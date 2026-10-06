@@ -30,6 +30,7 @@ const { uploadVideoToDrive } = await import("./video-drive.mjs");
 const { removeArchiveLeftovers } = await import("./video-compress.mjs");
 const { ensureTeacherFolder } = await import("./video-drive-folders.mjs");
 const { loadVideoTeacher } = await import("./video-teacher-route.mjs");
+const { reloadArchivedVideo } = await import("./classnote-feed-core.mjs");
 import { readFileSync } from "node:fs";
 import { resetVideoJobPick } from "./video-job-pick.mjs";
 const candidate = { centerId: "12", videoId: "34", postId: "56", boardName: "보드", postedAt: "2026-10-01T01:00:00Z", sources: [] };
@@ -177,5 +178,115 @@ describe("영상 작업 배선", () => {
     expect(runManualDriveScan).not.toHaveBeenCalled();
     expect(log).toHaveBeenCalledWith(expect.stringContaining("저장 폴더 설정을 확인하지 못해 새 수집은 건너뜁니다"));
     expect(downloadVideo).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * 원장 2026-10-06: *"해당 숙제 보고서 고유의 링크 주소가 있는 보고서에 영상을 업로드하면 무조건 체킹가능하지."*
+ * 재조회가 실어 준 보고서 토큰(`reportToken`) → 판정이 실어 준 숙제일(`homeworkDate`)이 route에 찍혀 완료 기록까지 가는지,
+ * 이미 한 번 시도된 작업·글을 못 읽은 작업이 어떻게 되는지(리뷰 2026-10-06)를 실행으로 잠근다.
+ */
+describe("보고서 글에 댓글로 올린 영상 — 숙제 연결", () => {
+  const TOKEN = "0f8fad5b-d9cb-469f-a165-70867728950e";
+  const oldRoot = "oldRoot1234567";
+  const comment = { ...candidate, commentId: "9" };
+  const linked = { tenantId: TENANT, studentId: "student", subject: "math", teacherId: "teacher", folderName: "김 선생님",
+    classId: "class-a", className: "초등M 3A", homeworkDate: "2026-10-06" };
+  const stamped = { rootId: oldRoot, folderName: "담임 확인 필요", studentId: "student", subject: null, teacherId: null, classId: null };
+  const pinnedDb = (route, attempts = 2) => fakeSql({ id: "job1", payload: comment, route, attempts }, {
+    setting: { enabled: true, root_folder_id: "newRoot1234567", owner_id: TENANT }, owners: { [oldRoot]: TENANT },
+  });
+  const ready = async () => {
+    const filePath = path.join(h.dir, "classnote-12-34.mp4"); await writeFile(filePath, "x");
+    downloadVideo.mockResolvedValue({ filePath, metadataPath: `${filePath}.json`, md5: "a".repeat(32), bytes: 1000, sha256: "b".repeat(64) });
+    uploadVideoToDrive.mockResolvedValue({ id: "file123", bytes: 400, compression: null, status: "uploaded" });
+  };
+  const routes = (calls) => calls.flatMap((call) => call.values.filter((value) => value?.json?.rootId).map((value) => value.json));
+
+  it("새 작업: 판정이 실어 준 숙제일이 route에 찍히고 완료 기록까지 남는다", async () => {
+    const db = fakeSql({ id: "job1", payload: comment, route: null, attempts: 1 }); h.sql = db.sql; await ready();
+    reloadArchivedVideo.mockResolvedValueOnce({ ...comment, reportToken: TOKEN, reportUnread: false });
+    loadVideoTeacher.mockResolvedValueOnce(linked);
+    const log = vi.fn();
+    await processVideoJob(null, TENANT, log);
+    expect(reloadArchivedVideo).toHaveBeenCalledWith(null, comment, { readReport: true });
+    expect(loadVideoTeacher).toHaveBeenCalledWith(expect.anything(), TENANT, expect.objectContaining({ reportToken: TOKEN }));
+    expect(routes(db.calls)).toEqual([
+      expect.objectContaining({ rootId: SAVED, classId: "class-a", homeworkDate: "2026-10-06" }),
+      expect.objectContaining({ rootId: SAVED, classId: "class-a", homeworkDate: "2026-10-06", archive: expect.anything() }),
+    ]);
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("2026-10-06 숙제로 연결"));
+  });
+
+  it("🔴 이미 한 번 시도된 작업(숙제 미정)도 보고서 글의 영상이면 다시 판정해 묶는다 — 저장 루트·담임 폴더는 찍힌 그대로", async () => {
+    const db = pinnedDb(stamped); h.sql = db.sql; await ready();
+    reloadArchivedVideo.mockResolvedValueOnce({ ...comment, reportToken: TOKEN, reportUnread: false });
+    loadVideoTeacher.mockResolvedValueOnce(linked);
+    await processVideoJob(null, TENANT, () => {});
+    expect(reloadArchivedVideo).toHaveBeenCalledWith(null, comment, { readReport: true });
+    // 반·숙제일은 새 판정, 폴더 키(teacherId)·폴더 이름은 첫 판정 — 업로드 재개 기록에 첫 폴더가 박혀 있어 폴더가 바뀌면 영영 실패한다.
+    for (const route of routes(db.calls)) {
+      expect(route).toMatchObject({ rootId: oldRoot, classId: "class-a", className: "초등M 3A", subject: "math", homeworkDate: "2026-10-06",
+        teacherId: null, folderName: "담임 확인 필요" });
+      expect(route.reason).toContain("담임 폴더는 첫 판정 그대로");
+    }
+    expect(routes(db.calls)).toHaveLength(2);
+    expect(ensureTeacherFolder).toHaveBeenCalledWith(oldRoot, expect.objectContaining({ teacherId: null, folderName: "담임 확인 필요" }), expect.anything(), expect.any(String), expect.anything());
+    // 칸에 적는 담임도 폴더와 같은 값이다(첫 판정)
+    const stamp = db.calls.find((call) => call.text.includes("set route ="));
+    expect(stamp.values.slice(1, 4)).toEqual(["student", "math", null]);
+  });
+
+  it("다시 판정한 담임이 찍힌 담임과 같으면 판정 사유도 새 판정 그대로다", async () => {
+    const db = pinnedDb({ ...stamped, teacherId: "teacher", folderName: "김 선생님" }); h.sql = db.sql; await ready();
+    reloadArchivedVideo.mockResolvedValueOnce({ ...comment, reportToken: TOKEN, reportUnread: false });
+    loadVideoTeacher.mockResolvedValueOnce({ ...linked, reason: "보고서 글에 올린 영상 — 그 보고서 반의 현재 담임" });
+    await processVideoJob(null, TENANT, () => {});
+    for (const route of routes(db.calls))
+      expect(route).toMatchObject({ teacherId: "teacher", folderName: "김 선생님", homeworkDate: "2026-10-06", reason: "보고서 글에 올린 영상 — 그 보고서 반의 현재 담임" });
+  });
+
+  it("다시 판정해도 그 보고서의 숙제로 안 묶이면 찍힌 판정 그대로다", async () => {
+    const db = pinnedDb(stamped); h.sql = db.sql; await ready();
+    reloadArchivedVideo.mockResolvedValueOnce({ ...comment, reportToken: TOKEN, reportUnread: false });
+    await processVideoJob(null, TENANT, () => {}); // 판정 대역의 기본값엔 숙제일이 없다
+    expect(loadVideoTeacher).toHaveBeenCalledTimes(1);
+    for (const route of routes(db.calls)) {
+      expect(route).toMatchObject({ rootId: oldRoot, folderName: "담임 확인 필요", studentId: "student" });
+      expect(route).not.toHaveProperty("homeworkDate");
+    }
+  });
+
+  it("숙제가 이미 정해진 작업은 글을 다시 읽지 않고 판정도 다시 하지 않는다", async () => {
+    const db = pinnedDb({ ...stamped, ...linked, rootId: oldRoot }); h.sql = db.sql; await ready();
+    // 재조회가 토큰을 실어 와도(이중 방어) 숙제가 정해진 작업은 다시 판정하지 않는다
+    reloadArchivedVideo.mockResolvedValueOnce({ ...comment, reportToken: TOKEN, reportUnread: false });
+    const log = vi.fn();
+    await processVideoJob(null, TENANT, log);
+    expect(reloadArchivedVideo).toHaveBeenCalledWith(null, comment, { readReport: false });
+    expect(loadVideoTeacher).not.toHaveBeenCalled();
+    expect(routes(db.calls).every((route) => route.homeworkDate === "2026-10-06" && route.rootId === oldRoot)).toBe(true);
+    expect(log).not.toHaveBeenCalledWith(expect.stringContaining("숙제로 연결"));
+  });
+
+  it("🔴 글을 못 읽으면 집은 횟수 세 번까지는 다음 주기로 미루고, 그 뒤로는 숙제 연결 없이 보관한다", async () => {
+    const unread = { ...comment, reportToken: null, reportUnread: true };
+    const early = fakeSql({ id: "job1", payload: comment, route: null, attempts: 3 }); h.sql = early.sql; await ready();
+    reloadArchivedVideo.mockResolvedValueOnce(unread);
+    const earlyLog = vi.fn();
+    await expect(processVideoJob(null, TENANT, earlyLog)).rejects.toThrow("재시도 대기");
+    expect(earlyLog).toHaveBeenCalledWith(expect.stringContaining("다음 주기에 다시 합니다")); // 원인이 로그에 남는다(Drive 문제로 읽히지 않게)
+    expect(early.calls.some((call) => call.text.includes("set route ="))).toBe(false); // 판정을 찍지 않는다 — 다음에 처음부터 다시 본다
+    expect(early.calls.some((call) => call.text.includes("set status = 'failed'"))).toBe(true);
+    expect(downloadVideo).not.toHaveBeenCalled();
+    expect(loadVideoTeacher).not.toHaveBeenCalled();
+
+    const late = fakeSql({ id: "job1", payload: comment, route: null, attempts: 4 }); h.sql = late.sql;
+    reloadArchivedVideo.mockResolvedValueOnce(unread);
+    const log = vi.fn();
+    await processVideoJob(null, TENANT, log);
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("숙제 연결 없이 보관합니다"));
+    expect(late.calls.some((call) => call.text.includes("set status = 'uploaded'"))).toBe(true);
+    expect(routes(late.calls).some((route) => "homeworkDate" in route)).toBe(false);
   });
 });

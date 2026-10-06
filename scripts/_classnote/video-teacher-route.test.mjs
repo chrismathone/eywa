@@ -54,4 +54,41 @@ describe("영상 담임 분류", () => {
     expect(result.classId).toBeNull();
     expect(result.reason).toContain("여러 개");
   });
+
+  /**
+   * 원장 2026-10-06 — 보고서 글에 댓글로 올린 영상은 그 보고서의 숙제다. `report`는 `video-report-link.mjs`가 DB로 확인한 값
+   * (이 학생 · 영상 과제 있음 · 반 있음)이고, 여기서는 그 값으로 반과 숙제일이 어떻게 정해지는지를 잠근다.
+   */
+  it("보고서 글에 올린 영상은 그 보고서의 반 · 숙제일로 간다 — 1인 보드라 반을 못 가르던 학생도 정해진다", () => {
+    const regular = { ...math, class_id: "ms2a", class_name: "중등M 초6 MS2A", teacher_id: "a" };
+    const other = { ...math, class_id: "bs1d", class_name: "초등M 개별 BS1D", teacher_id: "c", teacher_name: "다른담임" };
+    const jj = { ...math, class_id: "jj2a", class_name: "중등M 초6 JJ2A", teacher_id: "j", teacher_name: "JJ담임" };
+    const classes = [regular, other, jj, english];
+    // 보고서가 없으면 반이 둘이라 보류(반 이름 없음 · 숙제일 없음) — 종전 그대로
+    const before = chooseVideoTeacher({ ...base, classes });
+    expect(before).toMatchObject({ teacherId: null, classId: null, folderName: "담임 확인 필요" });
+    expect(before).not.toHaveProperty("homeworkDate");
+    // 그 글의 보고서가 BS1D의 10/6 수업이면 그 반 담임 폴더 + 숙제일
+    const pinned = chooseVideoTeacher({ ...base, classes, report: { classId: "bs1d", homeworkDate: "2026-10-06" } });
+    expect(pinned).toMatchObject({ teacherId: "c", classId: "bs1d", className: "초등M 개별 BS1D", folderName: "다른담임 선생님", homeworkDate: "2026-10-06" });
+    expect(pinned.reason).toContain("보고서 글");
+    // JJ 반 보고서 글이면 JJ 반 그대로다(JJ 제외는 반을 모를 때의 규칙)
+    expect(chooseVideoTeacher({ ...base, classes, report: { classId: "jj2a", homeworkDate: "2026-10-02" } }))
+      .toMatchObject({ teacherId: "j", classId: "jj2a", homeworkDate: "2026-10-02" });
+    // 반 보드에 올라온 글이어도 보고서의 반이 앞선다
+    expect(chooseVideoTeacher({ ...base, classes, boardClassIds: ["ms2a"], report: { classId: "bs1d", homeworkDate: "2026-10-06" } }))
+      .toMatchObject({ classId: "bs1d", homeworkDate: "2026-10-06" });
+  });
+  it("담임이 비어 있어도 반이 정해졌으면 숙제일은 싣는다 — 폴더만 '담임 확인 필요'", () => {
+    const vacant = { ...math, class_id: "ms2a", class_name: "중등M 초6 MS2A", teacher_id: null, teacher_name: null, teacher_status: null };
+    expect(chooseVideoTeacher({ ...base, classes: [vacant], report: { classId: "ms2a", homeworkDate: "2026-10-06" } }))
+      .toMatchObject({ teacherId: null, folderName: "담임 확인 필요", classId: "ms2a", homeworkDate: "2026-10-06" });
+  });
+  it("🔴 지금 그 반을 다니지 않으면 보고서를 쓰지 않는다 — 반을 옮긴 뒤 옛 글에 올린 영상은 예전 판정 그대로", () => {
+    const moved = chooseVideoTeacher({ ...base, report: { classId: "old-class", homeworkDate: "2026-09-20" } });
+    expect(moved).toEqual(chooseVideoTeacher(base));
+    expect(moved).not.toHaveProperty("homeworkDate");
+    // 학생을 못 정한 영상도 마찬가지 — 보고서가 있어도 숙제일을 싣지 않는다
+    expect(chooseVideoTeacher({ ...base, studentIds: [], report: { classId: "math-class", homeworkDate: "2026-10-06" } })).not.toHaveProperty("homeworkDate");
+  });
 });

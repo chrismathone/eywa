@@ -39,7 +39,10 @@ export type VideoArrival = {
   id: string; studentId: string; classId: string | null; postedAt: string;
   /** 서버가 파일 id를 검증한 재생 주소. 업로드 전/잘못된 id는 null, 옛 조회는 생략 가능. */
   playback?: { preview: string; thumbnail: string; uploadedAt: string | null } | null;
-  /** 학생이 올리기 사이트에서 **고른 숙제일**(`route.homeworkDate`, 2026-10-03) — 있으면 그 숙제 칸으로만 간다. 없으면 게시일순 규칙. */
+  /**
+   * **정해진 숙제일**(`route.homeworkDate`) — 학생이 올리기 사이트에서 고른 숙제(2026-10-03) 또는 그 숙제를 낸 보고서 글에 댓글로 올린
+   * ClassNote 영상(2026-10-06, 연동 PC가 싣는다). 있으면 그 숙제 칸으로만 간다. 없으면 게시일순 규칙.
+   */
   homeworkDate?: string | null;
   /**
    * 이 영상이 **들어온 시각** — 같은 날 고른 영상과 안 고른 영상의 앞뒤를 가른다(`videoArrivedAt`, rounds.ts가 정한다).

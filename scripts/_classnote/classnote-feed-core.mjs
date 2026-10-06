@@ -45,6 +45,7 @@ import {
 } from "./classnote-admin-core.mjs";
 import { kickClassify, loadChildStudentMap, storeParentMessages } from "./classnote-inbox-store.mjs";
 import { enqueueParentVideos, incomingVideo } from "./video-inbox.mjs";
+import { readCommentedReportToken } from "./video-report-link.mjs";
 import { loadWorkerVideoDriveSetting } from "./video-drive-settings.mjs";
 import { kickAttachmentRepair } from "./repair-attachment-messages.mjs";
 import {
@@ -1178,7 +1179,16 @@ export async function pollParentCommentsOnce(sql, browser, { tenant, post, log =
 /** 큐가 대기하는 동안 영상 변환·주소 갱신이 끝났을 수 있어 전송 직전에 원글/댓글을 다시 읽는다. */
 export async function videoFeedSession(browser) { return getFeedPage(browser); }
 
-export async function reloadArchivedVideo(browser, video) {
+/**
+ * 🔑 **댓글 영상**이면 댓글이 달린 글도 읽어 그 글의 보고서 토큰(`reportToken`)을 싣는다(원장 2026-10-06 — 보고서 글에 올린 영상은
+ *    그 보고서의 숙제다, `video-report-link.mjs`). 수집 경로가 셋(댓글 폴러 · 알림 목록 · 이력 순환)이라 여기 한 곳에서 읽는다 —
+ *    이미 큐에 들어가 있던 영상도 전송될 때 같은 판정을 받는다. 글 조회(GET)는 **전송을 시도할 때마다 한 번**(실패하면 한 번 더)이다 —
+ *    같은 댓글이 아직 있는 것을 확인한 **뒤에** 읽고(지워진 댓글의 영상에는 읽지 않는다), 이미 숙제가 정해진 작업은 부르는 쪽이
+ *    `readReport: false`로 건너뛴다. 토큰이 없으면(보고서 글이 아님 · 글이 지워짐) null — 예전 판정 그대로다.
+ * 🔴 글을 못 읽어도 여기서는 던지지 않는다 — `reportUnread: true`로 알리고, 다시 할지 연결 없이 보관할지는 부르는 쪽이 정한다
+ *    (`video-worker.mjs`: 영상 보관이 숙제 연결보다 먼저다 — 글 하나를 영영 못 읽는다고 그 영상이 끝없이 실패로 남으면 안 된다).
+ */
+export async function reloadArchivedVideo(browser, video, { readReport = true } = {}) {
   const { page, centerId } = await getFeedPage(browser);
   if (String(centerId) !== String(video.centerId)) throw new Error("영상 기관과 로그인 기관이 다릅니다.");
   let item;
@@ -1197,5 +1207,6 @@ export async function reloadArchivedVideo(browser, video) {
   }
   const fresh = incomingVideo(item, centerId, parent);
   if (!fresh || fresh.videoId !== video.videoId) throw new Error("원글·댓글에서 같은 영상을 찾지 못했습니다.");
-  return { ...video, sources: fresh.sources };
+  const report = video.commentId && readReport ? await readCommentedReportToken(page, video.postId) : { token: null, unread: false };
+  return { ...video, sources: fresh.sources, reportToken: report.token, reportUnread: report.unread };
 }

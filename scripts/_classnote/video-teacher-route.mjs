@@ -1,6 +1,7 @@
 import postgres from "postgres";
 import { BOARD_GROUPS } from "./classnote-admin-core.mjs";
 import { resolveTenant } from "./classnote-core.mjs";
+import { loadCommentedReport } from "./video-report-link.mjs";
 
 const unique = (items) => [...new Set(items.filter(Boolean))];
 
@@ -12,15 +13,30 @@ const unique = (items) => [...new Set(items.filter(Boolean))];
  */
 export const isJjClass = (className) => /JJ/.test(String(className ?? ""));
 
-/** 이름으로 학생을 추측하지 않는다. 게시 반 우선, 1인 보드는 기존 과목 매핑 사용. */
-export function chooseVideoTeacher({ video, tenantId, studentIds, boardClassIds, classes, student = null }) {
+/**
+ * 이름으로 학생을 추측하지 않는다. 게시 반 우선, 1인 보드는 기존 과목 매핑 사용.
+ *
+ * `report` — 그 영상이 **댓글로 달린 글의 보고서**(`video-report-link.mjs`가 DB로 확인한 `{ classId, homeworkDate }`, 원장 2026-10-06).
+ *  · 그 보고서의 반이 곧 게시 반이다(1인 보드 글이라 반을 못 가르던 학생도 반이 정해진다 — JJ 제외 규칙보다 앞선다).
+ *  · 반이 그 보고서의 반으로 정해졌을 때만 `homeworkDate`를 싣는다 → 영상 제출 현황이 그 숙제 칸에만 붙인다.
+ *  · 🔴 학생이 **영상을 올린 날 그 반을 다니고 있지 않으면** 보고서를 쓰지 않는다(반을 옮긴 뒤 옛 글에 올린 영상 — 예전 판정 그대로).
+ *    `classes`는 `loadVideoTeacher`가 영상 게시일(`postedAt`) 기준으로 읽은 수강 반이다 — 처리하는 날이 아니다.
+ */
+export function chooseVideoTeacher(input) {
+  const classes = input.classes ?? [];
+  const reportClassId = input.report?.classId && classes.some((c) => c.class_id === input.report.classId) ? input.report.classId : null;
+  const route = chooseTeacher({ ...input, classes, reportClassId });
+  return reportClassId && route.classId === reportClassId ? { ...route, homeworkDate: input.report.homeworkDate } : route;
+}
+
+function chooseTeacher({ video, tenantId, studentIds, boardClassIds, classes, student = null, reportClassId = null }) {
   const studentId = unique(studentIds).length === 1 ? studentIds[0] : null;
   const identity = { studentName: student?.name ?? null, school: student?.school ?? null, grade: student?.grade ?? null,
     classId: null, className: null };
   let subject = null;
   const hold = (reason) => ({ tenantId, studentId, subject, ...identity, teacherId: null, folderName: "담임 확인 필요", reason });
   if (unique(studentIds).length !== 1) return hold("학생 연결이 없거나 서로 충돌합니다.");
-  const linked = unique(boardClassIds);
+  const linked = reportClassId ? [reportClassId] : unique(boardClassIds);
   if (linked.length > 1) return hold("게시 반 연결이 여러 개입니다.");
   let matched;
   if (linked.length === 1) matched = classes.filter((c) => c.class_id === linked[0]);
@@ -53,7 +69,8 @@ export function chooseVideoTeacher({ video, tenantId, studentIds, boardClassIds,
   const suffix = Number(teacher.same_name_count) > 1 ? ` (${teacher.teacher_id.slice(0, 8)})` : "";
   // 반은 여러 개여도 담임이 한 사람이면 그 담임 폴더로 보낸다(반 이름만 비운다).
   return { tenantId, studentId, subject, ...identity, teacherId: teacher.teacher_id, folderName: `${teacher.teacher_name.trim()} 선생님${suffix}`,
-    reason: !single ? "담임이 같은 반이 여러 개 — 반 이름 없이 담임 폴더" : linked.length ? "게시 반의 현재 담임" : "게시 과목의 현재 담임" };
+    reason: !single ? "담임이 같은 반이 여러 개 — 반 이름 없이 담임 폴더"
+      : reportClassId ? "보고서 글에 올린 영상 — 그 보고서 반의 현재 담임" : linked.length ? "게시 반의 현재 담임" : "게시 과목의 현재 담임" };
 }
 
 /** DB는 SELECT만. 모든 조인은 지점으로 제한한다. DB 오류를 미분류로 숨기지 않는다. */
@@ -98,5 +115,7 @@ export async function loadVideoTeacher(sql, tenantId, video) {
           and (e.start_date is null or e.start_date <= ${today}) and (e.end_date is null or e.end_date >= ${today})
           and (c.closed_at is null or c.closed_at >= ${today})`;
     }
-    return chooseVideoTeacher({ video, tenantId, studentIds, boardClassIds, classes, student });
+    // 보고서 글에 댓글로 올린 영상이면 그 보고서(이 학생 · 영상 과제 있음)를 확인한다 — 아니면 null(예전 판정).
+    const report = studentIds.length === 1 ? await loadCommentedReport(sql, tenantId, video, studentIds[0]) : null;
+    return chooseVideoTeacher({ video, tenantId, studentIds, boardClassIds, classes, student, report });
 }

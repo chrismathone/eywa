@@ -288,8 +288,49 @@ describe("학생이 고른 숙제(올리기 사이트, 원장 2026-10-03) — �
     expect(videoArrivedAt({ createdAt: kst("2026-10-07", "09:05"), postedAt: kst("2026-10-07", "12:00"), uploadedAt: kst("2026-10-07", "09:30"), fromClassnote: false, picked: false })).toBe(at("09:05"));
     // 고른 영상(사이트)은 올리기를 시작한 시각이 아니라 줄이 생긴 시각
     expect(videoArrivedAt({ createdAt: kst("2026-10-08", "08:00"), postedAt: kst("2026-10-07", "15:00"), uploadedAt: kst("2026-10-07", "23:00"), fromClassnote: false, picked: true })).toBe(new Date(kst("2026-10-08", "08:00")).toISOString());
+    // 🔴 보고서 글에 댓글로 올려 숙제가 정해진 ClassNote 영상 — 사이트 업로드가 아니다. 늦게 수집돼도 학부모가 올린 시각이 기준이다
+    expect(videoArrivedAt({ createdAt: kst("2026-10-07", "15:01"), postedAt: kst("2026-10-07", "14:52"), uploadedAt: kst("2026-10-07", "15:05"), fromClassnote: true, picked: true })).toBe(at("14:52"));
     // 읽을 수 있는 시각이 없으면 null(게시 시각으로 본다)
     expect(videoArrivedAt({ createdAt: null, uploadedAt: "모름", fromClassnote: false, picked: false })).toBeNull();
+  });
+  /**
+   * 원장 2026-10-06: *"해당 숙제 보고서 고유의 링크 주소가 있는 보고서에 영상을 업로드하면 무조건 체킹가능하지."*
+   * 연동 PC가 댓글이 달린 글의 보고서를 확인해 영상 줄에 그 숙제일을 싣는다(`scripts/_classnote/video-report-link.mjs`) — 장부는
+   * 올리기 사이트에서 숙제를 골라 올린 영상과 같은 길(③)로 붙인다. 여기서는 그 결과가 원장이 말한 대로인지를 잠근다.
+   */
+  it("🔴 보고서 글에 댓글로 올린 ClassNote 영상은 그 보고서의 숙제 칸으로 간다 — 가장 오래된 미확인 칸을 채우지 않는다", () => {
+    const rows = [row("s1", ["2026-10-01", "2026-10-06"])];
+    // 10/6 보고서 글에 10/7에 올린 영상 — 10/1은 아직 안 낸 숙제 그대로다(예전 규칙이면 10/1이 완료로 찍혔다)
+    const pinned = build({ rows, videos: [video("s1", "2026-10-07", { time: "20:30", homeworkDate: "2026-10-06" })] });
+    expect(view(pinned)).toEqual([["2026-10-01", "unchecked", null, false], ["2026-10-06", "submitted", "2026-10-07", true]]);
+    // 선생님이 손으로 '완료'를 찍어 둔 칸에 그 영상이 오면 표시는 그대로고(영상이 붙는다), 그 기록을 지워도 완료(영상)로 남는다
+    const marked = build({ rows, marks: [mark("s1", "2026-10-06", "submitted", { submittedDate: "2026-10-07" })], videos: [video("s1", "2026-10-07", { homeworkDate: "2026-10-06" })] });
+    expect(view(marked)[1]).toEqual(["2026-10-06", "submitted", "2026-10-07", false]);
+    // 새 글로 올린 영상(숙제일 없음)은 종전대로 가장 오래된 미확인 칸부터
+    const plain = build({ rows, videos: [video("s1", "2026-10-07", { time: "20:30" })] });
+    expect(view(plain)).toEqual([["2026-10-01", "submitted", "2026-10-07", true], ["2026-10-06", "unchecked", null, false]]);
+  });
+  /**
+   * 알고 정한 것(리뷰 2026-10-06): 댓글 영상의 들어온 시각 = 학부모가 올린 시각. 수집은 새 글(1분)이 댓글(10분)보다 빨라, 같은 날 **나중에**
+   * 올린 새 글 영상이 먼저 장부에 보이다가 댓글 영상이 분류되는 순간 빠진다(그 칸은 미확인으로 돌아간다). 끝난 모습은 "같은 날은 한 번"이다.
+   * 들어온 시각을 줄이 생긴 시각으로 되돌리면 이 테스트가 깨진다 — 수집 순서에 따라 두 칸이 채워진다.
+   */
+  it("🔴 댓글 영상은 학부모가 올린 시각이 기준 — 같은 날 그 뒤에 새 글로 올린 영상은 세지 않고, 먼저 올린 영상은 그대로 센다", () => {
+    const rows = [row("s1", ["2026-10-01", "2026-10-06"])];
+    const cells = (videos: VideoArrival[]) => view(build({ rows, videos })).map((r) => r.slice(0, 2));
+    // 로더가 싣는 값 그대로(ClassNote 줄: 게시 시각 · 연동 PC가 수집해 줄이 생긴 시각)
+    const arrive = (posted: string, collected: string, picked: boolean) =>
+      videoArrivedAt({ createdAt: kst("2026-10-07", collected), postedAt: kst("2026-10-07", posted), fromClassnote: true, picked })!;
+    // 08:55 10/6 보고서 글에 댓글 영상(09:10 수집) · 09:00 새 글 영상(09:01 수집 — 먼저 장부에 보인다)
+    const comment = video("s1", "2026-10-07", { time: "08:55", homeworkDate: "2026-10-06", arrivedAt: arrive("08:55", "09:10", true) });
+    const later = video("s1", "2026-10-07", { time: "09:00", arrivedAt: arrive("09:00", "09:01", false) });
+    expect(cells([later])).toEqual([["2026-10-01", "submitted"], ["2026-10-06", "unchecked"]]); // 댓글 영상 분류 전
+    expect(cells([later, comment])).toEqual([["2026-10-01", "unchecked"], ["2026-10-06", "submitted"]]); // 분류 뒤 — 같은 날은 한 번
+    // 새 글 영상을 **먼저** 올렸으면(08:50) 늦게 수집됐어도 그대로 센다 — 먼저 올린 영상은 댓글 영상 때문에 빠지지 않는다
+    const earlier = video("s1", "2026-10-07", { time: "08:50", arrivedAt: arrive("08:50", "09:20", false) });
+    expect(cells([earlier, comment])).toEqual([["2026-10-01", "submitted"], ["2026-10-06", "submitted"]]);
+    // 다른 날 올린 새 글 영상은 무관하다
+    expect(cells([video("s1", "2026-10-08", { time: "09:00" }), comment])).toEqual([["2026-10-01", "submitted"], ["2026-10-06", "submitted"]]);
   });
   it("🔴 앞뒤는 들어온 시각으로 가른다 — 게시 시각은 순서가 아니다(직접 넣은 Drive 파일은 정오 고정 · 사이트 업로드는 시작 시각)", () => {
     const rows = [row("s1", ["2026-10-01", "2026-10-06"])];

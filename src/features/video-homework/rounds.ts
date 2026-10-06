@@ -20,12 +20,17 @@
  *     그래서 영상으로 센 칸을 확정해도, 미확인 칸을 한 번 눌러 완료로 바꿔도 **다른 칸의 판정이 흔들리지 않는다**.
  *     직접 찍은 '완료'는 그 기록이 볼 수 있었던 영상만 받는다(제출일까지 · 날짜 없는 원스크린 체크는 체크한 시각까지).
  *  🔴 숙제보다 먼저 올라온 영상·`VIDEO_MATCH_WINDOW_DAYS`를 넘겨 올라온 영상은 짝이 아니다. 직접 찍은 기록(완료·미수행)이 늘 이긴다.
- *  ③ 학생이 올리기 사이트에서 **숙제를 골라** 올린 영상(`homeworkDate`, 원장 2026-10-03 *"숙제 리스트에서 고르도록 해서 숙제 링크 배선"*)은
+ *  ③ 숙제가 정해진 영상(`homeworkDate`) — 학생이 올리기 사이트에서 **숙제를 골라** 올린 영상(원장 2026-10-03 *"숙제 리스트에서 고르도록 해서
+ *     숙제 링크 배선"*)과 **그 숙제를 낸 보고서 글에 댓글로 올린 ClassNote 영상**(원장 2026-10-06 *"해당 숙제 보고서 고유의 링크 주소가 있는
+ *     보고서에 영상을 업로드하면 무조건 체킹가능하지"* — 연동 PC가 글의 보고서를 확인해 싣는다, `scripts/_classnote/video-report-link.mjs`)은
  *     ②의 순서를 타지 않고 **그 숙제 칸으로만** 간다 — 다른 칸을 채우지 않는다(그 칸이 이미 영상을 받았거나 미수행으로 찍혔으면 그 영상은 세지 않는다).
  *     고른 영상을 먼저 붙이고, 남은 영상(ClassNote·옛 링크)이 ②로 나머지 칸을 채운다. 단 고른 영상이 칸에 붙은 날, **그 영상보다 늦게 들어온**
  *     같은 반 × 학생의 안 고른 영상은 세지 않는다(①과 같은 뜻 — 사이트에 올린 영상을 ClassNote에도 올려도 한 번이다).
  *     🔴 **먼저 들어와 있던** 안 고른 영상은 종전대로 센다 — 나중에 올린 영상이 이미 완료(영상)로 보이던 칸을 되돌리지 않는다.
  *     앞뒤는 게시 시각이 아니라 **들어온 시각**(`arrivedAt`, `videoArrivedAt`)으로 가른다.
+ *     ⚠️ 알고 정한 예외 = 보고서 글의 **댓글 영상**: 들어온 시각이 학부모가 올린 시각이라(수집·분류는 그보다 늦다), 같은 날 그 **뒤에** 새 글로 올린
+ *     영상이 먼저 분류돼 다른 칸을 채웠다가 댓글 영상이 분류되는 순간 빠질 수 있다(그 칸이 미확인으로 돌아간다 — 보통 몇 분 사이). 끝난 모습은
+ *     ①과 같다(같은 날은 한 번 · 먼저 **올린** 영상은 안 빠진다). 틀릴 바에는 '완료'가 아니라 '미확인' 쪽으로 틀린다(선생님이 다시 본다).
  *     🔴 단 하나의 예외 = **같은 파일**(`fingerprint` — md5 + 용량이 같다): 칸에 붙은 고른 영상과 같은 반 × 학생의 같은 파일인 안 고른 영상은,
  *     그 숙제일 이후에 올라왔으면 들어온 순서와 상관없이 세지 않는다(원장 2026-10-03 *"영상 정보를 확인할 방법이 있나? 메타데이터 등이나
  *     용량 등으로"* → *"그렇게하자"*). 학생이 그 파일을 어느 숙제로 냈는지 밝혔으니, 먼저 ClassNote로 올라와 다른 칸을 채웠던 같은 파일은
@@ -132,16 +137,23 @@ function canTake(round: LedgerRound, video: VideoDay): boolean {
 /**
  * 영상이 **들어온 시각** — 같은 날 고른 영상과 안 고른 영상의 앞뒤를 가르는 값(`VideoArrival.arrivedAt`). 두 로더가 이 함수로 싣는다.
  *  · 고른 영상(올리기 사이트) = 줄이 생긴 시각(`created_at`) 그대로 — 올리기가 **끝나** 장부에 보이기 시작한 때다.
+ *    🔴 보고서 글에 댓글로 올려 숙제가 정해진 **ClassNote 영상**은 여기 들지 않는다(아래 '안 고른 영상'과 같은 식) — 그 줄은 연동 PC가
+ *    수집한 때 생기므로, 줄이 생긴 시각만 보면 학부모가 먼저 올린 영상이 뒤늦게 들어온 것으로 읽힌다.
  *  · 안 고른 영상 = 줄이 생긴 시각과 그 영상의 실제 시각 중 **이른 쪽**: ClassNote(글 번호가 있다) = 학부모가 올린 시각,
  *    직접 넣은 Drive 파일 = Drive에 파일이 생긴 시각(`uploaded_at`).
  * 🔴 줄이 생긴 시각만 쓰지 말 것 — ClassNote 줄은 연동 PC가 수집한 때 생긴다(댓글 영상 10분 주기 · PC가 꺼져 있었으면 한참 뒤).
  *    먼저 올린 영상이 사이트 업로드보다 늦게 수집되면 '겹쳐 올린 것'으로 빠져 영영 안 세진다. Drive 줄은 파일을 휴지통에서 되살리면 다시 생긴다.
- * 🔴 이른 쪽을 쓰므로 값은 늘 줄이 생긴 시각 이하다 — "먼저 보이던 영상 < 나중에 생긴 고른 영상 줄"이 그대로 성립한다(되돌아감 없음).
+ * 🔴 이른 쪽을 쓰므로 값은 늘 줄이 생긴 시각 이하다 — 올리기 사이트 영상에 대해서는 "먼저 보이던 영상 < 나중에 생긴 고른 영상 줄"이
+ *    그대로 성립한다(되돌아감 없음).
+ * ⚠️ 숙제가 정해진 ClassNote 영상(댓글 영상)에는 그 보장이 **없다** — 값이 학부모가 올린 시각이고 장부에 보이기 시작하는 때(분류)는 그보다 늦다.
+ *    같은 날 그 뒤에 올린 안 고른 영상이 먼저 보이다가 빠질 수 있다(머리 주석 ③의 '알고 정한 예외' · `rounds.test.ts`가 잠근다).
+ *    줄이 생긴 시각으로 바꾸면 되돌아감은 줄지만, 같은 날 올린 영상 둘이 수집 순서(새 글 1분 · 댓글 10분)에 따라 두 칸을 채운다(① 위반).
  * 읽을 수 있는 시각이 하나도 없으면 null(게시 시각으로 본다).
  */
 export function videoArrivedAt(row: { createdAt?: string | null; postedAt?: string | null; uploadedAt?: string | null; fromClassnote: boolean; picked: boolean }): string | null {
   const ms = (value?: string | null) => (value ? Date.parse(value) : NaN);
-  const times = [ms(row.createdAt), row.picked ? NaN : ms(row.fromClassnote ? row.postedAt : row.uploadedAt)].filter((t) => !Number.isNaN(t));
+  const siteUpload = row.picked && !row.fromClassnote; // 올리기 사이트 — 게시 시각이 '올리기 시작'이라 줄이 생긴 시각만 본다
+  const times = [ms(row.createdAt), siteUpload ? NaN : ms(row.fromClassnote ? row.postedAt : row.uploadedAt)].filter((t) => !Number.isNaN(t));
   return times.length ? new Date(Math.min(...times)).toISOString() : null;
 }
 
@@ -189,13 +201,14 @@ export function buildLedgerRounds(input: {
     attach(round, mark);
     if (!before) rounds.set(key, round);
   }
-  // ③ 학생이 고른 숙제 — 그 칸으로만(올린 순서대로 첫 영상이 그 칸의 영상이다).
+  // ③ 숙제가 정해진 영상(학생이 고른 숙제 · 보고서 글의 댓글 영상) — 그 칸으로만(올린 순서대로 첫 영상이 그 칸의 영상이다).
   const picked = input.videos.filter((v) => !!v.homeworkDate && !!v.classId).sort((a, b) => Date.parse(a.postedAt) - Date.parse(b.postedAt));
   // `반:학생:게시일` → 그날 칸에 붙은 고른 영상 중 **가장 먼저 들어온 것**의 시각. 그날 그보다 늦게(같거나 뒤) 들어온 안 고른 영상은 세지 않는다
   // (사이트에 올린 영상을 ClassNote에도 올린 것 — 한 영상이 두 칸을 채우지 않게).
   // 🔴 그보다 **먼저 들어와 있던** 안 고른 영상은 종전대로 센다 — 나중에 올린 영상이 이미 완료(영상)로 보이던 칸을 미확인으로 되돌리지 않는다
   //    (원장 2026-10-03 *"그거 보완해야겠는데"* — 오전에 ClassNote로 낸 숙제가 오후 사이트 업로드 뒤 미확인이 되던 것).
-  // 🔴 앞뒤는 **들어온 시각**(`videoArrivedAt`)으로 가른다(게시 시각 아님) — 장부에 먼저 보이던 영상은 늘 그 뒤에 생긴 고른 영상 줄보다 이르다.
+  // 🔴 앞뒤는 **들어온 시각**(`videoArrivedAt`)으로 가른다(게시 시각 아님) — 장부에 먼저 보이던 영상은 늘 그 뒤에 생긴 고른 영상 줄(올리기 사이트)보다 이르다.
+  //    ⚠️ 숙제가 정해진 ClassNote 댓글 영상은 예외다(학부모가 올린 시각이 기준 — `videoArrivedAt` 주석).
   const arrived = (v: VideoArrival) => {
     const at = v.arrivedAt ? Date.parse(v.arrivedAt) : NaN;
     return Number.isNaN(at) ? Date.parse(v.postedAt) : at;

@@ -33,7 +33,7 @@ async function loadClassVideos(tenantId: string, studentIds: string[], fromDate:
       .not("route->>classId", "is", null)
       .gte("posted_at", `${fromDate}T00:00:00+09:00`).lt("posted_at", `${addDays(toDate, 1)}T00:00:00+09:00`)
       .order("id", { ascending: true }).range(from, to));
-    // 고른 숙제일(올리기 사이트)은 날짜 모양일 때만 믿는다 — 아니면 게시일순 규칙으로 센다.
+    // 정해진 숙제일(올리기 사이트에서 고른 숙제 · 보고서 글의 댓글 영상)은 날짜 모양일 때만 믿는다 — 아니면 게시일순 규칙으로 센다.
     return rows.map((row) => {
       const homeworkDate = row.homework_date && isVideoHomeworkDate(row.homework_date) ? row.homework_date : null;
       const links = row.status === "uploaded" ? homeworkVideoLinks(row.drive_file_id) : null;

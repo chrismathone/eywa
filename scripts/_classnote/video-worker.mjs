@@ -25,8 +25,31 @@ let authFailure = null;
 /** 저장 폴더 조회 실패로 새 수집을 건너뛴 안내 — 설정이 다시 읽히면 비운다. */
 let collectionSkipLogged = false;
 
+/** 댓글이 달린 글을 못 읽었을 때 다음 주기로 미루는 한도 — 작업을 집은 횟수 기준(이 횟수를 넘기면 숙제 연결 없이 보관한다). */
+const REPORT_READ_ATTEMPTS = 3;
+
 function envBag(options) {
   return options?.env ?? process.env;
+}
+
+/**
+ * 이미 한 번 시도된 작업(route가 찍혀 있다)의 판정 — 찍힌 것을 그대로 쓴다.
+ * 단 숙제가 아직 안 정해졌고 **보고서 글에 댓글로 올린 영상**이면 다시 판정해, 그 보고서의 숙제로 묶일 때만 새 판정으로 바꾼다
+ * (새 워커를 풀기 전에 옛 워커가 찍어 둔 작업 · 글을 못 읽은 채 진행했다가 보관에 실패한 작업도 같은 숙제 칸으로 간다 —
+ * 안 그러면 한 번이라도 시도된 영상은 영영 "가장 오래된 미확인 숙제부터"로 센다).
+ * 저장 루트·연결(`rootId` · `connectionId`)은 부르는 쪽이 찍힌 값으로 다시 덮는다.
+ * 🔴 **담임 폴더(`teacherId` · `folderName`)도 찍힌 그대로 둔다** — 반·숙제일만 새 판정을 받는다. 업로드 재개 기록
+ *    (`*.drive-state.json`, 완료 뒤에만 지워진다)에 첫 시도의 폴더가 박혀 있어, 폴더가 바뀌면 `uploadVideoToDrive`가
+ *    "기존 업로드 작업의 폴더/원본과 다릅니다"로 던지고 그 영상은 영영 Drive에 못 올라간다(재리뷰 2026-10-06).
+ *    그래서 이 길로 묶인 영상은 반은 보고서의 반인데 폴더는 첫 판정의 폴더일 수 있다(장부는 반·숙제일만 본다).
+ */
+async function pinnedVideoRoute(sql, tenant, route, candidate) {
+  if (route?.homeworkDate || !candidate.reportToken) return route;
+  const fresh = await loadVideoTeacher(sql, tenant, candidate);
+  if (!fresh.homeworkDate) return route;
+  const teacherId = route.teacherId ?? null;
+  const kept = (fresh.teacherId ?? null) === teacherId ? {} : { reason: "보고서 글에 올린 영상 — 숙제만 연결(담임 폴더는 첫 판정 그대로)" };
+  return { ...route, ...fresh, teacherId, folderName: route.folderName ?? fresh.folderName, ...kept };
 }
 
 /** 발송 루프는 전송을 기다리지 않는다. DB 선점은 여러 PC가 같은 영상을 동시에 처리하지 못하게 한다. */
@@ -142,12 +165,23 @@ export async function processVideoJob(browser, tenant, log = console.log, option
     if (!parentDir) throw new Error("영상 임시 저장 폴더를 열 수 없습니다.");
     const out = path.join(process.env.CLASSNOTE_VIDEO_OUT || path.join(parentDir, "videos"), tenant);
     await mkdir(out, { recursive: true });
-    const candidate = await reloadArchivedVideo(browser, job.payload);
+    const pinned = decision.kind === "pinned";
+    // 숙제가 이미 정해진 작업은 댓글이 달린 글(보고서 주소)을 다시 읽지 않는다.
+    const candidate = await reloadArchivedVideo(browser, job.payload, { readReport: !(pinned && job.route?.homeworkDate) });
+    if (candidate.reportUnread) {
+      // 글을 못 읽었다. 이 작업을 **집은 횟수**(무엇으로 실패했든 센다)가 REPORT_READ_ATTEMPTS 이하면 다음 주기에 다시 하고,
+      // 그 뒤로는 숙제 연결 없이 보관한다 — 영상 보관이 숙제 연결보다 먼저다. 보관이 또 실패하면 다음 시도에서 다시 읽어 묶는다(pinnedVideoRoute).
+      if (Number(job.attempts) <= REPORT_READ_ATTEMPTS) {
+        log("[영상] 댓글이 달린 글을 읽지 못해 다음 주기에 다시 합니다."); // 아래 catch의 일반 문구만 남으면 Drive 문제로 읽힌다
+        throw new Error("댓글이 달린 글을 읽지 못했습니다.");
+      }
+      log("[영상] 댓글이 달린 글을 읽지 못해 숙제 연결 없이 보관합니다.");
+    }
     // 이미 찍힌 rootId 는 활성 설정으로 바꾸지 않는다. 없는 작업만 지금 루트를 찍는다.
     const connectionStamp = decision.connectionId ? { connectionId: decision.connectionId } : {};
-    const route = decision.kind === "pinned"
-      ? { ...job.route, rootId: workRoot, ...connectionStamp }
-      : { ...await loadVideoTeacher(sql, tenant, candidate), rootId: workRoot, ...connectionStamp };
+    const route = { ...(pinned ? await pinnedVideoRoute(sql, tenant, job.route, candidate) : await loadVideoTeacher(sql, tenant, candidate)),
+      rootId: workRoot, ...connectionStamp };
+    if (route.homeworkDate && !job.route?.homeworkDate) log(`[영상] 보고서 글에 올린 영상 — ${route.homeworkDate} 숙제로 연결`);
     const auth = { ...credentials, fileRegistry: videoFileRegistry(sql, tenant), folderRegistry: videoFolderRegistry(sql, tenant, workRoot), accessToken: async () => {
       if (leaseLost) throw new Error("영상 작업 연결이 끊겼습니다.");
       return credentials.accessToken();

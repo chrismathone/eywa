@@ -107,7 +107,9 @@ const recentIssues = [];
 // 설정을 '전체'로 바꿔도 실제 학부모 글의 요청을 전부 실패시킨다 — 앱은 이 키가 없으면 답글 요청을 받지 않는다.
 // homeworkVideoTenantFolders=지점별 저장 폴더 설정을 읽는 버전인가. 이 키가 없는 워커는 env 폴더만 안다.
 // 새 PC 번들 전에는 키 부재만으로 준비 안 됨으로 보면 안 된다(지금 도는 워커가 막힌다). 다른 루트 첫 각인은 DB 가드가 거절한다.
-const WORKER_CAPS = { autoBoardSync: POST && autoSyncMode() === "on", classNoticeImages: true, noticeClassRoute: true, noticeAttachments: true, nativePublish: true, reportRecall: true, kageFailReasons: true, mathClassRoute: true, classWideNotice: true, classBoardSync: true, syncRequests: true, homeworkVideoArchive: true, homeworkVideoTenantFolders: true, homeworkVideoTenantAccounts: true, parentReply: true, parentReplySettings: true, parentReaction: true, attachmentMessageRepair: true };
+// homeworkVideoReportLink=보고서 글에 댓글로 올린 영상을 그 보고서의 숙제에 묶는 버전인가(2026-10-06, video-report-link.mjs).
+// 앱은 이 키로 아무것도 막지 않는다 — 이 키가 없는 옛 워커가 올린 영상은 예전처럼 '가장 오래된 미확인 숙제부터' 센다(적용 확인용).
+const WORKER_CAPS = { autoBoardSync: POST && autoSyncMode() === "on", classNoticeImages: true, noticeClassRoute: true, noticeAttachments: true, nativePublish: true, reportRecall: true, kageFailReasons: true, mathClassRoute: true, classWideNotice: true, classBoardSync: true, syncRequests: true, homeworkVideoArchive: true, homeworkVideoTenantFolders: true, homeworkVideoTenantAccounts: true, homeworkVideoReportLink: true, parentReply: true, parentReplySettings: true, parentReaction: true, attachmentMessageRepair: true };
 
 // 로그 타임스탬프 = KST(UTC+9) 고정 오프셋 — 연동 PC의 시스템 로케일/타임존과 무관하게 "YYYY-MM-DD HH:MM:SS".
 // watch.log이 UTC(…Z)로 찍혀 실제 시각과 9시간 어긋나 보이던 문제(2026-07-22 원장 제보). DB/하트비트는 ISO 유지(기계용).

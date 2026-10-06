@@ -75,7 +75,7 @@ export async function openHomeworkDates(db: Db, tenantId: string, pairs: readonl
     return classId ? [{ id: row.id, studentId: row.student_id, classId, postedAt: row.posted_at, arrivedAt, homeworkDate: picked,
       fingerprint: videoFingerprint(row.md5, row.bytes) }] : [];
   });
-  // 학생이 그 숙제를 골라 이미 올린 (반 × 학생 × 숙제일) — 칸의 상태와 무관하게 "낸 숙제"다.
+  // 숙제가 정해진 영상이 이미 있는 (반 × 학생 × 숙제일) — 학생이 골라 올렸거나 그 보고서 글에 댓글로 올린 것. 칸의 상태와 무관하게 "낸 숙제"다.
   const alreadyPicked = new Set(videoArrivals.filter((v) => v.homeworkDate).map((v) => `${roundPairKey({ classId: v.classId!, studentId: v.studentId })}:${v.homeworkDate}`));
   const rounds = buildLedgerRounds({
     rows: pairs.map((p) => ({ classId: p.classId, studentId: p.studentId, assignedDates: [...(assigned.get(roundPairKey(p)) ?? [])].sort(), tracked: true })),
