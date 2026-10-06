@@ -1485,11 +1485,16 @@ export const SHEET_DICT = {
     ko: "정산액에 다른 반 대신 보강 {units}시수가 들어 있습니다(표 아래 목록)",
     en: "Pay includes {units} substitute makeup units taught in other classes (list below the table)",
   },
+  // 그 달 뒤에 담임이 된 반(원장 2026-10-06) — 표에는 세우지 않지만 티어 정산액의 반 범위는 현재 담임 기준 그대로다.
+  "att.moneyNote.later": {
+    ko: "정산액에 이 달 뒤에 담임이 된 반 {n}개의 {units}시수가 들어 있습니다(정산은 현재 담임 기준 — 표에는 없습니다)",
+    en: "Pay includes {units} units from {n} classes you became homeroom for after this month (pay follows the current homeroom — not shown in the table)",
+  },
   "att.sub.title": { ko: "다른 반 대신 보강 {n}칸 · 시수 {units}", en: "Substitute makeups in other classes · {n} cells · {units} units" },
   "att.sub.readonly": { ko: "읽기 전용", en: "Shown only — edit in that class" },
   "att.sub.desc": {
-    ko: "위임 없이 다른 반 학생을 대신 보강한 칸입니다 — 칸은 그 학생의 반 출석부에 있고, 시수는 선생님 몫으로 정산에 들어갑니다. 고칠 때는 그 반 출석부(관리자)에서 고칩니다.",
-    en: "Makeups you taught for another class's student without a delegation — the cell lives in that student's class sheet and the units count toward your pay. Corrections are made in that class's sheet (admin).",
+    ko: "위임 없이 다른 반 학생을 대신 보강한 칸입니다 — 칸은 그 학생의 반 출석부에 있어 이 표의 수업 차수·실급여에는 들어 있지 않습니다. 고칠 때는 그 반 출석부(관리자)에서 고칩니다.",
+    en: "Makeups you taught for another class's student without a delegation — the cell lives in that student's class sheet, so it is not part of this table's units or pay columns. Corrections are made in that class's sheet (admin).",
   },
   "att.sub.more": { ko: "외 {n}칸", en: "+{n} more" },
   // 반 머리행 끝의 "누가 수업했나"(2026-09-07) — 이름은 데이터, 여기 있는 건 꼬리말과 근거 설명뿐이다.
@@ -1785,6 +1790,29 @@ export const SHEET_DICT = {
   "att.row.teacherShare": {
     ko: "반 전체 등록 {total} 중 이 선생님 담당 {own} · 교시별 배분 후 남는 시수는 담임에게 배분",
     en: "Teacher's share: {own} of {total} registered for the class. Remaining units after scheduled allocation go to homeroom.",
+  },
+  // 금액 이월이 걸린 줄(원장 2026-10-06) — 등록 차수 칸을 주황으로 칠하고 카드에 몇 회차인지 적는다.
+  // 🔴 제목은 회차 확정 화면과 같은 말('금액 이월') — 회차(시수) 이월(0134a)이라는 다른 물건이 있어 '회차 이월'이라 부르지 않는다.
+  "att.row.carry.title": { ko: "금액 이월", en: "Carry-over" },
+  "att.row.carry.in": { ko: "{month}에서 받음", en: "From {month}" },
+  "att.row.carry.inUnknown": { ko: "지난 달에서 받음", en: "From last month" },
+  "att.row.carry.out": { ko: "{month}로 보냄", en: "To {month}" },
+  "att.row.carry.outUnknown": { ko: "다음 달로 보냄", en: "To next month" },
+  "att.row.carry.value": { ko: "{units} · {amount}원", en: "{units} · ₩{amount}" },
+  "att.row.carry.valueApprox": { ko: "약 {units} · {amount}원", en: "≈ {units} · ₩{amount}" },
+  "att.row.carry.amountOnly": { ko: "{amount}원", en: "₩{amount}" },
+  "att.row.carry.notApplied": {
+    ko: "받은 이월이 아직 청구액에 실리지 않았습니다. 수납관리 '회차 확정'에서 이 줄의 수납 배분을 저장하면 실립니다.",
+    en: "The amount carried in is not yet included in the billed amount. Save this row's receipt allocation in billing to include it.",
+  },
+  "att.row.carry.refunded": {
+    ko: "받는 줄이 환불 처리돼 이월을 싣지 않았습니다. 수납관리 '회차 확정'의 지난 달에서 이월을 취소하거나 받을 반을 다시 고르세요.",
+    en: "This row was refunded, so the carried amount is not included. Cancel the carry-over or pick another class in last month's billing.",
+  },
+  "att.row.carry.mark": { ko: "금액 이월 있음", en: "has a carry-over" },
+  "att.row.carry.unitsNote": {
+    ko: "회차는 이월 금액을 이 줄의 확정 단가로 나눈 값입니다. 등록 차수 숫자는 회차 확정의 확정 시수 그대로입니다.",
+    en: "Sessions are the carried amount divided by this row's confirmed unit price. The registered count is the confirmed sessions as saved in billing.",
   },
   "att.row.allocationPending": { ko: "배분 확인", en: "Check share" },
   "att.row.allocationPendingTip": {

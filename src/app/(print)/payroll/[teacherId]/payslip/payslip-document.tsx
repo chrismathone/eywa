@@ -237,7 +237,8 @@ export function PayslipDocument({ data }: { data: PayslipData }) {
               총 시수
             </th>
             <td className="num border border-black/70 px-2 py-1.5">
-              {ok ? `${data.settlement!.unitsTotal}T` : unknown}
+              {/* 단위 글자 — 출석부 기준(프리랜서)은 그 출석부의 단위(영어 U · 수학 T · 섞이면 없음), 그 밖·옛 스냅샷은 종전대로 T. */}
+              {ok ? `${data.settlement!.unitsTotal}${data.settlement!.unitSuffix === undefined ? "T" : data.settlement!.unitSuffix ?? ""}` : unknown}
             </td>
           </tr>
           <tr>

@@ -89,3 +89,14 @@ export function actualLessonSalary(
   if (rate == null || base === null) return null;
   return floor1(base.base * NET_MULTIPLIER * (rate / 100));
 }
+
+/**
+ * 줄 실급여들의 **합계**(원, 내림) — 출석부 합계 칸과 프리랜서 명세서가 같은 함수를 쓴다(원장 2026-10-06 "출석부 그대로").
+ * 🔑 줄 값은 소수 한 자리(`floor1`)다. 소수로 그냥 더하면 더하는 순서에 따라 정수 경계에서 1원이 갈릴 수 있어
+ *    **0.1원 단위 정수로** 더한 뒤 내린다 — 줄 순서가 달라도(화면 정렬 · 서버 조립) 같은 값이 나온다.
+ */
+export function sumSalaryAmounts(amounts: Iterable<number>): number {
+  let tenths = 0;
+  for (const amount of amounts) tenths += Math.round(amount * 10);
+  return Math.floor(tenths / 10);
+}

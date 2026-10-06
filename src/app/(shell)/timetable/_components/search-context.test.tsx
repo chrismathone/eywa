@@ -63,6 +63,8 @@ function editState(): TimetableEditState {
     setHovered: () => {},
     openDayEdit: () => {},
     openClassPick: () => {},
+    canSplit: false,
+    openWholeSplit: () => {},
   };
 }
 

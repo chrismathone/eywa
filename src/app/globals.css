@@ -205,6 +205,7 @@
   --color-att-holiday-ink: var(--att-holiday-ink);
   --color-att-col-billed: var(--att-col-billed);
   --color-att-col-sessions: var(--att-col-sessions);
+  --color-att-col-carry: var(--att-col-carry);
   --color-att-diff-plus: var(--att-diff-plus);
   --color-att-diff-minus: var(--att-diff-minus);
 
@@ -469,6 +470,8 @@
         (보여 준 값 그대로면 흰 글자가 4.11·4.16:1로 WCAG 4.5 미달). `palette-contrast.test.ts`가 실제로 계산해 잠근다. */
   --att-col-billed: #fdf0cd;
   --att-col-sessions: #c9dcf1;
+  /* 금액 이월(0278a)이 걸린 줄의 등록 차수 칸 = 주황(원장 2026-10-06 색 지정) — 옆 크림(청구액)과 갈리게 한 단계 진하다. */
+  --att-col-carry: #ffc285;
   --att-diff-plus: #2b6fd0;
   --att-diff-minus: #e01b1b;
 

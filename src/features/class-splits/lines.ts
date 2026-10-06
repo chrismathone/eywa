@@ -25,6 +25,8 @@ export type TimetableSplitLine = {
   /** 상대 쪽 선생님(없으면 반 이름) — 줄 꼬리표(`→유형숙`). */
   otherLabel: string;
   otherClassName: string;
+  /** 이 칸의 반 이름(툴바 목록이 "어느 반 → 어느 반"으로 묶는 데). 모르면 빈 문자열. */
+  hereClassName: string;
   periodText: string;
 };
 
@@ -66,6 +68,7 @@ export function splitLinesForCell(
       endTime: s.endTime,
       otherLabel: other.teacherName?.trim() || other.name,
       otherClassName: other.name,
+      hereClassName: names.klass(cell.classId)?.name ?? "",
       periodText: periodText(s),
     });
   }
@@ -100,4 +103,44 @@ export function uniqueSplits(slots: readonly { splits?: TimetableSplitLine[] }[]
     }
   }
   return out;
+}
+
+export type SplitLineGroup = {
+  key: string;
+  splitIds: string[];
+  names: string[];
+  hereClassName: string;
+  otherClassName: string;
+  otherLabel: string;
+  day: TimetableSplitLine["day"];
+  startTime: string;
+  endTime: string;
+  periodText: string;
+};
+
+/** 툴바 목록용 — 같은 반 → 같은 반 · 같은 요일·시간·기간을 한 건으로(반 전체 나누기는 학생 수만큼 줄이 생긴다). */
+export function groupSplitLines(lines: readonly TimetableSplitLine[]): SplitLineGroup[] {
+  const map = new Map<string, SplitLineGroup>();
+  for (const l of lines) {
+    const key = [l.hereClassName, l.otherClassName, l.day, l.startTime, l.endTime, l.periodText].join("|");
+    const g = map.get(key);
+    if (g) {
+      g.splitIds.push(l.splitId);
+      g.names.push(l.name);
+      continue;
+    }
+    map.set(key, {
+      key,
+      splitIds: [l.splitId],
+      names: [l.name],
+      hereClassName: l.hereClassName,
+      otherClassName: l.otherClassName,
+      otherLabel: l.otherLabel,
+      day: l.day,
+      startTime: l.startTime,
+      endTime: l.endTime,
+      periodText: l.periodText,
+    });
+  }
+  return [...map.values()];
 }

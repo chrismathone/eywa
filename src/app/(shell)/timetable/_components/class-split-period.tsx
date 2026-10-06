@@ -13,17 +13,20 @@ export function SplitPeriodFields({
   value,
   onChange,
   today,
+  anchor,
 }: {
   value: PeriodChoice | null;
   onChange: (v: PeriodChoice) => void;
   today: string;
+  /** 기본값 기준일 — 보고 있는 주(오늘보다 앞이면 오늘). 일별·영구의 첫 날짜, 월별의 첫 달. */
+  anchor: string;
 }) {
   const kind = value?.kind ?? "day";
   const pick = (k: SplitPeriodKind) => {
     if (k === kind) return;
-    if (k === "day") onChange({ kind: "day", date: today });
-    else if (k === "month") onChange({ kind: "month", month: today.slice(0, 7) });
-    else onChange({ kind: "forever", from: today });
+    if (k === "day") onChange({ kind: "day", date: anchor });
+    else if (k === "month") onChange({ kind: "month", month: anchor.slice(0, 7) });
+    else onChange({ kind: "forever", from: anchor });
   };
   const input = "border-line h-8 rounded-lg border px-2 text-sm";
   return (

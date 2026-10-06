@@ -8,13 +8,16 @@ import "server-only";
  * 격자에는 B반이 없다 — 칸이 안 보이면 **화면 시수와 정산액이 말없이 갈린다**. 그래서 A의 강사 보기가 그 칸을 목록으로 보인다.
  * 🔴 판정 재료는 정산 조립(`collectTierRows`)과 같다 — 귀속 칸 `taught_by` · 교시별 유효 행(`effectiveAttendanceRecords`) ·
  *    결석·공결 0 · 자리 행 제외. 금액은 여기서 계산하지 않는다(정산 함수 한 벌).
+ * 🔴 **프리랜서는 다르다**(2026-10-06) — 프리랜서 명세서의 수업료는 그 강사 출석부의 실급여 합계라 이 칸이 **들어가지 않는다**
+ *    (격자에 없는 칸이다). 그래서 `computeSheetTuition`이 같은 목록으로 빠진 시수를 명세서 '발행 전 확인'에 적는다.
+ *    줄로 넣을지는 원장 결정 대기 — 화면 문구(`att.sub.desc`)는 정산 반영을 단정하지 않는다.
  * ⚠️ 표시 전용이다 — 조회 실패·0316a 미적용이면 빈 목록(격자는 산다, [[#95]]). admin + `tenant_id` 필터([[#104]]).
  */
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
 import { monthBounds } from "@/features/payroll/server/tier-rows";
-import { taughtByColumnReady } from "./taught-by-db";
+import { taughtByColumnState } from "./taught-by-db";
 
 export type SubstituteCell = {
   classId: string;
@@ -42,16 +45,20 @@ type Row = {
 /**
  * 그 강사가 그 달 **표에 없는 반**에서 한 대신 보강 칸(날짜순).
  * @param excludeClassIds 강사 보기 격자에 이미 선 반 — 그 반의 칸은 격자가 보여 준다(교시 담당 반의 대신 보강 등).
+ * @param opts.strict 조회 실패·귀속 칸 확인 실패를 빈 목록으로 접지 않고 **던진다** — 명세서 '발행 전 확인'은 이 목록으로
+ *        "빠진 시수"를 적으므로, 접으면 그 안내가 말없이 사라진다(재리뷰 2026-10-06). 화면은 옵션 없이 부른다(종전 그대로).
  */
 export async function loadSubstituteCells(input: {
   tenantId: string;
   teacherId: string;
   month: string;
   excludeClassIds: readonly string[];
-}): Promise<SubstituteCell[]> {
+}, opts: { strict?: boolean } = {}): Promise<SubstituteCell[]> {
   if (!/^\d{4}-\d{2}$/.test(input.month)) return [];
   try {
-    if (!(await taughtByColumnReady())) return [];
+    const column = await taughtByColumnState();
+    if (column === "unknown" && opts.strict) throw new Error("taught_by 칸 확인 실패");
+    if (column !== "ready") return [];
     const admin = createAdminClient();
     const { from, to } = monthBounds(input.month);
     const rows = await fetchAllPaged<Row>((f, t) =>
@@ -96,7 +103,8 @@ export async function loadSubstituteCells(input: {
       })
       .sort((a, b) => a.date.localeCompare(b.date) || a.className.localeCompare(b.className, "ko") || a.studentName.localeCompare(b.studentName, "ko"));
   } catch (e) {
-    console.error("[substitute-cells] 대신 보강 칸 조회 실패 — 목록 없이 그린다", e instanceof Error ? e.message : e);
-    return [];
+    console.error("[substitute-cells] 대신 보강 칸 조회 실패", e instanceof Error ? e.message : e);
+    if (opts.strict) throw e;
+    return []; // 화면 — 목록 없이 그린다
   }
 }

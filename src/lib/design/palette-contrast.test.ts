@@ -108,9 +108,9 @@ describe("팔레트 대비 — 화이트 캔버스(v4)", () => {
   });
 
   it("월별 출석부 열 틴트 위 본문 글자가 4.5:1 이상", () => {
-    // 청구액(크림)·차수(연파랑) 칸은 `--foreground` 굵은 글씨를 얹는다.
+    // 청구액(크림)·차수(연파랑)·이월 걸린 등록 차수(주황) 칸은 `--foreground` 굵은 글씨를 얹는다.
     const ink = rgbOf(token("foreground"));
-    for (const name of ["att-col-billed", "att-col-sessions"]) {
+    for (const name of ["att-col-billed", "att-col-sessions", "att-col-carry"]) {
       const r = contrast(ink, rgbOf(token(name)));
       expect(r, `foreground on --${name} = ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
     }

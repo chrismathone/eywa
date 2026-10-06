@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { durationLabel, endAfter, intersectWindows, splitBoundaries, splitUnitMinutes, startOptions, toMin } from "./rules";
 import { hasDayInRange, periodText, resolvePeriod, splitActiveOn, splitsCollide } from "./period";
-import { splitLinesForCell, uniqueSplits } from "./lines";
-import { canSplitClass, CLASS_SPLITTER_USER_IDS } from "./access";
+import { groupSplitLines, splitLinesForCell, uniqueSplits } from "./lines";
+import { canSplitClass, CLASS_SPLIT_ENABLED, CLASS_SPLITTER_USER_IDS } from "./access";
 import type { ClassSplit } from "./rules";
 
 const w = (a: string, b: string) => ({ start: toMin(a), end: toMin(b) });
@@ -151,7 +151,8 @@ describe("시간표 줄 — 원래 반엔 →, 받는 반엔 ←", () => {
   });
 });
 
-describe("권한 — 명단 + super_admin", () => {
+// 기능이 꺼져 있으면(원장 2026-10-06) 누구도 못 나눈다 — 명단 판정은 켜졌을 때의 규칙이다.
+describe.skipIf(!CLASS_SPLIT_ENABLED)("권한 — 명단 + super_admin", () => {
   it("침산은 명단만(master여도 명단 밖이면 불가)", () => {
     expect(canSplitClass({ id: CLASS_SPLITTER_USER_IDS[0]!, systemRole: "master" }, { isSuperAdmin: false, isChinsanTenant: true })).toBe(true);
     expect(canSplitClass({ id: "someone", systemRole: "master" }, { isSuperAdmin: false, isChinsanTenant: true })).toBe(false);
@@ -160,5 +161,27 @@ describe("권한 — 명단 + super_admin", () => {
   it("일반판은 원장만", () => {
     expect(canSplitClass({ id: "x", systemRole: "master" }, { isSuperAdmin: false, isChinsanTenant: false })).toBe(true);
     expect(canSplitClass({ id: "x", systemRole: "admin" }, { isSuperAdmin: false, isChinsanTenant: false })).toBe(false);
+  });
+});
+
+describe("툴바 목록 — 반 전체 나누기는 한 건으로 묶는다", () => {
+  const names = {
+    student: (id: string) => ({ name: id === "s1" ? "가" : "나", grade: null, school: null }),
+    klass: (id: string) => (id === "A" ? { name: "고등M 단체 BS4F", teacherName: "이성우" } : { name: "중등M 중3 BS3Q", teacherName: "유형숙" }),
+  };
+  it("같은 반→반·요일·시간·기간이면 한 건, 해제는 id 전부", () => {
+    const cell = { classId: "A", dayOfWeek: "tue", startTime: "20:10", endTime: "22:00" };
+    const lines = splitLinesForCell(cell, [split({ id: "x1", studentId: "s1" }), split({ id: "x2", studentId: "s2" })], names);
+    const groups = groupSplitLines(lines);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.splitIds.sort()).toEqual(["x1", "x2"]);
+    expect(groups[0]!.hereClassName).toBe("고등M 단체 BS4F");
+  });
+});
+
+describe("기능 스위치", () => {
+  it("꺼져 있으면 super_admin·명단도 못 나눈다", () => {
+    if (CLASS_SPLIT_ENABLED) return;
+    expect(canSplitClass({ id: CLASS_SPLITTER_USER_IDS[0]!, systemRole: "master" }, { isSuperAdmin: true, isChinsanTenant: true })).toBe(false);
   });
 });

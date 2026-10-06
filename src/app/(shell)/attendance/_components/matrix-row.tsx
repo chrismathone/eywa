@@ -10,8 +10,9 @@ import { rowKey } from "@/features/attendance/grid/model";
 import { formatMoney } from "@/features/attendance/money-format";
 import { salaryBilledCap } from "@/features/attendance/salary-rates";
 import { formatUnitsWithSuffix, type AttendanceUnitSuffix } from "@/features/attendance/unit-suffix";
-import type { AttendanceConfirmedPrice, AttendanceInvoiceGap, AttendanceTermSessions } from "@/features/attendance/class-billing";
+import type { AttendanceCarryMark, AttendanceConfirmedPrice, AttendanceInvoiceGap, AttendanceTermSessions } from "@/features/attendance/class-billing";
 import { tipProps } from "@/components/hover-tip/tip";
+import { carryTipCard } from "@/features/attendance/carry-tip";
 import { placeLifecycleBadges } from "@/features/attendance/badge-placement";
 import { attendanceNameTone } from "@/features/attendance/name-tone";
 import { VIVID_STUDENT_TONE_STICKY } from "@/features/timetable/lib/student-tone";
@@ -34,6 +35,7 @@ export function MatrixRow({
   showActualAmount = false,
   actualSalaryRate,
   termSessions,
+  carryMark = null,
   unitSuffix = null,
   noTransferBadge = false,
   lockBefore,
@@ -64,6 +66,11 @@ export function MatrixRow({
    * 원장 2026-09-17 *"그 옆에 등록 차수 열 추가하고. 그걸 회차 확정에서 확정된 시수로 보여줄것"*.
    */
   termSessions?: AttendanceTermSessions | null;
+  /**
+   * 이 줄에 걸린 **금액 이월**(0278a) — 있으면 등록 차수 칸을 주황으로 칠하고 마우스 오버 카드에 몇 회차·얼마인지 적는다
+   * (원장 2026-10-06). 표시 전용이다 — 등록 차수·차이확인·실급여는 이 값을 읽지 않는다.
+   */
+  carryMark?: AttendanceCarryMark | null;
   /** 차수 뒤 단위 한 글자(영어 `U` · 수학 `T`, 원장 2026-09-18). null이면 숫자만. */
   unitSuffix?: AttendanceUnitSuffix;
   /**
@@ -124,6 +131,26 @@ export function MatrixRow({
     days.filter((d) => !d.placeholder).map((d) => d.date),
     (date) => !isEnrolledOn(date, student.spans) && !marks[date],
   );
+  // 등록 차수 칸의 강사 몫 설명 — 평소엔 `title`, 이월 카드가 뜨는 칸에선 카드 줄.
+  const teacherShareText =
+    termSessions && !termSessions.allocationPending && !termSessions.daysBasis && termSessions.classUnits !== undefined
+      ? sheetTf(lang, "att.row.teacherShare", {
+          total: formatUnitsWithSuffix(termSessions.classUnits, unitSuffix),
+          own: formatUnitsWithSuffix(termSessions.units, unitSuffix),
+        })
+      : null;
+  // 금액 이월이 걸린 줄 — 등록 차수가 미확정이어도 선다(배분만 저장해도 받은 이월은 청구액에 실린다).
+  // 🔴 카드가 실제로 붙을 때만 켠다(`data-tip` 유무) — 빈 카드로 켜지면 주황만 칠하고 안쪽 설명까지 떼어 버린다.
+  const carryProps = carryMark
+    ? tipProps(
+        carryTipCard(carryMark, unitSuffix, lang, [
+          termSessions?.allocationPending ? sheetT(lang, "att.row.allocationPendingTip") : null,
+          ...(termSessions?.daysBasis ? [sheetT(lang, "att.row.daysBasisWhat"), sheetT(lang, "att.row.daysBasisHow")] : []),
+          teacherShareText,
+        ]),
+      )
+    : null;
+  const carryTip = carryProps && "data-tip" in carryProps ? carryProps : null;
 
   return (
     <tr className="hover:bg-bg-soft/40">
@@ -235,31 +262,39 @@ export function MatrixRow({
       {/* 등록 차수 = 회차 확정의 확정 시수. **확정 전엔 숫자를 안 지어낸다**(미확정으로 적는다).
           🔴 옛 **일수 기준** 확정은 단위가 달라(시수가 아니라 출석 일수) 회차 확정 화면이 붉게 칠하는 값이다
              (원장 2026-09-16). 여기서도 점선 밑줄 + 마우스 오버 카드로 그 사실을 적는다 — 감추지 않는다. */}
+      {/* 금액 이월(0278a)이 걸린 줄 = **주황 칸** + 마우스 오버 카드에 몇 회차인지(원장 2026-10-06 *"이월처리된 회차가 있으면
+          등록차수에 셀 색을 주황색으로 … 마우스오버시에 몇회차 이월됐는지"*). 표시 전용 — 숫자·차이확인·실급여는 그대로다.
+          🔴 카드를 띄우는 칸에선 안쪽 `title`·카드를 **떼고 그 문장을 카드 줄로 옮긴다**(둘 다 달면 회색 메모 상자가 겹쳐 뜬다). */}
       {termSessions !== undefined ? (
-        <td data-att-column="termSessions" className="border-line num bg-att-col-sessions border-b border-r px-1 py-1 text-right text-xs font-bold whitespace-nowrap">
+        <td
+          data-att-column="termSessions"
+          {...(carryTip ? { "data-att-carry": "", ...carryTip } : {})}
+          className={`border-line num border-b border-r px-1 py-1 text-right text-xs font-bold whitespace-nowrap ${
+            carryTip ? "bg-att-col-carry cursor-help" : "bg-att-col-sessions"
+          }`}
+        >
           {termSessions === null ? (
             <UnconfirmedMark noInvoice={noInvoice} lang={lang} />
           ) : termSessions.allocationPending ? (
-            <span className="text-text-dim" title={sheetT(lang, "att.row.allocationPendingTip")}>{sheetT(lang, "att.row.allocationPending")}</span>
+            <span className="text-text-dim" title={carryTip ? undefined : sheetT(lang, "att.row.allocationPendingTip")}>{sheetT(lang, "att.row.allocationPending")}</span>
           ) : termSessions.daysBasis ? (
             <span
               className="text-danger cursor-help underline decoration-dotted underline-offset-4"
-              {...tipProps({
+              {...(carryTip ? {} : tipProps({
                 title: sheetT(lang, "att.row.daysBasis"),
                 lines: [sheetT(lang, "att.row.daysBasisWhat"), sheetT(lang, "att.row.daysBasisHow")],
-              })}
+              }))}
             >
               {formatUnitsWithSuffix(termSessions.units, unitSuffix)}
               <span className="sr-only"> · {sheetT(lang, "att.row.daysBasis")}</span>
             </span>
           ) : (
-            <span title={termSessions.classUnits !== undefined ? sheetTf(lang, "att.row.teacherShare", {
-              total: formatUnitsWithSuffix(termSessions.classUnits, unitSuffix),
-              own: formatUnitsWithSuffix(termSessions.units, unitSuffix),
-            }) : undefined}>
+            <span title={carryTip ? undefined : teacherShareText ?? undefined}>
               {formatUnitsWithSuffix(termSessions.units, unitSuffix)}
             </span>
           )}
+          {/* 색·마우스 오버만으로는 전달되지 않는 사람을 위해 글자로도 적는다(같은 칸의 '일수 기준 확정'과 같은 방식). */}
+          {carryTip ? <span className="sr-only"> · {sheetT(lang, "att.row.carry.mark")}</span> : null}
         </td>
       ) : null}
       {/* 차이확인 = 수업 차수 − 등록 차수(원장 2026-09-18). 양수=파랑 · 음수=빨강 · 0=색 없음.

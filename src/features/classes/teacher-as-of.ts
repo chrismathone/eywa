@@ -202,11 +202,17 @@ export type HomeroomSinceIndex = {
   byClassTeacher: Map<string, string>;
   /** 되살리기 창의 시작일 — 이보다 과거의 전이는 애초에 조회되지 않는다(호출부 안내용). */
   since: string;
+  /**
+   * 원자료(감사로그·반 이름)를 **읽지 못해** 이력이 비었을 수 있다 — 화면은 종전대로 전부 보여 주면 되지만(안전벨트),
+   * 이 이력을 **금액**에 쓰는 자리(프리랜서 명세서)는 이 표식이 서면 산정하지 않는다(남의 반이 들어온다).
+   */
+  incomplete?: boolean;
 };
 
 export function buildHomeroomSinceIndex(
   transitions: readonly TeacherTransition[],
   since: string,
+  incomplete = false,
 ): HomeroomSinceIndex {
   const byClass = new Map<string, TeacherTransition[]>();
   for (const t of transitions) {
@@ -227,7 +233,7 @@ export function buildHomeroomSinceIndex(
     }
     byClassTeacher.set(`${classId}|${last.teacherId}`, start);
   }
-  return { byClassTeacher, since };
+  return incomplete ? { byClassTeacher, since, incomplete } : { byClassTeacher, since };
 }
 
 /**

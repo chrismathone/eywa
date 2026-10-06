@@ -1,7 +1,7 @@
 import { classInvoiceAmount, type LineItemLike } from "@/features/billing/session-terms/class-amount";
 import { effectiveAllocations, receiptLines } from "@/features/billing/session-terms/receipt-allocation";
 import { invoiceAllocationStates } from "@/features/billing/session-terms/allocation-state";
-import { canReceiveCarry, carryInTotal, carryOutValid, type MoneyCarryIn } from "@/features/billing/session-terms/money-carryover";
+import { canReceiveCarry, carryInTotal, carryOutValid, carryRefunded, type MoneyCarryIn } from "@/features/billing/session-terms/money-carryover";
 import { monthRosterKey } from "@/features/billing/session-terms/month-roster";
 import { round1 } from "./session-units";
 import { rowKey } from "./grid/model";
@@ -86,8 +86,24 @@ export function attendanceNoInvoiceRows(
 }
 
 /** 금액 이월(0278a) — 보낸 이월(회차 행 id → 원) · 받은 이월(`monthRosterKey(학생, 반)` → 목록). 없으면 빈 맵. */
-export type AttendanceMoneyCarry = { outs: ReadonlyMap<string, number>; ins: ReadonlyMap<string, readonly MoneyCarryIn[]> };
+export type AttendanceMoneyCarry = {
+  outs: ReadonlyMap<string, number>;
+  ins: ReadonlyMap<string, readonly MoneyCarryIn[]>;
+  /** 보낸 이월이 가는 달(`YYYY-MM`) — 이월 표식 카드의 '○월로 보냄'에만 쓴다. 금액 계산은 안 읽는다. */
+  outPeriod?: string;
+};
 const NO_CARRY: AttendanceMoneyCarry = { outs: new Map(), ins: new Map() };
+
+/** 청구액과 함께, **이월이 실제로 실린 줄**을 돌려준다 — 이월 표식(`attendanceCarryMarks`)이 금액과 같은 판정을 보게. */
+export type AttendanceBilledDetail = {
+  billed: Record<string, number>;
+  /** 받은 이월을 청구액에 더한 줄(`rowKey`). */
+  carryInApplied: Set<string>;
+  /** 받은 이월이 있는데 그 줄이 **환불로 만든 0**이라 싣지 않은 줄 — 배분을 다시 저장해도 실리지 않는다. */
+  carryInRefunded: Set<string>;
+  /** 청구액에서 뺀 보낸 이월(`rowKey` → 원). 유효한 것만. */
+  carryOut: Record<string, number>;
+};
 
 /**
  * 회차 확정의 '이 반 청구액'과 동일: 유효한 배분 우선, 없으면 반 이름 매칭.
@@ -100,6 +116,16 @@ export function attendanceClassBilledAmounts(
   terms: readonly AttendanceBillingTerm[],
   carry: AttendanceMoneyCarry = NO_CARRY,
 ): Record<string, number> {
+  return attendanceClassBilledDetail(classes, invoices, terms, carry).billed;
+}
+
+/** `attendanceClassBilledAmounts`의 본체 — 같은 한 번의 계산에서 청구액과 이월이 실린 줄을 함께 낸다. */
+export function attendanceClassBilledDetail(
+  classes: readonly AttendanceBillingClass[],
+  invoices: readonly AttendanceInvoice[],
+  terms: readonly AttendanceBillingTerm[],
+  carry: AttendanceMoneyCarry = NO_CARRY,
+): AttendanceBilledDetail {
   const classById = new Map(classes.map((c) => [c.classId, { ...c, students: new Set(c.studentIds) }]));
   const termsByInvoice = new Map<string, AttendanceBillingTerm[]>();
   for (const term of terms) {
@@ -109,6 +135,9 @@ export function attendanceClassBilledAmounts(
   }
   const out: Record<string, number> = {};
   const carriedIn = new Set<string>(); // 같은 학생·반이 청구서 여러 장에 있어도 받은 이월은 한 번만.
+  const carryInApplied = new Set<string>();
+  const carryInRefunded = new Set<string>();
+  const carryOut: Record<string, number> = {};
   for (const invoice of invoices) {
     const invoiceTerms = termsByInvoice.get(invoice.id) ?? [];
     // 이월 판정 재료(회차 확정 면과 같은 판정) — 이 청구서에 보낸 이월이나 받은 이월이 있을 때만 계산한다.
@@ -137,23 +166,29 @@ export function attendanceClassBilledAmounts(
       const base = allocated.get(term.id);
       let amount = base ?? (freeActive ? 0 : classInvoiceAmount(cls.className, lineItems));
       if (amount === null) continue;
+      const key = rowKey(cls.classId, invoice.student_id);
       if (base !== undefined) {
         const sent = carry.outs.get(term.id) ?? 0;
         const state = states?.get(term.id);
-        if (sent > 0 && state && carryOutValid({ ...state, amount: term.amount === null ? null : Number(term.amount), confirmedSessions: term.confirmed_sessions === null ? null : Number(term.confirmed_sessions) }, sent)) amount -= sent;
+        if (sent > 0 && state && carryOutValid({ ...state, amount: term.amount === null ? null : Number(term.amount), confirmedSessions: term.confirmed_sessions === null ? null : Number(term.confirmed_sessions) }, sent)) {
+          amount -= sent;
+          carryOut[key] = (carryOut[key] ?? 0) + sent;
+        }
         const inKey = monthRosterKey(invoice.student_id, cls.classId);
         // 받은 이월은 받을 수 있는 줄에만(회차 확정 `netAllocatedAmount`와 같은 `canReceiveCarry` — 환불로 만든 0이면 안 싣는다).
         const receivable = !!state && canReceiveCarry({ ...state, amount: term.amount === null ? null : Number(term.amount), confirmedSessions: term.confirmed_sessions === null ? null : Number(term.confirmed_sessions) });
         if (!carriedIn.has(inKey) && carry.ins.has(inKey) && receivable) {
           carriedIn.add(inKey);
           amount += carryInTotal(carry.ins.get(inKey));
+          carryInApplied.add(key);
+        } else if (carry.ins.has(inKey) && state && carryRefunded(state)) {
+          carryInRefunded.add(key);
         }
       }
-      const key = rowKey(cls.classId, invoice.student_id);
       out[key] = (out[key] ?? 0) + amount;
     }
   }
-  return out;
+  return { billed: out, carryInApplied, carryInRefunded, carryOut };
 }
 
 /**
@@ -167,6 +202,21 @@ export type AttendanceTermSessions = {
   classUnits?: number;
   allocationPending?: boolean;
 };
+
+/** 이월 한 건 — 금액과, 그 줄 확정 단가로 나눈 **회차**(단가를 하나로 못 정하면 `null` — 금액만 적는다). */
+export type AttendanceCarryPart = { amount: number; period: string; units: number | null };
+
+/**
+ * 금액 이월(0278a)이 걸린 줄의 **표식 재료**(원장 2026-10-06 *"이월처리된 회차가 있으면 등록차수에 셀 색을 주황색으로
+ * 해주고, 마우스오버시에 몇회차 이월됐는지 표시"*).
+ *  · `ins`  지난 달에서 받은 이월 — 보낸 달 판정(`carryOutValid`)을 통과한 것만(무효·받을 반 없음은 뺀다).
+ *  · `inState`  그 받은 이월이 이 줄 **청구액에 실렸나** — `applied` 실림 · `pending` 유효 배분이 없어 아직 안 실림(배분 전·재확인 —
+ *     배분을 저장하면 실린다) · `refunded` 받는 줄이 환불이라 싣지 않음(배분을 다시 저장해도 안 실린다).
+ *  · `out`  다음 달로 보낸 이월 — 청구액에서 실제로 뺀 것만.
+ * 🔴 **표시 전용**이다 — 등록 차수 숫자·차이확인·실급여는 이 값을 읽지 않는다.
+ * ⚠️ 등록 차수가 미확정인 줄에도 선다(배분만 저장해도 받은 이월은 청구액에 실린다) — 그 줄은 단가가 없어 회차 없이 금액만 적는다.
+ */
+export type AttendanceCarryMark = { ins: AttendanceCarryPart[]; inState: "applied" | "pending" | "refunded"; out: AttendanceCarryPart | null };
 
 /** 회차 확정에 저장된 단가. 월 정액은 회당 단가와 구분하고, 서로 다른 단가는 더하지 않는다. */
 export type AttendanceConfirmedPrice = { unitPrice: number; monthly: boolean; daysBasis: boolean };
@@ -238,6 +288,45 @@ export function attendanceClassConfirmedSessions(
       // 하나라도 옛 일수 기준이면 그 합은 단위가 섞였다 — 섞였다는 사실을 알린다.
       daysBasis: (prev?.daysBasis ?? false) || isDaysBasisTerm(term),
     };
+  }
+  return out;
+}
+
+/** 금액 → 회차. 그 줄 확정 단가가 **회당 하나**일 때만(월 정액·옛 일수 기준·단가 여럿·0원은 나눌 수 없다). */
+function carryUnits(amount: number, prices: readonly AttendanceConfirmedPrice[] | undefined): number | null {
+  if (prices?.length !== 1) return null;
+  const price = prices[0]!;
+  if (price.monthly || price.daysBasis || !(price.unitPrice > 0)) return null;
+  return amount / price.unitPrice;
+}
+
+/**
+ * 이월 표식 — 줄(`rowKey`)마다 받은 이월·보낸 이월. 이월이 없는 줄은 키를 만들지 않는다.
+ * 🔴 **금액과 같은 판정**을 본다: 실렸는지·뺐는지는 `attendanceClassBilledDetail`이 낸 값을 그대로 쓰고(다시 판정하지 않는다),
+ *    받은 이월 목록은 `carryInTotal`과 같은 조건(유효 · 받을 반 있음)으로 거른다.
+ * ⚠️ 받은 이월은 **실리지 않았어도** 담는다(`inState`) — "이월은 넘어왔는데 청구액이 그대로"인 이유를 카드가 말한다.
+ */
+export function attendanceCarryMarks(
+  classes: readonly AttendanceBillingClass[],
+  carry: AttendanceMoneyCarry,
+  detail: Pick<AttendanceBilledDetail, "carryInApplied" | "carryInRefunded" | "carryOut">,
+  prices: Readonly<Record<string, readonly AttendanceConfirmedPrice[]>>,
+): Record<string, AttendanceCarryMark> {
+  const out: Record<string, AttendanceCarryMark> = {};
+  for (const cls of classes) {
+    for (const studentId of new Set(cls.studentIds)) {
+      const key = rowKey(cls.classId, studentId);
+      const ins = (carry.ins.get(monthRosterKey(studentId, cls.classId)) ?? [])
+        .filter((c) => c.valid && !c.orphan && c.amount > 0)
+        .map((c) => ({ amount: c.amount, period: c.fromPeriod, units: carryUnits(c.amount, prices[key]) }));
+      const sent = detail.carryOut[key] ?? 0;
+      if (ins.length === 0 && !(sent > 0)) continue;
+      out[key] = {
+        ins,
+        inState: detail.carryInApplied.has(key) ? "applied" : detail.carryInRefunded.has(key) ? "refunded" : "pending",
+        out: sent > 0 ? { amount: sent, period: carry.outPeriod ?? "", units: carryUnits(sent, prices[key]) } : null,
+      };
+    }
   }
   return out;
 }

@@ -4,6 +4,7 @@ import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { kstToday, kstDateOf } from "@/lib/date-kst";
 import { fetchAllPaged } from "@/lib/supabase/batch";
+import { markFolded } from "@/lib/folded-read";
 import {
   buildHomeroomSinceIndex,
   buildHomeroomHistoryIndex,
@@ -28,9 +29,15 @@ import {
  * ⚠️ React `cache` — 한 요청에서 시간표·출석부가 같이 물어도 왕복 1회.
  */
 const loadTeacherTransitions = cache(
-  async (): Promise<{ transitions: TeacherTransition[]; since: string }> => {
+  async (): Promise<{ transitions: TeacherTransition[]; since: string; incomplete: boolean }> => {
     const supabase = await createClient();
     const since = historyWindowStart(kstToday());
+    // 읽기 실패 표식 — 화면은 종전대로 접지만(빈 이력 = 전부 보여 준다), 금액에 쓰는 자리는 이 표식을 보고 산정을 멈춘다.
+    let incomplete = false;
+    const failSoft = () => {
+      incomplete = true;
+      return [] as never[];
+    };
 
     // 로그와 반 이름 인덱스는 서로 독립이라 병렬(B4).
     const [logs, classRows] = await Promise.all([
@@ -51,12 +58,12 @@ const loadTeacherTransitions = cache(
             .order("created_at")
             .range(from, to) as never;
         },
-      ).catch(() => []),
+      ).catch(failSoft),
       // 🔴 whitelist(이름→id)라 무페이징 select 금지(B2). 활성/비활성 **전부** 담는다 —
       //    종강한 반의 옛 인계도 이력이고, 중복 이름 판정은 좁게 보면 거짓 유일이 된다.
       fetchAllPaged<{ id: string; class_name: string | null }>((from, to) =>
         supabase.from("classes").select("id, class_name").order("id").range(from, to),
-      ).catch(() => []),
+      ).catch(failSoft),
     ]);
 
     const classIdByUniqueName = buildUniqueClassNameIndex(
@@ -95,7 +102,7 @@ const loadTeacherTransitions = cache(
       // 담임이 안 바뀐 `class_update`(강의실만 고침 등)는 전이가 아니다 — newTeacherId가 없다.
       .filter((t) => !!t.classId && !!t.teacherId && !!t.date);
 
-    return { transitions, since };
+    return { transitions, since, incomplete };
   },
 );
 
@@ -109,14 +116,17 @@ const loadTeacherTransitions = cache(
  *    로더는 `lesson_reports`를 아예 읽지 않는다(출석부에 얹히는 왕복도 그만큼 적다).
  */
 export const getHomeroomSinceIndex = cache(async (): Promise<HomeroomSinceIndex> => {
-  const { transitions, since } = await loadTeacherTransitions();
-  return buildHomeroomSinceIndex(transitions, since);
+  const { transitions, since, incomplete } = await loadTeacherTransitions();
+  return buildHomeroomSinceIndex(transitions, since, incomplete);
 });
 
 /** 출석일 당시의 담임 복원. 작성자 추정 없이 적용된 인수인계만 사용한다. */
 export const getHomeroomHistoryIndex = cache(async () => {
-  const { transitions } = await loadTeacherTransitions();
-  return buildHomeroomHistoryIndex(transitions);
+  const { transitions, incomplete } = await loadTeacherTransitions();
+  const index = buildHomeroomHistoryIndex(transitions);
+  // 원자료를 못 읽어 빈 이력이면 표식을 남긴다 — 이 호출은 서버 액션 안에선 요청 캐시가 없어 `getHomeroomSinceIndex`와
+  // **따로** 돈다(한쪽만 실패할 수 있다). 금액 조립은 이 표식을 반 목록·매트릭스를 거쳐 받아 멈춘다.
+  return incomplete ? markFolded(index, "담임 변경 기록을 읽지 못했습니다") : index;
 });
 
 /**
