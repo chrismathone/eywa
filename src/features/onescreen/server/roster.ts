@@ -37,6 +37,8 @@ import { makeupSessionEntries } from "../makeup-session";
 import { makeupStudentIds } from "@/features/attendance/input-roster";
 // 보강 예약(0264a) — 그날 내 반에 예약된 학생을 보강 행으로 미리 세운다. 별도 함수·fail-soft(hot path 보호, #95).
 import { getReservationsOn } from "@/features/attendance/server/makeup-reservation-queries";
+import { getSplitsOnDate } from "@/features/class-splits/server/queries";
+import { planSplitRows } from "../split-rows";
 import { autoUnitsOn, isAutoUnitsSubject, toAutoUnitsSchedule } from "@/features/attendance/auto-units";
 import { getLessonProfile } from "@/features/owner/server/lesson-profile";
 import { LEGACY_REPORT_SUBJECT, reportSubject } from "@/features/timetable/lib/report-subject";
@@ -458,7 +460,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   const nativePromise = loadNativeParticipants({ session_date: targetDate, limit: 500 }, { sharedRead: true }).catch(
     (): ReadOutcome<ParticipantRead> => ({ status: "failed", error: MAKEUP_UNREAD_NOTICE }),
   );
-  const [scheds, makeupReports, makeupAttRows, reservedToday] = await Promise.all([
+  const [scheds, makeupReports, makeupAttRows, reservedToday, splitsToday] = await Promise.all([
     // end_time·자리 라벨·유효구간·요일은 **수학 자동 시수**(수업 길이, auto-units.ts) 재료 — 같은 행이라 왕복 0.
     fetchInChunks<{
       class_id: string;
@@ -496,6 +498,9 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     //    *"보강 추가 할 필요없이 미리 학생이 추가되어있어야"*). 조회는 **별도 함수 + fail-soft**(표가 없어도 빈 목록) —
     //    이 로스터는 강사 전원의 hot path라 새 컬럼·표를 본문 select에 섞지 않는다([[#95]]).
     getReservationsOn(targetDate, allIds),
+    // 🔴 그날 내 반이 **보내거나 받는 수업 나누기**(0351a) — 받는 반엔 그 학생이 미리 서고(출결은 이 반 몫), 원래 반 행엔
+    //    표식이 붙는다. 조회는 별도 함수 + fail-soft(표가 없어도 빈 결과 — 이 로스터는 강사 전원의 hot path, [[#95]]).
+    getSplitsOnDate(targetDate, allIds),
   ]);
   /**
    * **내가 맡은 보강 회차의 학생**(보강관리 배정) — 원반 담임·위임이 아니어도, 담당 반이 하나도 없어도 이 화면에 서야 한다.
@@ -661,6 +666,11 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
    * 🔴 저장 관문은 건드리지 않는다: 그 반의 출결 칸을 직접 쓰는 길은 종전대로 담당 반만이고(`setAttendanceCell`), 맡은 강사의 칸은
    *    보강 보고서 저장이 세운다(`syncAnchorCells` — 귀속 = 보강한 강사). 이 행은 기존 보강 행처럼 `classId=null`이라 직접 출결 조작이 없다.
    */
+  /**
+   * **수업 나누기로 오늘 내 반에 오는 학생**(0351a) — 오늘 도는 반(`activeIds`)에서만. 이미 그 반 수강생이면 정규 행이 있다(안 더한다).
+   * 행은 아래 5-d가 `classId`가 있는 행으로 세운다(출결 알약이 그 반에 찍힌다) + 보고서는 잠근다(`reportOptout`).
+   */
+  const splitPlan = planSplitRows(activeIds, targetDate, splitsToday.splits, splitsToday.classNames, enrolledKey);
   const ownClassIds = new Set(allIds);
   const nativePairs = rosterNativePairs(alreadyMakeup, participantsOrLegacy(nativeOutcome), teacherId, ownClassIds);
   const foreignIds = foreignClassIds(nativePairs.filter((pair) => pair.foreign), ownClassIds);
@@ -700,6 +710,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       ...enrollments.map((e) => e.student_id),
       ...makeupReports.map((r) => r.student_id),
       ...attMakeup.map((r) => r.studentId),
+      ...splitPlan.incoming.map((r) => r.studentId),
     ]),
   ];
   if (studentIds.length === 0)
@@ -879,6 +890,69 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
         textbook: "",
         homeworkToday: "",
       });
+    }
+  }
+
+  // 5-d) 수업 나누기(0351a) — 받는 반 행(출결 알약 O · 보고서 잠금) + 원래 반 행 표식.
+  // 🔴 받는 반 행은 `classId`가 있는 **정규 모양**이다(보강 행이 아니다) — 출결이 이 반에 찍혀야 받는 선생님 몫이 된다.
+  //    수강행이 없으니 보고서 쪽은 `reportOptout: true`로 잠근다(보고서는 원래 반 담임이 쓴다 — 원장 2026-10-06).
+  for (const row of splitPlan.incoming) {
+    const stu = studById.get(row.studentId);
+    const cls = classById.get(row.classId);
+    if (!stu || !cls) continue;
+    const label = subjects.labelOf(cls.subject);
+    let os = byStudent.get(stu.id);
+    if (!os) {
+      const tmax = subjectTestMax.get(cls.subject) ?? 5;
+      os = {
+        id: stu.id,
+        name: stu.name,
+        grade: stu.grade ?? "",
+        school: stu.school ?? "",
+        tag: cls.class_name,
+        className: cls.class_name,
+        classId: cls.id,
+        attendance: "출석",
+        subjects: [],
+        tests: {
+          daily: { score: null, max: tmax, prevScore: null },
+          check: { score: null, max: tmax, prevScore: null },
+        },
+        attitude: null,
+        homework: "",
+        note: "",
+        progressConfirmed: false,
+        reportDraft: "",
+        reportSent: false,
+      };
+      byStudent.set(stu.id, os);
+    }
+    const names = classNamesByStudent.get(stu.id) ?? new Set<string>();
+    names.add(cls.class_name);
+    classNamesByStudent.set(stu.id, names);
+    if (os.subjects.some((su) => su.classId === cls.id)) continue;
+    os.subjects.push({
+      name: label,
+      subjectLabel: label,
+      subjectKey: cls.subject,
+      classId: cls.id,
+      className: cls.class_name,
+      isSpecial: !!cls.is_special,
+      reportOptout: true,
+      splitIn: row.note,
+      prev: "",
+      today: "",
+      textbook: "",
+      makeup: false,
+      homeworkToday: "",
+    });
+  }
+  if (splitPlan.outgoing.size > 0) {
+    for (const os of byStudent.values()) {
+      for (const su of os.subjects) {
+        const note = su.classId ? splitPlan.outgoing.get(`${os.id}|${su.classId}`) : undefined;
+        if (note) su.splitOut = note;
+      }
     }
   }
 
@@ -1565,7 +1639,8 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
         const legacyKey = su.subjectKey || su.name;
         let entry = byClass;
         // ⚠️ 보강 행은 legacyKey 폴백을 **타지 않는다** — 그 폴백이 바로 교차오염의 통로였다.
-        if (!entry && !makeupKey && !legacyTaken.has(legacyKey)) {
+        // 나눔 행(0351a)도 타지 않는다 — 옛 과목키 항목은 원래 반 행의 것이다(나눔 행은 보고서가 잠겨 있다).
+        if (!entry && !makeupKey && !su.splitIn && !legacyTaken.has(legacyKey)) {
           entry = sp[legacyKey];
           if (entry) legacyTaken.add(legacyKey);
         }

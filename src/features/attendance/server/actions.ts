@@ -71,6 +71,7 @@ import { canWriteAttendanceStudent } from "../makeup-write";
 // 보강 예약(0264a) — 예약된 학생의 그날 칸은 수강행이 없어도 연다(`hasReservedMakeup`), 시수를 쓰는 출결이 찍히면
 // 예약을 이행 처리한다(`completeMakeupReservations`). 둘 다 fail-soft — 표가 없어도 출결 저장은 종전 그대로.
 import { hasReservedMakeup, reservedCellKey, reservedCellKeys } from "./makeup-reservation-queries";
+import { hasSplitInto, splitIntoKeys } from "@/features/class-splits/server/queries";
 import { nativeWriteAllowance } from "@/features/makeups/server/adapters/gates";
 import { completeMakeupReservations, completionKey } from "./makeup-reservation-complete";
 import { kstToday } from "@/lib/date-kst";
@@ -669,7 +670,9 @@ export async function setAttendanceCell(input: {
           input.allowMakeup === true ||
           ((enrolled ?? 0) === 0 &&
             (existing ?? 0) === 0 &&
-            (await hasReservedMakeup(user.tenantId, { studentId, classId, date: sessionDate }))),
+            ((await hasReservedMakeup(user.tenantId, { studentId, classId, date: sessionDate })) ||
+              // 수업 나누기(0351a)로 그날 이 반에 오는 학생 — 보강 예약과 같은 뜻(수강행 없이 오기로 한 사람).
+              (await hasSplitInto(classId, studentId, sessionDate)))),
       })
     ) {
       const native = await nativeWriteAllowance({ studentId, classId, sessionDate });
@@ -1656,10 +1659,13 @@ export async function setAttendanceBulk(input: {
         .filter((c) => !enrolledSet.has(`${c.studentId}::${c.classId}`))
         .map((c) => ({ studentId: c.studentId, classId: c.classId, date: sessionDate })),
     );
+    // 수업 나누기(0351a)로 그날 들어오는 학생도 같은 문으로(단건 게이트 `hasSplitInto`와 같은 판정).
+    const splitKeys = await splitIntoKeys(classIds, sessionDate);
     allowed = cells.filter(
       (c) =>
         ownSet.has(c.classId) &&
         (enrolledSet.has(`${c.studentId}::${c.classId}`) ||
+          splitKeys.has(`${c.studentId}::${c.classId}`) ||
           reservedKeys.has(reservedCellKey({ studentId: c.studentId, classId: c.classId, date: sessionDate }))),
     );
     if (allowed.length === 0) return { error: "담당 반 수강생이 아니어서 기록할 수 없습니다" };

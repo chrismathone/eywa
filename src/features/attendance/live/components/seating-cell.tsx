@@ -258,6 +258,8 @@ export function SeatingCell({
         periodStart: klass.firstStart,
         quiet: true,
         source: "live",
+        // 수업 나누기로 온 학생(0351a) — 이 반 수강행이 없어 강사 게이트가 막는다. 보강 칸과 같은 문을 연다.
+        ...(student.splitMark?.dir === "in" ? { allowMakeup: true } : {}),
       })
         .then((res) => {
           if ("error" in res) {
@@ -297,6 +299,9 @@ export function SeatingCell({
                 student.reservedMakeup.periodLabel ? ` · ${student.reservedMakeup.periodLabel}` : ""
               })`
             : ""
+        }${
+          // 수업 나누기(0351a) — 왜 이 칸에 섰는지(또는 다른 반에 가 있는지)를 hover에 적는다.
+          student.splitMark ? ` · ${student.splitMark.note}` : ""
         }`}
         /* 🔴 링(검색 강조·hover)은 **칸 전체**에 두른다 — 시각 줄까지가 한 칸이라, 이름 알약에만 두르면
            찾은 칸의 아래 절반이 테두리 밖으로 새어 나간 것처럼 보인다. */
@@ -314,6 +319,9 @@ export function SeatingCell({
           } ${
             // 보강 예약으로 선 학생 — 기록 전엔 보라 점선(출석부 '보강 예약' 칸과 같은 문법), 찍히면 상태 색이 주인이다.
             student.reservedMakeup && !check ? "outline-1 outline-dashed -outline-offset-2 outline-purple/60" : ""
+          } ${
+            // 수업 나누기로 온 학생 — 기록 전엔 파란 점선(시간표 '나눔' 박스와 같은 info 색). 찍히면 상태 색이 주인이다.
+            student.splitMark?.dir === "in" && !check ? "outline-1 outline-dashed -outline-offset-2 outline-blue/60" : ""
           }`}
         >
           <span className="max-w-full truncate leading-none font-bold" style={{ fontSize: nameSize }}>

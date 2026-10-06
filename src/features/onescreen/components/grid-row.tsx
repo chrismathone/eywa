@@ -19,6 +19,7 @@ import {
 } from "../grid";
 import { evaluateSendGate } from "../send-gate";
 import { hasTextBesidesMarkers } from "@/features/report-templates/image-slots";
+import { rowLockNotice } from "../split-rows";
 import { reportOptoutNotice } from "@/features/classes/report-optout";
 import { checkMentConsistency, MENT_WARNING_HINT, MENT_WARNING_LABEL } from "../ment-consistency";
 import { attendanceMarkBadgeClass, attendanceMarkLabel, MARK_PRESENT } from "../attendance-mark";
@@ -330,8 +331,9 @@ export function GridBodyRow({
   const LOCK_FS =
     "contents [&_input:disabled]:opacity-50 [&_textarea:disabled]:opacity-50 [&_button:disabled]:opacity-50 [&:disabled_*]:cursor-not-allowed";
   const optoutRow = isReportOptoutRow(subject);
+  const lockNotice = rowLockNotice(subject, reportOptoutNotice(lang));
   const mentPlaceholder = optoutRow
-    ? reportOptoutNotice(lang)
+    ? lockNotice
     : isAbsent
       ? t("os.row.absentMent")
       : alreadySent
@@ -339,7 +341,7 @@ export function GridBodyRow({
         : null;
   /** 특이사항 자리 — 막기만 하지 말고 **갈 곳**을 알려준다(결석 사유는 출결 알약 안에 적는 칸이 있다). */
   const rowPlaceholder = optoutRow
-    ? reportOptoutNotice(lang)
+    ? lockNotice
     : isAbsent
       ? t("os.row.absentNote")
       : alreadySent
@@ -514,6 +516,10 @@ export function GridBodyRow({
           ) : null}
           {showClass && subject.className ? (
             <span className="text-text-faint text-xs">{subject.className}</span>
+          ) : null}
+          {/* 수업 나누기(0351a) — 받는 반 행이면 "← 원래 선생님", 원래 반 행이면 "→ 받는 선생님"(그 시간만). */}
+          {subject.splitIn || subject.splitOut ? (
+            <span className="bg-blue-soft text-blue rounded-pill px-1 py-px text-xs font-bold">{subject.splitIn ?? subject.splitOut}</span>
           ) : null}
           <span className="text-text-faint text-xs">{student.grade}</span>
         </div>
@@ -851,7 +857,7 @@ export function GridBodyRow({
                   : canAutoWrite
                   ? t("os.row.genTitle")
                   : optoutRow
-                    ? reportOptoutNotice(lang)
+                    ? lockNotice
                     : isAbsent
                       ? t("os.row.genAbsent")
                       : t("os.row.genNoProgress") // 미발송 반은 위 optoutRow 분기가 먼저 잡는다

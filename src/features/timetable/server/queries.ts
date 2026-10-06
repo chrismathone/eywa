@@ -474,6 +474,7 @@ export async function getScheduleSlotsForWeek(referenceDate: string): Promise<Sc
 }
 
 import type { TimetableReservedLine } from "@/features/attendance/makeup-reservation";
+import type { TimetableSplitLine } from "@/features/class-splits/lines";
 
 export type StudentLine = {
   name: string;
@@ -537,6 +538,11 @@ export type ScheduleSlotWithStudents = ScheduleSlot & {
    * 🔴 `students`에 섞지 않는다(인원·드래그·엑셀·이동 판정이 그 배열을 센다).
    */
   reserved?: TimetableReservedLine[];
+  /**
+   * 그 요일 칸의 **수업 나누기**(0351a, 표시 전용 — `attachSplitLines`가 기본뷰 직전에만 얹는다).
+   * 🔴 `students`에 섞지 않는다(위 `reserved`와 같은 이유 — 나눔은 수강이 아니다).
+   */
+  splits?: TimetableSplitLine[];
 };
 
 /**
