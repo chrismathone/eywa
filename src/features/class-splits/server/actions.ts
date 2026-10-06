@@ -74,7 +74,7 @@ export async function previewClassSplit(t: Target): Promise<SplitPreview> {
     .filter((d) => d.starts.length > 0)
     .sort((a, b) => "mon tue wed thu fri sat sun".indexOf(a.day) - "mon tue wed thu fri sat sun".indexOf(b.day));
   if (days.length === 0) {
-    return { ok: false, error: `${ctx.source.name}와(과) ${ctx.target.name}이(가) 같은 시간에 도는 요일이 없어 나눌 수 없습니다 — 반 이동을 쓰세요.` };
+    return { ok: false, error: `${ctx.source.name}와(과) ${ctx.target.name}이(가) 같은 요일에 도는 날이 없어 나눌 수 없습니다 — 반 이동을 쓰세요.` };
   }
   return {
     ok: true,
@@ -135,7 +135,7 @@ export async function createClassSplit(input: CreateSplitInput): Promise<CreateS
   const ends = (days as SplitDay[]).map((day) => endAfter(ctx.bounds[day] ?? [], start, units));
   if (ends.some((e) => e === null)) {
     const bad = (days as SplitDay[])[ends.findIndex((e) => e === null)]!;
-    return { ok: false, error: `${SPLIT_DAY_KO[bad]}요일 ${toHm(start)}부터 그 길이는 두 반이 같이 도는 시간이 아닙니다.` };
+    return { ok: false, error: `${SPLIT_DAY_KO[bad]}요일 ${toHm(start)}부터 그 길이는 받는 반 수업 시간을 넘습니다.` };
   }
   if (new Set(ends).size > 1) return { ok: false, error: "요일마다 끝나는 시각이 달라 한 번에 나눌 수 없습니다 — 요일별로 따로 나눠 주세요." };
   const end = ends[0]!;
