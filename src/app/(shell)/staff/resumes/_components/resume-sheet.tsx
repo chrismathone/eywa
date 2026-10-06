@@ -987,6 +987,21 @@ export function ResumeSheet({
                   ))}
             </td>
           </tr>
+          {/* 근무시간 — 한 줄 자유 텍스트(원장 2026-10-06). 직원 목록 '근무시간' 열이 이 값을 그대로 보여 준다. */}
+          <tr>
+            <th className={head}><P k="res.f.workHours" /></th>
+            <td className={cell} colSpan={3}>
+              {editing ? (
+                <EditInput
+                  name="c_workHours"
+                  defaultValue={c.workHours}
+                  placeholder={t("res.ph.workHours")}
+                />
+              ) : (
+                V(c.workHours)
+              )}
+            </td>
+          </tr>
           <tr>
             <th className={head}><P k="res.f.pay" /></th>
             <td className={cell} colSpan={3}>
