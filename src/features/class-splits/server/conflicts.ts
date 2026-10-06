@@ -77,6 +77,16 @@ export async function collectSplitWarnings(
     }
   }
 
+  // ④ 원래 반 수업 시간 밖 — 막지 않는다(맡아 주는 시간이 앞뒤로 붙을 수 있다). 무엇이 일어나는지만 알린다.
+  for (const day of plan.days) {
+    const rows = ctx.sourceRows.filter((r) => r.day_of_week === day);
+    if (rows.length === 0) continue;
+    if (rows.some((r) => overlaps(plan.start, plan.end, toMin(r.start_time), toMin(r.end_time)))) continue;
+    const s = Math.min(...rows.map((r) => toMin(r.start_time)));
+    const e = Math.max(...rows.map((r) => toMin(r.end_time)));
+    warnings.push(`${SPLIT_DAY_KO[day]} ${span(plan.start, plan.end)}은 ${ctx.source.name} 수업 시간(${span(s, e)}) 밖입니다 — 원래 반 수업은 그대로이고 이 시간이 더해집니다.`);
+  }
+
   // ③ 받는 반 강의실 정원
   const capWarn = await capacityWarnings(sb, tenantId, ctx, plan, rows, incoming);
   warnings.push(...capWarn);

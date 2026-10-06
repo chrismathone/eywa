@@ -21,7 +21,7 @@ describe("시간 단위 — 수학 1시간 · EiE 40분(원장 2026-10-06)", () 
   });
 });
 
-describe("고를 수 있는 시작 시각 = 두 반이 같이 도는 구간의 교시 칸", () => {
+describe("교시 칸 경계(splitBoundaries)", () => {
   const edgesOf = (...ws: { start: number; end: number }[]) => ws.flatMap((x) => [x.start, x.end]);
   const opts = (source: { start: number; end: number }[], target: { start: number; end: number }[], unit: number) =>
     splitBoundaries(intersectWindows(source, target), edgesOf(...source, ...target), unit);
@@ -136,8 +136,10 @@ describe("시간표 줄 — 원래 반엔 →, 받는 반엔 ←", () => {
     expect(l?.dir).toBe("in");
     expect(l?.otherLabel).toBe("이성우");
   });
-  it("시간이 안 겹치는 칸·다른 요일엔 안 선다", () => {
-    expect(splitLinesForCell({ classId: "A", dayOfWeek: "tue", startTime: "14:20", endTime: "16:20" }, [split()], names)).toEqual([]);
+  it("받는 반은 그 시간 칸에만 · 원래 반은 그날 칸이면 시간이 달라도 선다 · 다른 요일엔 안 선다", () => {
+    expect(splitLinesForCell({ classId: "B", dayOfWeek: "tue", startTime: "14:20", endTime: "16:20" }, [split()], names)).toEqual([]);
+    // 나눈 시간은 받는 반 시간표 기준이라 원래 반 수업 밖일 수 있다(원장 2026-10-06).
+    expect(splitLinesForCell({ classId: "A", dayOfWeek: "tue", startTime: "14:20", endTime: "16:20" }, [split()], names)).toHaveLength(1);
     expect(splitLinesForCell({ classId: "A", dayOfWeek: "fri", startTime: "16:20", endTime: "19:20" }, [split()], names)).toEqual([]);
   });
   it("모르는 반이면 지어내지 않는다", () => {

@@ -45,9 +45,11 @@ export function splitLinesForCell(
   const out: TimetableSplitLine[] = [];
   for (const s of splits) {
     if (s.dayOfWeek !== cell.dayOfWeek) continue;
-    if (!(toMin(s.startTime) < ce && cs < toMin(s.endTime))) continue;
     const dir = s.sourceClassId === cell.classId ? "out" : s.targetClassId === cell.classId ? "in" : null;
     if (!dir) continue;
+    // 받는 반은 그 시간 칸에만 선다. 원래 반은 **그날 칸이면 어디든** 선다 — 나눈 시간은 받는 반 시간표 기준이라
+    // 원래 반 수업 시간 밖일 수 있다(원장 2026-10-06 *"옮겨지는 쌤 시간 내에서"*). 시간으로 거르면 원래 반에선 안 보인다.
+    if (dir === "in" && !(toMin(s.startTime) < ce && cs < toMin(s.endTime))) continue;
     const stu = names.student(s.studentId);
     const other = names.klass(dir === "out" ? s.targetClassId : s.sourceClassId);
     if (!stu || !other) continue;
