@@ -3,6 +3,8 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { classnoteModuleOn } from "@/features/owner/classnote-gate";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
 import { classKey, boardKey } from "../english-writing";
@@ -37,6 +39,7 @@ export type BoardRosterView = {
 export async function getBoardRosterCheck(subject = "english"): Promise<BoardRosterView | null> {
   const user = await getCurrentUser();
   if (!user) return null;
+  if (!classnoteModuleOn(await getTenantSettings())) return null;
   const supabase = await createClient();
   const today = kstToday();
 

@@ -26,6 +26,8 @@ import { logAction } from "@/features/audit/server/log";
 import { teacherOwnsStudent } from "@/features/onescreen/server/scope";
 import { ownsMakeupReport } from "@/features/onescreen/makeup-owner";
 import { RECALL_FAILED, RECALL_REQUESTED, partitionRecallTargets } from "../report-recall";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { classnoteModuleOn } from "@/features/owner/classnote-gate";
 
 /** 한 번에 처리할 상한 — 실수로 전체 선택해 대량 삭제가 나가는 것을 구조적으로 막는다. */
 const MAX_PER_CALL = 100;
@@ -46,6 +48,9 @@ export type RecallResult = {
  * (revokeShareLink·reissueShareLink와 같은 키). **게이트는 아래 본체 하나뿐** — 진입점만 둘이다.
  */
 export async function requestReportRecallByShareToken(shareToken: string): Promise<RecallResult> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  if (!classnoteModuleOn(await getTenantSettings())) return { ok: false, error: "사용할 수 없는 기능입니다" };
   // '다른 강사 뷰'(열람 전용) 차단 — canWriteTenant 캡만으론 부족하다: 겸직이 같은 학생을 직접 담당하면
   // 아래 소유 판정(teacherOwnsStudent·ownsMakeupReport)이 본인 축으로 열려 열람 중 회수가 뚫린다(#77).
   {
@@ -71,6 +76,7 @@ export async function requestReportRecallByShareToken(shareToken: string): Promi
 export async function requestReportRecall(ids: string[]): Promise<RecallResult> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  if (!classnoteModuleOn(await getTenantSettings())) return { ok: false, error: "사용할 수 없는 기능입니다" };
   // '다른 강사 뷰'(열람 전용) 차단 — 위 requestReportRecallByShareToken과 같은 이유(겸직 본인 축 우회).
   const roError = await readonlyTeacherViewError();
   if (roError) return { ok: false, error: roError };

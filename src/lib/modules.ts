@@ -130,8 +130,8 @@ export const MODULES: Readonly<Record<ModuleId, ModuleDef>> = {
   },
   classnote: {
     id: "classnote",
-    label: "ClassNote 발송",
-    description: "수업보고서를 ClassNote 학부모 게시판으로 보내는 발송 PC 연동",
+    label: "클래스노트",
+    description: "수업보고서의 클래스노트 탭: 발송 큐·반 구성·공지·직접 발송·회수·학부모 글·답글 연동",
     menuKeys: [],
   },
   makeedu: {

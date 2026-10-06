@@ -24,7 +24,7 @@ import {
   type NoticeAttachment,
 } from "@/features/onescreen/notice-attachments";
 import { workerSupportsClassNoticeImages } from "../worker-results";
-import { classnoteSendOn } from "@/features/owner/classnote-gate";
+import { classnoteModuleOn, classnoteSendOn } from "@/features/owner/classnote-gate";
 import { effectiveTeacherId, readonlyTeacherViewError } from "@/lib/auth/view-mode";
 // 담당 반 판정 단일 소스(담당 반 ∪ 그날 위임 반) — classes.teacher_id를 직접 비교하지 않는다(0173a).
 import { getTeachingClassIds } from "@/features/classes/server/delegation";
@@ -84,6 +84,8 @@ export async function sendClassWideNotice(input: {
   if (roError) return { ok: false, error: roError };
   const teacherId = await effectiveTeacherId();
   if (!teacherId && !(await canWriteTenant(user.systemRole, "lesson_reports"))) return { ok: false, error: "공지 발송 권한이 없습니다" };
+  const settings = await getTenantSettings();
+  if (!classnoteModuleOn(settings)) return { ok: false, error: "사용할 수 없는 기능입니다" };
   const title = (input.title ?? "").trim();
   const body = (input.body ?? "").trim();
   if (!title) return { ok: false, error: "공지 제목을 입력하세요" };
@@ -133,7 +135,6 @@ export async function sendClassWideNotice(input: {
   if (images.length) targets = targets.map((t) => ({ ...t, attachments: images }));
 
   // 발송 안전 스위치 — 보고서·원생 개별 공지와 같은 스위치(OFF = 큐에 안 올린다).
-  const settings = await getTenantSettings();
   if (!classnoteSendOn(settings)) return { ok: true, queued: 0, skipped, dryRun: true };
   // 이미지가 있으면 발송 PC가 처리할 수 있는 판인지 먼저 본다 — 옛 판은 글만 올리고 '발송 완료'로 적는다.
   if (images.length) {
@@ -174,6 +175,7 @@ export async function listClassWideNotices(): Promise<{
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   if (!(await canAccessTenant(user.systemRole, "lesson_reports"))) return { ok: false, error: "권한이 없습니다" };
+  if (!classnoteModuleOn(await getTenantSettings())) return { ok: false, error: "사용할 수 없는 기능입니다" };
   const supabase = await createClient();
   const [{ data, error }, { data: boards }] = await Promise.all([
     supabase
@@ -219,6 +221,7 @@ export async function loadMyClassWideNotice(): Promise<{
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   const teacherId = await effectiveTeacherId();
   if (!teacherId && !(await canWriteTenant(user.systemRole, "lesson_reports"))) return { ok: false, error: "공지 발송 권한이 없습니다" };
+  if (!classnoteModuleOn(await getTenantSettings())) return { ok: false, error: "사용할 수 없는 기능입니다" };
   const supabase = await createClient();
   const admin = createAdminClient();
   try {

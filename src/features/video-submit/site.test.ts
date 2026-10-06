@@ -112,7 +112,8 @@ describe("배선 가드", () => {
   });
   it("🔴 두 로더가 영상 지문(md5·용량)과 들어온 시각 재료를 함께 읽는다 — 빠지면 같은 파일 판정·같은 날 규칙이 조용히 꺼진다(가짜 DB는 select 칸을 안 본다)", () => {
     const ledger = read("src", "features", "video-homework", "server", "ledger-queries.ts");
-    expect(ledger).toContain('.select("id,student_id,post_id,posted_at,created_at,uploaded_at,md5,bytes,class_id:route->>classId,homework_date:route->>homeworkDate")');
+    const columns = ledger.match(/\.select\("([^"]*post_id[^"]*)"\)/)?.[1].split(",");
+    expect(columns).toEqual(expect.arrayContaining(["id", "student_id", "post_id", "posted_at", "created_at", "uploaded_at", "md5", "bytes", "status", "drive_file_id", "class_id:route->>classId", "homework_date:route->>homeworkDate"]));
     expect(ledger).toContain("fingerprint: videoFingerprint(row.md5, row.bytes)");
     // 지난 기간을 봐도 지금 보기와 같은 판정 — 고른 영상을 짝 범위 끝 + 2주까지 읽는다
     expect(ledger).toContain("loadClassVideos(tenantId, homeworkStudents, wideFrom, addDays(wideTo, VIDEO_MATCH_WINDOW_DAYS))");

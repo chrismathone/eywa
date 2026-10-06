@@ -27,6 +27,8 @@ import { humanizeDbError } from "@/lib/supabase/db-error";
 import { kstToday } from "@/lib/date-kst";
 import { classKey, boardKey } from "../english-writing";
 import { birthYearMatches, kstSchoolYear, matchMembers } from "../board-roster-diff";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { classnoteModuleOn } from "@/features/owner/classnote-gate";
 
 /** 스냅샷이 이보다 오래되면 연결을 막는다 — 낡은 명단으로 못 박으면 이미 떠난 원아에 붙을 수 있다. */
 const MAX_SNAPSHOT_AGE_DAYS = 7;
@@ -43,6 +45,7 @@ export async function linkClassnoteChild(input: {
   // G1 권한 — 발송 대상을 정하는 행위라 보고서 쓰기 권한과 같은 등급으로 본다.
   if (!(await canWriteTenant(user.systemRole, "lesson_reports")))
     return { ok: false, error: "연결할 권한이 없습니다" };
+  if (!classnoteModuleOn(await getTenantSettings())) return { ok: false, error: "사용할 수 없는 기능입니다" };
 
   const studentId = String(input.studentId ?? "").trim();
   const boardId = Number(input.boardId);
@@ -168,6 +171,7 @@ export async function unlinkClassnoteChild(input: { studentId: string; boardId: 
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "lesson_reports")))
     return { ok: false, error: "해제할 권한이 없습니다" };
+  if (!classnoteModuleOn(await getTenantSettings())) return { ok: false, error: "사용할 수 없는 기능입니다" };
 
   const supabase = await createClient();
   const { error } = await supabase

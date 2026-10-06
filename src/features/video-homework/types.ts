@@ -34,9 +34,11 @@ export type VideoHomeworkLedgerRow = VideoHomeworkRosterRow & {
   editable: boolean;
 };
 
-/** 학부모가 올린 숙제 영상 한 건 — 워커가 분류한 반(`route.classId`, 못 정했으면 null)과 게시 시각·영상 id만 내려온다(원본·주소는 안 내려온다 — id는 학생 상세 '숙제 영상' 탭으로 바로 가는 링크용). */
+/** 숙제 영상 한 건 — 반·시각·id와 재생 가능한 경우의 미리보기만 내려온다. 원본 다운로드 주소는 내리지 않는다. */
 export type VideoArrival = {
   id: string; studentId: string; classId: string | null; postedAt: string;
+  /** 서버가 파일 id를 검증한 재생 주소. 업로드 전/잘못된 id는 null, 옛 조회는 생략 가능. */
+  playback?: { preview: string; thumbnail: string; uploadedAt: string | null } | null;
   /** 학생이 올리기 사이트에서 **고른 숙제일**(`route.homeworkDate`, 2026-10-03) — 있으면 그 숙제 칸으로만 간다. 없으면 게시일순 규칙. */
   homeworkDate?: string | null;
   /**

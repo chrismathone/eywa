@@ -18,7 +18,7 @@ import {
   type NoticeReportLink,
 } from "@/features/onescreen/notice-links";
 import type { NoticeSkip } from "../notice-targets";
-import { classnoteSendOn } from "@/features/owner/classnote-gate";
+import { classnoteModuleOn, classnoteSendOn } from "@/features/owner/classnote-gate";
 import { prepareClassNotice } from "./prepare-class-notice";
 import type { ClassNoticeInput, ClassNoticePreview } from "../class-notice-preview";
 
@@ -53,6 +53,7 @@ async function loadNoticeClassOptions(): Promise<{ ok: boolean; classes?: Notice
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   if (!(await canAccessTenant(user.systemRole, "lesson_reports"))) return { ok: false, error: "권한이 없습니다" };
   const settings = await getTenantSettings();
+  if (!classnoteModuleOn(settings)) return { ok: false, error: "사용할 수 없는 기능입니다" };
   const allowed = settings.report.classnoteSubjects;
   if (!allowed.length) return { ok: true, classes: [] };
 
@@ -181,6 +182,7 @@ export async function listClassNotices(): Promise<{ ok: boolean; rows?: NoticeRo
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   if (!(await canAccessTenant(user.systemRole, "lesson_reports"))) return { ok: false, error: "권한이 없습니다" };
+  if (!classnoteModuleOn(await getTenantSettings())) return { ok: false, error: "사용할 수 없는 기능입니다" };
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("classnote_notices")

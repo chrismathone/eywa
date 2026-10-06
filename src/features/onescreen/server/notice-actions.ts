@@ -37,7 +37,7 @@ import {
   type NoticeAttachment,
 } from "../notice-attachments";
 import { humanizeDbError } from "@/lib/supabase/db-error";
-import { classnoteSendOn } from "@/features/owner/classnote-gate";
+import { classnoteModuleOn, classnoteSendOn } from "@/features/owner/classnote-gate";
 // 수학 개별 공지의 반 보드 경로(삼자 일치) — 세 발송 표면이 같이 쓰는 한 벌.
 import { routeNoticeCandidates, type RoutedCandidate } from "@/features/report-admin/server/notice-class-route";
 
@@ -476,6 +476,7 @@ async function postedNoticeActor(
 export async function cancelOnescreenNotice(noticeId: string): Promise<MutateResult> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  if (!classnoteModuleOn(await getTenantSettings())) return { ok: false, error: "사용할 수 없는 기능입니다" };
   const supabase = await createClient();
   const { data: row } = await supabase
     .from("classnote_notices")
@@ -529,6 +530,7 @@ export async function cancelOnescreenNotice(noticeId: string): Promise<MutateRes
 export async function editPostedNotice(noticeId: string, newBody: string): Promise<MutateResult> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  if (!classnoteModuleOn(await getTenantSettings())) return { ok: false, error: "사용할 수 없는 기능입니다" };
   const body = (newBody ?? "").trim();
   if (!body) return { ok: false, error: "내용을 입력하세요" };
   if (body.length > BODY_MAX) return { ok: false, error: `공지가 너무 깁니다(최대 ${BODY_MAX}자)` };
@@ -612,6 +614,7 @@ async function explainZeroRows(
 export async function editQueuedNotice(noticeId: string, newBody: string): Promise<MutateResult> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  if (!classnoteModuleOn(await getTenantSettings())) return { ok: false, error: "사용할 수 없는 기능입니다" };
   const body = (newBody ?? "").trim();
   if (!body) return { ok: false, error: "공통 내용을 입력하세요" };
   if (body.length > BODY_MAX) return { ok: false, error: `공지가 너무 깁니다(최대 ${BODY_MAX}자)` };
@@ -659,6 +662,7 @@ export async function editQueuedNotice(noticeId: string, newBody: string): Promi
 export async function deleteQueuedNotice(noticeId: string): Promise<MutateResult> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  if (!classnoteModuleOn(await getTenantSettings())) return { ok: false, error: "사용할 수 없는 기능입니다" };
   const supabase = await createClient();
   const { data } = await supabase
     .from("classnote_notices")

@@ -13,7 +13,7 @@ vi.mock("@/lib/auth/perm-matrix", () => ({ canWriteTenant: m.canWrite, canAccess
 vi.mock("@/lib/auth/view-mode", () => ({ effectiveTeacherId: m.teacherId, readonlyTeacherViewError: m.readonly }));
 vi.mock("@/features/classes/server/delegation", () => ({ getTeachingClassIds: m.teaching }));
 vi.mock("@/features/owner/server/queries", () => ({ getTenantSettings: m.settings }));
-vi.mock("@/features/owner/classnote-gate", () => ({ classnoteSendOn: () => m.sendOn }));
+vi.mock("@/features/owner/classnote-gate", () => ({ classnoteSendOn: () => m.sendOn, classnoteModuleOn: (s: { modules?: { disabled?: string[] } }) => !s.modules?.disabled?.includes("classnote") }));
 vi.mock("@/features/audit/server/log", () => ({ logAction: m.log }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
