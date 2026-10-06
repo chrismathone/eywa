@@ -11,7 +11,7 @@ export function SplitBadge({ split }: { split: { dir: "in" | "out"; note: string
   if (!split) return null;
   return (
     <span
-      className={`ml-1 inline-block min-w-0 max-w-[14rem] truncate rounded-full whitespace-nowrap px-1.5 py-px text-[11px] font-bold ${TONE_SOFT.info}`}
+      className={`ml-1 inline-block min-w-0 max-w-[14rem] truncate rounded-full whitespace-nowrap px-1.5 py-px text-xs font-bold ${TONE_SOFT.info}`}
       title={split.note}
     >
       {split.dir === "in" ? split.note : `나눔 ${split.note}`}

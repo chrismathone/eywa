@@ -672,7 +672,7 @@ export async function setAttendanceCell(input: {
             (existing ?? 0) === 0 &&
             ((await hasReservedMakeup(user.tenantId, { studentId, classId, date: sessionDate })) ||
               // 수업 나누기(0351a)로 그날 이 반에 오는 학생 — 보강 예약과 같은 뜻(수강행 없이 오기로 한 사람).
-              (await hasSplitInto(classId, studentId, sessionDate))))),
+              (await hasSplitInto(classId, studentId, sessionDate)))),
       })
     ) {
       const native = await nativeWriteAllowance({ studentId, classId, sessionDate });
