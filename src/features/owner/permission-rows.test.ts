@@ -2,7 +2,8 @@
  * 역할·권한 면의 줄 구성 = 왼쪽 탭과 그 내부 메뉴의 차례 (원장 2026-10-06).
  *
  * 지키는 것:
- *  · **모든 권한 키가 정확히 한 번** 선다 — 어떤 메뉴 구성에서도(감춤 · 옮김 · 새 탭). 줄이 빠지면 그 권한을 고칠 자리가 없다.
+ *  · 전체 목록(`permissionRowGroups`)에는 **모든 권한 키가 정확히 한 번** 선다 — 어떤 메뉴 구성에서도(감춤 · 옮김 · 새 탭).
+ *    화면에 세우는 목록(`editablePermissionRowGroups`)은 거기서 메뉴에 없는 화면 · 감춘 메뉴 · 역할 전용 화면을 뺀다.
  *  · 차례·묶음·이름은 사이드바와 같은 해석에서 나온다 — 원장이 탭을 옮기면 표도 따라 바뀐다.
  *  · 메뉴 버튼이 없는 권한은 그 권한을 쓰는 화면 아래에 선다.
  */
@@ -10,6 +11,7 @@ import { describe, expect, it } from "vitest";
 import { configuredHubGroups, HUB_GROUPS, SUPPORT_GROUPS } from "@/lib/menu-hub";
 import { teacherMenuKeysFor } from "@/lib/navigation";
 import { MENU_KEYS, MENU_LABEL, resolveMatrix, TEACHER_MENU_KEYS, type MenuKey } from "@/lib/permissions";
+import { SETTINGS_ROLE_HREF } from "@/lib/settings-role-catalog";
 import { teacherNavigationSource } from "@/lib/teacher-navigation";
 import { TEACHER_MENU_LINKS } from "@/lib/teacher-menu-links";
 import { editablePermissionRowGroups, NO_MENU_GROUP, permissionRowGroups, TEACHER_ONLY_GROUP, type PermissionNavigation } from "./permission-rows";
@@ -36,18 +38,20 @@ const BUSY: PermissionNavigation = {
   teacherMenus: [{ href: "/expense-requests", order: 0 }, { href: "/textbook-requests", hidden: true }],
 };
 
-describe("화면에 세우는 줄 — 탭 및 메뉴 구성에 있는 화면의 권한만(원장 2026-10-06)", () => {
-  for (const [name, nav, generic] of [
-    ["저장된 구성이 없을 때", undefined, false],
-    ["일반판(기능 면 포함)", undefined, true],
-    ["옮김 · 감춤 · 개명 · 새 탭이 섞인 구성", BUSY, false],
+describe("화면에 세우는 줄 — 탭 및 메뉴 구성에서 쓰고 있는 화면의 권한만(원장 2026-10-06)", () => {
+  for (const [name, nav, generic, hiddenMenus] of [
+    ["저장된 구성이 없을 때", undefined, false, []],
+    ["일반판(기능 면 포함)", undefined, true, []],
+    // 강사뷰에서 감춘 교재 요청만 더 빠진다 — 시간표는 관리자뷰에서 감췄어도 강사 '내 메뉴'에 보여 남고,
+    // 수납관리는 탭을 감췄어도 다른 탭으로 옮긴 면(교재)이 보여 남는다.
+    ["옮김 · 감춤 · 개명 · 새 탭이 섞인 구성", BUSY, false, ["textbook_requests"]],
   ] as const) {
     it(name, () => {
       const shown = editablePermissionRowGroups(nav, { generic }).flatMap((g) => g.rows.map((r) => r.menu));
-      // 빠지는 것은 '메뉴에 없는 화면' 묶음과 역할 전용 화면 둘뿐이고, 차례는 그대로다.
-      const dropped = new Set<MenuKey>([...menusOf(NO_MENU_GROUP.id, nav), "teacher_onescreen", "my_learning"]);
+      // 빠지는 것은 '메뉴에 없는 화면' 묶음 · 역할 전용 화면 둘 · 구성에서 감춘 메뉴뿐이고, 차례는 그대로다.
+      const dropped = new Set<MenuKey>([...menusOf(NO_MENU_GROUP.id, nav), "teacher_onescreen", "my_learning", ...hiddenMenus]);
       expect(shown).toEqual(keysOf(nav, generic).filter((menu) => !dropped.has(menu)));
-      expect([...dropped].sort()).toEqual(["admin", "calendar", "my_learning", "teacher_onescreen"]);
+      expect([...dropped].filter((menu) => !(hiddenMenus as readonly string[]).includes(menu)).sort()).toEqual(["admin", "calendar", "my_learning", "teacher_onescreen"]);
       expect(shown).toHaveLength(MENU_KEYS.length - dropped.size);
       expect(editablePermissionRowGroups(nav, { generic }).some((g) => g.id === NO_MENU_GROUP.id)).toBe(false);
       // 줄이 다 빠진 묶음은 세우지 않는다(이름만 남은 빈 띠).
@@ -55,10 +59,47 @@ describe("화면에 세우는 줄 — 탭 및 메뉴 구성에 있는 화면의 
     });
   }
 
-  it("🔴 메뉴 구성에서 감춘 메뉴의 줄은 남는다 — 감춘 것은 입구뿐이고 주소로는 열린다(권한을 고칠 자리가 있어야 한다)", () => {
+  const shownMenus = (nav: PermissionNavigation) => editablePermissionRowGroups(nav).flatMap((g) => g.rows.map((r) => r.menu));
+
+  it("🔴 감춘 메뉴의 줄은 세우지 않는다 — 그 화면 안에서 쓰는 권한 줄도 함께 빠진다(원장 *\"감춘 메뉴 줄도 표에서 빼\"*)", () => {
+    // 수납관리 탭을 통째로 감춘다(옮긴 면 없음) → 수납관리 줄과 그 아래 급여 정책 설정 줄이 함께 빠지고, 빈 탭 띠도 서지 않는다.
+    const nav: PermissionNavigation = { groups: [{ id: "billing", hidden: true }] };
+    expect(menusOf("billing", nav)).toEqual(["billing", "payroll_settings"]); // 전체 목록에는 그대로 있다(권한은 살아 있다)
+    expect(shownMenus(nav)).not.toContain("billing");
+    expect(shownMenus(nav)).not.toContain("payroll_settings");
+    expect(editablePermissionRowGroups(nav).some((g) => g.id === "billing")).toBe(false);
+    // 다른 줄은 그대로다.
+    expect(shownMenus(nav)).toHaveLength(shownMenus({}).length - 2);
+  });
+
+  it("관리자뷰에서 감췄어도 강사 '내 메뉴'에 보이는 메뉴는 남긴다 — 양쪽에서 다 감춰야 빠진다", () => {
+    // BUSY는 시간표를 관리자뷰에서만 감췄다 — 강사 '내 메뉴'가 쓰고 있으니 줄(과 그 아래 구글 시트 연동)이 남는다.
+    expect(shownMenus(BUSY)).toEqual(expect.arrayContaining(["timetable", "sheet_sync"]));
+    const both: PermissionNavigation = { ...BUSY, teacherMenus: [...(BUSY.teacherMenus ?? []), { href: "/timetable", hidden: true }] };
+    expect(shownMenus(both)).not.toContain("timetable");
+    expect(shownMenus(both)).not.toContain("sheet_sync");
+  });
+
+  it("면 하나만 감춘 권한은 남는다 — 다른 입구가 보이면 쓰고 있는 것이다", () => {
+    // BUSY는 '오늘 출결' 면만 감췄다(출석부의 다른 면은 보인다).
+    expect(shownMenus(BUSY)).toEqual(expect.arrayContaining(["attendance", "seat_attendance"]));
+  });
+
+  it("남긴 줄의 감춤 표식은 지우지 않는다 — 관리자뷰에서 감췄는데 왜 서 있는지 화면이 적는다", () => {
     const rows = editablePermissionRowGroups(BUSY).flatMap((g) => g.rows);
     expect(rows.find((r) => r.menu === "timetable")?.hiddenInMenu).toBe(true);
-    expect(rows.some((r) => r.menu === "billing")).toBe(true); // 탭째 감춘 수납관리
+    // 표식이 달린 채 선 줄은 강사 '내 메뉴'가 쓰는 메뉴뿐이다.
+    expect(rows.filter((r) => r.hiddenInMenu).map((r) => r.menu)).toEqual(["timetable"]);
+    // 묶음 표식도 지우지 않는다 — 수납관리 탭은 감췄지만 다른 탭으로 옮긴 면(교재)이 보여서 남는다.
+    expect(editablePermissionRowGroups(BUSY).find((g) => g.id === "billing")?.hiddenInMenu).toBe(true);
+  });
+
+  it("🔴 설정 권한은 관리자뷰만 따른다 — 강사뷰의 '설정' 묶음에 입구가 있어도 관리자뷰에서 감추면 빠진다", () => {
+    const base = shownMenus({});
+    expect(base).toEqual(expect.arrayContaining(["report_settings", "ai_ment"]));
+    const nav: PermissionNavigation = { menus: [{ href: SETTINGS_ROLE_HREF.report_settings, hidden: true }] };
+    expect(shownMenus(nav)).not.toContain("report_settings");
+    expect(shownMenus(nav)).toHaveLength(base.length - 1);
   });
 });
 
@@ -157,7 +198,7 @@ describe("원장이 메뉴 구성을 바꾸면 표도 따라 바뀐다", () => {
     expect(menusOf("billing", BUSY)).toContain("billing");
   });
 
-  it("🔴 감춘 메뉴·감춘 탭의 권한도 표에 남는다 — 감춤은 입구뿐이고 권한은 그대로다", () => {
+  it("🔴 감춘 메뉴·감춘 탭의 권한도 전체 목록에는 남는다(표식만 단다) — 감춤은 입구뿐이고 권한은 그대로다. 화면에 세울지는 위 describe", () => {
     expect(group("billing", BUSY)).toMatchObject({ hiddenInMenu: true });
     const timetable = group("class", BUSY)!.rows.find((r) => r.menu === "timetable")!;
     expect(timetable.hiddenInMenu).toBe(true);

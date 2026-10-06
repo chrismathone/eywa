@@ -7,6 +7,7 @@ import { TEACHER_TOGGLE_KEYS, teacherToggleOnAccess } from "@/features/owner/tea
 import { ambiguousRoleCells } from "@/features/owner/permissions-canonical";
 import type { PermissionsSettings } from "@/features/owner/settings-types";
 import {
+  MENU_KEYS,
   MENU_LABEL,
   SYSTEM_ROLES,
   isPermissionLocked,
@@ -95,8 +96,9 @@ export function PermissionsSection({
   const ambiguous = notice.cells;
   // '저장 전 변경'의 기준은 **확정 상태**다(서버 prop이 아니다 — 저장 직후엔 prop이 잠깐 옛 값이라 방금 저장한 칸이 변경으로 남는다).
   const savedMatrix = useMemo(() => (JSON.parse(confirmed) as PermissionsDraft).matrix, [confirmed]);
-  // 표에 선 차례대로 적는다(왼쪽 탭 → 내부 메뉴).
-  const changes = groups.flatMap((g) => g.rows).flatMap(({ menu }) => SYSTEM_ROLES.flatMap((role) =>
+  // 표에 선 차례대로 적고(왼쪽 탭 → 내부 메뉴), **표에 없는 줄의 변경도 뒤에 붙인다** — 감춘 메뉴의 강사 칸은 위 '내 메뉴' 표시로 바뀐다.
+  const shownMenus = groups.flatMap((g) => g.rows.map((r) => r.menu));
+  const changes = [...shownMenus, ...MENU_KEYS.filter((menu) => !shownMenus.includes(menu))].flatMap((menu) => SYSTEM_ROLES.flatMap((role) =>
     matrix[menu][role] === savedMatrix[menu][role] ? [] : [{ menu, role, before: savedMatrix[menu][role], after: matrix[menu][role] }],
   ));
   const staffName = (id: string) => staffOptions.find((s) => s.id === id)?.name || userOverrideNames[id] || `${id.slice(0, 8)}…`;
@@ -148,7 +150,7 @@ export function PermissionsSection({
           title="역할별 메뉴 권한"
           description={<>
             셀을 클릭하면 <b>전체 → 담당 → 읽기 → 없음</b> 순으로 바뀝니다. 기본값과 다른 셀만 저장됩니다
-            (기본값과 다른 셀 {overrides.length}개). 줄은 <b>탭 및 메뉴 구성에 있는 메뉴</b>가 <b>왼쪽 탭과 그 안의 메뉴 차례</b>대로 서 있습니다(구성을 바꾸면
+            (기본값과 다른 셀 {overrides.length}개). 줄은 <b>탭 및 메뉴 구성에서 쓰는 메뉴</b>가 <b>왼쪽 탭과 그 안의 메뉴 차례</b>대로 서 있습니다(구성에서 감춘 메뉴는 표에 없고 — 강사 ‘내 메뉴’에 보이면 ‘관리자뷰에서 감춤’으로 남습니다 — 구성을 바꾸면
             함께 바뀝니다). 선생님 원스크린·내 학습은 강사·학생 전용 화면이라 표에 없고, 학생 역할과 원장의 설정·대시보드 접근은
             잠글 수 없습니다. 강사 대시보드는 담당 범위 집계가 없어 비활성화됩니다.
           </>}

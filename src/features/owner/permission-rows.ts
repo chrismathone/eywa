@@ -9,11 +9,11 @@
  *    ([`configuredHubGroups`](@/lib/menu-hub))을 그대로 부른다. 원장이 탭을 옮기거나 이름을 바꾸면 이 표도 따라 바뀐다.
  * 🔴 줄의 단위는 **권한 키**다(목적지가 아니다) — 수납의 일곱 면은 권한이 하나라 줄도 하나다. 그 줄이 함께 여는 내부 메뉴는
  *    `covers`에 이름으로 적는다(무엇이 열리는지 표에서 보이게).
- * 🔴 메뉴 구성에서 감춘 줄도 **지우지 않는다** — 감추는 것은 입구뿐이고 권한은 그대로다(주소를 치면 열린다, [[#77]]).
- *    표에서 빠지면 그 권한을 고칠 자리가 사라진다. `hiddenInMenu` 표식만 단다.
- * 🔴 화면(표 · 개인별 메뉴 권한의 메뉴 고르기)은 `editablePermissionRowGroups`를 쓴다 — **탭 및 메뉴 구성에 있는 화면의 권한만** 세운다
- *    (원장 2026-10-06 *"탭 및 메뉴 구성에 사용중인 역할만 역할 권한에 넣을것"*). 어느 메뉴에도 없는 화면(④)과, 어느 역할의 칸도 바꿀 수
- *    없는 역할 전용 화면 둘(선생님 원스크린 · 내 학습 — *"역할 필요없어 보이는데"*)은 세우지 않는다.
+ * 🔴 이 목록은 메뉴 구성에서 감춘 줄도 **지우지 않고** `hiddenInMenu` 표식을 단다 — 감추는 것은 입구뿐이고 권한은 그대로다
+ *    (주소를 치면 열린다, [[#77]]). 화면에 세울지는 아래 `editablePermissionRowGroups`가 정한다(감춘 줄은 세우지 않는다).
+ * 🔴 화면(표 · 개인별 메뉴 권한의 메뉴 고르기)은 `editablePermissionRowGroups`를 쓴다 — **탭 및 메뉴 구성에서 쓰고 있는 화면의 권한만** 세운다
+ *    (원장 2026-10-06 *"탭 및 메뉴 구성에 사용중인 역할만 역할 권한에 넣을것"* · *"감춘 메뉴 줄도 표에서 빼"*). 어느 메뉴에도 없는 화면(④),
+ *    구성에서 감춘 메뉴, 어느 역할의 칸도 바꿀 수 없는 역할 전용 화면 둘(선생님 원스크린 · 내 학습)은 세우지 않는다.
  * 강사 '내 메뉴' 표시 칸의 차례는 [`teacher-toggle-rows.ts`](./teacher-toggle-rows.ts)가 같은 방식으로 정한다.
  */
 import { configuredHubGroups, HUB_GROUPS, hubDestinationForPath, SUPPORT_GROUPS, type HubDest } from "@/lib/menu-hub";
@@ -167,16 +167,31 @@ export function permissionRowGroups(navigation?: PermissionNavigation, options?:
 }
 
 /**
- * **화면에 세우는** 묶음과 줄 — 탭 및 메뉴 구성(관리자뷰 · 강사뷰)에 있는 화면의 권한만. 위 목록에서 둘을 뺀다:
- *  · '메뉴에 없는 화면' 묶음(④) — 메뉴에서 뺀 화면 · 옮겨진 옛 화면. 구성에 없는 화면의 줄은 표에 세우지 않는다.
+ * **화면에 세우는** 묶음과 줄 — 탭 및 메뉴 구성(관리자뷰 · 강사뷰)에서 **쓰고 있는** 화면의 권한만. 위 목록에서 셋을 뺀다:
+ *  · '메뉴에 없는 화면' 묶음(④) — 메뉴에서 뺀 화면 · 옮겨진 옛 화면.
+ *  · 구성에서 **감춘** 메뉴(원장 2026-10-06 *"감춘 메뉴 줄도 표에서 빼"*) — 그 화면 안에서 쓰는 권한 줄(inner)도 함께 뺀다.
+ *    관리자뷰에서 감췄어도 강사 '내 메뉴'에 보이는 메뉴는 쓰고 있는 것이라 남긴다(표식 `hiddenInMenu`는 그대로 — 화면이 '관리자뷰에서 감춤'으로 적는다).
+ *    설정 권한은 관리자뷰만 따른다 — 강사뷰의 '설정' 묶음은 맡은 사람에게만 서는 자리라 '쓰는 메뉴'로 치지 않는다.
  *  · 역할 전용 화면(선생님 원스크린 · 내 학습) — 강사 · 학생의 홈 화면이라 어느 역할의 칸도 바꿀 수 없다.
- * 권한 자체와 저장된 값은 그대로다(표가 실제로 적용되는 값 전체를 들고 저장한다 — 줄을 안 세울 뿐이다).
- * ⚠️ 메뉴 구성에서 **감춘** 메뉴의 줄은 남는다('메뉴에서 감춤' 표식) — 감춘 것은 입구뿐이라 주소로는 열리고, 그 권한을 고칠 자리가 있어야 한다.
+ * 권한 자체와 저장된 값은 그대로다(표가 적용되는 값 전체를 들고 저장한다 — 줄을 안 세울 뿐이다).
+ * ⚠️ 감춘 메뉴는 입구만 없을 뿐 주소로는 열린다 — 그 권한을 고치려면 메뉴 구성에서 다시 보이게 한 뒤 이 표에서 고친다.
  * ⚠️ 새 권한 키는 메뉴에 세우거나 `INNER_PARENT`에 속할 화면을 적어야 표에 선다(가드 `permission-rows.test.ts`가 ④의 목록을 잠근다).
  */
 export function editablePermissionRowGroups(navigation?: PermissionNavigation, options?: { generic?: boolean }): PermissionRowGroup[] {
+  const teacherMenus = navigation?.teacherMenus;
+  const isSetting = (menu: MenuKey) => (SETTINGS_ROLE_KEYS as readonly string[]).includes(menu);
+  const usedByTeacher = new Set(
+    configuredHubGroups(teacherNavigationSource(), teacherMenus, navigation?.teacherGroups, true).flatMap((g) =>
+      g.hidden === true ? [] : g.items.filter((d) => !isSetting(d.menuKey) && !isMenuHiddenByLayout(d.href, teacherMenus)).map((d) => d.menuKey),
+    ),
+  );
+  const shown = (row: PermissionRow) => !isRoleOnlyMenu(row.menu) && (!row.hiddenInMenu || usedByTeacher.has(row.menu));
   return permissionRowGroups(navigation, options)
     .filter((group) => group.id !== NO_MENU_GROUP.id)
-    .map((group) => ({ ...group, rows: group.rows.filter((row) => !isRoleOnlyMenu(row.menu)) }))
+    .map((group) => {
+      let parentShown = false;
+      // 다른 화면 안에서 쓰는 권한(inner)은 바로 위 화면의 줄을 따라간다.
+      return { ...group, rows: group.rows.filter((row) => (row.inner ? parentShown : (parentShown = shown(row)))) };
+    })
     .filter((group) => group.rows.length > 0);
 }

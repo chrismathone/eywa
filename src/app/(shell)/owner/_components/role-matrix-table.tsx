@@ -72,7 +72,7 @@ export function RoleMatrixTable({ groups, matrix, savedMatrix, onCycle }: {
         <span className="flex min-w-0 items-baseline gap-1.5">
           {item.inner ? <span aria-hidden className="text-text-faint">└</span> : null}
           <span className={`truncate ${tab ? "font-bold" : "font-medium"}`} title={item.label}>{item.label}</span>
-          {item.hiddenInMenu || (tab && group.hiddenInMenu) ? <span className="text-text-dim shrink-0">메뉴에서 감춤</span> : null}
+          {item.hiddenInMenu || (tab && group.hiddenInMenu) ? <span className="text-text-dim shrink-0">관리자뷰에서 감춤</span> : null}
         </span>
         {item.covers.length > 0 ? (
           // 이 권한이 함께 여는 내부 메뉴 — 줄이면 무엇이 열리는지 안 보이므로 자르지 않고 접어 적는다.
@@ -135,7 +135,7 @@ export function RoleMatrixTable({ groups, matrix, savedMatrix, onCycle }: {
                     <tr className={index === 0 ? undefined : "border-border border-t"}>
                       <th scope="rowgroup" colSpan={SYSTEM_ROLES.length + 1} className="bg-bg-soft px-3 py-1.5 text-left">
                         <span className="sticky left-3 inline-block font-bold">{group.label}</span>
-                        {group.hiddenInMenu ? <span className="text-text-dim ml-2 font-medium">메뉴에서 감춤</span> : null}
+                        {group.hiddenInMenu ? <span className="text-text-dim ml-2 font-medium">관리자뷰에서 감춤</span> : null}
                       </th>
                     </tr>
                   )}

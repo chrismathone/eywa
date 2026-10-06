@@ -421,6 +421,17 @@ describe("역할별 메뉴 권한 표 — 줄은 왼쪽 탭과 그 내부 메뉴
     expect(sent).toContainEqual({ menu: "staff", role: "admin", access: "none" });
   });
 
+  it("🔴 표에 없는 줄의 칸이 바뀌어도 '저장 전 변경'에 적힌다 — 감춘 메뉴의 강사 칸은 '내 메뉴' 표시로 바뀐다", () => {
+    // 강사뷰에서 교재 요청을 감췄다 → 표에는 그 줄이 없지만 위 '강사 내 메뉴 표시' 칸은 남아 있다.
+    render(<PermissionsSection initial={EMPTY} navigation={{ teacherMenus: [{ href: "/textbook-requests", hidden: true }] }} />);
+    expect(within(screen.getByRole("table")).queryByText(MENU_LABEL.textbook_requests)).not.toBeInTheDocument();
+    expect(screen.queryByText(/저장 전 변경/)).not.toBeInTheDocument();
+    fireEvent.click(within(toggleCard()).getByRole("checkbox", { name: new RegExp(`^${MENU_LABEL.textbook_requests}`), hidden: true }));
+    const list = screen.getByText(/저장 전 변경 1개/).closest("details") as HTMLElement;
+    expect(list.textContent).toContain(MENU_LABEL.textbook_requests);
+    expect(JSON.parse(screen.getByTestId("payload").textContent ?? "{}").overrides).toContainEqual({ menu: "textbook_requests", role: "teacher", access: "none" });
+  });
+
   it("🔴 선생님 원스크린 · 내 학습 줄은 표에 없다 — 어느 역할의 칸도 바꿀 수 없는 줄이다(원장 2026-10-06)", () => {
     render(<PermissionsSection initial={EMPTY} />);
     const table = within(screen.getByRole("table"));
