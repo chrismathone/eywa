@@ -11,7 +11,10 @@ import {
   previewTimetableImport,
   type ApplyState,
 } from "@/features/timetable/server/import-actions";
-import { supportsStructureImport } from "@/features/integrations/sheets-provider";
+import { previewMathSheetBundle } from "@/features/timetable/server/math-grid-import-actions";
+import { supportsGridImport, supportsStructureImport } from "@/features/integrations/sheets-provider";
+import type { MathGridPreview } from "@/features/timetable/import/math-grid/build-preview";
+import { MathGridPreviewSection } from "./math-grid-preview";
 import type { ImportDiff } from "@/features/timetable/import/types";
 import { effectiveDateLabel, isImmediate } from "@/features/timetable/import/effective-date";
 import { EffectiveDateField } from "./effective-date-field";
@@ -52,6 +55,8 @@ export function TimetableImportDialog({
   hideTrigger?: boolean;
 }) {
   const sheet = mode === "sheet";
+  // 시간표 격자 탭까지 읽는 과목(수학) — 숨겨진 '수강편집' 탭만 읽으면 사람이 격자에서 고친 것이 통째로 무시된다.
+  const readsGrid = sheet && supportsGridImport(subject);
   const router = useRouter();
   // ⚠️ controlled 하이브리드(2026-07-24) — 툴바가 이 다이얼로그를 '엑셀·시트' 팝오버 항목에서 열기 위해
   // open을 부모가 소유할 수 있게 한다. prop을 안 주면 종전대로 자기 상태로 동작(완전 하위호환).
@@ -71,6 +76,9 @@ export function TimetableImportDialog({
   const [hash, setHash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ApplyState | null>(null);
+  // 시간표 격자 탭에서 읽은 변경(확인용 — 적용 경로 없음). 수강편집 diff와 따로 든다.
+  const [gridPreview, setGridPreview] = useState<MathGridPreview | null>(null);
+  const [gridError, setGridError] = useState<string | null>(null);
   const [previewing, startPreview] = useTransition();
   const [applying, startApply] = useTransition();
   // 적용일 — 기본은 오늘(종전 동작). 반이동은 이 날짜로 옛 수강을 끝내고 새 수강을 시작한다.
@@ -97,6 +105,8 @@ export function TimetableImportDialog({
     setHash(null);
     setError(null);
     setResult(null);
+    setGridPreview(null);
+    setGridError(null);
   }
   function close() {
     // 미리보기한 변경을 적용 안 하고 닫으면 사라짐 → 한 번 더 확인.
@@ -110,9 +120,17 @@ export function TimetableImportDialog({
     setResult(null);
     setDiff(null);
     setHash(null);
+    setGridPreview(null);
+    setGridError(null);
     if (sheet) {
       startPreview(async () => {
-        const res = await previewSheetImport(subject);
+        // 격자까지 읽는 과목은 두 탭을 **서버에서 한꺼번에** 읽는다 — 클라가 액션 둘을 부르면 줄지어 돈다.
+        const bundle = readsGrid ? await previewMathSheetBundle(subject) : null;
+        const res = bundle ? bundle.edit : await previewSheetImport(subject);
+        if (bundle) {
+          setGridPreview(bundle.grid.preview ?? null);
+          setGridError(bundle.grid.error ?? null);
+        }
         if (res.error) setError(res.error);
         else {
           setDiff(res.diff ?? null);
@@ -180,6 +198,9 @@ export function TimetableImportDialog({
       if (!res.error) {
         setDiff(null);
         setHash(null);
+        // 적용으로 수강이 바뀌었다 — 격자 미리보기의 "이미 그렇게 돼 있는 변경" 판정이 낡았으니 지운다(다시 불러오면 새로 읽는다).
+        setGridPreview(null);
+        setGridError(null);
         router.refresh();
       }
     });
@@ -204,7 +225,7 @@ export function TimetableImportDialog({
         <>
           <div className="fixed inset-0 z-40 bg-black/30" onClick={close} aria-hidden />
           <div
-            className="bg-card border-line shadow-modal fixed top-1/2 left-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-xl border p-5"
+            className="bg-card border-line shadow-modal fixed top-1/2 left-1/2 z-50 max-h-[90dvh] w-full max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border p-5"
             role="dialog"
             aria-label={sheet ? "구글 시트에서 가져오기" : "엑셀 가져오기"}
           >
@@ -219,9 +240,16 @@ export function TimetableImportDialog({
 
             {sheet ? (
               <>
-                <p className="text-text-dim mt-1 text-xs">
-                  연결된 구글 시트의 <b>수강편집</b> 탭에서 학생의 <b>반</b>만 바꾼 뒤 불러오세요.
-                </p>
+                {readsGrid ? (
+                  <p className="text-text-dim mt-1 text-xs break-keep">
+                    연결된 구글 시트를 읽어 옵니다. <b>시간표 탭</b>에서 반을 새로 만들거나 학생을 옮긴 것은 무엇이
+                    읽혔는지 <b>확인</b>할 수 있고, <b>수강편집</b> 탭에서 학생의 <b>반</b>만 바꾼 것은 바로 적용할 수 있습니다.
+                  </p>
+                ) : (
+                  <p className="text-text-dim mt-1 text-xs">
+                    연결된 구글 시트의 <b>수강편집</b> 탭에서 학생의 <b>반</b>만 바꾼 뒤 불러오세요.
+                  </p>
+                )}
                 <p className="text-text-faint mt-1 flex items-start gap-1 text-xs">
                   <AlertTriangle size={13} className="mt-0.5 shrink-0" aria-hidden="true" />
                   <span>시트에서 편집했으면 <b>‘시트로 보내기’를 다시 누르지 마세요</b> — 전체 덮어쓰기라 편집분이 사라집니다.</span>
@@ -380,7 +408,9 @@ export function TimetableImportDialog({
                 ) : null}
 
                 {total === 0 ? (
-                  <p className="text-text-faint text-xs">가져올 변경이 없습니다.</p>
+                  <p className="text-text-faint text-xs">
+                    {readsGrid ? "수강편집 탭에는 가져올 변경이 없습니다." : "가져올 변경이 없습니다."}
+                  </p>
                 ) : null}
 
                 <button
@@ -394,6 +424,11 @@ export function TimetableImportDialog({
                 </button>
               </div>
             ) : null}
+
+            {gridError ? (
+              <p className="text-chart-4 mt-3 text-xs break-keep">시간표 탭을 읽지 못했습니다 — {sanitizeErrorText(gridError)}</p>
+            ) : null}
+            {gridPreview ? <MathGridPreviewSection preview={gridPreview} /> : null}
 
             {result ? (
               result.error ? (
