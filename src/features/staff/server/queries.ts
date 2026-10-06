@@ -9,6 +9,7 @@ import { getSeatDuties } from "@/features/attendance/seat/server/duty";
 import { getDeskAttendanceOptin } from "@/features/attendance/live/server/desk-optin";
 import { isStaffInSubjectScope } from "@/features/staff/subject-scope";
 import { RESUME_FORM_TYPE } from "@/features/staff/resume";
+import { workHoursLabel } from "@/features/staff/work-hours-label";
 import { canSeeStaffMember, getViewerStaffScope } from "./subject-scope";
 import {
   WORK_DAYS,
@@ -40,7 +41,7 @@ export type StaffRow = {
   contractStart: string | null;
   contractEnd: string | null;
   contractTerms: string | null;
-  /** 근무시간 — 연결된 이력서의 '근무시간' 한 줄(원장 2026-10-06). 목록 '근무시간' 열. 이력서가 없거나 비었으면 null. */
+  /** 근무시간 — 연결된 이력서의 근무요일 + '근무시간' 한 줄(`월~금 13:00~21:00`, 원장 2026-10-06). 목록 '근무시간' 열. 둘 다 비면 null. */
   workHours: string | null;
   contractSeq: number | null;
   /** 계약서 파일 첨부 여부(academy_documents kind='file' + staff_user_id) — 목록 '계약서' 열. */
@@ -55,15 +56,26 @@ export type StaffRow = {
   textColor: string | null;
 };
 
-type WorkHourRow = { staff_user_id: string; updated_at: string | null; work_hours: string | null };
+type WorkHourRow = {
+  staff_user_id: string;
+  updated_at: string | null;
+  work_hours: string | null;
+  work_days: unknown;
+};
 
-/** 직원별 근무시간 — 이력서가 둘 이상이면 가장 최근에 고친 것. 빈 값은 '없음'(null)으로 친다. */
+/**
+ * 직원별 근무시간 칸 — 이력서 근무요일 + 근무시간을 한 줄로(`월~금 13:00~21:00`, workHoursLabel).
+ * 이력서가 둘 이상이면 가장 최근에 고친 것. 둘 다 비면 '없음'(null)으로 친다.
+ */
 function latestWorkHoursByStaff(rows: readonly WorkHourRow[]): Map<string, string> {
   const best = new Map<string, { at: string; text: string | null }>();
   for (const r of rows) {
     const at = r.updated_at ?? "";
     const prev = best.get(r.staff_user_id);
-    if (!prev || at > prev.at) best.set(r.staff_user_id, { at, text: (r.work_hours ?? "").trim() || null });
+    if (!prev || at > prev.at) {
+      const days = Array.isArray(r.work_days) ? r.work_days.map(String) : [];
+      best.set(r.staff_user_id, { at, text: workHoursLabel(days, r.work_hours) });
+    }
   }
   const out = new Map<string, string>();
   for (const [id, v] of best) if (v.text) out.set(id, v.text);
@@ -131,7 +143,7 @@ export async function getStaffList(): Promise<StaffRow[]> {
       ? Promise.resolve([] as WorkHourRow[])
       : admin
           .from("academy_documents")
-          .select("staff_user_id, updated_at, work_hours:form_data->contract->>workHours")
+          .select("staff_user_id, updated_at, work_hours:form_data->contract->>workHours, work_days:form_data->contract->workDays")
           .eq("tenant_id", viewer.tenantId)
           .eq("form_type", RESUME_FORM_TYPE)
           .not("staff_user_id", "is", null)
