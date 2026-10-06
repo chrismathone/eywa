@@ -3184,6 +3184,9 @@ export const SHEET_DICT = {
   "os.cnMatch.title": { ko: "ClassNote 반 매칭", en: "ClassNote class match" },
   "os.cnMatch.ok": { ko: "매칭됨", en: "Matched" },
   "os.cnMatch.fail": { ko: "매칭 실패", en: "Not matched" },
+  // 연결은 됐는데 반 배정이 지금 반과 다르다(아이콘 위 물음표, 원장 2026-10-06).
+  "os.cnMatch.mismatch": { ko: "반 배정 확인 필요", en: "Class assignment needs checking" },
+  "os.cnMatch.elsewhere": { ko: "배정된 반 보드", en: "Assigned board" },
   "os.cnMatch.class": { ko: "반", en: "Class" },
   "os.cnMatch.board": { ko: "반 보드", en: "Board" },
   "os.cnMatch.child": { ko: "원아", en: "Child" },

@@ -16,7 +16,7 @@ import { attendanceMarkBadgeClass, attendanceMarkLabel, MARK_PRESENT } from "../
 import { CLASS_GROUP_MAKEUP, CLASS_GROUP_OTHER } from "../class-tags";
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { CnBadge } from "./cn-badge";
-import type { CnMatch } from "../classnote-match";
+import type { CnLabel } from "../classnote-match";
 import type { SheetDictKey } from "@/features/teacher-view/i18n";
 
 const CELL_CLASS: Record<CellState, string> = {
@@ -52,7 +52,7 @@ function StudentRow({
   reportCell?: CellState;
   sendMark?: SendMark;
   /** ClassNote 반 보드 매칭(수학 행만 — 호출부가 cnLabelFor로 판정). null = 라벨 없음. */
-  cn?: { ok: boolean; match: CnMatch | null } | null;
+  cn?: CnLabel | null;
   onClick: () => void;
   testConfig?: TestConfig;
   showClass?: boolean;
@@ -160,7 +160,7 @@ export function StudentList({
   statusForStudent?: (student: OneScreenStudent, now: string | null) => {
     reportCell: CellState;
     sendMark: SendMark;
-    cn?: { ok: boolean; match: CnMatch | null } | null;
+    cn?: CnLabel | null;
   };
   reportCellById?: Record<string, CellState>;
   /** 보고서 라벨의 색·툴팁 — 학생 id → 발송한 행 수·전체 행 수. */

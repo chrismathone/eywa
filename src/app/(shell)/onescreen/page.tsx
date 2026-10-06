@@ -188,10 +188,11 @@ export default async function OneScreenPage({
       initialClassName={initialClassName}
       initialStudentId={initialStudentId}
       canLinkIjw={!!jjAccess?.canLink}
-      // 이 강사 로스터의 반만 — 다른 반 학생의 보류 사유를 내려보내지 않는다.
+      // 이 강사 로스터의 반만 — 다른 반 학생의 보류 사유를 내려보내지 않는다. 다른 반 보드 배정(이름만)은 이 로스터의 학생 것만.
       classnoteMatch={pickCnForClasses(
         classnoteMatch,
         roster.students.flatMap((s) => s.subjects.map((su) => su.classId).filter((id): id is string => !!id)),
+        roster.students.map((s) => s.id),
       )}
       />
       </VideoHomeworkProvider>
