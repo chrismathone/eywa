@@ -1,3 +1,10 @@
-ignoredBuiltDependencies:
-  - sharp
-  - unrs-resolver
+# 의존 패키지의 설치 스크립트(postinstall 등)를 실행할지 정한다.
+# pnpm 11부터는 allowBuilds만 읽는다(ignoredBuiltDependencies는 조용히 무시된다).
+# 결정이 빠진 패키지가 있으면 pnpm 11 이상의 install이 ERR_PNPM_IGNORED_BUILDS로 끝난다 —
+# 설치 스크립트가 있는 의존성이 새로 들어오면 여기에 한 줄을 더할 것.
+allowBuilds:
+  esbuild: false
+  msw: false
+  protobufjs: false
+  sharp: false
+  unrs-resolver: false
