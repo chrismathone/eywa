@@ -125,3 +125,18 @@ export const getSplitsOnDate = cache(async function getSplitsOnDate(
   );
   return { splits, classNames };
 });
+
+/**
+ * 쓰기 게이트용 — 그날 이 학생이 **나눔으로 이 반에 오는가**(강사 계정이 수강행 없이 출결을 찍을 근거).
+ * 🔴 판정은 서버가 표를 직접 본다(클라 플래그가 아니라, #77). 조회 실패는 false(모르면 안 연다).
+ */
+export async function hasSplitInto(classId: string, studentId: string, date: string): Promise<boolean> {
+  const splits = await getSplitsTouchingClasses([classId], date, date).catch(() => [] as ClassSplit[]);
+  return splits.some((s) => s.targetClassId === classId && s.studentId === studentId && splitActiveOn(s, date));
+}
+
+/** 일괄 게이트용 — 그날 나눔으로 들어오는 (학생, 반) 키 집합(`학생::반`). */
+export async function splitIntoKeys(classIds: readonly string[], date: string): Promise<Set<string>> {
+  const splits = await getSplitsTouchingClasses(classIds, date, date).catch(() => [] as ClassSplit[]);
+  return new Set(splits.filter((s) => splitActiveOn(s, date)).map((s) => `${s.studentId}::${s.targetClassId}`));
+}

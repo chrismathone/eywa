@@ -30,6 +30,10 @@ import { taughtByForSlot } from "@/features/attendance/teacher-axis";
 import { getReservationsOn } from "@/features/attendance/server/makeup-reservation-queries";
 // 테스트 학생(`students.is_test`) 판정 재료 — 알림·집계와 같은 공용 한 벌(데스크 표면에서만 쓴다, 아래 opts).
 import { getTestStudentIds } from "@/features/students/server/test-students";
+// 수업 나누기(0351a) — 받는 반 교시엔 더하고, 원래 반의 겹치는 교시에선 뺀다(fail-soft, 표 없음 = 없음).
+import { getSplitsOnDate } from "@/features/class-splits/server/queries";
+import { splitDayOf, type ClassSplitDay } from "@/features/class-splits/attendance";
+import { applySplitsToSlotRoster } from "../split-roster";
 import type { LiveSlot, LiveStudent } from "../types";
 
 export type { LiveSlot, LiveStudent };
@@ -117,7 +121,7 @@ export async function loadLiveSlots(
   const slotClassIds = [...new Set(slots.map((s) => s.class_id))];
 
   // 2) 반 메타(활성만) + 그 반들의 수강행 + 그날 출결 — 서로 독립이라 병렬(B4).
-  const [classRows, enrollRows, recordRows, reservedRaw, testStudentIds, labSplit] = await Promise.all([
+  const [classRows, enrollRows, recordRows, reservedRaw, testStudentIds, labSplit, splitsToday] = await Promise.all([
     fetchInChunks<{
       id: string;
       class_name: string;
@@ -179,6 +183,8 @@ export async function loadLiveSlots(
     opts.excludeTestStudents ? getTestStudentIds(supabase) : Promise.resolve(new Set<string>()),
     // LAB '따로 수업(*LAB)' 배정 재료(0271a·0271b) — 자리 출석부와 같은 로더(fail-soft: 모르면 null = 안 가른다).
     loadLabSplitInputs(supabase, { classIds: slotClassIds, date, tenantId: null }),
+    // 그날 수업 나누기(0351a, fail-soft) — 독립 조회라 함께(B4).
+    getSplitsOnDate(date, slotClassIds),
   ]);
 
   const activeClasses = new Map(
@@ -201,6 +207,24 @@ export async function loadLiveSlots(
     const m = reservedBySlot.get(key) ?? new Map<string, { absenceDate: string; periodLabel: string | null }>();
     if (!m.has(r.studentId)) m.set(r.studentId, { absenceDate: r.absenceDate, periodLabel: r.periodLabel });
     reservedBySlot.set(key, m);
+  }
+
+  /**
+   * 그날 **수업 나누기**(0351a) — 반마다 받는/보내는 두 갈래. 교시 단위로 `applySplitsToSlotRoster`가 얹는다.
+   * 🔴 반 전체 명단(`expectedByClass`)엔 넣지 않는다(보강 예약과 같은 이유 — 다른 교시에도 서고 분모가 는다).
+   *    대신 받는 학생의 기록이 버려지지 않게 `expectedInClass`가 이 집합도 본다.
+   * 🔴 테스트 학생은 뺀다(위 예약과 같은 이유).
+   */
+  const splitDayByClass = new Map<string, ClassSplitDay>();
+  const splitInByClass = new Map<string, Set<string>>();
+  {
+    const splits = splitsToday.splits.filter((x) => !testStudentIds.has(x.studentId));
+    for (const classId of activeClasses.keys()) {
+      const d = splitDayOf(classId, date, splits);
+      if (d.incoming.length === 0 && d.outgoing.length === 0) continue;
+      splitDayByClass.set(classId, d);
+      if (d.incoming.length) splitInByClass.set(classId, new Set(d.incoming.map((v) => v.studentId)));
+    }
   }
 
   // 3) 그 날짜 예정 명단(반별) — 처리현황·완료 벨과 **같은 규약**.
@@ -238,7 +262,7 @@ export async function loadLiveSlots(
   //    "강사가 출석부를 열었다"로 뒤집히고 **나머지 11명이 전원 학부모 전화 대상**이 된다 —
   //    이 설계가 막으려던 바로 그 홍수다(적대 리뷰 M3).
   const expectedInClass = (classId: string, studentId: string) =>
-    expectedByClass.get(classId)?.has(studentId) ?? false;
+    (expectedByClass.get(classId)?.has(studentId) ?? false) || (splitInByClass.get(classId)?.has(studentId) ?? false);
   const effective = effectiveAttendanceRecords(recordRows).filter((r) =>
     expectedInClass(r.class_id, r.student_id),
   );
@@ -276,6 +300,7 @@ export async function loadLiveSlots(
     ...new Set([
       ...[...expectedByClass.values()].flatMap((s) => [...s]),
       ...reservedToday.map((r) => r.studentId),
+      ...[...splitInByClass.values()].flatMap((x) => [...x]),
     ]),
   ];
   const [students, rooms] = await Promise.all([
@@ -335,14 +360,23 @@ export async function loadLiveSlots(
     const start = hhmm(slot.start_time);
     // 그 교시에 예약된 보강 학생(0264a) — 정규 명단 뒤에 붙인다(수강생이면 정규 명단에 이미 있어 표식만 붙는다).
     const reservedHere = reservedBySlot.get(`${slot.class_id}|${start}`);
-    const expected = new Set<string>([...(expectedByClass.get(slot.class_id) ?? []), ...(reservedHere?.keys() ?? [])]);
+    // 수업 나누기(0351a) — 받는 반이면 더하고, 원래 반이면 겹치는 교시에서 뺀다(기록이 있으면 남기고 표식).
+    const split = applySplitsToSlotRoster({
+      expected: new Set<string>([...(expectedByClass.get(slot.class_id) ?? []), ...(reservedHere?.keys() ?? [])]),
+      slotStart: start,
+      slotEnd: slot.end_time ? hhmm(slot.end_time) : null,
+      day: splitDayByClass.get(slot.class_id),
+      hasSlotRecord: (sid) => bySlot.has(`${slot.class_id}|${start}|${sid}`),
+      classInfo: (id) => splitsToday.classNames.get(id),
+    });
+    const expected = split.expected;
     // *LAB 배정 — 켠 원생은 *LAB 칸에만, 끈 원생은 일반 LAB 칸에만(원장 2026-09-18). 자리 출석부와 같은 판정.
     // 🔴 **보강으로 온 학생은 안 뺀다** — 그 교시에 오기로 한 사실이 배정보다 구체적이다.
     const labDay = special === LAB_ROOM_LABEL ? labDayByClass.get(slot.class_id) : undefined;
     if (labSplit && labDay?.sep) {
       const slotSeparate = labSplit.separateIds.has(String(slot.id));
       for (const sid of [...expected]) {
-        if (reservedHere?.has(sid)) continue;
+        if (reservedHere?.has(sid) || split.marks.get(sid)?.dir === "in") continue;
         const flagged = labSplit.flagged.has(labSplitKey(slot.class_id, sid));
         if (!labSplitSlotShows({ slotSeparate, flagged, dayHasSeparate: true, dayHasNormal: labDay.normal }))
           expected.delete(sid);
@@ -377,6 +411,8 @@ export async function loadLiveSlots(
         signal: classifySignal(status, hasAnyRecord),
         // 보강 예약(0264a) 표식 — 좌석표가 이름 옆에 '보강 예약'을 붙이고, 그 근거를 hover에 적는다.
         ...(reservedHere?.has(sid) ? { reservedMakeup: reservedHere.get(sid)! } : {}),
+        // 수업 나누기 표식 — 좌석표가 hover에 사정을 적고, 받는 쪽은 저장 때 수강행 없는 칸을 연다(allowMakeup).
+        ...(split.marks.has(sid) ? { splitMark: split.marks.get(sid)! } : {}),
       });
     }
     rows.sort((a, b) => a.studentName.localeCompare(b.studentName, "ko"));

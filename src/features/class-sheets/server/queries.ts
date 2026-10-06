@@ -15,6 +15,8 @@ import { viewAsTeacher } from "@/lib/auth/view-mode";
 import { canonicalRoomName, resolveRoomName } from "@/features/attendance/live/seating-floors";
 import { resolvePeriodLabel, tableToEntries } from "../lib/period-label";
 import { isWeekendDow } from "../lib/grid-rows";
+import { applySplitsToGrid } from "../lib/split-roster";
+import { loadSplitsForSheet } from "./split-week";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { eieModuleOn } from "./eie-on";
 import { isModuleEnabled } from "@/lib/modules";
@@ -215,6 +217,8 @@ export async function getClassSheetWeek(
   const enrollmentFloor = withdrawnFloorOf(weekMonday);
 
   const admin = createAdminClient();
+  // 수업 나누기(0351a) — 아래 큰 조회와 독립이라 프라미스만 먼저 띄운다(B4). fail-soft(표 없음 = 나눔 없음).
+  const splitsPromise = loadSplitsForSheet(admin, tenantId, [classId], weekMonday, weekSunday);
   const [
     schedulesRes,
     enrollmentsRes,
@@ -497,7 +501,7 @@ export async function getClassSheetWeek(
     ),
   }));
 
-  const grid = buildWeekGrid({
+  const baseGrid = buildWeekGrid({
     weekMonday,
     schedules: scheduleRows,
     enrollments: enrollments.map((e) => ({
@@ -525,6 +529,17 @@ export async function getClassSheetWeek(
     // 휴일 — **표시와 작성률 분모에만** 닿는다(칸·입력·출결은 평일과 똑같다, [[holiday.ts]] 규약).
     holidays: buildHolidayMap(settings.operations.holidays),
   });
+
+  // 수업 나누기(0351a) — 받는 반 교시엔 학생을 세우고, 원래 반 교시에선 뺀다(기록이 있으면 표식만 남긴다).
+  // 규약은 split-roster.ts 한 곳. 기록 판정 키는 grid와 **같은 정규화**(normalizeSlotTime)를 쓴다.
+  const { splits, names: splitNames } = await splitsPromise;
+  const recordKeys = new Set<string>([
+    ...marks.map((m) => `${m.studentId}|${m.markDate}|${normalizeSlotTime(m.slotStart)}`),
+    ...effAttendance.filter((a) => a.slot_start).map((a) => `${a.student_id}|${a.session_date}|${normalizeSlotTime(a.slot_start!)}`),
+  ]);
+  const grid = applySplitsToGrid(baseGrid, classId, splits, splitNames, (sid, date, slot) =>
+    recordKeys.has(`${sid}|${date}|${slot}`),
+  );
 
   // 학생 메타 — enrollment 조인분 + (마크·출석만 있는 historical) 부족분 보충 조회
   const students: Record<string, SheetStudentMeta> = {};
