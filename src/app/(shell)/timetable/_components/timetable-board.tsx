@@ -62,6 +62,8 @@ import { CELL_DAY_ATTR, CELL_OK_ATTR } from "@/features/timetable/lib/grid-attrs
 import { toast } from "sonner";
 // 🔴 거절·큐잉 문구는 **통합뷰와 공유**한다(move-toast.ts) — 뷰마다 만들면 같은 거절이 다르게 들린다.
 import { queued, refuse } from "./move-toast";
+import { ClassSplitDialog } from "./class-split-dialog";
+import { DropModeTabs } from "./drop-mode-tabs";
 import { useClassMoveIndex } from "./class-move-context";
 import type { MoveSubject } from "@/features/timetable/lib/class-move";
 import { moveClassSlots } from "@/features/timetable/server/move-actions";
@@ -118,8 +120,14 @@ export function TimetableEditProvider({
   effectiveDate,
   today,
   canEdit = true,
+  canSplit = false,
+  weekMonday,
 }: {
   children: ReactNode;
+  /** 수업 나누기 권한(0351a, 특수 권한 명단) — 켜지면 드롭 팝업에 '수업 나누기' 쪽이 선다. 게이트는 서버 액션이 다시 본다(#77). */
+  canSplit?: boolean;
+  /** 보고 있는 주의 월요일 — 나누기 선택지를 그 주 배치로 만든다. */
+  weekMonday?: string;
   /** 이동 적용일(YYYY-MM-DD) — 미래 주 편집 시 그 주 월요일. 미지정=오늘 즉시. (Phase B 주간 이동) */
   effectiveDate?: string;
   /** 오늘(KST, YYYY-MM-DD) — 적용일 입력 기본·최소값. */
@@ -172,6 +180,8 @@ export function TimetableEditProvider({
    * 🔴 기본뷰·통합뷰가 **같은 팝업**을 쓴다(provider가 소유) — 뷰마다 만들면 날짜 규약이 갈린다.
    */
   const [moveDate, setMoveDate] = useState<MoveDateTarget | null>(null);
+  // 같은 드롭의 '수업 나누기' 쪽 — 반 이동 팝업과 **같은 대상**을 들고 전환한다(둘 중 하나만 떠 있다).
+  const [splitTarget, setSplitTarget] = useState<MoveDateTarget | null>(null);
 
   // 학생 위에 마우스 올린 채 Delete → 오늘 수강 종료 **확인 팝업**. 입력창 타이핑 중엔 무시.
   // ⚠️ 옛 '편집 모드'가 이 단축키의 문이었는데 모드가 사라졌다 — 이제 편집 권한(canDrag)이 곧 문이고,
@@ -621,9 +631,36 @@ export function TimetableEditProvider({
           onApply={applyClassPick}
         />
       ) : null}
+      {splitTarget && splitTarget.studentId && weekMonday ? (
+        <ClassSplitDialog
+          target={{
+            studentId: splitTarget.studentId,
+            name: splitTarget.name,
+            fromClassId: splitTarget.fromClassId,
+            fromClassName: splitTarget.fromClassName,
+            toClassId: splitTarget.toClassId,
+            toClassName: splitTarget.toClassName,
+            dropDay: splitTarget.toDays?.[0],
+          }}
+          weekMonday={weekMonday}
+          onCancel={() => setSplitTarget(null)}
+          onSwitchToMove={() => {
+            setMoveDate(splitTarget);
+            setSplitTarget(null);
+          }}
+        />
+      ) : null}
       {moveDate ? (
         <MoveDatePopover
           target={moveDate}
+          onSwitchToSplit={
+            canSplit && moveDate.studentId && weekMonday
+              ? () => {
+                  setSplitTarget(moveDate);
+                  setMoveDate(null);
+                }
+              : undefined
+          }
           dateFloor={dateFloor}
           defaultDate={scheduledDate ?? dateFloor}
           today={today}
@@ -646,6 +683,7 @@ export function TimetableEditProvider({
  */
 function MoveDatePopover({
   target,
+  onSwitchToSplit,
   dateFloor,
   defaultDate,
   today,
@@ -653,6 +691,8 @@ function MoveDatePopover({
   onApply,
 }: {
   target: MoveDateTarget;
+  /** 나누기 권한이 있으면 위에 '반 이동 / 수업 나누기' 전환이 선다. 없으면(undefined) 종전 그대로. */
+  onSwitchToSplit?: () => void;
   dateFloor: string;
   defaultDate: string;
   today: string;
@@ -678,6 +718,11 @@ function MoveDatePopover({
         aria-modal="true"
         aria-label="반 이동 적용일"
       >
+        {onSwitchToSplit ? (
+          <div className="mb-3">
+            <DropModeTabs mode="move" onSplit={onSwitchToSplit} />
+          </div>
+        ) : null}
         <p className="text-foreground text-sm font-bold">
           <span className="text-text-dim font-normal">{target.name} · </span>반 이동
         </p>
@@ -1467,6 +1512,7 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
     //    확인해야 큐에 들어간다(취소 = 아무 일도 없음). 토스트도 확인 뒤에 뜬다.
     openMoveDate({
       enrollmentId,
+      studentId: data?.studentId,
       fromClassId,
       fromClassName: data?.fromClassName ?? "다른 반",
       toClassId,

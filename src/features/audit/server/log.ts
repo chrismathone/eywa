@@ -519,6 +519,9 @@ export const AUDIT_ACTIONS = {
   support_request_delete: "개선요청 삭제",
   // 데모 지점 대시보드에서만. 가상 재원 네 구성 중 하나로 갈아끼운다.
   demo_roster_apply: "데모 재원 구성 바꾸기",
+  // 수업 나누기(0351a) — 한 학생의 일부 시간을 다른 선생님 반에서. 출결 귀속이 바뀌므로 기록한다.
+  class_split_create: "수업 나누기",
+  class_split_end: "수업 나누기 해제",
 } as const;
 export type AuditActionKey = keyof typeof AUDIT_ACTIONS;
 

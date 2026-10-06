@@ -21,6 +21,8 @@ import { ClassInfoCard, HoverCard } from "./hover-cards";
 import { DraggableStudentRow, StudentRow, IndexBadge, metaLabel, ROW_CLASS } from "./student-rows";
 import { StudentSection, DayDropZone } from "./student-section";
 import { ReservedSection } from "./reserved-section";
+import { SplitSection } from "./split-section";
+import type { TimetableSplitLine } from "@/features/class-splits/lines";
 import type { TimetableReservedLine } from "@/features/attendance/makeup-reservation";
 import { holdTone, useTimetableColorMode, subjectHeaderStyle, timetableStudentTone, withdrawnTone } from "./timetable-color";
 
@@ -125,6 +127,7 @@ export function HapbanCell({
   coveringDays,
   roster = "names",
   reserved = [],
+  splits = [],
 }: {
   /** mergeSlotsByClass 결과(반별 1개, startTime순) — 순서가 곧 세그먼트 인덱스(1부터). */
   slots: ClassDetailQuick[];
@@ -135,6 +138,8 @@ export function HapbanCell({
    * 그 배열은 반별로 접힌 뒤라(`mergeSlotsByClass`) 월+목 칸이면 **월요일 슬롯만** 남아 목요일 예약이 사라진다.
    */
   reserved?: TimetableReservedLine[];
+  /** 수업 나누기(0351a) 줄 — 구성 반 것을 합친다(표시 전용). */
+  splits?: TimetableSplitLine[];
   /** ClassCell과 같은 계약 — `none`이면 명단 구획을 통째로 안 그린다('학생 명단 접기'). */
   roster?: "full" | "names" | "none";
 }) {
@@ -180,7 +185,7 @@ export function HapbanCell({
   const anyHandover = slots.some((s) => s.pendingHandover);
   const totalStudents = slots.reduce((n, s) => n + s.students.length, 0);
   // 'none' = '학생 명단 접기'(뷰 설정) — 명단 구획을 통째로 안 그린다(ClassCell과 같은 계약).
-  const showRoster = roster !== "none" && (totalStudents > 0 || incomingAll.length > 0 || reserved.length > 0);
+  const showRoster = roster !== "none" && (totalStudents > 0 || incomingAll.length > 0 || reserved.length > 0 || splits.length > 0);
 
   // 본문(통합 명단) 드롭존 — id는 `hapban:`(콜론 2조각: `class:${rep.id}`는 세그먼트1과 중복, 3조각은
   // preferDayZone이 요일존으로 오인). onDragEnd는 data만 읽으므로 계약 무변경.
@@ -393,6 +398,8 @@ export function HapbanCell({
             ) : null}
             {/* 보강 — 구성 반들의 그 요일 예약(0264a). 반 칸과 같은 박스. */}
             <ReservedSection lines={reserved} coveringDays={covers} />
+            {/* 수업 나누기(0351a) — 이 반에서 그 시간 빠지는 학생(→) · 그 시간 이 반으로 오는 학생(←). 표시 전용. */}
+            <SplitSection lines={splits} coveringDays={covers} />
           </div>
         ) : null}
     </div>

@@ -35,6 +35,8 @@ import {
 // 보강 탭(원장 2026-09-14) — 슬롯이 아니라 보강 예약(0264a)을 요일 × 교시 칸에 그린다. 표시 전용(가드 makeup-tab-wiring).
 import { getReservationsInWeek } from "@/features/attendance/server/makeup-reservation-queries";
 import { attachReservedLines } from "@/features/timetable/server/reserved-lines";
+import { attachSplitLines } from "@/features/timetable/server/split-lines";
+import { canSplitClassNow } from "@/features/class-splits/server/gate";
 import { listMakeupScopeClasses } from "@/features/attendance/server/makeup-reservation-scope";
 import { MakeupWeekView, type MakeupWeekEntry, type MakeupWeekRow } from "./_components/makeup-week-view";
 import { fetchInChunks } from "@/lib/supabase/batch";
@@ -113,6 +115,7 @@ import { applyGradeFilter } from "@/features/timetable/lib/view-prefs";
 import { getTimetableEntryPreferences } from "@/features/timetable/server/view-prefs-queries";
 import { WeekNav } from "./_components/week-nav";
 import { ScheduledImportBadge } from "./_components/scheduled-import-badge";
+import { SplitListBadge } from "./_components/split-list-badge";
 import { getScheduledImports } from "@/features/timetable/server/scheduled-import-queries";
 import { WeekdayGroupTables } from "./_components/weekday-group-tables";
 import { TEACHER_VIEW_ORDER_GROUP, TeacherGridView } from "./_components/teacher-grid";
@@ -597,8 +600,21 @@ export default async function TimetablePage({
    */
   // 🔴 예약이 **두 갈래**로 나온다(reserved-lines.ts): 원반 칸이 있는 날은 그 반 칸 아래 줄(`slots[].reserved`),
   //    없는 날은 원반 담임 열에 세울 '보강' 박스(`strays`). 둘 다 기본뷰 격자 한 곳으로만 간다.
-  const basicReserved = makeupTab || effView !== "basic" ? null : await attachReservedLines(slots, referenceDate);
-  const basicSlots = basicReserved?.slots ?? slots;
+  // 🔑 '나눔'(수업 나누기 0351a)도 같은 자리로만 간다 — 보강 예약과 서로 독립이라 함께 읽는다(B4). 칸 순서는 둘 다 보존한다.
+  const basicOnly = !makeupTab && effView === "basic";
+  const [basicReserved, basicSplit, canSplit] = await Promise.all([
+    basicOnly ? attachReservedLines(slots, referenceDate) : null,
+    basicOnly ? attachSplitLines(slots, referenceDate) : null,
+    basicOnly && canEdit ? canSplitClassNow() : false,
+  ]);
+  const reservedSlots = basicReserved?.slots ?? slots;
+  const basicSlots = basicSplit
+    ? reservedSlots.map((s, i) => {
+        const lines = basicSplit.slots[i]?.splits;
+        return lines ? { ...s, splits: lines } : s;
+      })
+    : reservedSlots;
+  const activeSplits = basicSplit?.active ?? [];
   const strayReserved = basicReserved?.strays ?? [];
   // 통합뷰 **\*LAB 임시 칸**(원장 2026-09-11 *"이동된 학생때문에 추가되는거니까 *LAB 같은식으로 임시 추가"*) —
   // 자리 출석부에서 다른 시간 랩실로 옮겨 앉는(하루 이동·상시 고정) 학생의 요일·교시 칸. 판정은 자리 출석부와 같은 함수.
@@ -691,7 +707,7 @@ export default async function TimetablePage({
   ]);
 
   return (
-    <TimetableEditProvider effectiveDate={effectiveDate} today={today} canEdit={canEdit}>
+    <TimetableEditProvider effectiveDate={effectiveDate} today={today} canEdit={canEdit} canSplit={canSplit} weekMonday={week}>
       {/* 학생 검색 — 툴바 입력칸과 세 뷰(기본·통합·강사)가 같은 값을 보게 감싼다. 편집 공급자 **안쪽**이라
           검색이 편집 모드를 읽고 스스로 물러난다(search-context.tsx 주석). */}
       <TimetableSearchProvider index={searchIndex} scope={searchScope} enabled={searchEnabled}>
@@ -760,6 +776,8 @@ export default async function TimetablePage({
             canCancel={(canSync && canManageImport) || canMasterImport}
           />
         ))}
+        {/* 그 주의 '수업 나누기' — 누가 어느 시간에 어느 선생님 반으로 가는지 한 목록(× = 해제). 없으면 안 그린다. */}
+        {activeSplits.length > 0 ? <SplitListBadge lines={activeSplits} canEnd={canSplit} /> : null}
         </ToolbarRow>
         <ToolbarRow>
         <div className="toolbar-group flex min-w-0 flex-wrap items-center gap-3">
