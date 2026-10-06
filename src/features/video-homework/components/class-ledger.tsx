@@ -16,9 +16,10 @@ const PAGE_SIZE = 50;
 const ROUND_SIZE = 10;
 // 반의 회차 수나 창 폭이 달라도 같은 열은 항상 같은 너비를 쓴다. 나머지 폭은 빈 공간이다.
 const COLUMN_WIDTH = { select: 32, student: 112, school: 132, count: 64, round: 96 } as const;
-export function ClassLedger({ group, rounds, blankFacts, videosKnown = true, today, busy, save, onEdit, collapsed, onToggle }: {
+export function ClassLedger({ group, rounds, blankFacts, videosKnown = true, today, busy, save, onEdit, onPlay, collapsed, onToggle }: {
   group: LedgerGroup; rounds: LedgerRounds; blankFacts: BlankFacts; videosKnown?: boolean; today: string; busy: boolean; save: SaveLedgerChanges;
   onEdit: (cell: ActiveCell) => void; collapsed: boolean; onToggle: () => void;
+  onPlay: (cell: ActiveCell) => void;
 }) {
   const [page, setPage] = useState(0);
   const [roundPage, setRoundPage] = useState(0);
@@ -110,7 +111,8 @@ export function ClassLedger({ group, rounds, blankFacts, videosKnown = true, tod
               <th scope="row" className={styles.studentCell}><span title={row.studentName}>{row.studentName}</span>{!row.editable ? <small title="읽기 전용">조회</small> : null}</th>
               <td className={styles.schoolCell} title={`${row.school ?? "학교 미등록"} ${row.grade ?? ""}`}>{row.school || "미등록"} <span>{row.grade}</span></td>
               <td className={styles.countCell}><strong>{counts.submitted}</strong><span>/{counts.total}</span></td>
-              {numbers.map((n) => <RoundCell key={n} row={row} round={own[n - 1]} blank={blanks[n - 1 - own.length]} number={n} busy={busy} videosKnown={videosKnown} onOpen={(round) => open(row, round, n)} />)}
+              {numbers.map((n) => <RoundCell key={n} row={row} round={own[n - 1]} blank={blanks[n - 1 - own.length]} number={n} busy={busy} videosKnown={videosKnown}
+                onOpen={(round) => open(row, round, n)} onPlay={(round) => onPlay({ row, round, number: n })} />)}
             </tr>;
           })}</tbody>
         </table>

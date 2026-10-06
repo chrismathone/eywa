@@ -25,12 +25,11 @@ import { NoticeFace } from "./_components/notice-face";
 import { BoardRosterCard } from "./_components/board-roster-card";
 import { ReportSection } from "@/app/(shell)/owner/_components/report-section";
 import { AiMentSection } from "@/app/(shell)/owner/_components/ai-ment-section";
-import { isModuleEnabled } from "@/lib/modules";
 import { isFeatureLicensed } from "@/lib/license/server";
-import { classnoteReplyMode, classnoteSendOn } from "@/features/owner/classnote-gate";
+import { classnoteModuleOn, classnoteReplyMode, classnoteSendOn } from "@/features/owner/classnote-gate";
 import { getVideoHomeworkClassOptions } from "@/features/video-homework/server/queries";
 import { redirect } from "next/navigation";
-import { isClassnoteReportTab, lessonReportFaces } from "@/features/report-admin/lesson-report-faces";
+import { classnoteReportFaces, isClassnoteReportTab, lessonReportFaces, resolveLessonReportTab } from "@/features/report-admin/lesson-report-faces";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "수업보고서 — 에이와" };
@@ -45,29 +44,8 @@ export const maxDuration = 300;
 type Sp = Record<string, string | undefined>;
 // 관리 면(영상 제출 현황·ClassNote 발송 큐·작성률·반 구성·목록·공지·직접발송) + 설정 면.
 // (미매핑 탭은 2026-07-29 제거 — Edutrix 소등으로 원본이 사라져 매핑 자체가 불가능해졌다.)
-type Tab = "writing" | "boards" | "list" | "notice" | "compose" | "recall" | "parent_replies" | "queue" | "report" | "ai_ment";
-
-// 설정 2탭은 각각 메뉴 권한으로 판정한다. 읽기 전용이면 탭을 표시하고 편집만 막는다.
-// 직접 발송(compose)은 lesson_reports 쓰기 권한(canSend) 있을 때만(관리자 발송).
-// ClassNote 발송 PC에 기대는 면 — ClassNote 모듈이 꺼진 학원(새 학원 기본)에선 세우지 않는다(2026-09-22 방향 B).
-function resolveTab(sp: Sp, canReportSettings: boolean, canAiMent: boolean, canSend: boolean, classnoteOn: boolean, aiOn: boolean, replyOn: boolean): Tab {
-  const t = sp.tab;
-  if (!classnoteOn && t && isClassnoteReportTab(t)) return "writing";
-  // 학부모 글 답글·공감이 끔인 지점엔 그 면이 없다 — 주소를 직접 쳐도 없는 면과 똑같이 첫 면으로(있었는지조차 모르게).
-  if (!replyOn && t === "parent_replies") return "writing";
-  // AI 라이선스가 꺼진 지점엔 'AI 멘트' 면이 없다(2026-09-30 "꺼지면 흔적 없이").
-  if (!aiOn && t === "ai_ment") return "writing";
-  if (t === "list" || t === "writing" || t === "notice" || t === "boards" || t === "queue") return t;
-  // 회수(recall)는 **되돌릴 수 없는 파괴적 동작**이라 발송과 같은 쓰기 게이트(canSend)로 잠근다.
-  // 서버 액션(requestReportRecall)이 최종 게이트 — 탭을 숨기는 건 게이트가 아니다(#77).
-  if ((t === "compose" || t === "recall" || t === "parent_replies") && canSend) return t;
-  if (t === "report" && canReportSettings) return t;
-  if (t === "ai_ment" && canAiMent) return t;
-  return "writing";
-}
-
 /**
- * 수업보고서(발송 관리) — ClassNote 큐는 독립 탭, 작성률·반 구성·목록은 내부 FaceTabs로 이동.
+ * 수업보고서 — ClassNote 관련 면은 한 상위 탭과 하위 FaceTabs로 묶는다.
  * 보고서 설정·AI 멘트는 각각 메뉴 권한을 따른다. 강사 작성은 /onescreen.
  * 활성 탭만 무거운 조회(서버 렌더).
  */
@@ -86,13 +64,16 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
   // ClassNote 모듈 — 꺼진 학원은 발송 콘솔(큐·반 구성·반 공지·직접 발송·회수)을 세우지 않는다. 침산은 켜져 있어 종전과 같다.
   // 요청 캐시라 아래 면별 조회의 getTenantSettings와 같은 조회를 나눠 쓴다.
   const [tenantSettings, aiOn] = await Promise.all([getTenantSettings(), isFeatureLicensed(viewer.tenantId, "ai_analysis")]);
-  const classnoteOn = isModuleEnabled(tenantSettings.modules.disabled, "classnote");
+  const classnoteOn = classnoteModuleOn(tenantSettings);
   // 학부모 글 답글·공감 모드(학원 설정, 기본 끔 — 모듈이 꺼지면 끔). 끔이면 면도 조회도 없다.
   const replyMode = classnoteReplyMode(tenantSettings);
-  const tab = resolveTab(sp, canReportSettings, canAiMent, canSendReports, classnoteOn, aiOn, replyMode !== "off");
+  const faceOptions = { canReportSettings, canAiMent, canSend: canSendReports, classnoteOn, aiOn, replyOn: replyMode !== "off", canReports };
+  const tab = resolveLessonReportTab(sp, faceOptions);
   if (tab !== "report" && tab !== "ai_ment" && !canReports) await requireAccess("lesson_reports");
 
-  const faces = lessonReportFaces({ canReportSettings, canAiMent, canSend: canSendReports, classnoteOn, aiOn, replyOn: replyMode !== "off", canReports });
+  const faces = lessonReportFaces(faceOptions);
+  const classnoteFaces = classnoteReportFaces(faceOptions);
+  const inClassnote = isClassnoteReportTab(tab);
 
   // 큐는 독립 탭에서만 조회·폴링한다. 다른 관리 면의 첫 화면을 차지하지 않는다.
   const queueP = tab === "queue" && classnoteOn ? getClassnoteQueue(3) : Promise.resolve(null);
@@ -174,7 +155,8 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
         }
       />
 
-      <FaceTabs faces={faces} active={tab} ariaLabel="수업보고서 면" />
+      <FaceTabs faces={faces} active={inClassnote ? "classnote" : tab} ariaLabel="수업보고서 면" />
+      {inClassnote ? <FaceTabs faces={classnoteFaces} active={tab} ariaLabel="클래스노트 기능" level="secondary" /> : null}
 
       {tab === "queue" ? (
         queue ? <ClassnoteQueueCard view={queue} /> :

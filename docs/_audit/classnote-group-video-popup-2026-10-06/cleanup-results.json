@@ -1,0 +1,11 @@
+{
+  "StoppedOnlyOwnedServices": true,
+  "ClosedPorts": [
+    3045,
+    55449,
+    55450,
+    55451
+  ],
+  "FixtureSettingsRestored": true,
+  "BrowserSessionClosed": "eywa-classnote-video-20261006"
+}

@@ -258,6 +258,7 @@ async function loadSendableUnsent(
 export async function getClassnoteQueue(days = 3): Promise<ClassnoteQueueView | null> {
   const user = await getCurrentUser();
   if (!user) return null;
+  if (!classnoteModuleOn(await getTenantSettings())) return null;
   const supabase = await createClient();
   const today = kstToday();
   const since = daysBefore(today, days);

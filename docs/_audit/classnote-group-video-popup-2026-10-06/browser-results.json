@@ -1,0 +1,16 @@
+{
+  "checks": [
+    "One main ClassNote tab, six children, correct active states in a real embed frame",
+    "Canonical child navigation preserves embed; legacy notice link selects the same group",
+    "Playback uses the selected iframe without student navigation or mark writes; close removes iframe",
+    "390px player popup stays inside viewport",
+    "Actual owner module save hides the group and closes direct recall URL",
+    "Re-enable restores the group and legacy queue without data deletion",
+    "Read-only actor sees only the three read children",
+    "Teacher own-homework view uses the same inline player"
+  ],
+  "errors": [],
+  "sourceBase": "13c52fade",
+  "videoContent": "Synthetic preview HTML only; no real protected Drive video was played",
+  "visualEvidence": "Desktop/mobile screenshots were inspected before integration; final teacher popup is captured separately after automation disconnect"
+}

@@ -1,5 +1,5 @@
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { VideoHomeworkManagement } from "./video-homework-management";
 import type { BlankFacts } from "../no-homework";
 import type { VideoArrival, VideoHomeworkLedgerRow, VideoHomeworkMark } from "../types";
@@ -8,6 +8,19 @@ const mocks = vi.hoisted(() => ({ save: vi.fn() }));
 vi.mock("../server/actions", () => ({ setVideoHomeworkRound: mocks.save }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/components/embed-link", () => ({ EmbedHiddenInput: () => null }));
+
+const frameSettings = (window as unknown as { happyDOM: { settings: { disableIframePageLoading: boolean } } }).happyDOM.settings;
+const previousFrameLoading = frameSettings.disableIframePageLoading;
+const originalError = console.error;
+let consoleSpy: ReturnType<typeof vi.spyOn>;
+beforeAll(() => {
+  frameSettings.disableIframePageLoading = true;
+  consoleSpy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+    if (String(args[0]).includes("Iframe page loading is disabled.")) return;
+    originalError(...args);
+  });
+});
+afterAll(() => { frameSettings.disableIframePageLoading = previousFrameLoading; consoleSpy.mockRestore(); });
 
 const today = "2026-10-30";
 const row = (patch: Partial<VideoHomeworkLedgerRow>): VideoHomeworkLedgerRow => ({ classId: "a", className: "수학 A", subject: "수학",
@@ -19,7 +32,8 @@ const rows = [
   row({ studentId: "three", studentName: "박도윤", assignedDates: ["2026-10-20"] }),
 ];
 const facts: BlankFacts = { "a:two": { "2026-10-06": "absent", "2026-10-20": "none" } };
-const videos: VideoArrival[] = [{ id: "vid-1", studentId: "one", classId: "a", postedAt: "2026-10-07T19:00:00+09:00" }];
+const videos: VideoArrival[] = [{ id: "vid-1", studentId: "one", classId: "a", postedAt: "2026-10-07T19:00:00+09:00",
+  playback: { preview: "https://drive.google.com/file/d/syntheticFile123/preview", thumbnail: "https://drive.google.com/thumbnail?id=syntheticFile123&sz=w64", uploadedAt: null } }];
 const marks: VideoHomeworkMark[] = [
   { classId: "a", studentId: "one", checkDate: "2026-10-14", homeworkDate: "2026-10-13", status: "submitted", submittedDate: "2026-10-14" },
   { classId: "a", studentId: "two", checkDate: "2026-10-14", homeworkDate: "2026-10-13", status: "submitted", submittedDate: "2026-10-14" },
@@ -29,17 +43,33 @@ const show = () => render(<VideoHomeworkManagement rows={rows} initialMarks={mar
 beforeEach(() => vi.clearAllMocks());
 afterEach(cleanup);
 
-describe("영상 제출 현황 — ▶ 영상 바로가기 · 수동", () => {
-  it("영상으로 완료된 칸에 ▶ — 그 학생의 숙제 영상 탭에 그 영상을 미리 골라 여는 주소, 칸 버튼과 별개", () => {
+describe("영상 제출 현황 — ▶ 현재 화면 재생 · 수동", () => {
+  it("▶는 장부 위 재생 팝업 — 학생 상세 이동·완료 저장·편집 없이 그 영상만 열고 닫으면 iframe 제거", async () => {
     show();
-    const link = screen.getByRole("link", { name: "숙제 영상 보기" });
-    expect(link).toHaveAttribute("href", "/students/one?tab=homework-videos&video=vid-1");
-    expect(screen.getAllByRole("link", { name: "숙제 영상 보기" })).toHaveLength(1);
-    expect(link.closest("button")).toBeNull();
+    const play = screen.getByRole("button", { name: "숙제 영상 보기" });
+    expect(screen.queryByRole("link", { name: "숙제 영상 보기" })).toBeNull();
+    expect(play.parentElement?.closest("button")).toBeNull();
     // ▶를 눌러도 칸을 누른 것이 아니다(완료 찍기·편집 열기 없음)
-    fireEvent.click(link);
+    fireEvent.click(play);
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByRole("heading")).toHaveTextContent("김민준 · 숙제 영상 1회");
+    const frame = within(dialog).getByTitle("김민준 · 숙제 영상 1회");
+    expect(frame).toHaveAttribute("src", videos[0].playback!.preview);
+    expect(screen.queryByRole("button", { name: "기록 저장" })).toBeNull();
     expect(mocks.save).not.toHaveBeenCalled();
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(document.querySelector("iframe")).toBeNull());
+    expect(screen.getByRole("table", { name: /수학 A/ })).toBeInTheDocument();
+    expect(mocks.save).not.toHaveBeenCalled();
+  });
+
+  it("업로드 대기·옛 조회는 재생 주소 없이 안내하며, 다른 학생 영상이 같은 id여도 열지 않는다", async () => {
+    render(<VideoHomeworkManagement rows={rows} initialMarks={marks} videos={[{ ...videos[0], studentId: "other-student" }, { ...videos[0], playback: null }]}
+      fromDate="2026-10-01" toDate={today} today={today} />);
+    fireEvent.click(screen.getByRole("button", { name: "숙제 영상 보기" }));
+    expect(await screen.findByText("아직 재생할 수 없는 영상입니다. 잠시 뒤 다시 확인해 주세요.")).toBeInTheDocument();
+    expect(document.querySelector("iframe")).toBeNull();
+    expect(mocks.save).not.toHaveBeenCalled();
   });
   it("영상 없이 찍은 완료는 '수동'(누를 수 없음) — 영상이 짝지어진 칸은 수동이 아니다", () => {
     show();

@@ -27,7 +27,8 @@ export function ParentRepliesFace({ view }: { view: ParentThreadsView }) {
   const pathname = usePathname();
   const pageHref = (page: number) => {
     const query = new URLSearchParams(params?.toString());
-    query.set("tab", "parent_replies");
+    query.set("tab", "classnote");
+    query.set("section", "parent_replies");
     if (page > 1) query.set("page", String(page)); else query.delete("page");
     return `${pathname}?${query}`;
   };

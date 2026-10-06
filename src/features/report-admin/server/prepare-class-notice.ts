@@ -10,7 +10,7 @@ import { hasClassnoteNameCollision } from "@/features/onescreen/server/scope";
 import { isTenantReportAttachmentPath } from "@/lib/storage/legacy-audio-path";
 import { noticeAttachmentOverflow, NOTICE_ATTACHMENT_INPUT_MAX, NOTICE_ATTACHMENT_MAX, sanitizeNoticeAttachments } from "@/features/onescreen/notice-attachments";
 import { resolveNoticeTargets, type NoticeSkip, type NoticeTarget } from "../notice-targets";
-import { classnoteSendOn } from "@/features/owner/classnote-gate";
+import { classnoteModuleOn, classnoteSendOn } from "@/features/owner/classnote-gate";
 import { routeNoticeCandidates, type RoutedCandidate } from "./notice-class-route";
 import type { ClassNoticeInput } from "../class-notice-preview";
 
@@ -35,8 +35,9 @@ async function prepare(input: ClassNoticeInput) {
   if (!body) return { ok: false as const, error: "공지 내용을 입력하세요" };
   if (body.length > BODY_MAX) return { ok: false as const, error: `공지가 너무 깁니다(최대 ${BODY_MAX}자)` };
 
-  const supabase = await createClient();
   const settings = await getTenantSettings();
+  if (!classnoteModuleOn(settings)) return { ok: false as const, error: "사용할 수 없는 기능입니다" };
+  const supabase = await createClient();
 
   // body?: 개별 내용을 담을 수 있음. 테스트 타깃은 studentId null이라 유니온.
   let targets: { studentId: string | null; studentName: string; board: string; body?: string; classId?: string; className?: string }[] = [];

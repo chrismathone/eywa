@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { classnoteReplyMode } from "@/features/owner/classnote-gate";
 import { diffSettingsSection, formatSettingChange } from "@/features/owner/settings-diff";
 import { DEFAULT_SETTINGS } from "@/features/owner/defaults";
-import { isClassnoteReportTab, lessonReportFaces } from "@/features/report-admin/lesson-report-faces";
+import { classnoteReportFaces, isClassnoteReportTab, resolveLessonReportTab } from "@/features/report-admin/lesson-report-faces";
 import { REACTION_LABELS, REACTION_TYPES, canPressReaction, canRemoveReaction, isReactionType, reactionStatusView } from "./reaction-policy";
 
 /**
@@ -55,18 +55,21 @@ describe("classnoteReplyMode — 모드를 읽는 한 곳", () => {
 
 describe("끔이면 흔적이 없다", () => {
   it("수업보고서 '학부모 글·답글' 면은 모드가 시험·전체일 때만 선다", () => {
-    const keys = (replyOn: boolean, classnoteOn = true, canSend = true) => lessonReportFaces({ canReportSettings: true, canAiMent: true, canSend, classnoteOn, replyOn }).map((f) => f.key);
+    const keys = (replyOn: boolean, classnoteOn = true, canSend = true) => classnoteReportFaces({ canReportSettings: true, canAiMent: true, canSend, classnoteOn, replyOn }).map((f) => f.key);
     expect(keys(true)).toContain("parent_replies");
     expect(keys(false)).not.toContain("parent_replies");
     expect(keys(true, false)).not.toContain("parent_replies"); // 모듈 꺼짐
     expect(keys(true, true, false)).not.toContain("parent_replies"); // 쓰기 권한 없음
-    expect(lessonReportFaces({ canReportSettings: true, canAiMent: true, canSend: true, classnoteOn: true }).map((f) => f.key)).not.toContain("parent_replies"); // 안 넘기면 끔
+    expect(classnoteReportFaces({ canReportSettings: true, canAiMent: true, canSend: true, classnoteOn: true }).map((f) => f.key)).not.toContain("parent_replies"); // 안 넘기면 끔
     expect(isClassnoteReportTab("parent_replies")).toBe(true);
   });
 
   it("페이지는 끔이면 그 면의 주소를 직접 쳐도 첫 면으로 보내고, 조회도 하지 않는다", () => {
     const page = read("src/app/(shell)/lesson-reports/page.tsx");
-    expect(page).toMatch(/if \(!replyOn && t === "parent_replies"\) return "writing";/);
+    const options = { canReportSettings: true, canAiMent: true, canSend: true, classnoteOn: true, replyOn: false };
+    expect(resolveLessonReportTab({ tab: "parent_replies" }, options)).toBe("writing");
+    expect(resolveLessonReportTab({ tab: "classnote", section: "parent_replies" }, options)).toBe("writing");
+    expect(page).toContain("resolveLessonReportTab(sp, faceOptions)");
     expect(page).toMatch(/const replyMode = classnoteReplyMode\(tenantSettings\);/);
     expect(page).toMatch(/replyOn: replyMode !== "off"/);
     expect(page).toMatch(/listParentThreads\(\{ mode: replyMode, user: viewer, page: sp.page \}\)/);

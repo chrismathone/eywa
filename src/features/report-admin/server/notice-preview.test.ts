@@ -8,7 +8,7 @@ const m = vi.hoisted(() => ({
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => ({ id: "u1", tenantId: "t1", systemRole: "admin" }) }));
 vi.mock("@/lib/auth/perm-matrix", () => ({ canWriteTenant: async () => m.writable, canAccessTenant: async () => true }));
 vi.mock("@/features/owner/server/queries", () => ({ getTenantSettings: async () => ({ report: { classnoteSubjects: ["math"] } }) }));
-vi.mock("@/features/owner/classnote-gate", () => ({ classnoteSendOn: () => m.sendOn }));
+vi.mock("@/features/owner/classnote-gate", () => ({ classnoteSendOn: () => m.sendOn, classnoteModuleOn: () => true }));
 vi.mock("@/features/onescreen/server/scope", () => ({ hasClassnoteNameCollision: async () => false }));
 vi.mock("@/features/audit/server/log", () => ({ logAction: async () => undefined }));
 vi.mock("./notice-class-route", () => ({ routeNoticeCandidates: async ({ candidates }: { candidates: { studentId: string; name: string; hints: string[] }[] }) => ({
