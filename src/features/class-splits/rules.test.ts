@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { intersectWindows, maxUnitsFrom, splitUnitMinutes, startOptions, toMin, durationLabel } from "./rules";
+import { durationLabel, endAfter, intersectWindows, splitBoundaries, splitUnitMinutes, startOptions, toMin } from "./rules";
 import { hasDayInRange, periodText, resolvePeriod, splitActiveOn, splitsCollide } from "./period";
 import { splitLinesForCell, uniqueSplits } from "./lines";
 import { canSplitClass, CLASS_SPLITTER_USER_IDS } from "./access";
@@ -21,26 +21,43 @@ describe("시간 단위 — 수학 1시간 · EiE 40분(원장 2026-10-06)", () 
   });
 });
 
-describe("고를 수 있는 시작 시각 = 두 반이 같이 도는 구간 안", () => {
-  it("이성우 3시간(교시마다 행) × 유형숙 1시간 → 17:20 한 자리", () => {
-    const source = [w("16:20", "17:20"), w("17:20", "18:20"), w("18:20", "19:20")];
-    const target = [w("17:20", "18:20")];
-    const both = intersectWindows(source, target);
-    expect(both).toEqual([w("17:20", "18:20")]);
-    expect(startOptions(both, 60)).toEqual([toMin("17:20")]);
-    expect(maxUnitsFrom(both, toMin("17:20"), 60)).toBe(1);
+describe("고를 수 있는 시작 시각 = 두 반이 같이 도는 구간의 교시 칸", () => {
+  const edgesOf = (...ws: { start: number; end: number }[]) => ws.flatMap((x) => [x.start, x.end]);
+  const opts = (source: { start: number; end: number }[], target: { start: number; end: number }[], unit: number) =>
+    splitBoundaries(intersectWindows(source, target), edgesOf(...source, ...target), unit);
+
+  it("원장 제보 2026-10-06 — 수학 55분 교시가 한 칸만 겹쳐도 나눌 수 있다(고등M 단체 BS4F → 중등M 중3 BS3Q)", () => {
+    const source = [w("20:10", "21:05"), w("21:05", "22:00")];
+    const target = [w("18:20", "19:15"), w("19:15", "20:10"), w("20:10", "21:05")];
+    const b = opts(source, target, 60);
+    expect(startOptions(b)).toEqual([{ start: toMin("20:10"), maxUnits: 1 }]);
+    expect(endAfter(b, toMin("20:10"), 1)).toBe(toMin("21:05"));
+    expect(durationLabel(55)).toBe("1시간");
   });
-  it("같은 3시간끼리면 16:20·17:20·18:20, 앞에서 고르면 최대 3시간", () => {
-    const both = intersectWindows([w("16:20", "19:20")], [w("16:20", "19:20")]);
-    expect(startOptions(both, 60)).toEqual(["16:20", "17:20", "18:20"].map(toMin));
-    expect(maxUnitsFrom(both, toMin("16:20"), 60)).toBe(3);
-    expect(maxUnitsFrom(both, toMin("18:20"), 60)).toBe(1);
+  it("교시마다 행인 3교시 × 같은 3교시 → 세 자리, 앞에서 고르면 최대 3칸", () => {
+    const rows = [w("18:20", "19:15"), w("19:15", "20:10"), w("20:10", "21:05")];
+    const b = opts(rows, rows, 60);
+    expect(startOptions(b).map((s) => s.start)).toEqual(["18:20", "19:15", "20:10"].map(toMin));
+    expect(startOptions(b)[0]!.maxUnits).toBe(3);
+    expect(endAfter(b, toMin("18:20"), 2)).toBe(toMin("20:10"));
   });
-  it("EiE 40분 — 한 단위가 통째로 들어가는 자리만", () => {
-    expect(startOptions([w("16:20", "18:00")], 40)).toEqual(["16:20", "17:00"].map(toMin));
+  it("3시간 한 줄짜리 행은 명목 단위로 자른다", () => {
+    const b = opts([w("16:20", "19:20")], [w("16:20", "19:20")], 60);
+    expect(startOptions(b).map((s) => s.start)).toEqual(["16:20", "17:20", "18:20"].map(toMin));
   });
-  it("안 겹치면 선택지가 없다", () => {
+  it("EiE 40분 교시", () => {
+    const rows = [w("16:20", "17:00"), w("17:00", "17:40")];
+    const b = opts(rows, rows, 40);
+    expect(startOptions(b).map((s) => s.start)).toEqual(["16:20", "17:00"].map(toMin));
+    expect(durationLabel(80)).toBe("80분");
+  });
+  it("10~20분 어긋난 겹침·안 겹침은 선택지가 없다", () => {
+    expect(opts([w("19:00", "20:00")], [w("19:45", "20:45")], 60)).toEqual([]);
     expect(intersectWindows([w("14:00", "15:00")], [w("16:00", "17:00")])).toEqual([]);
+  });
+  it("범위를 넘는 길이는 끝이 없다", () => {
+    const b = opts([w("20:10", "21:05")], [w("20:10", "21:05")], 60);
+    expect(endAfter(b, toMin("20:10"), 2)).toBeNull();
   });
 });
 

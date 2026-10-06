@@ -15,7 +15,7 @@ import { kstToday } from "@/lib/date-kst";
 import { logAction } from "@/features/audit/server/log";
 import { getPeriodWindow } from "@/features/periods/server/queries";
 import { CLASS_SPLIT_DENIED_MSG } from "../access";
-import { durationLabel, isSplitDay, maxUnitsFrom, SPLIT_DAY_KO, startOptions, toHm, toMin, type SplitDay } from "../rules";
+import { durationLabel, endAfter, isSplitDay, SPLIT_DAY_KO, startOptions, toHm, toMin, type SplitDay } from "../rules";
 import { dowOf, hasDayInRange, periodText, resolvePeriod, splitsCollide, type PeriodInput } from "../period";
 import { canSplitClassNow } from "./gate";
 import { loadSplitContext } from "./context";
@@ -35,7 +35,7 @@ export type SplitPreview =
       target: { name: string; teacherName: string | null };
       unit: number;
       /** 나눌 수 있는 요일과 그날의 시작 시각 선택지("HH:MM") + 시작마다 최대 단위 수. */
-      days: { day: SplitDay; starts: { time: string; maxUnits: number }[] }[];
+      days: { day: SplitDay; starts: { time: string; ends: string[] }[] }[];
       /** 원래 반 등원 요일([] = 전 요일). */
       attendanceDays: string[];
       today: string;
@@ -58,11 +58,18 @@ export async function previewClassSplit(t: Target): Promise<SplitPreview> {
   const ctx = await loadSplitContext(createAdminClient(), user.tenantId, { ...t, onDate: t.refDate < today ? today : t.refDate });
   if ("error" in ctx) return { ok: false, error: ctx.error };
   if (!ctx.enrollment) return { ok: false, error: `${ctx.student.name} 학생의 ${ctx.source.name} 수강이 열려 있지 않습니다.` };
-  const days = (Object.keys(ctx.windows) as SplitDay[])
+  const days = (Object.keys(ctx.bounds) as SplitDay[])
     .filter(isSplitDay)
     .map((day) => {
-      const w = ctx.windows[day] ?? [];
-      return { day, starts: startOptions(w, ctx.unit).map((s) => ({ time: toHm(s), maxUnits: maxUnitsFrom(w, s, ctx.unit) })) };
+      const b = ctx.bounds[day] ?? [];
+      // 끝 시각은 칸 경계에서 온다(수학 교시 55분 — 고정 분으로 더하지 않는다). ends[n-1] = n칸 뒤 끝.
+      return {
+        day,
+        starts: startOptions(b).map((s) => ({
+          time: toHm(s.start),
+          ends: Array.from({ length: s.maxUnits }, (_, n) => toHm(endAfter(b, s.start, n + 1)!)),
+        })),
+      };
     })
     .filter((d) => d.starts.length > 0)
     .sort((a, b) => "mon tue wed thu fri sat sun".indexOf(a.day) - "mon tue wed thu fri sat sun".indexOf(b.day));
@@ -124,13 +131,16 @@ export async function createClassSplit(input: CreateSplitInput): Promise<CreateS
   const start = toMin(input.start);
   const units = Math.floor(Number(input.units));
   if (!Number.isFinite(start) || !(units >= 1)) return { ok: false, error: "시작 시각과 길이를 골라 주세요." };
-  const end = start + units * ctx.unit;
+  // 끝 = 칸 경계에서(요일마다 같아야 한 번에 나눈다 — 다르면 요일별로 따로 나누게 한다).
+  const ends = (days as SplitDay[]).map((day) => endAfter(ctx.bounds[day] ?? [], start, units));
+  if (ends.some((e) => e === null)) {
+    const bad = (days as SplitDay[])[ends.findIndex((e) => e === null)]!;
+    return { ok: false, error: `${SPLIT_DAY_KO[bad]}요일 ${toHm(start)}부터 그 길이는 두 반이 같이 도는 시간이 아닙니다.` };
+  }
+  if (new Set(ends).size > 1) return { ok: false, error: "요일마다 끝나는 시각이 달라 한 번에 나눌 수 없습니다 — 요일별로 따로 나눠 주세요." };
+  const end = ends[0]!;
   const attend = ctx.enrollment.attendanceDays;
   for (const day of days as SplitDay[]) {
-    const w = ctx.windows[day] ?? [];
-    if (!startOptions(w, ctx.unit).includes(start) || maxUnitsFrom(w, start, ctx.unit) < units) {
-      return { ok: false, error: `${SPLIT_DAY_KO[day]}요일 ${toHm(start)}~${toHm(end)}은 두 반이 같이 도는 시간이 아닙니다.` };
-    }
     if (attend.length > 0 && !attend.includes(day)) {
       return { ok: false, error: `${ctx.student.name} 학생은 ${SPLIT_DAY_KO[day]}요일에 ${ctx.source.name}에 오지 않습니다.` };
     }
