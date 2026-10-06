@@ -4,7 +4,8 @@ import { enumDayToKo } from '@/features/timetable/lib/periods';
 import { movedByTarget, movedCellBox, visibleSpanRows } from '@/features/timetable/lib/row-span';
 import { appearanceOf, paint, subjectTone, teacherTone } from './appearance';
 import { integratedProjection } from './integrated-projection';
-import { validate } from './constraints';
+import { conflictNotes } from './insights';
+import { conflictLines } from './lesson-block';
 import { timeLabel, type Draft, type Lesson } from './model';
 import type { DraftStore } from './store';
 import { useRosterDrag } from './roster-drag';
@@ -12,13 +13,13 @@ import { moveNote } from './student-marks';
 import type { EditorActions } from './editor-actions';
 import { classMenu, studentMenu } from './menus';
 type Selection = { selected: string[]; select: (ids: string[]) => void; details: () => void };
-type ViewData = { draft: Draft; byClass: Map<string, Lesson[]>; byId: Map<string, Lesson>; conflicts: Set<string>; selection: Selection; roster: ReturnType<typeof useRosterDrag>; readOnly: boolean;
+type ViewData = { draft: Draft; byClass: Map<string, Lesson[]>; byId: Map<string, Lesson>; conflicts: Map<string, string[]>; selection: Selection; roster: ReturnType<typeof useRosterDrag>; readOnly: boolean;
   actions?: EditorActions; focus: string | null };
 export function IntegratedView({ store, selected, select, details, zoom, search, announce, readOnly = false, actions, focus = null }: Selection & { store: DraftStore; zoom: number; search: string; announce: (s: string) => void; readOnly?: boolean;
   actions?: EditorActions; focus?: string | null }) {
   const { draft } = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const projection = useMemo(() => integratedProjection(draft), [draft]), appearance = appearanceOf(draft);
-  const conflicts = useMemo(() => new Set(validate(draft).issues.flatMap(i => i.placementIds)), [draft]);
+  const conflicts = useMemo(() => conflictNotes(draft), [draft]);
   const root = useRef<HTMLDivElement>(null), ghost = useRef<HTMLDivElement>(null), roster = useRosterDrag(store, announce, root, ghost);
   const data: ViewData = { draft, byClass: projection.byClass, byId: projection.byId, conflicts, selection: { selected, select, details }, roster, readOnly, actions, focus };
   return <div ref={root} className="schedule-scroll integrated-scroll" role="region" aria-label="통합뷰 학생 배정" tabIndex={0}
@@ -77,7 +78,7 @@ function MiniCell({ cell, data, rowTime }: { cell?: GridCell; data: ViewData; ro
     const offAxis = rowTime && rowTime.split('~')[0] !== timeLabel(item.start);
     const trail = data.focus ? item.students.includes(data.focus) ? 'is-trail' : 'is-dim' : '';
     return <button key={item.id} data-integrated-id={item.id} className={`${selection.selected.includes(item.id) ? 'is-selected' : ''} ${conflicts.has(item.id) ? 'has-conflict' : ''} ${trail}`}
-      style={paint(color)} title={`${item.name} · ${item.day} ${timeLabel(item.start)}–${timeLabel(item.end)} · ${item.teacher}`}
+      style={paint(color)} title={`${item.name} · ${item.day} ${timeLabel(item.start)}–${timeLabel(item.end)} · ${item.teacher}${conflictLines(conflicts.get(item.id))}`}
       aria-label={`${item.name} ${item.day} ${timeLabel(item.start)} ${item.teacher}`}
       onClick={() => { selection.select([item.id]); selection.details(); }}>{item.labSeparate ? '*LAB' : item.teacher}
       {offAxis && <i className="off-axis" aria-label={`실제 시작 ${timeLabel(item.start)}`} />}{conflicts.has(item.id) && <b className="conflict-dot" aria-label="겹침 있음">!</b>}

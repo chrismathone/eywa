@@ -1,8 +1,8 @@
 import { copyBlocks, moveBlocks, type Position } from './block-commands';
 import { reasonOf } from './reason';
 import { classList } from './class-commands';
-import { validate } from './constraints';
-import { labelsOf, lessons, type Draft, type Lesson } from './model';
+import { outsideOf, validate } from './constraints';
+import { labelsOf, lessons, timeLabel, type Draft, type Lesson } from './model';
 import { teacherColumns } from './teachers';
 
 export type MovePreview = { ok: boolean; added: number; reason: string };
@@ -24,6 +24,27 @@ export function previewMove(draft: Draft, ids: string[], anchorId: string, to: P
 }
 
 export const issueKeys = (draft: Draft) => new Set(validate(draft).issues.map(i => i.key));
+
+/**
+ * 수업마다 **무엇과 왜 겹치는지** 한 줄씩 — 겹친 수업에 마우스를 올리면 보인다.
+ * 상대 수업(강사·강의실), 겹치는 시간, 겹친 축(강사·강의실·학생)을 적고, 학생이 겹치면 누구인지도 적는다.
+ */
+export function conflictNotes(draft: Draft): Map<string, string[]> {
+  const byId = new Map([...lessons(draft).items, ...outsideOf(draft)].map(p => [p.id, p])), names = labelsOf(draft), notes = new Map<string, string[]>();
+  for (const issue of validate(draft).issues) {
+    const a = byId.get(issue.placementIds[0]), b = byId.get(issue.placementIds[1]);
+    if (!a || !b) continue;
+    // 겹친 축은 겹침 열쇠의 마지막 토막에 있다(`수업/수업/강사,학생`).
+    const axes = issue.key.slice(issue.key.lastIndexOf('/') + 1).split(',').join('·');
+    const shared = a.students.filter(id => b.students.includes(id)).map(id => names[id] ?? '이름 미확인');
+    const who = shared.length ? ` (${shared.slice(0, 3).join(', ')}${shared.length > 3 ? ` 외 ${shared.length - 3}명` : ''})` : '';
+    const time = `${a.day} ${timeLabel(Math.max(a.start, b.start))}~${timeLabel(Math.min(a.end, b.end))}`;
+    for (const [mine, other] of [[a, b], [b, a]] as const) {
+      notes.set(mine.id, [...notes.get(mine.id) ?? [], `${other.name}(${[other.teacher, other.room].filter(Boolean).join(' · ')}) · ${time} · ${axes} 겹침${who}`]);
+    }
+  }
+  return notes;
+}
 
 const minutes = (items: Lesson[]) => items.reduce((sum, p) => sum + p.end - p.start, 0);
 /** 연습본의 주간 요약 — 강사별 수업 시간, 강의실 사용, 반 인원, 학생 수. 화면이 바뀔 때마다 다시 센다. */

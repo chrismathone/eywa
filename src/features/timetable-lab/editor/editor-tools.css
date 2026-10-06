@@ -11,9 +11,13 @@
 .danger:hover { background: #86271a; }
 .mini { padding: 1px 6px; font-size: 14px; }
 
-/* 강사 열 머리 — 눌러서 메뉴 */
-button.week-teacher-heading { border-radius: 0; padding: 0 6px; font: inherit; font-weight: 700; cursor: pointer; }
+/* 강사 열 머리 — 눌러서 메뉴, 끌어서 열을 통째로 옮기기 */
+button.week-teacher-heading { border-radius: 0; padding: 0 6px; font: inherit; font-weight: 700; cursor: grab; user-select: none; }
 button.week-teacher-heading:hover { filter: brightness(.95); }
+[data-column-drag] { opacity: .45; }
+button.week-teacher-heading[data-column-drag] { cursor: grabbing; }
+/* 놓일 자리 — 그 열 경계에 서는 세로선. 붙어 있는 머리 줄 위로도 보인다. */
+.column-drop-line { position: absolute; top: 0; bottom: 0; width: 4px; z-index: 11; background: #216dde; box-shadow: 0 0 0 1px #fff; pointer-events: none; }
 
 /* 블록: 길이 조절 손잡이·잠금·메모·동선 */
 .lesson-block .grip { position: absolute; left: 0; right: 0; height: 7px; cursor: ns-resize; z-index: 2; touch-action: none; }
@@ -87,14 +91,37 @@ button.week-teacher-heading:hover { filter: brightness(.95); }
 
 /* 확인 패널: 명단 편집 · 잠금 · 메모 · 지우기 확인 */
 .class-roster { border-top: 1px solid #dbe3ec; margin-top: 14px; }
-.class-roster table { width: 100%; border-collapse: collapse; }
-.class-roster th, .class-roster td { padding: 3px 2px; text-align: center; border-bottom: 1px solid #edf1f5; font-weight: 400; }
-.class-roster thead th { color: #617791; font-size: 13px; }
-.class-roster thead small { display: block; font-size: 11px; }
-.class-roster th[scope=row] { text-align: left; }
-.roster-name { border: 0; background: transparent; padding: 3px 4px; text-align: left; color: #1f3a57; }
-.roster-name:hover { background: #eef3f9; }
+/* 명단 표는 제 상자 안에서만 스크롤한다 — 학생이 열, 수업이 행. 이름 줄·수업 칸·빼기 줄은 붙어 있다. */
+/* 확인 패널의 좌우 여백까지 쓴다(폭 320px에서 학생 한 명이 더 보인다). */
+.roster-scroll { max-height: min(50vh, 400px); overflow: auto; scrollbar-width: thin; margin-inline: -16px; border-block: 1px solid #c3cfdc; background: #fff; }
+.roster-scroll:focus-visible { outline: 2px solid #9fc0ea; outline-offset: 1px; }
+/* 칸마다 불투명한 바탕 — 붙어 있는 줄 밑으로 지나가는 글자가 비치지 않게. 선은 칸에 긋는다(표 테두리를 합치면 붙은 줄의 선이 따라오지 않는다). */
+.roster-scroll table { border-collapse: separate; border-spacing: 0; }
+.roster-scroll th, .roster-scroll td { padding: 3px 2px; text-align: center; white-space: nowrap; font-weight: 400; background: #fff; border-bottom: 1px solid #edf1f5; }
+.roster-scroll thead th { position: sticky; top: 0; z-index: 2; background: #f3f6fa; border-bottom-color: #c3cfdc; }
+.roster-scroll tfoot th, .roster-scroll tfoot td { position: sticky; bottom: 0; z-index: 2; background: #f3f6fa; border-top: 1px solid #c3cfdc; border-bottom: 0; }
+.roster-scroll th:first-child { position: sticky; left: 0; z-index: 1; padding-inline: 8px; text-align: left; color: #55697f; font-size: 13px; background: #f8fafc; border-right: 1px solid #d5dfea; }
+.roster-scroll thead th:first-child, .roster-scroll tfoot th:first-child { z-index: 3; background: #f3f6fa; }
+.roster-scroll th small { font-size: 12px; font-variant-numeric: tabular-nums; }
+.roster-scroll tr.day-start > * { border-top: 1px solid #c3cfdc; }
+.roster-scroll input[type=checkbox] { width: 16px; height: 16px; margin: 0; vertical-align: middle; cursor: pointer; }
+.roster-list { list-style: none; margin-block: 0; padding: 2px 16px; }
+.roster-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 3px 0; border-bottom: 1px solid #edf1f5; }
+.roster-list li:last-child { border-bottom: 0; }
+.roster-name { border: 0; background: transparent; padding: 3px; text-align: left; color: #1f3a57; white-space: nowrap; }
+.roster-name:hover { background: #e8f0fb; }
+.class-roster > small { display: block; margin-top: 6px; color: #718398; }
 .class-roster form { margin-top: 10px; }
+/* 학생 넣기 — 이름으로 찾아 누르면 들어간다. 결과도 제 상자 안에서 스크롤한다. */
+.student-picker label { gap: 10px; }
+.student-picker input[type=search] { flex: 1; min-width: 0; max-width: none; }
+.student-picker ul { list-style: none; margin: 0; padding: 0; max-height: 200px; overflow: auto; scrollbar-width: thin; border: 1px solid #d5dfea; border-radius: 6px; }
+.student-picker li + li { border-top: 1px solid #edf1f5; }
+.student-picker li button { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; width: 100%; border: 0; border-radius: 0; padding: 6px 9px; text-align: left; background: transparent; }
+.student-picker li button:hover, .student-picker li button:focus-visible { background: #e8f0fb; outline-offset: -2px; }
+.student-picker li b { font-weight: 400; white-space: nowrap; }
+.student-picker li small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #718398; font-size: 13px; }
+.student-picker li.subtle { padding: 6px 9px; }
 .lab-inspector select { max-width: 180px; }
 .lab-inspector textarea { width: 100%; max-width: 180px; border: 1px solid #cbd7e4; border-radius: 4px; padding: 6px 8px; font: inherit; resize: vertical; }
 .lock-row { align-items: flex-start; flex-direction: column; gap: 2px; }

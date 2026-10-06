@@ -18,6 +18,8 @@ const appearance = z.strictObject({
   compactSections: z.array(z.number().finite()).max(1000), hideEmptyDays: z.boolean(), hideStudents: z.boolean(),
   pxPerMin: z.number().positive().max(20), sectionLines: z.array(minute).max(1000), excludedTeachers: ids,
   breaks: z.array(z.strictObject({ start: time, end: time })).max(1000), subjectColor: text,
+  // 편집기에서 고르는 주말 칸 보기 — 없던 연습본도 그대로 읽히게 선택 항목으로 둔다.
+  hideSaturday: z.boolean().optional(), showSunday: z.boolean().optional(),
 });
 const placementFields = {
   id, sourceScheduleId: id.nullable(), classId: z.string().max(200), row: z.number().int(),
