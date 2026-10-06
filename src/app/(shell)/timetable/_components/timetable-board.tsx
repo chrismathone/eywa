@@ -40,6 +40,7 @@ import {
   type ClassPickTarget,
   type DayEditTarget,
   type MoveDateTarget,
+  type WholeSplitTarget,
   type QueuedClassMove,
   type HoveredStudent,
   type IncomingStudent,
@@ -58,7 +59,7 @@ import { SAME_SPOT_TITLE, annotateDropCells, annotateStudentBlocks, clearDropCel
 import type { StudentBusyWindow } from "@/features/timetable/lib/student-busy";
 // 칸 좌표 속성 이름은 **일반 모듈**에서 — 클라 모듈 재-export를 두면 서버 파일이 실수로 그걸 집어
 // 런타임 undefined가 된다([[#81]], 실제로 한 번 그렇게 깨졌다).
-import { CELL_DAY_ATTR, CELL_OK_ATTR } from "@/features/timetable/lib/grid-attrs";
+import { CELL_DAY_ATTR, CELL_OK_ATTR, CLASS_CELL_ID_ATTR, CLASS_CELL_NAME_ATTR } from "@/features/timetable/lib/grid-attrs";
 import { toast } from "sonner";
 // 🔴 거절·큐잉 문구는 **통합뷰와 공유**한다(move-toast.ts) — 뷰마다 만들면 같은 거절이 다르게 들린다.
 import { queued, refuse } from "./move-toast";
@@ -182,6 +183,12 @@ export function TimetableEditProvider({
   const [moveDate, setMoveDate] = useState<MoveDateTarget | null>(null);
   // 같은 드롭의 '수업 나누기' 쪽 — 반 이동 팝업과 **같은 대상**을 들고 전환한다(둘 중 하나만 떠 있다).
   const [splitTarget, setSplitTarget] = useState<MoveDateTarget | null>(null);
+  // 반 블록 드롭의 '반 전체 나누기' — 반 이동을 고르면 부를 함수(그 칸으로 못 옮기면 null + 사유)를 함께 든다.
+  const [wholeSplit, setWholeSplit] = useState<{ t: WholeSplitTarget; onMove: (() => void) | null; moveRefusal: string | null } | null>(null);
+  const openWholeSplit = useCallback(
+    (t: WholeSplitTarget, onMove: (() => void) | null, moveRefusal: string | null) => setWholeSplit({ t, onMove, moveRefusal }),
+    [],
+  );
 
   // 학생 위에 마우스 올린 채 Delete → 오늘 수강 종료 **확인 팝업**. 입력창 타이핑 중엔 무시.
   // ⚠️ 옛 '편집 모드'가 이 단축키의 문이었는데 모드가 사라졌다 — 이제 편집 권한(canDrag)이 곧 문이고,
@@ -606,6 +613,8 @@ export function TimetableEditProvider({
         setHovered,
         openDayEdit,
         openClassPick,
+        canSplit: canSplit && !!weekMonday,
+        openWholeSplit,
       }}
     >
       {children}
@@ -629,6 +638,27 @@ export function TimetableEditProvider({
           defaultDate={scheduledDate ?? dateFloor}
           onCancel={() => setClassPick(null)}
           onApply={applyClassPick}
+        />
+      ) : null}
+      {wholeSplit && weekMonday ? (
+        <ClassSplitDialog
+          target={{
+            studentId: "",
+            wholeClass: true,
+            name: `${wholeSplit.t.fromClassName} 전체`,
+            fromClassId: wholeSplit.t.fromClassId,
+            fromClassName: wholeSplit.t.fromClassName,
+            toClassId: wholeSplit.t.toClassId,
+            toClassName: wholeSplit.t.toClassName,
+          }}
+          weekMonday={weekMonday}
+          onCancel={() => setWholeSplit(null)}
+          onSwitchToMove={() => {
+            const w = wholeSplit;
+            setWholeSplit(null);
+            if (w.onMove) w.onMove();
+            else refuse(w.moveRefusal ?? "그 칸으로는 반을 옮길 수 없습니다.");
+          }}
         />
       ) : null}
       {splitTarget && splitTarget.studentId && weekMonday ? (
@@ -1246,7 +1276,7 @@ const preferDayZone: CollisionDetection = (args) => {
  *    전략도 기본값(WhileDragging = 시작 시 1회)을 쓴다.
  */
 export function TimetableDndArea({ children }: { children: ReactNode }) {
-  const { canDrag, queueMove, queueClassMove, openClassPick, openMoveDate, dateFloor } = useTimetableEdit();
+  const { canDrag, queueMove, queueClassMove, openClassPick, openMoveDate, dateFloor, canSplit, openWholeSplit } = useTimetableEdit();
   // 반 이동 판정 재료(서버 색인 → 요일별). 없으면 반 드래그가 없는 화면이다.
   const moveLookup = useClassMoveIndex();
   // 끌리는 줄의 **원본 모습**(이름·학교학년·톤·폭) — 고스트를 셀 안 줄과 똑같이 그리기 위한 재료.
@@ -1386,6 +1416,38 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
     }
   }
 
+  /** 반 블록 이동 큐잉 — 격자 칸에 놓았을 때와, 반 전체 나누기 팝업에서 '반 이동'을 골랐을 때가 같은 함수를 탄다. */
+  function queueBlockMove(src: ClassDragInfo, cellHit: HTMLElement) {
+    // 블록 전체가 어디로 가는지 — 칸이 들고 있는 좌표로 계산한다(하이라이트와 **같은 함수**).
+    const placed = placementAt(cellHit, src.subject, document);
+    if (!placed || placed.length === 0) return refuse("그 칸에는 이 반을 놓을 수 없습니다.");
+    const anchor = placed.find((w) => w.slotId === src.slotId) ?? placed[0]!;
+    if (src.fromDay === anchor.day && src.fromStart.slice(0, 5) === anchor.start.slice(0, 5)) return;
+    queued(`${src.className} 반을 옮깁니다`);
+    queueClassMove({
+      slotId: src.slotId,
+      classId: src.classId,
+      className: src.className,
+      fromDay: src.fromDay,
+      fromStart: src.fromStart,
+      moves: placed.map((w) => ({ slotId: w.slotId, toDay: w.day, toStart: w.start })),
+      toDay: anchor.day,
+      toStart: anchor.start,
+      toDays: [...new Set(placed.map((w) => w.day))],
+      effectiveOn: null, // provider가 큐잉 시점의 의도로 덮어쓴다(주 앵커)
+    });
+  }
+
+  /** 포인터 아래 **다른 반의 칸**(반 전체 나누기의 받는 반) — 끄는 고스트·자기 반 칸은 건너뛴다. */
+  function classCellAt(x: number, y: number, exceptClassId: string): { id: string; name: string } | null {
+    for (const el of document.elementsFromPoint(x, y)) {
+      const cell = (el as HTMLElement).closest?.(`[${CLASS_CELL_ID_ATTR}]`) as HTMLElement | null;
+      const id = cell?.getAttribute(CLASS_CELL_ID_ATTR);
+      if (cell && id && id !== exceptClassId) return { id, name: cell.getAttribute(CLASS_CELL_NAME_ATTR) || "다른 반" };
+    }
+    return null;
+  }
+
   function onDragEnd(e: DragEndEvent) {
     setBlockGhost(null);
     // 🔴 **목적지를 먼저 읽는다** — `stopTracking()`이 `clearDropCells`로 `data-cell-ok` 표식을 지운다.
@@ -1395,6 +1457,11 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
     // 갈 수 있는 칸이 아니면 **그 자리의 아무 칸**을 찾아 이유(`title`)를 미리 읽어 둔다 — `stopTracking()`이 title까지 지운다.
     const blockedCell = isBlockDrag && !cellHit && pointerRef.current ? anyCellAt(pointerRef.current.x, pointerRef.current.y) : null;
     const blockedWhy = blockedCell?.title ?? "";
+    // 반 블록을 **다른 반 칸 위에** 놓았나 — 그 반이 '반 전체 나누기'의 받는 반이 된다(포인터는 아래 stopTracking이 지운다).
+    const blockSrcId = isBlockDrag ? (e.active.data.current as unknown as ClassDragInfo | undefined)?.classId : undefined;
+    const classHit = isBlockDrag && canSplit && blockSrcId && pointerRef.current
+      ? classCellAt(pointerRef.current.x, pointerRef.current.y, blockSrcId)
+      : null;
     // 학생 드래그 스냅샷은 여기서 한 번 꺼내고 비운다(어느 갈래로 빠져나가든 다음 드래그에 안 남게).
     const studentData = studentDragRef.current;
     studentDragRef.current = null;
@@ -1412,6 +1479,21 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
     if (activeIdStr.startsWith("block:")) {
       const src = active.data.current as unknown as ClassDragInfo | undefined;
       if (!src) return;
+      // 🔑 다른 반 칸 위에 놓았고 나누기 권한이 있으면 **묻는다**(원장 2026-10-06 *"반으로 통으로 … 수업 나누기"*) —
+      //    `반 이동`을 고르면 아래 종전 이동을 그대로 탄다(그 칸으로 못 옮기면 사유를 말한다).
+      if (classHit) {
+        const why = !cellHit
+          ? blockedWhy && blockedWhy !== SAME_SPOT_TITLE
+            ? `그 칸에는 놓을 수 없습니다 — ${blockedWhy}`
+            : "그 칸으로는 반을 옮길 수 없습니다 — 빈 칸에 놓아 주세요."
+          : null;
+        openWholeSplit(
+          { fromClassId: src.classId, fromClassName: src.className, toClassId: classHit.id, toClassName: classHit.name },
+          cellHit ? () => queueBlockMove(src, cellHit) : null,
+          why,
+        );
+        return;
+      }
       if (!cellHit) {
         // 제자리에 도로 놓은 것 = 취소(말하지 않는다). 막힌 칸이면 **왜** 막혔는지 말한다 — "칸을 찾지 못했다"는
         // 포인터가 격자 밖일 때만 맞는 말이다(원장 제보 2026-09-09: 칸 위에 놓았는데 그 문구가 떴다).
@@ -1420,24 +1502,7 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
           blockedWhy ? `그 칸에는 놓을 수 없습니다 — ${blockedWhy}` : "놓을 칸을 찾지 못했습니다 — 격자 칸 위에 놓아 주세요.",
         );
       }
-      // 블록 전체가 어디로 가는지 — 칸이 들고 있는 좌표로 계산한다(하이라이트와 **같은 함수**).
-      const placed = placementAt(cellHit, src.subject, document);
-      if (!placed || placed.length === 0) return refuse("그 칸에는 이 반을 놓을 수 없습니다.");
-      const anchor = placed.find((w) => w.slotId === src.slotId) ?? placed[0]!;
-      if (src.fromDay === anchor.day && src.fromStart.slice(0, 5) === anchor.start.slice(0, 5)) return;
-      queued(`${src.className} 반을 옮깁니다`);
-      queueClassMove({
-        slotId: src.slotId,
-        classId: src.classId,
-        className: src.className,
-        fromDay: src.fromDay,
-        fromStart: src.fromStart,
-        moves: placed.map((w) => ({ slotId: w.slotId, toDay: w.day, toStart: w.start })),
-        toDay: anchor.day,
-        toStart: anchor.start,
-        toDays: [...new Set(placed.map((w) => w.day))],
-        effectiveOn: null, // provider가 큐잉 시점의 의도로 덮어쓴다(주 앵커)
-      });
+      queueBlockMove(src, cellHit);
       return;
     }
     if (!over || !activeIdStr.startsWith("student:")) return;

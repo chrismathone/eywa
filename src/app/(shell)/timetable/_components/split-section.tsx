@@ -21,18 +21,21 @@ import { SectionLabelRow } from "./student-section";
 export function SplitSection({
   lines,
   coveringDays,
+  inline = false,
 }: {
   lines: readonly TimetableSplitLine[];
   /** 이 칸이 덮는 요일 — 2일 이상이면 줄마다 어느 요일인지 적는다. */
   coveringDays?: string[];
+  /** 재원 스크롤 **안**에 둘 때 — 자체 높이 상한·스크롤을 두지 않는다(바깥 재원 스크롤이 맡는다, 2줄 잘림 방지). */
+  inline?: boolean;
 }) {
   if (lines.length === 0) return null;
   const showDay = (coveringDays?.length ?? 0) >= 2;
   return (
     <div
       data-help="tt-split"
-      className="scrollbar-hide divide-line/40 shrink-0 divide-y overflow-y-auto border-t"
-      style={{ maxHeight: HOLD_MAX_H }}
+      className={`divide-line/40 shrink-0 divide-y border-t ${inline ? "" : "scrollbar-hide overflow-y-auto"}`}
+      style={inline ? undefined : { maxHeight: HOLD_MAX_H }}
     >
       <SectionLabelRow label="나눔" count={lines.length} tone={TONE_SOFT.info} />
       {lines.map((l) => (

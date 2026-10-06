@@ -146,6 +146,14 @@ export type MoveDateTarget = {
   fromHold?: boolean;
 };
 
+/** 반 전체 나누기 팝업 대상 — 반 블록을 놓은 자리의 반(받는 반). */
+export type WholeSplitTarget = {
+  fromClassId: string;
+  fromClassName: string;
+  toClassId: string;
+  toClassName: string;
+};
+
 export interface TimetableEditState {
   /**
    * 드래그로 옮길 수 있는가 = **편집 권한 + 이번/미래 주**(과거 주는 조회 전용). 옛 '편집 모드' 토글을 대신한다
@@ -229,6 +237,13 @@ export interface TimetableEditState {
   openDayEdit: (t: DayEditTarget) => void;
   /** 합반 드롭 → 반+요일 선택 팝업 열기(외부 학생 어디든 / 멤버의 다른 세그먼트). */
   openClassPick: (t: ClassPickTarget) => void;
+  /** 수업 나누기 권한(0351a 특수 권한 명단) — 반 블록 드롭이 '반 전체 나누기'를 물을지 정한다. 게이트는 서버가 다시 본다(#77). */
+  canSplit: boolean;
+  /**
+   * 반 블록을 **다른 반 칸 위에** 놓았을 때 — `반 이동 / 수업 나누기` 팝업(반 전체). `onMove`는 '반 이동'을 고르면
+   * 종전 반 블록 이동을 그대로 큐잉하는 함수(그 칸으로 옮길 수 없으면 null — 거절 사유를 말한다).
+   */
+  openWholeSplit: (t: WholeSplitTarget, onMove: (() => void) | null, moveRefusal: string | null) => void;
 }
 
 const noop = () => {};
@@ -256,6 +271,8 @@ export const TimetableEditContext = createContext<TimetableEditState>({
   setHovered: noop,
   openDayEdit: noop,
   openClassPick: noop,
+  canSplit: false,
+  openWholeSplit: noop,
 });
 
 export function useTimetableEdit(): TimetableEditState {

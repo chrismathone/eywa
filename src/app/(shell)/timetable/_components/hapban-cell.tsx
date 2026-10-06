@@ -332,6 +332,9 @@ export function HapbanCell({
                   </div>
                 </div>
               ) : null}
+              {/* 수업 나누기(0351a) — 재원 명단 **바로 아래**(재원 스크롤 안). 🔴 대기·퇴원 아래 고정 박스에 두면 재원이 0명인 칸에서
+                  칸 맨 아래로 밀려 다음 교시 띠에 서 보이고(19:15 나눔이 20시 칸에 있는 것처럼) 2줄에서 잘렸다(원장 제보 2026-10-06). */}
+              <SplitSection lines={splits} coveringDays={covers} inline />
               {/* 전입 예정 — 대상 반 인덱스 배지(어느 반으로 오는지). 재원 스크롤 안. */}
               {incomingAll.length > 0 ? (
                 <div className="divide-line/40 border-primary/40 shrink-0 divide-y border-t border-dashed">
@@ -398,8 +401,6 @@ export function HapbanCell({
             ) : null}
             {/* 보강 — 구성 반들의 그 요일 예약(0264a). 반 칸과 같은 박스. */}
             <ReservedSection lines={reserved} coveringDays={covers} />
-            {/* 수업 나누기(0351a) — 이 반에서 그 시간 빠지는 학생(→) · 그 시간 이 반으로 오는 학생(←). 표시 전용. */}
-            <SplitSection lines={splits} coveringDays={covers} />
           </div>
         ) : null}
     </div>

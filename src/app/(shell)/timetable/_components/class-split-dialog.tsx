@@ -11,7 +11,10 @@ import { SplitPeriodFields, type PeriodChoice } from "./class-split-period";
 import { DropModeTabs } from "./drop-mode-tabs";
 
 export type ClassSplitTarget = {
+  /** 학생 한 명이면 그 학생 id, 반 전체면 "". */
   studentId: string;
+  /** 반 전체 나누기(반 블록을 다른 반 칸에 놓았을 때) — 그날 재원생 전원에게 같은 나눔. */
+  wholeClass?: boolean;
   name: string;
   fromClassId: string;
   fromClassName: string;
@@ -50,7 +53,13 @@ export function ClassSplitDialog({
   const [error, setError] = useState<string | null>(null);
   const [busy, run] = useTransition();
   const req = useMemo(
-    () => ({ studentId: target.studentId, sourceClassId: target.fromClassId, targetClassId: target.toClassId, refDate: weekMonday }),
+    () => ({
+      studentId: target.studentId,
+      sourceClassId: target.fromClassId,
+      targetClassId: target.toClassId,
+      refDate: weekMonday,
+      wholeClass: target.wholeClass === true,
+    }),
     [target, weekMonday],
   );
 
@@ -65,15 +74,15 @@ export function ClassSplitDialog({
       const pick = target.dropDay && avail.includes(target.dropDay as SplitDay) ? [target.dropDay as SplitDay] : avail;
       setDays(new Set(pick));
       setStart(p.days.find((d) => d.day === pick[0])?.starts[0]?.time ?? "");
-      // 기본 기간 = 일별 · 그 요일의 가장 가까운 날(오늘 포함).
-      let date = p.today;
-      for (let i = 0; i < 7 && pick[0] && dowOf(date) !== pick[0]; i++) date = addDays(date, 1);
+      // 기본 기간 = 일별 · **보고 있는 주**의 그 요일(원장 제보 2026-10-06 — 11/3 주에서 끌었는데 오늘(10/6)로 저장돼
+      // 화면에 안 보였다). 보고 있는 주가 이미 지났으면 오늘부터 가장 가까운 그 요일.
+      const date = nearestDow(splitAnchor(weekMonday, p.today), pick[0]);
       setPeriod({ kind: "day", date });
     });
     return () => {
       alive = false;
     };
-  }, [req, target.dropDay]);
+  }, [req, target.dropDay, weekMonday]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onCancel();
@@ -124,7 +133,11 @@ export function ClassSplitDialog({
       >
         <DropModeTabs mode="split" onMove={onSwitchToMove} />
         <p className="text-foreground mt-3 text-sm font-bold">
-          <span className="text-text-dim font-normal">{target.name} · </span>수업 나누기
+          <span className="text-text-dim font-normal">
+            {target.name}
+            {ready?.studentCount ? ` ${ready.studentCount}명` : ""} ·{" "}
+          </span>
+          수업 나누기
         </p>
         <p className="text-text-faint mt-1 text-xs">
           <b className="text-text-dim">{target.fromClassName}</b>은 그대로 두고, 고른 시간만{" "}
@@ -148,7 +161,7 @@ export function ClassSplitDialog({
           </div>
         ) : (
           <div className="mt-3 space-y-3 text-sm">
-            <SplitPeriodFields value={period} onChange={setPeriod} today={ready!.today} />
+            <SplitPeriodFields value={period} onChange={setPeriod} today={ready!.today} anchor={nearestDow(splitAnchor(weekMonday, ready!.today), [...days][0])} />
             {period?.kind !== "day" ? (
               <Row label="요일">
                 {ready!.days.map((d) => {
@@ -218,6 +231,18 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
       <div className="flex flex-wrap gap-1">{children}</div>
     </div>
   );
+}
+
+/** 기간 기본값의 기준일 — 보고 있는 주의 월요일, 단 오늘보다 앞이면 오늘(과거로는 못 나눈다). */
+function splitAnchor(weekMonday: string, today: string): string {
+  return weekMonday < today ? today : weekMonday;
+}
+
+/** 기준일부터 그 요일이 처음 오는 날(기준일 포함). 요일을 모르면 기준일. */
+function nearestDow(from: string, day: SplitDay | undefined): string {
+  let date = from;
+  for (let i = 0; i < 7 && day && dowOf(date) !== day; i++) date = addDays(date, 1);
+  return date;
 }
 
 export function Chip({ on, disabled, title, onClick, children }: {
