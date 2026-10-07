@@ -88,7 +88,7 @@ async function load(
     admin.from("shuttle_ride_exceptions").select("id, student_id, kind, io_kind, run_stop_id, memo")
       .eq("tenant_id", tenantId).eq("on_date", ymd).in("student_id", studentIds).limit(100),
     live
-      ? admin.from("shuttle_boardings").select("id, student_id, run_id, stop_label, io_kind, status, memo, recorded_at")
+      ? admin.from("shuttle_boardings").select("id, student_id, run_id, stop_label, io_kind, status, memo, recorded_at, notify_parent")
           .eq("tenant_id", tenantId).eq("boarded_on", ymd).in("student_id", studentIds).limit(100)
       : Promise.resolve(none),
   ]);
@@ -106,6 +106,7 @@ async function load(
     .map((l) => ({
       id: l.id, studentId: l.student_id, runId: l.run_id, ioKind: l.io_kind as RideLogInput["ioKind"],
       status: l.status as RideLogInput["status"], memo: l.memo, stopLabel: l.stop_label, recordedAt: l.recorded_at,
+      notifyParent: l.notify_parent !== false,
     }));
 
   // ① 이 아이들이 걸린 노선 칸(정기 배정 ∪ 오늘만 탐) → 그 칸들의 회차.

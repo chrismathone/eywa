@@ -96,9 +96,23 @@ export function RunPanel({
    */
   const ended = tripsReady && tripState(trip) === "done";
   const rowsWritable = canWrite && !ended;
+  /**
+   * 🔒 **[출발]이 눌려야 탑승·미탑승·하차를 찍는다**(사용자 2026-10-07). 출발 전엔 하원 체크·[등원/하원 안함]·[등하원 수정]만
+   * 된다(체크는 출발 전에 하는 일이다). 운행 표가 없으면(0243a 미적용) 출발 버튼도 없으니, 오늘이 아닌 날(지난 기록 정정)도 잠그지 않는다([[#95]]).
+   * 서버(recordBoarding)도 같은 판정을 다시 한다([[#77]]).
+   */
+  const departed = !tripsReady || date !== today || tripState(trip) !== "ready";
 
   return (
-    <section className="bg-card flex flex-col rounded-2xl shadow-[var(--shadow-card)]">
+    // 🔘 **종료된 회차는 판 전체를 회색으로**(사용자 2026-10-07 "종료됐는지 확실히 표시") — 바탕을 죽이고 머리·명단을
+    //    흑백으로 눌러 "지나간 것"(tone 캐논 inert)으로 읽히게 한다. ⚠️ [종료 취소]·종료 배지(TripControl)는 색을 남긴다 —
+    //    되돌리는 문은 눈에 띄어야 하고, 종료(초록)와 출발 전(회색)이 한눈에 갈려야 한다(trip-state.ts TRIP_TONE).
+    <section
+      className={cn(
+        "flex flex-col rounded-2xl",
+        ended ? "bg-muted border-line border" : "bg-card shadow-[var(--shadow-card)]",
+      )}
+    >
       {/* 회차 머리 = 접기 버튼 + 출발/종료. 접힌 채로도 "몇 명 중 몇 명 남았는지"가 보여야 한다.
           🔴 **출발 시각이 맨 앞**이다 — 기사는 회차 번호가 아니라 다음 출발 시각으로 움직인다. */}
       <div className="flex items-center gap-1.5 px-3 py-2">
@@ -109,9 +123,15 @@ export function RunPanel({
           className={cn(
             SHUTTLE_ROW,
             "flex min-w-0 flex-1 cursor-pointer flex-wrap items-center gap-x-2 gap-y-1 text-left",
+            ended && "opacity-60 grayscale",
           )}
         >
-          {start && <span className="text-foreground num shrink-0 text-base font-bold">{start}</span>}
+          {start && (
+            <span className={cn("num shrink-0 text-base font-bold", ended ? "text-text-dim" : "text-foreground")}>
+              {start}
+            </span>
+          )}
+          {ended && <span className="bg-text-dim rounded-full px-2 py-0.5 text-xs font-bold text-white">운행 종료</span>}
           {headIos.map((io) => (
             <Pill key={io} color={IO_TONE[io]}>
               {DIRECTION_LABEL[io]}
@@ -145,6 +165,7 @@ export function RunPanel({
           date={date}
           today={today}
           canWrite={canWrite}
+          rows={rows}
           onError={onError}
           onDone={onTripDone}
         />
@@ -160,7 +181,7 @@ export function RunPanel({
           {/* 🔑 **정류장(시각)이 먼저, 등·하원은 그 안에서**(사용자 2026-10-06 "같은 시간대를 두 번 나눠서
               봐야 하잖아") — 예전엔 등원 칸 / 하원 칸을 먼저 가르고 칸마다 정류장을 다시 묶어 같은 시각이 두 번 나왔다. */}
           {groupRowsByStop(rows).map((group) => (
-            <div key={group.key} className="flex flex-col gap-1">
+            <div key={group.key} className={cn("flex flex-col gap-1", ended && "opacity-60 grayscale")}>
               {/* 정류장 머리 — 줄마다 반복되던 긴 이름이 여기 한 번만 온다.
                   🔑 묶음 순서가 곧 기사가 도는 순서라 "다음 정류장"이 그대로 읽힌다. */}
               <div className="border-line-faint flex items-baseline gap-1.5 border-b px-1 pb-1">
@@ -190,6 +211,7 @@ export function RunPanel({
                         date={date}
                         season={run.season}
                         canWrite={rowsWritable}
+                        departed={departed}
                         canEditException={canEditException && !ended}
                         ioBadge={mixed}
                         onError={onError}

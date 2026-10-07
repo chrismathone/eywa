@@ -6,6 +6,8 @@
 - SQL 원문(그대로 실행 가능한 정의): [`supabase-schema.sql`](supabase-schema.sql) — 참고용 스냅샷이다. **실제 적용은 마이그레이션 파일로** 한다.
 - 본서버 마이그레이션(브랜치 `윤여원/학부모-등하원-시스템`): `0320a_parent_accounts` → `0321a_shuttle_ride_exception_history` →
   `0322a_shuttle_regular_ride_change` → `0323a_shuttle_history_acks` (로컬 번호는 0290a~0293a). 전부 손으로 적용하는 alpha 파일이고 앱 배포보다 먼저.
+- 10/7 추가(학부모 알림 · [저장]): `0354a_parent_departure_acks` → `0354b_parent_notice_key` → `0354c_boarding_notify_parent`
+  (로컬 0294a~0294c) — [10/7 정리](../parent-ride-summary-2026-10-07.md). 아래 표·§1-추가·§5에 반영했다.
 - Drizzle `schema.ts`엔 **하나도 없다** — 앱은 Supabase 클라이언트로 읽고 쓴다(RLS·트리거·함수는 drizzle이 표현 못 해 alpha로만 둔다).
 
 ## 한눈에
@@ -17,6 +19,8 @@
 | 새 표 | `shuttle_ride_exception_history` | 0321a | '그날만 변경' 이력 장부(추가만) |
 | 새 표 | `shuttle_rider_history` | 0322a | '매주 고정' 변경 이력 장부(추가만) |
 | 새 표 | `shuttle_history_acks` | 0323a | 변경 내역 '확인' 표식 |
+| 새 표 | `parent_departure_acks` | 0354a·0354b | 학부모 알림(출발·탑승·미탑승·하차) '확인' 표식 — 학부모 계정마다 |
+| 바꾼 표 | `shuttle_boardings` | 0354c | 칸 `notify_parent` — [전송]=true · [저장]=false |
 | 바꾼 표 | `shuttle_ride_exceptions`(0229a) | 0321a | 칸 3개 + 제약 2개 + 이력 트리거 |
 | 새 함수 | `shuttle_ride_exception_label` · `tg_shuttle_ride_exception_history` · `tg_shuttle_ride_exception_history_append_only` · `cancel_shuttle_ride_exception` · `change_shuttle_regular_ride` | 0321a·0322a | 아래 §3 |
 | 바꾼 함수 | `tg_sync_user_from_auth`(0075a) | 0320a | 학부모 로그인은 직원 표로 복사하지 않음 |
@@ -104,6 +108,22 @@
 - **유일 `(tenant_id, history_kind, history_id)`** — 앱이 이 축으로 upsert한다(그래서 부분 유니크 아님). 학원 공용 확인.
 - RLS: 같은 학원 읽기 · 쓰기는 서버만.
 
+### `parent_departure_acks` — 학부모 알림 '확인' 표식 (0354a · 0354b)
+학부모 화면 위쪽 알림 줄의 [확인]. 알림 자체는 저장하지 않고 운행·탑승 기록에서 도출하고, 여기엔 **확인했다**는 사실만 쌓는다.
+
+| 칸 | 타입 | 비우기 | 기본값 | 메모 |
+|---|---|---|---|---|
+| `id` | uuid | ✗ | `gen_random_uuid()` | PK |
+| `tenant_id` | uuid | ✗ | | |
+| `parent_account_id` | uuid → `parent_accounts(id)` **지우면 같이 삭제** | ✗ | | 확인은 학부모 계정마다(엄마가 확인해도 아빠 화면엔 남는다) |
+| `ran_on` | date | ✗ | | 그날 |
+| `run_id` | uuid | ✗ | | 회차 |
+| `notice_key` | text | ✗ | `'depart'` | 0354b — `depart` · `board:<학생 id>` · `miss:<학생 id>` · `drop:<학생 id>` |
+| `acked_at` | timestamptz | ✗ | `now()` | |
+
+- **유일 `(tenant_id, parent_account_id, ran_on, run_id, notice_key)`** — upsert 축(부분 유니크 아님).
+- RLS 켬 · **정책 없음** — 학부모 세션은 원래 아무 표도 못 읽는다. 서버(service_role)만 읽고 쓴다.
+
 ## 2. 바꾼 표 — `shuttle_ride_exceptions`(0229a)
 
 | 더한 것 | 정의 | 왜 |
@@ -114,6 +134,12 @@
 | 트리거 `tg_shuttle_ride_exception_history` | AFTER INSERT · UPDATE · DELETE, 줄마다 | 이력 장부에 한 줄 |
 
 ⚠️ 기존 칸·제약은 안 건드렸다. 취소(줄 삭제)는 `cancel_shuttle_ride_exception()`으로 해야 장부에 "누가 취소했는지"가 남는다(직접 지우면 '자동 정리'로 남는다).
+
+### 2-추가. 바꾼 표 — `shuttle_boardings` (0354c)
+
+| 더한 것 | 정의 | 왜 |
+|---|---|---|
+| 칸 `notify_parent` | boolean NOT NULL DEFAULT `true` | 셔틀 [전송]=true(학부모 알림) · 등원 [저장]=false(기록만). 기존 줄은 기본값으로 알림 대상 |
 
 ## 3. 함수
 
@@ -143,6 +169,10 @@
 ## 5. 되돌리기 (역순)
 
 ```sql
+-- 0354c
+alter table public.shuttle_boardings drop column if exists notify_parent;
+-- 0354b · 0354a
+drop table if exists public.parent_departure_acks;
 -- 0323a
 drop table if exists public.shuttle_history_acks;
 -- 0322a

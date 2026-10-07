@@ -16,6 +16,7 @@ import {
 } from "../types";
 import { canRecordBoarding } from "./record-gate";
 import { runNotOpenMessage } from "./trip-open-guard";
+import { endTripUncheckedMessage } from "./trip-end-guard";
 
 /**
  * 셔틀 쓰기 — 정류장·차량·회차·노선·배정·등하원 기록.
@@ -542,6 +543,9 @@ export async function moveRider(riderId: string, toRunStopId: string): Promise<S
  * (오클릭 복구 — 되돌릴 문을 잠그지 않는다, [[#103]]).
  *
  * 차량·정류장 **이름을 스냅샷**으로 함께 저장한다 → 나중에 노선을 고쳐도 지난 기록이 그대로 읽힌다.
+ *
+ * 🔑 `notify=0`이면 **학부모 알림 없이 기록만**(0354c — 등원 줄의 [저장]). 없거나 그 밖이면 알림 대상([전송]).
+ *    매번 이 칸을 같이 보낸다 — 다시 [전송]하면 덮어써 알림 대상으로 돌아온다.
  */
 export async function recordBoarding(formData: FormData): Promise<ShuttleActionState> {
   const ctx = await recordGate();
@@ -553,6 +557,7 @@ export async function recordBoarding(formData: FormData): Promise<ShuttleActionS
   const ioKind = String(formData.get("ioKind") ?? "");
   const status = String(formData.get("status") ?? "");
   const memo = String(formData.get("memo") ?? "").trim() || null;
+  const notifyParent = formData.get("notify") !== "0";
 
   if (!YMD.test(boardedOn)) return { error: "날짜를 확인하세요" };
   if (!studentId || !runId) return { error: "학생과 회차를 고르세요" };
@@ -561,10 +566,16 @@ export async function recordBoarding(formData: FormData): Promise<ShuttleActionS
 
   const admin = createAdminClient();
   // 스냅샷 재료 — 회차(차량 이름·회차번호)와 정류장 이름. 없으면 null로 두고 기록은 남긴다.
-  // ⚡ 출발 10분 전 규칙(trip-open-guard)도 **같이** 묻는다 — 학생마다 누르는 버튼이라 따로 한 번 더 기다리지 않게.
-  const [notOpen, ended, runRes, stopRes] = await Promise.all([
+  // ⚡ 출발 전 열림 규칙(직원은 30분 전, trip-open-guard)·운행 상태도 **같이** 묻는다 — 학생마다 누르는 버튼이라 따로 한 번 더 기다리지 않게.
+  const [notOpen, trip, runRes, stopRes] = await Promise.all([
     runNotOpenMessage(admin, ctx.tenantId, runId, boardedOn),
-    tripEnded(admin, ctx.tenantId, boardedOn, runId),
+    admin
+      .from("shuttle_trips")
+      .select("started_at, ended_at")
+      .eq("tenant_id", ctx.tenantId)
+      .eq("ran_on", boardedOn)
+      .eq("run_id", runId)
+      .maybeSingle(),
     admin
       .from("shuttle_runs")
       .select("run_no, vehicle:shuttle_vehicles!shuttle_runs_vehicle_id_fkey(name)")
@@ -581,7 +592,13 @@ export async function recordBoarding(formData: FormData): Promise<ShuttleActionS
       : Promise.resolve({ data: null, error: null }),
   ]);
   if (notOpen) return { error: notOpen };
-  if (ended) return { error: TRIP_ENDED_MESSAGE };
+  // 🔒 **오늘 기록은 [출발]이 눌린 회차에서만**(사용자 2026-10-07 "탑승 미탑승 하차는 출발이 눌러진 후에만 작동") —
+  //    차가 떠나기 전에 찍힌 "탔어요"가 학부모 알림으로 나가면 거짓이 된다. 화면도 버튼을 잠그지만 게이트는 여기다([[#77]]).
+  //    ⚠️ 운행 표(0243a)를 못 읽으면(표 없음 등) 막지 않는다([[#95]] — 출발 버튼 자체가 없는 상태다). 지난 날짜 정정도 막지 않는다.
+  if (boardedOn === kstToday() && !trip.error && !trip.data?.started_at) {
+    return { error: "먼저 이 회차의 [출발]을 누르세요 — 출발한 뒤에 탑승·미탑승·하차를 기록할 수 있습니다" };
+  }
+  if (trip.data?.ended_at) return { error: TRIP_ENDED_MESSAGE };
   if (!runRes.data) return { error: "회차를 찾지 못했습니다" };
 
   const vehicle = runRes.data.vehicle as { name?: string } | null;
@@ -602,6 +619,7 @@ export async function recordBoarding(formData: FormData): Promise<ShuttleActionS
       io_kind: ioKind,
       status,
       memo,
+      notify_parent: notifyParent,
       recorded_by: ctx.userId,
       recorded_at: new Date().toISOString(),
     },
@@ -609,7 +627,7 @@ export async function recordBoarding(formData: FormData): Promise<ShuttleActionS
   );
   if (error) return { error: friendly(error, "탑승 기록을 저장하지 못했습니다") };
 
-  await logAction({ action: "shuttle_boarding_record", targetType: "shuttle", metadata: { boardedOn, studentId, runId, status } });
+  await logAction({ action: "shuttle_boarding_record", targetType: "shuttle", metadata: { boardedOn, studentId, runId, status, notifyParent } });
   refresh();
   return { ok: true };
 }
@@ -801,7 +819,7 @@ export async function startTrip(formData: FormData): Promise<ShuttleActionState>
 
   const admin = createAdminClient();
   // 스냅샷 재료 — 회차를 지워도 "그날 1호차 3회차가 돌았다"는 남아야 한다(boardings와 같은 규약).
-  // ⚡ 회차 · 출발 10분 전 규칙 · 이미 찍힌 운행은 서로 독립이라 함께 묻는다(B4).
+  // ⚡ 회차 · 출발 전 열림 규칙(직원은 30분 전, trip-open-guard) · 이미 찍힌 운행은 서로 독립이라 함께 묻는다(B4).
   const [runRes, notOpen, existing] = await Promise.all([
     admin
       .from("shuttle_runs")
@@ -843,8 +861,10 @@ export async function startTrip(formData: FormData): Promise<ShuttleActionState>
 }
 
 /**
- * 종료를 찍는다. 🔴 **미기록이 남아 있어도 막지 않는다** — 차는 이미 들어왔는데 화면이 종료를 거부하면
- * 사실과 화면이 어긋난다. 대신 관제가 그 회차를 '미기록 남음'으로 **표시**한다(막는 대신 보이게).
+ * 종료를 찍는다.
+ * 🔴 **명단 전원의 상태가 정해져야 끝난다**(사용자 2026-10-07 — 종전 "미기록이 남아도 막지 않는다"를 뒤집음).
+ *    탑승·미탑승 기록(전송·저장) 또는 오늘 안 탐(등원 안함)이 아닌 아이가 있으면 "누구누구 학생 확인이 필요합니다"로
+ *    돌려보낸다(`trip-end-guard.ts`). 확인할 수 없을 때(조회 실패)는 막지 않는다.
  */
 export async function endTrip(formData: FormData): Promise<ShuttleActionState> {
   const ctx = await recordGate();
@@ -859,6 +879,8 @@ export async function endTrip(formData: FormData): Promise<ShuttleActionState> {
   const existing = await loadTrip(admin, ctx.tenantId, ranOn, runId);
   if (!existing?.started_at) return { error: "아직 출발을 찍지 않았습니다" };
   if (existing.ended_at) return { ok: true, notice: "이미 종료로 찍혀 있습니다" };
+  const unchecked = await endTripUncheckedMessage(ctx.tenantId, runId, ranOn);
+  if (unchecked) return { error: unchecked };
 
   const { error } = await admin
     .from("shuttle_trips")

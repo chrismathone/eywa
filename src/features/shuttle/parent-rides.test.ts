@@ -40,8 +40,8 @@ const YMD = "2026-09-26"; // 토요일
 
 const leg = (over: Partial<RideLeg>): RideLeg => ({
   key: "k", studentId: "s1", direction: "in", vehicleId: "v1", runId: "r1", vehicleName: "1호차", runName: "1회차", stopName: "칠성초 정문",
-  plannedTime: "14:40", skipped: false, added: false, status: null, recordedTime: null,
-  trip: "ready", tripEndedTime: null, staffMemo: null, route: [], ...over,
+  plannedTime: "14:40", skipped: false, added: false, status: null, recordedTime: null, notifyParent: true,
+  trip: "ready", tripStartedTime: null, tripEndedTime: null, staffMemo: null, route: [], ...over,
 });
 
 describe("weekDates — 운영 주 월~금", () => {

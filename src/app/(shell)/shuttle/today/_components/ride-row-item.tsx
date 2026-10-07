@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useSyncExternalStore, useTransition } from "react";
+import { useSyncExternalStore, useTransition } from "react";
 import { Pill } from "@/components/atoms/pill";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -21,6 +21,7 @@ import {
 } from "@/features/shuttle/types";
 import { isInactiveDay, type RideRow } from "@/features/shuttle/roster";
 import { clearBoarding, clearRideException, recordBoarding } from "@/features/shuttle/server/actions";
+import { setRowChecked, useRowChecked } from "@/features/shuttle/check-store";
 import { StaffRideControls } from "./staff-ride-controls";
 
 /** 그날 변경을 건 사람 표식 — 학부모(파랑 info) / 직원(앰버, 직원 수정 버튼과 같은 색)으로 갈린다(사용자 2026-10-06). */
@@ -65,6 +66,8 @@ const BIG_CHIP = "h-9 flex-[3] font-bold sm:min-w-24 sm:flex-none";
 type Draft = { status: BoardingStatus | null; memo: string };
 
 const LOCKED_HINT = "전송된 기록입니다 — 바꾸려면 [취소]를 누르세요";
+const NEEDS_CHECK_HINT = "하원 차에 탄 아이만 하차를 찍습니다 — 먼저 체크하세요";
+const NOT_DEPARTED_HINT = "먼저 회차 [출발]을 누르세요 — 출발한 뒤에 기록합니다";
 
 function draftKey(date: string, rowKey: string) {
   return `shuttle-draft:${date}:${rowKey}`;
@@ -121,6 +124,7 @@ export function RideRowItem({
   canWrite,
   canEditException,
   ioBadge = false,
+  departed = true,
   onError,
   onDone,
 }: {
@@ -136,12 +140,23 @@ export function RideRowItem({
   canEditException: boolean;
   /** 등·하원이 섞인 회차면 이름 옆에 [등원]/[하원]을 붙인다(사용자 2026-10-06) — 한쪽뿐이면 회차 머리가 이미 말한다. */
   ioBadge?: boolean;
+  /** 이 회차가 [출발]됐나 — 아니면 탑승·미탑승·하차 칩을 잠근다(사용자 2026-10-07). 체크·안함·수정은 그대로. */
+  departed?: boolean;
   onError: (msg: string | null) => void;
   onDone: () => void;
 }) {
   const [busy, startTransition] = useTransition();
-  /** 체크 표시(사용자 2026-10-06) — 화면 안에서만 켜고 끈다(저장 안 함). */
-  const [checked, setChecked] = useState(false);
+  /**
+   * 체크 표시(사용자 2026-10-06) — DB에 저장하지 않는다. 탭 세션에 두어 회차 머리의 [출발]이 같은 값을 본다
+   * (하원 아이가 다 체크됐나 — 사용자 2026-10-07, check-store.ts).
+   */
+  const checked = useRowChecked(date, row.key);
+  /**
+   * 🔒 **하원 줄은 체크된 아이만 [하차]·[전송]**(사용자 2026-10-07 "체크가 안 된 애들은 하원 차에 안 타는 애들이니 수정할
+   * 필요가 없다"). [하원 안함]·[등하원 수정]은 그대로 둔다 — 체크 안 된 아이는 [하원 안함]을 눌러야 [출발]이 된다.
+   * ⚠️ [취소]는 잠그지 않는다 — 이미 보낸 기록에서 빠져나올 문이다([[#103]]).
+   */
+  const needsCheck = row.ioKind === "out" && !checked;
 
   const key = draftKey(date, row.key);
   const saved: Draft = { status: row.status, memo: row.memo ?? "" };
@@ -157,6 +172,13 @@ export function RideRowItem({
    * DB에 기록이 있고 초안이 없으면 탑승/미탑승·사유를 못 바꾼다. [취소]를 누르면 초안(미기록)이 생겨 풀린다.
    */
   const locked = row.status !== null && !pending;
+  /** 출발 전이라 찍을 수 없나 — 이미 기록이 있는 줄은 이 판정과 무관하게 잠금(locked)이 말한다. */
+  const notDeparted = !departed;
+  /** 탑승·미탑승·하차 칩을 못 누르는 이유(툴팁) — 우선순위: 전송 잠금 → 출발 전 → 하원 미체크. */
+  const chipHint = locked ? LOCKED_HINT : notDeparted ? NOT_DEPARTED_HINT : needsCheck ? NEEDS_CHECK_HINT : undefined;
+  const chipBlocked = locked || notDeparted || needsCheck;
+  /** DB 기록이 학부모 알림으로 나갔나 — 등원 탑승·미탑승 · 하원 하차를 [전송]했을 때. */
+  const boardedNotified = row.status !== null && row.notifyParent !== false;
 
   function setDraft(next: Draft) {
     // DB와 같아지면 초안이 아니다 — 지운다(전송할 게 없다).
@@ -172,8 +194,11 @@ export function RideRowItem({
     else setDraft({ ...view, status });
   }
 
-  /** [전송] — 초안을 DB로 보낸다. 미기록으로 되돌린 초안은 기록 삭제, 나머지는 덮어쓰기. */
-  function send() {
+  /**
+   * [전송] — 초안을 DB로 보낸다. 미기록으로 되돌린 초안은 기록 삭제, 나머지는 덮어쓰기.
+   * 🔑 `notify=false`는 등원 줄의 [저장](사용자 2026-10-07) — 같은 저장인데 학부모 탑승 알림을 끈다(0354c).
+   */
+  function send(notify = true) {
     if (!draft) return;
     onError(null);
     if (draft.status === null) {
@@ -201,6 +226,7 @@ export function RideRowItem({
     fd.set("ioKind", row.ioKind);
     fd.set("status", draft.status);
     if (draft.status === "missed" && draft.memo.trim()) fd.set("memo", draft.memo.trim());
+    if (!notify) fd.set("notify", "0");
     startTransition(async () => {
       const res = await recordBoarding(fd);
       if (res?.error) onError(res.error);
@@ -266,6 +292,14 @@ export function RideRowItem({
           <Pill color={row.ioKind === "in" ? TONE_COLOR.info : TONE_COLOR.special}>{DIRECTION_LABEL[row.ioKind]}</Pill>
         )}
         {pending && !skipped && <span className="text-amber text-xs font-bold">미전송</span>}
+        {/* 🔑 등원 줄에 저장된 기록이 **어느 문으로 갔나**(사용자 2026-10-07) — [전송]으로 탑승을 보냈으면 학부모 알림이 갔고,
+            [저장]이면 기록만 남았다(0354c). 탑승·미탑승 모두 [전송]이면 알림이 간다(미탑승 = "탑승하지 않았습니다").
+            하원 [하차]→[전송]도 알림이 간다("OO에서 내렸습니다", 사용자 2026-10-07). */}
+        {row.status && !pending && !skipped && (
+          <span className={cn("text-xs font-bold", boardedNotified ? "text-green" : "text-text-dim")}>
+            {boardedNotified ? "학부모님에게 알람 전송했습니다" : "데이터를 저장만 했습니다"}
+          </span>
+        )}
         {/* 🔑 일회성 변경 표식 — tone 캐논에서 고른다: 오늘만 탑승 = special(예외·대체) ·
             오늘 안 탐 = inert(지나간 것). 사유는 **선택**이라 없으면 배지만 뜬다. */}
         {row.dayKind === "added" && (
@@ -341,63 +375,91 @@ export function RideRowItem({
               칩, 동작만 하면 버튼) — 그래서 공용 `<Button>`이 아니라 `SHUTTLE_CHIP`을 쓴다.
               색은 의미색 캐논: 탄 것 = positive(초록) · 못 탄 것 = critical(빨강). */}
           {/* 🔒 전송된 줄(locked)은 눌린 색은 그대로 두고 누르지만 못하게 한다 — 무엇을 보냈는지는 보여야 한다. */}
+          {/* 🔑 **하원 줄은 [하차] 하나**(사용자 2026-10-07 "탑승 미탑승 버튼을 하차 버튼 하나로") — 기록 값은 그대로
+              'boarded'(하원의 boarded = 그 정류장에서 내림 · 학부모 문장 "OO에서 내렸어요"). [전송]하면 이 줄의 정류장이
+              내린 곳으로 같이 저장된다(recordBoarding의 stop_label 스냅샷). 하원은 미탑승 칸이 없다. */}
           <button
             type="button"
-            disabled={busy || locked}
+            disabled={busy || chipBlocked}
             onClick={() => mark("boarded")}
             aria-pressed={boarded}
-            title={locked ? LOCKED_HINT : undefined}
+            title={chipHint}
             className={cn(
               SHUTTLE_CHIP,
               BIG_CHIP,
               boarded ? "bg-green text-white" : SHUTTLE_CHIP_OFF,
-              locked && "disabled:opacity-60",
+              chipBlocked && "disabled:opacity-60",
             )}
           >
-            탑승
+            {row.ioKind === "out" ? "하차" : "탑승"}
           </button>
-          <button
-            type="button"
-            disabled={busy || locked}
-            onClick={() => mark("missed")}
-            aria-pressed={view.status === "missed"}
-            title={locked ? LOCKED_HINT : undefined}
-            className={cn(
-              SHUTTLE_CHIP,
-              BIG_CHIP,
-              view.status === "missed" ? "bg-danger text-white" : SHUTTLE_CHIP_OFF,
-              locked && "disabled:opacity-60",
-            )}
-          >
-            미탑승
-          </button>
+          {row.ioKind === "in" && (
+            <button
+              type="button"
+              disabled={busy || chipBlocked}
+              onClick={() => mark("missed")}
+              aria-pressed={view.status === "missed"}
+              title={chipHint}
+              className={cn(
+                SHUTTLE_CHIP,
+                BIG_CHIP,
+                view.status === "missed" ? "bg-danger text-white" : SHUTTLE_CHIP_OFF,
+                chipBlocked && "disabled:opacity-60",
+              )}
+            >
+              미탑승
+            </button>
+          )}
           {/* 🔑 체크 · 전송(사용자 2026-10-06) — 체크는 눌러서 켜고 다시 눌러 끄는 표시다.
-              ⚠️ 체크는 **저장하지 않는다**(이 화면 안의 상태라 새로고침하면 풀린다).
-              🔑 [전송]이 이 줄의 탑승/미탑승 초안을 DB에 저장한다 — 보낼 게 없으면 꺼져 있다. */}
-          {/* 글자 없이 체크박스 모양(작은 네모 + ✓) — 사용자 2026-10-06 "표시 형태로 · 박스 크기 줄여". */}
-          <button
-            type="button"
-            role="checkbox"
-            aria-checked={checked}
-            aria-label={checked ? "체크 풀기" : "체크"}
-            title={checked ? "체크 풀기" : "체크"}
-            onClick={() => setChecked((v) => !v)}
-            className={cn(
-              "flex size-7 shrink-0 items-center justify-center rounded-md border-2",
-              checked ? "border-primary bg-primary text-primary-foreground" : "border-line-strong bg-card",
-            )}
-          >
-            {checked ? (
-              <svg viewBox="0 0 16 16" aria-hidden className="size-4" fill="none" stroke="currentColor" strokeWidth={2.5}>
-                <path d="M3 8.5l3.2 3L13 4.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            ) : null}
-          </button>
+              ⚠️ 체크는 **DB에 저장하지 않는다**(탭 세션에만 — 하원 줄은 [출발] 전에 다 체크됐는지 본다).
+              🔑 [전송]이 이 줄의 탑승/미탑승 초안을 DB에 저장한다 — 보낼 게 없으면 꺼져 있다.
+              🔑 **등원 줄은 체크 대신 [저장]**(사용자 2026-10-07) — [전송]과 같은 저장인데 학부모 탑승 알림을 보내지 않는다(0354c).
+                 하원 줄은 체크 그대로 — 체크가 "이 아이가 하원 차에 탔나"이고, 체크된 아이만 [하차]·[전송]이 열린다. */}
+          {row.ioKind === "in" ? (
+            <Button
+              variant="outline"
+              disabled={busy || !pending}
+              onClick={() => send(false)}
+              title={pending ? "학부모 알림 없이 저장만 합니다" : "저장할 변경이 없습니다"}
+              // size-guard-ok: [전송]과 같은 작은 고정 크기(사용자 2026-10-06 "전송은 조금 작게").
+              className="h-8 shrink-0 rounded-md px-2 text-xs"
+            >
+              저장
+            </Button>
+          ) : (
+            // 글자 없이 체크박스 모양(작은 네모 + ✓) — 사용자 2026-10-06 "표시 형태로 · 박스 크기 줄여".
+            <button
+              type="button"
+              role="checkbox"
+              aria-checked={checked}
+              aria-label={checked ? "체크 풀기" : "체크"}
+              title={checked ? "체크 풀기" : "체크"}
+              onClick={() => setRowChecked(date, row.key, !checked)}
+              className={cn(
+                "flex size-7 shrink-0 items-center justify-center rounded-md border-2",
+                checked ? "border-primary bg-primary text-primary-foreground" : "border-line-strong bg-card",
+              )}
+            >
+              {checked ? (
+                <svg viewBox="0 0 16 16" aria-hidden className="size-4" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                  <path d="M3 8.5l3.2 3L13 4.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              ) : null}
+            </button>
+          )}
           <Button
             variant={pending ? "default" : "outline"}
-            disabled={busy || !pending}
-            onClick={send}
-            title={pending ? "찍은 내용을 저장합니다" : "보낼 변경이 없습니다"}
+            disabled={busy || !pending || needsCheck}
+            onClick={() => send()}
+            title={
+              needsCheck
+                ? NEEDS_CHECK_HINT
+                : pending
+                  ? row.ioKind === "in"
+                    ? "저장하고 학부모에게 탑승 알림을 보냅니다"
+                    : "저장하고 학부모에게 하차 알림을 보냅니다"
+                  : "보낼 변경이 없습니다"
+            }
             // size-guard-ok: 전송은 작은 고정 크기(사용자 2026-10-06 "전송은 조금 작게") — 탑승·미탑승이 주 버튼이다.
             className="h-8 shrink-0 rounded-md px-2 text-xs"
           >

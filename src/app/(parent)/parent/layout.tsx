@@ -3,10 +3,12 @@
 import { signOut } from "@/app/(auth)/login/actions";
 import { getPublicBrandingByTenantId } from "@/features/owner/server/public-branding";
 import { getParentViewer } from "@/features/shuttle/server/parent-viewer";
+import { loadParentNotices } from "@/features/shuttle/server/parent-departure";
+import { DepartureNoticeList } from "@/features/shuttle/components/departure-notice-list";
 import { ParentTabs } from "./_components/parent-tabs";
 
 /**
- * 학부모 화면 공통 머리 — 학원명·학부모 이름·로그아웃 + 가로 탭(5칸). 섹션(실시간 차량·변경·확인·
+ * 학부모 화면 공통 머리 — 학원명·학부모 이름·로그아웃 + 셔틀 알림 줄(출발·탑승) + 가로 탭(5칸). 섹션(실시간 차량·변경·확인·
  * 수업 시간표)은 이 아래 `children`으로 바뀐다.
  *
  * 🔑 학부모 게이트를 여기서 한 번 건다 — 학부모가 아니면(직원 등) 자기 홈으로. 각 섹션도 데이터를 읽을 때
@@ -15,7 +17,7 @@ import { ParentTabs } from "./_components/parent-tabs";
 export default async function ParentSectionLayout({ children }: { children: React.ReactNode }) {
   const viewer = await getParentViewer();
   if (!viewer) redirect("/home");
-  const branding = await getPublicBrandingByTenantId(viewer.tenantId);
+  const [branding, notices] = await Promise.all([getPublicBrandingByTenantId(viewer.tenantId), loadParentNotices(viewer)]);
   const academy = branding?.settings.profile.name ?? "";
 
   return (
@@ -31,6 +33,8 @@ export default async function ParentSectionLayout({ children }: { children: Reac
           </button>
         </form>
       </header>
+      {/* 셔틀 알림(차량 출발 · 등원 탑승, 0354a·0354b) — 푸시 가정판. 어느 탭에서든 맨 위에 뜬다. */}
+      <DepartureNoticeList notices={notices} />
       <ParentTabs />
       {children}
     </>

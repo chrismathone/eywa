@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FaceTabs } from "@/components/face-tabs";
 import { Pill } from "@/components/atoms/pill";
@@ -109,6 +109,14 @@ export function DayBoardClient({
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  /**
+   * 오류 띠는 보드 맨 위에 하나다 — 폰에서 아래쪽 회차의 [종료]가 "누구누구 학생 확인이 필요합니다"로 막히면
+   * 띠가 화면 밖이라 아무 일도 없는 것처럼 보였다(사용자 2026-10-07). 띠가 뜨면 보이는 곳까지 끌어온다.
+   */
+  const errorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [error]);
   /** 사람이 직접 접거나 편 회차 — 여기 없으면 "미기록이 남았나"로 자동 판정한다. */
   const [manualOpen, setManualOpen] = useState<Record<string, boolean>>({});
   const [exceptionOpen, setExceptionOpen] = useState(false);
@@ -261,7 +269,7 @@ export function DayBoardClient({
       </div>
 
       {error && (
-        <div className="border-danger/30 bg-danger-soft text-danger rounded-xl border px-3 py-2 text-xs">
+        <div ref={errorRef} role="alert" className="border-danger/30 bg-danger-soft text-danger rounded-xl border px-3 py-2 text-xs">
           {error}
         </div>
       )}

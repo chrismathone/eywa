@@ -45,7 +45,11 @@ export function weekDates(today: string): { day: DayCode; ymd: string }[] {
 export type RouteStop = { id: string; kind: RunStopKind; name: string; time: string | null; mine: boolean };
 
 /** 기록 한 건 — 오늘 등하원 조회 결과에 **찍은 시각**만 더한 모양. */
-export type RideLogInput = BoardingLogLike & { recordedAt?: string | null };
+export type RideLogInput = BoardingLogLike & {
+  recordedAt?: string | null;
+  /** 학부모 탑승 알림 대상인가(0354c) — [저장]으로 찍으면 false. 없으면 대상. */
+  notifyParent?: boolean;
+};
 
 export type RideLegInput = {
   ymd: string;
@@ -79,6 +83,10 @@ export type RideLeg = {
   recordedTime: string | null;
   /** 운행 상태 — 표가 없으면 null(모름). */
   trip: TripState | null;
+  /** 이 기록이 학부모 탑승 알림 대상인가(0354c) — 셔틀 [저장]으로 찍었으면 false. 기록이 없으면 true. */
+  notifyParent: boolean;
+  /** 운행 출발 시각 "HH:MM" — 학부모 출발 알림(0354a)이 쓴다. */
+  tripStartedTime: string | null;
   /** 운행 종료 시각 "HH:MM" — 등원이면 학원 도착 시각이다. */
   tripEndedTime: string | null;
   /** 직원 메모(기록 메모 → 오늘만 변경 사유). 🔴 관리자 뷰 전용. */
@@ -94,6 +102,7 @@ export type RideLeg = {
 export function buildRideLegs(input: RideLegInput): Map<string, RideLeg[]> {
   const vehicleName = new Map(input.vehicles.map((v) => [v.id, v.name]));
   const recordedAt = new Map(input.logs.map((l) => [l.id, l.recordedAt ?? null]));
+  const notifyOf = new Map(input.logs.map((l) => [l.id, l.notifyParent !== false]));
   const out = new Map<string, RideLeg[]>();
 
   for (const run of input.runs) {
@@ -128,7 +137,9 @@ export function buildRideLegs(input: RideLegInput): Map<string, RideLeg[]> {
         added: row.dayKind === "added",
         status: row.status,
         recordedTime: row.logId ? kstTimeOf(recordedAt.get(row.logId)) : null,
+        notifyParent: row.logId ? (notifyOf.get(row.logId) ?? true) : true,
         trip: input.tripsReady ? tripState(trip) : null,
+        tripStartedTime: input.tripsReady ? kstTimeOf(trip?.startedAt) : null,
         tripEndedTime: kstTimeOf(trip?.endedAt),
         staffMemo: row.memo ?? row.exceptionMemo,
         route: stops.map((s) => ({ id: s.id, kind: s.kind, name: s.stopName, time: s.atTime, mine: s.id === mineId })),

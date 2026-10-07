@@ -223,6 +223,8 @@ export type RideRow = {
   memo: string | null;
   /** 이미 찍힌 기록의 id — 지우기(clearBoarding)에 쓴다. */
   logId: string | null;
+  /** 찍힌 기록이 학부모 탑승 알림 대상인가(0354c) — [전송]=true · [저장]=false. 기록이 없으면 null. */
+  notifyParent?: boolean | null;
   /** 오늘만의 예정 변경(0229a). 기록(`status`)과 **다른 축**이다. */
   dayKind: RideDayKind;
   exceptionMemo: string | null;
@@ -244,6 +246,7 @@ export type BoardingLogLike = {
   status: BoardingStatus;
   memo: string | null;
   stopLabel?: string | null;
+  notifyParent?: boolean;
 };
 
 export function mergePlanAndLog(
@@ -270,6 +273,7 @@ export function mergePlanAndLog(
     status: hit?.status ?? null,
     memo: hit?.memo ?? null,
     logId: hit?.id ?? null,
+    notifyParent: hit ? hit.notifyParent !== false : null,
     dayKind: p.dayKind,
     exceptionMemo: p.exceptionMemo,
     exceptionId: p.exceptionId,
@@ -311,6 +315,7 @@ export function mergePlanAndLog(
       status: leftover.status,
       memo: leftover.memo,
       logId: leftover.id,
+      notifyParent: leftover.notifyParent !== false,
       // 예정에 없던 기록이라 오늘의 **예정 변경**과는 무관하다 — 예외로 생긴 줄이 아니다.
       dayKind: "regular",
       exceptionMemo: null,
