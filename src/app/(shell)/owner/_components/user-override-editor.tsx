@@ -55,6 +55,8 @@ export function UserOverrideEditor({ overrides, hiddenUserIds, staffOptions, nam
   return (
     <SettingsCard
       title={`개인별 메뉴 권한 ${visible.length}건`}
+      collapsible
+      defaultOpen
       description="한 사람에게만 메뉴를 열거나 닫습니다. 역할별 권한보다 먼저 적용되고, 같은 사람의 같은 메뉴는 새 값으로 바뀝니다."
     >
       {staff.length > 0 ? (

@@ -48,6 +48,8 @@ export function SpecialAccessEditor({ value, hiddenUserIds, staffOptions, nameOf
   return (
     <SettingsCard
       title="개인별 기능 권한"
+      collapsible
+      defaultOpen
       description="메뉴 권한과 별개로, 사람을 지정해서 여는 기능입니다. 원장은 지정하지 않아도 전부 할 수 있습니다. 지정한 사람은 × 로 거둘 수 있습니다."
     >
       <div className="space-y-5">
