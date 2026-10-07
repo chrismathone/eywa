@@ -11,6 +11,7 @@ export function SettingsCard({
   children,
   span2,
   collapsible,
+  defaultOpen = false,
   summary,
 }: {
   title: string;
@@ -24,6 +25,8 @@ export function SettingsCard({
    * 접혀 있어도 안의 입력은 그대로 살아 있다 — 고치다 접어도 값이 남고 저장에 실린다.
    */
   collapsible?: boolean;
+  /** 접는 카드를 처음 펼쳐 둘지 여부. 제목 줄에서 직접 닫고 열 수 있다. */
+  defaultOpen?: boolean;
   /** 접는 카드의 제목 줄 오른쪽에 적는 한마디(예: `12개`) — 펼치지 않아도 얼마나 들었는지 보인다. */
   summary?: string;
 }) {
@@ -31,7 +34,7 @@ export function SettingsCard({
   if (collapsible) {
     return (
       <section data-span-all={span2 ? "" : undefined} className={shell}>
-        <details className="group">
+        <details className="group" open={defaultOpen}>
           {/* 제목 줄의 자식은 제목 · 오른쪽 한마디 · 설명 셋뿐이다(격자로 놓는다 — 제목을 다른 상자에 넣지 않는다).
               설명은 두 칸을 다 쓴다(오른쪽 한마디 아래를 비워 두면 좁은 창에서 설명이 좁은 기둥으로 접힌다). */}
           <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 [&::-webkit-details-marker]:hidden">

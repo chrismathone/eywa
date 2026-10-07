@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   alreadyListed,
+  campusOf,
   colLetter,
   entryCells,
   findMonthTab,
@@ -101,7 +102,9 @@ describe("줄 고르기·중복", () => {
     expect(alreadyListed(SEPT, l, { ...e, name: "김나윤", className: "초5 BS2C" })).toBe(true);
     expect(alreadyListed(SEPT, l, e)).toBe(false);
   });
-  it("쓸 칸 — 캠퍼스·사유는 안 건드린다", () => {
+  it("쓸 칸 — 사유는 안 건드리고, 캠퍼스는 알 때만", () => {
+    expect(l.campusCol).toBe(6);
+    expect([...entryCells(l, { ...e, campus: "고등관" }, null).keys()].sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
     const cells = entryCells(l, e, null);
     expect([...cells.keys()].sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5, 7, 8, 9]);
     expect(cells.get(7)).toBe("25.07.22");
@@ -125,5 +128,17 @@ describe("mathWithdrawalsOn — 수학을 그만둔 수강만", () => {
   });
   it("고른 수강만", () => {
     expect(mathWithdrawalsOn([f("a", "2026-09-30"), f("b", "2026-09-30")], "2026-09-30", new Set(["b"])).map((x) => x.id)).toEqual(["b"]);
+  });
+});
+
+describe("campusOf — 강의실 → 재원캠퍼스(원장 2026-10-07)", () => {
+  it("본원이면 본원, 고수면 고등관", () => {
+    expect(campusOf(["본원201", "본원203"])).toBe("본원");
+    expect(campusOf(["고수801"])).toBe("고등관");
+  });
+  it("두 건물을 오가면 많이 쓴 쪽 · 모르는 건물은 이름 그대로 · 모르면 빈 칸", () => {
+    expect(campusOf(["고수801", "본원205", "고수802"])).toBe("고등관");
+    expect(campusOf(["바른602"])).toBe("바른");
+    expect(campusOf([null, ""])).toBe("");
   });
 });
