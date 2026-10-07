@@ -12,7 +12,9 @@ import { suggestFromLastMonth, type TermSuggestion } from "../last-month-suggest
 import { loadLastMonthBasis, type LastMonthBasis } from "./last-month";
 import { monthRosterKey, termRowState, virtualTermId, type MonthRosterPair, type MonthRosterSource, type TermRowState } from "../month-roster";
 import { loadMonthRoster, type MonthRoster } from "./month-roster";
-import { carryTargetRank, type MoneyCarryIn, type MoneyCarryOut } from "../money-carryover";
+import type { MoneyCarryIn, MoneyCarryOut } from "../money-carryover";
+// 받은·보낸 이월을 줄에 붙이는 규칙은 순수 모듈 한 벌(확정 시수 자동 반영도 같은 함수로 받을 줄을 고른다).
+import { attachMoneyCarry } from "../money-carry-attach";
 import { loadMoneyCarryIns, loadMoneyCarryLanding, loadMoneyCarryOuts } from "./money-carryover-queries";
 
 /** 회차 확정 면 한 행 — 청구서×반(반마다 단가가 달라 합산 금지). subject는 raw key(라벨은 소비처가 buildSubjectMaps로). */
@@ -137,41 +139,6 @@ const itemsOf = (inv: InvoiceRow) => invoiceLineItems(inv) as LineItemLike[];
  * ⚠️ `invoiceId` 모드(배분 창)는 그 학생의 줄만 세우고 `missing` 가상 행만 더한다(청구서 한 장에 붙이는 일이라 그 밖 상태는 없다).
  *    회차 행 유무는 **그 학생의 이 달 청구서 전부**로 본다 — 중복 청구서의 다른 장에 행이 있으면 여기선 가상 행이 아니다.
  */
-/**
- * 금액 이월을 행에 붙인다. 받은 이월은 (학생, 받을 반) 줄에 — 그 줄이 이 달에 없으면(반을 그만둠 등) 그 학생의 첫 줄에
- * `orphan`으로 붙여 **보이게만** 한다(어느 반 몫인지 모르니 실납엔 안 더한다 — 조용히 사라지면 돈이 증발한 것처럼 보인다).
- */
-function attachMoneyCarry(rows: SessionTermRow[], carryOuts: Map<string, MoneyCarryOut>, carryIns: Map<string, MoneyCarryIn[]>) {
-  if (carryOuts.size === 0 && carryIns.size === 0) return;
-  const byKey = new Map<string, SessionTermRow[]>();
-  for (const r of rows) {
-    if (r.termState === "term" && carryOuts.has(r.id)) r.carryOut = carryOuts.get(r.id)!;
-    if (r.classId) {
-      const key = monthRosterKey(r.studentId, r.classId);
-      (byKey.get(key) ?? byKey.set(key, []).get(key)!).push(r);
-    }
-  }
-  // 같은 쌍이 여러 줄(청구서 중복)이면 **한 줄에만** — `carryTargetRank`(받을 수 있는 줄 → 환불 아닌 회차 행 → 가상 행 → 환불 줄) → id 순.
-  // 보낸 달 도착 판정(`carryLanding`)과 같은 규칙이다. 두 줄에 붙이면 두 번 더해지고, 배분 없는 줄에 붙으면 분배에 0으로 빠진다.
-  for (const [key, list] of carryIns) {
-    const target = [...(byKey.get(key) ?? [])].sort((a, b) => carryTargetRank(a) - carryTargetRank(b) || a.id.localeCompare(b.id))[0];
-    if (target && carryTargetRank(target) === 3) {
-      // 받을 줄이 전부 환불 — 받을 곳이 없다. 보이되 더하지 않고 분배 저장을 막는다(보낸 달도 `orphan`으로 본다).
-      target.carryIns = [...(target.carryIns ?? []), ...list.map((c) => ({ ...c, orphan: true, refunded: true }))];
-      continue;
-    }
-    if (target) {
-      target.carryIns = [...(target.carryIns ?? []), ...list];
-      continue;
-    }
-    // 받을 줄이 이 달에 없다 — 그 학생의 다른 줄(청구서 있는 줄 먼저)에 **보이게만** 붙인다(실납엔 안 더한다).
-    const studentId = key.slice(0, key.indexOf("|")); // monthRosterKey = `학생|반`
-    const own = rows.filter((r) => r.studentId === studentId);
-    const fallback = own.find((r) => r.invoiceId !== null) ?? own[0];
-    if (fallback) fallback.carryIns = [...(fallback.carryIns ?? []), ...list.map((c) => ({ ...c, orphan: true }))];
-  }
-}
-
 export async function getSessionTermsView(period: string, invoiceId?: string, options: { lastMonth?: boolean } = {}): Promise<SessionTermsView> {
   const supabase = await createClient();
 

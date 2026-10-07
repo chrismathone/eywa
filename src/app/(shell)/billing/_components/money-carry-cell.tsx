@@ -10,6 +10,7 @@ import { carryOutValid, carrySurplus, MONEY_CARRY_NOTE_MAX } from "@/features/bi
 import { getMoneyCarryoverOptions, saveMoneyCarryover, type MoneyCarryOptions } from "@/features/billing/session-terms/server/money-carryover-actions";
 import type { SessionTermRow } from "@/features/billing/session-terms/server/queries";
 import { CELL_ACTION_BUTTON } from "./cell-action-button";
+import { toast } from "sonner";
 
 // 회차 확정 '실납 청구액' 칸의 **금액 이월** 표식·버튼·창(0278a, 원장 2026-09-21 "'이월' 기능 추가").
 // 옆 금액은 부모가 `netAllocatedAmount`로 보인다(배분액 − 보낸 이월 + 받은 이월). 여기는 그 차이를 말한다.
@@ -99,6 +100,8 @@ function MoneyCarryDialog({ data, onClose }: { data: MoneyCarryOptions; onClose:
       try {
         const result = await saveMoneyCarryover({ termId: data.termId, amount: nextAmount, classId: nextAmount > 0 ? classId : null, note: nextAmount > 0 ? note : null, expectedAllocation: data.allocatedAmount });
         if (result.error) { setError(result.error); return; }
+        // 받는 달 확정 시수를 이월만큼 자동으로 맞췄으면 알린다(원장 2026-10-07) — 말없이 바뀌면 "누가 고쳤지"가 된다.
+        if (result.notice) toast.success(result.notice);
         if (result.warning) alert(result.warning);
         publishRecordSaved("billing:session-terms");
         router.refresh();

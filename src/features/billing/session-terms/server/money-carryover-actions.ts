@@ -13,6 +13,7 @@ import { loadMonthRoster } from "./month-roster";
 import { loadMoneyCarryOuts } from "./money-carryover-queries";
 import { carrySurplus, validateMoneyCarry, type MoneyCarryOut } from "../money-carryover";
 import { isVirtualTermId } from "../month-roster";
+import { carryShortNotice, carrySyncNotice, syncCarrySessionsAfterCarry } from "./carry-session-sync";
 
 // 금액 이월 저장·취소(0278a) — 원장 2026-09-21 *"만원 남은걸 다음달로 금액 넘기는 기능 … '이월' 기능 추가"*.
 // 🔴 게이트는 화면이 아니라 여기서 다시 본다(#77): 유효 배분(`getSessionTermsView` 한 벌)으로 더 받은 몫을 다시 구하고,
@@ -81,7 +82,7 @@ export async function getMoneyCarryoverOptions(termId: string): Promise<{ data?:
 }
 
 /** `amount: 0` = 이월 취소. `expectedAllocation` = 창을 열 때 본 배분액(그 사이 배분이 바뀌면 거절). */
-export async function saveMoneyCarryover(input: { termId: string; amount: number; classId: string | null; note: string | null; expectedAllocation: number | null }): Promise<{ ok?: true; error?: string; warning?: string }> {
+export async function saveMoneyCarryover(input: { termId: string; amount: number; classId: string | null; note: string | null; expectedAllocation: number | null }): Promise<{ ok?: true; error?: string; warning?: string; notice?: string }> {
   const user = await getCurrentUser();
   if (!user || !(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
   if (await sessionBillingOff()) return { error: SESSION_BILLING_OFF };
@@ -130,6 +131,15 @@ export async function saveMoneyCarryover(input: { termId: string; amount: number
       note,
     },
   });
+  // 받는 달 줄의 확정 시수를 이월만큼 **올린다**(원장 2026-10-07) — 사람이 '해제 → 시수 고침 → 다시 확정'하던 일. 못 올리면(배분 전·잔돈·
+  // 여럿이 나누는 항목) 그대로 둔다. 이월을 취소·줄여 덜 받게 된 줄은 자동으로 내리지 않고 알리기만 한다(`shortNotice`).
+  const synced = await syncCarrySessionsAfterCarry(db, {
+    period: c.nextPeriod, studentId: c.studentId,
+    previous: c.current ? { classId: c.current.toClassId, amount: c.current.amount } : null,
+    next: amount > 0 ? { classId: input.classId, amount } : null,
+  }, user.id);
+  const notice = carrySyncNotice(synced.changes);
+  const shortNotice = carryShortNotice(synced.shorts);
   revalidatePath("/billing");
   // 두 달 중 이미 **분배를 저장한** 달이 있으면 그 저장본이 낡았다 — 다시 저장하라고 알린다(적대 리뷰 2026-09-21).
   // 달마다 따로 센다(한 번에 limit로 읽으면 한 달 행만으로 채워져 다른 달이 빠진다). 조회가 실패하면 모른다고 알린다.
@@ -137,10 +147,12 @@ export async function saveMoneyCarryover(input: { termId: string; amount: number
     const { count, error: countError } = await db.from("invoice_teacher_splits").select("*", { count: "exact", head: true }).eq("period", p);
     return { p, has: countError ? null : (count ?? 0) > 0 };
   }));
-  if (counts.some((x) => x.has === null)) return { ok: true, warning: "강사 분배 저장본을 확인하지 못했습니다 — 두 달 분배를 저장해 두었다면 시수 검증 면에서 다시 저장해 주세요." };
+  // 이월이 빠져 덜 받게 된 줄 안내를 분배 경고 앞에 붙인다(둘 다 사람이 손봐야 하는 일이라 한 창으로).
+  const withShort = (text: string | undefined) => [shortNotice, text].filter(Boolean).join("\n\n") || undefined;
+  if (counts.some((x) => x.has === null)) return { ok: true, ...(notice ? { notice } : {}), warning: withShort("강사 분배 저장본을 확인하지 못했습니다 — 두 달 분배를 저장해 두었다면 시수 검증 면에서 다시 저장해 주세요.") };
   const stale = counts.filter((x) => x.has).map((x) => x.p);
-  const warning = stale.length
+  const warning = withShort(stale.length
     ? `${stale.map((p) => `${Number(p.slice(5, 7))}월`).join("·")} 강사 분배를 이미 저장해 두었습니다 — 시수 검증 면에서 분배를 다시 저장해 주세요.`
-    : undefined;
-  return { ok: true, ...(warning ? { warning } : {}) };
+    : undefined);
+  return { ok: true, ...(notice ? { notice } : {}), ...(warning ? { warning } : {}) };
 }

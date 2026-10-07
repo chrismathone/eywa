@@ -25,6 +25,23 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const one = <T,>(v: Embed<T>) => (Array.isArray(v) ? v[0] : v) ?? null;
 
 export type AutoReallocateResult = { saved: number; skipped: number };
+export type AutoInvoiceEntry = { inv: AutoInvoice | null; terms: AutoTerm[] };
+
+/**
+ * 청구서들의 **판정 재료**(청구서 + 그 청구서의 회차 행 전부) — 자동 재확정과 '금액 이월 → 확정 시수 반영'(carry-session-sync)이 같이 쓴다.
+ * 한 청구서에 반이 여럿이라 청크 안에서도 1,000행을 넘을 수 있다(B2) — 페이징 + 고정 정렬.
+ */
+export async function loadAutoInvoices(db: Db, invoiceIds: readonly string[]): Promise<Map<string, AutoInvoiceEntry>> {
+  const siblings = await fetchAllPagedInChunks<TermRow>([...invoiceIds], (chunk, from, to) =>
+    db.from("invoice_session_terms").select(COLS).in("invoice_id", chunk).order("id").range(from, to));
+  const byInvoice = new Map<string, AutoInvoiceEntry>();
+  for (const s of siblings) {
+    const { invoice_id: invoiceId, class: cls, invoice, ...rest } = s;
+    const entry = byInvoice.get(invoiceId) ?? byInvoice.set(invoiceId, { inv: one(invoice), terms: [] }).get(invoiceId)!;
+    entry.terms.push({ ...rest, className: one(cls)?.class_name ?? null });
+  }
+  return byInvoice;
+}
 
 /** `termIds` = 방금 확정한 회차 행들. 그 청구서 가운데 배분을 저장해 둔 것만 본다. */
 export async function autoReallocateAfterConfirm(db: Db, termIds: readonly string[], trigger: string): Promise<AutoReallocateResult> {
@@ -33,15 +50,7 @@ export async function autoReallocateAfterConfirm(db: Db, termIds: readonly strin
   try {
     const own = await fetchInChunks<{ invoice_id: string }>(ids, (chunk) => db.from("invoice_session_terms").select("invoice_id").in("id", chunk));
     const invoiceIds = [...new Set(own.map((r) => r.invoice_id))];
-    // 한 청구서에 반이 여럿이라 청크 안에서도 1,000행을 넘을 수 있다(B2) — 페이징 + 고정 정렬.
-    const siblings = await fetchAllPagedInChunks<TermRow>(invoiceIds, (chunk, from, to) =>
-      db.from("invoice_session_terms").select(COLS).in("invoice_id", chunk).order("id").range(from, to));
-    const byInvoice = new Map<string, { inv: AutoInvoice | null; terms: AutoTerm[] }>();
-    for (const s of siblings) {
-      const { invoice_id: invoiceId, class: cls, invoice, ...rest } = s;
-      const entry = byInvoice.get(invoiceId) ?? byInvoice.set(invoiceId, { inv: one(invoice), terms: [] }).get(invoiceId)!;
-      entry.terms.push({ ...rest, className: one(cls)?.class_name ?? null });
-    }
+    const byInvoice = await loadAutoInvoices(db, invoiceIds);
     const plans = [...byInvoice.values()].flatMap(({ inv, terms }) => (inv ? [{ inv, plan: planAutoReallocation(inv, terms) }] : []));
     const todo = plans.flatMap(({ inv, plan }) => (plan.kind === "save" ? [{ inv, rows: plan.rows, linked: plan.linked }] : []));
     let saved = 0;

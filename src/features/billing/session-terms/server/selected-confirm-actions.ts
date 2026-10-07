@@ -15,6 +15,7 @@ import { isVirtualTermId } from "../month-roster";
 import type { SessionTermPatch } from "./actions";
 import { materializeVirtualTerms } from "./term-materialize";
 import { autoReallocateAfterConfirm } from "./auto-reallocate";
+import { applyCarrySync, syncCarrySessionsAfter } from "./carry-session-sync";
 
 /** `monthly` = 화면이 이 행을 EiE 월 정액으로 보고 있었는가(서버 판정과 다르면 그 행은 쓰지 않는다). */
 export type SelectedTermInput = { id: string; sessions: number; unitPrice: number; monthly: boolean };
@@ -178,9 +179,12 @@ export async function confirmSelectedTerms(
 
   const failedIds = failures.map((f) => f.id);
   const skipped = items.length - terms.length - failures.length;
+  // 응답에 싣는 행 값 — 받은 금액 이월 때문에 확정 시수를 맞춘 줄은 고친 값으로(원장 2026-10-07). 건수는 `terms`로 센다.
+  let patched: SessionTermPatch[] = terms;
   if (terms.length > 0) {
     // 배분을 저장해 둔 청구서는 사람이 다시 저장할 일만 대신한다(원장 2026-10-06) — 응답 전에 끝낸다.
     await autoReallocateAfterConfirm(supabase, terms.map((t) => t.id), "confirm_selected");
+    patched = applyCarrySync(terms, await syncCarrySessionsAfter(supabase, { termIds: terms.map((t) => t.id) }, user.id, "confirm_selected"));
     // 돈이 결정되는 자리 — 학생마다 시수·단가·금액을 남긴다(반 일괄 확정은 한 값이라 한 줄이지만 여기선 행마다 다르다).
     after(async () => {
       revalidatePath("/billing");
@@ -195,8 +199,8 @@ export async function confirmSelectedTerms(
   // `materialized` > 0 = 가상 줄이 실제 행이 됐다(확정 쓰기가 실패한 줄도) → 화면이 새로 읽어 갈아끼운다.
   const createdPart = { ...(created ? { created } : {}), ...(materialized ? { materialized } : {}) };
   if (failures.length) {
-    return { confirmed: terms.length, skipped, failedIds, terms, ...createdPart, error: `${failures.length}명은 확정하지 못했습니다 — ${failures[0]!.reason}` };
+    return { confirmed: terms.length, skipped, failedIds, terms: patched, ...createdPart, error: `${failures.length}명은 확정하지 못했습니다 — ${failures[0]!.reason}` };
   }
   if (terms.length === 0) return { error: "선택한 학생이 이미 확정됐거나 이 반에 없습니다", confirmed: 0, skipped, failedIds, terms, ...createdPart };
-  return { confirmed: terms.length, skipped, failedIds, terms, ...createdPart };
+  return { confirmed: terms.length, skipped, failedIds, terms: patched, ...createdPart };
 }

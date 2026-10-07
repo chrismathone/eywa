@@ -485,6 +485,17 @@ export function auditDetail(
       const kept = Math.max(0, arr(m.allocations).length - linked);
       return join(kept ? `${kept}개 반 배분 유지` : null, linked ? `새로 확정한 ${linked}개 반을 남은 수업 항목에 연결` : null);
     }
+    case "session_term_carry_sync": {
+      // 받은 금액 이월만큼 확정 시수를 올린 자동 조정 — 누구의 어느 달 줄이 몇 시수에서 몇 시수로, 이월 얼마 때문에.
+      const before = num(m.sessionsBefore);
+      const after = num(m.sessions);
+      return join(
+        str(m.period),
+        str(m.studentName),
+        before !== null && after !== null ? `확정 시수 ${before} → ${after}` : null,
+        won(m.carryAmount) ? `받은 이월 ${won(m.carryAmount)} 반영` : null,
+      );
+    }
     case "session_term_money_carryover":
     case "session_term_money_carryover_cancel": {
       // 금액 이월(0278a) — 어느 달 어느 반에서 얼마를 다음 달 어느 반으로. 이름은 저장 시점 스냅샷(반 이름이 바뀌어도 그대로 읽힌다).

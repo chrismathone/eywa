@@ -6,6 +6,7 @@ import type { SessionTermRow } from "@/features/billing/session-terms/server/que
 import { publishRecordSaved } from "@/lib/realtime/record-channel";
 import { useBillingSettingsRefresh } from "@/features/billing/use-billing-settings-refresh";
 import { useTermRefresh } from "./use-term-refresh";
+import { toast } from "sonner";
 
 type RowPatch = Partial<SessionTermRow> & { id: string };
 
@@ -37,6 +38,9 @@ export function SessionTermsState({ rows, children }: { rows: (Pick<SessionTermR
       for (const term of terms) next[term.id] = { ...next[term.id], ...term };
       return { ...current, patches: next };
     });
+    // 받은 금액 이월 때문에 확정 시수를 자동으로 맞춘 줄(원장 2026-10-07) — 친 값과 다른 숫자가 서므로 한 번 알린다.
+    const notices = terms.flatMap((term) => (term.carryNotice ? [term.carryNotice] : []));
+    if (notices.length) toast.success(notices.join(" · "));
     if (affected.size) refresh();
     publishRecordSaved("billing:session-terms");
   }
