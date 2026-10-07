@@ -33,7 +33,13 @@ const drawsHeader = (src: string) => /<PageHeader[\s>/]/.test(src);
  * PageHeader를 안 쓰는 화면의 스켈레톤 — 맨 위 막대는 PageHeader 근사가 아니다(JJ 덱·응시 결과 = 본문 카드 ·
  * 수학 강사 시트 랜딩 = 자체 머리 `<h2>` — 스켈레톤도 그 머리를 그대로 흉내 낸다).
  */
-const NOT_PAGE_HEADER = ["exams/jj/[deckId]/loading.tsx", "exams/jj/attempt/[attemptId]/loading.tsx", "(shell)/mcs/loading.tsx"];
+// 머리글 없는 하위 창(결과지 · 보카킹 리포트) — 링크 줄 + 본문 틀만 있다.
+const NOT_PAGE_HEADER = [
+  "exams/jj/[deckId]/loading.tsx",
+  "exams/jj/attempt/[attemptId]/loading.tsx",
+  "exams/jj/attempt/[attemptId]/vocabking/loading.tsx",
+  "(shell)/mcs/loading.tsx",
+];
 
 /** 최대화 CSS 블록(데스크톱 미디어쿼리 안) — 첫 규칙부터 블록 끝까지. */
 function maximizeBlock(css: string): string {
