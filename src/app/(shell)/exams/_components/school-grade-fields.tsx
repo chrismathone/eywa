@@ -1,5 +1,7 @@
 "use client";
 
+import { SheetText } from "@/features/teacher-view/interface-label";
+
 import { useMemo } from "react";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 
@@ -25,10 +27,10 @@ export function SchoolGradeFields({ students, school, grade, onSchool, onGrade, 
     return [...set].sort((a, b) => a.localeCompare(b, "ko", { numeric: true }));
   }, [students, school]);
   return <>
-    <div className={labelClass}>학교<SearchableSelect value={school} placeholder="전체" searchPlaceholder="학교 이름" cap={50} ariaLabel="학교"
+    <div className={labelClass}><SheetText value={"학교"} /><SearchableSelect value={school} placeholder="전체" searchPlaceholder="학교 이름" cap={50} ariaLabel="학교"
       className="w-52" triggerClassName={fieldClass} onValueChange={onSchool}
       options={[{ value: "", label: "전체" }, ...schools]} /></div>
-    <label className={labelClass}>학년<select value={grades.includes(grade) ? grade : ""} onChange={(e) => onGrade(e.target.value)} className={fieldClass}>
-      <option value="">전체</option>{grades.map((g) => <option key={g} value={g}>{g}</option>)}</select></label>
+    <label className={labelClass}><SheetText value={"학년"} /><select value={grades.includes(grade) ? grade : ""} onChange={(e) => onGrade(e.target.value)} className={fieldClass}>
+      <option value=""><SheetText value={"전체"} /></option>{grades.map((g) => <option key={g} value={g}>{g}</option>)}</select></label>
   </>;
 }

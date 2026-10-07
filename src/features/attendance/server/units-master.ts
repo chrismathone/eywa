@@ -20,12 +20,13 @@ import { enrollmentAttendsOnDay, isEnrollmentEndedOn } from "@/features/enrollme
 import { axisDowOf } from "../teacher-axis";
 import { nativeLessonDraft } from "@/features/makeups/roster-merge";
 import { loadNativeParticipants, participantsOrLegacy } from "@/features/makeups/server/adapters/participants";
+import { taughtByColumnReady } from "./taught-by-db";
 
 export function canViewUnitsMaster(role: CurrentUser["systemRole"], teacherId: string | null): boolean {
   return ["master", "admin", "manager"].includes(role) && !teacherId;
 }
 
-type ClassRow = { id: string; class_name: string; teacher_id: string | null; english_track: string | null };
+type ClassRow = { id: string; class_name: string; subject: "math" | "english"; teacher_id: string | null; english_track: string | null };
 type EnrollmentRow = { class_id: string; student_id: string; start_date: string; end_date: string | null; is_transferred: boolean; attendance_days: string[] | null; on_hold: boolean };
 type ScheduleRow = Parameters<typeof toAutoUnitsSchedule>[0] & { id: string; class_id: string; teacher_id: string | null };
 type StudentRow = { id: string; name: string; school: string | null; grade: string | null };
@@ -40,15 +41,16 @@ export async function loadUnitsMaster(requestedMonth: string): Promise<UnitsMast
   const month = /^(20\d{2})-(0[1-9]|1[0-2])$/.test(requestedMonth) ? requestedMonth : kstMonth();
   const asOf = kstDateTimeLocal();
   const db = createAdminClient();
-  const [classes, defs, { operations }, invoices] = await Promise.all([
-    fetchAllPaged<ClassRow>((f, t) => db.from("classes").select("id, class_name, teacher_id, english_track")
-      .eq("tenant_id", user.tenantId).eq("subject", "english").order("id").range(f, t)),
+  const [classes, defs, { operations }, invoices, taughtByReady] = await Promise.all([
+    fetchAllPaged<ClassRow>((f, t) => db.from("classes").select("id, class_name, subject, teacher_id, english_track")
+      .eq("tenant_id", user.tenantId).in("subject", ["math", "english"]).order("id").range(f, t)),
     getPeriodDefs(Number(month.slice(0, 4))), getTenantSettings(),
     fetchAllPaged<InvoiceRow>((f, t) => db.from("invoices").select("id, student_id, status")
       .eq("tenant_id", user.tenantId).eq("period", month).order("id").range(f, t)),
+    taughtByColumnReady(db),
   ]);
   if (!classes.length) return { month, asOf, classes: [] };
-  const windows = new Map(classes.map((c) => [c.id, resolvePeriodWindow({ period: month, subjectKey: "english", classId: c.id, defs })]));
+  const windows = new Map(classes.map((c) => [c.id, resolvePeriodWindow({ period: month, subjectKey: c.subject, classId: c.id, defs })]));
   const from = [...windows.values()].map((w) => w.start).sort()[0];
   const to = [...windows.values()].map((w) => w.end).sort().at(-1)!;
   const ids = classes.map((c) => c.id);
@@ -61,8 +63,11 @@ export async function loadUnitsMaster(requestedMonth: string): Promise<UnitsMast
       .select("id, class_id, day_of_week, start_time, end_time, teacher_id, slot_teacher_label, valid_from, valid_to")
       .eq("tenant_id", user.tenantId).in("class_id", chunk).lte("valid_from", to).or(`valid_to.is.null,valid_to.gte.${from}`).order("id").range(f, t)),
     fetchAllPagedInChunks<MasterRecord>(ids, (chunk, f, t) => db.from("attendance_records")
-      .select("id, class_id, student_id, session_date, slot_start, status, session_units, seat_label, recorded_via, recorded_at")
-      .eq("tenant_id", user.tenantId).in("class_id", chunk).gte("session_date", from).lte("session_date", to).order("id").range(f, t)),
+      .select(taughtByReady
+        ? "id, class_id, student_id, session_date, slot_start, status, session_units, seat_label, recorded_via, recorded_at, taught_by"
+        : "id, class_id, student_id, session_date, slot_start, status, session_units, seat_label, recorded_via, recorded_at")
+      .eq("tenant_id", user.tenantId).in("class_id", chunk).gte("session_date", from).lte("session_date", to).order("id").range(f, t)
+      .overrideTypes<MasterRecord[], { merge: false }>()),
     fetchAllPagedInChunks<TermRow>(liveInvoices.map((i) => i.id), (chunk, f, t) => db.from("invoice_session_terms")
       .select("id, invoice_id, class_id, confirmed_sessions, quantity_basis, pricing_mode")
       .eq("tenant_id", user.tenantId).in("invoice_id", chunk).order("id").range(f, t)),
@@ -91,7 +96,7 @@ export async function loadUnitsMaster(requestedMonth: string): Promise<UnitsMast
     ])] };
   });
   const studentIds = [...new Set(roster.flatMap((r) => r.studentIds))];
-  const teacherIds = [...new Set([...classes.map((c) => c.teacher_id), ...schedules.map((s) => s.teacher_id)].filter((id): id is string => !!id))];
+  const teacherIds = [...new Set([...classes.map((c) => c.teacher_id), ...schedules.map((s) => s.teacher_id), ...records.map((r) => r.taught_by)].filter((id): id is string => !!id))];
   const [students, teachers] = await Promise.all([
     fetchAllPagedInChunks<StudentRow>(studentIds, (chunk, f, t) => db.from("students").select("id, name, school, grade")
       .eq("tenant_id", user.tenantId).in("id", chunk).order("id").range(f, t)),
@@ -115,9 +120,10 @@ export async function loadUnitsMaster(requestedMonth: string): Promise<UnitsMast
     const w = windows.get(c.id)!;
     const slots = (schedulesByClass.get(c.id) ?? []).map((s) => ({ ...toAutoUnitsSchedule(s), teacherId: s.teacher_id, labSeparate: separate.ids.has(s.id) }));
     const referenceDate = asOf.slice(0, 10) < w.start ? w.start : asOf.slice(0, 10) > w.end ? w.end : asOf.slice(0, 10);
-    const basis40 = usesFortyMinuteEnglishUnits(referenceDate, slots, c.english_track, c.class_name);
-    const track = c.english_track === "eie" ? "eie" : basis40 ? "bridge" : "hourly";
-    const planInput = { schedules: slots, homeroomTeacherId: c.teacher_id, englishTrack: c.english_track, className: c.class_name, holidays };
+    const basis40 = c.subject === "english" && usesFortyMinuteEnglishUnits(referenceDate, slots, c.english_track, c.class_name);
+    const track = c.subject === "math" ? "math" : c.english_track === "eie" ? "eie" : basis40 ? "bridge" : "hourly";
+    const unitTrack = c.subject === "math" ? "math" : basis40 ? "eie" : "injaewon";
+    const planInput = { subject: c.subject, schedules: slots, homeroomTeacherId: c.teacher_id, englishTrack: c.english_track, className: c.class_name, holidays };
     const plan = masterPlan({ ...planInput, from: w.start, to: w.end });
     const fixedWeek = track === "eie" ? masterPlan({ ...planInput, from: referenceDate, to: shiftDays(referenceDate, 6), holidays: new Set(),
       schedules: slots.filter((s) => s.validFrom <= referenceDate && (!s.validTo || s.validTo >= referenceDate))
@@ -137,7 +143,7 @@ export async function loadUnitsMaster(requestedMonth: string): Promise<UnitsMast
       const upcoming: MasterLesson[] = (reservationsByClass.get(c.id) ?? []).filter((r) => r.student_id === id && r.makeup_date >= w.start && r.makeup_date <= w.end)
         .map((r) => { const start = r.slot_start.slice(0, 5), end = r.slot_end.slice(0, 5);
           const minutes = Number(end.slice(0, 2)) * 60 + Number(end.slice(3)) - Number(start.slice(0, 2)) * 60 - Number(start.slice(3));
-          return { date: r.makeup_date, start, end, owner: masterOwner(slots, c.teacher_id, r.makeup_date, start), units: unitsFromMinutes(minutes, basis40 ? "eie" : "injaewon") ?? 1 };
+          return { date: r.makeup_date, start, end, owner: masterOwner(slots, c.teacher_id, r.makeup_date, start), units: unitsFromMinutes(minutes, unitTrack) ?? 1 };
         });
       const nativeReviews: string[] = [];
       for (const piece of nativeRows.filter((row) => row.classId === c.id && row.studentId === id && row.sessionDate >= w.start && row.sessionDate <= w.end)) {
@@ -148,7 +154,7 @@ export async function loadUnitsMaster(requestedMonth: string): Promise<UnitsMast
         }
         if (upcoming.some((lesson) => lesson.date === draft.date && lesson.start === draft.start)) continue;
         const minutes = Number(draft.end.slice(0, 2)) * 60 + Number(draft.end.slice(3)) - Number(draft.start.slice(0, 2)) * 60 - Number(draft.start.slice(3));
-        upcoming.push({ date: draft.date, start: draft.start, end: draft.end, owner: masterOwner(slots, c.teacher_id, draft.date, draft.start), units: unitsFromMinutes(minutes, basis40 ? "eie" : "injaewon") ?? 1 });
+        upcoming.push({ date: draft.date, start: draft.start, end: draft.end, owner: masterOwner(slots, c.teacher_id, draft.date, draft.start), units: unitsFromMinutes(minutes, unitTrack) ?? 1 });
       }
       const row = buildMasterStudent({ student: { id, name: s.name, school: schoolGradeLabel(s.school, s.grade) },
         records: recordsByClass.get(c.id) ?? [], schedules: slots, enrollments: enrollment, plan, allocation,
@@ -163,7 +169,7 @@ export async function loadUnitsMaster(requestedMonth: string): Promise<UnitsMast
       return [row];
     }).sort((a, b) => a.name.localeCompare(b.name, "ko"));
     const owners = [...new Set(rows.flatMap((r) => Object.keys(r.owners)))];
-    result.push({ id: c.id, name: c.class_name, track, from: w.start, to: w.end, periodLabel: w.label,
+    result.push({ id: c.id, name: c.class_name, subject: c.subject, track, from: w.start, to: w.end, periodLabel: w.label,
       teachers: owners.filter((id) => !["JJ", "LAB"].includes(id)).map((id) => ({ id, name: teacherNames.get(id) ?? "귀속 확인" })), students: rows });
   }
   return { month, asOf, classes: result.sort((a, b) => a.name.localeCompare(b.name, "ko")) };

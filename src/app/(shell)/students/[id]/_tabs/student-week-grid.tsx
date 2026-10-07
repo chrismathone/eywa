@@ -1,5 +1,7 @@
 "use client";
 
+import { SheetText } from "@/features/teacher-view/interface-label";
+
 import { useState } from "react";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import type { PeriodsConfig } from "@/features/timetable/lib/periods";
@@ -59,15 +61,14 @@ export function StudentWeekGrid({
     <section className="bg-card border-border rounded-2xl border">
       <header className="border-border flex flex-wrap items-center justify-between gap-3 border-b px-5 py-3">
         <div>
-          <h2 className="text-sm font-bold tracking-tight">주간 시간표</h2>
+          <h2 className="text-sm font-bold tracking-tight"><SheetText value={"주간 시간표"} /></h2>
           <p className="text-muted-foreground text-xs">
-            과목별 교시 시간표 · 실제 등원 요일 기준 (읽기전용)
-          </p>
+            <SheetText value={"과목별 교시 시간표 · 실제 등원 요일 기준 (읽기전용)"} /></p>
         </div>
         <div className="flex flex-wrap items-center gap-1">
           {subjectKeys.map((k) => (
             <TabChip key={k} active={active === k} onClick={() => setTab(k)}>
-              {subjects.labelOf(k)}
+              <SheetText value={subjects.labelOf(k)} />
             </TabChip>
           ))}
         </div>

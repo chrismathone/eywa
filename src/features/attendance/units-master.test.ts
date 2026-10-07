@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildMasterStudent, masterOwner, masterPlan, masterStatus, type MasterRecord } from "./units-master";
+import { buildMasterStudent, masterOwner, masterPlan, masterStatus, masterMatchesFilter, masterPriority, type MasterRecord } from "./units-master";
 import type { TermShareSchedule } from "./teacher-term-share";
 
 const slot = (startTime: string, endTime: string, teacherId: string | null = "home", slotTeacherLabel: string | null = null): TermShareSchedule => ({
@@ -85,6 +85,40 @@ describe("English units master: actual lessons, not duplicated teacher views", (
 });
 
 describe("shared planning and owner rules", () => {
+  it("plans math with the attendance convention: each 55-minute lesson is 0.5U", () => {
+    const mathSlots = [slot("14:30", "15:25"), slot("15:25", "16:20"), slot("16:20", "17:15")];
+    const rows = masterPlan({ from: "2026-09-07", to: "2026-09-07", schedules: mathSlots,
+      subject: "math", homeroomTeacherId: "home", englishTrack: null, className: "수학", holidays: new Set() });
+    expect(rows.map((r) => r.units)).toEqual([0.5, 0.5, 0.5]);
+    expect(rows.reduce((n, r) => n + r.units, 0)).toBe(1.5);
+    const student = buildMasterStudent({ ...base, schedules: mathSlots, allocation: new Map([["home", 1.5]]), plan: rows, records: [record("day", null, { session_units: 1.5 })], term: { units: 1.5, daysBasis: false } });
+    expect(student).toMatchObject({ actual: 1.5, missing: 0, status: "complete" });
+  });
+  it("math plans exclude seat-only and separate LAB slots, deduplicate the same start", () => {
+    const rows = masterPlan({ from: "2026-09-07", to: "2026-09-07", subject: "math", schedules: [slot("14:30", "15:25"), slot("14:30", "15:25"), slot("16:20", "17:15", null, "JJ"), slot("17:15", "18:10", null, "*LAB")],
+      homeroomTeacherId: "home", englishTrack: null, className: "수학", holidays: new Set() });
+    expect(rows).toHaveLength(1); expect(rows[0].units).toBe(0.5);
+  });
+  it("an unconfirmed target does not hide attendance-input work in filters", () => {
+    const row = buildMasterStudent({ ...base, term: undefined, records: [] });
+    expect(row.status).toBe("unconfirmed");
+    expect(masterMatchesFilter(row, "unconfirmed")).toBe(true);
+    expect(masterMatchesFilter(row, "review")).toBe(true);
+    expect(masterMatchesFilter(row, "attention")).toBe(true);
+    expect(masterPriority(row)).toBe(0);
+  });
+  it("prioritizes input problems before a pending confirmation without input problems", () => {
+    const row = buildMasterStudent({ ...base, term: undefined, plan: [], records: [] });
+    expect(masterMatchesFilter(row, "review")).toBe(false);
+    expect(masterPriority(row)).toBe(2);
+  });
+  it("uses recorded substitute-teacher ownership, preserving seat facts and total units", () => {
+    const row = buildMasterStudent({ ...base, plan: [], records: [record("a", "09:00", { taught_by: "substitute" }), record("b", "10:00", { taught_by: "substitute", recorded_via: "seat" })] });
+    expect(row.actual).toBe(2);
+    expect(row.owners.substitute.actual).toBe(1);
+    expect(row.owners.JJ.actual).toBe(1);
+    expect(row.events.some((e) => e.note === "실제 수업 강사로 귀속")).toBe(true);
+  });
   it("uses existing LAB aliases", () => expect(masterOwner([slot("09:00", "09:40", null, "이주희")], "home", "2026-09-07", "09:00")).toBe("LAB"));
   it("never attributes an unknown seat record to homeroom", () => expect(masterOwner([], "home", "2026-09-07", "09:00", null, "seat")).toBe("unassigned"));
   it("keeps hourly 50-minute lessons at 1U and skips holidays", () => {

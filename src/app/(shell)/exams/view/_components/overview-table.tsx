@@ -1,3 +1,5 @@
+
+import { SheetText } from "@/features/teacher-view/interface-label";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { EXAM_SLOT_LABEL } from "@/features/grades/exam-slots";
 import type { OverviewColumn, OverviewRow } from "@/features/grades/overview";
@@ -17,21 +19,17 @@ export function OverviewTable({ columns, rows }: { columns: OverviewColumn[]; ro
       {/* 🔴 최소 폭 — 없으면 좁은 창에서 열이 서로를 찌그러뜨린다(입력 격자와 같은 이유).
           시험이 늘면 가로로 스크롤한다(잡고 끌기도 된다). */}
       <table className="w-full min-w-[880px] text-sm [&_td]:whitespace-nowrap">
-        <caption className="sr-only">학기 성적 확인표 — 학생별 시험 점수와 평균</caption>
+        <caption className="sr-only"><SheetText value={"학기 성적 확인표 — 학생별 시험 점수와 평균"} /></caption>
         <thead className="bg-card sticky top-0 z-10 [&_th]:shadow-[0_1px_0_0_var(--color-line)] [&_th]:whitespace-nowrap">
           <tr>
             <th scope="col" className="micro px-4 py-3 text-left">
-              이름
-            </th>
+              <SheetText value={"이름"} /></th>
             <th scope="col" className="micro px-4 py-3 text-left">
-              학교
-            </th>
+              <SheetText value={"학교"} /></th>
             <th scope="col" className="micro px-2 py-3 text-center">
-              학년
-            </th>
+              <SheetText value={"학년"} /></th>
             <th scope="col" className="micro px-3 py-3 text-left">
-              반
-            </th>
+              <SheetText value={"반"} /></th>
             {columns.map((c) => (
               <th key={c.key} scope="col" className="micro px-3 py-3 text-center">
                 {/* 🔴 달 열은 시험 이름을 **글자로** 함께 적는다 — `title` 툴팁은 모바일에서 없는 것과
@@ -51,8 +49,7 @@ export function OverviewTable({ columns, rows }: { columns: OverviewColumn[]; ro
               className="micro px-3 py-3 text-center"
               title="적힌 시험만의 평균입니다 — 학생마다 친 시험 수가 다를 수 있습니다"
             >
-              평균
-            </th>
+              <SheetText value={"평균"} /></th>
           </tr>
         </thead>
         <tbody className="divide-line divide-y">
@@ -78,8 +75,7 @@ export function OverviewTable({ columns, rows }: { columns: OverviewColumn[]; ro
                       <span className="text-foreground font-medium">{cell.score}</span>
                     ) : cell?.noExam ? (
                       <span className="text-text-faint" title="시험없음으로 표시된 칸입니다">
-                        없음
-                      </span>
+                        <SheetText value={"없음"} /></span>
                     ) : skipped ? (
                       <span className="text-text-faint" title="이 학년은 이 시험을 치지 않습니다">
                         ·

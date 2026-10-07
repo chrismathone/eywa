@@ -6,9 +6,12 @@ import { enrollmentAttendsOnDay, isEnrollmentEndedOn } from "@/features/enrollme
 import { isLabSeparateSlot } from "@/features/timetable/lib/lab-separate";
 import type { AttendanceTermSessions } from "./class-billing";
 import { specialSlotLabel } from "@/features/timetable/lib/teacher-label";
+import { liveSlotMinutesOn } from "@/features/class-sheets/lib/grid";
+import { unitsFromMinutes } from "./auto-units";
 
 export type MasterRecord = EffectiveAttendanceRecord & {
   status: string; session_units: number | string | null; seat_label: string | null; recorded_via: string | null;
+  taught_by?: string | null;
 };
 export type MasterLesson = { date: string; start: string; end: string; owner: string; units: number };
 export type MasterEvent = { date: string; slot: string | null; owner: string; status: string; units: number; note: string; excluded?: boolean };
@@ -20,7 +23,7 @@ export type MasterStudent = {
 };
 export type MasterStatus = "normal" | "short" | "review" | "complete" | "excess" | "plannedExcess" | "unconfirmed";
 export type MasterClass = {
-  id: string; name: string; track: "eie" | "bridge" | "hourly"; from: string; to: string; periodLabel: string;
+  id: string; name: string; subject: "math" | "english"; track: "math" | "eie" | "bridge" | "hourly"; from: string; to: string; periodLabel: string;
   teachers: { id: string; name: string }[]; students: MasterStudent[];
 };
 export type UnitsMaster = { month: string; asOf: string; classes: MasterClass[] };
@@ -53,11 +56,22 @@ export function masterOwner(schedules: readonly TermShareSchedule[], home: strin
 export function masterPlan(input: {
   from: string; to: string; schedules: readonly TermShareSchedule[]; homeroomTeacherId: string | null;
   englishTrack: string | null; className: string; holidays: ReadonlySet<string>;
+  subject?: "math" | "english";
 }): MasterLesson[] {
   const out: MasterLesson[] = [];
   for (const day = new Date(`${input.from}T00:00:00Z`); day.toISOString().slice(0, 10) <= input.to; day.setUTCDate(day.getUTCDate() + 1)) {
     const date = day.toISOString().slice(0, 10);
     if (input.holidays.has(date)) continue;
+    if (input.subject === "math") {
+      const eligible = input.schedules.filter((s) => !separate(s));
+      for (const [start, minutes] of liveSlotMinutesOn(date, eligible)) {
+        if (minutes <= 0) continue;
+        const end = Number(start.slice(0, 2)) * 60 + Number(start.slice(3, 5)) + minutes;
+        out.push({ date, start, end: `${String(Math.floor(end / 60)).padStart(2, "0")}:${String(end % 60).padStart(2, "0")}`,
+          owner: masterOwner(eligible, input.homeroomTeacherId, date, start), units: unitsFromMinutes(minutes, "math") ?? 1 });
+      }
+      continue;
+    }
     for (const l of teacherLessonsOn({ ...input, date })) {
       const minutes = Number(l.start.slice(0, 2)) * 60 + Number(l.start.slice(3, 5)) + l.minutes;
       out.push({ date, start: l.start, end: `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`,
@@ -65,6 +79,26 @@ export function masterPlan(input: {
     }
   }
   return out;
+}
+
+/** Confirmation and attendance problems are independent: pending billing must not hide missing attendance. */
+export function masterNeedsInput(row: Pick<MasterStudent, "review" | "missing">): boolean {
+  return row.review.length > 0 || row.missing > 0;
+}
+
+export function masterMatchesFilter(row: MasterStudent, filter: string): boolean {
+  if (filter === "all") return true;
+  if (filter === "review") return masterNeedsInput(row);
+  if (filter === "attention") return masterNeedsInput(row) || !["normal", "complete"].includes(row.status);
+  if (filter === "excess") return ["excess", "plannedExcess"].includes(row.status);
+  return row.status === filter;
+}
+
+/** Input problems come first, then confirmed shortages/excess, then confirmation work. */
+export function masterPriority(row: MasterStudent): number {
+  if (masterNeedsInput(row)) return 0;
+  if (["short", "excess", "plannedExcess"].includes(row.status)) return 1;
+  return row.target === null ? 2 : 3;
 }
 
 export function masterStatus(row: Pick<MasterStudent, "target" | "actual" | "future" | "review" | "missing">): MasterStatus {
@@ -122,7 +156,8 @@ export function buildMasterStudent(input: {
     const periods = rows.filter((r) => r.slot_start);
     for (const r of rows) {
       const start = normalizeAxisTime(r.slot_start);
-      const own = masterOwner(schedules, home, date, start, r.seat_label, r.recorded_via);
+      const scheduledOwner = masterOwner(schedules, home, date, start, r.seat_label, r.recorded_via);
+      const own = r.taught_by && !["JJ", "LAB"].includes(scheduledOwner) && r.recorded_via !== "seat" ? r.taught_by : scheduledOwner;
       const matching = candidates(schedules, date, start);
       const excludedLab = /^\s*\*\s*LAB/i.test(r.seat_label ?? "") || (!!start && matching.length > 0 && matching.every(separate));
       // LAB has its own fact axis. A day row plus teacher/JJ periods is ambiguous; never sum both.
@@ -139,7 +174,7 @@ export function buildMasterStudent(input: {
         if (start) counted.add(`${date}|${start}`); else dayCovered.add(date);
       }
       events.push({ date, slot: start, owner: own, status: r.status, units, excluded,
-        note: excludedLab ? "*LAB · 합계 제외" : overlap ? "일별·교시 겹침 · 일별 기록은 합계 보류" : !valid ? "시수 확인" : "" });
+        note: excludedLab ? "*LAB · 합계 제외" : overlap ? "일별·교시 겹침 · 일별 기록은 합계 보류" : !valid ? "시수 확인" : own !== scheduledOwner ? "실제 수업 강사로 귀속" : "" });
     }
   }
   const expected = input.plan.filter((l) => input.enrollments.some((e) => e.startDate <= l.date

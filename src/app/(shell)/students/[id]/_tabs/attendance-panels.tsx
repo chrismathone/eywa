@@ -1,4 +1,6 @@
 "use client";
+
+import { SheetClassName, SheetText } from "@/features/teacher-view/interface-label";
 import { tipProps } from "@/components/hover-tip/tip";
 
 import { useMemo } from "react";
@@ -73,7 +75,7 @@ export function MonthCalendar({
 export function AttendanceList({ records }: { records: StudentAttendanceFull[] }) {
   const byDate = useMemo(() => groupRecordsByDate(records), [records]);
   if (byDate.length === 0)
-    return <p className="text-muted-foreground py-8 text-center text-sm">이 달의 출결 기록이 없습니다</p>;
+    return <p className="text-muted-foreground py-8 text-center text-sm"><SheetText value={"이 달의 출결 기록이 없습니다"} /></p>;
 
   return (
     <ul className="bg-card border-line divide-line divide-y rounded-2xl border">
@@ -89,7 +91,7 @@ export function AttendanceList({ records }: { records: StudentAttendanceFull[] }
               >
                 <span>{attendanceStatusLabel(r.status)}</span>
                 <span className="opacity-60">·</span>
-                <span className="opacity-80">{r.className}</span>
+                <span className="opacity-80"><SheetClassName value={r.className} /></span>
                 {listExtra(r)}
               </span>
             ))}

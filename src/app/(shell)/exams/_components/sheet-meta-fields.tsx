@@ -1,5 +1,7 @@
 "use client";
 
+import { SheetText } from "@/features/teacher-view/interface-label";
+
 import { useRef, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
@@ -55,7 +57,7 @@ export function SheetMetaFields({
   return (
     <>
       <label className={`${TOOLBAR_SELECT} gap-1.5`}>
-        <span className="text-text-dim shrink-0">시험일</span>
+        <span className="text-text-dim shrink-0"><SheetText value={"시험일"} /></span>
         <input
           type="date"
           value={date}
@@ -67,7 +69,7 @@ export function SheetMetaFields({
         />
       </label>
       <label className={`${TOOLBAR_SELECT} gap-1.5`}>
-        <span className="text-text-dim shrink-0">만점</span>
+        <span className="text-text-dim shrink-0"><SheetText value={"만점"} /></span>
         <input
           key={maxScore}
           ref={maxRef}

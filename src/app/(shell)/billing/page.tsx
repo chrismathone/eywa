@@ -8,11 +8,12 @@ import { ExpensesPanel } from "./_components/expenses-panel";
 import { CalculatorPanel } from "./_components/calculator-panel";
 import { RefundsFace } from "./_components/refunds-face";
 import { SessionTermsFace } from "./_components/session-terms-face";
-import { SessionVerificationFace } from "./_components/session-verification-face";
 import { TeacherSettlementFace } from "./_components/teacher-settlement-face";
 import { FaceTabs, type Face } from "@/components/face-tabs";
 import { MakeeduSyncBadge } from "@/components/makeedu-sync-badge";
 import { canManageTenant, canAccessTenant } from "@/lib/auth/perm-matrix";
+import { redirect } from "next/navigation";
+import { legacyVerificationHref } from "@/features/billing/session-terms/panel-href";
 
 type Sp = Record<string, string | undefined>;
 type BillingTab = "billing" | "textbooks" | "expenses" | "calculator" | "refunds" | "sessions" | "verify" | "payroll";
@@ -42,7 +43,6 @@ const FACES: Face[] = [
   { key: "expenses", label: "지출", href: "/billing?tab=expenses" },
   { key: "calculator", label: "수강료 계산기", href: "/billing?tab=calculator" },
   { key: "sessions", label: "회차 확정", href: "/billing?tab=sessions" },
-  { key: "verify", label: "시수 검증", href: "/billing?tab=verify" },
   { key: "refunds", label: "환불 요청서", href: "/billing?tab=refunds" },
 ];
 
@@ -54,7 +54,8 @@ const PAYROLL_FACE: Face = { key: "payroll", label: "강사 정산", href: "/bil
 
 // 면마다 문서 제목을 달리해 창 타이틀바가 "수납관리 · 교재"로 라이브 갱신(route-window 관찰).
 export async function generateMetadata({ searchParams }: { searchParams: Promise<Sp> }) {
-  let tab = resolveTab(await searchParams);
+  const sp = await searchParams;
+  let tab = resolveTab(sp);
   // 강사 정산 탭은 원장 전용 — 비-master가 URL로 와도 제목에 "강사 정산"을 노출하지 않는다(본문도 수납으로 폴백).
   if (tab === "payroll" && !(await canReadSalary())) tab = "billing";
   const suffix =
@@ -67,9 +68,9 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
           : tab === "refunds"
             ? " · 환불 요청서"
             : tab === "sessions"
-              ? " · 회차 확정"
+              ? sp.panel === "verify" ? " · 회차 확정 · 청구 시수 대조" : " · 회차 확정"
               : tab === "verify"
-                ? " · 시수 검증"
+                ? " · 회차 확정 · 청구 시수 대조"
                 : tab === "payroll"
                   ? " · 강사 정산"
                   : "";
@@ -80,6 +81,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const sp = await searchParams;
   const tab = resolveTab(sp);
   const user = await requireAccess(tab === "payroll" ? "payroll_settings" : "billing");
+  if (tab === "verify") redirect(legacyVerificationHref(sp));
   // 강사 정산 탭은 원장(master)·총괄(super_admin)에게만 노출(감사 D6 — 총괄은 게이트 자동 통과). 그 밖이 URL로 오면 수납 면으로 폴백.
   const isMaster = await canReadSalary();
   const canBilling = await canAccessTenant(user.systemRole, "billing");
@@ -118,9 +120,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
       ) : effectiveTab === "refunds" ? (
         <RefundsFace sp={sp} />
       ) : effectiveTab === "sessions" ? (
-        <SessionTermsFace period={sp.period} subject={sp.subject} q={sp.q} page={sp.page} allocation={sp.allocation} confirmation={sp.confirmation} />
-      ) : effectiveTab === "verify" ? (
-        <SessionVerificationFace period={sp.period} subject={sp.subject} page={sp.page} query={sp.q} status={sp.status} params={sp} />
+        <SessionTermsFace period={sp.period} subject={sp.subject} q={sp.q} page={sp.page} allocation={sp.allocation} confirmation={sp.confirmation} panel={sp.panel} status={sp.status} params={sp} />
       ) : effectiveTab === "payroll" ? (
         <TeacherSettlementFace period={sp.period} />
       ) : (

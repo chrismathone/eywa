@@ -1,3 +1,5 @@
+
+import { SheetClassName, SheetText } from "@/features/teacher-view/interface-label";
 import type { CSSProperties } from "react";
 import { Mic, Sparkles } from "@/components/icons/aywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
@@ -166,15 +168,15 @@ export function ConsultationList({
         {Array.from({ length: LIST_HEADER_COPIES }, (_, i) => (
           <div key={i} aria-hidden={i > 0 ? "true" : undefined} className="@container/row">
             <div className={`text-text-dim grid h-full items-center gap-2 px-1.5 text-sm font-bold ${ROW_GRID}`}>
-              <span className="truncate text-left">학생</span>
-              <span className="truncate text-left">과목 · 상담사</span>
-              {classOn ? <span className="truncate text-left">반 이름</span> : null}
-              <span className="hidden text-left @5xl/row:block">요약</span>
+              <span className="truncate text-left"><SheetText value={"학생"} /></span>
+              <span className="truncate text-left"><SheetText value={"과목 · 상담사"} /></span>
+              {classOn ? <span className="truncate text-left"><SheetText value={"반 이름"} /></span> : null}
+              <span className="hidden text-left @5xl/row:block"><SheetText value={"요약"} /></span>
               <div className={`-col-end-1 grid items-center justify-items-center gap-1 whitespace-nowrap ${RIGHT_GRID}`}>
-                <span>카테고리</span>
-                <span>후속</span>
-                <span className="hidden @min-[41rem]/row:block">녹음·AI</span>
-                <span className="justify-self-end">시각</span>
+                <span><SheetText value={"카테고리"} /></span>
+                <span><SheetText value={"후속"} /></span>
+                <span className="hidden @min-[41rem]/row:block"><SheetText value={"녹음·AI"} /></span>
+                <span className="justify-self-end"><SheetText value={"시각"} /></span>
               </div>
             </div>
           </div>
@@ -215,8 +217,7 @@ function ConsultationRow({ c, classOn }: { c: StudentConsultationRow; classOn: b
         {c.hasAudio ? (
           <span className="text-primary inline-flex items-center gap-0.5 text-sm font-bold whitespace-nowrap">
             <Mic className="size-4" />
-            녹음
-          </span>
+            <SheetText value={"녹음"} /></span>
         ) : null}
         {c.hasAi ? (
           <span className="text-gold inline-flex items-center gap-0.5 text-sm font-bold whitespace-nowrap">
@@ -247,7 +248,7 @@ function ConsultationRow({ c, classOn }: { c: StudentConsultationRow; classOn: b
         <p className="text-text-dim flex min-w-0 items-center gap-1.5 text-sm font-medium">
           <span className="min-w-0 truncate">
             {who}
-            {classOn && c.className ? <span className="hidden phone:inline"> · {c.className}</span> : null}
+            {classOn && c.className ? <span className="hidden phone:inline"> · <SheetClassName value={c.className} /></span> : null}
           </span>
           {c.syncAddedAt ? <MakeeduOriginTag /> : null}
           <EditingBadge scope={`student-consultation:${c.id}`} />

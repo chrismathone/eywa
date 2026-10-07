@@ -1,3 +1,5 @@
+
+import { SheetTeacherName, SheetText } from "@/features/teacher-view/interface-label";
 import Link from "next/link";
 import {
   getStudentConsultationHistory,
@@ -70,17 +72,15 @@ export async function ConsultationsTab({
     <div className="space-y-4">
       <header className="border-border flex items-baseline justify-between border-b pb-3">
         <h2 className="text-foreground text-base font-bold">
-          상담 이력
-          {consults.length > 0 ? (
-            <span className="text-muted-foreground num ml-2 text-xs font-normal">{consults.length}건</span>
+          <SheetText value={"상담 이력"} />{consults.length > 0 ? (
+            <span className="text-muted-foreground num ml-2 text-xs font-normal">{consults.length}<SheetText value={"건"} /></span>
           ) : null}
         </h2>
         <Link
           href={`/consultations/new?studentId=${studentId}`}
           className="text-chart-1 hover:underline text-xs"
         >
-          + 새 상담 기록
-        </Link>
+          <SheetText value={"+ 새 상담 기록"} /></Link>
       </header>
 
       {/* 입학 상담(등록상담) — 아주 중요한 상담이라 상단 고정. 별도 테이블(enrollment_consultations).
@@ -88,8 +88,7 @@ export async function ConsultationsTab({
       {enrollConsults.length > 0 ? (
         <div className="space-y-2">
           <p className="text-primary text-xs font-bold">
-            입학 상담 <span className="num">{enrollConsults.length}</span>건
-          </p>
+            <SheetText value={"입학 상담 "} /><span className="num">{enrollConsults.length}</span><SheetText value={"건"} /></p>
           <ul className="space-y-2">
           {enrollConsults.map((e) => (
             <EnrollmentConsultItem
@@ -105,7 +104,7 @@ export async function ConsultationsTab({
 
       {consults.length === 0 ? (
         enrollConsults.length === 0 ? (
-          <p className="text-muted-foreground py-8 text-center text-sm">상담 기록이 없습니다</p>
+          <p className="text-muted-foreground py-8 text-center text-sm"><SheetText value={"상담 기록이 없습니다"} /></p>
         ) : null
       ) : (
         <>
@@ -118,8 +117,7 @@ export async function ConsultationsTab({
             <details className="group">
               <summary className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft mt-3 flex cursor-pointer list-none items-center justify-center gap-1 rounded-lg border py-2 text-center text-xs transition">
                 <EyIcon name="chevronDown" size={12} aria-hidden="true" />
-                {rest.length}건 더 보기
-              </summary>
+                {rest.length}<SheetText value={"건 더 보기"} /></summary>
               <ul className="mt-3 space-y-3">
                 {rest.map((c) => (
                   <ConsultItem key={c.id} c={c} studentId={studentId} />
@@ -151,15 +149,14 @@ function ConsultItem({ c, studentId }: { c: Consult; studentId: string }) {
           </span>
         ) : null}
         {c.counselorName ? (
-          <span className="text-muted-foreground text-xs">· {c.counselorName}</span>
+          <span className="text-muted-foreground text-xs">· <SheetTeacherName value={c.counselorName} /></span>
         ) : null}
         <div className="ml-auto flex items-center gap-3">
           <Link
             href={`/consultations/${c.id}/edit`}
             className="text-chart-1 text-xs hover:underline"
           >
-            수정
-          </Link>
+            <SheetText value={"수정"} /></Link>
           <ConsultationDeleteButton id={c.id} studentId={studentId} label="" />
         </div>
       </header>
@@ -167,12 +164,12 @@ function ConsultItem({ c, studentId }: { c: Consult; studentId: string }) {
       {c.followUpAction ? (
         <div className="bg-bg-soft/40 rounded-sm px-3 py-2 text-xs">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-muted-foreground">후속 조치</p>
+            <p className="text-muted-foreground"><SheetText value={"후속 조치"} /></p>
             <FollowUpToggle id={c.id} done={!!c.followUpDone} />
           </div>
           <p className="text-foreground mt-0.5">{c.followUpAction}</p>
           {c.followUpDate ? (
-            <p className="text-muted-foreground num mt-0.5">예정일: {c.followUpDate}</p>
+            <p className="text-muted-foreground num mt-0.5"><SheetText value={"예정일: "} />{c.followUpDate}</p>
           ) : null}
         </div>
       ) : null}
@@ -195,8 +192,7 @@ function EnrollmentConsultItem({
     <li className="bg-primary/5 border-primary/20 space-y-2 rounded-2xl border px-4 py-3">
       <header className="flex flex-wrap items-baseline gap-2">
         <span className="bg-primary/10 text-primary border-primary/20 rounded-full border px-1.5 py-0.5 text-xs font-bold">
-          입학 상담
-        </span>
+          <SheetText value={"입학 상담"} /></span>
         {e.date ? (
           <span className="num text-muted-foreground text-xs">
             {new Date(e.date).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" })}
@@ -212,8 +208,7 @@ function EnrollmentConsultItem({
             title="입학 상담 상세"
             className="text-chart-1 ml-auto text-xs hover:underline"
           >
-            상세 보기
-          </WindowLink>
+            <SheetText value={"상세 보기"} /></WindowLink>
         ) : null}
       </header>
       {/* 상담 원문을 전문 노출(2줄 클램프 제거) — 등록상담은 대부분 원본 필드만 채워지고 AI분석은 희소. */}
@@ -222,9 +217,9 @@ function EnrollmentConsultItem({
       {e.followUp ? <EnrollField label="후속" value={e.followUp} /> : null}
       {!e.request && !e.careerGoal && !e.followUp ? (
         <p className="text-muted-foreground text-xs italic">
-          {canOpenDetail
+          <SheetText value={canOpenDetail
             ? "기본 정보만 있는 상담입니다 — 학부모 정보 등 전체는 ‘상세 보기’에서 확인하세요"
-            : "기본 정보만 있는 상담입니다"}
+            : "기본 정보만 있는 상담입니다"} />
         </p>
       ) : null}
     </li>

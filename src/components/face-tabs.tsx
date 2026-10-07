@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { useEmbed, withEmbed } from "@/components/workspace/embed-context";
 import { faceTabOverflow, faceTabScrollTo } from "@/components/face-tab-scroll";
+import { useSheetText } from "@/features/teacher-view/lang-context";
 
 /**
  * 면 전환 — 한 창 안에서 여러 "면"을 바꾸는 표준 상단 가로 탭바. 수납관리·학생상세·학원설정 등
@@ -38,6 +39,7 @@ export function FaceTabs({
   level?: "primary" | "secondary";
   customLabels?: boolean;
 }) {
+  const text = useSheetText();
   const embed = useEmbed();
   const presentation = useMenuPresentation();
   const { menus, source } = useNavigationSettings();
@@ -80,7 +82,7 @@ export function FaceTabs({
       <div className="relative min-w-0 flex-1">
       <nav
         ref={scrollerRef}
-        aria-label={ariaLabel}
+        aria-label={text(ariaLabel)}
         // URL을 여는 링크 탐색이다. 버튼 탭의 ARIA 역할 대신 현재 페이지를 알린다.
         className={`scrollbar-hide border-line flex min-h-(--control-h) items-stretch gap-1 overflow-x-auto ${
           level === "primary" ? "border-b pb-1" : "w-fit max-w-full rounded-lg border bg-bg-soft/40 px-0.5"
@@ -110,7 +112,7 @@ export function FaceTabs({
                 }`}
               >
                 {override?.icon && custom ? <MenuGlyph name={custom.icon} size={16} className="mr-1.5" /> : null}
-                {override?.label && custom ? custom.label : f.label}
+                {text(override?.label && custom ? custom.label : f.label)}
               </Link>
             </span>
           );
@@ -146,10 +148,11 @@ function TabScrollButton({
   enabled: boolean;
   onClick: () => void;
 }) {
+  const text = useSheetText();
   return (
     <button
       type="button"
-      aria-label={direction < 0 ? "앞쪽 탭 보기" : "뒤쪽 탭 보기"}
+      aria-label={text(direction < 0 ? "앞쪽 탭 보기" : "뒤쪽 탭 보기")}
       aria-hidden={enabled ? undefined : true}
       tabIndex={enabled ? 0 : -1}
       disabled={!enabled}

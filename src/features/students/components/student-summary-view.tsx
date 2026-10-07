@@ -6,6 +6,11 @@ import { Pill } from "@/components/atoms/pill";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { studentStatusMeta } from "@/features/students/status-labels";
 import type { StudentSummary } from "@/features/students/server/queries";
+import { useSheetLang, useSheetText, useSheetTf } from "@/features/teacher-view/lang-context";
+import { SheetText } from "@/features/teacher-view/interface-label";
+import { useTimetableDisplay } from "@/features/teacher-view/use-timetable-display";
+import { studentDisplayName } from "@/features/teacher-view/student-name";
+import { sheetSchoolGrade } from "@/features/teacher-view/school-grade";
 
 /**
  * 학생 경량 요약 뷰 — 모바일 QuickPanel(Sheet)과 데스크톱 워크스페이스 창이
@@ -17,6 +22,7 @@ import type { StudentSummary } from "@/features/students/server/queries";
 export type StudentHeaderInfo = {
   id: string;
   name: string;
+  englishName?: string | null;
   grade?: string | null;
   school?: string | null;
   status?: string | null;
@@ -37,31 +43,33 @@ export function StudentSummaryView({
   /** 데스크톱 창에서 "상세 전체보기"를 스포트라이트 창으로 열 때(없으면 일반 Link 이동 = 모바일). */
   onOpenDetail?: () => void;
 }) {
-  const name = summary?.name ?? info.name;
+  const lang = useSheetLang();
+  const text = useSheetText();
+  const display = useTimetableDisplay();
+  const name = studentDisplayName(summary?.name ?? info.name, summary?.englishName ?? info.englishName, lang);
   const grade = summary?.grade ?? info.grade;
   const school = summary?.school ?? info.school;
   const status = summary?.status ?? info.status;
   const teacherNames = summary?.teacherNames ?? info.teacherNames ?? [];
-  const statusMeta = studentStatusMeta(status);
+  const statusMeta = studentStatusMeta(status, lang);
 
   return (
     <div className="flex h-full flex-col">
       <header className="border-line space-y-1 border-b pb-4">
-        <p className="micro">빠른 보기</p>
+        <p className="micro">{text("빠른 보기")}</p>
         <div className="flex items-center gap-2">
           <h2 className="text-foreground text-xl font-bold">{name}</h2>
           {statusMeta ? <Pill color={statusMeta.color}>{statusMeta.label}</Pill> : null}
         </div>
         <p className="text-text-dim text-xs">
-          {grade ?? "—"}
-          {school ? <> · {school}</> : null}
-          {teacherNames.length > 0 ? <> · 담당 {teacherNames.join("·")}</> : null}
+          {sheetSchoolGrade(school, grade, lang) || "—"}
+          {teacherNames.length > 0 ? <> · {text("담당")} {teacherNames.map(display.teacher).join("·")}</> : null}
         </p>
       </header>
 
       <div className="mt-4 flex-1">
         {error ? (
-          <p className="text-danger text-xs">요약을 불러오지 못했습니다.</p>
+          <p className="text-danger text-xs">{text("요약을 불러오지 못했습니다.")}</p>
         ) : loading || !summary ? (
           <SummarySkeleton />
         ) : (
@@ -75,7 +83,7 @@ export function StudentSummaryView({
           onClick={onOpenDetail}
           className="bg-primary text-primary-foreground hover:bg-primary/85 mt-6 flex items-center justify-center gap-1.5 rounded-lg py-2.5 text-sm font-bold transition"
         >
-          상세 전체보기
+          {text("상세 전체보기")}
           <EyIcon name="arrowRight" size={13} />
         </button>
       ) : (
@@ -84,7 +92,7 @@ export function StudentSummaryView({
           title={name}
           className="bg-primary text-primary-foreground hover:bg-primary/85 mt-6 flex items-center justify-center gap-1.5 rounded-lg py-2.5 text-sm font-bold transition"
         >
-          상세 전체보기
+          {text("상세 전체보기")}
           <EyIcon name="arrowRight" size={13} />
         </WindowLink>
       )}
@@ -96,18 +104,21 @@ type MetricTone = "primary" | "amber" | "danger";
 
 function SummaryBody({ summary }: { summary: StudentSummary }) {
   const subjects = useSubjectMaps();
+  const text = useSheetText();
+  const tf = useSheetTf();
+  const display = useTimetableDisplay();
   const a = summary.attendance;
   // 🔴 수납 읽기 권한이 없으면 서버가 아예 안 실어 보낸다(null) — 칸을 **그리지 않는다**.
   //    "완납"으로 대신 그리면 권한 없는 사람에게 거짓 사실을 말하는 셈이다([[#77]]).
   const b = summary.billing;
-  const billingValue = b ? (b.unpaidCount === 0 ? "완납" : `${b.unpaidCount}건`) : null;
-  const billingSub = b ? (b.overdueCount > 0 ? `연체 ${b.overdueCount}건` : (b.latestPeriod ?? undefined)) : undefined;
+  const billingValue = b ? text(b.unpaidCount === 0 ? "완납" : `${b.unpaidCount}건`) : null;
+  const billingSub = b ? (b.overdueCount > 0 ? text(`연체 ${b.overdueCount}건`) : (b.latestPeriod ?? undefined)) : undefined;
   const billingTone: MetricTone = b && b.overdueCount > 0 ? "danger" : b && b.unpaidCount > 0 ? "amber" : "primary";
 
   return (
     <div className="space-y-4">
       <div className={`grid gap-2.5 ${billingValue === null ? "grid-cols-1" : "grid-cols-2"}`}>
-        <Metric label="출석률 (30일)" value={`${Math.round(a.rate)}%`} sub={`출석·지각 ${a.present + a.late}/${a.total}회`} tone="primary" />
+        <Metric label="출석률 (30일)" value={`${Math.round(a.rate)}%`} sub={tf("stu.summary.attended", { present: a.present + a.late, total: a.total })} tone="primary" />
         {billingValue === null ? null : (
           <Metric label="미납" value={billingValue} sub={billingSub} tone={billingTone} />
         )}
@@ -115,23 +126,23 @@ function SummaryBody({ summary }: { summary: StudentSummary }) {
 
       <div className="border-line flex items-center justify-between rounded-md border px-3 py-2 text-xs">
         <span className="text-text-dim">
-          결석 <span className="text-foreground font-bold">{a.absent}</span> · 지각{" "}
+          {text("결석")} <span className="text-foreground font-bold">{a.absent}</span> · {text("지각")}{" "}
           <span className="text-foreground font-bold">{a.late}</span>
         </span>
-        <span className="text-text-faint">최근 30일 {a.total}회</span>
+        <span className="text-text-faint">{tf("stu.summary.last30", { total: a.total })}</span>
       </div>
 
       <div>
-        <p className="micro mb-1.5">수강 반</p>
+        <p className="micro mb-1.5">{text("수강 반")}</p>
         {summary.enrollments.length === 0 ? (
-          <p className="text-text-faint text-xs">활성 수강 없음</p>
+          <p className="text-text-faint text-xs">{text("활성 수강 없음")}</p>
         ) : (
           <ul className="space-y-1">
             {summary.enrollments.map((e, i) => (
               <li key={i} className="border-line flex items-center justify-between rounded-sm border px-2.5 py-1.5 text-xs">
-                <span className="text-foreground font-medium">{e.className}</span>
+                <span className="text-foreground font-medium">{display.className(e.className)}</span>
                 <span className="flex items-center gap-1.5">
-                  {e.onHold ? <Pill color="amber">휴원</Pill> : null}
+                  {e.onHold ? <Pill color="amber">{text("휴원")}</Pill> : null}
                   <span className="text-text-dim">{subjects.labelOf(e.subject)}</span>
                 </span>
               </li>
@@ -151,7 +162,7 @@ function Metric({ label, value, sub, tone }: { label: string; value: string; sub
   };
   return (
     <div className="bg-bg-soft rounded-md px-3 py-2.5">
-      <p className="text-text-dim text-xs">{label}</p>
+      <p className="text-text-dim text-xs"><SheetText value={label} /></p>
       <p className={`mt-0.5 text-xl leading-none font-bold ${TONE[tone]}`}>{value}</p>
       {sub ? <p className="text-text-faint mt-1 text-xs">{sub}</p> : null}
     </div>

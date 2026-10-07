@@ -1,3 +1,5 @@
+
+import { SheetRoomName, SheetText } from "@/features/teacher-view/interface-label";
 import { reportError } from "@/lib/observability/report-error";
 import { isModuleEnabled } from "@/lib/modules";
 import { WindowLink } from "@/components/workspace/window-link";
@@ -51,6 +53,9 @@ import { slotPhase } from "@/features/classes/schedule-summary";
 import { ClassHistorySection } from "./_components/history-section";
 import { getClassHistory } from "@/features/classes/server/history-queries";
 import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
+import { classNameFor } from "@/features/teacher-view/class-name";
+import { studentDisplayName } from "@/features/teacher-view/student-name";
+import { sheetSchoolGrade } from "@/features/teacher-view/school-grade";
 import { sheetDowLabel, sheetT, sheetTf } from "@/features/teacher-view/i18n";
 import { seatMarkLabelOf } from "@/features/attendance/live/mark-state";
 import { ijwConfigFor } from "@/features/ijw/server/client";
@@ -105,7 +110,7 @@ export default async function ClassDetailPage({
   const canEditSchedule = await canManageTenant(user.systemRole, "classes");
 
   // 과목 라벨은 학원설정(operations.subjects) 단일 소스 — 하드코딩 금지.
-  const subjects = buildSubjectMaps(settings.operations.subjects);
+  const subjects = buildSubjectMaps(settings.operations.subjects, lang);
 
   // 인수인계 대상 강사 풀 — 활성 강사/실장/원장 전원(현재 담임 제외).
   // 과목 담당자를 상단에 정렬하고, 나머지(신입·타 과목)는 검색으로 선택할 수 있게 hint를 붙인다.
@@ -225,8 +230,8 @@ export default async function ClassDetailPage({
         <div className="space-y-2">
           <p className="eyebrow">{sheetT(lang, "cls.d.eyebrow")}</p>
           <div className="flex flex-wrap items-baseline gap-2">
-            <h1 className="font-bold tracking-tight text-foreground text-3xl">{klass.className}</h1>
-            <Pill color={subjects.colorOf(klass.subject)}>{subjects.labelOf(klass.subject)}</Pill>
+            <h1 className="font-bold tracking-tight text-foreground text-3xl">{classNameFor(klass.className, lang)}</h1>
+            <Pill color={subjects.colorOf(klass.subject)}><SheetText value={subjects.labelOf(klass.subject)} /></Pill>
             {!klass.isActive ? (
               <span className="text-muted-foreground bg-muted border-border inline-flex items-center rounded-md border px-2 py-0.5 text-xs">
                 {sheetT(lang, "cls.status.retired")}
@@ -245,7 +250,7 @@ export default async function ClassDetailPage({
             {klass.classroomName ? (
               <span className="inline-flex items-center gap-1.5">
                 <MapPin className="size-3.5" />
-                {klass.classroomName}
+                <SheetRoomName value={klass.classroomName} />
               </span>
             ) : null}
             <span>
@@ -477,11 +482,11 @@ export default async function ClassDetailPage({
                   <li key={s.enrollmentId} className="flex items-center justify-between px-5 py-3">
                     <WindowLink
                       href={`/students/${s.studentId}`}
-                      title={s.name}
+                      title={studentDisplayName(s.name, s.englishName, lang)}
                       className="hover:underline"
                     >
                       <p className="text-foreground flex items-center gap-1.5 text-sm font-medium">
-                        {s.name}
+                        {studentDisplayName(s.name, s.englishName, lang)}
                         {/* 아직 안 온 학생 — 표시가 없으면 오늘 다니는 학생과 구분이 안 된다. */}
                         {s.phase === "upcoming" ? (
                           <span className="text-blue bg-blue-soft num rounded-md px-1.5 py-0.5 text-xs font-semibold">
@@ -490,8 +495,7 @@ export default async function ClassDetailPage({
                         ) : null}
                       </p>
                       <p className="text-muted-foreground text-xs">
-                        {s.grade ?? "—"}
-                        {s.school ? ` · ${s.school}` : ""}
+                        {sheetSchoolGrade(s.school, s.grade, lang) || "—"}
                       </p>
                     </WindowLink>
                     <div className="flex items-center gap-2">

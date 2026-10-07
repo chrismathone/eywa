@@ -3,6 +3,8 @@
 // client 컴포넌트에는 직렬화 가능한 맵/배열을 prop으로 전달한다.
 import type { PillColor } from "@/components/atoms/pill";
 import type { SubjectSetting } from "./settings-types";
+import { localizeSubjectMaps } from "@/features/teacher-view/interface-text";
+import type { SheetLang } from "@/features/teacher-view/i18n";
 
 // DEFAULT_SETTINGS.subjects엔 없지만 기존 코드/DB에 존재하던 레거시 과목 key의 폴백 라벨·색.
 // (영문 key 노출 방지 + 사이트별 하드코딩 맵과의 동등성 유지.)
@@ -58,15 +60,15 @@ export type SubjectMaps = {
   filters: { value: string; label: string }[];
 };
 
-export function buildSubjectMaps(subjects: SubjectSetting[]): SubjectMaps {
+export function buildSubjectMaps(subjects: SubjectSetting[], lang: SheetLang = "ko"): SubjectMaps {
   const labelMap = new Map(subjects.map((s) => [s.key, s.label]));
   const colorMap = new Map(subjects.map((s) => [s.key, s.color]));
-  return {
+  return localizeSubjectMaps({
     labelOf: (key) => labelMap.get(key) ?? LEGACY_LABELS[key] ?? key,
     colorOf: (key) => colorMap.get(key) ?? LEGACY_COLORS[key] ?? "neutral",
     options: subjects.map((s) => ({ value: s.key, label: s.label })),
     filters: [{ value: "all", label: "전체" }, ...subjects.map((s) => ({ value: s.key, label: s.label }))],
-  };
+  }, lang);
 }
 
 /** key→라벨 단순 맵(직렬화해 client로 넘길 때). 레거시 폴백 포함. */

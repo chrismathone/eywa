@@ -52,7 +52,7 @@ export function SplitsSnapshotPanel({
       <div className="text-xs leading-relaxed">
         {saved ? (
           <span className="text-text-dim">
-            저장된 스냅샷: <b className="num text-foreground">{saved.rowCount}</b>행 · 청구 기준{" "}
+            저장된 청구 분배 기록: <b className="num text-foreground">{saved.rowCount}</b>행 · 청구 기준{" "}
             <b className="num text-foreground">{fmtWon(saved.confirmedAmount)}</b> · 실측 기준{" "}
             <b className="num text-foreground">{fmtWon(saved.actualAmount)}</b> ·{" "}
             <span className="num">{fmtKst(saved.savedAt)}</span> 저장
@@ -68,7 +68,7 @@ export function SplitsSnapshotPanel({
           </span>
         ) : (
           <span className="text-text-dim">
-            저장된 분배 스냅샷이 없습니다. 확정 행(현재 <b className="num">{live.rowCount}</b>행)의 강사 분배를
+            저장된 청구 분배 기록이 없습니다. 확정 행(현재 <b className="num">{live.rowCount}</b>행)의 강사 분배를
             기록으로 남기려면 저장하세요.
           </span>
         )}
@@ -79,13 +79,14 @@ export function SplitsSnapshotPanel({
         ) : null}
         {state?.error ? <span className="text-danger ml-1.5">{state.error}</span> : null}
       </div>
+      <p className="text-text-dim text-xs">청구 기준 참고 기록입니다. 실제 급여는 출석부 기준으로 계산합니다.</p>
 
       <form action={formAction} className="flex items-center gap-2">
         <input type="hidden" name="period" value={period} />
         <span className="text-text-faint text-xs">그 달 전체 저장 · 청구서는 변경되지 않음</span>
         <SaveButton
           disabled={!canSave}
-          label={live.rowCount === 0 && saved !== null ? "스냅샷 비우기(확정 0)" : "분배 스냅샷 저장"}
+          label={live.rowCount === 0 && saved !== null ? "분배 기록 비우기(확정 0)" : "청구 분배 기록 저장"}
         />
       </form>
     </div>

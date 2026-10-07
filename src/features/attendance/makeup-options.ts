@@ -11,6 +11,9 @@
  */
 
 /** 결석 후보 한 줄(화면·판정에 필요한 것만). */
+import { classNameFor } from "@/features/teacher-view/class-name";
+import { sheetMonthLabel, type SheetLang } from "@/features/teacher-view/i18n";
+
 export type MakeupAbsenceOption = {
   classId: string;
   className: string;
@@ -98,8 +101,11 @@ export function isWithinMakeupDeadline(absenceDate: string, makeupDate: string):
  * 기한이 지난 결석을 막을 때의 한 문장 — 확인창·서버 쓰기 문이 **같은 문장**을 쓴다(표면마다 딴말 금지).
  * 예: `보강 기한이 지난 결석입니다 — 5월 결석은 6/30까지 보강할 수 있습니다`
  */
-export function makeupDeadlineMessage(absenceDate: string): string {
+export function makeupDeadlineMessage(absenceDate: string, lang: SheetLang = "ko"): string {
   const deadline = makeupDeadlineOf(absenceDate);
+  if (lang === "en") return deadline
+    ? `The makeup deadline has passed — absences in ${sheetMonthLabel(absenceDate.slice(0, 7), "", lang)} can be made up through ${deadline}.`
+    : "The makeup deadline has passed.";
   if (!deadline) return "보강 기한이 지난 결석입니다";
   const [, dm, dd] = deadline.split("-");
   return `보강 기한이 지난 결석입니다 — ${Number(absenceDate.slice(5, 7))}월 결석은 ${Number(dm)}/${Number(dd)}까지 보강할 수 있습니다`;
@@ -235,10 +241,10 @@ function slotLabel(raw: string | null | undefined): string | null {
 }
 
 /** 화면 표기 — "8/12 수학 초4 BS1J 16:20" · 이전 반이면 꼬리표를 단다. */
-export function absenceOptionLabel(o: MakeupAbsenceOption): string {
+export function absenceOptionLabel(o: MakeupAbsenceOption, lang: SheetLang = "ko"): string {
   const [, m, d] = o.date.split("-");
-  const tags = [o.pastClass ? "이전 반" : null, o.alreadyMadeUp ? "보강 완료" : null].filter(Boolean);
+  const tags = [o.pastClass ? (lang === "en" ? "Past class" : "이전 반") : null, o.alreadyMadeUp ? (lang === "en" ? "Made up" : "보강 완료") : null].filter(Boolean);
   // 하루 여러 교시를 도는 반이면 어느 수업의 결석인지 시각으로 밝힌다(교시 이름은 안 쓴다 — 위 🔴).
   const slots = o.slots?.length ? ` ${o.slots.join("·")}` : "";
-  return `${Number(m)}/${Number(d)} ${o.className}${slots}${tags.length ? ` (${tags.join(" · ")})` : ""}`;
+  return `${Number(m)}/${Number(d)} ${classNameFor(o.className, lang)}${slots}${tags.length ? ` (${tags.join(" · ")})` : ""}`;
 }

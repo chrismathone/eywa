@@ -1,3 +1,5 @@
+
+import { SheetText } from "@/features/teacher-view/interface-label";
 import Link from "next/link";
 import { HeaderFilter } from "@/components/header-filter";
 import { EyIcon } from "@/components/icons/aywa-icons";
@@ -45,6 +47,6 @@ export function LedgerHead({ view, href, options, subject, subjects }: {
       options={[{ value: "up", label: "상승" }, { value: "down", label: "하락" }, { value: "same", label: "변화 없음" }]} />, "delta")}</th>
     <th className={`${th} text-center`}><HeaderFilter paramName="fConsult" axisLabel="상담" value={view.consult}
       options={[{ value: "done", label: "상담함" }, { value: "none", label: "상담 안 함" }]} /></th>
-    <th className={`${th} text-center`}>관리</th>
+    <th className={`${th} text-center`}><SheetText value={"관리"} /></th>
   </tr></thead>;
 }

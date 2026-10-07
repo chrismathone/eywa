@@ -111,7 +111,7 @@ export function resolveSheetLang(
  * 아직 한국어로 남은 것 = 월간 뷰 3종 · 자리(JJ·LAB) 출석부 · MCS 칸 문구 · 알림 벨 · 원스크린.
  */
 export const SHEET_DICT = {
-  "studentEnglishName.editHint": { ko: "더블클릭 또는 F2: 영문 이름 수정", en: "Double-click or press F2 to edit the English name" },
+  "studentEnglishName.editHint": { ko: "더블클릭 또는 이름 위에 마우스를 올리고 F2: 영문 이름 수정", en: "Double-click, or hover over this name and press F2 to edit its English name" },
   "studentEnglishName.detailsHint": { ko: "클릭하면 학생 정보", en: "Click for student details" },
   "studentEnglishName.input": { ko: "{name} 영문 이름", en: "English name for {name}" },
   "studentEnglishName.placeholder": { ko: "영문 이름", en: "English name" },
@@ -872,6 +872,8 @@ export const SHEET_DICT = {
   "select.legacy": { ko: "이전 표기", en: "Old label" },
   "select.search": { ko: "찾기", en: "Search" },
   "select.choose": { ko: "선택", en: "Choose" },
+  "select.moreSelected": { ko: "{label} 외 {n}", en: "{label} +{n}" },
+  "select.moreResults": { ko: "+{n}개 더 — 검색으로 좁히세요", en: "+{n} more — type to narrow the list" },
   // 오늘 카드 학생 기록 팝오버(태도·특이사항 + JJ 칸).
   "mark.attitudeAria": { ko: "{name} {slot} 태도", en: "{name} {slot} attitude" },
   "mark.noteAria": { ko: "{name} {slot} 특이사항", en: "{name} {slot} notes" },
@@ -2265,6 +2267,8 @@ export const SHEET_DICT = {
 
   // ── 학생목록(/students) — 머리·툴바 필터·표 ─────────────────────
   "stu.title": { ko: "원생목록", en: "Student list" },
+  "stu.summary.attended": { ko: "출석·지각 {present}/{total}회", en: "Present/late {present}/{total} sessions" },
+  "stu.summary.last30": { ko: "최근 30일 {total}회", en: "Last 30 days: {total} sessions" },
   "stu.eyebrow": { ko: "원생 관리", en: "Student management" },
   "stu.desc": { ko: "재원 {n}명 · {basis}", en: "{n} enrolled · {basis}" },
   "stu.basis.mine": { ko: "담당 과목 기준", en: "your subjects" },
@@ -2901,6 +2905,11 @@ export const SHEET_DICT = {
   "os.makeup.searching": { ko: "검색 중…", en: "Looking…" },
   "os.makeup.noResult": { ko: "결과 없음", en: "No results" },
   "os.makeup.typeName": { ko: "이름을 입력하세요", en: "Type a name" },
+  "os.makeup.flow.alreadyListed": { ko: "{name}은(는) 이미 이 반 명단에 있습니다", en: "{name} is already on this class roster" },
+  "os.makeup.flow.added": { ko: "{name} 보강 추가 — 수업타임 {units}", en: "Makeup added for {name} — {units} lesson units" },
+  "os.makeup.flow.addedLinked": { ko: "{name} 보강 추가 — 결석 칸에 메모, 수업타임 {units}", en: "Makeup added for {name} — absence noted, {units} lesson units" },
+  "os.makeup.flow.addedNoAbsence": { ko: "{name} 보강 추가 — 수업타임 {units}. 그날 결석 기록이 없어 메모는 남기지 않았습니다.", en: "Makeup added for {name} — {units} lesson units. No absence was recorded on that date, so no note was added." },
+  "os.makeup.flow.linkFailed": { ko: "보강은 추가됐지만 결석분 연결에 실패했습니다 — {error}", en: "The makeup was added, but the absence could not be linked — {error}" },
   "os.present.title": {
     ko: "출결 기록이 없는 {n}칸을 출석으로 기록합니다 — 이미 찍힌 출석·지각·결석은 그대로 둡니다",
     en: "Marks the {n} empty boxes as present — anything already marked present, late or absent is left alone",

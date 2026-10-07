@@ -1,5 +1,7 @@
 "use client";
 
+import { SheetText } from "@/features/teacher-view/interface-label";
+
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { homeworkVideoLinks, homeworkVideoOrigin, HOMEWORK_VIDEO_STATUS, type HomeworkVideo } from "@/features/students/homework-videos";
@@ -29,15 +31,15 @@ export function HomeworkVideosView({ rows, subjectLabels, initialVideoId = null 
   }
   const subjectLabel = (key: string | null) => key ? subjectLabels[key] ?? "기타 과목" : "과목 미분류";
   if (!rows.length) return <div className="border-line rounded-xl border p-6 text-sm">
-    <p className="font-bold">아직 보관된 숙제 영상이 없습니다.</p>
-    <p className="mt-2">클래스노트에 올린 학부모 영상이나 담임 폴더에 직접 올린 영상이 들어오면 과목별로 표시됩니다.</p>
+    <p className="font-bold"><SheetText value={"아직 보관된 숙제 영상이 없습니다."} /></p>
+    <p className="mt-2"><SheetText value={"클래스노트에 올린 학부모 영상이나 담임 폴더에 직접 올린 영상이 들어오면 과목별로 표시됩니다."} /></p>
   </div>;
   return <div className="space-y-4">
-    <p className="text-sm">숙제 영상 <strong className="num">{rows.length}</strong>개 · 영상을 선택하면 바로 볼 수 있습니다.</p>
+    <p className="text-sm"><SheetText value={"숙제 영상 "} /><strong className="num">{rows.length}</strong><SheetText value={"개 · 영상을 선택하면 바로 볼 수 있습니다."} /></p>
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(280px,1fr)_minmax(0,2fr)]">
       <div className="min-w-0 space-y-5">
         {[...groups].map(([key, items]) => <section key={key} aria-label={`${subjectLabel(key)} 숙제 영상`}>
-          <h3 className="border-line border-b pb-2 text-base font-bold">{subjectLabel(key)} <span className="num text-sm">{items.length}개</span></h3>
+          <h3 className="border-line border-b pb-2 text-base font-bold">{subjectLabel(key)} <span className="num text-sm">{items.length}<SheetText value={"개"} /></span></h3>
           <ul className="divide-line divide-y">
             {items.map((row) => {
               const rowLinks = homeworkVideoLinks(row.drive_file_id);
@@ -57,11 +59,11 @@ export function HomeworkVideosView({ rows, subjectLabels, initialVideoId = null 
         {selected && links ? <section className="space-y-3" aria-label="숙제 영상 뷰어">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h3 className="text-base font-bold">{subjectLabel(selected.subject)} · {rowDate(selected)}</h3>
-            <Button type="button" variant="outline" onClick={() => setSelectedId(null)}>닫기</Button>
+            <Button type="button" variant="outline" onClick={() => setSelectedId(null)}><SheetText value={"닫기"} /></Button>
           </div>
           <HomeworkVideoPlayer key={selected.id} preview={links.preview} thumbnail={links.thumbnail} uploadedAt={selected.uploaded_at}
             title={`${subjectLabel(selected.subject)} 숙제 영상 ${rowDate(selected)}`} />
-        </section> : <div className="border-line flex aspect-video items-center justify-center rounded-xl border bg-muted/30 p-6 text-sm">목록에서 재생할 영상을 선택하세요.</div>}
+        </section> : <div className="border-line flex aspect-video items-center justify-center rounded-xl border bg-muted/30 p-6 text-sm"><SheetText value={"목록에서 재생할 영상을 선택하세요."} /></div>}
       </div>
     </div>
   </div>;

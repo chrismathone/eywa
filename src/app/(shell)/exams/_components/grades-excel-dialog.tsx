@@ -1,5 +1,7 @@
 "use client";
 
+import { SheetClassName, SheetText } from "@/features/teacher-view/interface-label";
+
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -71,43 +73,38 @@ export function GradesExcelDialog({
     <Dialog open onOpenChange={(open) => (open ? null : onClose())}>
       <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="text-base font-bold">엑셀로 넣기</DialogTitle>
+          <DialogTitle className="text-base font-bold"><SheetText value={"엑셀로 넣기"} /></DialogTitle>
           <DialogDescription className="text-xs">
-            지금 보고 있는 명단을 받아 점수만 채운 뒤 올리면 미리보기가 뜨고, [반영]을 누르면 그대로 들어갑니다.
-          </DialogDescription>
+            <SheetText value={"지금 보고 있는 명단을 받아 점수만 채운 뒤 올리면 미리보기가 뜨고, [반영]을 누르면 그대로 들어갑니다."} /></DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-4 text-xs">
           <section className="border-line flex flex-wrap items-center justify-between gap-2 rounded-xl border p-3">
             <div>
-              <p className="font-bold">1. 서식 내려받기</p>
+              <p className="font-bold"><SheetText value={"1. 서식 내려받기"} /></p>
               <p className="text-text-dim text-xs">
-                지금 명단·점수가 들어 있는 파일(시트: 성적 · 안내). 어느 학기·시험인지는 성적 시트 맨 윗줄에 적혀 있습니다.
-              </p>
+                <SheetText value={"지금 명단·점수가 들어 있는 파일(시트: 성적 · 안내). 어느 학기·시험인지는 성적 시트 맨 윗줄에 적혀 있습니다."} /></p>
             </div>
             <a
               href={excelHref}
               download
               className="text-primary inline-flex items-center gap-1 font-bold hover:underline"
             >
-              <EyIcon name="arrowDown" size={14} /> 성적.xlsx
-            </a>
+              <EyIcon name="arrowDown" size={14} /> <SheetText value={"성적.xlsx"} /></a>
           </section>
 
           {canWrite ? (
             <section className="border-line flex flex-col gap-2 rounded-xl border p-3">
-              <p className="font-bold">2. 작성한 파일 올리기 — 고르면 바로 미리보기</p>
+              <p className="font-bold"><SheetText value={"2. 작성한 파일 올리기 — 고르면 바로 미리보기"} /></p>
               <FilePickerButton accept=".xlsx" file={file} onSelect={pick} label="엑셀 파일 선택" disabled={busy} />
               <p className="text-text-faint text-xs">
-                학생은 회색 칸(이름·학교·학년·반)으로 찾습니다 — 고치지 마세요. 빈 점수 칸은 그대로 둡니다(지우기는 화면에서).
-                오류가 하나라도 있으면 아무것도 바꾸지 않습니다.
-              </p>
+                <SheetText value={"학생은 회색 칸(이름·학교·학년·반)으로 찾습니다 — 고치지 마세요. 빈 점수 칸은 그대로 둡니다(지우기는 화면에서). 오류가 하나라도 있으면 아무것도 바꾸지 않습니다."} /></p>
             </section>
           ) : (
-            <p className="text-text-faint">점수를 올릴 권한이 없습니다 — 내려받기만 됩니다.</p>
+            <p className="text-text-faint"><SheetText value={"점수를 올릴 권한이 없습니다 — 내려받기만 됩니다."} /></p>
           )}
 
-          {busy && !result ? <p className="text-text-dim text-xs">파일을 읽는 중…</p> : null}
+          {busy && !result ? <p className="text-text-dim text-xs"><SheetText value={"파일을 읽는 중…"} /></p> : null}
           {result?.error ? (
             <p role="alert" className="bg-danger-soft/40 text-danger rounded-lg px-3 py-1.5 text-xs">
               {result.error}
@@ -117,11 +114,10 @@ export function GradesExcelDialog({
 
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={onClose}>
-              닫기
-            </Button>
+              <SheetText value={"닫기"} /></Button>
             {canWrite ? (
               <Button type="button" disabled={!canApply} onClick={() => run(file, false)}>
-                {result?.applied ? "반영됨" : "반영"}
+                <SheetText value={result?.applied ? "반영됨" : "반영"} />
               </Button>
             ) : null}
           </div>
@@ -153,7 +149,7 @@ function ResultPanel({ result }: { result: NonNullable<GradesExcelResult> }) {
             : "미리보기 — 아직 아무것도 바꾸지 않았습니다"}
       </p>
       <p className="mt-1">
-        {counts.total}행 — 반영 <span className="num font-bold">{counts.apply}</span> · 그대로{" "}
+        {counts.total}<SheetText value={"행 — 반영 "} /><span className="num font-bold">{counts.apply}</span> <SheetText value={"· 그대로"} />{" "}
         <span className="num">{counts.keep}</span>
       </p>
       {errors.length > 0 ? (
@@ -161,7 +157,7 @@ function ResultPanel({ result }: { result: NonNullable<GradesExcelResult> }) {
           {errors.map((e) => (
             <li key={e}>{e}</li>
           ))}
-          {errorTotal > errors.length ? <li>… 외 {errorTotal - errors.length}건</li> : null}
+          {errorTotal > errors.length ? <li><SheetText value={"… 외 "} />{errorTotal - errors.length}<SheetText value={"건"} /></li> : null}
         </ul>
       ) : null}
       {result.notes && result.notes.length > 0 ? (
@@ -181,7 +177,7 @@ function ResultPanel({ result }: { result: NonNullable<GradesExcelResult> }) {
               <span className="text-text-faint num w-8 shrink-0 text-right">{r.rowNum}</span>
               <Pill color={toneColor(ACTION_TONE[r.action])}>{ACTION_LABEL[r.action]}</Pill>
               <span className="font-bold">{r.name}</span>
-              <span className="text-text-dim shrink-0">{r.className}</span>
+              <span className="text-text-dim shrink-0"><SheetClassName value={r.className} /></span>
               <span className="text-text-dim min-w-0 truncate">{r.summary}</span>
             </li>
           ))}

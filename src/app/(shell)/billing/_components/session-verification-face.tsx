@@ -118,7 +118,8 @@ export async function SessionVerificationFace({
   // 과목 필터를 보존한 채 월·page만 바꾸는 href.
   const hrefFor = (per: string, n = 1, clearDisplayFilters = false) => {
     const qs = new URLSearchParams(Object.entries(params).filter((entry): entry is [string, string] => entry[1] !== undefined));
-    qs.set("tab", "verify");
+    qs.set("tab", "sessions");
+    qs.set("panel", "verify");
     qs.set("period", per);
     qs.delete("page");
     if (clearDisplayFilters) { qs.delete("q"); qs.delete("status"); }
@@ -161,6 +162,7 @@ export async function SessionVerificationFace({
 
       {/* 규칙 설명(N1/N2)은 지워선 안 되는 사실이라 접힌 2차로(§4). */}
       <FaceNote>
+        <b>달력월 청구 시수 대조</b>입니다. 출석부 시수 마스터의 세션 기간과 다르며, *LAB 출결도 청구 소비에 포함합니다.{" "}
         <b>확정한 시수</b>(청구 기준)와 그 반의 <b>출석부 시수 합계</b>(출석·지각·조퇴·보강)를 대조합니다. 기존 일수 기준 확정은 재확정 전까지 같은 일수 기준으로 비교합니다.
         {" "}EiE 월 고정은 확정한 월 금액을 정산 기준으로 쓰며 출석 회차로 금액을 바꾸지 않습니다.
         차이는 <span className="text-amber">부족</span>(청구보다 적게 나옴)·<span className="text-danger">초과</span>(더
@@ -190,7 +192,7 @@ export async function SessionVerificationFace({
           {allocations.length > 0 ? (
           <section className="border-line rounded-2xl border">
             <header className="border-line flex flex-wrap items-baseline justify-between gap-2 border-b px-3 py-2">
-              <h3 className="text-foreground text-sm font-bold">강사별 분배 (참고)</h3>
+              <h3 className="text-foreground text-sm font-bold">강사별 청구 금액 (참고)</h3>
               <p className="text-text-dim text-xs">
                 반 담당 강사 기준 집계 — 표시 전용이며 어디에도 저장되지 않습니다. 단가 없는 행은 금액에서
                 제외하고 개수로 표시합니다.

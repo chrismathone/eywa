@@ -2,9 +2,17 @@
 .options summary { cursor: pointer; list-style: none; }
 .options summary::-webkit-details-marker { display: none; }
 
+.body { display: grid; flex: 1; min-height: 0; min-width: 0; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.withDetail { grid-template-columns: minmax(0, 1fr) minmax(360px, 420px); }
+.detailPane { min-width: 0; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--card); }
+.detailBody { display: flex; flex-direction: column; gap: 16px; padding: 14px; }
+.detailHeader { display: flex; flex-direction: column; gap: 8px; }
+.checkNotes { padding: 10px; border-left: 3px solid var(--amber); background: var(--bg-soft); font-size: var(--text-xs); line-height: 1.6; }
+
 .scroll {
   flex: 1;
   min-height: 0;
+  min-width: 0;
   overflow: auto;
   isolation: isolate;
   border: 1px solid var(--line);
@@ -83,3 +91,4 @@
 .events strong { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .events p { margin-top: 4px; }
 .events [data-excluded] { background: var(--bg-soft); }
+.events [data-missing] { border-left: 3px solid var(--amber); padding-left: 8px; }

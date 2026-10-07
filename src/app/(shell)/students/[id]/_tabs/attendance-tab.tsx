@@ -1,3 +1,5 @@
+
+import { SheetText } from "@/features/teacher-view/interface-label";
 import { buildAttendanceClassOptions } from "@/features/students/attendance-tab";
 import {
   getStudentAttendanceFull,
@@ -38,7 +40,7 @@ export async function AttendanceTab({ studentId }: { studentId: string }) {
         <section className="border-line bg-card mb-3 rounded-2xl border px-4 py-3" aria-label="앞으로의 보강 예약">
           <h3 className="text-foreground text-sm font-bold">
             {RESERVED_CELL_LABEL}
-            <span className="text-text-dim num ml-1.5 font-normal">{upcoming.length}건</span>
+            <span className="text-text-dim num ml-1.5 font-normal">{upcoming.length}<SheetText value={"건"} /></span>
           </h3>
           <ul className="mt-1.5 flex flex-col gap-1">
             {upcoming.map((r) => (
@@ -47,14 +49,13 @@ export async function AttendanceTab({ studentId }: { studentId: string }) {
                   {reservationSpanLabel(r)}
                 </span>
                 <span className="text-foreground">{classNameById.get(r.classId) ?? "—"}</span>
-                <span className="text-text-dim">{shortDate(r.absenceDate)} 결석분</span>
+                <span className="text-text-dim">{shortDate(r.absenceDate)} <SheetText value={"결석분"} /></span>
                 {r.note ? <span className="text-text-dim break-keep">· {r.note}</span> : null}
               </li>
             ))}
           </ul>
           <p className="text-text-faint mt-1.5 text-xs break-keep">
-            보강일에 출석부에서 출결을 찍으면 예약은 자동으로 이행 처리됩니다. 취소는 출석부의 예약 칸에서.
-          </p>
+            <SheetText value={"보강일에 출석부에서 출결을 찍으면 예약은 자동으로 이행 처리됩니다. 취소는 출석부의 예약 칸에서."} /></p>
         </section>
       ) : null}
       <AttendanceView records={records} classes={classes} />

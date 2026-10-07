@@ -1,5 +1,7 @@
 "use client";
 
+import { SheetText } from "@/features/teacher-view/interface-label";
+
 import { useActionState, useMemo, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { AlertCircle, Check, Loader2, Save } from "@/components/icons/aywa-icon-compat";
@@ -280,22 +282,19 @@ export function ScoreGrid({
       ) : null}
       {!lockReason && !marksReady ? (
         <p className="border-amber/40 bg-amber-soft text-foreground rounded-lg border px-3 py-2 text-sm">
-          성적표 받기 체크는 준비(0284a)가 적용된 뒤에 눌립니다 — 점수 입력·저장은 그대로 됩니다.
-        </p>
+          <SheetText value={"성적표 받기 체크는 준비(0284a)가 적용된 뒤에 눌립니다 — 점수 입력·저장은 그대로 됩니다."} /></p>
       ) : null}
       {!lockReason && !noExamReady ? (
         <p className="border-amber/40 bg-amber-soft text-foreground rounded-lg border px-3 py-2 text-sm">
-          [시험없음]은 준비(0285a)가 적용된 뒤에 눌립니다 — 점수 입력·저장은 그대로 됩니다.
-        </p>
+          <SheetText value={"[시험없음]은 준비(0285a)가 적용된 뒤에 눌립니다 — 점수 입력·저장은 그대로 됩니다."} /></p>
       ) : null}
 
       {/* 요약 줄 — 왼쪽은 **진행**(적은 칸/전체 + 막대), 가운데는 분포, 오른쪽은 이 판의 조건.
           세 덩어리를 가는 세로선으로 가른다(한 줄에 여섯 숫자가 평평하게 늘어서면 뭘 봐야 할지 모른다). */}
       <div className="bg-bg-soft border-line flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border px-4 py-2.5 text-sm">
         <span className="text-text-dim flex items-center gap-2">
-          입력
-          <span className="text-foreground num font-bold">{live.stats.count}</span>
-          <span className="text-text-faint">/ {live.people}명</span>
+          <SheetText value={"입력"} /><span className="text-foreground num font-bold">{live.stats.count}</span>
+          <span className="text-text-faint">/ {live.people}<SheetText value={"명"} /></span>
           {/* 🔑 직접 그린 막대가 아니라 `<progress>` — 보조기기가 값으로 읽는다(장식이 아니라 값이다). */}
           <progress
             className="h-1.5 w-24 overflow-hidden rounded-full [&::-webkit-progress-bar]:bg-line/70 [&::-webkit-progress-value]:bg-primary"
@@ -306,14 +305,14 @@ export function ScoreGrid({
         </span>
         <Divider />
         <span className="text-text-dim">
-          평균 <span className="text-foreground num font-bold">{live.stats.avg ?? "—"}</span>
+          <SheetText value={"평균 "} /><span className="text-foreground num font-bold">{live.stats.avg ?? "—"}</span>
           {live.stats.avgPct != null ? <span className="text-text-faint"> ({live.stats.avgPct}%)</span> : null}
         </span>
         <span className="text-text-dim">
-          최고 <span className="text-foreground num font-bold">{live.stats.max ?? "—"}</span>
+          <SheetText value={"최고 "} /><span className="text-foreground num font-bold">{live.stats.max ?? "—"}</span>
         </span>
         <span className="text-text-dim">
-          최저 <span className="text-foreground num font-bold">{live.stats.min ?? "—"}</span>
+          <SheetText value={"최저 "} /><span className="text-foreground num font-bold">{live.stats.min ?? "—"}</span>
         </span>
         {markKeys.includes("received") ? (
           <>
@@ -321,23 +320,22 @@ export function ScoreGrid({
             <span className="text-text-dim">
               {GRADE_MARK_LABEL.received}{" "}
               <span className="text-foreground num font-bold">{live.received}</span>
-              <span className="text-text-faint">/{live.people}명</span>
+              <span className="text-text-faint">/{live.people}<SheetText value={"명"} /></span>
             </span>
           </>
         ) : null}
         {live.skipped > 0 ? (
           <span className="text-text-dim">
-            시험없음 <span className="text-foreground num font-bold">{live.skipped}</span>명
-          </span>
+            <SheetText value={"시험없음 "} /><span className="text-foreground num font-bold">{live.skipped}</span><SheetText value={"명"} /></span>
         ) : null}
         <span className="text-text-faint ml-auto">
-          만점 {sel.maxScore} · 시험일 {sel.date}
+          <SheetText value={"만점 "} />{sel.maxScore} <SheetText value={"· 시험일 "} />{sel.date}
         </span>
       </div>
 
       {pasteNote ? (
         <p role="status" className="text-text-dim bg-bg-soft border-line rounded-lg border px-3 py-1.5 text-sm">
-          붙여넣기 — {pasteNote}
+          <SheetText value={"붙여넣기 — "} />{pasteNote}
         </p>
       ) : null}
       {/* 🔴 `scrollY` 없이 `sticky`만 붙이면 아무 일도 안 난다 — 이 컨테이너는 기본이 `overflow-y-hidden`이라
@@ -349,8 +347,7 @@ export function ScoreGrid({
             폭이 모자라면 컨테이너가 가로로 스크롤한다(잡고 끌기도 된다). */}
         <table className="w-full min-w-[880px] table-fixed text-sm [&_td]:whitespace-nowrap">
           <caption className="sr-only">
-            {slotLabel} 점수 입력표 — 이름·학교·학년·점수와 {markKeys.map((k) => GRADE_MARK_LABEL[k]).join("·")} 체크
-          </caption>
+            {slotLabel} <SheetText value={"점수 입력표 — 이름·학교·학년·점수와 "} />{markKeys.map((k) => GRADE_MARK_LABEL[k]).join("·")} <SheetText value={"체크"} /></caption>
           {/* 🔴 **모든 열에 폭을 준다** — 하나라도 비워 두면 그 열이 남는 폭을 독식해 표 가운데가 빈다.
               `table-fixed`는 남는 폭을 이 비율대로 나눠 주므로 창이 넓어져도 리듬이 유지된다.
               🔴 표식 열이 줄면 그 폭을 **이름·학교·점수가 나눠 갖는다** — 비율을 그대로 두면 남은 체크
@@ -423,7 +420,7 @@ export function ScoreGrid({
                       <td className="text-foreground overflow-hidden px-4 py-1.5 text-left font-medium text-ellipsis">
                         {r.name}
                         {/* 🔴 표식은 **퇴원** 하나뿐 — 반이동·과목 변경엔 아무 표식도 붙이지 않는다. */}
-                        {r.withdrawn ? <span className="text-text-faint ml-1.5 text-xs">퇴원</span> : null}
+                        {r.withdrawn ? <span className="text-text-faint ml-1.5 text-xs"><SheetText value={"퇴원"} /></span> : null}
                       </td>
                       <td className="text-text-dim overflow-hidden px-4 py-1.5 text-left text-sm text-ellipsis">
                         {r.school ?? "—"}
@@ -503,8 +500,7 @@ export function ScoreGrid({
                                   : "border-line bg-background text-text-dim hover:text-foreground"
                               }`}
                             >
-                              시험없음
-                            </button>
+                              <SheetText value={"시험없음"} /></button>
                         </div>
                       </td>
                       {markKeys.map((k) => {
@@ -548,14 +544,13 @@ export function ScoreGrid({
           ) : state?.ok && dirtyIds.length === 0 ? (
             <p className="text-green inline-flex items-center gap-1.5 text-sm">
               <Check className="size-4" />
-              {state.saved === 0 && state.cleared === 0
+              <SheetText value={state.saved === 0 && state.cleared === 0
                 ? "바뀐 내용이 없습니다"
-                : `저장했습니다 (${state.saved ?? 0}칸${state.cleared ? ` · ${state.cleared}칸 지움` : ""})`}
+                : `저장했습니다 (${state.saved ?? 0}칸${state.cleared ? ` · ${state.cleared}칸 지움` : ""})`} />
             </p>
           ) : null}
           <span className="text-text-dim text-sm">
-            저장 안 된 칸 <span className="text-foreground num font-bold">{dirtyIds.length}</span>개
-          </span>
+            <SheetText value={"저장 안 된 칸 "} /><span className="text-foreground num font-bold">{dirtyIds.length}</span><SheetText value={"개"} /></span>
           <SaveButton disabled={dirtyIds.length === 0} />
         </div>
       )}
@@ -665,7 +660,6 @@ function SaveButton({ disabled }: { disabled: boolean }) {
   return (
     <Button type="submit" disabled={pending || disabled}>
       {pending ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-      점수 저장
-    </Button>
+      <SheetText value={"점수 저장"} /></Button>
   );
 }

@@ -1,5 +1,7 @@
 "use client";
 
+import { SheetText } from "@/features/teacher-view/interface-label";
+
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FilterSelect, type FilterSelectOption } from "@/components/filter-select";
 import { SearchToggle } from "@/components/search-toggle";
@@ -34,7 +36,7 @@ export function ExamsToolbar({ from, to, subject, kind, missing, q, subjectOptio
   };
   const dateInput = `${CONTROL_H} ${CONTROL_LABEL} border-line bg-background rounded-lg border px-2`;
   return <Toolbar>
-    <span className={`${CONTROL_LABEL} text-text-dim`}>기간:</span>
+    <span className={`${CONTROL_LABEL} text-text-dim`}><SheetText value={"기간:"} /></span>
     <input type="date" aria-label="시작일" className={dateInput} value={from} max={to} onChange={(e) => setDate("from", e.target.value)} />
     <span aria-hidden>~</span>
     <input type="date" aria-label="종료일" className={dateInput} value={to} min={from} onChange={(e) => setDate("to", e.target.value)} />
@@ -43,7 +45,7 @@ export function ExamsToolbar({ from, to, subject, kind, missing, q, subjectOptio
     <FilterSelect paramName="missing" axisLabel="미입력" allLabel="숨김" value={missing ? "1" : ""} options={[{ value: "1", label: "표시" }]} />
     <SearchToggle placeholder="학생 이름" defaultValue={q} />
     <span className="ml-auto" />
-    <ToolbarButton onClick={() => window.location.assign(inFrame ? withEmbed(exportHref) : exportHref)}>엑셀 내보내기</ToolbarButton>
+    <ToolbarButton onClick={() => window.location.assign(inFrame ? withEmbed(exportHref) : exportHref)}><SheetText value={"엑셀 내보내기"} /></ToolbarButton>
     <ToolbarDivider />
     {action}
   </Toolbar>;

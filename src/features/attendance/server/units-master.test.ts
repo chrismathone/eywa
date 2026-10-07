@@ -26,6 +26,7 @@ vi.mock("@/lib/supabase/server", () => ({
   }),
 }));
 vi.mock("@/features/periods/server/queries", () => ({ getPeriodDefs: async () => [] }));
+vi.mock("./taught-by-db", () => ({ taughtByColumnReady: async () => true }));
 vi.mock("next/navigation", () => ({ redirect: (path: string) => { throw new Error(`redirect:${path}`); } }));
 import { canViewUnitsMaster, loadUnitsMaster } from "./units-master";
 
@@ -47,12 +48,15 @@ beforeEach(() => {
     let rows = [...(h.tables[table] ?? [])];
     const entry = { table, filters: [] as [string, unknown][] }; h.reads.push(entry);
     const q = {
-      select: () => q, order: () => q, or: () => q,
+      select: () => q, order: () => q, or: () => q, overrideTypes: () => q,
       eq: (key: string, value: unknown) => { entry.filters.push([key, value]); rows = rows.filter((r) => r[key] === value); return q; },
       in: (key: string, values: unknown[]) => { rows = rows.filter((r) => values.includes(r[key])); return q; },
       gte: (key: string, value: string) => { rows = rows.filter((r) => String(r[key]) >= value); return q; },
       lte: (key: string, value: string) => { rows = rows.filter((r) => String(r[key]) <= value); return q; },
-      range: (f: number, t: number) => Promise.resolve({ data: rows.slice(f, t + 1), error: h.fail === table ? { message: "read failed" } : null }),
+      range: (f: number, t: number) => {
+        const result = Promise.resolve({ data: rows.slice(f, t + 1), error: h.fail === table ? { message: "read failed" } : null });
+        return Object.assign(result, { overrideTypes: () => result });
+      },
     };
     return q;
   });
@@ -71,6 +75,18 @@ it("uses actual data, tenant scope on every query, and returns no financial fiel
   expect(h.reads.length).toBeGreaterThan(8);
   for (const read of h.reads) expect(read.filters).toContainEqual(["tenant_id", "tenant"]);
   expect(JSON.stringify(data)).not.toMatch(/unit_price|line_items|commission_rate/);
+});
+it("reads math and English together and resolves substitute teachers", async () => {
+  h.tables.classes.push({ ...h.tables.classes[0], id: "math", subject: "math", class_name: "수학반", english_track: null });
+  h.tables.enrollments.push({ ...h.tables.enrollments[0], id: "math-enrollment", class_id: "math" });
+  h.tables.attendance_records.push({ ...h.tables.attendance_records[0], id: "math-record", class_id: "math", session_units: 1.5, taught_by: "substitute" });
+  h.tables.users.push({ id: "substitute", display_name: "대신 수업 강사", tenant_id: "tenant" });
+  const data = await loadUnitsMaster("2026-09");
+  const math = data.classes.find((c) => c.subject === "math")!;
+  expect(math.track).toBe("math");
+  expect(math.students[0].actual).toBe(1.5);
+  expect(math.teachers).toContainEqual({ id: "substitute", name: "대신 수업 강사" });
+  expect(data.classes.some((c) => c.subject === "english")).toBe(true);
 });
 it("does not count void invoices or partial confirmations as a complete target", async () => {
   h.tables.invoice_session_terms.push({ ...h.tables.invoice_session_terms[0], id: "pending", confirmed_sessions: null });

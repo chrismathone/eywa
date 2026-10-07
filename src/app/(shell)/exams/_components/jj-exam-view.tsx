@@ -1,3 +1,5 @@
+
+import { SheetText } from "@/features/teacher-view/interface-label";
 /**
  * 성적관리 › 영어 › **JJ실(시험)** — 인재원 단어시험별 응시·평균·최고·최저(설명서 6번). 서버 컴포넌트.
  *
@@ -65,12 +67,11 @@ export async function JjExamView({
       </div>
       {filterName ? (
         <JjNote>
-          목록 숫자는 학원 전체 기준입니다 — 시험을 열면 {filterName} 반 결과로 봅니다.
-        </JjNote>
+          <SheetText value={"목록 숫자는 학원 전체 기준입니다 — 시험을 열면 "} />{filterName} <SheetText value={"반 결과로 봅니다."} /></JjNote>
       ) : classFilter && options ? (
-        <JjNote>고른 반을 찾을 수 없어(담당 반이 아니거나 운영이 끝난 반) 반 없이 엽니다.</JjNote>
+        <JjNote><SheetText value={"고른 반을 찾을 수 없어(담당 반이 아니거나 운영이 끝난 반) 반 없이 엽니다."} /></JjNote>
       ) : classFilter ? (
-        <JjNote>반 목록을 불러오지 못해 반 없이 엽니다.</JjNote>
+        <JjNote><SheetText value={"반 목록을 불러오지 못해 반 없이 엽니다."} /></JjNote>
       ) : null}
       {res.exams.length === 0 ? (
         <EmptyState
@@ -104,7 +105,7 @@ export async function JjExamView({
                     </WindowLink>
                   </td>
                   <td className="text-text-dim px-4 py-2.5 text-xs">{examTypeLabel(e.examType)}</td>
-                  <td className="num text-foreground px-4 py-2.5 text-right text-xs font-bold">{e.takers}명</td>
+                  <td className="num text-foreground px-4 py-2.5 text-right text-xs font-bold">{e.takers}<SheetText value={"명"} /></td>
                   <td className={NUM}>{e.avg ?? "—"}</td>
                   <td className={NUM}>{e.max ?? "—"}</td>
                   <td className={NUM}>{e.min ?? "—"}</td>

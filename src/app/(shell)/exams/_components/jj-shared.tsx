@@ -1,3 +1,5 @@
+
+import { SheetText } from "@/features/teacher-view/interface-label";
 /**
  * 성적관리 JJ실 화면 공용 조각 — 실패 배너 · 기간 줄 · KST 시각 표기 · 스켈레톤.
  *
@@ -27,9 +29,9 @@ export function JjFailBanner({ message, detail }: { message: string; detail?: st
 export function JjLinkColumnNotice({ teacher = false }: { teacher?: boolean }) {
   return (
     <p className="border-line bg-bg-soft/60 text-text-dim rounded-2xl border px-4 py-2.5 text-xs">
-      {teacher
+      <SheetText value={teacher
         ? "학생 짝 칸이 아직 준비되지 않아(DB 적용 전) 담당 학생을 가려낼 수 없습니다 — 적용되면 담당 학생의 기록이 보입니다."
-        : "학생 짝 칸이 아직 준비되지 않았습니다(DB 적용 전). 에이와 학생과 연결하지 않고 인재원 이름으로만 보여 줍니다."}
+        : "학생 짝 칸이 아직 준비되지 않았습니다(DB 적용 전). 에이와 학생과 연결하지 않고 인재원 이름으로만 보여 줍니다."} />
     </p>
   );
 }
@@ -94,13 +96,13 @@ export function JjPeriodLine({
 }) {
   return (
     <p className="micro">
-      기간 <span className="text-foreground num font-bold">{from}</span> ~{" "}
+      <SheetText value={"기간 "} /><span className="text-foreground num font-bold">{from}</span> ~{" "}
       <span className="text-foreground num font-bold">{to}</span>
       {note ? (
         <span className={`ml-2 normal-case ${note.warn ? "text-amber font-bold" : "text-text-faint"}`}>· {note.text}</span>
       ) : null}
       <span className="text-text-faint ml-2 normal-case">
-        {basis === "study" ? "· 학습일 기준(새벽 3시에 날이 바뀝니다)" : "· 제출한 날짜 기준"}
+        <SheetText value={basis === "study" ? "· 학습일 기준(새벽 3시에 날이 바뀝니다)" : "· 제출한 날짜 기준"} />
       </span>
       {extra ? <span className="text-text-faint ml-2 normal-case">· {extra}</span> : null}
     </p>

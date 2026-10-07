@@ -23,6 +23,30 @@ beforeEach(() => { vi.clearAllMocks(); m.save.mockResolvedValue({ ok: true, engl
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe("영어 시트 이름 두 줄과 영문 이름 편집", () => {
+  it("이름에 마우스만 올린 상태에서도 F2로 편집을 연다", () => {
+    setup();
+    fireEvent.mouseEnter(screen.getByText("Lucy"));
+    fireEvent.keyDown(document.body, { key: "F2" });
+    expect(screen.getByRole("textbox")).toHaveValue("Lucy");
+    expect(m.navigate).not.toHaveBeenCalled();
+  });
+  it("이름에서 마우스를 떼면 F2가 그 학생의 편집을 열지 않는다", () => {
+    setup();
+    const name = screen.getByText("Lucy");
+    fireEvent.mouseEnter(name);
+    fireEvent.mouseLeave(name);
+    fireEvent.keyDown(document.body, { key: "F2" });
+    expect(screen.queryByRole("textbox")).toBeNull();
+  });
+  it("다른 입력칸에서 작업 중이면 마우스가 이름 위에 있어도 F2로 가로채지 않는다", () => {
+    setup();
+    const input = document.createElement("input");
+    document.body.append(input);
+    fireEvent.mouseEnter(screen.getByText("Lucy"));
+    fireEvent.keyDown(input, { key: "F2" });
+    expect(screen.queryByRole("textbox", { name: /English name/ })).toBeNull();
+    input.remove();
+  });
   it("영문 이름만 첫 줄, 학교·학년은 둘째 줄에 보인다", () => {
     const { container } = setup();
     const cell = container.querySelector("td")!;
@@ -72,6 +96,8 @@ describe("영어 시트 이름 두 줄과 영문 이름 편집", () => {
   });
   it("권한이 없으면 더블클릭·F2로 편집이 열리지 않고 링크는 즉시 동작한다", () => {
     setup({ enabled: false });
+    fireEvent.mouseEnter(screen.getByText("Lucy"));
+    fireEvent.keyDown(document.body, { key: "F2" });
     fireEvent.doubleClick(screen.getByText("Lucy"));
     fireEvent.keyDown(screen.getByRole("link"), { key: "F2" });
     expect(screen.queryByRole("textbox")).toBeNull();

@@ -1,3 +1,5 @@
+
+import { SheetText } from "@/features/teacher-view/interface-label";
 /**
  * 성적관리 › 영어 › **JJ실** — 학생별 기간 학습(인재원 설명서 8번)을 **aywa 반으로 묶어** 보여 준다. 서버 컴포넌트.
  *
@@ -63,18 +65,17 @@ export async function JjStudyView({
         />
         {options ? <JjClassFilter classes={options} value={filter} hrefFor={classHref} /> : null}
       </div>
-      {!member.ok ? <JjNote title={member.detail}>반 정보를 불러오지 못해 반으로 묶지 않았습니다.</JjNote> : null}
+      {!member.ok ? <JjNote title={member.detail}><SheetText value={"반 정보를 불러오지 못해 반으로 묶지 않았습니다."} /></JjNote> : null}
       {/* 원인을 가른다 — 목록을 못 읽은 것과 '고른 반이 선택지에 없는 것'은 다른 사실이다(적대 리뷰 2026-09-11). */}
       {classFilter && !filter && options ? (
-        <JjNote>고른 반을 찾을 수 없어(담당 반이 아니거나 운영이 끝난 반) 전체를 보여 줍니다.</JjNote>
+        <JjNote><SheetText value={"고른 반을 찾을 수 없어(담당 반이 아니거나 운영이 끝난 반) 전체를 보여 줍니다."} /></JjNote>
       ) : classFilter && !options && member.ok ? (
-        <JjNote>반 목록을 불러오지 못해 전체를 보여 줍니다.</JjNote>
+        <JjNote><SheetText value={"반 목록을 불러오지 못해 전체를 보여 줍니다."} /></JjNote>
       ) : null}
       {groups && groups.length ? (
         <p className="text-text-faint text-xs">
-          반 줄 = 그 반 학생의 합계·평균(정답률은 푼 문제 수로 가중)
-          {viewer.teacherStudentIds ? " · 내 학생 기준(다른 선생님 학생은 세지 않습니다)" : ""}
-          {hasMultiClassStudent(groups) ? " · 영어 반 두 곳을 함께 다니는 학생은 두 반 모두에 셉니다" : ""}
+          <SheetText value={"반 줄 = 그 반 학생의 합계·평균(정답률은 푼 문제 수로 가중)"} /><SheetText value={viewer.teacherStudentIds ? " · 내 학생 기준(다른 선생님 학생은 세지 않습니다)" : ""} />
+          <SheetText value={hasMultiClassStudent(groups) ? " · 영어 반 두 곳을 함께 다니는 학생은 두 반 모두에 셉니다" : ""} />
         </p>
       ) : null}
       {shown === 0 ? (

@@ -1,3 +1,5 @@
+
+import { SheetClassName, SheetText } from "@/features/teacher-view/interface-label";
 import { CalendarDays } from "@/components/icons/aywa-icon-compat";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { kstToday } from "@/lib/date-kst";
@@ -227,18 +229,18 @@ function Section({
         {action}
       </header>
       {rows.length === 0 ? (
-        <div className="text-muted-foreground px-5 py-8 text-center text-sm">해당 수업이 없습니다</div>
+        <div className="text-muted-foreground px-5 py-8 text-center text-sm"><SheetText value={"해당 수업이 없습니다"} /></div>
       ) : (
         <DragScrollArea>
           <table className="w-full min-w-[720px] text-sm [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
             <thead className="border-border text-muted-foreground border-b text-xs">
               <tr>
-                <th className="px-4 py-2 text-left font-medium">과목</th>
-                <th className="px-4 py-2 text-left font-medium">수업명</th>
-                <th className="px-4 py-2 text-left font-medium">강사</th>
-                <th className="px-4 py-2 text-left font-medium">스케줄</th>
-                <th className="px-4 py-2 text-left font-medium">시작</th>
-                <th className="px-4 py-2 text-left font-medium">종료</th>
+                <th className="px-4 py-2 text-left font-medium"><SheetText value={"과목"} /></th>
+                <th className="px-4 py-2 text-left font-medium"><SheetText value={"수업명"} /></th>
+                <th className="px-4 py-2 text-left font-medium"><SheetText value={"강사"} /></th>
+                <th className="px-4 py-2 text-left font-medium"><SheetText value={"스케줄"} /></th>
+                <th className="px-4 py-2 text-left font-medium"><SheetText value={"시작"} /></th>
+                <th className="px-4 py-2 text-left font-medium"><SheetText value={"종료"} /></th>
                 {showActionCol ? <th className="px-2 py-2" /> : null}
               </tr>
             </thead>
@@ -246,7 +248,7 @@ function Section({
               {rows.map((r) => (
                 <tr key={r.enrollmentId} className="hover:bg-bg-soft/40">
                   <td className="px-4 py-2.5">
-                    <Pill color={subjects.colorOf(r.subject)}>{subjects.labelOf(r.subject)}</Pill>
+                    <Pill color={subjects.colorOf(r.subject)}><SheetText value={subjects.labelOf(r.subject)} /></Pill>
                   </td>
                   {/* 수업명은 길면 **잘라내고 hover 툴팁**으로 보여준다(원장 2026-07-23) — 반 이름이 길어지면
                       (특강·병합반) 표가 옆으로 밀려 다른 열이 화면 밖으로 나갔다. `title`이 이미 전체 이름을
@@ -259,7 +261,7 @@ function Section({
                       title={r.className}
                       className="hover:text-primary block overflow-hidden text-ellipsis whitespace-nowrap hover:underline"
                     >
-                      {r.className}
+                      <SheetClassName value={r.className} />
                     </WindowLink>
                   </td>
                   {/* 🔴 **글자는 이름만**(원장 2026-09-07 *"괄호 추정 표기 제거해 그냥 이름만"*). 종전엔 그 꼬리표를
@@ -306,9 +308,9 @@ function Section({
                       <span className="text-amber num font-medium">~{enrollmentLastDate(r.endDate, r.isTransferred)}</span>
                     ) : (
                       /* 재원중 = positive(green) — 학생 상태 배지와 같은 뜻·같은 색. */
-                      <span className="text-green font-medium">재원중</span>
+                      <span className="text-green font-medium"><SheetText value={"재원중"} /></span>
                     )}
-                    {r.onHold ? <span className="text-amber ml-1">(휴원)</span> : null}
+                    {r.onHold ? <span className="text-amber ml-1"><SheetText value={"(휴원)"} /></span> : null}
                   </td>
                   {showActionCol ? (
                     <td className="px-2 py-2.5 text-right">
@@ -358,8 +360,7 @@ function ScheduleCell({ schedule }: { schedule: StudentClassRow["schedule"] }) {
   if (schedule.length === 0) {
     return (
       <span className="text-text-faint inline-flex items-center gap-1 text-xs italic">
-        <CalendarDays className="size-3" /> 시간 미정
-      </span>
+        <CalendarDays className="size-3" /> <SheetText value={"시간 미정"} /></span>
     );
   }
   return (

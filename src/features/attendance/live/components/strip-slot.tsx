@@ -12,8 +12,10 @@ import Link from "next/link";
 import { setAttendanceBulk } from "@/features/attendance/server/actions";
 import { requestDeskConfirm } from "@/features/attendance/live/server/actions";
 import { busCellsFromBulk, publishAttendanceApplied } from "@/features/attendance/live/attendance-applied-bus";
-// 강사뷰 화면 언어(2026-09-03) — 반 이름·학생 이름·시각은 데이터라 번역 대상이 아니다.
-import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+import { useSheetFeedback, useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+import { classNameFor } from "@/features/teacher-view/class-name";
+import { studentDisplayName } from "@/features/teacher-view/student-name";
+import { sheetUiText } from "@/features/teacher-view/interface-text";
 
 export function StripSlot({
   date,
@@ -23,7 +25,7 @@ export function StripSlot({
   saveSlot,
   periodLabel,
   pendingIds,
-  pendingNames,
+  pendingStudents,
   deskRequested,
 }: {
   date: string;
@@ -34,12 +36,16 @@ export function StripSlot({
   saveSlot: string | null;
   periodLabel: string | null;
   pendingIds: string[];
-  pendingNames: string[];
+  pendingStudents: { name: string; englishName: string | null }[];
   /** 이 (반·저장축)에 이미 '데스크 확인 요청'을 보냈는가 — 표식은 서버(dedup 원장)가 진실. */
   deskRequested: boolean;
 }) {
   const t = useSheetT();
   const tf = useSheetTf();
+  const lang = useSheetLang();
+  const feedback = useSheetFeedback();
+  const shownClass = classNameFor(className, lang);
+  const pendingNames = pendingStudents.map((student) => studentDisplayName(student.name, student.englishName, lang));
   const router = useRouter();
   const [busy, startTransition] = useTransition();
   const [done, setDone] = useState(false);
@@ -61,7 +67,7 @@ export function StripSlot({
         .then((res) => {
           if ("error" in res) {
             setDone(false);
-            setError(res.error);
+            setError(feedback(res.error));
             return;
           }
           // 같은 문서 아래에 열려 있는 화면(원스크린 로스터·ECS 오늘 보드/주간 시트)에 방금 기록한 칸을
@@ -99,7 +105,7 @@ export function StripSlot({
         .then((res) => {
           if ("error" in res) {
             setAsked(deskRequested);
-            setError(res.error);
+            setError(feedback(res.error));
             return;
           }
           router.refresh();
@@ -118,13 +124,13 @@ export function StripSlot({
     // 버튼 3개만큼 커져 스트립이 화면을 먹는다. 이름·시각·명단·버튼을 한 줄에 눕힌다. 한 줄이 실제로
     // 성립하는 폭은 부모 그리드가 보장한다(today-strip auto-fill minmax 34rem). 그래도 넘치면(아주 긴
     // 반 이름 등) flex-wrap이 뒤쪽 조각부터 다음 줄로 내린다(이름·명단은 truncate + 전체는 title).
-    <div className="border-line bg-surface flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border px-2.5 py-1.5">
-      <p className="min-w-0 truncate text-sm font-bold" title={className}>
-        {className}
+    <div className="border-line bg-card flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border px-2.5 py-1.5">
+      <p className="min-w-0 truncate text-sm font-bold" title={shownClass}>
+        {shownClass}
       </p>
       {/* 🔴 수가 든 문구는 **문장 전체**를 사전에서 받는다(`미입력 4명` ↔ `4 not marked` — 어순이 반대). */}
       <p className="text-text-dim num shrink-0 text-xs">
-        {periodLabel ? `${periodLabel} · ` : ""}
+        {periodLabel ? `${sheetUiText(lang, periodLabel)} · ` : ""}
         {tf("strip.slotMeta", { time: slotStart, n: pendingIds.length })}
       </p>
       {/* 명단은 남는 공간만 쓴다(basis 0) — 좁으면 먼저 줄어들되 최소 폭은 지켜 버튼을 다음 줄로 민다. */}

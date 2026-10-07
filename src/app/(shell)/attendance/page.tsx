@@ -866,7 +866,7 @@ export default async function AttendancePage({
             }
           />
         ) : null}
-        {showUnitsMaster ? <UnitsMasterButton month={month} /> : null}
+        {showUnitsMaster ? <UnitsMasterButton month={month} subject={effectiveSubject} /> : null}
         {canIntakeAbsence ? <AbsenceIntakeButton today={kstToday()} /> : null}
         {canOpenPayslip && effectiveTeacher ? (
           <PayslipWindowButton teacherId={effectiveTeacher} period={month} subjectFiltered={!!effectiveSubject} />

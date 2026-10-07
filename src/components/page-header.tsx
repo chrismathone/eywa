@@ -3,6 +3,7 @@ import { MenuPageLead } from "@/features/owner/menu-page-title";
 import { PageMaximizeButton } from "@/components/page-maximize/page-maximize-button";
 import { HeaderSeparator, PageHeaderLead } from "./page-header-lead";
 import { pageHeaderEyebrow } from "@/features/owner/page-eyebrow";
+import { SheetText } from "@/features/teacher-view/interface-label";
 
 /**
  * PageHeader — Editorial 문법 ①의 단일 소스. **한 줄**: `eyebrow - 제목 - 설명 ………… [actions] [화면 최대화]`.
@@ -80,11 +81,11 @@ export function PageHeader({
               }`}
             >
               <HeaderSeparator />
-              <div className="text-text-dim min-w-0 text-sm font-medium compact-chrome:font-normal">{description}</div>
+              <div className="text-text-dim min-w-0 text-sm font-medium compact-chrome:font-normal">{typeof description === "string" ? <SheetText value={description} /> : description}</div>
             </div>
           ) : null}
           {embedLabel ? (
-            <div className="text-text-dim hidden text-sm compact-chrome:block">{embedLabel}</div>
+            <div className="text-text-dim hidden text-sm compact-chrome:block">{typeof embedLabel === "string" ? <SheetText value={embedLabel} /> : embedLabel}</div>
           ) : null}
         </div>
         {/* 임베드에선 shrink/wrap 허용 — actions로 들어온 툴바(문서 검색 등)의 내부 flex-wrap이
