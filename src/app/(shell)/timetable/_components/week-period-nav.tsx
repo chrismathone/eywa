@@ -1,5 +1,8 @@
 "use client";
+import { useTimetableText } from "@/features/teacher-view/use-timetable-text";
 
+import { useSheetLang } from "@/features/teacher-view/lang-context";
+import { sheetWeekLabel } from "@/features/teacher-view/i18n";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { PeriodNav, type PeriodRelation } from "@/components/period-nav";
@@ -22,6 +25,7 @@ import { confirmTimetableNav } from "./timetable-unsaved";
  */
 export function WeekPeriodNav({
   label,
+  monday,
   mobileLabel,
   prevHref,
   nextHref,
@@ -29,25 +33,28 @@ export function WeekPeriodNav({
   relation,
 }: {
   label: string;
+  monday?: string;
   mobileLabel?: string;
   prevHref: string;
   nextHref: string;
   currentHref: string;
   relation: PeriodRelation;
 }) {
+  const tt = useTimetableText();
+  const lang = useSheetLang();
   const router = useRouter();
   const [pending, start] = useTransition();
   return (
     <PeriodNav
-      label={label}
+      label={monday ? sheetWeekLabel(monday, label, lang) : label}
       mobileLabel={mobileLabel}
       prevHref={prevHref}
       nextHref={nextHref}
       currentHref={currentHref}
       relation={relation}
-      prevAriaLabel="이전 주"
-      nextAriaLabel="다음 주"
-      currentTitle="눌러서 이번 주로"
+      prevAriaLabel={tt("이전 주")}
+      nextAriaLabel={tt("다음 주")}
+      currentTitle={tt("눌러서 이번 주로")}
       // 주 라벨의 최장은 달을 걸치는 주 "2026년 12월 5주차 (28일~1/3일)" — 그 폭으로 **고정**한다.
       labelWidth={WEEK_LABEL_W}
       // 🔴 가로챈 이동은 PeriodNav의 자체 transition을 안 태우므로 "가는 중"을 여기서 넘긴다 —

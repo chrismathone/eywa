@@ -1,5 +1,6 @@
 "use client";
 
+import { useSheetFeedback } from "@/features/teacher-view/lang-context";
 import { useId, useState, useTransition, type ReactNode } from "react";
 import {
   DndContext,
@@ -45,6 +46,7 @@ export function LandingOrderRows({
    */
   canReorder?: boolean;
 }) {
+  const feedback = useSheetFeedback();
   const t = useSheetT();
   const [ids, setIds] = useState<string[]>(() => items.map((i) => i.id));
   const [, startSave] = useTransition();
@@ -70,7 +72,7 @@ export function LandingOrderRows({
       const res = await setMyEcsLandingOrder(next);
       if (!res.ok) {
         setIds(before);
-        toast.error(res.error ?? t("today.order.saveFail"));
+        toast.error(feedback(res.error ?? t("today.order.saveFail")));
       }
     });
   };

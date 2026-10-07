@@ -66,7 +66,7 @@ export async function goalViewsForRows(rows: readonly {
 }[]): Promise<Record<string, GoalView>> {
   const keyed = rows.map((r) => ({ r, cell: recordCellKey(r) })).filter((x): x is { r: (typeof rows)[number]; cell: string } => x.cell != null);
   if (!keyed.length) return {};
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return {};
   // 줄에 붙는 목표는 **곁들임**이다 — 목표 조회가 실패해도 성적 표(매일 쓰는 화면)는 서야 한다. 목표 구역(getStudentGradeGoals)은 오류를 그대로 드러낸다.
   let goals: GoalRecord[];

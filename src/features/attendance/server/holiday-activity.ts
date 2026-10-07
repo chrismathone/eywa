@@ -62,7 +62,7 @@ export const getHolidayDayActivity = cache(async function getHolidayDayActivity(
   subject: string | null = null,
 ): Promise<ScopedHolidayActivity> {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return empty(date, false);
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return empty(date, false);
   const level = await accessLevelTenant(user.systemRole, "attendance");
   if (level === "none") return empty(date, false);

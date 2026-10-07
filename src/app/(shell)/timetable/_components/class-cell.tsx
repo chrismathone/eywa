@@ -1,4 +1,6 @@
 "use client";
+import { useTimetableDisplay } from "@/features/teacher-view/use-timetable-display";
+import { useTimetableText } from "@/features/teacher-view/use-timetable-text";
 import { monthDay } from "@/features/timetable/scheduled-import";
 
 import { useDraggable, useDroppable } from "@dnd-kit/core";
@@ -161,6 +163,8 @@ export function ClassCell({
   /** 수업 나누기(0351a) 줄 — 표시 전용(격자가 병합 슬롯에서 모아 넘긴다). */
   splits?: TimetableSplitLine[];
 }) {
+  const display = useTimetableDisplay();
+  const tt = useTimetableText();
   const { canDrag, incoming, classMoves } = useTimetableEdit();
   const subjects = useSubjectMaps();
   const colorMode = useTimetableColorMode();
@@ -316,7 +320,7 @@ export function ClassCell({
             >
               <div className="flex items-baseline justify-between gap-1.5">
                 <span className="min-w-0 overflow-hidden whitespace-nowrap text-clip text-sm font-bold">
-                  {slot.className}
+                  {display.className(slot.className)}
                   {/* 반 블록을 옮겨 둔 상태 — 어디로 갈지 셀 머리에 남긴다(저장 전엔 화면이 유일한 근거다). */}
                   {classMove ? (
                     <span className="ml-1 text-xs font-bold opacity-90">
@@ -333,7 +337,7 @@ export function ClassCell({
                 </span>
                 {/* 반교시(1행)면 아래 줄이 없으니 강의실을 이름과 같은 줄에 붙인다(정보 손실 방지). */}
                 {subSlot !== "full" && slot.classroomName ? (
-                  <span className="shrink-0 whitespace-nowrap text-xs opacity-75">{slot.classroomName}</span>
+                  <span className="shrink-0 whitespace-nowrap text-xs opacity-75">{display.room(slot.classroomName ?? "")}</span>
                 ) : null}
                 <span className="num shrink-0 text-xs opacity-70">{active.length}</span>
               </div>
@@ -418,8 +422,7 @@ export function ClassCell({
                               )
                             ) : (
                               <div className="text-text-faint hidden min-h-[22px] items-center justify-center text-xs [.tt-dragging-student_&]:flex">
-                                여기로
-                              </div>
+                                {tt("여기로")}</div>
                             )}
                           </>
                         );
@@ -454,7 +457,7 @@ export function ClassCell({
               {incomingHere.length > 0 ? (
                 <div className="divide-line/40 border-primary/40 shrink-0 divide-y border-t border-dashed">
                   <div className="bg-primary-soft/50 text-primary flex items-center justify-between px-2 py-px text-xs font-bold tracking-wide">
-                    <span>반이동 예정</span>
+                    <span>{tt("반이동 예정")}</span>
                     <span className="num">{incomingHere.length}</span>
                   </div>
                   {incomingHere.map((s) => {
@@ -509,7 +512,7 @@ export function ClassCell({
                   cap={SECTION_CAP}
                   draggable={false}
                   tone={() => holdTone(colorMode)}
-                  label="대기"
+                  label={tt("대기")}
                   labelTone="bg-bg-soft text-text-faint"
                 />
               </div>
@@ -529,7 +532,7 @@ export function ClassCell({
                   cap={SECTION_CAP}
                   draggable={false}
                   tone={() => withdrawnTone(colorMode)}
-                  label="퇴원"
+                  label={tt("퇴원")}
                   labelTone="bg-bg-soft text-text-faint"
                 />
               </div>

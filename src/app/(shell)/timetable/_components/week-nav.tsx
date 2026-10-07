@@ -32,6 +32,7 @@ export function WeekNav({
   return (
     <span data-help="tt-week" className="inline-flex">
     <WeekPeriodNav
+      monday={currentWeek}
       label={weekLabel(currentWeek)}
       mobileLabel={compactWeekLabel(currentWeek)}
       prevHref={hrefForWeek(addWeeks(currentWeek, -1))}

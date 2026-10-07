@@ -24,7 +24,7 @@ export async function loadClassroomPreview(): Promise<ClassroomSnapshot> {
     fetchAllPaged<{ id: string; name: string; capacity: number | null; archived_at: string | null }>((from, to) =>
       db.from("classrooms").select("id,name,capacity,archived_at").order("name").order("id").range(from, to)),
     getTodaySchedule({ includeStudentIds: true }),
-    effectiveTeacherScope(),
+    effectiveTeacherScope({ includeScheduled: true }),
     getTenantSettings(),
     effectiveTeacherId(),
     attendanceAllowed ? fetchAllPaged<PresenceRecord>((from, to) => db.from("attendance_records")

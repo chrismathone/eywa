@@ -32,7 +32,7 @@ import { TeacherNamesProvider } from "@/features/teacher-view/teacher-names-cont
 import { EditPresenceProvider } from "@/features/presence/edit-presence";
 import { getUserPermMatrix } from "@/lib/auth/perm-matrix";
 import { getShellView, canUseTeacherView, canUseOtherTeacherView, isFullShellRole, effectiveTeacherScope, viewAsTeacher } from "@/lib/auth/view-mode";
-import { ViewAsChip } from "@/components/other-teacher-view";
+import { ViewAsChip, TeacherPeerViewSwitcher } from "@/components/other-teacher-view";
 import { teacherViewHome } from "@/lib/auth/teacher-home";
 import { ecsAssistantClassIds } from "@/features/class-sheets/server/access";
 import { canAccess, menuKeyForPath } from "@/lib/permissions";
@@ -120,7 +120,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
       <EmbedProvider embed>
         <TeacherNamesProvider names={await getTeacherEnglishNames()}>
         <SheetLangProvider lang={embedLang}>
-        <EditPresenceProvider trackDisabled={!!viewAs} user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels} jobTitles={settings.operations.jobTitles} jobTitlesByDepartment={settings.operations.jobTitlesByDepartment} disabledModules={settings.modules.disabled} licenses={await licensesPromise}>
+        <EditPresenceProvider trackDisabled={viewAs?.access === "readonly"} user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels} jobTitles={settings.operations.jobTitles} jobTitlesByDepartment={settings.operations.jobTitlesByDepartment} disabledModules={settings.modules.disabled} licenses={await licensesPromise}>
           {/* .embed-main = 창 컴팩트 마커 — PageHeader 등이 CSS 변형([.embed-main_&])으로 소비. soft nav에서
               layout(<main>)은 재렌더되지 않아 창 안 내비가 embed 파라미터를 흘려도 컴팩트가 유지된다(요청 단위
               x-embed로 판정하면 내비마다 풀 헤더로 플립 — 적대 리뷰 major). */}
@@ -236,7 +236,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   //   (teacher=scoped)·겸직 관리자(full)는 이 조건이 항상 참이라 기존 동작 불변.
   const ecsForTeacher =
     view === "teacher"
-      ? ((((await effectiveTeacherScope())?.subjects.includes("english") ?? true) ||
+      ? ((((await effectiveTeacherScope({ includeScheduled: true }))?.subjects.includes("english") ?? true) ||
           (await ecsAssistantClassIds()).length > 0) &&
         canAccess(user.systemRole, "ecs", permMatrix))
       : false;
@@ -247,7 +247,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   // 위 ecsForTeacher와 **같은 캐시**(effectiveTeacherScope)를 재사용하므로 추가 쿼리 0.
   const mcsForTeacher =
     view === "teacher"
-      ? (((await effectiveTeacherScope())?.subjects.includes("math") ?? true) &&
+      ? (((await effectiveTeacherScope({ includeScheduled: true }))?.subjects.includes("math") ?? true) &&
         canAccess(user.systemRole, "mcs", permMatrix))
       : false;
 
@@ -339,7 +339,8 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           <div className="flex items-center gap-1.5">
             {/* 겸직이면 '내 메뉴' 드롭다운 하단에 '관리자뷰로 전환'을 넣는다(헤더 별도 버튼 X). 실 강사는 미노출. */}
             {/* '다른 강사 뷰' 배지 — 누구의 화면인지 상시 표시 + 누르면 바로 관리자뷰(열람 종료, 원장 2026-09-29). */}
-            {viewAs ? <ViewAsChip name={viewAs.displayName} lang={teacherLang} /> : null}
+            {viewAs ? <ViewAsChip name={viewAs.displayName} lang={teacherLang} readonly={viewAs.access === "readonly"} /> : null}
+            {view === "teacher" && !viewAs && await canUseOtherTeacherView() ? <TeacherPeerViewSwitcher /> : null}
             {view === "teacher" ? (
               <TeacherMenu
                 menus={teacherMenus}
@@ -368,7 +369,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
             찍으므로 본문 PageHeader의 eyebrow·21px 제목은 중복이다 — 강사 화면은 세로 1px이 곧 데이터다. */}
         {/* 강사 미니셸 — 원장이 "빠듯하다"고 짚은 화면(영어 강사 ECS 시트)이 여기다. */}
         <main className="compact-main flex-1 overflow-auto px-3 pt-4 pb-8 lg:px-6 lg:pt-5 lg:pb-10 [scrollbar-gutter:stable]">
-          <EditPresenceProvider trackDisabled={!!viewAs} user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels} jobTitles={settings.operations.jobTitles} jobTitlesByDepartment={settings.operations.jobTitlesByDepartment} disabledModules={settings.modules.disabled} licenses={await licensesPromise}>
+          <EditPresenceProvider trackDisabled={viewAs?.access === "readonly"} user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels} jobTitles={settings.operations.jobTitles} jobTitlesByDepartment={settings.operations.jobTitlesByDepartment} disabledModules={settings.modules.disabled} licenses={await licensesPromise}>
             <ScreenHelpOverlay />
             <Suspense fallback={null}>
               <UsageTracker />
@@ -482,7 +483,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           <Suspense fallback={null}>
             <UsageTracker />
           </Suspense>
-          <EditPresenceProvider trackDisabled={!!viewAs} user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}>
+          <EditPresenceProvider trackDisabled={viewAs?.access === "readonly"} user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}>
             {/* 배경(운영실) F1 은 창(z-40) 아래 — 창을 보고 있는데 대시보드 설명이 덮이지 않게. */}
             <ScreenHelpOverlay beneathWindows />
             {/* 이전 화면 유지 방식: 화면이 바탕을 덮는 동안 바탕 본문을 잠재운다(효과·폴링 정지 — keepalive-main-gate.tsx). 다른 방식은 그대로. */}

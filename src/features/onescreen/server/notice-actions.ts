@@ -98,7 +98,7 @@ function senderTeachers(map: unknown, studentId: string): string[] {
  * 발송 스위치 OFF면 dry-run(적재 안 함). 게시는 연동 PC 워커가 classnote_notices 큐를 폴링해 처리.
  */
 export async function sendOnescreenNotice(input: OnescreenNoticeInput): Promise<OnescreenNoticeResult> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   // 🔴 '다른 강사 뷰'(열람 전용) 차단 — 아래 게이트는 effectiveTeacherId(=열람 대상)가 있으면 통과라,
   //    이 가드가 없으면 관리자가 **그 강사 명의·스코프로** 학부모 공지를 내보낼 수 있다(외부 발신).
@@ -332,7 +332,7 @@ export async function listMyNoticeStudents(): Promise<{
   scope?: "teacher" | "tenant";
   error?: string;
 }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   const supabase = await createClient();
   const settings = await getTenantSettings();
@@ -418,7 +418,7 @@ export type OnescreenNoticeRow = {
 
 /** 내가 보낸 공지 이력(20건) — 대기건 수정/삭제·게시건 게시취소 UI의 소스. created_by=본인만. */
 export async function listMyOnescreenNotices(): Promise<{ ok: boolean; rows?: OnescreenNoticeRow[]; error?: string }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -474,7 +474,7 @@ async function postedNoticeActor(
  * ⚠️ 캡처 id 없는 구버전 발송분은 회수 불가(워커가 지울 대상 정보 없음) — 명확 안내.
  */
 export async function cancelOnescreenNotice(noticeId: string): Promise<MutateResult> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   if (!classnoteModuleOn(await getTenantSettings())) return { ok: false, error: "사용할 수 없는 기능입니다" };
   const supabase = await createClient();
@@ -528,7 +528,7 @@ export async function cancelOnescreenNotice(noticeId: string): Promise<MutateRes
  * 개별 내용(targets[].body)은 스트립해 전원 새 공통으로 통일(일괄 정정). 캡처 id 없는 구버전은 앱에서 직접 수정 안내.
  */
 export async function editPostedNotice(noticeId: string, newBody: string): Promise<MutateResult> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   if (!classnoteModuleOn(await getTenantSettings())) return { ok: false, error: "사용할 수 없는 기능입니다" };
   const body = (newBody ?? "").trim();
@@ -612,7 +612,7 @@ async function explainZeroRows(
 
 /** 대기 공지 공통 내용 수정 — status='queued' + 본인만. 수정 시 개별 내용(targets[].body)은 스트립해 전원 공통으로 되돌림(일괄 정정). */
 export async function editQueuedNotice(noticeId: string, newBody: string): Promise<MutateResult> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   if (!classnoteModuleOn(await getTenantSettings())) return { ok: false, error: "사용할 수 없는 기능입니다" };
   const body = (newBody ?? "").trim();
@@ -660,7 +660,7 @@ export async function editQueuedNotice(noticeId: string, newBody: string): Promi
 
 /** 대기 공지 삭제 — status='queued' + 본인만(게시 전이라 학부모 미도달). */
 export async function deleteQueuedNotice(noticeId: string): Promise<MutateResult> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   if (!classnoteModuleOn(await getTenantSettings())) return { ok: false, error: "사용할 수 없는 기능입니다" };
   const supabase = await createClient();

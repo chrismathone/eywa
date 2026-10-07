@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { SHEET_LANGS, SHEET_LANG_LABEL, sheetT, type SheetLang } from "./i18n";
 import { useSheetLang } from "./lang-context";
+import { sheetFeedback } from "./feedback";
 import { setMyTeacherLang } from "./server/actions";
 
 /**
@@ -18,8 +19,7 @@ import { setMyTeacherLang } from "./server/actions";
  * 🔴 **전원에게 보인다** — 기본값만 이름으로 갈린다([`defaultSheetLangFor`](./i18n.ts)).
  *    "원어민에게만 보이기"로 만들면, 이름 휴리스틱이 틀린 사람(한글로 등록된 원어민)은 **영어로
  *    되돌릴 수단이 아예 없다**. 표시 판정이 곧 능력 판정이 되면 안 된다.
- * 🔴 **언어 이름은 번역하지 않는다**(`한국어`/`English`) — 지금 화면을 못 읽는 사람이 자기 언어를
- *    글자 모양으로 찾을 수 있어야 한다.
+ * 언어 버튼은 현재 언어에 맞춘 짧은 이름을 쓴다: 한글/영어 · Kor/En.
  *
  * ⚠️ **메뉴 항목(`DropdownMenuItem`)이 아니라 팝업의 평범한 자식**으로 놓는다 — 항목 안에 버튼 둘을
  *    넣으면 클릭·키보드를 서로 뺏고 스크린리더에 중첩 인터랙티브로 읽힌다(teacher-menu.tsx 주석).
@@ -42,7 +42,7 @@ export function TeacherLangSwitch() {
         const r = await setMyTeacherLang(next);
         if (!r.ok) {
           // 실패 문구는 **바꾸려던 언어**로 — 영어를 누른 사람에게 한글 오류를 띄우면 두 번 막힌다.
-          toast.error(r.error ?? sheetT(next, "lang.saveFailed"));
+          toast.error(sheetFeedback(next, r.error ?? sheetT(next, "lang.saveFailed")));
           return;
         }
         router.refresh();
@@ -73,12 +73,12 @@ export function TeacherLangSwitch() {
             aria-pressed={lang === l}
             // ⚠️ `lang` 속성을 함께 준다 — 한글 폰트 스택 안에서 `English`가 자간이 어긋나 보이는 것을 막고,
             //    스크린리더가 각 칸을 그 언어로 읽는다.
-            lang={l}
+            lang={lang}
             className={`cursor-pointer rounded-md px-2 py-0.5 text-xs font-medium transition disabled:cursor-wait disabled:opacity-60 ${
               lang === l ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
             }`}
           >
-            {SHEET_LANG_LABEL[l]}
+            {SHEET_LANG_LABEL[lang][l]}
           </button>
         ))}
       </span>

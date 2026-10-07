@@ -22,7 +22,7 @@ export type CurrentUser = {
 // public.users에서** 읽어 app_metadata 드리프트 위험 0(삭제된 유저는 SELECT null → 로그아웃 처리됨).
 // ⚠️ 트레이드오프: 로컬검증이라 서버측 강제 로그아웃/ban이 access token 만료 전까지 지연 — 토큰 만료 단축으로 완화.
 // (속도 이득은 프로젝트가 비대칭 서명키일 때만 — Dashboard › Auth › JWT Keys. 대칭키면 무해한 no-op.)
-export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
+const getAuthenticatedUser = cache(async (): Promise<CurrentUser | null> => {
   const supabase = await createClient();
   // 빠른 경로: 로컬 JWT 검증(getUser의 네트워크 왕복 제거).
   const { data: claimsData, error: claimsError } = await supabase.auth.getClaims();
@@ -63,4 +63,12 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
     jobTitle: data.job_title,
     systemRole: data.system_role as SystemRole,
   };
+});
+
+/** Domain actions can opt into the validated teacher view; auth, settings and audit use the real actor. */
+export const getCurrentUser = cache(async (options?: { teacherView: boolean }): Promise<CurrentUser | null> => {
+  const user = await getAuthenticatedUser();
+  if (!user || !options?.teacherView) return user;
+  const { viewAsTeacher } = await import("./view-as");
+  return (await viewAsTeacher()) ?? user;
 });

@@ -8,27 +8,28 @@
 // 헤더는 **본문 그리드와 분리된 sticky 밴드**다. 헤더 카드 자체를 sticky로 두면 카드가 둥글고 열 사이에
 // 간격이 있어 **스크롤되는 본문이 모서리·틈으로 비쳐** 겹쳐 보인다(원장 제보 2026-07-29). 불투명 배경
 // 밴드가 전 폭을 덮으면 본문은 그 뒤로 완전히 숨는다(gotcha #74 "불투명 base + 밴드 레이어"와 같은 처방).
+import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+import { sheetDowLabel } from "@/features/teacher-view/i18n";
 import { memo, useMemo } from "react";
 import type { ClassSheetWeekData } from "../server/queries";
 import type { GridDay } from "../lib/grid";
 import type { RosterGroupKey } from "../lib/roster-order";
 import type { SheetMark } from "../lib/roster-form";
 import { buildGridRows } from "../lib/grid-rows";
-import { SHEET_DAY_MAX_W, TODAY_PLAN_W } from "../lib/today-columns";
+import { SHEET_DAY_MAX_W, sheetPlanWidth } from "../lib/today-columns";
 import type { PlanLineDTO } from "../server/actions";
 import type { SheetHandlers } from "./sheet-client";
 import type { SheetSaveStore } from "./use-sheet-saves";
 import { PeriodBlock } from "./period-block";
 import { DayBulk } from "./day-bulk";
 
-const DOW_KO: Record<string, string> = { mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일" };
 // 요일 열의 **최소** 폭 = 오늘 면 교시 카드 폭과 같은 상수(today-columns 단일 소스) — 따로 적으면 두 화면이 갈린다.
 // 🔴 2026-09-10부터 **최소**다(그전엔 고정). 원장 *"우측 공간 많으니까 적절히 열너비 조정"* — 요일이
 //    두셋뿐인 반(실측 43반 중 2일 10 · 3일 30)은 창 오른쪽이 통째로 비어 있었는데, 정작 카드 안에서는
 //    특이사항이 잔여 폭을 못 받아 좁았다. 이제 남는 폭을 요일들이 고르게 나눠 갖는다.
 // ⚠️ **최소값은 그대로 둔다** — 2026-08-17의 "3열이 한 페이지에"(3×420+24 = 1284 ≤ 가용 1330)가 이 값에
 //    걸려 있다. 넓히는 쪽으로만 움직이므로 그 결정은 어떤 폭에서도 깨지지 않는다.
-const COL_W = TODAY_PLAN_W;
+
 const GAP_X = 12; // gap-x-3 — 밴드가 열 사이 틈까지 덮어야 본문이 안 비친다
 // 교시 행 사이 간격(옛 gap-y-2). row-gap이 아니라 **행마다 붙는 전용 트랙**이다 — 아래 주석 참조.
 const GAP_Y = 8;
@@ -63,6 +64,9 @@ export const SheetGrid = memo(function SheetGrid({
   /** `${date}|${HH:MM}` → Shouting 체크(EiE 전용). 저장 반영이 즉시 보이도록 시트가 들고 있는 live 맵. */
   shouting: Record<string, boolean>;
 }) {
+  const lang = useSheetLang();
+  const t = useSheetT();
+  const tf = useSheetTf();
   const rows = useMemo(() => buildGridRows(days), [days]);
   // 🔴 `minmax(0, 1fr)` — **0**이 최소인 이유: `1fr`(=`minmax(auto, 1fr)`)로 두면 카드 안 내용의
   //    min-content가 트랙을 밀어 올려 폭이 내용 따라 들쭉날쭉해진다. 실제 최소는 아래 `minWidth`가
@@ -71,7 +75,7 @@ export const SheetGrid = memo(function SheetGrid({
   const gaps = Math.max(0, days.length - 1) * GAP_X;
   // 최소 = 종전 고정 폭 그대로(3열 한 페이지 유지) · 최대 = 요일이 한둘뿐인 반이 화면을 통째로
   // 차지하지 않게(카드 한 장이 두 장 몫을 넘지 않는다).
-  const minWidth = days.length * COL_W + gaps;
+  const minWidth = days.length * sheetPlanWidth(lang) + gaps;
   const maxWidth = days.length * SHEET_DAY_MAX_W + gaps;
 
   if (days.length === 0) {
@@ -114,7 +118,7 @@ export const SheetGrid = memo(function SheetGrid({
                   isToday ? "bg-primary" : "bg-foreground"
                 }`}
               >
-                {DOW_KO[day.dow]}
+                {sheetDowLabel(day.dow, lang)}
               </span>
               {/* 휴일 날짜·공휴일명 = 출석부 휴일 잉크(`text-att-holiday-ink`) — 공용 `text-danger`는 휴일 회색
                   (`--att-weekend`) 위에서 대비 3.75로 WCAG 4.5를 깼다(2026-09-14). */}
@@ -123,7 +127,7 @@ export const SheetGrid = memo(function SheetGrid({
               </span>
               {isToday ? (
                 <span className="border-primary text-primary rounded-full border px-1.5 py-0.5 text-xs font-bold">
-                  오늘
+                  {t("toolbar.today")}
                 </span>
               ) : null}
               {/* 공휴일명 — 이름이 곧 설명이라 본문에 적는다(툴팁은 모바일에서 없는 것과 같다).
@@ -131,7 +135,7 @@ export const SheetGrid = memo(function SheetGrid({
               {holiday ? (
                 <span
                   className="text-att-holiday-ink min-w-0 shrink truncate text-xs font-bold"
-                  title={`${holiday} — 휴일이지만 수업했다면 그대로 쓰실 수 있습니다`}
+                  title={tf("plan.holidayHint", { holiday })}
                 >
                   {holiday}
                 </span>

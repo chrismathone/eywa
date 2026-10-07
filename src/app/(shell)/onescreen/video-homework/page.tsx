@@ -58,7 +58,7 @@ export default async function TeacherVideoHomeworkPage({ searchParams }: {
     getTenantSettings(),
   ]);
   // 체크 = 서버 판정과 같은 조건(강사 쓰기 또는 수업보고서 전체 권한 — 겸직) · '다른 강사 뷰'는 열람 전용.
-  const canEdit = !viewAs && (canTeacherWrite || lessonReportsLevel === "full");
+  const canEdit = viewAs?.access !== "readonly" && (canTeacherWrite || lessonReportsLevel === "full");
   const subjectLabels = buildSubjectMaps(settings.operations.subjects);
   // 줄 = 내가 낸 숙제가 있는 반 × 학생 — 그 줄의 숙제일은 **남이 낸 것까지 전부** 둔다(영상 짝을 관리자 화면과 같게 짓기 위해).
   const candidates = ledger.rows.filter((row) => ownPairs.has(ledgerPairKey(row))).map((row) => {

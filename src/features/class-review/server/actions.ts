@@ -38,7 +38,7 @@ import {
 export type ReviewActionState = { ok?: true; error?: string; notice?: string } | undefined;
 
 async function requireWrite() {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" as const };
   // '다른 강사 뷰'(열람 전용)는 쓰기 캡에도 걸리지만 사유가 "권한 없음"으로 뭉뚱그려진다 —
   // 그 화면은 남의 눈을 빌린 것뿐이라 정확한 문구로 돌려준다(원장 2026-08-19).
@@ -246,7 +246,7 @@ export async function setMyClassReviewFilter(
   filter: ClassReviewFilter,
 ): Promise<{ ok: boolean; error?: string }> {
   if (normalizeClassReviewFilter(filter) !== filter) return { ok: false, error: "잘못된 값입니다" };
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
 
   const admin = createAdminClient();

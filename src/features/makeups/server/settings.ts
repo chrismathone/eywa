@@ -11,7 +11,7 @@ import { parseCommandSuccess } from "../command-parse";
 
 /** Called by saveOwnerSection; SQL atomically checks transition and merges the section. */
 export async function configureMakeupSettings(input: unknown) {
-  const actor = await getCurrentUser();
+  const actor = await getCurrentUser({ teacherView: true });
   if (!actor) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(actor.systemRole, "owner")) ||
       (actor.systemRole !== "master" && !(await isCurrentUserSuperAdmin()))) {

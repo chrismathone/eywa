@@ -38,7 +38,7 @@ describe("탭 아이콘 그림 파일", () => {
  *   같은 그림을 쓸 수 없고, `public/icons`에 남는 그림 중 책 계열이 없다. 스티커가 생기면 이 줄을 지운다.
  */
 // edit = 원생목록의 영어이름 편집 권한. 독립 메뉴 없이 이름 칸 안에서만 쓰는 조작이다.
-const PENDING_GLYPH = new Set<string>(["bookText", "edit"]);
+const PENDING_GLYPH = new Set<string>(["bookText", "edit", "eye"]);
 
   it("메뉴가 쓰는 아이콘 이름은 전부 그림이 있다 — MENU_ICON + 허브 면 override", () => {
     const icons = readFileSync(join(SRC, "components", "icons", "aywa-icons.tsx"), "utf8");

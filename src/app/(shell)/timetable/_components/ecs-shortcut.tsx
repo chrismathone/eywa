@@ -1,3 +1,5 @@
+"use client";
+import { useTimetableText } from "@/features/teacher-view/use-timetable-text";
 // 시간표 → English Class Sheet 바로가기(영어 과목을 보고 있을 때만 렌더 — 조건 판정은 page.tsx).
 // WindowLink를 쓰는 이유: 이 앱은 메뉴=플로팅 창이라 최상위 프레임에서 router.push하면 배경만 바뀌어
 // 창에 가려 안 보인다(gotcha #86). WindowLink는 최상위에선 ecs 창(자기 크기 1400×760)을 열고,
@@ -7,12 +9,12 @@ import { Button } from "@/components/ui/button";
 import { WindowLink } from "@/components/workspace/window-link";
 
 export function EcsShortcut({ week }: { week: string }) {
+  const tt = useTimetableText();
   return (
     <Button
       variant="outline"
-      render={<WindowLink href={`/ecs?week=${week}`} title="영어 강사 시트" />}
+      render={<WindowLink href={`/ecs?week=${week}`} title={tt("영어 강사 시트")} />}
     >
-      ECS 바로가기
-    </Button>
+      {tt("ECS 바로가기")}</Button>
   );
 }

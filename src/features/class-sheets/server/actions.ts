@@ -869,7 +869,7 @@ export async function setMyEcsTodayOrder(visibleOrder: string[]): Promise<{ ok: 
   const readonlyErr = await readonlyTeacherViewError();
   if (readonlyErr) return { ok: false, error: readonlyErr };
   const next = normalizeTodayOrder(visibleOrder);
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   const admin = createAdminClient();
   const { data } = await admin.from("users").select("ui_prefs").eq("id", user.id).maybeSingle();
@@ -889,7 +889,7 @@ export async function setMyEcsLandingOrder(visibleOrder: string[]): Promise<{ ok
   const readonlyErr = await readonlyTeacherViewError();
   if (readonlyErr) return { ok: false, error: readonlyErr };
   const next = normalizeTodayOrder(visibleOrder);
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   const admin = createAdminClient();
   const { data } = await admin.from("users").select("ui_prefs").eq("id", user.id).maybeSingle();

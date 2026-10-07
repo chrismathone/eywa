@@ -80,7 +80,7 @@ export async function getConsultationStats(filters: ConsultationListFilters): Pr
  * (다른 상담사가 어제 상담한 학생을 재촉하면 거짓 할 일). 좁히는 건 학생 집합뿐 — 강사는 담당 학생, 사무실은 재원생 전체.
  */
 export async function getConsultationGap(): Promise<GapStats> {
-  const scope = await effectiveTeacherScope();
+  const scope = await effectiveTeacherScope({ includeScheduled: true });
   const today = kstToday();
   if (scope && scope.studentIds.length === 0) return { full: true, today, enrolled: 0, never: 0, d30: 0, d60: 0, d90: 0, top: [] };
   if (classSchemaWorthTrying()) {

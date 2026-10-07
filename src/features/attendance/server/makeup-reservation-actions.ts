@@ -65,7 +65,7 @@ export type MakeupPeriodOptionsResult =
  * 읽기 권한(출결 쓰기)만 본다 — 담당 반 판정은 예약 저장에서 한다(선택지 조회는 남의 정보가 아니다).
  */
 export async function getMakeupPeriodOptions(classId: string, date: string): Promise<MakeupPeriodOptionsResult> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "attendance"))) return { error: "출석 관리 권한이 없습니다" };
   if (!classId || !YMD.test(date)) return { error: "날짜를 고르세요" };
@@ -166,7 +166,7 @@ export async function reserveMakeup(input: {
   /** 강사 전체 보기의 주인 — 결석 칸 쓰기에 그대로 실린다(`setAttendanceCell` 규약). */
   scopeTeacherId?: string | null;
 }): Promise<ReserveMakeupResult> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "attendance"))) return { error: "출석 관리 권한이 없습니다" };
   const { studentId, classId, absenceDate, makeupDate } = input;
@@ -346,7 +346,7 @@ async function absenceCreatedByAnyReservation(
  * 못 지운다 — 보강일 칸을 지우면 되돌아온다.
  */
 export async function cancelMakeupReservation(input: { id: string }): Promise<CancelMakeupResult> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "attendance"))) return { error: "출석 관리 권한이 없습니다" };
   if (!input.id) return { error: "예약을 찾지 못했습니다" };

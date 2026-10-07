@@ -12,7 +12,7 @@ import { accessLevelTenant } from "@/lib/auth/perm-matrix";
  * ⚠️ '다른 강사 뷰'(열람 전용)는 `accessLevelTenant`가 중앙에서 readonly로 눌러 준다 — 여기서 또 보지 않는다.
  */
 export async function gradeWriteError(): Promise<string | null> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return "로그인이 필요합니다";
   const level = await accessLevelTenant(user.systemRole, "exams");
   if (level !== "full" && level !== "scoped") return "성적을 입력할 권한이 없습니다";

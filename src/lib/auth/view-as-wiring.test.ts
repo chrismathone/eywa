@@ -80,7 +80,7 @@ describe("'다른 강사 뷰'(열람 전용) 배선 가드", () => {
     // (shell) 레이아웃의 세 EditPresenceProvider(임베드·미니셸·풀셸) 전부에 걸려 있어야 한다 —
     // 한 곳이라도 빠지면 그 셸에서 연 화면이 대상 강사의 원스크린 '동시 열림' 경고에 뜬다.
     const layout = read("src", "app", "(shell)", "layout.tsx");
-    expect(layout.match(/trackDisabled=\{!!viewAs\}/g)?.length).toBe(3);
+    expect(layout.match(/trackDisabled=\{viewAs\?\.access === "readonly"\}/g)?.length).toBe(3);
   });
 
   it("원스크린 로스터 — 강사 축이 열람 대상(viewAsTeacher)을 따른다", () => {
@@ -115,7 +115,7 @@ describe("'다른 강사 뷰'(열람 전용) 배선 가드", () => {
     expect(read("src", "features", "onescreen", "components", "grid-row.tsx")).toContain(
       "gen.readonlyView || !isRowInputEditable",
     );
-    expect(read("src", "app", "(shell)", "onescreen", "page.tsx")).toContain("readonlyView={!!viewAs}");
+    expect(read("src", "app", "(shell)", "onescreen", "page.tsx")).toContain('readonlyView={viewAs?.access === "readonly"}');
   });
 
   it("감사 레지스트리 — 열람·토글 액션 키가 한글 라벨로 등록돼 있다", () => {

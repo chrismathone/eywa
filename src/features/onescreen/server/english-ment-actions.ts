@@ -45,7 +45,7 @@ async function generateOnce(
 }
 
 export async function generateEnglishMent(input: EnglishMentInput): Promise<EnglishMentResult> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   // '다른 강사 뷰'(열람 전용) — DB는 안 바꾸지만 AI 호출(비용)이라 열람에서 못 누르게 한다(수학 멘트와 같다).
   const roError = await readonlyTeacherViewError();

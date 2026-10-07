@@ -1,4 +1,5 @@
 "use client";
+import { useSheetLang } from "@/features/teacher-view/lang-context";
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition, type CSSProperties, type ReactNode } from "react";
@@ -32,10 +33,10 @@ export type PeriodRelation = "past" | "current" | "future";
 
 const RELATION_BADGE: Record<
   Exclude<PeriodRelation, "current">,
-  { label: string; tone: string }
+  { label: string; en: string; tone: string }
 > = {
-  past: { label: "과거 조회", tone: "bg-amber-soft text-amber" },
-  future: { label: "미래 조회", tone: "bg-blue-soft text-blue" },
+  past: { label: "과거 조회", en: "Past period", tone: "bg-amber-soft text-amber" },
+  future: { label: "미래 조회", en: "Future period", tone: "bg-blue-soft text-blue" },
 };
 
 export function PeriodNav({
@@ -99,6 +100,7 @@ export function PeriodNav({
   prevDisabled?: boolean;
   nextDisabled?: boolean;
 }) {
+  const lang = useSheetLang();
   const router = useRouter();
   const embed = useEmbed();
   const [pending, startTransition] = useTransition();
@@ -164,7 +166,7 @@ export function PeriodNav({
         <button
           type="button"
           className={cn(arrow, litPrev && !prevDisabled && lit)}
-          aria-label={prevAriaLabel ?? "이전"}
+          aria-label={prevAriaLabel ?? (lang === "en" ? "Previous" : "이전")}
           disabled={prevDisabled}
           onClick={() => go(prevHref)}
         >
@@ -190,7 +192,7 @@ export function PeriodNav({
             style={{ width: labelWidth }}
             aria-label={mobileLabel ? label : undefined}
             title={
-              isCurrent ? undefined : (currentTitle ?? "눌러서 이번 기간으로")
+              isCurrent ? undefined : (currentTitle ?? (lang === "en" ? "Go to the current period" : "눌러서 이번 기간으로"))
             }
             onClick={() => go(currentHref)}
           >
@@ -200,7 +202,7 @@ export function PeriodNav({
         <button
           type="button"
           className={cn(arrow, litNext && !nextDisabled && lit)}
-          aria-label={nextAriaLabel ?? "다음"}
+          aria-label={nextAriaLabel ?? (lang === "en" ? "Next" : "다음")}
           disabled={nextDisabled}
           onClick={() => go(nextHref)}
         >
@@ -211,7 +213,7 @@ export function PeriodNav({
         <span
           className={`shrink-0 rounded-full px-1.5 py-0.5 text-xs font-bold whitespace-nowrap ${badge.tone}`}
         >
-          {badge.label}
+          {lang === "en" ? badge.en : badge.label}
         </span>
       ) : null}
     </div>

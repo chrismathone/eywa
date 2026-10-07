@@ -2,6 +2,7 @@
 
 // 지난주 복사 배너 — 빈 주에만 노출. 확인 다이얼로그에 복사 범위·skip 정책 명시.
 // RPC(ecs_copy_week)가 원자 처리: 의미 행 있는 대상 교시 통째 skip, 대상 주 스케줄 밖 슬롯은 unmapped 보고.
+import { useSheetFeedback } from "@/features/teacher-view/lang-context";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -17,6 +18,7 @@ export function CopyPrevWeek({
   weekMonday: string;
   weekLabelText: string;
 }) {
+  const feedback = useSheetFeedback();
   const router = useRouter();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [busy, setBusy] = useState(false);
@@ -27,7 +29,7 @@ export function CopyPrevWeek({
     setBusy(false);
     dialogRef.current?.close();
     if (!r.ok) {
-      toast.error(r.error);
+      toast.error(feedback(r.error));
       return;
     }
     const parts = [`계획 ${r.copied}줄 · 주간 목표 ${r.goalsCopied}건 복사`];

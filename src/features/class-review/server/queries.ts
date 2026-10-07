@@ -168,7 +168,7 @@ export function myScoreSlot(
 }
 
 async function requireRead() {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user || !(await canAccessTenant(user.systemRole, "class_review"))) {
     throw new Error("직원 평가를 열람할 권한이 없습니다");
   }
@@ -197,7 +197,7 @@ export type ReviewViewer = {
 };
 
 export const getReviewViewer = cache(async (): Promise<ReviewViewer> => {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   // 비로그인은 requireRead가 먼저 막는다 — 여기 값은 안전한 최소치.
   if (!user) return { id: "", role: "teacher", selfOnly: true, viewAs: false };
   const target = await viewAsTeacher();

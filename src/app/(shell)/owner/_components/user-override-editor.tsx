@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { PERMISSION_ACCESS_CYCLE as CYCLE } from "@/features/owner/permission-edit";
+import { permissionAccessOptions } from "@/features/owner/permission-edit";
 import type { PermissionRowGroup } from "@/features/owner/permission-rows";
 import { isPermissionLocked, isRoleOnlyMenu, MENU_LABEL, type Access, type MenuKey, type SystemRole, type UserPermissionOverride } from "@/lib/permissions";
 import { SettingsCard } from "./settings-card";
@@ -63,7 +63,7 @@ export function UserOverrideEditor({ overrides, hiddenUserIds, staffOptions, nam
             <option value="">직원 선택</option>
             {staff.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
-          <select aria-label="메뉴 선택" value={pickedMenu} onChange={(e) => setWantedMenu(e.target.value as MenuKey)} className={select}>
+          <select aria-label="메뉴 선택" value={pickedMenu} onChange={(e) => { const menu = e.target.value as MenuKey; setWantedMenu(menu); if (!permissionAccessOptions(menu).includes(pickedAccess)) setPickedAccess("readonly"); }} className={select}>
             {menuGroups.map((group) => (
               <optgroup key={group.id} label={group.label}>
                 {group.rows.map((row) => <option key={row.menu} value={row.menu}>{row.label}</option>)}
@@ -71,7 +71,7 @@ export function UserOverrideEditor({ overrides, hiddenUserIds, staffOptions, nam
             ))}
           </select>
           <select aria-label="접근 수준" value={pickedAccess} onChange={(e) => setPickedAccess(e.target.value as Access)} className={select}>
-            {CYCLE.map((access) => <option key={access} value={access}>{ACCESS_LABEL[access]}</option>)}
+            {permissionAccessOptions(pickedMenu).map((access) => <option key={access} value={access}>{ACCESS_LABEL[access]}</option>)}
           </select>
           <button type="button" onClick={add} disabled={blocked} className="border-border bg-card rounded border px-3 py-1.5 text-xs font-bold disabled:opacity-40">
             추가·변경
@@ -104,7 +104,7 @@ export function UserOverrideEditor({ overrides, hiddenUserIds, staffOptions, nam
                   className="border-border bg-card rounded border px-2 py-1 text-xs"
                 >
                   {/* 그 사람의 역할에서 잠긴 수준은 고를 수 없다(지금 값은 남긴다 — 사라지면 다른 값으로 보인다). */}
-                  {CYCLE.filter((access) => access === row.access || !role || !isPermissionLocked(row.menu, role, access)).map((access) => (
+                  {permissionAccessOptions(row.menu).filter((access) => access === row.access || !role || !isPermissionLocked(row.menu, role, access)).map((access) => (
                     <option key={access} value={access}>{ACCESS_LABEL[access]}</option>
                   ))}
                 </select>

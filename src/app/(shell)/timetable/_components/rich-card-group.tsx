@@ -1,13 +1,15 @@
 "use client";
+import { useTimetableDisplay } from "@/features/teacher-view/use-timetable-display";
+import { useTimetableText } from "@/features/teacher-view/use-timetable-text";
 import { tipProps } from "@/components/hover-tip/tip";
 import type { CSSProperties, HTMLAttributes, ReactNode } from "react";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { GripVertical } from "@/components/icons/aywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { SUBJECT_SOLID } from "@/features/owner/subjects";
-import { enumDayToKo, type DayOfWeek } from "@/features/timetable/lib/periods";
+import { type DayOfWeek } from "@/features/timetable/lib/periods";
 import { LAB_ROOM_LABEL, type TeacherNicknameMap } from "@/features/timetable/lib/teacher-label";
-import { schoolGradeLabel } from "@/lib/format/school-grade";
+
 import { readableTextColor } from "@/lib/color-utils";
 import {
   padCardDays,
@@ -302,21 +304,22 @@ function LabelColumn({
   wdH: number;
   namesOnly?: boolean;
 }) {
+  const tt = useTimetableText();
   const cell = `${GRID} text-text-dim flex items-center justify-center border-b text-xs font-bold`;
   const rail = `bg-bg-soft ${GRID} sticky left-0 z-20 flex shrink-0 flex-col self-stretch border-r shadow-[4px_0_10px_-6px_rgba(29,29,31,0.18)]`;
   if (namesOnly)
     return (
       <div className={rail} style={{ width: LABEL_W }}>
-        <div className={cell} style={{ height: NAME_H }}>수업명</div>
+        <div className={cell} style={{ height: NAME_H }}>{tt("수업명")}</div>
       </div>
     );
   return (
     <div className={rail} style={{ width: LABEL_W }}>
       {/* 강의실 라벨은 없앴다 — 카드 쪽에서 수업명 아래 둘째 줄로 들어가 별도 행이 사라졌다(NAME_ROOM_H). */}
-      <div className={cell} style={{ height: NAME_ROOM_H }}>수업명</div>
-      <div className={cell} style={{ height: TEACHER_H }}>담임</div>
+      <div className={cell} style={{ height: NAME_ROOM_H }}>{tt("수업명")}</div>
+      <div className={cell} style={{ height: TEACHER_H }}>{tt("담임")}</div>
       {/* 축 이름도 '시간'이다(원장 2026-09-12) — 아래 칸이 교시 번호 없이 시각만 적으므로 머리만 '교시'면 어긋난다. */}
-      <div className={cell} style={{ height: DAYHEAD_H }}>시간</div>
+      <div className={cell} style={{ height: DAYHEAD_H }}>{tt("시간")}</div>
       {visibleSpanRows(group.periodRows, group.rowPlan).map((p) => (
         <div
           key={p.order}
@@ -336,15 +339,13 @@ function LabelColumn({
       {/* 명단을 접으면(activeH 0) 라벨도 없다 — 카드 쪽과 높이가 같아야 줄이 어긋나지 않는다. */}
       {activeH > 0 ? (
         <div className={`text-primary ${GRID} flex items-center justify-center border-b text-xs font-bold`} style={{ height: activeH }}>
-          재원
-        </div>
+          {tt("재원")}</div>
       ) : null}
       {/* 대기·퇴원은 **항상** 선다(원장 2026-09-07) — 카드 쪽 높이와 같아 정렬이 유지된다. */}
-      {holdH > 0 ? <div className={cell} style={{ height: holdH }}>대기</div> : null}
+      {holdH > 0 ? <div className={cell} style={{ height: holdH }}>{tt("대기")}</div> : null}
       {wdH > 0 ? (
         <div className={`${GRID} text-text-dim flex items-center justify-center text-xs font-bold`} style={{ height: wdH }}>
-          퇴원
-        </div>
+          {tt("퇴원")}</div>
       ) : null}
     </div>
   );
@@ -370,6 +371,7 @@ export function ClassColumn({
   /** 있으면 편집 모드 — 헤더가 '반 창 열기 링크'가 아니라 **드래그 손잡이**가 된다. */
   edit?: ColumnEdit;
 }) {
+  const display = useTimetableDisplay();
   // 요일축 = **이 반이 실제 수업하는 요일만**(원장 2026-08-11 "수업없는 요일 열도 숨겨버리고").
   // 카드 폭(CARD_W)은 그대로라 남은 칸이 넓어질 뿐, 카드 간 세로 정렬은 유지된다. 2026-07-27의
   // "항상 월~금 5칸" 규약을 뒤집은 배경은 class-grid.ts `days` 주석 참조(실측 42반 중 41반이 2~3일).
@@ -396,7 +398,7 @@ export function ClassColumn({
   // 수업명만 남은 칩이 요일 수에 따라 들쭉날쭉하면 끌어 놓을 자리를 가늠하기 어렵다.
   // 🔴 카드 **최소 폭 = 3칸**(144px) — padCardDays가 못 채우는 주말 전용 반(토·일 하루)은 1칸(48px)이라 학생 이름이 통째로
   //    잘렸다(실측 2026-09-04 수학 통합뷰 20줄). 칸은 `1fr`이라 폭이 남으면 요일 칸이 그만큼 넓어질 뿐 정렬은 안 깨진다.
-  const cardW = namesOnly ? CARD_W : Math.max(3, days.length) * DAY_COL_W;
+  const cardW = namesOnly ? CARD_W : Math.max(3, days.length) * DAY_COL_W + (display.lang === "en" ? 30 : 0);
   /**
    * 배치 편집(그룹 설정)에서는 카드 폭을 **화면에 맞춰 줄인다**(원장 2026-09-09: *"수업당 열너비가 너무
    * 넓어서 화면을 넘어가서 이동시키기가 매우 안좋아 … 하단에 스크롤이 없으면 좋겠다"*).
@@ -458,14 +460,14 @@ export function ClassColumn({
         {edit ? (
           <div
             {...edit.handleProps}
-            title={`${card.className} — 끌어서 다른 줄로 옮기기`}
+            title={`${display.className(card.className)} — 끌어서 다른 줄로 옮기기`}
             className="flex h-full w-full cursor-grab items-center justify-center gap-1 px-1 text-center text-sm font-bold select-none active:cursor-grabbing"
           >
             <GripVertical className="size-3 shrink-0 opacity-45" />
             {/* 🔴 칩이 화면에 맞춰 좁아지므로(EDIT_CARD_MIN_W) 이름은 **두 줄까지 접는다** — 한 줄로 두면
                 `중등E_초등 브릿지 D`가 말줄임도 없이 글자 중간에서 잘린다(원장 캡처 2026-09-09).
                 평소 카드 헤더가 같은 이유로 이미 `line-clamp-2`다 — 같은 규약을 편집 모드에도 맞춘다. */}
-            <span className="line-clamp-2 min-w-0 break-keep">{card.className}</span>
+            <span className="line-clamp-2 min-w-0 break-keep">{display.className(card.className)}</span>
           </div>
         ) : (
           <HoverCard
@@ -489,14 +491,14 @@ export function ClassColumn({
               {/* 이름은 **두 줄까지** 접는다 — 칸 너비를 고정하면서(DAY_COL_W) 2요일 반 카드가 70px까지
                   좁아져 한 줄로는 `고등E_고1 특별 S` 같은 이름이 통째로 잘린다. 전체 이름은 title에도 있다. */}
               <span className="line-clamp-2 w-full text-sm leading-tight font-bold break-keep">
-                {card.className}
+                {display.className(card.className)}
               </span>
               {/* 강의실 — 전용 행 대신 수업명 바로 아래(원장 2026-08-11 "LS6 / 화 602 / 금 603 이렇게").
                   헤더색 위에 얹히므로 색을 따로 주지 않고 투명도만 낮춘다(반색이 어두우면 흰 글자가 유지된다).
                   ⚠️ namesOnly(배치 편집)에선 헤더가 NAME_H(40px)로 좁아 두 줄이 안 들어간다 → 안 그린다. */}
               {namesOnly ? null : (
                 <span className="line-clamp-1 w-full text-xs leading-tight font-normal opacity-70" title={card.classroomLabel}>
-                  {card.classroomLabel}
+                  {display.room(card.classroomLabel)}
                   {/* 명단을 접으면 인원이 어디에도 안 남는다(기본뷰는 헤더에 있다) → 강의실 옆에 붙인다. */}
                   {hideStudents ? <span className="num"> · {card.activeCount}</span> : null}
                 </span>
@@ -518,7 +520,7 @@ export function ClassColumn({
           <span className="text-text-faint text-xs">-</span>
         ) : (
           <span className="text-foreground overflow-hidden text-xs font-bold whitespace-nowrap text-clip">
-            {card.teacherName}
+            {display.teacher(card.teacherName)}
             <TeacherNick name={card.teacherName} map={teacherNicknames} />
           </span>
         )}
@@ -769,6 +771,7 @@ function EmptyDash() {
  * ⚠️ 좁은 칸이라 화면엔 이름 + 날짜만 — 어디서 오는지(기존 반)는 툴팁이 말한다(원장 명시).
  */
 function IncomingRow({ s, toClassName }: { s: IncomingStudent; toClassName: string }) {
+  const tt = useTimetableText();
   return (
     <div
       title={moveWaitTitle({
@@ -785,7 +788,7 @@ function IncomingRow({ s, toClassName }: { s: IncomingStudent; toClassName: stri
       }`}
     >
       <span className="min-w-0 overflow-hidden text-clip">← {s.name}</span>
-      <span className="shrink-0 text-xs font-bold">{s.scheduled ? shortMoveDate(s.applyOn) : "반이동"}</span>
+      <span className="shrink-0 text-xs font-bold">{s.scheduled ? shortMoveDate(s.applyOn) : tt("반이동")}</span>
     </div>
   );
 }
@@ -856,11 +859,14 @@ function RosterSection({
 
 /** 담임 이름 뒤 `(영어이름)` — 한국인 강사이고 닉네임이 등록돼 있을 때만. 원어민·미등록은 안 그린다. */
 function TeacherNick({ name, map }: { name: string; map?: TeacherNicknameMap }) {
+  const display = useTimetableDisplay();
+  if (display.lang === "en") return null;
   const nick = map?.[name];
   return nick ? <span className="text-xs font-bold opacity-85">({nick})</span> : null;
 }
 
 function DayHead({ day }: { day: DayOfWeek }) {
+  const display = useTimetableDisplay();
   const weekend = day === "sat" || day === "sun";
   return (
     <div
@@ -868,7 +874,7 @@ function DayHead({ day }: { day: DayOfWeek }) {
         weekend ? "text-rose" : "text-text-dim"
       }`}
     >
-      {enumDayToKo(day)}
+      {display.dow(day)}
     </div>
   );
 }
@@ -891,10 +897,14 @@ function cellPaintsBackground(c: GridCell | undefined): boolean {
  * `withTime` = 이 카드에만 더한 행 — 라벨열에 그 행이 없어 칸이 제 시각을 함께 적는다(두 줄, 행 높이 안).
  */
 function VirtualLabCellView({ lab, last, withTime = false }: { lab: VirtualLabCell; last: boolean; withTime?: boolean }) {
+  const display = useTimetableDisplay();
+  const note = display.lang === "en"
+    ? `Temporary LAB · ${display.dow(lab.dayOfWeek)} ${lab.start} — ${lab.students.map((student) => `${student.name} (${student.source.kind === "move" ? `${student.source.date} only` : `weekly from ${student.source.effectiveFrom}`})`).join(" · ")}`
+    : lab.note;
   return (
     <div
       data-virtual-lab=""
-      {...tipProps(lab.note)}
+      {...tipProps(note)}
       className={`${GRID} flex h-full flex-col items-center justify-center overflow-hidden text-xs leading-none font-bold whitespace-nowrap ${
         last ? "" : "border-r"
       } ${VIRTUAL_LAB_CELL_CLASS}`}
@@ -923,6 +933,7 @@ function VirtualLabCellView({ lab, last, withTime = false }: { lab: VirtualLabCe
  * ⚠️ `sr-only`는 absolute라 **positioned 부모 안**에 있어야 한다([[#79]]) — 호출부가 칸에 `relative`를 준다.
  */
 function OffAxisMark({ time, edge }: { time: string; edge: string }) {
+  const tt = useTimetableText();
   return (
     <>
       <span
@@ -935,7 +946,7 @@ function OffAxisMark({ time, edge }: { time: string; edge: string }) {
         className="border-t-danger pointer-events-none absolute top-0 left-0 size-0 border-t-[7px] border-r-[7px] border-r-transparent"
       />
       {/* 표식은 눈에만 보인다 — 같은 사실을 글자로도 남긴다(칸의 기존 툴팁 문구는 그대로 둔다). */}
-      <span className="sr-only">실제 수업 시각 {time}</span>
+      <span className="sr-only">{tt("실제 수업 시각")} {time}</span>
     </>
   );
 }
@@ -965,11 +976,14 @@ function Cell({
    */
   last?: boolean;
 }) {
+  const display = useTimetableDisplay();
+  const tt = useTimetableText();
   const base = `${GRID} h-full flex items-center justify-center overflow-hidden font-bold ${last ? "" : "border-r"}`;
   const c = card.cells[`${order}:${day}`];
   if (!c) return <div className={base} />;
   // 주말 셀은 행 라벨이 그 반의 시각이 아니다(class-grid `weekendSelfShift`) → 툴팁에 실제 시각을 붙인다.
-  const tip = c.time ? `${c.label} · ${c.time}` : c.label;
+  const label = display.teacher(c.label) ?? c.label;
+  const tip = c.time ? `${label} · ${c.time}` : label;
   /**
    * 🔺 **'다른 시각' 표식을 띄울까** — `c.time`만 보면 안 된다(적대 리뷰 2026-09-14에서 잡혔다).
    * `class-grid.ts`는 **주말 셀이면 무조건** `time`을 싣는다("이 칸은 주말 슬롯"이라는 뜻이지
@@ -993,7 +1007,7 @@ function Cell({
     return (
       <div
         className={`${base} ${tone} ${cellFont(text)} ${separate ? LAB_SEPARATE_TEXT_CLASS : ""} ${offAxisTime ? "relative" : ""}`}
-        title={separate ? (c.time ? `${LAB_SEPARATE_TIP} · ${c.time}` : LAB_SEPARATE_TIP) : tip}
+        title={separate ? (c.time ? `${tt(LAB_SEPARATE_TIP)} · ${c.time}` : tt(LAB_SEPARATE_TIP)) : tip}
       >
         {text}
         {/* 자리 칸은 연한 틴트 바탕이라 테두리는 경계만 만들면 된다(빨강이 이미 또렷하다). */}
@@ -1005,7 +1019,7 @@ function Cell({
   if (!cellPaintsBackground(c)) return <div className={base} title={c.time || undefined} />;
   // 저장된 강사색(ijw) 우선 — 라벨(한글명·영문닉네임)이 users 맵에 있으면 그 hex. 없으면 라벨 해시색.
   const tc = teacherColors[c.label];
-  const text = abbrev(c.label);
+  const text = abbrev(label);
   const cls = `${base} ${cellFont(text)}`;
   if (tc)
     return (
@@ -1067,6 +1081,7 @@ function RosterRow({
   /** 저장 대기 중인 이동(카드가 한 번 읽어 내려보낸다 — 줄마다 컨텍스트를 구독하지 않게). */
   move?: PendingTarget;
 }) {
+  const display = useTimetableDisplay();
   const withdrawn = s.status === "withdrawn";
   // 명단 이동 — 축이 둘이다: 대기·퇴원(학생 기록 권한) / 다른 반으로 이동(시간표 편집 권한).
   // 🔴 **하나라도** 열려 있으면 줄을 집을 수 있어야 한다(어디에 놓을 수 있는지는 놓는 순간 판정한다).
@@ -1102,7 +1117,8 @@ function RosterRow({
   const waiting = scheduledMove || !!saved;
   // 검색에 걸린 학생 표식 — 기본뷰 StudentRow와 같은 함수(같은 필드로 판정, 같은 클래스로 표시).
   const tone = useSearchTone(s, waiting ? movingTone(colorMode) : baseTone);
-  const meta = schoolGradeLabel(s.school, s.grade);
+  const meta = display.school(s.school, s.grade);
+  const shownName = display.student(s.name, s.englishName);
   const moveTitle = moving
     ? moveWaitTitle({
         side: "out",
@@ -1122,7 +1138,7 @@ function RosterRow({
           s.seatPinNote ? ` ${SEAT_PIN_MARK_CLASS}` : s.labSeparate ? ` ${LAB_SEPARATE_STUDENT_CLASS}` : ""
         }`}
       >
-        {s.name}
+        {shownName}
       </span>
       {/* 학교·학년 꼬리는 한 단계 작게(14px, v5 바닥) — 이름은 그대로 두고 꼬리만 줄여 좁은 2요일 카드에서도 덜 잘린다.
           🔴 이동 대기 줄은 꼬리 대신 **어디로·언제 가는지**를 적는다(좁은 칸이라 둘 다는 안 들어간다). */}
@@ -1151,14 +1167,14 @@ function RosterRow({
     <WindowLink
       href={`/students/${s.studentId}`}
       // 🔴 이동 대기면 **그 사실**이 툴팁이다(기존 반 이름 포함, 원장 2026-09-09 명시).
-      title={moveTitle || s.name}
-      ariaLabel={`${s.name} 학생 정보`}
+      title={moveTitle ? display.note(moveTitle) : shownName}
+      ariaLabel={display.lang === "en" ? `${shownName}: student details` : `${s.name} 학생 정보`}
       className={`${cls} hover:bg-bg-soft`}
     >
       {inner}
     </WindowLink>
   ) : (
-    <div className={cls} title={moveTitle || undefined}>
+    <div className={cls} title={moveTitle ? display.note(moveTitle) : undefined}>
       {inner}
     </div>
   );

@@ -20,6 +20,8 @@ import {
 } from "@/features/shell/view-actions";
 import { TONE_SOFT } from "@/lib/design/semantic-color";
 import { sheetT, type SheetLang } from "@/features/teacher-view/i18n";
+import { useSheetLang } from "@/features/teacher-view/lang-context";
+import { useTimetableDisplay } from "@/features/teacher-view/use-timetable-display";
 
 // 사이드바 레일과 동일 톤의 모핑 이징.
 const EASE = "ease-[cubic-bezier(0.22,0.61,0.36,1)]";
@@ -37,6 +39,7 @@ function useTeacherTargets() {
 
 /** 다른 강사 목록 드롭다운 항목들 — 클릭 시 그 강사 뷰로 전환(풀 문서 네비, view-actions 규약). */
 function TargetItems({ targets, loading }: { targets: TeacherViewTarget[] | null; loading: boolean }) {
+  const display = useTimetableDisplay();
   const [pending, start] = useTransition();
   const go = (id: string) =>
     start(async () => {
@@ -45,9 +48,9 @@ function TargetItems({ targets, loading }: { targets: TeacherViewTarget[] | null
       if (dest) assignTop(dest);
     });
   if (loading || targets === null)
-    return <div className="text-text-faint px-2 py-1.5 text-sm">불러오는 중…</div>;
+    return <div className="text-text-faint px-2 py-1.5 text-sm">{display.lang === "en" ? "Loading…" : "불러오는 중…"}</div>;
   if (targets.length === 0)
-    return <div className="text-text-faint px-2 py-1.5 text-sm">전환할 강사가 없습니다</div>;
+    return <div className="text-text-faint px-2 py-1.5 text-sm">{display.lang === "en" ? "No teachers available" : "전환할 강사가 없습니다"}</div>;
   return (
     <>
       {targets.map((t) => (
@@ -58,7 +61,7 @@ function TargetItems({ targets, loading }: { targets: TeacherViewTarget[] | null
           disabled={pending}
           onClick={() => go(t.id)}
         >
-          <EyIcon name="user" size={16} strokeWidth={1.8} /> {t.name}
+          <EyIcon name="user" size={16} strokeWidth={1.8} /> {display.teacher(t.name)}
         </DropdownMenuItem>
       ))}
     </>
@@ -136,7 +139,7 @@ export function TeacherViewSwitcher({
         {canOthers ? (
           <>
             {canSelf ? <DropdownMenuSeparator /> : null}
-            <DropdownMenuLabel className="text-text-faint text-xs">다른 강사 · 열람 전용</DropdownMenuLabel>
+            <DropdownMenuLabel className="text-text-faint text-xs">다른 강사</DropdownMenuLabel>
             {/* 목록만 스크롤(머리글·나 항목은 고정) — 강사가 많아도 위가 밀려 나가지 않는다. */}
             <div className="max-h-64 overflow-y-auto">
               <TargetItems targets={targets} loading={loading} />
@@ -155,7 +158,20 @@ export function TeacherViewSwitcher({
  * '내 메뉴'의 '관리자뷰로 전환'도 열람 중엔 세우지 않는다 — 나가는 문은 이 버튼 하나(원장 같은 날).
  * 대상 강사 화면엔 아무것도 안 뜬다(presence track 차단 — 열람 사실은 감사로그에만 남는다).
  */
-export function ViewAsChip({ name, lang }: { name: string; lang: SheetLang }) {
+export function TeacherPeerViewSwitcher() {
+  const lang = useSheetLang();
+  const { targets, loading, load } = useTeacherTargets();
+  return <DropdownMenu modal={false} onOpenChange={(open) => { if (open) load(); }}>
+    <DropdownMenuTrigger render={<button type="button" className="border-line rounded-lg border px-2 py-1 text-xs" />}>
+      {lang === "en" ? "Teacher view" : "강사뷰 전환"}
+    </DropdownMenuTrigger>
+    <DropdownMenuContent align="end" className="max-h-72 w-56 overflow-y-auto">
+      <TargetItems targets={targets} loading={loading} />
+    </DropdownMenuContent>
+  </DropdownMenu>;
+}
+
+export function ViewAsChip({ name, lang, readonly = true }: { name: string; lang: SheetLang; readonly?: boolean }) {
   const [pending, start] = useTransition();
   return (
     <button
@@ -167,7 +183,7 @@ export function ViewAsChip({ name, lang }: { name: string; lang: SheetLang }) {
           assignTop(dest);
         })
       }
-      title={sheetT(lang, "chrome.viewAs.endTitle")}
+      title={sheetT(lang, "chrome.viewAs.returnTitle")}
       className={`${TONE_SOFT.special} flex h-7 cursor-pointer items-center gap-1 rounded-full px-2.5 text-xs font-semibold disabled:opacity-60`}
     >
       <EyIcon name="users" size={13} strokeWidth={2} />
@@ -178,7 +194,7 @@ export function ViewAsChip({ name, lang }: { name: string; lang: SheetLang }) {
         {sheetT(lang, "chrome.viewAs.suffix").startsWith("'") ? "" : " "}
         {sheetT(lang, "chrome.viewAs.suffix")}
       </span>
-      <span className="shrink-0 font-medium opacity-80">· {sheetT(lang, "chrome.viewAs.end")}</span>
+      <span className="shrink-0 font-medium opacity-80">· {sheetT(lang, readonly ? "chrome.viewAs.end" : "chrome.viewAs.editEnd")}</span>
       <EyIcon name="logOut" size={12} strokeWidth={2.2} className="shrink-0" />
     </button>
   );

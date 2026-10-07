@@ -1,4 +1,5 @@
 "use client";
+import { useTimetableDisplay } from "@/features/teacher-view/use-timetable-display";
 
 import { useMemo, type ComponentProps, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { useDraggable } from "@dnd-kit/core";
@@ -172,6 +173,7 @@ function StudentNameLink({
   className: string;
   children: ReactNode;
 } & Pick<ComponentProps<typeof WindowLink>, "onMouseEnter" | "onMouseLeave" | "onMouseMove">) {
+  const display = useTimetableDisplay();
   // 🔴 `...rest`를 반드시 흘려보낸다 — [`HoverCard`](./hover-cards.tsx)는 **트리거 엘리먼트에** hover 핸들러를
   //    주입한다(cloneElement). 이 래퍼가 그걸 삼키면 읽기 전용 줄(강사·뷰어·과거 주·대기·퇴원)의 정보 카드가
   //    통째로 죽는다 — 관리자가 이번 주에서 보면 드래그 줄이라 멀쩡해 눈에 안 띈다(적대 리뷰 2026-09-04).
@@ -185,7 +187,7 @@ function StudentNameLink({
     <WindowLink
       href={`/students/${studentId}`}
       title={title || name}
-      ariaLabel={`${name} 학생 정보`}
+      ariaLabel={display.lang === "en" ? `${name}: student details` : `${name} 학생 정보`}
       className={className}
       {...rest}
     >
@@ -309,8 +311,11 @@ function StudentRowView({
   };
   onArm?: () => void;
 }) {
+  const display = useTimetableDisplay();
   const { pending, setHovered, openDayEdit } = useTimetableEdit();
   const colorMode = useTimetableColorMode();
+  const shownName = display.student(name, student?.englishName);
+  const shownMeta = display.lang === "en" && student ? display.school(student.school, student.grade) : meta;
   const target = pending.get(enrollmentId);
   const moving = !!target && !target.sameClass; // 반 이동=취소선+dim / 같은 반 요일 편집=배지만
   /**
@@ -370,11 +375,11 @@ function StudentRowView({
       <>
         <StudentNameLink
           studentId={studentId}
-          name={name}
+          name={shownName}
           title={moveTitle}
           className={`min-w-0 ${NAME_CLASS} ${moving ? "line-through" : ""}`}
         >
-          <NameInner name={name} meta={targetKey ? "" : meta} badge={badge} pinNote={pinNote} labSeparate={labSeparate} />
+          <NameInner name={shownName} meta={targetKey ? "" : shownMeta} badge={badge} pinNote={pinNote} labSeparate={labSeparate} />
         </StudentNameLink>
         {/* 반 이동=작은 "→", 같은 반 요일 편집=" →목만" 배지(학생이름 우선이라 반이름은 뺌).
             🔴 예약 이동은 **그 건의 날짜**를 함께 적는다 — 툴바 값 하나만 보면 건별 날짜가 안 보인다
@@ -403,7 +408,7 @@ function StudentRowView({
     //    안 바뀌면 메모가 옛 문장을 붙들고 있는다(`targetKey`가 날짜를 담지만 문구는 반 이름도 쓴다).
     // ⚠️ `pinNote`도 넣는다 — 빠뜨리면 고정을 걸거나 푼 뒤 그 줄만 옛 모습을 붙들고 있는다.
     // ⚠️ `labSeparate`도 같은 이유(반 상세에서 켜고 끈 뒤 그 줄만 옛 모습을 붙들지 않게).
-    [studentId, name, meta, badge, moving, targetKey, moveTitle, pinNote, labSeparate],
+    [studentId, shownName, shownMeta, badge, moving, targetKey, moveTitle, pinNote, labSeparate],
   );
   const row = (
     <div
@@ -498,6 +503,7 @@ export function StudentRow({
   /** 합반 인덱스 배지("1"/"1,2") — 통합 명단에서만. */
   badge?: string;
 }) {
+  const display = useTimetableDisplay();
   const colorMode = useTimetableColorMode();
   /**
    * 읽기 전용 줄에도 **예약 이동은 보여야 한다** — 편집 권한이 없다고 사실이 사라지면 안 된다
@@ -517,8 +523,8 @@ export function StudentRow({
   const inner = (
     <>
       <NameInner
-        name={name}
-        meta={saved ? "" : meta}
+        name={display.student(name, student?.englishName)}
+        meta={saved ? "" : display.lang === "en" ? display.school(student.school, student.grade) : meta}
         badge={badge}
         pinNote={student.seatPinNote}
         labSeparate={student.labSeparate === true}

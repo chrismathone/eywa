@@ -1,5 +1,6 @@
 "use client";
 
+import { useSheetFeedback } from "@/features/teacher-view/lang-context";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   mpCellKey,
@@ -31,6 +32,7 @@ export function useMonthPlan(input: {
   /** 학원설정 휴일(그 달) — 휴강 토글이 "자동 판정과 같으면 행을 지운다"를 계산할 때 쓴다. */
   holidays: Readonly<Record<string, string>>;
 }) {
+  const feedback = useSheetFeedback();
   const { classId, initial, holidays } = input;
   const [cells, setCells] = useState(() => mpCellMapOf(initial));
   const [error, setError] = useState<string | null>(null);
@@ -58,7 +60,7 @@ export function useMonthPlan(input: {
             setError(null);
             return;
           }
-          setError(res.error);
+          setError(feedback(res.error));
           // 실패는 되돌린다 — 화면에만 남은 계획은 대조 신호를 조용히 뒤집는다.
           const reverted = { ...cellsRef.current };
           for (const key of revertKeys) {
@@ -71,7 +73,7 @@ export function useMonthPlan(input: {
         .catch((e: unknown) => {
           // 액션은 {ok:false}로 실패를 알리지만 **네트워크가 끊기면 reject**된다 — 안 잡으면
           // unhandled rejection이 되고, 이 Promise에 이동을 매단 화면이 영영 안 움직인다.
-          setError(e instanceof Error ? e.message : "네트워크 오류로 저장하지 못했습니다");
+          setError(feedback(e instanceof Error ? e.message : "네트워크 오류로 저장하지 못했습니다"));
         })
         .finally(() => {
           inflight.current.delete(job);
@@ -79,7 +81,7 @@ export function useMonthPlan(input: {
       inflight.current.add(job);
       return job;
     },
-    [classId],
+    [classId, feedback],
   );
 
   /** 여러 칸을 한 번에 — 열 추가/숨기기·휴강 토글이 쓴다(디바운스 없음). */

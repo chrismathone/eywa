@@ -150,12 +150,12 @@ export function PlanTable({
                       (TODAY_PLAN_W 406→420) + 가변 열(진도·과제, 한 줄 textarea라 스크롤로 산다)에서 나온다. */}
                   <col style={{ width: 100 }} />
                   <col style={{ width: 106 }} />
-                  <col style={{ width: 64 }} />
+                  <col style={{ width: lang === "en" ? 82 : 64 }} />
                   <col />
                   <col />
                   <col style={{ width: 22 }} />
                 </colgroup>
-                <thead>
+                <thead className="[&_th]:break-normal [&_th]:[overflow-wrap:normal]">
                   {/* 헤더 밴드 — 원본 시트의 노란 머리글(시기·구분·교재·시간·진도·과제)과 같은 역할. */}
                   <tr className="bg-bg-soft text-foreground text-left text-xs">
                     <th className="rounded-l-md py-0.5 pl-1 font-bold">{sheetT(lang, "plan.col.kind")}</th>

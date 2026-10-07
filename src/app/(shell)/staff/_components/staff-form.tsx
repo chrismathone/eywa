@@ -182,7 +182,7 @@ export function StaffForm({
       {/* 겹치는 칸을 뺐으면 **어디로 갔는지** 적는다 — 없는 걸 찾다가 되돌아 나가는 게 가장 큰 낭비다
           (원장 지시 2026-08-25: 겹치는 건 이력서에서 받고, 이력서에 없는 것만 여기 남긴다). */}
       {mode === "edit" ? (
-        <p className="border-line bg-surface-soft text-text-dim rounded-2xl border p-4 text-xs leading-relaxed">
+        <p className="border-line bg-bg-soft text-text-dim rounded-2xl border p-4 text-xs leading-relaxed">
           <b className="text-foreground">여기는 담당·알림·표시 설정만 바꿉니다.</b> 이름·연락처·직급·입사일·
           근무부서·근무형태·이메일은 <b>이력서</b>에서, 비밀번호·역할·삭제는 직원 상세의 <b>계정 관리</b>에서
           바꿉니다.
@@ -413,7 +413,7 @@ export function StaffForm({
       {!classnoteOn ? (
         v.attendanceAlertOptin === true ? <input type="hidden" name="attendanceAlertOptin" value="on" /> : null
       ) : (
-      <div className="border-border bg-surface-soft rounded-2xl border p-4">
+      <div className="border-border bg-bg-soft rounded-2xl border p-4">
         <label htmlFor="attendanceAlertOptin" className="flex cursor-pointer items-start gap-3">
           <input
             id="attendanceAlertOptin"
@@ -433,7 +433,7 @@ export function StaffForm({
       </div>
       )}
 
-      <div className="border-border bg-surface-soft rounded-2xl border p-4">
+      <div className="border-border bg-bg-soft rounded-2xl border p-4">
         <label htmlFor="deskAttendanceOptin" className="flex cursor-pointer items-start gap-3">
           <input
             id="deskAttendanceOptin"
@@ -458,7 +458,7 @@ export function StaffForm({
           {v.seatJjDuty === true ? <input type="hidden" name="seatJjDuty" value="on" /> : null}
         </>
       ) : (
-      <div className="border-border bg-surface-soft space-y-3 rounded-2xl border p-4">
+      <div className="border-border bg-bg-soft space-y-3 rounded-2xl border p-4">
         <p className="text-foreground text-sm font-medium">자리 출석부 담당</p>
         <p className="text-muted-foreground text-xs">
           켜면 로그인 후 그 자리 출석부로 바로 들어가고, 그 자리 출결만 찍을 수 있습니다. 다른 메뉴는
@@ -493,7 +493,7 @@ export function StaffForm({
       {!shuttleOn ? (
         v.shuttleDuty === true ? <input type="hidden" name="shuttleDuty" value="on" /> : null
       ) : (
-      <div className="border-border bg-surface-soft rounded-2xl border p-4">
+      <div className="border-border bg-bg-soft rounded-2xl border p-4">
         <label htmlFor="shuttleDuty" className="flex cursor-pointer items-start gap-3">
           <input
             id="shuttleDuty"
@@ -514,29 +514,7 @@ export function StaffForm({
       </div>
       )}
 
-      {/* '강사뷰 접근'(0224a) — 다른 강사의 강사뷰 열람(열람 전용). master(+super_admin)에게만 보이고
-          서버 액션도 그 자격일 때만 이 컬럼을 저장한다(#77 — 화면에서만 숨긴 게 아니다). */}
-      {canGrantTeacherView ? (
-        <div className="border-border bg-surface-soft rounded-2xl border p-4">
-          <label htmlFor="teacherViewAccess" className="flex cursor-pointer items-start gap-3">
-            <input
-              id="teacherViewAccess"
-              name="teacherViewAccess"
-              type="checkbox"
-              defaultChecked={v.teacherViewAccess === true}
-              className="border-border text-primary focus-visible:ring-ring mt-0.5 size-4 shrink-0 rounded"
-            />
-            <span className="space-y-1">
-              <span className="text-foreground block text-sm font-medium">강사뷰 접근 (다른 강사 뷰 열람)</span>
-              <span className="text-muted-foreground block text-xs">
-                사이드바에서 <b>다른 강사의 강사뷰를 열람 전용으로</b> 볼 수 있습니다. 저장·발송은 되지 않고,
-                열람 사실은 감사로그에 남습니다. 열람 대상 강사에게는 표시되지 않습니다. 관리자 계열
-                역할 전용이며(강사·학생 역할엔 줄 수 없음), 원장은 항상 가능합니다.
-              </span>
-            </span>
-          </label>
-        </div>
-      ) : null}
+      {canGrantTeacherView ? <p className="text-muted-foreground text-xs">강사뷰 접근은 학원 설정의 역할·권한에서 전체·읽기·없음으로 지정합니다.</p> : null}
 
       {/* 강사 화면 기본 언어(0248a) — 원장 2026-09-03 *"샘 킴 (sam)도 원어민에 등록"*.
           🔴 **"원어민 여부" 같은 이름의 체크박스로 만들지 말 것** — 그 이름이면 다음 사람이 담임 판정

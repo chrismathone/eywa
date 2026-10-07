@@ -88,7 +88,7 @@ type StudentRow = { id: string; name: string; school: string | null; grade: stri
  */
 async function searchStudents(term: string): Promise<Axis> {
   const supabase = await createClient();
-  const scope = await effectiveTeacherScope();
+  const scope = await effectiveTeacherScope({ includeScheduled: true });
   if (scope && scope.studentIds.length === 0) return NO_HITS;
   const or = [
     `name.ilike.%${term}%`,
@@ -157,7 +157,11 @@ async function searchClasses(term: string): Promise<Axis> {
     .from("classes")
     .select("id, class_name, subject, is_active, closed_at")
     .or(parts.join(","));
-  if (tId) q = q.eq("teacher_id", tId);
+  if (tId) {
+    const scope = await effectiveTeacherScope({ includeScheduled: true });
+    if (!scope || scope.classIds.length === 0) return NO_HITS;
+    q = q.in("id", scope.classIds);
+  }
   // ⚠️ 컬럼 이름(`is_makeup_pool`)을 이 쿼리에 끼워 넣지 않는다 — 0241a 미적용이면 400으로 화면이 죽는다([[#95]]).
   if (poolIds.length > 0) q = q.not("id", "in", `(${poolIds.join(",")})`);
   // 운영 중인 반 먼저 — 실데이터 168개 중 47개가 종강·폐지라, 안 그러면 끝난 반이 상위 8을 먹는다.

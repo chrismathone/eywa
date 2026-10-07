@@ -29,7 +29,7 @@ export async function loadEnglishJjDay(input: {
    */
   pick?: string[] | null;
 }): Promise<JjDayState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user || user.systemRole === "student") return { status: "error", message: "로그인이 필요합니다" };
   if (!input?.studentId) return { status: "error", message: "학생 정보가 없습니다" };
   const date = resolveReportDate(input.date);
