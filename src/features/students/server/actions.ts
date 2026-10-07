@@ -149,7 +149,7 @@ export async function createStudent(
   _prev: StudentFormState,
   formData: FormData,
 ): Promise<StudentFormState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canManageStudentRecords(user.systemRole))) return { error: STUDENT_MANAGE_DENIED };
 
@@ -237,7 +237,7 @@ export type DeleteStudentState = { error?: string; ok?: true } | undefined;
  * (기본 master, 역할·권한에서 위임 시 admin/manager). 되돌릴 수 없음 → UI에서 2단계 확인.
  */
 export async function deleteStudent(_prev: DeleteStudentState, formData: FormData): Promise<DeleteStudentState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "admin"))) return { error: "영구 삭제 권한이 없습니다(관리 도구 권한 필요)" };
 
@@ -276,7 +276,7 @@ export async function updateStudent(
   _prev: StudentFormState,
   formData: FormData,
 ): Promise<StudentFormState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canManageStudentRecords(user.systemRole))) return { error: STUDENT_MANAGE_DENIED };
 
@@ -471,7 +471,7 @@ export async function changeStudentStatus(
   _prev: ChangeStatusState,
   formData: FormData,
 ): Promise<ChangeStatusState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   // 🔴 퇴원·휴원·복구 = full만(강사 차단, 원장 지시 2026-08-18) — canManageStudentRecords 주석 참조.
   if (!(await canManageStudentRecords(user.systemRole))) return { error: STUDENT_MANAGE_DENIED };
@@ -647,7 +647,7 @@ export async function cancelScheduledWithdrawal(
   _prev: ChangeStatusState,
   formData: FormData,
 ): Promise<ChangeStatusState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canManageStudentRecords(user.systemRole))) return { error: STUDENT_MANAGE_DENIED };
   const id = String(formData.get("id") ?? "").trim();
@@ -693,7 +693,7 @@ export async function endStudentEnrollments(
   _prev: ChangeStatusState,
   formData: FormData,
 ): Promise<ChangeStatusState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   // 🔴 단일 수강 종료와 **같은 게이트** — 강사(scoped)는 학생 기록 열람 전용(원장 2026-08-18).
   if (!(await canManageStudentRecords(user.systemRole))) return { error: STUDENT_MANAGE_DENIED };
@@ -774,7 +774,7 @@ export async function setStudentEnrollmentHolds(
   _prev: ChangeStatusState,
   formData: FormData,
 ): Promise<ChangeStatusState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   // 🔴 퇴원·부분 종료와 **같은 게이트** — 강사(scoped)는 학생 기록 열람 전용(원장 2026-08-18).
   if (!(await canManageStudentRecords(user.systemRole))) return { error: STUDENT_MANAGE_DENIED };
@@ -851,7 +851,7 @@ export async function holdSingleEnrollment(
   _prev: ChangeStatusState,
   formData: FormData,
 ): Promise<ChangeStatusState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canManageStudentRecords(user.systemRole))) return { error: STUDENT_MANAGE_DENIED };
 
@@ -898,7 +898,7 @@ export async function endSingleEnrollment(
   _prev: ChangeStatusState,
   formData: FormData,
 ): Promise<ChangeStatusState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   // 수강 종료 = 학생 쓰기(full) 권한 이상만(master·admin·manager·counselor). UI 숨김 + 이 서버 게이트 이중 방어.
   if (!(await canManageStudentRecords(user.systemRole))) {
@@ -983,7 +983,7 @@ export async function createStudentMemo(
   _prev: CreateMemoState,
   formData: FormData,
 ): Promise<CreateMemoState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "students"))) return { error: "학생 관리 권한이 없습니다" };
 
@@ -1021,7 +1021,7 @@ export async function deleteStudentMemo(
   _prev: DeleteMemoState,
   formData: FormData,
 ): Promise<DeleteMemoState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "students"))) return { error: "학생 관리 권한이 없습니다" };
 
@@ -1045,7 +1045,7 @@ export async function updateStudentMemo(
   _prev: UpdateMemoState,
   formData: FormData,
 ): Promise<UpdateMemoState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "students"))) return { error: "학생 관리 권한이 없습니다" };
 
@@ -1076,7 +1076,7 @@ export async function toggleStudentMemoPin(
   _prev: ToggleMemoPinState,
   formData: FormData,
 ): Promise<ToggleMemoPinState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "students"))) return { error: "학생 관리 권한이 없습니다" };
 
@@ -1104,7 +1104,7 @@ export async function createStudentGrade(
   _prev: CreateGradeState,
   formData: FormData,
 ): Promise<CreateGradeState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "students"))) return { error: "학생 관리 권한이 없습니다" };
 
@@ -1165,7 +1165,7 @@ export async function deleteStudentGrade(
   _prev: DeleteGradeState,
   formData: FormData,
 ): Promise<DeleteGradeState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   const grdLvl = await accessLevelTenant(user.systemRole, "students");
   if (grdLvl !== "full" && grdLvl !== "scoped") return { error: "성적 관리 권한이 없습니다" };
@@ -1198,7 +1198,7 @@ export async function createStudentLevelTest(
   _prev: LevelTestState,
   formData: FormData,
 ): Promise<LevelTestState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "students"))) return { error: "학생 관리 권한이 없습니다" };
 
@@ -1244,7 +1244,7 @@ export async function deleteStudentLevelTest(
   _prev: LevelTestState,
   formData: FormData,
 ): Promise<LevelTestState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "students"))) return { error: "학생 관리 권한이 없습니다" };
 
@@ -1265,7 +1265,7 @@ export async function deleteStudentLevelTest(
 // === 성적 목표설정(grade_goals) / 성적 코멘트(grade_comments) ===
 // 쓰기 권한: 성적(=students) full/scoped. deleteStudentGrade 게이트와 동일.
 async function requireGradeWrite() {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { user: null, error: "로그인이 필요합니다" };
   const lvl = await accessLevelTenant(user.systemRole, "students");
   if (lvl !== "full" && lvl !== "scoped") return { user: null, error: "성적 관리 권한이 없습니다" };
@@ -1464,7 +1464,7 @@ export async function deleteStudentGradeComment(
 export async function clearDupSuspect(
   studentId: string,
 ): Promise<{ ok?: boolean; error?: string }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   // 학생 레코드 변경 = full만 — canWriteTenant는 scoped(강사)도 통과한다(적대 리뷰 F3, #77).
   if (!(await canManageStudentRecords(user.systemRole))) return { error: STUDENT_MANAGE_DENIED };

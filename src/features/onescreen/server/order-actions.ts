@@ -21,7 +21,7 @@ export async function saveStudentOrder(input: {
   classId: string;
   studentIds: string[];
 }): Promise<SaveOrderResult> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   // '다른 강사 뷰'(열람 전용) 차단 — 없으면 관리자가 **그 강사의 저장 순서 행**을 덮어쓴다(teacher_id=대상).
   const roError = await readonlyTeacherViewError();

@@ -32,7 +32,7 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
     noExamReady: false,
     monthReady: false,
   };
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ...empty, schemaReady: false };
 
 
@@ -47,8 +47,6 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
   // ⚠️ 과목 스코프는 그대로 둔다(영어 강사에게 수학 성적표가 열리지 않게) — 반 필터가 사실상 같은 일을
   //    하지만, 고른 과목이 내 것이 아니면 **명단을 만들기도 전에** 접는 쪽이 싸다.
   const scope = await effectiveTeacherScope();
-  const teacherSubjects = scope?.subjects ?? null;
-  if (teacherSubjects && !teacherSubjects.includes(sel.subject)) return empty;
   const teacherId = scope ? await effectiveTeacherId() : null;
   // 담임 ∪ 부담임 — 공용 스코프(`classes.teacher_id`만 본다)를 넓히지 않고 성적관리 전용으로 구한다.
   const teacherScope = teacherId ? await gradeTeacherClassScope(teacherId) : { ids: [], partial: false };

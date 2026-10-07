@@ -66,6 +66,7 @@ const INNER_PARENT: Partial<Record<MenuKey, MenuKey>> = {
   sheet_sync: "timetable", // 시간표의 '시트 반영' · '시트에서 가져오기'
   integrations: "students", // 원생목록의 '지금 동기화'(콜&상담의 '보내기'도 이 권한)
   student_english_name: "students", // 원생목록 - 영어이름: 영문 이름 한 칸 편집
+  teacher_view: "staff",
 };
 
 /** `listed` = '이 권한으로 열리는 메뉴'에 이름을 적는 목적지(원장만 들어가는 면은 적지 않는다 — 감춤 판정에는 센다). */

@@ -64,7 +64,7 @@ export async function loadHubStudentSearch(input: {
   const monthLabel = sheetMonthLabel(month, `${Number(month.slice(5, 7))}월`, lang);
 
   const plainScope = sheetTf(lang, "att.search.scope.plain", { month: monthLabel });
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return emptyResult(plainScope);
   // 화면(page)의 requireAccess("attendance")와 **같은 게이트** — 읽기라 canAccessTenant(readonly 통과).
   if (!(await canAccessTenant(user.systemRole, "attendance"))) return emptyResult(plainScope);

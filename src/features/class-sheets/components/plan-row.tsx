@@ -184,12 +184,12 @@ export const PlanRow = memo(function PlanRow({
           <select
             className={areaCls}
             value={known ? (areaValue ?? "") : ""}
-            aria-label="구분(영역)"
+            aria-label={t("plan.areaAria")}
             onChange={(e) => {
               if (e.target.value) handlers.editCell(line.id, "skill_area", e.target.value);
             }}
           >
-            {!known ? <option value="">{areaLabel} (미등록)</option> : null}
+            {!known ? <option value="">{areaLabel} ({t("plan.unknownArea")})</option> : null}
             {skillAreas.map((a) => (
               <option key={a.key} value={a.key}>
                 {a.label}
@@ -227,13 +227,13 @@ export const PlanRow = memo(function PlanRow({
         {canEdit ? (
           <button
             type="button"
-            aria-label="줄 삭제"
+            aria-label={t("plan.deleteRow")}
             className="text-text-dim hover:text-danger cursor-pointer rounded p-0.5"
             onClick={() => {
               const hasContent = [line.textbook, line.pageRange, line.progress, line.homework].some(
                 (v) => (v ?? "").trim() !== "",
               );
-              if (hasContent && !window.confirm("내용이 있는 줄입니다. 삭제할까요?")) return;
+              if (hasContent && !window.confirm(t("plan.deleteConfirm"))) return;
               handlers.removeLine(line.id, date, slotStart);
             }}
           >

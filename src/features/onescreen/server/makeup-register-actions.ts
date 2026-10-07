@@ -40,7 +40,7 @@ export async function registerMakeupEntries(input: {
   | { ok: true; updatedAt: string; previousUpdatedAt: string | null; cellError?: string; makeupEffect?: MakeupEffectNotice }
   | { ok: false; error: string }
 > {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   const readonly = await readonlyTeacherViewError();
   if (readonly) return { ok: false, error: readonly };

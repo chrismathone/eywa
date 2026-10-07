@@ -1,4 +1,5 @@
 "use client";
+import { useSheetLang } from "@/features/teacher-view/lang-context";
 
 /**
  * 출석부 **학생 검색 칸** — 월별 출석부·오늘 출결이 같이 쓰는 입력 하나(판정은 [`student-search.ts`](../student-search.ts)).
@@ -40,6 +41,7 @@ export function StudentSearchToggle({
   /** 입력칸 접근성 이름 — 학생이 아닌 것을 찾는 화면(도움말)은 제 이름을 준다(기본 "학생 검색"). */
   ariaLabel?: string;
 }) {
+  const lang = useSheetLang();
   const [opened, setOpened] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const active = isSearchActive(value);
@@ -60,7 +62,7 @@ export function StudentSearchToggle({
         }}
         className={`${CONTROL_H} ${CONTROL_LABEL} text-text-dim hover:text-foreground inline-flex shrink-0 items-center px-1 font-medium whitespace-nowrap transition`}
       >
-        검색
+        {lang === "en" ? "Search" : "검색"}
       </button>
     );
   }
@@ -69,7 +71,7 @@ export function StudentSearchToggle({
       <StudentSearchBox
         value={value}
         onChange={change}
-        placeholder={placeholder}
+        placeholder={lang === "en" && (placeholder === undefined || placeholder === "학생 이름") ? "Student name" : placeholder}
         inputWidth={inputWidth}
         inputRef={inputRef}
         ariaLabel={ariaLabel}
@@ -82,7 +84,7 @@ export function StudentSearchToggle({
           onClick={() => setOpened(false)}
           className={`${CONTROL_H} ${CONTROL_LABEL} text-text-faint hover:text-foreground inline-flex shrink-0 items-center px-1 whitespace-nowrap transition`}
         >
-          닫기
+          {lang === "en" ? "Close" : "닫기"}
         </button>
       )}
     </>
@@ -113,6 +115,7 @@ export function StudentSearchBox({
    */
   inputRef?: React.Ref<HTMLInputElement>;
 }) {
+  const lang = useSheetLang();
   const active = isSearchActive(value);
   return (
     <div
@@ -135,8 +138,8 @@ export function StudentSearchBox({
             onChange("");
           }
         }}
-        placeholder={placeholder}
-        aria-label={ariaLabel}
+        placeholder={lang === "en" && (placeholder === undefined || placeholder === "학생 이름") ? "Student name" : placeholder}
+        aria-label={lang === "en" && ariaLabel === "학생 검색" ? "Search students" : ariaLabel}
         // ⚠️ 브라우저 기본 ✕(webkit)를 감춘다 — 아래 우리 ✕와 나란히 두 개가 뜬다.
         // 글자 = sm 라벨(16px — iOS 자동확대 하한 그대로, 상자 라벨 18보다 한 단계 작게: 원장 2026-09-04 "내부 텍스트는 폰트 작게") ·
         // `h-full leading-normal` — `<input>`은 제 상자 안에서
@@ -147,7 +150,7 @@ export function StudentSearchBox({
         <button
           type="button"
           onClick={() => onChange("")}
-          aria-label="검색 지우기"
+          aria-label={lang === "en" ? "Clear search" : "검색 지우기"}
           title="검색 지우기 (Esc)"
           className="text-text-faint hover:text-foreground hover:bg-bg-soft -mr-1 inline-flex size-5 shrink-0 items-center justify-center rounded-full transition"
         >

@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { readEnglishTrack, type EnglishTrack } from "../english-track";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
-import { getTeacherScope } from "@/lib/auth/teacher-scope";
+import { getTeacherReadScope } from "@/lib/auth/teacher-read-scope";
 import { attendanceRate, attendedCount } from "@/lib/calc/attendance";
 import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
 import { enrollmentPhaseOn, isEnrollmentOnRosterOn, type EnrollmentPhase } from "@/features/enrollments/eligibility";
@@ -418,9 +418,11 @@ export async function getClassesStats(): Promise<{ total: number; active: number
   // 강사 스코프(teacher·겸직 강사뷰면 본인 담당 반·그 반 수강만 — 목록과 일치)와 보강 반 id는
   // 서로 안 기다린다(B4) — 둘 다 아래 쿼리를 만드는 재료다.
   const [tId, poolIds] = await Promise.all([effectiveTeacherId(), listMakeupPoolClassIds()]);
+  const scope = tId ? await getTeacherReadScope(tId) : null;
+  if (scope && scope.classIds.length === 0) return { total: 0, active: 0, totalSeats: 0 };
   const classBase = () => {
     let q = supabase.from("classes").select("*", { count: "exact", head: true });
-    if (tId) q = q.eq("teacher_id", tId);
+    if (scope) q = q.in("id", scope.classIds);
     if (poolIds.length > 0) q = q.not("id", "in", `(${poolIds.join(",")})`);
     return q;
   };
@@ -436,7 +438,7 @@ export async function getClassesStats(): Promise<{ total: number; active: number
     .lte("start_date", seatToday)
     .or(`end_date.is.null,end_date.gte.${seatToday}`);
   if (tId) {
-    const { classIds } = await getTeacherScope(tId);
+    const { classIds } = await getTeacherReadScope(tId);
     if (classIds.length === 0) return { total: 0, active: 0, totalSeats: 0 };
     seatsQuery = seatsQuery.in("class_id", classIds);
   }
@@ -510,9 +512,13 @@ export async function getClassesPage(
     )
     .order("class_name");
   if (options.subject && options.subject !== "all") qb = qb.eq("subject", options.subject);
-  const teacherFilter =
-    forcedTeacherId ?? (options.teacherId && options.teacherId !== "all" ? options.teacherId : null);
-  if (teacherFilter) qb = qb.eq("teacher_id", teacherFilter);
+  if (forcedTeacherId) {
+    const scope = await getTeacherReadScope(forcedTeacherId);
+    if (scope.classIds.length === 0) return { rows: [], total: 0 };
+    qb = qb.in("id", scope.classIds);
+  } else if (options.teacherId && options.teacherId !== "all") {
+    qb = qb.eq("teacher_id", options.teacherId);
+  }
   if (options.active === "active") qb = qb.eq("is_active", true);
   if (options.active === "closed") qb = qb.eq("is_active", false);
   // 상태(운영/종강/폐지) — 화면 배지와 같은 판정. `closed_at`은 종강일이라 **있으면 종강**이다.

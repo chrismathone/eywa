@@ -22,7 +22,7 @@ export async function getClassnoteStatuses(
   reportDate: string,
   studentIds: string[],
 ): Promise<ClassnoteStatusRow[] | null> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return null;
   if ((await getShellView()) !== "teacher") return null;
   const ids = [...new Set(studentIds)].slice(0, MAX_STUDENTS);

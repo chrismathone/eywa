@@ -19,7 +19,7 @@ import type { NoticeAttachment } from "../notice-attachments";
 import { issueNoticeImageTicket, verifyNoticeImage } from "./notice-image-upload";
 
 async function gate(): Promise<{ tenantId: string } | { error: string }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   // '다른 강사 뷰'(열람 전용) 차단 — 발송(sendOnescreenNotice)과 같은 게이트 모양 유지(#77).
   const roError = await readonlyTeacherViewError();

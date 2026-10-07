@@ -348,7 +348,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   const today = formatKoreanDate(targetDate);
   const dow = DOW_KEY[weekdayIndexOf(targetDate)];
 
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return emptyRoster(today, targetDate, "");
   // '다른 강사 뷰'(열람 전용, 2026-08-19) — 로스터의 강사 축을 열람 대상으로 통째 전환한다.
   // viewAsTeacher()는 매 요청 자격·대상을 재검증(effectiveTeacherId와 같은 판정)하고, 아니면 본인.

@@ -1,5 +1,6 @@
 "use client";
 
+import { useSheetFeedback } from "@/features/teacher-view/lang-context";
 import { useRef, useState, type FocusEvent } from "react";
 import { upsertGoal } from "@/features/class-sheets/server/actions";
 import { useEditPresence } from "@/features/presence/edit-presence";
@@ -23,6 +24,7 @@ export function InlineGoalEditor({ classId, area, scope, periodStart, weekMonday
   classId: string; area: string; scope: "month" | "week"; periodStart: string; weekMonday: string;
   items: RoleGoal[]; role: GoalsBoardRole; lang: SheetLang; onClose: () => void; onSaved: () => void;
 }) {
+  const feedback = useSheetFeedback();
   const [initial] = useState<Draft>(() => initialDraft(items));
   const [draft, setDraft] = useState<Draft>(initial);
   const [error, setError] = useState<string | null>(null);
@@ -46,11 +48,11 @@ export function InlineGoalEditor({ classId, area, scope, periodStart, weekMonday
         if (before.textbook.trim() === next.textbook.trim() && before.targetProgress.trim() === next.targetProgress.trim()) continue;
         const result = await upsertGoal({ classId, skillArea: area, scope, periodStart, role: owner,
           textbook: next.textbook, targetProgress: next.targetProgress });
-        if (!result.ok) { setError(result.error); return; }
+        if (!result.ok) { setError(feedback(result.error)); return; }
         savedAny.current = true;
       }
       close();
-    } catch { setError("저장 결과를 확인하지 못했습니다. 다시 시도해 주세요."); }
+    } catch { setError(feedback("저장 결과를 확인하지 못했습니다. 다시 시도해 주세요.")); }
     finally { busy.current = false; setSaving(false); }
   };
   const onBlur = (event: FocusEvent<HTMLDivElement>) => {

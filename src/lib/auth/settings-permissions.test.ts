@@ -6,7 +6,7 @@ const s = vi.hoisted(() => ({ role: "admin" as SystemRole, super: false, readonl
   overrides: [] as PermissionOverride[], userOverrides: [] as UserPermissionOverride[], disabled: [] as string[] }));
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => ({ id: "u1", tenantId: "t1", systemRole: s.role }) }));
 vi.mock("@/lib/auth/super-admin", () => ({ isCurrentUserSuperAdmin: async () => s.super }));
-vi.mock("@/lib/auth/view-as", () => ({ isReadonlyTeacherView: async () => s.readonly }));
+vi.mock("@/lib/auth/view-as", () => ({ isReadonlyTeacherView: async () => s.readonly, viewAsTeacher: async () => null }));
 vi.mock("@/lib/license/server", () => ({ isFeatureLicensed: async () => s.licensed }));
 vi.mock("@/features/owner/server/queries", () => ({ getTenantSettings: async () => ({ preset: "generic", modules: { disabled: s.disabled }, permissions: { overrides: s.overrides, userOverrides: s.userOverrides } }) }));
 import { canAccessTenant, canWriteTenant, getUserPermMatrix } from "./perm-matrix";

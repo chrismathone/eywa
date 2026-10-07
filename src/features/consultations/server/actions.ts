@@ -50,7 +50,7 @@ export async function runStudentCareAnalysis(
   // 역할 게이트 — 유료 AI 호출은 학생 **full** 역할만(비용통제, #S5 형제).
   // 🔴 강사(scoped) 차단(원장 지시 2026-08-18 "AI 케어 분석도 막고 — 읽기만") — 학생 상세의
   // 퇴원·수정 차단(students/server/actions.ts canManageStudentRecords)과 같은 결.
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if ((await accessLevelTenant(user.systemRole, "students")) !== "full") {
     return { error: "AI 케어 분석 권한이 없습니다 — 강사 계정은 열람 전용입니다" };
@@ -308,7 +308,7 @@ export async function createStudentConsultation(
   _prev: ConsultationFormState,
   formData: FormData,
 ): Promise<ConsultationFormState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "consultations"))) return { error: "상담 관리 권한이 없습니다" };
 
@@ -407,7 +407,7 @@ export async function updateStudentConsultation(
   _prev: ConsultationFormState,
   formData: FormData,
 ): Promise<ConsultationFormState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "consultations"))) return { error: "상담 관리 권한이 없습니다" };
 
@@ -576,7 +576,7 @@ export async function toggleConsultationFollowUp(
   _prev: ToggleFollowUpState,
   formData: FormData,
 ): Promise<ToggleFollowUpState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   const cLvl = await accessLevelTenant(user.systemRole, "consultations");
   if (cLvl !== "full" && cLvl !== "scoped") return { error: "상담 관리 권한이 없습니다" };
@@ -612,7 +612,7 @@ export async function deleteStudentConsultation(
   _prev: DeleteConsultationState,
   formData: FormData,
 ): Promise<DeleteConsultationState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "consultations"))) return { error: "상담 관리 권한이 없습니다" };
 

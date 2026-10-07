@@ -4,6 +4,8 @@
 // 시트 원본의 "담임 월간계획/주간계획·부담임 월간계획/주간계획" 4구획을 아코디언으로 이식. LWW 자동저장.
 // 행은 반 트랙별(원장 2026-09-14 — EiE = 달력 칸 `In-class · Homework · Test` / 그 외 = 6영역):
 // 호출부가 `goalAreasFor`로 골라 넘긴다. 이 파일은 받은 목록을 그리기만 한다.
+import { useSheetT } from "@/features/teacher-view/lang-context";
+import type { SheetDictKey } from "@/features/teacher-view/i18n";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
 import { skillAreaColorOf } from "@/features/owner/skill-areas";
@@ -11,11 +13,11 @@ import { SUBJECT_SOFT } from "@/features/owner/subjects";
 import type { SheetGoalDTO } from "../server/queries";
 import { SHEET_BOX_FRAME, SHEET_INPUT, SHEET_TEXTAREA } from "../ui-box";
 
-const SECTIONS: { role: "homeroom" | "assistant"; scope: "month" | "week"; title: string }[] = [
-  { role: "homeroom", scope: "month", title: "담임 월간계획" },
-  { role: "homeroom", scope: "week", title: "담임 주간계획" },
-  { role: "assistant", scope: "month", title: "부담임 월간계획" },
-  { role: "assistant", scope: "week", title: "부담임 주간계획" },
+const SECTIONS: { role: "homeroom" | "assistant"; scope: "month" | "week"; title: SheetDictKey }[] = [
+  { role: "homeroom", scope: "month", title: "plan.panel.homeroom.month" },
+  { role: "homeroom", scope: "week", title: "plan.panel.homeroom.week" },
+  { role: "assistant", scope: "month", title: "plan.panel.assistant.month" },
+  { role: "assistant", scope: "week", title: "plan.panel.assistant.week" },
 ];
 
 export function PlanPanel({
@@ -44,6 +46,7 @@ export function PlanPanel({
   ) => void;
   onMemo: (body: string) => void;
 }) {
+  const t = useSheetT();
   const goalOf = (scope: string, role: string, area: string) =>
     goals.find(
       (g) =>
@@ -66,9 +69,9 @@ export function PlanPanel({
                 size={11}
                 className="text-text-faint transition-transform group-open:rotate-90"
               />
-              <span className="text-foreground text-sm font-bold">{sec.title}</span>
+              <span className="text-foreground text-sm font-bold">{t(sec.title)}</span>
               <span className="text-foreground num ml-auto text-xs font-bold">
-                {sec.scope === "month" ? monthStart.slice(0, 7) : "이번 주"}
+                {sec.scope === "month" ? monthStart.slice(0, 7) : t("plan.panel.thisWeek")}
               </span>
             </summary>
             {/* 🔴 표 하나 + 줄마다 subgrid — 영역 칸 폭 = **가장 긴 라벨**(하한 74px · 상한 96px).
@@ -79,8 +82,8 @@ export function PlanPanel({
               {/* 열 머리글 — 시트의 '교재명 / 목표 진도' 머리줄. faint 10px는 안 읽혀 11px 굵게로. */}
               <div className="text-foreground bg-bg-soft col-span-3 grid grid-cols-subgrid rounded-md py-0.5 text-xs font-bold">
                 <span />
-                <span className="pl-1">교재명</span>
-                <span>목표 진도</span>
+                <span className="pl-1">{t("month.goal.book")}</span>
+                <span>{t("plan.panel.progress")}</span>
               </div>
               {skillAreas.map((area) => {
                 const g = goalOf(sec.scope, sec.role, area.key);
@@ -101,14 +104,14 @@ export function PlanPanel({
                       className={SHEET_INPUT}
                       defaultValue={g?.textbook ?? ""}
                       readOnly={!canEdit}
-                      aria-label={`${sec.title} ${area.label} 교재명`}
+                      aria-label={`${t(sec.title)} ${area.label} ${t("month.goal.book")}`}
                       onChange={(e) => onGoalField(sec.scope, sec.role, area.key, "textbook", e.target.value)}
                     />
                     <input
                       className={SHEET_INPUT}
                       defaultValue={g?.targetProgress ?? ""}
                       readOnly={!canEdit}
-                      aria-label={`${sec.title} ${area.label} 목표 진도`}
+                      aria-label={`${t(sec.title)} ${area.label} ${t("plan.panel.progress")}`}
                       onChange={(e) =>
                         onGoalField(sec.scope, sec.role, area.key, "targetProgress", e.target.value)
                       }
@@ -122,12 +125,12 @@ export function PlanPanel({
       </div>
 
       <div className="border-line-strong mt-1.5 border-t pt-1.5">
-        <span className="text-foreground text-xs font-bold">메모</span>
+        <span className="text-foreground text-xs font-bold">{t("plan.panel.memo")}</span>
         <textarea
           className={`${SHEET_TEXTAREA} mt-1 min-h-[56px]`}
           defaultValue={memo}
           readOnly={!canEdit}
-          aria-label="주간 메모"
+          aria-label={t("plan.panel.memo")}
           onChange={(e) => onMemo(e.target.value)}
         />
       </div>

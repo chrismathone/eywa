@@ -9,7 +9,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { caseListSchema, caseDetailSchema, optionPageSchema, candidatePageSchema, dryRunPageSchema, eventPageSchema, reconciliationPageSchema, type ReadResult } from "./read-types";
 
 async function readRpc<T>(name: string, args: Record<string, unknown>, schema: z.ZodType<T>): Promise<ReadResult<T>> {
-  const actor = await getCurrentUser();
+  const actor = await getCurrentUser({ teacherView: true });
   if (!actor || !(await canAccessTenant(actor.systemRole, "makeups"))) return { error: "보강관리 조회 권한이 없습니다" };
   if ((await getTenantSettings()).makeups.mode === "off") return { error: "보강관리 운영이 중지되어 있습니다" };
   const db = await createClient();

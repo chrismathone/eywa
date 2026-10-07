@@ -13,6 +13,8 @@
  *    CAS 시드(expectedValue)가 옛 값으로 남는다. 서버가 돌려준 canonical 행으로 **다시 심고** 나서
  *    refresh한다(안 심으면 방금 채워진 칸을 처음 고칠 때 충돌로 뜬다).
  */
+import { sheetCarrySummary } from "@/features/teacher-view/feedback";
+import { useSheetLang, useSheetFeedback } from "@/features/teacher-view/lang-context";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -39,6 +41,8 @@ export function TodayCopySlot({
    */
   onCarried?: (slotStart: string, patches: CarryPatch[]) => void;
 }) {
+  const feedback = useSheetFeedback();
+  const lang = useSheetLang();
   const router = useRouter();
   const t = useSheetT();
   const tf = useSheetTf();
@@ -59,15 +63,15 @@ export function TodayCopySlot({
               if (!go) return;
             }
             return copySlotFromPrevious({ classId, planDate: date, slotStart, termMode: "regular" }).then((r) => {
-              if (!r.ok) return void toast.error(r.error);
+              if (!r.ok) return void toast.error(feedback(r.error));
               // JJ 이어받기는 계획 복사와 **따로** 반영한다(원본이 계획 줄이 아니라 학생 기록이다).
               if (r.carried.length > 0) onCarried?.(slotStart, r.carried);
-              if (r.carryError) toast.error(r.carryError);
+              if (r.carryError) toast.error(feedback(r.carryError));
               if (r.carryPending) {
                 toast.info(t("today.copy.carryPending"));
               }
               if (r.copied === 0 && r.carrySummary) {
-                toast.success(tf("today.copy.carriedOnly", { summary: r.carrySummary }));
+                toast.success(tf("today.copy.carriedOnly", { summary: sheetCarrySummary(lang, r.carrySummary) }));
                 return;
               }
               if (r.copied === 0) {
@@ -98,7 +102,7 @@ export function TodayCopySlot({
                   source: r.sourceLabel ? tf("today.copy.done.source", { label: r.sourceLabel }) : "",
                   n: r.copied,
                 }) +
-                  (r.carrySummary ? tf("today.copy.done.carry", { summary: r.carrySummary }) : "") +
+                  (r.carrySummary ? tf("today.copy.done.carry", { summary: sheetCarrySummary(lang, r.carrySummary) }) : "") +
                   (r.truncated > 0 ? tf("today.copy.done.truncated", { n: r.truncated }) : ""),
               );
               router.refresh();

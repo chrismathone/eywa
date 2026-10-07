@@ -20,7 +20,7 @@ const CREATE_KINDS = new Set<UnifiedKind>(["daily", "check", "admission", "other
 export async function createUnifiedGrade(_previous: UnifiedSaveState, formData: FormData): Promise<UnifiedSaveState> {
   const gate = await gradeWriteError();
   if (gate) return { error: gate };
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   const studentId = String(formData.get("studentId") ?? "");
   const subject = String(formData.get("subject") ?? "");

@@ -1,5 +1,6 @@
 "use client";
 
+import { useSheetFeedback } from "@/features/teacher-view/lang-context";
 import { useEffect, useRef, useState, type FocusEvent } from "react";
 import { getEcsDayPlan } from "@/features/class-sheets/server/day-plan";
 import { ECS_PLAN_API } from "@/features/class-sheets/components/plan-api";
@@ -36,6 +37,7 @@ export function InlineDayEditor({ classId, area, date, weekMonday, slots, lang, 
   classId: string; area: string; date: string; weekMonday: string; slots: MonthSlot[];
   lang: SheetLang; onClose: () => void; onSaved: () => void;
 }) {
+  const feedback = useSheetFeedback();
   const [lines, setLines] = useState<DraftLine[] | null>(null);
   const [knownIds, setKnownIds] = useState<Record<string, string[]>>({});
   const [showExamTerm, setShowExamTerm] = useState(false);
@@ -50,8 +52,8 @@ export function InlineDayEditor({ classId, area, date, weekMonday, slots, lang, 
     let active = true;
     void getEcsDayPlan({ classId, planDate: date }).then((result) => {
       if (!active) return;
-      if (!result.ok) { setError(result.error); return; }
-      if (!result.data.canEdit) { setError("이 반의 계획을 수정할 권한이 없습니다."); return; }
+      if (!result.ok) { setError(feedback(result.error)); return; }
+      if (!result.data.canEdit) { setError(feedback("이 반의 계획을 수정할 권한이 없습니다.")); return; }
       const all = slots.flatMap((slot) => result.data.linesBySlot[slot.slotStart] ?? []);
       const areaLines = all.filter((line) => line.skillArea === area);
       const meaningful = areaLines.filter(isMeaningfulPlanLine);
@@ -61,9 +63,9 @@ export function InlineDayEditor({ classId, area, date, weekMonday, slots, lang, 
       setShowExamTerm(result.data.showExamTerm);
       setLines(selected.length > 0 ? selected.map(toDraft) : [{ ...EMPTY, id: null, slotStart: slots[0]!.slotStart,
         termMode: "regular", lineNo: 1, before: EMPTY }]);
-    }).catch(() => { if (active) setError("일간 계획을 불러오지 못했습니다. 다시 시도해 주세요."); });
+    }).catch(() => { if (active) setError(feedback("일간 계획을 불러오지 못했습니다. 다시 시도해 주세요.")); });
     return () => { active = false; };
-  }, [area, classId, date, slots]);
+  }, [area, classId, date, feedback, slots]);
 
   const close = () => { if (savedAny.current) onSaved(); onClose(); };
   const save = async () => {
@@ -81,9 +83,9 @@ export function InlineDayEditor({ classId, area, date, weekMonday, slots, lang, 
         let before = line.before;
         if (!id) {
           const created = await ECS_PLAN_API.createLine(ref, { termMode: line.termMode, skillArea: area });
-          if (!created.ok) { setError(created.error); return; }
+          if (!created.ok) { setError(feedback(created.error)); return; }
           const fresh = created.lines.find((item) => item.skillArea === area && !usedIds.has(item.id));
-          if (!fresh) { setError("새 계획 줄을 찾지 못했습니다. 새로고침 후 다시 시도해 주세요."); return; }
+          if (!fresh) { setError(feedback("새 계획 줄을 찾지 못했습니다. 새로고침 후 다시 시도해 주세요.")); return; }
           id = fresh.id;
           usedIds.add(id);
           before = { textbook: fresh.textbook, pageRange: fresh.pageRange, progress: fresh.progress, homework: fresh.homework };
@@ -97,18 +99,18 @@ export function InlineDayEditor({ classId, area, date, weekMonday, slots, lang, 
         });
         if (patches.length === 0) continue;
         const result = await ECS_PLAN_API.flushPatches(ref, patches);
-        if (!result.ok) { setError(result.error); return; }
+        if (!result.ok) { setError(feedback(result.error)); return; }
         if (result.results.some((item) => item.status === "applied" || item.status === "already_applied")) {
           savedAny.current = true;
         }
         const failed = result.results.find((item) => item.status !== "applied" && item.status !== "already_applied");
         if (failed) {
-          setError(failed.status === "error" ? failed.error : "다른 화면에서 계획이 바뀌었습니다. 새로고침 후 다시 시도해 주세요.");
+          setError(feedback(failed.status === "error" ? failed.error : "다른 화면에서 계획이 바뀌었습니다. 새로고침 후 다시 시도해 주세요."));
           return;
         }
       }
       close();
-    } catch { setError("저장 결과를 확인하지 못했습니다. 다시 시도해 주세요."); }
+    } catch { setError(feedback("저장 결과를 확인하지 못했습니다. 다시 시도해 주세요.")); }
     finally { busy.current = false; setSaving(false); }
   };
   const onBlur = (event: FocusEvent<HTMLDivElement>) => {

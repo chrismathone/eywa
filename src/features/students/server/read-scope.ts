@@ -89,7 +89,7 @@ export const teacherClassScopeStrict = cache(async (userId: string): Promise<Tea
  * 상세 페이지·요약 API(/api/students/[id]/summary)가 함께 잠긴다(#77 — 표면마다 다시 쓰지 않는다).
  */
 export async function canViewStudentDetail(studentId: string): Promise<boolean> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return false;
   if ((await accessLevelTenant(user.systemRole, "students")) !== "scoped") return true;
 

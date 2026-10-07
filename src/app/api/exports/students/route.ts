@@ -24,7 +24,7 @@ export async function GET(request: Request) {
   const status = url.searchParams.get("status") ?? undefined;
   // 🔴 강사 스코프면 파일도 **화면과 같은 축**이어야 한다 — 안 그러면 "화면엔 없는 영어가 파일엔 있다".
   //    과목 필터가 축 밖이면 화면(page.tsx)과 같은 규칙으로 "전체"로 되돌린다.
-  const axis = subjectAxisOf(await effectiveTeacherScope());
+  const axis = subjectAxisOf(await effectiveTeacherScope({ includeScheduled: true }));
   const subject = coerceSubjectFilter(axis, url.searchParams.get("subject") ?? undefined);
   const q = url.searchParams.get("q") ?? undefined;
   // 고급 필터 — 화면 필터와 동일하게 export에 반영(목록과 파일 불일치 방지). 과목·학년·담임은 쉼표 다중 값 그대로 넘긴다

@@ -1,4 +1,6 @@
 "use client";
+import { useSheetFeedback, useSheetLang } from "@/features/teacher-view/lang-context";
+import { useTimetableText } from "@/features/teacher-view/use-timetable-text";
 import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF, TOOLBAR_CHIP_ON } from "@/components/toolbar-controls";
 
 import { useState, useTransition } from "react";
@@ -65,6 +67,9 @@ export function TimetableViewSettings({
   /** 지금 접혀 있는가(true = 명단 숨김). 칩은 "보이는 상태"를 강조로 나타낸다. */
   hideStudentsOn?: boolean;
 }) {
+  const tt = useTimetableText();
+  const feedback = useSheetFeedback();
+  const lang = useSheetLang();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
@@ -100,11 +105,11 @@ export function TimetableViewSettings({
       // 표시 토글(미사용 요일·빈 교시·1시간 단위·색)이 이 저장에 덮여 날아간다.
       const res = await saveTimetableViewPrefs({ grades });
       if (!res.ok) {
-        toast.error(res.error ?? "뷰 설정을 저장하지 못했습니다");
+        toast.error(feedback(res.error ?? tt("뷰 설정을 저장하지 못했습니다")));
         return;
       }
       setOpen(false);
-      toast.success(grades ? `${gradeFilterLabel(grades, allGrades)} 보기로 저장했습니다` : "전체 학년 보기로 저장했습니다");
+      toast.success(lang === "en" ? "View settings saved" : grades ? `${gradeFilterLabel(grades, allGrades)} 보기로 저장했습니다` : tt("전체 학년 보기로 저장했습니다"));
       router.refresh();
     });
   };
@@ -134,24 +139,23 @@ export function TimetableViewSettings({
     >
       <Popover.Trigger
         className={`${TOOLBAR_CHIP} gap-1.5 ${badge ? TOOLBAR_CHIP_ON : TOOLBAR_CHIP_OFF}`}
-        title="학제·학년으로 보이는 학생을 고른다 (내 계정에 저장)"
+        title={tt("학제·학년으로 보이는 학생을 고른다 (내 계정에 저장)")}
       >
         <Filter size={11} strokeWidth={1.8} aria-hidden />
-        {badge ?? "뷰 설정"}
+        {badge ? tt(badge) : tt("뷰 설정")}
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner side="bottom" align="start" sideOffset={6} className="z-50">
           <Popover.Popup className="bg-card border-line shadow-card w-[300px] max-w-[calc(100vw-2rem)] rounded-xl border p-3 text-left outline-none">
             <div className="mb-2 flex items-center justify-between">
-              <span className="text-foreground text-xs font-semibold">보이는 학년</span>
+              <span className="text-foreground text-xs font-semibold">{tt("보이는 학년")}</span>
               <button
                 type="button"
                 onClick={reset}
                 className="text-text-dim hover:text-foreground inline-flex items-center gap-1 text-xs"
               >
                 <RotateCcw size={10} strokeWidth={1.8} aria-hidden />
-                전체
-              </button>
+                {tt("전체")}</button>
             </div>
 
             {/* 학제 = 그 학제 학년을 통째로 켜고 끈다. */}
@@ -172,7 +176,7 @@ export function TimetableViewSettings({
                           : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
                     }`}
                   >
-                    {b}
+                    {tt(b)}
                   </button>
                 );
               })}
@@ -194,7 +198,7 @@ export function TimetableViewSettings({
                         : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
                     }`}
                   >
-                    {g}
+                    {tt(g)}
                   </button>
                 );
               })}
@@ -202,8 +206,8 @@ export function TimetableViewSettings({
 
             <p className="text-text-dim mb-2 text-xs leading-relaxed">
               {noneSelected
-                ? "아무것도 고르지 않으면 전체 학년을 봅니다."
-                : "학생 기준으로 걸러집니다. 학년이 섞인 반은 사라지지 않고 명단만 좁아집니다."}
+                ? tt("아무것도 고르지 않으면 전체 학년을 봅니다.")
+                : tt("학생 기준으로 걸러집니다. 학년이 섞인 반은 사라지지 않고 명단만 좁아집니다.")}
             </p>
 
             {/* ── 표시(즉시 반영) — 위 학년(초안+적용)과 적용 시점이 달라 구분선과 문구로 가른다.
@@ -212,8 +216,8 @@ export function TimetableViewSettings({
                    이 칸은 조건 없이 렌더한다. 옛 조건은 색·링크가 다 없는 뷰에서 칸을 통째로 감췄다. */}
             <div className="border-line mb-2 border-t pt-2">
               <div className="mb-1.5 flex items-baseline justify-between gap-2">
-                <span className="text-foreground text-xs font-semibold">표시</span>
-                <span className="text-text-faint text-xs">바로 적용됩니다</span>
+                <span className="text-foreground text-xs font-semibold">{tt("표시")}</span>
+                <span className="text-text-faint text-xs">{tt("바로 적용됩니다")}</span>
               </div>
               <TimetableFontToggle />
               {showColor ? (
@@ -227,33 +231,30 @@ export function TimetableViewSettings({
                   {hideStudentsHref ? (
                     <ParamLink
                       href={hideStudentsHref}
-                      title="셀 안 학생 명단 표시/숨김 (숨기면 반 이름·강의실·인원만 남고 칸이 낮아진다)"
+                      title={tt("셀 안 학생 명단 표시/숨김 (숨기면 반 이름·강의실·인원만 남고 칸이 낮아진다)")}
                       className={toggleCls(!hideStudentsOn)}
                     >
                       <Users size={11} strokeWidth={1.8} />
-                      학생 명단
-                    </ParamLink>
+                      {tt("학생 명단")}</ParamLink>
                   ) : null}
                   {collapseHref ? (
                     <ParamLink
                       href={collapseHref}
-                      title="수업 없는 교시 행을 얇게 접기/펼치기 (편집 중엔 자동으로 펼쳐짐)"
+                      title={tt("수업 없는 교시 행을 얇게 접기/펼치기 (편집 중엔 자동으로 펼쳐짐)")}
                       className={toggleCls(collapseOn)}
                     >
                       <ListFilter size={11} strokeWidth={1.8} />
-                      빈 교시 접기
-                    </ParamLink>
+                      {tt("빈 교시 접기")}</ParamLink>
                   ) : null}
                   {/* ⚠️ 강조는 `!hideEmptyDays`일 때 — "미사용 요일을 **보여주는**" 상태가 켜짐이다(툴바 원본과 동일). */}
                   {hideEmptyDaysHref ? (
                     <ParamLink
                       href={hideEmptyDaysHref}
-                      title="수업 없는 요일 컬럼 표시/숨김"
+                      title={tt("수업 없는 요일 컬럼 표시/숨김")}
                       className={toggleCls(!hideEmptyDaysOn)}
                     >
                       <CalendarOff size={11} strokeWidth={1.8} />
-                      미사용 요일
-                    </ParamLink>
+                      {tt("미사용 요일")}</ParamLink>
                   ) : null}
                 </div>
               ) : null}
@@ -265,15 +266,14 @@ export function TimetableViewSettings({
                 onClick={() => setOpen(false)}
                 className="border-line text-text-dim hover:text-foreground rounded-lg border px-2.5 py-1 text-xs"
               >
-                취소
-              </button>
+                {tt("취소")}</button>
               <button
                 type="button"
                 onClick={apply}
                 disabled={pending}
                 className="bg-primary text-primary-foreground rounded-lg px-3 py-1 text-xs font-medium disabled:opacity-50"
               >
-                {pending ? "저장 중…" : "적용"}
+                {pending ? tt("저장 중…") : tt("적용")}
               </button>
             </div>
           </Popover.Popup>

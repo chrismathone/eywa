@@ -1,4 +1,6 @@
 "use client";
+import { useSheetLang } from "@/features/teacher-view/lang-context";
+import { useTimetableText } from "@/features/teacher-view/use-timetable-text";
 
 /**
  * 시간표 **학생 검색** 상태 — 툴바(입력)와 세 뷰(기본·통합·강사)가 같은 값을 본다.
@@ -227,13 +229,14 @@ export function useSearchTone(student: TimetableSearchStudent, tone: string): st
  * ⚠️ 입력칸이 숨는 상황(편집 모드·반 0개)엔 통째로 사라진다 — 구분선을 따로 안 그리는 이유.
  */
 export function TimetableSearchToggle() {
+  const tt = useTimetableText();
   const ctx = useTimetableSearch();
   if (!ctx || ctx.suspended || ctx.totalClasses === 0) return null;
   return (
     <StudentSearchToggle
       value={ctx.query}
       onChange={ctx.setQuery}
-      chip={<SearchScopeChip shown={ctx.matchedClasses} total={ctx.totalClasses} unit="개 수업" totalsNote="상단 인원 집계는 전체 기준" />}
+      chip={<SearchScopeChip shown={ctx.matchedClasses} total={ctx.totalClasses} unit={tt("개 수업")} totalsNote={tt("상단 인원 집계는 전체 기준")} />}
     />
   );
 }
@@ -243,20 +246,21 @@ export function TimetableSearchToggle() {
  * 범위(주·과목)만 말하고 권한 이야기는 하지 않는다(검색은 보고 있던 화면만 좁힌다).
  */
 export function TimetableSearchEmptyNote() {
+  const lang = useSheetLang();
+  const tt = useTimetableText();
   const ctx = useTimetableSearch();
   if (!ctx?.active || ctx.matchedClasses > 0) return null;
   return (
     <div className="bg-card shadow-card flex shrink-0 flex-wrap items-center gap-2 rounded-2xl px-4 py-3">
       <span className="text-foreground text-sm font-bold break-keep">
-        {emptySearchMessage(ctx.query, ctx.scope)}
+        {lang === "en" ? `No classes match “${ctx.query}” in this timetable.` : emptySearchMessage(ctx.query, ctx.scope)}
       </span>
       <button
         type="button"
         onClick={() => ctx.setQuery("")}
         className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition"
       >
-        검색 지우기
-      </button>
+        {tt("검색 지우기")}</button>
     </div>
   );
 }

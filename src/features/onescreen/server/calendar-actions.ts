@@ -20,7 +20,7 @@ export async function getMySendCalendar(input: {
   /** "YYYY-MM" */
   month: string;
 }): Promise<{ ok: boolean; rows?: SendStatRow[]; error?: string }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   // '다른 강사 뷰'(열람 전용) = 그 강사의 달력 — "지난 보고서"(history-actions)와 같은 축(갈라지면 달력과 상세가 어긋난다).
   const viewAs = await viewAsTeacher();

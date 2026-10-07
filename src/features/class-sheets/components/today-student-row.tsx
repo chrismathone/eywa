@@ -5,6 +5,7 @@
  * today-board.tsx에서 분리(한 파일 200줄 규칙) — 저장 경로·계약은 그대로다(#77: 출결은
  * setAttendanceCell/clearPresentAttendance 두 경로만, 보고서는 원스크린 링크만).
  */
+import { useSheetFeedback } from "@/features/teacher-view/lang-context";
 import { SplitBadge } from "./split-badge";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -16,6 +17,9 @@ import { TodayAttendancePills } from "./today-attendance-pills";
 import { TodayMarkPopover, type MarkMap, type MarkSlot, type StudentMark } from "./today-mark-popover";
 import type { TodayClassCard, TodayStudent } from "../server/today";
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+import { EnglishNameEditor } from "./english-name-editor";
+import { useStudentEnglishName } from "./english-name-context";
+import { sheetSchoolGrade } from "@/features/teacher-view/school-grade";
 import { studentNameParts } from "@/features/teacher-view/student-name";
 
 export function StudentRow({
@@ -43,12 +47,15 @@ export function StudentRow({
   onSet: (status: BasicAttendance, note?: string | null) => void;
   onClear: () => void;
 }) {
+  const feedback = useSheetFeedback();
   const router = useRouter();
   const t = useSheetT();
   const tf = useSheetTf();
   const lang = useSheetLang();
   // 🔴 영어 화면에서는 영어 이름이 주 이름 — 판정은 `studentNameParts` 한 곳이다(주간 시트와 같은 규칙).
-  const names = studentNameParts(student.name, student.englishName, lang);
+  const { value: englishName } = useStudentEnglishName(student.studentId, student.englishName);
+  const names = studentNameParts(student.name, englishName, lang);
+  const school = sheetSchoolGrade(student.school, student.grade, lang);
   return (
     // ⚠️ 이름 칸을 `1fr`로 두고 행을 화면 폭에 맡기면 넓은 창에서 이름은 왼쪽 끝, 컨트롤은 오른쪽 끝으로
     // **벌어져** 한 줄을 눈으로 잇기 어렵다(2026-08-07 실화면). 폭은 목록 컨테이너(`max-w`)가 잡고,
@@ -60,18 +67,12 @@ export function StudentRow({
     // 9rem에 안 들어갔다(원장 2026-09-08 *"영어 화면 출결 칸 11.5rem으로 넓혀"*). 옛 7.25rem(116px)은 12px 시절 값이라
     // 미기록 행이 넘쳐 옆 칸(TodayMarkPopover) 위로 올라왔다. 고정 트랙이라 넘치면 그대로 흘러나온다(이름 칸 1fr이 흡수).
     <div className="border-line grid grid-cols-[minmax(0,1fr)_11.5rem_auto_auto] items-center gap-2 border-b py-1.5 last:border-b-0">
-      <span className="min-w-0 truncate text-sm">
-        {/* 구조화 행 목록(Editorial 문법 ⑤) — 이름 bold 13.5px + 설명 dim 12.5px. */}
-        {/* 🔴 이름 두 줄이 아니라 **주 이름 + 보조**를 한 줄에 잇는다(이 행은 높이가 촘촘하다).
-            🔴 보조 이름은 **영어 화면에서만** 붙인다 — 한국어 화면은 원래 이름 하나만 있었고
-               (주간 시트와 달리 이 행은 한 줄짜리 촘촘한 목록이다) 원장 지시는 영어 화면을 고치는
-               것이라 한국어 화면이 덩달아 바뀌면 안 된다("ko는 글자까지 그대로"). */}
-        <span className="text-foreground text-sm font-bold">{names.primary}</span>
-        {lang === "en" && names.secondary ? (
-          <span className="text-text-dim ml-1 text-xs">{names.secondary}</span>
-        ) : null}
-        {student.grade ? <span className="text-text-dim ml-1 text-xs">{student.grade}</span> : null}
-        <SplitBadge split={student.split} />
+      <span className="min-w-0 text-sm">
+        <EnglishNameEditor studentId={student.studentId} studentName={student.name} englishName={englishName}>
+          <span className="text-foreground block truncate text-sm font-bold">{names.primary}<SplitBadge split={student.split} /></span>
+        </EnglishNameEditor>
+        {lang === "en" && school ? <span className="text-text-dim block truncate text-xs" title={school}>{school}</span>
+          : student.grade ? <span className="text-text-dim text-xs">{student.grade}</span> : null}
       </span>
       <span>
         {/* 드롭다운 배제(원장 2026-08-11) — 1클릭 알약. 저장 경로(onSet/onClear)는 그대로다. */}
@@ -91,7 +92,7 @@ export function StudentRow({
                     date,
                   }).then((r) => {
                     if (!r.ok) {
-                      toast.error(r.error);
+                      toast.error(feedback(r.error));
                       return;
                     }
                     toast.success(t("today.makeup.removed"));

@@ -28,7 +28,7 @@ export async function updateStudentEnglishName(input: {
 }): Promise<EnglishNameResult> {
   const parsed = inputSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "invalid" };
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user || user.systemRole === "student") return { ok: false, error: "denied" };
   const [level, canRead] = await Promise.all([
     accessLevelTenant(user.systemRole, "student_english_name"),

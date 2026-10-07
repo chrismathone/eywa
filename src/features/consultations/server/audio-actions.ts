@@ -30,7 +30,7 @@ import {
 } from "./write-scope";
 
 async function requireConsultationWrite() {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { user: null, error: "로그인이 필요합니다" };
   const lvl = await accessLevelTenant(user.systemRole, "consultations");
   if (lvl !== "full" && lvl !== "scoped") return { user: null, error: "상담 관리 권한이 없습니다" };

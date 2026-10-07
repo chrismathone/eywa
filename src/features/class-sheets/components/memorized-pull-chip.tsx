@@ -14,6 +14,7 @@
  * ⚠️ 카드 **안쪽** 컨트롤이라 툴바 규약(h-8 칩) 대상이 아니다 — 머리 줄의 강사 알약과 같은 치수를 쓴다.
  */
 
+import { useSheetFeedback } from "@/features/teacher-view/lang-context";
 import { useTransition } from "react";
 import { toast } from "sonner";
 import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
@@ -34,6 +35,7 @@ export function MemorizedPullChip({
   /** 적힌 값을 화면 state로 옮기는 손 — `SheetHandlers.applyMemorizedWords`와 **같은 모양**이어야 한다. */
   onWritten: (date: string, slotStart: string, written: readonly EcsMemorizedWritten[]) => void;
 }) {
+  const feedback = useSheetFeedback();
   const t = useSheetT();
   const tf = useSheetTf();
   const [pending, start] = useTransition();
@@ -48,7 +50,7 @@ export function MemorizedPullChip({
         start(async () => {
           const res = await pullEcsMemorizedWords({ classId, date, slotStart });
           if (!res.ok) {
-            toast.error(res.error);
+            toast.error(feedback(res.error));
             return;
           }
           onWritten(date, slotStart, res.written);

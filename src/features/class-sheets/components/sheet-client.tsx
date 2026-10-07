@@ -2,6 +2,7 @@
 
 // ECS 주간 시트 오케스트레이터 — state 소유·저장 큐·저널·presence·네비 flush.
 // 페이지가 key={classId:week}로 재마운트하므로 서버 데이터로 state가 재초기화된다.
+import { useSheetTf, useSheetFeedback } from "@/features/teacher-view/lang-context";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EmbedLink } from "@/components/embed-link";
 // 강사뷰 화면 언어(2026-09-03) — 반 이름은 번역 대상이 아니고 안내·링크 글자만 사전을 탄다.
@@ -240,6 +241,8 @@ export function SheetClient({
    */
   myTeacherId?: string | null;
 }) {
+  const feedback = useSheetFeedback();
+  const tf = useSheetTf();
   const router = useRouter();
   // 빈 카드 안내 문구(오늘 면) — 반 이름은 번역 대상이 아니다.
   const t = useSheetT();
@@ -259,12 +262,12 @@ export function SheetClient({
   const audit = useSheetEditAudit({ enabled: canEdit, flush: () => store.flush() });
   useEffect(() => {
     store.setCallbacks({
-      onError: (m) => toast.error(m),
+      onError: (m) => toast.error(feedback(m)),
       onGone: () => toast.info(t("plan.editor.gone")),
       // 계획 칸(교재·진도·과제…) 입력마다 편집 전 값 — 감사로그가 칸마다 첫 값만 잡는다(원장 결정 2026-09-14 범위 확대).
       onEdit: (lineId, field, before) => audit.touch(classId, { kind: "plan", lineId, field }, before),
     });
-  }, [audit, classId, store, t]);
+  }, [audit, classId, feedback, store, t]);
 
   // presence — 팀티칭 동시편집은 정상(중립 톤). 충돌 방지는 CAS가 담당.
   useEditPresence(ecsPresenceScope(classId, weekMonday), canEdit);
@@ -415,10 +418,10 @@ export function SheetClient({
     void setMyEcsFontSize(size).then((r) => {
       if (!r.ok)
         toast.error(
-          "글씨 크기를 계정에 저장하지 못했습니다 — 이 화면에서는 적용됩니다",
+          feedback(t("os.c.fontSizeFail")),
         );
     });
-  }, []);
+  }, [feedback, t]);
   const fontZoom = ECS_FONT_SIZE_ZOOM[fontSize];
 
   // ── JJ 표시(내 계정) ───────────────────────────────────────────────────────
@@ -435,13 +438,13 @@ export function SheetClient({
         const flushed = await store.flush();
         if (!flushed.ok) {
           const go = window.confirm(
-            "아직 저장이 확정되지 않은 입력(또는 충돌)이 있습니다. 그래도 표시를 바꿀까요? (입력은 이 기기에 보관됩니다)",
+            t("plan.feedback.displayUnsaved"),
           );
           if (!go) return;
         }
         const r = await setMyEcsShowSelfStudy(show);
         if (!r.ok) {
-          toast.error(r.error ?? "표시 설정을 저장하지 못했습니다");
+          toast.error(feedback(r.error ?? t("os.display.saveFail")));
           return;
         }
         router.refresh();
@@ -449,7 +452,7 @@ export function SheetClient({
         setSelfStudyPending(false);
       }
     },
-    [data.showSelfStudy, router, selfStudyPending, store],
+    [data.showSelfStudy, feedback, router, selfStudyPending, store, t],
   );
 
   // ── 로스터 섹션 접기(내 계정) ──────────────────────────────────────────────
@@ -470,11 +473,11 @@ export function SheetClient({
       void setMyEcsCollapsedRosterGroups(next).then((r) => {
         if (!r.ok)
           toast.error(
-            "접기 상태를 계정에 저장하지 못했습니다 — 이 화면에서는 적용됩니다",
+            feedback(t("plan.feedback.collapse")),
           );
       });
     },
-    [collapsedGroups],
+    [collapsedGroups, feedback, t],
   );
 
   // ── 네비(주/반 이동) — flush 성공 후에만 이동, 실패·미확정 시 중단(저널 보존) ─
@@ -488,14 +491,14 @@ export function SheetClient({
       const r = await store.flush();
       if (!r.ok) {
         const go = window.confirm(
-          "아직 저장이 확정되지 않은 입력(또는 충돌)이 있습니다. 그래도 이동할까요? (입력은 이 기기에 보관됩니다)",
+          t("plan.feedback.navigateUnsaved"),
         );
         if (!go) return;
       }
       await drainAttendanceSaves();
       router.push(href);
     },
-    [drainAttendanceSaves, embed, router, store],
+    [drainAttendanceSaves, embed, router, store, t],
   );
 
   // ── 저널 복구 배너 적용 ────────────────────────────────────────────────────
@@ -507,8 +510,8 @@ export function SheetClient({
       store.seed(p.lineId, p.field, p.expectedValue);
       store.edit(p.lineId, p.field, p.newValue ?? "");
     }
-    toast.info(`미저장 입력 ${muts.length}건을 복구해 다시 저장합니다`);
-  }, [doc, store]);
+    toast.info(tf("plan.feedback.recovered", { n: muts.length }));
+  }, [doc, store, tf]);
 
   // ── 계획 줄(수업계획) — 공용 훅 한 벌 ─────────────────────────────────────
   // 🔴 여기서 액션을 다시 부르지 않는다: 셀 CAS·줄 추가/삭제/시기 이동·내용 복사는 전부
@@ -625,7 +628,7 @@ export function SheetClient({
               else next[key] = before;
               return next;
             });
-            toast.error(r.error);
+            toast.error(feedback(r.error));
           } else if ("autoUnits" in r) {
             // 응답을 기다리는 동안 다시 입력한 칸은 덮지 않는다.
             setAttendance((prev) => prev[key] === optimistic ? { ...prev, [key]: { ...optimistic, units: r.autoUnits ?? null } } : prev);
@@ -661,7 +664,7 @@ export function SheetClient({
         }).then((r) => {
           if (!r.ok) {
             setAttendance((prev) => ({ ...prev, [key]: before }));
-            toast.error(r.error);
+            toast.error(feedback(r.error));
           }
         });
         trackAttendanceSave(save);
@@ -686,10 +689,10 @@ export function SheetClient({
         const save = removeMakeupAttendee({ classId, studentId, date }).then((r) => {
           if (!r.ok) {
             setAttendance((prev) => ({ ...prev, ...before }));
-            toast.error(r.error);
+            toast.error(feedback(r.error));
             return;
           }
-          toast.success("보강 명단에서 뺐습니다");
+          toast.success(t("today.makeup.removed"));
           router.refresh();
         });
         trackAttendanceSave(save);
@@ -717,7 +720,7 @@ export function SheetClient({
         }).then((r) => {
           if ("error" in r) {
             setAttendance((prev) => ({ ...prev, [key]: before }));
-            toast.error(r.error);
+            toast.error(feedback(r.error));
           }
         });
         trackAttendanceSave(save);
@@ -732,7 +735,7 @@ export function SheetClient({
           if (!r.ok) {
             // 되돌린다 — "체크했는데 서버엔 없음"은 다음 사람이 못 알아챈다(마크·출결과 같은 처방).
             setShouting((prev) => ({ ...prev, [key]: !next }));
-            toast.error(r.error);
+            toast.error(feedback(r.error));
           }
         });
       },
@@ -776,24 +779,13 @@ export function SheetClient({
               else delete next[key];
               return next;
             });
-            toast.error(r.error);
+            toast.error(feedback(r.error));
           }
         });
       },
     }),
     // unitsByDate가 빠지면 주를 넘긴 뒤에도 **옛 주의 유닛**이 박힌다(시수=급여라 조용한 오기록).
-    [
-      applyMemorizedWords,
-      audit,
-      classId,
-      data.canMarkAttendanceByDate,
-      data.unitsByDate,
-      planHandlers,
-      router,
-      store,
-      trackAttendanceSave,
-      trackAttendanceCell,
-    ],
+    [planHandlers, applyMemorizedWords, data.canMarkAttendanceByDate, data.unitsByDate, classId, trackAttendanceSave, trackAttendanceCell, feedback, t, router, store, audit],
   );
 
   const saveGoal = useCallback(
@@ -862,11 +854,11 @@ export function SheetClient({
         // (조용히 "저장됨"으로 넘어가지 않게. 새로고침하면 서버 값이 진실이다.)
         if (!r.ok)
           toast.error(
-            `${r.error} — 저장되지 않았습니다(새로고침하면 이전 값으로 돌아갑니다)`,
+            tf("plan.feedback.notSavedRefresh", { error: feedback(r.error) }),
           );
       });
     },
-    [audit, classId, data.monthStart, store, weekMonday],
+    [audit, classId, data.monthStart, feedback, store, tf, weekMonday],
   );
 
   const saveWeekMemo = useCallback(
@@ -881,10 +873,10 @@ export function SheetClient({
           memoKey,
           body,
         });
-        if (!r.ok) toast.error(`${r.error} — 저장되지 않았습니다`);
+        if (!r.ok) toast.error(tf("plan.feedback.notSaved", { error: feedback(r.error) }));
       });
     },
-    [audit, classId, store, weekMonday],
+    [audit, classId, feedback, store, tf, weekMonday],
   );
 
   // 요일 필터 + **오늘 면의 강사 축 필터**를 한 곳에서(today-own-slots) — 주간(full)은 종전 그대로다.

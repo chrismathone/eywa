@@ -17,6 +17,7 @@
  * 🔑 감사로그(원장 결정 2026-09-14 "칸 입력을 마칠 때 한 줄") — 칸을 건드릴 때 편집 전 값을 `audit`에 알리고,
  *    보낸 저장을 `track`한다. 칸을 떠나면 화면 루트(`month-client`)가 그 저장이 끝난 뒤 한 줄 남긴다.
  */
+import { useSheetFeedback } from "@/features/teacher-view/lang-context";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { saveMonthMemo } from "../server/month-memo-actions";
 import type { MonthMemoStatus } from "../server/month-queries";
@@ -45,6 +46,7 @@ export function MonthMemo({
   /** 칸 편집 감사로그 — 없으면 기록하지 않는다(저장은 그대로). */
   audit?: SheetEditAudit;
 }) {
+  const feedback = useSheetFeedback();
   const t = useSheetT();
   const tf = useSheetTf();
   const [savedAt, setSavedAt] = useState<number | null>(null);
@@ -67,7 +69,7 @@ export function MonthMemo({
             setError(null);
             return;
           }
-          setError(res.error);
+          setError(feedback(res.error));
         })
         .catch(() => {
           // 액션은 {ok:false}로 실패를 알리지만 **네트워크가 끊기면 reject**된다 — 안 잡으면
@@ -79,7 +81,7 @@ export function MonthMemo({
       return job;
     },
     // 🔴 `t`도 의존성이다 — 언어가 바뀌면 이 함수도 새로 만들어야 실패 문구가 옛 언어로 굳지 않는다.
-    [classId, month, t, audit],
+    [classId, month, audit, feedback, t],
   );
 
   useEffect(() => {
