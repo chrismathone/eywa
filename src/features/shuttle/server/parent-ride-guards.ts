@@ -61,7 +61,7 @@ export async function stopPoint(admin: Admin, tenantId: string, runStopId: strin
 export async function rodeMessage(admin: Admin, ctx: Ctx): Promise<string | null> {
   if (ctx.onDate !== kstToday()) return null;
   const { data, error } = await admin.from("shuttle_boardings").select("status")
-    .eq("tenant_id", ctx.viewer.tenantId).eq("student_id", ctx.studentId)
+    .eq("tenant_id", ctx.tenantId).eq("student_id", ctx.studentId)
     .eq("boarded_on", ctx.onDate).eq("io_kind", ctx.ioKind).limit(20);
   if (error) throw error;
   if (!(data ?? []).some((b) => legRode({ status: isBoardingStatus(b.status) ? b.status : null }))) return null;
@@ -75,9 +75,12 @@ export async function rodeMessage(admin: Admin, ctx: Ctx): Promise<string | null
  * 판정은 화면과 같은 `runEditClosed`(시작 = 학원 출발 칸, 없으면 첫 시각 · 모르면 막지 않음).
  */
 export async function closedRunsMessage(admin: Admin, ctx: Ctx, runIds: string[]): Promise<string | null> {
+  // 🔑 출발 10분 전 마감은 **학부모 규칙**이다 — 직원(관리자 · 셔틀 선생님)은 전화를 받고 그 자리에서 바꾼다
+  //    (기존 '오늘만 승하차'도 마감이 없다). 이미 탄 뒤 잠금(`rodeMessage`)·짝 규칙은 직원에게도 그대로다.
+  if (ctx.actor.kind === "staff") return null;
   const today = kstToday();
   if (ctx.onDate !== today || runIds.length === 0) return null;
-  const tenantId = ctx.viewer.tenantId;
+  const tenantId = ctx.tenantId;
   const [stopsRes, runsRes] = await Promise.all([
     admin.from("shuttle_run_stops").select("run_id, kind, at_time").eq("tenant_id", tenantId).in("run_id", runIds).limit(500),
     admin.from("shuttle_runs").select("id, run_no, label").eq("tenant_id", tenantId).in("id", runIds),
@@ -100,7 +103,7 @@ export async function closedRunsMessage(admin: Admin, ctx: Ctx, runIds: string[]
 export async function closedStopsMessage(admin: Admin, ctx: Ctx, runStopIds: string[]): Promise<string | null> {
   if (ctx.onDate !== kstToday() || runStopIds.length === 0) return null;
   const { data: own, error } = await admin.from("shuttle_run_stops").select("run_id")
-    .eq("tenant_id", ctx.viewer.tenantId).in("id", runStopIds);
+    .eq("tenant_id", ctx.tenantId).in("id", runStopIds);
   if (error) throw error;
   return closedRunsMessage(admin, ctx, [...new Set((own ?? []).map((s) => s.run_id as string))]);
 }

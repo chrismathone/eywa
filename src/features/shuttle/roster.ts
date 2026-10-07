@@ -64,7 +64,15 @@ export type RideException = {
   /** `add`일 때만. 어디서 타는지 모르면 기사가 못 태운다. */
   runStopId: string | null;
   memo: string | null;
+  /**
+   * 누가 건 변경인가(0321a `actor_kind`) — 셔틀 화면이 '학부모 변경'/'직원 변경'을 갈라 보인다(사용자 2026-10-06).
+   * 모르면(옛 줄 · 조회 안 함) 생략.
+   */
+  actorKind?: RideActorKind | null;
+  actorName?: string | null;
 };
+
+export type RideActorKind = "parent" | "staff";
 
 /** 그 줄이 오늘 어떤 상태인가 — 화면 표식·진행 카운트가 함께 읽는다. */
 export type RideDayKind =
@@ -101,6 +109,8 @@ export type PlannedRide = {
   exceptionMemo: string | null;
   /** 예외 되돌리기에 쓰는 id — 예외로 생긴/막힌 줄에만 있다. */
   exceptionId: string | null;
+  /** 그 예외를 건 사람의 종류·이름(있을 때만). */
+  exceptionBy?: { kind: RideActorKind; name: string | null } | null;
 };
 
 /**
@@ -114,6 +124,9 @@ export type PlannedRide = {
  * ⚠️ `add`가 이미 요일 규칙에 걸려 있는 사람을 가리키면 **줄을 두 번 만들지 않는다**(같은 학생이
  *    한 회차에 두 줄이면 시수·진행이 두 번 세어진다). 그 경우 예외는 조용히 무시된다.
  */
+const byOf = (e: RideException | undefined) =>
+  e?.actorKind ? { kind: e.actorKind, name: e.actorName ?? null } : null;
+
 export function plannedRidesOn(
   run: ShuttleRun,
   ymd: string,
@@ -155,6 +168,7 @@ export function plannedRidesOn(
         exceptionMemo: hit?.memo ?? (replaced ? add!.memo : null),
         // 대체된 줄엔 되돌리기 id를 달지 않는다 — 되돌리는 건 '오늘만 승하차' 줄(그 예외)이다.
         exceptionId: hit?.id ?? null,
+        exceptionBy: byOf(hit ?? (replaced ? add : undefined)),
       });
     }
     for (const add of addsByRunStop.get(stop.id) ?? []) {
@@ -181,6 +195,7 @@ export function plannedRidesOn(
         dayKind: "added",
         exceptionMemo: add.memo,
         exceptionId: add.id,
+        exceptionBy: byOf(add),
       });
     }
   }
@@ -212,6 +227,8 @@ export type RideRow = {
   dayKind: RideDayKind;
   exceptionMemo: string | null;
   exceptionId: string | null;
+  /** 그날 변경을 건 사람(학부모/직원) — 줄 표식이 갈라 보인다. */
+  exceptionBy?: { kind: RideActorKind; name: string | null } | null;
 };
 
 /**
@@ -256,6 +273,7 @@ export function mergePlanAndLog(
     dayKind: p.dayKind,
     exceptionMemo: p.exceptionMemo,
     exceptionId: p.exceptionId,
+    exceptionBy: p.exceptionBy ?? null,
   });
 
   // 🔴 **오늘 타는 줄이 기록을 먼저 가져간다.** 같은 (학생·회차·방향)에 skip 줄과 add 줄이 함께 있으면

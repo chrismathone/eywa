@@ -373,7 +373,7 @@ export async function getRideExceptionsOn(
     const supabase = await createClient();
     const { data, error } = await supabase
       .from("shuttle_ride_exceptions")
-      .select("id, student_id, kind, io_kind, run_stop_id, memo")
+      .select("id, student_id, kind, io_kind, run_stop_id, memo, actor_kind, actor_name")
       .eq("on_date", ymd)
       .limit(500); // 하루 예외는 몇 건 규모 — 절단 방지 명시 상한(B2)
 
@@ -399,6 +399,8 @@ export async function getRideExceptionsOn(
           ioKind: r.io_kind as Direction,
           runStopId: r.run_stop_id,
           memo: r.memo,
+          actorKind: r.actor_kind === "parent" || r.actor_kind === "staff" ? r.actor_kind : null,
+          actorName: r.actor_name ?? null,
         };
       }),
     };

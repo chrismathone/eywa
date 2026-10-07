@@ -15,12 +15,15 @@ import {
   type VehicleRoute,
 } from "../parent-rides";
 import { changeParentRideStop, resetParentRide } from "../server/parent-ride-actions";
+import { staffChangeRideStop, staffResetRide } from "../server/staff-ride-actions";
 import { useRideDates } from "./ride-dates-context";
 import { DIRECTION_LABEL } from "../types";
 import { KstClock, useKstNow } from "./kst-clock";
 import { Badge, FocusedRun, RunHeader } from "./vehicle-route-parts";
 
 const CUTOFF_NOTE = `각 회차 출발 ${EDIT_CUTOFF_MINUTES}분 전까지만 수정할 수 있어요`;
+/** 직원 수정은 출발 10분 전 마감이 없다(서버 `closedRunsMessage`가 행위자로 가른다). */
+const STAFF_NOTE = "직원 수정 · 출발 직전에도 바꿀 수 있어요 · 학부모 화면에 바로 반영돼요";
 
 /**
  * 학부모 '등원/하원 수정하기' — 누르면 **호차의 그날 전체 노선**을 모달로 보여 준다(사용자 2026-09-28).
@@ -48,8 +51,22 @@ export function VehicleRouteDialog({
   today,
   editable,
   other = null,
+  staff = false,
+  open,
+  onOpenChange,
+  onSaved,
 }: {
   leg: RideLeg;
+  /**
+   * 직원(관리자 · 셔틀 선생님)이 셔틀 '오늘 등하원'에서 여는 창(사용자 2026-10-06) — 같은 창·같은 규칙에 저장만
+   * 직원 액션(`staff-ride-actions.ts`)으로 간다. 머리에 '직원 수정' 표식을 달아 학부모 수정과 갈라 보인다.
+   * 이때는 바깥이 열고 닫는다(`open`/`onOpenChange`, 버튼 없음).
+   */
+  staff?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** 저장·되돌리기가 성공하면(직원 화면이 그날 명단을 다시 읽는다). */
+  onSaved?: () => void;
   /**
    * 그날 **반대 방향**이 타는 자리(회차·시각) — 짝 규칙(사용자 2026-09-30): 같은 회차 금지 · 등원이 하원보다 빨라야.
    * 안 타는 날이면 null. 판정은 서버와 같은 `ridePairConflict`(여기는 안내, 서버가 다시 막는다).
@@ -86,7 +103,7 @@ export function VehicleRouteDialog({
   const now = useKstNow();
   // 시계가 아직 없으면(첫 렌더) 마감을 판정하지 않는다 — 서버가 어차피 다시 본다.
   const closed = (stops: VehicleRoute["stops"]) =>
-    now ? runEditClosed(runStartTime(stops), onDate, today, now.minutes) : false;
+    staff ? false : now ? runEditClosed(runStartTime(stops), onDate, today, now.minutes) : false;
   // 🔑 마감은 **고르려는 회차**에만 건다 — 지금 타는 회차가 마감이어도 열린 다른 회차로는 옮긴다(사용자 2026-09-29).
   const locked = editable ? null : "지난 날짜는 바꿀 수 없어요";
   // 🔑 짝 규칙 — 반대 방향이 탄 회차는 통째로, 시각이 어긋나는 정류장은 칸마다 못 고른다.
@@ -125,37 +142,59 @@ export function VehicleRouteDialog({
     if (!focused || !pickStopId) return;
     const runStopId = pickStopId;
     startTransition(async () => {
-      const res = await changeParentRideStop({ studentId: leg.studentId, onDate, ioKind: leg.direction, runStopId, dates });
+      const res = staff
+        ? await staffChangeRideStop({ studentId: leg.studentId, onDate, ioKind: leg.direction, runStopId })
+        : await changeParentRideStop({ studentId: leg.studentId, onDate, ioKind: leg.direction, runStopId, dates });
       if ("error" in res) {
         setNotice({ tone: "error", text: res.error });
         return;
       }
       setPickStopId(null);
       setNotice({ tone: "ok", text: res.message });
+      onSaved?.();
     });
   }
 
   function restore() {
     startTransition(async () => {
-      const res = await resetParentRide({ studentId: leg.studentId, onDate, ioKind: leg.direction, dates });
+      const res = staff
+        ? await staffResetRide({ studentId: leg.studentId, onDate, ioKind: leg.direction })
+        : await resetParentRide({ studentId: leg.studentId, onDate, ioKind: leg.direction, dates });
       if ("error" in res) {
         setNotice({ tone: "error", text: res.error });
         return;
       }
       setPickStopId(null);
       setNotice({ tone: "ok", text: res.message });
+      onSaved?.();
     });
   }
 
+  const cutoffNote = staff ? STAFF_NOTE : CUTOFF_NOTE;
+
   return (
-    <Dialog onOpenChange={(open) => { if (open) reset(); }}>
-      <DialogTrigger className="border-primary text-primary mt-2 flex h-10 w-full items-center justify-center rounded-lg border text-sm font-bold">
-        {DIRECTION_LABEL[leg.direction]} 수정하기
-      </DialogTrigger>
+    <Dialog
+      {...(open === undefined ? {} : { open })}
+      onOpenChange={(next) => {
+        if (next) reset();
+        onOpenChange?.(next);
+      }}
+    >
+      {staff ? null : (
+        <DialogTrigger className="border-primary text-primary mt-2 flex h-10 w-full items-center justify-center rounded-lg border text-sm font-bold">
+          {DIRECTION_LABEL[leg.direction]} 수정하기
+        </DialogTrigger>
+      )}
       <DialogContent className="gap-3">
         {/* 오른쪽 위 닫기(X) 자리를 비워 둔다(pr-8). */}
         <DialogHeader className="pr-8">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            {/* 🔑 직원 수정 표식 — 학부모 수정과 한눈에 갈린다(사용자 2026-10-06 "명확하게 구별"). */}
+            {staff ? (
+              <span className="bg-amber text-white rounded-md px-2 py-0.5 text-xs font-bold">
+                직원 수정 · {DIRECTION_LABEL[leg.direction]}
+              </span>
+            ) : null}
             <DialogTitle className="text-base font-bold">{vehicle?.name ?? leg.vehicleName} 전체 노선</DialogTitle>
             {!focused && fleet.length > 1 ? (
               <div role="group" aria-label="호차 선택" className="flex flex-wrap gap-1">
@@ -188,7 +227,7 @@ export function VehicleRouteDialog({
           ) : null}
           {/* 마감 규칙은 늘 보인다 — 잠겼으면 왜 잠겼는지가 그 자리에 선다. */}
           <p className={`text-xs font-bold break-keep ${locked ? "text-danger" : "text-primary"}`}>
-            {locked ?? (focused ? `${verb} 곳을 누른 뒤 저장하세요 · ${CUTOFF_NOTE}` : `회차를 누르면 크게 볼 수 있어요 · ${CUTOFF_NOTE}`)}
+            {locked ?? (focused ? `${verb} 곳을 누른 뒤 저장하세요 · ${cutoffNote}` : `회차를 누르면 크게 볼 수 있어요 · ${cutoffNote}`)}
           </p>
         </DialogHeader>
 

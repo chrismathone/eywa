@@ -6,7 +6,7 @@ import { addDays, kstToday, weekdayIndexOf } from "@/lib/date-kst";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { dayCodeOf } from "../roster";
 import { isDirection, type Direction } from "../types";
-import { getParentViewer, type ParentViewer } from "./parent-viewer";
+import { getParentViewer } from "./parent-viewer";
 
 /**
  * 학부모 등하원 변경의 **공용 재료** — 게이트가 만든 문맥(`Ctx`), 그날 상태 읽기, 취소, 화면 갱신.
@@ -16,7 +16,16 @@ import { getParentViewer, type ParentViewer } from "./parent-viewer";
 
 export type ParentRideActionState = { ok: true; message: string } | { error: string };
 export type Admin = ReturnType<typeof createAdminClient>;
-export type Ctx = { viewer: ParentViewer; studentId: string; onDate: string; ioKind: Direction; actorName: string };
+/**
+ * 누가 바꾸나 — 학부모(학부모 화면) / 직원(관리자 · 셔틀 선생님, 셔틀 '오늘 등하원' 화면, 사용자 2026-10-06).
+ * 🔑 같은 규칙·같은 저장 경로를 타고 **행위자만** 다르다 — 줄의 `actor_kind`·이력 장부(0321a)가 둘을 가른다.
+ */
+export type RideActor =
+  | { kind: "parent"; parentAccountId: string; userId: null }
+  | { kind: "staff"; parentAccountId: null; userId: string };
+export type Ctx = { tenantId: string; studentId: string; onDate: string; ioKind: Direction; actorName: string; actor: RideActor };
+/** 이력 장부·취소 함수에 넘기는 행위자 id(학부모 계정 id / 직원 id). */
+export const actorIdOf = (a: RideActor) => (a.kind === "parent" ? a.parentAccountId : a.userId);
 
 /** 미리 바꿀 수 있는 기간 — 월별 변경까지 염두에 둔 두 달. */
 const MAX_AHEAD_DAYS = 62;
@@ -44,11 +53,12 @@ export async function parentGate(input: { studentId: string; onDate: string; ioK
   const dow = weekdayIndexOf(input.onDate);
   if (dow === 0 || dow === 6) return { error: "주말에는 셔틀을 운영하지 않아요" };
   return {
-    viewer,
+    tenantId: viewer.tenantId,
     studentId: child.id,
     onDate: input.onDate,
     ioKind: input.ioKind,
     actorName: `학부모 · ${viewer.displayName}`,
+    actor: { kind: "parent", parentAccountId: viewer.parentAccountId, userId: null },
   };
 }
 
@@ -60,7 +70,7 @@ export type RideState = { regularStopIds: string[]; add: ExceptionRow | null; sk
  * 🔑 두 방향을 따로 읽지 않는다 — 짝 규칙(반대 방향)과 결석 하원 되살리기가 같은 재료를 쓰므로 왕복 2번이면 된다(B4).
  */
 export async function loadStates(admin: Admin, ctx: Ctx): Promise<Record<Direction, RideState>> {
-  const tenantId = ctx.viewer.tenantId;
+  const tenantId = ctx.tenantId;
   const [ridersRes, exceptionsRes] = await Promise.all([
     admin.from("shuttle_riders").select("io_kind, run_stop_id, weekdays")
       .eq("tenant_id", tenantId).eq("student_id", ctx.studentId).limit(40),
@@ -89,13 +99,13 @@ export function effectiveStopId(state: RideState): string | null {
   return state.add?.run_stop_id ?? state.regularStopIds[0] ?? null;
 }
 
-/** 변경 줄 하나 취소 — 취소 함수로 지워야 이력 장부에 학부모로 남는다(0321a). */
+/** 변경 줄 하나 취소 — 취소 함수로 지워야 이력 장부에 행위자(학부모/직원)가 남는다(0321a). */
 async function cancel(admin: Admin, ctx: Ctx, exceptionId: string) {
   const { error } = await admin.rpc("cancel_shuttle_ride_exception", {
-    p_tenant_id: ctx.viewer.tenantId,
+    p_tenant_id: ctx.tenantId,
     p_id: exceptionId,
-    p_actor_kind: "parent",
-    p_actor_id: ctx.viewer.parentAccountId,
+    p_actor_kind: ctx.actor.kind,
+    p_actor_id: actorIdOf(ctx.actor),
     p_actor_name: ctx.actorName,
   });
   if (error) throw error;

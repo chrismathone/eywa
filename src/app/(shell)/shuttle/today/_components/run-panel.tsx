@@ -9,6 +9,7 @@ import {
   DIRECTION_LABEL,
   runTimeRange,
   runShortTitle,
+  type Direction,
   type ShuttleRun,
   type ShuttleTrip,
 } from "@/features/shuttle/types";
@@ -17,11 +18,15 @@ import {
   firstTime,
   groupRowsByStop,
   progressState,
-  stopGroupRemaining,
+  splitRowsByIo,
   type Progress,
 } from "@/features/shuttle/today-board";
+import { tripState } from "@/features/shuttle/trip-state";
 import { RideRowItem } from "./ride-row-item";
 import { TripControl } from "./trip-control";
+
+/** 등원 = info(파랑) · 하원 = special(보라) — 회차 머리 배지가 원래 쓰던 색 그대로. */
+const IO_TONE = { in: TONE_COLOR.info, out: TONE_COLOR.special } as const satisfies Record<Direction, unknown>;
 
 /**
  * 회차 한 판 — 머리(접기 + 출발/종료) + 정류장별 명단.
@@ -34,6 +39,10 @@ import { TripControl } from "./trip-control";
  *     화면 전용 `runShortTitle`을 쓴다.
  *   · **명단을 정류장으로 묶는다** — 줄마다 반복되던 긴 정류장 이름이 묶음 머리 한 줄로 접히고,
  *     묶음이 곧 **기사가 도는 순서**가 된다(today-board.groupRowsByStop 주석).
+ *
+ * 🔑 **등·하원이 섞인 회차**(사용자 2026-10-06 "학생들마다 등원인지 하원인지 명확하게") —
+ *   머리에 [등원][하원] 배지를 둘 다 띄우고, **정류장마다 그 안에서** 등원 / 하원으로 가른다(칸 머리 "[등원] N명", 왼쪽 띠 없음),
+ *   줄마다 이름 옆에도 배지를 붙인다. 한쪽뿐인 회차는 예전 그대로다(배지를 반복하면 다시 글자 덩어리가 된다).
  */
 export function RunPanel({
   run,
@@ -76,7 +85,17 @@ export function RunPanel({
   // 앞에 이미 출발 시각을 크게 세웠다 — 뒤 범위는 **끝시각만** 남긴다(같은 값을 두 번 읽히지 않게).
   const range = runTimeRange(run.stops);
   const tail = start && range.startsWith(start) ? range.slice(start.length) : range;
-  const stopGroups = groupRowsByStop(rows);
+  // 회차 성격 쪽 칸이 먼저 온다. 칸이 둘이면 섞인 회차다.
+  const ioSections = splitRowsByIo(rows, run.direction);
+  const mixed = ioSections.length > 1;
+  const headIos: Direction[] = mixed ? ioSections.map((sec) => sec.io) : [run.direction];
+  /**
+   * 🔒 **종료된 회차는 명단을 못 바꾼다**(사용자 2026-10-06 "회차가 종료됐을 경우에는 아이들 내용을 수정할 수 없게") —
+   * 줄을 읽기 전용으로 그리고 판 위에 "운행이 종료됐습니다"를 띄운다. 되돌리는 문은 머리의 [종료 취소]다.
+   * 서버(recordBoarding·clearBoarding)도 같은 판정을 다시 한다([[#77]]).
+   */
+  const ended = tripsReady && tripState(trip) === "done";
+  const rowsWritable = canWrite && !ended;
 
   return (
     <section className="bg-card flex flex-col rounded-2xl shadow-[var(--shadow-card)]">
@@ -93,20 +112,20 @@ export function RunPanel({
           )}
         >
           {start && <span className="text-foreground num shrink-0 text-base font-bold">{start}</span>}
-          <Pill color={TONE_COLOR[run.direction === "in" ? "info" : "special"]}>
-            {DIRECTION_LABEL[run.direction]}
-          </Pill>
+          {headIos.map((io) => (
+            <Pill key={io} color={IO_TONE[io]}>
+              {DIRECTION_LABEL[io]}
+            </Pill>
+          ))}
           {/* 방향 글자는 위 배지가 이미 말한다 — 제목은 "3회차"까지만. */}
           <span className="text-text-dim text-xs font-bold">{runShortTitle(run)}</span>
           {tail && <span className="text-text-faint num text-xs">{tail}</span>}
           <span className="ml-auto flex shrink-0 items-center gap-1.5">
             {/* 🔴 전원이 '오늘 안 탐'인 회차를 "완료"로 쓰지 않는다(아무도 안 탔는데 다 한 것처럼 읽힌다)
-                — 판정은 순수 `progressState` 한 곳에서 온다. */}
-            {state === "remaining" ? (
-              <span className="text-amber text-xs font-bold">
-                <span className="num">{progress.unmarked}</span>명 남음
-              </span>
-            ) : state === "done" ? (
+                — 판정은 순수 `progressState` 한 곳에서 온다.
+                📐 남은 명수는 **호차 머리 하나만** 말한다(사용자 2026-10-06 "남은 명수 표시가 너무 많아") —
+                   회차·정류장 머리에서는 뺐다. */}
+            {state === "remaining" ? null : state === "done" ? (
               <span className="text-green text-xs font-bold">완료</span>
             ) : (
               <span className="text-text-faint text-xs font-bold">오늘 탑승 없음</span>
@@ -132,57 +151,56 @@ export function RunPanel({
       </div>
 
       {open && (
-        <div className="flex flex-col gap-2 px-2.5 pb-2.5">
-          {stopGroups.map((group) => {
-            const remaining = stopGroupRemaining(group);
-            return (
-              <div key={group.key} className="flex flex-col gap-1">
-                {/* 정류장 머리 — 줄마다 반복되던 긴 이름이 여기 한 번만 온다.
-                    🔑 묶음 순서가 곧 기사가 도는 순서라 "다음 정류장"이 그대로 읽힌다. */}
-                <div className="border-line-faint flex items-baseline gap-1.5 border-b px-1 pb-1">
-                  {group.atTime && (
-                    <span className="text-text-dim num shrink-0 text-xs font-bold">
-                      {group.atTime}
-                    </span>
-                  )}
-                  <span className="text-foreground min-w-0 flex-1 truncate text-xs font-bold">
-                    {group.stopName}
-                  </span>
-                  <span className="text-text-faint shrink-0 text-xs">
-                    {remaining > 0 ? (
-                      <span className="text-amber font-bold">
-                        <span className="num">{remaining}</span>명 남음
-                      </span>
-                    ) : (
-                      <>
-                        <span className="num">{group.rows.length}</span>명
-                      </>
-                    )}
-                  </span>
-                </div>
-                {/* 📐 **넓으면 두 사람씩**(2026-09-03) — 정류장 이름을 묶음 머리로 올리고 나니 줄이
-                    이름 하나뿐인데도 폭을 다 써서, PC에서 이름(왼쪽 끝)과 [탑승]/[미탑승](오른쪽 끝)
-                    사이가 700px 가까이 비었다. 눈이 그만큼 왕복한다.
-                    🔴 **폰은 그대로 한 줄**이다 — 두 열로 쪼개면 44px 버튼 두 개가 한 칸에 들어가지
-                       못해 달리는 차 안에서 오조작이 난다(셔틀 결정: 탭 타겟 44px).
-                    ⚠️ 기준을 `sm`(640px)으로 잡은 이유: 셔틀 창은 ROUTE_WINDOW_SIZE에 없어 기본
-                       480px로 열린다 — 그보다 넓어야 두 열이 의미가 있다. */}
-                <ul className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                  {group.rows.map((row) => (
-                    <RideRowItem
-                      key={row.key}
-                      row={row}
-                      date={date}
-                      canWrite={canWrite}
-                      canEditException={canEditException}
-                      onError={onError}
-                      onDone={onDone}
-                    />
-                  ))}
-                </ul>
+        <div className="flex flex-col gap-3 px-2.5 pb-2.5">
+          {ended && (
+            <p role="status" className="bg-muted text-text-dim rounded-lg px-3 py-2 text-center text-sm font-bold">
+              운행이 종료됐습니다{canWrite ? " — 바꾸려면 [종료 취소]를 누르세요" : ""}
+            </p>
+          )}
+          {/* 🔑 **정류장(시각)이 먼저, 등·하원은 그 안에서**(사용자 2026-10-06 "같은 시간대를 두 번 나눠서
+              봐야 하잖아") — 예전엔 등원 칸 / 하원 칸을 먼저 가르고 칸마다 정류장을 다시 묶어 같은 시각이 두 번 나왔다. */}
+          {groupRowsByStop(rows).map((group) => (
+            <div key={group.key} className="flex flex-col gap-1">
+              {/* 정류장 머리 — 줄마다 반복되던 긴 이름이 여기 한 번만 온다.
+                  🔑 묶음 순서가 곧 기사가 도는 순서라 "다음 정류장"이 그대로 읽힌다. */}
+              <div className="border-line-faint flex items-baseline gap-1.5 border-b px-1 pb-1">
+                {group.atTime && (
+                  <span className="text-text-dim num shrink-0 text-xs font-bold">{group.atTime}</span>
+                )}
+                <span className="text-foreground min-w-0 flex-1 truncate text-xs font-bold">{group.stopName}</span>
               </div>
-            );
-          })}
+              {splitRowsByIo(group.rows, run.direction).map((sec) => (
+                <div key={sec.io} className="flex flex-col gap-1">
+                  {/* 섞인 회차의 칸 머리 — "[등원] 5명" / "[하원] 2명". 왼쪽 색 띠는 뺐다(사용자 2026-10-06). */}
+                  {mixed && (
+                    <div className="flex items-center gap-1.5 px-1 pt-0.5">
+                      <Pill color={IO_TONE[sec.io]}>{DIRECTION_LABEL[sec.io]}</Pill>
+                      <span className="text-text-dim text-xs font-bold">{sec.rows.length}명</span>
+                    </div>
+                  )}
+                  {/* 📐 **넓으면 두 사람씩**(2026-09-03) — PC에서 이름과 [탑승]/[미탑승] 사이가 700px 가까이 비었다.
+                      🔴 **폰은 그대로 한 줄**이다 — 두 열로 쪼개면 44px 버튼 두 개가 한 칸에 들어가지
+                         못해 달리는 차 안에서 오조작이 난다(셔틀 결정: 탭 타겟 44px).
+                      ⚠️ 기준을 `sm`(640px)으로 잡은 이유: 셔틀 창은 기본 480px로 열린다. */}
+                  <ul className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+                    {sec.rows.map((row) => (
+                      <RideRowItem
+                        key={row.key}
+                        row={row}
+                        date={date}
+                        season={run.season}
+                        canWrite={rowsWritable}
+                        canEditException={canEditException && !ended}
+                        ioBadge={mixed}
+                        onError={onError}
+                        onDone={onDone}
+                      />
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          ))}
         </div>
       )}
     </section>

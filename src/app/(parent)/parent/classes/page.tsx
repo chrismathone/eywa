@@ -135,7 +135,7 @@ function WeekGrid({ rows, today, restOf }: { rows: TimetableDayRow[]; today: str
               <span key={h} className="border-line absolute inset-x-0 border-t" style={{ top: at(i) }} />
             ))}
             {rest ? (
-              <p className="text-danger absolute inset-x-0 top-2 px-0.5 text-center font-bold break-keep" style={CELL_TEXT}>
+              <p className="text-danger absolute inset-x-0 top-1/2 -translate-y-1/2 px-0.5 text-center font-bold break-keep" style={CELL_TEXT}>
                 학원이 쉬어요
                 <br />
                 {rest}

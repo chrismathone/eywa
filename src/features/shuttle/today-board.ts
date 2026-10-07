@@ -214,6 +214,18 @@ export function groupRowsByStop(rows: readonly RideRow[]): StopGroup[] {
   return out;
 }
 
+/**
+ * 회차 안 명단을 **등원/하원으로 가른다**(사용자 2026-10-06 "그 시간 학생들마다 등원인지 하원인지 명확하게").
+ * 한 회차에 등·하원이 섞이면(types.ts: rider.ioKind는 회차 성격과 따로) 두 칸으로 나누고,
+ * 회차 성격(`primary`) 쪽을 먼저 둔다. 한쪽뿐이면 칸 하나 — 화면은 섞였을 때만 칸 머리를 그린다.
+ */
+export function splitRowsByIo(rows: readonly RideRow[], primary: Direction): { io: Direction; rows: RideRow[] }[] {
+  const order: Direction[] = primary === "in" ? ["in", "out"] : ["out", "in"];
+  return order
+    .map((io) => ({ io, rows: rows.filter((r) => r.ioKind === io) }))
+    .filter((s) => s.rows.length > 0);
+}
+
 /** 그 정류장 묶음에서 아직 안 찍은 사람 수 — 묶음 머리에 "N명 남음"을 띄운다. */
 export function stopGroupRemaining(group: Pick<StopGroup, "rows">): number {
   return countProgress(group.rows).unmarked;

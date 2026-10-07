@@ -49,7 +49,7 @@ export async function changeRegularRide(input: {
   if ("error" in ctx) return ctx;
   const reason = checkReason(input.reason);
   if (typeof reason !== "string") return reason;
-  const tenantId = ctx.viewer.tenantId;
+  const tenantId = ctx.tenantId;
   const admin = createAdminClient();
   try {
     const [stop, regular] = await Promise.all([
@@ -74,7 +74,7 @@ export async function changeRegularRide(input: {
       p_run_stop_id: stop.id,
       p_reason: reason,
       p_actor_kind: "parent",
-      p_actor_id: ctx.viewer.parentAccountId,
+      p_actor_id: ctx.actor.parentAccountId,
       p_actor_name: ctx.actorName,
     });
     if (error) throw error;

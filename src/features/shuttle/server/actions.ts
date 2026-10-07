@@ -562,8 +562,9 @@ export async function recordBoarding(formData: FormData): Promise<ShuttleActionS
   const admin = createAdminClient();
   // 스냅샷 재료 — 회차(차량 이름·회차번호)와 정류장 이름. 없으면 null로 두고 기록은 남긴다.
   // ⚡ 출발 10분 전 규칙(trip-open-guard)도 **같이** 묻는다 — 학생마다 누르는 버튼이라 따로 한 번 더 기다리지 않게.
-  const [notOpen, runRes, stopRes] = await Promise.all([
+  const [notOpen, ended, runRes, stopRes] = await Promise.all([
     runNotOpenMessage(admin, ctx.tenantId, runId, boardedOn),
+    tripEnded(admin, ctx.tenantId, boardedOn, runId),
     admin
       .from("shuttle_runs")
       .select("run_no, vehicle:shuttle_vehicles!shuttle_runs_vehicle_id_fkey(name)")
@@ -580,6 +581,7 @@ export async function recordBoarding(formData: FormData): Promise<ShuttleActionS
       : Promise.resolve({ data: null, error: null }),
   ]);
   if (notOpen) return { error: notOpen };
+  if (ended) return { error: TRIP_ENDED_MESSAGE };
   if (!runRes.data) return { error: "회차를 찾지 못했습니다" };
 
   const vehicle = runRes.data.vehicle as { name?: string } | null;
@@ -751,6 +753,16 @@ export async function clearBoarding(formData: FormData): Promise<ShuttleActionSt
   if (!id) return { error: "기록을 찾지 못했습니다" };
 
   const admin = createAdminClient();
+  // 🔒 종료된 회차의 기록은 지우지 않는다(recordBoarding과 같은 판정) — 그 기록이 어느 날·어느 회차인지 먼저 읽는다.
+  const { data: rec } = await admin
+    .from("shuttle_boardings")
+    .select("boarded_on, run_id")
+    .eq("id", id)
+    .eq("tenant_id", ctx.tenantId)
+    .maybeSingle();
+  if (rec?.run_id && (await tripEnded(admin, ctx.tenantId, String(rec.boarded_on), String(rec.run_id)))) {
+    return { error: TRIP_ENDED_MESSAGE };
+  }
   const { error } = await admin
     .from("shuttle_boardings")
     .delete()
@@ -887,6 +899,22 @@ export async function reopenTrip(formData: FormData): Promise<ShuttleActionState
   await logAction({ action: "shuttle_trip_reopen", targetType: "shuttle", metadata: { ranOn, runId } });
   refresh();
   return { ok: true };
+}
+
+const TRIP_ENDED_MESSAGE = "운행이 종료됐습니다 — 바꾸려면 [종료 취소]를 먼저 누르세요";
+
+/**
+ * 그 회차가 그날 **종료**됐나(사용자 2026-10-06 "회차가 종료됐을 경우 아이들 내용을 수정할 수 없게").
+ * 화면도 줄을 잠그지만 화면 조건은 게이트가 아니다([[#77]]). 0243a 미적용(표 없음)이면 loadTrip이 null → 막지 않는다.
+ */
+async function tripEnded(
+  admin: ReturnType<typeof createAdminClient>,
+  tenantId: string,
+  ranOn: string,
+  runId: string,
+): Promise<boolean> {
+  const trip = await loadTrip(admin, tenantId, ranOn, runId);
+  return Boolean(trip?.ended_at);
 }
 
 /** 그날 그 회차의 운행 행. ⚠️ admin은 RLS 우회라 tenant_id 필터 필수([[#104]]). */

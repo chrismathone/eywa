@@ -26,7 +26,7 @@ export async function parentDayGate(input: {
 }): Promise<Ctx | { error: string }> {
   const ctx = await parentGate(input);
   if ("error" in ctx) return ctx;
-  const rest = restDayName(await loadAcademyHolidays(ctx.viewer.tenantId), ctx.onDate);
+  const rest = restDayName(await loadAcademyHolidays(ctx.tenantId), ctx.onDate);
   if (rest) return { error: `${HOLIDAY_CLOSED_MESSAGE}(${rest})` };
   return ctx;
 }
