@@ -47,6 +47,7 @@ export type VocabkingReport = {
   weakWords: { prompt: string; answer: string; wrongs: number; answers: number }[];
   strengths: string[];
   nextSteps: { title: string; body: string }[];
+  /** `accuracy`는 인재원 값 그대로 **퍼센트(0~100)**. */
   habits: { activeDays: number; days: number; studyMs: number; newWords: number; accuracy: number; daily: { day: string; answers: number }[] } | null;
 };
 

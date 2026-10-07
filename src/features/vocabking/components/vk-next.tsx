@@ -35,7 +35,8 @@ export function VkNext({ report }: { report: VocabkingReport }) {
               { label: "학습한 날", value: `${h.activeDays}일` },
               { label: "학습 시간", value: fmtStudy(h.studyMs) },
               { label: "새로 익힌 단어", value: `${h.newWords}개` },
-              { label: "학습 정답률", value: `${Math.round(h.accuracy * 100)}%` },
+              // 🔴 인재원 `totals.accuracy`는 이미 퍼센트(0~100)다 — 다시 100을 곱하면 "8000%"(실화면 제보 2026-10-07).
+              { label: "학습 정답률", value: `${Math.round(h.accuracy)}%` },
             ].map((x) => (
               <div key={x.label} className="bg-bg-soft rounded-xl px-3 py-2.5">
                 <p className="text-text-dim text-xs font-medium">{x.label}</p>
