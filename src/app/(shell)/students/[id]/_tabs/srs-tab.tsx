@@ -1,3 +1,5 @@
+
+import { SheetText } from "@/features/teacher-view/interface-label";
 import { Suspense } from "react";
 import { StudentJjSection } from "../_components/jj-section";
 
@@ -26,7 +28,7 @@ export function SrsTab({
     <div className="space-y-4">
       <header className="border-border flex items-baseline justify-between border-b pb-3">
         <h2 className="text-foreground text-base font-bold">SRS</h2>
-        <p className="text-muted-foreground text-xs">인재원 단어 학습·시험</p>
+        <p className="text-muted-foreground text-xs"><SheetText value={"인재원 단어 학습·시험"} /></p>
       </header>
       <Suspense fallback={null}>
         <StudentJjSection studentId={studentId} jjFrom={jjFrom} jjTo={jjTo} />

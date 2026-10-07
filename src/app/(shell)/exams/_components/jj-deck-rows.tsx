@@ -1,3 +1,5 @@
+
+import { SheetText } from "@/features/teacher-view/interface-label";
 /**
  * 시험 결과 창의 **학생별 결과 표** — 점수 높은 순(인재원 순서 그대로). 서버 컴포넌트.
  * 학생 이름 → 학생 상세 성적 탭 · '결과지' → 그 응시 한 장(`/exams/jj/attempt/{attemptId}`) · 반 = 지금 다니는 aywa 영어 반.
@@ -56,8 +58,7 @@ export function JjDeckRows({ rows }: { rows: JjDeckTableRow[] }) {
                   )}
                   {!r.aywa ? (
                     <span className="border-amber/40 bg-amber-soft text-amber rounded-pill border px-1.5 py-px text-xs font-bold">
-                      연결 필요
-                    </span>
+                      <SheetText value={"연결 필요"} /></span>
                   ) : null}
                 </span>
               </td>
@@ -75,8 +76,7 @@ export function JjDeckRows({ rows }: { rows: JjDeckTableRow[] }) {
                   title="시험 결과지"
                   className="text-primary text-xs font-bold hover:underline"
                 >
-                  결과지
-                </WindowLink>
+                  <SheetText value={"결과지"} /></WindowLink>
               </td>
             </tr>
           ))}

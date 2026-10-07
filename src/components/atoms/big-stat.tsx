@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { SheetText } from "@/features/teacher-view/interface-label";
 
 /**
  * BigStat — Editorial 문법 ②(빅 스탯: 큰 tabular 숫자 + 작은 라벨 + 보조 라인).
@@ -90,7 +91,7 @@ export function BigStat({
       className={`bg-card block w-full rounded-2xl p-4 compact-chrome:p-3 xl:p-5 ${onClick ? RAISED : "shadow-card"}`}
     >
       <Box data-stat-label="" className="flex items-center justify-between gap-2">
-        <span className="text-text-dim text-sm font-medium compact-chrome:text-xs">{label}</span>
+        <span className="text-text-dim text-sm font-medium compact-chrome:text-xs"><SheetText value={label} /></span>
         {icon ? (
           <span
             className={`${ICON_TONE[tone]} flex size-8 shrink-0 items-center justify-center rounded-xl compact-chrome:size-6 compact-chrome:rounded-lg`}
@@ -109,7 +110,7 @@ export function BigStat({
         >
           {value}
         </span>
-        {unit ? <span className="text-text-dim text-sm font-medium compact-chrome:text-xs">{unit}</span> : null}
+        {unit ? <span className="text-text-dim text-sm font-medium compact-chrome:text-xs"><SheetText value={unit} /></span> : null}
       </Box>
       {/* 보조라인 자리는 값이 없을 때 **비워두되 높이를 잡아** 카드 4장의 밑선을 맞춘다 — 컴팩트에선 그
           예약 높이를 없애고(min-h-0) 실제 내용이 있을 때만 차지하게 한다. */}

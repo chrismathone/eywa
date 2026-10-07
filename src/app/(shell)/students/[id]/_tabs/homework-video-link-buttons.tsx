@@ -1,5 +1,7 @@
 "use client";
 
+import { SheetText } from "@/features/teacher-view/interface-label";
+
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -29,9 +31,9 @@ export function HomeworkVideoLinkButtons(props: { studentId: string; classId: st
   return (
     <>
       {/* 끊은 뒤엔 '쓰는 중'을 지운다 — 결과 문구와 어긋나지 않게(새로 그리지 않으므로 여기서 바꾼다). */}
-      {done ? null : <span className="text-text-dim text-sm">{`쓰는 중 ${props.count}개 · ${props.until ?? ""}까지`}</span>}
+      {done ? null : <span className="text-text-dim text-sm"><SheetText value={`쓰는 중 ${props.count}개 · ${props.until ?? ""}까지`} /></span>}
       <div className="flex basis-full flex-col items-end gap-1 sm:basis-auto">
-        {done ? null : <Button type="button" size="sm" variant="outline" disabled={pending} onClick={revoke}>링크 끊기</Button>}
+        {done ? null : <Button type="button" size="sm" variant="outline" disabled={pending} onClick={revoke}><SheetText value={"링크 끊기"} /></Button>}
         {message ? <p className="text-text-dim text-xs break-keep" aria-live="polite">{message}</p> : null}
       </div>
     </>

@@ -1,3 +1,5 @@
+
+import { SheetText } from "@/features/teacher-view/interface-label";
 import { ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
 
 /**
@@ -25,18 +27,14 @@ export function GradeViewSwitch({
   return (
     <ToolbarSegment label="보기">
       <ToolbarSegmentItem active={active === "unified"} href={unifiedHref}>
-        통합
-      </ToolbarSegmentItem>
+        <SheetText value={"통합"} /></ToolbarSegmentItem>
       <ToolbarSegmentItem active={active === "input"} href={inputHref}>
-        입력
-      </ToolbarSegmentItem>
+        <SheetText value={"입력"} /></ToolbarSegmentItem>
       <ToolbarSegmentItem active={active === "view"} href={viewHref}>
-        확인
-      </ToolbarSegmentItem>
+        <SheetText value={"확인"} /></ToolbarSegmentItem>
       {jjHref ? (
         <ToolbarSegmentItem active={false} href={jjHref}>
-          JJ실
-        </ToolbarSegmentItem>
+          <SheetText value={"JJ실"} /></ToolbarSegmentItem>
       ) : null}
     </ToolbarSegment>
   );

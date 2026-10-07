@@ -1,4 +1,5 @@
 "use client";
+import { useSheetText } from "@/features/teacher-view/lang-context";
 
 import { useState, useTransition } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
@@ -93,6 +94,7 @@ export function FilterSelect({
    */
   multiple?: boolean;
 }) {
+  const text = useSheetText();
   const router = useRouter();
   const pathname = usePathname() ?? "/";
   const currentParams = useSearchParams();
@@ -149,14 +151,14 @@ export function FilterSelect({
       value={multiple ? (values.length > 0 ? values.join(",") : allValue) : (value ?? allValue)}
       multiValues={multiple ? values : undefined}
       onValueChange={navigate}
-      placeholder={axisLabel ?? allLabel}
-      valuePrefix={axisLabel}
+      placeholder={text(axisLabel ?? allLabel)}
+      valuePrefix={axisLabel ? text(axisLabel) : undefined}
       prefixOnlyFor={prefixOnlyFor}
-      ariaLabel={ariaLabel ?? paramName}
+      ariaLabel={text(ariaLabel ?? paramName)}
       cap={cap}
       // undefined면 SearchableSelect가 기본 박스를 그린다 — 반쪽만 덮어쓰지 않는다(톤은 한 벌).
       triggerClassName={markerOn ? MARKER_TRIGGER : triggerClassName}
-      options={[{ value: allValue, label: allLabel }, ...options]}
+      options={[{ value: allValue, label: text(allLabel) }, ...options.map((option) => option.label === "(선택지에 없는 값)" ? { ...option, label: text(option.label) } : option)]}
     />
   );
 }

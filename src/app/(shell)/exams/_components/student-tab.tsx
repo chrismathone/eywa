@@ -1,3 +1,5 @@
+
+import { SheetText } from "@/features/teacher-view/interface-label";
 import Link from "next/link";
 import { aggregateBy, averagePercent, schoolGradeLabel, type UnifiedRow } from "@/features/grades/unified/model";
 import { percentTone } from "@/features/grades/unified/kind-color";
@@ -21,10 +23,10 @@ function StudentPicker({ students, rows, href }: { students: UnifiedRow[]; rows:
       const avg = averagePercent(list);
       return <Link key={s.studentId} href={href({ tab: "student", student: s.studentId })}
         className="border-line hover:border-primary hover:bg-primary-soft/30 flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-sm transition">
-        <span className="min-w-0"><b className="block truncate">{s.name}</b><small className="text-text-dim">{schoolGradeLabel(s.school, s.grade)} · {list.length}건</small></span>
+        <span className="min-w-0"><b className="block truncate">{s.name}</b><small className="text-text-dim">{schoolGradeLabel(s.school, s.grade)} · {list.length}<SheetText value={"건"} /></small></span>
         <b className={`num shrink-0 ${percentTone(avg)}`}>{pct(avg)}</b>
       </Link>;
-    })}</div> : <p className="text-text-dim py-10 text-center text-sm">검색어에 맞는 학생이 없습니다.</p>}
+    })}</div> : <p className="text-text-dim py-10 text-center text-sm"><SheetText value={"검색어에 맞는 학생이 없습니다."} /></p>}
   </Panel>;
 }
 
@@ -37,9 +39,9 @@ export function StudentTab({ students, selected, rows, allRows, href, goalViews,
   if (!selected) return <StudentPicker students={students} rows={allRows} href={href} />;
   return <div className="space-y-4">
     <div className="flex flex-wrap items-center gap-3">
-      <Link href={href({ tab: "student", student: "" })} className="text-primary text-sm font-semibold hover:underline">← 학생 목록</Link>
+      <Link href={href({ tab: "student", student: "" })} className="text-primary text-sm font-semibold hover:underline"><SheetText value={"← 학생 목록"} /></Link>
       <h2 className="text-xl font-bold">{selected.name} <small className="text-text-dim text-sm font-normal">{schoolGradeLabel(selected.school, selected.grade)}</small></h2>
-      <Link href={`/students/${selected.studentId}?tab=grades`} className="text-primary ml-auto text-sm font-semibold hover:underline">학생 상세 열기 →</Link>
+      <Link href={`/students/${selected.studentId}?tab=grades`} className="text-primary ml-auto text-sm font-semibold hover:underline"><SheetText value={"학생 상세 열기 →"} /></Link>
     </div>
     <StudentGradeStats rows={rows} />
     <div className="grid gap-4 lg:grid-cols-[1.3fr_1fr]">
@@ -53,12 +55,12 @@ export function StudentTab({ students, selected, rows, allRows, href, goalViews,
       </Panel>
     </div>
     <Panel title="시험 목표" sub={goals.length ? `${goals.length}건 · 기간과 무관하게 이 학생의 목표 전부` : undefined}
-      right={<Link href={`/students/${selected.studentId}?tab=grades`} className="text-primary text-sm font-semibold hover:underline">목표 추가·삭제 →</Link>}>
+      right={<Link href={`/students/${selected.studentId}?tab=grades`} className="text-primary text-sm font-semibold hover:underline"><SheetText value={"목표 추가·삭제 →"} /></Link>}>
       {goals.length ? <ul className="divide-line-faint divide-y">{goals.map((g) => <li key={g.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
         <span className="font-semibold">{g.examName}</span>
-        <span className="flex items-center gap-3">{g.actualScore != null ? <span className="num text-text-dim text-xs">실제 <b className="text-foreground">{g.actualScore}점{g.actualMaxScore != null ? ` / ${g.actualMaxScore}점` : ""}</b></span> : null}
+        <span className="flex items-center gap-3">{g.actualScore != null ? <span className="num text-text-dim text-xs"><SheetText value={"실제 "} /><b className="text-foreground">{g.actualScore}<SheetText value={"점"} /><SheetText value={g.actualMaxScore != null ? ` / ${g.actualMaxScore}점` : ""} /></b></span> : null}
           <GoalBadge goal={{ target: g.targetScore, max: g.maxScore, status: g.status }} /></span>
-      </li>)}</ul> : <p className="text-text-dim py-6 text-center text-sm">설정된 목표가 없습니다.</p>}
+      </li>)}</ul> : <p className="text-text-dim py-6 text-center text-sm"><SheetText value={"설정된 목표가 없습니다."} /></p>}
     </Panel>
   </div>;
 }

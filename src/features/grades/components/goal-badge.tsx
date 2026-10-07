@@ -1,3 +1,5 @@
+
+import { SheetText } from "@/features/teacher-view/interface-label";
 import { GOAL_STATUS_LABEL, type GoalStatus, type GoalView } from "../goals";
 
 const TONE: Record<GoalStatus, string> = {
@@ -17,7 +19,7 @@ export function GoalBadge({ goal, className = "" }: { goal: GoalView; className?
   const label = GOAL_STATUS_LABEL[goal.status];
   return <span className={`inline-flex items-center gap-1.5 text-xs whitespace-nowrap ${className}`}
     title={goal.status === "unknown" ? "목표나 성적의 만점을 몰라 비교할 수 없습니다" : undefined}>
-    <span className="text-text-dim num">목표 {goal.target}점{goal.max != null ? ` / ${goal.max}점` : ""}</span>
+    <span className="text-text-dim num"><SheetText value={"목표 "} />{goal.target}<SheetText value={"점"} /><SheetText value={goal.max != null ? ` / ${goal.max}점` : ""} /></span>
     <span className={`rounded-full px-1.5 py-0.5 font-bold ${TONE[goal.status]}`}>{label}</span>
   </span>;
 }

@@ -10,8 +10,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { searchMakeupStudents } from "@/features/attendance/server/actions";
+import { useSheetLang, useSheetT } from "@/features/teacher-view/lang-context";
+import { studentDisplayName } from "@/features/teacher-view/student-name";
+import { sheetSchoolGrade } from "@/features/teacher-view/school-grade";
 
-export type MakeupPick = { id: string; name: string; label: string };
+export type MakeupPick = { id: string; name: string; label: string; englishName?: string | null; school?: string | null; grade?: string | null };
 
 export function AttendanceMakeupAdder({
   classId,
@@ -25,6 +28,8 @@ export function AttendanceMakeupAdder({
   disabled?: boolean;
   onAdd: (student: MakeupPick) => void;
 }) {
+  const t = useSheetT();
+  const lang = useSheetLang();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [results, setResults] = useState<MakeupPick[]>([]);
@@ -61,7 +66,7 @@ export function AttendanceMakeupAdder({
         disabled={disabled}
         className="border-line text-text-dim hover:bg-bg-soft rounded-lg border px-2.5 py-1 text-xs font-medium transition disabled:opacity-50"
       >
-        + 보강 학생 추가
+        {t("os.makeup.add")}
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner side="bottom" align="end" sideOffset={4} className="z-50">
@@ -70,16 +75,16 @@ export function AttendanceMakeupAdder({
               autoFocus
               value={q}
               onChange={(e) => runSearch(e.target.value)}
-              placeholder="학생 이름 검색"
-              aria-label="보강 학생 이름 검색"
+              placeholder={t("os.makeup.searchPh")}
+              aria-label={t("os.makeup.searchAria")}
               className="border-line bg-bg-soft focus:border-primary h-8 w-full rounded-lg border px-2 outline-none"
             />
             <div className="scrollbar-thin mt-1.5 max-h-64 overflow-y-auto">
               {loading ? (
-                <p className="text-text-faint px-2 py-3 text-center">검색 중…</p>
+                <p className="text-text-faint px-2 py-3 text-center">{t("os.makeup.searching")}</p>
               ) : results.length === 0 ? (
                 <p className="text-text-faint px-2 py-3 text-center">
-                  {q.trim() ? "결과 없음" : "이름을 입력하세요"}
+                  {q.trim() ? t("os.makeup.noResult") : t("os.makeup.typeName")}
                 </p>
               ) : (
                 results.map((s) => (
@@ -94,8 +99,8 @@ export function AttendanceMakeupAdder({
                     }}
                     className="hover:bg-bg-soft flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left"
                   >
-                    <span className="text-foreground font-medium">{s.name}</span>
-                    <span className="text-text-faint text-xs">{s.label}</span>
+                    <span className="text-foreground font-medium">{studentDisplayName(s.name, s.englishName, lang)}</span>
+                    <span className="text-text-faint text-xs">{s.school !== undefined || s.grade !== undefined ? sheetSchoolGrade(s.school, s.grade, lang) : s.label}</span>
                   </button>
                 ))
               )}

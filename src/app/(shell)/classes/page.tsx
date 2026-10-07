@@ -33,6 +33,10 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps, SUBJECT_SOLID, type SubjectMaps } from "@/features/owner/subjects";
 import { loadClassListPrefs, saveClassListPrefs } from "@/features/classes/server/list-prefs";
 import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
+import { classNameFor } from "@/features/teacher-view/class-name";
+import { teacherNameFor } from "@/features/teacher-view/teacher-name";
+import { getTeacherEnglishNames } from "@/features/teacher-view/server/teacher-names";
+import { roomNameFor } from "@/features/teacher-view/room-name";
 import { sheetDowLabel, sheetT, sheetTf, type SheetLang } from "@/features/teacher-view/i18n";
 import {
   DEFAULT_CLASS_LIST_PREFS,
@@ -155,16 +159,23 @@ export default async function ClassesPage({
   ]);
 
   // 과목 라벨·색·필터 옵션은 학원설정(operations.subjects) 단일 소스 — 미등록 과목은 드롭다운에 안 뜸.
-  const subjects = buildSubjectMaps(settings.operations.subjects);
+  const subjects = buildSubjectMaps(settings.operations.subjects, lang);
   const subjectOptions = subjects.filters.filter((f) => f.value !== "all");
   // 담임 선택지 — 현재 과목 담당만(전체면 전부). 선택 담임이 목록 밖이면(직접 URL) 앞에 보강해 라벨을 유지한다.
   const visibleTeachers = subject === "all" ? teachers : teachers.filter((t) => teacherTeaches(t.subjects, subject));
   const selectedTeacher = teacherId === "all" ? null : teachers.find((t) => t.id === teacherId);
-  const teacherOptions = visibleTeachers.map((t) => ({ value: t.id, label: t.name }));
+  const teacherNames = await getTeacherEnglishNames();
+  const displayTeacher = (name: string) => teacherNameFor(name, teacherNames, lang) ?? name;
+  const teacherOptions = visibleTeachers.map((t) => ({ value: t.id, label: displayTeacher(t.name) }));
   if (selectedTeacher && !visibleTeachers.some((t) => t.id === selectedTeacher.id)) {
-    teacherOptions.unshift({ value: selectedTeacher.id, label: selectedTeacher.name });
+    teacherOptions.unshift({ value: selectedTeacher.id, label: displayTeacher(selectedTeacher.name) });
   }
   const showTeacher = !scopedTeacherId;
+  const shownClasses = classes.map((klass) => ({ ...klass,
+    className: classNameFor(klass.className, lang),
+    teacherName: teacherNameFor(klass.teacherName, teacherNames, lang),
+    classroomName: roomNameFor(klass.classroomName, lang),
+  }));
   const totalSeats = stats.totalSeats;
   const active = stats.active;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -335,9 +346,9 @@ export default async function ClassesPage({
       {/* 🔴 표는 결과가 0개여도 그린다 — 열 머리가 곧 필터라, 표를 치우면 걸린 필터를 되돌릴 컨트롤이 함께 사라진다
           (학생목록 실브라우저 결함 2026-09-03). 빈 상태는 표 본문 안에 선다. */}
       {view === "table" ? (
-        <TableView classes={classes} subjects={subjects} showTeacher={showTeacher} head={head} lang={lang} empty={emptyState(total, status, q, listParams, lang)} />
+        <TableView classes={shownClasses} subjects={subjects} showTeacher={showTeacher} head={head} lang={lang} empty={emptyState(total, status, q, listParams, lang)} />
       ) : (
-        <CardsView classes={classes} subjects={subjects} showTeacher={showTeacher} head={head} lang={lang} empty={emptyState(total, status, q, listParams, lang)} />
+        <CardsView classes={shownClasses} subjects={subjects} showTeacher={showTeacher} head={head} lang={lang} empty={emptyState(total, status, q, listParams, lang)} />
       )}
       {total > 0 ? <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} /> : null}
     </div>

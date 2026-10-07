@@ -1,5 +1,7 @@
 "use client";
 
+import { SheetText } from "@/features/teacher-view/interface-label";
+
 import { schoolGradeLabel } from "@/features/grades/unified/model";
 
 export type EntryGridRow = {
@@ -52,8 +54,8 @@ export function EntryGrid({ rows, scores, max, results, onScore, onRemove, disab
             </span>}
           </td>
           <td className="px-2 py-1.5 text-center text-xs">
-            {result ? result.ok ? <span className="text-green font-bold">저장됨</span> : <span className="text-danger" title={result.error}>{result.error}</span>
-              : onRemove ? <button type="button" className="text-text-dim hover:text-danger" onClick={() => onRemove(row.studentId)}>빼기</button> : null}
+            {result ? result.ok ? <span className="text-green font-bold"><SheetText value={"저장됨"} /></span> : <span className="text-danger" title={result.error}>{result.error}</span>
+              : onRemove ? <button type="button" className="text-text-dim hover:text-danger" onClick={() => onRemove(row.studentId)}><SheetText value={"빼기"} /></button> : null}
           </td>
         </tr>;
       })}</tbody>

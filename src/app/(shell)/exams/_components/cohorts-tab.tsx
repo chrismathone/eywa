@@ -1,3 +1,5 @@
+
+import { SheetSchoolGrade, SheetText } from "@/features/teacher-view/interface-label";
 import Link from "next/link";
 import { FaceTabs } from "@/components/face-tabs";
 import { aggregateBy, averagePercent, type Aggregate, type UnifiedRow } from "@/features/grades/unified/model";
@@ -30,7 +32,7 @@ function LevelTabs({ param, level, href, label }: { param: string; level: Level;
 }
 
 function Picker({ items, selected, param, href }: { items: Aggregate[]; selected: Aggregate | undefined; param: string; href: Href }) {
-  if (!items.length) return <p className="text-text-dim py-6 text-center text-sm">해당하는 기록이 없습니다.</p>;
+  if (!items.length) return <p className="text-text-dim py-6 text-center text-sm"><SheetText value={"해당하는 기록이 없습니다."} /></p>;
   return <div className="max-h-56 space-y-0.5 overflow-auto pr-1">{items.map((item) => <Link key={item.key} href={href({ tab: "cohorts", [param]: item.key })} scroll={false} className="block">
     <BarRow label={item.label} sub={`${item.count}건`} value={item.average} active={item.key === selected?.key} /></Link>)}</div>;
 }
@@ -76,11 +78,11 @@ export function CohortsTab({ rows, schools, grades, schoolKey, gradeKey, level: 
         <thead className="bg-bg-soft"><tr>{["학교", "학년", "평균", "기록", "월별 흐름"].map((h, i) => <th key={h} className={`px-3 py-2 font-bold ${i === 4 ? "text-left" : "text-center"}`}>{h}</th>)}</tr></thead>
         <tbody>{cohortRows.map((entry) => { const avg = averagePercent(entry.rows); const points = aggregateBy(entry.rows, "academy")[0]?.points ?? [];
           return <tr key={`${entry.school}:${entry.grade}`} className="border-line-faint border-t">
-            <td className="px-3 py-2 text-center font-semibold">{entry.school}</td><td className="px-3 py-2 text-center">{entry.grade}</td>
-            <td className={`num px-3 py-2 text-center font-bold ${percentTone(avg)}`}>{avg == null ? "—" : `${avg}%`}</td><td className="num px-3 py-2 text-center">{entry.rows.length}건</td>
+            <td className="px-3 py-2 text-center font-semibold"><SheetSchoolGrade school={entry.school} /></td><td className="px-3 py-2 text-center"><SheetSchoolGrade grade={entry.grade} /></td>
+            <td className={`num px-3 py-2 text-center font-bold ${percentTone(avg)}`}>{avg == null ? "—" : `${avg}%`}</td><td className="num px-3 py-2 text-center">{entry.rows.length}<SheetText value={"건"} /></td>
             <td className="text-text-dim px-3 py-2">{points.map((p) => `${Number(p.month.slice(5))}월 ${p.average}%`).join(" → ") || "—"}</td>
           </tr>; })}</tbody></table></div>
-        : <p className="text-text-dim py-8 text-center text-sm">비교할 점수 기록이 없습니다.</p>}
+        : <p className="text-text-dim py-8 text-center text-sm"><SheetText value={"비교할 점수 기록이 없습니다."} /></p>}
     </Panel>
   </div>;
 }

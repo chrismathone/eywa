@@ -1,3 +1,5 @@
+
+import { SheetText } from "@/features/teacher-view/interface-label";
 /**
  * 월별 평균 추이 — 세로축은 **데이터 범위에 맞춰** 잡는다(옛 0~100 고정은 평균 90점대가 한 줄로 눌려
  * "멈춘 것처럼" 보였다). 선만 SVG(비율 무시·선 굵기 고정)이고 점·값·월 라벨은 HTML로 같은 x%에 둔다
@@ -19,7 +21,7 @@ function domainOf(values: number[]): [number, number] {
 }
 
 export function TrendChart({ points }: { points: Point[] }) {
-  if (!points.length) return <p className="py-12 text-center text-sm">비교할 점수 기록이 없습니다.</p>;
+  if (!points.length) return <p className="py-12 text-center text-sm"><SheetText value={"비교할 점수 기록이 없습니다."} /></p>;
   const [lo, hi] = domainOf(points.map((p) => p.average));
   const x = (i: number) => (points.length === 1 ? 50 : 4 + (i * 92) / (points.length - 1));
   const y = (v: number) => ((hi - v) / (hi - lo)) * 100;
@@ -41,7 +43,7 @@ export function TrendChart({ points }: { points: Point[] }) {
         </div>)}
       </div>
       <div className="relative mt-2 h-5 text-xs" aria-hidden>
-        {points.map((p, i) => <span key={p.month} className="absolute -translate-x-1/2 whitespace-nowrap" style={{ left: `${x(i)}%` }}>{Number(p.month.slice(5))}월</span>)}
+        {points.map((p, i) => <span key={p.month} className="absolute -translate-x-1/2 whitespace-nowrap" style={{ left: `${x(i)}%` }}>{Number(p.month.slice(5))}<SheetText value={"월"} /></span>)}
       </div>
     </div>
   </div>;

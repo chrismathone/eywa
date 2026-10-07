@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
@@ -23,6 +23,7 @@ function EditableEnglishName({ studentId, studentName, englishName, children }: 
   const t = useSheetT();
   const tf = useSheetTf();
   const [editing, setEditing] = useState(false);
+  const [hovered, setHovered] = useState(false);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -31,16 +32,27 @@ function EditableEnglishName({ studentId, studentName, englishName, children }: 
   const replaying = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
-  function cancelNavigation() {
+  const cancelNavigation = useCallback(() => {
     if (timer.current) clearTimeout(timer.current);
     timer.current = null;
-  }
-  function begin() {
+  }, []);
+  const begin = useCallback(() => {
     cancelNavigation();
     if (!enabled || busy.current) return;
     previous.current = value;
     setDraft(value ?? ""); setError(null); setEditing(true);
-  }
+  }, [cancelNavigation, enabled, value]);
+  useEffect(() => {
+    if (!hovered || editing) return;
+    const onShortcut = (event: KeyboardEvent) => {
+      if (event.key !== "F2" || event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+      if (event.target instanceof HTMLElement && event.target.closest("input, textarea, select, [contenteditable=true]")) return;
+      event.preventDefault();
+      begin();
+    };
+    document.addEventListener("keydown", onShortcut);
+    return () => document.removeEventListener("keydown", onShortcut);
+  }, [hovered, editing, begin]);
   function save() {
     if (busy.current || !enabled) return;
     if ((draft.trim() || null) === previous.current) { setEditing(false); return; }
@@ -58,6 +70,8 @@ function EditableEnglishName({ studentId, studentName, englishName, children }: 
     });
   }
   return <span className="min-w-0 max-w-full" title={editing ? undefined : t("studentEnglishName.editHint")}
+    onMouseEnter={() => setHovered(true)}
+    onMouseLeave={() => setHovered(false)}
     onMouseDownCapture={(e) => {
       if (editing || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
       // 두 번째 클릭을 누르는 순간 취소한다. click/dblclick까지 기다리면 손을 떼기 전에 이동할 수 있다.
@@ -77,7 +91,7 @@ function EditableEnglishName({ studentId, studentName, englishName, children }: 
       }, 500);
     }}
     onDoubleClickCapture={(e) => { if (!editing) { e.preventDefault(); e.stopPropagation(); begin(); } }}
-    onKeyDown={(e) => { if (!editing && e.key === "F2") { e.preventDefault(); begin(); } }}>
+    onKeyDown={(e) => { if (!editing && e.key === "F2" && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) { e.preventDefault(); begin(); } }}>
     {editing ? <span className="block min-w-0">
       <span className="flex items-center gap-0.5">
         <input autoFocus value={draft} maxLength={80} disabled={pending}

@@ -6,6 +6,8 @@
  * `data-page-header-extra` = 화면 최대화 중 숨는 조각(eyebrow·구분자·설명) — 최대화 중 머리글은 **제목 + 오른쪽 버튼** 한 줄만
  * 남는다(globals.css `[data-page-maximize="on"]`). 제목은 남긴다: 사이드바가 숨어 "지금 어느 화면인가"를 알려 줄 곳이 여기뿐이다.
  */
+import { SheetText } from "@/features/teacher-view/interface-label";
+
 export function PageHeaderLead({
   eyebrow,
   title,
@@ -21,7 +23,7 @@ export function PageHeaderLead({
     <>
       {eyebrow ? (
         <p data-page-header-extra="" className="text-foreground text-sm font-medium whitespace-nowrap compact-chrome:hidden">
-          {eyebrow}
+          <SheetText value={eyebrow} />
         </p>
       ) : null}
       <div className={`flex items-baseline gap-x-2 ${hasCompactLabel ? "compact-chrome:hidden" : ""}`}>
@@ -33,7 +35,7 @@ export function PageHeaderLead({
               : "compact-chrome:text-text-dim compact-chrome:text-sm compact-chrome:font-medium compact-chrome:tracking-normal"
           }`}
         >
-          {title}
+          <SheetText value={title} />
         </h2>
       </div>
     </>

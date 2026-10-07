@@ -1,3 +1,5 @@
+
+import { SheetText } from "@/features/teacher-view/interface-label";
 import { getStudentMemos } from "@/features/students/server/queries";
 import { MemoForm } from "../_components/memo-form";
 import { MemoItem } from "../_components/memo-item";
@@ -8,14 +10,14 @@ export async function MemosTab({ studentId }: { studentId: string }) {
   return (
     <div className="space-y-4">
       <header className="border-border flex items-baseline justify-between border-b pb-3">
-        <h2 className="text-foreground text-base font-bold">메모</h2>
-        <p className="text-muted-foreground num text-xs">{memos.length}건</p>
+        <h2 className="text-foreground text-base font-bold"><SheetText value={"메모"} /></h2>
+        <p className="text-muted-foreground num text-xs">{memos.length}<SheetText value={"건"} /></p>
       </header>
 
       <MemoForm studentId={studentId} />
 
       {memos.length === 0 ? (
-        <p className="text-muted-foreground py-8 text-center text-sm">기록된 메모가 없습니다</p>
+        <p className="text-muted-foreground py-8 text-center text-sm"><SheetText value={"기록된 메모가 없습니다"} /></p>
       ) : (
         // 메모는 짧은 카드라 1열로만 쌓으면 넓은 창에서 한 건이 1900px 한 줄을 다 먹는다. auto-fit으로
         // 폭이 되는 만큼 열을 늘린다(1건이면 전폭 = 기존과 동일). items-start = 카드가 같은 행 최고

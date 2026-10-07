@@ -1,5 +1,7 @@
 "use client";
 
+import { SheetClassName, SheetTeacherName, SheetText } from "@/features/teacher-view/interface-label";
+
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { SUBJECT_SOFT, type SubjectMaps } from "@/features/owner/subjects";
 import { isPerPeriodSubject, type DayOfWeek, type PeriodsConfig } from "@/features/timetable/lib/periods";
@@ -50,7 +52,7 @@ export function StudentPeriodGrid({
   const hasWeekday = weekday.days.length > 0;
   const hasWeekend = weekend.days.length > 0;
   if (!hasWeekday && !hasWeekend) {
-    return <p className="text-muted-foreground px-1 text-sm">이 과목의 시간표가 없습니다.</p>;
+    return <p className="text-muted-foreground px-1 text-sm"><SheetText value={"이 과목의 시간표가 없습니다."} /></p>;
   }
   const cellColor = SUBJECT_SOFT[subjects.colorOf(subject)];
   return (
@@ -101,7 +103,7 @@ function PeriodTable({
       <thead>
         <tr>
           <th className={`bg-bg-soft text-text-faint ${GRID} border-b border-r px-2 py-1.5 text-xs font-medium`}>
-            {weekend ? "주말" : "교시"}
+            <SheetText value={weekend ? "주말" : "교시"} />
           </th>
           {days.map((d) => (
             <th key={d} className={`bg-bg-soft text-foreground ${GRID} border-b border-r px-2 py-1.5 text-center text-xs font-bold`}>
@@ -132,8 +134,7 @@ function PeriodTable({
                 // 묶음 병합(rowSpan=2)·시간범위 결합은 **홀수 앵커 + 실제 짝일 때만**. 짝수가 폴백으로
                 // 앵커가 된 퇴화 케이스는 개별 라벨(다음 홀수와 오병합 금지).
                 <td rowSpan={labelSpan} className={labelCls} style={{ height: sumSpan(heights, ri, labelSpan) }}>
-                  {Math.ceil(mathN / 2)}교시
-                  <div className="text-text-faint num mt-0.5 text-xs font-normal">
+                  {Math.ceil(mathN / 2)}<SheetText value={"교시"} /><div className="text-text-faint num mt-0.5 text-xs font-normal">
                     {oddPaired ? `${row.time.split("~")[0]}~${nextRow!.time.split("~")[1]}` : row.time}
                   </div>
                 </td>
@@ -170,7 +171,7 @@ function PeriodTable({
                         style={{ height: spanH - 8 }} // p-1(상하 8px) 보정 → 셀 전체 채움
                       >
                         <span className="text-foreground text-xs leading-tight font-bold break-keep">
-                          {c.className}
+                          <SheetClassName value={c.className} />
                         </span>
                         {/* 🔴 자리(LAB·JJ) 교시는 **사람이 아니라 방**이다 — 이름 자리에 자리 이름을 적고
                             테두리 알약으로 사람과 구분한다(원장 2026-09-07 "JJ실도 있을텐데 표현 제대로"). */}
@@ -185,7 +186,7 @@ function PeriodTable({
                             {c.labSeparate ? LAB_SEPARATE_LABEL : c.seat}
                           </span>
                         ) : c.teacherName ? (
-                          <span className="text-text-dim mt-0.5 text-xs">{c.teacherName}</span>
+                          <span className="text-text-dim mt-0.5 text-xs"><SheetTeacherName value={c.teacherName} /></span>
                         ) : null}
                         {c.room ? (
                           <span className="text-text-faint mt-auto pt-0.5 text-xs">{c.room}</span>

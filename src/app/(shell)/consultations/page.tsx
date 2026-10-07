@@ -1,3 +1,5 @@
+
+import { SheetText } from "@/features/teacher-view/interface-label";
 import { Suspense } from "react";
 import { MessagesSquare, CalendarClock, BellRing, AlarmClock } from "@/components/icons/aywa-icon-compat";
 import { BigStat } from "@/components/atoms/big-stat";
@@ -131,8 +133,7 @@ export default async function ConsultationsPage({
           필터는 축마다 라벨 하나(드롭다운) · 검색은 눌러야 나온다. 통계는 목록 옆 패널이 아니라 전용 화면(원장 2026-10-01). */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-1">
         <p className="text-text-dim text-sm whitespace-nowrap">
-          결과 <span className="text-foreground font-bold">{total}</span>건
-          {totalPages > 1 ? (
+          <SheetText value={"결과 "} /><span className="text-foreground font-bold">{total}</span><SheetText value={"건"} />{totalPages > 1 ? (
             <span className="num ml-1.5">
               · {page}/{totalPages}
             </span>
@@ -162,8 +163,7 @@ export default async function ConsultationsPage({
             title="상담 통계 — 지금 필터 그대로"
             className={`${CONTROL_H} ${CONTROL_LABEL} text-primary inline-flex items-center px-1 font-medium whitespace-nowrap hover:underline`}
           >
-            통계 보기
-          </EmbedLink>
+            <SheetText value={"통계 보기"} /></EmbedLink>
           <NewConsultationTrigger />
         </div>
       </div>

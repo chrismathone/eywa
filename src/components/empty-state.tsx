@@ -3,6 +3,7 @@ import type { ComponentType, ReactNode } from "react";
 
 import { EMPTY_STATE_IMAGES, type EmptyStateImage } from "@/components/empty-state-assets";
 import { cn } from "@/lib/utils";
+import { SheetText } from "@/features/teacher-view/interface-label";
 
 type IconComponent = ComponentType<{ className?: string; size?: number }>;
 
@@ -48,8 +49,8 @@ export function EmptyState({
           <Icon className="size-6" />
         </div>
       ) : null}
-      <p className="text-base font-bold">{title}</p>
-      {description ? <p className="text-text-dim max-w-sm text-sm">{description}</p> : null}
+      <p className="text-base font-bold"><SheetText value={title} /></p>
+      {description ? <p className="text-text-dim max-w-sm text-sm"><SheetText value={description} /></p> : null}
       {action ? <div className="mt-2">{action}</div> : null}
     </div>
   );

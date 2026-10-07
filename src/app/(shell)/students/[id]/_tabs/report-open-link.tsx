@@ -1,5 +1,7 @@
 "use client";
 
+import { SheetText } from "@/features/teacher-view/interface-label";
+
 import { usePrintWindow } from "@/components/workspace/print-window";
 import { useInFrame } from "@/components/workspace/use-in-frame";
 
@@ -36,7 +38,6 @@ export function ReportOpenLink({ reportId, reportDate }: { reportId: string; rep
         openPrint(params, e);
       }}
     >
-      열기
-    </button>
+      <SheetText value={"열기"} /></button>
   );
 }

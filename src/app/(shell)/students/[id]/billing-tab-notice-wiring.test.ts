@@ -27,7 +27,7 @@ describe("수납 탭 권한 안내", () => {
   });
 
   it("🔴 안내는 '수납 탭 + 권한 없음'일 때만 선다 — 조건이 그 한 줄뿐이다", () => {
-    const notices = [...code.matchAll(/\{([^{}]+?)\?\s*\(\s*<p[^>]*role="status"[^>]*>([^<]+)<\/p>/g)];
+    const notices = [...code.matchAll(/\{([^{}]+?)\?\s*\(\s*<p[^>]*role="status"[^>]*><SheetText value=\{"([^"]+)"\} \/><\/p>/g)];
     expect(notices).toHaveLength(1);
     const [, condition, message] = notices[0]!;
     expect(condition.trim()).toBe('requestedTab === "billing" && !canSeeBilling');
@@ -45,7 +45,8 @@ describe("수납 탭 권한 안내", () => {
   });
 
   it("안내 문구에 내부 역할 이름·권한 키가 없다", () => {
-    const message = code.match(/role="status"[^>]*>([^<]+)</)?.[1] ?? "";
+    const message = code.match(/role="status"[^>]*><SheetText value=\{"([^"]+)"\}/)?.[1] ?? "";
+    expect(message).not.toBe("");
     expect(message).not.toMatch(/슈퍼|총괄|super_admin|master|teacher|admin|billing|원장|강사/);
   });
 

@@ -1,5 +1,7 @@
 "use client";
 
+import { SheetText } from "@/features/teacher-view/interface-label";
+
 /**
  * 짝 잇기 패널 — 후보를 골라 한 명씩, 목록에서 직접 찾아서, 또는 '이름이 하나뿐인 학생 한 번에'.
  * 판정(누가 유일한가)과 권한은 서버가 다시 한다(link-actions.ts) — 이 화면은 고르고 확인하는 자리만 준다(#77).
@@ -74,8 +76,7 @@ export function JjLinkPanel({ rows, pool }: { rows: JjLinkRow[]; pool: JjPoolOpt
     <section className="border-amber/40 bg-amber-soft/40 space-y-2 rounded-2xl border px-4 py-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-foreground text-sm font-bold">
-          인재원 학생 중 에이와 학생과 아직 연결되지 않은 <span className="num">{rows.length}</span>명
-        </p>
+          <SheetText value={"인재원 학생 중 에이와 학생과 아직 연결되지 않은 "} /><span className="num">{rows.length}</span><SheetText value={"명"} /></p>
         <div className="flex flex-wrap items-center gap-1.5">
           {uniqueRows.length > 0 ? (
             <Button
@@ -85,19 +86,18 @@ export function JjLinkPanel({ rows, pool }: { rows: JjLinkRow[]; pool: JjPoolOpt
               onClick={() => setBulkOpen((v) => !v)}
               title="이름이 양쪽 모두(퇴원생 포함) 하나뿐인 학생만 — 누르면 이을 짝을 먼저 보여 줍니다"
             >
-              {bulkOpen ? "한 번에 연결 닫기" : `이름이 하나뿐인 ${uniqueRows.length}명 한 번에 연결…`}
+              <SheetText value={bulkOpen ? "한 번에 연결 닫기" : `이름이 하나뿐인 ${uniqueRows.length}명 한 번에 연결…`} />
             </Button>
           ) : null}
           <Button variant="outline" size="sm" onClick={() => setOpen((v) => !v)}>
-            {open ? "목록 접기" : "목록 보기"}
+            <SheetText value={open ? "목록 접기" : "목록 보기"} />
           </Button>
         </div>
       </div>
       {bulkOpen ? (
         <div className="border-amber/60 bg-card space-y-2 rounded-lg border px-3 py-2">
           <p className="text-text-dim text-xs">
-            아래 목록에 있는 짝만 잇습니다. 누르는 순간 서버가 다시 확인해, 그사이 바뀐 짝은 빼고 누구인지 알려 드립니다.
-          </p>
+            <SheetText value={"아래 목록에 있는 짝만 잇습니다. 누르는 순간 서버가 다시 확인해, 그사이 바뀐 짝은 빼고 누구인지 알려 드립니다."} /></p>
           <ul className="max-h-48 space-y-0.5 overflow-y-auto px-1 text-sm">
             {uniqueRows.map((r) => (
               <li key={r.ijwId}>
@@ -109,19 +109,14 @@ export function JjLinkPanel({ rows, pool }: { rows: JjLinkRow[]; pool: JjPoolOpt
           </ul>
           <div className="flex flex-wrap gap-1.5">
             <Button size="sm" disabled={pending} onClick={linkAllUnique}>
-              {uniqueRows.length}명 연결
-            </Button>
+              {uniqueRows.length}<SheetText value={"명 연결"} /></Button>
             <Button size="sm" variant="ghost" disabled={pending} onClick={() => setBulkOpen(false)}>
-              취소
-            </Button>
+              <SheetText value={"취소"} /></Button>
           </div>
         </div>
       ) : null}
       <p className="text-text-dim text-xs">
-        이름만으로 자동 연결하지 않습니다(인재원엔 생년월일·학교가 없어 동명이인을 가를 수 없습니다). 인재원 이름이
-        로그인 아이디인 학생은 아이디 머리글자(예: ijwhgd → 홍길동)로 후보를 찾아 드립니다 — 머리글자는 겹칠 수 있으니
-        후보를 고른 뒤 확인 줄에서 반·학교를 보고 [연결]을 눌러 주세요.
-      </p>
+        <SheetText value={"이름만으로 자동 연결하지 않습니다(인재원엔 생년월일·학교가 없어 동명이인을 가를 수 없습니다). 인재원 이름이 로그인 아이디인 학생은 아이디 머리글자(예: ijwhgd → 홍길동)로 후보를 찾아 드립니다 — 머리글자는 겹칠 수 있으니 후보를 고른 뒤 확인 줄에서 반·학교를 보고 [연결]을 눌러 주세요."} /></p>
       {open ? (
         <ul className="divide-line divide-y">
           {rows.map((r) => (

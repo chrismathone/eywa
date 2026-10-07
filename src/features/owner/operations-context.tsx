@@ -5,6 +5,8 @@ import { buildSubjectMaps, type SubjectMaps } from "./subjects";
 import { jobTitlesForDepartment } from "@/features/staff/department-job-titles";
 import type { SubjectSetting } from "./settings-types";
 import { isModuleEnabled, type ModuleId } from "@/lib/modules";
+import { useSheetLang } from "@/features/teacher-view/lang-context";
+import { localizeSubjectMaps } from "@/features/teacher-view/interface-text";
 
 /**
  * 운영체계(operations) enum의 **클라이언트 단일 소스**.
@@ -55,7 +57,9 @@ export function OperationsProvider({
 /** 과목 라벨·색·옵션 맵(buildSubjectMaps). 프로바이더 밖이면 빈 설정 폴백(레거시 라벨만). */
 export function useSubjectMaps(): SubjectMaps {
   const ctx = useContext(Ctx);
-  return ctx?.subjects ?? EMPTY_SUBJECTS;
+  const lang = useSheetLang();
+  const subjects = ctx?.subjects ?? EMPTY_SUBJECTS;
+  return useMemo(() => localizeSubjectMaps(subjects, lang), [subjects, lang]);
 }
 
 /** 학년 체계(operations.gradeLevels). 프로바이더 밖이면 빈 배열. */

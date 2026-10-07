@@ -1,3 +1,5 @@
+
+import { SheetText } from "@/features/teacher-view/interface-label";
 import type { ReactNode } from "react";
 import { ToolbarButton } from "@/components/toolbar";
 
@@ -14,11 +16,11 @@ export function RecordsPager({ page, pageSize, total, href, note }: {
   const end = Math.min(total, page * pageSize);
   const last = Math.max(1, Math.ceil(total / pageSize));
   return <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-    <p className="text-text-dim"><b className="num text-foreground">{start}–{end}</b> / <span className="num">{total}</span>건{note ? <> · {note}</> : null}</p>
+    <p className="text-text-dim"><b className="num text-foreground">{start}–{end}</b> / <span className="num">{total}</span><SheetText value={"건"} />{note ? <> · {note}</> : null}</p>
     {last > 1 ? <div className="flex items-center gap-1.5">
-      {page > 1 ? <ToolbarButton href={href({ page: String(page - 1) })}>‹ 이전</ToolbarButton> : <ToolbarButton disabled>‹ 이전</ToolbarButton>}
+      {page > 1 ? <ToolbarButton href={href({ page: String(page - 1) })}><SheetText value={"‹ 이전"} /></ToolbarButton> : <ToolbarButton disabled><SheetText value={"‹ 이전"} /></ToolbarButton>}
       <span className="num text-text-dim px-1">{page} / {last}</span>
-      {page < last ? <ToolbarButton href={href({ page: String(page + 1) })}>다음 ›</ToolbarButton> : <ToolbarButton disabled>다음 ›</ToolbarButton>}
+      {page < last ? <ToolbarButton href={href({ page: String(page + 1) })}><SheetText value={"다음 ›"} /></ToolbarButton> : <ToolbarButton disabled><SheetText value={"다음 ›"} /></ToolbarButton>}
     </div> : null}
   </div>;
 }

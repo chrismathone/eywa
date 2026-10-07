@@ -1,4 +1,6 @@
 "use client";
+
+import { SheetText } from "@/features/teacher-view/interface-label";
 import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 
 import { useMemo, useState } from "react";
@@ -54,9 +56,9 @@ export function TimelineView({ events }: { events: TimelineEvent[] }) {
     return (
       <div className="space-y-4">
         <header className="border-border flex items-baseline justify-between border-b pb-3">
-          <h2 className="text-foreground text-base font-bold">타임라인</h2>
+          <h2 className="text-foreground text-base font-bold"><SheetText value={"타임라인"} /></h2>
         </header>
-        <p className="text-muted-foreground py-8 text-center text-sm">이벤트가 없습니다</p>
+        <p className="text-muted-foreground py-8 text-center text-sm"><SheetText value={"이벤트가 없습니다"} /></p>
       </div>
     );
   }
@@ -67,10 +69,9 @@ export function TimelineView({ events }: { events: TimelineEvent[] }) {
     <div className="space-y-4">
       <header className="border-border flex flex-wrap items-center justify-between gap-3 border-b pb-3">
         <div className="flex items-baseline gap-2">
-          <h2 className="text-foreground text-base font-bold">타임라인</h2>
+          <h2 className="text-foreground text-base font-bold"><SheetText value={"타임라인"} /></h2>
           <span className="text-muted-foreground num text-xs">
-            {safeIdx + 1}/{months.length}개월 · 총 {events.length}건
-          </span>
+            {safeIdx + 1}/{months.length}<SheetText value={"개월 · 총 "} />{events.length}<SheetText value={"건"} /></span>
         </div>
         {/* 월 네비 — idx 0 = 최신. ◀ 이전(과거)=idx+1, ▶ 다음(최신)=idx-1.
             가운데 라벨은 SearchableSelect로 어느 달이든 바로 점프(전역 드롭다운 규약). */}

@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { Button } from "@/components/ui/button";
 import { TOOLBAR_SEARCH_BOX } from "@/components/toolbar-controls";
+import { useSheetText } from "@/features/teacher-view/lang-context";
 
 /**
  * 공통 검색 폼 — 기존 GET <form>(문서 전체 새로고침 = 화면 깜빡 + 스크롤/포커스 유실)을
@@ -33,6 +34,7 @@ export function SearchForm({
   /** 토글로 펼쳐질 때(SearchToggle) 커서를 바로 넣는다 — 버튼이 사라진 자리에서 포커스를 잃지 않게. */
   autoFocus?: boolean;
 }) {
+  const text = useSheetText();
   const router = useRouter();
   const pathname = usePathname() ?? "/";
   const searchParams = useSearchParams();
@@ -61,7 +63,7 @@ export function SearchForm({
           type="search"
           name={paramName}
           defaultValue={defaultValue ?? ""}
-          placeholder={placeholder}
+          placeholder={text(placeholder)}
           autoFocus={autoFocus}
           // 안 글자는 16px(sm 라벨) — 상자 라벨 18px보다 한 단계 작게, 자리표시자·검색어가 더 보이게(원장 2026-09-04 재고관리 캡처,
           // "스타일 통일" — 앱의 검색 입력이 전부 같은 값).
@@ -69,7 +71,7 @@ export function SearchForm({
         />
       </div>
       <Button type="submit" variant="outline" disabled={pending}>
-        {pending ? "검색 중…" : "검색"}
+        {text(pending ? "검색 중…" : "검색")}
       </Button>
     </form>
   );

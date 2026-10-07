@@ -85,7 +85,7 @@ export async function TodayAttendanceStrip({ className }: { className?: string }
             saveSlot={slot.saveSlot}
             periodLabel={slot.periodLabel}
             pendingIds={slot.students.filter((s) => s.status == null).map((s) => s.studentId)}
-            pendingNames={slot.students.filter((s) => s.status == null).map((s) => s.studentName)}
+            pendingStudents={slot.students.filter((s) => s.status == null).map((s) => ({ name: s.studentName, englishName: s.englishName }))}
             deskRequested={deskRequested.has(`${slot.classId}|${slot.saveSlot ?? ""}`)}
           />
         ))}

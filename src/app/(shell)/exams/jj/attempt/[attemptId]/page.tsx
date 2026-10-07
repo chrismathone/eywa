@@ -1,3 +1,5 @@
+
+import { SheetClassName, SheetText } from "@/features/teacher-view/interface-label";
 import { notFound } from "next/navigation";
 import { WindowLink } from "@/components/workspace/window-link";
 import { requireAccess } from "@/lib/auth/require-access";
@@ -36,27 +38,24 @@ export default async function JjAttemptPage({ params }: { params: Promise<{ atte
             title={aywa.name}
             className="text-primary font-bold hover:underline"
           >
-            {aywa.name} 학생 상세
-          </WindowLink>
+            {aywa.name} <SheetText value={"학생 상세"} /></WindowLink>
         ) : (
           <span className="text-foreground font-bold">{exam.student.name || exam.student.id}</span>
         )}
-        {exam.student.className ? <span className="text-text-dim">인재원 반 {exam.student.className}</span> : null}
+        {exam.student.className ? <span className="text-text-dim"><SheetText value={"인재원 반 "} /><SheetClassName value={exam.student.className} /></span> : null}
         <WindowLink
           href={`/exams/jj/${encodeURIComponent(exam.deck.id)}`}
           title={`${exam.deck.name} — 이 시험 전체 결과`}
           className="text-primary font-bold hover:underline"
         >
-          이 시험 전체 결과
-        </WindowLink>
+          <SheetText value={"이 시험 전체 결과"} /></WindowLink>
         {/* 보카킹 종합평가 리포트(2026-10-07 1차 구현) — 같은 응시를 리포트 모양으로. 게이트는 같은 함수를 지난다. */}
         <WindowLink
           href={`/exams/jj/attempt/${encodeURIComponent(attemptId)}/vocabking`}
           title={`${exam.student.name || "학생"} — 종합평가 리포트`}
           className="text-primary font-bold hover:underline"
         >
-          종합평가 리포트
-        </WindowLink>
+          <SheetText value={"종합평가 리포트"} /></WindowLink>
       </nav>
       <JjExamSheet exam={exam} layout="wide" />
     </div>

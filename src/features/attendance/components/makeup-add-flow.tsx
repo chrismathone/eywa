@@ -10,6 +10,8 @@
  *     오늘 보강한 반**. ①을 먼저 해야 ②가 그 칸을 찾아 갱신한다(없으면 ②가 '출석'으로 새로 열어 버린다).
  */
 import { useRef, useState } from "react";
+import { useSheetFeedback, useSheetLang, useSheetTf } from "@/features/teacher-view/lang-context";
+import { studentDisplayName } from "@/features/teacher-view/student-name";
 import { toast } from "sonner";
 import { setAttendanceCell } from "../server/actions";
 import { noteMakeupAgainstAbsence } from "../server/makeup-note-action";
@@ -46,6 +48,10 @@ export function MakeupAddFlow({
   slotOptions?: readonly MakeupSlotOption[];
   onDone?: () => void;
 }) {
+  const lang = useSheetLang();
+  const tf = useSheetTf();
+  const feedback = useSheetFeedback();
+  const displayName = (s: MakeupPick) => studentDisplayName(s.name, s.englishName, lang);
   const [pending, setPending] = useState<MakeupPick | null>(null);
   const [absences, setAbsences] = useState<MakeupAbsenceList>(EMPTY_ABSENCES);
   const [loading, setLoading] = useState(false);
@@ -54,7 +60,7 @@ export function MakeupAddFlow({
 
   function pickStudent(s: MakeupPick) {
     if (alreadyIn?.has(s.id)) {
-      toast.message(`${s.name}은(는) 이미 이 반 명단에 있습니다`);
+      toast.message(tf("os.makeup.flow.alreadyListed", { name: displayName(s) }));
       return;
     }
     setPending(s);
@@ -98,11 +104,11 @@ export function MakeupAddFlow({
       ...(choice.slotStart ? { slotStart: choice.slotStart } : {}),
     });
     if ("error" in cell) {
-      toast.error(cell.error);
+      toast.error(feedback(cell.error));
       return;
     }
     if (!choice.absentDate) {
-      toast.success(`${s.name} 보강 추가 — 수업타임 ${choice.addUnits}`);
+      toast.success(tf("os.makeup.flow.added", { name: displayName(s), units: choice.addUnits }));
       onDone?.();
       return;
     }
@@ -116,14 +122,14 @@ export function MakeupAddFlow({
     });
     if ("error" in res) {
       // 칸은 이미 열렸다 — 연결만 실패했다는 사실을 그대로 알린다(둘 다 실패한 것처럼 말하지 않는다).
-      toast.error(`보강은 추가됐지만 결석분 연결에 실패했습니다 — ${res.error}`);
+      toast.error(tf("os.makeup.flow.linkFailed", { error: feedback(res.error) }));
       onDone?.();
       return;
     }
     toast.success(
       res.absenceNoted
-        ? `${s.name} 보강 추가 — 결석 칸에 메모, 수업타임 ${choice.addUnits}`
-        : `${s.name} 보강 추가 — 수업타임 ${choice.addUnits}. 그날 결석 기록이 없어 메모는 남기지 않았습니다.`,
+        ? tf("os.makeup.flow.addedLinked", { name: displayName(s), units: choice.addUnits })
+        : tf("os.makeup.flow.addedNoAbsence", { name: displayName(s), units: choice.addUnits }),
     );
     onDone?.();
   }
@@ -134,7 +140,7 @@ export function MakeupAddFlow({
       {pending ? (
         <MakeupConfirmDialog
           key={pending.id}
-          studentName={pending.name}
+          studentName={displayName(pending)}
           // ECS·출석부는 그 반 한 칸을 여는 것이라 '합침' 선택지가 없다(합칠 정규 보고서를 모른다).
           candidates={[]}
           makeupDate={date}

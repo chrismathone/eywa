@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MakeupConfirmDialog } from "./makeup-confirm-dialog";
 import type { MergeCandidate } from "@/features/onescreen/makeup-merge-plan";
 import type { MakeupAbsenceList, MakeupAbsenceOption } from "../makeup-options";
+import { SheetLangProvider } from "@/features/teacher-view/lang-context";
 
 /**
  * 여기서 잠그는 계약:
@@ -17,6 +18,20 @@ import type { MakeupAbsenceList, MakeupAbsenceOption } from "../makeup-options";
  *     (원장 제보 2026-08-19: 수학 반 보강에 영어 결석이 뜨던 것을 과목으로 좁혔다).
  */
 const TODAY = "2026-07-31";
+it("English makeup entry and its explanation contain no Korean interface copy", () => {
+  render(<SheetLangProvider lang="en"><MakeupConfirmDialog studentName="Lucy" candidates={[]} makeupDate={TODAY} absences={{ options: [], hiddenBySubject: 0 }} onConfirm={vi.fn()} onCancel={vi.fn()} /></SheetLangProvider>);
+  const dialog = screen.getByRole("alertdialog");
+  expect(dialog.textContent).not.toMatch(/[가-힣]/);
+  expect(screen.getByRole("button", { name: "Add makeup" })).toBeEnabled();
+});
+it("English absence choices retain the original class ID and date when confirmed", async () => {
+  const onConfirm = vi.fn();
+  render(<SheetLangProvider lang="en"><MakeupConfirmDialog studentName="Lucy" candidates={[]} makeupDate={TODAY} absences={{ options: [{ classId: "old-class", className: "중등E_초등 브릿지 A", date: "2026-07-16", pastClass: true }], hiddenBySubject: 0 }} onConfirm={onConfirm} onCancel={vi.fn()} /></SheetLangProvider>);
+  await userEvent.selectOptions(screen.getByLabelText("Which missed lesson is this makeup for?"), "old-class|2026-07-16");
+  expect(screen.getByRole("alertdialog").textContent).not.toMatch(/[가-힣]/);
+  await userEvent.click(screen.getByRole("button", { name: "Add makeup" }));
+  expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ absentClassId: "old-class", absentDate: "2026-07-16", addUnits: 1, mode: "separate" }));
+});
 const cand = (over: Partial<MergeCandidate> = {}): MergeCandidate => ({
   name: "수학",
   classId: "c1",

@@ -1,5 +1,7 @@
 "use client";
 
+import { SheetText } from "@/features/teacher-view/interface-label";
+
 /**
  * 짝 잇기 한 줄 — 후보 버튼·검색 목록은 **고르기만** 하고, 확인 줄의 [연결]이 잇는다(적대 리뷰 2026-09-10).
  * 확인 줄은 양쪽을 다 적는다: `ijwgsy (중등E_중2 정규 C) ↔ 공서연 · 경명여중1 · 중등E_중2 정규 C`.
@@ -111,11 +113,9 @@ export function JjLinkRowItem({
             <b>{pick.label}</b>
           </span>
           <Button size="sm" disabled={pending} onClick={() => onLink(pick.id, pick.label, () => setPick(null))}>
-            연결
-          </Button>
+            <SheetText value={"연결"} /></Button>
           <Button size="sm" variant="ghost" disabled={pending} onClick={() => setPick(null)}>
-            취소
-          </Button>
+            <SheetText value={"취소"} /></Button>
         </div>
       ) : null}
     </li>

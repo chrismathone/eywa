@@ -93,6 +93,7 @@ type EnrollClass = {
 export type StudentListRow = {
   id: string;
   name: string;
+  englishName?: string | null;
   school: string | null;
   grade: string | null;
   status: string;
@@ -136,12 +137,12 @@ export type StudentListFilters = {
 
 /** getStudentsPage가 students에서 직접 읽는 컬럼(아래 StudentPageRecord와 함께 고칠 것). */
 const STUDENT_PAGE_COLUMNS =
-  "id, name, school, grade, status, enrolled_at, parent_phone, sync_added_at, dup_suspect, notes";
+  "id, name, english_name, school, grade, status, enrolled_at, parent_phone, sync_added_at, dup_suspect, notes";
 
 // 검색 필드 → 컬럼 매핑. all은 데스크 응대 빈도 높은 이름·학교·전화·보호자명 묶음.
 const SEARCH_FIELD_COLS: Record<SearchField, string[]> = {
-  all: ["name", "school", "student_phone", "parent_phone", "parent_name"],
-  name: ["name"],
+  all: ["name", "english_name", "school", "student_phone", "parent_phone", "parent_name"],
+  name: ["name", "english_name"],
   school: ["school"],
   phone: ["student_phone", "parent_phone"],
   address: ["address"],
@@ -271,6 +272,7 @@ function subjectFilterOf(options?: StudentListFilters): { real: string[]; none: 
 type StudentPageRecord = {
   id: string;
   name: string;
+  english_name: string | null;
   school: string | null;
   grade: string | null;
   status: string;
@@ -310,7 +312,7 @@ export async function getStudentsList(
     let qb = supabase
       .from("students")
       .select(
-        `id, name, school, grade, status, enrolled_at, parent_phone, sync_added_at, dup_suspect, notes`,
+        `id, name, english_name, school, grade, status, enrolled_at, parent_phone, sync_added_at, dup_suspect, notes`,
       );
     if (options?.status && options.status !== "all") qb = qb.eq("status", options.status);
     if (grades.length > 0) qb = qb.in("grade", grades);
@@ -385,6 +387,7 @@ export async function getStudentsList(
       ({
         id: r.id,
         name: r.name,
+        englishName: r.english_name ?? null,
         school: r.school,
         grade: r.grade,
         status: r.status,
@@ -648,6 +651,7 @@ export async function getStudentsPage(
     return {
       id: r.id,
       name: r.name,
+      englishName: r.english_name ?? null,
       school: r.school,
       grade: r.grade,
       status: r.status,
@@ -1938,6 +1942,7 @@ export async function getStudentTimeline(studentId: string): Promise<TimelineEve
 export type StudentSummary = {
   id: string;
   name: string;
+  englishName?: string | null;
   school: string | null;
   grade: string | null;
   status: string;
@@ -2001,6 +2006,7 @@ export async function getStudentSummary(studentId: string): Promise<StudentSumma
   return {
     id: detail.id,
     name: detail.name,
+    englishName: detail.englishName,
     school: detail.school,
     grade: detail.grade,
     status: detail.status,

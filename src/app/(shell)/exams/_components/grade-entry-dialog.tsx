@@ -1,5 +1,7 @@
 "use client";
 
+import { SheetText } from "@/features/teacher-view/interface-label";
+
 import { useMemo, useState, useTransition } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -130,58 +132,58 @@ export function GradeEntryDialog({ canWrite, today, subjects, students, classes,
   });
 
   const loadButton = <button type="button" onClick={loadRoster} disabled={pending} className={`${FIELD} bg-primary text-primary-foreground border-primary font-semibold`}>
-    {pending && !roster ? "불러오는 중" : "명단 불러오기"}</button>;
+    <SheetText value={pending && !roster ? "불러오는 중" : "명단 불러오기"} /></button>;
   const termFields = <>
-    <label className={LABEL}>년도<input type="number" min="2000" max="2100" value={year} onChange={(e) => change(setYear)(e.target.value)} className={`${FIELD} w-24`} /></label>
-    <label className={LABEL}>학기<select value={term} onChange={(e) => change(setTerm)(e.target.value)} className={FIELD}><option value="1">1학기</option><option value="2">2학기</option></select></label>
+    <label className={LABEL}><SheetText value={"년도"} /><input type="number" min="2000" max="2100" value={year} onChange={(e) => change(setYear)(e.target.value)} className={`${FIELD} w-24`} /></label>
+    <label className={LABEL}><SheetText value={"학기"} /><select value={term} onChange={(e) => change(setTerm)(e.target.value)} className={FIELD}><option value="1"><SheetText value={"1학기"} /></option><option value="2"><SheetText value={"2학기"} /></option></select></label>
   </>;
 
   return <>
-    <ToolbarButton variant="primary" disabled={!canWrite} onClick={() => setOpen(true)} title={canWrite ? undefined : "성적을 입력할 권한이 없습니다"}>성적 입력</ToolbarButton>
+    <ToolbarButton variant="primary" disabled={!canWrite} onClick={() => setOpen(true)} title={canWrite ? undefined : "성적을 입력할 권한이 없습니다"}><SheetText value={"성적 입력"} /></ToolbarButton>
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="sm:max-w-4xl">
-        <DialogHeader><DialogTitle>성적 입력</DialogTitle>
-          <DialogDescription>시험을 고르고 명단을 세운 뒤 점수만 차례로 치세요. Enter를 누르면 다음 학생으로 내려갑니다.</DialogDescription></DialogHeader>
+        <DialogHeader><DialogTitle><SheetText value={"성적 입력"} /></DialogTitle>
+          <DialogDescription><SheetText value={"시험을 고르고 명단을 세운 뒤 점수만 차례로 치세요. Enter를 누르면 다음 학생으로 내려갑니다."} /></DialogDescription></DialogHeader>
         {/* 1행 — 모든 시험에 공통 */}
         <div className="flex flex-wrap items-end gap-2">
-          <label className={LABEL}>시험<select value={kind} onChange={(e) => change(setKind)(e.target.value as EntryKind)} className={`${FIELD} font-semibold`}>
+          <label className={LABEL}><SheetText value={"시험"} /><select value={kind} onChange={(e) => change(setKind)(e.target.value as EntryKind)} className={`${FIELD} font-semibold`}>
             {kinds.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
-          <label className={LABEL}>과목<select value={subject} onChange={(e) => {
+          <label className={LABEL}><SheetText value={"과목"} /><select value={subject} onChange={(e) => {
             const next = e.target.value;
             change(setSubject)(next); setClassId(""); setSchoolName(""); setGradeName(""); setExtraIds([]); setSlot("");
             if (kind === "monthly" && !examSlotsFor(next.split(":")[0] ?? "").includes("monthly")) setKind("school");
           }} className={FIELD}>{subjects.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
           {kind === "school" ? <SchoolGradeFields students={subjectStudents} school={schoolName} grade={gradeName} fieldClass={FIELD} labelClass={LABEL}
             onSchool={(v) => { change(setSchoolName)(v); setGradeName(""); }} onGrade={(v) => change(setGradeName)(v)} />
-          : <div className={LABEL}>반<SearchableSelect value={classId} placeholder={school ? "전체" : "반 검색"} searchPlaceholder="반 이름" requireQuery cap={50} ariaLabel="반"
+          : <div className={LABEL}><SheetText value={"반"} /><SearchableSelect value={classId} placeholder={school ? "전체" : "반 검색"} searchPlaceholder="반 이름" requireQuery cap={50} ariaLabel="반"
             className="w-60" triggerClassName={FIELD} onValueChange={(id) => change(setClassId)(id)}
             options={[...(school ? [{ value: "", label: "전체" }] : []), ...subjectClasses.map((c) => ({ value: c.id, label: c.name, hint: `${c.studentIds.length}명` }))]} /></div>}
-          <label className={LABEL}>시험일<input type="date" value={date} onChange={(e) => change(setDate)(e.target.value)} className={FIELD} /></label>
-          <label className={LABEL}>만점<input type="number" min="1" max="1000" value={max} onChange={(e) => change(setMax)(e.target.value)} className={`${FIELD} w-20`} /></label>
+          <label className={LABEL}><SheetText value={"시험일"} /><input type="date" value={date} onChange={(e) => change(setDate)(e.target.value)} className={FIELD} /></label>
+          <label className={LABEL}><SheetText value={"만점"} /><input type="number" min="1" max="1000" value={max} onChange={(e) => change(setMax)(e.target.value)} className={`${FIELD} w-20`} /></label>
         </div>
         {/* 2행 — 고른 시험에만 필요한 것 */}
         <div className="bg-bg-soft flex flex-wrap items-end gap-2 rounded-xl p-3">
           {kind === "school" ? <>{termFields}
-            <label className={LABEL}>내신 종류<select value={slot || schoolSlots[0]?.value} onChange={(e) => change(setSlot)(e.target.value)} className={FIELD}>
+            <label className={LABEL}><SheetText value={"내신 종류"} /><select value={slot || schoolSlots[0]?.value} onChange={(e) => change(setSlot)(e.target.value)} className={FIELD}>
               {schoolSlots.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>{loadButton}</>
             : kind === "monthly" ? <>{termFields}
-              <p className="text-sm font-semibold">{Number(date.slice(5, 7))}월 월말평가 <span className="text-text-dim font-normal">(월은 시험일에서)</span></p>{loadButton}</>
-            : <div className={LABEL}>학생 추가<SearchableSelect value="" placeholder="이름 검색" searchPlaceholder="학생 이름" requireQuery cap={30} ariaLabel="학생 추가" className="w-48" triggerClassName={FIELD}
+              <p className="text-sm font-semibold">{Number(date.slice(5, 7))}<SheetText value={"월 월말평가 "} /><span className="text-text-dim font-normal"><SheetText value={"(월은 시험일에서)"} /></span></p>{loadButton}</>
+            : <div className={LABEL}><SheetText value={"학생 추가"} /><SearchableSelect value="" placeholder="이름 검색" searchPlaceholder="학생 이름" requireQuery cap={30} ariaLabel="학생 추가" className="w-48" triggerClassName={FIELD}
               onValueChange={(id) => id && setExtraIds((prev) => prev.includes(id) ? prev : [...prev, id])}
               options={students.map((s) => ({ value: s.id, label: s.name, hint: schoolGradeLabel(s.school, s.grade) }))} /></div>}
         </div>
         {school && roster?.notice ? <p className="text-danger text-sm">{roster.notice}</p> : null}
-        {school && !roster ? <p className="text-text-dim py-8 text-center text-sm">조건을 고르고 [명단 불러오기]를 누르면 그 학기 명단이 섭니다. 이미 있는 점수는 채워져 나옵니다.</p>
+        {school && !roster ? <p className="text-text-dim py-8 text-center text-sm"><SheetText value={"조건을 고르고 [명단 불러오기]를 누르면 그 학기 명단이 섭니다. 이미 있는 점수는 채워져 나옵니다."} /></p>
           : <EntryGrid rows={shownRows} scores={scores} max={maxNum} results={results} disabled={pending}
             emptyText={onlyMissing && rows.length ? "미입력 학생이 없습니다." : school ? "조건에 맞는 학생이 없습니다." : undefined}
             onScore={(id, v) => { setScores((prev) => ({ ...prev, [id]: v })); setResults((prev) => { const { [id]: _drop, ...rest } = prev; void _drop; return rest; }); }}
             onRemove={school ? undefined : (id) => setExtraIds((prev) => prev.filter((x) => x !== id))} />}
         <DialogFooter className="items-center">
           {notice ? <p role={notice.ok ? "status" : "alert"} className={`mr-auto text-sm font-semibold ${notice.ok ? "text-green" : "text-danger"}`}>{notice.text}</p>
-            : <p className="text-text-dim mr-auto text-sm">점수 친 학생 {filled.length}명 / {rows.filter((r) => !r.lockedReason).length}명</p>}
-          <label className="flex items-center gap-1.5 text-sm font-semibold"><input type="checkbox" checked={onlyMissing} onChange={(e) => setOnlyMissing(e.target.checked)} />미입력만 보기</label>
-          <ToolbarButton onClick={() => setOpen(false)}>닫기</ToolbarButton>
-          <ToolbarButton variant="primary" onClick={save} disabled={pending || !canWrite || (school ? !roster?.ready : filled.length === 0)}>{pending ? "저장 중" : "저장"}</ToolbarButton>
+            : <p className="text-text-dim mr-auto text-sm"><SheetText value={"점수 친 학생 "} />{filled.length}<SheetText value={"명 / "} />{rows.filter((r) => !r.lockedReason).length}<SheetText value={"명"} /></p>}
+          <label className="flex items-center gap-1.5 text-sm font-semibold"><input type="checkbox" checked={onlyMissing} onChange={(e) => setOnlyMissing(e.target.checked)} /><SheetText value={"미입력만 보기"} /></label>
+          <ToolbarButton onClick={() => setOpen(false)}><SheetText value={"닫기"} /></ToolbarButton>
+          <ToolbarButton variant="primary" onClick={save} disabled={pending || !canWrite || (school ? !roster?.ready : filled.length === 0)}><SheetText value={pending ? "저장 중" : "저장"} /></ToolbarButton>
         </DialogFooter>
       </DialogContent>
     </Dialog>

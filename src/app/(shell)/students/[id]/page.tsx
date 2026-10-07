@@ -1,3 +1,5 @@
+
+import { SheetText } from "@/features/teacher-view/interface-label";
 import { WindowLink } from "@/components/workspace/window-link";
 import { notFound } from "next/navigation";
 import { Pencil } from "@/components/icons/aywa-icon-compat";
@@ -38,6 +40,9 @@ import { MemosTab } from "./_tabs/memos-tab";
 import { TimelineTab } from "./_tabs/timeline-tab";
 import { HomeworkVideosTab } from "./_tabs/homework-videos-tab";
 import { HomeworkVideoLinks } from "./_tabs/homework-video-links";
+import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
+import { studentDisplayName } from "@/features/teacher-view/student-name";
+import { sheetSchoolGrade } from "@/features/teacher-view/school-grade";
 
 export const metadata = { title: "학생 상세 — 에이와" };
 
@@ -70,6 +75,7 @@ export default async function StudentDetailPage({
   }>;
 }) {
   const user = await requireAccess("students");
+  const lang = await getTeacherViewLang();
   const { id } = await params;
   const sp = await searchParams;
   const { tab: tabParam, back: backParam, jjFrom, jjTo, page: pageParam, from: fromParam, to: toParam } = sp;
@@ -110,11 +116,9 @@ export default async function StudentDetailPage({
         <div className="space-y-6">
           <BackLink href="/students" label="원생목록으로" />
           <div className="bg-card border-line rounded-2xl border p-6">
-            <p className="text-foreground text-sm font-bold">담당 학생만 열람할 수 있어요</p>
+            <p className="text-foreground text-sm font-bold"><SheetText value={"담당 학생만 열람할 수 있어요"} /></p>
             <p className="text-text-dim mt-1 text-sm">
-              이 학생은 내 반(담임·교시 담당·임시 위임) 수강생이 아니거나, 수강이 끝난 지 오래됐어요.
-              열람이 필요하면 데스크(관리자)에 요청해 주세요.
-            </p>
+              <SheetText value={"이 학생은 내 반(담임·교시 담당·임시 위임) 수강생이 아니거나, 수강이 끝난 지 오래됐어요. 열람이 필요하면 데스크(관리자)에 요청해 주세요."} /></p>
           </div>
         </div>
       );
@@ -122,7 +126,7 @@ export default async function StudentDetailPage({
     notFound();
   }
 
-  const statusMeta = studentStatusMeta(student.status);
+  const statusMeta = studentStatusMeta(student.status, lang);
   // 학생 기록 변경(상태 전환·수정·AI 케어·수강 종료) = 학생 full 권한만(master·admin·manager·counselor).
   // 🔴 강사(scoped)는 열람 전용 — 원장 지시 2026-08-18("강사들은 퇴원처리 막아, 수정도, AI 케어도. 읽기만").
   // 서버 게이트는 students/server/actions.ts canManageStudentRecords가 같은 판정(#77 — UI 숨김만으론 부족).
@@ -189,16 +193,15 @@ export default async function StudentDetailPage({
 
       <header className="border-border flex flex-col gap-3 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1.5">
-          <p className="eyebrow">학생</p>
+          <p className="eyebrow"><SheetText value={"학생"} /></p>
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="font-bold tracking-tight text-foreground text-3xl">{student.name}</h1>
+            <h1 className="font-bold tracking-tight text-foreground text-3xl">{studentDisplayName(student.name, student.englishName, lang)}</h1>
             {student.dupSuspect ? <DupSuspectTag /> : null}
           </div>
           <div className="text-muted-foreground flex flex-wrap items-center gap-3 text-sm">
-            {student.grade ? <span>{student.grade}</span> : null}
-            {student.school ? <span>· {student.school}</span> : null}
+            {student.grade || student.school ? <span>{sheetSchoolGrade(student.school, student.grade, lang)}</span> : null}
             {student.studentCode ? (
-              <span className="num">· 학번 {student.studentCode}</span>
+              <span className="num"><SheetText value={"· 학번 "} />{student.studentCode}</span>
             ) : null}
           </div>
           {student.dupSuspect ? (
@@ -214,7 +217,7 @@ export default async function StudentDetailPage({
             <Pill color={statusMeta?.color ?? "neutral"}>{statusMeta?.label ?? student.status}</Pill>
             {/* 퇴원 예약(원장 2026-09-28 *"퇴원당일전까지 '재원'"*) — 상태는 재원·휴원 그대로, 그날 00:05에 퇴원 처리된다.
                 표식 = 퇴원이 아닌데 퇴원일이 있다(`changeStudentStatus` 주석). */}
-            {scheduledWithdrawal ? <Pill color="amber">퇴원 예정 {scheduledWithdrawal}</Pill> : null}
+            {scheduledWithdrawal ? <Pill color="amber"><SheetText value={"퇴원 예정 "} />{scheduledWithdrawal}</Pill> : null}
           </div>
           {/* ⚠️ 감기게 둔다 — 이 줄엔 상태 변경·수정·AI·삭제가 함께 서고, 라벨에 목적어를 붙이면
               (수정 → 학생 수정) 좁은 화면에서 가로로 넘친다. 넘치는 대신 다음 줄로 내려간다. */}
@@ -236,14 +239,13 @@ export default async function StudentDetailPage({
             {canManageStudent ? (
               <Button variant="outline" render={<WindowLink href={`/students/${student.id}/edit`} title="학생 수정" />}>
                 <Pencil className="size-3.5" />
-                학생 수정
-              </Button>
+                <SheetText value={"학생 수정"} /></Button>
             ) : null}
             {/* 🔴 'AI 케어 분석' 버튼은 **없앴다**(원장 2026-09-18 "삭제") — 되살리지 말 것.
                 지난 분석 결과는 개요 탭 'AI 케어 인사이트'에 그대로 보인다(결과가 있을 때만 서는 패널). */}
             {canSeeWithdrawals ? (
               <WindowLink href={`/withdrawals/${student.id}`} title={student.name}>
-                <span className="text-primary text-sm font-semibold hover:underline">퇴원 기록 보기</span>
+                <span className="text-primary text-sm font-semibold hover:underline"><SheetText value={"퇴원 기록 보기"} /></span>
               </WindowLink>
             ) : null}
             {canDeleteStudent ? (
@@ -278,7 +280,7 @@ export default async function StudentDetailPage({
         {tab === "overview" ? (
           <>
             {requestedTab === "billing" && !canSeeBilling ? (
-              <p className="text-text-dim mb-3 text-sm" role="status">수납 내역을 볼 권한이 없어 학생 개요를 표시합니다.</p>
+              <p className="text-text-dim mb-3 text-sm" role="status"><SheetText value={"수납 내역을 볼 권한이 없어 학생 개요를 표시합니다."} /></p>
             ) : null}
             <OverviewTab student={student} canSeeBilling={canSeeBilling} />
           </>

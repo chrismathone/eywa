@@ -1,3 +1,5 @@
+
+import { SheetText } from "@/features/teacher-view/interface-label";
 /**
  * JJ실 표 — 반 묶음마다 **반 줄(합계·평균) + 학생 줄**. 한 표라서 반 줄 숫자가 학생 줄 숫자와 같은 열에 선다.
  * 반 정보가 없으면(조회 실패) 묶지 않고 학생 줄만. 서버 컴포넌트(표만 그린다 — 데이터는 jj-study-view.tsx).
@@ -96,29 +98,27 @@ function GroupRow({
               {ref.name}
             </WindowLink>
           ) : (
-            <span className="text-foreground text-sm font-bold">{g.kind === "none" ? "영어 반 없음" : "연결 필요"}</span>
+            <span className="text-foreground text-sm font-bold"><SheetText value={g.kind === "none" ? "영어 반 없음" : "연결 필요"} /></span>
           )}
           {ref?.track ? <Pill color="neutral">{ENGLISH_TRACK_LABEL[ref.track]}</Pill> : null}
           {ref && classHref ? (
             <EmbedAnchor href={classHref(ref.id)} className="text-text-faint hover:text-foreground text-xs underline">
-              이 반만
-            </EmbedAnchor>
+              <SheetText value={"이 반만"} /></EmbedAnchor>
           ) : null}
         </span>
       </th>
       <td className="text-text-dim px-4 py-2 text-xs">
-        학생 {s.students}명 · 학습 {s.activeStudents}명
-      </td>
-      <td className={SUM}>평균 {s.avgActiveDays ?? "—"}일</td>
+        <SheetText value={"학생 "} />{s.students}<SheetText value={"명 · 학습 "} />{s.activeStudents}<SheetText value={"명"} /></td>
+      <td className={SUM}><SheetText value={"평균 "} />{s.avgActiveDays ?? "—"}<SheetText value={"일"} /></td>
       <td className={SUM}>{fmt(s.answers)}</td>
       <td className={SUM} title="푼 문제 수로 가중한 정답률">
         {s.accuracy != null ? `${s.accuracy}%` : "—"}
       </td>
       <td className={SUM}>{fmt(s.newWords)}</td>
-      <td className={SUM}>평균 {s.avgLongTermWords != null ? fmt(s.avgLongTermWords) : "—"}</td>
-      <td className={SUM}>평균 {s.avgSeenWords != null ? fmt(s.avgSeenWords) : "—"}</td>
+      <td className={SUM}><SheetText value={"평균 "} />{s.avgLongTermWords != null ? fmt(s.avgLongTermWords) : "—"}</td>
+      <td className={SUM}><SheetText value={"평균 "} />{s.avgSeenWords != null ? fmt(s.avgSeenWords) : "—"}</td>
       <td className={SUM} title={`합계 ${formatStudyTime(s.studyMs)}`}>
-        평균 {s.avgStudyMs != null ? formatStudyTime(s.avgStudyMs) : "—"}
+        <SheetText value={"평균 "} />{s.avgStudyMs != null ? formatStudyTime(s.avgStudyMs) : "—"}
       </td>
     </tr>
   );
@@ -138,13 +138,12 @@ function StudentRow({ row: r, href }: { row: JjStudyRow; href: (studentId: strin
           )}
           {!r.aywa ? (
             <span className="border-amber/40 bg-amber-soft text-amber rounded-pill border px-1.5 py-px text-xs font-bold">
-              연결 필요
-            </span>
+              <SheetText value={"연결 필요"} /></span>
           ) : null}
         </span>
       </td>
       <td className="text-text-dim px-4 py-2.5 text-xs">{r.className ?? "—"}</td>
-      <td className="num text-foreground px-4 py-2.5 text-right text-xs font-bold">{r.activeDays}일</td>
+      <td className="num text-foreground px-4 py-2.5 text-right text-xs font-bold">{r.activeDays}<SheetText value={"일"} /></td>
       <td className={NUM}>{fmt(r.answers)}</td>
       <td className={NUM}>{r.answers ? `${r.accuracy}%` : "—"}</td>
       <td className={NUM}>{fmt(r.newWords)}</td>

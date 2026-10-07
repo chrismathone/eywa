@@ -1,3 +1,5 @@
+
+import { SheetText } from "@/features/teacher-view/interface-label";
 import { notFound } from "next/navigation";
 import { WindowLink } from "@/components/workspace/window-link";
 import { requireAccess } from "@/lib/auth/require-access";
@@ -32,16 +34,14 @@ export default async function VocabkingReportPage({ params }: { params: Promise<
           title="시험 결과지"
           className="text-primary font-bold hover:underline"
         >
-          시험 결과지
-        </WindowLink>
+          <SheetText value={"시험 결과지"} /></WindowLink>
         {res.aywa ? (
           <WindowLink
             href={`/students/${res.aywa.studentId}?tab=grades`}
             title={res.aywa.name}
             className="text-primary font-bold hover:underline"
           >
-            {res.aywa.name} 학생 상세
-          </WindowLink>
+            {res.aywa.name} <SheetText value={"학생 상세"} /></WindowLink>
         ) : null}
       </nav>
       <VocabkingReportView report={res.report} />

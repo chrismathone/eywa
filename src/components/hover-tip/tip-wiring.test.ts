@@ -29,7 +29,7 @@ const CARD_SURFACES: [string, string][] = [
   ["app/(shell)/attendance/seat/[seat]/_components/seat-jj-table.tsx", "tipProps(noteTitle)"],
   ["app/(shell)/attendance/seat/[seat]/_components/seat-lab-grid.tsx", "tipProps(noteTitle)"],
   ["app/(shell)/timetable/_components/reserved-section.tsx", "reservationTipRows(r)"],
-  ["app/(shell)/timetable/_components/rich-card-group.tsx", "tipProps(lab.note)"],
+  ["app/(shell)/timetable/_components/rich-card-group.tsx", "tipProps(note)"],
   ["app/(shell)/timetable/_components/teacher-chip.tsx", "tipProps(offAxisNote)"],
   ["features/class-sheets/components/attendance-check.tsx", 'att.tip.reason"), note'],
   ["app/(shell)/billing/_components/billing-table.tsx", "tipProps(r.notes)"],
@@ -115,7 +115,8 @@ export function memoTitleOffenders(src: string): string[] {
   const out: string[] = [];
   for (const { expr, at } of titleExpressions(src)) {
     const values = valueParts(expr).join(" ");
-    if (!MEMO_TOKEN.test(withoutText(values))) continue;
+    // This formatter translates system-generated timetable copy; its arguments still need the memo check.
+    if (!MEMO_TOKEN.test(withoutText(values).replace(/\bdisplay\.note(?=\s*\()/g, "generatedCopy"))) continue;
     // 🔴 예외 표식은 **바로 위**에서만 유효하다 — 사이에 다른 `title=`이 끼면 그 표식은 이 줄의 것이 아니다.
     const before = src.slice(Math.max(0, at - 200), at);
     const mark = before.lastIndexOf(ALLOW_MARK);
@@ -138,6 +139,7 @@ describe("memoTitleOffenders — 메모가 값이면 위반, 조건이면 정상
     expect(flag("title={`할인 사유: ${r.discountReason}`}")).toBe(true);
     expect(flag("title={cond && note}")).toBe(true);
     expect(flag("title={makeTitle(note)}")).toBe(true);
+    expect(flag("title={display.note(r.note)}")).toBe(true);
   });
 
   it("🔴 `??`·`?.`를 삼항으로 오인하지 않는다(3차 재리뷰가 잡은 새는 구멍)", () => {
@@ -149,6 +151,7 @@ describe("memoTitleOffenders — 메모가 값이면 위반, 조건이면 정상
   it("조건에만 있으면 정상 — 중첩 삼항의 조건도 마찬가지", () => {
     expect(flag("title={noteTitle ? undefined : s.name}")).toBe(false);
     expect(flag("title={a ? b : note ? x : y}")).toBe(false);
+    expect(flag("title={moveTitle ? display.note(moveTitle) : shownName}")).toBe(false);
     expect(flag('title={showReason && !readOnly ? "우클릭: 특이사항·사유 입력" : undefined}')).toBe(false);
   });
 
@@ -216,6 +219,6 @@ describe("메모는 카드로 뜬다 — 브라우저 기본 툴팁으로 되돌
     expect(rich).toContain("pinNote={s.seatPinNote}");
     expect(rows).not.toContain("title={pinNote}");
     expect(rich).not.toContain("title={s.seatPinNote");
-    expect(strip(read("app/(shell)/timetable/_components/hover-cards.tsx"))).toContain('<Row label="자리" value={pinNote} />');
+    expect(strip(read("app/(shell)/timetable/_components/hover-cards.tsx"))).toContain('<Row label={tt("자리")} value={display.note(pinNote)} />');
   });
 });

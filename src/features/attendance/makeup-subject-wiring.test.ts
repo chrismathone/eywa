@@ -162,7 +162,7 @@ describe("왜 비었는지 화면이 말한다 — raw 과목 키는 안 내보�
   });
 
   it("과목 라벨이 없으면 이름 대신 '이 과목'으로 말한다", () => {
-    expect(code(dialog)).toContain('subjectLabel ? `${subjectLabel} 과목` : "이 과목"');
+    expect(code(dialog)).toContain('lang === "en" ? "this subject" : text("이 과목")');
   });
 
   it("0건의 뜻을 가른다 — 과목 때문에 뺐으면 그렇게 알린다", () => {

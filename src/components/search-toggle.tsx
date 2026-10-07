@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { SearchForm } from "./search-form";
 import { CONTROL_H, CONTROL_LABEL } from "./ui/control-scale";
+import { useSheetText } from "@/features/teacher-view/lang-context";
 
 /**
  * 검색은 **필요할 때만** 나타난다(디자인 지시서 §10 "검색은 필요할 때만 나타나게(단축키 또는 토글)" —
@@ -26,6 +27,7 @@ export function SearchToggle({
   /** 검색할 때 함께 지울 파라미터(SearchForm 그대로 — 1회성 배너 `?invited=` 같은 것. page는 늘 지운다). */
   resetParams?: string[];
 }) {
+  const text = useSheetText();
   const [opened, setOpen] = useState(false);
   // 검색어가 URL에 걸려 있으면 **언제나** 펼친다(뒤로 가기 등 클라 내비로 q가 나중에 생겨도 — 마운트 시점 state만 보면
   // "검색어는 걸려 있는데 입력창은 접힘"이 된다).
@@ -37,7 +39,7 @@ export function SearchToggle({
         onClick={() => setOpen(true)}
         className={`${CONTROL_H} ${CONTROL_LABEL} text-text-dim hover:text-foreground inline-flex shrink-0 items-center px-1 font-medium whitespace-nowrap transition`}
       >
-        검색
+        {text("검색")}
       </button>
     );
   }
@@ -58,7 +60,7 @@ export function SearchToggle({
           onClick={() => setOpen(false)}
           className={`${CONTROL_H} ${CONTROL_LABEL} text-text-faint hover:text-foreground inline-flex shrink-0 items-center px-1 whitespace-nowrap transition`}
         >
-          닫기
+          {text("닫기")}
         </button>
       ) : null}
     </span>

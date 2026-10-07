@@ -1,4 +1,6 @@
 "use client";
+
+import { SheetText } from "@/features/teacher-view/interface-label";
 import {
   TOOLBAR_SEG_BOX,
   TOOLBAR_SEG_ITEM,
@@ -66,15 +68,13 @@ export function AttendanceView({
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5">
         <div className="flex items-center gap-1.5">
           <CalendarDays className="text-primary size-4" />
-          <h2 className="text-foreground text-sm font-bold">출결 현황</h2>
+          <h2 className="text-foreground text-sm font-bold"><SheetText value={"출결 현황"} /></h2>
         </div>
         <div className={TOOLBAR_SEG_BOX}>
           <ViewBtn active={view === "calendar"} onClick={() => setView("calendar")} icon={<CalendarDays className="size-3.5" />}>
-            달력
-          </ViewBtn>
+            <SheetText value={"달력"} /></ViewBtn>
           <ViewBtn active={view === "list"} onClick={() => setView("list")} icon={<List className="size-3.5" />}>
-            리스트
-          </ViewBtn>
+            <SheetText value={"리스트"} /></ViewBtn>
         </div>
         {subjectOptions.length > 1 ? (
           <SearchableSelect
@@ -111,8 +111,7 @@ export function AttendanceView({
               <ChevronLeft className="size-4" />
             </button>
             <span className="num text-foreground min-w-[5.5rem] text-center text-sm font-medium">
-              {yy}년 {mm}월
-            </span>
+              {yy}<SheetText value={"년 "} />{mm}<SheetText value={"월"} /></span>
             <button
               type="button"
               onClick={() => navMonth(1)}
@@ -134,7 +133,7 @@ export function AttendanceView({
       </div>
 
       {records.length === 0 ? (
-        <p className="text-muted-foreground py-10 text-center text-sm">출결 기록이 없습니다</p>
+        <p className="text-muted-foreground py-10 text-center text-sm"><SheetText value={"출결 기록이 없습니다"} /></p>
       ) : view === "calendar" ? (
         <MonthCalendar year={yy} month={mm} records={monthRecords} />
       ) : (

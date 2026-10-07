@@ -1,3 +1,5 @@
+
+import { SheetText } from "@/features/teacher-view/interface-label";
 import { notFound } from "next/navigation";
 import { BackLink } from "@/components/back-link";
 import { requireAccess } from "@/lib/auth/require-access";
@@ -85,9 +87,9 @@ export default async function JjDeckPage({
       <header className="bg-card shadow-card rounded-2xl p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-text-dim text-xs">
-            인재원 JJ실 시험 · {examTypeLabel(res.deck.examType)}
-            {viewer.teacherStudentIds ? " · 내 학생 기준" : ""}
-            {picked ? ` · ${picked.name} 반 기준` : ""}
+            <SheetText value={"인재원 JJ실 시험 · "} />{examTypeLabel(res.deck.examType)}
+            <SheetText value={viewer.teacherStudentIds ? " · 내 학생 기준" : ""} />
+            <SheetText value={picked ? ` · ${picked.name} 반 기준` : ""} />
           </p>
           <JjClassFilter classes={chips} value={filter} hrefFor={hrefFor} />
         </div>
@@ -102,10 +104,10 @@ export default async function JjDeckPage({
         )}
       </header>
       {res.scopeNotReady ? <JjLinkColumnNotice teacher /> : res.columnMissing ? <JjLinkColumnNotice /> : null}
-      {!member.ok ? <JjNote title={member.detail}>반 정보를 불러오지 못해 반별로 나누지 않았습니다.</JjNote> : null}
+      {!member.ok ? <JjNote title={member.detail}><SheetText value={"반 정보를 불러오지 못해 반별로 나누지 않았습니다."} /></JjNote> : null}
       {wanted && !picked && member.ok ? (
         <JjNote>
-          {options ? "고른 반을 찾을 수 없어(담당 반이 아니거나 운영이 끝난 반) 전체를 보여 줍니다." : "반 목록을 불러오지 못해 전체를 보여 줍니다."}
+          <SheetText value={options ? "고른 반을 찾을 수 없어(담당 반이 아니거나 운영이 끝난 반) 전체를 보여 줍니다." : "반 목록을 불러오지 못해 전체를 보여 줍니다."} />
         </JjNote>
       ) : null}
       {res.scopeNotReady || filter ? null : (

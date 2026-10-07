@@ -1,3 +1,5 @@
+
+import { SheetText } from "@/features/teacher-view/interface-label";
 import { ChevronLeft, ChevronRight, Files, Folder } from "@/components/icons/aywa-icon-compat";
 import { headers } from "next/headers";
 import { requireAccess } from "@/lib/auth/require-access";
@@ -162,13 +164,13 @@ export default async function DocumentsPage({
             </div>
           </div> : null}
           {children.length ? <div className="border-b border-line p-4">
-            <p className="mb-2 text-xs text-text-faint">{cat ? "하위 폴더" : "폴더"} · {children.length}개</p>
+            <p className="mb-2 text-xs text-text-faint">{cat ? "하위 폴더" : "폴더"} · {children.length}<SheetText value={"개"} /></p>
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
               {children.map((c) => <FolderDropTarget key={c.key} folderKey={c.key}
                 className="flex min-w-0 items-center gap-2 rounded-lg border border-line px-3 py-1 hover:bg-bg-soft">
                 <Folder className="size-4 shrink-0 text-amber" />
                 <FolderName folder={c} href={folderHref(c.key)} />
-                <span className="num shrink-0 text-xs text-text-faint" title="하위 폴더 문서 포함">{treeCounts ? treeCounts[c.key] ?? 0 : "—"}건</span>
+                <span className="num shrink-0 text-xs text-text-faint" title="하위 폴더 문서 포함">{treeCounts ? treeCounts[c.key] ?? 0 : "—"}<SheetText value={"건"} /></span>
                 <ChevronRight className="size-3 shrink-0 text-text-faint" />
               </FolderDropTarget>)}
             </div>
@@ -176,8 +178,7 @@ export default async function DocumentsPage({
           <div className="border-line text-text-dim flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2 text-xs">
             <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
               <Files className="size-3.5" />
-              {linked ? LINKED_LABEL[linked] : cat ? "이 폴더의 문서" : "전체 문서"} · {total}건
-            </span>
+              {linked ? LINKED_LABEL[linked] : cat ? "이 폴더의 문서" : "전체 문서"} · {total}<SheetText value={"건"} /></span>
             {totalPages > 1 ? (
               // 헤더 컴팩트 페이저 — 작은 창에선 50행 아래 하단 표준 페이저가 안 보여(스크롤 필요)
               // 스크롤 없이 바로 넘길 수 있게 표시기를 클릭 가능한 ◀ ▶로 승격(하단 페이저와 병존).
@@ -186,8 +187,7 @@ export default async function DocumentsPage({
                   <ChevronLeft className="size-3" />
                 </PageStep>
                 <span className="num px-0.5">
-                  {page}/{totalPages} 페이지
-                </span>
+                  {page}/{totalPages} <SheetText value={"페이지"} /></span>
                 <PageStep href={pageHref(page + 1)} disabled={page >= totalPages}>
                   <ChevronRight className="size-3" />
                 </PageStep>
@@ -197,7 +197,7 @@ export default async function DocumentsPage({
 
           {docPage?.failed ? (
             // 조회 실패를 '아직 문서가 없습니다'로 보이면 사람이 문서가 사라진 줄 안다(E6) — 사실대로 알린다.
-            <p role="alert" className="text-danger px-4 py-8 text-center text-sm">문서 목록을 불러오지 못했습니다 — 잠시 후 새로고침해 주세요.</p>
+            <p role="alert" className="text-danger px-4 py-8 text-center text-sm"><SheetText value={"문서 목록을 불러오지 못했습니다 — 잠시 후 새로고침해 주세요."} /></p>
           ) : total === 0 ? (
             children.length && !q ? <p className="px-4 py-8 text-center text-sm text-text-faint">{cat ? "이 폴더에 직접 저장된 문서가 없습니다. 하위 폴더를 열거나 문서를 추가하세요." : "폴더를 열어 문서를 추가하세요."}</p>
               : <EmptyState image={q ? "search" : "documents"} title={empty.title} description={empty.description} />

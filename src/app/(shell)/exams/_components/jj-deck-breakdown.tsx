@@ -1,3 +1,5 @@
+
+import { SheetText } from "@/features/teacher-view/interface-label";
 /**
  * 시험 결과 창의 **반별 결과** — 반(aywa 영어 반)마다 응시·평균·최고·최저(2026-09-11 "학생별 반별 유기적으로").
  * 인재원과 같은 반올림(summarizeScores). 반 이름을 누르면 같은 창이 그 반만 보여 준다. 서버 컴포넌트.
@@ -34,9 +36,9 @@ export function JjDeckBreakdown({
   return (
     <section className="bg-card shadow-card rounded-2xl">
       <header className="flex flex-wrap items-baseline justify-between gap-2 px-5 pt-4">
-        <h2 className="text-foreground text-base font-bold">반별 결과</h2>
+        <h2 className="text-foreground text-base font-bold"><SheetText value={"반별 결과"} /></h2>
         <p className="text-text-faint text-xs">
-          반 이름을 누르면 그 반만 봅니다{multi ? " · 영어 반 두 곳을 다니는 학생은 두 반 모두에 셉니다" : ""}
+          <SheetText value={"반 이름을 누르면 그 반만 봅니다"} /><SheetText value={multi ? " · 영어 반 두 곳을 다니는 학생은 두 반 모두에 셉니다" : ""} />
         </p>
       </header>
       <DragScrollArea className="mt-2 pb-2">
@@ -68,7 +70,7 @@ export function JjDeckBreakdown({
                     {it.track ? <Pill color="neutral">{ENGLISH_TRACK_LABEL[it.track]}</Pill> : null}
                   </span>
                 </td>
-                <td className="num text-foreground px-4 py-2.5 text-right text-xs font-bold">{it.stats.count}명</td>
+                <td className="num text-foreground px-4 py-2.5 text-right text-xs font-bold">{it.stats.count}<SheetText value={"명"} /></td>
                 <td className={NUM}>{it.stats.avg ?? "—"}</td>
                 <td className={NUM}>{it.stats.max ?? "—"}</td>
                 <td className={NUM}>{it.stats.min ?? "—"}</td>

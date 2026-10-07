@@ -1,4 +1,6 @@
 "use client";
+
+import { SheetText } from "@/features/teacher-view/interface-label";
 import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import { kstYear } from "@/lib/date-kst";
 
@@ -130,7 +132,7 @@ export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5">
         <div className="flex items-center gap-1.5">
           <CircleDollarSign className="text-primary size-4" />
-          <h2 className="text-foreground text-sm font-bold">수납 현황</h2>
+          <h2 className="text-foreground text-sm font-bold"><SheetText value={"수납 현황"} /></h2>
         </div>
         <SearchableSelect
           className="ml-auto w-24"
@@ -156,7 +158,7 @@ export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
           >
             <ChevronLeft className="size-4" />
           </button>
-          <span className="num text-foreground min-w-[4rem] text-center text-sm font-medium">{year}년</span>
+          <span className="num text-foreground min-w-[4rem] text-center text-sm font-medium">{year}<SheetText value={"년"} /></span>
           <button
             type="button"
             onClick={() => setYearReset(year + 1)}
@@ -185,26 +187,25 @@ export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
         {yearStats.pending > 0 ? (
           <div className="border-danger/30 bg-danger-soft text-danger mt-2 flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs">
             <AlertTriangle className="size-3.5" />
-            미납 건이 {yearStats.pending}건 ({won(yearStats.unpaid)}원) 있습니다.
-          </div>
+            <SheetText value={"미납 건이 "} />{yearStats.pending}<SheetText value={"건 ("} />{won(yearStats.unpaid)}<SheetText value={"원) 있습니다."} /></div>
         ) : null}
       </Section>
 
       {/* 수납 내역 */}
       <Section title="수납 내역" open={showRecords} onToggle={() => setShowRecords((s) => !s)}>
         {filtered.length === 0 ? (
-          <div className="text-muted-foreground py-8 text-center text-sm">{year}년 수납 내역이 없습니다.</div>
+          <div className="text-muted-foreground py-8 text-center text-sm">{year}<SheetText value={"년 수납 내역이 없습니다."} /></div>
         ) : (
           <>
             <div className="border-line overflow-hidden rounded-2xl border">
               <table className="w-full text-sm">
                 <thead className="bg-bg-soft text-text-dim text-xs">
                   <tr>
-                    <th className="px-3 py-2 text-left font-medium">청구월</th>
-                    <th className="px-3 py-2 text-left font-medium">수납명</th>
-                    <th className="px-3 py-2 text-right font-medium">청구액</th>
-                    <th className="px-3 py-2 text-right font-medium">납부액</th>
-                    <th className="px-3 py-2 text-center font-medium">상태</th>
+                    <th className="px-3 py-2 text-left font-medium"><SheetText value={"청구월"} /></th>
+                    <th className="px-3 py-2 text-left font-medium"><SheetText value={"수납명"} /></th>
+                    <th className="px-3 py-2 text-right font-medium"><SheetText value={"청구액"} /></th>
+                    <th className="px-3 py-2 text-right font-medium"><SheetText value={"납부액"} /></th>
+                    <th className="px-3 py-2 text-center font-medium"><SheetText value={"상태"} /></th>
                   </tr>
                 </thead>
                 <tbody className="divide-line divide-y">
@@ -260,8 +261,7 @@ export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
                   ariaLabel="페이지당 건수"
                 />
                 <span>
-                  (총 {filtered.length}건 중 {(safePage - 1) * pageSize + 1}-{Math.min(safePage * pageSize, filtered.length)}건)
-                </span>
+                  <SheetText value={"(총 "} />{filtered.length}<SheetText value={"건 중 "} />{(safePage - 1) * pageSize + 1}-{Math.min(safePage * pageSize, filtered.length)}<SheetText value={"건)"} /></span>
               </div>
               <div className="flex items-center gap-1">
                 <button
@@ -270,8 +270,7 @@ export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
                   onClick={() => setPage(safePage - 1)}
                   className="border-line hover:bg-bg-soft rounded-lg border px-2 py-1 disabled:opacity-40"
                 >
-                  이전
-                </button>
+                  <SheetText value={"이전"} /></button>
                 <span className="num px-1">
                   {safePage}/{totalPages}
                 </span>
@@ -281,8 +280,7 @@ export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
                   onClick={() => setPage(safePage + 1)}
                   className="border-line hover:bg-bg-soft rounded-lg border px-2 py-1 disabled:opacity-40"
                 >
-                  다음
-                </button>
+                  <SheetText value={"다음"} /></button>
               </div>
             </div>
           </>
@@ -294,17 +292,14 @@ export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
         <Section title="전체 통계" open={showOverall} onToggle={() => setShowOverall((s) => !s)}>
           <div className="bg-bg-soft flex flex-wrap gap-x-5 gap-y-1 rounded-2xl px-3 py-2.5 text-xs">
             <span>
-              총 <b className="text-foreground num">{overall.total}</b>건
-            </span>
+              <SheetText value={"총 "} /><b className="text-foreground num">{overall.total}</b><SheetText value={"건"} /></span>
             <span className="text-green">
-              납부 <b className="num">{overall.paidCount}</b>건
-            </span>
+              <SheetText value={"납부 "} /><b className="num">{overall.paidCount}</b><SheetText value={"건"} /></span>
             {/* 미납은 위 표·카드·배너와 **같은 빨강**(종전엔 여기만 앰버라 같은 화면에서 두 색이었다). */}
             <span className="text-danger">
-              미납 <b className="num">{overall.pendingCount}</b>건
-            </span>
+              <SheetText value={"미납 "} /><b className="num">{overall.pendingCount}</b><SheetText value={"건"} /></span>
             <span className="text-blue">
-              수납률 <b className="num">{paymentRateDisplay(overall.rate, overall.outstanding)}</b>%
+              <SheetText value={"수납률 "} /><b className="num">{paymentRateDisplay(overall.rate, overall.outstanding)}</b>%
             </span>
           </div>
         </Section>

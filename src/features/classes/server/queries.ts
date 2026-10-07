@@ -130,6 +130,7 @@ export type ClassDetail = {
 };
 
 export type ClassStudentRow = {
+  englishName?: string | null;
   enrollmentId: string;
   studentId: string;
   name: string;
@@ -872,7 +873,7 @@ export async function getClassStudents(classId: string): Promise<ClassStudentRow
     .from("enrollments")
     .select(
       `id, start_date, end_date, on_hold, is_transferred, is_transferred_in, attendance_days,
-       student:student_id ( id, name, grade, school )`,
+       student:student_id ( id, name, english_name, grade, school )`,
     )
     .eq("class_id", classId)
     // 종료일 당일도 재원이라 `>= today`까지 받아 두고, 전출 배타 판정은 아래 단일 소스에 맡긴다.
@@ -883,9 +884,9 @@ export async function getClassStudents(classId: string): Promise<ClassStudentRow
   if (!data) return [];
 
   return data
-    .map((e) => {
+    .map((e): ClassStudentRow | null => {
       const s = (Array.isArray(e.student) ? e.student[0] : e.student) as
-        | { id: string; name: string; grade: string | null; school: string | null }
+        | { id: string; name: string; english_name: string | null; grade: string | null; school: string | null }
         | undefined;
       if (!s) return null;
       const endDate = (e.end_date as string | null) ?? null;
@@ -900,6 +901,7 @@ export async function getClassStudents(classId: string): Promise<ClassStudentRow
         enrollmentId: e.id,
         studentId: s.id,
         name: s.name,
+        englishName: s.english_name ?? null,
         grade: s.grade,
         school: s.school,
         enrolledAt: e.start_date,

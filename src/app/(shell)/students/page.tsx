@@ -40,7 +40,8 @@ import {
 } from "@/features/students/list-prefs";
 import { WindowLink } from "@/components/workspace/window-link";
 import { PageHeader } from "@/components/page-header";
-import { schoolGradeLabel } from "@/lib/format/school-grade";
+import { sheetSchoolGrade } from "@/features/teacher-view/school-grade";
+import { studentDisplayName } from "@/features/teacher-view/student-name";
 import { studentStatusMeta } from "@/features/students/status-labels";
 // 강사 미니셸이면 화면 언어를 따른다(원장 2026-09-04 "강사가 접근 가능한 모든 메뉴를 전환").
 import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
@@ -210,7 +211,7 @@ export default async function StudentsPage({
   const showTeacher = (n: string) => teacherNameFor(n, teacherNames, lang) ?? n;
   const { enrolled, bySubject } = counts;
   // 과목·학년 필터·라벨·색은 학원설정(operations) 단일 소스 — 미등록 값은 드롭다운에 안 뜸.
-  const subjects = buildSubjectMaps(settings.operations.subjects);
+  const subjects = buildSubjectMaps(settings.operations.subjects, lang);
   // 강사 스코프면 과목 선택지도 담당 과목만. 고를 게 1개뿐이면 필터 자체를 감춘다(잡음).
   // 맨 끝 '미수강' = 지금 수강 중인 과목이 하나도 없는 학생(운영실 '재원생 구성'의 미수강 막대와 같은 판정). 퇴원 목록엔 안 세운다.
   const subjectOptions = [
@@ -220,7 +221,7 @@ export default async function StudentsPage({
   const statusOptions = STATUS_OPTION_KEYS.map((o) => ({ value: o.value, label: sheetT(lang, o.key) }));
   const sortOptions = SORT_OPTION_KEYS.map((o) => ({ value: o.value, label: sheetT(lang, o.key) }));
   const hideSubjectFilter = !showSubjectFilter(axis);
-  const gradeOptions = settings.operations.gradeLevels.map((g) => ({ value: g, label: g }));
+  const gradeOptions = settings.operations.gradeLevels.map((g) => ({ value: g, label: sheetSchoolGrade(null, g, lang) }));
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const teacherOptions = teachers.map((t) => ({ value: t.id, label: showTeacher(t.displayName) }));
   // 담임 필터 — 스코프에서 고를 사람이 나 하나뿐이면 감춘다(전체/나 = 같은 결과).
@@ -573,7 +574,8 @@ export default async function StudentsPage({
                     color: "neutral" as PillColor,
                   };
                   // 이름 + 학교·학년 압축 라벨("경명여중1")을 **한 줄**에(§11 "한 행 = 이름 + 값") — 두 줄 셀은 행을 키운다.
-                  const sg = schoolGradeLabel(s.school, s.grade);
+                  const sg = sheetSchoolGrade(s.school, s.grade, lang);
+                  const shownName = studentDisplayName(s.name, s.englishName, lang);
                   return (
                     <tr key={s.id} data-help="st-row" className="hover:bg-bg-soft/50 transition-colors [&>td]:px-3 [&>td]:py-2.5 [&>td]:text-center">
                       <td data-cell="primary">
@@ -581,11 +583,11 @@ export default async function StudentsPage({
                           {/* 이름은 1차 식별자라 줄지 않는다(§1 "1차 핵심값 ellipsis 금지") — 좁으면 학교·학년(2차)이 먼저 접힌다. */}
                           <WindowLink
                             href={`/students/${s.id}`}
-                            title={s.name}
-                            ariaLabel={sheetTf(lang, "stu.rowAria", { name: s.name })}
+                            title={shownName}
+                            ariaLabel={sheetTf(lang, "stu.rowAria", { name: shownName })}
                             className="text-foreground shrink-0 text-base font-bold whitespace-nowrap hover:underline"
                           >
-                            {s.name}
+                            {shownName}
                           </WindowLink>
                           {sg ? <span className="text-text-dim min-w-0 truncate text-sm">{sg}</span> : null}
                           {s.syncNew ? <MakeeduOriginTag /> : null}
@@ -613,7 +615,7 @@ export default async function StudentsPage({
                         )}
                       </td>
                       <td className="text-text-dim" data-empty={s.teacherNames.length === 0 ? "true" : undefined}>
-                        <span className="block truncate" title={s.teacherNames.join(" · ")}>
+                        <span className="block truncate" title={s.teacherNames.map(showTeacher).join(" · ")}>
                           {s.teacherNames.length > 0 ? s.teacherNames.map(showTeacher).join("·") : "—"}
                         </span>
                       </td>

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { Popover } from "@base-ui/react/popover";
 import { useMobileScrollRow } from "./mobile-scroll-row";
+import { useSheetText, useSheetTf } from "@/features/teacher-view/lang-context";
 
 export type ComboOption = {
   value: string;
@@ -131,6 +132,8 @@ export function SearchableSelect({
    */
   multiSummary?: (count: number) => string;
 }) {
+  const text = useSheetText();
+  const tf = useSheetTf();
   const isControlled = value !== undefined;
   const [internal, setInternal] = useState(defaultValue);
   const current = isControlled ? value : internal;
@@ -157,16 +160,16 @@ export function SearchableSelect({
           value: picked.map((o) => o.value).join(","),
           // 둘부터 `수학 외 1` — 열 머리(고정 폭 칸)에서 이름을 잇대면 옆 칸으로 넘친다. 전체 목록은 트리거 `title`·낭독 이름에.
           label: picked.length === 1 ? picked[0].label
-            : multiSummary ? multiSummary(picked.length) : `${picked[0].label} 외 ${picked.length - 1}`,
+            : multiSummary ? multiSummary(picked.length) : tf("select.moreSelected", { label: picked[0].label, n: picked.length - 1 }),
         }
       : (options.find((o) => o.value === current) ?? null);
   const filtered = useMemo(() => {
     const t = q.trim().toLowerCase();
     if (!t) return options;
     return options.filter(
-      (o) => o.label.toLowerCase().includes(t) || (o.hint ?? "").toLowerCase().includes(t),
+      (o) => text(o.label).toLowerCase().includes(t) || o.label.toLowerCase().includes(t) || (o.hint ?? "").toLowerCase().includes(t),
     );
-  }, [q, options]);
+  }, [q, options, text]);
   const waiting = requireQuery && !q.trim();
   // 검색 전엔 '전체' 같은 해제 항목(빈 값)만 남긴다 — 그것까지 숨기면 되돌리려고 '전체'를 타이핑해야 한다.
   const shown = waiting ? options.filter((o) => o.value === "") : filtered.slice(0, cap);
@@ -208,9 +211,9 @@ export function SearchableSelect({
    *    지금 고른 값을 영영 안 읽는다(재리뷰 2026-09-04. `HrefSelect`는 처음부터 트리거에 안 달았다).
    *    서술 라벨이 필요한 자리에선 **값을 붙여 한 이름으로** 만든다("과목 필터: 수학").
    */
-  const multiFull = multi && picked.length > 1 ? picked.map((o) => o.label).join(", ") : null;
-  const a11yValue = multiFull ?? (selected ? selected.label : (placeholder ?? null));
-  const a11yName = ariaLabel ? (a11yValue ? `${ariaLabel}: ${a11yValue}` : ariaLabel) : undefined;
+  const multiFull = multi && picked.length > 1 ? picked.map((o) => text(o.label)).join(", ") : null;
+  const a11yValue = multiFull ?? (selected ? text(selected.label) : text(placeholder));
+  const a11yName = ariaLabel ? (a11yValue ? `${text(ariaLabel)}: ${a11yValue}` : text(ariaLabel)) : undefined;
 
   return (
     <SelectFrame portalled={portalled} open={open} onOpenChange={setOpen}>
@@ -230,10 +233,10 @@ export function SearchableSelect({
           {selected
             ? valuePrefix
               ? prefixOnlyFor !== undefined && selected.value === prefixOnlyFor
-                ? valuePrefix
-                : `${valuePrefix}: ${selected.label}`
-              : selected.label
-            : placeholder}
+                ? text(valuePrefix)
+                : `${text(valuePrefix)}: ${text(selected.label)}`
+              : text(selected.label)
+            : text(placeholder)}
         </span>
         {/* 꼬리표는 라벨 뒤·쉐브론 앞, 줄어들지 않는다 — 라벨만 남은 폭에서 접힌다. */}
         {trailing ? <span className="ml-auto shrink-0">{trailing}</span> : null}
@@ -263,14 +266,14 @@ export function SearchableSelect({
                   setQ("");
                 }
               }}
-              placeholder={searchPlaceholder}
+              placeholder={text(searchPlaceholder)}
               className="text-foreground placeholder:text-text-faint w-full bg-transparent text-sm focus:outline-none"
             />
           </div>
           <ul className="max-h-56 overflow-y-auto py-1">
-            {waiting && shown.length > 0 ? <li className="text-text-faint px-3 py-2 text-xs">검색어를 입력하세요</li> : null}
+            {waiting && shown.length > 0 ? <li className="text-text-faint px-3 py-2 text-xs">{text("검색어를 입력하세요")}</li> : null}
             {shown.length === 0 ? (
-              <li className="text-text-faint px-3 py-2 text-xs">{waiting ? "검색어를 입력하세요" : "결과 없음"}</li>
+              <li className="text-text-faint px-3 py-2 text-xs">{text(waiting ? "검색어를 입력하세요" : "결과 없음")}</li>
             ) : (
               shown.map((o) => {
                 const isCurrent = multi && picked.length > 0 ? multiValues.includes(o.value) : o.value === current;
@@ -291,8 +294,8 @@ export function SearchableSelect({
                       {o.meta !== undefined && sideColumns ? (
                         // 열 맞춤(폭 지정) — 이름(남는 폭) · hint 열 · meta 열. 빈 hint도 칸을 세운다.
                         <span className="flex min-w-0 flex-1 items-baseline gap-2">
-                          <span className="min-w-0 flex-1 truncate" title={o.label}>
-                            {o.label}
+                          <span className="min-w-0 flex-1 truncate" title={text(o.label)}>
+                            {text(o.label)}
                           </span>
                           <span className={`text-text-dim shrink-0 truncate text-xs ${sideColumns.hint}`}>
                             {o.hint ?? ""}
@@ -304,7 +307,7 @@ export function SearchableSelect({
                       ) : o.meta !== undefined ? (
                         // 열 맞춤 — 이름(남는 폭) · 금액(숫자 정렬, 오른쪽) · 상세(고정 폭).
                         <span className="flex min-w-0 flex-1 items-baseline gap-2">
-                          <span className="min-w-0 flex-1 truncate">{o.label}</span>
+                          <span className="min-w-0 flex-1 truncate">{text(o.label)}</span>
                           {o.hint ? (
                             <span className="num text-text-dim shrink-0 text-right text-xs">{o.hint}</span>
                           ) : null}
@@ -312,7 +315,7 @@ export function SearchableSelect({
                         </span>
                       ) : (
                         <span className="truncate">
-                          {o.label}
+                          {text(o.label)}
                           {o.hint ? <span className="text-text-faint ml-1 text-xs">{o.hint}</span> : null}
                         </span>
                       )}
@@ -333,7 +336,7 @@ export function SearchableSelect({
             )}
             {overflow > 0 ? (
               <li className="text-text-faint px-3 py-1.5 text-xs">
-                +{overflow}개 더 — 검색으로 좁히세요
+                {tf("select.moreResults", { n: overflow })}
               </li>
             ) : null}
           </ul>

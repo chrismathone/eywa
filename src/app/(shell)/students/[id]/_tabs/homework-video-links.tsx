@@ -1,3 +1,5 @@
+
+import { SheetClassName, SheetText } from "@/features/teacher-view/interface-label";
 import { requireAccess } from "@/lib/auth/require-access";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatShortKoreanDate, kstDateOf, kstToday } from "@/lib/date-kst";
@@ -59,24 +61,21 @@ export async function HomeworkVideoLinks({ studentId }: { studentId: string }) {
   return (
     <section aria-label="숙제 영상 올리기" className="border-line space-y-3 rounded-xl border p-4">
       <div>
-        <h3 className="text-base font-bold">숙제 영상 올리기</h3>
+        <h3 className="text-base font-bold"><SheetText value={"숙제 영상 올리기"} /></h3>
         {siteUrl ? (
           <p className="text-text-dim mt-1 text-sm break-keep">
-            학생은 <span className="text-foreground font-bold break-all">{siteUrl}</span> 에서 휴대폰 뒷 4자리와 이름을 넣고, 원스크린에서
-            &lsquo;영상 과제 있음&rsquo;으로 낸 숙제를 골라 올립니다(숙제가 나간 날로부터 {SITE_HOMEWORK_DAYS}일 뒤까지 — 10/1 숙제면 10/8까지). ClassNote에 올려도 됩니다.
-          </p>
+            <SheetText value={"학생은 "} /><span className="text-foreground font-bold break-all">{siteUrl}</span> <SheetText value={"에서 휴대폰 뒷 4자리와 이름을 넣고, 원스크린에서 ‘영상 과제 있음’으로 낸 숙제를 골라 올립니다(숙제가 나간 날로부터 "} />{SITE_HOMEWORK_DAYS}<SheetText value={"일 뒤까지 — 10/1 숙제면 10/8까지). ClassNote에 올려도 됩니다."} /></p>
         ) : null}
         {rows.length ? (
           <p className="text-text-dim mt-1 text-sm break-keep">
-            아래는 아직 쓸 수 있는 제출 링크입니다(학생이 사이트에서 연 링크 · 예전에 보낸 링크). 적힌 날까지 쓸 수 있고, 그 전에 끊을 수 있습니다. 학생마다 링크를 새로 만들지는 않습니다.
-          </p>
+            <SheetText value={"아래는 아직 쓸 수 있는 제출 링크입니다(학생이 사이트에서 연 링크 · 예전에 보낸 링크). 적힌 날까지 쓸 수 있고, 그 전에 끊을 수 있습니다. 학생마다 링크를 새로 만들지는 않습니다."} /></p>
         ) : null}
       </div>
       {rows.length ? (
         <ul className="divide-line divide-y">
           {rows.map((row) => (
             <li key={row.classId} className="flex flex-wrap items-center gap-x-3 gap-y-2 py-3">
-              <span className="min-w-0 flex-1 text-sm font-bold">{row.className}</span>
+              <span className="min-w-0 flex-1 text-sm font-bold"><SheetClassName value={row.className} /></span>
               <HomeworkVideoLinkButtons studentId={studentId} classId={row.classId} classLabel={row.className} count={row.count} until={row.until} />
             </li>
           ))}

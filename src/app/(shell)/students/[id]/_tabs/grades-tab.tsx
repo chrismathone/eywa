@@ -1,3 +1,5 @@
+
+import { SheetText } from "@/features/teacher-view/interface-label";
 import {
   getStudentGrades,
   getStudentGradeComments,
@@ -69,8 +71,8 @@ export async function GradesTab({ studentId, query, back, embed }: {
   return (
     <div className="space-y-4">
       <header className="border-border flex items-baseline justify-between border-b pb-3">
-        <h2 className="text-foreground text-base font-bold">성적 기록</h2>
-        <p className="text-muted-foreground num text-xs">{rows.length}건</p>
+        <h2 className="text-foreground text-base font-bold"><SheetText value={"성적 기록"} /></h2>
+        <p className="text-muted-foreground num text-xs">{rows.length}<SheetText value={"건"} /></p>
       </header>
 
       {rows.length > 0 ? (
@@ -78,7 +80,7 @@ export async function GradesTab({ studentId, query, back, embed }: {
           <StudentGradeStats rows={rows} />
           {points.length >= 2 ? (
             <div className="bg-card border-border rounded-2xl border p-4">
-              <p className="micro">성적 흐름 · 월별 평균 정답률</p>
+              <p className="micro"><SheetText value={"성적 흐름 · 월별 평균 정답률"} /></p>
               <TrendChart points={points} />
             </div>
           ) : null}

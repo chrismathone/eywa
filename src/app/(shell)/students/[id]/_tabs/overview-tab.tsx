@@ -1,3 +1,5 @@
+
+import { SheetText } from "@/features/teacher-view/interface-label";
 import { Sparkles } from "@/components/icons/aywa-icon-compat";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { formatCreatedAt } from "@/lib/utils";
@@ -19,6 +21,10 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { invoiceOutstanding } from "@/features/billing/calc";
 import { TabLink } from "../_components/tab-link";
 import { memoCategoryLabel } from "@/features/students/memo-category";
+import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
+import { getTeacherEnglishNames } from "@/features/teacher-view/server/teacher-names";
+import { teacherNameFor } from "@/features/teacher-view/teacher-name";
+import { classNameFor } from "@/features/teacher-view/class-name";
 
 const won = (n: number) => n.toLocaleString();
 
@@ -36,7 +42,7 @@ const PRIORITY_LABEL: Record<CareFocus["priority"], string> = {
 
 export async function OverviewTab({ student, canSeeBilling }: { student: StudentDetail; canSeeBilling: boolean }) {
   const sid = student.id;
-  const [attendance, enrollments, grades, invoices, consultations, memos, settings] = await Promise.all([
+  const [attendance, enrollments, grades, invoices, consultations, memos, settings, lang, teacherNames] = await Promise.all([
     getStudentAttendanceStats(sid, 30),
     getStudentEnrollments(sid),
     // 성적 탭·통합 성적관리와 같은 기록(수업보고서 일일·확인테스트 포함 — 원장 2026-09-24).
@@ -45,8 +51,10 @@ export async function OverviewTab({ student, canSeeBilling }: { student: Student
     getStudentConsultationHistory(sid),
     getStudentMemos(sid),
     getTenantSettings(),
+    getTeacherViewLang(),
+    getTeacherEnglishNames(),
   ]);
-  const subjects = buildSubjectMaps(settings.operations.subjects);
+  const subjects = buildSubjectMaps(settings.operations.subjects, lang);
   const hasCareAi = student.aiCareSummary !== null;
 
   // 🔴 `!endDate`로 자르면 안 된다(2026-08-29) — 반이동을 예약하면 옛 수강에 **미래 종료일**이
@@ -68,8 +76,8 @@ export async function OverviewTab({ student, canSeeBilling }: { student: Student
       {/* 최근 30일 출결 — 전체 폭 KPI */}
       <section className="bg-card border-border rounded-2xl border p-5">
         <header className="mb-4 flex items-baseline justify-between">
-          <h2 className="text-sm font-bold tracking-tight">최근 30일 출결</h2>
-          <p className="text-muted-foreground num text-xs">총 {attendance.total}건</p>
+          <h2 className="text-sm font-bold tracking-tight"><SheetText value={"최근 30일 출결"} /></h2>
+          <p className="text-muted-foreground num text-xs"><SheetText value={"총 "} />{attendance.total}<SheetText value={"건"} /></p>
         </header>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <Stat
@@ -86,7 +94,7 @@ export async function OverviewTab({ student, canSeeBilling }: { student: Student
       {/* 프로필 + 다이제스트 — CSS columns 마조너리(창 폭 따라 1/2/3열 자동 패킹, 빈칸 최소화) */}
       <div className="gap-4 sm:columns-2 xl:columns-3 [&>section]:mb-4 [&>section]:break-inside-avoid">
         <section className="bg-card border-border space-y-3 rounded-2xl border p-5">
-          <h2 className="text-sm font-bold tracking-tight">프로필</h2>
+          <h2 className="text-sm font-bold tracking-tight"><SheetText value={"프로필"} /></h2>
           <dl className="space-y-3 text-sm">
             {student.englishName ? <Field label="영문명" value={student.englishName} /> : null}
             {student.nickname ? <Field label="닉네임" value={student.nickname} /> : null}
@@ -94,7 +102,7 @@ export async function OverviewTab({ student, canSeeBilling }: { student: Student
               <Field label="출결번호" value={student.attendanceCode} mono />
             ) : null}
             {student.gender ? (
-              <Field label="성별" value={student.gender === "male" ? "남" : "여"} />
+              <Field label="성별" value={lang === "en" ? student.gender === "male" ? "Male" : "Female" : student.gender === "male" ? "남" : "여"} />
             ) : null}
             {student.birthDate ? <Field label="생년월일" value={student.birthDate} mono /> : null}
             {student.graduationYear ? (
@@ -136,23 +144,23 @@ export async function OverviewTab({ student, canSeeBilling }: { student: Student
           </dl>
         </section>
 
-        <DigestCard title="수강 중인 반" more={<TabLink href={`${base}?tab=classes`}>수업</TabLink>}>
+        <DigestCard title="수강 중인 반" more={<TabLink href={`${base}?tab=classes`}><SheetText value={"수업"} /></TabLink>}>
           {activeClasses.length === 0 ? (
-            <Empty>수강 중인 반 없음</Empty>
+            <Empty><SheetText value={"수강 중인 반 없음"} /></Empty>
           ) : (
             activeClasses.slice(0, 4).map((e) => (
               <DigestRow
                 key={e.id}
-                left={e.className}
-                right={[subjects.labelOf(e.subject), e.teacherName].filter(Boolean).join(" · ")}
+                left={classNameFor(e.className, lang)}
+                right={[subjects.labelOf(e.subject), teacherNameFor(e.teacherName, teacherNames, lang)].filter(Boolean).join(" · ")}
               />
             ))
           )}
         </DigestCard>
 
-        <DigestCard title="최근 성적" more={<TabLink href={`${base}?tab=grades`}>성적</TabLink>}>
+        <DigestCard title="최근 성적" more={<TabLink href={`${base}?tab=grades`}><SheetText value={"성적"} /></TabLink>}>
           {grades.length === 0 ? (
-            <Empty>성적 기록 없음</Empty>
+            <Empty><SheetText value={"성적 기록 없음"} /></Empty>
           ) : (
             grades.slice(0, 4).map((g) => (
               <DigestRow
@@ -165,9 +173,9 @@ export async function OverviewTab({ student, canSeeBilling }: { student: Student
           )}
         </DigestCard>
 
-        {canSeeBilling ? <DigestCard title="수납 현황" more={<TabLink href={`${base}?tab=billing`}>수납</TabLink>}>
+        {canSeeBilling ? <DigestCard title="수납 현황" more={<TabLink href={`${base}?tab=billing`}><SheetText value={"수납"} /></TabLink>}>
           {invoices.length === 0 ? (
-            <Empty>청구 내역 없음</Empty>
+            <Empty><SheetText value={"청구 내역 없음"} /></Empty>
           ) : (
             <>
               <DigestRow left="총 청구" right={`${invoices.length}건`} />
@@ -181,9 +189,9 @@ export async function OverviewTab({ student, canSeeBilling }: { student: Student
           )}
         </DigestCard> : null}
 
-        <DigestCard title="최근 상담" more={<TabLink href={`${base}?tab=consultations`}>상담</TabLink>}>
+        <DigestCard title="최근 상담" more={<TabLink href={`${base}?tab=consultations`}><SheetText value={"상담"} /></TabLink>}>
           {consultations.length === 0 ? (
-            <Empty>상담 기록 없음</Empty>
+            <Empty><SheetText value={"상담 기록 없음"} /></Empty>
           ) : (
             consultations.slice(0, 3).map((c) => (
               <DigestRow key={c.id} left={String(c.consultedAt).slice(0, 10)} right={c.summary} truncate mono />
@@ -191,9 +199,9 @@ export async function OverviewTab({ student, canSeeBilling }: { student: Student
           )}
         </DigestCard>
 
-        <DigestCard title="최근 메모" more={<TabLink href={`${base}?tab=memos`}>메모</TabLink>}>
+        <DigestCard title="최근 메모" more={<TabLink href={`${base}?tab=memos`}><SheetText value={"메모"} /></TabLink>}>
           {pinnedMemos.length === 0 ? (
-            <Empty>메모 없음</Empty>
+            <Empty><SheetText value={"메모 없음"} /></Empty>
           ) : (
             pinnedMemos.slice(0, 3).map((m) => (
               <DigestRow
@@ -214,7 +222,7 @@ export async function OverviewTab({ student, canSeeBilling }: { student: Student
           <header className="flex items-baseline justify-between">
             <div className="inline-flex items-center gap-2">
               <Sparkles className="text-chart-4 size-4" />
-              <h2 className="text-foreground text-sm font-bold">AI 케어 인사이트</h2>
+              <h2 className="text-foreground text-sm font-bold"><SheetText value={"AI 케어 인사이트"} /></h2>
             </div>
             {student.aiCareGeneratedAt ? (
               <span className="text-muted-foreground num text-xs">
@@ -224,13 +232,13 @@ export async function OverviewTab({ student, canSeeBilling }: { student: Student
           </header>
 
           <div className="space-y-2">
-            <p className="eyebrow">종합 요약</p>
+            <p className="eyebrow"><SheetText value={"종합 요약"} /></p>
             <p className="text-foreground text-sm leading-relaxed">{student.aiCareSummary}</p>
           </div>
 
           {student.aiCareFocus && student.aiCareFocus.length > 0 ? (
             <div className="space-y-2">
-              <p className="eyebrow">주의 영역</p>
+              <p className="eyebrow"><SheetText value={"주의 영역"} /></p>
               <ul className="space-y-2">
                 {student.aiCareFocus.map((f, i) => (
                   <li
@@ -262,7 +270,7 @@ export async function OverviewTab({ student, canSeeBilling }: { student: Student
 function Field({ label, value, mono }: { label: string; value: string | null; mono?: boolean }) {
   return (
     <div className="flex items-start justify-between gap-3">
-      <dt className="text-muted-foreground shrink-0 text-xs">{label}</dt>
+      <dt className="text-muted-foreground shrink-0 text-xs"><SheetText value={label} /></dt>
       <dd className={`text-foreground text-sm ${mono ? "num" : ""}`}>{value ?? "—"}</dd>
     </div>
   );
@@ -280,7 +288,7 @@ function DigestCard({
   return (
     <section className="bg-card border-border flex flex-col rounded-2xl border p-4">
       <header className="mb-2 flex items-center justify-between">
-        <h3 className="text-foreground text-sm font-bold">{title}</h3>
+        <h3 className="text-foreground text-sm font-bold"><SheetText value={title} /></h3>
         {more}
       </header>
       <div className="divide-border/60 flex-1 divide-y">{children}</div>
@@ -330,11 +338,11 @@ function Stat({
 }) {
   return (
     <div className="space-y-1">
-      <p className="eyebrow">{label}</p>
+      <p className="eyebrow"><SheetText value={label} /></p>
       <p className={`num text-foreground text-xl font-bold ${highlight ?? ""}`}>
         {value}
         {unit ? (
-          <span className="text-muted-foreground ml-0.5 text-xs font-normal">{unit}</span>
+          <span className="text-muted-foreground ml-0.5 text-xs font-normal"><SheetText value={unit} /></span>
         ) : null}
       </p>
     </div>

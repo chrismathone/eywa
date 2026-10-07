@@ -1,3 +1,5 @@
+
+import { SheetText } from "@/features/teacher-view/interface-label";
 import {
   getStudentLessonReportsPage,
   STUDENT_REPORTS_PAGE_SIZE,
@@ -100,7 +102,7 @@ export async function ProgressTab({
       <ProgressContainerPanel studentId={studentId} />
 
       <header className="border-border flex flex-wrap items-center justify-between gap-2 border-b pb-3">
-        <h2 className="text-foreground text-base font-bold">수업 진도</h2>
+        <h2 className="text-foreground text-base font-bold"><SheetText value={"수업 진도"} /></h2>
         {/* 날짜 조회 — 보고서 날짜 기준, 양 끝 포함. 비우면 전체. */}
         <form method="get" action={`/students/${studentId}`} className="flex flex-wrap items-center gap-2">
           <input type="hidden" name="tab" value="progress" />
@@ -122,44 +124,41 @@ export async function ProgressTab({
             className="border-border bg-card text-foreground num h-(--control-h-sm) rounded-lg border px-2 text-sm"
           />
           <Button type="submit" size="sm">
-            날짜 보기
-          </Button>
+            <SheetText value={"날짜 보기"} /></Button>
           {filtered ? (
             <EmbedAnchor href={hrefWith({ p: 1, keepDates: false })} className="text-text-dim text-sm hover:underline">
-              전체 보기
-            </EmbedAnchor>
+              <SheetText value={"전체 보기"} /></EmbedAnchor>
           ) : null}
           <span className="text-muted-foreground num text-xs">
-            {filtered ? "조회 " : "전체 "}
-            {total}건
-          </span>
+            <SheetText value={filtered ? "조회 " : "전체 "} />
+            {total}<SheetText value={"건"} /></span>
         </form>
       </header>
 
       {total === 0 ? (
         <p className="text-muted-foreground py-8 text-center text-sm">
-          {filtered ? "이 기간에 기록된 진도가 없습니다" : "기록된 진도가 없습니다"}
+          <SheetText value={filtered ? "이 기간에 기록된 진도가 없습니다" : "기록된 진도가 없습니다"} />
         </p>
       ) : (
         <div className="bg-card border-border overflow-x-auto rounded-2xl border">
           <table className="w-full text-sm">
             <thead className="border-border bg-bg-soft/40 border-b [&_th]:whitespace-nowrap">
               <tr>
-                <th className="micro px-4 py-2 text-left">날짜</th>
+                <th className="micro px-4 py-2 text-left"><SheetText value={"날짜"} /></th>
                 {/* 🔴 과목 열은 2026-07-29 감사로 신설 — 없을 땐 영어 강사 화면에서 수학 진도 12줄이
                     그 학생의 '수업 진도'로 읽혔다(쿼리가 subject를 select조차 안 했다). */}
-                <th className="micro px-4 py-2 text-left">과목</th>
-                <th className="micro px-4 py-2 text-left">선생님</th>
-                <th className="micro px-4 py-2 text-left">진도</th>
-                <th className="micro px-4 py-2 text-center">시험</th>
-                <th className="micro px-4 py-2 text-center">숙제</th>
+                <th className="micro px-4 py-2 text-left"><SheetText value={"과목"} /></th>
+                <th className="micro px-4 py-2 text-left"><SheetText value={"선생님"} /></th>
+                <th className="micro px-4 py-2 text-left"><SheetText value={"진도"} /></th>
+                <th className="micro px-4 py-2 text-center"><SheetText value={"시험"} /></th>
+                <th className="micro px-4 py-2 text-center"><SheetText value={"숙제"} /></th>
                 {classnoteOn ? <th className="micro px-4 py-2 text-center">ClassNote</th> : null}
-                <th className="micro px-4 py-2 text-center">학부모 링크</th>
+                <th className="micro px-4 py-2 text-center"><SheetText value={"학부모 링크"} /></th>
                 {/* 실제 수업보고서 바로가기(원장 2026-09-18). 🔴 학부모 링크(`/r/…`)로 보내지 말 것 — 그 페이지는
                     워커 밖의 **모든 방문을 학부모 열람으로 적는다**(바로 옆 '학부모 링크' 열이 "1회 열람"으로 오염된다).
                     내부 문서(`/lesson_reports/[id]/print`)는 **같은 카드**(ParentReportCard)를 그리되 열람을 안 적고,
                     강사 게이트도 이 탭과 같은 함수(`canViewStudentDetail`)다. */}
-                <th className="micro px-4 py-2 text-center">보고서</th>
+                <th className="micro px-4 py-2 text-center"><SheetText value={"보고서"} /></th>
               </tr>
             </thead>
             <tbody className="divide-border divide-y">
@@ -169,7 +168,7 @@ export async function ProgressTab({
                 return (
                   <tr key={r.id} className="hover:bg-bg-soft/30 align-top">
                     <td className="num text-muted-foreground px-4 py-2 text-xs whitespace-nowrap">{r.reportDate}</td>
-                    <td className="text-text-dim px-4 py-2 text-xs whitespace-nowrap">{subjects.labelOf(r.subject)}</td>
+                    <td className="text-text-dim px-4 py-2 text-xs whitespace-nowrap"><SheetText value={subjects.labelOf(r.subject)} /></td>
                     <td className="text-foreground px-4 py-2 text-xs whitespace-nowrap">{r.teacherName ?? "—"}</td>
                     <td className="text-foreground break-keep px-4 py-2 text-xs">{r.progress ? <ProgressCell text={r.progress} /> : "—"}</td>
                     <td className="num px-4 py-2 text-center text-xs whitespace-nowrap">{r.examInfo ?? "—"}</td>

@@ -1,3 +1,5 @@
+
+import { SheetText } from "@/features/teacher-view/interface-label";
 import { SearchX } from "@/components/icons/aywa-icon-compat";
 import { EmptyState } from "@/components/empty-state";
 import { FilterSelect } from "@/components/filter-select";
@@ -131,14 +133,12 @@ export default async function ExamsViewPage({
 
       {!overview.schemaReady ? (
         <p className="border-amber/40 bg-amber-soft text-foreground rounded-lg border px-3 py-2 text-sm">
-          성적 표 준비(0283a)가 아직 적용되지 않아 점수를 읽지 못했습니다 — 적용 뒤에 표가 채워집니다.
-        </p>
+          <SheetText value={"성적 표 준비(0283a)가 아직 적용되지 않아 점수를 읽지 못했습니다 — 적용 뒤에 표가 채워집니다."} /></p>
       ) : null}
 
       {overview.schemaReady && overview.rows.length > 0 && overview.columns.length === 0 ? (
         <p className="border-line bg-bg-soft text-text-dim rounded-lg border px-3 py-2 text-sm">
-          이 학기·과목에 아직 적힌 성적이 없습니다 — [입력]에서 시험을 고르고 점수를 적으면 여기에 열이 섭니다.
-        </p>
+          <SheetText value={"이 학기·과목에 아직 적힌 성적이 없습니다 — [입력]에서 시험을 고르고 점수를 적으면 여기에 열이 섭니다."} /></p>
       ) : null}
 
       {overview.rows.length > 0 ? (

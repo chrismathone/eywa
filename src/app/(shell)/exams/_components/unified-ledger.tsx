@@ -1,5 +1,7 @@
 "use client";
 
+import { SheetText } from "@/features/teacher-view/interface-label";
+
 import { useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { saveUnifiedGrade } from "@/features/grades/unified/server/actions";
@@ -58,7 +60,7 @@ function LedgerRow({ row, canWrite, goal }: { row: UnifiedRow; canWrite: boolean
 
   return (
     <tr className={`border-line-faint border-t align-middle ${editing ? "bg-primary-soft/30" : "hover:bg-muted/40"} ${row.score == null && !row.rawScore ? "bg-amber-soft/40" : ""}`}>
-      <td className="px-2 py-2 text-center"><span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap ${SUBJECT_SOFT[subjectMaps.colorOf(row.subject)]}`}>{subjectMaps.labelOf(row.subject)}</span></td>
+      <td className="px-2 py-2 text-center"><span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap ${SUBJECT_SOFT[subjectMaps.colorOf(row.subject)]}`}><SheetText value={subjectMaps.labelOf(row.subject)} /></span></td>
       <td className="px-2 py-2 text-center">
         {editing && !reportDate ? <input type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label={`${row.name} 시험일`} className={`${INPUT} w-full`} />
           : <span className="num" title={reportDate ? "수업보고서 날짜 — 날짜는 보고서에서 고칩니다" : undefined}>{row.date.slice(2).replaceAll("-", ".")}</span>}
@@ -89,18 +91,18 @@ function LedgerRow({ row, canWrite, goal }: { row: UnifiedRow; canWrite: boolean
         <div className="flex items-center justify-center gap-1">
           {editing ? <>
             <button type="button" className={`${BTN} bg-primary text-primary-foreground border-primary`} disabled={pending || (consulted && !row.consultationDate && !consultDate)}
-              onClick={() => send({ score, label: "저장됨" })}>{pending ? "저장 중" : "저장"}</button>
-            <button type="button" className={BTN} disabled={pending} onClick={cancel}>취소</button>
+              onClick={() => send({ score, label: "저장됨" })}><SheetText value={pending ? "저장 중" : "저장"} /></button>
+            <button type="button" className={BTN} disabled={pending} onClick={cancel}><SheetText value={"취소"} /></button>
           </> : confirmDelete ? <>
-            <button type="button" className={`${BTN} border-danger text-danger`} disabled={pending} onClick={() => send({ score: "", label: "점수를 지웠습니다" })}>{pending ? "지우는 중" : "지우기"}</button>
-            <button type="button" className={BTN} disabled={pending} onClick={() => setConfirmDelete(false)}>취소</button>
+            <button type="button" className={`${BTN} border-danger text-danger`} disabled={pending} onClick={() => send({ score: "", label: "점수를 지웠습니다" })}><SheetText value={pending ? "지우는 중" : "지우기"} /></button>
+            <button type="button" className={BTN} disabled={pending} onClick={() => setConfirmDelete(false)}><SheetText value={"취소"} /></button>
           </> : <>
-            <button type="button" className={BTN} disabled={!canWrite} onClick={() => reset(true)}>수정</button>
+            <button type="button" className={BTN} disabled={!canWrite} onClick={() => reset(true)}><SheetText value={"수정"} /></button>
             <button type="button" className={`${BTN} text-danger`} disabled={!canWrite || (row.score == null && !row.rawScore)}
-              title="이 기록의 점수를 지웁니다" onClick={() => { setConfirmDelete(true); setMessage(null); }}>삭제</button>
+              title="이 기록의 점수를 지웁니다" onClick={() => { setConfirmDelete(true); setMessage(null); }}><SheetText value={"삭제"} /></button>
           </>}
         </div>
-        {confirmDelete ? <span className="text-danger mt-1 block text-xs">점수를 지울까요?</span> : null}
+        {confirmDelete ? <span className="text-danger mt-1 block text-xs"><SheetText value={"점수를 지울까요?"} /></span> : null}
         {message ? <span role={message.ok ? "status" : "alert"} className={`mt-1 block text-xs ${message.ok ? "text-green" : "text-danger"}`}>{message.text}</span> : null}
       </td>
     </tr>
@@ -124,7 +126,7 @@ export function UnifiedLedger({ rows, canWrite, head, goals = {} }: {
         {head}
         <tbody>{rows.map((row) => <LedgerRow key={row.key} row={row} canWrite={canWrite} goal={goals[row.key]} />)}</tbody>
       </table>
-      {rows.length === 0 ? <p className="text-text-dim p-8 text-center text-sm">조건에 맞는 성적 기록이 없습니다. 필터나 검색어를 바꿔 보세요.</p> : null}
+      {rows.length === 0 ? <p className="text-text-dim p-8 text-center text-sm"><SheetText value={"조건에 맞는 성적 기록이 없습니다. 필터나 검색어를 바꿔 보세요."} /></p> : null}
     </div>
   );
 }

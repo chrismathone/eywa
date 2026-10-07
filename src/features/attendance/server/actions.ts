@@ -2660,11 +2660,11 @@ export async function searchMakeupStudents(
   query: string,
   /** 보고 있는 수업일 — 그날 담당·위임인지로 검색을 연다. 없으면 오늘. */
   onDate?: string,
-): Promise<{ id: string; name: string; label: string }[]> {
+): Promise<{ id: string; name: string; label: string; englishName: string | null; school: string | null; grade: string | null }[]> {
   const user = await getCurrentUser({ teacherView: true });
   if (!user) return [];
   if (!(await canWriteTenant(user.systemRole, "attendance"))) return [];
-  const q = query.trim();
+  const q = query.trim().replace(/[,()]/g, " ").trim();
   if (!q || !classId) return [];
   const supabase = await createClient();
   const when = onDate && /^\d{4}-\d{2}-\d{2}$/.test(onDate) ? onDate : kstToday();
@@ -2674,14 +2674,17 @@ export async function searchMakeupStudents(
   }
   const { data } = await supabase
     .from("students")
-    .select("id, name, grade, school")
+    .select("id, name, english_name, grade, school")
     .neq("status", "withdrawn")
-    .ilike("name", `%${q}%`)
+    .or(`name.ilike.%${q}%,english_name.ilike.%${q}%`)
     .order("name", { ascending: true })
     .limit(20);
   return (data ?? []).map((s) => ({
     id: s.id,
     name: s.name,
+    englishName: s.english_name ?? null,
+    school: s.school ?? null,
+    grade: s.grade ?? null,
     label: schoolGradeLabel(s.school ?? null, s.grade ?? null),
   }));
 }

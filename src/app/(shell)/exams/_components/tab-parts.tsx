@@ -1,3 +1,5 @@
+
+import { SheetText } from "@/features/teacher-view/interface-label";
 import type { ReactNode } from "react";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { KIND_LABEL, scorePercent, scoreUnit, type UnifiedKind, type UnifiedRow } from "@/features/grades/unified/model";
@@ -23,7 +25,7 @@ export function KindPill({ kind }: { kind: UnifiedKind }) {
 
 export function DeltaBadge({ row }: { row: Pick<UnifiedRow, "delta" | "deltaUnit"> }) {
   if (row.delta == null) return <span className="text-text-dim">—</span>;
-  if (row.delta === 0) return <span className="text-text-dim whitespace-nowrap">변화없음</span>;
+  if (row.delta === 0) return <span className="text-text-dim whitespace-nowrap"><SheetText value={"변화없음"} /></span>;
   const up = row.delta > 0;
   return <span className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-bold whitespace-nowrap ${up ? "bg-green-soft text-green" : "bg-danger-soft text-danger"}`}
     aria-label={`직전보다 ${Math.abs(row.delta)}${row.deltaUnit} ${up ? "상승" : "하락"}`}>
