@@ -1,4 +1,3 @@
-import { SettingRolesControl } from "@/features/owner/components/setting-roles-control";
 import { canReadSalary } from "@/features/payroll/server/salary-access";
 import { requireAccess } from "@/lib/auth/require-access";
 import { isModuleEnabled } from "@/lib/modules";
@@ -109,7 +108,6 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
       )}
       <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
         <FaceTabs faces={faces} active={effectiveTab} ariaLabel="수납관리 면 전환" />
-        <SettingRolesControl group="billing" />
       </div>
       {effectiveTab === "textbooks" ? (
         <TextbooksFace sp={sp} />

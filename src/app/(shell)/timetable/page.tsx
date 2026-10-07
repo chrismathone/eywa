@@ -1,4 +1,3 @@
-import { SettingRolesControl } from "@/features/owner/components/setting-roles-control";
 import { ParamLink } from "./_components/param-link";
 import { isModuleEnabled } from "@/lib/modules";
 import { ParamSelect } from "./_components/param-select";
@@ -757,7 +756,6 @@ export default async function TimetablePage({
       <PageMaximizeToolbar>
       <Toolbar rail={false} gap="gap-3 compact-chrome:gap-1">
         <ToolbarRow>
-          <SettingRolesControl group="timetable" />
         {/* 모바일에서는 주간 이동을 필터와 별도의 짧은 레일에 둔다. */}
         {/* 왼쪽 묶음(필터·검색·설정·엑셀) / 오른쪽 묶음(집계·ECS·편집) — 창을 줄이면 **묶음 단위로** 줄이 바뀐다
             (원장 2026-09-04 *"창 크기를 조절했을때도 헤더 정렬이 이루어질 수 있게"* — 종전엔 항목 하나(엑셀·시트)만 둘째 줄

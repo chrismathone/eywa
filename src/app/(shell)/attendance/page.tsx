@@ -1,4 +1,3 @@
-import { SettingRolesControl } from "@/features/owner/components/setting-roles-control";
 import { redirect } from "next/navigation";
 import { Users } from "@/components/icons/aywa-icon-compat";
 import { PeriodNav } from "@/components/period-nav";
@@ -1051,7 +1050,6 @@ export default async function AttendancePage({
           지시서 §10(2026-09-04, 12단계): 축 이름은 `micro` 소라벨이 아니라 드롭다운 안의 `축: 값`(과목·강사·반·기간·보기·정렬),
           보기(반별/강사 전체)는 링크형 드롭다운(HrefSelect — 주소를 attHref가 만든다), 검색은 토글. 구분선은 뺐다(다른 화면과 같은 gap). */}
       <div className="relative flex shrink-0 flex-wrap items-center gap-2.5 px-1 py-1">
-        <SettingRolesControl group="attendance" />
         {/* 과목 → 강사 → 반 계층 필터(넓→좁). 위를 고르면 아래 선택지가 좁혀지고, 반을 골라야 출석부가 뜬다.
             반 선택 시 과목·강사는 그 반의 값으로 자동 표시(누구 선생님인지 바로 보이게). 전체(=미선택)면 축 이름만 선다. */}
         <span data-help="att-filters" className="inline-flex flex-wrap items-center gap-2.5">

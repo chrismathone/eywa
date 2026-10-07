@@ -1,7 +1,6 @@
 import { requireAccess } from "@/lib/auth/require-access";
 import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { PageHeader } from "@/components/page-header";
-import { SettingRolesControl } from "@/features/owner/components/setting-roles-control";
 import { FaceTabs } from "@/components/face-tabs";
 import { getClassnoteQueue, getReportFilterOptions, getWeeklyWritingRates, getReportTeacherCandidates } from "@/features/report-admin/server/queries";
 import { getBoardRosterCheck } from "@/features/report-admin/server/board-roster-queries";
@@ -147,7 +146,6 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
       <PageHeader
         eyebrow={classnoteOn ? "발송 관리" : "보고서 관리"}
         title="수업보고서"
-        actions={<SettingRolesControl group="lesson_reports" />}
         description={
           classnoteOn
             ? "발송 현황과 보고서 작성률을 확인합니다. 강사 작성은 원스크린에서 진행합니다."
