@@ -14,6 +14,7 @@ import {
   placeVirtualLabs,
   VIRTUAL_LAB_CELL_CLASS,
   VIRTUAL_LAB_LABEL,
+  virtualLabNoteEn,
   type SeatLiveSlot,
   type SeatMoveRow,
   type VirtualLabCell,
@@ -213,6 +214,8 @@ describe("buildVirtualLabs — 자리 출석부와 같은 판정", () => {
     for (const f of ["src/features/timetable/lib/virtual-lab.ts", "docs/changelog.md"]) {
       expect(readFileSync(join(process.cwd(), f), "utf8"), `${f}의 예시가 실제 문장과 다르다`).toContain(note);
     }
+    // 영어 화면의 같은 문장 — 화면 파일이 아니라 여기서 만든다(요일 표기만 화면 언어 사전이 넘긴다).
+    expect(virtualLabNoteEn(out.LE1![0]!, "Thu")).toBe("Temporary LAB · Thu 17:00 — 송지혜 (2026-09-10 only) · 이현이 (weekly from 2026-09-03)");
   });
 
   it("🔴 제 반 자리 교시로 고른 것(하루 두 번 도는 반)은 **자기 칸**이라 *LAB이 아니다", () => {

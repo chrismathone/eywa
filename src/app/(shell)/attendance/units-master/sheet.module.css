@@ -7,7 +7,7 @@
 .detailPane { min-width: 0; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--card); }
 .detailBody { display: flex; flex-direction: column; gap: 16px; padding: 14px; }
 .detailHeader { display: flex; flex-direction: column; gap: 8px; }
-.checkNotes { padding: 10px; border-left: 3px solid var(--amber); background: var(--bg-soft); font-size: var(--text-xs); line-height: 1.6; }
+.checkNotes { padding: 10px; border-radius: var(--radius-lg); background: var(--bg-soft); font-size: var(--text-xs); line-height: 1.6; }
 
 .scroll {
   flex: 1;
@@ -91,4 +91,5 @@
 .events strong { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .events p { margin-top: 4px; }
 .events [data-excluded] { background: var(--bg-soft); }
-.events [data-missing] { border-left: 3px solid var(--amber); padding-left: 8px; }
+/* 미입력 줄 — 왼쪽 색 띠 대신 옅은 앰버 바탕(왼쪽 띠 금지 · 뜻은 바탕과 '미입력' 글자가 말한다). */
+.events [data-missing] { background: var(--amber-soft); padding-left: 8px; }

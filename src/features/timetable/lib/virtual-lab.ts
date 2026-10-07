@@ -200,6 +200,19 @@ export function virtualLabNote(cell: Pick<VirtualLabCell, "dayOfWeek" | "start" 
   return `임시 LAB · ${day} ${cell.start} — 교시 이동: ${who}`;
 }
 
+/**
+ * 영어 화면(강사 화면 언어 EN)의 같은 문장 — `Temporary LAB · Thu 17:00 — Song (2026-09-10 only) · Lee (weekly from 2026-09-03)`.
+ * 요일 표기는 화면 언어 사전이 정한다(호출부가 넘긴다).
+ * 🔴 화면 파일에서 조립하지 않는다 — 화면이 출처(하루 이동 / 고정 적용일)를 직접 읽기 시작하면 뷰마다 답이 갈린다
+ *    (`seat-pin-mark-wiring.test.ts`가 화면 파일의 적용일 참조를 막는다).
+ */
+export function virtualLabNoteEn(cell: Pick<VirtualLabCell, "start" | "students">, dayLabel: string): string {
+  const who = cell.students
+    .map((s) => `${s.name} (${s.source.kind === "move" ? `${s.source.date} only` : `weekly from ${s.source.effectiveFrom}`})`)
+    .join(" · ");
+  return `Temporary LAB · ${dayLabel} ${cell.start} — ${who}`;
+}
+
 const pushUnique = (map: Record<string, string[]>, key: string, value: string) => {
   const list = (map[key] ??= []);
   if (!list.includes(value)) list.push(value);

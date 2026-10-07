@@ -52,6 +52,7 @@ import {
   placeVirtualLabs,
   VIRTUAL_LAB_CELL_CLASS,
   VIRTUAL_LAB_LABEL,
+  virtualLabNoteEn,
   type VirtualLabCell,
   type VirtualLabsByClass,
 } from "@/features/timetable/lib/virtual-lab";
@@ -898,9 +899,7 @@ function cellPaintsBackground(c: GridCell | undefined): boolean {
  */
 function VirtualLabCellView({ lab, last, withTime = false }: { lab: VirtualLabCell; last: boolean; withTime?: boolean }) {
   const display = useTimetableDisplay();
-  const note = display.lang === "en"
-    ? `Temporary LAB · ${display.dow(lab.dayOfWeek)} ${lab.start} — ${lab.students.map((student) => `${student.name} (${student.source.kind === "move" ? `${student.source.date} only` : `weekly from ${student.source.effectiveFrom}`})`).join(" · ")}`
-    : lab.note;
+  const note = display.lang === "en" ? virtualLabNoteEn(lab, display.dow(lab.dayOfWeek)) : lab.note;
   return (
     <div
       data-virtual-lab=""

@@ -188,9 +188,11 @@ describe("대시보드 권한 게이트는 loading.tsx 앞(gotchas #137)", () =>
 });
 
 describe("'처음으로'는 권한을 본 홈(gotchas #137)", () => {
-  it("관리자뷰 전환은 사용자 유효 매트릭스로 홈을 고른다", () => {
+  it("관리자뷰 전환은 본인 유효 매트릭스로 홈을 고른다", () => {
     const src = read("src/features/shell/view-actions.ts");
-    expect(src).toContain("roleHome(user.systemRole, await getUserPermMatrix())");
+    // 🔑 **본인(행위자)** 매트릭스다 — 강사 뷰에서는 `getUserPermMatrix`가 보는 대상 강사의 권한을 따른다(2026-10-07).
+    //    관리자뷰로 돌아가는 홈을 그것으로 고르면 그 강사 권한으로 정해진다. 매트릭스 없이 부르는 것(코드 기본값)도 여전히 금지.
+    expect(src).toContain("roleHome(user.systemRole, await getActorPermMatrix())");
     expect(src).not.toMatch(/roleHome\(user\.systemRole\)/);
   });
 
