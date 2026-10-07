@@ -6,6 +6,7 @@ import { reportError } from "@/lib/observability/report-error";
 import { logActionAs } from "@/features/audit/server/log";
 import { kstToday } from "@/lib/date-kst";
 import { closeActiveEnrollmentsClamped, listOpenEnrollments } from "@/features/students/server/enrollment-sync";
+import { recordMathWithdrawalToSheet } from "@/features/withdrawals/server/withdrawal-sheet";
 import type { createClient } from "@/lib/supabase/server";
 
 /**
@@ -105,6 +106,8 @@ export async function GET(req: Request) {
           },
         },
       );
+      // 수학 퇴원이면 '퇴원생 관리 차트' 시트에 적는다(원장 2026-10-07) — 던지지 않는다(실패는 로그만).
+      await recordMathWithdrawalToSheet({ tenantId: s.tenant_id, studentId: s.id, date });
       applied++;
     } catch (e) {
       failed++;
