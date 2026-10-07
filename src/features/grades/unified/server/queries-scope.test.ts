@@ -162,6 +162,7 @@ describe("강사 범위(실 강사 · 겸직 강사뷰 · 다른 강사 뷰 — 
 
   it("담당 과목 밖의 기록은 빠진다 — 그래도 scoped = true", async () => {
     m.scope = scopeOf(["math"]);
+    m.myClassIds = ["math-a"];
     const data = await run();
     expect(data.scoped).toBe(true);
     // 수학만: 영어 C반은 보이는 반에서 빠지고, s1의 영어 기록(g4)도 빠진다.
@@ -178,11 +179,11 @@ describe("강사 범위(실 강사 · 겸직 강사뷰 · 다른 강사 뷰 — 
     expect(m.touched).toEqual(["classes"]);
   });
 
-  it("스코프의 과목이 담당 반과 하나도 안 겹쳐도 scoped = true(빈 결과)", async () => {
-    m.scope = scopeOf(["science"]);
+  it("담임 과목이 비어도 교시 담당 반의 기록을 표시한다", async () => {
+    m.scope = scopeOf([]);
     const data = await run();
     expect(data.scoped).toBe(true);
-    expect(data.records).toEqual([]);
+    expect(keys(data.records)).toEqual(["grade:g1", "grade:g3", "grade:g4"]);
   });
 });
 

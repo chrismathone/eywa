@@ -1,5 +1,6 @@
 "use client";
 
+import { useSheetFeedback } from "@/features/teacher-view/lang-context";
 import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -70,6 +71,7 @@ export function MonthClient({
   /** 교재목록 모듈이 켜져 있나 — 꺼진 학원엔 [교재 배정] 입구를 세우지 않는다(서버도 거절한다). */
   textbooksOn: boolean;
 }) {
+  const feedback = useSheetFeedback();
   const router = useRouter();
   const embed = useEmbed();
   // 교재 배정 창 — 월간 화면에서 교시를 고르고 교재를 고르면 차수가 순서대로 들어간다(원장 2026-09-16).
@@ -172,7 +174,7 @@ export function MonthClient({
     (date: string, slotStart: string, kind: "skip" | "advance" | null) => {
       void setLessonShift({ classId: data.classId, date, slotStart, kind }).then((r) => {
         if (!r.ok) {
-          toast.error(r.error);
+          toast.error(feedback(r.error));
           return;
         }
         toast.success(
@@ -185,7 +187,7 @@ export function MonthClient({
         router.refresh();
       });
     },
-    [data.classId, router, t],
+    [data.classId, feedback, router, t],
   );
   const tf = useSheetTf();
   const lang = useSheetLang();
@@ -200,7 +202,7 @@ export function MonthClient({
       .then(() => importPlannedRange({ classId: data.classId, from: data.period.start, to: data.period.end }))
       .then((r) => {
         if (!r.ok) {
-          toast.error(r.error);
+          toast.error(feedback(r.error));
           return;
         }
         // 🔴 "가져왔다"고만 말하지 않는다 — 빈 칸이 없어 아무것도 안 바뀐 경우가 흔하다.

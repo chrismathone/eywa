@@ -1,4 +1,5 @@
 "use client";
+import { useTimetableText } from "@/features/teacher-view/use-timetable-text";
 import { EXCEL_MENU_LABEL } from "@/components/excel-import/excel-menu";
 import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF } from "@/components/toolbar-controls";
 
@@ -91,6 +92,7 @@ export function TimetableToolbarActions({
   /** 현재 화면의 '1시간 단위' 압축 섹션(sectionKey) — 엑셀·시트 내보내기에 그대로 반영. */
   compact1h?: number[];
 }) {
+  const tt = useTimetableText();
   const [pending, startSync] = useTransition();
   /** 지금 반영 중인 과목 — 줄이 여럿이라 boolean 하나로는 어느 줄에 스피너를 놓을지 못 가린다. */
   const [running, setRunning] = useState<string | null>(null);
@@ -175,8 +177,8 @@ export function TimetableToolbarActions({
 
   /** 줄 오른쪽 부차 정보 — 마지막 반영 시각(KST `yy.mm.dd hh:mm`). 없으면 빈 칸이 아니라 사실을 적는다. */
   function stampOf(row: SheetSyncRow): string {
-    if (!row.connected) return "시트 미등록";
-    return kstShortStamp(laterIso(justSynced[row.subject], row.lastSyncedAt)) ?? "아직 반영 안 함";
+    if (!row.connected) return tt("시트 미등록");
+    return kstShortStamp(laterIso(justSynced[row.subject], row.lastSyncedAt)) ?? tt("아직 반영 안 함");
   }
 
   // 툴바 줄에 서는 버튼 — 높이는 control-scale 한 값(세로 패딩으로 만들지 않는다).
@@ -243,13 +245,11 @@ export function TimetableToolbarActions({
         {exportsAllowed ? (
           <a href={exportHref} className={btnCls}>
             <FileSpreadsheet className="size-3" />
-            엑셀 내보내기
-          </a>
+            {tt("엑셀 내보내기")}</a>
         ) : (
-          <button type="button" disabled title={KIND_EXPORT_TITLE} className={btnCls}>
+          <button type="button" disabled title={tt(KIND_EXPORT_TITLE)} className={btnCls}>
             <FileSpreadsheet className="size-3" />
-            엑셀 내보내기
-          </button>
+            {tt("엑셀 내보내기")}</button>
         )}
       </div>
     );
@@ -260,7 +260,7 @@ export function TimetableToolbarActions({
       <Popover.Root open={menuOpen} onOpenChange={setMenuOpen}>
         <Popover.Trigger
           className={`${TOOLBAR_CHIP} gap-1.5 ${TOOLBAR_CHIP_OFF} data-[popup-open]:bg-bg-soft`}
-          title={sheetSection ? "엑셀 내보내기·가져오기, 시트로 보내기·가져오기" : "엑셀 내보내기·가져오기"}
+          title={sheetSection ? tt("엑셀 내보내기·가져오기, 시트로 보내기·가져오기") : tt("엑셀 내보내기·가져오기")}
         >
           {/* 진행 중이면 트리거에서 바로 보이게 — 접으면 안쪽 스피너가 안 보인다. */}
           {anyBusy ? <Loader2 className="size-3 animate-spin" /> : <FileSpreadsheet className="size-3" />}
@@ -275,15 +275,13 @@ export function TimetableToolbarActions({
               {exportsAllowed ? (
                 <a href={exportHref} className={itemCls} onClick={() => setMenuOpen(false)}>
                   <FileSpreadsheet className="size-3 shrink-0" />
-                  엑셀 내보내기
-                </a>
+                  {tt("엑셀 내보내기")}</a>
               ) : (
                 <>
                   <button type="button" disabled className={itemCls}>
                     <FileSpreadsheet className="size-3 shrink-0" />
-                    엑셀 내보내기
-                  </button>
-                  <Reason text={KIND_EXPORT_TITLE} />
+                    {tt("엑셀 내보내기")}</button>
+                  <Reason text={tt(KIND_EXPORT_TITLE)} />
                 </>
               )}
 
@@ -297,12 +295,11 @@ export function TimetableToolbarActions({
                   }}
                 >
                   <Upload className="size-3 shrink-0" />
-                  엑셀 가져오기
-                </button>
+                  {tt("엑셀 가져오기")}</button>
               ) : null}
 
               {sheetSection ? <div className="border-line my-1 border-t" /> : null}
-              {showMasterImport ? <Link href="/timetable/english-sheet" className={itemCls} onClick={() => setMenuOpen(false)}><Sheet className="size-3 shrink-0" />영어 시트 반영</Link> : null}
+              {showMasterImport ? <Link href="/timetable/english-sheet" className={itemCls} onClick={() => setMenuOpen(false)}><Sheet className="size-3 shrink-0" />{tt("영어 시트 반영")}</Link> : null}
 
               {/* 과목별 '시트로 보내기' — 원장 2026-09-10 "영어/수학 과목별로 시트 반영. 우측에 최근 반영 날짜".
                   ⚠️ 여기선 팝오버를 **닫지 않는다** — 닫으면 진행 스피너와 결과 문구를 볼 곳이 사라진다
@@ -311,18 +308,18 @@ export function TimetableToolbarActions({
                 <>
                   <button type="button" disabled className={itemCls}>
                     <Sheet className="size-3 shrink-0" />
-                    <span className="min-w-0 flex-1 truncate">시트로 보내기</span>
+                    <span className="min-w-0 flex-1 truncate">{tt("시트로 보내기")}</span>
                     <span className="text-text-faint shrink-0 text-xs">
-                      {rowsFailed ? "상태 확인 실패" : "불러오는 중…"}
+                      {rowsFailed ? tt("상태 확인 실패") : tt("불러오는 중…")}
                     </span>
                   </button>
                   {rowsFailed ? (
-                    <Reason text="시트 연동 상태를 불러오지 못했습니다 — 잠시 후 다시 열어 보세요." />
+                    <Reason text={tt("시트 연동 상태를 불러오지 못했습니다 — 잠시 후 다시 열어 보세요.")} />
                   ) : null}
                 </>
               ) : null}
 
-              {sheetSection && rows?.length === 0 ? <Reason text={NO_SHEET_SUBJECT_TITLE} /> : null}
+              {sheetSection && rows?.length === 0 ? <Reason text={tt(NO_SHEET_SUBJECT_TITLE)} /> : null}
 
               {sheetSection && rows?.length
                 ? rows.map((row) => {
@@ -341,7 +338,7 @@ export function TimetableToolbarActions({
                         ) : (
                           <Sheet className="size-3 shrink-0" />
                         )}
-                        <span className="min-w-0 flex-1 truncate">{label} 시트로</span>
+                        <span className="min-w-0 flex-1 truncate">{label} {tt("시트로")}</span>
                         <span className="text-text-faint shrink-0 text-xs tabular-nums">{stampOf(row)}</span>
                       </button>
                     );
@@ -351,9 +348,9 @@ export function TimetableToolbarActions({
               {/* 비활성 사유는 **한 줄만** — 여러 줄이 쌓이면 진짜 이유가 묻힌다. 넓은 것부터(구분 → 미등록 → 진행 중). */}
               {sheetSection && rows?.length ? (
                 !exportsAllowed ? (
-                  <Reason text={KIND_EXPORT_TITLE} />
+                  <Reason text={tt(KIND_EXPORT_TITLE)} />
                 ) : rows.some((r) => !r.connected) ? (
-                  <Reason text={NO_SHEET_TARGET_TITLE} />
+                  <Reason text={tt(NO_SHEET_TARGET_TITLE)} />
                 ) : rows.some((r) => r.busy) ? (
                   <Reason text={SYNC_BUSY_TITLE} />
                 ) : null
@@ -385,9 +382,8 @@ export function TimetableToolbarActions({
                     }}
                   >
                     <Sheet className="size-3 shrink-0" />
-                    시트에서 가져오기
-                  </button>
-                  {!exportsAllowed ? <Reason text={KIND_EXPORT_TITLE} /> : null}
+                    {tt("시트에서 가져오기")}</button>
+                  {!exportsAllowed ? <Reason text={tt(KIND_EXPORT_TITLE)} /> : null}
                 </>
               ) : null}
 
@@ -400,8 +396,7 @@ export function TimetableToolbarActions({
                   onClick={() => setMenuOpen(false)}
                 >
                   <ExternalLink className="size-3 shrink-0" />
-                  시트 열기
-                </a>
+                  {tt("시트 열기")}</a>
               ) : null}
             </Popover.Popup>
           </Popover.Positioner>

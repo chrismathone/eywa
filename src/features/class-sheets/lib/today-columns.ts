@@ -18,6 +18,7 @@
  * ⚠️ 열 **구성**은 교시마다 다를 수 있다(JJ 전용 폼) — 구성은 [roster-form](./roster-form.ts)이 정하고
  *    여기는 그 폭들을 교시 폭에 맞춰 배분만 한다.
  */
+import type { SheetLang } from "@/features/teacher-view/i18n";
 import { rosterTextCols, type RosterForm } from "./roster-form";
 
 /**
@@ -68,6 +69,8 @@ export const TODAY_GUTTER = 0;
 //  잔여에서 빼지 않도록 카드 폭에서 +14를 댔다(주간 카드 특이사항 104 → 103, 하한 100 유지).
 //  ✅ 3열 = 3×420 + 24 = 1284 ≤ 1330. 🔴 여유는 46px뿐이니 더 넓히지 말 것(3열이 깨진다).
 export const TODAY_PLAN_W = 420;
+/** English headings need room for whole words; both plan and roster use this width. */
+export function sheetPlanWidth(lang: SheetLang = "ko"): number { return lang === "en" ? 480 : TODAY_PLAN_W; }
 
 /** 한 교시가 차지하는 전체 폭 = 카드 + 숨. 위아래가 **같은 값**을 쓴다. */
 export const TODAY_SLOT_W = TODAY_PLAN_W + TODAY_GUTTER;
@@ -80,10 +83,10 @@ export const TODAY_SLOT_W = TODAY_PLAN_W + TODAY_GUTTER;
  * ⚠️ 특이사항을 **가변(`<col>` 무지정)으로 두지 말 것**: 가변이면 표가 남는 폭을 거기 몰아줘 교시 폭이
  *    카드와 달라진다(2026-08-11에 실제로 밟은 버그).
  */
-export function todaySlotCols(form: RosterForm): number[] {
+export function todaySlotCols(form: RosterForm, lang: SheetLang = "ko"): number[] {
   const fixed = [...TODAY_BASE_COLS, ...rosterTextCols(form).map((c) => c.width)];
   const sum = fixed.reduce((a, b) => a + b, 0);
-  return [...fixed, TODAY_SLOT_W - sum];
+  return [...fixed, sheetPlanWidth(lang) + TODAY_GUTTER - sum];
 }
 
 /** 특이사항 열 폭(잔여) — 폼이 자유 입력 칸을 더 쓰면 그만큼 줄어든다(원장 2026-08-13 "특이사항은 좀 줄여도 돼"). */
@@ -96,13 +99,13 @@ export function todayNoteWidth(form: RosterForm): number {
 export const TODAY_CARD_PAD = 10;
 
 /** 표(그리고 레일 안쪽)의 총 폭 — 학생 열 + 교시들. */
-export function todayContentWidth(slotCount: number): number {
-  return TODAY_NAME_W + Math.max(0, slotCount) * TODAY_SLOT_W;
+export function todayContentWidth(slotCount: number, lang: SheetLang = "ko"): number {
+  return TODAY_NAME_W + Math.max(0, slotCount) * (sheetPlanWidth(lang) + TODAY_GUTTER);
 }
 
 /** k번째 교시가 시작하는 x(내용 좌표) — 위아래가 같은 식을 써야 줄이 맞는다. */
-export function todaySlotOffset(index: number): number {
-  return TODAY_NAME_W + Math.max(0, index) * TODAY_SLOT_W;
+export function todaySlotOffset(index: number, lang: SheetLang = "ko"): number {
+  return TODAY_NAME_W + Math.max(0, index) * (sheetPlanWidth(lang) + TODAY_GUTTER);
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────

@@ -1,3 +1,4 @@
+import { TimetableLabel, TimetableTeacherName } from "@/features/teacher-view/timetable-label";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { sortTeachersByOrder, teacherGroupKey, type TeacherOrderByGroup } from "@/features/timetable/lib/teacher-order";
 import { TeacherHeadCell } from "./teacher-head-cell";
@@ -534,7 +535,7 @@ function GroupTable({
                     같은 값이라 두 뷰가 갈리지 않는다(학생 줄은 class-cell의 `text-sm` 컨테이너를 물려받는다).
                     넘치면 잘린다(생략표 없음 = 고밀도 규약). 머리 높이는 `TEACHER_HEAD_H`가 따로 잡으므로
                     글자만 줄여도 요일 줄의 sticky 오프셋은 그대로다. */}
-                <span className="text-foreground block overflow-hidden text-sm leading-tight font-bold whitespace-nowrap text-clip">{t.name}</span>
+                <span className="text-foreground block overflow-hidden text-sm leading-tight font-bold whitespace-nowrap text-clip"><TimetableTeacherName name={t.name} /></span>
               </TeacherHeadCell>
             )),
           )}
@@ -555,7 +556,7 @@ function GroupTable({
                     {/* 그룹 색 띠 — 밴드를 없앤 뒤로 이 물들임이 월목|화금을 가르는 유일한 색 신호다(나머지는 진한 세로선).
                         불투명 base 위에 반투명 tint를 얹는다 — sticky 셀을 soft 토큰(12% 알파)으로만 두면 스크롤 시 본문(학생 이름)이 비친다. */}
                     <div className={`${g.tint} text-text-dim px-1 py-1 text-center text-xs leading-tight font-bold`}>
-                      {DAY_LABEL[d] ?? d}
+                      <TimetableLabel kind="day" value={d} />
                       {date ? (
                         <span className="text-text-faint block text-xs font-normal">{date}</span>
                       ) : null}

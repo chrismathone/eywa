@@ -430,7 +430,7 @@ export type StudentOption = {
 export async function getStudentOptionsForConsultation(): Promise<StudentOption[]> {
   const supabase = await createClient();
   // 강사 스코프: teacher(또는 겸직-강사뷰)면 본인 담당 학생만 상담 대상 드롭다운에.
-  const teacherStudentIds = (await effectiveTeacherScope())?.studentIds ?? null;
+  const teacherStudentIds = (await effectiveTeacherScope({ includeScheduled: true }))?.studentIds ?? null;
   if (teacherStudentIds && teacherStudentIds.length === 0) return [];
   type Row = { id: string; name: string; grade: string | null };
   // ⚠️ 담당 학생이 많은 강사는 단일 `.in()`이 URL 414로 실패하고, 오류를 `?? []`로 삼키면 드롭다운이
@@ -473,7 +473,7 @@ export type ConsultationNeededRow = {
  * 상담 1340건을 전건 안전 수집(fetchAllPaged, 1000행 절단 회피) 후 학생별 최신만 집계.
  *
  * 🔴 **강사는 담당 학생만**(2026-08-06 수리 전엔 전교생 230명 명단이 그대로 떴다 — 담당도 아닌 학생의
- *    이름·학년·마지막 상담일 노출). 담당 판정은 `effectiveTeacherScope().studentIds` 단일 소스.
+ *    이름·학년·마지막 상담일 노출). 담당 판정은 `effectiveTeacherScope({ includeScheduled: true }).studentIds` 단일 소스.
  * ⚠️ '마지막 상담'은 **작성자를 가리지 않는다** — 다른 상담사가 어제 상담한 학생을 "상담 필요"로 재촉하면
  *    거짓 할 일이 된다. 좁히는 건 *학생 집합*이지 상담 이력이 아니다.
  */
@@ -482,7 +482,7 @@ export async function getStudentsNeedingConsultation(
   limit = 20,
 ): Promise<{ rows: ConsultationNeededRow[]; total: number }> {
   const supabase = await createClient();
-  const scope = await effectiveTeacherScope();
+  const scope = await effectiveTeacherScope({ includeScheduled: true });
   // 강사인데 담당 학생이 0명이면 조회할 것도 없다(전체로 새지 않게 여기서 끊는다).
   if (scope && scope.studentIds.length === 0) return { rows: [], total: 0 };
 

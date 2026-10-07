@@ -30,7 +30,7 @@ import {
 } from "@/features/onescreen/server/notice-image-upload";
 
 async function gate() {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" as const };
   if (!(await canWriteTenant(user.systemRole, "textbook_requests")))
     return { error: "교재 요청 권한이 없습니다" as const };

@@ -293,7 +293,7 @@ export async function getStudentsList(
   scopeOptions?: { applyTeacherScope?: boolean },
 ): Promise<StudentListRow[]> {
   const supabase = await createClient();
-  const teacherScope = scopeOptions?.applyTeacherScope ? await effectiveTeacherScope() : null;
+  const teacherScope = scopeOptions?.applyTeacherScope ? await effectiveTeacherScope({ includeScheduled: true }) : null;
   if (teacherScope && teacherScope.studentIds.length === 0) return [];
   const axis = subjectAxisOf(teacherScope);
   // ⚠️ 스코프는 **받아온 뒤 JS로** 거른다 — id 수백을 `.in()`으로 URL에 실으면 414 + content-location
@@ -436,7 +436,7 @@ export async function getEnrolledStatCounts(): Promise<{
 }> {
   const supabase = await createClient();
   // 강사 스코프: Stat 카드도 본인 담당 학생 기준(페이지 목록과 일치). teacher 또는 겸직-강사뷰.
-  const teacherScope = await effectiveTeacherScope();
+  const teacherScope = await effectiveTeacherScope({ includeScheduled: true });
   if (teacherScope && teacherScope.studentIds.length === 0) return { enrolled: 0, bySubject: {}, combinations: [] };
   // 재원 수(count head)와 활성 수강 전건(요청 캐시 — 운영실 구성과 같은 행)을 병렬로. 과목별 집계는 순수 함수 한 벌 —
   // 표시 축(원장 2026-08-20: 게이지는 **담당 과목만**)도 그 안에서 건다. 운영실은 같은 순수 함수에 직접 받은 행을 넘긴다.
@@ -464,7 +464,7 @@ export async function getStudentsPage(
   const to = from + pageSize - 1;
 
   // 강사 스코프: teacher(또는 겸직-강사뷰)면 본인 담당 반 학생만(intra-tenant 누수 차단 + 사용성). fail-safe(쿼리가 자체 스코프).
-  const teacherScope = await effectiveTeacherScope();
+  const teacherScope = await effectiveTeacherScope({ includeScheduled: true });
   const teacherStudentIds = teacherScope?.studentIds ?? null;
   if (teacherStudentIds && teacherStudentIds.length === 0) return { rows: [], total: 0, hiddenNotStarted: 0 };
   // 표시 축(원장 2026-08-20) — 행(누가 보이는지)은 그대로 두고 그 위에 그리는 과목·담당 강사만 좁힌다.
@@ -744,7 +744,7 @@ export async function getTeacherOptions(): Promise<TeacherOption[]> {
 export async function getScopedTeacherOptions(): Promise<
   { id: string; displayName: string }[] | null
 > {
-  const teacherScope = await effectiveTeacherScope();
+  const teacherScope = await effectiveTeacherScope({ includeScheduled: true });
   const axis = subjectAxisOf(teacherScope);
   if (!teacherScope || !axis) return null;
   if (teacherScope.studentIds.length === 0) return [];
@@ -1360,7 +1360,7 @@ export type GradeGoalRow = {
  * 🔴 축이 채워진 목표는 이름 폴백을 절대 안 탄다(같은 이름의 다른 해 성적에 붙는다).
  */
 export async function getStudentGradeGoals(studentId: string): Promise<GradeGoalRow[]> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return [];
   const supabase = await createClient();
   const [goals, schemaReady, monthReady, noExamReady] = await Promise.all([
@@ -1760,7 +1760,7 @@ export async function getStudentTimeline(studentId: string): Promise<TimelineEve
   const tId = await effectiveTeacherId();
   // 입학(등록)상담 노출은 상담탭과 **같은 게이트 함수**로 판정한다(#77). 게이트를 여기서 직접 걸어야
   // 새 호출부(비서 툴 등)가 빼먹어도 새지 않는다 — 호출부에 맡기면 그게 곧 우회 구멍이다.
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   const canSeeEnrollment = user
     ? await canSeeStudentEnrollment(user.systemRole, studentId)
     : false;
@@ -1973,7 +1973,7 @@ export async function getStudentSummary(studentId: string): Promise<StudentSumma
   // 🔴 수납 블록은 **billing 읽기 권한이 있을 때만** 만든다([[#77]]) — 이 요약의 호출부는 전부
   //    `students` 게이트만 지난다(QuickPanel API·창 오버레이·비서 툴). 조회 자체를 안 하므로
   //    권한 없는 사람의 응답엔 미납 사실이 애초에 담기지 않는다(왕복도 하나 준다).
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   const canReadBilling = user
     ? (await accessLevelTenant(user.systemRole, "billing")) !== "none"
     : false;

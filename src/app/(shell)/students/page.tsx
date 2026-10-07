@@ -133,7 +133,7 @@ export default async function StudentsPage({
   const status = sp.status ?? "enrolled";
   // 보기 설정은 계정 귀속(users.ui_prefs.students, 원장 2026-08-04) — URL(명시값) → 저장값 → 기본값.
   // 표시 축(원장 2026-08-20) — 강사 스코프면 **담당 과목**으로 축을 좁힌다(관리자·담당 반 0개는 null=종전 동일).
-  const [scope, prefsLoaded] = await Promise.all([effectiveTeacherScope(), loadStudentListPrefs()]);
+  const [scope, prefsLoaded] = await Promise.all([effectiveTeacherScope({ includeScheduled: true }), loadStudentListPrefs()]);
   // 조회 실패(null)면 기본값으로 그리되 **이번 렌더는 저장하지 않는다** — 기본값을 저장값으로 알고 전체를 보내면 다른 축이 지워진다(리뷰 2026-09-04).
   const prefs = prefsLoaded ?? DEFAULT_STUDENT_LIST_PREFS;
   const axis = subjectAxisOf(scope);

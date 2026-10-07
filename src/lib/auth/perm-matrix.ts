@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import {
   accessLevel,
+  MENU_KEYS,
   applyUserOverrides,
   canAccess,
   canWrite,
@@ -18,7 +19,7 @@ import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { approvalMenuOverridesFor } from "@/features/approvals/access";
 import { capDisabledModules } from "@/lib/modules";
 // ⚠️ view-mode.ts가 아니라 view-as.ts에서 — view-mode는 teacher-scope·delegation을 물고 있어 순환 위험.
-import { isReadonlyTeacherView } from "@/lib/auth/view-as";
+import { isReadonlyTeacherView, viewAsTeacher } from "@/lib/auth/view-as";
 import { SETTINGS_ROLE_KEYS } from "@/lib/settings-role-catalog";
 import { isFeatureLicensed } from "@/lib/license/server";
 import { capMakeupMode, normalizeMakeupSettings } from "@/features/makeups/config";
@@ -78,7 +79,7 @@ export const getPermMatrix = cache(async (): Promise<AccessMatrix> => {
  *    (approvals/access.ts — 사람 명단은 코드에 두지 않는다, 원장 2026-10-06). 저장된 설정보다 **먼저** 넣는다.
  *    이렇게 두면 사이드바·requireAccess·서버 액션이 전부 한 게이트를 공유한다(#77).
  */
-export const getUserPermMatrix = cache(async (): Promise<AccessMatrix> => {
+export const getActorPermMatrix = cache(async (): Promise<AccessMatrix> => {
   const base = await getPermMatrix();
   try {
     const user = await getCurrentUser();
@@ -112,6 +113,24 @@ export const getUserPermMatrix = cache(async (): Promise<AccessMatrix> => {
     console.error("[perm-matrix] 개인 예외 적용 실패 — 테넌트 매트릭스로 폴백", e);
     return base;
   }
+});
+
+/** A selected teacher view has that teacher's role and personal permissions, never the viewer's broader powers. */
+export const getUserPermMatrix = cache(async (): Promise<AccessMatrix> => {
+  const actor = await getActorPermMatrix();
+  const target = await viewAsTeacher();
+  if (!target) return actor;
+  const user = await getCurrentUser();
+  if (!user) return actor;
+  const settings = await getTenantSettings();
+  const targetMatrix = await capSettingFeatures(capMakeupMode(capDisabledModules(
+    applyUserOverrides(resolveMatrix(settings.permissions.overrides), target.id, target.systemRole, settings.permissions.userOverrides),
+    settings.modules.disabled), normalizeMakeupSettings(settings.makeups).mode), target.tenantId, target.systemRole);
+  return Object.fromEntries(MENU_KEYS.map((menu) => {
+    const value = targetMatrix[menu][target.systemRole];
+    const level = target.access === "readonly" && (value === "full" || value === "scoped") ? "readonly" : value;
+    return [menu, { ...actor[menu], [user.systemRole]: level, [target.systemRole]: level, teacher: level }];
+  })) as AccessMatrix;
 });
 
 /**

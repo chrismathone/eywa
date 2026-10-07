@@ -1,5 +1,6 @@
 "use client";
 
+import { useSheetFeedback } from "@/features/teacher-view/lang-context";
 import { useId, useState, useTransition, type ReactNode } from "react";
 import {
   DndContext,
@@ -43,6 +44,7 @@ export function TodayOrderList({
   /** 🔴 false면 드래그 장치를 아예 안 만든다('다른 강사 뷰'는 열람 전용 — 원장 2026-09-05). */
   canReorder?: boolean;
 }) {
+  const feedback = useSheetFeedback();
   const t = useSheetT();
   const [ids, setIds] = useState<string[]>(() => items.map((i) => i.id));
   const [, startSave] = useTransition();
@@ -70,7 +72,7 @@ export function TodayOrderList({
       const res = await setMyEcsTodayOrder(next);
       if (!res.ok) {
         setIds(before); // 되돌린다 — 저장 안 된 순서를 남기면 새로고침에 조용히 사라진다.
-        toast.error(res.error ?? t("today.order.saveFail"));
+        toast.error(feedback(res.error ?? t("today.order.saveFail")));
       }
     });
   };

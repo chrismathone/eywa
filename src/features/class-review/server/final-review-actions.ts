@@ -19,7 +19,7 @@ import type { ReviewActionState } from "./actions";
  * ⚠️ 채점 제출과 같은 read-modify-write라 동시 저장 창이 이론상 있다(submitClassReviewScores와 같은 트레이드오프).
  */
 export async function saveFinalReview(_prev: ReviewActionState, formData: FormData): Promise<ReviewActionState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   const readonly = await readonlyTeacherViewError();
   if (readonly) return { error: readonly };

@@ -95,6 +95,20 @@ describe("menuKeyForPath — 경로→MenuKey (뷰-경로 가드용)", () => {
 });
 
 describe("applyUserOverrides — 개인 예외(직원관리 4인 좁히기의 메커니즘, 2026-08-01)", () => {
+  it("영어이름 개인 권한은 해당 강사의 이름 편집만 열고 원생목록 전체 관리를 부여하지 않는다", () => {
+    const matrix = applyUserOverrides(MENU_ACCESS, "teacher-one", "teacher", [
+      { userId: "teacher-one", menu: "student_english_name", access: "full" },
+    ]);
+    expect(matrix.student_english_name.teacher).toBe("full");
+    expect(matrix.students.teacher).toBe("scoped");
+    for (const menu of MENU_KEYS.filter((key) => key !== "student_english_name")) {
+      expect(matrix[menu]).toEqual(MENU_ACCESS[menu]);
+    }
+    const other = applyUserOverrides(MENU_ACCESS, "teacher-two", "teacher", [
+      { userId: "teacher-one", menu: "student_english_name", access: "full" },
+    ]);
+    expect(other.student_english_name.teacher).toBe("none");
+  });
   // 실제 시나리오: staff를 역할 override로 admin=none 잠근 뒤, 설현·이승엽에게만 개인 full.
   const base = resolveMatrix([
     { menu: "staff", role: "admin", access: "none" },

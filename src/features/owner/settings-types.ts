@@ -606,6 +606,9 @@ export const permissionsSchema = z
   })
   .superRefine((v, ctx) => {
     // 가드레일을 스키마에서 강제(저장 자체 거부) — resolveMatrix 적용 단계와 이중 방어.
+    if ([...v.overrides, ...v.userOverrides].some((r) => r.menu === "teacher_view" && r.access === "scoped")) {
+      ctx.addIssue({ code: "custom", message: "강사뷰 접근은 전체·읽기·없음 중에서 선택해 주세요" });
+    }
     for (const r of v.overrides) {
       if (r.menu === "teacher_onescreen" || r.menu === "my_learning") {
         ctx.addIssue({ code: "custom", message: "역할 전용 화면(원스크린/내 학습)은 편집할 수 없습니다" });

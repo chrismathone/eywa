@@ -24,14 +24,14 @@ describe("팰릿 데이터 검색 — 테넌트 안에서 강사 스코프를 �
   const src = read(QUERIES);
 
   it("🔴 원생 축은 담당 원생으로 좁힌다(RLS는 역할을 안 본다 — students 정책은 tenant_id 하나뿐)", () => {
-    expect(src).toContain("effectiveTeacherScope()");
+    expect(src).toContain("effectiveTeacherScope({ includeScheduled: true })");
     // 스코프가 있는데 담당 원생이 0명이면 **아무도 안 보여야** 한다(전체로 열리면 안 된다).
     expect(src).toMatch(/scope\.studentIds\.length === 0/);
   });
 
   it("🔴 수업 축은 수업목록과 같이 본인 담당 반만 + 보이지 않는 '보강' 반은 뺀다", () => {
     expect(src).toContain("effectiveTeacherId()");
-    expect(src).toContain('q.eq("teacher_id", tId)');
+    expect(src).toContain('q.in("id", scope.classIds)');
     expect(src).toContain("listMakeupPoolClassIds()");
     // ⚠️ 컬럼 이름을 쿼리에 끼워 넣으면 0241a 미적용 환경에서 400이 난다([[#95]]).
     expect(src).not.toContain('"is_makeup_pool"');

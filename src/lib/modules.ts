@@ -60,7 +60,7 @@ export const MODULES: Readonly<Record<ModuleId, ModuleDef>> = {
     id: "ecs",
     label: "영어 강사 시트",
     description: "영어 반의 주간 수업계획·출결 시트와 월간 계획서",
-    menuKeys: ["ecs"],
+    menuKeys: ["ecs", "student_english_name"],
   },
   mcs: {
     id: "mcs",

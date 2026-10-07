@@ -39,7 +39,7 @@ const EMPTY: UnifiedData = { scoped: false, records: [], students: [], classes: 
  * `studentId`를 주면 **그 학생만** 읽는다(학생 상세 성적 탭·개요 — 통합 성적관리와 같은 기록·같은 계산이 되게).
  */
 export async function getUnifiedGrades(from: string, to: string, opts: { studentId?: string } = {}): Promise<UnifiedData> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return EMPTY;
   const supabase = await createClient();
   const [scope, schemaReady, noExamReady, classRows] = await Promise.all([
@@ -51,8 +51,9 @@ export async function getUnifiedGrades(from: string, to: string, opts: { student
   ]);
   const teacherId = scope ? await effectiveTeacherId() : null;
   const myClassIds = new Set(teacherId ? await gradeTeacherClassIds(teacherId) : []);
-  const visibleClasses = scope ? classRows.filter((row) => myClassIds.has(row.id) && (!scope.subjects || scope.subjects.includes(row.subject))) : classRows;
+  const visibleClasses = scope ? classRows.filter((row) => myClassIds.has(row.id)) : classRows;
   const classIds = visibleClasses.map((row) => row.id);
+  const teachingSubjects = new Set(visibleClasses.map((row) => row.subject));
   if (scope && classIds.length === 0) return { ...EMPTY, scoped: true };
   const lookback = isoDaysBefore(from, 180);
   const classAnchor = kstToday();
@@ -144,7 +145,7 @@ export async function getUnifiedGrades(from: string, to: string, opts: { student
   const linkedConsultDates = linkedConsultationDates(consultations);
   const base = (studentId: string, subject: string, date: string) => {
     const student = studentById.get(studentId);
-    if (!student || (scope?.subjects && !scope.subjects.includes(subject))) return null;
+    if (!student || (scope && !teachingSubjects.has(subject))) return null;
     const latestClasses = classesFor(studentId, subject, classAnchor);
     const historicalClasses = classesFor(studentId, subject, date);
     return {

@@ -74,7 +74,7 @@ export async function removeMakeupEntry(input: {
   classId?: string | null;
   subject?: string | null;
 }): Promise<RemoveMakeupResult> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   if (!input.studentId || !YMD_RE.test(input.date)) return { ok: false, error: "잘못된 요청입니다" };
   if (!(await canWriteTenant(user.systemRole, "attendance"))) {

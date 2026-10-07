@@ -158,7 +158,7 @@ export type MonthResult = { ok: true; data: ClassSheetMonthData } | { ok: false;
  * ⚠️ admin은 RLS 우회라 `tenant_id`를 함께 건다([[#104]]).
  */
 async function loadMyUiPrefs(): Promise<unknown> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return null;
   const { data } = await createAdminClient()
     .from("users")

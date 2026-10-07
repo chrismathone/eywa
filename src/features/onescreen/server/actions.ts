@@ -168,7 +168,7 @@ export async function saveLessonReport(
   /** 영상 과제 값을 작성 선생님 것으로 두었다([`report-owner.ts`]) — 화면이 이 값으로 되돌린다(나머지는 저장됨). */
   keptVideoHomework?: boolean | null;
 }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   // '다른 강사 뷰'(열람 전용) 차단 — 아래 담당 판정은 user.id(본인) 축이라 대부분 자연 거절되지만,
   // outOfClass(보강·수업외)는 학원 학생 전체가 허용이라 이 가드 없이는 열람 중 저장이 뚫린다.
@@ -606,7 +606,7 @@ export async function saveAndQueueClassnote(
   /** status="board_hold"·"board_hold_recheck"일 때 — 반 보드 배정이 보류된 사유 문장(강사뷰 사전의 `{reason}`). */
   boardHoldReason?: string;
 }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   // '다른 강사 뷰'(열람 전용) 차단 — 발송(외부 발신)은 특히 이중으로 막는다(saveLessonReport 내부 가드와 별개).
   const roError = await readonlyTeacherViewError();
@@ -1005,7 +1005,7 @@ export async function saveAndQueueClassnote(
  * 링크·토큰은 유지하되 revoked_at을 세워 /r이 취소화면을 렌더. 대상은 share_token으로 식별(전역 유니크).
  */
 export async function revokeShareLink(shareToken: string): Promise<{ ok: boolean; error?: string }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   // '다른 강사 뷰'(열람 전용) 차단 — 발송 흔적(공유 링크)을 열람 중에 만지지 못하게.
   const roError = await readonlyTeacherViewError();
@@ -1048,7 +1048,7 @@ export async function revokeShareLink(shareToken: string): Promise<{ ok: boolean
 export async function reissueShareLink(
   shareToken: string,
 ): Promise<{ ok: boolean; shareToken?: string; error?: string }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   // '다른 강사 뷰'(열람 전용) 차단 — revokeShareLink와 동일.
   const roError = await readonlyTeacherViewError();
@@ -1181,7 +1181,7 @@ export type SaveOnescreenSessionInput = {
 export async function saveOnescreenSession(
   input: SaveOnescreenSessionInput,
 ): Promise<{ ok: boolean; error?: string; skipped?: boolean; updatedAt?: string }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   // '다른 강사 뷰'(열람 전용) 차단 — 임시저장도 저장이다(대상 강사의 세션 행과 섞이면 안 된다).
   const roError = await readonlyTeacherViewError();
@@ -1313,7 +1313,7 @@ export async function generateReportComment(
   // 말투 프로파일(0262a)을 붙이면 안 된다. 스코프 판정(effectiveTeacherId)만으론 겸직 관리자가 강사뷰 쿠키를 켠 채 그 화면을 열면 새므로(재리뷰).
   opts?: { teacherStyle?: boolean },
 ): Promise<{ ok: boolean; comment?: string; trend?: string; error?: string }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   // '다른 강사 뷰'(열람 전용) 차단 — DB 미변경이지만 AI 호출(비용)이라 열람에서 못 누르게 한다.
   const roError = await readonlyTeacherViewError();
@@ -1467,7 +1467,7 @@ ${style}` : body) });
 export async function setMyNoticeMode(
   mode: "A" | "B" | null,
 ): Promise<{ ok: boolean; error?: string }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   // '다른 강사 뷰'(열람 전용) 차단 — 화면은 대상 강사의 값을 보여주는데 저장은 본인 행이라, 허용하면
   // "저장했는데 안 바뀜"으로 보인다. 열람에선 아예 막는 게 정직하다.
@@ -1495,7 +1495,7 @@ export async function setMyNoticeMode(
 export async function setMyOnescreenFontSize(
   size: OnescreenFontSize,
 ): Promise<{ ok: boolean; error?: string }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   // '다른 강사 뷰'(열람 전용) 차단 — setMyNoticeMode와 같은 이유(화면=대상 값·저장=본인 행 불일치 방지).
   const roError = await readonlyTeacherViewError();
@@ -1550,7 +1550,7 @@ export async function setMyTrendOptOut(input: {
   studentId: string;
   on: boolean;
 }): Promise<{ ok: boolean; error?: string; cleared?: number }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   const roError = await readonlyTeacherViewError();
   if (roError) return { ok: false, error: roError };
@@ -1614,7 +1614,7 @@ export async function setMyTrendOptOut(input: {
 export async function searchTenantStudents(
   query: string,
 ): Promise<{ id: string; name: string; label: string }[]> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return [];
   const q = query.trim();
   if (q.length < 1) return [];
@@ -1642,7 +1642,7 @@ export async function buildMakeupStudent(
   studentId: string,
   reportDate?: string, // 조회 중인 날짜(과거 백필 지원) — 발송상태 복원 쿼리가 이 날짜 기준이어야 중복게시 방지
 ): Promise<{ ok: boolean; student?: OneScreenStudent; error?: string }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   if (!studentId) return { ok: false, error: "학생 정보가 없습니다" };
   const supabase = await createClient();
@@ -1757,7 +1757,7 @@ export async function loadMakeupHistory(
   prevScore?: { daily: number | null; check: number | null };
   error?: string;
 }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   if (!studentId) return { ok: false, error: "학생 정보가 없습니다" };
   const supabase = await createClient();
@@ -1831,7 +1831,7 @@ export async function loadReportTrend(
   classId: string | null,
   reportDate?: string,
 ): Promise<{ ok: boolean; rows?: TrendReportRow[]; error?: string }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   if (!studentId) return { ok: false, error: "학생 정보가 없습니다" };
   const supabase = await createClient();

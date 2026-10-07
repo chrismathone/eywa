@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { roleHome } from "@/lib/permissions";
-import { getUserPermMatrix } from "@/lib/auth/perm-matrix";
+import { getActorPermMatrix } from "@/lib/auth/perm-matrix";
 import { canUseTeacherView, isFullShellRole, VIEW_MODE_COOKIE } from "@/lib/auth/view-mode";
 import { canUseOtherTeacherView, loadViewAsTarget, VIEW_AS_COOKIE } from "@/lib/auth/view-as";
 import { teacherHomeForSubjects } from "@/lib/auth/teacher-home";
@@ -84,20 +84,20 @@ export async function switchToAdminView(): Promise<string> {
   // 🔴 매트릭스를 **반드시** 넘긴다(2026-10-01, gotchas #137) — 빼면 코드 기본값으로 판정해 대시보드를 원장이 꺼 둔
   //    역할(뷰어·회계 등)도 늘 `/dashboard`를 받고, 그 문서 이동이 곧장 튕기면서 Next 기본 오류 화면의 입구가 됐다.
   //    `landingPath`는 쓰지 않는다: 강사뷰 쿠키를 **이 응답에서** 지웠지만 요청 쿠키엔 남아 있어 강사 홈을 돌려준다.
-  return roleHome(user.systemRole, await getUserPermMatrix());
+  return roleHome(user.systemRole, await getActorPermMatrix());
 }
 
 /**
- * '다른 강사 뷰'(열람 전용) 진입 — 대상 강사를 검증하고 두 쿠키(view=teacher + view-as=대상)를 세팅한 뒤
+ * '다른 강사 뷰' 진입 — 대상 강사를 검증하고 두 쿠키(view=teacher + view-as=대상)를 세팅한 뒤
  * **그 강사의 강사 홈 경로를 반환**한다(네비게이션은 호출부가 window.location — 위 두 액션과 동일 규약).
  *
- * 자격 = master·super_admin·직원관리 '강사뷰 접근' 토글(canUseOtherTeacherView, 원장 2026-08-19).
- * 권한 불변·열람 전용(쓰기는 perm-matrix 캡 + readonlyTeacherViewError가 차단) — 상세는 view-as.ts.
+ * 역할·개인별 '강사뷰 접근' 권한을 확인한다(canUseOtherTeacherView).
+ * 전체는 대상 강사의 권한, 읽기는 쓰기 차단 — 상세는 view-as.ts.
  * 열람 시작은 감사로그(teacher_view_impersonate)에 남긴다(누가 누구 뷰를 봤는지 역검수).
  */
 export async function switchToOtherTeacherView(targetId: string): Promise<string | null> {
   const user = await getCurrentUser();
-  if (!user || !isFullShellRole(user.systemRole)) return null;
+  if (!user || user.systemRole === "student") return null;
   if (!(await canUseOtherTeacherView())) return null;
   if (targetId === user.id) return switchToTeacherView(); // 자기 자신 = 본인 강사뷰(쓰기 가능한 그 뷰)
 

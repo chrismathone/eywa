@@ -8,7 +8,6 @@ import { gradeTeacherClassIds } from "@/features/grades/server/teacher-classes";
 export async function canEditStudent(studentId: string, subject: string, tenantId: string, classId?: string | null): Promise<boolean> {
   const scope = await effectiveTeacherScope();
   if (!scope) return true;
-  if (scope.subjects && !scope.subjects.includes(subject)) return false;
   const teacherId = await effectiveTeacherId();
   if (!teacherId) return false;
   const ids = await gradeTeacherClassIds(teacherId);

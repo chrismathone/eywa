@@ -106,6 +106,7 @@ describe("사전 — 값이 비거나 키가 새지 않는다", () => {
         "strip",
         // 학생목록(/students) — 머리·툴바 필터·표.
         "stu",
+        "studentEnglishName",
         // makeedu 동기화 배지(목록 화면 상단, 공용) — 사실 문장(issue)은 번역하지 않는다.
         "sync",
         "today",
@@ -168,8 +169,8 @@ describe("언어 판정 — 이름이 기본값을 정하고, 고른 값이 언�
   });
 
   it("언어 이름은 번역하지 않는다(자기 언어를 자기 글자로 찾을 수 있어야 한다)", () => {
-    expect(SHEET_LANG_LABEL.ko).toBe("한국어");
-    expect(SHEET_LANG_LABEL.en).toBe("English");
+    expect(SHEET_LANG_LABEL.ko).toEqual({ ko: "한글", en: "영어" });
+    expect(SHEET_LANG_LABEL.en).toEqual({ ko: "Kor", en: "En" });
   });
 });
 

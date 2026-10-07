@@ -46,7 +46,7 @@ export async function getMyPastReports(input?: {
   /** 이 날짜(YYYY-MM-DD) **하루만** — 월간 달력에서 날짜를 눌렀을 때. `before`보다 우선. */
   on?: string;
 }): Promise<{ ok: boolean; rows?: PastReportRow[]; hasMore?: boolean; error?: string }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   // '다른 강사 뷰'(열람 전용)면 그 강사의 이력을 보여준다 — 로스터와 같은 축(안 맞추면 열람자 본인의
   // 빈 이력이 나와 "이 강사는 발송을 안 했다"로 오독된다). 이름이 비면 정직하게 거절(빈 이름 행 매칭 방지).

@@ -17,7 +17,7 @@ export async function getConsultationClassOptions(input: {
   counselorId: string | null;
   subject: string | null;
 }): Promise<ClassOptionsResult | { error: string }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   const level = await accessLevelTenant(user.systemRole, "consultations");
   if (level === "none") return { error: "원생상담 권한이 없습니다" };

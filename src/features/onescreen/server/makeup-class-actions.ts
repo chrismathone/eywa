@@ -37,7 +37,7 @@ export async function setMakeupClass(input: {
   subject: string;
   classId: string;
 }): Promise<SetMakeupClassResult> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   const ro = await readonlyTeacherViewError();
   if (ro) return { ok: false, error: ro };

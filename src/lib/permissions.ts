@@ -45,6 +45,7 @@ export const MENU_KEYS = [
   "seat_attendance",
   "classes",
   "students",
+  "student_english_name",
   "exams",
   "enrollment",
   "consultations",
@@ -56,6 +57,7 @@ export const MENU_KEYS = [
   "lesson_reports",
   ...NEW_SETTINGS_ROLE_KEYS,
   "staff",
+  "teacher_view",
   "billing",
   "textbook_requests",
   "expense_requests",
@@ -91,6 +93,7 @@ export const MENU_LABEL: Record<MenuKey, string> = {
   seat_attendance: "랩실·JJ실 출석부",
   classes: "수업목록",
   students: "원생목록",
+  student_english_name: "원생목록 - 영어이름",
   exams: "성적관리",
   enrollment: "콜&상담",
   consultations: "원생상담",
@@ -113,6 +116,7 @@ export const MENU_LABEL: Record<MenuKey, string> = {
   attendance_salary_settings: "출석부 급여 비율 설정",
   payroll_settings: "급여 정책 설정",
   staff: "직원관리",
+  teacher_view: "강사뷰 접근",
   billing: "수납관리",
   textbook_requests: "교재 요청",
   expense_requests: "지출결의서",
@@ -181,6 +185,9 @@ export const MENU_ACCESS: AccessMatrix = {
   seat_attendance: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
   classes: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "none", accountant: "none", viewer: "readonly", student: "none" },
   students: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "full", accountant: "readonly", viewer: "readonly", student: "none" },
+  // 영어 시트의 이름 한 칸만 수정. 원생목록 전체 권한과 별도로 부여한다.
+  student_english_name: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
+  teacher_view: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
   // 성적관리 — 시험 등록 + 반 일괄 성적입력. 강사는 담당 반 채점(scoped), 회계는 무관, 학생 미표시.
   exams: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "full", accountant: "none", viewer: "readonly", student: "none" },
   enrollment: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "full", accountant: "none", viewer: "none", student: "none" },
@@ -432,6 +439,7 @@ export function isRoleOnlyMenu(menu: MenuKey): boolean {
   return ROLE_LOCKED_MENUS.has(menu);
 }
 export function isPermissionLocked(menu: MenuKey, role: SystemRole, access: Access): boolean {
+  if (menu === "teacher_view" && access === "scoped") return true;
   if (ROLE_LOCKED_MENUS.has(menu)) return true;
   // 대시보드 집계는 테넌트 전체 데이터다. 강사 scoped 쿼리가 마련되기 전까지는
   // 강사에게 메뉴를 열면 담당 범위를 넘어 학생·출결 데이터가 노출되므로 override를 막는다.

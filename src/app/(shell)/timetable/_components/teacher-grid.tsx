@@ -1,3 +1,4 @@
+import { TimetableLabel, TimetableTeacherName } from "@/features/teacher-view/timetable-label";
 import type { ReactElement } from "react";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { TeacherHeadCell } from "./teacher-head-cell";
@@ -16,7 +17,6 @@ import {
 } from "@/features/timetable/lib/ten-minute-grid";
 import type { TeacherColorMap } from "@/features/timetable/lib/class-grid";
 import type { TeacherNicknameMap } from "@/features/timetable/lib/teacher-label";
-import { DAY_LABEL } from "@/features/timetable/lib/split-attendance";
 import {
   ENGLISH_SHEET_TEACHERS,
   buildTeacherComparator,
@@ -353,10 +353,8 @@ export function TeacherGridView({
                 {/* 한국인 강사는 `한글이름(영어이름)`(원장 2026-08-13) — 영어과는 서로를 닉네임으로 부른다.
                     원어민은 이름이 곧 영어라 그대로. 닉네임은 한 단계 작게 — 이름이 먼저 읽혀야 한다. */}
                 <span className={`block overflow-hidden text-sm leading-tight font-bold whitespace-nowrap text-clip ${t.color ? "" : "text-foreground bg-bg-soft"}`}>
-                  {t.name}
-                  {teacherNicknames?.[t.name] ? (
-                    <span className="text-xs font-bold opacity-85">({teacherNicknames[t.name]})</span>
-                  ) : null}
+                  <TimetableTeacherName name={t.name} nickname={teacherNicknames?.[t.name]} />
+
                 </span>
               </TeacherHeadCell>
             ))}
@@ -373,7 +371,7 @@ export function TeacherGridView({
                   }`}
                   style={{ top: HEAD_TEACHER_H, height: HEAD_DAY_H }}
                 >
-                  {DAY_LABEL[col.day] ?? col.day}
+                  <TimetableLabel kind="day" value={col.day} />
                   {dayDates[col.day] ? (
                     <span className="text-ink block text-xs font-bold">{dayDates[col.day]}</span>
                   ) : null}

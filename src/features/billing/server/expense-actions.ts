@@ -161,7 +161,7 @@ function validate(f: ReturnType<typeof parse>): ExpenseState {
 }
 
 export async function createExpense(_prev: ExpenseState, formData: FormData): Promise<ExpenseState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await expenseWriteScope(user.systemRole))) return { error: "지출결의서 작성 권한이 없습니다" };
   const f = parse(formData);
@@ -219,7 +219,7 @@ export async function createExpense(_prev: ExpenseState, formData: FormData): Pr
 }
 
 export async function updateExpense(_prev: ExpenseState, formData: FormData): Promise<ExpenseState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   const scope = await expenseWriteScope(user.systemRole);
   if (!scope) return { error: "지출 관리 권한이 없습니다" };
@@ -287,7 +287,7 @@ export async function updateExpense(_prev: ExpenseState, formData: FormData): Pr
 }
 
 export async function deleteExpense(_prev: ExpenseState, formData: FormData): Promise<ExpenseState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   const scope = await expenseWriteScope(user.systemRole);
   if (!scope) return { error: "지출 관리 권한이 없습니다" };
@@ -347,7 +347,7 @@ export async function toggleExpenseApproval(
   _prev: ExpenseState,
   formData: FormData,
 ): Promise<ExpenseState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "지출 관리 권한이 없습니다" };
   const id = String(formData.get("id") ?? "").trim();
@@ -399,7 +399,7 @@ export async function toggleExpenseApproval(
 // 복제(duplicate) — 기존 결의서를 새 결의서로. 날짜=오늘, 작성자=현재 사용자, 결재 체크는 작성만(원장/대표/집행자
 // 초기화), 제목·항목·메모·정산정보는 그대로. ijw "매월 반복 결의서 빠른 입력" 패리티.
 export async function duplicateExpense(_prev: ExpenseState, formData: FormData): Promise<ExpenseState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   const scope = await expenseWriteScope(user.systemRole);
   if (!scope) return { error: "지출 관리 권한이 없습니다" };
@@ -473,7 +473,7 @@ export async function setExpenseReceiptType(
   _prev: ExpenseState,
   formData: FormData,
 ): Promise<ExpenseState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   const scope = await expenseWriteScope(user.systemRole);
   if (!scope) return { error: "지출 관리 권한이 없습니다" };
@@ -509,7 +509,7 @@ export async function issueReceiptUploadTicket(
   _prev: IssueReceiptTicketState,
   formData: FormData,
 ): Promise<IssueReceiptTicketState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   const scope = await expenseWriteScope(user.systemRole);
   if (!scope) return { error: "지출 관리 권한이 없습니다" };
@@ -548,7 +548,7 @@ export async function addExpenseReceipt(
   _prev: ExpenseState,
   formData: FormData,
 ): Promise<ExpenseState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   const scope = await expenseWriteScope(user.systemRole);
   if (!scope) return { error: "지출 관리 권한이 없습니다" };
@@ -605,7 +605,7 @@ export async function removeExpenseReceipt(
   _prev: ExpenseState,
   formData: FormData,
 ): Promise<ExpenseState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   const scope = await expenseWriteScope(user.systemRole);
   if (!scope) return { error: "지출 관리 권한이 없습니다" };
@@ -659,7 +659,7 @@ export async function signExpenseReceipts(
   _prev: SignReceiptsState,
   formData: FormData,
 ): Promise<SignReceiptsState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   const expenseId = String(formData.get("id") ?? "").trim();
   if (!expenseId) return { error: "지출 ID가 누락되었습니다" };
@@ -690,7 +690,7 @@ export async function signExpenseReceipt(
   _prev: SignReceiptState,
   formData: FormData,
 ): Promise<SignReceiptState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   const path = String(formData.get("path") ?? "").trim();
   if (!isTenantReceiptPath(path, user.tenantId)) return { error: "파일 경로가 잘못되었습니다" };

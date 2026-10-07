@@ -15,6 +15,7 @@
  * ⚠️ 줄 추가·삭제·시기 이동은 여기 없다 — 오늘 칸은 **이미 있는 줄을 채우는 자리**다. 구조 변경은
  *    주간 시트에서(같은 화면에 두 개의 구조 편집 경로를 두면 line_no 정합을 두 곳에서 지켜야 한다).
  */
+import { useSheetFeedback } from "@/features/teacher-view/lang-context";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { skillAreaColorOf, skillAreaLabelOf } from "@/features/owner/skill-areas";
@@ -236,6 +237,7 @@ export function TodayPlanEditor({
   /** 오늘 이미 체크된 교시 시각 — 서버 스냅샷(주간 시트와 같은 표). */
   initialShouting?: readonly string[];
 }) {
+  const feedback = useSheetFeedback();
   const t = useSheetT();
   const tf = useSheetTf();
   const lang = useSheetLang();
@@ -250,7 +252,7 @@ export function TodayPlanEditor({
     void setSlotShouting({ classId, date, slotStart, value: next }).then((r) => {
       if (!r.ok) {
         setShouting((prev) => ({ ...prev, [slotStart]: !next }));
-        toast.error(r.error);
+        toast.error(feedback(r.error));
       }
     });
   };
@@ -264,12 +266,12 @@ export function TodayPlanEditor({
   const audit = useSheetEditAudit({ enabled: canEdit, flush: () => store.flush() });
   useEffect(() => {
     store.setCallbacks({
-      onError: (m) => toast.error(m),
+      onError: (m) => toast.error(feedback(m)),
       onGone: () => toast.info(t("plan.editor.gone")),
       // 칸 입력마다 편집 전 값 — 감사로그가 칸마다 첫 값만 잡는다.
       onEdit: (lineId, field, before) => audit.touch(classId, { kind: "plan", lineId, field }, before),
     });
-  }, [store, audit, classId, t]);
+  }, [store, audit, classId, t, feedback]);
   // canonical 시드 — 서버가 준 값이 CAS의 expected가 된다(이게 없으면 첫 저장이 무조건 충돌).
   useEffect(() => {
     for (const slot of slots) {

@@ -1,5 +1,6 @@
 "use client";
 
+import { useSheetFeedback } from "@/features/teacher-view/lang-context";
 import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import { toast } from "sonner";
 import { setAttendanceCell } from "@/features/attendance/server/actions";
@@ -28,6 +29,7 @@ export function useSeatDaySaves(
 ): (
   classId: string,
 ) => Pick<SheetHandlers, "setAttendance" | "clearAttendance" | "setAttendanceNote" | "saveMark"> {
+  const feedback = useSheetFeedback();
   const attRef = useRef(attendance);
   const marksRef = useRef(marks);
   useEffect(() => {
@@ -120,7 +122,7 @@ export function useSeatDaySaves(
               else next[key] = before;
               return next;
             });
-            toast.error(r.error);
+            toast.error(feedback(r.error));
           } else if ("autoUnits" in r) {
             setAttendance((prev) => prev[key] === optimistic ? { ...prev, [key]: { ...optimistic, units: r.autoUnits ?? null } } : prev);
           }
@@ -140,7 +142,7 @@ export function useSeatDaySaves(
         }).then((r) => {
           if (!r.ok) {
             setAttendance((prev) => ({ ...prev, [key]: before }));
-            toast.error(r.error);
+            toast.error(feedback(r.error));
           }
         });
       },
@@ -163,7 +165,7 @@ export function useSeatDaySaves(
         }).then((r) => {
           if ("error" in r) {
             setAttendance((prev) => ({ ...prev, [key]: before }));
-            toast.error(r.error);
+            toast.error(feedback(r.error));
           }
         });
       },
@@ -202,11 +204,11 @@ export function useSeatDaySaves(
               else delete next[key];
               return next;
             });
-            toast.error(r.error);
+            toast.error(feedback(r.error));
           }
         });
       },
     }),
-    [audit, scheduleLww, setAttendance, setMarks],
+    [audit, feedback, scheduleLww, setAttendance, setMarks],
   );
 }

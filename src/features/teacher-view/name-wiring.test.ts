@@ -291,7 +291,7 @@ describe("🔴 오늘 면(카드·요약·학생 줄)도 사전을 탄다", () =
     expect(src).toContain("studentNameParts");
     expect(src).toContain("today.report.sent");
     // 🔴 표시 이름과 접근성 이름이 **같은 값**을 봐야 한다(하나만 한국어면 음성으로 못 부른다).
-    expect(codeOnly(src)).not.toContain("studentName={student.name}");
+    expect(codeOnly(src).match(/studentName=\{names.primary\}/g)?.length).toBeGreaterThanOrEqual(2);
   });
 
   it("🔴 오늘 면 학생에 영어 이름이 실려 온다(서버) — 없으면 화면이 영원히 한국어다", () => {

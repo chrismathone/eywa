@@ -30,7 +30,7 @@ export async function getMonthPlanChrome(input: {
   /** 반 담임(없으면 강사 표기를 비운다 — 추측해 채우지 않는다). */
   teacherId: string | null;
 }): Promise<MonthPlanChrome> {
-  const user = await getCurrentUser(); // 게이트를 이미 통과했으므로 있다(없으면 아래에서 안전하게 빠진다).
+  const user = await getCurrentUser({ teacherView: true }); // 게이트를 이미 통과했으므로 있다(없으면 아래에서 안전하게 빠진다).
   const [settings, period, teacherRow] = await Promise.all([
     getTenantSettings(),
     getPeriodWindow({ period: input.month, subjectKey: "english", classId: input.classId }),

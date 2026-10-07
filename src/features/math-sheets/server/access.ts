@@ -1,7 +1,8 @@
 import "server-only";
-import { getCurrentUser, type CurrentUser } from "@/lib/auth/current-user";
+import type { CurrentUser } from "@/lib/auth/current-user";
+import { getCurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
-import { effectiveTeacherId, effectiveTeacherScope } from "@/lib/auth/view-mode";
+import { effectiveTeacherId, effectiveTeacherScope, viewAsTeacher } from "@/lib/auth/view-mode";
 import { getDelegatedClassIdsInRange } from "@/features/classes/server/delegation";
 import { addDays, kstToday } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
@@ -14,10 +15,7 @@ import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
  *
  * ECS 게이트(`requireEcsClassAccess`)와 **일부러 같은 모양**이되 두 가지가 다르다:
  *  · 과목 판정이 `math`다(그리고 `skillAreas`를 요구하지 않는다 — 수학엔 영역 축이 없다).
- *  · **부담임(슬롯 강사) 갈래가 없다.** 실측 2026-08: 수학 유효 슬롯 230개 전부
- *    `class_schedules.teacher_id`가 null이라 그 갈래는 아무도 통과시키지 못한다. 없는 문을 그려 두면
- *    "여기로도 열린다"는 잘못된 인상을 남기므로 아예 두지 않는다.
- *    ⚠️ 나중에 수학 슬롯에 담당이 배선되면 그때 ECS와 같은 방식으로 갈래를 더할 것.
+ *  · 교시 담당 반은 조회할 수 있다. 목표 쓰기는 기존 담임·위임 범위를 유지한다.
  *
  * 검증 순서:
  *  ① 로그인 + 메뉴 접근 수준(`accessLevelTenant("mcs")` — none 차단, write 요구 시 readonly도 차단)
@@ -67,6 +65,8 @@ async function delegatedClassIds(): Promise<string[]> {
  */
 export async function canResetMathLearningGoals(user: CurrentUser | null): Promise<boolean> {
   if (!user) return false;
+  const target = await viewAsTeacher();
+  if (target) return target.access === "full" && target.systemRole === "master";
   return user.systemRole === "master" || (await isCurrentUserSuperAdmin());
 }
 
@@ -74,19 +74,23 @@ export async function requireMcsClassAccess(
   classId: string,
   opts: { write?: boolean } = {},
 ): Promise<McsAccessResult> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
 
   const level = await accessLevelTenant(user.systemRole, "mcs");
   if (level === "none") return { ok: false, error: "접근 권한이 없습니다" };
-  const canWrite = level === "full" || level === "scoped";
+  let canWrite = level === "full" || level === "scoped";
   if (opts.write && !canWrite) return { ok: false, error: "편집 권한이 없습니다" };
 
   // ⚠️ 이 갈래는 목록(`mcsVisibleClassFilter`)과 **같아야** 한다 — 갈라지면 목록엔 뜨는데 열면 거절된다.
   const scope = await effectiveTeacherScope();
   if (scope && !scope.classIds.includes(classId)) {
     const delegated = await delegatedClassIds();
-    if (!delegated.includes(classId)) return { ok: false, error: "담당 반이 아닙니다" };
+    if (!delegated.includes(classId)) {
+      const readScope = await effectiveTeacherScope({ includeScheduled: true });
+      if (opts.write || !readScope?.classIds.includes(classId)) return { ok: false, error: "담당 반이 아닙니다" };
+      canWrite = false;
+    }
   }
 
   const supabase = await createClient();
@@ -118,7 +122,7 @@ export async function requireMcsClassAccess(
  * 강사 스코프가 없으면(사무실 계정) `null`을 돌려 "전부"를 뜻한다.
  */
 export async function mcsVisibleClassFilter(): Promise<((classId: string) => boolean) | null> {
-  const scope = await effectiveTeacherScope();
+  const scope = await effectiveTeacherScope({ includeScheduled: true });
   if (!scope) return null;
   const delegated = await delegatedClassIds();
   const allow = new Set([...scope.classIds, ...delegated]);

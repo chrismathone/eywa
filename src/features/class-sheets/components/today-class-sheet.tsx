@@ -13,6 +13,7 @@
  * 새 기계가 아니다 — 계획은 주간 시트의 PeriodBlock, 로스터는 공용 셀(roster-slot-cells)이라 저장
  * 경로(CAS·setAttendanceCell·마크 LWW)와 게이트가 주간 시트와 한 벌이다.
  */
+import { useSheetLang } from "@/features/teacher-view/lang-context";
 import type { ReactNode } from "react";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import type { ClassSheetWeekData } from "../server/queries";
@@ -27,7 +28,7 @@ import { DayBulk } from "./day-bulk";
 import { TodayRosterTable } from "./today-roster-table";
 import { EcsMakeupAdder } from "./ecs-makeup-adder";
 // 가로 치수는 아래 통합 로스터와 **공유**한다 — 한쪽만 고치면 줄이 조용히 어긋난다(today-columns).
-import { TODAY_GUTTER, TODAY_NAME_W, TODAY_SLOT_W, todayContentWidth } from "../lib/today-columns";
+import { TODAY_GUTTER, TODAY_NAME_W, sheetPlanWidth, todayContentWidth } from "../lib/today-columns";
 
 export function TodayClassSheet({
   day,
@@ -66,6 +67,7 @@ export function TodayClassSheet({
   /** `${date}|${HH:MM}` → Shouting 체크(EiE 전용) — 주간 시트와 같은 live 맵. */
   shouting: Record<string, boolean>;
 }) {
+  const lang = useSheetLang();
   const hasRoster = day.slots.some((s) => s.roster.length > 0);
   return (
     // 🔴 **가로 스크롤은 하나**다(원장 2026-08-11 "줄맞춤"). 두 층이 각자 스크롤을 가지면 옆으로 미는
@@ -81,7 +83,7 @@ export function TodayClassSheet({
             제목은 `truncate`로 접히고 격자는 그대로다(폭 단일 소스 = today-columns). */}
         <div
           className="flex items-center gap-2 pb-1.5"
-          style={{ width: todayContentWidth(day.slots.length) }}
+          style={{ width: todayContentWidth(day.slots.length, lang) }}
         >
           {/* 반 이름 자리 — 아래 표 첫 열(TODAY_NAME_W) 위에서 시작해 일괄 버튼 앞까지 쓴다.
               ⚠️ 폭을 고정하지 않는다(min-w-0 + flex-1) — 고정하면 이름이 늘 잘리고, 여기서 늘리면
@@ -147,7 +149,7 @@ export function TodayClassSheet({
             <div
               key={slot.slotStart}
               className="border-line-strong shrink-0 border-l px-1.5"
-              style={{ width: TODAY_SLOT_W, paddingRight: TODAY_GUTTER || undefined }}
+              style={{ width: sheetPlanWidth(lang) + TODAY_GUTTER, paddingRight: TODAY_GUTTER || undefined }}
             >
               <PeriodBlock
                 date={day.date}

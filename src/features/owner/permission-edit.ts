@@ -11,6 +11,8 @@ import {
 } from "@/lib/permissions";
 
 export const PERMISSION_ACCESS_CYCLE: readonly Access[] = ["full", "scoped", "readonly", "none"];
+export const permissionAccessOptions = (menu: MenuKey): readonly Access[] =>
+  menu === "teacher_view" ? ["full", "readonly", "none"] : PERMISSION_ACCESS_CYCLE;
 /** Skip forbidden values without changing the persisted permission policy. */
 export function nextPermissionAccess(menu: MenuKey, role: SystemRole, current: Access): Access {
   for (let step = 1; step <= PERMISSION_ACCESS_CYCLE.length; step++) {

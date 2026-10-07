@@ -131,7 +131,7 @@ export default async function OneScreenPage({
       {roster.makeupNotice ? <p role="status" className="border-line mb-3 rounded-lg border p-3 text-sm">{roster.makeupNotice}</p> : null}
       {/* '다른 강사 뷰' 열람 배너 — 이 화면의 입력·발송은 서버가 전부 거절한다(perm-matrix 캡 +
           readonlyTeacherViewError). 배너가 없으면 타이핑해 놓고 저장이 안 되는 이유를 알 수 없다. */}
-      {viewAs ? (
+      {viewAs?.access === "readonly" ? (
         <div className="bg-purple-soft text-purple mb-3 rounded-lg px-3 py-2 text-sm font-medium">
           {viewAs.displayName || "이름 없음"} 강사의 화면을 열람 중입니다 — 이 화면에서는 저장·발송이 되지 않습니다.
         </div>
@@ -166,7 +166,7 @@ export default async function OneScreenPage({
       showAttachments={roster.showAttachments}
       canEditAttendance={roster.canEditAttendance}
       // '다른 강사 뷰'(열람 전용) — 카드·표의 입력·발송·저장 UI를 실제로 잠근다(서버 가드의 거울).
-      readonlyView={!!viewAs}
+      readonlyView={viewAs?.access === "readonly"}
       // 글씨 크기(작음/보통/큼) — 계정 저장값. 서버가 확정해 내리므로 첫 렌더부터 정확하다(하이드레이션 안전).
       initialFontSize={roster.fontSize}
       initialDisplayOptions={roster.displayOptions}

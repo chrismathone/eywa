@@ -37,7 +37,7 @@ async function sameDayRegular(studentId: string, classId: string, date: string):
   { hasRegular: boolean; teacherId: string | null } | "unknown" | "conflict"
 > {
   try {
-    const user = await getCurrentUser();
+    const user = await getCurrentUser({ teacherView: true });
     const tenantId = user?.tenantId?.trim() ?? "";
     if (!tenantId) return "unknown";
     const found = await loadRegularAttendanceTeacher(await createClient(), tenantId, studentId, classId, date);

@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useMemo, type ReactNode } from "react";
+import { sheetFeedback } from "./feedback";
 import {
   DEFAULT_SHEET_LANG,
   sheetT,
@@ -30,6 +31,12 @@ export function SheetLangProvider({ lang, children }: { lang: SheetLang; childre
 /** 지금 화면의 언어. provider 밖(MCS 등)에서는 한국어. */
 export function useSheetLang(): SheetLang {
   return useContext(SheetLangContext);
+}
+
+/** Server feedback follows the teacher's language; the default Korean screen keeps the original. */
+export function useSheetFeedback(): (message: string) => string {
+  const lang = useSheetLang();
+  return useMemo(() => (message: string) => sheetFeedback(lang, message), [lang]);
 }
 
 /**

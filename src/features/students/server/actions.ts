@@ -2,6 +2,8 @@
 
 import { seatBlockReason } from "@/lib/license/server";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
+import { recordMathWithdrawalToSheet } from "@/features/withdrawals/server/withdrawal-sheet";
 import { goalExamLabel, parseGoalAxis } from "@/features/grades/goals";
 import { goalAxisReady } from "@/features/grades/server/goals";
 import {
@@ -149,7 +151,7 @@ export async function createStudent(
   _prev: StudentFormState,
   formData: FormData,
 ): Promise<StudentFormState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canManageStudentRecords(user.systemRole))) return { error: STUDENT_MANAGE_DENIED };
 
@@ -237,7 +239,7 @@ export type DeleteStudentState = { error?: string; ok?: true } | undefined;
  * (기본 master, 역할·권한에서 위임 시 admin/manager). 되돌릴 수 없음 → UI에서 2단계 확인.
  */
 export async function deleteStudent(_prev: DeleteStudentState, formData: FormData): Promise<DeleteStudentState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "admin"))) return { error: "영구 삭제 권한이 없습니다(관리 도구 권한 필요)" };
 
@@ -276,7 +278,7 @@ export async function updateStudent(
   _prev: StudentFormState,
   formData: FormData,
 ): Promise<StudentFormState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canManageStudentRecords(user.systemRole))) return { error: STUDENT_MANAGE_DENIED };
 
@@ -399,6 +401,10 @@ export async function updateStudent(
   if (savedStatus === "withdrawn" && prevStatus !== "withdrawn") {
     const enrErr = await closeActiveEnrollmentsClamped(supabase, id, input.withdrawnAt ?? null);
     if (enrErr) return { error: enrErr };
+    // 수학 퇴원이면 '퇴원생 관리 차트' 시트에 적는다(원장 2026-10-07) — 응답 뒤에, 실패해도 퇴원은 그대로.
+    const sheetDate = (savedWithdrawnAt ? String(savedWithdrawnAt).slice(0, 10) : null) ?? kstToday();
+    const sheetTenant = user.tenantId;
+    after(() => recordMathWithdrawalToSheet({ tenantId: sheetTenant, studentId: id, date: sheetDate }));
   } else if (savedStatus === "enrolled" && prevStatus !== "enrolled") {
     // 퇴원이 닫은 enrollment(end_date=퇴원일)를 다시 연다 — 안 하면 재원인데 시간표 '퇴원'에 남음.
     // 🔴 퇴원에서 돌아올 때만 — 휴원·예비의 withdrawn_at은 **퇴원 예약**이라 그 날짜로 끝나는 다른 수강을 잘못 연다.
@@ -471,7 +477,7 @@ export async function changeStudentStatus(
   _prev: ChangeStatusState,
   formData: FormData,
 ): Promise<ChangeStatusState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   // 🔴 퇴원·휴원·복구 = full만(강사 차단, 원장 지시 2026-08-18) — canManageStudentRecords 주석 참조.
   if (!(await canManageStudentRecords(user.systemRole))) return { error: STUDENT_MANAGE_DENIED };
@@ -581,6 +587,9 @@ export async function changeStudentStatus(
     // 활성 enrollment 종료 (미래 시작 수강은 end_date=start_date로 클램프 — daterange 에러 방지).
     const enrErr = await closeActiveEnrollmentsClamped(supabase, id, date, { withdrawal_reason: reasonStr });
     if (enrErr) return { error: enrErr };
+    // 수학 퇴원이면 '퇴원생 관리 차트' 시트에 적는다(원장 2026-10-07) — 응답 뒤에, 실패해도 퇴원은 그대로.
+    const sheetTenant = user.tenantId;
+    after(() => recordMathWithdrawalToSheet({ tenantId: sheetTenant, studentId: id, date }));
   } else if (target === "on_hold") {
     const { error: stuErr } = await supabase
       .from("students")
@@ -647,7 +656,7 @@ export async function cancelScheduledWithdrawal(
   _prev: ChangeStatusState,
   formData: FormData,
 ): Promise<ChangeStatusState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canManageStudentRecords(user.systemRole))) return { error: STUDENT_MANAGE_DENIED };
   const id = String(formData.get("id") ?? "").trim();
@@ -693,7 +702,7 @@ export async function endStudentEnrollments(
   _prev: ChangeStatusState,
   formData: FormData,
 ): Promise<ChangeStatusState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   // 🔴 단일 수강 종료와 **같은 게이트** — 강사(scoped)는 학생 기록 열람 전용(원장 2026-08-18).
   if (!(await canManageStudentRecords(user.systemRole))) return { error: STUDENT_MANAGE_DENIED };
@@ -748,6 +757,11 @@ export async function endStudentEnrollments(
     });
   }
 
+  // 고른 수강 중 수학이 있고 그로써 수학을 그만뒀으면(반이동 제외) 시트에 적는다(원장 2026-10-07 '수학만 퇴원'도 적는다).
+  const sheetTenant = user.tenantId;
+  const sheetIds = targets.map((t) => t.id);
+  after(() => recordMathWithdrawalToSheet({ tenantId: sheetTenant, studentId, date, enrollmentIds: sheetIds }));
+
   revalidatePath(`/students/${studentId}`);
   revalidatePath("/students");
   revalidatePath("/withdrawals");
@@ -774,7 +788,7 @@ export async function setStudentEnrollmentHolds(
   _prev: ChangeStatusState,
   formData: FormData,
 ): Promise<ChangeStatusState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   // 🔴 퇴원·부분 종료와 **같은 게이트** — 강사(scoped)는 학생 기록 열람 전용(원장 2026-08-18).
   if (!(await canManageStudentRecords(user.systemRole))) return { error: STUDENT_MANAGE_DENIED };
@@ -851,7 +865,7 @@ export async function holdSingleEnrollment(
   _prev: ChangeStatusState,
   formData: FormData,
 ): Promise<ChangeStatusState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canManageStudentRecords(user.systemRole))) return { error: STUDENT_MANAGE_DENIED };
 
@@ -898,7 +912,7 @@ export async function endSingleEnrollment(
   _prev: ChangeStatusState,
   formData: FormData,
 ): Promise<ChangeStatusState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   // 수강 종료 = 학생 쓰기(full) 권한 이상만(master·admin·manager·counselor). UI 숨김 + 이 서버 게이트 이중 방어.
   if (!(await canManageStudentRecords(user.systemRole))) {
@@ -917,6 +931,15 @@ export async function endSingleEnrollment(
   // 부분 종료(endStudentEnrollments)도 같은 함수를 돈다(#77: 표면마다 다시 짜면 한쪽만 고쳐진다).
   const res = await endEnrollmentById(supabase, enrollmentId, date, reason);
   if (res.error) return { error: res.error };
+  // 이 종료로 수학을 그만뒀으면(반이동 제외 · 다른 수학 반이 남아 있으면 아님) 시트에 적는다(원장 2026-10-07).
+  const sheetStudent = studentId || res.studentId || null;
+  if (sheetStudent && res.endDate) {
+    const sheetTenant = user.tenantId;
+    const sheetDate = String(res.endDate).slice(0, 10);
+    after(() =>
+      recordMathWithdrawalToSheet({ tenantId: sheetTenant, studentId: sheetStudent, date: sheetDate, enrollmentIds: [enrollmentId] }),
+    );
+  }
 
   await logAction({
     action: "enrollment_end",
@@ -983,7 +1006,7 @@ export async function createStudentMemo(
   _prev: CreateMemoState,
   formData: FormData,
 ): Promise<CreateMemoState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "students"))) return { error: "학생 관리 권한이 없습니다" };
 
@@ -1021,7 +1044,7 @@ export async function deleteStudentMemo(
   _prev: DeleteMemoState,
   formData: FormData,
 ): Promise<DeleteMemoState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "students"))) return { error: "학생 관리 권한이 없습니다" };
 
@@ -1045,7 +1068,7 @@ export async function updateStudentMemo(
   _prev: UpdateMemoState,
   formData: FormData,
 ): Promise<UpdateMemoState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "students"))) return { error: "학생 관리 권한이 없습니다" };
 
@@ -1076,7 +1099,7 @@ export async function toggleStudentMemoPin(
   _prev: ToggleMemoPinState,
   formData: FormData,
 ): Promise<ToggleMemoPinState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "students"))) return { error: "학생 관리 권한이 없습니다" };
 
@@ -1104,7 +1127,7 @@ export async function createStudentGrade(
   _prev: CreateGradeState,
   formData: FormData,
 ): Promise<CreateGradeState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "students"))) return { error: "학생 관리 권한이 없습니다" };
 
@@ -1165,7 +1188,7 @@ export async function deleteStudentGrade(
   _prev: DeleteGradeState,
   formData: FormData,
 ): Promise<DeleteGradeState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   const grdLvl = await accessLevelTenant(user.systemRole, "students");
   if (grdLvl !== "full" && grdLvl !== "scoped") return { error: "성적 관리 권한이 없습니다" };
@@ -1198,7 +1221,7 @@ export async function createStudentLevelTest(
   _prev: LevelTestState,
   formData: FormData,
 ): Promise<LevelTestState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "students"))) return { error: "학생 관리 권한이 없습니다" };
 
@@ -1244,7 +1267,7 @@ export async function deleteStudentLevelTest(
   _prev: LevelTestState,
   formData: FormData,
 ): Promise<LevelTestState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "students"))) return { error: "학생 관리 권한이 없습니다" };
 
@@ -1265,7 +1288,7 @@ export async function deleteStudentLevelTest(
 // === 성적 목표설정(grade_goals) / 성적 코멘트(grade_comments) ===
 // 쓰기 권한: 성적(=students) full/scoped. deleteStudentGrade 게이트와 동일.
 async function requireGradeWrite() {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { user: null, error: "로그인이 필요합니다" };
   const lvl = await accessLevelTenant(user.systemRole, "students");
   if (lvl !== "full" && lvl !== "scoped") return { user: null, error: "성적 관리 권한이 없습니다" };
@@ -1464,7 +1487,7 @@ export async function deleteStudentGradeComment(
 export async function clearDupSuspect(
   studentId: string,
 ): Promise<{ ok?: boolean; error?: string }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   // 학생 레코드 변경 = full만 — canWriteTenant는 scoped(강사)도 통과한다(적대 리뷰 F3, #77).
   if (!(await canManageStudentRecords(user.systemRole))) return { error: STUDENT_MANAGE_DENIED };

@@ -895,6 +895,8 @@ export function auditDetail(
         return join(ctx.nameOf(m.studentId), "퇴원 예약 취소", str(m.cancelledWithdrawal) ? `예약일 ${str(m.cancelledWithdrawal)}` : null);
       return join(ctx.nameOf(m.studentId), str(m.memo));
     }
+    case "student_english_name_update":
+      return join(ctx.nameOf(m.studentId), `영문 이름 ${str(m.before) || "없음"} → ${str(m.after) || "없음"}`);
     case "student_update": {
       const from = str(m.statusFrom);
       const to = str(m.statusTo);

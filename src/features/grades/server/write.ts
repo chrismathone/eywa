@@ -70,7 +70,7 @@ export async function writeGradeCells(
   axis: GradeWriteAxis,
   rows: GradeWriteRow[],
 ): Promise<{ saved: number; cleared: number }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) throw new Error("로그인이 필요합니다");
   const supabase = await createClient();
   // 🔴 월 축(0288a) — 월말평가는 달마다 다른 칸이다. 적용 전에는 옛 유니크 축 그대로 쓴다([[#95]]):
@@ -251,7 +251,7 @@ export type UnifiedGradePatch = {
 /** 통합 성적 화면의 행 수정도 이 모듈에서 실행한다. 호출부가 학생·과목 쓰기 권한을 확인한다. */
 export async function updateUnifiedGrade(tenantId: string, id: string,
   patch: UnifiedGradePatch): Promise<string | null> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user || user.tenantId !== tenantId) return "로그인이 필요합니다";
   const supabase = await createClient();
   const { data, error } = await supabase.from("student_grades").update(patch)
