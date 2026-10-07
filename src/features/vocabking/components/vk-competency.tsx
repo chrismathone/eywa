@@ -16,7 +16,7 @@ function Radar({ rows }: { rows: RateRow[] }) {
   const ring = (f: number) => rows.map((_, i) => pt(i, R * f)).join(" ");
   const label = (i: number) => ({ x: Math.cos(angle(i)) * (R + 26), y: Math.sin(angle(i)) * (R + 26) });
   return (
-    <svg viewBox="-160 -140 320 270" className="w-full max-w-80" role="img" aria-label={rows.map((r) => `${r.label} ${pct(r.rate)}`).join(", ")}>
+    <svg viewBox="-180 -140 360 270" className="w-full max-w-80" role="img" aria-label={rows.map((r) => `${r.label} ${pct(r.rate)}`).join(", ")}>
       {[0.25, 0.5, 0.75, 1].map((f) => (
         <polygon key={f} points={ring(f)} fill="none" className="stroke-line" strokeWidth={1} />
       ))}
@@ -43,19 +43,21 @@ function Radar({ rows }: { rows: RateRow[] }) {
 
 function DetailRow({ label, sub, value, bar, avg }: { label: string; sub?: string; value: string; bar?: number; avg?: number | null }) {
   return (
-    <div className="border-line grid grid-cols-[8rem_minmax(0,1fr)_7rem] items-center gap-3 border-b py-2.5 last:border-b-0">
-      <span className="text-foreground text-sm font-bold">{label}</span>
+    // 좁은 폭(폰·학부모 카드) = 이름·값 한 줄 + 아래에 막대/설명 전체 폭 · 넓은 틀(@3xl, JJ실 창) = 이름 | 막대 | 값 세 칸.
+    // 🔴 세 칸을 폰에서 그대로 두면 가운데 설명이 한두 글자씩 세로로 쌓였다(실화면 확인 2026-10-07).
+    <div className="border-line grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 border-b py-2.5 last:border-b-0 @3xl:grid-cols-[8rem_minmax(0,1fr)_7rem]">
+      <span className="text-foreground col-start-1 row-start-1 text-sm font-bold">{label}</span>
       {bar !== undefined ? (
-        <span className="bg-bg-soft relative block h-2.5 rounded-full">
+        <span className="bg-bg-soft relative col-span-2 row-start-2 block h-2.5 rounded-full @3xl:col-span-1 @3xl:col-start-2 @3xl:row-start-1">
           <span className="bg-primary block h-2.5 rounded-full" style={{ width: `${Math.round(bar * 100)}%` }} />
           {avg != null ? (
             <span className="bg-neutral-fill absolute -top-1 block h-4.5 w-0.5" style={{ left: `${avg}%` }} title={`전체 평균 ${avg}점`} />
           ) : null}
         </span>
       ) : (
-        <span className="text-text-dim text-xs">{sub}</span>
+        <span className="text-text-dim col-span-2 row-start-2 text-xs @3xl:col-span-1 @3xl:col-start-2 @3xl:row-start-1">{sub}</span>
       )}
-      <span className="num text-primary text-right text-base font-bold">{value}</span>
+      <span className="num text-primary col-start-2 row-start-1 text-right text-base font-bold @3xl:col-start-3">{value}</span>
     </div>
   );
 }

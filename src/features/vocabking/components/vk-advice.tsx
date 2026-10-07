@@ -28,7 +28,7 @@ export function VkAdvice({ report }: { report: VocabkingReport }) {
             <thead>
               <tr className="bg-bg-soft">
                 <th className="border-line border-b px-3 py-2 text-left font-bold">유형</th>
-                <th className="border-line border-b px-3 py-2 text-right font-bold">틀린 문제</th>
+                <th className="border-line border-b px-3 py-2 text-right font-bold whitespace-nowrap">틀린 문제</th>
               </tr>
             </thead>
             <tbody>
@@ -59,13 +59,17 @@ export function VkAdvice({ report }: { report: VocabkingReport }) {
           <div className="flex flex-col gap-1 text-sm">
             <p className="text-text-dim text-xs font-bold">철자 다시 보기</p>
             {m.spellingExamples.map((w, i) => (
-              <p key={`${w.answer}-${i}`} className="flex flex-wrap items-baseline gap-x-2">
-                <span className="text-text-dim">{w.prompt}</span>
-                <s className="text-danger">{w.typed || "(빈칸)"}</s>
-                <span>→</span>
-                <b className="text-foreground">{w.answer}</b>
-                <span className="text-text-faint text-xs">{SPELLING_LABEL[w.kind]}</span>
-              </p>
+              <div key={`${w.answer}-${i}`} className="border-line flex flex-col border-b py-1.5 last:border-b-0">
+                {/* 두 줄 — 고친 철자를 먼저, 뜻·유형은 아래 작게(좁은 폭에서 한 줄이 들쭉날쭉 꺾이지 않게). */}
+                <p className="flex flex-wrap items-baseline gap-x-2">
+                  <s className="text-danger">{w.typed || "(빈칸)"}</s>
+                  <span aria-hidden>→</span>
+                  <b className="text-foreground">{w.answer}</b>
+                </p>
+                <p className="text-text-faint text-xs">
+                  {w.prompt} · {SPELLING_LABEL[w.kind]}
+                </p>
+              </div>
             ))}
           </div>
         ) : null}
