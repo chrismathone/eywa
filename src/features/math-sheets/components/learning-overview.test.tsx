@@ -4,6 +4,7 @@ import { LearningOverview } from "./learning-overview";
 import { learningMapFixture } from "@/features/math-progress-map/learning-map.test-fixture";
 import type { MathSheetMonthData, MathStudentRow } from "../server/month-queries";
 import type { LearningData } from "../lib/learning-plan";
+import { learningRailMetrics } from "../lib/learning-axis";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
 // Next의 App Router 번들러가 사용하는 동적 로더를 테스트에서도 사용한다.
@@ -29,6 +30,30 @@ beforeEach(() => window.history.replaceState(null, "", "/mcs/test/month?month=20
 afterEach(cleanup);
 
 describe("학생 집중 보기의 진도맵 통합", { timeout: 15000 }, () => {
+  it("저장 시각이 다른 동일 목표는 공통 요약을 유지하고 실제 내용 차이만 개별로 표시한다", () => {
+    const { data, learning, first, second, f } = fixture();
+    const goals = { [first.studentId]: { ...f.goal, updatedAt: "first" }, [second.studentId]: { ...f.goal, studentId: second.studentId, updatedAt: "second" } };
+    const view = render(<LearningOverview data={data} learning={{ ...learning, goals }} classOptions={[]} />);
+    expect(screen.queryByText("학생별 목표")).not.toBeInTheDocument();
+    expect(screen.getByText(`${f.goal.startDate} – ${f.goal.endDate}`)).toBeVisible();
+    view.rerender(<LearningOverview data={data} learning={{ ...learning, goals: { ...goals, [second.studentId]: { ...goals[second.studentId], textbook: "다른 교재" } } }} classOptions={[]} />);
+    expect(screen.getByText("학생별 목표")).toBeVisible();
+    expect(screen.queryByText(`${f.goal.startDate} – ${f.goal.endDate}`)).not.toBeInTheDocument();
+  });
+  it.each(["regular", "supplement"] as const)("%s의 반 전체·학생 목록·집중 보기 지표는 같은 눈금을 사용한다", async track => {
+    const { data, learning, first, f } = fixture();
+    learning.track = track;
+    learning.goals[first.studentId] = { ...f.goal, track };
+    const metric = learningRailMetrics(learning.goals[first.studentId], f.progress);
+    const view = render(<LearningOverview data={data} learning={learning} classOptions={[]} />);
+    const cells = view.container.querySelectorAll("tbody tr:first-child td");
+    expect(cells[2]).toHaveTextContent(`${metric.percent}%`);
+    expect(cells[2]).toHaveTextContent(`${metric.current} / ${metric.total}차시`);
+    expect(cells[4]).toHaveTextContent(`${metric.requiredPace?.toFixed(1)}차시`);
+    fireEvent.click(screen.getByRole("button", { name: first.name }));
+    expect(await screen.findByLabelText("전체 진도율")).toHaveTextContent(`${metric.percent}%${metric.current} / ${metric.total}차시`);
+    expect(within(screen.getByRole("complementary", { name: "학생 선택" })).getByRole("button", { name: new RegExp(first.name) })).toHaveTextContent(`${metric.percent}%`);
+  });
   it("학생 행에서 세 지도를 열고 목표 편집·기존 월 목표·블록 계획·시험 결과를 유지한다", async () => {
     const { data, learning, first } = fixture();
     render(<LearningOverview data={data} learning={learning} classOptions={[]} canResetGoals />);

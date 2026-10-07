@@ -10,13 +10,14 @@ const mocks = vi.hoisted(() => ({
   log: vi.fn(),
   revalidate: vi.fn(),
   track: vi.fn(),
+  rpc: vi.fn(),
 }));
 vi.mock("./access", () => ({
   requireMcsClassAccess: mocks.access,
   canResetMathLearningGoals: mocks.canReset,
 }));
 vi.mock("@/lib/supabase/admin", () => ({
-  createAdminClient: () => ({ from: mocks.from }),
+  createAdminClient: () => ({ from: mocks.from, rpc: mocks.rpc }),
 }));
 vi.mock("@/features/owner/server/queries", () => ({
   getTenantSettings: async () => ({ operations: { holidays: [] } }),
@@ -59,6 +60,7 @@ beforeEach(() => {
   });
   mocks.save.mockResolvedValue({ error: null });
   mocks.track.mockResolvedValue("regular");
+  mocks.rpc.mockResolvedValue({ data: 1, error: null });
   rows = {
     class_schedules: [
       {
@@ -238,10 +240,10 @@ describe("전체 목표 초기화(배정 취소) — 원장 이상급", () => {
 
   it("🔴 표준 계획은 (구분·시작월)까지 좁혀 그 한 칸만 지운다", async () => {
     expect(await resetMathLearningGoals(resetInput)).toEqual({ ok: true, removed: 1 });
-    expect(filters).toContainEqual(["math_learning_track_goals:delete", "tenant_id", tenantId]);
-    expect(filters).toContainEqual(["math_learning_track_goals:delete", "class_id", classId]);
-    expect(filters).toContainEqual(["math_learning_track_goals:delete", "track", "regular"]);
-    expect(filters).toContainEqual(["math_learning_track_goals:delete", "start_date", "2026-09-01"]);
+    expect(mocks.rpc).toHaveBeenCalledWith("reset_mcs_learning_goals", {
+      p_tenant_id: tenantId, p_class_id: classId, p_student_ids: [studentId],
+      p_track: "regular", p_start_date: "2026-09-01", p_standard: true,
+    });
     expect(mocks.log).toHaveBeenCalledWith(
       expect.objectContaining({ action: "mcs_learning_goal_reset" }),
     );
@@ -251,16 +253,18 @@ describe("전체 목표 초기화(배정 취소) — 원장 이상급", () => {
   it("🔴 옛 목표 표도 함께 지운다 — 안 지우면 읽기 폴백으로 곧바로 되살아난다", async () => {
     expect(deleted).toEqual([]);
     await resetMathLearningGoals(resetInput);
-    expect(deleted).toEqual(["math_learning_track_goals", "math_learning_goals"]);
+    expect(mocks.rpc).toHaveBeenCalledTimes(1);
+    expect(deleted).toEqual([]);
   });
 
   it("🔴 복습 심화 초기화는 옛 표(정규)를 건드리지 않는다", async () => {
     await resetMathLearningGoals({ ...resetInput, track: "supplement" });
-    expect(deleted).toEqual(["math_learning_track_goals"]);
+    expect(mocks.rpc).toHaveBeenCalledWith("reset_mcs_learning_goals", expect.objectContaining({ p_track: "supplement" }));
+    expect(deleted).toEqual([]);
   });
 
   it("지운 게 없으면 성공이라 말하지 않는다(새로고침·감사로그도 없다)", async () => {
-    deleteRows.math_learning_track_goals = [];
+    mocks.rpc.mockResolvedValue({ data: 0, error: null });
     expect(await resetMathLearningGoals(resetInput)).toEqual({
       ok: false,
       error: "초기화할 전체 목표가 없습니다.",
@@ -270,15 +274,21 @@ describe("전체 목표 초기화(배정 취소) — 원장 이상급", () => {
   });
 
   it("표가 아직 없는 환경은 실패가 아니다 — 다른 한쪽만 지운다([[#95]])", async () => {
-    deleteRows.math_learning_track_goals = [];
-    deleteErrors.math_learning_track_goals = { code: "42P01" };
-    deleteRows.math_learning_goals = [{ student_id: studentId }];
+    mocks.rpc.mockResolvedValue({ data: 1, error: null });
     expect(await resetMathLearningGoals(resetInput)).toEqual({ ok: true, removed: 1 });
   });
 
   it("진짜 DB 오류는 성공으로 알리지 않는다", async () => {
-    deleteErrors.math_learning_track_goals = { code: "XX000" };
+    mocks.rpc.mockResolvedValue({ data: null, error: { code: "XX000" } });
     expect((await resetMathLearningGoals(resetInput)).ok).toBe(false);
+    expect(mocks.log).not.toHaveBeenCalled();
+    expect(mocks.revalidate).not.toHaveBeenCalled();
+    expect(deleted).toEqual([]);
+  });
+  it("RPC가 아직 없어도 개별 삭제로 우회하지 않는다", async () => {
+    mocks.rpc.mockResolvedValue({ data: null, error: { code: "PGRST202" } });
+    expect((await resetMathLearningGoals(resetInput)).ok).toBe(false);
+    expect(deleted).toEqual([]);
     expect(mocks.log).not.toHaveBeenCalled();
   });
 });

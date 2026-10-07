@@ -9,71 +9,71 @@
 .bottomHeading { display: flex; gap: 12px; flex-wrap: wrap; justify-content: space-between; align-items: baseline; }
 .bottomHeading h3 { font-size: 16px; font-weight: 700; }
 .bottomHeading > strong { color: var(--current); font-size: 15px; }
-.bottomHeading > span { font-size: 12px; }
+.bottomHeading > span { font-size: var(--text-sm); }
 .bottomHeading button { color: var(--goal); cursor: pointer; }
 .comparison { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 15px; }
 .comparison > button { display: grid; gap: 6px; border: 1px solid var(--line, #ddd); border-radius: 10px; padding: 12px; text-align: left; cursor: pointer; }
-.comparison span { font-size: 12px; }
-.comparison strong { font-size: 13px; }
-.comparison b { color: var(--goal); font-size: 12px; }
+.comparison span { font-size: var(--text-sm); }
+.comparison strong { font-size: var(--text-sm); }
+.comparison b { color: var(--goal); font-size: var(--text-sm); }
 .comparison > button:last-child b { color: var(--current); }
 .comparisonTrack { position: relative; height: 9px; margin: 23px 8px 10px; border-radius: 9px; background: var(--bg-soft, #eee); }
 .comparisonTrack > span { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: var(--current); }
 .comparisonTrack > button { position: absolute; top: 50%; transform: translate(-50%, -50%); width: 15px; height: 15px; border-radius: 50%; cursor: pointer; }
 .plannedMarker { background: white; border: 2px solid var(--goal); }
 .actualMarker { background: var(--current); border: 2px solid white; box-shadow: 0 0 0 1px var(--current); }
-.comparisonScale { display: flex; justify-content: space-between; font-size: 12px; }
-.comparisonDates { margin-top: 15px; font-size: 12px; color: var(--text-dim, #666); }
-.currentNext { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 16px; padding-top: 13px; border-top: 1px solid var(--line, #ddd); font-size: 12px; }
+.comparisonScale { display: flex; justify-content: space-between; font-size: var(--text-sm); }
+.comparisonDates { margin-top: 15px; font-size: var(--text-sm); color: var(--text-dim, #666); }
+.currentNext { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 16px; padding-top: 13px; border-top: 1px solid var(--line, #ddd); font-size: var(--text-sm); }
 .currentNext > div { display: grid; align-content: start; gap: 8px; }
 .currentNext button { text-align: left; display: grid; gap: 7px; cursor: pointer; }
-.currentNext strong { font-size: 13px; }
-.currentNext small { font-size: 11px; color: var(--text-dim, #666); }
-.goalList { margin-top: 16px; font-size: 12px; }
+.currentNext strong { font-size: var(--text-sm); }
+.currentNext small { font-size: var(--text-sm); color: var(--text-dim, #666); }
+.goalList { margin-top: 16px; font-size: var(--text-sm); }
 .goalList summary, .lessonList summary { cursor: pointer; font-weight: 600; }
 .goalList button { display: flex; text-align: left; gap: 10px; width: 100%; padding: 10px 0; color: var(--goal); cursor: pointer; }
 .goalList time { white-space: nowrap; }
-.lessonList > summary { font-size: 12px; padding: 14px 20px; }
+.lessonList > summary { font-size: var(--text-sm); padding: 14px 20px; }
 @container (max-width: 1023px) { .dashboardGrid, .bottomGrid { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 480px) { .bottomPanel { padding: 14px; } .comparison, .currentNext { gap: 10px; } }
-.header { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; padding: 16px 20px; background: var(--card, #fff); border: 1px solid var(--line, #ddd); border-radius: 12px; }
+.header { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 12px 16px; background: var(--card, #fff); border: 1px solid var(--line, #ddd); border-radius: var(--radius-xl); }
 .header h2 { font-size: 22px; font-weight: 750; margin: 0; }
-.header h2 span { font-size: 13px; font-weight: 500; margin-left: 10px; }
-.header p { font-size: 12px; color: var(--text-dim, #666); margin: 4px 0 0; }
-.overall, .status { display: grid; gap: 4px; font-size: 12px; }
+.header h2 span { font-size: var(--text-sm); font-weight: 500; margin-left: 10px; }
+.header p { font-size: var(--text-sm); color: var(--text-dim, #666); margin: 4px 0 0; }
+.overall, .status { display: grid; gap: 4px; font-size: var(--text-sm); min-width: 0; }
 .overall { margin-left: auto; color: var(--current); }
 .overall strong { font-size: 28px; line-height: 1; }
-.status strong { color: var(--current); font-weight: 650; }
+.status strong { color: var(--current); font-weight: 650; word-break: keep-all; }
 .status span { color: var(--text-dim, #666); }
-.back { font-size: 12px; text-decoration: underline; text-underline-offset: 4px; }
-.rail { padding: 16px 20px 4px; background: var(--card, #fff); margin-top: 12px; border: 1px solid var(--line, #ddd); border-radius: 12px; }
-.railTitle { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 12px; font-size: 12px; flex-wrap: wrap; }
+.back { font-size: var(--text-sm); text-decoration: underline; text-underline-offset: 4px; }
+.rail { padding: 12px 16px 4px; background: var(--card, #fff); margin-top: 12px; border: 1px solid var(--line, #ddd); border-radius: var(--radius-xl); }
+.railTitle { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 12px; font-size: var(--text-sm); flex-wrap: wrap; }
 .railTitle time { color: var(--text-dim, #666); }
-.controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 14px 0; font-size: 12px; }
+.controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 14px 0; font-size: var(--text-sm); }
 .controls > div { display: flex; }
 .controls label { display: flex; gap: 6px; align-items: center; }
-.controls button, .controls select, .controls input, .lessonDetail button { padding: 5px 9px; border: 1px solid var(--line, #ddd); border-radius: 6px; background: var(--card, #fff); cursor: pointer; }
-.controls [aria-pressed="true"] { background: var(--current); color: white; border-color: var(--current); }
+.controls button, .controls select, .controls input, .lessonDetail button { min-height: var(--control-h); padding: 0 9px; font-size: var(--control-label); border: 1px solid var(--line, #ddd); border-radius: 6px; background: var(--card, #fff); cursor: pointer; }
+.controls [aria-pressed="true"] { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
 .panelHeading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 17px 20px; border-bottom: 1px solid var(--line, #eee); }
 .panelHeading h3 { font-size: 15px; font-weight: 700; margin: 0; }
-.panelHeading > span { font-size: 11px; white-space: nowrap; color: var(--text-dim, #666); }
+.panelHeading > span { font-size: var(--text-sm); white-space: nowrap; color: var(--text-dim, #666); }
 .lessons { max-height: 565px; overflow-y: auto; }
 .lessons > button { display: flex; align-items: center; text-align: left; gap: 12px; padding: 13px 20px; width: 100%; border-bottom: 1px solid var(--line, #eee); cursor: pointer; }
 .lessons > button[aria-pressed="true"] { background: color-mix(in srgb, var(--current) 6%, var(--card, #fff)); }
-.lessons strong { display: block; font-size: 12px; font-weight: 600; }
-.lessons small { display: block; font-size: 10px; margin-top: 4px; color: var(--text-dim, #666); }
-.lessons > button > span:last-child { margin-left: auto; flex-shrink: 0; font-size: 10px; color: var(--text-dim, #666); }
+.lessons strong { display: block; font-size: var(--text-sm); font-weight: 600; }
+.lessons small { display: block; font-size: var(--text-sm); margin-top: 4px; color: var(--text-dim, #666); }
+.lessons > button > span:last-child { margin-left: auto; flex-shrink: 0; font-size: var(--text-sm); color: var(--text-dim, #666); }
 .lessonDot { width: 9px; height: 9px; flex-shrink: 0; border: 1px solid var(--line-strong, #999); border-radius: 50%; }
 /* 도달 = 실제 진도라 막대의 현재진도와 같은 파랑이다(2026-09-19 전엔 목표색 빨강이었다 — 막대와 뜻이 뒤집혀 있었다).
    아직 안 온 차시는 막대의 빈 트랙처럼 무채색 테두리. */
 .lessonDot[data-reached="true"] { border-color: var(--current); background: var(--current); }
 /* 진도맵 곁 '입학부터 종강까지' — 과정 카드의 알약·테두리(앱 blue 유틸)를 MCS 파랑으로 맞춘다. */
 .mcsTones { --blue: var(--mcs-actual); --blue-soft: color-mix(in srgb, var(--mcs-actual) 12%, var(--card, #fff)); }
-.lessonDetail { padding: 15px 20px; font-size: 12px; border-bottom: 1px solid var(--line, #ddd); }
+.lessonDetail { padding: 15px 20px; font-size: var(--text-sm); border-bottom: 1px solid var(--line, #ddd); }
 .lessonDetail p { margin: 5px 0; }
 .lessonDetail button { margin: 7px 6px 0 0; }
-.empty { padding: 24px 20px; font-size: 12px; color: var(--text-dim, #666); }
-.records { padding: 15px 20px; border-top: 1px solid var(--line, #ddd); font-size: 12px; }
+.empty { padding: 24px 20px; font-size: var(--text-sm); color: var(--text-dim, #666); }
+.records { padding: 15px 20px; border-top: 1px solid var(--line, #ddd); font-size: var(--text-sm); }
 .records summary { font-weight: 650; cursor: pointer; }
 .records article { padding: 12px 0; border-bottom: 1px solid var(--line, #eee); }
 .records article button { color: var(--current); text-decoration: underline; margin-right: 10px; cursor: pointer; }
@@ -83,4 +83,10 @@
 @media (max-width: 900px) { .header { gap: 14px; } }
 @media (max-width: 480px) { .header, .rail { padding-left: 12px; padding-right: 12px; } .header h2 { font-size: 19px; } .header h2 span { display: block; margin: 3px 0 0; } .overall { margin-left: auto; } .status { flex: 1; } .back { width: 100%; } .panelHeading { padding: 14px 12px; flex-wrap: wrap; } .lessons > button { padding: 12px; } .controls { gap: 7px; } .controls button { padding: 5px 8px; } }
 
-.detailPanel { min-width: 0; background: var(--card, #fff); border: 1px solid var(--line, #ddd); border-radius: 12px; }
+.detailPanel { min-width: 0; background: var(--card, #fff); border: 1px solid var(--line, #ddd); border-radius: var(--radius-xl); }
+@container (max-width: 600px) {
+  .header { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
+  .header > :first-child { grid-column: 1 / -1; }
+  .overall { margin-left: 0; }
+  .header > button { justify-self: start; }
+}

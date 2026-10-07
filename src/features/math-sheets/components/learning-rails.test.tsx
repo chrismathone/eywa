@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { LearningRails } from "./learning-rails";
 import { flatLessons } from "@/features/onescreen/curriculum";
 import { planLearningGoal, buildLearningProgress, type LearningGoal } from "../lib/learning-plan";
-import { LEARNING_LESSON_WIDTH, learningCurrentPosition, learningGoalTicks, learningTopicTicks } from "../lib/learning-axis";
+import { LEARNING_LESSON_WIDTH, learningCurrentPosition, learningGoalTicks, learningTargetPosition, learningTopicTicks } from "../lib/learning-axis";
 
 afterEach(cleanup);
 const first = planLearningGoal({ studentId: "s", studyGrade: "중1", startBlock: flatLessons("중1")[0], endBlock: flatLessons("중1").at(-1)!, startDate: "2026-09-01", endDate: "2026-11-30", textbook: null, track: "regular" });
@@ -60,8 +60,8 @@ describe("현재 진도와 고정 목표 수직선", () => {
     expect(screen.getByText("중1 2학기, 회전체")).toBeVisible();
     expect(screen.queryByText(/최근 발송 보고서 · 2026-09-14 수업/)).not.toBeInTheDocument();
     expect(screen.getByTitle(/최근 발송 보고서 · 2026-09-14 수업/)).toHaveAttribute("title", expect.stringContaining("진도선은 2026-08-31 마지막 확인 단원 기준"));
-    expect(screen.getByRole("progressbar", { name: "현재진도" })).toHaveAttribute("aria-valuenow", String(state.current));
-    expect(screen.getByRole("progressbar", { name: "현재진도" })).toHaveAccessibleDescription(expect.stringContaining("블록"));
+    expect(screen.getByRole("progressbar", { name: "현재진도" })).toHaveAttribute("aria-valuenow", String(learningCurrentPosition(first, state)));
+    expect(screen.getByRole("progressbar", { name: "현재진도" })).toHaveAccessibleDescription(expect.stringContaining("차시"));
   });
   it("단원 위치를 모르는 최신 발송 내용도 보이지만 진행률은 만들지 않는다", () => {
     const state = buildLearningProgress(first, { schedules: [], holidays: {}, spans: {} }, [
@@ -98,7 +98,7 @@ describe("현재 진도와 고정 목표 수직선", () => {
     expect([...ticks].map(tick => tick.dataset.lesson)).toEqual(topics.map(topic => topic.lesson));
     expect(container.querySelector('[data-lesson="다각형"]')).toHaveAttribute("title", "중1 2학기, 다각형");
     expect(ticks[ticks.length - 1]).toHaveAttribute("title", "중3 1학기, 이차함수의 최댓값과 최솟값");
-    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", String(state.current));
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", String(learningCurrentPosition(goal, state)));
     expect(container.querySelectorAll('[data-goal-number]')).toHaveLength(4);
     expect(container.querySelector('[data-goal-number="4"]')).toHaveStyle({ left: "100%" });
   });
@@ -125,9 +125,9 @@ describe("현재 진도와 고정 목표 수직선", () => {
     expect(container.querySelector('[data-planned]')).toHaveStyle({ "--lesson-count": String(topics.length), "--scale-lessons": "250", "--lesson-max-width": `${LEARNING_LESSON_WIDTH}px` });
     rerender(<LearningRails goal={goal} progress={{ ...state, target: 100 }} scaleLessons={200} />);
     expect(positions()).toEqual(expected);
-    expect(screen.getByRole("progressbar", { name: "현재진도" })).toHaveAttribute("aria-valuemax", String(goal.blockCount));
+    expect(screen.getByRole("progressbar", { name: "현재진도" })).toHaveAttribute("aria-valuemax", String(topics.length));
   });
-  it("장기 계획의 모든 정거장을 수평 스크롤 진도선에 보존하고 숫자는 블록으로 표시한다", () => {
+  it("장기 계획의 모든 정거장을 보존하고 표시 숫자는 차시 눈금과 일치한다", () => {
     let goal: LearningGoal = first;
     for (const grade of ["중2", "중3", "공통수학1", "공통수학2"]) {
       goal = planLearningGoal({ ...goal, endStudyGrade: grade, endBlock: flatLessons(grade).at(-1)! }, goal);
@@ -135,8 +135,8 @@ describe("현재 진도와 고정 목표 수직선", () => {
     const state = { ...progress, current: 9.5, currentBlock: "수학 다각형" };
     const { container } = render(<LearningRails goal={goal} progress={state} />);
     expect(container.querySelectorAll("[data-goal-number]")).toHaveLength(5);
-    expect(screen.getByText("9.5")).toBeInTheDocument();
-    expect(screen.getByText(String(goal.blockCount))).toBeInTheDocument();
-    expect(screen.getByText("블록 목표")).toBeInTheDocument();
+    expect(screen.getByText(String(learningCurrentPosition(goal, state)))).toBeInTheDocument();
+    expect(screen.getByText(String(learningTargetPosition(goal, learningTopicTicks(goal, state))))).toBeInTheDocument();
+    expect(screen.getByText("차시 목표")).toBeInTheDocument();
   });
 });

@@ -85,7 +85,7 @@ export function LearningGoalDialog({ data, learning, studentId, onClose, canRese
           {previous ? "이전 목표를 정거장으로 남겨두고 다음 도착점을 추가합니다. 기존 구간과 목표일은 유지됩니다." : "현재 시작 단원부터 최종 도착점까지 정하세요. 학년과 과정을 넘어 목표를 설정할 수 있습니다."}
         </DialogDescription>
         <form onSubmit={submit} className={styles.goalForm}>
-          <fieldset disabled={pending}>
+          <fieldset disabled={pending} data-extended={previous ? true : undefined}>
             <label>적용 대상
               <select aria-label="목표 적용 대상" value={scope} onChange={(e) => selectScope(e.target.value)}>
                 {withoutGoal.length ? <option value="all">목표 없는 학생 전체 · {withoutGoal.length}명</option> : null}

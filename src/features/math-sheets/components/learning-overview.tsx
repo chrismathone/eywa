@@ -38,7 +38,8 @@ import { courseRangeLabel } from "../lib/learning-path";
 import { learningBlockLabel } from "../lib/learning-label";
 import { setMathClassLearningTrack } from "../server/learning-actions";
 import { LearningReportList } from "@/features/math-progress-map/components/learning-report-list";
-import { learningTopicTicks } from "../lib/learning-axis";
+import { learningRailMetrics, learningTopicTicks, type LearningRailMetrics } from "../lib/learning-axis";
+import { learningGoalPlanKey } from "../lib/learning-goal-comparison";
 
 const GoalDialog = dynamic(() =>
   import("./learning-goal-dialog").then((m) => m.LearningGoalDialog),
@@ -63,7 +64,7 @@ function Status({
         ? "수강 종료"
         : student.rosterPhase === "upcoming"
           ? "수강 예정"
-          : learningStatusLabel(progress, "블록")}
+          : learningStatusLabel(progress, "차시")}
     </span>
   );
 }
@@ -127,13 +128,13 @@ export function LearningOverview({
     return () => window.removeEventListener("popstate", onBack);
   }, []);
   const { summaries, scaleLessons } = useMemo(() => {
-    const summaries: Record<string, LearningProgress> = {};
+    const summaries: Record<string, LearningRailMetrics> = {};
     let scaleLessons = 1;
     for (const [id, goal] of Object.entries(learning.goals)) {
       const progress = learning.progress[id];
       const topics = learningTopicTicks(goal, progress);
       scaleLessons = Math.max(scaleLessons, topics.length);
-      if (progress) summaries[id] = progress;
+      if (progress) summaries[id] = learningRailMetrics(goal, progress, topics);
     }
     return { summaries, scaleLessons };
   }, [learning.goals, learning.progress]);
@@ -159,7 +160,7 @@ export function LearningOverview({
   const student = data.students.find((s) => s.studentId === selected);
   const goals = Object.values(learning.goals);
   const uniqueGoals = new Set(
-    goals.map((g) => JSON.stringify({ ...g, studentId: "" })),
+    goals.map(learningGoalPlanKey),
   );
   const common = uniqueGoals.size === 1 ? goals[0] : null;
   const thisMonth = data.today.slice(0, 7);
@@ -234,27 +235,26 @@ export function LearningOverview({
                 ‹ 반 전체 진도
               </button>
             ) : null}
-            <h2>{student ? "학생 집중 보기" : "수학 진도 관리"}</h2>
-            <p>
-              {data.className} <span>{data.teacherName ?? "담임 미지정"}</span>
-            </p>
+            <div className={styles.headingTitle}>
+              <h2>{student ? "학생 집중 보기" : "수학 진도 관리"}</h2>
+              <span className={styles.trackBadge}>{track === "regular" ? "정규 진도" : "복습 심화"}</span>
+              <span className={styles.trackCaption}>월 {MATH_LEARNING_CADENCE[track].monthlyBlocks}블록</span>
+            </div>
           </div>
-          {editable ? (
+          {editable ? <div className={styles.headingActions}>
+            <button type="button" className={styles.button} disabled={trackPending} onClick={() => { setNextTrack(track); setTrackEditor(!trackEditor); }}>수업 유형 설정</button>
             <button
+              type="button"
               className={styles.primaryButton}
+              disabled={trackPending}
               onClick={() =>
                 setGoalEditor({ studentId: student?.studentId ?? null })
               }
             >
               전체 목표 설정
             </button>
-          ) : null}
+          </div> : null}
         </header>
-        <div className={styles.classTrack}>
-          <span className={styles.trackBadge}>{track === "regular" ? "정규 진도" : "복습 심화"}</span>
-          <span>월 {MATH_LEARNING_CADENCE[track].monthlyBlocks}블록 · 이 반의 수업 유형</span>
-          {editable ? <button type="button" className={styles.button} onClick={() => { setNextTrack(track); setTrackEditor(!trackEditor); }}>수업 유형 설정</button> : null}
-        </div>
         {trackEditor ? <form className={styles.trackEditor} onSubmit={(event) => {
           event.preventDefault(); setTrackError(null);
           startTrackTransition(async () => {
@@ -283,15 +283,14 @@ export function LearningOverview({
                   {common
                     ? `${courseRangeLabel(common)}${learning.progress[common.studentId] ? ` · ${learning.progress[common.studentId].total}블록` : ""}`
                     : goals.length
-                      ? `학생별 개별 목표 ${goals.length}명`
+                      ? "학생별 목표"
                       : "시작·완료 블록과 기간을 설정해 주세요"}
                 </strong>
               </div>
               {common ? (
                 <p>
                   {common.startDate} – {common.endDate}
-                  <br />
-                  최종 목표: {common.endStudyGrade ?? common.studyGrade} · {common.endBlock}
+                  <span>최종 목표: {common.endStudyGrade ?? common.studyGrade} · {common.endBlock}</span>
                 </p>
               ) : (
                 <p>
@@ -404,14 +403,14 @@ export function LearningOverview({
                               ? goal
                                 ? "진도 확인 필요"
                                 : "전체 목표 미설정"
-                              : `${summary.current} / ${summary.total}블록`}
+                              : `${summary.current} / ${summary.total}차시`}
                           </p>
                         </td>
                         <td>
                           <Status student={s} progress={summary} />
                           <p className={styles.meta}>
                             {summary
-                              ? `기준일 계획 ${summary.target}블록`
+                              ? summary.targetBeforeRail ? "기준일 계획 · 첫 기록보다 앞" : `기준일 계획 ${summary.target}차시`
                               : "학생을 눌러 목표 설정"}
                           </p>
                         </td>
@@ -419,7 +418,7 @@ export function LearningOverview({
                           <strong className={styles.pace}>
                             {summary?.requiredPace == null
                               ? "—"
-                              : `${summary.requiredPace.toFixed(1)}블록`}
+                              : `${summary.requiredPace.toFixed(1)}차시`}
                           </strong>
                           <p className={styles.meta}>
                             {summary
@@ -448,7 +447,7 @@ export function LearningOverview({
             initialQuery={focusQuery}
             onSelect={selectStudent}
             onEdit={
-              editable
+              editable && !trackPending
                 ? () => setGoalEditor({ studentId: student.studentId })
                 : undefined
             }
@@ -465,8 +464,9 @@ export function LearningOverview({
           </span>
         </footer>
       </div>
-      {goalEditor ? (
+      {goalEditor && !trackPending ? (
         <GoalDialog
+          key={track}
           data={data}
           learning={learning}
           studentId={goalEditor.studentId}
@@ -489,7 +489,7 @@ function StudentFocus({
 }: {
   data: MathSheetMonthData;
   learning: LearningData;
-  summaries: Record<string, LearningProgress>;
+  summaries: Record<string, LearningRailMetrics>;
   student: MathStudentRow;
   initialQuery: string;
   onSelect: (id: string) => void;

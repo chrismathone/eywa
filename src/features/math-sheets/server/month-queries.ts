@@ -31,6 +31,8 @@ import type { EnrollSpan, LifecycleBadge } from "@/features/attendance/enrollmen
 import { mathLifecycleBadges } from "./lifecycle";
 import { describePosition } from "@/features/progress/curriculum-position";
 import { readMcsFontSize, type McsFontSize } from "../font-size";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { logDbError } from "@/lib/supabase/db-error";
 import { requireMcsClassAccess } from "./access";
 import { getTenantSettings } from "@/features/owner/server/queries";
 // 휴일 판정 자료는 학원설정 하나뿐 — 내장 법정공휴일 표는 쓰지 않는다([[holiday.ts]]).
@@ -249,7 +251,12 @@ export async function getMathSheetMonth(
       .eq("tenant_id", tenantId)
       .eq("class_id", classId)
       .eq("period_start", from),
-    admin.from("users").select("ui_prefs").eq("id", access.user.id).maybeSingle(),
+    getCurrentUser().then(async actor => {
+      if (!actor) return { data: null };
+      const { data } = await admin.from("users").select("ui_prefs")
+        .eq("id", actor.id).eq("tenant_id", actor.tenantId).maybeSingle();
+      return { data };
+    }),
     access.teacherId
       ? admin
           .from("users")
@@ -262,6 +269,11 @@ export async function getMathSheetMonth(
     // 휴일 — 테넌트 단위 read-mostly라 요청 캐시를 탄다(추가 왕복 없음, B4·B6).
     getTenantSettings(),
   ]);
+
+  if (schedRes.error || enrRes.error) {
+    logDbError(schedRes.error ?? enrRes.error, "math-sheets.getMathSheetMonth.roster");
+    return { ok: false, error: "수업 일정과 학생 명단을 불러오지 못했습니다. 잠시 뒤 다시 시도해 주세요." };
+  }
 
   // 이 달 범위로 좁힌 휴일 — 전 연도를 클라로 내려보낼 이유가 없다(설정엔 2027년까지 들어 있다).
   const holidays: Record<string, string> = {};

@@ -151,13 +151,13 @@
   border: 1px solid color-mix(in srgb, var(--point-ink) 25%, var(--card));
   background: var(--card);
   color: var(--point-ink);
-  font-size: 11px;
+  font-size: var(--text-sm);
   line-height: 1.6;
   overflow-wrap: anywhere;
   box-shadow: 0 3px 12px rgb(0 0 0 / 10%);
 }
 .goalTooltip p, .currentTooltip p { margin: 2px 0; }
-.goalTooltip small, .currentTooltip small { color: var(--text-dim); font-size: 10px; }
+.goalTooltip small, .currentTooltip small { color: var(--text-dim); font-size: var(--text-sm); }
 .goalTooltip > [aria-hidden="true"], .currentTooltip > [aria-hidden="true"] { background: var(--card); }
 .annotation {
   position: absolute;
@@ -172,7 +172,7 @@
   border-radius: 5px;
   background: var(--card);
   color: var(--rail-ink);
-  font-size: 11px;
+  font-size: var(--text-sm);
   line-height: 1;
   white-space: nowrap;
   z-index: 2;
@@ -197,7 +197,7 @@
   align-self: stretch;
   flex-shrink: 0;
   padding: 0 7px;
-  font-size: 10px;
+  font-size: var(--text-sm);
   font-weight: 700;
   border-radius: 4px 0 0 4px;
   background: var(--rail-ink);
@@ -228,8 +228,8 @@
 .currentValue { top: 43px; }
 .targetValue { top: 77px; color: var(--goal-ink); }
 .values b { font-size: 16px; font-weight: 650; letter-spacing: -0.04em; }
-.values small { font-size: 10px; font-weight: 450; }
-.targetValue b { font-size: 13px; font-weight: 550; }
+.values small { font-size: var(--text-sm); font-weight: 450; }
+.targetValue b { font-size: var(--text-sm); font-weight: 550; }
 .scale {
   position: absolute;
   top: 89px;
@@ -238,11 +238,11 @@
   height: 15px;
   min-width: 0;
   color: var(--goal-ink);
-  font-size: 10px;
+  font-size: var(--text-sm);
   line-height: 1.5;
 }
 .scaleTick { position: absolute; transform: translateX(-50%); font-weight: 550; white-space: nowrap; }
-.reportSource { color: var(--text-dim); font-size: 10px; line-height: 1.6; }
+.reportSource { color: var(--text-dim); font-size: var(--text-sm); line-height: 1.6; }
 @container (max-width: 600px) {
   .plot { height: 179px; }
   .scale { font-size: 9px; }
@@ -262,7 +262,7 @@
 }
 @media (max-width: 720px) {
   .values b { font-size: 14px; }
-  .targetValue b { font-size: 12px; }
+  .targetValue b { font-size: var(--text-sm); }
 }
 @media (prefers-reduced-motion: reduce) {
   .currentFill, .targetFill, .currentMarker, .targetMarker,

@@ -1,13 +1,13 @@
 .root,
 .goalDialog {
-  --blue: var(--mcs-actual);
-  --blue-soft: color-mix(in srgb, var(--mcs-actual) 8%, var(--card));
+  --blue: var(--primary);
+  --blue-soft: color-mix(in srgb, var(--primary) 8%, var(--card));
 }
 .root {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 .surface {
   background: var(--card);
@@ -23,16 +23,18 @@
   justify-content: space-between;
   align-items: center;
   gap: 16px;
-  padding: 24px;
+  padding: 12px 16px;
 }
 .heading h2 {
-  font-size: 22px;
+  font-size: var(--text-lg);
   line-height: 1.3;
-  letter-spacing: -0.04em;
-  font-weight: 750;
+  font-weight: 700;
 }
+.headingTitle, .headingActions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.headingActions { justify-content: flex-end; }
+.trackCaption { color: var(--text-dim); font-size: var(--text-sm); white-space: nowrap; }
 .heading p {
-  font-size: 13px;
+  font-size: var(--text-sm);
   color: var(--text-dim);
   margin-top: 7px;
 }
@@ -44,12 +46,13 @@
   display: inline-flex;
   justify-content: center;
   align-items: center;
-  min-height: 36px;
+  height: var(--control-h);
   border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 8px 12px;
-  font-size: 13px;
-  font-weight: 650;
+  border-radius: var(--radius-md);
+  padding: 0 10px;
+  font-size: var(--control-label);
+  line-height: 1;
+  font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
   background: var(--card);
@@ -59,7 +62,7 @@
 }
 .primaryButton {
   background: var(--blue);
-  color: white;
+  color: var(--primary-foreground);
   border-color: var(--blue);
 }
 .primaryButton:hover {
@@ -76,36 +79,39 @@
   outline-offset: 3px;
 }
 .goalSummary {
-  margin: 0 24px 20px;
-  padding: 16px 18px;
+  margin: 0 16px 12px;
+  padding: 10px 12px;
   background: var(--bg-soft);
   border: 1px solid var(--line);
   border-radius: 6px;
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 16px;
 }
 .goalSummary small {
-  display: block;
+  display: inline;
   color: var(--text-dim);
-  font-size: 12px;
-  margin-bottom: 5px;
+  font-size: var(--text-sm);
+  margin-right: 8px;
 }
 .goalSummary strong {
-  font-size: 15px;
+  font-size: var(--text-base);
   font-weight: 700;
 }
 .goalSummary p {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-dim);
-  line-height: 1.8;
-  max-width: 56ch;
+  line-height: 1.5;
+  min-width: 0;
+  flex: 1;
 }
+.goalSummary p > span { display: block; margin-top: 3px; }
+.goalForm fieldset[data-extended] > .goalEndpoint { grid-column: 1 / -1; }
 .autoBadge {
   margin-left: auto;
   background: var(--blue-soft);
   color: var(--blue);
-  font-size: 11px;
+  font-size: var(--text-sm);
   white-space: nowrap;
   border-radius: 4px;
   padding: 5px 7px;
@@ -115,7 +121,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin: 0 24px 17px;
+  margin: 0 16px 10px;
   flex-wrap: wrap;
 }
 .filters > div {
@@ -128,28 +134,32 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-dim);
-  padding: 8px 10px;
-  border-radius: 5px;
+  min-height: var(--control-h);
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
   cursor: pointer;
 }
 .activeFilter {
-  background: var(--blue-soft);
-  color: var(--blue);
-  font-weight: 700;
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-foreground);
+  font-weight: 500;
 }
 .filter span,
 .activeFilter span {
-  font-size: 11px;
+  font-size: var(--text-sm);
 }
 .search {
   display: flex;
   align-items: center;
   gap: 7px;
   border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 7px 9px;
+  border-radius: var(--radius-md);
+  min-height: var(--control-h);
+  padding: 0 9px;
   color: var(--text-dim);
 }
 .search input {
@@ -158,11 +168,11 @@
   outline: none;
   width: 115px;
   min-width: 0;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .tableScroll {
   overflow-x: auto;
-  margin: 0 24px 20px;
+  margin: 0 16px 16px;
   scrollbar-width: thin;
 }
 .table {
@@ -175,7 +185,7 @@
   background: var(--bg-soft);
   color: var(--text-dim);
   padding: 11px 13px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   text-align: left;
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
@@ -194,7 +204,7 @@
   width: 136px;
 }
 .table td {
-  padding: 23px 13px;
+  padding: 12px 13px;
   border-bottom: 1px solid var(--line);
   vertical-align: middle;
 }
@@ -219,7 +229,7 @@
   color: var(--blue);
 }
 .meta {
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.8;
   color: var(--text-dim);
   margin-top: 5px;
@@ -228,16 +238,16 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 14px;
+  margin-bottom: 6px;
   min-width: 0;
 }
 .course strong {
-  font-size: 13px;
+  font-size: var(--text-sm);
   white-space: nowrap;
   font-weight: 650;
 }
 .course span {
-  font-size: 12px;
+  font-size: var(--text-sm);
   white-space: nowrap;
   text-overflow: ellipsis;
   overflow: hidden;
@@ -250,12 +260,12 @@
   color: var(--blue);
 }
 .rate small {
-  font-size: 12px;
+  font-size: var(--text-sm);
   margin-left: 2px;
   color: var(--text-dim);
 }
 .pace {
-  font-size: 16px;
+  font-size: var(--text-base);
   color: var(--blue);
   font-weight: 650;
 }
@@ -267,7 +277,7 @@
   color: var(--blue);
   background: var(--blue-soft);
   border-radius: 4px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   white-space: nowrap;
   font-weight: 650;
 }
@@ -285,16 +295,16 @@
   padding: 35px 10px;
   text-align: center;
   color: var(--text-dim);
-  font-size: 13px;
+  font-size: var(--text-sm);
 }
 .footer {
   display: flex;
   justify-content: space-between;
   gap: 15px;
-  padding: 14px 24px;
+  padding: 8px 16px;
   background: var(--bg-soft);
   border-top: 1px solid var(--line);
-  font-size: 11px;
+  font-size: var(--text-sm);
   color: var(--text-dim);
   flex-wrap: wrap;
 }
@@ -309,7 +319,7 @@
   height: 6px;
   border-radius: 50%;
   display: inline-block;
-  background: var(--blue);
+  background: var(--mcs-actual);
 }
 .targetDot {
   background: var(--mcs-goal);
@@ -317,9 +327,9 @@
 }
 .back {
   display: block;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-dim);
-  margin-bottom: 10px;
+  margin-bottom: 6px;
   cursor: pointer;
 }
 .back:hover {
@@ -330,13 +340,13 @@
   border: 1px solid var(--line);
   background: var(--bg-soft);
   border-radius: 6px;
-  font-size: 13px;
+  font-size: var(--text-sm);
   line-height: 1.8;
 }
 .focusLayout {
   display: grid;
   grid-template-columns: 210px minmax(0, 1fr);
-  margin: 0 24px 24px;
+  margin: 0 16px 16px;
   border: 1px solid var(--line);
   border-radius: 7px;
   overflow: hidden;
@@ -347,7 +357,7 @@
   border-right: 1px solid var(--line);
 }
 .studentList > p {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-dim);
   padding: 10px 12px;
 }
@@ -374,12 +384,12 @@
   display: flex;
   justify-content: space-between;
   gap: 7px;
-  font-size: 16px;
+  font-size: var(--text-base);
   font-weight: 650;
 }
 .selectStudent small,
 .selectedStudent small {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--blue);
   font-weight: 550;
 }
@@ -387,18 +397,18 @@
 .selectedStudent > span:not(.status) {
   display: block;
   margin-top: 5px;
-  font-size: 11px;
+  font-size: var(--text-sm);
   color: var(--text-dim);
 }
 .studentList .status {
-  font-size: 10px;
+  font-size: var(--text-sm);
   margin-top: 7px;
 }
 .focusMain {
   padding: 16px;
   min-width: 0;
 }
-.planArchive { margin-top: 18px; border: 1px solid var(--line); border-radius: 7px; padding: 14px; font-size: 12px; }
+.planArchive { margin-top: 18px; border: 1px solid var(--line); border-radius: 7px; padding: 14px; font-size: var(--text-sm); }
 .planArchive > summary { cursor: pointer; font-weight: 600; }
 .focusTitle {
   display: flex;
@@ -423,15 +433,15 @@
   flex-wrap: wrap;
 }
 .focusCourse strong {
-  font-size: 15px;
+  font-size: var(--text-base);
   font-weight: 650;
 }
 .focusCourse span {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-dim);
 }
 .currentBlock {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-dim);
   margin: 12px 0 0;
   line-height: 1.8;
@@ -455,7 +465,7 @@
 }
 .hierarchy span {
   display: block;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-dim);
   margin-bottom: 10px;
 }
@@ -467,13 +477,13 @@
   color: var(--blue);
 }
 .hierarchy small {
-  font-size: 11px;
+  font-size: var(--text-sm);
   color: var(--text-dim);
   margin-left: 3px;
   font-weight: 450;
 }
 .hierarchy p {
-  font-size: 11px;
+  font-size: var(--text-sm);
   color: var(--text-dim);
   margin-top: 7px;
   line-height: 1.6;
@@ -487,7 +497,7 @@
   border-radius: 5px;
   background: var(--blue-soft);
   color: var(--blue);
-  font-size: 13px;
+  font-size: var(--text-sm);
   line-height: 1.9;
 }
 .dailyPlan,
@@ -495,7 +505,7 @@
   margin-top: 18px;
   border: 1px solid var(--line);
   border-radius: 5px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   padding: 12px 14px;
 }
 .dailyPlan summary,
@@ -511,7 +521,7 @@
 .dailyPlan table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .dailyPlan th,
 .dailyPlan td {
@@ -533,11 +543,11 @@
   border-bottom: 1px solid var(--line);
 }
 .noGoal h4 {
-  font-size: 16px;
+  font-size: var(--text-base);
   font-weight: 650;
 }
 .noGoal p {
-  font-size: 13px;
+  font-size: var(--text-sm);
   color: var(--text-dim);
   line-height: 1.9;
   margin: 8px 0 15px;
@@ -546,7 +556,7 @@
   margin-top: 25px;
 }
 .records h4 {
-  font-size: 15px;
+  font-size: var(--text-base);
   font-weight: 650;
   display: flex;
   align-items: center;
@@ -554,7 +564,7 @@
   margin-bottom: 12px;
 }
 .records h4 span {
-  font-size: 11px;
+  font-size: var(--text-sm);
   font-weight: 450;
   color: var(--text-dim);
 }
@@ -564,33 +574,33 @@
   gap: 14px;
   padding: 14px 0;
   border-top: 1px solid var(--line);
-  font-size: 13px;
+  font-size: var(--text-sm);
   line-height: 1.8;
 }
 .record time {
   color: var(--text-dim);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .record strong {
   font-weight: 550;
   white-space: pre-line;
 }
 .record p {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-dim);
   white-space: pre-line;
 }
 .goalForm fieldset {
-  display: flex;
-  flex-direction: column;
-  gap: 17px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
   min-width: 0;
   border: 0;
   padding: 0;
 }
 .goalForm label {
   display: block;
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 600;
   min-width: 0;
 }
@@ -601,9 +611,9 @@
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: 5px;
-  min-height: 40px;
-  padding: 8px 10px;
-  font-size: 13px;
+  min-height: var(--control-h);
+  padding: 4px 10px;
+  font-size: var(--text-sm);
   background: var(--card);
   margin-top: 7px;
   color: var(--foreground);
@@ -616,21 +626,21 @@
 }
 .fieldLabel {
   display: block;
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 600;
   margin-bottom: 7px;
 }
 .planPreview {
-  margin-top: 20px;
+  margin-top: 12px;
   background: var(--bg-soft);
   border: 1px solid var(--line);
   border-radius: 6px;
-  padding: 15px;
-  font-size: 13px;
+  padding: 12px;
+  font-size: var(--text-sm);
   line-height: 1.8;
 }
 .planPreview p {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-dim);
   margin-top: 7px;
 }
@@ -638,7 +648,13 @@
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  margin-top: 20px;
+  margin-top: 12px;
+  position: sticky;
+  bottom: -16px;
+  padding: 10px 0;
+  background: var(--card);
+  border-top: 1px solid var(--line);
+  z-index: 1;
 }
 /* '초기화'(배정 취소)는 **왼쪽 끝** — 공용 삭제 규약 `[삭제][취소][저장]`.
    🔴 저장 옆에 두지 말 것(되돌릴 수 없는 버튼과 기본 동작이 붙으면 오클릭이 난다).
@@ -650,7 +666,7 @@
   background: color-mix(in srgb, var(--danger) 6%, var(--card));
 }
 .error {
-  font-size: 13px;
+  font-size: var(--text-sm);
   color: var(--danger);
   line-height: 1.8;
   margin-top: 14px;
@@ -658,27 +674,27 @@
 
 @media (max-width: 1050px) {
   .heading {
-    padding: 20px;
+    padding: 12px 16px;
   }
   .goalSummary {
-    margin-left: 20px;
-    margin-right: 20px;
+    margin-left: 16px;
+    margin-right: 16px;
     gap: 16px;
   }
   .goalSummary .autoBadge {
     display: none;
   }
   .filters {
-    margin-left: 20px;
-    margin-right: 20px;
+    margin-left: 16px;
+    margin-right: 16px;
   }
   .tableScroll {
-    margin-left: 20px;
-    margin-right: 20px;
+    margin-left: 16px;
+    margin-right: 16px;
   }
   .focusLayout {
-    margin-left: 20px;
-    margin-right: 20px;
+    margin-left: 16px;
+    margin-right: 16px;
     grid-template-columns: 180px minmax(0, 1fr);
   }
   .focusMain {
@@ -698,14 +714,15 @@
 
 @media (max-width: 720px) {
   .heading {
-    padding: 19px 16px;
+    padding: 12px 16px;
     align-items: flex-start;
+    flex-wrap: wrap;
   }
   .heading h2 {
     font-size: 20px;
   }
   .heading p {
-    font-size: 12px;
+    font-size: var(--text-sm);
   }
   .heading p span {
     margin-left: 8px;
@@ -717,7 +734,7 @@
     padding: 13px;
   }
   .goalSummary p {
-    font-size: 11px;
+    font-size: var(--text-sm);
   }
   .filters {
     margin: 0 16px 12px;
@@ -728,8 +745,8 @@
   }
   .filter,
   .activeFilter {
-    font-size: 11px;
-    padding: 7px;
+    font-size: var(--text-sm);
+    padding: 0 7px;
     gap: 5px;
   }
   .search {
@@ -751,7 +768,7 @@
   .table tr {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    padding: 20px 0;
+    padding: 12px 0;
     border-bottom: 1px solid var(--line);
   }
   .table td {
@@ -789,16 +806,16 @@
     font-size: 23px;
   }
   .pace {
-    font-size: 15px;
+    font-size: var(--text-base);
   }
   .meta {
-    font-size: 11px;
+    font-size: var(--text-sm);
   }
   .course {
     gap: 8px;
   }
   .course span {
-    font-size: 11px;
+    font-size: var(--text-sm);
   }
   .focusLayout {
     grid-template-columns: 1fr;
@@ -822,7 +839,7 @@
   }
   .selectStudent > strong,
   .selectedStudent > strong {
-    font-size: 15px;
+    font-size: var(--text-base);
   }
   .focusMain {
     padding: 12px 8px;
@@ -834,11 +851,11 @@
     font-size: 25px;
   }
   .focusTitle .status {
-    font-size: 11px;
+    font-size: var(--text-sm);
   }
   .focusTitle .button {
     padding: 7px 9px;
-    font-size: 11px;
+    font-size: var(--text-sm);
   }
   .focusCourse {
     margin-top: 24px;
@@ -861,18 +878,18 @@
     margin-left: 4px;
   }
   .insight {
-    font-size: 12px;
+    font-size: var(--text-sm);
     padding: 12px;
   }
   .footer {
     padding: 12px 16px;
-    font-size: 10px;
+    font-size: var(--text-sm);
     gap: 8px;
   }
   .button,
   .primaryButton {
-    font-size: 12px;
-    padding: 8px 10px;
+    font-size: var(--control-label);
+    padding: 0 10px;
   }
   .formPair {
     gap: 10px;
@@ -881,27 +898,30 @@
 
 .classTrack {
   display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
-  margin: 0 24px 20px; font-size: 12px; color: var(--text-dim);
+  margin: 0 24px 20px; font-size: var(--text-sm); color: var(--text-dim);
 }
 .goalDialog { max-height: 90dvh; overflow-y: auto; }
-.trackBadge { color: var(--blue); background: var(--blue-soft); border-radius: 5px; padding: 7px 10px; font-weight: 700; }
+.trackBadge { color: var(--primary); background: var(--blue-soft); border-radius: var(--radius-md); padding: 4px 8px; font-size: var(--text-sm); white-space: nowrap; font-weight: 500; }
 .classTrack > button { margin-left: auto; }
-.trackEditor { margin: 0 24px 20px; padding: 16px; border: 1px solid var(--line); border-radius: 6px; display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 13px; }
+.trackEditor { margin: 0 24px 20px; padding: 16px; border: 1px solid var(--line); border-radius: 6px; display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: var(--text-sm); }
 .trackEditor select { padding: 8px; border: 1px solid var(--line); border-radius: 5px; background: var(--card); }
-.trackEditor p { flex-basis: 100%; font-size: 12px; color: var(--text-dim); }
+.trackEditor p { flex-basis: 100%; font-size: var(--text-sm); color: var(--text-dim); }
 .goalEndpoint { display: flex; flex-direction: column; gap: 14px; padding: 16px; border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
 .goalEndpoint h3 { font-size: 14px; font-weight: 700; }
 .milestones { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 10px; margin: 16px 0; }
 .milestones li { display: flex; gap: 10px; min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 7px; align-items: flex-start; }
 .milestones li > div { min-width: 0; }
-.stopNumber { flex: 0 0 24px; height: 24px; display: grid; place-items: center; color: var(--mcs-goal); border: 1px solid var(--mcs-goal); border-radius: 50%; font-size: 11px; font-weight: 700; }
-.milestones strong { font-size: 12px; font-weight: 700; }
-.milestones p { font-size: 12px; line-height: 1.7; margin-top: 4px; overflow-wrap: anywhere; }
-.milestones small { display: block; font-size: 11px; color: var(--text-dim); line-height: 1.7; margin-top: 5px; }
+.stopNumber { flex: 0 0 24px; height: 24px; display: grid; place-items: center; color: var(--mcs-goal); border: 1px solid var(--mcs-goal); border-radius: 50%; font-size: var(--text-sm); font-weight: 700; }
+.milestones strong { font-size: var(--text-sm); font-weight: 700; }
+.milestones p { font-size: var(--text-sm); line-height: 1.7; margin-top: 4px; overflow-wrap: anywhere; }
+.milestones small { display: block; font-size: var(--text-sm); color: var(--text-dim); line-height: 1.7; margin-top: 5px; }
 .milestones li[data-reached] .stopNumber { color: white; background: var(--mcs-goal); border-color: var(--mcs-goal); }
 @media (max-width: 720px) {
   .classTrack, .trackEditor { margin-left: 16px; margin-right: 16px; }
-  .formPair { grid-template-columns: 1fr; }
+  .formPair, .goalForm fieldset { grid-template-columns: 1fr; }
   .goalEndpoint { padding: 12px; }
   .focusCourse { align-items: flex-start; flex-wrap: wrap; }
 }
+
+.filter:hover { background: var(--bg-soft); }
+.goalForm fieldset > label, .goalForm fieldset > div { grid-column: 1 / -1; }

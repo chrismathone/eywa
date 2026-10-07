@@ -252,7 +252,6 @@ export async function resetMathLearningGoals(
     return { ok: false, error: "전체 목표 초기화는 원장만 할 수 있습니다." };
   const admin = createAdminClient(),
     { tenantId, classId } = gate.access;
-  const missing = (code?: string) => ["42P01", "PGRST205"].includes(code ?? "");
   /**
    * 🔴 **두 표를 함께 지운다** — 표준 계획만 지우면 옛 `math_learning_goals`의 목표가 읽기 폴백으로
    *    **곧바로 다시 뜬다**(화면상 "초기화가 안 됐다"). 사람이 말한 '배정 취소'는 그 학생에게 목표가
@@ -260,33 +259,15 @@ export async function resetMathLearningGoals(
    * 🔴 표준 계획은 (구분 · 시작월)까지 맞춰 **그 한 칸만** 지운다(다른 달·복습 심화 계획은 남는다).
    * 🔴 옛 표엔 구분 칸이 없어 **정규 초기화일 때만** 건드린다 — 복습 심화을 지우며 정규 목표를 날리면 안 된다.
    */
-  const standardDelete = value.standard
-    ? await admin
-        .from("math_learning_track_goals")
-        .delete()
-        .eq("tenant_id", tenantId)
-        .eq("class_id", classId)
-        .in("student_id", studentIds)
-        .eq("track", value.track)
-        .eq("start_date", value.startDate)
-        .select("student_id")
-    : { data: [], error: null };
-  const legacyDelete =
-    value.track === "regular"
-      ? await admin
-          .from("math_learning_goals")
-          .delete()
-          .eq("tenant_id", tenantId)
-          .eq("class_id", classId)
-          .in("student_id", studentIds)
-          .select("student_id")
-      : { data: [], error: null };
-  // 표가 아직 없는 환경은 **실패가 아니다**([[#95]]) — 다른 한쪽만 지우고 넘어간다.
-  const realError = [standardDelete.error, legacyDelete.error].find((e) => e && !missing(e.code));
-  if (realError)
+  const { data: removed, error } = await admin.rpc("reset_mcs_learning_goals", {
+    p_tenant_id: tenantId, p_class_id: classId, p_student_ids: studentIds,
+    p_track: value.track, p_start_date: value.startDate, p_standard: value.standard,
+  });
+  if (error) {
+    logDbError(error, "math-sheets.resetMathLearningGoals");
     return { ok: false, error: "전체 목표를 초기화하지 못했습니다. 다시 시도해 주세요." };
-  const data = [...(standardDelete.data ?? []), ...(legacyDelete.data ?? [])];
-  if (!data.length)
+  }
+  if (typeof removed !== "number" || !Number.isInteger(removed) || removed < 1)
     return { ok: false, error: "초기화할 전체 목표가 없습니다." };
   await logAction({
     action: "mcs_learning_goal_reset",
@@ -298,10 +279,10 @@ export async function resetMathLearningGoals(
       track: value.track,
       startDate: value.startDate,
       standard: value.standard,
-      removed: data.length,
+      removed,
     },
   });
   revalidatePath(`/mcs/${classId}/month`);
   revalidatePath("/mcs");
-  return { ok: true, removed: data.length };
+  return { ok: true, removed };
 }

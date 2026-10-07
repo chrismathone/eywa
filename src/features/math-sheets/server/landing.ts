@@ -2,6 +2,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { logDbError } from "@/lib/supabase/db-error";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { kstMonth, kstToday, monthLabel, monthRange } from "@/lib/date-kst";
 import { classDaysOf, normalizeMonth, type MathScheduleRow } from "../lib/class-days";
@@ -129,6 +130,10 @@ export async function getMathClassOptions(monthRaw: string | null): Promise<{ id
       .order("class_name"),
     mcsVisibleClassFilter(),
   ]);
+  if (classRes.error) {
+    logDbError(classRes.error, "math-sheets.getMathClassOptions");
+    throw new Error("반 목록을 불러오지 못했습니다. 잠시 뒤 다시 시도해 주세요.");
+  }
   const all = classRes.data ?? [];
   const scoped = filter ? all.filter((c) => filter(String(c.id))) : all;
   return scoped.map((c) => ({ id: String(c.id), name: String(c.class_name) }));
@@ -162,6 +167,11 @@ export async function getMathSheetLanding(monthRaw: string | null): Promise<Math
     // 휴일 — 테넌트 단위 read-mostly라 요청 캐시를 탄다(추가 왕복 없음, B4·B6).
     getTenantSettings(),
   ]);
+
+  if (classRes.error) {
+    logDbError(classRes.error, "math-sheets.getMathSheetLanding");
+    return { ok: false, error: "반 목록을 불러오지 못했습니다. 잠시 뒤 다시 시도해 주세요." };
+  }
 
   // 🔴 시트와 **같은 맵**을 읽는다 — 갈리면 카드 작성률과 시트 툴바가 다른 수를 말한다(이 파일의 상시 규약).
   const holidays = buildHolidayMap(settings.operations.holidays);
