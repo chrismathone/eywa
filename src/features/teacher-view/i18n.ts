@@ -1310,8 +1310,6 @@ export const SHEET_DICT = {
     en: "A reason can only be added for late or absent",
   },
   "att.cycle.aria": { ko: "{name} 출결 — {value}", en: "{name} attendance — {value}" },
-  "att.select.aria": { ko: "{name} 출결", en: "{name} attendance" },
-  "att.select.tipClick": { ko: "클릭하여 출결 선택", en: "Click to choose attendance" },
   "att.cycle.none": { ko: "선택 안 함", en: "Not set" },
   "att.cycle.tipClick": {
     ko: "클릭: 출석 → 결석 → 지각 → 선택 안 함",

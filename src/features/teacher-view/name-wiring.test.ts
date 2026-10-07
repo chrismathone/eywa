@@ -307,7 +307,7 @@ describe("🔴 오늘 면(카드·요약·학생 줄)도 사전을 탄다", () =
     expect(sheetT("en", "select.choose")).toBe("Choose");
     const att = codeOnly(read("features", "class-sheets", "components", "attendance-check.tsx"));
     expect(att).toContain('t("select.choose")');
-    expect(att).toContain("att.select.tipClick");
+    expect(att).toContain("att.cycle.tipClick");
     expect(att).toContain("att.makeup.removeConfirm");
     expect(att).not.toContain("선택 안 함");
     expect(att).not.toContain("출결 없음");

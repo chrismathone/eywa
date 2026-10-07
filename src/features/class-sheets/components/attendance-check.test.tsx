@@ -2,7 +2,6 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { tipText } from "@/components/hover-tip/tip";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AttendanceCheck } from "./attendance-check";
-import { SheetLangProvider } from "@/features/teacher-view/lang-context";
 
 /**
  * 원장 2026-08-18: *"영어 강사 시트에도 지각/결석 팝업 시에 **시간 혹은 사유 적는 란**(수학처럼)"*.
@@ -29,60 +28,25 @@ const base = {
 const noteBox = () => screen.queryByPlaceholderText(/학원버스 지연/);
 
 describe("ECS 출결 체크 — 지각·결석 사유 창", () => {
-  it("목록을 여는 것만으로는 저장하지 않고, 출석을 고르면 바로 저장한다", async () => {
+  it("① 기록 없음 → 클릭(=출석)은 사유 창을 열지 않는다", () => {
     const onSet = vi.fn();
     render(<AttendanceCheck {...base} status={null} note={null} onSet={onSet} />);
     fireEvent.click(screen.getByRole("button"));
-    expect(onSet).not.toHaveBeenCalled();
-    fireEvent.click(await screen.findByRole("button", { name: "출석" }));
     expect(onSet).toHaveBeenCalledWith("present");
     expect(noteBox()).toBeNull();
   });
 
-  it("출석에서 결석을 직접 선택하면 먼저 저장하고 사유 창을 연다", async () => {
+  it("①② 출석 → 클릭(=결석)이면 **먼저 저장하고** 사유 창을 연다", () => {
     const onSet = vi.fn();
     const { rerender } = render(
       <AttendanceCheck {...base} status="present" note={null} onSet={onSet} />,
     );
     fireEvent.click(screen.getByRole("button"));
-    fireEvent.click(await screen.findByRole("button", { name: "결석" }));
     // 저장이 먼저 — 사유를 안 적고 닫아도 결석은 남는다(필수 입력 금지).
     expect(onSet).toHaveBeenCalledWith("absent");
     // 부모가 낙관 갱신으로 새 상태를 되돌려준 뒤에도 창은 열려 있다.
     rerender(<AttendanceCheck {...base} status="absent" note={null} onSet={onSet} />);
     expect(noteBox()).not.toBeNull();
-  });
-
-  it("결석에서 출석을 직접 선택하며 중간 상태를 저장하지 않는다", async () => {
-    const onSet = vi.fn();
-    render(<AttendanceCheck {...base} status="absent" note="병결" onSet={onSet} />);
-    fireEvent.click(screen.getByRole("button"));
-    fireEvent.click(await screen.findByRole("button", { name: "출석" }));
-    expect(onSet.mock.calls).toEqual([["present"]]);
-    expect(noteBox()).toBeNull();
-  });
-
-  it("선택 안 함으로 기록을 지우되 사유가 있으면 기존 상태를 유지한다", async () => {
-    const onSet = vi.fn();
-    const onClear = vi.fn();
-    const { rerender } = render(<AttendanceCheck {...base} status="present" note={null} onSet={onSet} onClear={onClear} />);
-    fireEvent.click(screen.getByRole("button"));
-    fireEvent.click(await screen.findByRole("button", { name: "선택 안 함" }));
-    expect(onClear).toHaveBeenCalledOnce();
-    onClear.mockClear();
-    rerender(<AttendanceCheck {...base} status="late" note="버스" onSet={onSet} onClear={onClear} />);
-    fireEvent.click(screen.getByRole("button"));
-    fireEvent.click(await screen.findByRole("button", { name: "선택 안 함" }));
-    expect(onClear).not.toHaveBeenCalled();
-    expect(onSet).not.toHaveBeenCalled();
-  });
-
-  it("영어 화면의 목록은 번역된 이름을 표시하고 원래 상태 코드를 저장한다", async () => {
-    const onSet = vi.fn();
-    render(<SheetLangProvider lang="en"><AttendanceCheck {...base} status="absent" note={null} onSet={onSet} /></SheetLangProvider>);
-    fireEvent.click(screen.getByRole("button"));
-    fireEvent.click(await screen.findByRole("button", { name: "Present" }));
-    expect(onSet).toHaveBeenCalledWith("present");
   });
 
   it("③ 이미 적힌 사유는 채워서 연다 — 저장하면 그 상태 그대로 사유만 바뀐다", () => {
