@@ -2,6 +2,8 @@
 
 import { seatBlockReason } from "@/lib/license/server";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
+import { recordMathWithdrawalToSheet } from "@/features/withdrawals/server/withdrawal-sheet";
 import { goalExamLabel, parseGoalAxis } from "@/features/grades/goals";
 import { goalAxisReady } from "@/features/grades/server/goals";
 import {
@@ -399,6 +401,10 @@ export async function updateStudent(
   if (savedStatus === "withdrawn" && prevStatus !== "withdrawn") {
     const enrErr = await closeActiveEnrollmentsClamped(supabase, id, input.withdrawnAt ?? null);
     if (enrErr) return { error: enrErr };
+    // 수학 퇴원이면 '퇴원생 관리 차트' 시트에 적는다(원장 2026-10-07) — 응답 뒤에, 실패해도 퇴원은 그대로.
+    const sheetDate = (savedWithdrawnAt ? String(savedWithdrawnAt).slice(0, 10) : null) ?? kstToday();
+    const sheetTenant = user.tenantId;
+    after(() => recordMathWithdrawalToSheet({ tenantId: sheetTenant, studentId: id, date: sheetDate }));
   } else if (savedStatus === "enrolled" && prevStatus !== "enrolled") {
     // 퇴원이 닫은 enrollment(end_date=퇴원일)를 다시 연다 — 안 하면 재원인데 시간표 '퇴원'에 남음.
     // 🔴 퇴원에서 돌아올 때만 — 휴원·예비의 withdrawn_at은 **퇴원 예약**이라 그 날짜로 끝나는 다른 수강을 잘못 연다.
@@ -581,6 +587,9 @@ export async function changeStudentStatus(
     // 활성 enrollment 종료 (미래 시작 수강은 end_date=start_date로 클램프 — daterange 에러 방지).
     const enrErr = await closeActiveEnrollmentsClamped(supabase, id, date, { withdrawal_reason: reasonStr });
     if (enrErr) return { error: enrErr };
+    // 수학 퇴원이면 '퇴원생 관리 차트' 시트에 적는다(원장 2026-10-07) — 응답 뒤에, 실패해도 퇴원은 그대로.
+    const sheetTenant = user.tenantId;
+    after(() => recordMathWithdrawalToSheet({ tenantId: sheetTenant, studentId: id, date }));
   } else if (target === "on_hold") {
     const { error: stuErr } = await supabase
       .from("students")
@@ -747,6 +756,11 @@ export async function endStudentEnrollments(
       },
     });
   }
+
+  // 고른 수강 중 수학이 있고 그로써 수학을 그만뒀으면(반이동 제외) 시트에 적는다(원장 2026-10-07 '수학만 퇴원'도 적는다).
+  const sheetTenant = user.tenantId;
+  const sheetIds = targets.map((t) => t.id);
+  after(() => recordMathWithdrawalToSheet({ tenantId: sheetTenant, studentId, date, enrollmentIds: sheetIds }));
 
   revalidatePath(`/students/${studentId}`);
   revalidatePath("/students");
@@ -917,6 +931,15 @@ export async function endSingleEnrollment(
   // 부분 종료(endStudentEnrollments)도 같은 함수를 돈다(#77: 표면마다 다시 짜면 한쪽만 고쳐진다).
   const res = await endEnrollmentById(supabase, enrollmentId, date, reason);
   if (res.error) return { error: res.error };
+  // 이 종료로 수학을 그만뒀으면(반이동 제외 · 다른 수학 반이 남아 있으면 아님) 시트에 적는다(원장 2026-10-07).
+  const sheetStudent = studentId || res.studentId || null;
+  if (sheetStudent && res.endDate) {
+    const sheetTenant = user.tenantId;
+    const sheetDate = String(res.endDate).slice(0, 10);
+    after(() =>
+      recordMathWithdrawalToSheet({ tenantId: sheetTenant, studentId: sheetStudent, date: sheetDate, enrollmentIds: [enrollmentId] }),
+    );
+  }
 
   await logAction({
     action: "enrollment_end",
