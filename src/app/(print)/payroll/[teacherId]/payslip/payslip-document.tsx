@@ -83,8 +83,11 @@ export function PayslipDocument({ data }: { data: PayslipData }) {
    * 과정별 비율이 비어 있으면 **기본 비율**이 실제로 적용된다(computeTierSettlement의 defaultRate 폴백).
    * 표에 'ㅡ'만 찍으면 "비율 없이 계산됐다"는 거짓말이 된다 — 적용된 값을 그대로 보인다.
    */
-  const shownBase = (g: (typeof SALARY_GROUPS)[number]) => rates.base[g] ?? rates.baseDefault ?? undefined;
-  const shownApplied = (g: (typeof SALARY_GROUPS)[number]) => rates.applied[g] ?? rates.appliedDefault ?? undefined;
+  // 🔴 대상 학년을 좁힌 명세서 — 대상 밖 학년 칸은 **빈 칸**이다. 기본 비율로 메우면 계산에 쓰지 않은 비율이 찍힌다(적대 리뷰 2026-10-07).
+  const outOfScope = (g: (typeof SALARY_GROUPS)[number]) =>
+    !!data.sheetLevels?.length && (g === "초등" || g === "중등" || g === "고등") && !data.sheetLevels.includes(g);
+  const shownBase = (g: (typeof SALARY_GROUPS)[number]) => (outOfScope(g) ? undefined : rates.base[g] ?? rates.baseDefault ?? undefined);
+  const shownApplied = (g: (typeof SALARY_GROUPS)[number]) => (outOfScope(g) ? undefined : rates.applied[g] ?? rates.appliedDefault ?? undefined);
   /**
    * 🔴 수업료를 못 냈으면 **금액 칸을 전부** 이걸로 채운다. 수업료만 가리고 지급총액·실수령액에 ₩0을
    *    찍으면 "겉보기 정상인 ₩0 명세서"가 인쇄된다(적대 리뷰가 잡은 치명 버그).
@@ -366,7 +369,8 @@ function ClassMetrics({ data }: { data: PayslipData }) {
           <Cell label="누적수업인원">{metrics.cumulativeStudents}명</Cell>
         </tr>
         <tr>
-          <Cell label="담당 반">{data.teacher.classes.length}개</Cell>
+          {/* 대상 학년을 좁힌 명세서는 그 학년 학생이 있는 반만 센다(수업인원과 같은 범위). */}
+          <Cell label="담당 반">{metrics.scopedClassCount ?? data.teacher.classes.length}개</Cell>
           <Cell label="월 평균 수업인원">{metrics.averageStudents}명</Cell>
         </tr>
         <tr className="print:hidden">

@@ -28,6 +28,10 @@ export function SalaryRatesButton({ teacherId, teacherName, month, rates, classe
       const raw = String(data.get(`class:${cls.id}`) ?? "").trim();
       if (raw) next.classes[cls.id] = Number(raw); else delete next.classes[cls.id];
     }
+    // 대상 학년 — 전부 고르면 '전체'(저장하지 않는다). 하나도 안 고르면 아무도 계산되지 않으므로 받지 않는다.
+    const picked = ATTENDANCE_RATE_LEVELS.filter((level) => data.get(`level:${level}`) === "on");
+    if (picked.length === 0) { setError("대상 학년을 하나 이상 골라 주세요"); return; }
+    if (picked.length < ATTENDANCE_RATE_LEVELS.length) next.levels = picked;
     setError("");
     startTransition(async () => {
       try {
@@ -55,6 +59,17 @@ export function SalaryRatesButton({ teacherId, teacherName, month, rates, classe
               </td>)}
             </tr>)}</tbody>
           </table>
+          {/* 대상 학년(원장 2026-10-07 — 고등학생에게만 프리랜서를 적용하는 선생님). 기준은 학생 학년이다(반 이름 아님). */}
+          <div role="group" aria-label="대상 학년" className="border-line mt-3 border-t pt-3">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="text-sm font-bold">대상 학년</span>
+              {ATTENDANCE_RATE_LEVELS.map((level) => <label key={level} className="inline-flex items-center gap-1 text-sm">
+                <input type="checkbox" name={`level:${level}`} defaultChecked={!rates.levels?.length || rates.levels.includes(level)} />
+                {level}
+              </label>)}
+            </div>
+            <p className="text-text-dim mt-2 text-xs break-keep">고른 학년의 학생만 실급여와 급여명세서(출석부 별지 포함)에 들어갑니다. 전부 고르면 모든 학생입니다. 학생의 학년으로 가릅니다(반 이름이 아닙니다).</p>
+          </div>
           <details className="border-line mt-3 border-t pt-3">
             <summary className="cursor-pointer text-sm font-bold">반별 예외 비율</summary>
             <p className="text-text-dim my-2 text-xs">입력한 반은 위 비율보다 우선합니다. 비우면 정규·특강의 학년별 비율을 따릅니다.</p>

@@ -10,7 +10,7 @@ import {
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { cellKey, rowKey } from "@/features/attendance/grid/model";
 import type { AttendanceUnitSuffix } from "@/features/attendance/unit-suffix";
-import { attendanceSalaryRate, type AttendanceSalaryRates } from "@/features/attendance/salary-rates";
+import { attendanceSalaryRate, salaryRowOutOfScope, type AttendanceSalaryRates } from "@/features/attendance/salary-rates";
 import type { ReactNode } from "react";
 import { suppressedTransferRows, transferRowKey } from "@/features/attendance/transfer-badge";
 import { countMarks, sumCounts, type Counted } from "@/features/attendance/grid/totals";
@@ -595,6 +595,7 @@ export function MatrixTable({
                     confirmedPrices={showPrice ? confirmedPricesByRow?.[rowKey(g.classId, s.id)] ?? null : undefined}
                     showActualAmount={showActualAmount}
                     actualSalaryRate={salaryRatesByRow?.[rowKey(g.classId, s.id)]}
+                actualSalaryOutOfScope={showActualSalary && salaryRowOutOfScope(salaryRates!, s.grade)}
                     classBilled={showClassBilled ? billedView?.[rowKey(g.classId, s.id)] ?? null : undefined}
                     termSessions={showTermSessions ? termView?.[rowKey(g.classId, s.id)] ?? null : undefined}
                     carryMark={showTermSessions ? carryMarksByRow?.[rowKey(g.classId, s.id)] ?? null : null}
@@ -626,6 +627,7 @@ export function MatrixTable({
                 confirmedPrices={showPrice ? confirmedPricesByRow?.[rowKey(g.classId, s.id)] ?? null : undefined}
                 showActualAmount={showActualAmount}
                 actualSalaryRate={salaryRatesByRow?.[rowKey(g.classId, s.id)]}
+                actualSalaryOutOfScope={showActualSalary && salaryRowOutOfScope(salaryRates!, s.grade)}
                 classBilled={showClassBilled ? billedView?.[rowKey(g.classId, s.id)] ?? null : undefined}
                 termSessions={showTermSessions ? termView?.[rowKey(g.classId, s.id)] ?? null : undefined}
                     carryMark={showTermSessions ? carryMarksByRow?.[rowKey(g.classId, s.id)] ?? null : null}

@@ -276,6 +276,11 @@ describe("급여명세서 별지 — 그 달 출석부", () => {
     expect(screen.getByText(/칸의 숫자 = 그날 인정된 수업 시수/)).toBeTruthy();
   });
 
+  it("대상 학년을 좁힌 명세서의 별지는 머리에 그 사실을 적는다(다른 학년 학생이 왜 없는지)", () => {
+    render1({ scopeNote: "고등 학생만" });
+    expect(screen.getByText("· 고등 학생만")).toBeTruthy();
+  });
+
   it("caption을 바꾸면 급여 문구는 안 나오고 새 문구가 선다(랩실 별지)", () => {
     render1({ caption: "자리 표시가 있는 확정 기록만 시수 열에 넣습니다" });
     expect(screen.queryByText(/급여 산정에 들어간 값/)).toBeNull();

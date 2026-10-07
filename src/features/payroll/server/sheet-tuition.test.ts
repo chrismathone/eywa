@@ -253,3 +253,80 @@ describe("배선 — 명세서와 강사 정산 면이 같은 갈림을 탄다",
     expect(page).toMatch(/\{appendixMissing \? \( <p className="[^"]*print:hidden[^"]*">/);
   });
 });
+
+/** 원장 2026-10-07 *"이성우 선생님은 … 고등학생에 대해서만 급여 명세서가 나오도록"* — 대상 학년. */
+describe("대상 학년을 좁힌 선생님의 명세서", () => {
+  const price = [{ unitPrice: 30000, monthly: false, daysBasis: false }];
+  const mixedSheet = () => sheet({
+    groups: [{
+      classId: C, className: "고등M 단체 BS4F", subject: "math", isSpecial: false, makeupPool: false,
+      matrix: {
+        students: [{ id: "h1", name: "고일", grade: "고1" }, { id: "m1", name: "중삼", grade: "중3" }, { id: "m2", name: "중이", grade: "중2" }],
+        marks: { h1: days(8), m1: days(8), m2: days(6) },
+        units: {},
+      },
+    }],
+    billing: { billed: {}, confirmedSessions: {}, confirmedPrices: { [rowKey(C, "h1")]: price, [rowKey(C, "m1")]: price, [rowKey(C, "m2")]: price } },
+    unitSuffix: "T",
+  });
+
+  it("고등학생 줄만 수업료에 들어가고, 그 사실과 빠진 학년의 사람 수·시수를 적는다", async () => {
+    mocks.rates.mockResolvedValue({ rates: rates({ levels: ["고등"] }) });
+    mocks.sheet.mockResolvedValue(mixedSheet());
+    const r = await computeSheetTuition(args);
+    expect(r?.levels).toEqual(["고등"]);
+    expect(r?.settlement?.lines.map((l) => l.studentName)).toEqual(["고일"]);
+    expect(r?.settlement?.unitsTotal).toBe(8);
+    expect(r?.settlement?.total).toBe(103854); // 30,000 × 8 × 0.911 × 47.5%
+    expect(r?.warnings[0]).toBe("고등 학생만 산정한 명세서입니다(출석부 '비율 설정'의 대상 학년) — 그 밖 학년 2명 · 14시수는 들어 있지 않습니다.");
+    // 다른 학년은 '배분율이 없어 빠진' 줄이 아니다.
+    expect(r?.warnings.join("\n")).not.toContain("배분율이 정해지지 않아");
+    // 비율표에는 대상 학년만(계산에 쓰지 않는 초등·중등 비율을 찍지 않는다).
+    expect(r?.rates.base).toEqual({ 고등: 47.5, 수능: 50, 특강: 50 });
+  });
+
+  it("학년을 모르는 학생은 '배분율'이 아니라 학년 미입력으로 적는다 — 무엇을 고쳐야 하는지 말한다", async () => {
+    mocks.rates.mockResolvedValue({ rates: rates({ levels: ["고등"] }) });
+    const s = mixedSheet();
+    s.groups[0]!.matrix.students.push({ id: "u1", name: "학년없음", grade: null });
+    s.groups[0]!.matrix.marks.u1 = days(2);
+    s.billing.confirmedPrices[rowKey(C, "u1")] = price;
+    mocks.sheet.mockResolvedValue(s);
+    const r = await computeSheetTuition(args);
+    const text = r!.warnings.join("\n");
+    expect(text).toContain("학년이 비어 있거나 초·중·고로 분류되지 않아(예: 7세) 대상 학년인지 판정하지 못한 1명(학년없음) — 2시수가 산정에서 빠졌습니다.");
+    expect(text).not.toContain("배분율이 정해지지 않아");
+    expect(r?.settlement?.lines.map((l) => l.studentName)).toEqual(["고일"]);
+  });
+
+  it("대상을 좁히지 않은 선생님은 문구도 `levels`도 없다 — 종전 그대로", async () => {
+    mocks.sheet.mockResolvedValue(mixedSheet());
+    const r = await computeSheetTuition(args);
+    expect(r?.levels).toBeUndefined();
+    expect(r?.settlement?.lines.map((l) => l.studentName)).toEqual(["고일", "중삼", "중이"]);
+    expect(r?.warnings.join("\n")).not.toContain("학생만 산정한 명세서");
+  });
+
+  it("비율표 — 대상 밖 학년은 계약 비율도 찍지 않고, 특강은 대상 학년끼리만 같은지 본다", () => {
+    const r = rates({ levels: ["중등", "고등"], regular: { 초등: 40, 중등: 45, 고등: 47.5 }, special: { 초등: 55, 중등: 50, 고등: 50 } });
+    expect(sheetRatesAsGroups(r, args.contractRates)).toEqual({ 중등: 45, 고등: 47.5, 수능: 50, 특강: 50 });
+  });
+
+  it("🔴 명세서 지표(수업인원·퇴원)와 별지도 같은 학년만 — 한 장에서 말이 갈리지 않게(배선)", () => {
+    const queries = readFileSync("src/features/payroll/server/payslip-queries.ts", "utf8");
+    expect(queries).toContain("loadMetrics(supabase, classIds, period, year, tuitionPromise.then((t) => t.sheet?.levels, () => undefined)),");
+    expect(queries).toContain("rows = rows.filter((r) => inScope.has(r.studentId));");
+    expect(queries).toContain("...(sheet?.levels?.length ? { sheetLevels: sheet.levels } : {}),");
+    const page = readFileSync("src/app/(print)/payroll/[teacherId]/payslip/page.tsx", "utf8");
+    expect(page).toContain("students: g.matrix.students.filter((s) => !salaryRowOutOfScope({ levels: sheetLevels }, s.grade))");
+    expect(page).toContain("scopeNote={sheetLevels ? `${sheetLevels.join(\"·\")} 학생만` : undefined}");
+    // '담당 반'도 대상 학년 학생이 있는 반만 · 비율표의 대상 밖 학년 칸은 기본 비율로도 메우지 않는다.
+    expect(queries).toContain("...(scopedClassCount !== undefined ? { scopedClassCount } : {}),");
+    const doc = readFileSync("src/app/(print)/payroll/[teacherId]/payslip/payslip-document.tsx", "utf8");
+    expect(doc).toContain("{metrics.scopedClassCount ?? data.teacher.classes.length}개");
+    expect(doc).toContain("(outOfScope(g) ? undefined : rates.base[g] ?? rates.baseDefault ?? undefined)");
+    // 출석부의 대상 밖 줄 '—'는 "대상 학년이 아니다"라고 말한다(단가·비율 미설정 문구가 아니다).
+    expect(readFileSync("src/app/(shell)/attendance/_components/matrix-table.tsx", "utf8").split("actualSalaryOutOfScope={showActualSalary && salaryRowOutOfScope(salaryRates!, s.grade)}").length - 1).toBe(2);
+    expect(readFileSync("src/app/(shell)/attendance/_components/live-totals.tsx", "utf8")).toContain('outOfScope ? "att.row.actualSalaryOutOfScope" : "att.row.actualSalaryUnavailable"');
+  });
+});

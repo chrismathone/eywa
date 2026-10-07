@@ -9,6 +9,7 @@ import { PrintActions } from "@/app/(print)/enrollment/[id]/print/print-actions"
 import { PayslipDocument } from "./payslip-document";
 import { AdjustmentsEditor } from "./adjustments-editor";
 import { AttendanceAppendix } from "./attendance-appendix";
+import { salaryRowOutOfScope } from "@/features/attendance/salary-rates";
 import { getMonthlyAttendanceMatrix } from "@/features/attendance/server/queries";
 import { loadTeacherSheet } from "@/features/attendance/server/teacher-sheet";
 import { TeacherSheetError } from "@/features/attendance/teacher-sheet-error";
@@ -86,7 +87,14 @@ export default async function PayslipPrintPage({
         ).then((groups) => ({ groups, missing: false })),
     getTenantSettings(),
   ]);
-  const appendix = appendixResult.groups;
+  // 대상 학년을 좁힌 선생님 — 별지도 수업료와 같은 학년 학생만 싣는다(학년을 모르는 학생은 남긴다 — 본문이 '빠진 줄'로 알린다).
+  const sheetLevels = data.sheetLevels?.length ? data.sheetLevels : null;
+  const appendix = sheetLevels
+    ? appendixResult.groups.map((g) => ({
+        ...g,
+        matrix: { ...g.matrix, students: g.matrix.students.filter((s) => !salaryRowOutOfScope({ levels: sheetLevels }, s.grade)) },
+      }))
+    : appendixResult.groups;
   // 본문이 금액을 보이는데(발행본) 별지만 못 붙인 경우에만 따로 알린다 — 산정 불가면 본문의 사유가 같은 말을 한다.
   const appendixMissing = appendixResult.missing && data.settlement !== null;
   // 공휴일 = 학원설정 단일 소스(출석부 화면과 같은 값이라야 음영이 어긋나지 않는다).
@@ -117,6 +125,7 @@ export default async function PayslipPrintPage({
         period={period}
         teacherName={data.teacher.name}
         holidays={holidays}
+        scopeNote={sheetLevels ? `${sheetLevels.join("·")} 학생만` : undefined}
       />
     </>
   );
