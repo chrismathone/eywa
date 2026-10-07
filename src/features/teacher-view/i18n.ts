@@ -1564,6 +1564,11 @@ export const SHEET_DICT = {
     en: ". Even in the same class, other teachers' periods and the seat rooms (JJ·Lab) are hidden and left out of the session and attendance-rate totals. Editing here never changes another teacher's records. A record with no period (a makeup, say) counts for every teacher who takes this class that day.",
   },
   "att.notice.scope.d": { ko: "반별 보기", en: "the class view" },
+  // 반별 보기 + 세션 축 — 실급여는 달 단위(청구액·등록 차수·명세서와 같은 축)라 세션 창에서는 싣지 않는다(원장 2026-10-07).
+  "att.notice.salaryAxis": {
+    ko: "실급여는 달 단위로 계산합니다. 기간을 '월'로 바꾸면 이 표에서도 보입니다.",
+    en: "Actual pay is worked out per calendar month. Switch Period to Month to see it in this table.",
+  },
   "att.notice.scope.e": { ko: "에서 봅니다.", en: " instead." },
   "att.notice.empty.teacherPre": { ko: "담당 반에 아직 ", en: "Among your classes, " },
   "att.notice.empty.classPre": { ko: "이 반은 아직 ", en: "In this class, " },

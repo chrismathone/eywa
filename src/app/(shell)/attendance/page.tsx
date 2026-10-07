@@ -29,6 +29,7 @@ import { classWorkerLabel } from "@/features/attendance/class-worker";
 import { getAttendanceClassBilledAmounts, mergeAttendanceClassBilling } from "@/features/attendance/server/class-billing";
 import { attendanceNoInvoiceRows } from "@/features/attendance/class-billing";
 import { canShowAttendanceActualAmount } from "@/features/attendance/server/actual-amount-access";
+import { monthBounds } from "@/features/attendance/enrollment-span";
 import { getAttendanceSalaryRates } from "@/features/attendance/server/salary-rates";
 import { SalaryRatesButton } from "./_components/salary-rates-button";
 import { SalaryVisibleButton } from "./_components/salary-visible-button";
@@ -597,6 +598,14 @@ export default async function AttendancePage({
     const billing = await getAttendanceClassBilledAmounts(month, [roster], { allowClassIds: [makeupPoolClassId] });
     return { classId: makeupPoolClassId, matrix: poolMatrix, roster, billing };
   };
+  /**
+   * 반별 보기의 표가 **달력월**을 그리고 있나 — 실급여는 이럴 때만 싣는다.
+   * 🔴 청구액·등록 차수·확정 단가·명세서는 전부 달력월이다. 반별 보기의 기본 축은 세션이고 세션은 달을 넘길 수 있어
+   *    (실측: 수학 9월 = 9/1~10/1), 세션 창의 시수로 계산하면 같은 달 실급여가 강사 전체 보기·명세서와 다른 숫자로 선다.
+   *    급여로 읽는 숫자가 화면마다 다르면 안 되므로 창이 달과 같을 때만 싣고, 아니면 값을 안 보내고 안내 한 줄을 세운다.
+   */
+  const monthSpan = monthBounds(month);
+  const classAxisIsMonth = matrix.window.start === monthSpan.first && matrix.window.end === monthSpan.last;
   const [workers, homeBilling, makeupPool, showActualAmountRaw, salaryConfigRaw, substituteCells] = await Promise.all([
     getMonthlyClassWorkers(user.tenantId, month, workerClassIds),
     getAttendanceClassBilledAmounts(month, homeBillingRoster, {
@@ -613,6 +622,7 @@ export default async function AttendancePage({
     // 🔴 선생님 본인의 **반별 보기**(`classScopeTeacher` — 반 하나를 골라 본 제 출석부)에서도 읽는다. 강사 전체 보기에서만 읽으면
     //    스위치를 켜 줘도 반을 골라 보는 선생님에겐 실급여 열이 안 선다(원장 제보 2026-10-07 *"체크했는데 실제 강사들이 실급여 열이
     //    안보인다고"*). 관리자가 반을 골라 본 화면은 `classScopeTeacher`가 null이라 종전 그대로다(비율 설정·스위치는 강사 전체 보기에서).
+    //    단 표에 싣는 것은 창이 달력월일 때만이다(`classAxisIsMonth` — 세션 축이면 숫자가 명세서와 갈린다).
     getAttendanceSalaryRates(mode === "teacher" ? effectiveTeacher : classScopeTeacher, month),
     // 다른 반 대신 보강 칸(읽기 전용 목록) — 강사 보기만. 격자에 선 반은 빼고 읽는다(그 칸은 격자가 보여 준다). 대부분 0행.
     mode === "teacher" && effectiveTeacher
@@ -621,7 +631,11 @@ export default async function AttendancePage({
   ]);
   // 급여 기능이 꺼진 학원 = 실급여 열·단가 버튼·토글 없음(조회는 이미 끝났지만 값을 버린다 — 표시 전용).
   const showActualAmount = payrollOn && showActualAmountRaw;
-  const salaryConfig = payrollOn ? salaryConfigRaw : null;
+  const salaryConfigAny = payrollOn ? salaryConfigRaw : null;
+  /** 반별 보기 + 세션 축 = 실급여 값을 싣지 않는다(위 `classAxisIsMonth`). 스위치가 켜져 있으면 왜 안 보이는지 한 줄로 말한다. */
+  const salaryAxisOff = mode === "class" && !classAxisIsMonth;
+  const salaryConfig = salaryAxisOff ? null : salaryConfigAny;
+  const salaryAxisNotice = salaryAxisOff && !!salaryConfigAny?.visible && showActualAmount;
   /** 청구 판정을 받은 **모든** 학생×반(담당 반 + 명단이 있는 보강 반) — `—` 줄 판정과 표의 청구 칸이 같은 목록·같은 판정을 본다. */
   const billingRoster = makeupPool.roster ? [...homeBillingRoster, makeupPool.roster] : homeBillingRoster;
   const classBilledAmounts = makeupPool.billing
@@ -942,6 +956,12 @@ export default async function AttendancePage({
                 {sheetTf(lang, "att.notice.lock.b", { n: ATTENDANCE_EDIT_WINDOW_DAYS })}
               </strong>
               {sheetTf(lang, "att.notice.lock.c", { date: lockBefore })}
+            </p>
+          ) : null,
+          // 스위치는 켜져 있는데 세션 축이라 실급여를 안 실은 화면 — "켜 줬는데 안 보인다"로 읽히지 않게 이유를 말한다.
+          salaryAxisNotice ? (
+            <p key="salaryAxis" className={noticeClass}>
+              {sheetT(lang, "att.notice.salaryAxis")}
             </p>
           ) : null,
           // 🔴 같은 반이 반별 보기와 강사 전체 보기에서 **다른 숫자**를 낸다 — 그 사실을 화면이 먼저

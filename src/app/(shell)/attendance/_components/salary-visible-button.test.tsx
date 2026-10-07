@@ -142,6 +142,13 @@ describe("합계 및 실급여 보여주기 — 배선", () => {
     expect(page).toContain("<SalaryVisibleButton key={`${salaryConfig.teacherId}:${month}`} teacherId={salaryConfig.teacherId} month={month} checked={salaryConfig.visible} canEdit={salaryConfig.canEdit} />");
     // 🔴 스위치는 출석부가 보는 **그 달**의 것이다 — 달 없이 읽지 않는다.
     expect(page).toContain("getAttendanceSalaryRates(mode === \"teacher\" ? effectiveTeacher : classScopeTeacher, month)");
+    // 🔴 반별 보기는 표의 창이 달력월일 때만 싣는다 — 세션 창(수학 9월 = 9/1~10/1)의 시수 × 달력월 청구액이면 명세서와 다른 숫자가 선다.
+    expect(page).toContain("const classAxisIsMonth = matrix.window.start === monthSpan.first && matrix.window.end === monthSpan.last;");
+    expect(page).toContain("const salaryAxisOff = mode === \"class\" && !classAxisIsMonth;");
+    expect(page).toContain("const salaryConfig = salaryAxisOff ? null : salaryConfigAny;");
+    // 스위치가 켜진 선생님에겐 왜 안 보이는지 말한다(값은 안 보낸다).
+    expect(page).toContain("const salaryAxisNotice = salaryAxisOff && !!salaryConfigAny?.visible && showActualAmount;");
+    expect(page).toContain('sheetT(lang, "att.notice.salaryAxis")');
   });
 
   it("🔴 선생님 본인의 반별 보기에서도 실급여 재료를 읽는다 — 반을 골라 보는 선생님에게 열이 안 서던 것", () => {
