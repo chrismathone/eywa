@@ -18,8 +18,7 @@ import {
   recordedOnlyMatrixRow,
   recordedOnlyStudentIds,
 } from "@/features/attendance/monthly-makeup-roster";
-import { consumedUnits, rollupDay, type GhostValue, type SlotMark } from "@/features/attendance/cell-display";
-import { isJjSeatRow } from "@/features/attendance/seat-transfer";
+import { rollupDay, type GhostValue, type SlotMark } from "@/features/attendance/cell-display";
 import { stripProxyMemo } from "@/features/attendance/proxy-memo";
 import { buildHolidayMap, dowsFromKeys, resolveAttendDows } from "@/features/attendance/calendar";
 import {
@@ -683,12 +682,6 @@ export type AttendanceMatrix = {
    * ⚠️ 월간 격자의 **새 입력도 day-level**이라 이 집합은 계속 늘어난다(교시를 아는 입력은 ECS가 한다).
    */
   dayAxis: Record<string, Record<string, true>>;
-  /**
-   * studentId → date → [아직 방 몫인 JJ실 시수, 이 표의 주인이 넘겨받은 JJ실 시수, 넘겨받은 행 수] — 강사 전체 보기 전용
-   * (JJ실 시수 넘기기, 원장 2026-10-07). 규칙 = `seat-transfer.ts`(`isJjSeatRow` — 랩실 기록은 안 센다).
-   * 🔴 페이지가 **급여 비율을 고칠 수 있는 사람의 화면에만** 내려보낸다(그 밖엔 지운다) — 선생님 화면에 자리 기록을 다시 세우지 않는다.
-   */
-  jjUnits?: Record<string, Record<string, [number, number, number]>>;
   // studentId → date → true. **수기 기록이 아니라 수업보고서에서 파생한 칸**(derive-from-reports.ts).
   // 화면이 사실과 다른 말을 하지 않도록 셀 툴팁에 출처를 밝히는 용도 — 수기로 덮으면 이 표시는 사라진다.
   derived: Record<string, Record<string, true>>;
@@ -1313,7 +1306,6 @@ export async function getMonthlyAttendanceMatrix(
   // 2026-09-17부터 늘 비어 있다 — 남의 교시는 보여 주지 않는다(`AttendanceMatrix.ghosts` 주석).
   const ghosts: Record<string, Record<string, SlotMark[]>> = {};
   const dayAxis: Record<string, Record<string, true>> = {};
-  const jjUnits: Record<string, Record<string, [number, number, number]>> = {};
   const derived: Record<string, Record<string, true>> = {};
 
   if (studentIds.length > 0) {
@@ -1389,19 +1381,6 @@ export async function getMonthlyAttendanceMatrix(
         };
       // 시수(배수) — null=기본 1. numeric은 문자열로 올 수 있어 Number 변환.
       const raw = r.session_units === null || r.session_units === undefined ? null : Number(r.session_units);
-      // JJ실 시수 넘기기(원장 2026-10-07) — 이 칸의 JJ실 기록을 '아직 방 몫 / 이 선생님이 넘겨받음'으로 센다(강사 보기만 · 다른 선생님이
-      // 넘겨받은 것은 안 센다). 시수는 칸과 같은 셈(`consumedUnits` — 결석 0 · 미입력 1).
-      if (scopeTeacherId && isJjSeatRow({ slotStart: slot, seatLabel: r.seat_label, recordedVia: r.recorded_via }, axisSlots, r.session_date)) {
-        const holder = r.taught_by ?? null;
-        const jj = holder === null || holder === scopeTeacherId ? consumedUnits(r.status as AttendanceStatus, raw !== null && Number.isFinite(raw) ? raw : null) : 0;
-        // 넘겨받은 행은 시수가 0이어도(그 뒤 결석으로 바뀜) 싣는다 — 안 실으면 되돌릴 버튼이 사라진다.
-        if (jj > 0 || holder === scopeTeacherId) {
-          const cur = ((jjUnits[r.student_id] ??= {})[r.session_date] ??= [0, 0, 0]);
-          const i = holder === null ? 0 : 1;
-          cur[i] = Math.round((cur[i] + jj) * 10) / 10;
-          if (holder !== null) cur[2] += 1;
-        }
-      }
       // 주인 몫이면 칸 값(marks/units/slots)으로. 반별 보기는 전부 몫이다(종전과 같은 숫자).
       const mine = ownsSlot(r.session_date, slot, r.seat_label, r.recorded_via, r.taught_by ?? null);
       if (!mine) {
@@ -1657,7 +1636,6 @@ export async function getMonthlyAttendanceMatrix(
     // 강사 보기 — 그리는 날(그 강사가 수업하는 날). 그 밖의 날은 격자가 입력을 막는다.
     ...(ownDateSet ? { ownDates: [...ownDateSet] } : {}),
     dayAxis,
-    ...(Object.keys(jjUnits).length > 0 ? { jjUnits } : {}),
     derived,
     derivedActive,
     // 수학 자동 시수 — 빈 칸 기본값(보이는 기본값 = 저장될 값). 판정은 서버 쓰기와 같은 함수(auto-units.ts).

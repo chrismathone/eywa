@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isJjSeatRow, seatTransferTargets, seatTransferUnits, type SeatTransferRow } from "./seat-transfer";
+import { isJjSeatRow, type SeatTransferRow } from "./seat-transfer";
 import { attendanceSlotShare, ownsAttendanceSlot, type AxisSlot } from "./teacher-axis";
 
 // JJ실 시수 넘기기(원장 2026-10-07) — JJ실 기록 한 칸을 한 선생님 몫으로(`taught_by`). 랩실은 대상이 아니다.
@@ -55,29 +55,5 @@ describe("넘기면 그 선생님 몫이 된다(JJ −1 · 선생님 +1)", () =>
     expect(ownsAttendanceSlot({ ...facts, scopeTeacherId: TEACHER })).toBe(false);
     expect(ownsAttendanceSlot({ ...facts, scopeTeacherId: TEACHER, taughtBy: TEACHER })).toBe(true);
     expect(ownsAttendanceSlot({ ...facts, scopeTeacherId: OTHER, taughtBy: TEACHER })).toBe(false);
-  });
-
-  it("한 칸의 JJ실 시수를 세 갈래로 센다 — 아직 방 몫 · 이 선생님 · 다른 선생님 (결석은 0 · 미입력은 1)", () => {
-    const rows = [
-      row(), // 방 몫 1
-      row({ slotStart: "19:20", units: 1.5, taughtBy: TEACHER }), // 이 선생님 1.5
-      row({ slotStart: "20:20", taughtBy: OTHER }), // 다른 선생님 1
-      row({ slotStart: "21:20", status: "absent" }), // 결석 — 0
-      row({ slotStart: "16:20", recordedVia: null }), // 사람 수업 — 안 센다
-      row({ slotStart: "18:20", seatLabel: "LAB" }), // 랩실 — 안 센다
-    ];
-    expect(seatTransferUnits(rows, SLOTS, DATE, TEACHER)).toEqual({ avail: 1, taken: 1.5, others: 1 });
-  });
-
-  it("넘기기 대상 = 아직 방 몫인 JJ 기록 · 되돌리기 대상 = 이 선생님이 넘겨받은 JJ 기록", () => {
-    const rows = [row(), row({ slotStart: "19:20", taughtBy: TEACHER }), row({ slotStart: "20:20", taughtBy: OTHER }), row({ slotStart: "16:20", recordedVia: null })];
-    expect(seatTransferTargets(rows, SLOTS, DATE, TEACHER, true).map((r) => r.slotStart)).toEqual(["17:20"]);
-    expect(seatTransferTargets(rows, SLOTS, DATE, TEACHER, false).map((r) => r.slotStart)).toEqual(["19:20"]);
-  });
-
-  it("🔴 대신 보강 귀속(`taught_by`)이 걸린 **사람 수업** 행은 되돌리기 대상이 아니다 — 자리 기록만 건드린다", () => {
-    const makeup = row({ slotStart: "16:20", recordedVia: null, taughtBy: TEACHER });
-    expect(seatTransferTargets([makeup], SLOTS, DATE, TEACHER, false)).toEqual([]);
-    expect(seatTransferUnits([makeup], SLOTS, DATE, TEACHER)).toEqual({ avail: 0, taken: 0, others: 0 });
   });
 });

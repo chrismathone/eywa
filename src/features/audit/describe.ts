@@ -832,11 +832,16 @@ export function auditDetail(
     case "payroll_jj_units_take":
     case "payroll_jj_units_return": {
       const units = num(m.units);
+      // 회차 확정의 JJ실 줄에서 준 것 — 날짜가 여럿일 수 있고(첫 날 외 N일) 학생 수로 적는다.
+      const dates = Array.isArray(m.dates) ? m.dates.filter((x): x is string => typeof x === "string") : [];
+      const students = num(m.students);
       return join(
-        str(m.date),
-        ctx.nameOf(m.studentId),
+        dates.length > 1 ? `${dates[0]} 외 ${dates.length - 1}일` : str(m.date),
+        students ? `${students}명` : ctx.nameOf(m.studentId),
         ctx.nameOf(m.classId),
-        `${ctx.nameOf(m.userId) ?? "선생님"} ${action === "payroll_jj_units_take" ? "몫으로 넘김" : "몫에서 되돌림"}${units ? ` · ${units}시수` : ""}`,
+        `${ctx.nameOf(m.userId) ?? "선생님"} ${action === "payroll_jj_units_take" ? "몫으로 줌" : "몫에서 되돌림"}${units ? ` · ${units}시수` : ""}`,
+        // 저장이 도중에 실패해 그 묶음의 일부만 반영됐다 — 적힌 시수 전부가 옮겨진 것은 아니다.
+        m.partial === true ? "일부만 반영" : null,
       );
     }
     case "payroll_sheet_visible_set":

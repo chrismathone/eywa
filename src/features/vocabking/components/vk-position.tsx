@@ -39,25 +39,7 @@ export function VkHeader({ report }: { report: VocabkingReport }) {
 export function VkPosition({ report }: { report: VocabkingReport }) {
   const p = report.position;
   return (
-    <section className="grid gap-4 @3xl:grid-cols-[13rem_minmax(0,1fr)_15rem]">
-      <div className="bg-primary text-primary-foreground flex flex-col items-center justify-center gap-2 rounded-2xl px-4 py-5">
-        {p.rank !== null ? (
-          <>
-            <p className="text-xs opacity-85">전체 응시자 중</p>
-            <p className="num text-5xl leading-none font-bold">
-              {p.rank}
-              <span className="text-2xl">위</span>
-            </p>
-            {p.band ? <p className="bg-amber-soft text-amber rounded-full px-3 py-1 text-sm font-bold">{p.band}</p> : null}
-          </>
-        ) : (
-          <>
-            <p className="text-xs opacity-85">점수</p>
-            <p className="num text-5xl leading-none font-bold">{report.score.score}</p>
-            <p className="text-xs opacity-85">석차 정보가 없습니다</p>
-          </>
-        )}
-      </div>
+    <section className="grid gap-4 @3xl:grid-cols-[minmax(0,1fr)_16rem]">
       <div className="flex min-w-0 flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="bg-green-soft text-green rounded-full px-3 py-1 text-xs font-bold">① 현재 학습 위치</span>
@@ -65,16 +47,8 @@ export function VkPosition({ report }: { report: VocabkingReport }) {
             {report.header.grade ? `${report.header.grade} · ` : ""}Lv.{p.level.level} {p.level.label}
           </span>
         </div>
-        <p className="text-foreground text-lg font-bold">
-          점수 <span className="num text-primary text-3xl">{report.score.score}</span>
-          <span className="text-text-dim text-sm font-medium">
-            {" "}
-            · {report.score.total}문제 중 {report.score.correct}개
-            {p.topPercent !== null ? ` · 상위 ${p.topPercent}%` : ""}
-          </span>
-        </p>
         {p.comparisons.length ? (
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(7.5rem,1fr))] gap-2">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(6rem,1fr))] gap-2">
             {p.comparisons.map((c) => (
               <div key={c.key} className="border-line rounded-xl border px-3 py-2.5 text-center">
                 <p className="text-text-dim text-xs font-medium">{c.label}</p>

@@ -2,6 +2,7 @@ import "server-only";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { isModuleEnabled } from "@/lib/modules";
 import { requireAccess } from "@/lib/auth/require-access";
+import { getCurrentUser } from "@/lib/auth/current-user";
 import { canManageTenant, canAccessTenant } from "@/lib/auth/perm-matrix";
 import { isReadonlyTeacherView } from "@/lib/auth/view-as";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
@@ -13,6 +14,22 @@ import { loadSalarySheetVisible } from "./salary-visibility";
 export async function requireAttendanceSalaryAdmin(write = true) {
   const user = await requireAccess("attendance");
   // 급여 기능(모듈)이 꺼진 학원엔 급여 화면·단가·명세서가 없다 — 총괄도 예외 없음(기능이 없는 학원, 2026-09-30).
+  if (!isModuleEnabled((await getTenantSettings()).modules.disabled, "payroll")) return null;
+  if (await isReadonlyTeacherView()
+    || !(await (write ? canManageTenant : canAccessTenant)(user.systemRole, "attendance_salary_settings"))) return null;
+  return user;
+}
+
+/**
+ * 위와 **같은 문을 이동 없이** 본다 — 출석부 페이지 밖(회차 확정의 JJ실 줄 · 그 서버 액션)에서 쓴다.
+ * 🔴 `requireAccess("attendance")`는 출석부 메뉴가 닫힌 계정을 홈으로 **보낸다**(redirect). 수납은 열려 있고 출석부는 닫힌 계정
+ *    (상담 역할에 수납만 열어 준 경우 등)이 회차 확정을 열면 이 판정 하나 때문에 화면이 통째로 이동한다(적대 리뷰 2026-10-07).
+ *    여기는 판정만 하고 null을 돌려준다 — 줄을 안 세우거나 액션이 `{ ok: false }`를 돌려주면 된다.
+ */
+export async function attendanceSalaryAdminOrNull(write = true) {
+  const user = await getCurrentUser();
+  if (!user) return null;
+  if (!(await canAccessTenant(user.systemRole, "attendance"))) return null;
   if (!isModuleEnabled((await getTenantSettings()).modules.disabled, "payroll")) return null;
   if (await isReadonlyTeacherView()
     || !(await (write ? canManageTenant : canAccessTenant)(user.systemRole, "attendance_salary_settings"))) return null;
