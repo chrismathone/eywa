@@ -95,6 +95,29 @@ export function teacherFourWeekWeights(input: {
   return Object.assign(new Map([...week].map(([owner, units]) => [owner, units * 4])), { homeroomTeacherId: input.homeroomTeacherId });
 }
 
+/**
+ * **JJ실 시수 넘기기**(원장 2026-10-07 *"JJ가 -1되면, 다른 선생님이 +1 되도록"*) — 그 선생님이 넘겨받은 자리 시수만큼
+ * 계획 몫을 방(`""`)에서 그 선생님으로 옮긴다. 등록 차수(= 실급여 상한 `salaryBilledCap`의 제 몫)가 수업 차수와 함께 는다.
+ *
+ * 🔴 안 옮기면 넘겨받아도 급여가 그대로다 — 칸의 시수(수업 차수)는 +1인데 상한은 "청구액 × 제 등록 차수 ÷ 반 전체"라
+ *    제 교시를 다 나온 달에는 실수업액이 상한에 걸린다(적대 리뷰 2026-10-07).
+ * 🔴 **방 몫보다 많이는 못 옮긴다** — 그 줄에 자리 계획 시수가 없으면(자리 교시가 없는 반·기간) 0이다. 합계(반 전체)는 그대로라
+ *    다른 선생님 몫·담임 잔여 규칙은 바뀌지 않는다.
+ * 🔴 **0.5 단위로 내려서** 옮긴다 — 등록 차수는 0.5 단위여야 한다(`teacherTermSessions`가 그 밖의 값을 '배분 확인'으로 돌린다).
+ *    그날 합계를 교시에 나눠 담은 기록(1.3 · 1.3 · 1.4)을 그대로 옮기면 배분 확인이 되어 상한이 **줄 전체 청구액**으로 풀린다
+ *    (적대 재리뷰 2026-10-07 — 넘겨받았더니 남의 교시 몫까지 상한에 들어온다).
+ */
+export function withTakenSeatUnits(weights: TermShareWeights, teacherId: string, taken: number): TermShareWeights {
+  const pool = weights.get("") ?? 0;
+  const move = Math.floor(Math.min(Number.isFinite(taken) ? Math.max(0, taken) : 0, pool) * 2 + 1e-9) / 2;
+  if (!(move > 0) || !teacherId) return weights;
+  const next: TermShareWeights = new Map(weights);
+  next.homeroomTeacherId = weights.homeroomTeacherId;
+  next.set("", pool - move);
+  next.set(teacherId, (next.get(teacherId) ?? 0) + move);
+  return next;
+}
+
 /** Scheduled units first; any positive unallocated confirmation belongs to the homeroom teacher. */
 export function teacherTermSessions(term: AttendanceTermSessions, teacherId: string, weights: TermShareWeights): AttendanceTermSessions {
   if (term.daysBasis) return term;

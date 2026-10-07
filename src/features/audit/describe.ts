@@ -829,6 +829,16 @@ export function auditDetail(
         m.beforeKnown === false ? (ca ? `청구 기준 합계 ${ca}` : null) : cb && ca ? `청구 기준 합계 ${cb} → ${ca}` : null,
       );
     }
+    case "payroll_jj_units_take":
+    case "payroll_jj_units_return": {
+      const units = num(m.units);
+      return join(
+        str(m.date),
+        ctx.nameOf(m.studentId),
+        ctx.nameOf(m.classId),
+        `${ctx.nameOf(m.userId) ?? "선생님"} ${action === "payroll_jj_units_take" ? "몫으로 넘김" : "몫에서 되돌림"}${units ? ` · ${units}시수` : ""}`,
+      );
+    }
     case "payroll_sheet_visible_set":
       return join(ctx.nameOf(m.userId), m.visible === true ? "선생님 출석부에 보이게 켬" : "선생님 출석부에서 감춤");
     case "payroll_mark_paid":

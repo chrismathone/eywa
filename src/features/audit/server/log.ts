@@ -108,6 +108,9 @@ export const AUDIT_ACTIONS = {
   payroll_upsert: "급여 정산",
   payroll_mark_paid: "급여 지급 완료 처리",
   payroll_auto_compute: "급여 자동 계산 저장",
+  // JJ실 시수 넘기기(원장 2026-10-07) — JJ실 기록 한 칸을 한 선생님 몫으로(`taught_by`). 급여가 달라지는 일이라 남긴다.
+  payroll_jj_units_take: "JJ실 시수 넘기기(선생님 몫으로)",
+  payroll_jj_units_return: "JJ실 시수 되돌리기",
   // 선생님별 스위치(0352a) — 켜면 그 선생님 본인 출석부에도 실급여가 보인다. 금액은 남기지 않는다(누구 것을 켰는지·껐는지만).
   payroll_sheet_visible_set: "출석부 합계·실급여 보여주기 설정",
   class_salary_update: "반별 급여 설정 변경",

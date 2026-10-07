@@ -37,6 +37,8 @@ export type SeatAttRecord = {
   date: string;
   slotStart: string | null;
   status: string;
+  /** 이 기록의 시수를 넘겨받은 선생님(`taught_by`, JJ실 시수 넘기기 2026-10-07) — 있으면 자리 시수 합계에서 뺀다. */
+  taughtBy?: string | null;
   seatLabel: string | null;
   sessionUnits: number | null;
 };

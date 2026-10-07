@@ -760,6 +760,9 @@ export async function setAttendanceCell(input: {
        */
       const day = await loadScopedDay(scopeTeacherId);
       if ("error" in day) return day;
+      // 넘겨받은 JJ실 시수가 있는 칸 — 값과 같은 이유로 메모도 고치지 않는다(화면은 그 행의 메모를 칸 메모로 보여 주는데
+      // 저장은 자리 행을 건드리지 않아, 고쳐도 옛 메모가 그대로 보이거나 "기록이 없어…"라는 엉뚱한 안내가 나간다).
+      if (day.rows.some((r) => day.share.takenSeat?.(classId, sessionDate, r) === true)) return { error: SCOPED_REJECT_MESSAGE.seatTaken };
       const { write, seat } = splitOutSeatRows(day.rows, seatOf(day.share), ownerOf(day.share));
       // 🔴 메모는 **제 교시 행에만** 단다(원장 2026-09-17 *"남의 출석부를 건드리는건 아니지"*) — 제 몫 행이 없으면
       //    (남의 교시·자리 기록뿐) 메모를 달 제 기록이 없다: 아래 "먼저 출결을 입력하세요"로 안내한다.
@@ -870,6 +873,7 @@ export async function setAttendanceCell(input: {
         targets: pickSaveTargets(day.rows, null).updateIds.map((id) => byId.get(id)!),
         share: (r) => day.share(classId, sessionDate, r),
         clearing: true,
+        taken: (r) => day.share.takenSeat?.(classId, sessionDate, r) === true,
       });
       if (plan.kind === "reject") return { error: SCOPED_REJECT_MESSAGE[plan.reason] };
       // 🔴 지울 제 기록이 없다(남의 교시·자리 기록뿐) — 남의 기록은 지우지 않고, 빈칸을 지운 것이라 조용히 끝낸다(2026-09-17).
@@ -986,6 +990,7 @@ export async function setAttendanceCell(input: {
         share: (r) => share(classId, sessionDate, r),
         clearing: false,
         ghostIntent: input.ghostTransfer === true,
+        taken: (r) => share.takenSeat?.(classId, sessionDate, r) === true,
       })
     : null;
   if (scopedPlan?.kind === "reject") return { error: SCOPED_REJECT_MESSAGE[scopedPlan.reason] };
@@ -2214,11 +2219,12 @@ export async function setAttendanceRange(input: {
       share: (r) => s(c.classId, c.sessionDate, r),
       clearing,
       ghostIntent: ghostIntentKeys.has(cellKeyOf(c)),
+      taken: (r) => s.takenSeat?.(c.classId, c.sessionDate, r) === true,
     });
   };
   /** 거절 사유별 칸 수 — 전부 걸렸을 때 격자가 그 칸에 하는 말과 같은 문장을 고른다. */
-  const rejected: Record<ScopedRejectReason, number> = { seatOnly: 0, stale: 0 };
-  const rejectMessage = () => SCOPED_REJECT_MESSAGE[rejected.stale > 0 ? "stale" : "seatOnly"];
+  const rejected: Record<ScopedRejectReason, number> = { seatOnly: 0, stale: 0, seatTaken: 0 };
+  const rejectMessage = () => SCOPED_REJECT_MESSAGE[rejected.stale > 0 ? "stale" : rejected.seatTaken > 0 ? "seatTaken" : "seatOnly"];
   /** 행 id → 저장 전 메모 — 빗금 칸 입력이 기존 메모 끝에 `대신 입력` 한 줄을 붙인다(추가 왕복 없음). */
   const noteById = new Map(mine.map((r) => [r.id, r.note]));
 
