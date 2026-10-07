@@ -133,7 +133,8 @@ describe("JJ실 줄", () => {
 });
 
 describe("배선 — 주는 곳은 회차 확정 한 곳", () => {
-  const read = (path: string) => readFileSync(path, "utf8");
+  // 줄바꿈은 LF로 맞춰 읽는다 — 여러 줄 문자열을 찾는 단언이 CRLF로 받은 작업본에서도 같게 돈다.
+  const read = (path: string) => readFileSync(path, "utf8").replace(/\r\n/g, "\n");
   it("회차 확정 면이 JJ실 줄 재료를 표 조회와 나란히 읽어 표에 넘긴다", () => {
     const face = read("src/app/(shell)/billing/_components/session-terms-face.tsx");
     expect(face).toContain("getSessionTermsView(p, undefined, { lastMonth: true }), getTenantSettings(), loadSeatGiveSummary(p)]);");
