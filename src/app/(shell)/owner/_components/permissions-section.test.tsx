@@ -13,6 +13,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { CLASS_SPLIT_ENABLED } from "@/features/class-splits/access";
 import { OperationsProvider } from "@/features/owner/operations-context";
 import type { SubjectSetting } from "@/features/owner/settings-types";
+import { SETTINGS_ROLE_KEYS } from "@/lib/settings-role-catalog";
 import { editablePermissionRowGroups } from "@/features/owner/permission-rows";
 import { teacherToggleRows } from "@/features/owner/teacher-toggle-rows";
 import { teacherMenuKeysFor } from "@/lib/navigation";
@@ -28,6 +29,7 @@ vi.mock("@/components/ui/drag-scroll-area", () => ({
 
 const EMPTY = { overrides: [], userOverrides: [], specialAccess: { payslipViewerIds: [], leaveAdjusterIds: [], classSplitterIds: [], staffSubjectScopes: [] } };
 afterEach(cleanup);
+const menuTable = () => within(screen.getByRole("heading", { name: "역할별 메뉴 권한" }).closest("section")!).getByRole("table");
 
 const toggleCard = () => screen.getByRole("heading", { name: /내 메뉴.*표시/, hidden: true }).closest("section") as HTMLElement;
 /** 칸의 권한 이름 줄(아래 '내 메뉴' 이름 줄은 뗀다). */
@@ -104,7 +106,7 @@ describe("학원설정 '강사 내 메뉴 표시' — 메뉴에서 뺀 탭은 �
 
   it("캘린더는 메뉴 구성에 없는 화면이라 '역할별 메뉴 권한' 표에도 없다(원장 2026-10-06 — 구성에 있는 화면의 권한만 세운다)", () => {
     render(<PermissionsSection initial={EMPTY} />);
-    expect(within(screen.getByRole("table")).queryByText(MENU_LABEL.calendar)).not.toBeInTheDocument();
+    expect(within(menuTable()).queryByText(MENU_LABEL.calendar)).not.toBeInTheDocument();
   });
 });
 
@@ -398,7 +400,7 @@ describe("개인별 메뉴 권한 — 역할 표 아래에서 주고 거둔다(�
 describe("역할별 메뉴 권한 표 — 줄은 왼쪽 탭과 그 내부 메뉴 차례", () => {
   /** 표의 줄 이름을 위에서부터 — 탭 줄은 탭 이름, 권한 줄은 권한 이름. */
   const rowLabels = () =>
-    [...screen.getByRole("table").querySelectorAll("tbody tr")].map((tr) => (tr.querySelector("th span, td span.truncate")?.textContent ?? "").trim());
+    [...menuTable().querySelectorAll("tbody tr")].map((tr) => (tr.querySelector("th span, td span.truncate")?.textContent ?? "").trim());
 
   it("탭 줄 아래에 그 탭의 메뉴가 선다 — 수업 → 시간표 … / 원생 → 원생목록 …", () => {
     render(<PermissionsSection initial={EMPTY} />);
@@ -412,23 +414,23 @@ describe("역할별 메뉴 권한 표 — 줄은 왼쪽 탭과 그 내부 메뉴
 
   it("탭 하나가 권한 하나면 줄도 하나다(같은 이름을 두 번 세우지 않는다) — 대시보드 · 수납관리 · 회의록", () => {
     render(<PermissionsSection initial={EMPTY} />);
-    const table = within(screen.getByRole("table"));
+    const table = within(menuTable());
     for (const menu of ["dashboard", "billing", "meetings"] as const) expect(table.getAllByText(MENU_LABEL[menu])).toHaveLength(1);
   });
 
   it("맨 첫 줄만 윗선을 그리지 않는다(머리 줄의 아랫선과 겹친다) — 그 아래 묶음 띠 · 줄의 윗선은 그대로다", () => {
     render(<PermissionsSection initial={EMPTY} />);
-    const rows = [...screen.getByRole("table").querySelectorAll("tbody tr")];
+    const rows = [...menuTable().querySelectorAll("tbody tr")];
     expect(rows[0]!.className).not.toContain("border-t");
     for (const tr of rows.slice(1)) expect(tr.className).toContain("border-t");
   });
 
   it("탭 및 메뉴 구성에 있는 화면의 권한이 한 줄씩 있고, 줄마다 역할 수만큼 칸이 있다", () => {
     render(<PermissionsSection initial={EMPTY} />);
-    const rows = [...screen.getByRole("table").querySelectorAll("tbody tr")].filter((tr) => tr.querySelector("button"));
+    const rows = [...menuTable().querySelectorAll("tbody tr")].filter((tr) => tr.querySelector("button"));
     // 전체 권한에서 메뉴에 없는 화면(캘린더 · 관리자 도구)과 역할 전용 화면 둘을 뺀 수.
-    expect(rows).toHaveLength(editablePermissionRowGroups().flatMap((g) => g.rows).length);
-    expect(rows).toHaveLength(Object.keys(MENU_LABEL).length - 4);
+    expect(rows).toHaveLength(editablePermissionRowGroups().flatMap((g) => g.rows).filter((row) => !(SETTINGS_ROLE_KEYS as readonly string[]).includes(row.menu)).length);
+    expect(rows).toHaveLength(Object.keys(MENU_LABEL).length - 4 - SETTINGS_ROLE_KEYS.length);
     for (const tr of rows) expect(tr.querySelectorAll("button")).toHaveLength(SYSTEM_ROLES.length);
   });
 
@@ -442,7 +444,7 @@ describe("역할별 메뉴 권한 표 — 줄은 왼쪽 탭과 그 내부 메뉴
   it("🔴 표에 없는 줄의 칸이 바뀌어도 '저장 전 변경'에 적힌다 — 감춘 메뉴의 강사 칸은 '내 메뉴' 표시로 바뀐다", () => {
     // 강사뷰에서 교재 요청을 감췄다 → 표에는 그 줄이 없지만 위 '강사 내 메뉴 표시' 칸은 남아 있다.
     render(<PermissionsSection initial={EMPTY} navigation={{ teacherMenus: [{ href: "/textbook-requests", hidden: true }] }} />);
-    expect(within(screen.getByRole("table")).queryByText(MENU_LABEL.textbook_requests)).not.toBeInTheDocument();
+    expect(within(menuTable()).queryByText(MENU_LABEL.textbook_requests)).not.toBeInTheDocument();
     expect(screen.queryByText(/저장 전 변경/)).not.toBeInTheDocument();
     fireEvent.click(within(toggleCard()).getByRole("checkbox", { name: new RegExp(`^${MENU_LABEL.textbook_requests}`), hidden: true }));
     const list = screen.getByText(/저장 전 변경 1개/).closest("details") as HTMLElement;
@@ -452,7 +454,7 @@ describe("역할별 메뉴 권한 표 — 줄은 왼쪽 탭과 그 내부 메뉴
 
   it("🔴 선생님 원스크린 · 내 학습 줄은 표에 없다 — 어느 역할의 칸도 바꿀 수 없는 줄이다(원장 2026-10-06)", () => {
     render(<PermissionsSection initial={EMPTY} />);
-    const table = within(screen.getByRole("table"));
+    const table = within(menuTable());
     expect(table.queryByText(MENU_LABEL.teacher_onescreen)).not.toBeInTheDocument();
     expect(table.queryByText(MENU_LABEL.my_learning)).not.toBeInTheDocument();
     // 다른 줄은 그대로다.
@@ -465,9 +467,29 @@ describe("역할별 메뉴 권한 표 — 줄은 왼쪽 탭과 그 내부 메뉴
     expect(head.className).toContain("sticky");
     expect(head.className).toContain("top-0");
     // 본문 표와 같은 표 상자 안에 있다(붙는 범위 = 표가 화면에 걸쳐 있는 동안).
-    expect(head.parentElement!.contains(screen.getByRole("table"))).toBe(true);
+    expect(head.parentElement!.contains(menuTable())).toBe(true);
     expect([...head.querySelectorAll("th")].map((th) => th.textContent)).toEqual(["메뉴", "원장", "관리자", "실장", "강사", "상담", "회계", "열람", "학생"]);
     const cols = [...container.querySelectorAll("colgroup")].map((g) => g.querySelectorAll("col").length);
-    expect(cols).toEqual([SYSTEM_ROLES.length + 1, SYSTEM_ROLES.length + 1]);
+    expect(cols).toEqual(Array(4).fill(SYSTEM_ROLES.length + 1));
+  });
+});
+
+describe("설정별 역할 권한 통합", () => {
+  it("설정 권한은 하단에 한 번만 표시하고 메뉴 권한과 함께 저장한다", () => {
+    render(<PermissionsSection initial={{ ...EMPTY, overrides: [{ menu: "report_settings", role: "teacher", access: "readonly" }] }} />);
+    const card = screen.getByRole("heading", { name: "설정별 역할 권한" }).closest("section")!;
+    expect(within(menuTable()).queryByText(MENU_LABEL.report_settings)).not.toBeInTheDocument();
+    expect(within(card).getByRole("button", { name: MENU_LABEL.report_settings + " · 강사: 읽기" })).toBeInTheDocument();
+    expect(card.compareDocumentPosition(screen.getByRole("heading", { name: "개인별 기능 권한" }))).toBe(Node.DOCUMENT_POSITION_PRECEDING);
+    fireEvent.click(within(card).getByRole("button", { name: MENU_LABEL.report_settings + " · 강사: 읽기" }));
+    const overrides = JSON.parse(screen.getByTestId("payload").textContent ?? "{}").overrides;
+    expect(resolveMatrix(overrides).report_settings.teacher).toBe("none");
+    expect(within(card).getAllByRole("button")).toHaveLength(SETTINGS_ROLE_KEYS.length * SYSTEM_ROLES.length);
+  });
+  it("사용하지 않는 설정은 감춰도 저장값을 보존한다", () => {
+    render(<PermissionsSection initial={{ ...EMPTY, overrides: [{ menu: "ai_ment", role: "admin", access: "readonly" }] }} hiddenSettingKeys={["ai_ment", "payroll_settings"]} />);
+    const card = screen.getByRole("heading", { name: "설정별 역할 권한" }).closest("section")!;
+    expect(within(card).queryByText(MENU_LABEL.ai_ment)).not.toBeInTheDocument();
+    expect(JSON.parse(screen.getByTestId("payload").textContent ?? "{}").overrides).toContainEqual({ menu: "ai_ment", role: "admin", access: "readonly" });
   });
 });

@@ -42,7 +42,7 @@ const lastRequest = () => m.save.mock.calls.at(-1)![1] as FormData;
 const saveButton = () => within(screen.getByTestId("action-bar")).getByRole("button", { name: /저장/ });
 /** '역할별 메뉴 권한' 표의 한 칸(버튼). */
 const cell = (menu: MenuKey, role: SystemRole) => {
-  const row = within(screen.getByRole("table")).getByText(MENU_LABEL[menu]).closest("tr") as HTMLElement;
+  const row = screen.getAllByRole("table").map((table) => within(table).queryByText(MENU_LABEL[menu])).find(Boolean)!.closest("tr") as HTMLElement;
   return within(row).getAllByRole("button")[SYSTEM_ROLES.indexOf(role)] as HTMLButtonElement;
 };
 const overrideOf = (container: HTMLElement, menu: MenuKey, role: SystemRole): Access | undefined =>
@@ -331,8 +331,7 @@ describe("배선", () => {
   const page = strip(read("src", "app", "(shell)", "owner", "page.tsx"));
 
   it("🔴 역할·권한 면에는 머리글 '역할 설정' 버튼을 세우지 않는다 — 같은 칸을 고치는 곳이 한 화면에 둘이 되지 않게", () => {
-    expect(page).toContain('{tab === "permissions" ? null : <SettingRolesControl group={tab === "sheets" ? "integrations" : "owner"} />}');
-    expect(page.match(/<SettingRolesControl /g)?.length).toBe(1);
+    expect(page).not.toContain("SettingRolesControl");
   });
 
   it("🔴 폼의 값과 기준 token은 **방금 읽은** 역할·권한에서 만든다 — 설정 캐시의 값으로 폼을 열지 않는다", () => {

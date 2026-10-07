@@ -1,4 +1,3 @@
-import { SettingRolesControl } from "@/features/owner/components/setting-roles-control";
 import { ParamLink } from "./_components/param-link";
 import type { LucideIcon } from "@/components/icons/aywa-icon-compat";
 import { Columns3, DoorOpen, Layers, LayoutGrid, Users } from "@/components/icons/aywa-icon-compat";
@@ -580,7 +579,6 @@ export default async function TimetablePage({
           양옆 gap 때문에 줄바꿈을 앞당겨, 폰에서 툴바를 한 줄 더 밀어내는 값이 컸다. */}
       {/* ⚠️ 카드 껍데기 없음(툴바 규약) — 본 시간표(page.tsx)와 같은 부품이라야 두 화면을 오갈 때 안 튄다. */}
       <Toolbar>
-        <SettingRolesControl group="timetable" />
         {/* 월 이동 — 본 시간표의 주간 이동(WeekNav) 자리. 계획은 달 단위라 '주'가 없다(month-nav 주석). */}
         <MonthNav
           current={month}

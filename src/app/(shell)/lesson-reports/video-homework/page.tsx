@@ -1,6 +1,5 @@
 import { requireAccess } from "@/lib/auth/require-access";
 import { accessLevelTenant, canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
-import { SettingRolesControl } from "@/features/owner/components/setting-roles-control";
 import { isFeatureLicensed } from "@/lib/license/server";
 import { PageHeader } from "@/components/page-header";
 import { FaceTabs } from "@/components/face-tabs";
@@ -60,7 +59,7 @@ export default async function VideoHomeworkPage({ searchParams }: {
   const initialFilters = ledgerInitialFilters(param, activeClasses);
   return <main className="w-full min-w-0 space-y-4">
     <PageHeader eyebrow="수업보고서 · 학습 관리" title="영상숙제 확인"
-      description="숙제가 나간 수업을 학생별 회차로 세어 제출 여부를 확인합니다." actions={<SettingRolesControl group="lesson_reports" />} />
+      description="숙제가 나간 수업을 학생별 회차로 세어 제출 여부를 확인합니다." />
     <FaceTabs faces={lessonReportFaces({ canReportSettings, canAiMent, aiOn, canSend,
       classnoteOn: isModuleEnabled(settings.modules.disabled, "classnote"), replyOn: classnoteReplyMode(settings) !== "off" })}
       active="video_homework" ariaLabel="수업보고서 면" />

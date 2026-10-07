@@ -4,10 +4,9 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { permissionAccountIds, platformAccountIds } from "@/features/owner/server/platform-settings";
 import { canAccessTenant, canWriteTenant, canManageTenant, getUserPermMatrix } from "@/lib/auth/perm-matrix";
-import { OWNER_SECTION_MENU } from "@/lib/settings-role-catalog";
+import { OWNER_SECTION_MENU, type SettingsRoleKey } from "@/lib/settings-role-catalog";
 import { fallbackOwnerFace, ownerFaceHref, ownerFaceMenu } from "@/features/owner/face-access";
 import { operationsForViewer, seatPinStatus } from "@/features/owner/seat-pin-view";
-import { SettingRolesControl } from "@/features/owner/components/setting-roles-control";
 import { kstToday } from "@/lib/date-kst";
 import { OWNER_FACES, ownerTabLabel, resolveOwnerTab, type OwnerFaceDef, type OwnerFaceKey, type OwnerTab } from "@/features/owner/tabs";
 import { getTenantSettings, getSettingsMeta, getUserDisplayNames, getPermissionStaffOptions, getTenantSettingsForEdit } from "@/features/owner/server/queries";
@@ -182,6 +181,9 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
   // 개인별 권한에 이름이 올라 있는 계정의 이름 — 역할·권한 편집 폼이 설 때만 로드(다른 면 진입 비용 0). 폼과 같은 값에서 뽑는다.
   // 메뉴 권한뿐 아니라 기능 권한(담당자 · 과목 범위)의 사람도 함께 푼다 — 퇴직해 선택지에서 빠진 사람도 이름으로 보여야 거둘 수 있다.
   const permissionPeople = permissionsSource ? permissionAccountIds(permissionsSource) : [];
+  const hiddenSettingKeys: SettingsRoleKey[] = [];
+  if (showsPermissions && !(await isFeatureLicensed(viewer.tenantId, "ai_analysis"))) hiddenSettingKeys.push("ai_ment");
+  if (settings.modules.disabled.includes("payroll")) hiddenSettingKeys.push("attendance_salary_settings", "payroll_settings");
   const [userOverrideNames, permissionStaff, hiddenPermissionIds] = await Promise.all([
     permissionPeople.length > 0 ? getUserDisplayNames(permissionPeople) : {},
     // 개인별 메뉴 권한을 주고 거두는 구획의 직원 선택지 — 어느 학원에서나 선다(원장 2026-10-06).
@@ -210,9 +212,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
         // 창 컴팩트 행은 1행이 규칙 — 위 안내문(~110자)은 창 폭에서 2~3줄로 감겨 짧은 라벨로 대체(적대 리뷰).
         // ⚠️ 상단 바 브랜드는 `logoText`라 `profile.name`과 다를 수 있다 → 컴팩트 행에 학원명을 남긴다.
         embedLabel={`${settings.profile.name || "학원"} 설정 — 변경은 원장·위임 계정만`}
-        // 역할·권한 면에는 '역할 설정' 버튼을 세우지 않는다 — 그 면의 표가 같은 칸을 고친다. 한 화면에 같은 값을 고치는 곳이
-        // 둘이면 대화상자로 바꾼 직급을 아래 표의 저장이 되돌리려 든다(지금은 거절되지만, 왜 거절됐는지 알기 어렵다).
-        actions={<>{tab === "permissions" ? null : <SettingRolesControl group={tab === "sheets" ? "integrations" : "owner"} />}<p className="text-text-faint text-xs">최근 저장: {fmt(meta?.updatedAt ?? null)}</p></>}
+        actions={<p className="text-text-faint text-xs">최근 저장: {fmt(meta?.updatedAt ?? null)}</p>}
       />
 
       </div>
@@ -286,6 +286,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
               staffOptions={permissionStaff}
               hiddenUserIds={hiddenPermissionIds}
               generic={isGenericTenant(settings)}
+              hiddenSettingKeys={hiddenSettingKeys}
               baselineToken={permissionsToken(permissionsSource)}
               baselineVersion={editable?.versions.permissions}
             />
