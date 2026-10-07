@@ -40,7 +40,7 @@ const STUDY: IjwStudy = {
   student: { id: "학원이", name: "학원이", className: "테스터 그룹" },
   from: "2026-08-30",
   to: "2026-09-28",
-  totals: { answers: 1179, correct: 980, accuracy: 0.83, studyMs: 21_600_000, newWords: 240, activeDays: 21 },
+  totals: { answers: 1179, correct: 980, accuracy: 83, studyMs: 21_600_000, newWords: 240, activeDays: 21 },
   longTermWords: 412,
   seenWords: 960,
   daily: Array.from({ length: 30 }, (_, i) => ({ day: `2026-09-${String(i + 1).padStart(2, "0")}`, answers: i % 3 ? 40 : 0, correct: 30, studyMs: 600_000 })),
