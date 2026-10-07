@@ -108,6 +108,9 @@ function MonthCell({
     day,
   });
   const review = slots.some((s) => s.track === "review");
+  // 선생님 몫으로 넘긴 기록(JJ실 시수 넘기기, 원장 2026-10-07) — 출결 표시는 남기되 이 자리 시수 합계에서는 뺐다는 걸 칸이 말한다.
+  // 🔴 '확인 필요'보다 **먼저** 본다 — 넘길 수 있는 행은 자리 라벨이 없는 행뿐이라 늘 확인 필요 갈래다(뒤에 두면 표식이 한 번도 안 선다).
+  const moved = slots.some((s) => s.moved);
   const start = slots.find((s) => s.status)?.start ?? slots[0]?.start;
   const href = start
     ? `/attendance/seat/${seat}?date=${date}&start=${start}`
@@ -115,7 +118,7 @@ function MonthCell({
   const clickable = Boolean(cell?.expected || recorded.length);
   const inner = (
     <span
-      className={`flex h-7 items-center justify-center text-xs ${disp.className} ${review ? "ring-1 ring-inset ring-amber" : ""}`}
+      className={`flex h-7 items-center justify-center text-xs ${disp.className} ${moved ? "ring-1 ring-inset ring-primary" : review ? "ring-1 ring-inset ring-amber" : ""}`}
       style={disp.style}
     >
       {disp.text}
@@ -124,7 +127,7 @@ function MonthCell({
   return (
     <td
       className="border-line border-b border-r p-0 text-center"
-      title={review ? `${SEAT_NAME[seat]} 출석부로 찍힌 기록이 아닙니다` : holiday}
+      title={moved ? "선생님 몫으로 넘긴 시수입니다 — 이 자리 시수 합계에서 뺐습니다" : review ? `${SEAT_NAME[seat]} 출석부로 찍힌 기록이 아닙니다` : holiday}
     >
       {clickable ? (
         <Link href={href} className="block">

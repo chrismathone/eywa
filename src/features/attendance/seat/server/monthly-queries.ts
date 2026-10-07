@@ -4,6 +4,7 @@ import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supab
 import { addDays, kstToday } from "@/lib/date-kst";
 import { TRANSFER_GAP_DAYS, clipToWithdrawal } from "@/features/attendance/enrollment-span";
 import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
+import { taughtByColumnReady } from "@/features/attendance/server/taught-by-db";
 import { buildHolidayMap } from "@/features/attendance/calendar";
 import { getPeriodWindow } from "@/features/periods/server/queries";
 import { monthBounds } from "@/features/periods/resolve";
@@ -248,6 +249,7 @@ async function fetchRecords(
   start: string,
   end: string,
 ): Promise<SeatAttRecord[]> {
+  const withTaughtBy = await taughtByColumnReady().catch(() => false);
   const rows = await fetchAllPagedInChunks<{
     id: string;
     class_id: string;
@@ -258,10 +260,14 @@ async function fetchRecords(
     seat_label: string | null;
     session_units: number | string | null;
     recorded_at: string;
+    taught_by?: string | null;
   }>(classIds, (chunk, from, to) =>
     supabase
       .from("attendance_records")
-      .select("id, class_id, student_id, session_date, slot_start, status, seat_label, session_units, recorded_at")
+      // 넘겨받은 선생님(`taught_by`, 0316a)은 칸이 있을 때만 읽는다([[#95]] — 없으면 종전 그대로, 자리 시수에서 빼지 않는다).
+      .select((withTaughtBy
+        ? "id, class_id, student_id, session_date, slot_start, status, seat_label, session_units, recorded_at, taught_by"
+        : "id, class_id, student_id, session_date, slot_start, status, seat_label, session_units, recorded_at") as "id, class_id, student_id, session_date, slot_start, status, seat_label, session_units, recorded_at")
       .in("class_id", chunk)
       .gte("session_date", start)
       .lte("session_date", end)
@@ -278,6 +284,7 @@ async function fetchRecords(
       date: r.session_date,
       slotStart: r.slot_start,
       status: r.status,
+      taughtBy: r.taught_by ?? null,
       seatLabel: r.seat_label,
       sessionUnits: raw !== null && Number.isFinite(raw) ? raw : null,
     };

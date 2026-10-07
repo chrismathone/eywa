@@ -20,6 +20,7 @@ import { unlinkedZeroBlockers } from "../unlinked-zero";
 import { isVirtualTermId } from "../month-roster";
 import { materializeVirtualTerms } from "./term-materialize";
 import { logDbError } from "@/lib/supabase/db-error";
+import { carrySyncNotice, syncCarrySessionsAfter } from "./carry-session-sync";
 
 /**
  * `terms`엔 회차 행이 없는 줄(가상 id, `termState: "missing"`)도 선다 — 이 학생의 그 달 출석부 줄인데 행이 없는 반(보강 방문 등).
@@ -98,7 +99,7 @@ export async function mergeReceiptItems(invoiceId: string, source: unknown, indi
   return { committed: true, error: "수납 합산 변경은 저장됐습니다. 창을 다시 열어 확인해 주세요." };
 }
 
-export async function saveReceiptAllocation(invoiceId: string, source: unknown, input: ReceiptAllocationInput[]): Promise<{ ok?: boolean; error?: string }> {
+export async function saveReceiptAllocation(invoiceId: string, source: unknown, input: ReceiptAllocationInput[]): Promise<{ ok?: boolean; error?: string; notice?: string }> {
   const user = await getCurrentUser();
   if (!user || !(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
   if (await sessionBillingOff()) return { error: SESSION_BILLING_OFF };
@@ -148,11 +149,13 @@ export async function saveReceiptAllocation(invoiceId: string, source: unknown, 
   }
   const { error } = await db.rpc("save_session_receipt_allocations", { p_invoice_id: invoiceId, p_expected_lines: source, p_rows: rows });
   if (error) return { error: error.message };
+  // 이 저장으로 지난 달 이월이 이 달 줄에 실렸으면 확정 시수를 그만큼 맞춘다(원장 2026-10-07) — 응답 전에 끝내야 화면이 다시 읽을 때 맞는다.
+  const notice = carrySyncNotice(await syncCarrySessionsAfter(db, { invoiceId }, user.id, "allocate"));
   after(async () => {
     revalidatePath("/billing");
     await logAction({ action: "session_term_receipt_allocate", targetType: "invoice", metadata: { invoiceId, basis: "gross_bill", allocations: rows } });
   });
-  return { ok: true };
+  return { ok: true, ...(notice ? { notice } : {}) };
 }
 
 /** 자유 배분 저장 행 — `confirmedAt`·`baseAmount`는 창을 열 때 본 값(그 사이 확정이 바뀌면 DB 함수가 거절한다). */

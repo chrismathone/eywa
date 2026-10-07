@@ -9,6 +9,8 @@ export type SeatMonthSlotCell = {
   status: AttendanceMark | null;
   units: number | null;
   track: SeatTrack | null;
+  /** 선생님 몫으로 넘긴 기록이다(JJ실 시수 넘기기) — 출결 표시는 남기고 자리 시수 합계에서는 뺀다. */
+  moved?: true;
 };
 
 export type SeatMonthCell = {

@@ -65,6 +65,7 @@ export default async function SeatMonthlyPrintPage({
         holidays={buildHolidayMap(settings.operations.holidays)}
         caption={seatAppendixCaption(isPayrollSeat(seat))}
         unitsByStudent={unitsByStudent}
+        nameStyle="badge"
       />
     </>
   );

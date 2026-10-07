@@ -485,6 +485,17 @@ export function auditDetail(
       const kept = Math.max(0, arr(m.allocations).length - linked);
       return join(kept ? `${kept}개 반 배분 유지` : null, linked ? `새로 확정한 ${linked}개 반을 남은 수업 항목에 연결` : null);
     }
+    case "session_term_carry_sync": {
+      // 받은 금액 이월만큼 확정 시수를 올린 자동 조정 — 누구의 어느 달 줄이 몇 시수에서 몇 시수로, 이월 얼마 때문에.
+      const before = num(m.sessionsBefore);
+      const after = num(m.sessions);
+      return join(
+        str(m.period),
+        str(m.studentName),
+        before !== null && after !== null ? `확정 시수 ${before} → ${after}` : null,
+        won(m.carryAmount) ? `받은 이월 ${won(m.carryAmount)} 반영` : null,
+      );
+    }
     case "session_term_money_carryover":
     case "session_term_money_carryover_cancel": {
       // 금액 이월(0278a) — 어느 달 어느 반에서 얼마를 다음 달 어느 반으로. 이름은 저장 시점 스냅샷(반 이름이 바뀌어도 그대로 읽힌다).
@@ -818,8 +829,18 @@ export function auditDetail(
         m.beforeKnown === false ? (ca ? `청구 기준 합계 ${ca}` : null) : cb && ca ? `청구 기준 합계 ${cb} → ${ca}` : null,
       );
     }
+    case "payroll_jj_units_take":
+    case "payroll_jj_units_return": {
+      const units = num(m.units);
+      return join(
+        str(m.date),
+        ctx.nameOf(m.studentId),
+        ctx.nameOf(m.classId),
+        `${ctx.nameOf(m.userId) ?? "선생님"} ${action === "payroll_jj_units_take" ? "몫으로 넘김" : "몫에서 되돌림"}${units ? ` · ${units}시수` : ""}`,
+      );
+    }
     case "payroll_sheet_visible_set":
-      return join(ctx.nameOf(m.userId), m.visible === true ? "선생님 출석부에 보이게 켬" : "선생님 출석부에서 감춤");
+      return join(str(m.period), ctx.nameOf(m.userId), m.visible === true ? "선생님 출석부에 보이게 켬" : "선생님 출석부에서 감춤");
     case "payroll_mark_paid":
     case "payroll_auto_compute":
     case "payroll_upsert": {

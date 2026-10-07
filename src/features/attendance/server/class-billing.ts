@@ -136,6 +136,9 @@ export async function getAttendanceClassBilledAmounts(
   ), options.teacherScope
     ? loadTeacherTermWeights(admin, user.tenantId, month, classes, options.teacherScope)
     : Promise.resolve(new Map())]);
+  // 등록 차수 몫의 재료(넘겨받은 JJ실 시수)를 못 읽어 접은 결과 — 상한이 넘겨받기 전 몫으로 서므로 금액 조립은 멈춘다.
+  const weightsFolded = foldedReason(weights);
+  if (weightsFolded) degraded.push(weightsFolded);
   const invoices = allInvoices.filter((i) => i.status !== "void");
   // 배분 유효성은 청구서 전체 반이 필요하다. 최종 결과는 classes의 학생×반으로만 좁힌다.
   // ⚠️ 회차 행은 살아 있는 청구서 것만 읽는다 — 취소된 청구서의 회차 행은 금액·차수·단가 어디에도 안 실린다.

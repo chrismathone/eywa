@@ -86,7 +86,13 @@ export function scopeInsertSlots(
 
 export type ScopeOwner = (classId: string, date: string, row: DayTargetRow) => boolean;
 /** 행 하나의 몫 — 자기 몫(`mine`)·자리(`seat`)·그 밖(`other`). `attendanceSlotShare`와 같은 답. */
-export type ScopeShare = (classId: string, date: string, row: DayTargetRow) => AttendanceSlotShare;
+export type ScopeShare = ((classId: string, date: string, row: DayTargetRow) => AttendanceSlotShare) & {
+  /**
+   * 이 행이 **이 선생님이 넘겨받은 JJ실 기록**인가(JJ실 시수 넘기기, 원장 2026-10-07 — `taught_by` = 이 선생님 + 자리 신호).
+   * 저장은 이런 행이 있는 칸을 고치지 않는다(`planScopedDay`의 `seatTaken`).
+   */
+  takenSeat?: (classId: string, date: string, row: DayTargetRow) => boolean;
+};
 
 /** 판정 함수에 넘길 재료 — 몫(`buildScopeOwner`)과 셋 가르기(`buildScopeShare`)가 **같은 재료**를 쓴다. */
 function slotInputOf(teacherId: string, f: ScopeClassFacts, date: string, row: DayTargetRow) {
@@ -139,9 +145,21 @@ export function buildScopeShare(input: {
   teacherId: string;
   facts: ReadonlyMap<string, ScopeClassFacts>;
 }): ScopeShare {
-  return (classId, date, row) => {
+  const takenSeat = (classId: string, date: string, row: DayTargetRow): boolean => {
+    const f = input.facts.get(classId);
+    if (!f || !row.taught_by || row.taught_by !== input.teacherId) return false;
+    // 귀속을 빼고 본 몫이 자리면 = 자리 기록에 귀속만 얹은 행(대신 보강 귀속이 걸린 **사람 수업** 행은 여기 안 걸린다).
+    return attendanceSlotShare({ ...slotInputOf(input.teacherId, f, date, row), taughtBy: null }) === "seat";
+  };
+  const share: ScopeShare = (classId, date, row) => {
     const f = input.facts.get(classId);
     if (!f) return "other";
+    // 🔴 넘겨받은 JJ실 기록 — 렌즈(칸의 값·실급여)에선 이 선생님 몫으로 세지만 **저장은 자리 행 그대로 손대지 않는다**.
+    //    `mine`으로 두면 강사 보기에서 그 칸을 지우거나 숫자를 칠 때 JJ실 출석부의 기록이 지워지고 시수가 바뀐다(적대 리뷰 2026-10-07).
+    //    ⚠️ 그래서 이 행만은 `buildScopeOwner`(렌즈와 같은 답 = 몫)와 답이 다르다 — 일부러다.
+    if (takenSeat(classId, date, row)) return "seat";
     return attendanceSlotShare(slotInputOf(input.teacherId, f, date, row));
   };
+  share.takenSeat = takenSeat;
+  return share;
 }

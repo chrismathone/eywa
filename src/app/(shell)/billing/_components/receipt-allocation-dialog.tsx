@@ -13,6 +13,7 @@ import { normalizeInvoiceLineItems } from "@/features/billing/invoice-line-items
 import { MergedReceiptDetails } from "./merged-receipt-details";
 import { initialReceiptDraft } from "@/features/billing/session-terms/receipt-suggestion";
 import { CELL_ACTION_BUTTON } from "./cell-action-button";
+import { toast } from "sonner";
 import { ReceiptSuggestions } from "./receipt-suggestions";
 import { receiptRefundState } from "@/features/billing/session-terms/receipt-refund";
 import { unlinkedZeroBlockers } from "@/features/billing/session-terms/unlinked-zero";
@@ -99,6 +100,8 @@ function AllocationDialog({ invoiceId, studentName, data: initialData, onClose }
         const rows = receiptAllocationSaveRows(data.terms, draft, ackUnlinked);
         const result = await saveReceiptAllocation(invoiceId, data.source, rows);
         if (result.error) { setError(result.error); return; }
+        // 이 저장으로 지난 달 이월이 실려 확정 시수를 자동으로 맞췄으면 알린다(원장 2026-10-07).
+        if (result.notice) toast.success(result.notice);
         publishRecordSaved("billing:session-terms");
         router.refresh();
         onClose();

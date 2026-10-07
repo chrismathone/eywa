@@ -74,6 +74,7 @@ export default async function ClassMonthlyPrintPage({
           teacherName={cls.className}
           holidays={buildHolidayMap(settings.operations.holidays)}
           caption={lens ? `${CLASS_PRINT_CAPTION} · 이 선생님이 맡은 교시만` : CLASS_PRINT_CAPTION}
+          nameStyle="badge"
         />
       ) : (
         <p className="mx-auto max-w-[277mm] px-8 py-10 text-sm">

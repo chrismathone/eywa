@@ -148,11 +148,21 @@ export function buildSeatMonthly(input: {
         const slotCells: SeatMonthSlotCell[] = [...starts].sort().map((start) => {
           const hit = recByKey.get(`${classId}|${row.studentId}|${d.date}|${start}`);
           if (hit) {
+            const status = asMark(hit.rec.status);
+            // 🔴 선생님 몫으로 넘긴 기록(JJ실 시수 넘기기, 원장 2026-10-07 *"JJ가 -1되면, 다른 선생님이 +1"*) — 그 시수는 선생님 출석부에
+            //    선다. 여기서도 세면 같은 시수가 두 화면에 선다. 출결 표시(학생이 그 시간에 왔다)는 남기고 **시수 합계에서만** 뺀다.
+            if (hit.rec.taughtBy) {
+              // 출석률(줄의 `counted`)에는 넣는다 — 빼면 넘긴 출석이 사라져 남은 결석만으로 0%가 선다(적대 재리뷰). 시수는 이 값에서 읽지 않는다.
+              if (status) countedCells.push({ s: status, u: hit.rec.sessionUnits });
+              if (status === "present") present += 1;
+              else if (status === "absent" || status === "excused") absent += 1;
+              else if (status === "late") late += 1;
+              return { start, status, units: hit.rec.sessionUnits, track: hit.track, moved: true as const };
+            }
             (hit.track === "confirmed" ? confirmedRecs : reviewRecs).push({
               status: hit.rec.status,
               sessionUnits: hit.rec.sessionUnits,
             });
-            const status = asMark(hit.rec.status);
             if (status) countedCells.push({ s: status, u: hit.rec.sessionUnits });
             if (status === "present") present += 1;
             else if (status === "absent" || status === "excused") absent += 1;

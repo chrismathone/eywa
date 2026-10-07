@@ -21,6 +21,7 @@ import { isVirtualTermId, monthRosterKey, parseVirtualTermId, virtualTermId } fr
 import { loadMonthRoster, type MonthRoster } from "./month-roster";
 import { MATERIALIZE_ERROR, materializeVirtualTerms } from "./term-materialize";
 import { autoReallocateAfterConfirm } from "./auto-reallocate";
+import { applyCarrySync, syncCarrySessionsAfter } from "./carry-session-sync";
 
 const DOW: Record<string, number> = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
 
@@ -32,6 +33,8 @@ export type SessionTermPatch = {
   pricingMode: SessionPricingMode;
   confirmedAt: string | null;
   quantityBasis?: SessionQuantityBasis;
+  /** 받은 금액 이월 때문에 확정 시수를 자동으로 맞췄다(원장 2026-10-07) — 화면이 한 번 알린다(`SessionTermsState.apply`). */
+  carryNotice?: string;
 };
 /**
  * `created` = 이번 저장이 **회차 행을 새로 만든** 수(출석부 줄인데 행이 없던 학생 — `term-materialize.ts`). 0보다 크면 응답의 `terms`는
@@ -403,6 +406,8 @@ export async function confirmClassTerms(
   if (confirmed === 0) return { error: "확정할 대상을 찾을 수 없습니다", ...extra };
   // 배분을 저장해 둔 청구서는 사람이 다시 저장할 일만 대신한다(원장 2026-10-06) — 응답 전에 끝내야 화면이 다시 읽을 때 정상이다.
   await autoReallocateAfterConfirm(supabase, terms.map((t) => t.id), "confirm_class");
+  // 받은 금액 이월이 실린 줄은 확정 시수를 그만큼 맞춘다(원장 2026-10-07) — 응답의 행 값도 고친 값으로.
+  const synced = applyCarrySync(terms, await syncCarrySessionsAfter(supabase, { termIds: terms.map((t) => t.id) }, user.id, "confirm_class"));
 
   // 🔴 한 번에 반 전체 청구 회차·단가를 못박는 자리 = 돈이 실제로 결정되는 지점. 단가·회차를 남긴다
   //    (`invoice_create`가 amountTotal을 남기는 것과 같은 결 — 금액 없이 "누가 눌렀다"만 남기면
@@ -423,7 +428,7 @@ export async function confirmClassTerms(
       ...(skippedUnplanned ? { skippedUnplanned } : {}),
     },
   });
-  return { confirmed, terms, ...extra };
+  return { confirmed, terms: synced, ...extra };
 }
 
 /** 회차/월 금액 확정 — 회당은 N×단가, EiE는 설정의 월 금액과 단위를 스냅샷. */
@@ -488,6 +493,11 @@ export async function confirmSessionTerm(
   if (error) return { error: error.message };
   if (!saved) return { error: "확정할 대상을 찾을 수 없습니다" };
   await autoReallocateAfterConfirm(supabase, [id], "confirm");
+  // 받은 금액 이월이 실린 줄은 확정 시수를 그만큼 맞춘다(원장 2026-10-07) — 사람이 '해제 → 시수 올림 → 다시 확정'하던 일.
+  const synced = applyCarrySync(
+    [{ id, confirmedSessions: sessions, unitPrice, pricingMode, amount, confirmedAt, quantityBasis: "attendance_units" as const }],
+    await syncCarrySessionsAfter(supabase, { termIds: [id] }, user.id, "confirm"),
+  );
 
   const hadPrev = before?.confirmed_sessions !== null && before?.confirmed_sessions !== undefined;
   finishTermMutation({
@@ -506,7 +516,7 @@ export async function confirmSessionTerm(
         : {}),
     },
   });
-  return { ok: true, ...(created ? { created } : {}), terms: [{ id, confirmedSessions: sessions, unitPrice, pricingMode, amount, confirmedAt, quantityBasis: "attendance_units" }] };
+  return { ok: true, ...(created ? { created } : {}), terms: synced };
 }
 
 /** 확정 해제 — 계획 N은 유지. */

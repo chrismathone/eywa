@@ -66,7 +66,7 @@ export type AttendanceSalarySheet = {
   /** 급여 비율 설정 권한자의 관리자 화면인가 — 비율 설정·'합계 및 실급여 보여주기' 버튼이 서는 화면. 선생님 본인 화면은 false. */
   manage: boolean;
   canEdit: boolean;
-  /** '합계 및 실급여 보여주기'가 켜져 있는가(선생님별, 0352a) — 켜져 있을 때만 표에 실급여 값을 싣는다. */
+  /** 그 달의 '합계 및 실급여 보여주기'가 켜져 있는가(선생님 × 달, 0352a·0353a) — 켜져 있을 때만 표에 실급여 값을 싣는다. */
   visible: boolean;
 };
 
@@ -74,13 +74,15 @@ export type AttendanceSalarySheet = {
  * 월별 출석부(강사 전체 보기)의 실급여 재료 — 문은 둘이다(원장 2026-10-07 *"권한자가 … 실급여 보이기 토글을 on하면
  * 실제 강사뷰의 강사가 출석부에서 합계 및 실급여를 볼 수 있게"*).
  *
+ * 스위치는 **달마다 따로**다(원장 2026-10-07 *"9월에 보여주기 눌렀다고해서 10월에 보여주는건 아님"*) — `month` = 출석부가 보는 달.
+ *
  * ① **관리자 화면**(급여 비율 설정 권한) — 비율은 늘 받는다(비율 설정 창의 재료). 표에 싣는 것은 `visible`일 때만.
  * ② **선생님 본인 화면**(강사 화면의 주인 = 이 선생님) — 그 선생님의 스위치가 **켜져 있을 때만** 받는다.
  *    꺼져 있으면 비율·급여 값을 읽지도 싣지도 않는다(화면에서 감추는 게 아니다).
  *    · '다른 강사 뷰'(열람 전용)는 그 선생님이 보는 그대로 보되, **급여 비율 설정 권한이 있는 사람만** — 뷰 자격만으로 남의 급여가 열리지 않게.
  * 🔴 ②는 선생님이 매일 여는 화면이다 — 조회가 실패해도 던지지 않는다(실급여 열만 비우고 출석부는 산다, [[#95]]).
  */
-export async function getAttendanceSalaryRates(teacherId: string | null): Promise<AttendanceSalarySheet | null> {
+export async function getAttendanceSalaryRates(teacherId: string | null, month: string): Promise<AttendanceSalarySheet | null> {
   if (!teacherId) return null;
   const admin = await requireAttendanceSalaryAdmin(false);
   if (admin) {
@@ -88,7 +90,7 @@ export async function getAttendanceSalaryRates(teacherId: string | null): Promis
     //    실급여 열만 비우고 격자는 살린다(종전 동작).
     const [loaded, visible, canEdit] = await Promise.all([
       loadAttendanceSalaryRates(admin.tenantId, teacherId, { screen: true }),
-      loadSalarySheetVisible(admin.tenantId, teacherId),
+      loadSalarySheetVisible(admin.tenantId, teacherId, month),
       canManageTenant(admin.systemRole, "attendance_salary_settings"),
     ]);
     if (!loaded) return null;
@@ -98,7 +100,7 @@ export async function getAttendanceSalaryRates(teacherId: string | null): Promis
   if ((await effectiveTeacherId()) !== teacherId) return null;
   if (!isModuleEnabled((await getTenantSettings()).modules.disabled, "payroll")) return null;
   if (user.id !== teacherId && !(await canAccessTenant(user.systemRole, "attendance_salary_settings"))) return null;
-  if (!(await loadSalarySheetVisible(user.tenantId, teacherId))) return null;
+  if (!(await loadSalarySheetVisible(user.tenantId, teacherId, month))) return null;
   try {
     const loaded = await loadAttendanceSalaryRates(user.tenantId, teacherId, { screen: true });
     if (!loaded) return null;

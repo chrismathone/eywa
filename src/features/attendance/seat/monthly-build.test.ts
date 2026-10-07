@@ -73,6 +73,29 @@ describe("월간 표 조립", () => {
     expect(cell.slots.map((x) => x.track)).toEqual(["confirmed", "review"]);
   });
 
+  it("🔴 선생님 몫으로 넘긴 기록은 자리 시수에서 뺀다 — 출결 표시는 남는다(JJ실 시수 넘기기 · 원장 'JJ가 -1되면')", () => {
+    const v = build({
+      records: [
+        { id: "a", classId: "mec", studentId: "s1", date: "2026-08-12", slotStart: "16:20", status: "present", seatLabel: "LAB", sessionUnits: null },
+        // 넘길 수 있는 행은 **자리 라벨이 없는** 행뿐이다(JJ실 기록 — 이 표에선 '확인 필요' 갈래).
+        { id: "b", classId: "mec", studentId: "s1", date: "2026-08-12", slotStart: "17:00", status: "present", seatLabel: null, sessionUnits: null, taughtBy: "teacher-1" },
+      ],
+    });
+    const student = v.groups[0]!.students[0]!;
+    // 넘긴 1시수는 빠지고 남은 1시수만 — 학생 · 반 · 날짜 합계가 전부 같은 답이다(확정에도 확인 필요에도 안 들어간다).
+    expect(student.confirmedUnits).toBe(1);
+    expect(student.reviewUnits).toBe(0);
+    expect(v.groups[0]!.confirmedUnits).toBe(1);
+    expect(v.summary.confirmedUnits).toBe(1);
+    expect(v.dateTotals["2026-08-12"]).toEqual({ confirmed: 1, review: 0 });
+    // 칸에는 그대로 선다(학생이 그 시간에 온 사실) — 넘겼다는 표식과 함께.
+    const cell = v.groups[0]!.cells.s1!["2026-08-12"]!;
+    expect(cell.slots.map((x) => [x.status, x.moved ?? false])).toEqual([["present", false], ["present", true]]);
+    expect(v.summary.present).toBe(2);
+    // 🔴 출석률에는 넘긴 출석도 센다 — 빼면 남은 기록만으로 비율이 선다(넘긴 출석 3 + 남은 결석 1 = 0%).
+    expect(student.counted).toMatchObject({ recorded: 2, present: 2 });
+  });
+
   it("결석은 시수에 안 들어가고, 자리 슬롯이 아닌 기록은 표에 안 실린다", () => {
     const v = build({
       records: [

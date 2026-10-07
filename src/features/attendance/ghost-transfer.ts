@@ -35,7 +35,7 @@ export type ScopedDayPlan<T extends DayTargetRow> =
   | { kind: "transfer"; rows: T[] }
   | { kind: "reject"; reason: ScopedRejectReason };
 
-export type ScopedRejectReason = "seatOnly" | "stale";
+export type ScopedRejectReason = "seatOnly" | "stale" | "seatTaken";
 
 /**
  * @param targets 그날 교시별 최신 행(`pickSaveTargets(rows, null).updateIds` 순서) — 화면이 값으로 세는 행과 같은 대상.
@@ -52,11 +52,19 @@ export function planScopedDay<T extends DayTargetRow>(input: {
   share: ((row: T) => AttendanceSlotShare) | null;
   clearing: boolean;
   ghostIntent?: boolean;
+  /**
+   * 이 행이 **이 선생님이 넘겨받은 JJ실 기록**인가(`ScopeShare.takenSeat`, JJ실 시수 넘기기 2026-10-07).
+   * 🔴 그런 행이 있는 칸은 강사 보기에서 고치지 않는다(입력·지우기 모두) — 칸의 값은 제 교시 + 넘겨받은 JJ 시수인데 저장은 제 교시
+   *    행에만 쓰므로, 친 합계와 다시 읽은 합계가 갈린다(2026-09-11의 "새로고침하면 숫자가 바뀐다"와 같은 모양). 고치려면 JJ실 시수를
+   *    먼저 되돌리거나 반별 보기에서 고친다.
+   */
+  taken?: (row: T) => boolean;
 }): ScopedDayPlan<T> {
   const { share } = input;
   // 반별 보기엔 빗금 칸이 없다 — 표식이 와도 뜻이 없다(종전 경로).
   if (!share) return { kind: "own" };
   const { targets } = input;
+  if (input.taken && targets.some(input.taken)) return { kind: "reject", reason: "seatTaken" };
   const owned = targets.length === 0 || targets.some((r) => share(r) === "mine");
   if (input.clearing) return owned ? { kind: "own" } : { kind: "skip" };
   const intent = input.ghostIntent === true;
@@ -75,4 +83,5 @@ export function planScopedDay<T extends DayTargetRow>(input: {
 export const SCOPED_REJECT_MESSAGE: Record<ScopedRejectReason, string> = {
   seatOnly: sheetT("ko", "att.lock.seatOnly"),
   stale: sheetT("ko", "att.grid.ghostStale"),
+  seatTaken: sheetT("ko", "att.lock.seatTaken"),
 };

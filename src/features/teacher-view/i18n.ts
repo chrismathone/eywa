@@ -1564,6 +1564,11 @@ export const SHEET_DICT = {
     en: ". Even in the same class, other teachers' periods and the seat rooms (JJ·Lab) are hidden and left out of the session and attendance-rate totals. Editing here never changes another teacher's records. A record with no period (a makeup, say) counts for every teacher who takes this class that day.",
   },
   "att.notice.scope.d": { ko: "반별 보기", en: "the class view" },
+  // 반별 보기 + 세션 축 — 실급여는 달 단위(청구액·등록 차수·명세서와 같은 축)라 세션 창에서는 싣지 않는다(원장 2026-10-07).
+  "att.notice.salaryAxis": {
+    ko: "실급여는 달 단위로 계산합니다. 기간을 '월'로 바꾸면 이 표에서도 보입니다.",
+    en: "Actual pay is worked out per calendar month. Switch Period to Month to see it in this table.",
+  },
   "att.notice.scope.e": { ko: "에서 봅니다.", en: " instead." },
   "att.notice.empty.teacherPre": { ko: "담당 반에 아직 ", en: "Among your classes, " },
   "att.notice.empty.classPre": { ko: "이 반은 아직 ", en: "In this class, " },
@@ -1820,8 +1825,8 @@ export const SHEET_DICT = {
   // '합계 및 실급여 보여주기' 버튼(원장 2026-09-21 → 2026-10-07 선생님별 스위치) — 관리자가 프리랜서 강사 전체 보기를 볼 때만 선다.
   "att.actualSalary.toggle": { ko: "합계 및 실급여 보여주기", en: "Show totals & net pay" },
   "att.actualSalary.saveFailed": { ko: "합계 및 실급여 보여주기 설정을 저장하지 못했습니다. 다시 눌러 주세요.", en: "Couldn't save the totals & net pay setting. Please try again." },
-  "att.actualSalary.savedOn": { ko: "이제 이 선생님 본인 출석부에도 실급여와 합계가 보입니다", en: "Net pay and its total now show on this teacher's own sheet too" },
-  "att.actualSalary.savedOff": { ko: "이 선생님 출석부에서 실급여를 감췄습니다(이 화면과 선생님 화면 모두)", en: "Net pay is now hidden on this teacher's sheet (here and for the teacher)" },
+  "att.actualSalary.savedOn": { ko: "이제 {m}월 출석부의 실급여와 합계가 이 선생님 본인에게도 보입니다", en: "Net pay and its total for month {m} now show on this teacher's own sheet too" },
+  "att.actualSalary.savedOff": { ko: "{m}월 출석부에서 실급여를 감췄습니다(이 화면과 선생님 화면 모두)", en: "Net pay for month {m} is now hidden (here and for the teacher)" },
   "att.actualSalary.stateOn": { ko: "켜짐 · 선생님에게 보임", en: "On · visible to the teacher" },
   "att.actualSalary.stateOff": { ko: "꺼짐", en: "Off" },
   "att.actualSalary.tipOn": {
@@ -1833,8 +1838,8 @@ export const SHEET_DICT = {
     en: "Off: hidden on both. Net pay values are not sent to the screen.",
   },
   "att.actualSalary.tipScope": {
-    ko: "선생님마다 따로 저장됩니다(누르는 사람의 보기 설정이 아닙니다).",
-    en: "Saved per teacher (not a personal view setting).",
+    ko: "선생님마다 · 달마다 따로 저장됩니다. 지금은 {m}월 출석부에만 적용됩니다(다른 달은 그 달에서 따로 켭니다).",
+    en: "Saved per teacher and per month. This applies to month {m} only — turn it on separately for other months.",
   },
   "att.actualSalary.tipFormula": {
     ko: "실급여 = 실수업액(청구액보다 많으면 청구액) × 0.911 × 비율",
@@ -2030,6 +2035,11 @@ export const SHEET_DICT = {
     ko: "이 날은 자리(JJ·랩실) 기록뿐이라 선생님 출석부에서는 고치지 않습니다",
     en: "This day only has JJ or Lab seat records, so it is not edited in a teacher's register",
   },
+  // 넘겨받은 JJ실 시수가 있는 칸(JJ실 시수 넘기기, 2026-10-07) — 강사 보기 저장이 거절하는 사유. 서버 문장도 이 사전을 쓴다.
+  "att.lock.seatTaken": {
+    ko: "넘겨받은 JJ실 시수가 있는 칸은 선생님 출석부에서 고치지 않습니다 — 관리자가 JJ실 시수를 되돌린 뒤 고칠 수 있습니다",
+    en: "This day includes JJ room units moved to this teacher, so it is not edited here — an admin needs to return the JJ units first",
+  },
   "att.totals.search": { ko: "검색 합계", en: "Search total" },
   "att.totals.all": { ko: "합계", en: "Total" },
   // 합계 행(원장 2026-09-18) — 출석률 칸은 행 출석률의 **평균**, 등록 차수 합은 옛 일수 기준 확정을 뺀다.
@@ -2137,6 +2147,14 @@ export const SHEET_DICT = {
   },
   "att.pop.pickFirst": { ko: "상태를 먼저 선택하세요", en: "Pick a status first" },
   // 보강 예약(0264a, 원장 2026-09-14) — 우클릭 메뉴의 '보강' 아래 항목 + 예약된 칸의 안내·취소.
+  // JJ실 시수 넘기기(원장 2026-10-07) — 급여 비율을 고칠 수 있는 사람의 강사 전체 보기 칸 팝오버에만 선다.
+  "att.pop.jj.hint": { ko: "JJ실 수업을 대신 한 날 — 넘겨받으면 이 선생님 시수가 됩니다.", en: "For days this teacher covered the JJ room class — taken units count for this teacher." },
+  "att.pop.jj.take": { ko: "JJ실 시수 {n} 넘겨받기", en: "Take {n} JJ room unit(s)" },
+  "att.pop.jj.return": { ko: "JJ실 시수 {n} 되돌리기", en: "Return {n} JJ room unit(s)" },
+  "att.pop.jj.returnRecord": { ko: "넘겨받은 JJ실 기록 되돌리기", en: "Return the JJ room record" },
+  "att.pop.jj.took": { ko: "JJ실 시수 {n}을(를) 이 선생님 몫으로 넘겼습니다", en: "Moved {n} JJ room unit(s) to this teacher" },
+  "att.pop.jj.returned": { ko: "JJ실 시수 {n}을(를) JJ실 몫으로 되돌렸습니다", en: "Returned {n} JJ room unit(s) to the JJ room" },
+  "att.pop.jj.failed": { ko: "JJ실 시수를 넘기지 못했습니다. 다시 눌러 주세요.", en: "Couldn't move the JJ room units. Please try again." },
   "att.pop.reserve": { ko: "보강 예약", en: "Reserve makeup" },
   "att.pop.reserveHint": {
     ko: "이 날 결석분의 보강 시간을 미리 잡습니다",
