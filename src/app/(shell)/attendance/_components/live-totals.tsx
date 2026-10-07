@@ -77,8 +77,10 @@ export function RowActualAmountCell({ row, fallback, prices, lang }: {
   </td>;
 }
 
-export function RowActualSalaryCell({ row, fallback, prices, rate, billed, lang }: {
+export function RowActualSalaryCell({ row, fallback, prices, rate, billed, lang, outOfScope }: {
   row: string; fallback: Counted; prices: readonly AttendanceConfirmedPrice[] | null | undefined; rate: number | null;
+  /** 이 선생님의 실급여 대상 학년이 아닌 학생 줄 — '—'의 이유가 단가·비율 미설정이 아니다(대상 학년, 원장 2026-10-07). */
+  outOfScope?: boolean;
   /** 이 줄의 실급여 상한 = 이 선생님 몫의 청구액(`salaryBilledCap`). 모르면 undefined(상한 없음). */
   billed?: number | null;
   lang: SheetLang;
@@ -87,7 +89,7 @@ export function RowActualSalaryCell({ row, fallback, prices, rate, billed, lang 
   const amount = actualLessonSalary(prices, count.units, rate, billed);
   const capped = amount !== null && actualSalaryBase(prices, count.units, billed)?.capped === true;
   return <td data-att-column="actualSalary" className="border-line num bg-att-col-billed border-b border-r px-1 py-1 text-right text-xs font-bold whitespace-nowrap"
-    title={amount === null ? sheetT(lang, "att.row.actualSalaryUnavailable")
+    title={amount === null ? sheetT(lang, outOfScope ? "att.row.actualSalaryOutOfScope" : "att.row.actualSalaryUnavailable")
       : sheetTf(lang, capped ? "att.row.actualSalaryRateCapped" : "att.row.actualSalaryRate", { rate: rate! })}>
     {amount === null ? "—" : formatMoney(amount)}
   </td>;

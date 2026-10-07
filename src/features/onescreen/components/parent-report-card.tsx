@@ -158,7 +158,7 @@ export function ParentReportCard({
           학습 추세는 **전부 건너뛴다**: 같이 그리면 같은 진도·숙제가 글 안과 칸에 두 번 나간다.
           🔴 'showParentNote' 토글을 보지 않는다 — 수학에선 여러 칸 중 하나지만 여기선 글이 곧 보고서라,
              끄면 학생 정보만 남은 빈 카드가 학부모에게 나간다. 머리·학생 정보·첨부·바닥글은 수학과 같다. */}
-      {templateMode ? <TemplateBody text={report.notes} jj={jj} inline={inline} /> : null}
+      {templateMode ? <TemplateBody text={report.notes} jj={jj} inline={inline} student={student} /> : null}
 
       {!templateMode && showToday ? (
         <Section title="오늘 수업">

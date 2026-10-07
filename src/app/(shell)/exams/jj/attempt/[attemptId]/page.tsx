@@ -49,6 +49,14 @@ export default async function JjAttemptPage({ params }: { params: Promise<{ atte
         >
           이 시험 전체 결과
         </WindowLink>
+        {/* 보카킹 종합평가 리포트(2026-10-07 1차 구현) — 같은 응시를 리포트 모양으로. 게이트는 같은 함수를 지난다. */}
+        <WindowLink
+          href={`/exams/jj/attempt/${encodeURIComponent(attemptId)}/vocabking`}
+          title={`${exam.student.name || "학생"} — 종합평가 리포트`}
+          className="text-primary font-bold hover:underline"
+        >
+          종합평가 리포트
+        </WindowLink>
       </nav>
       <JjExamSheet exam={exam} layout="wide" />
     </div>

@@ -2,7 +2,7 @@ import "server-only";
 import { loadAttendanceSalaryRates } from "@/features/attendance/server/salary-rates";
 import { loadSubstituteCells } from "@/features/attendance/server/substitute-cells";
 import { loadTeacherSheet, sheetSalaryOf } from "@/features/attendance/server/teacher-sheet";
-import { ATTENDANCE_RATE_LEVELS, type AttendanceSalaryRates } from "@/features/attendance/salary-rates";
+import { ATTENDANCE_RATE_LEVELS, type AttendanceRateLevel, type AttendanceSalaryRates } from "@/features/attendance/salary-rates";
 import { formatSessionUnits } from "@/features/attendance/session-units";
 import { TeacherSheetError } from "@/features/attendance/teacher-sheet-error";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -39,6 +39,8 @@ export type SheetTuition = {
   /** null = 산정할 줄이 없다(0원을 지어내지 않는다). */
   settlement: PayslipData["settlement"];
   warnings: string[];
+  /** 대상 학년을 좁힌 선생님이면 그 학년(없으면 전체) — 별지가 같은 학년 학생만 싣는다. */
+  levels?: AttendanceRateLevel[];
   /** 명세서 비율표에 찍을 값 — 출석부 비율표를 과정(초등·중등·고등·특강)으로 옮긴 것. 옮길 수 없는 칸은 계약 비율 그대로. */
   rates: { base: GroupRates; applied: GroupRates };
 };
@@ -59,7 +61,10 @@ export function sheetRatesAsGroups(rates: AttendanceSalaryRates, contract: Group
     const v = rates.regular[level];
     if (v !== undefined) out[level] = v;
   }
-  const specials = new Set(ATTENDANCE_RATE_LEVELS.map((level) => rates.special[level]).filter((v): v is number => v !== undefined));
+  // 대상 학년을 좁힌 선생님 — 대상이 아닌 학년의 비율은 표에서 뺀다(계산에 쓰지 않는 비율이 명세서에 찍히지 않게).
+  const inScope = rates.levels?.length ? ATTENDANCE_RATE_LEVELS.filter((level) => rates.levels!.includes(level)) : ATTENDANCE_RATE_LEVELS;
+  for (const level of ATTENDANCE_RATE_LEVELS) if (!inScope.includes(level)) delete out[level];
+  const specials = new Set(inScope.map((level) => rates.special[level]).filter((v): v is number => v !== undefined));
   if (specials.size === 1) out["특강"] = [...specials][0]!;
   return out;
 }
@@ -91,7 +96,8 @@ export async function computeSheetTuition(args: {
   const base = sheetRatesAsGroups(loaded.rates, args.contractRates);
   const applied: GroupRates = Object.fromEntries(Object.entries(base).map(([group, rate]) => [group, applyRatePenalty(rate, penalty)]));
   const sheet = assembled.sheet;
-  if (!sheet) return { settlement: null, warnings: [assembled.unavailable ?? "출석부를 불러오지 못해 수업료를 산정하지 않았습니다."], rates: { base, applied } };
+  const levels = loaded.rates.levels?.length ? loaded.rates.levels : undefined;
+  if (!sheet) return { settlement: null, warnings: [assembled.unavailable ?? "출석부를 불러오지 못해 수업료를 산정하지 않았습니다."], rates: { base, applied }, levels };
   if (!sheet.sessionBillingOn) return null;
   const salary = sheetSalaryOf(sheet, loaded.rates, penalty > 0 ? (rate) => applyRatePenalty(rate, penalty) : undefined);
   // 다른 반 대신 보강 칸 — 이 강사 표에 없는 반의 것만(표에 선 반의 칸은 격자가 이미 센다). 금액에는 안 들어가는 알림 재료라
@@ -107,6 +113,14 @@ export async function computeSheetTuition(args: {
   ).catch(() => null);
 
   const warnings: string[] = [];
+  // 대상 학년만 산정한 명세서라는 사실을 먼저 적는다 — 읽는 사람이 다른 학년 학생이 왜 없는지 묻지 않게.
+  if (levels) {
+    const out = salary.outOfScope;
+    warnings.push(
+      `${levels.join("·")} 학생만 산정한 명세서입니다(출석부 '비율 설정'의 대상 학년)` +
+        (out.students > 0 ? ` — 그 밖 학년 ${out.students}명 · ${formatSessionUnits(out.units)}시수는 들어 있지 않습니다.` : "."),
+    );
+  }
   const noPrice = salary.excluded.filter((e) => e.reason === "no-price");
   const noRate = salary.excluded.filter((e) => e.reason === "no-rate");
   if (salary.total === null) {
@@ -115,6 +129,12 @@ export async function computeSheetTuition(args: {
   if (noPrice.length > 0) {
     const units = Math.round(noPrice.reduce((sum, e) => sum + e.units, 0) * 10) / 10;
     warnings.push(`회차 확정 단가가 없어 빠진 ${new Set(noPrice.map((e) => e.studentId)).size}명(${names(noPrice.map((e) => e.studentName))}) — ${units}시수가 산정에서 빠졌습니다.`);
+  }
+  const noLevel = salary.excluded.filter((e) => e.reason === "no-level");
+  if (noLevel.length > 0) {
+    const units = Math.round(noLevel.reduce((sum, e) => sum + e.units, 0) * 10) / 10;
+    // 학년이 비었거나, 값은 있는데 초·중·고가 아닌 경우(예: 7세) 둘 다다 — "입력하면 풀린다"고만 말하면 뒤의 경우엔 따를 수 없는 안내가 된다(재리뷰).
+    warnings.push(`학년이 비어 있거나 초·중·고로 분류되지 않아(예: 7세) 대상 학년인지 판정하지 못한 ${new Set(noLevel.map((e) => e.studentId)).size}명(${names(noLevel.map((e) => e.studentName))}) — ${units}시수가 산정에서 빠졌습니다.`);
   }
   if (noRate.length > 0) {
     const units = Math.round(noRate.reduce((sum, e) => sum + e.units, 0) * 10) / 10;
@@ -177,5 +197,6 @@ export async function computeSheetTuition(args: {
           },
     warnings,
     rates: { base, applied },
+    levels,
   };
 }

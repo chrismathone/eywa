@@ -72,6 +72,31 @@ it("saves the six rates for only the selected freelance teacher in the authentic
   expect(await saveAttendanceSalaryRates({ teacherId, month: "2026-09", rates })).toEqual({ ok: true });
   expect(h.writes).toEqual([expect.objectContaining({ tenant_id: "tenant", teacher_id: teacherId, rates, updated_by: "admin" })]);
 });
+// 원장 2026-10-07 *"이성우 선생님은 … 고등학생에 대해서만 급여 명세서가 나오도록"* — 대상 학년.
+it("대상 학년을 저장하고, 바뀌었을 때만 감사로그를 남긴다 — 비율 숫자는 남기지 않는다", async () => {
+  h.replies = [{ data: { employment_type: "프리랜서", display_name: "이강사" }, error: null }, { data: null, error: null }, { error: null }];
+  expect(await saveAttendanceSalaryRates({ teacherId, month: "2026-09", rates: { ...rates, levels: ["고등"] } })).toEqual({ ok: true });
+  expect(h.writes).toEqual([expect.objectContaining({ teacher_id: teacherId, rates: { ...rates, levels: ["고등"] } })]);
+  expect(h.log).toHaveBeenCalledExactlyOnceWith({
+    action: "payroll_sheet_levels_set", targetType: "user", targetLabel: "이강사",
+    metadata: { userId: teacherId, levels: ["고등"], before: [] },
+  });
+  // 같은 대상 학년으로 다시 저장 — 달라진 결정이 없으니 남기지 않는다.
+  h.log.mockClear();
+  h.replies = [{ data: { employment_type: "프리랜서", display_name: "이강사" }, error: null }, { data: { rates: { ...rates, levels: ["고등"] } }, error: null }, { error: null }];
+  expect(await saveAttendanceSalaryRates({ teacherId, month: "2026-09", rates: { ...rates, levels: ["고등"] } })).toEqual({ ok: true });
+  expect(h.log).not.toHaveBeenCalled();
+  // 전체로 되돌리면(세 학년 전부 = 저장값에서 칸이 빠진다) 그 사실을 남긴다.
+  h.replies = [{ data: { employment_type: "프리랜서", display_name: "이강사" }, error: null }, { data: { rates: { ...rates, levels: ["고등"] } }, error: null }, { error: null }];
+  expect(await saveAttendanceSalaryRates({ teacherId, month: "2026-09", rates: { ...rates, levels: ["초등", "중등", "고등"] } })).toEqual({ ok: true });
+  expect(h.writes.at(-1)).toEqual(expect.objectContaining({ rates }));
+  expect(h.log).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ metadata: { userId: teacherId, levels: [], before: ["고등"] } }));
+});
+it("🔴 대상 학년을 하나도 안 고른 요청은 저장하지 않는다 — 아무도 계산되지 않는 설정", async () => {
+  expect(await saveAttendanceSalaryRates({ teacherId, month: "2026-09", rates: { ...rates, levels: [] } })).toEqual({ ok: false, error: "대상 학년을 하나 이상 골라 주세요" });
+  expect((await saveAttendanceSalaryRates({ teacherId, month: "2026-09", rates: { ...rates, levels: ["수능"] } as never })).ok).toBe(false);
+  expect(h.from).not.toHaveBeenCalled();
+});
 it("rejects a rate for an unrelated class and invalid ranges without saving", async () => {
   expect((await saveAttendanceSalaryRates({ teacherId, month: "2026-09", rates: { ...rates, special: { 고등: 101 } } })).ok).toBe(false);
   h.replies = [{ data: { employment_type: "프리랜서" }, error: null }, { data: null, error: null }];

@@ -1818,6 +1818,8 @@ export const SHEET_DICT = {
   },
   // 선생님 본인 화면에도 뜨는 문구다(2026-10-07 선생님별 스위치) — 고칠 수 없는 사람에게 "확인해 주세요"라고 하지 않는다.
   "att.row.actualSalaryUnavailable": { ko: "단가 또는 적용 비율(정규·특강의 학년별)이 정해지지 않아 계산하지 않았습니다", en: "Not calculated — the unit price or the grade-level rate (regular/special) isn't set" },
+  // 실급여 대상 학년을 좁힌 선생님의 다른 학년 학생 줄(원장 2026-10-07) — 단가·비율 미설정과 다른 이유다.
+  "att.row.actualSalaryOutOfScope": { ko: "이 선생님의 실급여 대상 학년이 아니라 계산하지 않습니다(비율 설정의 대상 학년)", en: "Not calculated — this student's grade level is outside this teacher's pay scope (set in the rate settings)" },
   "att.col.actualAmountTitle": { ko: "확정 단가 × 수업 차수", en: "Confirmed unit price × attended units" },
   "att.row.actualAmountUnavailable": { ko: "회당 단가가 확정된 경우 계산합니다. 월 정액·일수 기준·복수 단가는 계산하지 않습니다.", en: "Requires one confirmed per-unit price. Monthly fees, day-based prices and multiple prices cannot be multiplied by lesson units." },
   "att.columns.toggle": { ko: "보기 옵션", en: "View options" },

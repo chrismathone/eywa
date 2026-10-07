@@ -31,6 +31,7 @@ import {
   nextRowOf,
   sheetLayoutOf,
   templateTabFor,
+  campusOf,
   type EnrollmentFact,
   type SheetEntry,
 } from "../withdrawal-sheet-model";
@@ -61,9 +62,15 @@ async function isSheetTenant(tenantId: string): Promise<boolean> {
 
 type EnrollmentRow = {
   id: string;
+  class_id: string;
   end_date: string | null;
   is_transferred: boolean | null;
-  class: { class_name: string | null; subject: string | null; teacher: { display_name: string | null } | null } | null;
+  class: {
+    class_name: string | null;
+    subject: string | null;
+    classroom_id: string | null;
+    teacher: { display_name: string | null } | null;
+  } | null;
 };
 
 /** 이 학생이 이 날 수학을 그만뒀다면 시트에 적을 줄들. 아니면 빈 배열. */
@@ -78,7 +85,9 @@ async function entriesFor(
     db.from("students").select("name, school, grade, enrolled_at").eq("tenant_id", tenantId).eq("id", studentId).maybeSingle(),
     db
       .from("enrollments")
-      .select("id, end_date, is_transferred, class:class_id ( class_name, subject, teacher:teacher_id ( display_name ) )")
+      .select(
+        "id, class_id, end_date, is_transferred, class:class_id ( class_name, subject, classroom_id, teacher:teacher_id ( display_name ) )",
+      )
       .eq("tenant_id", tenantId)
       .eq("student_id", studentId),
   ]);
@@ -95,15 +104,66 @@ async function entriesFor(
   }));
   const quit = mathWithdrawalsOn(facts, date, only ? new Set(only) : undefined) as typeof facts;
   const s = stu.data as { name: string; school: string | null; grade: string | null; enrolled_at: string | null };
+  if (quit.length === 0) return [];
+  const campusByClass = await campusByClassOf(
+    db,
+    tenantId,
+    quit.map((f) => ({ classId: f.row.class_id, defaultRoomId: f.row.class?.classroom_id ?? null })),
+    date,
+  );
   return quit.map((f) => ({
     name: s.name,
     schoolGrade: schoolGradeLabel(s.school, s.grade) ?? "",
     className: f.row.class?.class_name ?? "",
     subject: SUBJECT_TEXT,
     teacher: f.row.class?.teacher?.display_name ?? "",
+    campus: campusByClass.get(f.row.class_id) ?? "",
     enrolledAt: s.enrolled_at ? String(s.enrolled_at).slice(0, 10) : null,
     withdrawnAt: date,
   }));
+}
+
+/**
+ * 반 → 재원캠퍼스. 강의실은 **수업 배치(교시)의 강의실**이 먼저다(한 반이 요일마다 방이 다를 수 있다) — 퇴원일에 살아 있던
+ * 배치, 없으면 그 반의 가장 최근 배치, 배치에 방이 비면 반 기본 강의실(`classes.classroom_id`, 배치가 비면 이걸 상속한다).
+ * 조회 실패는 빈 칸(캠퍼스 하나 때문에 기입을 막지 않는다).
+ */
+async function campusByClassOf(
+  db: ReturnType<typeof createAdminClient>,
+  tenantId: string,
+  classes: { classId: string; defaultRoomId: string | null }[],
+  date: string,
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  try {
+    const ids = [...new Set(classes.map((c) => c.classId))];
+    const { data: slots, error } = await db
+      .from("class_schedules")
+      .select("class_id, classroom_id, valid_from, valid_to")
+      .eq("tenant_id", tenantId)
+      .in("class_id", ids);
+    if (error) throw error;
+    const rows = (slots ?? []) as { class_id: string; classroom_id: string | null; valid_from: string; valid_to: string | null }[];
+    const roomIdsByClass = new Map<string, (string | null)[]>();
+    for (const c of classes) {
+      const mine = rows.filter((r) => r.class_id === c.classId);
+      const live = mine.filter((r) => String(r.valid_from) <= date && (!r.valid_to || String(r.valid_to) >= date));
+      const latestFrom = mine.reduce((m, r) => (String(r.valid_from) > m ? String(r.valid_from) : m), "");
+      const pick = live.length ? live : mine.filter((r) => String(r.valid_from) === latestFrom);
+      roomIdsByClass.set(c.classId, pick.length ? pick.map((r) => r.classroom_id ?? c.defaultRoomId) : [c.defaultRoomId]);
+    }
+    const roomIds = [...new Set([...roomIdsByClass.values()].flat().filter((x): x is string => !!x))];
+    const names = new Map<string, string>();
+    if (roomIds.length) {
+      const { data: rooms, error: rErr } = await db.from("classrooms").select("id, name").eq("tenant_id", tenantId).in("id", roomIds);
+      if (rErr) throw rErr;
+      for (const r of (rooms ?? []) as { id: string; name: string | null }[]) names.set(r.id, r.name ?? "");
+    }
+    for (const [classId, ids2] of roomIdsByClass) out.set(classId, campusOf(ids2.map((id) => (id ? names.get(id) : null))));
+  } catch (e) {
+    reportError(e, { where: "withdrawal-sheet.campus" });
+  }
+  return out;
 }
 
 type Sheets = Awaited<ReturnType<typeof getSheetsApi>>;

@@ -11,6 +11,13 @@ export type AttendanceSalaryRates = {
   regular: Partial<Record<AttendanceRateLevel, number>>;
   special: Partial<Record<AttendanceRateLevel, number>>;
   classes: Record<string, number>;
+  /**
+   * **대상 학년** — 실급여(= 프리랜서 명세서)를 이 학년 학생에게만 계산한다. 없으면 전체(대부분의 선생님).
+   * 원장 2026-10-07 *"이성우 선생님은 특이케이스로 고등학생에 대해서만 프리랜서 적용할거라 고등학생에 대해서만 급여 명세서가
+   * 나오도록"*. 기준은 **학생 학년**이다(반 이름이 아니다 — '고등M' 반의 중3은 대상이 아니다).
+   * 🔴 계정을 코드에 적지 않는다 — 선생님마다 비율 설정 창에서 고른다. 세 학년을 다 고른 것은 '없음'(전체)과 같아 저장하지 않는다.
+   */
+  levels?: AttendanceRateLevel[];
 };
 export const emptyAttendanceRates = (): AttendanceSalaryRates => ({ regular: {}, special: {}, classes: {} });
 
@@ -28,15 +35,41 @@ export function parseAttendanceRates(value: unknown): AttendanceSalaryRates | nu
       (out[kind] as Record<string, number>)[key] = Math.round(rate * 100) / 100;
     }
   }
+  // 대상 학년(선택) — 없으면 전체. 모르는 값·빈 목록은 거절한다(하나도 안 고르면 아무도 계산되지 않는다).
+  if (input.levels !== undefined && input.levels !== null) {
+    if (!Array.isArray(input.levels) || input.levels.length === 0) return null;
+    if (input.levels.some((level) => !ATTENDANCE_RATE_LEVELS.includes(level as AttendanceRateLevel))) return null;
+    const picked = ATTENDANCE_RATE_LEVELS.filter((level) => (input.levels as unknown[]).includes(level));
+    if (picked.length < ATTENDANCE_RATE_LEVELS.length) out.levels = picked;
+  }
   return out;
+}
+
+/** 학생 학년 → 비율표의 학년(초등·중등·고등). 학년을 모르면 null. */
+export function attendanceRateLevel(grade: string | null | undefined): AttendanceRateLevel | null {
+  const level = getGradeLevel(grade ?? null);
+  return level === "초" ? "초등" : level === "중" ? "중등" : level === "고" ? "고등" : null;
+}
+
+/**
+ * 이 줄이 **대상 학년 밖**인가 — 대상 학년을 좁힌 선생님의, 학년이 **확인된** 다른 학년 학생만 true.
+ * 대상 밖 줄은 빠진 줄(비율 없음 경고)이 아니라 **처음부터 계산하지 않는 줄**이다 — 명세서·별지에 서지 않는다.
+ * ⚠️ 학년을 모르는 학생은 여기서 false다(대상인지 알 수 없다) — `attendanceSalaryRate`가 비율을 주지 않아
+ *    '빠진 줄'로 드러난다. 말없이 빼지도, 확인 없이 지급하지도 않는다.
+ */
+export function salaryRowOutOfScope(rates: Pick<AttendanceSalaryRates, "levels">, grade: string | null | undefined): boolean {
+  if (!rates.levels?.length) return false;
+  const level = attendanceRateLevel(grade);
+  return level !== null && !rates.levels.includes(level);
 }
 
 export function attendanceSalaryRate(rates: AttendanceSalaryRates, row: {
   classId: string; className: string; isSpecial?: boolean; grade: string | null;
 }): number | null {
+  const level = attendanceRateLevel(row.grade);
+  // 대상 학년을 좁힌 선생님 — 그 학년으로 **확인된** 학생만. 반별 예외 비율보다 먼저 본다(예외 비율이 다른 학년 학생을 되살리지 않게).
+  if (rates.levels?.length && (!level || !rates.levels.includes(level))) return null;
   if (rates.classes[row.classId] !== undefined) return rates.classes[row.classId]!;
-  const grade = getGradeLevel(row.grade);
-  const level = grade === "초" ? "초등" : grade === "중" ? "중등" : grade === "고" ? "고등" : null;
   if (!level) return null;
   return rates[isSpecialLecture(row) ? "special" : "regular"][level] ?? null;
 }

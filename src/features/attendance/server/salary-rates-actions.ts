@@ -55,12 +55,16 @@ export async function saveAttendanceSalaryVisible(input: { teacherId: string; mo
 export async function saveAttendanceSalaryRates(input: { teacherId: string; month: string; rates: AttendanceSalaryRates }): Promise<{ ok: boolean; error?: string }> {
   const user = await requireAttendanceSalaryAdmin();
   if (!user) return { ok: false, error: "관리자용 출석부에서만 급여 비율을 설정할 수 있습니다" };
+  // 대상 학년을 하나도 안 고른 요청 — 비율 오류와 다른 이유라 따로 말한다(화면도 막지만 서버가 다시 본다).
+  if (Array.isArray((input.rates as { levels?: unknown } | null)?.levels) && (input.rates.levels as unknown[]).length === 0) {
+    return { ok: false, error: "대상 학년을 하나 이상 골라 주세요" };
+  }
   const rates = parseAttendanceRates(input.rates);
   if (!rates || !/^[0-9a-f-]{36}$/i.test(input.teacherId) || !/^\d{4}-(0[1-9]|1[0-2])$/.test(input.month)) {
     return { ok: false, error: "비율은 0~100 사이의 숫자로 입력해 주세요" };
   }
   const db = createAdminClient();
-  const { data: teacher, error: teacherError } = await db.from("users").select("employment_type")
+  const { data: teacher, error: teacherError } = await db.from("users").select("employment_type, display_name")
     .eq("tenant_id", user.tenantId).eq("id", input.teacherId).maybeSingle();
   if (teacherError || teacher?.employment_type !== "프리랜서") return { ok: false, error: "프리랜서 선생님만 설정할 수 있습니다" };
   const { from, to } = monthRange(input.month);
@@ -78,6 +82,17 @@ export async function saveAttendanceSalaryRates(input: { teacherId: string; mont
     tenant_id: user.tenantId, teacher_id: input.teacherId, rates, updated_at: new Date().toISOString(), updated_by: user.id,
   }, { onConflict: "tenant_id,teacher_id" });
   if (error) return { ok: false, error: error.message };
+  // 대상 학년이 바뀌었을 때만 남긴다 — 누구의 명세서가 어느 학년까지인지가 달라지는 결정이다(비율 숫자는 남기지 않는다).
+  const before = existing?.levels ?? [];
+  const after = rates.levels ?? [];
+  if (before.join("|") !== after.join("|")) {
+    await logAction({
+      action: "payroll_sheet_levels_set",
+      targetType: "user",
+      targetLabel: typeof teacher.display_name === "string" ? teacher.display_name : null,
+      metadata: { userId: input.teacherId, levels: after, before },
+    });
+  }
   revalidatePath("/attendance");
   return { ok: true };
 }

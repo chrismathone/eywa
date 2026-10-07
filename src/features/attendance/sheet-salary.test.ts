@@ -129,3 +129,44 @@ describe("강사 전체 보기 실급여 — 출석부 합계 행과 같은 식(
     expect(penalized.total).toBe(Math.floor(Math.floor(100000 * 0.911 * 0.43 * 10) / 10));
   });
 });
+
+/** 원장 2026-10-07 *"이성우 선생님은 … 고등학생에 대해서만 급여 명세서가 나오도록"* — 대상 학년(`rates.levels`). */
+describe("대상 학년 — 고른 학년의 학생 줄만 실급여에 들어간다", () => {
+  const mixed = group([
+    { id: "h1", name: "고일", grade: "고1", n: 8 },
+    { id: "h2", name: "고이", grade: "고2", n: 4 },
+    { id: "m1", name: "중삼", grade: "중3", n: 8 },
+    { id: "m2", name: "중이", grade: "중2", n: 6 },
+    { id: "u1", name: "학년없음", grade: null, n: 2 },
+  ], { className: "고등M 단체 BS4F" });
+  const all = Object.fromEntries(["h1", "h2", "m1", "m2", "u1"].map((id) => [rowKey(C, id), price(30000)]));
+  const run = (over: Partial<AttendanceSalaryRates>) => teacherSheetSalary({ groups: [mixed], billed: {}, terms: {}, prices: all, rates: rates(over) });
+
+  it("고등만 고르면 고등학생 줄만 — 다른 학년은 '빠진 줄'도 아니고 금액에도 없다('고등M' 반의 중3 포함)", () => {
+    const r = run({ levels: ["고등"] });
+    expect(r.lines.map((l) => l.studentName)).toEqual(["고일", "고이"]);
+    expect(r.unitsTotal).toBe(12);
+    // 줄 = floor1(30,000 × 시수 × 0.911 × 47.5%)
+    expect(r.total).toBe(Math.floor((Math.round(103854 * 10) + Math.round(51927 * 10)) / 10));
+    // 대상 밖 줄은 사람 수·시수만 센다(확인용).
+    expect(r.outOfScope).toEqual({ students: 2, units: 14 });
+    // 🔴 학년을 모르는 학생은 말없이 빠지지 않는다 — '빠진 줄'(비율 없음)로 드러난다.
+    //    사유는 '비율 없음'이 아니라 '학년 모름'이다(비율은 정해져 있다 — 학년을 입력하면 풀린다).
+    expect(r.excluded).toEqual([{ classId: C, studentId: "u1", studentName: "학년없음", units: 2, reason: "no-level" }]);
+    // 대상을 좁히지 않은 선생님에게 학년 모름은 종전대로 '비율 없음'이다.
+    expect(run({}).excluded).toEqual([{ classId: C, studentId: "u1", studentName: "학년없음", units: 2, reason: "no-rate" }]);
+  });
+
+  it("대상을 좁히지 않으면 종전 그대로 — 중등·고등 줄이 다 서고 대상 밖은 0", () => {
+    const r = run({});
+    expect(r.lines.map((l) => l.studentName)).toEqual(["고일", "고이", "중삼", "중이"]);
+    expect(r.outOfScope).toEqual({ students: 0, units: 0 });
+  });
+
+  it("대상 학년에 아무도 없으면 합계는 null — 0원을 지어내지 않는다", () => {
+    const r = run({ levels: ["초등"] });
+    expect(r.total).toBeNull();
+    expect(r.lines).toEqual([]);
+    expect(r.outOfScope).toEqual({ students: 4, units: 26 });
+  });
+});
