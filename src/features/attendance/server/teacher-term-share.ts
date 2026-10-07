@@ -7,9 +7,11 @@ import { lookupLabSeparateIds } from "@/features/classes/server/lab-separate";
 import { toAutoUnitsSchedule } from "../auto-units";
 import { consumedUnits, type AttendanceMark } from "../cell-display";
 import { rowKey } from "../grid/model";
+import { seatShareTakeFor } from "../seat-share-adjust";
 import { isJjSeatRow } from "../seat-transfer";
 import { axisSlotFromRow } from "../teacher-axis";
 import { teacherFourWeekWeights, teacherTermWeights, withTakenSeatUnits, type TermShareWeights } from "../teacher-term-share";
+import { loadSeatShareAdjust } from "./seat-share-adjust";
 
 export type TeacherTermScope = {
   teacherId: string;
@@ -79,7 +81,7 @@ export async function loadTeacherTermWeights(
   const { from, to } = monthRange(month);
   type ScheduleRow = Parameters<typeof toAutoUnitsSchedule>[0] & { id: string; class_id: string; teacher_id: string | null };
   type EnrollmentRow = { class_id: string; student_id: string; start_date: string; end_date: string | null; is_transferred: boolean; attendance_days: string[] | null };
-  const [meta, schedules, enrollments, separate, takenRows] = await Promise.all([
+  const [meta, schedules, enrollments, separate, takenRows, shareAdjust] = await Promise.all([
     fetchAllPagedInChunks<{ id: string; class_name: string; teacher_id: string | null; english_track: string | null }>(ids, (chunk, f, t) => db.from("classes")
       .select("id, class_name, teacher_id, english_track").eq("tenant_id", tenantId).in("id", chunk).order("id").range(f, t)),
     fetchAllPagedInChunks<ScheduleRow>(ids, (chunk, f, t) => db.from("class_schedules")
@@ -90,6 +92,8 @@ export async function loadTeacherTermWeights(
       .eq("tenant_id", tenantId).in("class_id", chunk).lte("start_date", to).or(`end_date.is.null,end_date.gte.${from}`).order("id").range(f, t)),
     lookupLabSeparateIds(db, { kind: "window", from, to, tenantId, classIds: ids }),
     loadTakenSeatRows(db, tenantId, ids, scope.teacherId, from, to),
+    // 반 × 달 '자리 몫 → 수업 몫' 조정값(0355a, 원장 2026-10-07 *"19/5를 20/4로"*) — 그 반 선생님 전부(줄마다 차례로 나눠 갖는다).
+    loadSeatShareAdjust(db, tenantId, ids, month),
   ]);
   if (typeof separate === "string") throw new Error("등록 차수 배분을 위한 LAB 시간표를 확인하지 못했습니다");
   // JJ실 시수 넘기기 — 넘겨받은 시수만큼 방 몫을 그 선생님 몫으로 옮긴다(등록 차수 = 실급여 상한이 수업 차수와 함께 는다).
@@ -110,16 +114,55 @@ export async function loadTeacherTermWeights(
     }) : null;
     for (const studentId of cls.studentIds) {
       const key = rowKey(cls.classId, studentId);
-      result.set(key, withTakenSeatUnits(fourWeekWeights ?? teacherTermWeights({
+      const planned = fourWeekWeights ?? teacherTermWeights({
         month, schedules: slots, homeroomTeacherId: info?.teacher_id ?? null, englishTrack: info?.english_track ?? null, className: info?.class_name ?? "",
         holidays, scopeTeacherId: scope.teacherId, homeroomSince: scope.homeroomSinceByClass?.[cls.classId],
         // Hold has no historical start/end. A present-day hold must not erase a confirmed month's shares.
         enrollments: enrollments.filter((e) => e.class_id === cls.classId && e.student_id === studentId).map((e) => ({
           startDate: e.start_date, endDate: e.end_date, isTransferred: e.is_transferred, attendanceDays: e.attendance_days,
         })),
-      }), scope.teacherId, taken.get(key) ?? 0));
+      });
+      // 자리 몫에서 이 선생님 몫으로 돌리는 시수 = 넘겨받은 자리 기록 + 그 달 그 반의 조정값 가운데 이 줄에서 제 차례에 가져가는 만큼
+      // (같은 반 선생님들이 그 줄의 자리 몫을 id 순으로 나눠 갖는다 — 합이 자리 몫을 넘지 않는다). 자리 계획 몫까지만 옮겨진다.
+      result.set(key, withTakenSeatUnits(planned, scope.teacherId,
+        (taken.get(key) ?? 0) + seatShareTakeFor(shareAdjust.get(cls.classId), scope.teacherId, studentId, planned)));
     }
   }
-  // 넘겨받은 기록을 못 읽었으면 그 사실을 결과에 실어 보낸다 — 청구 조회가 `degraded`로 올리고 명세서가 멈춘다.
-  return carryFolded(takenRows, result);
+  // 넘겨받은 기록·조정값을 못 읽었으면 그 사실을 결과에 실어 보낸다 — 청구 조회가 `degraded`로 올리고 명세서가 멈춘다.
+  return carryFolded(shareAdjust, carryFolded(takenRows, result));
+}
+
+/**
+ * 반 하나의 **그 달 계획 몫**(달 내내 다닌 학생 기준 · 조정과 넘겨받은 시수는 얹지 않는다) — 자리 몫 조정 창이
+ * "수업 19 / 자리 5"를 보이는 재료다. 위 `loadTeacherTermWeights`와 **같은 함수**로 센다(창의 숫자와 출석부 몫이 갈리지 않게).
+ * 키 = 선생님 id, `""` = 자리(JJ실·랩실) 몫.
+ */
+export async function loadClassTermPlan(
+  db: SupabaseClient, tenantId: string, month: string, classId: string, holidayDates: readonly string[],
+): Promise<TermShareWeights | null> {
+  const { from, to } = monthRange(month);
+  type ScheduleRow = Parameters<typeof toAutoUnitsSchedule>[0] & { id: string; class_id: string; teacher_id: string | null };
+  const [meta, schedules, separate] = await Promise.all([
+    db.from("classes").select("id, class_name, teacher_id, english_track").eq("tenant_id", tenantId).eq("id", classId).maybeSingle(),
+    fetchAllPagedInChunks<ScheduleRow>([classId], (chunk, f, t) => db.from("class_schedules")
+      .select("id, class_id, day_of_week, start_time, end_time, teacher_id, slot_teacher_label, valid_from, valid_to")
+      .eq("tenant_id", tenantId).in("class_id", chunk).lte("valid_from", to).or(`valid_to.is.null,valid_to.gte.${from}`).order("id").range(f, t)),
+    lookupLabSeparateIds(db, { kind: "window", from, to, tenantId, classIds: [classId] }),
+  ]);
+  if (meta.error) throw meta.error;
+  const info = meta.data as { id: string; class_name: string | null; teacher_id: string | null; english_track: string | null } | null;
+  if (!info) return null;
+  if (typeof separate === "string") throw new Error("등록 차수 배분을 위한 LAB 시간표를 확인하지 못했습니다");
+  const slots = schedules.map((s) => ({ ...toAutoUnitsSchedule(s), teacherId: s.teacher_id, labSeparate: separate.ids.has(s.id) }));
+  if (info.english_track === "eie") {
+    const today = kstToday();
+    return teacherFourWeekWeights({
+      referenceDate: today < from ? from : today > to ? to : today, schedules: slots, homeroomTeacherId: info.teacher_id, className: info.class_name ?? "",
+    });
+  }
+  return teacherTermWeights({
+    month, schedules: slots, homeroomTeacherId: info.teacher_id, englishTrack: info.english_track, className: info.class_name ?? "",
+    holidays: new Set(holidayDates), scopeTeacherId: info.teacher_id ?? "",
+    enrollments: [{ startDate: from, endDate: null, isTransferred: false, attendanceDays: null }],
+  });
 }

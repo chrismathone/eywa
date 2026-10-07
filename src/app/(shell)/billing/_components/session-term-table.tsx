@@ -31,8 +31,8 @@ import { formatTermDays } from "@/features/billing/session-terms/term-days";
 import { isUntouchedScaledSessions } from "@/features/billing/session-terms/last-month-suggestion";
 import { WindowLink } from "@/components/workspace/window-link";
 
-import type { SeatGiveSummary } from "@/features/attendance/server/seat-give-summary";
-import { SeatGiveRow } from "./seat-give-row";
+import type { SeatShareSummary } from "@/features/attendance/server/seat-share-summary";
+import { SeatShareRow } from "./seat-share-row";
 
 const KRW = new Intl.NumberFormat("ko-KR");
 const won = (n: number) => `${KRW.format(n)}원`;
@@ -686,7 +686,7 @@ export function SessionTermGroups({
   catalog,
   period,
   visibleOnly = false,
-  seatGive = null,
+  seatShare = null,
 }: {
   groups: ClassGroup[];
   catalog: Catalog;
@@ -694,13 +694,13 @@ export function SessionTermGroups({
   /** 필터(미배분만 보기·검색)로 좁혀 보는 중 — 반 일괄 확정을 보이는 학생에게만. */
   visibleOnly?: boolean;
   /**
-   * JJ실 줄 재료(원장 2026-10-07 *"회차 확정에 JJ반이 생기면 거기서 주면"*) — 그 달 JJ실 교시가 있는 반과 이미 준 시수.
+   * 자리 몫 줄 재료(원장 2026-10-07 *"어떤반의 수업/JJ 비율을 19/5를 20/4로"*) — 그 달 자리(JJ실·랩실) 교시가 있는 영어 반과 이미 돌린 시수.
    * 급여 비율을 고칠 수 있는 사람의 화면에만 온다(없으면 줄을 세우지 않는다).
    */
-  seatGive?: SeatGiveSummary | null;
+  seatShare?: SeatShareSummary | null;
 }) {
   const listId = useId();
-  const seatGiveClasses = new Set(seatGive?.classIds ?? []);
+  const seatShareClasses = new Set(seatShare?.classIds ?? []);
   const { patches } = useSessionTermsState();
   // 화면 메모리 셋 — 입력칸 초안(drafts) · 체크 선택(ids) · 새 데이터를 기다리는 가상 줄(awaiting). 전부 `row.id` 키다.
   // 새 데이터(다른 창의 확정·새로고침)가 오면 렌더 중 파생으로 맞춘다(SessionTermsState와 같은 방식 — effect로 setState 금지):
@@ -918,9 +918,9 @@ export function SessionTermGroups({
                     selectable={!(batchDone && hasClass)}
                   />
                 ))}
-                {/* JJ실 줄 — 이 반의 JJ실 시수를 날짜를 골라 선생님에게 준다(반마다 한 줄 · 학생별 선택은 창 안에서). */}
-                {hasClass && seatGiveClasses.has(g.classId) ? (
-                  <SeatGiveRow classId={g.classId} className={g.className} period={period} given={seatGive?.given[g.classId] ?? []} />
+                {/* 자리 몫 줄 — 이 반의 그 달 자리(JJ실·랩실) 몫을 숫자로 선생님 몫에 돌린다(반마다 한 줄 · 학생별 값은 창 안에서 · 날짜는 고르지 않는다). */}
+                {hasClass && seatShareClasses.has(g.classId) ? (
+                  <SeatShareRow classId={g.classId} className={g.className} period={period} adjusted={seatShare?.adjusted[g.classId] ?? []} />
                 ) : null}
               </Fragment>
             );

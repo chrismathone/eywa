@@ -844,6 +844,25 @@ export function auditDetail(
         m.partial === true ? "일부만 반영" : null,
       );
     }
+    case "payroll_seat_share_set": {
+      // 회차 확정의 자리 몫 줄 — 그 달 그 반의 자리(JJ실·랩실) 몫에서 선생님 몫으로 돌린 시수(반 전체 값 · 따로 정한 학생 수).
+      // 학생별 값만 바꾼 저장도 드러나게 앞뒤 값이 다른 학생 수를 적는다(반 전체 값은 그대로일 수 있다).
+      const units = num(m.units);
+      const own = num(m.students);
+      const before = (m.before ?? {}) as Record<string, unknown>;
+      const was = num(before.units);
+      const map = (v: unknown) => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null);
+      const now = map(m.studentUnits);
+      const prev = map(before.studentUnits);
+      const moved = now && prev ? [...new Set([...Object.keys(now), ...Object.keys(prev)])].filter((id) => now[id] !== prev[id]).length : 0;
+      return join(
+        str(m.period),
+        ctx.nameOf(m.classId),
+        `${ctx.nameOf(m.userId) ?? "선생님"} 몫으로 반 전체 ${was ?? 0} → ${units ?? 0}시수`,
+        own ? `따로 정한 학생 ${own}명` : null,
+        moved ? `학생별 값 ${moved}명 바뀜` : null,
+      );
+    }
     case "payroll_sheet_visible_set":
       return join(str(m.period), ctx.nameOf(m.userId), m.visible === true ? "선생님 출석부에 보이게 켬" : "선생님 출석부에서 감춤");
     case "payroll_sheet_levels_set": {
