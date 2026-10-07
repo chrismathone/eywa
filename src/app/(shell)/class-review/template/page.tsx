@@ -5,7 +5,7 @@ import { ArrowLeft, Plus } from "@/components/icons/aywa-icon-compat";
 import { PageHeader } from "@/components/page-header";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getChecklistTemplates, getReviewPrivileges } from "@/features/class-review/server/queries";
-import { CHECKLIST_PRESETS, presetOf } from "@/features/class-review/presets";
+import { CHECKLIST_AREAS } from "@/features/class-review/checklist";
 import { TemplateEditor } from "../_components/template-editor";
 
 export const metadata = { title: "직원 평가 문항 편집 — 에이와" };
@@ -13,8 +13,8 @@ export const metadata = { title: "직원 평가 문항 편집 — 에이와" };
 /**
  * 문항 세트 관리 — 원장 + class_review 개인 예외 인원만(원장 지시 2026-08-04).
  * 세트 여러 개(원장 지시 2026-08-05 "1번 문항세트 2번 문항세트") — 위 칩에서 고르고 아래에서 편집.
- * 새 세트의 시작 문안은 고를 수 있다(`?new=<preset>`) — 수업 참관 30문항 / 강사평가 15문항(원장 2026-09-29,
- * 시트 `강사평가(김미)` 탭). 빈 종이보다 고쳐 쓰는 게 빠르다. 저장해야 세트가 된다.
+ * 새 세트의 시작 문항은 내장 기본 30문항(빈 종이보다 고쳐 쓰는 게 빠르다).
+ * ('새 세트 (강사평가)' 시작 문안은 그 세트를 만든 뒤 걷었다 — 원장 2026-10-07 "추가했으니까 이제 필요없자나".)
  */
 export default async function ClassReviewTemplatePage({
   searchParams,
@@ -27,8 +27,7 @@ export default async function ClassReviewTemplatePage({
 
   const { set, new: isNew } = await searchParams;
   const templates = await getChecklistTemplates(viewer.tenantId);
-  const creating = !!isNew || templates.length === 0;
-  const preset = presetOf(isNew);
+  const creating = isNew === "1" || templates.length === 0;
   const selected = creating ? null : (templates.find((t) => t.id === set) ?? templates[0]);
 
   return (
@@ -60,30 +59,21 @@ export default async function ClassReviewTemplatePage({
             {t.name}
           </Link>
         ))}
-        {CHECKLIST_PRESETS.map((p, i) => {
-          const on = creating && preset.key === p.key;
-          return (
-            <Link
-              key={p.key}
-              href={`/class-review/template?new=${p.key}`}
-              aria-current={on ? "true" : undefined}
-              className={`${TOOLBAR_CHIP} gap-1 ${
-                on ? TOOLBAR_CHIP_ON : "border-line-strong text-text-dim hover:text-primary border-dashed"
-              }`}
-            >
-              <Plus className="size-3" /> {i === 0 ? "새 세트" : `새 세트 (${p.name})`}
-            </Link>
-          );
-        })}
+        <Link
+          href="/class-review/template?new=1"
+          className={`${TOOLBAR_CHIP} gap-1 ${
+            creating ? TOOLBAR_CHIP_ON : "border-line-strong text-text-dim hover:text-primary border-dashed"
+          }`}
+        >
+          <Plus className="size-3" /> 새 세트
+        </Link>
       </div>
 
       <TemplateEditor
-        key={selected?.id ?? `new-${preset.key}`}
+        key={selected?.id ?? "new"}
         templateId={selected?.id}
-        initialName={
-          selected?.name ?? (preset.key === "class" ? `${templates.length + 1}번 문항 세트` : preset.name)
-        }
-        initialAreas={selected?.areas ?? preset.areas}
+        initialName={selected?.name ?? `${templates.length + 1}번 문항 세트`}
+        initialAreas={selected?.areas ?? CHECKLIST_AREAS}
       />
     </div>
   );
