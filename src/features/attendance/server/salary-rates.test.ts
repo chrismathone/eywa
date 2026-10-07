@@ -1,27 +1,48 @@
-import { beforeEach, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { accessLevel, type SystemRole } from "@/lib/permissions";
-const h = vi.hoisted(() => ({ access: vi.fn(), manage: vi.fn(), scope: vi.fn(), from: vi.fn(), replies: [] as unknown[], writes: [] as unknown[], classes: vi.fn() }));
+const VIEW_TABLE = "attendance_salary_teacher_view";
+const h = vi.hoisted(() => ({
+  access: vi.fn(), manage: vi.fn(), read: vi.fn(), scope: vi.fn(), effective: vi.fn(), from: vi.fn(), log: vi.fn(), classes: vi.fn(),
+  /** 스위치 표에 건 조건 — 지점·선생님으로 좁혔는지 본다(admin 클라이언트라 RLS가 대신 걸러 주지 않는다). */
+  viewFilters: [] as Record<string, unknown>[],
+  replies: [] as unknown[], writes: [] as unknown[], tables: [] as string[], disabled: [] as string[],
+  /** 선생님별 스위치 표(0352a)의 읽기·쓰기 응답 — 다른 표의 응답 줄(replies)과 섞이지 않게 따로 둔다. */
+  visible: { data: null, error: null } as unknown, visibleWrite: { error: null } as unknown,
+}));
 vi.mock("@/lib/auth/require-access", () => ({ requireAccess: h.access }));
-vi.mock("@/lib/auth/perm-matrix", () => ({ canManageTenant: h.manage, canAccessTenant: h.manage }));
+vi.mock("@/lib/auth/perm-matrix", () => ({ canManageTenant: h.manage, canAccessTenant: h.read }));
 vi.mock("@/lib/auth/view-as", () => ({ isReadonlyTeacherView: h.scope }));
+vi.mock("@/lib/auth/view-mode", () => ({ effectiveTeacherId: h.effective }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: h.from }) }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("@/features/owner/server/queries", () => ({ getTenantSettings: async () => ({ modules: { disabled: [] } }) }));
+vi.mock("@/features/owner/server/queries", () => ({ getTenantSettings: async () => ({ modules: { disabled: h.disabled } }) }));
+vi.mock("@/features/audit/server/log", () => ({ logAction: h.log }));
 vi.mock("./teacher-axis-queries", () => ({ loadClassAxisRows: h.classes }));
 import { getAttendanceSalaryRates, loadAttendanceSalaryRates } from "./salary-rates";
-import { saveAttendanceSalaryRates } from "./salary-rates-actions";
+import { saveAttendanceSalaryRates, saveAttendanceSalaryVisible } from "./salary-rates-actions";
 const teacherId = "aaaaaaaa-1111-1111-1111-111111111111";
+const otherId = "bbbbbbbb-2222-2222-2222-222222222222";
 const rates = { regular: { 초등: 40, 중등: 45, 고등: 50 }, special: { 초등: 55, 중등: 60, 고등: 65 }, classes: {} };
+const freelancer = { data: { employment_type: "프리랜서", commission_rate: 10, commission_rates: {}, display_name: "김강사" }, error: null };
+const savedRates = { data: { rates, updated_at: "2026-09-21" }, error: null };
 
 beforeEach(() => {
-  vi.clearAllMocks(); h.replies = []; h.writes = [];
+  vi.clearAllMocks(); h.replies = []; h.writes = []; h.tables = []; h.disabled = []; h.viewFilters = [];
+  h.visible = { data: null, error: null }; h.visibleWrite = { error: null };
   h.access.mockResolvedValue({ id: "admin", tenantId: "tenant", systemRole: "admin" });
   h.manage.mockImplementation(async (role: SystemRole) => accessLevel(role, "attendance_salary_settings") === "full"); h.scope.mockResolvedValue(false); h.classes.mockResolvedValue([]);
-  h.from.mockImplementation(() => {
-    const result = h.replies.shift() ?? { data: null, error: null };
+  h.read.mockImplementation(async (role: SystemRole) => accessLevel(role, "attendance_salary_settings") !== "none");
+  h.effective.mockResolvedValue(null);
+  h.from.mockImplementation((table: string) => {
+    h.tables.push(table);
+    const isView = table === VIEW_TABLE;
+    let result: unknown = isView ? h.visible : h.replies.shift() ?? { data: null, error: null };
     const builder: Record<string, unknown> = {};
-    for (const method of ["select", "eq", "maybeSingle"]) builder[method] = () => builder;
-    builder.upsert = (payload: unknown) => { h.writes.push(payload); return builder; };
+    const filters: Record<string, unknown> = {};
+    if (isView) h.viewFilters.push(filters);
+    for (const method of ["select", "maybeSingle"]) builder[method] = () => builder;
+    builder.eq = (col: string, value: unknown) => { filters[col] = value; return builder; };
+    builder.upsert = (payload: unknown) => { h.writes.push(payload); if (isView) result = h.visibleWrite; return builder; };
     builder.then = (resolve: (v: unknown) => unknown) => Promise.resolve(result).then(resolve);
     return builder;
   });
@@ -38,7 +59,7 @@ it("does not expose rates in an administrator's teacher preview", async () => {
   expect(h.from).not.toHaveBeenCalled();
 });
 it("respects the attendance administrator permission gate", async () => {
-  h.manage.mockResolvedValue(false);
+  h.manage.mockResolvedValue(false); h.read.mockResolvedValue(false);
   expect((await saveAttendanceSalaryRates({ teacherId, month: "2026-09", rates })).ok).toBe(false);
   expect(h.from).not.toHaveBeenCalled();
 });
@@ -54,7 +75,7 @@ it("rejects a rate for an unrelated class and invalid ranges without saving", as
   expect(h.writes).toEqual([]);
 });
 it("loads saved six-way rates without reverting to legacy rates", async () => {
-  h.replies = [{ data: { employment_type: "프리랜서", commission_rate: 10, commission_rates: {} }, error: null }, { data: { rates, updated_at: "2026-09-21" }, error: null }];
+  h.replies = [freelancer, savedRates];
   expect(await getAttendanceSalaryRates(teacherId)).toMatchObject({ rates });
 });
 it("🔴 강사 정보 조회 실패 — 명세서(공용 로더)는 던지고 화면은 실급여 열만 비운다", async () => {
@@ -66,4 +87,175 @@ it("🔴 강사 정보 조회 실패 — 명세서(공용 로더)는 던지고 �
   h.replies = [{ data: null, error: { message: "timeout" } }];
   expect(await getAttendanceSalaryRates(teacherId)).toBeNull();
   spy.mockRestore();
+});
+
+// 원장 2026-10-07 — '합계 및 실급여 보여주기'는 선생님별 스위치(0352a)다. 켜면 관리자 화면과 선생님 본인 화면 둘 다.
+describe("합계 및 실급여 보여주기 — 관리자 화면", () => {
+  it("비율은 늘 받고(비율 설정 창의 재료) 스위치 상태를 함께 싣는다 — 줄이 없으면 꺼짐", async () => {
+    h.replies = [freelancer, savedRates];
+    expect(await getAttendanceSalaryRates(teacherId)).toMatchObject({ teacherId, rates, manage: true, canEdit: true, visible: false });
+    h.replies = [freelancer, savedRates];
+    h.visible = { data: { visible: true }, error: null };
+    expect(await getAttendanceSalaryRates(teacherId)).toMatchObject({ manage: true, visible: true });
+  });
+  it("🔴 스위치 표는 지점·선생님으로 좁혀 읽는다(서버 전용 표 — RLS가 대신 걸러 주지 않는다)", async () => {
+    h.replies = [freelancer, savedRates];
+    await getAttendanceSalaryRates(teacherId);
+    expect(h.viewFilters).toEqual([{ tenant_id: "tenant", teacher_id: teacherId }]);
+  });
+  it("읽기만 되는 권한자 — 화면은 서되(버튼은 상태만) 고칠 수 없고, 저장은 거절된다", async () => {
+    h.manage.mockResolvedValue(false); // 쓰기 수준은 없다
+    h.read.mockResolvedValue(true);
+    h.replies = [freelancer, savedRates];
+    expect(await getAttendanceSalaryRates(teacherId)).toMatchObject({ manage: true, canEdit: false, visible: false });
+    expect((await saveAttendanceSalaryVisible({ teacherId, visible: true })).ok).toBe(false);
+    expect(h.writes).toEqual([]);
+  });
+  it("🔴 스위치 표를 못 읽어도(SQL 적용 전·일시 오류) 화면은 산다 — 꺼진 것으로 읽는다", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    h.replies = [freelancer, savedRates];
+    h.visible = { data: null, error: { message: "Could not find the table" } };
+    expect(await getAttendanceSalaryRates(teacherId)).toMatchObject({ rates, manage: true, visible: false });
+    spy.mockRestore();
+  });
+});
+
+describe("합계 및 실급여 보여주기 — 선생님 본인 화면", () => {
+  const asTeacher = () => {
+    h.access.mockResolvedValue({ id: teacherId, tenantId: "tenant", systemRole: "teacher" });
+    h.effective.mockResolvedValue(teacherId);
+  };
+  it("스위치가 켜져 있으면 제 출석부의 실급여 재료를 받는다 — 비율 설정·스위치 버튼은 없다(manage false)", async () => {
+    asTeacher();
+    h.visible = { data: { visible: true }, error: null };
+    h.replies = [freelancer, savedRates];
+    expect(await getAttendanceSalaryRates(teacherId)).toEqual({ teacherId, rates, updatedAt: "2026-09-21", manage: false, canEdit: false, visible: true });
+  });
+  it("🔴 꺼져 있으면 비율·급여를 읽지도 않는다 — 스위치 표 한 번만 본다", async () => {
+    asTeacher();
+    expect(await getAttendanceSalaryRates(teacherId)).toBeNull();
+    h.visible = { data: { visible: false }, error: null };
+    expect(await getAttendanceSalaryRates(teacherId)).toBeNull();
+    expect(new Set(h.tables)).toEqual(new Set([VIEW_TABLE]));
+  });
+  it("🔴 남의 출석부(강사 화면의 주인이 아님)는 스위치가 켜져 있어도 못 받는다 — 표를 읽지도 않는다", async () => {
+    asTeacher();
+    h.visible = { data: { visible: true }, error: null };
+    expect(await getAttendanceSalaryRates(otherId)).toBeNull();
+    h.effective.mockResolvedValue(null); // 강사 화면이 아닌 요청
+    expect(await getAttendanceSalaryRates(teacherId)).toBeNull();
+    expect(h.from).not.toHaveBeenCalled();
+  });
+  it("급여 기능이 꺼진 학원이면 스위치와 무관하게 없다", async () => {
+    asTeacher();
+    h.disabled = ["payroll"];
+    h.visible = { data: { visible: true }, error: null };
+    expect(await getAttendanceSalaryRates(teacherId)).toBeNull();
+    expect(h.from).not.toHaveBeenCalled();
+  });
+  it("🔴 조회가 실패해도 던지지 않는다 — 선생님이 매일 여는 화면이라 실급여 열만 비운다", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    asTeacher();
+    h.visible = { data: null, error: { message: "timeout" } };
+    expect(await getAttendanceSalaryRates(teacherId)).toBeNull();
+    h.visible = { data: { visible: true }, error: null };
+    h.replies = [freelancer, { data: null, error: { message: "timeout" } }]; // 비율 표 조회 실패 — 공용 로더는 던진다
+    expect(await getAttendanceSalaryRates(teacherId)).toBeNull();
+    h.replies = [freelancer, { data: { rates: "깨진 값", updated_at: "2026-09-21" }, error: null }];
+    expect(await getAttendanceSalaryRates(teacherId)).toBeNull();
+    spy.mockRestore();
+  });
+  it("겸직(관리자 계열 계정의 강사 화면) — 급여 권한이 없어도 **본인** 출석부는 스위치를 따른다", async () => {
+    h.access.mockResolvedValue({ id: teacherId, tenantId: "tenant", systemRole: "counselor" });
+    h.effective.mockResolvedValue(teacherId);
+    h.visible = { data: { visible: true }, error: null };
+    h.replies = [freelancer, savedRates];
+    expect(await getAttendanceSalaryRates(teacherId)).toMatchObject({ rates, manage: false, canEdit: false, visible: true });
+    // 강사 화면이 아니면(관리자 화면에서 본인을 고름) 급여 권한이 없으니 없다.
+    h.effective.mockResolvedValue(null);
+    expect(await getAttendanceSalaryRates(teacherId)).toBeNull();
+  });
+  it("프리랜서가 아니면 스위치가 켜져 있어도 없다(실급여 열은 프리랜서에게만 있다)", async () => {
+    asTeacher();
+    h.visible = { data: { visible: true }, error: null };
+    h.replies = [{ data: { employment_type: "정규직" }, error: null }];
+    expect(await getAttendanceSalaryRates(teacherId)).toBeNull();
+  });
+});
+
+describe("합계 및 실급여 보여주기 — 다른 강사 뷰(열람 전용)", () => {
+  const viewAs = (systemRole: SystemRole) => {
+    h.access.mockResolvedValue({ id: "viewer", tenantId: "tenant", systemRole });
+    h.scope.mockResolvedValue(true);
+    h.effective.mockResolvedValue(teacherId);
+    h.visible = { data: { visible: true }, error: null };
+    h.replies = [freelancer, savedRates];
+  };
+  it("급여 비율 설정 권한이 있는 사람은 그 선생님이 보는 그대로 본다 — 버튼은 없다", async () => {
+    viewAs("master");
+    expect(await getAttendanceSalaryRates(teacherId)).toMatchObject({ rates, manage: false, canEdit: false, visible: true });
+  });
+  it("🔴 뷰 자격만 있고 급여 권한이 없으면 남의 실급여가 열리지 않는다", async () => {
+    viewAs("counselor");
+    expect(await getAttendanceSalaryRates(teacherId)).toBeNull();
+    expect(h.from).not.toHaveBeenCalled();
+  });
+  it("스위치가 꺼져 있으면 급여 권한이 있어도 그 선생님이 보는 그대로 — 없다", async () => {
+    viewAs("master");
+    h.visible = { data: { visible: false }, error: null };
+    expect(await getAttendanceSalaryRates(teacherId)).toBeNull();
+    expect(new Set(h.tables)).toEqual(new Set(["attendance_salary_teacher_view"]));
+  });
+  it("스위치는 못 바꾼다(열람 전용)", async () => {
+    viewAs("master");
+    expect((await saveAttendanceSalaryVisible({ teacherId, visible: false })).ok).toBe(false);
+    expect(h.writes).toEqual([]);
+  });
+});
+
+describe("합계 및 실급여 보여주기 — 저장", () => {
+  it("급여 비율을 고칠 수 있는 사람이 프리랜서 선생님 한 명의 스위치를 바꾸고 감사로그를 남긴다(금액 없음)", async () => {
+    h.replies = [freelancer];
+    expect(await saveAttendanceSalaryVisible({ teacherId, visible: true })).toEqual({ ok: true });
+    expect(h.writes).toEqual([expect.objectContaining({ tenant_id: "tenant", teacher_id: teacherId, visible: true, updated_by: "admin" })]);
+    expect(h.log).toHaveBeenCalledWith({ action: "payroll_sheet_visible_set", targetType: "user", targetLabel: "김강사", metadata: { userId: teacherId, visible: true } });
+  });
+  it.each(["teacher", "accountant", "viewer"])("%s 계정은 못 바꾼다 — 선생님이 스스로 켤 수 없다", async (systemRole) => {
+    h.access.mockResolvedValue({ id: teacherId, tenantId: "tenant", systemRole });
+    h.effective.mockResolvedValue(teacherId);
+    expect((await saveAttendanceSalaryVisible({ teacherId, visible: true })).ok).toBe(false);
+    expect(h.from).not.toHaveBeenCalled();
+    expect(h.log).not.toHaveBeenCalled();
+  });
+  it("프리랜서가 아닌 사람·잘못된 입력은 저장하지 않는다", async () => {
+    h.replies = [{ data: { employment_type: "정규직", display_name: "박직원" }, error: null }];
+    expect((await saveAttendanceSalaryVisible({ teacherId, visible: true })).ok).toBe(false);
+    expect((await saveAttendanceSalaryVisible({ teacherId: "x", visible: true })).ok).toBe(false);
+    expect((await saveAttendanceSalaryVisible({ teacherId, visible: "yes" as unknown as boolean })).ok).toBe(false);
+    expect(h.writes).toEqual([]);
+    expect(h.log).not.toHaveBeenCalled();
+  });
+  it("🔴 선생님 조회 실패를 '프리랜서가 아니다'로 말하지 않는다", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    h.replies = [{ data: null, error: { message: "timeout" } }];
+    const result = await saveAttendanceSalaryVisible({ teacherId, visible: true });
+    expect(result.ok).toBe(false);
+    expect(result.error).not.toContain("프리랜서");
+    expect(result.error).toMatch(/[가-힣]/);
+    expect(h.writes).toEqual([]);
+    spy.mockRestore(); warn.mockRestore();
+  });
+  it("저장이 실패하면 한글 안내를 돌려주고 감사로그는 남기지 않는다", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    h.replies = [freelancer];
+    h.visibleWrite = { error: { code: "PGRST205", message: "Could not find the table 'public.attendance_salary_teacher_view' in the schema cache" } };
+    const result = await saveAttendanceSalaryVisible({ teacherId, visible: true });
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/[가-힣]/);
+    expect(result.error).not.toContain("attendance_salary_teacher_view");
+    expect(h.log).not.toHaveBeenCalled();
+    spy.mockRestore(); warn.mockRestore();
+  });
 });

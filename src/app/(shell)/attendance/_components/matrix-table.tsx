@@ -247,11 +247,14 @@ export function MatrixTable({
   confirmedPricesByRow?: Record<string, AttendanceConfirmedPrice[]>;
   /** Server-authorized: freelance teacher views only. */
   showActualAmount?: boolean;
-  /** Supplied only to the authorized administrator's teacher view — **and only while '실급여 보이기' is on**. */
+  /**
+   * 이 선생님의 '합계 및 실급여 보여주기'(선생님별 스위치 0352a)가 **켜져 있을 때만** 온다 — 급여 비율 설정 권한자의 관리자 화면과
+   * 그 선생님 본인 화면 둘 다. 꺼져 있으면 undefined(실급여 열·합계 없음).
+   */
   salaryRates?: AttendanceSalaryRates;
   /**
-   * 실급여가 **설 수 있는** 보기(관리자 + 프리랜서 강사 전체 보기, 토글과 무관). 이 보기에선 옛 '정산액'(티어)을
-   * 안 그린다 — 토글을 끄면 실급여 열만 빠지고 급여 숫자는 **하나도** 안 보여야 한다(리뷰 2026-09-21: 끄면 정산액이
+   * 실급여가 **설 수 있는** 관리자 화면(급여 비율 설정 권한 + 프리랜서 강사 전체 보기, 스위치와 무관). 이 보기에선 옛 '정산액'(티어)을
+   * 안 그린다 — 스위치를 끄면 실급여 열만 빠지고 급여 숫자는 **하나도** 안 보여야 한다(리뷰 2026-09-21: 끄면 정산액이
    * 대신 떠 "끄기"가 급여를 감추는 게 아니라 다른 급여로 바꾸는 꼴이었다).
    */
   salaryView?: boolean;

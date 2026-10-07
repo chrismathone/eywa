@@ -31,7 +31,7 @@ import { attendanceNoInvoiceRows } from "@/features/attendance/class-billing";
 import { canShowAttendanceActualAmount } from "@/features/attendance/server/actual-amount-access";
 import { getAttendanceSalaryRates } from "@/features/attendance/server/salary-rates";
 import { SalaryRatesButton } from "./_components/salary-rates-button";
-import { ActualSalaryToggle } from "./_components/actual-salary-toggle";
+import { SalaryVisibleButton } from "./_components/salary-visible-button";
 import { UnitsMasterButton } from "./_components/units-master-button";
 import { canViewUnitsMaster } from "@/features/attendance/server/units-master";
 
@@ -1293,10 +1293,11 @@ export default async function AttendancePage({
             classBilledAmounts={classBilledAmounts.billed}
             carryMarksByRow={sessionBillingOn ? classBilledAmounts.carryMarks : {}}
             showActualAmount={showActualAmount}
-            // 🔴 실급여 열은 **'실급여 보이기'를 켰을 때만**(원장 2026-09-21) — 꺼 두면 급여 값을 아예 싣지 않는다
-            //    (화면에서 감추는 게 아니라 서버가 안 보낸다). 권한 판정(salaryConfig)은 종전 그대로.
-            salaryRates={viewPrefs.showActualSalary ? salaryConfig?.rates : undefined}
-            salaryView={!!salaryConfig}
+            // 🔴 실급여 열은 **이 선생님의 '합계 및 실급여 보여주기'가 켜져 있을 때만**(선생님별 스위치 0352a, 원장 2026-10-07)
+            //    — 꺼 두면 급여 값을 아예 싣지 않는다(화면에서 감추는 게 아니라 서버가 안 보낸다).
+            //    관리자 화면과 선생님 본인 화면이 **같은 스위치**를 본다(`getAttendanceSalaryRates`의 두 문).
+            salaryRates={salaryConfig?.visible ? salaryConfig.rates : undefined}
+            salaryView={!!salaryConfig?.manage}
             optionsLeading={
               <>
                 {scopeChip}
@@ -1310,13 +1311,13 @@ export default async function AttendancePage({
               </>
             }
             optionsTools={sheetTools}
-            optionsExtra={salaryConfig ? <>
+            optionsExtra={salaryConfig?.manage ? <>
               {salaryConfig.canEdit ? <SalaryRatesButton teacherId={salaryConfig.teacherId} month={month}
                 teacherName={allTeacherOptions.find((t) => t.value === salaryConfig.teacherId)?.label ?? ""}
                 rates={salaryConfig.rates} classes={teacherClasses.map((c) => ({ id: c.id, name: c.className }))} /> : null}
-              {/* '실급여 보이기'(원장 2026-09-21 *"관리자 출석부 우측에 토글"*) — 열이 설 수 있는 보기(관리자 +
-                  프리랜서 강사 전체 보기)에서만. 켜고 끄는 건 계정 귀속 설정이다. */}
-              {showActualAmount ? <ActualSalaryToggle checked={viewPrefs.showActualSalary} /> : null}
+              {/* '합계 및 실급여 보여주기'(원장 2026-09-21 *"관리자 출석부 우측에 토글"* → 2026-10-07 선생님별 스위치) — 열이 설 수 있는
+                  보기(관리자 + 프리랜서 강사 전체 보기)에서만. 🔴 계정 귀속 보기 설정이 아니다 — 켜면 그 선생님 본인 화면에도 보인다. */}
+              {showActualAmount ? <SalaryVisibleButton key={salaryConfig.teacherId} teacherId={salaryConfig.teacherId} checked={salaryConfig.visible} canEdit={salaryConfig.canEdit} /> : null}
             </> : undefined}
             termSessionsByRow={sessionBillingOn ? classBilledAmounts.confirmedSessions : {}}
             confirmedPricesByRow={sessionBillingOn ? classBilledAmounts.confirmedPrices : {}}

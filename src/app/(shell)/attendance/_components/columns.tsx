@@ -18,7 +18,7 @@ export function AttendanceColumns({ children, columns, minWidth, dayCount, dayMi
   dayCount: number;
   dayMinWidth: number;
   lang: SheetLang;
-  /** '보기 옵션' 오른쪽 — 비율 설정·실급여 보이기(관리자 전용, 서버가 권한을 보고 넣는다). */
+  /** '보기 옵션' 오른쪽 — 비율 설정·합계 및 실급여 보여주기(관리자 전용, 서버가 권한을 보고 넣는다). */
   extra?: ReactNode;
   /** 같은 줄 왼쪽 — 범례·시수 기준·칸 안내(원장 2026-09-21 한 줄로). */
   leading?: ReactNode;

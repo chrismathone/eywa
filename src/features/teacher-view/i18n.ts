@@ -1766,26 +1766,47 @@ export const SHEET_DICT = {
   "att.col.actualAmount": { ko: "실수업액", en: "Earned" },
   "att.col.actualSalary": { ko: "실급여", en: "Net pay" },
   "att.col.actualSalaryTitle": {
-    ko: "시수 × 단가 × 0.911 × 적용 비율의 합 — 실수업액이 청구액보다 많은 줄은 청구액으로 계산(여럿이 나눠 맡는 반은 이 선생님 몫)",
+    ko: "시수 × 단가 × 0.911 × 적용 비율의 합 — 실수업액이 청구액보다 많은 줄은 청구액으로 계산(여럿이 나눠 맡는 반은 담당 선생님 몫)",
     en: "Sum of units × unit price × 0.911 × assigned rate — rows above the bill use the billed amount (this teacher's share on shared classes)",
   },
   "att.row.actualSalaryRate": { ko: "시수 × 단가 × 0.911 × {rate}%", en: "Units × unit price × 0.911 × {rate}%" },
   // 실수업액이 청구액보다 크면 청구액으로 계산한다(원장 2026-09-21 "받은 돈보다 많은 돈을 지급하면 안되기 때문").
   "att.row.actualSalaryRateCapped": {
-    ko: "청구액 × 0.911 × {rate}% — 실수업액이 청구액보다 많아 청구액으로 계산(여럿이 나눠 맡는 반은 청구액 중 이 선생님 몫)",
+    ko: "청구액 × 0.911 × {rate}% — 실수업액이 청구액보다 많아 청구액으로 계산(여럿이 나눠 맡는 반은 청구액 중 담당 선생님 몫)",
     en: "Billed amount × 0.911 × {rate}% — lessons exceed the bill, so the bill is used (this teacher's share on shared classes)",
   },
-  "att.row.actualSalaryUnavailable": { ko: "단가·정규/특강의 학년별 비율을 확인해 주세요", en: "Check the unit price and grade-level rate for regular/special lessons" },
+  // 선생님 본인 화면에도 뜨는 문구다(2026-10-07 선생님별 스위치) — 고칠 수 없는 사람에게 "확인해 주세요"라고 하지 않는다.
+  "att.row.actualSalaryUnavailable": { ko: "단가 또는 적용 비율(정규·특강의 학년별)이 정해지지 않아 계산하지 않았습니다", en: "Not calculated — the unit price or the grade-level rate (regular/special) isn't set" },
   "att.col.actualAmountTitle": { ko: "확정 단가 × 수업 차수", en: "Confirmed unit price × attended units" },
   "att.row.actualAmountUnavailable": { ko: "회당 단가가 확정된 경우 계산합니다. 월 정액·일수 기준·복수 단가는 계산하지 않습니다.", en: "Requires one confirmed per-unit price. Monthly fees, day-based prices and multiple prices cannot be multiplied by lesson units." },
   "att.columns.toggle": { ko: "보기 옵션", en: "View options" },
   "att.columns.all": { ko: "모두 표시", en: "Show all columns" },
-  // 실급여 열 토글(원장 2026-09-21) — 관리자가 프리랜서 강사 전체 보기를 볼 때만 선다.
-  "att.actualSalary.toggle": { ko: "실급여 보이기", en: "Show net pay" },
-  "att.actualSalary.saveFailed": { ko: "실급여 보이기 설정을 저장하지 못했습니다. 다시 눌러 주세요.", en: "Couldn't save the net pay setting. Please try again." },
-  "att.actualSalary.toggleTitle": {
-    ko: "체크하면 이 선생님 출석부에 실급여 열이 섭니다. 설정은 계정에 저장됩니다.",
-    en: "Adds a net pay column to this teacher's sheet. Saved to your account.",
+  // '합계 및 실급여 보여주기' 버튼(원장 2026-09-21 → 2026-10-07 선생님별 스위치) — 관리자가 프리랜서 강사 전체 보기를 볼 때만 선다.
+  "att.actualSalary.toggle": { ko: "합계 및 실급여 보여주기", en: "Show totals & net pay" },
+  "att.actualSalary.saveFailed": { ko: "합계 및 실급여 보여주기 설정을 저장하지 못했습니다. 다시 눌러 주세요.", en: "Couldn't save the totals & net pay setting. Please try again." },
+  "att.actualSalary.savedOn": { ko: "이제 이 선생님 본인 출석부에도 실급여와 합계가 보입니다", en: "Net pay and its total now show on this teacher's own sheet too" },
+  "att.actualSalary.savedOff": { ko: "이 선생님 출석부에서 실급여를 감췄습니다(이 화면과 선생님 화면 모두)", en: "Net pay is now hidden on this teacher's sheet (here and for the teacher)" },
+  "att.actualSalary.stateOn": { ko: "켜짐 · 선생님에게 보임", en: "On · visible to the teacher" },
+  "att.actualSalary.stateOff": { ko: "꺼짐", en: "Off" },
+  "att.actualSalary.tipOn": {
+    ko: "켜면 이 선생님 출석부에 실급여 열과 그 합계가 섭니다. 이 화면과 선생님 본인의 출석부(강사 화면) 양쪽에 보입니다.",
+    en: "On: a net pay column and its total appear on this teacher's sheet — here and on the teacher's own sheet.",
+  },
+  "att.actualSalary.tipOff": {
+    ko: "끄면 양쪽 모두에서 감춥니다. 실급여 값을 화면으로 내려보내지 않습니다.",
+    en: "Off: hidden on both. Net pay values are not sent to the screen.",
+  },
+  "att.actualSalary.tipScope": {
+    ko: "선생님마다 따로 저장됩니다(누르는 사람의 보기 설정이 아닙니다).",
+    en: "Saved per teacher (not a personal view setting).",
+  },
+  "att.actualSalary.tipFormula": {
+    ko: "실급여 = 실수업액(청구액보다 많으면 청구액) × 0.911 × 비율",
+    en: "Net pay = lesson amount (capped at the billed amount) × 0.911 × rate",
+  },
+  "att.actualSalary.tipReadonly": {
+    ko: "급여 비율을 설정할 수 있는 사람만 바꿀 수 있습니다.",
+    en: "Only people who can edit pay rates can change this.",
   },
   "att.col.termSessionsTitle": {
     ko: "수납관리 '회차 확정'에서 확정한 시수입니다. 영어는 교시 담당별로 배분하며 EiE는 각 요일 4회 기준입니다. 배분 후 남는 시수는 담임에게 배분합니다. 확정 전에는 '미확정', 그 달 청구서가 없거나 취소됐으면 '—'로 보입니다.",

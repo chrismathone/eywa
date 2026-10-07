@@ -4,9 +4,11 @@ import { isModuleEnabled } from "@/lib/modules";
 import { requireAccess } from "@/lib/auth/require-access";
 import { canManageTenant, canAccessTenant } from "@/lib/auth/perm-matrix";
 import { isReadonlyTeacherView } from "@/lib/auth/view-as";
+import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseGroupRates } from "@/features/payroll/salary-group";
-import { ATTENDANCE_RATE_LEVELS, emptyAttendanceRates, parseAttendanceRates } from "../salary-rates";
+import { ATTENDANCE_RATE_LEVELS, emptyAttendanceRates, parseAttendanceRates, type AttendanceSalaryRates } from "../salary-rates";
+import { loadSalarySheetVisible } from "./salary-visibility";
 
 export async function requireAttendanceSalaryAdmin(write = true) {
   const user = await requireAccess("attendance");
@@ -56,14 +58,53 @@ export async function loadAttendanceSalaryRates(tenantId: string, teacherId: str
   return { rates, updatedAt: saved?.updated_at as string | undefined };
 }
 
-/** No rates or salary data are serialized into a teacher's response. */
-export async function getAttendanceSalaryRates(teacherId: string | null) {
+/** 월별 출석부가 받는 실급여 재료 — 누가 보는 화면인지(`manage`)와 표에 실을지(`visible`)를 함께 싣는다. */
+export type AttendanceSalarySheet = {
+  teacherId: string;
+  rates: AttendanceSalaryRates;
+  updatedAt?: string;
+  /** 급여 비율 설정 권한자의 관리자 화면인가 — 비율 설정·'합계 및 실급여 보여주기' 버튼이 서는 화면. 선생님 본인 화면은 false. */
+  manage: boolean;
+  canEdit: boolean;
+  /** '합계 및 실급여 보여주기'가 켜져 있는가(선생님별, 0352a) — 켜져 있을 때만 표에 실급여 값을 싣는다. */
+  visible: boolean;
+};
+
+/**
+ * 월별 출석부(강사 전체 보기)의 실급여 재료 — 문은 둘이다(원장 2026-10-07 *"권한자가 … 실급여 보이기 토글을 on하면
+ * 실제 강사뷰의 강사가 출석부에서 합계 및 실급여를 볼 수 있게"*).
+ *
+ * ① **관리자 화면**(급여 비율 설정 권한) — 비율은 늘 받는다(비율 설정 창의 재료). 표에 싣는 것은 `visible`일 때만.
+ * ② **선생님 본인 화면**(강사 화면의 주인 = 이 선생님) — 그 선생님의 스위치가 **켜져 있을 때만** 받는다.
+ *    꺼져 있으면 비율·급여 값을 읽지도 싣지도 않는다(화면에서 감추는 게 아니다).
+ *    · '다른 강사 뷰'(열람 전용)는 그 선생님이 보는 그대로 보되, **급여 비율 설정 권한이 있는 사람만** — 뷰 자격만으로 남의 급여가 열리지 않게.
+ * 🔴 ②는 선생님이 매일 여는 화면이다 — 조회가 실패해도 던지지 않는다(실급여 열만 비우고 출석부는 산다, [[#95]]).
+ */
+export async function getAttendanceSalaryRates(teacherId: string | null): Promise<AttendanceSalarySheet | null> {
   if (!teacherId) return null;
-  const user = await requireAttendanceSalaryAdmin(false);
-  if (!user) return null;
-  // 🔴 화면은 강사 정보 조회 실패를 접는다(`screen`) — 그대로 던지면 일시 오류 한 번에 출석부가 통째로 오류 화면이 된다.
-  //    실급여 열만 비우고 격자는 살린다(종전 동작).
-  const loaded = await loadAttendanceSalaryRates(user.tenantId, teacherId, { screen: true });
-  if (!loaded) return null;
-  return { teacherId, rates: loaded.rates, updatedAt: loaded.updatedAt, canEdit: await canManageTenant(user.systemRole, "attendance_salary_settings") };
+  const admin = await requireAttendanceSalaryAdmin(false);
+  if (admin) {
+    // 🔴 화면은 강사 정보 조회 실패를 접는다(`screen`) — 그대로 던지면 일시 오류 한 번에 출석부가 통째로 오류 화면이 된다.
+    //    실급여 열만 비우고 격자는 살린다(종전 동작).
+    const [loaded, visible, canEdit] = await Promise.all([
+      loadAttendanceSalaryRates(admin.tenantId, teacherId, { screen: true }),
+      loadSalarySheetVisible(admin.tenantId, teacherId),
+      canManageTenant(admin.systemRole, "attendance_salary_settings"),
+    ]);
+    if (!loaded) return null;
+    return { teacherId, rates: loaded.rates, updatedAt: loaded.updatedAt, manage: true, canEdit, visible };
+  }
+  const user = await requireAccess("attendance");
+  if ((await effectiveTeacherId()) !== teacherId) return null;
+  if (!isModuleEnabled((await getTenantSettings()).modules.disabled, "payroll")) return null;
+  if (user.id !== teacherId && !(await canAccessTenant(user.systemRole, "attendance_salary_settings"))) return null;
+  if (!(await loadSalarySheetVisible(user.tenantId, teacherId))) return null;
+  try {
+    const loaded = await loadAttendanceSalaryRates(user.tenantId, teacherId, { screen: true });
+    if (!loaded) return null;
+    return { teacherId, rates: loaded.rates, updatedAt: loaded.updatedAt, manage: false, canEdit: false, visible: true };
+  } catch (error) {
+    console.error("[attendance-salary-rates] 선생님 화면 실급여 재료 조회 실패", teacherId, error instanceof Error ? error.message : error);
+    return null;
+  }
 }

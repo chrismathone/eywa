@@ -33,13 +33,8 @@ export type AttendanceViewPrefs = {
    * ⚠️ 감춘 인원은 **숫자로 알린다**(칩에 "퇴직 N"). 조용히 사라지면 "강사가 없어졌다"가 된다.
    */
   hideRetired: boolean;
-  /**
-   * **실급여 열**을 세울지(원장 2026-09-21 *"관리자 출석부 우측에 토글 두고 '실급여 보이기'"*). 기본 꺼짐 —
-   * 급여 숫자는 옆 사람 눈에 띄면 안 되는 값이라 켤 때만 보인다.
-   * ⚠️ 이건 **보기 렌즈**다 — 권한은 그대로 서버가 정한다(관리자 + 프리랜서 강사 전체 보기일 때만 열이 설 수 있다).
-   *    꺼 두면 급여 값을 **내려보내지도 않는다**(화면에서 감추는 게 아니라 서버가 안 싣는다).
-   */
-  showActualSalary: boolean;
+  // 🔴 `showActualSalary`(실급여 열 — 누르는 사람의 보기 설정)는 2026-10-07에 없앴다. 실급여 열은 이제 **선생님별 스위치**
+  //    (0352a `attendance_salary_teacher_view`)가 정한다 — 여기에 되살리지 말 것(선생님이 제 계정 설정으로 스스로 켤 수 있게 된다).
 };
 
 export type PeriodMode = "session" | "month";
@@ -49,7 +44,6 @@ export const DEFAULT_ATTENDANCE_PREFS: AttendanceViewPrefs = {
   sort: "class",
   periodMode: "session",
   hideRetired: true,
-  showActualSalary: false,
 };
 
 export function parsePeriodMode(raw: unknown): PeriodMode {
@@ -72,7 +66,5 @@ export function parseAttendanceViewPrefs(raw: unknown): AttendanceViewPrefs {
     periodMode: parsePeriodMode(o.periodMode),
     // 저장된 적 없으면(undefined) 기본 켜짐. 명시적으로 false를 저장한 계정만 퇴직자를 본다.
     hideRetired: o.hideRetired === false ? false : true,
-    // 명시적으로 true를 저장한 계정만 켠다(깨진 값·옛 계정은 꺼진 채).
-    showActualSalary: o.showActualSalary === true,
   };
 }
