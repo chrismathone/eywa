@@ -31,8 +31,12 @@ function EditableEnglishName({ studentId, studentName, englishName, children }: 
   const replaying = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
-  function begin() {
+  function cancelNavigation() {
     if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+  }
+  function begin() {
+    cancelNavigation();
     if (!enabled || busy.current) return;
     previous.current = value;
     setDraft(value ?? ""); setError(null); setEditing(true);
@@ -54,12 +58,17 @@ function EditableEnglishName({ studentId, studentName, englishName, children }: 
     });
   }
   return <span className="min-w-0 max-w-full" title={editing ? undefined : t("studentEnglishName.editHint")}
+    onMouseDownCapture={(e) => {
+      if (editing || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+      // 두 번째 클릭을 누르는 순간 취소한다. click/dblclick까지 기다리면 손을 떼기 전에 이동할 수 있다.
+      cancelNavigation();
+    }}
     onClickCapture={(e) => {
       if (editing || replaying.current || e.detail === 0 || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
       const link = (e.target as Element).closest("a");
       if (!link) return;
       e.preventDefault(); e.stopPropagation();
-      if (timer.current) clearTimeout(timer.current);
+      cancelNavigation();
       if (e.detail > 1) return;
       timer.current = setTimeout(() => {
         timer.current = null;
