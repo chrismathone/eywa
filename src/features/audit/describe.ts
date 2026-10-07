@@ -846,6 +846,10 @@ export function auditDetail(
     }
     case "payroll_sheet_visible_set":
       return join(str(m.period), ctx.nameOf(m.userId), m.visible === true ? "선생님 출석부에 보이게 켬" : "선생님 출석부에서 감춤");
+    case "payroll_sheet_levels_set": {
+      const levels = Array.isArray(m.levels) ? m.levels.filter((x): x is string => typeof x === "string") : [];
+      return join(ctx.nameOf(m.userId), levels.length > 0 ? `${levels.join("·")} 학생만` : "모든 학년");
+    }
     case "payroll_mark_paid":
     case "payroll_auto_compute":
     case "payroll_upsert": {

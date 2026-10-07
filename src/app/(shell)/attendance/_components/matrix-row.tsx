@@ -34,6 +34,7 @@ export function MatrixRow({
   confirmedPrices,
   showActualAmount = false,
   actualSalaryRate,
+  actualSalaryOutOfScope,
   termSessions,
   carryMark = null,
   unitSuffix = null,
@@ -50,6 +51,8 @@ export function MatrixRow({
   lang?: SheetLang;
   showActualAmount?: boolean;
   actualSalaryRate?: number | null;
+  /** 실급여 대상 학년이 아닌 줄(대상 학년을 좁힌 선생님) — '—' 툴팁의 이유를 가른다. */
+  actualSalaryOutOfScope?: boolean;
   student: MatrixStudent;
   /** 이 행이 속한 반 — 셀 저장 대상. 강사 전체 보기에선 행마다 다르다. */
   classId: string;
@@ -251,7 +254,7 @@ export function MatrixRow({
         </td>
       ) : null}
       {showActualAmount ? <RowActualAmountCell row={rowKey(classId, student.id)} fallback={countMarks(marks, units)} prices={confirmedPrices} lang={lang} /> : null}
-      {actualSalaryRate !== undefined ? <RowActualSalaryCell row={rowKey(classId, student.id)} fallback={countMarks(marks, units)} prices={confirmedPrices} rate={actualSalaryRate} billed={salaryBilledCap(classBilled, termSessions)} lang={lang} /> : null}
+      {actualSalaryRate !== undefined ? <RowActualSalaryCell row={rowKey(classId, student.id)} fallback={countMarks(marks, units)} prices={confirmedPrices} rate={actualSalaryRate} billed={salaryBilledCap(classBilled, termSessions)} lang={lang} outOfScope={actualSalaryOutOfScope} /> : null}
       {/* 수업 차수(출석부에서 센 시수) — 청구액 바로 옆(원장 2026-09-17). */}
       <RowLessonCountCell
         row={rowKey(classId, student.id)}

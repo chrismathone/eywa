@@ -83,6 +83,11 @@ export type PayslipData = {
    * 없으면(옛 발행 스냅샷) `tier`다. 별지가 어느 출석부를 붙일지도 이 값으로 정한다.
    */
   tuitionBasis?: "sheet" | "tier";
+  /**
+   * 대상 학년을 좁힌 선생님(출석부 '비율 설정')이면 그 학년 — 없으면 전체. 수업료·수업인원·퇴원 지표·출석부 별지가
+   * 전부 이 학년 학생만 센다(원장 2026-10-07 *"고등학생에 대해서만 급여 명세서가 나오도록"*). 발행 스냅샷에도 함께 굳는다.
+   */
+  sheetLevels?: ("초등" | "중등" | "고등")[];
   rates: {
     base: GroupRates;
     baseDefault: number | null;
@@ -98,6 +103,11 @@ export type PayslipData = {
     averageStudents: number;
     /** 그 해 퇴원 누계(이 강사에게 배우던 학생 중). 일괄 도장일 제외. */
     yearlyWithdrawals: number;
+    /**
+     * 대상 학년을 좁힌 명세서 — 그 달 **대상 학년 학생이 있는 반**의 수. 없으면(전체 · 옛 스냅샷) 담임 반 수를 쓴다.
+     * 수업인원은 고등학생만인데 '담당 반'이 전 학년 반이면 한 표에서 말이 갈린다(적대 리뷰 2026-10-07).
+     */
+    scopedClassCount?: number;
   };
   adjustments: PayslipAdjustments;
   /** 화면 상단에 그대로 띄운다 — 조용히 빠진 금액이 있으면 안 된다. */

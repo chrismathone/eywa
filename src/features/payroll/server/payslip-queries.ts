@@ -6,8 +6,10 @@ import { kstMonth } from "@/lib/date-kst";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { appliedRatesOf, computeTeacherTuition } from "@/features/payroll/server/tuition";
 import { computeSheetTuition } from "@/features/payroll/server/sheet-tuition";
+import { attendanceRateLevel, type AttendanceRateLevel } from "@/features/attendance/salary-rates";
 import { computePayslipAmounts } from "@/features/payroll/payslip";
 import {
+  spanOverlapsMonth,
   studentIdsInMonth,
   withdrawalStats,
   yearlyClassMetrics,
@@ -153,9 +155,11 @@ export async function getPayslipData(teacherId: string, period: string): Promise
       : null;
     return sheet ? { sheet, tier: null } : { sheet: null, tier: await tierTuition() };
   };
+  // 지표(수업인원·퇴원)는 수업료와 같은 학년만 센다 — 대상 학년은 수업료 조립이 알려 준다(조회 자체는 나란히 돈다).
+  const tuitionPromise = tuitionOf();
   const [tuition, metrics, resume] = await Promise.all([
-    tuitionOf(),
-    loadMetrics(supabase, classIds, period, year),
+    tuitionPromise,
+    loadMetrics(supabase, classIds, period, year, tuitionPromise.then((t) => t.sheet?.levels, () => undefined)),
     supabase
       .from("academy_documents")
       .select("form_data")
@@ -270,6 +274,7 @@ export async function getPayslipData(teacherId: string, period: string): Promise
           missingPriceTiers: settlement.missingPriceTiers,
         }
       : null,
+    ...(sheet?.levels?.length ? { sheetLevels: sheet.levels } : {}),
     // 프리랜서는 출석부 비율표를 과정으로 옮긴 값(저장된 표가 없으면 계약 비율과 같다) — 계산에 실제로 쓴 비율을 찍는다.
     rates: sheet
       ? { base: sheet.rates.base, baseDefault, applied: sheet.rates.applied, appliedDefault, penaltyPoints: penalty }
@@ -286,6 +291,8 @@ async function loadMetrics(
   classIds: string[],
   period: string,
   year: number,
+  /** 대상 학년(없으면 전체) — 수업료와 같은 학년의 학생만 센다. */
+  levelsOf: Promise<readonly AttendanceRateLevel[] | undefined> = Promise.resolve(undefined),
 ): Promise<{ value: PayslipData["metrics"]; warning: string | null }> {
   const empty = {
     value: {
@@ -302,12 +309,13 @@ async function loadMetrics(
   // 그 해에 걸치는 수강 전건(B2 — 페이징으로 전건, 1000행 절단 방지).
   const spans = await fetchAllPagedInChunks<{
     student_id: string;
+    class_id: string;
     start_date: string | null;
     end_date: string | null;
   }>(classIds, (chunk, f, t) =>
     supabase
       .from("enrollments")
-      .select("student_id, start_date, end_date")
+      .select("student_id, class_id, start_date, end_date")
       .in("class_id", chunk)
       .lte("start_date", `${year}-12-31`)
       .or(`end_date.is.null,end_date.gte.${year}-01-01`)
@@ -315,9 +323,31 @@ async function loadMetrics(
       .range(f, t),
   );
 
-  const rows: EnrollSpanRow[] = spans
+  let rows: EnrollSpanRow[] = spans
     .filter((s) => !!s.start_date)
     .map((s) => ({ studentId: s.student_id, startDate: s.start_date!, endDate: s.end_date }));
+
+  // 대상 학년을 좁힌 선생님 — 지표도 그 학년 학생만(수업료는 고등학생만인데 수업인원·퇴원율이 전 학년이면 한 장에서 말이 갈린다).
+  // 학년을 모르는 학생은 세지 않는다(수업료에서도 '빠진 줄'로 따로 드러난다).
+  const levels = await levelsOf;
+  let scopedClassCount: number | undefined;
+  if (levels?.length) {
+    const ids = [...new Set(rows.map((r) => r.studentId))];
+    const grades = ids.length === 0
+      ? []
+      : await fetchInChunks<{ id: string; grade: string | null }>(ids, (chunk) => supabase.from("students").select("id, grade").in("id", chunk));
+    const inScope = new Set(grades.filter((g) => {
+      const level = attendanceRateLevel(g.grade);
+      return level !== null && levels.includes(level);
+    }).map((g) => g.id));
+    rows = rows.filter((r) => inScope.has(r.studentId));
+    // '담당 반'도 같은 범위로 — 그 달 대상 학년 학생이 한 명이라도 있는 반만 센다.
+    scopedClassCount = new Set(
+      spans
+        .filter((s) => !!s.start_date && inScope.has(s.student_id) && spanOverlapsMonth({ studentId: s.student_id, startDate: s.start_date!, endDate: s.end_date }, period))
+        .map((s) => s.class_id),
+    ).size;
+  }
 
   const thisMonth = studentIdsInMonth(rows, period);
   const yearly = yearlyClassMetrics(rows, year, period);
@@ -366,6 +396,7 @@ async function loadMetrics(
       cumulativeStudents: yearly.cumulativeStudents,
       averageStudents: yearly.averageStudents,
       yearlyWithdrawals,
+      ...(scopedClassCount !== undefined ? { scopedClassCount } : {}),
     },
     warning:
       w.unknownDateCount > 0

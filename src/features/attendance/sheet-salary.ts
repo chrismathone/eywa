@@ -17,8 +17,10 @@ import { countMarks } from "./grid/totals";
 import {
   actualLessonSalary,
   actualSalaryBase,
+  attendanceRateLevel,
   attendanceSalaryRate,
   salaryBilledCap,
+  salaryRowOutOfScope,
   sumSalaryAmounts,
   type AttendanceSalaryRates,
 } from "./salary-rates";
@@ -58,8 +60,11 @@ export type SheetSalaryExcluded = {
   studentId: string;
   studentName: string;
   units: number;
-  /** `no-price` 회차 확정 단가를 하나로 못 정함 · `no-rate` 비율 없음. */
-  reason: "no-price" | "no-rate";
+  /**
+   * `no-price` 회차 확정 단가를 하나로 못 정함 · `no-rate` 비율 없음 ·
+   * `no-level` 대상 학년을 좁힌 선생님인데 이 학생의 학년이 비었거나 초·중·고로 분류되지 않는다(예: 7세 — 대상인지 확인할 수 없어 계산하지 않았다).
+   */
+  reason: "no-price" | "no-rate" | "no-level";
 };
 
 export type SheetSalaryResult = {
@@ -72,6 +77,11 @@ export type SheetSalaryResult = {
   /** 시수가 있는데 산정에서 빠진 줄. */
   excluded: SheetSalaryExcluded[];
   excludedUnits: number;
+  /**
+   * **대상 학년 밖**이라 처음부터 계산하지 않은 줄(대상 학년을 좁힌 선생님만 — `rates.levels`). 빠진 줄(`excluded`)과 다르다:
+   * 고칠 것이 아니라 이 선생님의 실급여에 원래 들어가지 않는 줄이다. 확인용으로 사람 수·시수만 센다.
+   */
+  outOfScope: { students: number; units: number };
 };
 
 export function teacherSheetSalary(input: {
@@ -91,6 +101,8 @@ export function teacherSheetSalary(input: {
   let unitsTotal = 0;
   let baseTotal = 0;
   let excludedUnits = 0;
+  const outStudents = new Set<string>();
+  let outUnits = 0;
   for (const g of input.groups) {
     for (const s of g.students) {
       const key = rowKey(g.classId, s.id);
@@ -98,6 +110,12 @@ export function teacherSheetSalary(input: {
       // 🔴 시수가 없는 줄은 빠진 것도 산정된 것도 아니다 — 받을 것이 없는 줄이다. 줄로 세우면 단가·비율만 갖춘
       //    0시수 줄들이 합계를 null이 아니라 **0원**으로 만들어, 출결이 아직 없는 달에 "₩0 · 0시수" 명세서가 발행된다.
       if (!(units > 0)) continue;
+      // 대상 학년 밖(원장 2026-10-07 — 고등학생에게만 프리랜서를 적용하는 선생님) — 산정도 '빠진 줄'도 아니다.
+      if (salaryRowOutOfScope(input.rates, s.grade)) {
+        outStudents.add(s.id);
+        outUnits += units;
+        continue;
+      }
       const prices = input.prices[key];
       const picked = attendanceSalaryRate(input.rates, { classId: g.classId, className: g.className, isSpecial: g.isSpecial, grade: s.grade });
       const rate = picked == null ? null : input.adjustRate ? input.adjustRate(picked) : picked;
@@ -105,7 +123,8 @@ export function teacherSheetSalary(input: {
       const base = actualSalaryBase(prices, units, cap);
       const amount = actualLessonSalary(prices, units, rate, cap);
       if (amount === null || base === null || rate === null) {
-        excluded.push({ classId: g.classId, studentId: s.id, studentName: s.name, units, reason: base === null ? "no-price" : "no-rate" });
+        const noLevel = !!input.rates.levels?.length && attendanceRateLevel(s.grade) === null;
+        excluded.push({ classId: g.classId, studentId: s.id, studentName: s.name, units, reason: noLevel ? "no-level" : base === null ? "no-price" : "no-rate" });
         excludedUnits += units;
         continue;
       }
@@ -121,5 +140,6 @@ export function teacherSheetSalary(input: {
     baseTotal,
     excluded,
     excludedUnits: Math.round(excludedUnits * 10) / 10,
+    outOfScope: { students: outStudents.size, units: Math.round(outUnits * 10) / 10 },
   };
 }

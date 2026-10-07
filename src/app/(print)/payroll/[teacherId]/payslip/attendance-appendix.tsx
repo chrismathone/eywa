@@ -65,6 +65,7 @@ export function AttendanceAppendix({
   caption = PAYSLIP_APPENDIX_CAPTION,
   unitsByStudent,
   nameStyle = "tone",
+  scopeNote,
 }: {
   groups: { classId: string; className: string; matrix: AttendanceMatrix }[];
   period: string;
@@ -80,6 +81,8 @@ export function AttendanceAppendix({
    * `badge` = 이름 옆 라벨(신입·퇴원·전입·전출·종강 — 화면과 같은 표를 찍는 반별·자리 출석부 인쇄).
    */
   nameStyle?: "tone" | "badge";
+  /** 대상 학년을 좁힌 명세서의 별지 — "고등 학생만"처럼 머리에 한 마디(다른 학년 학생이 왜 없는지). */
+  scopeNote?: string;
 }) {
   const drawable = groups.filter((g) => g.matrix.students.length > 0);
   if (drawable.length === 0) return null;
@@ -103,6 +106,7 @@ export function AttendanceAppendix({
                 </span>
               ))
             : null}
+          {scopeNote ? <span className="font-semibold">· {scopeNote}</span> : null}
         </p>
       </header>
 

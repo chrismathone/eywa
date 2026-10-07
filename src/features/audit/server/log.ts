@@ -113,6 +113,8 @@ export const AUDIT_ACTIONS = {
   payroll_jj_units_return: "JJ실 시수 되돌리기",
   // 선생님별 스위치(0352a) — 켜면 그 선생님 본인 출석부에도 실급여가 보인다. 금액은 남기지 않는다(누구 것을 켰는지·껐는지만).
   payroll_sheet_visible_set: "출석부 합계·실급여 보여주기 설정",
+  // 실급여·명세서 대상 학년(원장 2026-10-07 — 고등학생에게만 프리랜서를 적용하는 선생님). 비율 숫자는 남기지 않는다.
+  payroll_sheet_levels_set: "실급여·명세서 대상 학년 설정",
   class_salary_update: "반별 급여 설정 변경",
   session_splits_save: "강사 분배 스냅샷 저장",
   withdrawal_update: "퇴원 사유",

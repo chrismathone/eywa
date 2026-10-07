@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actualLessonSalary, actualSalaryBase, attendanceSalaryRate, parseAttendanceRates, salaryBilledCap, type AttendanceSalaryRates } from "./salary-rates";
+import { actualLessonSalary, actualSalaryBase, attendanceRateLevel, attendanceSalaryRate, parseAttendanceRates, salaryBilledCap, salaryRowOutOfScope, type AttendanceSalaryRates } from "./salary-rates";
 const cls = "aaaaaaaa-1111-1111-1111-111111111111";
 const rates: AttendanceSalaryRates = { regular: { 초등: 40, 중등: 45, 고등: 50 }, special: { 초등: 55, 중등: 60, 고등: 65 }, classes: {} };
 
@@ -75,5 +75,58 @@ describe("나눠 맡는 줄의 상한 = 이 선생님 몫의 청구액(salaryBil
   it("청구액을 모르면 상한 없음(undefined)", () => {
     expect(salaryBilledCap(null, { units: 1.5, classUnits: 3, daysBasis: false })).toBeUndefined();
     expect(salaryBilledCap(undefined, undefined)).toBeUndefined();
+  });
+});
+
+/**
+ * 원장 2026-10-07 *"이성우 선생님은 특이케이스로 고등학생에 대해서만 프리랜서 적용할거라 고등학생에 대해서만 급여 명세서가
+ * 나오도록 해줘"* — 선생님마다 고르는 **대상 학년**. 기준은 학생 학년이다(반 이름이 아니다).
+ */
+describe("대상 학년(levels) — 고른 학년의 학생만 실급여를 계산한다", () => {
+  const high: AttendanceSalaryRates = { ...rates, levels: ["고등"] };
+  const row = (grade: string | null, className = "고등M 단체 BS4F") => ({ classId: cls, className, grade });
+
+  it("대상 학년 학생은 종전 그대로, 그 밖 학년은 비율이 없다 — '고등M' 반의 중3도 대상이 아니다", () => {
+    expect(attendanceSalaryRate(high, row("고2"))).toBe(50);
+    expect(attendanceSalaryRate(high, { ...row("고1"), isSpecial: true })).toBe(65);
+    expect(attendanceSalaryRate(high, row("중3"))).toBeNull();
+    expect(attendanceSalaryRate(high, row("초6", "중등M 중1 BS2F"))).toBeNull();
+    expect(salaryRowOutOfScope(high, "중3")).toBe(true);
+    expect(salaryRowOutOfScope(high, "고3")).toBe(false);
+  });
+
+  it("🔴 반별 예외 비율이 다른 학년 학생을 되살리지 않는다 — 학년을 먼저 본다", () => {
+    const withClass: AttendanceSalaryRates = { ...high, classes: { [cls]: 47.5 } };
+    expect(attendanceSalaryRate(withClass, row("고2"))).toBe(47.5);
+    expect(attendanceSalaryRate(withClass, row("중3"))).toBeNull();
+  });
+
+  it("🔴 학년을 모르는 학생 — 대상 밖으로 말없이 빼지도, 확인 없이 지급하지도 않는다(비율 없음 = '빠진 줄'로 드러난다)", () => {
+    expect(salaryRowOutOfScope(high, null)).toBe(false);
+    expect(attendanceSalaryRate(high, row(null))).toBeNull();
+    // 반별 예외가 있어도 마찬가지다 — 고등학생인지 확인되지 않았다.
+    expect(attendanceSalaryRate({ ...high, classes: { [cls]: 47.5 } }, row(null))).toBeNull();
+    // 대상을 좁히지 않은 선생님은 종전 그대로(학년을 몰라도 반별 예외 비율은 쓴다).
+    expect(attendanceSalaryRate({ ...rates, classes: { [cls]: 47.5 } }, row(null))).toBe(47.5);
+  });
+
+  it("대상을 좁히지 않은 선생님은 아무것도 달라지지 않는다", () => {
+    for (const grade of ["초5", "중2", "고3", null]) expect(salaryRowOutOfScope(rates, grade)).toBe(false);
+    expect(attendanceSalaryRate(rates, row("중3"))).toBe(45);
+    expect(attendanceRateLevel("고1")).toBe("고등");
+    expect(attendanceRateLevel("초3")).toBe("초등");
+    expect(attendanceRateLevel(null)).toBeNull();
+  });
+
+  it("저장 검증 — 순서를 맞추고, 세 학년 전부는 '전체'라 저장하지 않으며, 빈 목록·모르는 값은 거절한다", () => {
+    expect(parseAttendanceRates({ ...rates, levels: ["고등", "중등"] })?.levels).toEqual(["중등", "고등"]);
+    expect(parseAttendanceRates({ ...rates, levels: ["고등"] })).toEqual({ ...rates, levels: ["고등"] });
+    expect(parseAttendanceRates({ ...rates, levels: ["초등", "중등", "고등"] })).toEqual(rates);
+    expect("levels" in parseAttendanceRates({ ...rates, levels: ["초등", "중등", "고등"] })!).toBe(false);
+    expect(parseAttendanceRates({ ...rates, levels: [] })).toBeNull();
+    expect(parseAttendanceRates({ ...rates, levels: ["수능"] })).toBeNull();
+    expect(parseAttendanceRates({ ...rates, levels: "고등" })).toBeNull();
+    // 칸이 없는 옛 저장값은 전체다.
+    expect(parseAttendanceRates(rates)?.levels).toBeUndefined();
   });
 });
