@@ -6,7 +6,7 @@ import { NO_LESSON_LABEL, TERM_STATE_LABEL } from "@/features/billing/session-te
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 
 /**
- * 회차 확정 엑셀 — 수납관리 '회차 확정' 면의 **표와 같은 줄 집합**(과목·검색·미확정만·미배분만, 감사 N2).
+ * 회차 확정 엑셀 — 수납관리 '회차 확정' 면의 **표와 같은 줄 집합**(과목·검색·보기 필터(미확정·미배분·몫 조정한 반), 감사 N2).
  * 🔴 돈 숫자는 새로 계산하지 않는다 — 확정액·단가는 저장값, 실납은 화면과 같은 `netAllocatedAmount`.
  * raw 코드(termState·pricingMode)는 한글 라벨로만 싣는다.
  */

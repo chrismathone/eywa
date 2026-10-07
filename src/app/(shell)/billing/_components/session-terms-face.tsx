@@ -14,13 +14,15 @@ import { FaceNote } from "./face-note";
 import Link from "next/link";
 import { SessionTermsState, SessionTermsConfirmedCount } from "./session-terms-state";
 import { NO_LESSON_LABEL } from "@/features/billing/session-terms/month-roster";
-import { confirmableTermRow, filterSessionTermRows } from "@/features/billing/session-terms/term-filter";
+import { confirmableTermRow, filterSessionTermRows, shareClassIdsOf, type TermOnlyKey } from "@/features/billing/session-terms/term-filter";
 import { SessionVerificationFace } from "./session-verification-face";
 import { SessionPanels } from "./session-panels";
 
 const PAGE_SIZE = 25; // 반(그룹) 단위 페이지
 
 const confirmableRow = confirmableTermRow;
+/** 보기 필터의 이름 — 드롭다운 항목과 '맞는 줄 없음' 안내가 같은 말을 쓴다. */
+const ONLY_LABEL: Record<TermOnlyKey, string> = { open: "미확정", pending: "미배분", share: "몫 조정한 반" };
 
 /**
  * 회차 확정 면 — 청구=N회 키스톤(docs/per-session-billing-plan.md).
@@ -32,6 +34,7 @@ export async function SessionTermsFace({
   subject,
   q,
   page,
+  only,
   allocation,
   confirmation,
   panel,
@@ -42,8 +45,13 @@ export async function SessionTermsFace({
   subject?: string;
   q?: string;
   page?: string;
+  /**
+   * 보기 필터 — `open,pending,share`(쉼표 · 여럿을 고르면 모두에 해당하는 줄만). 원장 2026-10-07 *"확정 / 배분 / 몫 3개를
+   * 하나의 드랍다운으로 묶고 중복 체크가능하게"*. 미확정 보기는 2026-09-17 *"검색 필터에 '미확정' 보기 추가"*에서 왔다.
+   */
+  only?: string;
+  /** 옛 주소 호환(`allocation=pending` · `confirmation=open`) — 드롭다운이 둘이던 때의 주소도 그대로 읽는다. */
   allocation?: string;
-  /** `open` = 미확정만 보기(원장 2026-09-17 *"검색 필터에 '미확정' 보기 추가"*). */
   confirmation?: string;
   panel?: string;
   status?: string;
@@ -59,9 +67,10 @@ export async function SessionTermsFace({
   const subjects = buildSubjectMaps(settings.operations.subjects);
 
   const allRows = view.rows.map((r) => ({ ...r, subjectLabel: subjects.labelOf(r.subject) }));
-  // 과목·검색·미확정만·미배분만 = 엑셀과 같은 한 벌(filterSessionTermRows, 감사 N2). 페이저는 검색 결과 기준.
-  const { presentSubjects, activeSubject, query, pendingOnly, openOnly, pendingCount, openCount, filtered } =
-    filterSessionTermRows(allRows, { subject, q, allocation, confirmation });
+  // 과목·검색·보기 필터(미확정·미배분·몫 조정한 반) = 엑셀과 같은 한 벌(filterSessionTermRows, 감사 N2). 페이저는 검색 결과 기준.
+  // '몫' 필터의 재료는 자리 몫 줄과 같은 조회다 — 줄이 안 서는 화면(권한 없음)에는 그 항목도 안 선다.
+  const { presentSubjects, activeSubject, query, pendingOnly, openOnly, pendingCount, openCount, shareCount, only: onlyKeys, filtered } =
+    filterSessionTermRows(allRows, { subject, q, only, allocation, confirmation, shareClassIds: shareClassIdsOf(seatShare) });
   // 머리 줄 카운트(원장 2026-09-18) — 확정 분모는 확정 가능한 줄, 그 뒤에 줄 상태별 수(0이면 생략).
   const confirmableCount = filtered.filter(confirmableRow).length;
   const missingCount = filtered.filter((r) => r.termState === "missing").length;
@@ -101,8 +110,7 @@ export async function SessionTermsFace({
     const qs = new URLSearchParams({ tab: "sessions", period: per });
     if (activeSubject) qs.set("subject", activeSubject);
     if (query) qs.set("q", query);
-    if (pendingOnly) qs.set("allocation", "pending");
-    if (openOnly) qs.set("confirmation", "open");
+    if (onlyKeys.length > 0) qs.set("only", onlyKeys.join(","));
     if (n > 1) qs.set("page", String(n));
     return `/billing?${qs.toString()}`;
   };
@@ -129,18 +137,32 @@ export async function SessionTermsFace({
           />
         ) : null}
         <SearchToggle placeholder="이름·반·학교·담임·메모" defaultValue={query} />
-        {/* 엑셀 내보내기(감사 N2 · 원장 2026-09-29 검색 줄 통일) — 이 표와 같은 줄 집합(과목·검색·미확정만·미배분만). 가져오기는 없다. */}
+        {/* 엑셀 내보내기(감사 N2 · 원장 2026-09-29 검색 줄 통일) — 이 표와 같은 줄 집합(과목·검색·보기 필터). 가져오기는 없다. */}
         <ExcelMenu
           exportHref={`/api/exports/session-terms?${new URLSearchParams({
             period: p,
             ...(activeSubject ? { subject: activeSubject } : {}),
             ...(query ? { q: query } : {}),
-            ...(pendingOnly ? { allocation: "pending" } : {}),
-            ...(openOnly ? { confirmation: "open" } : {}),
+            ...(onlyKeys.length > 0 ? { only: onlyKeys.join(",") } : {}),
           }).toString()}`}
         />
-        <FilterSelect paramName="confirmation" value={openOnly ? "open" : ""} options={[{ value: "open", label: `미확정만 보기 (${openCount})` }]} axisLabel="확정" ariaLabel="확정 상태 필터" className="w-auto" triggerClassName={TOOLBAR_SELECT} />
-        <FilterSelect paramName="allocation" value={pendingOnly ? "pending" : ""} options={[{ value: "pending", label: `미배분만 보기 (${pendingCount})` }]} axisLabel="배분" ariaLabel="배분 상태 필터" className="w-auto" triggerClassName={TOOLBAR_SELECT} />
+        {/* 보기 필터 — 확정 · 배분 · 몫을 드롭다운 하나에서 여러 개 고른다(원장 2026-10-07). 고른 것 모두에 해당하는 줄만 남는다.
+            괄호 속 수는 서로를 거르지 않은 수 · '몫 조정한 반'은 반 수다. 옛 주소의 두 파라미터는 고르는 순간 지운다. */}
+        <FilterSelect
+          paramName="only"
+          multiple
+          value={onlyKeys.join(",")}
+          options={[
+            { value: "open", label: `${ONLY_LABEL.open} (${openCount})` },
+            { value: "pending", label: `${ONLY_LABEL.pending} (${pendingCount})` },
+            ...(seatShare ? [{ value: "share", label: `${ONLY_LABEL.share} (${shareCount})` }] : []),
+          ]}
+          clearParams={["confirmation", "allocation"]}
+          axisLabel="보기"
+          ariaLabel="확정·배분·몫 보기 필터"
+          className="w-auto"
+          triggerClassName={TOOLBAR_SELECT}
+        />
         <span className="text-text-dim text-sm whitespace-nowrap">
           반 <span className="num">{allGroups.length}</span>개 · 확정{" "}
           <SessionTermsConfirmedCount />/<span className="num">{confirmableCount}</span>건
@@ -193,7 +215,9 @@ export async function SessionTermsFace({
               이 달의 회차 데이터가 없습니다. 위의 <b>계획 갱신</b>을 누르면 청구서 기준으로 반별 계획 회차가
               생성됩니다.
             </>
-          ) : openOnly && pendingOnly ? "미확정이면서 배분이 필요한 항목이 없습니다." : openOnly ? "미확정 항목이 없습니다." : pendingOnly ? "배분이 필요한 항목이 없습니다." : query ? (
+          ) : onlyKeys.length > 0 ? (
+            <>보기 필터({onlyKeys.map((key) => ONLY_LABEL[key]).join(" · ")})에 맞는 항목이 없습니다.</>
+          ) : query ? (
             <>“{query}” 검색 결과가 없습니다. 검색어를 조정해 보세요.</>
           ) : (
             <>

@@ -5,6 +5,7 @@ export function sessionPanelHref(params: Record<string, string | undefined>, per
   qs.set("period", period);
   qs.delete("page");
   qs.delete("status");
+  qs.delete("only");
   qs.delete("allocation");
   qs.delete("confirmation");
   if (panel === "verify") qs.set("panel", "verify"); else qs.delete("panel");

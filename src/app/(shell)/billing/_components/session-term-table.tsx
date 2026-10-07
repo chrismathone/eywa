@@ -84,7 +84,7 @@ type BandNote = { notice: string | null; selection: string | null };
 type Selection = { rows: Row[]; draftOf: (row: SessionTermRow) => TermDraft; onConfirmed: (ids: string[]) => void; onAwait: (ids: string[]) => void };
 
 /** 회차 없이 단가만 입력하면 미확정 학생의 입력칸만 채운다. */
-/** `visibleOnly` = 필터(미배분만 보기·검색)로 이 반의 일부만 보이는 중 — 반 일괄 확정도 보이는 학생에게만 보낸다. */
+/** `visibleOnly` = 필터(보기 필터의 미확정·미배분 · 검색)로 이 반의 일부만 보이는 중 — 반 일괄 확정도 보이는 학생에게만 보낸다. */
 /** `onAwait` = 반 일괄이 가상 줄을 실 행으로 바꿨을 때 그 줄들을 새 데이터가 올 때까지 잠근다(부모가 새 groups에서 푼다). */
 /**
  * `onBandNote` = 안내·선택 확정 문구는 **반 머리 줄(부모)**이 들고 그린다 — 반 일괄이 끝나 이 폼이 '전체 확정 해제'로 바뀌어도
@@ -691,7 +691,7 @@ export function SessionTermGroups({
   groups: ClassGroup[];
   catalog: Catalog;
   period: string;
-  /** 필터(미배분만 보기·검색)로 좁혀 보는 중 — 반 일괄 확정을 보이는 학생에게만. */
+  /** 필터(보기 필터의 미확정·미배분 · 검색)로 좁혀 보는 중 — 반 일괄 확정을 보이는 학생에게만. */
   visibleOnly?: boolean;
   /**
    * 자리 몫 줄 재료(원장 2026-10-07 *"어떤반의 수업/JJ 비율을 19/5를 20/4로"*) — 그 달 자리(JJ실·랩실) 교시가 있는 영어 반과 이미 돌린 시수.
