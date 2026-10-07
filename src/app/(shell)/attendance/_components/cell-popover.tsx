@@ -17,7 +17,6 @@ import {
 import { canonicalUnitsRaw } from "@/features/attendance/grid/typing";
 import { useAutoUnits } from "./grid-context";
 import { scopeFieldsFor, useAttendanceScope } from "./scope-context";
-import { JjTransferSection } from "./jj-transfer-section";
 import { NOT_MINE_MESSAGE, STATUS_TONE, statusTextOf } from "@/features/attendance/cell-display";
 // 화면 언어 — 상태 이름은 `statusTextOf`(한글 맵 옆) 단일 소스, 나머지 문구는 사전.
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
@@ -59,7 +58,6 @@ export function CellPopover({
   note,
   locked,
   otherCount = 0,
-  jjUnits,
   anchor,
   reservation = null,
   onReserve,
@@ -88,11 +86,6 @@ export function CellPopover({
    * 0보다 크면 그 날 기록은 **있다**(남의 교시 것). 이걸 안 보면 아래 안내가 사실과 반대로 나간다.
    */
   otherCount?: number;
-  /**
-   * 이 칸의 JJ실 시수 [아직 방 몫, 이 선생님이 넘겨받음] — 있으면 맨 아래에 '넘겨받기 · 되돌리기'가 선다(원장 2026-10-07).
-   * 급여 비율을 고칠 수 있는 사람의 강사 전체 보기에만 온다. 출결 값과 무관하게(잠긴 칸에서도) 쓸 수 있다 — 귀속만 바꾼다.
-   */
-  jjUnits?: readonly [number, number, number];
   anchor: PopoverAnchor;
   onClose: () => void;
   /**
@@ -450,9 +443,6 @@ export function CellPopover({
             ) : null}
           </>
         )}
-        {jjUnits && scope?.canTransferSeat && scope.classIds.has(classId) ? (
-          <JjTransferSection classId={classId} studentId={studentId} sessionDate={sessionDate} teacherId={scope.teacherId} units={jjUnits} onDone={onClose} />
-        ) : null}
       </div>
     </>
   );

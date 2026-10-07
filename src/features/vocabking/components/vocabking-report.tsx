@@ -1,5 +1,6 @@
 import type { VocabkingReport } from "../model";
 import { VkHeader, VkPosition } from "./vk-position";
+import { VkScore } from "./vk-score";
 import { VkCompetency } from "./vk-competency";
 import { VkAdvice } from "./vk-advice";
 import { VkNext } from "./vk-next";
@@ -14,6 +15,7 @@ export function VocabkingReportView({ report }: { report: VocabkingReport }) {
   return (
     <article className="bg-card shadow-card @container flex flex-col gap-6 rounded-2xl px-6 py-6">
       <VkHeader report={report} />
+      <VkScore report={report} />
       <VkPosition report={report} />
       <VkCompetency report={report} />
       <VkAdvice report={report} />

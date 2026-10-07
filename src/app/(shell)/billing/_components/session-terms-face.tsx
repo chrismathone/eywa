@@ -1,4 +1,5 @@
 import { getSessionTermsView } from "@/features/billing/session-terms/server/queries";
+import { loadSeatGiveSummary } from "@/features/attendance/server/seat-give-summary";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { currentPeriod } from "@/features/billing/calc";
@@ -41,7 +42,8 @@ export async function SessionTermsFace({
   confirmation?: string;
 }) {
   const p = period && /^\d{4}-\d{2}$/.test(period) ? period : currentPeriod();
-  const [view, settings] = await Promise.all([getSessionTermsView(p, undefined, { lastMonth: true }), getTenantSettings()]);
+  // JJ실 줄 재료는 표 조회와 독립이라 나란히 읽는다(B4) — 권한이 없거나 못 읽으면 null(줄만 안 선다).
+  const [view, settings, seatGive] = await Promise.all([getSessionTermsView(p, undefined, { lastMonth: true }), getTenantSettings(), loadSeatGiveSummary(p)]);
   const subjects = buildSubjectMaps(settings.operations.subjects);
 
   const allRows = view.rows.map((r) => ({ ...r, subjectLabel: subjects.labelOf(r.subject) }));
@@ -189,7 +191,7 @@ export async function SessionTermsFace({
       ) : (
         <>
           {/* 검색·과목·미배분·미확정 필터로 한 반의 일부만 보일 때도 반 일괄 확정은 보이는 학생에게만(안 보이는 확정값을 덮지 않게 — 리뷰 2026-09-17). */}
-          <SessionTermGroups key={p} groups={groups} catalog={view.catalog} period={p} visibleOnly={pendingOnly || openOnly || query !== "" || activeSubject !== null} />
+          <SessionTermGroups key={p} groups={groups} catalog={view.catalog} period={p} seatGive={seatGive} visibleOnly={pendingOnly || openOnly || query !== "" || activeSubject !== null} />
           <Pagination page={curPage} totalPages={totalPages} total={allGroups.length} hrefForPage={pageHref} />
         </>
       )}

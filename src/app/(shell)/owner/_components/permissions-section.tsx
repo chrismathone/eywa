@@ -44,7 +44,7 @@ const teacherAccessOf = (matrix: AccessMatrix) =>
   Object.fromEntries(TEACHER_TOGGLE_KEYS.map((k) => [k, matrix[k].teacher])) as Record<string, Access>;
 
 /**
- * 역할·권한 면 — 강사 메뉴 표시, 역할별 메뉴 권한, 개인별 메뉴·기능 권한, 설정별 역할 권한.
+ * 역할·권한 면 — 강사 메뉴 표시, 역할별 메뉴 권한, 설정별 역할 권한, 개인별 메뉴·기능 권한.
  * 모든 구획이 한 폼이다. 설정 권한도 같은 draft와 저장 기준을 사용한다.
  */
 export function PermissionsSection({
@@ -188,6 +188,12 @@ export function PermissionsSection({
           <RoleMatrixTable groups={menuGroups} matrix={matrix} savedMatrix={savedMatrix} onCycle={cycle} />
           </div>
         </SettingsCard>
+        <SettingsCard
+          title="설정별 역할 권한"
+          description="각 메뉴에 있던 ‘역할 설정’을 여기에서 관리합니다. 기존 권한은 그대로 유지되며, 메뉴·개인 권한과 함께 저장됩니다."
+        >
+          <RoleMatrixTable groups={settingGroups} matrix={matrix} savedMatrix={savedMatrix} onCycle={cycle} />
+        </SettingsCard>
         <UserOverrideEditor
           overrides={userOverrides}
           hiddenUserIds={hiddenUserIds}
@@ -203,12 +209,6 @@ export function PermissionsSection({
           nameOf={staffName}
           onChange={(next) => setDraft((d) => ({ ...d, specialAccess: next(d.specialAccess) }))}
         />
-        <SettingsCard
-          title="설정별 역할 권한"
-          description="각 메뉴에 있던 ‘역할 설정’을 여기에서 관리합니다. 기존 권한은 그대로 유지되며, 위의 메뉴·개인 권한과 함께 저장됩니다."
-        >
-          <RoleMatrixTable groups={settingGroups} matrix={matrix} savedMatrix={savedMatrix} onCycle={cycle} />
-        </SettingsCard>
       </>
     </SectionForm>
   );

@@ -29,7 +29,7 @@ import { getAttendanceClassBilledAmounts, mergeAttendanceClassBilling } from "@/
 import { attendanceNoInvoiceRows } from "@/features/attendance/class-billing";
 import { canShowAttendanceActualAmount } from "@/features/attendance/server/actual-amount-access";
 import { monthBounds } from "@/features/attendance/enrollment-span";
-import { getAttendanceSalaryRates, requireAttendanceSalaryAdmin } from "@/features/attendance/server/salary-rates";
+import { getAttendanceSalaryRates } from "@/features/attendance/server/salary-rates";
 import { SalaryRatesButton } from "./_components/salary-rates-button";
 import { SalaryVisibleButton } from "./_components/salary-visible-button";
 import { UnitsMasterButton } from "./_components/units-master-button";
@@ -605,7 +605,7 @@ export default async function AttendancePage({
    */
   const monthSpan = monthBounds(month);
   const classAxisIsMonth = matrix.window.start === monthSpan.first && matrix.window.end === monthSpan.last;
-  const [workers, homeBilling, makeupPool, showActualAmountRaw, salaryConfigRaw, substituteCells, seatAdmin] = await Promise.all([
+  const [workers, homeBilling, makeupPool, showActualAmountRaw, salaryConfigRaw, substituteCells] = await Promise.all([
     getMonthlyClassWorkers(user.tenantId, month, workerClassIds),
     getAttendanceClassBilledAmounts(month, homeBillingRoster, {
       teacherScope: (mode === "teacher" ? effectiveTeacher : classScopeTeacher) ? {
@@ -627,9 +627,6 @@ export default async function AttendancePage({
     mode === "teacher" && effectiveTeacher
       ? loadSubstituteCells({ tenantId: user.tenantId, teacherId: effectiveTeacher, month, excludeClassIds: teacherClasses.map((c) => c.id) })
       : Promise.resolve([]),
-    // JJ실 시수 넘기기(원장 2026-10-07 *"월별 출석부 우클릭으로 (권한 보유자 전용)"*) — 급여 비율을 **고칠 수 있는** 사람인가.
-    // 강사 전체 보기에서만 묻는다(요청 캐시된 판정들이라 추가 조회가 없다). 서버 액션이 같은 판정을 다시 한다(#77).
-    mode === "teacher" && effectiveTeacher ? requireAttendanceSalaryAdmin() : Promise.resolve(null),
   ]);
   // 급여 기능이 꺼진 학원 = 실급여 열·단가 버튼·토글 없음(조회는 이미 끝났지만 값을 버린다 — 표시 전용).
   const showActualAmount = payrollOn && showActualAmountRaw;
@@ -638,8 +635,6 @@ export default async function AttendancePage({
   const salaryAxisOff = mode === "class" && !classAxisIsMonth;
   const salaryConfig = salaryAxisOff ? null : salaryConfigAny;
   const salaryAxisNotice = salaryAxisOff && !!salaryConfigAny?.visible && showActualAmount;
-  /** 이 화면에서 JJ실 시수를 넘길 수 있나 — 급여 비율을 고칠 수 있는 사람의 **강사 전체 보기**만(선생님 본인 · 권한 없는 직원 · 반별 보기는 아니다). */
-  const canTransferSeat = payrollOn && mode === "teacher" && !!effectiveTeacher && !!seatAdmin;
   /** 청구 판정을 받은 **모든** 학생×반(담당 반 + 명단이 있는 보강 반) — `—` 줄 판정과 표의 청구 칸이 같은 목록·같은 판정을 본다. */
   const billingRoster = makeupPool.roster ? [...homeBillingRoster, makeupPool.roster] : homeBillingRoster;
   const classBilledAmounts = makeupPool.billing
@@ -726,8 +721,7 @@ export default async function AttendancePage({
    *    (원장 제보 2026-09-02: *"이윤 9/1 왜 0개?"*). 표에 넣을 목록과 값·좌표를 만드는 목록이
    *    갈리면 화면이 **행만 있고 값이 없는** 거짓 상태가 된다 — 하나로 묶어 둘 것.
    */
-  // 🔴 JJ실 시수(넘기기 재료 `jjUnits`)는 권한 보유자 화면에만 내려보낸다 — 그 밖엔 매트릭스에서 지운다(화면에서 감추는 게 아니라 안 보낸다).
-  const allGroups = (makeupGroup ? [...groups, makeupGroup] : groups).map((g) => (canTransferSeat || !g.matrix.jjUnits ? g : { ...g, matrix: { ...g.matrix, jjUnits: undefined } }));
+  const allGroups = makeupGroup ? [...groups, makeupGroup] : groups;
 
   // 상단 스탯 — 강사 전체 보기는 반들을 합산(학생은 반 중복을 제거한 실인원).
   // ⚠️ 출결 수치는 **격자와 같은 함수**(`countMarks`)로 센다. 화면이 입력 즉시 다시 셀 때 서버 첫 렌더가
@@ -914,7 +908,7 @@ export default async function AttendancePage({
    */
   const attendanceScope =
     mode === "teacher" && effectiveTeacher
-      ? { teacherId: effectiveTeacher, classIds: teacherClasses.map((c) => c.id), ...(canTransferSeat ? { canTransferSeat: true } : {}) }
+      ? { teacherId: effectiveTeacher, classIds: teacherClasses.map((c) => c.id) }
       : classScopeTeacher && effectiveClassId
         ? { teacherId: classScopeTeacher, classIds: [effectiveClassId] }
         : null;

@@ -11,12 +11,8 @@ import { createContext, useContext, useMemo } from "react";
  * ⚠️ 보강 묶음(0241a)은 강사 전체 보기에서도 **스코프 없이** 그려진다(page.tsx `makeupPoolMatrix`) — 그래서 반 목록으로 가린다.
  * ⚠️ `GridProvider`보다 바깥에 둔다(격자·팝오버가 둘 다 읽는다). 없으면 반별 보기 = 종전 저장 그대로.
  */
-/**
- * `canTransferSeat` = 이 화면에서 **JJ실 시수 넘기기**를 쓸 수 있나(급여 비율을 고칠 수 있는 사람의 강사 전체 보기, 원장 2026-10-07).
- * 표시용 신호일 뿐이다 — 서버 액션(`transferSeatUnits`)이 같은 판정을 다시 한다(#77).
- */
-export type AttendanceScope = { teacherId: string; classIds: readonly string[]; canTransferSeat?: boolean } | null;
-export type ResolvedAttendanceScope = { teacherId: string; classIds: ReadonlySet<string>; canTransferSeat?: boolean } | null;
+export type AttendanceScope = { teacherId: string; classIds: readonly string[] } | null;
+export type ResolvedAttendanceScope = { teacherId: string; classIds: ReadonlySet<string> } | null;
 
 const ScopeCtx = createContext<ResolvedAttendanceScope>(null);
 
@@ -24,10 +20,9 @@ export function AttendanceScopeProvider({ scope, children }: { scope: Attendance
   const teacherId = scope?.teacherId ?? null;
   // 서버가 새로고침마다 새 배열을 내려도 내용이 같으면 같은 값 — 격자 콜백이 헛돌지 않게.
   const key = scope ? scope.classIds.join(",") : "";
-  const canTransferSeat = scope?.canTransferSeat === true;
   const value = useMemo<ResolvedAttendanceScope>(
-    () => (teacherId ? { teacherId, classIds: new Set(key ? key.split(",") : []), ...(canTransferSeat ? { canTransferSeat } : {}) } : null),
-    [teacherId, key, canTransferSeat],
+    () => (teacherId ? { teacherId, classIds: new Set(key ? key.split(",") : []) } : null),
+    [teacherId, key],
   );
   return <ScopeCtx.Provider value={value}>{children}</ScopeCtx.Provider>;
 }
