@@ -165,10 +165,13 @@ describe("메뉴 버튼이 없는 권한은 그 권한을 쓰는 화면 아래�
   it("출석부 ← 랩실·JJ실 출석부 · 출석부 급여 비율 설정", () => {
     expect(after("class", "attendance")).toEqual(["seat_attendance", "attendance_salary_settings"]);
   });
+  it("원생목록 - 영어이름은 원생목록 아래에서 개별 부여할 수 있다", () => {
+    expect(after("student", "students")).toContain("student_english_name");
+  });
   it("시간표 ← 구글 시트 연동 · 수납관리 ← 급여 정책 설정 · 원생목록 ← makeedu 연동", () => {
     expect(after("class", "timetable")).toEqual(["sheet_sync"]);
     expect(after("billing", "billing")).toEqual(["payroll_settings"]);
-    expect(after("student", "students")).toEqual(["integrations"]);
+    expect(after("student", "students")).toEqual(["student_english_name", "integrations"]);
   });
 
   it("🔴 강사 '내 메뉴'에만 입구가 있는 권한 · 어느 메뉴에도 없는 화면 — 이 목록이 늘면 새 권한의 자리를 정하지 않은 것이다", () => {
@@ -188,7 +191,7 @@ describe("원장이 메뉴 구성을 바꾸면 표도 따라 바뀐다", () => {
     expect(group("counsel", BUSY)!.label).toBe("상담");
     const desk = group("custom-desk", BUSY)!;
     expect(desk.label).toBe("데스크");
-    expect(desk.rows.map((r) => r.menu)).toEqual(["students", "integrations"]);
+    expect(desk.rows.map((r) => r.menu)).toEqual(["students", "student_english_name", "integrations"]);
     // 이름을 바꾼 메뉴는 바꾼 이름을 함께 적는다(권한 이름은 그대로다).
     expect(desk.rows[0]).toMatchObject({ label: MENU_LABEL.students, covers: ["학생 명부"] });
   });

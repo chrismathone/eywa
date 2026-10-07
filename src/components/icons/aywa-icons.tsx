@@ -1256,6 +1256,7 @@ export const MENU_ICON = {
   seat_attendance: "seatGrid",
   classes: "book",
   students: "users",
+  student_english_name: "edit",
   exams: "exam",
   enrollment: "userPlus",
   consultations: "messages",

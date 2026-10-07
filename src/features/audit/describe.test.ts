@@ -18,6 +18,10 @@ const ctx = (names: Record<string, string> = {}) => ({
 });
 
 describe("auditDetail — 청구 회차 행 생성(출석부 줄에 맞춤, 2026-09-18)", () => {
+  it("영문 이름 변경은 이전·이후 이름을 남긴다", () => {
+    expect(auditDetail("student_english_name_update", { studentId: SID, before: "Lucy", after: "Luna" }, ctx({ [SID]: "김학생" }))).toContain("영문 이름 Lucy → Luna");
+    expect(auditDetail("student_english_name_update", { studentId: SID, before: null, after: "Lucy" }, ctx())).toBe("영문 이름 없음 → Lucy");
+  });
   it("회차 삭제는 0시수·0원과 삭제된 메모까지 표시한다", () => {
     expect(auditDetail("session_term_delete", { period: "2026-09", sessionsBefore: 0, amountBefore: 0, note: "종료반 정리" }, ctx()))
       .toBe("2026-09 · 확정 0시수 삭제 · 0원 · 메모: 종료반 정리");

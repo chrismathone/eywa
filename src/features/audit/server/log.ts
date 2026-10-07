@@ -201,6 +201,7 @@ export const AUDIT_ACTIONS = {
   // 수정·삭제·수강 종료·관리 도구 일괄 처리까지 **학생 레코드를 바꾸는 모든 경로**가 actor를 남긴다.
   student_create: "학생 등록",
   student_update: "학생 정보 수정",
+  student_english_name_update: "학생 영문 이름 수정",
   student_delete: "학생 영구 삭제",
   student_withdraw: "학생 퇴원 처리",
   student_hold: "학생 휴원 처리",

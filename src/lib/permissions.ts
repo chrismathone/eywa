@@ -45,6 +45,7 @@ export const MENU_KEYS = [
   "seat_attendance",
   "classes",
   "students",
+  "student_english_name",
   "exams",
   "enrollment",
   "consultations",
@@ -91,6 +92,7 @@ export const MENU_LABEL: Record<MenuKey, string> = {
   seat_attendance: "랩실·JJ실 출석부",
   classes: "수업목록",
   students: "원생목록",
+  student_english_name: "원생목록 - 영어이름",
   exams: "성적관리",
   enrollment: "콜&상담",
   consultations: "원생상담",
@@ -181,6 +183,8 @@ export const MENU_ACCESS: AccessMatrix = {
   seat_attendance: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
   classes: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "none", accountant: "none", viewer: "readonly", student: "none" },
   students: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "full", accountant: "readonly", viewer: "readonly", student: "none" },
+  // 영어 시트의 이름 한 칸만 수정. 원생목록 전체 권한과 별도로 부여한다.
+  student_english_name: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
   // 성적관리 — 시험 등록 + 반 일괄 성적입력. 강사는 담당 반 채점(scoped), 회계는 무관, 학생 미표시.
   exams: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "full", accountant: "none", viewer: "readonly", student: "none" },
   enrollment: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "full", accountant: "none", viewer: "none", student: "none" },

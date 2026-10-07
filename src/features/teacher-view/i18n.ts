@@ -111,6 +111,21 @@ export function resolveSheetLang(
  * 아직 한국어로 남은 것 = 월간 뷰 3종 · 자리(JJ·LAB) 출석부 · MCS 칸 문구 · 알림 벨 · 원스크린.
  */
 export const SHEET_DICT = {
+  "studentEnglishName.editHint": { ko: "더블클릭 또는 F2: 영문 이름 수정", en: "Double-click or press F2 to edit the English name" },
+  "studentEnglishName.detailsHint": { ko: "클릭하면 학생 정보", en: "Click for student details" },
+  "studentEnglishName.input": { ko: "{name} 영문 이름", en: "English name for {name}" },
+  "studentEnglishName.placeholder": { ko: "영문 이름", en: "English name" },
+  "studentEnglishName.save": { ko: "영문 이름 저장", en: "Save English name" },
+  "studentEnglishName.cancel": { ko: "수정 취소", en: "Cancel editing" },
+  "studentEnglishName.detailsAria": { ko: "{name} 학생 정보", en: "Student details for {name}" },
+  "roster.endedTitle": { ko: "{date} 수강 종료", en: "Enrollment ended on {date}" },
+  "studentEnglishName.error.invalid": { ko: "영문 이름은 줄바꿈 없이 80자 이내로 입력해 주세요.", en: "Enter a name of up to 80 characters, without line breaks." },
+  "studentEnglishName.error.denied": { ko: "이 학생의 영문 이름을 수정할 권한이 없습니다.", en: "You do not have permission to edit this student's English name." },
+  "studentEnglishName.error.missing": { ko: "학생 정보를 찾을 수 없습니다.", en: "Student information could not be found." },
+  "studentEnglishName.error.conflict": { ko: "다른 곳에서 이름이 변경됐습니다. 새로고침 후 다시 수정해 주세요.", en: "The name was changed elsewhere. Refresh before editing again." },
+  "studentEnglishName.error.failed": { ko: "저장 결과를 확인하지 못했습니다. 새로고침 후 확인해 주세요.", en: "The save could not be confirmed. Refresh to check the name." },
+  "studentEnglishName.error.duplicate": { ko: "같은 지점에서 이미 사용하는 영문 이름입니다. 다른 이름을 입력해 주세요.", en: "This English name is already used by another student at this branch. Please choose a different name." },
+
   // ── 언어 스위치 자체('내 메뉴' 드롭다운 안) ───────────────────────
   "lang.label": { ko: "언어", en: "Language" },
   "lang.title": {

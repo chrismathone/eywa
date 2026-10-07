@@ -4,7 +4,7 @@
  * 로스터 **셀 묶음** — 주간 시트(교시별 표, roster-table)와 오늘 면(통합 표, today-roster-table)이
  * **같은 셀 구현**을 쓴다(원장 2026-08-11 "쓸데없이 중복되는 컴포넌트가 다수" — 중복의 처방은 추출).
  *
- *  · `RosterNameCell` — 이름(학생 정보 링크) + 퇴원일, 영어이름은 **둘째 줄**(2026-08-17).
+ *  · `RosterNameCell` — 학생 정보 링크·영문 이름 편집. 영어 화면은 이름 / 학교학년의 두 줄.
  *  · `RosterSlotCells` — 한 교시분: 출결(체크 순환) · 유닛 · 태도(체크 순환) · **폼별 자유 입력** · 특이사항.
  *    자유 입력 칸은 교시마다 다르다 — 기본은 '시험 점수' 하나, **JJ 교시는 '듣기 레벨'+'누적 암기 단어수'**
  *    (원장 2026-08-13). 구성은 [roster-form](../lib/roster-form.ts) 단일 소스.
@@ -19,7 +19,7 @@
  *    저장된 값을 지우지 않는다(roster-form.ts 규약).
  */
 import { SplitBadge } from "./split-badge";
-import { schoolGradeLabel } from "@/lib/format/school-grade";
+import { sheetSchoolGrade } from "@/features/teacher-view/school-grade";
 // 사유는 표준 코드(other·schedule…)일 수 있다 — 한글화를 거치지 않으면 raw enum이 화면에 샌다(반복 지적).
 import { reasonDisplay } from "@/features/withdrawals/types";
 import { WindowLink } from "@/components/workspace/window-link";
@@ -38,9 +38,11 @@ import { AttendanceCheck } from "./attendance-check";
 import { AttitudeCheck } from "./attitude-check";
 import { NoteCell } from "./note-cell";
 // 강사뷰 화면 언어(2026-09-03) — 영어 모드에서 학생 영어 이름이 주 이름이 된다(표시 전용).
-import { useSheetLang } from "@/features/teacher-view/lang-context";
+import { useSheetLang, useSheetT } from "@/features/teacher-view/lang-context";
 import { sheetT, sheetTf, type SheetLang } from "@/features/teacher-view/i18n";
 import { studentNameParts } from "@/features/teacher-view/student-name";
+import { EnglishNameEditor } from "./english-name-editor";
+import { useStudentEnglishName } from "./english-name-context";
 import type { SheetHandlers } from "./sheet-client";
 
 export type StudentMeta = {
@@ -53,62 +55,47 @@ export type StudentMeta = {
 /**
  * 이름 칸 — 클릭=학생 정보(WindowLink, #86). 이름 13px 굵게(원장 2026-08-10 "크기 통일").
  *
- * **이름 뒤에 `/학교학년`이 같은 줄로 붙는다**(원장 2026-09-10: *"학생이름 → 학생이름/학교학년 으로.
- * 예를 들면 김원중/경명여중3 이렇게."* → 주간 시트도 같게, *"이름 옆에"*).
- * 🔴 표기는 [`schoolGradeLabel`](@/lib/format/school-grade) **한 곳**이다 — `경명여중`+`중3` → `경명여중3`.
- *    여기서 `${school} ${grade}`로 새로 조립하지 말 것(공백 join 금지, 전역 표기 규약).
- * 🔴 **번역하지 않는다** — 학교명은 사람이 입력한 사실이라 영어 화면에서도 그대로다(teacher-view 규약).
- * 🔴 **학교·학년이 없으면 슬래시도 없다** — `김덕현/`처럼 꼬리만 남기지 않는다(빈 값 = 아예 안 그린다).
- * ⚠️ **아래 줄로 내리지 말 것**(원장 *"이름 옆에"*) — 두 줄이 되면 그 행만 키가 커져 나란한 카드의
- *    `grid-rows-subgrid` 줄맞춤이 깨진다.
- * ⚠️ 이름은 `shrink-0`(절대 안 잘린다, 실측 최장 4자 ≈ 56px) + 학교학년만 `min-w-0 truncate` — 좁은
- *    칸에서 먼저 양보하는 쪽은 **덧붙인 정보**여야 한다([[#111]]: 밀도 높은 표에서 `flex-wrap` 금지).
- *
- * 영어이름은 **아래 줄 작은 회색 한 줄**이다(원장 2026-08-17 "학생들 영어이름 어떻게 하면 깔끔하게
- * 보이게 할 수 있을려나"). 그전의 괄호 병기("김나윤A (Chloe)")는 좁은 칸에서 "김나윤A (" 다음 줄
- * "Chloe)"로 꺾여 지저분했다 — 이제 truncate(nowrap)라 꺾이지 않고, 잘리면 title 툴팁이 전체를 보인다.
- * ⚠️ 아바타/이니셜 배지 금지(결정 로그) — 이름은 텍스트만.
+ * 영어 화면: 영문 이름(없으면 한글 이름) / 영문 학교·학년의 두 줄(2026-10-07).
+ * 한국어 화면: 이름/학교학년 + 보조 영문 이름의 기존 표기 유지.
+ * 영문 이름은 전용 권한이 있으면 더블클릭 또는 F2로 수정한다.
  */
 export function RosterNameCell({ entry, meta }: { entry: RosterEntry; meta: StudentMeta | undefined }) {
   // 🔴 주/보조 이름 판정은 [`studentNameParts`](@/features/teacher-view/student-name) **한 곳**이다 —
   //    화면마다 `lang === "en" ? …`를 적으면 한쪽만 고쳐진다. 여기선 그 결과를 그리기만 한다.
-  const names = studentNameParts(meta?.name, meta?.englishName, useSheetLang());
+  const lang = useSheetLang();
+  const t = useSheetT();
+  const english = useStudentEnglishName(entry.studentId, meta?.englishName ?? null);
+  const names = studentNameParts(meta?.name, english.value, lang);
   // 없으면 빈 문자열 — 아래에서 슬래시째 안 그린다.
-  const schoolGrade = schoolGradeLabel(meta?.school, meta?.grade);
+  const schoolGrade = sheetSchoolGrade(meta?.school, meta?.grade, lang);
+  const schoolParts = /^(.*?)( (?:Girls’ )?(?:ES|MS|HS)\d*)$/.exec(schoolGrade);
+  const editPrimary = lang === "en" || !english.value?.trim();
+  const nameLink = (
+    <WindowLink href={`/students/${entry.studentId}`} title={meta?.name}
+      className={`max-w-full shrink-0 truncate text-sm font-bold underline-offset-2 hover:underline ${
+        entry.historical ? "text-text-dim" : "text-foreground"
+      } ${entry.endedOn ? "line-through" : ""}`}
+      ariaLabel={sheetTf(lang, "studentEnglishName.detailsAria", { name: names.primary })}>
+      <span title={meta ? `${names.primary || meta.name}${schoolGrade ? ` · ${schoolGrade}` : ""} — ${
+        english.enabled && editPrimary ? t("studentEnglishName.editHint") : t("studentEnglishName.detailsHint")
+      }` : undefined}>{names.primary || "?"}</span>
+    </WindowLink>
+  );
   return (
     <td className="py-px pr-1">
       {/* 첫 줄: 이름 + /학교학년 (+퇴원일). flex+min-w-0라 학교학년이 truncate로 잘리고 날짜는 안 밀린다. */}
       <div className="flex min-w-0 items-center gap-1">
         {/* 이름과 학교학년은 **한 덩어리**(사이 간격 0) — `김원중/경명여중3`이 한 낱말로 읽혀야 한다. */}
         <span className="flex min-w-0 items-center">
-          <WindowLink
-            href={`/students/${entry.studentId}`}
-            title={meta?.name}
-            className={`max-w-full shrink-0 truncate text-sm font-bold underline-offset-2 hover:underline ${
-              entry.historical ? "text-text-dim" : "text-foreground"
-            } ${entry.endedOn ? "line-through" : ""}`}
-            ariaLabel={meta ? `${meta.name} 학생 정보` : "학생 정보"}
-          >
-            {/* 학교·학년은 이름 툴팁에도 남긴다(학교 열은 2026-08-06에 뺐다 — 정보는 남긴다).
-                🔴 **잘리는 건 화면에 보이는 그 글자**라 툴팁도 `names.primary`(그 줄에 실제로 적힌
-                   이름)를 앞세운다 — 한국어 화면에선 `meta.name`과 **글자까지 같고**, 영어 화면에서만
-                   영어 이름이 온다(한글 이름은 둘째 줄이 제 툴팁으로 들고 있다).
-                ⚠️ 학교·학년이 없으면 `·`도 안 붙인다 — 안 그러면 `이서은A ·  — 클릭하면…`처럼
-                   구분점만 떠 있는 툴팁이 된다(빈 값에 슬래시를 안 그리는 것과 같은 규칙). */}
-            <span
-              title={
-                meta
-                  ? `${names.primary || meta.name}${schoolGrade ? ` · ${schoolGrade}` : ""} — 클릭하면 학생 정보`
-                  : undefined
-              }
-            >
-              {names.primary || "?"}
-            </span>
-          </WindowLink>
+          {editPrimary && meta ? (
+            <EnglishNameEditor studentId={entry.studentId} studentName={meta.name} englishName={meta.englishName}>
+              {nameLink}
+            </EnglishNameEditor>
+          ) : nameLink}
           {/* 보조 표기라 한 단계 작게(둘째 줄 영어이름과 같은 위계). ⚠️ `text-text-dim`은 지금
               `--foreground`와 **같은 색**이다(2026-09-08 글자색 통일) — 색으로 위계를 만들지 못하니
               크기·굵기가 그 일을 한다. 토큰을 `text-text-faint` 등으로 바꿔도 결과는 같다. */}
-          {schoolGrade ? (
+          {lang !== "en" && schoolGrade ? (
             <span
               className="text-text-dim min-w-0 truncate text-xs font-semibold"
               title={`${names.primary}/${schoolGrade}`}
@@ -119,18 +106,22 @@ export function RosterNameCell({ entry, meta }: { entry: RosterEntry; meta: Stud
         </span>
         <SplitBadge split={entry.split} />
         {entry.endedOn ? (
-          <span className="text-text-dim num shrink-0 text-sm" title={`${entry.endedOn} 수강 종료`}>
+          <span className="text-text-dim num shrink-0 text-sm" title={sheetTf(lang, "roster.endedTitle", { date: entry.endedOn })}>
             {entry.endedOn.slice(5)}
           </span>
         ) : null}
       </div>
-      {/* 둘째 줄: 보조 이름 — 행 글자 13px 통일 규약의 유일한 예외(보조 표기라 11px dim, ui-box.ts 각주).
-          🔴 **영어 모드에서는 주/보조가 뒤집힌다**(원장 2026-09-03 *"영어이름 보유한 학생은 이름 → 영어이름"*):
-             en이면 위가 영어 이름·여기가 한글 이름, ko면 지금 그대로. 판정은 `studentNameParts` 한 곳. */}
-      {names.secondary ? (
-        <div className="text-text-dim truncate text-xs leading-tight font-semibold" title={names.secondary}>
-          {names.secondary}
+      {/* 영어 화면은 이름 한 개 + 학교·학년의 두 줄(2026-10-07). */}
+      {lang === "en" && schoolGrade ? (
+        <div className="text-text-dim flex min-w-0 gap-1 text-xs leading-tight font-semibold" title={schoolGrade}>
+          {schoolParts ? <><span className="min-w-0 truncate">{schoolParts[1]}</span>{" "}<span className="shrink-0">{schoolParts[2].trim()}</span></> : <span className="truncate">{schoolGrade}</span>}
         </div>
+      ) : lang !== "en" && names.secondary && meta ? (
+        <EnglishNameEditor studentId={entry.studentId} studentName={meta.name} englishName={meta.englishName}>
+          <span tabIndex={english.enabled ? 0 : undefined} className="text-text-dim block truncate text-xs leading-tight font-semibold" title={english.enabled ? t("studentEnglishName.editHint") : names.secondary}>
+            {names.secondary}
+          </span>
+        </EnglishNameEditor>
       ) : null}
     </td>
   );
@@ -397,7 +388,7 @@ export function WithdrawnSummaryRow({
   const lang = useSheetLang();
   const summary = withdrawnSummaryText({
     // 압축 표기 "침산중2" — 공백 join 금지(전역 규칙).
-    schoolGrade: schoolGradeLabel(meta?.school, meta?.grade),
+    schoolGrade: sheetSchoolGrade(meta?.school, meta?.grade, lang),
     endedOn: entry.endedOn,
     reason: reasonDisplay(entry.endedReason, lang),
   });
@@ -413,12 +404,12 @@ export function WithdrawnSummaryRow({
           href={`/students/${entry.studentId}`}
           title={meta?.name}
           className="text-text-dim shrink-0 text-sm font-bold line-through underline-offset-2 hover:underline"
-          ariaLabel={meta ? `${meta.name} 학생 정보` : "학생 정보"}
+          ariaLabel={sheetTf(lang, "studentEnglishName.detailsAria", { name: meta?.name ?? "" })}
         >
           <span
-            title={`${meta?.name ?? ""} · ${entry.endedOn ?? ""} 수강 종료${
+            title={`${meta?.name ?? ""} · ${sheetTf(lang, "roster.endedTitle", { date: entry.endedOn ?? "" })}${
               fullReason ? ` · ${fullReason}` : ""
-            } — 클릭하면 학생 정보`}
+            } — ${sheetT(lang, "studentEnglishName.detailsHint")}`}
           >
             {meta?.name ?? "?"}
           </span>
