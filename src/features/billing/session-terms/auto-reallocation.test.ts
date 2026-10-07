@@ -82,8 +82,71 @@ describe("배분 자동 재확정 — 대신 저장하는 것", () => {
   });
 });
 
+/**
+ * 원장 2026-10-07 *"자꾸 일일이 재확정하지않고 스마트하게 자동확정될 수 있으면 자동확정을 선호함."* — 여러 반이 나누는 항목도
+ * 답이 하나로 정해질 때는 대신 맞춘다(실측: 오늘 재확정으로 풀린 나누는 묶음 10개 중 6개는 새 확정금액 합이 항목 금액과 같았고
+ * 4개는 금액을 받는 반이 하나뿐이었다).
+ */
+describe("배분 자동 재확정 — 여러 반이 나누는 항목", () => {
+  const shared = (id: string, amount: number, allocated: number, base: number, over: Partial<AutoTerm> = {}) =>
+    term(id, { amount, allocation_line_index: 0, allocation_amount: allocated, allocation_source: math, allocation_base_amount: base, ...over });
+
+  it("나누는 반들의 새 확정금액 합이 항목 금액과 같으면 각 반 확정금액대로(JJ↔MS처럼 반끼리 시수를 옮긴 경우)", () => {
+    const inv = { id: "i1", line_items: [math], status: "paid" };
+    // 저장 때 150,000 / 90,000 → 시수를 옮겨 120,000 / 120,000으로 다시 확정(합 240,000 = 항목 금액).
+    const terms = [shared("jj", 120000, 150000, 150000), shared("ms", 120000, 90000, 90000)];
+    expect(invoiceAllocationStates(inv, terms).get("jj")?.allocationStale).toBe(true);
+    const plan = planAutoReallocation(inv, terms);
+    expect(plan).toMatchObject({ kind: "save", rows: [{ termId: "jj", lineIndex: 0, amount: 120000, baseAmount: 120000 }, { termId: "ms", lineIndex: 0, amount: 120000, baseAmount: 120000 }] });
+    const after = invoiceAllocationStates(inv, applySave(inv, terms, plan.kind === "save" ? plan.rows : []));
+    expect([after.get("jj")?.allocationStale, after.get("ms")?.allocationStale]).toEqual([false, false]);
+    expect((after.get("jj")?.allocatedAmount ?? 0) + (after.get("ms")?.allocatedAmount ?? 0)).toBe(240000);
+  });
+
+  it("금액을 받는 반이 하나뿐이면(나머지 0원) 금액 그대로, 기준액만 새 확정금액", () => {
+    const inv = { id: "i1", line_items: [math], status: "paid" };
+    const terms = [shared("a", 210000, 240000, 240000), shared("b", 0, 0, 0, { confirmed_sessions: 0 })];
+    const plan = planAutoReallocation(inv, terms);
+    expect(plan).toMatchObject({ kind: "save", rows: [{ termId: "a", lineIndex: 0, amount: 240000, baseAmount: 210000 }, { termId: "b", lineIndex: 0, amount: 0, baseAmount: 0 }] });
+  });
+
+  it("🔴 0원이던 반의 확정금액이 바뀌었으면 사람 몫이다 — 그 0원이 더는 맞는지 모른다", () => {
+    const inv = { id: "i1", line_items: [math], status: "paid" };
+    // b는 0시수(0원)로 저장했는데 5시수로 다시 확정 — 합도 항목 금액과 다르다.
+    const terms = [shared("a", 240000, 240000, 240000), shared("b", 150000, 0, 0, { confirmed_sessions: 5 })];
+    expect(planAutoReallocation(inv, terms)).toEqual({ kind: "skip", reason: "shared" });
+  });
+
+  it("🔴 합이 항목 금액과 다르고 여럿이 받는 줄은 종전대로 사람 몫(비례로 나누지 않는다)", () => {
+    const inv = { id: "i1", line_items: [math], status: "paid" };
+    const terms = [shared("a", 150000, 140000, 140000), shared("b", 100000, 100000, 100000)]; // 새 합 250,000 ≠ 240,000
+    expect(planAutoReallocation(inv, terms)).toEqual({ kind: "skip", reason: "shared" });
+  });
+
+  /**
+   * 🔴 (가)는 **저장 때도 확정금액대로 나눴던** 묶음만이다(적대 리뷰 2026-10-07). 일부러 다르게 나눈 분할은 합이 우연히 맞아도
+   *    사람이 정한 것이다 — 덮으면 반 사이 귀속이 조용히 바뀌고, 더 받은 몫을 다음 달로 보낸 이월이 무효가 된다.
+   */
+  it("🔴 저장 때 일부러 다르게 나눈 묶음(반반 · 더 받은 몫 이월)은 합이 맞아도 확정금액대로 덮지 않는다", () => {
+    const inv = { id: "i1", line_items: [{ ...math, amount: 300000 }], status: "paid" };
+    const line = inv.line_items[0]!;
+    const half = (id: string, amount: number, allocated: number, base: number) =>
+      term(id, { amount, allocation_line_index: 0, allocation_amount: allocated, allocation_source: line, allocation_base_amount: base });
+    // 일부러 반반(150/150)으로 나눴다 — 확정금액은 200/100이었다. 175/125로 재확정(합 300 = 항목 금액).
+    expect(planAutoReallocation(inv, [half("a", 175000, 150000, 200000), half("b", 125000, 150000, 100000)])).toEqual({ kind: "skip", reason: "shared" });
+    // a가 확정금액(200)보다 1만 원 더 받고 그만큼 다음 달로 이월해 뒀다 — b만 재확정(90 → 100).
+    expect(planAutoReallocation(inv, [half("a", 200000, 210000, 200000), half("b", 100000, 90000, 90000)])).toEqual({ kind: "skip", reason: "shared" });
+  });
+
+  it("🔴 확정을 풀어 둔 반이 있으면 나누는 줄도 손대지 않는다", () => {
+    const inv = { id: "i1", line_items: [math], status: "paid" };
+    const terms = [shared("a", 120000, 150000, 150000), shared("b", 120000, 90000, 90000, { confirmed_sessions: null })];
+    expect(planAutoReallocation(inv, terms)).toEqual({ kind: "skip", reason: "released" });
+  });
+});
+
 describe("배분 자동 재확정 — 사람 몫으로 남기는 것('배분 재확인' 그대로)", () => {
-  it("🔴 여러 반이 나누는 항목에 재확인이 걸리면 손대지 않는다(나누는 법은 사람마다 다르다)", () => {
+  it("🔴 여러 반이 나누는 항목 — 답이 하나로 안 정해지면 손대지 않는다(나누는 법은 사람마다 다르다)", () => {
     const inv = { id: "i1", line_items: [math], status: "paid" };
     const terms = [
       term("a", { amount: 150000, allocation_line_index: 0, allocation_amount: 140000, allocation_source: math, allocation_base_amount: 140000 }),
@@ -105,11 +168,11 @@ describe("배분 자동 재확정 — 사람 몫으로 남기는 것('배분 재
     expect(planAutoReallocation({ ...inv, status: "void" }, [linked("a", 0, math, 240000, { amount: 1 })])).toEqual({ kind: "skip", reason: "void" });
   });
 
-  it("🔴 저장 뒤 청구 항목이 바뀐 줄(금액·이름·순서)은 손대지 않는다 — 다시 저장하면 스냅샷이 지금 항목으로 덮여 차이가 사라진다", () => {
+  it("🔴 저장 뒤 청구 항목이 바뀐 줄(금액·순서)은 손대지 않는다 — 다시 저장하면 스냅샷이 지금 항목으로 덮여 차이가 사라진다", () => {
     const changed = (line: typeof math) => planAutoReallocation({ id: "i1", line_items: [line, eng], status: "paid" }, [linked("a", 0, math, 240000, { amount: 210000 })]);
     expect(changed({ ...math, amount: 250000 })).toEqual({ kind: "skip", reason: "line-changed" });
-    // 금액이 같아도 이름이 바뀌면(드라이런에서 실제로 걸린 모양) 사람이 본다.
-    expect(changed({ ...math, description: "중2 수학 A반(9월 보충)" })).toEqual({ kind: "skip", reason: "line-changed" });
+    // 🔑 그 자리에서 **수납명만** 바뀐 것은 바뀐 것이 아니다(원장 2026-10-07 "금액이 바뀌지 않으면 그대로 두도록 해") — 종전엔 사람 몫이었다.
+    expect(changed({ ...math, description: "중2 수학 A반(9월 보충)" })).toMatchObject({ kind: "save", rows: [{ termId: "a", lineIndex: 0, amount: 240000, baseAmount: 210000 }] });
     // 순서가 바뀌어 같은 번호가 같은 금액의 다른 반 항목을 가리켜도 붙이지 않는다.
     const swapped = { id: "i2", line_items: [{ ...eng, amount: 240000 }, math], status: "paid" };
     expect(planAutoReallocation(swapped, [linked("a", 0, math, 240000, { amount: 210000 })])).toEqual({ kind: "skip", reason: "line-changed" });

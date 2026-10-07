@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { connectReceiptTerm, distributeLinkedReceipt, distributeReceipt, effectiveAllocations, receiptAllocationSaveRows, receiptLines, receiptRemainder, tuitionTotal, type AllocationTerm } from "./receipt-allocation";
+import { connectReceiptTerm, distributeLinkedReceipt, distributeReceipt, effectiveAllocations, receiptAllocationSaveRows, receiptLines, receiptRemainder, sameBillAt, tuitionTotal, type AllocationTerm } from "./receipt-allocation";
 import { computeSplitRows } from "./splits";
 import { aggregateTeacherAllocations } from "./allocation";
 
@@ -134,5 +134,87 @@ describe("자유 배분(0279a) — 수납 항목에 하나도 연결하지 않�
     const out = effectiveAllocations(lines, [linked, free("a", 5000, 63750)]);
     expect(out.get("l")).toBe(169375);
     expect(out.has("a")).toBe(false);
+  });
+});
+
+/**
+ * 원장 2026-10-07 *"금액이 바뀌지 않으면 그대로 두도록 해. 자꾸 확정이 풀리면 의문을 가질 수 밖에 없음."*
+ * makeedu 동기화(매일 06·18시)가 금액은 그대로 두고 수납명만 바꾸면(수납명 속 강사·반·레벨 이름) 저장해 둔 배분이 통째로
+ * '배분 재확인'이 됐다 — 실측: 9/19 79장 · 10/7 80장. 이름은 배분의 근거가 아니다(금액이 근거다).
+ */
+describe("수납명만 바뀐 줄은 배분을 그대로 둔다", () => {
+  const before = { kind: "수업", description: "[EiE] 중2 정규 A (Charlie)", amount: 270000 };
+  const renamed = { ...before, description: "[EiE] 중2 정규 A (Jennifer)" };
+  const term = (over: Partial<AllocationTerm> = {}): AllocationTerm => ({ id: "t", confirmedSessions: 8, amount: 270000, lineIndex: 0, allocatedAmount: 270000, baseAmount: 270000, source: before, ...over });
+
+  it("그 자리에서 이름만 바뀌면 유효 — 연결한 반 · 여러 반이 나누는 줄 · 연결 안 함 0원 · 자유 배분 전부", () => {
+    expect(effectiveAllocations(receiptLines([renamed]), [term()]).get("t")).toBe(270000);
+    const shared = [term({ id: "a", amount: 150000, allocatedAmount: 150000, baseAmount: 150000 }), term({ id: "b", amount: 120000, allocatedAmount: 120000, baseAmount: 120000 })];
+    expect([...effectiveAllocations(receiptLines([renamed]), shared).values()]).toEqual([150000, 120000]);
+    const zero = term({ id: "z", lineIndex: null, allocatedAmount: 0, source: [before] });
+    expect(effectiveAllocations(receiptLines([renamed]), [term(), zero]).get("z")).toBe(0);
+    const free = term({ id: "f", lineIndex: null, allocatedAmount: 200000, source: [before] });
+    expect(effectiveAllocations(receiptLines([renamed]), [free]).get("f")).toBe(200000);
+  });
+
+  it("🔴 금액 · 종류 · 반 연결 · 합산 묶음이 달라지면 종전대로 재확인이다", () => {
+    for (const changed of [{ ...renamed, amount: 280000 }, { ...renamed, kind: "교재" }, { ...renamed, classId: "c-other" }, { ...renamed, receiptGroupId: "g1" }]) {
+      expect(effectiveAllocations(receiptLines([changed]), [term()]).has("t")).toBe(false);
+    }
+    // 이름이 프로그램 항목(수업료가 아닌 것)으로 바뀌면 지금 항목 기준으로 수업 항목이 아니다.
+    expect(effectiveAllocations(receiptLines([{ ...before, description: "[강아] 강의하는 아이들" }]), [term()]).has("t")).toBe(false);
+  });
+
+  it("🔴 이름이 바뀐 게 아니라 **순서가 바뀐** 것은 다르다 — 저장 때 이름의 항목이 다른 번호에 그대로 있으면 이 번호는 남의 항목이다", () => {
+    const math = { kind: "수업", description: "중2 수학 A반", amount: 240000 };
+    const eng = { kind: "수업", description: "중2 영어 B반", amount: 240000 }; // 금액이 같은 다른 반
+    const saved = term({ amount: 240000, allocatedAmount: 240000, baseAmount: 240000, source: math });
+    // 저장 때는 [수학, 영어], 지금은 [영어, 수학] — 0번은 금액만 같은 영어 항목이다.
+    const swapped = receiptLines([eng, math]);
+    expect(sameBillAt(math, swapped[0], swapped)).toBe(false);
+    expect(effectiveAllocations(swapped, [saved]).has("t")).toBe(false);
+    // 제자리(1번)를 가리키면 당연히 같다 · 이름만 바뀐 것(저장 때 이름이 어디에도 없고 같은 금액의 다른 수업 항목도 없다)은 같다.
+    expect(sameBillAt(math, swapped[1], swapped)).toBe(true);
+    const book = { kind: "교재", description: "개념서", amount: 15000 };
+    const renamedOnly = receiptLines([{ ...math, description: "중2 수학 A반(김그린)" }, book]);
+    expect(sameBillAt(math, renamedOnly[0], renamedOnly)).toBe(true);
+  });
+
+  /**
+   * 🔴 이름이 바뀐 **뒤에** 번호가 밀리면 스냅샷이 옛 이름이라 번호 옮기기(0267d)가 못 따라간다 — 옛 번호에 금액이 같은 남의 수업
+   *    항목이 오면 그대로 유효로 남아, 그 항목이 환불될 때 엉뚱한 반이 0원이 되고 진짜 항목이 환불돼도 이 반은 그대로 받는다
+   *    (적대 리뷰 2026-10-07). 가릴 근거가 이름뿐일 때는 재확인으로 둔다.
+   */
+  it("🔴 이름이 다른데 같은 금액의 수업 항목이 또 있으면 가릴 수 없다 → 재확인(이름이 바뀐 뒤 번호가 밀린 경우)", () => {
+    const math = { kind: "수업", description: "중2 수학 A (Elsa)", amount: 300000 };
+    const eng = { kind: "수업", description: "중2 영어 B", amount: 300000 };
+    const saved = term({ amount: 300000, allocatedAmount: 300000, baseAmount: 300000, source: math });
+    // t1: 그 자리에서 이름만 바뀜 — 같은 금액의 영어가 옆에 있어 이름 말고는 가릴 근거가 없다.
+    const renamed = receiptLines([{ ...math, description: "중2 수학 A (Green)" }, eng]);
+    expect(effectiveAllocations(renamed, [saved]).has("t")).toBe(false);
+    // t2: 번호까지 밀려 0번이 영어 — 남의 항목에 붙으면 안 된다.
+    const shifted = receiptLines([eng, { ...math, description: "중2 수학 A (Green)" }]);
+    expect(effectiveAllocations(shifted, [saved]).has("t")).toBe(false);
+    // 교재 한 줄이 앞에 끼어 밀린 경우: [특강 300k, 수학 300k]의 1번 → [교재, 특강 300k, 수학' 300k]의 1번(특강).
+    const special = { kind: "수업", description: "[특강] 중3-2", amount: 300000 };
+    const pushed = receiptLines([{ kind: "교재", description: "개념서", amount: 15000 }, special, { ...math, description: "중2 수학 A (Green)" }]);
+    expect(effectiveAllocations(pushed, [{ ...saved, lineIndex: 1 }]).has("t")).toBe(false);
+    // 진짜 항목(수학)이 전액 환불돼 급여 기준액이 0이 돼도 '같은 모양이 또 있다'는 판정은 남는다(환불 전 금액으로 본다 — 재리뷰).
+    const refundedReal = receiptLines([eng, { ...math, description: "중2 수학 A (Green)", refunds: [{ status: "active", type: "full", amount: 300000 }] }]);
+    expect(effectiveAllocations(refundedReal, [saved]).has("t")).toBe(false);
+  });
+
+  it("🔴 저장 때 이름의 항목이 다른 번호로 가면서 **금액도 바뀐** 경우 — 이 번호의 같은 금액 항목에 붙지 않는다", () => {
+    const math = { kind: "수업", description: "중2 수학 A", amount: 300000 };
+    const saved = term({ amount: 300000, allocatedAmount: 300000, baseAmount: 300000, source: math });
+    const lines = receiptLines([{ kind: "수업", description: "중2 과학", amount: 300000 }, { ...math, amount: 320000 }]);
+    expect(effectiveAllocations(lines, [saved]).has("t")).toBe(false);
+  });
+
+  it("전액 환불된 줄도 이름만 바뀐 것이면 0원으로 읽는다(환불이 저장한 양수 배분보다 우선)", () => {
+    const refunded = { ...renamed, refunds: [{ status: "active", type: "full", amount: 270000 }] };
+    expect(effectiveAllocations(receiptLines([refunded]), [term()]).get("t")).toBe(0);
+    // 금액이 다른 항목이 그 번호에 온 것이면 환불이어도 이 반의 0원으로 읽지 않는다(다른 항목이다).
+    expect(effectiveAllocations(receiptLines([{ ...refunded, amount: 300000 }]), [term()]).has("t")).toBe(false);
   });
 });
