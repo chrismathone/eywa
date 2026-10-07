@@ -5,7 +5,47 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { monthRange } from "@/lib/date-kst";
 import { loadClassAxisRows } from "./teacher-axis-queries";
 import { requireAttendanceSalaryAdmin } from "./salary-rates";
+import { SALARY_SHEET_VIEW_TABLE } from "./salary-visibility";
 import { parseAttendanceRates, type AttendanceSalaryRates } from "../salary-rates";
+import { explainDbError } from "@/lib/supabase/db-error";
+import { logAction } from "@/features/audit/server/log";
+
+/**
+ * '합계 및 실급여 보여주기' — **선생님별** 스위치(0352a, 원장 2026-10-07). 켜면 그 선생님 출석부에 실급여 열과 합계가
+ * 관리자 화면과 **선생님 본인 화면** 양쪽에 선다. 끄면 양쪽 모두 감춘다(서버가 값을 싣지 않는다).
+ *
+ * 🔴 누르는 사람의 보기 설정이 아니다 — 그 선생님에게 급여 숫자를 여는 결정이라 급여 비율 설정을 **고칠 수 있는** 사람만 바꾼다
+ *    ('다른 강사 뷰'는 열람 전용이라 `requireAttendanceSalaryAdmin`이 거절한다).
+ */
+export async function saveAttendanceSalaryVisible(input: { teacherId: string; visible: boolean }): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireAttendanceSalaryAdmin();
+  if (!user) return { ok: false, error: "급여 비율을 설정할 수 있는 사람만 관리자용 출석부에서 바꿀 수 있습니다" };
+  if (!input || !/^[0-9a-f-]{36}$/i.test(String(input.teacherId)) || typeof input.visible !== "boolean") {
+    return { ok: false, error: "선생님을 다시 선택한 뒤 눌러 주세요" };
+  }
+  const db = createAdminClient();
+  const { data: teacher, error: teacherError } = await db.from("users").select("employment_type, display_name")
+    .eq("tenant_id", user.tenantId).eq("id", input.teacherId).maybeSingle();
+  // 조회 실패를 "프리랜서가 아니다"로 읽지 않는다 — 일시 오류에 틀린 이유를 말하게 된다([[#138]]).
+  if (teacherError) {
+    return { ok: false, error: explainDbError(teacherError, { scope: "attendance.salaryVisible.teacher", fallback: "선생님 정보를 불러오지 못했습니다. 잠시 후 다시 눌러 주세요", context: { teacherId: input.teacherId } }).message };
+  }
+  if (teacher?.employment_type !== "프리랜서") return { ok: false, error: "프리랜서 선생님만 설정할 수 있습니다" };
+  const { error } = await db.from(SALARY_SHEET_VIEW_TABLE).upsert({
+    tenant_id: user.tenantId, teacher_id: input.teacherId, visible: input.visible, updated_at: new Date().toISOString(), updated_by: user.id,
+  }, { onConflict: "tenant_id,teacher_id" });
+  if (error) {
+    return { ok: false, error: explainDbError(error, { scope: "attendance.salaryVisible.save", fallback: "설정을 저장하지 못했습니다. 잠시 후 다시 눌러 주세요", context: { teacherId: input.teacherId } }).message };
+  }
+  await logAction({
+    action: "payroll_sheet_visible_set",
+    targetType: "user",
+    targetLabel: typeof teacher.display_name === "string" ? teacher.display_name : null,
+    metadata: { userId: input.teacherId, visible: input.visible },
+  });
+  revalidatePath("/attendance");
+  return { ok: true };
+}
 
 export async function saveAttendanceSalaryRates(input: { teacherId: string; month: string; rates: AttendanceSalaryRates }): Promise<{ ok: boolean; error?: string }> {
   const user = await requireAttendanceSalaryAdmin();
