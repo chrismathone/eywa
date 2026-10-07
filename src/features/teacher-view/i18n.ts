@@ -1782,8 +1782,8 @@ export const SHEET_DICT = {
   // '합계 및 실급여 보여주기' 버튼(원장 2026-09-21 → 2026-10-07 선생님별 스위치) — 관리자가 프리랜서 강사 전체 보기를 볼 때만 선다.
   "att.actualSalary.toggle": { ko: "합계 및 실급여 보여주기", en: "Show totals & net pay" },
   "att.actualSalary.saveFailed": { ko: "합계 및 실급여 보여주기 설정을 저장하지 못했습니다. 다시 눌러 주세요.", en: "Couldn't save the totals & net pay setting. Please try again." },
-  "att.actualSalary.savedOn": { ko: "이제 이 선생님 본인 출석부에도 실급여와 합계가 보입니다", en: "Net pay and its total now show on this teacher's own sheet too" },
-  "att.actualSalary.savedOff": { ko: "이 선생님 출석부에서 실급여를 감췄습니다(이 화면과 선생님 화면 모두)", en: "Net pay is now hidden on this teacher's sheet (here and for the teacher)" },
+  "att.actualSalary.savedOn": { ko: "이제 {m}월 출석부의 실급여와 합계가 이 선생님 본인에게도 보입니다", en: "Net pay and its total for month {m} now show on this teacher's own sheet too" },
+  "att.actualSalary.savedOff": { ko: "{m}월 출석부에서 실급여를 감췄습니다(이 화면과 선생님 화면 모두)", en: "Net pay for month {m} is now hidden (here and for the teacher)" },
   "att.actualSalary.stateOn": { ko: "켜짐 · 선생님에게 보임", en: "On · visible to the teacher" },
   "att.actualSalary.stateOff": { ko: "꺼짐", en: "Off" },
   "att.actualSalary.tipOn": {
@@ -1795,8 +1795,8 @@ export const SHEET_DICT = {
     en: "Off: hidden on both. Net pay values are not sent to the screen.",
   },
   "att.actualSalary.tipScope": {
-    ko: "선생님마다 따로 저장됩니다(누르는 사람의 보기 설정이 아닙니다).",
-    en: "Saved per teacher (not a personal view setting).",
+    ko: "선생님마다 · 달마다 따로 저장됩니다. 지금은 {m}월 출석부에만 적용됩니다(다른 달은 그 달에서 따로 켭니다).",
+    en: "Saved per teacher and per month. This applies to month {m} only — turn it on separately for other months.",
   },
   "att.actualSalary.tipFormula": {
     ko: "실급여 = 실수업액(청구액보다 많으면 청구액) × 0.911 × 비율",

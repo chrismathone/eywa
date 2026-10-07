@@ -830,7 +830,7 @@ export function auditDetail(
       );
     }
     case "payroll_sheet_visible_set":
-      return join(ctx.nameOf(m.userId), m.visible === true ? "선생님 출석부에 보이게 켬" : "선생님 출석부에서 감춤");
+      return join(str(m.period), ctx.nameOf(m.userId), m.visible === true ? "선생님 출석부에 보이게 켬" : "선생님 출석부에서 감춤");
     case "payroll_mark_paid":
     case "payroll_auto_compute":
     case "payroll_upsert": {

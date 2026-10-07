@@ -610,7 +610,10 @@ export default async function AttendancePage({
     }),
     loadMakeupPool(),
     canShowAttendanceActualAmount(mode === "teacher" ? effectiveTeacher : classScopeTeacher ?? classesForSubject.find((c) => c.id === effectiveClassId)?.teacherId ?? null),
-    getAttendanceSalaryRates(mode === "teacher" ? effectiveTeacher : null),
+    // 🔴 선생님 본인의 **반별 보기**(`classScopeTeacher` — 반 하나를 골라 본 제 출석부)에서도 읽는다. 강사 전체 보기에서만 읽으면
+    //    스위치를 켜 줘도 반을 골라 보는 선생님에겐 실급여 열이 안 선다(원장 제보 2026-10-07 *"체크했는데 실제 강사들이 실급여 열이
+    //    안보인다고"*). 관리자가 반을 골라 본 화면은 `classScopeTeacher`가 null이라 종전 그대로다(비율 설정·스위치는 강사 전체 보기에서).
+    getAttendanceSalaryRates(mode === "teacher" ? effectiveTeacher : classScopeTeacher, month),
     // 다른 반 대신 보강 칸(읽기 전용 목록) — 강사 보기만. 격자에 선 반은 빼고 읽는다(그 칸은 격자가 보여 준다). 대부분 0행.
     mode === "teacher" && effectiveTeacher
       ? loadSubstituteCells({ tenantId: user.tenantId, teacherId: effectiveTeacher, month, excludeClassIds: teacherClasses.map((c) => c.id) })
@@ -1293,7 +1296,7 @@ export default async function AttendancePage({
             classBilledAmounts={classBilledAmounts.billed}
             carryMarksByRow={sessionBillingOn ? classBilledAmounts.carryMarks : {}}
             showActualAmount={showActualAmount}
-            // 🔴 실급여 열은 **이 선생님의 '합계 및 실급여 보여주기'가 켜져 있을 때만**(선생님별 스위치 0352a, 원장 2026-10-07)
+            // 🔴 실급여 열은 **이 선생님의 이 달 '합계 및 실급여 보여주기'가 켜져 있을 때만**(선생님 × 달 스위치 0352a·0353a, 원장 2026-10-07)
             //    — 꺼 두면 급여 값을 아예 싣지 않는다(화면에서 감추는 게 아니라 서버가 안 보낸다).
             //    관리자 화면과 선생님 본인 화면이 **같은 스위치**를 본다(`getAttendanceSalaryRates`의 두 문).
             salaryRates={salaryConfig?.visible ? salaryConfig.rates : undefined}
@@ -1317,7 +1320,7 @@ export default async function AttendancePage({
                 rates={salaryConfig.rates} classes={teacherClasses.map((c) => ({ id: c.id, name: c.className }))} /> : null}
               {/* '합계 및 실급여 보여주기'(원장 2026-09-21 *"관리자 출석부 우측에 토글"* → 2026-10-07 선생님별 스위치) — 열이 설 수 있는
                   보기(관리자 + 프리랜서 강사 전체 보기)에서만. 🔴 계정 귀속 보기 설정이 아니다 — 켜면 그 선생님 본인 화면에도 보인다. */}
-              {showActualAmount ? <SalaryVisibleButton key={salaryConfig.teacherId} teacherId={salaryConfig.teacherId} checked={salaryConfig.visible} canEdit={salaryConfig.canEdit} /> : null}
+              {showActualAmount ? <SalaryVisibleButton key={`${salaryConfig.teacherId}:${month}`} teacherId={salaryConfig.teacherId} month={month} checked={salaryConfig.visible} canEdit={salaryConfig.canEdit} /> : null}
             </> : undefined}
             termSessionsByRow={sessionBillingOn ? classBilledAmounts.confirmedSessions : {}}
             confirmedPricesByRow={sessionBillingOn ? classBilledAmounts.confirmedPrices : {}}
