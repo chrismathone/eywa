@@ -49,7 +49,7 @@ export async function saveTeacherSplits(
     const adminOnly = [...new Set(stale.filter((row) => row.freeAllocationSaved).map((row) => row.studentName))];
     return { error: adminOnly.length
       ? `관리자가 자유 배분으로 저장한 청구서의 배분을 다시 확인해야 합니다(${adminOnly.slice(0, 3).join(", ")}${adminOnly.length > 3 ? ` 외 ${adminOnly.length - 3}명` : ""}) — 관리자만 고칠 수 있습니다`
-      : "수납 연결 후 청구액 또는 반 확정금액이 바뀐 학생이 있습니다. 수납 연결·배분을 다시 확인해 주세요" };
+      : "수납 연결 후 청구액 또는 반 확정금액이 바뀐 학생이 있습니다. 회차 확정에서 그 학생 줄의 ‘배분’ 버튼으로 다시 확인해 주세요" };
   }
   // 금액 이월(0278a) — 조회가 실패했거나 받을 줄이 없는 이월이 있으면 저장하지 않는다(그 돈은 어느 달에도 분배되지 않거나 두 번 들어간다).
   if (view.carryFailed) return { error: "금액 이월 정보를 불러오지 못했습니다. 잠시 뒤 다시 저장해 주세요" };

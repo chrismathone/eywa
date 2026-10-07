@@ -239,6 +239,24 @@ describe("개인별 기능 권한 — 사람을 지정해서 여는 기능을 �
     expect(payload().specialAccess.staffSubjectScopes).toEqual([]);
   });
 
+  it("범위 목록은 과목별로 묶어 칩으로 나열한다 — 한 사람은 한 칩, 묶음은 학원 설정의 과목 차례(원장 2026-10-07)", () => {
+    const { unmount } = view({ ...EMPTY, specialAccess: { ...EMPTY.specialAccess, staffSubjectScopes: [
+      { userId: staff[0].id, subjects: ["english"] }, { userId: staff[1].id, subjects: ["math"] },
+    ] } } as typeof EMPTY);
+    const group = (label: string) => screen.getByText(label, { selector: "li > span" }).closest("li")!;
+    // 저장 차례(영어 먼저)가 아니라 설정의 과목 차례(수학 → 영어)로 선다.
+    expect([...group("수학").parentElement!.querySelectorAll("li > span:first-child")].map((el) => el.textContent)).toEqual(["수학", "영어"]);
+    expect(within(group("수학")).getByRole("button", { name: "나 선생 직원관리 과목 범위 해제" })).toBeInTheDocument();
+    expect(within(group("영어")).getByRole("button", { name: "가 선생 직원관리 과목 범위 해제" })).toBeInTheDocument();
+    unmount();
+    // 같은 과목은 한 묶음에 나란히, 여러 과목을 보는 사람은 그 조합의 묶음에.
+    view({ ...EMPTY, specialAccess: { ...EMPTY.specialAccess, staffSubjectScopes: [
+      { userId: staff[0].id, subjects: ["math", "english"] }, { userId: staff[1].id, subjects: ["math"] },
+    ] } } as typeof EMPTY);
+    expect(within(group("수학")).getAllByRole("button")).toHaveLength(1);
+    expect(within(group("수학 · 영어")).getByRole("button", { name: "가 선생 직원관리 과목 범위 해제" })).toBeInTheDocument();
+  });
+
   it("없어진 과목은 내부 키를 보이지 않는다 — 줄은 남아 있고 거둘 수 있다", () => {
     view({ ...EMPTY, specialAccess: { ...EMPTY.specialAccess, staffSubjectScopes: [{ userId: staff[0].id, subjects: ["math", "subject_9"] }] } } as typeof EMPTY);
     expect(screen.getByText("수학 · (없어진 과목)")).toBeInTheDocument();

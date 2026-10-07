@@ -9,6 +9,7 @@ import { publishRecordSaved } from "@/lib/realtime/record-channel";
 import { carryOutValid, carrySurplus, MONEY_CARRY_NOTE_MAX } from "@/features/billing/session-terms/money-carryover";
 import { getMoneyCarryoverOptions, saveMoneyCarryover, type MoneyCarryOptions } from "@/features/billing/session-terms/server/money-carryover-actions";
 import type { SessionTermRow } from "@/features/billing/session-terms/server/queries";
+import { CELL_ACTION_BUTTON } from "./cell-action-button";
 
 // 회차 확정 '실납 청구액' 칸의 **금액 이월** 표식·버튼·창(0278a, 원장 2026-09-21 "'이월' 기능 추가").
 // 옆 금액은 부모가 `netAllocatedAmount`로 보인다(배분액 − 보낸 이월 + 받은 이월). 여기는 그 차이를 말한다.
@@ -63,7 +64,7 @@ export function MoneyCarryButton({ r }: { r: SessionTermRow }) {
   if (r.termState !== "term" || (carrySurplus(r) <= 0 && !r.carryOut)) return null;
   return (
     <>
-      <button type="button" disabled={pending} className="text-primary text-xs underline-offset-2 hover:underline disabled:opacity-50" onClick={() => start(async () => {
+      <button type="button" disabled={pending} aria-busy={pending} className={CELL_ACTION_BUTTON} onClick={() => start(async () => {
         setError(null);
         try {
           const result = await getMoneyCarryoverOptions(r.id);
@@ -72,7 +73,7 @@ export function MoneyCarryButton({ r }: { r: SessionTermRow }) {
         } catch {
           setError("이월 정보를 불러오지 못했습니다");
         }
-      })}>{pending ? "불러오는 중…" : "이월"}</button>
+      })}>이월</button>
       {error ? <p role="alert" className="text-danger basis-full text-xs whitespace-normal">{error}</p> : null}
       {data ? <MoneyCarryDialog data={data} onClose={() => setData(null)} /> : null}
     </>
@@ -116,7 +117,7 @@ function MoneyCarryDialog({ data, onClose }: { data: MoneyCarryOptions; onClose:
           <h2 className="text-lg font-bold">{data.studentName} · 금액 이월</h2>
           <p className="text-text-dim mt-1 text-sm">{monthKo(data.period)} {data.className ?? "반"}에서 확정액보다 더 받은 몫을 {monthKo(data.nextPeriod)} 반으로 넘깁니다.</p>
         </div>
-        <button type="button" disabled={pending} onClick={onClose} className="text-sm">닫기</button>
+        <button type="button" disabled={pending} onClick={onClose} className="shrink-0 text-sm whitespace-nowrap">닫기</button>
       </header>
       <dl className="bg-bg-soft mb-4 grid grid-cols-3 gap-2 rounded-lg p-3 text-sm">
         <div><dt className="text-text-dim text-xs">배분액</dt><dd className="num font-bold">{data.allocatedAmount == null ? "—" : won(data.allocatedAmount)}</dd></div>

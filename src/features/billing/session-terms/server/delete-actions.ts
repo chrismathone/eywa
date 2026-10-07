@@ -54,7 +54,7 @@ async function deletionContext(id: string, period: string) {
 
   let blockedReason: string | null = null;
   // 유효 판정 뒤의 0원이 아니라 저장 원본을 검사한다(환불·무효 배분도 돈의 근거를 보존).
-  if (Number(term.allocation_amount ?? 0) !== 0) blockedReason = "수납 배분금이 남아 있습니다. 수납 연결·배분에서 이 반의 배분을 정리한 뒤 삭제해 주세요";
+  if (Number(term.allocation_amount ?? 0) !== 0) blockedReason = "수납 배분금이 남아 있습니다. 회차 확정에서 이 학생 줄의 ‘배분’ 버튼으로 이 반의 배분을 정리한 뒤 삭제해 주세요";
   if (Number(term.allocation_carry_out) !== 0 || Number(term.carryover_in) !== 0 || Number(term.carryover_out) !== 0) {
     blockedReason = "금액 또는 시수 이월이 남아 있습니다. 이월을 취소한 뒤 삭제해 주세요";
   }

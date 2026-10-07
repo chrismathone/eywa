@@ -11,6 +11,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { useRouter } from "next/navigation";
+import { subscribeRecordSaved } from "@/lib/realtime/record-channel";
 import { setAttendanceCell, setAttendanceRange } from "@/features/attendance/server/actions";
 import { saveAttendanceCollapsed } from "@/features/attendance/server/prefs-actions";
 import { cellKey, classIdOfRow, parseCellKey, rowKey } from "@/features/attendance/grid/model";
@@ -337,6 +338,29 @@ export function GridProvider({
     refreshTimer.current = setTimeout(() => router.refresh(), 900);
   }, [router]);
   useEffect(() => () => { if (refreshTimer.current) clearTimeout(refreshTimer.current); }, []);
+  /**
+   * 다른 창(수납 '회차 확정')에서 확정·해제·배분·이월을 저장하면 금액 열(청구액·실수업액·실급여·등록 차수·차이)을 다시 읽는다 —
+   * 원장 2026-10-07 *"확정할때마다 새로고침해야하는데 회차 확정(수납쪽)이랑 실시간 연동 가능?"*. 보내는 쪽은 이미 저장마다
+   * `billing:session-terms`를 쏜다(`SessionTermsState.apply` 등). 연속 확정은 위 타이머가 한 번으로 묶는다.
+   * ⚠️ 같은 브라우저의 창·탭만 받는다(BroadcastChannel) — 다른 PC에서 확정한 것은 새로고침해야 보인다.
+   * ⚠️ 같은 신호를 수강·시간표·반 저장(`notifyTermPlansChanged`)도 쏜다 — 숨은 창(최소화·유지 화면·뒤 탭)은 그때마다
+   *    달 전체를 다시 읽지 않고 **보이게 될 때 한 번만** 읽는다(창의 숨김은 부모가 문서 가시성으로 내려 준다 — `frame-visibility`).
+   */
+  const staleWhileHidden = useRef(false);
+  useEffect(() => {
+    const unsubscribe = subscribeRecordSaved((message) => {
+      if (message.scope !== "billing:session-terms") return;
+      if (document.visibilityState === "hidden") staleWhileHidden.current = true;
+      else scheduleRefresh();
+    });
+    const onVisible = () => {
+      if (document.visibilityState !== "visible" || !staleWhileHidden.current) return;
+      staleWhileHidden.current = false;
+      scheduleRefresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { unsubscribe(); document.removeEventListener("visibilitychange", onVisible); };
+  }, [scheduleRefresh]);
   /**
    * 타이핑 값 → 칸에 보여 줄 값.
    *

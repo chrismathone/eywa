@@ -306,15 +306,15 @@ describe("한 행 = 한 줄 (원장 2026-09-16)", () => {
 
   it("실납 청구액은 금액 · 꼬리표 · 수납 연결을 한 줄에 — 배분 재확인은 꼬리표 자리에 앰버 + 카드", () => {
     const { container, rerender } = render(<SessionTermGroups groups={[confirmedGroup({ allocatedAmount: 148750 })]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
-    const cell = () => screen.getByRole("button", { name: "수납 연결·배분" }).closest("td")!;
-    expect(cell().textContent).toBe("148,750원배분 완료수납 연결·배분");
+    const cell = () => screen.getByRole("button", { name: "배분" }).closest("td")!;
+    expect(cell().textContent).toBe("148,750원배분 완료배분");
     expect(cell().querySelector("div")!.className).toContain("inline-flex");
     rerender(<SessionTermGroups groups={[confirmedGroup({ classAmount: 148750 })]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
-    expect(cell().textContent).toBe("148,750원이름 매칭 참고수납 연결·배분");
+    expect(cell().textContent).toBe("148,750원이름 매칭 참고배분");
     rerender(<SessionTermGroups groups={[confirmedGroup({ classAmount: 148750, allocationStale: true })]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
     const stale = within(cell()).getByText("배분 재확인 필요");
     expect(stale.className).toContain("text-amber");
-    expect(stale.getAttribute("data-tip")).toContain("수납 연결·배분에서 다시 배분하세요");
+    expect(stale.getAttribute("data-tip")).toContain("‘배분’을 눌러 다시 배분하세요");
     expect(cell().textContent).not.toContain("이름 매칭 참고");
     expect(stale.getAttribute("data-tip")).toContain("이름 매칭 참고값");
     rerender(<SessionTermGroups groups={[confirmedGroup({ classAmount: null, allocationStale: true })]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
@@ -960,7 +960,7 @@ describe("반 일괄 대상·가상 줄 전환·실납 표식 (적대적 리뷰 
   });
 
   it("K: 회차 없음 줄도 배분 표식(배분 완료·재확인 필요)을 보이고 '회차 없음' 설명은 그 카드로 — 표식이 없을 때만 알약", () => {
-    const cell = () => within(rowOf("보강생")).getByRole("button", { name: "수납 연결·배분" }).closest("td")!;
+    const cell = () => within(rowOf("보강생")).getByRole("button", { name: "배분" }).closest("td")!;
     const { rerender } = render(<SessionTermGroups groups={[replaceStudent(withVisitor(), "보강생", { allocatedAmount: 36000 })]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
     const done = within(cell()).getByText("배분 완료");
     expect(done.getAttribute("data-tip")).toContain(TERM_STATE_LABEL.missing.tip);

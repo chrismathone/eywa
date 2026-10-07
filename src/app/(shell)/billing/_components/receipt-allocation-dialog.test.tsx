@@ -17,7 +17,7 @@ function view(): ReceiptAllocationView {
 async function open(data = view()) {
   vi.mocked(getReceiptAllocation).mockResolvedValueOnce({ data });
   render(<ReceiptAllocationButton invoiceId="invoice" studentName="학생" />);
-  fireEvent.click(screen.getByRole("button", { name: "수납 연결·배분" }));
+  fireEvent.click(screen.getByRole("button", { name: "배분" }));
   await screen.findByRole("dialog");
 }
 beforeEach(() => {

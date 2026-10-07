@@ -226,7 +226,7 @@ const staleTip = (hasReferenceAmount: boolean, extra: readonly string[] = []) =>
       "이 학생의 수납 배분에서 이 반 몫이 빠져 있습니다.",
       // 금액이 `—`인 행엔 이 문장을 싣지 않는다(없는 금액을 가리키게 된다 — 재리뷰 2026-09-16).
       hasReferenceAmount ? "옆의 금액은 배분액이 아니라 이름 매칭 참고값입니다." : null,
-      "수납 연결·배분에서 다시 배분하세요.",
+      "‘배분’을 눌러 다시 배분하세요.",
       ...extra,
     ],
   });
@@ -560,7 +560,7 @@ function TermRow({ r, period, listId, draft, onDraft, selected, onSelect, awaiti
           </div>
         ) : "—"}
       </td>
-      {/* 실납 청구액(옛 '이 반 청구액') — `금액 꼬리표 · 수납 연결·배분`을 한 줄로. 꼬리표는 `ReceiptTag` 하나(배분 재확인·완료 → 회차 없음 →
+      {/* 실납 청구액(옛 '이 반 청구액') — `금액 꼬리표 · 배분 · 이월`을 한 줄로. 꼬리표는 `ReceiptTag` 하나(배분 재확인·완료 → 회차 없음 →
           청구서 중복 → 이름 매칭 참고). 회차 행이 없는 줄(missing)도 배분 버튼은 그대로(저장하는 순간 행이 생긴다). 청구서 없는 줄은 —. */}
       <td className="num text-muted-foreground px-3 py-2 text-right text-xs">
         {locked ? (
@@ -568,7 +568,7 @@ function TermRow({ r, period, listId, draft, onDraft, selected, onSelect, awaiti
           <span className="inline-flex items-baseline gap-x-2">—<MoneyCarryTags r={r} /></span>
         ) : (
           // 오류 문구(수납 연결 불러오기 실패)만 아래로 꺾인다 — `flex-wrap` + 버튼 쪽 `basis-full`. 평소엔 한 줄.
-          <div className="inline-flex flex-wrap items-baseline justify-end gap-x-2">
+          <div className="inline-flex flex-wrap items-center justify-end gap-x-2 gap-y-1">
             {/* 실납 = 배분액 − 보낸 이월 + 받은 이월(0278a) — 분배와 같은 값(`netAllocatedAmount`). 이월 표식이 차이를 말한다. */}
             {r.allocatedAmount != null ? <b>{won(netAllocatedAmount(r) ?? r.allocatedAmount)}</b> : <span>{r.classAmount !== null ? won(r.classAmount) : "—"}</span>}
             <ReceiptTag r={r} />
