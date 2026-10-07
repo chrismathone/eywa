@@ -196,7 +196,7 @@ export async function createStaff(
     seat_lab_duty: input.seatLabDuty,
     seat_jj_duty: input.seatJjDuty,
     desk_attendance_optin: input.deskAttendanceOptin,
-    ...(canGrantTeacherView ? { teacher_view_access: input.teacherViewAccess } : {}),
+    ...(canGrantTeacherView && formData.has("teacherViewAccess") ? { teacher_view_access: input.teacherViewAccess } : {}),
     // 🔴 강사 화면 기본 언어(0248a)는 **생성 시 안 싣는다** — 신규 직원은 '지정 없음'(null)으로 태어나고
     //    (이름에서 도출), 지정은 근무 설정에서 사람이 명시로 켠다. 여기서 실으면 0248a 미적용 창에서
     //    계정 생성 전체가 실패한다([[#95]]).
@@ -397,7 +397,7 @@ export async function updateStaff(
     seat_lab_duty: input.seatLabDuty,
     seat_jj_duty: input.seatJjDuty,
     desk_attendance_optin: input.deskAttendanceOptin,
-    ...(canGrantTeacherView ? { teacher_view_access: input.teacherViewAccess } : {}),
+    ...(canGrantTeacherView && formData.has("teacherViewAccess") ? { teacher_view_access: input.teacherViewAccess } : {}),
     // 🔴 **폼에 칸이 있고 컬럼도 있을 때만** 싣는다 — `prevLang === undefined`는 "칸이 없거나 0248a
     //    미적용"이고, 그때 실으면 update 전체가 실패하거나(미적용) 다른 경로 저장이 이 값을 null로
     //    지운다(칸 없음). CLAUDE.md: *"폼에서 뺀 칸은 서버 저장에서도 뺀다."*
@@ -436,7 +436,7 @@ export async function updateStaff(
     // 🔴 **두 로그는 서로 배타가 아니다** — `else if`로 묶으면 한 번의 저장에서 둘 다 바뀐 날
     //    뒤엣것('강사뷰 접근' 부여·회수 = 남의 화면을 여는 **권한**)이 통째로 안 남는다.
     //    감사로그는 "무엇이 바뀌었나"를 각각 세는 자리라 각자 판정한다.
-    if (canGrantTeacherView && prevTeacherView !== null && prevTeacherView !== input.teacherViewAccess) {
+    if (canGrantTeacherView && formData.has("teacherViewAccess") && prevTeacherView !== null && prevTeacherView !== input.teacherViewAccess) {
       // '강사뷰 접근' 부여·회수 — 다른 강사 화면을 여는 권한이라 누가 언제 바꿨는지 남긴다.
       await logAction({
         action: "staff_teacher_view_access",

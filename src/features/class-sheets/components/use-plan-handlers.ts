@@ -23,6 +23,9 @@
  *    🔴 마크는 클라 state라 `router.refresh()`로는 안 바뀐다 — 안 머지하면 "복사했는데 칸이 그대로"가 된다.
  *  · `flushHost()`(선택) — 호스트가 따로 들고 있는 저장 큐를 **복사 전에** 함께 비운다.
  */
+import { sheetCarrySummary } from "@/features/teacher-view/feedback";
+import { useSheetLang, useSheetTf, useSheetT } from "@/features/teacher-view/lang-context";
+import { useSheetFeedback } from "@/features/teacher-view/lang-context";
 import { useMemo } from "react";
 import { toast } from "sonner";
 import type { CarryPatch } from "../lib/carry-marks";
@@ -95,13 +98,17 @@ export function usePlanHandlers({
    */
   flushHost?: () => Promise<unknown>;
 }): PlanHandlers {
+  const t = useSheetT();
+  const tf = useSheetTf();
+  const lang = useSheetLang();
+  const feedback = useSheetFeedback();
   return useMemo(
     () => ({
       editCell: (lineId, field, value) => store.edit(lineId, field, value),
       resolveConflict: (saveKey, choice) => store.resolveConflict(saveKey, choice),
       addLine: (planDate, slotStart, termMode, skillArea) => {
         void api.createLine({ classId, planDate, slotStart }, { termMode, skillArea }).then((r) => {
-          if (!r.ok) return toast.error(r.error);
+          if (!r.ok) return toast.error(feedback(r.error));
           onSlotLines(planDate, slotStart, r.lines);
           seedPlanLines(store, r.lines);
         });
@@ -114,22 +121,22 @@ export function usePlanHandlers({
         void Promise.all([store.flush(), flushHost?.() ?? Promise.resolve()]).then(([flushed]) => {
           if (!flushed.ok) {
             const go = window.confirm(
-              "아직 저장이 확정되지 않은 입력(또는 충돌)이 있습니다. 그래도 지난 수업 내용을 복사할까요? (입력을 잃을 수 있습니다)",
+              t("today.copy.unsaved"),
             );
             if (!go) return;
           }
           void api.copySlot({ classId, planDate, slotStart }, { termMode }).then((r) => {
-            if (!r.ok) return toast.error(r.error);
+            if (!r.ok) return toast.error(feedback(r.error));
             // JJ 이어받기(듣기 레벨·누적 암기 단어수) — 계획 복사와 **따로** 반영한다. 두 칸의 원본은
             // 계획 줄이 아니라 학생 기록이라, 계획이 하나도 안 채워진 경우에도 이 칸은 채워질 수 있다.
             if (r.carried.length > 0) onCarried?.(planDate, slotStart, r.carried);
-            if (r.carryError) toast.error(r.carryError);
+            if (r.carryError) toast.error(feedback(r.carryError));
             if (r.carryPending) {
-              toast.info("듣기 레벨·누적 암기 단어수 칸은 아직 준비 중입니다(관리자에게 문의하세요)");
+              toast.info(t("today.copy.carryPending"));
             }
             // 계획은 채울 게 없었지만 두 칸은 채워진 경우 — "복사할 게 없다"고만 말하면 거짓말이 된다.
             if (r.copied === 0 && r.carrySummary) {
-              toast.success(`${r.carrySummary} 채움 — 지난 기록 값이라 바뀐 학생은 고쳐 주세요`);
+              toast.success(tf("today.copy.carriedOnly", { summary: sheetCarrySummary(lang, r.carrySummary) }));
               return;
             }
             if (r.copied === 0) {
@@ -137,21 +144,21 @@ export function usePlanHandlers({
               // ⚠️ target_not_empty는 0209a 적용 전(옛 함수)에만 온다 — 그때도 raw 코드는 안 보여준다.
               toast.info(
                 r.reason === "target_already_filled"
-                  ? "빈 칸이 없어 채울 게 없습니다(이미 쓴 칸은 덮어쓰지 않습니다)"
+                  ? t("month.importAll.none")
                   : r.reason === "target_not_empty"
-                    ? "이미 계획이 있는 교시라 복사하지 않았습니다(덮어쓰기 없음)"
+                    ? t("today.copy.none.notEmpty")
                     : r.sameDow === true
-                      ? "복사할 지난 같은 요일 수업이 없습니다(최근 8주 안에 같은 요일·같은 교시·같은 시기 계획이 없습니다)"
-                      : "복사할 지난 수업이 없습니다(최근 8주 안에 같은 교시·같은 시기 계획이 없습니다)",
+                      ? t("today.copy.none.sameDow")
+                      : t("today.copy.none.any"),
               );
               return;
             }
             onSlotLines(planDate, slotStart, r.lines);
             seedPlanLines(store, r.lines);
             toast.success(
-              (r.sourceLabel ? `${r.sourceLabel} 수업에서 ${r.copied}줄 채움` : `${r.copied}줄 채움`) +
-                (r.carrySummary ? ` · ${r.carrySummary} 채움` : "") +
-                (r.truncated > 0 ? ` — ${r.truncated}줄은 20줄 상한이라 못 넣었습니다` : ""),
+              tf("today.copy.done", { source: r.sourceLabel ? tf("today.copy.done.source", { label: r.sourceLabel }) : "", n: r.copied }) +
+                (r.carrySummary ? tf("today.copy.done.carry", { summary: sheetCarrySummary(lang, r.carrySummary) }) : "") +
+                (r.truncated > 0 ? tf("today.copy.done.truncated", { n: r.truncated }) : "")
             );
           });
         });
@@ -173,30 +180,30 @@ export function usePlanHandlers({
             const call = api.setShift;
             if (!call) return;
             void call({ classId, planDate, slotStart }, kind).then((r) => {
-              if (!r.ok) return toast.error(r.error);
+              if (!r.ok) return toast.error(feedback(r.error));
               toast.success(
                 kind === "skip"
-                  ? "이 회차를 미뤘습니다 — 이 칸은 계획 없이 직접 적고, 다음 수업일부터 차수가 이어집니다"
+                  ? t("plan.feedback.shiftSkip")
                   : kind === "advance"
-                    ? "이 회차를 당겼습니다 — 이 칸엔 다음 차수가 옵니다"
-                    : "회차 표식을 지웠습니다 — 원래 차수로 돌아갑니다",
+                    ? t("plan.feedback.shiftAdvance")
+                    : t("month.shift.clear.done"),
               );
             });
           }
         : undefined,
       removeLine: (lineId, planDate, slotStart) => {
         void api.deleteLine({ classId, planDate, slotStart }, { lineId }).then((r) => {
-          if (!r.ok) return toast.error(r.error);
+          if (!r.ok) return toast.error(feedback(r.error));
           onSlotLines(planDate, slotStart, r.lines);
         });
       },
       moveLineTerm: (lineId, planDate, slotStart, termMode) => {
         void api.moveLine({ classId, planDate, slotStart }, { lineId, termMode, lineNo: 99 }).then((r) => {
-          if (!r.ok) return toast.error(r.error);
+          if (!r.ok) return toast.error(feedback(r.error));
           onSlotLines(planDate, slotStart, r.lines);
         });
       },
     }),
-    [api, classId, store, onSlotLines, onCarried, flushHost],
+    [api, store, classId, feedback, onSlotLines, flushHost, t, onCarried, tf, lang],
   );
 }

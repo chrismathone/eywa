@@ -22,6 +22,7 @@
  * ⚠️ 줄 상태(`lines`)는 **마운트당 1회** 서버 값으로 초기화한다(주간 시트와 같은 계약 — 호출부가
  *    날짜·교시가 바뀔 때 `key`로 재마운트시킨다). 렌더 중 props로 되돌리면 방금 추가한 줄이 사라진다.
  */
+import { useSheetTf, useSheetFeedback } from "@/features/teacher-view/lang-context";
 import { memo, useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
@@ -102,6 +103,8 @@ export const SlotPlanBlock = memo(function SlotPlanBlock({
    */
   onConflicts?: (count: number) => void;
 }) {
+  const feedback = useSheetFeedback();
+  const tf = useSheetTf();
   const t = useSheetT();
   // ① 저널 — 시트와 같은 문서 키(반+주차).
   const doc = useSheetDoc({ tenantId, userId, classId, week: weekMonday });
@@ -131,12 +134,12 @@ export const SlotPlanBlock = memo(function SlotPlanBlock({
   }, [registerFlush, store]);
   useEffect(() => {
     store.setCallbacks({
-      onError: (m) => toast.error(m),
+      onError: (m) => toast.error(feedback(m)),
       onGone: () => toast.info(t("plan.editor.gone")),
       // 칸 입력마다 편집 전 값 — 감사로그가 칸마다 첫 값만 잡는다.
       onEdit: (lineId, field, before) => audit.touch(classId, { kind: "plan", lineId, field }, before),
     });
-  }, [store, audit, classId, t]);
+  }, [store, audit, classId, t, feedback]);
 
   const [lines, setLines] = useState(initialLines);
   // canonical 시드 — 서버가 준 값이 CAS의 expected가 된다(이게 없으면 첫 저장이 무조건 충돌).
@@ -208,7 +211,7 @@ export const SlotPlanBlock = memo(function SlotPlanBlock({
                   store.seed(p.lineId, p.field, p.expectedValue);
                   store.edit(p.lineId, p.field, p.newValue ?? "");
                 }
-                toast.info(`미저장 입력 ${muts.length}건을 복구해 다시 저장합니다`);
+                toast.info(tf("plan.feedback.recovered", { n: muts.length }));
               });
             }}
           >

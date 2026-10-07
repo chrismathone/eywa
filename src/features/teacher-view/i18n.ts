@@ -52,11 +52,11 @@ export type SheetLang = (typeof SHEET_LANGS)[number];
  */
 export const DEFAULT_SHEET_LANG: SheetLang = "ko";
 
-/**
- * 언어 스위치에 적는 이름 — **번역하지 않는다**(언어 이름은 그 언어로 적는 것이 만국 관행이고,
- * 그래야 지금 화면을 못 읽는 사람도 자기 언어를 찾을 수 있다).
- */
-export const SHEET_LANG_LABEL: Record<SheetLang, string> = { ko: "한국어", en: "English" };
+/** 현재 화면 언어에 맞춘 짧은 전환 버튼 이름(원장 2026-10-07). */
+export const SHEET_LANG_LABEL: Record<SheetLang, Record<SheetLang, string>> = {
+  ko: { ko: "한글", en: "영어" },
+  en: { ko: "Kor", en: "En" },
+};
 
 /** 저장값·URL 등 바깥에서 온 값 → 언어. 모르는 값은 null(호출부가 기본값을 정한다). */
 export function parseSheetLang(raw: unknown): SheetLang | null {
@@ -111,6 +111,44 @@ export function resolveSheetLang(
  * 아직 한국어로 남은 것 = 월간 뷰 3종 · 자리(JJ·LAB) 출석부 · MCS 칸 문구 · 알림 벨 · 원스크린.
  */
 export const SHEET_DICT = {
+  "studentEnglishName.editHint": { ko: "더블클릭 또는 F2: 영문 이름 수정", en: "Double-click or press F2 to edit the English name" },
+  "studentEnglishName.detailsHint": { ko: "클릭하면 학생 정보", en: "Click for student details" },
+  "studentEnglishName.input": { ko: "{name} 영문 이름", en: "English name for {name}" },
+  "studentEnglishName.placeholder": { ko: "영문 이름", en: "English name" },
+  "studentEnglishName.save": { ko: "영문 이름 저장", en: "Save English name" },
+  "studentEnglishName.cancel": { ko: "수정 취소", en: "Cancel editing" },
+  "studentEnglishName.detailsAria": { ko: "{name} 학생 정보", en: "Student details for {name}" },
+  "roster.endedTitle": { ko: "{date} 수강 종료", en: "Enrollment ended on {date}" },
+  "plan.deleteRow": { ko: "줄 삭제", en: "Delete row" },
+  "plan.deleteConfirm": { ko: "내용이 있는 줄입니다. 삭제할까요?", en: "This row contains information. Delete it?" },
+  "plan.areaAria": { ko: "구분(영역)", en: "Skill area" },
+  "plan.unknownArea": { ko: "미등록", en: "Unlisted" },
+  "plan.feedback.fontSize": { ko: "글씨 크기를 계정에 저장하지 못했습니다 — 이 화면에서는 적용됩니다", en: "The text size could not be saved to your account. It still applies on this screen." },
+  "plan.feedback.collapse": { ko: "접기 상태를 계정에 저장하지 못했습니다 — 이 화면에서는 적용됩니다", en: "The collapsed sections could not be saved to your account. They still apply on this screen." },
+  "plan.feedback.displayFailed": { ko: "표시 설정을 저장하지 못했습니다", en: "The display settings could not be saved." },
+  "plan.feedback.displayUnsaved": { ko: "아직 저장이 확정되지 않은 입력(또는 충돌)이 있습니다. 그래도 표시를 바꿀까요? (입력은 이 기기에 보관됩니다)", en: "Some edits are unsaved or have conflicts. Change the display anyway? Your edits are kept on this device." },
+  "plan.feedback.navigateUnsaved": { ko: "아직 저장이 확정되지 않은 입력(또는 충돌)이 있습니다. 그래도 이동할까요? (입력은 이 기기에 보관됩니다)", en: "Some edits are unsaved or have conflicts. Leave anyway? Your edits are kept on this device." },
+  "plan.feedback.recovered": { ko: "미저장 입력 {n}건을 복구해 다시 저장합니다", en: "Restoring and saving {n} unsaved edits." },
+  "plan.feedback.makeupRemoved": { ko: "보강 명단에서 뺐습니다", en: "Removed from the makeup roster." },
+  "plan.feedback.notSaved": { ko: "{error} — 저장되지 않았습니다", en: "{error} — Not saved." },
+  "plan.feedback.notSavedRefresh": { ko: "{error} — 저장되지 않았습니다(새로고침하면 이전 값으로 돌아갑니다)", en: "{error} — Not saved. Refreshing restores the previous value." },
+  "plan.feedback.shiftSkip": { ko: "이 회차를 미뤘습니다 — 이 칸은 계획 없이 직접 적고, 다음 수업일부터 차수가 이어집니다", en: "Lesson postponed. Fill this period manually; the planned sequence resumes next class day." },
+  "plan.feedback.shiftAdvance": { ko: "이 회차를 당겼습니다 — 이 칸엔 다음 차수가 옵니다", en: "Lesson advanced. The next planned lesson now appears in this period." },
+  "plan.feedback.shiftClear": { ko: "회차 표식을 지웠습니다 — 원래 차수로 돌아갑니다", en: "Lesson adjustment removed. The original sequence is restored." },
+  "plan.holidayHint": { ko: "{holiday} — 휴일이지만 수업했다면 그대로 쓰실 수 있습니다", en: "{holiday} — a holiday. You can still enter records if you taught." },
+  "plan.panel.homeroom.month": { ko: "담임 월간계획", en: "Homeroom monthly plan" },
+  "plan.panel.homeroom.week": { ko: "담임 주간계획", en: "Homeroom weekly plan" },
+  "plan.panel.assistant.month": { ko: "부담임 월간계획", en: "Assistant monthly plan" },
+  "plan.panel.assistant.week": { ko: "부담임 주간계획", en: "Assistant weekly plan" },
+  "plan.panel.thisWeek": { ko: "이번 주", en: "This week" },
+  "plan.panel.progress": { ko: "목표 진도", en: "Target progress" },
+  "plan.panel.memo": { ko: "주간 메모", en: "Weekly notes" },
+  "studentEnglishName.error.invalid": { ko: "영문 이름은 줄바꿈 없이 80자 이내로 입력해 주세요.", en: "Enter a name of up to 80 characters, without line breaks." },
+  "studentEnglishName.error.denied": { ko: "이 학생의 영문 이름을 수정할 권한이 없습니다.", en: "You do not have permission to edit this student's English name." },
+  "studentEnglishName.error.missing": { ko: "학생 정보를 찾을 수 없습니다.", en: "Student information could not be found." },
+  "studentEnglishName.error.conflict": { ko: "다른 곳에서 이름이 변경됐습니다. 새로고침 후 다시 수정해 주세요.", en: "The name was changed elsewhere. Refresh before editing again." },
+  "studentEnglishName.error.failed": { ko: "저장 결과를 확인하지 못했습니다. 새로고침 후 확인해 주세요.", en: "The save could not be confirmed. Refresh to check the name." },
+  "studentEnglishName.error.duplicate": { ko: "같은 지점에서 이미 사용하는 영문 이름입니다. 다른 이름을 입력해 주세요.", en: "This English name is already used by another student at this branch. Please choose a different name." },
   // ── 언어 스위치 자체('내 메뉴' 드롭다운 안) ───────────────────────
   "lang.label": { ko: "언어", en: "Language" },
   "lang.title": {
@@ -1526,6 +1564,11 @@ export const SHEET_DICT = {
     en: ". Even in the same class, other teachers' periods and the seat rooms (JJ·Lab) are hidden and left out of the session and attendance-rate totals. Editing here never changes another teacher's records. A record with no period (a makeup, say) counts for every teacher who takes this class that day.",
   },
   "att.notice.scope.d": { ko: "반별 보기", en: "the class view" },
+  // 반별 보기 + 세션 축 — 실급여는 달 단위(청구액·등록 차수·명세서와 같은 축)라 세션 창에서는 싣지 않는다(원장 2026-10-07).
+  "att.notice.salaryAxis": {
+    ko: "실급여는 달 단위로 계산합니다. 기간을 '월'로 바꾸면 이 표에서도 보입니다.",
+    en: "Actual pay is worked out per calendar month. Switch Period to Month to see it in this table.",
+  },
   "att.notice.scope.e": { ko: "에서 봅니다.", en: " instead." },
   "att.notice.empty.teacherPre": { ko: "담당 반에 아직 ", en: "Among your classes, " },
   "att.notice.empty.classPre": { ko: "이 반은 아직 ", en: "In this class, " },
@@ -1782,8 +1825,8 @@ export const SHEET_DICT = {
   // '합계 및 실급여 보여주기' 버튼(원장 2026-09-21 → 2026-10-07 선생님별 스위치) — 관리자가 프리랜서 강사 전체 보기를 볼 때만 선다.
   "att.actualSalary.toggle": { ko: "합계 및 실급여 보여주기", en: "Show totals & net pay" },
   "att.actualSalary.saveFailed": { ko: "합계 및 실급여 보여주기 설정을 저장하지 못했습니다. 다시 눌러 주세요.", en: "Couldn't save the totals & net pay setting. Please try again." },
-  "att.actualSalary.savedOn": { ko: "이제 이 선생님 본인 출석부에도 실급여와 합계가 보입니다", en: "Net pay and its total now show on this teacher's own sheet too" },
-  "att.actualSalary.savedOff": { ko: "이 선생님 출석부에서 실급여를 감췄습니다(이 화면과 선생님 화면 모두)", en: "Net pay is now hidden on this teacher's sheet (here and for the teacher)" },
+  "att.actualSalary.savedOn": { ko: "이제 {m}월 출석부의 실급여와 합계가 이 선생님 본인에게도 보입니다", en: "Net pay and its total for month {m} now show on this teacher's own sheet too" },
+  "att.actualSalary.savedOff": { ko: "{m}월 출석부에서 실급여를 감췄습니다(이 화면과 선생님 화면 모두)", en: "Net pay for month {m} is now hidden (here and for the teacher)" },
   "att.actualSalary.stateOn": { ko: "켜짐 · 선생님에게 보임", en: "On · visible to the teacher" },
   "att.actualSalary.stateOff": { ko: "꺼짐", en: "Off" },
   "att.actualSalary.tipOn": {
@@ -1795,8 +1838,8 @@ export const SHEET_DICT = {
     en: "Off: hidden on both. Net pay values are not sent to the screen.",
   },
   "att.actualSalary.tipScope": {
-    ko: "선생님마다 따로 저장됩니다(누르는 사람의 보기 설정이 아닙니다).",
-    en: "Saved per teacher (not a personal view setting).",
+    ko: "선생님마다 · 달마다 따로 저장됩니다. 지금은 {m}월 출석부에만 적용됩니다(다른 달은 그 달에서 따로 켭니다).",
+    en: "Saved per teacher and per month. This applies to month {m} only — turn it on separately for other months.",
   },
   "att.actualSalary.tipFormula": {
     ko: "실급여 = 실수업액(청구액보다 많으면 청구액) × 0.911 × 비율",
@@ -1884,6 +1927,8 @@ export const SHEET_DICT = {
   // '다른 강사 뷰' 열람 배지 = 나가는 버튼(원장 2026-09-29 *"강사뷰 열람 종료"*). 이름 뒤에 붙는다.
   "chrome.viewAs.suffix": { ko: "강사뷰", en: "'s view" },
   "chrome.viewAs.end": { ko: "열람 종료", en: "End viewing" },
+  "chrome.viewAs.editEnd": { ko: "편집 종료", en: "End editing" },
+  "chrome.viewAs.returnTitle": { ko: "이전 화면으로 돌아갑니다", en: "Return to your own view" },
   "chrome.viewAs.endTitle": { ko: "눌러서 관리자뷰로 돌아갑니다", en: "Back to the admin view" },
   "chrome.viewAs.noName": { ko: "이름 없음", en: "No name" },
   "att.legend": { ko: "범례", en: "Legend" },

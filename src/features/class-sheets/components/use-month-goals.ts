@@ -1,5 +1,6 @@
 "use client";
 
+import { useSheetFeedback } from "@/features/teacher-view/lang-context";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { upsertGoal } from "../server/actions";
 import type { MonthGoalMap } from "../lib/goal-match";
@@ -30,6 +31,7 @@ export function useMonthGoals(input: {
   periodStart: string;
   initial: { homeroom: MonthGoalMap; assistant: MonthGoalMap };
 }) {
+  const feedback = useSheetFeedback();
   const { classId, periodStart, initial, scope = "month" } = input;
   const [goals, setGoals] = useState(initial);
   const [error, setError] = useState<string | null>(null);
@@ -58,8 +60,8 @@ export function useMonthGoals(input: {
     else failedKeys.current.delete(key);
     const next = failedKeys.current.values().next().value ?? null;
     errorRef.current = next;
-    setError(next);
-  }, []);
+    setError(next ? feedback(next) : null);
+  }, [feedback]);
 
   // ⚠️ 서버 값이 바뀌면(달 이동·반 전환) **페이지가 컴포넌트를 새로 세운다**(`key={classId:month}`) —
   //    effect로 state를 덮어쓰면 React 19가 막는 캐스케이딩 렌더가 되고([[#25]]), 무엇보다 타이핑 중에

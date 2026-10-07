@@ -100,7 +100,7 @@ async function resolveStudentName(
 }
 
 export async function createTextbookOrder(_prev: TextbookState, formData: FormData): Promise<TextbookState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "교재 관리 권한이 없습니다" };
   const f = parse(formData);
@@ -153,7 +153,7 @@ export async function createTextbookOrder(_prev: TextbookState, formData: FormDa
  * 생성된 요청은 사무실이 /billing 교재 면에서 처리(주문/납부 체크). teacher_name=요청 강사 본인.
  */
 export async function requestTextbook(_prev: TextbookState, formData: FormData): Promise<TextbookState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "textbook_requests"))) return { error: "교재 요청 권한이 없습니다" };
   const f = parse(formData);
@@ -252,7 +252,7 @@ async function loadEditableRequest(
   //    영어 강사가 수학 강사의 요청을 수정·삭제할 수 있었다. 소유 판정은 ownsTextbookRequest 단일 소스.
   const tId = await effectiveTeacherId();
   if (tId) {
-    const user = await getCurrentUser();
+    const user = await getCurrentUser({ teacherView: true });
     // 본인이 만든 요청(created_by)은 담당 범위 밖 학생이어도 목록에 뜨므로(D5) 여기서도 고칠 수 있어야 한다.
     const studentIds = await textbookRequestStudentIds(tId);
     const createdByViewer = !!row.created_by && row.created_by === user?.id;
@@ -269,7 +269,7 @@ async function loadEditableRequest(
 }
 
 export async function updateTextbookRequest(_prev: TextbookState, formData: FormData): Promise<TextbookState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "textbook_requests"))) return { error: "교재 요청 권한이 없습니다" };
   const id = String(formData.get("id") ?? "").trim();
@@ -313,7 +313,7 @@ export async function updateTextbookRequest(_prev: TextbookState, formData: Form
 }
 
 export async function deleteTextbookRequest(_prev: TextbookState, formData: FormData): Promise<TextbookState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "textbook_requests"))) return { error: "교재 요청 권한이 없습니다" };
   const id = String(formData.get("id") ?? "").trim();
@@ -343,7 +343,7 @@ export async function deleteTextbookRequest(_prev: TextbookState, formData: Form
 }
 
 export async function updateTextbookOrder(_prev: TextbookState, formData: FormData): Promise<TextbookState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "교재 관리 권한이 없습니다" };
   const id = String(formData.get("id") ?? "").trim();
@@ -401,7 +401,7 @@ export async function updateTextbookOrder(_prev: TextbookState, formData: FormDa
 // 체크 토글(등록/주문/납부) — 해당 타임스탬프를 켜고(now)/끄고(null), 마지막 변경자·시각 기록.
 // status는 체크에서 파생: 납부>주문>신청 (등록은 status 무관 = 독립 운영 플래그, ijw와 동일).
 export async function toggleTextbookCheck(_prev: TextbookState, formData: FormData): Promise<TextbookState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "교재 관리 권한이 없습니다" };
   const id = String(formData.get("id") ?? "").trim();
@@ -463,7 +463,7 @@ export async function toggleTextbookCheck(_prev: TextbookState, formData: FormDa
 }
 
 export async function deleteTextbookOrder(_prev: TextbookState, formData: FormData): Promise<TextbookState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "교재 관리 권한이 없습니다" };
   const id = String(formData.get("id") ?? "").trim();

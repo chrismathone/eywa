@@ -3,11 +3,12 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { getTeacherScope, type TeacherScope } from "@/lib/auth/teacher-scope";
+import { getTeacherReadScope } from "@/lib/auth/teacher-read-scope";
 import { hasActiveDelegation } from "@/features/classes/server/delegation";
 import { createClient } from "@/lib/supabase/server";
 import { isFullShellRole, viewAsTeacher, VIEW_MODE_COOKIE } from "@/lib/auth/view-as";
 
-// 쿠키 상수·풀셸 판별·'다른 강사 뷰'(열람 전용) 검증은 [view-as.ts](./view-as.ts)로 분리 —
+// 쿠키 상수·풀셸 판별·'다른 강사 뷰' 접근 검증은 [view-as.ts](./view-as.ts)로 분리 —
 // perm-matrix(쓰기 캡)가 이 파일을 import하면 순환이 생겨서다. 기존 소비처를 위해 재수출.
 export {
   isFullShellRole,
@@ -33,12 +34,12 @@ export {
 export const effectiveTeacherId = cache(async (): Promise<string | null> => {
   const user = await getCurrentUser();
   if (!user) return null;
-  if (user.systemRole === "teacher") return user.id; // 실 강사 — 불변(추가 쿼리 없음)
-  if (!isFullShellRole(user.systemRole)) return null; // student 등
-  // '다른 강사 뷰'(열람 전용, 원장 2026-08-19) — 검증된 대상 강사의 id로 전 스코프 소비처가 따라온다.
-  // ⚠️ 쓰기 귀속은 안 따라온다: perm-matrix 쓰기 캡 + readonlyTeacherViewError 가드가 저장·발송을 차단.
+  if (user.systemRole === "student") return null;
+  // 다른 강사 뷰는 검증된 대상 강사의 id로 조회 범위를 정한다.
+  // 전체 권한의 업무 액션은 대상 강사로 귀속하고, 읽기 권한은 저장·발송을 차단한다.
   const viewAs = await viewAsTeacher();
   if (viewAs) return viewAs.id;
+  if (user.systemRole === "teacher") return user.id;
   // 겸직: 관리자 계열이 강사뷰 쿠키를 켰고, 실제 담당 반(또는 아래 오늘 위임)이 있을 때만.
   // 🔑 이 두 조건은 노출·진입 판정(canUseTeacherView)과 같다 — 한쪽만 바꾸면 '보이는데 안 들어가지는' 버튼이 된다.
   const jar = await cookies();
@@ -52,9 +53,9 @@ export const effectiveTeacherId = cache(async (): Promise<string | null> => {
 });
 
 /** effectiveTeacherId 기반 스코프 객체(없으면 null). getTeacherScope와 동일 형태(요청당 캐시 공유). */
-export async function effectiveTeacherScope(): Promise<TeacherScope | null> {
+export async function effectiveTeacherScope(options?: { includeScheduled: boolean }): Promise<TeacherScope | null> {
   const tId = await effectiveTeacherId();
-  return tId ? getTeacherScope(tId) : null;
+  return tId ? (options?.includeScheduled ? getTeacherReadScope(tId) : getTeacherScope(tId)) : null;
 }
 
 export type ShellView = "admin" | "teacher" | "student";

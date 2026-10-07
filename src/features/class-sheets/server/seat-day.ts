@@ -31,7 +31,7 @@ export async function getEcsSeatDay(
   seat: SpecialSlotLabel,
   dateRaw: string | null,
 ): Promise<SeatDayResult> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   const ecsLevel = await accessLevelTenant(user.systemRole, "ecs");
   if (ecsLevel === "none") return { ok: false, error: "접근 권한이 없습니다" };

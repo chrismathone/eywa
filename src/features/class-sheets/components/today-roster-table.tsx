@@ -131,7 +131,7 @@ export const TodayRosterTable = memo(function TodayRosterTable({
                `todaySlotOffset`이 잡아 둔 교시 시작점을 밀지 않는다. */}
         <table
           className="border-collapse text-sm [&_tr>*:not(:first-child):not(.ecs-slot-edge)]:border-l [&_tr>*:not(:first-child):not(.ecs-slot-edge)]:border-l-line-faint"
-          style={{ tableLayout: "fixed", width: todayContentWidth(slots.length) }}
+          style={{ tableLayout: "fixed", width: todayContentWidth(slots.length, lang) }}
         >
         <colgroup>
           <col style={{ width: TODAY_NAME_W }} />
@@ -139,7 +139,7 @@ export const TodayRosterTable = memo(function TodayRosterTable({
             <Fragment key={slot.slotStart}>
               {/* 마지막이 특이사항(잔여)이고 **합은 항상 교시 폭** — 특이사항까지 고정 폭이어야 표가
                   남는 폭을 거기 몰아주지 않는다(그러면 교시 폭이 카드와 달라진다). */}
-              {todaySlotCols(formOf(slot)).map((w, i) => (
+              {todaySlotCols(formOf(slot), lang).map((w, i) => (
                 <col key={i} style={{ width: w }} />
               ))}
             </Fragment>

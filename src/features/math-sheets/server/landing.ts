@@ -111,7 +111,7 @@ export type MathLandingResult = { ok: true; data: MathLandingData } | { ok: fals
  * 드롭다운은 "갈 수 있는 반"이지 "이 달 카드"가 아니다(호출부가 지금 보는 반은 어차피 맨 앞에 끼운다).
  */
 export async function getMathClassOptions(monthRaw: string | null): Promise<{ id: string; name: string }[]> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return [];
   const level = await accessLevelTenant(user.systemRole, "mcs");
   if (level === "none") return [];
@@ -135,7 +135,7 @@ export async function getMathClassOptions(monthRaw: string | null): Promise<{ id
 }
 
 export async function getMathSheetLanding(monthRaw: string | null): Promise<MathLandingResult> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   const level = await accessLevelTenant(user.systemRole, "mcs");
   if (level === "none") return { ok: false, error: "접근 권한이 없습니다" };

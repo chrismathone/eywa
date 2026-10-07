@@ -34,7 +34,7 @@ export type TextbookOrderRow = {
 
 /** 로그인 강사가 저장해 둔 멘트(없으면 null). 읽기는 본인 users 행 self-select(기존 RLS). */
 export async function getMyTextbookMent(): Promise<string | null> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return null;
   const supabase = await createClient();
   const { data } = await supabase
@@ -59,7 +59,7 @@ export type StudentBoardInfo = {
 
 export async function getStudentBoardSubjects(studentIds: string[]): Promise<StudentBoardInfo> {
   const empty: StudentBoardInfo = { subjects: {}, classes: {} };
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return empty;
   const ids = [...new Set((studentIds ?? []).filter(Boolean))];
   if (!ids.length) return empty;
@@ -135,7 +135,7 @@ export async function getStudentBoardSubjects(studentIds: string[]): Promise<Stu
 export async function loadNoticeOwners(
   rows: Array<{ id: string; teacher_name: string | null; created_by: string | null }>,
 ): Promise<Record<string, NoticeOwner[]>> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return {};
   const names = [...new Set(rows.map((r) => r.teacher_name?.trim()).filter((v): v is string => !!v))];
   const creators = [...new Set(rows.map((r) => r.created_by).filter((v): v is string => !!v))];
@@ -209,7 +209,7 @@ export async function loadScopedOrders(
   if (!rows.length) return { error: "교재 요청을 찾을 수 없습니다" };
   const teacherId = await effectiveTeacherId();
   if (teacherId) {
-    const user = await getCurrentUser();
+    const user = await getCurrentUser({ teacherView: true });
     const scoped = new Set(await textbookRequestStudentIds(teacherId));
     // 본인이 만든 요청은 담당 범위와 무관하게 본인 것(D5 — 목록에 뜨는 요청은 보낼 수 있어야 한다).
     if (!rows.every((r) => (r.created_by && r.created_by === user?.id) || (r.student_id && scoped.has(r.student_id))))

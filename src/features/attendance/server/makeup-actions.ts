@@ -32,7 +32,7 @@ export async function fetchMakeupAbsences(
   makeupDate: string,
   anchorClassId?: string | null,
 ): Promise<MakeupAbsenceList> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return EMPTY;
   // 보강 추가와 같은 권한(출결 쓰기) — 읽기 전용 계정이 남의 결석 이력을 훑는 경로를 열지 않는다.
   if (!(await canWriteTenant(user.systemRole, "attendance"))) return EMPTY;
@@ -57,7 +57,7 @@ export async function fetchMakeupHostClasses(
   makeupDate: string,
   subjects?: readonly string[],
 ): Promise<{ options: MakeupHostClass[]; failed?: boolean; noneBlocked?: boolean }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user || !(await canWriteTenant(user.systemRole, "attendance"))) return { options: [], failed: true };
   if (typeof studentId !== "string" || !studentId || !/^\d{4}-\d{2}-\d{2}$/.test(makeupDate)) return { options: [], failed: true };
   try {

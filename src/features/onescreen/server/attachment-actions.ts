@@ -116,7 +116,7 @@ async function findReportRow(
  * ⚠️ admin 경로는 비수강 학생(예: 테스트 '학원이')에도 첨부 가능 — RLS가 tenant 격리, 행 존재 확인이 유효성 보강.
  */
 async function gate(studentId: string, reportDate?: string) {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" as const };
   // '다른 강사 뷰'(열람 전용) 차단 — canWriteTenant는 캡으로 거절되지만, 겸직이 같은 반을 직접
   // 담당하는 경우 teacherOwnsStudent(본인 축)가 열려 열람 중 첨부가 뚫린다. 여기서 일괄 차단.

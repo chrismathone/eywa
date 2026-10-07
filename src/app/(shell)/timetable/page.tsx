@@ -1,4 +1,3 @@
-import { SettingRolesControl } from "@/features/owner/components/setting-roles-control";
 import { ParamLink } from "./_components/param-link";
 import { isModuleEnabled } from "@/lib/modules";
 import { ParamSelect } from "./_components/param-select";
@@ -10,6 +9,8 @@ import { PageMaximizeToolbar } from "@/components/page-maximize/page-maximize-to
 import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF, TOOLBAR_CHIP_ON } from "@/components/toolbar-controls";
 import { cookies } from "next/headers";
 import { requireAccess } from "@/lib/auth/require-access";
+import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
+import { timetableText } from "@/features/teacher-view/timetable-labels";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import {
   getClassroomsLite,
@@ -205,6 +206,8 @@ export default async function TimetablePage({
 
   // 강사(또는 겸직-강사뷰)는 담임 반 ∪ 그 주에 교시 하나라도 맡은 반만(intra-tenant PII 누수 차단, 원장 2026-09-17). master/직원은 전체.
   const teacherId = (await effectiveTeacherId()) ?? undefined;
+  const lang = teacherId ? await getTeacherViewLang() : "ko";
+  const tt = (text: string) => timetableText(lang, text);
   // 교실뷰 = 관리자 전용 — 강사 스코프 슬롯으로 그리면 남의 반이 쓰는 교실이 전부 비어 보인다(거짓 지도).
   const roomsViewAllowed = !teacherId;
   const [allSlots, settings, teacherColors, entryPrefs, classroomsForMap, seatPins, seatMoves, labSeparateIds] = await Promise.all([
@@ -740,9 +743,9 @@ export default async function TimetablePage({
           (우측 학생 인원 집계는 2026-09-28 삭제 — 원장 "헷갈리니까".) */}
       <div data-maximize-title-row="" className="shrink-0 compact-chrome:hidden">
         <PageHeader
-          eyebrow="수업 운영"
-          title="시간표"
-          description={isRooms ? "교실 사용 현황 지도" : `${subjectMaps.labelOf(subject)} 주간표`}
+          eyebrow={tt("수업 운영")}
+          title={tt("시간표")}
+          description={isRooms ? tt("교실 사용 현황 지도") : lang === "en" ? `${tt(subjectMaps.labelOf(subject))} weekly timetable` : `${subjectMaps.labelOf(subject)} 주간표`}
           actions={
             isRooms || !showEcsShortcut ? null : <EcsShortcut week={week} />
           }
@@ -753,7 +756,6 @@ export default async function TimetablePage({
       <PageMaximizeToolbar>
       <Toolbar rail={false} gap="gap-3 compact-chrome:gap-1">
         <ToolbarRow>
-          <SettingRolesControl group="timetable" />
         {/* 모바일에서는 주간 이동을 필터와 별도의 짧은 레일에 둔다. */}
         {/* 왼쪽 묶음(필터·검색·설정·엑셀) / 오른쪽 묶음(집계·ECS·편집) — 창을 줄이면 **묶음 단위로** 줄이 바뀐다
             (원장 2026-09-04 *"창 크기를 조절했을때도 헤더 정렬이 이루어질 수 있게"* — 종전엔 항목 하나(엑셀·시트)만 둘째 줄

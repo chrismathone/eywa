@@ -1,5 +1,6 @@
 "use client";
 
+import { useSheetFeedback } from "@/features/teacher-view/lang-context";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -76,6 +77,7 @@ export function TextbookFillDialog({
   /** 기입이 끝나면 호출 — 호출부가 화면을 다시 읽는다. */
   onApplied: () => void;
 }) {
+  const feedback = useSheetFeedback();
   const router = useRouter();
   const t = useSheetT();
   const tf = useSheetTf();
@@ -108,11 +110,11 @@ export function TextbookFillDialog({
       if (!alive) return;
       setLoading(false);
       if (!s.ok) {
-        setError(s.error);
+        setError(feedback(s.error));
         return;
       }
       if (!b.ok) {
-        setError(b.error);
+        setError(feedback(b.error));
         return;
       }
       setSlots(s.rows);
@@ -127,7 +129,7 @@ export function TextbookFillDialog({
     return () => {
       alive = false;
     };
-  }, [classId]);
+  }, [classId, feedback]);
 
   const book = books.find((b) => b.id === bookId);
   /**
@@ -174,19 +176,19 @@ export function TextbookFillDialog({
       // 그 사이 입력이 바뀌었다 — 이 응답은 버린다.
       if (token !== gen.current) return;
       if (!pv.ok) {
-        setError(pv.error);
+        setError(feedback(pv.error));
         return;
       }
       setPreview(pv.preview);
     } catch (e) {
-      if (token === gen.current) setError(e instanceof Error ? e.message : t("fill.err.generic"));
+      if (token === gen.current) setError(feedback(e instanceof Error ? e.message : t("fill.err.generic")));
     } finally {
       // ⚠️ **조건 없이 푼다** — `token === gen.current`일 때만 풀면, 입력을 바꿔 계산이 취소된 뒤
       //    (교시를 모두 해제해) 새 계산이 안 도는 경우 busy가 영영 true로 남아 **닫기 버튼까지 잠긴다**.
       //    겹친 요청 사이의 '계산 중…' 표시는 아래 `calculating`이 파생값으로 메운다.
       setBusy(false);
     }
-  }, [classId, bookId, pickedSlots, pace, termMode, startDate, startLessonNo, t]);
+  }, [classId, bookId, pickedSlots, pace, termMode, startDate, startLessonNo, feedback, t]);
 
   /**
    * 🔴 **미리보기는 스스로 돈다** — 원장 제보 2026-09-17(*"기입자체가안됌"*, 교시·교재를 바꿔 가며 세 번).
@@ -218,7 +220,7 @@ export function TextbookFillDialog({
         startLessonNo,
       });
       if (!res.ok) {
-        setError(res.error);
+        setError(feedback(res.error));
         return;
       }
       // 🔴 배정은 **월간계획까지만** 만든다(원장 2026-09-22) — 실제 칸은 강사가 [월간계획 가져오기]를
@@ -230,7 +232,7 @@ export function TextbookFillDialog({
       onApplied();
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t("fill.err.generic"));
+      setError(feedback(e instanceof Error ? e.message : t("fill.err.generic")));
     } finally {
       setBusy(false);
     }

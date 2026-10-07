@@ -54,12 +54,11 @@ export type OverviewSelection = {
 
 export async function getGradeOverview(sel: OverviewSelection): Promise<GradeOverview> {
   const empty: GradeOverview = { columns: [], rows: [], classes: [], schemaReady: true };
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ...empty, schemaReady: false };
   const supabase = await createClient();
 
   const scope = await effectiveTeacherScope();
-  if (scope?.subjects && !scope.subjects.includes(sel.subject)) return empty;
   const teacherId = scope ? await effectiveTeacherId() : null;
   const { start: termStart, end: termEnd } = termWindow(sel.year, sel.term);
 

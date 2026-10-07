@@ -80,7 +80,7 @@ export type GoalsBoardResult =
   | { ok: false; error: string };
 
 export async function getGoalsBoard(dateParam?: string | null): Promise<GoalsBoardResult> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   const level = await accessLevelTenant(user.systemRole, "ecs");
   if (level === "none") return { ok: false, error: "접근 권한이 없습니다" };

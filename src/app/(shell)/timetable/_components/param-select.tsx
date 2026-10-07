@@ -1,4 +1,5 @@
 "use client";
+import { useTimetableText } from "@/features/teacher-view/use-timetable-text";
 
 import { HrefSelect, type HrefSelectOption } from "@/components/href-select";
 import { confirmTimetableNav } from "./timetable-unsaved";
@@ -20,5 +21,6 @@ export function ParamSelect({
   value: string;
   options: HrefSelectOption[];
 }) {
-  return <HrefSelect axisLabel={axisLabel} ariaLabel={ariaLabel} value={value} options={options} beforeNavigate={confirmTimetableNav} />;
+  const tt = useTimetableText();
+  return <HrefSelect axisLabel={tt(axisLabel)} ariaLabel={tt(ariaLabel)} value={value} options={options.map((option) => ({ ...option, label: tt(option.label) }))} beforeNavigate={confirmTimetableNav} />;
 }

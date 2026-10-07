@@ -1,5 +1,4 @@
 import { requireAccess } from "@/lib/auth/require-access";
-import { SettingRolesControl } from "@/features/owner/components/setting-roles-control";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import {
   type KakaoChannelStatus,
@@ -96,7 +95,6 @@ export default async function KioskSettingsPage() {
       <header>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h1 className="text-foreground text-xl font-bold">출석 키오스크 설정</h1>
-          <SettingRolesControl group="kiosk" />
         </div>
         <p className="text-text-dim mt-1 text-sm leading-relaxed">
           태블릿을 현관에 두면 학생이 출석번호를 입력해 스스로 등하원을 체크하고, 학부모에게 알림이 갑니다.

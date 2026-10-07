@@ -26,7 +26,7 @@ function validIsoDate(value: string): boolean {
 export async function saveUnifiedGrade(_previous: UnifiedSaveState, formData: FormData): Promise<UnifiedSaveState> {
   const gate = await gradeWriteError();
   if (gate) return { error: gate };
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   const source = String(formData.get("source") ?? "");
   const id = String(formData.get("id") ?? "");

@@ -1,6 +1,7 @@
 import "server-only";
 import { cache } from "react";
-import { getCurrentUser, type CurrentUser } from "@/lib/auth/current-user";
+import type { CurrentUser } from "@/lib/auth/current-user";
+import { getCurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { effectiveTeacherId, effectiveTeacherScope } from "@/lib/auth/view-mode";
 // 반 임시 위임(0173a) — ECS만 넓히는 확장(전역 teacher-scope는 불변, 아래 ecsDelegatedClassIds 주석 참조).
@@ -54,7 +55,7 @@ export async function requireEcsClassAccess(
   classId: string,
   opts: { write?: boolean; readOnly?: boolean } = {},
 ): Promise<EcsAccessResult> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
 
   const level = await accessLevelTenant(user.systemRole, "ecs");

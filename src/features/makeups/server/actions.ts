@@ -29,7 +29,7 @@ export async function executeMakeupCommand(input: unknown, options?: unknown): P
   const checked = parseMakeupCommand(parsed.data);
   if (!checked.ok) return { ok: false, error: checked.error };
   if (JSON.stringify(parsed.data.payload).length > 32_000) return { ok: false, error: "입력 내용이 너무 깁니다" };
-  const actor = await getCurrentUser();
+  const actor = await getCurrentUser({ teacherView: true });
   if (!actor || !(await canWriteTenant(actor.systemRole, "makeups"))) return { ok: false, error: "보강 기록 변경 권한이 없습니다" };
   const settings = await getTenantSettings();
   if (settings.makeups.mode === "off") return { ok: false, error: "보강관리 운영이 중지되어 있습니다" };

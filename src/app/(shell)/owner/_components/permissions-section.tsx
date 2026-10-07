@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { nextPermissionAccess, sparseRoleOverrides } from "@/features/owner/permission-edit";
 import { editablePermissionRowGroups, type PermissionNavigation } from "@/features/owner/permission-rows";
 import { TEACHER_TOGGLE_KEYS, teacherToggleOnAccess } from "@/features/owner/teacher-toggle-rows";
+import { SETTINGS_ROLE_KEYS, type SettingsRoleKey } from "@/lib/settings-role-catalog";
 import { ambiguousRoleCells } from "@/features/owner/permissions-canonical";
 import type { PermissionsSettings } from "@/features/owner/settings-types";
 import {
@@ -43,8 +44,8 @@ const teacherAccessOf = (matrix: AccessMatrix) =>
   Object.fromEntries(TEACHER_TOGGLE_KEYS.map((k) => [k, matrix[k].teacher])) as Record<string, Access>;
 
 /**
- * 역할·권한 면 — 위에서부터 ① 강사 '내 메뉴' 표시(접는 카드) ② 역할별 메뉴 권한 표 ③ 개인별 메뉴 권한 ④ 개인별 기능 권한.
- * 네 구획이 **한 폼**이다(저장 한 번에 함께 간다). 표의 줄과 '내 메뉴' 칸의 차례는 학원의 메뉴 구성을 따른다(`navigation`).
+ * 역할·권한 면 — 강사 메뉴 표시, 역할별 메뉴 권한, 개인별 메뉴·기능 권한, 설정별 역할 권한.
+ * 모든 구획이 한 폼이다. 설정 권한도 같은 draft와 저장 기준을 사용한다.
  */
 export function PermissionsSection({
   initial,
@@ -53,6 +54,7 @@ export function PermissionsSection({
   staffOptions = [],
   hiddenUserIds = [],
   generic = false,
+  hiddenSettingKeys = [],
   baselineToken,
   baselineVersion,
 }: {
@@ -65,6 +67,7 @@ export function PermissionsSection({
   staffOptions?: { id: string; name: string; role: string }[];
   hiddenUserIds?: string[];
   generic?: boolean;
+  hiddenSettingKeys?: readonly SettingsRoleKey[];
   /**
    * 이 화면이 연 시점의 역할·권한을 가리키는 기준 token — 저장 요청에 실려, 그사이 다른 곳(다른 창 · '역할 설정' 대화상자 ·
    * 운영자 스크립트)이 바꿨으면 저장이 거절된다. 없으면 저장할 수 없다(서버가 받지 않는다).
@@ -82,6 +85,15 @@ export function PermissionsSection({
   const setMatrix = (next: (m: AccessMatrix) => AccessMatrix) => setDraft((d) => ({ ...d, matrix: next(d.matrix) }));
   const overrides = useMemo(() => sparseRoleOverrides(matrix), [matrix]);
   const groups = useMemo(() => editablePermissionRowGroups(navigation, { generic }), [navigation, generic]);
+  const isSetting = (menu: MenuKey) => (SETTINGS_ROLE_KEYS as readonly string[]).includes(menu);
+  const menuGroups = groups.map((group) => ({ ...group, rows: group.rows.filter((row) => !isSetting(row.menu)) })).filter((group) => group.rows.length > 0);
+  const settingGroups = [{
+    id: "settings-roles", label: "설정별 역할 권한", hiddenInMenu: false,
+    rows: SETTINGS_ROLE_KEYS.filter((menu) => !hiddenSettingKeys.includes(menu)).map((menu) => ({
+      menu, label: MENU_LABEL[menu], covers: [], hiddenInMenu: false, inner: false,
+    })),
+  }];
+  const individualGroups = [...menuGroups, ...settingGroups];
   // 같은 칸이 서로 다른 값으로 두 번 저장돼 있으면(손으로 넣은 값·스크립트) 알린다 — 표는 마지막 줄을 보여 주고,
   // 저장하면 표의 값 하나로 정리된다. 말없이 정리하지 않는다(그 전까지 읽는 곳에 따라 다른 값이 적용될 수 있었다).
   // 🔴 안내의 기준도 **이 화면이 받아들인 서버 상태**(기준 token)다 — 서버 prop을 그대로 읽으면, 저장으로 정리한 뒤에도
@@ -150,7 +162,7 @@ export function PermissionsSection({
           title="역할별 메뉴 권한"
           description={<>
             셀을 클릭하면 <b>전체 → 담당 → 읽기 → 없음</b> 순으로 바뀝니다. 기본값과 다른 셀만 저장됩니다
-            (기본값과 다른 셀 {overrides.length}개). 줄은 <b>탭 및 메뉴 구성에서 쓰는 메뉴</b>가 <b>왼쪽 탭과 그 안의 메뉴 차례</b>대로 서 있습니다(구성에서 감춘 메뉴는 표에 없고 — 강사 ‘내 메뉴’에 보이면 ‘관리자뷰에서 감춤’으로 남습니다 — 구성을 바꾸면
+            (기본값과 다른 셀 {overrides.length}개). 강사뷰 접근은 <b>전체 → 읽기 → 없음</b>만 사용합니다. 줄은 <b>탭 및 메뉴 구성에서 쓰는 메뉴</b>가 <b>왼쪽 탭과 그 안의 메뉴 차례</b>대로 서 있습니다(구성에서 감춘 메뉴는 표에 없고 — 강사 ‘내 메뉴’에 보이면 ‘관리자뷰에서 감춤’으로 남습니다 — 구성을 바꾸면
             함께 바뀝니다). 선생님 원스크린·내 학습은 강사·학생 전용 화면이라 표에 없고, 학생 역할과 원장의 설정·대시보드 접근은
             잠글 수 없습니다. 강사 대시보드는 담당 범위 집계가 없어 비활성화됩니다.
           </>}
@@ -173,7 +185,7 @@ export function PermissionsSection({
               </ul>
             </details>
           ) : null}
-          <RoleMatrixTable groups={groups} matrix={matrix} savedMatrix={savedMatrix} onCycle={cycle} />
+          <RoleMatrixTable groups={menuGroups} matrix={matrix} savedMatrix={savedMatrix} onCycle={cycle} />
           </div>
         </SettingsCard>
         <UserOverrideEditor
@@ -181,7 +193,7 @@ export function PermissionsSection({
           hiddenUserIds={hiddenUserIds}
           staffOptions={staffOptions}
           nameOf={staffName}
-          groups={groups}
+          groups={individualGroups}
           onChange={(next) => setDraft((d) => ({ ...d, userOverrides: next(d.userOverrides) }))}
         />
         <SpecialAccessEditor
@@ -191,6 +203,12 @@ export function PermissionsSection({
           nameOf={staffName}
           onChange={(next) => setDraft((d) => ({ ...d, specialAccess: next(d.specialAccess) }))}
         />
+        <SettingsCard
+          title="설정별 역할 권한"
+          description="각 메뉴에 있던 ‘역할 설정’을 여기에서 관리합니다. 기존 권한은 그대로 유지되며, 위의 메뉴·개인 권한과 함께 저장됩니다."
+        >
+          <RoleMatrixTable groups={settingGroups} matrix={matrix} savedMatrix={savedMatrix} onCycle={cycle} />
+        </SettingsCard>
       </>
     </SectionForm>
   );

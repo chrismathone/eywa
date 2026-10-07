@@ -47,7 +47,7 @@ export async function saveUnifiedRosterGrade(previous: GradeSaveState, formData:
   try { studentId = (JSON.parse(entries) as { studentId: string }[])[0]?.studentId ?? ""; }
   catch { return { error: "학생을 확인해 주세요" }; }
   if (!isUuid(studentId)) return { error: "학생을 확인해 주세요" };
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   const supabase = await createClient();
   const { data: grades, error: lookupError } = await supabase.from("student_grades")

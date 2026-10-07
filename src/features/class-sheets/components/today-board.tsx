@@ -17,6 +17,7 @@
  *    아니라 **서버가 강제**한다(`fillEmptyOnly` — 화면이 낡아도 남의 기록을 못 덮는다).
  * ⚠️ 지각·결석의 **사유·시수 편집은 여기에 없다** — 그건 출석부·주간 시트의 몫이다(ECS §E 규약 그대로).
  */
+import { useSheetFeedback } from "@/features/teacher-view/lang-context";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -124,6 +125,7 @@ function ClassCard({
    */
   isHoliday: boolean;
 }) {
+  const feedback = useSheetFeedback();
   const { att, setAtt, marks, setMarks, attInflight } = state;
   const [open, setOpen] = useState(true);
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -165,7 +167,7 @@ function ClassCard({
       .then((r) => {
         if ("error" in r) {
           setAtt((p) => ({ ...p, [key]: before ?? { status: null, note: null } }));
-          toast.error(r.error);
+          toast.error(feedback(r.error));
         }
       })
       .catch(() => {
@@ -208,7 +210,7 @@ function ClassCard({
       .then((r) => {
         if ("error" in r) {
           restore(targets);
-          toast.error(r.error);
+          toast.error(feedback(r.error));
           return;
         }
         const appliedSet = new Set(r.applied.map((a) => a.studentId));
@@ -265,7 +267,7 @@ function ClassCard({
         const r = await clearPresentAttendance({ classId: card.classId, studentId, date, slot });
         if (!r.ok) {
           rollback();
-          toast.error(r.error);
+          toast.error(feedback(r.error));
           return;
         }
       }

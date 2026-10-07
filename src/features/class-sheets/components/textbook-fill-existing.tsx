@@ -1,5 +1,6 @@
 "use client";
 
+import { useSheetFeedback } from "@/features/teacher-view/lang-context";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -26,6 +27,7 @@ function pickLabel(pick: string, lang: ReturnType<typeof useSheetLang>): string 
  * ⚠️ 원어민 강사도 이 창을 연다 — 문구는 전부 사전(`fill.existing.*`)이다.
  */
 export function TextbookFillExisting({ classId }: { classId: string }) {
+  const feedback = useSheetFeedback();
   const router = useRouter();
   const t = useSheetT();
   const tf = useSheetTf();
@@ -39,7 +41,7 @@ export function TextbookFillExisting({ classId }: { classId: string }) {
     try {
       const res = await loadClassTextbookPlans(classId);
       if (!res.ok) {
-        setError(res.error);
+        setError(feedback(res.error));
         setRows([]);
         return;
       }
@@ -49,7 +51,7 @@ export function TextbookFillExisting({ classId }: { classId: string }) {
       setError(null);
       setRows([]);
     }
-  }, [classId]);
+  }, [classId, feedback]);
 
   useEffect(() => {
     let alive = true;
@@ -57,7 +59,7 @@ export function TextbookFillExisting({ classId }: { classId: string }) {
       .then((res) => {
         if (!alive) return;
         if (!res.ok) {
-          setError(res.error);
+          setError(feedback(res.error));
           setRows([]);
         } else setRows(res.rows);
       })
@@ -67,7 +69,7 @@ export function TextbookFillExisting({ classId }: { classId: string }) {
     return () => {
       alive = false;
     };
-  }, [classId]);
+  }, [classId, feedback]);
 
   async function onDelete(planId: string) {
     if (busy) return;
@@ -76,7 +78,7 @@ export function TextbookFillExisting({ classId }: { classId: string }) {
     try {
       const res = await deleteClassTextbookPlan(planId);
       if (!res.ok) {
-        setError(res.error);
+        setError(feedback(res.error));
         return;
       }
       toast.success(t("fill.existing.deleted"));

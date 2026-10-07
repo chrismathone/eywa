@@ -241,7 +241,7 @@ export async function saveAttendance(
   _prev: SaveAttendanceState,
   formData: FormData,
 ): Promise<SaveAttendanceState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "attendance"))) return { error: "출석 관리 권한이 없습니다" };
 
@@ -598,7 +598,7 @@ export async function setAttendanceCell(input: {
    */
   ghostTransfer?: boolean;
 }): Promise<CellResult> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "attendance"))) return { error: "출석 관리 권한이 없습니다" };
 
@@ -1381,7 +1381,7 @@ export async function linkMakeupToAbsence(input: {
    */
   addUnits: number;
 }): Promise<MakeupLinkResult> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "attendance"))) return { error: "출석 관리 권한이 없습니다" };
 
@@ -1597,7 +1597,7 @@ export async function setAttendanceBulk(input: {
    */
   units?: string;
 }): Promise<BulkCellResult> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "attendance"))) return { error: "출석 관리 권한이 없습니다" };
 
@@ -1994,7 +1994,7 @@ export async function setAttendanceRange(input: {
    */
   scopeClassIds?: string[];
 }): Promise<RangeResult> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "attendance"))) return { error: "출석 관리 권한이 없습니다" };
 
@@ -2661,7 +2661,7 @@ export async function searchMakeupStudents(
   /** 보고 있는 수업일 — 그날 담당·위임인지로 검색을 연다. 없으면 오늘. */
   onDate?: string,
 ): Promise<{ id: string; name: string; label: string }[]> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return [];
   if (!(await canWriteTenant(user.systemRole, "attendance"))) return [];
   const q = query.trim();

@@ -48,7 +48,7 @@ export async function noteMakeupAgainstAbsence(input: {
   absentClassId: string;
   absentDate: string;
 }): Promise<MakeupNoteResult> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "attendance"))) return { error: "출석 관리 권한이 없습니다" };
   const { studentId, makeupClassId, makeupDate, absentClassId, absentDate } = input;

@@ -72,7 +72,7 @@ const MENT_MAX = 2000;
  * "중간저장" 용도라 실패해도 발송·입력을 막지 않는다(조용히 ok:false).
  */
 export async function saveMyTextbookMent(text: string): Promise<{ ok: boolean }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false };
   const value = (text ?? "").trim().slice(0, MENT_MAX) || null;
   const admin = createAdminClient();
@@ -89,7 +89,7 @@ export async function saveMyTextbookMent(text: string): Promise<{ ok: boolean }>
  * 발송 다이얼로그는 `prepareTextbookNotice`가 이미 같이 실어주므로 이 액션을 또 부르지 않는다(왕복 1회).
  */
 export async function loadMyTextbookMent(): Promise<string> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return DEFAULT_TEXTBOOK_MENT;
   // 저장값이 옛 기본 문구 그대로면 현재 기본 문구로 흡수한다(resolveTextbookMent 주석 — 안 그러면 기본을 고쳐도 안 바뀐다).
   return resolveTextbookMent(await getMyTextbookMent());
@@ -97,7 +97,7 @@ export async function loadMyTextbookMent(): Promise<string> {
 
 /** 발송 다이얼로그 진입 — 요청 행 + 학생별 발송 가능 과목 + 내 멘트 + 계좌 + 발송/첨부 스위치를 한 번에. */
 export async function prepareTextbookNotice(orderIds: string[]): Promise<PreparedTextbookNotice> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "textbook_requests")))
     return { ok: false, error: "교재 요청 권한이 없습니다" };
@@ -192,7 +192,7 @@ export type SendTextbookNoticeInput = {
  * 성공하면 멘트를 다음 기본값으로 저장(원장 요구). dryRun·skipped는 그대로 실어 화면이 정직하게 표시한다.
  */
 export async function sendTextbookNotice(input: SendTextbookNoticeInput): Promise<SendTextbookNoticeResult> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "textbook_requests")))
     return { ok: false, error: "교재 요청 권한이 없습니다" };
