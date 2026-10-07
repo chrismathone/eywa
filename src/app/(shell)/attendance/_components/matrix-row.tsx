@@ -368,8 +368,6 @@ export function MatrixRow({
               daySlots={matrix.slots[student.id]?.[d.date]}
               otherSlots={otherSlots}
               sharedDay={!!matrix.dayAxis[student.id]?.[d.date]}
-              // JJ실 시수 넘기기(원장 2026-10-07) — 권한 보유자 화면에만 값이 온다(페이지가 그 밖엔 지운다).
-              jjUnits={matrix.jjUnits?.[student.id]?.[d.date]}
               // 보강 예약(0264a) — 값이 없는 칸에 '보강 예약' 네 글자로 선다. 이름·반은 예약 창 머리에 쓴다.
               reservation={matrix.reservations?.[student.id]?.[d.date] ?? null}
               studentName={student.name}

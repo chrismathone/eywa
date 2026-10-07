@@ -80,7 +80,6 @@ export function AttendanceCell({
   daySlots,
   otherSlots,
   sharedDay,
-  jjUnits,
   reservation = null,
   studentName,
   className,
@@ -144,8 +143,6 @@ export function AttendanceCell({
    * 툴바 칩("칸 = 이 선생님 교시")의 유일한 예외라, 그 사실을 이 칸이 직접 말한다.
    */
   sharedDay?: boolean;
-  /** 이 칸의 JJ실 시수 [아직 방 몫, 이 선생님이 넘겨받음, 넘겨받은 행 수] — 권한 보유자 화면에만 온다(JJ실 시수 넘기기, 원장 2026-10-07). */
-  jjUnits?: readonly [number, number, number];
 }) {
   const row = rowKey(classId, studentId);
   const key = cellKey(row, sessionDate);
@@ -497,7 +494,6 @@ export function AttendanceCell({
           note={noteVal || ghostNote}
           locked={locked ?? null}
           otherCount={otherSlots?.length ?? 0}
-          jjUnits={jjUnits}
           anchor={popover}
           // 값이 찍힌 칸(결석 등)에서도 예약 정보·취소가 보여야 한다(서버는 `reserved`만 내려준다 — 이행되면 사라진다).
           reservation={reservation}
