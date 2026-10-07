@@ -475,12 +475,14 @@ describe("역할별 메뉴 권한 표 — 줄은 왼쪽 탭과 그 내부 메뉴
 });
 
 describe("설정별 역할 권한 통합", () => {
-  it("설정 권한은 하단에 한 번만 표시하고 메뉴 권한과 함께 저장한다", () => {
+  it("역할별 메뉴·설정 권한 다음에 개인별 메뉴·기능 권한을 표시하고 함께 저장한다", () => {
     render(<PermissionsSection initial={{ ...EMPTY, overrides: [{ menu: "report_settings", role: "teacher", access: "readonly" }] }} />);
     const card = screen.getByRole("heading", { name: "설정별 역할 권한" }).closest("section")!;
     expect(within(menuTable()).queryByText(MENU_LABEL.report_settings)).not.toBeInTheDocument();
     expect(within(card).getByRole("button", { name: MENU_LABEL.report_settings + " · 강사: 읽기" })).toBeInTheDocument();
-    expect(card.compareDocumentPosition(screen.getByRole("heading", { name: "개인별 기능 권한" }))).toBe(Node.DOCUMENT_POSITION_PRECEDING);
+    expect(screen.getAllByRole("heading", { name: /^(역할별 메뉴 권한|설정별 역할 권한|개인별 메뉴 권한|개인별 기능 권한)/ })
+      .map((heading) => heading.textContent?.replace(/\s+\d+건$/, "")))
+      .toEqual(["역할별 메뉴 권한", "설정별 역할 권한", "개인별 메뉴 권한", "개인별 기능 권한"]);
     fireEvent.click(within(card).getByRole("button", { name: MENU_LABEL.report_settings + " · 강사: 읽기" }));
     const overrides = JSON.parse(screen.getByTestId("payload").textContent ?? "{}").overrides;
     expect(resolveMatrix(overrides).report_settings.teacher).toBe("none");
