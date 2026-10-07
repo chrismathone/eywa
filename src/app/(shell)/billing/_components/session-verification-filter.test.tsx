@@ -20,11 +20,12 @@ it.each([{query:"없는이름"},{status:"over"}])("검색/판정 0건은 월 데
   render(await SessionVerificationFace({period:"2026-10",...filter,params:{q:"없는이름",status:"over",embed:"1",lang:"en",page:"3",subject:"math"}}));
   expect(screen.queryByText(/이 달의 회차 데이터가 없습니다/)).toBeNull();
   expect(screen.getByText(/조건에 맞는 학생이 없습니다/)).toBeInTheDocument();
-  expect(screen.getByText("강사별 분배 (참고)")).toBeInTheDocument();
+  expect(screen.getByText("강사별 청구 금액 (참고)")).toBeInTheDocument();
   expect(screen.getByText("합성강사")).toBeInTheDocument();
   expect(screen.getByTestId("split-snapshot")).toHaveTextContent('"confirmedAmount":40000');
   const url=new URL(screen.getByRole("link",{name:"검색·판정 해제"}).getAttribute("href")!,"https://test.invalid");
   expect(url.searchParams.has("q")).toBe(false); expect(url.searchParams.has("status")).toBe(false);
   expect(url.searchParams.has("page")).toBe(false); expect(url.searchParams.get("embed")).toBe("1");
   expect(url.searchParams.get("lang")).toBe("en"); expect(url.searchParams.get("subject")).toBe("math");
+  expect(url.searchParams.get("tab")).toBe("sessions"); expect(url.searchParams.get("panel")).toBe("verify");
 });

@@ -149,10 +149,10 @@ export async function saveMoneyCarryover(input: { termId: string; amount: number
   }));
   // 이월이 빠져 덜 받게 된 줄 안내를 분배 경고 앞에 붙인다(둘 다 사람이 손봐야 하는 일이라 한 창으로).
   const withShort = (text: string | undefined) => [shortNotice, text].filter(Boolean).join("\n\n") || undefined;
-  if (counts.some((x) => x.has === null)) return { ok: true, ...(notice ? { notice } : {}), warning: withShort("강사 분배 저장본을 확인하지 못했습니다 — 두 달 분배를 저장해 두었다면 시수 검증 면에서 다시 저장해 주세요.") };
+  if (counts.some((x) => x.has === null)) return { ok: true, ...(notice ? { notice } : {}), warning: withShort("강사 분배 저장본을 확인하지 못했습니다 — 두 달 분배를 저장해 두었다면 회차 확정의 ‘청구 시수 대조’에서 다시 저장해 주세요.") };
   const stale = counts.filter((x) => x.has).map((x) => x.p);
   const warning = withShort(stale.length
-    ? `${stale.map((p) => `${Number(p.slice(5, 7))}월`).join("·")} 강사 분배를 이미 저장해 두었습니다 — 시수 검증 면에서 분배를 다시 저장해 주세요.`
+    ? `${stale.map((p) => `${Number(p.slice(5, 7))}월`).join("·")} 강사 분배를 이미 저장해 두었습니다 — 회차 확정의 ‘청구 시수 대조’에서 분배를 다시 저장해 주세요.`
     : undefined);
   return { ok: true, ...(notice ? { notice } : {}), ...(warning ? { warning } : {}) };
 }

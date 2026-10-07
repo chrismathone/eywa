@@ -99,7 +99,6 @@ export const SUBTABS_BY_MENU: Partial<Record<MenuKey, SubTab[]>> = {
     { label: "지출", href: "/billing?tab=expenses" },
     { label: "수강료 계산기", href: "/billing?tab=calculator" },
     { label: "회차 확정", href: "/billing?tab=sessions" },
-    { label: "시수 검증", href: "/billing?tab=verify" },
     { label: "환불 요청서", href: "/billing?tab=refunds" },
   ],
   // 출석부 — 오늘 출결을 하부탭 위에 두되, **부모 메뉴·기본 착지는 월별**(`/attendance`).

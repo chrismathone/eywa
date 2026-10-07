@@ -15,6 +15,8 @@ import Link from "next/link";
 import { SessionTermsState, SessionTermsConfirmedCount } from "./session-terms-state";
 import { NO_LESSON_LABEL } from "@/features/billing/session-terms/month-roster";
 import { confirmableTermRow, filterSessionTermRows } from "@/features/billing/session-terms/term-filter";
+import { SessionVerificationFace } from "./session-verification-face";
+import { SessionPanels } from "./session-panels";
 
 const PAGE_SIZE = 25; // 반(그룹) 단위 페이지
 
@@ -32,6 +34,9 @@ export async function SessionTermsFace({
   page,
   allocation,
   confirmation,
+  panel,
+  status,
+  params = {},
 }: {
   period?: string;
   subject?: string;
@@ -40,8 +45,15 @@ export async function SessionTermsFace({
   allocation?: string;
   /** `open` = 미확정만 보기(원장 2026-09-17 *"검색 필터에 '미확정' 보기 추가"*). */
   confirmation?: string;
+  panel?: string;
+  status?: string;
+  params?: Record<string, string | undefined>;
 }) {
   const p = period && /^\d{4}-\d{2}$/.test(period) ? period : currentPeriod();
+  if (panel === "verify") return <div className="space-y-4">
+    <SessionPanels period={p} params={params} active="verify" />
+    <SessionVerificationFace period={p} subject={subject} page={page} query={q} status={status} params={params} />
+  </div>;
   // JJ실 줄 재료는 표 조회와 독립이라 나란히 읽는다(B4) — 권한이 없거나 못 읽으면 null(줄만 안 선다).
   const [view, settings, seatGive] = await Promise.all([getSessionTermsView(p, undefined, { lastMonth: true }), getTenantSettings(), loadSeatGiveSummary(p)]);
   const subjects = buildSubjectMaps(settings.operations.subjects);
@@ -97,6 +109,8 @@ export async function SessionTermsFace({
   const pageHref = (n: number) => hrefFor(p, n);
 
   return (
+    <div className="space-y-4">
+    <SessionPanels period={p} params={params} active="confirm" />
     <SessionTermsState rows={filtered.map(({ id, confirmedSessions, invoiceId, invoiceHasAllocations }) => ({ id, confirmedSessions, invoiceId, invoiceHasAllocations }))}>
     <section className="space-y-4">
       {/* 툴바(지시서 §10) — 월 이동은 공용 BillingMonthNav(옛 h-8 text-xs 화살표 링크 대체) · 과목 칩 줄 → `과목: 전체` 라벨 ·
@@ -197,5 +211,6 @@ export async function SessionTermsFace({
       )}
     </section>
     </SessionTermsState>
+    </div>
   );
 }

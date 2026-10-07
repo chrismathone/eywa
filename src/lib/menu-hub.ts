@@ -173,7 +173,6 @@ export const HUB_GROUPS: HubGroup[] = [
       billingFace("/billing?tab=refunds", "환불 요청서 처리", { icon: "undo" }),
       billingFace("/billing?tab=calculator", undefined, { tool: true }),
       billingFace("/billing?tab=sessions", undefined, { tool: true }),
-      billingFace("/billing?tab=verify", undefined, { tool: true }),
     ]),
   },
   {
