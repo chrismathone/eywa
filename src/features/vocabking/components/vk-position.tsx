@@ -39,7 +39,7 @@ export function VkHeader({ report }: { report: VocabkingReport }) {
 export function VkPosition({ report }: { report: VocabkingReport }) {
   const p = report.position;
   return (
-    <section className="grid gap-4 @lg:grid-cols-[13rem_minmax(0,1fr)_15rem]">
+    <section className="grid gap-4 @3xl:grid-cols-[13rem_minmax(0,1fr)_15rem]">
       <div className="bg-primary text-primary-foreground flex flex-col items-center justify-center gap-2 rounded-2xl px-4 py-5">
         {p.rank !== null ? (
           <>
@@ -74,7 +74,7 @@ export function VkPosition({ report }: { report: VocabkingReport }) {
           </span>
         </p>
         {p.comparisons.length ? (
-          <div className="grid grid-cols-1 gap-2 @md:grid-cols-3">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(7.5rem,1fr))] gap-2">
             {p.comparisons.map((c) => (
               <div key={c.key} className="border-line rounded-xl border px-3 py-2.5 text-center">
                 <p className="text-text-dim text-xs font-medium">{c.label}</p>

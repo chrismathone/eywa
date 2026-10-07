@@ -5,6 +5,9 @@ import { JjStudySheet } from "@/features/ijw/components/jj-study-sheet";
 import { slotAvailability, type JjReportSnapshot } from "@/features/ijw/snapshot";
 import { splitImageSlots } from "@/features/report-templates/image-slots";
 import { isImageAttachment } from "../attachment-utils";
+import { isVocabkingDeck } from "@/features/vocabking/deck";
+import { buildVocabkingReport } from "@/features/vocabking/model";
+import { VocabkingReportView } from "@/features/vocabking/components/vocabking-report";
 
 /**
  * 학부모 카드의 **템플릿 모드 본문**(영어) — ParentReportCard에서 떼어 냈다(2026-09-11, 첨부 자리를 더하며).
@@ -33,10 +36,13 @@ export function TemplateBody({
   text,
   jj,
   inline,
+  student,
 }: {
   text: string | null;
   jj?: JjReportSnapshot | null;
   inline: ReadonlyMap<string, CardAttachment>;
+  /** 카드 머리의 학생(이름·학년) — 보카킹 리포트 머리글과 학년 표기에 쓴다. 없으면 인재원 이름만. */
+  student?: { name: string | null; grade: string | null } | null;
 }) {
   const body = (text ?? "").replace(/\r\n?/g, "\n").trim();
   const segments = splitImageSlots(body);
@@ -53,8 +59,24 @@ export function TemplateBody({
       return att ? [<InlineAttachment key={`a${i}`} att={att} />] : [];
     }
     if (seg.key === "시험결과지") {
+      // 보카킹 시험이면 **종합평가 리포트**(원장 2026-10-07), 그 밖의 단어 시험은 종전 결과지. 재료는 같은 동결본이다 —
+      // 같은 시험 응시자 결과(학년 평균·응시자 평균 시간)는 동결본에 없어 카드에선 그 칸만 빠진다(JJ실 창에선 보인다).
       return avail.시험결과지 && jj
-        ? jj.exams.map((exam, j) => <JjExamSheet key={`e${i}-${j}`} exam={exam} layout="card" />)
+        ? jj.exams.map((exam, j) =>
+            isVocabkingDeck(exam.deck.name) ? (
+              <VocabkingReportView
+                key={`v${i}-${j}`}
+                report={buildVocabkingReport({
+                  exam,
+                  study: jj.study ?? null,
+                  student: { name: student?.name || exam.student.name || exam.student.id, grade: student?.grade ?? null },
+                  peers: null,
+                })}
+              />
+            ) : (
+              <JjExamSheet key={`e${i}-${j}`} exam={exam} layout="card" />
+            ),
+          )
         : [];
     }
     return avail.학습분석지 && jj?.study ? [<JjStudySheet key={`s${i}`} study={jj.study} layout="card" />] : [];
