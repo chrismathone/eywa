@@ -74,6 +74,6 @@ export default async function VideoHomeworkPage({ searchParams }: {
     {!ledger.videosKnown ? <p role="status" className={NOTE}>학부모 영상 도착 기록을 읽지 못해 이번 화면에서는 영상 자동 집계를 뺐습니다.</p> : null}
     {rangeTooLong ? <p role="status" className="text-text-dim text-xs">한 번에 최대 366일을 조회할 수 있어 종료일이 속한 달을 표시했습니다.</p> : null}
     <VideoHomeworkManagement key={`${fromDate}:${toDate}`} rows={ledgerRows} initialMarks={ledger.marks} videos={ledger.videos} blankFacts={ledger.blankFacts} videosKnown={ledger.videosKnown}
-      fromDate={fromDate} toDate={toDate} today={today} initialFilters={initialFilters} />
+      fromDate={fromDate} toDate={toDate} today={today} initialFilters={initialFilters} showTeacher />
   </main>;
 }

@@ -27,7 +27,7 @@ function SourceMark({ row, round, videosKnown, onPlay }: { row: VideoHomeworkLed
 export function BlankRoundCell({ blank }: { blank: BlankCell | undefined }) {
   if (!blank) return <td><span className={styles.notApplicable} title="이 회차의 숙제가 없습니다" aria-label="숙제 없음">—</span></td>;
   const label = BLANK_LABEL[blank.reason];
-  return <td><span className={styles.blank} title={`${blank.date} ${label}${blank.reason === "absent" ? " — 결석이라 숙제 회차에 넣지 않습니다" : " — 이 학생에겐 영상 숙제가 없었습니다"}`}
+  return <td><span className={styles.blank} data-reason={blank.reason} title={`${blank.date} ${label}${blank.reason === "absent" ? " — 결석이라 숙제 회차에 넣지 않습니다" : " — 이 학생에겐 영상 숙제가 없었습니다"}`}
     aria-label={`${blank.date} ${label}`}>
     <small className={styles.markDate}>{shortDate(blank.date)}</small><span>{label}</span>
   </span></td>;

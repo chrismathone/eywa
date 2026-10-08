@@ -3,7 +3,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 const m = vi.hoisted(() => ({ rows: {} as Record<string, unknown[]>, reads: [] as { table: string; name: string; args: unknown[] }[] }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from(table: string) {
   const q: Record<string, unknown> = {};
-  for (const name of ["select", "eq", "in", "not", "gte", "lt", "or", "order"]) q[name] = (...args: unknown[]) => { m.reads.push({ table, name, args }); return q; };
+  for (const name of ["select", "eq", "in", "not", "gte", "lt", "or", "order", "returns"]) q[name] = (...args: unknown[]) => { m.reads.push({ table, name, args }); return q; };
   q.range = () => Promise.resolve({ data: m.rows[table] ?? [], error: null });
   return q;
 } }) }));

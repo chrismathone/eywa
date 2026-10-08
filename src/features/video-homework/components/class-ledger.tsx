@@ -16,8 +16,9 @@ const PAGE_SIZE = 50;
 const ROUND_SIZE = 10;
 // 반의 회차 수나 창 폭이 달라도 같은 열은 항상 같은 너비를 쓴다. 나머지 폭은 빈 공간이다.
 const COLUMN_WIDTH = { select: 32, student: 112, school: 132, count: 64, round: 96 } as const;
-export function ClassLedger({ group, rounds, blankFacts, videosKnown = true, today, busy, save, onEdit, onPlay, onAssign, collapsed, onToggle }: {
+export function ClassLedger({ group, rounds, blankFacts, videosKnown = true, showTeacher = false, today, busy, save, onEdit, onPlay, onAssign, collapsed, onToggle }: {
   group: LedgerGroup; rounds: LedgerRounds; blankFacts: BlankFacts; videosKnown?: boolean; today: string; busy: boolean; save: SaveLedgerChanges;
+  showTeacher?: boolean;
   onEdit: (cell: ActiveCell) => void; collapsed: boolean; onToggle: () => void;
   onPlay: (cell: ActiveCell) => void;
   onAssign?: (row: VideoHomeworkLedgerRow) => void;
@@ -67,6 +68,7 @@ export function ClassLedger({ group, rounds, blankFacts, videosKnown = true, tod
     <button type="button" className={styles.groupHeading} onClick={onToggle} aria-expanded={!collapsed} aria-controls={panelId}>
       <EyIcon name={collapsed ? "chevronRight" : "chevronDown"} size={18} /><strong>{group.className}</strong>
       <span className={styles.groupMeta}>{group.subject} · {group.rows.length}명</span>
+      {showTeacher ? <span className={styles.groupTeacher}>담당 {group.teacherName || "미지정"}</span> : null}
       <span className={styles.groupTotals}><span className={styles.green}>완료 {summary.submitted}</span><span className={styles.red}>미수행 {summary.missing}</span><span className={styles.amber}>미확인 {summary.unchecked}</span></span>
     </button>
     {!collapsed ? <div id={panelId}>

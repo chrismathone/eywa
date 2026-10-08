@@ -19,8 +19,9 @@ const NO_VIDEOS: VideoArrival[] = [];
 const NO_FACTS: BlankFacts = {};
 const unique = (values: string[]) => [...new Set(values)].sort((a, b) => a.localeCompare(b, "ko", { numeric: true })).map((value) => ({ value, label: value }));
 
-export function VideoHomeworkManagement({ rows, initialMarks, videos = NO_VIDEOS, blankFacts = NO_FACTS, videosKnown = true, fromDate, toDate, today, initialFilters = DEFAULT_LEDGER_FILTERS, keepRounds }: {
+export function VideoHomeworkManagement({ rows, initialMarks, videos = NO_VIDEOS, blankFacts = NO_FACTS, videosKnown = true, showTeacher = false, fromDate, toDate, today, initialFilters = DEFAULT_LEDGER_FILTERS, keepRounds }: {
   rows: VideoHomeworkLedgerRow[]; initialMarks: VideoHomeworkMark[]; videos?: VideoArrival[]; blankFacts?: BlankFacts; videosKnown?: boolean;
+  showTeacher?: boolean;
   fromDate: string; toDate: string; today: string; initialFilters?: LedgerFilters;
   /** 보일 회차(`반:학생:숙제일`, `ownRoundKey`) — 주면 그 칸만 세운다(강사뷰 = 내가 낸 숙제). 없으면 전부(관리자 화면). */
   keepRounds?: readonly string[];
@@ -87,7 +88,7 @@ export function VideoHomeworkManagement({ rows, initialMarks, videos = NO_VIDEOS
     <p className={styles.hint}>수업보고서에 영상 과제가 나간 수업만 회차로 셉니다 — 1회·2회는 학생마다의 순서라 같은 회차도 날짜가 다를 수 있습니다.
       칸 위 날짜 = 숙제가 나간 날 · <EyIcon name="check" size={12} className="inline-block align-middle" /> 뒤 날짜 = 제출일 · 날짜 없이 완료 = 제출일 미기록 · ▶ = 영상 재생 · 초록 테두리 = 영상으로 자동 완료(반이 확인된 영상만 자동으로 셉니다) · × 미수행 · 미확인 = 숙제가 나갔는데 아직 확인 전. 미확인 칸을 누르면 오늘 날짜로 완료됩니다.</p>
     {progress ? <p className={styles.saving} role="status">기록 저장 중 {progress.done} / {progress.total}건</p> : null}
-    {visibleGroups.length ? visibleGroups.map((group) => <ClassLedger key={`${group.classId}:${filterKey}`} group={group} rounds={rounds} blankFacts={blankFacts} videosKnown={videosKnown} today={today} busy={busy} save={save} onEdit={setActive} onPlay={setPlaying} onAssign={setAssigning}
+    {visibleGroups.length ? visibleGroups.map((group) => <ClassLedger key={`${group.classId}:${filterKey}`} group={group} rounds={rounds} blankFacts={blankFacts} videosKnown={videosKnown} showTeacher={showTeacher} today={today} busy={busy} save={save} onEdit={setActive} onPlay={setPlaying} onAssign={setAssigning}
       collapsed={collapsed.has(group.classId)} onToggle={() => setCollapsed((current) => { const next = new Set(current); if (next.has(group.classId)) next.delete(group.classId); else next.add(group.classId); return next; })} />)
       : <div className={styles.empty}><strong>{rows.length ? "조건에 맞는 학생이 없습니다." : "조회 기간에 영상 과제가 나간 수업이 없습니다."}</strong><p>{rows.length ? "검색어와 필터를 조정해 주세요." : "원스크린에서 '영상 과제'를 켜고 저장한 수업부터 회차가 생깁니다."}</p></div>}
     <Dialog open={active !== null} onOpenChange={(open) => { if (!open && !busy) setActive(null); }}>

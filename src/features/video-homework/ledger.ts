@@ -37,9 +37,9 @@ export const roundStatusLabel = (round: Pick<LedgerRound, "status" | "auto">) =>
   round.status === "submitted" ? (round.auto ? "완료(영상)" : "완료") : round.status === "missing" ? "미수행" : "미확인";
 
 export function groupLedgerRows(rows: VideoHomeworkLedgerRow[], rounds: LedgerRounds) {
-  const groups = new Map<string, { classId: string; className: string; subject: string; rows: VideoHomeworkLedgerRow[]; roundCount: number; homeworkDates: string[] }>();
+  const groups = new Map<string, { classId: string; className: string; subject: string; teacherName?: string | null; rows: VideoHomeworkLedgerRow[]; roundCount: number; homeworkDates: string[] }>();
   for (const row of rows) {
-    const group = groups.get(row.classId) ?? { classId: row.classId, className: row.className, subject: row.subject, rows: [], roundCount: 0, homeworkDates: [] };
+    const group = groups.get(row.classId) ?? { classId: row.classId, className: row.className, subject: row.subject, teacherName: row.teacherName, rows: [], roundCount: 0, homeworkDates: [] };
     group.rows.push(row);
     // 열 수 = 그 반에서 회차가 가장 많은 학생. 검색으로 학생이 가려져도 열은 그대로다.
     group.roundCount = Math.max(group.roundCount, roundsOf(rounds, row).length);

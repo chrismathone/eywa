@@ -17,7 +17,8 @@ type DbMark = { class_id: string; student_id: string; check_date: string; homewo
 type DbVideo = { id: string; student_id: string; post_id: number | null; posted_at: string; created_at: string | null; uploaded_at: string | null;
   md5: string | null; bytes: number | string | null; status: string; drive_file_id: string | null;
   class_id: string | null; homework_date: string | null; manual_assignment?: string | null };
-export type VideoHomeworkLedgerBaseRow = VideoHomeworkRosterRow & { assignedDates: string[] };
+type DbLedgerClass = LedgerClass & { teacher: { display_name: string; tenant_id: string } | null };
+export type VideoHomeworkLedgerBaseRow = VideoHomeworkRosterRow & { assignedDates: string[]; teacherName: string | null };
 
 /**
  * 숙제 영상(0315a `student_homework_videos`) — 반이 확인된 것만 읽고 업로드 완료 파일의 검증된 미리보기를 붙인다.
@@ -70,8 +71,8 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
   const today = kstToday();
   const { from: wideFrom, to: wideTo } = videoMatchRange(fromDate, toDate, today);
   const [classes, enrollments, schedules, markRows, assigned] = await Promise.all([
-    fetchAllPaged<LedgerClass>((from, to) => db.from("classes")
-      .select("id,class_name,subject,is_active,closed_at").eq("tenant_id", tenantId).order("id").range(from, to)),
+    fetchAllPaged<DbLedgerClass>((from, to) => db.from("classes")
+      .select("id,class_name,subject,is_active,closed_at,teacher:teacher_id(display_name,tenant_id)").eq("tenant_id", tenantId).order("id").returns<DbLedgerClass[]>().range(from, to)),
     fetchAllPaged<LedgerEnrollment>((from, to) => db.from("enrollments")
       .select("class_id,student_id,start_date,end_date,on_hold,is_transferred,attendance_days")
       .eq("tenant_id", tenantId).or(`start_date.is.null,start_date.lte.${toDate}`)
@@ -135,6 +136,7 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
     const cls = byClass.get(pair.classId);
     const student = byStudent.get(pair.studentId);
     return cls && student ? [{ classId: pair.classId, studentId: pair.studentId, className: cls.class_name, subject: cls.subject,
+      teacherName: cls.teacher?.tenant_id === tenantId ? cls.teacher.display_name.trim() || null : null,
       studentName: student.name, school: student.school, grade: student.grade,
       assignedDates: [...new Set(assignedByPair.get(`${pair.classId}:${pair.studentId}`) ?? [])].sort() }] : [];
   });

@@ -27,6 +27,8 @@ export type VideoHomeworkHistoryRow = VideoHomeworkRosterRow & VideoHomeworkMark
 
 /** 장부의 한 줄 = 반 × 학생. 회차는 `rounds.ts`가 숙제가 나간 날·기록·영상 도착으로 만든다. */
 export type VideoHomeworkLedgerRow = VideoHomeworkRosterRow & {
+  /** 반에 현재 지정된 담당 선생님. 관리자 현황의 반 제목에 표시한다. */
+  teacherName?: string | null;
   /** 그 반에서 이 학생에게 영상 과제가 나간 수업일(보고서 `video_homework = true`). 조회 기간 앞뒤 여유분을 포함한다. */
   assignedDates: string[];
   /** 지금 설정으로 검사 대상인가 — 아니면 저장된 기록만 회차로 보이고 새 미확인·자동 집계는 만들지 않는다. */
