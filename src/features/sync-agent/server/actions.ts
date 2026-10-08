@@ -5,10 +5,20 @@ import { SettingsInput } from "../protocol";
 import { agentDb } from "./db";
 import { AgentError, generateCode, privateHash, rateLimit, requireManager } from "./security";
 import { deviceConfiguration } from "./control";
+import { reportError } from "@/lib/observability/report-error";
 
 async function action<T>(fn: () => Promise<T>): Promise<{ data?: T; error?: string }> {
   try { return { data: await fn() }; }
-  catch (error) { return { error: error instanceof AgentError && error.status !== 429 ? error.code : "처리하지 못했습니다. 잠시 후 다시 시도해 주세요." }; }
+  catch (error) {
+    if (error instanceof AgentError && error.status !== 429) return { error: error.code };
+    const source = error && typeof error === "object" ? error as { code?: unknown; message?: unknown } : {};
+    const busy = typeof source.message === "string" && /EMAXCONNSESSION|MaxClientsInSessionMode|max clients reached|Max client connections reached/i.test(source.message);
+    const code = typeof source.code === "string" && /^[A-Z0-9_]{1,40}$/.test(source.code) ? source.code : "UNKNOWN";
+    // SQL errors may carry values, credentials or query parameters. Log only the
+    // bounded code and category, never the original error or statement.
+    reportError(new Error("Sync agent action failed"), { scope: "sync-agent.action", code, category: busy ? "connection_limit" : "unexpected" });
+    return { error: busy ? "연동 서버의 연결이 혼잡합니다. 잠시 후 새로고침해 주세요." : "처리하지 못했습니다. 잠시 후 다시 시도해 주세요." };
+  }
 }
 export async function getAgentDashboard() {
   return action(async () => {

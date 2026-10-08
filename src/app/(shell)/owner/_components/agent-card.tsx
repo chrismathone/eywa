@@ -11,7 +11,7 @@ export function AgentCard({classnoteOn,makeeduOn}:{classnoteOn:boolean;makeeduOn
   const [managementCode,setManagementCode]=useState<{code:string;expiresAt:string}|null>(null);
   const [now,setNow]=useState(0),[pending,startTransition]=useTransition();
   const [filter,setFilter]=useState("all"),[level,setLevel]=useState("all");
-  const refresh=useCallback(async()=>{const result=await getAgentDashboard();setNow(Date.now());if(result.data){setData(result.data);setError("");}else setError(result.error??"상태를 확인하지 못했습니다.");},[]);
+  const refresh=useCallback(async()=>{try{const result=await getAgentDashboard();setNow(Date.now());if(result.data){setData(result.data);setError("");}else setError(result.error??"상태를 확인하지 못했습니다.");}catch{setError("연동 PC 상태를 불러오지 못했습니다. 잠시 후 새로고침해 주세요.");}},[]);
   useEffect(()=>{let disposed=false;const load=async()=>{if(!disposed) await refresh();};void load();const timer=setInterval(load,20_000);return()=>{disposed=true;clearInterval(timer);};},[refresh]);
   const act=(fn:()=>Promise<{error?:string}>,message="")=>startTransition(async()=>{setError("");setNotice("");try{const result=await fn();if(result.error)setError(result.error);else{setNotice(message);await refresh();}}catch{setError("서버 연결을 확인해 주세요.");}});
   const settings=data?.configuration;
@@ -31,13 +31,13 @@ export function AgentCard({classnoteOn,makeeduOn}:{classnoteOn:boolean;makeeduOn
     <section className={box}>
       <h2 className="font-bold">Windows 연동 앱</h2>
       <p className="text-text-dim text-sm">지점의 연동 PC 한 대에 설치하면 켜 둔 연동을 함께 실행합니다. 새 버전은 자동으로 받고, PC 앱에서 버전마다 즉시 업데이트하거나 날짜·시간을 지정합니다.</p>
-      {data?.release?<a className={button+" inline-flex"} href={data.release.url} rel="noreferrer">Windows용 다운로드 · {data.release.version}</a>:<p className="text-text-dim text-sm">설치 파일을 준비 중입니다.</p>}
+      {data?.release?<a className={button+" inline-flex"} href={data.release.url} rel="noreferrer">Windows용 다운로드 · {data.release.version}</a>:<p className="text-text-dim text-sm">{data?"설치 파일을 준비 중입니다.":error?"다운로드 정보를 불러오지 못했습니다. 아래 새로고침을 눌러 주세요.":"다운로드 정보를 확인 중입니다."}</p>}
     </section>
     <section className={box}>
       <h2 className="font-bold">지점 연결 코드</h2>
       <p className="text-text-dim text-sm">앱을 처음 실행할 때 아래 코드를 입력하세요. 15분 동안 한 번 사용할 수 있으며, 재발급하면 이전 코드는 만료됩니다.</p>
       {code && Date.parse(code.expiresAt)>now?<div className="flex flex-wrap items-center gap-3"><output className="font-mono text-2xl tracking-widest" aria-label="12자리 연결 코드">{code.code.match(/.{1,4}/g)?.join(" ")}</output><button className={button} onClick={()=>{void navigator.clipboard.writeText(code.code).then(()=>setNotice("코드를 복사했습니다."),()=>setError("코드를 직접 입력해 주세요."));}}>복사</button><span className="text-text-dim text-xs">{when(code.expiresAt)}까지</span></div>:null}
-      <button className={button} disabled={pending||!!device} onClick={()=>act(async()=>{const result=await issueAgentCode();if(result.data){setCode(result.data);setNow(Date.now());}return result;})}>연결 코드 발급</button>
+      <button className={button} disabled={pending||!data||!!device} onClick={()=>act(async()=>{const result=await issueAgentCode();if(result.data){setCode(result.data);setNow(Date.now());}return result;})}>연결 코드 발급</button>
       {device?<p className="text-text-dim text-xs">다른 PC로 교체하려면 현재 PC의 연결을 먼저 해제하세요.</p>:null}
     </section>
     <section className={box}>
@@ -49,7 +49,7 @@ export function AgentCard({classnoteOn,makeeduOn}:{classnoteOn:boolean;makeeduOn
         {managementCode && Date.parse(managementCode.expiresAt)>now?<p className="text-sm">앱의 설정 잠금을 여는 코드: <output className="font-mono tracking-widest">{managementCode.code.match(/.{1,4}/g)?.join(" ")}</output> · 10분 동안 한 번 사용</p>:null}
         {device.revoke_requested_at?<p role="status" className="text-sm">기존 PC의 실행 종료를 확인하고 있습니다. 완료 후 새 코드를 발급할 수 있습니다.</p>:<button className={button} disabled={pending} onClick={()=>{if(window.confirm("이 PC의 연동을 중지하고 연결을 해제할까요? 작업 중이면 완료 여부를 확인해 주세요."))act(()=>revokeAgentDevice(device.id),"연결 해제를 요청했습니다.");}}>PC 연결 해제</button>}
         {!settings?.cutoverReady?<p className="text-text-dim text-sm">앱에서 기존 워커 확인과 계정 설정을 마치면 연동을 시작할 수 있습니다.</p>:null}
-      </>:<p className="text-text-dim text-sm">아직 연결된 PC가 없습니다.</p>}
+      </>:<p className="text-text-dim text-sm">{data?"아직 연결된 PC가 없습니다.":error?"PC 상태를 불러오지 못했습니다.":"PC 상태를 확인 중입니다."}</p>}
       {toggle("enabled","이 PC에서 연동 실행")}
       {classnoteOn?toggle("classnoteEnabled","클래스노트 · 숙제영상 보관"):null}
       {makeeduOn?toggle("makeeduEnabled","메이크에듀"):null}
@@ -62,7 +62,7 @@ export function AgentCard({classnoteOn,makeeduOn}:{classnoteOn:boolean;makeeduOn
         <select className={button} aria-label="연동 기록 필터" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">전체 연동</option><option value="app">앱</option>{classnoteOn?<><option value="classnote">클래스노트</option><option value="video">영상</option></>:null}{makeeduOn?<option value="makeedu">메이크에듀</option>:null}<option value="update">업데이트</option></select>
         <select className={button} aria-label="기록 종류 필터" value={level} onChange={e=>setLevel(e.target.value)}><option value="all">전체 기록</option><option value="warning">확인 필요</option><option value="error">오류</option></select>
       </div>
-      {events.length?<ol className="divide-border divide-y">{events.map(event=><li key={event.event_id} className="flex flex-wrap justify-between gap-2 py-2 text-sm"><span>{event.detail.task?`${TASK_LABELS[event.detail.task as keyof typeof TASK_LABELS]??"연동"} · `:""}{EVENT_LABELS[event.kind as keyof typeof EVENT_LABELS]??"실행 기록"}{event.detail.version?` · ${String(event.detail.version)}`:""}{typeof event.detail.count==="number"?` · ${event.detail.count}건`:""}</span><time className="text-text-dim text-xs" dateTime={event.received_at}>{when(event.received_at)}</time></li>)}</ol>:<p className="text-text-dim text-sm">표시할 기록이 없습니다.</p>}
+      {events.length?<ol className="divide-border divide-y">{events.map(event=><li key={event.event_id} className="flex flex-wrap justify-between gap-2 py-2 text-sm"><span>{event.detail.task?`${TASK_LABELS[event.detail.task as keyof typeof TASK_LABELS]??"연동"} · `:""}{EVENT_LABELS[event.kind as keyof typeof EVENT_LABELS]??"실행 기록"}{event.detail.version?` · ${String(event.detail.version)}`:""}{typeof event.detail.count==="number"?` · ${event.detail.count}건`:""}</span><time className="text-text-dim text-xs" dateTime={event.received_at}>{when(event.received_at)}</time></li>)}</ol>:<p className="text-text-dim text-sm">{data?"표시할 기록이 없습니다.":error?"실행 기록을 불러오지 못했습니다.":"실행 기록을 확인 중입니다."}</p>}
     </section>
   </div>;
 }
