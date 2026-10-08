@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const AGENT_PROTOCOL = 1;
-export const AGENT_VERSION = "1.0.1";
+export const AGENT_VERSION = "1.0.2";
 export const UUID = z.string().uuid();
 export const Version = z.string().regex(/^\d+\.\d+\.\d+$/).max(32);
 export const MODULES = ["classnote", "makeedu"] as const;
@@ -20,10 +20,17 @@ export const BeatInput = LeaseInput.extend({ generation: z.string().regex(/^[1-9
 export const EventKind = z.enum(["app_started", "app_stopped", "paired", "paused", "resumed", "lease_lost", "connection_lost", "connection_restored", "module_started", "module_stopped", "module_failed", "module_retry", "job_started", "job_succeeded", "job_failed", "update_available", "update_downloaded", "update_applied", "update_failed", "update_rollback", "legacy_detected", "logs_dropped", "credentials_needed"]);
 export const TASK_LABELS = {queue:"보고서 발송",notice:"개별 공지",classNotice:"반 공지",recall:"발송 회수",autoSync:"반 자동 동기화",syncNow:"지금 동기화",parentReply:"학부모 답장",parentReaction:"학부모 반응",provision:"신입 준비",classBoardSync:"반 보드",childmap:"학생 연결",posts:"학부모 게시글",comments:"학부모 댓글",reads:"읽음 확인",roster:"반 명단",video:"영상 보관",sync:"정기 동기화",login:"로그인 점검",push:"상담 전송"} as const;
 export const TaskKind=z.enum(Object.keys(TASK_LABELS) as [keyof typeof TASK_LABELS,...Array<keyof typeof TASK_LABELS>]);
+export const LOG_CODE_LABELS = {
+  makeedu_sync_started:"메이크에듀 동기화 시작",makeedu_sync_complete:"동기화 처리 완료 · 실패 없음",makeedu_sync_partial:"동기화 일부 항목 확인 필요",
+  makeedu_students:"학생 동기화 처리 중",makeedu_classes:"반 동기화 처리 중",makeedu_prospects:"예비 상담 동기화 처리 중",makeedu_invoices:"수납 동기화 처리 중",
+  makeedu_textbook_checks:"교재 체크 처리 중",makeedu_consultations:"재원 상담 동기화 처리 중",login_ok:"메이크에듀 로그인 확인 완료",
+  status_failed:"실행 상태 기록 실패",result_failed:"동기화 완료 기록 저장 실패",poll_failed:"작업 조회 실패 · 다음 주기에 재확인",
+} as const;
+export const LogCode=z.enum(Object.keys(LOG_CODE_LABELS) as [keyof typeof LOG_CODE_LABELS,...Array<keyof typeof LOG_CODE_LABELS>]);
 export const EventInput = z.object({
-  id: UUID, at: z.string().datetime(), kind: EventKind,
+  id: UUID, at: z.string().datetime(), kind: EventKind.or(z.literal("worker_log")),
   module: z.enum(["app", "classnote", "makeedu", "video", "update"]), level: z.enum(["info", "warning", "error"]),
-  detail: z.object({ task:TaskKind.optional(),count: z.number().int().min(0).max(1000000).optional(), durationMs: z.number().int().min(0).max(86400000).optional(), version: Version.optional() }).strict().default({}),
+  detail: z.object({ task:TaskKind.optional(),logCode:LogCode.optional(),count: z.number().int().min(0).max(1000000).optional(), durationMs: z.number().int().min(0).max(86400000).optional(), version: Version.optional() }).strict().default({}),
 }).strict();
 export const SettingsInput = z.object({ enabled: z.boolean(), classnoteEnabled: z.boolean(), makeeduEnabled: z.boolean(), updatesEnabled: z.boolean(), revision: z.number().int().positive() }).strict();
 export const LocalSettingsInput = z.object({

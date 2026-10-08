@@ -6,6 +6,7 @@ import { agentDb } from "./db";
 import { AgentError, generateCode, privateHash, rateLimit, requireManager } from "./security";
 import { deviceConfiguration } from "./control";
 import { reportError } from "@/lib/observability/report-error";
+import { AgentLogRequest,kstLogRange } from "../log-filter";
 
 async function action<T>(fn: () => Promise<T>): Promise<{ data?: T; error?: string }> {
   try { return { data: await fn() }; }
@@ -20,19 +21,27 @@ async function action<T>(fn: () => Promise<T>): Promise<{ data?: T; error?: stri
     return { error: busy ? "연동 서버의 연결이 혼잡합니다. 잠시 후 새로고침해 주세요." : "처리하지 못했습니다. 잠시 후 다시 시도해 주세요." };
   }
 }
-export async function getAgentDashboard() {
+export async function getAgentDashboard(input:unknown={}) {
   return action(async () => {
-    const user = await requireManager(); const sql = agentDb();
+    const user = await requireManager(); const parsed=AgentLogRequest.safeParse(input);
+    if(!parsed.success)throw new AgentError(400,"로그 조회 조건을 확인해 주세요.");
+    let range;try{range=kstLogRange(parsed.data.date);}catch{throw new AgentError(400,"로그 날짜를 확인해 주세요.");}
+    const cursor=parsed.data.cursor,sql = agentDb();
     await sql`update sync_agent_devices set revoked_at=now() where tenant_id=${user.tenantId} and revoke_requested_at is not null
       and revoked_at is null and (lease_until is null or lease_until<=clock_timestamp())`;
     const [devices, events, releases, configuration] = await Promise.all([
       sql`select id,name,version,last_seen_at,status,created_at,lease_until,revoke_requested_at from sync_agent_devices where tenant_id=${user.tenantId} and revoked_at is null`,
-      sql`select event_id,received_at,kind,module,level,detail from sync_agent_events where tenant_id=${user.tenantId} order by received_at desc limit 100`,
+      sql`select event_id,occurred_at,received_at,kind,module,level,detail from sync_agent_events where tenant_id=${user.tenantId}
+        and occurred_at>=${range.start}::timestamptz and occurred_at<${range.end}::timestamptz
+        and (${parsed.data.module}='all' or module=${parsed.data.module}) and (${parsed.data.level}='all' or level=${parsed.data.level})
+        and (${cursor?.at??null}::timestamptz is null or (occurred_at,event_id)<(${cursor?.at??null}::timestamptz,${cursor?.id??null}::uuid))
+        order by occurred_at desc,event_id desc limit 101`,
       sql`select version,installer_url from sync_agent_releases where revoked_at is null order by sequence desc limit 1`,
       deviceConfiguration({ id: "", tenantId: user.tenantId }),
     ]);
     return { device: devices[0] ? JSON.parse(JSON.stringify(devices[0])) as { id: string; name: string; version: string | null; last_seen_at: string | null; status: Record<string, unknown>; created_at: string; lease_until: string | null; revoke_requested_at: string | null } : null,
-      events: JSON.parse(JSON.stringify(events)) as Array<{ event_id: string; received_at: string; kind: string; module: string; level: string; detail: Record<string, unknown> }>,
+      events: JSON.parse(JSON.stringify(events.slice(0,100))) as Array<{ event_id: string; occurred_at?:string; received_at: string; kind: string; module: string; level: string; detail: Record<string, unknown> }>,
+      logDate:range.day,hasMore:events.length>100,nextCursor:events.length>100?{at:new Date(events[99]!.occurred_at).toISOString(),id:String(events[99]!.event_id)}:null,
       release: releases[0] ? { version: String(releases[0].version), url: String(releases[0].installer_url) } : null, configuration };
   });
 }

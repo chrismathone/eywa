@@ -36,6 +36,15 @@ describe("agent dashboard rendering", () => {
     expect(screen.queryByText("다운로드 정보를 확인 중입니다.")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "연결 코드 발급" })).toBeDisabled();
   });
+  it("loads dated server filters and displays safe worker progress",async()=>{
+    h.dashboard.mockResolvedValue({data:{...loaded.data,logDate:"2026-10-09",hasMore:false,nextCursor:null,events:[{event_id:"fixture",received_at:"2026-10-08T21:00:00Z",module:"makeedu",level:"info",kind:"worker_log",detail:{logCode:"makeedu_students"}}]}});
+    render(<AgentCard classnoteOn makeeduOn />);
+    await screen.findByText("메이크에듀 · 학생 동기화 처리 중");
+    fireEvent.change(screen.getByLabelText("로그 날짜 (한국시간)"),{target:{value:"2026-10-08"}});
+    await waitFor(()=>expect(h.dashboard).toHaveBeenLastCalledWith({date:"2026-10-08",module:"all",level:"all"}));
+    fireEvent.change(screen.getByLabelText("기록 종류 필터"),{target:{value:"error"}});
+    await waitFor(()=>expect(h.dashboard).toHaveBeenLastCalledWith({date:"2026-10-08",module:"all",level:"error"}));
+  });
   it("shows legacy status before migration, then hides it after cutover even while the app is paused", async () => {
     h.dashboard.mockResolvedValueOnce(loaded).mockResolvedValue({ data: { ...loaded.data,
       device: { id: "fixture", name: "새 연동 PC", last_seen_at: "2026-01-01T00:00:00Z", version: "1.0.2", revoke_requested_at: null },

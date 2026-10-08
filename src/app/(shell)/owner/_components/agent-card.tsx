@@ -1,6 +1,6 @@
 "use client";
-import { useCallback,useEffect,useState,useTransition,type ReactNode } from "react";
-import { EVENT_LABELS,TASK_LABELS } from "@/features/sync-agent/protocol";
+import { useCallback,useEffect,useState,useTransition,useRef,type ReactNode } from "react";
+import { EVENT_LABELS,TASK_LABELS,LOG_CODE_LABELS } from "@/features/sync-agent/protocol";
 import { getAgentDashboard,issueAgentCode,issueAgentManagementCode,revokeAgentDevice,saveAgentSettings } from "@/features/sync-agent/server/actions";
 
 type Dashboard=NonNullable<Awaited<ReturnType<typeof getAgentDashboard>>["data"]>;
@@ -10,9 +10,24 @@ export function AgentCard({classnoteOn,makeeduOn,legacyPC}:{classnoteOn:boolean;
   const [code,setCode]=useState<{code:string;expiresAt:string}|null>(null);
   const [managementCode,setManagementCode]=useState<{code:string;expiresAt:string}|null>(null);
   const [now,setNow]=useState(0),[pending,startTransition]=useTransition();
-  const [filter,setFilter]=useState("all"),[level,setLevel]=useState("all");
-  const refresh=useCallback(async()=>{try{const result=await getAgentDashboard();setNow(Date.now());if(result.data){setData(result.data);setError("");}else setError(result.error??"상태를 확인하지 못했습니다.");}catch{setError("연동 PC 상태를 불러오지 못했습니다. 잠시 후 새로고침해 주세요.");}},[]);
-  useEffect(()=>{let disposed=false;const load=async()=>{if(!disposed) await refresh();};void load();const timer=setInterval(load,20_000);return()=>{disposed=true;clearInterval(timer);};},[refresh]);
+  const [filter,writeFilter]=useState("all"),[level,writeLevel]=useState("all");
+  const [logDate,setLogDate]=useState(""),[cursors,setCursors]=useState<Array<{at:string;id:string}>>([]);
+  const cursor=cursors.at(-1);
+  const [loading,setLoading]=useState(true);
+  const setFilter=(value:string)=>{writeFilter(value);setCursors([]);},setLevel=(value:string)=>{writeLevel(value);setCursors([]);};
+  const request=useRef(0);
+  const invalidate=useCallback(()=>{request.current++;},[]);
+  const refresh=useCallback(async()=>{
+    const current=++request.current;setLoading(true);
+    try {
+      const result=await getAgentDashboard({module:filter,level,...logDate?{date:logDate}:{},...cursor?{cursor}:{}});
+      if(current!==request.current)return;
+      setNow(Date.now());
+      if(result.data){setData(result.data);setError("");}else setError(result.error??"상태를 확인하지 못했습니다.");
+    }catch{if(current===request.current)setError("연동 PC 상태를 불러오지 못했습니다. 잠시 후 새로고침해 주세요.");}
+    finally{if(current===request.current)setLoading(false);}
+  },[logDate,cursor,filter,level]);
+  useEffect(()=>{let disposed=false;const load=async()=>{if(!disposed) await refresh();};void load();const timer=setInterval(load,20_000);return()=>{disposed=true;invalidate();clearInterval(timer);};},[refresh,invalidate]);
   const act=(fn:()=>Promise<{error?:string}>,message="")=>startTransition(async()=>{setError("");setNotice("");try{const result=await fn();if(result.error)setError(result.error);else{setNotice(message);await refresh();}}catch{setError("서버 연결을 확인해 주세요.");}});
   const settings=data?.configuration;
   const change=(key:"enabled"|"classnoteEnabled"|"makeeduEnabled"|"updatesEnabled",value:boolean)=>{
@@ -58,11 +73,13 @@ export function AgentCard({classnoteOn,makeeduOn,legacyPC}:{classnoteOn:boolean;
       <p className="text-text-dim text-xs">기존 발송 시간과 자동 동기화 설정은 각 연동의 설정을 따릅니다. PC의 일시 중지 설정도 함께 적용됩니다.</p>
     </section>
     <section className={box}>
-      <div className="flex flex-wrap items-center gap-3"><h2 className="mr-auto font-bold">최근 실행 기록</h2>
+      <div className="flex flex-wrap items-center gap-3"><h2 className="mr-auto font-bold">실행 로그</h2>
+        <input className={button} type="date" aria-label="로그 날짜 (한국시간)" value={logDate||data?.logDate||""} onChange={e=>{setLogDate(e.target.value);setCursors([]);}} />
         <select className={button} aria-label="연동 기록 필터" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">전체 연동</option><option value="app">앱</option>{classnoteOn?<><option value="classnote">클래스노트</option><option value="video">영상</option></>:null}{makeeduOn?<option value="makeedu">메이크에듀</option>:null}<option value="update">업데이트</option></select>
         <select className={button} aria-label="기록 종류 필터" value={level} onChange={e=>setLevel(e.target.value)}><option value="all">전체 기록</option><option value="warning">확인 필요</option><option value="error">오류</option></select>
       </div>
-      {events.length?<ol className="divide-border divide-y">{events.map(event=><li key={event.event_id} className="flex flex-wrap justify-between gap-2 py-2 text-sm"><span>{event.detail.task?`${TASK_LABELS[event.detail.task as keyof typeof TASK_LABELS]??"연동"} · `:""}{EVENT_LABELS[event.kind as keyof typeof EVENT_LABELS]??"실행 기록"}{event.detail.version?` · ${String(event.detail.version)}`:""}{typeof event.detail.count==="number"?` · ${event.detail.count}건`:""}</span><time className="text-text-dim text-xs" dateTime={event.received_at}>{when(event.received_at)}</time></li>)}</ol>:<p className="text-text-dim text-sm">{data?"표시할 기록이 없습니다.":error?"실행 기록을 불러오지 못했습니다.":"실행 기록을 확인 중입니다."}</p>}
+      {events.length?<ol className="divide-border max-h-96 overflow-y-auto divide-y">{events.map(event=><li key={event.event_id} className="flex flex-wrap justify-between gap-2 py-2 text-sm"><span className={event.level==="error"?"text-danger":""}>{event.module==="makeedu"?"메이크에듀 · ":event.module==="classnote"?"클래스노트 · ":""}{event.detail.task?`${TASK_LABELS[event.detail.task as keyof typeof TASK_LABELS]??"연동"} · `:""}{event.detail.logCode?LOG_CODE_LABELS[event.detail.logCode as keyof typeof LOG_CODE_LABELS]??"실행 기록":EVENT_LABELS[event.kind as keyof typeof EVENT_LABELS]??"실행 기록"}{event.detail.version?` · ${String(event.detail.version)}`:""}{typeof event.detail.count==="number"?` · ${event.detail.count}건`:""}{typeof event.detail.code==="string"&&/^(?:[A-Z0-9]{5}|unknown_operation|operation_failed|lease_lost)$/.test(event.detail.code)?` · ${event.detail.code}`:""}</span><time className="text-text-dim text-xs" dateTime={event.received_at}>{when(event.received_at)}</time></li>)}</ol>:<p className="text-text-dim text-sm">{data?"표시할 기록이 없습니다.":error?"실행 기록을 불러오지 못했습니다.":"실행 기록을 확인 중입니다."}</p>}
+      <div className="flex items-center gap-2">{cursors.length?<button className={button} disabled={loading} onClick={()=>setCursors(value=>value.slice(0,-1))}>이전 로그</button>:null}{data?.hasMore&&data.nextCursor?<button className={button} disabled={loading} onClick={()=>{if(data.nextCursor){setLogDate(logDate||data.logDate);setCursors(value=>[...value,data.nextCursor!]);}}}>더 지난 로그</button>:null}<span className="text-text-dim text-xs">한국시간 · 20초마다 갱신 · 최근 30일 보관</span></div>
     </section>
     {data && !(device && settings?.cutoverReady)?legacyPC:null}
   </div>;

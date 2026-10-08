@@ -47,4 +47,12 @@ describe("agent dashboard failures", () => {
     expect(h.sql).not.toHaveBeenCalled();
     expect(h.configuration).not.toHaveBeenCalled();
   });
+  it("binds KST day and pagination to the authenticated tenant",async()=>{
+    const cursor={at:"2026-10-08T19:00:00.000Z",id:"68636d0d-812a-41c5-9e9d-37d13f3951d6"};
+    const result=await getAgentDashboard({date:"2026-10-09",cursor});
+    expect(result.data?.logDate).toBe("2026-10-09");
+    const call=h.sql.mock.calls.find(([parts])=>parts.join("").includes("from sync_agent_events"))!;
+    expect(call.slice(1)).toEqual(["verified-tenant","2026-10-08T15:00:00.000Z","2026-10-09T15:00:00.000Z","all","all","all","all",cursor.at,cursor.at,cursor.id]);
+    expect((await getAgentDashboard({date:"2026-02-30"})).error).toBe("로그 날짜를 확인해 주세요.");
+  });
 });

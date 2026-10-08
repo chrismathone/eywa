@@ -1,0 +1,8 @@
+import { it,expect } from "vitest";
+import { EventInput } from "./protocol";
+it("accepts only fixed worker log codes and rejects raw text or unknown detail fields",()=>{
+ const event={id:"68636d0d-812a-41c5-9e9d-37d13f3951d6",at:"2026-10-09T00:00:00Z",module:"makeedu",level:"info",kind:"worker_log",detail:{logCode:"makeedu_students"}};
+ expect(EventInput.safeParse(event).success).toBe(true);
+ expect(EventInput.safeParse({...event,detail:{logCode:"학생이름 private"}}).success).toBe(false);
+ expect(EventInput.safeParse({...event,detail:{logCode:"makeedu_students",stdout:"private"}}).success).toBe(false);
+});
