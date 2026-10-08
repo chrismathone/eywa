@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { checkVideoFile } from "@/features/video-submit/rules";
 import { runResumableUpload, UploadError, xhrPut } from "@/features/video-submit/upload-client";
+import { createUploadReporter, flushUploadEvents } from "@/features/video-submit/upload-diagnostics-client";
+import { confirmationReason, uploadEventLabel, uploadFailureText, type UploadEvent } from "@/features/video-submit/upload-diagnostics";
 
 type Phase =
   | { kind: "idle" }
@@ -62,6 +64,9 @@ export function VideoSubmitForm(props: {
 }) {
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   const [recovered, setRecovered] = useState(false);
+  const [uploadLog, setUploadLog] = useState<UploadEvent[]>([]);
+  const [uploadNumber, setUploadNumber] = useState<string | null>(null);
+  const reporter = useRef<ReturnType<typeof createUploadReporter> | null>(null);
   const input = useRef<HTMLInputElement>(null);
   // 화면이 스스로 새로 고칠 때(만료·숙제 없어짐)는 아래 '닫기 붙잡기'를 건너뛴다 — 그 순간 화면은 아직 '올리는 중'이다.
   const leaving = useRef(false);
@@ -69,6 +74,9 @@ export function VideoSubmitForm(props: {
   // 지난번에 못 알린 업로드가 이 기기에 남아 있으면 대신 알린다.
   useEffect(() => {
     let alive = true;
+    const flush = () => { void flushUploadEvents(props.token); };
+    flush();
+    window.addEventListener("online", flush);
     void (async () => {
       for (const uploadId of readPending(props.token)) {
         const done = await postJson("/api/video-submit/complete", { token: props.token, uploadId });
@@ -76,7 +84,7 @@ export function VideoSubmitForm(props: {
         if (done?.ok && alive) setRecovered(true);
       }
     })();
-    return () => { alive = false; };
+    return () => { alive = false; reporter.current?.dispose(); window.removeEventListener("online", flush); };
   }, [props.token]);
   const busy = phase.kind === "uploading" || phase.kind === "finishing";
 
@@ -95,6 +103,8 @@ export function VideoSubmitForm(props: {
   }
 
   async function upload(file: File) {
+    reporter.current?.dispose();
+    setUploadLog([]); setUploadNumber(null);
     setPhase({ kind: "uploading", file, sent: 0 });
     const started = await postJson("/api/video-submit/start", {
       token: props.token, name: file.name, size: file.size, type: file.type, ...(props.homeworkDate ? { homeworkDate: props.homeworkDate } : {}),
@@ -111,26 +121,41 @@ export function VideoSubmitForm(props: {
       return;
     }
     writePending(props.token, [...readPending(props.token), started.uploadId]);
+    setUploadNumber(started.uploadId.slice(0, 8));
+    const trace = createUploadReporter(props.token, started.uploadId, file.size, event => {
+      setUploadLog(current => [...current.filter(e => e.kind !== "progress"), event].slice(-12));
+    });
+    reporter.current = trace;
     try {
       await runResumableUpload({
         size: file.size, slice: (start, end) => file.slice(start, end), put: xhrPut(started.sessionUrl),
-        onProgress: (sent) => setPhase({ kind: "uploading", file, sent }),
+        onProgress: (sent) => { trace.progress(sent); setPhase({ kind: "uploading", file, sent }); },
+        onEvent: (kind, detail) => trace.event(kind, detail),
       });
     } catch (error) {
+      if (!(error instanceof UploadError)) trace.event("failed", { reason: "unknown" });
+      trace.dispose();
       setPhase({ kind: "error", message: error instanceof UploadError ? error.message : "영상을 올리지 못했습니다. 다시 올려 주세요.", file });
       return;
     }
     setPhase({ kind: "finishing" });
+    trace.confirming();
     // Drive가 마지막 조각을 반영하는 데 잠깐 걸릴 수 있다 — '아직'이면 몇 번 더 묻는다.
     for (let attempt = 0; attempt < 5; attempt++) {
       const done = await postJson("/api/video-submit/complete", { token: props.token, uploadId: started.uploadId });
       if (settled(done)) writePending(props.token, readPending(props.token).filter((id) => id !== started.uploadId));
-      if (done?.ok) return setPhase({ kind: "done" });
-      if (done && settled(done))
+      if (done?.ok) { trace.event("confirmed"); trace.dispose(); return setPhase({ kind: "done" }); }
+      const reason = done ? confirmationReason(done.code) : "network";
+      if (done && settled(done)) {
+        trace.event("confirm_failed", { reason, attempt: attempt + 1 }); trace.dispose();
         return setPhase({ kind: "error", message: typeof done.error === "string" ? done.error : "올린 영상을 확인하지 못했습니다.", file: null });
+      }
+      trace.event(attempt === 4 ? "confirm_failed" : "confirm_retry", { reason, attempt: attempt + 1 });
       await sleep(1500 * (attempt + 1));
     }
-    setPhase({ kind: "error", message: "올린 영상을 확인하지 못했습니다. 잠시 후 다시 올려 주세요.", file });
+    trace.dispose();
+    const message = uploadFailureText("confirm_pending");
+    setPhase({ kind: "error", message: `${message.label}. ${message.help}`, file });
   }
 
   const percent = phase.kind === "uploading" ? Math.floor((phase.sent / Math.max(1, phase.file.size)) * 100) : 0;
@@ -202,6 +227,13 @@ export function VideoSubmitForm(props: {
             <Button type="button" variant="outline" className="w-full" onClick={() => input.current?.click()}>영상 다시 고르기</Button>
           </div>
         ) : null}
+        {uploadNumber ? <details className="border-line border-t pt-3 text-sm">
+          <summary className="cursor-pointer">업로드 기록 · 확인번호 {uploadNumber}</summary>
+          <p className="text-text-dim mt-2 break-keep">문제가 계속되면 이 번호를 선생님께 알려 주세요. 인터넷에 연결되면 기록을 전송합니다.</p>
+          <ol className="mt-2 space-y-1" aria-label="업로드 진행 기록">{uploadLog.map(event => <li key={event.sequence}>
+            {Math.floor(event.elapsedMs / 1000)}초 · {uploadEventLabel(event)}{event.kind === "progress" ? ` · ${mb(event.sentBytes)}` : ""}
+          </li>)}</ol>
+        </details> : null}
       </section>
     </main>
   );

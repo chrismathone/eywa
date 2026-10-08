@@ -104,6 +104,11 @@ describe("업로드 시작 — 거절", () => {
 });
 
 describe("업로드 시작 — 정상", () => {
+  it("끝나지 않은 같은 파일 시도 4건은 재업로드를 막지 않는다", async () => {
+    db.tables.homework_video_link_uploads = Array.from({ length: 4 }, (_, i) => ({ id: `unfinished-${i}`, tenant_id: T, link_id: "L1", status: "started", created_at: new Date().toISOString(), bytes: file.size }));
+    expect((await req()).ok).toBe(true);
+    expect(db.tables.homework_video_link_uploads).toHaveLength(5);
+  });
   it("담임 폴더·미리 받은 번호·세션 주소 — 메타데이터는 서버가 정하고 크기를 못박는다", async () => {
     const result = await req();
     expect(result).toMatchObject({ ok: true, sessionUrl: SESSION });
