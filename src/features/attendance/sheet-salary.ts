@@ -111,7 +111,7 @@ export function teacherSheetSalary(input: {
       //    0시수 줄들이 합계를 null이 아니라 **0원**으로 만들어, 출결이 아직 없는 달에 "₩0 · 0시수" 명세서가 발행된다.
       if (!(units > 0)) continue;
       // 대상 학년 밖(원장 2026-10-07 — 고등학생에게만 프리랜서를 적용하는 선생님) — 산정도 '빠진 줄'도 아니다.
-      if (salaryRowOutOfScope(input.rates, s.grade)) {
+      if (salaryRowOutOfScope(input.rates, s.grade, g)) {
         outStudents.add(s.id);
         outUnits += units;
         continue;

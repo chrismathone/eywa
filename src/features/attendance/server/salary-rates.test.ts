@@ -72,6 +72,17 @@ it("saves the six rates for only the selected freelance teacher in the authentic
   expect(await saveAttendanceSalaryRates({ teacherId, month: "2026-09", rates })).toEqual({ ok: true });
   expect(h.writes).toEqual([expect.objectContaining({ tenant_id: "tenant", teacher_id: teacherId, rates, updated_by: "admin" })]);
 });
+it("특강 포함은 선택한 선생님 설정에 저장하고 바뀔 때만 감사로그를 남긴다", async () => {
+  const scoped = { ...rates, levels: ["고등"], includeSpecial: true };
+  h.replies = [freelancer, { data: { rates: { ...rates, levels: ["고등"] } }, error: null }, { error: null }];
+  expect(await saveAttendanceSalaryRates({ teacherId, month: MONTH, rates: scoped as never })).toEqual({ ok: true });
+  expect(h.writes).toEqual([expect.objectContaining({ tenant_id: "tenant", teacher_id: teacherId, rates: scoped })]);
+  expect(h.log).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ action: "payroll_sheet_special_scope_set", metadata: { userId: teacherId, includeSpecial: true, before: false } }));
+  h.log.mockClear();
+  h.replies = [freelancer, { data: { rates: scoped }, error: null }, { error: null }];
+  await saveAttendanceSalaryRates({ teacherId, month: MONTH, rates: scoped as never });
+  expect(h.log).not.toHaveBeenCalled();
+});
 // 원장 2026-10-07 *"이성우 선생님은 … 고등학생에 대해서만 급여 명세서가 나오도록"* — 대상 학년.
 it("대상 학년을 저장하고, 바뀌었을 때만 감사로그를 남긴다 — 비율 숫자는 남기지 않는다", async () => {
   h.replies = [{ data: { employment_type: "프리랜서", display_name: "이강사" }, error: null }, { data: null, error: null }, { error: null }];

@@ -18,6 +18,8 @@ export type AttendanceSalaryRates = {
    * 🔴 계정을 코드에 적지 않는다 — 선생님마다 비율 설정 창에서 고른다. 세 학년을 다 고른 것은 '없음'(전체)과 같아 저장하지 않는다.
    */
   levels?: AttendanceRateLevel[];
+  /** 이 선생님의 특강은 대상 학년 제한 없이 포함한다(기본은 기존 학년 제한). */
+  includeSpecial?: boolean;
 };
 export const emptyAttendanceRates = (): AttendanceSalaryRates => ({ regular: {}, special: {}, classes: {} });
 
@@ -42,6 +44,10 @@ export function parseAttendanceRates(value: unknown): AttendanceSalaryRates | nu
     const picked = ATTENDANCE_RATE_LEVELS.filter((level) => (input.levels as unknown[]).includes(level));
     if (picked.length < ATTENDANCE_RATE_LEVELS.length) out.levels = picked;
   }
+  if (input.includeSpecial !== undefined) {
+    if (typeof input.includeSpecial !== "boolean") return null;
+    if (input.includeSpecial) out.includeSpecial = true;
+  }
   return out;
 }
 
@@ -57,8 +63,13 @@ export function attendanceRateLevel(grade: string | null | undefined): Attendanc
  * ⚠️ 학년을 모르는 학생은 여기서 false다(대상인지 알 수 없다) — `attendanceSalaryRate`가 비율을 주지 않아
  *    '빠진 줄'로 드러난다. 말없이 빼지도, 확인 없이 지급하지도 않는다.
  */
-export function salaryRowOutOfScope(rates: Pick<AttendanceSalaryRates, "levels">, grade: string | null | undefined): boolean {
+export function salaryRowOutOfScope(
+  rates: Pick<AttendanceSalaryRates, "levels" | "includeSpecial">,
+  grade: string | null | undefined,
+  cls?: { className?: string | null; isSpecial?: boolean | null },
+): boolean {
   if (!rates.levels?.length) return false;
+  if (rates.includeSpecial && cls && isSpecialLecture(cls)) return false;
   const level = attendanceRateLevel(grade);
   return level !== null && !rates.levels.includes(level);
 }
@@ -67,11 +78,22 @@ export function attendanceSalaryRate(rates: AttendanceSalaryRates, row: {
   classId: string; className: string; isSpecial?: boolean; grade: string | null;
 }): number | null {
   const level = attendanceRateLevel(row.grade);
+  const special = isSpecialLecture(row);
   // 대상 학년을 좁힌 선생님 — 그 학년으로 **확인된** 학생만. 반별 예외 비율보다 먼저 본다(예외 비율이 다른 학년 학생을 되살리지 않게).
-  if (rates.levels?.length && (!level || !rates.levels.includes(level))) return null;
+  if (rates.levels?.length && !(rates.includeSpecial && special) && (!level || !rates.levels.includes(level))) return null;
   if (rates.classes[row.classId] !== undefined) return rates.classes[row.classId]!;
+  // 학년 제한 없는 특강의 세 학년 비율이 모두 같으면 학년 없이도 그 비율을 확정할 수 있다.
+  if (!level && rates.includeSpecial && special) {
+    const values = ATTENDANCE_RATE_LEVELS.map((l) => rates.special[l]);
+    return values.every((v) => v !== undefined && v === values[0]) ? values[0]! : null;
+  }
   if (!level) return null;
-  return rates[isSpecialLecture(row) ? "special" : "regular"][level] ?? null;
+  return rates[special ? "special" : "regular"][level] ?? null;
+}
+
+export function salaryScopeLabel(rates: Pick<AttendanceSalaryRates, "levels" | "includeSpecial">): string | undefined {
+  if (!rates.levels?.length) return undefined;
+  return rates.includeSpecial ? `${rates.levels.join("·")} 학생과 전 학년 특강` : `${rates.levels.join("·")} 학생만`;
 }
 
 /**

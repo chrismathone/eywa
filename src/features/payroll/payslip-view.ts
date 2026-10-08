@@ -88,6 +88,8 @@ export type PayslipData = {
    * 전부 이 학년 학생만 센다(원장 2026-10-07 *"고등학생에 대해서만 급여 명세서가 나오도록"*). 발행 스냅샷에도 함께 굳는다.
    */
   sheetLevels?: ("초등" | "중등" | "고등")[];
+  /** 특강의 학년 제한 예외도 발행 시점 값으로 보존한다. */
+  sheetIncludeSpecial?: boolean;
   rates: {
     base: GroupRates;
     baseDefault: number | null;

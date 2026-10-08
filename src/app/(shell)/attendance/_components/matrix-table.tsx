@@ -595,7 +595,7 @@ export function MatrixTable({
                     confirmedPrices={showPrice ? confirmedPricesByRow?.[rowKey(g.classId, s.id)] ?? null : undefined}
                     showActualAmount={showActualAmount}
                     actualSalaryRate={salaryRatesByRow?.[rowKey(g.classId, s.id)]}
-                actualSalaryOutOfScope={showActualSalary && salaryRowOutOfScope(salaryRates!, s.grade)}
+                    actualSalaryOutOfScope={showActualSalary && salaryRowOutOfScope(salaryRates!, s.grade, g)}
                     classBilled={showClassBilled ? billedView?.[rowKey(g.classId, s.id)] ?? null : undefined}
                     termSessions={showTermSessions ? termView?.[rowKey(g.classId, s.id)] ?? null : undefined}
                     carryMark={showTermSessions ? carryMarksByRow?.[rowKey(g.classId, s.id)] ?? null : null}
@@ -627,7 +627,7 @@ export function MatrixTable({
                 confirmedPrices={showPrice ? confirmedPricesByRow?.[rowKey(g.classId, s.id)] ?? null : undefined}
                 showActualAmount={showActualAmount}
                 actualSalaryRate={salaryRatesByRow?.[rowKey(g.classId, s.id)]}
-                actualSalaryOutOfScope={showActualSalary && salaryRowOutOfScope(salaryRates!, s.grade)}
+                actualSalaryOutOfScope={showActualSalary && salaryRowOutOfScope(salaryRates!, s.grade, g)}
                 classBilled={showClassBilled ? billedView?.[rowKey(g.classId, s.id)] ?? null : undefined}
                 termSessions={showTermSessions ? termView?.[rowKey(g.classId, s.id)] ?? null : undefined}
                     carryMark={showTermSessions ? carryMarksByRow?.[rowKey(g.classId, s.id)] ?? null : null}

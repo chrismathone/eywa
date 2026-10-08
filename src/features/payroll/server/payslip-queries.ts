@@ -6,13 +6,14 @@ import { kstMonth } from "@/lib/date-kst";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { appliedRatesOf, computeTeacherTuition } from "@/features/payroll/server/tuition";
 import { computeSheetTuition } from "@/features/payroll/server/sheet-tuition";
-import { attendanceRateLevel, type AttendanceRateLevel } from "@/features/attendance/salary-rates";
+import { type AttendanceSalaryRates } from "@/features/attendance/salary-rates";
 import { computePayslipAmounts } from "@/features/payroll/payslip";
 import {
   spanOverlapsMonth,
   studentIdsInMonth,
   withdrawalStats,
   yearlyClassMetrics,
+  salaryScopedEnrollments,
   type EnrollSpanRow,
 } from "@/features/payroll/payslip-metrics";
 import { currentContract } from "@/features/staff/contract";
@@ -63,7 +64,7 @@ export async function getPayslipData(teacherId: string, period: string): Promise
     //    (시트 대조 4인 검증치가 이 집합에 걸려 있다). 돈은 담임을 따라가므로 임시 위임은 보지 않는다.
     supabase
       .from("classes")
-      .select("id, class_name, subject")
+      .select("id, class_name, subject, is_special")
       .eq("tenant_id", user.tenantId)
       .eq("teacher_id", teacherId)
       .eq("is_active", true)
@@ -92,6 +93,7 @@ export async function getPayslipData(teacherId: string, period: string): Promise
     id: c.id as string,
     className: c.class_name as string,
     subject: (c.subject as string | null) ?? null,
+    isSpecial: c.is_special === true,
   }));
   const classIds = classes.map((c) => c.id);
 
@@ -159,7 +161,9 @@ export async function getPayslipData(teacherId: string, period: string): Promise
   const tuitionPromise = tuitionOf();
   const [tuition, metrics, resume] = await Promise.all([
     tuitionPromise,
-    loadMetrics(supabase, classIds, period, year, tuitionPromise.then((t) => t.sheet?.levels, () => undefined)),
+    loadMetrics(supabase, period, year, tuitionPromise.then((t) => ({
+      levels: t.sheet?.levels, includeSpecial: t.sheet?.includeSpecial, classes: t.sheet?.classScope ?? classes,
+    }))),
     supabase
       .from("academy_documents")
       .select("form_data")
@@ -275,6 +279,7 @@ export async function getPayslipData(teacherId: string, period: string): Promise
         }
       : null,
     ...(sheet?.levels?.length ? { sheetLevels: sheet.levels } : {}),
+    ...(sheet?.includeSpecial ? { sheetIncludeSpecial: true } : {}),
     // 프리랜서는 출석부 비율표를 과정으로 옮긴 값(저장된 표가 없으면 계약 비율과 같다) — 계산에 실제로 쓴 비율을 찍는다.
     rates: sheet
       ? { base: sheet.rates.base, baseDefault, applied: sheet.rates.applied, appliedDefault, penaltyPoints: penalty }
@@ -288,11 +293,11 @@ export async function getPayslipData(teacherId: string, period: string): Promise
 /** 수업인원·퇴원생·연 누적 — 수강 구간을 한 번만 긁어 JS에서 월별로 자른다(월마다 재조회 금지). */
 async function loadMetrics(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  classIds: string[],
   period: string,
   year: number,
-  /** 대상 학년(없으면 전체) — 수업료와 같은 학년의 학생만 센다. */
-  levelsOf: Promise<readonly AttendanceRateLevel[] | undefined> = Promise.resolve(undefined),
+  scopeOf: Promise<Pick<AttendanceSalaryRates, "levels" | "includeSpecial"> & {
+    classes: { id: string; className: string; isSpecial: boolean }[];
+  }>,
 ): Promise<{ value: PayslipData["metrics"]; warning: string | null }> {
   const empty = {
     value: {
@@ -304,6 +309,8 @@ async function loadMetrics(
     },
     warning: null as string | null,
   };
+  const scope = await scopeOf;
+  const classIds = scope.classes.map((c) => c.id);
   if (classIds.length === 0) return empty;
 
   // 그 해에 걸치는 수강 전건(B2 — 페이징으로 전건, 1000행 절단 방지).
@@ -329,22 +336,19 @@ async function loadMetrics(
 
   // 대상 학년을 좁힌 선생님 — 지표도 그 학년 학생만(수업료는 고등학생만인데 수업인원·퇴원율이 전 학년이면 한 장에서 말이 갈린다).
   // 학년을 모르는 학생은 세지 않는다(수업료에서도 '빠진 줄'로 따로 드러난다).
-  const levels = await levelsOf;
+  const levels = scope.levels;
   let scopedClassCount: number | undefined;
   if (levels?.length) {
     const ids = [...new Set(rows.map((r) => r.studentId))];
     const grades = ids.length === 0
       ? []
       : await fetchInChunks<{ id: string; grade: string | null }>(ids, (chunk) => supabase.from("students").select("id, grade").in("id", chunk));
-    const inScope = new Set(grades.filter((g) => {
-      const level = attendanceRateLevel(g.grade);
-      return level !== null && levels.includes(level);
-    }).map((g) => g.id));
-    rows = rows.filter((r) => inScope.has(r.studentId));
+    const scopedSpans = salaryScopedEnrollments(spans, scope, new Map(grades.map((g) => [g.id, g.grade])), new Map(scope.classes.map((c) => [c.id, c])));
+    rows = scopedSpans.filter((s) => !!s.start_date).map((s) => ({ studentId: s.student_id, startDate: s.start_date!, endDate: s.end_date }));
     // '담당 반'도 같은 범위로 — 그 달 대상 학년 학생이 한 명이라도 있는 반만 센다.
     scopedClassCount = new Set(
-      spans
-        .filter((s) => !!s.start_date && inScope.has(s.student_id) && spanOverlapsMonth({ studentId: s.student_id, startDate: s.start_date!, endDate: s.end_date }, period))
+      scopedSpans
+        .filter((s) => !!s.start_date && spanOverlapsMonth({ studentId: s.student_id, startDate: s.start_date!, endDate: s.end_date }, period))
         .map((s) => s.class_id),
     ).size;
   }

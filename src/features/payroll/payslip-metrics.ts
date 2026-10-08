@@ -6,6 +6,24 @@
 //
 // 원본 시트는 이 값들을 강사별 출석부 시트에서 IMPORTRANGE로 끌어왔다(사람이 채우는 칸).
 // aywa는 수강(enrollments) + 학생 상태에서 직접 낸다 — 사람이 안 채워도 되고, 틀릴 일도 없다.
+import { attendanceRateLevel, salaryRowOutOfScope, type AttendanceSalaryRates } from "@/features/attendance/salary-rates";
+import { isSpecialLecture } from "@/features/classes/special-lecture";
+
+/** 학생만으로 거르지 않는다 — 같은 학생의 특강이 포함되어도 대상 밖 정규 수강은 제외한다. */
+export function salaryScopedEnrollments<T extends { student_id: string; class_id: string }>(
+  spans: readonly T[],
+  scope: Pick<AttendanceSalaryRates, "levels" | "includeSpecial">,
+  grades: ReadonlyMap<string, string | null>,
+  classes: ReadonlyMap<string, { className: string; isSpecial?: boolean }>,
+): T[] {
+  if (!scope.levels?.length) return [...spans];
+  return spans.filter((span) => {
+    const cls = classes.get(span.class_id);
+    if (scope.includeSpecial && cls && isSpecialLecture(cls)) return true;
+    const grade = grades.get(span.student_id);
+    return attendanceRateLevel(grade) !== null && !salaryRowOutOfScope(scope, grade, cls);
+  });
+}
 
 /** 수강 1구간. endDate=null = 아직 재원. */
 export type EnrollSpanRow = {
