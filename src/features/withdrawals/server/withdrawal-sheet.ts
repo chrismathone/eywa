@@ -32,6 +32,7 @@ import {
   sheetLayoutOf,
   templateTabFor,
   campusOf,
+  isSelfStudyClassName,
   type EnrollmentFact,
   type SheetEntry,
 } from "../withdrawal-sheet-model";
@@ -100,6 +101,7 @@ async function entriesFor(
     endDate: r.end_date ? String(r.end_date).slice(0, 10) : null,
     isTransferred: r.is_transferred === true,
     isMath: isMathKey(r.class?.subject),
+    isSelfStudy: isSelfStudyClassName(r.class?.class_name),
     row: r,
   }));
   const quit = mathWithdrawalsOn(facts, date, only ? new Set(only) : undefined) as typeof facts;

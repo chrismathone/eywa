@@ -5,6 +5,7 @@ import {
   colLetter,
   entryCells,
   findMonthTab,
+  isSelfStudyClassName,
   mathWithdrawalsOn,
   monthTabKey,
   monthTabTitle,
@@ -128,6 +129,25 @@ describe("mathWithdrawalsOn — 수학을 그만둔 수강만", () => {
   });
   it("고른 수강만", () => {
     expect(mathWithdrawalsOn([f("a", "2026-09-30"), f("b", "2026-09-30")], "2026-09-30", new Set(["b"])).map((x) => x.id)).toEqual(["b"]);
+  });
+  it("JJ(자습실) 반은 적지 않는다 — 수업 반 하나만(원장 2026-10-08)", () => {
+    const jj = { ...f("jj", "2026-10-06"), isSelfStudy: true };
+    expect(mathWithdrawalsOn([f("bs", "2026-10-06"), jj], "2026-10-06").map((x) => x.id)).toEqual(["bs"]);
+    // JJ만 남아 계속 다니면 퇴원이 아니다(판정은 그대로).
+    expect(mathWithdrawalsOn([f("bs", "2026-10-06"), { ...f("jj", null), isSelfStudy: true }], "2026-10-06")).toEqual([]);
+  });
+});
+
+describe("isSelfStudyClassName — JJ(자습실) 반 이름", () => {
+  it("JJ 토큰", () => {
+    for (const n of ["초등M 개별 JJ1F", "중등M 개별 JJ2L", "중등M 중2 JJPS", "중등M 중2 JJ3E (~26.09.30)", "JJ1A"]) {
+      expect(isSelfStudyClassName(n)).toBe(true);
+    }
+  });
+  it("수업 반·다른 글자는 아니다", () => {
+    for (const n of ["초등M 개별 BS2G", "중등M 개별 BS3Q", "중등M 중2 PS", "AJJ반", "jj", "", null]) {
+      expect(isSelfStudyClassName(n)).toBe(false);
+    }
   });
 });
 

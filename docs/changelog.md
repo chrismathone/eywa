@@ -1,5 +1,9 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-10-08 — 퇴원 시트: JJ(자습실) 반 줄은 안 적는다
+
+- 원장 *"퇴원하면 jj는 자습실이라 안 들어가도 됨, 하나만 들어가면 됨"* — 수학 개별 학생은 수업 반(`BS…`)과 JJ 반을 함께 다녀 퇴원 한 번에 시트 줄이 두 개였다. `mathWithdrawalsOn`이 JJ 반 수강을 결과에서 뺀다(그만뒀는지 판정은 그대로 — JJ만 남아 계속 다니면 퇴원 아님). 판정 = 반 이름의 `JJ` 토큰([`isSelfStudyClassName`](../src/features/withdrawals/withdrawal-sheet-model.ts)) — JJ 반을 가르는 컬럼이 없다(`math_learning_track` supplement는 JJ 반 25개 중 21개뿐). 실측: JJ가 든 반 28개 전부 걸리고 그 밖은 0. 이미 시트에 적힌 JJ 줄은 손대지 않았다(시트 변경은 승인 후).
+
 ## 2026-10-08 (3) — 옛 기본 교재 가격표 이관 스크립트 삭제
 - 원장 *"처음 옮길 때만 쓰고 버렸어야지"* → `scripts/_poc_migration/import-catalog.cjs` 삭제. ijw 코드의 기본 가격표(`data/textbookCatalog.ts`)를
   단가표로 옮기던 일회용 스크립트인데, 다시 돌리면 **단가표를 통째로 지우고 옛 기본 가격으로 채운다**(그동안 고친 가격 소실).

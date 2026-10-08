@@ -254,7 +254,21 @@ export type EnrollmentFact = {
   endDate: string | null;
   isTransferred: boolean;
   isMath: boolean;
+  /** JJ(자습실) 반 — 시트에 적지 않는다(`isSelfStudyClassName`). 없으면 false. */
+  isSelfStudy?: boolean;
 };
+
+/**
+ * JJ(자습실) 반인가 — 원장 2026-10-08 *"퇴원하면 jj는 자습실이라 안 들어가도 됨, 하나만 들어가면 됨"*.
+ * 수학 개별 학생은 수업 반(`… BS2G`)과 JJ 반(`… JJ1F`)을 함께 다녀서, 퇴원 한 번에 시트 줄이 두 개씩 생겼다.
+ *
+ * ⚠️ 판정은 **반 이름의 `JJ` 토큰**이다 — JJ 반을 가르는 컬럼이 없다(실측 2026-10-08: 교시 칸에 'JJ' 표시가 붙은 반 0개,
+ *    `math_learning_track`='supplement'는 JJ 반 25개 중 21개뿐이라 정규로 남은 JJ 반 4개를 놓친다).
+ *    토큰은 단어 머리의 대문자 `JJ`(`JJ1F`·`JJPS`) — 다른 글자 속의 jj는 안 잡는다.
+ */
+export function isSelfStudyClassName(name: string | null | undefined): boolean {
+  return /(^|[\s_(\[])JJ/.test(name ?? "");
+}
 
 /**
  * 이 날 **수학을 그만둔** 수강들 — 그날 끝났고 반이동이 아니며, 그 뒤에도 **열려 있는 수학 수강이 하나도 없을 때만**.
@@ -269,5 +283,8 @@ export function mathWithdrawalsOn(
   const math = facts.filter((f) => f.isMath);
   const stillOpen = math.some((f) => f.endDate == null || f.endDate > date);
   if (stillOpen) return [];
-  return math.filter((f) => f.endDate === date && !f.isTransferred && (!only || only.has(f.id)));
+  // JJ(자습실) 반은 적지 않는다 — 그만둔 판정(stillOpen)은 그대로 둔다(JJ만 남아 계속 다니면 퇴원이 아니다).
+  return math.filter(
+    (f) => f.endDate === date && !f.isTransferred && !f.isSelfStudy && (!only || only.has(f.id)),
+  );
 }
