@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { CURRICULUM_GRADES, flatLessons, semesterOfLesson, resolveStudyGrade } from "@/features/onescreen/curriculum";
 import { MATH_LEARNING_CADENCE } from "@/features/progress/learning-cadence";
-import { learningBlocks, learningDays, learningGoalError, goalMilestones, planLearningGoal, plannedAt, standardGoalDates, type LearningData, type LearningGoal } from "../lib/learning-plan";
+import { learningBlocks, learningDays, learningGoalError, goalMilestones, planLearningGoal, plannedLearningTarget, standardGoalDates, type LearningData, type LearningGoal } from "../lib/learning-plan";
 import { learningTopics } from "../lib/learning-path";
 import type { MathSheetMonthData } from "../server/month-queries";
 import { resetMathLearningGoals, saveMathLearningGoals } from "../server/learning-actions";
@@ -114,15 +114,16 @@ export function LearningGoalDialog({ data, learning, studentId, onClose, canRese
               </select></label>
               <div><span className={styles.fieldLabel}>최종 목표 단원</span><SearchableSelect ariaLabel="최종 목표 단원" value={draft.endBlock} options={lessonOptions(endGrade)} onValueChange={(endBlock) => update({ endBlock })} searchPlaceholder="최종 목표 단원 검색" /></div>
             </section>
+            {previous?.revision ? <label>완료 예정일<input aria-label="확장 목표 완료 예정일" type="date" required value={goal.endDate} onChange={event => update({ endDate: event.target.value })} /></label> : null}
             <label>교재<input aria-label="목표 교재" value={draft.textbook ?? ""} maxLength={500} onChange={(e) => update({ textbook: e.target.value || null })} placeholder="교재 이름 (선택)" list="mcs-goal-books" /></label>
             <datalist id="mcs-goal-books">{data.bookOptions.map((book) => <option key={book} value={book} />)}</datalist>
           </fieldset>
           <div className={styles.planPreview} aria-live="polite">
-            <strong>{validation ? (previous ? "이전 도착점 이후의 목표를 선택해 주세요" : "시작 지점과 최종 도착점을 확인해 주세요") : `전체 ${total}블록 · 월 ${policy.monthlyBlocks}블록`}</strong>
+            <strong>{validation ? (previous ? "이전 도착점 이후의 목표를 선택해 주세요" : "시작 지점과 최종 도착점을 확인해 주세요") : `전체 ${total}블록 · ${previous?.revision ? "목표별 직접 배분" : `월 ${policy.monthlyBlocks}블록`}`}</strong>
             <p>{[...new Set(learningTopics(goal).map((topic) => topic.grade))].join(" → ")}</p>
             {!validation ? <p>{goal.startDate} 시작 – {goal.endDate} 최종 도착</p> : null}
-            {!validation && preview.length ? <p>오늘까지 {plannedAt(preview, data.today)}블록 · 수업당 평균 {(total / preview.length).toFixed(1)}블록</p> : null}
-            <p>{track === "regular" ? `각 학기·과정 구간을 ${policy.totalBlocks}블록·${policy.months}개월로 나누고 월 ${policy.monthlyBlocks}블록씩 배분합니다.` : "복습 심화는 월 4블록이며, 수업 기록을 날짜별로 누적합니다."} 이 반의 모든 수업 요일과 휴강일·수강 기간을 반영합니다.</p>
+            {!validation && preview.length ? <p>오늘 계획 {plannedLearningTarget(goal, preview, data.today)}블록 · 배분된 수업 {preview.length}회</p> : null}
+            <p>{previous?.revision ? "수정한 기존 계획은 유지하고 새 구간을 추가합니다." : track === "regular" ? `각 학기·과정 구간을 ${policy.totalBlocks}블록·${policy.months}개월로 나누고 월 ${policy.monthlyBlocks}블록씩 배분합니다.` : "복습 심화는 월 4블록이며, 수업 기록을 날짜별로 누적합니다."} 이 반의 모든 수업 요일과 휴강일·수강 기간을 반영합니다.</p>
           </div>
           {error ? <p role="alert" className={styles.error}>{error}</p> : null}
           <div className={styles.formActions}>

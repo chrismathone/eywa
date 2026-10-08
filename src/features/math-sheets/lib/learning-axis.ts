@@ -1,4 +1,4 @@
-import { goalMilestones, learningTopicPositions, type LearningGoal, type LearningProgress } from "./learning-plan";
+import { goalMilestones, learningTopicPositions, learningPlannedTopic, type LearningGoal, type LearningProgress } from "./learning-plan";
 import { learningTimelineTopics, learningTimelineTopicIndex, topicSegments } from "./learning-path";
 
 /** Maximum lesson spacing; available width sets a shared scale for every student in the view. */
@@ -18,7 +18,7 @@ export function learningTopicTicks(goal: LearningGoal, progress?: LearningProgre
   const lastStop = savedStops.at(-1);
   const lastSemesterIndex = lastStop ? semesters.findIndex(topics => topics.some(topic =>
     topic.grade === lastStop.studyGrade && topic.lesson === lastStop.endBlock)) : -1;
-  const windowEnd = savedStops.length >= 4 && (goal.blockCount ?? 0) >= 96
+  const windowEnd = goal.revision || (savedStops.length >= 4 && (goal.blockCount ?? 0) >= 96)
     ? Math.max(semesterIndex + 4, lastSemesterIndex + 1) : semesterIndex + 4;
   const window = semesters.slice(Math.max(0, semesterIndex - 2), windowEnd).flat();
   const start = progress?.history?.start;
@@ -79,21 +79,21 @@ export function learningRailMetrics(goal: LearningGoal, progress: LearningProgre
   const course = learningTopicPositions(goal);
   const full = learningTimelineTopics(goal);
   const displayStart = topics.length ? full.findIndex(topic => topic.grade === topics[0].grade && topic.lesson === topics[0].lesson) : 0;
-  const planned = course.findLast(topic => topic.block <= progress.target);
+  const planned = learningPlannedTopic(goal, progress);
   const plannedIndex = planned
     ? full.findIndex(topic => topic.grade === planned.grade && topic.lesson === planned.lesson)
     : full.findIndex(topic => topic.grade === goal.studyGrade && topic.lesson === goal.startBlock) - 1;
   // 🔴 차이·상태는 **자르지 않은** 계획 위치로 센다 — 레일은 등록 이후 첫 기록부터라(2026-09-21) 계획 위치가 레일 시작보다
   //    앞일 수 있다. 잘린 0으로 빼면 앞선 학생이 '계획대로'로 보인다(적대 리뷰 2026-09-21). 0으로 자르는 건 그리는 값(target)뿐.
   const rawTarget = plannedIndex - displayStart + 1;
-  const target = Math.max(0, Math.min(total, rawTarget));
+  const target = Math.max(0, goal.revision ? rawTarget : Math.min(total, rawTarget));
   // 레일 시작(첫 기록)이 이미 목표 끝을 지났다 — 목표 구간이 0차시라도 완료다('진도 확인 필요'로 떨어뜨리지 않는다).
   const goalEnd = full.findIndex(topic => topic.grade === (goal.endStudyGrade ?? goal.studyGrade) && topic.lesson === goal.endBlock);
   const pastGoalEnd = topics.length > 0 && goalEnd >= 0 && goalEnd < displayStart;
   const targetBeforeRail = planned != null && rawTarget < 1;
   const last = topics[total - 1];
   const lastBlock = last ? course.find(topic => topic.grade === last.grade && topic.lesson === last.lesson)?.block : null;
-  const deadline = lastBlock == null ? goal.endDate : progress.days.find(day => day.target >= lastBlock)?.date ?? goal.endDate;
+  const deadline = goal.revision || lastBlock == null ? goal.endDate : progress.days.find(day => day.target >= lastBlock)?.date ?? goal.endDate;
   const remainingDays = progress.referenceDate
     ? progress.days.filter(day => day.date > progress.referenceDate! && day.date <= deadline).length
     : progress.remainingDays;

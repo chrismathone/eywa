@@ -17,9 +17,11 @@ export function buildLearningMap(goal: LearningGoal, progress: LearningProgress)
   const topics = learningTopicTicks(goal, progress);
   const metrics = learningRailMetrics(goal, progress, topics);
   const course = new Map(learningTopicPositions(goal).map(topic => [`${topic.grade}:${topic.lesson}`, topic.block]));
+  const anchorIndex = goal.revision?.anchor ? topics.findIndex(item => item.grade === goal.revision!.anchor!.grade && item.lesson === goal.revision!.anchor!.lesson) : -1;
   const lessons: LearningMapLesson[] = topics.map(topic => {
     const block = course.get(`${topic.grade}:${topic.lesson}`);
-    const plannedDate = block == null ? null : progress.days.find(day => day.target >= block)?.date ?? null;
+    const planDays = goal.revision && topic.position > anchorIndex + 1 ? progress.days.filter(day => day.date > goal.revision!.effectiveDate) : progress.days;
+    const plannedDate = block == null ? null : planDays.find(day => day.target >= block)?.date ?? null;
     const reached = metrics.current == null ? null : topic.position <= metrics.current;
     return { ...topic, label: learningBlockLabel(topic.lesson, topic.grade), plannedDate,
       // 실제 진도는 보고서의 수업일에 놓는다. 날짜를 모르는 완료 차시는 계획일로 꾸미지 않는다.

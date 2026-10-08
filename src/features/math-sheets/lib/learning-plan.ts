@@ -21,6 +21,15 @@ export type LearningGoal = {
   blockCount?: number | null;
   milestones?: LearningMilestone[];
   updatedAt?: string;
+  /** A user-edited tail; earlier planned lesson positions remain available. */
+  revision?: LearningPlanRevision | null;
+};
+export type LearningPlanTopic = { grade: string; lesson: string };
+export type LearningPlanRevision = {
+  effectiveDate: string;
+  anchor: LearningPlanTopic | null;
+  lockedStops: number;
+  pastDays: { date: string; topic: LearningPlanTopic | null }[];
 };
 export type LearningRecord = {
   date: string;
@@ -38,7 +47,7 @@ export type LearningStatus =
   | "on"
   | "ahead"
   | "done";
-export type PlannedDay = { date: string; target: number; block: string | null };
+export type PlannedDay = { date: string; target: number; block: string | null; topic?: LearningPlanTopic | null };
 export type LearningHistory = {
   enrolledAt: string | null;
   fromDate: string;
@@ -98,6 +107,7 @@ export function goalMilestones(goal: LearningGoal): LearningMilestone[] {
 
 /** Read old 24-block plans in the current unit, preserving dates and optimistic-lock tokens. */
 export function normalizeLearningGoal(goal: LearningGoal): LearningGoal {
+  if (goal.revision) return goal;
   if (goal.track === "supplement" || !goal.blockCount || goal.blockCount % 24 !== 0) return goal;
   const legacyEnd = monthRange(shiftMonth(goal.startDate.slice(0, 7), goal.blockCount / 8 - 1)).to;
   if (goal.endDate !== legacyEnd) return goal;
@@ -117,7 +127,10 @@ export function planLearningGoal(draft: LearningGoal, previous?: LearningGoal): 
   const oldEnd = previous ? topics.findIndex((topic) => topic.grade === (previous.endStudyGrade ?? previous.studyGrade) && topic.lesson === previous.endBlock) : -1;
   const added = track === "supplement" ? MATH_LEARNING_CADENCE.supplement.totalBlocks : topicSegments(topics.slice(oldEnd + 1)).length * MATH_LEARNING_CADENCE.regular.totalBlocks;
   const count = (previous?.blockCount ?? (previous ? goalBlocks(previous).length : 0)) + added;
-  const dates = standardGoalDates(goal.startDate.slice(0, 7), track, count);
+  const dates = previous?.revision
+    ? { startDate: previous.startDate, endDate: draft.endDate !== previous.endDate ? draft.endDate
+      : standardGoalDates(shiftMonth(previous.endDate.slice(0, 7), 1), track, added).endDate }
+    : standardGoalDates(goal.startDate.slice(0, 7), track, count);
   return {
     ...goal, ...dates, blockCount: count,
     milestones: [...(previous ? goalMilestones(previous) : []), { studyGrade: goal.endStudyGrade ?? goal.studyGrade, endBlock: goal.endBlock, endDate: dates.endDate, blockCount: count }],
@@ -130,10 +143,10 @@ function allocatedSegments(goal: LearningGoal): { topics: LearningTopic[]; block
   if (!goal.blockCount) return [{ topics, blocks: topics.length, offset: 0 }];
   const result: { topics: LearningTopic[]; blocks: number; offset: number }[] = [];
   let from = 0, offset = 0;
-  for (const milestone of goalMilestones(goal)) {
+  for (const [index, milestone] of goalMilestones(goal).entries()) {
     const to = topics.findIndex((topic, index) => index >= from && topic.grade === milestone.studyGrade && topic.lesson === milestone.endBlock);
     if (to < from) return [];
-    if (goal.track === "supplement") {
+    if (goal.track === "supplement" || (goal.revision && index >= goal.revision.lockedStops)) {
       result.push({ topics: topics.slice(from, to + 1), blocks: milestone.blockCount - offset, offset });
       offset = milestone.blockCount;
       from = to + 1;
@@ -206,13 +219,30 @@ export function learningGoalError(goal: LearningGoal): string | null {
       if (!Number.isInteger(milestone.blockCount) || milestone.blockCount <= previousCount || !validPlanDate(milestone.endDate) || milestone.endDate <= previousDate)
         return "목표 정거장의 순서와 완료일을 확인해 주세요.";
       const dates = standardGoalDates(goal.startDate.slice(0, 7), track, milestone.blockCount);
-      if (milestone.blockCount % policy.monthlyBlocks || goal.startDate !== dates.startDate || milestone.endDate !== dates.endDate)
+      if (!goal.revision && (milestone.blockCount % policy.monthlyBlocks || goal.startDate !== dates.startDate || milestone.endDate !== dates.endDate))
         return "목표 기간과 월별 블록 수를 확인해 주세요.";
       previousCount = milestone.blockCount;
       previousDate = milestone.endDate;
     }
-    if (track === "regular" && (!allocatedSegments(goal).length || allocatedSegments(goal).some((segment) => segment.blocks !== policy.totalBlocks)))
+    if (track === "regular" && !goal.revision && (!allocatedSegments(goal).length || allocatedSegments(goal).some((segment) => segment.blocks !== policy.totalBlocks)))
       return `정규 목표는 학기별 ${policy.totalBlocks}블록·${policy.months}개월로 배분해 주세요.`;
+    if (!learningTopics(goal).length || learningBlocks(goal).length !== goal.blockCount)
+      return "목표 단원과 구간별 블록 수를 확인해 주세요.";
+    if (goal.revision) {
+      const revision = goal.revision;
+      if (!validPlanDate(revision.effectiveDate) || !Number.isInteger(revision.lockedStops)
+        || revision.lockedStops < 0 || revision.lockedStops > milestones.length || revision.pastDays.length > 4000
+        || revision.pastDays.some((day, index) => !validPlanDate(day.date) || day.date > revision.effectiveDate
+          || (index > 0 && day.date <= revision.pastDays[index - 1].date)))
+        return "남은 계획의 적용일과 이전 계획을 확인해 주세요.";
+      const topics = learningTimelineTopics(goal);
+      if (revision.anchor && !topics.some(topic => topic.grade === revision.anchor!.grade && topic.lesson === revision.anchor!.lesson))
+        return "현재 진도 단원이 포함되는 목표를 선택해 주세요.";
+      const anchorIndex = revision.anchor ? topics.findIndex(topic => topic.grade === revision.anchor!.grade && topic.lesson === revision.anchor!.lesson) : -1;
+      if (milestones.some(stop => topics.findIndex(topic => topic.grade === stop.studyGrade && topic.lesson === stop.endBlock) > anchorIndex
+        && stop.endDate <= revision.effectiveDate))
+        return "남은 목표의 완료 예정일은 적용일 이후로 정해 주세요.";
+    }
   }
   return null;
 }
@@ -222,6 +252,7 @@ export function learningDays(
   context: LearningContext,
 ): PlannedDay[] {
   if (learningGoalError(goal)) return [];
+  if (goal.revision) return revisedLearningDays(goal, context);
   const dates = learningClassDates(goal.studentId, context, goal.startDate, goal.endDate);
   const blocks = learningBlocks(goal);
   if (goal.blockCount != null) {
@@ -244,6 +275,52 @@ export function learningDays(
 }
 
 /** Same-course lookup also handles high-school courses without changing the legacy global timeline. */
+function revisedLearningDays(goal: LearningGoal, context: LearningContext): PlannedDay[] {
+  const revision = goal.revision!;
+  const course = learningTopicPositions(goal);
+  const timeline = learningTimelineTopics(goal);
+  const globalAnchor = revision.anchor ? timeline.findIndex(topic => topic.grade === revision.anchor!.grade && topic.lesson === revision.anchor!.lesson) : -1;
+  const globalStart = timeline.findIndex(topic => topic.grade === goal.studyGrade && topic.lesson === goal.startBlock);
+  const globalEnd = timeline.findIndex(topic => topic.grade === (goal.endStudyGrade ?? goal.studyGrade) && topic.lesson === goal.endBlock);
+  let fromIndex = revision.anchor ? course.findIndex(topic => topic.grade === revision.anchor!.grade && topic.lesson === revision.anchor!.lesson) : -1;
+  if (fromIndex < 0 && globalAnchor >= globalStart) fromIndex = course.length;
+  const dayAt = (date: string, topic: LearningPlanTopic | null): PlannedDay => ({
+    date, topic, target: topic ? course.find(item => item.grade === topic.grade && item.lesson === topic.lesson)?.block
+      ?? (timeline.findIndex(item => item.grade === topic.grade && item.lesson === topic.lesson) > globalEnd ? goal.blockCount! : 0) : 0,
+    block: topic ? `${topic.grade} · ${topic.lesson}` : null,
+  });
+  const days = revision.pastDays.map(day => dayAt(day.date, day.topic));
+  const blocks = learningBlocks(goal);
+  let fromDate = revision.effectiveDate;
+  for (const stop of goalMilestones(goal)) {
+    const toIndex = course.findIndex(topic => topic.grade === stop.studyGrade && topic.lesson === stop.endBlock);
+    if (toIndex <= fromIndex) continue;
+    const dates = learningClassDates(goal.studentId, context, [goal.startDate, addDays(fromDate, 1)].sort().at(-1)!, stop.endDate);
+    if (!dates.length) return [];
+    dates.forEach((date, index) => {
+      const startBlock = course[fromIndex]?.block ?? 0;
+      const target = Math.min(stop.blockCount, startBlock + Math.ceil((stop.blockCount - startBlock) * (index + 1) / dates.length));
+      const topic = course.findLast((item, itemIndex) => itemIndex <= toIndex && item.block <= target);
+      days.push({ date, target, topic: topic ? { grade: topic.grade, lesson: topic.lesson } : null,
+        block: blocks[Math.ceil(target) - 1] ?? null });
+    });
+    fromIndex = toIndex;
+    fromDate = stop.endDate;
+  }
+  return days;
+}
+
+/** Explicit revised lesson positions keep comparisons independent of block redistribution. */
+export function learningPlannedTopic(goal: LearningGoal, progress: LearningProgress): LearningPlanTopic | null {
+  const reference = progress.referenceDate ?? goal.startDate;
+  if (goal.revision) {
+    const days = progress.days.filter(day => day.date <= reference && (reference < goal.revision!.effectiveDate || day.date > goal.revision!.effectiveDate));
+    return days.at(-1)?.topic ?? (reference >= goal.revision.effectiveDate ? goal.revision.anchor : null);
+  }
+  const topic = learningTopicPositions(goal).findLast(topic => topic.block <= progress.target);
+  return topic ? { grade: topic.grade, lesson: topic.lesson } : null;
+}
+
 export function recordBlockIndex(
   progress: string | null,
   studyGrade: string,
@@ -275,12 +352,20 @@ export function plannedAt(days: readonly PlannedDay[], date: string): number {
   return target;
 }
 
+export function plannedLearningTarget(goal: LearningGoal, days: readonly PlannedDay[], date: string): number {
+  if (!goal.revision || date < goal.revision.effectiveDate) return plannedAt(days, date);
+  const last = days.findLast(day => day.date > goal.revision!.effectiveDate && day.date <= date);
+  const anchor = goal.revision.anchor;
+  return last?.target ?? (anchor ? learningTopicPositions(goal).find(topic => topic.grade === anchor.grade && topic.lesson === anchor.lesson)?.block ?? 0 : 0);
+}
+
 export function buildLearningProgress(
   goal: LearningGoal,
   context: LearningContext,
   records: readonly LearningRecord[],
   referenceDate: string,
   planMonth = referenceDate.slice(0, 7),
+  options: { includeAfterGoal?: boolean } = {},
 ): LearningProgress {
   const days = learningDays(goal, context),
     blocks = learningBlocks(goal),
@@ -299,7 +384,7 @@ export function buildLearningProgress(
     a.date.localeCompare(b.date) || (a.sentAt ?? "").localeCompare(b.sentAt ?? ""),
   )) {
     if (record.date > referenceDate) continue;
-    if (goal.track === "supplement" && record.date > goal.endDate) continue;
+    if (goal.track === "supplement" && !goal.revision && !options.includeAfterGoal && record.date > goal.endDate) continue;
     latestRecord = record;
     if (goal.track === "supplement") {
       if (record.date >= goal.startDate && plannedDates.has(record.date) && record.progress?.trim()) {
@@ -334,13 +419,15 @@ export function buildLearningProgress(
     currentDate = record.date;
     currentRecord = record;
   }
-  const target = plannedAt(days, referenceDate),
+  const target = plannedLearningTarget(goal, days, referenceDate),
     difference = current == null ? null : Math.round((current - target) * 10) / 10;
   const remainingDays = days.filter((d) => d.date > referenceDate).length;
   const range = monthRange(planMonth);
   const dow = new Date(`${referenceDate}T00:00:00Z`).getUTCDay();
   const monday = addDays(referenceDate, -((dow + 6) % 7)),
     sunday = addDays(monday, 6);
+  const periodStart = (from: string, to: string) => goal.revision && goal.revision.effectiveDate >= from && goal.revision.effectiveDate <= to
+    ? goal.revision.effectiveDate : addDays(from, -1);
   const status: LearningStatus = !days.length
     ? "no-schedule"
     : referenceDate < days[0]!.date
@@ -376,13 +463,13 @@ export function buildLearningProgress(
         ? null
         : (total - current) / remainingDays,
     month: {
-      from: plannedAt(days, addDays(range.from, -1)),
-      to: plannedAt(days, range.to),
+      from: plannedLearningTarget(goal, days, periodStart(range.from, range.to)),
+      to: plannedLearningTarget(goal, days, range.to),
       endDate: range.to,
     },
     week: {
-      from: plannedAt(days, addDays(monday, -1)),
-      to: plannedAt(days, sunday),
+      from: plannedLearningTarget(goal, days, periodStart(monday, sunday)),
+      to: plannedLearningTarget(goal, days, sunday),
       endDate: sunday,
     },
     days,

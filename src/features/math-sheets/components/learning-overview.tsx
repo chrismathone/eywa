@@ -20,6 +20,7 @@ import type {
 } from "../server/month-queries";
 import {
   learningStatusLabel,
+  goalMilestones,
   type LearningData,
   type LearningProgress,
 } from "../lib/learning-plan";
@@ -44,6 +45,7 @@ import { learningGoalPlanKey } from "../lib/learning-goal-comparison";
 const GoalDialog = dynamic(() =>
   import("./learning-goal-dialog").then((m) => m.LearningGoalDialog),
 );
+const GoalRevisionDialog = dynamic(() => import("./learning-goal-revision-dialog").then(module => module.LearningGoalRevisionDialog));
 const StudentLearningMap = dynamic(() => import("@/features/math-progress-map/components/linked-learning-map").then(m => m.LinkedLearningMap), {
   loading: () => <p role="status">학생 진도맵을 불러오는 중입니다…</p>,
 });
@@ -103,6 +105,7 @@ export function LearningOverview({
     studentId: string | null;
   } | null>(null);
   const [fontSize, setFontSize] = useState<McsFontSize>(data.fontSize);
+  const [revisionEditor, setRevisionEditor] = useState<{ studentId: string; goalNumber: number } | null>(null);
   const inFrame = useInFrame();
   const navigate = (href: string) =>
     window.location.assign(inFrame ? withEmbed(href) : href);
@@ -110,6 +113,7 @@ export function LearningOverview({
     if (studentId === selected) return;
     setSelected(studentId);
     setGoalEditor(null);
+    setRevisionEditor(null);
     const url = new URL(window.location.href);
     if (studentId) url.searchParams.set("student", studentId);
     else url.searchParams.delete("student");
@@ -123,6 +127,7 @@ export function LearningOverview({
       setSelected(params.get("student"));
       setFocusQuery(params.toString());
       setGoalEditor(null);
+      setRevisionEditor(null);
     };
     window.addEventListener("popstate", onBack);
     return () => window.removeEventListener("popstate", onBack);
@@ -238,7 +243,7 @@ export function LearningOverview({
             <div className={styles.headingTitle}>
               <h2>{student ? "학생 집중 보기" : "수학 진도 관리"}</h2>
               <span className={styles.trackBadge}>{track === "regular" ? "정규 진도" : "복습 심화"}</span>
-              <span className={styles.trackCaption}>월 {MATH_LEARNING_CADENCE[track].monthlyBlocks}블록</span>
+              <span className={styles.trackCaption}>{student && learning.goals[student.studentId]?.revision ? "직접 수정한 계획" : `월 ${MATH_LEARNING_CADENCE[track].monthlyBlocks}블록`}</span>
             </div>
           </div>
           {editable ? <div className={styles.headingActions}>
@@ -261,7 +266,7 @@ export function LearningOverview({
             try {
               const result = await setMathClassLearningTrack({ classId: data.classId, track: nextTrack });
               if (!result.ok) { setTrackError(result.error); return; }
-              setTrackEditor(false); setFilter("all"); router.refresh();
+              setTrackEditor(false); setFilter("all"); setRevisionEditor(null); router.refresh();
             } catch { setTrackError("수업 유형을 저장하지 못했습니다. 다시 시도해 주세요."); }
           });
         }}>
@@ -388,7 +393,8 @@ export function LearningOverview({
                               {goal ? `전체 목표 · ${learningBlockLabel(goal.endBlock, goal.endStudyGrade ?? goal.studyGrade)}` : "전체 목표 미설정"}
                             </span>
                           </div>
-                          <LearningRails progress={progress} goal={goal} scaleLessons={scaleLessons} recentRecord={learning.records[s.studentId]?.[0]} />
+                          <LearningRails progress={progress} goal={goal} scaleLessons={scaleLessons} recentRecord={learning.records[s.studentId]?.[0]}
+                            onEditGoal={editable && !trackPending && goal?.blockCount ? goalNumber => setRevisionEditor({ studentId: s.studentId, goalNumber }) : undefined} />
                         </td>
                         <td>
                           <strong className={styles.rate}>
@@ -413,7 +419,7 @@ export function LearningOverview({
                           <Status student={s} progress={summary} />
                           <p className={styles.meta}>
                             {summary
-                              ? summary.targetBeforeRail ? "기준일 계획 · 첫 기록보다 앞" : `기준일 계획 ${summary.target}차시`
+                              ? summary.targetBeforeRail ? "기준일 계획 · 첫 기록보다 앞" : `${goal.revision && (progress?.referenceDate ?? data.today) < goal.revision.effectiveDate ? "수정 전 " : ""}기준일 계획 ${summary.target}차시`
                               : "학생을 눌러 목표 설정"}
                           </p>
                         </td>
@@ -454,6 +460,7 @@ export function LearningOverview({
                 ? () => setGoalEditor({ studentId: student.studentId })
                 : undefined
             }
+            onEditGoal={editable && !trackPending ? goalNumber => setRevisionEditor({ studentId: student.studentId, goalNumber }) : undefined}
           />
         )}
         <footer className={styles.footer}>
@@ -477,6 +484,10 @@ export function LearningOverview({
           onClose={() => setGoalEditor(null)}
         />
       ) : null}
+      {revisionEditor && !trackPending && learning.goals[revisionEditor.studentId] ? <GoalRevisionDialog
+        key={`${track}:${revisionEditor.studentId}:${revisionEditor.goalNumber}`}
+        classId={data.classId} studentId={revisionEditor.studentId} studentName={data.students.find(student => student.studentId === revisionEditor.studentId)?.name ?? "학생"}
+        startDate={learning.goals[revisionEditor.studentId].startDate} track={track} goalNumber={revisionEditor.goalNumber} onClose={() => setRevisionEditor(null)} /> : null}
     </div>
   );
 }
@@ -489,6 +500,7 @@ function StudentFocus({
   initialQuery,
   onSelect,
   onEdit,
+  onEditGoal,
 }: {
   data: MathSheetMonthData;
   learning: LearningData;
@@ -497,6 +509,7 @@ function StudentFocus({
   initialQuery: string;
   onSelect: (id: string) => void;
   onEdit?: () => void;
+  onEditGoal?: (goalNumber: number) => void;
 }) {
   const goal = learning.goals[student.studentId],
     progress = learning.progress[student.studentId];
@@ -558,6 +571,7 @@ function StudentFocus({
               goal={goal} progress={progress} records={records} reportScores={student.records}
               context={learning.context}
               initialQuery={initialQuery} embedded
+              onEditGoal={goal.blockCount ? onEditGoal : undefined}
               headerActions={<>
                 {student.rosterPhase !== "on" ? <Status student={student} progress={summary} /> : null}
                 {onEdit ? <button className={styles.button} onClick={onEdit}>목표 확장</button> : null}
@@ -568,12 +582,12 @@ function StudentFocus({
               <p className={styles.meta}>{courseRangeLabel(goal)} · {goal.startDate} 시작 – {goal.endDate} 완료</p>
             {goal.blockCount && learning.track !== "supplement" ? (
               <details className={styles.dailyPlan}>
-                <summary>전체 {goal.blockCount}블록 진도표 · 월 {MATH_LEARNING_CADENCE.regular.monthlyBlocks}블록</summary>
-                <p className={styles.meta}>과정별 단원을 배분한 계획입니다. 목표 확장 시 이전 정거장의 배분은 유지됩니다.</p>
+                <summary>전체 {goal.blockCount}블록 진도표 · {goal.revision ? "목표별 직접 배분" : `월 ${MATH_LEARNING_CADENCE.regular.monthlyBlocks}블록`}</summary>
+                <p className={styles.meta}>{goal.revision ? `${goal.revision.effectiveDate}부터 수정한 목표 날짜와 구간별 분량을 반영합니다.` : "과정별 단원을 배분한 계획입니다. 목표 확장 시 이전 정거장의 배분은 유지됩니다."}</p>
                 <div>
                   <table>
-                    <thead><tr><th>월</th><th>블록</th><th>학습 단원</th></tr></thead>
-                    <tbody>{learningBlocks(goal).map((label, index) => <tr key={index}><td>{Math.floor(index / MATH_LEARNING_CADENCE.regular.monthlyBlocks) + 1}개월차</td><td>{index + 1}블록</td><td>{label}</td></tr>)}</tbody>
+                    <thead><tr><th>{goal.revision ? "목표 구간" : "월"}</th><th>블록</th><th>학습 단원</th></tr></thead>
+                    <tbody>{learningBlocks(goal).map((label, index) => <tr key={index}><td>{goal.revision ? `${goalMilestones(goal).findIndex(stop => stop.blockCount >= index + 1) + 1}차 목표` : `${Math.floor(index / MATH_LEARNING_CADENCE.regular.monthlyBlocks) + 1}개월차`}</td><td>{index + 1}블록</td><td>{label}</td></tr>)}</tbody>
                   </table>
                 </div>
               </details>

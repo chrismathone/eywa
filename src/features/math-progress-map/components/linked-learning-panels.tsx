@@ -10,7 +10,7 @@ import styles from "./linked-learning-map.module.css";
 
 type OpenLesson = (lesson: LearningMapLesson, date?: string | null) => void;
 
-export function LinkedPlanVsActual({ onLesson }: { onLesson: OpenLesson }) {
+export function LinkedPlanVsActual({ onLesson, revisionDate }: { onLesson: OpenLesson; revisionDate?: string }) {
   const { sourceProgress } = useProgressMap();
   const { metrics, lessons } = sourceProgress.learningMap!;
   const remainingLessons = metrics.percent == null || metrics.current == null
@@ -32,12 +32,13 @@ export function LinkedPlanVsActual({ onLesson }: { onLesson: OpenLesson }) {
       {actual ? <button className={styles.actualMarker} style={{ left: pct(actual.position) }} aria-label={`실제 위치 ${actual.position}차시`} onClick={() => onLesson(actual, actual.date)} /> : null}
     </div>
     <div className={styles.comparisonScale}><span>0차시</span><span>전체 목표 {metrics.total}차시</span></div>
-    <p className={styles.comparisonDates}>{sourceProgress.asOf} 기준 · 남은 진도 {remainingLessons == null ? "—" : `${remainingLessons}차시`} · 남은 수업 {metrics.remainingDays}회</p>
+    <p className={styles.comparisonDates}>{sourceProgress.asOf} 기준{revisionDate && sourceProgress.asOf < revisionDate ? " · 수정 전 계획" : ""} · 남은 진도 {remainingLessons == null ? "—" : `${remainingLessons}차시`} · 남은 수업 {metrics.remainingDays}회</p>
   </section>;
 }
 
-export function LinkedCurriculumPosition({ goal, progress, onLesson, onSelectGoal }: {
+export function LinkedCurriculumPosition({ goal, progress, onLesson, onSelectGoal, onEditGoal }: {
   goal: LearningGoal; progress: LearningProgress; onLesson: OpenLesson; onSelectGoal: (date: string, lesson: number | null) => void;
+  onEditGoal?: (goalNumber: number) => void;
 }) {
   const { sourceProgress } = useProgressMap();
   const { metrics, lessons } = sourceProgress.learningMap!;
@@ -55,7 +56,7 @@ export function LinkedCurriculumPosition({ goal, progress, onLesson, onSelectGoa
     </div>
     <details className={styles.goalList}><summary>학습 목표 {stops.length}개</summary>{stops.map((stop, index) => {
       const lesson = lessons.find(lesson => lesson.grade === stop.studyGrade && lesson.lesson === stop.endBlock);
-      return <button key={`${index}:${stop.endDate}`} onClick={() => onSelectGoal(stop.endDate, lesson?.position ?? null)}><time>{stop.endDate}</time><strong>{index + 1}차 목표 · {learningBlockLabel(stop.endBlock, stop.studyGrade)}</strong></button>;
+      return <button key={`${index}:${stop.endDate}`} onClick={() => onEditGoal ? onEditGoal(index + 1) : onSelectGoal(stop.endDate, lesson?.position ?? null)}><time>{stop.endDate}</time><strong>{index + 1}차 목표 · {learningBlockLabel(stop.endBlock, stop.studyGrade)}</strong></button>;
     })}</details>
   </section>;
 }

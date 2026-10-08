@@ -18,6 +18,7 @@ import {
 import { logAction } from "@/features/audit/server/log";
 import { readMathLearningTrack } from "./learning-track";
 import { logDbError } from "@/lib/supabase/db-error";
+import { learningGoalPlanKey } from "../lib/learning-goal-comparison";
 
 const inputSchema = z.object({
   classId: z.string().uuid(),
@@ -37,6 +38,8 @@ const inputSchema = z.object({
   })).max(100).optional(),
   mode: z.enum(["create", "extend"]).default("create"),
   updatedAt: z.string().optional(),
+  revision: z.object({ effectiveDate: z.string(), anchor: z.object({ grade: z.string(), lesson: z.string() }).nullable(),
+    lockedStops: z.number().int().nonnegative(), pastDays: z.array(z.object({ date: z.string(), topic: z.object({ grade: z.string(), lesson: z.string() }).nullable() })).max(4000) }).nullable().optional(),
 });
 
 export async function saveMathLearningGoals(
@@ -47,6 +50,8 @@ export async function saveMathLearningGoals(
     return { ok: false, error: "학생과 전체 목표 입력값을 확인해 주세요." };
   const value = parsed.data,
     studentIds = [...new Set(value.studentIds)];
+  if (value.mode === "create" && value.revision)
+    return { ok: false, error: "남은 계획 수정 창에서 기존 목표를 변경해 주세요." };
   const gate = await requireMcsClassAccess(value.classId, { write: true });
   if (!gate.ok) return { ok: false, error: gate.error };
   const base: LearningGoal = {
@@ -65,7 +70,7 @@ export async function saveMathLearningGoals(
     if (studentIds.length !== 1 || !value.updatedAt || !value.blockCount)
       return { ok: false, error: "확장할 학생의 기존 목표를 다시 불러와 주세요." };
     const { data: existing, error } = await admin.from("math_learning_track_goals")
-      .select("study_grade,end_study_grade,start_block,end_block,start_date,end_date,block_count,milestones,updated_at")
+      .select("study_grade,end_study_grade,start_block,end_block,start_date,end_date,block_count,milestones,updated_at,plan_revision")
       .eq("tenant_id", tenantId).eq("class_id", classId).eq("student_id", studentIds[0])
       .eq("track", classTrack).eq("start_date", value.startDate).maybeSingle();
     if (error || !existing || existing.updated_at !== value.updatedAt)
@@ -73,7 +78,9 @@ export async function saveMathLearningGoals(
     const oldStops = goalMilestones(normalizeLearningGoal({ studentId: studentIds[0], studyGrade: existing.study_grade,
       endStudyGrade: existing.end_study_grade ?? undefined, startBlock: existing.start_block,
       endBlock: existing.end_block, startDate: existing.start_date, endDate: existing.end_date,
-      blockCount: existing.block_count, milestones: existing.milestones, textbook: null, track: classTrack }));
+      blockCount: existing.block_count, milestones: existing.milestones, textbook: null, track: classTrack, revision: existing.plan_revision ?? null }));
+    if (learningGoalPlanKey({ ...base, revision: existing.plan_revision ?? null }) !== learningGoalPlanKey(base))
+      return { ok: false, error: "기존 계획의 배분은 유지하고 다음 목표를 추가해 주세요." };
     const stops = value.milestones ?? [];
     const sameStop = (a: typeof oldStops[number], b: typeof oldStops[number]) => a.studyGrade === b.studyGrade && a.endBlock === b.endBlock && a.endDate === b.endDate && a.blockCount === b.blockCount;
     if (value.studyGrade !== existing.study_grade || value.startBlock !== existing.start_block || stops.length !== oldStops.length + 1 || oldStops.some((stop, i) => !sameStop(stop, stops[i])))
@@ -143,7 +150,7 @@ export async function saveMathLearningGoals(
           "선택한 학생의 목표 기간에 수업이 없습니다. 기간과 시간표를 확인해 주세요.",
       };
   }
-  if (value.track === "supplement" && (!value.blockCount || value.blockCount % 4 !== 0))
+  if (value.track === "supplement" && !value.revision && (!value.blockCount || value.blockCount % 4 !== 0))
     return { ok: false, error: "복습 심화 목표는 월 4블록으로 설정해 주세요." };
   const standard = value.blockCount != null;
   const rows = studentIds.map((studentId) => ({
@@ -157,7 +164,7 @@ export async function saveMathLearningGoals(
       end_date: value.endDate,
       textbook: value.textbook || null,
       updated_by: user.id,
-      ...(standard ? { track: value.track, block_count: value.blockCount, end_study_grade: value.endStudyGrade ?? value.studyGrade, milestones: value.milestones ?? [] } : {}),
+      ...(standard ? { track: value.track, block_count: value.blockCount, end_study_grade: value.endStudyGrade ?? value.studyGrade, milestones: value.milestones ?? [], plan_revision: value.revision ?? null } : {}),
     }));
   const saved = value.mode === "extend"
     ? await admin.from("math_learning_track_goals").update(rows[0])

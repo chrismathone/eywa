@@ -17,7 +17,7 @@ import { buildLearningHistory } from "../lib/learning-history";
 export async function getMathLearningData(
   classId: string,
   monthData: MathSheetMonthData,
-  options: { studentId?: string; allRecords?: boolean } = {},
+  options: { studentId?: string; allRecords?: boolean; forRevision?: boolean } = {},
 ): Promise<LearningData> {
   const gate = await requireMcsClassAccess(classId);
   const endOfMonth = monthRange(monthData.month).to;
@@ -49,7 +49,7 @@ export async function getMathLearningData(
     .eq("tenant_id", tenantId)
     .eq("class_id", classId), admin
     .from("math_learning_track_goals")
-    .select("student_id, study_grade, end_study_grade, start_block, end_block, start_date, end_date, textbook, track, block_count, milestones, updated_at")
+    .select("student_id, study_grade, end_study_grade, start_block, end_block, start_date, end_date, textbook, track, block_count, milestones, updated_at, plan_revision")
     .eq("tenant_id", tenantId)
     .eq("class_id", classId)
     .eq("track", track)
@@ -64,7 +64,7 @@ export async function getMathLearningData(
         : "failed",
     };
   const visibleIds = new Set(monthData.students.filter(s => !options.studentId || s.studentId === options.studentId).map((s) => s.studentId));
-  for (const row of [...(legacy.data ?? []).map((row) => ({ ...row, track: "regular", block_count: null as number | null, end_study_grade: null, milestones: [], updated_at: undefined })), ...(standard.data ?? [])]) {
+  for (const row of [...(legacy.data ?? []).map((row) => ({ ...row, track: "regular", block_count: null as number | null, end_study_grade: null, milestones: [], updated_at: undefined, plan_revision: null })), ...(standard.data ?? [])]) {
     if (!visibleIds.has(String(row.student_id)) || row.track !== track) continue;
     const goal: LearningGoal = {
       studentId: String(row.student_id),
@@ -79,6 +79,7 @@ export async function getMathLearningData(
       blockCount: row.block_count,
       milestones: row.milestones,
       updatedAt: row.updated_at,
+      revision: row.plan_revision ?? null,
     };
     result.goals[goal.studentId] = normalizeLearningGoal(goal);
   }
@@ -154,7 +155,7 @@ export async function getMathLearningData(
       const firstEnrollment = enrollments.filter(item => item.student_id === studentId && item.start_date).map(item => item.start_date!).sort()[0];
       const enrolledAt = students.find(student => student.id === studentId)?.enrolled_at ?? firstEnrollment ?? null;
       const currentRecords = (byStudent.get(studentId) ?? []).filter(record => !enrolledAt || record.date >= enrolledAt);
-      const history = currentRecords.filter((record) => !goal || goal.track !== "supplement" || (record.date >= goal.startDate && record.date <= goal.endDate));
+      const history = currentRecords.filter((record) => !goal || goal.track !== "supplement" || goal.revision || (record.date >= goal.startDate && record.date <= goal.endDate));
       if (goal) {
         result.progress[studentId] = buildLearningProgress(
           goal,
@@ -162,13 +163,14 @@ export async function getMathLearningData(
           currentRecords,
           referenceDate,
           monthData.month,
+          { includeAfterGoal: options.forRevision },
         );
         result.progress[studentId].history = buildLearningHistory(goal, result.progress[studentId], [
           ...(previousByStudent.get(studentId) ?? []), ...(byStudent.get(studentId) ?? []),
         ], enrolledAt, referenceDate);
       }
-      result.records[studentId] = (options.allRecords
-        ? currentRecords.filter(record => goal?.track !== "supplement" || record.date <= goal.endDate)
+      result.records[studentId] = (options.allRecords || options.forRevision
+        ? currentRecords.filter(record => goal?.track !== "supplement" || goal.revision || options.forRevision || record.date <= goal.endDate)
         : history.slice(-30)).reverse();
     }
   } catch {

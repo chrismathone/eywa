@@ -10,6 +10,14 @@ const first = planLearningGoal({ studentId: "s", studyGrade: "중1", startBlock:
 const progress = buildLearningProgress(first, { schedules: [], holidays: {}, spans: {} }, [], "2026-09-18");
 
 describe("현재 진도와 고정 목표 수직선", () => {
+  it("편집 가능한 목표 점과 목표 라벨은 해당 목표 편집을 열고 행 선택으로 전파하지 않는다", () => {
+    const edit = vi.fn(), select = vi.fn(), row = vi.fn();
+    render(<div onClick={row}><LearningRails goal={first} progress={progress} onEditGoal={edit} onSelectPosition={select} /></div>);
+    fireEvent.click(screen.getByRole("button", { name: "1차 목표" }));
+    fireEvent.click(screen.getByRole("button", { name: "1차 목표 남은 계획 수정" }));
+    expect(edit.mock.calls).toEqual([[1], [1]]);
+    expect(select).not.toHaveBeenCalled(); expect(row).not.toHaveBeenCalled();
+  });
   it("같은 학기에 목표가 둘 있어도 모든 목표 점과 동작을 보존한다", () => {
     const onSelect = vi.fn();
     const goal = planLearningGoal({ ...first, track: "supplement", startBlock: "다각형", endBlock: "부채꼴의 호의 길이와 넓이" });

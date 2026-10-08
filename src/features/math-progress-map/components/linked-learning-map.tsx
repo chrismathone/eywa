@@ -29,9 +29,10 @@ type Props = {
   embedded?: boolean;
   headerActions?: ReactNode;
   reportScores?: Record<string, TestScoreSource>;
+  onEditGoal?: (goalNumber: number) => void;
 };
 
-export function LinkedLearningMap({ student, classId, className, month, goal, progress, records, context, initialQuery = "", embedded = false, headerActions, reportScores }: Props) {
+export function LinkedLearningMap({ student, classId, className, month, goal, progress, records, context, initialQuery = "", embedded = false, headerActions, reportScores, onEditGoal }: Props) {
   const map = useMemo(() => buildLearningMap(goal, progress), [goal, progress]);
   const dashboard = useMemo(() => buildLearningDashboard(student, goal, progress, records, map, context), [student, goal, progress, records, map, context]);
   const { selection, select, state } = useLinkedMapState(dashboard, map, initialQuery);
@@ -48,7 +49,7 @@ export function LinkedLearningMap({ student, classId, className, month, goal, pr
     <header className={styles.header}>
       <div><h2>{student.name} <span>학습 진도맵</span></h2><p>{student.school} {student.grade} · {className}{goal.textbook ? ` · ${goal.textbook}` : ""}</p></div>
       <div className={styles.overall} aria-label="전체 진도율"><span>전체 진도</span><strong>{metrics.percent == null ? "—" : `${metrics.percent}%`}</strong><span>{metrics.current ?? "—"} / {metrics.total}차시</span></div>
-      <div className={styles.status}><strong>{learningStatusLabel(metrics, "차시")}</strong><span>{metrics.targetBeforeRail ? "기준일 계획 · 첫 기록보다 앞" : `기준일 계획 ${metrics.target}차시`}</span></div>
+      <div className={styles.status}><strong>{learningStatusLabel(metrics, "차시")}</strong><span>{metrics.targetBeforeRail ? "기준일 계획 · 첫 기록보다 앞" : `${goal.revision && map.referenceDate < goal.revision.effectiveDate ? "수정 전 " : ""}기준일 계획 ${metrics.target}차시`}</span></div>
       <div className={styles.status}><strong>목표까지 {remainingLessons == null ? "—" : `${remainingLessons}차시`}</strong><span>남은 수업 {metrics.remainingDays}회</span></div>
       {headerActions}
       {!embedded ? <EmbedLink href={learningSheetHref(classId, student.studentId, month)} className={styles.back}>MCS로 돌아가기</EmbedLink> : null}
@@ -56,6 +57,7 @@ export function LinkedLearningMap({ student, classId, className, month, goal, pr
     <section className={styles.rail} aria-label="MCS 학습 진도">
       <div className={styles.railTitle}><span>전체 목표 · {learningBlockLabel(goal.endBlock, goal.endStudyGrade ?? goal.studyGrade)}</span><time>{map.referenceDate} 기준</time></div>
       <LearningRails goal={goal} progress={progress}
+        onEditGoal={onEditGoal}
         selectedPositions={activeLesson ? [activeLesson.position] : selectedLessons.map(lesson => lesson.position)}
         selectedActualPositions={activeLesson ? [activeLesson.position] : map.lessons.filter(lesson => !selection.undated && lesson.date && lesson.date >= period.from && lesson.date <= period.to).map(lesson => lesson.position)}
         onSelectPosition={(position, date, kind) => {
@@ -74,8 +76,8 @@ export function LinkedLearningMap({ student, classId, className, month, goal, pr
     </div>
     <div className={styles.dashboardGrid}><ProgressMapPanel /><CurriculumTimelineCard /></div>
     <div className={styles.bottomGrid}>
-      <LinkedPlanVsActual onLesson={openLesson} />
-      <LinkedCurriculumPosition goal={goal} progress={progress} onLesson={openLesson} onSelectGoal={(date, lesson) => select({ date, mode: "month", lesson })} />
+      <LinkedPlanVsActual onLesson={openLesson} revisionDate={goal.revision?.effectiveDate} />
+      <LinkedCurriculumPosition goal={goal} progress={progress} onLesson={openLesson} onSelectGoal={(date, lesson) => select({ date, mode: "month", lesson })} onEditGoal={onEditGoal} />
     </div>
     <section className={styles.detailPanel} aria-label="선택한 진도 상세">
       <div className={styles.panelHeading}><h3>{activeLesson?.label ?? `${selection.undated ? "날짜 미확정" : period.label} 학습 차시`}</h3><span>{selectedLessons.length}차시</span></div>
