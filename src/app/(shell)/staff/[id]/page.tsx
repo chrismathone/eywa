@@ -15,12 +15,15 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { resolveTenantReadUrls } from "@/lib/storage/media-storage";
 import { getSuperAdminIds, displayRoleFor } from "@/lib/auth/super-admin";
 import { getTenantSettings } from "@/features/owner/server/queries";
-import { StaffTabsNav, isStaffTabKey } from "./_components/tabs-nav";
+import { StaffTabsNav, isStaffTabKey, accessibleStaffTab } from "./_components/tabs-nav";
 import { BasicInfoTab } from "./_tabs/basic-info-tab";
 import { MonthlyScheduleTab } from "./_tabs/monthly-schedule-tab";
 import { ClassesTab } from "./_tabs/classes-tab";
 import { ActivityLogTab } from "./_tabs/activity-log-tab";
 import { isPayrollEnabled, isStaffLeavesEnabled } from "@/features/payroll/config";
+import { attendanceSalaryAdminOrNull } from "@/features/attendance/server/salary-rates";
+import { kstMonth } from "@/lib/date-kst";
+import { PersonalSalaryScope } from "./payroll/_salary-scope";
 
 export const metadata = { title: "직원 상세 — 에이와" };
 
@@ -30,11 +33,11 @@ export default async function StaffDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: string; page?: string }>;
+  searchParams: Promise<{ tab?: string; page?: string; period?: string }>;
 }) {
   await requireAccess("staff");
   const { id } = await params;
-  const { tab: tabParam, page: pageParam } = await searchParams;
+  const { tab: tabParam, page: pageParam, period } = await searchParams;
   const tabRaw = isStaffTabKey(tabParam) ? tabParam : "info";
   const activityPage = Math.max(1, Number(pageParam) || 1);
 
@@ -51,7 +54,9 @@ export default async function StaffDetailPage({
 
   const canManage = !!viewer && (await canWriteTenant(viewer.systemRole, "staff"));
   // 활동 로그 탭은 사무실 전용 — 비-사무실이 ?tab=activity로 직접 와도 기본정보로 폴백(RLS도 별도 방어).
-  const tab = tabRaw === "activity" && !canManage ? "info" : tabRaw;
+  // 개인별 급여 설정은 출석부 급여 권한을 따른다. 침산의 휴면 급여 정산 스위치와 별개다.
+  const showSalarySettings = staff.employmentType === "프리랜서" && !!(await attendanceSalaryAdminOrNull(false));
+  const tab = accessibleStaffTab(tabRaw, { showActivity: canManage, showSalarySettings });
   // 계정 관리 카드 = **메뉴 쓰기 권한(개인 예외 포함) AND 대상 보호선** 둘 다(2026-08-11).
   // canManageStaffMember는 이제 대상만 본다(원장 계정만 차단) — canManage를 빼면 staff=readonly인
   // 사람에게도 카드가 떠서 "버튼은 보이는데 누르면 거부"가 된다(서버 loadTarget이 막긴 하지만 거짓 UI).
@@ -146,7 +151,7 @@ export default async function StaffDetailPage({
       </header>
 
       <div className="print:hidden">
-        <StaffTabsNav staffId={staff.id} active={tab} showActivity={canManage} />
+        <StaffTabsNav staffId={staff.id} active={tab} showActivity={canManage} showSalarySettings={showSalarySettings} />
       </div>
 
       <section>
@@ -169,6 +174,8 @@ export default async function StaffDetailPage({
           <MonthlyScheduleTab staffId={staff.id} staffName={staff.displayName} canManage={canManage} />
         ) : tab === "classes" ? (
           <ClassesTab staffId={staff.id} />
+        ) : tab === "salary" ? (
+          <PersonalSalaryScope teacherId={staff.id} teacherName={staff.displayName} period={period ?? kstMonth()} />
         ) : tab === "activity" ? (
           <ActivityLogTab userId={staff.id} page={activityPage} />
         ) : null}
