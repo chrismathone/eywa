@@ -10,6 +10,7 @@ import { fetchReportTrendRows, fetchSpecialClassIds } from "@/features/onescreen
 import { resolveReportAuthorName } from "@/features/onescreen/server/report-author-name";
 import { buildTrendPoints } from "@/features/onescreen/report-trend";
 import { ParentReportCard } from "@/features/onescreen/components/parent-report-card";
+import { reportVideoHomework } from "@/features/onescreen/server/report-video-homework";
 import { classKindMeta } from "@/features/classes/list-filters";
 import { loadReportJjSnapshot } from "@/features/ijw/server/report-snapshot";
 import { PrintActions } from "@/app/(print)/enrollment/[id]/print/print-actions";
@@ -62,7 +63,7 @@ export default async function LessonReportPrintPage({
   )
     notFound();
 
-  const [{ data: student }, settings, trendRows, sendName, jj, reportClass] = await Promise.all([
+  const [{ data: student }, settings, trendRows, sendName, jj, reportClass, videoHomework] = await Promise.all([
     supabase.from("students").select("name, school, grade").eq("id", report.student_id).single(),
     getTenantSettings(),
     // 성적 추이 이력 — RLS 클라이언트라 테넌트 격리 자동(tenantId 불요). 실패해도 문서 안 깨짐.
@@ -91,6 +92,7 @@ export default async function LessonReportPrintPage({
           .maybeSingle()
           .then(({ data }) => data, () => null)
       : Promise.resolve(null),
+    reportVideoHomework(supabase, user.tenantId, report.id as string),
   ]);
   const trend = buildTrendPoints(trendRows, report.id as string);
 
@@ -132,6 +134,7 @@ export default async function LessonReportPrintPage({
             examInfo: report.exam_info,
             homeworkScore: report.homework_score,
             homeworkToday: report.homework_today,
+            videoHomework,
             attitude: report.attitude,
             notes: report.notes,
             trendNote: report.trend_note,

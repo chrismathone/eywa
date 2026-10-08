@@ -13,6 +13,7 @@ import { fetchReportTrendRows, fetchSpecialClassIds } from "@/features/onescreen
 import { resolveReportAuthorName } from "@/features/onescreen/server/report-author-name";
 import { buildTrendPoints } from "@/features/onescreen/report-trend";
 import { ParentReportCard } from "@/features/onescreen/components/parent-report-card";
+import { reportVideoHomework } from "@/features/onescreen/server/report-video-homework";
 import { classKindMeta } from "@/features/classes/list-filters";
 import { loadReportJjSnapshot } from "@/features/ijw/server/report-snapshot";
 import { ClosedReportScreen } from "./_closed";
@@ -80,7 +81,7 @@ export default async function PublicLessonReportPage({
   const specialClassIds = await fetchSpecialClassIds(admin, report.tenant_id as string).catch(
     () => [] as string[],
   );
-  const [{ data: student }, settings, trendRows, sendName, jj, reportClass] = await Promise.all([
+  const [{ data: student }, settings, trendRows, sendName, jj, reportClass, videoHomework] = await Promise.all([
     admin.from("students").select("name, school, grade").eq("id", report.student_id).maybeSingle(),
     getTenantSettingsByTenantId(report.tenant_id as string),
     // 성적 추이 이력 — admin(service_role)이라 tenantId 필터로 테넌트 격리 필수(#B6 규약). 실패해도 페이지 안 깨짐.
@@ -107,6 +108,7 @@ export default async function PublicLessonReportPage({
           .maybeSingle()
           .then(({ data }) => data, () => null)
       : Promise.resolve(null),
+    reportVideoHomework(admin, report.tenant_id as string, report.id as string),
   ]);
   const trend = buildTrendPoints(trendRows, report.id as string);
 
@@ -149,6 +151,7 @@ export default async function PublicLessonReportPage({
           examInfo: report.exam_info,
           homeworkScore: report.homework_score,
           homeworkToday: report.homework_today,
+          videoHomework,
           attitude: report.attitude,
           notes: report.notes,
           trendNote: report.trend_note,

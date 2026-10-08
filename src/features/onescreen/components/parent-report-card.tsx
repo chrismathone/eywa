@@ -6,6 +6,7 @@ import { isImageAttachment, pickInlineAttachments } from "../attachment-utils";
 import { isSkipStatusProgress } from "../progress-status";
 import { collapseProgressRanges } from "../progress-range";
 import { reportTitleText } from "../report-title";
+import { videoHomeworkDueLabel } from "../video-homework-label";
 import { ReportTrendGraph } from "./report-trend-graph";
 import { EMPTY_NOTES, FileLink, TemplateBody, type CardAttachment } from "./report-template-body";
 
@@ -57,6 +58,7 @@ export type ParentReportCardProps = {
     examInfo: string | null; // 레거시 합본(일일/확인 분리값 없을 때 폴백)
     homeworkScore: string | null;
     homeworkToday: string | null; // 오늘 과제(숙제 내용) — 0096a(showHomeworkToday 토글)
+    videoHomework?: boolean | null;
     attitude: string | null;
     notes: string | null;
     trendNote: string | null; // 학습 추세(종합분석) — 0091a(showTrendNote 토글)
@@ -103,6 +105,7 @@ export function ParentReportCard({
   const [ry, rm, rd] = (report.reportDate ?? "").split("-");
   const reportDate = ry && rm && rd ? `${ry}년 ${rm}월 ${rd}일` : "";
   const schoolGrade = fmtSchoolGrade(student?.school, student?.grade);
+  const videoDue = videoHomeworkDueLabel(report.reportDate, report.videoHomework);
   // 성적 추이 그래프 표시 여부 — 토글 ON + 시험 또는 과제 중 하나라도 유효점 2개 이상(빈 카드 방지).
   const showTrendGraph =
     rpt.showTrendGraph && !!trend && (hasTrend(trend, "exam") || hasTrend(trend, "homework"));
@@ -116,7 +119,7 @@ export function ParentReportCard({
   const showToday =
     (rpt.showTextbook && report.textbook) ||
     (rpt.showProgress && report.progress) ||
-    (rpt.showHomeworkToday && report.homeworkToday);
+    (rpt.showHomeworkToday && report.homeworkToday) || videoDue;
   const showEval =
     report.dailyTest ||
     report.checkTest ||
@@ -159,6 +162,7 @@ export function ParentReportCard({
           🔴 'showParentNote' 토글을 보지 않는다 — 수학에선 여러 칸 중 하나지만 여기선 글이 곧 보고서라,
              끄면 학생 정보만 남은 빈 카드가 학부모에게 나간다. 머리·학생 정보·첨부·바닥글은 수학과 같다. */}
       {templateMode ? <TemplateBody text={report.notes} jj={jj} inline={inline} student={student} /> : null}
+      {templateMode && videoDue ? <section className="bg-card border-line rounded-2xl border px-5"><Field label="영상 숙제" value={videoDue} /></section> : null}
 
       {!templateMode && showToday ? (
         <Section title="오늘 수업">
@@ -175,6 +179,7 @@ export function ParentReportCard({
           {rpt.showHomeworkToday && report.homeworkToday ? (
             <Field label="오늘 과제" value={report.homeworkToday} />
           ) : null}
+          {videoDue ? <Field label="영상 숙제" value={videoDue} /> : null}
         </Section>
       ) : null}
 

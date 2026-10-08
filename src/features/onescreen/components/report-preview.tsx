@@ -137,6 +137,7 @@ export function ReportPreview({
             examInfo: null, // 레거시 합본 폴백 — 새 보고서는 항상 일일/확인 분리값을 쓴다.
             homeworkScore: fields.homeworkScore || null,
             homeworkToday: fields.homeworkToday || null,
+            videoHomework: subject.videoHomework,
             attitude: fields.attitude || null,
             notes: fields.notes || null,
             trendNote: fields.trendNote ?? null,

@@ -85,6 +85,14 @@ const FULL: ParentReportCardProps = {
   ),
 };
 
+it("영상 과제가 있는 보고서만 오늘 과제 아래에 실제 제출 날짜를 표시한다", () => {
+  const html = renderToStaticMarkup(<ParentReportCard {...FULL} report={{ ...FULL.report, reportDate: "2026-10-02", videoHomework: true }} />);
+  expect(html).toContain("~10/9 (금)");
+  expect(html.indexOf("영상 숙제")).toBeGreaterThan(html.indexOf("오늘 과제"));
+  expect(html).not.toContain("영상숙제 기한");
+  expect(renderToStaticMarkup(<ParentReportCard {...FULL} />)).not.toContain("영상 숙제");
+});
+
 /** 빈 칸이 많은 보고서 — 레거시 합본 점수·보강·학생 없음·빈 전달 내용·바닥글 끔 분기. */
 const SPARSE: ParentReportCardProps = {
   report: {
