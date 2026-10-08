@@ -72,10 +72,8 @@ export async function IntegrationsFace({
         />
       ) : null}
       {active === "video" ? <VideoDriveCard /> : null}
-      {active === "agent" ? <>
-        <AgentCard classnoteOn={classnoteModuleOn(settings)} makeeduOn={modulesOn.makeedu} />
-        {modulesOn.makeedu?<LegacyMakeeduPC />:null}
-      </> : null}
+      {active === "agent" ? <AgentCard classnoteOn={classnoteModuleOn(settings)} makeeduOn={modulesOn.makeedu}
+        legacyPC={modulesOn.makeedu?<LegacyMakeeduPC />:null} /> : null}
     </div>
   );
 }

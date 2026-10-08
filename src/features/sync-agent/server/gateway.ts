@@ -39,7 +39,9 @@ export async function runAgentQuery(device:{id:string;tenantId:string},input:unk
   return withAgentWork(device,p,async sql=>{
     try {
       const rows=await sql.unsafe(compiled.text,compiled.values as Parameters<typeof sql.unsafe>[1]);
-      return {rows:[...rows],count:rows.count,columns:rows.columns.map(c=>({name:c.name,type:c.type}))};
+      // Commands without RETURNING have no column metadata in postgres.js.
+      // Serializing them must not throw and roll back an otherwise successful write.
+      return {rows:[...rows],count:rows.count,columns:(rows.columns??[]).map(c=>({name:c.name,type:c.type}))};
     } catch(e) {
       // Preserve only safe SQLSTATE codes needed by existing compatibility fallbacks.
       const code=(e as {code?:string}).code;

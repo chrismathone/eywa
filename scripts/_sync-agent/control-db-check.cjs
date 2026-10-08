@@ -24,6 +24,16 @@ async function main(){
     await sql`insert into students(id,tenant_id,name) values(${studentA},${a},'A'),(${studentB},${b},'B')`;
     await sql`insert into classes(id,tenant_id) values(${classA},${a}),(${classB},${b})`;
     const scoped=(tenant,fn)=>sql.begin(async tx=>{if(tenant)await tx`select set_config('eywa.agent_tenant',${tenant},true)`;await tx`set local role eywa_sync_agent`;return fn(tx);});
+    await check('existing PUBLIC policies need only bounded helper grants; tenant isolation remains enforced',async()=>{
+      await sql.unsafe("create function public.auth_tenant_id() returns uuid language sql stable as 'select null::uuid'; create function public.auth_system_role() returns text language sql stable as 'select null::text'; revoke all on function public.auth_tenant_id(),public.auth_system_role() from public");
+      await sql.unsafe('create policy fixture_existing_helper on students for select to public using(tenant_id=public.auth_tenant_id())');
+      await assert.rejects(scoped(a,tx=>tx`select id from students`),{code:'42501'});
+      await sql.unsafe(fs.readFileSync(path.resolve(__dirname,'../../supabase/migrations/20261009061000_sync_agent_policy_function_grants.sql'),'utf8'));
+      assert.deepEqual((await scoped(a,tx=>tx`select id from students`)).map(r=>r.id),[studentA]);
+      assert.equal((await scoped(null,tx=>tx`select id from students`)).length,0);
+      const [role]=await sql`select rolinherit,rolbypassrls,rolsuper from pg_roles where rolname='eywa_sync_agent'`;
+      assert.deepEqual(role,{rolinherit:false,rolbypassrls:false,rolsuper:false});
+    });
     await check('missing tenant context reads no data',async()=>assert.equal((await scoped(null,tx=>tx`select id from students`)).length,0));
     await check('restrictive policy defeats existing broad public policy',async()=>{
       await sql.unsafe('create policy fixture_broad on students for all to public using(true) with check(true)');

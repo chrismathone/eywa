@@ -36,4 +36,14 @@ describe("agent dashboard rendering", () => {
     expect(screen.queryByText("다운로드 정보를 확인 중입니다.")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "연결 코드 발급" })).toBeDisabled();
   });
+  it("shows legacy status before migration, then hides it after cutover even while the app is paused", async () => {
+    h.dashboard.mockResolvedValueOnce(loaded).mockResolvedValue({ data: { ...loaded.data,
+      device: { id: "fixture", name: "새 연동 PC", last_seen_at: "2026-01-01T00:00:00Z", version: "1.0.2", revoke_requested_at: null },
+      configuration: { ...loaded.data.configuration, enabled: false, cutoverReady: true } } });
+    render(<AgentCard classnoteOn makeeduOn legacyPC={<p>기존 동기화 PC</p>} />);
+    await screen.findByText("기존 동기화 PC");
+    fireEvent.click(screen.getByRole("button", { name: "새로고침" }));
+    await screen.findByText("새 연동 PC");
+    expect(screen.queryByText("기존 동기화 PC")).not.toBeInTheDocument();
+  });
 });

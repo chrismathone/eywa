@@ -1,11 +1,11 @@
 "use client";
-import { useCallback,useEffect,useState,useTransition } from "react";
+import { useCallback,useEffect,useState,useTransition,type ReactNode } from "react";
 import { EVENT_LABELS,TASK_LABELS } from "@/features/sync-agent/protocol";
 import { getAgentDashboard,issueAgentCode,issueAgentManagementCode,revokeAgentDevice,saveAgentSettings } from "@/features/sync-agent/server/actions";
 
 type Dashboard=NonNullable<Awaited<ReturnType<typeof getAgentDashboard>>["data"]>;
 const when=(value:string|null)=>value?new Date(value).toLocaleString("ko-KR",{timeZone:"Asia/Seoul"}):"아직 없음";
-export function AgentCard({classnoteOn,makeeduOn}:{classnoteOn:boolean;makeeduOn:boolean}) {
+export function AgentCard({classnoteOn,makeeduOn,legacyPC}:{classnoteOn:boolean;makeeduOn:boolean;legacyPC?:ReactNode}) {
   const [data,setData]=useState<Dashboard|null>(null),[error,setError]=useState(""),[notice,setNotice]=useState("");
   const [code,setCode]=useState<{code:string;expiresAt:string}|null>(null);
   const [managementCode,setManagementCode]=useState<{code:string;expiresAt:string}|null>(null);
@@ -64,5 +64,6 @@ export function AgentCard({classnoteOn,makeeduOn}:{classnoteOn:boolean;makeeduOn
       </div>
       {events.length?<ol className="divide-border divide-y">{events.map(event=><li key={event.event_id} className="flex flex-wrap justify-between gap-2 py-2 text-sm"><span>{event.detail.task?`${TASK_LABELS[event.detail.task as keyof typeof TASK_LABELS]??"연동"} · `:""}{EVENT_LABELS[event.kind as keyof typeof EVENT_LABELS]??"실행 기록"}{event.detail.version?` · ${String(event.detail.version)}`:""}{typeof event.detail.count==="number"?` · ${event.detail.count}건`:""}</span><time className="text-text-dim text-xs" dateTime={event.received_at}>{when(event.received_at)}</time></li>)}</ol>:<p className="text-text-dim text-sm">{data?"표시할 기록이 없습니다.":error?"실행 기록을 불러오지 못했습니다.":"실행 기록을 확인 중입니다."}</p>}
     </section>
+    {data && !(device && settings?.cutoverReady)?legacyPC:null}
   </div>;
 }
