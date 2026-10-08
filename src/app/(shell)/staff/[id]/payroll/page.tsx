@@ -12,6 +12,7 @@ import {
 } from "@/features/payroll/server/queries";
 import { PayrollClient } from "./_client";
 import { kstMonth } from "@/lib/date-kst";
+import { PersonalSalaryScope } from "./_salary-scope";
 
 export const metadata = { title: "강사 정산 — 에이와" };
 
@@ -52,6 +53,8 @@ export default async function StaffPayrollPage({
           기본급 {staff.monthlyBase.toLocaleString("ko-KR")}원
         </p>
       </header>
+
+      <PersonalSalaryScope teacherId={staff.id} teacherName={staff.displayName} period={period} />
 
       <PayrollClient
         userId={staff.id}
