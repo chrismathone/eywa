@@ -4,6 +4,7 @@ import { compileAgentQuery, InvalidAgentQuery, type QueryCatalog } from "../quer
 import catalog from "./query-catalog.json";
 import { agentDb } from "./db";
 import { AgentError } from "./security";
+import { recordAgentQueryFailure } from "./operation-failure";
 
 export const WorkEnvelope = z.object({
   instanceId:z.string().uuid(), generation:z.string().regex(/^[1-9]\d{0,17}$/), module:z.enum(["classnote","makeedu"]),
@@ -34,9 +35,13 @@ export async function runAgentQuery(device:{id:string;tenantId:string},input:unk
   const p=parsed.data;
   let compiled;
   try { compiled=compileAgentQuery(catalog as QueryCatalog,p.module,p); }
-  catch(e) { if(e instanceof InvalidAgentQuery) throw new AgentError(403,"unknown_operation"); throw e; }
+  catch(e) { if(e instanceof InvalidAgentQuery) {
+    if(Object.hasOwn(catalog,p.id)) await recordAgentQueryFailure(device.id,p.module,p.id,"unknown_operation");
+    throw new AgentError(403,"unknown_operation");
+  } throw e; }
   if(p.readOnly && !/^\s*select\b/i.test(compiled.text)) throw new AgentError(403,"read_only");
-  return withAgentWork(device,p,async sql=>{
+  let failureCode="operation_failed";
+  try {return await withAgentWork(device,p,async sql=>{
     try {
       const rows=await sql.unsafe(compiled.text,compiled.values as Parameters<typeof sql.unsafe>[1]);
       // Commands without RETURNING have no column metadata in postgres.js.
@@ -45,8 +50,9 @@ export async function runAgentQuery(device:{id:string;tenantId:string},input:unk
     } catch(e) {
       // Preserve only safe SQLSTATE codes needed by existing compatibility fallbacks.
       const code=(e as {code?:string}).code;
+      if(code && /^[A-Z0-9]{5}$/.test(code)) failureCode=code;
       if(code && ["42P01","42703","23505","23503","42501","57014"].includes(code)) throw new AgentError(409,code);
       throw new AgentError(503,"operation_failed");
     }
-  });
+  });}catch(e){await recordAgentQueryFailure(device.id,p.module,p.id,e instanceof AgentError&&e.code==="lease_lost"?e.code:failureCode);throw e;}
 }

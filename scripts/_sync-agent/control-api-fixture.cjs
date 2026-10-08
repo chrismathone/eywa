@@ -37,6 +37,21 @@ module.exports=async function apiChecks(sql,{tenant,other,student,check}){
     await sql`update classnote_workers set last_seen=now()-interval '181 seconds' where tenant_id=${tenant}`;
     assert.equal((await svc.prepareCutover(device,{instanceId,generation})).ready,true);await svc.moduleSession(device,envelope,false);
   });
+  await check('actual gateway commits no-column heartbeat and finalization commands with empty arrays',async()=>{
+    const worker={instanceId,generation,module:'makeedu'};
+    await svc.moduleSession(device,worker,false);
+    const catalog=require('../../src/features/sync-agent/server/query-catalog.json');
+    const query=(text,parameters)=>svc.runAgentQuery(device,{...worker,id:Object.entries(catalog).find(([,v])=>v.parts.join('').includes(text))[0],parameters});
+    await sql.unsafe('alter table makeedu_sync_workers add unique(tenant_id,hostname)');
+    const beat=await query('insert into makeedu_sync_workers',[tenant,'managed-fixture',new Date().toISOString()]);
+    assert.deepEqual(beat,{rows:[],columns:[],count:1});
+    const runId=crypto.randomUUID();await sql`insert into makeedu_sync_runs(id,tenant_id,status) values(${runId},${tenant},'running')`;
+    const done=await query('update makeedu_sync_runs',['ok',100,{kind:'json',value:{students:{status:'ok',rows:0}}},[],null,runId]);
+    assert.deepEqual(done,{rows:[],columns:[],count:1});
+    const [run]=await sql`select status,failed_domains,domains from makeedu_sync_runs where id=${runId}`;
+    assert.equal(run.status,'ok');assert.deepEqual(run.failed_domains,[]);assert.deepEqual(run.domains,{students:{status:'ok',rows:0}});
+    await svc.moduleSession(device,worker,true);
+  });
   const requestId=crypto.randomUUID();
   await sql`insert into classnote_sync_requests(id,tenant_id,status,next_scope) values(${requestId},${tenant},'running',null)`;
   const finish=()=>svc.runAgentOperation(device,{...envelope,operation:'finish-class-sync',input:{id:requestId,status:'done',result:{ok:true},error:null}});

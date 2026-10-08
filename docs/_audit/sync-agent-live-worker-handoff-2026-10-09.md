@@ -12,6 +12,8 @@
 1. 기존 PUBLIC RLS 정책이 `auth_tenant_id()`를 호출하지만 새 비상속 DB 역할에 실행 권한이 없어 SQLSTATE 42501로 큐 조회가 실패했다. 정책 의존성 조사에서 `auth_system_role()`도 누락됐다. 마이그레이션 `20261009061000_sync_agent_policy_function_grants.sql`은 이 두 함수만 허용한다. RLS 우회, 역할 상속, 다른 지점 접근 권한은 추가하지 않는다.
 2. postgres.js에서 RETURNING 없는 명령의 `columns`는 null이다. 게이트웨이 직렬화의 `.map` 예외가 성공한 쓰기도 트랜잭션 롤백시켰다. 빈 배열로 직렬화하고 기존 SQLSTATE 제한과 실행 임대 검증을 유지한다.
 3. EXE 브로커의 `remaining_ms`와 기존 ClassNote 어댑터의 `remainingMs`가 달라 임대를 얻지 못했다. 브로커 응답을 실제 소비자 계약에 맞춘다. 이는 새 EXE 1.0.2 업데이트가 필요하다.
+4. 컴파일러가 이미 JSON으로 인코딩한 문자열을 `::jsonb`에 바로 바인딩해 postgres.js가 다시 인코딩했다. 실제 PostgreSQL fixture에서 객체 대신 JSON 문자열이 저장되는 것을 재현했다. `::text::jsonb`를 통해 한 번만 해석하도록 바꾸고 실제 gateway의 heartbeat·완료 쓰기, 빈 배열과 JSON 객체 저장까지 검사한다.
+5. 작업 루프의 오류는 기존 PC 로컬 로그에만 남아 웹에서 원인을 구분하기 어려웠다. 알려진 쿼리의 실패에 한해 코드·쿼리 해시만 구조화 기록으로 저장한다. 원시 오류/SQL/파라미터는 저장하지 않고 같은 실패는 5분간 중복 기록하지 않는다.
 
 ## 근거 및 검증
 

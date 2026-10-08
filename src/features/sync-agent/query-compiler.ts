@@ -13,7 +13,9 @@ export function compileAgentQuery(catalog: QueryCatalog, module: string, operati
     if (values.length >= 50000) return bad();
     if (isRecord(value)) {
       if (value.kind !== "json" || !Object.hasOwn(value,"value") || Object.keys(value).some(k=>!["kind","value"].includes(k))) return bad();
-      values.push(JSON.stringify(value.value)); return `$${values.length}::jsonb`;
+      // The wire value is already encoded JSON. Force a text parameter first so
+      // postgres.js cannot apply its jsonb serializer a second time.
+      values.push(JSON.stringify(value.value)); return `$${values.length}::text::jsonb`;
     }
     if (value === undefined || (typeof value === "number" && !Number.isFinite(value))) return bad();
     if (Array.isArray(value) && value.some(v=>isRecord(v) || Array.isArray(v))) return bad();

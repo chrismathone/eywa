@@ -17,6 +17,12 @@ describe("device query boundary",()=>{
     expect(compile(c,[{kind:"fragment",id:fragment,parameters:[1]}]).text).toBe("select 1 where 1=$1");
     expect(()=>compile(c,[{kind:"fragment",id,parameters:[]}])).toThrow();
   });
+  it("binds pre-encoded JSON through text to preserve objects, arrays and null",()=>{
+    const c={[id]:{parts:["select ",""],modules:["classnote"],parameters:[{kind:"value"}]}};
+    for(const value of [{nested:{text:"'; select 1;--"}},[1,"two"],null]) {
+      expect(compile(c,[{kind:"json",value}])).toEqual({text:"select $1::text::jsonb",values:[JSON.stringify(value)]});
+    }
+  });
   it("rejects injected row columns, duplicate columns and unsupported values",()=>{
     const c={[id]:{parts:["insert into students ",""],modules:["makeedu"],parameters:[{kind:"rows",columns:["id","name"]}]}};
     const row={kind:"rows",rows:[{id:1,name:"x"}],columns:["id","name"]};
