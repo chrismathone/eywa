@@ -4,6 +4,7 @@ import { seatBlockReason } from "@/lib/license/server";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { recordMathWithdrawalToSheet } from "@/features/withdrawals/server/withdrawal-sheet";
+import { pushIjwProfiles } from "@/features/ijw/server/profile-push";
 import { goalExamLabel, parseGoalAxis } from "@/features/grades/goals";
 import { goalAxisReady } from "@/features/grades/server/goals";
 import {
@@ -395,6 +396,11 @@ export async function updateStudent(
     .eq("id", id);
 
   if (error) return studentSaveError(error, "students.update", "학생 정보를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+  // 인재원 짝이 있는 학생이면 학교·학년·생일을 인재원에 보낸다(원장 2026-10-08) — 응답 뒤에, 짝이 없으면 아무것도 안 한다.
+  {
+    const ijwTenant = user.tenantId;
+    after(() => pushIjwProfiles(ijwTenant, { studentIds: [id] }));
+  }
 
   // 상태 전환에 맞춰 활성 enrollment 정합성 유지 (changeStudentStatus와 동일 불변식).
   // 편집 폼 경로가 enrollment를 안 닫던 누수(F8) 보강 — 퇴원 시 종료, 복구/재원 시 on_hold 해제.

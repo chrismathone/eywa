@@ -9,6 +9,7 @@ import { getIjwLinkSuggestions, type JjViewer } from "@/features/ijw/server/quer
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { JjFailBanner } from "./jj-shared";
 import { JjLinkPanel, type JjLinkRow, type JjPoolOption } from "./jj-link-panel";
+import { JjProfilePushButton } from "./jj-profile-push-button";
 
 const labelOf = (s: { name: string; school: string | null; grade: string | null; classNames?: readonly string[] }) =>
   [s.name, schoolGradeLabel(s.school, s.grade), (s.classNames ?? []).join(", ")].filter(Boolean).join(" · ");
@@ -17,7 +18,9 @@ export async function JjLinkSection({ viewer }: { viewer: JjViewer }) {
   if (!viewer.canLink) return null;
   const res = await getIjwLinkSuggestions(viewer.tenantId);
   if (!res.ok) return <JjFailBanner message={res.message} detail={res.detail} />;
-  if (res.columnMissing || res.suggestions.length === 0) return null;
+  if (res.columnMissing) return null;
+  // 학교·학년·생일 보내기(원장 2026-10-08) — 이을 짝이 없어도(전원 이어진 상태) 버튼은 남는다.
+  if (res.suggestions.length === 0) return <JjProfilePushButton />;
   const rows: JjLinkRow[] = res.suggestions.map((s) => ({
     ijwId: s.ijw.ijwId,
     ijwName: s.ijw.name || s.ijw.ijwId,
@@ -33,5 +36,10 @@ export async function JjLinkSection({ viewer }: { viewer: JjViewer }) {
     })),
   }));
   const pool: JjPoolOption[] = res.pool.map((s) => ({ id: s.id, label: labelOf(s) }));
-  return <JjLinkPanel rows={rows} pool={pool} />;
+  return (
+    <div className="flex flex-col gap-3">
+      <JjProfilePushButton />
+      <JjLinkPanel rows={rows} pool={pool} />
+    </div>
+  );
 }

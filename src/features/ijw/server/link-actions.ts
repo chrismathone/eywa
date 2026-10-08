@@ -14,6 +14,7 @@
  * ⚠️ 이 파일은 async 함수만 export한다([[#119]]).
  */
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canManageTenant } from "@/lib/auth/perm-matrix";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -23,6 +24,7 @@ import { IJW_SCHEMAS } from "../contract";
 import { isMissingIjwColumn } from "../db-errors";
 import { IJW_PATHS, ijwGet } from "./client";
 import { getIjwLinkSuggestions } from "./links";
+import { pushIjwProfiles } from "./profile-push";
 
 type Fail = { ok: false; error: string };
 /** 한 짝의 결과 — 일괄 연결이 "건너뜀(그사이 연결됨)"과 "저장 실패"를 가르려고 원인을 싣는다. */
@@ -80,8 +82,36 @@ export async function linkIjwStudent(input: { studentId: string; ijwId: string }
     targetLabel: res.name,
     metadata: { studentId: input.studentId, ijwId, ijwName: target.name },
   });
+  // 새로 이은 학생의 학교·학년·생일을 인재원에 보낸다(원장 2026-10-08) — 응답 뒤에, 실패해도 연결은 그대로.
+  const tenantId = who.tenantId;
+  after(() => pushIjwProfiles(tenantId, { studentIds: [input.studentId] }));
   revalidatePath("/exams");
   return { ok: true };
+}
+
+/**
+ * 짝 맞춘 학생 **전원**의 학교·학년·생년월일을 인재원에 지금 보낸다(원장 2026-10-08 *"전부 보내줘"*) — 하루 한 번 cron과 같은 일을
+ * 사람이 바로 돌린다. 게이트는 짝 잇기와 같다(학생 기록 관리).
+ */
+export async function pushIjwProfilesNow(): Promise<
+  { ok: true; sent: number; updated: number; notFound: number; invalid: number } | Fail
+> {
+  const who = await manager();
+  if ("ok" in who) return who;
+  const res = await pushIjwProfiles(who.tenantId);
+  if (!res.ok) return { ok: false, error: res.message };
+  await logAction({
+    action: "ijw_profile_push",
+    targetType: "student",
+    targetLabel: `${res.sent}명`,
+    metadata: {
+      sent: res.sent,
+      updated: res.updated,
+      notFound: res.notFound.slice(0, 50),
+      invalid: res.invalid.slice(0, 50),
+    },
+  });
+  return { ok: true, sent: res.sent, updated: res.updated, notFound: res.notFound.length, invalid: res.invalid.length };
 }
 
 /** 짝 끊기 — 걸려 있던 아이디를 먼저 읽어 **그 값일 때만** 지우고(동시 변경 보호), 옛 아이디를 감사로그에 남긴다. */
@@ -190,6 +220,12 @@ export async function linkIjwUniqueMatches(input: { pairs: { ijwId: string; stud
       ),
     );
   }
-  if (done.length > 0) revalidatePath("/exams");
+  if (done.length > 0) // 이번에 이은 학생들의 학교·학년·생일을 인재원에 보낸다(원장 2026-10-08) — 응답 뒤에.
+  if (done.length) {
+    const tenantId = who.tenantId;
+    const ids = done.map((d) => d.studentId);
+    after(() => pushIjwProfiles(tenantId, { studentIds: ids }));
+  }
+  revalidatePath("/exams");
   return { ok: true, linked: done.length, dropped, skipped, failed };
 }
