@@ -967,6 +967,14 @@ export function auditDetail(
       const name = str(m.ijwName);
       return name && name !== id ? `인재원 계정 ${id}(${name})` : `인재원 계정 ${id}`;
     }
+    // 인재원에 학교·학년·생일 보내기(2026-10-08) — 몇 명 보냈고 인재원이 몇 명 반영했나.
+    case "ijw_profile_push": {
+      const n = (v: unknown) => (Array.isArray(v) ? v.length : Number(v) || 0);
+      const parts = [`보냄 ${n(m.sent)}명`, `반영 ${n(m.updated)}명`];
+      if (n(m.notFound)) parts.push(`인재원에 없는 아이디 ${n(m.notFound)}개`);
+      if (n(m.invalid)) parts.push(`못 읽은 값 ${n(m.invalid)}개`);
+      return parts.join(" · ");
+    }
     // 수강 단위 대기/해제(2026-09-07 시간표 드래그 · 2026-09-16 휴원 다이얼로그 부분 휴원) —
     // "어느 반이 언제 멈췄고 언제 다시 돌았나"가 이 로그의 목적이다(enrollments엔 담을 칸이 없다).
     case "enrollment_hold":

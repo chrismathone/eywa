@@ -42,6 +42,10 @@
       "schedule": "20 19 * * *"
     },
     {
+      "path": "/api/cron/ijw-profile-sync",
+      "schedule": "30 19 * * *"
+    },
+    {
       "path": "/api/cron/notification-maintenance",
       "schedule": "0 22 * * *"
     },

@@ -1,5 +1,13 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-10-08 — aywa → 인재원: 학생 학교·학년·생년월일 보내기
+- 인재원(anki-main) 요청 · 원장 *"전부 보내줘"*(생년월일 포함 승인). 인재원이 학년 대비 레벨·같은 학년 평균을 내려고 받는다. 입구 = 인재원
+  `POST /ext/eywa/students/profile`(기존 `IJW_API_SECRET`). **aywa가 원본** — `students.school·grade·birth_date`를 그대로(빈 값 = 인재원에서도 지움).
+- 보내는 때: ① 성적관리 › 영어 › JJ실 짝 잇기 구역 **[인재원에 학교·학년·생일 보내기]**(짝 맞춘 전원, 학생 기록 관리 권한, 감사로그 `ijw_profile_push`)
+  ② cron `/api/cron/ijw-profile-sync` 매일 04:30 KST(전원 — 엑셀·makeedu처럼 저장 액션을 안 거친 변경을 메운다) ③ 학생 정보 저장 · 짝 잇기 때 **그 학생**(`after()`).
+- 모듈 = [`profile-push.ts`](../src/features/ijw/server/profile-push.ts)(던지지 않는다 · 1000명씩) + 순수 [`profile-payload.ts`](../src/features/ijw/profile-payload.ts).
+- ⚠️ 생년월일은 개인정보 — 이번 승인 범위는 인재원 한 곳·이 세 칸뿐. 다른 칸이나 다른 곳으로 넓히려면 다시 물을 것.
+
 ## 2026-10-07 — 회차 확정 상단 '보기' 필터: 확정 · 배분 · 몫을 드롭다운 하나에서 여러 개
 
 - 원장 *"JJ/LAB 몫 조정 따로 된거 필터링 할 수 있게 회차 확정 상단에 필터 줄것. 확정 / 배분 / 몫 3개를 하나의 드랍다운으로 묶고 중복 체크가능하게"*.
