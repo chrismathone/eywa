@@ -4,6 +4,7 @@
 :where(:scope), * { all: revert; box-sizing: border-box; }
 /* 되돌리기는 hidden 속성의 숨김까지 지운다(브라우저가 표현 힌트로 다룬다) — 다시 못박는다. */
 [hidden] { display: none !important; }
+[draggable=true] { -webkit-user-drag: element; user-select: none; }
 :scope { position: relative; height: 100%; min-height: 0; display: flex; flex-direction: column; background: #fff; color: #18324f; font-size: 14px; line-height: normal; }
 button, input, select { font: inherit; }
 button { cursor: pointer; border: 1px solid #d0dae5; border-radius: 5px; background: #fff; color: #234363; padding: 7px 11px; }
@@ -13,11 +14,11 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .schedule-scroll:focus-visible { outline: 2px solid #9fc0ea; outline-offset: -2px; }
 .primary { background: #1c4779; border-color: #1c4779; color: #fff; }
 .primary:hover { background: #15375e; }
-.lab-topbar { height: 52px; flex: 0 0 auto; display: flex; align-items: center; gap: 22px; padding: 0 18px; border-bottom: 1px solid #dbe3ec; }
+.lab-topbar { min-height: 40px; flex: 0 0 auto; display: flex; align-items: center; gap: 12px; padding: 4px 8px; border-bottom: 1px solid #dbe3ec; }
 .lab-topbar h1 { font-size: 18px; margin: 0; white-space: nowrap; letter-spacing: -.5px; }
 .lab-topbar h1 span { font-weight: 400; color: #617791; font-size: 14px; margin-left: 5px; }
 .source-name { color: #687f98; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lab-controls { flex: 0 0 auto; display: flex; align-items: center; gap: 12px; padding: 8px 14px; border-bottom: 1px solid #ccd8e6; background: #f7f9fc; overflow: auto; scrollbar-width: thin; }
+.lab-controls { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-bottom: 1px solid #ccd8e6; background: #f7f9fc; overflow: auto; scrollbar-width: thin; }
 .view-switch, .week-tabs, .history-buttons { display: flex; align-items: center; flex-shrink: 0; gap: 3px; }
 .view-switch button { border: 0; background: transparent; white-space: nowrap; }
 .view-switch button[aria-selected=true] { background: #e3edfa; color: #154b89; font-weight: 700; }
@@ -53,7 +54,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .slot-cursor { position: absolute; inset-inline: 0; border: 1px solid #4f84c2; background: #ddeafa55; pointer-events: none; }
 .slot-cursor span { font-size: 14px; color: #366296; padding-left: 5px; }
 .drag-preview { position: absolute; inset-inline: 3px; z-index: 10; pointer-events: none; background: #b6d6fcbb; border: 2px dashed #2e63a4; color: #123f74; padding: 7px; font-weight: 700; }
-.lab-status { min-height: 30px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 5px 14px; border-top: 1px solid #cddae7; color: #617791; font-size: 14px; flex-shrink: 0; background: #f8fafc; }
+.lab-status { min-height: 24px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 3px 6px; border-top: 1px solid #cddae7; color: #617791; font-size: 12px; flex-shrink: 0; background: #f8fafc; }
 .lab-status b { color: #37694d; font-weight: 400; white-space: nowrap; }
 .lab-status [role=status] { color: #36587a; }
 .lab-inspector { width: 320px; flex: 0 0 320px; padding: 16px; border-left: 1px solid #cbd8e6; overflow: auto; background: #fff; }

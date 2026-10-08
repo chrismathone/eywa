@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { reasonOf } from './reason';
 import type { DraftStore } from './store';
 import { lessons, type Draft } from './model';
@@ -22,17 +22,20 @@ import './editor-tools.css';
 // 보관함·비교 창도 함께 묶는다 — 따로 내려받다 실패하면 저장하려던 순간에 편집기가 통째로 내려간다.
 import { ComparisonView, type ComparedDraft } from './comparison-view';
 import { DraftLibrary } from './draft-library';
+import { LessonTooltip } from './lesson-tooltip';
 
 /** 연습본 저장소는 밖에서 만든다 — 앱 화면과 시험용 화면이 같은 편집기를 쓴다. */
-export type EditorProps = { store: DraftStore; onDirtyChange?: (dirty: boolean) => void; loginHref?: string };
-export function App({ store, onDirtyChange, loginHref = '/login' }: EditorProps) {
+export type EditorProps = { store: DraftStore; onDirtyChange?: (dirty: boolean) => void; loginHref?: string; fontScale?: number; applyControls?: (saved: (draft: Draft, name: string) => void) => ReactNode };
+export function App({ store, onDirtyChange, loginHref = '/login', applyControls, fontScale = 1 }: EditorProps) {
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot), { draft, undos, redos } = snapshot;
   const [view, setView] = useState<'teacher' | 'integrated'>('teacher');
   const [picked, select] = useState<string[]>([]), [panel, setPanel] = useState<'inspect' | 'stats' | null>(null), [loading, showLoad] = useState(false);
   const [message, setMessage] = useState('수업을 잡아 옮겨 보세요. 충돌이 있어도 배치할 수 있습니다.');
-  const [zoom, setZoom] = useState(1), [search, setSearch] = useState('');
+  const scale = draft.appearance?.scale ?? 1, zoom = scale * fontScale;
+  const [search, setSearch] = useState('');
   const [library, showLibrary] = useState(false), [comparison, setComparison] = useState<[ComparedDraft, ComparedDraft] | null>(null);
   const [savedDraft, setSavedDraft] = useState(draft), [savedName, setSavedName] = useState('');
+  const markSaved = useCallback((draft: Draft, name: string) => { setSavedDraft(draft); setSavedName(name); }, []);
   const [adding, setAdding] = useState<AddSeed | null>(null), [managing, setManaging] = useState<ManageTab | null>(null);
   const [menu, setMenu] = useState<MenuState | null>(null), [focus, setFocus] = useState<string | null>(null);
   const announce = useCallback((s: string) => setMessage(s), []), items = useMemo(() => lessons(draft).items, [draft]), checks = useMemo(() => validate(draft), [draft]);
@@ -92,28 +95,29 @@ export function App({ store, onDirtyChange, loginHref = '/login' }: EditorProps)
   const weekend = ([['hideSaturday', '토요일', !look.hideSaturday], ['showSunday', '일요일', !!look.showSunday]] as const).map(([field, day, shown]) => ({ field, day, shown,
     done: shown ? `${day} 칸을 숨겼습니다. 수업이 있는 ${day} 칸은 그대로 보입니다.` : `${day} 칸을 폈습니다. 수업이 하나도 없는 새 강사 열은 평일만 보입니다.` }));
   /** 보기 설정은 연습본에 함께 저장된다(되돌리기도 된다). */
-  function toggleView(field: 'hideEmptyDays' | 'hideStudents' | 'hideSaturday' | 'showSunday', done?: string) {
+  function toggleView(field: 'hideEmptyDays' | 'hideStudents' | 'hideSaturday' | 'showSunday' | 'hidePeriods', done?: string) {
     const next = structuredClone(draft); next.appearance ??= structuredClone(look);
     next.appearance[field] = !next.appearance[field]; store.commit('보기 설정', next); if (done) announce(done);
   }
   return <div className="timetable-workspace">
     <header className="lab-topbar"><h1>시간표 편집기 <span>영어 · 연습본</span></h1>
       <span className="source-name">{draft.source ? `${draft.source.academy} · ${draft.source.date} 주` : items.length ? '예제 시간표' : '기존 시간표로 시작하세요'}</span>
-      <button onClick={() => showLibrary(true)}>연습본 저장·불러오기·비교</button><button className="primary" onClick={() => showLoad(true)}>기존 시간표 불러오기</button></header>
+      <button onClick={() => showLibrary(true)}>연습본 저장·불러오기·비교</button><button onClick={() => showLoad(true)}>기존 시간표 불러오기</button>{applyControls?.(markSaved)}</header>
     <div className="lab-controls"><div className="view-switch" role="tablist" aria-label="시간표 보기">
-      <button role="tab" aria-selected={view === 'teacher'} onClick={() => setView('teacher')}>강사뷰</button>
-      <button role="tab" aria-selected={view === 'integrated'} onClick={() => setView('integrated')}>통합뷰</button></div>
+      <button role="tab" aria-selected={view === 'teacher'} onClick={() => { if (view !== 'teacher') { setView('teacher'); select([]); setPanel(null); setMenu(null); } }}>강사뷰</button>
+      <button role="tab" aria-selected={view === 'integrated'} onClick={() => { if (view !== 'integrated') { setView('integrated'); select([]); setPanel(null); setMenu(null); } }}>통합뷰</button></div>
       <button className="add-button" onClick={() => actions.openAdd()} title="수업·반·회의 일정·강사·학생을 새로 만듭니다 (Insert)">＋ 추가</button>
       <button onClick={() => setManaging('teachers')} title="강사·학생·반·강의실을 목록으로 고칩니다">관리</button>
       <button className="view-option" aria-pressed={view === 'teacher' ? look.hideEmptyDays : look.hideStudents} onClick={() => toggleView(view === 'teacher' ? 'hideEmptyDays' : 'hideStudents')}>{view === 'teacher' ? '빈 요일 접기' : '학생 명단 접기'}</button>
+      {view === 'integrated' && <button className="view-option" aria-pressed={!!look.hidePeriods} onClick={() => toggleView('hidePeriods')}>교시 접기</button>}
       {view === 'teacher' && weekend.map(w => <button className="view-option" key={w.field} disabled={look.hideEmptyDays} onClick={() => toggleView(w.field, w.done)}
         title={look.hideEmptyDays ? '‘빈 요일 접기’를 켠 동안에는 수업이 있는 요일만 보입니다.' : `${w.day} 칸을 ${w.shown ? '숨깁니다' : '폅니다'}. 수업이 있는 ${w.day} 칸은 숨겨도 그대로 보이고, 수업이 하나도 없는 새 강사 열은 평일만 보입니다.`}>{w.day} {w.shown ? '숨기기' : '보이기'}</button>)}
       <input className="schedule-search" aria-label="수업 강사 학생 검색" placeholder="수업 · 강사 · 학생 찾기" value={search} onChange={e => setSearch(e.target.value)} />
       <div className="history-buttons"><button disabled={!undos} onClick={store.undo} aria-label="되돌리기" title="Ctrl+Z">↶</button><button disabled={!redos} onClick={store.redo} aria-label="다시 실행" title="Ctrl+Shift+Z">↷</button>
         <button className="history-list" disabled={!undos} aria-haspopup="menu" title="지금까지의 변경을 보고 원하는 지점까지 되돌립니다" onClick={e => actions.openMenu(e, '변경 기록', historyMenu())}>기록</button></div>
-      <label className="zoom-label">크기<select aria-label="시간표 크기" value={zoom} onChange={e => setZoom(Number(e.target.value))}><option value="0.65">작게</option><option value="0.8">조밀하게</option><option value="1">기본</option><option value="1.25">크게</option></select></label>
+      <label className="zoom-label">크기<select aria-label="시간표 크기" value={scale} onChange={e => { const scale = Number(e.target.value); actions.run('시간표 크기', draft => ({ ...draft, appearance: { ...appearanceOf(draft), scale } })); }}><option value="0.65">작게</option><option value="0.8">조밀하게</option><option value="1">기본</option><option value="1.25">크게</option></select></label>
       <button aria-pressed={panel === 'stats'} onClick={() => setPanel(panel === 'stats' ? null : 'stats')} title="강사별 시수·강의실 사용·반 인원">요약</button>
-      <button className={`check-toggle ${checks.issues.length || checks.incomplete.length ? 'warning' : ''}`} aria-expanded={panel === 'inspect'} onClick={() => setPanel(panel === 'inspect' ? null : 'inspect')}>배치 확인 {checks.issues.length ? `· 겹침 ${checks.issues.length}` : ''}{checks.incomplete.length ? ` · 미확정 ${checks.incomplete.length}` : ''}</button>
+      <button className={`check-toggle ${checks.issues.length || checks.incomplete.length ? 'warning' : ''}`} aria-expanded={panel === 'inspect' && !selected.length} onClick={() => { if (panel === 'inspect' && !selected.length) setPanel(null); else { select([]); setPanel('inspect'); } }}>배치 확인 {checks.issues.length ? `· 겹침 ${checks.issues.length}` : ''}{checks.incomplete.length ? ` · 미확정 ${checks.incomplete.length}` : ''}</button>
     </div>
     {focus && <TrailBar store={store} student={focus} actions={actions} />}
     <div className="lab-workarea">
@@ -123,10 +127,10 @@ export function App({ store, onDirtyChange, loginHref = '/login' }: EditorProps)
         <button className="primary" onClick={() => showLoad(true)}>기존 시간표 불러오기</button><button className="sample-button" onClick={() => { store.commit('예제 열기', makeFixture()); }}>예제로 먼저 연습</button>
         <button className="sample-button" onClick={() => actions.openAdd({ kind: 'teacher' })}>빈 시간표에서 직접 만들기</button>
       </section>}
-      {panel === 'inspect' && <Inspector key={selected[0] ?? 'all'} store={store} selected={selected} close={() => setPanel(null)} announce={announce} actions={actions} />}
+      {panel === 'inspect' && <Inspector key={selected[0] ?? 'all'} store={store} selected={selected} close={() => setPanel(null)} announce={announce} actions={actions} view={view} />}
       {panel === 'stats' && <StatsPanel store={store} actions={actions} close={() => setPanel(null)} />}
     </div>
-    {selected.length > 0 && <SelectionBar store={store} selected={selected} actions={actions} />}
+    {selected.length > 0 && <SelectionBar store={store} selected={selected} actions={actions} view={view} />}
     <footer className="lab-status"><span role="status">{message}</span>
       <span>{selected.length > 0 ? `${selected.length}개 선택 · ` : ''}빈 칸을 끌어 새 수업 · Shift+끌기 여러 개 고르기 · 끝을 끌어 길이 · Alt+끌기 복제 · 우클릭 메뉴 · Ctrl+C / X / V · Ctrl+Z</span>
       <b>{dirty ? '저장하지 않은 변경 있음' : savedName ? `저장됨 · ${savedName}` : '이름을 붙여 연습본을 저장하세요'}</b></footer>
@@ -138,5 +142,6 @@ export function App({ store, onDirtyChange, loginHref = '/login' }: EditorProps)
     {managing && <ManageDialog store={store} initial={managing} actions={actions} close={() => setManaging(null)} />}
     {adding && <AddDialog store={store} seed={adding} actions={actions} close={() => setAdding(null)} />}
     {menu && <ContextMenu menu={menu} close={closeMenu} />}
+    <LessonTooltip store={store} />
   </div>;
 }

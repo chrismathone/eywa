@@ -90,39 +90,57 @@ export function UserOverrideEditor({ overrides, hiddenUserIds, staffOptions, nam
         </p>
       ) : null}
       {visible.length > 0 ? (
-        <ul className={`space-y-1 ${staff.length > 0 ? "mt-3" : ""}`}>
+        <div className={`overflow-x-auto ${staff.length > 0 ? "mt-3" : ""}`}>
+          <table aria-label="개인별 메뉴 권한" className="w-full min-w-[32rem] table-fixed text-left text-xs">
+            <colgroup>
+              <col className="w-36" />
+              <col className="w-20" />
+              <col />
+              <col className="w-24" />
+              <col className="w-12" />
+            </colgroup>
+            <thead className="bg-bg-soft text-text-dim border-border border-b">
+              <tr>{["직원", "역할", "메뉴", "권한", "삭제"].map((label) => <th key={label} scope="col" className="px-2 py-2 font-medium">{label}</th>)}</tr>
+            </thead>
+            <tbody>
           {visible.map((row) => {
             const name = nameOf(row.userId);
             const role = roleOf(row.userId);
             return (
-              <li key={`${row.userId}-${row.menu}`} className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="text-foreground min-w-20 font-medium">{name}</span>
-                {role ? <span className="text-text-faint">{ROLE_LABEL[role]}</span> : null}
-                <span className="text-text-dim">{MENU_LABEL[row.menu]}</span>
+              <tr key={`${row.userId}-${row.menu}`} className="border-border border-b last:border-b-0">
+                <th scope="row" className="text-foreground break-words px-2 py-2 font-medium">{name}</th>
+                <td className="text-text-dim px-2 py-2">{role ? ROLE_LABEL[role] : "—"}</td>
+                <td className="text-text-dim break-words px-2 py-2">{MENU_LABEL[row.menu]}</td>
+                <td className="px-2 py-2">
                 <select
                   aria-label={`${name} ${MENU_LABEL[row.menu]} 권한`}
                   value={row.access}
                   onChange={(e) => onChange((rows) => rows.map((r) => (r === row ? { ...r, access: e.target.value as Access } : r)))}
-                  className="border-border bg-card rounded border px-2 py-1 text-xs"
+                  className="border-border bg-card min-h-8 w-full rounded border px-2 py-1 text-xs"
                 >
                   {/* 그 사람의 역할에서 잠긴 수준은 고를 수 없다(지금 값은 남긴다 — 사라지면 다른 값으로 보인다). */}
                   {permissionAccessOptions(row.menu).filter((access) => access === row.access || !role || !isPermissionLocked(row.menu, role, access)).map((access) => (
                     <option key={access} value={access}>{ACCESS_LABEL[access]}</option>
                   ))}
                 </select>
+                </td>
+                <td className="px-2 py-2">
                 <button
                   type="button"
                   aria-label={`${name} ${MENU_LABEL[row.menu]} 권한 제거`}
                   title="제거"
                   onClick={() => onChange((rows) => rows.filter((r) => r !== row))}
-                  className="text-text-dim hover:bg-bg-soft hover:text-danger rounded px-1.5 py-0.5 text-sm leading-none"
+                  className="text-text-dim hover:bg-bg-soft hover:text-danger flex size-8 items-center justify-center rounded text-sm leading-none"
                 >
                   ×
                 </button>
-              </li>
+                </td>
+              </tr>
             );
           })}
-        </ul>
+            </tbody>
+          </table>
+        </div>
       ) : (
         <p className={`text-text-dim text-xs ${staff.length > 0 ? "mt-3" : ""}`}>지정된 개인별 권한이 없습니다.</p>
       )}

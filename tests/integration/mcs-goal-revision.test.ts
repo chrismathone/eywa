@@ -18,7 +18,7 @@ describe.skipIf(!connection)("남은 계획 DB 제약·저장 경계", () => {
     catch (error) { if (error !== rollback) throw error; }
   }
   const revision = { effectiveDate: "2026-10-08", anchor: null, lockedStops: 0, pastDays: [] };
-  const update = (sql: postgres.TransactionSql, value: object | null) => sql`update public.math_learning_track_goals
+  const update = (sql: postgres.TransactionSql, value: postgres.JSONValue) => sql`update public.math_learning_track_goals
     set end_date='2026-11-18', block_count=10, plan_revision=${sql.json(value)}
     where tenant_id=${uid(11)} and class_id=${uid(51)} and student_id=${uid(9901)} and track='regular' and start_date='2026-10-01' returning student_id`;
   it("일반 로그인·비로그인은 직접 갱신할 수 없고 RLS를 유지한다", async () => {

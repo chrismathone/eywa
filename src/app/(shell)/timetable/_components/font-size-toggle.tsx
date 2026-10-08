@@ -87,8 +87,9 @@ export function TimetableFontToggle() {
  *    zoom 좌표계로 들어가 커서와 어긋난다. 안쪽이면 드롭 판정(rect·포인터 모두 뷰포트 좌표)은 그대로이고
  *    끌고 있는 칩만 1배로 남는다(표시상 차이).
  */
-export function TimetableZoomArea({ children }: { children: ReactNode }) {
-  const zoom = UI_FONT_SIZE_ZOOM[usePrefs((s) => s.timetableFontSize)];
+export function TimetableZoomArea({ children, scale }: { children: ReactNode; scale?: number }) {
+  const fontZoom = UI_FONT_SIZE_ZOOM[usePrefs((s) => s.timetableFontSize)];
+  const zoom = fontZoom * (scale ?? 1);
   if (zoom === 1) return <>{children}</>;
   return (
     // 🔴 `flex flex-col` 필수 — 안쪽 판(`min-h-0 flex-1` 스크롤 영역)이 높이를 받는 사슬이 여기서 끊기면

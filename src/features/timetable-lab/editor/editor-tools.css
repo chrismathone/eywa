@@ -73,6 +73,33 @@ button.week-teacher-heading[data-column-drag] { cursor: grabbing; }
 .add-dialog form { display: grid; gap: 10px; margin-top: 12px; }
 .add-dialog form select, .add-dialog form input:not([type=checkbox]) { min-width: 190px; max-width: 62%; border: 1px solid #cbd7e4; border-radius: 4px; padding: 6px 8px; background: #fff; }
 .add-dialog small { color: #65768b; }
+.search-picker { display: grid; grid-template-columns: minmax(72px, 1fr) minmax(0, 62%); gap: 4px 10px; align-items: center; }
+.search-picker label { grid-column: 1; grid-row: 1 / 3; }
+.add-dialog form .search-picker input, .add-dialog form .search-picker select, .lab-inspector .search-picker input, .lab-inspector .search-picker select { grid-column: 2; width: 100%; max-width: none; min-width: 0; }
+.search-picker small { grid-column: 2; }
+.integrated-class[data-class-drop=before] .class-name-row { box-shadow: inset 4px 0 #216dde; }
+.integrated-class[data-class-drop=after] .class-name-row { box-shadow: inset -4px 0 #216dde; }
+.class-name-row[draggable=true] { cursor: grab; }
+.lesson-tooltip { position: fixed; margin: 0; z-index: 100; pointer-events: none; box-sizing: border-box; border: 1px solid #cbd7e4; border-radius: 8px; padding: 12px; background: #fff; color: #18324f; box-shadow: 0 6px 24px #18324f33; font-size: 13px; max-height: calc(100dvh - 16px); overflow: hidden; }
+.lesson-tooltip > strong { font-size: 15px; }
+.lesson-tooltip dl { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 5px 8px; margin: 10px 0; }
+.lesson-tooltip dt { color: #617791; }
+.lesson-tooltip dd { margin: 0; overflow-wrap: anywhere; }
+.lesson-tooltip p { margin: 6px 0 0; line-height: 1.5; overflow-wrap: anywhere; }
+.tooltip-note { border-top: 1px solid #dbe3ec; padding-top: 6px; white-space: pre-wrap; }
+.tooltip-conflict { color: #9a471c; }
+.apply-dialog { width: min(680px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto; }
+.apply-time-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.apply-time-fields label { flex-direction: column; align-items: stretch; gap: 6px; }
+.apply-time-fields input, .apply-time-fields select { min-width: 0; padding: 7px; border: 1px solid #cbd7e4; border-radius: 4px; }
+.apply-summary { padding: 8px; background: #eef3f9; border-radius: 5px; }
+.apply-changes, .apply-dialog details ul { max-height: 220px; overflow: auto; padding-left: 22px; font-size: 13px; line-height: 1.7; }
+.apply-dialog .apply-ack { justify-content: flex-start; gap: 6px; margin-block: 10px; }
+.apply-dialog footer { position: sticky; bottom: -24px; background: #fff; padding-top: 12px; border-top: 1px solid #dbe3ec; }
+.apply-history { position: absolute; top: 40px; right: 8px; width: min(420px, calc(100% - 16px)); max-height: 60vh; overflow: auto; z-index: 40; border: 1px solid #cbd7e4; background: #fff; padding: 12px; box-shadow: 0 8px 24px #18324f33; border-radius: 8px; }
+.apply-history header { display: flex; justify-content: space-between; align-items: center; }
+.apply-history > div { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; border-top: 1px solid #dbe3ec; padding-block: 8px; font-size: 13px; }
+.apply-history p { width: 100%; font-size: 12px; }
 .keep-open { margin-right: auto; justify-content: flex-start; gap: 6px; }
 .manage-dialog { width: min(860px, 96vw); max-height: 92vh; overflow: auto; }
 .manage-list { display: grid; gap: 6px; margin-top: 10px; }

@@ -6,7 +6,7 @@ import type { LabSourceSlot } from '../types';
 
 export type RosterRow = { id: string; class_id: string; student_id: string; start_date: string; end_date: string | null;
   on_hold: boolean | null; is_transferred: boolean | null; attendance_days: string[] | null;
-  student: { name: string; status: string; withdrawn_at: string | null } | { name: string; status: string; withdrawn_at: string | null }[] | null };
+  student: { name: string; grade?: string | null; school?: string | null; status: string; withdrawn_at: string | null } | { name: string; grade?: string | null; school?: string | null; status: string; withdrawn_at: string | null }[] | null };
 export type BlockRow = { id: string; teacher_label: string; day_of_week: string; start_time: string; end_time: string;
   label: string; valid_from: string | null; valid_to: string | null };
 export type TeacherRow = { id: string; display_name: string | null; english_name?: string | null;
@@ -28,7 +28,7 @@ export function projectSlots(slots: ScheduleSlot[], roster: RosterRow[], teacher
       if (!isEnrollmentActiveOn({ startDate: r.start_date, endDate: r.end_date, onHold: !!r.on_hold, isTransferred: !!r.is_transferred }, date)
         || !enrollmentAttendsOnDay(r.attendance_days, s.dayOfWeek)
         || (student.status === 'withdrawn' && student.withdrawn_at && student.withdrawn_at <= date)) continue;
-      students.set(r.student_id, { id: r.student_id, name: student.name, enrollmentId: r.id, attendanceDays: r.attendance_days ?? [] });
+      students.set(r.student_id, { id: r.student_id, name: student.name, ...(student.grade !== undefined ? { grade: student.grade } : {}), ...(student.school !== undefined ? { school: student.school } : {}), enrollmentId: r.id, attendanceDays: r.attendance_days ?? [] });
     }
     return { id: s.id, classId: s.classId, name: s.className, subject: s.subject, day: s.dayOfWeek,
       start: s.startTime.slice(0, 5), end: s.endTime.slice(0, 5), teacher, teacherId: ids.length === 1 && !specialSlotLabel(teacher) ? ids[0] : null,

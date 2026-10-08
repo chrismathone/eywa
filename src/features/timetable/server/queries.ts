@@ -176,6 +176,7 @@ export async function getTeacherLabelsBySubject(): Promise<Record<string, string
 }
 
 export type ScheduleSlot = {
+  editorNote?: string; editorLocked?: boolean;
   id: string;
   classId: string;
   className: string;

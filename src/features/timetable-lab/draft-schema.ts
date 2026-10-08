@@ -19,7 +19,8 @@ const appearance = z.strictObject({
   pxPerMin: z.number().positive().max(20), sectionLines: z.array(minute).max(1000), excludedTeachers: ids,
   breaks: z.array(z.strictObject({ start: time, end: time })).max(1000), subjectColor: text,
   // 편집기에서 고르는 주말 칸 보기 — 없던 연습본도 그대로 읽히게 선택 항목으로 둔다.
-  hideSaturday: z.boolean().optional(), showSunday: z.boolean().optional(),
+  hideSaturday: z.boolean().optional(), showSunday: z.boolean().optional(), hidePeriods: z.boolean().optional(),
+  scale: z.number().min(.5).max(2).optional(),
 });
 const placementFields = {
   id, sourceScheduleId: id.nullable(), classId: z.string().max(200), row: z.number().int(),
@@ -42,10 +43,13 @@ export const draftSnapshotSchema = z.strictObject({
   // 강사 열의 순서(수업이 없는 새 강사 열 포함).
   teachers: z.array(z.string().min(1).max(40)).max(500).optional(),
   studentMoves: record(record(z.strictObject({ fromClassId: id, fromName: text }))).optional(),
+  studentDetails: record(z.strictObject({ grade: text.nullable(), school: text.nullable() })).optional(),
   operatingHours: record(z.array(z.strictObject({ start: minute, end: minute }).refine(v => v.start < v.end)).max(100)).optional(),
   source: z.strictObject({ kind: z.literal('live'), date: z.iso.date(), tenantId: z.uuid(), loadedAt: z.iso.datetime({ offset: true }),
     academy: text, notices: z.array(text).max(2000), uncertainties: z.array(text).max(2000).optional(),
-    step: z.number().int().positive().max(60), teacherOrder: ids }).optional(),
+    step: z.number().int().positive().max(60), teacherOrder: ids, baselineHash: z.string().regex(/^[a-f0-9]{64}$/).optional(), importedIds: ids.optional(), importedClassIds: ids.optional(), initialAppearance: appearance.optional(), initialTeacherOrder: ids.optional(), initialStudents: record(ids).optional(), initialSlotMetadata: record(z.strictObject({ note: z.string().max(300), locked: z.boolean() })).optional(),
+    initialPlacements: record(z.strictObject({name:text,classId:z.string().max(200),day:z.enum(['월','화','수','목','금','토','일']),start:minute,end:minute,teacher:text,room:text,labSeparate:z.boolean(),students:ids})).optional(),
+    initialClasses: record(z.strictObject({name:text,homeroomTeacher:text.optional(),color:color.optional()})).optional() }).optional(),
 }).superRefine((draft, ctx) => {
   const seen = new Set<string>(), rows = new Set<number>();
   for (const p of draft.placements) {

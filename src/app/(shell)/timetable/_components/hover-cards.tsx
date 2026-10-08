@@ -191,6 +191,7 @@ export function ClassInfoCard({
   textbook,
   counts,
   pendingHandover,
+  note,
 }: {
   className: string;
   subject: string;
@@ -200,6 +201,7 @@ export function ClassInfoCard({
   textbook?: string | null;
   counts: { active: number; hold: number; withdrawn: number };
   pendingHandover?: { teacherName: string | null; date: string | null } | null;
+  note?: string;
 }) {
   const display = useTimetableDisplay();
   const tt = useTimetableText();
@@ -221,6 +223,7 @@ export function ClassInfoCard({
         <Row label={tt("강의실")} value={room ? display.room(room) : "—"} />
         {schedule ? <Row label={tt("시간")} value={display.note(schedule)} mono /> : null}
         {textbook ? <Row label={tt("교재")} value={textbook} /> : null}
+        {note ? <p className="whitespace-pre-wrap break-words">{note}</p> : null}
       </div>
       <div className="border-line flex flex-wrap items-center gap-x-2.5 border-t pt-1.5 num text-xs">
         <span className="text-primary">{tt("재원")} {counts.active}</span>

@@ -6,7 +6,7 @@ import { keepColumns, teacherColumns } from './teachers';
 import type { LabColor } from '@/features/timetable-lab/types';
 
 /** 새 항목이 놓일 자리. 강의실은 비워 둘 수 있다(미정). */
-export type Slot = { day: string; teacher: string; start: number; end: number; room?: string };
+export type Slot = { day: string; teacher: string; start: number; end: number; room?: string; labSeparate?: boolean };
 const text = (value: string) => ({ text: value });
 const plain = (draft: Draft, row: number, col: number, value: string) => ({ ...draft.cells[row][col], text: value, formula: undefined, richText: undefined });
 
@@ -14,7 +14,7 @@ function checkSlot(draft: Draft, items: Lesson[], at: Slot, kind: 'lesson' | 'bl
   if (!days.includes(at.day) || !teacherColumns(draft, items).includes(at.teacher)) throw new Error('요일과 강사를 선택해 주세요.');
   if (kind === 'block') {
     if (!isAllowedTime(draft, 'block', at.day, at.start, at.end)) throw new Error('하루 안에서 시작보다 늦은 종료 시간을 골라 주세요.');
-    if (items.some(p => p.teacher === at.teacher && p.kind === 'seat')) throw new Error('비수업 일정은 강사 열에 놓아 주세요.');
+    if (['LAB', 'JJ'].includes(at.teacher) || items.some(p => p.teacher === at.teacher && p.kind === 'seat')) throw new Error('비수업 일정은 강사 열에 놓아 주세요.');
   } else checkOperatingTime(draft, at.day, at.start, at.end);
   if ((at.room ?? '').length > 40) throw new Error('강의실 이름은 40자까지 쓸 수 있습니다.');
 }
@@ -25,7 +25,7 @@ function place(next: Draft, name: string, at: Slot, placement: Omit<Placement, '
   next.placements.push({ ...placement, id, row, sourceScheduleId: null });
   return id;
 }
-const seatKind = (items: Lesson[], teacher: string) => items.some(p => p.teacher === teacher && p.kind === 'seat') ? 'seat' as const : 'lesson' as const;
+const seatKind = (items: Lesson[], teacher: string) => ['LAB', 'JJ'].includes(teacher) || items.some(p => p.teacher === teacher && p.kind === 'seat') ? 'seat' as const : 'lesson' as const;
 const teacherIdOf = (items: Lesson[], teacher: string) => items.find(p => p.teacher === teacher && p.teacherId)?.teacherId ?? null;
 const roomIdOf = (items: Lesson[], room?: string) => (room && items.find(p => p.room === room && p.roomId)?.roomId) || null;
 
@@ -36,7 +36,7 @@ export function addLesson(draft: Draft, classId: string, at: Slot): Draft {
   checkSlot(draft, items, at, 'lesson');
   const next = structuredClone(draft);
   place(next, group.name, at, { classId, teacherId: teacherIdOf(items, at.teacher), roomId: roomIdOf(items, at.room),
-    kind: seatKind(items, at.teacher), studentIds: [...group.students] });
+    kind: seatKind(items, at.teacher), studentIds: [...group.students], labSeparate: at.teacher === 'LAB' && !!at.labSeparate });
   return next;
 }
 /** 새 반을 만들고 첫 수업을 놓는다. 학생은 비어 있다 — 통합뷰에서 끌어 넣거나 ‘학생 넣기’로 채운다. */
@@ -44,7 +44,7 @@ export function addClass(draft: Draft, name: string, at: Slot, options: { color?
   const items = lessons(draft).items, value = checkClassName(draft, name);
   checkSlot(draft, items, at, 'lesson');
   const next = changed(draft), classId = crypto.randomUUID();
-  place(next, value, at, { classId, teacherId: teacherIdOf(items, at.teacher), roomId: roomIdOf(items, at.room), kind: seatKind(items, at.teacher), studentIds: [] });
+  place(next, value, at, { classId, teacherId: teacherIdOf(items, at.teacher), roomId: roomIdOf(items, at.room), kind: seatKind(items, at.teacher), studentIds: [], labSeparate: at.teacher === 'LAB' && !!at.labSeparate });
   next.students[classId] = [];
   (next.classes ??= {})[classId] = { name: value, color: options.color, homeroomTeacher: options.homeroomTeacher ?? at.teacher };
   // 통합뷰가 묶음에 든 반만 보여 주는 설정이면 마지막 묶음에 넣어 바로 보이게 한다.

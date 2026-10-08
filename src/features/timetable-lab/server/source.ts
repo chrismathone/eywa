@@ -9,9 +9,12 @@ import type { LabSource } from '../types';
 import { projectAppearance } from './appearance';
 import { readSourceGroupPlans } from './source-groups';
 import { pickScheduledGroupsForWeek } from '@/features/timetable/scheduled-groups';
+import { readApplyFingerprint } from './apply-context';
+import { parseViewPrefs } from '@/features/timetable/lib/view-prefs';
 
 /** Caller must check tenant-aware full timetable/classes permissions before reading. Session RLS remains enabled. */
 export async function readLabSource(tenantId: string, referenceDate: string, userId: string): Promise<LabSource> {
+  const beforeHash = await readApplyFingerprint(tenantId);
   const db = await createClient(), week = weekBoundsOf(referenceDate);
   const [slots, blockRows, settings, teachers, labelMap, preferences, groupPlans] = await Promise.all([
     getScheduleSlotsForWeek(referenceDate),
@@ -34,7 +37,7 @@ export async function readLabSource(tenantId: string, referenceDate: string, use
   const visual = projectAppearance(sourceSettings, teachers, labelMap, preferences.data.ui_prefs);
   const classIds = [...new Set(slots.map(s => s.classId))];
   const roster = await fetchAllPagedInChunks<RosterRow>(classIds, (ids, from, to) => db.from('enrollments')
-    .select('id, class_id, student_id, start_date, end_date, on_hold, is_transferred, attendance_days, student:student_id(name, status, withdrawn_at)')
+    .select('id, class_id, student_id, start_date, end_date, on_hold, is_transferred, attendance_days, student:student_id(name, grade, school, status, withdrawn_at)')
     .eq('tenant_id', tenantId).in('class_id', ids).lte('start_date', week.end)
     .or(`end_date.is.null,end_date.gte.${week.start}`).order('id').range(from, to));
   const projected = projectSlots(slots, roster, teachers, referenceDate, labelMap);
@@ -43,13 +46,15 @@ export async function readLabSource(tenantId: string, referenceDate: string, use
   const english = settings.operations.subjects.find(s => s.key === 'english');
   const blocks = projectBlocks(blockRows, referenceDate, labelMap, teachers);
   const unknown = [...new Set([...projected, ...blocks].filter(s => s.kind !== 'seat' && !s.teacherId).map(s => s.teacher || '담당 미정'))];
+  const baselineHash = await readApplyFingerprint(tenantId);
+  if (beforeHash !== baselineHash) throw new Error('불러오는 동안 시간표가 변경되었습니다. 다시 불러와 주세요.');
   return { version: 1, tenantId, referenceDate, fetchedAt: new Date().toISOString(), subject: 'english',
     academy: [settings.profile?.name, settings.profile?.branchLabel].filter(Boolean).join(' '),
-    stepMinutes: english?.teacherViewStep ?? 10, ...visual,
-    slots: [...englishSlots, ...blocks],
+    stepMinutes: english?.teacherViewStep ?? 10, ...visual, baselineHash,
+    slots: [...englishSlots, ...blocks].map(slot => ({ ...slot, ...parseViewPrefs(preferences.data.ui_prefs).editorView?.english?.slotMetadata?.[slot.id] })),
     outside: projected.filter(s => s.subject !== 'english').map(s => ({ ...s, students: s.students.filter(p => englishStudents.has(p.id)) })),
     notices: ['선택한 주의 수업 날짜에 수강 중인 학생을 가져옵니다. 휴원·수강 대기 학생은 제외합니다.',
-      '출결·교시 고정·합반 예외의 전체 검사는 아직 연결하지 않았습니다.'],
+      '출결·보강·교시 고정 등 연결 내역은 연습본 적용 전과 예약 실행 때 다시 검사합니다.'],
     uncertainties: unknown.map(name => `${name}: 담당 강사를 특정할 수 없어 강사 겹침 검사를 완료할 수 없습니다.`),
   };
 }

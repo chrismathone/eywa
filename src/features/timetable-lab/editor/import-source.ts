@@ -1,6 +1,7 @@
 import type { LabSource } from '@/features/timetable-lab/types';
 import { days, emptyDraft, lessons, timeMinutes, type Draft, type Lesson } from './model';
 import { captureOperatingHours } from './operating-times';
+import { teacherColumns } from './teachers';
 
 const keys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 export function importSource(value: LabSource): Draft {
@@ -14,7 +15,10 @@ export function importSource(value: LabSource): Draft {
       || !day || start === null || end === null || end <= start || typeof s.teacher !== 'string' || typeof s.room !== 'string'
       || !Array.isArray(s.students) || s.students.some(p => !p.id || typeof p.name !== 'string')) throw new Error('일부 수업의 식별자·요일·시간을 확인할 수 없어 불러오기를 중단했습니다.');
     seen.add(s.id);
-    for (const student of s.students) draft.people![student.id] = student.name;
+    for (const student of s.students) {
+      draft.people![student.id] = student.name;
+      (draft.studentDetails ??= {})[student.id] = { grade: student.grade ?? null, school: student.school ?? null };
+    }
     return { id: `source:${s.id}`, sourceScheduleId: s.id, classId: s.classId, row,
       teacherId: s.teacherId, roomId: s.roomId, kind: s.kind, studentIds: s.students.map(p => p.id),
       name: s.name, day, start, end, teacher: s.teacher || '담당 미정', room: s.room, students: s.students.map(p => p.id) };
@@ -22,7 +26,7 @@ export function importSource(value: LabSource): Draft {
   for (const s of value.slots) {
     const p = slot(s, draft.cells.length);
     const { id, sourceScheduleId, classId, row, teacherId, roomId, kind, studentIds } = p;
-    draft.placements.push({ id, sourceScheduleId, classId, row, teacherId, roomId, kind, studentIds, labSeparate: s.labSeparate });
+    draft.placements.push({ id, sourceScheduleId, classId, row, teacherId, roomId, kind, studentIds, labSeparate: s.labSeparate, note: s.note, locked: s.locked });
     if (classId) (draft.classes ??= {})[classId] = { color: s.classColor ? { ...s.classColor } : undefined, homeroomTeacher: s.homeroomTeacher };
     draft.cells.push([s.name, p.day, s.start, s.end, p.teacher, s.room].map(text => ({ text })));
     if (s.classId) draft.students[s.classId] = [...new Set([...(draft.students[s.classId] ?? []), ...p.students])];
@@ -32,6 +36,11 @@ export function importSource(value: LabSource): Draft {
   draft.originId = crypto.randomUUID();
   draft.operatingHours = captureOperatingHours(draft, lessons(draft).items);
   draft.source = { kind: 'live', date: value.referenceDate, tenantId: value.tenantId, loadedAt: value.fetchedAt,
-    academy: value.academy, notices: value.notices, uncertainties: value.uncertainties, step: [5, 10, 15, 20, 30, 60].includes(value.stepMinutes) ? value.stepMinutes : 10, teacherOrder: value.teacherOrder };
+    academy: value.academy, notices: value.notices, uncertainties: value.uncertainties, step: [5, 10, 15, 20, 30, 60].includes(value.stepMinutes) ? value.stepMinutes : 10, teacherOrder: value.teacherOrder,
+    baselineHash: value.baselineHash, importedIds: value.slots.map(slot => slot.id), importedClassIds: [...new Set(value.slots.map(slot => slot.classId).filter(Boolean))], initialAppearance: value.appearance ? structuredClone(value.appearance) : undefined, initialStudents: structuredClone(draft.students) };
+  draft.source.initialTeacherOrder = teacherColumns(draft);
+  draft.source.initialSlotMetadata = Object.fromEntries(value.slots.map(slot => [slot.id, { note: slot.note ?? '', locked: !!slot.locked }]));
+  draft.source.initialPlacements = Object.fromEntries(lessons(draft).items.map(item=>[item.sourceScheduleId!,{name:item.name,classId:item.classId,day:item.day,start:item.start,end:item.end,teacher:item.teacher,room:item.room,labSeparate:!!item.labSeparate,students:[...item.students]}]));
+  draft.source.initialClasses = Object.fromEntries([...new Set(value.slots.filter(slot=>slot.kind!=='block').map(slot=>slot.classId))].map(id=>[id,{name:value.slots.find(slot=>slot.classId===id)!.name,...draft.classes?.[id]}]));
   return draft;
 }

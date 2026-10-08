@@ -39,15 +39,15 @@ export function TrailBar({ store, student, actions }: { store: DraftStore; stude
 }
 
 /** 수업을 고르면 나타나는 도구줄 — 우클릭 메뉴와 같은 동작을 버튼으로. */
-export function SelectionBar({ store, selected, actions }: { store: DraftStore; selected: string[]; actions: EditorActions }) {
+export function SelectionBar({ store, selected, actions, view = 'teacher' }: { store: DraftStore; selected: string[]; actions: EditorActions; view?: 'teacher' | 'integrated' }) {
   const { draft } = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const first = useMemo(() => lessons(draft).items.find(p => selected.includes(p.id)), [draft, selected]);
   if (!first) return null;
   const items = blockMenu(draft, first, selected, actions).filter(item => item !== null && !/요일에도 놓기$/.test(item.label));
   return <div className="selection-bar" role="toolbar" aria-label="고른 수업 도구">
     <b>{selected.length}개 선택</b>
-    {items.map(item => item && <button key={item.label} disabled={item.disabled} className={item.danger ? 'danger-text' : undefined} title={item.hint} onClick={item.run}>{item.label}</button>)}
-    <button onClick={e => actions.openMenu(e, '다른 요일에도 놓기', blockMenu(draft, first, selected, actions).filter(item => item !== null && /요일에도 놓기$/.test(item.label)))}>다른 요일에도 놓기 ▾</button>
+    {items.map(item => { if (!item) return null; const timing = /복제|분 앞|분 뒤|자리 맞바꾸기|잠그기|지우기/.test(item.label); const disabledHere = view === 'integrated' && timing; return <button key={item.label} disabled={item.disabled || disabledHere} className={item.danger ? 'danger-text' : undefined} title={disabledHere ? '강사뷰에서 수업을 선택해 사용하세요.' : item.hint} onClick={item.run}>{item.label}</button>; })}
+    <button disabled={view === 'integrated'} title={view === 'integrated' ? '강사뷰에서 수업을 선택해 사용하세요.' : undefined} onClick={e => actions.openMenu(e, '다른 요일에도 놓기', blockMenu(draft, first, selected, actions).filter(item => item !== null && /요일에도 놓기$/.test(item.label)))}>다른 요일에도 놓기 ▾</button>
     <button onClick={() => actions.select([])}>선택 해제</button>
   </div>;
 }

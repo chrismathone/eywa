@@ -62,6 +62,7 @@ export type GridStudent = {
 
 /** 빌더 입력 — ScheduleSlotWithStudents와 구조 호환(서버 타입 직접 import 회피, [[#61]]). */
 export type GridSlot = {
+  editorNote?: string;
   /** Optional provenance for editors; normal read views do not supply it. */
   sourceId?: string;
   classId: string;
@@ -89,6 +90,7 @@ export type GridSlot = {
  * 아래 `weekendSelfShift`) **행의 시각 ≠ 그 수업의 시각**이다. 잃으면 안 되는 사실이라 셀이 들고 간다.
  */
 export type GridCell = {
+  notes?: string[];
   sourceIds?: string[];
   label: string;
   isLab: boolean;
@@ -568,6 +570,7 @@ export function buildRichClassCards(slots: GridSlot[], config: PeriodsConfig): R
       const teacher = s.slotTeacherLabel ?? s.teacherName ?? "";
       const isSeat = isSpecialSlotLabel(s.slotTeacherLabel);
       cells[`${effWeekend.order}:${day}`] = {
+        ...(s.editorNote ? { notes: [...cells[`${effWeekend.order}:${day}`]?.notes ?? [], s.editorNote] } : {}),
         ...(s.sourceId ? { sourceIds: [...cells[`${effWeekend.order}:${day}`]?.sourceIds ?? [], s.sourceId] } : {}),
         label: teacher,
         isLab: isSeat,

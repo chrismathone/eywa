@@ -23,7 +23,7 @@ export default async function TimetableEditorPage() {
   }
   return (
     // `.edge-to-edge` — 창에선 좌우·아래 여백 0(편집기가 창을 가득 쓴다). loading.tsx 루트와 같은 className.
-    <div className="edge-to-edge h-full min-h-0">
+    <div className="edge-to-edge timetable-editor-page h-full min-h-0">
       <TimetableEditorHost appearance={blankAppearance(await getTenantSettings())} />
     </div>
   );

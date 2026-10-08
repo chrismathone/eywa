@@ -6,6 +6,7 @@ import { renameBlock, setLocked, setNote, setRoom } from './item-commands';
 import { isAllowedTime, operatingLabel, resizeLesson } from './operating-times';
 import type { DraftStore } from './store';
 import { teacherColumns } from './teachers';
+import { SearchSelect } from './search-select';
 
 /** 고른 수업(또는 회의 일정) 하나의 요일·강사·시간·강의실·잠금·메모를 고친다. 한 번 저장 = 되돌리기 한 번. */
 export function LessonTimeForm({ store, item, announce }: { store: DraftStore; item: Lesson; announce: (s: string) => void }) {
@@ -16,6 +17,7 @@ export function LessonTimeForm({ store, item, announce }: { store: DraftStore; i
   const [start, setStart] = useState(timeLabel(item.start)), [end, setEnd] = useState(timeLabel(item.end)), [error, setError] = useState('');
   const [room, setRoomText] = useState(item.room), [label, setLabel] = useState(item.name);
   const [locked, setLock] = useState(!!item.locked), [note, setNoteText] = useState(item.note ?? '');
+  const [labSeparate, setLabSeparate] = useState(!!item.labSeparate);
   // 회의 등 비수업 일정은 끌어 옮길 때와 같이 수업 운영시간에 묶이지 않는다.
   const meeting = item.kind === 'block', fits = (from: number, to: number) => isAllowedTime(draft, item.kind, day, from, to);
   const a = timeMinutes(start), b = timeMinutes(end), allowed = a !== null && b !== null && fits(a, b);
@@ -34,6 +36,10 @@ export function LessonTimeForm({ store, item, announce }: { store: DraftStore; i
       if (meeting) next = renameBlock(next, item.id, label);
       else if (room.trim() !== item.room) next = setRoom(next, [item.id], room);
       next = setNote(next, item.id, note);
+      if (!meeting && !!item.labSeparate !== (teacher === 'LAB' && labSeparate)) {
+        next = structuredClone(next);
+        next.placements.find(placement => placement.id === item.id)!.labSeparate = teacher === 'LAB' && labSeparate;
+      }
       if (!item.locked && locked) next = setLocked(next, [item.id], true);
       store.commit(meeting ? '일정 변경' : '수업 변경', next); setError('');
       announce(`${meeting ? '일정을' : '수업을'} ${day} ${start}~${end}, ${b - a}분으로 저장했습니다. 겹침 표시를 확인해 주세요.`);
@@ -41,7 +47,8 @@ export function LessonTimeForm({ store, item, announce }: { store: DraftStore; i
   }}>
     {meeting && <label>일정 이름<input name="label" value={label} maxLength={80} onChange={e => setLabel(e.target.value)} required /></label>}
     <label>수업 요일<select name="day" value={day} onChange={e => setDay(e.target.value)}>{days.map(d => <option key={d}>{d}</option>)}</select></label>
-    <label>수업 강사<select name="teacher" value={teacher} onChange={e => setTeacher(e.target.value)}>{teachers.map(t => <option key={t}>{t}</option>)}</select></label>
+    <SearchSelect label="수업 강사" value={teacher} onChange={setTeacher} options={teachers.map(t => ({ value: t, label: t }))} />
+    {!meeting && teacher === 'LAB' && <label><span><input type="checkbox" checked={labSeparate} onChange={event => setLabSeparate(event.target.checked)} /> *LAB 별도 수업</span></label>}
     <label>수업 시작<input name="start" type="time" value={start} onChange={e => setStart(e.target.value)} required /></label>
     <label>수업 종료<input name="end" type="time" value={end} onChange={e => setEnd(e.target.value)} required /></label>
     <div className="duration-presets">{[40, 50, 60, 80, 90].map(n => <button type="button" key={n} disabled={a === null || !fits(a, a + n)} onClick={() => setEnd(timeLabel(a! + n))}>{n}분</button>)}</div>

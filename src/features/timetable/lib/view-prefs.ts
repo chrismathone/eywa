@@ -17,6 +17,7 @@
 import { mergeTeacherOrderPref, parseTeacherOrderPref, type TeacherOrderPref } from "./teacher-order";
 import { isPreschoolGrade, PRESCHOOL_LABEL } from "@/lib/format/school-grade";
 import { DEFAULT_UI_FONT_SIZE, UI_FONT_SIZES, type UiFontSize } from "@/lib/ui-prefs/font-size";
+import { mergeEditorViewPref, parseEditorViewPref, type EditorViewPref } from './editor-view-prefs';
 import {
   normalizeEnglishTrackFilter,
   type EnglishTrackFilter,
@@ -57,6 +58,8 @@ export type TimetableViewPrefs = {
    * 🔴 강사뷰의 테넌트 '강사 순서'(`saveTeacherViewOrder`)와 **다른 축**이다 — 그쪽은 학원 공통, 이쪽은 사람마다.
    */
   teacherOrder: TeacherOrderPref | null;
+  /** 편집기에서 적용한 과목별 개인 배치·색·표시 설정. 다른 과목과 기존 설정은 부분 병합한다. */
+  editorView?: EditorViewPref | null;
   /**
    * 글씨 크기(작음/보통/큼) — **모든 뷰 공통**. null = 미설정(스토어/기본 '작음' 폴백).
    * 값·배율은 공용 규약(lib/ui-prefs/font-size) — 원스크린·ECS와 같은 어휘를 쓴다.
@@ -240,6 +243,7 @@ export function parseViewPrefs(raw: unknown): TimetableViewPrefs {
         : null,
     compact1h: parseCompact1h(o.compact1h),
     teacherOrder: parseTeacherOrderPref(o.teacherOrder),
+    ...(parseEditorViewPref(o.editorView) ? { editorView: parseEditorViewPref(o.editorView) } : {}),
     fontSize:
       typeof o.fontSize === "string" && (UI_FONT_SIZES as readonly string[]).includes(o.fontSize)
         ? (o.fontSize as UiFontSize)
@@ -273,6 +277,7 @@ export function serializeViewPrefs(prefs: TimetableViewPrefs): Record<string, un
   if (prefs.compact1h && Object.keys(prefs.compact1h).length > 0) out.compact1h = prefs.compact1h;
   // 강사 열 순서 — 비면(전부 초기화) 키를 안 적는다.
   if (prefs.teacherOrder) out.teacherOrder = prefs.teacherOrder;
+  if (prefs.editorView) out.editorView = prefs.editorView;
   // 기본값('작음')은 키를 지운다 — 빈 값이 쌓이지 않게(ECS·원스크린과 같은 규약).
   if (prefs.fontSize !== null && prefs.fontSize !== DEFAULT_UI_FONT_SIZE) out.fontSize = prefs.fontSize;
   // 기본값(켜짐)은 키를 지운다 — 빈 값이 쌓이지 않게(fontSize와 같은 규약).
@@ -318,6 +323,7 @@ export function mergeViewPrefs(
     teacherOrder: patch.teacherOrder !== undefined
       ? mergeTeacherOrderPref(current.teacherOrder, patch.teacherOrder)
       : current.teacherOrder,
+    ...(patch.editorView !== undefined ? { editorView: mergeEditorViewPref(current.editorView, patch.editorView) } : current.editorView ? { editorView: current.editorView } : {}),
   };
 }
 

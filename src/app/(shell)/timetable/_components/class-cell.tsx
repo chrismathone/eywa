@@ -35,6 +35,7 @@ import { holdTone, useTimetableColorMode, subjectHeaderStyle, timetableStudentTo
  * (학생 행·섹션 컴포넌트는 student-rows.tsx/student-section.tsx로 추출 — 합반 통합 명단(hapban-cell)과 공유.)
  */
 export type ClassDetailQuick = {
+  editorNote?: string; editorLocked?: boolean;
   id: string;
   /** 실제 반 id(/classes/[id] 링크용). 시간표 slot.id는 스케줄 id라 별도 필요. 없으면 id 폴백. */
   classId?: string;
@@ -306,6 +307,7 @@ export function ClassCell({
                 schedule={`${shortTime(slot.startTime)}~${shortTime(slot.endTime)}`}
                 counts={{ active: active.length, hold: hold.length, withdrawn: withdrawn.length }}
                 pendingHandover={handover}
+                note={slot.editorNote}
               />
             }
           >

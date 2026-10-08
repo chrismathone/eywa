@@ -9,7 +9,11 @@ export type Draft = { cells: Cell[][]; placements: Placement[]; students: Record
   classRevision?: number; originId?: string; operatingHours?: Record<string, { start: number; end: number }[]>;
   /** 강사 열의 순서. 강사를 더하거나 순서를 바꾸면 그때의 순서를 여기에 굳힌다(수업이 없는 강사 열도 남는다). */ teachers?: string[];
   studentMoves?: Record<string, Record<string, { fromClassId: string; fromName: string }>>;
-  people?: Record<string, string>; outside?: Lesson[]; source?: { kind: 'live'; date: string; tenantId: string; loadedAt: string; academy: string; notices: string[]; uncertainties?: string[]; step: number; teacherOrder: string[] } };
+  studentDetails?: Record<string, { grade: string | null; school: string | null }>;
+  people?: Record<string, string>; outside?: Lesson[]; source?: { kind: 'live'; date: string; tenantId: string; loadedAt: string; academy: string; notices: string[]; uncertainties?: string[]; step: number; teacherOrder: string[];
+    baselineHash?: string; importedIds?: string[]; importedClassIds?: string[]; initialAppearance?: LabAppearance; initialTeacherOrder?: string[]; initialStudents?: Record<string, string[]>; initialSlotMetadata?: Record<string, { note: string; locked: boolean }>;
+    initialPlacements?: Record<string, { name: string; classId: string; day: string; start: number; end: number; teacher: string; room: string; labSeparate: boolean; students: string[] }>;
+    initialClasses?: Record<string, { name: string; homeroomTeacher?: string; color?: LabColor }> } };
 export const headers = ['수업', '요일', '시작', '종료', '강사', '강의실'];
 export const days = ['월', '화', '수', '목', '금', '토', '일'];
 export const studentLabels: Record<string, string> = { s1: '학생 가', s2: '학생 나', s3: '학생 다' };

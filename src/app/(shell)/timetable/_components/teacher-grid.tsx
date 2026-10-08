@@ -114,6 +114,8 @@ export function TeacherGridView({
   teacherOrder,
   subject,
   showUnusedDays = true,
+  hideSaturday = false,
+  showSunday = false,
 }: {
   slots: ScheduleSlotWithStudents[];
   weekMonday?: string;
@@ -148,6 +150,8 @@ export function TeacherGridView({
   excludedTeachers?: string[];
   /** true(기본) = 강사마다 월~토 전 요일 컬럼(수업 없는 요일도 빈 컬럼으로). false = 수업 있는 요일만. */
   showUnusedDays?: boolean;
+  hideSaturday?: boolean;
+  showSunday?: boolean;
 }) {
   /**
    * 축 하한보다 이른 슬롯은 **한 칸에 겹쳐 그려진다** — 그대로 두면 같은 열·같은 줄의 뒤엣것이 조용히
@@ -235,7 +239,7 @@ export function TeacherGridView({
       const daySet = new Set(gridSlots.filter((s) => teacherOf(s) === name).map((s) => s.dayOfWeek as DayOfWeek));
       // 기본 = 월~토 전 컬럼(빈 요일 포함, 일요일은 수업 있을 때만). 토글 해제 시 수업 요일만.
       const days = DAY_ORDER.filter((d) =>
-        showUnusedDays ? d !== "sun" || daySet.has(d) : daySet.has(d),
+        showUnusedDays ? (d === "sat" ? !hideSaturday || daySet.has(d) : d === "sun" ? showSunday || daySet.has(d) : true) : daySet.has(d),
       );
       return { name, days, color: colorFor(name) };
     })
@@ -472,7 +476,7 @@ export function TeacherGridView({
                                   // 않으므로(빈 classIds), 남겨 두면 "찾은 수업"과 섞여 읽힌다.
                                   <SearchedCell key={s.id} classIds={[]}>
                                   <div
-                                    title={s.blockKind === "supervise" ? `${s.className} 수업 감독` : s.className}
+                                    title={[s.blockKind === "supervise" ? `${s.className} 수업 감독` : s.className,s.editorNote].filter(Boolean).join('\n')}
                                     // ⚠️ cursor-default 필수 — 바깥 DragScrollArea가 컨테이너에
                                     // cursor-grab(펼친 손)을 깔아서, 안 덮으면 **끌어서 옮길 수 있는 것처럼**
                                     // 보인다(원장 지적 2026-07-22). 이 블록은 읽기 전용 라벨이다.

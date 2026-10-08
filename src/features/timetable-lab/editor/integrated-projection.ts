@@ -13,7 +13,7 @@ export function integratedProjection(draft: Draft) {
     rosters.set(p.classId, roster);
   }
   const students = new Map<string, GridStudent[]>([...rosters].map(([classId, roster]) => [classId, [...roster].map(([id, attendance]) => ({
-    studentId: id, name: people[id] ?? '이름 미확인', grade: null, school: null, status: 'active', attendanceDays: [...attendance], isTransferredIn: !!draft.studentMoves?.[classId]?.[id],
+    studentId: id, name: people[id] ?? '이름 미확인', grade: draft.studentDetails?.[id]?.grade ?? null, school: draft.studentDetails?.[id]?.school ?? null, status: 'active', attendanceDays: [...attendance], isTransferredIn: !!draft.studentMoves?.[classId]?.[id],
   }))]));
   const slots: GridSlot[] = all.map(p => ({ sourceId: p.id, classId: p.classId, className: p.name, subject: 'english',
     dayOfWeek: koDayToEnum(p.day)!, startTime: timeLabel(p.start), endTime: timeLabel(p.end),

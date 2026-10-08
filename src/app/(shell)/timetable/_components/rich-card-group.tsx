@@ -212,6 +212,7 @@ export function RichCardGroupBoard({
   trailing,
   namesOnly,
   hideStudents = false,
+  hidePeriods = false,
   virtualLabs,
 }: {
   group: RichCardGroup;
@@ -229,6 +230,7 @@ export function RichCardGroupBoard({
   namesOnly?: boolean;
   /** '학생 명단 접기'(뷰 설정) — 명단 섹션을 통째로 안 그린다(카드가 그만큼 낮아진다). */
   hideStudents?: boolean;
+  hidePeriods?: boolean;
 }) {
   // 섹션 안에서는 모든 카드가 같은 높이(행이 맞물려 시트처럼 읽힌다) — 높이는 그 섹션의 최대 인원.
   // '학생 명단 접기'면 세 섹션을 0행으로 — 높이·라벨·행이 **같은 값 하나**를 보므로 카드와 라벨열이 어긋나지 않는다.
@@ -278,7 +280,7 @@ export function RichCardGroupBoard({
     //    바가 그려져 있던 게 그것이다. 넘침 판정은 브라우저에 맡긴다(auto).
     // 🔴 배치 편집(namesOnly)에는 **팬도** 걸지 않는다 — 카드를 끌어 줄을 바꾸는 모드라 같은 포인터를
     //    다툰다(기본뷰·강사뷰와 같은 규약, 원장 2026-09-09). 읽기 모드는 끌어 옮길 것이 없어 그대로 둔다.
-    <DragScrollArea barX={!namesOnly} pan={!namesOnly} className={`${GRID} border-t`}>
+    <DragScrollArea barX={!namesOnly} pan={!namesOnly} className={`${GRID} border-t ${hidePeriods ? 'timetable-periods-hidden' : ''}`}>
       {/* 🔴 배치 편집은 `w-max`가 아니라 **화면 폭**이다 — w-max면 카드가 제 폭을 고집해 flex가 안 줄어든다. */}
       <div className={`flex items-stretch ${namesOnly ? "w-full" : "w-max"}`}>
         <LabelColumn group={group} activeH={activeH} holdH={holdH} wdH={wdH} namesOnly={namesOnly} />
@@ -318,12 +320,13 @@ function LabelColumn({
     <div className={rail} style={{ width: LABEL_W }}>
       {/* 강의실 라벨은 없앴다 — 카드 쪽에서 수업명 아래 둘째 줄로 들어가 별도 행이 사라졌다(NAME_ROOM_H). */}
       <div className={cell} style={{ height: NAME_ROOM_H }}>{tt("수업명")}</div>
-      <div className={cell} style={{ height: TEACHER_H }}>{tt("담임")}</div>
+      <div data-timetable-period-section className={cell} style={{ height: TEACHER_H }}>{tt("담임")}</div>
       {/* 축 이름도 '시간'이다(원장 2026-09-12) — 아래 칸이 교시 번호 없이 시각만 적으므로 머리만 '교시'면 어긋난다. */}
-      <div className={cell} style={{ height: DAYHEAD_H }}>{tt("시간")}</div>
+      <div data-timetable-period-section className={cell} style={{ height: DAYHEAD_H }}>{tt("시간")}</div>
       {visibleSpanRows(group.periodRows, group.rowPlan).map((p) => (
         <div
           key={p.order}
+          data-timetable-period-section
           className={`${GRID} text-text-faint flex flex-col items-center justify-center border-b num leading-none`}
           style={{ height: PERIOD_H }}
         >
@@ -516,7 +519,7 @@ export function ClassColumn({
              한 카드에 색이 세 층이 됐다. 색은 칸(누가 그 교시에 들어가나)에만 남는다.
           한국인 강사는 `한글이름(영어이름)`(원장 2026-08-13) — 영어과는 서로를 닉네임으로 부른다.
           ⚠️ 넘치면 카드 안에서 **잘린다**(overflow-hidden) — 옆 반 칸 위로 삐져나오지 않게. */}
-      <div className={`${GRID} flex min-w-0 items-center justify-center overflow-hidden border-b`} style={{ height: TEACHER_H }}>
+      <div data-timetable-period-section className={`${GRID} flex min-w-0 items-center justify-center overflow-hidden border-b`} style={{ height: TEACHER_H }}>
         {!card.teacherName ? (
           <span className="text-text-faint text-xs">-</span>
         ) : (
@@ -527,14 +530,14 @@ export function ClassColumn({
         )}
       </div>
       {/* 요일 헤더 — 이 반이 실제 수업하는 요일만(빈 열 없음). */}
-      <div className={`${GRID} grid border-b`} style={{ ...gridCols, height: DAYHEAD_H }}>
+      <div data-timetable-period-section className={`${GRID} grid border-b`} style={{ ...gridCols, height: DAYHEAD_H }}>
         {days.map((d) => (
           <DayHead key={d} day={d} />
         ))}
       </div>
       {/* 요일×교시 미니그리드 — 행은 섹션이 실제 쓰는 교시만(keepUsedRows). */}
       {gridRows.map((p) => (
-        <div key={p.order} className={`${GRID} grid border-b`} style={{ ...gridCols, height: PERIOD_H }}>
+        <div key={p.order} data-timetable-period-section className={`${GRID} grid border-b`} style={{ ...gridCols, height: PERIOD_H }}>
           {days.map((d, di) => (
             // 칸 하나가 **한 칸보다 길 수 있다**(60분 수업 = 40분 눈금 1.5칸) → 요일마다 자리 상자를 두고
             // 접힌 칸을 그 안에 절대배치한다. 넘치는 부분은 아래 행 위로 그려진다(그 자리는 어차피 빈 칸이다).
@@ -600,6 +603,7 @@ export function ClassColumn({
       {labs.extraRows.map((r) => (
         <div
           key={`vlab:${r.start}`}
+          data-timetable-period-section
           data-virtual-lab-row=""
           className={`${GRID} grid border-b`}
           style={{ ...gridCols, height: PERIOD_H }}
@@ -982,7 +986,7 @@ function Cell({
   if (!c) return <div className={base} />;
   // 주말 셀은 행 라벨이 그 반의 시각이 아니다(class-grid `weekendSelfShift`) → 툴팁에 실제 시각을 붙인다.
   const label = display.teacher(c.label) ?? c.label;
-  const tip = c.time ? `${label} · ${c.time}` : label;
+  const tip = [c.time ? `${label} · ${c.time}` : label, ...c.notes ?? []].join('\n');
   /**
    * 🔺 **'다른 시각' 표식을 띄울까** — `c.time`만 보면 안 된다(적대 리뷰 2026-09-14에서 잡혔다).
    * `class-grid.ts`는 **주말 셀이면 무조건** `time`을 싣는다("이 칸은 주말 슬롯"이라는 뜻이지

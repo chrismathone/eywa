@@ -50,10 +50,10 @@ export function TeacherChip({
   //    축까지 접으면 "몇 시 자리인지"가 무너져 검색 결과의 위치를 못 읽는다.
   const visible = useClassVisible([slot.classId ?? slot.id]);
   const color = SUBJECT_SOFT[subjects.colorOf(slot.subject)];
-  const headerStyle = teacherColor
-    ? { background: teacherColor.bg, color: teacherColor.text }
-    : slot.classBgColor
+  const headerStyle = slot.classBgColor
     ? { background: slot.classBgColor, color: slot.classTextColor ?? readableTextColor(slot.classBgColor) }
+    : teacherColor
+    ? { background: teacherColor.bg, color: teacherColor.text }
     : undefined;
   /**
    * 축 밖 표식(왼쪽 위 삼각형)의 **테두리 색** — 반 색이 무엇이든 표식이 보이게 하는 유일한 장치다.
@@ -102,6 +102,7 @@ export function TeacherChip({
             subject={slot.subject}
             teacherName={slot.teacherName}
             room={slot.classroomName}
+            note={slot.editorNote}
             schedule={`${slot.startTime.slice(0, 5)}~${slot.endTime.slice(0, 5)}`}
             counts={{ active: active.length, hold: 0, withdrawn: 0 }}
             pendingHandover={slot.pendingHandover ?? null}

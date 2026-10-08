@@ -41,6 +41,7 @@ export function RichGridView({
   compactSections,
   customGroups,
   hideStudents = false,
+  hidePeriods = false,
   virtualLabs,
 }: {
   slots: GridSlot[];
@@ -58,6 +59,7 @@ export function RichGridView({
   compactSections: Set<number>;
   /** '학생 명단 접기'(뷰 설정) — 카드에서 명단 섹션을 뺀다(기본뷰와 같은 축). */
   hideStudents?: boolean;
+  hidePeriods?: boolean;
   /**
    * **\*LAB 임시 칸**(원장 2026-09-11) — 자리 출석부에서 다른 시간 랩실로 옮겨 앉는 학생 때문에 서는 표시 전용 칸.
    * 🔴 `slots`에 섞지 않고 **따로** 받는다 — 위 좌표 표식(학생 드래그 빗금)·섹션 교시축·명단 인원은 슬롯에서
@@ -120,6 +122,7 @@ export function RichGridView({
                 teacherColors={teacherColors}
                 teacherNicknames={teacherNicknames}
                 hideStudents={hideStudents}
+                hidePeriods={hidePeriods}
                 virtualLabs={virtualLabs}
               />
             </section>

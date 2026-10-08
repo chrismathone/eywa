@@ -24,6 +24,7 @@
 .off-axis { position: absolute; top: 0; left: 0; border-top: 7px solid #c53232; border-right: 7px solid transparent; filter: drop-shadow(1px 1px 0 white); pointer-events: none; }
 .drag-preview { padding: 3px 0; text-align: center; overflow: hidden; }
 .integrated-board { width: max-content; min-width: 100%; }
+.integrated-board[data-periods-hidden] .homeroom-row, .integrated-board[data-periods-hidden] .class-day-row, .integrated-board[data-periods-hidden] .class-period-grid, .integrated-board[data-periods-hidden] .class-period-row { display: none; }
 .integrated-group { display: flex; width: max-content; border-bottom: 3px solid #12121273; }
 .integrated-class { flex: none; border-right: 2px solid #12121273; }
 .period-rail { flex: 0 0 104px; width: 104px; position: sticky; left: 0; z-index: 5; background: #fafafa; border-right: 1px solid #aaa; text-align: center; }
@@ -40,8 +41,13 @@
 .mini-cell-items { display: flex; height: 100%; }
 .mini-cell-items button { position: relative; padding: 0 1px; border: 0; border-radius: 0; flex: 1; min-width: 0; font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; }
 .moved-mini-cell { position: absolute; inset-inline: 0; z-index: 2; background: #fff; }
-.integrated-roster { padding: 4px 0; overflow: auto; scrollbar-width: thin; }
-.integrated-roster button { display: block; text-align: left; height: 26px; line-height: 20px; padding: 3px 8px; font-size: 16px; color: #121212; border: 0; border-radius: 0; width: 100%; white-space: nowrap; }
+.integrated-roster { padding: 3px 0; }
+.integrated-roster button, .student-out { display: flex; align-items: center; justify-content: space-between; gap: 6px; text-align: left; min-height: 22px; line-height: 18px; padding: 2px 6px; font-size: 14px; color: #121212; border: 0; border-radius: 0; width: 100%; }
+.integrated-roster small { color: #617791; font-size: 11px; line-height: 16px; text-align: right; }
+.roster-transfers:has(button), .roster-transfers:has(.student-out) { border-top: 1px solid #ddd2ef; margin-top: 5px; padding-top: 3px; }
+.roster-transfers h3 { margin: 0; padding: 2px 6px; font-size: 11px; color: #6b3b99; }
+.transfer-tag { font-size: 10px; }
+.integrated-roster .student-out { color: #6b3b99; background: #f5f0fa; }
 .integrated-roster > span { display: block; padding: 4px 8px; }
 .roster-label { padding: 8px 0; }
 .practice-colors { margin-top: 20px; border-block: 1px solid #d7dfe8; padding: 10px 0; }

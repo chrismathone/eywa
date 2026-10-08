@@ -120,6 +120,7 @@ import { SplitListBadge } from "./_components/split-list-badge";
 import { getScheduledImports } from "@/features/timetable/server/scheduled-import-queries";
 import { WeekdayGroupTables } from "./_components/weekday-group-tables";
 import { TEACHER_VIEW_ORDER_GROUP, TeacherGridView } from "./_components/teacher-grid";
+import { TimetableApplyRefresh } from './_components/apply-refresh';
 import { TeacherOrderDialog } from "./_components/teacher-order-dialog";
 import { RoomMapView } from "./_components/room-map-view";
 import { resolveDayWindows } from "@/features/timetable/lib/room-metrics";
@@ -210,7 +211,7 @@ export default async function TimetablePage({
   const tt = (text: string) => timetableText(lang, text);
   // 교실뷰 = 관리자 전용 — 강사 스코프 슬롯으로 그리면 남의 반이 쓰는 교실이 전부 비어 보인다(거짓 지도).
   const roomsViewAllowed = !teacherId;
-  const [allSlots, settings, teacherColors, entryPrefs, classroomsForMap, seatPins, seatMoves, labSeparateIds] = await Promise.all([
+  const [allSlots, settings, storedTeacherColors, entryPrefs, classroomsForMap, seatPins, seatMoves, labSeparateIds] = await Promise.all([
     // futureNames — 사람이 읽는 화면이라 **그 주에 불릴 반 이름**으로 그린다(원장 2026-08-29).
     // 🔴 시트·엑셀 경로는 켜지 말 것: 거기선 반 이름이 매칭 키라, 아직 DB에 없는 이름이 적히면
     //    그 시트를 되읽는 구조 가져오기가 그 반을 버리고 배치를 마감한다(fetchSlots 주석).
@@ -280,6 +281,8 @@ export default async function TimetablePage({
     ? subjectMaps.options.map((o) => o.value)
     : subjectMaps.options.map((o) => o.value).filter((k) => kindSlots.some((s) => s.subject === k));
   const subject = resolveTimetableSubject(available, staffSubjects, subjectParam);
+  const editorView = viewPrefs.editorView?.[subject];
+  const teacherColors = { ...storedTeacherColors, ...editorView?.teacherColors };
   // 영어 프로그램 보기 필터(전체/EiE/인재원 영어, 0176a `classes.english_track`).
   // 🔴 **영어에만 있는 축이다** — 다른 과목 반은 english_track이 항상 null이라 'eie'를 걸면 화면이 통째로
   //    빈다. 그래서 칩도 안 띄우고 값도 'all'로 못박는다(과목 칩으로 옮겨가도 필터가 따라붙지 않는다).
@@ -345,7 +348,7 @@ export default async function TimetablePage({
   // 권한자에게만 도는 쿼리다(배지의 × 가 권한자 전용이라 남에게 보여줄 이유가 없다).
   const scheduled = (canSync && canManageImport) || canMasterImport ? await getScheduledImports() : [];
   // 위에서 미리 띄워 둔 근무 블록(판정 재료·강사뷰 격자) — 여기서 한 번 기다린다.
-  const scheduleBlocks = await scheduleBlocksPromise;
+  const scheduleBlocks = (await scheduleBlocksPromise).map(slot => ({ ...slot, editorNote: editorView?.slotMetadata?.[slot.id.startsWith('block:') ? slot.id : `block:${slot.id}`]?.note }));
   // 구글 시트 URL — 대상 시트가 설정돼 있을 때만(그 과목 전용 시트).
   const sheetUrl = sheetsStatus?.spreadsheetId
     ? `https://docs.google.com/spreadsheets/d/${sheetsStatus.spreadsheetId}/edit`
@@ -377,7 +380,7 @@ export default async function TimetablePage({
       { pins: seatPins.pins, liveStarts: seatPins.liveStarts, referenceDate },
     ),
     labSeparateIds,
-  );
+  ).map(slot => ({ ...slot, sourceId: slot.id, editorNote: editorView?.slotMetadata?.[slot.id]?.note, editorLocked: editorView?.slotMetadata?.[slot.id]?.locked }));
   const subjectRow = settings.operations.subjects.find((s) => s.key === subject);
 
   /**
@@ -487,7 +490,7 @@ export default async function TimetablePage({
           subjectRow.integrationGroups,
         )
       : null;
-  const customGroups = resolveIntegrationGroups(
+  const customGroups = editorView?.groups ?? resolveIntegrationGroups(
     // 🔴 **읽기 뷰에만** 갈아끼운다 — 배치 편집 모드는 아래에서 `subjectRow`를 직접 읽는다.
     //    편집기에 미래 배치를 넣으면 저장 한 번에 그 배치가 **오늘부터** 굳어 버린다.
     scheduledGroups && subjectRow ? { ...subjectRow, integrationGroups: scheduledGroups.groups } : subjectRow,
@@ -711,6 +714,7 @@ export default async function TimetablePage({
 
   return (
     <TimetableEditProvider effectiveDate={effectiveDate} today={today} canEdit={canEdit} canSplit={canSplit} weekMonday={week}>
+      <TimetableApplyRefresh tenantId={user.tenantId} />
       {/* 학생 검색 — 툴바 입력칸과 세 뷰(기본·통합·강사)가 같은 값을 보게 감싼다. 편집 공급자 **안쪽**이라
           검색이 편집 모드를 읽고 스스로 물러난다(search-context.tsx 주석). */}
       <TimetableSearchProvider index={searchIndex} scope={searchScope} enabled={searchEnabled}>
@@ -1184,7 +1188,7 @@ export default async function TimetablePage({
         // 통합뷰 명단 이동(대기/퇴원 드롭) — 🔴 zoom 래퍼 **바깥**에 DndContext를 둔다([[#98]]: 안쪽이면
         // fixed인 DragOverlay가 zoom 좌표계로 들어가 고스트가 커서와 어긋난다. 기본뷰와 같은 배치).
         <RosterMoveArea canEdit={canEditRoster} today={today}>
-        <TimetableZoomArea>
+        <TimetableZoomArea scale={editorView?.scale}>
           <RichGridView
             slots={slots}
             subjectMaps={subjectMaps}
@@ -1194,6 +1198,7 @@ export default async function TimetablePage({
             compactSections={compactSections}
             customGroups={customGroups}
             hideStudents={hideStudents}
+            hidePeriods={editorView?.hidePeriods}
             virtualLabs={virtualLabs}
           />
         </TimetableZoomArea>
@@ -1201,7 +1206,7 @@ export default async function TimetablePage({
       ) : effView === "teacher" ? (
         // 강사뷰 — 시트 "강사별영어시간표" 그대로(강사=세로 블록, 그 안 월~토, 셀=반명+방). 읽기전용, 반 클릭=학생 명단.
         // 가로줄·격자 단위는 과목 설정(teacherViewLines/Step, 학원설정 과목 운영)에서.
-        <TimetableZoomArea>
+        <TimetableZoomArea scale={editorView?.scale}>
           <div className="flex min-h-0 flex-1 flex-col">
             <TeacherGridView
               slots={[...slots, ...scheduleBlocks]}
@@ -1217,6 +1222,8 @@ export default async function TimetablePage({
               teacherOrder={teacherViewOrder}
               subject={subject}
               showUnusedDays={!hideEmptyDays}
+              hideSaturday={editorView?.hideSaturday}
+              showSunday={editorView?.showSunday}
             />
           </div>
         </TimetableZoomArea>

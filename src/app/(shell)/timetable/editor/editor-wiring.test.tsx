@@ -66,7 +66,7 @@ describe("화면 — 창을 가득 쓰고, 편집기는 열 때만 내려받는�
   const rootClass = (source: string) => /<div className="([^"]*edge-to-edge[^"]*)">/.exec(source)?.[1];
 
   it("page와 loading의 루트 className이 같다(스켈레톤 → 본문에서 폭이 튀지 않는다)", () => {
-    expect(rootClass(PAGE)).toBe("edge-to-edge h-full min-h-0");
+    expect(rootClass(PAGE)).toBe("edge-to-edge timetable-editor-page h-full min-h-0");
     expect(rootClass(LOADING)).toBe(rootClass(PAGE));
   });
 

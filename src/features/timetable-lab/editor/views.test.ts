@@ -11,7 +11,7 @@ import { DraftStore } from './store';
 describe('operating view settings in an isolated practice draft', () => {
   it('imports configured colors, nicknames, homeroom and whole-week columns without aliasing the snapshot', () => {
     const source = sourceFixture(), draft = importSource(source), all = lessons(draft).items;
-    expect(lessonTone(draft, all[0])).toEqual({ bg: '#156542', text: '#ffffff' });
+    expect(lessonTone(draft, all[0])).toEqual(source.slots[0].classColor);
     const grid = teacherLayout(draft, all, 1);
     expect(grid.lanes.filter(l => l.teacher === '강사 가').map(l => l.day)).toEqual(['월', '화', '수', '목', '금', '토', '일']);
     const card = integratedProjection(draft).groups.flatMap(g => g.cards)[0];

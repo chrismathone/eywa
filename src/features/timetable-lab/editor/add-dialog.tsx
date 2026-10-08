@@ -9,6 +9,7 @@ import { operatingHoursOf, operatingLabel } from './operating-times';
 import { addStudentToClass, createStudent } from './roster-commands';
 import type { DraftStore } from './store';
 import { addTeacher, teacherColumns } from './teachers';
+import { SearchSelect } from './search-select';
 
 const kinds: { kind: AddKind; label: string; done: string; hint: string }[] = [
   { kind: 'lesson', label: '수업', done: '수업을', hint: '이미 있는 반에 수업을 하나 더합니다. 그 반 학생이 모두 배정됩니다.' },
@@ -30,12 +31,13 @@ export function AddDialog({ store, seed, actions, close }: { store: DraftStore; 
   const firstStart = operatingHoursOf(draft)[seed.day ?? '월']?.[0]?.start ?? 840;
   const [start, setStart] = useState(timeLabel(seed.start ?? firstStart)), [end, setEnd] = useState(timeLabel(seed.end ?? (seed.start ?? firstStart) + 60));
   const [room, setRoom] = useState(''), [pickedClass, setClassId] = useState(seed.classId ?? ''), [name, setName] = useState('');
+  const [labSeparate, setLabSeparate] = useState(false);
   // 창을 연 채로 강사·반을 더하거나 지울 수 있다(계속 추가) — 고른 값이 없어졌으면 첫 항목을 쓴다.
   const teacher = teachers.includes(pickedTeacher) ? pickedTeacher : teachers[0] ?? '', classId = classes.some(c => c.id === pickedClass) ? pickedClass : classes[0]?.id ?? '';
   const [target, setTarget] = useState(seed.kind === 'student' ? seed.classId ?? '' : ''), [more, setMore] = useState(false), [error, setError] = useState('');
   useEffect(() => { dialog.current?.showModal(); }, []);
   const a = timeMinutes(start), b = timeMinutes(end);
-  const slot: Slot | null = a !== null && b !== null ? { day, teacher, start: a, end: b, room } : null;
+  const slot: Slot | null = a !== null && b !== null ? { day, teacher, start: a, end: b, room, labSeparate: teacher === 'LAB' && labSeparate } : null;
 
   /** 지금 입력대로 만든 연습본. 실제로 적용하지는 않는다 — 미리 보기와 적용이 같은 계산을 쓴다. */
   const build = (base: Draft): Draft => {
@@ -51,7 +53,7 @@ export function AddDialog({ store, seed, actions, close }: { store: DraftStore; 
       return { blocked: '', fresh: validate(build(draft)).issues.filter(i => !before.has(i.key)).map(i => i.message) };
     } catch (e) { return { blocked: reasonOf(e, '입력한 내용을 확인해 주세요.'), fresh: [] as string[] }; }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- build는 아래 입력값으로만 정해진다
-  }, [draft, kind, name, classId, target, day, teacher, start, end, room]);
+  }, [draft, kind, name, classId, target, day, teacher, start, end, room, labSeparate]);
 
   function apply() {
     const before = new Set(store.getSnapshot().draft.placements.map(p => p.id));
@@ -72,12 +74,13 @@ export function AddDialog({ store, seed, actions, close }: { store: DraftStore; 
       disabled={(k.kind === 'lesson' && !classes.length) || (placed(k.kind) && !teachers.length)} onClick={() => { setKind(k.kind); setError(''); }}>{k.label}</button>)}</div>
     <p className="subtle">{kinds.find(k => k.kind === kind)!.hint}</p>
     <form onSubmit={e => { e.preventDefault(); apply(); }}>
-      {kind === 'lesson' && <label>반<select aria-label="수업을 더할 반" value={classId} onChange={e => setClassId(e.target.value)}>{classes.map(c => <option key={c.id} value={c.id}>{c.name} · {c.students.length}명</option>)}</select></label>}
+      {kind === 'lesson' && <SearchSelect label="수업을 더할 반" value={classId} onChange={setClassId} options={classes.map(c => ({ value: c.id, label: `${c.name} · ${c.students.length}명` }))} />}
       {kind !== 'lesson' && <label>{kind === 'class' ? '반 이름' : kind === 'block' ? '일정 이름' : kind === 'teacher' ? '강사 이름' : '학생 이름'}
         <input autoFocus aria-label="이름" value={name} maxLength={80} onChange={e => setName(e.target.value)} placeholder={kind === 'block' ? '예: 강사 회의' : kind === 'class' ? '예: 영어 D' : ''} /></label>}
       {placed(kind) && <>
         <label>요일<select aria-label="요일" value={day} onChange={e => setDay(e.target.value)}>{days.map(d => <option key={d}>{d}</option>)}</select></label>
-        <label>강사<select aria-label="강사" value={teacher} onChange={e => setTeacher(e.target.value)}>{teachers.map(t => <option key={t}>{t}</option>)}</select></label>
+        <SearchSelect label="강사" value={teacher} onChange={setTeacher} options={teachers.map(t => ({ value: t, label: t }))} />
+        {kind !== 'block' && teacher === 'LAB' && <label><span><input type="checkbox" checked={labSeparate} onChange={event => setLabSeparate(event.target.checked)} /> *LAB 별도 수업</span></label>}
         <label>시작<input aria-label="시작" type="time" value={start} onChange={e => setStart(e.target.value)} required /></label>
         <label>종료<input aria-label="종료" type="time" value={end} onChange={e => setEnd(e.target.value)} required /></label>
         <div className="duration-presets">{[40, 50, 60, 80, 90].map(n => <button type="button" key={n} disabled={a === null} onClick={() => setEnd(timeLabel(a! + n))}>{n}분</button>)}</div>
@@ -85,7 +88,7 @@ export function AddDialog({ store, seed, actions, close }: { store: DraftStore; 
           <datalist id="add-rooms">{rooms.map(r => <option key={r} value={r} />)}</datalist></label>}
         {kind !== 'block' && <small>{day}요일 운영시간: {operatingLabel(draft, day)}</small>}
       </>}
-      {kind === 'student' && <label>넣을 반<select aria-label="넣을 반" value={target} onChange={e => setTarget(e.target.value)}><option value="">나중에 넣기</option>{classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
+      {kind === 'student' && <SearchSelect label="넣을 반" value={target} onChange={setTarget} options={[{ value: '', label: '나중에 넣기' }, ...classes.map(c => ({ value: c.id, label: c.name }))]} />}
       {(error || preview.blocked) && <p role="alert" className="load-error">{error || preview.blocked}</p>}
       {!preview.blocked && preview.fresh.length > 0 && <p role="status" className="lab-conflict">이 자리에 놓으면 겹침이 {preview.fresh.length}건 생깁니다. 그래도 놓을 수 있습니다.<br />{preview.fresh[0]}</p>}
       {!preview.blocked && !preview.fresh.length && placed(kind) && ready && <p role="status" className="clear-check">이 자리는 겹치는 수업이 없습니다.</p>}

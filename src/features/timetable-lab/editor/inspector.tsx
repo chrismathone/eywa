@@ -10,21 +10,21 @@ import { LessonTimeForm } from './lesson-time-form';
 import { moveNote } from './student-marks';
 import { ClassRoster } from './class-roster';
 import type { EditorActions } from './editor-actions';
-export function Inspector({ store, selected, close, announce, actions }: { store: DraftStore; selected: string[]; close: () => void; announce: (s: string) => void; actions: EditorActions }) {
+export function Inspector({ store, selected, close, announce, actions, view = 'teacher' }: { store: DraftStore; selected: string[]; close: () => void; announce: (s: string) => void; actions: EditorActions; view?: 'teacher' | 'integrated' }) {
   const { draft, revision } = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const all = lessons(draft).items, item = all.find(p => p.id === selected[0]), checks = validate(draft);
   const people = labelsOf(draft), [candidates, setCandidates] = useState<Candidate[]>([]), [searched, setSearched] = useState(false);
   const relevant = item ? checks.issues.filter(i => i.placementIds.includes(item.id)) : checks.issues;
   return <aside className="lab-inspector"><header><h2>{item?.name || '배치 확인'}</h2><button onClick={close} aria-label="확인 패널 닫기">×</button></header>
     {item && <>
-      <p>{item.teacher} · {item.day} {timeLabel(item.start)}–{timeLabel(item.end)} {item.room && `· ${item.room}호`}</p>
+      {view === 'teacher' && <p>{item.teacher} · {item.day} {timeLabel(item.start)}–{timeLabel(item.end)} {item.room && `· ${item.room}호`}</p>}
       {/* 이 수업의 값이 바뀔 때만 다시 만든다 — 다른 곳(명단·색)을 고쳐도 적던 메모·강의실이 지워지지 않는다. */}
-      <LessonTimeForm key={[item.id, item.name, item.day, item.start, item.end, item.teacher, item.room, item.locked, item.note].join('|')} store={store} item={item} announce={announce} />
+      {view === 'teacher' && <LessonTimeForm key={[item.id, item.name, item.day, item.start, item.end, item.teacher, item.room, item.locked, item.note, item.labSeparate].join('|')} store={store} item={item} announce={announce} />}
       <ColorSettings store={store} item={item} announce={announce} />
       {item.kind !== 'block' && <ClassTools store={store} classId={item.classId} announce={announce} cleared={() => actions.select([])} />}
       {item.kind !== 'block' && <ClassRoster store={store} classId={item.classId} actions={actions} />}
       <h3>이 시간에 오는 학생 <span>{item.students.length}명</span></h3><div className="student-chips">{item.students.map(id => <span key={id} className={moveNote(draft, item.classId, id) ? 'student-moved' : ''} title={moveNote(draft, item.classId, id)}>{people[id] ?? '이름 미확인'}{moveNote(draft, item.classId, id) && ' ↗'}</span>)}</div>
-      {item.students.length > 0 && <form aria-label="학생 배정 이동" key={`student-${item.id}-${revision}`} onSubmit={e => {
+      {view === 'teacher' && item.students.length > 0 && <form aria-label="학생 배정 이동" key={`student-${item.id}-${revision}`} onSubmit={e => {
         e.preventDefault(); const values = new FormData(e.currentTarget);
         try { store.commit('학생 배정 이동', moveStudent(draft, String(values.get('student')), item.id, String(values.get('target')))); announce('이 교시의 학생 배정을 옮겼습니다. 다른 요일의 배정은 유지됩니다.'); }
         catch (error) { announce(reasonOf(error, '배정을 확인하세요.')); }

@@ -4,7 +4,7 @@ import { EditorSkeleton } from "./_components/editor-skeleton";
 // ⚠️ 루트 className은 page.tsx와 같아야 한다(`.edge-to-edge` = 창에서 좌우·아래 여백 0).
 export default function TimetableEditorLoading() {
   return (
-    <div className="edge-to-edge h-full min-h-0">
+    <div className="edge-to-edge timetable-editor-page h-full min-h-0">
       <EditorSkeleton />
     </div>
   );

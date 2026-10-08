@@ -25,8 +25,10 @@ export function teacherTone(draft: Draft, teacher: string, integrated = false): 
 }
 export function lessonTone(draft: Draft, item: Lesson): LabColor {
   if (item.kind === 'block') return { bg: '#efefef', text: '#555555' };
+  const classColor = draft.classes?.[item.classId]?.color;
+  if (classColor) return classColor;
   if (item.kind !== 'seat' && (appearanceOf(draft).teacherColors[item.teacher] || ENGLISH_SHEET_TEACHERS[item.teacher])) return teacherTone(draft, item.teacher);
-  return draft.classes?.[item.classId]?.color ?? subjectTone(draft);
+  return subjectTone(draft);
 }
 export function setPracticeColor(draft: Draft, target: 'teacher' | 'class', key: string, color: LabColor): Draft {
   if (![color.bg, color.text].every(c => /^#[0-9a-f]{6}$/i.test(c))) throw new Error('색상을 확인하세요.');
