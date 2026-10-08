@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DayCode, ShuttleRider, ShuttleRun, ShuttleRunStop } from "./types";
-import { buildRunWeek, ridesOnDay, weekColumns } from "./week-grid";
+import { buildRunWeek, ridesOnDay, visibleRows, weekColumns } from "./week-grid";
 
 const rider = (id: string, name: string, weekdays: DayCode[], o: Partial<ShuttleRider> = {}): ShuttleRider => ({
   id,
@@ -95,5 +95,24 @@ describe("셔틀 주간 시간표 격자 — 시트 '7,8시하원' 모양", () =
       active,
     );
     expect(w.counts.mon).toBe(1);
+  });
+});
+
+describe("화면용 줄 줄이기", () => {
+  it("학생 없는 정류장 줄만 빼고, 출발·도착 줄은 남긴다", () => {
+    const days: DayCode[] = ["mon", "tue"];
+    const w = buildRunWeek(
+      run([
+        stop("d", 0, "학원 출발", [], { kind: "depart" }),
+        stop("a", 1, "북구청역", [rider("1", "김덕현", ["tue"])]),
+        stop("b", 2, "빈 정류장", []),
+        stop("c", 3, "토요일만", [rider("2", "유채원", ["sat"])]),
+      ]),
+      days,
+      active,
+    );
+    const v = visibleRows(w, days);
+    expect(v.rows.map((r) => r.name)).toEqual(["학원 출발", "북구청역"]);
+    expect(v.hidden).toBe(2);
   });
 });

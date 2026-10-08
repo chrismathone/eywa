@@ -86,3 +86,12 @@ export function buildRunWeek(run: ShuttleRun, days: readonly DayCode[], isActive
   const counts = Object.fromEntries(days.map((d) => [d, perDay.get(d)!.size])) as Record<DayCode, number>;
   return { rows, counts, total: everyone.size };
 }
+
+/**
+ * 화면용으로 줄을 줄인다 — 보이는 요일 어디에도 학생이 없는 **정류장** 줄은 뺀다(원장 2026-10-08
+ * *"스크롤이 너무 많이"*). 출발·도착 줄은 회차의 시작·끝이라 남긴다. 뺀 수는 표 아래 한 줄로 알린다.
+ */
+export function visibleRows(week: RunWeek, days: readonly DayCode[]): { rows: WeekRow[]; hidden: number } {
+  const rows = week.rows.filter((r) => r.kind !== "stop" || days.some((d) => r.cells[d].length > 0));
+  return { rows, hidden: week.rows.length - rows.length };
+}
