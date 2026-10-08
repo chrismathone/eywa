@@ -132,6 +132,18 @@ describe("강사 전체 보기 실급여 — 출석부 합계 행과 같은 식(
 
 /** 원장 2026-10-07 *"이성우 선생님은 … 고등학생에 대해서만 급여 명세서가 나오도록"* — 대상 학년(`rates.levels`). */
 describe("대상 학년 — 고른 학년의 학생 줄만 실급여에 들어간다", () => {
+  it("받은 금액이 있는 중등 특강은 포함하고 같은 학생의 중등 정규는 제외한다 — 상한·0원·미확정은 유지", () => {
+    const student = { id: "s1", name: "학생", grade: "중3", n: 4 };
+    const regular = group([student], { classId: "regular", className: "고등M 개별" });
+    const special = group([student], { classId: "special", className: "주말내신특강(중3) (~26.09.19)" });
+    const input = { groups: [regular, special], billed: { [rowKey("special", "s1")]: 60000 }, terms: {}, prices: { [rowKey("special", "s1")]: price(20000), [rowKey("regular", "s1")]: price(20000) }, rates: rates({ levels: ["고등"], includeSpecial: true }) };
+    const result = teacherSheetSalary(input);
+    expect(result.lines).toEqual([expect.objectContaining({ classId: "special", amount: 27330, base: 60000, capped: true })]);
+    expect(result.outOfScope).toEqual({ students: 1, units: 4 });
+    expect(teacherSheetSalary({ ...input, billed: { [rowKey("special", "s1")]: 0 } }).total).toBe(0);
+    expect(teacherSheetSalary({ ...input, prices: {} }).excluded).toEqual([expect.objectContaining({ classId: "special", reason: "no-price" })]);
+    expect(teacherSheetSalary({ ...input, rates: rates({ levels: ["고등"] }) }).total).toBeNull();
+  });
   const mixed = group([
     { id: "h1", name: "고일", grade: "고1", n: 8 },
     { id: "h2", name: "고이", grade: "고2", n: 4 },

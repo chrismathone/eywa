@@ -53,6 +53,16 @@ describe("administrator salary rate editor", () => {
     expect(screen.getByRole("checkbox", { name: "초등" })).not.toBeChecked();
     expect(screen.getByRole("checkbox", { name: "중등" })).not.toBeChecked();
   });
+  it("고등만 선택한 선생님의 특강 예외를 켜서 저장하고 다시 열어도 유지한다", async () => {
+    render(<SalaryRatesButton teacherId={teacherId} teacherName="강사" month="2026-09"
+      rates={{ regular: { 고등: 50 }, special: { 초등: 50, 중등: 50, 고등: 50 }, classes: {}, levels: ["고등"], includeSpecial: true }} classes={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "비율 설정" }));
+    const toggle = screen.getByRole("checkbox", { name: "특강은 학년 제한 없이 포함" });
+    expect(toggle).toBeChecked();
+    fireEvent.submit(screen.getByRole("button", { name: "저장" }).closest("form")!);
+    await waitFor(() => expect(refresh).toHaveBeenCalledOnce());
+    expect(save.mock.calls[0]![0].rates).toMatchObject({ levels: ["고등"], includeSpecial: true });
+  });
   it("keeps an unsuccessful save open and preserves a deliberately blank rate", async () => {
     save.mockResolvedValue({ ok: false, error: "저장 실패" });
     open();

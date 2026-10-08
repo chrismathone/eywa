@@ -32,6 +32,7 @@ export function SalaryRatesButton({ teacherId, teacherName, month, rates, classe
     const picked = ATTENDANCE_RATE_LEVELS.filter((level) => data.get(`level:${level}`) === "on");
     if (picked.length === 0) { setError("대상 학년을 하나 이상 골라 주세요"); return; }
     if (picked.length < ATTENDANCE_RATE_LEVELS.length) next.levels = picked;
+    if (data.get("includeSpecial") === "on") next.includeSpecial = true;
     setError("");
     startTransition(async () => {
       try {
@@ -68,7 +69,11 @@ export function SalaryRatesButton({ teacherId, teacherName, month, rates, classe
                 {level}
               </label>)}
             </div>
-            <p className="text-text-dim mt-2 text-xs break-keep">고른 학년의 학생만 실급여와 급여명세서(출석부 별지 포함)에 들어갑니다. 전부 고르면 모든 학생입니다. 학생의 학년으로 가릅니다(반 이름이 아닙니다).</p>
+            <label className="mt-2 flex items-center gap-1 text-sm">
+              <input type="checkbox" name="includeSpecial" defaultChecked={rates.includeSpecial === true} />
+              특강은 학년 제한 없이 포함
+            </label>
+            <p className="text-text-dim mt-2 text-xs break-keep">고른 학년의 학생만 실급여와 급여명세서(출석부 별지 포함)에 들어갑니다. 특강 포함을 켜면 다른 학년의 특강도 계산합니다. 이 선생님에게만 적용하며, 단가·배분율·청구액 상한은 그대로 따릅니다.</p>
           </div>
           <details className="border-line mt-3 border-t pt-3">
             <summary className="cursor-pointer text-sm font-bold">반별 예외 비율</summary>

@@ -2,7 +2,7 @@ import "server-only";
 import { loadAttendanceSalaryRates } from "@/features/attendance/server/salary-rates";
 import { loadSubstituteCells } from "@/features/attendance/server/substitute-cells";
 import { loadTeacherSheet, sheetSalaryOf } from "@/features/attendance/server/teacher-sheet";
-import { ATTENDANCE_RATE_LEVELS, type AttendanceRateLevel, type AttendanceSalaryRates } from "@/features/attendance/salary-rates";
+import { ATTENDANCE_RATE_LEVELS, salaryScopeLabel, type AttendanceRateLevel, type AttendanceSalaryRates } from "@/features/attendance/salary-rates";
 import { formatSessionUnits } from "@/features/attendance/session-units";
 import { TeacherSheetError } from "@/features/attendance/teacher-sheet-error";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -41,6 +41,9 @@ export type SheetTuition = {
   warnings: string[];
   /** 대상 학년을 좁힌 선생님이면 그 학년(없으면 전체) — 별지가 같은 학년 학생만 싣는다. */
   levels?: AttendanceRateLevel[];
+  includeSpecial?: boolean;
+  /** 실제 그 달 강사 출석부의 반 범위(종강·담임 이력 포함) — 명세서 지표도 같은 반을 센다. */
+  classScope?: { id: string; className: string; isSpecial: boolean }[];
   /** 명세서 비율표에 찍을 값 — 출석부 비율표를 과정(초등·중등·고등·특강)으로 옮긴 것. 옮길 수 없는 칸은 계약 비율 그대로. */
   rates: { base: GroupRates; applied: GroupRates };
 };
@@ -64,7 +67,8 @@ export function sheetRatesAsGroups(rates: AttendanceSalaryRates, contract: Group
   // 대상 학년을 좁힌 선생님 — 대상이 아닌 학년의 비율은 표에서 뺀다(계산에 쓰지 않는 비율이 명세서에 찍히지 않게).
   const inScope = rates.levels?.length ? ATTENDANCE_RATE_LEVELS.filter((level) => rates.levels!.includes(level)) : ATTENDANCE_RATE_LEVELS;
   for (const level of ATTENDANCE_RATE_LEVELS) if (!inScope.includes(level)) delete out[level];
-  const specials = new Set(inScope.map((level) => rates.special[level]).filter((v): v is number => v !== undefined));
+  const specialLevels = rates.includeSpecial ? ATTENDANCE_RATE_LEVELS : inScope;
+  const specials = new Set(specialLevels.map((level) => rates.special[level]).filter((v): v is number => v !== undefined));
   if (specials.size === 1) out["특강"] = [...specials][0]!;
   return out;
 }
@@ -97,7 +101,8 @@ export async function computeSheetTuition(args: {
   const applied: GroupRates = Object.fromEntries(Object.entries(base).map(([group, rate]) => [group, applyRatePenalty(rate, penalty)]));
   const sheet = assembled.sheet;
   const levels = loaded.rates.levels?.length ? loaded.rates.levels : undefined;
-  if (!sheet) return { settlement: null, warnings: [assembled.unavailable ?? "출석부를 불러오지 못해 수업료를 산정하지 않았습니다."], rates: { base, applied }, levels };
+  const includeSpecial = loaded.rates.includeSpecial || undefined;
+  if (!sheet) return { settlement: null, warnings: [assembled.unavailable ?? "출석부를 불러오지 못해 수업료를 산정하지 않았습니다."], rates: { base, applied }, levels, includeSpecial };
   if (!sheet.sessionBillingOn) return null;
   const salary = sheetSalaryOf(sheet, loaded.rates, penalty > 0 ? (rate) => applyRatePenalty(rate, penalty) : undefined);
   // 다른 반 대신 보강 칸 — 이 강사 표에 없는 반의 것만(표에 선 반의 칸은 격자가 이미 센다). 금액에는 안 들어가는 알림 재료라
@@ -117,8 +122,8 @@ export async function computeSheetTuition(args: {
   if (levels) {
     const out = salary.outOfScope;
     warnings.push(
-      `${levels.join("·")} 학생만 산정한 명세서입니다(출석부 '비율 설정'의 대상 학년)` +
-        (out.students > 0 ? ` — 그 밖 학년 ${out.students}명 · ${formatSessionUnits(out.units)}시수는 들어 있지 않습니다.` : "."),
+      `${salaryScopeLabel(loaded.rates)}${includeSpecial ? "을" : ""} 산정한 명세서입니다(출석부 '비율 설정'의 대상 학년)` +
+        (out.students > 0 ? ` — 그 밖 학년${includeSpecial ? "의 정규 수업" : ""} ${out.students}명 · ${formatSessionUnits(out.units)}시수는 들어 있지 않습니다.` : "."),
     );
   }
   const noPrice = salary.excluded.filter((e) => e.reason === "no-price");
@@ -198,5 +203,7 @@ export async function computeSheetTuition(args: {
     warnings,
     rates: { base, applied },
     levels,
+    includeSpecial,
+    classScope: sheet.groups.filter((g) => !g.makeupPool).map((g) => ({ id: g.classId, className: g.className, isSpecial: g.isSpecial })),
   };
 }

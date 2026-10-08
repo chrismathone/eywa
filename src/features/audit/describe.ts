@@ -869,6 +869,8 @@ export function auditDetail(
       const levels = Array.isArray(m.levels) ? m.levels.filter((x): x is string => typeof x === "string") : [];
       return join(ctx.nameOf(m.userId), levels.length > 0 ? `${levels.join("·")} 학생만` : "모든 학년");
     }
+    case "payroll_sheet_special_scope_set":
+      return join(ctx.nameOf(m.userId), m.includeSpecial === true ? "특강은 학년 제한 없이 포함" : "특강도 대상 학년만 포함");
     case "payroll_mark_paid":
     case "payroll_auto_compute":
     case "payroll_upsert": {

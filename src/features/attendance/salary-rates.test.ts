@@ -4,6 +4,30 @@ const cls = "aaaaaaaa-1111-1111-1111-111111111111";
 const rates: AttendanceSalaryRates = { regular: { 초등: 40, 중등: 45, 고등: 50 }, special: { 초등: 55, 중등: 60, 고등: 65 }, classes: {} };
 
 describe("regular/special × student grade rates", () => {
+  it("특강 예외는 이 선생님에게만 적용하며 이름·토글 모두 지원한다", () => {
+    const scoped: AttendanceSalaryRates = { ...rates, levels: ["고등"], includeSpecial: true };
+    for (const grade of ["초5", "중3", "고1"]) {
+      const row = { classId: cls, className: "주말내신특강(중3) (~26.09.19)", grade };
+      expect(salaryRowOutOfScope(scoped, grade, row)).toBe(false);
+      expect(attendanceSalaryRate(scoped, row)).toBe(rates.special[attendanceRateLevel(grade)!]);
+      expect(attendanceSalaryRate(scoped, { ...row, className: "방학 완성", isSpecial: true })).toBe(rates.special[attendanceRateLevel(grade)!]);
+    }
+    expect(attendanceSalaryRate(scoped, { classId: cls, className: "고등M", grade: "중3" })).toBeNull();
+    expect(attendanceSalaryRate({ ...scoped, includeSpecial: false }, { classId: cls, className: "내신특강", grade: "중3" })).toBeNull();
+  });
+  it("학년을 모르는 특강은 비율이 세 학년 모두 같거나 반별로 확정되어야 한다", () => {
+    const scoped: AttendanceSalaryRates = { ...rates, levels: ["고등"], includeSpecial: true };
+    const row = { classId: cls, className: "내신특강", grade: null };
+    expect(attendanceSalaryRate(scoped, row)).toBeNull();
+    expect(attendanceSalaryRate({ ...scoped, special: { 초등: 50, 중등: 50, 고등: 50 } }, row)).toBe(50);
+    expect(attendanceSalaryRate({ ...scoped, classes: { [cls]: 0 } }, row)).toBe(0);
+    expect(attendanceSalaryRate(scoped, { ...row, className: "정규" })).toBeNull();
+  });
+  it("특강 예외 저장값은 boolean만 받고, 기존 설정의 기본 동작을 바꾸지 않는다", () => {
+    expect(parseAttendanceRates({ ...rates, includeSpecial: true })?.includeSpecial).toBe(true);
+    expect(parseAttendanceRates({ ...rates, includeSpecial: false })).toEqual(rates);
+    for (const includeSpecial of ["true", 1, null, []]) expect(parseAttendanceRates({ ...rates, includeSpecial })).toBeNull();
+  });
   it.each([["초5", 40, 55], ["중2", 45, 60], ["고3", 50, 65]] as const)("uses %s student's grade even in a mixed high-school-named class", (grade, regular, special) => {
     const row = { classId: cls, className: "고등M 개별", grade };
     expect(attendanceSalaryRate(rates, row)).toBe(regular);

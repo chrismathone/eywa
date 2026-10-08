@@ -284,6 +284,22 @@ describe("대상 학년을 좁힌 선생님의 명세서", () => {
     // 비율표에는 대상 학년만(계산에 쓰지 않는 초등·중등 비율을 찍지 않는다).
     expect(r?.rates.base).toEqual({ 고등: 47.5, 수능: 50, 특강: 50 });
   });
+  it("전 학년 특강 예외가 수업료·경고·비율·명세서 범위에 함께 반영된다", async () => {
+    mocks.rates.mockResolvedValue({ rates: rates({ levels: ["고등"], includeSpecial: true }) });
+    const s = mixedSheet();
+    s.groups[0]!.className = "주말내신특강(중3) (~26.09.19)";
+    s.groups[0]!.isSpecial = true;
+    mocks.sheet.mockResolvedValue(s);
+    const r = await computeSheetTuition(args);
+    expect(r?.includeSpecial).toBe(true);
+    expect(r?.levels).toEqual(["고등"]);
+    expect(r?.settlement?.lines.map((l) => l.studentName)).toEqual(["고일", "중삼", "중이"]);
+    expect(r?.settlement?.total).toBe(300630); // 22 × 30,000 × 0.911 × 50%
+    expect(r?.rates.base).toEqual({ 고등: 47.5, 수능: 50, 특강: 50 });
+    expect(r?.classScope).toEqual([{ id: C, className: s.groups[0]!.className, isSpecial: true }]);
+    expect(r?.warnings[0]).toContain("고등 학생과 전 학년 특강을 산정한 명세서");
+    expect(r?.warnings.join("\n")).not.toContain("그 밖 학년");
+  });
 
   it("학년을 모르는 학생은 '배분율'이 아니라 학년 미입력으로 적는다 — 무엇을 고쳐야 하는지 말한다", async () => {
     mocks.rates.mockResolvedValue({ rates: rates({ levels: ["고등"] }) });
@@ -314,19 +330,19 @@ describe("대상 학년을 좁힌 선생님의 명세서", () => {
 
   it("🔴 명세서 지표(수업인원·퇴원)와 별지도 같은 학년만 — 한 장에서 말이 갈리지 않게(배선)", () => {
     const queries = readFileSync("src/features/payroll/server/payslip-queries.ts", "utf8");
-    expect(queries).toContain("loadMetrics(supabase, classIds, period, year, tuitionPromise.then((t) => t.sheet?.levels, () => undefined)),");
-    expect(queries).toContain("rows = rows.filter((r) => inScope.has(r.studentId));");
+    expect(queries).toContain("loadMetrics(supabase, period, year, tuitionPromise.then((t) => ({");
+    expect(queries).toContain("levels: t.sheet?.levels, includeSpecial: t.sheet?.includeSpecial, classes: t.sheet?.classScope ?? classes,");
     expect(queries).toContain("...(sheet?.levels?.length ? { sheetLevels: sheet.levels } : {}),");
     const page = readFileSync("src/app/(print)/payroll/[teacherId]/payslip/page.tsx", "utf8");
-    expect(page).toContain("students: g.matrix.students.filter((s) => !salaryRowOutOfScope({ levels: sheetLevels }, s.grade))");
-    expect(page).toContain("scopeNote={sheetLevels ? `${sheetLevels.join(\"·\")} 학생만` : undefined}");
+    expect(page).toContain("students: g.matrix.students.filter((s) => !salaryRowOutOfScope(salaryScope, s.grade, g))");
+    expect(page).toContain("scopeNote={salaryScopeLabel(salaryScope)}");
     // '담당 반'도 대상 학년 학생이 있는 반만 · 비율표의 대상 밖 학년 칸은 기본 비율로도 메우지 않는다.
     expect(queries).toContain("...(scopedClassCount !== undefined ? { scopedClassCount } : {}),");
     const doc = readFileSync("src/app/(print)/payroll/[teacherId]/payslip/payslip-document.tsx", "utf8");
     expect(doc).toContain("{metrics.scopedClassCount ?? data.teacher.classes.length}개");
     expect(doc).toContain("(outOfScope(g) ? undefined : rates.base[g] ?? rates.baseDefault ?? undefined)");
     // 출석부의 대상 밖 줄 '—'는 "대상 학년이 아니다"라고 말한다(단가·비율 미설정 문구가 아니다).
-    expect(readFileSync("src/app/(shell)/attendance/_components/matrix-table.tsx", "utf8").split("actualSalaryOutOfScope={showActualSalary && salaryRowOutOfScope(salaryRates!, s.grade)}").length - 1).toBe(2);
+    expect(readFileSync("src/app/(shell)/attendance/_components/matrix-table.tsx", "utf8").split("actualSalaryOutOfScope={showActualSalary && salaryRowOutOfScope(salaryRates!, s.grade, g)}").length - 1).toBe(2);
     expect(readFileSync("src/app/(shell)/attendance/_components/live-totals.tsx", "utf8")).toContain('outOfScope ? "att.row.actualSalaryOutOfScope" : "att.row.actualSalaryUnavailable"');
   });
 });

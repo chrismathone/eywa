@@ -93,6 +93,14 @@ export async function saveAttendanceSalaryRates(input: { teacherId: string; mont
       metadata: { userId: input.teacherId, levels: after, before },
     });
   }
+  if (!!existing?.includeSpecial !== !!rates.includeSpecial) {
+    await logAction({
+      action: "payroll_sheet_special_scope_set",
+      targetType: "user",
+      targetLabel: typeof teacher.display_name === "string" ? teacher.display_name : null,
+      metadata: { userId: input.teacherId, includeSpecial: !!rates.includeSpecial, before: !!existing?.includeSpecial },
+    });
+  }
   revalidatePath("/attendance");
   return { ok: true };
 }

@@ -7,8 +7,26 @@ import {
   studentIdsInMonth,
   withdrawalStats,
   yearlyClassMetrics,
+  salaryScopedEnrollments,
   type EnrollSpanRow,
 } from "./payslip-metrics";
+
+it("개인별 특강 예외는 학생·반 수강별로 걸러 연 누적에 대상 밖 정규 수강이 섞이지 않는다", () => {
+  const spans = [
+    { student_id: "middle", class_id: "regular", startDate: "2026-01-01", endDate: null },
+    { student_id: "middle", class_id: "special", startDate: "2026-09-01", endDate: "2026-09-19" },
+    { student_id: "high", class_id: "regular", startDate: "2026-01-01", endDate: null },
+  ];
+  const grades = new Map([["middle", "중3"], ["high", "고1"]]);
+  const classes = new Map([["regular", { className: "고등M 개별", isSpecial: false }], ["special", { className: "주말내신특강(중3) (~26.09.19)", isSpecial: false }]]);
+  const filtered = salaryScopedEnrollments(spans, { levels: ["고등"], includeSpecial: true }, grades, classes);
+  expect(filtered).toEqual([spans[1], spans[2]]);
+  const yearly = yearlyClassMetrics(filtered.map((s) => ({ studentId: s.student_id, startDate: s.startDate, endDate: s.endDate })), 2026, "2026-10");
+  expect(yearly.byMonth.find((m) => m.period === "2026-08")?.students).toBe(1);
+  expect(yearly.byMonth.find((m) => m.period === "2026-09")?.students).toBe(2);
+  expect(yearly.byMonth.find((m) => m.period === "2026-10")?.students).toBe(1);
+  expect(salaryScopedEnrollments(spans, { levels: ["고등"] }, grades, classes)).toEqual([spans[2]]);
+});
 
 const span = (studentId: string, startDate: string, endDate: string | null = null): EnrollSpanRow => ({
   studentId,
