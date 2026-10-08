@@ -205,6 +205,11 @@ export const AUDIT_ACTIONS = {
   textbook_order_update: "교재 신청 수정",
   textbook_order_delete: "교재 신청 삭제",
   textbook_order_check: "교재 처리 상태 변경",
+  // 교재 단가표(2026-10-08) — 단가표 22,500원 · 신청은 21,000원인데 단가표를 누가 언제 바꿨는지 남은 게 없었다(원장).
+  textbook_catalog_create: "교재 단가표 추가",
+  textbook_catalog_update: "교재 단가표 수정",
+  textbook_catalog_delete: "교재 단가표 삭제",
+  textbook_catalog_toggle: "교재 단가표 사용 전환",
 
   // 학생 기록 변경 전수 감사(2026-08-18) — "퇴원을 누가 했는지 역검수가 안 된다"(원장). 상태 전환·정보
   // 수정·삭제·수강 종료·관리 도구 일괄 처리까지 **학생 레코드를 바꾸는 모든 경로**가 actor를 남긴다.

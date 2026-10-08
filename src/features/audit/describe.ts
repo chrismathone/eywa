@@ -62,6 +62,7 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   academy_documents: "서식 문서",
   invoice: "청구서",
   textbook_order: "교재 신청",
+  textbook_catalog: "교재 단가표",
   exam: "시험",
   // 2026-09-22 성적관리 개편 — 시험 행이 아니라 `학기·과목·시험 칸` 격자를 저장한다(옛 `exam` 행도 남아 있어 둘 다 둔다).
   grades: "성적",
@@ -914,6 +915,18 @@ export function auditDetail(
       const count = typeof m.count === "number" && m.count > 1 ? `${m.count}명 일괄` : null;
       return join(str(m.target), price, count);
     }
+    // 교재 단가표(2026-10-08) — 신청과 같은 모양: 수정은 전후 값, 추가·삭제는 그때 금액, 사용 전환은 켬/끔.
+    case "textbook_catalog_update": {
+      const changes = Array.isArray(m.changes) ? (m.changes as TextbookFieldChange[]) : null;
+      return join(str(m.target), describeTextbookChanges(changes));
+    }
+    case "textbook_catalog_create":
+    case "textbook_catalog_delete": {
+      const price = typeof m.price === "number" ? `${m.price.toLocaleString("ko-KR")}원` : null;
+      return join(str(m.target), price);
+    }
+    case "textbook_catalog_toggle":
+      return join(str(m.target), m.active ? "사용으로" : "사용 안 함으로");
     case "textbook_order_check": {
       const label = TEXTBOOK_CHECK_LABEL[str(m.field) ?? ""] ?? str(m.field);
       return join(str(m.target), label ? `${label} ${m.checked ? "체크" : "해제"}` : null);
