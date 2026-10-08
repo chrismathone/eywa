@@ -11,6 +11,7 @@ import {
   type VehicleFleet,
 } from "../parent-rides";
 import { dayCodeOf, type RideException } from "../roster";
+import { isMissingNotifyColumn } from "../notify-column";
 import {
   isBoardingStatus,
   isDirection,
@@ -81,7 +82,7 @@ async function load(
   withVehicleRoutes: boolean,
 ): Promise<ParentRideData> {
   const admin = createAdminClient();
-  const [ridersRes, exceptionsRes, logsRes] = await Promise.all([
+  const [ridersRes, exceptionsRes, logsFirst] = await Promise.all([
     admin.from("shuttle_riders").select("id, run_stop_id, student_id, io_kind, weekdays, memo")
       .eq("tenant_id", tenantId).in("student_id", studentIds).limit(200),
     // 그날만 변경은 **어느 날짜든** 읽는다 — 학부모가 이번 주 다른 요일을 미리 바꿀 수 있어서(0321a).
@@ -92,6 +93,13 @@ async function load(
           .eq("tenant_id", tenantId).eq("boarded_on", ymd).in("student_id", studentIds).limit(100)
       : Promise.resolve(none),
   ]);
+  // ⚠️ 0354c(notify_parent) 전 DB면 그 칸만 빼고 다시 읽는다 — 안 그러면 학부모 화면 전체가 "셔틀 일정이 없어요"로
+  //    접힌다(notify-column.ts). 그때 기록은 전부 알림 대상으로 친다.
+  const logsRes = isMissingNotifyColumn(logsFirst.error)
+    ? await admin.from("shuttle_boardings").select("id, student_id, run_id, stop_label, io_kind, status, memo, recorded_at")
+        .eq("tenant_id", tenantId).eq("boarded_on", ymd).in("student_id", studentIds).limit(100)
+        .then((r) => ({ ...r, data: (r.data ?? []).map((l) => ({ ...l, notify_parent: true })) }))
+    : logsFirst;
   for (const res of [ridersRes, exceptionsRes, logsRes]) if (res.error) throw res.error;
   const riders = (ridersRes.data ?? []).filter((r) => isDirection(r.io_kind));
 

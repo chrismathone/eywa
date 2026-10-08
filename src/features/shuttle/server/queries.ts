@@ -22,6 +22,7 @@ import {
   type ShuttleVehicle,
 } from "../types";
 import { dayCodeOf, type RideException } from "../roster";
+import { isMissingNotifyColumn } from "../notify-column";
 
 /**
  * 셔틀 조회 — 읽기는 세션 클라이언트 + RLS(테넌트 전원, 0225a). 쓰기는 서버 액션(actions.ts).
@@ -324,11 +325,22 @@ export async function getBoardingsOn(ymd: string): Promise<{ ready: boolean; log
   const user = await getCurrentUser();
   if (!user) return { ready: false, logs: [] };
   const supabase = await createClient();
-  const { data, error } = await supabase
+  const first = await supabase
     .from("shuttle_boardings")
     .select("id, student_id, run_id, stop_id, vehicle_label, stop_label, run_no, io_kind, status, memo, recorded_at, notify_parent")
     .eq("boarded_on", ymd)
     .limit(2000);
+  // ⚠️ 0354c(notify_parent) 전 DB면 그 칸만 빼고 다시 읽는다 — 안 그러면 찍은 기록이 전부 '미기록'으로 보인다(notify-column.ts).
+  //    그때 기록은 전부 알림 대상(notify_parent=true)으로 친다.
+  const fallback = isMissingNotifyColumn(first.error)
+    ? await supabase
+        .from("shuttle_boardings")
+        .select("id, student_id, run_id, stop_id, vehicle_label, stop_label, run_no, io_kind, status, memo, recorded_at")
+        .eq("boarded_on", ymd)
+        .limit(2000)
+    : null;
+  const error = fallback ? fallback.error : first.error;
+  const data = fallback ? (fallback.data ?? []).map((r) => ({ ...r, notify_parent: true })) : first.data;
 
   if (isMissingTable(error)) return { ready: false, logs: [] };
   if (error) {

@@ -17,6 +17,7 @@ import {
 import { canRecordBoarding } from "./record-gate";
 import { runNotOpenMessage } from "./trip-open-guard";
 import { endTripUncheckedMessage } from "./trip-end-guard";
+import { isMissingNotifyColumn } from "../notify-column";
 
 /**
  * 셔틀 쓰기 — 정류장·차량·회차·노선·배정·등하원 기록.
@@ -604,27 +605,33 @@ export async function recordBoarding(formData: FormData): Promise<ShuttleActionS
   const vehicle = runRes.data.vehicle as { name?: string } | null;
   const stopRow = stopRes.data as { stop_id?: string | null; stop?: { name?: string } | null } | null;
 
-  const { error } = await admin.from("shuttle_boardings").upsert(
-    {
-      tenant_id: ctx.tenantId,
-      boarded_on: boardedOn,
-      student_id: studentId,
-      run_id: runId,
-      // 🔴 노선 칸을 모르는 줄('예정에 없던 탑승')에서 누르면 정류장을 **보내지 않는다** — null로 보내면
-      //    이미 적혀 있던 정류장 이름(그날 어디서 탔나)을 지운다(2026-09-27 실제로 지워졌다).
-      //    upsert는 보낸 칸만 덮으므로 빼면 기존 값이 남는다(새 줄이면 원래대로 비어 있다).
-      ...(runStopId ? { stop_id: stopRow?.stop_id ?? null, stop_label: stopRow?.stop?.name ?? null } : {}),
-      vehicle_label: vehicle?.name ?? null,
-      run_no: runRes.data.run_no,
-      io_kind: ioKind,
-      status,
-      memo,
-      notify_parent: notifyParent,
-      recorded_by: ctx.userId,
-      recorded_at: new Date().toISOString(),
-    },
-    { onConflict: "tenant_id,boarded_on,student_id,run_id,io_kind" },
-  );
+  const row = {
+    tenant_id: ctx.tenantId,
+    boarded_on: boardedOn,
+    student_id: studentId,
+    run_id: runId,
+    // 🔴 노선 칸을 모르는 줄('예정에 없던 탑승')에서 누르면 정류장을 **보내지 않는다** — null로 보내면
+    //    이미 적혀 있던 정류장 이름(그날 어디서 탔나)을 지운다(2026-09-27 실제로 지워졌다).
+    //    upsert는 보낸 칸만 덮으므로 빼면 기존 값이 남는다(새 줄이면 원래대로 비어 있다).
+    ...(runStopId ? { stop_id: stopRow?.stop_id ?? null, stop_label: stopRow?.stop?.name ?? null } : {}),
+    vehicle_label: vehicle?.name ?? null,
+    run_no: runRes.data.run_no,
+    io_kind: ioKind,
+    status,
+    memo,
+    notify_parent: notifyParent,
+    recorded_by: ctx.userId,
+    recorded_at: new Date().toISOString(),
+  };
+  const onConflict = { onConflict: "tenant_id,boarded_on,student_id,run_id,io_kind" };
+  let { error } = await admin.from("shuttle_boardings").upsert(row, onConflict);
+  // ⚠️ 0354c(notify_parent) 전 DB면 그 칸만 빼고 다시 저장한다 — 안 그러면 아무도 기록을 못 한다(notify-column.ts).
+  //    그때는 [저장]도 알림 대상으로 남는다(칸이 없으니 끌 방법이 없다).
+  if (isMissingNotifyColumn(error)) {
+    const { notify_parent: _skip, ...withoutNotify } = row;
+    void _skip;
+    ({ error } = await admin.from("shuttle_boardings").upsert(withoutNotify, onConflict));
+  }
   if (error) return { error: friendly(error, "탑승 기록을 저장하지 못했습니다") };
 
   await logAction({ action: "shuttle_boarding_record", targetType: "shuttle", metadata: { boardedOn, studentId, runId, status, notifyParent } });
