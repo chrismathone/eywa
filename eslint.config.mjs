@@ -97,6 +97,14 @@ const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
   ...shadcnConfig,
+  // Electron's main/preload and native build helpers intentionally use CommonJS.
+  {
+    files: ["apps/sync-agent/**/*.cjs"],
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+      "@next/next/no-assign-module-variable": "off",
+    },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:
@@ -104,6 +112,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "coverage/**",
+    "work/**",
+    "apps/sync-agent/build/**",
+    "apps/sync-agent/dist/**",
+    "apps/sync-agent/lib/protocol.cjs",
     "next-env.d.ts",
     // Design handoff reference files (HTML/JSX prototypes, not source code)
     "data/**",

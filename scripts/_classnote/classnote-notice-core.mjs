@@ -536,11 +536,11 @@ export async function processNoticesOnce(
 ) {
   // stale 복구 — 크래시로 갇힌 처리중 상태
   await sql`update classnote_notices set status='queued', processing_at=null
-    where tenant_id=${tenant} and status='processing' and processing_at < now() - interval '${sql.unsafe(String(STUCK_MIN))} minutes'`;
+    where tenant_id=${tenant} and status='processing' and processing_at < now() - ${STUCK_MIN} * interval '1 minute'`;
   await sql`update classnote_notices set status='revoke_requested', processing_at=null
-    where tenant_id=${tenant} and status='revoking' and processing_at < now() - interval '${sql.unsafe(String(STUCK_MIN))} minutes'`;
+    where tenant_id=${tenant} and status='revoking' and processing_at < now() - ${STUCK_MIN} * interval '1 minute'`;
   await sql`update classnote_notices set status='edit_requested', processing_at=null
-    where tenant_id=${tenant} and status='editing' and processing_at < now() - interval '${sql.unsafe(String(STUCK_MIN))} minutes'`;
+    where tenant_id=${tenant} and status='editing' and processing_at < now() - ${STUCK_MIN} * interval '1 minute'`;
 
   const [{ n }] = await sql`select count(*)::int as n from classnote_notices where tenant_id=${tenant} and status='queued'`;
   const [{ r }] = await sql`select count(*)::int as r from classnote_notices where tenant_id=${tenant} and status='revoke_requested'`;

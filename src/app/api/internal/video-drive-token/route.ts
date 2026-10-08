@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { secretMatches } from "@/lib/http/secret-compare";
+import { authorizeInternalWorker } from "@/features/sync-agent/server/internal-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { classnoteModuleOn } from "@/features/owner/classnote-gate";
@@ -35,13 +35,15 @@ const UNAVAILABLE = () => reply({ error: "unavailable" }, 503);
 type WorkerRow = { last_seen: string | null; last_results: { postMode?: unknown; caps?: { homeworkVideoTenantAccounts?: unknown } } | null };
 
 export async function POST(request: Request) {
-  if (!secretMatches(request.headers.get("x-eywa-internal"), process.env.CLASSNOTE_INTERNAL_SECRET))
+  const authorization = await authorizeInternalWorker(request.headers.get("x-eywa-internal"));
+  if (!authorization)
     return reply({ error: "unauthorized" }, 401);
   const body = (await request.json().catch(() => null)) as { tenantId?: unknown; rootId?: unknown; connectionId?: unknown; hostname?: unknown } | null;
   const { tenantId, rootId, connectionId, hostname } = body ?? {};
   if (typeof tenantId !== "string" || !UUID_RE.test(tenantId) || typeof connectionId !== "string" || !UUID_RE.test(connectionId) ||
     typeof rootId !== "string" || !DRIVE_ID_RE.test(rootId) || typeof hostname !== "string" || !hostname || hostname.length > 255)
     return FORBIDDEN();
+  if (authorization.tenantId && tenantId !== authorization.tenantId) return FORBIDDEN();
   try {
     if (!classnoteModuleOn(await getTenantSettingsByTenantId(tenantId))) return FORBIDDEN();
     const db = createAdminClient();

@@ -547,6 +547,8 @@ export function auditDetail(
       }
       return "설정 저장";
     }
+    case "sync_agent_manage":
+      return str(m.summary) ?? "연동 PC 설정 변경";
     case "integration_sync_toggle":
     case "integration_sheets_toggle":
       return m.enabled === true ? "켜기" : m.enabled === false ? "끄기" : null;

@@ -1,0 +1,77 @@
+# 통합 연동 앱 1.0.0 수용 검증
+
+2026-10-08, Windows 11 x64. **설치 EXE·서버/API·웹 관리 화면·서명된 업데이트 묶음 구현 및 아래 로컬/가상 검증을 완료했다. 운영 배포와 실제 연동 PC 인수 시험은 아직 하지 않았다.** 운영 데이터·시간표·기존 지점 설정을 변경하거나 외부 계정으로 발송/동기화/영상 업로드를 실행하지 않았다.
+
+## 산출물
+
+| 파일 | 내용 |
+|---|---|
+| [AywaSync-Setup-1.0.0.exe](../../apps/sync-agent/dist/release/1/AywaSync-Setup-1.0.0.exe) | Windows x64 설치기, 411,946,084바이트(약 393MiB) |
+| [AywaSync-1.0.0.zip](../../apps/sync-agent/dist/release/1/AywaSync-1.0.0.zip) | 자동 업데이트용 전체 묶음, 569,569,627바이트(약 543MiB), 9,997개 파일 |
+| [release.json](../../apps/sync-agent/dist/release/1/release.json) | RSA-SHA256 서명된 릴리스 선언, sequence 1 |
+| [checksums.json](../../apps/sync-agent/dist/release/1/checksums.json) | 설치기·ZIP 해시와 준비된 게시 경로 |
+| [운영/빌드 안내](../../apps/sync-agent/README.md) | 최초 설치·이전·설정·업데이트·릴리스 게시 절차 |
+
+파일은 로컬에 있으며 아직 웹 다운로드에 게시되지 않았다. 릴리스 선언의 URL은 게시 예정 경로다. 웹은 실제 정식 릴리스 행이 등록되기 전 다운로드 버튼을 활성화하지 않는다.
+
+설치기 SHA-256: `fd63be76267d30a3528c48178b628c9b58d095d0f4d3d7717d6539d2937ba02c`
+
+업데이트 ZIP SHA-256: `5cf5425a23b7d4da910b4d646802f1250d675491642c1c5be8a834d546798654`
+
+## 구현 범위
+
+- 기존 ClassNote 실행기의 16개 업무 단계, 영상 보관·첨부 복구, Makeedu 감시기·동기화·상담 전송·08:30 접속 점검을 재사용했다. 포장된 원본 소스 125개를 실제 배포물과 대조했다.
+- 공통 EXE 안에서 연동별 프로세스를 분리하고 Windows Job Object로 브라우저·FFmpeg까지 추적한다. 부모 종료 시 자식 트리가 남지 않는다.
+- 웹 `연동 PC` 탭에 다운로드, 12자리 연결 코드, PC 설정 관리 코드, 실행/업데이트 토글, 담당 PC와 최근 구조화 로그를 둔다. 기존 Makeedu 담당 PC 카드도 이 탭으로 옮겼다.
+- 기기별 비밀, 지점당 활성 등록 하나, 원자적 실행 임대/세대, 로컬 중복 차단, 지점 RLS, 동일 지점 외래키 검증을 적용했다. 코드 원문은 서버 DB에 저장하지 않는다.
+- 기존 큐·워터마크·영상 재개 상태를 그대로 사용하고 로컬 상태는 지점별 디렉터리로 이전한다. `바른 602 → 본원 602` 과거 병합을 재실행하지 않았다.
+- 새 앱은 SQL 문자열이나 DB 비밀번호를 보내지 않는다. 고정 템플릿 308개와 이름 있는 서버 작업만 사용한다. 기존 웹 내부 API에는 기기 인증의 지점 범위를 추가했다.
+- 자동 업데이트는 서명·순번·경로·압축 크기·전체 및 개별 해시를 검증한다. 작업 종료 지점에서 적용하고 시작 실패 시 이전 버전으로 복귀한다. 실패 순번은 다시 자동 적용하지 않는다.
+
+## 실행한 검사
+
+| 검사 | 결과 | 근거 |
+|---|---|---|
+| 기존 워커·관련 웹 회귀 | **257개 파일, 3,959개 통과 / 실패 0 / 건너뜀 0** | [실행 요약](../../work/unified-sync-agent-dryrun/2026-10-08T06-18-02.501Z/summary.json), [개별 결과](../../work/unified-sync-agent-dryrun/2026-10-08T06-18-02.501Z/vitest-results.json) |
+| 외부 통신 차단 장치 | 7개 자체 검사 통과, 본 시험 통신 시도 **0건** | 같은 실행 폴더의 guard-selfcheck.jsonl / network-attempts.jsonl |
+| 기존 ClassNote DB 잠금 | **12개 통과** | [격리 DB 결과](../../work/unified-sync-agent-dryrun/2026-10-08T06-18-02.501Z/database-check.json) |
+| 신규 제어/API·RLS | **24개 통과** | [실행 로그](../../work/sync-agent-build/control-db-tests.log), [시험 코드](../../scripts/_sync-agent/control-db-check.cjs), [실제 서버 함수 시험](../../scripts/_sync-agent/control-api-fixture.cjs) |
+| 데스크톱 핵심·네이티브·복구 | **14개 통과 / 실패 0 / 건너뜀 0** | [최종 로그](../../work/sync-agent-build/desktop-tests-final.log) |
+| 실제 Electron 제어 흐름 | 가상 등록, DPAPI 암호화, 설정 저장, 중복 프로세스 차단, 해제 후 재연결 통과 | [로그](../../work/sync-agent-build/controller-smoke.log), [화면](../../work/agent-controller-zS0pn4/settings.png) |
+| 패키지 실제 실행 화면 | 12자리 입력 검증, 렌더러 격리 통과 | [로그](../../work/sync-agent-build/packaged-ui-final.log), [화면](../../work/agent-ui-XrNYX1/packaged.png) |
+| 패키지 실제 도구 | WorkerHost + 묶인 Electron Node 24.21.0 + Chromium 스크린샷 + FFmpeg 영상 생성 통과, 외부 요청 0 | [로그](../../work/sync-agent-build/bundled-runtime-final.log) |
+| 배포물 소스 대조 | 원본 125개와 관리 앱 파일 일치, 9,997개 파일에서 금지된 비밀/세션 파일 없음, 직접 postgres 패키지 없음 | [로그](../../work/sync-agent-build/package-audit-final.log) |
+| 실제 업데이트 묶음 | 서명·크기·전체 해시 및 9,997개 파일의 실제 검증/해제 | [로그](../../work/sync-agent-build/release-acceptance-final.log) |
+| 릴리스 등록 dry-run | 로컬 EXE/ZIP 해시 일치, 원격 조회/등록 없음 | [로그](../../work/sync-agent-build/register-dryrun-final.log) |
+| 인증 경계 추가 검사 | 3개 파일 11개 통과 | [로그](../../work/sync-agent-build/auth-tests.log); 일부는 최종 회귀에도 포함되므로 합산하지 않음 |
+| 웹 프로덕션 빌드·타입·린트 | 통과 | [빌드](../../work/sync-agent-build/web-build.log), [타입](../../work/sync-agent-build/typecheck-final.log), [린트](../../work/sync-agent-build/lint-final.log) |
+
+최종 회귀 중 워커 소스 변경은 0개였다. 회귀 실행 도구의 당시 `unifiedExeAcceptance: NOT_IMPLEMENTED_NOT_TESTED`는 이전 도구의 고정 문자열로, EXE를 평가한 값이 아니다. 이후 이 문구를 `SEPARATE_DESKTOP_ACCEPTANCE_REQUIRED`로 바꿨고 당시 증거 파일은 수정하지 않았다. EXE 판정은 위 별도 실행 근거를 사용한다.
+
+[통합 결과와 소스 해시 260개](../../work/sync-agent-build/acceptance-summary.json)를 남겼고 최종 회귀 이후 워커 변경이 없음을 다시 확인했다. 시험에 사용한 라벨·이미지·루프백 포트가 일치하는 PostgreSQL 컨테이너만 종료·제거했다.
+
+타입 검사 최초 실행은 Node 기본 4GB 힙 한도에서 종료됐다. 저장소가 제공하는 6GB `npm run typecheck`로 다시 실행하여 종료 코드 0을 확인했다. 코드 오류를 무시한 결과가 아니다.
+
+## 실패 주입과 보완
+
+실제 로컬 PostgreSQL에서 32개 동시 기기 등록과 32개 동시 실행 승인 중 각각 하나만 승인됐다. 이전 세대·만료·해제 요청·다른 지점 쓰기·타 지점 학생/반 외래키·광범위한 기존 public 정책을 이용한 접근을 거부했다. 앞자리 0 코드, 등록 응답 유실 후 같은 기기 재시도, 구 워커의 최근 활동, OFF 후 현재 작업 완료, 종료 유예 재설정 금지, 예약 버킷 중복, 로그 중복/민감 원문과 과대 본문도 시험했다.
+
+DB 시험에서 발견한 외래키 확인 SQL의 OID 표기를 `regclass`로 고쳤다. 실제 패키지 시험에서 누락된 중첩 `node_modules`를 포함하도록 수정했다. 실제 전체 파일 목록이 기존 2MiB 선언 한도를 넘는 점을 발견해 4MiB로 조정하고 10,000개 파일 시험을 추가했다. 릴리스 생성 자체도 동일한 클라이언트 검증기를 통과해야 한다.
+
+업데이트 시험에는 잘못된 서명·변조된 파일·만료/하위 버전·압축 경로 탈출·심볼릭 링크·대소문자 충돌·중복/누락 파일·선언 크기 불일치·다운로드 리다이렉트·중단 후 준비된 버전 복구·실패 순번 격리를 포함했다. 실제 C# 부트스트랩은 정상 새 버전, 시작 실패, 변조 파일, 잘못된 서명, 잘못된 실행 기록의 5가지 시나리오로 확인했다.
+
+ClassNote 정상 중지는 다음 단계 진입을 막고 영상과 첨부 복구 모두가 끝난 뒤 자원을 닫는지 시험했다. Makeedu도 수동 동기화·예약·주간 큐·역전송 사이에 중지 지점을 둔다. 서버 연결 상실·절전은 정상 중지와 달리 실행 권한 소실로 취급하여 트리를 종료한다.
+
+스크린샷 인증은 같은 출처의 보고서 탐색에만 기기 비밀을 붙인다. 이미지·CDN·다른 출처로 이동하는 요청에 비밀을 전달하지 않으며 인증 요청의 리다이렉트를 허용하지 않는다.
+
+## 검증의 한계와 운영 전환
+
+- **운영 DB에 새 마이그레이션을 적용하지 않았고 웹/API를 배포하지 않았다.** 릴리스 파일 업로드·정식 등록도 하지 않았다. 원래 운영 워커는 이 작업으로 교체되거나 중지되지 않았다.
+- 실제 ClassNote/Makeedu 로그인, Makeedu 허용 IP, 실제 Google 계정/Drive 업로드, 학부모 실발송은 실행하지 않았다. 실제 연동 PC에서 전환 시 확인해야 한다.
+- 로컬 PostgreSQL은 실제 서버 제어 함수와 47개 표의 스키마 메타데이터를 사용했지만, 운영의 모든 트리거/외래키/데이터 분포를 복제한 환경은 아니다. 학생·반 외래키는 대표 제약을 추가해 시험했다.
+- 설치기 생성과 패키지 실행은 검증했지만, 깨끗한 Windows VM에서 설치/제거, 실제 재부팅·절전·백신 차단·모든 전원 장애 시점까지 물리적으로 재현하지 않았다. 자동 시작 설정은 시험에서 실제 로그인 레지스트리를 바꾸지 않도록 대체했다.
+- 설치기는 Windows Authenticode 서명이 없다. 자동 업데이트에는 별도로 RSA 서명이 있다. Windows의 최초 실행 경고가 전혀 없다고 보장하지 않는다.
+- 이전 워커가 보유한 공유 DB 자격증명은 새 기기 프로토콜만으로 폐기되지 않는다. 알려진 예약/실행 확인 뒤, 실제 전환에서 구 PC와 공용 자격증명을 정리해야 한다.
+- 기존 수동 복구·초기 임포트·정리 도구는 저장소에 남겨 두었다. 모든 관리 스크립트를 EXE의 버튼으로 만들지는 않았다. 설계 문서의 기간 지정 일시 중지·로그 필터·진단 상세 옵션 등은 1.0.0의 제공 목록에 포함하지 않는다.
+
+[실패 상황 목록](../plans/unified-sync-agent-failure-matrix.md)은 더 넓은 운영 기준이다. 이 문서는 위에 실제 실행한 범위만 통과로 판정하며, “발생 가능한 모든 상황에서 이상이 없다”거나 실제 운영 전환까지 완료됐다는 결론을 내리지 않는다.

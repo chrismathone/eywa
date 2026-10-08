@@ -14,6 +14,7 @@
  * @returns {Promise<{classes:number, ok:number, hold:number, cleared:number}>}
  */
 export async function writeClassBoardSnapshot(sql, tenant, plans, { keepClassIds = [], scoped = false } = {}) {
+  if (sql.agentOperation) return sql.agentOperation("class-board-snapshot", { plans, keepClassIds, scoped });
   const out = { classes: 0, ok: 0, hold: 0, cleared: 0 };
   for (const p of plans) {
     await sql.begin(async (tx) => {

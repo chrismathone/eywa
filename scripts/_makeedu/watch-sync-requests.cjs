@@ -22,6 +22,7 @@ const path = require("path");
 const postgres = require("postgres");
 const L = require("./lib.cjs");
 const { runWeeklyPushEnqueue, weeklyBucketOf } = require("./weekly-push.cjs");
+const managedWorker = require("../_sync-agent/managed-worker.cjs");
 
 const POLL_MS = 15_000;
 const HERE = __dirname;
@@ -98,7 +99,7 @@ async function finish(ids, ok, errMsg) {
 function runScript(scriptRel, extraEnv) {
   const r = spawnSync(
     process.execPath,
-    ["--env-file=.env.local", path.join("scripts", "_makeedu", scriptRel), "--apply"],
+    [...(managedWorker.managed ? [] : ["--env-file=.env.local"]), path.join("scripts", "_makeedu", scriptRel), "--apply"],
     { cwd: REPO, encoding: "utf8", windowsHide: true, env: { ...process.env, ...extraEnv } },
   );
   const out = `${r.stdout || ""}${r.stderr || ""}`;
@@ -190,6 +191,12 @@ async function heartbeat() {
   heartbeatTimer.unref?.();
   for (;;) {
     try {
+      const control = managedWorker.managed ? await managedWorker.state("cycle") : { drain: false };
+      if (control.drain) { await dropDb(); return; }
+      if (!managedWorker.managed && await managedWorker.legacyCutover(db(), await tenantOfWorker())) {
+        log("이 지점은 통합 연동 앱으로 전환되었습니다.");
+        clearInterval(heartbeatTimer); await dropDb(); return;
+      }
       // 0) 심장박동 — 담당 PC 생존 신호(웹 표시용). best-effort라 실패해도 요청 처리 계속.
       await beat();
       // 1) 정방향 동기화 요청.
@@ -200,17 +207,32 @@ async function heartbeat() {
         log(`동기화 요청 ${claimed.length}건 감지 → sync-all 실행`);
         await beat(); // 블로킹 실행 직전에 갱신 — 실행 중 '오프라인' 오표시 최소화
         const { ok, tail } = runSync(requester);
+        managedWorker.result("syncNow",{ok});
         await finish(claimed, ok, ok ? null : tail || "sync-all 실패");
         log(ok ? "✅ 동기화 완료 (done)" : `✖ 동기화 실패 (error): ${tail}`);
       }
+      if (managedWorker.managed && (await managedWorker.state("stage")).drain) continue;
+      if (managedWorker.managed) {
+        const { brokerCall } = require("../_sync-agent/remote-db.cjs");
+        const { job } = await brokerCall("schedule", {});
+        if (job) {
+          await brokerCall("event", { kind: "job_started",detail:{task:job.kind} });
+          const result = runScript(job.kind === "login" ? "check-session.mjs" : "sync-all.cjs", { MAKEEDU_FORCE: "false", MAKEEDU_TRIGGER: "scheduled" });
+          await brokerCall("schedule", { finish: { ...job, ok: result.ok } });
+          await brokerCall("event", { kind: result.ok ? "job_succeeded" : "job_failed",detail:{task:job.kind} });
+        }
+      }
       // 2) 주간 자동 역동기화 적재 — 일요일 06:00(KST) 버킷이 열렸으면 큐에 넣는다(주 1회).
       //    제출은 새 경로가 아니라 바로 아래 3)이 그대로 한다.
+      if (managedWorker.managed && (await managedWorker.state("stage")).drain) continue;
       await weeklyPush();
       // 3) 역동기화 푸시 요청(aywa→makeedu) — 스크립트가 pending을 claim·처리·마감.
+      if (managedWorker.managed && (await managedWorker.state("stage")).drain) continue;
       if ((await pendingPushCount()) > 0) {
         log(`푸시 요청 감지 → push-consultations 실행`);
         await beat();
         const { ok, tail } = runPush();
+        managedWorker.result("push",{ok});
         log(ok ? "✅ 푸시 완료 (done)" : `✖ 푸시 실패/부분실패: ${tail}`);
       }
     } catch (e) {

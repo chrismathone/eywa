@@ -89,7 +89,7 @@ export async function fetchClassNoticeMedia({ base, secret, noticeId, expected, 
   let status = 0;
   let json = null;
   try {
-    const res = await fetchImpl(url, { headers: secret ? { "x-eywa-internal": secret } : {} });
+    const res = await fetchImpl(url, { redirect: "error", headers: secret ? { "x-eywa-internal": secret } : {} });
     status = res.status;
     if (res.ok) json = await res.json();
   } catch (e) {

@@ -125,7 +125,8 @@ describe("반 공지 이미지 — 옛 발송 PC가 글만 올리는 것을 막�
   });
   it("내부 라우트 — 시크릿 게이트 · 공지가 없으면 404(빈 목록으로 얼버무리지 않는다) · 서명 전 장수를 함께 준다", () => {
     const route = read("src", "app", "api", "internal", "class-notice-attachments", "[noticeId]", "route.ts");
-    expect(route).toContain('secretMatches(request.headers.get("x-eywa-internal"), secret)');
+    expect(route).toContain('authorizeInternalWorker(request.headers.get("x-eywa-internal"))');
+    expect(route).toContain('notice.tenant_id !== worker.tenantId');
     expect(route).toContain('{ error: "notice_not_found" }, { status: 404 }');
     expect(route).toContain("expected: list.length, missing");
     expect(route).toContain('"report_attachment", notice.tenant_id as string');

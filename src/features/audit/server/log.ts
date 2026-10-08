@@ -12,6 +12,7 @@ export const AUDIT_ACTIONS = {
   // ── 학원 설정 감사 커버리지(2026-08-27 원장 점검) — 연동·프롬프트·강의실 수정·팝업 수정이
   //    통째로 무기록이었다. 특히 연동은 user_integrations에 updated_by조차 없어 흔적이 0이었다.
   integration_sync_toggle: "makeedu 자동 동기화 토글",
+  sync_agent_manage: "연동 PC 관리",
   integration_sheets_toggle: "구글 시트 내보내기 토글",
   integration_sheet_target: "구글 시트 대상 지정",
   integration_video_drive_setting: "숙제영상 저장 폴더 지정",
@@ -315,6 +316,7 @@ export const AUDIT_ACTIONS = {
   // 수학 강사 시트(MCS) — 학생별 월간 목표. 실제 진도는 원스크린이 쓰므로 여기 안 온다(읽기 전용 화면).
   mcs_goal_update: "수학 시트 학생 월간 목표 저장",
   mcs_learning_goal_save: "수학 시트 전체 목표 저장",
+  mcs_learning_goal_revise: "수학 시트 남은 계획 수정",
   mcs_learning_goal_reset: "수학 시트 전체 목표 초기화",
   // 칸을 떠날 때 전후 값 한 줄(원장 결정 2026-09-14, `math-sheets/server/goal-audit-actions.ts`). 위 키는 옛 행과
   // '지난 달 목표 가져오기'(한 번 누름) 표시용으로 남는다 — 저장 액션은 더 이상 디바운스마다 남기지 않는다.

@@ -1,3 +1,4 @@
+import managedWorker from "../_sync-agent/managed-worker.cjs";
 import postgres from "postgres";
 import path from "node:path";
 import { mkdir, unlink } from "node:fs/promises";
@@ -19,6 +20,7 @@ import { credentialForVideoTarget, rejectCachedTenantToken } from "./video-drive
 import { pickVideoJob } from "./video-job-pick.mjs";
 
 let running = null;
+export async function waitForVideoIdle() { if (running) await running; }
 let nextPoll = 0;
 /** 마지막으로 로그에 남긴 Drive 인증 실패 사유 — 풀리면 비운다. */
 let authFailure = null;
@@ -201,6 +203,7 @@ export async function processVideoJob(browser, tenant, log = console.log, option
       where id = ${job.id} and tenant_id = ${tenant} and lock_token = ${token} returning id`;
     if (!completed.length) throw new Error("영상 작업 소유권이 변경되었습니다.");
     log(`[영상] Drive 저장 완료 · ${route.folderName}`);
+    managedWorker.result("video",{uploaded:1},"video");
     for (const file of [local.filePath, local.metadataPath]) {
       try { await unlink(file); }
       catch (error) { if (error.code !== "ENOENT") log("[영상] 임시 파일 정리 실패 — Drive 보관은 완료됐습니다."); }
@@ -208,6 +211,7 @@ export async function processVideoJob(browser, tenant, log = console.log, option
     await removeArchiveLeftovers(local.filePath);
   } catch (error) {
     if (/HTTP 401/.test(String(error?.message ?? "")) && credentials) rejectCachedTenantToken(credentials.connectionId, credentials.tokenVersion);
+    managedWorker.result("video",{ok:false},"video");
     if (job) await sql`update student_homework_videos set status = 'failed',
       error = '영상 전송을 완료하지 못했습니다. 워커 인증·원본·폴더 설정을 확인하세요.',
       available_at = now() + interval '15 minutes', updated_at = now(), locked_at = null, lock_token = null

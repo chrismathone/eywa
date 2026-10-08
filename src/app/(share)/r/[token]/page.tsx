@@ -1,3 +1,4 @@
+import { authorizeInternalWorker } from "@/features/sync-agent/server/internal-auth";
 import { createHash } from "node:crypto";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
@@ -55,7 +56,9 @@ export default async function PublicLessonReportPage({
   // 조회 로그(0086a, best-effort) — 부모 열람 1회 = 1행. 워커 스크린샷(x-eywa-internal secret 일치)은 제외해 과집계 방지.
   const hdrs = await headers();
   const internalSecret = process.env.CLASSNOTE_INTERNAL_SECRET;
-  const isInternal = !!internalSecret && hdrs.get("x-eywa-internal") === internalSecret;
+  const workerHeader = hdrs.get("x-eywa-internal");
+  const scopedWorker = workerHeader?.startsWith("agent:") ? await authorizeInternalWorker(workerHeader) : null;
+  const isInternal = (!!internalSecret && workerHeader === internalSecret) || (!!scopedWorker?.tenantId && scopedWorker.tenantId === report.tenant_id);
   if (!isInternal) {
     const ipRaw = parseForwardedFor(hdrs.get("x-forwarded-for"), hdrs.get("x-real-ip"));
     const ipHash = createHash("sha256")

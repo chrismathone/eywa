@@ -1,5 +1,6 @@
+import { createAdminClient } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
-import { secretMatches } from "@/lib/http/secret-compare";
+import { authorizeInternalWorker } from "@/features/sync-agent/server/internal-auth";
 import { reportSiteLine } from "@/features/video-submit/server/report-link";
 
 /**
@@ -12,9 +13,15 @@ import { reportSiteLine } from "@/features/video-submit/server/report-link";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
-  if (!secretMatches(request.headers.get("x-eywa-internal"), process.env.CLASSNOTE_INTERNAL_SECRET))
+  const authorization = await authorizeInternalWorker(request.headers.get("x-eywa-internal"));
+  if (!authorization)
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const body = (await request.json().catch(() => null)) as { reportId?: unknown } | null;
+  if (authorization.tenantId) {
+    if (typeof body?.reportId !== "string") return NextResponse.json({ error: "invalid_input" }, { status: 400 });
+    const { data } = await createAdminClient().from("lesson_reports").select("id").eq("id", body.reportId).eq("tenant_id", authorization.tenantId).maybeSingle();
+    if (!data) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
   try {
     return NextResponse.json({ token: null, site: await reportSiteLine(body?.reportId) });
   } catch (error) {

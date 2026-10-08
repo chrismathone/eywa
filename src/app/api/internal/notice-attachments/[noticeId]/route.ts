@@ -1,4 +1,4 @@
-import { secretMatches } from "@/lib/http/secret-compare";
+import { authorizeInternalWorker } from "@/features/sync-agent/server/internal-auth";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveTenantReadUrls } from "@/lib/storage/media-storage";
@@ -86,8 +86,8 @@ const asList = (v: unknown): NoticeAttachment[] =>
   Array.isArray(v) ? (v as NoticeAttachment[]).filter((a) => a && typeof a.path === "string") : [];
 
 export async function GET(request: Request, { params }: { params: Promise<{ noticeId: string }> }) {
-  const secret = process.env.CLASSNOTE_INTERNAL_SECRET;
-  if (!secretMatches(request.headers.get("x-eywa-internal"), secret)) {
+  const worker = await authorizeInternalWorker(request.headers.get("x-eywa-internal"));
+  if (!worker) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const { noticeId } = await params;
@@ -100,6 +100,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ noti
     .maybeSingle();
   // 공지 행이 없으면 첨부를 실을 수 없다 — 200+빈 목록으로 얼버무리면 워커가 글자만 게시한다. 404로 명확히.
   if (!notice) return NextResponse.json({ error: "notice_not_found" }, { status: 404 });
+  if (worker.tenantId && notice.tenant_id !== worker.tenantId) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const common = asList(notice.attachments);
   const targets = (Array.isArray(notice.targets) ? notice.targets : []) as {

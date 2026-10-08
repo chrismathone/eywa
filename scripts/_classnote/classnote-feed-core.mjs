@@ -711,7 +711,8 @@ export async function pollParentPostsOnce(sql, browser, { tenant, post, log = co
     // process-parent-posts.mjs --apply를 같이 돌림) → 그쪽이 이미 알렸으므로 **중복 insert 금지**, 워터마크만 최대로.
     // notifications엔 유니크 제약이 없어 중복이 그대로 벨에 쌓이므로 이 확인이 유일한 방어다.
     let raced = false;
-    await sql.begin(async (tx) => {
+    if (sql.agentOperation) ({ raced } = await sql.agentOperation("feed-posts", { lastSeenId, watermark, plan }));
+    else await sql.begin(async (tx) => {
       const [fresh] = await tx`
         select last_seen_post_id from classnote_feed_state
         where tenant_id = ${tenant} and scope = ${SCOPE} for update`;
@@ -1139,7 +1140,8 @@ export async function pollParentCommentsOnce(sql, browser, { tenant, post, log =
     // → 다음 폴에 재알림). notifications엔 유니크 제약이 없어 중복이 그대로 벨에 쌓이므로, 통째로 포기하고
     // 다음 폴에서 새로 읽는 게 유일하게 안전한 선택이다.
     let raced = false;
-    await sql.begin(async (tx) => {
+    if (sql.agentOperation) ({ raced } = await sql.agentOperation("feed-comments", { readAt, counts: pruneCounts(nextCounts, COMMENT_COUNTS_CAP), mark: old.mark && !holdEventMark ? old.mark : null, plan }));
+    else await sql.begin(async (tx) => {
       const [fresh] = await tx`
         select updated_at from classnote_feed_state
         where tenant_id = ${tenant} and scope = ${COMMENT_SCOPE} for update`;

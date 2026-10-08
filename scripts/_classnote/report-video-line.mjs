@@ -65,7 +65,7 @@ export async function fetchVideoSubmitLine({ base, shareBase, reportId, secret, 
   try {
     const res = await fetchImpl(`${base}/api/internal/video-submit-link`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-eywa-internal": secret },
+      redirect: "error", headers: { "content-type": "application/json", "x-eywa-internal": secret },
       body: JSON.stringify({ reportId }),
       signal: AbortSignal.timeout(timeoutMs),
     });

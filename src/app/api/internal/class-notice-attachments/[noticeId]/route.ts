@@ -1,4 +1,4 @@
-import { secretMatches } from "@/lib/http/secret-compare";
+import { authorizeInternalWorker } from "@/features/sync-agent/server/internal-auth";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveTenantReadUrls } from "@/lib/storage/media-storage";
@@ -17,8 +17,8 @@ import { classNoticeAttachmentsOf } from "@/features/report-admin/class-notice";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request, { params }: { params: Promise<{ noticeId: string }> }) {
-  const secret = process.env.CLASSNOTE_INTERNAL_SECRET;
-  if (!secretMatches(request.headers.get("x-eywa-internal"), secret)) {
+  const worker = await authorizeInternalWorker(request.headers.get("x-eywa-internal"));
+  if (!worker) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const { noticeId } = await params;
@@ -30,6 +30,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ noti
     .eq("id", noticeId)
     .maybeSingle();
   if (!notice) return NextResponse.json({ error: "notice_not_found" }, { status: 404 });
+  if (worker.tenantId && notice.tenant_id !== worker.tenantId) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const list = classNoticeAttachmentsOf(notice.targets);
   let urls: Record<string, string> = {};

@@ -67,16 +67,18 @@ function messageDateOf(row: PendingRow): string {
   return kstToday(new Date(row.posted_at ?? row.created_at));
 }
 
-export async function classifyPendingParentMessages(): Promise<ClassifyOutcome> {
+export async function classifyPendingParentMessages(tenantId?: string): Promise<ClassifyOutcome> {
   const db = createAdminClient();
   const out: ClassifyOutcome = { scanned: 0, classified: 0, attendance: 0, notified: 0, failed: 0 };
 
-  const { data: pending, error } = await db
+  let pendingQuery = db
     .from("classnote_parent_messages")
     .select("id, tenant_id, content, posted_at, created_at, student_id")
     .is("classified_at", null)
     .order("created_at", { ascending: true })
     .limit(MAX_PER_RUN);
+  if (tenantId) pendingQuery = pendingQuery.eq("tenant_id", tenantId);
+  const { data: pending, error } = await pendingQuery;
   if (error) throw new Error(`미분류 학부모 연락 조회 실패: ${error.message}`);
 
   const rows = (pending ?? []) as PendingRow[];
@@ -155,7 +157,7 @@ export async function classifyPendingParentMessages(): Promise<ClassifyOutcome> 
   }
 
   // 알림은 **분류와 분리된 스윕**으로 보낸다(아래 함수 주석 참조 — 중복·유실·벨폭탄을 한 번에 막는다).
-  out.notified += await notifyPending(db);
+  out.notified += await notifyPending(db, tenantId);
   return out;
 }
 
@@ -169,10 +171,10 @@ export async function classifyPendingParentMessages(): Promise<ClassifyOutcome> 
  *     notifications엔 유니크 제약이 없어 중복이 그대로 벨에 쌓이므로, **조건부 update로 먼저 선점**한다.
  *  ③ **벨 폭탄**: 아래 age 가드 — 토글을 나중에 켜면 과거분이 통째로 쏟아지는 것을 막는다.
  */
-async function notifyPending(db: ReturnType<typeof createAdminClient>): Promise<number> {
+async function notifyPending(db: ReturnType<typeof createAdminClient>, tenantId?: string): Promise<number> {
   const COLUMNS = "id, tenant_id, content, posted_at, created_at, student_id, category, starts_on, ends_on, detail";
-  const pendingRows = (columns: string) =>
-    db
+  const pendingRows = (columns: string) => {
+    const query = db
       .from("classnote_parent_messages")
       .select(columns)
       .not("classified_at", "is", null)
@@ -180,6 +182,8 @@ async function notifyPending(db: ReturnType<typeof createAdminClient>): Promise<
       .neq("category", "none")
       .order("created_at", { ascending: true })
       .limit(MAX_PER_RUN);
+    return tenantId ? query.eq("tenant_id", tenantId) : query;
+  };
   // 🔴 `cross_teacher_ids`(0331a)는 SQL을 손으로 적용하기 전에도 앱이 돈다(#95) — 그 칸이 없어서 실패한 것이면(42703) 그 칸 없이 다시 읽는다.
   //    여기서 그냥 실패하면 출결 알림 전체가 조용히 멈춘다. 다른 실패는 종전대로 이번 킥을 건너뛴다(다음 킥이 이어받는다).
   let res = await pendingRows(`${COLUMNS}, cross_teacher_ids`);

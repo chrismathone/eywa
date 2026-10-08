@@ -5,6 +5,10 @@ import type { TenantSettings } from "@/features/owner/settings-types";
 import { SheetsFace } from "./sheets-face";
 import { SlackCard } from "./slack-card";
 import { VideoDriveCard } from "./video-drive-card";
+import { AgentCard } from "./agent-card";
+import { agentTabAvailable } from "@/features/sync-agent/server/availability";
+import { getMakeeduSyncWorkers } from "@/features/integrations/server/makeedu-sync";
+import { MakeeduWorkerStatus } from "./makeedu-worker-status";
 
 /**
  * 학원 설정 '연동' 면 = **켜진 연동만 내부 탭으로**(원장 2026-09-28 *"연동 탭이 좀 깔끔해지도록 (현재 너무 세로스크롤이
@@ -13,9 +17,9 @@ import { VideoDriveCard } from "./video-drive-card";
  * 2026-10-04 — 숙제 영상을 받는 기능이 그 모듈에 있다). 꺼진 연동은 탭도 조회도 없다.
  * 주소 `?tab=sheets&sub=slack|makeedu|sheets|video` — 고른 탭만 서버에서 읽는다(무거운 면 지연, FaceTabs 규약).
  */
-export type IntegrationSub = "slack" | "makeedu" | "sheets" | "video";
+export type IntegrationSub = "slack" | "makeedu" | "sheets" | "video" | "agent";
 
-const LABEL: Record<IntegrationSub, string> = { slack: "슬랙", makeedu: "makeedu 동기화", sheets: "구글 시트", video: "숙제영상 드라이브" };
+const LABEL: Record<IntegrationSub, string> = { slack: "슬랙", makeedu: "makeedu 동기화", sheets: "구글 시트", video: "숙제영상 드라이브", agent: "연동 PC" };
 
 export async function IntegrationsFace({
   sub,
@@ -31,7 +35,7 @@ export async function IntegrationsFace({
   isEmbed: boolean;
 }) {
   // 슬랙 탭 = 설정 게이트와 같은 판정(지점 스위치 ∧ 원장·총괄) — 위임 관리자에게 빈 슬랙 탭이 첫 탭으로 뜨지 않게.
-  const gate = await slackGate(false);
+  const [gate,agentOn] = await Promise.all([slackGate(false),agentTabAvailable(modulesOn.makeedu||classnoteModuleOn(settings))]);
   const slackOn = !("error" in gate);
   const available: IntegrationSub[] = [
     ...(slackOn ? (["slack"] as const) : []),
@@ -39,6 +43,7 @@ export async function IntegrationsFace({
     ...(modulesOn.sheets ? (["sheets"] as const) : []),
     // 숙제영상 드라이브 = ClassNote 기능이 있는 지점만(조회·저장 서버 게이트와 같은 판정 — drive-settings-actions).
     ...(classnoteModuleOn(settings) ? (["video"] as const) : []),
+    ...(agentOn ? (["agent"] as const) : []),
   ];
   if (available.length === 0) {
     return (
@@ -67,6 +72,19 @@ export async function IntegrationsFace({
         />
       ) : null}
       {active === "video" ? <VideoDriveCard /> : null}
+      {active === "agent" ? <>
+        <AgentCard classnoteOn={classnoteModuleOn(settings)} makeeduOn={modulesOn.makeedu} />
+        {modulesOn.makeedu?<LegacyMakeeduPC />:null}
+      </> : null}
     </div>
   );
+}
+
+async function LegacyMakeeduPC() {
+  // Server request timestamp for the legacy heartbeat display.
+  // eslint-disable-next-line react-hooks/purity
+  const nowMs=Date.now();
+  const workers=await getMakeeduSyncWorkers(nowMs);
+  if(!workers.length)return null;
+  return <section className="space-y-2"><h2 className="text-sm font-bold">기존 동기화 PC</h2><MakeeduWorkerStatus workers={workers} nowMs={nowMs} /></section>;
 }

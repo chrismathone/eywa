@@ -147,6 +147,7 @@ export async function runScopedSync(sql, browser, { tenant, scope: rawScope, log
  * @returns {Promise<{finished:boolean, requeued:boolean}>}
  */
 async function finish(sql, tenant, id, { status, result, error }) {
+  if (sql.agentOperation) return sql.agentOperation("finish-class-sync", { id, status, result, error });
   return sql.begin(async (tx) => {
     const [row] = await tx`update classnote_sync_requests set status = ${status}, finished_at = now(), result = ${sql.json(result)}, error = ${error}
       where id = ${id} and status = 'running' returning next_scope`;

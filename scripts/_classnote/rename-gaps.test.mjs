@@ -4,9 +4,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { classBoardKeys, classBoardStudentOf } from "./class-board-keys.mjs";
 import { homonymPhoneGate } from "./homonym-phone-gate.mjs";
-import { LOCAL_LOCK_STALE_MS, acquireLocalWorkerLock, decideWorkerLease } from "./worker-lease.mjs";
+import { createLocalWorkerLock, decideWorkerLease } from "./worker-lease.mjs";
 import { evaluateBoardSafety } from "./board-safety.mjs";
-import os from "node:os";
+import { randomUUID } from "node:crypto";
 
 vi.mock("@playwright/test", () => ({ chromium: {} }));
 const { findChildReportId } = await import("./classnote-admin-core.mjs");
@@ -86,41 +86,45 @@ describe("G6 — 실게시 워커는 지점당 한 대", () => {
     alive,
     post_mode,
   });
-  it("먼저 시작한 살아 있는 PC가 주인", () => {
+  it("시작 시각과 PC 이름만으로 실행 권한을 부여하지 않는다", () => {
     const rows = [row("PC-A", 60, true), row("PC-B", 5, true)];
-    expect(decideWorkerLease({ rows, me: "PC-B" })).toEqual({ owner: false, holder: "PC-A" });
-    expect(decideWorkerLease({ rows, me: "PC-A" }).owner).toBe(true);
+    expect(decideWorkerLease({ rows, me: "PC-B" })).toEqual({ owner: false, holder: null });
+    expect(decideWorkerLease({ rows, me: "PC-A" }).owner).toBe(false);
   });
-  it("주인이 죽었으면(DB 시계로 판정한 alive=false) 다음 PC가 이어받는다", () => {
-    expect(decideWorkerLease({ rows: [row("PC-A", 60, false), row("PC-B", 5, true)], me: "PC-B" }).owner).toBe(true);
+  it("기존 heartbeat가 만료돼도 새 서버 승인 없이 이어받지 않는다", () => {
+    expect(decideWorkerLease({ rows: [row("PC-A", 60, false), row("PC-B", 5, true)], instanceId: "new-instance" }).owner).toBe(false);
   });
   it("dry-run PC(표식 없음·false)는 주인이 되지 않는다", () => {
-    const rows = [row("DEV", 600, true, false), row("OLD", 600, true, null), row("PC-B", 5, true)];
-    expect(decideWorkerLease({ rows, me: "PC-B" }).owner).toBe(true);
+    const rows = [row("DEV", 600, true, false), row("OLD", 600, true, null)]
+      .map((item) => ({ ...item, instance_id: "dry-instance" }));
+    expect(decideWorkerLease({ rows, instanceId: "dry-instance" }).owner).toBe(false);
   });
-  it("같은 PC 두 번째 워커 — 살아 있는 다른 pid가 잠금을 쥐면 거절, 죽은 pid면 이어받는다", () => {
-    const f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "lease-")), "worker.lock");
-    expect(acquireLocalWorkerLock(f, process.pid)).toBe(true);
-    expect(acquireLocalWorkerLock(f, process.pid + 999999)).toBe(false); // 나(살아 있음)가 쥐고 있다
-    fs.writeFileSync(f, "999999999"); // 없는 pid
-    expect(acquireLocalWorkerLock(f, process.pid)).toBe(true);
-    expect(acquireLocalWorkerLock(null)).toBe(true); // 폴더 없음 = 막지 않는다
+  it("같은 PC 두 번째 워커는 OS 소유권 해제 후에만 이어받는다", async () => {
+    const scope = `rename-audit:${randomUUID()}`;
+    const first = createLocalWorkerLock(scope), next = createLocalWorkerLock(scope);
+    const missing = createLocalWorkerLock(null);
+    try {
+      expect(await first.acquire()).toBe(true);
+      expect(await next.acquire()).toBe(false);
+      await first.release();
+      expect(await next.acquire()).toBe(true);
+      expect(await missing.acquire()).toBe(false);
+    } finally { await Promise.all([first.release(), next.release(), missing.release()]); }
   });
-  it("🔴 pid 재사용 — 살아 있는 남의 pid라도 잠금 파일이 오래 안 갱신됐으면 이어받는다(워커 영구 휴면 방지)", () => {
-    const f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "lease-")), "worker.lock");
-    fs.writeFileSync(f, String(process.pid)); // '살아 있는' pid(이 테스트 프로세스)가 쥔 것처럼
-    const later = Date.now() + LOCAL_LOCK_STALE_MS + 1_000;
-    expect(acquireLocalWorkerLock(f, process.pid + 999999)).toBe(false); // 방금 갱신 = 주인 인정
-    expect(acquireLocalWorkerLock(f, process.pid + 999999, later)).toBe(true); // 오래됨 = 이어받음
+  it("시계가 앞으로 뛰어도 살아 있는 OS 잠금을 빼앗지 않는다", async () => {
+    const scope = `rename-clock:${randomUUID()}`;
+    const first = createLocalWorkerLock(scope), next = createLocalWorkerLock(scope);
+    const later = Date.now() + 24 * 60 * 60_000;
+    const clock = vi.spyOn(Date, "now");
+    try {
+      expect(await first.acquire()).toBe(true);
+      clock.mockReturnValue(later);
+      expect(await next.acquire()).toBe(false);
+    } finally { clock.mockRestore(); await Promise.all([first.release(), next.release()]); }
   });
-  it("배선 — 임대는 DB 시계·폴과 따로 갱신·같은 PC 잠금 · stale·멈춤복구는 게시 상한보다 길다 · 게시 직전 처리 시각 갱신", () => {
-    const watch = read("watch-classnote-queue.mjs");
-    expect(watch).toContain("decideWorkerLease({ rows, me: HOSTNAME })");
-    expect(watch).toContain("(now() - last_seen) <= make_interval(secs => ${LEASE_SECONDS}) as alive");
-    expect(watch).toContain("LEASE_REFRESH_MS).unref()");
-    expect(watch).toContain('acquireLocalWorkerLock(stateFile("worker.lock"))');
-    expect(watch).toContain('touchLocalWorkerLock(stateFile("worker.lock"))');
-    expect(watch).toContain("postMode: POST");
+  // 실제 실행기 잠금 배선은 watch-classnote-lease.test.mjs의 실행 시험으로 검증한다.
+  // DB 인계 경쟁은 _sync-agent/lease-db-check.cjs, 프로세스 종료는 worker-lease.test.mjs.
+  it("stale·멈춤복구는 게시 상한보다 길고 게시 직전 처리 시각을 갱신한다", () => {
     const core = read("classnote-core.mjs");
     const stale = Number(core.match(/export const STALE_MIN = (\d+);/)[1]);
     const postMin = Number(core.match(/export const POST_TIMEOUT_MS = (\d+) \* 60_000;/)[1]);

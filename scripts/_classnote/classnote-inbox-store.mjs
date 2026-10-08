@@ -158,7 +158,7 @@ export async function kickClassify(log = console.log) {
   try {
     const res = await fetch(`${base.replace(/\/$/, "")}/api/internal/parent-messages/classify`, {
       method: "POST",
-      headers: { "x-eywa-internal": secret },
+      redirect: "error", headers: { "x-eywa-internal": secret },
       signal: AbortSignal.timeout(KICK_TIMEOUT_MS),
     });
     const body = await res.json().catch(() => ({}));

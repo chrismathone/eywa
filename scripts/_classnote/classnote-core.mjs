@@ -1,3 +1,4 @@
+import { protectScreenshotHeaders } from "./screenshot-auth.mjs";
 // scripts/_classnote/classnote-core.mjs — ClassNote 발송 처리 코어 (one-shot·데몬 공용).
 //
 // stale 복구 + SKIP LOCKED 원자 클레임 + 건별 스크린샷·내부 API 게시·재시도 로직을 processQueueOnce로 묶어
@@ -268,7 +269,7 @@ export async function sendReportViaApi(adminPage, { report, studentName, boardId
   if (fileAtts.length) {
   let epStatus = 0;
   const ep = await fetch(`${base}/api/internal/report-attachments/${report.id}`, {
-    headers: INTERNAL_SECRET ? { "x-eywa-internal": INTERNAL_SECRET } : {},
+    redirect: "error", headers: INTERNAL_SECRET ? { "x-eywa-internal": INTERNAL_SECRET } : {},
   })
     .then(async (r) => {
       epStatus = r.status;
@@ -803,8 +804,8 @@ export async function processQueueOnce(sql, browser, opts) {
       const ctx = await browser.newContext({
         viewport: { width: 800, height: 1200 },
         deviceScaleFactor: 2,
-        ...(INTERNAL_SECRET ? { extraHTTPHeaders: { "x-eywa-internal": INTERNAL_SECRET } } : {}),
       });
+      await protectScreenshotHeaders(ctx,base,INTERNAL_SECRET);
       const page = await ctx.newPage();
       // waitUntil은 'domcontentloaded' — 'networkidle'은 /r이 로고 이미지를 Firebase 서명 URL로 불러오는데
       // 발송 PC 망에서 그 요청이 늘어지면 '네트워크 완전 정지'가 영영 안 떠 30초 타임아웃(실측 2026-07-10).

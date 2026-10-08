@@ -19,10 +19,15 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import postgres from "postgres";
+import { randomUUID } from "node:crypto";
 import { isWorkerIssueLine } from "./worker-issue-filter.mjs";
 import { stateDirLabel, stateFile } from "./classnote-paths.mjs";
 import { DEFAULT_KEEP_DAYS, DEFAULT_MAX_BYTES, archiveName, needsRotation, pruneList, uniqueArchiveName } from "./log-rotation.mjs";
-import { LEASE_REFRESH_MS, LEASE_SECONDS, acquireLocalWorkerLock, touchLocalWorkerLock, decideWorkerLease } from "./worker-lease.mjs";
+import { LEASE_REFRESH_MS, LEASE_SECONDS, createLocalWorkerLock } from "./worker-lease.mjs";
+import { createExecutionLease, workerLeaseApi } from "./worker-execution-lease.mjs";
+import managedWorker from "../_sync-agent/managed-worker.cjs";
+import { waitForVideoIdle } from "./video-worker.mjs";
+import { waitForAttachmentIdle } from "./repair-attachment-messages.mjs";
 import { BATCH, closeClassnoteAdminSession, isClassnoteModuleEnabled, launchBrowser, processQueueOnce, resolveTenant } from "./classnote-core.mjs";
 import { processNoticesOnce } from "./classnote-notice-core.mjs";
 import { processRecallsOnce } from "./classnote-recall-core.mjs";
@@ -76,6 +81,7 @@ function maybeRotateLog(nowMs) {
 }
 const HOSTNAME = os.hostname();
 const STARTED_AT = new Date().toISOString(); // 이 데몬 프로세스 시작 시각(재시작 감지)
+const INSTANCE_ID = randomUUID(); // hostname is display-only; a new process gets a new identity
 
 // 최근 경고/오류 몇 줄 — 하트비트에 실어 **aywa 화면에서 바로 본다**(연동 PC 파일을 열 수 없을 때의 생명줄).
 // ⚠️ 로그 파일이 안 써지던 사고(2026-07-21) 재발 시에도 원인이 웹에 남게 하는 안전망.
@@ -181,6 +187,7 @@ function noteResult(key, value) {
   }
   if (typeof value?.error === "string" && value.error) out.error = value.error.slice(0, 200);
   lastResults[key] = out;
+  if(managedWorker.managed) managedWorker.result(key,value);
 }
 
 // 심장박동(0084a) — 이 PC가 발송 담당·살아있음을 매 폴마다 기록. best-effort(실패해도 처리 계속).
@@ -194,6 +201,8 @@ async function heartbeat(tenant, driveSetting) {
     videoArchive: videoArchiveHeartbeat(driveSetting),
     videoStorage: videoStorageStatus(process.env, videoStorageKeyFor(driveSetting)), // 그 계정의 실제 문턱(앱 '영상 보관' 줄)
     postMode: POST, // 실게시 PC 표식 — 지점당 한 대 임대(worker-lease.mjs)가 이 값을 센다(dry-run PC는 주인이 안 된다)
+    executionInstanceId: INSTANCE_ID,
+    executionLeaseVersion: 1,
     env: {
       logDir: stateDirLabel(),
       recent: recentIssues.slice(-RECENT_MAX),
@@ -209,7 +218,27 @@ async function heartbeat(tenant, driveSetting) {
       set last_seen = now(), started_at = excluded.started_at, last_results = excluded.last_results`;
 }
 
-let localLockHeld = true;
+let localLock = null;
+let leaseTenant = null;
+let executionLease = null;
+let leaseSql = null;
+function stopAfterLeaseLoss() {
+  log("[중단] 실행 잠금을 확인하지 못해 워커를 종료합니다. 진행 결과를 확인한 뒤 다시 시작합니다.");
+  // Exit the worker so background video/attachment tasks cannot keep writing after ownership loss.
+  // Work already accepted by an external service is reconciled by the existing job handlers.
+  process.exit(1);
+}
+async function assertExecutionLease() {
+  if (!localLock?.held) stopAfterLeaseLoss();
+  if (POST && !executionLease) stopAfterLeaseLoss();
+  if (POST) executionLease.assertHeld();
+  if(managedWorker.managed&&(await managedWorker.state("stage")).drain)throw Object.assign(new Error("작업 종료 요청"),{code:"AGENT_DRAIN"});
+}
+async function finishDraining(){
+  await Promise.allSettled([waitForVideoIdle(),waitForAttachmentIdle()]);
+  await dropBrowser();await dropDb();await executionLease?.release?.();
+  await leaseSql?.end({timeout:1});await localLock?.release();
+}
 async function main() {
   if (!process.env.DATABASE_URL) { console.error("DATABASE_URL 없음"); process.exit(1); }
   if (POST && (!process.env.CLASSNOTE_UPLOAD_ID || !process.env.CLASSNOTE_UPLOAD_PW)) {
@@ -227,22 +256,69 @@ async function main() {
   // 임대 유지 — 한 폴이 몇 분 걸려도(매일 동기화·밀린 배치) 하트비트가 끊기지 않게 폴과 따로 last_seen만 갱신한다.
   if (POST)
     setInterval(() => {
-      if (!tenantId || !localLockHeld) return;
-      touchLocalWorkerLock(stateFile("worker.lock"));
-      db()`update classnote_workers set last_seen = now() where tenant_id = ${tenantId} and hostname = ${HOSTNAME}`.catch(() => {});
+      if (!tenantId || !localLock?.held || !executionLease?.held) return;
+      db()`update classnote_workers set last_seen = now() where tenant_id = ${tenantId} and hostname = ${HOSTNAME}
+        and last_results->>'executionInstanceId' = ${INSTANCE_ID}`.catch(() => {});
     }, LEASE_REFRESH_MS).unref();
   let backlogFastPoll = false; // 직전 주기가 배치를 꽉 채워 성공했는가 = 밀린 큐 → 다음 주기 즉시 진행
   for (;;) {
     try {
+      if (managedWorker.managed && (await managedWorker.state("cycle")).drain) {
+        await finishDraining();
+        return;
+      }
       const tenant = await getTenant();
-      // 같은 PC 두 번째 워커 창은 하트비트도 쓰지 않는다(같은 행을 덮어 시작 시각이 바뀌면 PC 사이 순서가 흔들린다).
-      localLockHeld = acquireLocalWorkerLock(stateFile("worker.lock"));
+      if (!managedWorker.managed && await managedWorker.legacyCutover(db(), tenant)) {
+        log("[중단] 이 지점은 통합 연동 앱으로 전환되었습니다.");
+        process.exit(0);
+        return;
+      }
+      if (leaseTenant && leaseTenant !== tenant) { stopAfterLeaseLoss(); return; }
+      leaseTenant = tenant;
+      localLock ??= createLocalWorkerLock(`classnote:${tenant}`);
+      if (!(await localLock.acquire())) {
+        if (leaseHolderLogged !== "local") log("[안내] 다른 워커가 실행 중이거나 실행 잠금을 사용할 수 없어 대기합니다.");
+        leaseHolderLogged = "local";
+        backlogFastPoll = false;
+        await new Promise((r) => setTimeout(r, POLL_MS));
+        continue;
+      }
+      if (POST) {
+        // Older workers do not participate in the new atomic lease. Do not overwrite
+        // their heartbeat before this check, especially when hostnames are identical.
+        const [legacy] = await db()`select exists(select 1 from classnote_workers where tenant_id = ${tenant}
+          and last_results->>'postMode' = 'true'
+          and last_results->>'executionLeaseVersion' is distinct from '1'
+          and (now() - last_seen) <= make_interval(secs => ${LEASE_SECONDS})) as active`;
+        if (legacy?.active) {
+          if (executionLease?.held) { stopAfterLeaseLoss(); return; }
+          if (leaseHolderLogged !== "legacy") log("[안내] 이전 워커의 종료 확인을 기다립니다. 이전 발송 PC 작업을 먼저 중지하세요.");
+          leaseHolderLogged = "legacy";
+          backlogFastPoll = false;
+          await new Promise((r) => setTimeout(r, POLL_MS));
+          continue;
+        }
+        leaseSql ??= postgres(process.env.DATABASE_URL, { prepare: false, max: 1, connect_timeout: 10 });
+        executionLease ??= createExecutionLease(workerLeaseApi(leaseSql, tenant, INSTANCE_ID), {
+          localHeld: () => localLock?.held === true, onLost: stopAfterLeaseLoss,
+        });
+        if (!(await executionLease.acquire())) {
+          if (leaseHolderLogged !== "server") log("[안내] 다른 PC가 작업을 맡고 있어 대기합니다.");
+          leaseHolderLogged = "server";
+          backlogFastPoll = false;
+          await new Promise((r) => setTimeout(r, POLL_MS));
+          continue;
+        }
+      }
+      if (leaseHolderLogged) log("[안내] 실행 잠금을 확인했습니다. 작업을 이어갑니다.");
+      leaseHolderLogged = null;
+      await assertExecutionLease();
       // 이 폴의 영상 설정. 폴마다 다시 읽는다 — 프로세스 수명의 캐시는 해제 뒤에도 큐에 넣는다.
       let driveSetting = { enabled: false, rootId: null, source: "none" };
       try { driveSetting = await loadWorkerVideoDriveSetting(db(), tenant); }
       catch { driveSetting = { enabled: false, rootId: null, source: "unknown", error: true }; }
       // 0) 심장박동 — best-effort라 실패해도 처리 계속. 루트는 이번 폴의 실제 설정이다.
-      if (localLockHeld) await heartbeat(tenant, driveSetting).catch((e) => log(`heartbeat 실패(무시): ${e.message}`));
+      await heartbeat(tenant, driveSetting).catch((e) => log(`상태 전송 실패: ${e.message}`));
       // 0-a) 이 학원에서 ClassNote 기능(모듈)이 꺼져 있으면 아무것도 하지 않는다(발송·공지·회수·동기화·피드·읽음 전부).
       //      원장 2026-09-30 "꺼지면 있었는지조차 모르게". 켜지면 다음 폴부터 그대로 이어서 처리한다(큐 보존).
       if (!(await isClassnoteModuleEnabled(db(), tenant))) {
@@ -253,28 +329,9 @@ async function main() {
         continue;
       }
       moduleOffLogged = false;
-      // 0-b) 실게시 워커는 지점당 한 대(개명 감사 G6) — 다른 PC가 먼저 돌고 있으면 이 PC는 쉰다(그 PC가 멈추면 90초 뒤 이어받는다).
-      if (POST) {
-        // 같은 PC 두 번째 인스턴스(④) — 잠금 파일. PC 사이(③)는 DB 시계로 본 하트비트.
-        const localOk = localLockHeld;
-        const rows = localOk
-          ? await db()`select hostname, started_at, (last_results->>'postMode')::boolean as post_mode,
-              (now() - last_seen) <= make_interval(secs => ${LEASE_SECONDS}) as alive
-              from classnote_workers where tenant_id = ${tenant}`
-          : [];
-        const lease = localOk ? decideWorkerLease({ rows, me: HOSTNAME }) : { owner: false, holder: `${HOSTNAME}(같은 PC의 다른 워커 창)` };
-        if (!lease.owner) {
-          if (leaseHolderLogged !== lease.holder) log(`[안내] 다른 PC에서 워커가 이미 실행 중입니다(${lease.holder}) — 이 PC는 쉽니다. 한 대만 켜 두세요.`);
-          leaseHolderLogged = lease.holder;
-          backlogFastPoll = false;
-          await new Promise((r) => setTimeout(r, POLL_MS));
-          continue;
-        }
-        if (leaseHolderLogged) log("[안내] 이 PC가 발송 담당을 이어받았습니다.");
-        leaseHolderLogged = null;
-      }
       // 1) 큐 한 주기 처리(공용 코어).
       const b = await getBrowser();
+      await assertExecutionLease();
       const s = await processQueueOnce(db(), b, { tenant, post: POST, log });
       if (s.claimed) {
         log(`처리 완료 — 성공 ${s.success} / 실패 ${s.failed} / 재큐 ${s.requeued} / stale복구 ${s.stale}`);
@@ -287,6 +344,7 @@ async function main() {
       // 아래 부가 폴러(공지·프로비저닝·피드·읽음 등)는 전부 자체 시간 가드가 있어 즉시 재호출돼도 no-op.
       backlogFastPoll = s.claimed >= BATCH && s.success > 0;
       // 2) 반 공지 큐(classnote_notices) — 내부 API 게시(별 코어). 실패해도 보고서 큐와 독립.
+      await assertExecutionLease();
       const nres = await processNoticesOnce(db(), b, { tenant, post: POST, log }).catch((e) => {
         log(`[notice] 처리 오류(다음 폴에서 재시도): ${e.message}`);
         noteResult("notice", { error: e.message });
@@ -297,6 +355,7 @@ async function main() {
         noteResult("notice", nres);
       }
       // 2-a) 반 단체 공지 큐(classnote_class_notices, 0304a) — 반 보드에 공지 1건. 원생 개별 공지(위)와 별개.
+      await assertExecutionLease();
       const cnres = await processClassNoticesOnce(db(), b, { tenant, post: POST, log }).catch((e) => {
         log(`[class-notice] 처리 오류(다음 폴에서 재시도): ${e.message}`);
         noteResult("classNotice", { error: e.message });
@@ -307,6 +366,7 @@ async function main() {
       //      ⚠️ 발송 킬스위치엔 걸지 않는다(회수는 사고 수습이라 스위치를 내린 상황에서 가장 급하다).
       // ⚠️ 변수명은 `recallRes` — 아래 읽음 동기화가 이미 `rres`를 쓴다(같은 블록 스코프라 중복 선언 =
       //    **파일 전체 문법 오류**로 데몬이 아예 기동 못 한다. 2026-08-06 실측으로 걸렀다).
+      await assertExecutionLease();
       const recallRes = await processRecallsOnce(db(), b, { tenant, post: POST, log }).catch((e) => {
         log(`[recall] 처리 오류(다음 폴에서 재시도): ${e.message}`);
         noteResult("recall", { error: e.message });
@@ -320,11 +380,13 @@ async function main() {
       //      새벽 정기 동기화(아래 3·3-a)의 '오늘 함' 표식은 건드리지 않는다(한 폴 루프라 둘이 동시에 돌 수 없다).
       // 2-c-0) 반 보드 자동 동기화(2026-10-03) — 1분에 한 번 aywa DB만 보고, 지난 동기화 기록과 달라진 반이 있으면 **요청 한 줄**을 넣는다.
       //        바로 아래 2-c가 그 요청을 버튼과 같은 길로 집어 실행한다. 스스로 오류를 삼킨다(대조가 실패해도 발송은 계속).
+      await assertExecutionLease();
       const asres = await autoSyncTick(db(), { tenant, post: POST, log }).catch((e) => {
         log(`[auto-sync] 처리 오류(다음에 다시): ${e.message}`);
         return { checked: false };
       });
       if (asres.requested) noteResult("autoSync", { requested: asres.requested });
+      await assertExecutionLease();
       const snres = await processSyncRequestOnce(db(), b, { tenant, post: POST, host: HOSTNAME, log }).catch((e) => {
         log(`[sync-now] 처리 오류(다음 폴에서 재시도): ${e.message}`);
         noteResult("syncNow", { error: e.message });
@@ -333,6 +395,7 @@ async function main() {
       if (snres.ran) noteResult("syncNow", { ok: snres.ok ? 1 : 0 });
       // 2-d) 학부모 글·댓글 답글(0317a) — 앱에서 쓴 답글을 그 글에 댓글로 게시·수정·삭제. 한 폴에 한 건(드물다).
       //      발송 킬스위치·모듈을 따르고, 모드(학원 설정 '학부모 글 답글·공감' — 끔·시험·전체)는 코어가 폴마다 DB에서 다시 읽는다(끔이면 아무것도 안 집는다).
+      await assertExecutionLease();
       const rpres = await processParentRepliesOnce(db(), b, { tenant, post: POST, host: HOSTNAME, log }).catch((e) => {
         log(`[reply] 처리 오류(다음 폴에서 재시도): ${e.message}`);
         noteResult("parentReply", { error: e.message });
@@ -340,6 +403,7 @@ async function main() {
       });
       if (rpres.ran) noteResult("parentReply", { ok: rpres.ok ? 1 : 0 });
       // 2-e) 학부모 글·댓글 공감(0319a) — 앱에서 누른 공감을 그 글·댓글에 누르거나 푼다. 답글과 같은 모드·가드·허가증. 한 폴에 한 건.
+      await assertExecutionLease();
       const rxres = await processParentReactionsOnce(db(), b, { tenant, post: POST, host: HOSTNAME, log }).catch((e) => {
         log(`[reaction] 처리 오류(다음 폴에서 재시도): ${e.message}`);
         noteResult("parentReaction", { error: e.message });
@@ -347,6 +411,7 @@ async function main() {
       });
       if (rxres.ran) noteResult("parentReaction", { ok: rxres.ok ? 1 : 0 });
       // 3) 일일 프로비저닝(신규생 보드 생성 + 가입자 자동 배정) — KST 05시 이후 하루 1회(가드 내장).
+      await assertExecutionLease();
       const pres = await provisionDailyOnce(db(), b, { tenant, post: POST, log }).catch((e) => {
         log(`[provision] 오류(내일 재시도): ${e.message}`);
         noteResult("provision", { error: e.message });
@@ -357,6 +422,7 @@ async function main() {
         noteResult("provision", pres);
       }
       // 3-a) 수학 반 보드 매일 동기화(새 반·이름 변경·신입 배정·담임·0302a 기록) — KST 05시 이후 하루 1회, 반 보드를 쓰는 지점만.
+      await assertExecutionLease();
       const cbres = await syncMathClassBoardsDaily(db(), b, { tenant, post: POST, log }).catch((e) => {
         log(`[class-board] 동기화 중단(내일 재시도): ${e.message}`);
         noteResult("classBoardSync", { error: e.message });
@@ -366,6 +432,7 @@ async function main() {
       // 3.5) 원아 ID 매핑(0184a, 읽기 전용 GET) — 학부모 연락에서 **그룹반(영어) 학생까지** 특정하려면 선행돼야 한다.
       //      KST 하루 1회 가드 내장. ⚠️ `--post`와 무관하게 돈다 — ClassNote에 쓰지 않고 aywa 한 컬럼만 채우는
       //      사실 데이터라(프로비저닝 스냅샷·읽음 동기화와 같은 취지), 발송이 꺼져 있어도 매핑은 최신이어야 한다.
+      await assertExecutionLease();
       const mres = await syncChildMapOnce(db(), b, { tenant, apply: true, log }).catch((e) => {
         log(`[원아매핑] 오류(내일 재시도): ${e.message}`);
         noteResult("childmap", { error: e.message });
@@ -381,6 +448,7 @@ async function main() {
         driveSettingUnreadLogged = false;
         // 4) 학부모 새 글 감지(인바운드, 읽기 전용) → 담당 강사 aywa 알림. 1분 가드 내장이라 대부분 즉시 no-op.
         //    ClassNote에 아무것도 쓰지 않는다. 실패해도 발송 큐와 독립.
+        await assertExecutionLease();
         const fres = await pollParentPostsOnce(db(), b, { tenant, post: POST, log, archiveEnabled: driveSetting.enabled }).catch((e) => {
           log(`[feed] 오류(다음 폴에서 재시도): ${e.message}`);
           noteResult("posts", { error: e.message });
@@ -390,6 +458,7 @@ async function main() {
         // 5) 학부모 댓글 감지(인바운드, 읽기 전용) → 담당 강사 aywa 알림. 10분 가드 내장.
         //    ⚠️ 4)와 별 폴러인 이유 = 감지 방식이 다르다(글=워터마크 1페이지 / 댓글=감시 창 전체 재조회).
         //    실측상 학부모 연락의 다수가 댓글로 온다(댓글 12건/일 vs 새 글 4.2건/일). 실패해도 나머지와 독립.
+        await assertExecutionLease();
         const cres = await pollParentCommentsOnce(db(), b, { tenant, post: POST, log, archiveEnabled: driveSetting.enabled }).catch((e) => {
           log(`[comment] 오류(다음 폴에서 재시도): ${e.message}`);
           noteResult("comments", { error: e.message });
@@ -397,10 +466,12 @@ async function main() {
         });
         if (cres.ran) noteResult("comments", cres);
       }
+      await assertExecutionLease();
       if (POST) kickVideoWorker(b, tenant, log, { setting: driveSetting });
       // 6) 학부모 읽음 동기화(0122a, 읽기 전용 GET) → aywa lesson_reports.classnote_read_at.
       //    ⚠️ ClassNote에 아무것도 쓰지 않으므로 --post와 무관하게 돈다(읽음은 사실 데이터).
       //    30분 가드 내장. 읽음은 발송 뒤 며칠에 걸쳐 채워져 워터마크 없이 창(14일)을 매번 재조회한다.
+      await assertExecutionLease();
       const rres = await pollReportReadsOnce(db(), b, { tenant, log }).catch((e) => {
         log(`[읽음] 오류(다음 폴에서 재시도): ${e.message}`);
         noteResult("reads", { error: e.message });
@@ -410,6 +481,7 @@ async function main() {
       // 7) 반 보드 구성 스냅샷(0142a, 읽기 전용 GET) — aywa 반 ↔ ClassNote 반 보드 대조용 원본.
       //    ⚠️ ClassNote에 아무것도 쓰지 않으므로 --post와 무관하게 돈다(구성은 사실 데이터).
       //    KST 05시 이후 하루 1회. 영어는 반 보드로 운영돼 학생 배정이 어긋나면 발송이 조용히 실패한다.
+      await assertExecutionLease();
       const bres = await snapshotBoardRosterOnce(db(), b, { tenant, log }).catch((e) => {
         log(`[roster] 오류(내일 재시도): ${e.message}`);
         noteResult("roster", { error: e.message });
@@ -417,6 +489,7 @@ async function main() {
       });
       if (bres.ran) noteResult("roster", bres);
     } catch (e) {
+      if(e.code==="AGENT_DRAIN"){await finishDraining();return;}
       log(`폴링 오류(다음 폴에서 재시도): ${e.message}`);
       await dropDb();
       await dropBrowser(); // 브라우저 상태도 의심 → 재launch

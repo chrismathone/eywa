@@ -123,7 +123,7 @@ async function storeFromNetwork(identity, options) {
   try {
     const posted = await bound.limit(Promise.resolve().then(() => options.fetchImpl(url, {
       method: "POST", cache: "no-store",
-      headers: { "content-type": "application/json", "x-eywa-internal": secret },
+      redirect: "error", headers: { "content-type": "application/json", "x-eywa-internal": secret },
       body: JSON.stringify({ tenantId: identity.tenantId, rootId: identity.rootId, connectionId, hostname: options.hostname }),
       signal: bound.signal,
     })).then((value) => ({ value })).catch(() => ({ failed: true })));

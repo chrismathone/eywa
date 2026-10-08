@@ -1,4 +1,4 @@
-import { secretMatches } from "@/lib/http/secret-compare";
+import { authorizeInternalWorker } from "@/features/sync-agent/server/internal-auth";
 import { NextResponse } from "next/server";
 import { classifyPendingParentMessages } from "@/features/attendance/parent-alerts/server/classify";
 
@@ -21,15 +21,15 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 export async function POST(request: Request) {
-  const secret = process.env.CLASSNOTE_INTERNAL_SECRET;
-  if (!secretMatches(request.headers.get("x-eywa-internal"), secret)) {
+  const worker = await authorizeInternalWorker(request.headers.get("x-eywa-internal"));
+  if (!worker) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   try {
-    const result = await classifyPendingParentMessages();
+    const result = await classifyPendingParentMessages(worker.tenantId ?? undefined);
     return NextResponse.json({ ok: true, ...result });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    return NextResponse.json({ ok: false, error: worker.tenantId ? "classification_failed" : message }, { status: 500 });
   }
 }

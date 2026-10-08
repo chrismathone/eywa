@@ -5,14 +5,12 @@ import {
   getMakeeduAutoSyncStatus,
   getMakeeduSyncRuns,
   getUnpushedIntakeConsultations,
-  getMakeeduSyncWorkers,
   getMakeeduSyncLock,
   getMakeeduSyncState,
 } from "@/features/integrations/server/makeedu-sync";
 import { getServiceAccountEmail } from "@/features/integrations/google-sheets";
 import { SubjectSheetCard } from "./subject-sheet-card";
 import { MakeeduSyncCard } from "./makeedu-sync-card";
-import { MakeeduWorkerStatus } from "./makeedu-worker-status";
 import { MakeeduSyncRunsList } from "./makeedu-sync-runs";
 import { MakeeduPushCard } from "@/features/integrations/components/makeedu-push-card";
 import { EyIcon } from "@/components/icons/aywa-icons";
@@ -46,9 +44,6 @@ export async function SheetsFace({
   /** 구글 시트 시간표 연동 모듈 — 꺼지면 시트 내보내기 절을 세우지 않는다. 침산은 둘 다 켜져 있다. */
   sheetsOn?: boolean;
 }) {
-  // 서버 렌더 시각 — 워처 온라인/상대시각 판정용(RSC는 요청당 1회 실행이라 안정).
-  // eslint-disable-next-line react-hooks/purity -- server component renders once per request
-  const nowMs = Date.now();
   // 독립 조회 → 병렬(B4). 시트 상태는 지원 과목(math·english)마다 별도 provider 행.
   // 꺼진 연동은 조회도 하지 않는다 — 그 학원엔 없는 연동이다.
   if (!makeeduOn && !sheetsOn) {
@@ -61,12 +56,11 @@ export async function SheetsFace({
       </div>
     );
   }
-  const [sheetStatuses, makeeduStatus, runsPage, pushCandidates, workers, syncLock, invoiceSync] = await Promise.all([
+  const [sheetStatuses, makeeduStatus, runsPage, pushCandidates, syncLock, invoiceSync] = await Promise.all([
     sheetsOn ? Promise.all(SHEET_EXPORT_SUBJECTS.map((s) => getGoogleSheetsStatus(s))) : Promise.resolve([]),
     makeeduOn ? getMakeeduAutoSyncStatus() : Promise.resolve(null),
     makeeduOn ? getMakeeduSyncRuns(page, RUNS_PAGE_SIZE) : Promise.resolve({ runs: [], total: 0 }),
     makeeduOn ? getUnpushedIntakeConsultations() : Promise.resolve([]),
-    makeeduOn ? getMakeeduSyncWorkers(nowMs) : Promise.resolve([]),
     makeeduOn ? getMakeeduSyncLock() : Promise.resolve({ busyUntil: null, running: false }),
     makeeduOn ? getMakeeduSyncState("invoices") : Promise.resolve(null),
   ]);
@@ -90,13 +84,13 @@ export async function SheetsFace({
           <p className="text-sm">학생 미매칭은 원생의 이름·학년·중복 등록을 확인해야 합니다. 가져오지 못한 수납은 수납 화면의 ‘마지막 동기화에 없던 청구’ 목록에 표시되지 않습니다.</p>
           <EmbedLink href="/owner?tab=data" className="inline-flex text-sm font-semibold text-primary underline underline-offset-2">데이터 정리에서 중복 원생 확인</EmbedLink>
           <p className="text-text-dim text-xs">미매칭 대상의 상세 내역은 동기화 담당 PC의 .makeedu-tmp/import-invoices-report.json에서 확인할 수 있습니다.</p>
-        </> : <p className="text-sm">아래의 동기화 담당 PC 상태와 최근 실행 이력을 확인하세요.</p>}
+        </> : <p className="text-sm">연동 PC 탭의 담당 PC 상태와 아래 최근 실행 이력을 확인하세요.</p>}
       </section> : null}
       {/* makeedu 자동 동기화 — 외부 연동 면 상단: 토글/버튼 카드 + 담당 PC 상태(0073a) + 최근 실행 이력(0070a) */}
       {makeeduOn && makeeduStatus ? (
         <>
           <MakeeduSyncCard status={makeeduStatus} initialLock={syncLock} />
-          <MakeeduWorkerStatus workers={workers} nowMs={nowMs} />
+          <EmbedLink href="/owner?tab=sheets&sub=agent" className="text-primary text-sm font-semibold underline underline-offset-2">연동 PC 관리</EmbedLink>
           <MakeeduSyncRunsList
             runs={runsPage.runs}
             page={page}

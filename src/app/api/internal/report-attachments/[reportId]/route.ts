@@ -1,4 +1,4 @@
-import { secretMatches } from "@/lib/http/secret-compare";
+import { authorizeInternalWorker } from "@/features/sync-agent/server/internal-auth";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveTenantReadUrls } from "@/lib/storage/media-storage";
@@ -20,8 +20,8 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ reportId: string }> },
 ) {
-  const secret = process.env.CLASSNOTE_INTERNAL_SECRET;
-  if (!secretMatches(request.headers.get("x-eywa-internal"), secret)) {
+  const worker = await authorizeInternalWorker(request.headers.get("x-eywa-internal"));
+  if (!worker) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const { reportId } = await params;
@@ -33,6 +33,7 @@ export async function GET(
     .eq("id", reportId)
     .maybeSingle();
   if (!report) return NextResponse.json({ files: [] });
+  if (worker.tenantId && report.tenant_id !== worker.tenantId) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const attachments = (report.attachments as { path: string; name: string }[] | null) ?? [];
   const files = attachments.filter((a) => !isImageAttachment(a.name || a.path)); // 파일만(이미지는 스샷에 포함)

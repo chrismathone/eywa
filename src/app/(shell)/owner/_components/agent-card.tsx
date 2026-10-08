@@ -1,0 +1,67 @@
+"use client";
+import { useCallback,useEffect,useState,useTransition } from "react";
+import { EVENT_LABELS,TASK_LABELS } from "@/features/sync-agent/protocol";
+import { getAgentDashboard,issueAgentCode,issueAgentManagementCode,revokeAgentDevice,saveAgentSettings } from "@/features/sync-agent/server/actions";
+
+type Dashboard=NonNullable<Awaited<ReturnType<typeof getAgentDashboard>>["data"]>;
+const when=(value:string|null)=>value?new Date(value).toLocaleString("ko-KR",{timeZone:"Asia/Seoul"}):"아직 없음";
+export function AgentCard({classnoteOn,makeeduOn}:{classnoteOn:boolean;makeeduOn:boolean}) {
+  const [data,setData]=useState<Dashboard|null>(null),[error,setError]=useState(""),[notice,setNotice]=useState("");
+  const [code,setCode]=useState<{code:string;expiresAt:string}|null>(null);
+  const [managementCode,setManagementCode]=useState<{code:string;expiresAt:string}|null>(null);
+  const [now,setNow]=useState(0),[pending,startTransition]=useTransition();
+  const [filter,setFilter]=useState("all"),[level,setLevel]=useState("all");
+  const refresh=useCallback(async()=>{const result=await getAgentDashboard();setNow(Date.now());if(result.data){setData(result.data);setError("");}else setError(result.error??"상태를 확인하지 못했습니다.");},[]);
+  useEffect(()=>{let disposed=false;const load=async()=>{if(!disposed) await refresh();};void load();const timer=setInterval(load,20_000);return()=>{disposed=true;clearInterval(timer);};},[refresh]);
+  const act=(fn:()=>Promise<{error?:string}>,message="")=>startTransition(async()=>{setError("");setNotice("");try{const result=await fn();if(result.error)setError(result.error);else{setNotice(message);await refresh();}}catch{setError("서버 연결을 확인해 주세요.");}});
+  const settings=data?.configuration;
+  const change=(key:"enabled"|"classnoteEnabled"|"makeeduEnabled"|"updatesEnabled",value:boolean)=>{
+    if(!settings)return;
+    act(()=>saveAgentSettings({enabled:settings.enabled,classnoteEnabled:settings.classnoteEnabled,makeeduEnabled:settings.makeeduEnabled,updatesEnabled:settings.updatesEnabled,revision:settings.revision,[key]:value}),"설정을 저장했습니다. 다음 상태 확인 때 PC에 반영됩니다.");
+  };
+  const device=data?.device;
+  const online=device?.last_seen_at && now-Date.parse(device.last_seen_at)<90_000;
+  const events=(data?.events??[]).filter(e=>(filter==="all"||e.module===filter)&&(level==="all"||e.level===level));
+  const box="border-border bg-card rounded-2xl border p-5 space-y-3";
+  const button="border-border rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-50";
+  const toggle=(key:"enabled"|"classnoteEnabled"|"makeeduEnabled"|"updatesEnabled",label:string)=><label className="flex items-center justify-between gap-4 py-2"><span>{label}</span><input aria-label={label} type="checkbox" checked={settings?.[key]??false} disabled={pending||!settings} onChange={e=>change(key,e.target.checked)} /></label>;
+  return <div className="space-y-5" aria-label="연동 PC 관리">
+    {error?<p role="alert" className="text-danger rounded-lg border p-3 text-sm">{error}</p>:null}
+    {notice?<p role="status" className="text-primary text-sm">{notice}</p>:null}
+    <section className={box}>
+      <h2 className="font-bold">Windows 연동 앱</h2>
+      <p className="text-text-dim text-sm">지점의 연동 PC 한 대에 설치하면 켜 둔 연동을 함께 실행하고, 작업이 끝난 뒤 새 버전을 자동으로 적용합니다.</p>
+      {data?.release?<a className={button+" inline-flex"} href={data.release.url} rel="noreferrer">Windows용 다운로드 · {data.release.version}</a>:<p className="text-text-dim text-sm">설치 파일을 준비 중입니다.</p>}
+    </section>
+    <section className={box}>
+      <h2 className="font-bold">지점 연결 코드</h2>
+      <p className="text-text-dim text-sm">앱을 처음 실행할 때 아래 코드를 입력하세요. 15분 동안 한 번 사용할 수 있으며, 재발급하면 이전 코드는 만료됩니다.</p>
+      {code && Date.parse(code.expiresAt)>now?<div className="flex flex-wrap items-center gap-3"><output className="font-mono text-2xl tracking-widest" aria-label="12자리 연결 코드">{code.code.match(/.{1,4}/g)?.join(" ")}</output><button className={button} onClick={()=>{void navigator.clipboard.writeText(code.code).then(()=>setNotice("코드를 복사했습니다."),()=>setError("코드를 직접 입력해 주세요."));}}>복사</button><span className="text-text-dim text-xs">{when(code.expiresAt)}까지</span></div>:null}
+      <button className={button} disabled={pending||!!device} onClick={()=>act(async()=>{const result=await issueAgentCode();if(result.data){setCode(result.data);setNow(Date.now());}return result;})}>연결 코드 발급</button>
+      {device?<p className="text-text-dim text-xs">다른 PC로 교체하려면 현재 PC의 연결을 먼저 해제하세요.</p>:null}
+    </section>
+    <section className={box}>
+      <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-bold">담당 PC</h2><button className={button} disabled={pending} onClick={()=>void refresh()}>새로고침</button></div>
+      {device?<>
+        <p className="font-semibold">{device.name} <span className="text-text-dim text-sm">· {online?"온라인":"연결 확인 필요"}</span></p>
+        <p className="text-text-dim text-sm">버전 {device.version??"확인 중"} · 마지막 확인 {when(device.last_seen_at)}</p>
+        <button className={button} disabled={pending||!!device.revoke_requested_at} onClick={()=>act(async()=>{const result=await issueAgentManagementCode();if(result.data)setManagementCode(result.data);return result;})}>PC 설정 관리 코드 발급</button>
+        {managementCode && Date.parse(managementCode.expiresAt)>now?<p className="text-sm">앱의 설정 잠금을 여는 코드: <output className="font-mono tracking-widest">{managementCode.code.match(/.{1,4}/g)?.join(" ")}</output> · 10분 동안 한 번 사용</p>:null}
+        {device.revoke_requested_at?<p role="status" className="text-sm">기존 PC의 실행 종료를 확인하고 있습니다. 완료 후 새 코드를 발급할 수 있습니다.</p>:<button className={button} disabled={pending} onClick={()=>{if(window.confirm("이 PC의 연동을 중지하고 연결을 해제할까요? 작업 중이면 완료 여부를 확인해 주세요."))act(()=>revokeAgentDevice(device.id),"연결 해제를 요청했습니다.");}}>PC 연결 해제</button>}
+        {!settings?.cutoverReady?<p className="text-text-dim text-sm">앱에서 기존 워커 확인과 계정 설정을 마치면 연동을 시작할 수 있습니다.</p>:null}
+      </>:<p className="text-text-dim text-sm">아직 연결된 PC가 없습니다.</p>}
+      {toggle("enabled","이 PC에서 연동 실행")}
+      {classnoteOn?toggle("classnoteEnabled","클래스노트 · 숙제영상 보관"):null}
+      {makeeduOn?toggle("makeeduEnabled","메이크에듀"):null}
+      {toggle("updatesEnabled","검증된 버전 자동 업데이트")}
+      <p className="text-text-dim text-xs">기존 발송 시간과 자동 동기화 설정은 각 연동의 설정을 따릅니다. PC의 일시 중지 설정도 함께 적용됩니다.</p>
+    </section>
+    <section className={box}>
+      <div className="flex flex-wrap items-center gap-3"><h2 className="mr-auto font-bold">최근 실행 기록</h2>
+        <select className={button} aria-label="연동 기록 필터" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">전체 연동</option><option value="app">앱</option>{classnoteOn?<><option value="classnote">클래스노트</option><option value="video">영상</option></>:null}{makeeduOn?<option value="makeedu">메이크에듀</option>:null}<option value="update">업데이트</option></select>
+        <select className={button} aria-label="기록 종류 필터" value={level} onChange={e=>setLevel(e.target.value)}><option value="all">전체 기록</option><option value="warning">확인 필요</option><option value="error">오류</option></select>
+      </div>
+      {events.length?<ol className="divide-border divide-y">{events.map(event=><li key={event.event_id} className="flex flex-wrap justify-between gap-2 py-2 text-sm"><span>{event.detail.task?`${TASK_LABELS[event.detail.task as keyof typeof TASK_LABELS]??"연동"} · `:""}{EVENT_LABELS[event.kind as keyof typeof EVENT_LABELS]??"실행 기록"}{event.detail.version?` · ${String(event.detail.version)}`:""}{typeof event.detail.count==="number"?` · ${event.detail.count}건`:""}</span><time className="text-text-dim text-xs" dateTime={event.received_at}>{when(event.received_at)}</time></li>)}</ol>:<p className="text-text-dim text-sm">표시할 기록이 없습니다.</p>}
+    </section>
+  </div>;
+}

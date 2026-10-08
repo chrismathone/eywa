@@ -21,11 +21,13 @@ export function attachmentRecoveryItems(post, comments, expectedId) {
 
 const tried = new Map();
 let repairing = false;
+let repairWork = null;
+export async function waitForAttachmentIdle() { if (repairWork) await repairWork; }
 /** 발송 루프를 기다리게 하지 않는다. 이미 복구 중이면 다음 폴은 건너뛴다. */
 export function kickAttachmentRepair(sql, tenant, session, log = console.log) {
   if (repairing) return;
   repairing = true;
-  void repairAttachmentMessages(sql, tenant, session, log)
+  repairWork = repairAttachmentMessages(sql, tenant, session, log)
     .catch(() => log("[첨부 복구] 원문 목록 재조회 보류 — 다음 폴에서 재시도합니다"))
     .finally(() => { repairing = false; });
 }

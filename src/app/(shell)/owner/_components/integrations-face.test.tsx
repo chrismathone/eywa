@@ -6,6 +6,8 @@ vi.mock("@/features/slack/server/gate", () => ({ slackGate: m.slack }));
 vi.mock("./slack-card", () => ({ SlackCard: () => <p>슬랙 카드</p> }));
 vi.mock("./sheets-face", () => ({ SheetsFace: () => <p>시트 면</p> }));
 vi.mock("./video-drive-card", () => ({ VideoDriveCard: () => <p>숙제영상 카드</p> }));
+vi.mock("@/features/sync-agent/server/availability",()=>({agentTabAvailable:async(on:boolean)=>on}));
+vi.mock("./agent-card",()=>({AgentCard:()=> <p>연동 PC 카드</p>}));
 vi.mock("@/components/face-tabs", () => ({
   FaceTabs: ({ faces }: { faces: { key: string; label: string; href: string }[] }) => <nav>{faces.map((f) => <a key={f.key} href={f.href}>{f.label}</a>)}</nav>,
 }));
@@ -40,7 +42,7 @@ describe("연동 면의 내부 탭 — 숙제영상 드라이브는 ClassNote �
   it("다른 연동이 하나도 없어도 ClassNote 기능이 있으면 이 카드 하나가 선다(탭 줄 없이) · 전부 꺼지면 빈 안내", async () => {
     const { unmount } = render(await face([], undefined, { makeedu: false, sheets: false }));
     expect(screen.getByText("숙제영상 카드")).toBeInTheDocument();
-    expect(screen.queryByRole("navigation")).toBeNull();
+    expect(screen.getByRole("link",{name:"연동 PC"})).toHaveAttribute("href","/owner?tab=sheets&sub=agent");
     unmount();
     render(await face(["classnote"], undefined, { makeedu: false, sheets: false }));
     expect(screen.getByText("이 학원은 켜진 외부 연동이 없습니다")).toBeInTheDocument();

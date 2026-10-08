@@ -1,0 +1,4085 @@
+{
+  "capturedAt": "2026-10-08",
+  "columns": [
+    {
+      "table_name": "audit_logs",
+      "column_name": "id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "audit_logs",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "audit_logs",
+      "column_name": "actor_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "audit_logs",
+      "column_name": "actor_name",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "audit_logs",
+      "column_name": "action",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "audit_logs",
+      "column_name": "target_type",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "audit_logs",
+      "column_name": "target_label",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "audit_logs",
+      "column_name": "metadata",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "audit_logs",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "class_delegations",
+      "column_name": "id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "class_delegations",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "class_delegations",
+      "column_name": "class_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "class_delegations",
+      "column_name": "delegate_user_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "class_delegations",
+      "column_name": "from_date",
+      "data_type": "date",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "class_delegations",
+      "column_name": "to_date",
+      "data_type": "date",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "class_delegations",
+      "column_name": "reason",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "class_delegations",
+      "column_name": "created_by",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "class_delegations",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "class_delegations",
+      "column_name": "revoked_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "class_delegations",
+      "column_name": "revoked_by",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "class_schedules",
+      "column_name": "id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "class_schedules",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "class_schedules",
+      "column_name": "class_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "class_schedules",
+      "column_name": "day_of_week",
+      "data_type": "USER-DEFINED",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "class_schedules",
+      "column_name": "start_time",
+      "data_type": "time without time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "class_schedules",
+      "column_name": "end_time",
+      "data_type": "time without time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "class_schedules",
+      "column_name": "valid_from",
+      "data_type": "date",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "class_schedules",
+      "column_name": "valid_to",
+      "data_type": "date",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "class_schedules",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "class_schedules",
+      "column_name": "teacher_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "class_schedules",
+      "column_name": "classroom_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "class_schedules",
+      "column_name": "period_label",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "class_schedules",
+      "column_name": "merge_group",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "class_schedules",
+      "column_name": "slot_teacher_label",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "class_schedules",
+      "column_name": "slot_room_label",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "class_schedules",
+      "column_name": "lab_separate",
+      "data_type": "boolean",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classes",
+      "column_name": "id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classes",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classes",
+      "column_name": "class_name",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classes",
+      "column_name": "subject",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classes",
+      "column_name": "teacher_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classes",
+      "column_name": "classroom_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classes",
+      "column_name": "is_active",
+      "data_type": "boolean",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classes",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classes",
+      "column_name": "notes",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classes",
+      "column_name": "bg_color",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classes",
+      "column_name": "text_color",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classes",
+      "column_name": "pending_teacher_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classes",
+      "column_name": "pending_teacher_date",
+      "data_type": "date",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classes",
+      "column_name": "pending_teacher_reason",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classes",
+      "column_name": "makeedu_lesson_id",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classes",
+      "column_name": "closed_at",
+      "data_type": "date",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classes",
+      "column_name": "is_special",
+      "data_type": "boolean",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classes",
+      "column_name": "report_optout",
+      "data_type": "boolean",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classes",
+      "column_name": "english_track",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classes",
+      "column_name": "is_makeup_pool",
+      "data_type": "boolean",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classes",
+      "column_name": "math_learning_track",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_board_members",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_board_members",
+      "column_name": "board_id",
+      "data_type": "bigint",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_board_members",
+      "column_name": "child_id",
+      "data_type": "bigint",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_board_members",
+      "column_name": "child_name",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_board_members",
+      "column_name": "birth_year",
+      "data_type": "integer",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_board_members",
+      "column_name": "synced_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_board_sync_runs",
+      "column_name": "id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_board_sync_runs",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_board_sync_runs",
+      "column_name": "kind",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_board_sync_runs",
+      "column_name": "request_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_board_sync_runs",
+      "column_name": "started_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_board_sync_runs",
+      "column_name": "finished_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_board_sync_runs",
+      "column_name": "ok",
+      "data_type": "boolean",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_board_sync_runs",
+      "column_name": "error",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_board_sync_runs",
+      "column_name": "summary",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_board_sync_runs",
+      "column_name": "events",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_boards",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_boards",
+      "column_name": "board_id",
+      "data_type": "bigint",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_boards",
+      "column_name": "board_name",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_boards",
+      "column_name": "child_count",
+      "data_type": "integer",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_boards",
+      "column_name": "synced_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_child_links",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_child_links",
+      "column_name": "child_id",
+      "data_type": "bigint",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_child_links",
+      "column_name": "student_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_child_links",
+      "column_name": "linked_by",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_child_links",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_class_board_members",
+      "column_name": "id",
+      "data_type": "bigint",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_class_board_members",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_class_board_members",
+      "column_name": "class_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_class_board_members",
+      "column_name": "board_id",
+      "data_type": "bigint",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_class_board_members",
+      "column_name": "student_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_class_board_members",
+      "column_name": "child_id",
+      "data_type": "bigint",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_class_board_members",
+      "column_name": "child_name",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_class_board_members",
+      "column_name": "status",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_class_board_members",
+      "column_name": "reason",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_class_board_members",
+      "column_name": "checked_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_class_boards",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_class_boards",
+      "column_name": "class_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_class_boards",
+      "column_name": "board_id",
+      "data_type": "bigint",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_class_boards",
+      "column_name": "board_name",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_class_boards",
+      "column_name": "synced_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_class_boards",
+      "column_name": "release_names",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_class_boards",
+      "column_name": "release_checked_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_class_notices",
+      "column_name": "id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_class_notices",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_class_notices",
+      "column_name": "title",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_class_notices",
+      "column_name": "body",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_class_notices",
+      "column_name": "targets",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_class_notices",
+      "column_name": "is_test",
+      "data_type": "boolean",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_class_notices",
+      "column_name": "status",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_class_notices",
+      "column_name": "results",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_class_notices",
+      "column_name": "error",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_class_notices",
+      "column_name": "created_by",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_class_notices",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_class_notices",
+      "column_name": "processing_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_class_notices",
+      "column_name": "processed_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_class_posts",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_class_posts",
+      "column_name": "board_name",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_class_posts",
+      "column_name": "posted_on",
+      "data_type": "date",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_class_posts",
+      "column_name": "post_count",
+      "data_type": "integer",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_class_posts",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_feed_state",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_feed_state",
+      "column_name": "scope",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_feed_state",
+      "column_name": "last_seen_post_id",
+      "data_type": "bigint",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_feed_state",
+      "column_name": "last_polled_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_feed_state",
+      "column_name": "status",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_feed_state",
+      "column_name": "error",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_feed_state",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_feed_state",
+      "column_name": "counts",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_notices",
+      "column_name": "id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_notices",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_notices",
+      "column_name": "body",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_notices",
+      "column_name": "targets",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_notices",
+      "column_name": "status",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_notices",
+      "column_name": "results",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_notices",
+      "column_name": "error",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_notices",
+      "column_name": "created_by",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_notices",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_notices",
+      "column_name": "processing_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_notices",
+      "column_name": "processed_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_notices",
+      "column_name": "attachments",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_message_attachments",
+      "column_name": "message_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_message_attachments",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_message_attachments",
+      "column_name": "attachments",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_message_attachments",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_messages",
+      "column_name": "id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_messages",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_messages",
+      "column_name": "source",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_messages",
+      "column_name": "classnote_post_id",
+      "data_type": "bigint",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_messages",
+      "column_name": "classnote_comment_id",
+      "data_type": "bigint",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_messages",
+      "column_name": "child_id",
+      "data_type": "bigint",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_messages",
+      "column_name": "student_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_messages",
+      "column_name": "class_name",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_messages",
+      "column_name": "content",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_messages",
+      "column_name": "posted_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_messages",
+      "column_name": "classified_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_messages",
+      "column_name": "category",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_messages",
+      "column_name": "starts_on",
+      "data_type": "date",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_messages",
+      "column_name": "ends_on",
+      "data_type": "date",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_messages",
+      "column_name": "detail",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_messages",
+      "column_name": "model",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_messages",
+      "column_name": "classify_error",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_messages",
+      "column_name": "notified_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_messages",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_messages",
+      "column_name": "cross_teacher_ids",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_reactions",
+      "column_name": "id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_reactions",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_reactions",
+      "column_name": "message_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_reactions",
+      "column_name": "classnote_post_id",
+      "data_type": "bigint",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_reactions",
+      "column_name": "target_comment_id",
+      "data_type": "bigint",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_reactions",
+      "column_name": "board_id",
+      "data_type": "bigint",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_reactions",
+      "column_name": "board_name",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_reactions",
+      "column_name": "child_id",
+      "data_type": "bigint",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_reactions",
+      "column_name": "student_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_reactions",
+      "column_name": "reaction_type",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_reactions",
+      "column_name": "author_user_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_reactions",
+      "column_name": "author_label",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_reactions",
+      "column_name": "last_action_by",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_reactions",
+      "column_name": "status",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_reactions",
+      "column_name": "processing_action",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_reactions",
+      "column_name": "classnote_reaction_id",
+      "data_type": "bigint",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_reactions",
+      "column_name": "error",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_reactions",
+      "column_name": "error_raw",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_reactions",
+      "column_name": "failed_action",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_reactions",
+      "column_name": "retry_count",
+      "data_type": "integer",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_reactions",
+      "column_name": "unconfirmed",
+      "data_type": "boolean",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_reactions",
+      "column_name": "processing_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_reactions",
+      "column_name": "worker_host",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_reactions",
+      "column_name": "requested_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_reactions",
+      "column_name": "reacted_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_reactions",
+      "column_name": "removed_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_reactions",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_reactions",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_replies",
+      "column_name": "id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_replies",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_replies",
+      "column_name": "message_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_replies",
+      "column_name": "classnote_post_id",
+      "data_type": "bigint",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_replies",
+      "column_name": "reply_to_comment_id",
+      "data_type": "bigint",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_replies",
+      "column_name": "board_id",
+      "data_type": "bigint",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_replies",
+      "column_name": "board_name",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_replies",
+      "column_name": "child_id",
+      "data_type": "bigint",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_replies",
+      "column_name": "student_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_replies",
+      "column_name": "author_user_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_replies",
+      "column_name": "author_label",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_replies",
+      "column_name": "body",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_replies",
+      "column_name": "client_key",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_replies",
+      "column_name": "status",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_replies",
+      "column_name": "processing_action",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_replies",
+      "column_name": "pending_body",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_replies",
+      "column_name": "edit_history",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_replies",
+      "column_name": "last_action_by",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_replies",
+      "column_name": "classnote_comment_id",
+      "data_type": "bigint",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_replies",
+      "column_name": "error",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_replies",
+      "column_name": "error_raw",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_replies",
+      "column_name": "failed_action",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_replies",
+      "column_name": "retry_count",
+      "data_type": "integer",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_replies",
+      "column_name": "processing_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_replies",
+      "column_name": "worker_host",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_replies",
+      "column_name": "posted_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_replies",
+      "column_name": "edited_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_replies",
+      "column_name": "deleted_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_replies",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_parent_replies",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_student_links",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_student_links",
+      "column_name": "student_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_student_links",
+      "column_name": "board_id",
+      "data_type": "bigint",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_student_links",
+      "column_name": "child_id",
+      "data_type": "bigint",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_student_links",
+      "column_name": "child_name_at_link",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_student_links",
+      "column_name": "birth_year_at_link",
+      "data_type": "integer",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_student_links",
+      "column_name": "linked_by",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_student_links",
+      "column_name": "linked_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_sync_requests",
+      "column_name": "id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_sync_requests",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_sync_requests",
+      "column_name": "requested_by",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_sync_requests",
+      "column_name": "requested_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_sync_requests",
+      "column_name": "scope",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_sync_requests",
+      "column_name": "merge_count",
+      "data_type": "integer",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_sync_requests",
+      "column_name": "next_scope",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_sync_requests",
+      "column_name": "status",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_sync_requests",
+      "column_name": "started_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_sync_requests",
+      "column_name": "finished_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_sync_requests",
+      "column_name": "worker_id",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_sync_requests",
+      "column_name": "result",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_sync_requests",
+      "column_name": "error",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_video_files",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_video_files",
+      "column_name": "folder_id",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_video_files",
+      "column_name": "md5",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_video_files",
+      "column_name": "bytes",
+      "data_type": "bigint",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_video_files",
+      "column_name": "drive_file_id",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_video_folders",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_video_folders",
+      "column_name": "root_folder_id",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_video_folders",
+      "column_name": "route_key",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_video_folders",
+      "column_name": "drive_folder_id",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_video_history",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_video_history",
+      "column_name": "center_id",
+      "data_type": "bigint",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_video_history",
+      "column_name": "state",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_video_history",
+      "column_name": "revision",
+      "data_type": "bigint",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_video_history",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_workers",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_workers",
+      "column_name": "hostname",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_workers",
+      "column_name": "started_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_workers",
+      "column_name": "last_seen",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "classnote_workers",
+      "column_name": "last_results",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "prospect_name",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "prospect_grade",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "prospect_school",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "parent_name",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "parent_phone",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "parent_request",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "learning_history",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "consultant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "outcome",
+      "data_type": "USER-DEFINED",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "student_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "consulted_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "audio_path",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "audio_duration_sec",
+      "data_type": "integer",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "audio_size_bytes",
+      "data_type": "integer",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "transcription",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "speaker_labels",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "processing_status",
+      "data_type": "USER-DEFINED",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "processing_error",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "assemblyai_transcript_id",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "english_name",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "gender",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "blood_type",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "birth_date",
+      "data_type": "date",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "student_phone",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "home_phone",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "parent_relation",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "address",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "zip_code",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "address_detail",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "consultation_path",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "subject",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "career_goal",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "siblings",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "safety_notes",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "shuttle_bus_request",
+      "data_type": "boolean",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "registration_status",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "payment_amount",
+      "data_type": "numeric",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "payment_date",
+      "data_type": "date",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "registrar",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "privacy_agreement",
+      "data_type": "boolean",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "installment_agreement",
+      "data_type": "boolean",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "follow_up_date",
+      "data_type": "date",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "follow_up_content",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "non_registration_reason",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "subject_details",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "from_public_intake",
+      "data_type": "boolean",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "intake_token_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "makeedu_id",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "sync_added_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "counselor",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "received_date",
+      "data_type": "date",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "student_type",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "siblings_details",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "consultation_date",
+      "data_type": "date",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "makeedu_pushed_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "intake_checklist",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "prep_brief",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "prep_brief_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "prep_brief_status",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "prep_brief_error",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "receiver",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "legacy_key",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "legacy_source",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "consent_snapshot",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollment_consultations",
+      "column_name": "staff_recording_consent",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollments",
+      "column_name": "id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollments",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollments",
+      "column_name": "student_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollments",
+      "column_name": "class_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollments",
+      "column_name": "start_date",
+      "data_type": "date",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollments",
+      "column_name": "end_date",
+      "data_type": "date",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollments",
+      "column_name": "on_hold",
+      "data_type": "boolean",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollments",
+      "column_name": "withdrawal_reason",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollments",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollments",
+      "column_name": "attendance_days",
+      "data_type": "ARRAY",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollments",
+      "column_name": "is_transferred",
+      "data_type": "boolean",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollments",
+      "column_name": "is_transferred_in",
+      "data_type": "boolean",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollments",
+      "column_name": "salary_tier",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "enrollments",
+      "column_name": "lab_separate",
+      "data_type": "boolean",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "homework_video_drive_connections",
+      "column_name": "id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "homework_video_drive_connections",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "homework_video_drive_connections",
+      "column_name": "google_subject",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "homework_video_drive_connections",
+      "column_name": "permission_id",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "homework_video_drive_connections",
+      "column_name": "email",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "homework_video_drive_connections",
+      "column_name": "oauth_client_id",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "homework_video_drive_connections",
+      "column_name": "refresh_secret_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "homework_video_drive_connections",
+      "column_name": "token_version",
+      "data_type": "integer",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "homework_video_drive_connections",
+      "column_name": "status",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "homework_video_drive_connections",
+      "column_name": "connected_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "homework_video_drive_connections",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "homework_video_drive_roots",
+      "column_name": "root_folder_id",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "homework_video_drive_roots",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "homework_video_drive_roots",
+      "column_name": "folder_name",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "homework_video_drive_roots",
+      "column_name": "ancestor_ids",
+      "data_type": "ARRAY",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "homework_video_drive_roots",
+      "column_name": "ancestry_verified",
+      "data_type": "boolean",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "homework_video_drive_roots",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "homework_video_drive_roots",
+      "column_name": "connection_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "homework_video_drive_roots",
+      "column_name": "chain_complete",
+      "data_type": "boolean",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "homework_video_drive_roots",
+      "column_name": "legacy_permission_id",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "homework_video_drive_roots",
+      "column_name": "legacy_auth_fingerprint",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "homework_video_drive_settings",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "homework_video_drive_settings",
+      "column_name": "root_folder_id",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "homework_video_drive_settings",
+      "column_name": "enabled",
+      "data_type": "boolean",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "homework_video_drive_settings",
+      "column_name": "version",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "homework_video_drive_settings",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "homework_video_drive_settings",
+      "column_name": "connection_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "invoices",
+      "column_name": "id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "invoices",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "invoices",
+      "column_name": "student_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "invoices",
+      "column_name": "period",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "invoices",
+      "column_name": "amount_total",
+      "data_type": "numeric",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "invoices",
+      "column_name": "amount_paid",
+      "data_type": "numeric",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "invoices",
+      "column_name": "status",
+      "data_type": "USER-DEFINED",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "invoices",
+      "column_name": "line_items",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "invoices",
+      "column_name": "due_date",
+      "data_type": "date",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "invoices",
+      "column_name": "paid_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "invoices",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "invoices",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "invoices",
+      "column_name": "amount_discount",
+      "data_type": "numeric",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "invoices",
+      "column_name": "notes",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "invoices",
+      "column_name": "category",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "invoices",
+      "column_name": "teacher_snapshot_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "invoices",
+      "column_name": "payment_method",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "invoices",
+      "column_name": "card_company",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "invoices",
+      "column_name": "cash_receipt_number",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "invoices",
+      "column_name": "points_used",
+      "data_type": "numeric",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "invoices",
+      "column_name": "discount_reason",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "invoices",
+      "column_name": "billed_at",
+      "data_type": "date",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "invoices",
+      "column_name": "sync_added_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "invoices",
+      "column_name": "receipt_merge_groups",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "student_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "report_date",
+      "data_type": "date",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "progress",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "exam_info",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "homework_score",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "teacher_name",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "notes",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "source",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "share_token",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "daily_test",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "check_test",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "attitude",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "subject",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "classnote_status",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "classnote_error",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "classnote_queued_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "classnote_processing_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "classnote_sent_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "classnote_retry_count",
+      "data_type": "integer",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "revoked_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "revoked_by",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "attachments",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "textbook",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "makeup",
+      "data_type": "boolean",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "trend_note",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "edutrix_report_id",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "homework_today",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "edutrix_share_token",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "classnote_read_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "class_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "unit_key",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "covers_date",
+      "data_type": "date",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "covers_by",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "covers_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "covers_note",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "makeup_class_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "created_by",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "ment_source",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "classnote_deadline_exempt_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "classnote_class_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "video_homework",
+      "data_type": "boolean",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "lesson_reports",
+      "column_name": "video_submit_link",
+      "data_type": "boolean",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_push_batches",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_push_batches",
+      "column_name": "bucket",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_push_batches",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_push_batches",
+      "column_name": "queued_count",
+      "data_type": "integer",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_push_requests",
+      "column_name": "id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_push_requests",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_push_requests",
+      "column_name": "consultation_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_push_requests",
+      "column_name": "requested_by",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_push_requests",
+      "column_name": "requested_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_push_requests",
+      "column_name": "status",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_push_requests",
+      "column_name": "started_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_push_requests",
+      "column_name": "finished_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_push_requests",
+      "column_name": "makeedu_counsel_seq",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_push_requests",
+      "column_name": "error",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_sync_requests",
+      "column_name": "id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_sync_requests",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_sync_requests",
+      "column_name": "requested_by",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_sync_requests",
+      "column_name": "requested_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_sync_requests",
+      "column_name": "status",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_sync_requests",
+      "column_name": "started_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_sync_requests",
+      "column_name": "finished_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_sync_requests",
+      "column_name": "error",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_sync_runs",
+      "column_name": "id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_sync_runs",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_sync_runs",
+      "column_name": "trigger_source",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_sync_runs",
+      "column_name": "status",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_sync_runs",
+      "column_name": "started_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_sync_runs",
+      "column_name": "finished_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_sync_runs",
+      "column_name": "duration_ms",
+      "data_type": "integer",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_sync_runs",
+      "column_name": "domains",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_sync_runs",
+      "column_name": "failed_domains",
+      "data_type": "ARRAY",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_sync_runs",
+      "column_name": "error",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_sync_runs",
+      "column_name": "triggered_by",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_sync_state",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_sync_state",
+      "column_name": "domain",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_sync_state",
+      "column_name": "synced_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_sync_state",
+      "column_name": "row_count",
+      "data_type": "integer",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_sync_state",
+      "column_name": "status",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_sync_state",
+      "column_name": "error",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_sync_state",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_sync_workers",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_sync_workers",
+      "column_name": "hostname",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_sync_workers",
+      "column_name": "started_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "makeedu_sync_workers",
+      "column_name": "last_seen",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "notifications",
+      "column_name": "id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "notifications",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "notifications",
+      "column_name": "recipient_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "notifications",
+      "column_name": "type",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "notifications",
+      "column_name": "title",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "notifications",
+      "column_name": "body",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "notifications",
+      "column_name": "link",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "notifications",
+      "column_name": "actor_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "notifications",
+      "column_name": "read_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "notifications",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "notifications",
+      "column_name": "archived_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_consultations",
+      "column_name": "id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_consultations",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_consultations",
+      "column_name": "student_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_consultations",
+      "column_name": "counselor_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_consultations",
+      "column_name": "consulted_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_consultations",
+      "column_name": "summary",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_consultations",
+      "column_name": "follow_up_action",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_consultations",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_consultations",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_consultations",
+      "column_name": "category",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_consultations",
+      "column_name": "subject",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_consultations",
+      "column_name": "audience",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_consultations",
+      "column_name": "follow_up_date",
+      "data_type": "date",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_consultations",
+      "column_name": "follow_up_done",
+      "data_type": "boolean",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_consultations",
+      "column_name": "audio_path",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_consultations",
+      "column_name": "audio_duration_sec",
+      "data_type": "integer",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_consultations",
+      "column_name": "audio_size_bytes",
+      "data_type": "integer",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_consultations",
+      "column_name": "transcription",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_consultations",
+      "column_name": "speaker_labels",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_consultations",
+      "column_name": "processing_status",
+      "data_type": "USER-DEFINED",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_consultations",
+      "column_name": "processing_error",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_consultations",
+      "column_name": "assemblyai_transcript_id",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_consultations",
+      "column_name": "ai_report",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_consultations",
+      "column_name": "ai_summary",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_consultations",
+      "column_name": "ai_model_version",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_consultations",
+      "column_name": "ai_generated_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_consultations",
+      "column_name": "makeedu_id",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_consultations",
+      "column_name": "sync_added_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_consultations",
+      "column_name": "class_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_consultations",
+      "column_name": "class_source",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_homework_videos",
+      "column_name": "id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_homework_videos",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_homework_videos",
+      "column_name": "student_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_homework_videos",
+      "column_name": "subject",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_homework_videos",
+      "column_name": "teacher_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_homework_videos",
+      "column_name": "center_id",
+      "data_type": "bigint",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_homework_videos",
+      "column_name": "video_id",
+      "data_type": "bigint",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_homework_videos",
+      "column_name": "post_id",
+      "data_type": "bigint",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_homework_videos",
+      "column_name": "comment_id",
+      "data_type": "bigint",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_homework_videos",
+      "column_name": "posted_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_homework_videos",
+      "column_name": "status",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_homework_videos",
+      "column_name": "drive_file_id",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_homework_videos",
+      "column_name": "drive_folder_id",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_homework_videos",
+      "column_name": "bytes",
+      "data_type": "bigint",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_homework_videos",
+      "column_name": "md5",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_homework_videos",
+      "column_name": "payload",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_homework_videos",
+      "column_name": "route",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_homework_videos",
+      "column_name": "attempts",
+      "data_type": "integer",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_homework_videos",
+      "column_name": "available_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_homework_videos",
+      "column_name": "locked_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_homework_videos",
+      "column_name": "lock_token",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_homework_videos",
+      "column_name": "error",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_homework_videos",
+      "column_name": "uploaded_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_homework_videos",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_homework_videos",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_homework_videos",
+      "column_name": "source",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "student_homework_videos",
+      "column_name": "source_ref",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "student_code",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "name",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "school",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "grade",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "parent_phone",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "parent_name",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "status",
+      "data_type": "USER-DEFINED",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "enrolled_at",
+      "data_type": "date",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "withdrawn_at",
+      "data_type": "date",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "name_normalized",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "ai_care_summary",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "ai_care_focus",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "ai_care_model_version",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "ai_care_generated_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "notes",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "withdrawal_metadata",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "student_phone",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "attendance_code",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "english_name",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "gender",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "birth_date",
+      "data_type": "date",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "address",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "email",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "graduation_year",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "home_phone",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "parent_relation",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "other_phone",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "zip_code",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "address_detail",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "nickname",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "makeedu_id",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "sync_added_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "dup_suspect",
+      "data_type": "boolean",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "classnote_name",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "edutrix_student_id",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "is_test",
+      "data_type": "boolean",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "ijw_student_id",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "tenant_settings",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "tenant_settings",
+      "column_name": "data",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "tenant_settings",
+      "column_name": "updated_by",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "tenant_settings",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "tenants",
+      "column_name": "id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "tenants",
+      "column_name": "slug",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "tenants",
+      "column_name": "name",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "tenants",
+      "column_name": "plan",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "tenants",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "textbook_orders",
+      "column_name": "id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "textbook_orders",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "textbook_orders",
+      "column_name": "student_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "textbook_orders",
+      "column_name": "student_name",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "textbook_orders",
+      "column_name": "teacher_name",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "textbook_orders",
+      "column_name": "book_name",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "textbook_orders",
+      "column_name": "book_detail",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "textbook_orders",
+      "column_name": "price",
+      "data_type": "numeric",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "textbook_orders",
+      "column_name": "status",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "textbook_orders",
+      "column_name": "request_date",
+      "data_type": "date",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "textbook_orders",
+      "column_name": "ordered_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "textbook_orders",
+      "column_name": "delivered_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "textbook_orders",
+      "column_name": "billed_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "textbook_orders",
+      "column_name": "paid_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "textbook_orders",
+      "column_name": "notes",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "textbook_orders",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "textbook_orders",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "textbook_orders",
+      "column_name": "status_by_name",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "textbook_orders",
+      "column_name": "status_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "textbook_orders",
+      "column_name": "registered_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "textbook_orders",
+      "column_name": "check_dismissed_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "textbook_orders",
+      "column_name": "created_by",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "textbook_orders",
+      "column_name": "classnote_notice_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "user_integrations",
+      "column_name": "id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "user_integrations",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "user_integrations",
+      "column_name": "provider",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "user_integrations",
+      "column_name": "spreadsheet_id",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "user_integrations",
+      "column_name": "spreadsheet_url",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "user_integrations",
+      "column_name": "shared_with_email",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "user_integrations",
+      "column_name": "last_synced_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "user_integrations",
+      "column_name": "last_error",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "user_integrations",
+      "column_name": "sync_enabled",
+      "data_type": "boolean",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "user_integrations",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "user_integrations",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "user_integrations",
+      "column_name": "sync_started_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "users",
+      "column_name": "id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "users",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "users",
+      "column_name": "email",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "users",
+      "column_name": "display_name",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "users",
+      "column_name": "system_role",
+      "data_type": "USER-DEFINED",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "users",
+      "column_name": "status",
+      "data_type": "USER-DEFINED",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "users",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "users",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "users",
+      "column_name": "hire_date",
+      "data_type": "date",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "users",
+      "column_name": "job_title",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "users",
+      "column_name": "subjects",
+      "data_type": "ARRAY",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "users",
+      "column_name": "default_classroom",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "users",
+      "column_name": "memo",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "users",
+      "column_name": "hourly_rate",
+      "data_type": "numeric",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "users",
+      "column_name": "monthly_base",
+      "data_type": "numeric",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "users",
+      "column_name": "work_schedule",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "users",
+      "column_name": "phone",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "users",
+      "column_name": "bg_color",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "users",
+      "column_name": "text_color",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "users",
+      "column_name": "english_name",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "users",
+      "column_name": "notion_user_id",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "users",
+      "column_name": "report_notice_mode",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "users",
+      "column_name": "salary_type",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "users",
+      "column_name": "commission_rate",
+      "data_type": "numeric",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "users",
+      "column_name": "textbook_notice_ment",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "users",
+      "column_name": "commission_rates",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "users",
+      "column_name": "ui_prefs",
+      "data_type": "jsonb",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "users",
+      "column_name": "department",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "users",
+      "column_name": "employment_type",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "users",
+      "column_name": "attendance_alert_optin",
+      "data_type": "boolean",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "users",
+      "column_name": "seat_lab_duty",
+      "data_type": "boolean",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "users",
+      "column_name": "seat_jj_duty",
+      "data_type": "boolean",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "users",
+      "column_name": "desk_attendance_optin",
+      "data_type": "boolean",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "users",
+      "column_name": "report_display_name",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "users",
+      "column_name": "teacher_view_access",
+      "data_type": "boolean",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "users",
+      "column_name": "shuttle_duty",
+      "data_type": "boolean",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "users",
+      "column_name": "teacher_view_lang",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "notification_events",
+      "column_name": "id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "notification_events",
+      "column_name": "tenant_id",
+      "data_type": "uuid",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "notification_events",
+      "column_name": "event_type",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "notification_events",
+      "column_name": "subject_key",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "notification_events",
+      "column_name": "bucket",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "notification_events",
+      "column_name": "seeded",
+      "data_type": "boolean",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "notification_events",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "table_type": "BASE TABLE"
+    }
+  ]
+}
