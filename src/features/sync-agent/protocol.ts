@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const AGENT_PROTOCOL = 1;
-export const AGENT_VERSION = "1.0.0";
+export const AGENT_VERSION = "1.0.1";
 export const UUID = z.string().uuid();
 export const Version = z.string().regex(/^\d+\.\d+\.\d+$/).max(32);
 export const MODULES = ["classnote", "makeedu"] as const;
@@ -28,10 +28,18 @@ export const EventInput = z.object({
 export const SettingsInput = z.object({ enabled: z.boolean(), classnoteEnabled: z.boolean(), makeeduEnabled: z.boolean(), updatesEnabled: z.boolean(), revision: z.number().int().positive() }).strict();
 export const LocalSettingsInput = z.object({
   autoStart: z.boolean(), startMinimized: z.boolean(), paused: z.boolean(),
-  classnoteEnabled: z.boolean(), makeeduEnabled: z.boolean(), autoUpdate: z.boolean(),
+  classnoteEnabled: z.boolean(), makeeduEnabled: z.boolean(), autoDownload: z.boolean(),
+}).strict();
+// Old hour windows never grant permission to apply a future release.
+const LegacyLocalSettingsInput = LocalSettingsInput.omit({ autoDownload: true }).extend({
+  autoUpdate: z.boolean(),
   updateStartHour: z.number().int().min(0).max(23), updateEndHour: z.number().int().min(0).max(23),
 }).strict();
-export const DEFAULT_LOCAL_SETTINGS = { autoStart: true, startMinimized: true, paused: false, classnoteEnabled: true, makeeduEnabled: true, autoUpdate: true, updateStartHour: 0, updateEndHour: 0 };
+export const StoredLocalSettingsInput = z.union([
+  LocalSettingsInput,
+  LegacyLocalSettingsInput.transform((old) => ({ autoStart: old.autoStart, startMinimized: old.startMinimized, paused: old.paused, classnoteEnabled: old.classnoteEnabled, makeeduEnabled: old.makeeduEnabled, autoDownload: old.autoUpdate })),
+]);
+export const DEFAULT_LOCAL_SETTINGS = { autoStart: true, startMinimized: true, paused: false, classnoteEnabled: true, makeeduEnabled: true, autoDownload: true };
 export const EVENT_LABELS: Record<z.infer<typeof EventKind>, string> = {
   app_started: "앱 시작", app_stopped: "앱 종료", paired: "PC 연결", paused: "일시 중지", resumed: "작업 재개",
   lease_lost: "실행 권한 확인 필요", connection_lost: "서버 연결 끊김", connection_restored: "서버 연결 복구",

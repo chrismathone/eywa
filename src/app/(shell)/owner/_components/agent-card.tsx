@@ -30,7 +30,7 @@ export function AgentCard({classnoteOn,makeeduOn}:{classnoteOn:boolean;makeeduOn
     {notice?<p role="status" className="text-primary text-sm">{notice}</p>:null}
     <section className={box}>
       <h2 className="font-bold">Windows 연동 앱</h2>
-      <p className="text-text-dim text-sm">지점의 연동 PC 한 대에 설치하면 켜 둔 연동을 함께 실행하고, 작업이 끝난 뒤 새 버전을 자동으로 적용합니다.</p>
+      <p className="text-text-dim text-sm">지점의 연동 PC 한 대에 설치하면 켜 둔 연동을 함께 실행합니다. 새 버전은 자동으로 받고, PC 앱에서 버전마다 즉시 업데이트하거나 날짜·시간을 지정합니다.</p>
       {data?.release?<a className={button+" inline-flex"} href={data.release.url} rel="noreferrer">Windows용 다운로드 · {data.release.version}</a>:<p className="text-text-dim text-sm">설치 파일을 준비 중입니다.</p>}
     </section>
     <section className={box}>
@@ -53,7 +53,8 @@ export function AgentCard({classnoteOn,makeeduOn}:{classnoteOn:boolean;makeeduOn
       {toggle("enabled","이 PC에서 연동 실행")}
       {classnoteOn?toggle("classnoteEnabled","클래스노트 · 숙제영상 보관"):null}
       {makeeduOn?toggle("makeeduEnabled","메이크에듀"):null}
-      {toggle("updatesEnabled","검증된 버전 자동 업데이트")}
+      {toggle("updatesEnabled","새 버전 다운로드·업데이트 허용")}
+      <p className="text-text-dim text-xs">켜 두어도 바로 적용되지 않습니다. PC 앱에서 새 버전마다 적용 시점을 선택해야 합니다.</p>
       <p className="text-text-dim text-xs">기존 발송 시간과 자동 동기화 설정은 각 연동의 설정을 따릅니다. PC의 일시 중지 설정도 함께 적용됩니다.</p>
     </section>
     <section className={box}>

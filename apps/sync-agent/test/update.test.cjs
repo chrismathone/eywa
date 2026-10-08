@@ -25,3 +25,12 @@ test('updater recovers a fully staged release after restart and refuses quaranti
   const current=create(2);await current.check();assert.equal(current.ready,null);assert.equal(current.state,'idle');
   fs.writeFileSync(path.join(root,'launch.json'),JSON.stringify({failed:[2]}));const quarantined=create(1);await quarantined.check();assert.equal(quarantined.ready,null);
 });
+test('a downloaded release still checks for newer versions and rechecks the signature at application',async()=>{
+  const pair=crypto.generateKeyPairSync('rsa',{modulusLength:2048}),root=fs.mkdtempSync(path.join(base,'updater-new-release-'));
+  const sign=m=>{const bytes=Buffer.from(JSON.stringify(m));return{payload:bytes.toString('base64'),signature:crypto.sign('RSA-SHA256',bytes,pair.privateKey).toString('base64')};};
+  const releases=[sign(manifest()),sign({...manifest(),sequence:3,version:'1.2.0'})];
+  for(let i=0;i<releases.length;i++){const dir=path.join(root,'versions',String(i+2));fs.mkdirSync(dir,{recursive:true});fs.writeFileSync(path.join(dir,'release.json'),JSON.stringify(releases[i]));}
+  let calls=0;const updater=new Updater({root,api:{call:async()=>({release:releases[Math.min(calls++,1)]})},publicKey:pair.publicKey,sequence:1,event:()=>{}});
+  await updater.check();assert.equal(updater.ready.sequence,2);updater.nextCheck=0;await updater.check();assert.equal(updater.ready.sequence,3);assert.equal(calls,2);
+  fs.writeFileSync(path.join(root,'versions/3/release.json'),JSON.stringify({...releases[1],signature:'invalid'}));assert.throws(()=>updater.activate(),/invalid_signature/);assert.equal(fs.existsSync(path.join(root,'launch.json')),false);
+});

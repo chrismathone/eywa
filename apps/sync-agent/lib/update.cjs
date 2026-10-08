@@ -56,13 +56,17 @@ async function extractVerified(file,target,m){
 class Updater {
   constructor({root,api,publicKey,sequence,event}){Object.assign(this,{root,api,publicKey,sequence,event});this.state='idle';this.ready=null;this.pending=false;this.nextCheck=0;}
   async check(){
-    if(this.pending||this.ready||Date.now()<this.nextCheck)return;
+    if(this.pending||Date.now()<this.nextCheck)return;
     this.pending=true;this.nextCheck=Date.now()+6*3600000;
     let stage,archive;
     try {
       const {release}=await this.api.call('latest');if(!release)return;
       const m=verifyManifest(release,this.publicKey,{sequence:this.sequence,allowExisting:true});
       if(!m)return;
+      if(this.ready?.sequence===m.sequence){this.state='ready';return;}
+      // A newer release needs its own decision; never keep applying the old
+      // selection while its replacement is being downloaded.
+      this.ready=null;
       let journal={};try{journal=JSON.parse(fs.readFileSync(path.join(this.root,'launch.json'),'utf8'));}catch{}
       if((journal.failed??[]).includes(m.sequence))return;
       const versions=path.resolve(this.root,'versions');await fsp.mkdir(versions,{recursive:true});
@@ -70,7 +74,7 @@ class Updater {
       if(fs.existsSync(destination)){
         const saved=JSON.parse(await fsp.readFile(path.join(destination,'release.json'),'utf8'));
         if(saved.payload!==release.payload||saved.signature!==release.signature)throw new Error('version_conflict');
-        this.ready={sequence:m.sequence,version:m.version};this.state='ready';return;
+        this.ready={sequence:m.sequence,version:m.version,expiresAt:m.expiresAt};this.state='ready';return;
       }
       const keep=new Set([this.sequence,m.sequence,journal.current,journal.previous].map(String));
       for(const name of await fsp.readdir(versions)){
@@ -85,7 +89,7 @@ class Updater {
       if(Number(free.bavail)*Number(free.bsize)<required)throw new Error('disk_full');
       await download(m,archive);await extractVerified(archive,stage,m);atomicWrite(path.join(stage,'release.json'),JSON.stringify(release));
       if(fs.existsSync(destination))throw new Error('version_exists');await fsp.rename(stage,destination);await fsp.unlink(archive).catch(()=>{});
-      this.ready={sequence:m.sequence,version:m.version};this.state='ready';this.event('update_downloaded','update','info',{version:m.version});
+      this.ready={sequence:m.sequence,version:m.version,expiresAt:m.expiresAt};this.state='ready';this.event('update_downloaded','update','info',{version:m.version});
     }catch{
       // Only this attempt's generated stage paths are removable; installed/active versions never match.
       const versions=path.resolve(this.root,'versions');
@@ -96,6 +100,9 @@ class Updater {
   }
   activate(){
     if(!this.ready)throw new Error('not_ready');const file=path.join(this.root,'launch.json');let prior={};try{prior=JSON.parse(fs.readFileSync(file,'utf8'));}catch{}
+    const envelope=JSON.parse(fs.readFileSync(path.join(this.root,'versions',String(this.ready.sequence),'release.json'),'utf8'));
+    const manifest=verifyManifest(envelope,this.publicKey,{sequence:this.sequence});
+    if(manifest.sequence!==this.ready.sequence||manifest.version!==this.ready.version||(prior.failed??[]).includes(manifest.sequence))throw new Error('release_unavailable');
     atomicWrite(file,JSON.stringify({current:this.ready.sequence,previous:this.sequence,trial:true,failed:prior.failed??[]}));this.state='applying';
   }
 }
