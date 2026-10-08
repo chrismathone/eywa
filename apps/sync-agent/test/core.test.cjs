@@ -50,3 +50,18 @@ test('loopback broker rejects unauthenticated, cross-origin and retired requests
     held=false;assert.equal((await request('/query',headers)).status,503);assert.equal(received.length,1);
   }finally{b.close();}
 });
+
+test('real managed ClassNote lease adapter acquires and renews through the loopback broker',async()=>{
+  const {workerLeaseApi,createExecutionLease}=await import('../../../scripts/_classnote/worker-execution-lease.mjs');
+  let held=true,now=0;
+  const lease={generation:'7',deadline:80000,now:()=>now,assert(){if(!held)throw new Error('lost');},envelope(){return{};}};
+  const broker=await createBroker({module:'classnote',lease,api:{call:async()=>{throw Error('No external API permitted');}},isDraining:()=>false,onCycle:()=>{},onEvent:()=>{}});
+  const keys=['SYNC_AGENT_MODE','SYNC_AGENT_BROKER_PORT','SYNC_AGENT_BROKER_TOKEN'],old=Object.fromEntries(keys.map(k=>[k,process.env[k]]));
+  Object.assign(process.env,{SYNC_AGENT_MODE:'1',SYNC_AGENT_BROKER_PORT:String(broker.port),SYNC_AGENT_BROKER_TOKEN:broker.token});
+  const execution=createExecutionLease(workerLeaseApi(()=>{throw Error('No SQL permitted');},'fixture','fixture'),{now:()=>now});
+  try {
+    assert.equal(await execution.acquire(),true);assert.equal(execution.generation,'7');assert.equal(execution.held,true);
+    now=10000;lease.deadline=90000;await execution.renew();assert.equal(execution.held,true);
+    held=false;await execution.renew();assert.equal(execution.held,false);assert.throws(()=>execution.assertHeld());
+  } finally {await execution.release();broker.close();for(const key of keys)if(old[key]===undefined)delete process.env[key];else process.env[key]=old[key];}
+});

@@ -62,6 +62,11 @@ describe("실제 클래스노트 실행기의 잠금 배선", () => {
     const payload = result.writes[0].values.find((value) => value?.executionInstanceId);
     expect(payload).toMatchObject({ executionInstanceId: "fixture-instance", executionLeaseVersion: 1, postMode: true });
   });
+  it("통합 앱도 기존 16개 처리 단계를 같은 순서로 연결한다", async () => {
+    const result = await oneLoop({ managed: true });
+    expect(result.calls.filter((name) => stages.includes(name))).toEqual(stages);
+    expect(result.writes).toHaveLength(1);
+  });
   it("첫 단계 뒤 잠금이 소실되면 다음 작업을 시작하지 않는다", async () => {
     const result = await oneLoop({ loseAfterFirst: true });
     expect(result.calls.filter((name) => stages.includes(name))).toEqual(["processQueueOnce"]);

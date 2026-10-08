@@ -15,7 +15,7 @@
  * 등록: 작업 스케줄러 "eywa-makeedu-sync-watcher" (run-watch-requests.ps1, 로그온 트리거 + 상시 실행)
  * 로그: <repo>/.makeedu-tmp/watch-requests.log (MAKEEDU_OUT로 재정의 가능)
  */
-const { spawnSync } = require("child_process");
+const { spawnSync, spawn } = require("child_process");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -35,6 +35,7 @@ const STARTED_AT = new Date().toISOString(); // 이 워처 프로세스 시작 �
 function log(msg) {
   const line = `[${new Date().toISOString()}] ${msg}`;
   console.log(line);
+  if(managedWorker.managed)return; // The app captures and dates all worker output.
   try {
     fs.mkdirSync(LOG_DIR, { recursive: true });
     fs.appendFileSync(LOG, line + "\n");
@@ -96,7 +97,17 @@ async function finish(ids, ok, errMsg) {
 }
 
 // 스크립트를 동기(블로킹)로 완주 — 실행 중엔 폴링도 멈춰 중복 실행이 구조적으로 없음.
-function runScript(scriptRel, extraEnv) {
+async function runScript(scriptRel, extraEnv) {
+  if(managedWorker.managed) {
+    return new Promise(resolve=>{
+      let tail="",settled=false;
+      const child=spawn(process.execPath,[path.join("scripts","_makeedu",scriptRel),"--apply"],{cwd:REPO,windowsHide:true,env:{...process.env,...extraEnv},stdio:["ignore","pipe","pipe"]});
+      const collect=(stream,chunk)=>{stream.write(chunk);tail=(tail+chunk.toString('utf8')).slice(-8192);};
+      child.stdout.on('data',chunk=>collect(process.stdout,chunk));child.stderr.on('data',chunk=>collect(process.stderr,chunk));
+      const finish=ok=>{if(settled)return;settled=true;resolve({ok,tail:tail.split("\n").filter(Boolean).slice(-5).join(" | ").slice(0,500)});};
+      child.once('error',()=>finish(false));child.once('close',code=>finish(code===0));
+    });
+  }
   const r = spawnSync(
     process.execPath,
     [...(managedWorker.managed ? [] : ["--env-file=.env.local"]), path.join("scripts", "_makeedu", scriptRel), "--apply"],
@@ -206,7 +217,7 @@ async function heartbeat() {
         const requester = claimed.map((c) => c.requested_by).find(Boolean) || null;
         log(`동기화 요청 ${claimed.length}건 감지 → sync-all 실행`);
         await beat(); // 블로킹 실행 직전에 갱신 — 실행 중 '오프라인' 오표시 최소화
-        const { ok, tail } = runSync(requester);
+        const { ok, tail } = await runSync(requester);
         managedWorker.result("syncNow",{ok});
         await finish(claimed, ok, ok ? null : tail || "sync-all 실패");
         log(ok ? "✅ 동기화 완료 (done)" : `✖ 동기화 실패 (error): ${tail}`);
@@ -217,7 +228,7 @@ async function heartbeat() {
         const { job } = await brokerCall("schedule", {});
         if (job) {
           await brokerCall("event", { kind: "job_started",detail:{task:job.kind} });
-          const result = runScript(job.kind === "login" ? "check-session.mjs" : "sync-all.cjs", { MAKEEDU_FORCE: "false", MAKEEDU_TRIGGER: "scheduled" });
+          const result = await runScript(job.kind === "login" ? "check-session.mjs" : "sync-all.cjs", { MAKEEDU_FORCE: "false", MAKEEDU_TRIGGER: "scheduled" });
           await brokerCall("schedule", { finish: { ...job, ok: result.ok } });
           await brokerCall("event", { kind: result.ok ? "job_succeeded" : "job_failed",detail:{task:job.kind} });
         }
@@ -231,7 +242,7 @@ async function heartbeat() {
       if ((await pendingPushCount()) > 0) {
         log(`푸시 요청 감지 → push-consultations 실행`);
         await beat();
-        const { ok, tail } = runPush();
+        const { ok, tail } = await runPush();
         managedWorker.result("push",{ok});
         log(ok ? "✅ 푸시 완료 (done)" : `✖ 푸시 실패/부분실패: ${tail}`);
       }

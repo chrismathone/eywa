@@ -2,7 +2,7 @@
 
 Windows x64용 통합 연동 앱. 클래스노트의 보고서·공지·회수·학부모 연락·답글·공감·명단·읽음 처리와 Google Drive 영상 보관, 메이크에듀의 기존 동기화·상담 전송·접속 점검을 기존 실행기로 처리한다. 일반 사용자는 최초 설치 한 번 이후 ZIP을 풀 필요가 없다.
 
-현재 버전은 **1.0.1 / sequence 2**이다. 2026-10-08 웹/API와 제어 DB를 배포했고, 기존 침산점 워커의 응답과 무변경 점검 요청 완료를 확인했다. 2026-10-09 설치 파일을 게시하고 정식 릴리스를 등록했다. 웹 `학원 설정 → 연동 → 연동 PC`에서 다운로드할 수 있다. 실제 연동 PC 전환은 별도다. [게시 검증 및 handoff](../../docs/_audit/sync-agent-download-handoff-2026-10-09.md), [최초 수용 검증](../../docs/_audit/sync-agent-acceptance-2026-10-08.md).
+현재 정식 버전은 **1.0.2 / sequence 4**다. 웹 `학원 설정 → 연동 → 연동 PC`에서 다운로드할 수 있다. 2026-10-09 실제 전환된 PC의 권한·반환 컬럼·JSON 인코딩 오류를 수정하고, 완료 로그가 남지 않는 통신 문제와 메뉴·로그 기능을 보완했다. sequence 3는 게시하지 않은 로컬 검증판이다. [실제 운영 점검과 handoff](../../docs/_audit/sync-agent-live-worker-handoff-2026-10-09.md), [역할별 검수표](../../docs/_audit/sync-agent-worker-role-coverage-2026-10-09.md), [최초 게시 검증](../../docs/_audit/sync-agent-download-handoff-2026-10-09.md).
 
 ## 운영자 사용
 
@@ -13,6 +13,8 @@ Windows x64용 통합 연동 앱. 클래스노트의 보고서·공지·회수·
 5. 웹과 PC 양쪽에서 켜 둔 연동만 실행된다. 실제 발송·자동 동기화·답글 모드 등의 기존 업무 설정도 계속 적용된다. 메이크에듀의 정기 동기화는 06:00/18:00, 접속 점검은 08:30 KST다.
 
 PC 설정은 웹에서 발급한 별도 12자리 **관리 코드**로 10분 동안 연다. Windows 로그인 시 실행, 트레이 시작, 전체/연동별 일시 중지와 자동 다운로드를 설정한다. 새 버전마다 **지금 업데이트** 또는 **날짜·시간 지정**을 선택한다. 창 닫기는 트레이 유지이며 **작업을 마치고 종료**가 실제 종료다.
+
+웹의 **실행 로그**에서 한국시간 날짜·연동·오류 필터로 최근 기록을 보고 이전 100건으로 이동한다. PC의 **로그 폴더 열기**는 `%LOCALAPPDATA%\AYWA\Sync\tenants\<tenant-id>\log\YYYY-MM-DD\`를 연다. `app.log`, `classnote.log`, `makeedu.log`의 날짜와 행 시각은 KST다. 상세 로그는 PC에 두고 웹에는 고정된 처리 단계·오류 요약만 보낸다. 자격증명은 마스킹하고 파일은 20MiB마다 나눈다. 예전 상태 폴더의 로그를 삭제하거나 새 로그로 덮지 않는다.
 
 Google 계정과 영상 저장 폴더는 기존 웹의 `숙제영상 드라이브`에서 관리한다. 기존 PC의 Google 환경 설정은 가져오기에서 허용된 항목만 이전한다. gcloud 인증을 쓰는 PC는 같은 Windows 사용자와 설치된 gcloud가 필요하다. 과거 Drive 영상을 옮기거나 폴더를 바꾸지 않는다.
 
@@ -41,7 +43,7 @@ cd F:\eywa\apps\sync-agent
 npm ci
 # FFmpeg의 ffmpeg.exe와 ffprobe.exe가 들어 있는 디렉터리
 $env:EYWA_AGENT_FFMPEG_DIR = 'C:\tools\ffmpeg\bin'
-$env:EYWA_AGENT_SEQUENCE = '2'
+$env:EYWA_AGENT_SEQUENCE = '4'
 npm run prepare:runtime
 npm test
 npm run package
@@ -58,20 +60,20 @@ node test/bundled-runtime.cjs
 
 ## 서버 반영과 최초 게시
 
-1·2번 웹/API와 DB 배포는 2026-10-08, 3~5번의 1.0.1 최초 게시는 2026-10-09 완료했다. 6번 실제 PC 전환은 별도다. 자동으로 기존 PC를 교체하는 명령은 제공하지 않는다.
+1·2번 웹/API와 DB 배포는 2026-10-08, 1.0.1 최초 게시와 실제 PC 전환 및 1.0.2 게시는 2026-10-09 진행했다. 이미 연결된 PC의 새 버전 적용은 PC 앱에서 버전별로 선택한다.
 
-1. 기존 DB 백업/배포 절차로 다음 마이그레이션을 순서대로 반영한다: `20261008073000`, `20261008100000`, `20261008101000`, `20261008102000`, `20261008103000`. 새로운 제어 표와 역할 정책이며 현재 시간표·학생·수납을 이관하거나 초기화하는 SQL은 없다.
+1. 기존 DB 백업/배포 절차로 다음 마이그레이션을 순서대로 반영한다: `20261008073000`, `20261008100000`, `20261008101000`, `20261008102000`, `20261008103000`, `20261009061000`, `20261009064000`. 새로운 제어 표·역할 정책·기존 정책 helper 권한과 로그 인덱스이며 현재 시간표·학생·수납을 초기화하지 않는다.
 2. 웹/API를 배포한다. 서버 `DATABASE_URL`의 역할은 새 `eywa_sync_agent` 역할로 전환할 수 있어야 한다. `SYNC_AGENT_CODE_SECRET`은 서버에만 두는 안정된 난수 비밀이다. 미설정 시 기존 서버 서비스 키를 사용하므로 가능하면 별도 비밀을 지정한다.
-3. 변경 불가능한 HTTPS 파일 경로를 정하고 아래와 같이 배포 묶음을 만든다. 현재 게시한 경로는 서비스 저장소의 `sync-agent-releases/2/`이다. 다음 릴리스는 새 순번의 경로를 사용한다. 실제 업로드 위치가 다르면 새 공개 전에 URL과 서명을 다시 만든다.
+3. 변경 불가능한 HTTPS 파일 경로를 정하고 아래와 같이 배포 묶음을 만든다. 현재 게시한 경로는 서비스 저장소의 `sync-agent-releases/4/`이다. 다음 릴리스는 새 순번의 경로를 사용한다. 실제 업로드 위치가 다르면 새 공개 전에 URL과 서명을 다시 만든다.
 
 ```powershell
-$env:EYWA_AGENT_RELEASE_BASE_URL = 'https://YOUR-STORAGE-HOST/path/2/'
+$env:EYWA_AGENT_RELEASE_BASE_URL = 'https://YOUR-STORAGE-HOST/path/4/'
 node release.cjs
 node register-release.cjs
 ```
 
-4. 생성된 `dist/release/2/AywaSync-Setup-1.0.1.exe`, `AywaSync-1.0.1.zip`, `release.json`, `checksums.json`을 해당 HTTPS 경로에 게시한다. 현재 Supabase 경로에서는 `node --env-file=../../.env.local publish-release.cjs`로 검증 계획을 확인한 뒤 `--apply`를 추가하면 전용 공개 버킷에 TUS 방식으로 올린다. 서명·로컬 해시·프로젝트 주소를 먼저 검사하고 같은 경로의 다른 파일은 덮어쓰지 않는다. 중단된 업로드 상태는 저장소의 무시된 `work/sync-agent-publish/`에 둔다. EXE/ZIP은 리다이렉트 없이 200 응답이어야 한다. 현재 전용 버킷 제한은 600MiB이며, 전역 제한이 그 이상이어야 한다. 기존 첨부파일 버킷의 제한은 변경하지 않는다.
-5. `node register-release.cjs --verify-remote`로 게시된 EXE와 ZIP 전체 해시를 확인한다. 서버 접속 환경에서 `node --env-file=../../.env.local register-release.cjs --apply`를 실행하면 같은 검증 후 정식 릴리스 행을 등록한다. 기본 실행은 로컬 검증뿐이며, `--apply`는 업로드나 마이그레이션을 하지 않는다. 등록 후 웹 다운로드와 자동 업데이트 조회에 나타난다.
+4. 생성된 `dist/release/4/AywaSync-Setup-1.0.2.exe`, `AywaSync-1.0.2.zip`, `release.json`, `checksums.json`을 해당 HTTPS 경로에 게시한다. 현재 Supabase 경로에서는 `node --env-file=../../.env.local publish-release.cjs`로 검증 계획을 확인한 뒤 `--apply`를 추가하면 전용 공개 버킷에 TUS 방식으로 올린다. 서명·로컬 해시·프로젝트 주소를 먼저 검사하고 같은 경로의 다른 파일은 덮어쓰지 않는다. 중단된 업로드 상태는 저장소의 무시된 `work/sync-agent-publish/`에 둔다. EXE/ZIP은 리다이렉트 없이 200 응답이어야 한다. 현재 전용 버킷 제한은 600MiB이며, 전역 제한이 그 이상이어야 한다. 기존 첨부파일 버킷의 제한은 변경하지 않는다.
+5. `node register-release.cjs --verify-remote`로 게시된 EXE와 ZIP 전체 해시를 확인한다. 검증된 버전·순번·명세·서명·설치 링크로 등록 SQL 파일을 준비하고, Supabase CLI의 `db query --file`로 같은 앱 프로젝트의 정식 릴리스 행을 등록한다. 등록은 표 잠금 안에서 순번·버전 재사용을 거부해야 한다. 등록 후 웹 다운로드와 자동 업데이트 조회에 나타난다. 기본 `register-release.cjs` 실행은 로컬 검증뿐이다.
 6. 최초 실제 연동 PC에서 설정/기록을 가져오고 구 워커 종료를 확인한 뒤 전환한다. 실제 외부 계정·IP 허용·Drive 권한·재시작을 확인한다. 이전 PC의 오래된 예약 작업과 공유 DB 자격증명 사용처를 정리한 후 구 설치를 제거한다.
 
 구형 워커는 새 프로토콜을 모르므로 서버의 기기 등록만으로 과거에 배포한 DB 비밀번호를 무효화할 수 없다. 기존 파일과 공유 자격증명을 그대로 둔 채 “어떤 구 PC도 다시 실행할 수 없다”고 보장하지 않는다.

@@ -3,7 +3,7 @@ const {randomBytes,timingSafeEqual}=require('node:crypto');
 async function createBroker({module,lease,api,isDraining,onCycle,onEvent}) {
   const token=randomBytes(32).toString('base64url');let inflight=0;
   const server=http.createServer(async(req,res)=>{
-    const reply=(status,body)=>{res.writeHead(status,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify(body));};
+    const reply=(status,body)=>{res.writeHead(status,{'content-type':'application/json','cache-control':'no-store',connection:'close'});res.end(JSON.stringify(body));};
     const expected=Buffer.from(`Bearer ${token}`),supplied=Buffer.from(req.headers.authorization??'');
     if(req.method!=='POST'||req.headers.origin||supplied.length!==expected.length||!timingSafeEqual(supplied,expected)){req.resume();reply(401,{error:'unauthorized'});return;}
     try {
@@ -13,7 +13,7 @@ async function createBroker({module,lease,api,isDraining,onCycle,onEvent}) {
       inflight++;
       try {
         if(req.url==='/state'){onCycle();result={drain:isDraining()};}
-        else if(req.url==='/lease-check'){result={generation:lease.generation,remaining_ms:Math.max(0,lease.deadline-lease.now())};}
+        else if(req.url==='/lease-check'){result={generation:lease.generation,remainingMs:Math.max(0,lease.deadline-lease.now())};}
         else if(req.url==='/schedule'){result=await api.call('schedule',{...body,...lease.envelope(module)});}
         else if(req.url==='/event'){onEvent(body);result={ok:true};}
         else if(['/query','/operation'].includes(req.url))result=await api.call(req.url.slice(1),{...body,...lease.envelope(module)});

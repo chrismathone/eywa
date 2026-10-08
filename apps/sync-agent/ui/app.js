@@ -44,5 +44,5 @@ $('credentials-form').addEventListener('submit',async e=>{e.preventDefault();con
 $('settings-form').addEventListener('submit',async e=>{e.preventDefault();const settings={...latest.local};for(const key of Object.keys(options))settings[key]=$(key).checked;if(await command('settings',settings))dirty=false;});
 $('schedule-form').addEventListener('submit',e=>{e.preventDefault();const at=new Date($('update-at').value);if(!Number.isFinite(at.getTime())){$('error').textContent='예약 날짜와 시간을 지정해 주세요.';return;}void command('update-schedule',{sequence:latest.updateInfo?.ready?.sequence,at:at.toISOString()});});
 $('update-now').addEventListener('click',()=>void command('update-now',{sequence:latest.updateInfo?.ready?.sequence}));
-for(const id of ['import','legacy','cutover','update','update-cancel','quit','reset'])$(id).addEventListener('click',()=>void command(id));
+for(const id of ['import','legacy','cutover','update','update-cancel','quit','reset','logs'])$(id).addEventListener('click',()=>void command(id));
 window.agent.onState(render);void command('state');

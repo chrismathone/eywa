@@ -1,10 +1,11 @@
-const {app,BrowserWindow,ipcMain,Tray,Menu,nativeImage,dialog,powerMonitor,safeStorage,Notification}=require('electron');
+const {app,BrowserWindow,ipcMain,Tray,Menu,nativeImage,dialog,powerMonitor,safeStorage,Notification,shell}=require('electron');
 const fs=require('node:fs');const path=require('node:path');const os=require('node:os');const {randomUUID,randomBytes}=require('node:crypto');
 const {AgentApi}=require('./lib/api.cjs');const {DeviceLease}=require('./lib/lease.cjs');const {Supervisor,CREDENTIAL_KEYS}=require('./lib/supervisor.cjs');
 const {atomicWrite,secretStore,eventQueue}=require('./lib/storage.cjs');const {Updater}=require('./lib/update.cjs');
 const {UpdatePlan}=require('./lib/update-plan.cjs');
+const {createWorkerLog}=require('./lib/worker-log.cjs');
 const {inspectLegacy,disableLegacyTasks,readLegacySettings,copyLegacyState}=require('./lib/legacy.cjs');
-const {LocalSettingsInput,StoredLocalSettingsInput,DEFAULT_LOCAL_SETTINGS,EventInput}=require('./lib/protocol.cjs');
+const {LocalSettingsInput,StoredLocalSettingsInput,DEFAULT_LOCAL_SETTINGS,EventInput,EVENT_LABELS,LOG_CODE_LABELS}=require('./lib/protocol.cjs');
 const build=require('./build-config.json');
 // Resolve from the OS profile, independent of executable/version directory.
 const dataRoot=path.resolve(process.env.LOCALAPPDATA||path.join(app.getPath('home'),'AppData','Local'),'AYWA','Sync');
@@ -15,7 +16,7 @@ let window,tray,store,events,connection=null,local={...DEFAULT_LOCAL_SETTINGS},l
 let message='',unlockedUntil=0,looping=false,quitting=false,closing=false,applying=false,suspended=false,nextConnect=0,revoked=false;
 let notifiedUpdate=0;
 const uiFile=path.join(__dirname,'ui','index.html');
-function event(kind,module='app',level='info',detail={}){const row={id:randomUUID(),at:new Date().toISOString(),kind,module,level,detail};if(EventInput.safeParse(row).success)events?.add(row);}
+function event(kind,module='app',level='info',detail={}){const row={id:randomUUID(),at:new Date().toISOString(),kind,module,level,detail};if(EventInput.safeParse(row).success){events?.add(row);try{createWorkerLog(path.join(dataRoot,...(connection?.tenantId?['tenants',connection.tenantId]:[]),'log')).append('app',`${module} · ${detail.logCode?LOG_CODE_LABELS[detail.logCode]:EVENT_LABELS[kind]??'실행 기록'}${detail.version?' · '+detail.version:''}`);}catch{}}}
 function snapshot(){return{version:build.version,tenantName:connection?.tenantName??'',paired:!!connection?.tenantId,revoked,online:!!lease?.held,unlocked:Date.now()<unlockedUntil,local,
   configuration,modules:{classnote:supervisor?.status('classnote')??'off',makeedu:supervisor?.status('makeedu')??'off'},update:updater?.state??'idle',message,
   updateInfo:{ready:updater?.ready??null,plan:updatePlan?.plan??null,draining:applying&&!closing,closing},
@@ -34,6 +35,7 @@ async function checkUpdates(){
   broadcast();
 }
 async function start(){
+  Menu.setApplicationMenu(null);
   fs.mkdirSync(dataRoot,{recursive:true});store=secretStore(dataRoot,safeStorage);
   try{connection=store.read();}catch{message='저장된 연결을 열지 못했습니다. 같은 Windows 계정으로 실행했는지 확인해 주세요.';}
   events=eventQueue(path.join(dataRoot,'events',connection?.deviceId??'unpaired'));
@@ -101,6 +103,7 @@ function registerIpc(){
     try{
       switch(action){
         case 'state':return{ok:true,state:snapshot()};
+        case 'logs':{const dir=path.join(dataRoot,...(connection?.tenantId?['tenants',connection.tenantId]:[]),'log');fs.mkdirSync(dir,{recursive:true});const error=await shell.openPath(dir);if(error)throw Error('로그 폴더를 열지 못했습니다.');return{ok:true};}
         case 'pair':{
           if(connection?.tenantId)throw new Error('연결된 PC입니다. 웹에서 기존 연결을 해제해 주세요.');
           const code=String(input?.code??'').replace(/[\s-]/g,'');if(!/^\d{12}$/.test(code))throw new Error('12자리 연결 코드를 입력해 주세요.');

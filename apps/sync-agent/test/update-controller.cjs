@@ -10,12 +10,12 @@ async function main(){
  console.log(JSON.stringify({stage:'fixture'}));
  try{
   await electron.evaluate(({app,Notification})=>{
-   const load=process.mainModule.require.bind(process.mainModule),path=load('node:path'),base=app.getAppPath(),{Updater}=load(path.join(base,'lib/update.cjs')),{Supervisor}=load(path.join(base,'lib/supervisor.cjs')),{UpdatePlan}=load(path.join(base,'lib/update-plan.cjs'));
+   const load=process.mainModule.require.bind(process.mainModule),path=load('node:path'),base=app.getAppPath(),{Updater}=load(path.join(base,'lib/update.cjs')),{Supervisor}=load(path.join(base,'lib/supervisor.cjs')),{UpdatePlan}=load(path.join(base,'lib/update-plan.cjs')),build=load(path.join(base,'build-config.json'));
    global.fixture={calls:[],activations:0,busy:false,now:Date.now(),enabled:true,notifications:0};
    // Advance only the appointment clock; keep Electron, IPC, leases and unlock expiry on real time.
    const request=UpdatePlan.prototype.request;UpdatePlan.prototype.request=function(...args){this.now=()=>global.fixture.now;return request.apply(this,args);};
    app.setLoginItemSettings=()=>{};Notification.prototype.show=function(){global.fixture.notifications++;};
-   Updater.prototype.check=async function(){this.ready={sequence:3,version:'1.0.2',expiresAt:'2099-01-01T00:00:00Z'};this.state='ready';};
+   Updater.prototype.check=async function(){this.ready={sequence:build.sequence+1,version:'99.0.0',expiresAt:'2099-01-01T00:00:00Z'};this.state='ready';};
    Updater.prototype.activate=function(){global.fixture.activations++;throw new Error('fixture: installation deliberately unavailable');};
    Object.defineProperty(Supervisor.prototype,'busy',{get(){return global.fixture.busy;}});
    global.fetch=async(url,init)=>{
@@ -40,16 +40,17 @@ async function main(){
   assert.equal(await electron.evaluate(()=>global.fixture.activations),0);const at=(await state()).updateInfo.plan.at;
   await page.screenshot({path:path.join(root,'scheduled.png'),fullPage:true});
   await page.getByRole('button',{name:'예약·적용 대기 취소'}).click();assert.equal((await state()).updateInfo.plan,null);
-  const scheduled=await page.evaluate(at=>window.agent.command('update-schedule',{sequence:3,at}),at);assert.equal(scheduled.ok,true);
+  const readySequence=(await state()).updateInfo.ready.sequence;
+  const scheduled=await page.evaluate(({at,sequence})=>window.agent.command('update-schedule',{sequence,at}),{sequence:readySequence,at});assert.equal(scheduled.ok,true);
   console.log(JSON.stringify({stage:'drain'}));
   await electron.evaluate(at=>{global.fixture.busy=true;global.fixture.now=Date.parse(at)+1000;},at);await tick();await waitPlan('waiting');
   assert.equal(await electron.evaluate(()=>global.fixture.activations),0);const waiting=await state();console.log(JSON.stringify({stage:'cancel-drain',unlocked:waiting.unlocked,online:waiting.online,update:waiting.update,info:waiting.updateInfo}));await page.getByRole('button',{name:'예약·적용 대기 취소'}).click();assert.equal((await state()).updateInfo.plan,null);
   await page.getByRole('button',{name:'지금 업데이트',exact:true}).click();await waitPlan('waiting');assert.equal(await electron.evaluate(()=>global.fixture.activations),0);
   await electron.evaluate(()=>{global.fixture.busy=false;});await tick();await waitPlan('failed');assert.equal(await electron.evaluate(()=>global.fixture.activations),1);
   await tick();assert.equal(await electron.evaluate(()=>global.fixture.activations),1);
-  const stale=await page.evaluate(()=>window.agent.command('update-now',{sequence:2}));assert.equal(stale.ok,false);
+  const stale=await page.evaluate(sequence=>window.agent.command('update-now',{sequence:sequence-1}),readySequence);assert.equal(stale.ok,false);
   await electron.evaluate(()=>{global.fixture.enabled=false;});await tick();await page.waitForFunction(async()=>!(await window.agent.command('state')).state.configuration.updatesEnabled);
-  assert.equal((await page.evaluate(()=>window.agent.command('update-now',{sequence:3}))).ok,false);
+  assert.equal((await page.evaluate(sequence=>window.agent.command('update-now',{sequence}),readySequence)).ok,false);
   const result=await electron.evaluate(()=>global.fixture);assert.ok(!result.calls.includes('module-start'));
   console.log(JSON.stringify({passed:true,packaged,downloadDoesNotApply:true,appointmentPersisted:true,cancelWhileBusy:true,immediateWaitsForWork:true,failedApplyNotRetried:true,staleChoiceRejected:true,serverDisableRespected:true,operationalWorkers:0,realNetworkRequests:0,evidence:root}));
  }catch(error){console.error('Controller fixture failed:',error.message);throw error;}

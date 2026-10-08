@@ -2,6 +2,7 @@ const path=require('node:path');
 const fs=require('node:fs');
 const {spawn}=require('node:child_process');
 const {createBroker}=require('./broker.cjs');
+const {createWorkerLog}=require('./worker-log.cjs');
 const CREDENTIAL_KEYS=['CLASSNOTE_UPLOAD_ID','CLASSNOTE_UPLOAD_PW','CLASSNOTE_AUTHOR_NAME','MAKEEDU_ID','MAKEEDU_PW','GOOGLE_DRIVE_CLIENT_ID','GOOGLE_DRIVE_CLIENT_SECRET','GOOGLE_DRIVE_REFRESH_TOKEN','GOOGLE_SERVICE_ACCOUNT_KEY','GOOGLE_DRIVE_GCLOUD_ACCOUNT','GOOGLE_DRIVE_GCLOUD_PATH','CLASSNOTE_VIDEO_DRIVE_FOLDER_ID','CLASSNOTE_VIDEO_TEACHER_FOLDERS'];
 // Preserve existing behavior switches during migration, including intentionally disabled automation.
 CREDENTIAL_KEYS.push('CLASSNOTE_BOARD_AUTO_SYNC','CLASSNOTE_BOARD_AUTO_RELEASE','CLASSNOTE_LEGACY_SHARE_BASES','CLASSNOTE_VIDEO_COMPRESS','CLASSNOTE_VIDEO_DRIVE_ACCOUNT_MIN_FREE_GB','CLASSNOTE_VIDEO_DRIVE_MIN_FREE_GB','CLASSNOTE_LOG_KEEP_DAYS','CLASSNOTE_LOG_MAX_MB','MAKEEDU_STORAGE_STATE','MAKEEDU_CONC','MAKEEDU_CONSULT_MAX','MAKEEDU_INVOICE_FROM','MAKEEDU_INVOICE_MONTHS','MAKEEDU_INVOICE_TO','MAKEEDU_PROSPECT_MAX_AGE_DAYS','MAKEEDU_VOID_STALE','MAKEEDU_ALLOW_BULK_VOID');
@@ -42,8 +43,11 @@ class Supervisor {
         CLASSNOTE_PUBLISH_MODE:'post',PLAYWRIGHT_BROWSERS_PATH:path.join(this.resources,'browsers'),
         CLASSNOTE_FFMPEG_PATH:path.join(this.resources,'ffmpeg','ffmpeg.exe'),CLASSNOTE_FFPROBE_PATH:path.join(this.resources,'ffmpeg','ffprobe.exe')});
       const runtime=path.join(this.resources,'runtime');const entry=module==='classnote'?'scripts/_classnote/watch-classnote-queue.mjs':'scripts/_makeedu/watch-sync-requests.cjs';
-      const child=spawn(path.join(this.resources,'WorkerHost.exe'),[this.executable,path.join(runtime,entry),...(module==='classnote'?['--post']:[])],{cwd:runtime,env,windowsHide:true,stdio:['pipe','ignore','ignore']});record.process=child;
-      // No raw stdout is uploaded or rendered: worker output can include student data and credentials.
+      const logs=createWorkerLog(path.join(this.root,'tenants',this.identity.tenantId,'log'),{secrets:[...Object.values(credentials),this.identity.secret,record.broker.token],onSafeLog:({logCode,level})=>this.event('worker_log',module,level,{logCode})});
+      const stdout=logs.sink(module),stderr=logs.sink(module);
+      const child=spawn(path.join(this.resources,'WorkerHost.exe'),[this.executable,path.join(runtime,entry),...(module==='classnote'?['--post']:[])],{cwd:runtime,env,windowsHide:true,stdio:['pipe','pipe','pipe']});record.process=child;
+      child.stdout.on('data',stdout.write);child.stderr.on('data',stderr.write);child.once('close',()=>{stdout.end();stderr.end();});
+      // Only fixed summaries cross the network. Raw lines stay in the local tenant log.
       const done=async(failed)=>{if(this.modules.get(module)!==record||record.stopping)return;record.stopping=true;record.broker.close();
         try{await this.api.call('module-stop',{instanceId:this.lease.instanceId,generation:this.lease.generation,module});}catch{this.lease.lose();}
         this.modules.delete(module);

@@ -6,7 +6,10 @@ async function brokerCall(action, body) {
   const token = process.env.SYNC_AGENT_BROKER_TOKEN;
   if (!Number.isInteger(port) || port < 1 || port > 65535 || !token) throw new Error('연동 앱 연결을 확인하지 못했습니다.');
   const response = await fetch(`http://127.0.0.1:${port}/${action}`, {
-    method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    // Legacy jobs use spawnSync for minutes. Their event loop cannot notice an
+    // idle socket closing, so never reuse a loopback socket after that pause.
+    // Do not retry a possibly committed write to mask a transport failure.
+    method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', connection: 'close' },
     body: JSON.stringify(body), signal: AbortSignal.timeout(60_000), redirect: 'error',
   });
   const result = await response.json();

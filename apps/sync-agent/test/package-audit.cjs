@@ -14,7 +14,7 @@ for(const rel of manifest.sources){
 }
 for(const name of ['remote-db.cjs','managed-worker.cjs'])assert.deepEqual(fs.readFileSync(path.join(runtime,'scripts/_sync-agent',name)),fs.readFileSync(path.join(root,'scripts/_sync-agent',name)));
 const archive=path.join(bundle,'resources/app.asar');
-for(const name of ['main.cjs','preload.cjs','lib/update.cjs','lib/update-plan.cjs','lib/supervisor.cjs','lib/lease.cjs','lib/broker.cjs','lib/storage.cjs','lib/legacy.cjs','lib/api.cjs','lib/protocol.cjs','build-config.json','ui/index.html','ui/app.js','ui/style.css'])
+for(const name of ['main.cjs','preload.cjs','lib/update.cjs','lib/update-plan.cjs','lib/supervisor.cjs','lib/lease.cjs','lib/broker.cjs','lib/storage.cjs','lib/worker-log.cjs','lib/legacy.cjs','lib/api.cjs','lib/protocol.cjs','build-config.json','ui/index.html','ui/app.js','ui/style.css'])
   assert.equal(textContents(asar.extractFile(archive,name)),textContents(fs.readFileSync(path.join(app,name))),`Application mismatch: ${name}`);
 const files=fs.readdirSync(bundle,{recursive:true,withFileTypes:true}).filter(d=>d.isFile());
 for(const d of files){const rel=path.relative(bundle,path.join(d.parentPath,d.name)).replaceAll('\\','/');
