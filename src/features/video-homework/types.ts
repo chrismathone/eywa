@@ -32,10 +32,13 @@ export type VideoHomeworkLedgerRow = VideoHomeworkRosterRow & {
   /** 지금 설정으로 검사 대상인가 — 아니면 저장된 기록만 회차로 보이고 새 미확인·자동 집계는 만들지 않는다. */
   tracked: boolean;
   editable: boolean;
+  canAssignVideos?: boolean;
 };
 
 /** 숙제 영상 한 건 — 반·시각·id와 재생 가능한 경우의 미리보기만 내려온다. 원본 다운로드 주소는 내리지 않는다. */
 export type VideoArrival = {
+  /** 담당자가 숙제를 직접 지정한 영상은 자동 날짜 추정 범위를 적용하지 않는다. */
+  manuallyAssigned?: boolean;
   id: string; studentId: string; classId: string | null; postedAt: string;
   /** 서버가 파일 id를 검증한 재생 주소. 업로드 전/잘못된 id는 null, 옛 조회는 생략 가능. */
   playback?: { preview: string; thumbnail: string; uploadedAt: string | null } | null;

@@ -91,7 +91,7 @@ describe("배선 가드", () => {
     expect(start.indexOf("isAssignedHomeworkDate(")).toBeLessThan(start.indexOf("ensureLinkTeacherFolder("));
     // 숙제 조회는 전부 그 지점으로 좁힌다(로그인 없는 화면 — admin은 RLS를 우회한다)
     const hw = read("src", "features", "video-submit", "server", "site-homework.ts");
-    expect(hw.match(/\.from\("/g)).toHaveLength(4);
+    expect(hw.match(/\.from\(/g)).toHaveLength(4);
     expect(hw.match(/\.eq\("tenant_id", tenantId\)/g)).toHaveLength(4);
   });
   it("🔴 숙제 하나를 올린 뒤 같은 반의 다른 숙제로 바로 간다(같은 링크) — 숙제마다 다시 조회·열기를 하지 않는다(횟수 제한·하루 링크 상한이 숙제 수만큼 들지 않게)", () => {

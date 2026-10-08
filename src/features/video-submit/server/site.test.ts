@@ -226,6 +226,15 @@ describe("뒷 4자리 + 이름 조회 — 선생님이 낸 영상 숙제 중 아
     db.tables.video_homework_marks = [{ id: "m9", tenant_id: OTHER_T, class_id: C, student_id: S, check_date: "2026-10-02", homework_date: "2026-10-01", submitted_date: "2026-10-02", status: "submitted", updated_at: "2026-10-02T10:00:00+09:00" }];
     expect(dates(await look())).toHaveLength(2);
   });
+  it("업로드 시작 기록만 있는 파일은 제출 가능한 숙제를 숨기지 않는다", async () => {
+    db.tables.homework_video_link_uploads = Array.from({ length: 4 }, (_, i) => ({ id: `unfinished-${i}`, tenant_id: T, status: "started", route: { classId: C, homeworkDate: "2026-10-01" } }));
+    expect(dates(await look())).toHaveLength(2);
+  });
+  it("담임이 고친 반·숙제 배정을 사용해 다른 반 영상으로 오인하지 않는다", async () => {
+    db.tables.student_homework_videos = [{ id: "v", tenant_id: T, student_id: S, posted_at: "2026-10-02T09:00:00+09:00", route: { classId: C3 } }];
+    db.tables.homework_video_ledger_videos = [{ ...db.tables.student_homework_videos[0], route: { classId: C, homeworkDate: "2026-10-01", manualAssignment: true } }];
+    expect(dates(await look())).toEqual([`${label("2026-09-29")}|LT4`]);
+  });
   it("🔴 한 조회가 행 상한(500)을 넘으면 조용히 잘라 판정하지 않는다 — 숙제 목록 대신 '다시 시도' 안내", async () => {
     db.tables.video_homework_marks = Array.from({ length: 501 }, (_, i) => ({ id: `m${i}`, tenant_id: T, class_id: C, student_id: S,
       check_date: "2026-10-02", homework_date: "2026-10-01", submitted_date: null, status: "missing", updated_at: "2026-10-02T10:00:00+09:00" }));

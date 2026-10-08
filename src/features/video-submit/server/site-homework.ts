@@ -5,6 +5,7 @@ import { buildLedgerRounds, roundPairKey, videoArrivedAt, videoFingerprint, vide
 import { videoHomeworkColumnReady } from "@/features/video-homework/server/assignments";
 import { isVideoHomeworkDate, type VideoArrival, type VideoHomeworkMark, type VideoHomeworkStatus } from "@/features/video-homework/types";
 import { SITE_HOMEWORK_DAYS } from "../site";
+import { homeworkVideoSource } from "@/features/video-homework/server/video-source";
 
 type Db = ReturnType<typeof createAdminClient>;
 export type HomeworkPair = { studentId: string; classId: string };
@@ -41,6 +42,7 @@ export async function openHomeworkDates(db: Db, tenantId: string, pairs: readonl
   const wanted = new Set(pairs.map(roundPairKey));
   const from = addDays(today, -SITE_HOMEWORK_DAYS);
   const wide = videoMatchRange(from, today, today);
+  const videoSource = await homeworkVideoSource(db);
   const [reports, marks, videos] = await Promise.all([
     db.from("lesson_reports").select("student_id,class_id,report_date")
       .eq("tenant_id", tenantId).eq("video_homework", true).in("student_id", students).in("class_id", classes)
@@ -48,9 +50,9 @@ export async function openHomeworkDates(db: Db, tenantId: string, pairs: readonl
     db.from("video_homework_marks").select("class_id,student_id,check_date,homework_date,submitted_date,status,updated_at")
       .eq("tenant_id", tenantId).in("student_id", students).in("class_id", classes)
       .gte("check_date", wide.from).order("id", { ascending: true }).limit(ROW_LIMIT + 1),
-    db.from("student_homework_videos").select("id,student_id,post_id,posted_at,created_at,uploaded_at,md5,bytes,route")
+    db.from(videoSource).select("id,student_id,post_id,posted_at,created_at,uploaded_at,md5,bytes,route")
       .eq("tenant_id", tenantId).in("student_id", students).in("route->>classId", classes)
-      .gte("posted_at", `${wide.from}T00:00:00+09:00`).order("id", { ascending: true }).limit(ROW_LIMIT + 1),
+      .or(`posted_at.gte.${wide.from}T00:00:00+09:00,route->>manualAssignment.eq.true`).order("id", { ascending: true }).limit(ROW_LIMIT + 1),
   ]);
   if (reports.error) throw new Error("영상 숙제 조회 실패");
   if (marks.error) throw new Error("영상 숙제 기록 조회 실패");
@@ -73,6 +75,7 @@ export async function openHomeworkDates(db: Db, tenantId: string, pairs: readonl
     const picked = typeof route.homeworkDate === "string" && isVideoHomeworkDate(route.homeworkDate) ? route.homeworkDate : null;
     const arrivedAt = videoArrivedAt({ createdAt: row.created_at, postedAt: row.posted_at, uploadedAt: row.uploaded_at, fromClassnote: row.post_id != null, picked: !!picked });
     return classId ? [{ id: row.id, studentId: row.student_id, classId, postedAt: row.posted_at, arrivedAt, homeworkDate: picked,
+      manuallyAssigned: route.manualAssignment === true,
       fingerprint: videoFingerprint(row.md5, row.bytes) }] : [];
   });
   // 숙제가 정해진 영상이 이미 있는 (반 × 학생 × 숙제일) — 학생이 골라 올렸거나 그 보고서 글에 댓글로 올린 것. 칸의 상태와 무관하게 "낸 숙제"다.

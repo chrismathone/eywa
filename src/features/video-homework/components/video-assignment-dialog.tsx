@@ -1,0 +1,56 @@
+"use client";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { HomeworkVideoPlayer } from "@/features/students/components/homework-video-player";
+import { getVideoAssignmentOptions, assignHomeworkVideo } from "../server/video-assignment";
+import type { VideoAssignmentOptions } from "../video-assignment";
+import type { VideoHomeworkLedgerRow } from "../types";
+
+export function VideoAssignmentDialog({ row, onClose }: { row: VideoHomeworkLedgerRow; onClose: () => void }) {
+  const router = useRouter();
+  const [options, setOptions] = useState<VideoAssignmentOptions | null>(null);
+  const [videoId, setVideoId] = useState(""); const [date, setDate] = useState(""); const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false); const [error, setError] = useState("");
+  useEffect(() => {
+    let active = true;
+    void getVideoAssignmentOptions({ classId: row.classId, studentId: row.studentId }).then(result => {
+      if (!active) return;
+      setOptions(result); if (result.ok) setDate(result.dates[0] ?? "");
+    }).catch(() => { if (active) setOptions({ ok: false, error: "영상 목록을 읽지 못했습니다." }); });
+    return () => { active = false; };
+  }, [row.classId, row.studentId]);
+  const videos = options?.ok ? options.videos : [];
+  const selected = videos.find(v => v.id === videoId);
+  async function save() {
+    if (!selected || busy) return;
+    setBusy(true); setError("");
+    try {
+      const result = await assignHomeworkVideo({ classId: row.classId, studentId: row.studentId, videoId,
+        homeworkDate: date === "exclude" ? null : date, excluded: date === "exclude", revision: selected.revision, reason });
+      if (!result.ok) setError(result.error ?? "저장하지 못했습니다.");
+      else { router.refresh(); onClose(); }
+    } catch { setError("연결을 확인한 뒤 다시 시도해 주세요."); } finally { setBusy(false); }
+  }
+  return <Dialog open onOpenChange={open => { if (!open && !busy) onClose(); }}>
+    <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl" showCloseButton={!busy}>
+      <DialogHeader><DialogTitle>{row.studentName} · 영상 숙제 배정</DialogTitle>
+        <DialogDescription>{row.className}의 숙제에 영상을 연결합니다. 같은 학생의 다른 반에 잘못 올라간 영상도 선택할 수 있습니다.</DialogDescription></DialogHeader>
+      {!options ? <p role="status">영상 목록을 읽는 중…</p> : !options.ok ? <p role="alert">{options.error}</p> : !videos.length ? <p>배정할 수 있는 업로드 완료 영상이 없습니다.</p> : <div className="space-y-4 text-sm">
+        <label className="block space-y-1"><span>영상 선택 (최근 100개)</span><select className="border-line w-full rounded border p-2" value={videoId} disabled={busy} onChange={e => setVideoId(e.target.value)}>
+          <option value="">영상을 골라 주세요</option>{videos.map(v => <option key={v.id} value={v.id}>{new Date(v.postedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })} · {v.className ?? "반 미지정"} · {v.source}{v.excluded ? " · 집계 제외" : ""}</option>)}
+        </select></label>
+        {selected ? <div className="space-y-2"><p>현재 연결: {selected.className ?? "반 미지정"} · {selected.homeworkDate ?? "날짜 자동 추정"}{selected.postId ? ` · 게시물 ${selected.postId}` : ""}</p>
+          {selected.playback ? <HomeworkVideoPlayer key={selected.id} {...selected.playback} title={`${row.studentName} 배정할 영상`} /> : <p>이 영상은 아직 재생할 수 없습니다.</p>}</div> : null}
+        <label className="block space-y-1"><span>배정할 영상 숙제</span><select className="border-line w-full rounded border p-2" value={date} disabled={busy} onChange={e => setDate(e.target.value)}>
+          {options.dates.map(d => <option key={d} value={d}>{row.className} · {d}</option>)}<option value="exclude">숙제 완료 집계에서 제외</option>
+        </select></label>
+        <label className="block space-y-1"><span>변경 사유</span><input className="border-line w-full rounded border p-2" value={reason} maxLength={300} disabled={busy} onChange={e => setReason(e.target.value)} placeholder="예: 영어 게시물에 잘못 올린 수학 숙제" /></label>
+        <p className="text-text-dim">저장하면 영상의 기존 연결이 바뀝니다. 직접 체크한 수행 기록은 유지됩니다. 변경 전후와 처리자를 기록합니다.</p>
+        {error ? <p role="alert" className="text-danger">{error}</p> : null}
+        <Button disabled={busy || !selected || !date || !reason.trim()} onClick={() => void save()}>{busy ? "저장 중…" : "영상 배정 저장"}</Button>
+      </div>}
+    </DialogContent>
+  </Dialog>;
+}

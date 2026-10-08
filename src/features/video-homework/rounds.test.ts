@@ -17,6 +17,23 @@ const build = (input: { rows: ReturnType<typeof row>[]; marks?: VideoHomeworkMar
 const view = (rounds: ReturnType<typeof build>, pair = "A:s1") =>
   (rounds.get(pair) ?? []).map((r) => [r.date, r.status, r.submittedDate, r.auto]);
 
+describe("영어·수학 구분과 담당자의 수동 배정", () => {
+  it("같은 학생의 영어 영상으로 수학 숙제를 완료시키지 않는다", () => {
+    const rows = [row("s1", ["2026-10-01"]), row("s1", ["2026-10-01"], { classId: "english" })];
+    const rounds = build({ rows, videos: [video("s1", "2026-10-02", { classId: "english", homeworkDate: "2026-10-01" })] });
+    expect(view(rounds)[0]?.[1]).toBe("unchecked"); expect(view(rounds, "english:s1")[0]?.[1]).toBe("submitted");
+  });
+  it("수동으로 정한 숙제는 14일 추정 범위를 넘어도 그 칸에만 붙는다", () => {
+    const v = { ...video("s1", "2026-10-25", { homeworkDate: "2026-10-01" }), manuallyAssigned: true };
+    const rows = [row("s1", ["2026-10-01", "2026-10-20"])];
+    expect(view(build({ rows, videos: [v] })).map(r => r[1])).toEqual(["submitted", "unchecked"]);
+    expect(view(build({ rows, videos: [{ ...v, manuallyAssigned: false }] })).map(r => r[1])).toEqual(["unchecked", "unchecked"]);
+  });
+  it("집계 제외(classId 없음) 영상은 다른 날짜로 자동 재배정되지 않는다", () => {
+    expect(view(build({ rows: [row("s1", ["2026-10-01"])], videos: [video("s1", "2026-10-02", { classId: null })] }))[0]?.[1]).toBe("unchecked");
+  });
+});
+
 describe("회차 = 숙제가 나간 수업만(원장 2026-10-01)", () => {
   it("학생마다 숙제가 나간 날을 순서대로 센다 — 같은 1회라도 날짜가 다를 수 있다", () => {
     const rounds = build({ rows: [row("s1", ["2026-10-06", "2026-10-01"]), row("s2", ["2026-10-08"])] });

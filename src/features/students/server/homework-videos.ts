@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { getStudentById } from "./queries";
 import { dedupeHomeworkVideos, type HomeworkVideo } from "../homework-videos";
+import { homeworkVideoSource } from "@/features/video-homework/server/video-source";
 
 // md5는 같은 영상 두 줄을 접는 데만 쓴다(dedupeHomeworkVideos가 화면으로 내보내기 전에 뺀다). 0315a부터 있는 칸.
 const COLUMNS = "id,subject,posted_at,created_at,comment_id,status,drive_file_id,bytes,uploaded_at,md5";
@@ -13,8 +14,9 @@ export async function getStudentHomeworkVideos(studentId: string): Promise<{ rea
   // service_role 조회 전 기존 학생 상세와 같은 지점·담당학생·입학정보 게이트를 통과한다.
   if (!await getStudentById(studentId)) throw new Error("학생 영상을 열람할 수 없습니다.");
   const db = createAdminClient();
+  const source = await homeworkVideoSource(db);
   const read = async (columns: string) => dedupeHomeworkVideos(await fetchAllPaged<HomeworkVideo & { md5?: string | null }>(async (from, to) => {
-    const { data, error } = await db.from("student_homework_videos")
+    const { data, error } = await db.from(source)
       .select(columns)
       .eq("tenant_id", user.tenantId).eq("student_id", studentId)
       .order("posted_at", { ascending: false, nullsFirst: false }).order("id").range(from, to);

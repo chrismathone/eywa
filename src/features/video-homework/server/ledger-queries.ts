@@ -10,12 +10,13 @@ import { getAssignedVideoHomework } from "./assignments";
 import { loadBlankFacts } from "./blank-facts";
 import type { BlankFacts } from "../no-homework";
 import { homeworkVideoLinks } from "@/features/students/homework-videos";
+import { homeworkVideoSource } from "./video-source";
 
 type DbMark = { class_id: string; student_id: string; check_date: string; homework_date: string | null;
   submitted_date: string | null; status: string; updated_at: string | null };
 type DbVideo = { id: string; student_id: string; post_id: number | null; posted_at: string; created_at: string | null; uploaded_at: string | null;
   md5: string | null; bytes: number | string | null; status: string; drive_file_id: string | null;
-  class_id: string | null; homework_date: string | null };
+  class_id: string | null; homework_date: string | null; manual_assignment?: string | null };
 export type VideoHomeworkLedgerBaseRow = VideoHomeworkRosterRow & { assignedDates: string[] };
 
 /**
@@ -26,18 +27,20 @@ async function loadClassVideos(tenantId: string, studentIds: string[], fromDate:
   if (!studentIds.length) return [];
   try {
     const db = createAdminClient();
+    const source = await homeworkVideoSource(db);
     const rows = await fetchAllPagedInChunks<DbVideo>(studentIds, (chunk, from, to) => db
-      .from("student_homework_videos")
-      .select("id,student_id,post_id,posted_at,created_at,uploaded_at,md5,bytes,status,drive_file_id,class_id:route->>classId,homework_date:route->>homeworkDate")
+      .from(source)
+      .select("id,student_id,post_id,posted_at,created_at,uploaded_at,md5,bytes,status,drive_file_id,class_id:route->>classId,homework_date:route->>homeworkDate,manual_assignment:route->>manualAssignment")
       .eq("tenant_id", tenantId).in("student_id", chunk)
       .not("route->>classId", "is", null)
-      .gte("posted_at", `${fromDate}T00:00:00+09:00`).lt("posted_at", `${addDays(toDate, 1)}T00:00:00+09:00`)
+      .or(`and(posted_at.gte.${fromDate}T00:00:00+09:00,posted_at.lt.${addDays(toDate, 1)}T00:00:00+09:00),and(route->>manualAssignment.eq.true,route->>homeworkDate.gte.${fromDate},route->>homeworkDate.lte.${toDate})`)
       .order("id", { ascending: true }).range(from, to));
     // 정해진 숙제일(올리기 사이트에서 고른 숙제 · 보고서 글의 댓글 영상)은 날짜 모양일 때만 믿는다 — 아니면 게시일순 규칙으로 센다.
     return rows.map((row) => {
       const homeworkDate = row.homework_date && isVideoHomeworkDate(row.homework_date) ? row.homework_date : null;
       const links = row.status === "uploaded" ? homeworkVideoLinks(row.drive_file_id) : null;
       return { id: row.id, studentId: row.student_id, classId: row.class_id, postedAt: row.posted_at, homeworkDate, fingerprint: videoFingerprint(row.md5, row.bytes),
+        manuallyAssigned: row.manual_assignment === "true",
         playback: links ? { ...links, uploadedAt: row.uploaded_at } : null,
         arrivedAt: videoArrivedAt({ createdAt: row.created_at, postedAt: row.posted_at, uploadedAt: row.uploaded_at, fromClassnote: row.post_id != null, picked: !!homeworkDate }) };
     });

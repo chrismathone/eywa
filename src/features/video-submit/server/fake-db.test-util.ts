@@ -29,7 +29,7 @@ export function createFakeDb(seed: Record<string, Row[]>, unique: Record<string,
     let selected = "";
     const rows = () => (tables[table] ??= []);
     const run = (single: "none" | "maybe" | "one") => {
-      if (missing.has(table)) return { data: null, error: { code: "PGRST205", message: "missing" }, count: null };
+      if (missing.has(table) || (table === "homework_video_ledger_videos" && !tables[table])) return { data: null, error: { code: "PGRST205", message: "missing" }, count: null };
       if (selected.split(",").some((col) => missingColumns[table]?.has(col.trim())))
         return { data: null, error: { code: "42703", message: "missing column" }, count: null };
       if (op === "insert") {
@@ -72,9 +72,10 @@ export function createFakeDb(seed: Record<string, Row[]>, unique: Record<string,
       },
       // `a.like.%1234`(끝자리) · `a.ilike.%1234%`(포함) · `a.eq.false`(같음 — 칸이 없는 행은 안 맞는다) — 어느 한 조건이 맞으면 통과.
       or(expr: string) {
-        const parts = expr.split(",").map((part) => ({ like: /^([a-z_]+)\.i?like\.%(.+?)(%?)$/.exec(part), eq: /^([a-z_]+)\.eq\.(.+)$/.exec(part) }));
-        filters.push((r) => parts.some(({ like, eq }) => {
+        const parts = expr.split(",").map((part) => ({ like: /^([a-z_]+)\.i?like\.%(.+?)(%?)$/.exec(part), eq: /^([a-z_]+)\.eq\.(.+)$/.exec(part), compare: /^(.+?)\.(gte|eq)\.(.+)$/.exec(part) }));
+        filters.push((r) => parts.some(({ like, eq, compare }) => {
           if (eq) return r[eq[1]!] !== undefined && String(r[eq[1]!]) === eq[2];
+          if (compare) { const [base, key] = compare[1]!.split("->>"); const value = key ? (r[base!] as Row | undefined)?.[key] : r[base!]; return value !== undefined && (compare[2] === "gte" ? String(value) >= compare[3]! : String(value) === compare[3]); }
           if (!like) return false;
           const value = String(r[like[1]!] ?? "");
           return like[3] ? value.includes(like[2]!) : value.endsWith(like[2]!);

@@ -16,10 +16,11 @@ const PAGE_SIZE = 50;
 const ROUND_SIZE = 10;
 // 반의 회차 수나 창 폭이 달라도 같은 열은 항상 같은 너비를 쓴다. 나머지 폭은 빈 공간이다.
 const COLUMN_WIDTH = { select: 32, student: 112, school: 132, count: 64, round: 96 } as const;
-export function ClassLedger({ group, rounds, blankFacts, videosKnown = true, today, busy, save, onEdit, onPlay, collapsed, onToggle }: {
+export function ClassLedger({ group, rounds, blankFacts, videosKnown = true, today, busy, save, onEdit, onPlay, onAssign, collapsed, onToggle }: {
   group: LedgerGroup; rounds: LedgerRounds; blankFacts: BlankFacts; videosKnown?: boolean; today: string; busy: boolean; save: SaveLedgerChanges;
   onEdit: (cell: ActiveCell) => void; collapsed: boolean; onToggle: () => void;
   onPlay: (cell: ActiveCell) => void;
+  onAssign?: (row: VideoHomeworkLedgerRow) => void;
 }) {
   const [page, setPage] = useState(0);
   const [roundPage, setRoundPage] = useState(0);
@@ -108,7 +109,8 @@ export function ClassLedger({ group, rounds, blankFacts, videosKnown = true, tod
             const blanks = blankCells({ classDates: group.homeworkDates, own, facts: blankFacts[ledgerPairKey(row)], slots: group.roundCount - own.length });
             return <tr key={ledgerPairKey(row)} data-selected={selected.has(row.studentId) || undefined}>
               <td className={styles.selectCell}><input type="checkbox" aria-label={`${group.className} ${row.studentName} 선택`} disabled={busy || !row.editable} checked={selected.has(row.studentId)} onChange={() => toggleStudent(row.studentId)} /></td>
-              <th scope="row" className={styles.studentCell}><span title={row.studentName}>{row.studentName}</span>{!row.editable ? <small title="읽기 전용">조회</small> : null}</th>
+              <th scope="row" className={styles.studentCell}><span title={row.studentName}>{row.studentName}</span>{!row.editable ? <small title="읽기 전용">조회</small> : null}
+                {row.canAssignVideos && onAssign ? <button type="button" className="text-primary mt-1 block text-xs underline underline-offset-2" disabled={busy} aria-label={`${group.className} ${row.studentName} 영상 배정`} onClick={() => onAssign(row)}>영상 배정</button> : null}</th>
               <td className={styles.schoolCell} title={`${row.school ?? "학교 미등록"} ${row.grade ?? ""}`}>{row.school || "미등록"} <span>{row.grade}</span></td>
               <td className={styles.countCell}><strong>{counts.submitted}</strong><span>/{counts.total}</span></td>
               {numbers.map((n) => <RoundCell key={n} row={row} round={own[n - 1]} blank={blanks[n - 1 - own.length]} number={n} busy={busy} videosKnown={videosKnown}

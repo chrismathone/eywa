@@ -15,6 +15,7 @@ vi.mock("./assignments", () => ({ getAssignedVideoHomework: async () => [
   { classId: "a", studentId: "one", date: "2026-10-06" }, { classId: "b", studentId: "one", date: "2026-10-06" },
 ] }));
 vi.mock("./blank-facts", () => ({ loadBlankFacts: async () => ({}) }));
+vi.mock("./video-source", () => ({ homeworkVideoSource: async () => "student_homework_videos" }));
 
 import { getVideoHomeworkLedger } from "./ledger-queries";
 

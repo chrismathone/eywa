@@ -47,7 +47,7 @@ export default async function VideoHomeworkPage({ searchParams }: {
     const tracked = isVideoHomeworkEnabled(settings.report.videoHomeworkPolicy, {
       classId: row.classId, subjectKey: row.subject, grade: row.grade,
     });
-    return { ...row, subject: subjectLabels.labelOf(row.subject), tracked, editable: tracked && canEdit };
+    return { ...row, subject: subjectLabels.labelOf(row.subject), tracked, editable: tracked && canEdit, canAssignVideos: canEdit };
   });
   // 회차 = 숙제가 나간 날·기록(영상은 회차를 만들지 않으니 여기선 빼고 센다). 대상에서 제외된 학생은 기록만 회차다(rounds.ts).
   const rounds = buildLedgerRounds({ rows: candidates, marks: ledger.marks, videos: [], fromDate, toDate });

@@ -222,7 +222,7 @@ export function buildLedgerRounds(input: {
     const pair = roundPairKey({ classId: video.classId!, studentId: video.studentId });
     const day = kstDateOf(video.postedAt);
     const round = tracked.has(pair) ? all.get(pair)?.get(`h:${video.homeworkDate}`) : undefined;
-    if (!round || !day || round.videoDate || day < round.date || day > addDays(round.date, VIDEO_MATCH_WINDOW_DAYS)) continue;
+    if (!round || !day || round.videoDate || (!video.manuallyAssigned && (day < round.date || day > addDays(round.date, VIDEO_MATCH_WINDOW_DAYS)))) continue;
     if (round.mark && round.mark.status !== "submitted") continue; // 직접 찍은 미수행이 이긴다
     round.videoDate = day;
     round.videoId = video.id;

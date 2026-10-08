@@ -5,6 +5,7 @@ const m = vi.hoisted(() => ({
 vi.mock("@/lib/auth/require-access", () => ({ requireAccess: m.access }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: m.admin }));
 vi.mock("./queries", () => ({ getStudentById: m.student }));
+vi.mock("@/features/video-homework/server/video-source", () => ({ homeworkVideoSource: async () => "student_homework_videos" }));
 import { getStudentHomeworkVideos } from "./homework-videos";
 
 beforeEach(() => {
