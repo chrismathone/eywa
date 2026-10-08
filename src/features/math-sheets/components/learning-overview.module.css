@@ -201,7 +201,7 @@
   width: 130px;
 }
 .table th:nth-child(5) {
-  width: 136px;
+  width: 152px;
 }
 .table td {
   padding: 12px 13px;
@@ -264,7 +264,7 @@
   margin-left: 2px;
   color: var(--text-dim);
 }
-.pace {
+.remainingLessons {
   font-size: var(--text-base);
   color: var(--blue);
   font-weight: 650;

@@ -49,7 +49,8 @@ describe("학생 집중 보기의 진도맵 통합", { timeout: 15000 }, () => {
     const cells = view.container.querySelectorAll("tbody tr:first-child td");
     expect(cells[2]).toHaveTextContent(`${metric.percent}%`);
     expect(cells[2]).toHaveTextContent(`${metric.current} / ${metric.total}차시`);
-    expect(cells[4]).toHaveTextContent(`${metric.requiredPace?.toFixed(1)}차시`);
+    expect(cells[4]).toHaveTextContent(`${Math.max(0, metric.total - metric.current!)}차시`);
+    expect(cells[4]).toHaveTextContent(`남은 수업 ${metric.remainingDays}회`);
     fireEvent.click(screen.getByRole("button", { name: first.name }));
     expect(await screen.findByLabelText("전체 진도율")).toHaveTextContent(`${metric.percent}%${metric.current} / ${metric.total}차시`);
     expect(within(screen.getByRole("complementary", { name: "학생 선택" })).getByRole("button", { name: new RegExp(first.name) })).toHaveTextContent(`${metric.percent}%`);

@@ -40,6 +40,8 @@ export function LinkedLearningMap({ student, classId, className, month, goal, pr
   const activeLesson = map.lessons.find(lesson => lesson.position === selection.lesson);
   const undated = map.lessons.filter(lesson => lesson.inGoal && !lesson.calendarDate);
   const metrics = map.metrics;
+  const remainingLessons = metrics.percent == null || metrics.current == null
+    ? null : Math.max(0, metrics.total - metrics.current);
   const openLesson = (lesson: LearningMapLesson, date = lesson.calendarDate) => select({ lesson: lesson.position,
     ...(date ? { date, mode: "day" } : { undated: true }) });
   return <ProgressMapSnapshot value={state}><div className={`${styles.root} ${mapStyles.selectionTheme}`} data-linked-learning-map>
@@ -47,7 +49,7 @@ export function LinkedLearningMap({ student, classId, className, month, goal, pr
       <div><h2>{student.name} <span>학습 진도맵</span></h2><p>{student.school} {student.grade} · {className}{goal.textbook ? ` · ${goal.textbook}` : ""}</p></div>
       <div className={styles.overall} aria-label="전체 진도율"><span>전체 진도</span><strong>{metrics.percent == null ? "—" : `${metrics.percent}%`}</strong><span>{metrics.current ?? "—"} / {metrics.total}차시</span></div>
       <div className={styles.status}><strong>{learningStatusLabel(metrics, "차시")}</strong><span>{metrics.targetBeforeRail ? "기준일 계획 · 첫 기록보다 앞" : `기준일 계획 ${metrics.target}차시`}</span></div>
-      <div className={styles.status}><strong>수업당 {metrics.requiredPace == null ? "—" : `${metrics.requiredPace.toFixed(1)}차시`}</strong><span>남은 수업 {metrics.remainingDays}회</span></div>
+      <div className={styles.status}><strong>목표까지 {remainingLessons == null ? "—" : `${remainingLessons}차시`}</strong><span>남은 수업 {metrics.remainingDays}회</span></div>
       {headerActions}
       {!embedded ? <EmbedLink href={learningSheetHref(classId, student.studentId, month)} className={styles.back}>MCS로 돌아가기</EmbedLink> : null}
     </header>

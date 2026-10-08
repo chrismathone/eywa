@@ -344,7 +344,7 @@ export function LearningOverview({
                     <th>전체 학습 구간 · 기준일 계획과 비교</th>
                     <th>전체 진도율</th>
                     <th>계획 대비</th>
-                    <th>남은 수업당 필요</th>
+                    <th>목표까지 남은 진도</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -352,6 +352,9 @@ export function LearningOverview({
                     const progress = learning.progress[s.studentId],
                       goal = learning.goals[s.studentId];
                     const summary = summaries[s.studentId];
+                    const remainingLessons = summary?.percent == null || summary.current == null
+                      ? null
+                      : Math.max(0, summary.total - summary.current);
                     return (
                       <tr
                         key={s.studentId}
@@ -415,10 +418,10 @@ export function LearningOverview({
                           </p>
                         </td>
                         <td>
-                          <strong className={styles.pace}>
-                            {summary?.requiredPace == null
+                          <strong className={styles.remainingLessons}>
+                            {remainingLessons == null
                               ? "—"
-                              : `${summary.requiredPace.toFixed(1)}차시`}
+                              : `${remainingLessons}차시`}
                           </strong>
                           <p className={styles.meta}>
                             {summary

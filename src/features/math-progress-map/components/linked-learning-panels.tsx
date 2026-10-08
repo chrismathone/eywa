@@ -13,6 +13,8 @@ type OpenLesson = (lesson: LearningMapLesson, date?: string | null) => void;
 export function LinkedPlanVsActual({ onLesson }: { onLesson: OpenLesson }) {
   const { sourceProgress } = useProgressMap();
   const { metrics, lessons } = sourceProgress.learningMap!;
+  const remainingLessons = metrics.percent == null || metrics.current == null
+    ? null : Math.max(0, metrics.total - metrics.current);
   const planned = lessons.find(lesson => lesson.position === metrics.target);
   const actual = lessons.find(lesson => lesson.position === metrics.current);
   // 레일은 등록 이후 첫 기록부터라 계획 위치가 그보다 앞일 수 있다 — 그때는 '계획 시작 전'이 아니고, 0차시 숫자·0% 마커도 거짓이다.
@@ -30,7 +32,7 @@ export function LinkedPlanVsActual({ onLesson }: { onLesson: OpenLesson }) {
       {actual ? <button className={styles.actualMarker} style={{ left: pct(actual.position) }} aria-label={`실제 위치 ${actual.position}차시`} onClick={() => onLesson(actual, actual.date)} /> : null}
     </div>
     <div className={styles.comparisonScale}><span>0차시</span><span>전체 목표 {metrics.total}차시</span></div>
-    <p className={styles.comparisonDates}>{sourceProgress.asOf} 기준 · 남은 수업 {metrics.remainingDays}회 · 수업당 {metrics.requiredPace == null ? "—" : metrics.requiredPace.toFixed(1)}차시</p>
+    <p className={styles.comparisonDates}>{sourceProgress.asOf} 기준 · 남은 진도 {remainingLessons == null ? "—" : `${remainingLessons}차시`} · 남은 수업 {metrics.remainingDays}회</p>
   </section>;
 }
 
