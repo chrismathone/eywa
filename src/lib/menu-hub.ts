@@ -185,6 +185,7 @@ export const HUB_GROUPS: HubGroup[] = [
       fromMenu("staff", "직원 명부·근무 설정"),
       fromMenu("shuttle", "노선 편성·등하원 기록"),
       fromMenu("inventory", "자산·대여·실사·소모품"),
+      face("shuttle", "/shuttle/week", "주간 시간표", undefined, { tool: true, icon: "calendarClock" }),
       face("shuttle", "/shuttle/today", "오늘 등하원", undefined, { tool: true, icon: "busStop" }),
       face("shuttle", "/shuttle/live", "운행 현황", undefined, { tool: true, icon: "steering" }),
       // ⚠️ 실시간 위치는 아직 준비 화면이다(인수인계 §7) — 그래도 **입구는 남긴다**(사이드바 하부탭에 있던 자리).

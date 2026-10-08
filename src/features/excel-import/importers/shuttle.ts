@@ -129,7 +129,7 @@ const def: ImporterDef<Plan> = {
     "· 승하차의 같은 배정 판단: 원생 + 그 회차의 정류장 + 승차/하차. 덮어쓰기면 요일·메모를 파일 값으로 바꿉니다.",
     "· 요일은 '월,수,금' 또는 '월수금'. 등하원 기록(탔다/안 탔다)은 이 파일로 넣지 않습니다.",
   ],
-  revalidate: ["/shuttle", "/shuttle/today", "/shuttle/live"],
+  revalidate: ["/shuttle", "/shuttle/today", "/shuttle/live", "/shuttle/week"],
 
   async template(ctx) {
     const [stops, routing, db] = await Promise.all([loadStops(ctx.tenantId), loadRouting(ctx.tenantId).catch(() => null), createClient()]);

@@ -4,20 +4,23 @@ import {
   SHUTTLE_LIVE_PATH,
   SHUTTLE_TODAY_PATH,
   SHUTTLE_TRACK_PATH,
+  SHUTTLE_WEEK_PATH,
   shuttleFaces,
 } from "./faces";
 
 describe("셔틀 면 전환", () => {
-  it("네 면이 사이드바 하부탭에서 파생된다", () => {
+  it("다섯 면이 사이드바 하부탭에서 파생된다", () => {
     const faces = shuttleFaces("term");
     expect(faces.map((f) => f.key)).toEqual([
       SHUTTLE_BOARD_PATH,
+      SHUTTLE_WEEK_PATH,
       SHUTTLE_TODAY_PATH,
       SHUTTLE_LIVE_PATH,
       SHUTTLE_TRACK_PATH,
     ]);
     expect(faces.map((f) => f.label)).toEqual([
       "노선 편성",
+      "주간 시간표",
       "오늘 등하원",
       "운행 현황",
       "실시간 위치",
@@ -28,6 +31,7 @@ describe("셔틀 면 전환", () => {
     // 라벨만 있고 시즌이 빠지면 방학 편성을 보다 탭을 옮길 때 학기중 명단으로 되돌아간다.
     expect(shuttleFaces("vacation").map((f) => f.href)).toEqual([
       "/shuttle?season=vacation",
+      "/shuttle/week?season=vacation",
       "/shuttle/today?season=vacation",
       "/shuttle/live?season=vacation",
       "/shuttle/track?season=vacation",
@@ -38,6 +42,7 @@ describe("셔틀 면 전환", () => {
     // 하부탭 href를 바꾸면 active가 어느 면과도 안 맞아 **탭이 통째로 비활성**으로 보인다.
     const keys = shuttleFaces("term").map((f) => f.key);
     expect(keys).toContain(SHUTTLE_BOARD_PATH);
+    expect(keys).toContain(SHUTTLE_WEEK_PATH);
     expect(keys).toContain(SHUTTLE_TODAY_PATH);
     expect(keys).toContain(SHUTTLE_LIVE_PATH);
     expect(keys).toContain(SHUTTLE_TRACK_PATH);

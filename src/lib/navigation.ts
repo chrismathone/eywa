@@ -128,6 +128,8 @@ export const SUBTABS_BY_MENU: Partial<Record<MenuKey, SubTab[]>> = {
   // 편성이 셔틀의 본체라 출석부(월별 착지)와 같은 결로 둔다.
   shuttle: [
     { label: "노선 편성", href: "/shuttle" },
+    // 주간 시간표(원장 2026-10-08 — 구글 시트 탑승현황처럼 회차마다 정류장 × 요일 표). 편성의 **보기 전용** 면이라 바로 옆에 둔다.
+    { label: "주간 시간표", href: "/shuttle/week" },
     { label: "오늘 등하원", href: "/shuttle/today" },
     // 관제(2026-09-02) — '오늘 등하원'이 **찍는 화면**이라면 이쪽은 **보는 화면**이다. 관리자는
     // 회차를 펼쳐 한 줄씩 다루는 게 아니라 차 전체를 한눈에 보고 이상한 것만 짚는다.

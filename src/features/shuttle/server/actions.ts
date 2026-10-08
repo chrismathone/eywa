@@ -71,6 +71,8 @@ function refresh() {
   revalidatePath("/shuttle/today");
   // 관제(운행 현황)도 같은 사실을 본다 — 빼먹으면 관리자 화면만 옛 값으로 남는다.
   revalidatePath("/shuttle/live");
+  // 주간 시간표도 편성 보드를 그대로 읽는다.
+  revalidatePath("/shuttle/week");
 }
 
 /** PostgREST 에러를 한글로 — raw 원문을 화면에 그대로 내보내지 않는다(CLAUDE.md 반복 지적). */
