@@ -78,8 +78,9 @@ describe("영상 제출 현황 — 회차는 학생별 '숙제가 나간 날' �
   it("이 반으로 올라온 학부모 영상은 '영상'으로 완료 — 요약에도 같이 세고, 확정하면 직접 기록으로 남는다", async () => {
     show({ videos: [{ id: "vt", studentId: "two", classId: "a", postedAt: "2026-09-04T19:00:00+09:00" }, { id: "vo", studentId: "one", classId: null, postedAt: "2026-09-04T19:00:00+09:00" }] });
     const auto = cell("이서연 1회 2026-09-02 완료(영상)");
-    expect(auto).toHaveTextContent("영상");
-    expect(auto).toHaveAttribute("title", expect.stringContaining("학부모 영상 2026-09-04"));
+    expect(auto).toHaveTextContent("09.04");
+    expect(auto).toHaveAttribute("title", expect.stringContaining("연결된 영상 게시일 2026-09-04"));
+    expect(auto).toHaveAttribute("title", expect.stringContaining("영상으로 자동 완료"));
     // 반이 정해지지 않은 영상은 김민준 2회(9/03)를 채우지 않는다.
     expect(cell("김민준 2회 2026-09-03 미확인")).toBeInTheDocument();
     expect(screen.getByLabelText("수학 A 장부")).toHaveTextContent("완료 1");
