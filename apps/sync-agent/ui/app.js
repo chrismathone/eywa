@@ -25,7 +25,7 @@ function render(s){latest=s;$('version').textContent=`v${s.version}`;$('subtitle
   const count=progress?.total>0,percent=count?Math.min(100,Math.floor(progress.completed/progress.total*100)):0;
   $('update-progress-wrap').hidden=!count;
   $('update-progress').value=percent;
-  $('update-progress-text').textContent=count?(progress.phase==='extracting'?`${progress.completed.toLocaleString('ko-KR')} / ${progress.total.toLocaleString('ko-KR')}개 파일 · ${percent}%`:`${(progress.completed/1024/1024).toFixed(1)} / ${(progress.total/1024/1024).toFixed(1)} MB · ${percent}%`):'';
+  $('update-progress-text').textContent=count?(['extracting','finalizing'].includes(progress.phase)?`${progress.completed.toLocaleString('ko-KR')} / ${progress.total.toLocaleString('ko-KR')}개 파일 · ${percent}%`:`${(progress.completed/1024/1024).toFixed(1)} / ${(progress.total/1024/1024).toFixed(1)} MB · ${percent}%`):'';
   let detail=ready?`v${ready.version} 다운로드 완료. 지금 업데이트하거나 시간을 지정해 주세요.`:
     progress?.phase==='checking'?'서버에서 새 버전을 확인하고 있습니다.':
     progress?.phase==='downloading'?`v${progress.version} 설치 파일을 받고 있습니다.`:

@@ -10,7 +10,7 @@
 
 ## 구현
 
-1. 1.0.3 / sequence 5 후보. 기존 게시 순번·파일은 변경하지 않는다.
+1. 1.0.3 / sequence 5 정식 게시. 기존 게시 순번·파일은 변경하지 않았다.
 2. PC 설정 잠금과 업데이트 조작을 분리한다. 확인·즉시 적용·예약·취소에는 관리 코드가 필요 없다. 연결 유효성, 웹 업데이트 허용, 작업 마무리, 버전별 선택과 만료·서명 검증은 유지한다. 계정·연동 옵션·이전 작업의 잠금은 유지한다.
 3. 확인, 다운로드, ZIP 검증, 압축 해제·파일 검증, 준비 마무리를 표시한다. 수신 MB/전체 MB와 검증한 파일 수/전체 파일 수로 진행률을 제공한다. 완료까지 적용 버튼은 비활성화한다.
 4. 아직 확인하지 않음, 최신 버전, 실패, 다운로드, 압축 해제 문구를 상태에 맞게 표시한다. 마지막 버전 확인 시각은 KST로 표시한다.
@@ -24,7 +24,9 @@
 - 관련 웹/프로토콜 19개 검사, TypeScript, 변경 TS/TSX ESLint 통과.
 - 실제 Electron UI 가상 서버 검사 통과: 진행률·단계·실패·최신 문구, 만료된 설정 잠금에서 확인·즉시 적용·예약·취소 가능, 계정·옵션 변경 거부, 웹 업데이트 OFF 거부, 작업 마무리·예약 취소·오래된 버전 선택 거부. 외부 업무나 실제 설치 적용은 실행하지 않았다.
 - 기존 Electron 시험의 `evaluate` 인자 전달도 수정했다. Electron 모듈 인자 다음에 날짜 값을 받아 예약 시계가 실제로 진행되도록 했다.
-- 실제 패키지 검수·서명 ZIP 전체 검수·게시 등록은 아래 릴리스 기록에 최종 결과를 추가한다. 현재 학원동기화-PC는 1.0.1이므로 설치 완료 검증을 대신했다고 표현하지 않는다.
+- 실제 패키지 검수 통과: 원본 125개와 앱 ASAR의 현재 소스가 일치하고, 비밀·상태 파일 포함 없음. 실제 EXE 화면 검사와 번들 Chromium·FFmpeg 실행 검사 통과(외부 요청 0). 설치 준비 마무리 단계도 파일 수 단위를 유지하도록 보완했다.
+- 서명 ZIP 전체 SHA-256 검증과 9,997개 파일의 추출·해시 검증 통과. 공개 EXE·ZIP의 전체 원격 해시 확인 통과. Supabase CLI로 정식 순번 5를 등록했다.
+- 10:11:22 KST 학원동기화-PC는 여전히 1.0.1 / `update=error`다. 실제 PC 설치 완료를 대신 검증했다고 표현하지 않는다. 사용자가 같은 Windows 계정에서 최신 EXE를 덮어 설치한 뒤 기기 버전·실행 기록을 확인해야 한다.
 
 ## 발송 조건 조회 (쓰기·발송 없이)
 
@@ -32,4 +34,10 @@
 
 ## 릴리스 기록
 
-패키지 검증과 게시 완료 후 순번 5의 해시·URL·커밋·배포 결과를 기록한다.
+- 버전 **1.0.3**, sequence **5**, 2026-10-09 10:11 KST Supabase CLI 등록 완료.
+- 설치기: `411952428` bytes, SHA-256 `08f8510b4f609ad437cf7ce5b63d59dfa94f2b81dd957a335d8bc026b249e72e`.
+- ZIP: `569576516` bytes, SHA-256 `6e6011dc24115d03da63fa383d4312f00bbd3b5dcf9981ab20c2ebd6baa1d872`.
+- RSA 공개키 지문(PEM SHA-256)은 기존과 같은 `03e9d9b95b8f2d298db056963782b3c1555a7131e0b3b92f71e97ff7c4a20b01`이다. 개인키를 교체하지 않았다.
+- [설치 파일](https://ylqviwxedsdikuslmwxf.supabase.co/storage/v1/object/public/sync-agent-releases/5/AywaSync-Setup-1.0.3.exe), [업데이트 ZIP](https://ylqviwxedsdikuslmwxf.supabase.co/storage/v1/object/public/sync-agent-releases/5/AywaSync-1.0.3.zip).
+- 기능/계획 커밋 `79c5016b5374f27ce1cc1b60b3ca98000d474042`, [Vercel 배포 성공](https://vercel.com/bigshols-projects/eywa/59mtnK5pQLaQxfVkpCc1LqapQDwc). 게시 결과와 마무리 단계 단위 보완은 후속 커밋으로 남긴다.
+- 패키지 UI 증거 `work/update-controller-fcTyBN/`, 런타임 검사 `work/agent-runtime-QJP9C7/`, 실제 전체 ZIP 검증 `work/agent-release-2oTX6q/`. 시험 루트는 운영 계정·DB를 사용하지 않았다.
