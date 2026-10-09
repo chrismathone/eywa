@@ -53,6 +53,18 @@ module.exports=async function apiChecks(sql,{tenant,other,student,check}){
     await svc.moduleSession(device,worker,true);
   });
   const requestId=crypto.randomUUID();
+  await check('real feed-comments accepts only legacy routing helpers, strips them and prevents duplicate notifications',async()=>{
+    await sql.unsafe('alter table notifications alter column id set default gen_random_uuid()');
+    await sql.unsafe('alter table classnote_feed_state add unique(tenant_id,scope)');
+    const plan={tenant_id:tenant,recipient_id:global.__agentFixtureUser.id,type:'classnote_parent_comment',title:'fixture',body:'fixture',link:'https://fixture.invalid/comment/1',dedupeKey:'comment:1',fromEvent:true};
+    const input={readAt:null,counts:{'1':1},mark:null,plan:[plan]},operation=input=>svc.runAgentOperation(device,{...envelope,operation:'feed-comments',input});
+    assert.equal((await operation(input)).raced,false);assert.equal((await operation(input)).raced,true);
+    const rows=await sql`select type,title,body from notifications where tenant_id=${tenant}`;assert.equal(rows.length,1);assert.equal(rows[0].body,'fixture');
+    await assert.rejects(operation({...input,plan:[{...plan,stdout:'private'}]}),e=>e.code==='invalid_input');
+    const [state]=await sql`select updated_at,counts from classnote_feed_state where tenant_id=${tenant} and scope='parent_comments'`;
+    await assert.rejects(operation({...input,readAt:state.updated_at.toISOString(),plan:[{...plan,tenant_id:other}]}),e=>e.code==='tenant_mismatch');
+    const [after]=await sql`select counts from classnote_feed_state where tenant_id=${tenant} and scope='parent_comments'`;assert.deepEqual(after.counts,{'1':1});
+  });
   await sql`insert into classnote_sync_requests(id,tenant_id,status,next_scope) values(${requestId},${tenant},'running',null)`;
   const finish=()=>svc.runAgentOperation(device,{...envelope,operation:'finish-class-sync',input:{id:requestId,status:'done',result:{ok:true},error:null}});
   await check('module OFF permits completion of already-running work but rejects a new start',async()=>{

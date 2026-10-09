@@ -5,7 +5,10 @@ import { AgentError } from "./security";
 import { writeClassBoardSnapshot } from "../../../../scripts/_classnote/math-class-boards-db.mjs";
 import { normalizeScope } from "../../../../scripts/_classnote/sync-request-plan.mjs";
 
-const Notification=z.object({tenant_id:z.string().uuid(),recipient_id:z.string().uuid(),type:z.string().max(80),title:z.string().max(1000),body:z.string().max(10000).nullable(),link:z.string().max(2000).nullable()}).strict();
+const Notification=z.object({tenant_id:z.string().uuid(),recipient_id:z.string().uuid(),type:z.string().max(80),title:z.string().max(1000),body:z.string().max(10000).nullable(),link:z.string().max(2000).nullable(),
+  // Legacy feed plans carry these two routing helpers. They never become DB columns.
+  dedupeKey:z.string().max(200).optional(),fromEvent:z.boolean().optional(),
+}).strict().transform(row=>({tenant_id:row.tenant_id,recipient_id:row.recipient_id,type:row.type,title:row.title,body:row.body,link:row.link}));
 const common={plan:z.array(Notification).max(5000)};
 const postInput=z.object({...common,lastSeenId:z.number().nullable(),watermark:z.number()}).strict();
 const commentsInput=z.object({...common,readAt:z.string().nullable(),counts:z.record(z.string(),z.unknown()),mark:z.object({id:z.number(),created:z.string().nullable()}).passthrough().nullable()}).strict();
