@@ -1,5 +1,5 @@
 type Parameter = { kind: string; ids?: string[]; columns?: string[] };
-export type QueryDefinition = { parts: string[]; modules: string[]; parameters: Parameter[] };
+export type QueryDefinition = { parts: string[]; modules: string[]; parameters: Parameter[]; replacement?:string };
 export type QueryCatalog = Record<string, QueryDefinition>;
 export class InvalidAgentQuery extends Error {}
 type Fragment = { id: string; parameters: unknown[] };
@@ -25,6 +25,9 @@ export function compileAgentQuery(catalog: QueryCatalog, module: string, operati
     if (depth > 5 || !/^[a-f0-9]{64}$/.test(op.id)) return bad();
     const def = Object.hasOwn(catalog,op.id) ? catalog[op.id] : undefined;
     if (!def || !def.modules.includes(module) || !Array.isArray(op.parameters) || op.parameters.length !== def.parts.length-1) return bad();
+    // Compatibility aliases are checked-in catalog entries, never wire input.
+    // Both the original and corrected query retain their module/shape checks.
+    if(def.replacement)return build({id:def.replacement,parameters:op.parameters},depth+1);
     let text = def.parts[0]!;
     for (let i=0;i<op.parameters.length;i++) {
       const value = op.parameters[i], expected=def.parameters[i]!;

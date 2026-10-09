@@ -47,6 +47,7 @@ export async function repairAttachmentMessages(sql, tenant, session, log = conso
           and ((n.type = 'classnote_parent_post' and m.source = 'post')
             or (n.type = 'classnote_parent_comment' and m.source = 'comment' and m.content = n.body
               and (n.link !~ '[?&]comment=[0-9]+' or m.classnote_comment_id::text = substring(n.link from '[?&]comment=([0-9]+)'))))
+      )
     order by post_id desc limit 50`;
   const row = rows.find((r) => !tried.has(`${tenant}:${r.post_id}`));
   if (!row) return 0;

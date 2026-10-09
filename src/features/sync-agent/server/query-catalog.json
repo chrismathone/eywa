@@ -1977,10 +1977,16 @@
     ],
     "parameters": [
       {
-        "kind": "value"
+        "kind": "fragment",
+        "ids": [
+          "2af1b852b3c47342f9fd7d9776020f0f2a5c019b5c4e7c4fb198137eae252b43"
+        ]
       },
       {
-        "kind": "value"
+        "kind": "fragment",
+        "ids": [
+          "c1fdd299b12b0f585383e38157a3442a817888a69ebd7032d5ec71511988d44f"
+        ]
       }
     ],
     "expressions": [
@@ -3100,7 +3106,8 @@
     ],
     "expressions": [
       "tenant"
-    ]
+    ],
+    "replacement": "d7c52004c87d25b6c5b73eb9d4dbad158bbaaf656f45a1abb98114e1c3137c52"
   },
   "65d16b4625f08f96678100fe386e09abc53220bda3aae6f3f8e768e37c95f212": {
     "parts": [
@@ -7199,10 +7206,16 @@
     ],
     "parameters": [
       {
-        "kind": "value"
+        "kind": "fragment",
+        "ids": [
+          "c1fdd299b12b0f585383e38157a3442a817888a69ebd7032d5ec71511988d44f"
+        ]
       },
       {
-        "kind": "value"
+        "kind": "fragment",
+        "ids": [
+          "2af1b852b3c47342f9fd7d9776020f0f2a5c019b5c4e7c4fb198137eae252b43"
+        ]
       },
       {
         "kind": "value"
@@ -7458,6 +7471,26 @@
     ],
     "sources": [
       "scripts/_classnote/classnote-core.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenant"
+    ]
+  },
+  "d7c52004c87d25b6c5b73eb9d4dbad158bbaaf656f45a1abb98114e1c3137c52": {
+    "parts": [
+      "\n    select distinct substring(n.link from '/service/report/([0-9]+)')::bigint as post_id\n    from notifications n\n    where n.tenant_id = ",
+      " and n.type in ('classnote_parent_post', 'classnote_parent_comment')\n      and n.created_at > now() - interval '14 days' and n.body like '%(내용 없이 첨부만)%'\n      and n.link ~ '/service/report/[0-9]+'\n      and not exists (\n        select 1 from classnote_parent_messages m where m.tenant_id = n.tenant_id\n          and m.classnote_post_id::text = substring(n.link from '/service/report/([0-9]+)')\n          and ((n.type = 'classnote_parent_post' and m.source = 'post')\n            or (n.type = 'classnote_parent_comment' and m.source = 'comment' and m.content = n.body\n              and (n.link !~ '[?&]comment=[0-9]+' or m.classnote_comment_id::text = substring(n.link from '[?&]comment=([0-9]+)'))))\n      )\n    order by post_id desc limit 50"
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/repair-attachment-messages.mjs"
     ],
     "parameters": [
       {

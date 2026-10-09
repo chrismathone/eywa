@@ -15,19 +15,43 @@ const sources = new Map();
 const externals = new Set();
 const normalize = p => p.replaceAll('\\', '/');
 const idOf = parts => crypto.createHash('sha256').update(JSON.stringify(parts)).digest('hex');
+const parsedFiles=new Map();
+function bindings(file) {
+  if(parsedFiles.has(file))return parsedFiles.get(file);
+  const source=ts.createSourceFile(file,fs.readFileSync(file,'utf8'),ts.ScriptTarget.Latest,true,ts.ScriptKind.JS),declarations=new Map(),imports=new Map();
+  function collect(n) {
+    if(ts.isVariableDeclaration(n)&&ts.isIdentifier(n.name)&&n.initializer)declarations.set(n.name.text,n.initializer);
+    if(ts.isImportDeclaration(n)&&ts.isStringLiteral(n.moduleSpecifier)&&n.moduleSpecifier.text.startsWith('.')&&n.importClause?.namedBindings&&ts.isNamedImports(n.importClause.namedBindings)) {
+      const target=path.resolve(path.dirname(file),n.moduleSpecifier.text);
+      if(target.startsWith(root+path.sep)&&fs.existsSync(target))for(const item of n.importClause.namedBindings.elements)imports.set(item.name.text,{file:target,name:item.propertyName?.text??item.name.text});
+    }
+    ts.forEachChild(n,collect);
+  }
+  collect(source);const result={source,declarations,imports};parsedFiles.set(file,result);return result;
+}
+function helperFragment(file,name,seen=new Set()) {
+  const key=file+':'+name;if(seen.has(key))return null;seen.add(key);
+  const {source,declarations,imports}=bindings(file),node=declarations.get(name);
+  // Only a directly returned SQL template from a synchronous helper is a fragment.
+  // Async queries and ordinary data helpers must remain values.
+  if(node&&ts.isArrowFunction(node)&&!node.modifiers?.some(m=>m.kind===ts.SyntaxKind.AsyncKeyword)&&ts.isTaggedTemplateExpression(node.body)&&/^(sql\d*|tx|s|db\(\))$/.test(node.body.tag.getText(source))) {
+    const t=node.body.template;return idOf(ts.isNoSubstitutionTemplateLiteral(t)?[t.text]:[t.head.text,...t.templateSpans.map(s=>s.literal.text)]);
+  }
+  const imported=imports.get(name);return imported?helperFragment(imported.file,imported.name,seen):null;
+}
 function visitFile(file, module) {
   file = path.resolve(file);
   if (!file.startsWith(root + path.sep) || !fs.existsSync(file) || /\.test\./.test(file)) return;
   const key = `${module}:${file}`;
   if (sources.has(key)) return;
   sources.set(key, normalize(path.relative(root,file)));
-  const source = ts.createSourceFile(file, fs.readFileSync(file,'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
-  const declarations = new Map();
-  function collect(n) { if(ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.initializer) declarations.set(n.name.text,n.initializer); ts.forEachChild(n,collect); }
-  collect(source);
+  const {source,declarations}=bindings(file);
   const templateParts = t => ts.isNoSubstitutionTemplateLiteral(t) ? [t.text] : [t.head.text,...t.templateSpans.map(s=>s.literal.text)];
   function descriptor(n,seen=new Set()) {
     if(ts.isIdentifier(n) && declarations.has(n.text) && !seen.has(n.text)) return descriptor(declarations.get(n.text),new Set([...seen,n.text]));
+    if(ts.isCallExpression(n)&&ts.isIdentifier(n.expression)) {
+      const helper=helperFragment(file,n.expression.text);if(helper)return {kind:'fragment',ids:[helper]};
+    }
     const fragments=[];
     function find(x) { if(ts.isTaggedTemplateExpression(x) && /^(sql\d*|tx|s|db\(\))$/.test(x.tag.getText(source))) fragments.push(idOf(templateParts(x.template))); else ts.forEachChild(x,find); }
     find(n);
@@ -70,6 +94,14 @@ function visitFile(file, module) {
   walk(source);
 }
 for(const [module,files] of Object.entries(entries)) for(const file of files) visitFile(path.join(root,`scripts/_${module}`,file),module);
+// Installed 1.0.3 sends the original attachment query ID. Its missing closing
+// parenthesis is repaired on the server without changing any posted release.
+const legacyAttachment='63bb961c8416762e284136a79f2b0d69a77c6dca789abe4d9b64227fffbe4e05';
+if(catalog[legacyAttachment]) {
+  const replacement=Object.entries(catalog).find(([id,q])=>id!==legacyAttachment&&q.sources.includes('scripts/_classnote/repair-attachment-messages.mjs')&&q.parts[0].includes('select distinct substring(n.link'));
+  if(!replacement)throw Error('Missing corrected attachment query');
+  catalog[legacyAttachment].replacement=replacement[0];
+}
 const sorted = Object.fromEntries(Object.entries(catalog).sort(([a],[b])=>a.localeCompare(b)));
 const out = path.join(root,'src/features/sync-agent/server/query-catalog.json');
 fs.mkdirSync(path.dirname(out),{recursive:true});
