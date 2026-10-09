@@ -25,17 +25,27 @@ function verifyManifest(envelope,publicKey,{sequence=0,now=Date.now(),allowExist
   if(size>6*1024*1024*1024||!names.has('aywasyncruntime.exe')||!names.has('resources/app.asar'))throw new Error('invalid_files');
   return m;
 }
-async function download(m,file,fetchImpl=fetch){
-  const response=await fetchImpl(m.url,{redirect:'error',signal:AbortSignal.timeout(20*60*1000)});
+async function download(m,file,fetchImpl=fetch,{onProgress=()=>{},idleTimeoutMs=90_000}={}){
+  // A stalled response used to show "downloading" for the entire 20-minute deadline.
+  const stalled=new AbortController();let timer;
+  const touch=()=>{clearTimeout(timer);timer=setTimeout(()=>stalled.abort(new Error('download_stalled')),idleTimeoutMs);};
+  const signal=AbortSignal.any([AbortSignal.timeout(20*60*1000),stalled.signal]);
+  touch();onProgress({phase:'downloading',completed:0,total:m.size});
+  try{
+  const response=await fetchImpl(m.url,{redirect:'error',signal});
   if(!response.ok||!response.body)throw new Error('download_failed');
   const hash=crypto.createHash('sha256');let size=0;
-  const meter=new Transform({transform(chunk,_enc,cb){size+=chunk.length;if(size>m.size)return cb(new Error('oversize'));hash.update(chunk);cb(null,chunk);}});
-  await pipeline(Readable.fromWeb(response.body),meter,fs.createWriteStream(file,{flags:'wx'}));
+  const meter=new Transform({transform(chunk,_enc,cb){size+=chunk.length;if(size>m.size)return cb(new Error('oversize'));touch();hash.update(chunk);onProgress({phase:'downloading',completed:size,total:m.size});cb(null,chunk);}});
+  await pipeline(Readable.fromWeb(response.body),meter,fs.createWriteStream(file,{flags:'wx'}),{signal});
+  onProgress({phase:'verifying',completed:size,total:m.size});
   if(size!==m.size||hash.digest('hex')!==m.sha256)throw new Error('hash_mismatch');
+  }catch(error){if(signal.aborted)throw new Error('download_timeout');throw error;}
+  finally{clearTimeout(timer);}
 }
-async function extractVerified(file,target,m){
+async function extractVerified(file,target,m,{onProgress=()=>{}}={}){
   // Target is a newly created directory; never follow pre-existing directories or symlinks.
-  await fsp.mkdir(target,{recursive:false});const expected=new Map(m.files.map(f=>[f.path.toLowerCase(),f]));const seen=new Set();
+  await fsp.mkdir(target,{recursive:false});const expected=new Map(m.files.map(f=>[f.path.toLowerCase(),f]));const seen=new Set();let completed=0;
+  onProgress({phase:'extracting',completed,total:expected.size});
   const zip=await new Promise((resolve,reject)=>yauzl.open(file,{lazyEntries:true,decodeStrings:true,validateEntrySizes:true},(e,z)=>e?reject(e):resolve(z)));
   await new Promise((resolve,reject)=>{
     let failed=false;const fail=e=>{if(!failed){failed=true;zip.close();reject(e);}};
@@ -49,32 +59,35 @@ async function extractVerified(file,target,m){
       seen.add(name.toLowerCase());const dest=path.join(target,...name.split('/'));await fsp.mkdir(path.dirname(dest),{recursive:true});
       const input=await new Promise((r,j)=>zip.openReadStream(entry,(e,s)=>e?j(e):r(s)));const hash=crypto.createHash('sha256');let count=0;
       await pipeline(input,new Transform({transform(c,_e,cb){count+=c.length;if(count>f.size)return cb(new Error('oversize'));hash.update(c);cb(null,c);}}),fs.createWriteStream(dest,{flags:'wx'}));
-      if(count!==f.size||hash.digest('hex')!==f.sha256)throw new Error('file_hash_mismatch');zip.readEntry();
+      if(count!==f.size||hash.digest('hex')!==f.sha256)throw new Error('file_hash_mismatch');onProgress({phase:'extracting',completed:++completed,total:expected.size});zip.readEntry();
     })().catch(fail);});zip.readEntry();
   });
 }
 class Updater {
-  constructor({root,api,publicKey,sequence,event}){Object.assign(this,{root,api,publicKey,sequence,event});this.state='idle';this.ready=null;this.pending=false;this.nextCheck=0;}
+  constructor({root,api,publicKey,sequence,event,fetchImpl=fetch}){Object.assign(this,{root,api,publicKey,sequence,event,fetchImpl});this.state='idle';this.ready=null;this.pending=false;this.nextCheck=0;this.progress=null;this.failure=null;this.checkedAt=null;}
   async check(){
     if(this.pending||Date.now()<this.nextCheck)return;
-    this.pending=true;this.nextCheck=Date.now()+6*3600000;
-    let stage,archive;
+    this.pending=true;this.nextCheck=Date.now()+6*3600000;this.failure=null;
+    const progress=value=>{this.progress={...this.progress,...value,updatedAt:new Date().toISOString()};};
+    this.progress=null;progress({phase:'checking',completed:0,total:0});
+    let stage,archive,version;
     try {
-      const {release}=await this.api.call('latest');if(!release)return;
+      const {release}=await this.api.call('latest');this.checkedAt=new Date().toISOString();if(!release){this.state=this.ready?'ready':'idle';this.progress=null;return;}
       const m=verifyManifest(release,this.publicKey,{sequence:this.sequence,allowExisting:true});
-      if(!m)return;
-      if(this.ready?.sequence===m.sequence){this.state='ready';return;}
+      if(!m){this.state='idle';this.progress=null;return;}
+      version=m.version;progress({version});
+      if(this.ready?.sequence===m.sequence){this.state='ready';this.progress=null;return;}
       // A newer release needs its own decision; never keep applying the old
       // selection while its replacement is being downloaded.
       this.ready=null;
       let journal={};try{journal=JSON.parse(fs.readFileSync(path.join(this.root,'launch.json'),'utf8'));}catch{}
-      if((journal.failed??[]).includes(m.sequence))return;
+      if((journal.failed??[]).includes(m.sequence))throw new Error('release_quarantined');
       const versions=path.resolve(this.root,'versions');await fsp.mkdir(versions,{recursive:true});
       const destination=path.join(versions,String(m.sequence));
       if(fs.existsSync(destination)){
         const saved=JSON.parse(await fsp.readFile(path.join(destination,'release.json'),'utf8'));
         if(saved.payload!==release.payload||saved.signature!==release.signature)throw new Error('version_conflict');
-        this.ready={sequence:m.sequence,version:m.version,expiresAt:m.expiresAt};this.state='ready';return;
+        this.ready={sequence:m.sequence,version:m.version,expiresAt:m.expiresAt};this.state='ready';this.progress=null;return;
       }
       const keep=new Set([this.sequence,m.sequence,journal.current,journal.previous].map(String));
       for(const name of await fsp.readdir(versions)){
@@ -87,14 +100,19 @@ class Updater {
       stage=path.join(versions,`${m.sequence}.stage-${crypto.randomUUID()}`);archive=stage+'.zip';
       const free=await fsp.statfs(versions);const required=m.size+m.files.reduce((n,f)=>n+f.size,0)+256*1024*1024;
       if(Number(free.bavail)*Number(free.bsize)<required)throw new Error('disk_full');
-      await download(m,archive);await extractVerified(archive,stage,m);atomicWrite(path.join(stage,'release.json'),JSON.stringify(release));
+      await download(m,archive,this.fetchImpl,{onProgress:progress});await extractVerified(archive,stage,m,{onProgress:progress});progress({phase:'finalizing'});atomicWrite(path.join(stage,'release.json'),JSON.stringify(release));
       if(fs.existsSync(destination))throw new Error('version_exists');await fsp.rename(stage,destination);await fsp.unlink(archive).catch(()=>{});
-      this.ready={sequence:m.sequence,version:m.version,expiresAt:m.expiresAt};this.state='ready';this.event('update_downloaded','update','info',{version:m.version});
-    }catch{
+      this.ready={sequence:m.sequence,version:m.version,expiresAt:m.expiresAt};this.state='ready';this.progress=null;this.event('update_downloaded','update','info',{version:m.version});
+    }catch(error){
       // Only this attempt's generated stage paths are removable; installed/active versions never match.
       const versions=path.resolve(this.root,'versions');
       for(const item of [archive,stage])if(item&&path.dirname(path.resolve(item))===versions&&/^\d+\.stage-[0-9a-f-]{36}(?:\.zip)?$/.test(path.basename(item)))await fsp.rm(item,{recursive:true,force:true}).catch(()=>{});
-      this.state='error';this.nextCheck=Date.now()+30*60000;this.event('update_failed','update','warning');
+      const phase=this.progress?.phase;
+      const code=error.message==='release_quarantined'?'release_quarantined':error.message==='download_timeout'?'download_timeout':
+        error.message==='disk_full'||error.code==='ENOSPC'?'disk_full':['EACCES','EPERM','EBUSY'].includes(error.code)?'files_locked':
+        ['hash_mismatch','file_hash_mismatch','oversize','unexpected_file','missing_files','non_regular_file','invalid_path'].includes(error.message)?'archive_invalid':
+        phase==='checking'?'manifest_failed':phase==='downloading'?'download_failed':phase==='extracting'?'extract_failed':'prepare_failed';
+      this.failure=code;this.progress=null;this.state='error';this.nextCheck=Date.now()+30*60000;this.event('update_failed','update','warning',{updateError:code,...(version?{version}:{})});
     }
     finally{this.pending=false;}
   }

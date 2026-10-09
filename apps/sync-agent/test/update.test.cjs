@@ -34,3 +34,30 @@ test('a downloaded release still checks for newer versions and rechecks the sign
   await updater.check();assert.equal(updater.ready.sequence,2);updater.nextCheck=0;await updater.check();assert.equal(updater.ready.sequence,3);assert.equal(calls,2);
   fs.writeFileSync(path.join(root,'versions/3/release.json'),JSON.stringify({...releases[1],signature:'invalid'}));assert.throws(()=>updater.activate(),/invalid_signature/);assert.equal(fs.existsSync(path.join(root,'launch.json')),false);
 });
+test('download reports received bytes, separates verification and aborts a stalled body',async()=>{
+  const bytes=zipBytes(entries),root=fs.mkdtempSync(path.join(base,'download-progress-')),progress=[];
+  const body=new ReadableStream({start(controller){controller.enqueue(bytes.subarray(0,10));setTimeout(()=>{controller.enqueue(bytes.subarray(10));controller.close();},10);}});
+  await download(manifest(),path.join(root,'ok.zip'),async()=>new Response(body),{onProgress:p=>progress.push(p)});
+  assert.equal(progress[0].completed,0);assert.ok(progress.some(p=>p.phase==='downloading'&&p.completed===10));assert.equal(progress.at(-1).phase,'verifying');assert.equal(progress.at(-1).completed,bytes.length);
+  let cancelled=false;
+  await assert.rejects(download(manifest(),path.join(root,'stall.zip'),async()=>new Response(new ReadableStream({cancel(){cancelled=true;}})),{idleTimeoutMs:20}),/download_timeout/);
+  assert.equal(cancelled,true);
+});
+test('updater exposes extraction progress and only marks fully verified files ready',async()=>{
+  const pair=crypto.generateKeyPairSync('rsa',{modulusLength:2048}),m=manifest(),bytes=Buffer.from(JSON.stringify(m)),envelope={payload:bytes.toString('base64'),signature:crypto.sign('RSA-SHA256',bytes,pair.privateKey).toString('base64')};
+  const root=fs.mkdtempSync(path.join(base,'updater-progress-')),events=[],progress=[];
+  const updater=new Updater({root,api:{call:async()=>({release:envelope})},publicKey:pair.publicKey,sequence:1,event:(...e)=>events.push(e),fetchImpl:async()=>new Response(zipBytes(entries))});
+  let value;Object.defineProperty(updater,'progress',{get(){return value;},set(p){value=p;if(p){assert.equal(this.ready,null);progress.push(p);}}});
+  await updater.check();assert.equal(updater.state,'ready');assert.equal(updater.ready.sequence,2);assert.equal(updater.pending,false);assert.equal(updater.progress,null);assert.equal(updater.failure,null);
+  assert.deepEqual([...new Set(progress.map(p=>p.phase))],['checking','downloading','verifying','extracting','finalizing']);
+  assert.equal(progress.filter(p=>p.phase==='extracting').at(-1).completed,m.files.length);
+  assert.equal(events.at(-1)[0],'update_downloaded');assert.equal(fs.readdirSync(path.join(root,'versions')).some(n=>n.includes('.stage-')),false);
+});
+test('failure records a fixed reason, cleans only its staging files and permits manual retry',async()=>{
+  const pair=crypto.generateKeyPairSync('rsa',{modulusLength:2048}),m=manifest(),bytes=Buffer.from(JSON.stringify(m)),envelope={payload:bytes.toString('base64'),signature:crypto.sign('RSA-SHA256',bytes,pair.privateKey).toString('base64')};
+  const root=fs.mkdtempSync(path.join(base,'updater-failed-')),events=[];fs.mkdirSync(path.join(root,'versions/1'),{recursive:true});fs.writeFileSync(path.join(root,'versions/1/keep.txt'),'active');let fail=true,calls=0;
+  const updater=new Updater({root,api:{call:async()=>{calls++;return{release:envelope};}},publicKey:pair.publicKey,sequence:1,event:(...e)=>events.push(e),fetchImpl:async()=>{if(fail)throw Error('private-path-or-token');return new Response(zipBytes(entries));}});
+  await updater.check();assert.equal(updater.state,'error');assert.equal(updater.failure,'download_failed');assert.equal(updater.ready,null);assert.equal(updater.progress,null);assert.equal(updater.pending,false);
+  assert.deepEqual(events.at(-1).at(-1),{updateError:'download_failed',version:m.version});assert.equal(JSON.stringify(events).includes('private-path-or-token'),false);assert.deepEqual(fs.readdirSync(path.join(root,'versions')),['1']);
+  await updater.check();assert.equal(calls,1);fail=false;updater.nextCheck=0;await updater.check();assert.equal(calls,2);assert.equal(updater.state,'ready');assert.equal(updater.failure,null);assert.equal(fs.readFileSync(path.join(root,'versions/1/keep.txt'),'utf8'),'active');
+});

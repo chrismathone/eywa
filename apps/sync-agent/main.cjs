@@ -5,7 +5,7 @@ const {atomicWrite,secretStore,eventQueue}=require('./lib/storage.cjs');const {U
 const {UpdatePlan}=require('./lib/update-plan.cjs');
 const {createWorkerLog}=require('./lib/worker-log.cjs');
 const {inspectLegacy,disableLegacyTasks,readLegacySettings,copyLegacyState}=require('./lib/legacy.cjs');
-const {LocalSettingsInput,StoredLocalSettingsInput,DEFAULT_LOCAL_SETTINGS,EventInput,EVENT_LABELS,LOG_CODE_LABELS}=require('./lib/protocol.cjs');
+const {LocalSettingsInput,StoredLocalSettingsInput,DEFAULT_LOCAL_SETTINGS,EventInput,EVENT_LABELS,LOG_CODE_LABELS,UPDATE_ERROR_LABELS}=require('./lib/protocol.cjs');
 const build=require('./build-config.json');
 // Resolve from the OS profile, independent of executable/version directory.
 const dataRoot=path.resolve(process.env.LOCALAPPDATA||path.join(app.getPath('home'),'AppData','Local'),'AYWA','Sync');
@@ -16,10 +16,10 @@ let window,tray,store,events,connection=null,local={...DEFAULT_LOCAL_SETTINGS},l
 let message='',unlockedUntil=0,looping=false,quitting=false,closing=false,applying=false,suspended=false,nextConnect=0,revoked=false;
 let notifiedUpdate=0;
 const uiFile=path.join(__dirname,'ui','index.html');
-function event(kind,module='app',level='info',detail={}){const row={id:randomUUID(),at:new Date().toISOString(),kind,module,level,detail};if(EventInput.safeParse(row).success){events?.add(row);try{createWorkerLog(path.join(dataRoot,...(connection?.tenantId?['tenants',connection.tenantId]:[]),'log')).append('app',`${module} · ${detail.logCode?LOG_CODE_LABELS[detail.logCode]:EVENT_LABELS[kind]??'실행 기록'}${detail.version?' · '+detail.version:''}`);}catch{}}}
+function event(kind,module='app',level='info',detail={}){const row={id:randomUUID(),at:new Date().toISOString(),kind,module,level,detail};if(EventInput.safeParse(row).success){events?.add(row);try{createWorkerLog(path.join(dataRoot,...(connection?.tenantId?['tenants',connection.tenantId]:[]),'log')).append('app',`${module} · ${detail.logCode?LOG_CODE_LABELS[detail.logCode]:EVENT_LABELS[kind]??'실행 기록'}${detail.version?' · '+detail.version:''}${detail.updateError?' · '+UPDATE_ERROR_LABELS[detail.updateError]:''}`);}catch{}}}
 function snapshot(){return{version:build.version,tenantName:connection?.tenantName??'',paired:!!connection?.tenantId,revoked,online:!!lease?.held,unlocked:Date.now()<unlockedUntil,local,
   configuration,modules:{classnote:supervisor?.status('classnote')??'off',makeedu:supervisor?.status('makeedu')??'off'},update:updater?.state??'idle',message,
-  updateInfo:{ready:updater?.ready??null,plan:updatePlan?.plan??null,draining:applying&&!closing,closing},
+  updateInfo:{ready:updater?.ready??null,plan:updatePlan?.plan??null,progress:updater?.progress??null,pending:!!updater?.pending,failure:updater?.failure?UPDATE_ERROR_LABELS[updater.failure]:null,checkedAt:updater?.checkedAt??null,draining:applying&&!closing,closing},
   credentials:Object.fromEntries(CREDENTIAL_KEYS.map(k=>[k,!!connection?.credentials?.[k]])),events:events?.peek().slice(-12)??[]};}
 function broadcast(){if(window&&!window.isDestroyed())window.webContents.send('state',snapshot());}
 function show(){if(!window)return;if(window.isMinimized())window.restore();window.show();window.focus();}
@@ -92,7 +92,7 @@ async function tick(){
   finally{looping=false;broadcast();}
 }
 function interruptUpdate(){updatePlan?.interrupt();if(!closing){applying=false;if(supervisor)supervisor.draining=false;}}
-function requireUpdateAllowed(){requireUnlocked();if(closing||quitting)throw new Error('앱이 종료 중입니다. 다시 실행한 뒤 선택해 주세요.');if(!lease?.held||!configuration?.updatesEnabled)throw new Error('서버 연결과 웹의 업데이트 허용 설정을 확인해 주세요.');}
+function requireUpdateAllowed(){if(closing||quitting)throw new Error('앱이 종료 중입니다. 다시 실행한 뒤 선택해 주세요.');if(!lease?.held||!configuration?.updatesEnabled)throw new Error('서버 연결과 웹의 업데이트 허용 설정을 확인해 주세요.');}
 async function shutdown(){
   if(quitting||closing)return;closing=true;applying=true;supervisor?.drain();message='진행 중인 작업을 마친 뒤 종료합니다.';broadcast();
   const check=setInterval(async()=>{if(supervisor?.busy)return;clearInterval(check);event('app_stopped');await lease?.release().catch(()=>{});quitting=true;app.quit();},500);
@@ -142,7 +142,7 @@ function registerIpc(){
         case 'update':requireUpdateAllowed();updater.nextCheck=0;void checkUpdates();break;
         case 'update-now':requireUpdateAllowed();updatePlan.request(updater.ready,{sequence:input?.sequence});message='현재 작업을 마치고 선택한 버전을 적용합니다.';void tick();break;
         case 'update-schedule':requireUpdateAllowed();if(typeof input?.at!=='string')throw new Error('예약 날짜와 시간을 지정해 주세요.');updatePlan.request(updater.ready,{sequence:input?.sequence,at:input.at});if(!closing){applying=false;supervisor.draining=false;}message='이 버전의 업데이트 시간을 예약했습니다.';void tick();break;
-        case 'update-cancel':requireUnlocked();if(closing||quitting)throw new Error('앱이 종료 중입니다.');updatePlan.cancel();applying=false;if(supervisor)supervisor.draining=false;message='업데이트 예약을 취소했습니다. 새 적용 방법을 선택할 때까지 기다립니다.';void tick();break;
+        case 'update-cancel':if(closing||quitting)throw new Error('앱이 종료 중입니다.');updatePlan.cancel();applying=false;if(supervisor)supervisor.draining=false;message='업데이트 예약을 취소했습니다. 새 적용 방법을 선택할 때까지 기다립니다.';void tick();break;
         case 'reset':{
           if(supervisor?.busy)throw new Error('이전 실행이 종료되기를 기다려 주세요.');
           let confirmed=false;try{await api.call('configuration');}catch(e){if(e.code==='unauthorized')confirmed=true;else throw e;}

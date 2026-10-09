@@ -15,7 +15,7 @@ async function main(){
    // Advance only the appointment clock; keep Electron, IPC, leases and unlock expiry on real time.
    const request=UpdatePlan.prototype.request;UpdatePlan.prototype.request=function(...args){this.now=()=>global.fixture.now;return request.apply(this,args);};
    app.setLoginItemSettings=()=>{};Notification.prototype.show=function(){global.fixture.notifications++;};
-   Updater.prototype.check=async function(){this.ready={sequence:build.sequence+1,version:'99.0.0',expiresAt:'2099-01-01T00:00:00Z'};this.state='ready';};
+   Updater.prototype.check=async function(){global.fixture.updater=this;if(this.pending)return;this.ready={sequence:build.sequence+1,version:'99.0.0',expiresAt:'2099-01-01T00:00:00Z'};this.state='ready';};
    Updater.prototype.activate=function(){global.fixture.activations++;throw new Error('fixture: installation deliberately unavailable');};
    Object.defineProperty(Supervisor.prototype,'busy',{get(){return global.fixture.busy;}});
    global.fetch=async(url,init)=>{
@@ -28,8 +28,16 @@ async function main(){
    };
   });
   console.log(JSON.stringify({stage:'pair'}));
-  const page=await electron.firstWindow({timeout:15000});page.setDefaultTimeout(15000);await page.getByLabel('지점 연결 코드').fill('001122334455');await page.getByRole('button',{name:'지점 연결',exact:true}).click();
+  const page=await electron.firstWindow({timeout:15000});page.setDefaultTimeout(15000);page.on('pageerror',error=>console.error('Renderer:',error.message));await page.getByLabel('지점 연결 코드').fill('001122334455');await page.getByRole('button',{name:'지점 연결',exact:true}).click();
   await page.getByText('다운로드 완료 · 적용 방법 선택',{exact:true}).waitFor();assert.equal(await electron.evaluate(()=>global.fixture.activations),0);
+  // Renderer must distinguish the long ZIP extraction from receiving bytes.
+  const phase=async(phase,completed,total)=>electron.evaluate((_electron,{phase,completed,total})=>{const u=global.fixture.updater;u.ready=null;u.state='downloading';u.pending=true;u.progress={phase,completed,total,version:'99.0.0',updatedAt:new Date().toISOString()};},{phase,completed,total});
+  await phase('downloading',50*1024*1024,100*1024*1024);await page.getByText('50.0 / 100.0 MB · 50%',{exact:true}).waitFor();assert.equal(await page.getByRole('button',{name:'새 버전 확인',exact:true}).isDisabled(),true);assert.equal(await page.getByRole('button',{name:'지금 업데이트',exact:true}).isDisabled(),true);
+  await phase('extracting',1250,10000);await page.getByText('압축 해제 · 파일 검증 중',{exact:true}).waitFor();await page.getByText('1,250 / 10,000개 파일 · 12%',{exact:true}).waitFor();assert.equal(await page.getByRole('progressbar',{name:'업데이트 준비 진행률'}).getAttribute('value'),'12');
+  await phase('finalizing',10000,10000);await page.getByText('설치 준비 마무리 중',{exact:true}).waitFor();await page.screenshot({path:path.join(root,'progress.png'),fullPage:true});
+  await electron.evaluate(()=>{const u=global.fixture.updater;u.pending=false;u.progress=null;u.state='error';u.failure='download_timeout';});await page.getByText('파일 수신이 멈추었거나 제한 시간을 넘었습니다. 새 버전 확인으로 다시 시도해 주세요.',{exact:true}).waitFor();assert.equal(await page.getByRole('button',{name:'새 버전 확인',exact:true}).isDisabled(),false);
+  await electron.evaluate(()=>{const u=global.fixture.updater;u.state='idle';u.failure=null;u.checkedAt=new Date().toISOString();});await page.getByText('현재 최신 버전입니다.',{exact:true}).waitFor();assert.equal(await page.getByText('다운로드가 끝나면 적용 방법을 선택할 수 있습니다.',{exact:true}).count(),0);
+  await page.getByRole('button',{name:'새 버전 확인',exact:true}).click();await page.getByText('다운로드 완료 · 적용 방법 선택',{exact:true}).waitFor();
   const state=async()=> (await page.evaluate(()=>window.agent.command('state'))).state;
   const tick=async()=>{const s=await state();await page.evaluate(local=>window.agent.command('settings',local),s.local);};
   const waitPlan=async value=>{await page.waitForFunction(async expected=>(await window.agent.command('state')).state.updateInfo.plan?.state===expected,value);};
@@ -43,7 +51,7 @@ async function main(){
   const readySequence=(await state()).updateInfo.ready.sequence;
   const scheduled=await page.evaluate(({at,sequence})=>window.agent.command('update-schedule',{sequence,at}),{sequence:readySequence,at});assert.equal(scheduled.ok,true);
   console.log(JSON.stringify({stage:'drain'}));
-  await electron.evaluate(at=>{global.fixture.busy=true;global.fixture.now=Date.parse(at)+1000;},at);await tick();await waitPlan('waiting');
+  await electron.evaluate((_electron,at)=>{global.fixture.busy=true;global.fixture.now=Date.parse(at)+1000;},at);await tick();await waitPlan('waiting');
   assert.equal(await electron.evaluate(()=>global.fixture.activations),0);const waiting=await state();console.log(JSON.stringify({stage:'cancel-drain',unlocked:waiting.unlocked,online:waiting.online,update:waiting.update,info:waiting.updateInfo}));await page.getByRole('button',{name:'예약·적용 대기 취소'}).click();assert.equal((await state()).updateInfo.plan,null);
   await page.getByRole('button',{name:'지금 업데이트',exact:true}).click();await waitPlan('waiting');assert.equal(await electron.evaluate(()=>global.fixture.activations),0);
   await electron.evaluate(()=>{global.fixture.busy=false;});await tick();await waitPlan('failed');assert.equal(await electron.evaluate(()=>global.fixture.activations),1);
@@ -51,9 +59,17 @@ async function main(){
   const stale=await page.evaluate(sequence=>window.agent.command('update-now',{sequence:sequence-1}),readySequence);assert.equal(stale.ok,false);
   await electron.evaluate(()=>{global.fixture.enabled=false;});await tick();await page.waitForFunction(async()=>!(await window.agent.command('state')).state.configuration.updatesEnabled);
   assert.equal((await page.evaluate(sequence=>window.agent.command('update-now',{sequence}),readySequence)).ok,false);
-  const result=await electron.evaluate(()=>global.fixture);assert.ok(!result.calls.includes('module-start'));
-  console.log(JSON.stringify({passed:true,packaged,downloadDoesNotApply:true,appointmentPersisted:true,cancelWhileBusy:true,immediateWaitsForWork:true,failedApplyNotRetried:true,staleChoiceRejected:true,serverDisableRespected:true,operationalWorkers:0,realNetworkRequests:0,evidence:root}));
- }catch(error){console.error('Controller fixture failed:',error.message);throw error;}
+  await electron.evaluate(()=>{global.fixture.enabled=true;global.fixture.busy=true;});await tick();
+  await electron.evaluate(()=>{const realNow=Date.now;Date.now=()=>realNow()+16*60_000;});await page.waitForFunction(async()=>!(await window.agent.command('state')).state.unlocked);
+  await page.getByRole('button',{name:'새 버전 확인',exact:true}).click();await page.getByText('다운로드 완료 · 적용 방법 선택',{exact:true}).waitFor();
+  assert.equal((await page.evaluate(()=>window.agent.command('credentials',{MAKEEDU_ID:'blocked-fixture'}))).ok,false);
+  assert.equal((await page.evaluate(async()=>window.agent.command('settings',(await window.agent.command('state')).state.local))).ok,false);
+  assert.equal((await page.evaluate(sequence=>window.agent.command('update-now',{sequence}),readySequence)).ok,true);await waitPlan('waiting');
+  assert.equal((await page.evaluate(()=>window.agent.command('update-cancel'))).ok,true);assert.equal((await state()).updateInfo.plan,null);
+  assert.equal((await page.evaluate(({sequence,at})=>window.agent.command('update-schedule',{sequence,at}),{sequence:readySequence,at:new Date(when+60*60_000).toISOString()})).ok,true);await waitPlan('scheduled');assert.equal((await page.evaluate(()=>window.agent.command('update-cancel'))).ok,true);
+  const result=await electron.evaluate(()=>({calls:global.fixture.calls}));assert.ok(!result.calls.includes('module-start'));
+  console.log(JSON.stringify({passed:true,packaged,progressStages:true,updateWithoutManagementCode:true,settingsStayLocked:true,downloadDoesNotApply:true,appointmentPersisted:true,cancelWhileBusy:true,immediateWaitsForWork:true,failedApplyNotRetried:true,staleChoiceRejected:true,serverDisableRespected:true,operationalWorkers:0,realNetworkRequests:0,evidence:root}));
+ }catch(error){console.error('Controller fixture failed:',error.message);const page=await electron.firstWindow();console.log(JSON.stringify(await page.evaluate(async()=>({state:(await window.agent.command('state')).state.updateInfo,detail:document.getElementById('update-detail')?.textContent,progress:document.getElementById('update-progress-text')?.textContent}))));throw error;}
  finally{await Promise.race([electron.evaluate(({app})=>app.exit(0)).catch(()=>{}),new Promise(r=>setTimeout(r,2000))]);electron.process().kill();await Promise.race([electron.close().catch(()=>{}),new Promise(r=>setTimeout(r,2000))]);}
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const AGENT_PROTOCOL = 1;
-export const AGENT_VERSION = "1.0.2";
+export const AGENT_VERSION = "1.0.3";
 export const UUID = z.string().uuid();
 export const Version = z.string().regex(/^\d+\.\d+\.\d+$/).max(32);
 export const MODULES = ["classnote", "makeedu"] as const;
@@ -27,10 +27,22 @@ export const LOG_CODE_LABELS = {
   status_failed:"실행 상태 기록 실패",result_failed:"동기화 완료 기록 저장 실패",poll_failed:"작업 조회 실패 · 다음 주기에 재확인",
 } as const;
 export const LogCode=z.enum(Object.keys(LOG_CODE_LABELS) as [keyof typeof LOG_CODE_LABELS,...Array<keyof typeof LOG_CODE_LABELS>]);
+export const UPDATE_ERROR_LABELS = {
+  manifest_failed:"버전 정보를 확인하지 못했습니다. 서버 연결 후 다시 확인해 주세요.",
+  download_failed:"설치 파일을 받지 못했습니다. 인터넷 연결 후 다시 확인해 주세요.",
+  download_timeout:"파일 수신이 멈추었거나 제한 시간을 넘었습니다. 새 버전 확인으로 다시 시도해 주세요.",
+  disk_full:"설치 준비 공간이 부족합니다. C 드라이브의 여유 공간을 확보해 주세요.",
+  files_locked:"업데이트 파일에 접근하지 못했습니다. 파일 권한과 보안 프로그램의 차단 기록을 확인해 주세요.",
+  archive_invalid:"파일 검증에 실패했습니다. 새 버전 확인으로 다시 받아 주세요.",
+  extract_failed:"압축을 풀지 못했습니다. 디스크 상태를 확인하고 다시 시도해 주세요.",
+  release_quarantined:"이 버전은 이전 실행에 실패했습니다. 다음 버전이 배포되면 다시 확인해 주세요.",
+  prepare_failed:"업데이트 준비를 마치지 못했습니다. 새 버전 확인으로 다시 시도해 주세요.",
+} as const;
+export const UpdateErrorCode=z.enum(Object.keys(UPDATE_ERROR_LABELS) as [keyof typeof UPDATE_ERROR_LABELS,...Array<keyof typeof UPDATE_ERROR_LABELS>]);
 export const EventInput = z.object({
   id: UUID, at: z.string().datetime(), kind: EventKind.or(z.literal("worker_log")),
   module: z.enum(["app", "classnote", "makeedu", "video", "update"]), level: z.enum(["info", "warning", "error"]),
-  detail: z.object({ task:TaskKind.optional(),logCode:LogCode.optional(),count: z.number().int().min(0).max(1000000).optional(), durationMs: z.number().int().min(0).max(86400000).optional(), version: Version.optional() }).strict().default({}),
+  detail: z.object({ task:TaskKind.optional(),logCode:LogCode.optional(),updateError:UpdateErrorCode.optional(),count: z.number().int().min(0).max(1000000).optional(), durationMs: z.number().int().min(0).max(86400000).optional(), version: Version.optional() }).strict().default({}),
 }).strict();
 export const SettingsInput = z.object({ enabled: z.boolean(), classnoteEnabled: z.boolean(), makeeduEnabled: z.boolean(), updatesEnabled: z.boolean(), revision: z.number().int().positive() }).strict();
 export const LocalSettingsInput = z.object({
