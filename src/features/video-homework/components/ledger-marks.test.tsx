@@ -90,11 +90,11 @@ describe("영상 제출 현황 — ▶ 현재 화면 재생 · 수동", () => {
   });
 });
 
-describe("영상 제출 현황 — 빈 칸에 결석·숙제없음(회차 수는 그대로)", () => {
-  it("이서연의 빈 칸 = 10.06 결석 · 10.20 숙제없음, 박도윤은 입반 전이라 —", () => {
+describe("영상 제출 현황 — 결석은 —, 숙제없음은 사유 표시(회차 수는 그대로)", () => {
+  it("이서연의 결석 칸은 — · 10.20 숙제없음, 박도윤은 입반 전이라 —", () => {
     show();
     const rowOf = (name: string) => within(screen.getByRole("row", { name: new RegExp(name) }));
-    expect(rowOf("이서연").getByLabelText("2026-10-06 결석")).toHaveTextContent("10.06결석");
+    expect(rowOf("이서연").getByLabelText("숙제 없음")).toHaveTextContent("—");
     expect(rowOf("이서연").getByLabelText("2026-10-20 숙제없음")).toHaveTextContent("10.20숙제없음");
     expect(rowOf("박도윤").queryByLabelText(/결석|숙제없음/)).toBeNull();
     expect(rowOf("박도윤").getAllByLabelText("숙제 없음")).toHaveLength(2);
@@ -105,10 +105,10 @@ describe("영상 제출 현황 — 빈 칸에 결석·숙제없음(회차 수는
     expect(within(table).getAllByRole("columnheader").map((th) => th.textContent)).toEqual(["", "학생", "학교 · 학년", "완료", "1회", "2회", "3회"]);
     const two = within(screen.getByRole("row", { name: /이서연/ }));
     expect(two.getByText("/1")).toBeInTheDocument(); // m = 자기 회차 1개
-    expect(screen.getByText("결석")).toBeInTheDocument();
+    expect(screen.queryByText("결석")).not.toBeInTheDocument();
   });
   it("안내 줄에 표시 뜻이 한 줄 들어간다", () => {
     show();
-    expect(screen.getByText("▶ 영상 · 수동 · 결석 · 숙제없음", { exact: false })).toBeInTheDocument();
+    expect(screen.getByText("▶ 영상 · 수동 · 숙제없음 · — 회차 없음", { exact: false })).toBeInTheDocument();
   });
 });

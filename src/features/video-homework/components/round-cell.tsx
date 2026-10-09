@@ -23,11 +23,11 @@ function SourceMark({ row, round, videosKnown, onPlay }: { row: VideoHomeworkLed
   </span>;
 }
 
-/** 회차가 없는 칸 — 결석·숙제없음 사유가 있으면 "MM.DD 결석", 그날 수강생이 아니었거나 사유를 모르면 '—'. */
+/** 회차가 없는 칸 — 결석과 남는 칸은 '—', 숙제없음 사유만 날짜와 함께 표시한다. */
 export function BlankRoundCell({ blank }: { blank: BlankCell | undefined }) {
-  if (!blank) return <td><span className={styles.notApplicable} title="이 회차의 숙제가 없습니다" aria-label="숙제 없음">—</span></td>;
+  if (!blank || blank.reason === "absent") return <td><span className={styles.notApplicable} title="이 회차의 숙제가 없습니다" aria-label="숙제 없음">—</span></td>;
   const label = BLANK_LABEL[blank.reason];
-  return <td><span className={styles.blank} data-reason={blank.reason} title={`${blank.date} ${label}${blank.reason === "absent" ? " — 결석이라 숙제 회차에 넣지 않습니다" : " — 이 학생에겐 영상 숙제가 없었습니다"}`}
+  return <td><span className={styles.blank} title={`${blank.date} ${label} — 이 학생에겐 영상 숙제가 없었습니다`}
     aria-label={`${blank.date} ${label}`}>
     <small className={styles.markDate}>{shortDate(blank.date)}</small><span>{label}</span>
   </span></td>;

@@ -69,9 +69,8 @@
 .auto{box-shadow:inset 0 0 0 1px var(--green)}
 .autoNote{background:var(--green-soft);color:var(--green);border-radius:var(--radius-lg);padding:8px 10px;font-size:var(--text-xs);line-height:1.5}
 .notApplicable{color:var(--text-dim)}
-/* 회차가 아닌 사유 칸 — 결석은 출결 격자와 같은 붉은색, 숙제없음은 중립색. */
+/* 숙제없음 사유 칸은 중립색. 결석은 배경 없이 notApplicable의 '—'로 표시한다. */
 .blank{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;width:100%;min-height:var(--control-h-sm);border-radius:var(--radius-sm);font-size:var(--text-sm);line-height:1.25;padding:2px 0;background:var(--bg-soft);color:var(--text-dim)}
-.blank[data-reason=absent]{background:var(--att-absent);color:var(--att-absent-ink)}
 .cellWrap{position:relative;display:grid;grid-template-columns:minmax(0,1fr);gap:3px}
 /* 재생 영역을 따로 확보해 날짜·상태와 겹치지 않는다(회차 열 96px). */
 .cellWrap[data-source=video]{grid-template-columns:minmax(0,1fr) 28px}
