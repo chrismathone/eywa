@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { describeDbError } from "@/lib/supabase/db-error";
 import { tenantSettingsTag } from "@/features/owner/server/queries";
 import { makeupSettingsSchema } from "../config";
+import { isLaboratoryMenuAvailable } from "@/lib/laboratory/server";
 import { parseCommandSuccess } from "../command-parse";
 
 /** Called by saveOwnerSection; SQL atomically checks transition and merges the section. */
@@ -19,6 +20,9 @@ export async function configureMakeupSettings(input: unknown) {
   }
   const parsed = makeupSettingsSchema.safeParse(input);
   if (!parsed.success) return { error: "보강관리 설정을 확인해 주세요" };
+  if (parsed.data.mode !== "off" && !(await isLaboratoryMenuAvailable(actor.tenantId, "makeups"))) {
+    return { error: "보강 운영을 사용할 수 없습니다" };
+  }
   // Additional guidance remains unavailable until its attendance/billing policy is approved.
   if (parsed.data.allowAdditional) return { error: "추가 지도의 출결·수납 기준을 확정한 뒤 사용할 수 있습니다" };
   const db = await createClient();

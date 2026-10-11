@@ -7,7 +7,8 @@ vi.mock("@/lib/auth/view-as", () => ({
   viewAsTeacher: async () => m.access ? { id: "target", tenantId: "branch", systemRole: "teacher", access: m.access } : null,
   isReadonlyTeacherView: async () => m.access === "readonly",
 }));
-vi.mock("@/lib/license/server", () => ({ isFeatureLicensed: async () => true }));
+vi.mock("@/lib/license/server", () => ({ isFeatureLicensed: async () => true, isFeatureOptedIn: async () => true }));
+vi.mock("@/lib/laboratory/server", () => ({ getLaboratoryMenus: async () => ["makeups"] }));
 vi.mock("@/features/owner/server/queries", () => ({ getTenantSettings: async () => ({
   modules: { disabled: [] }, permissions: { overrides: m.overrides, userOverrides: m.individual },
 }) }));

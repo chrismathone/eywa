@@ -38,6 +38,7 @@ import { SameNameFace } from "./_components/same-name-face";
 import { AuditFace } from "./_components/audit-face";
 import { IntegrationsFace } from "./_components/integrations-face";
 import { isFeatureLicensed } from "@/lib/license/server";
+import { isLaboratoryMenuAvailable } from "@/lib/laboratory/server";
 import { PopupsFace } from "./_components/popups-face";
 import { ImportHubFace } from "./_components/import-hub-face";
 import { DashboardFace } from "./_components/dashboard/dashboard-face";
@@ -53,10 +54,10 @@ type Sp = Record<string, string | undefined>;
  *    **에러 없이 늘 빈 목록**이 뜬다(조용한 거짓말). 자물쇠는 RLS고([[#77]]) 여기서 감추는 건 그 사실을
  *    화면에 반영하는 것이다. ⚠️ 이 학원은 `owner` 메뉴를 admin·manager에게 위임해 뒀다(실측 활성 11명).
  */
-function facesFor(canReadAudit: boolean, showModules: boolean): OwnerFaceDef[] {
+function facesFor(canReadAudit: boolean, showModules: boolean, showMakeups: boolean): OwnerFaceDef[] {
   // 원장 위에게만 서는 면(감사로그 · 대시보드 관리 · 기능)은 위임 계정엔 세우지 않는다 — 주소로 와도 안내 문구(아래 본문).
   // '기능'(모듈 켜기·끄기) 면은 **새 학원(일반판)에만** 선다 — 침산 설정 화면은 이 면이 생기기 전과 같아야 한다(원장 2026-09-22).
-  return OWNER_FACES.filter((f) => (!f.masterOnly || canReadAudit) && (!f.genericOnly || showModules));
+  return OWNER_FACES.filter((f) => (!f.masterOnly || canReadAudit) && (!f.genericOnly || showModules) && (f.key !== "makeups" || showMakeups));
 }
 
 /**
@@ -113,6 +114,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
   // 왼쪽 '설정'(기본 면 = 프로필)을 누르면 맡은 면이 있는데도 운영실로 튕겼다. 보낼 면이 없으면 아래 가드가 종전처럼 처리한다.
   // ⚠️ 권한이 있는 평소 경로에서는 여기서 더 조회하지 않는다(사용자·권한 표는 요청 안에서 한 번만 읽힌다).
   const actor = await getCurrentUser();
+  if (actor && requestedFace === "makeups" && !(await isLaboratoryMenuAvailable(actor.tenantId, "makeups"))) redirect("/owner");
   if (actor) {
     const matrix = await getUserPermMatrix();
     if (!canAccess(actor.systemRole, menu, matrix)) {
@@ -140,6 +142,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
   // (실측: 총괄 2명 중 1명의 users.system_role은 'admin'이다).
   const canReadAudit = isMaster || (await isCurrentUserSuperAdmin());
   const [settings, meta] = await Promise.all([getTenantSettings(), getSettingsMeta()]);
+  const showMakeups = await isLaboratoryMenuAvailable(viewer.tenantId, "makeups");
   const tab = effectiveTab(sp, settings);
   /**
    * 운영 섹션을 클라이언트로 넘기는 두 면(운영 체계 · 과목 운영) — **저장할 수 없는 열람자에게는 자리 PIN 값을 지우고** 넘긴다.
@@ -218,7 +221,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
       </div>
       <PageMaximizeToolbar>
         {/* 면이 많으면 범주 줄 + 그 범주의 면 줄, 적으면 종전처럼 한 줄(`ownerTabRows`). 주소는 면마다 `?tab=` 그대로다. */}
-        <OwnerTabBar faces={facesFor(canReadAudit, isGenericTenant(settings)).filter((face) => allowedTabs.get(face.key))} active={tab} />
+        <OwnerTabBar faces={facesFor(canReadAudit, isGenericTenant(settings), showMakeups).filter((face) => allowedTabs.get(face.key))} active={tab} />
       </PageMaximizeToolbar>
 
       {/* 운영 체계·과목 운영 면은 섹션 폼이 같은 안내를 직접 적는다(읽기 전용 폼) — 두 번 적지 않는다. */}

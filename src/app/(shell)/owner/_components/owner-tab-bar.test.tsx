@@ -101,7 +101,7 @@ describe("한 줄", () => {
 describe("배선", () => {
   it("설정 화면은 권한으로 거른 면을 이 탭 바에 넘긴다(면 목록을 따로 세우지 않는다)", () => {
     const page = readFileSync(join(process.cwd(), "src", "app", "(shell)", "owner", "page.tsx"), "utf8");
-    expect(page).toContain("<OwnerTabBar faces={facesFor(canReadAudit, isGenericTenant(settings)).filter((face) => allowedTabs.get(face.key))} active={tab} />");
+    expect(page).toContain("<OwnerTabBar faces={facesFor(canReadAudit, isGenericTenant(settings), showMakeups).filter((face) => allowedTabs.get(face.key))} active={tab} />");
     expect(page).not.toMatch(/<FaceTabs\b/);
   });
 });

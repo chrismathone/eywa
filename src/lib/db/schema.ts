@@ -1908,6 +1908,12 @@ export const tenantLicenses = pgTable(
   (t) => [uniqueIndex("tenant_licenses_tenant_feature_idx").on(t.tenantId, t.feature)],
 );
 
+// 슈퍼관리자가 실험실에 배치한 메뉴. 지점별 허용은 tenant_licenses('laboratory')에서 따로 판정한다.
+export const labMenuAssignments = pgTable("lab_menu_assignments", {
+  menuKey: text("menu_key").primaryKey(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 // === super_admin_audit_logs (SaaS owner 액션 추적) ===
 // 모든 super-admin mutation을 INSERT-only로 기록. service_role로만 write.
 export const superAdminAuditLogs = pgTable(

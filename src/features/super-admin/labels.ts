@@ -12,7 +12,7 @@
  * ⚠️ 서버·클라 양쪽이 import한다 — `"use client"`·`import "server-only"` 금지([[#61]]·[[#81]]).
  */
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
-import type { SystemRole } from "@/lib/permissions";
+import { MENU_LABEL, type MenuKey, type SystemRole } from "@/lib/permissions";
 import type { SemanticTone } from "@/lib/design/semantic-color";
 import { isSupportStatus, SUPPORT_STATUS_META } from "@/features/support/types";
 import { isShellMode, SHELL_MODE_LABEL } from "@/lib/license/shell-mode";
@@ -96,6 +96,7 @@ export const TOGGLE_FEATURES = [
   // 슬랙 알림 — 켠 지점만 학원 설정 '연동' 면에 슬랙 카드가 서고, aywa 알림을 슬랙 채널·본인 1:1로 보낸다(원장 2026-09-28).
   // 학생 이름 등이 외부 메신저로 나가므로 기본 꺼짐. 읽는 곳 = features/slack/server/{dispatch,gate,queries}.ts + 0298a 인박스 트리거.
   { key: "slack", label: "슬랙 알림 연결", defaultOn: false },
+  { key: "laboratory", label: "실험실 기능", defaultOn: false },
 ] as const;
 
 /**
@@ -125,6 +126,7 @@ export const AUDIT_ACTIONS = {
   impersonate_view: { label: "지점장 보기", tone: "caution" },
   grant_license: { label: "좌석 설정", tone: "info" },
   toggle_license: { label: "기능 켜기·끄기", tone: "info" },
+  toggle_laboratory_menu: { label: "실험실 메뉴 지정", tone: "info" },
   change_user_role: { label: "역할 변경", tone: "caution" },
   reset_user_password: { label: "비밀번호 재설정", tone: "critical" },
   set_user_active: { label: "계정 활성·비활성", tone: "caution" },
@@ -184,6 +186,10 @@ export function auditDetail(action: string, metadata: Record<string, unknown> | 
       // 화면 방식 변경은 셋 중 무엇으로 바꿨는지가 사실이다(켬/끔으로는 안 읽힌다).
       if (m.feature === "window_mode" && isShellMode(m.mode)) return `화면 방식 → ${SHELL_MODE_LABEL[m.mode]}`;
       return `${featureLabel(m.feature)} ${m.active === true ? "켬" : "끔"}`;
+    }
+    case "toggle_laboratory_menu": {
+      const menu = str(m.menu) as MenuKey | null;
+      return `${menu && MENU_LABEL[menu] ? MENU_LABEL[menu] : "메뉴"} ${m.enabled === true ? "실험실 지정" : "실험실 해제"}`;
     }
     case "change_user_role": {
       const role = str(m.role);

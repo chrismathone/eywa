@@ -21,8 +21,16 @@ import { capDisabledModules } from "@/lib/modules";
 // ⚠️ view-mode.ts가 아니라 view-as.ts에서 — view-mode는 teacher-scope·delegation을 물고 있어 순환 위험.
 import { isReadonlyTeacherView, viewAsTeacher } from "@/lib/auth/view-as";
 import { SETTINGS_ROLE_KEYS } from "@/lib/settings-role-catalog";
-import { isFeatureLicensed } from "@/lib/license/server";
+import { isFeatureLicensed, isFeatureOptedIn } from "@/lib/license/server";
 import { capMakeupMode, normalizeMakeupSettings } from "@/features/makeups/config";
+import { capLaboratoryMenus } from "@/lib/laboratory/rule";
+import { getLaboratoryMenus } from "@/lib/laboratory/server";
+
+async function capLaboratory(matrix: AccessMatrix, tenantId: string): Promise<AccessMatrix> {
+  const menus = await getLaboratoryMenus();
+  if (menus.length === 0) return matrix;
+  return capLaboratoryMenus(matrix, menus, await isFeatureOptedIn(tenantId, "laboratory"));
+}
 
 async function capSettingFeatures(matrix: AccessMatrix, tenantId: string, role: SystemRole): Promise<AccessMatrix> {
   if (matrix.ai_ment[role] === "none" || await isFeatureLicensed(tenantId, "ai_analysis")) return matrix;
@@ -55,9 +63,9 @@ export const getPermMatrix = cache(async (): Promise<AccessMatrix> => {
     const disabled = settings.modules.disabled;
     if (overrides.length > 0 && (await isCurrentUserSuperAdmin())) {
       // 잠금은 무시(기본값이 살아남고), 부여는 보존(원장이 연 셀은 그대로) — mergeMostPermissive 주석 참조.
-      return capMakeupMode(capDisabledModules(mergeMostPermissive(resolveMatrix([]), resolveMatrix(overrides)), disabled), makeupMode);
+      return capLaboratory(capMakeupMode(capDisabledModules(mergeMostPermissive(resolveMatrix([]), resolveMatrix(overrides)), disabled), makeupMode), (await getCurrentUser())?.tenantId ?? "");
     }
-    return capMakeupMode(capDisabledModules(resolveMatrix(overrides), disabled), makeupMode);
+    return capLaboratory(capMakeupMode(capDisabledModules(resolveMatrix(overrides), disabled), makeupMode), (await getCurrentUser())?.tenantId ?? "");
   } catch (e) {
     // ⚠️ fail-open(코드 기본값 복귀) = revoke override가 일시 무효화되는 방향 — 의도적·최종 결정이다.
     // 이유: fail-closed(차단)는 설정 조회 장애 시 master까지 /owner에 못 들어가 **복구 불능 락아웃**이 된다
@@ -65,7 +73,7 @@ export const getPermMatrix = cache(async (): Promise<AccessMatrix> => {
     // self-escalation(비-master가 override 자기부여)은 0038a tenant_settings master-guard 트리거로 DB레벨 차단됨 →
     // override는 항상 master가 정당히 설정한 값이고, 일시 무효는 캐시 회복 시 자가복구되는 낮은 위험. 관측성 위해 로깅.
     console.error("[perm-matrix] getTenantSettings 실패 — 코드 기본 권한으로 폴백(override 일시 미적용)", e);
-    return capMakeupMode(resolveMatrix([]), "off");
+    return capLaboratory(capMakeupMode(resolveMatrix([]), "off"), (await getCurrentUser())?.tenantId ?? "");
   }
 });
 
@@ -119,18 +127,18 @@ export const getActorPermMatrix = cache(async (): Promise<AccessMatrix> => {
 export const getUserPermMatrix = cache(async (): Promise<AccessMatrix> => {
   const actor = await getActorPermMatrix();
   const target = await viewAsTeacher();
-  if (!target) return actor;
+  if (!target) return capLaboratory(actor, (await getCurrentUser())?.tenantId ?? "");
   const user = await getCurrentUser();
   if (!user) return actor;
   const settings = await getTenantSettings();
   const targetMatrix = await capSettingFeatures(capMakeupMode(capDisabledModules(
     applyUserOverrides(resolveMatrix(settings.permissions.overrides), target.id, target.systemRole, settings.permissions.userOverrides),
     settings.modules.disabled), normalizeMakeupSettings(settings.makeups).mode), target.tenantId, target.systemRole);
-  return Object.fromEntries(MENU_KEYS.map((menu) => {
+  return capLaboratory(Object.fromEntries(MENU_KEYS.map((menu) => {
     const value = targetMatrix[menu][target.systemRole];
     const level = target.access === "readonly" && (value === "full" || value === "scoped") ? "readonly" : value;
     return [menu, { ...actor[menu], [user.systemRole]: level, [target.systemRole]: level, teacher: level }];
-  })) as AccessMatrix;
+  })) as AccessMatrix, user.tenantId);
 });
 
 /**

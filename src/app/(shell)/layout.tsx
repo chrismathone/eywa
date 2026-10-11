@@ -65,6 +65,7 @@ import { HideInFrame } from "@/components/workspace/hide-in-frame";
 import { ScreenHelpOverlay } from "@/components/help/screen-help-overlay";
 import { menuLayoutWithModules } from "@/lib/modules";
 import { isGenericTenant } from "@/features/owner/preset";
+import { isLaboratoryMenuAvailable } from "@/lib/laboratory/server";
 
 export default async function ShellLayout({ children }: { children: ReactNode }) {
   const user = await getCurrentUser();
@@ -77,12 +78,20 @@ export default async function ShellLayout({ children }: { children: ReactNode })
 
   // 학원 브랜드·색 — owner 설정(없으면 기본값). 셸 크롬(사이드바·헤더·미니셸)에 테넌트별 적용.
   // getTenantSettings는 React cache라 아래 분기들이 같은 라운드트립을 공유(임베드 포함).
-  const settings = await getTenantSettings();
+  const [settings, showMakeupSettings] = await Promise.all([
+    getTenantSettings(),
+    isLaboratoryMenuAvailable(user.tenantId, "makeups"),
+  ]);
   // 브랜드 색을 --primary 등 CSS 변수로 주입(기본색이면 undefined → 주입 생략). 모든 셸 분기에 적용.
   const brandStyle = brandColorVars(settings.profile.brandColor) ?? undefined;
   // 왼쪽 탭 보기 설정 + 꺼진 기능(모듈)의 면 입구 — 사이드바·휴대폰 메뉴·메뉴 판이 같은 목록을 본다.
   // 꺼진 면이 없으면 settings.navigation.menus 그대로(침산 = 오늘과 같은 값).
-  const menuLayout = menuLayoutWithModules(settings.navigation.menus, settings.modules.disabled);
+  const baseMenuLayout = menuLayoutWithModules(settings.navigation.menus, settings.modules.disabled);
+  // The owner settings face shares the owner permission key, so hide its entry by href.
+  const menuLayout = showMakeupSettings ? baseMenuLayout : [
+    ...baseMenuLayout.filter((row) => row.href !== "/owner?tab=makeups"),
+    { ...baseMenuLayout.find((row) => row.href === "/owner?tab=makeups"), href: "/owner?tab=makeups", hidden: true },
+  ];
   // 새 학원(일반판)이면 설정 '기능' 면을 사이드바·메뉴 판·검색에도 세운다(설정 화면 탭과 같은 판정, F19).
   const genericTenant = isGenericTenant(settings);
   // 지점 라이선스 넷(한 조회, 요청 캐시) — 꺼진 라이선스의 버튼·탭을 클라 화면이 감추는 데 쓴다(표시용 · 2026-09-30).

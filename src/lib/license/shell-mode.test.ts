@@ -130,9 +130,9 @@ describe("라이선스 조회 배선", () => {
   const server = readFileSync(join(process.cwd(), "src/lib/license/server.ts"), "utf8");
 
   it("window_keepalive는 명시로 켠 행만 true(기본 꺼짐) — 다른 넷(행 없음 = 켜짐)과 기본값이 반대다", () => {
-    expect(server).toContain("window_keepalive: false };"); // ALL_ON
+    expect(server).toContain("window_keepalive: false, laboratory: false };"); // ALL_ON
     expect(server).toMatch(/out\.window_keepalive = licenseExplicitlyOn\(r\)/);
-    expect(server).toContain('["tenant-license-flags-v3", tenantId]'); // 표 모양이 바뀌어(판 추가) 캐시 키를 올렸다
+    expect(server).toContain('["tenant-license-flags-v4", tenantId]'); // 실험실 플래그가 추가되어 이전 캐시와 구분한다
   });
 
   it("판은 방식 행 둘(window_mode·window_keepalive)의 updated_at에서만 — 다른 기능을 켜고 꺼도 창 배치가 초기화되지 않는다", () => {

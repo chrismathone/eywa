@@ -6,6 +6,7 @@ import { getUserPermMatrix } from "./perm-matrix";
 import { landingPath } from "./teacher-home";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { isModuleEnabled, moduleOfMenuKey } from "@/lib/modules";
+import { isLaboratoryMenuAvailable } from "@/lib/laboratory/server";
 
 /**
  * Server-side permissions guard. Drop into the top of any page server
@@ -30,6 +31,7 @@ export async function requireAccess(menu: MenuKey): Promise<CurrentUser> {
     // 거부 이유가 "이 학원에서 끈 기능(모듈)"이면 **없는 주소**(404) — 기능 이름을 말하지 않는다
     // (원장 2026-09-30 *"스위치가 꺼져있을때 이 기능이 있었는지조차 모르게"*). 침산은 꺼진 모듈이 없어 이 갈래를 타지 않는다.
     const mod = moduleOfMenuKey(menu);
+    if (!(await isLaboratoryMenuAvailable(user.tenantId, menu))) notFound();
     if (menu === "makeups" && (await getTenantSettings()).makeups.mode === "off") notFound();
     if (mod && !isModuleEnabled((await getTenantSettings()).modules.disabled, mod)) notFound();
     redirect(await landingPath(user.systemRole, matrix));
