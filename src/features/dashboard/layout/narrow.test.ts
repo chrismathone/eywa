@@ -70,7 +70,7 @@ describe("과목 관리자 — 담당 과목으로 좁히기(서버)", () => {
     expect(math.mathSheet).toBeDefined();
     expect(math.englishSheet).toBeUndefined();
     const korean = narrowBySubject(sections, ["korean"], groupOf, false);
-    expect(korean.withdrawals).toBeUndefined();
+    expect(korean.withdrawals?.data?.rows).toEqual([]);
     expect(korean.mathSheet).toBeUndefined();
   });
 

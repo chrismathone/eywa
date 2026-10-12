@@ -35,7 +35,7 @@ export function Trash({ over, blocked }: { over: boolean; blocked: boolean }) {
 
 
 export const ACCESSIBILITY = {
-  screenReaderInstructions: { draggable: "마우스로 끌거나 길게 눌러 옮깁니다. 키보드는 화살표로 순서, Shift와 화살표로 크기, Delete로 뺍니다." },
+  screenReaderInstructions: { draggable: "마우스로 끌거나 길게 눌러 옮깁니다. 키보드는 화살표로 행·열 이동, Shift와 화살표로 크기, Delete로 뺍니다." },
   announcements: {
     onDragStart: () => "카드를 들었습니다.",
     onDragOver: () => undefined,

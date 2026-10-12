@@ -43,10 +43,12 @@ describe("resolveView — 보는 사람의 배치", () => {
     expect(mixed.phones).toBe(false);
   });
 
-  it("과목 관리자 — 제목 뒤 담당 과목, 학원 전체 값 카드 표시", () => {
+  it("과목 관리자 — 제목 뒤 담당 과목, 과목으로 구분할 수 없는 카드는 제외", () => {
     const v = resolveView({ stored: stored("subject", [{ id: "panel:subjects", w: 6, h: 1 }, { id: "panel:attendance", w: 6, h: 1 }]), bundle: "subject", menus: ALL, subjectLabels: ["수학"] });
     expect(v.scopeLabel).toBe("수학");
-    expect(v.academyWide).toEqual(["panel:attendance"]);
+    expect(v.academyWide).toEqual([]);
+    expect(v.items?.map((i) => i.id)).toEqual(["panel:subjects"]);
+    expect(loadPlan(v, ALL).has("attendance")).toBe(false);
   });
 
   it("배치가 바뀌면 rev가 바뀐다(갱신이 옛 배치를 안 붙든다)", () => {
@@ -71,7 +73,7 @@ describe("loadPlan — 서버가 조회할 영역(배치에 없으면 미조회 
   });
 
   it("과목 관리자 기본은 놓인 카드의 영역만", () => {
-    expect([...plan("subject")].sort()).toEqual(["absent", "firstClass", "notices", "schedule", "students"]);
+    expect([...plan("subject")].sort()).toEqual(["absent", "firstClass", "notices", "schedule", "students", "teacherWork", "withdrawals"]);
   });
 
   it("배치에 있어도 메뉴 권한이 없으면 조회하지 않는다", () => {

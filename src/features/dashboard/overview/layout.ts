@@ -27,6 +27,7 @@ export type PanelId =
   | "studentConsult"
   | "newcomerChecks"
   | "sheets"
+  | "teacherWork"
   | "nowClasses"
   | "admissionsSchedule"
   | "staff"

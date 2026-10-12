@@ -5,14 +5,29 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { MenuKey } from "@/lib/permissions";
 import { patchItem, placedIds, removeItem, resizeItem } from "@/features/dashboard/layout/engine";
-import { cardDef, missingMenuLabel, presetOf, type SizePreset } from "@/features/dashboard/layout/registry";
-import { isHeadingId, type Bundle, type Item } from "@/features/dashboard/layout/types";
+import { cardDef, missingMenuLabel, type SizePreset } from "@/features/dashboard/layout/registry";
+import { GRID_COLS, MAX_GRID_Y, MAX_ROW_SPAN, isHeadingId, isSpaceId, isStructuralId, type Bundle, type Item } from "@/features/dashboard/layout/types";
+import { gridHeight, placeItem } from "@/features/dashboard/layout/fixed-grid";
 import { exposureOf, optionOn, scopeLine, sensitiveReason } from "./badges";
 import e from "./editor.module.css";
 
 /** 크기 단추의 작은 모양 — 24열 격자에서의 비율 그대로. */
 function SizeShape({ z }: { z: SizePreset }) {
   return <span className={e.sizeShape} style={{ width: 6 + z.w * 1.4, height: 8 + (z.h - 1) * 9 }} aria-hidden />;
+}
+
+function GridNumber({ label, value, max, onCommit }: { label: string; value: number; max: number; onCommit: (n: number) => void }) {
+  const [draft, setDraft] = useState(String(value));
+  const [seen, setSeen] = useState(value);
+  if (seen !== value) { setSeen(value); setDraft(String(value)); }
+  const save = () => {
+    const n = Number(draft);
+    if (!draft.trim() || !Number.isFinite(n)) { setDraft(String(value)); return; }
+    const next = Math.max(1, Math.min(max, Math.round(n)));
+    setDraft(String(next));
+    if (next !== value) onCommit(next);
+  };
+  return <label>{label}<Input type="number" min={1} max={max} value={draft} onChange={(e) => setDraft(e.target.value)} onBlur={save} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); save(); } }} /></label>;
 }
 
 /** 제목 입력 — 치는 동안은 이 칸만, Enter·포커스 이탈에 한 번 저장 이력(글자마다 되돌리기 칸이 쌓이지 않게). */
@@ -69,8 +84,9 @@ export function CardInspector({
   const missing = def ? missingMenuLabel(def, menus) : null;
   const sensitive = sensitiveReason(item.id, role);
   const scope = scopeLine(item.id, role);
-  const current = def ? presetOf(def, item) : null;
-  const lastCard = !heading && placedIds(items).length <= 1;
+  const sizes = def?.sizes.map((z) => ({ ...z, h: gridHeight({ id: item.id, ...z }) })) ?? [];
+  const current = sizes.find((z) => z.w === item.w && z.h === item.h && z.mode === item.mode);
+  const lastCard = !isStructuralId(item.id) && placedIds(items).length <= 1;
   const exposure = exposureOf(items, role, menus);
   const remove = () => {
     const before = [...items];
@@ -80,7 +96,7 @@ export function CardInspector({
   return (
     <aside className={e.inspector} aria-label="고른 카드 설정">
       <div className="flex items-start justify-between gap-2">
-        <h3>{heading ? "구역 제목" : def?.label}</h3>
+        <h3>{heading ? "구역 제목" : isSpaceId(item.id) ? "빈 행" : def?.label}</h3>
         <Button variant="ghost" size="sm" onClick={onClose}>
           닫기
         </Button>
@@ -95,13 +111,27 @@ export function CardInspector({
       {heading ? (
         <TextField label="설명(선택)" value={item.note ?? ""} placeholder="예: 오늘 할 일" max={80} onCommit={(v) => onCommit(patchItem(items, item.id, { note: v }))} />
       ) : null}
+      <div className="grid grid-cols-2 gap-2" aria-label="행·열 위치와 크기">
+        {([
+          ["x", "시작 열", (item.x ?? 0) + 1, GRID_COLS - item.w + 1],
+          ["y", "시작 행", (item.y ?? 0) + 1, MAX_GRID_Y - item.h + 1],
+          ["w", "너비 (열)", item.w, GRID_COLS - (item.x ?? 0)],
+          ["h", "높이 (행)", item.h, MAX_ROW_SPAN],
+        ] as const).map(([key, label, value, max]) => (
+          <GridNumber key={key} label={label} value={value} max={max} onCommit={(v) => {
+            if (key === "x" || key === "y") onCommit(placeItem(items, item, key === "x" ? v - 1 : item.x ?? 0, key === "y" ? v - 1 : item.y ?? 0));
+            else onCommit(resizeItem(items, item.id, { w: item.w, h: item.h, mode: item.mode, [key]: v }));
+          }} />
+        ))}
+      </div>
+      <p className="text-xs">위치는 24열 격자에 저장됩니다. 확장한 카드와 겹치는 카드만 아래로 이동합니다.</p>
       {def && def.sizes.length > 1 ? (
         <div>
           <p className="mb-1 font-semibold">크기</p>
           <div className={e.sizes} role="group" aria-label="크기">
-            {def.sizes.map((z) => (
+            {sizes.map((z) => (
               <button key={z.key} type="button" className={e.sizeBtn} aria-pressed={current?.key === z.key} title={z.hint} onClick={() => onCommit(resizeItem(items, item.id, z))}>
-                <SizeShape z={z} />
+                <SizeShape z={{ ...z, h: Math.ceil(z.h / 4) }} />
                 {z.label}
               </button>
             ))}

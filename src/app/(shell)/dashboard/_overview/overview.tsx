@@ -1106,6 +1106,29 @@ export function Overview({
         ))}
     </Panel>
     ),
+    teacherWork: (
+      <Panel title={t("teacherWork", "강사별 업무 현황")}
+        note="현재 담당 반 · 보고서 최근 7일 · 영상 숙제 최근 30일" sections={[v.teacherWork]}>
+        {v.teacherWork?.data ? <>
+          <table className="w-full text-left text-xs tabular-nums">
+            <thead><tr className="border-line border-b">
+              {["강사 · 과목", "작성", "발송 완료", "미발송", "발송 오류", "영상 미제출"].map((label) => <th key={label} className="px-1 py-2 font-semibold">{label}</th>)}
+            </tr></thead>
+            <tbody>{v.teacherWork.data.rows.map((row) => <tr key={`${row.teacherId ?? "none"}:${row.subject}`} className="border-line border-b last:border-0">
+              <td className="px-1 py-2"><b>{row.teacherName}</b><div className="text-muted-foreground">{snapshot.subjects[row.subject] ?? row.subject} · {row.classIds.length}반</div></td>
+              <td className="px-1 py-2">{row.reports}</td>
+              <td className="text-chart-2 px-1 py-2">{row.sent}</td>
+              <td className="px-1 py-2">{row.pending}</td>
+              <td className="px-1 py-2" style={{ color: row.failed ? "#b4232b" : undefined }}>{row.failed}</td>
+              <td className="px-1 py-2"><Jump href={`/lesson-reports/video-homework?${new URLSearchParams({ from: v.teacherWork!.data!.videoFrom, to: v.teacherWork!.data!.to, class: row.classIds.join(","), status: "missing" })}`}>{row.videoMissing}</Jump></td>
+            </tr>)}</tbody>
+          </table>
+          {v.teacherWork.data.rows.length === 0 ? <p className={s.empty}>담당 반이 없습니다.</p> : null}
+          <p className={s.footnote}>작성은 저장된 보고서 건수이며, 미발송에는 발송 대기가 포함됩니다. 영상 미제출 숫자를 누르면 해당 반을 확인합니다.</p>
+          <p className={s.footnote}>{v.teacherWork.data.videoCheckedAt ? `영상 확인 ${clock(Date.parse(v.teacherWork.data.videoCheckedAt))} 기준` : "영상 상태 확인 대기"}</p>
+        </> : null}
+      </Panel>
+    ),
     nowClasses: (
     <Panel
       title={t("nowClasses", "현재 수업 현황")}

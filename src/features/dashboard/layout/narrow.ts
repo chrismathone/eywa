@@ -64,6 +64,8 @@ export function narrowBySubject(sections: Sections, groups: readonly string[], g
   const st = sections.students;
   if (st?.data) out.students = { ...st, data: narrowStudents(st.data, groups, groupOf, keepAcademyWide) };
   const schedule = sections.schedule;
+  const work = sections.teacherWork;
+  if (work?.data) out.teacherWork = { ...work, data: { ...work.data, rows: work.data.rows.filter((r) => same(r.subject)) } };
   if (schedule?.data) out.schedule = { ...schedule, data: schedule.data.filter((row) => same(row.subject)) };
   const first = sections.firstClass;
   if (first?.data) {
@@ -92,10 +94,7 @@ export function narrowBySubject(sections: Sections, groups: readonly string[], g
   // 퇴원 명단 — 마지막 수강 반의 프로그램으로 가른다. 영어·수학 밖 과목은 귀속을 못 가려 영역째 뺀다.
   const wd = sections.withdrawals;
   if (wd?.data) {
-    const keep: readonly string[] = groups.filter((g) => g === "english" || g === "math");
-    if (keep.length) {
-      out.withdrawals = { ...wd, data: { ...wd.data, rows: wd.data.rows.filter((r) => keep.includes(programGroup(r.program) ?? "")) } };
-    } else delete out.withdrawals;
+    out.withdrawals = { ...wd, data: { ...wd.data, rows: wd.data.rows.filter((r) => r.subject ? same(r.subject) : groups.includes(programGroup(r.program) ?? "")) } };
   }
   // 강사 시트는 과목마다 하나뿐 — 담당 과목 것만 남긴다.
   if (!groups.includes("english")) delete out.englishSheet;

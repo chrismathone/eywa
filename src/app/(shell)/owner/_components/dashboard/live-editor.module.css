@@ -1,4 +1,8 @@
 .canvas { position: relative; }
+.canvas :global([data-overview="free-grid"]) {
+  background-image: linear-gradient(to right, #d7e0e966 1px, transparent 1px), linear-gradient(to bottom, #d7e0e966 1px, transparent 1px);
+  background-size: calc((100% + var(--dash-gap)) / 24) calc(64px + var(--dash-gap));
+}
 /* 카드·차트는 실제 운영실이 그린다. 편집 손잡이는 크기 없는 별도 층에 둔다. */
 .surface > div { padding: 0; background: none; box-shadow: none; }
 .surface [data-tile-id] {

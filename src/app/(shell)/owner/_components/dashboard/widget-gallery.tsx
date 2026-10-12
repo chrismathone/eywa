@@ -105,7 +105,7 @@ export function WidgetGallery({
             <section key={group} className={g.group} aria-label={group}>
               <h4>{group === "KPI" ? "숫자 칸(KPI)" : group}</h4>
               <ul className={g.list}>
-                {CARDS.filter((c) => c.group === group).map((def) => (
+                {CARDS.filter((c) => c.group === group && (role !== "subject" || c.subjectScope !== "academy")).map((def) => (
                   <GalleryCard key={def.id} def={def} placed={placed.has(def.id)} role={role} menus={menus} snapshot={snapshot} exposure={exposure} items={items} onAdd={onAdd} />
                 ))}
               </ul>

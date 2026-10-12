@@ -8,9 +8,12 @@
   grid-template-columns: repeat(24, minmax(0, 1fr));
   gap: var(--dash-gap);
   align-items: stretch;
+  grid-auto-rows: 64px;
 }
 .cell {
   min-width: 0;
+  min-height: 0;
+  overflow: auto;
   display: flex;
   flex-direction: column;
   grid-column: var(--dx) / span var(--dw);
@@ -19,7 +22,9 @@
 /* 카드가 칸 높이를 다 쓴다(같은 줄 카드 높이가 맞는다). */
 .cell > * {
   flex: 1 1 auto;
+  min-height: 0;
 }
+.space { pointer-events: none; }
 .grid :global([data-overview="panel"]) {
   padding: var(--dash-pad);
 }
@@ -65,7 +70,7 @@
   }
   .cell {
     grid-column: var(--mx) / span var(--mw);
-    grid-row: var(--my) / span 1;
+    grid-row: var(--my) / span var(--dh);
   }
 }
 /* 폰 — KPI·요약만 반 줄, 나머지 한 줄로 쌓는다. */
@@ -73,6 +78,7 @@
   .grid {
     --dash-gap: 10px;
     --dash-pad: 14px;
+    grid-auto-rows: auto;
   }
   .cell {
     grid-column: var(--sx) / span var(--sw);
@@ -82,4 +88,6 @@
     flex-wrap: wrap;
     gap: 4px 10px;
   }
+  .space { display: none; }
+  .cell { overflow: visible; }
 }

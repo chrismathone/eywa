@@ -10,7 +10,7 @@
 import { MENU_LABEL, type MenuKey } from "@/lib/permissions";
 import { KPI_KEYS, type KpiKey, type PanelId } from "@/features/dashboard/overview/layout";
 import type { Area } from "@/features/dashboard/overview/model";
-import { isHeadingId, type Item } from "./types";
+import { isStructuralId, type Item } from "./types";
 
 /** 영역 → 그 영역을 읽으려면 필요한 메뉴 권한(서버 `add()`의 두 번째 인자와 같다 — `registry.test.ts`가 대조). */
 export const AREA_MENUS: Record<Area, readonly MenuKey[]> = {
@@ -43,6 +43,7 @@ export const AREA_MENUS: Record<Area, readonly MenuKey[]> = {
   consultProgress: ["enrollment"],
   englishSheet: ["ecs"],
   mathSheet: ["mcs"],
+  teacherWork: ["lesson_reports"],
 };
 
 export type ThumbKind = "number" | "donut" | "bars" | "columns" | "line" | "list" | "table" | "schedule" | "stack";
@@ -94,6 +95,7 @@ const CHART_S = [Z.summary, ...CHART];
 const TREND_S = [Z.summary, Z.one, Z.wide, Z.full];
 
 const PANELS: Record<PanelId, PanelSpec> = {
+  teacherWork: { label: "강사별 업무 현황", group: "출결·수업", thumb: "table", areas: ["teacherWork"], subjectScope: "subject", size: { w: 12, h: 1 }, sizes: [...LIST, Z.full] },
   studentsComp: { label: "재원생 구성", group: "학생·재원", thumb: "donut", areas: ["students"], sizes: CHART_S },
   attendance: { label: "출결 현황", group: "출결·수업", thumb: "donut", areas: ["attendance", "processing", "holidayAttendance"], sizes: CHART_S },
   billingMonth: { label: "이번 달 수납 현황", group: "수납·지출", thumb: "donut", areas: ["billing"], options: ["amounts"], sizes: CHART_S },
@@ -168,7 +170,7 @@ export const CARDS: readonly CardDef[] = [
 
 const BY_ID = new Map(CARDS.map((c) => [c.id, c]));
 export const cardDef = (id: string): CardDef | undefined => BY_ID.get(id);
-export const isKnownId = (id: string) => isHeadingId(id) || BY_ID.has(id);
+export const isKnownId = (id: string) => isStructuralId(id) || BY_ID.has(id);
 
 /** 카드가 필요로 하는 메뉴 권한(영역 합집합). */
 export function menusOf(def: CardDef): MenuKey[] {
