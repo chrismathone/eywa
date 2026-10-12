@@ -3,9 +3,10 @@
 import { Button } from "@/components/ui/button";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import type { MenuKey } from "@/lib/permissions";
-import { moveTo, placedIds, removeItem } from "@/features/dashboard/layout/engine";
+import { placedIds, removeItem } from "@/features/dashboard/layout/engine";
+import { placeItem } from "@/features/dashboard/layout/fixed-grid";
 import { cardDef, presetOf } from "@/features/dashboard/layout/registry";
-import { isHeadingId, type Bundle, type Item } from "@/features/dashboard/layout/types";
+import { isStructuralId, type Bundle, type Item } from "@/features/dashboard/layout/types";
 import { badgesFor, exposureOf } from "./badges";
 import e from "./editor.module.css";
 
@@ -34,11 +35,11 @@ export function ListBoard({
   const exposure = exposureOf(items, role, menus);
   return (
     <ol className="flex flex-col gap-2" aria-label="운영실 카드 순서">
-      {items.map((it, idx) => {
+      {[...items].sort((a, b) => (a.y ?? 0) - (b.y ?? 0) || (a.x ?? 0) - (b.x ?? 0)).map((it) => {
         const def = cardDef(it.id);
-        const heading = isHeadingId(it.id);
+        const heading = isStructuralId(it.id);
         const name = it.title ?? def?.label ?? "구역 제목";
-        const size = def ? (presetOf(def, it)?.label ?? "") : "구역";
+        const size = it.x !== undefined ? `${it.y! + 1}행 ${it.x + 1}열 · ${it.w}×${it.h}` : def ? (presetOf(def, it)?.label ?? "") : "구역";
         const badges = badgesFor(it, role, menus, exposure);
         return (
           <li key={it.id} className={e.listRow} data-selected={selected === it.id || undefined} style={selected === it.id ? { boxShadow: "0 0 0 2px var(--primary)" } : undefined}>
@@ -53,10 +54,10 @@ export function ListBoard({
                 {badges[0].text}
               </small>
             ) : null}
-            <Button size="icon-sm" variant="ghost" aria-label={`${name} 앞으로`} disabled={idx === 0} onClick={() => onCommit(moveTo(items, it.id, idx - 1))}>
+            <Button size="icon-sm" variant="ghost" aria-label={`${name} 위로`} disabled={!it.y} onClick={() => onCommit(placeItem(items, it, it.x ?? 0, (it.y ?? 0) - 1))}>
               <EyIcon name="chevronUp" size={14} />
             </Button>
-            <Button size="icon-sm" variant="ghost" aria-label={`${name} 뒤로`} disabled={idx === items.length - 1} onClick={() => onCommit(moveTo(items, it.id, idx + 1))}>
+            <Button size="icon-sm" variant="ghost" aria-label={`${name} 아래로`} onClick={() => onCommit(placeItem(items, it, it.x ?? 0, (it.y ?? 0) + 1))}>
               <EyIcon name="chevronDown" size={14} />
             </Button>
             <Button

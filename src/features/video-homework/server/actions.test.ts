@@ -3,14 +3,14 @@ import { setVideoHomeworkMark, setVideoHomeworkMarksBulk, setVideoHomeworkRound 
 
 type Call = { table: string; op: "select" | "update" | "delete" | "upsert"; filters: unknown[][]; payload?: unknown; opts?: unknown };
 const mocks = vi.hoisted(() => ({
-  user: vi.fn(), readonly: vi.fn(), access: vi.fn(), canWrite: vi.fn(), log: vi.fn(),
+  user: vi.fn(), readonly: vi.fn(), teacher: vi.fn(), teaching: vi.fn(), access: vi.fn(), canWrite: vi.fn(), log: vi.fn(),
   calls: [] as Call[], respond: (() => ({ data: null, error: null })) as (call: Call) => { data: unknown; error: unknown },
 }));
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: mocks.user }));
-vi.mock("@/lib/auth/view-mode", () => ({ readonlyTeacherViewError: mocks.readonly }));
+vi.mock("@/lib/auth/view-mode", () => ({ readonlyTeacherViewError: mocks.readonly, effectiveTeacherId: mocks.teacher }));
 vi.mock("@/lib/auth/perm-matrix", () => ({ accessLevelTenant: mocks.access, canWriteTenant: mocks.canWrite }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
-vi.mock("@/features/classes/server/delegation", () => ({ getTeachingClassIds: vi.fn() }));
+vi.mock("@/features/classes/server/delegation", () => ({ getTeachingClassIds: mocks.teaching }));
 vi.mock("@/features/owner/server/queries", () => ({ getTenantSettings: async () => ({ report: { videoHomeworkPolicy: {} } }) }));
 vi.mock("@/features/audit/server/log", () => ({ logAction: mocks.log }));
 vi.mock("./assignments", () => ({ videoHomeworkColumnReady: async () => true }));
@@ -56,6 +56,8 @@ beforeEach(() => {
   mocks.calls = [];
   mocks.user.mockResolvedValue({ id: "staff-a", tenantId: "tenant-a", systemRole: "master" });
   mocks.readonly.mockResolvedValue(null);
+  mocks.teacher.mockResolvedValue(null);
+  mocks.teaching.mockImplementation(async (_db, teacherId) => ({ all: teacherId === "teacher-b" ? ["class-a"] : [] }));
   mocks.access.mockResolvedValue("full");
   world();
 });
@@ -63,6 +65,15 @@ beforeEach(() => {
 const onescreen = { classId: "class-a", studentId: "student-a", checkDate: "2026-09-03", homeworkDate: "2026-09-01", status: "submitted" as const };
 
 describe("원스크린 검사(setVideoHomeworkMark) — 같은 숙제 = 한 줄", () => {
+  it("다른 강사 편집은 대상 강사의 담당 반을 검사하고 실제 편집자를 기록한다", async () => {
+    mocks.access.mockResolvedValue("scoped"); mocks.canWrite.mockResolvedValue(true);
+    mocks.teacher.mockResolvedValue("teacher-b");
+    expect(await setVideoHomeworkMark(onescreen)).toEqual({ ok: true });
+    expect(writes()[0].payload).toMatchObject({ updated_by: "staff-a" });
+    mocks.calls = [];
+    expect(await setVideoHomeworkMark({ ...onescreen, classId: "unrelated" })).toMatchObject({ ok: false });
+    expect(writes()).toEqual([]);
+  });
   it("같은 숙제의 기록이 다른 자리에 이미 있으면(영상 제출 현황에서 찍음) 새 줄을 만들지 않고 그 줄을 고친다", async () => {
     world({ sameHomework: [{ id: "m1" }] });
     expect(await setVideoHomeworkMark(onescreen)).toEqual({ ok: true });
@@ -107,6 +118,23 @@ describe("원스크린 검사(setVideoHomeworkMark) — 같은 숙제 = 한 줄"
 const round = { classId: "class-a", studentId: "student-a", roundKey: "h:2026-09-29", status: "submitted" as const, submittedDate: "2026-09-30" };
 
 describe("영상 제출 현황 회차(setVideoHomeworkRound)", () => {
+  it("다른 강사 편집은 화면에 보이는 강사가 낸 숙제만 저장하며 편집자는 로그인 계정이다", async () => {
+    mocks.access.mockResolvedValue("scoped"); mocks.canWrite.mockResolvedValue(true);
+    mocks.teacher.mockResolvedValue("teacher-b");
+    const base = mocks.respond;
+    mocks.respond = call => call.table === "lesson_reports" && call.filters.some(f => f[1] === "created_by")
+      ? { data: has(call, "eq", "created_by", "teacher-b") ? [{ id: "r1" }] : [], error: null } : base(call);
+    expect(await setVideoHomeworkRound(round)).toEqual({ ok: true });
+    expect(writes()[0].payload).toMatchObject({ updated_by: "staff-a" });
+    mocks.calls = [];
+    world({ own: false });
+    expect(await setVideoHomeworkRound(round)).toMatchObject({ ok: false });
+    expect(writes()).toEqual([]);
+    mocks.readonly.mockResolvedValue("읽기 전용입니다.");
+    world();
+    expect(await setVideoHomeworkRound(round)).toEqual({ ok: false, error: "읽기 전용입니다." });
+    expect(writes()).toEqual([]);
+  });
   it("새 기록의 자리는 서버가 정한다(숙제일 다음 날) · 그날 보고서의 영상 과제를 확인하고 감사로그를 남긴다", async () => {
     expect(await setVideoHomeworkRound(round)).toEqual({ ok: true });
     expect(mocks.calls.some((c) => c.table === "lesson_reports" && has(c, "eq", "report_date", "2026-09-29") && has(c, "eq", "video_homework", true))).toBe(true);

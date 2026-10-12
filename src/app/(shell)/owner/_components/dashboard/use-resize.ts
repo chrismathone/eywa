@@ -2,13 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 import { resizeItem } from "@/features/dashboard/layout/engine";
-import { cardDef, nearestPreset, presetOf, type SizePreset } from "@/features/dashboard/layout/registry";
-import type { Item } from "@/features/dashboard/layout/types";
-import { GAP, ROW_H, type BoardLayout } from "./geometry";
+import type { SizePreset } from "@/features/dashboard/layout/registry";
+import { GRID_COLS, GRID_ROW_PX, MAX_ROW_SPAN, type Item } from "@/features/dashboard/layout/types";
+import type { BoardLayout } from "./geometry";
+
+const custom = (w: number, h: number, mode?: "summary"): SizePreset => ({ key: `${w}:${h}`, label: `${w}열 × ${h}행`, hint: "직접 설정", w, h, mode });
 
 /**
- * 모서리 손잡이로 크기 바꾸기 — 끄는 동안 **가장 가까운 허용 프리셋**으로 바로 스냅해서 보여 주고(다른 카드가 비켜 흐른다),
- * 손을 떼면 되돌리기 이력 한 칸. Esc = 취소. ½×1보다 작게 끌면 요약형이 된다(그 카드가 요약을 지원할 때).
+ * 모서리를 끌어 행·열 단위로 자유롭게 확장한다. 겹치는 카드만 아래로 이동한다.
+ * 손을 떼면 되돌리기 이력 한 칸. Esc = 취소. 요약형 전환은 설정의 프리셋에서만 한다.
  */
 export function useResize(opts: {
   items: readonly Item[];
@@ -30,8 +32,7 @@ export function useResize(opts: {
       setResize(null);
       if (!commit || !cur) return;
       const item = itemsRef.current.find((i) => i.id === cur.id);
-      const def = cardDef(cur.id);
-      if (item && def && presetOf(def, item)?.key !== cur.z.key) onCommit(resizeItem(itemsRef.current, cur.id, cur.z));
+      if (item && (item.w !== cur.z.w || item.h !== cur.z.h)) onCommit(resizeItem(itemsRef.current, cur.id, cur.z));
     },
     [onCommit],
   );
@@ -41,11 +42,10 @@ export function useResize(opts: {
     const move = (ev: PointerEvent) => {
       const cur = live.current;
       const layout = layoutRef.current;
-      const def = cur && cardDef(cur.id);
-      if (!cur || !layout || !def || ev.pointerId !== cur.pointerId) return;
+      if (!cur || !layout || ev.pointerId !== cur.pointerId) return;
       const want = { w: Math.max(1, cur.start.w + (ev.clientX - cur.start.x) / cur.start.col), h: Math.max(1, cur.start.h + (ev.clientY - cur.start.y) / cur.start.row) };
       const item = itemsRef.current.find((i) => i.id === cur.id);
-      const z = nearestPreset(def, want.w, want.h, want.w < 4.5 ? "summary" : item?.mode);
+      const z = custom(Math.max(1, Math.min(GRID_COLS - (item?.x ?? 0), Math.round(want.w))), Math.min(MAX_ROW_SPAN, Math.round(want.h)), item?.mode);
       if (z.key !== cur.z.key) {
         cur.z = z;
         setResize({ id: cur.id, z });
@@ -77,15 +77,14 @@ export function useResize(opts: {
       if (ev.button !== 0 || !ev.isPrimary || live.current) return;
       const layout = layoutRef.current;
       const item = itemsRef.current.find((i) => i.id === id);
-      const def = cardDef(id);
       const placed = layout?.placed.find((p) => p.id === id);
-      if (!layout || !item || !def || !placed) return;
+      if (!layout || !item || !placed) return;
       ev.preventDefault();
       // 🔑 시작 크기 = **저장된 프리셋**의 크기 — 줄 채우기로 넓어진 화면 폭에서 재면 1px만 움직여도 한 단계 커진다(적대 리뷰 2026-10-01).
       const actual = layout.rects?.get(id);
       const col = layout.metrics.colStep * (layout.columnScale ?? 1);
-      const row = actual ? (actual.height + GAP) / item.h : ROW_H + GAP;
-      const z = presetOf(def, item) ?? nearestPreset(def, item.w, item.h, item.mode);
+      const row = GRID_ROW_PX + (actual ? Math.max(0, col * item.w - actual.width) : 16);
+      const z = custom(item.w, item.h, item.mode);
       live.current = { id, pointerId: ev.pointerId, z, start: { x: ev.clientX, y: ev.clientY, w: item.w, h: item.h, col, row } };
       setResize({ id, z });
     },

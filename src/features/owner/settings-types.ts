@@ -14,7 +14,7 @@ import { MAX_GROUP_PRESETS } from "@/features/timetable/lib/group-presets";
 import { DEFAULT_EIE_MONTHLY_PRICE, DEFAULT_SESSION_PRICES } from "@/features/billing/session-pricing";
 import { MODULE_IDS } from "@/lib/modules";
 import { makeupSettingsSchema } from "@/features/makeups/config";
-import { BUNDLES, DASHBOARD_VERSION, GRID_COLS, MAX_ITEMS, MAX_ROW_SPAN } from "@/features/dashboard/layout/types";
+import { BUNDLES, DASHBOARD_VERSION, GRID_COLS, MAX_ITEMS, MAX_ROW_SPAN, MAX_GRID_Y } from "@/features/dashboard/layout/types";
 import { CHINSAN_SCHOOL_SAVE_ALIASES } from "@/features/schools/school-name";
 import { DEFAULT_VIDEO_HOMEWORK_POLICY } from "@/features/video-homework/policy";
 import { parseWeekdayPartition, weekdayPartitionKey } from "@/features/timetable/lib/weekday-partition";
@@ -753,6 +753,8 @@ export const dashboardItemSchema = z.object({
   id: z.string().min(1).max(64),
   w: z.number().int().min(1).max(GRID_COLS),
   h: z.number().int().min(1).max(MAX_ROW_SPAN),
+  x: z.number().int().min(0).max(GRID_COLS - 1).optional(),
+  y: z.number().int().min(0).max(MAX_GRID_Y - 1).optional(),
   mode: z.literal("summary").optional(),
   title: z.string().trim().max(40).optional(),
   note: z.string().trim().max(80).optional(),

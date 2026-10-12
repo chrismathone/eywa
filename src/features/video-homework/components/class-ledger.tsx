@@ -112,7 +112,7 @@ export function ClassLedger({ group, rounds, blankFacts, videosKnown = true, sho
             return <tr key={ledgerPairKey(row)} data-selected={selected.has(row.studentId) || undefined}>
               <td className={styles.selectCell}><input type="checkbox" aria-label={`${group.className} ${row.studentName} 선택`} disabled={busy || !row.editable} checked={selected.has(row.studentId)} onChange={() => toggleStudent(row.studentId)} /></td>
               <th scope="row" className={styles.studentCell}><span title={row.studentName}>{row.studentName}</span>{!row.editable ? <small title="읽기 전용">조회</small> : null}
-                {row.canAssignVideos && onAssign ? <button type="button" className="text-primary mt-1 block text-xs underline underline-offset-2" disabled={busy} aria-label={`${group.className} ${row.studentName} 영상 배정`} onClick={() => onAssign(row)}>영상 배정</button> : null}</th>
+                {row.canAssignVideos && row.hasAssignableVideos && onAssign ? <button type="button" className="text-primary mt-1 block text-xs underline underline-offset-2" disabled={busy} aria-label={`${group.className} ${row.studentName} 영상 배정`} onClick={() => onAssign(row)}>영상 배정</button> : null}</th>
               <td className={styles.schoolCell} title={`${row.school ?? "학교 미등록"} ${row.grade ?? ""}`}>{row.school || "미등록"} <span>{row.grade}</span></td>
               <td className={styles.countCell}><strong>{counts.submitted}</strong><span>/{counts.total}</span></td>
               {numbers.map((n) => <RoundCell key={n} row={row} round={own[n - 1]} blank={blanks[n - 1 - own.length]} number={n} busy={busy} videosKnown={videosKnown}

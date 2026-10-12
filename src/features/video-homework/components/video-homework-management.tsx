@@ -93,11 +93,12 @@ export function VideoHomeworkManagement({ rows, initialMarks, videos = NO_VIDEOS
       : <div className={styles.empty}><strong>{rows.length ? "조건에 맞는 학생이 없습니다." : "조회 기간에 영상 과제가 나간 수업이 없습니다."}</strong><p>{rows.length ? "검색어와 필터를 조정해 주세요." : "원스크린에서 '영상 과제'를 켜고 저장한 수업부터 회차가 생깁니다."}</p></div>}
     <Dialog open={active !== null} onOpenChange={(open) => { if (!open && !busy) setActive(null); }}>
       <DialogContent showCloseButton={!busy}>
-        {active ? <RoundEditor key={`${ledgerPairKey(active.row)}:${active.round.key}`} cell={active} today={today} busy={busy} save={save} onClose={() => setActive(null)} /> : null}
+        {active ? <RoundEditor key={`${ledgerPairKey(active.row)}:${active.round.key}`} cell={active} today={today} busy={busy} save={save} onClose={() => setActive(null)}
+          onAssign={() => { setAssigning(active.row); setActive(null); }} /> : null}
       </DialogContent>
     </Dialog>
     <LedgerVideoDialog cell={playing} video={playing ? videos.find((video) => video.id === playing.round.videoId
       && video.studentId === playing.row.studentId && video.classId === playing.row.classId) ?? null : null} onClose={() => setPlaying(null)} />
-    {assigning ? <VideoAssignmentDialog key={ledgerPairKey(assigning)} row={assigning} onClose={() => setAssigning(null)} /> : null}
+    {assigning ? <VideoAssignmentDialog key={ledgerPairKey(assigning)} row={assigning} fromDate={fromDate} toDate={toDate} onClose={() => setAssigning(null)} /> : null}
   </div>;
 }

@@ -64,6 +64,8 @@ import { resolveMentSource, type MentSource } from "../ment-source";
 import { mentSourceColumnReady } from "./ment-source-db";
 import { videoHomeworkColumnReady } from "@/features/video-homework/server/assignments";
 import { videoHomeworkKept } from "@/features/video-homework/report-owner";
+import { getVideoReceiptComment } from "@/features/video-homework/server/receipt-comment";
+import { appendVideoReceiptComment } from "@/features/video-homework/receipt-comment";
 import { videoSubmitLinkColumn } from "@/features/video-submit/server/link-choice-db";
 import { loadTeacherMentStyle } from "./ment-style-db";
 import { mentStyleDirective } from "../ment-style-prompt";
@@ -1356,12 +1358,13 @@ export async function generateReportComment(
     // 프로파일이 없거나 표가 아직 없으면(미적용) 아무것도 안 붙는다([[#95]]).
     // 멘트 모드 — 강사 본인 오버라이드(users.report_notice_mode) > 학원 기본(report.noticeMode) > 'A'.
     // 설정·모드·말투 세 조회는 서로 독립 — 직렬 워터폴 금지(B4). 겸직 강사뷰의 스코프 판정(쿠키+담당 반)도 이 안에서 돈다.
-    const [settings, { data: meRow }, mentStyle] = await Promise.all([
+    const [settings, { data: meRow }, mentStyle, videoReceipt] = await Promise.all([
       getTenantSettings(),
       supabase.from("users").select("report_notice_mode").eq("id", user.id).single(),
       opts?.teacherStyle === false
         ? null
         : effectiveTeacherId().then((teacherId) => (teacherId ? loadTeacherMentStyle(createAdminClient(), user.tenantId, teacherId) : null)),
+      getVideoReceiptComment(user.tenantId, trendCtx ?? {}).catch(() => null),
     ]);
     const styleBlock = mentStyle ? mentStyleDirective(mentStyle) : "";
     const withTeacherStyle = (body: string) => (styleBlock ? `${body}\n\n${styleBlock}` : body);
@@ -1435,7 +1438,7 @@ ${style}` : body) });
     const pick = (k: string) => (data[k] ?? "").trim();
     const aiComment = mode === "B" ? [pick("p1"), pick("p2")].filter(Boolean).join("\n\n") : pick("comment");
     if (!aiComment) return { ok: false, error: "빈 응답" };
-    const comment = prependParentAddress(aiComment, parentAddress);
+    const comment = prependParentAddress(appendVideoReceiptComment(aiComment, videoReceipt), parentAddress);
     // 🔴 추세 문장 후검증(2026-08-13) — 척도가 섞인 학생에게서 *"9~15문제 중 9~15개 선을 유지"* 같은
     //    **사실일 수 없는 표기**가 실제로 학부모에게 나갔다. 프롬프트 주의 문구가 이미 있었는데도 뚫렸으므로
     //    생성 뒤에도 한 번 더 본다. 걸리면 **추세를 아예 안 실는다** — 없는 것보다 거짓이 나쁘다.

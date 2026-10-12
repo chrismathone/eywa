@@ -20,6 +20,7 @@ export function includeSubjectEnds(
     for (const detail of ended) {
       if (!detail.endedAt) continue;
       extra.push({ id: s.id, eventKey: `${s.id}|${detail.subject}`, name: s.name,
+        subject: detail.subject,
         schoolGrade: schoolGrade(s.school, s.grade), withdrawnAt: detail.endedAt,
         program: withdrawalProgram({ lastClassSubject: detail.subject, lastClassEnglishTrack: detail.englishTrack }, subjects),
         kind: "subject-ended", className: detail.className ?? undefined });

@@ -7,9 +7,10 @@ import type { KpiKey, PanelId } from "@/features/dashboard/overview/layout";
 import type { OverviewSnapshot } from "@/features/dashboard/overview/model";
 import { BREAKPOINTS, layoutAt } from "@/features/dashboard/layout/flow";
 import { dropEmptyHeadings } from "@/features/dashboard/layout/engine";
+import { positionItems } from "@/features/dashboard/layout/fixed-grid";
 import { cardDef, menusOf } from "@/features/dashboard/layout/registry";
 import { isEmptyCard, summaryOf } from "@/features/dashboard/layout/summary";
-import { isHeadingId, type Item } from "@/features/dashboard/layout/types";
+import { isHeadingId, isSpaceId, isStructuralId, type Item } from "@/features/dashboard/layout/types";
 import { KpiCard } from "./kpi-card";
 import g from "./grid-board.module.css";
 
@@ -47,9 +48,8 @@ function SummaryTile({ item, snap, full, amounts }: { item: Item; snap: Overview
 }
 
 /**
- * 역할별 배치(학원 설정 '대시보드 관리')의 보기 화면 — 순서 + 크기를 `flow.ts`가 흘린 자리에 카드를 놓는다.
- * 넓은 창·중간·폰 세 가지 자리를 미리 계산해 CSS 변수로 싣고, 컨테이너 폭(`@container dashboard`)이 고른다 — 셋 다 같은 순서다.
- * 🔴 줄의 남는 칸은 그 줄 카드들이 나눠 채운다(빈 공간 금지). 그래서 **실제로 그려질 카드만** 흘린다 — 권한·조회 실패로 빠진 카드 자리가 구멍이 되지 않게.
+ * 데스크톱·중간 폭은 저장한 행·열·크기를 보존한다. 카드가 빠져도 다른 카드를 늘리거나 빈칸을 채우지 않는다.
+ * 폰에서는 같은 배치를 읽기 좋은 목록으로 보여 준다. 저장된 좌표는 바꾸지 않는다.
  */
 export function GridBoard({
   items,
@@ -63,25 +63,26 @@ export function GridBoard({
   kpis: Partial<Record<KpiKey, ReactNode>>;
 }) {
   const shown = useMemo(
-    () => dropEmptyHeadings(items.filter((i) => isHeadingId(i.id) || drawable(i.id, snapshot))),
+    () => dropEmptyHeadings(positionItems(items).filter((i) => isStructuralId(i.id) || drawable(i.id, snapshot)).sort((a, b) => a.y - b.y || a.x - b.x)),
     [items, snapshot],
   );
   const places = useMemo(
-    () => Object.fromEntries(BREAKPOINTS.map((bp) => [bp, new Map(layoutAt(shown, bp).map((p) => [p.id, p]))])),
+    () => Object.fromEntries(BREAKPOINTS.map((bp) => [bp, new Map((bp === "mobile" ? layoutAt(shown.filter((i) => !isSpaceId(i.id)), bp) : positionItems(shown)).map((p) => [p.id, p]))])),
     [shown],
   );
   const amounts = snapshot.view?.monthAmounts ?? true;
   return (
-    <div className={g.grid} data-overview="free-grid">
+    <div className={g.grid} data-overview="free-grid" data-fixed-grid="true">
       {shown.map((item) => {
         const d = places.desktop!.get(item.id)!;
         const m = places.medium!.get(item.id)!;
-        const s = places.mobile!.get(item.id)!;
+        const s = places.mobile!.get(item.id) ?? d;
         const vars = {
           "--dx": d.x + 1, "--dy": d.y + 1, "--dw": d.w, "--dh": d.h,
           "--mx": m.x + 1, "--my": m.y + 1, "--mw": m.w,
           "--sx": s.x + 1, "--sy": s.y + 1, "--sw": s.w,
         } as CSSProperties;
+        if (isSpaceId(item.id)) return <div key={item.id} className={`${g.cell} ${g.space}`} style={vars} data-cell="space" data-dashboard-card={item.id} aria-label="빈 행" />;
         if (isHeadingId(item.id)) {
           return (
             <div key={item.id} className={`${g.cell} ${g.heading}`} style={vars} data-cell="heading" data-dashboard-card={item.id}>

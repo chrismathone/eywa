@@ -53,7 +53,7 @@ export const CanvasTile = memo(function CanvasTile({
       {...attributes}
       role="button"
       aria-roledescription="위젯"
-      aria-label={`${label}. 끌어서 옮기기, 화살표로 순서 바꾸기, Shift와 화살표로 크기, Delete로 빼기`}
+      aria-label={`${label}. 끌어서 옮기기, 화살표로 행·열 이동, Shift와 화살표로 크기, Delete로 빼기`}
       aria-pressed={selected}
       tabIndex={0}
       data-tile-id={id}

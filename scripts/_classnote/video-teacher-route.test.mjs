@@ -84,10 +84,10 @@ describe("영상 담임 분류", () => {
     expect(chooseVideoTeacher({ ...base, classes: [vacant], report: { classId: "ms2a", homeworkDate: "2026-10-06" } }))
       .toMatchObject({ teacherId: null, folderName: "담임 확인 필요", classId: "ms2a", homeworkDate: "2026-10-06" });
   });
-  it("🔴 지금 그 반을 다니지 않으면 보고서를 쓰지 않는다 — 반을 옮긴 뒤 옛 글에 올린 영상은 예전 판정 그대로", () => {
+  it("반 이동 후 옛 보고서에 낸 영상도 그 숙제 연결을 유지한다 — 현재 반에 잘못 붙이지 않는다", () => {
     const moved = chooseVideoTeacher({ ...base, report: { classId: "old-class", homeworkDate: "2026-09-20" } });
-    expect(moved).toEqual(chooseVideoTeacher(base));
-    expect(moved).not.toHaveProperty("homeworkDate");
+    expect(moved).toMatchObject({ classId: "old-class", homeworkDate: "2026-09-20", teacherId: null });
+    expect(moved.classId).not.toBe(math.class_id);
     // 학생을 못 정한 영상도 마찬가지 — 보고서가 있어도 숙제일을 싣지 않는다
     expect(chooseVideoTeacher({ ...base, studentIds: [], report: { classId: "math-class", homeworkDate: "2026-10-06" } })).not.toHaveProperty("homeworkDate");
   });

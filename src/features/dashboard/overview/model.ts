@@ -49,6 +49,7 @@ export type OperationCount = {
   unit: string;
 };
 export type OverviewData = {
+  teacherWork: import("./teacher-work").TeacherWork;
   students: {
     /** 재원생 수 — 원생목록과 **같은** count(head · 강사 스코프). */
     enrolled: number;
@@ -78,6 +79,7 @@ export type OverviewData = {
       schoolGrade: string | null;
       withdrawnAt: string;
       program: Program | null;
+      subject?: string | null;
       kind?: "withdrawn" | "subject-ended";
       className?: string;
     }[];

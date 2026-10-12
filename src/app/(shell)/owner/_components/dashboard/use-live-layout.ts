@@ -32,7 +32,7 @@ export function useLiveLayout(rootRef: RefObject<HTMLDivElement | null>, items: 
       const width = grid?.getBoundingClientRect().width ?? origin.width;
       const overviewWidth = preview.querySelector('[data-overview="root"]')?.getBoundingClientRect().width ?? width;
       const free = !!preview.querySelector('[data-overview="free-grid"]');
-      const columnScale = free && overviewWidth <= 1100 ? 2 : 1;
+      const columnScale = grid?.dataset.fixedGrid ? 1 : free && overviewWidth <= 1100 ? 2 : 1;
       // 키보드 위/아래 이동도 실제 화면 좌표에서 이웃을 찾는다.
       layoutRef.current = {
         placed: next.map(({ id, rect: r }) => ({ id, x: r.left, y: r.top, w: r.width, h: r.height })),

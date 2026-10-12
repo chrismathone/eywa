@@ -63,11 +63,11 @@ describe("영상 제출 현황 — ▶ 현재 화면 재생 · 수동", () => {
     expect(mocks.save).not.toHaveBeenCalled();
   });
 
-  it("업로드 대기·옛 조회는 재생 주소 없이 안내하며, 다른 학생 영상이 같은 id여도 열지 않는다", async () => {
+  it("업로드 대기는 완료로 세지 않고, 다른 학생 영상이 같은 id여도 열지 않는다", () => {
     render(<VideoHomeworkManagement rows={rows} initialMarks={marks} videos={[{ ...videos[0], studentId: "other-student" }, { ...videos[0], playback: null }]}
       fromDate="2026-10-01" toDate={today} today={today} />);
-    fireEvent.click(screen.getByRole("button", { name: "숙제 영상 보기" }));
-    expect(await screen.findByText("아직 재생할 수 없는 영상입니다. 잠시 뒤 다시 확인해 주세요.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "숙제 영상 보기" })).toBeNull();
+    expect(screen.getByRole("button", { name: "김민준 1회 2026-10-06 미확인" })).toBeInTheDocument();
     expect(document.querySelector("iframe")).toBeNull();
     expect(mocks.save).not.toHaveBeenCalled();
   });

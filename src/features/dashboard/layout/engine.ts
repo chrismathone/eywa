@@ -1,16 +1,18 @@
 /**
  * 배치 목록 다루기 — 넣기·빼기·옮기기(순서)·크기 바꾸기·검증. **순수 함수**(서버·클라 공용, Vitest).
- * 배치는 순서 있는 목록이다(`types.ts`) — 자리는 `flow.ts`가 순서대로 흘려 정한다.
+ * 좌표가 있는 배치는 위치·자유 크기를 보존한다. 예전 순서 배치도 읽을 수 있다.
  */
 import { KPI_KEYS, type OverviewLayout, type PanelId } from "@/features/dashboard/overview/layout";
 import { cardDef, defaultPreset, HEADING_SIZE, isKnownId, nearestPreset, presetOf, type SizePreset } from "./registry";
-import { MAX_ITEMS, isHeadingId, type Item } from "./types";
+import { MAX_ITEMS, isHeadingId, isStructuralId, type Item } from "./types";
+import { gridBounds, isPositioned, placeItem, resizeGridItem } from "./fixed-grid";
 
 const TITLE_MAX = 40;
 const NOTE_MAX = 80;
 
 /** 크기를 그 카드의 허용 프리셋으로(모르는 크기는 가장 가까운 것) — 머리줄은 항상 한 줄 전체. */
 export function snapItem(item: Item): Item {
+  if (isPositioned(item)) return gridBounds(item);
   if (isHeadingId(item.id)) {
     const { mode: _m, amounts: _a, phones: _p, ...rest } = item;
     void _m;
@@ -55,6 +57,7 @@ export function sanitizeItems(raw: readonly unknown[]): Item[] {
       id,
       w: typeof o.w === "number" ? o.w : NaN,
       h: typeof o.h === "number" ? o.h : NaN,
+      ...(typeof o.x === "number" && Number.isFinite(o.x) && typeof o.y === "number" && Number.isFinite(o.y) ? { x: o.x, y: o.y } : {}),
       ...(o.mode === "summary" ? { mode: "summary" as const } : {}),
       ...(title ? { title } : {}),
       ...(cleanText(o.note, NOTE_MAX) ? { note: cleanText(o.note, NOTE_MAX) } : {}),
@@ -77,6 +80,7 @@ export function newItem(id: string, preset?: SizePreset, title?: string): Item {
 
 /** `index` 자리에 넣는다(이미 있으면 그 카드를 옮긴다). 끝 = `items.length`. */
 export function insertAt(items: readonly Item[], item: Item, index: number): Item[] {
+  if (isPositioned(item)) return placeItem(items, item, item.x, item.y);
   const rest = items.filter((i) => i.id !== item.id);
   if (rest.length >= MAX_ITEMS) return [...items];
   const at = Math.max(0, Math.min(rest.length, index));
@@ -93,6 +97,7 @@ export function moveTo(items: readonly Item[], id: string, index: number): Item[
 
 /** 크기 프리셋 바꾸기(요약형 ↔ 일반 포함). */
 export function resizeItem(items: readonly Item[], id: string, z: Pick<SizePreset, "w" | "h" | "mode">): Item[] {
+  if (items.some(isPositioned)) return resizeGridItem(items, id, { ...z, mode: z.mode });
   return items.map((i) => {
     if (i.id !== id) return i;
     const { mode: _old, ...rest } = i;
@@ -118,12 +123,12 @@ export function patchItem(items: readonly Item[], id: string, patch: Partial<Pic
 }
 
 /** 놓인 카드 id들(머리줄 제외). */
-export const placedIds = (items: readonly Item[]) => items.filter((i) => !isHeadingId(i.id)).map((i) => i.id);
+export const placedIds = (items: readonly Item[]) => items.filter((i) => !isStructuralId(i.id)).map((i) => i.id);
 
 /** 아래에 카드가 하나도 없는 머리줄을 뺀다 — 권한으로 카드가 사라진 구역의 빈 제목줄이 남지 않게. */
 export function dropEmptyHeadings(items: readonly Item[]): Item[] {
   return items.filter((it, idx) => {
-    if (!isHeadingId(it.id)) return true;
+    if (!isHeadingId(it.id) || isPositioned(it)) return true;
     const next = items[idx + 1];
     return !!next && !isHeadingId(next.id);
   });
@@ -131,7 +136,7 @@ export function dropEmptyHeadings(items: readonly Item[]): Item[] {
 
 /** 두 배치가 같은가(순서·크기·제목·옵션까지) — 기본과 같으면 저장값을 만들지 않는다. */
 export function sameItems(a: readonly Item[], b: readonly Item[]): boolean {
-  const key = (i: Item) => [i.id, i.w, i.h, i.mode ?? "", i.title ?? "", i.note ?? "", i.amounts ?? null, i.phones ?? null];
+  const key = (i: Item) => [i.id, i.w, i.h, i.x ?? null, i.y ?? null, i.mode ?? "", i.title ?? "", i.note ?? "", i.amounts ?? null, i.phones ?? null];
   return JSON.stringify(a.map(key)) === JSON.stringify(b.map(key));
 }
 

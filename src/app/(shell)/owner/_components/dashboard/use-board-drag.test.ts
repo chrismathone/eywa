@@ -8,7 +8,7 @@ import { useBoardDrag } from "./use-board-drag";
 afterEach(() => vi.useRealTimers());
 
 describe("실제 카드 위에서 끌기", () => {
-  it("실제 표시 좌표로 순서를 정하고, 그 사이 숨겨진 카드를 잃지 않는다", () => {
+  it("실제 격자 좌표에 놓고, 숨겨진 카드도 잃지 않는다", () => {
     vi.useFakeTimers();
     const items = [newItem("kpi:students"), newItem("panel:staff"), newItem("kpi:firstClass")];
     const rects = new Map([
@@ -21,6 +21,11 @@ describe("실제 카드 위에서 끌기", () => {
     };
     const canvas = document.createElement("div");
     canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 600, height: 500 } as DOMRect);
+    const grid = document.createElement("div");
+    grid.dataset.overview = "free-grid";
+    grid.style.gap = "16px";
+    grid.getBoundingClientRect = canvas.getBoundingClientRect;
+    canvas.appendChild(grid);
     const onCommit = vi.fn();
     const { result } = renderHook(() => useBoardDrag({ items, canvasRef: { current: canvas }, layoutRef: { current: layout }, onCommit, onRemoved: vi.fn() }));
     const active = { data: { current: { kind: "tile", id: "kpi:students" } }, rect: { current: { initial: { width: 100, height: 150 }, translated: null } } };
@@ -32,6 +37,7 @@ describe("실제 카드 위에서 끌기", () => {
     act(() => vi.advanceTimersByTime(80));
     act(() => result.current.handlers.onDragEnd({ active, over: { id: "canvas" } } as unknown as DragEndEvent));
     expect(onCommit).toHaveBeenCalledTimes(1);
-    expect(onCommit.mock.calls[0][0].map((i: { id: string }) => i.id)).toEqual(["panel:staff", "kpi:firstClass", "kpi:students"]);
+    expect(onCommit.mock.calls[0][0].map((i: { id: string }) => i.id)).toEqual(items.map((i) => i.id));
+    expect(onCommit.mock.calls[0][0][0]).toMatchObject({ x: 7, y: 0 });
   });
 });

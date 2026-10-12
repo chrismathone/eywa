@@ -5,11 +5,13 @@ import { toast } from "sonner";
 import type { MenuKey } from "@/lib/permissions";
 import type { OverviewSnapshot } from "@/features/dashboard/overview/model";
 import { defaultItems } from "@/features/dashboard/layout/defaults";
-import { insertAt, newItem } from "@/features/dashboard/layout/engine";
+import { newItem } from "@/features/dashboard/layout/engine";
 import { CARDS, cardDef, type SizePreset } from "@/features/dashboard/layout/registry";
 import { previewSnapshot } from "@/features/dashboard/layout/preview";
 import { BUNDLE_LABELS, BUNDLE_RULES, MAX_ITEMS, type Bundle, type DashboardSettings, type Item } from "@/features/dashboard/layout/types";
 import { SectionForm } from "../section-form";
+import { addRow, appendItem, positionItems } from "@/features/dashboard/layout/fixed-grid";
+import { Button } from "@/components/ui/button";
 import { CardInspector } from "./card-inspector";
 import { EditBoard } from "./edit-board";
 import { EditorActions, RoleBar } from "./editor-toolbar";
@@ -47,7 +49,8 @@ const LIST_BELOW = 720;
  */
 export function DashboardEditor({ initial, roleMenus, subjects, members, preview }: DashboardEditorProps) {
   const ed = useDashboardEditor(initial);
-  const { role, items, editing, selected, commit, select, restore, undo, redo } = ed;
+  const { role, editing, selected, commit, select, restore, undo, redo } = ed;
+  const items = useMemo(() => editing ? positionItems(ed.items) : ed.items, [ed.items, editing]);
   const [full, setFull] = useState<OverviewSnapshot | null | "failed">(null);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [subject, setSubject] = useState<string | null>(subjects[0]?.key ?? null);
@@ -87,7 +90,7 @@ export function DashboardEditor({ initial, roleMenus, subjects, members, preview
     () => (original ? previewSnapshot(original, { role, items: ALL_ITEMS, menus, subject: previewSubject }) : null),
     [original, role, menus, previewSubject],
   );
-  const unused = useMemo(() => CARDS.filter((c) => !items.some((i) => i.id === c.id)).map((c) => c.id), [items]);
+  const unused = useMemo(() => CARDS.filter((c) => (role !== "subject" || c.subjectScope !== "academy") && !items.some((i) => i.id === c.id)).map((c) => c.id), [items, role]);
   const selectedItem = items.find((i) => i.id === selected) ?? null;
 
   const onRemoved = useCallback(
@@ -107,7 +110,9 @@ export function DashboardEditor({ initial, roleMenus, subjects, members, preview
       const cur = itemsRef.current;
       if (cur.some((i) => i.id === id)) return;
       if (cur.length >= MAX_ITEMS) return toast.info(`카드와 구역 제목은 ${MAX_ITEMS}개까지 넣을 수 있습니다`);
-      commit([...cur, newItem(id, z)]);
+      const next = appendItem(cur, newItem(id, z));
+      if (next.length <= cur.length && !next.some((i) => i.id === id)) return toast.info("카드를 놓을 공간이 부족합니다. 기존 카드 위치를 조절해 주세요.");
+      commit(next);
       toast(`'${cardDef(id)?.label}'을(를) 맨 뒤에 넣었습니다`);
     },
     [commit],
@@ -116,10 +121,14 @@ export function DashboardEditor({ initial, roleMenus, subjects, members, preview
     const id = `heading:${Date.now().toString(36)}`;
     const cur = itemsRef.current;
     if (cur.length >= MAX_ITEMS) return toast.info(`카드와 구역 제목은 ${MAX_ITEMS}개까지 넣을 수 있습니다`);
-    const at = selected ? cur.findIndex((i) => i.id === selected) : cur.length;
-    commit(insertAt(cur, newItem(id, undefined, "새 구역"), at < 0 ? cur.length : at));
+    commit(appendItem(cur, newItem(id, undefined, "새 구역")));
     select(id);
-  }, [commit, select, selected]);
+  }, [commit, select]);
+  const appendRow = useCallback(() => {
+    const next = addRow(itemsRef.current, crypto.randomUUID());
+    if (next.length === itemsRef.current.length) return toast.info("더 이상 행을 추가할 수 없습니다");
+    commit(next);
+  }, [commit]);
 
   useEditorShortcuts(editing, undo, redo);
 
@@ -168,12 +177,15 @@ export function DashboardEditor({ initial, roleMenus, subjects, members, preview
               {listMode || !original ? (
                 <>
                   <ListBoard items={items} role={role} menus={menus} selected={selected} onSelect={select} onCommit={commit} onRemoved={onRemoved} />
+                  <Button type="button" variant="outline" onClick={appendRow}>+ 하단에 행 추가</Button>
                   <UnusedList ids={unused} onAdd={(id) => add(id)} />
                 </>
               ) : (
                 <EditBoard
                   key={role}
                   items={items}
+                  unused={unused}
+                  onAddRow={appendRow}
                   selected={selected}
                   renderPreview={(next) => <RolePreview full={original} role={role} items={next} menus={menus} subject={previewSubject} />}
                   onSelect={select}

@@ -2,6 +2,7 @@ import "server-only";
 
 import type { CurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
+import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { getTeachingClassIds } from "@/features/classes/server/delegation";
@@ -17,7 +18,9 @@ export type MarkWriteResult = { ok: boolean; error?: string };
 export async function videoHomeworkWriteError(user: CurrentUser, classId: string, date: string): Promise<string | null> {
   if ((await accessLevelTenant(user.systemRole, "lesson_reports")) === "full") return null;
   if (!(await canWriteTenant(user.systemRole, "teacher_onescreen"))) return "수정 권한이 없습니다.";
-  const classes = await getTeachingClassIds(await createClient(), user.id, date);
+  // 다른 강사 편집 모드도 화면에 표시된 강사 범위로 검사한다. 저장 행위자는 실제 로그인 계정 그대로다.
+  const teacherId = (await effectiveTeacherId()) ?? user.id;
+  const classes = await getTeachingClassIds(await createClient(), teacherId, date);
   return classes.all.includes(classId) ? null : "담당 반만 수정할 수 있습니다.";
 }
 
@@ -34,7 +37,8 @@ export async function ledgerRoundWriteError(db: Db, user: CurrentUser, input: { 
   const NOT_MINE = "내가 낸 숙제만 기록할 수 있습니다.";
   if (!input.homeworkDate) return "숙제일이 없는 옛 기록이라 여기서는 고칠 수 없습니다. 사무실에 알려 주세요.";
   try {
-    return (await isOwnVideoHomework(db, { tenantId: user.tenantId, userId: user.id, classId: input.classId, studentId: input.studentId, date: input.homeworkDate }))
+    const teacherId = (await effectiveTeacherId()) ?? user.id;
+    return (await isOwnVideoHomework(db, { tenantId: user.tenantId, userId: teacherId, classId: input.classId, studentId: input.studentId, date: input.homeworkDate }))
       ? null : NOT_MINE;
   } catch {
     return "숙제를 낸 사람을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.";

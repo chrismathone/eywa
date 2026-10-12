@@ -4,8 +4,9 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactNode
 import { createPortal } from "react-dom";
 import { DndContext, DragOverlay, MeasuringStrategy, getClientRect } from "@dnd-kit/core";
 import { removeItem } from "@/features/dashboard/layout/engine";
-import { CARDS, cardDef } from "@/features/dashboard/layout/registry";
-import { isHeadingId, type Item } from "@/features/dashboard/layout/types";
+import { cardDef } from "@/features/dashboard/layout/registry";
+import { isHeadingId, isSpaceId, isStructuralId, type Item } from "@/features/dashboard/layout/types";
+import { Button } from "@/components/ui/button";
 import { ACCESSIBILITY, CanvasDrop, Trash } from "./board-drop-targets";
 import { captureCard, CardDragPreview } from "./card-drag-preview";
 import { useBoardKeyboard } from "./use-board-keyboard";
@@ -20,8 +21,10 @@ import e from "./editor.module.css";
 import live from "./live-editor.module.css";
 
 /** 실제 운영실을 그대로 그리고, 측정한 카드 위에 편집 도구만 겹친다. */
-export function EditBoard({ items, selected, onSelect, onCommit, onRemoved, onAdd, renderPreview }: {
+export function EditBoard({ items, unused, onAddRow, selected, onSelect, onCommit, onRemoved, onAdd, renderPreview }: {
   items: Item[];
+  unused: string[];
+  onAddRow: () => void;
   selected: string | null;
   onSelect: (id: string | null) => void;
   onCommit: (next: Item[]) => void;
@@ -33,15 +36,14 @@ export function EditBoard({ items, selected, onSelect, onCommit, onRemoved, onAd
   const layoutRef = useRef<BoardLayout | null>(null);
   const [announce, setAnnounce] = useState("");
   const [dragHtml, setDragHtml] = useState("");
-  const label = useCallback((id: string) => items.find((i) => i.id === id)?.title ?? cardDef(id)?.label ?? "구역 제목", [items]);
+  const label = useCallback((id: string) => items.find((i) => i.id === id)?.title ?? cardDef(id)?.label ?? (isSpaceId(id) ? "빈 행 · 여기에 카드를 놓으세요" : "구역 제목"), [items]);
   const { drag, preview: dragPreview, sensors, canRemove, handlers } = useBoardDrag({ items, canvasRef, layoutRef, onCommit, onRemoved });
   const { resize, preview: resizePreview, start: startResize } = useResize({ items, layoutRef, onCommit });
   const shown = dragPreview ?? resizePreview ?? items;
   const cards = useLiveLayout(canvasRef, shown, layoutRef);
   const placed = useMemo(() => cards.map(({ id, rect: r }) => ({ id, x: r.left, y: r.top, w: r.width, h: r.height })), [cards]);
   const onKey = useBoardKeyboard({ items, placed, canRemove, label, onCommit, onRemoved, onSelect, setAnnounce });
-  const unused = CARDS.filter((c) => !items.some((i) => i.id === c.id)).map((c) => c.id);
-  const hidden = items.filter((it) => !isHeadingId(it.id) && !cards.some((c) => c.id === it.id));
+  const hidden = items.filter((it) => !isStructuralId(it.id) && !cards.some((c) => c.id === it.id));
 
   useLayoutEffect(() => {
     if (!drag) return;
@@ -66,19 +68,19 @@ export function EditBoard({ items, selected, onSelect, onCommit, onRemoved, onAd
           <div ref={canvasRef} className={live.canvas} onClick={(ev) => ev.target === ev.currentTarget && onSelect(null)}>
             <div data-live-preview inert>{renderPreview(shown)}</div>
             {cards.map(({ id, rect }) => {
-              const heading = isHeadingId(id);
-              const def = cardDef(id);
+              const heading = isStructuralId(id);
               return <CanvasTile key={id} id={id} label={label(id)} rect={rect} heading={heading}
                 selected={selected === id} ghosted={drag?.id === id} sizeLabel={resize?.id === id ? resize.z.label : null}
-                canRemove={heading || canRemove} canResize={!heading && !!def && def.sizes.length > 1}
+                canRemove={heading || canRemove} canResize={!isSpaceId(id)}
                 onSelect={onSelect} onKey={onKey} onResizeStart={startResize}
                 onRemove={(key) => { onCommit(removeItem(items, key)); onRemoved(key, [...items]); }}
-              >{null}</CanvasTile>;
+              >{isSpaceId(id) ? <span className="text-muted-foreground flex h-full items-center justify-center rounded-lg border border-dashed text-sm">빈 행 · 여기에 카드를 놓으세요</span> : null}</CanvasTile>;
             })}
           </div>
           <div className={e.srLive} aria-live="polite">{announce}</div>
         </CanvasDrop>
       </div>
+      <Button type="button" variant="outline" onClick={onAddRow}>+ 하단에 행 추가</Button>
       {hidden.length ? <details className={live.hiddenCards}>
         <summary>현재 화면에 표시되지 않는 카드 {hidden.length}개</summary>
         <p>권한이나 데이터에 따라 표시됩니다. 배치에는 보관되어 있습니다.</p>

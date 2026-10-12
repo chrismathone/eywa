@@ -3,6 +3,8 @@ import { logActionAs } from "@/features/audit/server/log";
 import { notifyUsers } from "@/features/notifications/server/notify";
 import { formatShortKoreanDate } from "@/lib/date-kst";
 import type { LinkVideoRoute } from "../route";
+import { reconcileVideoHomework } from "@/features/video-homework/server/reconcile-outcomes";
+import { reportError } from "@/lib/observability/report-error";
 
 /** 감사로그의 "누가" — 로그인 없는 학부모 업로드라 사람 대신 문 이름(`logActionAs`). */
 export const LINK_UPLOAD_ACTOR = "영상 제출 링크(학부모)";
@@ -19,6 +21,9 @@ export async function afterLinkUpload(input: { tenantId: string; studentId: stri
   // 학생이 올리기 사이트에서 고른 숙제(2026-10-03) — 어느 수업의 숙제인지 벨·감사로그에 함께 적는다.
   const homework = route.homeworkDate ? `${formatShortKoreanDate(route.homeworkDate)} 수업 숙제` : null;
   await Promise.all([
+    reconcileVideoHomework(tenantId, { studentId }).catch(error => {
+      reportError(error, { scope: "video-homework.after-upload", tenantId, studentId });
+    }),
     logActionAs({ tenantId, actorName: LINK_UPLOAD_ACTOR }, {
       action: "lesson_report_video_link_upload", targetType: "student", targetLabel: `${who} · ${where}`,
       metadata: { studentId, classId: route.classId, videoId: input.videoId, bytes: input.bytes, folder: route.folderName, ...(route.homeworkDate ? { homeworkDate: route.homeworkDate } : {}) },

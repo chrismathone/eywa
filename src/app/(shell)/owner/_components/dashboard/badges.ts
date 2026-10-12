@@ -50,7 +50,7 @@ export function badgesFor(item: Item, role: Bundle, menus: ReadonlySet<MenuKey>,
     const shown = ex ? ex.phones : optionOn(item, "phones", role);
     out.push(shown ? { tone: "warn", text: "번호 보임" } : { tone: "info", text: "번호 가림" });
   }
-  if (role === "subject" && def.subjectScope === "academy") out.push({ tone: "info", text: "학원 전체" });
+  if (role === "subject" && def.subjectScope === "academy") out.push({ tone: "info", text: "과목 구분 불가 · 숨김" });
   return out;
 }
 
@@ -59,6 +59,6 @@ export function scopeLine(id: string, role: Bundle): string | null {
   const def = cardDef(id);
   if (!def || role !== "subject") return null;
   if (def.subjectScope === "subject") return "담당 과목 데이터로 좁혀서 보여 줍니다.";
-  if (def.subjectScope === "academy") return "과목으로 나눌 수 없는 학원 전체 값입니다 — 화면에 '(학원 전체)'가 붙습니다.";
+  if (def.subjectScope === "academy") return "과목으로 구분할 수 없는 카드여서 담당 과목 화면에는 표시하지 않습니다.";
   return null;
 }

@@ -18,8 +18,9 @@ export const roundDateText = (round: Pick<LedgerRound, "homeworkDate" | "date">)
   round.homeworkDate ? `숙제 ${round.homeworkDate}` : `검사 ${round.date}`;
 
 /** 한 칸 편집 — 완료 날짜 고치기 · 미수행 · 미확인(기록 지우기). 영상으로 센 칸은 확정하거나 미수행으로 바꾼다. */
-export function RoundEditor({ cell, today, busy, save, onClose }: {
+export function RoundEditor({ cell, today, busy, save, onClose, onAssign }: {
   cell: ActiveCell; today: string; busy: boolean; save: SaveLedgerChanges; onClose: () => void;
+  onAssign?: () => void;
 }) {
   const { row, round } = cell;
   const [status, setStatus] = useState<EditorStatus>(round.status);
@@ -42,19 +43,21 @@ export function RoundEditor({ cell, today, busy, save, onClose }: {
   return <form className={styles.editor} onSubmit={(event) => void submit(event)}>
     <DialogHeader><DialogTitle>{row.studentName} · {cell.number}회</DialogTitle>
       <DialogDescription>{row.className} · {roundDateText(round)}</DialogDescription></DialogHeader>
-    {round.auto ? <p className={styles.autoNote}>학부모 영상이 {round.videoDate}에 이 반으로 올라와 완료로 셉니다. 저장하면 직접 확인한 기록으로 남습니다.</p>
+    {round.auto ? <p className={styles.autoNote}>학부모 영상이 {round.videoDate}에 이 반으로 올라와 완료로 셉니다.</p>
       : round.videoDate ? <p className={styles.dim}>이 기록과 짝지은 학부모 영상: {round.videoDate}</p> : null}
     <div className={styles.statusOptions}>{LEDGER_STATUS_OPTIONS.map((option) => {
-      // 영상으로 센 칸은 저장된 기록이 없어 '미확인'으로 되돌릴 것이 없다 — 이 반 숙제 영상이 아니면 미수행으로 남긴다.
+      // 영상 연결을 바꾸려면 배정 변경을 쓴다. 수동 상태를 바꿔도 업로드 기록은 남는다.
       const locked = option.value === "unchecked" && !round.mark && round.auto;
       return <button key={option.value} type="button" disabled={busy || !row.editable || locked}
-        title={locked ? "영상 도착으로 센 칸입니다. 이 숙제 영상이 아니면 미수행으로 기록하세요." : undefined}
+        title={locked ? "영상이 연결된 숙제입니다. 다른 숙제의 영상이면 영상 배정 변경에서 수정하세요." : undefined}
         aria-pressed={status === option.value} onClick={() => setStatus(option.value)}>{option.label}</button>;
     })}</div>
     {status === "submitted" ? <label>제출일<input type="date" value={submittedDate} min={floor} max={today} required
       disabled={busy || !row.editable} onChange={(event) => { setSubmittedDate(event.target.value); setError(""); }} /></label> : null}
     {error ? <p role="alert" className={styles.red}>{error}</p> : null}
-    <p className={styles.dim}>{round.assigned ? "미확인으로 바꾸면 이 숙제의 검사 기록이 지워집니다."
+    {row.canAssignVideos && round.videoId && onAssign ? <button type="button" className="text-primary w-fit text-sm underline" disabled={busy} onClick={onAssign}>영상 배정 변경</button> : null}
+    <p className={styles.dim}>{round.videoId ? "미확인은 수동 검사 기록만 지웁니다. 연결된 영상이 있으면 자동으로 완료됩니다. 영상 연결은 배정 변경에서 수정할 수 있습니다."
+      : round.assigned ? "미확인으로 바꾸면 이 숙제의 검사 기록이 지워집니다."
       : "보고서에 영상 과제 표시가 없는 기록입니다. 미확인으로 바꾸면 기록이 지워져 이 회차가 장부에서 빠집니다."}</p>
     {row.editable ? <button type="submit" className={styles.primary} disabled={busy}>{busy ? "저장 중…" : "기록 저장"}</button>
       : <p className={styles.dim}>이 기록은 읽기 전용입니다.</p>}

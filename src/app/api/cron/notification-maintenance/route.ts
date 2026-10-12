@@ -6,10 +6,11 @@ import { detectAndNotifyEvents } from "@/features/notifications/server/events";
 import { pruneNotificationData } from "@/features/notifications/server/prune";
 import { sweepFailedReportNotifications } from "@/features/notifications/server/failed-notify-sweep";
 import { checkProtectedAccountIntegrity } from "@/features/super-admin/server/protected-integrity";
+import { reconcileVideoHomework } from "@/features/video-homework/server/reconcile-outcomes";
 
 /** Daily notification checks and cleanup. AI briefing generation was retired on 2026-09-30. */
 export const dynamic = "force-dynamic";
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;
@@ -48,7 +49,15 @@ export async function GET(req: Request) {
   const tenantIds = [...new Set((masters ?? []).map((row) => row.tenant_id as string))];
   const events: Record<string, string> = {};
   const sweeps: Record<string, string> = {}; // 발송 실패 알림 유실 보정 결과(테넌트별)
+  const videos: Record<string, string> = {};
   for (const tenantId of tenantIds) {
+    try {
+      const result = await reconcileVideoHomework(tenantId, { notifyUnmatched: true, scheduled: true });
+      videos[tenantId] = `확인 ${result.checked}·갱신 ${result.updated}·알림 ${result.notifications}`;
+    } catch (e) {
+      reportError(e, { scope: "cron.notification-maintenance.video-homework", tenantId });
+      videos[tenantId] = "영상 과제 확인 실패";
+    }
     // 일반 이벤트 알림은 일일 AI 브리핑 중단과 독립적으로 유지한다.
     try {
       const detected = await detectAndNotifyEvents(tenantId);
@@ -77,5 +86,5 @@ export async function GET(req: Request) {
     pruned = `실패: ${e instanceof Error ? e.message : String(e)}`;
   }
 
-  return NextResponse.json({ ok: true, tenants: tenantIds.length, events, sweeps, pruned, protectedCheck });
+  return NextResponse.json({ ok: true, tenants: tenantIds.length, events, sweeps, videos, pruned, protectedCheck });
 }

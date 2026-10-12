@@ -44,11 +44,13 @@ function without(drop: readonly PanelId[]): OverviewLayout {
  */
 const SUBJECT_ITEMS: readonly Item[] = [
   { id: "kpi:students", w: 6, h: 1 },
+  { id: "kpi:withdrawals", w: 6, h: 1 },
   { id: "kpi:firstClass", w: 6, h: 1 },
   { id: "kpi:absent", w: 6, h: 1 },
   { id: "panel:nowClasses", w: 12, h: 1 },
   newItem("panel:subjects"),
   newItem("panel:notices"),
+  newItem("panel:teacherWork"),
 ];
 
 /** 편집기가 시작하는 값이자 저장값이 없는 역할의 배치 — 모든 역할에 있다. */

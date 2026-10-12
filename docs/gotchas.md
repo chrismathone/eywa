@@ -657,6 +657,8 @@ scope에 userId도 없었다 → **로그인조차 없이** DevTools › Applica
 - **재발(2026-07-16, 운영실 대시보드)**: AI 운영실 개편(`6962b14`)이 슬림 추세 스파크라인 `p.sr-only`([slim-trend.tsx](<src/app/(shell)/dashboard/_components/slim-trend.tsx>))·브리핑 갱신 안내 `span.sr-only`([briefing-auto-refresh.tsx](<src/app/(shell)/dashboard/_components/briefing-auto-refresh.tsx>))를 **static 부모**에 넣어 재발(실측: 뷰포트 674인데 `html.scrollHeight` 1294 = 아래 620px 유령 스크롤 영역). **감싼 부모에 `relative`**로 해소.
   ⚠️ **덮기(마스킹) 금지 — 이번 커밋은 근본원인 대신 전역 `html:has([data-aywa-shell]) { overflow:hidden }`(globals.css)로 스크롤바만 가렸다.** `overflow:hidden`은 스크롤바·사용자 조작만 막고 **프로그램적 스크롤은 허용**(`scrollTop=200` 실제로 먹힘) → 문서는 여전히 620px 넘쳐 있고, `scrollIntoView`/포커스 이동이 셸을 밀면 **스크롤바가 없어 새로고침 외 복구 불가**. 이 전역 잠금은 대시보드 커밋에서 처음 생긴 것(직전 커밋엔 없음)이라 **제거 = 안정적 이전 상태 복귀** + sr-only 근본수정으로 마무리.
 
+- **재발(2026-10-12, 강사 영상 제출 현황)**: 풀셸·이전 화면 유지에는 `main.relative`가 있었지만 **강사·학생 미니셸과 일반 창의 본문에는 누락**되어 `caption.sr-only`가 문서 높이를 늘렸다. 두 본문에도 `relative` 적용. 실제 CSS로 Chromium 재현 시 900px 화면의 문서 높이 **2813 → 900px**(일반 창 **2729 → 900px**). `node tests/browser/shell-scroll.mjs`로 공통 셸 6종 × 긴 표/스크롤 표/입력 폼 × 화면 크기 3종을 검증한다. 본문·표 스크롤과 마지막 항목 포커스는 유지하고, 문서 높이 및 프로그램적 문서 스크롤까지 검사한다.
+
 ### 80. Anthropic **Claude 5 계열은 `temperature` 파라미터가 deprecated** — 보내면 400, 폴백 경로 전멸 (2026-07-17)
 운영실 비서에서 Solar 실패 → Claude(sonnet-5) 폴백이 `temperature: 0.2` 때문에
 **400 `{"type":"invalid_request_error","message":"\`temperature\` is deprecated for this model."}`** 로 죽고,

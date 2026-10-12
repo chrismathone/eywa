@@ -56,7 +56,7 @@ export default async function TeacherVideoHomeworkPage({ searchParams }: {
     canWriteTenant(user.systemRole, "teacher_onescreen"),
     accessLevelTenant(user.systemRole, "lesson_reports"),
     getTenantSettings(),
-    createAdminClient().from("classes").select("id").eq("tenant_id", user.tenantId).eq("teacher_id", user.id),
+    createAdminClient().from("classes").select("id").eq("tenant_id", user.tenantId).eq("teacher_id", owner ?? user.id),
   ]);
   // 체크 = 서버 판정과 같은 조건(강사 쓰기 또는 수업보고서 전체 권한 — 겸직) · '다른 강사 뷰'는 열람 전용.
   const canEdit = viewAs?.access !== "readonly" && (canTeacherWrite || lessonReportsLevel === "full");
@@ -85,6 +85,7 @@ export default async function TeacherVideoHomeworkPage({ searchParams }: {
     </p> : null}
     {!ledger.assignedKnown ? <p role="status" className={NOTE}>수업보고서의 영상 과제 표시를 읽지 못해 이미 찍은 기록만 보여 줍니다. 잠시 뒤 다시 열어 주세요.</p> : null}
     {!ledger.videosKnown ? <p role="status" className={NOTE}>학부모 영상 도착 기록을 읽지 못해 이번 화면에서는 영상 자동 집계를 뺐습니다.</p> : null}
+    {canEdit && !ledger.assignmentVideosKnown ? <p role="status" className={NOTE}>배정할 영상 목록을 확인하지 못했습니다. 잠시 뒤 새로고침해 주세요.</p> : null}
     {rangeTooLong ? <p role="status" className="text-text-dim text-xs">한 번에 최대 366일을 조회할 수 있어 종료일이 속한 달을 표시했습니다.</p> : null}
     <VideoHomeworkManagement key={`${fromDate}:${toDate}`} rows={rows} initialMarks={marks.filter((mark) => shown.has(ledgerPairKey(mark)))}
       videos={videos.filter((video) => shown.has(ledgerPairKey({ classId: video.classId!, studentId: video.studentId })))} blankFacts={blankFacts}

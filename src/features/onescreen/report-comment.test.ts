@@ -13,6 +13,27 @@ import {
 import { parseExamPercent } from "./report-trend";
 import type { OneScreenStudent } from "./types";
 
+it("오늘 영상 과제는 멘트 재료로 전달하되 지난 영상 제출로 바꾸지 않는다", () => {
+  const st = student({ subjects: [{ name: "수학", prev: "", today: "분수", videoHomework: true }] });
+  const input = buildReportCommentInput(st, 0);
+  expect(input.videoHomework).toBe(true);
+  expect(buildFactBlock(input)).toContain("오늘 영상 과제: 있음");
+  expect(buildP1FactBlock(input)).toContain("오늘 영상 과제: 있음");
+  expect(buildFactBlock({ ...input, videoHomework: false })).not.toContain("오늘 영상 과제: 있음");
+  expect(buildReportCommentPrompt(input, "{{facts}}")).toContain("기존 선생님의 말투와 문장 구성을 유지");
+});
+
+it.each([true, false, undefined])("영상 지침은 오늘 체크된 과제에만 넣는다 (%s)", (videoHomework) => {
+  const input = { ...buildReportCommentInput(student({ subjects: [{ name: "수학", prev: "", today: "분수" }] }), 0), videoHomework,
+    attitude: "좋음" };
+  for (const prompt of [buildReportCommentPrompt(input), buildCommentP1Prompt(input), buildCommentP2Prompt(input),
+    buildReportCommentPrompt(input, "{{facts}}"), buildCommentP1Prompt(input, "{{p1facts}}"), buildCommentP2Prompt(input, "{{p2facts}}")]) {
+    expect(prompt).toContain("기존 선생님의 말투와 문장 구성을 유지");
+    if (videoHomework) expect(prompt).toContain("영상 제출 여부는 별도로 확인해 붙이므로");
+    else expect(prompt).not.toContain("영상");
+  }
+});
+
 // 표기 = **맞은 개수 하나뿐**(원장 2026-08-11 "점은 제거하고 갯수로만" + "마지막에 '맞음' 추가").
 describe("formatTestScore", () => {
   it("'N문제 중 M개 맞음' — 끝의 '맞음'이 빠지면 무엇이 M개인지 학부모가 되짚어야 한다", () => {

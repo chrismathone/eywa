@@ -1,0 +1,14 @@
+.popup { max-height: min(360px, var(--available-height)); }
+.columns { display: grid; grid-template-columns: 9rem minmax(0, 1fr) 8rem; align-items: center; gap: .75rem; width: 100%; }
+.item { padding: .4rem 2rem .4rem .75rem; }
+.item > span:first-child { min-width: 0; }
+.date, .homework { font-variant-numeric: tabular-nums; font-size: .8rem; }
+.date small { font-size: inherit; }
+.homework { text-align: right; white-space: normal; word-break: keep-all; }
+.className { min-width: 0; white-space: normal; overflow-wrap: anywhere; font-size: .85rem; }
+@media (max-width: 480px) {
+  .columns { grid-template-columns: 4.7rem minmax(0, 1fr) 5.3rem; gap: .4rem; }
+  .item { padding-left: .5rem; padding-right: 1.5rem; }
+  .date small { display: block; }
+  .date, .homework, .className { font-size: .75rem; }
+}

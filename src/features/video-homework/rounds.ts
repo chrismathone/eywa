@@ -16,14 +16,13 @@
  *     같은 과목 반을 둘 다니는 학생의 영상 하나가 두 반에 동시에 찍히지 않는다.
  *  ① 같은 날 올라온 영상은 한 번으로 센다.
  *  ② 영상은 게시일순으로, **그날까지 나간 숙제 중 아직 영상을 못 받은 가장 오래된 것**에 하나씩 간다.
- *     받는 쪽 = 기록 없는 숙제(→ 완료(영상)) 또는 직접 찍은 '완료'(→ 표시는 그대로, 그 영상은 다른 칸으로 안 간다).
+ *     수동 완료·미수행과 무관하게 영상을 배정한다. 저장된 상태는 자동 판정 작업이 실제 파일과 기한으로 갱신한다.
  *     그래서 영상으로 센 칸을 확정해도, 미확인 칸을 한 번 눌러 완료로 바꿔도 **다른 칸의 판정이 흔들리지 않는다**.
- *     직접 찍은 '완료'는 그 기록이 볼 수 있었던 영상만 받는다(제출일까지 · 날짜 없는 원스크린 체크는 체크한 시각까지).
- *  🔴 숙제보다 먼저 올라온 영상·`VIDEO_MATCH_WINDOW_DAYS`를 넘겨 올라온 영상은 짝이 아니다. 직접 찍은 기록(완료·미수행)이 늘 이긴다.
+ *  🔴 숙제보다 먼저 올라온 영상·`VIDEO_MATCH_WINDOW_DAYS`를 넘겨 올라온 영상은 짝이 아니다. 수동 체크가 이후 업로드를 막지 않는다.
  *  ③ 숙제가 정해진 영상(`homeworkDate`) — 학생이 올리기 사이트에서 **숙제를 골라** 올린 영상(원장 2026-10-03 *"숙제 리스트에서 고르도록 해서
  *     숙제 링크 배선"*)과 **그 숙제를 낸 보고서 글에 댓글로 올린 ClassNote 영상**(원장 2026-10-06 *"해당 숙제 보고서 고유의 링크 주소가 있는
  *     보고서에 영상을 업로드하면 무조건 체킹가능하지"* — 연동 PC가 글의 보고서를 확인해 싣는다, `scripts/_classnote/video-report-link.mjs`)은
- *     ②의 순서를 타지 않고 **그 숙제 칸으로만** 간다 — 다른 칸을 채우지 않는다(그 칸이 이미 영상을 받았거나 미수행으로 찍혔으면 그 영상은 세지 않는다).
+ *     ②의 순서를 타지 않고 **그 숙제 칸으로만** 간다 — 다른 칸을 채우지 않는다(그 칸이 이미 영상을 받았으면 대표 영상을 추가로 세지 않는다).
  *     고른 영상을 먼저 붙이고, 남은 영상(ClassNote·옛 링크)이 ②로 나머지 칸을 채운다. 단 고른 영상이 칸에 붙은 날, **그 영상보다 늦게 들어온**
  *     같은 반 × 학생의 안 고른 영상은 세지 않는다(①과 같은 뜻 — 사이트에 올린 영상을 ClassNote에도 올려도 한 번이다).
  *     🔴 **먼저 들어와 있던** 안 고른 영상은 종전대로 센다 — 나중에 올린 영상이 이미 완료(영상)로 보이던 칸을 되돌리지 않는다.
@@ -123,15 +122,10 @@ function attach(round: LedgerRound, mark: VideoHomeworkMark) {
   round.submittedDate = round.mark.status === "submitted" ? round.mark.submittedDate ?? null : null;
 }
 
-/** 이 영상을 이 칸이 받을 수 있나 — 기록 없는 숙제거나, 그 영상을 볼 수 있었던 직접 '완료'. */
+/** 수동 수행 체크는 영상 수신을 막지 않는다. 날짜가 맞고 아직 영상을 못 받은 숙제에 붙인다. */
 function canTake(round: LedgerRound, video: VideoDay): boolean {
   if (round.videoDate || round.date > video.day || video.day > addDays(round.date, VIDEO_MATCH_WINDOW_DAYS)) return false;
-  const mark = round.mark;
-  if (!mark) return round.assigned;
-  if (mark.status !== "submitted") return false;
-  if (mark.submittedDate) return video.day <= mark.submittedDate;
-  const seenBy = mark.updatedAt ? Date.parse(mark.updatedAt) : Date.parse(`${addDays(mark.checkDate, 1)}T00:00:00+09:00`);
-  return video.firstAt <= seenBy;
+  return round.assigned;
 }
 
 /**
@@ -202,7 +196,7 @@ export function buildLedgerRounds(input: {
     if (!before) rounds.set(key, round);
   }
   // ③ 숙제가 정해진 영상(학생이 고른 숙제 · 보고서 글의 댓글 영상) — 그 칸으로만(올린 순서대로 첫 영상이 그 칸의 영상이다).
-  const picked = input.videos.filter((v) => !!v.homeworkDate && !!v.classId).sort((a, b) => Date.parse(a.postedAt) - Date.parse(b.postedAt));
+  const picked = input.videos.filter((v) => v.playback !== null && !!v.homeworkDate && !!v.classId).sort((a, b) => Date.parse(a.postedAt) - Date.parse(b.postedAt));
   // `반:학생:게시일` → 그날 칸에 붙은 고른 영상 중 **가장 먼저 들어온 것**의 시각. 그날 그보다 늦게(같거나 뒤) 들어온 안 고른 영상은 세지 않는다
   // (사이트에 올린 영상을 ClassNote에도 올린 것 — 한 영상이 두 칸을 채우지 않게).
   // 🔴 그보다 **먼저 들어와 있던** 안 고른 영상은 종전대로 센다 — 나중에 올린 영상이 이미 완료(영상)로 보이던 칸을 미확인으로 되돌리지 않는다
@@ -223,7 +217,6 @@ export function buildLedgerRounds(input: {
     const day = kstDateOf(video.postedAt);
     const round = tracked.has(pair) ? all.get(pair)?.get(`h:${video.homeworkDate}`) : undefined;
     if (!round || !day || round.videoDate || (!video.manuallyAssigned && (day < round.date || day > addDays(round.date, VIDEO_MATCH_WINDOW_DAYS)))) continue;
-    if (round.mark && round.mark.status !== "submitted") continue; // 직접 찍은 미수행이 이긴다
     round.videoDate = day;
     round.videoId = video.id;
     pickedAt.set(`${pair}:${day}`, Math.min(pickedAt.get(`${pair}:${day}`) ?? Infinity, arrived(video)));
@@ -243,7 +236,7 @@ export function buildLedgerRounds(input: {
     const day = since ? kstDateOf(v.postedAt) : null;
     return !!since && !!day && day >= since;
   };
-  const days = videoDays(input.videos.filter((v) => !v.homeworkDate && !afterPicked(v) && !sameFile(v)));
+  const days = videoDays(input.videos.filter((v) => v.playback !== null && !v.homeworkDate && !afterPicked(v) && !sameFile(v)));
   for (const [pair, rounds] of all) {
     const available = tracked.has(pair) ? days.get(pair) : undefined;
     if (!available?.length) continue;

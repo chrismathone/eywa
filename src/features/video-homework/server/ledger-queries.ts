@@ -4,41 +4,45 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { addDays, kstToday } from "@/lib/date-kst";
 import { buildVideoHomeworkLessonPairs, type LedgerClass, type LedgerEnrollment, type LedgerSchedule } from "../ledger-roster";
-import { VIDEO_MATCH_WINDOW_DAYS, videoArrivedAt, videoFingerprint, videoMatchRange } from "../rounds";
-import { isVideoHomeworkDate, type VideoArrival, type VideoHomeworkMark, type VideoHomeworkRosterRow, type VideoHomeworkStatus } from "../types";
+import { buildLedgerRounds, VIDEO_MATCH_WINDOW_DAYS, videoArrivedAt, videoFingerprint, videoMatchRange } from "../rounds";
+import { type VideoArrival, type VideoHomeworkMark, type VideoHomeworkRosterRow, type VideoHomeworkStatus } from "../types";
 import { getAssignedVideoHomework } from "./assignments";
 import { loadBlankFacts } from "./blank-facts";
 import type { BlankFacts } from "../no-homework";
 import { homeworkVideoLinks } from "@/features/students/homework-videos";
 import { homeworkVideoSource } from "./video-source";
+import { loadVideoAssignmentCandidates, unassignedVideoPairs } from "./assignment-availability";
 
 type DbMark = { class_id: string; student_id: string; check_date: string; homework_date: string | null;
   submitted_date: string | null; status: string; updated_at: string | null };
 type DbVideo = { id: string; student_id: string; post_id: number | null; posted_at: string; created_at: string | null; uploaded_at: string | null;
   md5: string | null; bytes: number | string | null; status: string; drive_file_id: string | null;
-  class_id: string | null; homework_date: string | null; manual_assignment?: string | null };
+  class_id: string | null; homework_date: string | null; manual_assignment?: string | null; excluded?: string | null };
 type DbLedgerClass = LedgerClass & { teacher: { display_name: string; tenant_id: string } | null };
-export type VideoHomeworkLedgerBaseRow = VideoHomeworkRosterRow & { assignedDates: string[]; teacherName: string | null };
+export type VideoHomeworkLedgerBaseRow = VideoHomeworkRosterRow & { assignedDates: string[]; teacherName: string | null; hasAssignableVideos: boolean };
 
 /**
  * 숙제 영상(0315a `student_homework_videos`) — 반이 확인된 것만 읽고 업로드 완료 파일의 검증된 미리보기를 붙인다.
  * 🔴 표가 없거나(미적용 지점) 못 읽으면 null — 자동 집계만 빠지고 장부는 그대로 돈다(화면이 그 사실을 알린다).
  */
-async function loadClassVideos(tenantId: string, studentIds: string[], fromDate: string, toDate: string): Promise<VideoArrival[] | null> {
+export async function loadClassVideos(tenantId: string, studentIds: string[], fromDate: string, toDate: string, includeUnclassified = false): Promise<VideoArrival[] | null> {
   if (!studentIds.length) return [];
   try {
     const db = createAdminClient();
     const source = await homeworkVideoSource(db);
-    const rows = await fetchAllPagedInChunks<DbVideo>(studentIds, (chunk, from, to) => db
+    const rows = await fetchAllPagedInChunks<DbVideo>(studentIds, (chunk, from, to) => {
+      const query = db
       .from(source)
-      .select("id,student_id,post_id,posted_at,created_at,uploaded_at,md5,bytes,status,drive_file_id,class_id:route->>classId,homework_date:route->>homeworkDate,manual_assignment:route->>manualAssignment")
+      .select("id,student_id,post_id,posted_at,created_at,uploaded_at,md5,bytes,status,drive_file_id,class_id:route->>classId,homework_date:route->>homeworkDate,manual_assignment:route->>manualAssignment,excluded:route->>excluded")
       .eq("tenant_id", tenantId).in("student_id", chunk)
-      .not("route->>classId", "is", null)
       .or(`and(posted_at.gte.${fromDate}T00:00:00+09:00,posted_at.lt.${addDays(toDate, 1)}T00:00:00+09:00),and(route->>manualAssignment.eq.true,route->>homeworkDate.gte.${fromDate},route->>homeworkDate.lte.${toDate})`)
-      .order("id", { ascending: true }).range(from, to));
-    // 정해진 숙제일(올리기 사이트에서 고른 숙제 · 보고서 글의 댓글 영상)은 날짜 모양일 때만 믿는다 — 아니면 게시일순 규칙으로 센다.
-    return rows.map((row) => {
-      const homeworkDate = row.homework_date && isVideoHomeworkDate(row.homework_date) ? row.homework_date : null;
+      .order("id", { ascending: true });
+      if (!includeUnclassified) query.not("route->>classId", "is", null);
+      return query.range(from, to);
+    });
+    // 잘못된 지정 날짜도 그대로 둔다. 회차와 일치하지 않으면 미배정이며, 일반 게시글처럼 다른 숙제에 붙이지 않는다.
+    return rows.filter(row => row.excluded !== "true").map((row) => {
+      const homeworkDate = row.homework_date || null;
       const links = row.status === "uploaded" ? homeworkVideoLinks(row.drive_file_id) : null;
       return { id: row.id, studentId: row.student_id, classId: row.class_id, postedAt: row.posted_at, homeworkDate, fingerprint: videoFingerprint(row.md5, row.bytes),
         manuallyAssigned: row.manual_assignment === "true",
@@ -66,6 +70,7 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
   assignedKnown: boolean;
   /** 학부모 영상을 읽었나 — 못 읽었으면 자동 집계가 빠진다. */
   videosKnown: boolean;
+  assignmentVideosKnown: boolean;
 }> {
   const db = createAdminClient();
   const today = kstToday();
@@ -121,7 +126,9 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
   for (const row of assigned ?? []) addDate(row.classId, row.studentId, row.date);
   for (const mark of marks) if (mark.homeworkDate) addDate(mark.classId, mark.studentId, mark.homeworkDate);
   for (const pair of pairs) ownDates.set(`${pair.classId}:${pair.studentId}`, ownDates.get(`${pair.classId}:${pair.studentId}`) ?? new Set());
-  const [students, videos, blankFacts] = await Promise.all([
+  const assignmentRows = pairs.map(pair => ({ ...pair,
+    assignedDates: (assignedByPair.get(`${pair.classId}:${pair.studentId}`) ?? []).filter(date => date >= fromDate && date <= toDate) }));
+  const [students, videos, blankFacts, assignmentCandidates] = await Promise.all([
     fetchAllPagedInChunks<{ id: string; name: string; school: string | null; grade: string | null }>(studentIds,
       (chunk, from, to) => db.from("students").select("id,name,school,grade").eq("tenant_id", tenantId)
         .in("id", chunk).order("id").range(from, to)),
@@ -129,7 +136,17 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
     // 지금 보기와 똑같이 뺀다. 더 늦은 영상은 화면 칸에 닿지 못한다(칸은 숙제일 + 2주까지만 영상을 받는다).
     loadClassVideos(tenantId, homeworkStudents, wideFrom, addDays(wideTo, VIDEO_MATCH_WINDOW_DAYS)),
     loadBlankFacts(tenantId, { classDates, ownDates: new Map([...ownDates].filter(([pair]) => shownPairs.has(pair))), enrollments }),
+    loadVideoAssignmentCandidates(tenantId, assignmentRows),
   ]);
+  // 화면에 보이지 않는 다른 반·기간의 숙제까지 같은 규칙으로 짝지어야, 이미 쓰인 영상을 미배정으로 오인하지 않는다.
+  // 원본 영상·숙제·기록은 이미 넓혀 읽었다. 학생마다 추가 조회하지 않고 그 재료를 그대로 쓴다.
+  const videoPairs = new Map((videos ?? []).flatMap(video => video.classId ? [[`${video.classId}:${video.studentId}`,
+    { classId: video.classId, studentId: video.studentId, tracked: true,
+      assignedDates: assignedByPair.get(`${video.classId}:${video.studentId}`) ?? [] }] as const] : []));
+  const assignmentRounds = buildLedgerRounds({ rows: [...videoPairs.values()], marks, videos: videos ?? [], fromDate: wideFrom, toDate: wideTo });
+  const assignedVideoIds = new Set([...assignmentRounds.values()].flatMap(rounds => rounds.flatMap(round => round.videoId ? [round.videoId] : [])));
+  const assignablePairs = assigned !== null && videos !== null && assignmentCandidates !== null
+    ? unassignedVideoPairs(assignmentRows, assignmentCandidates, assignedVideoIds) : null;
   const byClass = new Map(classes.map((row) => [row.id, row]));
   const byStudent = new Map(students.map((row) => [row.id, row]));
   const rows = pairs.flatMap((pair): VideoHomeworkLedgerBaseRow[] => {
@@ -138,11 +155,12 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
     return cls && student ? [{ classId: pair.classId, studentId: pair.studentId, className: cls.class_name, subject: cls.subject,
       teacherName: cls.teacher?.tenant_id === tenantId ? cls.teacher.display_name.trim() || null : null,
       studentName: student.name, school: student.school, grade: student.grade,
+      hasAssignableVideos: assignablePairs?.has(`${pair.classId}:${pair.studentId}`) ?? false,
       assignedDates: [...new Set(assignedByPair.get(`${pair.classId}:${pair.studentId}`) ?? [])].sort() }] : [];
   });
   // 화면으로는 명단에 선 (반 × 학생)의 기록만 — 넓혀 읽은 지점 전체 기록을 내려보내지 않는다.
   const shown = new Set(rows.map((row) => `${row.classId}:${row.studentId}`));
   return { rows, marks: marks.filter((mark) => shown.has(`${mark.classId}:${mark.studentId}`)),
     videos: (videos ?? []).filter((video) => video.classId && shown.has(`${video.classId}:${video.studentId}`)), blankFacts: blankFacts ?? {},
-    assignedKnown: assigned !== null, videosKnown: videos !== null };
+    assignedKnown: assigned !== null, videosKnown: videos !== null, assignmentVideosKnown: assignablePairs !== null };
 }

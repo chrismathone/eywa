@@ -4,6 +4,7 @@ import { addDays } from "@/lib/date-kst";
 import { buildLedgerRounds, roundPairKey, videoArrivedAt, videoFingerprint, videoMatchRange } from "@/features/video-homework/rounds";
 import { videoHomeworkColumnReady } from "@/features/video-homework/server/assignments";
 import { isVideoHomeworkDate, type VideoArrival, type VideoHomeworkMark, type VideoHomeworkStatus } from "@/features/video-homework/types";
+import { homeworkVideoLinks } from "@/features/students/homework-videos";
 import { SITE_HOMEWORK_DAYS } from "../site";
 import { homeworkVideoSource } from "@/features/video-homework/server/video-source";
 
@@ -21,7 +22,7 @@ const ROW_LIMIT = 500;
  * 있어야 업로드 링크 보이도록 하고, 숙제 리스트에서 고르도록"*.
  *
  * 🔑 판정은 영상 제출 현황과 **같은 함수**(`buildLedgerRounds`)다 — 숙제 = 보고서의 '영상 과제 있음'(`video_homework = true`),
- *    낸 것 = 직접 찍은 '완료' 또는 짝지어진 영상. 재료도 같은 범위(`videoMatchRange`)로 읽어야 "가장 오래된 미확인 숙제부터"의
+ *    낸 것 = 짝지어진 영상. 직접 찍은 완료만으로는 학생의 업로드를 막지 않는다. 재료도 같은 범위(`videoMatchRange`)로 읽어야 "가장 오래된 미확인 숙제부터"의
  *    짝이 장부와 같게 나온다(범위가 다르면 사이트는 안 냈다는데 장부는 냈다고 한다).
  *  · 올릴 수 있는 숙제 = 숙제일이 오늘에서 `SITE_HOMEWORK_DAYS`(7일) 안(원장 2026-10-03 *"숙제날짜 기준 7일"*) — 장부가 영상을 그 숙제로
  *    세는 창(`VIDEO_MATCH_WINDOW_DAYS`, 2주)보다 짧아, 사이트로 올린 영상은 늘 그 숙제 칸에 닿는다.
@@ -50,8 +51,9 @@ export async function openHomeworkDates(db: Db, tenantId: string, pairs: readonl
     db.from("video_homework_marks").select("class_id,student_id,check_date,homework_date,submitted_date,status,updated_at")
       .eq("tenant_id", tenantId).in("student_id", students).in("class_id", classes)
       .gte("check_date", wide.from).order("id", { ascending: true }).limit(ROW_LIMIT + 1),
-    db.from(videoSource).select("id,student_id,post_id,posted_at,created_at,uploaded_at,md5,bytes,route")
+    db.from(videoSource).select("id,student_id,post_id,posted_at,created_at,uploaded_at,md5,bytes,route,drive_file_id")
       .eq("tenant_id", tenantId).in("student_id", students).in("route->>classId", classes)
+      .eq("status", "uploaded").not("drive_file_id", "is", null)
       .or(`posted_at.gte.${wide.from}T00:00:00+09:00,route->>manualAssignment.eq.true`).order("id", { ascending: true }).limit(ROW_LIMIT + 1),
   ]);
   if (reports.error) throw new Error("영상 숙제 조회 실패");
@@ -60,7 +62,7 @@ export async function openHomeworkDates(db: Db, tenantId: string, pairs: readonl
   const markRows = (marks.data ?? []) as Array<{ class_id: string; student_id: string; check_date: string; homework_date: string | null;
     submitted_date: string | null; status: string; updated_at: string | null }>;
   const videoRows = videos.error ? [] : ((videos.data ?? []) as Array<{ id: string; student_id: string; post_id?: number | null; posted_at: string;
-    created_at?: string | null; uploaded_at?: string | null; md5?: string | null; bytes?: number | string | null; route: unknown }>);
+    created_at?: string | null; uploaded_at?: string | null; md5?: string | null; bytes?: number | string | null; route: unknown; drive_file_id: string | null }>);
   if (reportRows.length > ROW_LIMIT || markRows.length > ROW_LIMIT || videoRows.length > ROW_LIMIT) throw new Error("영상 숙제 조회 범위 초과");
 
   const assigned = new Map<string, Set<string>>();
@@ -71,15 +73,16 @@ export async function openHomeworkDates(db: Db, tenantId: string, pairs: readonl
   }
   const videoArrivals = videoRows.flatMap((row): VideoArrival[] => {
     const route = row.route && typeof row.route === "object" && !Array.isArray(row.route) ? (row.route as Record<string, unknown>) : {};
+    const links = homeworkVideoLinks(row.drive_file_id);
+    if (!links || route.excluded === true) return [];
     const classId = typeof route.classId === "string" ? route.classId : null;
-    const picked = typeof route.homeworkDate === "string" && isVideoHomeworkDate(route.homeworkDate) ? route.homeworkDate : null;
+    const picked = typeof route.homeworkDate === "string" && route.homeworkDate ? route.homeworkDate : null;
     const arrivedAt = videoArrivedAt({ createdAt: row.created_at, postedAt: row.posted_at, uploadedAt: row.uploaded_at, fromClassnote: row.post_id != null, picked: !!picked });
     return classId ? [{ id: row.id, studentId: row.student_id, classId, postedAt: row.posted_at, arrivedAt, homeworkDate: picked,
+      playback: { ...links, uploadedAt: row.uploaded_at ?? null },
       manuallyAssigned: route.manualAssignment === true,
       fingerprint: videoFingerprint(row.md5, row.bytes) }] : [];
   });
-  // 숙제가 정해진 영상이 이미 있는 (반 × 학생 × 숙제일) — 학생이 골라 올렸거나 그 보고서 글에 댓글로 올린 것. 칸의 상태와 무관하게 "낸 숙제"다.
-  const alreadyPicked = new Set(videoArrivals.filter((v) => v.homeworkDate).map((v) => `${roundPairKey({ classId: v.classId!, studentId: v.studentId })}:${v.homeworkDate}`));
   const rounds = buildLedgerRounds({
     rows: pairs.map((p) => ({ classId: p.classId, studentId: p.studentId, assignedDates: [...(assigned.get(roundPairKey(p)) ?? [])].sort(), tracked: true })),
     marks: markRows.map((row): VideoHomeworkMark => ({ classId: row.class_id, studentId: row.student_id, checkDate: row.check_date,
@@ -91,7 +94,7 @@ export async function openHomeworkDates(db: Db, tenantId: string, pairs: readonl
   for (const p of pairs) {
     const key = roundPairKey(p);
     const dates = (rounds.get(key) ?? [])
-      .filter((round) => round.assigned && !!round.homeworkDate && round.status !== "submitted" && !alreadyPicked.has(`${key}:${round.homeworkDate}`))
+      .filter((round) => round.assigned && !!round.homeworkDate && !round.videoId)
       .map((round) => round.homeworkDate!)
       .sort((a, b) => b.localeCompare(a));
     if (dates.length) out.set(key, dates);

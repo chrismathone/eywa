@@ -25,6 +25,8 @@ import {
 import { getWithdrawalsInWindow, type WindowWithdrawal } from "@/features/withdrawals/server/window";
 import { getSubjectEndedStudents } from "@/features/withdrawals/server/queries";
 import { includeSubjectEnds } from "./monthly-exits";
+import { loadTeacherWork } from "./teacher-work-server";
+import { AREA_MENUS } from "@/features/dashboard/layout/registry";
 import {
   inWithdrawalWindow,
   withdrawalMonthWindow,
@@ -224,6 +226,7 @@ async function monthWithdrawals(
         schoolGrade: schoolGradeLabel(row.school, row.grade) || null,
         withdrawnAt: row.withdrawnAt,
         className: klass.className ?? undefined,
+        subject: klass.subject,
         program: withdrawalProgram({ lastClassSubject: klass.subject, lastClassEnglishTrack: klass.englishTrack }, settings.operations.subjects),
       }))), ended, win, settings.operations.subjects, (school, grade) => schoolGradeLabel(school, grade) || null),
   };
@@ -571,6 +574,9 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
   });
   // 조회 계획 = 놓인 카드가 읽는 영역 ∩ 메뉴 권한(`loadPlan`, 순수 — 테스트가 역할별로 잠근다).
   const needed = loadPlan(view, new Set(allowed));
+  if (options.full) for (const area of Object.keys(AREA_MENUS) as Area[]) {
+    if (AREA_MENUS[area].every((menu) => allowed.includes(menu))) needed.add(area);
+  }
   const needs = (...areas: Area[]) => areas.some((a) => needed.has(a));
   // 실제 퇴원 행은 KPI와 추이가 공유한다. 과목 종료는 KPI에서만 추가한다.
   const withdrawalRows =
@@ -697,6 +703,7 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
   add("consultations", ["consultations"], getStudentConsultationCounts);
   add("newcomers", ["newcomers"], () => newcomers(settingsPromise));
   add("homework", ["lesson_reports"], getHomeworkRisk);
+  add("teacherWork", ["lesson_reports"], async () => loadTeacherWork(user.tenantId, today, await scopePromise, settingsNow.report.videoHomeworkPolicy));
   // 학부모 미열람 = ClassNote 읽음 기록이 소스 — ClassNote 기능이 꺼진 학원엔 이 카드가 없다(2026-09-30 "꺼지면 흔적 없이").
   // 🔑 영역 등록을 설정 대기로 막지 않는다(뒤 영역들이 늦게 출발하지 않게) — 조회 안에서 판정하고,
   //    꺼졌으면 조회 없이 빈 값을 돌린 뒤 아래 반환 직전에 영역째 뺀다.

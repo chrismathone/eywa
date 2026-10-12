@@ -13,7 +13,7 @@ import type { MenuKey } from "@/lib/permissions";
 import { classicDefault, defaultItems, optionDefault } from "./defaults";
 import { dropEmptyHeadings, sanitizeItems } from "./engine";
 import { AREA_MENUS, canSeeCard, cardDef } from "./registry";
-import { isHeadingId, type Bundle, type DashboardSettings, type Item } from "./types";
+import { isHeadingId, isStructuralId, type Bundle, type DashboardSettings, type Item } from "./types";
 
 export type ResolvedView = {
   bundle: Bundle;
@@ -80,12 +80,12 @@ export type ResolveInput = {
 
 export function resolveView({ stored, bundle, menus, subjectLabels = [], subjectScoped = bundle === "subject" }: ResolveInput): ResolvedView {
   const role = stored.layouts.find((l) => l.role === bundle);
-  const classic = role ? null : classicDefault(bundle);
+  const classic = role || subjectScoped ? null : classicDefault(bundle);
   let items: Item[] | undefined;
   if (!classic) {
     const base = role ? sanitizeItems(role.items) : defaultItems(bundle);
     // 권한 상한 — 못 보는 카드는 빠지고(흐름이라 뒤 카드가 앞으로 당겨진다), 카드가 없어진 구역의 머리줄도 뺀다.
-    items = dropEmptyHeadings(base.filter((i) => isHeadingId(i.id) || (cardDef(i.id) && canSeeCard(cardDef(i.id)!, menus))));
+    items = dropEmptyHeadings(base.filter((i) => isStructuralId(i.id) || (cardDef(i.id) && canSeeCard(cardDef(i.id)!, menus) && (!subjectScoped || cardDef(i.id)!.subjectScope !== "academy"))));
     // 미지정은 학원 전체 집계로 폴백하지 않는다. 범위를 정할 때까지 공지만 표시한다.
     if (subjectScoped && !subjectLabels.length) items = items.filter((i) => cardDef(i.id)?.subjectScope === "none");
   }

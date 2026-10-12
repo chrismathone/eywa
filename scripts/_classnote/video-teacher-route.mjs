@@ -24,9 +24,10 @@ export const isJjClass = (className) => /JJ/.test(String(className ?? ""));
  */
 export function chooseVideoTeacher(input) {
   const classes = input.classes ?? [];
-  const reportClassId = input.report?.classId && classes.some((c) => c.class_id === input.report.classId) ? input.report.classId : null;
+  const reportClassId = input.report?.classId && unique(input.studentIds ?? []).length === 1 ? input.report.classId : null;
   const route = chooseTeacher({ ...input, classes, reportClassId });
-  return reportClassId && route.classId === reportClassId ? { ...route, homeworkDate: input.report.homeworkDate } : route;
+  // DB에서 확인한 보고서 연결은 반 이동 뒤에도 유지한다. 현재 수강 반으로 추측해 바꾸지 않는다.
+  return reportClassId ? { ...route, classId: reportClassId, homeworkDate: input.report.homeworkDate } : route;
 }
 
 function chooseTeacher({ video, tenantId, studentIds, boardClassIds, classes, student = null, reportClassId = null }) {
@@ -117,5 +118,14 @@ export async function loadVideoTeacher(sql, tenantId, video) {
     }
     // 보고서 글에 댓글로 올린 영상이면 그 보고서(이 학생 · 영상 과제 있음)를 확인한다 — 아니면 null(예전 판정).
     const report = studentIds.length === 1 ? await loadCommentedReport(sql, tenantId, video, studentIds[0]) : null;
+    if (report && !classes.some(c => c.class_id === report.classId)) {
+      // 예전 반의 숙제를 반 이동 후 제출한 경우. 학생·지점·영상 숙제 여부는 보고서 조회에서 검증했다.
+      const historical = await sql`select c.id as class_id,c.class_name,c.subject,c.teacher_id,
+        u.display_name as teacher_name,u.status as teacher_status,
+        (select count(*) from users names where names.tenant_id=${tenantId} and names.status='active' and names.display_name=u.display_name) as same_name_count
+        from classes c left join users u on u.id=c.teacher_id and u.tenant_id=${tenantId}
+        where c.tenant_id=${tenantId} and c.id=${report.classId}`;
+      classes.push(...historical);
+    }
     return chooseVideoTeacher({ video, tenantId, studentIds, boardClassIds, classes, student, report });
 }
