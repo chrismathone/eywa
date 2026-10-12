@@ -5,9 +5,9 @@ export const maxDuration = 60;
 
 /** 기본 주소와 기존 one/design 주소는 확정된 같은 대시보드를 제공한다. */
 export default async function DashboardPage({ searchParams }: {
-  searchParams: Promise<{ view?: string }>;
+  searchParams: Promise<{ view?: string; subject?: string }>;
 }) {
-  const { view } = await searchParams;
+  const { view, subject } = await searchParams;
   if (view === "rooms") {
     const [{ ClassroomPreview }, { loadClassroomPreview }] = await Promise.all([
       import("./_classrooms/classrooms"),
@@ -15,5 +15,5 @@ export default async function DashboardPage({ searchParams }: {
     ]);
     return <ClassroomPreview initial={await loadClassroomPreview()} />;
   }
-  return <OverviewDashboard />;
+  return <OverviewDashboard subject={typeof subject === "string" ? subject : undefined} />;
 }

@@ -17,6 +17,8 @@ import { useLiveLayout } from "./use-live-layout";
 import { useResize } from "./use-resize";
 import { WidgetDrawer } from "./widget-drawer";
 import { WidgetThumb } from "./widget-thumb";
+import { RowEditor } from "./row-editor";
+import { RowGuides } from "./row-guides";
 import e from "./editor.module.css";
 import live from "./live-editor.module.css";
 
@@ -38,11 +40,12 @@ export function EditBoard({ items, unused, onAddRow, selected, onSelect, onCommi
   const [dragHtml, setDragHtml] = useState("");
   const label = useCallback((id: string) => items.find((i) => i.id === id)?.title ?? cardDef(id)?.label ?? (isSpaceId(id) ? "빈 행 · 여기에 카드를 놓으세요" : "구역 제목"), [items]);
   const { drag, preview: dragPreview, sensors, canRemove, handlers } = useBoardDrag({ items, canvasRef, layoutRef, onCommit, onRemoved });
-  const { resize, preview: resizePreview, start: startResize } = useResize({ items, layoutRef, onCommit });
+  const { resize, preview: resizePreview, start: startResize } = useResize({ items, canvasRef, layoutRef, onCommit });
   const shown = dragPreview ?? resizePreview ?? items;
   const cards = useLiveLayout(canvasRef, shown, layoutRef);
+  const rowItems = useMemo(() => items.map((i) => ({ ...i, ...cards.find((c) => c.id === i.id)?.grid })), [items, cards]);
   const placed = useMemo(() => cards.map(({ id, rect: r }) => ({ id, x: r.left, y: r.top, w: r.width, h: r.height })), [cards]);
-  const onKey = useBoardKeyboard({ items, placed, canRemove, label, onCommit, onRemoved, onSelect, setAnnounce });
+  const onKey = useBoardKeyboard({ items: rowItems, placed, canRemove, label, onCommit, onRemoved, onSelect, setAnnounce });
   const hidden = items.filter((it) => !isStructuralId(it.id) && !cards.some((c) => c.id === it.id));
 
   useLayoutEffect(() => {
@@ -63,6 +66,7 @@ export function EditBoard({ items, unused, onAddRow, selected, onSelect, onCommi
         handlers.onDragStart(ev);
       }}
     >
+      <RowEditor items={rowItems} onCommit={onCommit} />
       <div className={live.surface}>
         <CanvasDrop over={drag?.target === "canvas"} onBackground={() => onSelect(null)}>
           <div ref={canvasRef} className={live.canvas} onClick={(ev) => ev.target === ev.currentTarget && onSelect(null)}>
@@ -76,6 +80,7 @@ export function EditBoard({ items, unused, onAddRow, selected, onSelect, onCommi
                 onRemove={(key) => { onCommit(removeItem(items, key)); onRemoved(key, [...items]); }}
               >{isSpaceId(id) ? <span className="text-muted-foreground flex h-full items-center justify-center rounded-lg border border-dashed text-sm">빈 행 · 여기에 카드를 놓으세요</span> : null}</CanvasTile>;
             })}
+            {!drag && !resize ? <RowGuides root={canvasRef} items={rowItems} onCommit={onCommit} /> : null}
           </div>
           <div className={e.srLive} aria-live="polite">{announce}</div>
         </CanvasDrop>
@@ -89,7 +94,7 @@ export function EditBoard({ items, unused, onAddRow, selected, onSelect, onCommi
       <WidgetDrawer ids={unused} draggingTile={drag?.kind === "tile"} activeChip={drag?.kind === "chip" ? drag.id : null} onAdd={onAdd} />
       {typeof document !== "undefined" ? createPortal(<>
         <DragOverlay dropAnimation={null} zIndex={70}>
-          {drag?.kind === "tile" ? <div className={e.lifted} data-blocked={drag.target === null || undefined}>
+          {drag?.kind === "tile" ? <div className={e.lifted} style={{ transform: "none", animation: "none" }} data-blocked={drag.target === null || undefined}>
             <CardDragPreview html={dragHtml} width={drag.size.width} height={drag.size.height} />
           </div> : drag ? <div className={`${e.chip} ${e.liftedChip}`}><WidgetThumb kind={cardDef(drag.id)?.thumb ?? "number"} /><span>{label(drag.id)}</span></div> : null}
         </DragOverlay>

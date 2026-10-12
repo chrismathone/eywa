@@ -1,20 +1,24 @@
-export type WorkClass = { id: string; teacherId: string | null; teacherName: string; subject: string };
-export type WorkReport = { id: string; classId: string; studentId: string; date: string; status: string | null; videoHomework: boolean };
+import { isTestClass, type WorkObligation } from "./work-targets";
+
+export type WorkClass = { id: string; name?: string; teacherId: string | null; teacherName: string; subject: string; reportSource?: "lesson" | "classnote" | "none" };
+export type WorkReport = { id: string; classId: string; studentId: string; date: string; coversDate?: string | null; status: string | null; videoHomework: boolean };
 export type WorkOutcome = { classId: string; studentId: string; date: string; status: string; observedAt: string };
 export type TeacherWorkRow = {
   teacherId: string | null; teacherName: string; subject: string; classIds: string[];
-  reports: number; sent: number; pending: number; failed: number; videoMissing: number;
+  reports: number; reportTarget: number; sent: number; pending: number; failed: number; videoMissing: number;
+  videoAssigned: number; videoSubmitted: number; reportSource: "lesson" | "classnote" | "none";
 };
 export type TeacherWork = { reportFrom: string; videoFrom: string; to: string; videoCheckedAt: string | null; rows: TeacherWorkRow[] };
 
 /** 현재 담당 반 기준. 동명이인은 ID로, 복수 과목 강사는 과목별로 분리한다. */
-export function teacherWork(classes: readonly WorkClass[], reports: readonly WorkReport[], outcomes: readonly WorkOutcome[], range: Pick<TeacherWork, "reportFrom" | "videoFrom" | "to">): TeacherWork {
+export function teacherWork(classes: readonly WorkClass[], reports: readonly WorkReport[], outcomes: readonly WorkOutcome[], range: Pick<TeacherWork, "reportFrom" | "videoFrom" | "to">, obligations?: readonly WorkObligation[]): TeacherWork {
   const rows = new Map<string, TeacherWorkRow>();
   const byClass = new Map<string, TeacherWorkRow>();
   for (const cls of classes) {
+    if (isTestClass(cls.name ?? "")) continue;
     const key = `${cls.teacherId ?? "unassigned"}:${cls.subject}`;
     let row = rows.get(key);
-    if (!row) { row = { teacherId: cls.teacherId, teacherName: cls.teacherName, subject: cls.subject, classIds: [], reports: 0, sent: 0, pending: 0, failed: 0, videoMissing: 0 }; rows.set(key, row); }
+    if (!row) { row = { teacherId: cls.teacherId, teacherName: cls.teacherName, subject: cls.subject, classIds: [], reports: 0, reportTarget: 0, sent: 0, pending: 0, failed: 0, videoMissing: 0, videoAssigned: 0, videoSubmitted: 0, reportSource: cls.reportSource ?? "lesson" }; rows.set(key, row); }
     if (!row.classIds.includes(cls.id)) row.classIds.push(cls.id);
     byClass.set(cls.id, row);
   }
@@ -27,11 +31,22 @@ export function teacherWork(classes: readonly WorkClass[], reports: readonly Wor
     const key = keyOf(rep);
     if (seen.has(key)) continue;
     seen.add(key);
-    if (rep.videoHomework && rep.date >= range.videoFrom) assignments.add(key);
+    if (rep.videoHomework && rep.date >= range.videoFrom) { assignments.add(key); row.videoAssigned++; }
+    if (obligations) continue;
     if (rep.date < range.reportFrom) continue;
     row.reports++;
+    row.reportTarget++;
     if (rep.status === "success") row.sent++;
     else if (["failed", "too_old", "name_conflict", "blocked_shared", "recall_failed"].includes(rep.status ?? "")) row.failed++;
+    else row.pending++;
+  }
+  for (const obligation of obligations ?? []) {
+    const row = byClass.get(obligation.classId);
+    if (!row || obligation.date < range.reportFrom || obligation.date > range.to) continue;
+    row.reportTarget++;
+    if (obligation.written) row.reports++;
+    if (obligation.status === "success") row.sent++;
+    else if (["failed", "too_old", "name_conflict", "blocked_shared", "recall_failed"].includes(obligation.status ?? "")) row.failed++;
     else row.pending++;
   }
   const counted = new Set<string>();
@@ -43,6 +58,7 @@ export function teacherWork(classes: readonly WorkClass[], reports: readonly Wor
     counted.add(key);
     if (!videoCheckedAt || outcome.observedAt < videoCheckedAt) videoCheckedAt = outcome.observedAt;
     if (outcome.status === "missing") row.videoMissing++;
+    if (outcome.status === "submitted") row.videoSubmitted++;
   }
-  return { ...range, videoCheckedAt, rows: [...rows.values()].sort((a, b) => b.failed + b.pending + b.videoMissing - a.failed - a.pending - a.videoMissing || a.teacherName.localeCompare(b.teacherName, "ko") || a.subject.localeCompare(b.subject)) };
+  return { ...range, videoCheckedAt, rows: [...rows.values()].sort((a, b) => a.teacherName.localeCompare(b.teacherName, "ko") || a.subject.localeCompare(b.subject) || (a.teacherId ?? "").localeCompare(b.teacherId ?? "")) };
 }

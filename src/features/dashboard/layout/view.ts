@@ -24,6 +24,8 @@ export type ResolvedView = {
   /** 과목 관리자 — 담당 과목 이름(맨 위 제목 뒤 "(수학)"). */
   scopeLabel?: string;
   subjectScoped?: boolean;
+  activeSubject?: string;
+  subjectChoices?: { key: string; label: string }[];
   /** 학원 전체 값이 섞인 카드 id(과목 관리자 화면에서 '(학원 전체)'를 붙인다). */
   academyWide: string[];
   /** 수납 영역에 금액이 실리는가(데이터) — 6개월 카드가 있거나 이번 달 카드의 금액 옵션이 켜졌을 때. */
@@ -76,10 +78,12 @@ export type ResolveInput = {
   /** 과목 관리자의 담당 과목 라벨(표시용). */
   subjectLabels?: readonly string[];
   subjectScoped?: boolean;
+  subject?: string;
 };
 
-export function resolveView({ stored, bundle, menus, subjectLabels = [], subjectScoped = bundle === "subject" }: ResolveInput): ResolvedView {
-  const role = stored.layouts.find((l) => l.role === bundle);
+export function resolveView({ stored, bundle, menus, subjectLabels = [], subjectScoped = bundle === "subject", subject }: ResolveInput): ResolvedView {
+  const role = (bundle === "subject" && subject ? stored.layouts.find((l) => l.role === bundle && l.subject === subject) : undefined)
+    ?? stored.layouts.find((l) => l.role === bundle && !l.subject);
   const classic = role || subjectScoped ? null : classicDefault(bundle);
   let items: Item[] | undefined;
   if (!classic) {
@@ -103,6 +107,6 @@ export function resolveView({ stored, bundle, menus, subjectLabels = [], subject
     ...body,
     ...(classic ? { classic } : { items }),
     ...(scopeLabel ? { scopeLabel } : {}),
-    rev: hash(JSON.stringify([body, items ?? null, scopeLabel ?? ""])),
+    rev: hash(JSON.stringify([body, items ?? null, scopeLabel ?? "", subject ?? ""])),
   };
 }

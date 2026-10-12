@@ -125,6 +125,7 @@ export function CardInspector({
         ))}
       </div>
       <p className="text-xs">위치는 24열 격자에 저장됩니다. 확장한 카드와 겹치는 카드만 아래로 이동합니다.</p>
+      {item.id === "panel:teacherWork" ? <p className="text-xs">강사별 업무 현황은 표가 모두 보이는 높이까지 자동으로 늘어납니다.</p> : null}
       {def && def.sizes.length > 1 ? (
         <div>
           <p className="mb-1 font-semibold">크기</p>

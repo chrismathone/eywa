@@ -5,7 +5,7 @@ import type { Item } from "@/features/dashboard/layout/types";
 import { GRID_COLS } from "@/features/dashboard/layout/types";
 import { type BoardLayout, type Rect } from "./geometry";
 
-export type LiveCard = { id: string; rect: Rect };
+export type LiveCard = { id: string; rect: Rect; grid?: Pick<Item, "x" | "y" | "w" | "h"> };
 
 /** 실제 대시보드의 카드 경계를 잰다. 편집용 격자·높이를 따로 만들지 않는다. */
 export function useLiveLayout(rootRef: RefObject<HTMLDivElement | null>, items: readonly Item[], layoutRef: RefObject<BoardLayout | null>) {
@@ -18,6 +18,7 @@ export function useLiveLayout(rootRef: RefObject<HTMLDivElement | null>, items: 
     const measure = () => {
       const origin = root.getBoundingClientRect();
       const rects = new Map<string, Rect>();
+      const positions = new Map<string, LiveCard["grid"]>();
       for (const el of preview.querySelectorAll<HTMLElement>("[data-dashboard-card]")) {
         const id = el.dataset.dashboardCard!;
         // 자유 격자의 바깥 칸을 사용한다(안쪽 실제 카드에도 같은 식별자가 있다).
@@ -25,8 +26,10 @@ export function useLiveLayout(rootRef: RefObject<HTMLDivElement | null>, items: 
         const r = el.getBoundingClientRect();
         if (r.width <= 0 || r.height <= 0) continue;
         rects.set(id, { left: r.left - origin.left, top: r.top - origin.top, width: r.width, height: r.height });
+        const grid = ["--dx", "--dy", "--dw", "--dh"].map((key) => Number(el.style.getPropertyValue(key)));
+        if (grid.every((v) => Number.isFinite(v) && v >= 1)) positions.set(id, { x: grid[0] - 1, y: grid[1] - 1, w: grid[2], h: grid[3] });
       }
-      const next = items.flatMap(({ id }) => rects.has(id) ? [{ id, rect: rects.get(id)! }] : []);
+      const next = items.flatMap(({ id }) => rects.has(id) ? [{ id, rect: rects.get(id)!, grid: positions.get(id) }] : []);
       const grid = preview.querySelector<HTMLElement>('[data-overview="free-grid"], [data-overview="grid"], [data-overview="kpis"]');
       const gap = grid ? parseFloat(getComputedStyle(grid).columnGap) || 16 : 16;
       const width = grid?.getBoundingClientRect().width ?? origin.width;

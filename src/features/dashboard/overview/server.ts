@@ -26,6 +26,7 @@ import { getWithdrawalsInWindow, type WindowWithdrawal } from "@/features/withdr
 import { getSubjectEndedStudents } from "@/features/withdrawals/server/queries";
 import { includeSubjectEnds } from "./monthly-exits";
 import { loadTeacherWork } from "./teacher-work-server";
+import { selectSubjectView } from "../layout/subject-view";
 import { AREA_MENUS } from "@/features/dashboard/layout/registry";
 import {
   inWithdrawalWindow,
@@ -537,7 +538,7 @@ async function operations(
  * 운영실 스냅샷을 만드는 옵션. `full` = **학원 설정 '대시보드 관리' 미리보기 원본 전용** — 역할 배치를 안 걸고 원장 시점의 모든 영역을 읽는다.
  * 🔴 호출부(`owner/page.tsx`)가 원장·총괄 게이트를 지난 뒤에만 넘긴다. 서버 액션 `refreshOverview`는 인자를 받지 않아 이 옵션을 못 넘긴다.
  */
-export type LoadOverviewOptions = { full?: boolean };
+export type LoadOverviewOptions = { full?: boolean; subject?: string };
 
 /** Authoritative, permission-gated snapshot. No cross-user server cache, no fallback zeros. */
 export async function loadOverview(options: LoadOverviewOptions = {}): Promise<OverviewSnapshot> {
@@ -564,14 +565,21 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
   //    설정(테넌트 캐시)과 역할 판정(총괄 여부·관리자의 담당 과목)은 서로 독립이라 함께 기다린다(B4).
   const [settingsNow, viewer] = await Promise.all([settingsPromise, viewerPromise]);
   const subjectLabels = subjectLabelRecord(settingsNow.operations.subjects);
+  const subjectView = viewer.bundle === "subject" ? selectSubjectView(subjectLabels, viewer.subjects, options.subject) : null;
+  const viewingSubjects = subjectView ? subjectView.subjects : viewer.subjects;
   const view: ResolvedView = resolveView({
     // 원장 시점 원본(full)·역할 판정 실패(degraded)는 저장값을 안 쓴다 — 실패면 코드 기본(민감 칸 없음·옵션 가림)으로.
     stored: options.full || ("degraded" in viewer && viewer.degraded) ? EMPTY_DASHBOARD : settingsNow.dashboard,
     bundle: viewer.bundle,
     subjectScoped: viewer.subjectScoped,
     menus: new Set(allowed),
-    subjectLabels: viewer.subjects.flatMap((k) => (subjectLabels[k] ? [subjectLabels[k]] : [])),
+    subject: subjectView?.active?.key,
+    subjectLabels: viewingSubjects.flatMap((k) => (subjectLabels[k] ? [subjectLabels[k]] : [])),
   });
+  if (subjectView) {
+    view.activeSubject = subjectView.active?.key;
+    view.subjectChoices = subjectView.choices;
+  }
   // 조회 계획 = 놓인 카드가 읽는 영역 ∩ 메뉴 권한(`loadPlan`, 순수 — 테스트가 역할별로 잠근다).
   const needed = loadPlan(view, new Set(allowed));
   if (options.full) for (const area of Object.keys(AREA_MENUS) as Area[]) {
@@ -703,7 +711,7 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
   add("consultations", ["consultations"], getStudentConsultationCounts);
   add("newcomers", ["newcomers"], () => newcomers(settingsPromise));
   add("homework", ["lesson_reports"], getHomeworkRisk);
-  add("teacherWork", ["lesson_reports"], async () => loadTeacherWork(user.tenantId, today, await scopePromise, settingsNow.report.videoHomeworkPolicy));
+  add("teacherWork", ["lesson_reports"], async () => loadTeacherWork(user.tenantId, today, await scopePromise, settingsNow));
   // 학부모 미열람 = ClassNote 읽음 기록이 소스 — ClassNote 기능이 꺼진 학원엔 이 카드가 없다(2026-09-30 "꺼지면 흔적 없이").
   // 🔑 영역 등록을 설정 대기로 막지 않는다(뒤 영역들이 늦게 출발하지 않게) — 조회 안에서 판정하고,
   //    꺼졌으면 조회 없이 빈 값을 돌린 뒤 아래 반환 직전에 영역째 뺀다.
@@ -903,7 +911,7 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
   //    `full`(설정 '대시보드 관리'의 미리보기 원본, 원장·총괄만)은 원장 시점 그대로 — 편집기가 역할마다 같은 함수를 다시 돌린다.
   const programSubjects = programSubjectsOf(subjectLabelRecord(settings.operations.subjects));
   const groupOf = (key: string | null | undefined) => subjectGroupOf(key, programSubjects);
-  const groups = [...new Set(viewer.subjects.map(groupOf).filter((g): g is string => g !== null))];
+  const groups = [...new Set(viewingSubjects.map(groupOf).filter((g): g is string => g !== null))];
   const shaped = options.full ? sections : shapeSections({ ...sections }, view, { groups, groupOf });
   return {
     scope: `${user.tenantId}:${user.id}:${user.systemRole}:${teacherId ?? "all"}:${view.rev}${options.full ? ":full" : ""}`,

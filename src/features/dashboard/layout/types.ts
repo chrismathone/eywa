@@ -7,7 +7,7 @@
  */
 export const GRID_COLS = 24;
 /** 카드 하나가 차지할 수 있는 고정 격자 행 수. */
-export const MAX_ROW_SPAN = 32;
+export const MAX_ROW_SPAN = 256;
 export const MAX_GRID_Y = 4096;
 export const GRID_ROW_PX = 64;
 export const MAX_ITEMS = 80;
@@ -58,7 +58,7 @@ export type Item = {
   phones?: boolean;
 };
 
-export type RoleLayout = { role: Bundle; items: Item[] };
+export type RoleLayout = { role: Bundle; subject?: string; items: Item[] };
 export type DashboardAssignment = { userId: string; scope: "all" | "subjects" | "unassigned"; subjects: string[]; adminLayout: "subject" | "desk" };
 export type DashboardSettings = { version: 1; layouts: RoleLayout[]; assignments?: DashboardAssignment[] };
 

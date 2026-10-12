@@ -763,8 +763,9 @@ export const dashboardItemSchema = z.object({
 });
 export const dashboardRoleLayoutSchema = z.object({
   role: z.enum(BUNDLES),
+  subject: z.string().trim().min(1).max(64).optional(),
   items: z.array(dashboardItemSchema).max(MAX_ITEMS),
-});
+}).refine((v) => !v.subject || v.role === "subject", "과목별 배치는 과목 관리자에게만 적용됩니다");
 export const dashboardAssignmentSchema = z.object({
   userId: z.string().uuid(),
   scope: z.enum(["all", "subjects", "unassigned"]),
@@ -774,14 +775,15 @@ export const dashboardAssignmentSchema = z.object({
 export const dashboardSchema = z
   .object({
     version: z.literal(DASHBOARD_VERSION),
-    layouts: z.array(dashboardRoleLayoutSchema).max(BUNDLES.length),
+    layouts: z.array(dashboardRoleLayoutSchema).max(BUNDLES.length + 100),
     assignments: z.array(dashboardAssignmentSchema).max(1000).optional(),
   })
   .superRefine((value, ctx) => {
     const roles = new Set<string>();
     value.layouts.forEach((layout, i) => {
-      if (roles.has(layout.role)) ctx.addIssue({ code: "custom", path: ["layouts", i, "role"], message: "같은 역할의 배치가 두 번 들어 있습니다" });
-      roles.add(layout.role);
+      const key = `${layout.role}:${layout.subject ?? ""}`;
+      if (roles.has(key)) ctx.addIssue({ code: "custom", path: ["layouts", i, "role"], message: "같은 역할·과목의 배치가 두 번 들어 있습니다" });
+      roles.add(key);
     });
     const users = new Set<string>();
     value.assignments?.forEach((assignment, i) => {

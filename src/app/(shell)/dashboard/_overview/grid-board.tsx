@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, type CSSProperties, type ReactNode } from "react";
+import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { MENU_ICON } from "@/components/icons/aywa-icons";
 import { MenuGlyph } from "@/components/icons/menu-glyph";
 import type { KpiKey, PanelId } from "@/features/dashboard/overview/layout";
@@ -8,6 +8,7 @@ import type { OverviewSnapshot } from "@/features/dashboard/overview/model";
 import { BREAKPOINTS, layoutAt } from "@/features/dashboard/layout/flow";
 import { dropEmptyHeadings } from "@/features/dashboard/layout/engine";
 import { positionItems } from "@/features/dashboard/layout/fixed-grid";
+import { fitContentRows } from "@/features/dashboard/layout/grid-rows";
 import { cardDef, menusOf } from "@/features/dashboard/layout/registry";
 import { isEmptyCard, summaryOf } from "@/features/dashboard/layout/summary";
 import { isHeadingId, isSpaceId, isStructuralId, type Item } from "@/features/dashboard/layout/types";
@@ -62,17 +63,48 @@ export function GridBoard({
   panels: Partial<Record<PanelId, ReactNode>>;
   kpis: Partial<Record<KpiKey, ReactNode>>;
 }) {
-  const shown = useMemo(
+  const ref = useRef<HTMLDivElement>(null);
+  const [heights, setHeights] = useState<Record<string, number>>({});
+  const base = useMemo(
     () => dropEmptyHeadings(positionItems(items).filter((i) => isStructuralId(i.id) || drawable(i.id, snapshot)).sort((a, b) => a.y - b.y || a.x - b.x)),
     [items, snapshot],
   );
+  const shown = useMemo(() => fitContentRows(base, heights), [base, heights]);
+  useLayoutEffect(() => {
+    const root = ref.current;
+    if (!root) return;
+    let frame = 0;
+    const measure = () => {
+      const gap = parseFloat(getComputedStyle(root).rowGap) || 16;
+      const next: Record<string, number> = {};
+      root.querySelectorAll<HTMLElement>("[data-auto-height]").forEach((content) => {
+        const panel = content.closest<HTMLElement>('[data-overview="panel"]');
+        const cell = content.closest<HTMLElement>('[data-cell]');
+        if (!panel || !cell?.dataset.dashboardCard) return;
+        const style = getComputedStyle(panel);
+        const extra = ["paddingTop", "paddingBottom", "borderTopWidth", "borderBottomWidth"] as const;
+        const height = extra.reduce((sum, key) => sum + (parseFloat(style[key]) || 0), 0)
+          + [...panel.children].reduce((sum, child) => {
+            const style = getComputedStyle(child);
+            return sum + child.getBoundingClientRect().height + (parseFloat(style.marginTop) || 0) + (parseFloat(style.marginBottom) || 0);
+          }, 0);
+        next[cell.dataset.dashboardCard] = Math.ceil((height + gap) / (64 + gap));
+      });
+      setHeights((prev) => JSON.stringify(prev) === JSON.stringify(next) ? prev : next);
+    };
+    const observer = new ResizeObserver(() => { cancelAnimationFrame(frame); frame = requestAnimationFrame(measure); });
+    root.querySelectorAll('[data-auto-height], [data-cell="panel"] [data-overview="panel-header"]').forEach((el) => observer.observe(el));
+    observer.observe(root);
+    measure();
+    return () => { observer.disconnect(); cancelAnimationFrame(frame); };
+  }, [base]);
   const places = useMemo(
-    () => Object.fromEntries(BREAKPOINTS.map((bp) => [bp, new Map((bp === "mobile" ? layoutAt(shown.filter((i) => !isSpaceId(i.id)), bp) : positionItems(shown)).map((p) => [p.id, p]))])),
+    () => Object.fromEntries(BREAKPOINTS.map((bp) => [bp, new Map((bp === "mobile" ? layoutAt(shown.filter((i) => !isSpaceId(i.id)), bp) : shown).map((p) => [p.id, p]))])),
     [shown],
   );
   const amounts = snapshot.view?.monthAmounts ?? true;
   return (
-    <div className={g.grid} data-overview="free-grid" data-fixed-grid="true">
+    <div ref={ref} className={g.grid} data-overview="free-grid" data-fixed-grid="true">
       {shown.map((item) => {
         const d = places.desktop!.get(item.id)!;
         const m = places.medium!.get(item.id)!;
@@ -97,7 +129,7 @@ export function GridBoard({
         return (
           <div
             key={item.id}
-            className={g.cell}
+            className={`${g.cell} ${item.id === "panel:teacherWork" ? g.fitCell : ""}`}
             style={vars}
             data-cell={def.kind}
             data-dashboard-card={item.id}

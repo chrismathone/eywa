@@ -5,6 +5,26 @@ import { EMPTY_DASHBOARD } from "@/features/dashboard/layout/types";
 import { useDashboardEditor } from "./use-editor";
 
 describe("역할별 대시보드 편집", () => {
+  it("과목 전환·이력·지연된 삭제 복구가 다른 과목에 섞이지 않는다", () => {
+    const { result } = renderHook(() => useDashboardEditor(EMPTY_DASHBOARD, ["math", "english"]));
+    act(() => result.current.setRole("subject"));
+    const mathBefore = result.current.items;
+    const removed = mathBefore[0];
+    const commitMath = result.current.commit;
+    act(() => result.current.setSubject("english"));
+    act(() => commitMath(mathBefore.slice(1)));
+    expect(result.current.items).toEqual(mathBefore);
+    expect(result.current.canUndo).toBe(false);
+    act(() => result.current.restore("subject", removed, 0, "math"));
+    expect(result.current.canUndo).toBe(false);
+    act(() => result.current.setSubject("math"));
+    expect(result.current.items).toEqual(mathBefore);
+    act(() => result.current.undo());
+    expect(result.current.items).toEqual(mathBefore.slice(1));
+    const payload = result.current.payload;
+    expect(payload.layouts.find((l) => l.subject === "math")?.items).toHaveLength(mathBefore.length - 1);
+    expect(payload.layouts.find((l) => l.subject === "english")?.items).toEqual(mathBefore);
+  });
   it("역할 전환 직전 시작한 편집은 원래 역할에 적용되고 새 역할을 덮지 않는다", () => {
     const { result } = renderHook(() => useDashboardEditor(EMPTY_DASHBOARD));
     const commitOwner = result.current.commit;

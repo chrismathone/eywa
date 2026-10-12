@@ -4,89 +4,72 @@ import { useCallback, useMemo, useReducer } from "react";
 import { defaultItems } from "@/features/dashboard/layout/defaults";
 import { insertAt, sameItems } from "@/features/dashboard/layout/engine";
 import { canRedo, canUndo, pushHistory, redoHistory, startHistory, undoHistory, type History } from "@/features/dashboard/layout/history";
-import { roleItems } from "@/features/dashboard/layout/normalize";
-import { BUNDLES, DASHBOARD_VERSION, type Bundle, type DashboardSettings, type Item } from "@/features/dashboard/layout/types";
+import { layoutKey, roleItems } from "@/features/dashboard/layout/normalize";
+import { BUNDLES, DASHBOARD_VERSION, type Bundle, type DashboardSettings, type Item, type RoleLayout } from "@/features/dashboard/layout/types";
 
-/**
- * 대시보드 편집기 상태 — 역할마다 **따로** 되돌리기 이력을 든다(역할을 오가도 각자의 편집이 남는다).
- * 저장은 다섯 역할을 한 번에(학원 설정 한 섹션). 기본과 같은 역할은 서버가 저장값을 지운다(`normalize.ts`).
- */
-type State = { role: Bundle; drafts: Record<Bundle, History>; selected: string | null; editing: boolean };
+type State = { role: Bundle; subject: string | null; drafts: Record<string, History>; selected: string | null; editing: boolean };
 type Action =
   | { type: "role"; role: Bundle }
+  | { type: "subject"; subject: string }
   | { type: "editing"; on: boolean }
   | { type: "select"; id: string | null }
-  | { type: "commit"; items: Item[]; role?: Bundle }
-  /** 뺀 카드 되살리기(토스트 '되돌리기') — 그사이 역할을 바꿨어도 **뺀 그 역할**의 지금 배치에 원래 자리로. */
-  | { type: "restore"; role: Bundle; item: Item; index: number }
-  | { type: "undo" }
-  | { type: "redo" };
+  | { type: "commit"; items: Item[]; key: string }
+  | { type: "restore"; key: string; item: Item; index: number }
+  | { type: "undo" | "redo" };
 
 function reduce(state: State, a: Action): State {
-  const h = state.drafts[state.role];
+  const key = layoutKey(state.role, state.subject);
+  const h = state.drafts[key];
   switch (a.type) {
-    case "role":
-      return { ...state, role: a.role, selected: null };
-    case "editing":
-      return { ...state, editing: a.on, selected: a.on ? state.selected : null };
-    case "select":
-      return { ...state, selected: a.id };
+    case "role": return { ...state, role: a.role, selected: null };
+    case "subject": return state.drafts[layoutKey("subject", a.subject)] ? { ...state, subject: a.subject, selected: null } : state;
+    case "editing": return { ...state, editing: a.on, selected: a.on ? state.selected : null };
+    case "select": return { ...state, selected: a.id };
     case "commit": {
-      const role = a.role ?? state.role;
-      const next = pushHistory(state.drafts[role], a.items);
-      const selected = role !== state.role ? state.selected : state.selected && a.items.some((i) => i.id === state.selected) ? state.selected : null;
-      return next === state.drafts[role] ? state : { ...state, selected, drafts: { ...state.drafts, [role]: next } };
+      const next = pushHistory(state.drafts[a.key], a.items);
+      const selected = a.key !== key ? state.selected : state.selected && a.items.some((i) => i.id === state.selected) ? state.selected : null;
+      return next === state.drafts[a.key] ? state : { ...state, selected, drafts: { ...state.drafts, [a.key]: next } };
     }
     case "restore": {
-      const cur = state.drafts[a.role].present;
-      if (cur.some((i) => i.id === a.item.id)) return state;
-      return reduce(state, { type: "commit", role: a.role, items: insertAt(cur, a.item, a.index) });
+      const cur = state.drafts[a.key].present;
+      return cur.some((i) => i.id === a.item.id) ? state : reduce(state, { type: "commit", key: a.key, items: insertAt(cur, a.item, a.index) });
     }
-    case "undo":
-      return { ...state, selected: null, drafts: { ...state.drafts, [state.role]: undoHistory(h) } };
-    case "redo":
-      return { ...state, selected: null, drafts: { ...state.drafts, [state.role]: redoHistory(h) } };
+    case "undo": return { ...state, selected: null, drafts: { ...state.drafts, [key]: undoHistory(h) } };
+    case "redo": return { ...state, selected: null, drafts: { ...state.drafts, [key]: redoHistory(h) } };
   }
 }
 
-export function useDashboardEditor(initial: DashboardSettings) {
-  const [state, dispatch] = useReducer(reduce, initial, (init): State => ({
-    role: "owner",
-    editing: false,
-    selected: null,
-    drafts: Object.fromEntries(BUNDLES.map((b) => [b, startHistory(roleItems(init, b))])) as Record<Bundle, History>,
+/** 역할과 과목마다 배치·이력을 따로 보관한다. 진행 중이던 조작은 원래 대상에 적용된다. */
+export function useDashboardEditor(initial: DashboardSettings, subjects: readonly string[] = []) {
+  const [state, dispatch] = useReducer(reduce, { initial, subjects }, ({ initial: init, subjects: keys }): State => ({
+    role: "owner", subject: keys[0] ?? null, editing: false, selected: null,
+    drafts: Object.fromEntries([
+      ...BUNDLES.map((b) => [b, startHistory(roleItems(init, b))]),
+      ...[...new Set([...keys, ...init.layouts.flatMap((l) => l.subject ? [l.subject] : [])])].map((s) => [layoutKey("subject", s), startHistory(roleItems(init, "subject", s))]),
+    ]),
   }));
-  const items = state.drafts[state.role].present;
-  const payload: DashboardSettings = useMemo(
-    () => ({ version: DASHBOARD_VERSION, layouts: BUNDLES.map((role) => ({ role, items: state.drafts[role].present })) }),
-    [state.drafts],
-  );
-  /** 역할마다: 기본을 쓰는가 · 저장된 값과 다른가(저장 안 한 편집). */
-  const status = useMemo(
-    () =>
-      Object.fromEntries(
-        BUNDLES.map((b) => [
-          b,
-          { isDefault: sameItems(state.drafts[b].present, defaultItems(b)), dirty: !sameItems(state.drafts[b].present, roleItems(initial, b)) },
-        ]),
-      ) as Record<Bundle, { isDefault: boolean; dirty: boolean }>,
-    [state.drafts, initial],
-  );
+  const key = layoutKey(state.role, state.subject);
+  const items = state.drafts[key].present;
+  const payload: DashboardSettings = useMemo(() => ({ version: DASHBOARD_VERSION, layouts: Object.entries(state.drafts).map(([key, h]): RoleLayout =>
+    key.startsWith("subject:") ? { role: "subject", subject: key.slice(8), items: h.present } : { role: key as Bundle, items: h.present }) }), [state.drafts]);
+  const status = useMemo(() => Object.fromEntries(BUNDLES.map((b) => {
+    const subject = b === "subject" ? state.subject : null;
+    const draft = state.drafts[layoutKey(b, subject)].present;
+    const dirty = b === "subject" ? Object.entries(state.drafts).some(([key, h]) => (key === "subject" || key.startsWith("subject:"))
+      && !sameItems(h.present, roleItems(initial, b, key.startsWith("subject:") ? key.slice(8) : null))) : !sameItems(draft, roleItems(initial, b));
+    return [b, { isDefault: sameItems(draft, defaultItems(b)), dirty }];
+  })) as Record<Bundle, { isDefault: boolean; dirty: boolean }>, [state.drafts, state.subject, initial]);
   return {
-    ...state,
-    items,
-    payload,
-    status,
-    canUndo: canUndo(state.drafts[state.role]),
-    canRedo: canRedo(state.drafts[state.role]),
+    ...state, items, payload, status, canUndo: canUndo(state.drafts[key]), canRedo: canRedo(state.drafts[key]),
     setRole: useCallback((role: Bundle) => dispatch({ type: "role", role }), []),
+    setSubject: useCallback((subject: string) => dispatch({ type: "subject", subject }), []),
     setEditing: useCallback((on: boolean) => dispatch({ type: "editing", on }), []),
     select: useCallback((id: string | null) => dispatch({ type: "select", id }), []),
-    commit: useCallback((next: Item[]) => dispatch({ type: "commit", role: state.role, items: next }), [state.role]),
-    restore: useCallback((role: Bundle, item: Item, index: number) => dispatch({ type: "restore", role, item, index }), []),
+    commit: useCallback((next: Item[]) => dispatch({ type: "commit", key, items: next }), [key]),
+    restore: useCallback((role: Bundle, item: Item, index: number, subject?: string | null) => dispatch({ type: "restore", key: layoutKey(role, subject), item, index }), []),
     undo: useCallback(() => dispatch({ type: "undo" }), []),
     redo: useCallback(() => dispatch({ type: "redo" }), []),
-    draftOf: (b: Bundle) => state.drafts[b].present,
+    draftOf: (b: Bundle) => state.drafts[layoutKey(b, state.subject)].present,
   };
 }
 

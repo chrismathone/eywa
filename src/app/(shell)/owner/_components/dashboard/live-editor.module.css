@@ -19,3 +19,10 @@
 .hiddenCards p { margin: 8px 0; }
 .hiddenCards div { display: flex; flex-wrap: wrap; gap: 8px; }
 .hiddenCards button { border: 1px solid var(--border); border-radius: 8px; padding: 5px 9px; }
+.rowGuides { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+.insertGuide, .emptyGuide { position: absolute; left: 0; right: 0; display: flex; justify-content: center; align-items: center; gap: 8px; transform: translateY(-50%); font-size: 11px; }
+.insertGuide button, .emptyGuide button { pointer-events: auto; border: 1px solid #b9c9de; border-radius: 5px; background: #fff; padding: 1px 9px; color: #264e80; line-height: 18px; cursor: pointer; }
+.insertGuide button { opacity: .65; }
+.insertGuide button:hover, .insertGuide button:focus-visible { opacity: 1; background: #edf3fc; }
+.emptyGuide { color: #64758b; }
+.emptyGuide button { padding: 5px 12px; }
