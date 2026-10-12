@@ -1,0 +1,13 @@
+.popup { max-height: min(360px, var(--available-height)); }
+.heading, .columns { display: grid; grid-template-columns: 6rem minmax(0, 1fr) 6rem; align-items: center; gap: .75rem; width: 100%; }
+.heading { position: sticky; top: 0; z-index: 1; padding: .6rem 2rem .6rem .75rem; background: var(--bg-soft); color: var(--text-dim); border-bottom: 1px solid var(--line); font-size: .75rem; font-weight: 600; }
+.item { padding: .65rem 2rem .65rem .75rem; border-bottom: 1px solid var(--line); border-radius: 0; }
+.item > span:first-child { min-width: 0; }
+.date, .homework { font-variant-numeric: tabular-nums; font-size: .8rem; }
+.date small { display: block; color: var(--text-dim); font-size: .75rem; }
+.className { min-width: 0; white-space: normal; overflow-wrap: anywhere; font-size: .85rem; }
+@media (max-width: 480px) {
+  .heading, .columns { grid-template-columns: 4.4rem minmax(0, 1fr) 4.4rem; gap: .4rem; }
+  .heading, .item { padding-left: .5rem; padding-right: 1.5rem; }
+  .date, .homework, .className { font-size: .75rem; }
+}

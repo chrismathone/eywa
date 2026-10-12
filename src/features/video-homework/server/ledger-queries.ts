@@ -11,6 +11,7 @@ import { loadBlankFacts } from "./blank-facts";
 import type { BlankFacts } from "../no-homework";
 import { homeworkVideoLinks } from "@/features/students/homework-videos";
 import { homeworkVideoSource } from "./video-source";
+import { loadVideoAssignmentAvailability } from "./assignment-availability";
 
 type DbMark = { class_id: string; student_id: string; check_date: string; homework_date: string | null;
   submitted_date: string | null; status: string; updated_at: string | null };
@@ -18,7 +19,7 @@ type DbVideo = { id: string; student_id: string; post_id: number | null; posted_
   md5: string | null; bytes: number | string | null; status: string; drive_file_id: string | null;
   class_id: string | null; homework_date: string | null; manual_assignment?: string | null };
 type DbLedgerClass = LedgerClass & { teacher: { display_name: string; tenant_id: string } | null };
-export type VideoHomeworkLedgerBaseRow = VideoHomeworkRosterRow & { assignedDates: string[]; teacherName: string | null };
+export type VideoHomeworkLedgerBaseRow = VideoHomeworkRosterRow & { assignedDates: string[]; teacherName: string | null; hasAssignableVideos: boolean };
 
 /**
  * 숙제 영상(0315a `student_homework_videos`) — 반이 확인된 것만 읽고 업로드 완료 파일의 검증된 미리보기를 붙인다.
@@ -66,6 +67,7 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
   assignedKnown: boolean;
   /** 학부모 영상을 읽었나 — 못 읽었으면 자동 집계가 빠진다. */
   videosKnown: boolean;
+  assignmentVideosKnown: boolean;
 }> {
   const db = createAdminClient();
   const today = kstToday();
@@ -121,7 +123,7 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
   for (const row of assigned ?? []) addDate(row.classId, row.studentId, row.date);
   for (const mark of marks) if (mark.homeworkDate) addDate(mark.classId, mark.studentId, mark.homeworkDate);
   for (const pair of pairs) ownDates.set(`${pair.classId}:${pair.studentId}`, ownDates.get(`${pair.classId}:${pair.studentId}`) ?? new Set());
-  const [students, videos, blankFacts] = await Promise.all([
+  const [students, videos, blankFacts, assignablePairs] = await Promise.all([
     fetchAllPagedInChunks<{ id: string; name: string; school: string | null; grade: string | null }>(studentIds,
       (chunk, from, to) => db.from("students").select("id,name,school,grade").eq("tenant_id", tenantId)
         .in("id", chunk).order("id").range(from, to)),
@@ -129,6 +131,8 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
     // 지금 보기와 똑같이 뺀다. 더 늦은 영상은 화면 칸에 닿지 못한다(칸은 숙제일 + 2주까지만 영상을 받는다).
     loadClassVideos(tenantId, homeworkStudents, wideFrom, addDays(wideTo, VIDEO_MATCH_WINDOW_DAYS)),
     loadBlankFacts(tenantId, { classDates, ownDates: new Map([...ownDates].filter(([pair]) => shownPairs.has(pair))), enrollments }),
+    loadVideoAssignmentAvailability(tenantId, pairs.map(pair => ({ ...pair,
+      assignedDates: (assignedByPair.get(`${pair.classId}:${pair.studentId}`) ?? []).filter(date => date >= fromDate && date <= toDate) }))),
   ]);
   const byClass = new Map(classes.map((row) => [row.id, row]));
   const byStudent = new Map(students.map((row) => [row.id, row]));
@@ -138,11 +142,12 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
     return cls && student ? [{ classId: pair.classId, studentId: pair.studentId, className: cls.class_name, subject: cls.subject,
       teacherName: cls.teacher?.tenant_id === tenantId ? cls.teacher.display_name.trim() || null : null,
       studentName: student.name, school: student.school, grade: student.grade,
+      hasAssignableVideos: assignablePairs?.has(`${pair.classId}:${pair.studentId}`) ?? false,
       assignedDates: [...new Set(assignedByPair.get(`${pair.classId}:${pair.studentId}`) ?? [])].sort() }] : [];
   });
   // 화면으로는 명단에 선 (반 × 학생)의 기록만 — 넓혀 읽은 지점 전체 기록을 내려보내지 않는다.
   const shown = new Set(rows.map((row) => `${row.classId}:${row.studentId}`));
   return { rows, marks: marks.filter((mark) => shown.has(`${mark.classId}:${mark.studentId}`)),
     videos: (videos ?? []).filter((video) => video.classId && shown.has(`${video.classId}:${video.studentId}`)), blankFacts: blankFacts ?? {},
-    assignedKnown: assigned !== null, videosKnown: videos !== null };
+    assignedKnown: assigned !== null, videosKnown: videos !== null, assignmentVideosKnown: assignablePairs !== null };
 }

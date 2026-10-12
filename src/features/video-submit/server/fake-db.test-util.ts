@@ -26,6 +26,7 @@ export function createFakeDb(seed: Record<string, Row[]>, unique: Record<string,
     let head = false;
     let returning = false;
     let limit = Infinity;
+    let offset = 0;
     let selected = "";
     const rows = () => (tables[table] ??= []);
     const run = (single: "none" | "maybe" | "one") => {
@@ -54,7 +55,7 @@ export function createFakeDb(seed: Record<string, Row[]>, unique: Record<string,
         return { data: null, error: null, count: null };
       }
       if (head) return { data: null, error: null, count: hit.length };
-      const out = hit.slice(0, limit);
+      const out = hit.slice(offset, offset + limit);
       if (single === "none") return { data: out, error: null, count: null };
       if (single === "one" && out.length !== 1) return { data: null, error: { code: "PGRST116", message: "not one" }, count: null };
       return { data: out[0] ?? null, error: null, count: null };
@@ -85,11 +86,17 @@ export function createFakeDb(seed: Record<string, Row[]>, unique: Record<string,
       eq(col: string, v: unknown) { filters.push((r) => r[col] === v); return builder; },
       neq(col: string, v: unknown) { filters.push((r) => r[col] != null && r[col] !== v); return builder; },
       is(col: string, v: unknown) { filters.push((r) => (r[col] ?? null) === v); return builder; },
+      not(col: string, operator: string, v: unknown) {
+        if (operator !== "is") throw new Error(`Unsupported fake-db not operator: ${operator}`);
+        filters.push((r) => (r[col] ?? null) !== v);
+        return builder;
+      },
       gt(col: string, v: string) { filters.push((r) => String(r[col]) > v); return builder; },
       gte(col: string, v: string) { filters.push((r) => String(r[col]) >= v); return builder; },
       lt(col: string, v: string) { filters.push((r) => String(r[col]) < v); return builder; },
       order() { return builder; },
       limit(n: number) { limit = n; return builder; },
+      range(from: number, to: number) { offset = from; limit = to - from + 1; return builder; },
       maybeSingle: async () => run("maybe"),
       single: async () => run("one"),
       then(resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) { return Promise.resolve(run("none")).then(resolve, reject); },

@@ -98,6 +98,6 @@ export function VideoHomeworkManagement({ rows, initialMarks, videos = NO_VIDEOS
     </Dialog>
     <LedgerVideoDialog cell={playing} video={playing ? videos.find((video) => video.id === playing.round.videoId
       && video.studentId === playing.row.studentId && video.classId === playing.row.classId) ?? null : null} onClose={() => setPlaying(null)} />
-    {assigning ? <VideoAssignmentDialog key={ledgerPairKey(assigning)} row={assigning} onClose={() => setAssigning(null)} /> : null}
+    {assigning ? <VideoAssignmentDialog key={ledgerPairKey(assigning)} row={assigning} fromDate={fromDate} toDate={toDate} onClose={() => setAssigning(null)} /> : null}
   </div>;
 }
