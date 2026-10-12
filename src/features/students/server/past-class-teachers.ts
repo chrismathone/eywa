@@ -31,7 +31,7 @@ export async function getPastClassTeachers(targets: readonly PastClassTarget[]):
     const [reportRows, attendanceRows] = await Promise.all([
       fetchAllPagedInChunks<{ class_id: string; report_date: string; teacher_name: string | null }>(missingIds, (chunk, f, t) => db
         .from("lesson_reports").select("class_id, report_date, teacher_name").in("class_id", chunk)
-        .gte("report_date", from).lte("report_date", to).or("makeup.is.null,makeup.eq.false")
+        .lte("report_date", to).or("makeup.is.null,makeup.eq.false")
         .is("revoked_at", null).order("id").range(f, t)),
       fetchAllPagedInChunks<{ class_id: string; session_date: string; recorder: { display_name: string | null } | { display_name: string | null }[] | null }>(missingIds, (chunk, f, t) => db
         .from("attendance_records").select("class_id, session_date, recorder:recorded_by ( display_name )").in("class_id", chunk)

@@ -17,8 +17,15 @@ describe("지난 수업 담당 복원", () => {
   it("보고서가 없으면 같은 반의 수강 기간 내 출결로 찾는다", () => {
     expect(resolvePastClassTeacher(target, null, [row("2026-09-29", "다른 반", "other")], [row("2026-09-25", "출결 담당")])).toMatchObject({ name: "출결 담당", source: "attendance" });
   });
-  it("같은 날 여러 강사 기록이 있거나 수강 기간 밖이면 추측하지 않는다", () => {
+  it("수강 시작보다 앞서도 종료일 이전 가장 최근의 같은 반 보고서를 사용한다", () => {
+    expect(resolvePastClassTeacher(
+      { ...target, startDate: "2026-10-01", lastDate: "2026-10-07" }, null,
+      [row("2026-09-22", "이전 담당"), row("2026-09-29", "유형숙"), row("2026-10-08", "다음 담당")],
+      [row("2026-10-03", "출결 담당")],
+    )).toMatchObject({ name: "유형숙", date: "2026-09-29", source: "report", inferred: true });
+  });
+  it("같은 날 여러 강사 기록이 있거나 종료일 이전 근거가 없으면 추측하지 않는다", () => {
     expect(resolvePastClassTeacher(target, null, [row("2026-09-29", "A"), row("2026-09-29", "B")], [row("2026-09-29", "A")])).toBeNull();
-    expect(resolvePastClassTeacher(target, null, [row("2026-08-03", "이전 수강")], [])).toBeNull();
+    expect(resolvePastClassTeacher(target, null, [row("2026-10-02", "다음 담당")], [row("2026-08-03", "수강 전 출결")])).toBeNull();
   });
 });
