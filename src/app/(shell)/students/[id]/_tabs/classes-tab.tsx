@@ -97,7 +97,7 @@ export async function ClassesTab({
     .filter((r) => hasEnded(r))
     .sort((a, b) => (b.endDate ?? "").localeCompare(a.endDate ?? "") || b.startDate.localeCompare(a.startDate));
   /**
-   * 종료일 당시 담임 이력을 우선하고, 없으면 종료일 이전 같은 반의 마지막 보고서 → 수강 기간의 강사 출결 기록으로 추정한다.
+   * 종료일 당시 담임 이력 → 종료일 이전 보고서 → 수강 기간의 강사 출결 → 담당 변경이 없는 반의 배정 강사 순서.
    * 반이동 당일은 새 반의 수업이므로 이전 반은 전날까지만 조회한다. 근거가 없거나 동률이면 `—`로 둔다.
    * 추정한 이름에는 근거 날짜를 표시하며, 실제 담임 배정은 변경하지 않는다.
    */
@@ -108,7 +108,9 @@ export async function ClassesTab({
   const pastRows = past.map((r) => {
     const at = pastTeachers.get(r.enrollmentId);
     return { ...r, teacherName: at?.name ?? null, teacherInferred: at?.inferred ?? false,
-      teacherEvidence: at?.inferred ? `${at.date} ${at.source === "report" ? "수업보고서" : "출결"} 기록 기준으로 추정한 담당입니다` : undefined };
+      teacherEvidence: at?.inferred ? at.source === "current"
+        ? "담당 변경 기록이 없어 현재 반에 배정된 강사를 기준으로 추정했습니다"
+        : `${at.date} ${at.source === "report" ? "수업보고서" : "출결"} 기록 기준으로 추정한 담당입니다` : undefined };
   });
 
   // 🔴 휴원·퇴원·상담 단계 학생에겐 '반 배정' 대신 **이유**를 보여준다 — 서버(createEnrollment)가

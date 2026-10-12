@@ -24,6 +24,14 @@ describe("지난 수업 담당 복원", () => {
       [row("2026-10-03", "출결 담당")],
     )).toMatchObject({ name: "유형숙", date: "2026-09-29", source: "report", inferred: true });
   });
+  it("다른 기록이 없으면 반 배정 강사를 추정으로 쓰고, 보고서와 충돌하는 기록은 우선하지 않는다", () => {
+    expect(resolvePastClassTeacher(target, null, [], [], "이성우"))
+      .toMatchObject({ name: "이성우", source: "current", inferred: true });
+    expect(resolvePastClassTeacher(target, null, [row("2026-09-29", "유형숙")], [], "다른 배정 강사"))
+      .toMatchObject({ name: "유형숙", source: "report" });
+    expect(resolvePastClassTeacher(target, null, [row("2026-09-29", "A"), row("2026-09-29", "B")], [], "다른 배정 강사"))
+      .toBeNull();
+  });
   it("같은 날 여러 강사 기록이 있거나 종료일 이전 근거가 없으면 추측하지 않는다", () => {
     expect(resolvePastClassTeacher(target, null, [row("2026-09-29", "A"), row("2026-09-29", "B")], [row("2026-09-29", "A")])).toBeNull();
     expect(resolvePastClassTeacher(target, null, [row("2026-10-02", "다음 담당")], [row("2026-08-03", "수강 전 출결")])).toBeNull();
