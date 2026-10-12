@@ -27,6 +27,14 @@ beforeEach(() => { vi.clearAllMocks(); mocks.save.mockResolvedValue({ ok: true }
 afterEach(cleanup);
 
 describe("영상 제출 현황 — 회차는 학생별 '숙제가 나간 날' 순서", () => {
+  it("이미 모두 배정된 학생도 완료 칸에서 영상 배정을 변경할 수 있다", async () => {
+    show({ rows: [row({ assignedDates: ["2026-09-01"], canAssignVideos: true, hasAssignableVideos: false })], marks: [],
+      videos: [{ id: "v", classId: "a", studentId: "one", postedAt: "2026-09-02T12:00:00+09:00" }] });
+    expect(screen.queryByRole("button", { name: "수학 A 김민준 영상 배정" })).toBeNull();
+    fireEvent.click(cell("김민준 1회 2026-09-01 완료(영상)"));
+    expect(await screen.findByRole("button", { name: "영상 배정 변경" })).toBeInTheDocument();
+    expect(screen.getByText(/미확인은 수동 검사 기록만 지웁니다/)).toBeInTheDocument();
+  });
   it("배정 권한과 기간에 맞는 미배정 영상이 있을 때만 영상 배정을 표시한다", () => {
     show({ rows: [
       row({ assignedDates: ["2026-09-01"], canAssignVideos: true, hasAssignableVideos: true }),

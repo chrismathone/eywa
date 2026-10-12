@@ -56,7 +56,7 @@ export default async function TeacherVideoHomeworkPage({ searchParams }: {
     canWriteTenant(user.systemRole, "teacher_onescreen"),
     accessLevelTenant(user.systemRole, "lesson_reports"),
     getTenantSettings(),
-    createAdminClient().from("classes").select("id").eq("tenant_id", user.tenantId).eq("teacher_id", user.id),
+    createAdminClient().from("classes").select("id").eq("tenant_id", user.tenantId).eq("teacher_id", owner ?? user.id),
   ]);
   // 체크 = 서버 판정과 같은 조건(강사 쓰기 또는 수업보고서 전체 권한 — 겸직) · '다른 강사 뷰'는 열람 전용.
   const canEdit = viewAs?.access !== "readonly" && (canTeacherWrite || lessonReportsLevel === "full");

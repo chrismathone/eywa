@@ -10,6 +10,9 @@ export const NOTIFICATION_LIST_LIMIT = 20;
 export const NOTIFICATION_LIST_MAX = 100;
 
 export type NotificationType =
+  | "video_homework_submitted"
+  | "video_homework_missing"
+  | "video_homework_unassigned"
   | "homework_video_upload_failed"
   | "enrollment_assigned" // 내 반에 학생 배정
   | "enrollment_transferred_in" // 반이동으로 내 반에 전입
@@ -73,6 +76,9 @@ export type NotificationItem = {
 
 /** 유형별 Aywa 아이콘. 미등록 유형은 벨 컴포넌트에서 기본 bell. */
 export const NOTIFICATION_ICON: Record<string, AywaIconName> = {
+  video_homework_submitted: "check",
+  video_homework_missing: "alert",
+  video_homework_unassigned: "alert",
   homework_video_upload_failed: "alert",
   enrollment_assigned: "book",
   enrollment_transferred_in: "swap",

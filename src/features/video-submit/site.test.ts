@@ -118,7 +118,7 @@ describe("배선 가드", () => {
     // 지난 기간을 봐도 지금 보기와 같은 판정 — 고른 영상을 짝 범위 끝 + 2주까지 읽는다
     expect(ledger).toContain("loadClassVideos(tenantId, homeworkStudents, wideFrom, addDays(wideTo, VIDEO_MATCH_WINDOW_DAYS))");
     const site = read("src", "features", "video-submit", "server", "site-homework.ts");
-    expect(site).toContain('select("id,student_id,post_id,posted_at,created_at,uploaded_at,md5,bytes,route")');
+    expect(site).toContain('select("id,student_id,post_id,posted_at,created_at,uploaded_at,md5,bytes,route,drive_file_id")');
     expect(site).toContain("fingerprint: videoFingerprint(row.md5, row.bytes)");
   });
   it("화면은 이름까지 받아 보낸다 · '올릴 숙제 없음'은 오류가 아니라 안내로 보인다", () => {

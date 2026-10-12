@@ -18,6 +18,8 @@ import { isSkipStatus } from "./progress-status";
 import { asProgressMode, progressFactLabel } from "./progress-mode";
 import { progressInline } from "./progress-range";
 
+const PLAIN_COMMENT_STYLE = "\n\n[말투 보완]\n기존 선생님의 말투와 문장 구성을 유지하세요. 기록에 없는 칭찬·다짐·전망을 덧붙이지 말고, '성장이 기대됩니다', '꾸준한 노력으로', '한 걸음 더 나아갔습니다' 같은 상투적인 마무리는 피하세요. 제출 사실만으로 성실함이나 이해도를 평가하지 마세요. 영상 제출 여부는 별도로 확인해 붙이므로, 입력에 없는 지난 영상 숙제의 제출·미제출 문장을 만들지 마세요.";
+
 /**
  * 테스트 점수 → 사람이 읽는 문자열(순수). **표시 단일 소스** — 학부모 카드(daily_test)·AI 멘트(testLine)·
  * 폴백 템플릿이 이 함수를 공유해야 표면마다 다른 표기가 나가지 않는다.
@@ -46,6 +48,7 @@ export type ReportCommentInput = {
   attitude: string; // "" = 미입력
   homework: string; // 지난 과제 수행률("90%"). "" = 미입력/—. 옛 기록은 "완료"·"미제출"도 온다.
   homeworkToday: string; // 오늘 내준 과제(숙제 내용) — 0096a. 멘트 마무리 "오늘 과제는 ~입니다" 재료. "" = 미입력
+  videoHomework?: boolean;
   textbook: string; // 교재명 — 공지 모드 B의 P1(수업 내용)에 사용. "" = 미입력
   specialNote: string; // 특이사항(강사 메모) — 0093a. 모드 A는 종합, B는 P2에 사용. "" = 미입력
   // 반 공통 서술(G6) — 강사가 반 단위로 1회 쓴 수업 맥락("2단원 심화, 대체로 이해도 좋았다").
@@ -116,6 +119,7 @@ export function buildReportCommentInput(
     // 쪽수 후보정 — 저장(report-fields)과 **같은 값**이 AI에 가야 멘트가 "~131까지"로 나가고 카드는 "~131p"가
     // 되는 어긋남이 안 생긴다. 순수·멱등이라 이미 단위가 붙은 값은 그대로 지나간다(homework-pages.ts).
     homeworkToday: normalizeHomeworkPages(su?.homeworkToday ?? ""),
+    ...(typeof su?.videoHomework === "boolean" ? { videoHomework: su.videoHomework } : {}),
     textbook: su?.textbook ?? "",
     specialNote,
     classNotice,
@@ -156,6 +160,7 @@ export function buildFactBlock(input: ReportCommentInput): string {
   //    (2026-08-28 실측). 판정·표기는 homework-rate.ts 단일 소스(폴백 템플릿 homeworkRateClause와 같은 뜻).
   if (input.homework) facts.push(`과제: ${homeworkFactValue(flatten(input.homework))}`);
   if (input.homeworkToday) facts.push(`오늘 과제: ${flatten(input.homeworkToday)}`); // 마무리 문장 재료(0096a)
+  if (input.videoHomework === true) facts.push("오늘 영상 과제: 있음. 오늘 과제 안내에 짧게 포함하되 이미 영상 과제를 언급했다면 반복하지 마세요. 지난 숙제의 제출 여부를 뜻하지 않습니다.");
   if (input.specialNote) facts.push(`특이사항: ${flatten(input.specialNote)}`);
   // 반 전체 안내 — 라벨에 **취급법까지** 적는다(프롬프트 본문은 원장이 편집 가능해 사라질 수 있다).
   if (input.classNotice)
@@ -178,7 +183,7 @@ export function buildFactBlock(input: ReportCommentInput): string {
  */
 /** 멘트 본문(출력 계약 없음) — 통합 호출 섹션용. template=원장 오버라이드. */
 export function commentBody(input: ReportCommentInput, template?: string | null): string {
-  return withTeacherNoteFidelity(interpolate(template || DEFAULT_PROMPTS.comment, { facts: buildFactBlock(input) }), input);
+  return withTeacherNoteFidelity(interpolate(template || DEFAULT_PROMPTS.comment, { facts: buildFactBlock(input) }), input) + PLAIN_COMMENT_STYLE;
 }
 
 /** 멘트 단일 프롬프트(본문 + {comment} 출력 계약) — 미리보기·개별 테스트용. */
@@ -201,6 +206,7 @@ export function buildP1FactBlock(input: ReportCommentInput): string | null {
   //    "하나도 해오지 못함"이 들어가 뜻이 뒤집힌다. (수행률 폴백 자체가 의미상 어색하나 모드 B는 현재 미사용.)
   const hw = flatten(input.homeworkToday || input.homework);
   if (hw) facts.push(`과제: ${hw}`);
+  if (input.videoHomework === true) facts.push("오늘 영상 과제: 있음. 오늘 과제 안내에 한 번만 짧게 포함하세요. 지난 숙제의 제출 여부는 추측하지 마세요.");
   // 반 공통 서술(G6)은 수업 내용 문단(P1)에만 — P2(태도·특이사항)에 새면 "항목 섞지 마세요" 규칙 위반.
   // ⚠️ 개별 P1 사실(교재·진도·과제)이 있을 때만 동봉 — 없으면 P1은 원래대로 null(문단 생략).
   // 반 서술 단독 P1은 "이 학생의 수업 내용"을 반 맥락만으로 지어내는 환각 벡터(태도만 입력된 케이스 등).
@@ -227,14 +233,14 @@ export function buildP2FactBlock(input: ReportCommentInput): string | null {
 export function commentP1Body(input: ReportCommentInput, template?: string | null): string | null {
   const p1facts = buildP1FactBlock(input);
   if (!p1facts) return null;
-  return interpolate(template || DEFAULT_PROMPTS.comment_p1, { p1facts });
+  return interpolate(template || DEFAULT_PROMPTS.comment_p1, { p1facts }) + PLAIN_COMMENT_STYLE;
 }
 
 /** 모드 B P2 본문(출력 계약 없음). 사실 없으면 null. */
 export function commentP2Body(input: ReportCommentInput, template?: string | null): string | null {
   const p2facts = buildP2FactBlock(input);
   if (!p2facts) return null;
-  return withTeacherNoteFidelity(interpolate(template || DEFAULT_PROMPTS.comment_p2, { p2facts }), input);
+  return withTeacherNoteFidelity(interpolate(template || DEFAULT_PROMPTS.comment_p2, { p2facts }), input) + PLAIN_COMMENT_STYLE;
 }
 
 /** 모드 B P1 단일 프롬프트(본문 + {comment} 계약) — 미리보기·개별 테스트용. 사실 없으면 null. */

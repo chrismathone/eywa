@@ -9,7 +9,7 @@ export type VideoHomeworkMark = {
   /** 실제 제출일. 기존 기록·제출일을 조회하지 않는 강사 체크 화면에서는 비어 있을 수 있다. */
   submittedDate?: string | null;
   status: VideoHomeworkStatus;
-  /** 마지막으로 찍은 시각(ISO) — 영상 자동 집계가 "그 검사가 본 영상"을 가릴 때만 쓴다. */
+  /** 마지막 변경 시각(ISO) — 같은 숙제의 중복 기록 중 최신 기록을 고른다. */
   updatedAt?: string | null;
 };
 

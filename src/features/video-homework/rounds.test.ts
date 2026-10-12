@@ -108,10 +108,11 @@ describe("영상 도착 자동 집계 — 반이 확인된 영상만", () => {
     expect(view(rounds)).toEqual([["2026-10-01", "unchecked", null, false]]);
     expect(view(rounds, "JJ:s1")).toEqual([["2026-10-01", "submitted", "2026-10-03", true]]);
   });
-  it("직접 찍은 기록이 이긴다 — 미수행은 그대로, 영상은 다음 미확인 숙제로", () => {
+  it("미수행 체크 뒤 올린 영상도 그 숙제에 붙인다 — 다음 숙제로 밀리지 않는다", () => {
     const rounds = build({ rows: [row("s1", ["2026-10-01", "2026-10-03"])], marks: [mark("s1", "2026-10-01", "missing")],
       videos: [video("s1", "2026-10-04")] });
-    expect(view(rounds)).toEqual([["2026-10-01", "missing", null, false], ["2026-10-03", "submitted", "2026-10-04", true]]);
+    expect(view(rounds)).toEqual([["2026-10-01", "missing", null, false], ["2026-10-03", "unchecked", null, false]]);
+    expect(rounds.get("A:s1")![0].videoId).toBe("v-s1-2026-10-04-20:00");
   });
   it("🔴 영상으로 센 칸을 확정해도 그 영상이 다음 숙제를 또 채우지 않는다(두 번 세지 않음)", () => {
     const rows = [row("s1", ["2026-10-01", "2026-10-03"])];
@@ -121,13 +122,14 @@ describe("영상 도착 자동 집계 — 반이 확인된 영상만", () => {
     expect(view(confirmed)).toEqual([["2026-10-01", "submitted", "2026-10-04", false], ["2026-10-03", "unchecked", null, false]]);
     expect(confirmed.get("A:s1")![0].videoDate).toBe("2026-10-04");
   });
-  it("원스크린 ✓(제출일 없음)은 그 검사 전에 올라온 영상만 가져간다 — 검사 뒤에 올라온 영상은 다음 숙제 몫", () => {
+  it("수동 ✓ 전후 어느 때 올려도 동일한 숙제에 연결한다", () => {
     const rows = [row("s1", ["2026-10-01", "2026-10-06"])];
     const checked = mark("s1", "2026-10-01", "submitted", { checkDate: "2026-10-06", updatedAt: "2026-10-06T08:00:00Z" }); // 17:00 KST
     const before = build({ rows, marks: [checked], videos: [video("s1", "2026-10-06", { time: "10:00" })] });
     expect(view(before)).toEqual([["2026-10-01", "submitted", null, false], ["2026-10-06", "unchecked", null, false]]);
     const after = build({ rows, marks: [checked], videos: [video("s1", "2026-10-06", { time: "21:00" })] });
-    expect(view(after)).toEqual([["2026-10-01", "submitted", null, false], ["2026-10-06", "submitted", "2026-10-06", true]]);
+    expect(view(after)).toEqual([["2026-10-01", "submitted", null, false], ["2026-10-06", "unchecked", null, false]]);
+    expect(after.get("A:s1")![0].videoId).toBe("v-s1-2026-10-06-21:00");
   });
   it("조회 기간 앞의 미확인 숙제도 짝 맞추기에는 들어간다 — 기간에 따라 같은 칸 판정이 바뀌지 않게", () => {
     const rows = [row("s1", ["2026-09-29", "2026-10-02"])];
@@ -223,9 +225,9 @@ describe("학생이 고른 숙제(올리기 사이트, 원장 2026-10-03) — �
     ];
     // 12:00 영상은 10:00에 들어온 고른 영상보다 늦다 → 세지 않는다(16:00을 기준으로 삼으면 10/1이 완료로 뒤집힌다)
     expect(view(build({ rows, videos }))).toEqual([["2026-10-01", "unchecked", null, false], ["2026-10-06", "submitted", "2026-10-09", true], ["2026-10-08", "submitted", "2026-10-09", true]]);
-    // 10/6이 ✕로 찍혀 있으면 10:00 영상은 칸에 못 붙는다 → 기준은 16:00, 12:00 영상은 종전대로 10/1을 채운다
+    // 수동 ✕가 있어도 정확한 숙제에 연결하고, 같은 날 중복된 영상이 다른 숙제를 채우지 않는다.
     const blocked = build({ rows, marks: [mark("s1", "2026-10-06", "missing")], videos });
-    expect(view(blocked).map((r) => r.slice(0, 2))).toEqual([["2026-10-01", "submitted"], ["2026-10-06", "missing"], ["2026-10-08", "submitted"]]);
+    expect(view(blocked).map((r) => r.slice(0, 2))).toEqual([["2026-10-01", "unchecked"], ["2026-10-06", "missing"], ["2026-10-08", "submitted"]]);
   });
   it("🔴 같은 파일(지문이 같다)이면 순서·날짜와 상관없이 한 번이다 — 먼저 ClassNote로 올라와 다른 칸을 채웠던 같은 파일은 그 칸에서 빠진다", () => {
     const rows = [row("s1", ["2026-10-01", "2026-10-06"])];
@@ -265,12 +267,12 @@ describe("학생이 고른 숙제(올리기 사이트, 원장 2026-10-03) — �
       ] });
       expect(view(other)).toEqual([["2026-10-01", "submitted", "2026-10-07", true], ["2026-10-06", "submitted", "2026-10-07", true]]);
     }
-    // 고른 영상이 칸에 못 붙었으면(✕) 그 파일은 어디에도 안 쓰였다 — 같은 파일의 ClassNote 사본은 종전대로 센다
+    // 수동 ✕가 있어도 고른 숙제에 붙인다. 같은 파일의 사본으로 다른 숙제를 완료시키지 않는다.
     const blocked = build({ rows, marks: [mark("s1", "2026-10-06", "missing")], videos: [
       video("s1", "2026-10-07", { time: "09:00", fingerprint: F }),
       video("s1", "2026-10-07", { time: "15:00", homeworkDate: "2026-10-06", fingerprint: F }),
     ] });
-    expect(view(blocked).map((r) => r.slice(0, 2))).toEqual([["2026-10-01", "submitted"], ["2026-10-06", "missing"]]);
+    expect(view(blocked).map((r) => r.slice(0, 2))).toEqual([["2026-10-01", "unchecked"], ["2026-10-06", "missing"]]);
     // 다른 학생의 같은 지문은 무관하다
     const twoKids = build({ rows: [row("s1", ["2026-10-06"]), row("s2", ["2026-10-01"])], videos: [
       video("s1", "2026-10-07", { time: "15:00", homeworkDate: "2026-10-06", fingerprint: F }),
@@ -398,11 +400,11 @@ describe("학생이 고른 숙제(올리기 사이트, 원장 2026-10-03) — �
     ] });
     expect(view(rounds)).toEqual([["2026-10-01", "unchecked", null, false], ["2026-10-06", "submitted", "2026-10-07", true]]);
   });
-  it("🔴 직접 찍은 기록이 이긴다 — 미수행(✕) 칸은 그대로 · 직접 찍은 완료 칸에는 영상이 붙는다(표시는 그대로)", () => {
+  it("수동 미수행·완료 모두 지정 숙제의 영상을 받는다 — 저장된 상태는 자동 판정 작업이 갱신한다", () => {
     const missing = build({ rows: [row("s1", ["2026-10-06"])], marks: [mark("s1", "2026-10-06", "missing")],
       videos: [video("s1", "2026-10-07", { homeworkDate: "2026-10-06" })] });
     expect(view(missing)).toEqual([["2026-10-06", "missing", null, false]]);
-    expect(missing.get("A:s1")![0]!.videoId).toBeNull();
+    expect(missing.get("A:s1")![0]!.videoId).toBe("v-s1-2026-10-07-20:00");
     const done = build({ rows: [row("s1", ["2026-10-06"])], marks: [mark("s1", "2026-10-06", "submitted", { submittedDate: "2026-10-06" })],
       videos: [video("s1", "2026-10-09", { homeworkDate: "2026-10-06" })] });
     expect(view(done)).toEqual([["2026-10-06", "submitted", "2026-10-06", false]]);

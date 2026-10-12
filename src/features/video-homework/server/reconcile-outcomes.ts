@@ -1,0 +1,69 @@
+import "server-only";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
+import { addDays, kstToday } from "@/lib/date-kst";
+import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
+import { isVideoHomeworkEnabled } from "../policy";
+import { videoHomeworkOutcomes } from "../auto-outcomes";
+import { videoMatchRange, VIDEO_MATCH_WINDOW_DAYS } from "../rounds";
+import { getAssignedVideoHomework } from "./assignments";
+import { loadClassVideos } from "./ledger-queries";
+
+/** 업로드 직후 + 정기 재시도. 조회 실패를 '영상 없음'으로 처리하지 않는다. */
+export async function reconcileVideoHomework(tenantId: string, options: { studentId?: string; notifyUnmatched?: boolean } = {}) {
+  const observedAt = new Date().toISOString();
+  const today = kstToday();
+  const range = videoMatchRange(addDays(today, -30), today, today);
+  const db = createAdminClient();
+  const [settings, assigned, students, classes] = await Promise.all([
+    getTenantSettingsByTenantId(tenantId),
+    getAssignedVideoHomework(tenantId, range.from, today),
+    fetchAllPaged<{ id: string; grade: string | null; is_test: boolean }>((from, to) => {
+      const query = db.from("students").select("id,grade,is_test").eq("tenant_id", tenantId).order("id");
+      if (options.studentId) query.eq("id", options.studentId);
+      return query.range(from, to);
+    }),
+    fetchAllPaged<{ id: string; subject: string }>((from, to) => db.from("classes").select("id,subject").eq("tenant_id", tenantId).order("id").range(from, to)),
+  ]);
+  if (assigned === null) throw new Error("영상 숙제 조회 실패");
+  if (!settings.report.videoHomeworkPolicy.enabled) return { checked: 0, updated: 0, notifications: 0 };
+  const byStudent = new Map(students.filter(student => !student.is_test).map(student => [student.id, student]));
+  const byClass = new Map(classes.map(cls => [cls.id, cls]));
+  const targets = assigned.filter(homework => {
+    const student = byStudent.get(homework.studentId), cls = byClass.get(homework.classId);
+    return student && cls && isVideoHomeworkEnabled(settings.report.videoHomeworkPolicy,
+      { classId: cls.id, subjectKey: cls.subject, grade: student.grade });
+  });
+  // 숙제가 아직 없는 학생의 미배정 영상도 다음 날 알릴 수 있게 실제 업로드 학생을 포함한다.
+  const videoStudents = options.notifyUnmatched ? [...byStudent.keys()] : [...new Set(targets.map(homework => homework.studentId))];
+  const videos = await loadClassVideos(tenantId, videoStudents, range.from, addDays(range.to, VIDEO_MATCH_WINDOW_DAYS), true);
+  if (videos === null) throw new Error("영상 조회 실패 — 상태 변경 중단");
+  const { outcomes, unmatched } = videoHomeworkOutcomes(targets, videos, today, range.from);
+  let updated = 0, notifications = 0;
+  for (let start = 0; start < outcomes.length; start += 100) {
+    const { data, error } = await db.rpc("reconcile_video_homework_outcomes", {
+      p_tenant: tenantId, p_outcomes: outcomes.slice(start, start + 100), p_observed_at: observedAt,
+    });
+    if (error) throw new Error(`영상 상태 갱신 실패: ${error.message}`);
+    updated += Number(data?.updated ?? 0); notifications += Number(data?.notifications ?? 0);
+  }
+  if (options.notifyUnmatched && unmatched.length) {
+    // 배정이 바뀌었는지는 RPC가 재확인한다. 수신자는 현재 담당 강사이며 지점 밖으로 보내지 않는다.
+    const eligible = unmatched.filter(video => {
+      const student = byStudent.get(video.studentId);
+      const candidates = video.classId ? [byClass.get(video.classId)].filter(Boolean) : classes;
+      return student && candidates.some(cls => cls && isVideoHomeworkEnabled(settings.report.videoHomeworkPolicy,
+        { classId: cls.id, subjectKey: cls.subject, grade: student.grade }));
+    });
+    const pending = await fetchAllPagedInChunks<{ id: string }>(eligible.map(video => video.id), (chunk, from, to) =>
+      db.from("homework_video_ledger_videos").select("id").eq("tenant_id", tenantId).in("id", chunk).eq("status", "uploaded").order("id").range(from, to));
+    for (let start = 0; start < pending.length; start += 100) {
+      const { data, error } = await db.rpc("notify_unassigned_homework_videos", {
+        p_tenant: tenantId, p_videos: pending.slice(start, start + 100).map(video => video.id), p_observed_at: observedAt,
+      });
+      if (error) throw new Error(`미배정 영상 알림 실패: ${error.message}`);
+      notifications += Number(data ?? 0);
+    }
+  }
+  return { checked: outcomes.length, updated, notifications };
+}

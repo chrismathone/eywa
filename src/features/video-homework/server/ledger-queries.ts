@@ -5,7 +5,7 @@ import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { addDays, kstToday } from "@/lib/date-kst";
 import { buildVideoHomeworkLessonPairs, type LedgerClass, type LedgerEnrollment, type LedgerSchedule } from "../ledger-roster";
 import { buildLedgerRounds, VIDEO_MATCH_WINDOW_DAYS, videoArrivedAt, videoFingerprint, videoMatchRange } from "../rounds";
-import { isVideoHomeworkDate, type VideoArrival, type VideoHomeworkMark, type VideoHomeworkRosterRow, type VideoHomeworkStatus } from "../types";
+import { type VideoArrival, type VideoHomeworkMark, type VideoHomeworkRosterRow, type VideoHomeworkStatus } from "../types";
 import { getAssignedVideoHomework } from "./assignments";
 import { loadBlankFacts } from "./blank-facts";
 import type { BlankFacts } from "../no-homework";
@@ -17,7 +17,7 @@ type DbMark = { class_id: string; student_id: string; check_date: string; homewo
   submitted_date: string | null; status: string; updated_at: string | null };
 type DbVideo = { id: string; student_id: string; post_id: number | null; posted_at: string; created_at: string | null; uploaded_at: string | null;
   md5: string | null; bytes: number | string | null; status: string; drive_file_id: string | null;
-  class_id: string | null; homework_date: string | null; manual_assignment?: string | null };
+  class_id: string | null; homework_date: string | null; manual_assignment?: string | null; excluded?: string | null };
 type DbLedgerClass = LedgerClass & { teacher: { display_name: string; tenant_id: string } | null };
 export type VideoHomeworkLedgerBaseRow = VideoHomeworkRosterRow & { assignedDates: string[]; teacherName: string | null; hasAssignableVideos: boolean };
 
@@ -25,21 +25,24 @@ export type VideoHomeworkLedgerBaseRow = VideoHomeworkRosterRow & { assignedDate
  * 숙제 영상(0315a `student_homework_videos`) — 반이 확인된 것만 읽고 업로드 완료 파일의 검증된 미리보기를 붙인다.
  * 🔴 표가 없거나(미적용 지점) 못 읽으면 null — 자동 집계만 빠지고 장부는 그대로 돈다(화면이 그 사실을 알린다).
  */
-async function loadClassVideos(tenantId: string, studentIds: string[], fromDate: string, toDate: string): Promise<VideoArrival[] | null> {
+export async function loadClassVideos(tenantId: string, studentIds: string[], fromDate: string, toDate: string, includeUnclassified = false): Promise<VideoArrival[] | null> {
   if (!studentIds.length) return [];
   try {
     const db = createAdminClient();
     const source = await homeworkVideoSource(db);
-    const rows = await fetchAllPagedInChunks<DbVideo>(studentIds, (chunk, from, to) => db
+    const rows = await fetchAllPagedInChunks<DbVideo>(studentIds, (chunk, from, to) => {
+      const query = db
       .from(source)
-      .select("id,student_id,post_id,posted_at,created_at,uploaded_at,md5,bytes,status,drive_file_id,class_id:route->>classId,homework_date:route->>homeworkDate,manual_assignment:route->>manualAssignment")
+      .select("id,student_id,post_id,posted_at,created_at,uploaded_at,md5,bytes,status,drive_file_id,class_id:route->>classId,homework_date:route->>homeworkDate,manual_assignment:route->>manualAssignment,excluded:route->>excluded")
       .eq("tenant_id", tenantId).in("student_id", chunk)
-      .not("route->>classId", "is", null)
       .or(`and(posted_at.gte.${fromDate}T00:00:00+09:00,posted_at.lt.${addDays(toDate, 1)}T00:00:00+09:00),and(route->>manualAssignment.eq.true,route->>homeworkDate.gte.${fromDate},route->>homeworkDate.lte.${toDate})`)
-      .order("id", { ascending: true }).range(from, to));
-    // 정해진 숙제일(올리기 사이트에서 고른 숙제 · 보고서 글의 댓글 영상)은 날짜 모양일 때만 믿는다 — 아니면 게시일순 규칙으로 센다.
-    return rows.map((row) => {
-      const homeworkDate = row.homework_date && isVideoHomeworkDate(row.homework_date) ? row.homework_date : null;
+      .order("id", { ascending: true });
+      if (!includeUnclassified) query.not("route->>classId", "is", null);
+      return query.range(from, to);
+    });
+    // 잘못된 지정 날짜도 그대로 둔다. 회차와 일치하지 않으면 미배정이며, 일반 게시글처럼 다른 숙제에 붙이지 않는다.
+    return rows.filter(row => row.excluded !== "true").map((row) => {
+      const homeworkDate = row.homework_date || null;
       const links = row.status === "uploaded" ? homeworkVideoLinks(row.drive_file_id) : null;
       return { id: row.id, studentId: row.student_id, classId: row.class_id, postedAt: row.posted_at, homeworkDate, fingerprint: videoFingerprint(row.md5, row.bytes),
         manuallyAssigned: row.manual_assignment === "true",

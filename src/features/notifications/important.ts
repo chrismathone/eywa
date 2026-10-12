@@ -9,6 +9,9 @@ import type { NotificationItem } from "./types";
  * 나머지 유형(반 배정·전입·인수인계)은 기존처럼 벨 배지로만.
  */
 export const IMPORTANT_NOTIFICATION_TYPES: readonly string[] = [
+  "video_homework_submitted",
+  "video_homework_missing",
+  "video_homework_unassigned",
   "classnote_parent_post", // 학부모가 ClassNote에 새 글 → 담당 강사가 바로 확인·응답해야 함
   // 보고서가 학부모에게 **안 갔는데 아무도 모르는** 상태를 끝내려면 벨 배지로는 약하다(원장 2026-07-23:
   // "안 그러면 영원히 모를듯"). 빈도 걱정은 실측으로 해소 — 전체 12,483건 중 failed 1건이고,

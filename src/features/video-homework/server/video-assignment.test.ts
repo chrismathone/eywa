@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createFakeDb, type FakeDb } from "@/features/video-submit/server/fake-db.test-util";
 import { addDays } from "@/lib/date-kst";
-const m = vi.hoisted(() => ({ db: null as unknown as FakeDb, user: { id: "teacher", tenantId: "tenant", systemRole: "teacher" }, full: false, writable: true, readonly: null as string | null, refresh: vi.fn() }));
+const m = vi.hoisted(() => ({ db: null as unknown as FakeDb, user: { id: "teacher", tenantId: "tenant", systemRole: "teacher" }, viewAs: null as { id: string; access: "full" } | null, full: false, writable: true, readonly: null as string | null, refresh: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: m.refresh }));
+vi.mock("next/server", () => ({ after: vi.fn() }));
+vi.mock("./reconcile-outcomes", () => ({ reconcileVideoHomework: vi.fn() }));
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => m.user }));
-vi.mock("@/lib/auth/view-mode", () => ({ readonlyTeacherViewError: async () => m.readonly }));
+vi.mock("@/lib/auth/view-mode", () => ({ readonlyTeacherViewError: async () => m.readonly, viewAsTeacher: async () => m.viewAs }));
 vi.mock("@/lib/auth/perm-matrix", () => ({ accessLevelTenant: async () => m.full ? "full" : "scoped", canWriteTenant: async () => m.writable }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => m.db }));
 import { assignHomeworkVideo, getVideoAssignmentOptions } from "./video-assignment";
@@ -14,6 +16,18 @@ const optionsInput = { classId: C, studentId: S, fromDate: "2026-10-01", toDate:
 const video = { id: V, tenant_id: "tenant", student_id: S, status: "uploaded", posted_at: "2026-10-02T10:00:00+09:00", drive_file_id: "syntheticDriveFile123", route: {}, assignment_revision: 0 };
 beforeEach(() => { m.full = false; m.writable = true; m.readonly = null; vi.clearAllMocks(); m.db = createFakeDb({ classes: [{ id: C, tenant_id: "tenant", teacher_id: "teacher" }], lesson_reports: [{ tenant_id: "tenant", student_id: S, class_id: C, report_date: "2026-10-01", video_homework: true }], homework_video_ledger_videos: [video] }); m.db.defineRpc("set_homework_video_assignment", () => "saved"); });
 describe("담임의 영상 배정", () => {
+  it("다른 강사 편집은 대상의 담당 반에 배정하고 감사 기록에는 실제 편집자를 남긴다", async () => {
+    m.viewAs = { id: "target", access: "full" };
+    m.db.tables.classes![0].teacher_id = "target";
+    try {
+      expect(await assignHomeworkVideo(input)).toEqual({ ok: true });
+      expect(m.db.rpcCalls[0]?.args).toMatchObject({ p_actor: "teacher", p_full: true });
+      expect(await assignHomeworkVideo({ ...input, excluded: true })).toMatchObject({ ok: false });
+      m.db.tables.classes![0].teacher_id = "unrelated";
+      expect(await assignHomeworkVideo(input)).toMatchObject({ ok: false });
+      expect(m.db.rpcCalls).toHaveLength(1);
+    } finally { m.viewAs = null; }
+  });
   it("담임이 본인 반 숙제로 배정할 수 있고 처리자는 로그인 계정으로 고정된다", async () => {
     expect(await assignHomeworkVideo(input)).toEqual({ ok: true });
     expect(m.db.rpcCalls[0]?.args).toMatchObject({ p_actor: "teacher", p_tenant: "tenant", p_full: false, p_context_class: C, p_student: S });

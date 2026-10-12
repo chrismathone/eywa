@@ -1,8 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
+import { reportError } from "@/lib/observability/report-error";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { readonlyTeacherViewError } from "@/lib/auth/view-mode";
+import { readonlyTeacherViewError, viewAsTeacher } from "@/lib/auth/view-mode";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
@@ -10,6 +12,7 @@ import { addDays } from "@/lib/date-kst";
 import { homeworkVideoLinks } from "@/features/students/homework-videos";
 import { isVideoHomeworkDate } from "../types";
 import { isVideoAssignableToDate, videoAssignmentRange, type VideoAssignmentOptions } from "../video-assignment";
+import { reconcileVideoHomework } from "./reconcile-outcomes";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 class AssignmentError extends Error {}
@@ -21,10 +24,11 @@ async function context(classId: string, studentId: string, period?: { fromDate: 
   if (!UUID.test(classId) || !UUID.test(studentId)) throw new AssignmentError("반과 학생을 확인해 주세요.");
   const full = await accessLevelTenant(user.systemRole, "lesson_reports") === "full";
   if (!full && !await canWriteTenant(user.systemRole, "teacher_onescreen")) throw new AssignmentError("영상 배정 권한이 없습니다.");
+  const viewAs = await viewAsTeacher();
   const db = createAdminClient();
   const { data: cls, error } = await db.from("classes").select("teacher_id").eq("tenant_id", user.tenantId).eq("id", classId).maybeSingle();
   if (error) throw new AssignmentError("담당 반을 확인하지 못했습니다.");
-  if (!cls || (!full && cls.teacher_id !== user.id)) throw new AssignmentError("본인 담임 반의 영상만 배정할 수 있습니다.");
+  if (!cls || (!full && cls.teacher_id !== (viewAs?.id ?? user.id))) throw new AssignmentError("본인 담임 반의 영상만 배정할 수 있습니다.");
   const reportQuery = db.from("lesson_reports").select("report_date").eq("tenant_id", user.tenantId).eq("class_id", classId)
     .eq("student_id", studentId).eq("video_homework", true).order("report_date", { ascending: false });
   // 기간을 먼저 좁혀야 오래 다닌 학생의 과거 숙제가 최근 366건 제한에서 잘리지 않는다.
@@ -32,7 +36,7 @@ async function context(classId: string, studentId: string, period?: { fromDate: 
   const reports = await reportQuery.limit(period ? 366 : 1);
   if (reports.error) throw new AssignmentError("학생의 영상 숙제를 읽지 못했습니다.");
   if (!reports.data?.length) throw new AssignmentError("이 반에 배정할 영상 숙제가 없습니다.");
-  return { user, db, full, dates: [...new Set(reports.data.map(r => String(r.report_date)))] };
+  return { user, db, full, delegated: viewAs?.access === "full", dates: [...new Set(reports.data.map(r => String(r.report_date)))] };
 }
 
 export async function getVideoAssignmentOptions(input: { classId: string; studentId: string; fromDate: string; toDate: string }): Promise<VideoAssignmentOptions> {
@@ -70,9 +74,16 @@ export async function assignHomeworkVideo(input: { classId: string; studentId: s
     || typeof input.reason !== "string" || !input.reason.trim() || input.reason.trim().length > 300
     || (!input.excluded && (!input.homeworkDate || !isVideoHomeworkDate(input.homeworkDate)))) return { ok: false, error: "영상·숙제 날짜와 변경 사유를 확인해 주세요." };
   try {
-    const { user, db, full, dates } = await context(input.classId, input.studentId,
+    const { user, db, full, delegated, dates } = await context(input.classId, input.studentId,
       input.excluded ? undefined : { fromDate: input.homeworkDate!, toDate: input.homeworkDate! });
     if (!input.excluded && !dates.includes(input.homeworkDate!)) return { ok: false, error: "이 학생에게 낸 영상 숙제를 골라 주세요." };
+    if (input.excluded && delegated && !full) {
+      // 대리 편집도 선택한 강사 반의 영상만 제외한다. RPC에 실제 편집자를 남기기 전에 같은 범위를 검사한다.
+      const video = await db.from("homework_video_ledger_videos").select("route")
+        .eq("tenant_id", user.tenantId).eq("student_id", input.studentId).eq("id", input.videoId).maybeSingle();
+      const route = video.data?.route as { classId?: string } | null;
+      if (video.error || route?.classId !== input.classId) return { ok: false, error: "이 영상의 배정을 변경할 권한이 없습니다." };
+    }
     if (!input.excluded) {
       const video = await db.from("homework_video_ledger_videos").select("posted_at")
         .eq("tenant_id", user.tenantId).eq("student_id", input.studentId).eq("id", input.videoId).eq("status", "uploaded")
@@ -82,12 +93,17 @@ export async function assignHomeworkVideo(input: { classId: string; studentId: s
       if (!isVideoAssignableToDate(video.data.posted_at, input.homeworkDate!)) return { ok: false, error: "숙제를 낸 날부터 14일 뒤까지 게시된 영상만 배정할 수 있습니다." };
     }
     const { data, error } = await db.rpc("set_homework_video_assignment", {
-      p_tenant: user.tenantId, p_actor: user.id, p_full: full, p_student: input.studentId, p_context_class: input.classId,
+      // 대상의 담당 반은 위에서 검증했다. 실제 편집자의 id를 대상 강사 id로 바꾸지 않는다.
+      p_tenant: user.tenantId, p_actor: user.id, p_full: full || delegated, p_student: input.studentId, p_context_class: input.classId,
       p_video: input.videoId, p_date: input.excluded ? null : input.homeworkDate, p_excluded: input.excluded, p_revision: input.revision, p_reason: input.reason.trim(),
     });
     if (error) return { ok: false, error: "영상 배정을 저장하지 못했습니다. 잠시 뒤 다시 시도해 주세요." };
-    const errors: Record<string, string> = { conflict: "다른 곳에서 영상 배정이 변경됐습니다. 창을 닫고 다시 열어 확인해 주세요.", denied: "이 영상의 배정을 변경할 권한이 없습니다.", unavailable: "업로드가 완료된 학생 영상만 배정할 수 있습니다.", invalid_homework: "해당 학생에게 실제로 낸 영상 숙제를 골라 주세요.", missing_mark: "미수행으로 기록된 숙제입니다. 수행 상태를 먼저 수정해 주세요." };
+    const errors: Record<string, string> = { conflict: "다른 곳에서 영상 배정이 변경됐습니다. 창을 닫고 다시 열어 확인해 주세요.", denied: "이 영상의 배정을 변경할 권한이 없습니다.", unavailable: "업로드가 완료된 학생 영상만 배정할 수 있습니다.", invalid_homework: "해당 학생에게 실제로 낸 영상 숙제를 골라 주세요." };
     if (data !== "saved") return { ok: false, error: errors[String(data)] ?? "영상 배정 정보를 확인해 주세요." };
+    after(async () => {
+      try { await reconcileVideoHomework(user.tenantId, { studentId: input.studentId }); }
+      catch (error) { reportError(error, { scope: "video-homework.after-assignment", tenantId: user.tenantId }); }
+    });
     revalidatePath("/onescreen/video-homework"); revalidatePath("/lesson-reports/video-homework"); revalidatePath(`/students/${input.studentId}`);
     return { ok: true };
   } catch (e) { return { ok: false, error: e instanceof AssignmentError ? e.message : "영상 배정을 저장하지 못했습니다." }; }
