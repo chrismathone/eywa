@@ -95,7 +95,7 @@ const CHART_S = [Z.summary, ...CHART];
 const TREND_S = [Z.summary, Z.one, Z.wide, Z.full];
 
 const PANELS: Record<PanelId, PanelSpec> = {
-  teacherWork: { label: "강사별 업무 현황", group: "출결·수업", thumb: "table", areas: ["teacherWork"], subjectScope: "subject", size: { w: 12, h: 1 }, sizes: [...LIST, Z.full] },
+  teacherWork: { label: "강사별 업무 현황", group: "출결·수업", thumb: "table", areas: ["teacherWork"], subjectScope: "subject", size: { w: 24, h: 1 }, sizes: [...LIST, Z.full] },
   studentsComp: { label: "재원생 구성", group: "학생·재원", thumb: "donut", areas: ["students"], sizes: CHART_S },
   attendance: { label: "출결 현황", group: "출결·수업", thumb: "donut", areas: ["attendance", "processing", "holidayAttendance"], sizes: CHART_S },
   billingMonth: { label: "이번 달 수납 현황", group: "수납·지출", thumb: "donut", areas: ["billing"], options: ["amounts"], sizes: CHART_S },

@@ -22,6 +22,7 @@ import { useEditorShortcuts } from "./use-editor-shortcuts";
 import { useDashboardEditor } from "./use-editor";
 import { WidgetGallery } from "./widget-gallery";
 import { AssignedStaff } from "./assigned-staff";
+import { RowEditor } from "./row-editor";
 import type { DashboardMembers } from "@/features/dashboard/layout/members";
 import e from "./editor.module.css";
 
@@ -48,12 +49,12 @@ const LIST_BELOW = 720;
  * 처음엔 그 역할의 **실데이터 미리보기**, '편집'을 누르면 위젯 편집(끌기·크기·서랍·갤러리), '완료'로 돌아온다. 저장은 아래 저장 바(다섯 역할 한 번에).
  */
 export function DashboardEditor({ initial, roleMenus, subjects, members, preview }: DashboardEditorProps) {
-  const ed = useDashboardEditor(initial);
+  const ed = useDashboardEditor(initial, subjects.map((s) => s.key));
   const { role, editing, selected, commit, select, restore, undo, redo } = ed;
   const items = useMemo(() => editing ? positionItems(ed.items) : ed.items, [ed.items, editing]);
   const [full, setFull] = useState<OverviewSnapshot | null | "failed">(null);
   const [galleryOpen, setGalleryOpen] = useState(false);
-  const [subject, setSubject] = useState<string | null>(subjects[0]?.key ?? null);
+  const { subject, setSubject } = ed;
   const [width, setWidth] = useState(1200);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const itemsRef = useRef(items);
@@ -82,6 +83,7 @@ export function DashboardEditor({ initial, roleMenus, subjects, members, preview
 
   const menus = useMemo(() => new Set(roleMenus[role]), [roleMenus, role]);
   const subjectChoice = subjects.find((s) => s.key === subject) ?? null;
+  const applicableMembers = role === "subject" && subject ? { ...members, people: members.people.filter((p) => p.subjectKeys.includes(subject)) } : members;
   const original = full && full !== "failed" ? full : null;
   const previewSubject = role === "subject" ? subjectChoice : null;
   // 편집 얼굴·갤러리의 값 — 모든 카드를 놓았다고 치고 이 역할로 다듬은 스냅샷(권한 밖 영역 제거 · 담당 과목으로 좁힘).
@@ -100,10 +102,10 @@ export function DashboardEditor({ initial, roleMenus, subjects, members, preview
       if (!removed) return;
       const name = removed.title ?? cardDef(id)?.label ?? "구역 제목";
       toast(`'${name}'을(를) 뺐습니다`, {
-        action: { label: "되돌리기", onClick: () => restore(role, removed, at) },
+        action: { label: "되돌리기", onClick: () => restore(role, removed, at, subject) },
       });
     },
-    [restore, role],
+    [restore, role, subject],
   );
   const add = useCallback(
     (id: string, z?: SizePreset) => {
@@ -142,7 +144,7 @@ export function DashboardEditor({ initial, roleMenus, subjects, members, preview
         <p className={e.roleInfo}>
           <b>{BUNDLE_LABELS[role]}</b>
           <span>{BUNDLE_RULES[role]}</span>
-          <span>{members.failed ? "직원 조회 실패" : `지금 ${members.people.filter((p) => p.bundle === role && p.canOpen).length}명`}</span>
+          <span>{members.failed ? "직원 조회 실패" : `지금 ${applicableMembers.people.filter((p) => p.bundle === role && p.canOpen).length}명`}</span>
           <span>{ed.status[role].isDefault ? "기본 배치 사용 중" : "직접 구성한 배치"}</span>
         </p>
         <EditorActions
@@ -169,20 +171,21 @@ export function DashboardEditor({ initial, roleMenus, subjects, members, preview
           onSubject={setSubject}
         />
         </div>
-        <AssignedStaff members={members} bundle={role} />
+        <AssignedStaff members={applicableMembers} bundle={role} />
         </div>
         {editing ? (
           <div className={e.stage} data-inspector={selectedItem ? "" : undefined}>
             <div className="flex min-w-0 flex-col gap-3">
               {listMode || !original ? (
                 <>
+                  <RowEditor items={items} onCommit={commit} />
                   <ListBoard items={items} role={role} menus={menus} selected={selected} onSelect={select} onCommit={commit} onRemoved={onRemoved} />
                   <Button type="button" variant="outline" onClick={appendRow}>+ 하단에 행 추가</Button>
                   <UnusedList ids={unused} onAdd={(id) => add(id)} />
                 </>
               ) : (
                 <EditBoard
-                  key={role}
+                  key={`${role}:${subject}`}
                   items={items}
                   unused={unused}
                   onAddRow={appendRow}

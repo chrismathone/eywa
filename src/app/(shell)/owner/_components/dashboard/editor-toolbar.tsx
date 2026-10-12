@@ -39,7 +39,7 @@ export function RoleBar({
 
 /**
  * 편집 동작 줄 — '편집' ↔ '완료'가 맨 앞(iOS처럼 진입·끝이 분명), 편집 중에만 위젯 추가·구역 제목·되돌리기·복사가 선다.
- * '기본값으로'는 코드의 기본 배치로 되돌린다(되돌리기로 취소 가능). 과목 관리자는 미리보기 과목을 고른다.
+ * '기본값으로'는 코드의 기본 배치로 되돌린다. 과목 관리자는 배치를 적용할 과목을 고른다.
  */
 export function EditorActions(p: {
   role: Bundle;
@@ -106,7 +106,7 @@ export function EditorActions(p: {
         기본값으로
       </ToolbarButton>
       {p.role === "subject" && p.subjects.length > 0 ? (
-        <ToolbarSegment label="미리보기 과목" className="ml-auto">
+        <ToolbarSegment label="적용할 과목" className="ml-auto">
           {p.subjects.map((s) => (
             <ToolbarSegmentItem key={s.key} active={p.subject === s.key} onClick={() => p.onSubject(s.key)}>
               {s.label}

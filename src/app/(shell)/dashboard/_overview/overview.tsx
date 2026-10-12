@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useState, useSyncExternalStore, type ReactNode } from "react";
+import Link from "next/link";
 import { DEFAULT_CHART_KINDS, type ChartKinds, type ChartPanel } from "@/features/dashboard/overview/chart-prefs";
 import { saveDashboardChartKind } from "@/features/dashboard/overview/chart-prefs-actions";
 import { DEFAULT_LAYOUT, type PanelId } from "@/features/dashboard/overview/layout";
@@ -25,6 +26,7 @@ import { cancelledSuffix } from "@/features/calendar/cancelled";
 import { useOverview } from "./use-overview";
 import { DetailPopup } from "./detail-popup";
 import { CurrentClasses } from "./current-classes";
+import { TeacherWorkCard } from "./teacher-work-card";
 import { SchoolDistribution } from "./school-distribution";
 import { AdmissionsSchedule } from "./admissions-schedule";
 import { KpiStrip, kpiCards } from "./kpi-strip";
@@ -144,7 +146,7 @@ function Panel({
           </div>
         ) : null}
       </header>
-      <div className={s.panelBody}>
+      <div className={s.panelBody} data-overview="panel-body">
         {available ? (
           children
         ) : (
@@ -1109,24 +1111,7 @@ export function Overview({
     teacherWork: (
       <Panel title={t("teacherWork", "강사별 업무 현황")}
         note="현재 담당 반 · 보고서 최근 7일 · 영상 숙제 최근 30일" sections={[v.teacherWork]}>
-        {v.teacherWork?.data ? <>
-          <table className="w-full text-left text-xs tabular-nums">
-            <thead><tr className="border-line border-b">
-              {["강사 · 과목", "작성", "발송 완료", "미발송", "발송 오류", "영상 미제출"].map((label) => <th key={label} className="px-1 py-2 font-semibold">{label}</th>)}
-            </tr></thead>
-            <tbody>{v.teacherWork.data.rows.map((row) => <tr key={`${row.teacherId ?? "none"}:${row.subject}`} className="border-line border-b last:border-0">
-              <td className="px-1 py-2"><b>{row.teacherName}</b><div className="text-muted-foreground">{snapshot.subjects[row.subject] ?? row.subject} · {row.classIds.length}반</div></td>
-              <td className="px-1 py-2">{row.reports}</td>
-              <td className="text-chart-2 px-1 py-2">{row.sent}</td>
-              <td className="px-1 py-2">{row.pending}</td>
-              <td className="px-1 py-2" style={{ color: row.failed ? "#b4232b" : undefined }}>{row.failed}</td>
-              <td className="px-1 py-2"><Jump href={`/lesson-reports/video-homework?${new URLSearchParams({ from: v.teacherWork!.data!.videoFrom, to: v.teacherWork!.data!.to, class: row.classIds.join(","), status: "missing" })}`}>{row.videoMissing}</Jump></td>
-            </tr>)}</tbody>
-          </table>
-          {v.teacherWork.data.rows.length === 0 ? <p className={s.empty}>담당 반이 없습니다.</p> : null}
-          <p className={s.footnote}>작성은 저장된 보고서 건수이며, 미발송에는 발송 대기가 포함됩니다. 영상 미제출 숫자를 누르면 해당 반을 확인합니다.</p>
-          <p className={s.footnote}>{v.teacherWork.data.videoCheckedAt ? `영상 확인 ${clock(Date.parse(v.teacherWork.data.videoCheckedAt))} 기준` : "영상 상태 확인 대기"}</p>
-        </> : null}
+        {v.teacherWork?.data ? <TeacherWorkCard data={v.teacherWork.data} subjects={snapshot.subjects} /> : null}
       </Panel>
     ),
     nowClasses: (
@@ -1410,6 +1395,12 @@ export function Overview({
           </div>
         </header>
 
+        {!preview && (view?.subjectChoices?.length ?? 0) > 1 ? <nav className="mb-4 flex flex-wrap gap-2" aria-label="대시보드 과목">
+          {view!.subjectChoices!.map((choice) => <Link key={choice.key} href={`/dashboard?subject=${encodeURIComponent(choice.key)}`}
+            aria-current={view?.activeSubject === choice.key ? "page" : undefined}
+            className={`rounded-md border px-3 py-1 text-sm ${view?.activeSubject === choice.key ? "bg-primary text-primary-foreground" : "bg-background"}`}>{choice.label}</Link>)}
+        </nav> : null}
+
         {classic ? (
           <>
             {/* KPI 여덟 칸(원장 2026-09-11 여섯 칸 → 보강예정 → 2026-09-23 금일 등록) — 카드 = 팝업, ↗ = 목적지 창. 카드·팝업·목적지가 같은 함수를 부른다. */}
@@ -1429,7 +1420,7 @@ export function Overview({
             ))}
           </>
         ) : (
-          // 역할별 배치(학원 설정 '대시보드 관리') — 순서 + 크기의 흐름 격자. 줄의 남는 칸은 그 줄 카드들이 나눠 채운다.
+          // 역할·과목별 배치 — 저장한 행·열과 크기를 유지한다.
           <GridBoard
             items={view?.items ?? []}
             snapshot={snapshot}

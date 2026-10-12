@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
-import { refreshOverview } from "@/features/dashboard/overview/actions";
+import { refreshOverview, refreshSubjectOverview } from "@/features/dashboard/overview/actions";
 import {
   mergeSnapshot,
   type OverviewSnapshot,
@@ -23,7 +23,7 @@ export function useOverview(initial: OverviewSnapshot, { live = true }: { live?:
   const query = useQuery({
     queryKey: ["dashboard-overview", initial.scope],
     queryFn: async () => {
-      const next = await refreshOverview();
+      const next = initial.view?.activeSubject ? await refreshSubjectOverview(initial.view.activeSubject) : await refreshOverview();
       return mergeSnapshot(
         client.getQueryData<OverviewSnapshot>([
           "dashboard-overview",

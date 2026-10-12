@@ -3,8 +3,9 @@ import { capDisabledModules } from "@/lib/modules";
 import type { TenantSettings } from "@/features/owner/settings-types";
 import { dashboardAssignmentOf } from "./assignment";
 import type { Bundle } from "./types";
+import { selectSubjectView } from "./subject-view";
 
-export type DashboardMember = { id: string; name: string; role: SystemRole; bundle: Bundle; scopeLabel: string; canOpen: boolean; inherited: boolean };
+export type DashboardMember = { id: string; name: string; role: SystemRole; bundle: Bundle; scopeLabel: string; subjectKeys: string[]; canOpen: boolean; inherited: boolean };
 export type DashboardMembers = { people: DashboardMember[]; failed: boolean };
 export type MemberRow = { id: string; display_name: string | null; system_role: string; subjects: string[] | null; status: string | null };
 
@@ -22,6 +23,7 @@ export function dashboardMembers(rows: MemberRow[], superIds: ReadonlySet<string
     const matrix = capDisabledModules(isSuperAdmin ? mergeMostPermissive(roleMatrix, applied) : applied, settings.modules.disabled);
     const view = dashboardAssignmentOf({ id: row.id, systemRole: role, isSuperAdmin, subjects: row.subjects ?? [] }, assignments.get(row.id));
     return { id: row.id, name: row.display_name || "이름 미등록", role, bundle: view.bundle, inherited: view.inherited,
+      subjectKeys: selectSubjectView(Object.fromEntries(labels), view.subjects).choices.map((s) => s.key),
       canOpen: canAccess(role, "dashboard", matrix),
       scopeLabel: view.scope === "all" ? "전 과목" : view.scope === "unassigned" ? "미지정" : view.subjects.map((key) => labels.get(key) ?? "삭제된 과목").join(" · ") || "미지정",
     };

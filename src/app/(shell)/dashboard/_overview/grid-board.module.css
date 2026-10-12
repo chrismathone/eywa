@@ -1,4 +1,4 @@
-/* 역할별 배치(학원 설정 '대시보드 관리')의 보기 격자 — 자리는 grid-board.tsx가 흐름 배치(flow.ts)로 미리 계산해 CSS 변수로 싣는다.
+/* 역할별 배치의 고정 격자 — 저장한 행·열과 크기를 CSS 변수로 싣는다.
    🔑 간격은 한 값(--dash-gap): 가로·세로·KPI↔카드·구역 사이가 전부 같은 격자 간격이다(원장 2026-10-01 "카드 간격 한 값").
    카드 안쪽 여백도 한 값(--dash-pad). 지금 운영실(원장 기본)은 이 파일을 쓰지 않는다(옛 CSS 격자 그대로). */
 .grid {
@@ -13,7 +13,7 @@
 .cell {
   min-width: 0;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   grid-column: var(--dx) / span var(--dw);
@@ -23,7 +23,15 @@
 .cell > * {
   flex: 1 1 auto;
   min-height: 0;
+  width: 100%;
+  box-sizing: border-box;
 }
+.cell > :global([data-overview="panel"]) { height: 100%; overflow: hidden; }
+.cell :global([data-overview="panel-body"]) { min-height: 0; overflow: auto; }
+.cell :global([data-overview="panel-header"]) { flex-shrink: 0; min-width: 0; }
+.cell :global([data-overview="panel-header"] > div:first-child) { min-width: 0; }
+.cell :global([data-overview="panel-header"] h2) { overflow-wrap: anywhere; }
+.fitCell :global([data-overview="panel-body"]) { flex: none; height: auto; overflow: visible; }
 .space { pointer-events: none; }
 .grid :global([data-overview="panel"]) {
   padding: var(--dash-pad);
@@ -35,7 +43,7 @@
 .cell[data-wide-cell] :global([data-overview="schedule-grid"]) {
   grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr));
 }
-/* 흐름 격자에선 카드가 줄을 채우며 넓어진다 — 도넛은 카드 폭을 따라 커지므로(46%) 상한을 둔다(옛 격자는 1/4 칸이라 필요 없었다). */
+/* 도넛은 카드 폭을 따라 커지므로(46%) 상한을 둔다. */
 .grid :global([data-overview="panel"]) svg[data-chart="donut"] {
   max-width: 190px;
 }
@@ -53,6 +61,7 @@
 }
 .heading > * {
   flex: none;
+  width: auto;
 }
 .heading > span {
   font-size: var(--text-lg);
@@ -63,7 +72,7 @@
   font-size: var(--text-xs);
   margin: 0;
 }
-/* 중간 폭(사이드바를 편 좁은 창·작은 창) — 카드 폭 두 배(1×1 = 반 줄), 모두 한 줄 높이. 같은 순서로 다시 흐른다. */
+/* 중간 폭에서도 저장한 행·열을 유지하며 간격만 줄인다. */
 @container dashboard (max-width: 1100px) {
   .grid {
     --dash-gap: 12px;
@@ -90,4 +99,6 @@
   }
   .space { display: none; }
   .cell { overflow: visible; }
+  .cell > :global([data-overview="panel"]) { height: auto; overflow: visible; }
+  .cell :global([data-overview="panel-body"]) { overflow: visible; }
 }

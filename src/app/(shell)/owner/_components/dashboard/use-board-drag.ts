@@ -7,9 +7,11 @@ import { placeItem, positionItems } from "@/features/dashboard/layout/fixed-grid
 import { GRID_COLS, GRID_ROW_PX, MAX_ITEMS, isStructuralId, type Item } from "@/features/dashboard/layout/types";
 import type { BoardLayout } from "./geometry";
 import { startPoint, useDragPointer } from "./use-drag-pointer";
+import { displayedItems } from "./displayed-items";
 
 export type DropTarget = "canvas" | "drawer" | "trash";
 export type DragState = {
+  base: readonly Item[];
   kind: "tile" | "chip"; id: string; item: Item;
   start: { x: number; y: number }; offset: { x: number; y: number };
   x: number; y: number; target: DropTarget | null;
@@ -35,8 +37,9 @@ export function useBoardDrag({ items, canvasRef, layoutRef, onCommit, onRemoved 
   const canRemove = placedIds(items).length > 1;
   const setDrag = useCallback((next: DragState | null) => { dragRef.current = next; setDragState(next); }, []);
   const onDragStart = useCallback((ev: DragStartEvent) => {
+    const base = displayedItems(canvasRef.current, items);
     const data = ev.active.data.current as { kind: "tile" | "chip"; id: string } | undefined;
-    const item = data ? (data.kind === "tile" ? positionItems(items).find((i) => i.id === data.id) : newItem(data.id)) : undefined;
+    const item = data ? (data.kind === "tile" ? positionItems(base).find((i) => i.id === data.id) : newItem(data.id)) : undefined;
     if (!data || !item) return;
     const r = ev.active.rect.current.initial;
     const start = startPoint(ev.activatorEvent);
@@ -44,7 +47,7 @@ export function useBoardDrag({ items, canvasRef, layoutRef, onCommit, onRemoved 
     const rect = layoutRef.current?.rects?.get(item.id);
     const offset = data.kind === "tile" && box && rect ? { x: start.x - box.left - rect.left, y: start.y - box.top - rect.top } : { x: 0, y: 0 };
     track(ev.activatorEvent);
-    setDrag({ kind: data.kind, id: item.id, item, start, offset, x: item.x ?? 0, y: item.y ?? 0, target: data.kind === "tile" ? "canvas" : "drawer", size: { width: r?.width ?? 160, height: r?.height ?? 40 } });
+    setDrag({ base, kind: data.kind, id: item.id, item, start, offset, x: item.x ?? 0, y: item.y ?? 0, target: data.kind === "tile" ? "canvas" : "drawer", size: { width: rect?.width ?? r?.width ?? 160, height: rect?.height ?? r?.height ?? 40 } });
   }, [items, canvasRef, layoutRef, track, setDrag]);
   const onDragMove = useCallback((ev: DragMoveEvent) => {
     const d = dragRef.current;
@@ -68,14 +71,14 @@ export function useBoardDrag({ items, canvasRef, layoutRef, onCommit, onRemoved 
     const target = (ev.over?.id as DropTarget | undefined) ?? null;
     if (target === "canvas" && d.target === "canvas") {
       if (d.kind === "chip" && items.length >= MAX_ITEMS) return;
-      onCommit(placeItem(items, d.item, d.x, d.y));
+      onCommit(placeItem(d.base, d.item, d.x, d.y));
     } else if (d.kind === "tile" && (target === "drawer" || target === "trash") && (canRemove || isStructuralId(d.id))) {
       onCommit(removeItem(items, d.id)); onRemoved(d.id, [...items]);
     }
   }, [items, canRemove, onCommit, onRemoved, setDrag, stop]);
   const preview = useMemo(() => {
     if (!drag) return null;
-    if (drag.target === "canvas") return placeItem(items, drag.item, drag.x, drag.y);
+    if (drag.target === "canvas") return placeItem(drag.base, drag.item, drag.x, drag.y);
     if (drag.kind === "tile" && (drag.target === "drawer" || drag.target === "trash") && (canRemove || isStructuralId(drag.id))) return removeItem(items, drag.id);
     return null;
   }, [drag, items, canRemove]);
