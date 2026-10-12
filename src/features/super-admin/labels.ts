@@ -124,6 +124,8 @@ export const AUDIT_ACTIONS = {
   create_tenant: { label: "학원 발급", tone: "positive" },
   update_tenant: { label: "학원 수정", tone: "info" },
   impersonate_view: { label: "지점장 보기", tone: "caution" },
+  // 원장 화면(읽기 전용 보기)을 연 채로 한 내려받기 · 민감 정보 열람 — 지점 감사 로그 대신 여기에 남는다.
+  tenant_view_activity: { label: "보기 중 열람·내려받기", tone: "caution" },
   grant_license: { label: "좌석 설정", tone: "info" },
   toggle_license: { label: "기능 켜기·끄기", tone: "info" },
   toggle_laboratory_menu: { label: "실험실 메뉴 지정", tone: "info" },
@@ -176,7 +178,10 @@ export function auditDetail(action: string, metadata: Record<string, unknown> | 
       // 이름·플랜을 한 폼으로 저장한다 — 로그엔 플랜만 남으므로 플랜이 비었으면 무엇을 고쳤는지만 말한다.
       return str(m.plan) ? `이름·플랜 저장 (플랜 ${planLabel(str(m.plan))})` : "이름·플랜 저장";
     case "impersonate_view":
-      return "읽기 전용으로 들여다봄";
+      // mode=screen = 그 지점의 화면 자체를 읽기 전용으로 연 것(0356a). 그 밖은 운영 콘솔 안의 요약 보기.
+      return m.mode === "screen" ? "원장 화면을 읽기 전용으로 엶" : "읽기 전용으로 들여다봄";
+    case "tenant_view_activity":
+      return [str(m.actionLabel) ?? "기록 대상 동작", str(m.targetLabel)].filter(Boolean).join(" · ");
     case "grant_license": {
       const seats = m.maxSeats;
       const limit = typeof seats === "number" ? `최대 ${seats.toLocaleString("ko-KR")}석` : "제한 없음";

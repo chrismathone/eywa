@@ -7,6 +7,7 @@ import { getCurrentUser, type CurrentUser } from "@/lib/auth/current-user";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { createClient } from "@/lib/supabase/server";
 import { READONLY_TEACHER_VIEW_ERROR } from "@/lib/auth/view-as-message";
+import { tenantViewWriteError } from "@/lib/auth/tenant-view";
 
 /**
  * '다른 강사 뷰' — 역할·개인 권한에 따라 전체 편집 또는 읽기 전용으로 연다 (원장 2026-08-19).
@@ -42,6 +43,9 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export const otherTeacherViewAccess = cache(async (): Promise<"full" | "readonly" | "none"> => {
   const user = await getCurrentUser();
   if (!user || user.systemRole === "student") return "none";
+  // 🔴 운영 콘솔의 '지점 보기'(읽기 전용)는 **원장 화면 하나**다 — 그 안에서 강사뷰로 갈아타지 않는다. 갈아타면 권한이 대상 강사의
+  //    것으로 덮여 보기에서 닫아 둔 메뉴(perm-matrix.ts `TENANT_VIEW_CLOSED_MENUS`)가 다시 열리고, 강사뷰 쿠키가 보기 뒤에도 남는다.
+  if (user.tenantView) return "none";
   if (await isCurrentUserSuperAdmin()) return "full";
   const level = accessLevel(user.systemRole, "teacher_view", await getActorPermMatrix());
   return level === "full" || level === "readonly" ? level : "none";
@@ -85,6 +89,8 @@ export async function loadViewAsTarget(targetId: string): Promise<CurrentUser | 
 export const viewAsTeacher = cache(async (): Promise<ViewAsTeacher | null> => {
   const user = await getCurrentUser();
   if (!user || user.systemRole === "student") return null;
+  // 지점 보기 중에는 이 브라우저에 남아 있던 강사뷰 쿠키(본인 지점에서 쓰던 것)를 읽지 않는다 — 위 otherTeacherViewAccess 주석.
+  if (user.tenantView) return null;
   const jar = await cookies();
   if (jar.get(VIEW_MODE_COOKIE)?.value !== "teacher") return null;
   const targetId = jar.get(VIEW_AS_COOKIE)?.value;
@@ -111,5 +117,9 @@ export { READONLY_TEACHER_VIEW_ERROR } from "@/lib/auth/view-as-message";
  *    canWriteTenant/accessLevelTenant를 지나는 쓰기는 perm-matrix 캡이 자동 차단하므로 별도 가드 불요.
  */
 export async function readonlyTeacherViewError(): Promise<string | null> {
+  // 운영 콘솔의 '지점 보기'(읽기 전용)도 같은 문에서 거절한다 — 이 가드를 먼저 지나는 액션(발송 · 강사 귀속 쓰기)은
+  // 외부로 나가는 일을 품고 있어, 데이터 접근 층의 쓰기 차단보다 **앞에서** 멈춰야 한다.
+  const tenantView = await tenantViewWriteError();
+  if (tenantView) return tenantView;
   return (await isReadonlyTeacherView()) ? READONLY_TEACHER_VIEW_ERROR : null;
 }

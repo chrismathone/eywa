@@ -1,5 +1,6 @@
 import "server-only";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { tenantViewWriteError } from "@/lib/auth/tenant-view";
 import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { isFeatureOptedIn } from "@/lib/license/server";
 import { loadConnection } from "./store";
@@ -30,6 +31,10 @@ export type SlackSelfGateOk = { tenantId: string; userId: string; email: string;
 export async function slackSelfGate(): Promise<SlackSelfGateOk | { error: string }> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  // 🔴 이 문을 지나는 액션은 전부 쓰기이고, 저장보다 **먼저** 슬랙에 조회(이메일로 사람 찾기)를 내보낸다. 운영 콘솔의
+  //    '지점 보기'(읽기 전용)에서는 그 조회도 나가면 안 된다 — 그 지점의 봇 토큰으로 남의 이메일을 확인하는 일이 된다.
+  const viewError = await tenantViewWriteError();
+  if (viewError) return { error: viewError };
   if (!(await isFeatureOptedIn(user.tenantId, "slack"))) return { error: "이 지점은 슬랙 연결을 쓰지 않습니다" };
   const conn = await loadConnection(user.tenantId);
   if (conn.status !== "ok" || !conn.value?.botToken || conn.value.status !== "active") {

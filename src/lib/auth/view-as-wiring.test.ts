@@ -80,7 +80,8 @@ describe("'다른 강사 뷰'(열람 전용) 배선 가드", () => {
     // (shell) 레이아웃의 세 EditPresenceProvider(임베드·미니셸·풀셸) 전부에 걸려 있어야 한다 —
     // 한 곳이라도 빠지면 그 셸에서 연 화면이 대상 강사의 원스크린 '동시 열림' 경고에 뜬다.
     const layout = read("src", "app", "(shell)", "layout.tsx");
-    expect(layout.match(/trackDisabled=\{viewAs\?\.access === "readonly"\}/g)?.length).toBe(3);
+    // 2026-10-12: 운영 콘솔의 '지점 보기'(읽기 전용)도 같은 자리에서 막는다 — 조건 뒤에 `|| !!user.tenantView`가 붙었다.
+    expect(layout.match(/trackDisabled=\{viewAs\?\.access === "readonly" \|\| !!user\.tenantView\}/g)?.length).toBe(3);
   });
 
   it("원스크린 로스터 — 강사 축이 열람 대상(viewAsTeacher)을 따른다", () => {

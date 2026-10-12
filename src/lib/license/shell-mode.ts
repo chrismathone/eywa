@@ -85,8 +85,18 @@ export const SHELL_MODE_COOKIE = "eywa-shell-mode";
 
 export function shellModeInfoFromLicenses(
   snapshot: { flags: { window_mode: boolean; window_keepalive: boolean }; windowModeEpoch: string | null },
-  env: { override: string | undefined; nodeEnv: string | undefined },
+  env: {
+    override: string | undefined;
+    nodeEnv: string | undefined;
+    /**
+     * 지점 설정과 무관하게 **단일 화면**으로 연다 — 운영 콘솔의 '지점 보기'(읽기 전용)가 쓴다. 창(iframe)마다 셸이 따로 돌면
+     * 보기 상태가 창마다 갈릴 수 있어서다. 판은 `null`(모른다)로 둔다: 그 문서는 브라우저의 화면 방식 쿠키를 적지 않고
+     * 저장된 창 배치도 초기화하지 않는다 — 운영자가 본인 지점에서 쓰던 창 배치가 보기 때문에 지워지면 안 된다.
+     */
+    forceSingle?: boolean;
+  },
 ): ShellModeInfo {
+  if (env.forceSingle) return { mode: "single", epoch: null };
   const override = devShellModeOverride(env.override, env.nodeEnv);
   // 개발 덮어쓰기는 DB 판과 따로 센다 — 덮어쓰기를 켜고 끄는 것도 방식 전환이다(판이 갈려 초기화된다).
   if (override) return { mode: override, epoch: `dev:${override}` };

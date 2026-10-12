@@ -1,5 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { withFactGuard } from "./fact-guard";
+import { assertTenantViewOutboundAllowed } from "@/lib/auth/tenant-view-outbound";
 import { AI_TENANT_MISSING_MESSAGE, LICENSE_BLOCKED_MESSAGE } from "@/lib/license/rule";
 import { getAnthropic } from "./anthropic";
 import { getUpstage } from "./upstage";
@@ -396,6 +397,10 @@ export type GenerateDecisionOptions = {
 };
 
 async function requireAiLicense(meta: GenerateJSONOptions["meta"]): Promise<void> {
+  // 🔴 운영 콘솔의 '지점 보기'(읽기 전용) 중에는 **어떤 AI 호출도** 내보내지 않는다 — 지점 데이터가 외부로 나가고 비용이 들며,
+  //    결과를 저장할 수도 없다(보기 중 쓰기는 전부 막힌다). 데이터 접근 층의 쓰기 차단은 Supabase로 가는 요청만 보므로
+  //    바깥으로 나가는 호출은 이 단일 관문에서 따로 막는다. 요청 밖(cron · 웹훅 · 워커)에서는 늘 통과한다.
+  await assertTenantViewOutboundAllowed();
   const tenantId = typeof meta?.tenantId === "string" ? meta.tenantId.trim() : "";
   if (!tenantId) throw new Error(AI_TENANT_MISSING_MESSAGE);
   const { isFeatureLicensed } = await import("@/lib/license/server");

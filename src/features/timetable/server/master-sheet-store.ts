@@ -1,4 +1,5 @@
 import "server-only";
+import { assertTenantViewOutboundAllowed } from "@/lib/auth/tenant-view-outbound";
 import { prepareClassTerms, applyClassTerms, rollbackClassTerms, type TermBackup } from "@/features/classes/server/class-term-store";
 import postgres from "postgres";
 import { createHash, randomUUID } from "node:crypto";
@@ -166,6 +167,8 @@ export async function applyMasterTransaction(
   hash: string,
   acknowledgements: string[],
 ) {
+  // 🔴 DB에 직접 접속해 쓴다 — Supabase 요청을 보는 쓰기 차단을 지나지 않으므로, 운영 콘솔의 '지점 보기'(읽기 전용)는 여기서 따로 멈춘다(tenant-view-outbound.ts).
+  await assertTenantViewOutboundAllowed();
   return sql.begin("isolation level serializable", async (tx) => {
     await lockAttendanceMigration(tx);
     await tx`select pg_advisory_xact_lock(hashtextextended(${`${actor.tenantId}:english-master`},0))`;
@@ -428,6 +431,8 @@ export async function cancelMasterDate(
   actor: MasterActor,
   date: string,
 ) {
+  // 🔴 DB에 직접 접속해 쓴다 — Supabase 요청을 보는 쓰기 차단을 지나지 않으므로, 운영 콘솔의 '지점 보기'(읽기 전용)는 여기서 따로 멈춘다(tenant-view-outbound.ts).
+  await assertTenantViewOutboundAllowed();
   return sql.begin("isolation level serializable", async (tx) => {
     await lockAttendanceMigration(tx);
     await tx`select pg_advisory_xact_lock(hashtextextended(${`${actor.tenantId}:english-master`},0))`;

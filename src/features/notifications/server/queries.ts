@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { isTenantViewWriteBlocked } from "@/lib/auth/tenant-view";
 import { NOTIFICATION_LIST_LIMIT, NOTIFICATION_LIST_MAX, type NotificationItem } from "../types";
 import { presentNotification } from "../presentation";
 
@@ -23,6 +24,10 @@ export async function getMyNotifications(
 ): Promise<{ unread: number; items: NotificationItem[] }> {
   const user = await getCurrentUser();
   if (!user) return { unread: 0, items: [] };
+  // 운영 콘솔의 '지점 보기'(읽기 전용) 중에는 벨을 비운다 — 알림은 지점이 아니라 **받는 사람**으로 걸러지는 표라
+  // (`recipient_id = auth.uid()`), 그대로 읽으면 운영자 본인이 자기 지점에서 받은 알림이 보는 지점 화면에 뜬다.
+  // 보기 쿠키가 남아 있는데 보기가 아닌 요청(끝났다 · 확인하지 못했다)도 같다 — 그 브라우저에는 보기 띠를 단 탭이 남아 있을 수 있다.
+  if (user.tenantView || (await isTenantViewWriteBlocked())) return { unread: 0, items: [] };
   const supabase = await createClient();
 
   const list = supabase

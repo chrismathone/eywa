@@ -39,6 +39,8 @@ export const effectiveTeacherId = cache(async (): Promise<string | null> => {
   // 전체 권한의 업무 액션은 대상 강사로 귀속하고, 읽기 권한은 저장·발송을 차단한다.
   const viewAs = await viewAsTeacher();
   if (viewAs) return viewAs.id;
+  // 운영 콘솔의 '지점 보기'(읽기 전용)는 늘 원장 화면(학원 전체)이다 — 이 브라우저에 남은 강사뷰 쿠키로 좁히지 않는다(view-as.ts).
+  if (user.tenantView) return null;
   if (user.systemRole === "teacher") return user.id;
   // 겸직: 관리자 계열이 강사뷰 쿠키를 켰고, 실제 담당 반(또는 아래 오늘 위임)이 있을 때만.
   // 🔑 이 두 조건은 노출·진입 판정(canUseTeacherView)과 같다 — 한쪽만 바꾸면 '보이는데 안 들어가지는' 버튼이 된다.
@@ -83,6 +85,8 @@ export const getShellView = cache(async (): Promise<ShellView> => {
 export const canUseTeacherView = cache(async (): Promise<boolean> => {
   const user = await getCurrentUser();
   if (!user || !isFullShellRole(user.systemRole)) return false;
+  // 지점 보기 중에는 강사뷰 전환을 내놓지 않는다(view-as.ts) — 전환은 쿠키를 써서 보기가 끝난 뒤의 본인 화면까지 바꾼다.
+  if (user.tenantView) return false;
   const supabase = await createClient();
   const { count } = await supabase
     .from("classes")

@@ -15,6 +15,7 @@ import "server-only";
  *    둘 다 없으면 지점이 정확히 하나일 때만(직원명부 시트와 같은 fail-closed 규약 — 남의 지점 학생 이름이 섞이지 않게).
  */
 import { getSheetsApi, describeSheetsError } from "@/features/integrations/google-sheets";
+import { tenantViewOutboundError } from "@/lib/auth/tenant-view-outbound";
 import { BOARD_PREFIX } from "@/features/report-admin/notice-targets";
 import { licenseBlockReason } from "@/lib/license/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -267,6 +268,8 @@ export async function recordMathWithdrawalToSheet(args: {
 }): Promise<void> {
   const spreadsheetId = spreadsheetIdOf();
   if (!spreadsheetId) return;
+  // 운영 콘솔의 '지점 보기'(읽기 전용) 중에는 바깥 시트에 적지 않는다(tenant-view-outbound.ts). 이 함수는 던지지 않으므로 조용히 건너뛴다.
+  if (await tenantViewOutboundError()) return;
   const job = (async () => {
     if (!(await isSheetTenant(args.tenantId))) return;
     if (await licenseBlockReason(args.tenantId, "google_sheets")) return;

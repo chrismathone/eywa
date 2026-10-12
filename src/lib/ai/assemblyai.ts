@@ -1,4 +1,5 @@
 import "server-only";
+import { assertTenantViewOutboundAllowed } from "@/lib/auth/tenant-view-outbound";
 
 /**
  * Lightweight AssemblyAI v2 client. Wraps just the calls we need for the
@@ -100,6 +101,8 @@ export async function submitTranscript(args: {
   webhookUrl?: string;
   webhookAuthHeader?: { name: string; value: string };
 }): Promise<AssemblySubmitResult> {
+  // 운영 콘솔의 '지점 보기'(읽기 전용) 중에는 바깥으로 내보내지 않는다(tenant-view-outbound.ts) — 요청 밖(cron · 웹훅)에서는 늘 통과한다.
+  await assertTenantViewOutboundAllowed();
   const body: Record<string, unknown> = {
     audio_url: args.audioUrl,
     language_code: "ko",

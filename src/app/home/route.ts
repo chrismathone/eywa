@@ -8,6 +8,7 @@ import { landingPath } from "@/lib/auth/teacher-home";
 import { safeLoginNext } from "@/lib/auth/login-next";
 import { pickClientIp, recordLoginEvent } from "@/features/audit/server/login-log";
 import { createClient } from "@/lib/supabase/server";
+import { closeTenantView, hasTenantViewCookie } from "@/lib/auth/tenant-view-session";
 
 const FRESH_LOGIN_SEC = 120;
 
@@ -61,6 +62,13 @@ export async function GET(request: NextRequest) {
   // 창(iframe) 안에서 왔으면(없는 주소 착지 등) 착지 주소에도 embed=1 — 빠지면 창 안에 전체 셸이 뜬다(#133).
   const embed = request.nextUrl.searchParams.get("embed") === "1";
   const withEmbed = (href: string) => (embed ? `${href}${href.includes("?") ? "&" : "?"}embed=1` : href);
+  // 방금 로그인해서 온 요청(`?login=1`)인데 이 브라우저에 '지점 보기' 쿠키가 남아 있으면 먼저 닫고 같은 주소로 다시 온다 —
+  // 새로 로그인한 사람은 늘 본인 화면에서 시작한다(세션이 끊겼다가 다시 들어온 운영자가 말없이 보기 화면에 내리지 않게).
+  // 쿠키가 지워진 다음 요청은 이 줄에 걸리지 않으므로 돌지 않는다.
+  if (request.nextUrl.searchParams.get("login") === "1" && (await hasTenantViewCookie())) {
+    await closeTenantView();
+    redirect(`${request.nextUrl.pathname}${request.nextUrl.search}`);
+  }
   const user = await getCurrentUser();
   // 지점 소속 없이 만든 SaaS 관리자 계정은 public.users 행이 없다.
   // 기존 지점 사용자는 아래의 역할/과목 착지 경로를 그대로 쓴다.
@@ -76,7 +84,8 @@ export async function GET(request: NextRequest) {
     }
     redirect(withEmbed(isAdminAuthEmail(sa.email) ? "/admin" : "/super-admin"));
   }
-  if (isAdminAuthEmail(user.email) && (await getCurrentSuperAdmin())) redirect(withEmbed("/admin"));
+  // 운영 콘솔에서 '지점 보기'(읽기 전용)를 연 요청은 콘솔로 되돌리지 않는다 — 그 지점의 첫 화면으로 간다.
+  if (!user.tenantView && isAdminAuthEmail(user.email) && (await getCurrentSuperAdmin())) redirect(withEmbed("/admin"));
   const params = request.nextUrl.searchParams;
   // 🔴 `?login=1`만으로 기록하지 않는다(적대적 리뷰) — 새로고침·북마크·남이 보낸 링크마다 로그인 기록이 한 줄씩
   //    쌓여 감사 기록이 흐려진다. JWT의 `amr` 로그인 시각이 **방금(2분 이내)**일 때만 진짜 로그인으로 본다.

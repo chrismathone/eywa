@@ -21,6 +21,9 @@ import { CONNECTED_APPS, connectedAppVisibleTo, type ConnectedApp } from "../app
 export const getMyConnectedApps = cache(async (): Promise<ConnectedApp[]> => {
   const user = await getCurrentUser();
   if (!user) return [];
+  // 운영 콘솔의 '지점 보기'(읽기 전용)에서는 연결 앱을 세우지 않는다 — 이 입구는 **다른 앱에 로그인시키는** 길이라
+  // 그 지점의 이름으로 바깥 앱에 들어가거나 계정이 이어지면 '읽기'가 아니다. 출발 라우트도 이 함수로 걸러진다.
+  if (user.tenantView) return [];
   const todaysMath = await isFeatureOptedIn(user.tenantId, "todays_math");
   const enabled = CONNECTED_APPS.filter((a) => (a.feature === "todays_math" ? todaysMath : false));
   if (enabled.length === 0) return [];

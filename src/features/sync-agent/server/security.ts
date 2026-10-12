@@ -2,6 +2,7 @@ import "server-only";
 import { createHash, createHmac, randomInt, timingSafeEqual } from "node:crypto";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { tenantViewWriteError } from "@/lib/auth/tenant-view";
 import { agentDb } from "./db";
 
 export class AgentError extends Error {
@@ -18,6 +19,9 @@ export async function requireManager() {
   const user = await getCurrentUser();
   if (!user || !["master", "admin"].includes(user.systemRole) || !(await canWriteTenant(user.systemRole, "integration_settings")))
     throw new AgentError(403, "권한을 확인해 주세요.");
+  // 운영 콘솔의 '지점 보기'(읽기 전용)에서는 연동 PC를 관리하지 않는다 — 이 모듈은 DB에 직접 접속해 데이터 접근 층의 쓰기 차단을
+  // 지나지 않는다(위 쓰기 권한 문이 이미 거절하지만, 그 문이 바뀌어도 여기서 멈춘다).
+  if (await tenantViewWriteError()) throw new AgentError(403, "권한을 확인해 주세요.");
   return user;
 }
 export async function rateLimit(key: string, limit: number) {

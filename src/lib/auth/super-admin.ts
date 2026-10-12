@@ -45,6 +45,9 @@ export const getCurrentSuperAdmin = cache(async (): Promise<CurrentSuperAdmin | 
 export const isCurrentUserSuperAdmin = cache(async (): Promise<boolean> => {
   const user = await getCurrentUser();
   if (!user) return false;
+  // 운영 콘솔의 '지점 보기'(읽기 전용) 중에는 **그 지점 원장과 같은 화면**이어야 한다 — 운영 계정만 통과하는 문
+  // (잠금 무시 · 설정 전체 권한 · 숨은 메뉴)을 열지 않는다. 열면 원장에게는 없는 화면이 섞인다.
+  if (user.tenantView) return false;
   const supabase = await createClient();
   const { data } = await supabase
     .from("super_admins")

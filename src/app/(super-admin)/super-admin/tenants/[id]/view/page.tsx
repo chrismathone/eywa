@@ -9,6 +9,7 @@ import { Panel, fmtDate, fmtNum } from "@/components/super-admin/parts";
 import { getTenantSnapshot } from "@/features/super-admin/server/queries";
 import { logImpersonateView } from "@/features/super-admin/server/actions";
 import { studentStatusMeta } from "@/features/students/status-labels";
+import { OpenTenantViewButton } from "../_open-view-button";
 
 export const metadata = { title: "슈퍼관리자 · 지점장 보기 — 에이와" };
 
@@ -28,9 +29,12 @@ export default async function TenantViewPage({ params }: { params: Promise<{ id:
         description="이 학원의 현황을 읽기 전용으로 봅니다. 여기서는 아무것도 바꿀 수 없습니다."
         embedLabel={`${snap.name} · 읽기 전용`}
         actions={
-          <Link href={`/super-admin/tenants/${id}`} className={buttonVariants({ variant: "outline" })}>
-            <EyIcon name="arrowLeft" size={16} strokeWidth={1.8} /> 학원 상세로
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <OpenTenantViewButton tenantId={snap.id} />
+            <Link href={`/super-admin/tenants/${id}`} className={buttonVariants({ variant: "outline" })}>
+              <EyIcon name="arrowLeft" size={16} strokeWidth={1.8} /> 학원 상세로
+            </Link>
+          </div>
         }
         stats={
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

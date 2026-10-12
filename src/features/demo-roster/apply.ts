@@ -1,4 +1,5 @@
 import { and, eq, inArray, like } from "drizzle-orm";
+import { assertTenantViewOutboundAllowed } from "@/lib/auth/tenant-view-outbound";
 import { db } from "@/lib/db";
 import { classes, classrooms, classSchedules, dayOfWeekEnum, enrollments, invoices, students, tenants } from "@/lib/db/schema";
 import { kstToday } from "@/lib/date-kst";
@@ -25,6 +26,8 @@ export async function replaceDemoRoster(
   tenantId: string,
   scenarioId: string,
 ): Promise<{ label: string; students: number } | { error: string }> {
+  // 🔴 DB에 직접 접속해 쓴다 — Supabase 요청을 보는 쓰기 차단을 지나지 않으므로, 운영 콘솔의 '지점 보기'(읽기 전용)는 여기서 따로 멈춘다(tenant-view-outbound.ts).
+  await assertTenantViewOutboundAllowed();
   if (!(scenarioId in SCENARIOS)) return { error: "없는 구성입니다" };
   const plan = buildScenario(scenarioId);
   const today = kstToday();

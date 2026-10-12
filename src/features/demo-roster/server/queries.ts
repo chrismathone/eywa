@@ -14,6 +14,8 @@ const IDS = ["neighborhood", "targetHeavy", "dual", "split"] as const;
 export async function getDemoRosterControl(): Promise<DemoRosterControl | null> {
   const user = await getCurrentUser();
   if (!user || user.systemRole !== "master") return null;
+  // 운영 콘솔의 '지점 보기'(읽기 전용)에서는 바꾸는 버튼을 세우지 않는다(액션도 같은 판정으로 거절한다).
+  if (user.tenantView) return null;
 
   const supabase = await createClient();
   const { data: tenant } = await supabase.from("tenants").select("slug").eq("id", user.tenantId).maybeSingle();

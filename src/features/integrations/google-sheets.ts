@@ -1,4 +1,5 @@
 import "server-only";
+import { assertTenantViewOutboundAllowed } from "@/lib/auth/tenant-view-outbound";
 import { google } from "googleapis";
 import type { SheetGrid } from "@/features/timetable/import/structure/types";
 
@@ -164,6 +165,8 @@ export async function overwriteTimetableSheet(
     hiddenTabs?: string[];
   },
 ): Promise<void> {
+  // 운영 콘솔의 '지점 보기'(읽기 전용) 중에는 바깥으로 내보내지 않는다(tenant-view-outbound.ts) — 요청 밖(cron · 웹훅)에서는 늘 통과한다.
+  await assertTenantViewOutboundAllowed();
   const auth = getServiceAccountAuth();
   await auth.authorize();
   const drive = google.drive({ version: "v3", auth });
@@ -229,6 +232,8 @@ export async function applySheetFormulas(
   sheetName: string,
   cells: { row: number; col: number; formula: string }[],
 ): Promise<void> {
+  // 운영 콘솔의 '지점 보기'(읽기 전용) 중에는 바깥으로 내보내지 않는다(tenant-view-outbound.ts) — 요청 밖(cron · 웹훅)에서는 늘 통과한다.
+  await assertTenantViewOutboundAllowed();
   if (cells.length === 0) return;
   const auth = getServiceAccountAuth();
   await auth.authorize();
@@ -270,6 +275,8 @@ export async function updateSheetRow(
   // 기입 시작 열 — 시트 수식 열(예: 직원명부 A열 ARRAYFORMULA 채번)을 덮지 않으려면 "B" 등으로.
   startColumn = "A",
 ): Promise<void> {
+  // 운영 콘솔의 '지점 보기'(읽기 전용) 중에는 바깥으로 내보내지 않는다(tenant-view-outbound.ts) — 요청 밖(cron · 웹훅)에서는 늘 통과한다.
+  await assertTenantViewOutboundAllowed();
   try {
     // 인증도 try 안 — invalid_grant 등 인증 오류가 한글 메시지(translateSheetsError)로 떨어지게.
     const auth = getServiceAccountAuth();

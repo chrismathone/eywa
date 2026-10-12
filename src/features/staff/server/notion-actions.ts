@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { tenantViewWriteError } from "@/lib/auth/tenant-view";
 import { canWriteTenant, getUserPermMatrix } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { logAction } from "@/features/audit/server/log";
@@ -225,6 +226,10 @@ export async function addTaskCommentAction(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const gate = await requireReader();
   if (!gate.ok) return gate;
+  // 🔴 이 액션은 **읽기 문**(requireReader)을 지난다 — 댓글은 직원관리를 볼 수 있는 사람이면 남길 수 있어서다. 그런데 운영 콘솔의
+  //    '지점 보기'(읽기 전용)도 읽기 문은 통과하므로, 여기서 따로 거절한다(안 하면 그 지점의 노션에 댓글이 실제로 써진다).
+  const viewError = await tenantViewWriteError();
+  if (viewError) return { ok: false, error: viewError };
   const t = text.trim();
   if (!t) return { ok: false, error: "댓글 내용을 입력하세요" };
   try {

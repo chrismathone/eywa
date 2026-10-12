@@ -1,5 +1,6 @@
 import "server-only";
 import { cache } from "react";
+import { unstable_rethrow } from "next/navigation";
 import {
   accessLevel,
   MENU_KEYS,
@@ -15,6 +16,7 @@ import {
 } from "@/lib/permissions";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { isTenantViewRequest, isTenantViewWriteBlocked } from "@/lib/auth/tenant-view";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { approvalMenuOverridesFor } from "@/features/approvals/access";
 import { capDisabledModules } from "@/lib/modules";
@@ -67,6 +69,8 @@ export const getPermMatrix = cache(async (): Promise<AccessMatrix> => {
     }
     return capLaboratory(capMakeupMode(capDisabledModules(resolveMatrix(overrides), disabled), makeupMode), (await getCurrentUser())?.tenantId ?? "");
   } catch (e) {
+    // Next가 흐름 제어에 쓰는 신호(끝난 '지점 보기'를 내보내는 이동 등 — current-user.ts)는 삼키지 않는다. 그 밖의 오류는 아래 폴백 그대로다.
+    unstable_rethrow(e);
     // ⚠️ fail-open(코드 기본값 복귀) = revoke override가 일시 무효화되는 방향 — 의도적·최종 결정이다.
     // 이유: fail-closed(차단)는 설정 조회 장애 시 master까지 /owner에 못 들어가 **복구 불능 락아웃**이 된다
     // (override를 고칠 유일한 경로가 owner 콘솔인데 그게 막힘). 기본값은 master=full이라 fail-open이 복구 가능성을 보존.
@@ -78,6 +82,27 @@ export const getPermMatrix = cache(async (): Promise<AccessMatrix> => {
 });
 
 /**
+ * '지점 보기'(읽기 전용)에서 **아예 닫는** 메뉴 — DB가 이 화면들의 지점을 `auth_tenant_id()`가 아니라 로그인한 사람의
+ * `users` 행에서 직접 정한다. 보기 중에 열면 보는 지점이 아니라 운영자 **본인 지점**의 기록이 나오거나(보강관리),
+ * 있는 기록이 없는 것처럼 비어 보인다(전자결재 · 급여 정책). 틀린 화면을 보여 주느니 닫는다.
+ * 🔴 새 메뉴의 정책 · 함수가 `users`를 `auth.uid()`로 직접 읽는다면 여기에 더할 것.
+ */
+export const TENANT_VIEW_CLOSED_MENUS: readonly MenuKey[] = ["makeups", "approvals", "payroll_settings"];
+
+/**
+ * 운영 콘솔의 '지점 보기'(읽기 전용)면 그 자리(원장 줄)의 전체·담당 권한을 **읽기**로 누른다 — 없음은 그대로(읽기를 넓히지 않는다).
+ * 사이드바·requireAccess·쓰기 게이트가 전부 이 매트릭스를 읽으므로 화면이 통째로 열람 전용이 된다.
+ * 실제 쓰기 차단은 여기에 기대지 않는다(데이터 접근 층 tenant-view-guard.ts + DB 0356a).
+ */
+export function capTenantViewReadonly(matrix: AccessMatrix, role: SystemRole): AccessMatrix {
+  return Object.fromEntries(MENU_KEYS.map((menu) => {
+    const level = matrix[menu][role];
+    const capped = TENANT_VIEW_CLOSED_MENUS.includes(menu) ? "none" : level === "full" || level === "scoped" ? "readonly" : level;
+    return [menu, { ...matrix[menu], [role]: capped }];
+  })) as AccessMatrix;
+}
+
+/**
  * 테넌트 매트릭스 위에 **현재 로그인 사용자의 개인 예외**(permissions.userOverrides)까지 얹은
  * "사용자 유효 매트릭스" — requireAccess·사이드바 등 현재 행위자 판정의 단일 소스(2026-08-01).
  * 자기 역할 행만 패치되므로 다른 역할 행을 읽는 소비처(레이아웃 강사뷰 가드 등)는 영향받지 않는다.
@@ -86,8 +111,17 @@ export const getPermMatrix = cache(async (): Promise<AccessMatrix> => {
  * ⚠️ **코드 기반 예외**도 같은 자리에서 얹는다 — 지금은 운영 계정이 기본값 '없음'인 메뉴(전자결재)를 여는 것뿐이다
  *    (approvals/access.ts — 사람 명단은 코드에 두지 않는다, 원장 2026-10-06). 저장된 설정보다 **먼저** 넣는다.
  *    이렇게 두면 사이드바·requireAccess·서버 액션이 전부 한 게이트를 공유한다(#77).
+ *
+ * 🔴 '지점 보기'(읽기 전용) 캡은 **맨 끝에서** 누른다 — 운영 계정 병합(잠금 무시 · 설정 메뉴 전체 권한)이 그 뒤에 오면
+ *    읽기 전용이 다시 열린다. 계산은 아래 `resolveActorPermMatrix`, 여기는 캡만 얹는다.
  */
 export const getActorPermMatrix = cache(async (): Promise<AccessMatrix> => {
+  const matrix = await resolveActorPermMatrix();
+  // 보기 = 그 지점 원장의 자리(current-user.ts)라 원장 줄을 누른다. 판정은 쿠키 하나를 보는 것이라 평소 요청엔 비용이 없다.
+  return (await isTenantViewRequest()) ? capTenantViewReadonly(matrix, "master") : matrix;
+});
+
+const resolveActorPermMatrix = cache(async (): Promise<AccessMatrix> => {
   const base = await getPermMatrix();
   try {
     const user = await getCurrentUser();
@@ -118,6 +152,7 @@ export const getActorPermMatrix = cache(async (): Promise<AccessMatrix> => {
     }
     return capSettingFeatures(capMakeupMode(capDisabledModules(applied, disabled), makeupMode), user.tenantId, user.systemRole);
   } catch (e) {
+    unstable_rethrow(e); // 위와 같다 — 이동 신호는 삼키지 않는다
     console.error("[perm-matrix] 개인 예외 적용 실패 — 테넌트 매트릭스로 폴백", e);
     return base;
   }
@@ -160,6 +195,9 @@ export async function canWriteTenant(role: SystemRole, menu: MenuKey): Promise<b
   //    본인 강사뷰(겸직)·관리자뷰는 viewAsTeacher()=null이라 영향 0. UI 쓰기 플래그(canEditAttendance 등)도
   //    같은 함수를 읽어 화면이 자동으로 열람 전용이 된다.
   if (await isReadonlyTeacherView()) return false;
+  // 운영 콘솔의 '지점 보기'도 같은 자리에서 막는다(매트릭스 캡과 이중 — 매트릭스 조회가 폴백을 타도 쓰기는 닫힌다).
+  // 보기 쿠키가 있는데 확인하지 못한 요청도 막는다(데이터 접근 층의 쓰기 가드와 같은 판정 — tenant-view.ts).
+  if (await isTenantViewWriteBlocked()) return false;
   return canWrite(role, menu, await getUserPermMatrix());
 }
 
@@ -169,6 +207,7 @@ export async function accessLevelTenant(role: SystemRole, menu: MenuKey): Promis
   // '다른 강사 뷰'는 열람 전용 — full/scoped를 readonly로 캡(ECS requireEcsClassAccess의 canWrite,
   // canManageTenant=학생 레코드 게이트 등이 이 수준을 본다). none은 그대로(읽기를 넓히지 않는다).
   if ((level === "full" || level === "scoped") && (await isReadonlyTeacherView())) return "readonly";
+  if ((level === "full" || level === "scoped") && (await isTenantViewWriteBlocked())) return "readonly";
   return level;
 }
 

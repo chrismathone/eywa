@@ -66,10 +66,15 @@ import { ScreenHelpOverlay } from "@/components/help/screen-help-overlay";
 import { menuLayoutWithModules } from "@/lib/modules";
 import { isGenericTenant } from "@/features/owner/preset";
 import { isLaboratoryMenuAvailable } from "@/lib/laboratory/server";
+import { TenantViewBanner } from "@/components/tenant-view-banner";
+import { TenantViewSync } from "@/components/tenant-view-sync";
+import { tenantViewServerNow, tenantViewSignedOutRedirect } from "@/lib/auth/tenant-view";
 
 export default async function ShellLayout({ children }: { children: ReactNode }) {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  // 끝난 '지점 보기' 때문에 사람을 못 읽은 것이면 로그인 화면이 아니라 보기를 정리하는 주소로 보낸다(tenant-view.ts).
+  // 보기 쿠키가 없는 요청은 조회 없이 null이라 종전대로 `/login`이다.
+  if (!user) redirect((await tenantViewSignedOutRedirect()) ?? "/login");
 
   // '다른 강사 뷰'(열람 전용, 2026-08-19) — 검증된 대상 강사(아니면 null). 쿠키 없으면 검증 쿼리 0.
   // 소비처 셋: ① presence track 전면 차단(대상 강사가 열람을 모르게 — 원장 지시) ② 미니셸 헤더 배지
@@ -78,10 +83,18 @@ export default async function ShellLayout({ children }: { children: ReactNode })
 
   // 학원 브랜드·색 — owner 설정(없으면 기본값). 셸 크롬(사이드바·헤더·미니셸)에 테넌트별 적용.
   // getTenantSettings는 React cache라 아래 분기들이 같은 라운드트립을 공유(임베드 포함).
-  const [settings, showMakeupSettings] = await Promise.all([
+  // 운영 계정 판정(아래 감시용)도 **여기서 나란히** 묻는다 — 따로 먼저 기다리면 모든 사용자의 창(embed) 첫 페인트 앞에 조회 하나가
+  // 줄을 선다(B4). 이 판정은 권한 매트릭스가 어차피 부르는 요청 캐시라 조회 수는 늘지 않는다.
+  const [settings, showMakeupSettings, canOpenTenantView] = await Promise.all([
     getTenantSettings(),
     isLaboratoryMenuAvailable(user.tenantId, "makeups"),
+    user.tenantView ? false : isCurrentUserSuperAdmin(),
   ]);
+  // 운영 콘솔의 '지점 보기'(읽기 전용) — 탭마다 "그려진 화면"과 "브라우저의 실제 상태"가 어긋났는지 지켜보는 감시
+  // (tenant-view-sync.tsx). 보는 중이거나 보기를 열 수 있는 사람(운영 계정)에게만 싣는다 — 그 밖의 사용자의 화면에는 놓이지 않는다.
+  const tenantViewSync = user.tenantView || canOpenTenantView
+    ? <TenantViewSync userId={user.id} viewingTenantId={user.tenantView?.tenantId ?? null} serverNow={tenantViewServerNow()} />
+    : null;
   // 브랜드 색을 --primary 등 CSS 변수로 주입(기본색이면 undefined → 주입 생략). 모든 셸 분기에 적용.
   const brandStyle = brandColorVars(settings.profile.brandColor) ?? undefined;
   // 왼쪽 탭 보기 설정 + 꺼진 기능(모듈)의 면 입구 — 사이드바·휴대폰 메뉴·메뉴 판이 같은 목록을 본다.
@@ -100,8 +113,9 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   const licensesPromise = licenseSnapshotPromise.then((s) => s.flags);
   // 지점 화면 방식(창 모드 / 단일 화면(이전 화면 유지) / 단일 화면) + 그 판(epoch) — 같은 라이선스 조회에서 판정한다(조회를 늘리지 않는다).
   // 개발 전용 덮어쓰기 `NEXT_PUBLIC_DEV_WINDOW_MODE_OVERRIDE`는 운영 빌드에서 무시된다(shell-mode.ts).
+  // 🔴 '지점 보기'(읽기 전용)는 늘 **단일 화면**으로 연다(`forceSingle` — 이유와 판(epoch)을 비우는 까닭은 shell-mode.ts).
   const shellModePromise = licenseSnapshotPromise.then((s) =>
-    shellModeInfoFromLicenses(s, { override: process.env.NEXT_PUBLIC_DEV_WINDOW_MODE_OVERRIDE, nodeEnv: process.env.NODE_ENV }),
+    shellModeInfoFromLicenses(s, { override: process.env.NEXT_PUBLIC_DEV_WINDOW_MODE_OVERRIDE, nodeEnv: process.env.NODE_ENV, forceSingle: !!user.tenantView }),
   );
 
   // Stage Manager 임베드(?embed=1 → proxy가 x-embed 주입): 사이드바·헤더·캔버스·팰릿 전부
@@ -129,7 +143,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
       <EmbedProvider embed>
         <TeacherNamesProvider names={await getTeacherEnglishNames()}>
         <SheetLangProvider lang={embedLang}>
-        <EditPresenceProvider trackDisabled={viewAs?.access === "readonly"} user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels} jobTitles={settings.operations.jobTitles} jobTitlesByDepartment={settings.operations.jobTitlesByDepartment} disabledModules={settings.modules.disabled} licenses={await licensesPromise}>
+        <EditPresenceProvider trackDisabled={viewAs?.access === "readonly" || !!user.tenantView} user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels} jobTitles={settings.operations.jobTitles} jobTitlesByDepartment={settings.operations.jobTitlesByDepartment} disabledModules={settings.modules.disabled} licenses={await licensesPromise}>
           {/* .embed-main = 창 컴팩트 마커 — PageHeader 등이 CSS 변형([.embed-main_&])으로 소비. soft nav에서
               layout(<main>)은 재렌더되지 않아 창 안 내비가 embed 파라미터를 흘려도 컴팩트가 유지된다(요청 단위
               x-embed로 판정하면 내비마다 풀 헤더로 플립 — 적대 리뷰 major). */}
@@ -177,6 +191,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
             {/* 창이 그 메뉴의 최소 크기(ROUTE_WINDOW_SIZE)보다 작으면 맨 위에 안내 — 화면은 접지 않는다(원장 2026-09-03). */}
             {keepaliveFrame ? null : <WindowMinSizeNotice />}
             <ScreenHelpOverlay />
+            {tenantViewSync}
             {children}
           </main>
           </KeepaliveFrameShell>
@@ -372,14 +387,17 @@ export default async function ShellLayout({ children }: { children: ReactNode })
             />
           </div>
         </header>
+        {/* 운영 콘솔에서 연 읽기 전용 보기 — 어느 지점인지와 끝내는 문(평소엔 없다). */}
+        {user.tenantView ? <TenantViewBanner tenantName={user.tenantView.tenantName} /> : null}
         {/* 컴퓨터 알림 선제 안내 — 권한 미설정 강사에게만(허용/차단/닫음이면 스스로 사라짐). 학생은 알림 없음. */}
         {view === "teacher" ? <NotifyPermissionBanner /> : null}
         {/* .compact-main = 페이지 헤더 접기 마커(globals.css `compact-chrome` ③). 위 헤더가 이미 메뉴명을
             찍으므로 본문 PageHeader의 eyebrow·21px 제목은 중복이다 — 강사 화면은 세로 1px이 곧 데이터다. */}
         {/* 강사 미니셸 — 원장이 "빠듯하다"고 짚은 화면(영어 강사 ECS 시트)이 여기다. */}
         <main className="compact-main flex-1 overflow-auto px-3 pt-4 pb-8 lg:px-6 lg:pt-5 lg:pb-10 [scrollbar-gutter:stable]">
-          <EditPresenceProvider trackDisabled={viewAs?.access === "readonly"} user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels} jobTitles={settings.operations.jobTitles} jobTitlesByDepartment={settings.operations.jobTitlesByDepartment} disabledModules={settings.modules.disabled} licenses={await licensesPromise}>
+          <EditPresenceProvider trackDisabled={viewAs?.access === "readonly" || !!user.tenantView} user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels} jobTitles={settings.operations.jobTitles} jobTitlesByDepartment={settings.operations.jobTitlesByDepartment} disabledModules={settings.modules.disabled} licenses={await licensesPromise}>
             <ScreenHelpOverlay />
+            {tenantViewSync}
             <Suspense fallback={null}>
               <UsageTracker />
             </Suspense>
@@ -483,6 +501,8 @@ export default async function ShellLayout({ children }: { children: ReactNode })
         {/* pt-2(모바일) — 상단 바 바로 아래라 여백을 조인다. 데스크톱은 종전 pt-5. */}
         {/* `relative` = 본문 안의 absolute(특히 `sr-only` 접근성 문구)의 기준점. 없으면 그 요소가 본문 스크롤 밖으로 빠져
             **문서 전체**가 늘어나 사이드바보다 아래까지 빈 스크롤이 생긴다([[#79]] — 2026-10-01 창 모드를 끈 지점의 영상 제출 현황). */}
+        {/* 운영 콘솔에서 연 읽기 전용 보기 — 어느 지점인지와 끝내는 문(평소엔 없다 · 본문 스크롤 밖). */}
+        {user.tenantView ? <TenantViewBanner tenantName={user.tenantView.tenantName} /> : null}
         {/* 화면 최대화 출구 줄 — 최대화 중 PageHeader가 없는 화면에서만 선다(본문 스크롤 밖 · 본문 높이를 밀지 않게 <main> 위). */}
         <PageMaximizeFallbackBar />
         <main className="relative flex-1 overflow-auto px-3 pt-2 pb-8 desk:px-6 desk:pt-5 lg:pb-10 [scrollbar-gutter:stable]">
@@ -492,9 +512,10 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           <Suspense fallback={null}>
             <UsageTracker />
           </Suspense>
-          <EditPresenceProvider trackDisabled={viewAs?.access === "readonly"} user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}>
+          <EditPresenceProvider trackDisabled={viewAs?.access === "readonly" || !!user.tenantView} user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}>
             {/* 배경(운영실) F1 은 창(z-40) 아래 — 창을 보고 있는데 대시보드 설명이 덮이지 않게. */}
             <ScreenHelpOverlay beneathWindows />
+            {tenantViewSync}
             {/* 이전 화면 유지 방식: 화면이 바탕을 덮는 동안 바탕 본문을 잠재운다(효과·폴링 정지 — keepalive-main-gate.tsx). 다른 방식은 그대로. */}
             {shellMode === "keepalive" ? <KeepaliveMainGate>{children}</KeepaliveMainGate> : children}
           </EditPresenceProvider>
@@ -505,7 +526,9 @@ export default async function ShellLayout({ children }: { children: ReactNode })
       <CommandPalette systemRole={user.systemRole} permMatrix={permMatrix} canTeacherView={canTeacherView} isSuperAdmin={isSuperAdmin} menuLayout={menuLayout} isGenericTenant={genericTenant} />
 
       {/* Stage Manager 워크스페이스 — 데스크톱에서만 자체 마운트(모바일/미니셸 무영향) */}
-      <WorkspaceCanvas owner={`${user.tenantId}:${user.id}`} homeHref={shellHome} />
+      {/* '지점 보기'(읽기 전용)에서는 캔버스를 싣지 않는다 — 창 배치의 주인(지점:사람)이 달라져, 실으면 운영자가 본인 지점에서
+          쓰던 저장된 창 배치를 "남의 것"으로 보고 지운다. 보기는 단일 화면이라 캔버스가 그릴 것도 없다. */}
+      {user.tenantView ? null : <WorkspaceCanvas owner={`${user.tenantId}:${user.id}`} homeHref={shellHome} />}
 
       {/* 업무군 메뉴 허브(버튼형, 원장 2026-09-07) — 사이드바에서 업무군을 고르면 본문에 메뉴 버튼이 뜬다.
           ⚠️ 캔버스와 **형제**로 둔다(캔버스 안에 넣으면 창들과 같은 층에 갇혀 z·포인터가 얽힌다).

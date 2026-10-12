@@ -1,4 +1,5 @@
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { isTenantViewWriteBlocked } from "@/lib/auth/tenant-view";
 import { MAX_BEACON_BYTES, toUsageRows, usagePayloadSchema } from "@/features/usage/ingest";
 import { recordPageUsage } from "@/features/usage/server/record";
 
@@ -26,6 +27,9 @@ export async function POST(req: Request) {
 
   const user = await getCurrentUser();
   if (!user) return empty(204);
+  // 운영 콘솔의 '지점 보기'(읽기 전용) 중의 화면 시간은 그 지점 사람의 이용 기록이 아니다 — 세지 않는다(쓰기도 어차피 막힌다).
+  // 보기 쿠키가 남아 있는데 보기가 아닌 요청(끝났다 · 확인하지 못했다)도 세지 않는다 — 보기 띠를 단 탭이 보낸 것일 수 있다.
+  if (user.tenantView || (await isTenantViewWriteBlocked())) return empty(204);
   await recordPageUsage(user, toUsageRows(parsed.data.items));
   return empty(204);
 }

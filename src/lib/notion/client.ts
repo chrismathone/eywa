@@ -1,5 +1,6 @@
 import "server-only";
 import type { NotionPage } from "@/features/staff/notion-tasks";
+import { assertTenantViewOutboundAllowed } from "@/lib/auth/tenant-view-outbound";
 
 // Notion REST 클라이언트(전역 토큰) — solapi.ts 캐시팩토리 패턴 미러. 토큰은 env 전용(DB/jsonb 금지).
 // SDK 없이 fetch로 최소 구현(week.ts·trend-graph '라이브러리 0' 에토스). 전건은 has_more/next_cursor 순회(B2 silent 절단 방지).
@@ -131,6 +132,7 @@ export type CommentSpan = { text: { content: string }; annotations?: { bold?: bo
 
 /** 페이지에 댓글 추가(서식 지원). "댓글 삽입" 권한 필요. API 댓글은 통합(봇)으로 표기됨(작성자 표기는 호출부). */
 export async function createComment(pageId: string, richText: CommentSpan[]): Promise<void> {
+  await assertTenantViewOutboundAllowed();
   await notionFetch(`/comments`, {
     method: "POST",
     body: JSON.stringify({ parent: { page_id: pageId }, rich_text: richText }),
@@ -139,11 +141,13 @@ export async function createComment(pageId: string, richText: CommentSpan[]): Pr
 
 /** 페이지 속성 수정(PATCH). properties는 Notion write 형식 그대로. "콘텐츠 업데이트" 권한 필요. */
 export async function updatePageProps(pageId: string, properties: Record<string, unknown>): Promise<void> {
+  await assertTenantViewOutboundAllowed();
   await notionFetch(`/pages/${pageId}`, { method: "PATCH", body: JSON.stringify({ properties }) });
 }
 
 /** DB에 새 페이지(업무) 생성. "콘텐츠 삽입" 권한 필요. 생성된 page id 반환. */
 export async function createPage(databaseId: string, properties: Record<string, unknown>): Promise<string> {
+  await assertTenantViewOutboundAllowed();
   const json = await notionFetch(`/pages`, {
     method: "POST",
     body: JSON.stringify({ parent: { database_id: databaseId }, properties }),

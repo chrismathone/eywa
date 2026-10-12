@@ -2,6 +2,7 @@
 
 import { revalidatePath, updateTag } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { tenantViewWriteError } from "@/lib/auth/tenant-view";
 import { logAction } from "@/features/audit/server/log";
 import { tenantSettingsTag } from "@/features/owner/server/queries";
 import { replaceDemoRoster } from "../apply";
@@ -13,6 +14,10 @@ export async function switchDemoRoster(
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   if (user.systemRole !== "master") return { error: "원장만 데모 데이터를 바꿀 수 있습니다" };
+  // 🔴 아래 교체는 DB에 **직접** 접속해 쓴다(drizzle) — Supabase 요청을 보는 쓰기 차단(tenant-view-guard.ts)을 지나지 않는다.
+  //    운영 콘솔의 '지점 보기'(읽기 전용)는 원장 자리로 보이므로 위 역할 검사도 통과한다 → 여기서 따로 거절한다.
+  const viewError = await tenantViewWriteError();
+  if (viewError) return { error: viewError };
 
   const result = await replaceDemoRoster(user.tenantId, scenarioId);
   if ("error" in result) return result;

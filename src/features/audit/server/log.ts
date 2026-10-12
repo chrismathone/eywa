@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { pokeSlack } from "@/features/slack/server/poke";
+import { logTenantViewActivity } from "@/features/super-admin/server/audit";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { collectAuditNameIds, systemActorMatches, SYSTEM_ACTOR_PREFIX } from "../describe";
 
@@ -561,6 +562,23 @@ export async function logAction(args: LogArgs): Promise<void> {
   try {
     const user = await getCurrentUser();
     if (!user) return;
+    // 운영 콘솔의 '지점 보기'(읽기 전용) 중이면 이 지점의 감사 로그가 아니라 **운영 감사 로그**에 남긴다 — 그 지점 사람이
+    // 한 일이 아니고, 보기 중에는 그 지점에 아무것도 쓰지 않는다. 내려받기 · 민감 정보 열람처럼 "읽기인데 기록 대상"인
+    // 동작이 여기로 온다(쓰기는 애초에 막혀 여기까지 오지 않는다).
+    if (user.tenantView) {
+      await logTenantViewActivity({
+        actorId: user.id,
+        actorEmail: user.email,
+        tenantId: user.tenantView.tenantId,
+        tenantName: user.tenantView.tenantName,
+        action: String(args.action),
+        actionLabel: auditActionLabel(String(args.action)),
+        targetType: args.targetType,
+        targetLabel: args.targetLabel,
+        metadata: args.metadata,
+      });
+      return;
+    }
     const supabase = await createClient();
     await supabase.from("audit_logs").insert({
       tenant_id: user.tenantId,

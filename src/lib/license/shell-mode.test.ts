@@ -110,6 +110,14 @@ describe("방식의 판(epoch) — 바꿨다 되돌린 전환도 초기화되게
     expect(shellModeInfoFromLicenses({ flags, windowModeEpoch: null }, env).epoch).toBeNull();
   });
 
+  it("단일 화면 강제(읽기 전용 지점 보기)는 지점 설정·개발 덮어쓰기보다 먼저다 — 판은 비워 창 배치를 초기화하지 않는다", () => {
+    const windowsOn = { flags: { window_mode: true, window_keepalive: true }, windowModeEpoch: "2026-10-01T00:00:00+00:00" };
+    expect(shellModeInfoFromLicenses(windowsOn, { ...env, forceSingle: true })).toEqual({ mode: "single", epoch: null });
+    expect(shellModeInfoFromLicenses(windowsOn, { override: "windows", nodeEnv: "development", forceSingle: true })).toEqual({ mode: "single", epoch: null });
+    // 끄면 종전 그대로다.
+    expect(shellModeInfoFromLicenses(windowsOn, { ...env, forceSingle: false })).toEqual(shellModeInfoFromLicenses(windowsOn, env));
+  });
+
   it("개발 덮어쓰기는 DB 판과 따로 센다(덮어쓰기를 켜고 끄는 것도 전환이다) — 운영 빌드에선 DB 그대로", () => {
     expect(
       shellModeInfoFromLicenses({ flags: { window_mode: false, window_keepalive: false }, windowModeEpoch: "x" }, {

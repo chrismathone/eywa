@@ -1,4 +1,5 @@
 import "server-only";
+import { assertTenantViewOutboundAllowed } from "@/lib/auth/tenant-view-outbound";
 
 /**
  * aywa → 인재원 **학생 학교·학년·생년월일 보내기**(원장 2026-10-08 *"전부 보내줘"* — 인재원이 학년 대비 레벨·같은 학년 평균을
@@ -36,6 +37,8 @@ type Row = IjwProfileRow;
  * 보낼 학생이 없으면 `sent: 0`으로 성공.
  */
 export async function pushIjwProfiles(tenantId: string, opts: { studentIds?: readonly string[] } = {}): Promise<IjwProfilePushResult> {
+  // 운영 콘솔의 '지점 보기'(읽기 전용) 중에는 바깥으로 내보내지 않는다(tenant-view-outbound.ts) — 요청 밖(cron · 웹훅)에서는 늘 통과한다.
+  await assertTenantViewOutboundAllowed();
   const conf = ijwConfigFor(tenantId);
   if (!conf) return { ok: false, reason: "not_configured", message: "인재원 연동이 설정되지 않은 학원입니다." };
   try {

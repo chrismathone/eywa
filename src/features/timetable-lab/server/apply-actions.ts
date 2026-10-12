@@ -2,6 +2,7 @@
 
 import { getCurrentUser } from '@/lib/auth/current-user';
 import { canManageTenant } from '@/lib/auth/perm-matrix';
+import { tenantViewWriteError } from '@/lib/auth/tenant-view';
 import { canUseTimetableEditor } from './access';
 import { draftSnapshotSchema, boundedJson } from '../draft-schema';
 import { openMasterDb } from '@/features/timetable/server/master-sheet-store';
@@ -20,6 +21,9 @@ const friendly = (error: unknown) => error instanceof Error && !('code' in error
 async function prepare(input: Request) {
   const user = await getCurrentUser();
   if (!user) throw new Error('로그인 후 다시 시도해 주세요.');
+  // 운영 콘솔의 '지점 보기'(읽기 전용)에서는 적용하지 않는다 — 이 파일은 DB에 직접 접속해 데이터 접근 층의 쓰기 차단을 지나지 않는다.
+  const viewError = await tenantViewWriteError();
+  if (viewError) throw new Error(viewError);
   if (!(await canUseTimetableEditor(user.systemRole))) throw new Error('시간표와 반을 관리할 권한이 필요합니다.');
   if (!boundedJson(input.draft)) throw new Error('연습본이 너무 크거나 형식이 올바르지 않습니다.');
   const text = JSON.stringify(input.draft);
@@ -118,6 +122,8 @@ export async function cancelTimetableLabApplyJob(id: string): Promise<{ ok: true
   try {
     const user = await getCurrentUser();
     if (!user || !(await canUseTimetableEditor(user.systemRole))) throw new Error('시간표를 관리할 권한이 필요합니다.');
+    const viewError = await tenantViewWriteError();
+    if (viewError) throw new Error(viewError);
     const sql = openMasterDb();
     try {
       const rows = await sql`update timetable_lab_apply_jobs set status='cancelled',finished_at=now() where tenant_id=${user.tenantId} and actor_id=${user.id} and id=${id}::uuid and status='pending' and apply_at>now() returning id`;
