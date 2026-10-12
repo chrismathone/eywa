@@ -14,6 +14,7 @@
  */
 
 import { inWithdrawalWindow, recentExitWindow } from "./window";
+export { withdrawalSubjects, WITHDRAW_SUBJECT_SPAN_DAYS } from "./window";
 import { normalizeReason, reasonDisplay } from "./types";
 
 export type ExitKind = "withdrawn" | "subject-ended";
@@ -48,22 +49,6 @@ export type ExitRow = {
   /** 수강종료 줄 — 학생이 휴원 중. */
   onHold?: boolean;
 };
-
-/** 퇴원 무렵으로 볼 폭 — 과목마다 마지막 수업일이 며칠씩 어긋나도 같은 퇴원으로 묶는다. */
-export const WITHDRAW_SUBJECT_SPAN_DAYS = 14;
-
-/** 퇴원생의 과목 — 마지막 종료일에서 `WITHDRAW_SUBJECT_SPAN_DAYS` 안에 끝난 수강의 과목 전부(중복 제거, 정렬). */
-export function withdrawalSubjects(ended: readonly { endDate: string | null; subject: string | null }[]): string[] {
-  let last: string | null = null;
-  for (const e of ended) if (e.endDate && (!last || e.endDate > last)) last = e.endDate;
-  if (!last) return [];
-  const floor = new Date(Date.parse(`${last.slice(0, 10)}T00:00:00Z`) - WITHDRAW_SUBJECT_SPAN_DAYS * 86_400_000)
-    .toISOString()
-    .slice(0, 10);
-  const out = new Set<string>();
-  for (const e of ended) if (e.subject && e.endDate && e.endDate.slice(0, 10) >= floor) out.add(e.subject);
-  return [...out].sort();
-}
 
 export type RangeKey = "all" | "month" | "30d" | "90d" | "year" | "custom";
 

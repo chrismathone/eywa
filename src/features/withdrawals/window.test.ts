@@ -88,7 +88,7 @@ describe("퇴원생 프로그램 = 마지막 수강 반", () => {
     expect(withdrawalProgram({ lastClassSubject: null }, SUBJECTS)).toBeNull();
   });
 
-  it("🔑 한 학생 = 프로그램 하나 → 프로그램별 합(기타·미상 포함) = 퇴원생 수", () => {
+  it("프로그램별 행 합(기타·미상 포함) = 입력 행 수", () => {
     const counts = countWithdrawalPrograms([
       { program: "eie" },
       { program: "math" },

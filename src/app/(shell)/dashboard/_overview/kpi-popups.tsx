@@ -3,6 +3,7 @@
 import type { OverviewData } from "@/features/dashboard/overview/model";
 import {
   studentsEnrolledHref,
+  studentsUnenrolledHref,
   withdrawalsMonthHref,
 } from "@/features/dashboard/overview/kpi-links";
 import { countWithdrawalPrograms } from "@/features/withdrawals/window";
@@ -41,7 +42,8 @@ export function StudentsPopup({
           ...(programs.otherOnly > 0
             ? [{ key: "other", label: "그 외 과목만", value: programs.otherOnly }]
             : []),
-          { key: "none", label: "수강 없음", value: programs.noEnrollment, note: "휴원 수강만 있는 학생 포함" },
+          { key: "none", label: "미수강", value: programs.noEnrollment, note: "휴원 수강만 있는 학생 포함",
+            href: canOpen && programs.noEnrollment > 0 ? studentsUnenrolledHref() : null },
         ]}
       />
       <p className={s.footnote}>
@@ -89,7 +91,7 @@ export function WithdrawalsPopup({
       ) : (
         <ul className={s.kpiList}>
           {data.rows.map((row) => (
-            <li key={row.id} className={s.kpiListRow}>
+            <li key={row.eventKey ?? row.id} className={s.kpiListRow}>
               <NameCell
                 href={canOpenStudent ? `/students/${row.id}` : null}
                 title={row.name}
@@ -110,7 +112,7 @@ export function WithdrawalsPopup({
           ))}
         </ul>
       )}
-      <p className={s.footnote}>과목 수업을 모두 종료한 학생 포함 · 반이동·특강 종료·퇴원일 미상 제외 · 학생당 1명, 프로그램은 마지막 종료 반 기준입니다.</p>
+      <p className={s.footnote}>과목 수업을 모두 종료한 학생 포함 · 반이동·특강 종료·퇴원일 미상 제외 · 여러 과목을 함께 종료하면 과목마다 1명씩 셉니다.</p>
     </>
   );
 }

@@ -197,7 +197,7 @@ async function students(
 
 /**
  * KPI '퇴원&수업종료' — 이번 달 1일 ~ min(말일, 오늘)(KST).
- * 퇴원관리의 과목 전체 종료 기준을 더하고 학생별로 한 번 센다. 반이동·특강 종료는 제외한다.
+ * 퇴원관리의 과목 전체 종료 기준을 더하고 종료된 과목마다 한 번 센다. 반이동·특강 종료는 제외한다.
  */
 async function monthWithdrawals(
   rowsPromise: Promise<WindowWithdrawal[]>,
@@ -213,13 +213,19 @@ async function monthWithdrawals(
       .filter((row) =>
         inWithdrawalWindow({ withdrawnAt: row.withdrawnAt, systemBulk: false }, win.from, win.to),
       )
-      .map((row) => ({
+      .flatMap((row) => (row.exitClasses.length ? row.exitClasses : [{
+        subject: row.lastClassSubject,
+        englishTrack: row.lastClassEnglishTrack,
+        className: row.lastClassName,
+      }]).map((klass) => ({
         id: row.id,
+        eventKey: `${row.id}|${klass.subject ?? "unknown"}`,
         name: row.name,
         schoolGrade: schoolGradeLabel(row.school, row.grade) || null,
         withdrawnAt: row.withdrawnAt,
-        program: withdrawalProgram(row, settings.operations.subjects),
-      })), ended, win, settings.operations.subjects, (school, grade) => schoolGradeLabel(school, grade) || null),
+        className: klass.className ?? undefined,
+        program: withdrawalProgram({ lastClassSubject: klass.subject, lastClassEnglishTrack: klass.englishTrack }, settings.operations.subjects),
+      }))), ended, win, settings.operations.subjects, (school, grade) => schoolGradeLabel(school, grade) || null),
   };
 }
 

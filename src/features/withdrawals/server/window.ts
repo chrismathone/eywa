@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { isMergedStudent } from "@/features/students/merged";
 import { isSystemBulkWithdrawal } from "../system-bulk";
-import { inWithdrawalWindow, lastEndedByStudent } from "../window";
+import { inWithdrawalWindow, lastEndedByStudent, pickLastEnded, withdrawalSubjects } from "../window";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 type One<T> = T | T[] | null;
@@ -59,6 +59,8 @@ export type WindowWithdrawal = {
   lastClassName: string | null;
   lastClassSubject: string | null;
   lastClassEnglishTrack: string | null;
+  /** 퇴원 무렵 종료된 과목 각각의 마지막 반. KPI의 과목별 집계에 사용한다. */
+  exitClasses: { subject: string; englishTrack: string | null; className: string | null }[];
 };
 
 /**
@@ -92,10 +94,23 @@ export async function getWithdrawalsInWindow(from: string, to: string): Promise<
   //    칸만 근거 없이 부푼다(김지유B·권민서B 실측).
   const students = withdrawnRows.filter((s) => !isMergedStudent(s.notes));
   if (students.length === 0) return [];
-  const last = lastEndedByStudent(await loadEndedEnrollments(supabase, students.map((s) => s.id)));
+  const ended = await loadEndedEnrollments(supabase, students.map((s) => s.id));
+  const last = lastEndedByStudent(ended);
+  const byStudent = new Map<string, EndedEnrollmentRow[]>();
+  for (const row of ended) {
+    const list = byStudent.get(row.student_id) ?? [];
+    list.push(row);
+    byStudent.set(row.student_id, list);
+  }
   return students.flatMap((s) => {
     const row = last.get(s.id);
     const klass = lastClassOf(row);
+    const history = byStudent.get(s.id) ?? [];
+    const exitClasses = withdrawalSubjects(history.map((e) => ({ endDate: e.end_date, subject: lastClassOf(e).subject })))
+      .map((subject) => {
+        const lastSubject = lastClassOf(pickLastEnded(history.filter((e) => lastClassOf(e).subject === subject)) ?? undefined);
+        return { subject, englishTrack: lastSubject.englishTrack, className: lastSubject.className };
+      });
     const systemBulk = isSystemBulkWithdrawal({ withdrawnAt: s.withdrawn_at, hasEnrollmentHistory: !!row });
     if (!inWithdrawalWindow({ withdrawnAt: s.withdrawn_at, systemBulk }, from, to)) return [];
     return [
@@ -108,6 +123,7 @@ export async function getWithdrawalsInWindow(from: string, to: string): Promise<
         lastClassName: klass.className,
         lastClassSubject: klass.subject,
         lastClassEnglishTrack: klass.englishTrack,
+        exitClasses,
       },
     ];
   });

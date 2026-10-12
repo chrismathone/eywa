@@ -67,11 +67,13 @@ export type OverviewData = {
   changes: MonthChange[];
   /** 재원생 추이(월말·연말 재원생 수, 원장 2026-09-29) — 강사 스코프면 null(지금 담당 학생으로 과거를 셀 수 없다). */
   enrolledTrend: import("./enrolled-trend-server").EnrolledTrend | null;
-  /** 이번 달 퇴원 또는 과목 전체 수업종료. 학생 중복·반이동·특강 종료·시스템 정리 제외. */
+  /** 이번 달 퇴원 또는 과목 전체 수업종료. 과목별 종료 건수이며 반이동·특강 종료·시스템 정리 제외. */
   withdrawals: {
     month: string;
     rows: {
       id: string;
+      /** 같은 학생이 여러 과목을 종료하면 목록에는 과목마다 한 줄. */
+      eventKey?: string;
       name: string;
       schoolGrade: string | null;
       withdrawnAt: string;

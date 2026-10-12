@@ -2,8 +2,8 @@
  * 기간 안 퇴원생 + 퇴원생의 프로그램 — 순수 규칙(Vitest). 운영실 '퇴원생' 카드·팝업과 퇴원관리
  * `range=month`·`program=` 필터가 같은 판정을 쓴다.
  *
- * 🔑 퇴원생의 프로그램 = **마지막으로 끝난 수강 반**의 프로그램 — 퇴원관리의 '마지막 반·과목'과 같은 근거.
- *    그래서 한 학생은 프로그램 하나(또는 기타·미상)에만 들고, 프로그램별 인원의 합이 퇴원생 수와 같다.
+ * 🔑 퇴원생 목록의 프로그램 = **마지막으로 끝난 수강 반**의 프로그램.
+ *    운영실 퇴원·수업종료 KPI는 과목별 행으로 펼친 뒤 각 과목의 프로그램을 센다.
  * 🔴 '시스템 정리(날짜 미상)'는 기간 판정에서 뺀다 — 퇴원일이 실제 시점이 아니라 장부 날짜라 그 달에
  *    세면 사실이 아니다([system-bulk.ts]와 월별 추이가 이미 쓰는 규칙).
  */
@@ -87,7 +87,7 @@ export function inWithdrawalWindow(
   return day >= from && day <= to;
 }
 
-/** 퇴원생의 프로그램 = 마지막 수강 반의 프로그램(programOf 단일 규칙). */
+/** 주어진 수강 반의 프로그램(programOf 단일 규칙). */
 export function withdrawalProgram(
   row: { lastClassSubject: string | null; lastClassEnglishTrack?: string | null },
   subjects: readonly ProgramSubject[],
@@ -97,7 +97,23 @@ export function withdrawalProgram(
 
 export type WithdrawalProgramCounts = Record<Program, number> & { other: number; total: number };
 
-/** 프로그램별 퇴원생 수 — 합(eie+injaewon+math+other) = total. */
+/** 퇴원 무렵으로 볼 폭 — 과목마다 마지막 수업일이 며칠씩 어긋나도 같은 퇴원으로 묶는다. */
+export const WITHDRAW_SUBJECT_SPAN_DAYS = 14;
+
+/** 퇴원생의 과목 — 마지막 종료일에서 14일 안에 끝난 수강의 과목 전부(중복 제거, 정렬). */
+export function withdrawalSubjects(ended: readonly { endDate: string | null; subject: string | null }[]): string[] {
+  let last: string | null = null;
+  for (const e of ended) if (e.endDate && (!last || e.endDate > last)) last = e.endDate;
+  if (!last) return [];
+  const floor = new Date(Date.parse(`${last.slice(0, 10)}T00:00:00Z`) - WITHDRAW_SUBJECT_SPAN_DAYS * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+  const out = new Set<string>();
+  for (const e of ended) if (e.subject && e.endDate && e.endDate.slice(0, 10) >= floor) out.add(e.subject);
+  return [...out].sort();
+}
+
+/** 프로그램별 행 수 — 합(eie+injaewon+math+other) = total. */
 export function countWithdrawalPrograms(rows: readonly { program: Program | null }[]): WithdrawalProgramCounts {
   const out: WithdrawalProgramCounts = { eie: 0, injaewon: 0, math: 0, other: 0, total: rows.length };
   for (const row of rows) {

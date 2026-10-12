@@ -400,7 +400,9 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     expect(
       within(popup).getByRole("link", { name: "EiE 4명 목록 열기" }).getAttribute("href"),
     ).toBe("/students?status=enrolled&subject=all&grade=all&teacher=all&noenr=0&from=dashboard&program=eie");
-    expect(popup.textContent).toContain("수강 없음");
+    expect(popup.textContent).toContain("미수강");
+    expect(within(popup).getByRole("link", { name: "미수강 1명 목록 열기" }).getAttribute("href"))
+      .toBe("/students?status=enrolled&subject=__none__&grade=all&teacher=all&noenr=0&from=dashboard");
     expect(popup.textContent).toContain("합계가 재원생 수보다 클 수 있습니다");
     cleanup();
   });
@@ -510,6 +512,20 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     expect(popup.textContent).toContain("퇴원 1명 · 수강종료 1명");
     expect(within(popup).getByText("퇴원")).toBeInTheDocument();
     expect(within(popup).getByText("수강종료")).toBeInTheDocument();
+    cleanup();
+  });
+
+  it("한 학생의 두 과목 종료를 총 2명과 과목별 두 줄로 보여 준다", () => {
+    mocks.data = kpiSnapshot();
+    mocks.data.sections.withdrawals!.data!.rows = [
+      { id: "w1", eventKey: "w1|english", name: "퇴원가", schoolGrade: "침산중1", withdrawnAt: "2026-09-03", program: "injaewon", kind: "subject-ended" },
+      { id: "w1", eventKey: "w1|math", name: "퇴원가", schoolGrade: "침산중1", withdrawnAt: "2026-09-03", program: "math", kind: "subject-ended" },
+    ];
+    render(<Overview initial={mocks.data} />);
+    fireEvent.click(screen.getByRole("button", { name: /^퇴원&수업종료 2명\./ }));
+    const popup = screen.getByRole("dialog");
+    expect(popup.textContent).toContain("퇴원 0명 · 수강종료 2명");
+    expect(within(popup).getAllByRole("link", { name: "퇴원가 원생 상세" })).toHaveLength(2);
     cleanup();
   });
 
