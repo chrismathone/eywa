@@ -31,3 +31,9 @@ it("다른 지점·담당 밖 반·존재하지 않는 학생의 영상은 조�
   expect(await getVideoReceiptComment("tenant", { ...input, studentId: "absent" })).toBeNull();
   expect(m.load).not.toHaveBeenCalled();
 });
+it("지난 보고서 발송 시각 이후 같은 날 제출도 반영한다", async () => {
+  m.db.tables.lesson_reports![0].classnote_sent_at = "2026-10-08T17:00:00+09:00";
+  m.load.mockResolvedValue([{ id: "v", studentId: "s", classId: "c", homeworkDate: "2026-10-01", postedAt: "2026-10-08T20:00:00+09:00",
+    playback: { preview: "preview", thumbnail: "thumbnail", uploadedAt: null } }]);
+  expect(await getVideoReceiptComment("tenant", input)).toBe("지난 영상 숙제도 제출했습니다.");
+});

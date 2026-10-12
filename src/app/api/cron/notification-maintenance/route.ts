@@ -52,7 +52,7 @@ export async function GET(req: Request) {
   const videos: Record<string, string> = {};
   for (const tenantId of tenantIds) {
     try {
-      const result = await reconcileVideoHomework(tenantId, { notifyUnmatched: true });
+      const result = await reconcileVideoHomework(tenantId, { notifyUnmatched: true, scheduled: true });
       videos[tenantId] = `확인 ${result.checked}·갱신 ${result.updated}·알림 ${result.notifications}`;
     } catch (e) {
       reportError(e, { scope: "cron.notification-maintenance.video-homework", tenantId });

@@ -18,7 +18,9 @@ import { isSkipStatus } from "./progress-status";
 import { asProgressMode, progressFactLabel } from "./progress-mode";
 import { progressInline } from "./progress-range";
 
-const PLAIN_COMMENT_STYLE = "\n\n[말투 보완]\n기존 선생님의 말투와 문장 구성을 유지하세요. 기록에 없는 칭찬·다짐·전망을 덧붙이지 말고, '성장이 기대됩니다', '꾸준한 노력으로', '한 걸음 더 나아갔습니다' 같은 상투적인 마무리는 피하세요. 제출 사실만으로 성실함이나 이해도를 평가하지 마세요. 영상 제출 여부는 별도로 확인해 붙이므로, 입력에 없는 지난 영상 숙제의 제출·미제출 문장을 만들지 마세요.";
+const PLAIN_COMMENT_STYLE = "\n\n[말투 보완]\n기존 선생님의 말투와 문장 구성을 유지하세요. 기록에 없는 칭찬·다짐·전망을 덧붙이지 말고, '성장이 기대됩니다', '꾸준한 노력으로', '한 걸음 더 나아갔습니다' 같은 상투적인 마무리는 피하세요.";
+const VIDEO_COMMENT_GUIDANCE = "\n\n[영상 과제]\n제출 사실만으로 성실함이나 이해도를 평가하지 마세요. 영상 제출 여부는 별도로 확인해 붙이므로, 입력에 없는 지난 영상 숙제의 제출·미제출 문장을 만들지 마세요.";
+const commentStyle = (input: ReportCommentInput) => PLAIN_COMMENT_STYLE + (input.videoHomework === true ? VIDEO_COMMENT_GUIDANCE : "");
 
 /**
  * 테스트 점수 → 사람이 읽는 문자열(순수). **표시 단일 소스** — 학부모 카드(daily_test)·AI 멘트(testLine)·
@@ -183,7 +185,7 @@ export function buildFactBlock(input: ReportCommentInput): string {
  */
 /** 멘트 본문(출력 계약 없음) — 통합 호출 섹션용. template=원장 오버라이드. */
 export function commentBody(input: ReportCommentInput, template?: string | null): string {
-  return withTeacherNoteFidelity(interpolate(template || DEFAULT_PROMPTS.comment, { facts: buildFactBlock(input) }), input) + PLAIN_COMMENT_STYLE;
+  return withTeacherNoteFidelity(interpolate(template || DEFAULT_PROMPTS.comment, { facts: buildFactBlock(input) }), input) + commentStyle(input);
 }
 
 /** 멘트 단일 프롬프트(본문 + {comment} 출력 계약) — 미리보기·개별 테스트용. */
@@ -233,14 +235,14 @@ export function buildP2FactBlock(input: ReportCommentInput): string | null {
 export function commentP1Body(input: ReportCommentInput, template?: string | null): string | null {
   const p1facts = buildP1FactBlock(input);
   if (!p1facts) return null;
-  return interpolate(template || DEFAULT_PROMPTS.comment_p1, { p1facts }) + PLAIN_COMMENT_STYLE;
+  return interpolate(template || DEFAULT_PROMPTS.comment_p1, { p1facts }) + commentStyle(input);
 }
 
 /** 모드 B P2 본문(출력 계약 없음). 사실 없으면 null. */
 export function commentP2Body(input: ReportCommentInput, template?: string | null): string | null {
   const p2facts = buildP2FactBlock(input);
   if (!p2facts) return null;
-  return withTeacherNoteFidelity(interpolate(template || DEFAULT_PROMPTS.comment_p2, { p2facts }), input) + PLAIN_COMMENT_STYLE;
+  return withTeacherNoteFidelity(interpolate(template || DEFAULT_PROMPTS.comment_p2, { p2facts }), input) + commentStyle(input);
 }
 
 /** 모드 B P1 단일 프롬프트(본문 + {comment} 계약) — 미리보기·개별 테스트용. 사실 없으면 null. */

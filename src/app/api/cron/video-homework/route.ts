@@ -18,7 +18,7 @@ export async function GET(req: Request) {
   let checked = 0, updated = 0, notifications = 0, failed = 0;
   for (const tenantId of new Set(users.map(user => user.tenant_id))) {
     try {
-      const result = await reconcileVideoHomework(tenantId);
+      const result = await reconcileVideoHomework(tenantId, { scheduled: true, notifyUnmatched: true });
       checked += result.checked; updated += result.updated; notifications += result.notifications;
     } catch (error) { failed++; reportError(error, { scope: "cron.video-homework", tenantId }); }
   }

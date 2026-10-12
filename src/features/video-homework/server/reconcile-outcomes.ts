@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { addDays, kstToday } from "@/lib/date-kst";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
+import { classnoteSendWindowHint } from "@/features/onescreen/classnote-guard";
 import { isVideoHomeworkEnabled } from "../policy";
 import { videoHomeworkOutcomes } from "../auto-outcomes";
 import { videoMatchRange, VIDEO_MATCH_WINDOW_DAYS } from "../rounds";
@@ -10,13 +11,17 @@ import { getAssignedVideoHomework } from "./assignments";
 import { loadClassVideos } from "./ledger-queries";
 
 /** 업로드 직후 + 정기 재시도. 조회 실패를 '영상 없음'으로 처리하지 않는다. */
-export async function reconcileVideoHomework(tenantId: string, options: { studentId?: string; notifyUnmatched?: boolean } = {}) {
+export async function reconcileVideoHomework(tenantId: string, options: { studentId?: string; notifyUnmatched?: boolean; scheduled?: boolean } = {}) {
   const observedAt = new Date().toISOString();
   const today = kstToday();
   const range = videoMatchRange(addDays(today, -30), today, today);
   const db = createAdminClient();
-  const [settings, assigned, students, classes] = await Promise.all([
-    getTenantSettingsByTenantId(tenantId),
+  const settings = await getTenantSettingsByTenantId(tenantId, { failOnReadError: true });
+  // 정기 확인은 ClassNote 허용 시간에만. 링크 업로드 직후 호출은 시간 제한을 적용하지 않는다.
+  if (!settings.report.videoHomeworkPolicy.enabled || (options.scheduled && classnoteSendWindowHint(
+    settings.report.classnoteSendWindowStart, settings.report.classnoteSendWindowEnd)))
+    return { checked: 0, updated: 0, notifications: 0 };
+  const [assigned, students, classes] = await Promise.all([
     getAssignedVideoHomework(tenantId, range.from, today),
     fetchAllPaged<{ id: string; grade: string | null; is_test: boolean }>((from, to) => {
       const query = db.from("students").select("id,grade,is_test").eq("tenant_id", tenantId).order("id");
@@ -26,7 +31,6 @@ export async function reconcileVideoHomework(tenantId: string, options: { studen
     fetchAllPaged<{ id: string; subject: string }>((from, to) => db.from("classes").select("id,subject").eq("tenant_id", tenantId).order("id").range(from, to)),
   ]);
   if (assigned === null) throw new Error("영상 숙제 조회 실패");
-  if (!settings.report.videoHomeworkPolicy.enabled) return { checked: 0, updated: 0, notifications: 0 };
   const byStudent = new Map(students.filter(student => !student.is_test).map(student => [student.id, student]));
   const byClass = new Map(classes.map(cls => [cls.id, cls]));
   const targets = assigned.filter(homework => {

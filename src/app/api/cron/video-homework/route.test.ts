@@ -18,6 +18,6 @@ it("지점별로 한 번 실행하고 하나가 실패해도 나머지는 처리
   m.run.mockRejectedValueOnce(new Error("retry"));
   const response = await GET(request());
   expect(response.status).toBe(500);
-  expect(m.run.mock.calls).toEqual([["a"], ["b"]]);
+  expect(m.run.mock.calls).toEqual([["a", { scheduled: true, notifyUnmatched: true }], ["b", { scheduled: true, notifyUnmatched: true }]]);
   expect(await response.json()).toMatchObject({ checked: 2, updated: 1, notifications: 1, failed: 1 });
 });

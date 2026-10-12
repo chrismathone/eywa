@@ -5,16 +5,23 @@ import type { VideoArrival } from "./types";
 /** 실제 파일만 사용한다. 수동 ✓는 학부모에게 보낼 제출 근거가 아니다. */
 export function videoReceiptComment(input: {
   classId: string; studentId: string; homeworkDates: string[]; videos: VideoArrival[];
-  reportDate: string; previousReportDate: string | null; fromDate: string;
+  reportDate: string; previousReportDate: string | null; previousReportAt?: string | null; fromDate: string;
   historyComplete?: boolean;
 }): string | null {
   const dates = [...new Set(input.homeworkDates)].filter(date => date < input.reportDate).sort();
-  const videos = input.videos.filter(video => !!video.playback && kstDateOf(video.postedAt)! <= input.reportDate);
+  const receivedAt = (video: VideoArrival) => Math.max(Date.parse(video.postedAt),
+    Date.parse(video.playback?.uploadedAt ?? video.postedAt) || Date.parse(video.postedAt));
+  const end = Date.parse(`${addDays(input.reportDate, 1)}T00:00:00+09:00`);
+  const videos = input.videos.filter(video => !!video.playback && !!kstDateOf(video.postedAt) && receivedAt(video) < end);
   const rounds = buildLedgerRounds({ rows: [{ classId: input.classId, studentId: input.studentId, assignedDates: dates, tracked: true }],
     videos, marks: [], fromDate: input.fromDate, toDate: input.reportDate }).get(`${input.classId}:${input.studentId}`) ?? [];
   // 지난 보고서 이후 새로 받은 영상만 말한다. 같은 숙제를 다음 수업마다 다시 칭찬하지 않는다.
-  const since = input.previousReportDate ?? addDays(input.reportDate, -7);
-  const recent = rounds.filter(round => round.videoDate && round.videoDate > since && round.videoDate <= input.reportDate);
+  const sinceDate = input.previousReportDate ?? addDays(input.reportDate, -7);
+  // 발송한 날 밤에 낸 영상도 다음 보고서에 싣는다. 발송 시각을 모르는 옛 기록만 날짜 경계를 쓴다.
+  const since = input.previousReportAt && kstDateOf(input.previousReportAt) === input.previousReportDate
+    ? Date.parse(input.previousReportAt) : Date.parse(`${addDays(sinceDate, 1)}T00:00:00+09:00`) - 1;
+  const byId = new Map(videos.map(video => [video.id, video]));
+  const recent = rounds.filter(round => round.videoId && receivedAt(byId.get(round.videoId)!) > since);
   if (!recent.length) return null;
   // '모두'는 여러 건을 한꺼번에 마무리했고, 조회 범위에 남은 숙제가 없을 때만 쓴다.
   // 한두 건을 냈거나, 과거 한 건이라도 남아 있으면 평범한 제출 문장으로 충분하다.

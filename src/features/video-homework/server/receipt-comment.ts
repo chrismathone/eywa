@@ -28,8 +28,8 @@ export async function getVideoReceiptComment(tenantId: string, input: { studentI
   if (student.error || !student.data) return null;
   const range = videoMatchRange(reportDate, reportDate, reportDate);
   // 보고서는 RLS로 먼저 범위를 확인한다. 남의 반의 영상 조회를 위한 우회로가 되지 않는다.
-  const reports = await fetchAllPaged<{ report_date: string; video_homework: boolean | null }>((from, to) =>
-    db.from("lesson_reports").select("report_date,video_homework").eq("tenant_id", tenantId).eq("student_id", studentId).eq("class_id", classId)
+  const reports = await fetchAllPaged<{ report_date: string; video_homework: boolean | null; classnote_sent_at: string | null; created_at: string | null }>((from, to) =>
+    db.from("lesson_reports").select("report_date,video_homework,classnote_sent_at,created_at").eq("tenant_id", tenantId).eq("student_id", studentId).eq("class_id", classId)
       .gte("report_date", range.from).lt("report_date", reportDate).order("report_date", { ascending: false }).order("id").range(from, to));
   if (!reports.length) return null;
   const [videos, older] = await Promise.all([
@@ -39,6 +39,7 @@ export async function getVideoReceiptComment(tenantId: string, input: { studentI
   ]);
   if (videos === null) return null;
   return videoReceiptComment({ classId, studentId, reportDate, previousReportDate: reports[0].report_date,
+    previousReportAt: reports[0].classnote_sent_at ?? reports[0].created_at,
     homeworkDates: reports.filter(report => report.video_homework === true).map(report => report.report_date), videos, fromDate: range.from,
     historyComplete: !older.error && !older.data?.length });
 }

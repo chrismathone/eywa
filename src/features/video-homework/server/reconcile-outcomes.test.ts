@@ -3,15 +3,21 @@ import { createFakeDb, type FakeDb } from "@/features/video-submit/server/fake-d
 import { DEFAULT_VIDEO_HOMEWORK_POLICY, type VideoHomeworkPolicy } from "../policy";
 import type { VideoArrival } from "../types";
 const m = vi.hoisted(() => ({ db: null as unknown as FakeDb, videos: [] as VideoArrival[] | null,
-  assigned: [] as { studentId: string; classId: string; date: string }[] | null, policy: {} as VideoHomeworkPolicy, load: vi.fn() }));
+  assigned: [] as { studentId: string; classId: string; date: string }[] | null, policy: {} as VideoHomeworkPolicy, load: vi.fn(),
+  settingsError: false, start: "", end: "", settings: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => m.db }));
-vi.mock("@/features/owner/server/queries", () => ({ getTenantSettingsByTenantId: async () => ({ report: { videoHomeworkPolicy: m.policy } }) }));
+vi.mock("@/features/owner/server/queries", () => ({ getTenantSettingsByTenantId: async (...args: unknown[]) => {
+  m.settings(...args);
+  if (m.settingsError) throw new Error("학원 설정 조회 실패");
+  return { report: { videoHomeworkPolicy: m.policy, classnoteSendWindowStart: m.start, classnoteSendWindowEnd: m.end } };
+} }));
 vi.mock("./assignments", () => ({ getAssignedVideoHomework: async () => m.assigned }));
 vi.mock("./ledger-queries", () => ({ loadClassVideos: (...args: unknown[]) => { m.load(...args); return Promise.resolve(m.videos); } }));
 import { reconcileVideoHomework } from "./reconcile-outcomes";
 
 beforeEach(() => {
   vi.useFakeTimers(); vi.setSystemTime(new Date("2026-10-12T03:00:00Z")); m.load.mockClear();
+  m.settingsError = false; m.start = ""; m.end = ""; m.settings.mockClear();
   m.policy = { ...DEFAULT_VIDEO_HOMEWORK_POLICY };
   m.assigned = [{ studentId: "s", classId: "c", date: "2026-10-01" }]; m.videos = [];
   m.db = createFakeDb({ students: [{ id: "s", tenant_id: "tenant", grade: "중1", is_test: false },
@@ -27,6 +33,22 @@ it("실제 영상 조회 실패를 미제출로 기록하지 않는다", async (
   m.assigned = null;
   await expect(reconcileVideoHomework("tenant")).rejects.toThrow("숙제 조회 실패");
   expect(m.db.rpcCalls).toEqual([]);
+});
+it("설정 조회 실패를 기본값으로 바꿔 끈 반의 상태를 변경하지 않는다", async () => {
+  m.settingsError = true;
+  await expect(reconcileVideoHomework("tenant")).rejects.toThrow("설정 조회 실패");
+  expect(m.settings).toHaveBeenCalledWith("tenant", { failOnReadError: true });
+  expect(m.load).not.toHaveBeenCalled(); expect(m.db.rpcCalls).toEqual([]);
+});
+it("ClassNote 제한 시간에는 정기 확인을 쉬고 링크 업로드는 즉시 처리한다", async () => {
+  m.start = "13:00"; m.end = "22:00"; // 지금은 KST 정오
+  expect((await reconcileVideoHomework("tenant", { scheduled: true, notifyUnmatched: true })).checked).toBe(0);
+  expect(m.load).not.toHaveBeenCalled(); expect(m.db.rpcCalls).toEqual([]);
+  expect((await reconcileVideoHomework("tenant", { studentId: "s" })).checked).toBe(1);
+  vi.setSystemTime(new Date("2026-10-12T04:00:00Z"));
+  expect((await reconcileVideoHomework("tenant", { scheduled: true })).checked).toBe(1);
+  vi.setSystemTime(new Date("2026-10-12T13:00:00Z"));
+  expect((await reconcileVideoHomework("tenant", { scheduled: true })).checked).toBe(0);
 });
 it("기한이 지난 숙제는 미제출 결과로 넘기고 다른 지점 학생은 읽지 않는다", async () => {
   expect(await reconcileVideoHomework("tenant", { studentId: "s" })).toEqual({ checked: 1, updated: 1, notifications: 1 });

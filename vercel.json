@@ -7,7 +7,7 @@
   "crons": [
     {
       "path": "/api/cron/video-homework",
-      "schedule": "*/5 * * * *"
+      "schedule": "*/30 * * * *"
     },
     {
       "path": "/api/cron/todays-math-sync",

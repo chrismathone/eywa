@@ -33,6 +33,18 @@ it("지연 제출도 실제 영상이 있으면 반영하고 같은 숙제의 �
   expect(run([dates[0]], [video(dates[0]), { ...video(dates[0]), id: "second" }, { ...video(dates[0]), id: "third" }]))
     .toBe("지난 영상 숙제도 제출했습니다.");
 });
+it("지난 보고서를 보낸 날 그 뒤에 도착한 영상도 다음 멘트에 반영한다", () => {
+  const input = { classId: "c", studentId: "s", homeworkDates: [dates[0]], reportDate: "2026-10-12",
+    previousReportDate: "2026-10-08", previousReportAt: "2026-10-08T18:00:00+09:00", fromDate: "2026-09-01" };
+  expect(videoReceiptComment({ ...input, videos: [{ ...video(dates[0]), postedAt: "2026-10-08T23:00:00+09:00" }] }))
+    .toBe("지난 영상 숙제도 제출했습니다.");
+  expect(videoReceiptComment({ ...input, videos: [{ ...video(dates[0]), postedAt: "2026-10-08T17:00:00+09:00" }] })).toBeNull();
+});
+it("뒤늦게 수집된 실제 파일을 반영하되 보고서 날짜 이후에 수집된 파일은 쓰지 않는다", () => {
+  const delayed = { ...video(dates[0], "2026-10-07"), playback: { preview: "p", thumbnail: "t", uploadedAt: "2026-10-10T12:00:00+09:00" } };
+  expect(run([dates[0]], [delayed])).toBe("지난 영상 숙제도 제출했습니다.");
+  expect(run([dates[0]], [{ ...delayed, playback: { ...delayed.playback, uploadedAt: "2026-10-13T12:00:00+09:00" } }])).toBeNull();
+});
 it("기존 멘트를 보존하면서 제출 문장은 한 번만 붙인다", () => {
   const receipt = "지난 영상 숙제도 제출했습니다.";
   expect(appendVideoReceiptComment(`오늘 분수를 공부했습니다. ${receipt}`, receipt)).toBe(`오늘 분수를 공부했습니다. ${receipt}`);
