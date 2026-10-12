@@ -4,14 +4,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { addDays, kstToday } from "@/lib/date-kst";
 import { buildVideoHomeworkLessonPairs, type LedgerClass, type LedgerEnrollment, type LedgerSchedule } from "../ledger-roster";
-import { VIDEO_MATCH_WINDOW_DAYS, videoArrivedAt, videoFingerprint, videoMatchRange } from "../rounds";
+import { buildLedgerRounds, VIDEO_MATCH_WINDOW_DAYS, videoArrivedAt, videoFingerprint, videoMatchRange } from "../rounds";
 import { isVideoHomeworkDate, type VideoArrival, type VideoHomeworkMark, type VideoHomeworkRosterRow, type VideoHomeworkStatus } from "../types";
 import { getAssignedVideoHomework } from "./assignments";
 import { loadBlankFacts } from "./blank-facts";
 import type { BlankFacts } from "../no-homework";
 import { homeworkVideoLinks } from "@/features/students/homework-videos";
 import { homeworkVideoSource } from "./video-source";
-import { loadVideoAssignmentAvailability } from "./assignment-availability";
+import { loadVideoAssignmentCandidates, unassignedVideoPairs } from "./assignment-availability";
 
 type DbMark = { class_id: string; student_id: string; check_date: string; homework_date: string | null;
   submitted_date: string | null; status: string; updated_at: string | null };
@@ -123,7 +123,9 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
   for (const row of assigned ?? []) addDate(row.classId, row.studentId, row.date);
   for (const mark of marks) if (mark.homeworkDate) addDate(mark.classId, mark.studentId, mark.homeworkDate);
   for (const pair of pairs) ownDates.set(`${pair.classId}:${pair.studentId}`, ownDates.get(`${pair.classId}:${pair.studentId}`) ?? new Set());
-  const [students, videos, blankFacts, assignablePairs] = await Promise.all([
+  const assignmentRows = pairs.map(pair => ({ ...pair,
+    assignedDates: (assignedByPair.get(`${pair.classId}:${pair.studentId}`) ?? []).filter(date => date >= fromDate && date <= toDate) }));
+  const [students, videos, blankFacts, assignmentCandidates] = await Promise.all([
     fetchAllPagedInChunks<{ id: string; name: string; school: string | null; grade: string | null }>(studentIds,
       (chunk, from, to) => db.from("students").select("id,name,school,grade").eq("tenant_id", tenantId)
         .in("id", chunk).order("id").range(from, to)),
@@ -131,9 +133,17 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
     // 지금 보기와 똑같이 뺀다. 더 늦은 영상은 화면 칸에 닿지 못한다(칸은 숙제일 + 2주까지만 영상을 받는다).
     loadClassVideos(tenantId, homeworkStudents, wideFrom, addDays(wideTo, VIDEO_MATCH_WINDOW_DAYS)),
     loadBlankFacts(tenantId, { classDates, ownDates: new Map([...ownDates].filter(([pair]) => shownPairs.has(pair))), enrollments }),
-    loadVideoAssignmentAvailability(tenantId, pairs.map(pair => ({ ...pair,
-      assignedDates: (assignedByPair.get(`${pair.classId}:${pair.studentId}`) ?? []).filter(date => date >= fromDate && date <= toDate) }))),
+    loadVideoAssignmentCandidates(tenantId, assignmentRows),
   ]);
+  // 화면에 보이지 않는 다른 반·기간의 숙제까지 같은 규칙으로 짝지어야, 이미 쓰인 영상을 미배정으로 오인하지 않는다.
+  // 원본 영상·숙제·기록은 이미 넓혀 읽었다. 학생마다 추가 조회하지 않고 그 재료를 그대로 쓴다.
+  const videoPairs = new Map((videos ?? []).flatMap(video => video.classId ? [[`${video.classId}:${video.studentId}`,
+    { classId: video.classId, studentId: video.studentId, tracked: true,
+      assignedDates: assignedByPair.get(`${video.classId}:${video.studentId}`) ?? [] }] as const] : []));
+  const assignmentRounds = buildLedgerRounds({ rows: [...videoPairs.values()], marks, videos: videos ?? [], fromDate: wideFrom, toDate: wideTo });
+  const assignedVideoIds = new Set([...assignmentRounds.values()].flatMap(rounds => rounds.flatMap(round => round.videoId ? [round.videoId] : [])));
+  const assignablePairs = assigned !== null && videos !== null && assignmentCandidates !== null
+    ? unassignedVideoPairs(assignmentRows, assignmentCandidates, assignedVideoIds) : null;
   const byClass = new Map(classes.map((row) => [row.id, row]));
   const byStudent = new Map(students.map((row) => [row.id, row]));
   const rows = pairs.flatMap((pair): VideoHomeworkLedgerBaseRow[] => {

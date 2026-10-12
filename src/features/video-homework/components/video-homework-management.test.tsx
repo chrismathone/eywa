@@ -27,15 +27,18 @@ beforeEach(() => { vi.clearAllMocks(); mocks.save.mockResolvedValue({ ok: true }
 afterEach(cleanup);
 
 describe("영상 제출 현황 — 회차는 학생별 '숙제가 나간 날' 순서", () => {
-  it("배정 권한과 기간에 맞는 영상이 모두 있을 때만 영상 배정을 표시한다", () => {
+  it("배정 권한과 기간에 맞는 미배정 영상이 있을 때만 영상 배정을 표시한다", () => {
     show({ rows: [
       row({ assignedDates: ["2026-09-01"], canAssignVideos: true, hasAssignableVideos: true }),
       row({ studentId: "empty", studentName: "영상없음", assignedDates: ["2026-09-01"], canAssignVideos: true, hasAssignableVideos: false }),
       row({ studentId: "readonly", studentName: "조회학생", assignedDates: ["2026-09-01"], canAssignVideos: false, hasAssignableVideos: true }),
-    ] });
+      row({ studentId: "assigned", studentName: "배정완료", assignedDates: ["2026-09-01"], canAssignVideos: true, hasAssignableVideos: false }),
+    ], videos: [{ id: "assigned-video", classId: "a", studentId: "assigned", postedAt: "2026-09-02T10:00:00+09:00" }] });
     expect(screen.getByRole("button", { name: "수학 A 김민준 영상 배정" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "수학 A 영상없음 영상 배정" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "수학 A 조회학생 영상 배정" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "수학 A 배정완료 영상 배정" })).not.toBeInTheDocument();
+    expect(cell("배정완료 1회 2026-09-01 완료(영상)")).toBeInTheDocument();
   });
   it("열 머리는 N회만, 칸 안에 그 학생의 숙제일 — 숙제가 없는 회차는 —", () => {
     show();

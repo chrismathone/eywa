@@ -35,7 +35,7 @@ export type VideoHomeworkLedgerRow = VideoHomeworkRosterRow & {
   tracked: boolean;
   editable: boolean;
   canAssignVideos?: boolean;
-  /** 조회 기간의 숙제를 낸 당일부터 14일 뒤까지 게시된 업로드 완료 영상이 있는가. */
+  /** 숙제 당일~14일 뒤의 업로드 완료 영상 중 수동·자동 배정되지 않은 영상이 남아 있는가. */
   hasAssignableVideos?: boolean;
 };
 
