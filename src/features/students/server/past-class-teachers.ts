@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { getHomeroomHistoryIndex } from "@/features/classes/server/teacher-as-of-queries";
 import { homeroomTeacherOnDate } from "@/features/classes/teacher-as-of";
+import { foldedReason } from "@/lib/folded-read";
+import { kstDateOf } from "@/lib/date-kst";
 import { resolvePastClassTeacher, type PastClassTarget, type PastTeacher, type TeacherEvidence } from "../lib/past-class-teacher";
 
 /** 학생 상세의 지난 수업 표시 전용. 추정값은 담당 배정·권한·시수 정산을 변경하지 않는다. */
@@ -13,12 +15,21 @@ export async function getPastClassTeachers(targets: readonly PastClassTarget[]):
   const classIds = [...new Set(targets.map(r => r.classId))];
   const [history, classes] = await Promise.all([
     getHomeroomHistoryIndex(),
-    fetchInChunks<{ id: string; teacher_id: string | null }>(classIds, ids => db.from("classes").select("id, teacher_id").in("id", ids)),
+    fetchInChunks<{ id: string; teacher_id: string | null; created_at: string }>(classIds, ids => db.from("classes").select("id, teacher_id, created_at").in("id", ids)),
   ]);
+  const classById = new Map(classes.map(r => [r.id, r]));
   const current = new Map(classes.map(r => [r.id, r.teacher_id]));
   const assignedIds = new Map(targets.map(t => [t.enrollmentId, history.get(t.classId)?.length
     ? homeroomTeacherOnDate(history.get(t.classId), current.get(t.classId) ?? null, t.lastDate) : null]));
-  const ids = [...new Set([...assignedIds.values()].filter((v): v is string => !!v))];
+  // 수강 시작일에 생성된 반에 담당 변경 이력이 없으면, 마지막 근거로 현재 배정 강사를 추정 표시한다.
+  // 기존 반·변경 이력이 있는 반·이력 조회 실패는 현재 담당을 과거 담당으로 소급하지 않는다.
+  const currentFallbackIds = new Map<string, string>();
+  if (!foldedReason(history)) for (const t of targets) {
+    const klass = classById.get(t.classId);
+    if (history.get(t.classId)?.length || !klass?.teacher_id || kstDateOf(klass.created_at) !== t.startDate) continue;
+    currentFallbackIds.set(t.enrollmentId, klass.teacher_id);
+  }
+  const ids = [...new Set([...assignedIds.values(), ...currentFallbackIds.values()].filter((v): v is string => !!v))];
   const teachers = await fetchInChunks<{ id: string; display_name: string | null }>(ids, chunk => db.from("users").select("id, display_name").in("id", chunk));
   const names = new Map(teachers.map(t => [t.id, t.display_name]));
   const missing = targets.filter(t => !names.get(assignedIds.get(t.enrollmentId) ?? ""));
@@ -43,7 +54,8 @@ export async function getPastClassTeachers(targets: readonly PastClassTarget[]):
       name: (Array.isArray(r.recorder) ? r.recorder[0] : r.recorder)?.display_name ?? "" }));
   }
   for (const t of targets) {
-    const resolved = resolvePastClassTeacher(t, names.get(assignedIds.get(t.enrollmentId) ?? "") ?? null, reports, attendance);
+    const resolved = resolvePastClassTeacher(t, names.get(assignedIds.get(t.enrollmentId) ?? "") ?? null, reports, attendance,
+      names.get(currentFallbackIds.get(t.enrollmentId) ?? "") ?? null);
     if (resolved) result.set(t.enrollmentId, resolved);
   }
   return result;
