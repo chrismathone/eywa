@@ -97,7 +97,7 @@ export async function ClassesTab({
     .filter((r) => hasEnded(r))
     .sort((a, b) => (b.endDate ?? "").localeCompare(a.endDate ?? "") || b.startDate.localeCompare(a.startDate));
   /**
-   * 종료일 당시 담임 이력을 우선하고, 없으면 수강 기간의 마지막 보고서 → 강사 출결 기록으로 추정한다.
+   * 종료일 당시 담임 이력을 우선하고, 없으면 종료일 이전 같은 반의 마지막 보고서 → 수강 기간의 강사 출결 기록으로 추정한다.
    * 반이동 당일은 새 반의 수업이므로 이전 반은 전날까지만 조회한다. 근거가 없거나 동률이면 `—`로 둔다.
    * 추정한 이름에는 근거 날짜를 표시하며, 실제 담임 배정은 변경하지 않는다.
    */
