@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { isModuleEnabled } from "@/lib/modules";
+import { isLaboratoryMenuAvailable } from "@/lib/laboratory/server";
 import { KIOSK_COOKIE } from "../constants";
 import { summarizeUserAgent } from "../device-info";
 
@@ -186,6 +187,7 @@ export async function resolveKioskDevice(): Promise<{ tenantId: string; academyN
   // 출석 키오스크 모듈이 꺼진 학원(새 학원 기본)은 등록된 기기가 남아 있어도 체크인을 받지 않는다(2026-09-22 방향 B).
   // 같은 설정 조회를 쓰므로 추가 왕복 없음 · 침산은 켜져 있어 종전과 같다.
   if (!isModuleEnabled(settings.modules.disabled, "kiosk")) return null;
+  if (!(await isLaboratoryMenuAvailable(device.tenant_id, "kiosk_settings"))) return null;
   const academyName = settings.profile.name || "학원";
 
   return {

@@ -7,6 +7,7 @@ import { parseForwardedFor } from "@/features/attendance/kiosk/device-info";
 import { processKioskCheckin } from "@/features/attendance/kiosk/server/checkin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isModuleOnForTenant } from "@/features/owner/server/modules";
+import { isLaboratoryMenuAvailable } from "@/lib/laboratory/server";
 
 export const dynamic = "force-dynamic";
 
@@ -42,7 +43,8 @@ export async function POST(req: Request) {
   }
   // 출석 키오스크 모듈이 꺼진 학원은 체크인을 받지 않는다(2026-09-22 방향 B — 기기 화면과 같은 판정).
   // 판정은 fail-open(조회 실패 = 켜짐)이라 침산은 실패해도 종전과 같다.
-  if (!(await isModuleOnForTenant(device.tenant_id, "kiosk"))) {
+  if (!(await isModuleOnForTenant(device.tenant_id, "kiosk")) ||
+      !(await isLaboratoryMenuAvailable(device.tenant_id, "kiosk_settings"))) {
     return NextResponse.json({ ok: false, reason: "device_revoked" }, { status: 401 });
   }
 
