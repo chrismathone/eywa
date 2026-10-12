@@ -25,6 +25,9 @@ describe("수강 타임라인의 반이동", () => {
     expect(transfers([{...top, endDate: regular.startDate, isTransferred: true}, regular])).toHaveLength(1);
     expect(transfers([{...top, endDate: regular.startDate}, regular])).toHaveLength(0);
   });
+  it("새 반 수강을 삭제해 짝이 없어진 전출도 마지막 수강일은 이동 전날이다", () => {
+    expect(enrollmentTimeline([{ ...top, endDate: "2026-10-06", isTransferred: true }])).toContainEqual({ date: "2026-10-05", kind: "enrollment_end", title: "중등E_중1 TOP 수강 종료", description: null });
+  });
   it.each([
     ["다른 과목", {...regular, subject: "math"}],
     ["과목 미상", {...regular, subject: null}],

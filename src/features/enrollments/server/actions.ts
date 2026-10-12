@@ -13,7 +13,7 @@ import { logAction } from "@/features/audit/server/log";
 import { PERIOD_END_REASON } from "@/features/classes/server/period-enrollments";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fetchAllPaged } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { enrollmentAssignBlockReason } from "../eligibility";
 import { BULK_TRANSFER_MAX, isTransferDate, transferDateError, type TransferSnapshot } from "../bulk-transfer";
 import { enrollmentDeleteBlockReason, type EnrollmentRecordCounts } from "../deletable";
@@ -295,7 +295,31 @@ export async function updateEnrollmentsAttendanceBatch(
   const supabase = await createClient();
   // 적용된 편집을 모아 두고 — 중간 실패로 빠져나가도 **이미 반영된 것까지는** 감사로그에 남긴다(적대 리뷰 M3).
   // 기록값은 클라 원본이 아니라 실제 저장된 정규화 요일(L2) + 학생 id(이름 검색 선해석용, L3).
-  const applied: Array<{ enrollmentId: string; days: string[]; studentId: string | null }> = [];
+  const applied: Array<{
+    enrollmentId: string; days: string[]; studentId: string | null;
+    classId: string; className: string | null; beforeDays: string[];
+    beforeEffectiveDays: string[] | null; effectiveDays: string[] | null;
+    recordedAt: string;
+  }> = [];
+  // 변경 전 값(지정 요일 · 반)은 루프 전에 한 번에 읽는다 — 편집마다 따로 읽으면 왕복이 편집 수만큼 는다(B4).
+  type BeforeRow = { id: string; class_id: string; attendance_days: string[] | null; class: unknown };
+  const beforeById = new Map<string, BeforeRow>();
+  const editIds = [...new Set(edits.map((e) => String(e?.enrollmentId ?? "").trim()).filter(Boolean))];
+  for (let i = 0; i < editIds.length; i += 100) {
+    const { data, error: readError } = await supabase.from("enrollments")
+      .select("id, class_id, attendance_days, class:class_id(class_name)").in("id", editIds.slice(i, i + 100));
+    if (readError) return { error: toKoreanDbError(readError, "수강 정보를 불러오지 못했습니다", "enrollments.days.read"), count: 0 };
+    for (const row of (data ?? []) as BeforeRow[]) beforeById.set(row.id, row);
+  }
+  // 반 전체 요일(지금 유효한 배치) — `[]`(전 요일)로 저장한 값이 그때 실제로 무슨 요일이었는지 감사로그에 남긴다.
+  // 요일을 확인하지 못하면 추측한 값을 쓰지 않는다(null).
+  const today = kstToday();
+  const editClassIds = [...new Set([...beforeById.values()].map((row) => row.class_id))];
+  const wholeDaysByClass = await fetchAllPagedInChunks<{ class_id: string; day_of_week: string }>(editClassIds,
+    (chunk, from, to) => supabase.from("class_schedules").select("class_id, day_of_week").in("class_id", chunk)
+      .lte("valid_from", today).or(`valid_to.is.null,valid_to.gte.${today}`).order("id").range(from, to))
+    .then((rows) => new Map(editClassIds.map((id) => [id, DAY_ORDER.filter((d) => rows.some((r) => r.class_id === id && r.day_of_week === d))])))
+    .catch(() => null);
   const writeDaysLog = () =>
     applied.length === 0
       ? Promise.resolve()
@@ -305,13 +329,17 @@ export async function updateEnrollmentsAttendanceBatch(
           metadata: {
             count: applied.length,
             studentIds: [...new Set(applied.map((a) => a.studentId).filter(Boolean))],
-            edits: applied.map((a) => ({ enrollmentId: a.enrollmentId, days: a.days })),
+            edits: applied.map((a) => ({ ...a })),
           },
         });
   for (const e of edits) {
     const enrollmentId = String(e?.enrollmentId ?? "").trim();
     if (!enrollmentId) continue;
     const days = DAY_ORDER.filter((d) => (e.days ?? []).includes(d)); // 유효 요일코드만·요일순
+    const before = beforeById.get(enrollmentId);
+    if (!before) continue; // 못 읽는 수강(남의 테넌트·삭제됨) = 아래 UPDATE도 0행이다.
+    const wholeDays = wholeDaysByClass?.get(before.class_id) ?? null;
+    const beforeDays = DAY_ORDER.filter((d) => (before.attendance_days ?? []).includes(d));
     const { data: row, error } = await supabase
       .from("enrollments")
       .update({ attendance_days: days })
@@ -323,9 +351,19 @@ export async function updateEnrollmentsAttendanceBatch(
       return { error: toKoreanDbError(error, "등원 요일을 저장하지 못했습니다", "enrollments.days"), count: applied.length };
     }
     // row=null이면 매치 0행(남의 테넌트·삭제된 수강) = 아무것도 안 바뀜 — 기록·카운트에서 제외.
-    if (row) applied.push({ enrollmentId, days, studentId: (row.student_id as string | null) ?? null });
+    if (row) {
+      const klass = (Array.isArray(before.class) ? before.class[0] : before.class) as { class_name?: string } | null;
+      applied.push({ enrollmentId, days, studentId: (row.student_id as string | null) ?? null,
+        classId: before.class_id, className: klass?.class_name ?? null, beforeDays,
+        recordedAt: new Date().toISOString(),
+        beforeEffectiveDays: beforeDays.length ? beforeDays : wholeDays,
+        effectiveDays: days.length ? days : wholeDays });
+      // 같은 수강이 한 묶음에 두 번 오면 둘째 편집의 '변경 전'은 방금 저장한 값이다.
+      beforeById.set(enrollmentId, { ...before, attendance_days: days });
+    }
   }
   await writeDaysLog();
+  for (const studentId of new Set(applied.map((a) => a.studentId).filter(Boolean))) revalidatePath(`/students/${studentId}`);
   revalidatePath("/timetable");
   return { count: applied.length };
 }

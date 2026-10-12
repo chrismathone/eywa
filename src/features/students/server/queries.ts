@@ -54,7 +54,8 @@ import {
 import { canSeeStudentEnrollment } from "./enrollment-gate";
 import { canViewStudentDetail } from "./read-scope";
 import { isMergedStudent } from "../merged";
-import { enrollmentTimeline } from "../enrollment-timeline";
+import { enrollmentHistoryTimeline } from "../enrollment-history";
+import { getStudentEnrollmentHistory, loadEnrollmentHistorySeed } from "./enrollment-history";
 import { OUTCOME_LABEL, type OutcomeKey } from "@/features/enrollment/server/queries";
 import { reasonDisplay } from "@/features/withdrawals/types";
 import { groupSchedule, type ScheduleGroup } from "@/features/classes/schedule-periods";
@@ -1734,11 +1735,15 @@ export async function getStudentAttendanceFull(studentId: string): Promise<Stude
 
 // 등록상담 → 학생 timeline ↔ 학생상담 + 메모 + enrollment 변경 통합
 export type TimelineEvent = {
+  id?: string;
   date: string; // ISO date
   kind:
     | "enrollment_start"
     | "enrollment_end"
     | "enrollment_transfer"
+    | "enrollment_schedule"
+    | "enrollment_change"
+    | "enrollment_delete"
     | "consultation"
     | "memo"
     | "status_change"
@@ -1747,7 +1752,8 @@ export type TimelineEvent = {
     | "enrollment_consultation";
   title: string;
   description?: string | null;
-  registrant?: string | null; // 등록자(상담/메모, 임포트 텍스트에서 분리)
+  registrant?: string | null; // 등록자·변경 처리자
+  recordedAt?: string; // 변경 처리 시각. 수강 적용일과 구분해 KST로 표시한다.
 };
 
 type EnrollConsultRow = {
@@ -1782,6 +1788,7 @@ export async function getStudentTimeline(studentId: string): Promise<TimelineEve
     { data: textbooks },
     { data: student },
     { data: enrollConsults },
+    historySeed,
   ] = await Promise.all([
     supabase
       .from("enrollments")
@@ -1819,11 +1826,15 @@ export async function getStudentTimeline(studentId: string): Promise<TimelineEve
           .select(`consulted_at, outcome, subject, parent_request`)
           .eq("student_id", studentId)
       : Promise.resolve({ data: [] as EnrollConsultRow[] }),
+    // 수강 변경 이력의 1차 조회 — 수강 행과 무관해 위 조회들과 나란히 돌린다(B4).
+    // 강사 범위(강사 · 강사 뷰)에서는 읽지 않는다: 변경 로그는 강사에게 열람 권한이 없어 어차피 0행이고,
+    // 강사 뷰는 강사가 보는 화면과 같아야 한다(위 상담 스코프와 같은 축 `tId`).
+    tId ? Promise.resolve(null) : loadEnrollmentHistorySeed(studentId),
   ]);
 
   const events: TimelineEvent[] = [];
 
-  events.push(...enrollmentTimeline((enrollments ?? []).map((e) => {
+  const timelineEnrollments = (enrollments ?? []).map((e) => {
     const c = (Array.isArray(e.class) ? e.class[0] : e.class) as
       | { class_name?: string; subject?: string }
       | undefined;
@@ -1837,7 +1848,9 @@ export async function getStudentTimeline(studentId: string): Promise<TimelineEve
       isTransferred: !!e.is_transferred,
       reason: e.withdrawal_reason,
     };
-  })));
+  });
+  const history = await getStudentEnrollmentHistory(historySeed, timelineEnrollments);
+  events.push(...enrollmentHistoryTimeline({ studentId, enrollments: timelineEnrollments, ...history }));
 
   // category 코드 → 한글. 임포트 데이터엔 audience 값("parent")이 섞여 있어, 매핑 안 되는 코드는 접미사 생략.
   const CONSULT_CATEGORY_LABEL: Record<string, string> = {
@@ -1933,7 +1946,7 @@ export async function getStudentTimeline(studentId: string): Promise<TimelineEve
   }
 
   // 최신 → 과거 정렬
-  events.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  events.sort((a, b) => b.date.localeCompare(a.date) || (b.recordedAt ?? "").localeCompare(a.recordedAt ?? ""));
   return events;
 }
 

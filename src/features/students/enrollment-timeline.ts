@@ -1,4 +1,5 @@
 import { addDays } from "@/lib/date-kst";
+import { enrollmentLastDate } from "@/features/enrollments/eligibility";
 
 export type TimelineEnrollment = {
   id: string;
@@ -64,7 +65,7 @@ export function enrollmentTimeline(enrollments: readonly TimelineEnrollment[]): 
         description: e.reason,
       });
     } else if (e.endDate) {
-      events.push({ date: e.endDate, kind: "enrollment_end", title: `${e.className} 수강 종료`, description: e.reason });
+      events.push({ date: enrollmentLastDate(e.endDate, e.isTransferred)!, kind: "enrollment_end", title: `${e.className} 수강 종료`, description: e.reason });
     }
   }
   return events.sort((a, b) => b.date.localeCompare(a.date) || a.title.localeCompare(b.title));

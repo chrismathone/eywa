@@ -76,6 +76,7 @@ export const INTERFACE_EN: Readonly<Record<string, string>> = {
   "이 과목의 시간표가 없습니다.": "No timetable for this subject.", "주간 시간표": "Weekly timetable",
   "과목별 교시 시간표 · 실제 등원 요일 기준 (읽기전용)": "Periods by subject · actual attendance days (read only)",
   "이벤트가 없습니다": "No events", "개월 · 총": " months · total ", "월 선택": "Choose month",
+  "전체 기록": "All records", "수강 이력": "Enrollment history", "수강 이력이 없습니다": "No enrollment history",
   "이 학생의 오늘의수학 연결을 확인 중이에요.": "Checking this student's Today's Math link.", "오늘의수학 수강 반": "Today's Math classes",
   "현재 연결된 수강 반이 없어요.": "No linked classes.", "최근 학습:": "Recent learning:", "오늘의수학 현황을 불러오는 중이에요.": "Loading Today's Math information.",
   "전체 상담": "All counseling", "최근 7일": "Last 7 days", "진행 중 후속": "Open follow-ups", "지연 후속": "Overdue follow-ups",
