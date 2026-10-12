@@ -56,9 +56,21 @@ function RangeSwitch({ range }: { range: WritingRatesView["range"] }) {
   const base = "/lesson-reports?tab=writing";
   const chip = "rounded-full border px-3 py-1 text-xs transition";
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+      <nav aria-label="작성률 조회 기간" className="flex shrink-0 items-center gap-1.5">
+        <Link href={base} aria-current={!isMonth ? "page" : undefined} className={`${chip} ${isMonth ? "border-line text-text-dim hover:bg-bg-soft" : "border-primary bg-primary text-white"}`}>
+          이번 주
+        </Link>
+        <Link
+          href={`${base}&rmonth=${range.month}`}
+          aria-current={isMonth ? "page" : undefined}
+          className={`${chip} ${isMonth ? "border-primary bg-primary text-white" : "border-line text-text-dim hover:bg-bg-soft"}`}
+        >
+          월간
+        </Link>
+      </nav>
       {isMonth ? (
-        <>
+        <nav aria-label="작성률 조회 월" className="flex shrink-0 items-center gap-1.5">
           <Link href={`${base}&rmonth=${shiftMonth(range.month, -1)}`} className={`${chip} border-line text-text-dim hover:bg-bg-soft`} aria-label="이전 달">
             ‹
           </Link>
@@ -66,17 +78,8 @@ function RangeSwitch({ range }: { range: WritingRatesView["range"] }) {
           <Link href={`${base}&rmonth=${shiftMonth(range.month, 1)}`} className={`${chip} border-line text-text-dim hover:bg-bg-soft`} aria-label="다음 달">
             ›
           </Link>
-        </>
+        </nav>
       ) : null}
-      <Link href={base} className={`${chip} ${isMonth ? "border-line text-text-dim hover:bg-bg-soft" : "border-primary bg-primary text-white"}`}>
-        이번 주
-      </Link>
-      <Link
-        href={`${base}&rmonth=${range.month}`}
-        className={`${chip} ${isMonth ? "border-primary bg-primary text-white" : "border-line text-text-dim hover:bg-bg-soft"}`}
-      >
-        월간
-      </Link>
     </div>
   );
 }
@@ -102,52 +105,50 @@ export function WritingRateCard({ view }: { view: WritingRatesView }) {
 
   return (
     <section className="bg-card shadow-card rounded-2xl px-5 py-5">
-      <div className="mb-3 flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-        {/* 카드 헤더 위계(문법 ①) — 작은 소라벨 → 볼드 타이틀 → dim 서브 */}
+      <div className="mb-3 space-y-3">
+        {/* 기간 전환은 제목 아래 고정한다. 월 이동·과목 필터가 생겨도 전환 버튼은 밀리지 않는다. */}
         <div>
           <p className="editorial-eyebrow">작성 현황</p>
           <h2 className="text-foreground mt-0.5 text-base font-bold">강사별 작성률</h2>
-          <p className="text-text-faint mt-0.5 text-xs">
-            {isMonth ? (
-              <>
-                {formatMonth(view.range.month)} 날짜별·월간 작성률 — 작성/대상(결석 제외) · 오늘은{" "}
-                <b className="font-medium">시작된 수업</b>까지만
-              </>
-            ) : (
-              <>
-                이번 주(월~일) 요일별·주간 작성률 — 작성/대상(결석 제외) · 오늘은{" "}
-                <b className="font-medium">시작된 수업</b>까지만
-              </>
-            )}
-          </p>
         </div>
         <RangeSwitch range={view.range} />
-        {/* ⚠️ 월간은 본문을 WritingRateMonth가 그리고 **자기 과목 칩**을 따로 갖는다 — 여기 칩까지 두면
-            같은 필터가 두 벌로 보이고(원장 제보 2026-07-23), 게다가 이 칩은 월간 표에 아무 영향이 없다
-            (filtered는 주간표 전용). 죽은 컨트롤을 숨긴다. */}
-        {showChips && !isMonth ? (
-          <div className="flex flex-wrap gap-1.5">
-            {[{ value: "all", label: "전체" }, ...chipOptions].map((o) => {
-              const on = sel === o.value;
-              return (
-                <button
-                  key={o.value}
-                  type="button"
-                  onClick={() => setSel(o.value)}
-                  aria-pressed={on}
-                  className={`rounded-full border px-3 py-1 text-xs transition ${
-                    on
-                      ? "border-primary bg-primary/10 text-primary font-bold"
-                      : "border-line text-text-dim hover:bg-bg-soft"
-                  }`}
-                >
-                  {o.label}
-                </button>
-              );
-            })}
-          </div>
-        ) : null}
+        <p className="text-text-faint text-xs">
+          {isMonth ? (
+            <>
+              {formatMonth(view.range.month)} 날짜별·월간 작성률 — 작성/대상(결석 제외) · 오늘은{" "}
+              <b className="font-medium">시작된 수업</b>까지만
+            </>
+          ) : (
+            <>
+              이번 주(월~일) 요일별·주간 작성률 — 작성/대상(결석 제외) · 오늘은{" "}
+              <b className="font-medium">시작된 수업</b>까지만
+            </>
+          )}
+        </p>
       </div>
+      {/* 월간은 WritingRateMonth가 자체 필터를 가진다. 주간 필터는 기간 도구와 분리한다. */}
+      {showChips && !isMonth ? (
+        <div className="mb-3 flex flex-wrap gap-1.5">
+          {[{ value: "all", label: "전체" }, ...chipOptions].map((o) => {
+            const on = sel === o.value;
+            return (
+              <button
+                key={o.value}
+                type="button"
+                onClick={() => setSel(o.value)}
+                aria-pressed={on}
+                className={`rounded-full border px-3 py-1 text-xs transition ${
+                  on
+                    ? "border-primary bg-primary/10 text-primary font-bold"
+                    : "border-line text-text-dim hover:bg-bg-soft"
+                }`}
+              >
+                {o.label}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
 
       {/* 월간은 열이 31개라 주간표(요일 7열 + 오늘 열)와 레이아웃이 다르다 — 전용 매트릭스로 분기.
           과목 칩·정렬은 각 뷰가 자기 것을 쓴다(주간표의 '오늘' 정렬은 월간에 의미가 없다). */}
