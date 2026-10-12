@@ -79,7 +79,7 @@ export async function assignHomeworkVideo(input: { classId: string; studentId: s
         .not("drive_file_id", "is", null).maybeSingle();
       if (video.error) return { ok: false, error: "영상의 게시일을 확인하지 못했습니다. 잠시 뒤 다시 시도해 주세요." };
       if (!video.data) return { ok: false, error: "업로드가 완료된 학생 영상만 배정할 수 있습니다." };
-      if (!isVideoAssignableToDate(video.data.posted_at, input.homeworkDate!)) return { ok: false, error: "숙제일과 30일 이상 차이 나는 영상은 배정할 수 없습니다." };
+      if (!isVideoAssignableToDate(video.data.posted_at, input.homeworkDate!)) return { ok: false, error: "숙제를 낸 날부터 14일 뒤까지 게시된 영상만 배정할 수 있습니다." };
     }
     const { data, error } = await db.rpc("set_homework_video_assignment", {
       p_tenant: user.tenantId, p_actor: user.id, p_full: full, p_student: input.studentId, p_context_class: input.classId,

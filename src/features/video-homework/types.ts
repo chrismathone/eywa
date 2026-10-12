@@ -35,7 +35,7 @@ export type VideoHomeworkLedgerRow = VideoHomeworkRosterRow & {
   tracked: boolean;
   editable: boolean;
   canAssignVideos?: boolean;
-  /** 조회 기간의 숙제와 30일 미만 차이인 업로드 완료 영상이 있는가. */
+  /** 조회 기간의 숙제를 낸 당일부터 14일 뒤까지 게시된 업로드 완료 영상이 있는가. */
   hasAssignableVideos?: boolean;
 };
 

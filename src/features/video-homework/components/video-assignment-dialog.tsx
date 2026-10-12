@@ -45,7 +45,7 @@ export function VideoAssignmentDialog({ row, fromDate, toDate, onClose }: { row:
         </select></label>
         <div className="space-y-1"><p>영상 선택{videos.length ? ` (${videos.length}개)` : ""}</p>
           <VideoAssignmentSelect key={date} videos={videos} value={videoId} disabled={busy} onChange={setVideoId} />
-          <p className="text-text-dim text-xs">{date === "exclude" ? "조회 기간의 숙제일" : "선택한 숙제일"} 기준 앞뒤 29일의 영상만 표시합니다. 최대 100개까지 최신순으로 보여 줍니다.</p>
+          <p className="text-text-dim text-xs">{date === "exclude" ? "조회 기간의 각 숙제를" : "선택한 숙제를"} 낸 날부터 14일 뒤까지 게시된 영상만 표시합니다. 최대 100개까지 최신순으로 보여 줍니다.</p>
           {!videos.length ? <p role="status">이 기간에 배정할 수 있는 업로드 완료 영상이 없습니다.</p> : null}
         </div>
         {selected ? <div className="space-y-2"><p>현재 연결: {selected.className ?? "반 미지정"} · {selected.homeworkDate ?? "날짜 자동 추정"}{selected.postId ? ` · 게시물 ${selected.postId}` : ""}</p>

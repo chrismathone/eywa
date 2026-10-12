@@ -39,14 +39,14 @@ describe("담임의 영상 배정", () => {
     m.db.tables.classes![0]!.teacher_id = "other";
     expect(await getVideoAssignmentOptions(optionsInput)).toMatchObject({ ok: false });
   });
-  it("조회 기간의 실제 숙제에서 30일 미만인 영상만 조회하며 다른 반·미지정 영상도 유지한다", async () => {
+  it("조회 기간의 실제 숙제 당일부터 14일 뒤까지 조회하며 다른 반·미지정 영상도 유지한다", async () => {
     m.db.tables.lesson_reports!.push({ ...m.db.tables.lesson_reports![0], report_date: "2026-03-01" });
     m.db.tables.homework_video_ledger_videos = [
       { ...video, id: "old", posted_at: "2026-03-15T12:54:02+09:00" },
-      { ...video, id: "before30", posted_at: "2026-09-01T23:59:59+09:00" },
-      { ...video, id: "before29", posted_at: "2026-09-02T00:00:00+09:00" },
-      { ...video, id: "after29", posted_at: "2026-10-30T23:59:59+09:00", route: { classId: "other" } },
-      { ...video, id: "after30", posted_at: "2026-10-31T00:00:00+09:00" },
+      { ...video, id: "before", posted_at: "2026-09-30T23:59:59+09:00" },
+      { ...video, id: "sameDay", posted_at: "2026-10-01T00:00:00+09:00" },
+      { ...video, id: "after14", posted_at: "2026-10-15T23:59:59+09:00", route: { classId: "other" } },
+      { ...video, id: "after15", posted_at: "2026-10-16T00:00:00+09:00" },
       { ...video, id: "queued", status: "queued" },
       { ...video, id: "noFile", drive_file_id: null },
       { ...video, id: "foreign", tenant_id: "other" },
@@ -56,7 +56,7 @@ describe("담임의 영상 배정", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error);
     expect(result.dates).toEqual(["2026-10-01"]);
-    expect(result.videos.map(video => video.id)).toEqual(["before29", "after29"]);
+    expect(result.videos.map(video => video.id)).toEqual(["sameDay", "after14"]);
   });
   it("최근 보고서가 366건을 넘겨도 조회 기간의 과거 숙제를 배정할 수 있다", async () => {
     const report = m.db.tables.lesson_reports![0];
@@ -75,13 +75,13 @@ describe("담임의 영상 배정", () => {
     expect(m.db.rpcCalls).toHaveLength(0);
     expect(await getVideoAssignmentOptions(null as unknown as typeof optionsInput)).toMatchObject({ ok: false });
   });
-  it.each(["2026-09-01T23:59:59+09:00", "2026-10-31T00:00:00+09:00"])("30일 차이는 직접 저장 요청도 거절한다: %s", async posted_at => {
+  it.each(["2026-09-30T23:59:59+09:00", "2026-10-16T00:00:00+09:00"])("숙제일 이전과 15일 이후는 직접 저장 요청도 거절한다: %s", async posted_at => {
     m.db.tables.homework_video_ledger_videos![0].posted_at = posted_at;
-    expect(await assignHomeworkVideo(input)).toMatchObject({ ok: false, error: expect.stringContaining("30일") });
+    expect(await assignHomeworkVideo(input)).toMatchObject({ ok: false, error: expect.stringContaining("14일") });
     expect(m.db.rpcCalls).toHaveLength(0);
   });
-  it("29일 차이는 저장할 수 있고, 오래된 잘못된 연결의 집계 제외도 가능하다", async () => {
-    m.db.tables.homework_video_ledger_videos![0].posted_at = "2026-10-30T23:59:59+09:00";
+  it("14일 뒤까지 저장할 수 있고, 오래된 잘못된 연결의 집계 제외도 가능하다", async () => {
+    m.db.tables.homework_video_ledger_videos![0].posted_at = "2026-10-15T23:59:59+09:00";
     expect(await assignHomeworkVideo(input)).toEqual({ ok: true });
     m.db.tables.homework_video_ledger_videos![0].posted_at = "2026-03-15T12:54:02+09:00";
     expect(await assignHomeworkVideo({ ...input, excluded: true, homeworkDate: null })).toEqual({ ok: true });
