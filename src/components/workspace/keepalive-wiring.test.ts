@@ -33,8 +33,8 @@ describe("이전 화면 유지 — 겉모습은 단일 화면과 같게", () => 
     expect(layout).toMatch(/className=\{keepaliveFrame \? KEEPALIVE_MAIN_CLASS : "embed-main /);
     expect(layout).toContain("{keepaliveFrame ? <KeepaliveFrameBridge /> : null}");
     expect(layout).toContain("{keepaliveFrame ? null : <WindowMinSizeNotice />}");
-    // 창 모드의 창 문서 클래스는 한 글자도 안 바뀐다
-    expect(layout).toContain('"embed-main bg-background text-foreground h-screen overflow-auto px-1.5 pt-2 pb-8 lg:pb-10 [scrollbar-gutter:stable]"');
+    // 창 모드의 본문도 숨김 설명이 문서 스크롤로 새지 않도록 위치 기준을 갖는다.
+    expect(layout).toContain('"embed-main relative bg-background text-foreground h-screen overflow-auto px-1.5 pt-2 pb-8 lg:pb-10 [scrollbar-gutter:stable]"');
   });
 
   it("첫 페인트 판정이 이전 화면 유지 본문도 본문 도착으로 읽는다(안 읽으면 덮개가 안 걷힌다)", () => {

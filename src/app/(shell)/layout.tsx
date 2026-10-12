@@ -157,7 +157,8 @@ export default async function ShellLayout({ children }: { children: ReactNode })
                  globals.css `main.embed-main:has(.edge-to-edge)`가 그 창만 좌우·아래 0 + 거터 해제로 만든다
                  (`.sticky-save-bar`와 같은 결, 시간표 선례 — 원장 2026-09-08 *"좌우와 하단 여백이 거의 느껴지지 않도록 딱"*). */}
           <KeepaliveFrameShell active={keepaliveFrame} maximized={keepaliveMaximized}>
-          <main style={brandStyle} className={keepaliveFrame ? KEEPALIVE_MAIN_CLASS : "embed-main bg-background text-foreground h-screen overflow-auto px-1.5 pt-2 pb-8 lg:pb-10 [scrollbar-gutter:stable]"}>
+          {/* 모든 셸의 스크롤 본문은 relative — sr-only 등이 문서까지 늘려 이중 스크롤을 만들지 않게 한다([[#79]]). */}
+          <main style={brandStyle} className={keepaliveFrame ? KEEPALIVE_MAIN_CLASS : "embed-main relative bg-background text-foreground h-screen overflow-auto px-1.5 pt-2 pb-8 lg:pb-10 [scrollbar-gutter:stable]"}>
             {keepaliveFrame ? <KeepaliveFrameBridge /> : null}
             <EmbedFocusSignal />
             {/* 부모의 소프트 새로고침 명령(숨어 있던 사이 데이터가 바뀐 창이 다시 보일 때) — router.refresh. */}
@@ -377,7 +378,8 @@ export default async function ShellLayout({ children }: { children: ReactNode })
         {/* .compact-main = 페이지 헤더 접기 마커(globals.css `compact-chrome` ③). 위 헤더가 이미 메뉴명을
             찍으므로 본문 PageHeader의 eyebrow·21px 제목은 중복이다 — 강사 화면은 세로 1px이 곧 데이터다. */}
         {/* 강사 미니셸 — 원장이 "빠듯하다"고 짚은 화면(영어 강사 ECS 시트)이 여기다. */}
-        <main className="compact-main flex-1 overflow-auto px-3 pt-4 pb-8 lg:px-6 lg:pt-5 lg:pb-10 [scrollbar-gutter:stable]">
+        {/* relative는 숨김 설명·입력을 본문 안에 가둔다. 강사·학생 화면도 풀셸과 같은 스크롤 경계를 쓴다([[#79]]). */}
+        <main className="compact-main relative flex-1 overflow-auto px-3 pt-4 pb-8 lg:px-6 lg:pt-5 lg:pb-10 [scrollbar-gutter:stable]">
           <EditPresenceProvider trackDisabled={viewAs?.access === "readonly"} user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels} jobTitles={settings.operations.jobTitles} jobTitlesByDepartment={settings.operations.jobTitlesByDepartment} disabledModules={settings.modules.disabled} licenses={await licensesPromise}>
             <ScreenHelpOverlay />
             <Suspense fallback={null}>
