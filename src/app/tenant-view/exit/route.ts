@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import { cookies } from "next/headers";
 import { tenantViewState } from "@/lib/auth/tenant-view";
 import { closeTenantView } from "@/lib/auth/tenant-view-session";
-import { expectedTenantFromMark, parseTenantViewMark, TENANT_VIEW_CLIENT_EXTRA_CUTOFF_MS, TENANT_VIEW_MARK_COOKIE } from "@/lib/auth/tenant-view-shared";
+import { expectedTenantFromMark, isUuid, parseTenantViewMark, TENANT_VIEW_CLIENT_EXTRA_CUTOFF_MS, TENANT_VIEW_MARK_COOKIE } from "@/lib/auth/tenant-view-shared";
 
 /**
  * 운영 콘솔의 '지점 보기'(읽기 전용) 끝내기 — 보기 기록을 닫고 쿠키를 지운 뒤 운영 콘솔의 그 학원으로 돌아간다.
@@ -21,6 +21,10 @@ import { expectedTenantFromMark, parseTenantViewMark, TENANT_VIEW_CLIENT_EXTRA_C
  *    쿠키는 그사이 다른 탭에서 **새로 연 보기**의 것일 수 있다(그대로 닫으면 "열었는데 바로 끝남"). 서버가 살아 있는 보기라 하고
  *    이 브라우저의 표식도 그렇게 말하면(화면 감시와 같은 기준) 닫지 않고 그 지점의 첫 화면으로 보낸다.
  *    사람이 누른 '보기 끝내기'(`why` 없음)는 묻지 않고 닫는다.
+ *
+ * 돌아갈 학원: 쿠키의 보기 기록에서 읽는다. 쿠키가 이미 없으면(같은 순간에 온 다른 끝내기 요청이 먼저 지웠다 — 화면 이동과 화면
+ * 감시가 함께 올 수 있다) 화면 감시가 실어 준 보던 지점(`t=`)으로 간다. 그 값은 **돌아갈 곳의 힌트일 뿐**이다 — 그 화면을
+ * 볼 수 있는지는 운영 콘솔의 문지기가 따로 본다.
  */
 export async function GET(request: NextRequest) {
   const ended = request.nextUrl.searchParams.get("why") === "ended";
@@ -33,7 +37,8 @@ export async function GET(request: NextRequest) {
       if (tabWouldAgree) redirect("/home");
     }
   }
-  const tenantId = await closeTenantView();
+  const hint = request.nextUrl.searchParams.get("t");
+  const tenantId = (await closeTenantView()) ?? (isUuid(hint) ? hint.toLowerCase() : null);
   if (!tenantId) redirect("/super-admin/tenants");
   redirect(`/super-admin/tenants/${tenantId}${ended ? "?view=ended" : ""}`);
 }

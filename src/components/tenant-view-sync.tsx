@@ -5,6 +5,7 @@ import {
   expectedTenantFromMark,
   parseTenantViewMark,
   TENANT_VIEW_CLIENT_EXTRA_CUTOFF_MS,
+  TENANT_VIEW_EXIT_PATH,
   TENANT_VIEW_MARK_COOKIE,
   tenantViewResyncHref,
 } from "@/lib/auth/tenant-view-shared";
@@ -37,6 +38,13 @@ const RESYNC_KEY = "aywa-tenant-view-resync";
 const RESYNC_QUIET_MS = 20_000;
 /** 사람이 누를 때의 다시 시도 간격 — 앞선 이동이 취소됐을 수 있다(미저장 경고에서 '머무르기'). */
 const USER_RETRY_MS = 2_000;
+/**
+ * 사람이 '보기 끝내기'를 누른 뒤 이만큼은 저절로 가는 이동을 쉰다. 끝내기 요청이 쿠키를 지우고 나서 새 화면이 뜨기까지의 틈에
+ * 이 문서의 타이머가 "띠는 있는데 표식이 없다"를 보고 한 번 더 끝내러 가면, 사람이 가던 길(보던 학원의 운영 콘솔 화면)을
+ * 덮어 학원 목록으로 보낸다(dev 실측 2026-10-12). 사람이 누르는 동작은 이 동안에도 그대로 견주고 **먹는다** — 다만 그 어긋남이
+ * "보던 화면인데 표식이 없다"(= 방금 누른 끝내기가 쿠키를 지웠다)면 다시 끝내러 가지 않고 가던 이동에 맡긴다.
+ */
+const LEAVING_QUIET_MS = 10_000;
 /**
  * 사용자의 동작이 시작되는 모든 길 — 전부 capture 단계에서 먼저 받는다. 누르는 순간(pointerdown)만 막으면 손을 뗄 때의
  * click은 그대로 나가 서버 액션이 불릴 수 있어, 이어지는 이벤트까지 같은 함수로 받는다.
@@ -88,17 +96,22 @@ export function TenantViewSync({
     const clockOffset = serverNow - Date.now();
     /** 이 문서에서 마지막으로 이동을 시도한 때(0 = 아직 없다). */
     let triedAt = 0;
+    /** 사람이 '보기 끝내기'를 눌러 이 문서가 떠나기 시작한 때(0 = 아니다). */
+    let leavingAt = 0;
 
     const expectedNow = () =>
       expectedTenantFromMark(parseTenantViewMark(readCookie(TENANT_VIEW_MARK_COOKIE)), userId, Date.now() + clockOffset + TENANT_VIEW_CLIENT_EXTRA_CUTOFF_MS);
 
     const resync = (expected: string | null, byUser: boolean) => {
       const now = Date.now();
+      const leaving = leavingAt > 0 && now - leavingAt < LEAVING_QUIET_MS;
+      // 사람이 방금 끝내기를 눌러 쿠키가 지워진 것이면(보던 화면 · 표식 없음) 가던 이동에 맡긴다 — 동작은 이미 먹었다.
+      if (leaving && viewingTenantId && !expected) return;
       if (byUser) {
         // 사람이 누른 것 — 방금 시도한 이동이 아직 진행 중일 수 있으니 잠깐만 기다렸다가 다시 간다.
         if (triedAt && now - triedAt < USER_RETRY_MS) return;
-      } else if (triedAt || !allowAutoResync(`${viewingTenantId ?? "-"}>${expected ?? "-"}`)) {
-        // 저절로 가는 것은 이 문서에서 한 번, 같은 어긋남으로는 잠시 동안 한 번뿐이다.
+      } else if (triedAt || leaving || !allowAutoResync(`${viewingTenantId ?? "-"}>${expected ?? "-"}`)) {
+        // 저절로 가는 것은 이 문서에서 한 번, 같은 어긋남으로는 잠시 동안 한 번뿐이다. 사람이 방금 끝내기를 눌렀으면 그 이동에 맡긴다.
         return;
       }
       triedAt = now;
@@ -116,7 +129,11 @@ export function TenantViewSync({
 
     const check = (event?: Event) => {
       const expected = expectedNow();
-      if (expected === viewingTenantId) return;
+      if (expected === viewingTenantId) {
+        // 어긋나지 않은 화면에서 사람이 '보기 끝내기'를 눌렀다 — 곧 쿠키가 지워지고 새 화면이 뜬다(위 LEAVING_QUIET_MS).
+        if (event?.type === "click" && event.target instanceof Element && event.target.closest(`a[href^="${TENANT_VIEW_EXIT_PATH}"]`)) leavingAt = Date.now();
+        return;
+      }
       // 어긋난 화면이다 — 이 동작은 서버에 닿지 않게 먹고(이동이 막혀 있어도), 화면을 다시 맞추러 간다.
       if (event) {
         if (event.cancelable) event.preventDefault();

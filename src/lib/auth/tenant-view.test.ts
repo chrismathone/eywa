@@ -204,7 +204,8 @@ describe("지점 보기 판정 — 쿠키는 믿지 않고 기록을 다시 본�
 
   it("🔴 기록이 끝났거나 만료됐으면 '끝난 보기' — 평소 요청이 아니다(쓰기를 막는다)", async () => {
     state.view = { ...liveRow(), ended_at: new Date().toISOString() };
-    expect(await tenantViewState()).toEqual({ state: "ended" });
+    // 기록을 읽은 끝난 보기는 보던 지점을 함께 든다(운영 콘솔의 그 학원 화면으로 돌아가는 데만 쓴다).
+    expect(await tenantViewState()).toEqual({ state: "ended", tenantId: TENANT });
     expect(await isTenantViewWriteBlocked()).toBe(true);
     expect(await isTenantViewRequest()).toBe(false);
     expect(await liveTenantView()).toBeNull();
@@ -325,10 +326,10 @@ describe("지점 보기 판정 — DB가 실제로 그 지점으로 답할 때�
     for (const body of [OWN_TENANT, null]) {
       request([viewCookie(), ...sessionCookie(OPERATOR)]);
       state.db = { status: 200, body, fail: false };
-      expect(await tenantViewState(), String(body)).toEqual({ state: "ended" });
+      expect(await tenantViewState(), String(body)).toEqual({ state: "ended", tenantId: TENANT });
       expect(await isTenantViewWriteBlocked()).toBe(true);
     }
-    await expect(getCurrentUser()).rejects.toThrow("REDIRECT:/tenant-view/exit?why=ended");
+    await expect(getCurrentUser()).rejects.toThrow(`REDIRECT:/tenant-view/exit?why=ended&t=${TENANT}`);
   });
 
   it("물어보지 못했으면(로그인 토큰 만료 · 통신 실패) 보기 기록대로 간다", async () => {
@@ -466,10 +467,13 @@ describe("지점 보기 중의 현재 사용자", () => {
 
   it("🔴 끝난 보기: 화면 요청은 그리지 않고 '보기 끝내기'로 보낸다(띠 아래에 본인 지점 화면이 뜨지 않게)", async () => {
     state.view = { ...liveRow(), ended_at: new Date().toISOString() };
-    await expect(getCurrentUser()).rejects.toThrow("REDIRECT:/tenant-view/exit?why=ended");
-    // 표식만 남은 경우도 같다.
+    // 보던 지점을 함께 싣는다 — 겹쳐 온 다른 끝내기 요청이 쿠키를 먼저 지웠어도 그 학원의 화면으로 돌아간다.
+    await expect(getCurrentUser()).rejects.toThrow(`REDIRECT:/tenant-view/exit?why=ended&t=${TENANT}`);
+    // 표식만 남은 경우도 끝내기로 간다(기록을 읽지 않아 지점은 싣지 않는다).
     request([markCookie(), ...sessionCookie(OPERATOR)]);
-    await expect(getCurrentUser()).rejects.toThrow("REDIRECT:/tenant-view/exit?why=ended");
+    let thrown = "";
+    await getCurrentUser().catch((e: Error) => { thrown = e.message; });
+    expect(thrown).toBe("REDIRECT:/tenant-view/exit?why=ended");
   });
 
   it("🔴 확인하지 못한 요청: 화면 요청은 그리지 않고 안내 화면으로 보낸다(보는 지점으로도 본인 지점으로도 그리지 않는다)", async () => {
@@ -495,7 +499,7 @@ describe("지점 보기 중의 현재 사용자", () => {
 
   it("사람을 못 읽은 화면이 갈 곳: 끝난 보기면 끝내기 · 확인하지 못했으면 안내 화면 · 그 밖(평소의 비로그인 · 보는 중)에는 없음", async () => {
     state.view = { ...liveRow(), ended_at: new Date().toISOString() };
-    expect(await tenantViewSignedOutRedirect()).toBe("/tenant-view/exit?why=ended");
+    expect(await tenantViewSignedOutRedirect()).toBe(`/tenant-view/exit?why=ended&t=${TENANT}`);
     request([viewCookie(), ...sessionCookie(OPERATOR)]);
     state.view = null;
     state.viewError = { message: "fetch failed" };

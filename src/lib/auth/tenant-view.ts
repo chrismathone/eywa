@@ -10,7 +10,7 @@ import {
   parseTenantViewMark,
   TENANT_VIEW_COOKIE,
   TENANT_VIEW_EARLY_CUTOFF_SECONDS,
-  TENANT_VIEW_ENDED_EXIT_HREF,
+  tenantViewEndedExitHref,
   TENANT_VIEW_HEADER,
   TENANT_VIEW_MARK_COOKIE,
   TENANT_VIEW_READONLY_MESSAGE,
@@ -69,7 +69,7 @@ export type TenantView = {
 export type TenantViewState =
   | { state: "none" }
   | { state: "unknown" }
-  | { state: "ended" }
+  | { state: "ended"; /** 끝난 보기가 보던 지점(기록을 읽었을 때만) — 운영 콘솔의 어느 학원 화면으로 돌아갈지에만 쓴다. */ tenantId?: string }
   | { state: "live"; view: TenantView };
 
 const NONE: TenantViewState = { state: "none" };
@@ -147,19 +147,21 @@ async function resolveState(jar: CookieJar, cookie: { token: string; operatorId:
     // 🔴 그런 기록이 없거나 주인이 다르면 **우리가 내 준 쿠키가 아니다** → 평소 요청이다(누가 만들어 넣은 쿠키로 저장이 막히지 않는다).
     //    띠를 단 탭은 실제 기록이 있었던 보기에서만 생긴다(기록은 30일 뒤에야 지워지고 쿠키는 2시간이면 사라진다).
     if (!row || row.operator_id !== cookie.operatorId) return NONE;
-    if (row.ended_at) return ENDED;
-    if (Date.parse(row.expires_at as string) - Date.now() <= TENANT_VIEW_EARLY_CUTOFF_SECONDS * 1000) return ENDED;
+    // 여기부터의 '끝난 보기'는 보던 지점을 함께 든다(돌아갈 학원 화면).
+    const ended: TenantViewState = { state: "ended", tenantId: row.tenant_id as string };
+    if (row.ended_at) return ended;
+    if (Date.parse(row.expires_at as string) - Date.now() <= TENANT_VIEW_EARLY_CUTOFF_SECONDS * 1000) return ended;
     const [operator, tenant] = await Promise.all([
       admin.from("super_admins").select("id, email, display_name").eq("id", row.operator_id as string).maybeSingle(),
       admin.from("tenants").select("id, name").eq("id", row.tenant_id as string).maybeSingle(),
     ]);
     if (operator.error || tenant.error) return UNKNOWN;
     // 운영자 명단에서 빠졌거나 지점이 없어졌으면 보기가 아니다(DB도 같은 조건으로 거른다).
-    if (!operator.data || !tenant.data) return ENDED;
+    if (!operator.data || !tenant.data) return ended;
     // ④ DB가 이 요청을 실제로 그 지점의 보기로 받아 주는가. 분명히 아니라고 하면(다른 값) 보기가 아니다 —
     //    로그인 토큰의 주인이 다르거나, DB 쪽에서 먼저 끝났거나, 헤더가 DB에 닿는 모양이 달라진 경우다.
     //    물어보지 못한 것(토큰 갱신 직전 · 통신 실패)은 위 기록대로 간다 — 그 요청의 조회는 세션 클라이언트가 토큰을 갱신해 보낸다.
-    if (session.accessToken && (await dbHonorsTenantView(session.accessToken, cookie.token, tenant.data.id as string)) === false) return ENDED;
+    if (session.accessToken && (await dbHonorsTenantView(session.accessToken, cookie.token, tenant.data.id as string)) === false) return ended;
     return {
       state: "live",
       view: {
@@ -264,8 +266,8 @@ export async function isTenantViewScreenRequest(): Promise<boolean> {
  * 로그인 화면**이 뜬다. 셸은 이 함수를 먼저 본다(보기 쿠키가 없으면 조회 없이 null — 평소의 비로그인은 종전대로 `/login`).
  */
 export async function tenantViewSignedOutRedirect(): Promise<string | null> {
-  const { state } = await tenantViewState();
-  return state === "ended" ? TENANT_VIEW_ENDED_EXIT_HREF : state === "unknown" ? TENANT_VIEW_UNCONFIRMED_PATH : null;
+  const tv = await tenantViewState();
+  return tv.state === "ended" ? tenantViewEndedExitHref(tv.tenantId) : tv.state === "unknown" ? TENANT_VIEW_UNCONFIRMED_PATH : null;
 }
 
 /** 서버의 지금 시각(ms) — 셸이 화면 감시(tenant-view-sync.tsx)에 내려 준다. 그 기기의 시계가 틀려도 끝나는 때를 서버 기준으로 맞추려는 값이다. */

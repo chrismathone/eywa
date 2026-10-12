@@ -89,15 +89,24 @@ export function expectedTenantFromMark(mark: TenantViewMark | null, userId: stri
 }
 
 /**
+ * 저절로 끝난 보기를 정리하러 가는 주소 — 보던 지점을 알면 함께 싣는다(`t=`). 끝내기 요청이 여럿 겹쳐(화면 이동 · 화면 감시)
+ * 먼저 온 것이 쿠키를 지웠어도, 나중 것까지 같은 학원의 화면으로 돌아가게 한다. 값은 돌아갈 곳의 힌트일 뿐이다.
+ */
+export function tenantViewEndedExitHref(tenantId?: string | null): string {
+  return isUuid(tenantId) ? `${TENANT_VIEW_ENDED_EXIT_HREF}&t=${tenantId.toLowerCase()}` : TENANT_VIEW_ENDED_EXIT_HREF;
+}
+
+/**
  * 탭에 그려진 지점(`viewingTenantId`)과 표식이 말하는 지점(`expected`)이 어긋났을 때 **어디로 가서 맞출지**. 같으면 null.
  * - 그려진 화면은 보는 중인데 표식이 없다/끝났다 → '보기 끝내기'(남은 쿠키를 지우고 운영 콘솔로 — 저절로 끝난 것이라 안내가 붙는다).
+ *   보던 지점을 함께 싣는다(`t=`) — 끝내기 주소에 닿기 전에 다른 요청이 쿠키를 먼저 지웠어도 그 학원의 화면으로 돌아가게.
  * - 그 밖(보기가 새로 열렸다 · 다른 지점으로 바뀌었다) → '화면 맞추기'(서버가 확인해 맞는 화면으로).
  *   그려진 화면이 보는 중이었으면 그 사실을 함께 싣는다(`from=view`) — 확인해 보니 보기가 아니었을 때 돌아갈 곳이 다르다
  *   (보던 화면의 주소는 다른 지점 것이라 본인 화면에서는 뜻이 없다 → 운영 콘솔로).
  */
 export function tenantViewResyncHref(viewingTenantId: string | null, expected: string | null, here: string): string | null {
   if (viewingTenantId === expected) return null;
-  if (viewingTenantId && !expected) return TENANT_VIEW_ENDED_EXIT_HREF;
+  if (viewingTenantId && !expected) return tenantViewEndedExitHref(viewingTenantId);
   return `${TENANT_VIEW_SYNC_PATH}?next=${encodeURIComponent(here)}${viewingTenantId ? "&from=view" : ""}`;
 }
 

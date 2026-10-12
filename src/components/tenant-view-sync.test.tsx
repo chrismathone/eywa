@@ -73,7 +73,8 @@ describe("지점 보기 화면 감시", () => {
     clearMark();
     render(<TenantViewSync userId={ME} viewingTenantId={TENANT_B} serverNow={Date.now()} />);
     expect(assign).toHaveBeenCalledTimes(1);
-    expect(assign).toHaveBeenCalledWith("/tenant-view/exit?why=ended");
+    // 보던 지점을 함께 싣는다(쿠키가 먼저 지워졌어도 그 학원의 화면으로 돌아가게).
+    expect(assign).toHaveBeenCalledWith(`/tenant-view/exit?why=ended&t=${TENANT_B}`);
     expect(press()).toEqual({ pointerdown: false, click: false });
     expect(assign).toHaveBeenCalledTimes(1); // 한 번만 옮긴다
   });
@@ -84,20 +85,20 @@ describe("지점 보기 화면 감시", () => {
     expect(press()).toEqual({ pointerdown: true, click: true });
     clearMark(); // 다른 탭에서 '보기 끝내기'
     expect(press()).toEqual({ pointerdown: false, click: false });
-    expect(assign).toHaveBeenCalledWith("/tenant-view/exit?why=ended");
+    expect(assign).toHaveBeenCalledWith(`/tenant-view/exit?why=ended&t=${TENANT_B}`);
   });
 
   it("끝나기 직전(서버가 먼저 끝난 것으로 보는 구간)이면 끝난 것으로 본다", () => {
     setMark(ME, TENANT_B, 80); // 서버 60초 + 이 화면의 여유 30초 안쪽
     render(<TenantViewSync userId={ME} viewingTenantId={TENANT_B} serverNow={Date.now()} />);
-    expect(assign).toHaveBeenCalledWith("/tenant-view/exit?why=ended");
+    expect(assign).toHaveBeenCalledWith(`/tenant-view/exit?why=ended&t=${TENANT_B}`);
   });
 
   it("이 기기의 시계가 늦어도 서버 시각으로 끝나는 때를 맞춘다", () => {
     setMark(ME, TENANT_B, 600); // 이 기기 시계로는 10분 남음
     // 서버 시각은 이 기기보다 9분 30초 앞서 있다 → 실제로는 30초 남았다.
     render(<TenantViewSync userId={ME} viewingTenantId={TENANT_B} serverNow={Date.now() + 570_000} />);
-    expect(assign).toHaveBeenCalledWith("/tenant-view/exit?why=ended");
+    expect(assign).toHaveBeenCalledWith(`/tenant-view/exit?why=ended&t=${TENANT_B}`);
   });
 
   it("🔴 본인 화면인 줄 아는데 다른 탭에서 보기를 열었으면 '화면 맞추기'로 간다(지금 주소를 실어서)", () => {
@@ -157,6 +158,49 @@ describe("지점 보기 화면 감시", () => {
     Object.defineProperty(shown, "persisted", { value: true });
     window.dispatchEvent(shown);
     expect(assign).toHaveBeenCalledTimes(2);
+  });
+
+  it("🔴 사람이 '보기 끝내기'를 누른 직후에는 저절로 끝내러 가지 않는다 — 가던 길(보던 학원의 운영 콘솔 화면)을 덮지 않는다", () => {
+    vi.useFakeTimers();
+    try {
+      setMark(ME, TENANT_B, 3600);
+      render(<TenantViewSync userId={ME} viewingTenantId={TENANT_B} serverNow={Date.now()} />);
+      const exit = document.createElement("a");
+      exit.setAttribute("href", "/tenant-view/exit");
+      exit.addEventListener("click", (e) => e.preventDefault()); // 시험 환경에서는 실제로 떠나지 않는다
+      document.body.appendChild(exit);
+      exit.dispatchEvent(new Event("click", { bubbles: true, cancelable: true }));
+      // 끝내기 요청이 쿠키를 지웠다 — 새 화면이 뜨기 전에 이 문서의 타이머가 돈다.
+      clearMark();
+      vi.advanceTimersByTime(6_000);
+      expect(assign).not.toHaveBeenCalled();
+      // 그사이 사람이 누른 것은 여전히 먹는다(지키는 것은 그대로다) — 다시 끝내러 가지는 않고 가던 이동에 맡긴다.
+      expect(press()).toEqual({ pointerdown: false, click: false });
+      expect(assign).not.toHaveBeenCalled();
+      exit.remove();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("끝내기를 눌렀는데 떠나지 못했으면(이동이 취소됐다) 잠시 뒤에는 다시 저절로 견준다", () => {
+    vi.useFakeTimers();
+    try {
+      setMark(ME, TENANT_B, 3600);
+      render(<TenantViewSync userId={ME} viewingTenantId={TENANT_B} serverNow={Date.now()} />);
+      const exit = document.createElement("a");
+      exit.setAttribute("href", "/tenant-view/exit?why=x");
+      exit.addEventListener("click", (e) => e.preventDefault());
+      document.body.appendChild(exit);
+      exit.dispatchEvent(new Event("click", { bubbles: true, cancelable: true }));
+      clearMark();
+      vi.advanceTimersByTime(16_000);
+      expect(assign).toHaveBeenCalledTimes(1);
+      expect(assign).toHaveBeenCalledWith(`/tenant-view/exit?why=ended&t=${TENANT_B}`);
+      exit.remove();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("어긋남이 풀리면(다른 탭에서 같은 지점을 다시 열었다) 다시 아무것도 가로채지 않는다", () => {

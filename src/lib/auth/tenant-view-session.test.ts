@@ -268,6 +268,20 @@ describe("'보기 끝내기' 주소", () => {
     expect(jar.values.size).toBe(0);
   });
 
+  it("쿠키가 이미 지워졌어도 화면 감시가 실어 준 보던 지점으로 돌아간다 — uuid 모양일 때만(주소를 지어내지 못한다)", async () => {
+    expect(await redirectOf(() => exitRoute(request(`/tenant-view/exit?why=ended&t=${TENANT}`)))).toBe(`/super-admin/tenants/${TENANT}?view=ended`);
+    expect(await redirectOf(() => exitRoute(request(`/tenant-view/exit?t=${TENANT.toUpperCase()}`)))).toBe(`/super-admin/tenants/${TENANT}`);
+    for (const bad of ["../../evil", "https://evil.example", "//evil.example", `${TENANT}/../x`, `${TENANT}?x=1`, ""]) {
+      expect(await redirectOf(() => exitRoute(request(`/tenant-view/exit?why=ended&t=${encodeURIComponent(bad)}`))), bad).toBe("/super-admin/tenants");
+    }
+  });
+
+  it("쿠키의 보기 기록이 있으면 실어 온 지점보다 그쪽을 따른다", async () => {
+    db.rows = [liveRow(OLD_TOKEN)];
+    jar.values.set(TENANT_VIEW_COOKIE, tenantViewCookieValue(OLD_TOKEN, OPERATOR));
+    expect(await redirectOf(() => exitRoute(request("/tenant-view/exit?t=cccccccc-0000-4000-8000-000000000003")))).toBe(`/super-admin/tenants/${TENANT}`);
+  });
+
   const liveCookies = (secondsLeft: number) => {
     db.rows = [liveRow(OLD_TOKEN)];
     jar.values.set(TENANT_VIEW_COOKIE, tenantViewCookieValue(OLD_TOKEN, OPERATOR));

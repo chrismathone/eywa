@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { SystemRole } from "@/lib/permissions";
 import { redirect } from "next/navigation";
 import { isTenantViewScreenRequest, tenantViewState } from "@/lib/auth/tenant-view";
-import { TENANT_VIEW_ENDED_EXIT_HREF, TENANT_VIEW_UNCONFIRMED_PATH } from "@/lib/auth/tenant-view-shared";
+import { tenantViewEndedExitHref, TENANT_VIEW_UNCONFIRMED_PATH } from "@/lib/auth/tenant-view-shared";
 
 export type CurrentUser = {
   id: string;
@@ -67,7 +67,7 @@ const getAuthenticatedUser = cache(async (): Promise<CurrentUser | null> => {
   //      대신 받아 와, 끝내기 주소의 쿠키 지우기가 브라우저에 닿지 않는다(tenant-view.ts `isTenantViewScreenRequest`).
   //    쓰기는 이와 별개로 데이터 접근 층이 막는다(이 함수를 부르지 않는 코드도 막힌다).
   if (tv.state === "ended" || tv.state === "unknown") {
-    if (await isTenantViewScreenRequest()) redirect(tv.state === "ended" ? TENANT_VIEW_ENDED_EXIT_HREF : TENANT_VIEW_UNCONFIRMED_PATH);
+    if (await isTenantViewScreenRequest()) redirect(tv.state === "ended" ? tenantViewEndedExitHref(tv.tenantId) : TENANT_VIEW_UNCONFIRMED_PATH);
     return null;
   }
   const view = tv.state === "live" ? tv.view : null;

@@ -272,7 +272,7 @@ describe("지점 보기 — 판정은 한 곳, 가드 없는 클라이언트는 
     expect(tv.indexOf("session.userId !== ownerId")).toBeLessThan(tv.indexOf('.from("operator_tenant_views")'));
     expect(tv.indexOf("session.userId !== ownerId")).toBeGreaterThan(0);
     // 🔴 '보는 중'이라고 답하기 전에 DB가 실제로 그 지점으로 답하는지 묻는다 — 분명히 아니면 끝난 보기다.
-    expect(tv).toContain("(await dbHonorsTenantView(session.accessToken, cookie.token, tenant.data.id as string)) === false) return ENDED;");
+    expect(tv).toContain("(await dbHonorsTenantView(session.accessToken, cookie.token, tenant.data.id as string)) === false) return ended;");
   });
 
   it("🔴 내 보기 쿠키가 남아 있는데 보기가 아니면 평소 요청(`none`)이 아니라 끝난 보기(`ended`)다", () => {
@@ -284,8 +284,9 @@ describe("지점 보기 — 판정은 한 곳, 가드 없는 클라이언트는 
     expect(afterLookup).toContain("return isMissingRelation(error) ? NONE : UNKNOWN;");
     expect(afterLookup).toContain("if (!row || row.operator_id !== cookie.operatorId) return NONE;");
     // 그 줄이 '끝난 보기' 판정들보다 앞이다 — 근거(실제 기록)가 있어야 끝난 보기다.
-    expect(afterLookup.indexOf("if (!row || row.operator_id !== cookie.operatorId) return NONE;")).toBeLessThan(afterLookup.indexOf("return ENDED;"));
-    expect(afterLookup.split("return ENDED;").length - 1).toBe(4);
+    expect(afterLookup.indexOf("if (!row || row.operator_id !== cookie.operatorId) return NONE;")).toBeLessThan(afterLookup.indexOf("return ended;"));
+    expect(afterLookup).toContain('const ended: TenantViewState = { state: "ended", tenantId: row.tenant_id as string };');
+    expect(afterLookup.split("return ended;").length - 1).toBe(4);
     // 표식 쿠키만 남은 브라우저는 운영자일 때만 끝난 보기다(표식은 누구나 쓸 수 있는 쿠키다).
     const markOnly = resolve.slice(resolve.indexOf("if (!cookie) {"), resolve.indexOf('.from("operator_tenant_views")'));
     expect(markOnly).toContain('.from("super_admins").select("id").eq("id", ownerId).maybeSingle();');
@@ -296,7 +297,7 @@ describe("지점 보기 — 판정은 한 곳, 가드 없는 클라이언트는 
 
   it("🔴 끝난 보기 · 확인하지 못한 요청에는 본인으로 답하지 않는다 — 화면은 끝내기/안내로 보내고, 그 밖은 로그인하지 않은 것으로", () => {
     const me = read("src/lib/auth/current-user.ts");
-    expect(me).toMatch(/if \(tv\.state === "ended" \|\| tv\.state === "unknown"\) \{\s+if \(await isTenantViewScreenRequest\(\)\) redirect\(tv\.state === "ended" \? TENANT_VIEW_ENDED_EXIT_HREF : TENANT_VIEW_UNCONFIRMED_PATH\);\s+return null;\s+\}/);
+    expect(me).toMatch(/if \(tv\.state === "ended" \|\| tv\.state === "unknown"\) \{\s+if \(await isTenantViewScreenRequest\(\)\) redirect\(tv\.state === "ended" \? tenantViewEndedExitHref\(tv\.tenantId\) : TENANT_VIEW_UNCONFIRMED_PATH\);\s+return null;\s+\}/);
     // 그 줄이 사람을 정하는 줄(보는 지점 · 본인 지점)보다 앞이다.
     expect(me.indexOf("isTenantViewScreenRequest())")).toBeLessThan(me.indexOf('const view = tv.state === "live" ? tv.view : null;'));
     // 권한 매트릭스의 폴백이 그 이동 신호를 삼키지 않는다(삼키면 권한만 묻고 데이터를 읽는 화면이 본인 지점으로 그려진다).
@@ -601,7 +602,7 @@ describe("지점 보기 — 순수 판정", () => {
     expect(tenantViewResyncHref(null, null, "/students")).toBeNull();
     expect(tenantViewResyncHref(TENANT, TENANT, "/students")).toBeNull();
     // 보던 화면인데 표식이 없다 = 저절로 끝났다 → 끝내기(운영 콘솔이 안내를 띄운다).
-    expect(tenantViewResyncHref(TENANT, null, "/students")).toBe("/tenant-view/exit?why=ended");
+    expect(tenantViewResyncHref(TENANT, null, "/students")).toBe(`/tenant-view/exit?why=ended&t=${TENANT}`);
     expect(tenantViewResyncHref(null, TENANT, "/students?tab=a b")).toBe("/tenant-view/sync?next=%2Fstudents%3Ftab%3Da%20b");
     // 보던 화면에서 다른 지점으로 바뀌었다 → 맞추기. 보던 화면이었다는 것을 함께 싣는다(보기가 아니었으면 운영 콘솔로 돌아간다).
     expect(tenantViewResyncHref(TENANT, ME, "/x")).toBe("/tenant-view/sync?next=%2Fx&from=view");
