@@ -125,6 +125,24 @@ describe("휴원일 실제 입력 조회 — 범위와 읽기 전용", () => {
   });
 });
 
+describe("원스크린 — 휴원일은 알리고 일괄 출결만 묻는다(원장 2026-10-13, 10/9 한글날 19명)", () => {
+  const ROSTER = "src/features/onescreen/server/roster.ts";
+  const CLIENT = "src/features/onescreen/components/onescreen-client.tsx";
+
+  it("명단은 출결 화면과 같은 fail-soft 판정을 싣고, 휴원일이라고 명단을 비우지 않는다", () => {
+    const src = code(ROSTER);
+    expect(src).toContain("holidayNameOrNull(targetDate)");
+    // 휴원일에도 실제로 수업하는 날이 있다(10/3) — 명단을 비우면 그날 입력할 길이 사라진다.
+    expect(src).not.toMatch(/if \(holidayName\)/);
+  });
+
+  it("'일괄 출석'은 휴원일에만 기록 전에 묻는다", () => {
+    const src = code(CLIENT);
+    const body = src.slice(src.indexOf("async function applyQuickPresent"), src.indexOf("setQuickAttBusy(true)"));
+    expect(body).toMatch(/if \(holidayName && !window\.confirm\(tf\("os\.present\.holidayConfirm"/);
+  });
+});
+
 describe("세 화면이 같은 조회를 읽는다", () => {
   it("오늘 출결 · 출석부 요약 · 운영실이 getHolidayDayActivity 한 함수다", () => {
     expect(code(LIVE_PAGE)).toContain("getHolidayDayActivity(date)");

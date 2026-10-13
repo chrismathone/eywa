@@ -173,6 +173,7 @@ export default async function OneScreenPage({
       initialTrendOptOut={roster.trendOptOut}
       noClassesToday={roster.noClassesToday}
       showingAll={roster.showingAll}
+      holidayName={roster.holidayName}
       // 카드 뷰 우측 '학부모 미리보기'(2026-08-05) — /r·인쇄와 같은 컴포넌트에 넘길 재료. 표시 전용.
       // 발송용 이름이 있으면 그 이름으로(지금 저장·발송될 보고서 기준) — 저장되는 teacher_name(귀속 축)은 불변.
       teacherName={sendName ?? roster.teacherName}
