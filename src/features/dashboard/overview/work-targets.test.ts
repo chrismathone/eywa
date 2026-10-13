@@ -57,6 +57,11 @@ describe("강사별 작성 의무와 비율 분모", () => {
     const post = { boardName: "[EIE] Let's Speak 2a (월수금)", postedOn: input.to };
     expect(reportWorkObligations({ ...input, classes: [external], posts: [post, post] })).toEqual([{ classId: "m", studentId: "class-post", date: input.to, written: true, status: "success" }]);
   });
+  it("영어 반도 그날 받을 학생이 없으면 할 일이 아니다(재원 0명·휴원뿐인 반)", () => {
+    const external = { ...cls, name: "초등E_LS2a", reportSource: "classnote" as const };
+    expect(reportWorkObligations({ ...input, classes: [external], enrollments: [] })).toEqual([]);
+    expect(reportWorkObligations({ ...input, classes: [external], enrollments: [{ ...enrollment, on_hold: true }] })).toEqual([]);
+  });
   it("테스트반과 테스트반에서 작성·배정한 수치까지 제외한다", () => {
     for (const name of ["테스트 (~26.10.01)", "고등특강(테스트) (~26.07.02)", "학원이(영어 테스트) (~26.09.30)", "학원이(테스트)", "Test class", "테스트반"]) expect(isTestClass(name), name).toBe(true);
     expect(isTestClass("레벨테스트 대비 정규반")).toBe(false);

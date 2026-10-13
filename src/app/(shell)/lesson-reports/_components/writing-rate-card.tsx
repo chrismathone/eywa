@@ -188,7 +188,7 @@ export function WritingRateCard({ view }: { view: WritingRatesView }) {
                     {r.source === "classnote" ? (
                       <span
                         className="border-line text-text-dim ml-1.5 rounded-full border px-1.5 py-0.5 text-xs"
-                        title="영어는 강사가 ClassNote에 직접 쓰므로 반 알림장 기준으로 셉니다(반 단위 · 주간만)"
+                        title="영어는 강사가 ClassNote에 직접 쓰므로 반 알림장 기준으로 셉니다(반 단위 · 주간만 · 어제까지)"
                       >
                         ClassNote
                       </span>

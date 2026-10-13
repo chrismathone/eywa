@@ -22,6 +22,21 @@ describe("classKey ↔ boardKey — aywa 반 이름과 ClassNote 보드를 같�
     expect(classKey("RTT2")).toBe(boardKey("[EIE] Ready To Talk 2 (화목금 16:20~18:20)"));
   });
 
+  it("Green·Jennifer 보드도 반과 잇는다(2026-10-13 — 빠져서 두 선생님 반이 0%로 보였다)", () => {
+    expect(classKey("중등E_초등 브릿지 C")).toBe(boardKey("Green 초등 브릿지C (월수목)"));
+    expect(classKey("고등E_고2 정규 A")).toBe(boardKey("Green 고2 정규A (화금)"));
+    expect(classKey("중고E_중1 MED")).toBe(boardKey("Jennifer 중1 MED (월목)"));
+    expect(classKey("중등E_초6 MED a")).toBe(boardKey("Jennifer 초6 MED a (화수금)"));
+    expect(classKey("중등E_초6 MED a")).not.toBe(boardKey("Jennifer 초6 MED b (화수금)"));
+  });
+
+  it("EIE Let's Express(LE)·Ready To Speak(RTS)도 잇는다", () => {
+    expect(classKey("LE1")).toBe(boardKey("[EIE] Let's Express 1 (월수목 16:20~18:20)"));
+    expect(classKey("LE2")).toBe(boardKey("[EIE] Let's Express 2 (화목금15:00~17:00)"));
+    expect(classKey("RTS1")).toBe(boardKey("[EIE] Ready To Speak 1 (월수목 16:20~18:20)"));
+    expect(classKey("RTS1")).not.toBe(classKey("RTT1")); // Ready To Talk과 섞이지 않는다
+  });
+
   it("보드 이름의 여분 공백에도 견딘다", () => {
     expect(classKey("LS2b")).toBe(boardKey("[EIE]  Let's Speak 2b (화목금 14:20~16:20)"));
   });
@@ -89,6 +104,23 @@ describe("computeEnglishRates", () => {
     const [r] = computeEnglishRates([cls({ className: "고등E_고3 정규" })], [], RANGE);
     expect(r!.unmatched).toBe(true);
     expect(r!.written).toBe(0);
+  });
+
+  it("그날 학생이 없는 수업일은 분모에서 빠지고, '요일 밖'은 시간표 기준 그대로다", () => {
+    const posts = [
+      { boardName: "Jane 중1 정규A (화수금)", postedOn: "2026-07-21" }, // 화 — 학생 있음
+      { boardName: "Jane 중1 정규A (화수금)", postedOn: "2026-07-24" }, // 금 — 학생 없음
+    ];
+    const [r] = computeEnglishRates([cls()], posts, { ...RANGE, hasStudentsOn: (_id, d) => d !== "2026-07-24" });
+    expect(r!.sessions).toBe(2); // 화·수
+    expect(r!.written).toBe(1);
+    expect(r!.offSchedule).toBe(0); // 금요일 글은 요일 밖이 아니다
+  });
+
+  it("학생이 한 날도 없으면 수업일 0 → rate=null", () => {
+    const [r] = computeEnglishRates([cls()], [], { ...RANGE, hasStudentsOn: () => false });
+    expect(r!.sessions).toBe(0);
+    expect(r!.rate).toBeNull();
   });
 
   it("수업일이 0이면 rate=null — 0%로 표시하면 거짓이다", () => {
