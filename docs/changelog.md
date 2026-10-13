@@ -1,5 +1,11 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-10-13 — 키오스크 표 쓰기 역할 게이트(0358a) + ECS 오늘 보드 휴원일 확인
+
+- **키오스크 표(0358a, 원장 손 적용 · 정책만)**: 키오스크 기기 삭제 리뷰에서 나온 구멍 — 키오스크 4표의 RLS가 역할을 안 보는 `tenant_isolation`(for all) 하나뿐이라, 강사 세션 + 공개 anon 키로 PostgREST에 직접 쓰면 **기기 등록(= 키오스크 자격 발급)·등하원 기록 위조·알림톡 채널 바꿔치기**가 화면·감사로그를 건너뛰고 됐다(0027a부터, [[#92]] 모양). `kiosk_devices`·`kakao_channels` 쓰기 = **'키오스크 설정' 쓰기 권한자**(새 함수 `auth_kiosk_can_write()` = 앱 `canWriteTenant(…, "kiosk_settings")`의 DB 미러 — `auth_menu_access` + super_admin, 0305a와 같은 모양 · restrictive · 읽기 그대로) · `attendance_checkins`·`attendance_notifications` = 세션은 **읽기만**(쓰는 코드가 전부 service_role). 역할 명단(0219a 모양)으로 하지 않은 것은 원장이 화면에서 바로 강사에게 키오스크 설정을 줄 수 있어서다(명단이면 앱 통과·DB 거부). 가드 = `permissions-sql-mirror.test.ts`(kiosk_settings 코드 기본값이 '원장만'인 동안만 DEFAULTS 행 없이 같은 답). 적용 전후 권한자의 화면 동작은 같다(#95 무관).
+- **기기 폐기**: 바뀐 행이 없으면 "폐기했습니다" 대신 "이미 삭제됐거나 찾을 수 없는 기기입니다"(감사로그 없음) — 삭제와 같은 규약. 전에는 다른 창에서 지운 기기를 폐기해도 성공 안내와 감사로그가 남았다.
+- **ECS 오늘 보드**: 반 카드의 '전원 출석 / 나머지 N명 출석'도 휴원일이면 기록 전에 한 번 묻는다(원스크린과 같은 문장 · 막지 않음 · 취소하면 낙관 표시도 안 칠한다). 페이지가 넘기던 `isHoliday` 대신 휴일 이름(`holidayName`)을 넘긴다. 시험 = `today-board-holiday.test.tsx`.
+
 ## 2026-10-13 — 영어 작성률: ClassNote 보드↔반 매칭 복구 + 학생 없는 날 분모 제외
 
 - **왜**: 영어 강사가 ClassNote에 직접 쓴 알림장은 보드 이름에서 강사 닉네임을 떼고 반 이름과 맞춘다(`english-writing.ts` `boardKey`/`classKey`). 닉네임 `Green`(김그린, 9/16~)·`Jennifer`(송지혜, 8/14~)와 EiE 약어 `LE`(Let's Express)·`RTS`(Ready To Speak)가 표에 없어 **10월 영어 반 40개 중 17개만 매칭** → 작성률이 김그린 0%·송지혜 15%·이다교 0%로 거짓 표시(실제 79%·59%·50%). 운영실 '선생님 할 일'·ECS 오늘 보드 배지도 같은 키라 함께 틀렸다.
