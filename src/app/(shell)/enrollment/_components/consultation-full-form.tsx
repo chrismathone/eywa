@@ -25,6 +25,7 @@ import { ChecklistView } from "./checklist-view";
 import { AudioRecorderField } from "./audio-recorder-field";
 import { RecordingRecoveryNotice } from "@/components/forms/recording-recovery-notice";
 import { clearRecovery, consultationRecordingKey, type RecordingOwner } from "@/lib/recording-recovery";
+import { dismissBrowserRecording } from "@/lib/browser-recording";
 import { issueAudioUploadTicket } from "@/features/media/server/upload-actions";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import {
@@ -298,7 +299,7 @@ export function ConsultationFullForm({
           setSubmitError(result.error);
           setPhase("idle");
         } else if (result?.id) {
-          if (audioRecoveryId) await clearRecovery(audioRecoveryId);
+          if (audioRecoveryId) { await clearRecovery(audioRecoveryId); dismissBrowserRecording(audioRecoveryId); }
           clearDraft();
           markSaved();
           setLeaving(true);
@@ -318,7 +319,7 @@ export function ConsultationFullForm({
           return;
         }
         if (result?.ok && v.id) {
-          if (audioRecoveryId) await clearRecovery(audioRecoveryId);
+          if (audioRecoveryId) { await clearRecovery(audioRecoveryId); dismissBrowserRecording(audioRecoveryId); }
           clearDraft();
           notifySaved();
           markSaved(); // ⚠️ 이동보다 먼저 — 뒤면 풀 문서 이동에 미저장 가드의 '떠나시겠습니까?'가 뜬다

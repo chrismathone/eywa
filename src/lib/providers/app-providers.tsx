@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { HoverTipLayer } from "@/components/hover-tip/hover-tip-layer";
 import { MutationSignalInstaller } from "@/components/workspace/mutation-signal-installer";
+import { RecordingRuntime } from "@/components/forms/recording-runtime";
 
 export function AppProviders({ children }: { children: ReactNode }) {
   return (
@@ -15,6 +16,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
         <HoverTipLayer />
         {/* 저장 성공 → "바뀜" 방송 — 숨어 있던 창이 다시 보일 때 새로고침할 근거(창 시스템, 2026-09-25). */}
         <MutationSignalInstaller />
+        <RecordingRuntime />
       </TooltipProvider>
     </QueryProvider>
   );

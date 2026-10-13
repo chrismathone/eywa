@@ -129,6 +129,7 @@ async function submitInlineRecording() {
     }
     stop() {
       this.state = "inactive";
+      this.ondataavailable?.({ data: new Blob(["audio"], { type: "audio/webm" }) });
       this.onstop?.();
     }
   }
@@ -137,6 +138,9 @@ async function submitInlineRecording() {
     configurable: true,
     value: { getUserMedia: async () => ({ getTracks: () => [] }) },
   });
+  Object.defineProperty(navigator, "locks", { configurable: true, value: {
+    request: (_name: string, _options: unknown, callback: (lock: object) => Promise<void>) => callback({}),
+  } });
   await renderForm();
   await click(/바로 녹음/);
   await click(/녹음 중지/);
