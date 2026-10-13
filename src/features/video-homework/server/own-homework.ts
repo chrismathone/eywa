@@ -24,7 +24,8 @@ export async function getOwnVideoHomework(db: Db, tenantId: string, userId: stri
   ]);
   const out = new Map<string, OwnHomework>();
   for (const row of rows) if (row.class_id) out.set(`${row.class_id}:${row.student_id}:${row.report_date}`, { classId: row.class_id, studentId: row.student_id, date: row.report_date });
-  for (const issue of extra) out.set(`${issue.classId}:${issue.studentId}:${issue.date}`, { classId: issue.classId, studentId: issue.studentId, date: issue.date });
+  // 검사 기록 칸에서 옮겨 남긴 숙제(kept)는 그 강사가 낸 숙제가 아니다 — 강사뷰에 새 칸을 만들지 않는다(옮기기 전에도 안 보였다).
+  for (const issue of extra) if (!issue.kept) out.set(`${issue.classId}:${issue.studentId}:${issue.date}`, { classId: issue.classId, studentId: issue.studentId, date: issue.date });
   return [...out.values()];
 }
 
@@ -37,5 +38,5 @@ export async function isOwnVideoHomework(db: Db, input: { tenantId: string; user
     findExtraIssue(db, input.tenantId, input),
   ]);
   if (report.error) throw new Error("숙제를 낸 사람을 확인하지 못했습니다.");
-  return (report.data ?? []).length > 0 || extra?.teacherId === input.userId;
+  return (report.data ?? []).length > 0 || (!!extra && !extra.kept && extra.teacherId === input.userId);
 }
