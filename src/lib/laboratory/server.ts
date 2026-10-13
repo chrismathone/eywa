@@ -10,7 +10,9 @@ export const getLaboratoryMenus = cache(async (): Promise<MenuKey[]> => {
   try {
     const { data, error } = await createAdminClient().from("lab_menu_assignments").select("menu_key");
     if (error) throw error;
-    return (data ?? []).map((row) => row.menu_key as MenuKey).filter((key) => LAB_ELIGIBLE_KEYS.has(key));
+    // Withdrawal reports remain experimental even before their assignment migration is applied.
+    return [...new Set<MenuKey>(["withdrawal_reports", ...(data ?? []).map((row) => row.menu_key as MenuKey)])]
+      .filter((key) => LAB_ELIGIBLE_KEYS.has(key));
   } catch (error) {
     // Unknown assignments cannot be treated as public. Retry on the next request.
     console.error("[laboratory] 메뉴 목록 조회 실패", error);

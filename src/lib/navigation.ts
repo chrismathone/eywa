@@ -240,6 +240,7 @@ export const NAV_GROUPS: NavGroup[] = [
       //    라벨엔 "신입"이 없어 팰릿 검색이 0건이었다 — 이 별칭이 그 절반을 갚는다.
       { href: "/newcomers", label: "신규생 관리", icon: MENU_ICON.newcomers, menuKey: "newcomers", aliases: ["신입생", "신입", "온보딩"] },
       { href: "/withdrawals", label: "퇴원관리", icon: MENU_ICON.withdrawals, menuKey: "withdrawals" },
+      { href: "/withdrawal-reports", label: "퇴원보고서", icon: MENU_ICON.withdrawal_reports, menuKey: "withdrawal_reports" },
     ],
   },
   {
