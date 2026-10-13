@@ -40,7 +40,7 @@ export default async function NewConsultationPage({
         </p>
       </header>
 
-      <AudioConsultationForm students={students} />
+      <AudioConsultationForm students={students} recordingOwner={{ tenantId: viewer.tenantId, userId: viewer.id }} />
 
       <ConsultationForm
         mode="create"

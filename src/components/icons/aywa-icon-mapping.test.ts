@@ -79,6 +79,9 @@ const APPROVED_INLINE_SVG = [
   // 2026-09-29 공개 랜딩의 대시보드 **개념도**(연결선 지도·추이 선, 둘 다 aria-hidden) — 장식 그림이지 아이콘이 아니다.
   // eb3787b2가 이 목록을 안 고쳐 가드가 빨갰다(보안 감사 푸시에 함께 고침).
   "src/app/(marketing)/_scroll/dashboard-mock.tsx",
+  // 2026-10-13 직원 포트폴리오의 **총점 원 그래프**(/100, 바탕 원 + 값 호 · aria-hidden, 점수는 버튼의 aria-label과 HTML 숫자) —
+  // 차트이지 아이콘이 아니다(vk-score와 같은 성격).
+  "src/app/(shell)/class-review/_components/portfolio/score-hero.tsx",
 ] as const;
 
 // 이 파일의 검사 3개가 각각 src/ 전체를 훑는다 — 디렉터리 워크는 파일 목록이 같으므로 한 번만 한다

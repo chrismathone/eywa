@@ -10,7 +10,7 @@ import { normalizeObserverLimit } from "../observer-count";
 import { humanizeDbError } from "@/lib/supabase/db-error";
 import { logAction } from "@/features/audit/server/log";
 import { kstToday } from "@/lib/date-kst";
-import { CHECKLIST_AREAS, itemCountOf, normalizeScore, sanitizeAreas } from "../checklist";
+import { CHECKLIST_AREAS, firstCompletedAt, itemCountOf, normalizeScore, sanitizeAreas } from "../checklist";
 import {
   DEFAULT_CLASS_REVIEW_FILTER,
   normalizeClassReviewFilter,
@@ -212,10 +212,14 @@ export async function submitClassReviewScores(
   }
 
   const submissions = { ...(doc.submissions ?? {}) };
+  const now = new Date().toISOString();
+  // 처음 완료된 시각은 굳힌다 — 지난달에 낸 평가를 이번 달에 고쳐도 지난달 평가로 남는다(직원 포트폴리오).
+  const completedAt = firstCompletedAt(submissions[slot], scores, areas, now);
   submissions[slot] = {
     scores,
     comment,
-    submittedAt: new Date().toISOString(),
+    submittedAt: now,
+    ...(completedAt ? { completedAt } : {}),
     by: { id: gate.user.id, name: gate.user.displayName },
   };
   const { error } = await admin

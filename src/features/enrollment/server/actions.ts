@@ -152,7 +152,7 @@ function buildConsultationRow(d: FullForm, aliases: readonly SchoolSaveAlias[]) 
   };
 }
 
-export type CreateConsultationState = { error?: string } | undefined;
+export type CreateConsultationState = { error?: string; id?: string } | undefined;
 
 export async function createEnrollmentConsultation(
   _prev: CreateConsultationState,
@@ -215,7 +215,7 @@ export async function createEnrollmentConsultation(
   });
 
   revalidatePath("/enrollment");
-  redirect(`/enrollment/${data.id}`);
+  return { id: data.id };
 }
 
 /**
@@ -281,7 +281,7 @@ async function createConsultationWithAudio(
   if (err) return { error: err };
 
   revalidatePath("/enrollment");
-  redirect(`/enrollment/${consult.id}`);
+  return { id: consult.id };
 }
 
 /**

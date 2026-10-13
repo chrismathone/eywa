@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizeObserverLimit } from "../observer-count";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant } from "@/lib/auth/perm-matrix";
+import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { viewAsTeacher } from "@/lib/auth/view-as";
 import type { SystemRole } from "@/lib/permissions";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -16,6 +17,7 @@ import {
   type ScoreSheet,
   type SheetTotals,
 } from "../checklist";
+import { canSeePortfolio } from "../faces";
 import { normalizeClassReviewFilter, type ClassReviewFilter } from "../list-filter";
 import { isOwnReview, isSelfOnlyReviewer, redactForSelfOnly } from "../self-only";
 
@@ -229,19 +231,26 @@ export async function getReviewPrivileges(): Promise<{
   editTemplate: boolean;
   /** 최종 총평 작성 — 실명 열람과 같은 사람들(평가자 전원을 보고 종합하는 자리라서). */
   writeFinalReview: boolean;
+  /**
+   * 직원 포트폴리오(내부 탭) — 전 강사의 월간 점수와 담당 매출이 한 화면에 실린다.
+   * 🔴 원장 역할만 본다. 직원 평가 개인 예외로는 열리지 않는다 — 평가를 맡겼다고 매출·전원 점수까지 열리면 안 된다.
+   */
+  seePortfolio: boolean;
 }> {
   const v = await getReviewViewer();
+  // 포트폴리오는 역할보다 '누구의 눈인가'가 먼저다 — 판정은 faces.ts 한 곳(canSeePortfolio).
+  const seePortfolio = canSeePortfolio(v, !v.viewAs && !v.selfOnly && (await isCurrentUserSuperAdmin()));
   // 강사 직급 = 자기 평가 전용(원장 2026-08-19) — 개인 예외로 full을 받아도 실명·문항 편집은 없다.
-  if (v.selfOnly) return { seeNames: false, editTemplate: false, writeFinalReview: false };
-  if (v.role === "master") return { seeNames: true, editTemplate: true, writeFinalReview: true };
+  if (v.selfOnly) return { seeNames: false, editTemplate: false, writeFinalReview: false, seePortfolio };
+  if (v.role === "master") return { seeNames: true, editTemplate: true, writeFinalReview: true, seePortfolio };
   try {
     const settings = await getTenantSettings();
     const mine = settings.permissions.userOverrides?.some(
       (o) => o.userId === v.id && o.menu === "class_review" && o.access !== "none",
     );
-    return { seeNames: !!mine, editTemplate: !!mine, writeFinalReview: !!mine };
+    return { seeNames: !!mine, editTemplate: !!mine, writeFinalReview: !!mine, seePortfolio };
   } catch {
-    return { seeNames: false, editTemplate: false, writeFinalReview: false };
+    return { seeNames: false, editTemplate: false, writeFinalReview: false, seePortfolio };
   }
 }
 

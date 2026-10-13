@@ -791,6 +791,11 @@ export const SHEET_DICT = {
     ko: "아직 출결이 없는 학생만 출석으로 기록합니다 — 이미 기록된 값(지각·결석 포함)은 건드리지 않습니다",
     en: "Marks present only where attendance is still empty — values already recorded (including late and absent) are never touched",
   },
+  // 휴원일에만 묻는다(원장 2026-10-13) — 원스크린 `os.present.holidayConfirm`과 같은 문장. 휴일 이름은 데이터라 번역 안 한다.
+  "today.bulkPresent.holidayConfirm": {
+    ko: "이 날짜는 학원 휴원일({name})입니다.\n수업하지 않은 날이면 취소하세요.\n\n그래도 출결이 없는 {n}명을 출석으로 기록할까요?",
+    en: "This date is an academy holiday ({name}).\nCancel if there was no lesson.\n\nRecord the {n} students without attendance as present anyway?",
+  },
   "today.noStudents": { ko: "이 날 수강하는 학생이 없습니다", en: "No students are enrolled on this day" },
   "today.noStudents.makeup": {
     ko: " — 보강으로 온 학생은 위에서 추가할 수 있습니다",
