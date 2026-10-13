@@ -17,10 +17,17 @@ type Db = ReturnType<typeof createAdminClient>;
  * 🔴 표가 아직 없으면(SQL 적용 전, [[#95]]) '따로 낸 숙제 없음'으로 돈다. 그 밖의 조회 실패는 던진다(없는 것으로 읽지 않는다).
  */
 const TABLE = "video_homework_extra_issues";
-export type ExtraIssue = { classId: string; studentId: string; date: string; teacherId: string | null };
-type Row = { class_id: string; student_id: string; homework_date: string; teacher_id: string | null };
-const COLUMNS = "class_id,student_id,homework_date,teacher_id";
-const toIssue = (row: Row): ExtraIssue => ({ classId: row.class_id, studentId: row.student_id, date: row.homework_date, teacherId: row.teacher_id });
+/**
+ * `kept` = 검사 기록 칸에서 **옮겨 남긴 숙제**(20261013220000 · keep-round.ts) — 선생님이 낸 숙제가 아니라, 보고서 표시 없이 검사 기록으로만
+ * 서 있던 칸을 미확인·반려 뒤에도 남기려고 둔 줄이다. 칸·손 배정·올리기 사이트에는 숙제로 서지만 장부 ②는 뒷순위로만 영상을 주고,
+ * 자동 판정·미제출 알림·강사의 '내 숙제'·운영실 집계·'따로 낸 숙제' 표시에서는 뺀다(정식 숙제로 치면 더 오래된 빈 칸이 다른 칸의 영상을
+ * 가져가 그 칸이 미수행이 되고 알림이 나간다 — 적대적 리뷰 2026-10-13).
+ */
+export type ExtraIssue = { classId: string; studentId: string; date: string; teacherId: string | null; kept: boolean };
+type Row = { class_id: string; student_id: string; homework_date: string; teacher_id: string | null; kept?: boolean | null };
+/** 🔴 `kept`(20261013220000)는 운영 DB에 적용한 뒤에 이 코드를 배포했다([[#95]]) — 열이 없는 DB에서는 이 표 조회가 실패한다. */
+const COLUMNS = "class_id,student_id,homework_date,teacher_id,kept";
+const toIssue = (row: Row): ExtraIssue => ({ classId: row.class_id, studentId: row.student_id, date: row.homework_date, teacherId: row.teacher_id, kept: row.kept === true });
 
 let tableKnownReady = false;
 type DbError = { code?: string; message?: string } | null | undefined;

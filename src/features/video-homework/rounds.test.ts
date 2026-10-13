@@ -490,3 +490,35 @@ describe("칸마다 센 영상(owners — 반려 대상의 근거)", () => {
     ])).toEqual({ pick: ["2026-10-03"], copy: ["2026-10-03"], before: ["2026-10-01"] });
   });
 });
+
+describe("검사 기록만으로 선 숙제 칸 = 뒷순위로 영상을 받는다(원장 2026-10-13 — 패치 전 수업)", () => {
+  it("어느 영상 과제 칸에도 못 가는 영상만 받는다 — 손 기록 '미수행'은 영상이 이긴다(안 그러면 붙은 영상이 ▶ 없이 숨는다)", () => {
+    const rounds = build({ from: "2026-09-20", rows: [row("s1", ["2026-10-08"])], marks: [mark("s1", "2026-09-28", "missing")],
+      videos: [video("s1", "2026-09-30"), video("s1", "2026-10-09")] });
+    expect(rounds.get("A:s1")!.map((r) => [r.date, r.videoDate, r.status, r.auto]))
+      .toEqual([["2026-09-28", "2026-09-30", "submitted", true], ["2026-10-08", "2026-10-09", "submitted", true]]);
+  });
+  it("손 기록 '완료' 칸은 그대로 완료이고 영상이 붙는다(▶)", () => {
+    const rounds = build({ from: "2026-09-20", rows: [row("s1", [])], marks: [mark("s1", "2026-09-28", "submitted", { submittedDate: "2026-09-29" })],
+      videos: [video("s1", "2026-09-30")] });
+    expect(rounds.get("A:s1")!.map((r) => [r.date, r.videoDate, r.status, r.submittedDate])).toEqual([["2026-09-28", "2026-09-30", "submitted", "2026-09-29"]]);
+  });
+  it("🔴 옮겨 남긴 숙제(kept)는 기록 없이도 칸이 서고, 검사 기록 칸처럼 뒷순위다 — 더 오래돼도 정식 칸의 영상을 가져가지 않는다", () => {
+    const rows = [{ ...row("s1", ["2026-09-24", "2026-10-01"]), kept: ["2026-09-24"] }];
+    const rounds = build({ from: "2026-09-20", rows, videos: [video("s1", "2026-10-02")] });
+    expect(rounds.get("A:s1")!.map((r) => [r.date, r.assigned, r.kept ?? false, r.videoDate, r.status]))
+      .toEqual([["2026-09-24", false, true, null, "unchecked"], ["2026-10-01", true, false, "2026-10-02", "submitted"]]);
+    const alone = build({ from: "2026-09-20", rows, videos: [video("s1", "2026-09-25")] });
+    expect(alone.get("A:s1")!.map((r) => [r.date, r.videoDate])).toEqual([["2026-09-24", "2026-09-25"], ["2026-10-01", null]]);
+  });
+  it("🔴 영상 과제 칸으로 가던 영상은 그대로 — 더 오래된 검사 기록 칸이 가로채지 않는다", () => {
+    const rounds = build({ from: "2026-09-20", rows: [row("s1", ["2026-10-01"])],
+      marks: [mark("s1", "2026-09-28", "submitted", { submittedDate: "2026-09-29" })], videos: [video("s1", "2026-10-02")] });
+    expect(rounds.get("A:s1")!.map((r) => [r.date, r.videoDate])).toEqual([["2026-09-28", null], ["2026-10-01", "2026-10-02"]]);
+  });
+  it("숙제일 없는 옛 기록 자리와 14일이 지난 칸은 받지 않는다", () => {
+    const rounds = build({ from: "2026-09-01", rows: [row("s1", [])],
+      marks: [mark("s1", null, "submitted", { checkDate: "2026-09-20" }), mark("s1", "2026-09-01", "missing")], videos: [video("s1", "2026-09-21")] });
+    expect(rounds.get("A:s1")!.map((r) => [r.date, r.videoDate])).toEqual([["2026-09-01", null], ["2026-09-20", null]]);
+  });
+});

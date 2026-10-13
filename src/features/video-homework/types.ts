@@ -44,6 +44,11 @@ export type VideoHomeworkLedgerRow = VideoHomeworkRosterRow & {
    * 영상만 떼면 다른 숙제에 붙어 있던 영상이 비운 칸으로 당겨져 칸이 다시 차고 뒤 숙제가 빈다.
    */
   rejected?: Readonly<Record<string, string>>;
+  /**
+   * `assignedDates` 중 **검사 기록 칸에서 옮겨 남긴 숙제**의 날짜(keep-round.ts · 원장 2026-10-13) — 정식 숙제가 아니라 검사 기록 칸처럼
+   * ②의 뒷순위로만 영상을 받는다(`rounds.ts`). 자동 판정·미제출 알림·강사의 '내 숙제'에 들지 않는다.
+   */
+  kept?: readonly string[];
 };
 
 /** 숙제 영상 한 건 — 반·시각·id와 재생 가능한 경우의 미리보기만 내려온다. 원본 다운로드 주소는 내리지 않는다. */

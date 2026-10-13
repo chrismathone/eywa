@@ -49,7 +49,8 @@ export async function getVideoReceiptComment(tenantId: string, input: { studentI
   if (videos === null) return null;
   return videoReceiptComment({ classId, studentId, reportDate, previousReportDate: reports[0].report_date,
     previousReportAt: reports[0].classnote_sent_at ?? reports[0].created_at,
-    homeworkDates: [...reports.filter(report => report.video_homework === true).map(report => report.report_date), ...extra.map(issue => issue.date)], videos, fromDate: range.from,
+    homeworkDates: [...reports.filter(report => report.video_homework === true).map(report => report.report_date), ...extra.filter(issue => !issue.kept).map(issue => issue.date)], videos, fromDate: range.from,
+    keptDates: extra.filter(issue => issue.kept).map(issue => issue.date),
     historyComplete: !older.error && !older.data?.length,
     rejected: Object.fromEntries(rejections.filter((r) => r.classId === classId).map((r) => [r.date, r.rejectedAt])) });
 }

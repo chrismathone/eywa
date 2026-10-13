@@ -45,7 +45,7 @@ export async function openHomeworkDates(db: Db, tenantId: string, pairs: readonl
   for (const p of pairs) {
     const key = roundPairKey(p);
     const dates = (rounds.get(key) ?? [])
-      .filter((round) => round.assigned && !!round.homeworkDate && !round.videoId)
+      .filter((round) => (round.assigned || round.kept) && !!round.homeworkDate && !round.videoId)
       .map((round) => round.homeworkDate!)
       .sort((a, b) => b.localeCompare(a));
     if (dates.length) out.set(key, dates);
@@ -59,13 +59,15 @@ export type PairRoundMaterials = {
   assigned: Map<string, Set<string>>; marks: VideoHomeworkMark[]; videos: VideoArrival[];
   /** 반려한 숙제(`반:학생` → 숙제일 → 반려 시각) — 장부와 같은 칸이 서게(rounds.ts ②). */
   rejected: Map<string, Record<string, string>>;
+  /** `assigned` 중 검사 기록 칸에서 옮겨 남긴 숙제(keep-round.ts) — 장부와 같게 검사 기록 칸처럼 짠다(rounds.ts `kept`). */
+  kept?: Map<string, Set<string>>;
 };
 
 /** 재료 → 숙제 칸(장부와 같은 `buildLedgerRounds`). `owners`를 넘기면 칸마다 센 영상을 채운다(반려가 쓴다). */
 export function pairRounds(m: PairRoundMaterials, owners?: RoundOwners) {
   return buildLedgerRounds({
     rows: m.pairs.map((p) => ({ classId: p.classId, studentId: p.studentId, assignedDates: [...(m.assigned.get(roundPairKey(p)) ?? [])].sort(), tracked: true,
-      rejected: m.rejected.get(roundPairKey(p)) })),
+      rejected: m.rejected.get(roundPairKey(p)), kept: [...(m.kept?.get(roundPairKey(p)) ?? [])] })),
     marks: m.marks, videos: m.videos, fromDate: m.from, toDate: m.today, owners,
   });
 }
@@ -108,11 +110,18 @@ export async function loadPairRoundMaterials(db: Db, tenantId: string, pairs: re
   if (reportRows.length > ROW_LIMIT || extra.length > ROW_LIMIT || markRows.length > ROW_LIMIT || videoRows.length > ROW_LIMIT) throw new Error("영상 숙제 조회 범위 초과");
 
   const assigned = new Map<string, Set<string>>();
-  const issued = [...reportRows.map((r) => ({ classId: r.class_id, studentId: r.student_id, date: r.report_date })), ...extra];
+  const kept = new Map<string, Set<string>>();
+  const add = (map: Map<string, Set<string>>, key: string, date: string) => (map.get(key) ?? map.set(key, new Set()).get(key)!).add(date);
+  const issued = [...reportRows.map((r) => ({ classId: r.class_id, studentId: r.student_id, date: r.report_date })), ...extra.filter((x) => !x.kept)];
   for (const r of issued) {
     if (!r.classId) continue;
     const key = roundPairKey({ classId: r.classId, studentId: r.studentId });
-    if (wanted.has(key)) (assigned.get(key) ?? assigned.set(key, new Set()).get(key)!).add(r.date);
+    if (wanted.has(key)) add(assigned, key, r.date);
+  }
+  // 옮겨 남긴 숙제 — 같은 날 정식 숙제가 있으면 정식 숙제 쪽(장부 `getAssignedVideoHomework`와 같다).
+  for (const x of extra.filter((issue) => issue.kept)) {
+    const key = roundPairKey(x);
+    if (wanted.has(key) && !assigned.get(key)?.has(x.date)) { add(assigned, key, x.date); add(kept, key, x.date); }
   }
   const videoArrivals = videoRows.flatMap((row): VideoArrival[] => {
     const route = row.route && typeof row.route === "object" && !Array.isArray(row.route) ? (row.route as Record<string, unknown>) : {};
@@ -127,7 +136,7 @@ export async function loadPairRoundMaterials(db: Db, tenantId: string, pairs: re
       fingerprint: videoFingerprint(row.md5, row.bytes) }] : [];
   });
   return {
-    pairs, from, today, assigned, videos: videoArrivals,
+    pairs, from, today, assigned, kept, videos: videoArrivals,
     rejected: new Map([...rejectionsByPair(rejections)].filter(([key]) => wanted.has(key))),
     marks: markRows.map((row): VideoHomeworkMark => ({ classId: row.class_id, studentId: row.student_id, checkDate: row.check_date,
       homeworkDate: row.homework_date, submittedDate: row.submitted_date ?? null, status: row.status as VideoHomeworkStatus, updatedAt: row.updated_at })),

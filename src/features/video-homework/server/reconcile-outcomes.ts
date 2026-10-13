@@ -7,6 +7,7 @@ import { classnoteSendWindowHint } from "@/features/onescreen/classnote-guard";
 import { isVideoHomeworkEnabled } from "../policy";
 import { videoHomeworkOutcomes } from "../auto-outcomes";
 import { videoMatchRange, VIDEO_MATCH_WINDOW_DAYS } from "../rounds";
+import type { VideoHomeworkStatus } from "../types";
 import { getAssignedVideoHomework } from "./assignments";
 import { loadClassVideos } from "./ledger-queries";
 
@@ -21,7 +22,7 @@ export async function reconcileVideoHomework(tenantId: string, options: { studen
   if (!settings.report.videoHomeworkPolicy.enabled || (options.scheduled && classnoteSendWindowHint(
     settings.report.classnoteSendWindowStart, settings.report.classnoteSendWindowEnd)))
     return { checked: 0, updated: 0, notifications: 0 };
-  const [assigned, students, classes] = await Promise.all([
+  const [assigned, students, classes, markRows] = await Promise.all([
     getAssignedVideoHomework(tenantId, range.from, today),
     fetchAllPaged<{ id: string; grade: string | null; is_test: boolean }>((from, to) => {
       const query = db.from("students").select("id,grade,is_test").eq("tenant_id", tenantId).order("id");
@@ -29,6 +30,13 @@ export async function reconcileVideoHomework(tenantId: string, options: { studen
       return query.range(from, to);
     }),
     fetchAllPaged<{ id: string; subject: string }>((from, to) => db.from("classes").select("id,subject").eq("tenant_id", tenantId).order("id").range(from, to)),
+    // 검사 기록만 있는 숙제 칸 — 장부가 ②의 뒷순위로 영상을 붙이는 자리. 판정하지 않고, 그 칸이 받은 영상을 미배정 알림에서만 뺀다.
+    fetchAllPaged<{ class_id: string; student_id: string; check_date: string; homework_date: string; status: string }>((from, to) => {
+      const query = db.from("video_homework_marks").select("class_id,student_id,check_date,homework_date,status").eq("tenant_id", tenantId)
+        .gte("homework_date", range.from).lt("homework_date", addDays(today, 1)).order("id");
+      if (options.studentId) query.eq("student_id", options.studentId);
+      return query.range(from, to);
+    }),
   ]);
   if (assigned === null) throw new Error("영상 숙제 조회 실패");
   const byStudent = new Map(students.filter(student => !student.is_test).map(student => [student.id, student]));
@@ -42,7 +50,9 @@ export async function reconcileVideoHomework(tenantId: string, options: { studen
   const videoStudents = options.notifyUnmatched ? [...byStudent.keys()] : [...new Set(targets.map(homework => homework.studentId))];
   const videos = await loadClassVideos(tenantId, videoStudents, range.from, addDays(range.to, VIDEO_MATCH_WINDOW_DAYS), true);
   if (videos === null) throw new Error("영상 조회 실패 — 상태 변경 중단");
-  const { outcomes, unmatched } = videoHomeworkOutcomes(targets, videos, today, range.from);
+  const marks = markRows.map((row) => ({ classId: row.class_id, studentId: row.student_id, checkDate: row.check_date, homeworkDate: row.homework_date,
+    status: row.status as VideoHomeworkStatus }));
+  const { outcomes, unmatched } = videoHomeworkOutcomes(targets, videos, today, range.from, marks);
   let updated = 0, notifications = 0;
   for (let start = 0; start < outcomes.length; start += 100) {
     const { data, error } = await db.rpc("reconcile_video_homework_outcomes", {

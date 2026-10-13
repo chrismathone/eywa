@@ -34,6 +34,7 @@ vi.mock("@/features/video-submit/server/site-homework", async (load) => ({
 }));
 import { rejectHomeworkVideos } from "./reject-videos";
 import { _resetRejectionsProbeForTest } from "./rejections";
+import { _resetExtraIssuesProbeForTest } from "./extra-issues";
 
 const C = "11111111-1111-4111-8111-111111111111", S = "22222222-2222-4222-8222-222222222222";
 const D1 = "2026-10-01", D2 = "2026-10-03";
@@ -48,7 +49,7 @@ const row = (id: string) => ({ id, tenant_id: "tenant", student_id: S, drive_fil
 const IDS = ["v1", "v2", "picked", "late", "copy", "d2same", "B", "P", "p1", "p2"];
 
 beforeEach(() => {
-  vi.clearAllMocks(); _resetRejectionsProbeForTest();
+  vi.clearAllMocks(); _resetRejectionsProbeForTest(); _resetExtraIssuesProbeForTest();
   m.denied = null; m.today = "2026-10-06";
   m.credential.mockResolvedValue({ accessToken: async () => "token" });
   m.trash.mockResolvedValue(undefined);
@@ -119,6 +120,21 @@ it("두 칸이 함께 접어 둔 영상은 남긴다 · 그 칸에 붙은 숙제
   expect(await rejectHomeworkVideos({ classId: C, studentId: S, homeworkDate: D1 })).toMatchObject({ ok: true, rejected: 1 });
   expect(sent()).toEqual(["p1"]);
   expect(m.db.rpcCalls.find((c) => c.name === "reject_homework_videos")?.args.p_legacy_check).toBe("2026-10-02");
+});
+
+it("이미 옮겨 남긴 숙제 칸을 반려하면 다시 넣지 않는다", async () => {
+  m.materials = materials([video("v1", "2026-10-02")], [D1], { kept: new Map([[`${C}:${S}`, new Set([D1])]]) });
+  expect(await rejectHomeworkVideos({ classId: C, studentId: S, homeworkDate: D1 })).toMatchObject({ ok: true, rejected: 1 });
+  expect(m.db.tables.video_homework_extra_issues ?? []).toEqual([]);
+});
+
+it("🔴 검사 기록만으로 선 숙제 칸(보고서 표시 없음)을 반려하면 먼저 옮겨 남긴 숙제로 넣는다 — 칸과 반려 표시가 설 자리가 남는다", async () => {
+  // 패치 전 수업: 숙제 표시 없이 D1에 미수행 기록만 있고, 10/02 영상이 뒷순위로 그 칸에 붙었다.
+  m.materials = materials([video("v1", "2026-10-02")], [], { marks: [{ classId: C, studentId: S, checkDate: "2026-10-02", homeworkDate: D1, status: "missing" }] });
+  expect(await rejectHomeworkVideos({ classId: C, studentId: S, homeworkDate: D1 })).toMatchObject({ ok: true, rejected: 1 });
+  expect(sent()).toEqual(["v1"]);
+  expect(m.db.tables.video_homework_extra_issues).toEqual([expect.objectContaining({ tenant_id: "tenant", class_id: C, student_id: S, homework_date: D1, issued_by: "teacher", kept: true })]);
+  expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ metadata: expect.objectContaining({ keptAsIssue: true }) }));
 });
 
 it("🔴 다른 영상 줄이 같은 Drive 파일을 쓰면 휴지통으로 보내지 않는다(연동 PC는 같은 폴더의 같은 파일을 다시 쓴다)", async () => {
