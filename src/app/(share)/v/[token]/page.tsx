@@ -108,15 +108,24 @@ export default async function VideoSubmitPage({ params, searchParams }: { params
   // 번호·이름을 다시 넣게 하면 조회·열기 횟수 제한과 하루 링크 수 상한이 "학생당 한 번"이 아니라 "숙제 수"만큼 든다(리뷰 2026-10-03).
   // 못 읽으면 그냥 비운다(이 화면의 숙제는 이미 확인됐다).
   let otherHomework: { date: string; label: string }[] = [];
-  if (link.origin === "site") {
+  let openDates: string[] | null = null;
+  if (link.origin === "site" || homeworkDate) {
     try {
       const open = await openHomeworkDates(db, link.tenant_id, [{ studentId: link.student_id, classId: link.class_id }], kstToday());
-      otherHomework = (open?.get(`${link.class_id}:${link.student_id}`) ?? [])
+      openDates = open ? open.get(`${link.class_id}:${link.student_id}`) ?? [] : null;
+      // 다른 숙제 목록은 올리기 사이트 링크에서만(학생 상세에서 복사한 링크는 숙제를 고르지 않는다).
+      otherHomework = link.origin === "site" ? (openDates ?? [])
         .filter((date) => date !== homeworkDate)
-        .map((date) => ({ date, label: formatShortKoreanDate(date) }));
+        .map((date) => ({ date, label: formatShortKoreanDate(date) })) : [];
     } catch {
       otherHomework = [];
     }
+  }
+  // 이미 영상을 낸 숙제(예전 숙제 주소·새로고침) — 같은 숙제에 또 올리지 않고 숙제 없이 올리기로 보낸다(원장 2026-10-13). 선생님이 미확인으로
+  // 되돌리면(영상 반려) 다시 열린다. 못 읽었으면(null) 막지 않는다 — 업로드 시작이 한 번 더 본다.
+  if (homeworkDate && openDates && !openDates.includes(homeworkDate)) {
+    return <Closed title="이미 영상을 낸 숙제입니다" toSite
+      message="더 올릴 영상이 있으면 처음 화면에서 '숙제 없이 올리기'로 올려 주세요. 선생님이 다시 올리라고 하면 이 숙제에 다시 올릴 수 있습니다." />;
   }
   return (
     <VideoSubmitForm

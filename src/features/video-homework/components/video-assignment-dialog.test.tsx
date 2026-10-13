@@ -46,18 +46,20 @@ it("영상 목록은 제목행 없이 배정 상태를 보여 주고, 숙제일~
     { ...original.videos[0], id: "automatic", homeworkDate: null },
     { ...original.videos[0], id: "excluded", excluded: true },
   ] });
-  render(<VideoAssignmentDialog row={row} fromDate="2026-10-01" toDate="2026-11-01" onClose={vi.fn()} />);
+  render(<VideoAssignmentDialog row={row} fromDate="2026-10-01" toDate="2026-11-01" onClose={vi.fn()} linked={new Map([["automatic", "2026-10-01"]])} />);
   const user = userEvent.setup();
   await user.click(await screen.findByRole("combobox", { name: "영상 선택" }));
   expect(screen.queryByText("게시일")).not.toBeInTheDocument();
   expect(screen.queryByText("반", { exact: true })).not.toBeInTheDocument();
   expect(screen.queryByText("연결된 숙제")).not.toBeInTheDocument();
   expect(screen.queryByText(/ClassNote|Drive|2026-03-15|2026-09-30|2026-10-16/)).not.toBeInTheDocument();
-  expect(screen.getByRole("option", { name: /2026-10-02 배정/ })).toBeInTheDocument();
-  expect(screen.getByRole("option", { name: /미배정/ })).toBeInTheDocument();
-  expect(screen.getByRole("option", { name: /숙제일 미지정/ })).toBeInTheDocument();
+  // "2026-10-02 배정"은 "10/2에 배정한 날"로 읽혔다(원장 2026-10-13) — 어느 숙제에 붙었나를 말한다.
+  expect(screen.getByRole("option", { name: /10\.02 숙제에 연결됨/ })).toBeInTheDocument();
+  expect(screen.getByRole("option", { name: /10\.01 숙제에 자동 연결됨/ })).toBeInTheDocument();
+  expect(screen.getByRole("option", { name: /이 기간 숙제엔 안 붙음/ })).toBeInTheDocument();
+  expect(screen.queryByRole("option", { name: /배정$|미배정|숙제일 미지정/ })).not.toBeInTheDocument();
   expect(screen.getByRole("option", { name: /집계 제외/ })).toBeInTheDocument();
-  await user.click(screen.getByRole("option", { name: /2026-10-02 배정/ }));
+  await user.click(screen.getByRole("option", { name: /10\.02 숙제에 연결됨/ }));
   fireEvent.change(screen.getByRole("textbox", { name: "변경 사유" }), { target: { value: "정정" } });
   expect(screen.getByRole("button", { name: "영상 배정 저장" })).toBeEnabled();
   fireEvent.change(screen.getByRole("combobox", { name: "배정할 영상 숙제" }), { target: { value: "2026-11-01" } });

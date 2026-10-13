@@ -186,6 +186,20 @@ describe("업로드 시작 — 정상", () => {
     fresh();
     expect((await req({ homeworkDate: TODAY })).ok).toBe(true);
   });
+  it("이미 영상이 붙은 숙제엔 또 올리지 않는다 — 숙제 없이 올리기로 안내 · 선생님이 반려(집계 제외)하면 다시 열린다", async () => {
+    Object.assign(db.tables.homework_video_links![0]!, { origin: "site", created_at: new Date().toISOString() });
+    assignHomework(TODAY);
+    const submitted = { id: "v-done", tenant_id: T, student_id: S, status: "uploaded", drive_file_id: "submittedDriveFile1",
+      posted_at: new Date().toISOString(), created_at: new Date().toISOString(), route: { classId: C, homeworkDate: TODAY } };
+    db.tables.student_homework_videos!.push(submitted);
+    const r = await req({ homeworkDate: TODAY });
+    expect(r).toMatchObject({ ok: false, code: "invalid" });
+    expect(!r.ok && r.error).toContain("숙제 없이 올리기");
+    expect(drive.calls.filter((c) => c.url.includes("uploadType=resumable"))).toHaveLength(0);
+    // 반려(집계 제외)된 영상만 있으면 다시 올릴 수 있다
+    submitted.route = { ...submitted.route, excluded: true } as typeof submitted.route;
+    expect((await req({ homeworkDate: TODAY })).ok).toBe(true);
+  });
   it("숙제 없이 올리기는 지금 그 반을 다닐 때만 — 끝난 수강·휴원·퇴원·영상 숙제 대상 밖이면 Drive를 열지 않는다", async () => {
     Object.assign(db.tables.homework_video_links![0]!, { origin: "site", created_at: new Date().toISOString() });
     const ask = () => req({ note: "추가 연습 영상" });
