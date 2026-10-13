@@ -15,7 +15,7 @@ import { videoDriveHasRoom } from "./drive-quota";
 import { linkFolderRegistry } from "./folder-registry";
 import { ensureLinkTeacherFolder } from "./folders";
 import { resolveSubmitToken } from "./links";
-import { isAssignedHomeworkDate } from "./site-homework";
+import { isAssignedHomeworkDate, openHomeworkDates } from "./site-homework";
 import { SITE_FREE_UPLOADS_PER_DAY, SITE_LINK_LOOKBACK_DAYS, siteNote } from "../site";
 import { reconcileLinkUploads, type CompletedUpload } from "./upload-complete";
 import { loadLinkRoute } from "./upload-context";
@@ -29,6 +29,8 @@ const FAILED = "영상 올리기를 시작하지 못했습니다. 잠시 후 다
 const LIMITED = "잠시 동안 너무 많이 올렸습니다. 한 시간 뒤에 다시 시도해 주세요.";
 /** 올리기 사이트 링크인데 고른 숙제를 확인할 수 없다(주소의 숙제일이 빠졌거나, 그 숙제가 없어졌거나, 숙제일 + 7일이 지났다). */
 const HOMEWORK_GONE = "올릴 숙제를 확인하지 못했습니다. 처음 화면에서 숙제를 다시 골라 주세요.";
+/** 고른 숙제가 이미 영상을 받았다 — 더 올릴 영상은 숙제 없이 올리기로(하루 5개, 원장 2026-10-13 *"추가 제출하려면 숙제 선택하지않고도 5회 더 제출가능하니 그쪽 방향으로"*). */
+const ALREADY_SUBMITTED = "이미 영상을 낸 숙제입니다. 더 올릴 영상이 있으면 처음 화면에서 '숙제 없이 올리기'로 올려 주세요.";
 const NOTE_NEEDED = "무슨 영상인지 메모를 2글자 이상 적어 주세요.";
 const FREE_LIMITED = `숙제 없이 올리는 영상은 하루 ${SITE_FREE_UPLOADS_PER_DAY}개까지입니다. 내일 다시 올려 주세요.`;
 
@@ -149,6 +151,12 @@ export async function startLinkUpload(input: {
       && (await isAssignedHomeworkDate(db, link.tenant_id, { studentId: link.student_id, classId: link.class_id }, input.homeworkDate, kstToday()));
     // 사이트 링크: 숙제를 골랐으면 그 숙제가 맞아야 하고(없어졌으면 다시 고른다), 숙제 없이 올리면 메모가 있어야 한다(하루 상한 — 아래).
     if (link.origin === "site" && input.homeworkDate != null && !homeworkOk) return fail("invalid", HOMEWORK_GONE);
+    // 이미 영상이 붙은 숙제엔 또 올리지 않는다(목록에서는 빠지지만, 올린 뒤 화면·예전 숙제 주소로는 다시 올 수 있었다). 선생님이 미확인으로
+    // 되돌리면(영상 반려 — reject-videos.ts) 다시 열린다. 못 읽으면(null) 막지 않는다 — 숙제 확인은 위에서 끝났다.
+    if (homeworkOk) {
+      const open = await openHomeworkDates(db, link.tenant_id, [{ studentId: link.student_id, classId: link.class_id }], kstToday());
+      if (open && !(open.get(`${link.class_id}:${link.student_id}`) ?? []).includes(input.homeworkDate as string)) return fail("invalid", ALREADY_SUBMITTED);
+    }
     const note = link.origin === "site" && !homeworkOk ? siteNote(input.note) : null;
     const free = link.origin === "site" && !homeworkOk;
     if (free && !note) return fail("file", NOTE_NEEDED);

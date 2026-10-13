@@ -12,6 +12,7 @@ import { videoMatchRange } from "../rounds";
 import { videoReceiptComment } from "../receipt-comment";
 import { loadClassVideos } from "./ledger-queries";
 import { listExtraIssuesFor } from "./extra-issues";
+import { listRejections } from "./rejections";
 
 /** 클라이언트의 제출 체크를 신뢰하지 않고, 접근 가능한 학생의 실제 영상으로 확인한다. */
 export async function getVideoReceiptComment(tenantId: string, input: { studentId?: string; classId?: string | null; date?: string }): Promise<string | null> {
@@ -36,16 +37,19 @@ export async function getVideoReceiptComment(tenantId: string, input: { studentI
   if (!reports.length) return null;
   // 보고서 없이 따로 낸 숙제(extra-issues.ts)도 같은 숙제다 — 못 읽으면 보고서의 숙제만 본다. ⚠️ 그때는 숙제가 덜 보여 짝이 달라질 수 있다
   // (드물게 남은 숙제를 못 보고 "모두 제출했습니다"가 나올 수 있다 — 조회 실패가 겹칠 때만).
-  const [videos, older, extra] = await Promise.all([
+  const [videos, older, extra, rejections] = await Promise.all([
     loadClassVideos(tenantId, [studentId], range.from, reportDate),
     db.from("lesson_reports").select("id").eq("tenant_id", tenantId).eq("student_id", studentId).eq("class_id", classId)
       .eq("video_homework", true).lt("report_date", range.from).limit(1),
     listExtraIssuesFor(createAdminClient(), tenantId, { studentIds: [studentId], classIds: [classId], fromDate: range.from, toDate: addDays(reportDate, -1) })
       .catch(() => []),
+    // 반려한 숙제 — 반려 전 영상을 그 숙제의 제출로 세지 않게(장부와 같은 칸). 못 읽으면 반려 없이 본다.
+    listRejections(createAdminClient(), tenantId, { studentIds: [studentId], fromDate: range.from, toDate: reportDate }).catch(() => []),
   ]);
   if (videos === null) return null;
   return videoReceiptComment({ classId, studentId, reportDate, previousReportDate: reports[0].report_date,
     previousReportAt: reports[0].classnote_sent_at ?? reports[0].created_at,
     homeworkDates: [...reports.filter(report => report.video_homework === true).map(report => report.report_date), ...extra.map(issue => issue.date)], videos, fromDate: range.from,
-    historyComplete: !older.error && !older.data?.length });
+    historyComplete: !older.error && !older.data?.length,
+    rejected: Object.fromEntries(rejections.filter((r) => r.classId === classId).map((r) => [r.date, r.rejectedAt])) });
 }

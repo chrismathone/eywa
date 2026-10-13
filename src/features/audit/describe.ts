@@ -2369,6 +2369,14 @@ export function auditDetail(
       return join(hw ? `숙제 ${hw}` : null, str(m.deadline) ? `기한 ${str(m.deadline)}` : null);
     }
 
+    case "lesson_report_video_homework_reject": {
+      // 영상이 붙은 칸을 미확인으로 되돌려 그 숙제의 영상을 반려 — 몇 개를 떼고 몇 개를 Drive 휴지통으로 옮겼나.
+      const hw = str(m.homeworkDate);
+      const n = (k: string) => (typeof m[k] === "number" && Number.isFinite(m[k]) ? (m[k] as number) : null);
+      return join(hw ? `숙제 ${hw}` : null, n("videos") !== null ? `영상 ${n("videos")}개 반려` : null,
+        n("trashed") !== null ? `휴지통 ${n("trashed")}개` : null, n("trashFailed") ? `휴지통 이동 실패 ${n("trashFailed")}개` : null);
+    }
+
     case "demo_roster_apply": {
       const label = str(m.label);
       const n = typeof m.students === "number" && Number.isFinite(m.students) ? `재원 ${m.students}명` : null;

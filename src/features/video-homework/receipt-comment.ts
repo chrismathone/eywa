@@ -7,13 +7,15 @@ export function videoReceiptComment(input: {
   classId: string; studentId: string; homeworkDates: string[]; videos: VideoArrival[];
   reportDate: string; previousReportDate: string | null; previousReportAt?: string | null; fromDate: string;
   historyComplete?: boolean;
+  /** 반려한 숙제(숙제일 → 반려 시각) — 장부와 같은 칸이 서게(rounds.ts). */
+  rejected?: Readonly<Record<string, string>>;
 }): string | null {
   const dates = [...new Set(input.homeworkDates)].filter(date => date < input.reportDate).sort();
   const receivedAt = (video: VideoArrival) => Math.max(Date.parse(video.postedAt),
     Date.parse(video.playback?.uploadedAt ?? video.postedAt) || Date.parse(video.postedAt));
   const end = Date.parse(`${addDays(input.reportDate, 1)}T00:00:00+09:00`);
   const videos = input.videos.filter(video => !!video.playback && !!kstDateOf(video.postedAt) && receivedAt(video) < end);
-  const rounds = buildLedgerRounds({ rows: [{ classId: input.classId, studentId: input.studentId, assignedDates: dates, tracked: true }],
+  const rounds = buildLedgerRounds({ rows: [{ classId: input.classId, studentId: input.studentId, assignedDates: dates, tracked: true, rejected: input.rejected }],
     videos, marks: [], fromDate: input.fromDate, toDate: input.reportDate }).get(`${input.classId}:${input.studentId}`) ?? [];
   // 지난 보고서 이후 새로 받은 영상만 말한다. 같은 숙제를 다음 수업마다 다시 칭찬하지 않는다.
   const sinceDate = input.previousReportDate ?? addDays(input.reportDate, -7);

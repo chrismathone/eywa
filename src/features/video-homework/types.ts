@@ -39,6 +39,11 @@ export type VideoHomeworkLedgerRow = VideoHomeworkRosterRow & {
   hasAssignableVideos?: boolean;
   /** 보고서 없이 따로 낸 숙제의 날짜(원장 2026-10-13) — 그 칸에 '따로 낸 숙제' 표시와 취소 메뉴를 단다. */
   extraDates?: string[];
+  /**
+   * 반려한 숙제(원장 2026-10-13) — 숙제일 → 반려 시각(ISO). 그 시각 **전에** 올라온 영상은 그 칸에 자동으로 붙지 않는다(`rounds.ts` ②).
+   * 영상만 떼면 다른 숙제에 붙어 있던 영상이 비운 칸으로 당겨져 칸이 다시 차고 뒤 숙제가 빈다.
+   */
+  rejected?: Readonly<Record<string, string>>;
 };
 
 /** 숙제 영상 한 건 — 반·시각·id와 재생 가능한 경우의 미리보기만 내려온다. 원본 다운로드 주소는 내리지 않는다. */
@@ -64,6 +69,8 @@ export type VideoArrival = {
    * 🔑 같으면 같은 파일이지만, 다르다고 다른 영상인 것은 아니다(폰·브라우저가 다시 압축하면 달라진다). 없으면 판정하지 않는다.
    */
   fingerprint?: string | null;
+  /** aywa에 이 영상 줄이 생긴 시각 — 반려한 칸에 "반려할 때 이미 있던 영상"을 다시 붙이지 않는 판정(rounds.ts). 없으면 들어온 시각·게시 시각. */
+  createdAt?: string | null;
   /** 숙제 없이 올린 영상(`route.free`, 올리기 사이트) — 게시일순 자동 짝(②)에 들지 않는다. 손 배정하면 정해진 숙제 영상(③)이 된다. */
   free?: boolean;
 };

@@ -11,7 +11,7 @@ import { fetchAllPaged } from "@/lib/supabase/batch";
 import { addDays } from "@/lib/date-kst";
 import { homeworkVideoLinks } from "@/features/students/homework-videos";
 import { isVideoHomeworkDate } from "../types";
-import { isVideoAssignableToDate, videoAssignmentRange, type VideoAssignmentOptions } from "../video-assignment";
+import { isOtherSubjectVideo, isVideoAssignableToDate, videoAssignmentRange, type VideoAssignmentOptions } from "../video-assignment";
 import { reconcileVideoHomework } from "./reconcile-outcomes";
 import { listExtraIssuesFor } from "./extra-issues";
 
@@ -54,21 +54,28 @@ export async function getVideoAssignmentOptions(input: { classId: string; studen
     const dates = allDates.filter(date => date >= input.fromDate && date <= input.toDate);
     const range = videoAssignmentRange(dates);
     if (!range) return { ok: true, dates, videos: [] };
-    const videos = await fetchAllPaged<{
-      id: string; posted_at: string; post_id: number | null; source: string; drive_file_id: string | null;
-      uploaded_at: string | null; route: unknown; assignment_revision: number;
-    }>((from, to) => db.from("homework_video_ledger_videos").select("id,posted_at,post_id,source,drive_file_id,uploaded_at,route,assignment_revision")
-      .eq("tenant_id", user.tenantId).eq("student_id", input.studentId).eq("status", "uploaded")
-      .not("drive_file_id", "is", null)
-      .gte("posted_at", `${range.from}T00:00:00+09:00`).lt("posted_at", `${addDays(range.to, 1)}T00:00:00+09:00`)
-      .order("posted_at", { ascending: false }).order("id").range(from, to));
-    const classes = await db.from("classes").select("id,class_name").eq("tenant_id", user.tenantId);
-    if (classes.error) return { ok: false, error: "영상의 반을 확인하지 못했습니다." };
-    const names = new Map((classes.data ?? []).map(c => [c.id, c.class_name]));
-    return { ok: true, dates, videos: videos.filter(v => dates.some(date => isVideoAssignableToDate(v.posted_at, date))).map(v => {
-      const route = v.route && typeof v.route === "object" ? v.route as Record<string, unknown> : {};
+    const [videos, classes] = await Promise.all([
+      fetchAllPaged<{
+        id: string; posted_at: string; post_id: number | null; source: string; drive_file_id: string | null;
+        uploaded_at: string | null; route: unknown; assignment_revision: number; subject: string | null;
+      }>((from, to) => db.from("homework_video_ledger_videos").select("id,posted_at,post_id,source,drive_file_id,uploaded_at,route,assignment_revision,subject")
+        .eq("tenant_id", user.tenantId).eq("student_id", input.studentId).eq("status", "uploaded")
+        .not("drive_file_id", "is", null)
+        .gte("posted_at", `${range.from}T00:00:00+09:00`).lt("posted_at", `${addDays(range.to, 1)}T00:00:00+09:00`)
+        .order("posted_at", { ascending: false }).order("id").range(from, to)),
+      fetchAllPaged<{ id: string; class_name: string; subject: string | null }>((from, to) =>
+        db.from("classes").select("id,class_name,subject").eq("tenant_id", user.tenantId).order("id").range(from, to)),
+    ]);
+    const byClass = new Map(classes.map(c => [c.id, c]));
+    const targetSubject = byClass.get(input.classId)?.subject ?? null;
+    const routeOf = (v: { route: unknown }) => (v.route && typeof v.route === "object" ? v.route as Record<string, unknown> : {});
+    // 확실히 다른 과목인 영상은 목록에 세우지 않는다(원장 2026-10-13) — 반을 모르는 영상은 그대로 보인다.
+    const sameSubject = videos.filter(v => !isOtherSubjectVideo({ classSubject: byClass.get(String(routeOf(v).classId))?.subject, subject: v.subject }, targetSubject));
+    return { ok: true, dates, videos: sameSubject.filter(v => dates.some(date => isVideoAssignableToDate(v.posted_at, date))).map(v => {
+      const route = routeOf(v);
       const links = homeworkVideoLinks(v.drive_file_id);
-      return { id: String(v.id), postedAt: String(v.posted_at), className: names.get(route.classId) ?? null,
+      return { id: String(v.id), postedAt: String(v.posted_at), className: byClass.get(String(route.classId))?.class_name ?? null,
+        classId: typeof route.classId === "string" ? route.classId : null,
         homeworkDate: typeof route.homeworkDate === "string" ? route.homeworkDate : null, source: v.source === "link" ? "제출 링크" : "ClassNote / Drive",
         note: typeof route.note === "string" && route.note.trim() ? route.note.trim().slice(0, 100) : null,
         postId: typeof v.post_id === "number" ? v.post_id : null, revision: Number(v.assignment_revision), excluded: route.excluded === true,
@@ -93,12 +100,20 @@ export async function assignHomeworkVideo(input: { classId: string; studentId: s
       if (video.error || route?.classId !== input.classId) return { ok: false, error: "이 영상의 배정을 변경할 권한이 없습니다." };
     }
     if (!input.excluded) {
-      const video = await db.from("homework_video_ledger_videos").select("posted_at")
+      const video = await db.from("homework_video_ledger_videos").select("posted_at,subject,route")
         .eq("tenant_id", user.tenantId).eq("student_id", input.studentId).eq("id", input.videoId).eq("status", "uploaded")
         .not("drive_file_id", "is", null).maybeSingle();
       if (video.error) return { ok: false, error: "영상의 게시일을 확인하지 못했습니다. 잠시 뒤 다시 시도해 주세요." };
       if (!video.data) return { ok: false, error: "업로드가 완료된 학생 영상만 배정할 수 있습니다." };
       if (!isVideoAssignableToDate(video.data.posted_at, input.homeworkDate!)) return { ok: false, error: "숙제를 낸 날부터 14일 뒤까지 게시된 영상만 배정할 수 있습니다." };
+      // 목록과 같은 판정 — 확실히 다른 과목 영상은 이 반 숙제에 붙이지 않는다(목록에 없는 영상을 주소로 보내도).
+      const videoClass = (video.data.route as { classId?: unknown } | null)?.classId;
+      const subjects = await db.from("classes").select("id,subject").eq("tenant_id", user.tenantId)
+        .in("id", [input.classId, ...(typeof videoClass === "string" && /^[0-9a-f-]{36}$/i.test(videoClass) ? [videoClass] : [])]);
+      if (subjects.error) return { ok: false, error: "영상의 과목을 확인하지 못했습니다. 잠시 뒤 다시 시도해 주세요." };
+      const subjectOf = new Map((subjects.data ?? []).map((c) => [c.id as string, c.subject as string | null]));
+      if (isOtherSubjectVideo({ classSubject: typeof videoClass === "string" ? subjectOf.get(videoClass) : null, subject: video.data.subject as string | null }, subjectOf.get(input.classId)))
+        return { ok: false, error: "다른 과목 영상은 이 반 숙제에 배정할 수 없습니다." };
     }
     const { data, error } = await db.rpc("set_homework_video_assignment", {
       // 대상의 담당 반은 위에서 검증했다. 실제 편집자의 id를 대상 강사 id로 바꾸지 않는다.

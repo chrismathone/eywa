@@ -3,16 +3,17 @@ import { SITE_HOMEWORK_DAYS } from "@/features/video-submit/site";
 import { buildLedgerRounds, roundPairKey, VIDEO_MATCH_WINDOW_DAYS } from "./rounds";
 import type { VideoArrival } from "./types";
 
-export type AssignedHomework = { classId: string; studentId: string; date: string };
+export type AssignedHomework = { classId: string; studentId: string; date: string; /** 반려 시각(장부와 같은 칸이 서게) */ rejectedAt?: string };
 export type AutoOutcome = { classId: string; studentId: string; homeworkDate: string; status: "submitted" | "missing" | "unchecked"; videoId: string | null };
 
 /** 실제 파일로만 최종 판정한다. 수동 체크는 학생의 업로드나 영상 배정 순서를 바꾸지 않는다. */
 export function videoHomeworkOutcomes(assignments: AssignedHomework[], videos: VideoArrival[], today: string, fromDate: string) {
-  const rows = new Map<string, { classId: string; studentId: string; assignedDates: string[]; tracked: boolean }>();
+  const rows = new Map<string, { classId: string; studentId: string; assignedDates: string[]; tracked: boolean; rejected: Record<string, string> }>();
   for (const homework of assignments) {
     const key = roundPairKey(homework);
-    const row = rows.get(key) ?? { ...homework, assignedDates: [], tracked: true };
+    const row = rows.get(key) ?? { classId: homework.classId, studentId: homework.studentId, assignedDates: [], tracked: true, rejected: {} };
     row.assignedDates.push(homework.date);
+    if (homework.rejectedAt) row.rejected[homework.date] = homework.rejectedAt;
     rows.set(key, row);
   }
   const uploaded = videos.filter(video => {

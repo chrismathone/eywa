@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { checkVideoFile } from "@/features/video-submit/rules";
 import { runResumableUpload, UploadError, wakeableSleep, xhrPut } from "@/features/video-submit/upload-client";
@@ -221,7 +222,10 @@ export function VideoSubmitForm(props: {
           <div className="space-y-3" aria-live="polite">
             <p className="text-foreground text-base font-bold">제출했습니다. 감사합니다.</p>
             <p className="text-text-dim text-sm break-keep">담당 선생님이 확인할 수 있습니다.</p>
-            <Button type="button" variant="outline" className="w-full" onClick={() => { setNote(""); setPhase({ kind: "idle" }); }}>다른 영상 올리기</Button>
+            {/* 숙제를 골라 낸 영상이면 같은 숙제에 또 올리지 않는다 — 더 올릴 영상은 숙제 없이 올리기로(원장 2026-10-13). */}
+            {props.homeworkDate
+              ? <p className="text-text-dim text-sm break-keep">더 올릴 영상이 있으면 <Link href="/v" prefetch={false} className="text-foreground underline underline-offset-2">처음 화면</Link>에서 &lsquo;숙제 없이 올리기&rsquo;로 올려 주세요.</p>
+              : <Button type="button" variant="outline" className="w-full" onClick={() => { setNote(""); setPhase({ kind: "idle" }); }}>다른 영상 올리기</Button>}
           </div>
         ) : null}
         {!busy && props.otherHomework?.length ? (

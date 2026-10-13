@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { assignmentKey, type VideoHomeworkAssignments } from "../assignment";
 import { extraIssuesReady, listExtraIssues } from "./extra-issues";
+import { listRejections } from "./rejections";
 
 /**
  * `lesson_reports.video_homework`(0308a) 적용 여부 probe — mentSourceColumnReady(ment-source-db.ts)와 같은 결.
@@ -148,10 +149,10 @@ export async function getAssignedVideoHomework(
   tenantId: string,
   fromDate: string,
   toDate: string,
-): Promise<{ classId: string; studentId: string; date: string; extra?: true }[] | null> {
+): Promise<{ classId: string; studentId: string; date: string; extra?: true; rejectedAt?: string }[] | null> {
   const db = createAdminClient();
   if (!(await videoHomeworkColumnReady(db))) return null;
-  const [rows, extra] = await Promise.all([
+  const [rows, extra, rejections] = await Promise.all([
     fetchAllPaged<ReportRow>((from, to) => db
       .from("lesson_reports")
       .select("student_id,class_id,report_date,video_homework")
@@ -163,9 +164,15 @@ export async function getAssignedVideoHomework(
       .order("id", { ascending: true })
       .range(from, to)),
     listExtraIssues(db, tenantId, { fromDate, toDate }),
+    // 반려 표시(원장 2026-10-13) — 그 숙제 칸에 반려 전 영상이 자동으로 다시 붙지 않게 숙제에 싣는다(rounds.ts ②).
+    listRejections(db, tenantId, { fromDate, toDate }),
   ]);
-  const out = new Map<string, { classId: string; studentId: string; date: string; extra?: true }>();
+  const out = new Map<string, { classId: string; studentId: string; date: string; extra?: true; rejectedAt?: string }>();
   for (const r of rows) if (r.class_id) out.set(`${r.class_id}:${r.student_id}:${r.report_date}`, { classId: r.class_id, studentId: r.student_id, date: r.report_date });
   for (const x of extra) out.set(`${x.classId}:${x.studentId}:${x.date}`, { classId: x.classId, studentId: x.studentId, date: x.date, extra: true });
+  for (const r of rejections) {
+    const hit = out.get(`${r.classId}:${r.studentId}:${r.date}`);
+    if (hit) hit.rejectedAt = r.rejectedAt;
+  }
   return [...out.values()];
 }

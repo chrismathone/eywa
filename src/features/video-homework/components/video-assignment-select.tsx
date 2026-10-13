@@ -5,28 +5,36 @@ import { kstDateOf, kstTimeOf } from "@/lib/date-kst";
 import type { AssignableVideo } from "../video-assignment";
 import styles from "./video-assignment-select.module.css";
 
-function assignmentLabel(video: AssignableVideo): string {
+const shortDate = (date: string) => date.slice(5).replace("-", ".");
+/**
+ * 이 영상이 지금 어느 숙제에 붙어 있나(원장 2026-10-13 — "2026-10-08 배정"이 "10/8에 배정한 날"로 읽혀 바꿨다).
+ * `linked` = 장부가 게시일 순서로 자동으로 붙인 숙제일(영상 id → 숙제일) — 숙제를 고르지 않은 영상도 칸에 붙어 있으면 그렇게 말한다.
+ */
+export function assignmentLabel(video: Pick<AssignableVideo, "id" | "excluded" | "homeworkDate" | "classId">, linked?: ReadonlyMap<string, string>, rowClassId?: string): string {
   if (video.excluded) return "집계 제외";
-  if (video.homeworkDate) return `${video.homeworkDate} 배정`;
-  // 반만 정해진 영상은 장부에서 날짜를 자동으로 추정할 수 있으므로 미배정으로 단정하지 않는다.
-  return video.className ? "숙제일 미지정" : "미배정";
+  if (video.homeworkDate) return `${shortDate(video.homeworkDate)} 숙제에 연결됨`;
+  // 같은 과목 다른 반으로 분류된 영상 — 이 줄의 칸만 아는 자동 연결로는 그 반에서 어떤지 모른다.
+  if (video.classId && rowClassId && video.classId !== rowClassId) return "다른 반 영상";
+  const auto = linked?.get(video.id);
+  // 자동 연결은 이 줄 · 지금 보는 기간의 칸만 안다 — 그 밖에 붙었을 수도 있어 "이 기간"이라고만 말한다.
+  return auto ? `${shortDate(auto)} 숙제에 자동 연결됨` : "이 기간 숙제엔 안 붙음";
 }
 
-export function VideoAssignmentSelect({ videos, value, disabled, onChange }: {
-  videos: AssignableVideo[]; value: string; disabled: boolean; onChange: (value: string) => void;
+export function VideoAssignmentSelect({ videos, value, disabled, onChange, linked, rowClassId }: {
+  videos: AssignableVideo[]; value: string; disabled: boolean; onChange: (value: string) => void; linked?: ReadonlyMap<string, string>; rowClassId?: string;
 }) {
   const selected = videos.find(video => video.id === value);
   return <Select value={value || null} onValueChange={value => onChange(value ?? "")} disabled={disabled || !videos.length}>
     <SelectTrigger className="w-full" aria-label="영상 선택">
-      <span className="truncate">{selected ? `${kstDateOf(selected.postedAt)} ${kstTimeOf(selected.postedAt)} · ${selected.className ?? "반 미지정"} · ${assignmentLabel(selected)}${selected.note ? ` · ${selected.note}` : ""}` : "영상을 골라 주세요"}</span>
+      <span className="truncate">{selected ? `${kstDateOf(selected.postedAt)} ${kstTimeOf(selected.postedAt)} · ${selected.className ?? "반 미지정"} · ${assignmentLabel(selected, linked, rowClassId)}${selected.note ? ` · ${selected.note}` : ""}` : "영상을 골라 주세요"}</span>
     </SelectTrigger>
     <SelectContent alignItemWithTrigger={false} align="start" className={styles.popup}>
       {videos.map(video => <SelectItem key={video.id} value={video.id} className={styles.item}
-        label={`${kstDateOf(video.postedAt)} ${kstTimeOf(video.postedAt)} ${video.className ?? "반 미지정"} ${assignmentLabel(video)}${video.note ? ` ${video.note}` : ""}`}>
+        label={`${kstDateOf(video.postedAt)} ${kstTimeOf(video.postedAt)} ${video.className ?? "반 미지정"} ${assignmentLabel(video, linked, rowClassId)}${video.note ? ` ${video.note}` : ""}`}>
         <span className={styles.columns}>
           <span className={styles.date}>{kstDateOf(video.postedAt)} <small>{kstTimeOf(video.postedAt)}</small></span>
           <span className={styles.className}>{video.className ?? "반 미지정"}</span>
-          <span className={styles.homework}>{assignmentLabel(video)}</span>
+          <span className={styles.homework}>{assignmentLabel(video, linked, rowClassId)}</span>
           {/* 학생이 남긴 메모(숙제 없이 올린 영상) — 학생이 쓴 글이라 글자로만 보여 준다. 격자의 한 줄을 통째로 쓴다. */}
           {video.note ? <span className={styles.note}>학생 메모: {video.note}</span> : null}
         </span>
