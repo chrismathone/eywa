@@ -5,7 +5,7 @@ import { NewMeetingForm } from "./new-meeting-form";
 export const metadata = { title: "새 회의록 — 에이와" };
 
 export default async function NewMeetingPage() {
-  await requireAccess("meetings");
+  const viewer = await requireAccess("meetings");
 
   return (
     <div className="mx-auto max-w-xl space-y-6">
@@ -20,7 +20,7 @@ export default async function NewMeetingPage() {
         </p>
       </header>
 
-      <NewMeetingForm />
+      <NewMeetingForm recordingOwner={{ tenantId: viewer.tenantId, userId: viewer.id }} />
     </div>
   );
 }
