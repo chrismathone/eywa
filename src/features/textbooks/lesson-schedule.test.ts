@@ -7,6 +7,9 @@ import {
   slotsOfPicks,
   parseSlotPick,
   MAX_LOOKAHEAD_DAYS,
+  lessonsPerSlot,
+  mergeLessonTexts,
+  normalizeLessonPace,
 } from "./lesson-schedule";
 
 // 2026-09-14(월) 주. 실제 영어 반 모양에 맞춰 월·수 2교시 + 같은 날 JJ 1교시를 둔다.
@@ -76,10 +79,10 @@ describe("buildLessonSchedule — 단위(pace)", () => {
       lookaheadDays: 14,
     });
     expect(s.targets).toEqual([
-      { lessonNo: 1, date: "2026-09-14", slotStart: "18:20" },
-      { lessonNo: 2, date: "2026-09-14", slotStart: "19:20" },
-      { lessonNo: 3, date: "2026-09-16", slotStart: "18:20" },
-      { lessonNo: 4, date: "2026-09-16", slotStart: "19:20" },
+      { lessonNo: 1, lessonNos: [1], date: "2026-09-14", slotStart: "18:20" },
+      { lessonNo: 2, lessonNos: [2], date: "2026-09-14", slotStart: "19:20" },
+      { lessonNo: 3, lessonNos: [3], date: "2026-09-16", slotStart: "18:20" },
+      { lessonNo: 4, lessonNos: [4], date: "2026-09-16", slotStart: "19:20" },
     ]);
     expect(s.unplaced).toEqual([]);
     expect(s.lastDate).toBe("2026-09-16");
@@ -96,10 +99,10 @@ describe("buildLessonSchedule — 단위(pace)", () => {
       lookaheadDays: 14,
     });
     expect(s.targets).toEqual([
-      { lessonNo: 1, date: "2026-09-14", slotStart: "18:20" },
-      { lessonNo: 1, date: "2026-09-14", slotStart: "19:20" },
-      { lessonNo: 2, date: "2026-09-16", slotStart: "18:20" },
-      { lessonNo: 2, date: "2026-09-16", slotStart: "19:20" },
+      { lessonNo: 1, lessonNos: [1], date: "2026-09-14", slotStart: "18:20" },
+      { lessonNo: 1, lessonNos: [1], date: "2026-09-14", slotStart: "19:20" },
+      { lessonNo: 2, lessonNos: [2], date: "2026-09-16", slotStart: "18:20" },
+      { lessonNo: 2, lessonNos: [2], date: "2026-09-16", slotStart: "19:20" },
     ]);
   });
 
@@ -177,8 +180,8 @@ describe("buildLessonSchedule — 축(axis)", () => {
       lookaheadDays: 14,
     });
     expect(s.targets).toEqual([
-      { lessonNo: 1, date: "2026-09-14", slotStart: "20:20" },
-      { lessonNo: 2, date: "2026-09-16", slotStart: "20:20" },
+      { lessonNo: 1, lessonNos: [1], date: "2026-09-14", slotStart: "20:20" },
+      { lessonNo: 2, lessonNos: [2], date: "2026-09-16", slotStart: "20:20" },
     ]);
   });
 
@@ -320,10 +323,10 @@ describe("buildLessonSchedule — 칸 선택(slotPicks)", () => {
       lookaheadDays: 14,
     });
     expect(s.targets).toEqual([
-      { lessonNo: 1, date: "2026-09-14", slotStart: "18:20" },
-      { lessonNo: 2, date: "2026-09-14", slotStart: "20:20" },
-      { lessonNo: 3, date: "2026-09-16", slotStart: "18:20" },
-      { lessonNo: 4, date: "2026-09-16", slotStart: "20:20" },
+      { lessonNo: 1, lessonNos: [1], date: "2026-09-14", slotStart: "18:20" },
+      { lessonNo: 2, lessonNos: [2], date: "2026-09-14", slotStart: "20:20" },
+      { lessonNo: 3, lessonNos: [3], date: "2026-09-16", slotStart: "18:20" },
+      { lessonNo: 4, lessonNos: [4], date: "2026-09-16", slotStart: "20:20" },
     ]);
   });
 
@@ -340,8 +343,8 @@ describe("buildLessonSchedule — 칸 선택(slotPicks)", () => {
     });
     // 수요일(9/16)은 건너뛰고 다음 월요일(9/21)로 간다.
     expect(s.targets).toEqual([
-      { lessonNo: 1, date: "2026-09-14", slotStart: "18:20" },
-      { lessonNo: 2, date: "2026-09-21", slotStart: "18:20" },
+      { lessonNo: 1, lessonNos: [1], date: "2026-09-14", slotStart: "18:20" },
+      { lessonNo: 2, lessonNos: [2], date: "2026-09-21", slotStart: "18:20" },
     ]);
   });
 
@@ -356,7 +359,7 @@ describe("buildLessonSchedule — 칸 선택(slotPicks)", () => {
       pace: "period",
       lookaheadDays: 14,
     });
-    expect(s.targets).toEqual([{ lessonNo: 1, date: "2026-09-16", slotStart: "19:20" }]);
+    expect(s.targets).toEqual([{ lessonNo: 1, lessonNos: [1], date: "2026-09-16", slotStart: "19:20" }]);
   });
 
   it("day 단위면 그 날 고른 칸 전부에 같은 차수", () => {
@@ -371,8 +374,8 @@ describe("buildLessonSchedule — 칸 선택(slotPicks)", () => {
       lookaheadDays: 14,
     });
     expect(s.targets).toEqual([
-      { lessonNo: 1, date: "2026-09-14", slotStart: "18:20" },
-      { lessonNo: 1, date: "2026-09-14", slotStart: "19:20" },
+      { lessonNo: 1, lessonNos: [1], date: "2026-09-14", slotStart: "18:20" },
+      { lessonNo: 1, lessonNos: [1], date: "2026-09-14", slotStart: "19:20" },
     ]);
   });
 
@@ -387,7 +390,7 @@ describe("buildLessonSchedule — 칸 선택(slotPicks)", () => {
       pace: "period",
       lookaheadDays: 14,
     });
-    expect(s.targets).toEqual([{ lessonNo: 1, date: "2026-09-14", slotStart: "20:20" }]);
+    expect(s.targets).toEqual([{ lessonNo: 1, lessonNos: [1], date: "2026-09-14", slotStart: "20:20" }]);
   });
 });
 
@@ -411,9 +414,9 @@ describe("buildLessonSchedule — 회차 미루기·당기기(shifts)", () => {
       lookaheadDays: 28,
     });
     expect(s.targets).toEqual([
-      { lessonNo: 1, date: "2026-09-14", slotStart: "18:20" },
+      { lessonNo: 1, lessonNos: [1], date: "2026-09-14", slotStart: "18:20" },
       // 9/21은 통째로 비고(자유 기입), 2차수는 9/28로 밀린다.
-      { lessonNo: 2, date: "2026-09-28", slotStart: "18:20" },
+      { lessonNo: 2, lessonNos: [2], date: "2026-09-28", slotStart: "18:20" },
     ]);
   });
 
@@ -430,7 +433,7 @@ describe("buildLessonSchedule — 회차 미루기·당기기(shifts)", () => {
       lookaheadDays: 14,
     });
     expect(s.skippedHolidays).toEqual([]);
-    expect(s.targets).toEqual([{ lessonNo: 1, date: "2026-09-21", slotStart: "18:20" }]);
+    expect(s.targets).toEqual([{ lessonNo: 1, lessonNos: [1], date: "2026-09-21", slotStart: "18:20" }]);
   });
 
   it("당기면 그 칸의 차수를 버리고 **다음 차수**가 온다", () => {
@@ -446,8 +449,8 @@ describe("buildLessonSchedule — 회차 미루기·당기기(shifts)", () => {
       lookaheadDays: 28,
     });
     expect(s.targets).toEqual([
-      { lessonNo: 1, date: "2026-09-14", slotStart: "18:20" },
-      { lessonNo: 3, date: "2026-09-21", slotStart: "18:20" }, // 2차수를 버렸다
+      { lessonNo: 1, lessonNos: [1], date: "2026-09-14", slotStart: "18:20" },
+      { lessonNo: 3, lessonNos: [3], date: "2026-09-21", slotStart: "18:20" }, // 2차수를 버렸다
     ]);
   });
 
@@ -464,8 +467,8 @@ describe("buildLessonSchedule — 회차 미루기·당기기(shifts)", () => {
       lookaheadDays: 14,
     });
     expect(s.targets).toEqual([
-      { lessonNo: 1, date: "2026-09-21", slotStart: "18:20" },
-      { lessonNo: 1, date: "2026-09-21", slotStart: "19:20" },
+      { lessonNo: 1, lessonNos: [1], date: "2026-09-21", slotStart: "18:20" },
+      { lessonNo: 1, lessonNos: [1], date: "2026-09-21", slotStart: "19:20" },
     ]);
   });
 
@@ -481,5 +484,68 @@ describe("buildLessonSchedule — 회차 미루기·당기기(shifts)", () => {
       lookaheadDays: 28,
     };
     expect(buildLessonSchedule({ ...base, shifts: {} })).toEqual(buildLessonSchedule(base));
+  });
+});
+
+describe("25분마다 1차수 (원장 2026-10-13)", () => {
+  it("교시 길이를 25분으로 버림 — 60분=2 · 50분=2 · 40분=1 · 80분=3 · 모르면 1", () => {
+    expect(lessonsPerSlot("18:20", "19:20")).toBe(2);
+    expect(lessonsPerSlot("19:20", "20:10")).toBe(2);
+    expect(lessonsPerSlot("16:20", "17:00")).toBe(1);
+    expect(lessonsPerSlot("16:20", "17:40")).toBe(3);
+    expect(lessonsPerSlot("16:20", "16:35")).toBe(1);
+    expect(lessonsPerSlot("16:20", null)).toBe(1);
+  });
+
+  it("한 칸에 차수 여러 개 — 다음 칸은 이어지는 차수부터", () => {
+    const s = buildLessonSchedule({
+      startDate: "2026-09-14",
+      lessonNos: [1, 2, 3, 4, 5],
+      schedules: MON_WED,
+      holidays: null,
+      axis: "class",
+      pace: "min25",
+      lookaheadDays: 7,
+    });
+    expect(s.targets.map((t) => [t.date, t.slotStart, t.lessonNos])).toEqual([
+      ["2026-09-14", "18:20", [1, 2]],
+      ["2026-09-14", "19:20", [3, 4]],
+      ["2026-09-16", "18:20", [5]],
+    ]);
+    expect(s.targets.map((t) => t.lessonNo)).toEqual([1, 3, 5]);
+    expect(s.unplaced).toEqual([]);
+  });
+
+  it("다른 단위는 한 칸에 한 차수 그대로", () => {
+    const s = buildLessonSchedule({
+      startDate: "2026-09-14",
+      lessonNos: [1, 2],
+      schedules: MON_WED,
+      holidays: null,
+      axis: "class",
+      pace: "period",
+      lookaheadDays: 7,
+    });
+    expect(s.targets.map((t) => t.lessonNos)).toEqual([[1], [2]]);
+  });
+
+  it("진도 합치기 — 차수 번호를 붙여 줄바꿈, 빈 차수는 빼고 전부 비면 null", () => {
+    const text: Record<number, string | null> = { 3: "Unit 3", 4: null, 5: "Unit 5" };
+    expect(mergeLessonTexts([3], (n) => text[n])).toBe("Unit 3");
+    expect(mergeLessonTexts([3, 5], (n) => text[n])).toBe("3차수 Unit 3\n5차수 Unit 5");
+    expect(mergeLessonTexts([3, 4], (n) => text[n])).toBe("3차수 Unit 3");
+    expect(mergeLessonTexts([4], (n) => text[n])).toBeNull();
+    expect(mergeLessonTexts([4, 4], () => " ")).toBeNull();
+    // 계획 줄 500자 CHECK — 넘으면 끝을 줄인다(넘긴 채 보내면 기입 묶음 전체가 거절된다).
+    const long = mergeLessonTexts([1, 2, 3], () => "가".repeat(400))!;
+    expect(long.length).toBe(500);
+    expect(long.endsWith("…")).toBe(true);
+  });
+
+  it("단위 문자열 읽기 — 모르는 값은 교시마다", () => {
+    expect(normalizeLessonPace("min25")).toBe("min25");
+    expect(normalizeLessonPace("day")).toBe("day");
+    expect(normalizeLessonPace("week")).toBe("period");
+    expect(normalizeLessonPace(null)).toBe("period");
   });
 });

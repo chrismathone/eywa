@@ -173,7 +173,11 @@ function CompareBody({ data, verdictLabel }: { data: Loaded; verdictLabel: (c: V
                 <li key={i} className="space-y-0.5">
                   <div className="flex flex-wrap items-baseline gap-1.5">
                     <span className="font-bold">{l.baseline.title}</span>
-                    <span className="num text-text-dim text-xs">{tf("month.plannedNo", { n: l.baseline.lessonNo })}</span>
+                    <span className="num text-text-dim text-xs">
+                      {(l.baseline.lessonNoEnd ?? l.baseline.lessonNo) > l.baseline.lessonNo
+                        ? tf("month.plannedNoRange", { n: l.baseline.lessonNo, m: l.baseline.lessonNoEnd ?? l.baseline.lessonNo })
+                        : tf("month.plannedNo", { n: l.baseline.lessonNo })}
+                    </span>
                     {actual.length > 0 ? (
                       <span className={`rounded px-1 text-xs font-bold ${TONE_SOFT[lineTone(l.verdict)]}`}>
                         {lineLabel(l)}
@@ -214,7 +218,11 @@ function CompareBody({ data, verdictLabel }: { data: Loaded; verdictLabel: (c: V
               {scheduled.map((s, i) => (
                 <li key={i}>
                   <span className="font-bold">{s.title}</span>{" "}
-                  <span className="num text-text-dim">{tf("month.plannedNo", { n: s.lessonNo })}</span>
+                  <span className="num text-text-dim">
+                    {s.lessonNoEnd > s.lessonNo
+                      ? tf("month.plannedNoRange", { n: s.lessonNo, m: s.lessonNoEnd })
+                      : tf("month.plannedNo", { n: s.lessonNo })}
+                  </span>
                   {s.progress ? <span className="text-text-dim"> · {s.progress}</span> : null}
                 </li>
               ))}

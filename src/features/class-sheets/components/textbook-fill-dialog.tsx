@@ -361,6 +361,7 @@ export function TextbookFillDialog({
                   >
                     <option value="period">{t("fill.pace.period")}</option>
                     <option value="day">{t("fill.pace.day")}</option>
+                    <option value="min25">{t("fill.pace.min25")}</option>
                   </select>
 <span className="text-text-faint text-xs">{t("fill.pace.hint")}</span>
                 </label>
@@ -453,7 +454,9 @@ export function TextbookFillDialog({
                           const o = OUTCOME[r.outcome];
                           return (
                             <tr key={`${r.date}|${r.slotStart}|${i}`} className="border-line-faint border-b last:border-0">
-                              <td className="num py-1 text-center font-bold">{r.lessonNo}</td>
+                              <td className="num py-1 text-center font-bold whitespace-nowrap">
+                                {r.lessonNoEnd > r.lessonNo ? `${r.lessonNo}~${r.lessonNoEnd}` : r.lessonNo}
+                              </td>
                               <td className="num py-1 text-center">{dayLabel(r.date, lang)}</td>
                               <td className="num py-1 text-center">{r.periodLabel ?? r.slotStart}</td>
                               <td className="truncate py-1">{r.progress ?? <span className="text-text-faint">—</span>}</td>

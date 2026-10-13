@@ -125,7 +125,9 @@ export function PlanPreviewDialog({
                         key={`${r.date}|${r.slotStart}|${i}`}
                         className={`border-line-faint border-b last:border-0 ${r.outcome === "skip-past" ? "text-text-faint" : ""}`}
                       >
-                        <td className="num py-1 text-center font-bold">{r.lessonNo}</td>
+                        <td className="num py-1 text-center font-bold whitespace-nowrap">
+                          {r.lessonNoEnd > r.lessonNo ? `${r.lessonNo}~${r.lessonNoEnd}` : r.lessonNo}
+                        </td>
                         <td className="num py-1 text-center">{dayLabel(r.date)}</td>
                         <td className="num py-1 text-center">{r.periodLabel ?? r.slotStart}</td>
                         <td className="truncate py-1">{r.progress ?? <span className="text-text-faint">—</span>}</td>

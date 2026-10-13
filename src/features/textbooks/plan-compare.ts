@@ -18,6 +18,11 @@ import { normalizeBookName, sameBookName } from "@/features/class-sheets/lib/goa
 /** 비교에 필요한 원래 계획 한 줄(= `PlannedLine`의 일부). */
 export type BaselineLine = {
   lessonNo: number;
+  /**
+   * 그 칸에 든 마지막 차수(25분 단위로 한 칸에 여러 차수가 든 경우). 없으면 `lessonNo` 하나.
+   * 실제 진도가 이 범위 안의 차수면 계획대로다 — 첫 차수와만 견주면 4차수를 한 칸이 '빠름'이 된다.
+   */
+  lessonNoEnd?: number;
   skillArea: string;
   title: string;
   progress: string | null;
@@ -144,9 +149,9 @@ export function compareCell(input: {
       return { baseline: b, actual: a, actualLessonNo: planned ? b.lessonNo : null, verdict: "match" };
     }
     const no = lessonNoOf(lessonIndex, b.title, a.progress);
-    if (no === null || no === b.lessonNo) {
-      return { baseline: b, actual: a, actualLessonNo: no, verdict: no === b.lessonNo ? "match" : "differ" };
-    }
+    const end = Math.max(b.lessonNo, b.lessonNoEnd ?? b.lessonNo);
+    if (no === null) return { baseline: b, actual: a, actualLessonNo: null, verdict: "differ" };
+    if (no >= b.lessonNo && no <= end) return { baseline: b, actual: a, actualLessonNo: no, verdict: "match" };
     return { baseline: b, actual: a, actualLessonNo: no, verdict: no < b.lessonNo ? "behind" : "ahead" };
   });
 
@@ -157,7 +162,12 @@ export function compareCell(input: {
   if (lines.some((l) => l.verdict === "differ" || l.verdict === "missing")) {
     return { verdict: "differ", lag: 0, lines };
   }
-  const lagOf = (l: LineCompare) => Math.abs((l.actualLessonNo ?? l.baseline.lessonNo) - l.baseline.lessonNo);
+  // 늦음은 첫 차수에서, 빠름은 마지막 차수에서 잰다(한 칸에 차수가 여럿인 25분 단위 — 범위 안은 계획대로).
+  const lagOf = (l: LineCompare) => {
+    const no = l.actualLessonNo ?? l.baseline.lessonNo;
+    const end = Math.max(l.baseline.lessonNo, l.baseline.lessonNoEnd ?? l.baseline.lessonNo);
+    return no < l.baseline.lessonNo ? l.baseline.lessonNo - no : no > end ? no - end : 0;
+  };
   const behind = lines.filter((l) => l.verdict === "behind");
   if (behind.length > 0) return { verdict: "behind", lag: Math.max(...behind.map(lagOf)), lines };
   const ahead = lines.filter((l) => l.verdict === "ahead");

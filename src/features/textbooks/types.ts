@@ -71,6 +71,8 @@ export type ClassTextbookPlanRow = {
 /** 미리보기 한 줄 — 차수 하나가 어느 칸에 어떻게 들어갈지. */
 export type ApplyPreviewRow = {
   lessonNo: number;
+  /** 그 칸에 든 마지막 차수 — 25분 단위로 여러 차수가 한 칸에 들면 `lessonNo`보다 크다. */
+  lessonNoEnd: number;
   date: string;
   slotStart: string;
   /** 교시 라벨(`8교시` 등). 없으면 null — 지어내지 않는다. */

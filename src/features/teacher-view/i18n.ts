@@ -959,6 +959,7 @@ export const SHEET_DICT = {
   "fill.pace": { ko: "차수 단위", en: "Lesson unit" },
   "fill.pace.period": { ko: "교시마다 1차수 (1시간씩)", en: "One lesson per period (1 hour)" },
   "fill.pace.day": { ko: "하루에 1차수 (2시간씩)", en: "One lesson per day (2 hours)" },
+  "fill.pace.min25": { ko: "25분마다 1차수 (1시간 수업 = 2차수)", en: "One lesson per 25 min (1-hour class = 2 lessons)" },
   "fill.pace.hint": {
     ko: "하루에 두 교시를 골랐다면, ‘하루에 1차수’는 그 두 칸에 같은 차수가 들어갑니다.",
     en: "If you picked two periods on the same day, “one lesson per day” puts the same lesson in both cells.",
@@ -1102,6 +1103,7 @@ export const SHEET_DICT = {
   "month.importAll.truncated": { ko: " · {n}줄은 칸의 20줄 상한이라 못 넣었습니다", en: " · {n} rows skipped (20-row limit per cell)" },
   "month.plannedTag": { ko: "계획", en: "Plan" },
   "month.plannedNo": { ko: "{n}차수", en: "lesson {n}" },
+  "month.plannedNoRange": { ko: "{n}~{m}차수", en: "lessons {n}–{m}" },
   "month.unwritten": { ko: "미작성", en: "Not written" },
   "month.unwrittenN": { ko: "미작성 {n}", en: "Not written {n}" },
   "month.allWritten.title": {

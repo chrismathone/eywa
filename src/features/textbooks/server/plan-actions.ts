@@ -33,6 +33,8 @@ import {
   MAX_LOOKAHEAD_DAYS,
   parseSlotPick,
   slotPickKey,
+  mergeLessonTexts,
+  normalizeLessonPace,
   type LessonPace,
   type SlotAxis,
 } from "../lesson-schedule";
@@ -120,7 +122,7 @@ export async function saveClassTextbookPlan(input: ClassTextbookPlanInput): Prom
     return { ok: false, error: `한 배정에 교시를 ${MAX_SLOT_PICKS}칸까지 고를 수 있습니다` };
   }
   const axis: SlotAxis = input.slotAxis === "jj" ? "jj" : "class";
-  const pace: LessonPace = input.pace === "day" ? "day" : "period";
+  const pace: LessonPace = normalizeLessonPace(input.pace);
   const termMode = input.termMode === "exam" ? "exam" : "regular";
   const startLessonNo = Math.max(1, Math.min(200, Math.trunc(Number(input.startLessonNo) || 1)));
 
@@ -326,7 +328,7 @@ async function loadPlan(planId: string, opts: { write: boolean } = { write: true
       classId: String(data.class_id),
       textbookId: String(data.textbook_id),
       axis: data.slot_axis === "jj" ? "jj" : "class",
-      pace: data.pace === "day" ? "day" : "period",
+      pace: normalizeLessonPace(data.pace),
       termMode: data.term_mode === "exam" ? "exam" : "regular",
       startDate: String(data.start_date),
       startLessonNo: Number(data.start_lesson_no ?? 1),
@@ -343,7 +345,14 @@ type Computed = {
   title: string;
   pageTime: string | null;
   skillArea: string;
-  targets: { lessonNo: number; date: string; slotStart: string; progress: string | null; homework: string | null }[];
+  targets: {
+    lessonNo: number;
+    lessonNos: number[];
+    date: string;
+    slotStart: string;
+    progress: string | null;
+    homework: string | null;
+  }[];
   unplaced: number[];
   skippedHolidays: { date: string; name: string }[];
   periodLabelBySlot: Record<string, string>;
@@ -492,14 +501,12 @@ async function computeTargets(loaded: LoadedPlan): Promise<Computed | { error: s
     title: String(book.title),
     pageTime: (book.page_time as string | null) ?? null,
     skillArea,
-    targets: schedule.targets.map((t) => {
-      const l = byNo.get(t.lessonNo);
-      return {
-        ...t,
-        progress: (l?.progress ?? null) || null,
-        homework: (l?.homework ?? null) || null,
-      };
-    }),
+    targets: schedule.targets.map((t) => ({
+      ...t,
+      // 25분 단위로 한 칸에 차수가 여럿이면 진도·과제를 한 줄로 합친다(계획 줄은 칸마다 하나다).
+      progress: mergeLessonTexts(t.lessonNos, (no) => byNo.get(no)?.progress),
+      homework: mergeLessonTexts(t.lessonNos, (no) => byNo.get(no)?.homework),
+    })),
     unplaced: schedule.unplaced,
     skippedHolidays: schedule.skippedHolidays,
     periodLabelBySlot,
@@ -590,6 +597,7 @@ async function previewLoaded(loaded: LoadedPlan, planId: string): Promise<PlanPr
     const lines = bySlot.get(key) ?? [];
     const base = {
       lessonNo: t.lessonNo,
+      lessonNoEnd: t.lessonNos[t.lessonNos.length - 1] ?? t.lessonNo,
       date: t.date,
       slotStart: t.slotStart,
       periodLabel: computed.periodLabelBySlot[key] ?? null,
@@ -729,7 +737,7 @@ async function loadFillInput(input: TextbookFillInput): Promise<LoadedPlan | { e
       classId: input.classId,
       textbookId: input.textbookId,
       axis: "class",
-      pace: input.pace === "day" ? "day" : "period",
+      pace: normalizeLessonPace(input.pace),
       termMode: input.termMode === "exam" ? "exam" : "regular",
       startDate: input.startDate,
       startLessonNo: Math.max(1, Math.min(200, Math.trunc(Number(input.startLessonNo) || 1))),

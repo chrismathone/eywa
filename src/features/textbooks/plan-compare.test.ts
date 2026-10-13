@@ -96,3 +96,16 @@ describe("집계", () => {
     expect(matchRate(t)).toBe(33);
   });
 });
+
+describe("compareCell — 한 칸에 여러 차수(25분 단위, 2026-10-13)", () => {
+  const range = { lessonNo: 1, lessonNoEnd: 2, skillArea: "reading", title: "Reading Smart 3", progress: "1차수 Unit 1\n2차수 Unit 2" };
+  it("범위 안의 차수를 했으면 계획대로", () => {
+    expect(compareCell({ baseline: [range], actual: [act("Unit 2")], lessonIndex: index, isFuture: false }).verdict).toBe("match");
+    expect(compareCell({ baseline: [range], actual: [act("Unit 1")], lessonIndex: index, isFuture: false }).verdict).toBe("match");
+  });
+  it("범위 뒤는 빠름 — 마지막 차수에서 잰다", () => {
+    const c = compareCell({ baseline: [range], actual: [act("Unit 3")], lessonIndex: index, isFuture: false });
+    expect(c.verdict).toBe("ahead");
+    expect(c.lag).toBe(1);
+  });
+});
