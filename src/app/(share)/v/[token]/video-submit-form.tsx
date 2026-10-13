@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { checkVideoFile } from "@/features/video-submit/rules";
-import { runResumableUpload, UploadError, xhrPut } from "@/features/video-submit/upload-client";
+import { runResumableUpload, UploadError, wakeableSleep, xhrPut } from "@/features/video-submit/upload-client";
 import { createUploadReporter, flushUploadEvents } from "@/features/video-submit/upload-diagnostics-client";
 import { confirmationReason, uploadEventLabel, uploadFailureText, type UploadEvent } from "@/features/video-submit/upload-diagnostics";
 import { SITE_FREE_UPLOADS_PER_DAY, SITE_NOTE_MAX, siteNote } from "@/features/video-submit/site";
@@ -135,7 +135,7 @@ export function VideoSubmitForm(props: {
     reporter.current = trace;
     try {
       await runResumableUpload({
-        size: file.size, slice: (start, end) => file.slice(start, end), put: xhrPut(started.sessionUrl),
+        size: file.size, slice: (start, end) => file.slice(start, end), put: xhrPut(started.sessionUrl), sleep: wakeableSleep,
         onProgress: (sent) => { trace.progress(sent); setPhase({ kind: "uploading", file, sent }); },
         onEvent: (kind, detail) => trace.event(kind, detail),
       });
