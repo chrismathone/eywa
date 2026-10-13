@@ -11,7 +11,12 @@ export type TeacherWorkRow = {
 export type TeacherWork = { reportFrom: string; videoFrom: string; to: string; videoCheckedAt: string | null; rows: TeacherWorkRow[] };
 
 /** 현재 담당 반 기준. 동명이인은 ID로, 복수 과목 강사는 과목별로 분리한다. */
-export function teacherWork(classes: readonly WorkClass[], reports: readonly WorkReport[], outcomes: readonly WorkOutcome[], range: Pick<TeacherWork, "reportFrom" | "videoFrom" | "to">, obligations?: readonly WorkObligation[]): TeacherWork {
+/**
+ * `extraVideoAssignments` = 보고서 없이 따로 낸 영상 숙제(video-homework `extra-issues.ts`) — 영상 제출 현황과 같은 숙제 축이라 낸 숙제 수에 더한다
+ * (같은 날 보고서에도 켜져 있으면 한 번만 · 보고서 수·발송 집계에는 들어가지 않는다).
+ */
+export function teacherWork(classes: readonly WorkClass[], reports: readonly WorkReport[], outcomes: readonly WorkOutcome[], range: Pick<TeacherWork, "reportFrom" | "videoFrom" | "to">, obligations?: readonly WorkObligation[],
+  extraVideoAssignments: readonly Pick<WorkReport, "classId" | "studentId" | "date">[] = []): TeacherWork {
   const rows = new Map<string, TeacherWorkRow>();
   const byClass = new Map<string, TeacherWorkRow>();
   for (const cls of classes) {
@@ -39,6 +44,13 @@ export function teacherWork(classes: readonly WorkClass[], reports: readonly Wor
     if (rep.status === "success") row.sent++;
     else if (["failed", "too_old", "name_conflict", "blocked_shared", "recall_failed"].includes(rep.status ?? "")) row.failed++;
     else row.pending++;
+  }
+  for (const extra of extraVideoAssignments) {
+    const row = byClass.get(extra.classId);
+    const key = keyOf(extra);
+    if (!row || extra.date > range.to || extra.date < range.videoFrom || assignments.has(key)) continue;
+    assignments.add(key);
+    row.videoAssigned++;
   }
   for (const obligation of obligations ?? []) {
     const row = byClass.get(obligation.classId);

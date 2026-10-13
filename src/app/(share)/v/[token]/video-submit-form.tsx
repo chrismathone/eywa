@@ -3,9 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { checkVideoFile } from "@/features/video-submit/rules";
-import { runResumableUpload, UploadError, xhrPut } from "@/features/video-submit/upload-client";
+import { runResumableUpload, UploadError, wakeableSleep, xhrPut } from "@/features/video-submit/upload-client";
 import { createUploadReporter, flushUploadEvents } from "@/features/video-submit/upload-diagnostics-client";
 import { confirmationReason, uploadEventLabel, uploadFailureText, type UploadEvent } from "@/features/video-submit/upload-diagnostics";
+import { SITE_FREE_UPLOADS_PER_DAY, SITE_NOTE_MAX, siteNote } from "@/features/video-submit/site";
 
 type Phase =
   | { kind: "idle" }
@@ -61,8 +62,13 @@ export function VideoSubmitForm(props: {
   homeworkLabel?: string | null;
   /** 같은 반의 다른 안 낸 영상 숙제(올리기 사이트 링크만) — 같은 링크에 숙제일만 바꿔 바로 간다. */
   otherHomework?: { date: string; label: string }[];
+  /** 숙제 없이 올리기(올리기 사이트 · 2026-10-13) — 무슨 영상인지 메모를 받아 업로드 시작 때 함께 보낸다(서버가 다시 확인한다). */
+  freeUpload?: boolean;
 }) {
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
+  const [note, setNote] = useState("");
+  // 숙제 없이 올릴 때는 메모가 있어야 올린다(서버와 같은 다듬기 — 2글자 이상).
+  const noteMissing = !!props.freeUpload && !siteNote(note);
   const [recovered, setRecovered] = useState(false);
   const [uploadLog, setUploadLog] = useState<UploadEvent[]>([]);
   const [uploadNumber, setUploadNumber] = useState<string | null>(null);
@@ -108,6 +114,7 @@ export function VideoSubmitForm(props: {
     setPhase({ kind: "uploading", file, sent: 0 });
     const started = await postJson("/api/video-submit/start", {
       token: props.token, name: file.name, size: file.size, type: file.type, ...(props.homeworkDate ? { homeworkDate: props.homeworkDate } : {}),
+      ...(props.freeUpload ? { note } : {}),
     });
     if (!started?.ok || typeof started.sessionUrl !== "string" || typeof started.uploadId !== "string") {
       const message = typeof started?.error === "string" ? started.error : "연결을 확인하고 다시 시도해 주세요.";
@@ -128,7 +135,7 @@ export function VideoSubmitForm(props: {
     reporter.current = trace;
     try {
       await runResumableUpload({
-        size: file.size, slice: (start, end) => file.slice(start, end), put: xhrPut(started.sessionUrl),
+        size: file.size, slice: (start, end) => file.slice(start, end), put: xhrPut(started.sessionUrl), sleep: wakeableSleep,
         onProgress: (sent) => { trace.progress(sent); setPhase({ kind: "uploading", file, sent }); },
         onEvent: (kind, detail) => trace.event(kind, detail),
       });
@@ -166,6 +173,7 @@ export function VideoSubmitForm(props: {
         <h1 className="text-foreground text-2xl font-bold">숙제 영상 제출</h1>
         <p className="text-foreground text-base break-keep">{props.studentLabel} 학생 · {props.className}</p>
         {props.homeworkLabel ? <p className="text-foreground text-base font-bold break-keep">{props.homeworkLabel} 수업의 영상 숙제</p> : null}
+        {props.freeUpload ? <p className="text-foreground text-base font-bold break-keep">숙제 목록에 없는 영상</p> : null}
       </header>
       {recovered ? <p className="text-foreground text-sm break-keep" aria-live="polite">지난번에 올린 영상도 제출됐습니다.</p> : null}
       <section className="bg-card border-line relative space-y-4 rounded-2xl border p-5">
@@ -174,7 +182,18 @@ export function VideoSubmitForm(props: {
           {/* 고른 숙제가 있으면 그 숙제의 기한(숙제일 + 7일), 없으면 링크가 끝나는 날 */}
           <li>{props.homeworkLabel ? `${props.lastDayLabel}까지 올릴 수 있습니다.` : `${props.lastDayLabel}까지 쓸 수 있는 링크입니다.`}</li>
           <li>올린 영상은 담당 선생님만 봅니다.</li>
+          {props.freeUpload ? <li>숙제 없이 올리는 영상은 하루 {SITE_FREE_UPLOADS_PER_DAY}개까지 올릴 수 있습니다.</li> : null}
         </ul>
+        {props.freeUpload ? (
+          <label className="block space-y-2">
+            <span className="text-foreground block text-base font-bold break-keep">무슨 영상인가요?</span>
+            {/* 16px 이상 — iOS 확대 방지. 선생님이 이 메모를 보고 숙제에 연결한다. */}
+            <textarea value={note} maxLength={SITE_NOTE_MAX} rows={2} disabled={busy} aria-label="무슨 영상인지 메모"
+              placeholder="예: 10월 6일 수업 숙제 3번 풀이" onChange={(event) => setNote(event.target.value)}
+              className="border-line bg-background focus:border-primary w-full rounded-lg border px-3 py-2 text-base outline-none" />
+            <span className="text-text-dim block text-sm break-keep">선생님이 이 메모를 보고 숙제에 연결합니다.</span>
+          </label>
+        ) : null}
         <input ref={input} type="file" accept="video/*" className="sr-only" aria-label="영상 고르기"
           onChange={(event) => { pick(event.target.files?.[0]); event.target.value = ""; }} />
         {phase.kind === "idle" ? (
@@ -183,7 +202,8 @@ export function VideoSubmitForm(props: {
         {phase.kind === "picked" ? (
           <div className="space-y-3">
             <p className="text-foreground text-sm break-all">{phase.file.name} · {mb(phase.file.size)}</p>
-            <Button type="button" size="lg" className="w-full" onClick={() => upload(phase.file)}>올리기</Button>
+            <Button type="button" size="lg" className="w-full" disabled={noteMissing} onClick={() => upload(phase.file)}>올리기</Button>
+            {noteMissing ? <p className="text-text-dim text-sm break-keep">무슨 영상인지 메모를 2글자 이상 적어 주세요.</p> : null}
             <Button type="button" variant="outline" className="w-full" onClick={() => input.current?.click()}>다른 영상 고르기</Button>
           </div>
         ) : null}
@@ -201,7 +221,7 @@ export function VideoSubmitForm(props: {
           <div className="space-y-3" aria-live="polite">
             <p className="text-foreground text-base font-bold">제출했습니다. 감사합니다.</p>
             <p className="text-text-dim text-sm break-keep">담당 선생님이 확인할 수 있습니다.</p>
-            <Button type="button" variant="outline" className="w-full" onClick={() => setPhase({ kind: "idle" })}>다른 영상 올리기</Button>
+            <Button type="button" variant="outline" className="w-full" onClick={() => { setNote(""); setPhase({ kind: "idle" }); }}>다른 영상 올리기</Button>
           </div>
         ) : null}
         {!busy && props.otherHomework?.length ? (
@@ -223,7 +243,7 @@ export function VideoSubmitForm(props: {
         {phase.kind === "error" ? (
           <div className="space-y-3" role="alert">
             <p className="text-danger text-sm font-bold break-keep">{phase.message}</p>
-            {phase.file ? <Button type="button" size="lg" className="w-full" onClick={() => upload(phase.file!)}>다시 올리기</Button> : null}
+            {phase.file ? <Button type="button" size="lg" className="w-full" disabled={noteMissing} onClick={() => upload(phase.file!)}>다시 올리기</Button> : null}
             <Button type="button" variant="outline" className="w-full" onClick={() => input.current?.click()}>영상 다시 고르기</Button>
           </div>
         ) : null}

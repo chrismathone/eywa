@@ -19,6 +19,8 @@
  *     수동 완료·미수행과 무관하게 영상을 배정한다. 저장된 상태는 자동 판정 작업이 실제 파일과 기한으로 갱신한다.
  *     그래서 영상으로 센 칸을 확정해도, 미확인 칸을 한 번 눌러 완료로 바꿔도 **다른 칸의 판정이 흔들리지 않는다**.
  *  🔴 숙제보다 먼저 올라온 영상·`VIDEO_MATCH_WINDOW_DAYS`를 넘겨 올라온 영상은 짝이 아니다. 수동 체크가 이후 업로드를 막지 않는다.
+ *  🔴 **숙제 없이 올린 영상**(`free`, 올리기 사이트 · 메모 — 원장 2026-10-13)은 ②를 타지 않는다 — 학생이 "숙제가 아니다"라고 밝힌 영상이라
+ *     남은 숙제를 자동으로 채우면 메모를 볼 길(배정 버튼)도 사라진다. 선생님이 손으로 배정하면 ③(정해진 숙제)으로 붙는다.
  *  ③ 숙제가 정해진 영상(`homeworkDate`) — 학생이 올리기 사이트에서 **숙제를 골라** 올린 영상(원장 2026-10-03 *"숙제 리스트에서 고르도록 해서
  *     숙제 링크 배선"*)과 **그 숙제를 낸 보고서 글에 댓글로 올린 ClassNote 영상**(원장 2026-10-06 *"해당 숙제 보고서 고유의 링크 주소가 있는
  *     보고서에 영상을 업로드하면 무조건 체킹가능하지"* — 연동 PC가 글의 보고서를 확인해 싣는다, `scripts/_classnote/video-report-link.mjs`)은
@@ -236,7 +238,7 @@ export function buildLedgerRounds(input: {
     const day = since ? kstDateOf(v.postedAt) : null;
     return !!since && !!day && day >= since;
   };
-  const days = videoDays(input.videos.filter((v) => v.playback !== null && !v.homeworkDate && !afterPicked(v) && !sameFile(v)));
+  const days = videoDays(input.videos.filter((v) => v.playback !== null && !v.homeworkDate && !v.free && !afterPicked(v) && !sameFile(v)));
   for (const [pair, rounds] of all) {
     const available = tracked.has(pair) ? days.get(pair) : undefined;
     if (!available?.length) continue;

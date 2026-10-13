@@ -44,6 +44,8 @@ export const AUDIT_ACTIONS = {
   ai_prompt_reset: "AI 프롬프트 기본값 복원",
   // 강사 말투 프로파일(0262a) — AI 산출물의 내용을 바꾸는 갱신이라 cron(주 1회)·[지금 갱신] 둘 다 남긴다.
   ment_style_rebuild: "강사 말투 프로파일 갱신",
+  // 직원 포트폴리오(0357a) — [지금 집계]와, 매일 cron이 달을 마감했을 때 남긴다(매일의 재집계는 남기지 않는다).
+  teacher_portfolio_refresh: "직원 포트폴리오 집계",
   classroom_update: "강의실 수정",
   notice_popup_update: "팝업 공지 수정",
   notice_popup_toggle: "팝업 공지 노출 전환",
@@ -416,6 +418,9 @@ export const AUDIT_ACTIONS = {
   lesson_report_save: "수업보고서 저장",
   // 영상 제출 현황(장부)에서 회차 한 칸을 찍음 — 완료·미수행·미확인으로 되돌림(원장 2026-10-01).
   lesson_report_video_homework_mark: "영상 과제 제출 기록",
+  // 영상 제출 현황의 '숙제없음' 칸에서 그 날짜의 영상 숙제를 뒤늦게 냄(보고서 없이) · 그 숙제를 거둠(원장 2026-10-13).
+  lesson_report_video_homework_issue: "영상 숙제 따로 내기",
+  lesson_report_video_homework_issue_cancel: "따로 낸 영상 숙제 취소",
   share_link_revoke: "학부모 공유 링크 회수",
   share_link_reissue: "학부모 공유 링크 재발급",
   // 숙제 영상 제출 링크(0325a) — 발급(학생 상세 복사·수업보고서 글) · 끊기 · 학부모 업로드 완료.

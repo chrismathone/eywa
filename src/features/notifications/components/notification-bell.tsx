@@ -40,6 +40,7 @@ import {
 } from "@/features/notifications/notify-permission-store";
 import { useWindowStore } from "@/components/workspace/window-store";
 import { windowIdForHref } from "@/components/workspace/window-link";
+import { adminVideoLedgerHref } from "@/features/notifications/presentation";
 import { useIsDesktop } from "@/components/workspace/use-is-desktop";
 import { useWorkspaceEnabled } from "@/components/workspace/workspace-enabled";
 import { useMenuHub } from "@/components/workspace/menu-hub-store";
@@ -241,7 +242,10 @@ export function NotificationBell() {
       return;
     }
     if (!n.link) return;
-    const link = n.link;
+    const onWorkspace = isDesktop && workspaceEnabled && isTopFrame();
+    // 영상 숙제 알림은 강사 화면 주소로 저장된다 — 창을 쓰는 관리자 화면에서는 관리자용 현황을 창으로 연다
+    // (강사 화면 주소는 강사뷰가 아니면 첫 화면으로 돌아가고, 창으로 매핑되지 않아 배경에서만 바뀐다 — #86).
+    const link = onWorkspace ? adminVideoLedgerHref(n.link) : n.link;
     // 학부모 알림 외의 외부 링크. 학부모 글의 이동 버튼은 답글창에서 실제 담임에게만 제공한다.
     if (isExternal(link)) {
       window.open(link, "_blank", "noopener,noreferrer");
@@ -251,7 +255,6 @@ export function NotificationBell() {
     // "알림을 눌렀는데 아무런 출력이 없다"의 진짜 원인). 데스크톱 풀셸은 메뉴가 전부 창이라 화면이 창으로 덮여
     // 있는 게 정상 상태고, 그 밑에서 배경이 바뀌어봐야 **눈에 보이는 변화가 0**이다. WindowLink와 같은 경로·
     // 같은 가드를 쓴다(창 시스템 없는 강사 미니셸·모바일·임베드는 아래 router.push로 자연 폴백).
-    const onWorkspace = isDesktop && workspaceEnabled && isTopFrame();
     // Reveal the dashboard behind work windows before following its section link.
     if (onWorkspace && link.split(/[?#]/)[0] === "/dashboard") {
       useMenuHub.getState().close();

@@ -9,6 +9,7 @@ import type { VideoHomeworkLedgerRow, VideoHomeworkStatus } from "../types";
 import { isVideoHomeworkDate } from "../types";
 import { LEDGER_STATUS_OPTIONS, type ActiveCell, type SaveLedgerChanges } from "./round-editor";
 import { RoundCell } from "./round-cell";
+import type { IssueMenuTarget } from "./issue-menu";
 import { changeKey, type LedgerChange } from "./use-ledger-marks";
 import styles from "./video-homework-management.module.css";
 
@@ -16,12 +17,14 @@ const PAGE_SIZE = 50;
 const ROUND_SIZE = 10;
 // 반의 회차 수나 창 폭이 달라도 같은 열은 항상 같은 너비를 쓴다. 나머지 폭은 빈 공간이다.
 const COLUMN_WIDTH = { select: 32, student: 112, school: 132, count: 64, round: 96 } as const;
-export function ClassLedger({ group, rounds, blankFacts, videosKnown = true, showTeacher = false, today, busy, save, onEdit, onPlay, onAssign, collapsed, onToggle }: {
+export function ClassLedger({ group, rounds, blankFacts, videosKnown = true, showTeacher = false, today, busy, save, onEdit, onPlay, onAssign, onIssueMenu, collapsed, onToggle }: {
   group: LedgerGroup; rounds: LedgerRounds; blankFacts: BlankFacts; videosKnown?: boolean; today: string; busy: boolean; save: SaveLedgerChanges;
   showTeacher?: boolean;
   onEdit: (cell: ActiveCell) => void; collapsed: boolean; onToggle: () => void;
   onPlay: (cell: ActiveCell) => void;
   onAssign?: (row: VideoHomeworkLedgerRow) => void;
+  /** 숙제없음 칸의 '숙제 출제' · 따로 낸 숙제 칸의 '출제 취소' 메뉴 — 고칠 수 있는 줄에서만 연다. */
+  onIssueMenu?: (target: IssueMenuTarget) => void;
 }) {
   const [page, setPage] = useState(0);
   const [roundPage, setRoundPage] = useState(0);
@@ -116,12 +119,13 @@ export function ClassLedger({ group, rounds, blankFacts, videosKnown = true, sho
               <td className={styles.schoolCell} title={`${row.school ?? "학교 미등록"} ${row.grade ?? ""}`}>{row.school || "미등록"} <span>{row.grade}</span></td>
               <td className={styles.countCell}><strong>{counts.submitted}</strong><span>/{counts.total}</span></td>
               {numbers.map((n) => <RoundCell key={n} row={row} round={own[n - 1]} blank={blanks[n - 1 - own.length]} number={n} busy={busy} videosKnown={videosKnown}
-                onOpen={(round) => open(row, round, n)} onPlay={(round) => onPlay({ row, round, number: n })} />)}
+                onOpen={(round) => open(row, round, n)} onPlay={(round) => onPlay({ row, round, number: n })}
+                onMenu={row.editable && onIssueMenu ? (kind, date, at) => onIssueMenu({ kind, row, date, ...at }) : undefined} />)}
             </tr>;
           })}</tbody>
         </table>
       </div>
-      <div className={styles.groupFooter}><span>{group.rows.length}명 중 {currentPage * PAGE_SIZE + 1}–{currentPage * PAGE_SIZE + paged.length}명 · 칸 위: 숙제가 나간 날 · 아래: 제출일 · ▶ 영상 · 수동 · 숙제없음 · — 회차 없음</span>
+      <div className={styles.groupFooter}><span>{group.rows.length}명 중 {currentPage * PAGE_SIZE + 1}–{currentPage * PAGE_SIZE + paged.length}명 · 칸 위: 숙제가 나간 날 · 아래: 제출일 · ▶ 영상 · 수동 · 숙제없음 · — 회차 없음 · 숙제없음 우클릭 = 숙제 출제 · 점선 = 따로 낸 숙제</span>
         {pages > 1 ? <div className={styles.roundPager}>
           <button type="button" disabled={busy || currentPage === 0} onClick={() => { setPage(currentPage - 1); setSelected(new Set()); }} aria-label={`${group.className} 이전 학생`}>이전</button>
           <span>{currentPage + 1} / {pages}</span>

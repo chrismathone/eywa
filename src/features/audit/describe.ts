@@ -99,6 +99,7 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   integration: "외부 연동",
   ai_prompt: "AI 프롬프트",
   ment_style: "강사 말투",
+  teacher_portfolio: "직원 포트폴리오",
   kiosk_device: "키오스크 기기",
   // 시간표(개발중) 월별 계획(0232a) — 본 시간표가 아니라 **계획**임이 '대상' 칸에서 바로 읽혀야 한다.
   timetable_plan: "시간표 계획",
@@ -248,6 +249,7 @@ const FALLBACK_ID_LABEL: Record<string, string> = {
  */
 export const SYSTEM_ACTOR_PREFIX = "system:";
 const SYSTEM_ACTOR_LABEL: Record<string, string> = {
+  "teacher-portfolio": "직원 포트폴리오 매일 집계",
   "grant-class-review": "직원 평가 권한 부여",
   "grant-seat-attendance": "자리 출석부 권한 부여",
   "narrow-staff-menu": "직원관리 권한 조정",
@@ -669,6 +671,15 @@ export function auditDetail(
       return "프롬프트 저장(새 버전)";
     case "ai_prompt_reset":
       return "기본 프롬프트로 복원";
+    case "teacher_portfolio_refresh": {
+      const teachers = num(m.teachers);
+      const closed = Array.isArray(m.closedMonths) ? m.closedMonths.filter((v): v is string => typeof v === "string") : [];
+      return join(
+        m.trigger === "cron" ? "매일 자동 집계" : "지금 집계",
+        teachers === null ? null : `강사 ${teachers}명`,
+        closed.length ? `마감 ${closed.join(", ")}` : null,
+      );
+    }
     case "ment_style_rebuild": {
       const built = num(m.built);
       const unchanged = num(m.unchanged);
@@ -2336,6 +2347,13 @@ export function auditDetail(
       const hw = str(m.homeworkDate);
       const checked = str(m.checkDate);
       return join(hw ? `숙제 ${hw}` : checked ? `검사 ${checked}` : null, label, str(m.submittedDate) ? `제출 ${str(m.submittedDate)}` : null);
+    }
+
+    case "lesson_report_video_homework_issue":
+    case "lesson_report_video_homework_issue_cancel": {
+      // 보고서 없이 따로 낸 영상 숙제 — 어느 수업의 숙제인가(+ 낼 때는 제출 기한).
+      const hw = str(m.homeworkDate);
+      return join(hw ? `숙제 ${hw}` : null, str(m.deadline) ? `기한 ${str(m.deadline)}` : null);
     }
 
     case "demo_roster_apply": {

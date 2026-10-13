@@ -37,6 +37,8 @@ export type VideoHomeworkLedgerRow = VideoHomeworkRosterRow & {
   canAssignVideos?: boolean;
   /** 숙제 당일~14일 뒤의 업로드 완료 영상 중 수동·자동 배정되지 않은 영상이 남아 있는가. */
   hasAssignableVideos?: boolean;
+  /** 보고서 없이 따로 낸 숙제의 날짜(원장 2026-10-13) — 그 칸에 '따로 낸 숙제' 표시와 취소 메뉴를 단다. */
+  extraDates?: string[];
 };
 
 /** 숙제 영상 한 건 — 반·시각·id와 재생 가능한 경우의 미리보기만 내려온다. 원본 다운로드 주소는 내리지 않는다. */
@@ -62,6 +64,8 @@ export type VideoArrival = {
    * 🔑 같으면 같은 파일이지만, 다르다고 다른 영상인 것은 아니다(폰·브라우저가 다시 압축하면 달라진다). 없으면 판정하지 않는다.
    */
   fingerprint?: string | null;
+  /** 숙제 없이 올린 영상(`route.free`, 올리기 사이트) — 게시일순 자동 짝(②)에 들지 않는다. 손 배정하면 정해진 숙제 영상(③)이 된다. */
+  free?: boolean;
 };
 
 export function isVideoHomeworkDate(value: string): boolean {

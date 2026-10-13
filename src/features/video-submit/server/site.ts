@@ -52,8 +52,10 @@ const LIMITED = "잠시 동안 너무 많이 시도했습니다. 조금 뒤에 �
 const FAILED = "확인하지 못했습니다. 잠시 후 다시 시도해 주세요.";
 const NAME_NEEDED = "이름을 두 글자 이상 입력해 주세요.";
 const NOT_FOUND = "번호와 이름이 맞는 학생을 찾지 못했습니다. 번호와 이름을 다시 확인하거나 선생님께 알려 주세요.";
-/** 번호·이름은 맞지만 올릴 숙제가 없다 — "찾지 못했다"와 가른다(영상 숙제가 없는 반의 학생이 검색이 안 되는 것으로 오해하지 않게, 원장 2026-10-03). */
-const NO_HOMEWORK = "지금 올릴 영상 숙제가 없습니다. 선생님이 영상 숙제를 낸 수업이 있을 때만 여기서 올릴 수 있습니다.";
+/** 번호·이름은 맞지만 올릴 반이 없다 — "찾지 못했다"와 가른다(영상 숙제를 쓰지 않는 반의 학생이 검색이 안 되는 것으로 오해하지 않게, 원장 2026-10-03). */
+const NO_HOMEWORK = "지금 여기서 영상을 올릴 수 있는 반이 없습니다. 숙제 영상은 ClassNote 알림장에 올려 주세요.";
+/** 숙제 없이 올리기 줄의 지문 자리(숙제일 대신) — 날짜 모양이 아니라 숙제 지문과 겹치지 않는다. */
+const FREE = "free";
 const TOO_MANY = "이 번호로는 여기서 찾을 수 없습니다. 숙제 영상은 ClassNote 알림장에 올려 주세요.";
 const STALE = "시간이 지나 다시 확인이 필요합니다. 번호와 이름을 다시 입력해 주세요.";
 const PAIR_BLOCKED = "오늘은 여기서 더 열 수 없습니다. 선생님께 알려 주세요.";
@@ -156,6 +158,18 @@ async function findCandidates(
 }
 
 type HomeworkChoice = Candidate & { homeworkDate: string };
+/** 고를 수 있는 줄 — 숙제(`homeworkDate`) 또는 숙제 없이 그 반에 올리기(`homeworkDate = null`). */
+type PickChoice = Candidate & { homeworkDate: string | null };
+
+/**
+ * 숙제 줄 + **숙제 없이 올리기** 줄(학생 × 반마다 하나, 원장 2026-10-13) — 숙제가 먼저, 그 아래 반 줄. 둘 다 같은 후보(번호·이름·지금 다니는 반·
+ * 영상 숙제 대상)에서만 나온다. `null` = 영상 과제 값을 읽을 수 없다(잠시 못 받음).
+ */
+async function pickChoices(db: Db, tenantId: string, list: Candidate[], day: string): Promise<PickChoice[] | null> {
+  const homework = await homeworkChoices(db, tenantId, list, day);
+  if (!homework) return null;
+  return [...homework, ...list.slice(0, SITE_MAX_CHOICES).map((c) => ({ ...c, homeworkDate: null }))];
+}
 
 /**
  * 후보(학생 × 반)마다 **아직 안 낸 영상 숙제**를 붙인다 — 최신 숙제부터, 상한까지. `null` = 영상 과제 값을 읽을 수 없다(잠시 못 받음).
@@ -174,7 +188,8 @@ async function homeworkChoices(db: Db, tenantId: string, list: Candidate[], day:
 /**
  * 뒷 4자리 + 이름 조회 — 그 학생이 **지금 올릴 수 있는 영상 숙제**를 돌려준다(이름은 가운데를 가린 채 — 구분 글자가 다른 동명이인을 가를 때만 쓴다).
  * 번호·이름이 안 맞으면 "찾지 못했다", 맞는데 숙제가 없으면 "올릴 숙제가 없다" — 둘을 가른다. 🔴 가르는 값이 새는 것은 "그 이름의 학생이
- * 그 번호를 쓴다"뿐이고, 이름과 번호를 둘 다 맞혀야 나온다(횟수 제한 뒤). 반·숙제 내용은 숙제가 있을 때만 내려간다.
+ * 그 번호를 쓴다"뿐이고, 이름과 번호를 둘 다 맞혀야 나온다(횟수 제한 뒤). ⚠️ 2026-10-13부터 숙제가 없어도 '숙제 없이 올리기' 줄로
+ * 지금 다니는 반(영상 숙제 대상) 이름이 내려간다 — 이름과 번호를 둘 다 맞힌 사람에게만. '올릴 숙제가 없다'는 그런 반조차 없을 때다.
  */
 export async function lookupSite(input: { last4: unknown; name: unknown; ip: string | null; tenant?: unknown }): Promise<SiteLookupResult> {
   if (!isLast4(input.last4)) return { ok: false, code: "invalid", error: "휴대폰 번호 뒷 4자리(숫자 4개)를 입력해 주세요." };
@@ -189,14 +204,15 @@ export async function lookupSite(input: { last4: unknown; name: unknown; ip: str
     const found = await findCandidates(db, site.tenantId, input.last4, input.name, day, site.settings);
     if (found.tooMany) return { ok: false, code: "invalid", error: TOO_MANY };
     if (!found.matched) return { ok: false, code: "invalid", error: NOT_FOUND };
-    const choices = await homeworkChoices(db, site.tenantId, found.list, day);
+    const choices = await pickChoices(db, site.tenantId, found.list, day);
     if (!choices) return { ok: false, code: "unavailable", error: UNAVAILABLE };
     if (!choices.length) return { ok: false, code: "no_homework", error: NO_HOMEWORK };
     return {
       ok: true,
       choices: choices.map((c) => ({
-        id: choiceId(site.tenantId, c.studentId, c.classId, c.homeworkDate, day),
-        studentLabel: maskStudentName(c.studentName), className: c.className, homeworkLabel: formatShortKoreanDate(c.homeworkDate),
+        id: choiceId(site.tenantId, c.studentId, c.classId, c.homeworkDate ?? FREE, day),
+        studentLabel: maskStudentName(c.studentName), className: c.className,
+        homeworkLabel: c.homeworkDate ? formatShortKoreanDate(c.homeworkDate) : "", ...(c.homeworkDate ? {} : { free: true as const }),
       })),
     };
   } catch (error) {
@@ -252,17 +268,18 @@ export async function openSiteLink(input: { last4: unknown; name: unknown; choic
     const day = kstToday();
     const yesterday = shareExpiryDate(day, -1);
     const found = await findCandidates(db, site.tenantId, input.last4, input.name, day, site.settings);
-    const choices = found.tooMany ? [] : await homeworkChoices(db, site.tenantId, found.list, day);
+    const choices = found.tooMany ? [] : await pickChoices(db, site.tenantId, found.list, day);
     if (!choices) return { ok: false, code: "unavailable", error: UNAVAILABLE };
-    const picked = choices.find((c) => [day, yesterday].some((d) => choiceId(site.tenantId, c.studentId, c.classId, c.homeworkDate, d) === input.choice));
+    const picked = choices.find((c) => [day, yesterday].some((d) => choiceId(site.tenantId, c.studentId, c.classId, c.homeworkDate ?? FREE, d) === input.choice));
     if (!picked) return { ok: false, code: "invalid", error: STALE };
     const before = await pairLinksToday(db, site.tenantId, picked, day);
     if (before.revokedToday) return { ok: false, code: "limit", error: PAIR_BLOCKED };
     if (before.todayIds.length >= SITE_LINKS_PER_PAIR_PER_DAY) return { ok: false, code: "limit", error: PAIR_BLOCKED };
     // 링크는 그 학생 × 반의 안 낸 숙제 중 가장 늦게 끝나는 것까지 산다(고른 숙제가 그중 하나다).
-    const newest = choices.filter((c) => c.studentId === picked.studentId && c.classId === picked.classId)
-      .reduce((max, c) => (c.homeworkDate > max ? c.homeworkDate : max), picked.homeworkDate);
-    const lastDay = siteHomeworkLastDay(newest);
+    // 숙제 없이 올리기만 있는 반은 오늘 하루(다음 날 0시까지) — 숙제가 있으면 그 기한까지(같은 링크로 숙제도 올린다).
+    const newest = choices.filter((c) => c.studentId === picked.studentId && c.classId === picked.classId && c.homeworkDate)
+      .reduce<string | null>((max, c) => (!max || c.homeworkDate! > max ? c.homeworkDate : max), null);
+    const lastDay = newest ? siteHomeworkLastDay(newest) : day;
     const minted = await mintSubmitLink(db, {
       tenantId: site.tenantId, studentId: picked.studentId, classId: picked.classId, origin: "site", baseDate: day, expiresAt: siteLinkExpiresAt(lastDay),
     });
@@ -275,9 +292,10 @@ export async function openSiteLink(input: { last4: unknown; name: unknown; choic
     }
     await logActionAs({ tenantId: site.tenantId, actorName: SITE_ACTOR }, {
       action: "lesson_report_video_link_issue", targetType: "student", targetLabel: `${picked.studentName} · ${picked.className}`,
-      metadata: { studentId: picked.studentId, classId: picked.classId, origin: "site", lastDay, homeworkDate: picked.homeworkDate },
+      metadata: { studentId: picked.studentId, classId: picked.classId, origin: "site", lastDay,
+        ...(picked.homeworkDate ? { homeworkDate: picked.homeworkDate } : { free: true }) },
     });
-    return { ok: true, url: `/v/${minted.token}?h=${picked.homeworkDate}` };
+    return { ok: true, url: picked.homeworkDate ? `/v/${minted.token}?h=${picked.homeworkDate}` : `/v/${minted.token}?free=1` };
   } catch (error) {
     console.error(JSON.stringify({ level: "error", scope: "videoSite.open", message: error instanceof Error ? error.message : "unknown" }));
     return { ok: false, code: "error", error: FAILED };

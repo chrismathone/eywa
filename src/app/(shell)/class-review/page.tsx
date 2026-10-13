@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { FaceTabs } from "@/components/face-tabs";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
@@ -13,9 +14,22 @@ import {
   observerLimitOf,
 } from "@/features/class-review/server/queries";
 import { GRADE_CUTS, GRADE_FALLBACK } from "@/features/class-review/checklist";
+import { classReviewFaces, resolveClassReviewTab } from "@/features/class-review/faces";
+import { PortfolioFace } from "./_components/portfolio/portfolio-face";
 import { ReviewTable } from "./_components/review-table";
 
-export const metadata = { title: "직원 평가 — 에이와" };
+type Sp = { tab?: string; teacher?: string };
+
+// 면마다 문서 제목을 달리해 창 타이틀바가 따라온다. 접두 "직원 평가"는 사이드바 라벨과 같아야 한다.
+// 열 수 없는 면의 이름은 제목에도 싣지 않는다(본문과 같은 판정).
+export async function generateMetadata({ searchParams }: { searchParams: Promise<Sp> }) {
+  const [sp, priv] = await Promise.all([searchParams, getReviewPrivileges()]);
+  const tab = resolveClassReviewTab(sp.tab, { portfolio: priv.seePortfolio });
+  return { title: `직원 평가${tab === "portfolio" ? " · 직원 포트폴리오" : ""} — 에이와` };
+}
+
+// 포트폴리오의 [지금 집계]가 이 화면에서 도는 서버 액션이다 — 기본 상한으로는 집계가 끝나기 전에 끊긴다.
+export const maxDuration = 120;
 
 /**
  * 수업 평가 체크리스트(참관) 목록 — 시트 "수업 상향화 체크리스트" 이식 초안(2026-08-04).
@@ -26,8 +40,29 @@ export const metadata = { title: "직원 평가 — 에이와" };
  * 내려온다(가림은 listClassReviews). 여기선 그 사실과 어긋나는 화면 요소만 걷어낸다:
  * 서버가 거절하는 '새 평가' 버튼(죽은 버튼)과 "제출된 채점들의 평균"이라는 캡션(본인 것 하나뿐이다).
  */
-export default async function ClassReviewPage() {
+export default async function ClassReviewPage({ searchParams }: { searchParams: Promise<Sp> }) {
   const viewer = await requireAccess("class_review");
+  const [sp, privileges] = await Promise.all([searchParams, getReviewPrivileges()]);
+  const faceOptions = { portfolio: privileges.seePortfolio };
+  const faces = classReviewFaces(faceOptions);
+  // 면이 하나뿐이면(포트폴리오를 못 보는 사람) 탭 줄을 그리지 않는다 — 종전 화면 그대로다.
+  const faceTabs = faces.length > 1
+    ? <FaceTabs faces={faces} active={resolveClassReviewTab(sp.tab, faceOptions)} ariaLabel="직원 평가 면 전환" />
+    : null;
+  if (resolveClassReviewTab(sp.tab, faceOptions) === "portfolio") {
+    return (
+      <div className="w-full min-w-0 space-y-5 p-6">
+        <PageHeader
+          eyebrow="운영"
+          title="직원 포트폴리오"
+          description="강사별 월간 점수와 근거를 봅니다. 매월 1일에 새로 시작해 말일에 마감합니다."
+          embedLabel="직원 포트폴리오"
+        />
+        {faceTabs}
+        <PortfolioFace role={viewer.systemRole} teacherId={sp.teacher ?? null} />
+      </div>
+    );
+  }
   // 자기 평가 전용 판정·평가지 소유 id는 서버 단일 소스에서('다른 강사 뷰'면 그 강사의 눈, #77).
   const [{ rows }, settings, priv, myFilter, rv] = await Promise.all([
     listClassReviews(),
@@ -73,6 +108,7 @@ export default async function ClassReviewPage() {
           </span>
         }
       />
+      {faceTabs}
 
       {rows.length === 0 ? (
         <div className="border-line rounded-2xl border border-dashed p-10 text-center">
