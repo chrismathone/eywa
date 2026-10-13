@@ -12,6 +12,9 @@
  *
  * ⚠️ 분모는 **현재 시간표 기준**이다(원장 확인 2026-07-23). 실제 수업 요일이 시간표와 어긋난
  *    반이 있어 `offSchedule`(요일 밖 작성일 수)을 함께 돌려준다 — 그 값이 크면 시간표를 의심할 것.
+ * 그날 그 반에 **수강 중인 학생이 없으면** 그날은 분모에서 뺀다(2026-10-13 — 받을 사람이 없는 날을
+ *    '안 씀'으로 세면 거짓 0%다. 실측: 재원 0명 반 2개가 매주 분모에 들어가 있었다).
+ *    판정 = [english-class-presence.ts](./english-class-presence.ts) `buildHasStudentsOn`.
  */
 
 /** 요일 키 — `class_schedules.day_of_week`와 같은 표기. */
@@ -73,11 +76,16 @@ export function sessionDates(from: string, to: string, holidays: ReadonlySet<str
 const EIE_ABBR: Record<string, string> = {
   LT: "letstalk", LS: "letsspeak", RTT: "readytotalk", DP: "drphonics",
   KW: "kopiwang", MEC: "mec", JP: "juniorplus", PL: "prelets", PJ: "prejunior",
+  LE: "letsexpress", RTS: "readytospeak",
 };
-/** 보드 이름 앞에 붙는 강사 닉네임(떼어낸다). 새 강사가 생기면 여기 추가. */
+/**
+ * 보드 이름 앞에 붙는 강사 닉네임(떼어낸다). 새 강사가 생기면 여기 추가.
+ * ⚠️ 빠지면 그 강사 반 전부가 "보드 없음"으로 떨어져 작성률이 0%로 보인다 — 2026-10-13 실측:
+ *    `Green`(김그린)·`Jennifer`(송지혜)가 없어 10월 영어 반 40개 중 23개가 매칭되지 않았다.
+ */
 const BOARD_NICKS = [
   "jane", "hannah", "daniella", "elsa", "charlie", "anna", "sam",
-  "kristine", "florence", "dom", "amy", "sarah", "hailey", "부원장", "교수부장",
+  "kristine", "florence", "dom", "amy", "sarah", "hailey", "green", "jennifer", "부원장", "교수부장",
 ];
 
 const squeeze = (s: string) => s.toLowerCase().replace(/[\s'’.\-_()[\]]/g, "");
@@ -105,11 +113,17 @@ export function boardKey(boardName: string): string {
  * 반별 작성률. `posts`는 적재된 (보드, 날짜) 전건.
  * 보드를 못 찾은 반은 `unmatched: true`로 표시하고 written=0으로 둔다 — 조용히 0%로 섞으면
  * "안 썼다"와 "보드가 없다"를 구분할 수 없다.
+ * `hasStudentsOn`을 주면 그날 학생이 없는 수업일은 분모에서 뺀다(없으면 종전대로 전부 센다).
  */
 export function computeEnglishRates(
   classes: readonly EnglishClassInput[],
   posts: readonly ClassPostDay[],
-  opts: { from: string; to: string; holidays?: Iterable<string> },
+  opts: {
+    from: string;
+    to: string;
+    holidays?: Iterable<string>;
+    hasStudentsOn?: (classId: string, date: string) => boolean;
+  },
 ): EnglishClassRate[] {
   const holidays = new Set(opts.holidays ?? []);
   const dates = sessionDates(opts.from, opts.to, holidays);
@@ -124,11 +138,15 @@ export function computeEnglishRates(
 
   return classes.map((c) => {
     const dows = new Set(c.dows);
-    const sessionDays = dates.filter((d) => dows.has(dowOf(d)));
+    const scheduledDays = dates.filter((d) => dows.has(dowOf(d)));
+    const sessionDays = opts.hasStudentsOn
+      ? scheduledDays.filter((d) => opts.hasStudentsOn!(c.classId, d))
+      : scheduledDays;
     const posted = daysByBoard.get(classKey(c.className));
     const written = posted ? sessionDays.filter((d) => posted.has(d)).length : 0;
+    // '요일 밖'은 시간표 불일치 신호라 시간표 요일 기준 그대로 — 학생 없는 날의 글을 여기 섞지 않는다.
     const offSchedule = posted
-      ? [...posted].filter((d) => d >= opts.from && d <= opts.to && !sessionDays.includes(d)).length
+      ? [...posted].filter((d) => d >= opts.from && d <= opts.to && !scheduledDays.includes(d)).length
       : 0;
     return {
       classId: c.classId,

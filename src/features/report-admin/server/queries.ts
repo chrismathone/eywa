@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { kstToday } from "@/lib/date-kst";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
+import { logDbError } from "@/lib/supabase/db-error";
 import { getTodaySchedule, getWeeklySchedule, getTeacherLabelsBySubject } from "@/features/timetable/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { fetchReportOptoutClassIds } from "@/features/classes/server/report-optout-ids";
@@ -36,6 +37,7 @@ import {
   type Dow,
   type EnglishClassInput,
 } from "../english-writing";
+import { buildHasStudentsOn, type ClassEnrollmentRow } from "../english-class-presence";
 import { classnoteModuleOn, classnoteSendOn } from "@/features/owner/classnote-gate";
 
 /**
@@ -473,17 +475,53 @@ async function getEnglishTeacherRates(
     return { classId: c.id as string, className: c.class_name as string, teacher: t?.display_name ?? null, dows };
   });
 
-  const { data: posts } = await supabase
-    .from("classnote_class_posts")
-    .select("board_name, posted_on")
-    .gte("posted_on", since)
-    .lte("posted_on", until);
+  // 보드×날짜 행은 수학 반 보드 게시분까지 함께 쌓여 한 달이면 1,000행에 다가간다 — 무페이징이면
+  // 조용히 잘려 작성일이 사라진다(B2). 재원 판정(그날 학생이 있는 반만 분모)은 운영실과 같은 함수.
+  // 재원 판정은 분모를 거르는 보조 재료라 실패하면 거르지 않고 넘어간다(작성률 면 전체를 죽이지 않는다 —
+  // fetchDelegateAttribution과 같은 결). 게시 기록은 분자 자체라 실패를 삼키지 않는다(거짓 0%보다 오류가 낫다).
+  const [posts, enrollmentRows, settings] = await Promise.all([
+    fetchAllPaged<{ board_name: string; posted_on: string }>((from, to) =>
+      supabase
+        .from("classnote_class_posts")
+        .select("board_name, posted_on")
+        .gte("posted_on", since)
+        .lte("posted_on", until)
+        .order("board_name")
+        .order("posted_on")
+        .range(from, to),
+    ),
+    fetchAllPagedInChunks<ClassEnrollmentRow>(
+      classes.map((c) => c.classId),
+      (chunk, from, to) =>
+        supabase
+          .from("enrollments")
+          .select("id, class_id, start_date, end_date, on_hold, is_transferred, attendance_days, student:students!inner(is_test)")
+          .eq("student.is_test", false)
+          .in("class_id", chunk)
+          .or(`start_date.is.null,start_date.lte.${until}`)
+          .or(`end_date.is.null,end_date.gte.${since}`)
+          .order("id")
+          .range(from, to),
+    ).catch((e: unknown) => {
+      logDbError(e, "report-admin/english-rates/enrollments");
+      return null;
+    }),
+    getTenantSettings(),
+  ]);
 
-  const settings = await getTenantSettings();
+  // 아직 오지 않은 날은 분모가 아니다(수학 경로도 미래일을 뺀다). 영어는 일간 칸이 없어 '오늘 이미 시작한
+  // 수업'을 가를 수 없고 게시는 수업 뒤에 올라오므로(워커 30분 주기) **어제까지**만 센다(2026-10-13 —
+  // 이번 주 보기면 남은 요일, 이번 달 보기면 남은 날 전부가 '안 씀'으로 섞여 있었다).
+  const lastCounted = until < today ? until : daysBefore(today, 1);
   const rows = computeEnglishRates(
     classes,
-    (posts ?? []).map((p) => ({ boardName: p.board_name as string, postedOn: String(p.posted_on).slice(0, 10) })),
-    { from: since, to: until, holidays: settings.operations.holidays.map((h) => h.date) },
+    posts.map((p) => ({ boardName: p.board_name, postedOn: String(p.posted_on).slice(0, 10) })),
+    {
+      from: since,
+      to: lastCounted,
+      holidays: settings.operations.holidays.map((h) => h.date),
+      hasStudentsOn: enrollmentRows ? buildHasStudentsOn(enrollmentRows) : undefined,
+    },
   );
 
   return foldByTeacher(rows).map((t) => ({
