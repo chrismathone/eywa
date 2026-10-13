@@ -244,6 +244,8 @@ const CANON_SURFACES = [
   "src/app/(shell)/owner/_components/navigation-section.tsx",
   "src/app/(shell)/class-review/_components/review-table.tsx",
   "src/app/(shell)/class-review/template/page.tsx",
+  // 직원 포트폴리오(2026-10-13, 새 면) — 평가 기간·평가 기준·지금 집계가 부품으로.
+  "src/app/(shell)/class-review/_components/portfolio/portfolio-board.tsx",
   "src/app/(shell)/documents/_components/document-toolbar.tsx",
   // 수학 학습 진도맵(2026-09-14, 새 화면·시안) — 보기 단위 선택이 부품으로.
   "src/features/math-progress-map/components/period-selector.tsx",

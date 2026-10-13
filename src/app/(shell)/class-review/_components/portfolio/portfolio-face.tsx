@@ -1,0 +1,30 @@
+import { EmptyState } from "@/components/empty-state";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import type { SystemRole } from "@/lib/permissions";
+import { kstDateOf, kstTimeOf } from "@/lib/date-kst";
+import { getPortfolioView } from "@/features/teacher-portfolio/server/queries";
+import { dayLabel } from "@/features/teacher-portfolio/view";
+import { PortfolioBoard, RefreshButton } from "./portfolio-board";
+
+/**
+ * 직원 평가 > 직원 포트폴리오 면. 저장된 달만 읽는다 — 무거운 집계는 매일 cron과 [지금 집계]가 한다.
+ * 저장 표가 아직 없거나(SQL 적용 전) 첫 집계 전이면 빈 상태로 안내한다(화면이 죽지 않는다 — #95).
+ */
+export async function PortfolioFace({ role, teacherId }: { role: SystemRole; teacherId: string | null }) {
+  const [view, canRefresh] = await Promise.all([getPortfolioView({ teacherId }), canWriteTenant(role, "class_review")]);
+  if (!view) return <EmptyState compact title="직원 포트폴리오를 볼 권한이 없습니다" />;
+  if (view.state !== "ready") {
+    return view.state === "tableMissing"
+      ? <EmptyState compact title="직원 포트폴리오를 준비하고 있습니다" description="저장 준비가 끝나면 강사별 월간 점수가 표시됩니다." />
+      : (
+        <EmptyState compact title="아직 집계한 점수가 없습니다" description="매일 새벽에 자동으로 집계합니다. 지금 바로 보려면 집계를 시작하세요."
+          action={canRefresh ? <RefreshButton label="지금 집계 시작" /> : undefined} />
+      );
+  }
+  const computedAt = view.selected.periods[0]?.closing.computedAt ?? null;
+  const day = kstDateOf(computedAt);
+  return (
+    <PortfolioBoard teachers={view.teachers} selected={view.selected} studentNames={view.studentNames} canRefresh={canRefresh}
+      computedLabel={day ? `${dayLabel(day)} ${kstTimeOf(computedAt) ?? ""}`.trim() : "—"} />
+  );
+}
