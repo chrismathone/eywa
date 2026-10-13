@@ -415,6 +415,9 @@ export const AUDIT_ACTIONS = {
   lesson_report_save: "수업보고서 저장",
   // 영상 제출 현황(장부)에서 회차 한 칸을 찍음 — 완료·미수행·미확인으로 되돌림(원장 2026-10-01).
   lesson_report_video_homework_mark: "영상 과제 제출 기록",
+  // 영상 제출 현황의 '숙제없음' 칸에서 그 날짜의 영상 숙제를 뒤늦게 냄(보고서 없이) · 그 숙제를 거둠(원장 2026-10-13).
+  lesson_report_video_homework_issue: "영상 숙제 따로 내기",
+  lesson_report_video_homework_issue_cancel: "따로 낸 영상 숙제 취소",
   share_link_revoke: "학부모 공유 링크 회수",
   share_link_reissue: "학부모 공유 링크 재발급",
   // 숙제 영상 제출 링크(0325a) — 발급(학생 상세 복사·수업보고서 글) · 끊기 · 학부모 업로드 완료.

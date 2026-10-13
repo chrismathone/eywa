@@ -1,0 +1,11 @@
+-- 메이크에듀 수납 동기화 권한 오류(42501) — 2026-10-10 아침부터 정기 동기화가 매번 '일부 실패'.
+--
+-- 연동 PC는 2026-10-08부터 DB에 전용 계정(eywa_sync_agent)으로 쓴다. 청구서(invoices)를 고치면 0354a의 트리거
+-- `relink_session_receipt_allocations`(security invoker)가 그 청구서의 회차 배분(invoice_session_terms)을 잠그고 따라 고치는데,
+-- 연동 PC 계정에는 그 표 권한이 없다 → 청구서 갱신이 통째로 거절된다(수납명·금액이 바뀐 청구서가 그 뒤로 반영되지 않았다).
+--
+-- 고침: 트리거 함수만 정의자 권한으로 돈다 — 청구서 한 장을 고칠 수 있는 쓰기가 **그 청구서의** 배분 행만 따라 고친다
+-- (전환 전 서버 키 동기화와 같은 결과). 연동 PC 계정에 배분 표(단가·배분액) 권한은 열지 않는다.
+--   · 트리거 함수(returns trigger)는 직접 부를 수 없다 — 이 함수로 다른 표를 읽거나 고치는 길은 없다.
+--   · 본문은 0354a 그대로다(검색 경로도 그대로 public 고정).
+alter function public.relink_session_receipt_allocations() security definer;

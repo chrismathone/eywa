@@ -76,16 +76,22 @@ describe("배선 가드", () => {
       expect(body.indexOf("await admit(")).toBeGreaterThan(0);
       expect(body.indexOf("await admit(")).toBeLessThan(body.indexOf("findCandidates("));
       // 숙제 목록도 횟수 판정·학생 확인을 지난 뒤에만 읽는다
-      expect(body.indexOf("findCandidates(")).toBeLessThan(body.indexOf("homeworkChoices("));
+      expect(body.indexOf("findCandidates(")).toBeLessThan(body.indexOf("pickChoices("));
     }
   });
   it("🔴 고른 숙제일은 주소·요청의 값을 믿지 않는다 — 제출 화면과 업로드 시작이 서버에서 다시 확인한다 · 사이트 링크는 숙제 없이는 못 연다", () => {
     const page = read("src", "app", "(share)", "v", "[token]", "page.tsx");
     expect(page).toContain("isAssignedHomeworkDate(db, link.tenant_id, { studentId: link.student_id, classId: link.class_id }, picked, kstToday())");
-    expect(page).toContain('if (link.origin === "site" && !homeworkDate) redirect("/v");');
+    expect(page).toContain('if (link.origin === "site" && !homeworkDate && !freeUpload) redirect("/v");');
+    // 숙제 없이 올리기는 사이트 링크 + 숙제를 고르지 않았을 때만(주소에 숙제일이 있으면 그 숙제가 이긴다)
+    expect(page).toContain('const freeUpload = link.origin === "site" && !homeworkDate && !picked && free === "1";');
     const start = read("src", "features", "video-submit", "server", "upload-start.ts");
     expect(start).toContain("isAssignedHomeworkDate(db, link.tenant_id, { studentId: link.student_id, classId: link.class_id }, input.homeworkDate, kstToday())");
-    expect(start).toContain('if (link.origin === "site" && !homeworkOk) return fail("invalid", HOMEWORK_GONE);');
+    expect(start).toContain('if (link.origin === "site" && input.homeworkDate != null && !homeworkOk) return fail("invalid", HOMEWORK_GONE);');
+    // 숙제 없이 올리면 메모가 있어야 하고 하루 상한을 넣기 전·넣은 뒤 두 번 센다
+    expect(start).toContain("if (free && !note) return fail(\"file\", NOTE_NEEDED);");
+    expect(start).toContain("if (free && (await freeUploadsToday(db, link)) >= SITE_FREE_UPLOADS_PER_DAY) return fail(\"limit\", FREE_LIMITED);");
+    expect(start).toContain("if (free && (await freeUploadsToday(db, link)) > SITE_FREE_UPLOADS_PER_DAY) {");
     // 숙제 확인은 횟수 제한을 지난 뒤, Drive 폴더·세션을 만들기 전에
     expect(start.indexOf("if (await overLimit(1))")).toBeLessThan(start.indexOf("isAssignedHomeworkDate("));
     expect(start.indexOf("isAssignedHomeworkDate(")).toBeLessThan(start.indexOf("ensureLinkTeacherFolder("));
@@ -99,7 +105,7 @@ describe("배선 가드", () => {
     expect(page).toContain("openHomeworkDates(db, link.tenant_id, [{ studentId: link.student_id, classId: link.class_id }], kstToday())");
     expect(page).toContain(".filter((date) => date !== homeworkDate)");
     // 올리기 사이트 링크에서만(학생 상세에서 복사한 링크는 숙제를 고르지 않는다)
-    expect(page).toContain('if (link.origin === "site" && homeworkDate) {');
+    expect(page).toContain('if (link.origin === "site") {');
     const form = read("src", "app", "(share)", "v", "[token]", "video-submit-form.tsx");
     expect(form).toContain("href={`/v/${props.token}?h=${hw.date}`}");
     // 고른 숙제가 없어졌으면(invalid) 같은 거절을 되풀이하지 않고 새로 고친다 — 페이지가 처음 화면으로 보낸다

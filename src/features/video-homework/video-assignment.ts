@@ -18,6 +18,8 @@ export function isVideoAssignableToDate(postedAt: string, homeworkDate: string):
 
 export type AssignableVideo = {
   id: string; postedAt: string; className: string | null; homeworkDate: string | null; source: string;
+  /** 학생이 숙제 없이 올리며 남긴 메모(올리기 사이트, 2026-10-13) — 무슨 영상인지. 없으면 null. */
+  note: string | null;
   postId: number | null; revision: number; excluded: boolean;
   playback: { preview: string; thumbnail: string; uploadedAt: string | null } | null;
 };

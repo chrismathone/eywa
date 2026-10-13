@@ -46,9 +46,11 @@ export function VideoAssignmentDialog({ row, fromDate, toDate, onClose }: { row:
         <div className="space-y-1"><p>영상 선택{videos.length ? ` (${videos.length}개)` : ""}</p>
           <VideoAssignmentSelect key={date} videos={videos} value={videoId} disabled={busy} onChange={setVideoId} />
           <p className="text-text-dim text-xs">{date === "exclude" ? "조회 기간의 각 숙제를" : "선택한 숙제를"} 낸 날부터 14일 뒤까지 게시된 영상만 표시합니다. 최대 100개까지 최신순으로 보여 줍니다.</p>
-          {!videos.length ? <p role="status">이 기간에 배정할 수 있는 업로드 완료 영상이 없습니다.</p> : null}
+          {!videos.length ? <p role="status">이 기간에 배정할 수 있는 업로드 완료 영상이 없습니다.</p>
+            : !selected ? <p className="text-text-dim text-xs">영상을 고르면 아래에서 바로 재생해 볼 수 있습니다. 저장을 누르기 전에는 아무것도 바뀌지 않습니다.</p> : null}
         </div>
         {selected ? <div className="space-y-2"><p>현재 연결: {selected.className ?? "반 미지정"} · {selected.homeworkDate ?? "날짜 자동 추정"}{selected.postId ? ` · 게시물 ${selected.postId}` : ""}</p>
+          {selected.note ? <p className="bg-bg-soft rounded-md px-3 py-2 break-keep">학생 메모: {selected.note}</p> : null}
           {selected.playback ? <HomeworkVideoPlayer key={selected.id} {...selected.playback} title={`${row.studentName} 배정할 영상`} /> : <p>이 영상은 아직 재생할 수 없습니다.</p>}</div> : null}
         <label className="block space-y-1"><span>변경 사유</span><input className="border-line w-full rounded border p-2" value={reason} maxLength={300} disabled={busy} onChange={e => setReason(e.target.value)} placeholder="예: 영어 게시물에 잘못 올린 수학 숙제" /></label>
         <p className="text-text-dim">저장하면 영상의 기존 연결이 바뀝니다. 수행 상태는 실제 영상과 제출 기한에 따라 갱신됩니다. 변경 전후와 처리자를 기록합니다.</p>

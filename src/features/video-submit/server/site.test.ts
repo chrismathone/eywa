@@ -74,7 +74,9 @@ function setup() {
 }
 const withEnglishOff = () => ({ ...settings(), report: { videoHomeworkPolicy: { ...settings().report.videoHomeworkPolicy, disabledSubjectKeys: ["english"] } } });
 const look = (name: unknown = "류태경", last4: unknown = "5678", ip = "1.1.1.1") => lookupSite({ last4, name, ip });
-const dates = (r: Awaited<ReturnType<typeof lookupSite>>) => (r.ok ? r.choices.map((c) => `${c.homeworkLabel}|${c.className}`) : r);
+// 숙제 줄만(숙제 없이 올리기 줄은 반마다 늘 하나씩 붙는다 — 아래 '숙제 없이 올리기' 묶음이 따로 본다).
+const dates = (r: Awaited<ReturnType<typeof lookupSite>>) => (r.ok ? r.choices.filter((c) => !c.free).map((c) => `${c.homeworkLabel}|${c.className}`) : r);
+const freeClasses = (r: Awaited<ReturnType<typeof lookupSite>>) => (r.ok ? r.choices.filter((c) => c.free).map((c) => c.className) : r);
 const label = formatShortKoreanDate;
 
 beforeEach(() => {
@@ -128,7 +130,7 @@ describe("뒷 4자리 + 이름 조회 — 선생님이 낸 영상 숙제 중 아
     // 같은 4자리를 쓰는 다른 학생(김민수)의 숙제는 없다. 학생·반·보고서 번호는 응답에 없다.
     expect(JSON.stringify(r)).not.toMatch(/김|33333333|44444444|55555555|"r\d"/);
     expect(r.ok && r.choices.every((c) => /^[0-9a-f]{40}$/.test(c.id))).toBe(true);
-    expect(r.ok && new Set(r.choices.map((c) => c.id)).size).toBe(2);
+    expect(r.ok && new Set(r.choices.filter((c) => !c.free).map((c) => c.id)).size).toBe(2);
     // 김민수 — 영어(학원 설정이 끈 과목) 반의 숙제는 없다
     expect(dates(await look("김민수"))).toEqual([`${label("2026-10-01")}|LT4`]);
   });
@@ -159,15 +161,17 @@ describe("뒷 4자리 + 이름 조회 — 선생님이 낸 영상 숙제 중 아
     const both = await look("류태경");
     expect(both.ok && [...new Set(both.choices.map((c) => c.studentLabel))].sort()).toEqual(["류**A", "류**B"]);
   });
-  it("🔴 번호·이름은 맞는데 올릴 숙제가 없으면 '찾지 못했다'가 아니라 '올릴 영상 숙제가 없다' — 영상 숙제가 없는 반의 학생이 검색이 안 되는 것으로 오해하지 않게", async () => {
+  it("🔴 번호·이름은 맞는데 올릴 반이 없으면 '찾지 못했다'가 아니라 '올릴 반이 없다' · 숙제만 없으면 반 줄(숙제 없이 올리기)만 선다", async () => {
     // ① 영상 숙제를 안 쓰는 반(영어)만 다니는 학생
     db.tables.enrollments = db.tables.enrollments!.filter((e) => !(e.student_id === S2 && e.class_id === C));
     const english = await look("김민수");
     expect(english).toMatchObject({ ok: false, code: "no_homework" });
-    expect(!english.ok && english.error).toContain("지금 올릴 영상 숙제가 없습니다");
-    // ② 숙제가 나간 적이 없다
+    expect(!english.ok && english.error).toContain("영상을 올릴 수 있는 반이 없습니다");
+    // ② 숙제가 나간 적이 없다 — 숙제 줄은 없고 반 줄(숙제 없이 올리기)만 선다(원장 2026-10-13 *"숙제가 없어도 업로드 할 수 있게"*)
     db.tables.lesson_reports = [];
-    expect(await look("류태경")).toMatchObject({ ok: false, code: "no_homework" });
+    const none = await look("류태경");
+    expect(dates(none)).toEqual([]);
+    expect(freeClasses(none)).toEqual(["LT4"]);
     // ③ 끝난 수강·휴원·아직 시작 전 — 지금 다니는 반이 없다
     setup();
     Object.assign(db.tables.enrollments![0]!, { end_date: "2026-10-01" });
@@ -185,7 +189,7 @@ describe("뒷 4자리 + 이름 조회 — 선생님이 낸 영상 숙제 중 아
     db.tables.student_homework_videos = [{ status: "uploaded", drive_file_id: "syntheticDriveFile123", id: "v1", tenant_id: T, student_id: S, posted_at: "2026-10-02T09:00:00+09:00", route: { classId: C, homeworkDate: "2026-09-29" } }];
     expect(dates(await look())).toEqual([`${label("2026-10-01")}|LT4`]);
     db.tables.student_homework_videos.push({ status: "uploaded", drive_file_id: "syntheticDriveFile123", id: "v-done", tenant_id: T, student_id: S, posted_at: "2026-10-02T11:00:00+09:00", route: { classId: C, homeworkDate: "2026-10-01" } });
-    expect(await look()).toMatchObject({ ok: false, code: "no_homework" });
+    expect(dates(await look())).toEqual([]);
     // 고르지 않고 올라온 영상(ClassNote·옛 링크)은 가장 오래된 미확인 숙제(9/29)부터 채운다 → 10/1이 남는다
     db.tables.video_homework_marks = [];
     db.tables.student_homework_videos = [{ status: "uploaded", drive_file_id: "syntheticDriveFile123", id: "v2", tenant_id: T, student_id: S, posted_at: "2026-10-01T21:00:00+09:00", route: { classId: C } }];
@@ -211,7 +215,7 @@ describe("뒷 4자리 + 이름 조회 — 선생님이 낸 영상 숙제 중 아
       // 08:00에 시작해 10:00에야 마무리된 사이트 업로드(10/1 숙제) — 게시 시각은 시작 시각이다
       { status: "uploaded", drive_file_id: "syntheticDriveFile123", id: "v2", tenant_id: T, student_id: S, posted_at: "2026-10-02T08:00:00+09:00", created_at: "2026-10-02T10:00:00+09:00", uploaded_at: "2026-10-02T10:00:00+09:00", route: { classId: C, homeworkDate: "2026-10-01" } },
     ];
-    expect(await look()).toMatchObject({ ok: false, code: "no_homework" });
+    expect(dates(await look())).toEqual([]);
   });
   it("🔴 같은 파일을 ClassNote에 먼저, 사이트에도 올렸으면 ClassNote 사본이 채웠던 숙제가 목록에 다시 선다(지문이 영상에 실린다)", async () => {
     const md5 = "0123456789abcdef0123456789abcdef";
@@ -222,7 +226,7 @@ describe("뒷 4자리 + 이름 조회 — 선생님이 낸 영상 숙제 중 아
     expect(dates(await look())).toEqual([`${label("2026-09-29")}|LT4`]);
     // 파일이 다르면 ClassNote 영상이 9/29를 그대로 채운다
     db.tables.student_homework_videos[0]!.md5 = "fedcba9876543210fedcba9876543210";
-    expect(await look()).toMatchObject({ ok: false, code: "no_homework" });
+    expect(dates(await look())).toEqual([]);
   });
   it("🔴 다른 지점의 검사 기록은 이 지점 숙제를 '낸 것'으로 만들지 않는다", async () => {
     db.tables.video_homework_marks = [{ id: "m9", tenant_id: OTHER_T, class_id: C, student_id: S, check_date: "2026-10-02", homework_date: "2026-10-01", submitted_date: "2026-10-02", status: "submitted", updated_at: "2026-10-02T10:00:00+09:00" }];

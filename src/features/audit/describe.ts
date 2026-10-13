@@ -2338,6 +2338,13 @@ export function auditDetail(
       return join(hw ? `숙제 ${hw}` : checked ? `검사 ${checked}` : null, label, str(m.submittedDate) ? `제출 ${str(m.submittedDate)}` : null);
     }
 
+    case "lesson_report_video_homework_issue":
+    case "lesson_report_video_homework_issue_cancel": {
+      // 보고서 없이 따로 낸 영상 숙제 — 어느 수업의 숙제인가(+ 낼 때는 제출 기한).
+      const hw = str(m.homeworkDate);
+      return join(hw ? `숙제 ${hw}` : null, str(m.deadline) ? `기한 ${str(m.deadline)}` : null);
+    }
+
     case "demo_roster_apply": {
       const label = str(m.label);
       const n = typeof m.students === "number" && Number.isFinite(m.students) ? `재원 ${m.students}명` : null;

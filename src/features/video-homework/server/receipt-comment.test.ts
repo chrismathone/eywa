@@ -7,6 +7,7 @@ vi.mock("@/lib/auth/perm-matrix", () => ({ accessLevelTenant: async () => m.full
 vi.mock("@/lib/auth/view-mode", () => ({ effectiveTeacherId: async () => "teacher" }));
 vi.mock("@/features/classes/server/delegation", () => ({ getTeachingClassIds: async () => ({ all: m.classes }) }));
 vi.mock("./ledger-queries", () => ({ loadClassVideos: m.load }));
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => m.db }));
 import { getVideoReceiptComment } from "./receipt-comment";
 beforeEach(() => {
   m.classes = ["c"]; m.full = false; m.load.mockReset();
@@ -30,6 +31,14 @@ it("다른 지점·담당 밖 반·존재하지 않는 학생의 영상은 조�
   m.classes = ["c"];
   expect(await getVideoReceiptComment("tenant", { ...input, studentId: "absent" })).toBeNull();
   expect(m.load).not.toHaveBeenCalled();
+});
+it("보고서 없이 따로 낸 숙제의 영상도 '지난 영상 숙제도 제출했습니다'로 읽는다", async () => {
+  m.db.tables.lesson_reports![1].video_homework = false; // 10/1 보고서는 '없음' — 숙제는 따로 냈다
+  m.load.mockResolvedValue([{ id: "v", studentId: "s", classId: "c", homeworkDate: "2026-10-01", postedAt: "2026-10-10T03:00:00Z",
+    playback: { preview: "preview", thumbnail: "thumbnail", uploadedAt: null } }]);
+  expect(await getVideoReceiptComment("tenant", input)).toBeNull();
+  m.db.tables.video_homework_extra_issues = [{ tenant_id: "tenant", class_id: "c", student_id: "s", homework_date: "2026-10-01", teacher_id: "teacher" }];
+  expect(await getVideoReceiptComment("tenant", input)).toBe("지난 영상 숙제도 제출했습니다.");
 });
 it("지난 보고서 발송 시각 이후 같은 날 제출도 반영한다", async () => {
   m.db.tables.lesson_reports![0].classnote_sent_at = "2026-10-08T17:00:00+09:00";

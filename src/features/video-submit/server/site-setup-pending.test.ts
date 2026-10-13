@@ -28,7 +28,7 @@ let db: FakeDb;
 const report = (id: string, student: string, klass: string, tenant = T) =>
   ({ id, tenant_id: tenant, student_id: student, class_id: klass, report_date: "2026-10-01", video_homework: true });
 const setSetting = (row: Record<string, unknown>) => { db.tables.homework_video_drive_settings = [{ tenant_id: OTHER_T, version: VERSION, ...row }]; };
-const classes = (r: Awaited<ReturnType<typeof lookupSite>>) => (r.ok ? r.choices.map((c) => c.className) : r);
+const classes = (r: Awaited<ReturnType<typeof lookupSite>>) => (r.ok ? r.choices.filter((c) => !c.free).map((c) => c.className) : r);
 const lookup = (tenant: unknown) => lookupSite({ last4: "5678", name: "류태경", ip: "1.1.1.1", tenant });
 const reasonOf = async (tenant: string) => {
   const availability = await videoSubmitAvailability(tenant, settings() as never, m.db as never);
