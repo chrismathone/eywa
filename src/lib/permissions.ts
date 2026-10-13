@@ -50,6 +50,7 @@ export const MENU_KEYS = [
   "enrollment",
   "consultations",
   "withdrawals",
+  "withdrawal_reports",
   "retention",
   "newcomers",
   "ecs",
@@ -98,6 +99,7 @@ export const MENU_LABEL: Record<MenuKey, string> = {
   enrollment: "콜&상담",
   consultations: "원생상담",
   withdrawals: "퇴원관리",
+  withdrawal_reports: "퇴원보고서",
   retention: "이탈 방어",
   newcomers: "신규생 관리",
   ecs: "영어 강사 시트",
@@ -163,6 +165,7 @@ export const TEACHER_MENU_KEYS = [
   // 수업 평가 — 강사에겐 **자기 평가 전용**(본인 평가지의 본인 채점만, self-only.ts). 기본값 none이라
   // 학원설정에서 열어야 보인다. 남의 평가지·평가자 점수는 조회 초크포인트에서 잘려 나간다.
   "class_review",
+  "withdrawal_reports",
   "documents", // 서식 저장소 — 강사는 readonly(빈 양식 다운로드 용도)
 ] as const satisfies readonly MenuKey[];
 
@@ -194,6 +197,7 @@ export const MENU_ACCESS: AccessMatrix = {
   consultations: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "full", accountant: "none", viewer: "readonly", student: "none" },
   // 강사=none — 전체 퇴원 학생(테넌트 전역, 강사 스코핑 없음)이라 누수. 강사 메뉴엔 없음(담당 교육 페이지만).
   withdrawals: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "full", accountant: "full", viewer: "readonly", student: "none" },
+  withdrawal_reports: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "none", accountant: "none", viewer: "none", student: "none" },
   // 이탈 방어(리텐션) — 위험도 기반 재등록 방어. 강사는 담당 학생만(scoped), 회계는 매출 위험 열람.
   retention: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "full", accountant: "readonly", viewer: "readonly", student: "none" },
   // 신규생 관리 — 신입 등록 후 90일 체크리스트(사전 콜·첫 수업 안내·OJT·만족도 콜). **데스크 업무**라
@@ -390,6 +394,7 @@ const PATH_SEGMENT_TO_MENU: Record<string, MenuKey> = {
   enrollment: "enrollment",
   consultations: "consultations",
   withdrawals: "withdrawals",
+  "withdrawal-reports": "withdrawal_reports",
   retention: "retention",
   newcomers: "newcomers",
   ecs: "ecs",

@@ -10,6 +10,7 @@ import { collectAuditNameIds, systemActorMatches, SYSTEM_ACTOR_PREFIX } from "..
 // 운영 감사로그 액션 키 + 라벨 — logAction 호출부와 뷰어 필터가 공유.
 // ⚠️ 새 logAction 액션 키는 반드시 여기 등록(안 하면 뷰어에 영문 키 원문 노출) + describe.ts에 상세 한글화 추가.
 export const AUDIT_ACTIONS = {
+  withdrawal_report_update: "퇴원보고서 처리",
   // ── 학원 설정 감사 커버리지(2026-08-27 원장 점검) — 연동·프롬프트·강의실 수정·팝업 수정이
   //    통째로 무기록이었다. 특히 연동은 user_integrations에 updated_by조차 없어 흔적이 0이었다.
   integration_sync_toggle: "makeedu 자동 동기화 토글",

@@ -1914,6 +1914,36 @@ export const labMenuAssignments = pgTable("lab_menu_assignments", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+// Laboratory withdrawal reports. Only service transactions write these records.
+export const withdrawalReports = pgTable("withdrawal_reports", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  studentId: uuid("student_id").notNull().references(() => students.id, { onDelete: "restrict" }),
+  requestedBy: uuid("requested_by").notNull().references(() => users.id, { onDelete: "restrict" }),
+  teacherId: uuid("teacher_id").notNull().references(() => users.id, { onDelete: "restrict" }),
+  managerId: uuid("manager_id").notNull().references(() => users.id, { onDelete: "restrict" }),
+  directorId: uuid("director_id").notNull().references(() => users.id, { onDelete: "restrict" }),
+  exitKind: text("exit_kind").notNull(), subjects: text("subjects").array().notNull(),
+  effectiveDate: date("effective_date").notNull(), requestNote: text("request_note").notNull().default(""),
+  snapshot: jsonb("snapshot").notNull(), body: jsonb("body").notNull().default(sql`'{}'::jsonb`),
+  status: text("status").notNull().default("requested"), revision: integer("revision").notNull().default(1),
+  managerApprovedAt: timestamp("manager_approved_at", { withTimezone: true }),
+  directorApprovedAt: timestamp("director_approved_at", { withTimezone: true }),
+  appliedAt: timestamp("applied_at", { withTimezone: true }), lastComment: text("last_comment"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => [index("withdrawal_reports_tenant_created").on(t.tenantId, t.createdAt),
+  uniqueIndex("withdrawal_reports_one_pending").on(t.tenantId, t.studentId).where(sql`status not in ('completed','canceled')`)]);
+export const withdrawalReportEvents = pgTable("withdrawal_report_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  reportId: uuid("report_id").notNull().references(() => withdrawalReports.id, { onDelete: "cascade" }),
+  actorId: uuid("actor_id").references(() => users.id, { onDelete: "restrict" }),
+  action: text("action").notNull(), fromStatus: text("from_status"), toStatus: text("to_status").notNull(),
+  body: jsonb("body"), comment: text("comment"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => [index("withdrawal_report_events_report").on(t.tenantId, t.reportId, t.createdAt)]);
+
 // === super_admin_audit_logs (SaaS owner 액션 추적) ===
 // 모든 super-admin mutation을 INSERT-only로 기록. service_role로만 write.
 export const superAdminAuditLogs = pgTable(

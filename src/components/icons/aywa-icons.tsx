@@ -1269,6 +1269,7 @@ export const MENU_ICON = {
   enrollment: "userPlus",
   consultations: "messages",
   withdrawals: "userMinus",
+  withdrawal_reports: "report",
   retention: "shield",
   // 신규생 관리 — 체크리스트 7항목이 정체성이다(이탈 방어의 "방패"와 뜻이 달라 그림도 다르다).
   newcomers: "userCheck",

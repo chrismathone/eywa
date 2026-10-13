@@ -8,6 +8,7 @@ import { kstToday } from "@/lib/date-kst";
 import { closeActiveEnrollmentsClamped, listOpenEnrollments } from "@/features/students/server/enrollment-sync";
 import { recordMathWithdrawalToSheet } from "@/features/withdrawals/server/withdrawal-sheet";
 import type { createClient } from "@/lib/supabase/server";
+import { applyDueWithdrawalReports } from "@/features/withdrawal-reports/server/scheduled";
 
 /**
  * **퇴원 예약을 그날 적용**하는 cron(매일 00:05 KST — 퇴원일이 된 날 자정 직후).
@@ -22,6 +23,7 @@ import type { createClient } from "@/lib/supabase/server";
  * ⚠️ 하루를 놓쳐도(cron 실패) 다음 날 `withdrawn_at ≤ 오늘`로 다시 잡힌다 — 종료일은 예약된 날 그대로다.
  */
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 const ACTOR = "시스템(퇴원일 도래)";
 
@@ -114,11 +116,13 @@ export async function GET(req: Request) {
       reportError(e, { where: "apply-due-withdrawals", studentId: s.id });
     }
   }
-  if (applied + failed > 0) {
+  const reports = await applyDueWithdrawalReports();
+  if (applied + failed + reports.applied + reports.blocked > 0) {
+    revalidatePath("/withdrawal-reports", "layout");
     revalidatePath("/students", "layout");
     revalidatePath("/withdrawals", "layout");
     revalidatePath("/dashboard", "layout");
     revalidatePath("/timetable", "layout");
   }
-  return NextResponse.json({ ok: failed === 0, applied, failed });
+  return NextResponse.json({ ok: failed + reports.failed === 0, applied, failed, reports });
 }

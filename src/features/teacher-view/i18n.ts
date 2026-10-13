@@ -191,6 +191,7 @@ export const SHEET_DICT = {
   "menu.item.calendar": { ko: "캘린더", en: "Academy calendar" },
   "menu.item.approvals": { ko: "전자결재", en: "Approvals" },
   "menu.item.class_review": { ko: "직원 평가", en: "Staff review" },
+  "menu.item.withdrawal_reports": { ko: "퇴원보고서", en: "Withdrawal reports" },
   "menu.item.documents": { ko: "데이터베이스", en: "Documents" },
 
   // ── 면 전환(주간 | 달력 | 진도표 | 계획) ──────────────────────────

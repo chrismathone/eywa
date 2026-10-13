@@ -1,5 +1,11 @@
 # Supabase 마이그레이션 — 적용 방식·순서·현재 상태
 
+## 2026-10-13 실험실 퇴원보고서
+
+`20261013203000_withdrawal_reports.sql`은 보고서·처리 이력·서비스 전용 상태 전이 RPC·실험실 메뉴 배치를 추가한다. 기존 원생·수강 표를 변경하지 않는다. `20261013210000_withdrawal_report_reasons.sql`은 병행 추가된 질병·권고퇴원 사유를 반영한다. `20261013215000_withdrawal_report_request_recovery.sql`은 요청자와 지정 원장이 퇴직해 고착된 요청을 현재 원장이 취소할 수 있게 한다. 지정자만 순서대로 승인하는 규칙은 유지한다.
+
+대상 프로젝트를 확인하는 `node --env-file=.env.local scripts/withdrawal-reports-db.mjs --apply` → `--upgrade` → `--test`로 이 기능만 적용·검증한다. 테스트의 가상 지점·학생·수강·알림은 전부 롤백된다. 앱은 적용 전에도 기존 퇴원관리·예약 작업을 유지한다. 일반 브라우저 역할에는 새 표의 읽기·쓰기와 RPC 실행을 부여하지 않는다. 보고서 승인 뒤 실제 퇴원일이 된 예약은 기존 `apply-due-withdrawals` 작업이 처리한다.
+
 ## 2026-10-04 오늘의수학 v2 원본 SQL (운영 적용 완료)
 
 `0337a_todays_math_sync_v2.sql`은 원본 제어·권한 세대·트랜잭션 outbox·동결 스냅샷·일회 SSO 코드와 서비스 역할 전용 RPC를 추가한다. Supabase CLI 2.81.3이 만든 `20261003083350_todays_math_sync_v2.sql`을 아래 alpha 규칙의 다음 번호로 옮겼다. 기존 업무 컬럼은 변경하지 않으며 최초 binding은 shadow, 구성 RPC는 기본 미리보기이다. 실제 PostgreSQL 17 격리 검증 및 운영 적용을 완료했다. 인터페이스·적용 전 조건·검증은 [원본 SQL 보고서](../../docs/todays-math-sync-source-sql-report.md), 현재 상태는 [운영 적용 기록](../../docs/todays-math-sync-production-2026-10-03.md)을 참조한다.
