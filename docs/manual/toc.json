@@ -99,7 +99,12 @@
           "slug": "makeups",
           "title": "보강관리",
           "module": "makeups",
-          "faces": [{ "slug": "overview", "title": "접수·예약·실시 검토" }]
+          "faces": [
+            {
+              "slug": "overview",
+              "title": "접수·예약·실시 검토"
+            }
+          ]
         },
         {
           "slug": "classes",
@@ -307,6 +312,10 @@
               "title": "노선 편성"
             },
             {
+              "slug": "week",
+              "title": "주간 시간표"
+            },
+            {
               "slug": "today",
               "title": "오늘 등하원"
             },
@@ -453,7 +462,10 @@
               "slug": "subjects",
               "title": "과목 운영"
             },
-            { "slug": "makeups", "title": "보강 운영" },
+            {
+              "slug": "makeups",
+              "title": "보강 운영"
+            },
             {
               "slug": "billing",
               "title": "수납·청구"
