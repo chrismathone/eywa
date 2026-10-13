@@ -14,6 +14,7 @@ import {
   type RecordingOwner,
 } from "@/lib/recording-recovery";
 import { useBrowserRecording } from "@/components/forms/use-browser-recording";
+import { useMicrophone } from "@/components/forms/use-microphone";
 import { startBrowserRecording, stopBrowserRecording, dismissBrowserRecording } from "@/lib/browser-recording";
 import { withEmbed } from "@/components/workspace/embed-context";
 import { useInFrame } from "@/components/workspace/use-in-frame";
@@ -64,6 +65,7 @@ export function NewMeetingForm({ onSuccess, recordingOwner }: { onSuccess?: () =
   const recordingScope = title.trim() ? { ...recordingOwner, recordKey: `meeting:${JSON.stringify([title.trim(), heldAt.slice(0, 10)])}`, label: title.trim() } : null;
 
   const recorded = useBrowserRecording("meeting", recordingScope, (f, id) => { setFile(f); setRecoveryId(id); });
+  const microphone = useMicrophone();
   const isRecording = recorded.recording;
   const recordSeconds = recorded.seconds;
 
@@ -398,12 +400,12 @@ export function NewMeetingForm({ onSuccess, recordingOwner }: { onSuccess?: () =
             <button
               type="button"
               onClick={startRecording}
-              disabled={busy || recorded.otherRecording}
+              disabled={busy || recorded.otherRecording || !microphone.available}
               className="border-border hover:border-foreground/40 hover:bg-accent/30 flex flex-col items-center gap-1.5 rounded-md border border-dashed px-3 py-5 transition"
             >
               <Mic className="text-muted-foreground size-5" />
-              <span className="text-foreground block text-sm font-medium">바로 녹음</span>
-              <span className="text-muted-foreground text-xs">브라우저 마이크 사용</span>
+              <span className="text-foreground block text-sm font-medium">{microphone.available ? "바로 녹음" : microphone.message}</span>
+              {microphone.available ? <span className="text-muted-foreground text-xs">브라우저 마이크 사용</span> : null}
             </button>
           </div>
         )}

@@ -136,7 +136,7 @@ async function submitInlineRecording() {
   vi.stubGlobal("MediaRecorder", FakeRecorder);
   Object.defineProperty(navigator, "mediaDevices", {
     configurable: true,
-    value: { getUserMedia: async () => ({ getTracks: () => [] }) },
+    value: { getUserMedia: async () => ({ getTracks: () => [] }), enumerateDevices: async () => [{ kind: "audioinput" }] },
   });
   Object.defineProperty(navigator, "locks", { configurable: true, value: {
     request: (_name: string, _options: unknown, callback: (lock: object) => Promise<void>) => callback({}),

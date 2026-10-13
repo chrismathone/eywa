@@ -1,0 +1,82 @@
+.anchor {
+  position: fixed;
+  width: 48px;
+  height: 48px;
+  z-index: 10000;
+}
+
+.capsule {
+  position: absolute;
+  top: 0;
+  width: 48px;
+  height: 48px;
+  border: 2px solid var(--danger);
+  border-radius: 999px;
+  background: var(--background);
+  color: var(--foreground);
+  box-shadow: 0 4px 18px rgb(0 0 0 / 14%);
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  transition: width 340ms cubic-bezier(.22, 1, .36, 1);
+}
+
+.anchor[data-side="right"] .capsule { left: 0; }
+.anchor[data-side="left"] .capsule { right: 0; }
+.capsule:focus-visible { outline: 2px solid var(--danger); outline-offset: 4px; }
+.capsule:focus-visible { width: 128px; }
+@media (hover: hover) {
+  .capsule:hover { width: 128px; }
+}
+
+.microphone {
+  position: absolute;
+  top: 0;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.microphone svg { width: 19.2px; height: 19.2px; }
+.anchor[data-side="right"] .microphone { left: 0; }
+.anchor[data-side="left"] .microphone { right: 0; }
+
+.timer {
+  position: absolute;
+  top: 0;
+  height: 44px;
+  width: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateX(-6px);
+  transition: opacity 180ms ease, transform 300ms cubic-bezier(.22, 1, .36, 1);
+}
+.anchor[data-side="right"] .timer { right: 0; padding-right: 8px; }
+.anchor[data-side="left"] .timer { left: 0; padding-left: 8px; transform: translateX(6px); }
+.capsule:focus-visible .timer { opacity: 1; transform: translateX(0); transition-delay: 80ms; }
+@media (hover: hover) {
+  .capsule:hover .timer { opacity: 1; transform: translateX(0); transition-delay: 80ms; }
+}
+.anchor[data-dragging="true"] .capsule { width: 48px; cursor: grabbing; }
+.anchor[data-dragging="true"] .timer { opacity: 0; transition-delay: 0ms; }
+
+.panel {
+  position: fixed;
+  z-index: 10001;
+  width: 320px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  visibility: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .capsule, .timer { transition: none; }
+}

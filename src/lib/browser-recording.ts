@@ -3,6 +3,7 @@
  * Audio stays local until the originating form explicitly uploads it.
  */
 import { downloadFile } from "./audio-upload";
+import { microphoneErrorMessage, microphoneMessage, refreshMicrophone } from "./microphone";
 import { startRecoverySession, saveChunk, recordingScopeKey, type RecordingMeta, type RecordingOwner, type RecordingScope, type RecoveryKind } from "./recording-recovery";
 
 export type BrowserRecording = {
@@ -15,6 +16,7 @@ export type BrowserRecording = {
   meta?: RecordingMeta;
   file?: File;
   error?: string;
+  errorCode?: string;
 };
 type Attempt = {
   request: BrowserRecording;
@@ -110,7 +112,7 @@ function clean(current: Attempt) {
  * Never silently fall back to an unprotected concurrent recorder.
  */
 async function reserveMicrophone(current: Attempt): Promise<boolean> {
-  if (!navigator.locks) throw new Error("이 브라우저에서는 녹음을 안전하게 시작할 수 없습니다. 최신 브라우저로 다시 열어 주세요.");
+  if (!navigator.locks) throw new DOMException("Web Locks unavailable", "NotSupportedError");
   return new Promise<boolean>((resolve, reject) => {
     void navigator.locks.request(`eywa-audio:${JSON.stringify([current.request.scope.tenantId, current.request.scope.userId])}`, { ifAvailable: true }, async (lock) => {
       if (!lock) { resolve(false); return; }
@@ -129,12 +131,12 @@ function finish(current: Attempt) {
   if (attempt !== current || current.retired) return;
   attempt = null;
   if (!meta || blob.size === 0) {
-    publish({ ...current.request, seconds: value?.seconds ?? 0, status: "failed", error: value?.error ?? "녹음된 소리가 없습니다. 마이크를 확인한 뒤 다시 녹음해 주세요." });
+    publish({ ...current.request, seconds: value?.seconds ?? 0, status: "failed", errorCode: value?.errorCode, error: value?.error ?? "녹음된 소리가 없습니다. 마이크를 확인한 뒤 다시 녹음해 주세요." });
     return;
   }
   const file = new File([blob], meta.fileName!, { type: mime });
   downloadFile(file);
-  publish({ ...current.request, seconds: value?.seconds ?? 0, status: "ready", file,
+  publish({ ...current.request, seconds: value?.seconds ?? 0, status: "ready", file, errorCode: value?.errorCode,
     error: value?.error ?? (!current.requestedStop ? "녹음이 예기치 않게 중단되었습니다. 중단 전 녹음은 보관했습니다." : undefined) });
 }
 
@@ -147,6 +149,10 @@ export async function startBrowserRecording(kind: RecoveryKind, scope: Recording
     href: window.location.pathname + window.location.search,
     status: "starting", seconds: 0,
   };
+  const microphone = await refreshMicrophone();
+  if (owner && (owner.tenantId !== request.scope.tenantId || owner.userId !== request.scope.userId)) return "작성 화면을 다시 열어 주세요.";
+  if (attempt || recordingIsActive(snapshot)) return "이미 녹음 중입니다. 녹음 아이콘에서 진행 중인 녹음을 확인해 주세요.";
+  if (microphone !== "available") return microphoneMessage(microphone);
   const current: Attempt = { request, chunks: [], requestedStop: false, retired: false };
   attempt = current;
   publish(request);
@@ -163,7 +169,7 @@ export async function startBrowserRecording(kind: RecoveryKind, scope: Recording
     current.stream = stream;
     if (attempt !== current || current.retired) { clean(current); return null; }
     const mime = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"].find((type) => MediaRecorder.isTypeSupported(type));
-    if (!mime) throw new Error("이 브라우저는 음성 녹음을 지원하지 않습니다.");
+    if (!mime) throw new DOMException("No recording format", "NotSupportedError");
     const recorder = new MediaRecorder(stream, { mimeType: mime });
     current.recorder = recorder;
     const meta = await startRecoverySession(kind, mime, request.scope);
@@ -178,7 +184,7 @@ export async function startBrowserRecording(kind: RecoveryKind, scope: Recording
     recorder.onstop = () => finish(current);
     recorder.onerror = (event) => {
       const code = (event as Event & { error?: DOMException }).error?.name ?? "UnknownError";
-      patch(current, { error: `녹음 오류가 발생했습니다 (${code}). 중단 전 녹음은 보관합니다.` });
+      patch(current, { errorCode: code, error: "녹음 오류가 발생했습니다. 중단 전 녹음은 보관합니다. 마이크 연결 상태를 확인해 주세요." });
       // MediaRecorder emits its final dataavailable and stop after the error.
       console.error("[browser-recording]", code);
     };
@@ -201,8 +207,9 @@ export async function startBrowserRecording(kind: RecoveryKind, scope: Recording
     if (attempt !== current || current.retired) return null;
     attempt = null;
     const code = error instanceof Error ? error.name : "UnknownError";
-    const message = error instanceof Error ? error.message : String(error);
-    publish({ ...current.request, status: "failed", error: `녹음을 시작하지 못했습니다 (${code}): ${message}` });
+    console.error("[browser-recording] start", code);
+    publish({ ...current.request, status: "failed", errorCode: code, error: microphoneErrorMessage(error) });
+    void refreshMicrophone();
     return null;
   }
 }
