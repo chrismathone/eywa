@@ -8,6 +8,7 @@ import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { createClient } from "@/lib/supabase/server";
 import { READONLY_TEACHER_VIEW_ERROR } from "@/lib/auth/view-as-message";
 import { tenantViewWriteError } from "@/lib/auth/tenant-view";
+import { VIEW_MODE_COOKIE, VIEW_AS_COOKIE } from "@/lib/auth/view-preference";
 
 /**
  * '다른 강사 뷰' — 역할·개인 권한에 따라 전체 편집 또는 읽기 전용으로 연다 (원장 2026-08-19).
@@ -24,10 +25,10 @@ import { tenantViewWriteError } from "@/lib/auth/tenant-view";
 
 // 뷰 전환(겸직) 쿠키 — 관리자 계열 역할이 "강사뷰"를 켜면 세팅. 값 "teacher"만 의미 있음(그 외/부재=관리자뷰).
 // httpOnly(서버만 읽음) + path "/"(모든 셸 경로 공유, 창=iframe도 같은 도메인이라 전파).
-export const VIEW_MODE_COOKIE = "eywa-view";
+export { VIEW_MODE_COOKIE } from "@/lib/auth/view-preference";
 
 // '다른 강사 뷰' 대상 쿠키 — 값 = 대상 강사의 user id. VIEW_MODE_COOKIE=teacher와 함께일 때만 의미.
-export const VIEW_AS_COOKIE = "eywa-view-as";
+export { VIEW_AS_COOKIE } from "@/lib/auth/view-preference";
 
 /**
  * 풀셸(관리자 계열) 역할 판별 — 강사/학생은 미니셸 전용 역할이라 뷰 전환 대상 아님.

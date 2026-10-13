@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { reportError } from "@/lib/observability/report-error";
+import { VIEW_RESET_PATH } from "@/lib/auth/view-preference";
 
 /**
  * 셸 라우트 오류 경계 — **화면이 검게 죽지 않게** 한다.
@@ -45,6 +46,9 @@ export default function ShellError({
             새로고침
           </Button>
         </div>
+        <a href={VIEW_RESET_PATH} target="_top" className="text-primary mt-4 inline-block text-sm underline underline-offset-4">
+          원래 화면으로 돌아가기
+        </a>
         {error.digest ? (
           <p className="text-text-faint num mt-4 text-xs">오류 번호 {error.digest}</p>
         ) : null}

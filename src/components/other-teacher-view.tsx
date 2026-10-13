@@ -14,7 +14,6 @@ import {
 import { useOwnTeacherViewSwitch } from "@/components/view-mode-toggle";
 import {
   listTeacherViewTargets,
-  switchToAdminView,
   switchToOtherTeacherView,
   type TeacherViewTarget,
 } from "@/features/shell/view-actions";
@@ -22,6 +21,7 @@ import { TONE_SOFT } from "@/lib/design/semantic-color";
 import { sheetT, type SheetLang } from "@/features/teacher-view/i18n";
 import { useSheetLang } from "@/features/teacher-view/lang-context";
 import { useTimetableDisplay } from "@/features/teacher-view/use-timetable-display";
+import { VIEW_RESET_PATH } from "@/lib/auth/view-preference";
 
 // 사이드바 레일과 동일 톤의 모핑 이징.
 const EASE = "ease-[cubic-bezier(0.22,0.61,0.36,1)]";
@@ -172,17 +172,10 @@ export function TeacherPeerViewSwitcher() {
 }
 
 export function ViewAsChip({ name, lang, readonly = true }: { name: string; lang: SheetLang; readonly?: boolean }) {
-  const [pending, start] = useTransition();
   return (
-    <button
-      type="button"
-      disabled={pending}
-      onClick={() =>
-        start(async () => {
-          const dest = await switchToAdminView();
-          assignTop(dest);
-        })
-      }
+    <a
+      href={VIEW_RESET_PATH}
+      target="_top"
       title={sheetT(lang, "chrome.viewAs.returnTitle")}
       className={`${TONE_SOFT.special} flex h-7 cursor-pointer items-center gap-1 rounded-full px-2.5 text-xs font-semibold disabled:opacity-60`}
     >
@@ -196,6 +189,6 @@ export function ViewAsChip({ name, lang, readonly = true }: { name: string; lang
       </span>
       <span className="shrink-0 font-medium opacity-80">· {sheetT(lang, readonly ? "chrome.viewAs.end" : "chrome.viewAs.editEnd")}</span>
       <EyIcon name="logOut" size={12} strokeWidth={2.2} className="shrink-0" />
-    </button>
+    </a>
   );
 }

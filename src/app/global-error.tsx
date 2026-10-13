@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { reportError } from "@/lib/observability/report-error";
+import { VIEW_RESET_PATH } from "@/lib/auth/view-preference";
 
 /**
  * 최후의 오류 경계 — **루트 레이아웃이 던졌을 때**만 여기까지 온다(그 위엔 아무것도 없다).
@@ -68,6 +69,11 @@ export default function GlobalError({
           >
             다시 시도
           </button>
+          <p style={{ marginTop: 16, fontSize: 14 }}>
+            <a href={VIEW_RESET_PATH} target="_top" style={{ color: "#153e75", textDecoration: "underline" }}>
+              원래 화면으로 돌아가기
+            </a>
+          </p>
           {error.digest ? (
             <p style={{ marginTop: 16, fontSize: 11, color: "#121212" }}>오류 번호 {error.digest}</p>
           ) : null}

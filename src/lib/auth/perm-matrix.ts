@@ -170,7 +170,10 @@ export const getUserPermMatrix = cache(async (): Promise<AccessMatrix> => {
     applyUserOverrides(resolveMatrix(settings.permissions.overrides), target.id, target.systemRole, settings.permissions.userOverrides),
     settings.modules.disabled), normalizeMakeupSettings(settings.makeups).mode), target.tenantId, target.systemRole);
   return capLaboratory(Object.fromEntries(MENU_KEYS.map((menu) => {
-    const value = targetMatrix[menu][target.systemRole];
+    // 원스크린은 역할 메뉴가 아니라 검증된 강사뷰의 홈이다. 겸직 직원은 실제 역할(admin 등)의
+    // 값이 none이므로 이를 teacher 행에 복사하면 /onescreen → /onescreen 리다이렉트가 반복된다.
+    // 본인 겸직 강사뷰와 동일하게 이 메뉴만 teacher 행을 쓰고, 나머지는 대상의 개인 권한을 유지한다.
+    const value = targetMatrix[menu][menu === "teacher_onescreen" ? "teacher" : target.systemRole];
     const level = target.access === "readonly" && (value === "full" || value === "scoped") ? "readonly" : value;
     return [menu, { ...actor[menu], [user.systemRole]: level, [target.systemRole]: level, teacher: level }];
   })) as AccessMatrix, user.tenantId);

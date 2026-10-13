@@ -1,9 +1,11 @@
 import "server-only";
 import { notFound, redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { canAccess, type MenuKey } from "@/lib/permissions";
 import { getCurrentUser, type CurrentUser } from "./current-user";
 import { getUserPermMatrix } from "./perm-matrix";
 import { landingPath } from "./teacher-home";
+import { accessFallbackPath } from "./view-preference";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { isModuleEnabled, moduleOfMenuKey } from "@/lib/modules";
 import { isLaboratoryMenuAvailable } from "@/lib/laboratory/server";
@@ -34,7 +36,7 @@ export async function requireAccess(menu: MenuKey): Promise<CurrentUser> {
     if (!(await isLaboratoryMenuAvailable(user.tenantId, menu))) notFound();
     if (menu === "makeups" && (await getTenantSettings()).makeups.mode === "off") notFound();
     if (mod && !isModuleEnabled((await getTenantSettings()).modules.disabled, mod)) notFound();
-    redirect(await landingPath(user.systemRole, matrix));
+    redirect(accessFallbackPath((await headers()).get("x-pathname") ?? "", await landingPath(user.systemRole, matrix)));
   }
   return user;
 }

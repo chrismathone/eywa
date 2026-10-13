@@ -1,12 +1,22 @@
 import { describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
+const auth = vi.hoisted(() => ({ claims: vi.fn(async () => ({ data: null, error: null })) }));
 
 vi.mock("@supabase/ssr", () => ({
-  createServerClient: () => ({ auth: { getClaims: async () => ({ data: null, error: null }) } }),
+  createServerClient: () => ({ auth: { getClaims: auth.claims } }),
 }));
 vi.mock("./env", () => ({ SUPABASE_URL: "https://example.supabase.co", SUPABASE_ANON_KEY: "test" }));
 
 import { updateSession } from "./proxy";
+
+it("keeps the emergency exit reachable without checking a broken or absent session", async () => {
+  auth.claims.mockClear();
+  const response = await updateSession(new NextRequest("https://www.aywa.co.kr/view-reset"));
+  expect(response.headers.get("location")).toBeNull();
+  expect(auth.claims).not.toHaveBeenCalled();
+  const protectedRoute = await updateSession(new NextRequest("https://www.aywa.co.kr/view-reset-settings"));
+  expect(new URL(protectedRoute.headers.get("location")!).pathname).toBe("/login");
+});
 
 describe("login return destination", () => {
   it("retains the classroom preview instead of returning to the default dashboard", async () => {

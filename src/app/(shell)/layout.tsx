@@ -34,6 +34,7 @@ import { getUserPermMatrix } from "@/lib/auth/perm-matrix";
 import { getShellView, canUseTeacherView, canUseOtherTeacherView, isFullShellRole, effectiveTeacherScope, viewAsTeacher } from "@/lib/auth/view-mode";
 import { ViewAsChip, TeacherPeerViewSwitcher } from "@/components/other-teacher-view";
 import { teacherViewHome } from "@/lib/auth/teacher-home";
+import { accessFallbackPath } from "@/lib/auth/view-preference";
 import { ecsAssistantClassIds } from "@/features/class-sheets/server/access";
 import { canAccess, menuKeyForPath } from "@/lib/permissions";
 import { SETTINGS_ROLE_HREF, SETTINGS_ROLE_KEYS } from "@/lib/settings-role-catalog";
@@ -248,7 +249,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
     // 설정 화면의 실제 탭은 페이지에서 개별 권한을 다시 검사한다.
     if (menu && !canAccess("teacher", menu, permMatrix) && !hasDelegatedSetting) {
       // 강사 홈은 담당 과목으로 갈린다(영어 전담=ECS·그 외=원스크린, 2026-08-07) — 하드코딩 금지.
-      redirect(await teacherViewHome());
+      redirect(accessFallbackPath(pathname, await teacherViewHome()));
     }
   }
 
