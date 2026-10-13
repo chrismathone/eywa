@@ -80,7 +80,11 @@ export function BulkApplyPopover({
    * 할 수 있는 것처럼 보여주지 않는다, attendance-pills와 같은 규칙).
    * `plan`은 순수 계산(planBulkAttendance)이라 고르는 즉시 대상·덮어쓸 건수를 미리 보여줄 수 있다.
    */
-  attendance?: { plan: (status: BulkAttendanceStatus, onlyEmpty: boolean) => BulkAttPlan } | null;
+  attendance?: {
+    plan: (status: BulkAttendanceStatus, onlyEmpty: boolean) => BulkAttPlan;
+    /** 그 날짜가 학원설정 휴원일이면 이름 — 출결을 실을 때 확인 사유에 한 줄 더한다(막지는 않는다). */
+    holidayName?: string | null;
+  } | null;
   onApply: (
     patch: BulkPatch,
     onlyEmpty: boolean,
@@ -176,6 +180,12 @@ export function BulkApplyPopover({
       warns.push(
         tf("os.bulk.warnAll", { n: targetCount }),
       );
+    }
+    // 휴원일에 출결을 실으면 한 번 묻는다(원장 2026-10-13 — 10/9 한글날 금요일 반 19명이 이 길로 출석이 됐다).
+    // 휴원일에도 수업하는 날이 있어 막지는 않는다 — 같은 확인창에 한 줄로 모은다.
+    const holidayName = attendance?.holidayName;
+    if (att && attPlan && attPlan.cells.length > 0 && holidayName) {
+      warns.push(tf("os.bulk.warnHoliday", { name: holidayName, n: attPlan.cells.length }));
     }
     // 출결은 적용 즉시 출석부에 남고 여기서 되돌릴 수 없다 — **기존 기록을 덮을 때만** 따로 밝힌다.
     if (att && attPlan && attPlan.overwrite > 0) {

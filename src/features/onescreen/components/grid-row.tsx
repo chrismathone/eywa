@@ -141,6 +141,8 @@ export type GridConfig = {
   noticeMode: "A" | "B";
   /** ClassNote 반 보드 매칭(0302a) — 이름 옆 'C.N' 알약. 없거나 available=false면 알약을 안 그린다. */
   classnoteMatch?: CnMatchMap;
+  /** 그 날짜가 학원설정 휴원일이면 이름 — 값 일괄 적용의 출결 확인에 한 줄을 더한다(roster.ts). */
+  holidayName?: string | null;
 };
 
 /** 과목 진도 입력이 커리큘럼(math)인지. 미지정은 math로 간주(progress-card와 동일 규칙). */

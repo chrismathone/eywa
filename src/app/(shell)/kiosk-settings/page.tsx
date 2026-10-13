@@ -13,6 +13,7 @@ import {
   KakaoChannelForm,
   RegisterDeviceForm,
   RevokeDeviceButton,
+  DeleteDeviceButton,
   TestAlimtalkForm,
 } from "./_components/forms";
 
@@ -137,7 +138,7 @@ export default async function KioskSettingsPage() {
       <section className="border-border bg-card rounded-lg border p-5">
         <h2 className="text-foreground text-sm font-bold">키오스크 기기</h2>
         <p className="text-text-dim mt-1 text-sm">
-          출석 체크에 쓸 태블릿(이 브라우저)을 등록합니다. 분실하면 ‘기기 차단’으로 바로 막습니다.
+          출석 체크에 쓸 태블릿(이 브라우저)을 등록합니다. 분실하면 ‘기기 차단’으로 바로 막고, 쓰지 않는 기기는 ‘삭제’로 목록에서 지웁니다.
         </p>
         {canWrite ? (
           <div className="mt-3">
@@ -167,7 +168,12 @@ export default async function KioskSettingsPage() {
                     <span>최근 사용 {fmt(d.lastSeenAt)}</span>
                   </div>
                 </div>
-                {d.isActive && canWrite ? <RevokeDeviceButton deviceId={d.id} /> : null}
+                {canWrite ? (
+                  <div className="flex shrink-0 items-center gap-1">
+                    {d.isActive ? <RevokeDeviceButton deviceId={d.id} /> : null}
+                    <DeleteDeviceButton deviceId={d.id} label={`기기 #${d.deviceNo} ${d.name}`} />
+                  </div>
+                ) : null}
               </li>
             ))}
           </ul>
