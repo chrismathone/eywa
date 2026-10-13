@@ -71,6 +71,16 @@ describe("0158a RLS 기본 권한 = permissions.ts MENU_ACCESS 미러", () => {
     expect(sql).not.toMatch(/create policy \w*textbook_orders\w*_role_gate/);
   });
 
+  // 0358a(키오스크 4표 쓰기 게이트)는 DEFAULTS에 없는 kiosk_settings로 auth_menu_access를 부른다 — 행이 없으면
+  // master 빼고 'none'으로 떨어진다. 코드 기본값이 지금처럼 '원장만'일 때만 그 결과가 앱과 같다.
+  // 실패하면 0170a DEFAULTS에 kiosk_settings 행을 넣고(위 미러 대상에도 추가) 다시 적용할 것.
+  it("kiosk_settings 코드 기본값 = 원장만 — 0358a가 DEFAULTS 없이 같은 답을 낸다", () => {
+    for (const role of SYSTEM_ROLES) {
+      if (role === "master" || mirrored.includes("kiosk_settings")) continue;
+      expect(MENU_ACCESS.kiosk_settings[role], `kiosk_settings.${role}`).toBe("none");
+    }
+  });
+
   it("0170a — 개인 예외(uov)가 역할 override(ov)보다 먼저 coalesce된다", () => {
     const sql = readFileSync(MIGRATION, "utf8");
     // userOverrides 분기 존재 + 본인(auth.uid()) 한정
