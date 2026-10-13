@@ -49,7 +49,7 @@ beforeEach(() => {
   getMedia = vi.fn(async () => ({ getTracks: () => [track] }));
   denyLock = false;
   vi.stubGlobal("MediaRecorder", FakeRecorder);
-  Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia: getMedia } });
+  Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia: getMedia, enumerateDevices: async () => [{ kind: "audioinput" }] } });
   Object.defineProperty(navigator, "locks", { configurable: true, value: {
     request: (_key: string, _options: unknown, callback: (lock: object | null) => Promise<void>) => callback(denyLock ? null : {}),
     query: async () => ({ held: [] }),
@@ -112,7 +112,7 @@ describe("document-owned audio recording", () => {
     getMedia.mockImplementation(() => new Promise((resolve) => { allow = resolve; }));
     const selected = { ...scopeA };
     let pending!: Promise<string | null>;
-    await act(async () => { pending = startBrowserRecording("consultation", selected); await Promise.resolve(); });
+    await act(async () => { pending = startBrowserRecording("consultation", selected); for (let i = 0; i < 12; i++) await Promise.resolve(); });
     selected.recordKey = scopeB.recordKey; selected.label = "B";
     await act(async () => { allow({ getTracks: () => [track] }); await pending; });
     expect(mocks.initialize).toHaveBeenCalledWith("consultation", expect.any(String), scopeA);
@@ -130,7 +130,7 @@ describe("document-owned audio recording", () => {
     let allow!: (value: { getTracks: () => Track[] }) => void;
     getMedia.mockImplementation(() => new Promise((resolve) => { allow = resolve; }));
     let pending!: Promise<string | null>;
-    await act(async () => { pending = startBrowserRecording("consultation", scopeA); await Promise.resolve(); });
+    await act(async () => { pending = startBrowserRecording("consultation", scopeA); for (let i = 0; i < 12; i++) await Promise.resolve(); });
     act(() => { stopBrowserRecording(); });
     await act(async () => { allow({ getTracks: () => [track] }); await pending; });
     expect(track.stop).toHaveBeenCalled();
@@ -162,16 +162,21 @@ describe("document-owned audio recording", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     await start();
     act(() => { recorder().onerror?.({ error: new DOMException("device", "UnknownError") }); recorder().stop(); });
-    expect(getBrowserRecording()?.error).toContain("UnknownError");
+    expect(getBrowserRecording()?.errorCode).toBe("UnknownError");
+    expect(getBrowserRecording()?.error).toContain("녹음 오류");
+    expect(getBrowserRecording()?.error).not.toContain("UnknownError");
     expect(getBrowserRecording()?.status).toBe("ready");
     expect(mocks.download).toHaveBeenCalled();
   });
 
   it("shows microphone permission errors and releases the reservation", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
     getMedia.mockRejectedValue(new DOMException("Permission denied", "NotAllowedError"));
     await start();
     expect(getBrowserRecording()?.status).toBe("failed");
-    expect(getBrowserRecording()?.error).toContain("NotAllowedError");
+    expect(getBrowserRecording()?.errorCode).toBe("NotAllowedError");
+    expect(getBrowserRecording()?.error).toContain("마이크 권한");
+    expect(getBrowserRecording()?.error).not.toContain("Permission denied");
     expect(mocks.download).not.toHaveBeenCalled();
   });
 
@@ -200,5 +205,36 @@ describe("document-owned audio recording", () => {
     expect(getBrowserRecording()).toBeNull();
     expect(mocks.save).toHaveBeenCalled();
     expect(mocks.download).not.toHaveBeenCalled();
+  });
+
+  it("does not open a microphone, create a recording or show controls when no mic is recognized", async () => {
+    vi.spyOn(navigator.mediaDevices, "enumerateDevices").mockResolvedValue([]);
+    expect(await startBrowserRecording("meeting", scopeA)).toContain("마이크를 연결");
+    expect(getMedia).not.toHaveBeenCalled();
+    expect(getBrowserRecording()).toBeNull();
+    expect(mocks.initialize).not.toHaveBeenCalled();
+  });
+
+  it("freezes attribution before device discovery and rejects an owner change while it is pending", async () => {
+    let finishProbe!: (devices: MediaDeviceInfo[]) => void;
+    vi.spyOn(navigator.mediaDevices, "enumerateDevices").mockImplementation(() => new Promise((resolve) => { finishProbe = resolve; }));
+    const selected = { ...scopeA };
+    const pending = startBrowserRecording("meeting", selected);
+    for (let i = 0; i < 12; i++) await Promise.resolve();
+    selected.label = "B";
+    adoptRecordingOwner({ tenantId: "t2", userId: "u2" });
+    finishProbe([{ kind: "audioinput" } as MediaDeviceInfo]);
+    expect(await pending).toContain("작성 화면을 다시");
+    expect(getMedia).not.toHaveBeenCalled();
+    expect(getBrowserRecording()).toBeNull();
+  });
+
+  it("keeps one recorder even when two starts race during microphone discovery", async () => {
+    await act(async () => {
+      const results = await Promise.all([startBrowserRecording("meeting", scopeA), startBrowserRecording("consultation", scopeB)]);
+      expect(results.filter((message) => message?.includes("이미 녹음 중"))).toHaveLength(1);
+    });
+    expect(getMedia).toHaveBeenCalledTimes(1);
+    expect(FakeRecorder.instances).toHaveLength(1);
   });
 });

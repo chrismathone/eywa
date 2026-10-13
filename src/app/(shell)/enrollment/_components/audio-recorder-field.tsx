@@ -8,6 +8,7 @@ import {
   type RecordingScope,
 } from "@/lib/recording-recovery";
 import { useBrowserRecording } from "@/components/forms/use-browser-recording";
+import { useMicrophone } from "@/components/forms/use-microphone";
 import { startBrowserRecording, stopBrowserRecording } from "@/lib/browser-recording";
 import {
   AUDIO_FILE_ACCEPT,
@@ -46,6 +47,7 @@ function AudioRecorderFieldInner({
   const [error, setError] = useState<string | null>(null);
 
   const recorded = useBrowserRecording("consultation", scope, onChange);
+  const microphone = useMicrophone();
   const isRecording = recorded.recording;
   const recordSeconds = recorded.seconds;
   // 녹음 진행 여부를 부모로 통지 → 부모가 제출 버튼을 막아 진행 중 녹음이 silent하게 유실되는 것 방지.
@@ -132,12 +134,12 @@ function AudioRecorderFieldInner({
           <button
             type="button"
             onClick={startRecording}
-              disabled={disabled || recorded.otherRecording}
+            disabled={disabled || recorded.otherRecording || !microphone.available}
             className="border-border hover:border-foreground/40 hover:bg-accent/30 flex flex-col items-center gap-1.5 rounded-md border border-dashed px-3 py-5 transition disabled:opacity-50"
           >
             <Mic className="text-muted-foreground size-5" />
-            <span className="text-foreground text-sm font-medium">바로 녹음</span>
-            <span className="text-muted-foreground text-xs">입력하면서 녹음 가능</span>
+            <span className="text-foreground text-sm font-medium">{microphone.available ? "바로 녹음" : microphone.message}</span>
+            {microphone.available ? <span className="text-muted-foreground text-xs">입력하면서 녹음 가능</span> : null}
           </button>
         </div>
       )}

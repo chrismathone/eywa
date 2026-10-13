@@ -15,6 +15,7 @@ import {
   type RecordingOwner,
 } from "@/lib/recording-recovery";
 import { useBrowserRecording } from "@/components/forms/use-browser-recording";
+import { useMicrophone } from "@/components/forms/use-microphone";
 import { startBrowserRecording, stopBrowserRecording, dismissBrowserRecording } from "@/lib/browser-recording";
 import { useInFrame } from "@/components/workspace/use-in-frame";
 import { withEmbed } from "@/components/workspace/embed-context";
@@ -41,6 +42,7 @@ function AudioConsultationFormInner({ students, recordingOwner }: { students: St
   const student = students.find((s) => s.id === studentId);
   const scope = student ? { ...recordingOwner, recordKey: `student:${student.id}`, label: student.name } : null;
   const recorded = useBrowserRecording(KIND, scope, (f, id) => { setFile(f); setRecoveryId(id); });
+  const microphone = useMicrophone();
   const recording = recorded.recording;
 
   async function startRec() {
@@ -132,9 +134,9 @@ function AudioConsultationFormInner({ students, recordingOwner }: { students: St
               녹음 중지
             </Button>
           ) : (
-            <Button type="button" variant="outline" size="sm" onClick={startRec} disabled={busy || recorded.otherRecording}>
+            <Button type="button" variant="outline" size="sm" onClick={startRec} disabled={busy || recorded.otherRecording || !microphone.available}>
               <Mic className="size-4" />
-              녹음 시작
+              {microphone.available ? "녹음 시작" : microphone.message}
             </Button>
           )}
           <span className="text-text-faint text-xs">또는</span>
