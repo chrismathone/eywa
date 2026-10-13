@@ -4,6 +4,8 @@ export type SnapshotUser = { id: string; display_name: string; status: string; s
 export type SnapshotClass = {
   id: string; class_name: string; subject: string; english_track: string | null; teacher_id: string | null;
   is_active: boolean; closed_at: string | null; report_optout: boolean | null; is_makeup_pool: boolean | null;
+  /** 특강 반 — 끝난 특강은 퇴원율에서 빼므로(퇴원관리와 같은 규칙) 읽는다. 옛 스냅샷엔 없다. */
+  is_special?: boolean | null;
 };
 export type SnapshotSchedule = {
   id: string; class_id: string; day_of_week: string; start_time: string; end_time: string | null;
@@ -13,6 +15,8 @@ export type SnapshotSchedule = {
 export type SnapshotEnrollment = {
   id: string; student_id: string; class_id: string; start_date: string; end_date: string | null;
   on_hold: boolean; attendance_days: string[] | null; is_transferred: boolean; is_transferred_in: boolean;
+  /** 종료 사유 — 퇴원 사유 코드(`graduated`…) 또는 자유 글('반 이동'·'반 폐지'·'종강' …). 옛 스냅샷엔 없다. */
+  withdrawal_reason?: string | null;
 };
 export type SnapshotAttendance = {
   id: string; class_id: string; student_id: string; session_date: string; slot_start: string | null;

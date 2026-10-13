@@ -88,6 +88,8 @@ function preRecordPolicy(from: string, firstReport: string | null, firstAttendan
   return policy.report || policy.attendance ? policy : null;
 }
 
+const ENROLLMENT_COLUMNS = "id, student_id, class_id, start_date, end_date, on_hold, attendance_days, is_transferred, is_transferred_in, withdrawal_reason";
+
 export async function loadPortfolioSnapshot(
   admin: Admin, tenantId: string, input: { end: string; now: Date; settings: PortfolioSnapshot["settings"] },
 ): Promise<PortfolioSnapshot> {
@@ -103,15 +105,16 @@ export async function loadPortfolioSnapshot(
   const [
     tenantRes, testStudents, users, classes, liveSchedules, endedSchedules, enrollments, attendance, reportsByDate,
     reportsByCover, followUps, consulted, reviewDocs, transitions, delegations, invoices, makeupByAbsence, makeupByDate,
+    futureEnrollments, studentReasons,
   ] = await Promise.all([
     table("tenants").select("id, name").eq("id", tenantId).maybeSingle(),
     paged<{ id: string }>((a, b) => inTenant("students", "id").eq("is_test", true).order("id").range(a, b)),
     paged<SnapshotUser>((a, b) => inTenant("users", "id, display_name, status, subjects").order("id").range(a, b)),
-    paged<SnapshotClass>((a, b) => inTenant("classes", "id, class_name, subject, english_track, teacher_id, is_active, closed_at, report_optout, is_makeup_pool").order("id").range(a, b)),
+    paged<SnapshotClass>((a, b) => inTenant("classes", "id, class_name, subject, english_track, teacher_id, is_active, closed_at, report_optout, is_makeup_pool, is_special").order("id").range(a, b)),
     // 시간표는 이력을 함께 담는다(#88). 창과 겹치는 배치만 — 끝이 없는 것과 창 안에서 끝난 것.
     paged<SnapshotSchedule>((a, b) => inTenant("class_schedules", SCHEDULE_COLUMNS).lte("valid_from", billingEnd).is("valid_to", null).order("id").range(a, b)),
     paged<SnapshotSchedule>((a, b) => inTenant("class_schedules", SCHEDULE_COLUMNS).lte("valid_from", billingEnd).gte("valid_to", attendanceFrom).order("id").range(a, b)),
-    paged<SnapshotEnrollment>((a, b) => inTenant("enrollments", "id, student_id, class_id, start_date, end_date, on_hold, attendance_days, is_transferred, is_transferred_in").lte("start_date", billingEnd).order("id").range(a, b)),
+    paged<SnapshotEnrollment>((a, b) => inTenant("enrollments", ENROLLMENT_COLUMNS).lte("start_date", billingEnd).order("id").range(a, b)),
     paged<SnapshotAttendance>((a, b) => inTenant("attendance_records", "id, class_id, student_id, session_date, slot_start, status, recorded_at, supersedes_id, seat_label, recorded_via, taught_by, note").gte("session_date", attendanceFrom).lte("session_date", end).order("id").range(a, b)),
     paged<SnapshotReport>((a, b) => inTenant("lesson_reports", REPORT_COLUMNS).is("revoked_at", null).gte("report_date", from).lte("report_date", end).order("id").range(a, b)),
     paged<SnapshotReport>((a, b) => inTenant("lesson_reports", REPORT_COLUMNS).is("revoked_at", null).gte("covers_date", from).lte("covers_date", end).order("id").range(a, b)),
@@ -124,6 +127,9 @@ export async function loadPortfolioSnapshot(
     paged<SnapshotInvoice>((a, b) => inTenant("invoices", "id, student_id, period, amount_total, amount_discount, line_items").neq("status", "void").eq("category", "tuition").gte("period", fromMonth).lte("period", endMonth).order("id").range(a, b)),
     paged<SnapshotMakeup>((a, b) => inTenant("makeup_reservations", MAKEUP_COLUMNS).gte("absence_date", attendanceFrom).lte("absence_date", end).order("id").range(a, b)),
     paged<SnapshotMakeup>((a, b) => inTenant("makeup_reservations", MAKEUP_COLUMNS).gte("makeup_date", attendanceFrom).lte("makeup_date", end).order("id").range(a, b)),
+    // 퇴원율 — 창 끝 다음 한 달 안에 시작하는 수강(말일에 끝나고 1일에 같은 과목 반을 시작한 학생) · 학생의 퇴원 사유(퇴원관리와 같은 곳).
+    paged<SnapshotEnrollment>((a, b) => inTenant("enrollments", ENROLLMENT_COLUMNS).gt("start_date", billingEnd).lte("start_date", addDays(billingEnd, 31)).order("id").range(a, b)),
+    paged<{ id: string; reason: string | null }>((a, b) => inTenant("students", "id, reason:withdrawal_metadata->>reason").not("withdrawal_metadata", "is", null).order("id").range(a, b)),
   ]);
   if (tenantRes.error || !tenantRes.data) throw new Error(`지점 조회 실패: ${tenantRes.error?.message ?? "없는 지점"}`);
 
@@ -158,5 +164,6 @@ export async function loadPortfolioSnapshot(
     }),
     delegations, invoices: tuition, terms,
     makeupLegacy: real(byId(makeupByAbsence, makeupByDate)),
+    futureEnrollments: real(futureEnrollments), studentReasons,
   };
 }

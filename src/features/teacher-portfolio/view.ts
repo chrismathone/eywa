@@ -112,7 +112,7 @@ export type StatusTone = SemanticTone;
 /** 처리 상태 → 의미색. 화면마다 따로 정하지 않는다. */
 export function statusTone(state: string): StatusTone {
   if (["완료", "인정", "기한 전 완료", "작성"].includes(state)) return "brand";
-  if (["미완료", "기한 초과", "미작성", "마감 후 작성"].includes(state)) return "caution";
+  if (["미완료", "기한 초과", "미작성", "마감 후 작성", "셈"].includes(state)) return "caution";
   if (state === "대리") return "special";
   return "inert";
 }

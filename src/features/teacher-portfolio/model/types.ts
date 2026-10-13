@@ -42,11 +42,14 @@ export type PortfolioSnapshot = {
   invoices: SnapshotInvoice[];
   terms: SnapshotTerm[];
   makeupLegacy: SnapshotMakeup[];
+  /** 퇴원율 — 창 끝 다음 한 달 안에 시작하는 수강(월말에 반을 옮긴 학생을 퇴원으로 세지 않게) · 학생의 퇴원 사유(퇴원관리와 같은 곳). */
+  futureEnrollments?: SnapshotEnrollment[];
+  studentReasons?: { id: string; reason: string | null }[];
 };
 
 /** 아직 계산이 들어오지 않은 원장 구성 지표(2026-10-13) — 수치 없이 자리만 선다(자료 없음 규칙으로 매긴다). */
-export type PendingMetricId = "payRatio" | "churn" | "grades" | "satisfaction" | "punctuality";
-export type MetricId = "report" | "attendance" | "follow" | "quality" | "students" | "revenue" | "expansion" | "coverage" | PendingMetricId;
+export type PendingMetricId = "payRatio" | "grades" | "satisfaction" | "punctuality";
+export type MetricId = "report" | "attendance" | "follow" | "quality" | "students" | "revenue" | "expansion" | "coverage" | "churn" | PendingMetricId;
 /** 계산 코드가 처음 매기는 만점(옛 고정 배점) — 화면의 만점은 설정이 덮는다. 옛 저장 행의 기준표도 이 값이다. */
 export const METRIC_MAX: Record<MetricId, number> = {
   report: 20, attendance: 10, follow: 10, quality: 10, students: 20, revenue: 10, expansion: 10, coverage: 10,
@@ -120,11 +123,15 @@ export type RevenueMetric = MetricCommon<"revenue", RevenueClassRow> & Pick<Reve
 export type ExpansionMetric = MetricCommon<"expansion", never>;
 export type CoverageMetric = MetricCommon<"coverage", CoverageRow> & Pick<CoverageResult, "due" | "done" | "pending" | "early">;
 export type PendingMetric = MetricCommon<PendingMetricId, never>;
+/** 퇴원율의 그만둔 학생 한 줄 — 셌는지(counted)와 뺀 까닭(note). */
+export type ChurnRow = { studentId: string; day: string; type: "퇴원" | "수강종료"; className: string; reason: string; counted: boolean; note: string | null };
+/** base = 지난달 담당 학생(그 달 절반 이상) · need = 절반 일수 · counted = 센 학생 수. */
+export type ChurnMetric = MetricCommon<"churn", ChurnRow> & { base: number; need: number; counted: number };
 /** 원장이 직접 만든 지표 — 달마다 입력한 숫자가 원래 수치다. */
 export type ManualMetricItem = MetricCommon<`manual:${string}`, never> & { unit: string; note?: string };
 export type Metric =
   | ReportMetric | AttendanceMetric | FollowMetric | QualityMetric | StudentsMetric | RevenueMetric | ExpansionMetric | CoverageMetric
-  | PendingMetric | ManualMetricItem;
+  | ChurnMetric | PendingMetric | ManualMetricItem;
 /** 한 달의 항목 id — 기본 지표 또는 `manual:<key>`. */
 export type ItemId = Metric["id"];
 export type MetricOf<Id extends MetricId> = Extract<Metric, { id: Id }>;

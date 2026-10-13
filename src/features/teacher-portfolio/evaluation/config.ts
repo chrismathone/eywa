@@ -41,12 +41,21 @@ export type MissingRule = z.infer<typeof missingSchema>;
 export const MISSING_LABEL: Record<MissingRule, string> = { zero: "0점", full: "만점", exclude: "합계에서 빼기" };
 
 const label = z.string().trim().min(1, "이름을 적어 주세요").max(30, "이름은 30자까지입니다");
+/** 퇴원율의 세는 법(원장 결정 6) — 뺄 퇴원 사유 코드 · 수강종료(다른 과목은 다님)도 셀지. 이 지표만 쓴다. */
+export const churnOptionsSchema = z.object({
+  excludeReasons: z.array(z.string().regex(/^[a-z]{1,20}$/)).max(20),
+  countEnded: z.boolean(),
+});
+export type ChurnOptions = z.infer<typeof churnOptionsSchema>;
+export const DEFAULT_CHURN_OPTIONS: ChurnOptions = { excludeReasons: ["graduated", "relocation", "illness", "advised"], countEnded: true };
 export const metricSettingSchema = z.object({
   enabled: z.boolean(),
   label,
   max: finite.min(0, "만점은 0 이상입니다").max(1000, "만점은 1000점까지입니다"),
   scoring: scoringSchema,
   missing: missingSchema,
+  /** 지표만의 세는 법 — 지금은 퇴원율(churn)만. 다른 지표엔 없다. */
+  churn: churnOptionsSchema.optional(),
 });
 export type MetricSetting = z.infer<typeof metricSettingSchema>;
 
@@ -102,7 +111,7 @@ export const DEFAULT_EVALUATION_CONFIG: EvaluationConfig = {
   order: [...BUILTIN_METRICS],
   metrics: {
     payRatio: { enabled: true, label: "매출 대비 급여", max: 20, scoring: upTo([[33, 20], [40, 16], [50, 12], [60, 8], [null, 4]]), missing: "zero" },
-    churn: { enabled: true, label: "퇴원율", max: 20, scoring: upTo([[3, 20], [6, 16], [10, 12], [15, 8], [null, 4]]), missing: "zero" },
+    churn: { enabled: true, label: "퇴원율", max: 20, scoring: upTo([[3, 20], [6, 16], [10, 12], [15, 8], [null, 4]]), missing: "zero", churn: DEFAULT_CHURN_OPTIONS },
     report: { enabled: true, label: "수업보고서", max: 10, scoring: linear(0, 100), missing: "zero" },
     follow: { enabled: true, label: "원생상담", max: 10, scoring: linear(0, 100), missing: "zero" },
     grades: { enabled: true, label: "성적 관리", max: 10, scoring: linear(0, 100), missing: "zero" },
@@ -146,6 +155,8 @@ export function resolveEvaluationConfig(stored: unknown): EvaluationConfig {
     const fallback = DEFAULT_EVALUATION_CONFIG.metrics[id];
     return [id, hasMetrics && !(id in storedMetrics) ? { ...fallback, enabled: false } : fallback];
   })) as EvaluationConfig["metrics"];
+  // 세는 법이 생기기 전에 저장한 퇴원율에는 그 칸이 없다 — 기본값을 채워 설정 화면에 칸이 서게(계산도 같은 기본값).
+  if (!metrics.churn.churn) metrics.churn = { ...metrics.churn, churn: DEFAULT_CHURN_OPTIONS };
   const manualRaw = Array.isArray(raw.manual) ? raw.manual : [];
   const seen = new Set<string>();
   const manual = manualRaw.flatMap((m) => {

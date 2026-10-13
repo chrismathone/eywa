@@ -46,7 +46,10 @@ export async function saveEvaluationSettings(input: unknown): Promise<Evaluation
   const on = [...Object.values(config.metrics), ...config.manual].filter((m) => m.enabled);
   await logAction({
     action: "teacher_evaluation_settings_save", targetType: "teacher_portfolio", targetLabel: "강사평가 설정",
-    metadata: { enabled: on.length, maxTotal: on.reduce((n, m) => n + m.max, 0), manual: config.manual.length },
+    metadata: {
+      enabled: on.length, maxTotal: on.reduce((n, m) => n + m.max, 0), manual: config.manual.length,
+      churnExclude: config.metrics.churn.churn?.excludeReasons ?? null, churnCountEnded: config.metrics.churn.churn?.countEnded ?? null,
+    },
   });
   refreshLater(gate.tenantId, "saveEvaluationSettings");
   revalidatePath("/owner");

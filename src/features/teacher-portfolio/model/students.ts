@@ -17,7 +17,14 @@ export const STUDENT_BASE_POINTS = 10;
 const clampScore = (n: number) => Math.min(20, Math.max(0, n));
 type Role = "담임" | "부담임";
 type Relation = { classes: Set<string>; roles: Set<Role> };
-type TrackedEvent = StudentEvent & { teacherId: string; month: string };
+/** `ended` = 유출 이벤트를 만든 종료 수강(퇴원율이 사유·특강·과목을 본다). 화면 근거(detail)엔 싣지 않는다. */
+type TrackedEvent = StudentEvent & { teacherId: string; month: string; ended?: SnapshotEnrollment[] };
+/** 퇴원율이 쓰는 재료 — 그날 강사별 명단과 유출 이벤트(학생 추적과 같은 판정 한 벌). */
+export type ChurnSource = {
+  rosterOf: (day: string, teacherId: string) => ReadonlyMap<string, { classes: ReadonlySet<string> }>;
+  exitsOf: (teacherId: string, start: string, end: string) => readonly TrackedEvent[];
+  enrollmentsOf: (studentId: string) => readonly SnapshotEnrollment[];
+};
 
 export function buildStudentTracking(input: {
   from: string;
@@ -95,6 +102,7 @@ export function buildStudentTracking(input: {
           const history = enrollmentByStudent.get(studentId) ?? [];
           let type: StudentEventType = "담당 변경";
           let points = 0;
+          let endedRows: SnapshotEnrollment[] | undefined;
           if (incoming) {
             const starts = history.filter((e) => relation.classes.has(e.class_id) && e.start_date === day);
             const transfers = starts.filter((b) => b.is_transferred_in);
@@ -106,6 +114,7 @@ export function buildStudentTracking(input: {
           } else {
             const ended = history.filter((e) => relation.classes.has(e.class_id)
               && (e.end_date === day || classes.get(e.class_id)?.closed_at === day));
+            endedRows = ended;
             const transfers = ended.filter((e) => e.is_transferred && e.end_date === day);
             const sameTeacher = transfers.some((a) => history.some((b) => linked(a, b) && teachersFor(b, b.start_date).has(teacherId)));
             if (sameTeacher) type = "같은 강사 내 반이동";
@@ -120,6 +129,7 @@ export function buildStudentTracking(input: {
             teacherId, month: day.slice(0, 7), studentId, day, type, points, direction: incoming ? "유입" : "유출",
             className: [...relation.classes].map((id) => classes.get(id)?.class_name || "").join(", "),
             role: [...relation.roles].join("·"),
+            ...(endedRows ? { ended: endedRows } : {}),
           });
         }
       }
@@ -128,8 +138,15 @@ export function buildStudentTracking(input: {
 
   const count = (rows: readonly StudentEvent[], type: StudentEventType) => rows.filter((r) => r.type === type).length;
   const resultCache = new Map<string, StudentTracking>();
+  const churnSource: ChurnSource = {
+    rosterOf: (day, teacherId) => roster(day).get(teacherId) ?? new Map(),
+    exitsOf: (teacherId, start, end) => events.filter((e) => e.teacherId === teacherId && e.direction === "유출"
+      && (e.type === "퇴원" || e.type === "수강종료") && e.day >= start && e.day <= end),
+    enrollmentsOf: (studentId) => enrollmentByStudent.get(studentId) ?? [],
+  };
   return {
     baseline,
+    churnSource,
     period(teacherId: string, w: Pick<PeriodWindow, "start" | "end">): StudentTracking {
       const key = `${teacherId}|${w.start}|${w.end}`;
       const cached = resultCache.get(key);

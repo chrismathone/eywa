@@ -9,7 +9,8 @@
  */
 import { subjectLabelRecord } from "@/features/owner/subjects";
 import type { SubjectSetting } from "@/features/owner/settings-types";
-import { DEFAULT_EVALUATION_CONFIG, type EvaluationConfig } from "../evaluation/config";
+import { DEFAULT_CHURN_OPTIONS, DEFAULT_EVALUATION_CONFIG, type EvaluationConfig } from "../evaluation/config";
+import { buildChurn } from "./churn";
 import { buildContext, type PortfolioContext } from "./context";
 import { applyEvaluation, indexEntries, type ManualEntryRow } from "./evaluate";
 import { between, daysBetween, kstDateOf, monthWindows, round1, unique } from "./dates";
@@ -21,22 +22,21 @@ import { deepMathKeyOf } from "./receipt";
 import { buildRevenue } from "./revenue";
 import { buildStudentTracking } from "./students";
 import {
-  METRIC_MAX, type Metric, type PeriodWindow, type PortfolioPeriod, type PortfolioResult, type PortfolioSnapshot,
+  METRIC_MAX, type ChurnMetric, type Metric, type PeriodWindow, type PortfolioPeriod, type PortfolioResult, type PortfolioSnapshot,
   type PortfolioTeacher, type SnapshotUser,
 } from "./types";
 
 /** 화면 6개월 + 전월 비교용 1개월. */
 export const PORTFOLIO_MONTHS = 7;
 export type { ManualEntryRow } from "./evaluate";
-const GAP_LABEL: Partial<Record<Metric["id"], string>> = {
-  report: "작성 근거 부족", attendance: "담당 교시 확인", follow: "마감 시점 확인", quality: "평가 기준 확인", students: "배정 기록 확인",
-};
+const GAP_LABEL: Partial<Record<Metric["id"], string>> = { report: "작성 근거 부족", attendance: "담당 교시 확인", follow: "마감 시점 확인", quality: "평가 기준 확인", students: "배정 기록 확인" };
 const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
 
 type Models = {
   ctx: PortfolioContext;
   revenue: ReturnType<typeof buildRevenue>;
   students: ReturnType<typeof buildStudentTracking>;
+  churn: (teacherId: string, w: PeriodWindow) => ChurnMetric;
   subjectOf: (classId: string) => string;
   classNameOf: (classId: string) => string;
 };
@@ -100,6 +100,7 @@ function teacherPeriod(d: PortfolioSnapshot, m: Models, user: SnapshotUser, w: P
       detail: revenue.detail, amount: revenue.amount, subjectTotal: revenue.subjectTotal, subjectLabel: revenue.subjectLabel,
       subjects: revenue.subjects, unassigned: revenue.unassigned, unclassified: revenue.unclassified,
     },
+    m.churn(user.id, w),
     referralItem(),
     {
       id: "coverage", max: METRIC_MAX.coverage, value: coverage.value, raw: coverage.due ? (100 * coverage.done) / coverage.due : null,
@@ -155,13 +156,16 @@ export function buildPortfolio(d: PortfolioSnapshot, opts: {
   const ctx = buildContext(d);
   const classes = new Map(d.classes.map((c) => [c.id, c]));
   const labels = subjectLabelRecord(d.settings.subjects as SubjectSetting[]);
+  const config = opts.evaluation?.config ?? DEFAULT_EVALUATION_CONFIG;
+  const students = buildStudentTracking({ from: d.from, end: d.end, classes: d.classes, schedules: d.schedules, enrollments: d.enrollments, owner: ctx.owner });
   const models: Models = {
     ctx,
     revenue: buildRevenue({
       classes: d.classes, schedules: d.schedules, enrollments: d.enrollments, invoices: d.invoices, terms: d.terms,
       holidays: ctx.holidays, subjectLabel: (key) => labels[key] ?? key, deepMathKey: deepMathKeyOf(d.settings.subjects), owner: ctx.owner,
     }),
-    students: buildStudentTracking({ from: d.from, end: d.end, classes: d.classes, schedules: d.schedules, enrollments: d.enrollments, owner: ctx.owner }),
+    students,
+    churn: (teacherId, w) => ({ id: "churn", max: METRIC_MAX.churn, value: null, ...buildChurn({ source: students.churnSource, classes, teacherId, w, options: config.metrics.churn.churn ?? DEFAULT_CHURN_OPTIONS, futureEnrollments: d.futureEnrollments, studentReasons: d.studentReasons }) }),
     subjectOf: (id) => classes.get(id)?.subject ?? "",
     classNameOf: (id) => classes.get(id)?.class_name ?? "",
   };
@@ -172,7 +176,6 @@ export function buildPortfolio(d: PortfolioSnapshot, opts: {
   for (const s of d.schedules) if (s.teacher_id) teachingIds.add(s.teacher_id);
   const windows = monthWindows(d.end, PORTFOLIO_MONTHS);
   const open = opts.openMonths ?? new Map<string, readonly string[]>();
-  const config = opts.evaluation?.config ?? DEFAULT_EVALUATION_CONFIG;
   const entriesOf = indexEntries(opts.evaluation?.entries ?? []);
   const teaching = (u: SnapshotUser) => u.status === "active" && teachingIds.has(u.id);
 
