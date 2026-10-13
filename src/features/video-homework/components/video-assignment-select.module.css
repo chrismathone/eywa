@@ -12,3 +12,5 @@
   .date small { display: block; }
   .date, .homework, .className { font-size: .75rem; }
 }
+/* 학생이 남긴 메모 — 줄 아래 한 줄, 길면 접는다. */
+.note{display:block;grid-column:1/-1;font-size:var(--text-xs);color:var(--text-dim);white-space:normal;word-break:keep-all}

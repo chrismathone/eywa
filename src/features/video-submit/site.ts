@@ -61,6 +61,23 @@ export const SITE_LINKS_PER_PAIR_PER_DAY = 6;
 export const SITE_MAX_CHOICES = 12;
 
 /**
+ * **숙제 없이 올리기**(원장 2026-10-13 *"기존 숙제가 있으면 숙제를 누르고 영상을 올리고, 숙제가 없어도 업로드 할 수 있게"* ·
+ * *"반 정도 고르고 해당 반에 영상 업로드하고, 학생이 무슨 영상인지 대략적으로 남겨놓는거지 메모로"* · *"하루 5회 한도"*).
+ *  · 숙제 목록 아래에 학생 × 반마다 한 줄 — 고르면 그 반의 담임 폴더로 올라가고, 메모가 영상과 함께 남는다(선생님이 보고 숙제에 연결한다).
+ *  · 한 학생이 하루(KST)에 시작할 수 있는 숙제 없는 업로드 수 = `SITE_FREE_UPLOADS_PER_DAY`(반 합산 · 횟수 제한·실패로 거절된 것은 안 센다).
+ *  · 메모는 필수 — 선생님이 무엇의 영상인지 알 수 있어야 한다. 학생이 쓴 글이라 화면에는 글자로만 보여 준다.
+ */
+export const SITE_FREE_UPLOADS_PER_DAY = 5;
+export const SITE_NOTE_MIN = 2;
+export const SITE_NOTE_MAX = 100;
+/** 메모 다듬기 — 줄바꿈·연속 공백을 한 칸으로, 앞뒤 공백을 뗀다. 모양이 틀리면(짧음·김·글자 아님) null. */
+export function siteNote(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const text = value.normalize("NFC").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim();
+  return text.length >= SITE_NOTE_MIN && text.length <= SITE_NOTE_MAX ? text : null;
+}
+
+/**
  * 사이트로 숙제를 올릴 수 있는 기간 — 숙제가 나간 수업일부터 이 날수가 지난 날까지(KST, 그날 포함). 원장 2026-10-03
  * *"링크가 숙제날짜 기준 7일로 하면 좋겠네"* — 10/1 숙제면 10/8까지. 숙제 목록·제출 화면·업로드 시작이 같은 값을 본다.
  */
@@ -103,7 +120,9 @@ export const SITE_LINK_LOOKBACK_DAYS = SITE_HOMEWORK_DAYS + 2;
  * 화면에 보이는 숙제 한 줄 — 학생 번호·반 번호·보고서 번호는 내려보내지 않는다(고른 값은 `id`로만 돌아온다).
  * `homeworkLabel` = 그 숙제가 나간 수업일("10/1 (목)"). 숙제 **내용**은 싣지 않는다(약한 확인으로 보고서 글을 보여 주지 않는다).
  */
-export type SiteChoice = { id: string; studentLabel: string; className: string; homeworkLabel: string };
+export type SiteChoice = { id: string; studentLabel: string; className: string; homeworkLabel: string;
+  /** 숙제 없이 그 반에 올리기(메모 필수) — `homeworkLabel`은 빈 글자다. */
+  free?: true };
 
 /**
  * 올리기 사이트를 쓰는 지점 한 곳(화면의 지점 선택지) — 번호와 이름만. 주소에는 지점을 넣지 않는다(멀티테넌트 C안):
@@ -122,7 +141,7 @@ export const SITE_BRANCH_STORAGE_KEY = "eywa-video-site-branch";
 
 export type SiteLookupResult =
   | { ok: true; choices: SiteChoice[] }
-  /** `no_homework` = 번호·이름은 맞지만 지금 올릴 영상 숙제가 없다(영상 숙제가 없는 반·이미 다 냄). */
+  /** `no_homework` = 번호·이름은 맞지만 영상을 올릴 반이 없다(영상 숙제를 쓰지 않는 반만 다닌다 · 수강 중인 반이 없다). */
   | { ok: false; code: "invalid" | "no_homework" | "limit" | "unavailable" | "error"; error: string }
   | SiteBranchNeeded;
 export type SiteOpenResult =

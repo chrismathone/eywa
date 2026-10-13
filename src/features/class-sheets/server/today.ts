@@ -363,7 +363,7 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
   })();
 
   // ── 계획·학생기록·수강·출결·보고서·강의실·담당자 — 서로 독립이라 한 번에(B4) ────────────────────
-  const [planLines, marks, enrollments, attendanceRaw, rooms, teachers, classnotePosts, classnoteBoards] = await Promise.all([
+  const [planLines, marks, enrollments, attendanceRaw, rooms, teachers, classnotePosts, classnoteBoards, boardSnapshot] = await Promise.all([
     fetchAllPagedInChunks<{
       id: string;
       class_id: string;
@@ -490,6 +490,7 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
       .eq("posted_on", date)
       .then((r): { board_name: string }[] => (r.error ? [] : ((r.data ?? []) as { board_name: string }[]))),
     // 최근 45일 보드 우주 — "이 반에 연동된 보드가 있나 · 같은 키에 보드가 둘 아닌가"(3상 판정 재료).
+    // 지금은 아래 보드 스냅샷과 겹쳐 '최근에 쓰인 보드'를 거르는 데 쓰고, 스냅샷이 비면 이것만으로 판정한다.
     // 보드×날짜 행이라 무페이징이면 곧 1,000행을 넘겨 조용히 잘린다(B2) → fetchAllPaged. 45일이면
     // 활성 반 보드는 전부 잡히고(주 2~5회 게시) 폐강 보드는 자연히 빠진다. 실패는 위와 같은 fail-soft.
     fetchAllPaged<{ board_name: string }>((from, to) =>
@@ -499,8 +500,20 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
         .eq("tenant_id", user.tenantId)
         .gte("posted_on", addDays(today, -45))
         .order("board_name")
+        .order("posted_on") // (board_name, posted_on) = 테넌트 안 PK — 페이지 경계가 흔들리지 않게
         .range(from, to),
     ).catch(() => [] as { board_name: string }[]),
+    // 지금 있는 반 보드(0142a — 워커가 하루 1회 스냅샷, 보드 id당 1행)가 위 45일 기록보다 우선이다.
+    // 게시 기록엔 **개명 전 이름이 남는다** — 강사가 바뀌어 `Elsa X`→`Green X`가 된 보드가 이름 둘로 보여
+    // '키 모호'로 배지가 빠졌다(2026-10-13 실측 17개 반, 45일이 지나야 풀린다). 실패는 빈 목록 → 45일 기록으로.
+    fetchAllPaged<{ board_id: number; board_name: string; child_count: number | null }>((from, to) =>
+      supabase
+        .from("classnote_boards")
+        .select("board_id, board_name, child_count")
+        .eq("tenant_id", user.tenantId)
+        .order("board_id")
+        .range(from, to),
+    ).catch(() => [] as { board_id: number; board_name: string; child_count: number | null }[]),
   ]);
 
   // 보강(수업외) = 그 반 수강행은 없는데 그날 출결이 있는 학생. 반마다 가른다(A반 수강생이 B반 보강일 수 있다).
@@ -588,11 +601,22 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
   // 올렸나"는 당일 행동 트리거라 남의 반 게시가 내 배지를 끄면 그 반 알림장이 그날 안 나간다. 그래서
   // 한 키에 보드가 2개 이상이면(실측 "Let's Speak 5" 두 요일그룹) 판정 불가로 뺀다(untracked).
   const postedBoardKeys = new Set(classnotePosts.map((p) => boardKey(p.board_name)));
+  // 보드 목록 = **스냅샷(지금 이름) ∩ 최근 45일에 글이 있는 보드**. 스냅샷만 쓰면 안 쓰는 옛 보드(원아가 남은
+  // 폐강·옛 레벨 보드)가 끝까지 남아 그 반에 지울 수 없는 '미게시'가 뜨고, 45일 기록만 쓰면 개명 전 이름이
+  // 남아 '키 모호'가 된다 — 둘을 겹치면 둘 다 막힌다. 원아 0명 보드는 '보드 없음'과 같다(올려도 받을 사람이
+  // 없다, 실측 고3 정규). 세는 단위는 보드 id(이름이 같은 보드 둘도 '모호'로 잡힌다). 스냅샷이 비면 45일 기록.
+  const recentBoardNames = new Set(classnoteBoards.map((b) => b.board_name.trim()));
+  const boardUniverse =
+    boardSnapshot.length > 0
+      ? boardSnapshot
+          .filter((b) => b.child_count !== 0 && recentBoardNames.has(b.board_name.trim()))
+          .map((b) => ({ name: b.board_name, id: `board:${b.board_id}` }))
+      : classnoteBoards.map((b) => ({ name: b.board_name, id: b.board_name.trim() }));
   const boardsByKey = new Map<string, Set<string>>();
-  for (const b of classnoteBoards) {
-    const k = boardKey(b.board_name);
+  for (const b of boardUniverse) {
+    const k = boardKey(b.name);
     const set = boardsByKey.get(k) ?? new Set<string>();
-    set.add(b.board_name.trim());
+    set.add(b.id);
     boardsByKey.set(k, set);
   }
   const classnoteStateOf = (className: string): "posted" | "pending" | "untracked" => {
@@ -877,7 +901,9 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
         // 🔴 **DB 이름 그대로** 넘긴다 — 이 값은 표시가 아니라 ClassNote **보드 매칭 키**다(classKey).
         //    미래 이름을 먹이면 그 반 보드를 못 찾아 배지가 조용히 '연동 없음'이 된다.
         // ClassNote 기능이 꺼진 학원 = 알림장 배지 없음("untracked" = 미표시, 2026-09-30).
-        classnoteToday: classnoteOn ? classnoteStateOf(cls.class_name as string) : "untracked",
+        // 그날 정규 명단이 비면 받을 학생이 없어 할 일이 아니다 — 작성률·운영실과 같은 취지(english-class-presence.ts).
+        // (명단 판정은 이 화면 것이라 테스트 학생 포함·퇴원일 반영이 저쪽과 조금 다르다.)
+        classnoteToday: classnoteOn && roster.length > 0 ? classnoteStateOf(cls.class_name as string) : "untracked",
         isEie: eieOn && readEnglishTrack(cls) === "eie",
         shoutingSlots: shoutingByClass.get(classId) ?? [],
         // 그 반의 오늘 계획 행 중 위 slots에 실리지 않은 것 = 안 그리는 기록(고아 시각 or 자리).

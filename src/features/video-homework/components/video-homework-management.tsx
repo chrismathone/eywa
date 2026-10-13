@@ -13,6 +13,7 @@ import { LedgerToolbar } from "./ledger-toolbar";
 import { RoundEditor, type ActiveCell } from "./round-editor";
 import { LedgerVideoDialog } from "./ledger-video-dialog";
 import { VideoAssignmentDialog } from "./video-assignment-dialog";
+import { IssueMenu, type IssueMenuTarget } from "./issue-menu";
 import styles from "./video-homework-management.module.css";
 
 const NO_VIDEOS: VideoArrival[] = [];
@@ -33,6 +34,8 @@ export function VideoHomeworkManagement({ rows, initialMarks, videos = NO_VIDEOS
   const [playing, setPlaying] = useState<ActiveCell | null>(null);
   const [assigning, setAssigning] = useState<VideoHomeworkLedgerRow | null>(null);
   const { marks, progress, save } = useLedgerMarks(initialMarks);
+  // 숙제없음 칸의 '숙제 출제' · 따로 낸 숙제 칸의 '출제 취소'(원장 2026-10-13) — 처리와 새로고침은 메뉴가 한다.
+  const [menu, setMenu] = useState<IssueMenuTarget | null>(null);
   const busy = progress !== null;
   // 회차·완료 판정은 한 벌 — 표·요약·필터·CSV가 전부 이 결과를 읽는다(저장 직후에도 같은 규칙으로 다시 센다).
   const keep = useMemo(() => (keepRounds ? new Set(keepRounds) : null), [keepRounds]);
@@ -85,10 +88,10 @@ export function VideoHomeworkManagement({ rows, initialMarks, videos = NO_VIDEOS
       <span className={styles.green}>완료 <strong>{summary.submitted}</strong>회</span><span className={styles.red}>미수행 <strong>{summary.missing}</strong>회</span><span className={styles.amber}>미확인 <strong>{summary.unchecked}</strong>회</span>
       <div className={styles.expandActions}><button type="button" onClick={() => setCollapsed(new Set())}>모두 펼치기</button><button type="button" onClick={() => setCollapsed(new Set(visibleGroups.map((group) => group.classId)))}>모두 접기</button></div>
     </div>
-    <p className={styles.hint}>수업보고서에 영상 과제가 나간 수업만 회차로 셉니다 — 1회·2회는 학생마다의 순서라 같은 회차도 날짜가 다를 수 있습니다.
+    <p className={styles.hint}>수업보고서에 영상 과제가 나간 수업과 따로 낸 숙제만 회차로 셉니다 — 1회·2회는 학생마다의 순서라 같은 회차도 날짜가 다를 수 있습니다.
       칸 위 날짜 = 숙제가 나간 날 · <EyIcon name="check" size={12} className="inline-block align-middle" /> 뒤 날짜 = 제출일 · 날짜 없이 완료 = 제출일 미기록 · ▶ = 영상 재생 · 초록 테두리 = 영상으로 자동 완료(반이 확인된 영상만 자동으로 셉니다) · × 미수행 · 미확인 = 숙제가 나갔는데 아직 확인 전. 미확인 칸을 누르면 오늘 날짜로 완료됩니다.</p>
     {progress ? <p className={styles.saving} role="status">기록 저장 중 {progress.done} / {progress.total}건</p> : null}
-    {visibleGroups.length ? visibleGroups.map((group) => <ClassLedger key={`${group.classId}:${filterKey}`} group={group} rounds={rounds} blankFacts={blankFacts} videosKnown={videosKnown} showTeacher={showTeacher} today={today} busy={busy} save={save} onEdit={setActive} onPlay={setPlaying} onAssign={setAssigning}
+    {visibleGroups.length ? visibleGroups.map((group) => <ClassLedger key={`${group.classId}:${filterKey}`} group={group} rounds={rounds} blankFacts={blankFacts} videosKnown={videosKnown} showTeacher={showTeacher} today={today} busy={busy} save={save} onEdit={setActive} onPlay={setPlaying} onAssign={setAssigning} onIssueMenu={setMenu}
       collapsed={collapsed.has(group.classId)} onToggle={() => setCollapsed((current) => { const next = new Set(current); if (next.has(group.classId)) next.delete(group.classId); else next.add(group.classId); return next; })} />)
       : <div className={styles.empty}><strong>{rows.length ? "조건에 맞는 학생이 없습니다." : "조회 기간에 영상 과제가 나간 수업이 없습니다."}</strong><p>{rows.length ? "검색어와 필터를 조정해 주세요." : "원스크린에서 '영상 과제'를 켜고 저장한 수업부터 회차가 생깁니다."}</p></div>}
     <Dialog open={active !== null} onOpenChange={(open) => { if (!open && !busy) setActive(null); }}>
@@ -99,6 +102,7 @@ export function VideoHomeworkManagement({ rows, initialMarks, videos = NO_VIDEOS
     </Dialog>
     <LedgerVideoDialog cell={playing} video={playing ? videos.find((video) => video.id === playing.round.videoId
       && video.studentId === playing.row.studentId && video.classId === playing.row.classId) ?? null : null} onClose={() => setPlaying(null)} />
+    {menu ? <IssueMenu key={`${ledgerPairKey(menu.row)}:${menu.kind}:${menu.date}`} target={menu} onClose={() => setMenu(null)} /> : null}
     {assigning ? <VideoAssignmentDialog key={ledgerPairKey(assigning)} row={assigning} fromDate={fromDate} toDate={toDate} onClose={() => setAssigning(null)} /> : null}
   </div>;
 }

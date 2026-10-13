@@ -37,3 +37,12 @@ it("명시적으로 같은 숙제에 낸 추가 파일과 같은 파일 사본�
   expect(result.outcomes.map(o => o.videoId)).toEqual([null, "chosen"]);
   expect(result.unmatched).toEqual([]);
 });
+it("🔴 숙제 없이 올린 영상(free · 메모)은 남은 숙제를 자동으로 채우지 않는다 — 미배정으로 알리고, 손으로 배정하면 그 숙제 칸으로", () => {
+  const free = video("free", "2026-10-09", { free: true });
+  const result = run([free]);
+  expect(result.outcomes.map(o => o.status)).toEqual(["missing", "unchecked"]); // 10/1 숙제가 '제출'로 바뀌지 않는다
+  expect(result.unmatched.map(v => v.id)).toEqual(["free"]);
+  const assigned = run([{ ...free, homeworkDate: "2026-10-08", manuallyAssigned: true }]);
+  expect(assigned.outcomes.map(o => o.videoId)).toEqual([null, "free"]);
+  expect(assigned.unmatched).toEqual([]);
+});

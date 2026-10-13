@@ -91,7 +91,9 @@ export default async function OneScreenPage({
   const [loadedMarks, loadedAssignments, submitLinkUi, othersReportKeys] = await Promise.all([
     getVideoHomeworkMarks(user.tenantId, rosterStudentIds, roster.date,
       videoHwPolicy.enabled ? videoHwTargets.flatMap((t) => (t.homeworkDate ? [t.homeworkDate] : [])) : []),
-    videoHwPolicy.enabled ? getVideoHomeworkAssignments(user.tenantId, rosterStudentIds, videoHwDates) : Promise.resolve({}),
+    // 지난 수업일엔 보고서 없이 따로 낸 숙제도 '있음'으로(검사 칸이 숨지 않게) — 오늘 값은 보고서 토글이라 덮지 않는다.
+    videoHwPolicy.enabled ? getVideoHomeworkAssignments(user.tenantId, rosterStudentIds, videoHwDates,
+      { issuedDates: videoHwTargets.flatMap((t) => (t.homeworkDate && t.homeworkDate !== roster.date ? [t.homeworkDate] : [])) }) : Promise.resolve({}),
     videoHwPolicy.enabled
       ? getSubmitLinkUi(user.tenantId, rosterStudentIds, roster.date)
       : Promise.resolve({ mode: "off" as const, choices: {} }),

@@ -13,6 +13,7 @@ import { homeworkVideoLinks } from "@/features/students/homework-videos";
 import { isVideoHomeworkDate } from "../types";
 import { isVideoAssignableToDate, videoAssignmentRange, type VideoAssignmentOptions } from "../video-assignment";
 import { reconcileVideoHomework } from "./reconcile-outcomes";
+import { listExtraIssuesFor } from "./extra-issues";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 class AssignmentError extends Error {}
@@ -33,10 +34,16 @@ async function context(classId: string, studentId: string, period?: { fromDate: 
     .eq("student_id", studentId).eq("video_homework", true).order("report_date", { ascending: false });
   // 기간을 먼저 좁혀야 오래 다닌 학생의 과거 숙제가 최근 366건 제한에서 잘리지 않는다.
   if (period) reportQuery.gte("report_date", period.fromDate).lt("report_date", addDays(period.toDate, 1));
-  const reports = await reportQuery.limit(period ? 366 : 1);
-  if (reports.error) throw new AssignmentError("학생의 영상 숙제를 읽지 못했습니다.");
-  if (!reports.data?.length) throw new AssignmentError("이 반에 배정할 영상 숙제가 없습니다.");
-  return { user, db, full, delegated: viewAs?.access === "full", dates: [...new Set(reports.data.map(r => String(r.report_date)))] };
+  // 보고서 없이 따로 낸 숙제(extra-issues.ts)도 같은 숙제다 — 기간이 없으면(집계 제외) 있는지만 본다.
+  const [reports, extra] = await Promise.all([
+    reportQuery.limit(period ? 366 : 1),
+    listExtraIssuesFor(db, user.tenantId, { studentIds: [studentId], classIds: [classId],
+      ...(period ? { fromDate: period.fromDate, toDate: period.toDate, limit: 366 } : { limit: 1 }) }).catch(() => null),
+  ]);
+  if (reports.error || extra === null) throw new AssignmentError("학생의 영상 숙제를 읽지 못했습니다.");
+  const dates = [...new Set([...(reports.data ?? []).map(r => String(r.report_date)), ...extra.map(issue => issue.date)])].sort().reverse();
+  if (!dates.length) throw new AssignmentError("이 반에 배정할 영상 숙제가 없습니다.");
+  return { user, db, full, delegated: viewAs?.access === "full", dates };
 }
 
 export async function getVideoAssignmentOptions(input: { classId: string; studentId: string; fromDate: string; toDate: string }): Promise<VideoAssignmentOptions> {
@@ -63,6 +70,7 @@ export async function getVideoAssignmentOptions(input: { classId: string; studen
       const links = homeworkVideoLinks(v.drive_file_id);
       return { id: String(v.id), postedAt: String(v.posted_at), className: names.get(route.classId) ?? null,
         homeworkDate: typeof route.homeworkDate === "string" ? route.homeworkDate : null, source: v.source === "link" ? "제출 링크" : "ClassNote / Drive",
+        note: typeof route.note === "string" && route.note.trim() ? route.note.trim().slice(0, 100) : null,
         postId: typeof v.post_id === "number" ? v.post_id : null, revision: Number(v.assignment_revision), excluded: route.excluded === true,
         playback: links ? { ...links, uploadedAt: v.uploaded_at as string | null } : null };
     }) };

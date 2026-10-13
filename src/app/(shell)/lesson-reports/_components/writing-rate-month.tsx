@@ -123,7 +123,7 @@ export function WritingRateMonth({ view }: { view: WritingRatesView }) {
                   {r.source === "classnote" ? (
                     <span
                       className="border-line text-text-dim ml-1.5 rounded-full border px-1.5 py-0.5 text-xs font-normal"
-                      title="영어는 ClassNote 반 알림장 기준(반 단위) — 일자별은 집계하지 않고 합계만 셉니다"
+                      title="영어는 ClassNote 반 알림장 기준(반 단위) — 일자별은 집계하지 않고 어제까지의 합계만 셉니다"
                     >
                       ClassNote
                     </span>

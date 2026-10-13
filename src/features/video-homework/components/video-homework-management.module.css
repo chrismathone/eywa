@@ -71,6 +71,12 @@
 .notApplicable{color:var(--text-dim)}
 /* 숙제없음 사유 칸은 중립색. 결석은 배경 없이 notApplicable의 '—'로 표시한다. */
 .blank{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;width:100%;min-height:var(--control-h-sm);border-radius:var(--radius-sm);font-size:var(--text-sm);line-height:1.25;padding:2px 0;background:var(--bg-soft);color:var(--text-dim)}
+/* 고칠 수 있는 줄의 숙제없음 칸 — 우클릭(또는 누르기)으로 그 날짜의 숙제를 낸다. 모양은 그대로 두고 누를 수 있다는 것만 알린다. */
+.blankAction{border:0;cursor:context-menu;font:inherit;font-size:var(--text-sm)}
+.blankAction:hover{outline:1px solid var(--line-strong);outline-offset:-1px}
+.blankAction:focus-visible{outline:2px solid var(--primary);outline-offset:1px}
+/* 수업보고서 없이 따로 낸 숙제 — 칸 크기를 건드리지 않게 안쪽 점선으로만 가른다. */
+.mark[data-extra]{outline:1px dashed currentColor;outline-offset:-4px}
 .cellWrap{position:relative;display:grid;grid-template-columns:minmax(0,1fr);gap:3px}
 /* 재생 영역을 따로 확보해 날짜·상태와 겹치지 않는다(회차 열 96px). */
 .cellWrap[data-source=video]{grid-template-columns:minmax(0,1fr) 28px}

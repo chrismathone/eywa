@@ -1,6 +1,7 @@
 import { absentClassKeysOf, judgeTodayLessonReports } from "../today-actions";
 import { enrollmentAttendsOnDay, isEnrollmentActiveOn } from "@/features/enrollments/eligibility";
 import { boardKey, classKey, dowOf, sessionDates, type ClassPostDay } from "@/features/report-admin/english-writing";
+import { buildHasStudentsOn } from "@/features/report-admin/english-class-presence";
 import type { EffectiveAttendanceRecord } from "@/features/attendance/effective-records";
 import type { WorkClass, WorkReport } from "./teacher-work";
 
@@ -72,10 +73,12 @@ export function reportWorkObligations(input: {
   }
   const external = classes.filter((c) => c.reportSource === "classnote");
   const posted = new Set(input.posts.map((p) => `${boardKey(p.boardName)}:${p.postedOn}`));
+  // 그날 받을 학생이 없는 반은 할 일이 아니다 — 작성률 화면(getEnglishTeacherRates)과 같은 판정.
+  const hasStudentsOn = buildHasStudentsOn(enrollments);
   for (const cls of external) {
     const key = classKey(cls.name ?? "");
     const unique = !!key && external.filter((c) => classKey(c.name ?? "") === key).length === 1;
-    for (const date of dates) if (activeOn(cls.id, date)) {
+    for (const date of dates) if (activeOn(cls.id, date) && hasStudentsOn(cls.id, date)) {
       const written = unique && posted.has(`${key}:${date}`);
       out.push({ classId: cls.id, studentId: "class-post", date, written, status: written ? "success" : null });
     }

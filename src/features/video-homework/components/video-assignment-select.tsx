@@ -18,15 +18,17 @@ export function VideoAssignmentSelect({ videos, value, disabled, onChange }: {
   const selected = videos.find(video => video.id === value);
   return <Select value={value || null} onValueChange={value => onChange(value ?? "")} disabled={disabled || !videos.length}>
     <SelectTrigger className="w-full" aria-label="영상 선택">
-      <span className="truncate">{selected ? `${kstDateOf(selected.postedAt)} ${kstTimeOf(selected.postedAt)} · ${selected.className ?? "반 미지정"} · ${assignmentLabel(selected)}` : "영상을 골라 주세요"}</span>
+      <span className="truncate">{selected ? `${kstDateOf(selected.postedAt)} ${kstTimeOf(selected.postedAt)} · ${selected.className ?? "반 미지정"} · ${assignmentLabel(selected)}${selected.note ? ` · ${selected.note}` : ""}` : "영상을 골라 주세요"}</span>
     </SelectTrigger>
     <SelectContent alignItemWithTrigger={false} align="start" className={styles.popup}>
       {videos.map(video => <SelectItem key={video.id} value={video.id} className={styles.item}
-        label={`${kstDateOf(video.postedAt)} ${kstTimeOf(video.postedAt)} ${video.className ?? "반 미지정"} ${assignmentLabel(video)}`}>
+        label={`${kstDateOf(video.postedAt)} ${kstTimeOf(video.postedAt)} ${video.className ?? "반 미지정"} ${assignmentLabel(video)}${video.note ? ` ${video.note}` : ""}`}>
         <span className={styles.columns}>
           <span className={styles.date}>{kstDateOf(video.postedAt)} <small>{kstTimeOf(video.postedAt)}</small></span>
           <span className={styles.className}>{video.className ?? "반 미지정"}</span>
           <span className={styles.homework}>{assignmentLabel(video)}</span>
+          {/* 학생이 남긴 메모(숙제 없이 올린 영상) — 학생이 쓴 글이라 글자로만 보여 준다. 격자의 한 줄을 통째로 쓴다. */}
+          {video.note ? <span className={styles.note}>학생 메모: {video.note}</span> : null}
         </span>
       </SelectItem>)}
     </SelectContent>

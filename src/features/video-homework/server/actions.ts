@@ -8,6 +8,7 @@ import { logAction } from "@/features/audit/server/log";
 import { addDays, kstToday } from "@/lib/date-kst";
 import { isVideoHomeworkDate, type VideoHomeworkStatus } from "../types";
 import { videoHomeworkColumnReady } from "./assignments";
+import { findExtraIssue } from "./extra-issues";
 import { ledgerRoundWriteError, loadVideoHomeworkTarget, videoHomeworkWriteError, writeVideoHomeworkMark, type MarkWriteResult } from "./mark-write";
 import { nativeWriteAllowance } from "@/features/makeups/server/adapters/gates";
 
@@ -191,7 +192,11 @@ export async function setVideoHomeworkRound(input: {
       .eq("tenant_id", user.tenantId).eq("class_id", input.classId).eq("student_id", input.studentId)
       .eq("report_date", homeworkDate).eq("video_homework", true).limit(1) : null;
     if (assigned?.error) return { ok: false, error: assigned.error.message };
-    if (!assigned?.data?.length) return { ok: false, error: "그날 이 학생에게 나간 영상 과제를 찾을 수 없습니다." };
+    // 보고서 없이 따로 낸 숙제(extra-issues.ts)도 같은 숙제다.
+    const extra = homeworkDate && !assigned?.data?.length
+      ? await findExtraIssue(db, user.tenantId, { classId: input.classId, studentId: input.studentId, date: homeworkDate }).catch(() => undefined) : null;
+    if (extra === undefined) return { ok: false, error: "영상 과제를 확인하지 못했습니다. 잠시 뒤 다시 시도해 주세요." };
+    if (!assigned?.data?.length && !extra) return { ok: false, error: "그날 이 학생에게 나간 영상 과제를 찾을 수 없습니다." };
   }
   const result = await writeVideoHomeworkMark(db, { tenantId: user.tenantId, userId: user.id, classId: input.classId,
     studentId: input.studentId, slotDate: homeworkDate ? addDays(homeworkDate, 1) : date, homeworkDate,

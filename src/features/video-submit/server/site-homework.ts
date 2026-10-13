@@ -7,6 +7,7 @@ import { isVideoHomeworkDate, type VideoArrival, type VideoHomeworkMark, type Vi
 import { homeworkVideoLinks } from "@/features/students/homework-videos";
 import { SITE_HOMEWORK_DAYS } from "../site";
 import { homeworkVideoSource } from "@/features/video-homework/server/video-source";
+import { findExtraIssue, listExtraIssuesFor } from "@/features/video-homework/server/extra-issues";
 
 type Db = ReturnType<typeof createAdminClient>;
 export type HomeworkPair = { studentId: string; classId: string };
@@ -44,10 +45,12 @@ export async function openHomeworkDates(db: Db, tenantId: string, pairs: readonl
   const from = addDays(today, -SITE_HOMEWORK_DAYS);
   const wide = videoMatchRange(from, today, today);
   const videoSource = await homeworkVideoSource(db);
-  const [reports, marks, videos] = await Promise.all([
+  const [reports, extra, marks, videos] = await Promise.all([
     db.from("lesson_reports").select("student_id,class_id,report_date")
       .eq("tenant_id", tenantId).eq("video_homework", true).in("student_id", students).in("class_id", classes)
       .gte("report_date", wide.from).lt("report_date", addDays(today, 1)).order("id", { ascending: true }).limit(ROW_LIMIT + 1),
+    // 보고서 없이 따로 낸 숙제(원장 2026-10-13)도 같은 숙제다 — 학생이 골라 올릴 수 있어야 한다.
+    listExtraIssuesFor(db, tenantId, { studentIds: students, classIds: classes, fromDate: wide.from, toDate: today, limit: ROW_LIMIT + 1 }),
     db.from("video_homework_marks").select("class_id,student_id,check_date,homework_date,submitted_date,status,updated_at")
       .eq("tenant_id", tenantId).in("student_id", students).in("class_id", classes)
       .gte("check_date", wide.from).order("id", { ascending: true }).limit(ROW_LIMIT + 1),
@@ -63,13 +66,14 @@ export async function openHomeworkDates(db: Db, tenantId: string, pairs: readonl
     submitted_date: string | null; status: string; updated_at: string | null }>;
   const videoRows = videos.error ? [] : ((videos.data ?? []) as Array<{ id: string; student_id: string; post_id?: number | null; posted_at: string;
     created_at?: string | null; uploaded_at?: string | null; md5?: string | null; bytes?: number | string | null; route: unknown; drive_file_id: string | null }>);
-  if (reportRows.length > ROW_LIMIT || markRows.length > ROW_LIMIT || videoRows.length > ROW_LIMIT) throw new Error("영상 숙제 조회 범위 초과");
+  if (reportRows.length > ROW_LIMIT || extra.length > ROW_LIMIT || markRows.length > ROW_LIMIT || videoRows.length > ROW_LIMIT) throw new Error("영상 숙제 조회 범위 초과");
 
   const assigned = new Map<string, Set<string>>();
-  for (const r of reportRows) {
-    if (!r.class_id) continue;
-    const key = roundPairKey({ classId: r.class_id, studentId: r.student_id });
-    if (wanted.has(key)) (assigned.get(key) ?? assigned.set(key, new Set()).get(key)!).add(r.report_date);
+  const issued = [...reportRows.map((r) => ({ classId: r.class_id, studentId: r.student_id, date: r.report_date })), ...extra];
+  for (const r of issued) {
+    if (!r.classId) continue;
+    const key = roundPairKey({ classId: r.classId, studentId: r.studentId });
+    if (wanted.has(key)) (assigned.get(key) ?? assigned.set(key, new Set()).get(key)!).add(r.date);
   }
   const videoArrivals = videoRows.flatMap((row): VideoArrival[] => {
     const route = row.route && typeof row.route === "object" && !Array.isArray(row.route) ? (row.route as Record<string, unknown>) : {};
@@ -80,7 +84,7 @@ export async function openHomeworkDates(db: Db, tenantId: string, pairs: readonl
     const arrivedAt = videoArrivedAt({ createdAt: row.created_at, postedAt: row.posted_at, uploadedAt: row.uploaded_at, fromClassnote: row.post_id != null, picked: !!picked });
     return classId ? [{ id: row.id, studentId: row.student_id, classId, postedAt: row.posted_at, arrivedAt, homeworkDate: picked,
       playback: { ...links, uploadedAt: row.uploaded_at ?? null },
-      manuallyAssigned: route.manualAssignment === true,
+      manuallyAssigned: route.manualAssignment === true, free: route.free === true,
       fingerprint: videoFingerprint(row.md5, row.bytes) }] : [];
   });
   const rounds = buildLedgerRounds({
@@ -112,9 +116,12 @@ export async function isAssignedHomeworkDate(db: Db, tenantId: string, pair: Hom
   if (typeof date !== "string" || !isVideoHomeworkDate(date)) return false;
   if (date > today || date < addDays(today, -SITE_HOMEWORK_DAYS)) return false;
   if (!(await videoHomeworkColumnReady(db))) throw new Error("영상 과제 값을 읽을 수 없습니다");
-  const { data, error } = await db.from("lesson_reports").select("id")
-    .eq("tenant_id", tenantId).eq("student_id", pair.studentId).eq("class_id", pair.classId)
-    .eq("report_date", date).eq("video_homework", true).limit(1);
+  const [{ data, error }, extra] = await Promise.all([
+    db.from("lesson_reports").select("id")
+      .eq("tenant_id", tenantId).eq("student_id", pair.studentId).eq("class_id", pair.classId)
+      .eq("report_date", date).eq("video_homework", true).limit(1),
+    findExtraIssue(db, tenantId, { classId: pair.classId, studentId: pair.studentId, date }),
+  ]);
   if (error) throw new Error("영상 숙제 확인 실패");
-  return (data ?? []).length > 0;
+  return (data ?? []).length > 0 || extra !== null;
 }

@@ -17,9 +17,13 @@ type DbMark = { class_id: string; student_id: string; check_date: string; homewo
   submitted_date: string | null; status: string; updated_at: string | null };
 type DbVideo = { id: string; student_id: string; post_id: number | null; posted_at: string; created_at: string | null; uploaded_at: string | null;
   md5: string | null; bytes: number | string | null; status: string; drive_file_id: string | null;
-  class_id: string | null; homework_date: string | null; manual_assignment?: string | null; excluded?: string | null };
+  class_id: string | null; homework_date: string | null; manual_assignment?: string | null; excluded?: string | null; free?: string | null };
 type DbLedgerClass = LedgerClass & { teacher: { display_name: string; tenant_id: string } | null };
-export type VideoHomeworkLedgerBaseRow = VideoHomeworkRosterRow & { assignedDates: string[]; teacherName: string | null; hasAssignableVideos: boolean };
+export type VideoHomeworkLedgerBaseRow = VideoHomeworkRosterRow & {
+  assignedDates: string[]; teacherName: string | null; hasAssignableVideos: boolean;
+  /** 보고서 없이 따로 낸 숙제의 날짜(extra-issues.ts) — 조회 기간 안의 것만. 칸의 '따로 낸 숙제' 표시와 취소에 쓴다. */
+  extraDates: string[];
+};
 
 /**
  * 숙제 영상(0315a `student_homework_videos`) — 반이 확인된 것만 읽고 업로드 완료 파일의 검증된 미리보기를 붙인다.
@@ -33,7 +37,7 @@ export async function loadClassVideos(tenantId: string, studentIds: string[], fr
     const rows = await fetchAllPagedInChunks<DbVideo>(studentIds, (chunk, from, to) => {
       const query = db
       .from(source)
-      .select("id,student_id,post_id,posted_at,created_at,uploaded_at,md5,bytes,status,drive_file_id,class_id:route->>classId,homework_date:route->>homeworkDate,manual_assignment:route->>manualAssignment,excluded:route->>excluded")
+      .select("id,student_id,post_id,posted_at,created_at,uploaded_at,md5,bytes,status,drive_file_id,class_id:route->>classId,homework_date:route->>homeworkDate,manual_assignment:route->>manualAssignment,excluded:route->>excluded,free:route->>free")
       .eq("tenant_id", tenantId).in("student_id", chunk)
       .or(`and(posted_at.gte.${fromDate}T00:00:00+09:00,posted_at.lt.${addDays(toDate, 1)}T00:00:00+09:00),and(route->>manualAssignment.eq.true,route->>homeworkDate.gte.${fromDate},route->>homeworkDate.lte.${toDate})`)
       .order("id", { ascending: true });
@@ -45,7 +49,7 @@ export async function loadClassVideos(tenantId: string, studentIds: string[], fr
       const homeworkDate = row.homework_date || null;
       const links = row.status === "uploaded" ? homeworkVideoLinks(row.drive_file_id) : null;
       return { id: row.id, studentId: row.student_id, classId: row.class_id, postedAt: row.posted_at, homeworkDate, fingerprint: videoFingerprint(row.md5, row.bytes),
-        manuallyAssigned: row.manual_assignment === "true",
+        manuallyAssigned: row.manual_assignment === "true", free: row.free === "true",
         playback: links ? { ...links, uploadedAt: row.uploaded_at } : null,
         arrivedAt: videoArrivedAt({ createdAt: row.created_at, postedAt: row.posted_at, uploadedAt: row.uploaded_at, fromClassnote: row.post_id != null, picked: !!homeworkDate }) };
     });
@@ -107,9 +111,11 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
   const pairs = buildVideoHomeworkLessonPairs({ classes, enrollments, schedules, fromDate, toDate, today, occurrences })
     .filter((pair) => activeClasses.has(pair.classId) && (!scope || scope.pairs.has(`${pair.classId}:${pair.studentId}`)));
   const assignedByPair = new Map<string, string[]>();
+  const extraByPair = new Map<string, string[]>();
   for (const row of assigned ?? []) {
     const key = `${row.classId}:${row.studentId}`;
     assignedByPair.set(key, [...(assignedByPair.get(key) ?? []), row.date]);
+    if (row.extra && row.date >= fromDate && row.date <= toDate) extraByPair.set(key, [...(extraByPair.get(key) ?? []), row.date]);
   }
   const shownPairs = new Set(pairs.map((pair) => `${pair.classId}:${pair.studentId}`));
   const studentIds = [...new Set(pairs.map((row) => row.studentId))];
@@ -156,6 +162,7 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
       teacherName: cls.teacher?.tenant_id === tenantId ? cls.teacher.display_name.trim() || null : null,
       studentName: student.name, school: student.school, grade: student.grade,
       hasAssignableVideos: assignablePairs?.has(`${pair.classId}:${pair.studentId}`) ?? false,
+      extraDates: [...(extraByPair.get(`${pair.classId}:${pair.studentId}`) ?? [])].sort(),
       assignedDates: [...new Set(assignedByPair.get(`${pair.classId}:${pair.studentId}`) ?? [])].sort() }] : [];
   });
   // 화면으로는 명단에 선 (반 × 학생)의 기록만 — 넓혀 읽은 지점 전체 기록을 내려보내지 않는다.

@@ -2,6 +2,9 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
+import type { TenantSettings } from "@/features/owner/settings-types";
+import { isEnrollmentEndedOn } from "@/features/enrollments/eligibility";
+import { isVideoHomeworkEnabled } from "@/features/video-homework/policy";
 import { kstToday } from "@/lib/date-kst";
 import { checkVideoFile } from "../rules";
 import { linkVideoFilename, teacherFolderKey } from "../route";
@@ -13,7 +16,7 @@ import { linkFolderRegistry } from "./folder-registry";
 import { ensureLinkTeacherFolder } from "./folders";
 import { resolveSubmitToken } from "./links";
 import { isAssignedHomeworkDate } from "./site-homework";
-import { SITE_LINK_LOOKBACK_DAYS } from "../site";
+import { SITE_FREE_UPLOADS_PER_DAY, SITE_LINK_LOOKBACK_DAYS, siteNote } from "../site";
 import { reconcileLinkUploads, type CompletedUpload } from "./upload-complete";
 import { loadLinkRoute } from "./upload-context";
 
@@ -26,6 +29,47 @@ const FAILED = "영상 올리기를 시작하지 못했습니다. 잠시 후 다
 const LIMITED = "잠시 동안 너무 많이 올렸습니다. 한 시간 뒤에 다시 시도해 주세요.";
 /** 올리기 사이트 링크인데 고른 숙제를 확인할 수 없다(주소의 숙제일이 빠졌거나, 그 숙제가 없어졌거나, 숙제일 + 7일이 지났다). */
 const HOMEWORK_GONE = "올릴 숙제를 확인하지 못했습니다. 처음 화면에서 숙제를 다시 골라 주세요.";
+const NOTE_NEEDED = "무슨 영상인지 메모를 2글자 이상 적어 주세요.";
+const FREE_LIMITED = `숙제 없이 올리는 영상은 하루 ${SITE_FREE_UPLOADS_PER_DAY}개까지입니다. 내일 다시 올려 주세요.`;
+
+/**
+ * 오늘(KST) 이 학생이 **숙제 없이** 시작한 업로드 수 — 반을 합쳐 센다(그 학생의 최근 사이트 링크 전부). 거절된 시작(횟수 제한·Drive 실패로
+ * `failed`)은 안 센다. 줄 수가 작아 받아서 센다(상한을 넘으면 조용히 자르지 않고 던진다, B2).
+ */
+async function freeUploadsToday(db: ReturnType<typeof createAdminClient>, link: { tenant_id: string; student_id: string }): Promise<number> {
+  const links = await db.from("homework_video_links").select("id")
+    .eq("tenant_id", link.tenant_id).eq("student_id", link.student_id).eq("origin", "site")
+    .gte("created_at", new Date(Date.now() - SITE_LINK_LOOKBACK_DAYS * 86_400_000).toISOString()).limit(201);
+  if (links.error) throw new Error("업로드 횟수 확인 실패");
+  const ids = ((links.data ?? []) as Array<{ id: string }>).map((r) => r.id);
+  if (ids.length > 200) throw new Error("업로드 횟수 확인 범위 초과");
+  if (!ids.length) return 0;
+  const rows = await db.from("homework_video_link_uploads").select("id,status,route")
+    .eq("tenant_id", link.tenant_id).in("link_id", ids).gte("created_at", `${kstToday()}T00:00:00+09:00`).limit(501);
+  if (rows.error) throw new Error("업로드 횟수 확인 실패");
+  const list = (rows.data ?? []) as Array<{ status: string; route: { homeworkDate?: unknown } | null }>;
+  if (list.length > 500) throw new Error("업로드 횟수 확인 범위 초과");
+  return list.filter((r) => r.status !== "failed" && !r.route?.homeworkDate).length;
+}
+
+/**
+ * 숙제 없이 올리기 전에 반을 다시 본다 — 조회 화면(`findCandidates`)과 같은 조건: 지금 그 반 수강 중(휴원·종료 아님) · 반이 살아 있음 · 학원 설정의 영상 숙제 대상.
+ */
+async function freeUploadClassLive(db: ReturnType<typeof createAdminClient>, link: { tenant_id: string; student_id: string; class_id: string },
+  settings: TenantSettings, day: string): Promise<boolean> {
+  const [enrollments, klass, student] = await Promise.all([
+    db.from("enrollments").select("start_date,end_date,on_hold,is_transferred").eq("tenant_id", link.tenant_id)
+      .eq("student_id", link.student_id).eq("class_id", link.class_id).limit(50),
+    db.from("classes").select("id,subject,is_active").eq("tenant_id", link.tenant_id).eq("id", link.class_id).maybeSingle(),
+    db.from("students").select("grade,status").eq("tenant_id", link.tenant_id).eq("id", link.student_id).maybeSingle(),
+  ]);
+  if (enrollments.error || klass.error || student.error) throw new Error("반 확인 실패");
+  if (!klass.data?.is_active || !klass.data.subject || student.data?.status !== "enrolled") return false;
+  const live = ((enrollments.data ?? []) as Array<{ start_date: string | null; end_date: string | null; on_hold: boolean | null; is_transferred: boolean | null }>)
+    .some((e) => !e.on_hold && (!e.start_date || e.start_date <= day) && !isEnrollmentEndedOn(e.end_date, day, e.is_transferred === true));
+  return live && isVideoHomeworkEnabled(settings.report.videoHomeworkPolicy,
+    { classId: klass.data.id as string, subjectKey: klass.data.subject as string, grade: (student.data?.grade as string | null) ?? null });
+}
 
 /**
  * 횟수 제한을 셀 링크들 — 보고서·원생 탭 링크는 그 링크 하나, **사이트 링크는 같은 학생 × 반의 최근 사이트 링크 전부**
@@ -56,6 +100,8 @@ async function uploadLimitLinkIds(db: ReturnType<typeof createAdminClient>, link
  */
 export async function startLinkUpload(input: {
   token: unknown; file: { name?: unknown; size?: unknown; type?: unknown }; origin: string | null; host: string | null; homeworkDate?: unknown;
+  /** 숙제 없이 올리는 영상의 메모(올리기 사이트 링크 · 숙제를 고르지 않았을 때만 쓴다 — 2026-10-13). */
+  note?: unknown;
 }): Promise<{ result: StartUploadResult; followUp: (() => Promise<CompletedUpload[]>) | null }> {
   let followUp: (() => Promise<CompletedUpload[]>) | null = null;
   const fail = (code: Exclude<StartUploadResult, { ok: true }>["code"], error: string) =>
@@ -70,7 +116,8 @@ export async function startLinkUpload(input: {
     const link = resolved.link;
     const file = checkVideoFile(input.file);
     if (!file.ok) return fail("file", file.error);
-    const availability = await videoSubmitAvailability(link.tenant_id, await getTenantSettingsByTenantId(link.tenant_id), db);
+    const settings = await getTenantSettingsByTenantId(link.tenant_id);
+    const availability = await videoSubmitAvailability(link.tenant_id, settings, db);
     // 새 업로드를 꺼도 이전에 시작한 업로드의 완료 확인은 유지한다. 기능·스키마 검사는 그대로 적용한다.
     if (!availability.ok && (availability.reason === "module_off" || availability.reason === "no_schema" || !(await videoSubmitSchemaReady(db))))
       return fail("unavailable", UNAVAILABLE);
@@ -100,8 +147,15 @@ export async function startLinkUpload(input: {
     if (!baseRoute) return fail("invalid", "사용할 수 없는 링크입니다.");
     const homeworkOk = input.homeworkDate != null
       && (await isAssignedHomeworkDate(db, link.tenant_id, { studentId: link.student_id, classId: link.class_id }, input.homeworkDate, kstToday()));
-    if (link.origin === "site" && !homeworkOk) return fail("invalid", HOMEWORK_GONE);
-    const route = homeworkOk ? { ...baseRoute, homeworkDate: input.homeworkDate as string } : baseRoute;
+    // 사이트 링크: 숙제를 골랐으면 그 숙제가 맞아야 하고(없어졌으면 다시 고른다), 숙제 없이 올리면 메모가 있어야 한다(하루 상한 — 아래).
+    if (link.origin === "site" && input.homeworkDate != null && !homeworkOk) return fail("invalid", HOMEWORK_GONE);
+    const note = link.origin === "site" && !homeworkOk ? siteNote(input.note) : null;
+    const free = link.origin === "site" && !homeworkOk;
+    if (free && !note) return fail("file", NOTE_NEEDED);
+    if (free && (await freeUploadsToday(db, link)) >= SITE_FREE_UPLOADS_PER_DAY) return fail("limit", FREE_LIMITED);
+    // 숙제 없이 올리는 영상은 지금 그 반을 다니고 영상 숙제 대상일 때만(숙제용 링크가 퇴원 뒤에도 며칠 살아 있다).
+    if (free && !(await freeUploadClassLive(db, link, settings, kstToday()))) return fail("invalid", "지금 이 반에는 영상을 올릴 수 없습니다. 처음 화면에서 다시 골라 주세요.");
+    const route = homeworkOk ? { ...baseRoute, homeworkDate: input.homeworkDate as string } : free && note ? { ...baseRoute, note, free: true as const } : baseRoute;
     const folder = await ensureLinkTeacherFolder({
       request, registry: linkFolderRegistry(db, link.tenant_id, drive.rootId), rootId: drive.rootId,
       key: teacherFolderKey(route, centerId), folderName: route.folderName,
@@ -120,6 +174,11 @@ export async function startLinkUpload(input: {
     if (await overLimit(0)) {
       await markFailed("횟수 제한");
       return fail("limit", LIMITED);
+    }
+    // 숙제 없는 업로드의 하루 상한도 넣은 뒤 다시 센다(동시에 여러 개를 보내 세기와 넣기 사이의 틈으로 넘지 못하게).
+    if (free && (await freeUploadsToday(db, link)) > SITE_FREE_UPLOADS_PER_DAY) {
+      await markFailed("하루 상한");
+      return fail("limit", FREE_LIMITED);
     }
     let sessionUrl: string;
     try {

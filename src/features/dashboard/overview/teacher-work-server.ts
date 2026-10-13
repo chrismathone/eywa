@@ -11,6 +11,7 @@ import { teacherWork, type WorkClass, type WorkReport } from "./teacher-work";
 import { isTestClass, reportWorkObligations, resolveUnclassifiedReports, type WorkAttendance, type WorkEnrollment, type WorkSchedule } from "./work-targets";
 import { isReportTrackedSubject } from "../report-subjects";
 import { isVideoHomeworkEnabled } from "@/features/video-homework/policy";
+import { listExtraIssues } from "@/features/video-homework/server/extra-issues";
 
 /** RLS 반 범위에서 현재 담당 반의 업무를 집계한다. 관리자 조회도 테넌트·허용 반으로 제한한다. */
 export async function loadTeacherWork(tenantId: string, today: string, scope: TeacherScope | null, settings: TenantSettings) {
@@ -23,7 +24,7 @@ export async function loadTeacherWork(tenantId: string, today: string, scope: Te
   const range = { reportFrom: addDays(today, -6), videoFrom: addDays(today, -29), to: today };
   if (!classIds.length) return teacherWork([], [], [], range, []);
   const admin = createAdminClient();
-  const [teachers, reports, outcomes, schedules, enrollments, attendance, posts, unclassified] = await Promise.all([
+  const [teachers, reports, outcomes, schedules, enrollments, attendance, posts, unclassified, extraIssues] = await Promise.all([
     fetchInChunks<{ id: string; display_name: string }>([...new Set(visible.flatMap((c) => c.teacher_id ? [c.teacher_id] : []))], (chunk) =>
       db.from("users").select("id,display_name").eq("tenant_id", tenantId).in("id", chunk)),
     fetchAllPagedInChunks<{ id: string; class_id: string; student_id: string; report_date: string; covers_date: string | null; classnote_status: string | null; video_homework: boolean; student: { grade: string | null } | { grade: string | null }[] }>(classIds, (chunk, from, to) =>
@@ -52,7 +53,14 @@ export async function loadTeacherWork(tenantId: string, today: string, scope: Te
         .eq("tenant_id", tenantId).eq("student.is_test", false).is("class_id", null).lte("report_date", today)
         .or(`report_date.gte.${range.reportFrom},covers_date.gte.${range.reportFrom}`)
         .order("created_at", { ascending: false }).order("id").range(from, to)),
+    // 보고서 없이 따로 낸 영상 숙제(원장 2026-10-13) — 장부와 같은 숙제 축. 못 읽으면 보고서 쪽 숫자만 낸다(카드가 죽지 않게).
+    listExtraIssues(admin, tenantId, { fromDate: range.videoFrom, toDate: today }).catch(() => []),
   ]);
+  // 따로 낸 숙제의 학생 — 학년(학교급 제외 설정)·테스트 여부는 학생 표에서 읽는다(보고서가 없는 학생도 있다 · 장부와 같은 판정).
+  // 못 읽으면 따로 낸 숙제를 빼고 보고서 쪽 숫자만 낸다.
+  const extraStudents = await fetchInChunks<{ id: string; grade: string | null; is_test: boolean }>([...new Set(extraIssues.map((x) => x.studentId))],
+    (chunk) => admin.from("students").select("id,grade,is_test").eq("tenant_id", tenantId).in("id", chunk)).catch(() => null);
+  const extraStudentOf = new Map((extraStudents ?? []).map((s) => [s.id, s]));
   const names = new Map(teachers.map((t) => [t.id, t.display_name]));
   const subjects = new Map(visible.map((c) => [c.id, c.subject]));
   const programs = programSubjectsOf(Object.fromEntries(settings.operations.subjects.map((s) => [s.key, s.label])));
@@ -73,5 +81,7 @@ export async function loadTeacherWork(tenantId: string, today: string, scope: Te
     posts: posts.map((p) => ({ boardName: p.board_name, postedOn: p.posted_on })), from: range.reportFrom, to: today,
     nowMinutes: kstMinutesOfDay(), holidays: settings.operations.holidays.map((h) => h.date) });
   return teacherWork(workClasses, workReports, outcomes.map((r) => ({ classId: r.class_id, studentId: r.student_id,
-    date: r.homework_date, status: r.status, observedAt: r.observed_at })), range, obligations);
+    date: r.homework_date, status: r.status, observedAt: r.observed_at })), range, obligations,
+    extraIssues.filter((x) => { const student = extraStudentOf.get(x.studentId); return !!student && !student.is_test
+      && isVideoHomeworkEnabled(settings.report.videoHomeworkPolicy, { classId: x.classId, subjectKey: subjects.get(x.classId) ?? "", grade: student.grade }); }));
 }

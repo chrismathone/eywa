@@ -20,6 +20,13 @@ let db: FakeDb;
 let drive: ReturnType<typeof fakeDrive>;
 /** 오늘(KST) 그 학생 × 반에 영상 숙제가 나갔다 — 올리기 사이트 링크는 고른 숙제가 있어야 올린다(2026-10-03). */
 const TODAY = kstToday();
+/** 숙제 없이 올리기의 전제 — 재원생이 지금 그 반을 다닌다(반이 살아 있다). */
+const liveClass = (enrollment: Record<string, unknown> = {}) => {
+  db.tables.students![0]!.status = "enrolled";
+  db.tables.classes![0]!.is_active = true;
+  (db.tables.enrollments ??= []).push({ id: `e-${(db.tables.enrollments ?? []).length}`, tenant_id: T, student_id: S, class_id: C,
+    start_date: addDays(TODAY, -30), end_date: null, on_hold: false, is_transferred: false, ...enrollment });
+};
 const assignHomework = (date = TODAY, over: Record<string, unknown> = {}) =>
   db.tables.lesson_reports!.push({ id: `r-${date}-${db.tables.lesson_reports!.length}`, tenant_id: T, student_id: S, class_id: C, report_date: date, video_homework: true, ...over });
 
@@ -131,17 +138,74 @@ describe("업로드 시작 — 정상", () => {
     assignHomework(addDays(TODAY, -8)); // 숙제일 + 7일이 지났다(원장 "숙제날짜 기준 7일")
     assignHomework(addDays(TODAY, -1), { student_id: "other-student" }); // 다른 학생의 숙제
     assignHomework(addDays(TODAY, -2), { tenant_id: OTHER_T }); // 다른 지점
-    for (const bad of [undefined, null, "", "2026-13-99", "어제", addDays(TODAY, -3), addDays(TODAY, -20), addDays(TODAY, -8), addDays(TODAY, -1), addDays(TODAY, -2), addDays(TODAY, 1), 20261003]) {
-      const r = await req({ homeworkDate: bad });
+    for (const bad of ["", "2026-13-99", "어제", addDays(TODAY, -3), addDays(TODAY, -20), addDays(TODAY, -8), addDays(TODAY, -1), addDays(TODAY, -2), addDays(TODAY, 1), 20261003]) {
+      const r = await req({ homeworkDate: bad, note: "메모가 있어도 숙제를 골랐으면 그 숙제가 맞아야 한다" });
       expect(r, String(bad)).toMatchObject({ ok: false, code: "invalid" });
       expect(!r.ok && r.error, String(bad)).toContain("숙제를 다시 골라 주세요");
     }
+    // 숙제를 고르지 않았으면(숙제 없이 올리기) 메모가 있어야 한다(2026-10-13)
+    for (const none of [undefined, null]) {
+      const r = await req({ homeworkDate: none });
+      expect(r, String(none)).toMatchObject({ ok: false, code: "file" });
+      expect(!r.ok && r.error).toContain("메모");
+    }
+    expect(await req({ note: " 가 " })).toMatchObject({ ok: false, code: "file" });
     // 거절된 시작은 Drive 세션을 열지 않고 업로드 기록도 남기지 않는다
     expect(drive.calls.filter((c) => c.url.includes("uploadType=resumable"))).toHaveLength(0);
     expect(db.tables.homework_video_link_uploads).toHaveLength(0);
     expect((await req({ homeworkDate: TODAY })).ok).toBe(true);
     // 확인된 숙제일이 업로드 경로에 실린다 — 영상 줄로 그대로 넘어가 영상 제출 현황이 그 숙제 칸에 붙인다
     expect(db.tables.homework_video_link_uploads![0]!.route).toMatchObject({ classId: C, studentId: S, homeworkDate: TODAY });
+  });
+  it("숙제 없이 올리기(사이트 링크 · 메모 필수 · 하루 5개) — 메모는 다듬어 업로드 경로에 실린다 · 숙제일은 싣지 않는다", async () => {
+    Object.assign(db.tables.homework_video_links![0]!, { origin: "site", created_at: new Date().toISOString() });
+    liveClass();
+    const fresh = () => { drive = fakeDrive(); vi.stubGlobal("fetch", vi.fn(drive.impl)); };
+    expect((await req({ note: "  10월 6일\n숙제   3번 풀이 " })).ok).toBe(true);
+    // 🔴 '숙제 없이 올린 영상' 표시(free)가 함께 실린다 — 없으면 게시일순 자동 짝이 남은 숙제를 채운다
+    expect(db.tables.homework_video_link_uploads![0]!.route).toMatchObject({ classId: C, studentId: S, note: "10월 6일 숙제 3번 풀이", free: true });
+    expect(db.tables.homework_video_link_uploads![0]!.route).not.toHaveProperty("homeworkDate");
+    // 오늘 이미 5개를 시작했으면(거절된 것 빼고) 더 받지 않는다 — 숙제를 고른 업로드는 세지 않는다
+    const row = db.tables.homework_video_link_uploads![0]!;
+    row.drive_file_id = "f0"; // 가짜 Drive는 파일 번호가 하나다 — 다음 시작과 겹치지 않게
+    db.tables.homework_video_link_uploads!.push(
+      ...[1, 2, 3].map((i) => ({ ...row, id: `free-${i}`, drive_file_id: `f${i}` })),
+      { ...row, id: "failed-1", drive_file_id: "ff", status: "failed" },
+      { ...row, id: "hw-1", drive_file_id: "fh", route: { ...(row.route as object), homeworkDate: TODAY } },
+    );
+    fresh();
+    const fifth = await req({ note: "다섯 번째" });
+    expect(fifth, JSON.stringify(fifth)).toMatchObject({ ok: true });
+    db.tables.homework_video_link_uploads!.at(-1)!.drive_file_id = "f5";
+    fresh();
+    const over = await req({ note: "여섯 번째" });
+    expect(over).toMatchObject({ ok: false, code: "limit" });
+    expect(!over.ok && over.error).toContain("하루 5개");
+    // 숙제를 고른 업로드는 그 상한과 무관하다
+    assignHomework(TODAY);
+    fresh();
+    expect((await req({ homeworkDate: TODAY })).ok).toBe(true);
+  });
+  it("숙제 없이 올리기는 지금 그 반을 다닐 때만 — 끝난 수강·휴원·퇴원·영상 숙제 대상 밖이면 Drive를 열지 않는다", async () => {
+    Object.assign(db.tables.homework_video_links![0]!, { origin: "site", created_at: new Date().toISOString() });
+    const ask = () => req({ note: "추가 연습 영상" });
+    expect(await ask()).toMatchObject({ ok: false, code: "invalid" }); // 수강 기록이 없다
+    liveClass({ end_date: addDays(TODAY, -1) });
+    expect(await ask()).toMatchObject({ ok: false, code: "invalid" });
+    db.tables.enrollments = [];
+    liveClass({ on_hold: true });
+    expect(await ask()).toMatchObject({ ok: false, code: "invalid" });
+    db.tables.enrollments = [];
+    liveClass();
+    db.tables.students![0]!.status = "withdrawn";
+    expect(await ask()).toMatchObject({ ok: false, code: "invalid" });
+    db.tables.students![0]!.status = "enrolled";
+    m.settings = { ...settings(), report: { videoHomeworkPolicy: { enabled: true, disabledSubjectKeys: ["math"], disabledSchoolLevels: [], disabledClassIds: [] } } };
+    expect(await ask()).toMatchObject({ ok: false, code: "invalid" });
+    expect(drive.calls.filter((c) => c.url.includes("uploadType=resumable"))).toHaveLength(0);
+    expect(db.tables.homework_video_link_uploads ?? []).toHaveLength(0);
+    m.settings = settings();
+    expect(await ask()).toMatchObject({ ok: true });
   });
   it("🔴 영상 과제 값을 읽을 수 없으면(0308a 전·순간 오류) '숙제를 다시 고르라'가 아니라 잠시 못 받음 — 학생을 처음 화면으로 돌려보내지 않는다", async () => {
     Object.assign(db.tables.homework_video_links![0]!, { origin: "site", created_at: new Date().toISOString() });
