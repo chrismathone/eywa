@@ -2,22 +2,19 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useLicenseOn } from "@/features/owner/operations-context";
-import { CircleStop, History, Mic, Upload, X } from "@/components/icons/aywa-icon-compat";
+import { CircleStop, Mic, Upload, X } from "@/components/icons/aywa-icon-compat";
+import { RecordingRecoveryNotice } from "@/components/forms/recording-recovery-notice";
 import {
-  checkRecovery,
-  clearRecovery,
-  recoverRecording,
   saveChunk,
   startRecoverySession,
-  type RecordingMeta,
+  type RecordingScope,
 } from "@/lib/recording-recovery";
 import { useRecordingLock } from "@/components/workspace/use-recording-lock";
 import {
-  ACCEPTED_AUDIO_TYPES,
+  AUDIO_FILE_ACCEPT,
   downloadFile,
   formatBytes,
   formatSeconds,
-  kstTimestamp,
   validateAudioFile,
   MAX_AUDIO_SIZE_LABEL,
 } from "@/lib/audio-upload";
@@ -33,22 +30,27 @@ function AudioRecorderFieldInner({
   onChange,
   onRecordingChange,
   disabled = false,
+  scope,
+  selectedRecoveryId,
+  showRecovery = true,
 }: {
   file: File | null;
-  onChange: (f: File | null) => void;
+  onChange: (f: File | null, recoveryId?: string) => void;
+  scope: RecordingScope | null;
+  selectedRecoveryId?: string | null;
+  showRecovery?: boolean;
   /** 녹음 진행 여부를 부모로 끌어올림 — 녹음 중 제출(=진행 녹음 silent 유실) 방지용. 안정 setter 권장. */
   onRecordingChange?: (recording: boolean) => void;
   disabled?: boolean;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const recordingChunksRef = useRef<Blob[]>([]);
+  const attemptRef = useRef<symbol | null>(null);
   const recordingTimerRef = useRef<number | null>(null);
 
   const [isRecording, setIsRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [recoveryMeta, setRecoveryMeta] = useState<RecordingMeta | null>(null);
 
   // 녹음 중이면 이 폼이 든 플로팅 창의 닫기(X)·배경보내기·탭 새로고침을 잠근다(우발적 유실 방지).
   useRecordingLock(isRecording);
@@ -57,18 +59,9 @@ function AudioRecorderFieldInner({
     onRecordingChange?.(isRecording);
   }, [isRecording, onRecordingChange]);
 
-  useEffect(() => {
-    let cancelled = false;
-    checkRecovery("consultation").then((m) => {
-      if (!cancelled) setRecoveryMeta(m);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   useEffect(
     () => () => {
+      attemptRef.current = null;
       if (recordingTimerRef.current) window.clearInterval(recordingTimerRef.current);
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
         mediaRecorderRef.current.stop();
@@ -76,20 +69,6 @@ function AudioRecorderFieldInner({
     },
     [],
   );
-
-  async function handleRecover() {
-    const recovered = await recoverRecording("consultation");
-    if (recovered) {
-      onChange(recovered);
-      setRecoveryMeta(null);
-      await clearRecovery("consultation");
-    }
-  }
-
-  async function handleDiscardRecovery() {
-    await clearRecovery("consultation");
-    setRecoveryMeta(null);
-  }
 
   function pickFile(f: File | null) {
     setError(null);
@@ -107,29 +86,39 @@ function AudioRecorderFieldInner({
 
   async function startRecording() {
     setError(null);
+    if (!scope) return setError("학생 이름을 입력한 뒤 녹음을 시작해 주세요.");
+    if (attemptRef.current) return;
+    const attempt = Symbol();
+    attemptRef.current = attempt;
+    mediaRecorderRef.current = null;
+    setIsRecording(true);
+    let stream: MediaStream | undefined;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (attemptRef.current !== attempt) { stream.getTracks().forEach((t) => t.stop()); return; }
       const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
         ? "audio/webm;codecs=opus"
         : "audio/webm";
       const recorder = new MediaRecorder(stream, { mimeType: mime });
-      recordingChunksRef.current = [];
-      await startRecoverySession("consultation", mime).catch(() => {});
+      const chunks: Blob[] = [];
+      const session = await startRecoverySession("consultation", mime, scope);
+      if (attemptRef.current !== attempt) { stream.getTracks().forEach((t) => t.stop()); return; }
       recorder.ondataavailable = (e) => {
         if (e.data && e.data.size > 0) {
-          const idx = recordingChunksRef.current.length;
-          recordingChunksRef.current.push(e.data);
-          void saveChunk("consultation", idx, e.data);
+          const idx = chunks.length;
+          chunks.push(e.data);
+          void saveChunk(session.id, idx, e.data);
         }
       };
       recorder.onstop = () => {
-        const blob = new Blob(recordingChunksRef.current, { type: "audio/webm" });
+        const blob = new Blob(chunks, { type: "audio/webm" });
         // 파일 이름엔 `&`를 쓰지 않는다(다운로드 백스톱·업로드 경로에서 이름이 깨질 수 있다) — '콜앤상담'.
-        const recorded = new File([blob], `콜앤상담녹음_${kstTimestamp()}.webm`, { type: "audio/webm" });
-        onChange(recorded);
+        const recorded = new File([blob], session.fileName!, { type: "audio/webm" });
+        if (attemptRef.current === attempt) onChange(recorded, session.id);
         // 불상사 대비 디스크 백스톱 — 정지 즉시 다운로드 폴더로 저장(IDB 복구와 별개).
         downloadFile(recorded);
-        stream.getTracks().forEach((t) => t.stop());
+        stream?.getTracks().forEach((t) => t.stop());
+        if (attemptRef.current === attempt) { attemptRef.current = null; setIsRecording(false); }
       };
       recorder.start(1000);
       mediaRecorderRef.current = recorder;
@@ -137,44 +126,36 @@ function AudioRecorderFieldInner({
       setRecordSeconds(0);
       recordingTimerRef.current = window.setInterval(() => setRecordSeconds((s) => s + 1), 1000);
     } catch (e) {
+      stream?.getTracks().forEach((t) => t.stop());
+      if (attemptRef.current !== attempt) return;
+      attemptRef.current = null;
+      setIsRecording(false);
       setError(`마이크 접근 실패: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
   function stopRecording() {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+    if (mediaRecorderRef.current?.state === "inactive") return;
+    if (mediaRecorderRef.current) {
       mediaRecorderRef.current.stop();
+    } else {
+      attemptRef.current = null;
+      setIsRecording(false);
     }
     if (recordingTimerRef.current) {
       window.clearInterval(recordingTimerRef.current);
       recordingTimerRef.current = null;
     }
-    setIsRecording(false);
   }
 
   return (
     <div className="space-y-2">
-      {recoveryMeta ? (
-        <div className="border-chart-3/40 bg-chart-3/5 flex items-start gap-3 rounded-md border px-4 py-3">
-          <History className="text-chart-3 mt-0.5 size-4 shrink-0" />
-          <div className="min-w-0 flex-1 space-y-1">
-            <p className="text-foreground text-sm font-medium">복구 가능한 녹음이 있습니다</p>
-            <p className="text-muted-foreground text-xs">
-              {new Date(recoveryMeta.startedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}에 시작 ·{" "}
-              <span className="num">{recoveryMeta.chunkCount}</span>개 청크
-            </p>
-            <div className="flex items-center gap-2 pt-1">
-              <button type="button" onClick={handleRecover} className="text-foreground hover:text-chart-3 text-xs font-medium">
-                복구하기
-              </button>
-              <span className="text-muted-foreground/40 text-xs">·</span>
-              <button type="button" onClick={handleDiscardRecovery} className="text-muted-foreground hover:text-foreground text-xs">
-                녹음 지우기
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      {showRecovery ? <RecordingRecoveryNotice
+        key={scope?.recordKey ?? "empty"}
+        kind="consultation" scope={scope} selectedId={selectedRecoveryId}
+        disabled={disabled || isRecording}
+        onRestore={(recovered, meta) => onChange(recovered, meta.id)}
+      /> : null}
 
       {file ? (
         <div className="border-border bg-muted/30 flex items-center justify-between rounded-md border px-3 py-2.5">
@@ -235,7 +216,7 @@ function AudioRecorderFieldInner({
       <input
         ref={fileInputRef}
         type="file"
-        accept={ACCEPTED_AUDIO_TYPES.join(",")}
+        accept={AUDIO_FILE_ACCEPT}
         onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
         className="hidden"
       />

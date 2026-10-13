@@ -2,22 +2,23 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useLicenseOn } from "@/features/owner/operations-context";
-import { History, Loader2, Mic, Square, Upload } from "@/components/icons/aywa-icon-compat";
+import { Loader2, Mic, Square, Upload } from "@/components/icons/aywa-icon-compat";
+import { RecordingRecoveryNotice } from "@/components/forms/recording-recovery-notice";
 import { Button } from "@/components/ui/button";
 import { FilePickerButton } from "@/components/ui/file-picker-button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { downloadFile, kstTimestamp } from "@/lib/audio-upload";
+import { AUDIO_FILE_ACCEPT, downloadFile } from "@/lib/audio-upload";
 import { issueAudioUploadTicket } from "@/features/media/server/upload-actions";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import {
-  checkRecovery,
   clearRecovery,
-  recoverRecording,
   saveChunk,
   startRecoverySession,
-  type RecordingMeta,
+  type RecordingOwner,
 } from "@/lib/recording-recovery";
 import { useRecordingLock } from "@/components/workspace/use-recording-lock";
+import { useInFrame } from "@/components/workspace/use-in-frame";
+import { withEmbed } from "@/components/workspace/embed-context";
 import { startStudentConsultationFromAudio } from "@/features/consultations/server/audio-actions";
 import type { StudentOption } from "@/features/consultations/server/queries";
 
@@ -29,82 +30,80 @@ const KIND = "student-consultation" as const;
  * 녹음은 이 폼이 든 플로팅 창 안에서 진행(별도 브라우저 창 없음) + IndexedDB 크래시 복구 + 녹음 중
  * 창 닫기/탭 새로고침 잠금(useRecordingLock) — 회의록·등록상담 폼과 동일.
  */
-function AudioConsultationFormInner({ students }: { students: StudentOption[] }) {
+function AudioConsultationFormInner({ students, recordingOwner }: { students: StudentOption[]; recordingOwner: RecordingOwner }) {
   const [studentId, setStudentId] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [recording, setRecording] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [busy, startBusy] = useTransition();
-  const [recoveryMeta, setRecoveryMeta] = useState<RecordingMeta | null>(null);
+  const [pending, startBusy] = useTransition();
+  const [leaving, setLeaving] = useState(false);
+  const busy = pending || leaving;
+  const inFrame = useInFrame();
+  const [recoveryId, setRecoveryId] = useState<string | null>(null);
+  const student = students.find((s) => s.id === studentId);
+  const scope = student ? { ...recordingOwner, recordKey: `student:${student.id}`, label: student.name } : null;
   const recRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
+  const attemptRef = useRef<symbol | null>(null);
 
   useRecordingLock(recording);
 
   useEffect(() => {
-    let cancelled = false;
-    checkRecovery(KIND).then((meta) => {
-      if (!cancelled) setRecoveryMeta(meta);
-    });
     return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    return () => {
+      attemptRef.current = null;
       if (recRef.current && recRef.current.state !== "inactive") recRef.current.stop();
     };
   }, []);
 
-  async function handleRecover() {
-    const recovered = await recoverRecording(KIND);
-    if (recovered) {
-      setFile(recovered);
-      setRecoveryMeta(null);
-      await clearRecovery(KIND);
-    }
-  }
-  async function handleDiscardRecovery() {
-    await clearRecovery(KIND);
-    setRecoveryMeta(null);
-  }
-
   async function startRec() {
     setError(null);
+    if (!scope) return setError("학생을 선택한 뒤 녹음을 시작해 주세요.");
+    if (attemptRef.current) return;
+    const attempt = Symbol();
+    attemptRef.current = attempt;
+    recRef.current = null;
+    setRecording(true);
+    let stream: MediaStream | undefined;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (attemptRef.current !== attempt) { stream.getTracks().forEach((t) => t.stop()); return; }
       const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
         ? "audio/webm;codecs=opus"
         : "audio/webm";
       const rec = new MediaRecorder(stream, { mimeType: mime });
-      chunksRef.current = [];
-      await startRecoverySession(KIND, mime).catch(() => {});
+      const chunks: Blob[] = [];
+      const session = await startRecoverySession(KIND, mime, scope);
+      if (attemptRef.current !== attempt) { stream.getTracks().forEach((t) => t.stop()); return; }
       rec.ondataavailable = (e) => {
         if (e.data.size > 0) {
-          const idx = chunksRef.current.length;
-          chunksRef.current.push(e.data);
-          void saveChunk(KIND, idx, e.data);
+          const idx = chunks.length;
+          chunks.push(e.data);
+          void saveChunk(session.id, idx, e.data);
         }
       };
       rec.onstop = () => {
-        stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(chunksRef.current, { type: mime });
-        const recorded = new File([blob], `상담녹음_${kstTimestamp()}.webm`, { type: mime });
-        setFile(recorded);
+        stream?.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(chunks, { type: mime });
+        const recorded = new File([blob], session.fileName!, { type: mime });
+        if (attemptRef.current === attempt) { setFile(recorded); setRecoveryId(session.id); }
         // 불상사 대비 디스크 백스톱 — 정지 즉시 다운로드 폴더로 저장(IDB 복구와 별개).
         downloadFile(recorded);
-        setRecording(false);
+        if (attemptRef.current === attempt) { attemptRef.current = null; setRecording(false); }
       };
       recRef.current = rec;
       rec.start(1000);
       setRecording(true);
     } catch {
+      stream?.getTracks().forEach((t) => t.stop());
+      if (attemptRef.current !== attempt) return;
+      attemptRef.current = null;
+      setRecording(false);
       setError("마이크 접근이 거부되었습니다. 음성 파일 업로드를 이용하세요.");
     }
   }
   function stopRec() {
-    recRef.current?.stop();
+    if (recRef.current?.state === "inactive") return;
+    if (recRef.current) recRef.current.stop();
+    else { attemptRef.current = null; setRecording(false); }
   }
 
   function submit() {
@@ -134,57 +133,42 @@ function AudioConsultationFormInner({ students }: { students: StudentOption[] })
       fd.set("audioPath", objectName);
       fd.set("audioSizeBytes", String(file.size));
       fd.set("consultedAt", new Date().toISOString());
-      const res = await startStudentConsultationFromAudio(undefined, fd);
-      if (res?.error) return setError(res.error); // 성공 시 서버 redirect가 이동 처리
-      await clearRecovery(KIND);
+      let res: Awaited<ReturnType<typeof startStudentConsultationFromAudio>>;
+      try {
+        res = await startStudentConsultationFromAudio(undefined, fd);
+      } catch {
+        return setError("상담이 저장됐을 수 있습니다. 목록에서 확인해 주세요.");
+      }
+      if (!res?.id) return setError(res?.error ?? "저장 결과를 확인하지 못했습니다. 목록에서 확인해 주세요.");
+      if (recoveryId) await clearRecovery(recoveryId);
+      setLeaving(true);
+      const dest = `/consultations/${res.id}/edit`;
+      window.location.assign(inFrame ? withEmbed(dest) : dest);
     });
   }
 
   return (
-    <details className="border-border bg-muted/20 rounded-2xl border p-4">
+    <>
+    <RecordingRecoveryNotice key={studentId} kind={KIND} scope={scope} selectedId={recoveryId}
+      disabled={busy || recording} onRestore={(recovered, meta) => { setFile(recovered); setRecoveryId(meta.id); }} />
+    <details className="border-border bg-muted/20 rounded-2xl border p-4" inert={leaving}>
       <summary className="text-foreground inline-flex cursor-pointer items-center gap-1.5 text-sm font-bold">
         <Mic className="text-primary size-4" />
         녹음·음성 파일로 작성 (AI 자동 분석)
       </summary>
       <div className="mt-3 space-y-3">
-        {recoveryMeta ? (
-          <div className="border-chart-3/40 bg-chart-3/5 flex items-start gap-3 rounded-md border px-3 py-2.5">
-            <History className="text-chart-3 mt-0.5 size-4 shrink-0" />
-            <div className="min-w-0 flex-1 space-y-1">
-              <p className="text-foreground text-sm font-medium">복구 가능한 녹음이 있습니다</p>
-              <p className="text-text-dim text-xs">
-                {new Date(recoveryMeta.startedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}에 시작 ·{" "}
-                <span className="num">{recoveryMeta.chunkCount}</span>개 청크
-              </p>
-              <div className="flex items-center gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={handleRecover}
-                  className="text-foreground hover:text-chart-3 text-xs font-medium"
-                >
-                  복구하기
-                </button>
-                <span className="text-text-faint text-xs">·</span>
-                <button
-                  type="button"
-                  onClick={handleDiscardRecovery}
-                  className="text-text-dim hover:text-foreground text-xs"
-                >
-                  녹음 지우기
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : null}
-
         <p className="text-text-dim text-xs">
           학생을 고르고 상담을 녹음하거나 음성 파일을 올리면, 전사 후 AI가 7개 항목으로 분석합니다.
         </p>
-        <div className="space-y-1.5">
+        <fieldset className="space-y-1.5" disabled={busy || recording}>
           <span className="text-foreground block text-sm font-medium">학생 *</span>
           <SearchableSelect
             value={studentId}
-            onValueChange={setStudentId}
+            onValueChange={(id) => {
+              if (busy || recording) return;
+              if (id !== studentId) { setFile(null); setRecoveryId(null); }
+              setStudentId(id);
+            }}
             placeholder="학생 선택..."
             searchPlaceholder="학생 이름 검색..."
             options={students.map((s) => ({
@@ -193,7 +177,7 @@ function AudioConsultationFormInner({ students }: { students: StudentOption[] })
               hint: s.grade ? `(${s.grade})` : undefined,
             }))}
           />
-        </div>
+        </fieldset>
 
         <div className="flex flex-wrap items-center gap-2">
           {recording ? (
@@ -209,10 +193,12 @@ function AudioConsultationFormInner({ students }: { students: StudentOption[] })
           )}
           <span className="text-text-faint text-xs">또는</span>
           <FilePickerButton
-            accept="audio/*"
+            disabled={busy || recording}
+            accept={AUDIO_FILE_ACCEPT}
             file={file}
             onSelect={(f) => {
               setFile(f);
+              setRecoveryId(null);
               setError(null);
             }}
             label="음성 파일 선택"
@@ -233,6 +219,7 @@ function AudioConsultationFormInner({ students }: { students: StudentOption[] })
         </Button>
       </div>
     </details>
+    </>
   );
 }
 
