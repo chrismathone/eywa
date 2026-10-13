@@ -42,6 +42,8 @@ import { isLaboratoryMenuAvailable } from "@/lib/laboratory/server";
 import { PopupsFace } from "./_components/popups-face";
 import { ImportHubFace } from "./_components/import-hub-face";
 import { DashboardFace } from "./_components/dashboard/dashboard-face";
+import { EvaluationFace } from "./_components/evaluation/evaluation-face";
+import { getPortfolioGate } from "@/features/teacher-portfolio/server/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -54,17 +56,18 @@ type Sp = Record<string, string | undefined>;
  *    **에러 없이 늘 빈 목록**이 뜬다(조용한 거짓말). 자물쇠는 RLS고([[#77]]) 여기서 감추는 건 그 사실을
  *    화면에 반영하는 것이다. ⚠️ 이 학원은 `owner` 메뉴를 admin·manager에게 위임해 뒀다(실측 활성 11명).
  */
-function facesFor(canReadAudit: boolean, showModules: boolean, showMakeups: boolean): OwnerFaceDef[] {
+function facesFor(canReadAudit: boolean, showModules: boolean, showMakeups: boolean, showEvaluation: boolean): OwnerFaceDef[] {
   // 원장 위에게만 서는 면(감사로그 · 대시보드 관리 · 기능)은 위임 계정엔 세우지 않는다 — 주소로 와도 안내 문구(아래 본문).
   // '기능'(모듈 켜기·끄기) 면은 **새 학원(일반판)에만** 선다 — 침산 설정 화면은 이 면이 생기기 전과 같아야 한다(원장 2026-09-22).
-  return OWNER_FACES.filter((f) => (!f.masterOnly || canReadAudit) && (!f.genericOnly || showModules) && (f.key !== "makeups" || showMakeups));
+  return OWNER_FACES.filter((f) => (!f.masterOnly || canReadAudit) && (!f.genericOnly || showModules) && (f.key !== "makeups" || showMakeups)
+    && (f.key !== "evaluation" || showEvaluation));
 }
 
 /**
  * **자체 판정을 하는 면** — 학원 설정 쓰기 권한(페이지의 fieldset 잠금 · '읽기 전용' 안내)을 따르지 않는다.
  * 고치는 것이 없거나(감사로그), 다른 권한으로 버튼을 세우는 면이다(데이터 정리 · 데이터 가져오기).
  */
-const SELF_GATED_TABS: ReadonlySet<OwnerTab | "modules"> = new Set(["data", "import", "audit"]);
+const SELF_GATED_TABS: ReadonlySet<OwnerTab | "modules"> = new Set(["data", "import", "audit", "evaluation"]);
 
 /** 요청한 면 + 학원 설정 → 실제로 보일 면. '기능' 면은 일반판 학원에서만 열리고, 침산에선 기본 면(프로필)으로 떨어진다. */
 function effectiveTab(sp: Sp, settings: { preset: "chinsan" | "generic" }): OwnerTab | "modules" {
@@ -90,6 +93,9 @@ function fmt(iso: string | null): string {
 }
 
 // 면마다 문서 제목을 달리해 창 타이틀바가 "학원 설정 · 운영 체계"로 라이브 갱신(route-window 관찰).
+// 강사평가 저장 뒤 진행 중인 달을 다시 매기는 일(after)이 이 화면의 서버 액션 안에서 돈다 — 직원 평가 화면의 [지금 집계]와 같은 상한.
+export const maxDuration = 120;
+
 export async function generateMetadata({ searchParams }: { searchParams: Promise<Sp> }) {
   const sp = await searchParams;
   // '기능' 면 판정에만 설정이 필요하다 — 그 외엔 종전처럼 조회 없이(요청 캐시라 본문과 같은 조회를 나눠 쓴다).
@@ -115,6 +121,8 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
   // ⚠️ 권한이 있는 평소 경로에서는 여기서 더 조회하지 않는다(사용자·권한 표는 요청 안에서 한 번만 읽힌다).
   const actor = await getCurrentUser();
   if (actor && requestedFace === "makeups" && !(await isLaboratoryMenuAvailable(actor.tenantId, "makeups"))) redirect("/owner");
+  // 강사평가는 직원 포트폴리오를 볼 수 있는 사람(원장 위 · 직원 평가 실험실이 열린 지점)에게만 — 그 밖엔 없는 면이다.
+  if (actor && requestedFace === "evaluation" && !(await getPortfolioGate())) redirect("/owner");
   if (actor) {
     const matrix = await getUserPermMatrix();
     if (!canAccess(actor.systemRole, menu, matrix)) {
@@ -142,7 +150,10 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
   // (실측: 총괄 2명 중 1명의 users.system_role은 'admin'이다).
   const canReadAudit = isMaster || (await isCurrentUserSuperAdmin());
   const [settings, meta] = await Promise.all([getTenantSettings(), getSettingsMeta()]);
-  const showMakeups = await isLaboratoryMenuAvailable(viewer.tenantId, "makeups");
+  const [showMakeups, showEvaluation] = await Promise.all([
+    isLaboratoryMenuAvailable(viewer.tenantId, "makeups"),
+    getPortfolioGate().then(Boolean),
+  ]);
   const tab = effectiveTab(sp, settings);
   /**
    * 운영 섹션을 클라이언트로 넘기는 두 면(운영 체계 · 과목 운영) — **저장할 수 없는 열람자에게는 자리 PIN 값을 지우고** 넘긴다.
@@ -221,7 +232,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
       </div>
       <PageMaximizeToolbar>
         {/* 면이 많으면 범주 줄 + 그 범주의 면 줄, 적으면 종전처럼 한 줄(`ownerTabRows`). 주소는 면마다 `?tab=` 그대로다. */}
-        <OwnerTabBar faces={facesFor(canReadAudit, isGenericTenant(settings), showMakeups).filter((face) => allowedTabs.get(face.key))} active={tab} />
+        <OwnerTabBar faces={facesFor(canReadAudit, isGenericTenant(settings), showMakeups, showEvaluation).filter((face) => allowedTabs.get(face.key))} active={tab} />
       </PageMaximizeToolbar>
 
       {/* 운영 체계·과목 운영 면은 섹션 폼이 같은 안내를 직접 적는다(읽기 전용 폼) — 두 번 적지 않는다. */}
@@ -365,7 +376,9 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
           이 면들의 버튼·입력은 다른 판정을 따른다. 안에 두면 권한이 있어도 잠긴다.
           · 데이터 정리: 버튼은 '관리자 도구' 권한(canManageData)으로 면이 직접 가린다.
           · 데이터 가져오기: 줄마다 그 메뉴의 전체 권한으로 버튼이 선다(올리기 주소도 같은 판정).
-          · 감사로그: 고치는 것이 없다 — 조회 조건(기간·검색) 입력이 설정 읽기 전용 때문에 잠기면 안 된다. */}
+          · 감사로그: 고치는 것이 없다 — 조회 조건(기간·검색) 입력이 설정 읽기 전용 때문에 잠기면 안 된다.
+          · 강사평가: 원장 게이트(직원 포트폴리오와 같은 문)를 지난 사람만 온다(위 redirect). 잠금은 면이 저장 액션과 같은 쓰기 판정으로 직접 한다. */}
+      {tab === "evaluation" && showEvaluation ? <EvaluationFace /> : null}
       {tab === "data" ? (
         <div className="space-y-10">
           <DataFace canManage={canManageData} />

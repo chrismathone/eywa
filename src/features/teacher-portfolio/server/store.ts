@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { addDays, kstToday } from "@/lib/date-kst";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { portfolioFloor } from "../model/build";
+import { missingColumn } from "./evaluation-store";
 import { awaitsReference } from "../model/pre-record";
 import type { ClosingSource, PortfolioPeriod, PortfolioResult, StoredPeriod } from "../model/types";
 
@@ -87,7 +88,42 @@ export function closingSourceFor(periodEnd: string, now: Date): ClosingSource {
   return kstToday(now) <= addDays(periodEnd, 1) ? "month_end" : "reconstructed";
 }
 
-export async function savePortfolioMonths(admin: SupabaseClient, tenantId: string, result: PortfolioResult, now: Date): Promise<SaveSummary> {
+/** 0359a의 raws 칸이 있는가 — 없으면 그 칸 없이 저장한다(앱이 SQL보다 먼저 나가도 집계가 멈추지 않게, #95). */
+export async function portfolioRawsReady(admin: SupabaseClient, tenantId: string): Promise<boolean> {
+  const { error } = await admin.from(TABLE).select("raws").eq("tenant_id", tenantId).limit(1);
+  if (!error) return true;
+  if (missingColumn(error)) return false;
+  throw new Error(`직원 포트폴리오 조회 실패: ${error.message}`);
+}
+
+/** 설정 미리보기용 원래 수치 — 끈 지표까지 싣는다(켜 보면 몇 점인지 바로 보이게). */
+export function rawsOf(w: Pick<PortfolioPeriod, "items">): Record<string, number | null> {
+  return Object.fromEntries(w.items.map((m) => [m.id, m.raw ?? null]));
+}
+
+const CLOSED_LOCK = "마감한 달의 점수는 바꿀 수 없습니다";
+
+/**
+ * 10줄씩 쓴다. 🔴 같은 지점의 집계가 겹쳐(저장 직후 다시 매기기 + [지금 집계] + 1일 cron) 다른 쪽이 먼저 그 달을 마감했으면
+ * 트리거가 묶음 전체를 거절한다 — 그 묶음에서 이미 마감된 줄만 빼고 한 번 더 쓴다(나머지 묶음까지 버리지 않는다).
+ */
+async function writeChunk(admin: SupabaseClient, tenantId: string, chunk: Record<string, unknown>[]): Promise<void> {
+  const upsert = (rows: Record<string, unknown>[]) => admin.from(TABLE).upsert(rows, { onConflict: "tenant_id,teacher_id,month" });
+  const { error } = await upsert(chunk);
+  if (!error) return;
+  if (!(error.message ?? "").includes(CLOSED_LOCK)) throw new Error(`직원 포트폴리오 저장 실패: ${error.message}`);
+  const months = [...new Set(chunk.map((r) => r.month as string))];
+  const { data, error: readError } = await admin.from(TABLE).select("teacher_id, month").eq("tenant_id", tenantId)
+    .in("month", months).in("teacher_id", [...new Set(chunk.map((r) => r.teacher_id as string))]).not("closed_at", "is", null);
+  if (readError) throw new Error(`직원 포트폴리오 저장 실패: ${readError.message}`);
+  const closed = new Set((data ?? []).map((r) => `${r.teacher_id}|${r.month}`));
+  const rest = chunk.filter((r) => !closed.has(`${r.teacher_id}|${r.month}`));
+  if (!rest.length) return;
+  const retry = await upsert(rest);
+  if (retry.error) throw new Error(`직원 포트폴리오 저장 실패: ${retry.error.message}`);
+}
+
+export async function savePortfolioMonths(admin: SupabaseClient, tenantId: string, result: PortfolioResult, now: Date, opts: { withRaws?: boolean } = {}): Promise<SaveSummary> {
   const months = [...new Set(result.teachers.flatMap((t) => t.periods.map((w) => w.month)))];
   const existing = months.length
     ? await fetchAllPaged<{ teacher_id: string; month: string; closed_at: string | null }>((from, to) =>
@@ -112,12 +148,10 @@ export async function savePortfolioMonths(admin: SupabaseClient, tenantId: strin
       tenant_id: tenantId, teacher_id: teacher.id, month: w.month, period_end: w.end, total: w.total, known_count: w.knownCount,
       class_count: w.classes.length, subjects: w.subjects, payload: w, computed_at: computedAt,
       closed_at: closes ? computedAt : null, closing_source: closes ? closingSourceFor(w.end, now) : null,
+      ...(opts.withRaws ? { raws: rawsOf(w) } : {}),
     });
   }
-  for (let i = 0; i < rows.length; i += WRITE_CHUNK) {
-    const { error } = await admin.from(TABLE).upsert(rows.slice(i, i + WRITE_CHUNK), { onConflict: "tenant_id,teacher_id,month" });
-    if (error) throw new Error(`직원 포트폴리오 저장 실패: ${error.message}`);
-  }
+  for (let i = 0; i < rows.length; i += WRITE_CHUNK) await writeChunk(admin, tenantId, rows.slice(i, i + WRITE_CHUNK));
   // 더는 집계 대상이 아닌 강사(퇴직 등)의 '진행 중' 줄은 걷는다. 마감한 줄은 기록이라 남긴다.
   let removed = 0;
   for (const stale of existing.filter((r) => !r.closed_at && !live.has(`${r.teacher_id}|${r.month}`))) {

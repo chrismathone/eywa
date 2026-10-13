@@ -98,7 +98,7 @@ export function TeacherList({ teachers, selectedId, month, period, onSelect }: P
                 <button key={t.id} type="button" data-teacher={t.id} onClick={() => onSelect(t.id)}
                   className={`hover:bg-primary-softer focus-visible:outline-primary flex w-full flex-col justify-center rounded-lg px-2.5 py-2 text-left focus-visible:outline-2 ${filling ? "max-h-24 flex-1" : ""}`}>
                   <b className="text-sm">{t.name}</b>
-                  <span className="num text-xs">{at?.classCount ? `산출 ${at.knownCount}/8` : "해당 월 수업 없음"}</span>
+                  <span className="num text-xs">{at?.classCount ? `합계 항목 ${at.knownCount}개` : "해당 월 수업 없음"}</span>
                 </button>
               );
             })}

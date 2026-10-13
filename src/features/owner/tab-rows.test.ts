@@ -28,7 +28,7 @@ describe("두 줄 — 범주 줄 + 지금 범주의 면 줄", () => {
     const rows = category(CHINSAN, "subjects");
     expect(labels(rows.categories)).toEqual(["학원 정보", "수업·운영", "청구·안내", "권한·화면", "관리"]);
     expect(rows.activeCategory).toBe("수업·운영");
-    expect(labels(rows.faces)).toEqual(["운영 체계", "과목 운영", "보강 운영"]);
+    expect(labels(rows.faces)).toEqual(["운영 체계", "과목 운영", "보강 운영", "강사평가"]);
   });
 
   it("범주를 누르면 그 범주의 첫 면으로 간다 — 주소는 면의 주소 그대로다(범주는 주소에 없다)", () => {

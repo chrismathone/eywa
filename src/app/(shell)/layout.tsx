@@ -86,9 +86,11 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   // getTenantSettings는 React cache라 아래 분기들이 같은 라운드트립을 공유(임베드 포함).
   // 운영 계정 판정(아래 감시용)도 **여기서 나란히** 묻는다 — 따로 먼저 기다리면 모든 사용자의 창(embed) 첫 페인트 앞에 조회 하나가
   // 줄을 선다(B4). 이 판정은 권한 매트릭스가 어차피 부르는 요청 캐시라 조회 수는 늘지 않는다.
-  const [settings, showMakeupSettings, canOpenTenantView] = await Promise.all([
+  const [settings, showMakeupSettings, showEvaluationSettings, canOpenTenantView] = await Promise.all([
     getTenantSettings(),
     isLaboratoryMenuAvailable(user.tenantId, "makeups"),
+    // 강사평가 설정 면은 직원 평가(실험실 메뉴)가 열린 지점에서만 — 꺼진 지점에선 입구도 없다(설정 화면은 따로 막는다).
+    isLaboratoryMenuAvailable(user.tenantId, "class_review"),
     user.tenantView ? false : isCurrentUserSuperAdmin(),
   ]);
   // 운영 콘솔의 '지점 보기'(읽기 전용) — 탭마다 "그려진 화면"과 "브라우저의 실제 상태"가 어긋났는지 지켜보는 감시
@@ -102,10 +104,12 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   // 꺼진 면이 없으면 settings.navigation.menus 그대로(침산 = 오늘과 같은 값).
   const baseMenuLayout = menuLayoutWithModules(settings.navigation.menus, settings.modules.disabled);
   // The owner settings face shares the owner permission key, so hide its entry by href.
-  const menuLayout = showMakeupSettings ? baseMenuLayout : [
-    ...baseMenuLayout.filter((row) => row.href !== "/owner?tab=makeups"),
-    { ...baseMenuLayout.find((row) => row.href === "/owner?tab=makeups"), href: "/owner?tab=makeups", hidden: true },
+  const hideFace = (layout: typeof baseMenuLayout, href: string) => [
+    ...layout.filter((row) => row.href !== href),
+    { ...layout.find((row) => row.href === href), href, hidden: true },
   ];
+  const withMakeups = showMakeupSettings ? baseMenuLayout : hideFace(baseMenuLayout, "/owner?tab=makeups");
+  const menuLayout = showEvaluationSettings ? withMakeups : hideFace(withMakeups, "/owner?tab=evaluation");
   // 새 학원(일반판)이면 설정 '기능' 면을 사이드바·메뉴 판·검색에도 세운다(설정 화면 탭과 같은 판정, F19).
   const genericTenant = isGenericTenant(settings);
   // 지점 라이선스 넷(한 조회, 요청 캐시) — 꺼진 라이선스의 버튼·탭을 클라 화면이 감추는 데 쓴다(표시용 · 2026-09-30).

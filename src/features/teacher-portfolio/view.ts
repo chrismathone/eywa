@@ -3,8 +3,12 @@
  * 계산은 여기 없다. 점수와 근거는 `model/`이 만든 값을 그대로 쓴다.
  */
 import type { SemanticTone } from "@/lib/design/semantic-color";
+import { MANUAL_COLORS, METRIC_META } from "./evaluation/catalog";
+import { isManualId, MISSING_LABEL, type BuiltinMetricId, type ManualMetricSetting } from "./evaluation/config";
+import { settingOf } from "./evaluation/preview";
+import { describeScoring } from "./evaluation/scoring";
 import { weeksOf } from "./model/dates";
-import type { FollowRow, MetricId, PeriodWindow, StoredPeriod } from "./model/types";
+import type { FollowRow, ItemId, Metric, MetricId, PeriodWindow, PortfolioPeriod, StoredPeriod } from "./model/types";
 
 export const METRIC_LABEL: Record<MetricId, string> = {
   report: "수업보고서", attendance: "출결 기록", follow: "원생상담", quality: "직원 평가",
@@ -19,13 +23,60 @@ export const METRIC_COLOR: Record<MetricId, string> = {
   report: "var(--color-primary)", attendance: "var(--color-green)", follow: "var(--color-rose)", quality: "var(--color-purple)",
   students: "var(--color-blue)", revenue: "var(--color-amber)", expansion: "var(--color-chart-5)", coverage: "var(--color-gold)",
 };
-export const MANAGEMENT_METRICS: readonly MetricId[] = ["report", "attendance", "follow", "quality"];
-export const IMPACT_METRICS: readonly MetricId[] = ["students", "revenue", "expansion", "coverage"];
+
+/** 항목 이름 — 원장이 정한 이름이 먼저, 옛 저장 행은 기본 이름. */
+export function itemLabel(m: Pick<Metric, "id" | "label">): string {
+  return m.label || (isManualId(m.id) ? "직접 입력 지표" : METRIC_LABEL[m.id as MetricId]);
+}
+/** 탭·표 머리의 짧은 이름 — 원장이 이름을 바꿨으면 그 이름, 기본 이름 그대로면 짧은 이름(표 머리가 두 줄로 접히지 않게). */
+export function itemShort(m: Pick<Metric, "id" | "label">): string {
+  if (isManualId(m.id)) return m.label || "직접 입력";
+  const id = m.id as MetricId;
+  return m.label && m.label !== METRIC_LABEL[id] ? m.label : METRIC_SHORT[id];
+}
+/** 항목 막대 색 — 기본 지표는 고정, 직접 만든 지표는 차례대로 돌려 쓴다. */
+export function itemColor(m: Pick<Metric, "id">, items: readonly Pick<Metric, "id">[] = []): string {
+  if (!isManualId(m.id)) return METRIC_COLOR[m.id as MetricId];
+  const at = Math.max(0, items.filter((x) => isManualId(x.id)).findIndex((x) => x.id === m.id));
+  return MANUAL_COLORS[at % MANUAL_COLORS.length];
+}
+/** 화면에 서는 항목 — 원장이 끈 지표는 저장만 돼 있고 보이지 않는다. */
+export const shownItems = (p: Pick<PortfolioPeriod, "items">): Metric[] => p.items.filter((m) => !m.off);
+export const itemOf = (p: Pick<PortfolioPeriod, "items">, id: ItemId): Metric | undefined => p.items.find((m) => m.id === id);
+/** 그 달 총점의 만점 — 켠 지표 만점의 합. 옛 저장 행(설정 사본 없음)은 100점이었다. */
+export const periodMax = (p: Pick<PortfolioPeriod, "evaluation" | "knownMax">): number => (p.evaluation ? p.knownMax : 100);
 /** 채워지지 않은 몫(미작성·미처리)의 색. */
 export const SHORTFALL_COLOR = "color-mix(in srgb, var(--color-amber) 45%, var(--color-card))";
 export const PROXY_COLOR = "color-mix(in srgb, var(--color-purple) 55%, var(--color-card))";
 
 export const fmtScore = (value: number | null): string => (value === null ? "산출불가" : value.toFixed(1));
+
+/**
+ * 항목 점수 글자 — 점수가 없으면 설정으로 매긴 달은 '합계에서 뺌', 2026-10-13 전에 저장된 달(설정 사본 없음)은 그때 뜻 그대로 '산출불가'.
+ * 만점은 그 달을 매긴 설정의 만점이다(고정 10점·20점이 아니다).
+ */
+export const scoreText = (m: Pick<Metric, "value">, p: Pick<PortfolioPeriod, "evaluation">): string =>
+  m.value === null ? (p.evaluation ? "합계에서 뺌" : "산출불가") : m.value.toFixed(1);
+export const pointsText = (m: Pick<Metric, "value" | "max">, p: Pick<PortfolioPeriod, "evaluation">): string =>
+  m.value === null ? scoreText(m, p) : `${scoreText(m, p)} / ${m.max}점`;
+const unitOf = (p: Pick<PortfolioPeriod, "evaluation">, id: ItemId): string => {
+  if (!isManualId(id)) return METRIC_META[id as BuiltinMetricId].unit;
+  return (p.evaluation ? (settingOf(p.evaluation, id) as ManualMetricSetting | undefined)?.unit : undefined) ?? "";
+};
+/** 그 달을 매긴 점수 규칙 한 줄 — 설정 사본이 없는 옛 달은 null(그때의 고정 규칙은 각 화면이 적는다). */
+export function ruleText(p: Pick<PortfolioPeriod, "evaluation">, id: ItemId): string | null {
+  const s = p.evaluation ? settingOf(p.evaluation, id) : undefined;
+  return s ? `${describeScoring(s.scoring, s.max, unitOf(p, id))} · 자료가 없으면 ${MISSING_LABEL[s.missing]}` : null;
+}
+/** 자료가 없어 규칙으로 매긴 항목의 꼬리표 — "자료 없음 · 0점" · "마감 대상 없음 · 만점". 옛 달은 null. */
+export function missingTag(m: Pick<Metric, "id" | "missing">, p: Pick<PortfolioPeriod, "evaluation">): string | null {
+  const s = m.missing && p.evaluation ? settingOf(p.evaluation, m.id) : undefined;
+  if (!s) return null;
+  return `${m.id === "coverage" ? "마감 대상 없음" : "자료 없음"} · ${MISSING_LABEL[s.missing]}`;
+}
+/** 자료가 없어 **깎이거나 빠진** 항목(만점으로 매긴 항목은 빼고) — 맨 아래 안내가 이것만 말한다. */
+export const shortItems = (p: Pick<PortfolioPeriod, "evaluation" | "items">): Metric[] =>
+  shownItems(p).filter((m) => m.value === null || (m.missing && (!p.evaluation || settingOf(p.evaluation, m.id)?.missing !== "full")));
 export const dayLabel = (ymd: string): string => ymd.slice(5).replace("-", ".");
 export const won = (n: number): string => `${Number(n || 0).toLocaleString("ko-KR")}원`;
 export const monthName = (month: string): string => `${Number(month.slice(0, 4))}년 ${Number(month.slice(5, 7))}월`;
@@ -36,13 +87,14 @@ export function closingLabel(w: Pick<StoredPeriod, "closing">): "집계 중" | "
   return !w.closing.closedAt ? "집계 중" : w.closing.source === "reconstructed" ? "마감 · 재구성" : "마감";
 }
 
-/** 총점이 오를수록 파랑 → 보라 → 빨강. 산출불가는 중립색. */
-export function scoreColor(total: number | null): string {
+/** 총점이 만점에 가까울수록 파랑 → 보라 → 빨강. 산출불가는 중립색. 만점이 100점이 아니어도 비율로 칠한다. */
+export function scoreColor(total: number | null, max = 100): string {
   if (total === null) return "var(--color-line-strong)";
-  const pct = Math.round(Math.min(100, Math.max(0, total)));
+  const pct = Math.round(Math.min(100, Math.max(0, max > 0 ? (total / max) * 100 : 0)));
   return `color-mix(in srgb, var(--color-danger) ${pct}%, var(--color-blue))`;
 }
-export const SCORE_SCALE = [0, 20, 40, 60, 80, 100];
+/** 게이지 아래 눈금 — 만점을 넷으로 나눈다. */
+export const scoreScale = (max: number): number[] => [0, 0.25, 0.5, 0.75, 1].map((f) => Math.round(f * max * 10) / 10);
 
 /** 전월 대비 — 오르면 붉은색, 내리면 파란색(원장 지정). */
 export function deltaOf(now: number | null, before: number | null | undefined): { text: string; tone: "up" | "down" | "flat" | "none"; label: string } {

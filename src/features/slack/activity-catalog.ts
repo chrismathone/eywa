@@ -61,6 +61,7 @@ const RULES: readonly [string, string][] = [
   ["class_review_", "staff"],
   // 직원 포트폴리오 집계(달 마감) — 기록에는 강사 수·마감한 달만 있고 점수는 없다.
   ["teacher_portfolio_", "staff"],
+  ["teacher_evaluation_", "staff"],
   ["class_sheet_", "sheets"],
   ["class_", "classes"],
   ["classroom_", "classes"],

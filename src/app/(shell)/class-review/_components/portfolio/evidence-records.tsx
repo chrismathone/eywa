@@ -2,7 +2,7 @@
 
 import { metricOf, type Metric, type StoredPeriod } from "@/features/teacher-portfolio/model/types";
 import {
-  METRIC_COLOR, PROXY_COLOR, REPORT_STATE_LABEL, SHORTFALL_COLOR, dayLabel, fmtScore, followAnchor, groupByWeek, pickWeek, weekRange,
+  METRIC_COLOR, PROXY_COLOR, REPORT_STATE_LABEL, SHORTFALL_COLOR, dayLabel, fmtScore, followAnchor, groupByWeek, itemColor, pickWeek, weekRange,
   type WeekGroup,
 } from "@/features/teacher-portfolio/view";
 import { BarList, DataTable, SectionTitle, StackBar, StatTiles, StatusChip, type TableRow } from "./parts";
@@ -26,17 +26,18 @@ const HOLIDAY = <span className="text-xs">휴원일</span>;
 export function EstimatedEvidence({ metric }: { metric: Metric }) {
   const e = metric.estimated;
   if (!e) return null;
+  const rate = e.unit === "%"; // 새 행은 기준 달의 원래 수치(%), 2026-10-13 전 행은 점수.
   return (
     <>
       <StatTiles items={[
         { label: "대상", value: `${e.targets}건` },
-        { label: "적용 점수", value: metric.value === null ? "산출불가" : `${fmtScore(metric.value)} / ${metric.max}점` },
+        { label: "적용 점수", value: metric.value === null ? (rate ? "합계에서 뺌" : "산출불가") : `${fmtScore(metric.value)} / ${metric.max}점` },
       ]} />
       {e.reference.length ? (
         <>
-          <SectionTitle>기준 달 점수</SectionTitle>
-          <BarList rows={e.reference.map((r) => ({ label: `${Number(r.month.slice(5))}월`, value: r.value }))} max={metric.max}
-            color={METRIC_COLOR[metric.id]} format={(n) => `${n.toFixed(1)}점`} />
+          <SectionTitle>{rate ? "기준 달 기록률" : "기준 달 점수"}</SectionTitle>
+          <BarList rows={e.reference.map((r) => ({ label: `${Number(r.month.slice(5))}월`, value: r.value }))} max={rate ? 100 : metric.max}
+            color={itemColor(metric)} format={(n) => (rate ? `${n.toFixed(1)}%` : `${n.toFixed(1)}점`)} />
         </>
       ) : null}
       <p className="mt-4 text-xs leading-relaxed">{metric.reason}</p>

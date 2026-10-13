@@ -241,6 +241,7 @@ pnpm db:alphas
 | `0341a_homework_video_drive_account_credentials` | Vault 갱신 토큰 저장, 동일 계정 재연결 버전 갱신, 지점·루트·연결이 일치하는 자격 조회 RPC. 웹 클라이언트 비밀은 저장하지 않는다. |
 | `0342a_homework_video_drive_account_routes` | 연결 번호를 포함한 폴더 저장, 시작한 영상의 지점·루트·계정 변경 금지, 이전 저장 RPC 차단. 위의 원자 적용 순서를 따른다. |
 | `0357a_teacher_portfolio_months` | **직원 포트폴리오 월간 점수**(원장 2026-10-12 *"모든 점수는 말일 마감하고 1일부터 새점수"*) — 강사 × 월 한 행(`payload` jsonb에 점수와 근거). RLS 켬 + 정책 없음(service_role 전용 — 전 강사 점수·담당 매출이 실린다). 마감한 행(`closed_at`)은 트리거가 UPDATE를 막는다. 새 표 하나라 기존 화면 무영향, 앱은 표가 없어도 돈다. |
+| `0359a_teacher_evaluation_settings` | **강사평가 설정**(원장 2026-10-13 *"'이것까지 커스터마이징 가능해?' 할 정도로"* · *"만점이 100점이 아니여도 됨"*) — `teacher_evaluation_settings`(지점마다 설정 한 줄 · 지표 켜고 끄기·만점·점수 규칙·자료 없을 때) + `teacher_evaluation_entries`(원장이 만든 지표의 월 입력). 두 표 모두 RLS 켬 + 정책 없음(service_role 전용). `teacher_portfolio_months`의 총점 0~100 · 항목 수 0~8 제약을 풀고 `raws`(설정 미리보기용 원래 수치)를 더한다. 앱은 이 SQL 전에도 돈다(기본 설정으로 계산 · raws 없이 저장). |
 
 새 alpha를 추가할 때: 다음 번호의 `000Na_*` 또는 `000Nb_*`로 만들고, 멱등 패턴을 지키고, **이 표에 추가**한다.
 상세 흐름은 [`../../CLAUDE.md`](../../CLAUDE.md) "마이그레이션 & 시드 흐름" 참고.

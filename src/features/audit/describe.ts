@@ -680,6 +680,16 @@ export function auditDetail(
         closed.length ? `마감 ${closed.join(", ")}` : null,
       );
     }
+    case "teacher_evaluation_settings_save": {
+      const enabled = num(m.enabled);
+      const maxTotal = num(m.maxTotal);
+      return join(enabled === null ? null : `지표 ${enabled}개`, maxTotal === null ? null : `만점 ${maxTotal}점`);
+    }
+    case "teacher_evaluation_entries_save": {
+      const saved = num(m.saved);
+      const cleared = num(m.cleared);
+      return join(saved ? `${saved}칸 입력` : null, cleared ? `${cleared}칸 비움` : null);
+    }
     case "ment_style_rebuild": {
       const built = num(m.built);
       const unchanged = num(m.unchanged);
