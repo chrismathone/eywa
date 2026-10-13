@@ -91,7 +91,9 @@ export async function getPeriodWindow(args: {
   todayIso?: string;
 }): Promise<PeriodWindow> {
   const year = Number(args.period.slice(0, 4));
-  const defs = Number.isFinite(year) ? await getPeriodDefs(year) : [];
+  // 달 단위는 세션 정의를 보지 않는다(`resolvePeriodWindow`가 달력월을 그대로 돌려준다) — 조회를 건너뛴다. 로그인 없는
+  // 출석부 조립(강사평가 밤 집계 — attendance/server/read-context.ts)이 세션에 기대지 않게 되는 것도 이 덕이다.
+  const defs = args.mode === "month" || !Number.isFinite(year) ? [] : await getPeriodDefs(year);
   return resolvePeriodWindow({ ...args, defs });
 }
 

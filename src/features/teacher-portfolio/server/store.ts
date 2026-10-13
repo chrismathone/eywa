@@ -123,7 +123,15 @@ async function writeChunk(admin: SupabaseClient, tenantId: string, chunk: Record
   if (retry.error) throw new Error(`직원 포트폴리오 저장 실패: ${retry.error.message}`);
 }
 
-export async function savePortfolioMonths(admin: SupabaseClient, tenantId: string, result: PortfolioResult, now: Date, opts: { withRaws?: boolean } = {}): Promise<SaveSummary> {
+/**
+ * `holdClose` — 아직 마감하면 안 되는 칸(급여 비율을 일시 실패로 못 센 칸). 기준 달 대기처럼 열어 두고, 급여 비율 계획이
+ * 마감하지 않은 달을 전부 세므로 다음 집계마다 다시 센다(`loadPayPlan`). 창 끝 달(`floor`)은 다음 실행에서 창 밖으로 밀려
+ * 다시 셀 수 없으니 그래도 마감한다.
+ */
+export async function savePortfolioMonths(
+  admin: SupabaseClient, tenantId: string, result: PortfolioResult, now: Date,
+  opts: { withRaws?: boolean; holdClose?: (teacherId: string, month: string) => boolean } = {},
+): Promise<SaveSummary> {
   const months = [...new Set(result.teachers.flatMap((t) => t.periods.map((w) => w.month)))];
   const existing = months.length
     ? await fetchAllPaged<{ teacher_id: string; month: string; closed_at: string | null }>((from, to) =>
@@ -142,7 +150,8 @@ export async function savePortfolioMonths(admin: SupabaseClient, tenantId: strin
     const key = `${teacher.id}|${w.month}`;
     live.add(key);
     if (closed.has(key)) continue;
-    const closes = !w.partial && (w.month <= floor || !awaitsReference(w, result.preRecord, lastClosedMonth));
+    const closes = !w.partial && (w.month <= floor
+      || (!awaitsReference(w, result.preRecord, lastClosedMonth) && !opts.holdClose?.(teacher.id, w.month)));
     if (closes) closedMonths.add(w.month);
     rows.push({
       tenant_id: tenantId, teacher_id: teacher.id, month: w.month, period_end: w.end, total: w.total, known_count: w.knownCount,

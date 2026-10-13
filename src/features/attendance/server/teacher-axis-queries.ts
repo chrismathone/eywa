@@ -1,7 +1,7 @@
 import "server-only";
 import { cache } from "react";
-import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
+import { attendanceDb, attendanceReadContext, memoInReadContext, readContextKey, scopeTenant } from "./read-context";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { carryFolded } from "@/lib/folded-read";
 import { classTeacherIdsInRange, slotOverlapsRange, type AxisSlot } from "../teacher-axis";
@@ -46,16 +46,17 @@ type SlotRow = {
  *    행은 한 달 기준 200줄 미만이다.
  * React `cache`라 같은 요청 안에서 반이 몇 개든 **왕복 1회**다(강사 전체 보기는 반마다 매트릭스를 부른다).
  */
-export const loadSlotAxisByClass = cache(
-  async (from: string, to: string): Promise<Map<string, AxisSlot[]>> => {
+// 세 번째 인자 = 로그인 없는 조립 문맥의 지점(`readContextKey`) — 캐시가 지점을 넘나들지 않게(화면은 늘 빈 글자).
+const loadSlotAxisByClassCached = cache(
+  async (from: string, to: string, tenantKey: string): Promise<Map<string, AxisSlot[]>> => {
+    void tenantKey; // 캐시 키 전용(지점마다 따로 캐시)
     // 🔴 `.or()`에 문자열을 보간하므로 형식을 먼저 잠근다(월 파라미터는 URL에서 온다).
     //    어긋나면 **빈 맵** = 교시 축만 접히고 종전 담임 축으로 안전하게 강등된다(화면은 안 죽는다).
     if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) return new Map();
-    const supabase = await createClient();
+    const { db: supabase, tenantId } = await attendanceDb();
     const rows = await fetchAllPaged<SlotRow>((f, t) =>
-      supabase
-        .from("class_schedules")
-        .select("class_id, day_of_week, start_time, teacher_id, slot_teacher_label, valid_from, valid_to")
+      scopeTenant(supabase.from("class_schedules")
+        .select("class_id, day_of_week, start_time, teacher_id, slot_teacher_label, valid_from, valid_to"), tenantId)
         .not("teacher_id", "is", null)
         .lte("valid_from", to)
         .or(`valid_to.is.null,valid_to.gte.${from}`)
@@ -80,6 +81,8 @@ export const loadSlotAxisByClass = cache(
     return byClass;
   },
 );
+export const loadSlotAxisByClass = (from: string, to: string): Promise<Map<string, AxisSlot[]>> =>
+  memoInReadContext(`slotAxis|${from}|${to}`, () => loadSlotAxisByClassCached(from, to, readContextKey()));
 
 /**
  * 교시 담당으로 등장하는 사람들의 표시 이름 — 담임이 아닌 사람도 강사 드롭다운에 서야 하기 때문
@@ -89,7 +92,7 @@ export const loadSlotAxisByClass = cache(
 export const loadAxisTeacherNames = cache(async (ids: string[]): Promise<Map<string, AxisTeacher>> => {
   if (ids.length === 0) return new Map();
   const rows = await (async () => {
-    const supabase = await createClient();
+    const { db: supabase } = await attendanceDb(); // 사람 id로 좁히는 조회 — 그 id가 이 지점 사람이다
     return fetchInChunks<{ id: string; display_name: string | null; status: string | null }>(ids, (chunk) =>
       supabase.from("users").select("id, display_name, status").in("id", chunk),
     );
@@ -132,17 +135,18 @@ export type ClassAxisRow = {
  * ⚠️ 여기서 **강사로 좁히지 않는다** — 좁히는 판정은 호출부가 `taughtBy`로 한다(캐시 키를 사람마다
  *    쪼개지 않기 위해서이기도 하다).
  */
-export const loadClassAxisRows = cache(async (from: string, to: string): Promise<ClassAxisRow[]> => {
-  const supabase = await createClient();
+const loadClassAxisRowsCached = cache(async (from: string, to: string, tenantKey: string): Promise<ClassAxisRow[]> => {
+  void tenantKey; // 캐시 키 전용(지점마다 따로 캐시)
+  const { db: supabase, tenantId } = await attendanceDb();
   // 반 목록·교시 배선·담임 이력은 서로 독립이라 병렬(B4).
   // 🔴 이 목록은 **강사 스코프의 whitelist**로 쓰인다(taughtBy로 좁힌다) → bare select 금지, 페이지네이션(B2).
   //    지금은 활성 반 110행이라 한 장에 들어오지만, 1000행을 넘기면 PostgREST가 **에러 없이 잘라** 그 강사의
   //    반이 조용히 사라진다. 잘림이 곧 "내 반이 없다"가 되는 자리라 상한을 두지 않는다.
   const [classRows, slotAxis, historyIndex] = await Promise.all([
     fetchAllPaged<ClassSelectRow>((f, t) =>
-      supabase
+      scopeTenant(supabase
         .from("classes")
-        .select("id, class_name, subject, report_optout, is_special, closed_at, teacher:teacher_id ( id, display_name, status )")
+        .select("id, class_name, subject, report_optout, is_special, closed_at, teacher:teacher_id ( id, display_name, status )"), tenantId)
         .eq("is_active", true)
         .order("class_name")
         .order("id", { ascending: true }) // OFFSET 페이지 안정용 unique 정렬(B2)
@@ -209,8 +213,13 @@ export const loadClassAxisRows = cache(async (from: string, to: string): Promise
  * ⚠️ 좁히는 근거는 `taughtBy`(담임 ∪ 그 기간 교시 담당) — 자리(LAB·JJ)는 사람이 아니라 안 들어온다.
  * ⚠️ 캐시는 `loadClassAxisRows` 쪽에 있다(사람별로 키를 쪼개지 않기 위해) — 여기선 필터만 한다.
  */
+/** 활성 반 + 그 달 강사 축(화면은 로그인 지점, 로그인 없는 조립 문맥은 그 지점). */
+export const loadClassAxisRows = (from: string, to: string): Promise<ClassAxisRow[]> =>
+  memoInReadContext(`classAxis|${from}|${to}`, () => loadClassAxisRowsCached(from, to, readContextKey()));
+
 export async function loadVisibleClassAxisRows(from: string, to: string): Promise<ClassAxisRow[]> {
-  const tId = await effectiveTeacherId();
+  // 로그인 없는 조립 문맥엔 강사 렌즈가 없다(원장이 관리자뷰로 보는 것과 같다 — 좁히지 않는다).
+  const tId = attendanceReadContext() ? null : await effectiveTeacherId();
   const rows = await loadClassAxisRows(from, to);
   // 좁힌 목록은 새 배열이라 접힘 표식을 옮겨 싣는다(이력을 못 읽으면 이전 담임 반이 이 필터에서 빠진다).
   return tId ? carryFolded(rows, rows.filter((c) => c.taughtBy.includes(tId))) : rows;

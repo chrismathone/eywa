@@ -56,7 +56,9 @@ describe("매일 집계", () => {
     expect(route).toContain("summary.tableMissing");
   });
   it("고친 배선이 빠지지 않았다 — 마감 전 달 · 처음 완료 시각 · 심화 매출 · 이 달 상담 수", () => {
-    expect(read("src/features/teacher-portfolio/server/refresh.ts")).toContain("buildPortfolio(snapshot, { openMonths, evaluation: { config: scoring.evaluation.config, entries: scoring.entries } })");
+    expect(read("src/features/teacher-portfolio/server/refresh.ts")).toContain("buildPortfolio(snapshot, { openMonths, evaluation: { config: scoring.evaluation.config, entries: scoring.entries }, pay })");
+    // 급여 비율을 일시 실패로 못 센 달은 마감을 미룬다(0점으로 굳지 않게).
+    expect(read("src/features/teacher-portfolio/server/refresh.ts")).toContain("savePortfolioMonths(admin, tenantId, result, now, { withRaws, holdClose })");
     expect(read("src/features/teacher-portfolio/server/refresh.ts")).toContain("loadOpenMonths(admin, tenantId, portfolioFloor(periodEnd))");
     expect(read("src/features/class-review/server/actions.ts")).toContain("firstCompletedAt(submissions[slot], scores, areas, now)");
     expect(read("src/features/teacher-portfolio/model/build.ts")).toContain("deepMathKey: deepMathKeyOf(d.settings.subjects)");

@@ -34,6 +34,7 @@ import { getPeriodWindow } from "@/features/periods/server/queries";
 import type { PeriodWindow } from "@/features/periods/resolve";
 // 출결의 강사 귀속 축 단일 소스(2026-08-18) — 담임만 보면 교시 담당 강사가 자기 수업을 못 본다.
 import { loadVisibleClassAxisRows } from "./teacher-axis-queries";
+import { attendanceDb, attendanceReadContext } from "./read-context";
 import type { HomeroomPeriod } from "@/features/classes/teacher-as-of";
 // 교시 귀속(누구 몫인가)은 같은 축 모듈이 단일 소스다 — 여기서 규칙을 다시 적지 말 것.
 import {
@@ -58,6 +59,7 @@ import { autoUnitsByDate, autoUnitsKey, isAutoUnitsSubject, toAutoUnitsSchedule 
 import { resolveAutoUnits } from "./auto-units";
 import { scopeInsertSlots } from "../scope-ownership";
 import { getLessonProfile } from "@/features/owner/server/lesson-profile";
+import { lessonProfileOf } from "@/features/owner/lesson-profile";
 // 보강 예약(0264a) — 그 달 이 반에 예약된 보강 칸 + 예약된 학생을 명단에 합친다. 조회는 fail-soft(표 없음 = 예약 없음).
 import {
   getClassReservationsInRange,
@@ -887,10 +889,12 @@ export async function getMonthlyAttendanceMatrix(
    */
   allowClassId: string | null = null,
 ): Promise<AttendanceMatrix> {
-  const supabase = await createClient();
+  // 로그인 없는 조립 문맥(강사평가 밤 집계 — read-context.ts)이면 관리 클라이언트·그 지점 설정. 아래 조회는 반·학생 id로 좁힌다.
+  const readCtx = attendanceReadContext();
+  const { db: supabase } = await attendanceDb();
 
   // 강사 스코프: teacher(또는 겸직-강사뷰)면 selector·데이터를 본인 담당 반만(URL로 남의 classId 넘겨도 무시).
-  const tId = await effectiveTeacherId();
+  const tId = readCtx ? null : await effectiveTeacherId();
 
   // 활성 반 목록 + 그 달 강사 축(담임 ∪ 교시 담당) — 조회는 축 헬퍼가 맡고 요청당 1회 캐시된다.
   // 🔴 강사 스코프를 SQL의 `.eq("teacher_id", tId)`로 걸지 **않는다**(2026-08-18). 그러면 축이 담임뿐이라
@@ -1510,7 +1514,7 @@ export async function getMonthlyAttendanceMatrix(
             .range(from, to);
         },
       ),
-      getTenantSettings(),
+      readCtx ? Promise.resolve(readCtx.settings) : getTenantSettings(),
     ]);
     // 🔴 반 단위 분류(0134a) — 세 갈래다:
     //  · 이 반(또는 반 미상 = 이관분·보강·관리자 작성) → **출석 파생 근거**.
@@ -1616,7 +1620,8 @@ export async function getMonthlyAttendanceMatrix(
     starts: scopeTeacherId ? scopeInsertSlots({ homeroomTeacherId, slots: axisSlots }, scopeTeacherId, d.date) : null,
   })) : [];
   const englishAuto = englishCells.length ? await resolveAutoUnits(supabase, englishCells.flatMap((c) =>
-    c.starts ? c.starts.map((slotStart) => ({ classId: c.classId, date: c.date, slotStart })) : [{ classId: c.classId, date: c.date }])) : null;
+    c.starts ? c.starts.map((slotStart) => ({ classId: c.classId, date: c.date, slotStart })) : [{ classId: c.classId, date: c.date }]),
+    readCtx ? { tenantId: readCtx.tenantId } : {}) : null;
   const presentRate =
     totalRecords > 0 ? Math.round(attendanceRate(attendedCount({ present: presentCount, late: lateCount }), totalRecords) * 10) / 10 : 0;
 
@@ -1640,7 +1645,7 @@ export async function getMonthlyAttendanceMatrix(
     derivedActive,
     // 수학 자동 시수 — 빈 칸 기본값(보이는 기본값 = 저장될 값). 판정은 서버 쓰기와 같은 함수(auto-units.ts).
     // 새 학원(일반판)은 자동 시수가 없다 — 저장(resolveAutoUnits)과 같은 프로필을 본다(보이는 기본값 = 저장될 값).
-    ...(isAutoUnitsSubject(selectedSubject) && (await getLessonProfile()).autoUnits
+    ...(isAutoUnitsSubject(selectedSubject) && (readCtx ? lessonProfileOf(readCtx.settings) : await getLessonProfile()).autoUnits
       ? { autoUnits: autoUnitsByDate(days.map((d) => d.date), (schedules ?? []).map(toAutoUnitsSchedule)) }
       : {}),
     ...(englishAuto ? { autoUnits: Object.fromEntries(englishCells.flatMap((c) => {

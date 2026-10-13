@@ -1,10 +1,12 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
-import { addDays, kstToday } from "@/lib/date-kst";
+import { reportWarning } from "@/lib/observability/report-error";
+import { addDays, kstToday, shiftMonth } from "@/lib/date-kst";
 import { PORTFOLIO_MONTHS, buildPortfolio, portfolioFloor } from "../model/build";
 import { monthWindows } from "../model/dates";
 import { loadEvaluationConfig, loadManualEntries } from "./evaluation-store";
+import { loadPayPlan, payMapOf, type PayPlan } from "./pay-sources";
 import { loadPortfolioSnapshot } from "./snapshot";
 import { loadOpenMonths, portfolioRawsReady, portfolioTableReady, savePortfolioMonths, type SaveSummary } from "./store";
 
@@ -29,7 +31,15 @@ export function rotateForDay<T>(items: readonly T[], today: string): T[] {
   return [...items.slice(offset), ...items.slice(0, offset)];
 }
 
-export async function refreshTenantPortfolio(admin: SupabaseClient, tenantId: string, opts: { now?: Date } = {}): Promise<RefreshSummary> {
+/**
+ * 화면 집계([지금 집계] · 저장 뒤 다시 매기기)의 출석부 조립 시간 — 함수 상한이 120초라 스냅샷·저장 몫을 남긴다.
+ * 밤 집계는 지점이 여럿이라 route가 `payDeadline`을 직접 준다.
+ */
+const SCREEN_PAY_BUDGET_MS = 50_000;
+
+export async function refreshTenantPortfolio(
+  admin: SupabaseClient, tenantId: string, opts: { now?: Date; payDeadline?: number } = {},
+): Promise<RefreshSummary> {
   const now = opts.now ?? new Date();
   const periodEnd = addDays(kstToday(now), -1);
   if (!(await portfolioTableReady(admin, tenantId))) {
@@ -58,11 +68,34 @@ export async function refreshTenantPortfolio(admin: SupabaseClient, tenantId: st
   // 🔴 집계가 도는 사이 원장이 설정·직접 입력을 또 저장했으면, 늦게 끝난 쪽이 옛 설정으로 덮어쓴다(저장마다 따로 다시 매기기가 돈다).
   //    쓰고 나서 설정·입력을 다시 읽어 달라졌으면 새 값으로 한 번 더 매긴다(같은 스냅샷 — 기록은 그대로고 점수 규칙만 바뀐 것).
   //    마감한 달은 첫 번째 쓰기에서 굳으므로 요약은 두 번을 합친다(다시 매긴 쪽은 이미 마감된 줄을 건너뛰어 '마감 0'으로 보인다).
+  // 매출 대비 급여(켠 경우만) — 진행 중인 달의 출석부를 조립해 청구액·실급여를 낸다(무겁다 — 한 번만, 비율은 다시 매길 때마다).
+  //   재료를 못 모으면(마감 확인·계약서 조회 실패) 급여 비율만 '계산 전'으로 두고 나머지 지표는 그대로 저장한다.
+  //   🔴 일시 실패(조회 실패·시간 초과)로 못 센 달은 **마감하지 않는다** — 1일 새벽 마감 때 0점으로 굳지 않게 다음 집계가 다시 센다
+  //      (기준 달을 기다리는 달과 같은 방식 · 창 끝 달은 그래도 마감).
+  const noPay: PayPlan = { facts: new Map(), contracts: new Map() };
+  const payOn = first.evaluation.config.metrics.payRatio.enabled;
+  let payFailed = false;
+  const plan: PayPlan = payOn
+    ? await loadPayPlan({
+      admin, tenantId, settings, deadline: opts.payDeadline ?? Date.now() + SCREEN_PAY_BUDGET_MS,
+      result: buildPortfolio(snapshot, { openMonths, evaluation: { config: first.evaluation.config, entries: first.entries } }),
+    }).catch((e: unknown) => {
+      reportWarning("강사평가 급여 비율 재료 조회 실패", { scope: "refreshTenantPortfolio", message: e instanceof Error ? e.message : String(e) });
+      payFailed = true;
+      return noPay;
+    })
+    : noPay;
+  const holdFrom = shiftMonth(periodEnd.slice(0, 7), -1);
   let scoring = first;
   let saved: SaveSummary | null = null;
   for (let pass = 0; ; pass++) {
-    const result = buildPortfolio(snapshot, { openMonths, evaluation: { config: scoring.evaluation.config, entries: scoring.entries } });
-    const once = await savePortfolioMonths(admin, tenantId, result, now, { withRaws });
+    const pay = payMapOf(plan, scoring.entries);
+    const result = buildPortfolio(snapshot, { openMonths, evaluation: { config: scoring.evaluation.config, entries: scoring.entries }, pay });
+    // 재료 조회 자체가 실패하면 어느 달을 못 셌는지도 모른다 — 그 실행은 마감을 모두 미룬다(다음 실행이 다시 센다).
+    // 미루는 것은 다음 달 말까지 — 계속 나는 오류(깨진 비율표 등)로 달이 반년씩 열려 있지 않게, 그 뒤엔 사유를 남긴 채 마감한다.
+    const holdClose = (teacherId: string, month: string) =>
+      month >= holdFrom && (payFailed || Boolean(pay.get(`${teacherId}|${month}`)?.retry));
+    const once = await savePortfolioMonths(admin, tenantId, result, now, { withRaws, holdClose });
     saved = !saved ? once : {
       teachers: once.teachers, written: Math.max(saved.written, once.written), removed: saved.removed + once.removed,
       closedMonths: [...new Set([...saved.closedMonths, ...once.closedMonths])].sort(),

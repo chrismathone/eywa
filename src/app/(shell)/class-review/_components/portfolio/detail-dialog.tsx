@@ -118,9 +118,9 @@ export function DetailDialog({ target, onClose, periods, teacherName, evidence }
         {target.id === "report" && !m.estimated
           ? <div className="overflow-auto"><ReportMatrix period={period} nameOf={evidence.nameOf} /></div>
           : <MetricEvidence id={target.id} {...evidence} sticky={false} onOpenStudents={undefined} />}
-        {m.estimated || selfExplained(m) ? null : <p className="mt-4 text-xs leading-relaxed">{m.reason}</p>}
+        {m.estimated || selfExplained(m) || m.id === "payRatio" ? null : <p className="mt-4 text-xs leading-relaxed">{m.reason}</p>}
         {/* 배정·유지·매출·직접 입력·계산 전 지표는 근거 안에서 이미 규칙을 적는다(두 번 적지 않게). */}
-        {!selfExplained(m) && m.id !== "students" && m.id !== "revenue" && m.id !== "churn" && ruleText(period, m.id) ? <p className="mt-2 text-xs leading-relaxed">점수 규칙: {ruleText(period, m.id)}</p> : null}
+        {!selfExplained(m) && m.id !== "students" && m.id !== "revenue" && m.id !== "churn" && m.id !== "payRatio" && ruleText(period, m.id) ? <p className="mt-2 text-xs leading-relaxed">점수 규칙: {ruleText(period, m.id)}</p> : null}
       </>
     );
   }

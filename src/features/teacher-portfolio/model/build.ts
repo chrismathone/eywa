@@ -11,6 +11,7 @@ import { subjectLabelRecord } from "@/features/owner/subjects";
 import type { SubjectSetting } from "@/features/owner/settings-types";
 import { DEFAULT_CHURN_OPTIONS, DEFAULT_EVALUATION_CONFIG, type EvaluationConfig } from "../evaluation/config";
 import { buildChurn } from "./churn";
+import { payRatioItem, type PayResult } from "./pay-ratio";
 import { buildContext, type PortfolioContext } from "./context";
 import { applyEvaluation, indexEntries, type ManualEntryRow } from "./evaluate";
 import { between, daysBetween, kstDateOf, monthWindows, round1, unique } from "./dates";
@@ -22,25 +23,23 @@ import { deepMathKeyOf } from "./receipt";
 import { buildRevenue } from "./revenue";
 import { buildStudentTracking } from "./students";
 import {
-  METRIC_MAX, type ChurnMetric, type Metric, type PeriodWindow, type PortfolioPeriod, type PortfolioResult, type PortfolioSnapshot,
+  METRIC_MAX, type ChurnMetric, type Metric, type PayRatioMetric, type PeriodWindow, type PortfolioPeriod, type PortfolioResult, type PortfolioSnapshot,
   type PortfolioTeacher, type SnapshotUser,
 } from "./types";
-
 /** 화면 6개월 + 전월 비교용 1개월. */
 export const PORTFOLIO_MONTHS = 7;
 export type { ManualEntryRow } from "./evaluate";
 const GAP_LABEL: Partial<Record<Metric["id"], string>> = { report: "작성 근거 부족", attendance: "담당 교시 확인", follow: "마감 시점 확인", quality: "평가 기준 확인", students: "배정 기록 확인" };
 const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
-
 type Models = {
   ctx: PortfolioContext;
   revenue: ReturnType<typeof buildRevenue>;
   students: ReturnType<typeof buildStudentTracking>;
   churn: (teacherId: string, w: PeriodWindow) => ChurnMetric;
+  payRatio: (teacherId: string, month: string) => PayRatioMetric;
   subjectOf: (classId: string) => string;
   classNameOf: (classId: string) => string;
 };
-
 function teacherPeriod(d: PortfolioSnapshot, m: Models, user: SnapshotUser, w: PeriodWindow): WorkingPeriod {
   // 진행 중인 달은 아직 열려 있다. 달 안에서 보충한 기록은 조회 시각까지 인정한다.
   const cutoff = w.partial ? (kstDateOf(d.capturedAt) as string) : w.end;
@@ -100,7 +99,7 @@ function teacherPeriod(d: PortfolioSnapshot, m: Models, user: SnapshotUser, w: P
       detail: revenue.detail, amount: revenue.amount, subjectTotal: revenue.subjectTotal, subjectLabel: revenue.subjectLabel,
       subjects: revenue.subjects, unassigned: revenue.unassigned, unclassified: revenue.unclassified,
     },
-    m.churn(user.id, w),
+    m.churn(user.id, w), m.payRatio(user.id, w.month),
     referralItem(),
     {
       id: "coverage", max: METRIC_MAX.coverage, value: coverage.value, raw: coverage.due ? (100 * coverage.done) / coverage.due : null,
@@ -150,8 +149,8 @@ export function portfolioFloor(end: string): string {
  */
 export function buildPortfolio(d: PortfolioSnapshot, opts: {
   openMonths?: ReadonlyMap<string, readonly string[]>;
-  /** 강사평가 설정과 직접 만든 지표의 입력값. 없으면 기본 설정(= 2026-10-13 전 직원 포트폴리오와 같은 점수). */
-  evaluation?: { config: EvaluationConfig; entries?: readonly ManualEntryRow[] };
+  /** 강사평가 설정과 직접 만든 지표의 입력값 · 매출 대비 급여(강사|달 → 비율, 마감하지 않은 달만 — 서버가 출석부로 낸다). */
+  evaluation?: { config: EvaluationConfig; entries?: readonly ManualEntryRow[] }; pay?: ReadonlyMap<string, PayResult>;
 } = {}): PortfolioResult {
   const ctx = buildContext(d);
   const classes = new Map(d.classes.map((c) => [c.id, c]));
@@ -166,6 +165,7 @@ export function buildPortfolio(d: PortfolioSnapshot, opts: {
     }),
     students,
     churn: (teacherId, w) => ({ id: "churn", max: METRIC_MAX.churn, value: null, ...buildChurn({ source: students.churnSource, classes, teacherId, w, options: config.metrics.churn.churn ?? DEFAULT_CHURN_OPTIONS, futureEnrollments: d.futureEnrollments, studentReasons: d.studentReasons }) }),
+    payRatio: (teacherId, month) => payRatioItem(opts.pay?.get(`${teacherId}|${month}`)),
     subjectOf: (id) => classes.get(id)?.subject ?? "",
     classNameOf: (id) => classes.get(id)?.class_name ?? "",
   };

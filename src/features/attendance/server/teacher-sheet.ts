@@ -13,6 +13,8 @@ import { TeacherSheetError } from "../teacher-sheet-error";
 import { attendanceUnitSuffix, type AttendanceUnitSuffix } from "../unit-suffix";
 import type { AttendanceSalaryRates } from "../salary-rates";
 import { getAttendanceClassBilledAmounts, mergeAttendanceClassBilling, type AttendanceClassBilling } from "./class-billing";
+import { attendanceReadContext } from "./read-context";
+import { rowKey } from "../grid/model";
 import { findMakeupPoolClass } from "./makeup-pool";
 import { getMonthlyAttendanceMatrix, type AttendanceMatrix } from "./queries";
 import { taughtByColumnState } from "./taught-by-db";
@@ -69,15 +71,18 @@ function stopIfFolded(reasons: readonly (string | null | undefined)[]): void {
 }
 
 export const loadTeacherSheet = cache(async (tenantId: string, teacherId: string, month: string): Promise<TeacherSheet> => {
+  // 로그인 없는 조립 문맥(강사평가 밤 집계 — read-context.ts)은 렌즈가 없고(관리자뷰와 같다) 학원 설정은 문맥이 읽어 둔 것이다.
+  const readCtx = attendanceReadContext();
+  if (readCtx && readCtx.tenantId !== tenantId) throw new TeacherSheetError("다른 지점의 출석부는 조립하지 않습니다.");
   // ① 보는 사람의 강사 렌즈 — 대상 강사와 다르면 아래 조회 전부가 그 사람 반으로 좁혀진다(같으면 결과도 같다).
-  const lens = await effectiveTeacherId();
+  const lens = readCtx ? null : await effectiveTeacherId();
   if (lens && lens !== teacherId) {
     throw new TeacherSheetError("강사뷰 상태에서는 다른 선생님의 출석부 금액을 계산할 수 없습니다 — 관리자뷰로 돌아간 뒤 다시 열어 주세요.");
   }
   // 반 목록(경량) · 학원설정 · 담임 시작일 · 대신 보강 귀속 확인은 서로 독립(B4).
   const [base, settings, sinceIdx, taughtBy] = await Promise.all([
     getMonthlyAttendanceMatrix(month, null),
-    getTenantSettings(),
+    readCtx ? Promise.resolve(readCtx.settings) : getTenantSettings(),
     getHomeroomSinceIndex(),
     taughtByColumnState(),
   ]);
@@ -148,6 +153,21 @@ export const loadTeacherSheet = cache(async (tenantId: string, teacherId: string
     handovers: scope.handovers.map((h) => ({ className: classById.get(h.classId)?.className ?? "", kind: h.kind, since: h.since })),
   };
 });
+
+/**
+ * 그 출석부의 **청구액 합계** — 화면 합계 행의 청구액 칸과 같은 정의(표의 모든 줄의 `billing.billed[rowKey(반, 학생)]` 중 숫자만 더함 —
+ * `live-totals.tsx`). 강사평가 '매출 대비 급여'의 매출(원장 2026-10-13 *"청구액 그대로"* — 함께 맡은 반도 그 줄 금액 그대로).
+ * 줄이 하나도 없거나 청구액이 하나도 없으면 null(0원을 지어내지 않는다).
+ */
+export function sheetBilledOf(sheet: TeacherSheet): number | null {
+  let total = 0;
+  let any = false;
+  for (const g of sheet.groups) for (const s of g.matrix.students) {
+    const v = sheet.billing.billed[rowKey(g.classId, s.id)];
+    if (typeof v === "number" && Number.isFinite(v)) { total += v; any = true; }
+  }
+  return any ? total : null;
+}
 
 /**
  * 그 출석부의 **실급여**(줄 + 합계) — 화면 합계 행과 같은 식(`teacherSheetSalary`).

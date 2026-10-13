@@ -48,8 +48,8 @@ export type PortfolioSnapshot = {
 };
 
 /** 아직 계산이 들어오지 않은 원장 구성 지표(2026-10-13) — 수치 없이 자리만 선다(자료 없음 규칙으로 매긴다). */
-export type PendingMetricId = "payRatio" | "grades" | "satisfaction" | "punctuality";
-export type MetricId = "report" | "attendance" | "follow" | "quality" | "students" | "revenue" | "expansion" | "coverage" | "churn" | PendingMetricId;
+export type PendingMetricId = "grades" | "satisfaction" | "punctuality";
+export type MetricId = "report" | "attendance" | "follow" | "quality" | "students" | "revenue" | "expansion" | "coverage" | "churn" | "payRatio" | PendingMetricId;
 /** 계산 코드가 처음 매기는 만점(옛 고정 배점) — 화면의 만점은 설정이 덮는다. 옛 저장 행의 기준표도 이 값이다. */
 export const METRIC_MAX: Record<MetricId, number> = {
   report: 20, attendance: 10, follow: 10, quality: 10, students: 20, revenue: 10, expansion: 10, coverage: 10,
@@ -127,11 +127,15 @@ export type PendingMetric = MetricCommon<PendingMetricId, never>;
 export type ChurnRow = { studentId: string; day: string; type: "퇴원" | "수강종료"; className: string; reason: string; counted: boolean; note: string | null };
 /** base = 지난달 담당 학생(그 달 절반 이상) · need = 절반 일수 · counted = 센 학생 수. */
 export type ChurnMetric = MetricCommon<"churn", ChurnRow> & { base: number; need: number; counted: number };
+/** 매출 대비 급여 — 비율·출처·학생 수·반 수만(금액 없음). 계산 전 달은 `uncounted`라 출처 칸이 없다. */
+export type PayRatioMetric = MetricCommon<"payRatio", never> & {
+  source?: string | null; students?: number; classes?: number; enrollments?: number;
+};
 /** 원장이 직접 만든 지표 — 달마다 입력한 숫자가 원래 수치다. */
 export type ManualMetricItem = MetricCommon<`manual:${string}`, never> & { unit: string; note?: string };
 export type Metric =
   | ReportMetric | AttendanceMetric | FollowMetric | QualityMetric | StudentsMetric | RevenueMetric | ExpansionMetric | CoverageMetric
-  | ChurnMetric | PendingMetric | ManualMetricItem;
+  | ChurnMetric | PayRatioMetric | PendingMetric | ManualMetricItem;
 /** 한 달의 항목 id — 기본 지표 또는 `manual:<key>`. */
 export type ItemId = Metric["id"];
 export type MetricOf<Id extends MetricId> = Extract<Metric, { id: Id }>;

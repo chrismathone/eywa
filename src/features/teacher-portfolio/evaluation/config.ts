@@ -59,9 +59,15 @@ export const metricSettingSchema = z.object({
 });
 export type MetricSetting = z.infer<typeof metricSettingSchema>;
 
+/**
+ * 직접 입력 표(`teacher_evaluation_entries`)에서 **매출 대비 급여의 급여 직접 입력**이 쓰는 칸 이름 — 원장이 만드는 지표의 키로는 못 쓴다
+ * (만드는 키는 `m` + 무작위라 겹치지 않지만, 저장값을 손으로 고쳐도 막는다). 이 칸만 큰 금액(원)을 받는다.
+ */
+export const PAY_OVERRIDE_KEY = "pay";
+
 /** 원장이 만드는 지표 — 자동으로 셀 수 없으니 달마다 숫자를 넣는다. */
 export const manualMetricSchema = metricSettingSchema.extend({
-  key: z.string().regex(/^[a-z0-9]{1,16}$/),
+  key: z.string().regex(/^[a-z0-9]{1,16}$/).refine((k) => k !== PAY_OVERRIDE_KEY, "쓸 수 없는 지표 키입니다"),
   unit: z.string().trim().max(10, "단위는 10자까지입니다"),
   description: z.string().trim().max(200, "설명은 200자까지입니다"),
 });
@@ -103,14 +109,15 @@ const V1_METRICS = {
 /**
  * 기본값 = **원장 8개 구성**(2026-10-13): 매출 대비 급여 20 · 퇴원율 20 · 보고서 10 · 원생상담 10 · 성적 관리 10 ·
  * 원생 소개 20(1건 5점) · 학부모 만족도(총점에 그대로 더하고 뺀다 — 만점 0) · 강사 근태 10 = 100점.
- * 급여 비율 구간 = 원장 결정 3(≤33% 20 · ≤40% 16 · ≤50% 12 · ≤60% 8 · 그 이상 4). 퇴원율·근태·성적의 구간은 원장이 고칠 자리(처음 값).
+ * 급여 비율 구간 = 원장 결정 3(≤33% 20 · ≤40% 16 · ≤50% 12 · ≤60% 8 · 그 이상 4) — 첫 구간 끝은 33.3%(*"급여의 3배가 매출이면 만점"* =
+ * 1/3 = 33.3%가 만점이어야 한다 — 33으로 두면 정확히 3배가 16점이 된다). 퇴원율·근태·성적의 구간은 원장이 고칠 자리(처음 값).
  * 아직 계산이 들어오지 않은 지표는 결정 4(자료 없음 = 0점)대로 0점이다 — 들어오는 대로 점수가 선다.
  */
 export const DEFAULT_EVALUATION_CONFIG: EvaluationConfig = {
   version: 1,
   order: [...BUILTIN_METRICS],
   metrics: {
-    payRatio: { enabled: true, label: "매출 대비 급여", max: 20, scoring: upTo([[33, 20], [40, 16], [50, 12], [60, 8], [null, 4]]), missing: "zero" },
+    payRatio: { enabled: true, label: "매출 대비 급여", max: 20, scoring: upTo([[33.3, 20], [40, 16], [50, 12], [60, 8], [null, 4]]), missing: "zero" },
     churn: { enabled: true, label: "퇴원율", max: 20, scoring: upTo([[3, 20], [6, 16], [10, 12], [15, 8], [null, 4]]), missing: "zero", churn: DEFAULT_CHURN_OPTIONS },
     report: { enabled: true, label: "수업보고서", max: 10, scoring: linear(0, 100), missing: "zero" },
     follow: { enabled: true, label: "원생상담", max: 10, scoring: linear(0, 100), missing: "zero" },

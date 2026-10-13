@@ -8,6 +8,7 @@ import {
   AttendanceEvidence, EstimatedEvidence, FollowEvidence, ReportEvidence, StudentCell, type EvidenceProps,
 } from "./evidence-records";
 import { ChurnEvidence } from "./evidence-churn";
+import { PayRatioEvidence } from "./evidence-pay";
 import { BarList, DataTable, Delta, SectionTitle, StackBar, StatTiles, StatusChip } from "./parts";
 
 /** 학원 운영 영향 쪽 내역 — 배정·유지 · 매출 · 과목 소개 · 보강, 그리고 직원 평가. */
@@ -179,6 +180,7 @@ export function MetricEvidence({ id, ...props }: EvidenceProps & { id: ItemId })
     case "coverage": return <CoverageEvidence {...props} />;
     // 계산이 들어오기 전에 매긴 달(계산 전 자리)은 그 안내 카드로.
     case "churn": return item.uncounted ? <PendingEvidence metric={item} period={props.period} /> : <ChurnEvidence {...props} />;
+    case "payRatio": return item.uncounted ? <PendingEvidence metric={item} period={props.period} /> : <PayRatioEvidence period={props.period} />;
     default: return <PendingEvidence metric={item} period={props.period} />;
   }
 }

@@ -84,8 +84,8 @@ export function PortfolioBoard({ teachers, selected, studentNames, computedLabel
         <HrefSelect axisLabel="평가 기간" ariaLabel="평가 기간 선택" value={period.month} onSelect={setMonthKey}
           options={shown.map((w) => ({ value: w.month, label: periodLabel(w) }))} />
         <ToolbarButton onClick={() => setDetail({ kind: "criteria" })}>평가 기준</ToolbarButton>
-        {/* 원장이 만든 지표가 이 달에 있으면 그 값을 넣는 입구 — 쓰기 권한(집계와 같은 문)이 있을 때만. */}
-        {canRefresh && period.items.some((m) => m.id.startsWith("manual:") && !m.off)
+        {/* 원장이 만든 지표나 매출 대비 급여(급여 직접 입력)가 이 달에 있으면 그 값을 넣는 입구 — 쓰기 권한(집계와 같은 문)이 있을 때만. */}
+        {canRefresh && period.items.some((m) => (m.id.startsWith("manual:") || m.id === "payRatio") && !m.off)
           ? <ToolbarButton onClick={() => setEntryOpen(true)}>직접 입력</ToolbarButton> : null}
         <span className="num ml-auto text-xs whitespace-nowrap">집계 {computedLabel}</span>
         {canRefresh ? <RefreshButton /> : null}
