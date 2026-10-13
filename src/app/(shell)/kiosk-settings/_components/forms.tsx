@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState } from "react";
 import {
   assignAttendanceCodesAction,
+  deleteKioskDevice,
   registerKioskDevice,
   revokeKioskDevice,
   saveKakaoChannel,
@@ -86,6 +87,34 @@ export function RevokeDeviceButton({ deviceId }: { deviceId: string }) {
         className="text-danger hover:bg-danger/5 rounded px-2 py-1 text-xs disabled:opacity-50"
       >
         {pending ? "…" : "기기 차단"}
+      </button>
+      {state?.error ? <span className="text-danger ml-1 text-xs">{state.error}</span> : null}
+    </form>
+  );
+}
+
+/** 기기 삭제 — 되돌릴 수 없어 한 번 묻는다. `label`은 확인창에 적을 이름(같은 이름 기기가 여럿일 수 있어 번호와 함께). */
+export function DeleteDeviceButton({ deviceId, label }: { deviceId: string; label: string }) {
+  const [state, action, pending] = useActionState<KioskActionState, FormData>(
+    deleteKioskDevice,
+    undefined,
+  );
+  return (
+    <form
+      action={action}
+      onSubmit={(e) => {
+        if (!window.confirm(`${label}을(를) 목록에서 삭제할까요?\n삭제한 기기로는 출석 체크를 할 수 없고, 다시 쓰려면 새로 등록해야 합니다.`))
+          e.preventDefault();
+      }}
+      className="inline"
+    >
+      <input type="hidden" name="deviceId" value={deviceId} />
+      <button
+        type="submit"
+        disabled={pending}
+        className="text-danger hover:bg-danger/5 rounded px-2 py-1 text-xs disabled:opacity-50"
+      >
+        {pending ? "…" : "삭제"}
       </button>
       {state?.error ? <span className="text-danger ml-1 text-xs">{state.error}</span> : null}
     </form>

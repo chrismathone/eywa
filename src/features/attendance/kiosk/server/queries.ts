@@ -11,7 +11,7 @@ import { summarizeUserAgent } from "../device-info";
 
 export type KioskDeviceRow = {
   id: string;
-  deviceNo: number; // 등록 순번(기기 #N) — 폐기 기기 포함해 안정적
+  deviceNo: number; // 등록 순번(기기 #N) — 차단된 기기는 포함하지만, 기기를 삭제하면 뒤 번호가 당겨진다(표시용)
   name: string;
   isActive: boolean;
   registeredIp: string | null;

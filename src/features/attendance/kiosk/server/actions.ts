@@ -114,6 +114,46 @@ export async function revokeKioskDevice(
   return { ok: "기기를 폐기했습니다." };
 }
 
+/**
+ * 기기 삭제 — 목록에서 지운다(원장 2026-10-13 *"키오스크 기기 차단 말고 삭제도 가능하게"*).
+ * 토큰 해시 행이 사라지므로 그 기기는 체크인도 못 한다(차단보다 강하다 — 다시 쓰려면 새로 등록).
+ * 지난 등하원 기록은 그대로다 — `attendance_checkins.device_id`는 FK 없는 참조라 남은 행에 영향이 없다.
+ */
+export async function deleteKioskDevice(
+  _prev: KioskActionState,
+  formData: FormData,
+): Promise<KioskActionState> {
+  const user = await requireKioskWrite();
+  if (!user) return { error: NO_PERMISSION };
+  const id = String(formData.get("deviceId") ?? "").trim();
+  if (!id) return { error: "기기 ID가 필요합니다" };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("kiosk_devices")
+    .delete()
+    .eq("id", id)
+    .eq("tenant_id", user.tenantId)
+    .select("name")
+    .maybeSingle();
+  if (error) return { error: friendly(error, "기기를 삭제하지 못했습니다") };
+  // 지운 행이 없으면 감사로그도 남기지 않는다(이미 지워졌거나 다른 지점의 기기).
+  // 목록은 다시 그린다 — 다른 창에서 먼저 지운 경우 이 화면에 남은 줄이 사라지게.
+  if (!data) {
+    revalidatePath("/kiosk-settings");
+    return { error: "이미 삭제됐거나 찾을 수 없는 기기입니다" };
+  }
+
+  await logAction({
+    action: "kiosk_device_delete",
+    targetType: "kiosk_device",
+    targetLabel: (data.name as string | undefined) ?? "키오스크 기기",
+  });
+
+  revalidatePath("/kiosk-settings");
+  return { ok: "기기를 삭제했습니다." };
+}
+
 /** 출석번호 일괄 발급 — attendance_code가 비어 있는 재원 학생만. 멱등. */
 export async function assignAttendanceCodesAction(
   _prev: KioskActionState,

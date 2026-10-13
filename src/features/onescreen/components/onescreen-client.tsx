@@ -349,6 +349,7 @@ export function OneScreenClient({
   initialStudentId = null,
   noClassesToday = false,
   showingAll = false,
+  holidayName = null,
   teacherName = "",
   reportSettings,
   academyName = "",
@@ -373,6 +374,8 @@ export function OneScreenClient({
   noClassesToday?: boolean;
   /** '담당 반 전체 보기'로 보는 중(요일 무시) — 화면이 그 사실을 밝힌다. */
   showingAll?: boolean;
+  /** 그 날짜가 학원설정 휴원일이면 이름(roster.ts) — 안내 띠 + 일괄 출결 확인. 명단·입력은 막지 않는다. */
+  holidayName?: string | null;
   sendWindow?: { start: string; end: string } | null; // 발송 허용 시간창 원문(무제한=null) — 창 밖일 때만 안내 배너
   showAttachments?: boolean; // 사진/파일 첨부 표시(학원 설정) — off면 첨부해도 안 실린다는 경고를 카드에 표시
   canEditAttendance?: boolean; // 출결 쓰기 권한 — false면 pill을 표시 전용으로(서버 거절 전에 화면에서 알림)
@@ -1959,6 +1962,8 @@ export function OneScreenClient({
     if (quickAttBusy) return;
     const { cells } = planQuickPresent(visible, activeClassFilter);
     if (cells.length === 0) return; // 버튼이 이미 비활성 — 방어선
+    // 휴원일에만 한 번 묻는다(원장 2026-10-13 — 10/9 한글날 19명). 평소엔 확인창 없이 한 번에(버튼 주석의 결정 그대로).
+    if (holidayName && !window.confirm(tf("os.present.holidayConfirm", { name: holidayName, n: cells.length }))) return;
     const keys = cells.map((c) => `${c.studentId}::${c.classId}`);
     setQuickAttBusy(true);
     setAttPending((p) => {
@@ -4252,6 +4257,7 @@ export function OneScreenClient({
             // 단일 칸으로 남으면 토글을 B로 둔 강사가 "표에선 적용이 안 된다"고 느낀다(원장 제보 2026-07-21).
             noticeMode: noticeMode ?? academyNoticeMode,
             classnoteMatch,
+            holidayName,
           }}
           fields={{
             onAttendance: setAttendanceFor,
@@ -4570,6 +4576,14 @@ selected ? (
       {/* 발송 시간창 안내 — **지금이 창 밖일 때만**(KST, 분 단위 재판정 — 원장 지시 2026-07-29).
           창 안에선 발송이 그냥 나가므로 상시 안내는 노이즈. 실제 지연은 워커 게이트가 담당. */}
       {sendWindow ? <SendWindowNotice start={sendWindow.start} end={sendWindow.end} /> : null}
+
+      {/* 학원설정 휴원일 — 시간표는 요일 반복이라 명단은 평소대로 선다. 막지 않고 사실만 알린다(원장 2026-10-13). */}
+      {holidayName ? (
+        <div className="border-amber/40 bg-amber/5 text-amber flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 text-xs">
+          <span className="font-bold">{tf("os.c.holidayTitle", { name: holidayName })}</span>
+          <span>{t("os.c.holidayBody")}</span>
+        </div>
+      ) : null}
 
       {/* 그 요일에 담당 수업이 없을 때 — 예전엔 담당 반 전체가 '오늘 목록'처럼 떴다(2026-07-22 이수진 수요일:
           반 7개·학생 37명). 이제 목록 대신 사실을 말하고, 전체 보기는 **누를 때만** 연다. */}

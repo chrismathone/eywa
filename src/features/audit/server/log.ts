@@ -38,6 +38,7 @@ export const AUDIT_ACTIONS = {
   intake_push_enqueue: "makeedu 상담 역동기화",
   kiosk_device_register: "키오스크 기기 등록",
   kiosk_device_revoke: "키오스크 기기 폐기",
+  kiosk_device_delete: "키오스크 기기 삭제",
   kakao_channel_save: "카카오 알림톡 채널 설정",
   ai_prompt_save: "AI 프롬프트 저장",
   ai_prompt_reset: "AI 프롬프트 기본값 복원",

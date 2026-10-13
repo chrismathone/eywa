@@ -316,6 +316,7 @@ export function OneScreenGrid({
                           status,
                           { onlyEmpty },
                         ),
+                      holidayName: config.holidayName ?? null,
                     }
               }
               onApply={(patch, onlyEmpty, progressSubjectKey, attendance, attendanceUnits, videoCheck) =>

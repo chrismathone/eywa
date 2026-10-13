@@ -44,6 +44,7 @@ const MUST_LOG: { file: string; fn: string }[] = [
   // 출결을 찍을 수 있는 물건 + 학부모 발신 자격.
   { file: "src/features/attendance/kiosk/server/actions.ts", fn: "registerKioskDevice" },
   { file: "src/features/attendance/kiosk/server/actions.ts", fn: "revokeKioskDevice" },
+  { file: "src/features/attendance/kiosk/server/actions.ts", fn: "deleteKioskDevice" },
   { file: "src/features/attendance/kiosk/server/actions.ts", fn: "saveKakaoChannel" },
   // 데이터 정리 면(학원 설정 → 데이터 정리) — 여러 학생의 기록을 한꺼번에 바꾸는 도구라 전부 남긴다.
   // 2026-10-06: 퇴원 학생의 남은 수강 일괄 종료(closeOrphanEnrollments)가 무기록이었다.

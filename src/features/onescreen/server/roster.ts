@@ -37,6 +37,7 @@ import { makeupSessionEntries } from "../makeup-session";
 import { makeupStudentIds } from "@/features/attendance/input-roster";
 // 보강 예약(0264a) — 그날 내 반에 예약된 학생을 보강 행으로 미리 세운다. 별도 함수·fail-soft(hot path 보호, #95).
 import { getReservationsOn } from "@/features/attendance/server/makeup-reservation-queries";
+import { holidayNameOrNull } from "@/features/attendance/server/holiday";
 import { getSplitsOnDate } from "@/features/class-splits/server/queries";
 import { planSplitRows } from "../split-rows";
 import { autoUnitsOn, isAutoUnitsSubject, toAutoUnitsSchedule } from "@/features/attendance/auto-units";
@@ -116,6 +117,13 @@ export type TeacherRoster = {
   noClassesToday: boolean;
   /** 지금 '담당 반 전체 보기'로 보고 있는가(요일 조건 미적용) — 화면이 그 사실을 밝힌다. */
   showingAll: boolean;
+  /**
+   * 그 날짜가 학원설정 휴원일이면 그 이름(아니면 null) — 출결 화면과 같은 판정(`holidayNameOrNull`).
+   * 🔴 명단은 그대로 둔다 — 휴원일에도 실제로 수업하는 날이 있다(2026-10-03 개천절에 원스크린으로 출결을 넣었다).
+   *    화면은 안내 띠를 세우고 일괄 출결(일괄 출석·값 일괄 적용)만 한 번 확인한다
+   *    (원장 2026-10-13 — 10/9 한글날에 금요일 반 19명이 일괄 출석으로 찍혔다).
+   */
+  holidayName: string | null;
   /**
    * 맡은 보강 배정을 읽지 못했다 — 화면이 그대로 알린다(빈 명단을 "오늘 할 일 없음"으로 읽지 않게). 평소엔 없다.
    * 수업이 없는 날에도 온다: 그날 화면에 설 사람이 맡은 보강 학생뿐일 수 있어서다.
@@ -225,6 +233,7 @@ type RosterSettings = Pick<
   | "reportSettings"
   | "academyName"
   | "logoSrc"
+  | "holidayName"
 >;
 type RosterConfig = Partial<RosterSettings & Pick<TeacherRoster, "noClassesToday" | "showingAll" | "makeupNotice">>;
 
@@ -337,6 +346,7 @@ function emptyRoster(today: string, date: string, teacherName: string, config: R
     reportSettings: DEFAULT_SETTINGS.report,
     academyName: "",
     logoSrc: null,
+    holidayName: null,
     ...config,
   };
 }
@@ -373,7 +383,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   //    + 학생 표시 순서(0116a, 강사×반 개인 설정) + 출결 쓰기 권한 — 서로 독립이라 병렬(B4).
   //    ⚠️ `classes.teacher_id`를 여기서 직접 비교하지 말 것 — 판정은 getTeachingClasses 단일 소스다
   //    (저장·발송·출결 게이트가 같은 함수를 쓴다. 갈라지면 "화면엔 뜨는데 저장하면 거절"이 난다).
-  const [teachingClasses, { data: meRow }, { data: orderRows }, canEditAttendance, logoSrc] =
+  const [teachingClasses, { data: meRow }, { data: orderRows }, canEditAttendance, logoSrc, holidayName] =
     await Promise.all([
       getTeachingClasses(supabase, teacherId, targetDate),
       supabase.from("users").select("report_notice_mode, ui_prefs").eq("id", teacherId).single(),
@@ -384,6 +394,8 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       settings.report.showLogo
         ? resolveBrandingSrc(settings.profile.logoUrl, user.tenantId).catch(() => null)
         : Promise.resolve(null),
+      // 휴원일 이름 — 위에서 읽은 학원설정을 그대로 읽는다(요청 단위 캐시라 왕복 0). 실패는 null(fail-soft).
+      holidayNameOrNull(targetDate),
     ]);
   const orderByClass = new Map(
     (orderRows ?? []).map((r) => [r.class_id as string, (r.student_ids ?? []) as string[]]),
@@ -422,6 +434,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     reportSettings: settings.report,
     academyName: settings.profile.name || "",
     logoSrc,
+    holidayName,
   };
 
   // 아래 로직은 전부 DB 컬럼 이름(class_name/is_special)을 쓰던 코드라 여기서 한 번만 맞춘다.

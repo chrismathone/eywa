@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from "./env";
+import { VIEW_RESET_PATH } from "@/lib/auth/view-preference";
 
 /**
  * 미들웨어 세션 갱신(표준 @supabase/ssr 패턴) — **지속 로그인의 핵심**.
@@ -37,7 +38,8 @@ export async function updateSession(request: NextRequest) {
   const isPublicAsset = pathname.startsWith("/_next") || pathname === "/favicon.ico";
   // /api/* 라우트 (webhook 포함)는 자체 인증 (시크릿 헤더 등) 사용 — 세션 갱신 불필요.
   const isApiRoute = pathname.startsWith("/api/");
-  if (isPublicAsset || isApiRoute) {
+  // 복구는 뷰 쿠키만 지우는 공개 경로다. 만료된 세션·인증 조회 장애도 출구를 막으면 안 된다.
+  if (isPublicAsset || isApiRoute || pathname === VIEW_RESET_PATH) {
     return NextResponse.next({ request });
   }
 

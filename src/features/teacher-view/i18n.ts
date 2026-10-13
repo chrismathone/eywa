@@ -2924,6 +2924,10 @@ export const SHEET_DICT = {
   },
   "os.present.busy": { ko: "기록 중…", en: "Recording…" },
   "os.present.btn": { ko: "일괄 출석", en: "Present for all" },
+  "os.present.holidayConfirm": {
+    ko: "이 날짜는 학원 휴원일({name})입니다.\n수업하지 않은 날이면 취소하세요.\n\n그래도 출결 기록이 없는 {n}칸을 출석으로 기록할까요?",
+    en: "This date is an academy holiday ({name}).\nCancel if there was no lesson.\n\nRecord the {n} empty boxes as present anyway?",
+  },
   "os.attach.title": { ko: "첨부 {n}개 — 보기·추가·삭제", en: "{n} attachments — view, add or delete" },
   "os.attach.empty": { ko: "사진/파일 첨부", en: "Attach a photo or file" },
   "os.attach.aria": { ko: "{label} 첨부", en: "{label} attachments" },
@@ -3501,6 +3505,10 @@ export const SHEET_DICT = {
     en: "· {n} attendance cells will be recorded as '{label}' — {over} of them overwrite an existing record.\n  Attendance goes into the attendance sheet the moment it is saved and cannot be undone here.",
   },
   "os.bulk.confirmTail": { ko: "계속할까요?", en: "Continue?" },
+  "os.bulk.warnHoliday": {
+    ko: "· 이 날짜는 학원 휴원일({name})입니다. 수업하지 않은 날이면 출결 {n}건을 기록하지 마세요.",
+    en: "· This date is an academy holiday ({name}). If there was no lesson, do not record these {n} attendance cells.",
+  },
   "os.bulk.title": {
     ko: "선택(없으면 표시 전체) 행을 한 번에 채우기 — 직접 입력하거나 맨 위 행을 복사",
     en: "Fill the selected rows (or every row shown) at once — type the values or copy the top row",
@@ -4087,6 +4095,11 @@ export const SHEET_DICT = {
   "os.c.showingAllTitle": { ko: "담당 반 전체 보기 — 이 날짜에 수업이 있는 학생이 아닙니다", en: "All my classes — these students do not have a lesson on this date" },
   "os.c.showingAllBody": { ko: "안 오는 날 입력·발송이 되지 않도록 주의하세요.", en: "Take care not to write or send on a day they do not come." },
   "os.c.showTodayOnly": { ko: "오늘 수업만 보기", en: "Show today's lessons only" },
+  "os.c.holidayTitle": { ko: "{name} · 학원 휴원일", en: "{name} · Academy holiday" },
+  "os.c.holidayBody": {
+    ko: "— 시간표는 평소 요일대로 보입니다. 수업하지 않은 날이면 출결을 찍지 마세요(수업한 날이면 그대로 입력하면 됩니다).",
+    en: "— the timetable still shows the usual weekday. If there was no lesson, do not mark attendance (if there was, enter it as usual).",
+  },
   "os.toolbar.settings": { ko: "설정", en: "Settings" },
   "os.display.sort": { ko: "정렬", en: "Sort" },
   "os.display.byClass": { ko: "반별 정렬", en: "Sort by class" },
