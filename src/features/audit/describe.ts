@@ -685,6 +685,9 @@ export function auditDetail(
       const maxTotal = num(m.maxTotal);
       return join(enabled === null ? null : `지표 ${enabled}개`, maxTotal === null ? null : `만점 ${maxTotal}점`);
     }
+    case "teacher_evaluation_preset_save":
+    case "teacher_evaluation_preset_delete":
+      return typeof m.name === "string" ? `‘${m.name}’` : null;
     case "teacher_evaluation_entries_save": {
       const saved = num(m.saved);
       const cleared = num(m.cleared);

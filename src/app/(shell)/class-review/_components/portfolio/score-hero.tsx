@@ -4,7 +4,7 @@ import { useLayoutEffect, useRef } from "react";
 import { Pill } from "@/components/atoms/pill";
 import type { ItemId, Metric, StoredPeriod } from "@/features/teacher-portfolio/model/types";
 import {
-  closingLabel, fmtScore, itemColor, itemLabel, itemOf, missingTag, periodMax, scoreColor, scoreScale, shortItems, shownItems,
+  closingLabel, fmtScore, itemColor, itemLabel, itemOf, missingTag, pendingShown, periodMax, scoreColor, scoreScale, shortItems, shownItems,
 } from "@/features/teacher-portfolio/view";
 import { Delta } from "./parts";
 
@@ -89,7 +89,7 @@ function MetricRow({ metric, color, before, tag, legacy, onOpen }: {
         <span className="text-sm font-bold">{label}{tag ? <small className="ml-1.5 text-xs font-medium">{tag}</small> : null}</span>
         <b className={`num leading-none font-bold whitespace-nowrap ${metric.value === null ? "text-base" : "text-xl"}`}>
           <span ref={number}>{metric.value === null ? (legacy ? "산출불가" : "제외") : fmtScore(metric.value)}</span>
-          <small className="ml-1 text-xs font-medium">/ {metric.max}점</small>
+          <small className="ml-1 text-xs font-medium">{metric.max > 0 ? `/ ${metric.max}점` : "가감"}</small>
         </b>
       </span>
       <span className="bg-bg-soft relative block h-2 w-full rounded-full" style={metric.value === null ? { background: BULLET_STRIPES } : undefined}>
@@ -121,6 +121,7 @@ export function ScoreHero({ period, previous, onOpenMetric, onOpenLedger }: {
   const max = periodMax(period);
   // 자료가 없어 깎이거나 빠진 항목만 — '마감 대상 없음 · 만점'처럼 손해가 없는 항목은 안내에 올리지 않는다.
   const missing = shortItems(period).map(itemLabel);
+  const pending = pendingShown(period).map(itemLabel);
   // 2026-10-13 전에 저장된 달 — 설정 사본이 없고, 산출불가 규칙이 그때 것이다.
   const legacy = !period.evaluation;
   return (
@@ -137,8 +138,15 @@ export function ScoreHero({ period, previous, onOpenMetric, onOpenLedger }: {
           ))}
         </dl>
         <p className="border-line-faint mt-auto border-t pt-3 text-xs leading-relaxed">
+          {pending.length ? (
+            <span className="block">
+              {pending.join(" · ")} 항목은 아직 자동으로 세지 않아 정해 둔 규칙으로 매겼습니다
+              {/* 마감한 달은 그때 점수로 굳는다 — 계산이 나중에 들어와도 이 달은 바뀌지 않는다(적대적 리뷰 2026-10-13). */}
+              {period.closing.closedAt ? " — 이 달은 마감돼 그 점수로 굳었습니다." : " — 계산이 들어오면 진행 중인 달부터 점수가 섭니다."}
+            </span>
+          ) : null}
           {!missing.length
-            ? `${items.length}개 항목을 합산한 점수입니다.`
+            ? (pending.length ? null : `${items.length}개 항목을 합산한 점수입니다.`)
             : legacy
               ? `${missing.join(" · ")} 항목의 근거가 더 필요합니다.`
               : `${missing.join(" · ")} 항목은 자료가 없어 정해 둔 규칙으로 매겼습니다.`}

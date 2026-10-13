@@ -5,31 +5,20 @@
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { logAction } from "@/features/audit/server/log";
-import { getCurrentUser } from "@/lib/auth/current-user";
-import { canWriteTenant } from "@/lib/auth/perm-matrix";
-import { readonlyTeacherViewError } from "@/lib/auth/view-as";
 import { reportWarning } from "@/lib/observability/report-error";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { z } from "zod";
-import { evaluationConfigSchema, resolveEvaluationConfig } from "../evaluation/config";
+import { evaluationConfigSchema, issueMessage, resolveEvaluationConfig } from "../evaluation/config";
 import { loadEvaluationConfig, loadTeacherEntries, saveEvaluationConfig, saveManualEntries } from "./evaluation-store";
 import { getPortfolioGate } from "./queries";
 import { refreshTenantPortfolio } from "./refresh";
+import { EVALUATION_DENIED, evaluationWriteGate } from "./write-gate";
 
 export type EvaluationActionState = { ok: boolean; error?: string; notice?: string };
 
-const DENIED = "강사평가 설정을 바꿀 권한이 없습니다";
-
-async function writeGate(): Promise<{ tenantId: string; userId: string } | { error: string }> {
-  const gate = await getPortfolioGate();
-  const user = await getCurrentUser({ teacherView: true });
-  if (!gate || !user) return { error: DENIED };
-  const readonly = await readonlyTeacherViewError();
-  if (readonly) return { error: readonly };
-  if (!(await canWriteTenant(user.systemRole, "class_review"))) return { error: DENIED };
-  return gate;
-}
+const DENIED = EVALUATION_DENIED;
+const writeGate = evaluationWriteGate;
 
 function refreshLater(tenantId: string, scope: string) {
   after(async () => {
@@ -45,7 +34,7 @@ export async function saveEvaluationSettings(input: unknown): Promise<Evaluation
   const gate = await writeGate();
   if ("error" in gate) return { ok: false, error: gate.error };
   const parsed = evaluationConfigSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "설정 값을 확인해 주세요" };
+  if (!parsed.success) return { ok: false, error: issueMessage(parsed.error) };
   const config = resolveEvaluationConfig(parsed.data);
   const admin = createAdminClient();
   try {

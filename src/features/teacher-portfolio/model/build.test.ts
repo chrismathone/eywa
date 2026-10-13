@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildPortfolio } from "./build";
+import { PORTFOLIO_V1_CONFIG } from "../evaluation/config";
+import { buildPortfolio as build } from "./build";
 import { awaitsReference } from "./pre-record";
 import { metricOf, type MetricId, type PortfolioSnapshot, type SnapshotAttendance, type SnapshotReport, type SnapshotReview } from "./types";
 
@@ -24,6 +25,8 @@ const present = (day: string, recordedAt = `${day}T09:00:00Z`, over: Partial<Sna
   id: `a${day}`, class_id: "c", student_id: "s", session_date: day, slot_start: "14:00", status: "present", recorded_at: recordedAt,
   supersedes_id: null, seat_label: null, recorded_via: null, taught_by: null, note: null, ...over,
 });
+/** 이 파일은 그 전 직원 포트폴리오의 점수를 지킨다 — 옛 구성으로 매긴다(기본값은 원장 구성, evaluation.test). */
+const buildPortfolio = (d: PortfolioSnapshot, opts: Parameters<typeof build>[1] = {}) => build(d, { evaluation: { config: PORTFOLIO_V1_CONFIG }, ...opts });
 const months = (d: PortfolioSnapshot) => Object.fromEntries(buildPortfolio(d).teachers.find((t) => t.name === "강사")!.periods.map((w) => [w.month, w]));
 const score = <Id extends MetricId>(d: PortfolioSnapshot, month: string, id: Id) => metricOf(months(d)[month], id);
 const wednesdays = (month: string) => Array.from({ length: 31 }, (_, i) => `${month}-${String(i + 1).padStart(2, "0")}`)
@@ -35,7 +38,8 @@ describe("8개 항목 100점", () => {
     const periods = out.teachers[0].periods;
     expect(periods.map((w) => w.month)).toEqual(["2026-10", "2026-09", "2026-08", "2026-07", "2026-06", "2026-05", "2026-04"]);
     expect(out.months).toHaveLength(6);
-    expect(periods.every((w) => w.items.length === 8 && w.items.reduce((n, m) => n + m.max, 0) === 100)).toBe(true);
+    const shown = (w: (typeof periods)[number]) => w.items.filter((m) => !m.off);
+    expect(periods.every((w) => shown(w).length === 8 && shown(w).reduce((n, m) => n + m.max, 0) === 100)).toBe(true);
     expect([periods[0].partial, periods[0].end, periods[1].partial, periods[1].end]).toEqual([true, "2026-10-11", false, "2026-09-30"]);
   });
   it("본인 보고서는 의무 하나를 채우고, 보고서·교시가 여럿이어도 점수는 불지 않는다", () => {

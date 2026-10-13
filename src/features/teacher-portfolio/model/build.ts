@@ -15,6 +15,7 @@ import { applyEvaluation, indexEntries, type ManualEntryRow } from "./evaluate";
 import { between, daysBetween, kstDateOf, monthWindows, round1, unique } from "./dates";
 import { followMetric, qualityMetric } from "./metrics";
 import { teacherDuties } from "./duties";
+import { pendingItems, referralItem } from "./pending";
 import { applyPreRecord, scoreTotals, type WorkingPeriod } from "./pre-record";
 import { deepMathKeyOf } from "./receipt";
 import { buildRevenue } from "./revenue";
@@ -99,17 +100,14 @@ function teacherPeriod(d: PortfolioSnapshot, m: Models, user: SnapshotUser, w: P
       detail: revenue.detail, amount: revenue.amount, subjectTotal: revenue.subjectTotal, subjectLabel: revenue.subjectLabel,
       subjects: revenue.subjects, unassigned: revenue.unassigned, unclassified: revenue.unclassified,
     },
-    {
-      id: "expansion", max: METRIC_MAX.expansion, value: 0, raw: 0, basis: "인정된 소개 0건",
-      reason: "확인된 소개 실적이 없습니다. 다른 과목 등록만으로 소개 실적을 인정하지 않습니다. 등록 전 소개, 납부·첫 수업, 기여자 확인이 필요합니다.",
-      detail: [],
-    },
+    referralItem(),
     {
       id: "coverage", max: METRIC_MAX.coverage, value: coverage.value, raw: coverage.due ? (100 * coverage.done) / coverage.due : null,
       basis: coverage.due ? `기한 내 완료 ${coverage.done} / 마감 대상 ${coverage.due}건` : "이번 달 마감 대상 없음",
       reason: `결석 다음 달 같은 날까지 완료한 보강만 인정합니다. 같은 날짜가 없으면 다음 달 말일까지입니다. 기한이 끝나는 달에 한 번 평가합니다. 기한이 남은 건은 감점하지 않습니다. 출석부의 보강 출결·완료 메모·완료 예약을 대조하고, 예정·취소·기한 초과와 중복 기록은 인정하지 않습니다. 대기 ${coverage.pending}건 · 기한 전 완료 ${coverage.early}건${coverage.unconfirmed ? ` · 연결 확인 필요 ${coverage.unconfirmed}건` : ""}.`,
       detail: coverage.detail, due: coverage.due, done: coverage.done, pending: coverage.pending, early: coverage.early,
     },
+    ...pendingItems(),
   ];
   for (const item of items) if (item.value === null) item.gap = GAP_LABEL[item.id] ?? "근거 확인";
 

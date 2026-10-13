@@ -44,10 +44,13 @@ export type PortfolioSnapshot = {
   makeupLegacy: SnapshotMakeup[];
 };
 
-export type MetricId = "report" | "attendance" | "follow" | "quality" | "students" | "revenue" | "expansion" | "coverage";
-export const METRIC_IDS: readonly MetricId[] = ["report", "attendance", "follow", "quality", "students", "revenue", "expansion", "coverage"];
+/** 아직 계산이 들어오지 않은 원장 구성 지표(2026-10-13) — 수치 없이 자리만 선다(자료 없음 규칙으로 매긴다). */
+export type PendingMetricId = "payRatio" | "churn" | "grades" | "satisfaction" | "punctuality";
+export type MetricId = "report" | "attendance" | "follow" | "quality" | "students" | "revenue" | "expansion" | "coverage" | PendingMetricId;
+/** 계산 코드가 처음 매기는 만점(옛 고정 배점) — 화면의 만점은 설정이 덮는다. 옛 저장 행의 기준표도 이 값이다. */
 export const METRIC_MAX: Record<MetricId, number> = {
   report: 20, attendance: 10, follow: 10, quality: 10, students: 20, revenue: 10, expansion: 10, coverage: 10,
+  payRatio: 20, churn: 20, grades: 10, satisfaction: 0, punctuality: 10,
 };
 
 export type PeriodWindow = { month: string; start: string; end: string; partial: boolean };
@@ -105,6 +108,8 @@ type MetricCommon<Id extends string, Detail> = {
   off?: boolean;
   /** 자료가 없어 '자료가 없을 때' 규칙(0점·만점·빼기)으로 매겼다. */
   missing?: boolean;
+  /** 아직 자동으로 세지 않는 지표(계산이 들어오기 전) — 화면이 '자료 없음'과 갈라 '계산 전'으로 적는다. */
+  uncounted?: boolean;
 };
 export type ReportMetric = MetricCommon<"report", ReportCell>;
 export type AttendanceMetric = MetricCommon<"attendance", AttendanceRow>;
@@ -114,11 +119,12 @@ export type StudentsMetric = MetricCommon<"students", StudentEvent> & { tracking
 export type RevenueMetric = MetricCommon<"revenue", RevenueClassRow> & Pick<RevenueResult, "amount" | "subjectTotal" | "subjectLabel" | "subjects" | "unassigned" | "unclassified">;
 export type ExpansionMetric = MetricCommon<"expansion", never>;
 export type CoverageMetric = MetricCommon<"coverage", CoverageRow> & Pick<CoverageResult, "due" | "done" | "pending" | "early">;
+export type PendingMetric = MetricCommon<PendingMetricId, never>;
 /** 원장이 직접 만든 지표 — 달마다 입력한 숫자가 원래 수치다. */
 export type ManualMetricItem = MetricCommon<`manual:${string}`, never> & { unit: string; note?: string };
 export type Metric =
   | ReportMetric | AttendanceMetric | FollowMetric | QualityMetric | StudentsMetric | RevenueMetric | ExpansionMetric | CoverageMetric
-  | ManualMetricItem;
+  | PendingMetric | ManualMetricItem;
 /** 한 달의 항목 id — 기본 지표 또는 `manual:<key>`. */
 export type ItemId = Metric["id"];
 export type MetricOf<Id extends MetricId> = Extract<Metric, { id: Id }>;

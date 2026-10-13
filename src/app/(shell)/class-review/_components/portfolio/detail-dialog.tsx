@@ -3,13 +3,14 @@
 import type { ReactNode } from "react";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { Dialog, DialogClose, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { PENDING_IDS } from "@/features/teacher-portfolio/model/pending";
 import { referenceLabel } from "@/features/teacher-portfolio/model/pre-record";
 import { METRIC_META } from "@/features/teacher-portfolio/evaluation/catalog";
 import { MISSING_LABEL, isManualId, type BuiltinMetricId } from "@/features/teacher-portfolio/evaluation/config";
 import { settingOf } from "@/features/teacher-portfolio/evaluation/preview";
 import { describeScoring } from "@/features/teacher-portfolio/evaluation/scoring";
 import { METRIC_MAX, type ItemId, type MetricId, type StoredPeriod } from "@/features/teacher-portfolio/model/types";
-import { METRIC_LABEL, fmtScore, itemLabel, itemOf, monthName, periodLabel, periodMax, pointsText, ruleText, shownItems } from "@/features/teacher-portfolio/view";
+import { METRIC_LABEL, fmtScore, itemLabel, itemOf, maxLabel, monthName, periodLabel, periodMax, pointsText, ruleText, shownItems } from "@/features/teacher-portfolio/view";
 import { MetricEvidence } from "./evidence-impact";
 import { ReportMatrix, type EvidenceProps } from "./evidence-records";
 import { BarList, DataTable, StatTiles } from "./parts";
@@ -55,7 +56,7 @@ function Criteria({ periods, period }: { periods: readonly StoredPeriod[]; perio
       </div>
       <p>{monthName(period.month)}을 매긴 기준입니다{period.evaluation ? " — 학원 설정 → 강사평가에서 바꾼 기준은 진행 중인 달부터 적용됩니다" : ""}. 만점 합계 {periodMax(period)}점.</p>
       <DataTable headers={["평가 항목", "만점", "계산 기준"]} kinds={["text", "num", "text"]}
-        rows={rows.map((r) => ({ key: r.key, cells: [<span key="l" className="whitespace-nowrap">{r.label}</span>, `${r.max}점`, r.rule] }))} />
+        rows={rows.map((r) => ({ key: r.key, cells: [<span key="l" className="whitespace-nowrap">{r.label}</span>, maxLabel(r.max), r.rule] }))} />
       <section>
         <h4 className="mb-1 text-sm font-bold">학생·매출의 인정 범위</h4>
         <p>담임·부담임을 모두 확인하고 강사별 같은 학생은 한 번만 셉니다. 같은 강사가 계속 맡는 반이동·역할 변경은 가감하지 않습니다. 추가 수강·재등록은 별도 표시합니다. 학생 수는 전월 말과 해당 월 마감일을 비교합니다.</p>
@@ -87,11 +88,14 @@ function Ledger({ period, teacherName }: { period: StoredPeriod; teacherName: st
         { label: "총점", value: period.total === null ? "산출불가" : `${fmtScore(period.total)} / ${periodMax(period)}점` },
         { label: "합계에 든 항목", value: `${period.knownCount} / ${shownItems(period).length}` },
       ]} />
-      <BarList rows={shownItems(period).map((m) => ({ label: `${itemLabel(m)} (${m.max}점)`, value: m.value, meta: m.basis }))}
+      <BarList rows={shownItems(period).map((m) => ({ label: `${itemLabel(m)} (${maxLabel(m.max)})`, value: m.value, meta: m.basis }))}
         max={Math.max(1, ...shownItems(period).map((m) => m.max))} color="var(--color-primary)" format={(n) => `${n.toFixed(1)}점`} />
     </div>
   );
 }
+
+/** 근거 카드가 설명·규칙을 직접 적는 항목(직접 입력 · 원생 소개 · 계산 전 지표). */
+const selfExplained = (id: ItemId) => isManualId(id) || id === "expansion" || (PENDING_IDS as readonly string[]).includes(id);
 
 export function DetailDialog({ target, onClose, periods, teacherName, evidence }: {
   target: DetailTarget | null; onClose: () => void; periods: readonly StoredPeriod[]; teacherName: string; evidence: EvidenceProps;
@@ -114,9 +118,9 @@ export function DetailDialog({ target, onClose, periods, teacherName, evidence }
         {target.id === "report" && !m.estimated
           ? <div className="overflow-auto"><ReportMatrix period={period} nameOf={evidence.nameOf} /></div>
           : <MetricEvidence id={target.id} {...evidence} sticky={false} onOpenStudents={undefined} />}
-        {m.estimated || isManualId(m.id) ? null : <p className="mt-4 text-xs leading-relaxed">{m.reason}</p>}
-        {/* 배정·유지·매출은 근거 안에서 이미 규칙을 적는다(두 번 적지 않게). */}
-        {!isManualId(m.id) && m.id !== "students" && m.id !== "revenue" && ruleText(period, m.id) ? <p className="mt-2 text-xs leading-relaxed">점수 규칙: {ruleText(period, m.id)}</p> : null}
+        {m.estimated || selfExplained(m.id) ? null : <p className="mt-4 text-xs leading-relaxed">{m.reason}</p>}
+        {/* 배정·유지·매출·직접 입력·계산 전 지표는 근거 안에서 이미 규칙을 적는다(두 번 적지 않게). */}
+        {!selfExplained(m.id) && m.id !== "students" && m.id !== "revenue" && ruleText(period, m.id) ? <p className="mt-2 text-xs leading-relaxed">점수 규칙: {ruleText(period, m.id)}</p> : null}
       </>
     );
   }

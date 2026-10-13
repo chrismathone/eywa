@@ -10,19 +10,15 @@ import { describeScoring } from "./evaluation/scoring";
 import { weeksOf } from "./model/dates";
 import type { FollowRow, ItemId, Metric, MetricId, PeriodWindow, PortfolioPeriod, StoredPeriod } from "./model/types";
 
+/** 이름이 없는 옛 저장 행의 기본 이름(그 행의 '과목 소개'는 그대로 과목 소개다). 새 행은 설정의 이름을 싣는다. */
 export const METRIC_LABEL: Record<MetricId, string> = {
   report: "수업보고서", attendance: "출결 기록", follow: "원생상담", quality: "직원 평가",
   students: "학생 배정·유지", revenue: "매출 기여", expansion: "과목 소개", coverage: "보강관리",
+  payRatio: "매출 대비 급여", churn: "퇴원율", grades: "성적 관리", satisfaction: "학부모 만족도", punctuality: "강사 근태",
 };
-export const METRIC_SHORT: Record<MetricId, string> = {
-  report: "보고서", attendance: "출결", follow: "상담", quality: "평가",
-  students: "배정·유지", revenue: "매출", expansion: "과목 소개", coverage: "보강",
-};
-/** 항목 막대의 색 — 상태 뜻이 아니라 항목 구분이다. 전부 토큰에서 온다. */
-export const METRIC_COLOR: Record<MetricId, string> = {
-  report: "var(--color-primary)", attendance: "var(--color-green)", follow: "var(--color-rose)", quality: "var(--color-purple)",
-  students: "var(--color-blue)", revenue: "var(--color-amber)", expansion: "var(--color-chart-5)", coverage: "var(--color-gold)",
-};
+export const METRIC_SHORT = Object.fromEntries(Object.entries(METRIC_META).map(([id, m]) => [id, m.short])) as Record<MetricId, string>;
+/** 항목 막대의 색 — 상태 뜻이 아니라 항목 구분이다. 전부 토큰에서 온다(지표 목록 한 곳). */
+export const METRIC_COLOR = Object.fromEntries(Object.entries(METRIC_META).map(([id, m]) => [id, m.color])) as Record<MetricId, string>;
 
 /** 항목 이름 — 원장이 정한 이름이 먼저, 옛 저장 행은 기본 이름. */
 export function itemLabel(m: Pick<Metric, "id" | "label">): string {
@@ -57,8 +53,10 @@ export const fmtScore = (value: number | null): string => (value === null ? "산
  */
 export const scoreText = (m: Pick<Metric, "value">, p: Pick<PortfolioPeriod, "evaluation">): string =>
   m.value === null ? (p.evaluation ? "합계에서 뺌" : "산출불가") : m.value.toFixed(1);
+/** 만점 글자 — 만점 0은 학부모 만족도처럼 총점에 그대로 더하고 빼는 지표(원장 *"무제한 가감"*)라 '가감'. */
+export const maxLabel = (max: number): string => (max > 0 ? `${max}점` : "가감");
 export const pointsText = (m: Pick<Metric, "value" | "max">, p: Pick<PortfolioPeriod, "evaluation">): string =>
-  m.value === null ? scoreText(m, p) : `${scoreText(m, p)} / ${m.max}점`;
+  m.value === null ? scoreText(m, p) : m.max > 0 ? `${scoreText(m, p)} / ${m.max}점` : `${m.value > 0 ? "+" : ""}${scoreText(m, p)}점 (가감)`;
 const unitOf = (p: Pick<PortfolioPeriod, "evaluation">, id: ItemId): string => {
   if (!isManualId(id)) return METRIC_META[id as BuiltinMetricId].unit;
   return (p.evaluation ? (settingOf(p.evaluation, id) as ManualMetricSetting | undefined)?.unit : undefined) ?? "";
@@ -69,14 +67,17 @@ export function ruleText(p: Pick<PortfolioPeriod, "evaluation">, id: ItemId): st
   return s ? `${describeScoring(s.scoring, s.max, unitOf(p, id))} · 자료가 없으면 ${MISSING_LABEL[s.missing]}` : null;
 }
 /** 자료가 없어 규칙으로 매긴 항목의 꼬리표 — "자료 없음 · 0점" · "마감 대상 없음 · 만점". 옛 달은 null. */
-export function missingTag(m: Pick<Metric, "id" | "missing">, p: Pick<PortfolioPeriod, "evaluation">): string | null {
+export function missingTag(m: Pick<Metric, "id" | "missing" | "uncounted" | "value">, p: Pick<PortfolioPeriod, "evaluation">): string | null {
+  if (m.uncounted) return m.value === null ? "계산 전 · 합계에서 뺌" : `계산 전 · ${m.value.toFixed(1)}점`;
   const s = m.missing && p.evaluation ? settingOf(p.evaluation, m.id) : undefined;
   if (!s) return null;
   return `${m.id === "coverage" ? "마감 대상 없음" : "자료 없음"} · ${MISSING_LABEL[s.missing]}`;
 }
-/** 자료가 없어 **깎이거나 빠진** 항목(만점으로 매긴 항목은 빼고) — 맨 아래 안내가 이것만 말한다. */
+/** 자료가 없어 **깎이거나 빠진** 항목(만점으로 매긴 항목·계산 전 항목은 빼고) — 맨 아래 안내가 이것만 말한다. */
 export const shortItems = (p: Pick<PortfolioPeriod, "evaluation" | "items">): Metric[] =>
-  shownItems(p).filter((m) => m.value === null || (m.missing && (!p.evaluation || settingOf(p.evaluation, m.id)?.missing !== "full")));
+  shownItems(p).filter((m) => !m.uncounted && (m.value === null || (m.missing && (!p.evaluation || settingOf(p.evaluation, m.id)?.missing !== "full"))));
+/** 아직 자동으로 세지 않는 항목 — 맨 아래 안내가 따로 말한다. */
+export const pendingShown = (p: Pick<PortfolioPeriod, "items">): Metric[] => shownItems(p).filter((m) => m.uncounted);
 export const dayLabel = (ymd: string): string => ymd.slice(5).replace("-", ".");
 export const won = (n: number): string => `${Number(n || 0).toLocaleString("ko-KR")}원`;
 export const monthName = (month: string): string => `${Number(month.slice(0, 4))}년 ${Number(month.slice(5, 7))}월`;

@@ -8,13 +8,20 @@ import { Button } from "@/components/ui/button";
 import { useUnsavedGuard } from "@/components/workspace/use-unsaved-guard";
 import { METRIC_META } from "@/features/teacher-portfolio/evaluation/catalog";
 import {
-  DEFAULT_EVALUATION_CONFIG, isManualId, manualId, type BuiltinMetricId, type EvaluationConfig, type ManualMetricSetting, type MetricSetting,
+  DEFAULT_EVALUATION_CONFIG, PORTFOLIO_V1_CONFIG, isManualId, manualId, type BuiltinMetricId, type EvaluationConfig, type ManualMetricSetting, type MetricSetting,
 } from "@/features/teacher-portfolio/evaluation/config";
 import { settingOf } from "@/features/teacher-portfolio/evaluation/preview";
 import { saveEvaluationSettings } from "@/features/teacher-portfolio/server/evaluation-actions";
 import { SettingsCard } from "../settings-card";
 import { MetricSettingCard } from "./metric-setting-card";
+import { PresetBar, type PresetOption } from "./preset-bar";
 import { PreviewCard, type PreviewData } from "./preview-card";
+
+/** 기본 제공 구성 — 원장 구성(기본값)과 그 전 직원 포트폴리오(같은 점수). 지울 수 없다. */
+const BUILTIN_PRESETS: PresetOption[] = [
+  { id: "builtin:default", name: "원장 기본 구성(8개 · 100점)", config: DEFAULT_EVALUATION_CONFIG, builtin: true },
+  { id: "builtin:v1", name: "옛 직원 포트폴리오 구성(8개 · 100점)", config: PORTFOLIO_V1_CONFIG, builtin: true },
+];
 
 /** 새 직접 입력 지표의 키 — 소문자·숫자 8자. 한 번 정하면 바꾸지 않는다(입력값이 이 키에 붙는다). */
 function newKey(taken: ReadonlySet<string>): string {
@@ -29,8 +36,10 @@ function newKey(taken: ReadonlySet<string>): string {
  * 지표마다 켜고 끄기 · 이름 · 만점 · 차례 · 점수 규칙(비례·구간표·건당) · 자료가 없을 때, 그리고 직접 만드는 지표.
  * 저장하면 진행 중인 달만 다시 매긴다 — 마감한 달은 그때의 설정으로 굳어 있다.
  */
-export function EvaluationEditor({ initial, tableMissing, readOnly = false, preview }: {
+export function EvaluationEditor({ initial, tableMissing, readOnly = false, preview, presets = [], presetsMissing = false }: {
   initial: EvaluationConfig; tableMissing: boolean; readOnly?: boolean; preview: PreviewData;
+  /** 원장이 이름 붙여 저장한 구성(0360a) — 표가 없으면 빈 목록 + presetsMissing. */
+  presets?: PresetOption[]; presetsMissing?: boolean;
 }) {
   const router = useRouter();
   const [saved, setSaved] = useState(initial);
@@ -85,6 +94,8 @@ export function EvaluationEditor({ initial, tableMissing, readOnly = false, prev
           <li>저장하면 진행 중인 달의 점수를 다시 매깁니다. 마감한 달은 그때의 설정 그대로입니다.</li>
         </ul>
       </SettingsCard>
+      <PresetBar presets={[...BUILTIN_PRESETS, ...presets]} draft={config} dirty={JSON.stringify(config) !== JSON.stringify(saved)}
+        readOnly={readOnly} tableMissing={presetsMissing} onLoad={setConfig} />
       <fieldset disabled={readOnly} className="m-0 grid min-w-0 gap-4 border-0 p-0 xl:grid-cols-[minmax(0,1fr)_22rem] xl:items-start">
         <div className="min-w-0 space-y-3">
           {config.order.map((id, i) => {
@@ -93,7 +104,7 @@ export function EvaluationEditor({ initial, tableMissing, readOnly = false, prev
             const manual = isManualId(id);
             const meta = manual ? null : METRIC_META[id as BuiltinMetricId];
             return (
-              <MetricSettingCard key={id} setting={s} manual={manual} measure={meta?.measure ?? null}
+              <MetricSettingCard key={id} setting={s} manual={manual} measure={meta?.measure ?? null} pending={meta?.pending}
                 unit={manual ? (s as ManualMetricSetting).unit : meta!.unit}
                 position={{ first: i === 0, last: i === config.order.length - 1 }}
                 onChange={(next) => update(id, next)} onMove={(dir) => move(id, dir)} onRemove={manual ? () => remove(id) : undefined} />

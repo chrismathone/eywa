@@ -17,6 +17,12 @@ export function bandFor(raw: number, bands: readonly Band[]): Band | null {
   return bands.find((b) => (b.from === null || r >= b.from) && (b.to === null || r <= b.to)) ?? null;
 }
 
+/** 만점이 0인 지표 — '건당 · 상한 없음'일 때만 점수가 난다(총점에 그대로 더하고 빼기). 그 밖의 규칙은 늘 0점이라 알린다. */
+export function zeroMaxIssue(scoring: Scoring, max: number): string | null {
+  if (max !== 0 || (scoring.mode === "perUnit" && !scoring.cap)) return null;
+  return "만점이 0이면 ‘건당’에 ‘만점에서 멈춤’을 끈 규칙만 점수가 납니다(총점에 그대로 더하고 빼기). 지금 규칙으로는 늘 0점입니다.";
+}
+
 /**
  * 구간표의 빈틈·잘못 — 설정 화면이 저장 전에 알린다(막지는 않는다).
  * 빈틈 = 두 구간 사이에 어느 구간에도 안 드는 값이 있다(예: 0~33 · 34~66 → 33.5는 0점). 겹침은 '위에서부터'라 문제가 아니다.
@@ -78,8 +84,11 @@ export function describeScoring(scoring: Scoring, max: number, unit: string): st
     }
     case "bands":
       // 적은 점수가 만점을 넘거나 0 아래면 실제로 매기는 값(0~만점)으로 적는다 — 규칙 줄과 항목 점수가 어긋나지 않게.
-      return scoring.bands.map((b) => `${bandRange(b, unit)} ${fmt(clamp(b.points, 0, max))}점`).join(" · ");
+      // 끝이 없는 구간이 맨 앞이 아니면 '그 밖'(앞 구간에 안 든 나머지)이다.
+      return scoring.bands.map((b, i) => `${i > 0 && b.from === null && b.to === null ? "그 밖" : bandRange(b, unit)} ${fmt(clamp(b.points, 0, max))}점`).join(" · ");
     case "perUnit":
+      // 만점 0 · 상한 없음 = 학부모 만족도처럼 총점에 그대로 더하고 빼는 지표.
+      if (max === 0 && !scoring.cap) return `1${unit || "건"}당 ${fmt(scoring.points)}점 — 만점 없이 총점에 그대로 더하고 뺍니다`;
       return `1${unit || "건"}당 ${fmt(scoring.points)}점${scoring.cap ? `(${fmt(max)}점까지)` : "(상한 없음)"}`;
   }
 }

@@ -49,6 +49,9 @@ export const AUDIT_ACTIONS = {
   // 강사평가 설정(0359a) — 지표 켜고 끄기·만점·점수 규칙. 원장만 바꾼다.
   teacher_evaluation_settings_save: "강사평가 설정 저장",
   teacher_evaluation_entries_save: "강사평가 직접 입력 지표 저장",
+  // 강사평가 구성 저장·삭제(0360a) — 이름 붙인 구성. 불러오기는 화면에서만 하니 남기지 않는다(점수를 바꾸는 건 설정 저장).
+  teacher_evaluation_preset_save: "강사평가 구성 저장",
+  teacher_evaluation_preset_delete: "강사평가 구성 삭제",
   classroom_update: "강의실 수정",
   notice_popup_update: "팝업 공지 수정",
   notice_popup_toggle: "팝업 공지 노출 전환",

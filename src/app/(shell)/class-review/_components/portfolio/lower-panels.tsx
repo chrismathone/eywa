@@ -87,7 +87,7 @@ export function MonthlyTable({ periods, selected, onMonth, onOpen }: {
   return (
     <section className={`${CARD} flex flex-1 flex-col`}>
       <h3 className="text-base font-bold">월간 점수</h3>
-      <p className="mt-1 mb-3 text-xs">총점의 만점은 그 달에 켠 항목의 만점 합계입니다. 점수를 누르면 해당 월의 내역이 열립니다.</p>
+      <p className="mt-1 mb-3 text-xs">총점의 만점은 그 달에 켠 항목의 만점 합계입니다. 항목 만점이 지금과 다른 달은 점수 아래에 그 달의 만점을 적습니다. 점수를 누르면 해당 월의 내역이 열립니다.</p>
       {/* 표가 카드의 남는 높이를 나눠 갖는다 — 카드 아래에 빈 띠가 생기지 않는다. */}
       <div className="flex min-h-0 flex-1 overflow-x-auto">
         <table className="num w-full min-w-[32rem] flex-1 border-collapse text-xs [&_td]:whitespace-nowrap">
@@ -122,6 +122,8 @@ export function MonthlyTable({ periods, selected, onMonth, onOpen }: {
                         {m.value === null ? "—" : fmtScore(m.value)}
                       </button>
                       {m.estimated ? mark : null}
+                      {/* 열 머리(가장 최근 달)와 만점이 다른 달 — 구성을 바꾼 앞뒤 달이 한 열에 선다(마감한 달은 그때 구성). */}
+                      {m.max !== c.max ? <small className="block text-xs font-medium">/ {m.max > 0 ? m.max : "가감"}</small> : null}
                     </td>
                   );
                 })}

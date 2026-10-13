@@ -9,7 +9,14 @@
  */
 import { z } from "zod";
 
-export const BUILTIN_METRICS = ["report", "attendance", "follow", "quality", "students", "revenue", "expansion", "coverage"] as const;
+/**
+ * 기본 지표 — 차례 = 기본 화면 차례. 앞 8개가 원장 구성(2026-10-13 *"지금 바로 원장 8개 구성으로 바꿔"* · *"디폴트로 해놓고"*),
+ * 뒤 5개는 그 전 직원 포트폴리오의 항목(기본은 꺼 둔다 — 계산은 계속하므로 켜면 바로 점수가 선다).
+ */
+export const BUILTIN_METRICS = [
+  "payRatio", "churn", "report", "follow", "grades", "expansion", "satisfaction", "punctuality",
+  "attendance", "quality", "students", "revenue", "coverage",
+] as const;
 export type BuiltinMetricId = (typeof BUILTIN_METRICS)[number];
 export type ManualMetricId = `manual:${string}`;
 
@@ -72,23 +79,52 @@ export type EvaluationConfig = z.infer<typeof evaluationConfigSchema>;
 
 const linear = (zero: number, full: number): Scoring => ({ mode: "linear", zero, full });
 
+const upTo = (rows: [number | null, number][]): Scoring => ({ mode: "bands", bands: rows.map(([to, points]) => ({ from: null, to, points })) });
+
+/** 그 전 직원 포트폴리오의 8개 항목(2026-10-13까지) — 그 점수와 똑같이 나온다. 기본 제공 구성 '옛 직원 포트폴리오 구성'. */
+const V1_METRICS = {
+  attendance: { enabled: true, label: "출결 기록", max: 10, scoring: linear(0, 100), missing: "zero" },
+  quality: { enabled: true, label: "직원 평가", max: 10, scoring: linear(0, 4), missing: "zero" },
+  students: { enabled: true, label: "학생 배정·유지", max: 20, scoring: linear(-10, 10), missing: "zero" },
+  revenue: { enabled: true, label: "매출 기여", max: 10, scoring: linear(0, 30), missing: "zero" },
+  // 기한이 이 달에 끝나는 보강이 없으면 만점 — 자료가 없는 게 아니라 할 일이 없었다는 뜻이다.
+  coverage: { enabled: true, label: "보강관리", max: 10, scoring: linear(0, 100), missing: "full" },
+} satisfies Partial<EvaluationConfig["metrics"]>;
+
 /**
- * 기본값 = 지금 직원 포트폴리오와 같은 점수(2026-10-13). 새 지표(매출 대비 급여·퇴원율·소개·만족도·근태·성적)는
- * 단계마다 여기에 더해지고, 다 들어오면 원장이 정한 8개 구성으로 기본값을 바꾼다(계획서 §6).
+ * 기본값 = **원장 8개 구성**(2026-10-13): 매출 대비 급여 20 · 퇴원율 20 · 보고서 10 · 원생상담 10 · 성적 관리 10 ·
+ * 원생 소개 20(1건 5점) · 학부모 만족도(총점에 그대로 더하고 뺀다 — 만점 0) · 강사 근태 10 = 100점.
+ * 급여 비율 구간 = 원장 결정 3(≤33% 20 · ≤40% 16 · ≤50% 12 · ≤60% 8 · 그 이상 4). 퇴원율·근태·성적의 구간은 원장이 고칠 자리(처음 값).
+ * 아직 계산이 들어오지 않은 지표는 결정 4(자료 없음 = 0점)대로 0점이다 — 들어오는 대로 점수가 선다.
  */
 export const DEFAULT_EVALUATION_CONFIG: EvaluationConfig = {
   version: 1,
   order: [...BUILTIN_METRICS],
   metrics: {
-    report: { enabled: true, label: "수업보고서", max: 20, scoring: linear(0, 100), missing: "zero" },
-    attendance: { enabled: true, label: "출결 기록", max: 10, scoring: linear(0, 100), missing: "zero" },
+    payRatio: { enabled: true, label: "매출 대비 급여", max: 20, scoring: upTo([[33, 20], [40, 16], [50, 12], [60, 8], [null, 4]]), missing: "zero" },
+    churn: { enabled: true, label: "퇴원율", max: 20, scoring: upTo([[3, 20], [6, 16], [10, 12], [15, 8], [null, 4]]), missing: "zero" },
+    report: { enabled: true, label: "수업보고서", max: 10, scoring: linear(0, 100), missing: "zero" },
     follow: { enabled: true, label: "원생상담", max: 10, scoring: linear(0, 100), missing: "zero" },
-    quality: { enabled: true, label: "직원 평가", max: 10, scoring: linear(0, 4), missing: "zero" },
-    students: { enabled: true, label: "학생 배정·유지", max: 20, scoring: linear(-10, 10), missing: "zero" },
-    revenue: { enabled: true, label: "매출 기여", max: 10, scoring: linear(0, 30), missing: "zero" },
+    grades: { enabled: true, label: "성적 관리", max: 10, scoring: linear(0, 100), missing: "zero" },
+    expansion: { enabled: true, label: "원생 소개", max: 20, scoring: { mode: "perUnit", points: 5, cap: true }, missing: "zero" },
+    satisfaction: { enabled: true, label: "학부모 만족도", max: 0, scoring: { mode: "perUnit", points: 1, cap: false }, missing: "zero" },
+    punctuality: { enabled: true, label: "강사 근태", max: 10, scoring: linear(5, 0), missing: "zero" },
+    ...(Object.fromEntries(Object.entries(V1_METRICS).map(([id, s]) => [id, { ...s, enabled: false }])) as Pick<EvaluationConfig["metrics"], keyof typeof V1_METRICS>),
+  },
+  manual: [],
+};
+
+/** 기본 제공 구성 '옛 직원 포트폴리오 구성' — 2026-10-13 전 점수와 같다(새 지표는 꺼 둔다). */
+export const PORTFOLIO_V1_CONFIG: EvaluationConfig = {
+  version: 1,
+  order: ["report", "attendance", "follow", "quality", "students", "revenue", "expansion", "coverage",
+    "payRatio", "churn", "grades", "satisfaction", "punctuality"],
+  metrics: {
+    ...Object.fromEntries(Object.entries(DEFAULT_EVALUATION_CONFIG.metrics).map(([id, s]) => [id, { ...s, enabled: false }])) as EvaluationConfig["metrics"],
+    ...V1_METRICS,
+    report: { enabled: true, label: "수업보고서", max: 20, scoring: linear(0, 100), missing: "zero" },
+    follow: { enabled: true, label: "원생상담", max: 10, scoring: linear(0, 100), missing: "zero" },
     expansion: { enabled: true, label: "과목 소개", max: 10, scoring: { mode: "perUnit", points: 5, cap: true }, missing: "zero" },
-    // 기한이 이 달에 끝나는 보강이 없으면 만점 — 자료가 없는 게 아니라 할 일이 없었다는 뜻이다.
-    coverage: { enabled: true, label: "보강관리", max: 10, scoring: linear(0, 100), missing: "full" },
   },
   manual: [],
 };
@@ -96,13 +132,19 @@ export const DEFAULT_EVALUATION_CONFIG: EvaluationConfig = {
 /**
  * 저장된 값을 기본값 위에 얹는다 — 지표마다 통째로 검증해 맞는 것만 쓴다(하나가 깨져도 나머지는 산다).
  * 차례에서 모르는 id는 빼고, 빠진 지표는 기본 차례로 뒤에 붙인다.
+ * 🔴 저장값에 **아예 없던** 지표(저장한 뒤에 더해진 기본 지표)는 **꺼진 채로** 붙인다 — 켜진 채로 붙이면 원장이 맞춰 둔 구성에
+ *    만점이 조용히 늘어난다(옛 8개로 저장한 설정이 13개·160점이 되는 식, 적대적 리뷰 2026-10-13). 깨진 값만 기본값으로 돌린다.
+ *    저장값 자체가 없으면(`metrics`가 없다) 기본값 그대로다.
  */
 export function resolveEvaluationConfig(stored: unknown): EvaluationConfig {
   const raw = stored && typeof stored === "object" ? (stored as Record<string, unknown>) : {};
-  const storedMetrics = raw.metrics && typeof raw.metrics === "object" ? (raw.metrics as Record<string, unknown>) : {};
+  const hasMetrics = Boolean(raw.metrics && typeof raw.metrics === "object");
+  const storedMetrics = hasMetrics ? (raw.metrics as Record<string, unknown>) : {};
   const metrics = Object.fromEntries(BUILTIN_METRICS.map((id) => {
     const parsed = metricSettingSchema.safeParse(storedMetrics[id]);
-    return [id, parsed.success ? parsed.data : DEFAULT_EVALUATION_CONFIG.metrics[id]];
+    if (parsed.success) return [id, parsed.data];
+    const fallback = DEFAULT_EVALUATION_CONFIG.metrics[id];
+    return [id, hasMetrics && !(id in storedMetrics) ? { ...fallback, enabled: false } : fallback];
   })) as EvaluationConfig["metrics"];
   const manualRaw = Array.isArray(raw.manual) ? raw.manual : [];
   const seen = new Set<string>();
@@ -120,4 +162,10 @@ export function resolveEvaluationConfig(stored: unknown): EvaluationConfig {
 }
 
 export const manualId = (key: string): ManualMetricId => `manual:${key}`;
+
+/** 저장 거절 문구 — 화면이 만든 한글 문구면 그대로, 아니면(지표 칸이 모자란 오래된 화면 등) 새로고침 안내(영문 원문을 띄우지 않는다). */
+export function issueMessage(error: z.ZodError): string {
+  const message = error.issues[0]?.message ?? "";
+  return /[가-힣]/.test(message) ? message : "화면이 오래됐습니다. 새로고침한 뒤 다시 저장해 주세요";
+}
 export const isManualId = (id: string): id is ManualMetricId => id.startsWith("manual:");

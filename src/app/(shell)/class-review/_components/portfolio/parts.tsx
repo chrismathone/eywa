@@ -111,7 +111,7 @@ export function ScoreValue({ value, max, empty = "산출불가", className = "" 
   return (
     <b className={`num leading-none font-bold whitespace-nowrap ${className}`}>
       {value === null ? empty : fmtScore(value)}
-      {value === null ? null : <small className="ml-1 text-xs font-medium">/ {max}점</small>}
+      {value === null ? null : <small className="ml-1 text-xs font-medium">{max > 0 ? `/ ${max}점` : "가감"}</small>}
     </b>
   );
 }

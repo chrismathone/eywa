@@ -78,7 +78,7 @@ export function ManualEntryDialog({ open, onClose, period, teacherId, teacherNam
           {loadError ? <p role="alert" className="text-danger text-sm">{loadError}</p> : !ready ? <p role="status" className="text-sm">입력한 값을 불러오는 중…</p> : null}
           {items.map((m) => (
             <fieldset key={m.id} disabled={closed || !ready} className="space-y-2">
-              <legend className="text-sm font-bold">{itemLabel(m)} <span className="text-xs font-medium">({m.unit || "값"} · 만점 {m.max}점)</span></legend>
+              <legend className="text-sm font-bold">{itemLabel(m)} <span className="text-xs font-medium">({m.unit || "값"} · {m.max > 0 ? `만점 ${m.max}점` : "가감"})</span></legend>
               {m.reason ? <p className="text-xs">{m.reason}</p> : null}
               <div className="grid gap-2 sm:grid-cols-[9rem_minmax(0,1fr)]">
                 <Input aria-label={`${itemLabel(m)} 값`} inputMode="decimal" value={cell(m).value} placeholder="비우면 입력 없음"

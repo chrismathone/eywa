@@ -6,10 +6,12 @@ import { MISSING_LABEL, missingSchema, type ManualMetricSetting, type MetricSett
 import { NumField, ScoringEditor } from "./scoring-editor";
 
 /** 지표 한 장 — 켜기 · 이름 · 만점 · 차례 · 원래 수치 · 점수 규칙 · 자료가 없을 때. 직접 만든 지표는 단위·설명과 삭제가 더 있다. */
-export function MetricSettingCard({ setting, measure, unit, manual, position, onChange, onMove, onRemove }: {
+export function MetricSettingCard({ setting, measure, pending, unit, manual, position, onChange, onMove, onRemove }: {
   setting: MetricSetting | ManualMetricSetting;
   /** 원래 수치가 무엇인가(기본 지표) — 직접 만든 지표는 null(설명 칸으로 적는다). */
   measure: string | null;
+  /** 아직 계산이 들어오지 않은 지표의 단계 — 그 전까지는 '자료가 없을 때' 규칙으로 매긴다고 알린다. */
+  pending?: string;
   unit: string;
   manual: boolean;
   position: { first: boolean; last: boolean };
@@ -51,7 +53,10 @@ export function MetricSettingCard({ setting, measure, unit, manual, position, on
           <p className="text-xs sm:col-span-2">원장이 달마다 강사별 숫자를 넣습니다(직원 포트폴리오 → 직접 입력 지표).</p>
         </div>
       ) : (
-        <p className="text-sm"><b className="font-medium">원래 수치</b> · {measure} ({unit})</p>
+        <>
+          <p className="text-sm"><b className="font-medium">원래 수치</b> · {measure}{unit ? ` (${unit})` : ""}</p>
+          {pending ? <p className="bg-amber-soft rounded-lg px-3 py-2 text-xs">아직 자동으로 세지 않습니다({pending}에서 들어옵니다). 그 전까지는 수치가 없거나 0건으로 매겨집니다.</p> : null}
+        </>
       )}
       <ScoringEditor label={label} scoring={setting.scoring} max={setting.max} unit={unit} onChange={(scoring) => set({ scoring })} />
       <label className="flex flex-wrap items-center gap-2 text-sm">

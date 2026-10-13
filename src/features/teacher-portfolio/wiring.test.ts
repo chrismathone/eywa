@@ -70,9 +70,14 @@ describe("매일 집계", () => {
     expect(rotateForDay([], "2026-10-13")).toEqual([]);
   });
   it("강사평가 설정·직접 입력은 포트폴리오와 같은 원장 문을 지나고, 표는 서버만 지난다(0359a)", () => {
+    // 바꾸는 액션은 전부 한 문(evaluationWriteGate) — 설정 저장·직접 입력(2) · 구성 저장·삭제(2).
+    const gate = read("src/features/teacher-portfolio/server/write-gate.ts");
+    expect(gate).toMatch(/async function evaluationWriteGate\(\)[\s\S]*const gate = await getPortfolioGate\(\);[\s\S]*readonlyTeacherViewError[\s\S]*canWriteTenant\(user\.systemRole, "class_review"\)/);
     const actions = read("src/features/teacher-portfolio/server/evaluation-actions.ts");
-    expect(actions).toMatch(/async function writeGate\(\)[\s\S]*const gate = await getPortfolioGate\(\);[\s\S]*readonlyTeacherViewError[\s\S]*canWriteTenant\(user\.systemRole, "class_review"\)/);
+    expect(actions).toContain("const writeGate = evaluationWriteGate;");
     expect(actions.match(/const gate = await writeGate\(\);\s*if \("error" in gate\) return/g)).toHaveLength(2);
+    const presets = read("src/features/teacher-portfolio/server/preset-actions.ts");
+    expect(presets.match(/const gate = await evaluationWriteGate\(\);\s*if \("error" in gate\) return/g)).toHaveLength(2);
     const page = read("src/app/(shell)/owner/page.tsx");
     expect(page).toContain('requestedFace === "evaluation" && !(await getPortfolioGate())');
     expect(page).toContain('tab === "evaluation" && showEvaluation ? <EvaluationFace /> : null');
@@ -82,6 +87,10 @@ describe("매일 집계", () => {
       expect(sql).toContain(`alter table public.${t} enable row level security`);
       expect(sql).toContain(`revoke all on public.${t} from public, anon, authenticated`);
     }
+    const presetSql = read("supabase/migrations/0360a_teacher_evaluation_presets.sql");
+    expect(presetSql).not.toMatch(/create policy/i);
+    expect(presetSql).toContain("alter table public.teacher_evaluation_presets enable row level security");
+    expect(presetSql).toContain("revoke all on public.teacher_evaluation_presets from public, anon, authenticated");
   });
   it("저장 표는 정책 없이 서버만 지나고, 마감한 줄은 DB가 고치지 못하게 막는다", () => {
     const sql = read("supabase/migrations/0357a_teacher_portfolio_months.sql");

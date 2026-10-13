@@ -26,6 +26,7 @@ import { planFormWithdrawal } from "../withdrawal-plan";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import {
   DEFAULT_WITHDRAWAL_METADATA,
+  WITHDRAWAL_REASONS,
   type WithdrawalMetadata,
   type WithdrawalReason,
 } from "@/features/withdrawals/types";
@@ -458,15 +459,6 @@ export async function updateStudent(
 
 // ────────────────────── 상태 전환 모달 (퇴원/휴원/수강종료/복구) ──────────────────────
 
-const WITHDRAWAL_REASONS: WithdrawalReason[] = [
-  "graduated",
-  "relocation",
-  "competitor",
-  "financial",
-  "schedule",
-  "dissatisfaction",
-  "other",
-];
 
 // ⚠️ `ok`는 다이얼로그가 **성공을 감지**하는 유일한 신호다 — 종전엔 성공 시 undefined를 돌려
 // useActionState state가 초깃값 그대로였고, StatusDialog의 `if (state && !state.error)` 닫기 effect가

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { Band, Scoring } from "@/features/teacher-portfolio/evaluation/config";
-import { bandIssues, describeScoring } from "@/features/teacher-portfolio/evaluation/scoring";
+import { bandIssues, describeScoring, zeroMaxIssue } from "@/features/teacher-portfolio/evaluation/scoring";
 
 const DECIMAL = /^-?\d+(\.\d+)?$/;
 
@@ -110,6 +110,7 @@ export function ScoringEditor({ scoring, max, unit, onChange, label }: {
           </label>
         </div>
       ) : null}
+      {zeroMaxIssue(scoring, max) ? <p role="status" className="bg-amber-soft rounded-lg px-3 py-2 text-xs">{zeroMaxIssue(scoring, max)}</p> : null}
       <p className="text-primary text-xs">{describeScoring(scoring, max, unit)}</p>
     </div>
   );

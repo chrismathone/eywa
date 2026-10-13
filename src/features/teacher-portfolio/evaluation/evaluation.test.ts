@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { applyEvaluation, indexEntries } from "../model/evaluate";
 import type { Metric, PortfolioPeriod } from "../model/types";
-import { DEFAULT_EVALUATION_CONFIG, evaluationConfigSchema, resolveEvaluationConfig, type EvaluationConfig } from "./config";
-import { bandIssues, describeScoring, pointsFor } from "./scoring";
+import { BUILTIN_METRICS, DEFAULT_EVALUATION_CONFIG, PORTFOLIO_V1_CONFIG, evaluationConfigSchema, issueMessage, resolveEvaluationConfig, type EvaluationConfig } from "./config";
+import { bandIssues, describeScoring, pointsFor, zeroMaxIssue } from "./scoring";
 
 /** 강사평가 설정(원장 2026-10-13) — 지표마다 켜고 끄기·만점·점수 규칙·자료 없을 때, 직접 만든 지표. */
 const clone = (): EvaluationConfig => structuredClone(DEFAULT_EVALUATION_CONFIG);
+/** 옛 직원 포트폴리오 구성 — 그 전 점수와 같은지 보는 테스트가 쓴다. */
+const v1 = (): EvaluationConfig => structuredClone(PORTFOLIO_V1_CONFIG);
 
 describe("점수 규칙", () => {
   it("비례: 0이면 0점, 만점 기준이면 만점, 밖은 자르고 낮을수록 좋은 지표도 된다", () => {
@@ -34,10 +36,19 @@ describe("설정 저장값 해석", () => {
     const c = resolveEvaluationConfig(stored);
     expect([c.metrics.report.max, c.metrics.follow.max]).toEqual([30, 10]);
   });
+  it("저장한 뒤에 더해진 기본 지표는 꺼진 채로 붙는다 — 원장이 맞춘 구성의 만점이 조용히 늘지 않게", () => {
+    const stored = { ...structuredClone(PORTFOLIO_V1_CONFIG), metrics: Object.fromEntries(Object.entries(PORTFOLIO_V1_CONFIG.metrics).filter(([id]) => !["payRatio", "churn", "grades", "satisfaction", "punctuality"].includes(id))) };
+    const c = resolveEvaluationConfig(stored);
+    expect(["payRatio", "churn", "grades", "satisfaction", "punctuality"].map((id) => c.metrics[id as keyof typeof c.metrics].enabled)).toEqual([false, false, false, false, false]);
+    expect(Object.values(c.metrics).filter((m) => m.enabled).reduce((n, m) => n + m.max, 0)).toBe(100);
+    expect(issueMessage(evaluationConfigSchema.safeParse(stored).error!)).toBe("화면이 오래됐습니다. 새로고침한 뒤 다시 저장해 주세요");
+    expect([zeroMaxIssue({ mode: "perUnit", points: 1, cap: false }, 0), zeroMaxIssue({ mode: "linear", zero: 0, full: 100 }, 10)]).toEqual([null, null]);
+    expect(zeroMaxIssue({ mode: "linear", zero: 0, full: 100 }, 0)).toContain("늘 0점");
+  });
   it("차례에서 모르는 지표는 빼고, 빠진 지표는 뒤에 붙인다 — 나중에 더한 기본 지표가 숨지 않게", () => {
     const c = resolveEvaluationConfig({ order: ["coverage", "nope", "report"] });
     expect(c.order.slice(0, 2)).toEqual(["coverage", "report"]);
-    expect(c.order).toHaveLength(8);
+    expect(c.order).toHaveLength(BUILTIN_METRICS.length);
   });
   it("직접 만든 지표는 키가 겹치면 하나만, 이름이 겹치면 저장을 막는다", () => {
     const m = { key: "sns", label: "SNS 칭찬", unit: "건", description: "", enabled: true, max: 10, scoring: { mode: "perUnit", points: 2, cap: true }, missing: "zero" };
@@ -54,14 +65,31 @@ describe("한 달에 설정 얹기", () => {
     items: [item("report", 50), item("attendance", null), item("follow", 100), item("quality", 4), item("students", 0), item("revenue", 15), item("expansion", 0), item("coverage", null)],
     knownCount: 0, knownScore: 0, knownMax: 0, total: null, ownReportRecords: 0, holidays: [], dayStats: [],
   });
-  it("기본 설정 = 지금 포트폴리오와 같은 점수, 자료 없는 출결은 0점 · 보강 할 일 없음은 만점", () => {
+  it("옛 직원 포트폴리오 구성 = 그 전 점수, 자료 없는 출결은 0점 · 보강 할 일 없음은 만점", () => {
     const p = period();
+    applyEvaluation(p, PORTFOLIO_V1_CONFIG);
+    const shown = p.items.filter((m) => !m.off);
+    expect(shown.map((m) => m.value)).toEqual([10, 0, 10, 10, 10, 5, 0, 10]);
+    expect([p.total, p.knownMax, shown[1].missing]).toEqual([55, 100, true]);
+  });
+  it("기본 설정 = 원장 8개 구성(100점) — 아직 계산 전인 지표는 0점, 만족도는 만점 없이 더하고 뺀다, 옛 5개는 꺼 둔다", () => {
+    const p = period();
+    p.items.push(...(["payRatio", "churn", "grades", "satisfaction", "punctuality"] as const).map((id) => item(id, null)));
     applyEvaluation(p, DEFAULT_EVALUATION_CONFIG);
-    expect(p.items.map((m) => m.value)).toEqual([10, 0, 10, 10, 10, 5, 0, 10]);
-    expect([p.total, p.knownMax, p.items[1].missing]).toEqual([55, 100, true]);
+    const shown = p.items.filter((m) => !m.off);
+    expect(shown.map((m) => [m.id, m.value, m.max])).toEqual([
+      ["payRatio", 0, 20], ["churn", 0, 20], ["report", 5, 10], ["follow", 10, 10], ["grades", 0, 10], ["expansion", 0, 20], ["satisfaction", 0, 0], ["punctuality", 0, 10],
+    ]);
+    expect([p.total, p.knownMax]).toEqual([15, 100]);
+    expect(p.items.filter((m) => m.off).map((m) => m.id)).toEqual(["attendance", "quality", "students", "revenue", "coverage"]);
+    // 만족도는 만점 0 · 상한 없음 — 칭찬 3점이면 총점에 +3(만점 합계는 그대로 100).
+    const q = period();
+    q.items.push(...(["payRatio", "churn", "grades", "punctuality"] as const).map((id) => item(id, null)), item("satisfaction", 3));
+    applyEvaluation(q, DEFAULT_EVALUATION_CONFIG);
+    expect([q.items.find((m) => m.id === "satisfaction")?.value, q.knownMax]).toEqual([3, 100]);
   });
   it("끈 지표·합계에서 뺀 지표는 총점과 만점에서 빠진다 — 만점이 100점이 아니어도 된다", () => {
-    const c = clone();
+    const c = v1();
     c.metrics.expansion.enabled = false;
     c.metrics.attendance.missing = "exclude";
     c.metrics.report.max = 30;
@@ -71,7 +99,7 @@ describe("한 달에 설정 얹기", () => {
     expect(p.items.find((m) => m.id === "expansion")?.off).toBe(true);
   });
   it("직접 만든 지표는 그 강사·그 달에 넣은 값으로 매기고, 입력이 없으면 '자료가 없을 때' 규칙", () => {
-    const c = clone();
+    const c = v1();
     c.manual = [{ key: "sns", label: "SNS 칭찬", unit: "건", description: "", enabled: true, max: 10, scoring: { mode: "perUnit", points: 2, cap: true }, missing: "zero" }];
     c.order = [...c.order, "manual:sns"];
     const entries = indexEntries([{ teacher_id: "t", month: "2026-10", metric_key: "sns", value: "3", note: "디스쿨 후기" }]);

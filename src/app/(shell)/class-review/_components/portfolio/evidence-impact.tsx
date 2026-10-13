@@ -2,7 +2,7 @@
 
 import { isManualId } from "@/features/teacher-portfolio/evaluation/config";
 import { settingOf } from "@/features/teacher-portfolio/evaluation/preview";
-import { metricOf, type ItemId, type ManualMetricItem, type MetricId } from "@/features/teacher-portfolio/model/types";
+import { metricOf, type ItemId, type ManualMetricItem, type Metric, type MetricId } from "@/features/teacher-portfolio/model/types";
 import { METRIC_COLOR, SHORTFALL_COLOR, dayLabel, itemOf, pointsText, ruleText, won } from "@/features/teacher-portfolio/view";
 import {
   AttendanceEvidence, EstimatedEvidence, FollowEvidence, ReportEvidence, StudentCell, type EvidenceProps,
@@ -133,19 +133,14 @@ function QualityEvidence({ period }: EvidenceProps) {
   );
 }
 
-function ExpansionEvidence({ period }: Pick<EvidenceProps, "period">) {
+/** 아직 계산이 들어오지 않은 지표 · 원생 소개 — 무엇을 세게 되는지와 지금 점수(자료 없음 규칙)만. */
+function PendingEvidence({ metric, period }: { metric: Metric } & Pick<EvidenceProps, "period">) {
   return (
     <>
-      <StatTiles items={[{ label: "인정된 소개", value: "0건" }, { label: "과목 소개 점수", value: pointsText(metricOf(period, "expansion"), period) }]} />
-      <ul className="mt-4 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-        {["소개 기록", "납부 확인", "첫 수업", "기여자 확인"].map((step) => (
-          <li key={step} className="bg-bg-soft/60 rounded-md px-1.5 py-3 text-center text-xs">
-            {step}
-            <b aria-hidden className="mt-2 block">—</b>
-          </li>
-        ))}
-      </ul>
-      <EmptyNote count="0건" text="확인된 과목 소개 내역이 없습니다." />
+      <StatTiles items={[{ label: "이 달 수치", value: metric.basis }, { label: "점수", value: pointsText(metric, period) }]} />
+      {/* '계산 전'은 그 행이 계산 전으로 매겨졌을 때만 — 옛 행(raw 없음)의 과목 소개는 실제로 0건으로 매긴 달이다. */}
+      <EmptyNote count={metric.uncounted && (metric.raw === null || metric.raw === undefined) ? "계산 전" : metric.basis} text={metric.reason} />
+      {ruleText(period, metric.id) ? <p className="mt-3 text-xs leading-relaxed">점수 규칙: {ruleText(period, metric.id)}</p> : null}
     </>
   );
 }
@@ -181,6 +176,6 @@ export function MetricEvidence({ id, ...props }: EvidenceProps & { id: ItemId })
     case "students": return <StudentsEvidence {...props} />;
     case "revenue": return <RevenueEvidence {...props} />;
     case "coverage": return <CoverageEvidence {...props} />;
-    default: return <ExpansionEvidence period={props.period} />;
+    default: return <PendingEvidence metric={item} period={props.period} />;
   }
 }
