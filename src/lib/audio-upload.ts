@@ -10,6 +10,9 @@ export const ACCEPTED_AUDIO_TYPES = [
   "audio/webm",
   "audio/ogg",
 ];
+// Windows can identify .webm as video/webm. Include extensions so downloaded audio backups
+// remain selectable even when the OS assigns a different MIME type.
+export const AUDIO_FILE_ACCEPT = [...ACCEPTED_AUDIO_TYPES, ".mp3", ".m4a", ".wav", ".webm", ".ogg"].join(",");
 /**
  * 업로드 오디오 상한 — **100MB**(원장 2026-09-10 *"100MB까지 허용해줘"*, 종전 50MB).
  *
@@ -61,6 +64,20 @@ export function kstTimestamp(d: Date = new Date()): string {
   }).formatToParts(d);
   const g = (t: string) => parts.find((p) => p.type === t)?.value ?? "00";
   return `${g("year")}-${g("month")}-${g("day")}_${g("hour")}-${g("minute")}-${g("second")}_KST`;
+}
+
+/** Human-readable disk backup name; identifiers distinguish recordings made in the same second. */
+export function recordingFileName(
+  kind: "meeting" | "consultation" | "student-consultation",
+  label: string,
+  startedAt: Date,
+  id: string,
+  mimeType = "audio/webm",
+): string {
+  const prefix = { meeting: "회의녹음", consultation: "콜앤상담녹음", "student-consultation": "상담녹음" }[kind];
+  const safeLabel = label.normalize("NFC").replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_").trim().replace(/[. ]+$/, "").slice(0, 70);
+  const extension = mimeType.startsWith("audio/mp4") ? "m4a" : mimeType.startsWith("audio/ogg") ? "ogg" : "webm";
+  return `${prefix}_${safeLabel || "이름없음"}_${kstTimestamp(startedAt)}_${id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 8)}.${extension}`;
 }
 
 /**

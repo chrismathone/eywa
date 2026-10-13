@@ -12,21 +12,14 @@ import { createClient } from "@/lib/supabase/server";
 import { logAction } from "@/features/audit/server/log";
 import {
   DEFAULT_WITHDRAWAL_METADATA,
+  WITHDRAWAL_REASONS,
   type WithdrawalConsultation,
   type WithdrawalMetadata,
   type WithdrawalReason,
 } from "../types";
 import { logDbError } from "@/lib/supabase/db-error";
 
-const REASONS: WithdrawalReason[] = [
-  "graduated",
-  "relocation",
-  "competitor",
-  "financial",
-  "schedule",
-  "dissatisfaction",
-  "other",
-];
+const REASONS: readonly WithdrawalReason[] = WITHDRAWAL_REASONS;
 
 const CONSULTATION_KEYS: (keyof WithdrawalConsultation)[] = [
   "adminCalledParent",

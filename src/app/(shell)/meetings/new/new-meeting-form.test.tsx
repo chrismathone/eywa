@@ -12,7 +12,7 @@ const m = vi.hoisted(() => ({
   startMeetingFromAudio: vi.fn(),
   issueAudioUploadTicket: vi.fn(),
   uploadToTicket: vi.fn(),
-  checkRecovery: vi.fn(),
+  listRecovery: vi.fn(),
   // 🔴 인자 타입은 **제네릭**으로 적는다 — `vi.fn(async () => {})`는 타입이 0인자로 굳어 아래 `m.clearRecovery(kind)`·
   //    `m.clearDraft(scope)`가 tsc에서 걸리고(TS2554), 쓰지 않는 인자를 구현에 적으면 lint가 경고한다.
   clearRecovery: vi.fn<(kind: string) => Promise<void>>(async () => {}),
@@ -28,11 +28,12 @@ vi.mock("@/features/media/server/upload-actions", () => ({
 }));
 vi.mock("@/lib/storage/upload-to-ticket", () => ({ uploadToTicket: (...a: unknown[]) => m.uploadToTicket(...a) }));
 vi.mock("@/lib/recording-recovery", () => ({
-  checkRecovery: (kind: string) => m.checkRecovery(kind),
+  listRecovery: (...a: unknown[]) => m.listRecovery(...a),
+  recordingScopeKey: (s: { tenantId: string; userId: string; recordKey: string }) => JSON.stringify([s.tenantId, s.userId, s.recordKey]),
   clearRecovery: (kind: string) => m.clearRecovery(kind),
   recoverRecording: async () => null,
   saveChunk: async () => {},
-  startRecoverySession: async () => {},
+  startRecoverySession: async () => ({ id: "meeting-session", fileName: "회의녹음_주간 회의.webm" }),
 }));
 vi.mock("@/lib/form-draft", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/form-draft")>()),
@@ -60,8 +61,8 @@ beforeEach(() => {
   for (const f of [m.createTextMeeting, m.startMeetingFromAudio, m.issueAudioUploadTicket, m.uploadToTicket, m.push]) {
     f.mockReset();
   }
-  m.checkRecovery.mockReset();
-  m.checkRecovery.mockResolvedValue(null);
+  m.listRecovery.mockReset();
+  m.listRecovery.mockResolvedValue([]);
   m.clearRecovery.mockClear();
   m.clearDraft.mockClear();
   m.issueAudioUploadTicket.mockResolvedValue({ ticket: { path: "t1/회의.mp3" } });
@@ -85,7 +86,7 @@ async function flush() {
 async function renderForm() {
   let utils!: ReturnType<typeof render>;
   await act(async () => {
-    utils = render(<NewMeetingForm />);
+    utils = render(<NewMeetingForm recordingOwner={{ tenantId: "t1", userId: "u1" }} />);
     await flush();
   });
   fireEvent.change(screen.getByLabelText(/회의 제목/), { target: { value: "주간 회의" } });
@@ -128,14 +129,18 @@ async function submitInlineRecording() {
     }
     stop() {
       this.state = "inactive";
+      this.ondataavailable?.({ data: new Blob(["audio"], { type: "audio/webm" }) });
       this.onstop?.();
     }
   }
   vi.stubGlobal("MediaRecorder", FakeRecorder);
   Object.defineProperty(navigator, "mediaDevices", {
     configurable: true,
-    value: { getUserMedia: async () => ({ getTracks: () => [] }) },
+    value: { getUserMedia: async () => ({ getTracks: () => [] }), enumerateDevices: async () => [{ kind: "audioinput" }] },
   });
+  Object.defineProperty(navigator, "locks", { configurable: true, value: {
+    request: (_name: string, _options: unknown, callback: (lock: object) => Promise<void>) => callback({}),
+  } });
   await renderForm();
   await click(/바로 녹음/);
   await click(/녹음 중지/);
@@ -173,7 +178,7 @@ describe("새 회의록 저장 뒤 이동(#102)", () => {
   it("이 화면에서 녹음한 것이면 성공 뒤 그 녹음의 복구 조각을 비운다", async () => {
     m.startMeetingFromAudio.mockResolvedValue({ id: "m4" });
     await submitInlineRecording();
-    expect(m.clearRecovery).toHaveBeenCalledWith("meeting");
+    expect(m.clearRecovery).toHaveBeenCalledWith("meeting-session");
     expect(assign).toHaveBeenCalledWith("/meetings/m4?embed=1");
   });
 
@@ -226,7 +231,7 @@ describe("새 회의록 저장 뒤 이동(#102)", () => {
   });
 
   it("떠나는 동안엔 녹음 복구 배너의 [복구하기]·[녹음 지우기]를 잠근다", async () => {
-    m.checkRecovery.mockResolvedValue({ startedAt: Date.parse("2026-09-12T01:00:00Z"), chunkCount: 3 });
+    m.listRecovery.mockResolvedValue([{ id: "meeting-old", startedAt: Date.parse("2026-09-12T01:00:00Z"), chunkCount: 3 }]);
     m.createTextMeeting.mockResolvedValue({ id: "m1" });
     await submitTextMeeting();
     expect(screen.getByRole("button", { name: "복구하기" })).toBeDisabled();

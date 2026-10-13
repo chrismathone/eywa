@@ -44,6 +44,14 @@ export const AUDIT_ACTIONS = {
   ai_prompt_reset: "AI 프롬프트 기본값 복원",
   // 강사 말투 프로파일(0262a) — AI 산출물의 내용을 바꾸는 갱신이라 cron(주 1회)·[지금 갱신] 둘 다 남긴다.
   ment_style_rebuild: "강사 말투 프로파일 갱신",
+  // 직원 포트폴리오(0357a) — [지금 집계]와, 매일 cron이 달을 마감했을 때 남긴다(매일의 재집계는 남기지 않는다).
+  teacher_portfolio_refresh: "직원 포트폴리오 집계",
+  // 강사평가 설정(0359a) — 지표 켜고 끄기·만점·점수 규칙. 원장만 바꾼다.
+  teacher_evaluation_settings_save: "강사평가 설정 저장",
+  teacher_evaluation_entries_save: "강사평가 직접 입력 지표 저장",
+  // 강사평가 구성 저장·삭제(0360a) — 이름 붙인 구성. 불러오기는 화면에서만 하니 남기지 않는다(점수를 바꾸는 건 설정 저장).
+  teacher_evaluation_preset_save: "강사평가 구성 저장",
+  teacher_evaluation_preset_delete: "강사평가 구성 삭제",
   classroom_update: "강의실 수정",
   notice_popup_update: "팝업 공지 수정",
   notice_popup_toggle: "팝업 공지 노출 전환",

@@ -68,6 +68,10 @@
     {
       "path": "/api/cron/apply-timetable-lab",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/teacher-portfolio",
+      "schedule": "10 15 * * *"
     }
   ]
 }

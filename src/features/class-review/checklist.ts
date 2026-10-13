@@ -128,9 +128,29 @@ export type ScoreSheet = {
   scores: number[]; // 문항 수만큼(부족하면 미입력 취급)
   comment?: string;
   submittedAt?: string;
+  /**
+   * 처음으로 전 문항을 채운 시각 — 다시 저장해도 바뀌지 않는다(`submittedAt`은 저장할 때마다 바뀐다).
+   * 직원 포트폴리오가 이 시각이 속한 달에 한 번만 센다. 이 칸이 생기기 전 장은 비어 있다.
+   */
+  completedAt?: string;
   /** 제출자 스냅샷(선착순 모드에서 열 이름 표시용). */
   by?: { id: string | null; name: string };
 };
+
+/**
+ * 이 장이 처음 전 문항을 채운 시각 — 한 번 정해지면 다시 저장해도 그대로다(직원 포트폴리오가 그 달에 한 번만 센다).
+ * 이 칸이 생기기 전에 이미 완료돼 있던 장은 그때의 제출 시각을 처음 완료 시각으로 본다. 아직 미완성이면 undefined.
+ */
+export function firstCompletedAt(
+  previous: Pick<ScoreSheet, "scores" | "submittedAt" | "completedAt"> | undefined,
+  scores: number[],
+  areas: ChecklistArea[],
+  now: string,
+): string | undefined {
+  if (previous?.completedAt) return previous.completedAt;
+  if (previous?.submittedAt && computeTotals(previous, areas).complete) return previous.submittedAt;
+  return computeTotals({ scores }, areas).complete ? now : undefined;
+}
 
 export type SheetTotals = {
   /** 영역별 소계(입력된 문항 합) */

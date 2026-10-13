@@ -454,6 +454,7 @@
               "title": "과목 운영"
             },
             { "slug": "makeups", "title": "보강 운영" },
+            { "slug": "evaluation", "title": "강사평가" },
             {
               "slug": "billing",
               "title": "수납·청구"

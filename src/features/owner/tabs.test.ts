@@ -36,7 +36,7 @@ describe("면 목록", () => {
   it("범주별 면(원장 합의 2026-10-06)", () => {
     const byCategory = (category: string) => OWNER_FACES.filter((f) => f.category === category).map((f) => f.label);
     expect(byCategory("학원 정보")).toEqual(["프로필·브랜드"]);
-    expect(byCategory("수업·운영")).toEqual(["운영 체계", "과목 운영", "보강 운영"]);
+    expect(byCategory("수업·운영")).toEqual(["운영 체계", "과목 운영", "보강 운영", "강사평가"]);
     expect(byCategory("청구·안내")).toEqual(["수납·청구", "알림·약관", "상담 양식"]);
     expect(byCategory("권한·화면")).toEqual(["역할·권한", "탭 및 메뉴 구성", "기능", "대시보드 관리"]);
     expect(byCategory("관리")).toEqual(["팝업 공지", "데이터 정리", "데이터 가져오기", "감사로그", "연동"]);
@@ -51,8 +51,8 @@ describe("면 목록", () => {
     expect(resolveOwnerTab("없는면")).toBe("profile");
   });
 
-  it("🔴 원장 위에게만 입구를 세우는 면 = 보강 운영 · 기능 · 대시보드 관리 · 감사로그(본문이 위임 계정에게 안내만 보이는 면들)", () => {
-    expect(OWNER_FACES.filter((f) => f.masterOnly).map((f) => f.key)).toEqual(["makeups", "modules", "dashboard", "audit"]);
+  it("🔴 원장 위에게만 입구를 세우는 면 = 보강 운영 · 강사평가 · 기능 · 대시보드 관리 · 감사로그(본문이 위임 계정에게 안내만 보이는 면들)", () => {
+    expect(OWNER_FACES.filter((f) => f.masterOnly).map((f) => f.key)).toEqual(["makeups", "evaluation", "modules", "dashboard", "audit"]);
   });
 
   it("라벨 조회는 '기능'까지 답한다", () => {
@@ -114,7 +114,7 @@ describe("파생 — 세 표면이 같은 목록을 쓴다", () => {
     for (const row of rows) expect(row, row.trim()).toMatch(/^\s+\w+: \{ icon: (?:"\w+"|MENU_ICON\.\w+) \},$/);
     // 문자열로 직접 적은 그림은 그림 가드의 추출식에 걸린다.
     const literal = [...table.matchAll(/icon:\s*"(\w+)"/g)].map((m) => m[1]);
-    expect(literal).toEqual(["tag", "key", "sparkle", "eraser", "sync", "history", "sync"]);
+    expect(literal).toEqual(["tag", "gauge", "key", "sparkle", "eraser", "sync", "history", "sync"]);
   });
 
   it("🔴 메뉴 판에 면을 다시 적지 않는다 — 설정 묶음 안에 `/owner` 주소를 손으로 적은 줄이 없다", () => {
@@ -180,7 +180,7 @@ describe("배선 — 설정 화면의 탭도 같은 판정이다", () => {
   it("화면 탭은 면 목록에서, 메뉴 판과 같은 두 표식으로 거른다", () => {
     const page = readFileSync(join(process.cwd(), "src", "app", "(shell)", "owner", "page.tsx"), "utf8");
     expect(page).toContain(
-      "return OWNER_FACES.filter((f) => (!f.masterOnly || canReadAudit) && (!f.genericOnly || showModules));",
+      "return OWNER_FACES.filter((f) => (!f.masterOnly || canReadAudit) && (!f.genericOnly || showModules)",
     );
     // 면 목록·라벨을 화면 파일에 다시 적지 않는다.
     expect(page).not.toContain('label: "기능"');

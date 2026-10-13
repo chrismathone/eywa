@@ -5,7 +5,7 @@ import { NewConsultationForm } from "./form";
 export const metadata = { title: "신규 콜&상담 — 에이와" };
 
 export default async function NewEnrollmentPage() {
-  await requireAccess("enrollment");
+  const viewer = await requireAccess("enrollment");
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -20,7 +20,7 @@ export default async function NewEnrollmentPage() {
         </p>
       </header>
 
-      <NewConsultationForm />
+      <NewConsultationForm recordingOwner={{ tenantId: viewer.tenantId, userId: viewer.id }} />
     </div>
   );
 }

@@ -11,7 +11,7 @@ export default async function EditEnrollmentPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireAccess("enrollment");
+  const viewer = await requireAccess("enrollment");
   const { id } = await params;
   const c = await getEnrollmentConsultationById(id);
   if (!c) notFound();
@@ -26,6 +26,8 @@ export default async function EditEnrollmentPage({
       </header>
 
       <ConsultationFullForm
+        key={c.id}
+        recordingOwner={{ tenantId: viewer.tenantId, userId: viewer.id }}
         mode="edit"
         confirmConsultedOnSave={c.fromPublicIntake && ["pending", "scheduled"].includes(c.outcome)}
         aiSuggestedParentRequest={c.aiFormSuggestions?.parentRequest ?? null}

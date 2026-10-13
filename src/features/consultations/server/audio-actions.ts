@@ -2,7 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 import { kstToday } from "@/lib/date-kst";
-import { redirect } from "next/navigation";
 import { submitTranscript } from "@/lib/ai/assemblyai";
 import { getAssemblyaiWebhookUrl } from "@/lib/config/app-url";
 import { getCurrentUser } from "@/lib/auth/current-user";
@@ -37,7 +36,7 @@ async function requireConsultationWrite() {
   return { user, error: undefined as string | undefined };
 }
 
-export type StartStudentConsultationAudioState = { error?: string } | undefined;
+export type StartStudentConsultationAudioState = { error?: string; id?: string } | undefined;
 
 /**
  * 녹음/업로드된 음성으로 재원생 학생상담을 생성하고 AssemblyAI 전사를 시작.
@@ -132,11 +131,12 @@ export async function startStudentConsultationFromAudio(
       .from("student_consultations")
       .update({ processing_status: "failed", processing_error: ko })
       .eq("id", row.id);
-    return { error: ko };
+    revalidatePath("/consultations");
+    return { error: ko, id: row.id };
   }
 
   revalidatePath("/consultations");
-  redirect(`/consultations/${row.id}/edit`);
+  return { id: row.id };
 }
 
 export type RunConsultationAnalysisState = { error?: string; ok?: boolean } | undefined;

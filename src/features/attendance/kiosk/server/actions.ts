@@ -103,11 +103,17 @@ export async function revokeKioskDevice(
     .select("name")
     .maybeSingle();
   if (error) return { error: friendly(error, "기기를 폐기하지 못했습니다") };
+  // 바뀐 행이 없으면 성공으로 말하지 않는다(삭제와 같은 규약) — 이미 지워졌거나 다른 지점의 기기이고,
+  // DB 쓰기 게이트(0358a)에 걸린 update도 오류 없이 0행으로 돌아온다. 감사로그도 남기지 않는다.
+  if (!data) {
+    revalidatePath("/kiosk-settings");
+    return { error: "이미 삭제됐거나 찾을 수 없는 기기입니다" };
+  }
 
   await logAction({
     action: "kiosk_device_revoke",
     targetType: "kiosk_device",
-    targetLabel: (data?.name as string | undefined) ?? "키오스크 기기",
+    targetLabel: (data.name as string | undefined) ?? "키오스크 기기",
   });
 
   revalidatePath("/kiosk-settings");

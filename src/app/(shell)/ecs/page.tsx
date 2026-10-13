@@ -476,7 +476,8 @@ function EcsTodayFace({
           fontSize={res.fontSize}
           isToday={isToday}
           // 휴일이면 요약 스트립의 **재촉 색**만 걷는다(숫자는 그대로) — 위 한 줄이 이미 사유를 말한다.
-          isHoliday={res.holidayName !== null}
+          // 반 카드의 일괄 출석은 휴일 이름을 넣어 한 번 묻는다(원장 2026-10-13, 막지는 않는다).
+          holidayName={res.holidayName}
         />
       )}
       </TextbookOptionsProvider>

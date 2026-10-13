@@ -6,28 +6,25 @@ import { kstDateTimeLocal } from "@/lib/date-kst";
 import { useRouter } from "next/navigation";
 import { useStateDraft } from "@/components/forms/use-state-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
-import { CircleStop, History, Loader2, Mic, Upload, X } from "@/components/icons/aywa-icon-compat";
+import { CircleStop, Loader2, Mic, Upload, X } from "@/components/icons/aywa-icon-compat";
+import { RecordingRecoveryNotice } from "@/components/forms/recording-recovery-notice";
 import { Button } from "@/components/ui/button";
 import {
-  checkRecovery,
   clearRecovery,
-  recoverRecording,
-  saveChunk,
-  startRecoverySession,
-  type RecordingMeta,
+  type RecordingOwner,
 } from "@/lib/recording-recovery";
-import { useRecordingLock } from "@/components/workspace/use-recording-lock";
+import { useBrowserRecording } from "@/components/forms/use-browser-recording";
+import { useMicrophone } from "@/components/forms/use-microphone";
+import { startBrowserRecording, stopBrowserRecording, dismissBrowserRecording } from "@/lib/browser-recording";
 import { withEmbed } from "@/components/workspace/embed-context";
 import { useInFrame } from "@/components/workspace/use-in-frame";
 import { startMeetingFromAudio, createTextMeeting } from "@/features/meetings/server/actions";
 import { issueAudioUploadTicket } from "@/features/media/server/upload-actions";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import {
-  ACCEPTED_AUDIO_TYPES,
-  downloadFile,
+  AUDIO_FILE_ACCEPT,
   formatBytes,
   formatSeconds,
-  kstTimestamp,
   validateAudioFile,
   MAX_AUDIO_SIZE_LABEL,
 } from "@/lib/audio-upload";
@@ -38,15 +35,12 @@ const nowLocalIso = (): string => kstDateTimeLocal();
 /** 만든 뒤 이동이 이만큼 안 끝나면 목적지 링크를 함께 보인다(아래 leaveTo). */
 const LEAVE_FALLBACK_MS = 5000;
 
-export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
+export function NewMeetingForm({ onSuccess, recordingOwner }: { onSuccess?: () => void; recordingOwner: RecordingOwner }) {
   // 녹음·전사 라이선스가 꺼진 지점엔 '음성' 칸이 없다 — 메모장만으로 회의록을 만든다(2026-09-30 "꺼지면 흔적 없이").
   const recordingOn = useLicenseOn("meeting_recording");
   const router = useRouter();
   const inFrame = useInFrame();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const recordingChunksRef = useRef<Blob[]>([]);
-  const recordingTimerRef = useRef<number | null>(null);
 
   const [title, setTitle] = useState("");
   const [attendees, setAttendees] = useState("");
@@ -54,8 +48,6 @@ export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
   const [notepad, setNotepad] = useState("");
 
   const [file, setFile] = useState<File | null>(null);
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordSeconds, setRecordSeconds] = useState(0);
   const [error, setError] = useState<string | null>(null);
   // leaving = 이미 만들었고 목적지로 떠나는 중(저장 버튼은 계속 잠근다 — leaveTo 주석).
   const [phase, setPhase] = useState<"idle" | "uploading" | "submitting" | "leaving">("idle");
@@ -68,16 +60,14 @@ export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
   const leaveDestRef = useRef<string | null>(null);
   /** 뒤로가기로 되살아난 화면(bfcache)인가 — 이동은 끝났으니 '이동 중…'이 아니라 '이미 만든 회의록'을 말한다. */
   const [restored, setRestored] = useState(false);
-  /**
-   * 지금 `file`이 **이 화면에서 녹음한 것**인가 — 성공 뒤 녹음 복구 조각(IDB)을 지울지 가른다.
-   * 파일 업로드·복구본이면 IDB에 남은 조각은 이 회의록 것이 아니다(아래 성공 분기 주석).
-   */
-  const fromInlineRecordingRef = useRef(false);
   const [uploadPct, setUploadPct] = useState(0);
-  const [recoveryMeta, setRecoveryMeta] = useState<RecordingMeta | null>(null);
+  const [recoveryId, setRecoveryId] = useState<string | null>(null);
+  const recordingScope = title.trim() ? { ...recordingOwner, recordKey: `meeting:${JSON.stringify([title.trim(), heldAt.slice(0, 10)])}`, label: title.trim() } : null;
 
-  // 녹음 중이면 이 폼이 든 플로팅 창의 닫기(X)·배경보내기와 탭 새로고침을 잠근다(우발적 유실 방지).
-  useRecordingLock(isRecording);
+  const recorded = useBrowserRecording("meeting", recordingScope, (f, id) => { setFile(f); setRecoveryId(id); });
+  const microphone = useMicrophone();
+  const isRecording = recorded.recording;
+  const recordSeconds = recorded.seconds;
 
   // 텍스트 필드 로컬 초안 — 녹음은 recording-recovery(IDB 청크)가 지키지만 제목·참석자·메모는 React state뿐이라
   // 새로고침/창닫기에 유실됐다. 스냅샷 저장 + 복구 배너(생성 성공 시 삭제). 파일/녹음 상태는 초안 대상 아님.
@@ -101,26 +91,6 @@ export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
     setNotepad(d.notepad);
   }
 
-  // On mount: look for an unfinished recording in IndexedDB (browser crash recovery).
-  useEffect(() => {
-    let cancelled = false;
-    checkRecovery("meeting").then((meta) => {
-      if (!cancelled) setRecoveryMeta(meta);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (recordingTimerRef.current) window.clearInterval(recordingTimerRef.current);
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-        mediaRecorderRef.current.stop();
-      }
-    };
-  }, []);
-
   // 떠나기 폴백 타이머의 수명 — 문서가 실제로 내려가면(pagehide) 풀어 둔다(이동 중에 안내가 끼어들지 않게).
   // 뒤로가기로 이 화면이 되살아나면(bfcache, persisted) 이동은 이미 끝난 것이다 — '이미 만든 회의록' 안내와
   // [열기]·[새로 작성]을 바로 보인다(타이머를 풀었으니 안 그러면 '이동 중…'에 영영 멈춘다). 저장 버튼은 계속 잠근다.
@@ -143,25 +113,11 @@ export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
     };
   }, []);
 
-  async function handleRecover() {
-    const recovered = await recoverRecording("meeting");
-    if (recovered) {
-      fromInlineRecordingRef.current = false; // 복구본 — 조각은 바로 아래에서 스스로 지운다
-      setFile(recovered);
-      setRecoveryMeta(null);
-      await clearRecovery("meeting");
-    }
-  }
-
-  async function handleDiscardRecovery() {
-    await clearRecovery("meeting");
-    setRecoveryMeta(null);
-  }
-
   function pickFile(f: File | null) {
     setError(null);
     if (!f) {
       setFile(null);
+      setRecoveryId(null);
       return;
     }
     const err = validateAudioFile(f);
@@ -169,71 +125,18 @@ export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
       setError(err);
       return;
     }
-    fromInlineRecordingRef.current = false; // 업로드한 파일 — IDB 복구 조각과 무관
+    setRecoveryId(null);
     setFile(f);
   }
 
-  function startRecording() {
+  async function startRecording() {
     setError(null);
-    // 폼이 든 플로팅 창 안에서 바로 녹음(별도 브라우저 창 없음). 창 자체가 떠 있어 배경을
-    // 자유롭게 쓸 수 있고, 녹음 중엔 useRecordingLock이 창 닫기/탭 새로고침을 막는다.
-    void startInlineRecording();
+    if (!recordingScope) return setError("회의 제목을 입력한 뒤 녹음을 시작해 주세요.");
+    const err = await startBrowserRecording("meeting", recordingScope);
+    if (err) setError(err);
   }
 
-  async function startInlineRecording() {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-        ? "audio/webm;codecs=opus"
-        : "audio/webm";
-      const recorder = new MediaRecorder(stream, { mimeType: mime });
-      recordingChunksRef.current = [];
-
-      // Initialize the IDB recovery session — chunks will persist as they arrive.
-      await startRecoverySession("meeting", mime, title || undefined).catch(() => {
-        // recovery is best-effort; swallow and continue recording
-      });
-
-      recorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) {
-          const idx = recordingChunksRef.current.length;
-          recordingChunksRef.current.push(e.data);
-          // Fire-and-forget — never block the recorder.
-          void saveChunk("meeting", idx, e.data);
-        }
-      };
-      recorder.onstop = () => {
-        const blob = new Blob(recordingChunksRef.current, { type: "audio/webm" });
-        const recorded = new File([blob], `회의녹음_${kstTimestamp()}.webm`, { type: "audio/webm" });
-        fromInlineRecordingRef.current = true; // 이 녹음의 조각이 IDB에 있다 — 성공하면 비운다
-        setFile(recorded);
-        // 불상사 대비 디스크 백스톱 — 정지 즉시 다운로드 폴더로 저장(IDB 복구와 별개).
-        downloadFile(recorded);
-        stream.getTracks().forEach((t) => t.stop());
-      };
-      recorder.start(1000);
-      mediaRecorderRef.current = recorder;
-      setIsRecording(true);
-      setRecordSeconds(0);
-      recordingTimerRef.current = window.setInterval(() => {
-        setRecordSeconds((s) => s + 1);
-      }, 1000);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setError(`마이크 접근 실패: ${msg}`);
-    }
-  }
-
-  function stopRecording() {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-      mediaRecorderRef.current.stop();
-    }
-    if (recordingTimerRef.current) {
-      window.clearInterval(recordingTimerRef.current);
-      recordingTimerRef.current = null;
-    }
-    setIsRecording(false);
-  }
+  function stopRecording() { stopBrowserRecording(recorded.requestId); }
 
   /**
    * 만든 뒤 떠나기 — 🔴 `router.push`가 아니라 **풀 문서 이동**. 서버 액션 직후의 push는 액션 응답이
@@ -262,6 +165,7 @@ export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (isRecording) return setError("녹음을 중지한 뒤 저장해 주세요.");
     setError(null);
     setErrorDetail(null);
 
@@ -362,9 +266,8 @@ export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
       }
       // 여기부터는 회의록 행이 **있다** — 성공, 또는 행을 만든 뒤 전사 제출만 실패(상세의 '처리 실패' 칸에 사유와
       // '전사부터 다시'가 뜬다). 버튼을 다시 열면 업로드·행·전사 과금이 한 벌 더 생기니 그 회의록으로 떠난다.
-      // 녹음 복구 조각은 **이 화면에서 녹음한 것일 때만** 비운다 — 파일 업로드였다면 IDB에 남은 건 다른 크래시
-      // 녹음이고(크래시라 다운로드 백업도 없다) 지우면 영구 유실이다. 텍스트 초안은 비운다.
-      if (fromInlineRecordingRef.current) await clearRecovery("meeting");
+      // 서버에 보관된 이 녹음의 복구본만 비운다. 다른 녹음과 PC 다운로드 파일은 보존한다.
+      if (recoveryId) { await clearRecovery(recoveryId); dismissBrowserRecording(recoveryId); }
       localDraft.clear();
       if (onSuccess) {
         onSuccess();
@@ -383,44 +286,14 @@ export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
     <form onSubmit={handleSubmit} className="space-y-5">
       {/* 텍스트 초안 복구 배너(제목·참석자·메모) — 녹음 복구 배너와 별개 */}
       <DraftBanner
-        savedAt={localDraft.draftSavedAt}
+        savedAt={title.trim() ? null : localDraft.draftSavedAt}
         onRestore={restoreTextDraft}
         onDiscard={localDraft.discard}
       />
-      {/* Recovery banner — IndexedDB crash recovery */}
-      {recoveryMeta ? (
-        <div className="border-chart-3/40 bg-chart-3/5 flex items-start gap-3 rounded-md border px-4 py-3">
-          <History className="text-chart-3 mt-0.5 size-4 shrink-0" />
-          <div className="min-w-0 flex-1 space-y-1">
-            <p className="text-foreground text-sm font-medium">복구 가능한 녹음이 있습니다</p>
-            <p className="text-muted-foreground text-xs">
-              {new Date(recoveryMeta.startedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}에 시작 ·{" "}
-              <span className="num">{recoveryMeta.chunkCount}</span>개 청크
-              {recoveryMeta.title ? ` · "${recoveryMeta.title}"` : ""}
-            </p>
-            {/* 저장·이동 중엔 잠근다 — 그 사이 누르면 조각을 지우거나 파일을 바꾸는데, 결과를 보기도 전에 화면이 떠난다. */}
-            <div className="flex items-center gap-2 pt-1">
-              <button
-                type="button"
-                onClick={handleRecover}
-                disabled={busy}
-                className="text-foreground hover:text-chart-3 text-xs font-medium disabled:opacity-40"
-              >
-                복구하기
-              </button>
-              <span className="text-muted-foreground/40 text-xs">·</span>
-              <button
-                type="button"
-                onClick={handleDiscardRecovery}
-                disabled={busy}
-                className="text-muted-foreground hover:text-foreground text-xs disabled:opacity-40"
-              >
-                녹음 지우기
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      {recordingOn ? <RecordingRecoveryNotice key={recordingScope?.recordKey ?? "empty"} kind="meeting" scope={recordingScope}
+        selectedId={recoveryId ?? recorded.activeRecoveryId} disabled={busy || isRecording}
+        onRestore={(recovered, meta) => { setFile(recovered); setRecoveryId(meta.id); }} /> : null}
+      {recordingOn && recorded.otherRecording ? <p className="text-text-dim text-xs">다른 화면에서 녹음 중입니다. 진행 중인 녹음을 먼저 중지해 주세요.</p> : null}
 
       {/* Title */}
       <div className="space-y-1.5">
@@ -430,8 +303,8 @@ export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
         <input
           id="title"
           value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          disabled={busy}
+          onChange={(e) => { setTitle(e.target.value); setFile(null); setRecoveryId(null); }}
+          disabled={busy || isRecording}
           required
           placeholder="예: 주간 강사 회의 (5월 4주차)"
           className="border-input bg-background w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
@@ -463,8 +336,11 @@ export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
           id="heldAt"
           type="datetime-local"
           value={heldAt}
-          onChange={(e) => setHeldAt(e.target.value)}
-          disabled={busy}
+          onChange={(e) => {
+            if (e.target.value.slice(0, 10) !== heldAt.slice(0, 10)) { setFile(null); setRecoveryId(null); }
+            setHeldAt(e.target.value);
+          }}
+          disabled={busy || isRecording}
           className="border-input bg-background w-72 rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
         />
       </div>
@@ -482,7 +358,7 @@ export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
             </div>
             <button
               type="button"
-              onClick={() => setFile(null)}
+              onClick={() => { setFile(null); setRecoveryId(null); }}
               disabled={busy}
               className="text-muted-foreground hover:text-foreground p-1"
               aria-label="제거"
@@ -524,12 +400,12 @@ export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
             <button
               type="button"
               onClick={startRecording}
-              disabled={busy}
+              disabled={busy || recorded.otherRecording || !microphone.available}
               className="border-border hover:border-foreground/40 hover:bg-accent/30 flex flex-col items-center gap-1.5 rounded-md border border-dashed px-3 py-5 transition"
             >
               <Mic className="text-muted-foreground size-5" />
-              <span className="text-foreground block text-sm font-medium">바로 녹음</span>
-              <span className="text-muted-foreground text-xs">브라우저 마이크 사용</span>
+              <span className="text-foreground block text-sm font-medium">{microphone.available ? "바로 녹음" : microphone.message}</span>
+              {microphone.available ? <span className="text-muted-foreground text-xs">브라우저 마이크 사용</span> : null}
             </button>
           </div>
         )}
@@ -537,7 +413,7 @@ export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
         <input
           ref={fileInputRef}
           type="file"
-          accept={ACCEPTED_AUDIO_TYPES.join(",")}
+          accept={AUDIO_FILE_ACCEPT}
           onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
           className="hidden"
         />
@@ -560,12 +436,12 @@ export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
         />
       </div>
 
-      {error ? (
+      {(error || recorded.error) ? (
         <p
           className="text-chart-4 bg-chart-4/10 border-chart-4/20 rounded-md border px-3 py-2 text-sm"
           title={errorDetail ?? undefined}
         >
-          {error}
+          {error || recorded.error}
         </p>
       ) : null}
 
@@ -602,7 +478,7 @@ export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
       ) : null}
 
       <div className="flex items-center justify-end gap-2 border-t pt-5">
-        <Button type="submit" disabled={busy || (!file && !notepad.trim())}>
+        <Button type="submit" disabled={busy || isRecording || (!file && !notepad.trim())}>
           {busy && !restored ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
           {phase === "uploading"
             ? `업로드 중 ${uploadPct}%`

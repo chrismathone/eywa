@@ -15,6 +15,8 @@
  * 🔴 일괄 출석은 **빈 칸만**(비파괴, lib/bulk.ts planBulkAttendance와 같은 계약) — 이미 기록된 값
  *    (특히 결석·지각)은 절대 덮지 않는다. 그래서 확인 다이얼로그가 필요 없다. 이 계약은 클라 필터가
  *    아니라 **서버가 강제**한다(`fillEmptyOnly` — 화면이 낡아도 남의 기록을 못 덮는다).
+ *    단 **학원 휴원일엔 한 번 묻는다**(원장 2026-10-13 — 10/9 한글날에 원스크린 일괄로 19명이 '출석'이 됐다).
+ *    막지는 않는다: 휴원일에도 실제로 수업한 날이 있다(원스크린 `applyQuickPresent`와 같은 규약).
  * ⚠️ 지각·결석의 **사유·시수 편집은 여기에 없다** — 그건 출석부·주간 시트의 몫이다(ECS §E 규약 그대로).
  */
 import { useSheetFeedback } from "@/features/teacher-view/lang-context";
@@ -106,7 +108,7 @@ function ClassCard({
   userId,
   tenantId,
   nowHm,
-  isHoliday,
+  holidayName,
 }: {
   card: TodayClassCard;
   weekMonday: string;
@@ -119,12 +121,13 @@ function ClassCard({
   /** 지금 시각(KST HH:mm) — 오늘이 아니거나 아직 마운트 전이면 null(진행 중 표시 없음). */
   nowHm: string | null;
   /**
-   * 학원 휴일인가 — 배지의 **재촉 색만** 걷는다(숫자·입력·저장은 그대로).
+   * 학원 휴원일 이름(아니면 null) — 배지의 **재촉 색만** 걷고, 일괄 출석 전에 한 번 묻는다(입력·저장은 그대로).
    * 🔴 요약 스트립과 **함께** 걷어야 한다 — 위는 무채색인데 카드마다 앰버 "계획 0/2"가 서면 한 화면이
    *    스스로 모순된다(절반만 옮긴 규칙이 안 옮긴 것보다 나쁘다).
    */
-  isHoliday: boolean;
+  holidayName: string | null;
 }) {
+  const isHoliday = holidayName !== null;
   const feedback = useSheetFeedback();
   const { att, setAtt, marks, setMarks, attInflight } = state;
   const [open, setOpen] = useState(true);
@@ -187,6 +190,10 @@ function ClassCard({
   function bulkPresent() {
     const targets = pending.map((s) => s.studentId);
     if (targets.length === 0 || bulkBusy) return;
+    // 휴원일이면 한 번 묻는다(막지 않는다 — 위 머리 주석). 취소하면 아무것도 칠하지 않는다.
+    if (holidayName && !window.confirm(tf("today.bulkPresent.holidayConfirm", { name: holidayName, n: targets.length }))) {
+      return;
+    }
     setBulkBusy(true);
     for (const id of targets) attInflight.acquire(`${card.classId}|${id}`);
     const before = new Map(targets.map((id) => [id, att[`${card.classId}|${id}`] ?? { status: null, note: null }]));
@@ -426,7 +433,7 @@ function ClassCard({
                 canAdd={card.canMarkAttendance}
                 slots={card.slots}
               />
-              {/* 일괄 출석 — 빈 칸만이라 비파괴(확인 불필요). 라벨이 실제 대상 수를 밝힌다(bulk-label 규약).
+              {/* 일괄 출석 — 빈 칸만이라 비파괴(확인 불필요 · 휴원일만 묻는다). 라벨이 실제 대상 수를 밝힌다(bulk-label 규약).
                   ⚠️ 렌더 조건에 bulkBusy를 포함 — 낙관 갱신으로 pending이 즉시 0이 되므로 이게 없으면
                   버튼이 클릭 순간 언마운트돼 '기록 중…' 상태가 보일 수 없다(적대 리뷰 2026-08-11). */}
               {card.canMarkAttendance && (pending.length > 0 || bulkBusy) ? (
@@ -497,7 +504,7 @@ export function TodayBoard({
   tenantId,
   fontSize: initialFontSize,
   isToday,
-  isHoliday = false,
+  holidayName = null,
 }: {
   cards: TodayClassCard[];
   date: string;
@@ -509,12 +516,14 @@ export function TodayBoard({
   fontSize: EcsFontSize;
   isToday: boolean;
   /**
-   * 이 날짜가 학원 휴일인가 — **요약 스트립의 재촉 색만** 걷는다(숫자·카드·입력은 그대로).
+   * 이 날짜의 학원 휴원일 이름(아니면 null) — **요약 스트립의 재촉 색만** 걷고(숫자·카드·입력은 그대로),
+   * 반 카드의 일괄 출석 전에 한 번 묻는다(원장 2026-10-13).
    * 🔴 카드를 지우거나 저장을 막는 값이 아니다(원장 2026-09-01 *"입력은 가능하도록"*). 사유는 페이지
    *    맨 위 한 줄이 말하고, 여기선 "계획 0/6"이 앰버로 서서 거짓 재촉이 되는 것만 막는다.
    */
-  isHoliday?: boolean;
+  holidayName?: string | null;
 }) {
+  const isHoliday = holidayName !== null;
   // 이름을 `boardT`로 둔다 — 아래 카드 컴포넌트의 `t`와 **다른 스코프**라 같은 이름이면 어느 것을
   // 부르는지 읽는 사람이 헷갈린다(이 보드는 토스트 하나만 쓴다).
   const boardT = useSheetT();
@@ -629,7 +638,7 @@ export function TodayBoard({
             userId={userId}
             tenantId={tenantId}
             nowHm={nowHm}
-            isHoliday={isHoliday}
+            holidayName={holidayName}
           />
         ))}
       </div>

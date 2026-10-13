@@ -99,6 +99,7 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   integration: "외부 연동",
   ai_prompt: "AI 프롬프트",
   ment_style: "강사 말투",
+  teacher_portfolio: "직원 포트폴리오",
   kiosk_device: "키오스크 기기",
   // 시간표(개발중) 월별 계획(0232a) — 본 시간표가 아니라 **계획**임이 '대상' 칸에서 바로 읽혀야 한다.
   timetable_plan: "시간표 계획",
@@ -248,6 +249,7 @@ const FALLBACK_ID_LABEL: Record<string, string> = {
  */
 export const SYSTEM_ACTOR_PREFIX = "system:";
 const SYSTEM_ACTOR_LABEL: Record<string, string> = {
+  "teacher-portfolio": "직원 포트폴리오 매일 집계",
   "grant-class-review": "직원 평가 권한 부여",
   "grant-seat-attendance": "자리 출석부 권한 부여",
   "narrow-staff-menu": "직원관리 권한 조정",
@@ -669,6 +671,28 @@ export function auditDetail(
       return "프롬프트 저장(새 버전)";
     case "ai_prompt_reset":
       return "기본 프롬프트로 복원";
+    case "teacher_portfolio_refresh": {
+      const teachers = num(m.teachers);
+      const closed = Array.isArray(m.closedMonths) ? m.closedMonths.filter((v): v is string => typeof v === "string") : [];
+      return join(
+        m.trigger === "cron" ? "매일 자동 집계" : "지금 집계",
+        teachers === null ? null : `강사 ${teachers}명`,
+        closed.length ? `마감 ${closed.join(", ")}` : null,
+      );
+    }
+    case "teacher_evaluation_settings_save": {
+      const enabled = num(m.enabled);
+      const maxTotal = num(m.maxTotal);
+      return join(enabled === null ? null : `지표 ${enabled}개`, maxTotal === null ? null : `만점 ${maxTotal}점`);
+    }
+    case "teacher_evaluation_preset_save":
+    case "teacher_evaluation_preset_delete":
+      return typeof m.name === "string" ? `‘${m.name}’` : null;
+    case "teacher_evaluation_entries_save": {
+      const saved = num(m.saved);
+      const cleared = num(m.cleared);
+      return join(saved ? `${saved}칸 입력` : null, cleared ? `${cleared}칸 비움` : null);
+    }
     case "ment_style_rebuild": {
       const built = num(m.built);
       const unchanged = num(m.unchanged);

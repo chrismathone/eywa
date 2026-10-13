@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
-import { useModuleOn } from "@/features/owner/operations-context";
+import { useLicenseOn, useModuleOn } from "@/features/owner/operations-context";
 import {
   AlertCircle, AlertTriangle, ArrowRight, Banknote, BookOpen, Bus, Cake, Calendar,
   CheckCircle, ChevronDown, ChevronRight, Globe, GraduationCap, Hash, Home, Languages,
@@ -23,6 +23,9 @@ import type { IntakeChecklist } from "@/features/enrollment/intake-checklist";
 import { sanitizeScoreInput } from "@/features/enrollment/score-input";
 import { ChecklistView } from "./checklist-view";
 import { AudioRecorderField } from "./audio-recorder-field";
+import { RecordingRecoveryNotice } from "@/components/forms/recording-recovery-notice";
+import { clearRecovery, consultationRecordingKey, type RecordingOwner } from "@/lib/recording-recovery";
+import { dismissBrowserRecording } from "@/lib/browser-recording";
 import { issueAudioUploadTicket } from "@/features/media/server/upload-actions";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import {
@@ -110,6 +113,7 @@ export function ConsultationFullForm({
   aiSuggestedParentRequest,
   existingRecordings = [],
   confirmConsultedOnSave = false,
+  recordingOwner,
 }: {
   mode: "create" | "edit";
   initial?: ConsultationFormInitial;
@@ -119,6 +123,7 @@ export function ConsultationFullForm({
   existingRecordings?: { createdAt: string; status: string }[];
   /** QR 접수 + 대기·예약 건(수정 모드) — 저장 시 "상담 완료로 변경?" 확인 팝업을 띄운다(서버도 조건 재검증). */
   confirmConsultedOnSave?: boolean;
+  recordingOwner: RecordingOwner;
 }) {
   const subjects = useSubjectMaps();
   const gradeLevels = useGradeLevels();
@@ -133,7 +138,28 @@ export function ConsultationFullForm({
   const inFrame = useInFrame();
   const isCreate = mode === "create";
   const shuttleOn = useModuleOn("shuttle");
+  const recordingOn = useLicenseOn("meeting_recording");
   const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [audioRecoveryId, setAudioRecoveryId] = useState<string | null>(null);
+  const [recordingDraftId, setRecordingDraftId] = useState("");
+  const [recordingSubject, setRecordingSubject] = useState({ name: v.prospectName ?? "", phone: v.parentPhone || v.studentPhone || "" });
+  const recordingKey = consultationRecordingKey(v.id, recordingSubject.name, recordingSubject.phone, recordingDraftId);
+  const recordingScope = recordingKey ? { ...recordingOwner, recordKey: recordingKey, label: recordingSubject.name.trim() || "상담" } : null;
+  function selectAudio(file: File | null, recoveryId?: string) {
+    setAudioFile(file);
+    setAudioRecoveryId(file ? recoveryId ?? null : null);
+  }
+  function syncRecordingSubject(form: HTMLFormElement) {
+    if (recordingActive || busy) return;
+    const data = new FormData(form);
+    const name = String(data.get("prospectName") ?? "");
+    const phone = String(data.get("parentPhone") || data.get("studentPhone") || "");
+    if (name === recordingSubject.name && phone === recordingSubject.phone) return;
+    const draftId = name !== recordingSubject.name ? crypto.randomUUID() : recordingDraftId;
+    if (consultationRecordingKey(v.id, name, phone, draftId) !== recordingKey) selectAudio(null);
+    setRecordingDraftId(draftId);
+    setRecordingSubject({ name, phone });
+  }
   const [recordingActive, setRecordingActive] = useState(false);
   const [phase, setPhase] = useState<"idle" | "uploading" | "submitting">("idle");
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -185,9 +211,11 @@ export function ConsultationFullForm({
   const draft = useFormDraft({
     scope: draftScope,
     // 항상 기본값이 채워지는 날짜/상태 필드는 "의미 있는 입력" 판정에서 제외(빈 폼 오탐 배너 방지).
-    ignoreForBanner: ["receivedDate", "consultationDate", "registrationStatus", "parentRelation"],
+    ignoreForBanner: ["receivedDate", "consultationDate", "registrationStatus", "parentRelation", "recordingDraftId"],
     formRef,
     onRestore: (vals) => {
+      if (formRef.current) syncRecordingSubject(formRef.current);
+      setRecordingDraftId(vals.recordingDraftId || crypto.randomUUID());
       if (vals.subjectDetails) {
         try {
           setDetails(JSON.parse(vals.subjectDetails) as SubjectDetails);
@@ -265,10 +293,20 @@ export function ConsultationFullForm({
       }
       setPhase("submitting");
       if (isCreate) {
-        // 성공 시 서버가 redirect(NEXT_REDIRECT throw) → catch에서 clearDraft.
+        // 저장된 상담 id를 확인한 뒤에만 해당 녹음의 로컬 복구본을 비운다.
         const result = await createEnrollmentConsultation(undefined, fd);
         if (result?.error) {
           setSubmitError(result.error);
+          setPhase("idle");
+        } else if (result?.id) {
+          if (audioRecoveryId) { await clearRecovery(audioRecoveryId); dismissBrowserRecording(audioRecoveryId); }
+          clearDraft();
+          markSaved();
+          setLeaving(true);
+          const dest = `/enrollment/${result.id}`;
+          window.location.assign(inFrame ? withEmbed(dest) : dest);
+        } else {
+          setSubmitError("저장 결과를 확인하지 못했습니다. 목록에서 확인해 주세요.");
           setPhase("idle");
         }
       } else {
@@ -281,6 +319,7 @@ export function ConsultationFullForm({
           return;
         }
         if (result?.ok && v.id) {
+          if (audioRecoveryId) { await clearRecovery(audioRecoveryId); dismissBrowserRecording(audioRecoveryId); }
           clearDraft();
           notifySaved();
           markSaved(); // ⚠️ 이동보다 먼저 — 뒤면 풀 문서 이동에 미저장 가드의 '떠나시겠습니까?'가 뜬다
@@ -294,11 +333,6 @@ export function ConsultationFullForm({
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      if (/NEXT_REDIRECT/.test(msg)) {
-        clearDraft();
-        markSaved();
-        return;
-      }
       setSubmitError(msg);
       setPhase("idle");
     }
@@ -310,12 +344,16 @@ export function ConsultationFullForm({
     // 🔴 저장 뒤 이동 대기 중엔 폼 전체를 잠근다(inert = 입력·포커스·클릭 불가). 풀 문서 이동은 응답이 올 때까지
     //    이 화면이 살아 있는데, 그 사이 칸에 치면 ① 초안 자동저장이 방금 지운 초안을 pagehide에서 되살리고
     //    ② 미저장 가드가 다시 dirty가 되어 이동에 '떠나시겠습니까?'가 뜬다.
-    <form ref={formRef} onSubmit={handleSubmit} className="space-y-3" inert={leaving}>
+    <form ref={formRef} onSubmit={handleSubmit} onInput={(e) => syncRecordingSubject(e.currentTarget)} className="space-y-3" inert={leaving}>
       {mode === "edit" && v.id ? <input type="hidden" name="id" value={v.id} /> : null}
       <input type="hidden" name="subjectDetails" value={JSON.stringify(details)} />
+      <input type="hidden" name="recordingDraftId" value={recordingDraftId} />
 
-      <DraftBanner savedAt={draft.draftSavedAt} onRestore={draft.restore} onDiscard={draft.discard} />
+      <DraftBanner savedAt={isCreate && recordingSubject.name.trim() ? null : draft.draftSavedAt} onRestore={draft.restore} onDiscard={draft.discard} />
       {editScope ? <EditingBanner scope={editScope} /> : null}
+      {recordingOn ? <RecordingRecoveryNotice key={recordingScope?.recordKey ?? "empty"} kind="consultation"
+        scope={recordingScope} selectedId={audioRecoveryId} disabled={busy || recordingActive}
+        onRestore={(file, meta) => selectAudio(file, meta.id)} /> : null}
 
       {/* 녹음 바 — 생성·수정 공통. 저장 시 자동 전사·13섹션 AI 분석(입력값 보존).
           수정: 녹음은 여러 행으로 **누적**(0068a) — 여러 상담사가 각자 추가하고, 분석은 전체 합본으로 갱신. */}
@@ -334,7 +372,10 @@ export function ConsultationFullForm({
         ) : null}
         <AudioRecorderField
           file={audioFile}
-          onChange={setAudioFile}
+          onChange={selectAudio}
+          scope={recordingScope}
+          selectedRecoveryId={audioRecoveryId}
+          showRecovery={false}
           onRecordingChange={setRecordingActive}
           disabled={busy}
         />
@@ -415,10 +456,10 @@ export function ConsultationFullForm({
           <Card title="학생 정보">
             <Grid cols={2}>
               <L label="학생 이름" icon={User} required>
-                <input name="prospectName" defaultValue={v.prospectName ?? ""} className={input} />
+                <input name="prospectName" defaultValue={v.prospectName ?? ""} disabled={recordingActive || busy} className={input} />
               </L>
               <L label="학생 전화" icon={MessageSquare}>
-                <input name="studentPhone" defaultValue={v.studentPhone ?? ""} placeholder="010-0000-0000" className={input} />
+                <input name="studentPhone" defaultValue={v.studentPhone ?? ""} disabled={recordingActive || busy} placeholder="010-0000-0000" className={input} />
               </L>
             </Grid>
             <Grid cols={2}>
@@ -426,7 +467,7 @@ export function ConsultationFullForm({
                 <input name="parentName" defaultValue={v.parentName ?? ""} placeholder="김영희" className={input} />
               </L>
               <L label="보호자 연락처" icon={MessageSquare}>
-                <input name="parentPhone" defaultValue={v.parentPhone ?? ""} className={input} />
+                <input name="parentPhone" defaultValue={v.parentPhone ?? ""} disabled={recordingActive || busy} className={input} />
               </L>
             </Grid>
             <Grid cols={2}>

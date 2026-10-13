@@ -3,10 +3,12 @@
 export type WithdrawalReason =
   | "graduated"
   | "relocation"
+  | "illness"
   | "competitor"
   | "financial"
   | "schedule"
   | "dissatisfaction"
+  | "advised"
   | "other";
 
 export type WithdrawalConsultation = {
@@ -21,15 +23,23 @@ export type WithdrawalMetadata = {
   consultation: WithdrawalConsultation;
 };
 
+/**
+ * 사유 라벨 — 🔴 **고르는 목록의 단일 소스**(순서 = 화면 순서). 저장 액션의 허용 목록도 이 키에서 나온다(`WITHDRAWAL_REASONS`).
+ * 질병·권고퇴원은 원장 2026-10-13 강사평가 퇴원율 결정(*"이사 질병 권고퇴원을 신규 퇴원항목으로 추가"*) — 강사 탓이 아닌 퇴원을 가른다.
+ */
 export const REASON_LABEL: Record<WithdrawalReason, string> = {
   graduated: "졸업",
   relocation: "이사",
+  illness: "질병",
   competitor: "타 학원으로 이동",
   financial: "경제적 이유",
   schedule: "시간/일정 조정",
   dissatisfaction: "수업 불만족",
+  advised: "권고퇴원",
   other: "기타",
 };
+/** 저장 액션이 받는 사유 코드 — 라벨 표의 키 그대로(목록을 따로 적지 않는다). */
+export const WITHDRAWAL_REASONS = Object.keys(REASON_LABEL) as WithdrawalReason[];
 
 /**
  * 같은 사유의 영어 라벨 — **강사뷰 영어 화면 전용**(원장 2026-09-03 "모든 곳을 en 전환").
@@ -41,10 +51,12 @@ export const REASON_LABEL: Record<WithdrawalReason, string> = {
 export const REASON_LABEL_EN: Record<WithdrawalReason, string> = {
   graduated: "Graduated",
   relocation: "Moved away",
+  illness: "Illness",
   competitor: "Moved to another academy",
   financial: "Financial reasons",
   schedule: "Schedule conflict",
   dissatisfaction: "Unhappy with lessons",
+  advised: "Advised to leave",
   other: "Other",
 };
 

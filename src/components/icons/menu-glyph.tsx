@@ -27,13 +27,14 @@ export const MENU_GLYPH_NAMES = new Set<string>([
   "alarm", "alert", "archive", "bellRing", "book", "bookMarked",
   "bus", "busStop", "calendar", "calendarCheck", "chart", "check",
   "clipboardCheck", "clipboardList", "clock", "eraser", "exam", "folder",
-  "formInput", "graduationCap", "help", "history", "invoice", "key",
-  "layoutGrid", "listChecks", "mail", "mapPin", "megaphone", "messages",
-  "note", "palette", "percent", "receipt", "report", "screen",
-  "scrollText", "seatGrid", "settings", "sheetColumns", "sheetRows", "shield",
-  "sparkle", "spreadsheet", "star", "steering", "sync", "tablet",
-  "tag", "trash", "undo", "userCheck", "userMinus", "userPlus",
-  "userSettings", "userX", "users", "wallet", "weekGrid", "wrench",
+  "formInput", "gauge", "graduationCap", "help", "history", "invoice",
+  "key", "layoutGrid", "listChecks", "mail", "mapPin", "megaphone",
+  "messages", "note", "palette", "percent", "receipt", "report",
+  "screen", "scrollText", "seatGrid", "settings", "sheetColumns", "sheetRows",
+  "shield", "sparkle", "spreadsheet", "star", "steering", "sync",
+  "tablet", "tag", "trash", "undo", "userCheck", "userMinus",
+  "userPlus", "userSettings", "userX", "users", "wallet", "weekGrid",
+  "wrench",
 ]);
 
 export function hasMenuGlyph(name: string): boolean {
