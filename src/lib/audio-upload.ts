@@ -72,10 +72,12 @@ export function recordingFileName(
   label: string,
   startedAt: Date,
   id: string,
+  mimeType = "audio/webm",
 ): string {
   const prefix = { meeting: "회의녹음", consultation: "콜앤상담녹음", "student-consultation": "상담녹음" }[kind];
   const safeLabel = label.normalize("NFC").replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_").trim().replace(/[. ]+$/, "").slice(0, 70);
-  return `${prefix}_${safeLabel || "이름없음"}_${kstTimestamp(startedAt)}_${id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 8)}.webm`;
+  const extension = mimeType.startsWith("audio/mp4") ? "m4a" : mimeType.startsWith("audio/ogg") ? "ogg" : "webm";
+  return `${prefix}_${safeLabel || "이름없음"}_${kstTimestamp(startedAt)}_${id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 8)}.${extension}`;
 }
 
 /**

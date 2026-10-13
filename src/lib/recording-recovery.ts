@@ -65,7 +65,7 @@ export async function startRecoverySession(kind: RecoveryKind, mimeType: string,
   const meta: RecordingMeta = {
     id, kind, scopeKey: recordingScopeKey(scope), startedAt, mimeType, chunkCount: 0,
     title: scope.label,
-    fileName: recordingFileName(kind, scope.label, new Date(startedAt), id),
+    fileName: recordingFileName(kind, scope.label, new Date(startedAt), id, mimeType),
   };
   let db: IDBDatabase | undefined;
   try {

@@ -70,6 +70,7 @@ import { isLaboratoryMenuAvailable } from "@/lib/laboratory/server";
 import { TenantViewBanner } from "@/components/tenant-view-banner";
 import { TenantViewSync } from "@/components/tenant-view-sync";
 import { tenantViewServerNow, tenantViewSignedOutRedirect } from "@/lib/auth/tenant-view";
+import { RecordingOwnerGuard } from "@/components/forms/recording-runtime";
 
 export default async function ShellLayout({ children }: { children: ReactNode }) {
   const user = await getCurrentUser();
@@ -198,6 +199,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
             {keepaliveFrame ? null : <WindowMinSizeNotice />}
             <ScreenHelpOverlay />
             {tenantViewSync}
+            <RecordingOwnerGuard owner={{ tenantId: user.tenantId, userId: user.id }} />
             {children}
           </main>
           </KeepaliveFrameShell>
@@ -405,6 +407,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           <EditPresenceProvider trackDisabled={viewAs?.access === "readonly" || !!user.tenantView} user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels} jobTitles={settings.operations.jobTitles} jobTitlesByDepartment={settings.operations.jobTitlesByDepartment} disabledModules={settings.modules.disabled} licenses={await licensesPromise}>
             <ScreenHelpOverlay />
             {tenantViewSync}
+            <RecordingOwnerGuard owner={{ tenantId: user.tenantId, userId: user.id }} />
             <Suspense fallback={null}>
               <UsageTracker />
             </Suspense>
@@ -536,6 +539,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
       {/* '지점 보기'(읽기 전용)에서는 캔버스를 싣지 않는다 — 창 배치의 주인(지점:사람)이 달라져, 실으면 운영자가 본인 지점에서
           쓰던 저장된 창 배치를 "남의 것"으로 보고 지운다. 보기는 단일 화면이라 캔버스가 그릴 것도 없다. */}
       {user.tenantView ? null : <WorkspaceCanvas owner={`${user.tenantId}:${user.id}`} homeHref={shellHome} />}
+      <RecordingOwnerGuard owner={{ tenantId: user.tenantId, userId: user.id }} />
 
       {/* 업무군 메뉴 허브(버튼형, 원장 2026-09-07) — 사이드바에서 업무군을 고르면 본문에 메뉴 버튼이 뜬다.
           ⚠️ 캔버스와 **형제**로 둔다(캔버스 안에 넣으면 창들과 같은 층에 갇혀 z·포인터가 얽힌다).
