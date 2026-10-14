@@ -10,7 +10,7 @@
  */
 import type { HolidayMap } from "@/features/class-sheets/lib/holiday";
 import type { MonthScheduleRow } from "@/features/class-sheets/lib/month-assemble";
-import { buildLessonSchedule, MAX_LOOKAHEAD_DAYS, type LessonPace, type SlotAxis } from "./lesson-schedule";
+import { buildLessonSchedule, MAX_LOOKAHEAD_DAYS, normalizeLessonPace, type SlotAxis } from "./lesson-schedule";
 import { addToLessonIndex, type LessonIndex } from "./plan-compare";
 
 /** 계획 한 줄 — 그 날 그 교시에 **오기로 되어 있는** 차수. 실제 줄(`class_sheet_plan_lines`)이 아니다. */
@@ -92,7 +92,7 @@ export function expandPlans(input: {
       axis: (p.slot_axis === "jj" ? "jj" : "class") as SlotAxis,
       slotPicks: picks,
       shifts,
-      pace: (p.pace === "day" ? "day" : "period") as LessonPace,
+      pace: normalizeLessonPace(p.pace),
       lookaheadDays: lookaheadFor(startDate, to),
     });
 

@@ -1,5 +1,5 @@
 /**
- * 콜&상담 '소개한 사람'(0361a) — 원생 하나 또는 직원 하나. 화면·서버가 같이 쓰는 순수 모듈(server-only 아님 — [[#61]]).
+ * 콜&상담 '소개한 사람'(0362a) — 원생 하나 또는 직원 하나. 화면·서버가 같이 쓰는 순수 모듈(server-only 아님 — [[#61]]).
  *
  * 원장 2026-10-13(강사평가 결정 7): *"누구 소개로 왔다"가 인정된 경우에만* — 상담 경로('지인 소개')만으로는 누가
  * 소개했는지 모른다. 고르는 칸으로 잇고, 글에 적힌 이름은 **후보로만** 띄운다(자동 확정 안 함 — 침산 실측: 글에 붙은
@@ -33,7 +33,7 @@ export type ReferrerColumns = { referrer_student_id: string | null; referrer_sta
 
 /**
  * 폼 → DB 칸. 🔴 폼에 `referrer` 칸이 **없으면 손대지 않는다**(빈 객체) — 배포 직후 열려 있던 옛 화면이나 다른 저장 경로가
- * 소개 연결을 null로 지우지 않게. 같은 학원 사람인지는 DB 트리거(0361a)가 막는다.
+ * 소개 연결을 null로 지우지 않게. 같은 학원 사람인지는 DB 트리거(0362a)가 막는다.
  */
 export function referrerColumns(formData: FormData): { cols: Partial<ReferrerColumns> } | { error: string } {
   if (!formData.has("referrer")) return { cols: {} };

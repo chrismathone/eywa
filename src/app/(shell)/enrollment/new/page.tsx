@@ -9,7 +9,7 @@ export const metadata = { title: "신규 콜&상담 — 에이와" };
 
 export default async function NewEnrollmentPage() {
   const viewer = await requireAccess("enrollment");
-  // 소개한 사람 칸(0361a)이 DB에 있을 때만 그린다(#95) — 행을 받지 않는 확인 한 번.
+  // 소개한 사람 칸(0362a)이 DB에 있을 때만 그린다(#95) — 행을 받지 않는 확인 한 번.
   const referrerReady = await referrerColumnsReady((await createClient()) as unknown as SupabaseClient);
 
   return (

@@ -38,7 +38,7 @@ export const ATOMIC_SETS = {
   makeedu: ["makeedu_id", "sync_added_at", "makeedu_pushed_at"],
   // 🔴 옛 시트 이관 키 — 재이관 스크립트가 다시 돌면 부활(부분 유니크가 승자 것만 막는다).
   legacy: ["legacy_key", "legacy_source"],
-  // 소개한 사람(0361a) — 원생·직원은 둘 중 하나만(체크 제약)이라 따로 고르면 둘 다 선 행이 생긴다. 신청서에 적은 이름도 같은 소개의 근거.
+  // 소개한 사람(0362a) — 원생·직원은 둘 중 하나만(체크 제약)이라 따로 고르면 둘 다 선 행이 생긴다. 신청서에 적은 이름도 같은 소개의 근거.
   referrer: ["referrer_student_id", "referrer_staff_id", "referrer_name"],
 } as const;
 

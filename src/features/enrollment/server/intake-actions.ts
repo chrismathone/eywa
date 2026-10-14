@@ -242,7 +242,7 @@ export async function submitPublicIntake(
   const parentPhone = clip(formData.get("parentPhone"), 20);
   const parentRelation = clip(formData.get("parentRelation"), 10);
   const consultationPath = clip(formData.get("consultationPath"), 40);
-  // 소개해 준 분(0361a) — 글로만 받는다(직원이 콜&상담에서 원생·직원으로 이어야 강사평가가 센다). 비면 칸을 쓰지 않는다.
+  // 소개해 준 분(0362a) — 글로만 받는다(직원이 콜&상담에서 원생·직원으로 이어야 강사평가가 센다). 비면 칸을 쓰지 않는다.
   const referrerName = cleanReferrerName(formData.get("referrerName"));
 
   if (!prospectSchool) return { error: "학교를 입력해주세요" };
@@ -303,7 +303,7 @@ export async function submitPublicIntake(
     consultant_id: null,
   };
   let { data: inserted, error: insErr } = await admin.from("enrollment_consultations").insert(row).select("id").single();
-  // 소개자 칸(0361a)이 아직 없는 DB면 그 칸만 빼고 다시 — 신규 문의가 소개자 이름 하나 때문에 사라지지 않게(#95).
+  // 소개자 칸(0362a)이 아직 없는 DB면 그 칸만 빼고 다시 — 신규 문의가 소개자 이름 하나 때문에 사라지지 않게(#95).
   if (insErr && referrerName && /referrer_name/.test(insErr.message ?? "")) {
     const { referrer_name: _skip, ...withoutReferrer } = row as typeof row & { referrer_name?: string };
     void _skip;

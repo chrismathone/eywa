@@ -249,6 +249,7 @@ pnpm db:alphas
 | `0357a_teacher_portfolio_months` | **직원 포트폴리오 월간 점수**(원장 2026-10-12 *"모든 점수는 말일 마감하고 1일부터 새점수"*) — 강사 × 월 한 행(`payload` jsonb에 점수와 근거). RLS 켬 + 정책 없음(service_role 전용 — 전 강사 점수·담당 매출이 실린다). 마감한 행(`closed_at`)은 트리거가 UPDATE를 막는다. 새 표 하나라 기존 화면 무영향, 앱은 표가 없어도 돈다. |
 | `0359a_teacher_evaluation_settings` | **강사평가 설정**(원장 2026-10-13 *"'이것까지 커스터마이징 가능해?' 할 정도로"* · *"만점이 100점이 아니여도 됨"*) — `teacher_evaluation_settings`(지점마다 설정 한 줄 · 지표 켜고 끄기·만점·점수 규칙·자료 없을 때) + `teacher_evaluation_entries`(원장이 만든 지표의 월 입력). 두 표 모두 RLS 켬 + 정책 없음(service_role 전용). `teacher_portfolio_months`의 총점 0~100 · 항목 수 0~8 제약을 풀고 `raws`(설정 미리보기용 원래 수치)를 더한다. 앱은 이 SQL 전에도 돈다(기본 설정으로 계산 · raws 없이 저장). |
 | `0360a_teacher_evaluation_presets` | **강사평가 구성 저장·불러오기**(원장 2026-10-13 *"폼 저장? 불러오기?"*) — `teacher_evaluation_presets`(지점 × 이름 유일 · 구성 jsonb ≤256KB · 지점당 20개는 앱이 막는다). RLS 켬 + 정책 없음(service_role 전용). 불러오기는 화면에 얹을 뿐이고 점수를 매기는 설정은 [저장]으로만 바뀐다. 앱은 이 SQL 전에도 돈다(목록 빈 칸 · 저장만 준비 안내). ✅ 2026-10-13 운영 적용(CLI). |
+| `0362a_consultation_referrer` | **콜&상담 '소개한 사람'**(강사평가 원장 결정 7 · 원생 소개) — `enrollment_consultations`에 `referrer_student_id`·`referrer_staff_id`(둘 중 하나만 — 체크 `ec_referrer_one_chk`)·`referrer_name`(QR 글) + 같은 학원 사람만 트리거(`enforce_consultation_referrer_tenant`, security definer) + 부분 인덱스. 앱은 이 SQL 전에도 돈다(소개 칸 숨김 · 강사평가 소개 0건 · QR은 이름만 빼고 접수). 원래 0361a였으나 교재 0361a와 겹쳐 0362a로(병합 때). ⏳ 운영 적용 전. |
 
 새 alpha를 추가할 때: 다음 번호의 `000Na_*` 또는 `000Nb_*`로 만들고, 멱등 패턴을 지키고, **이 표에 추가**한다.
 상세 흐름은 [`../../CLAUDE.md`](../../CLAUDE.md) "마이그레이션 & 시드 흐름" 참고.

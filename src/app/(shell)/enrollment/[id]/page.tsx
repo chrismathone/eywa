@@ -93,7 +93,7 @@ export default async function EnrollmentDetailPage({
     // 수학 반 배정 직후 '교재 신청서' 경로를 그릴지(원장 2026-09-09) — 못 여는 사람에게 그리면
     // 눌러도 권한 화면으로 튕기는 죽은 버튼이 된다. 진짜 게이트는 교재 화면의 requireAccess다([[#77]]).
     canWriteTenant(user.systemRole, "textbook_requests"),
-    // 소개한 사람(0361a) — 기본 조회와 따로·실패해도 되게(#95).
+    // 소개한 사람(0362a) — 기본 조회와 따로·실패해도 되게(#95).
     createClient().then((db) => loadConsultationReferrer(db as unknown as SupabaseClient, id)),
   ]);
   if (!consult) {

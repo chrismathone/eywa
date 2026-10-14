@@ -454,7 +454,7 @@ export function PublicIntakeForm({
             ))}
           </select>
         </Field>
-        {/* 소개해 준 분(0361a) — 공개 화면이라 원생 목록을 고르게 하지 않는다. 직원이 콜&상담에서 원생·직원으로 잇는다. */}
+        {/* 소개해 준 분(0362a) — 공개 화면이라 원생 목록을 고르게 하지 않는다. 직원이 콜&상담에서 원생·직원으로 잇는다. */}
         <Field label="소개해 주신 분 (선택)">
           <input name="referrerName" maxLength={40} placeholder="학원에 다니는 학생이나 선생님 이름" className={input} />
         </Field>

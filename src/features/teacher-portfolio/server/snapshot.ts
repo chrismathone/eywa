@@ -132,8 +132,8 @@ export async function loadPortfolioSnapshot(
     // 퇴원율 — 창 끝 다음 한 달 안에 시작하는 수강(말일에 끝나고 1일에 같은 과목 반을 시작한 학생) · 학생의 퇴원 사유(퇴원관리와 같은 곳).
     paged<SnapshotEnrollment>((a, b) => inTenant("enrollments", ENROLLMENT_COLUMNS).gt("start_date", billingEnd).lte("start_date", addDays(billingEnd, 31)).order("id").range(a, b)),
     paged<{ id: string; reason: string | null }>((a, b) => inTenant("students", "id, reason:withdrawal_metadata->>reason").not("withdrawal_metadata", "is", null).order("id").range(a, b)),
-    // 원생 소개(0361a) — 소개한 사람이 이어진 상담 전부(같은 사람 판정에 창 밖 상담도 필요하다).
-    // 칸이 아직 없는 DB(0361a 적용 전)만 빈 목록 — 집계 전체를 멈추지 않는다(#95). 다른 오류는 다른 조회처럼 멈춘다(마감 날 0건으로 굳지 않게).
+    // 원생 소개(0362a) — 소개한 사람이 이어진 상담 전부(같은 사람 판정에 창 밖 상담도 필요하다).
+    // 칸이 아직 없는 DB(0362a 적용 전)만 빈 목록 — 집계 전체를 멈추지 않는다(#95). 다른 오류는 다른 조회처럼 멈춘다(마감 날 0건으로 굳지 않게).
     paged<SnapshotReferral>((a, b) => inTenant("enrollment_consultations", REFERRAL_COLUMNS)
       .or("referrer_student_id.not.is.null,referrer_staff_id.not.is.null").order("id").range(a, b))
       .catch((e: unknown) => {

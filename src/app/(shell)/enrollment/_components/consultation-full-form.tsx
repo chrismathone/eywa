@@ -107,7 +107,7 @@ export type ConsultationFormInitial = {
   consultationDate?: string | null;
   prevAcademy?: string | null;
   lastScore?: string | null;
-  /** 소개한 사람(0361a) — 칸이 DB에 있을 때만 그린다(없으면 저장도 소개 칸을 건드리지 않는다, #95). */
+  /** 소개한 사람(0362a) — 칸이 DB에 있을 때만 그린다(없으면 저장도 소개 칸을 건드리지 않는다, #95). */
   referrerReady?: boolean;
   /** 연결된 원생·직원 · 신청서에 적은 이름 · 글에 이름이 나온 후보(수정 화면만). */
   referrer?: ReferrerOption | null;
@@ -458,7 +458,7 @@ export function ConsultationFullForm({
                 ))}
               </select>
             </L>
-            {/* 소개한 사람(0361a) — 강사평가 '원생 소개'가 이 연결만 센다. 고르기 칸 안에 버튼이 있어 <label>로 감싸지 않는다. */}
+            {/* 소개한 사람(0362a) — 강사평가 '원생 소개'가 이 연결만 센다. 고르기 칸 안에 버튼이 있어 <label>로 감싸지 않는다. */}
             {v.referrerReady ? (
               <div className="space-y-1">
                 <span className="text-text-dim flex items-center gap-1 text-xs font-medium">

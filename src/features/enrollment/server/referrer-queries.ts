@@ -5,7 +5,7 @@ import { fetchAllPaged } from "@/lib/supabase/batch";
 import { findReferrerCandidates, referrerValueOf, type ReferrerColumns, type ReferrerOption } from "../referrer";
 
 /**
- * 콜&상담 '소개한 사람' 고르기 목록(0361a) — 그 학원의 원생(퇴원생·시험용 학생 제외)과 직원(재직 중).
+ * 콜&상담 '소개한 사람' 고르기 목록(0362a) — 그 학원의 원생(퇴원생·시험용 학생 제외)과 직원(재직 중).
  * 🔴 호출부가 콜&상담 쓰기 권한을 먼저 확인한다(목록 = 학생 이름·학교라서). 지점 조건은 여기서 건다(관리 클라이언트로 불러도 새지 않게).
  * 학생이 1,000명을 넘을 수 있어 `fetchAllPaged`(B2).
  */
@@ -50,7 +50,7 @@ export async function readReferrerBefore(db: SupabaseClient, consultationId: str
 }
 
 /**
- * 상세·수정 화면의 소개한 사람 — 🔴 기본 상세 조회와 **따로·실패해도 되게** 읽는다(#95: 0361a 전 DB에서 기본 조회까지 죽지 않게).
+ * 상세·수정 화면의 소개한 사람 — 🔴 기본 상세 조회와 **따로·실패해도 되게** 읽는다(#95: 0362a 전 DB에서 기본 조회까지 죽지 않게).
  * `ready=false`(칸이 없음·조회 실패)면 화면은 고르기 칸을 그리지 않는다 → 저장도 소개 칸을 건드리지 않는다.
  */
 export async function loadConsultationReferrer(db: SupabaseClient, consultationId: string): Promise<{
@@ -78,7 +78,7 @@ export async function loadConsultationReferrer(db: SupabaseClient, consultationI
   return { ready: true, referrer, referrerName: row.referrer_name ?? null };
 }
 
-/** 새 상담 화면 — 소개 칸(0361a)이 DB에 있는지(없으면 고르기 칸을 그리지 않는다, #95). 행을 받지 않는다. */
+/** 새 상담 화면 — 소개 칸(0362a)이 DB에 있는지(없으면 고르기 칸을 그리지 않는다, #95). 행을 받지 않는다. */
 export async function referrerColumnsReady(db: SupabaseClient): Promise<boolean> {
   const { error } = await db.from("enrollment_consultations").select("referrer_name", { head: true, count: "exact" }).limit(1);
   if (error) console.error("[enrollment/referrer] 소개 칸 확인 실패", error.code, error.message);

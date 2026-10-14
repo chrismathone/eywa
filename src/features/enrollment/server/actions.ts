@@ -176,7 +176,7 @@ export async function createEnrollmentConsultation(
   // 넣으면 경로가 비어 있는 옛 상담(2023~2025, 기재율 31%)을 **수정할 때마다** 모르는 값을 고르게 되고,
   // 지어낸 경로는 미기재보다 나쁘다(틀린 값은 아무도 못 알아본다).
   if (!parsed.data.consultationPath) return { error: "상담 경로를 선택해주세요" };
-  // 소개한 사람(0361a) — 폼에 칸이 있을 때만 쓴다. 같은 학원 사람인지는 DB 트리거가 막는다.
+  // 소개한 사람(0362a) — 폼에 칸이 있을 때만 쓴다. 같은 학원 사람인지는 DB 트리거가 막는다.
   const referrer = referrerColumns(formData);
   if ("error" in referrer) return { error: referrer.error };
 

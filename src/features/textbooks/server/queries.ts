@@ -16,8 +16,8 @@ import type {
   TextbookRow,
   TextbookTableStatus,
 } from "../types";
-import { slotPickKey } from "../lesson-schedule";
-import type { LessonPace, SlotAxis } from "../lesson-schedule";
+import { normalizeLessonPace, slotPickKey } from "../lesson-schedule";
+import type { SlotAxis } from "../lesson-schedule";
 
 /**
  * 교재목록 조회 — **admin 클라이언트 + `tenant_id` 명시 필터**.
@@ -430,7 +430,7 @@ export async function getClassTextbookPlans(opts: {
         sessionCount: Number(book?.session_count ?? 0),
         slotAxis: (p.slot_axis === "jj" ? "jj" : "class") as SlotAxis,
         slotPicks: Array.isArray(p.slot_picks) && p.slot_picks.length > 0 ? p.slot_picks.map(String) : null,
-        pace: (p.pace === "day" ? "day" : "period") as LessonPace,
+        pace: normalizeLessonPace(p.pace),
         termMode: p.term_mode === "exam" ? "exam" : "regular",
         startDate: p.start_date,
         startLessonNo: Number(p.start_lesson_no ?? 1),

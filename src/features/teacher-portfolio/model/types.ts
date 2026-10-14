@@ -45,7 +45,7 @@ export type PortfolioSnapshot = {
   /** 퇴원율 — 창 끝 다음 한 달 안에 시작하는 수강(월말에 반을 옮긴 학생을 퇴원으로 세지 않게) · 학생의 퇴원 사유(퇴원관리와 같은 곳). */
   futureEnrollments?: SnapshotEnrollment[];
   studentReasons?: { id: string; reason: string | null }[];
-  /** 원생 소개 — 소개한 사람이 이어진 콜&상담 전부(같은 사람 판정에 창 밖 상담도 필요하다). 옛 스냅샷·0361a 전 DB엔 없다. */
+  /** 원생 소개 — 소개한 사람이 이어진 콜&상담 전부(같은 사람 판정에 창 밖 상담도 필요하다). 옛 스냅샷·0362a 전 DB엔 없다. */
   referrals?: SnapshotReferral[];
   /** 출결 입력·수정 기록(활동 기록) — 마감하지 않은 달만 읽는다(`touchesSince`). 없으면 출결 행의 현재 입력자·시각으로만 판정한다. */
   attendanceTouches?: SnapshotAttendanceTouch[];

@@ -35,7 +35,7 @@ export type SnapshotReport = {
  */
 export type SnapshotAttendanceTouch = { row_id: string; actor_id: string; day: string };
 /**
- * 소개한 사람이 이어진 콜&상담(0361a) — 강사평가 원생 소개. 같은 사람 판정은 이어진 원생, 없으면 이름·학교·학년(원생 자연키와 같은 축)
+ * 소개한 사람이 이어진 콜&상담(0362a) — 강사평가 원생 소개. 같은 사람 판정은 이어진 원생, 없으면 이름·학교·학년(원생 자연키와 같은 축)
  * — 연락처는 읽지 않는다(이 파일의 원칙).
  */
 export type SnapshotReferral = {

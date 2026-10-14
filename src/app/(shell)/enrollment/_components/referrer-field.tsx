@@ -6,7 +6,7 @@ import { loadReferrerOptions } from "@/features/enrollment/server/referrer-actio
 import type { ReferrerOption } from "@/features/enrollment/referrer";
 
 /**
- * 콜&상담 '소개한 사람'(0361a) — 원생·직원 이름으로 걸러 고른다. 강사평가 '원생 소개'가 이 연결만 센다.
+ * 콜&상담 '소개한 사람'(0362a) — 원생·직원 이름으로 걸러 고른다. 강사평가 '원생 소개'가 이 연결만 센다.
  * - 목록은 칸을 **처음 열 때** 불러온다(수정 화면을 열 때마다 학생 전체를 읽지 않게).
  * - 글에 이름이 그대로 나온 원생·직원은 **후보**로만 띄운다 — 눌러야 연결된다(자동 확정 안 함, 원장 2026-10-13).
  * - QR 신청서에 학부모가 적은 이름(`referrerName`)은 그대로 보존하고 옆에 보인다.
