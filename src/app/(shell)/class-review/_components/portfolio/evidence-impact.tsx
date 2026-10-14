@@ -3,12 +3,13 @@
 import { isManualId } from "@/features/teacher-portfolio/evaluation/config";
 import { settingOf } from "@/features/teacher-portfolio/evaluation/preview";
 import { metricOf, type ItemId, type ManualMetricItem, type Metric, type MetricId } from "@/features/teacher-portfolio/model/types";
-import { METRIC_COLOR, SHORTFALL_COLOR, dayLabel, itemOf, pointsText, ruleText, won } from "@/features/teacher-portfolio/view";
+import { METRIC_COLOR, SHORTFALL_COLOR, dayLabel, itemOf, pointsText, ruleText, shownReason, won } from "@/features/teacher-portfolio/view";
 import {
   AttendanceEvidence, EstimatedEvidence, FollowEvidence, ReportEvidence, StudentCell, type EvidenceProps,
 } from "./evidence-records";
 import { ChurnEvidence } from "./evidence-churn";
 import { CounselEvidence } from "./evidence-counsel";
+import { SourceEvidence } from "./evidence-sources";
 import { ReferralEvidence } from "./evidence-referral";
 import { ScoreRuleBox } from "./score-rule-box";
 import { PayRatioEvidence } from "./evidence-pay";
@@ -147,7 +148,7 @@ function PendingEvidence({ metric, period }: { metric: Metric } & Pick<EvidenceP
     <>
       <StatTiles items={[{ label: "이 달 수치", value: metric.basis }, { label: "점수", value: pointsText(metric, period) }]} />
       {/* '계산 전'은 그 행이 계산 전으로 매겨졌을 때만 — 옛 행(raw 없음)의 과목 소개는 실제로 0건으로 매긴 달이다. */}
-      <EmptyNote count={metric.uncounted && (metric.raw === null || metric.raw === undefined) ? "계산 전" : metric.basis} text={metric.reason} />
+      <EmptyNote count={metric.uncounted && (metric.raw === null || metric.raw === undefined) ? "계산 전" : metric.basis} text={shownReason(metric)} />
     </>
   );
 }
@@ -193,6 +194,7 @@ function EvidenceBody({ id, ...props }: EvidenceProps & { id: ItemId }) {
     case "churn": return item.uncounted ? <PendingEvidence metric={item} period={props.period} /> : <ChurnEvidence {...props} />;
     case "payRatio": return item.uncounted ? <PendingEvidence metric={item} period={props.period} /> : <PayRatioEvidence period={props.period} />;
     case "expansion": return item.uncounted || !Array.isArray(item.detail) ? <PendingEvidence metric={item} period={props.period} /> : <ReferralEvidence {...props} />;
+    case "grades": case "satisfaction": case "punctuality": return item.uncounted ? <PendingEvidence metric={item} period={props.period} /> : <SourceEvidence id={id} {...props} />;
     default: return <PendingEvidence metric={item} period={props.period} />;
   }
 }

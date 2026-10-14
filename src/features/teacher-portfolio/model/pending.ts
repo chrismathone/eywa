@@ -1,18 +1,21 @@
 /**
- * 아직 계산이 들어오지 않은 원장 구성 지표(2026-10-13 *"지금 바로 원장 8개 구성으로 바꿔"*) — 수치 없이 자리만 선다.
- * 수치가 null이라 지표의 '자료가 없을 때' 규칙(기본 0점, 결정 4)으로 매겨진다. 계산이 들어오면 그 지표는 여기서 빠진다.
+ * 재료가 없을 때의 자리 — 성적 관리 · 학부모 만족도 · 강사 근태는 스냅샷의 `sources`로 센다(2026-10-15 원장 *"계산 안된거 … 다 해결해"*).
+ * 재료가 없는 스냅샷(옛 스냅샷)이나 판정 표(0364a)를 아직 적용하지 않은 DB에선 그 지표가 수치 없이 자리만 선다 — '계산 전'
+ * (수치가 null이라 그 지표의 '자료가 없을 때' 규칙으로 매겨진다). 2026-10-15 전에 저장된 달의 이 세 지표도 이 자리다.
  */
-import { METRIC_MAX, type PendingMetric, type PendingMetricId } from "./types";
+import type { GradesMetric, PunctualityMetric, SatisfactionMetric } from "./types";
+import { METRIC_MAX } from "./types";
 
-/** 지표 → 들어오는 단계 · 무엇을 세게 되는지(근거 화면이 그대로 보인다). */
-export const PENDING_NOTE: Record<PendingMetricId, string> = {
-  grades: "성적관리에 등록된 성적(일일·확인 테스트 · 월말평가 · 내신)으로 매깁니다. 계산은 5단계에서 들어옵니다.",
-  satisfaction: "학부모 글·댓글의 문구 판정(확실한 것은 바로, 애매한 것은 확인 뒤)과 원장·관리자가 넣은 클레임을 총점에 그대로 더하고 뺍니다. 계산은 3단계에서 들어옵니다.",
-  punctuality: "메이크에듀 출퇴근 기록의 지각·결근 횟수(연차 제외)로 매깁니다. 연동 앱이 출퇴근을 가져오는 4단계에서 들어옵니다.",
+export const SOURCE_IDS = ["grades", "satisfaction", "punctuality"] as const;
+export type SourceMetricId = (typeof SOURCE_IDS)[number];
+
+const NOTE: Record<SourceMetricId, string> = {
+  grades: "이 달은 성적 재료를 읽지 못해 세지 못했습니다.",
+  satisfaction: "학부모 만족도를 저장하는 표가 아직 준비되지 않아 세지 못했습니다(DB에 반영되면 진행 중인 달부터 셉니다).",
+  punctuality: "이 달은 출퇴근 재료를 읽지 못해 세지 못했습니다.",
 };
 
-export const PENDING_IDS = Object.keys(PENDING_NOTE) as PendingMetricId[];
-
-export function pendingItems(): PendingMetric[] {
-  return PENDING_IDS.map((id) => ({ id, max: METRIC_MAX[id], value: null, raw: null, basis: "아직 계산 전", reason: PENDING_NOTE[id], detail: [], uncounted: true }));
+export function uncountedItem<Id extends SourceMetricId>(id: Id): Extract<GradesMetric | SatisfactionMetric | PunctualityMetric, { id: Id }> {
+  return { id, max: METRIC_MAX[id], value: null, raw: null, basis: "아직 계산 전", reason: NOTE[id], detail: [], uncounted: true } as unknown as
+    Extract<GradesMetric | SatisfactionMetric | PunctualityMetric, { id: Id }>;
 }

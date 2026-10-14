@@ -12,7 +12,10 @@ import { refreshTeacherPortfolioNow } from "@/features/teacher-portfolio/server/
 import type { PortfolioTeacherEntry } from "@/features/teacher-portfolio/server/queries";
 import { periodLabel } from "@/features/teacher-portfolio/view";
 import { DetailDialog, type DetailTarget } from "./detail-dialog";
+import type { CompareSort } from "@/features/teacher-portfolio/compare";
+import { CompareDialog } from "./compare-dialog";
 import { ManualEntryDialog } from "./manual-entry-dialog";
+import { SatisfactionDialog } from "./satisfaction-dialog";
 import { ClassBox, EvidencePanel, MonthlyTable } from "./lower-panels";
 import { RuleBoxPrefProvider } from "./rule-box-pref";
 import { ScoreHero } from "./score-hero";
@@ -32,6 +35,8 @@ type Props = {
   canRefresh: boolean;
   /** 항목별 내역 '점수 기준' 상자를 접어 둘지 — 계정 귀속(`ui_prefs.portfolio.ruleCollapsed`). */
   ruleCollapsed?: boolean;
+  /** 직원 비교 표의 정렬 — 계정 귀속(`ui_prefs.portfolio.compareSort`). */
+  compareSort?: CompareSort;
 };
 type Weeks = Partial<Record<"attendance" | "follow", number>>;
 /** 화면에 보이는 달 수 — 그다음 한 달은 전월 비교에만 쓴다. */
@@ -50,13 +55,15 @@ export function RefreshButton({ label = "지금 집계" }: { label?: string }) {
   return <ToolbarButton onClick={run} disabled={pending} aria-busy={pending}>{pending ? "집계 중…" : label}</ToolbarButton>;
 }
 
-export function PortfolioBoard({ teachers, selected, studentNames, computedLabel, canRefresh, ruleCollapsed = false }: Props) {
+export function PortfolioBoard({ teachers, selected, studentNames, computedLabel, canRefresh, ruleCollapsed = false, compareSort }: Props) {
   const router = useRouter();
   const embed = useEmbed();
   const [moving, startTransition] = useTransition();
   const [monthKey, setMonthKey] = useState<string | null>(null);
   const [tab, setTab] = useState<ItemId>("report");
   const [entryOpen, setEntryOpen] = useState(false);
+  const [satisfactionOpen, setSatisfactionOpen] = useState(false);
+  const [compareOpen, setCompareOpen] = useState(false);
   const [detail, setDetail] = useState<DetailTarget | null>(null);
   const shown = selected.periods.slice(0, SHOWN_MONTHS);
   const index = Math.max(0, shown.findIndex((w) => w.month === monthKey));
@@ -88,9 +95,14 @@ export function PortfolioBoard({ teachers, selected, studentNames, computedLabel
         <HrefSelect axisLabel="평가 기간" ariaLabel="평가 기간 선택" value={period.month} onSelect={setMonthKey}
           options={shown.map((w) => ({ value: w.month, label: periodLabel(w) }))} />
         <ToolbarButton onClick={() => setDetail({ kind: "criteria" })}>평가 기준</ToolbarButton>
-        {/* 원장이 만든 지표나 매출 대비 급여(급여 직접 입력)가 이 달에 있으면 그 값을 넣는 입구 — 쓰기 권한(집계와 같은 문)이 있을 때만. */}
-        {canRefresh && period.items.some((m) => (m.id.startsWith("manual:") || m.id === "payRatio") && !m.off)
+        {/* 직원별 항목 비교 — 한 달을 골라 직원 × 항목 표(원장 2026-10-15). */}
+        <ToolbarButton onClick={() => setCompareOpen(true)}>직원 비교</ToolbarButton>
+        {/* 원장이 만든 지표 · 매출 대비 급여(급여 직접 입력) · 강사 근태(그 달 횟수)가 이 달에 있으면 그 값을 넣는 입구 — 쓰기 권한(집계와 같은 문)이 있을 때만. */}
+        {canRefresh && period.items.some((m) => (m.id.startsWith("manual:") || m.id === "payRatio" || m.id === "punctuality") && !m.off)
           ? <ToolbarButton onClick={() => setEntryOpen(true)}>직접 입력</ToolbarButton> : null}
+        {/* 학부모 만족도 — 확인 대기 글 반영/무시 · 클레임·칭찬 넣기(계획서 3번). */}
+        {canRefresh && period.items.some((m) => m.id === "satisfaction" && !m.off)
+          ? <ToolbarButton onClick={() => setSatisfactionOpen(true)}>만족도 관리</ToolbarButton> : null}
         <span className="num ml-auto text-xs whitespace-nowrap">집계 {computedLabel}</span>
         {canRefresh ? <RefreshButton /> : null}
       </Toolbar>
@@ -119,6 +131,14 @@ export function PortfolioBoard({ teachers, selected, studentNames, computedLabel
       <DetailDialog target={detail} onClose={() => setDetail(null)} periods={shown} teacherName={selected.name} evidence={evidence} />
       {entryOpen ? (
         <ManualEntryDialog key={`${selected.id}|${period.month}`} open onClose={() => setEntryOpen(false)}
+          period={period} teacherId={selected.id} teacherName={selected.name} />
+      ) : null}
+      {compareOpen ? (
+        <CompareDialog open onClose={() => setCompareOpen(false)} periods={shown} month={period.month} initialSort={compareSort}
+          nameOf={(id) => teachers.find((t) => t.id === id)?.name || "직원"} onPick={(id) => { setCompareOpen(false); selectTeacher(id); }} />
+      ) : null}
+      {satisfactionOpen ? (
+        <SatisfactionDialog key={`${selected.id}|${period.month}`} open onClose={() => setSatisfactionOpen(false)}
           period={period} teacherId={selected.id} teacherName={selected.name} />
       ) : null}
     </div>

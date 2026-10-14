@@ -51,6 +51,8 @@ export const AUDIT_ACTIONS = {
   teacher_portfolio_rule_patch: "직원 포트폴리오 마감 달 규칙 반영",
   // 지난달을 지금 구성으로 처음부터 다시 집계(원장 지시 때만 · 운영 스크립트) — 2026-10-14 "이전 월들도 전부 10월 기준으로".
   teacher_portfolio_recompute: "직원 포트폴리오 지난달 다시 집계",
+  // 강사평가 학부모 만족도 — 확인 대기 글 반영·무시 · 반영 취소 · 클레임·칭찬 넣기·취소(원장).
+  teacher_evaluation_satisfaction: "학부모 만족도 판정·클레임",
   // 강사평가 설정(0359a) — 지표 켜고 끄기·만점·점수 규칙. 원장만 바꾼다.
   teacher_evaluation_settings_save: "강사평가 설정 저장",
   teacher_evaluation_entries_save: "강사평가 직접 입력 지표 저장",
