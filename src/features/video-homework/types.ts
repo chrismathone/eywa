@@ -46,7 +46,7 @@ export type VideoHomeworkLedgerRow = VideoHomeworkRosterRow & {
   rejected?: Readonly<Record<string, string>>;
   /**
    * `assignedDates` 중 **검사 기록 칸에서 옮겨 남긴 숙제**의 날짜(keep-round.ts · 원장 2026-10-13) — 정식 숙제가 아니라 검사 기록 칸처럼
-   * ②의 뒷순위로만 영상을 받는다(`rounds.ts`). 자동 판정·미제출 알림·강사의 '내 숙제'에 들지 않는다.
+   * ②의 뒷순위로만 영상을 받는다(`rounds.ts`). 자동 판정·미제출 알림에 들지 않는다. 강사뷰·강사 필터에는 그날 보고서를 쓴 선생님의 칸(own-homework.ts).
    */
   kept?: readonly string[];
 };

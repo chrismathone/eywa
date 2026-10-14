@@ -59,9 +59,12 @@ function StudentsEvidence({ period, nameOf }: EvidenceProps) {
       <DataTable headers={["학생 · 반", "날짜", "변동", period.evaluation ? "변동값" : "점수"]} empty="이번 달 담당 학생 변동이 없습니다."
         rows={m.detail.map((r, i) => ({
           key: `${r.studentId}|${r.day}|${r.type}|${i}`,
-          cells: [<StudentCell key="s" name={nameOf(r.studentId)} sub={`${r.className} · ${r.role}`} />, dayLabel(r.day), r.type, <span key="d">{change(r.points)}</span>],
+          cells: [<StudentCell key="s" name={nameOf(r.studentId)} sub={`${r.className} · ${r.role}`} />, dayLabel(r.day), r.note ? `${r.type} · ${r.note}` : r.type, <span key="d">{change(r.points)}</span>],
         }))} />
-      <p className="mt-3 text-xs">같은 강사가 계속 맡는 이동은 가감하지 않습니다. 추가 수강·재등록·담당 변경은 별도로 표시합니다.</p>
+      <p className="mt-3 text-xs">
+        같은 강사가 계속 맡는 이동은 가감하지 않습니다. 추가 수강·재등록·담당 변경은 별도로 표시합니다.
+        {t.excused ? ` 강사 탓이 아닌 사유로 그만둔 ${t.excused}명은 −1을 하지 않았습니다(퇴원율에서 빼는 사유와 같음).` : ""}
+      </p>
     </>
   );
 }

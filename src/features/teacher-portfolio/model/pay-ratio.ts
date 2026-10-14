@@ -52,12 +52,12 @@ export function payRatioOf(facts: PayFacts | undefined, contractPay: number | nu
   const problem = facts.problem
     ?? (facts.rows === 0 && facts.classes === 0 ? "이 달 담당 반이 없습니다"
       : facts.rows === 0 ? "이 달 담당 학생의 청구서가 없습니다"
-      : facts.revenue === null ? "청구서 항목을 담당 반에 맞추지 못했습니다(마감 전에 회차 확정에서 배분하면 잡힙니다)"
+      : facts.revenue === null ? "청구서에서 담당 반 금액을 찾지 못했습니다"
       : facts.revenue <= 0 ? "담당 반 청구액이 0원입니다"
-      : revenue === null ? `청구서 항목을 담당 반에 맞추지 못한 줄이 많습니다(맞춘 줄 ${Math.round(share * 100)}% · 마감 전에 회차 확정에서 배분하면 잡힙니다)`
+      : revenue === null ? `청구서에서 담당 반 금액을 찾지 못한 줄이 많습니다(찾은 줄 ${Math.round(share * 100)}%)`
         : pay === null
           ? (facts.payReadFailed ? "출석부 실급여 비율을 읽지 못했습니다(마감 전이면 다음 집계에서 다시 셉니다)"
-            : facts.payPending ? "출석부 실급여가 아직 다 잡히지 않았습니다(회차 확정 전 — 급여를 직접 입력할 수 있습니다)"
+            : facts.payPending ? "출석부 실급여(급여명세서 수업료와 같은 계산)가 아직 다 잡히지 않았습니다 — 급여를 직접 입력할 수 있습니다"
               : "급여를 알 수 없습니다(직접 입력·계약서 월급·출석부 실급여 모두 없음)")
           : null);
   // 매출은 있는데 급여만 기다리는 칸(실급여 비율표 일시 실패 · 프리랜서 단가 미확정)은 1일 새벽에 0점으로 굳지 않게 미룬다.

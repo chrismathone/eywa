@@ -76,11 +76,13 @@ export type StudentEventType =
 export type StudentEvent = {
   studentId: string; day: string; type: StudentEventType; points: number; direction: "유입" | "유출";
   className: string; role: string;
+  /** 감점하지 않은 까닭 — 강사 탓이 아닌 사유로 그만둔 퇴원·수강종료(`사유 졸업`). */ note?: string;
 };
 export type StudentTracking = {
   value: number; basePoints: number; adjustment: number; previousPoints: number; previous: number; current: number;
   change: number; newCount: number; exitCount: number; endedCount: number; transferIn: number; transferOut: number;
   unscored: number; homeroom: number; assistant: number; detail: StudentEvent[];
+  /** 강사 탓이 아닌 사유라 감점하지 않은 퇴원·수강종료 수(옛 행엔 없다). */ excused?: number;
 };
 
 export type RevenueSubject = { key: string; label: string; amount: number; total: number; unassigned: number };

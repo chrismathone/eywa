@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { addDays } from "@/lib/date-kst";
 import { SITE_HOMEWORK_DAYS } from "@/features/video-submit/site";
 import { cancelExtraVideoHomework, issueExtraVideoHomework } from "../server/issue-actions";
 import type { VideoHomeworkLedgerRow } from "../types";
+import { useLedgerRefresh } from "./ledger-refresh";
 
 /** 칸에서 연 메뉴 — `issue` = 숙제없음 칸에 숙제 내기, `cancel` = 따로 낸 숙제 거두기. 좌표는 누른 자리(화면 기준). */
 export type IssueMenuTarget = { kind: "issue" | "cancel"; row: VideoHomeworkLedgerRow; date: string; x: number; y: number };
@@ -21,7 +21,7 @@ const WIDTH = 256;
  * 화면 전체를 덮는 바닥이 깔려 있어, 처리하는 동안 표의 다른 칸은 눌리지 않는다.
  */
 export function IssueMenu({ target, onClose }: { target: IssueMenuTarget; onClose: () => void }) {
-  const router = useRouter();
+  const refresh = useLedgerRefresh();
   const [busy, setBusy] = useState(false);
   const action = useRef<HTMLButtonElement>(null);
   useEffect(() => { action.current?.focus(); }, []);
@@ -41,7 +41,7 @@ export function IssueMenu({ target, onClose }: { target: IssueMenuTarget; onClos
         ? `${target.row.studentName} 학생에게 ${target.date} 영상 숙제를 냈습니다${result.deadline ? ` · 기한 ${result.deadline}` : ""}. 수업보고서는 다시 나가지 않으니 학생에게 직접 알려 주세요.`
         : "kept" in result && result.kept ? `따로 낸 표시만 지웠습니다. ${target.date} 수업보고서에도 영상 과제가 있어 숙제는 그대로입니다.`
         : `${target.row.studentName} 학생의 ${target.date} 숙제를 취소했습니다.`);
-      router.refresh();
+      refresh();
     } catch { toast.error("연결을 확인한 뒤 다시 시도해 주세요."); }
     finally { setBusy(false); onClose(); }
   }

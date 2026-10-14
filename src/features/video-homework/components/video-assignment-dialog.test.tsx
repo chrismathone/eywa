@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 const m = vi.hoisted(() => ({ options: vi.fn(), save: vi.fn(), refresh: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: m.refresh }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: m.refresh }), usePathname: () => "/lesson-reports/video-homework" }));
 vi.mock("../server/video-assignment", () => ({ getVideoAssignmentOptions: m.options, assignHomeworkVideo: m.save }));
 vi.mock("@/features/students/components/homework-video-player", () => ({ HomeworkVideoPlayer: () => <div>영상 재생</div> }));
 import { VideoAssignmentDialog } from "./video-assignment-dialog";
@@ -18,6 +18,8 @@ async function pickVideo() {
   await user.click(await screen.findByRole("option", { name: /2026-10-02.*영어반/ }));
 }
 it("다른 반 영상의 원래 게시물과 숙제를 확인한 뒤 사유를 적어 배정한다", async () => {
+  const ledgerUrl = "/lesson-reports/video-homework?embed=1&from=2026-10-01&to=2026-10-31&teacher=t1";
+  window.history.replaceState(null, "", ledgerUrl);
   const close = vi.fn(); render(<VideoAssignmentDialog row={row} fromDate="2026-10-01" toDate="2026-10-31" onClose={close} />);
   await pickVideo();
   expect(m.options).toHaveBeenCalledWith({ classId: "math", studentId: "student", fromDate: "2026-10-01", toDate: "2026-10-31" });
@@ -26,7 +28,20 @@ it("다른 반 영상의 원래 게시물과 숙제를 확인한 뒤 사유를 �
   fireEvent.change(screen.getByRole("textbox", { name: "변경 사유" }), { target: { value: "수학 영상을 영어반에 올림" } });
   fireEvent.click(screen.getByRole("button", { name: "영상 배정 저장" }));
   await waitFor(() => expect(m.save).toHaveBeenCalledWith(expect.objectContaining({ classId: "math", videoId: "v", revision: 4, homeworkDate: "2026-10-01" })));
-  await waitFor(() => expect(close).toHaveBeenCalled()); expect(m.refresh).toHaveBeenCalled();
+  await waitFor(() => expect(close).toHaveBeenCalled());
+  // 스크롤은 그대로 — router.refresh()는 장부를 맨 위로 올렸다(원장 2026-10-14, ledger-refresh.ts). 창(embed)·기간·필터가 주소 그대로 실린다.
+  expect(m.refresh).toHaveBeenCalledWith(ledgerUrl, { scroll: false });
+  window.history.replaceState(null, "", "/");
+});
+it("장부를 떠난 뒤 끝난 배정은 옮겨 간 화면을 다시 받지 않는다", async () => {
+  const close = vi.fn(); render(<VideoAssignmentDialog row={row} fromDate="2026-10-01" toDate="2026-10-31" onClose={close} />);
+  await pickVideo();
+  fireEvent.change(screen.getByRole("textbox", { name: "변경 사유" }), { target: { value: "정정" } });
+  window.history.replaceState(null, "", "/students/abc");
+  fireEvent.click(screen.getByRole("button", { name: "영상 배정 저장" }));
+  await waitFor(() => expect(close).toHaveBeenCalled());
+  expect(m.refresh).not.toHaveBeenCalled();
+  window.history.replaceState(null, "", "/");
 });
 it("칸에서 연 배정 창은 그 칸의 숙제를 먼저 골라 둔다 — 목록에 없는 날이면 종전대로", async () => {
   const original = await m.options();

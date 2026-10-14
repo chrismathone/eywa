@@ -15,7 +15,7 @@ import { payRatioItem, type PayResult } from "./pay-ratio";
 import { buildContext, type PortfolioContext } from "./context";
 import { applyEvaluation, indexEntries, type ManualEntryRow } from "./evaluate";
 import { between, daysBetween, kstDateOf, monthWindows, unique } from "./dates";
-import { followMetric, qualityMetric } from "./metrics";
+import { STUDENTS_REASON, followMetric, qualityMetric } from "./metrics";
 import { teacherDuties } from "./duties";
 import { attendanceItem, reportItem } from "./duty-items";
 import { counselItem } from "./counsel";
@@ -65,7 +65,7 @@ function teacherPeriod(d: PortfolioSnapshot, m: Models, user: SnapshotUser, w: P
     {
       id: "students", max: METRIC_MAX.students, value: tracking.value, raw: tracking.adjustment,
       basis: `전월 ${tracking.previous}명 → 이번 달 ${tracking.current}명`,
-      reason: "매월 1일 새로 셉니다. 신규 +1, 퇴원·수강종료 −1, 반이동 유입 +0.5·유출 −0.5를 더한 값이 이 항목의 수치입니다. 담임·부담임을 포함하고 같은 학생은 강사별 한 번만 계산합니다. 같은 강사가 계속 맡는 반이동과 역할 변경은 가감하지 않습니다. 추가 수강·재등록은 신규·반이동으로 추정하지 않고 별도로 표시합니다.",
+      reason: STUDENTS_REASON,
       detail: tracking.detail, tracking,
     },
     {
@@ -133,9 +133,14 @@ export function buildPortfolio(d: PortfolioSnapshot, opts: {
   const classes = new Map(d.classes.map((c) => [c.id, c]));
   const labels = subjectLabelRecord(d.settings.subjects as SubjectSetting[]);
   const config = opts.evaluation?.config ?? DEFAULT_EVALUATION_CONFIG;
-  const students = buildStudentTracking({ from: d.from, end: d.end, classes: d.classes, schedules: d.schedules, enrollments: d.enrollments, owner: ctx.owner });
+  const churnOptions = config.metrics.churn.churn ?? DEFAULT_CHURN_OPTIONS;
+  // 학생 배정·유지도 강사 탓이 아닌 사유(퇴원율 세는 법의 사유 목록)로 그만둔 것은 감점하지 않는다(원장 2026-10-14 "사유 규칙 적용").
+  const students = buildStudentTracking({
+    from: d.from, end: d.end, classes: d.classes, schedules: d.schedules, enrollments: d.enrollments, owner: ctx.owner,
+    reasons: { studentReasons: d.studentReasons, excludeReasons: churnOptions.excludeReasons, futureEnrollments: d.futureEnrollments },
+  });
   // 퇴원율 — 시간표 X 겹침도 이 계산기를 같은 모양으로 부른다(withdrawals/server/exit-overlay.ts · 가드 exit-overlay-wiring.test).
-  const churn = buildChurnModel({ source: students.churnSource, classes: d.classes, options: config.metrics.churn.churn ?? DEFAULT_CHURN_OPTIONS, futureEnrollments: d.futureEnrollments, studentReasons: d.studentReasons });
+  const churn = buildChurnModel({ source: students.churnSource, classes: d.classes, options: churnOptions, futureEnrollments: d.futureEnrollments, studentReasons: d.studentReasons });
   const models: Models = {
     ctx,
     revenue: buildRevenue({

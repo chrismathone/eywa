@@ -6,7 +6,7 @@ import type { VideoArrival, VideoHomeworkLedgerRow, VideoHomeworkMark } from "..
 const mocks = vi.hoisted(() => ({ save: vi.fn(), success: vi.fn(), error: vi.fn(), reject: vi.fn(), refresh: vi.fn() }));
 vi.mock("../server/actions", () => ({ setVideoHomeworkRound: mocks.save }));
 vi.mock("../server/reject-videos", () => ({ rejectHomeworkVideos: mocks.reject }));
-vi.mock("next/navigation", async (load) => ({ ...(await load<typeof import("next/navigation")>()), useRouter: () => ({ refresh: mocks.refresh }) }));
+vi.mock("next/navigation", async (load) => ({ ...(await load<typeof import("next/navigation")>()), useRouter: () => ({ replace: mocks.refresh }) }));
 vi.mock("sonner", () => ({ toast: { success: mocks.success, error: mocks.error } }));
 vi.mock("@/components/embed-link", () => ({ EmbedHiddenInput: () => null }));
 
@@ -62,7 +62,7 @@ describe("영상 제출 현황 — 회차는 학생별 '숙제가 나간 날' �
     expect(within(dialog).getByText(/미확인으로 바꿔도 이 칸은 남습니다/)).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: "미확인" }));
     fireEvent.click(within(dialog).getByRole("button", { name: "기록 저장" }));
-    await waitFor(() => expect(mocks.refresh).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.refresh).toHaveBeenCalledWith(expect.any(String), { scroll: false }));
     expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ roundKey: "h:2026-09-01", status: null }));
     expect(cell("김민준 1회 2026-09-01 미확인")).toBeInTheDocument();
     expect(cell("김민준 2회 2026-09-03 미확인")).toBeInTheDocument();

@@ -1,6 +1,5 @@
 "use client";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { HomeworkVideoPlayer } from "@/features/students/components/homework-video-player";
@@ -8,6 +7,7 @@ import { getVideoAssignmentOptions, assignHomeworkVideo } from "../server/video-
 import { isVideoAssignableToDate, type VideoAssignmentOptions } from "../video-assignment";
 import type { VideoHomeworkLedgerRow } from "../types";
 import { assignmentLabel, VideoAssignmentSelect } from "./video-assignment-select";
+import { useLedgerRefresh } from "./ledger-refresh";
 
 export function VideoAssignmentDialog({ row, initialDate, fromDate, toDate, onClose, linked }: {
   row: VideoHomeworkLedgerRow; fromDate: string; toDate: string; onClose: () => void;
@@ -16,7 +16,7 @@ export function VideoAssignmentDialog({ row, initialDate, fromDate, toDate, onCl
   /** 장부가 이 줄에 자동으로 붙인 영상(영상 id → 숙제일) — 표기에만 쓴다. */
   linked?: ReadonlyMap<string, string>;
 }) {
-  const router = useRouter();
+  const refresh = useLedgerRefresh();
   const [options, setOptions] = useState<VideoAssignmentOptions | null>(null);
   const [videoId, setVideoId] = useState(""); const [date, setDate] = useState(""); const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false); const [error, setError] = useState("");
@@ -40,7 +40,7 @@ export function VideoAssignmentDialog({ row, initialDate, fromDate, toDate, onCl
       const result = await assignHomeworkVideo({ classId: row.classId, studentId: row.studentId, videoId,
         homeworkDate: date === "exclude" ? null : date, excluded: date === "exclude", revision: selected.revision, reason });
       if (!result.ok) setError(result.error ?? "저장하지 못했습니다.");
-      else { router.refresh(); onClose(); }
+      else { refresh(); onClose(); }
     } catch { setError("연결을 확인한 뒤 다시 시도해 주세요."); } finally { setBusy(false); }
   }
   return <Dialog open onOpenChange={open => { if (!open && !busy) onClose(); }}>
