@@ -3,7 +3,6 @@ import { createFakeDb, type FakeDb } from "@/features/video-submit/server/fake-d
 import { addDays } from "@/lib/date-kst";
 const m = vi.hoisted(() => ({ db: null as unknown as FakeDb, user: { id: "teacher", tenantId: "tenant", systemRole: "teacher" }, viewAs: null as { id: string; access: "full" } | null, full: false, writable: true, readonly: null as string | null, refresh: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: m.refresh }));
-vi.mock("next/server", () => ({ after: vi.fn() }));
 vi.mock("./reconcile-outcomes", () => ({ reconcileVideoHomework: vi.fn() }));
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => m.user }));
 vi.mock("@/lib/auth/view-mode", () => ({ readonlyTeacherViewError: async () => m.readonly, viewAsTeacher: async () => m.viewAs }));

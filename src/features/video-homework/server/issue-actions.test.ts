@@ -5,10 +5,9 @@ const m = vi.hoisted(() => ({
   db: null as unknown as FakeDb,
   user: { id: "teacher", tenantId: "tenant", systemRole: "teacher" } as { id: string; tenantId: string; systemRole: string } | null,
   denied: null as string | null, readonly: null as string | null, view: "teacher" as "teacher" | "admin", acting: null as string | null,
-  level: "scoped", writable: true, enabled: true, today: "2026-10-08", log: vi.fn(), after: vi.fn(),
+  level: "scoped", writable: true, enabled: true, today: "2026-10-08", log: vi.fn(), reconcile: vi.fn(),
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("next/server", () => ({ after: m.after }));
 vi.mock("@/lib/date-kst", async (load) => ({ ...(await load<typeof import("@/lib/date-kst")>()), kstToday: () => m.today }));
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => m.user }));
 vi.mock("@/lib/auth/view-mode", () => ({ readonlyTeacherViewError: async () => m.readonly, getShellView: async () => m.view, effectiveTeacherId: async () => m.acting }));
@@ -17,7 +16,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => m.db }));
 vi.mock("@/lib/observability/report-error", () => ({ reportError: vi.fn() }));
 vi.mock("@/features/audit/server/log", () => ({ logAction: m.log }));
 vi.mock("@/features/owner/server/queries", () => ({ getTenantSettings: async () => ({ operations: { holidays: [] } }) }));
-vi.mock("./reconcile-outcomes", () => ({ reconcileVideoHomework: vi.fn() }));
+vi.mock("./reconcile-outcomes", () => ({ reconcileVideoHomework: m.reconcile }));
 vi.mock("./mark-write", () => ({
   videoHomeworkWriteError: async () => m.denied,
   loadVideoHomeworkTarget: async () => ({ error: null, className: "초등M A", studentName: "김민준", enabled: m.enabled }),
@@ -50,7 +49,7 @@ describe("숙제없음 칸에서 영상 숙제 내기", () => {
       homework_date: "2026-10-06", teacher_id: "teacher", issued_by: "teacher" })]);
     expect(m.db.tables.lesson_reports![0]!.video_homework).toBeNull();
     expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ action: "lesson_report_video_homework_issue", metadata: expect.objectContaining({ homeworkDate: "2026-10-06", deadline: "2026-10-13" }) }));
-    expect(m.after).toHaveBeenCalled();
+    expect(m.reconcile).toHaveBeenCalledWith("tenant", { studentId: S }); // 응답 전에 재판정(장부가 판정 전 상태로 다시 그려지지 않게)
   });
   it("관리자 화면에서 내면 그날 보고서를 쓴 사람(없으면 그 반 담임)의 숙제로 선다(실제로 누른 사람은 따로 남긴다)", async () => {
     m.view = "admin";

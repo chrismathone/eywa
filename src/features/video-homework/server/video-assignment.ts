@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { after } from "next/server";
 import { reportError } from "@/lib/observability/report-error";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { readonlyTeacherViewError, viewAsTeacher } from "@/lib/auth/view-mode";
@@ -123,10 +122,10 @@ export async function assignHomeworkVideo(input: { classId: string; studentId: s
     if (error) return { ok: false, error: "영상 배정을 저장하지 못했습니다. 잠시 뒤 다시 시도해 주세요." };
     const errors: Record<string, string> = { conflict: "다른 곳에서 영상 배정이 변경됐습니다. 창을 닫고 다시 열어 확인해 주세요.", denied: "이 영상의 배정을 변경할 권한이 없습니다.", unavailable: "업로드가 완료된 학생 영상만 배정할 수 있습니다.", invalid_homework: "해당 학생에게 실제로 낸 영상 숙제를 골라 주세요." };
     if (data !== "saved") return { ok: false, error: errors[String(data)] ?? "영상 배정 정보를 확인해 주세요." };
-    after(async () => {
-      try { await reconcileVideoHomework(user.tenantId, { studentId: input.studentId }); }
-      catch (error) { reportError(error, { scope: "video-homework.after-assignment", tenantId: user.tenantId }); }
-    });
+    // 응답 전에 끝낸다 — `after()`로 미루면 저장 응답이 다시 그린 장부에 판정 전 '미수행'이 남아 배정한 칸이 새로고침 전까지
+    // 안 바뀌었다(원장 2026-10-14 *"배정하고도 안바뀌길래 안된줄 알았더니 새로고침하니까 되네"*). 실패해도 배정은 저장됐다(정기 확인이 맞춘다).
+    try { await reconcileVideoHomework(user.tenantId, { studentId: input.studentId }); }
+    catch (error) { reportError(error, { scope: "video-homework.after-assignment", tenantId: user.tenantId }); }
     revalidatePath("/onescreen/video-homework"); revalidatePath("/lesson-reports/video-homework"); revalidatePath(`/students/${input.studentId}`);
     return { ok: true };
   } catch (e) { return { ok: false, error: e instanceof AssignmentError ? e.message : "영상 배정을 저장하지 못했습니다." }; }

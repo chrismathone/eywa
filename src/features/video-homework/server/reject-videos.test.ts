@@ -11,10 +11,9 @@ import type { VideoArrival } from "../types";
 
 const m = vi.hoisted(() => ({
   db: null as unknown as FakeDb, denied: null as string | null, materials: null as unknown,
-  trash: vi.fn(), credential: vi.fn(), log: vi.fn(), after: vi.fn(), today: "2026-10-06",
+  trash: vi.fn(), credential: vi.fn(), log: vi.fn(), today: "2026-10-06",
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("next/server", () => ({ after: m.after }));
 vi.mock("@/lib/date-kst", async (load) => ({ ...(await load<typeof import("@/lib/date-kst")>()), kstToday: () => m.today }));
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => ({ id: "teacher", tenantId: "tenant", systemRole: "teacher" }) }));
 vi.mock("@/lib/auth/view-mode", () => ({ readonlyTeacherViewError: async () => null }));

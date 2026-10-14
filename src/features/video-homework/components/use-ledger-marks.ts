@@ -39,20 +39,37 @@ function initialMarks(marks: VideoHomeworkMark[]) {
 export function useLedgerMarks(initial: VideoHomeworkMark[]) {
   const [marks, setMarks] = useState(() => initialMarks(initial));
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  // 서버가 새 기록을 내려주면(영상 배정·반려·숙제 출제 뒤 다시 그린 화면) 그 값으로 바꾼다 — 처음 받은 값만 붙들면 배정한 칸이
+  // 새로고침 전까지 '미수행'으로 남았다(원장 2026-10-14 *"배정하고도 안바뀌길래 안된줄 알았더니 새로고침하니까 되네"*).
+  // 저장 중에는 미루고(바로 앞에 그린 칸을 덮지 않게), 끝나면 그때의 최신 값으로 맞춘다. 저장 중에 온 값은 그 저장보다 **먼저**
+  // 만든 것일 수 있어(배정 뒤 새로고침이 칸 저장보다 먼저 줄을 섰을 때) 방금 저장에 성공한 칸은 화면 값을 남긴다 — 안 그러면
+  // 저장한 '완료'가 '미확인'으로 돌아간다(적대 리뷰 2026-10-14). 저장이 끝난 뒤에 온 값은 그대로 따른다.
+  const [seen, setSeen] = useState(initial);
+  const [written, setWritten] = useState<ReadonlyMap<string, VideoHomeworkMark | null> | null>(null);
+  if (progress === null) {
+    if (seen !== initial) {
+      setSeen(initial);
+      const next = initialMarks(initial);
+      for (const [key, mark] of written ?? []) if (mark) next.set(key, mark); else next.delete(key);
+      setMarks(next);
+    }
+    if (written) setWritten(null);
+  }
   const inFlight = useRef(false);
   async function save(changes: LedgerChange[]) {
     if (inFlight.current || !changes.length) return changes.map(changeKey);
     inFlight.current = true;
     const before = marks;
     const failures: string[] = [];
+    const saved = new Map<string, VideoHomeworkMark | null>();
     let firstError = "";
+    const planned = changes.map((change) => [changeKey(change), optimisticMark(change)] as const);
     setProgress({ done: 0, total: changes.length });
     setMarks((current) => {
       const next = new Map(current);
-      for (const change of changes) {
-        const mark = optimisticMark(change);
-        if (mark) next.set(changeKey(change), mark);
-        else next.delete(changeKey(change));
+      for (const [key, mark] of planned) {
+        if (mark) next.set(key, mark);
+        else next.delete(key);
       }
       return next;
     });
@@ -64,6 +81,7 @@ export function useLedgerMarks(initial: VideoHomeworkMark[]) {
             roundKey: roundWriteKey(change.round), status: change.status,
             submittedDate: change.status === "submitted" ? change.submittedDate : null });
           if (!result.ok) throw new Error(result.error ?? "저장하지 못했습니다.");
+          saved.set(planned[index]![0], planned[index]![1]);
         } catch (error) {
           const key = changeKey(change);
           failures.push(key);
@@ -83,6 +101,7 @@ export function useLedgerMarks(initial: VideoHomeworkMark[]) {
       return failures;
     } finally {
       inFlight.current = false;
+      setWritten(saved);
       setProgress(null);
     }
   }

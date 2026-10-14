@@ -23,7 +23,7 @@ export async function reconcileVideoHomework(tenantId: string, options: { studen
     settings.report.classnoteSendWindowStart, settings.report.classnoteSendWindowEnd)))
     return { checked: 0, updated: 0, notifications: 0 };
   const [assigned, students, classes, markRows] = await Promise.all([
-    getAssignedVideoHomework(tenantId, range.from, today),
+    getAssignedVideoHomework(tenantId, range.from, today, { studentId: options.studentId }),
     fetchAllPaged<{ id: string; grade: string | null; is_test: boolean }>((from, to) => {
       const query = db.from("students").select("id,grade,is_test").eq("tenant_id", tenantId).order("id");
       if (options.studentId) query.eq("id", options.studentId);

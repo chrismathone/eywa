@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { after } from "next/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { effectiveTeacherId, getShellView, readonlyTeacherViewError } from "@/lib/auth/view-mode";
@@ -32,12 +31,11 @@ const shortDate = (date: string) => date.slice(5).replace("-", ".");
 const validInput = (input: Input) => !!input && typeof input.classId === "string" && typeof input.studentId === "string"
   && typeof input.date === "string" && UUID.test(input.classId) && UUID.test(input.studentId) && isVideoHomeworkDate(input.date);
 
-function refresh(tenantId: string, studentId: string) {
+async function refresh(tenantId: string, studentId: string) {
   // 이미 올라와 있던 영상이 새 숙제에 붙을 수 있다 — 상태와 알림은 자동 판정이 정한다(실패해도 다음 정기 확인이 맞춘다).
-  after(async () => {
-    try { await reconcileVideoHomework(tenantId, { studentId }); }
-    catch (error) { reportError(error, { scope: "video-homework.after-extra-issue", tenantId, studentId }); }
-  });
+  // 응답 전에 끝낸다 — `after()`로 미루면 저장 응답이 다시 그린 장부에 판정 전 상태가 남는다(원장 2026-10-14, 영상 배정과 같은 까닭).
+  try { await reconcileVideoHomework(tenantId, { studentId }); }
+  catch (error) { reportError(error, { scope: "video-homework.after-extra-issue", tenantId, studentId }); }
   revalidatePath("/onescreen/video-homework"); revalidatePath("/lesson-reports/video-homework"); revalidatePath(`/students/${studentId}`);
 }
 
@@ -106,7 +104,7 @@ export async function issueExtraVideoHomework(input: Input): Promise<Result> {
     await logAction({ action: "lesson_report_video_homework_issue", targetType: "video_homework",
       targetLabel: [target.studentName, target.className].filter(Boolean).join(" · ") || null,
       metadata: { classId, studentId, homeworkDate: date, deadline, teacherId } });
-    refresh(user.tenantId, studentId);
+    await refresh(user.tenantId, studentId);
     return { ok: true, deadline };
   } catch (error) {
     reportError(error, { scope: "video-homework.extra-issue", tenantId: user.tenantId, studentId });
@@ -149,7 +147,7 @@ export async function cancelExtraVideoHomework(input: Input): Promise<Result> {
     await logAction({ action: "lesson_report_video_homework_issue_cancel", targetType: "video_homework",
       targetLabel: target.error === null ? [target.studentName, target.className].filter(Boolean).join(" · ") || null : null,
       metadata: { classId, studentId, homeworkDate: date, ...(data === "kept" ? { keptByReport: true } : {}) } });
-    refresh(user.tenantId, studentId);
+    await refresh(user.tenantId, studentId);
     return { ok: true, ...(data === "kept" ? { kept: true } : {}) };
   } catch (error) {
     reportError(error, { scope: "video-homework.extra-issue-cancel", tenantId: user.tenantId, studentId });
