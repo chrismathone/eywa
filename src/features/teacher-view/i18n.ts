@@ -1271,6 +1271,9 @@ export const SHEET_DICT = {
   "me.reportName.desc.b": { ko: ")으로 나갑니다.", en: ")." },
   "me.reportName.label": { ko: "발송에 표시할 이름", en: "Name to show on reports" },
   "me.reportName.ph": { ko: "예: 영어 이름", en: "e.g. your English name" },
+  "me.reportName.classPrefix": { ko: "이름 앞에 반명 붙이기", en: "Add the class name before my name" },
+  "me.reportName.preview": { ko: "표시 예시", en: "Preview" },
+  "me.reportName.classPlaceholder": { ko: "[수업 반명]", en: "[Class name]" },
   "me.save": { ko: "저장", en: "Save" },
 
   // 내 연차(원장 2026-09-18) — 부여·사용·잔여와 "언제 썼는지". 숫자는 balance.ts, 라벨은 여기.

@@ -6,11 +6,13 @@
 //    "이름 한 줄"이 화면 생존보다 우선일 수 없다(#95 expand/contract, mentSourceColumnReady와 같은 결).
 //    단 컬럼 부재가 아닌 일시 오류는 warn으로 드러낸다([[#89]] 폴백 있는 기능은 실패율 계측).
 import { createAdminClient } from "@/lib/supabase/admin";
-import { pickReportAuthorName } from "../report-author-name";
+import { pickReportAuthorSettings, type ReportAuthorSettings } from "../report-author-name";
+
+const EMPTY: ReportAuthorSettings = { name: null, includeClassName: false };
 
 /** 0217a 미적용(컬럼 부재) 판별 — PostgREST 42703 문구. */
 function isColumnMissing(message: string): boolean {
-  return /report_display_name/.test(message) && /(does not exist|42703|column)/i.test(message);
+  return /report_display_name|report_class_name_prefix/.test(message) && /(does not exist|42703|column)/i.test(message);
 }
 
 function warnTransient(scope: string, message: string): void {
@@ -23,60 +25,80 @@ function warnTransient(scope: string, message: string): void {
  * admin(service_role)은 RLS 우회라 **tenantId 명시 필터 필수** — 호출부가 신뢰 가능한 tenantId를 넘긴다
  * (/r은 행의 tenant_id, 인쇄·원스크린은 세션 user.tenantId).
  */
-export async function resolveReportAuthorName(
+export async function resolveReportAuthorSettings(
   tenantId: string,
   teacherName: string | null | undefined,
-): Promise<string | null> {
+): Promise<ReportAuthorSettings> {
   // 🔴 raw 정확 일치(순수 함수 규칙과 동일) — trim해서 eq에 넣으면 워커(JS raw 매칭)와 답이 갈린다.
   const name = teacherName ?? "";
-  if (!name.trim()) return null;
+  if (!name.trim()) return EMPTY;
   try {
     const admin = createAdminClient();
     // 같은 표시 이름의 직원 **전부**(override 유무 무관) — 2명이면 모호라 매핑하지 않는다(순수 함수 규칙).
     // 학생 계정은 제외(직원 풀 규약 `.neq(system_role,'student')` — staff/approvals 조회와 동일):
     // 동명 학생이 강사의 발송용 이름을 조용히 꺼 버리면 안 된다(적대 리뷰 2026-08-18). 퇴사자는 남긴다
     // (퇴사 강사의 옛 공유 링크도 그 사람 이름 규칙을 유지). ⚠️ 워커 복제본과 반드시 같은 필터일 것.
-    const { data, error } = await admin
+    let { data, error } = await admin
       .from("users")
-      .select("display_name, report_display_name")
+      .select("display_name, report_display_name, report_class_name_prefix")
       .eq("tenant_id", tenantId)
       .eq("display_name", name)
       .neq("system_role", "student")
       .limit(2);
+    // 새 옵션 칸이 아직 없더라도 기존 발송용 이름은 보존한다(expand/contract).
+    if (error && /report_class_name_prefix/.test(error.message) && isColumnMissing(error.message)) {
+      const legacy = await admin.from("users").select("display_name, report_display_name")
+        .eq("tenant_id", tenantId).eq("display_name", name).neq("system_role", "student").limit(2);
+      data = legacy.data?.map((r) => ({ ...r, report_class_name_prefix: false })) ?? null;
+      error = legacy.error;
+    }
     if (error) {
       warnTransient("resolveReportAuthorName", error.message);
-      return null;
+      return EMPTY;
     }
-    return pickReportAuthorName(
+    return pickReportAuthorSettings(
       name,
       (data ?? []).map((r) => ({
         displayName: r.display_name as string | null,
         reportDisplayName: r.report_display_name as string | null,
+        includeClassName: r.report_class_name_prefix === true,
       })),
     );
   } catch (e) {
     warnTransient("resolveReportAuthorName", e instanceof Error ? e.message : String(e));
-    return null;
+    return EMPTY;
   }
 }
 
-/** 본인(user id)의 발송용 이름 — /me 입력칸 프리필. 실패·미적용 = null(빈 칸). */
-export async function fetchMyReportDisplayName(userId: string): Promise<string | null> {
+/** 이름 매핑 확인용. 반명은 보고서 행별로 formatReportAuthorName에서 붙인다. */
+export async function resolveReportAuthorName(tenantId: string, teacherName: string | null | undefined) {
+  return (await resolveReportAuthorSettings(tenantId, teacherName)).name;
+}
+
+/** 본인의 이름·접두 설정을 /me에 채운다. 새 옵션 칸 미적용 시 기존 이름은 유지한다. */
+export async function fetchMyReportAuthorSettings(userId: string, tenantId: string): Promise<ReportAuthorSettings> {
   try {
     const admin = createAdminClient();
-    const { data, error } = await admin
+    let { data, error } = await admin
       .from("users")
-      .select("report_display_name")
+      .select("report_display_name, report_class_name_prefix")
       .eq("id", userId)
+      .eq("tenant_id", tenantId)
       .maybeSingle();
+    if (error && /report_class_name_prefix/.test(error.message) && isColumnMissing(error.message)) {
+      const legacy = await admin.from("users").select("report_display_name")
+        .eq("id", userId).eq("tenant_id", tenantId).maybeSingle();
+      data = legacy.data ? { ...legacy.data, report_class_name_prefix: false } : null;
+      error = legacy.error;
+    }
     if (error) {
       warnTransient("fetchMyReportDisplayName", error.message);
-      return null;
+      return EMPTY;
     }
     const v = ((data?.report_display_name as string | null) ?? "").trim();
-    return v || null;
+    return { name: v || null, includeClassName: data?.report_class_name_prefix === true };
   } catch (e) {
     warnTransient("fetchMyReportDisplayName", e instanceof Error ? e.message : String(e));
-    return null;
+    return EMPTY;
   }
 }

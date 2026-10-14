@@ -19,6 +19,7 @@
  *    학습 추이 그래프는 지연 조회(`loadReportTrend`)로 채운다 — 지난 회차는 서버, 오늘 회차는 지금 입력값.
  */
 import { ParentReportCard } from "./parent-report-card";
+import { formatReportAuthorName } from "../report-author-name";
 import { classKindMeta } from "@/features/classes/list-filters";
 import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { buildReportFields } from "../report-fields";
@@ -37,6 +38,7 @@ export type ReportPreviewContext = {
   academyName: string;
   logoSrc: string | null;
   teacherName: string;
+  reportClassNamePrefix?: boolean;
   /** 대상 날짜(YYYY-MM-DD) — 발송본 제목의 보고일과 같은 값. */
   reportDate: string;
   showDailyTest: boolean;
@@ -129,7 +131,7 @@ export function ReportPreview({
         <ParentReportCard
           report={{
             reportDate: ctx.reportDate || null,
-            teacherName: ctx.teacherName || null,
+            teacherName: formatReportAuthorName(ctx.teacherName, { name: null, includeClassName: ctx.reportClassNamePrefix === true }, subject.className),
             textbook: fields.textbook || null,
             progress: fields.progress || null,
             dailyTest: fields.dailyTest || null,

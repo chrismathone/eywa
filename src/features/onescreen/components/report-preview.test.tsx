@@ -61,6 +61,15 @@ const renderPreview = (over: Partial<Parameters<typeof ReportPreview>[0]> = {}) 
   );
 
 describe("ReportPreview", () => {
+  it("반명 접두는 현재 보고서의 반을 사용한다(학생의 대표 반과 구별)", () => {
+    renderPreview({
+      ctx: { ...ctx, teacherName: "Jane", reportClassNamePrefix: true },
+      subject: { ...subject, className: "초등M 개별 JJ2M" },
+    });
+    expect(screen.getByText("초등M 개별 JJ2M Jane")).toBeTruthy();
+    expect(screen.queryByText("초2 A반 Jane")).toBeNull();
+  });
+
   it("입력값이 학부모 카드 형태로 그대로 보인다(진도 접두 = 과목 라벨)", () => {
     renderPreview();
     expect(screen.getByText("이윤건")).toBeTruthy();

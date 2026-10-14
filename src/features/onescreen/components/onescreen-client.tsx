@@ -351,6 +351,7 @@ export function OneScreenClient({
   showingAll = false,
   holidayName = null,
   teacherName = "",
+  reportClassNamePrefix = false,
   reportSettings,
   academyName = "",
   logoSrc = null,
@@ -399,6 +400,7 @@ export function OneScreenClient({
   // ── 카드 뷰 우측 '학부모 미리보기' 재료(2026-08-05) — 전부 서버가 확정해 내린다 ──
   // reportSettings가 없으면 미리보기 열이 아예 안 열린다(레이아웃 예전 그대로) → 표시 전용 기능이라 안전한 폴백.
   teacherName?: string;
+  reportClassNamePrefix?: boolean;
   reportSettings?: ReportSettings;
   academyName?: string;
   logoSrc?: string | null;
@@ -455,12 +457,13 @@ export function OneScreenClient({
             academyName,
             logoSrc,
             teacherName,
+            reportClassNamePrefix,
             reportDate: activeDate,
             showDailyTest,
             showCheckTest,
           }
         : undefined,
-    [reportSettings, academyName, logoSrc, teacherName, activeDate, showDailyTest, showCheckTest],
+    [reportSettings, academyName, logoSrc, teacherName, reportClassNamePrefix, activeDate, showDailyTest, showCheckTest],
   );
   // 반 공통 서술(G6) — 반 이름→서술. sessionStorage(날짜 키)+외부 스토어(#75 lazy 초기값·#25 effect setState 회피).
   // 생성 재료(기록 아님): 자동작성 시 그 행의 반 서술을 classContext로 동봉, 멘트 생성 후엔 잃어도 무해.

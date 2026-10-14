@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { isCleanupWithdrawal } from "./system-bulk";
 
 /**
  * 시간표 X 겹침(석 달 퇴원)이 **다른 화면과 같은 값**을 내는지 잠근다 — 원장 2026-10-14 *"모든 데이터가 일치해야함.
@@ -83,6 +84,12 @@ describe("시간표 X 겹침 배선", () => {
   it("🔴 '데이터 정리 일괄 퇴원'은 줄에서 뺀다 — 일괄 퇴원 액션이 적는 글과 판정이 한 상수", () => {
     expect(SERVER).toContain("if (isCleanupWithdrawal(w.memo)) continue;");
     expect(ADMIN).toContain("memo: CLEANUP_WITHDRAWAL_MEMO,");
+    // 2026-07-10 스크립트의 '수강 반 없음 일괄 퇴원 처리 (날짜)'도 같은 장부 정리(원장 2026-10-14 "이것도 뺀다").
+    expect(isCleanupWithdrawal("데이터 정리 일괄 퇴원")).toBe(true);
+    expect(isCleanupWithdrawal(" 수강 반 없음 일괄 퇴원 처리 (2026-07-10)")).toBe(true);
+    expect(isCleanupWithdrawal("타 학원으로 이동")).toBe(false);
+    expect(isCleanupWithdrawal("일괄 퇴원")).toBe(false);
+    expect(isCleanupWithdrawal(null)).toBe(false);
   });
 
   it("🔴 일반 화면 문구에 '강사평가'(실험실 메뉴)를 쓰지 않는다 — 꺼진 지점에선 있었는지도 모르게", () => {

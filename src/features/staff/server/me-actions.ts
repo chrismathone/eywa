@@ -10,7 +10,7 @@ import { EMAIL_RE } from "@/features/staff/email";
 import { EMAIL_TAKEN_MESSAGE, isEmailTakenAuthError } from "@/lib/auth/auth-email-error";
 import { isLoginEmailTakenElsewhere } from "./login-email-taken";
 import { REPORT_NAME_MAX } from "@/features/onescreen/report-author-name";
-import { resolveReportAuthorName } from "@/features/onescreen/server/report-author-name";
+import { resolveReportAuthorSettings } from "@/features/onescreen/server/report-author-name";
 
 // 본인 계정 자기관리(원장 지시 2026-07-29) — 시트에서 넘어온 임시 로그인 주소로 들어와
 // **본인이 직접** 실제 이메일과 비밀번호로 갈아끼운다. 대상은 언제나 로그인한 자기 자신(auth.uid())뿐 —
@@ -103,7 +103,7 @@ export async function updateMyPassword(_prev: MeAccountState, formData: FormData
  * ⚠️ lesson_reports.teacher_name(저장·귀속 축)은 건드리지 않는다 — 표시 시점 매핑(report-author-name.ts).
  * ⚠️ 같은 표시 이름(display_name)의 직원이 2명 이상이면 매핑이 적용되지 않는다(오표시 방지) — 저장은 되므로
  *    여기서 감지해 안내만 남긴다(막지 않는다 — 동명 정리는 관리자 영역). 판정은 실제 발송이 쓰는
- *    `resolveReportAuthorName` **그 함수로** 한다(적대 리뷰 2026-08-18: 별도 eq 조회로 판정하면
+ *    `resolveReportAuthorSettings` **그 함수로** 한다(적대 리뷰 2026-08-18: 별도 eq 조회로 판정하면
  *    실제 매핑 규칙과 갈려 토스트가 거짓말한다 — 단일 소스만이 안 갈린다).
  */
 export async function updateMyReportName(_prev: MeAccountState, formData: FormData): Promise<MeAccountState> {
@@ -113,17 +113,21 @@ export async function updateMyReportName(_prev: MeAccountState, formData: FormDa
   const raw = String(formData.get("reportName") ?? "").trim();
   if (raw.length > REPORT_NAME_MAX) return { error: `발송용 이름은 ${REPORT_NAME_MAX}자 이하로 입력하세요` };
   const value = raw || null; // 빈 칸 = 해제(실명으로 발송)
+  const prefix = formData.get("includeClassName");
+  if (prefix !== null && prefix !== "true" && prefix !== "false") return { error: "반명 표시 설정을 확인해 주세요" };
+  // 이전 화면에서 저장해도 새 옵션은 보존한다. 새 화면은 두 값을 한 번에 저장한다.
+  const includeClassName = prefix === "true";
 
   const admin = createAdminClient();
   const { error } = await admin
     .from("users")
-    .update({ report_display_name: value })
+    .update({ report_display_name: value, ...(prefix !== null ? { report_class_name_prefix: includeClassName } : {}) })
     .eq("id", user.id)
     .eq("tenant_id", user.tenantId);
   if (error) {
     // 0217a 미적용(컬럼 부재) — 원장이 SQL을 아직 안 돌린 간격(#95). raw 에러 대신 한글 안내.
-    if (/report_display_name/.test(error.message))
-      return { error: "DB 업데이트(0217a)가 아직 적용되지 않았습니다 — 관리자에게 문의하세요" };
+    if (/report_display_name|report_class_name_prefix/.test(error.message))
+      return { error: "이름 설정을 저장할 준비가 되지 않았습니다 — 관리자에게 문의하세요" };
     // raw 원문은 화면 금지(한글 매핑 규약) — 서버 로그로만 남긴다.
     console.warn(JSON.stringify({ level: "warn", scope: "updateMyReportName", message: error.message }));
     return { error: "저장하지 못했습니다 — 잠시 후 다시 시도하세요" };
@@ -136,17 +140,21 @@ export async function updateMyReportName(_prev: MeAccountState, formData: FormDa
       action: "self_report_name_change",
       targetType: "user",
       targetLabel: user.displayName ?? null,
-      metadata: { reportName: value },
+      metadata: { reportName: value, ...(prefix !== null ? { includeClassName } : {}) },
     }),
-    value ? resolveReportAuthorName(user.tenantId, user.displayName) : Promise.resolve(null),
+    value || includeClassName ? resolveReportAuthorSettings(user.tenantId, user.displayName) : Promise.resolve(null),
   ]);
   revalidatePath("/me");
-  if (!value) return { ok: true, notice: "발송용 이름을 지웠습니다 — 이제 실명으로 발송됩니다" };
-  if (resolved !== value)
+  revalidatePath("/onescreen");
+  const mappingBlocked = resolved && (resolved.name !== value || (includeClassName && !resolved.includeClassName));
+  if (includeClassName && !mappingBlocked)
+    return { ok: true, notice: "저장했습니다 — 수업의 반명 뒤에 이름이 표시됩니다" };
+  if (mappingBlocked)
     return {
       ok: true,
       notice:
         "저장했습니다 — 단, 같은 이름의 직원이 있거나 계정 이름 문제로 발송에는 적용되지 않습니다(실명으로 발송). 관리자에게 문의하세요",
     };
+  if (!value) return { ok: true, notice: "발송용 이름을 지웠습니다 — 이제 실명으로 발송됩니다" };
   return { ok: true, notice: `이제 수업보고서가 "${value}" 이름으로 발송됩니다` };
 }
