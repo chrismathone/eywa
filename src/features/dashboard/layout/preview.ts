@@ -12,6 +12,7 @@ import { defaultItems } from "./defaults";
 import { sameItems } from "./engine";
 import { AREA_MENUS } from "./registry";
 import { shapeSections } from "./shape";
+import { sliceGroupOf } from "./slices";
 import { DASHBOARD_VERSION, EMPTY_DASHBOARD, type Bundle, type Item } from "./types";
 import { resolveView } from "./view";
 
@@ -29,7 +30,10 @@ export function previewSnapshot(
   const programSubjects = programSubjectsOf(full.subjects);
   const groupOf = (key: string | null | undefined) => subjectGroupOf(key, programSubjects);
   const group = role === "subject" && subject ? groupOf(subject.key) : null;
-  const sections = shapeSections(readable, view, { groups: group ? [group] : [], groupOf });
+  // 행 좁히기의 과목 판정은 서버와 같은 `sliceGroupOf`(설정에 없는 과목·빈 과목 = 모두에게) — 과목 목록도 서버와 같은 설정 과목만.
+  const keys = full.sliceSubjectKeys ? new Set(full.sliceSubjectKeys) : null;
+  const sliceSubjects = keys ? programSubjects.filter((s) => keys.has(s.key)) : programSubjects;
+  const sections = shapeSections(readable, view, { groups: group ? [group] : [], groupOf: sliceGroupOf(sliceSubjects, groupOf), slices: full.slices });
   return {
     ...full,
     // 원본을 다시 받으면(저장 뒤 등) 쿼리 캐시가 옛 미리보기를 붙들지 않게 받은 시각을 섞는다.

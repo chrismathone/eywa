@@ -6,30 +6,43 @@
  *    그 화면의 원본 스냅샷은 원장 시점이다).
  * 순서: ① 놓인 카드가 안 읽는 영역은 데이터째 지운다 ② 수납 금액·6개월 이력 ③ 일정 제목 전화번호 ④ 과목 관리자는 담당 과목으로 좁힌다.
  */
-import type { BillingSummary } from "@/features/billing/calc";
-import type { Section, Sections } from "@/features/dashboard/overview/model";
+import type { SubjectBillingSummary } from "@/features/dashboard/overview/billing-subject";
+import type { Area, Section, Sections } from "@/features/dashboard/overview/model";
 import { maskPhones } from "./mask-phones";
 import { narrowBySubject, type GroupOf } from "./narrow";
+import { applySlices, sliceKey, type SliceTable } from "./slices";
 import { neededAreas, placedOf, type ResolvedView } from "./view";
 
-const zeroMoney = (b: BillingSummary): BillingSummary => ({ ...b, totalBilled: 0, totalCollected: 0, totalDiscount: 0, outstanding: 0, paymentRate: 0 });
+const zeroMoney = (b: SubjectBillingSummary): SubjectBillingSummary => ({
+  ...b, totalBilled: 0, totalCollected: 0, totalDiscount: 0, outstanding: 0, paymentRate: 0,
+  ...(b.unclassified ? { unclassified: { ...b.unclassified, billed: 0, outstanding: 0 } } : {}),
+});
 
 export type ShapeContext = {
   /** 과목 관리자의 담당 과목 묶음("english"·"math"…). 다른 묶음에선 쓰지 않는다. */
   groups: readonly string[];
+  /** 행의 과목 → 묶음. 설정에 없는 과목·빈 과목은 null(= 모든 과목 관리자에게) — 서버·미리보기는 `sliceGroupOf`를 넘긴다. */
   groupOf: GroupOf;
+  /** 영역별 과목 값 표(`addSliced`) — 과목 관리자 화면은 학원 전체 값 대신 담당 묶음의 값을 싣는다. */
+  slices?: SliceTable;
 };
 
 export function shapeSections(full: Sections, view: ResolvedView, ctx: ShapeContext): Sections {
   const needed = neededAreas(view);
   const placed = new Set(placedOf(view));
   let sections: Sections = Object.fromEntries(Object.entries(full).filter(([area]) => needed.has(area as never)));
+  const scoped = view.subjectScoped ?? view.bundle === "subject";
+  // 과목별로 다시 집계한 값이 있는 영역은 **먼저** 그 값으로 갈아 끼운다(원장 2026-10-14 2단계) — 아래 금액 가림·6개월 자르기·
+  // 전화번호 가림이 갈아 끼운 값에도 걸려야 한다(나중에 끼우면 가린 것이 되살아난다).
+  const key = scoped && ctx.groups.length ? sliceKey(ctx.groups) : "";
+  const sliced = new Set((key && ctx.slices ? Object.keys(ctx.slices) : []).filter((area) => ctx.slices?.[area as Area]?.[key] !== undefined) as Area[]);
+  if (key) sections = applySlices(sections, ctx.slices, key);
 
   const billing = sections.billing;
   if (billing?.data) {
     // 6개월 카드가 없으면 이번 달 한 줄만 — 지난 달 금액 이력은 내려보내지 않는다.
     const rows = placed.has("panel:billing6") ? billing.data : billing.data.slice(-1);
-    const next: Section<BillingSummary[]> = { ...billing, data: view.amounts ? rows : rows.map(zeroMoney) };
+    const next: Section<SubjectBillingSummary[]> = { ...billing, data: view.amounts ? rows : rows.map(zeroMoney) };
     sections = { ...sections, billing: next };
   }
   const calendar = sections.calendar;
@@ -41,10 +54,11 @@ export function shapeSections(full: Sections, view: ResolvedView, ctx: ShapeCont
     }));
     sections = { ...sections, calendar: { ...calendar, data: events } };
   }
-  if (view.subjectScoped ?? view.bundle === "subject") {
+  if (scoped) {
     // 학년·학교·수준 구성은 과목으로 못 나뉜다 — 그 칸이 놓였을 때만 학원 전체 값을 싣는다(안 쓰는 값을 내려보내지 않는다).
     const keepAcademyWide = ["panel:studentsComp", "panel:grades", "panel:schools"].some((id) => placed.has(id));
-    sections = narrowBySubject(sections, ctx.groups, ctx.groupOf, keepAcademyWide);
+    // 이미 과목별 값으로 갈아 끼운 영역은 다시 좁히지 않는다.
+    sections = narrowBySubject(sections, ctx.groups, ctx.groupOf, keepAcademyWide, sliced);
   }
   return sections;
 }

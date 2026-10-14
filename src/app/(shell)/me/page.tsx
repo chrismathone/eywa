@@ -10,8 +10,8 @@ import { isImportArtifactEmail } from "@/features/staff/email";
 import { getStaffById } from "@/features/staff/server/queries";
 import { getResumeByStaffUser } from "@/features/staff/server/resume-queries";
 import {
-  fetchMyReportDisplayName,
-  resolveReportAuthorName,
+  fetchMyReportAuthorSettings,
+  resolveReportAuthorSettings,
 } from "@/features/onescreen/server/report-author-name";
 import { ResumeSheet } from "../staff/resumes/_components/resume-sheet";
 // 강사 미니셸이면 화면 언어를 따른다(원장 2026-09-04 "강사가 접근 가능한 모든 메뉴를 전환").
@@ -50,10 +50,10 @@ export default async function MyPage() {
     getResumeByStaffUser(user.id),
     getStaffById(user.id),
     // 수업보고서 발송용 이름(0217a) — fail-soft: 컬럼 미적용이면 null(빈 칸)이고 페이지는 그대로 산다.
-    fetchMyReportDisplayName(user.id),
+    fetchMyReportAuthorSettings(user.id, user.tenantId),
     // 실제 발송이 쓰는 해석기로 "지금 매핑이 걸리는가"까지 확인 — 저장 후 생긴 동명 직원 때문에
     // 조용히 실명 발송으로 돌아간 상태를 카드가 밝힌다([[#89]] 폴백 기능의 침묵 실패 가시화).
-    resolveReportAuthorName(user.tenantId, user.displayName),
+    resolveReportAuthorSettings(user.tenantId, user.displayName),
     // 연차 잔여(원장 2026-09-18) — 다른 조회와 독립이라 함께 받는다(B4). 학생 계정엔 없는 개념이라
     // 아예 안 부르고, 실패해도 null로 떨어뜨린다(이력서를 채우는 화면이 연차 한 조각에 죽으면 안 된다).
     user.systemRole === "student" ? Promise.resolve(null) : getMyLeaveBalance(user.id).catch(() => null),
@@ -124,8 +124,9 @@ export default async function MyPage() {
         {/* 수업보고서 발송용 이름(0217a) — 발송·공유·인쇄에 실명 대신 표시할 이름을 본인이 정한다. */}
         <ReportNameCard
           realName={user.displayName}
-          initialName={reportName}
-          mappingBlocked={!!reportName && resolvedSendName !== reportName}
+          initialName={reportName.name}
+          initialIncludeClassName={reportName.includeClassName}
+          mappingBlocked={!!(reportName.name || reportName.includeClassName) && (resolvedSendName.name !== reportName.name || resolvedSendName.includeClassName !== reportName.includeClassName)}
           classnoteOn={settings ? classnoteModuleOn(settings) : true}
         />
         {slack ? <SlackLinkCard linked={slack.linked} email={slack.email} /> : null}

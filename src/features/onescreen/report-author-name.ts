@@ -11,7 +11,32 @@
 export type ReportAuthorRow = {
   displayName: string | null;
   reportDisplayName: string | null;
+  includeClassName?: boolean;
 };
+
+export type ReportAuthorSettings = { name: string | null; includeClassName: boolean };
+
+export function pickReportAuthorSettings(
+  teacherName: string | null | undefined,
+  rows: ReportAuthorRow[],
+): ReportAuthorSettings {
+  const matches = teacherName?.trim() ? rows.filter((r) => r.displayName === teacherName) : [];
+  return {
+    name: pickReportAuthorName(teacherName, rows),
+    includeClassName: matches.length === 1 && matches[0]!.includeClassName === true,
+  };
+}
+
+/** 표시 전용. 반은 보고서의 class_id에 해당하는 반이며, 강사 귀속 값은 바꾸지 않는다. */
+export function formatReportAuthorName(
+  teacherName: string | null | undefined,
+  settings: ReportAuthorSettings,
+  className?: string | null,
+): string | null {
+  const name = settings.name || teacherName || null;
+  const prefix = settings.includeClassName ? className?.trim() : null;
+  return name && prefix ? `${prefix} ${name}` : name;
+}
 
 /**
  * `teacherName`(보고서에 저장된 표시 이름)에 대한 발송용 이름 — 없으면 null(원래 이름 그대로).

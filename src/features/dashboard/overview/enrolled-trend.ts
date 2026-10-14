@@ -1,5 +1,6 @@
 import { isMergedStudent } from "@/features/students/merged";
 import { isSystemBulkWithdrawal } from "@/features/withdrawals/system-bulk";
+import { isEnrollmentEndedOn } from "@/features/enrollments/eligibility";
 
 /**
  * 재원생 추이 — 월말(이번 달은 오늘)·연말(올해는 오늘) 시점의 재원생 수(원장 2026-09-29 *"재원생 수치: 연간, 월간 흐름을
@@ -25,24 +26,62 @@ export type TrendStudent = {
 export type TrendEnrollments = { firstStart: ReadonlyMap<string, string>; ended: ReadonlySet<string> };
 export type TrendPoint = { key: string; label: string; date: string; count: number };
 
-export function enrolledOn(students: readonly TrendStudent[], en: TrendEnrollments, d: string): number {
+/** 한 학생이 날짜 d에 재원생으로 세어지는가(위 판정 한 벌 — `enrolledOn`·과목별 추이가 같이 쓴다). */
+export function countedOn(s: TrendStudent, en: TrendEnrollments, d: string): boolean {
   const { firstStart, ended } = en;
+  if (s.status !== "enrolled" && s.status !== "withdrawn") return false;
+  if (isMergedStudent(s.notes)) return false;
+  // 등록일이 빈 재원생 — 카드는 등록일을 안 본다. 첫 수강 시작일로 대신하고, 그것도 없으면 언제나 센다(오늘 칸 = 카드).
+  const enrolled = s.enrolledAt?.slice(0, 10) ?? firstStart.get(s.id) ?? (s.status === "enrolled" ? "0000-00-00" : null);
+  if (!enrolled || enrolled > d) return false;
+  const out = s.withdrawnAt?.slice(0, 10);
+  if (out && out <= d) return false;
+  if (s.status === "withdrawn" && !out) return false; // 퇴원했는데 날짜가 없으면 언제까지 다녔는지 모른다
+  if (s.status === "withdrawn" && isSystemBulkWithdrawal({ withdrawnAt: s.withdrawnAt, hasEnrollmentHistory: ended.has(s.id) })) return false;
+  const first = firstStart.get(s.id);
+  if (first && first > d) return false;
+  return true;
+}
+
+export function enrolledOn(students: readonly TrendStudent[], en: TrendEnrollments, d: string): number {
   let n = 0;
-  for (const s of students) {
-    if (s.status !== "enrolled" && s.status !== "withdrawn") continue;
-    if (isMergedStudent(s.notes)) continue;
-    // 등록일이 빈 재원생 — 카드는 등록일을 안 본다. 첫 수강 시작일로 대신하고, 그것도 없으면 언제나 센다(오늘 칸 = 카드).
-    const enrolled = s.enrolledAt?.slice(0, 10) ?? firstStart.get(s.id) ?? (s.status === "enrolled" ? "0000-00-00" : null);
-    if (!enrolled || enrolled > d) continue;
-    const out = s.withdrawnAt?.slice(0, 10);
-    if (out && out <= d) continue;
-    if (s.status === "withdrawn" && !out) continue; // 퇴원했는데 날짜가 없으면 언제까지 다녔는지 모른다
-    if (s.status === "withdrawn" && isSystemBulkWithdrawal({ withdrawnAt: s.withdrawnAt, hasEnrollmentHistory: ended.has(s.id) })) continue;
-    const first = firstStart.get(s.id);
-    if (first && first > d) continue;
-    n++;
-  }
+  for (const s of students) if (countedOn(s, en, d)) n++;
   return n;
+}
+
+/** 과목별 추이 재료 — 수강 한 줄(반 과목 · 시작·종료일 · 반이동 여부). */
+export type TrendEnrollment = { studentId: string; subject: string | null; start: string | null; end: string | null; transferred: boolean };
+
+/**
+ * **과목별 재원생 추이**(원장 2026-10-14 2단계 *"재원생 추이도 마찬가지(해당 과목 관리자는 나눠서 해당 과목만)"*) —
+ * 날짜 d에 재원생으로 세어지는 학생 중 **그 과목 반 수강이 d에 걸려 있던** 학생 · 두 과목이면 양쪽 모두.
+ * d에 끝나지 않은 수강이 하나도 없는 학생(반 배정 전 · 수강이 전부 끝난 재원생)은 '모름'이라 모든 과목에 든다 —
+ * 재원생 KPI의 과목 값(`server.ts` students — 끝나지 않은 수강이 없으면 모두에게)과 같은 판정이다(적대 리뷰 2026-10-14).
+ * 수강이 d에 걸렸는지는 수강 명단과 같은 규약(시작일 ≤ d, 비어 있으면 시작한 것 · 반이동은 종료일 전날까지, 일반 종료는
+ * 종료일 포함 — `isEnrollmentEndedOn`). **오늘 점**(`today`)만은 KPI 조회와 같은 규약 — 종료일이 박힌 수강은 끝난 것
+ * (KPI = `end_date is null` 행만, 재리뷰 2026-10-14: 반이동 예약처럼 종료일이 미래인 수강에서 오늘 점이 KPI보다 1 컸다).
+ * ⚠️ 휴원 이력은 없어 지난 날짜를 되감을 수 없다 — 지금 휴원 중인 수강도 그대로 센다
+ * (KPI는 휴원 수강을 빼므로, 휴원 수강만 남은 학생 몇 명은 오늘 점과 KPI가 다를 수 있다).
+ */
+export function subjectTrendOf(
+  students: readonly TrendStudent[],
+  en: TrendEnrollments,
+  enrollments: readonly TrendEnrollment[],
+  points: readonly { key: string; label: string; date: string }[],
+  inSubject: (subject: string | null) => boolean,
+  today?: string,
+): TrendPoint[] {
+  const byStudent = new Map<string, TrendEnrollment[]>();
+  for (const e of enrollments) byStudent.set(e.studentId, [...(byStudent.get(e.studentId) ?? []), e]);
+  return points.map((p) => {
+    let count = 0;
+    for (const s of students) {
+      if (!countedOn(s, en, p.date)) continue;
+      const live = (byStudent.get(s.id) ?? []).filter((e) => (p.date === today ? !e.end : !isEnrollmentEndedOn(e.end, p.date, e.transferred)));
+      if (!live.length || live.some((e) => inSubject(e.subject) && (!e.start || e.start.slice(0, 10) <= p.date))) count++;
+    }
+    return { ...p, count };
+  });
 }
 
 const lastDay = (ym: string) => {

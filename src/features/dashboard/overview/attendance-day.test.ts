@@ -54,6 +54,8 @@ describe("attendanceOverview", () => {
   it("server fetches the same window the trend draws", () => {
     const src = readFileSync(join(process.cwd(), "src/features/dashboard/overview/server.ts"), "utf8");
     expect(src).toContain('.gte("session_date", attendanceWindowStart(today))');
-    expect(src).toContain("attendanceOverview(effectiveAttendanceRecords(rows), today)");
+    // 정정 접기를 거친 칸을 넘긴다 — 과목 관리자 값(2026-10-14)도 같은 칸을 반 과목으로 거른 것이다.
+    expect(src).toContain("const cells = effectiveAttendanceRecords(rows);");
+    expect(src).toContain("attendanceOverview(pred ? cells.filter((c) => pred(subjectOf.get(c.class_id) ?? null)) : cells, today)");
   });
 });

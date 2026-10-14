@@ -591,10 +591,12 @@ const specialAccessSchema = z.object({
   payslipViewerIds: z.array(z.string().uuid()).max(80).default([]),
   leaveAdjusterIds: z.array(z.string().uuid()).max(80).default([]),
   classSplitterIds: z.array(z.string().uuid()).max(80).default([]),
+  // 새 칸을 모르는 화면·기존 저장값과 호환. 미지정은 빈 명단과 같다.
+  enrollmentDateEditorIds: z.array(z.string().uuid()).max(80).optional(),
   staffSubjectScopes: z.array(staffSubjectScopeSchema).max(80).default([]),
 });
 /** 사람 id 목록인 칸(과목 범위는 줄 모양이 달라 따로 다룬다). */
-export const SPECIAL_ACCESS_ID_LISTS = ["payslipViewerIds", "leaveAdjusterIds", "classSplitterIds"] as const;
+export const SPECIAL_ACCESS_ID_LISTS = ["payslipViewerIds", "leaveAdjusterIds", "classSplitterIds", "enrollmentDateEditorIds"] as const;
 export const permissionsSchema = z
   .object({
     overrides: z.array(permissionOverrideSchema).max(MENU_KEYS.length * SYSTEM_ROLES.length),
@@ -631,7 +633,7 @@ export const permissionsSchema = z
       }
     }
     for (const key of SPECIAL_ACCESS_ID_LISTS) {
-      const ids = v.specialAccess[key];
+      const ids = v.specialAccess[key] ?? [];
       if (new Set(ids).size !== ids.length) {
         ctx.addIssue({ code: "custom", message: "담당자를 중복 지정할 수 없습니다" });
       }
