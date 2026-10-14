@@ -43,8 +43,8 @@ const DIRECT: Record<string, ConstraintMessage> = {
   attendance_session_units_range: { message: "시수는 0보다 크고 20 이하로 넣어 주세요" },
   // 이름 규약(_len·_dates_ck)과 정의가 다른 CHECK — 규약 문구로 떨어지면 틀린 말을 한다.
   class_textbook_plans_slot_picks_len: { message: "고른 교시 수가 허용 범위(1~48개)를 벗어났습니다" },
-  // 0359a 적용 전엔 '25분마다 1차수'를 DB가 모른다 — "형식을 확인하세요"로 떨어지면 사람이 고칠 게 없다.
-  class_textbook_plans_pace_chk: { message: "‘25분마다 1차수’는 DB 업데이트(0359a) 적용 후 쓸 수 있습니다 — 지금은 다른 단위를 골라 주세요" },
+  // 0359a 적용 전엔 '25분 수업' 단위를 DB가 모른다 — "형식을 확인하세요"로 떨어지면 사람이 고칠 게 없다.
+  class_textbook_plans_pace_chk: { message: "‘25분 수업’ 단위는 DB 업데이트(0359a) 적용 후 쓸 수 있습니다 — 지금은 다른 단위를 골라 주세요" },
   math_learning_goals_dates_ck: { message: "목표 기간은 시작일 이후, 2년(730일) 이내로 잡아 주세요" },
   leave_adjustments_used_range_ordered: { message: "사용 기간의 시작일이 비었거나 끝이 시작보다 빠릅니다" },
   // ── 강의실·교재 ──

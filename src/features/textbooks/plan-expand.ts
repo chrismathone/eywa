@@ -10,21 +10,13 @@
  */
 import type { HolidayMap } from "@/features/class-sheets/lib/holiday";
 import type { MonthScheduleRow } from "@/features/class-sheets/lib/month-assemble";
-import {
-  buildLessonSchedule,
-  MAX_LOOKAHEAD_DAYS,
-  mergeLessonTexts,
-  normalizeLessonPace,
-  type SlotAxis,
-} from "./lesson-schedule";
+import { buildLessonSchedule, MAX_LOOKAHEAD_DAYS, normalizeLessonPace, type SlotAxis } from "./lesson-schedule";
 import { addToLessonIndex, type LessonIndex } from "./plan-compare";
 
 /** 계획 한 줄 — 그 날 그 교시에 **오기로 되어 있는** 차수. 실제 줄(`class_sheet_plan_lines`)이 아니다. */
 export type PlannedLine = {
-  /** 몇 차수인가(교재의 N차수). 25분 단위로 여러 차수가 든 칸이면 첫 차수. */
+  /** 몇 차수인가(교재의 N차수). */
   lessonNo: number;
-  /** 그 칸에 든 마지막 차수 — 한 차수뿐이면 `lessonNo`와 같다(25분 단위에서만 다르다). */
-  lessonNoEnd: number;
   date: string;
   /** `"HH:MM"` — 계획 줄 `slot_start`와 같은 표기. */
   slotStart: string;
@@ -108,16 +100,16 @@ export function expandPlans(input: {
     const termMode = p.term_mode === "exam" ? "exam" : "regular";
     for (const t of schedule.targets) {
       if (t.date < from || t.date > to) continue;
+      const l = lessons?.get(t.lessonNo);
       (byCell[`${t.date}|${t.slotStart}`] ??= []).push({
         lessonNo: t.lessonNo,
-        lessonNoEnd: t.lessonNos[t.lessonNos.length - 1] ?? t.lessonNo,
         date: t.date,
         slotStart: t.slotStart,
         skillArea: book.skillArea,
         title: book.title,
         pageTime: book.pageTime,
-        progress: mergeLessonTexts(t.lessonNos, (no) => lessons?.get(no)?.progress),
-        homework: mergeLessonTexts(t.lessonNos, (no) => lessons?.get(no)?.homework),
+        progress: (l?.progress ?? null) || null,
+        homework: (l?.homework ?? null) || null,
         termMode,
       });
     }

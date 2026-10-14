@@ -341,12 +341,7 @@ function DayCell({
                       </span>
                       <span className="min-w-0 truncate">
                         <span className="font-bold">{p.title}</span>
-                        <span className="num">
-                          {" "}
-                          {p.lessonNoEnd > p.lessonNo
-                            ? tf("month.plannedNoRange", { n: p.lessonNo, m: p.lessonNoEnd })
-                            : tf("month.plannedNo", { n: p.lessonNo })}
-                        </span>
+                        <span className="num"> {tf("month.plannedNo", { n: p.lessonNo })}</span>
                         {p.progress ? <span> · {p.progress}</span> : null}
                       </span>
                     </div>

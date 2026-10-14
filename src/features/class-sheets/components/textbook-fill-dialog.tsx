@@ -454,9 +454,7 @@ export function TextbookFillDialog({
                           const o = OUTCOME[r.outcome];
                           return (
                             <tr key={`${r.date}|${r.slotStart}|${i}`} className="border-line-faint border-b last:border-0">
-                              <td className="num py-1 text-center font-bold whitespace-nowrap">
-                                {r.lessonNoEnd > r.lessonNo ? `${r.lessonNo}~${r.lessonNoEnd}` : r.lessonNo}
-                              </td>
+                              <td className="num py-1 text-center font-bold">{r.lessonNo}</td>
                               <td className="num py-1 text-center">{dayLabel(r.date, lang)}</td>
                               <td className="num py-1 text-center">{r.periodLabel ?? r.slotStart}</td>
                               <td className="truncate py-1">{r.progress ?? <span className="text-text-faint">—</span>}</td>

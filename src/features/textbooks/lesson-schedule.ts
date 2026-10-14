@@ -17,9 +17,11 @@
  *  ③ **단위(pace)**: `period` = 교시 하나가 차수 하나(1시간씩) / `day` = 그 날 그 축의 **모든 교시**가
  *     같은 차수(2시간씩). 후자는 지어낸 규칙이 아니라 이미 쓰이는 패턴이다 — 실측(2026-09-16) 교시가
  *     둘 이상인 반-날짜 628건 중 **93건(15%)** 이 두 교시에 같은 (교재, 진도)를 적어 두고 있었다.
- *     `min25` = **25분마다 1차수**(원장 2026-10-13 *"25분짜리도 만들어줘 차수단위를 25분씩짜리로"*) —
- *     교시 길이를 25분으로 **버림**해 그 칸에 차수를 여러 개 넣는다(40분→1 · 60분→2 · 80분→3, 25분 미만·
- *     종료시각 모름→1). 계획 줄은 칸마다 하나라 그 칸의 차수들은 **한 줄에 합쳐** 적는다(`mergeLessonTexts`).
+ *     `min25` = **25분 수업**(원장 2026-10-13~14). 배치는 `period`와 **똑같이 교시 하나에 차수 하나**다 —
+ *     1시간 교시라도 한 차수만 넣고, 남는 25분은 **다른 교재를 같은 교시에 배정**해 채운다(원장 *"25분짜리
+ *     1시간수업이라도 하나만 들어가게 … 다른 교재로 또 25분 추가할수있자나"*). 🔴 교시 길이로 차수를 여러 개
+ *     밀어 넣지 말 것 — 한 번 그렇게 만들었다가 원장이 되돌렸다. 값이 따로 있는 건 배정 목록에서 "이 교재는
+ *     25분짜리"라는 사실을 보이기 위해서다.
  */
 import { slotsByDateOf, type MonthScheduleRow, type MonthSlot } from "@/features/class-sheets/lib/month-assemble";
 import { holidayNameOn, type HolidayMap } from "@/features/class-sheets/lib/holiday";
@@ -32,62 +34,13 @@ export type SlotAxis = "class" | "jj";
 /** 차수 1개가 소비하는 단위. */
 export type LessonPace = "period" | "day" | "min25";
 
-/** 25분 단위 — `min25`가 한 차수에 쓰는 분. */
-export const MIN25_MINUTES = 25;
-
 /**
  * DB·입력의 단위 문자열 → `LessonPace`. 모르는 값은 `period`(가장 오래된 기본값).
  * 🔴 단위를 읽는 자리는 전부 이 함수를 탄다 — 자리마다 `=== "day" ? "day" : "period"`를 적으면
- *    새 단위를 더할 때 한 곳만 빠져도 그 화면만 1시간씩으로 조용히 되돌아간다.
+ *    새 단위를 더할 때 한 곳만 빠져도 그 화면만 조용히 다른 단위로 읽힌다.
  */
 export function normalizeLessonPace(value: unknown): LessonPace {
   return value === "day" || value === "min25" ? value : "period";
-}
-
-/** `"HH:MM"` 두 개 → 분 차이. 못 읽으면 null. */
-function minutesBetween(start: string, end: string | null): number | null {
-  if (!end) return null;
-  const toMin = (v: string) => {
-    const m = /^(\d{1,2}):(\d{2})/.exec(v.trim());
-    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
-  };
-  const a = toMin(start);
-  const b = toMin(end);
-  return a === null || b === null || b <= a ? null : b - a;
-}
-
-/** `min25`에서 교시 한 칸이 받는 차수 수 — 25분 **버림**, 최소 1(종료시각을 모르면 1). */
-export function lessonsPerSlot(slotStart: string, slotEnd: string | null): number {
-  const minutes = minutesBetween(slotStart, slotEnd);
-  return minutes === null ? 1 : Math.max(1, Math.floor(minutes / MIN25_MINUTES));
-}
-
-/** 계획 줄 진도·과제 칸의 길이 상한 — `class_sheet_plan_lines` CHECK(0157a)와 같은 값. */
-export const PLAN_TEXT_MAX = 500;
-
-/**
- * 한 칸에 든 차수들의 진도(또는 과제)를 **한 줄로** 합친다. 차수가 하나면 그대로.
- * 여럿이면 `"3차수 Unit 1\n4차수 Unit 2"`처럼 차수 번호를 붙여 줄바꿈으로 잇고, 빈 차수는 뺀다
- * (전부 비면 null — 없는 진도를 지어내지 않는다).
- */
-export function mergeLessonTexts(
-  lessonNos: readonly number[],
-  textOf: (no: number) => string | null | undefined,
-): string | null {
-  if (lessonNos.length <= 1) {
-    const only = lessonNos[0];
-    return only === undefined ? null : (textOf(only) ?? null) || null;
-  }
-  const parts: string[] = [];
-  for (const no of lessonNos) {
-    const v = (textOf(no) ?? "").trim();
-    if (v) parts.push(`${no}차수 ${v}`);
-  }
-  if (parts.length === 0) return null;
-  const joined = parts.join("\n");
-  // 🔴 계획 줄 진도·과제 칸은 500자 CHECK(0157a)다 — 넘기면 RPC가 그 묶음 **전체**를 거절한다.
-  //    한 차수가 500자까지라 셋만 합쳐도 넘을 수 있으니 끝을 줄여 넣는다(…로 줄였다는 걸 남긴다).
-  return joined.length > PLAN_TEXT_MAX ? `${joined.slice(0, PLAN_TEXT_MAX - 1)}…` : joined;
 }
 
 /**
@@ -96,11 +49,8 @@ export function mergeLessonTexts(
  */
 export const MAX_LOOKAHEAD_DAYS = 400;
 
-/**
- * 차수가 앉을 자리 한 칸. 같은 `lessonNo`가 여러 칸에 앉을 수 있다(pace="day").
- * `lessonNos` = 그 칸에 든 차수 전부(오름차순, `lessonNo`가 첫째) — `min25`만 둘 이상이 될 수 있다.
- */
-export type LessonTarget = { lessonNo: number; lessonNos: number[]; date: string; slotStart: string };
+/** 차수 하나가 앉을 자리 한 칸. 같은 `lessonNo`가 여러 칸에 앉을 수 있다(pace="day"). */
+export type LessonTarget = { lessonNo: number; date: string; slotStart: string };
 
 export type LessonSchedule = {
   /** 날짜·교시 순으로 정렬된 배치 결과. */
@@ -245,7 +195,7 @@ export function buildLessonSchedule(input: {
       if (live.some((slot) => shiftOf(slot.slotStart) === "advance")) cursor += 1;
       if (cursor >= lessonNos.length) break;
       const lessonNo = lessonNos[cursor]!;
-      for (const slot of live) targets.push({ lessonNo, lessonNos: [lessonNo], date, slotStart: slot.slotStart });
+      for (const slot of live) targets.push({ lessonNo, date, slotStart: slot.slotStart });
       cursor += 1;
       lastDate = date;
       continue;
@@ -261,11 +211,8 @@ export function buildLessonSchedule(input: {
         cursor += 1;
         if (cursor >= lessonNos.length) break;
       }
-      // 25분 단위면 그 칸 길이만큼 여러 차수를 한꺼번에 앉힌다(남은 차수가 모자라면 있는 만큼).
-      const take = pace === "min25" ? lessonsPerSlot(slot.slotStart, slot.slotEnd) : 1;
-      const nos = lessonNos.slice(cursor, cursor + take);
-      targets.push({ lessonNo: nos[0]!, lessonNos: nos, date, slotStart: slot.slotStart });
-      cursor += nos.length;
+      targets.push({ lessonNo: lessonNos[cursor]!, date, slotStart: slot.slotStart });
+      cursor += 1;
       lastDate = date;
     }
   }

@@ -33,7 +33,6 @@ import {
   MAX_LOOKAHEAD_DAYS,
   parseSlotPick,
   slotPickKey,
-  mergeLessonTexts,
   normalizeLessonPace,
   type LessonPace,
   type SlotAxis,
@@ -345,14 +344,7 @@ type Computed = {
   title: string;
   pageTime: string | null;
   skillArea: string;
-  targets: {
-    lessonNo: number;
-    lessonNos: number[];
-    date: string;
-    slotStart: string;
-    progress: string | null;
-    homework: string | null;
-  }[];
+  targets: { lessonNo: number; date: string; slotStart: string; progress: string | null; homework: string | null }[];
   unplaced: number[];
   skippedHolidays: { date: string; name: string }[];
   periodLabelBySlot: Record<string, string>;
@@ -501,12 +493,14 @@ async function computeTargets(loaded: LoadedPlan): Promise<Computed | { error: s
     title: String(book.title),
     pageTime: (book.page_time as string | null) ?? null,
     skillArea,
-    targets: schedule.targets.map((t) => ({
-      ...t,
-      // 25분 단위로 한 칸에 차수가 여럿이면 진도·과제를 한 줄로 합친다(계획 줄은 칸마다 하나다).
-      progress: mergeLessonTexts(t.lessonNos, (no) => byNo.get(no)?.progress),
-      homework: mergeLessonTexts(t.lessonNos, (no) => byNo.get(no)?.homework),
-    })),
+    targets: schedule.targets.map((t) => {
+      const l = byNo.get(t.lessonNo);
+      return {
+        ...t,
+        progress: (l?.progress ?? null) || null,
+        homework: (l?.homework ?? null) || null,
+      };
+    }),
     unplaced: schedule.unplaced,
     skippedHolidays: schedule.skippedHolidays,
     periodLabelBySlot,
@@ -597,7 +591,6 @@ async function previewLoaded(loaded: LoadedPlan, planId: string): Promise<PlanPr
     const lines = bySlot.get(key) ?? [];
     const base = {
       lessonNo: t.lessonNo,
-      lessonNoEnd: t.lessonNos[t.lessonNos.length - 1] ?? t.lessonNo,
       date: t.date,
       slotStart: t.slotStart,
       periodLabel: computed.periodLabelBySlot[key] ?? null,
