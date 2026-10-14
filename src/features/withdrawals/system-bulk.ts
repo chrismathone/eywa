@@ -26,6 +26,17 @@ export const SYSTEM_BULK_WITHDRAWAL_DATES = [
   "2026-07-03",
 ] as const;
 
+/**
+ * 관리 도구 '데이터 정리'의 일괄 퇴원(수강 없는 재원생 정리)이 남기는 메모 — 그날 그만둔 게 아니라 이미 수업이 없던
+ * 학생을 장부에서 정리한 것이다(2026-08-17 31명). 시간표 X 겹침은 이 줄을 빼고 센다(원장 2026-10-14 *"일괄정리는 제외"*).
+ * 일괄 퇴원 액션(`bulkWithdrawStudents`)이 이 상수를 그대로 적는다 — 글을 바꾸면 판정도 같이 바뀐다.
+ */
+export const CLEANUP_WITHDRAWAL_MEMO = "데이터 정리 일괄 퇴원";
+
+export function isCleanupWithdrawal(memo: string | null | undefined): boolean {
+  return memo?.trim() === CLEANUP_WITHDRAWAL_MEMO;
+}
+
 /** 그 퇴원일이 시스템 일괄 처리분인가(날짜만 본다). */
 export function isSystemBulkWithdrawalDate(withdrawnAt: string | null): boolean {
   if (!withdrawnAt) return false;

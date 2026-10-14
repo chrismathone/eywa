@@ -30,17 +30,25 @@ export type RecordsAsOf = {
   coverage: ReturnType<typeof buildCoverage>;
 };
 
-export function buildContext(d: PortfolioSnapshot) {
-  const classNames = groupBy(d.classes, (c) => c.class_name);
+/**
+ * 반·날짜 → 그날 담임(id). 강사평가 전 지표와 시간표 X 겹침(퇴원 담당)이 **이 한 함수**를 쓴다 — 따로 짜면 같은 퇴원이
+ * 화면마다 다른 선생님에게 붙는다(원장 2026-10-14). 담임 이력 = 감사로그 전이, 반 id가 없으면 반 이름이 하나뿐일 때만 잇는다.
+ */
+export function buildHomeroomOwner(classes: readonly SnapshotClass[], transitions: PortfolioSnapshot["transitions"]) {
+  const classNames = groupBy(classes, (c) => c.class_name);
   const classIdOfLabel = (label: string | null) => {
     const hits = label ? classNames.get(label) : undefined;
     return hits?.length === 1 ? hits[0].id : "";
   };
-  const history = buildHomeroomHistoryIndex(d.transitions.map((t) => ({
+  const history = buildHomeroomHistoryIndex(transitions.map((t) => ({
     classId: t.class_id || classIdOfLabel(t.target_label), date: t.date, teacherName: null,
     teacherId: t.teacher_id, previousTeacherId: t.previous_teacher_id,
   })));
-  const owner = (c: SnapshotClass, day: string) => homeroomTeacherOnDate(history.get(c.id), c.teacher_id, day);
+  return (c: SnapshotClass, day: string) => homeroomTeacherOnDate(history.get(c.id), c.teacher_id, day);
+}
+
+export function buildContext(d: PortfolioSnapshot) {
+  const owner = buildHomeroomOwner(d.classes, d.transitions);
   const reportOwner = (c: SnapshotClass, day: string) => {
     const active = d.delegations.filter((x) => x.class_id === c.id && between(day, x.from_date, x.to_date));
     return active.length === 1 ? active[0].delegate_user_id : active.length > 1 ? null : owner(c, day);

@@ -4,6 +4,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { WindowLink } from "@/components/workspace/window-link";
 import { tipProps } from "@/components/hover-tip/tip";
 import type { ExitOverlayData, OverlayGroup, OverlayMonth, OverlayRow } from "@/features/withdrawals/exit-overlay-model";
+import { KBD_CLASS } from "./exit-overlay-hint";
 
 /** `loading.prev` = 달을 옮기는 동안 흐리게 남겨 두는 직전 묶음(카드가 줄었다 커지며 자리가 튀지 않게). */
 export type ExitOverlayState =
@@ -16,61 +17,54 @@ const tint = (color: string | undefined): CSSProperties | undefined =>
   color ? { background: `color-mix(in srgb, ${color} 62%, var(--card))` } : undefined;
 
 function Kbd({ children }: { children: ReactNode }) {
-  return (
-    <kbd className="border-line-strong bg-card inline-flex min-w-[1.6em] items-center justify-center rounded border border-b-2 px-1 font-sans text-xs font-bold">
-      {children}
-    </kbd>
-  );
+  return <kbd className={KBD_CLASS}>{children}</kbd>;
 }
 
-function Chip({ children, dashed = false }: { children: ReactNode; dashed?: boolean }) {
-  return (
-    <span className={`border-line-strong bg-card mr-1 inline-block rounded-full border px-1.5 text-xs leading-snug font-bold ${dashed ? "ml-1 mr-0 border-dashed" : ""}`}>
-      {children}
-    </span>
-  );
-}
-
-const ROW = "grid grid-cols-[8.8em_2.9em_minmax(0,1fr)] items-baseline gap-2 px-2 py-px text-xs";
+/**
+ * 한 달 열의 칸 — 이름 · 학교학년 · 날짜 · 사유가 묶음을 건너 **같은 세로줄**에 선다(원장 2026-10-14 *"열정리"*, 제목 행은 없다).
+ * 열 본문이 네 칸 격자이고 묶음·줄은 그 칸을 물려받는다(subgrid).
+ */
+// 사유 칸은 최소 6em — 좁은 창에서 앞 세 칸(auto)이 폭을 다 가져가 사유가 사라지지 않게(넘치면 이름·학교가 먼저 잘린다).
+const COLS = "grid grid-cols-[auto_auto_auto_minmax(6em,1fr)] gap-x-2";
+const SUB = "col-span-full grid grid-cols-subgrid";
+const ROW = `${SUB} items-baseline px-2 py-0.5 text-xs`;
+const CELL = "min-w-0 truncate";
+// 일반 화면 문구 — 평가 메뉴(실험실) 이름을 쓰지 않는다(꺼진 지점에선 있었는지도 모르게).
+const UNCOUNTED_TIP =
+  "선생님 퇴원 수에 넣지 않은 퇴원입니다 — 지난달 절반 이상 맡은 선생님이 없거나(온 지 얼마 안 된 학생 등), 이사 · 질병 · 권고퇴원 · 졸업, 끝난 특강 등.";
 
 function Row({ row }: { row: OverlayRow }) {
   const strike = row.excluded ? "line-through" : "";
   return (
     <div className={ROW} {...tipProps(row.reasonTitle)}>
-      <span className={`truncate ${strike}`}>
-        <b className="font-bold">{row.name}</b> {row.schoolGrade}
-      </span>
+      <b className={`${CELL} font-bold ${strike}`}>{row.name}</b>
+      <span className={`${CELL} ${strike}`}>{row.schoolGrade}</span>
       <span className="text-right tabular-nums">{row.dateLabel}</span>
-      <span className={`truncate ${strike}`}>
-        {row.kind === "subject-ended" ? <Chip>수강종료</Chip> : null}
-        {row.reason}
-        {row.excluded ? <Chip dashed>제외</Chip> : null}
-      </span>
+      <span className={`${CELL} ${strike}`}>{row.reason}</span>
     </div>
   );
 }
 
 function Group({ group, color }: { group: OverlayGroup; color: string | undefined }) {
   return (
-    <div className="bg-bg-soft rounded-md pt-0.5 pb-1" style={tint(color)}>
-      <div className="flex items-center gap-1.5 px-2 pt-1 pb-0.5 text-xs font-extrabold">
-        <span>{group.teacher ?? "담임 미상"}</span>
+    <div className={`${SUB} bg-bg-soft rounded-md pb-0.5`} style={tint(color)}>
+      <div
+        className="border-line-strong col-span-full flex items-center gap-1.5 border-b px-2 pt-1.5 pb-1 text-sm font-extrabold"
+        {...(group.teacher ? {} : tipProps(UNCOUNTED_TIP))}
+      >
+        <span>{group.teacher ?? "선생님 미반영"}</span>
         <span className="tabular-nums before:mr-1.5 before:font-normal before:content-['·']">{group.count}</span>
-        {group.inferred > 0 ? (
-          <span {...tipProps(`담임 기록이 없어 ${group.inferred}줄은 마지막 보고서·출결로 추정했습니다(줄에 마우스를 올리면 근거)`)}>
-            <Chip dashed>추정</Chip>
-          </span>
-        ) : null}
       </div>
-      {group.rows.map((r) => (
-        <Row key={r.key} row={r} />
-      ))}
+      <div className={`${SUB} divide-line-strong divide-y divide-dotted`}>
+        {group.rows.map((r) => (
+          <Row key={r.key} row={r} />
+        ))}
+      </div>
     </div>
   );
 }
 
 function Column({ month, tints }: { month: OverlayMonth; tints: Record<string, string> }) {
-  const { counts } = month;
   return (
     <section aria-label={month.label} className="border-line-faint flex min-w-0 flex-col border-r last:border-r-0 max-[760px]:border-r-0 max-[760px]:border-b">
       <div className="border-line bg-card sticky top-0 z-[1] border-b px-3 pt-2.5 pb-2">
@@ -79,33 +73,32 @@ function Column({ month, tints }: { month: OverlayMonth; tints: Record<string, s
           {month.live ? <span className="bg-primary-soft text-primary rounded-full px-2 text-xs font-bold">진행 중</span> : null}
         </div>
         <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-1 text-xs tabular-nums">
-          <span><b className="mr-0.5 text-sm font-extrabold">{counts.withdrawn}</b>퇴원</span>
-          <span><b className="mr-0.5 text-sm font-extrabold">{counts.subjectEnded}</b>수강종료</span>
-          <span>
-            제외 <b className="font-bold">{counts.excluded}</b>
-            {month.holds ? <> · 휴원 <b className="font-bold">{month.holds.length}</b></> : null}
-          </span>
+          <span><b className="mr-0.5 text-sm font-extrabold">{month.count}</b>퇴원</span>
+          {month.holds ? <span>휴원 <b className="font-bold">{month.holds.length}</b></span> : null}
         </div>
       </div>
-      <div className="flex flex-col gap-1.5 px-2.5 pt-2 pb-3">
-        {month.groups.length === 0 ? <p className="px-0.5 py-2.5 text-xs">이 달에는 퇴원 · 수강종료가 없습니다.</p> : null}
+      <div className={`${COLS} content-start gap-y-1.5 px-2.5 pt-2 pb-3`}>
+        {month.groups.length === 0 ? <p className="col-span-full px-0.5 py-2.5 text-xs">이 달에는 퇴원이 없습니다.</p> : null}
         {month.groups.map((g) => (
           <Group key={g.teacher ?? "—"} group={g} color={g.teacher ? tints[g.teacher] : undefined} />
         ))}
         {month.holds && month.holds.length > 0 ? (
-          <div className="bg-bg-soft rounded-md pt-0.5 pb-1">
-            <div className="px-2 pt-1 pb-0.5 text-xs font-extrabold">지금 휴원 중 · {month.holds.length}</div>
-            {month.holds.map((h) => (
-              <div key={h.key} className={ROW}>
-                <span className="truncate"><b className="font-bold">{h.name}</b> {h.schoolGrade}</span>
-                <span />
-                <span className="truncate">{[h.className, h.teacher].filter(Boolean).join(" · ")}</span>
-              </div>
-            ))}
+          <div className={`${SUB} bg-bg-soft rounded-md pb-0.5`}>
+            <div className="border-line-strong col-span-full border-b px-2 pt-1.5 pb-1 text-sm font-extrabold">지금 휴원 중 · {month.holds.length}</div>
+            <div className={`${SUB} divide-line-strong divide-y divide-dotted`}>
+              {month.holds.map((h) => (
+                <div key={h.key} className={ROW}>
+                  <b className={`${CELL} font-bold`}>{h.name}</b>
+                  <span className={CELL}>{h.schoolGrade}</span>
+                  <span />
+                  <span className={CELL}>{[h.className, h.teacher].filter(Boolean).join(" · ")}</span>
+                </div>
+              ))}
+            </div>
           </div>
         ) : null}
-        {month.zero?.length ? (
-          <div className="border-line mt-0.5 flex flex-wrap items-center gap-1.5 border-t px-0.5 pt-1.5 text-xs">
+        {month.zero.length ? (
+          <div className="border-line col-span-full mt-0.5 flex flex-wrap items-center gap-1.5 border-t px-0.5 pt-1.5 text-xs">
             <b className="mr-0.5 font-extrabold">퇴원 0</b>
             {month.zero.map((t) => (
               <span key={t} className="bg-bg-soft rounded-full px-2 font-bold" style={tint(tints[t])}>{t}</span>
@@ -136,7 +129,7 @@ export function ExitOverlayCard({
   return (
     <div className="border-line bg-card shadow-modal flex max-h-[min(660px,calc(100vh-16px))] w-[min(1040px,calc(100vw-16px))] flex-col rounded-lg border">
       <div className="border-line flex flex-wrap items-center gap-x-2.5 gap-y-1.5 border-b px-3 py-2">
-        <span className="text-sm font-extrabold">퇴원 · 수강종료</span>
+        <span className="text-sm font-extrabold">퇴원</span>
         <span className="text-xs">{data?.subjectLabel ?? ""}</span>
         <span className="flex-1" />
         <button type="button" className={BTN} onClick={onOlder} disabled={busy || !data?.canOlder}>‹ 이전 달</button>
@@ -164,7 +157,7 @@ export function ExitOverlayCard({
           <span><Kbd>Esc</Kbd> 닫기</span>
         </span>
         <span className="min-w-0 flex-[1_1_340px]">
-          선생님은 그때 담임입니다(기록이 없으면 보고서 · 출결로 추정). 이사 · 질병 · 권고퇴원 · 졸업은 줄을 긋고 건수에서 뺍니다. 휴원은 건수에 넣지 않습니다.
+          선생님 = 그날 담임 + 교시 담당(지난달 절반 이상 맡은 학생). 과목을 끊은 학생도 퇴원으로 셉니다. 이사 · 질병 · 권고퇴원 · 졸업은 줄을 긋고 건수에서 뺍니다. 데이터 정리 일괄 퇴원과 휴원은 넣지 않습니다.
         </span>
         {data ? (
           <WindowLink href={data.withdrawalsHref} className="text-primary font-bold hover:underline">
