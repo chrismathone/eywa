@@ -69,6 +69,7 @@ it("영상 목록은 제목행 없이 배정 상태를 보여 주고, 숙제일~
     { ...original.videos[0], id: "after15", postedAt: "2026-10-16T00:00:00+09:00" },
     { ...original.videos[0], id: "unassigned", className: null, homeworkDate: null },
     { ...original.videos[0], id: "automatic", homeworkDate: null },
+    { ...original.videos[0], id: "free", homeworkDate: null, free: true, note: "개념 강의 찍기" },
     { ...original.videos[0], id: "excluded", excluded: true },
   ] });
   render(<VideoAssignmentDialog row={row} fromDate="2026-10-01" toDate="2026-11-01" onClose={vi.fn()} linked={new Map([["automatic", "2026-10-01"]])} />);
@@ -81,7 +82,10 @@ it("영상 목록은 제목행 없이 배정 상태를 보여 주고, 숙제일~
   // "2026-10-02 배정"은 "10/2에 배정한 날"로 읽혔다(원장 2026-10-13) — 어느 숙제에 붙었나를 말한다.
   expect(screen.getByRole("option", { name: /10\.02 숙제에 연결됨/ })).toBeInTheDocument();
   expect(screen.getByRole("option", { name: /10\.01 숙제에 자동 연결됨/ })).toBeInTheDocument();
-  expect(screen.getByRole("option", { name: /이 기간 숙제엔 안 붙음/ })).toBeInTheDocument();
+  // "이 기간 숙제엔 안 붙음"은 "붙일 수 없다"로 읽혔다(원장 2026-10-15) — 짧게 · 숙제를 안 고르고 올린 영상은 그렇게 말한다.
+  expect(screen.getByRole("option", { name: /연결 안 됨/ })).toBeInTheDocument();
+  expect(screen.getByRole("option", { name: /숙제 없이 올림.*개념 강의 찍기/ })).toBeInTheDocument();
+  expect(screen.queryByText(/이 기간/)).not.toBeInTheDocument();
   expect(screen.queryByRole("option", { name: /배정$|미배정|숙제일 미지정/ })).not.toBeInTheDocument();
   expect(screen.getByRole("option", { name: /집계 제외/ })).toBeInTheDocument();
   await user.click(screen.getByRole("option", { name: /10\.02 숙제에 연결됨/ }));

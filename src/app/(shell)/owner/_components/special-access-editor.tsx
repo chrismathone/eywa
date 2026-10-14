@@ -9,9 +9,10 @@ import { SpecialAccessList } from "./special-access-list";
 
 type SpecialAccess = PermissionsSettings["specialAccess"];
 type StaffOption = { id: string; name: string; role: string };
-type ListKey = "payslipViewerIds" | "leaveAdjusterIds" | "classSplitterIds";
+type ListKey = "payslipViewerIds" | "payslipManagerIds" | "leaveAdjusterIds" | "classSplitterIds";
 const LISTS: readonly { key: ListKey; label: string; hint: string }[] = [
-  { key: "payslipViewerIds", label: "급여명세서 열람", hint: "급여명세서를 열람 · 작성 · 발행할 수 있는 사람입니다. 원장과 여기서 지정한 사람만 봅니다. 지정한 사람은 출석부 메뉴 권한도 있어야 합니다." },
+  { key: "payslipViewerIds", label: "급여명세서 열람", hint: "급여명세서를 조회·인쇄할 수 있는 사람입니다. 조정 저장·발행·발행취소는 관리 권한이 필요합니다. 지정한 사람은 출석부 메뉴 권한도 있어야 합니다." },
+  { key: "payslipManagerIds", label: "급여명세서 관리", hint: "열람을 포함해 조정 저장·발행·발행취소를 할 수 있는 사람입니다. 열람 명단에 중복 지정할 필요가 없으며, 관리 명단에 남아 있으면 열람을 해제해도 볼 수 있습니다. 출석부 메뉴 권한도 있어야 합니다." },
   { key: "leaveAdjusterIds", label: "연차 조정", hint: "직원의 연차 부여 일수를 고칠 수 있는 사람입니다. 직원관리 메뉴 권한도 있어야 합니다." },
   { key: "classSplitterIds", label: "수업 나누기", hint: "시간표에서 수업을 나눌 수 있는 사람입니다. 수업 관리 권한도 있어야 합니다." },
 ];
@@ -37,7 +38,7 @@ export function SpecialAccessEditor({ value, hiddenUserIds, staffOptions, nameOf
   const payrollOn = useModuleOn("payroll");
   const hidden = new Set(hiddenUserIds);
   const pickable = staffOptions.filter((s) => !hidden.has(s.id) && s.role !== "master");
-  const lists = LISTS.filter(({ key }) => (key !== "payslipViewerIds" || payrollOn) && (key !== "classSplitterIds" || CLASS_SPLIT_ENABLED));
+  const lists = LISTS.filter(({ key }) => (!key.startsWith("payslip") || payrollOn) && (key !== "classSplitterIds" || CLASS_SPLIT_ENABLED));
   return (
     <SettingsCard
       title="개인별 기능 권한"
@@ -47,8 +48,8 @@ export function SpecialAccessEditor({ value, hiddenUserIds, staffOptions, nameOf
     >
       <div className="space-y-5">
         {lists.map(({ key, label, hint }) => <SpecialAccessList key={key} label={label} hint={hint}
-          ids={value[key]} hiddenUserIds={hiddenUserIds} staffOptions={pickable} nameOf={nameOf}
-          onChange={(update) => onChange((prev) => ({ ...prev, [key]: update(prev[key]) }))} />)}
+          ids={value[key] ?? []} hiddenUserIds={hiddenUserIds} staffOptions={pickable} nameOf={nameOf}
+          onChange={(update) => onChange((prev) => ({ ...prev, [key]: update(prev[key] ?? []) }))} />)}
         <StaffScopeEditor
           scopes={value.staffSubjectScopes}
           hiddenUserIds={hiddenUserIds}

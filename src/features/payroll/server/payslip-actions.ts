@@ -23,8 +23,8 @@ import { unstable_rethrow } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { logAction } from "@/features/audit/server/log";
 import { resolvePenaltyPoints } from "../payslip";
-import { PAYSLIP_DENIED_MSG } from "../payslip-access";
-import { canViewPayslipNow } from "./payslip-gate";
+import { PAYSLIP_MANAGE_DENIED_MSG } from "../payslip-access";
+import { canManagePayslipNow } from "./payslip-gate";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getPayslipData } from "./payslip-queries";
 
@@ -62,9 +62,8 @@ export async function savePayslipAdjustments(
 ): Promise<SavePayslipState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  // 급여 = 원장 전용(RLS로도 막히지만 여기서 먼저 분명한 메시지를 준다).
-  // ⚠️ canWriteTenant("billing")은 admin·accountant를 통과시켜 여기 쓸 수 없다.
-  if (!(await canViewPayslipNow(user))) return { error: PAYSLIP_DENIED_MSG };
+  // 메뉴 권한과 별개인 관리 명단 + 읽기 전용/모듈 제한을 실제 요청자로 확인한다.
+  if (!(await canManagePayslipNow())) return { error: PAYSLIP_MANAGE_DENIED_MSG };
 
   const teacherId = String(formData.get("teacherId") ?? "").trim();
   const period = String(formData.get("period") ?? "").trim();
@@ -153,7 +152,7 @@ export async function issuePayslip(
 ): Promise<SavePayslipState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canViewPayslipNow(user))) return { error: PAYSLIP_DENIED_MSG };
+  if (!(await canManagePayslipNow())) return { error: PAYSLIP_MANAGE_DENIED_MSG };
 
   const teacherId = String(formData.get("teacherId") ?? "").trim();
   const period = String(formData.get("period") ?? "").trim();
@@ -214,7 +213,7 @@ export async function unissuePayslip(
 ): Promise<SavePayslipState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canViewPayslipNow(user))) return { error: PAYSLIP_DENIED_MSG };
+  if (!(await canManagePayslipNow())) return { error: PAYSLIP_MANAGE_DENIED_MSG };
 
   const teacherId = String(formData.get("teacherId") ?? "").trim();
   const period = String(formData.get("period") ?? "").trim();

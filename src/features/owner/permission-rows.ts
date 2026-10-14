@@ -112,20 +112,23 @@ export function permissionRowGroups(navigation?: PermissionNavigation, options?:
   const groups: { id: string; label: string; hidden: boolean; keys: MenuKey[] }[] = [];
   for (const g of configured) {
     const keys: MenuKey[] = [];
+    // 화면 위 탭 이름은 그 묶음의 버튼을 다 적은 **뒤에** 붙인다 — 메뉴 판·화면 탭 차례(수납 · 교재 · 지출 → 환불 …)와 같게(리뷰 2026-10-15).
+    const tabsAfter: { menu: MenuKey; dest: PlacedDest }[] = [];
     for (const d of g.items) {
       if (!visible(d)) continue;
       const at = placed.get(d.menuKey) ?? { row: newRow(d.menuKey), dests: [] };
       // 원장만 들어가는 면은 "이 권한으로 열리는 메뉴"로 적지 않는다 — 다른 역할에게 이 줄을 열어도 그 면은 안 열린다.
       const hidden = g.hidden === true || isMenuHiddenByLayout(d.href, menus);
       at.dests.push({ label: d.label, renamed: renamed(d), hidden, listed: !d.masterOnly });
-      // 같은 권한으로 열리는 그 화면 위 탭(수납의 교재·지출 · 셔틀의 오늘 등하원 …)도 '이 권한으로 열리는 메뉴'에 적는다 — 메뉴에선 뺐지만
+      // 같은 권한으로 열리는 그 화면 위 탭(수납의 환불 요청서·회차 확정 · 셔틀의 오늘 등하원 …)도 '이 권한으로 열리는 메뉴'에 적는다 — 메뉴에선 뺐지만
       // (원장 2026-10-14) 이 줄이 여는 화면이다. 감춤은 부모를 따른다(탭은 부모 화면 안에 있다). 따로 권한이 있는 탭은 제 줄이 적는다.
       for (const tab of INNER_TABS.find((x) => x.parent === d.href)?.items ?? []) {
-        if (tab.menuKey === d.menuKey && visible(tab)) at.dests.push({ label: tab.label, renamed: false, hidden, listed: !tab.masterOnly });
+        if (tab.menuKey === d.menuKey && visible(tab)) tabsAfter.push({ menu: d.menuKey, dest: { label: tab.label, renamed: false, hidden, listed: !tab.masterOnly } });
       }
       placed.set(d.menuKey, at);
       keys.push(...rowsAt(d));
     }
+    for (const t of tabsAfter) placed.get(t.menu)?.dests.push(t.dest);
     groups.push({ id: g.id, label: g.label, hidden: g.hidden === true, keys });
   }
 
