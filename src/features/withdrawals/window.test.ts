@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   countWithdrawalPrograms,
+  endedTogether,
   inWithdrawalWindow,
   lastEndedByStudent,
   pickLastEnded,
@@ -61,6 +62,20 @@ describe("pickLastEnded — 마지막으로 끝난 수강", () => {
     ]);
     expect(map.get("s1")?.id).toBe("2");
     expect(map.has("s2")).toBe(false);
+  });
+
+  it("함께 끝난 수강 = 마지막 종료에서 14일 안 · 반이동으로 닫힌 줄과 더 오래된 줄은 빠진다 · 첫째는 pickLastEnded", () => {
+    const rows = [
+      { id: "tue", end_date: "2026-09-10", start_date: "2026-03-02" },
+      { id: "thu", end_date: "2026-09-08", start_date: "2026-03-02" },
+      { id: "moved", end_date: "2026-09-01", start_date: "2026-03-02", is_transferred: true },
+      { id: "old", end_date: "2026-08-20", start_date: "2026-03-02" },
+      { id: "open", end_date: null, start_date: "2026-09-01" },
+    ];
+    expect(endedTogether(rows).map((r) => r.id)).toEqual(["tue", "thu"]);
+    expect(endedTogether(rows)[0]).toBe(pickLastEnded(rows));
+    expect(endedTogether([{ id: "x", end_date: "2026-09-10", is_transferred: true }]).map((r) => r.id)).toEqual(["x"]);
+    expect(endedTogether([])).toEqual([]);
   });
 });
 
