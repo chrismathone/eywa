@@ -2,7 +2,8 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * 녹음 캡슐 정보창(원장 2026-10-14) — "눌러서 정보창 띄워놓은채로 있으면 시간이 계속 보이게" ·
+ * 녹음 캡슐 정보창(원장 2026-10-14) — "눌러서 정보창 띄워놓은채로 있으면 시간이 계속 보이게" = 정보창이 열린 동안
+ * 캡슐이 펼친 채 시간을 보인다(닫혀 있으면 종전대로 올릴 때만). 정보창 자체엔 시간을 적지 않는다("안내창은 녹음 시간 안보여도됨") ·
  * "정보창 위치도 녹음 아이콘 위치에 따라 스마트하게". 정보창은 X·캡슐 다시 누르기·Esc·바깥 클릭으로만 닫히고,
  * 캡슐을 끌거나 창 크기가 바뀌면 닫지 않고 자리만 다시 잡는다. 자리 계산 자체는 recording-panel-placement.test.ts.
  */
@@ -13,7 +14,9 @@ vi.mock("@/lib/recording-recovery", async (original) => ({
 }));
 vi.mock("@/lib/audio-upload", async (original) => ({ ...await original<typeof import("@/lib/audio-upload")>(), downloadFile: () => {} }));
 vi.mock("next/navigation", () => ({ usePathname: () => "/meetings/new", useRouter: () => ({ push: vi.fn() }) }));
-vi.mock("next/link", () => ({ default: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a> }));
+// Next Link처럼 기본 이동은 막고 onClick만 부른다(happy-dom이 실제로 주소를 옮기지 않게).
+vi.mock("next/link", () => ({ default: ({ href, children, className, onClick }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }) =>
+  <a href={href} className={className} onClick={(event) => { event.preventDefault(); onClick?.(event); }}>{children}</a> }));
 vi.mock("@/lib/realtime/window-busy", () => ({ publishWindowBusy: vi.fn() }));
 
 import { adoptRecordingOwner, dismissBrowserRecording, startBrowserRecording, stopBrowserRecording } from "@/lib/browser-recording";
@@ -83,11 +86,12 @@ function press(element: Element, at = { clientX: 20, clientY: 20 }) {
 }
 
 describe("녹음 정보창 — 띄워 둔 동안 시간이 계속 보인다", () => {
-  it("열어 둔 채 1초마다 올라가고 캡슐과 같은 시간을 말한다 · 열린 동안 캡슐도 펼친 채", () => {
+  it("열어 둔 동안 캡슐이 펼친 채 1초마다 올라가는 시간을 보인다 · 정보창엔 시간을 적지 않는다", () => {
+    expect(anchor().dataset.open).toBeUndefined();
     open();
     for (const expected of ["00:01", "00:02", "00:03", "00:10"]) {
       act(() => { vi.advanceTimersByTime(expected === "00:10" ? 7000 : 1000); });
-      expect(panel()).toHaveTextContent(expected);
+      expect(panel()).not.toHaveTextContent(expected);
       expect(capsule()).toHaveAccessibleName(new RegExp(`· ${expected} ·`));
       expect(anchor().textContent).toContain(expected);
     }
@@ -118,6 +122,20 @@ describe("녹음 정보창 — 띄워 둔 동안 시간이 계속 보인다", ()
     expect(panel()).not.toBeNull();
     expect(panel()!.style.left).not.toBe(before);
     expect(parseFloat(panel()!.style.left) + 320).toBeLessThanOrEqual(800 - 16);
+  });
+
+  it("녹음을 멈춰도(녹음 완료) 열어 둔 정보창과 펼친 캡슐은 그대로 · '작성 화면 열기'는 그 화면으로 가며 정보창을 닫는다", async () => {
+    open();
+    act(() => { vi.advanceTimersByTime(3000); });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "녹음 중지" })); await vi.runOnlyPendingTimersAsync(); });
+    expect(capsule()).toHaveAccessibleName(/^녹음 완료 · 00:03 · /);
+    expect(anchor().textContent).toContain("00:03");
+    expect(anchor().dataset.open).toBe("true");
+    const link = screen.getByRole("link", { name: "작성 화면 열기" });
+    expect(link).toHaveAttribute("href", window.location.pathname + window.location.search);
+    fireEvent.click(link);
+    expect(panel()).toBeNull();
+    expect(anchor().dataset.open).toBeUndefined();
   });
 
   it("스크롤로는 닫지 않는다", () => {
