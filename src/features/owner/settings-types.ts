@@ -655,7 +655,7 @@ export type PermissionsSettings = z.infer<typeof permissionsSchema>;
 // === 탭 및 메뉴 구성(관리자뷰 사이드바 + 강사뷰 '내 메뉴') — 보기 설정, 권한 아님 ===
 // 규약·적용은 [`menu-layout.ts`](./menu-layout.ts) 단일 소스. 여기 담기는 건 **바뀐 줄만**(sparse)이고,
 // 비어 있으면 지금과 똑같이 동작한다(전부 표시·코드 순서). 판정 단위가 menuKey가 아니라 목적지 주소인
-// 이유도 그 파일에 적혀 있다(한 메뉴가 버튼 여럿을 갖는다 — 수납 7면·설정 11면…).
+// 이유도 그 파일에 적혀 있다(한 메뉴가 버튼 여럿을 갖는다 — 출석부 3면·설정 11면…).
 const menuOrderSchema = z.object({
   href: z.string().min(1).max(120).regex(/^\//, "앱 안 주소여야 합니다"),
   hidden: z.boolean().optional(),

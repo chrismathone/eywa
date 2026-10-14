@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
 import type { MenuKey } from "@/lib/permissions";
+import { adminEditorSource } from "@/features/owner/navigation-editor-source";
 import { type MenuLayoutRow, type MenuGroupLayoutRow } from "@/features/owner/menu-layout";
 import { navigationRevision } from "@/features/owner/normalize-navigation";
 import type { NavigationSettings } from "@/features/owner/settings-types";
@@ -10,13 +11,18 @@ import { SectionForm } from "./section-form";
 import { AdminMenuEditor } from "./admin-menu-editor";
 import { TeacherMenuEditor } from "./teacher-menu-editor";
 
-export function NavigationSection({ initial, teacherOpen, onPreview, onViewChange }: {
+export function NavigationSection({ initial, teacherOpen, teacherPersonal, closedMenus, onPreview, onViewChange }: {
   initial: NavigationSettings; teacherOpen: readonly MenuKey[];
+  /** 개인별 메뉴 권한으로 누군가에게 연 메뉴 — 강사 역할에 꺼져 있어도 강사뷰 편집기에 남긴다. */
+  teacherPersonal?: readonly MenuKey[];
+  /** 이 지점에서 아무도 열 수 없는 메뉴(꺼 둔 기능 · 보강 모드 · 실험실 · 라이선스) — 편집기에 세우지 않는다. */
+  closedMenus?: readonly MenuKey[];
   /** 로컬 dev 미리보기만 제공하는 저장 대체 함수. 운영 저장은 SectionForm의 단일 경로. */
   onPreview?: (settings: NavigationSettings) => void;
   onViewChange?: (view: "admin" | "teacher") => void;
 }) {
   const [view, setView] = useState<"admin" | "teacher">("admin");
+  const adminSource = useMemo(() => adminEditorSource(closedMenus), [closedMenus]);
   const [menus, setMenus] = useState<MenuLayoutRow[]>(initial.menus);
   const [groups, setGroups] = useState<MenuGroupLayoutRow[]>(initial.groups ?? []);
   const [confirmReset, setConfirmReset] = useState(false);
@@ -44,12 +50,12 @@ export function NavigationSection({ initial, teacherOpen, onPreview, onViewChang
         <ToolbarSegment label="구성할 화면"><ToolbarSegmentItem active={view === "admin"} onClick={() => changeView("admin")}>관리자뷰</ToolbarSegmentItem><ToolbarSegmentItem active={view === "teacher"} onClick={() => changeView("teacher")}>강사뷰</ToolbarSegmentItem></ToolbarSegment>
       </div>
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <p className="text-text-dim max-w-3xl text-xs leading-relaxed">{view === "admin" ? "왼쪽에서 탭을 고른 뒤 이름·아이콘을 바꾸고 내부 메뉴를 배치하세요. 사이드바·휴대폰 메뉴·검색에 함께 적용됩니다." : "강사 ‘내 메뉴’에 원하는 폴더를 만들고 메뉴를 끌어 담으세요. 탭과 내부 메뉴의 이름·아이콘·순서를 자유롭게 정할 수 있습니다."}<br />학원 전체에 적용되며, 직원마다 권한이 있는 메뉴만 보입니다. 메뉴를 숨겨도 기존 접근 권한은 바뀌지 않습니다.</p>
+        <p className="text-text-dim max-w-3xl text-xs leading-relaxed">{view === "admin" ? "왼쪽에서 탭을 고른 뒤 이름·아이콘을 바꾸고 내부 메뉴를 배치하세요. 사이드바·휴대폰 메뉴·검색에 함께 적용됩니다. 화면 안의 탭(수납의 교재·지출 등)은 그 화면 위에서 오가므로 여기에 따로 담지 않습니다." : "강사 ‘내 메뉴’에 원하는 폴더를 만들고 메뉴를 끌어 담으세요. 탭과 내부 메뉴의 이름·아이콘·순서를 자유롭게 정할 수 있습니다."}<br />학원 전체에 적용되며, 직원마다 권한이 있는 메뉴만 보입니다. 메뉴를 숨겨도 기존 접근 권한은 바뀌지 않습니다.</p>
         <button type="button" onClick={() => setConfirmReset(!confirmReset)} className="border-line hover:bg-bg-soft rounded-lg border px-3 py-2 text-xs font-semibold">{view === "admin" ? "관리자뷰" : "강사뷰"} 기본 구성 복원</button>
       </div>
       {confirmReset ? <div className="border-line bg-bg-soft flex flex-wrap items-center gap-3 rounded-lg border p-3 text-sm"><p className="flex-1">{view === "admin" ? "관리자뷰" : "강사뷰"}의 탭·이름·아이콘·배치를 기본 구성으로 되돌립니다. 저장하면 적용됩니다.</p><button type="button" className="text-primary font-bold" onClick={() => { if (view === "admin") { setMenus([]); setGroups([]); } else { setTeacherMenus([]); setTeacherGroups([]); } setConfirmReset(false); }}>기본 구성으로 되돌리기</button><button type="button" onClick={() => setConfirmReset(false)}>취소</button></div> : null}
     </div>
-    {view === "admin" ? <AdminMenuEditor menus={menus} groups={groups} onMenus={setMenus} onGroups={setGroups} /> : <TeacherMenuEditor menus={teacherMenus} groups={teacherGroups} teacherOpen={teacherOpen} onMenus={setTeacherMenus} onGroups={setTeacherGroups} />}
+    {view === "admin" ? <AdminMenuEditor menus={menus} groups={groups} onMenus={setMenus} onGroups={setGroups} source={adminSource} /> : <TeacherMenuEditor menus={teacherMenus} groups={teacherGroups} teacherOpen={teacherOpen} teacherPersonal={teacherPersonal} onMenus={setTeacherMenus} onGroups={setTeacherGroups} />}
   </>;
   return onPreview ? <div className="space-y-6">{content}<button type="button" onClick={() => onPreview(payload)} className="bg-primary text-primary-foreground rounded-xl px-5 py-3 font-bold">미리보기에 적용</button></div> : <SectionForm section="navigation" payload={payload} navigationBaseline={baseline}>{content}</SectionForm>;
 }

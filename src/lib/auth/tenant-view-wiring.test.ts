@@ -302,7 +302,8 @@ describe("지점 보기 — 판정은 한 곳, 가드 없는 클라이언트는 
     expect(me.indexOf("isTenantViewScreenRequest())")).toBeLessThan(me.indexOf('const view = tv.state === "live" ? tv.view : null;'));
     // 권한 매트릭스의 폴백이 그 이동 신호를 삼키지 않는다(삼키면 권한만 묻고 데이터를 읽는 화면이 본인 지점으로 그려진다).
     const perm = read("src/lib/auth/perm-matrix.ts");
-    expect(perm.split("unstable_rethrow(e)").length - 1).toBe(2);
+    // 폴백 자리 셋 = 지점 매트릭스 · 개인 예외 · 지점에서 닫힌 메뉴(`tenantClosedMenus`, 2026-10-14 탭 및 메뉴 구성) — 셋 다 이동 신호는 다시 던진다.
+    expect(perm.split("unstable_rethrow(e)").length - 1).toBe(3);
     // 셸은 사람을 못 읽었을 때 로그인 화면으로 보내기 전에 끝난 보기인지 본다(서버 액션 뒤의 재렌더는 화면 요청이 아니다).
     expect(read("src/app/(shell)/layout.tsx")).toContain('if (!user) redirect((await tenantViewSignedOutRedirect()) ?? "/login");');
     // 안내 화면은 로그인한 사람도 DB도 읽지 않는다(읽으면 같은 판정을 다시 지나 되돌아온다).

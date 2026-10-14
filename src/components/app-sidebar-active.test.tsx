@@ -136,16 +136,16 @@ describe("사이드바 '지금 보는 곳' — 포커스 창의 지금 주소로
     expect(groupActive("수업")).toBe(false);
   });
 
-  it("창 모드를 꺼도 query 면을 옮긴 새 탭이 현재 위치로 표시된다", () => {
-    nav.pathname = "/billing";
-    nav.search = "tab=expenses&period=2026-09";
-    const menus = [{ href: "/billing?tab=expenses", groupId: "custom-office" }];
+  it("창 모드를 꺼도 면을 옮긴 새 탭이 현재 위치로 표시된다", () => {
+    nav.pathname = "/attendance/live";
+    nav.search = "date=2026-09-01";
+    const menus = [{ href: "/attendance/live", groupId: "custom-office" }];
     render(<NavigationProvider menus={menus} groups={[{ id: "custom-office", label: "교무실" }]}>
       <WorkspaceEnabledProvider enabled={false}>
         <AppSidebar systemRole="master" email="owner@example.com" displayName="원장" menuLayout={menus} />
       </WorkspaceEnabledProvider>
     </NavigationProvider>);
     expect(groupActive("교무실")).toBe(true);
-    expect(groupActive("수납관리")).toBe(false);
+    expect(groupActive("수업")).toBe(false);
   });
 });

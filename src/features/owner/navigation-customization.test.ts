@@ -10,7 +10,8 @@ import { diffSettingsSection } from "./settings-diff";
 
 const all = [...HUB_GROUPS, ...SUPPORT_GROUPS];
 const groups: MenuGroupLayoutRow[] = [{ id: "custom-desk", label: "교무실", icon: "folder", order: 0 }];
-const menus: MenuLayoutRow[] = [{ href: "/billing?tab=expenses", groupId: "custom-desk", label: "운영비", icon: "star", order: 0 }];
+// 같은 권한(출석부)의 면 하나(오늘 출결)를 새 탭으로 — 수납의 면은 2026-10-14부터 메뉴가 아니다(화면 안 탭, `INNER_TABS`).
+const menus: MenuLayoutRow[] = [{ href: "/attendance/live", groupId: "custom-desk", label: "운영비", icon: "star", order: 0 }];
 const gate = { systemRole: "master" as const, isMaster: true, canTeacherView: true };
 
 describe("학원 탭 구성: 원본 목적지와 표시 설정", () => {
@@ -20,20 +21,20 @@ describe("학원 탭 구성: 원본 목적지와 표시 설정", () => {
   });
   it("같은 권한키의 면 하나만 새 탭으로 이동하고 권한키/주소는 보존한다", () => {
     const result = hubGroupsFor(all, { ...gate, menuLayout: menus, groupLayout: groups });
-    expect(result.find((g) => g.id === "custom-desk")?.items[0]).toMatchObject({ href: "/billing?tab=expenses", label: "운영비", icon: "star", menuKey: "billing" });
-    expect(result.find((g) => g.id === "billing")?.items.map((d) => d.href)).toContain("/billing?tab=textbooks");
-    expect(result.flatMap((g) => g.items).filter((d) => d.href === "/billing?tab=expenses")).toHaveLength(1);
+    expect(result.find((g) => g.id === "custom-desk")?.items[0]).toMatchObject({ href: "/attendance/live", label: "운영비", icon: "star", menuKey: "attendance" });
+    expect(result.find((g) => g.id === "class")?.items.map((d) => d.href)).toContain("/attendance");
+    expect(result.flatMap((g) => g.items).filter((d) => d.href === "/attendance/live")).toHaveLength(1);
   });
-  it("원래 이름과 바꾼 이름을 모두 검색하며 현재 위치는 query 면의 새 그룹이다", () => {
+  it("원래 이름과 바꾼 이름을 모두 검색하며 현재 위치는 옮긴 면의 새 그룹이다", () => {
     const result = configuredHubGroups(all, menus, groups);
     const dest = result.find((g) => g.id === "custom-desk")!.items[0];
     expect(hubSearchKeywords(dest, "교무실")).toContain("운영비");
-    expect(hubSearchKeywords(dest, "교무실")).toContain("지출");
-    expect(hubGroupOfPath("/billing?embed=1&tab=expenses&month=2026-09", result)?.id).toBe("custom-desk");
-    expect(hubGroupOfPath("/billing?tab=textbooks", result)?.id).toBe("billing");
+    expect(hubSearchKeywords(dest, "교무실")).toContain("오늘 출결");
+    expect(hubGroupOfPath("/attendance/live?embed=1&date=2026-09-01", result)?.id).toBe("custom-desk");
+    expect(hubGroupOfPath("/attendance?month=2026-09", result)?.id).toBe("class");
   });
   it("메뉴를 옮겨도 권한이 없으면 그룹까지 사라진다", () => {
-    const matrix = resolveMatrix([{ menu: "billing", role: "manager", access: "none" }]);
+    const matrix = resolveMatrix([{ menu: "attendance", role: "manager", access: "none" }]);
     const result = hubGroupsFor(all, { systemRole: "manager", permMatrix: matrix, menuLayout: menus, groupLayout: groups });
     expect(result.some((g) => g.id === "custom-desk")).toBe(false);
   });
@@ -85,7 +86,7 @@ describe("저장 검증·손상값·이전 화면·초기화", () => {
   });
   it("구버전 화면 저장은 새 그룹·이름·아이콘·소속과 강사 구성을 보존한다", () => {
     const stored = { menus, groups, teacherMenus: [{ href: "/students", hidden: true }] };
-    const raw = { menus: [{ href: "/billing?tab=expenses", hidden: true }] };
+    const raw = { menus: [{ href: "/attendance/live", hidden: true }] };
     const saved = prepareSectionForSave("chinsan", "navigation", raw, navigationSchema.parse(raw), stored) as typeof stored;
     expect(saved.groups).toEqual(groups);
     expect(saved.teacherMenus).toEqual(stored.teacherMenus);
@@ -102,7 +103,13 @@ describe("저장 검증·손상값·이전 화면·초기화", () => {
     const b = resolveSettings({}, { name: "B" });
     expect(a.navigation.menus[0].label).toBe("운영비");
     expect(b.navigation.menus).toEqual([]);
-    expect(all.find((g) => g.id === "billing")!.items.some((d) => d.label === "운영비")).toBe(false);
+    expect(all.find((g) => g.id === "class")!.items.some((d) => d.label === "운영비")).toBe(false);
+  });
+  it("🔴 화면 안 내부 탭(수납·셔틀·수업보고서 설정 면)의 옛 줄은 읽을 때 지워진다 — 메뉴가 아니라 저장을 막지 않는다(원장 2026-10-14)", () => {
+    const raw = { menus: [{ href: "/billing?tab=expenses", label: "운영비", groupId: "custom-desk" }, { href: "/shuttle/today", hidden: true }, { href: "/lesson-reports?tab=ai_ment", order: 0 }, { href: "/billing", order: 1 }], groups };
+    const normalized = normalizeNavigationSettings(raw);
+    expect(normalized.menus).toEqual([{ href: "/billing", order: 1 }]);
+    expect(navigationSchema.safeParse(normalized).success).toBe(true);
   });
   it("폐기된 메뉴·그룹과 없는 소속을 정리한 뒤 저장 검증과 baseline이 일치한다", () => {
     const raw = { menus: [{ href: "/retired", label: "옛 메뉴" }, { href: "/students", groupId: "retired" }], groups: [{ id: "retired", label: "옛 탭" }] };
@@ -116,6 +123,6 @@ describe("저장 검증·손상값·이전 화면·초기화", () => {
     const result = diffSettingsSection("navigation", { menus: [], groups: [] }, { menus, groups });
     const text = JSON.stringify(result);
     expect(text).toContain("운영비"); expect(text).toContain("아이콘 변경");
-    expect(text).not.toContain("custom-desk"); expect(text).not.toContain("/billing");
+    expect(text).not.toContain("custom-desk"); expect(text).not.toContain("/attendance/live");
   });
 });
