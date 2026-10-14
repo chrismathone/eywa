@@ -6,6 +6,7 @@ import { editablePermissionRowGroups, type PermissionNavigation } from "@/featur
 import { TEACHER_TOGGLE_KEYS, teacherToggleOnAccess } from "@/features/owner/teacher-toggle-rows";
 import { SETTINGS_ROLE_KEYS, type SettingsRoleKey } from "@/lib/settings-role-catalog";
 import { ambiguousRoleCells } from "@/features/owner/permissions-canonical";
+import { effectivePayslipManagerIds } from "@/features/owner/payslip-permissions";
 import type { PermissionsSettings } from "@/features/owner/settings-types";
 import {
   MENU_KEYS,
@@ -38,7 +39,7 @@ type PermissionsDraft = {
 const toDraft = (p: PermissionsSettings): PermissionsDraft => ({
   matrix: resolveMatrix(p.overrides),
   userOverrides: p.userOverrides,
-  specialAccess: p.specialAccess,
+  specialAccess: { ...p.specialAccess, payslipManagerIds: effectivePayslipManagerIds(p.specialAccess) },
 });
 const teacherAccessOf = (matrix: AccessMatrix) =>
   Object.fromEntries(TEACHER_TOGGLE_KEYS.map((k) => [k, matrix[k].teacher])) as Record<string, Access>;
