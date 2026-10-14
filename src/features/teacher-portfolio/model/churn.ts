@@ -12,8 +12,8 @@ export function buildChurn(input: { classes: readonly SnapshotClass[]; schedules
   const regular = (c: SnapshotClass) => !c.is_makeup_pool && !isSpecialLecture({ isSpecial: c.is_special, className: c.class_name });
   const schedules = groupBy(input.schedules.filter(s => !isSeatSlot(axisSlotFromRow(s))), s => s.class_id);
   const cache = new Map<string, Map<string, ChurnMetric>>();
-  return {
-    period(teacherId: string, w: { start: string; end: string }): ChurnMetric {
+  const subjectCache = new Map<string, Map<string, ReadonlySet<string>>>();
+  const computed = (w: { start: string; end: string }) => {
       const key = `${w.start}|${w.end}`;
       if (!cache.has(key)) {
         const prev = monthRange(shiftMonth(w.start.slice(0, 7), -1));
@@ -43,16 +43,27 @@ export function buildChurn(input: { classes: readonly SnapshotClass[]; schedules
           if (!rows.some(row => row.subject === c.subject && row.date === e.end_date)) rows.push({ subject: c.subject, date: e.end_date, className: c.class_name });
         }
         const result = new Map<string, ChurnMetric>();
+        const subjectsOf = new Map<string, ReadonlySet<string>>();
         for (const [id, students] of taught) {
           const eligible = [...students].filter(([, relation]) => relation.days.size >= Math.ceil(days.length / 2));
+          if (eligible.length) subjectsOf.set(id, new Set(eligible.flatMap(([, relation]) => [...relation.subjects])));
           const detail = eligible.flatMap(([studentId, relation]) => { const ended = (exits.get(studentId) ?? []).filter(e => relation.subjects.has(e.subject)); return ended.length ? [{ studentId, day: ended.map(e => e.date).sort().at(-1)!, subjects: [...new Set(ended.map(e => e.subject))], className: [...new Set(ended.map(e => e.className))].join(" · ") }] : []; });
           result.set(id, { id: "churn", max: 20, value: null, raw: eligible.length ? 100 * detail.length / eligible.length : null,
             basis: `퇴원·수강종료 ${detail.length} / 전월 담당 ${eligible.length}명`,
             reason: "담임과 교시 담당 모두에게 반영하며 같은 학생은 강사별 한 번만 셉니다. 분모는 전월 절반 이상 담당한 학생입니다. 졸업·이사·질병·권고퇴원·끝난 특강·같은 과목 반이동은 제외합니다. 보고서 작성 여부로 담당을 정하지 않습니다.", detail });
         }
         cache.set(key, result);
+        subjectCache.set(key, subjectsOf);
       }
-      return cache.get(key)!.get(teacherId) ?? { id: "churn", max: 20, value: null, raw: null, basis: "전월 담당 학생 없음", reason: "전월 담당 학생이 없어 퇴원율을 계산할 수 없습니다.", detail: [] };
+      return { result: cache.get(key)!, subjects: subjectCache.get(key)! };
+  };
+  return {
+    period(teacherId: string, w: { start: string; end: string }): ChurnMetric {
+      return computed(w).result.get(teacherId) ?? { id: "churn", max: 20, value: null, raw: null, basis: "전월 담당 학생 없음", reason: "전월 담당 학생이 없어 퇴원율을 계산할 수 없습니다.", detail: [] };
+    },
+    /** 그 기간 퇴원율이 계산되는 선생님(분모가 있는 사람) → 그 분모 학생을 가르친 과목. 시간표 X 겹침의 '퇴원 0'이 같은 계산을 읽는다. */
+    eligibleSubjects(w: { start: string; end: string }): ReadonlyMap<string, ReadonlySet<string>> {
+      return computed(w).subjects;
     },
   };
 }

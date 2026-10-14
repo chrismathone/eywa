@@ -1,87 +1,69 @@
 import { describe, expect, it } from "vitest";
-import { currentHomeroomIds, HOMEROOM_LOG_START, teacherNoteOf, zeroCandidateIds, type OverlayClass } from "./exit-overlay-teachers";
+import { churnMonthsFor, churnTeachersOf, churnZeroIds, currentHomeroomIds, teacherTints, TEACHER_TINTS, type ChurnView, type OverlayClass } from "./exit-overlay-teachers";
 
-const cls = (p: Partial<OverlayClass> & Pick<OverlayClass, "id" | "teacherId">): OverlayClass => ({
-  openedOn: "2026-03-01",
-  closedOn: null,
-  active: true,
-  special: false,
-  ...p,
+// 9월 퇴원율: 박(수학 담임)은 s1 수학 퇴원 · 오(수학 교시 담당)도 s1을 맡아 같이 · 윤(수학)은 분모만 · 리(영어)는 다른 과목.
+const view: ChurnView = new Map([
+  ["2026-09", {
+    detail: new Map([
+      ["park", [{ studentId: "s1", subjects: ["math"] }]],
+      ["oh", [{ studentId: "s1", subjects: ["math"] }]],
+      ["lee", [{ studentId: "s2", subjects: ["english"] }]],
+    ]),
+    eligible: new Map<string, ReadonlySet<string>>([
+      ["park", new Set(["math"])],
+      ["oh", new Set(["math"])],
+      ["yoon", new Set(["math"])],
+      ["lee", new Set(["english"])],
+      ["both", new Set(["math", "english"])],
+    ]),
+  }],
+]);
+
+describe("퇴원 담당 = 강사평가 퇴원율이 낸 값", () => {
+  it("🔴 줄의 선생님 = 그 달 퇴원율에 이 학생·이 과목 퇴원을 넣은 선생님 전부(담임 + 교시 담당)", () => {
+    expect(churnTeachersOf(view, "s1", "math", "2026-09").sort()).toEqual(["oh", "park"]);
+    // 다른 과목 줄 · 다른 달 · 퇴원율에 없는 학생 = 빈 배열('선생님 미반영').
+    expect(churnTeachersOf(view, "s1", "english", "2026-09")).toEqual([]);
+    expect(churnTeachersOf(view, "s1", "math", "2026-10")).toEqual([]);
+    expect(churnTeachersOf(view, "s9", "math", "2026-09")).toEqual([]);
+  });
+
+  it("🔴 퇴원율을 돌릴 달 = 석 달 열 + 앞뒤 한 달(이번 달을 넘지 않는다) — 어느 기준 달로 열어도 열마다 그 달과 앞뒤가 들어 있다", () => {
+    expect(churnMonthsFor("2026-10", "2026-10")).toEqual(["2026-10", "2026-09", "2026-08", "2026-07"]);
+    expect(churnMonthsFor("2026-09", "2026-10")).toEqual(["2026-10", "2026-09", "2026-08", "2026-07", "2026-06"]);
+    expect(churnMonthsFor("2026-01", "2026-10")).toEqual(["2026-02", "2026-01", "2025-12", "2025-11", "2025-10"]);
+    // 퇴원 8/31 · 수강 9/1 끝(윤채민) — 8월 열이 맨 오른쪽인 묶음(기준 10월)에서도, 맨 왼쪽인 묶음(기준 8월)에서도 9월 퇴원율을 본다.
+    for (const anchor of ["2026-10", "2026-09", "2026-08"]) expect(churnMonthsFor(anchor, "2026-10")).toContain("2026-09");
+  });
+
+  it("🔴 '퇴원 0' = 이 과목 분모가 있고 이 과목 분자가 없는 선생님 — 분모 없는 사람(학생 없는 반의 담임)은 서지 않는다", () => {
+    expect(churnZeroIds(view, "math", "2026-09").sort()).toEqual(["both", "yoon"]);
+    expect(churnZeroIds(view, "english", "2026-09").sort()).toEqual(["both"]);
+    expect(churnZeroIds(view, "math", "2026-08")).toEqual([]);
+  });
 });
 
-const SEP = { from: "2026-09-01", to: "2026-09-30" };
-const classes = [cls({ id: "A", teacherId: "park" }), cls({ id: "B", teacherId: "oh" }), cls({ id: "C", teacherId: "yoon" })];
-const none = new Map();
+describe("선생님 색", () => {
+  const cls = (p: Partial<OverlayClass> & Pick<OverlayClass, "id" | "teacherId">): OverlayClass => ({ active: true, closedOn: null, special: false, ...p });
 
-describe("'퇴원 0' 후보 — 묶음과 같은 반·날짜 판정", () => {
-  it("🔴 퇴원 줄의 반 담임은 '퇴원 0'에 서지 않는다 — 묶음이 담임 미상·대리 작성자로 묶었어도(적대 리뷰 #1)", () => {
-    const ids = zeroCandidateIds({
-      window: SEP, classes, history: none, historyFailed: false,
-      exits: [{ reasonRaw: "dissatisfaction", classId: "A", lastDate: "2026-09-10" }],
-    });
-    expect([...ids!].sort()).toEqual(["oh", "yoon"]);
-  });
-
-  it("제외 사유(이사 등)만 있는 반의 담임은 0으로 선다 · 그 달 담임은 이력대로(달 말 기준)", () => {
-    // B: 9/20에 오 → 한 인계(지금 담임 = 한). 9월 말 담임은 한, 8월 말 담임은 오.
-    const history = new Map([["B", [{ teacherId: "oh", from: null, to: "2026-09-20" }, { teacherId: "han", from: "2026-09-20", to: null }]]]);
-    const handed = classes.map((c) => (c.id === "B" ? { ...c, teacherId: "han" } : c));
-    const aug = zeroCandidateIds({ window: { from: "2026-08-01", to: "2026-08-31" }, classes: handed, history, historyFailed: false, exits: [] });
-    expect([...aug!].sort()).toEqual(["oh", "park", "yoon"]);
-    const ids = zeroCandidateIds({
-      window: SEP, classes: handed, history, historyFailed: false,
-      exits: [{ reasonRaw: "relocation", classId: "A", lastDate: "2026-09-10" }],
-    });
-    expect([...ids!].sort()).toEqual(["han", "park", "yoon"]);
-  });
-
-  it("🔴 가릴 수 없으면 null — 기록 이전 퇴원 · 반 모름 · 이력 읽기 실패", () => {
-    const base = { window: SEP, classes, history: none, historyFailed: false };
-    expect(zeroCandidateIds({ ...base, exits: [{ reasonRaw: null, classId: "A", lastDate: "2026-08-01" }] })).toBeNull();
-    expect(zeroCandidateIds({ ...base, exits: [{ reasonRaw: null, classId: null, lastDate: "2026-09-10" }] })).toBeNull();
-    expect(zeroCandidateIds({ ...base, exits: [{ reasonRaw: null, classId: "Z", lastDate: "2026-09-10" }] })).toBeNull();
-    expect(zeroCandidateIds({ ...base, historyFailed: true, exits: [] })).toBeNull();
-    expect(HOMEROOM_LOG_START).toBe("2026-08-04");
-  });
-
-  it("🔴 기록이 그 날짜를 덮지 못하면 null — 9/22 전 인계는 바뀐 날부터만 남았다(재리뷰 2026-10-14)", () => {
-    // A: 9/10에 박 → 한(이전 담임 구간 없음). 9/5 퇴원의 담임을 모르니 박을 0에 세울 수 없다.
-    const history = new Map([["A", [{ teacherId: "han", from: "2026-09-10", to: null }]]]);
-    const handed = classes.map((c) => (c.id === "A" ? { ...c, teacherId: "han" } : c));
-    const base = { window: SEP, classes: handed, history, historyFailed: false };
-    expect(zeroCandidateIds({ ...base, exits: [{ reasonRaw: "dissatisfaction", classId: "A", lastDate: "2026-09-05" }] })).toBeNull();
-    // 덮는 날짜면 그대로 가린다.
-    expect([...zeroCandidateIds({ ...base, exits: [{ reasonRaw: "dissatisfaction", classId: "A", lastDate: "2026-09-12" }] })!].sort()).toEqual(["oh", "yoon"]);
-    // 기록도 지금 담임도 없는 반 = 담임이 없던 반 — 모르는 것이 아니다.
-    const open = [...classes, cls({ id: "N", teacherId: null })];
-    const ids = zeroCandidateIds({ window: SEP, classes: open, history: none, historyFailed: false, exits: [{ reasonRaw: null, classId: "N", lastDate: "2026-09-10" }] });
-    expect([...ids!].sort()).toEqual(["oh", "park", "yoon"]);
-  });
-
-  it("기록 이전 달의 반 · 폐지(날짜 모름) · 특강 · 그 달 밖에 연/닫은 반은 후보가 아니다(빼는 쪽은 틀린 0을 만들지 않는다)", () => {
+  it("색 기준 = 오늘 담임(그날 담임 판정을 그대로) — 종강·폐지·특강 제외", () => {
     const list = [
-      cls({ id: "old", teacherId: "t1", closedOn: "2026-07-20" }),
-      cls({ id: "arch", teacherId: "t2", active: false }),
-      cls({ id: "sp", teacherId: "t3", special: true }),
-      cls({ id: "late", teacherId: "t4", openedOn: "2026-10-02" }),
-      cls({ id: "closedArch", teacherId: "t5", active: false, closedOn: "2026-09-15" }),
+      cls({ id: "A", teacherId: "park" }),
+      cls({ id: "B", teacherId: "oh" }),
+      cls({ id: "done", teacherId: "gone", closedOn: "2026-09-01" }),
+      cls({ id: "arch", teacherId: "arch", active: false }),
+      cls({ id: "sp", teacherId: "sp", special: true }),
     ];
-    expect([...zeroCandidateIds({ window: SEP, classes: list, history: none, historyFailed: false, exits: [] })!]).toEqual(["t5"]);
-    const july = { from: "2026-07-01", to: "2026-07-31" };
-    expect([...zeroCandidateIds({ window: july, classes: list, history: none, historyFailed: false, exits: [] })!]).toEqual([]);
-  });
-});
-
-describe("오늘 담임 · 추정 근거", () => {
-  it("색 기준 = 오늘 담임(종강·폐지·특강 제외) — 석 달 묶음의 기준 달과 무관", () => {
-    const list = [...classes, cls({ id: "done", teacherId: "gone", closedOn: "2026-09-01" }), cls({ id: "sp", teacherId: "sp", special: true })];
-    expect(currentHomeroomIds(list, none, "2026-10-14").sort()).toEqual(["oh", "park", "yoon"]);
+    // B는 기록상 오늘 담임이 한 — owner가 이긴다.
+    const owner = (c: OverlayClass) => (c.id === "B" ? "han" : c.teacherId);
+    expect(currentHomeroomIds(list, owner, "2026-10-14").sort()).toEqual(["han", "park"]);
   });
 
-  it("기록으로 확인한 담임은 근거 없음 · 추정은 무엇으로 추정했는지", () => {
-    expect(teacherNoteOf({ name: "박도윤", inferred: false, source: "assignment", date: "2026-09-10" })).toBeNull();
-    expect(teacherNoteOf({ name: "박도윤", inferred: true, source: "report", date: "2026-09-30" })).toBe("마지막 보고서 작성자 9/30");
-    expect(teacherNoteOf({ name: "박도윤", inferred: true, source: "attendance", date: "2026-09-08" })).toBe("마지막 출결 입력 9/8");
-    expect(teacherNoteOf(undefined)).toBeNull();
+  it("지금 담임 가나다순이 먼저, 나머지는 뒤에 — 16명을 넘으면 되풀이", () => {
+    const tints = teacherTints(["박도윤", "김하늘"], ["오세린", "김하늘"]);
+    expect(Object.keys(tints)).toEqual(["김하늘", "박도윤", "오세린"]);
+    expect(tints["김하늘"]).toBe(TEACHER_TINTS[0]);
+    const many = teacherTints(Array.from({ length: 17 }, (_, i) => `t${String(i).padStart(2, "0")}`), []);
+    expect(many.t16).toBe(TEACHER_TINTS[0]);
   });
 });

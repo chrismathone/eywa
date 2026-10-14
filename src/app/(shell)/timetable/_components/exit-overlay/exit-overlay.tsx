@@ -28,7 +28,7 @@ function otherDialogOpen(target: EventTarget | null, mine: HTMLElement | null): 
 }
 
 /**
- * **시간표 X 겹침** — 시간표 어디서든 X(한글 입력 상태의 ㅌ도)를 누르면 마우스 옆에 석 달 퇴원·수강종료가 뜬다(원장 2026-10-14).
+ * **시간표 X 겹침** — 시간표 어디서든 X(한글 입력 상태의 ㅌ도)를 누르면 마우스 옆에 석 달 퇴원(수강종료 포함)이 뜬다(원장 2026-10-14).
  * 다시 X · Esc · 바깥 클릭으로 닫고, ←/→로 석 달 묶음을 한 달씩 옮긴다. 데이터는 **누를 때만** 읽는다(첫 화면 비용 0).
  * 🔴 끄는 중(학생·반 드래그)엔 열지 않는다 · 입력칸에서 친 X는 글자다(`isExitOverlayHotkey`).
  * ⚠️ 닫으면 받아 둔 달도 버린다 — 다시 열 때는 최신으로 읽는다(그사이 퇴원 처리가 있었을 수 있다).
@@ -150,7 +150,7 @@ export function TimetableExitOverlay({ subject }: { subject: string }) {
 
   if (!open) return null;
   return createPortal(
-    <div ref={cardRef} role="dialog" aria-label="퇴원 · 수강종료 석 달" className="fixed z-[9998]" style={{ left: -9999, top: -9999 }}>
+    <div ref={cardRef} role="dialog" aria-label="퇴원 석 달" className="fixed z-[9998]" style={{ left: -9999, top: -9999 }}>
       <ExitOverlayCard state={state} onOlder={() => shift(-1)} onNewer={() => shift(1)} onClose={close} />
     </div>,
     document.body,

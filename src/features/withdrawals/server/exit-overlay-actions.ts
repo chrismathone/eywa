@@ -30,7 +30,7 @@ export async function loadExitOverlay(input: { subject: string; anchor?: string 
     return { ok: false, error: "볼 수 없는 달입니다" };
   }
   try {
-    return { ok: true, data: await getExitOverlay(input.subject, anchor) };
+    return { ok: true, data: await getExitOverlay(input.subject, anchor, user.tenantId) };
   } catch (e) {
     logDbError(e, "withdrawals.exit-overlay", { subject: input.subject, anchor });
     return { ok: false, error: "퇴원 목록을 불러오지 못했습니다. 잠시 뒤 다시 눌러 주세요." };

@@ -35,6 +35,14 @@ describe("withdrawal rate uses all actual assigned teachers", () => {
     expect(m.period("home", window).raw).toBe(100);
     expect(m.period("period", window).detail).toHaveLength(1);
   });
+  it("eligibleSubjects = teachers with a denominator and the subjects they taught those students (timetable X overlay reads this)", () => {
+    const m = model({ schedules: [slot, { ...slot, id: "eng", class_id: "english", teacher_id: "native" }], classes: [c, { ...c, id: "english", subject: "english", teacher_id: "home" }], enrollments: [e, { ...e, id: "en", class_id: "english", end_date: null }] });
+    const subjects = m.eligibleSubjects(window);
+    expect([...subjects.get("home") ?? []].sort()).toEqual(["english", "math"]);
+    expect([...subjects.get("period") ?? []]).toEqual(["math"]);
+    expect([...subjects.get("native") ?? []]).toEqual(["english"]);
+    expect(subjects.has("unrelated")).toBe(false);
+  });
   it("keeps denominator complete and uses actual owner history", () => {
     const m = buildChurn({ classes: [c], schedules: [slot], enrollments: [e, { ...e, id: "staying", student_id: "stay", end_date: null }], owner: () => "previousHome" });
     expect(m.period("previousHome", window).raw).toBe(50);

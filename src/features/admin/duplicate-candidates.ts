@@ -68,6 +68,20 @@ export function stripAutoSuffix(name: string): string {
   return base.length > 0 ? base : trimmed;
 }
 
+/**
+ * '왜 의심인지' 한 줄(원장 2026-10-14 *"왜 의심인지도 간략하게"*). 이 표식(`dup_suspect`)을 켜는 곳은 동기화 하나다 —
+ * 같은 이름이 이미 있어 끝에 알파벳을 붙여 새 학생으로 넣었다(`scripts/_makeedu/import-students-list.cjs`).
+ * 🔴 뗀 이름·붙인 글자를 **단정하지 않는다** — 원래 이름이 대문자로 끝나면(`김민서G` → 동기화가 `김민서GA`) 끝 대문자를
+ *    통째로 접미사로 읽어 사실과 다른 문장이 된다(적대 리뷰). 글자는 바로 옆 이름에 보인다.
+ * 끝이 대문자가 아니면(그 뒤 이름을 고쳤다) 알파벳 말을 빼고 적는다 — 지어내지 않는다.
+ */
+export function suspectReason(name: string): string {
+  const trimmed = name.trim();
+  return stripAutoSuffix(trimmed) !== trimmed
+    ? "동기화 때 같은 이름이 이미 있어 끝에 알파벳을 붙여 따로 등록"
+    : "동기화 때 같은 이름이 이미 있어 따로 등록";
+}
+
 /** (c)가 쓰는 이름 키 — 접미사를 떼고 **DB `name_normalized` 생성열과 같은 정규화**(소문자+공백 제거). */
 export function autoSuffixKey(name: string): string {
   return normalizeName(stripAutoSuffix(name));
@@ -226,4 +240,20 @@ export function groupDuplicateCandidates<T extends DuplicateInput>(
     (a, b) =>
       a.students[0]!.name.localeCompare(b.students[0]!.name, "ko") || a.key.localeCompare(b.key),
   );
+}
+
+/**
+ * **짝 없는 '의심' 학생** — 표식(`dup_suspect`)은 살아 있는데 어느 후보 그룹에도 안 든 학생(짝이 퇴원했거나, 이름을 고쳐
+ * 접미사를 뗀 이름이 더는 안 겹친다). 원장 2026-10-14 *"데이터 정리에서는 여전히 정리할 수 있게"* — 원생목록의 '의심'
+ * 꼬리표를 걷은 뒤로는 이 목록과 학생 상세가 그 학생을 찾는 자리다('정상 확인'으로 내린다).
+ * ⚠️ `groupDuplicateCandidates`에 넘긴 것과 **같은 목록**(퇴원 제외)과 그 결과를 넘긴다. 정렬 = 이름 → id.
+ */
+export function loneSuspects<T extends DuplicateInput>(
+  rows: readonly T[],
+  groups: readonly DuplicateCandidateGroup<T>[],
+): T[] {
+  const grouped = new Set(groups.flatMap((g) => g.students.map((s) => s.id)));
+  return rows
+    .filter((r) => r.dupSuspect === true && !grouped.has(r.id))
+    .sort((a, b) => a.name.localeCompare(b.name, "ko") || a.id.localeCompare(b.id));
 }

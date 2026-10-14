@@ -3,7 +3,10 @@
  * 띄울 수 있는 방법"* → *"오버레이로 마우스 옆에"* · *"현재 기준으로 3개월치 퇴원을 열로 나눠서"* · *"강사별로 색상"* · *"월만 표시"*.
  *
  * 🔑 한 열 = 한 달(퇴원일·수강 종료일이 속한 달 — 퇴원관리 '이번 달'과 같은 창 `withdrawalMonthWindow`).
- * 🔑 줄은 퇴원관리 한 목록과 같은 줄이다(퇴원 = 학생 한 줄 · 수강종료 = 학생 × 끊은 과목 한 줄). 묶음 = **그때 담임**.
+ * 🔑 줄은 퇴원관리 한 목록과 같은 줄이다(퇴원 = 학생 한 줄 · 수강종료 = 학생 × 끊은 과목 한 줄). 과목 화면이라 수강종료도
+ *    **퇴원으로 함께 센다**(원장 2026-10-14 *"합쳐. 퇴원으로"*). '데이터 정리 일괄 퇴원'은 줄에서 뺀다(서버).
+ * 🔑 묶음 = **강사평가 퇴원율이 그 퇴원을 넣은 선생님**(그날 담임 + 교시 담당 — 한 줄이 여러 묶음에 설 수 있다). 퇴원율에
+ *    안 들어가는 줄은 '선생님 미반영' 한 묶음(`exit-overlay-teachers.ts` — 겹침은 담당을 새로 판정하지 않는다).
  * 🔴 이사·질병·권고퇴원·졸업은 줄을 긋고 **건수에서 뺀다**(강사 탓이 아닌 퇴원 — 강사평가 퇴원율과 같은 네 사유).
  * 🔴 휴원은 건수에 넣지 않는다. 휴원 시작일은 저장되지 않아(수강의 '대기' 표시뿐) **이번 달 열에만 '지금 휴원 중'**으로 보인다.
  * ⚠️ 시간표엔 인원 숫자를 두지 않는다는 결정(2026-09-28)의 예외다 — X를 눌렀을 때만, 달을 적고, 퇴원관리와 같은 기준으로.
@@ -23,13 +26,8 @@ export type OverlayExitInput = {
   /** 사유 원문 — 표준 키(`relocation`)일 수도, 사람이 적은 글(`이사`·`종강`)일 수도 있다. */
   reasonRaw: string | null;
   memo: string | null;
-  /** 그때 담임 표시명 — 못 살리면 null('담임 미상'). */
-  teacher: string | null;
-  /**
-   * 담임 기록이 없어 **추정한** 선생님이면 그 근거(`마지막 보고서 작성자 9/30`) — 기록으로 확인했으면 null.
-   * 작성자는 담임이 아니다([[#93]] 대리 작성) → 화면이 '추정'을 밝힌다(학생 상세 '지난 수업'과 같은 근거).
-   */
-  teacherNote?: string | null;
+  /** 강사평가 퇴원율이 이 퇴원을 넣은 선생님 표시명 — 비면 '선생님 미반영'. */
+  teachers: readonly string[];
   /** 수강종료 — 아직 다니는 과목 라벨(마우스를 올리면 보인다). */
   keepSubjects?: string[];
 };
@@ -48,24 +46,20 @@ export type OverlayRow = {
   /** 마우스를 올리면 보이는 전체 — `사유 · 메모 · 영어 계속 다님`(조사는 과목 이름에 따라 갈려 붙이지 않는다). */
   reasonTitle: string;
   excluded: boolean;
-  /** 선생님을 추정했으면 그 근거(툴팁 카드 끝 줄에도 붙는다). */
-  teacherNote: string | null;
 };
 
-/** `inferred` = 그 묶음에서 선생님을 추정한 줄 수(머리에 '추정' 표식). */
-export type OverlayGroup = { teacher: string | null; count: number; inferred: number; rows: OverlayRow[] };
+/** `teacher` null = 강사평가 퇴원율에 들어가지 않는 줄 묶음. */
+export type OverlayGroup = { teacher: string | null; count: number; rows: OverlayRow[] };
 
 export type OverlayMonth = {
   month: string;
   label: string;
   live: boolean;
-  counts: { withdrawn: number; subjectEnded: number; excluded: number };
+  /** 센 퇴원(수강종료 포함, 줄 그은 것 제외) — 한 줄이 여러 묶음에 서도 한 번. */
+  count: number;
   groups: OverlayGroup[];
-  /**
-   * 그 달 담임 중 센 건수가 0인 선생님(가나다순). **null = 가릴 수 없는 달**(담임 기록 이전 · 기록을 못 읽음 ·
-   * 담임을 모르는 퇴원 줄이 있음) — "0명"이라고 단정하지 않는다(강사평가에 쓰이는 화면이라 틀린 0이 가장 나쁘다).
-   */
-  zero: string[] | null;
+  /** 그 달 이 과목 강사평가 퇴원율이 0인 선생님(가나다순) — 이 겹침에 센 줄이 있는 선생님은 뺀다. */
+  zero: string[];
   /** 지금 휴원 중 — 이번 달 열에만(지난 달은 null). */
   holds: OverlayHoldInput[] | null;
 };
@@ -129,55 +123,48 @@ function toRow(e: OverlayExitInput): OverlayRow {
     dateLabel: dayLabel(e.date),
     // 제외 줄은 왜 빠졌는지가 보이게 사유 라벨을 적는다(메모가 '대전으로'면 이사인지 안 보인다).
     reason: isExcludedExit(e.reasonRaw) ? label : (e.memo ?? label),
-    reasonTitle: [label, e.memo, keep, e.teacherNote ? `선생님 추정 — ${e.teacherNote}` : null].filter(Boolean).join(" · "),
+    reasonTitle: [label, e.memo, keep].filter(Boolean).join(" · "),
     excluded: isExcludedExit(e.reasonRaw),
-    teacherNote: e.teacherNote ?? null,
   };
 }
 
 const byKo = (a: string, b: string) => a.localeCompare(b, "ko");
 
-/** 한 달 열 — 묶음은 센 건수 많은 순(같으면 가나다, 담임 미상은 맨 뒤), 줄은 날짜순. */
+/** 한 달 열 — 묶음은 센 건수 많은 순(같으면 가나다, 선생님 미반영은 맨 뒤), 줄은 날짜순. */
 export function buildOverlayMonth(input: {
   month: string;
   today: string;
   exits: readonly OverlayExitInput[];
-  /**
-   * '퇴원 0' 후보 — 그 달 담임 중 **자기 반에서 센 퇴원이 없는** 선생님(서버가 반·날짜로 이미 거른 것). 여기서는
-   * 이름으로 한 번 더 거른다(묶음에 센 줄이 있는 이름은 빠진다). null = 가릴 수 없는 달.
-   */
-  homeroomTeachers: readonly string[] | null;
+  /** 그 달 이 과목 강사평가 퇴원율 0인 선생님(서버가 같은 계산에서 꺼낸 것) — 여기서 묶음에 센 줄이 있는 이름은 한 번 더 뺀다. */
+  zeroTeachers: readonly string[];
   holds: readonly OverlayHoldInput[] | null;
 }): OverlayMonth {
   const mine = input.exits.filter((e) => e.date.slice(0, 7) === input.month);
   const byTeacher = new Map<string | null, OverlayExitInput[]>();
   for (const e of mine) {
-    const list = byTeacher.get(e.teacher) ?? [];
-    list.push(e);
-    byTeacher.set(e.teacher, list);
+    for (const t of e.teachers.length ? [...new Set(e.teachers)] : [null]) {
+      const list = byTeacher.get(t) ?? [];
+      list.push(e);
+      byTeacher.set(t, list);
+    }
   }
   const groups: OverlayGroup[] = [...byTeacher.entries()].map(([teacher, list]) => {
     const sorted = [...list].sort((a, b) => a.date.localeCompare(b.date) || byKo(a.name, b.name) || a.key.localeCompare(b.key));
     const rows = sorted.map(toRow);
-    return { teacher, count: rows.filter((r) => !r.excluded).length, inferred: rows.filter((r) => r.teacherNote).length, rows };
+    return { teacher, count: rows.filter((r) => !r.excluded).length, rows };
   });
   groups.sort((a, b) => {
     if ((a.teacher == null) !== (b.teacher == null)) return a.teacher == null ? 1 : -1;
     return b.count - a.count || byKo(a.teacher ?? "", b.teacher ?? "");
   });
-  const counted = groups.flatMap((g) => g.rows).filter((r) => !r.excluded);
   const busy = new Set(groups.filter((g) => g.count > 0).map((g) => g.teacher));
   return {
     month: input.month,
     label: monthHeading(input.month, input.today),
     live: input.month === input.today.slice(0, 7),
-    counts: {
-      withdrawn: counted.filter((r) => r.kind === "withdrawn").length,
-      subjectEnded: counted.filter((r) => r.kind === "subject-ended").length,
-      excluded: groups.flatMap((g) => g.rows).length - counted.length,
-    },
+    count: mine.filter((e) => !isExcludedExit(e.reasonRaw)).length,
     groups,
-    zero: input.homeroomTeachers ? [...new Set(input.homeroomTeachers)].filter((t) => !busy.has(t)).sort(byKo) : null,
+    zero: [...new Set(input.zeroTeachers)].filter((t) => !busy.has(t)).sort(byKo),
     holds: input.holds ? [...input.holds].sort((a, b) => byKo(a.teacher ?? "", b.teacher ?? "") || byKo(a.name, b.name)) : null,
   };
 }

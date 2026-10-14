@@ -9,7 +9,7 @@ import {
 } from "./exit-overlay-model";
 import { teacherTints, TEACHER_TINTS } from "./exit-overlay-teachers";
 
-const exit = (p: Partial<OverlayExitInput> & Pick<OverlayExitInput, "key" | "teacher" | "date">): OverlayExitInput => ({
+const exit = (p: Partial<OverlayExitInput> & Pick<OverlayExitInput, "key" | "teachers" | "date">): OverlayExitInput => ({
   kind: "withdrawn",
   name: p.key,
   schoolGrade: "칠성초6",
@@ -38,35 +38,34 @@ describe("사유 → 제외 판정(이사·질병·권고퇴원·졸업)", () =>
 
 describe("한 달 열", () => {
   const exits: OverlayExitInput[] = [
-    exit({ key: "a", teacher: "오세린", date: "2026-10-01", memo: "수업 따라가기 힘들어함" }),
-    exit({ key: "b", teacher: "박도윤", date: "2026-10-02" }),
-    exit({ key: "c", teacher: "박도윤", date: "2026-10-02", kind: "subject-ended", reasonRaw: "종강", keepSubjects: ["영어"] }),
-    exit({ key: "d", teacher: "한지수", date: "2026-10-06", reasonRaw: "relocation", memo: "대전으로" }),
-    exit({ key: "e", teacher: null, date: "2026-10-07" }),
-    exit({ key: "g", teacher: "오세린", date: "2026-10-09", teacherNote: "마지막 보고서 작성자 10/8" }),
-    exit({ key: "f", teacher: "오세린", date: "2026-09-30" }), // 지난달 — 이 열에 안 선다
+    exit({ key: "a", teachers: ["오세린"], date: "2026-10-01", memo: "수업 따라가기 힘들어함" }),
+    // 담임 + 교시 담당 둘 다 퇴원율에 넣은 줄 — 두 묶음에 선다(건수는 한 번).
+    exit({ key: "b", teachers: ["박도윤", "오세린"], date: "2026-10-02" }),
+    exit({ key: "c", teachers: ["박도윤"], date: "2026-10-02", kind: "subject-ended", reasonRaw: "종강", keepSubjects: ["영어"] }),
+    exit({ key: "d", teachers: [], date: "2026-10-06", reasonRaw: "relocation", memo: "대전으로" }),
+    exit({ key: "e", teachers: [], date: "2026-10-07" }),
+    exit({ key: "f", teachers: ["오세린"], date: "2026-09-30" }), // 지난달 — 이 열에 안 선다
   ];
   const month = buildOverlayMonth({
     month: "2026-10",
     today: "2026-10-14",
     exits,
-    homeroomTeachers: ["오세린", "박도윤", "한지수", "윤하람", "윤하람"],
+    zeroTeachers: ["오세린", "한지수", "윤하람", "윤하람"],
     holds: [{ key: "h", name: "최지안", schoolGrade: "달성초4", teacher: "최가온", className: "초4 기본" }],
   });
 
-  it("묶음 = 센 건수 많은 순 · 같으면 가나다 · 담임 미상은 맨 뒤", () => {
+  it("묶음 = 강사평가 퇴원율이 넣은 선생님마다 · 센 건수 많은 순 · 같으면 가나다 · 선생님 미반영은 맨 뒤", () => {
     expect(month.groups.map((g) => [g.teacher, g.count])).toEqual([
       ["박도윤", 2],
       ["오세린", 2],
-      ["한지수", 0],
       [null, 1],
     ]);
   });
-  it("건수 = 제외 줄을 뺀 퇴원·수강종료 · 다른 달 줄은 안 선다", () => {
-    expect(month.counts).toEqual({ withdrawn: 4, subjectEnded: 1, excluded: 1 });
+  it("🔴 건수 = 수강종료까지 합친 퇴원에서 줄 그은 줄만 뺀 수 — 여러 묶음에 선 줄도 한 번 · 다른 달 줄은 안 선다", () => {
+    expect(month.count).toBe(4);
     expect(month.groups.flatMap((g) => g.rows).map((r) => r.key)).not.toContain("f");
   });
-  it("퇴원 0 = 그 달 담임 중 센 건수가 0 — 제외 줄만 있는 선생님도 들어간다(중복 없음, 가나다)", () => {
+  it("퇴원 0 = 서버가 준 퇴원율 0 명단에서 이 겹침에 센 줄이 있는 선생님을 한 번 더 뺀다(중복 없음, 가나다)", () => {
     expect(month.zero).toEqual(["윤하람", "한지수"]);
   });
   it("줄 글자 — 메모가 있으면 메모 · 제외 줄은 사유 라벨 · 날짜는 M/D · 수강종료는 계속 다니는 과목을 툴팁에", () => {
@@ -79,16 +78,9 @@ describe("한 달 열", () => {
     expect(rows.c!.reason).toBe("종강");
     expect(rows.c!.reasonTitle).toContain("영어 계속 다님");
   });
-  it("추정한 선생님 = 묶음 머리에 줄 수 · 줄 툴팁 끝에 근거(기록으로 확인한 줄은 없음)", () => {
-    const se = month.groups.find((g) => g.teacher === "오세린")!;
-    expect(se.inferred).toBe(1);
-    expect(se.rows.find((r) => r.key === "g")!.reasonTitle).toContain("선생님 추정 — 마지막 보고서 작성자 10/8");
-    expect(se.rows.find((r) => r.key === "a")!.teacherNote).toBeNull();
-    expect(month.groups.find((g) => g.teacher === "박도윤")!.inferred).toBe(0);
-  });
-  it("🔴 '퇴원 0'을 가릴 수 없는 달(null)은 null 그대로 — 빈 명단으로 바꾸지 않는다", () => {
-    const m = buildOverlayMonth({ month: "2026-10", today: "2026-10-14", exits, homeroomTeachers: null, holds: null });
-    expect(m.zero).toBeNull();
+  it("담당을 못 찾은 줄(서버가 빈 배열)은 '선생님 미반영' 묶음에 선다 — 줄 그은 줄도 줄 그은 채", () => {
+    const none = month.groups.find((g) => g.teacher === null)!;
+    expect(none.rows.map((r) => [r.key, r.excluded])).toEqual([["d", true], ["e", false]]);
   });
   it("이번 달이면 '진행 중' · 휴원은 넘겨준 그대로(건수에 안 섞는다)", () => {
     expect(month.live).toBe(true);
