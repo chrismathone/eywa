@@ -95,23 +95,25 @@ function MetricRow({ metric, color, before, tag, legacy, onOpen }: {
       <span className="bg-bg-soft relative block h-2 w-full rounded-full" style={metric.value === null ? { background: BULLET_STRIPES } : undefined}>
         <span data-bar className={`block h-full rounded-full transition-[width] ${MOTION}`} style={{ width: `${pct}%`, background: color }} />
         {/* 검은 눈금 = 전월 점수. 값은 아래 증감이 말한다. */}
-        {before !== null && before !== undefined && metric.max > 0 ? (
+        {before !== null && before !== undefined && metric.max > 0 && !metric.uncounted ? (
           <span aria-hidden className={`bg-foreground ring-card absolute -top-1 h-4 w-[3px] ring-1 transition-[left] ${MOTION}`}
             style={{ left: `${Math.min(100, Math.max(0, (before / metric.max) * 100))}%` }} />
         ) : null}
       </span>
       <span className="mt-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 text-xs">
         <span className="min-w-0">{metric.basis}</span>
-        <Delta now={metric.value} before={before} />
+        {/* 아직 자동으로 세지 않는 항목은 증감을 비운다 — 0점끼리 견준 '0.0점'이나 '비교 불가'는 잰 것처럼 읽힌다('계산 전'은 이름 옆 꼬리표가 말한다). */}
+        {metric.uncounted ? null : <Delta now={metric.value} before={before} />}
       </span>
     </button>
   );
 }
 
-/** 전월 점수 — 만점이 같을 때만 견준다(설정을 바꿔 10점 → 20점이 된 항목의 '+10'은 실적이 아니라 배점 변화다). */
+/** 전월 점수 — 만점이 같고 그 달에 잰 항목일 때만 견준다(설정을 바꿔 10점 → 20점이 된 항목의 '+10'은 실적이 아니라 배점 변화다 ·
+ *  계산 전이던 달의 0점은 잰 값이 아니다). */
 function beforeOf(previous: StoredPeriod | undefined, m: Metric): number | null | undefined {
   const was = previous ? itemOf(previous, m.id) : undefined;
-  return was && was.max === m.max ? was.value : undefined;
+  return was && was.max === m.max && !was.uncounted ? was.value : undefined;
 }
 
 export function ScoreHero({ period, previous, onOpenMetric, onOpenLedger }: {

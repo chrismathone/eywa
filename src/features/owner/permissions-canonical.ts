@@ -1,6 +1,7 @@
 import { MENU_KEYS, SYSTEM_ROLES, type MenuKey, type SystemRole } from "@/lib/permissions";
 import { sortKeysDeep } from "@/lib/stable-json";
 import type { PermissionsSettings } from "./settings-types";
+import { effectivePayslipManagerIds } from "./payslip-permissions";
 
 /**
  * 역할·권한 설정의 표준 문자열 — "같은 저장값인가"를 가리는 기준(기준 token의 재료). 순수 함수.
@@ -23,6 +24,7 @@ export function permissionsCanonical(permissions: PermissionsSettings): string {
     roles: rowsByCell(permissions?.overrides, ["menu", "role"]),
     people: rowsByCell(permissions?.userOverrides, ["userId", "menu"]),
     payslip: sortedIds(permissions?.specialAccess?.payslipViewerIds),
+    payslipManagement: sortedIds(effectivePayslipManagerIds(permissions?.specialAccess)),
     leave: sortedIds(permissions?.specialAccess?.leaveAdjusterIds),
     split: sortedIds(permissions?.specialAccess?.classSplitterIds),
     dates: sortedIds(permissions?.specialAccess?.enrollmentDateEditorIds),

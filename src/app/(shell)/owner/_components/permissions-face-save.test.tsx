@@ -80,7 +80,7 @@ describe("저장 요청", () => {
     expect(JSON.parse(String(lastRequest().get("data")))).toEqual({
       overrides: [{ menu: "staff", role: "admin", access: STAFF_ADMIN_NEXT }],
       userOverrides: [],
-      specialAccess: { payslipViewerIds: [], leaveAdjusterIds: [], classSplitterIds: [], staffSubjectScopes: [] },
+      specialAccess: { payslipViewerIds: [], payslipManagerIds: [], leaveAdjusterIds: [], classSplitterIds: [], staffSubjectScopes: [] },
     });
   });
 

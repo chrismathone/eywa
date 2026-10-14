@@ -92,7 +92,7 @@ describe("실제 소비처", () => {
     const link = screen.getByRole("link", { name: "운영비" });
     expect(link.querySelector("img")).toHaveAttribute("src", "/icons/star.png");
   });
-  it("수납관리 이름을 바꿔도 화면 위 다른 탭(지출) 이름으로 번지지 않는다 — 내부 탭은 메뉴가 아니다(2026-10-14)", () => {
+  it("수납 이름을 바꿔도 화면 위 다른 탭(지출) 이름으로 번지지 않는다", () => {
     const faces = [{ key: "billing", href: "/billing", label: "수납" }, { key: "expenses", href: "/billing?tab=expenses&period=2026-09", label: "지출" }];
     render(<NavigationProvider menus={[{ href: "/billing", label: "청구실" }]}><FaceTabs faces={faces} active="expenses" /></NavigationProvider>);
     expect(screen.getByRole("link", { name: "지출" })).toBeInTheDocument();

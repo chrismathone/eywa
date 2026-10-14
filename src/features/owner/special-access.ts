@@ -1,4 +1,5 @@
 import { SPECIAL_ACCESS_ID_LISTS, type PermissionsSettings } from "./settings-types";
+import { effectivePayslipManagerIds } from "./payslip-permissions";
 
 type SpecialAccess = PermissionsSettings["specialAccess"];
 
@@ -18,7 +19,7 @@ const scopeKey = (userId: string, subjects: readonly string[]) => `${userId}:${[
 export function specialAccessTargets(next: SpecialAccess, stored: unknown): { userIds: string[]; subjects: string[] } {
   const before = isRecord(stored) ? stored : {};
   const added = SPECIAL_ACCESS_ID_LISTS.flatMap((key) => {
-    const had = new Set(strings(before[key]));
+    const had = new Set(key === "payslipManagerIds" ? effectivePayslipManagerIds(before) : strings(before[key]));
     return (next[key] ?? []).filter((id) => !had.has(id));
   });
   const keptScopes = new Set(

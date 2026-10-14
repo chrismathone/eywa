@@ -19,8 +19,8 @@ export function activeItem(period: StoredPeriod, active: ItemId): Metric | undef
 
 /**
  * 항목별 내역 — 원장이 켠 지표마다 탭 하나. **어느 탭을 눌러도 카드 크기는 그대로**이고 긴 내용은 카드 안에서만 스크롤한다
- * (원장 2026-10-12). 넓은 화면에선 높이가 옆 열(월간 점수·수업·담당 반)에서 온다 — `contain-size`가
- * 이 카드의 내용이 행 높이에 끼어들지 못하게 한다. 한 열로 접히면 높이를 정해 둔다.
+ * (원장 2026-10-12). 나란히 설 때(본문 폭 64rem 이상 — portfolio-board의 `@container/board`)는 높이가 옆 열(월간 점수·수업·담당 반)에서
+ * 온다 — `contain-size`가 이 카드의 내용이 행 높이에 끼어들지 못하게 한다. 위아래로 쌓이면 높이를 정해 둔다.
  */
 export function EvidencePanel({ active, onTab, evidence }: { active: ItemId; onTab: (id: ItemId) => void; evidence: EvidenceProps }) {
   const baseId = useId();
@@ -38,7 +38,7 @@ export function EvidencePanel({ active, onTab, evidence }: { active: ItemId; onT
     event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus();
   };
   return (
-    <section data-evidence-panel className={`${CARD} flex h-[min(45rem,85dvh)] flex-col overflow-hidden lg:h-auto lg:contain-size`}>
+    <section data-evidence-panel className={`${CARD} flex h-[min(45rem,85dvh)] flex-col overflow-hidden @5xl/board:h-auto @5xl/board:contain-size`}>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-base font-bold">항목별 내역</h3>
         <span className="num text-xs">{periodLabel(evidence.period)}</span>
@@ -82,6 +82,9 @@ export function MonthlyTable({ periods, selected, onMonth, onOpen }: {
 }) {
   const marked = periods.some((w) => w.items.some((m) => m.estimated));
   const columns = monthlyColumns(periods);
+  // 기간은 '10월'로 줄인다(맨 위 달과 해가 다르면 해까지) — 열이 많아도 카드 안에 들게.
+  const year = periods[0]?.month.slice(0, 4);
+  const shortMonth = (month: string) => `${month.slice(0, 4) === year ? "" : `${month.slice(2, 4)}년 `}${Number(month.slice(5, 7))}월`;
   const cellButton = "text-primary underline underline-offset-4";
   const mark = <sup aria-hidden className="ml-0.5 no-underline">*</sup>;
   return (
@@ -90,9 +93,10 @@ export function MonthlyTable({ periods, selected, onMonth, onOpen }: {
       <p className="mt-1 mb-3 text-xs">총점의 만점은 그 달에 켠 항목의 만점 합계입니다. 항목 만점이 지금과 다른 달은 점수 아래에 그 달의 만점을 적습니다. 점수를 누르면 해당 월의 내역이 열립니다.</p>
       {/* 표가 카드의 남는 높이를 나눠 갖는다 — 카드 아래에 빈 띠가 생기지 않는다. */}
       <div className="flex min-h-0 flex-1 overflow-x-auto">
-        <table className="num w-full min-w-[32rem] flex-1 border-collapse text-xs [&_td]:whitespace-nowrap">
+        {/* 머리글은 띄어쓰기에서만 접는다(글자 사이에서 꺾이면 '퇴/원/율'처럼 세로로 선다). 표가 카드보다 넓으면 카드 안에서 가로로 민다. */}
+        <table className="num w-full flex-1 border-collapse text-xs [&_td]:whitespace-nowrap">
           <thead>
-            <tr className="bg-bg-soft [&_th]:px-1.5 [&_th]:py-2.5 [&_th]:font-bold [&_th]:break-keep">
+            <tr className="bg-bg-soft [&_th]:px-1 [&_th]:py-2.5 [&_th]:font-bold [&_th]:break-keep [&_th]:[overflow-wrap:normal]">
               <th scope="col" className="text-left">기간</th>
               <th scope="col" className="text-center">총점</th>
               {columns.map((c) => <th key={c.id} scope="col" className="text-center">{itemShort(c)}</th>)}
@@ -101,10 +105,10 @@ export function MonthlyTable({ periods, selected, onMonth, onOpen }: {
           <tbody>
             {periods.map((w) => (
               <tr key={w.month} data-selected={w.month === selected || undefined}
-                className={`border-line-faint border-b last:border-b-0 [&_td]:px-1.5 [&_td]:py-2.5 ${w.month === selected ? "bg-primary-softer" : ""}`}>
-                <td className="text-left whitespace-nowrap">
-                  <button type="button" onClick={() => onMonth(w.month)} className={cellButton}>{monthName(w.month)}</button>
-                  <small className="mt-1 block text-xs">{w.partial ? `${dayLabel(w.end)}까지` : closingLabel(w)}</small>
+                className={`border-line-faint border-b last:border-b-0 [&_td]:px-1 [&_td]:py-2.5 ${w.month === selected ? "bg-primary-softer" : ""}`}>
+                <td className="text-left">
+                  <button type="button" onClick={() => onMonth(w.month)} aria-label={monthName(w.month)} className={cellButton}>{shortMonth(w.month)}</button>
+                  <small className="mt-1 block text-xs break-keep whitespace-normal [overflow-wrap:normal]">{w.partial ? `${dayLabel(w.end)}까지` : closingLabel(w)}</small>
                 </td>
                 <td className="text-center text-sm font-bold">
                   <button type="button" onClick={() => onOpen(w.month, { kind: "ledger" })} aria-label={`${monthName(w.month)} 총점 ${fmtScore(w.total)} / ${periodMax(w)}점`} className={cellButton}>

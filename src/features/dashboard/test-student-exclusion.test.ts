@@ -197,11 +197,16 @@ describe("데스크 오늘 출결·처리현황은 테스트 학생을 명단에
     });
 
     it("🔴 판정 뒤에 뺀다(처리현황과 같은 순서) — 명단이 비면 그 반은 미기록 목록에 안 선다", () => {
-      const skip = fn.indexOf("if (testStudentIds.has(row.student_id)) continue;");
+      // 판정은 강사별 업무 현황과 같이 쓰는 함수로 옮겼다(2026-10-15 unrecorded-attendance.ts) — 신호는 테스트 학생을 그 함수에 넘긴다.
+      expect(fn).toContain("judgeClassAttendanceDay({");
+      expect(fn).toContain("excluded: testStudentIds");
+      const judge = strip(read("src", "features", "dashboard", "unrecorded-attendance.ts"));
+      const skip = judge.indexOf("if (input.excluded?.has(e.student_id)) continue;");
       expect(skip).toBeGreaterThan(-1);
-      expect(fn.indexOf("isEnrollmentActiveOn(")).toBeLessThan(skip);
-      expect(skip).toBeLessThan(fn.indexOf("students.add(row.student_id)"));
-      expect(fn).toContain("hasUnrecordedStudent");
+      expect(judge.indexOf("isEnrollmentActiveOn(")).toBeLessThan(skip);
+      expect(skip).toBeLessThan(judge.indexOf("expected.add(e.student_id)"));
+      // 명단이 비면 대상이 아니다 — 미기록은 명단 중 기록 없는 학생이 있을 때만.
+      expect(judge).toContain("unrecorded: [...expected].some((id) => !input.recorded.has(id))");
     });
   });
 });

@@ -11,6 +11,7 @@
 .table td { font-weight: 600; }
 .table td[data-tone="good"] { color: #087c52; }
 .table td[data-tone="alert"] { color: #b72f38; }
+.table small[data-tone="alert"] { color: #b72f38; font-weight: 600; }
 .table tr[data-video] > * { border-top: 2px solid #d9e3f0; }
 .table a { text-underline-offset: 4px; }
 .table a:hover { text-decoration: underline; }

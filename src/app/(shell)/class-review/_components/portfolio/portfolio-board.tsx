@@ -100,11 +100,13 @@ export function PortfolioBoard({ teachers, selected, studentNames, computedLabel
       </p>
       <div className="desk:grid-cols-[15rem_minmax(0,1fr)] grid grid-cols-1 gap-5">
         <TeacherList {...list} />
-        <div aria-busy={moving} className={`flex min-w-0 flex-col gap-5 transition-opacity ${moving ? "opacity-60 delay-100" : ""}`}>
+        <div aria-busy={moving} className={`@container/board flex min-w-0 flex-col gap-5 transition-opacity ${moving ? "opacity-60 delay-100" : ""}`}>
           <TeacherPicker {...list} />
           <ScoreHero period={period} previous={selected.periods[index + 1]} onOpenMetric={(id) => setDetail({ kind: "metric", id })}
             onOpenLedger={() => setDetail({ kind: "ledger" })} />
-          <div className="grid flex-1 grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:items-stretch">
+          {/* 내역과 월간 점수를 나란히 = 본문 폭이 64rem 이상일 때만(창 폭이 아니라 — 앱 메뉴·강사 목록을 뺀 폭이 좁으면 월간 표가
+              카드 밖으로 잘렸다, 원장 2026-10-14). 좁으면 위아래로 쌓는다. */}
+          <div className="grid flex-1 grid-cols-1 gap-5 @5xl/board:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] @5xl/board:items-stretch">
             <EvidencePanel active={tab} onTab={setTab} evidence={{ ...evidence, onOpenStudents: () => setDetail({ kind: "metric", id: "report" }) }} />
             <div className="flex min-w-0 flex-col gap-5">
               <MonthlyTable periods={shown} selected={period.month} onMonth={setMonthKey}

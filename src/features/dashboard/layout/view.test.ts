@@ -85,7 +85,8 @@ describe("loadPlan — 서버가 조회할 영역(배치에 없으면 미조회 
   });
 
   it("과목 관리자 기본은 놓인 카드의 영역만", () => {
-    expect([...plan("subject")].sort()).toEqual(["absent", "firstClass", "notices", "schedule", "students", "teacherWork", "withdrawals"]);
+    // 과목별 수강 → 반복 결석 학생(원장 2026-10-15) — 결석 위험 영역(`absences`)을 읽는다.
+    expect([...plan("subject")].sort()).toEqual(["absences", "absent", "firstClass", "notices", "schedule", "students", "teacherWork", "withdrawals"]);
   });
 
   it("배치에 있어도 메뉴 권한이 없으면 조회하지 않는다", () => {
