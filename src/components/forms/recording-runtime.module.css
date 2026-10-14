@@ -64,6 +64,9 @@
 @media (hover: hover) {
   .capsule:hover .timer { opacity: 1; transform: translateX(0); transition-delay: 80ms; }
 }
+/* 정보창이 열린 동안은 마우스가 떠나도 캡슐을 펼쳐 둔다 — 시간이 계속 보인다(원장 2026-10-14). 끄는 동안만 접는다(아래). */
+.anchor[data-open="true"] .capsule { width: 128px; }
+.anchor[data-open="true"] .timer { opacity: 1; transform: translateX(0); }
 .anchor[data-dragging="true"] .capsule { width: 48px; cursor: grabbing; }
 .anchor[data-dragging="true"] .timer { opacity: 0; transition-delay: 0ms; }
 
@@ -74,8 +77,11 @@
   max-width: calc(100vw - 32px);
   max-height: calc(100dvh - 32px);
   overflow: auto;
-  visibility: hidden;
+  /* 자리를 재기 전 한 프레임 — visibility가 아니라 opacity(숨은 요소는 초점을 못 받는다, gotchas #128). */
+  opacity: 0;
+  pointer-events: none;
 }
+.panel[data-placed="true"] { opacity: 1; pointer-events: auto; }
 
 @media (prefers-reduced-motion: reduce) {
   .capsule, .timer { transition: none; }
