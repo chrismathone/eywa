@@ -202,6 +202,20 @@ describe("개인별 기능 권한 — 사람을 지정해서 여는 기능을 �
     expect(payload().specialAccess.leaveAdjusterIds).toEqual([]);
   });
 
+  it("수강 날짜 수정은 기능 권한 맨 아래에서 따로 지정·해제한다", () => {
+    view();
+    const label = screen.getByText("수강 날짜 수정");
+    const scope = screen.getByText("직원관리 과목 범위");
+    expect(scope.compareDocumentPosition(label) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("수강 날짜 수정 담당자 선택"), { target: { value: staff[0].id } });
+    fireEvent.click(screen.getByRole("button", { name: "수강 날짜 수정 담당자 추가" }));
+    expect(payload().specialAccess.enrollmentDateEditorIds).toEqual([staff[0].id]);
+    expect(payload().specialAccess.leaveAdjusterIds).toEqual([]);
+    expect(payload().overrides).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: "가 선생 수강 날짜 수정 해제" }));
+    expect(payload().specialAccess.enrollmentDateEditorIds).toEqual([]);
+  });
+
   it("🔴 수업 나누기를 꺼 둔 동안엔 그 칸이 없다 — 지정해 둔 사람은 그대로 실려 간다(다시 켜면 보인다)", () => {
     view({ ...EMPTY, specialAccess: { ...EMPTY.specialAccess, classSplitterIds: [staff[0].id] } } as typeof EMPTY);
     expect(Boolean(screen.queryByLabelText("수업 나누기 담당자 선택"))).toBe(CLASS_SPLIT_ENABLED);

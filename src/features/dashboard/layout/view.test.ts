@@ -45,19 +45,21 @@ describe("resolveView — 보는 사람의 배치", () => {
 
   it("과목 관리자 — 제목 뒤 담당 과목, 원장이 넣은 카드는 다 보이고 과목으로 못 나누는 카드엔 '(학원 전체)'", () => {
     // 원장 2026-10-14 *"위젯은 똑같이 넣어주고 내가 커스텀"* — 예전엔 학원 전체 카드를 숨겼다.
-    const v = resolveView({ stored: stored("subject", [{ id: "panel:subjects", w: 6, h: 1 }, { id: "panel:attendance", w: 6, h: 1 }]), bundle: "subject", menus: ALL, subjectLabels: ["수학"] });
+    // 2단계(같은 날) — 출결·수납 등은 과목으로 다시 세어 꼬리표가 없고, 원천에 과목이 없는 지출·행정만 '(학원 전체)'다.
+    const v = resolveView({ stored: stored("subject", [{ id: "panel:subjects", w: 6, h: 1 }, { id: "panel:attendance", w: 6, h: 1 }, { id: "panel:expenses", w: 6, h: 1 }]), bundle: "subject", menus: ALL, subjectLabels: ["수학"] });
     expect(v.scopeLabel).toBe("수학");
-    expect(v.items?.map((i) => i.id)).toEqual(["panel:subjects", "panel:attendance"]);
-    expect(v.academyWide).toEqual(["panel:attendance"]);
-    expect(loadPlan(v, ALL).has("attendance")).toBe(true);
+    expect(v.items?.map((i) => i.id)).toEqual(["panel:subjects", "panel:attendance", "panel:expenses"]);
+    expect(v.academyWide).toEqual(["panel:expenses"]);
+    expect(loadPlan(v, ALL).has("expenses")).toBe(true);
     // 메뉴 권한 상한은 그대로 — 권한이 없으면 빠진다.
     const capped = resolveView({ stored: stored("subject", [{ id: "panel:attendance", w: 6, h: 1 }]), bundle: "subject", menus: new Set(), subjectLabels: ["수학"] });
     expect(capped.items?.map((i) => i.id)).toEqual([]);
   });
 
   it("과목 범위를 받은 다른 역할(실장 등)은 종전대로 학원 전체 카드를 숨긴다 — 편집기에 꼬리표가 안 서는 역할이라(리뷰 2026-10-14)", () => {
-    const v = resolveView({ stored: stored("manager", [{ id: "panel:subjects", w: 6, h: 1 }, { id: "panel:attendance", w: 6, h: 1 }]), bundle: "manager", menus: ALL, subjectScoped: true, subjectLabels: ["수학"] });
-    expect(v.items?.map((i) => i.id)).toEqual(["panel:subjects"]);
+    const v = resolveView({ stored: stored("manager", [{ id: "panel:subjects", w: 6, h: 1 }, { id: "panel:attendance", w: 6, h: 1 }, { id: "panel:expenses", w: 6, h: 1 }]), bundle: "manager", menus: ALL, subjectScoped: true, subjectLabels: ["수학"] });
+    // 출결은 과목으로 다시 세는 카드라 열리고(2단계), 학원 전체 카드(지출)만 숨는다.
+    expect(v.items?.map((i) => i.id)).toEqual(["panel:subjects", "panel:attendance"]);
     expect(v.academyWide).toEqual([]);
   });
 
@@ -162,5 +164,33 @@ describe("previewSnapshot — 편집기 미리보기가 서버와 같은 길을 
 
   it("원장이 기본 그대로면 미리보기도 옛 격자(지금 운영실)", () => {
     expect(previewSnapshot(snap, { role: "owner", items: defaultItems("owner"), menus: ALL, subject: null }).view?.mode).toBe("classic");
+  });
+});
+
+describe("과목별 값 끼우기(원장 2026-10-14 2단계) — shapeSections", () => {
+  const groupOf = (key: string | null | undefined) => (key === "math" ? "math" : key === "english" ? "english" : null);
+  const money = { period: "2026-10", totalCount: 3, paidCount: 3, partialCount: 0, unpaidCount: 0, totalBilled: 900, totalCollected: 900, totalDiscount: 0, outstanding: 0, paymentRate: 100 };
+  const sections: Sections = {
+    intake: { data: [{ id: "a", name: "A", time: null }, { id: "b", name: "B", time: null }], at: 1, error: false },
+    billing: { data: [money], at: 1, error: false },
+  };
+  const slices = {
+    intake: { math: [{ id: "a", name: "A", time: null }] },
+    billing: { math: [{ ...money, totalCount: 1, totalBilled: 300, totalCollected: 300, unclassified: { billed: 50, outstanding: 50, count: 1, lines: 1 } }] },
+  };
+  const items: Item[] = [{ id: "kpi:intake", w: 3, h: 1 }, { id: "panel:billingMonth", w: 6, h: 1, amounts: false }];
+
+  it("과목 관리자 = 그 묶음의 값 · 금액 가림은 끼운 값(과목 모름 포함)에도 걸린다", () => {
+    const view = resolveView({ stored: stored("subject", items), bundle: "subject", menus: ALL, subjectLabels: ["수학"] });
+    const out = shapeSections(sections, view, { groups: ["math"], groupOf, slices });
+    expect(out.intake?.data?.map((r) => r.id)).toEqual(["a"]);
+    expect(out.billing?.data?.[0]).toMatchObject({ totalCount: 1, totalBilled: 0, unclassified: { billed: 0, outstanding: 0, count: 1, lines: 1 } });
+  });
+
+  it("과목 관리자가 아니면 과목 값을 쓰지 않는다(학원 전체 값 그대로)", () => {
+    const view = resolveView({ stored: stored("desk", items), bundle: "desk", menus: ALL });
+    const out = shapeSections(sections, view, { groups: [], groupOf, slices });
+    expect(out.intake?.data?.map((r) => r.id)).toEqual(["a", "b"]);
+    expect(out.billing?.data?.[0]?.totalCount).toBe(3);
   });
 });

@@ -23,6 +23,7 @@ import { EndEnrollmentAction } from "@/features/enrollments/components/end-enrol
 import { DeleteEnrollmentButton } from "../_components/delete-enrollment-button";
 import { MoveEnrollmentButton, MoveEnrollmentProvider } from "../_components/move-enrollment-button";
 import { EditableDateCell } from "@/features/enrollments/components/editable-date-cell";
+import { canEditEnrollmentDateClass, type EnrollmentDateAccess } from "@/features/enrollments/date-access";
 import { EditableAttendanceCell } from "@/features/enrollments/components/editable-attendance-cell";
 import { WindowLink } from "@/components/workspace/window-link";
 import { StudentWeekGrid } from "./student-week-grid";
@@ -58,13 +59,13 @@ const DAY_CHIP: Record<string, string> = {
 export async function ClassesTab({
   student,
   canEnd,
-  canEditDates,
+  dateAccess,
   canEditSchedule,
   canDeleteEnrollment,
 }: {
   student: StudentDetail;
   canEnd: boolean;
-  canEditDates: boolean;
+  dateAccess: EnrollmentDateAccess;
   /** 분리등원 요일(스케줄 셀) 더블클릭 편집 노출 — canManageTenant("classes", 서버 액션과 같은 축). */
   canEditSchedule: boolean;
   /**
@@ -154,7 +155,7 @@ export async function ClassesTab({
         studentId={student.id}
         subjects={subjects}
         canEnd={canEnd}
-        canEditDates={canEditDates}
+        dateAccess={dateAccess}
         canEditSchedule={canEditSchedule}
         canDeleteEnrollment={canDeleteEnrollment}
         moveTargets={candidateClasses}
@@ -171,8 +172,8 @@ export async function ClassesTab({
         }
         note="실제 학생이 등원하는 요일만 표기됩니다"
       />
-      <Section title="배정 예정 수업" rows={scheduled} kind="scheduled" studentId={student.id} subjects={subjects} canEnd={canEnd} canEditDates={canEditDates} canEditSchedule={canEditSchedule} canDeleteEnrollment={canDeleteEnrollment} />
-      <Section title="지난 수업" rows={pastRows} kind="past" studentId={student.id} subjects={subjects} canEnd={canEnd} canEditDates={canEditDates} canEditSchedule={canEditSchedule} canDeleteEnrollment={canDeleteEnrollment} />
+      <Section title="배정 예정 수업" rows={scheduled} kind="scheduled" studentId={student.id} subjects={subjects} canEnd={canEnd} dateAccess={dateAccess} canEditSchedule={canEditSchedule} canDeleteEnrollment={canDeleteEnrollment} />
+      <Section title="지난 수업" rows={pastRows} kind="past" studentId={student.id} subjects={subjects} canEnd={canEnd} dateAccess={dateAccess} canEditSchedule={canEditSchedule} canDeleteEnrollment={canDeleteEnrollment} />
     </div>
     </MoveEnrollmentProvider>
   );
@@ -185,7 +186,7 @@ function Section({
   studentId,
   subjects,
   canEnd,
-  canEditDates,
+  dateAccess,
   canEditSchedule,
   canDeleteEnrollment,
   moveTargets,
@@ -203,7 +204,7 @@ function Section({
   studentId: string;
   subjects: SubjectMaps;
   canEnd: boolean;
-  canEditDates: boolean;
+  dateAccess: EnrollmentDateAccess;
   canEditSchedule: boolean;
   canDeleteEnrollment: boolean;
   /** 반 이동 대상 후보(수강 중 섹션에서만) — 있으면 행에 '반 이동' 버튼. */
@@ -295,14 +296,14 @@ function Section({
                     )}
                   </td>
                   <td className="px-4 py-2.5 text-xs">
-                    {canEditDates ? (
+                    {canEditEnrollmentDateClass(dateAccess, r.classId) ? (
                       <EditableDateCell enrollmentId={r.enrollmentId} field="start" value={r.startDate} />
                     ) : (
                       <span className="text-text-dim num">{r.startDate}</span>
                     )}
                   </td>
                   <td className="px-4 py-2.5 text-xs">
-                    {canEditDates ? (
+                    {canEditEnrollmentDateClass(dateAccess, r.classId) ? (
                       <EditableDateCell enrollmentId={r.enrollmentId} field="end" value={r.endDate} isTransferred={r.isTransferred} />
                     ) : kind === "scheduled" ? (
                       <span className="text-text-faint">—</span>

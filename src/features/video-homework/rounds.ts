@@ -267,7 +267,9 @@ export function buildLedgerRounds(input: {
     own(video.id, round);
     push(pickedAt, `${pair}:${day}`, { round, at: arrived(video) });
     if (video.fingerprint) push(pickedFiles, `${pair}:${video.fingerprint}`, { round, date: round.date });
-    if (!round.mark) Object.assign(round, { auto: true, status: "submitted", submittedDate: day });
+    // 검사 기록 칸 · 옮겨 남긴 숙제의 손 '미수행'은 영상이 이긴다(②의 뒷순위와 같다) — 자동 판정이 이 칸을 고치지 않으므로 여기서 완료로
+    // 보이지 않으면 손으로 붙인 영상이 ▶ 없이 '× 미수행'으로 숨는다(적대적 리뷰 2026-10-14). 정식 숙제 칸은 자동 판정이 기록을 고친다.
+    if (!round.mark || (!round.assigned && round.mark.status === "missing")) Object.assign(round, { auto: true, status: "submitted", submittedDate: day });
   }
   /** 이 안 고른 영상을 접어 두는 칸들 — 비면 접히지 않는다(②로 간다). */
   const foldedInto = (v: VideoArrival): LedgerRound[] => {

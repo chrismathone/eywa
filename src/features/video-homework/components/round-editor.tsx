@@ -58,10 +58,17 @@ export function RoundEditor({ cell, today, busy, save, onClose, onAssign }: {
     {status === "submitted" ? <label>제출일<input type="date" value={submittedDate} min={floor} max={today} required
       disabled={busy || !row.editable} onChange={(event) => { setSubmittedDate(event.target.value); setError(""); }} /></label> : null}
     {error ? <p role="alert" className={styles.red}>{error}</p> : null}
-    {row.canAssignVideos && round.videoId && onAssign ? <button type="button" className="text-primary w-fit text-sm underline" disabled={busy} onClick={onAssign}>영상 배정 변경</button> : null}
+    {/* 영상이 없는 칸(미확인 · 미수행 · 손으로 찍은 '수동' 완료)에서도 연다 — 학생이 올린 영상을 그 숙제에 붙인다(원장 2026-10-14
+        *"수동 영상들 다 학생들이 업로드해서 배정하고 싶은데 배정이 불가능함"*). 숙제일 없는 옛 기록(c:)은 붙일 숙제가 없고, 검사 대상 밖 줄은
+        영상을 세지 않아 붙여도 보이지 않는다(rounds.ts ③ — tracked). */}
+    {row.canAssignVideos && row.tracked && round.homeworkDate && onAssign ?<button type="button" className="text-primary w-fit text-sm underline" disabled={busy} onClick={onAssign}>
+      {round.videoId ? "영상 배정 변경" : "이 숙제에 영상 배정"}</button> : null}
     {rejecting ? <RejectVideosButton classId={row.classId} studentId={row.studentId} homeworkDate={round.homeworkDate!} today={today}
       disabled={busy || !row.editable} onDone={onClose} /> : null}
-    <p className={styles.dim}>{rejecting ? "다른 숙제에 올라간 영상이면 반려하지 말고 영상 배정 변경에서 옮겨 주세요." : round.videoId ? "미확인은 수동 검사 기록만 지웁니다. 연결된 영상이 있으면 자동으로 완료됩니다. 영상 연결은 배정 변경에서 수정할 수 있습니다."
+    <p className={styles.dim}>{rejecting ? "다른 숙제에 올라간 영상이면 반려하지 말고 영상 배정 변경에서 옮겨 주세요."
+      // 검사 기록 칸 · 옮겨 남긴 숙제는 붙은 영상이 손 '미수행'을 이긴다(rounds.ts) — 저장이 무시된 것처럼 보이지 않게 먼저 알린다(재리뷰 2026-10-14).
+      : status === "missing" && round.videoId && !round.assigned ? "영상이 붙은 칸이라 미수행으로 저장해도 영상으로 완료로 셉니다. 다른 숙제의 영상이면 영상 배정 변경에서 옮기고, 잘못 올린 영상이면 미확인(영상 반려)으로 바꿔 주세요."
+      : round.videoId ?"미확인은 수동 검사 기록만 지웁니다. 연결된 영상이 있으면 자동으로 완료됩니다. 영상 연결은 배정 변경에서 수정할 수 있습니다."
       : round.assigned ? "미확인으로 바꾸면 이 숙제의 검사 기록이 지워집니다."
       : round.homeworkDate ? "보고서에 영상 과제 표시가 없는 수업입니다. 미확인으로 바꿔도 이 칸은 남습니다."
       : "숙제일이 없는 옛 기록입니다. 미확인으로 바꾸면 기록이 지워져 이 회차가 장부에서 빠집니다."}</p>

@@ -5,6 +5,8 @@ import { revalidatePath } from "next/cache";
 //    있어서, 동기 헬퍼를 여기서 내보내면 프로덕션 빌드가 깨진다(2026-08-29 실측).
 import { isOverlapConflict, toKoreanDbError } from "../db-errors";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { canEditEnrollmentDatesNow, getEnrollmentDateAccess } from "./date-access";
+import { canEditEnrollmentDateClass, ENROLLMENT_DATE_DENIED } from "../date-access";
 import { createClient } from "@/lib/supabase/server";
 import { accessLevelTenant, canManageTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
@@ -379,7 +381,7 @@ export async function updateEnrollmentsAttendanceBatch(
  */
 async function countAttendanceOutside(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  args: { studentId: string; classId: string; ranges: ExcludedRange[] },
+  args: { tenantId: string; studentId: string; classId: string; ranges: ExcludedRange[] },
 ): Promise<AttendanceShrink | null> {
   if (args.ranges.length === 0) return null;
 
@@ -389,6 +391,7 @@ async function countAttendanceOutside(
       let q = supabase
         .from("attendance_records")
         .select("session_date", { count: "exact" })
+        .eq("tenant_id", args.tenantId)
         .eq("student_id", args.studentId)
         .eq("class_id", args.classId)
         .gte("session_date", r.from);
@@ -398,16 +401,15 @@ async function countAttendanceOutside(
         .limit(1);
       if (error) {
         console.error("[enrollments] 기간 밖 출결 확인 실패:", error.message);
-        return null;
+        throw new Error("기간 밖 출결 확인 실패");
       }
       const last = (data ?? [])[0]?.session_date as string | undefined;
       return { count: count ?? 0, lastDate: last ?? null };
     }),
   );
 
-  // 한 구간이라도 못 셌으면 숫자가 거짓이 된다 — 통째로 포기하고 확인을 건너뛴다.
-  if (results.some((r) => r === null)) return null;
-  const rows = results as { count: number; lastDate: string | null }[];
+  // 조회 실패는 위에서 중단한다. 확인 없이 날짜를 바꾸는 경로로 흘리지 않는다.
+  const rows = results;
   const count = rows.reduce((acc, r) => acc + r.count, 0);
   const lastDate = rows.reduce<string | null>(
     (acc, r) => (r.lastDate && (!acc || r.lastDate > acc) ? r.lastDate : acc),
@@ -437,7 +439,7 @@ export type UpdateEnrollmentDatesState =
   | undefined;
 
 /**
- * 수강 시작/종료일 직접 수정 (관리자 정정). owner(원장) 콘솔 권한 이상만(master).
+ * 수강 시작/종료일 직접 수정. 개인별 기능 권한의 수강 날짜 수정 자격을 확인한다.
  * enrollments는 시간 구간(temporal) 테이블이라 날짜 변경이 타임머신·시간표에 그대로 반영된다.
  * GiST EXCLUDE(enrollments_no_overlap = 같은 학생+같은 반 기간 겹침)에 걸리면 친절 메시지로 거부.
  *
@@ -452,10 +454,7 @@ export async function updateEnrollmentDates(
 ): Promise<UpdateEnrollmentDatesState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  // owner(원장) 콘솔 권한 이상만 — 날짜 정정은 수강 이력을 다시 쓰는 민감 작업이라 최상위로 제한.
-  if ((await accessLevelTenant(user.systemRole, "owner")) !== "full") {
-    return { error: "날짜 수정 권한이 없습니다 (원장 전용)" };
-  }
+  if (!(await canEditEnrollmentDatesNow())) return { error: ENROLLMENT_DATE_DENIED };
 
   const enrollmentId = String(formData.get("enrollmentId") ?? "").trim();
   const field = String(formData.get("field") ?? "").trim(); // "start" | "end"
@@ -471,10 +470,15 @@ export async function updateEnrollmentDates(
     .from("enrollments")
     .select("start_date, end_date, student_id, class_id, is_transferred, is_transferred_in, withdrawal_reason")
     .eq("id", enrollmentId)
+    .eq("tenant_id", user.tenantId)
     .single();
   if (fetchErr || !current) {
     logDbError(fetchErr, "enrollments.updateEnrollmentDates");
     return { error: "수강 정보를 찾을 수 없습니다" };
+  }
+
+  if (!canEditEnrollmentDateClass(await getEnrollmentDateAccess(), current.class_id as string)) {
+    return { error: ENROLLMENT_DATE_DENIED };
   }
 
   // 형식·시작≤종료 검증은 순수 함수 한 곳에서(Vitest로 잠금) — 문구는 종전 그대로다.
@@ -499,11 +503,15 @@ export async function updateEnrollmentDates(
   }
 
   // 이번 편집이 새로 기간 밖으로 밀어내는 출결은 저장 전에 확인한다. 넓히는 편집은 조회하지 않는다.
-  const shrink = await countAttendanceOutside(supabase, {
-    studentId: current.student_id as string,
-    classId: current.class_id as string,
-    ranges: newlyExcludedAttendanceRanges(prevWindow, nextWindow),
-  });
+  // 출결 메뉴가 없는 지정 직원도 실제 기록을 빠짐없이 확인한다. 읽기는 현재 지점으로 제한한다.
+  const dateWriter = createAdminClient();
+  let shrink: AttendanceShrink | null;
+  try {
+    shrink = await countAttendanceOutside(dateWriter, {
+      tenantId: user.tenantId, studentId: current.student_id as string,
+      classId: current.class_id as string, ranges: newlyExcludedAttendanceRanges(prevWindow, nextWindow),
+    });
+  } catch { return { error: "출결 기록을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요" }; }
   const risks: DateEditRisk[] = [];
   if (shrink) risks.push({ kind: "attendanceOutside", shrink });
 
@@ -554,7 +562,12 @@ export async function updateEnrollmentDates(
           }
         : { end_date: null, withdrawal_reason: null, is_transferred: false };
 
-  const { error } = await supabase.from("enrollments").update(patch).eq("id", enrollmentId);
+  // 기능 지정은 일반 수강 쓰기 권한을 넓히지 않는다. 이 경로에서 정해진 날짜 칸만 수정한다.
+  let write = dateWriter.from("enrollments").update(patch).eq("id", enrollmentId)
+    .eq("tenant_id", user.tenantId).eq("student_id", current.student_id).eq("class_id", current.class_id)
+    .eq("start_date", current.start_date);
+  write = current.end_date === null ? write.is("end_date", null) : write.eq("end_date", current.end_date);
+  const { data: changed, error } = await write.select("id").maybeSingle();
   if (error) {
     if (isOverlapConflict(error)) {
       return {
@@ -570,6 +583,7 @@ export async function updateEnrollmentDates(
     }
     return { error: toKoreanDbError(error, "날짜를 저장하지 못했습니다", "enrollments.dates") };
   }
+  if (!changed) return { error: "수강 정보가 변경되었습니다. 화면을 새로고침한 뒤 다시 수정해 주세요" };
 
   await logAction({
     action: "enrollment_dates_update",

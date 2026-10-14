@@ -9,6 +9,7 @@ vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => m.user }
 vi.mock("@/lib/auth/view-mode", () => ({ readonlyTeacherViewError: async () => m.readonly, viewAsTeacher: async () => m.viewAs }));
 vi.mock("@/lib/auth/perm-matrix", () => ({ accessLevelTenant: async () => m.full ? "full" : "scoped", canWriteTenant: async () => m.writable }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => m.db }));
+vi.mock("@/features/audit/server/log", () => ({ logAction: vi.fn() }));
 import { assignHomeworkVideo, getVideoAssignmentOptions } from "./video-assignment";
 const C = "11111111-1111-4111-8111-111111111111", S = "22222222-2222-4222-8222-222222222222", V = "33333333-3333-4333-8333-333333333333";
 const input = { classId: C, studentId: S, videoId: V, homeworkDate: "2026-10-01", excluded: false, revision: 0, reason: "잘못 올린 반 수정" };
@@ -39,6 +40,38 @@ describe("담임의 영상 배정", () => {
     if (kind === "readonly") m.readonly = "읽기 전용입니다.";
     if (kind === "noWrite") m.writable = false;
     expect((await assignHomeworkVideo(input)).ok).toBe(false); expect(m.db.rpcCalls).toHaveLength(0);
+  });
+  // 원장 2026-10-14 *"수동 영상들 다 학생들이 업로드해서 배정하고 싶은데 배정이 불가능함"* — 보고서에 '영상 과제' 표시 없이 선생님이 손으로
+  // 찍은 칸(검사 기록만 있는 숙제일)은 배정 목록에 없었고 DB 함수도 거절했다.
+  it("검사 기록만 있는 숙제일도 배정 목록에 서고, 배정하면 그 칸을 옮겨 남긴 숙제로 먼저 남긴 뒤 저장한다", async () => {
+    m.db.tables.lesson_reports = [{ tenant_id: "tenant", student_id: S, class_id: C, report_date: "2026-10-01", video_homework: null, created_by: "teacher" }];
+    m.db.tables.video_homework_marks = [{ tenant_id: "tenant", class_id: C, student_id: S, check_date: "2026-10-02", homework_date: "2026-10-01", status: "submitted" }];
+    m.db.tables.video_homework_extra_issues = [];
+    expect(await getVideoAssignmentOptions(optionsInput)).toMatchObject({ ok: true, dates: ["2026-10-01"], videos: [{ id: V }] });
+    expect(await assignHomeworkVideo(input)).toEqual({ ok: true });
+    expect(m.db.tables.video_homework_extra_issues).toEqual([expect.objectContaining({ class_id: C, student_id: S, homework_date: "2026-10-01", teacher_id: "teacher", kept: true })]);
+    expect(m.db.rpcCalls).toHaveLength(1);
+    expect(m.db.rpcCalls[0]?.args).toMatchObject({ p_date: "2026-10-01", p_video: V });
+    // 검사 기록도 숙제도 없는 날은 여전히 거절 — 옮겨 남기지도 않는다
+    expect((await assignHomeworkVideo({ ...input, homeworkDate: "2026-10-02" })).ok).toBe(false);
+    expect(m.db.tables.video_homework_extra_issues).toHaveLength(1);
+  });
+  // 재리뷰 2026-10-14 — 거두는 사이 다른 창이 그 칸을 미확인으로 지우면 칸이 통째로 사라진다. 남은 줄은 칸을 지킬 뿐이다.
+  it("🔴 배정이 실패해도 남긴 줄은 거두지 않는다 — 다시 시도하면 그 줄을 그대로 쓴다", async () => {
+    m.db.tables.lesson_reports = [{ tenant_id: "tenant", student_id: S, class_id: C, report_date: "2026-10-01", video_homework: null, created_by: "teacher" }];
+    m.db.tables.video_homework_marks = [{ tenant_id: "tenant", class_id: C, student_id: S, check_date: "2026-10-02", homework_date: "2026-10-01", status: "submitted" }];
+    m.db.tables.video_homework_extra_issues = [];
+    m.db.defineRpc("set_homework_video_assignment", () => "conflict");
+    expect(await assignHomeworkVideo(input)).toMatchObject({ ok: false, error: expect.stringContaining("다른 곳") });
+    expect(m.db.tables.video_homework_extra_issues).toHaveLength(1);
+    m.db.defineRpc("set_homework_video_assignment", () => "saved");
+    expect(await assignHomeworkVideo(input)).toEqual({ ok: true });
+    expect(m.db.tables.video_homework_extra_issues).toHaveLength(1);
+  });
+  it("보고서 숙제에 배정할 때는 옮겨 남긴 숙제를 만들지 않는다", async () => {
+    m.db.tables.video_homework_marks = [{ tenant_id: "tenant", class_id: C, student_id: S, check_date: "2026-10-02", homework_date: "2026-10-01", status: "submitted" }];
+    expect(await assignHomeworkVideo(input)).toEqual({ ok: true });
+    expect(m.db.tables.video_homework_extra_issues ?? []).toHaveLength(0);
   });
   it("없는 숙제일과 빈 사유를 거절한다", async () => {
     expect((await assignHomeworkVideo({ ...input, homeworkDate: "2026-10-02" })).ok).toBe(false);

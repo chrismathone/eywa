@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { blankCells, blankReasonOn, buildBlankFacts, type BlankAttendanceRow } from "./no-homework";
+import { blankCells, blankReasonOn, buildBlankFacts, ledgerRowCells, type BlankAttendanceRow } from "./no-homework";
 import { roundSource } from "./ledger";
+import type { LedgerRound } from "./rounds";
 import type { LedgerEnrollment } from "./ledger-roster";
 
 const enroll = (patch: Partial<LedgerEnrollment> = {}): LedgerEnrollment =>
@@ -53,6 +54,18 @@ describe("blankCells — 반 숙제 날짜 중 이 학생에게 없는 날을 �
     expect(blankCells({ classDates, own, facts, slots: 1 })).toEqual([{ date: "2026-10-06", reason: "absent" }]);
     expect(blankCells({ classDates, own, facts: undefined, slots: 2 })).toEqual([]);
     expect(blankCells({ classDates, own, facts, slots: 0 })).toEqual([]);
+  });
+});
+
+// 원장 2026-10-14 *"날짜 순서가 이상한데"* — 전주율: 10/1 숙제없음이 10/8·10/12 회차 뒤에 섰다.
+describe("ledgerRowCells — 회차와 빈 칸을 날짜순으로 섞는다", () => {
+  const round = (date: string) => ({ key: `h:${date}`, date, homeworkDate: date }) as LedgerRound;
+  it("빈 칸이 회차보다 이르면 앞에 · 사이면 사이에 · 회차 차례와 수는 그대로", () => {
+    const own = [round("2026-10-08"), round("2026-10-12")];
+    const cells = ledgerRowCells(own, [{ date: "2026-10-01", reason: "none" }, { date: "2026-10-10", reason: "absent" }]);
+    expect(cells.map((cell) => cell.round?.date ?? `빈 ${cell.blank?.date}`)).toEqual(["빈 2026-10-01", "2026-10-08", "빈 2026-10-10", "2026-10-12"]);
+    expect(ledgerRowCells(own, []).map((cell) => cell.round)).toEqual(own);
+    expect(ledgerRowCells([], [{ date: "2026-10-01", reason: "none" }])).toEqual([{ blank: { date: "2026-10-01", reason: "none" } }]);
   });
 });
 

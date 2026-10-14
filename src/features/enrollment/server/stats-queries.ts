@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { normalizeSchoolName } from "@/features/schools/school-name";
 import { bucketizePathStats, type BucketStat, type PathStatRow } from "../path-bucket";
+import { recentConsultMonths, type RecentConsultRow } from "../recent-stats";
 import {
   buildSchoolBars,
   gradeLabel,
@@ -183,6 +184,25 @@ export async function getRecentEnrollmentStats(today: string): Promise<Enrollmen
     rate: total > 0 ? Math.round(enrolled / total * 100) : null,
     paidSum: months.reduce((sum, row) => sum + row.paidSum, 0),
   };
+}
+
+/**
+ * 운영실 '콜&상담 전환'의 과목별 값 재료 — 지난달 1일 ~ 다음 달 1일(KST) 상담 행(두 달치, 수십 건 · `recent-stats.ts`가 센다).
+ * 학원 전체 값은 위 DB 함수가 세고, 이 행은 과목 관리자 화면에서만 쓴다.
+ */
+export async function getRecentConsultationRows(today: string): Promise<RecentConsultRow[]> {
+  const [previous, current] = recentConsultMonths(today);
+  const db = await createClient();
+  const rows = await fetchAllPaged<{ consulted_at: string; outcome: string; payment_amount: number | string | null; subject: string | null }>((from, to) =>
+    db
+      .from("enrollment_consultations")
+      .select("consulted_at, outcome, payment_amount, subject")
+      .gte("consulted_at", monthStartIso(previous))
+      .lt("consulted_at", monthStartIso(shiftMonth(current, 1)))
+      .order("id")
+      .range(from, to),
+  );
+  return rows.map((r) => ({ consultedAt: r.consulted_at, outcome: r.outcome, paymentAmount: r.payment_amount === null ? null : Number(r.payment_amount), subject: r.subject || null }));
 }
 
 export type { DistBar, SchoolBar } from "../consultation-dist";

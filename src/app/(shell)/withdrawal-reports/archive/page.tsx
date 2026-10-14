@@ -1,13 +1,15 @@
-import { notFound } from "next/navigation";
-import { EmbedLink } from "@/components/embed-link";
-import { PageHeader } from "@/components/page-header";
+import { notFound, redirect } from "next/navigation";
 import { requireAccess } from "@/lib/auth/require-access";
 import { reportViewer } from "@/features/withdrawal-reports/server/queries";
-import { listArchives } from "@/features/withdrawal-reports/server/archives";
-import { ArchiveList } from "../_components/archive-list";
-export default async function ArchivesPage() {
+
+/**
+ * 기존 스프레드시트 보고서 목록은 퇴원보고서 목록에 합쳤다(원장 2026-10-14 *"따로 볼 필요 없고 미연결 리스트만 따로"*).
+ * 옛 주소는 그 목록의 '스프레드시트 기록'으로 보낸다 — 창 안이면 embed를 지킨다([[#133]]). 볼 수 없는 사람(기능 꺼짐·
+ * 작성 요청 권한 없음)은 종전대로 바로 없는 주소 — 이동부터 하면 꺼진 기능의 주소가 한 번 응답한다.
+ */
+export default async function ArchivesPage({ searchParams }: { searchParams: Promise<{ embed?: string }> }) {
   await requireAccess("withdrawal_reports");
   if (!(await reportViewer())?.request) notFound();
-  const rows = await listArchives();
-  return <div className="min-w-0 space-y-5 p-4 md:p-6"><PageHeader eyebrow="실험실" title="기존 퇴원보고서" description="스프레드시트의 원문을 보관합니다. 연결되지 않은 기록은 학생을 확인한 뒤 연결할 수 있습니다." /><EmbedLink href="/withdrawal-reports" className="text-sm text-primary hover:underline">← 작성·승인 보고서</EmbedLink><ArchiveList rows={rows} /></div>;
+  const { embed } = await searchParams;
+  redirect(embed === "1" ? "/withdrawal-reports?status=archive&embed=1" : "/withdrawal-reports?status=archive");
 }

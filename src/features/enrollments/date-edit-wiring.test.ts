@@ -35,6 +35,12 @@ const SURFACES = [
 ] as const;
 
 describe("수강 날짜 인라인 편집 배선", () => {
+  it("날짜 수정은 세 페이지와 저장에서 같은 기능 자격을 쓰고 삭제 권한과 분리한다", () => {
+    const pages = ["src/app/(shell)/classes/[id]/page.tsx", "src/app/(shell)/students/[id]/page.tsx", "src/app/(shell)/withdrawals/[studentId]/page.tsx"];
+    for (const path of pages) expect(read(path)).toContain("getEnrollmentDateAccess()");
+    expect(read("src/features/enrollments/server/actions.ts")).toContain("if (!(await canEditEnrollmentDatesNow()))");
+    expect(code("src/app/(shell)/students/[id]/page.tsx")).not.toContain("canDeleteEnrollment = canEditDates");
+  });
   it.each(SURFACES)("%s 는 시작일·종료일을 **둘 다** 편집할 수 있다", (rel) => {
     const src = read(rel);
     expect(src).toContain("EditableDateCell");

@@ -261,6 +261,7 @@ function diffPermissions(before: unknown, after: unknown): SettingsDiff {
         ["payslipViewerIds", "급여명세서 열람"],
         ["leaveAdjusterIds", "연차 조정"],
         ["classSplitterIds", "수업 나누기"],
+        ["enrollmentDateEditorIds", "수강 날짜 수정"],
       ] as const) {
         for (const id of Array.isArray(v.specialAccess[key]) ? v.specialAccess[key] : []) {
           if (typeof id !== "string") continue;

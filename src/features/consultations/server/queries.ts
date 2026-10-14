@@ -219,15 +219,22 @@ export type StudentConsultationCounts = {
   overdueFollowUps: number;
 };
 
-/** Stat 카드용 경량 집계 (head:true count — 행 fetch 0). */
-export async function getStudentConsultationCounts(): Promise<StudentConsultationCounts> {
+/**
+ * Stat 카드용 경량 집계 (head:true count — 행 fetch 0).
+ * @param opts.excludeSubjects 운영실 과목 관리자 값(원장 2026-10-14 2단계) — 이 과목 값(키·라벨)의 상담만 빼고 센다.
+ *   과목이 비었거나 설정에 없는 과목의 상담은 '모름'이라 남는다(모든 과목 관리자에게 든다).
+ */
+export async function getStudentConsultationCounts(opts: { excludeSubjects?: readonly string[] } = {}): Promise<StudentConsultationCounts> {
   const supabase = await createClient();
   const today = kstToday();
   // 강사 스코프: Stat 카드도 **본인이 등록한 상담(counselor_id=나)** 기준(목록과 일치).
   // 담당 학생이어도 남이 쓴 상담은 제외 — 작성자 기준(사용자 요청 "내가 한 것만").
   const teacherId = await effectiveTeacherId();
+  // PostgREST 목록 값은 큰따옴표로 감싼다(라벨에 괄호·쉼표가 있을 수 있다 — '수학(심화)'), 안의 따옴표·역슬래시는 역슬래시로.
+  const excluded = (opts.excludeSubjects ?? []).map((v) => `"${v.replace(/["\\]/g, (c) => `\\${c}`)}"`).join(",");
   const base = () => {
-    const q = supabase.from("student_consultations").select("*", { count: "exact", head: true });
+    let q = supabase.from("student_consultations").select("*", { count: "exact", head: true });
+    if (excluded) q = q.or(`subject.is.null,subject.not.in.(${excluded})`);
     return teacherId ? q.eq("counselor_id", teacherId) : q;
   };
   const results =

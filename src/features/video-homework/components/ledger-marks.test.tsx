@@ -6,6 +6,7 @@ import type { VideoArrival, VideoHomeworkLedgerRow, VideoHomeworkMark } from "..
 
 const mocks = vi.hoisted(() => ({ save: vi.fn() }));
 vi.mock("../server/actions", () => ({ setVideoHomeworkRound: mocks.save }));
+vi.mock("next/navigation", async (load) => ({ ...(await load<typeof import("next/navigation")>()), useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/components/embed-link", () => ({ EmbedHiddenInput: () => null }));
 
@@ -106,6 +107,12 @@ describe("영상 제출 현황 — 결석은 —, 숙제없음은 사유 표시(
     const two = within(screen.getByRole("row", { name: /이서연/ }));
     expect(two.getByText("/1")).toBeInTheDocument(); // m = 자기 회차 1개
     expect(screen.queryByText("결석")).not.toBeInTheDocument();
+  });
+  // 원장 2026-10-14 *"날짜 순서가 이상한데"* — 전주율: 10/1 숙제없음이 10/8·10/12 회차 뒤 3회 자리에 섰다.
+  it("🔴 빈 칸도 날짜순으로 회차 사이에 선다 — 이서연: 10/06 결석(—) · 10/13 회차 · 10/20 숙제없음", () => {
+    show();
+    const cells = within(screen.getByRole("row", { name: /이서연/ })).getAllByRole("cell").slice(-3);
+    expect(cells.map((td) => td.textContent)).toEqual(["—", expect.stringContaining("10.13"), "10.20숙제없음"]);
   });
   it("안내 줄에 표시 뜻이 한 줄 들어간다", () => {
     show();

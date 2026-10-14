@@ -76,7 +76,11 @@ export type CardDef = {
   group: CardGroup;
   thumb: ThumbKind;
   areas: readonly Area[];
-  /** 과목 관리자 화면에서 담당 과목으로 좁혀지는가 — `academy`면 학원 전체 값이라 '(학원 전체)'가 붙는다. `none` = 과목과 무관(공지). */
+  /**
+   * 과목 관리자 화면에서 담당 과목으로 좁혀지는가 — `academy`면 학원 전체 값이라 '(학원 전체)'가 붙는다. `none` = 과목과 무관(공지).
+   * 2026-10-14 2단계(원장 *"과목별로 나눠서"*)로 카드 대부분이 `subject`다(`slices.ts` · 서버 `addSliced`). 원천에 과목이 없는
+   * 지출·행정 두 카드만 학원 전체로 남는다.
+   */
   subjectScope: "subject" | "academy" | "none";
   options: readonly CardOption[];
   /** 허용 크기(작은 것부터). 첫 번째가 아니라 `size`가 기본 크기다. */
@@ -96,27 +100,27 @@ const TREND_S = [Z.summary, Z.one, Z.wide, Z.full];
 
 const PANELS: Record<PanelId, PanelSpec> = {
   teacherWork: { label: "강사별 업무 현황", group: "출결·수업", thumb: "table", areas: ["teacherWork"], subjectScope: "subject", size: { w: 24, h: 1 }, sizes: [...LIST, Z.full] },
-  studentsComp: { label: "재원생 구성", group: "학생·재원", thumb: "donut", areas: ["students"], sizes: CHART_S },
-  attendance: { label: "출결 현황", group: "출결·수업", thumb: "donut", areas: ["attendance", "processing", "holidayAttendance"], sizes: CHART_S },
-  billingMonth: { label: "이번 달 수납 현황", group: "수납·지출", thumb: "donut", areas: ["billing"], options: ["amounts"], sizes: CHART_S },
-  newcomerStages: { label: "신규생 단계별 관리", group: "상담·신입", thumb: "bars", areas: ["newcomers"], sizes: LIST_S },
-  changes: { label: "등록 · 퇴원 추이", group: "학생·재원", thumb: "columns", areas: ["changes"], size: { w: 12, h: 1 }, sizes: TREND_S },
-  billing6: { label: "6개월 청구 · 수납", group: "수납·지출", thumb: "columns", areas: ["billing"], size: { w: 12, h: 1 }, sizes: TREND_S },
-  enrolledTrend: { label: "재원생 추이", group: "학생·재원", thumb: "columns", areas: ["enrolledTrend"], size: { w: 24, h: 1 }, sizes: TREND_S },
+  studentsComp: { label: "재원생 구성", subjectScope: "subject", group: "학생·재원", thumb: "donut", areas: ["students"], sizes: CHART_S },
+  attendance: { label: "출결 현황", subjectScope: "subject", group: "출결·수업", thumb: "donut", areas: ["attendance", "processing", "holidayAttendance"], sizes: CHART_S },
+  billingMonth: { label: "이번 달 수납 현황", subjectScope: "subject", group: "수납·지출", thumb: "donut", areas: ["billing"], options: ["amounts"], sizes: CHART_S },
+  newcomerStages: { label: "신규생 단계별 관리", subjectScope: "subject", group: "상담·신입", thumb: "bars", areas: ["newcomers"], sizes: LIST_S },
+  changes: { label: "등록 · 퇴원 추이", subjectScope: "subject", group: "학생·재원", thumb: "columns", areas: ["changes"], size: { w: 12, h: 1 }, sizes: TREND_S },
+  billing6: { label: "6개월 청구 · 수납", subjectScope: "subject", group: "수납·지출", thumb: "columns", areas: ["billing"], size: { w: 12, h: 1 }, sizes: TREND_S },
+  enrolledTrend: { label: "재원생 추이", subjectScope: "subject", group: "학생·재원", thumb: "columns", areas: ["enrolledTrend"], size: { w: 24, h: 1 }, sizes: TREND_S },
   subjects: { label: "과목별 수강", group: "학생·재원", thumb: "bars", areas: ["students"], subjectScope: "subject", sizes: LIST_S },
-  grades: { label: "학년별 재원생", group: "학생·재원", thumb: "bars", areas: ["students"], sizes: LIST },
-  schools: { label: "학교별 학생", group: "학생·재원", thumb: "list", areas: ["students"], size: { w: 6, h: 2 }, sizes: LIST_S },
-  admissions: { label: "콜&상담 전환", group: "상담·신입", thumb: "table", areas: ["admissions"], sizes: LIST_S },
-  repeatAbsence: { label: "반복 결석 학생", group: "출결·수업", thumb: "list", areas: ["absences"], sizes: LIST_S },
-  attendance14: { label: "최근 14일 등원율", group: "출결·수업", thumb: "line", areas: ["attendanceTrend"], sizes: TREND_S },
-  consultProgress: { label: "상담 진행", group: "상담·신입", thumb: "stack", areas: ["consultProgress"], sizes: LIST_S },
-  reports: { label: "학습 · 학부모 보고", group: "학생·재원", thumb: "stack", areas: ["homework", "unread"], size: { w: 12, h: 1 }, sizes: LIST_S },
-  studentConsult: { label: "학생 상담", group: "학생·재원", thumb: "stack", areas: ["consultations"], size: { w: 12, h: 1 }, sizes: LIST_S },
-  newcomerChecks: { label: "신규생 체크 진행", group: "상담·신입", thumb: "stack", areas: ["newcomers"], sizes: LIST_S },
+  grades: { label: "학년별 재원생", subjectScope: "subject", group: "학생·재원", thumb: "bars", areas: ["students"], sizes: LIST },
+  schools: { label: "학교별 학생", subjectScope: "subject", group: "학생·재원", thumb: "list", areas: ["students"], size: { w: 6, h: 2 }, sizes: LIST_S },
+  admissions: { label: "콜&상담 전환", subjectScope: "subject", group: "상담·신입", thumb: "table", areas: ["admissions"], sizes: LIST_S },
+  repeatAbsence: { label: "반복 결석 학생", subjectScope: "subject", group: "출결·수업", thumb: "list", areas: ["absences"], sizes: LIST_S },
+  attendance14: { label: "최근 14일 등원율", subjectScope: "subject", group: "출결·수업", thumb: "line", areas: ["attendanceTrend"], sizes: TREND_S },
+  consultProgress: { label: "상담 진행", subjectScope: "subject", group: "상담·신입", thumb: "stack", areas: ["consultProgress"], sizes: LIST_S },
+  reports: { label: "학습 · 학부모 보고", subjectScope: "subject", group: "학생·재원", thumb: "stack", areas: ["homework", "unread"], size: { w: 12, h: 1 }, sizes: LIST_S },
+  studentConsult: { label: "학생 상담", subjectScope: "subject", group: "학생·재원", thumb: "stack", areas: ["consultations"], size: { w: 12, h: 1 }, sizes: LIST_S },
+  newcomerChecks: { label: "신규생 체크 진행", subjectScope: "subject", group: "상담·신입", thumb: "stack", areas: ["newcomers"], sizes: LIST_S },
   sheets: { label: "강사 시트 작성 현황", group: "출결·수업", thumb: "stack", areas: ["englishSheet", "mathSheet"], subjectScope: "subject", sizes: LIST_S },
   nowClasses: { label: "현재 수업 현황", group: "출결·수업", thumb: "schedule", areas: ["schedule"], subjectScope: "subject", sizes: [...LIST_S, Z.full] },
-  admissionsSchedule: { label: "레벨테스트 및 첫수업 일정", group: "상담·신입", thumb: "schedule", areas: ["calendar"], options: ["phones"], sizes: LIST_S },
-  staff: { label: "직원 구성", group: "학원 운영", thumb: "bars", areas: ["staff"], sizes: LIST_S },
+  admissionsSchedule: { label: "레벨테스트 및 첫수업 일정", subjectScope: "subject", group: "상담·신입", thumb: "schedule", areas: ["calendar"], options: ["phones"], sizes: LIST_S },
+  staff: { label: "직원 구성", subjectScope: "subject", group: "학원 운영", thumb: "bars", areas: ["staff"], sizes: LIST_S },
   operations: { label: "행정 · 자산", group: "학원 운영", thumb: "list", areas: ["operations"], sizes: LIST_S },
   expenses: { label: "이번 달 지출 내역", group: "수납·지출", thumb: "bars", areas: ["expenses"], sizes: LIST_S },
   notices: { label: "학원 공지", group: "학원 운영", thumb: "list", areas: ["notices"], subjectScope: "none", sizes: LIST_S },
@@ -126,12 +130,12 @@ type KpiSpec = Pick<CardDef, "label"> & Partial<Pick<CardDef, "subjectScope" | "
 const KPIS: Record<KpiKey, KpiSpec> = {
   students: { label: "재원생", subjectScope: "subject" },
   withdrawals: { label: "퇴원&수업종료", subjectScope: "subject" },
-  intake: { label: "신규문의" },
-  calendar: { label: "금일 입테", options: ["phones"] },
-  enrolledToday: { label: "금일 등록" },
+  intake: { label: "신규문의", subjectScope: "subject" },
+  calendar: { label: "금일 입테", subjectScope: "subject", options: ["phones"] },
+  enrolledToday: { label: "금일 등록", subjectScope: "subject" },
   firstClass: { label: "오늘첫수업", subjectScope: "subject" },
   absent: { label: "전일 결석", subjectScope: "subject" },
-  makeup: { label: "보강예정" },
+  makeup: { label: "보강예정", subjectScope: "subject" },
 };
 
 /** 편집기 갤러리 순서 = KPI 8칸(운영실 순서) → 패널(배열 순서). */

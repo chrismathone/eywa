@@ -8,6 +8,7 @@ import type { MenuKey } from "@/lib/permissions";
 import { effectiveAttendanceRecords, type EffectiveAttendanceRecord } from "@/features/attendance/effective-records";
 import { balancedTake } from "@/lib/collections/balanced-take";
 import { absentDayHref, intakeDayHref, studentsFirstClassHref } from "./overview/kpi-links";
+import { ABSENT_STATUSES } from "./absent-students";
 export {
   enrollmentAttendsOnDay,
   isEnrollmentActiveOn,
@@ -306,13 +307,17 @@ export function findMissingLessonReportPairs(
 
 /**
  * 그날 **결석한 반** 키(`학생::반`) — 정정 줄은 최신 하나만(`effectiveAttendanceRecords`), 그 반의 교시가 **전부** 결석일 때만.
- * 한 교시라도 온 반은 결석한 반이 아니다. 두 판정 호출부가 같은 규칙으로 결석을 뺀다.
+ * 한 교시라도 온 반은 결석한 반이 아니다. 세 호출부(운영실 미작성 보고서 · 강사 업무 카드 · 작성률 카드)가 같은 규칙으로 결석을 뺀다.
+ * 결석 = `ABSENT_STATUSES`(결석·공결 — 출석부에 둘 다 '결석'으로 서는 상태). 원장 2026-10-14 *"결석이 있으면 분모에서 빼야함"* —
+ * 전에는 'absent'만 봐서 공결 학생이 보고서 분모에 남았다.
  */
+const ABSENT = new Set<string>(ABSENT_STATUSES);
+
 export function absentClassKeysOf(rows: readonly (EffectiveAttendanceRecord & { status: string })[]): Set<string> {
   const byKey = new Map<string, boolean>();
   for (const r of effectiveAttendanceRecords(rows)) {
     const key = `${r.student_id}::${r.class_id}`;
-    byKey.set(key, (byKey.get(key) ?? true) && r.status === "absent");
+    byKey.set(key, (byKey.get(key) ?? true) && ABSENT.has(r.status));
   }
   return new Set([...byKey].filter(([, allAbsent]) => allAbsent).map(([key]) => key));
 }
