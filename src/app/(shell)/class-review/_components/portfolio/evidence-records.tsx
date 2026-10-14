@@ -76,22 +76,21 @@ export function ReportEvidence({ period, onOpenStudents, sticky }: EvidenceProps
   );
 }
 
-/** 학생 × 날짜 상태표 — 상세 창에서만 연다(넓다). */
+/** 학생 × 날짜 상태표 — 상세 창에서만 연다(넓다). 열 = 누군가 보고 대상인 날만 · 대상이 아닌 칸은 비운다
+ *  (원장 2026-10-14 — 수업이 없는 날까지 '—'가 적혀 헷갈렸다). */
 export function ReportMatrix({ period, nameOf }: Pick<EvidenceProps, "period" | "nameOf">) {
   const m = metricOf(period, "report");
-  const days = period.dayStats.map((s) => s.day);
+  const days = period.dayStats.map((s) => s.day).filter((d) => m.detail.some((c) => c.day === d));
   const cells = new Map(m.detail.map((c) => [`${c.studentId}|${c.day}`, c]));
   const students = [...new Set(m.detail.map((c) => c.studentId))].sort((a, b) => nameOf(a).localeCompare(nameOf(b), "ko"));
-  return (
+  return (<>
     <DataTable headers={["학생", ...days.map(dayLabel)]} empty="이 달 보고 대상이 없습니다."
-      rows={students.map((id) => ({
-        key: id,
-        cells: [<span key="name" className="whitespace-nowrap">{nameOf(id)}</span>, ...days.map((day) => {
-          const cell = cells.get(`${id}|${day}`);
-          return cell ? <StatusChip key={day} state={REPORT_STATE_LABEL[cell.state]} /> : "—";
-        })],
-      }))} />
-  );
+      rows={students.map((id) => ({ key: id, cells: [<span key="name" className="whitespace-nowrap">{nameOf(id)}</span>, ...days.map((day) => {
+        const cell = cells.get(`${id}|${day}`);
+        return cell ? <StatusChip key={day} state={REPORT_STATE_LABEL[cell.state]} /> : "";
+      })] }))} />
+    {students.length ? <p className="mt-2 text-xs">빈 칸 = 그날 그 학생은 보고 대상이 아닙니다.</p> : null}
+  </>);
 }
 
 function weekRows<T>(weeks: WeekGroup<T>[], picked: number, onPick: (index: number) => void, cells: (rows: T[]) => TableRow["cells"]): TableRow[] {
