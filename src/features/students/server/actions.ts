@@ -1493,8 +1493,11 @@ export async function clearDupSuspect(
   if (!id) return { error: "학생 ID가 누락되었습니다" };
 
   const supabase = await createClient();
-  const { error } = await supabase.from("students").update({ dup_suspect: false }).eq("id", id);
+  const { data: cleared, error } = await supabase.from("students").update({ dup_suspect: false }).eq("id", id).select("id");
   if (error) return { error: dbWhy(error, "students.clearDupSuspect", "저장하지 못했습니다. 잠시 후 다시 시도해 주세요.") };
+  // 0행 = DB가 이 학생 수정을 허락하지 않았다(역할 쓰기 게이트·다른 지점 id). 성공으로 답하고 감사로그를 남기면 표식은 그대로인데
+  // "정상 확인함"이 기록된다(적대 리뷰 2026-10-14 — 데이터 정리에 버튼이 하나 더 생기며 드러남).
+  if (!cleared || cleared.length === 0) return { error: "표식을 내리지 못했습니다 — 이 학생 정보를 바꿀 수 없는 계정이거나 이미 없는 학생입니다" };
 
   // 학생 레코드를 바꾸는 모든 경로는 감사로그 필수(원장 2026-08-18). 이 해제는 **통합 후보를 없애는**
   // 판단이기도 하다(중복 병합의 접미사 신호가 이 표식을 본다) — 누가 "다른 사람이 맞다"고 확정했는지

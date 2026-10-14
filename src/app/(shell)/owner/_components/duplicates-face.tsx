@@ -1,7 +1,10 @@
 import { Pagination } from "@/components/pagination";
 import { MERGE_SCOPE_LABEL } from "@/features/admin/merge-scope";
-import { findDuplicateStudents, type DuplicateGroup } from "@/features/admin/server/queries";
+import { findDuplicateStudents, type DuplicateReview } from "@/features/admin/server/queries";
 import { DuplicatesClient } from "@/app/(shell)/admin/duplicates/_client";
+import { LoneSuspects } from "@/app/(shell)/admin/duplicates/suspects";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { canManageTenant } from "@/lib/auth/perm-matrix";
 
 const PAGE_SIZE = 20;
 
@@ -11,17 +14,26 @@ const PAGE_SIZE = 20;
  * Pagination은 서버 컴포넌트라 embed를 모르므로, 창(embed) 컨텍스트를 pageHref가 직접 유지한다.
  *
  * `canManage` = 병합할 수 있는가 — page.tsx가 **병합 액션과 같은 판정**으로 정해 넘긴다(후보 조회와는 무관).
+ * `canConfirm` = '의심'의 '정상 확인'을 누를 수 있는가 — `clearDupSuspect`와 같은 판정(원생 관리 전체)이라 여기서 직접 정한다.
+ * 짝 없는 '의심' 학생(병합 후보가 못 되는)도 아래에 세운다 — 원장 2026-10-14 *"데이터 정리에서는 여전히 정리할 수 있게"*
+ * (원생목록의 '의심' 꼬리표를 걷은 뒤 이 면과 학생 상세가 그 학생을 찾는 자리다).
  */
 export async function DuplicatesFace({ page, isEmbed, canManage }: { page: number; isEmbed: boolean; canManage: boolean }) {
   // 조회 헬퍼는 규약상 던진다 — 그대로 새면 데이터 정리 면 전체가 죽는다. 이 구획 안에서 한글 안내로 접는다(같은 이름 점검과 같은 방식).
-  let allGroups: DuplicateGroup[] = [];
+  // '정상 확인' 권한은 조회와 독립이라 함께 묻는다(B4).
+  const canConfirmP = getCurrentUser({ teacherView: true }).then((viewer) =>
+    viewer ? canManageTenant(viewer.systemRole, "students") : false,
+  ).catch(() => false);
+  let review: DuplicateReview = { groups: [], loneSuspects: [] };
   let failed = false;
   try {
-    allGroups = await findDuplicateStudents();
+    review = await findDuplicateStudents();
   } catch (error) {
     console.error("[owner/duplicates-face] 중복 의심 학생 조회 실패", error);
     failed = true;
   }
+  const canConfirm = await canConfirmP;
+  const allGroups = review.groups;
   const total = allGroups.length;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const groups = allGroups.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -60,13 +72,18 @@ export async function DuplicatesFace({ page, isEmbed, canManage }: { page: numbe
           중복 의심 학생을 불러오지 못했습니다 — 잠시 후 다시 시도해 주세요
         </p>
       ) : total === 0 ? (
-        <p className="text-muted-foreground py-12 text-center text-sm">중복 의심 학생이 없습니다</p>
+        <p className="text-muted-foreground py-12 text-center text-sm">
+          {review.loneSuspects.length > 0 ? "병합할 중복 후보는 없습니다" : "중복 의심 학생이 없습니다"}
+        </p>
       ) : (
         <>
-          <DuplicatesClient groups={groups} canManage={canManage} />
+          <DuplicatesClient groups={groups} canManage={canManage} canConfirm={canConfirm} />
           <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
         </>
       )}
+      {!failed && review.loneSuspects.length > 0 ? (
+        <LoneSuspects students={review.loneSuspects} canConfirm={canConfirm} />
+      ) : null}
     </div>
   );
 }
