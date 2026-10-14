@@ -169,7 +169,7 @@ describe("기록을 시작하기 전인 달 — 같은 강사의 기준 달 평�
     expect([score(d, "2026-08", "report").value, score(d, "2026-09", "report").value]).toEqual([10, 20]);
     expect([score(d, "2026-06", "report").value, score(d, "2026-05", "report").value, score(d, "2026-06", "attendance").value]).toEqual([15, 15, 5]);
     const june = months(d)["2026-06"];
-    expect(june.total).toBe(june.items.reduce((n, m) => n + (m.value ?? 0), 0));
+    expect(june.total).toBe(june.items.filter(m => !m.off).reduce((n, m) => n + (m.value ?? 0), 0));
   });
   it("평균으로 둔 달에는 기록처럼 보이는 줄을 만들지 않고, 근거가 된 달과 점수를 싣는다", () => {
     const june = months(early())["2026-06"];

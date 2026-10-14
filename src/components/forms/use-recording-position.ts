@@ -1,32 +1,40 @@
 "use client";
 
 import { useCallback, useLayoutEffect, useRef, type PointerEvent as ReactPointerEvent } from "react";
+import { CAPSULE_EXPANDED_WIDTH } from "./recording-panel-placement";
 
 const SIZE = 48;
-const EXPANDED_SIZE = 128;
 const EDGE = 16;
 const THRESHOLD = 4;
 const clamp = (value: number, max: number) => Math.max(EDGE, Math.min(value, Math.max(EDGE, max)));
 
-/** Position belongs to a recording's keyed controls, never the audio engine or next session. */
-export function useRecordingPosition(slot: number, closePanel: () => void) {
+/**
+ * Position belongs to a recording's keyed controls, never the audio engine or next session.
+ * `onMove` runs after the capsule moves or changes its expansion side (drag, drag end, window resize)
+ * so an open panel follows it. Dragging never closes the panel (원장 2026-10-14).
+ */
+export function useRecordingPosition(slot: number, onMove: () => void) {
   const anchor = useRef<HTMLDivElement>(null);
   const attach = useCallback((node: HTMLDivElement | null) => { anchor.current = node; }, []);
   const initialSlot = useRef(slot);
   const drag = useRef<{ id: number; x: number; y: number; left: number; top: number; moved: boolean } | null>(null);
   const suppressClick = useRef(false);
+  const moved = useRef(onMove);
+  useLayoutEffect(() => { moved.current = onMove; });
 
   function chooseSide() {
     const node = anchor.current;
     if (!node) return;
     const rect = node.getBoundingClientRect();
-    node.dataset.side = window.innerWidth - rect.left >= EXPANDED_SIZE + EDGE ? "right" : "left";
+    node.dataset.side = window.innerWidth - rect.left >= CAPSULE_EXPANDED_WIDTH + EDGE ? "right" : "left";
+    moved.current();
   }
   function place(left: number, top: number) {
     const node = anchor.current;
     if (!node) return;
     node.style.left = `${clamp(left, window.innerWidth - SIZE - EDGE)}px`;
     node.style.top = `${clamp(top, window.innerHeight - SIZE - EDGE)}px`;
+    moved.current();
   }
 
   useLayoutEffect(() => {
@@ -40,7 +48,8 @@ export function useRecordingPosition(slot: number, closePanel: () => void) {
       const rect = node.getBoundingClientRect();
       node.style.left = `${clamp(rect.left, window.innerWidth - SIZE - EDGE)}px`;
       node.style.top = `${clamp(rect.top, window.innerHeight - SIZE - EDGE)}px`;
-      node.dataset.side = window.innerWidth - node.getBoundingClientRect().left >= EXPANDED_SIZE + EDGE ? "right" : "left";
+      node.dataset.side = window.innerWidth - node.getBoundingClientRect().left >= CAPSULE_EXPANDED_WIDTH + EDGE ? "right" : "left";
+      moved.current();
     };
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
@@ -61,7 +70,6 @@ export function useRecordingPosition(slot: number, closePanel: () => void) {
     if (!current.moved && Math.hypot(dx, dy) < THRESHOLD) return;
     if (!current.moved) {
       current.moved = true;
-      closePanel();
       if (anchor.current) anchor.current.dataset.dragging = "true";
     }
     event.preventDefault();
