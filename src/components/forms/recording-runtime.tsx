@@ -11,6 +11,7 @@ import { adoptRecordingOwner, releaseRecordingOwner, dismissBrowserRecording, ge
 import type { RecordingOwner } from "@/lib/recording-recovery";
 import { useFrameRecordings, sendRecordingCommand } from "./use-frame-recordings";
 import { capsuleFootprint, placeRecordingPanel } from "./recording-panel-placement";
+import { useOutsideDismiss } from "./use-outside-dismiss";
 import { useRecordingPosition } from "./use-recording-position";
 import styles from "./recording-runtime.module.css";
 
@@ -84,15 +85,10 @@ function RecordingControls({ recording, hasFile, onStop, onDownload, onDismiss, 
     placePanel();
     const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(placePanel) : null;
     observer?.observe(panel.current);
-    // 바깥 클릭으로 닫는다 — pointerdown이 아니라 click: 터치 스크롤·스크롤바 끌기는 click을 만들지 않는다.
-    const onOutsideClick = (event: MouseEvent) => {
-      const target = event.target;
-      if (target instanceof Node && (panel.current?.contains(target) || anchor.current?.contains(target))) return;
-      setExpanded(false);
-    };
-    document.addEventListener("click", onOutsideClick, true);
-    return () => { observer?.disconnect(); document.removeEventListener("click", onOutsideClick, true); };
+    return () => observer?.disconnect();
   }, [expanded, placePanel]);
+  // 바깥 클릭 = 정보창만 닫고 그 클릭은 아래 화면에 전하지 않는다.
+  useOutsideDismiss(expanded, (target) => !!(panel.current?.contains(target) || anchor.current?.contains(target)), () => setExpanded(false));
   const closeOnEscape = (event: ReactKeyboardEvent, refocus: boolean) => {
     if (event.key !== "Escape" || !expanded) return;
     event.stopPropagation();

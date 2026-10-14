@@ -75,6 +75,12 @@ function open() {
   fireEvent.click(capsule(), { detail: 1 });
   expect(panel()).not.toBeNull();
 }
+/** 마우스 한 번 누르기 = pointerdown → pointerup → click(같은 자리) */
+function press(element: Element, at = { clientX: 20, clientY: 20 }) {
+  fireEvent.pointerDown(element, { pointerId: 9, isPrimary: true, button: 0, ...at });
+  fireEvent.pointerUp(element, { pointerId: 9, ...at });
+  fireEvent.click(element, { detail: 1, ...at });
+}
 
 describe("녹음 정보창 — 띄워 둔 동안 시간이 계속 보인다", () => {
   it("열어 둔 채 1초마다 올라가고 캡슐과 같은 시간을 말한다 · 열린 동안 캡슐도 펼친 채", () => {
@@ -142,12 +148,70 @@ describe("녹음 정보창 — 사용자가 닫을 때만 닫힌다", () => {
     fireEvent.keyDown(capsule(), { key: "Escape" });
     expect(panel()).toBeNull();
   });
-  it("바깥 클릭 — 정보창 안 클릭은 닫지 않는다", () => {
+  it("정보창 안 클릭은 닫지 않는다", () => {
     open();
-    fireEvent.click(panel()!.querySelector("p")!);
+    press(panel()!.querySelector("p")!);
     expect(panel()).not.toBeNull();
-    fireEvent.click(document.body);
+  });
+});
+
+/** 원장 2026-10-14 "바깥 클릭은 그냥 창만 닫히는걸로 멈추고 이런 액션 없이 그냥 클릭하기 전처럼" */
+describe("녹음 정보창 — 바깥 클릭은 정보창만 닫고 그 클릭은 아무 일도 안 한다", () => {
+  function outside() {
+    const onClick = vi.fn();
+    const onPointerDown = vi.fn();
+    const view = render(<div><button type="button" onClick={onClick} onPointerDown={onPointerDown}>바깥 버튼</button><input aria-label="바깥 입력" /></div>);
+    return { onClick, onPointerDown, button: view.getByRole("button", { name: "바깥 버튼" }), input: view.getByRole("textbox", { name: "바깥 입력" }) };
+  }
+  it("바깥 버튼을 누르면 정보창만 닫히고 버튼은 안 눌린다 — 다음 클릭부터는 평소대로", () => {
+    const { onClick, onPointerDown, button } = outside();
+    open();
+    press(button);
     expect(panel()).toBeNull();
+    expect(anchor().dataset.open).toBeUndefined();
+    expect(onClick).not.toHaveBeenCalled();
+    expect(onPointerDown).not.toHaveBeenCalled();
+    act(() => { vi.advanceTimersByTime(1000); });
+    press(button);
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+  it("손 뗀 자리의 click이 늦게 와도(터치) 삼킨다 · 다른 자리의 click은 그대로", () => {
+    const { onClick, button } = outside();
+    open();
+    fireEvent.pointerDown(button, { pointerId: 2, isPrimary: true, button: 0, clientX: 30, clientY: 30 });
+    fireEvent.pointerUp(button, { pointerId: 2, clientX: 30, clientY: 30 });
+    expect(panel()).toBeNull();
+    act(() => { vi.advanceTimersByTime(300); });
+    fireEvent.click(button, { clientX: 300, clientY: 300 });
+    expect(onClick).toHaveBeenCalledTimes(1);
+    fireEvent.click(button, { clientX: 30, clientY: 30 });
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+  it("바깥 입력칸을 눌러도 초점이 옮겨 가지 않는다(누르기 기본 동작도 막는다)", () => {
+    const { input } = outside();
+    open();
+    const down = new PointerEvent("pointerdown", { bubbles: true, cancelable: true, pointerId: 2, isPrimary: true, button: 0, clientX: 30, clientY: 30 });
+    input.dispatchEvent(down);
+    expect(down.defaultPrevented).toBe(true);
+    fireEvent.pointerUp(input, { pointerId: 2, clientX: 30, clientY: 30 });
+    expect(panel()).toBeNull();
+  });
+  it("터치 스크롤(pointercancel)·눌러서 끌기로는 닫지 않는다", () => {
+    const { button } = outside();
+    open();
+    fireEvent.pointerDown(button, { pointerId: 3, isPrimary: true, button: 0, clientX: 30, clientY: 30 });
+    fireEvent.pointerCancel(button, { pointerId: 3 });
+    expect(panel()).not.toBeNull();
+    fireEvent.pointerDown(button, { pointerId: 4, isPrimary: true, button: 0, clientX: 30, clientY: 30 });
+    fireEvent.pointerUp(button, { pointerId: 4, clientX: 30, clientY: 200 });
+    expect(panel()).not.toBeNull();
+  });
+  it("오른쪽 버튼·보조 포인터는 건드리지 않는다", () => {
+    const { button } = outside();
+    open();
+    fireEvent.pointerDown(button, { pointerId: 5, isPrimary: true, button: 2, clientX: 30, clientY: 30 });
+    fireEvent.pointerUp(button, { pointerId: 5, clientX: 30, clientY: 30 });
+    expect(panel()).not.toBeNull();
   });
 });
 
