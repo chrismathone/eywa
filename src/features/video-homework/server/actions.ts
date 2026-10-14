@@ -9,6 +9,7 @@ import { addDays, kstToday } from "@/lib/date-kst";
 import { isVideoHomeworkDate, type VideoHomeworkStatus } from "../types";
 import { videoHomeworkColumnReady } from "./assignments";
 import { findExtraIssue } from "./extra-issues";
+import { keepMarkOnlyRound } from "./keep-round";
 import { ledgerRoundWriteError, loadVideoHomeworkTarget, videoHomeworkWriteError, writeVideoHomeworkMark, type MarkWriteResult } from "./mark-write";
 import { nativeWriteAllowance } from "@/features/makeups/server/adapters/gates";
 
@@ -198,6 +199,13 @@ export async function setVideoHomeworkRound(input: {
     if (extra === undefined) return { ok: false, error: "영상 과제를 확인하지 못했습니다. 잠시 뒤 다시 시도해 주세요." };
     if (!assigned?.data?.length && !extra) return { ok: false, error: "그날 이 학생에게 나간 영상 과제를 찾을 수 없습니다." };
   }
+  // 검사 기록만으로 선 숙제 칸을 미확인으로 = 그 날짜를 따로 낸 숙제로 남긴 뒤 지운다 — 그냥 지우면 칸이 통째로 사라진다(keep-round.ts).
+  let kept = false;
+  if (input.status === null && homeworkDate && recorded.data?.length) {
+    const keep = await keepMarkOnlyRound(db, user.tenantId, user.id, { classId: input.classId, studentId: input.studentId, date: homeworkDate });
+    if (keep === "failed") return { ok: false, error: "숙제 칸을 남기지 못했습니다. 잠시 뒤 다시 시도해 주세요." };
+    kept = keep === "kept";
+  }
   const result = await writeVideoHomeworkMark(db, { tenantId: user.tenantId, userId: user.id, classId: input.classId,
     studentId: input.studentId, slotDate: homeworkDate ? addDays(homeworkDate, 1) : date, homeworkDate,
     submittedDate: input.submittedDate, status: input.status });
@@ -206,7 +214,8 @@ export async function setVideoHomeworkRound(input: {
     targetType: "video_homework",
     targetLabel: [target.studentName, target.className].filter(Boolean).join(" · ") || null,
     metadata: { classId: input.classId, studentId: input.studentId, homeworkDate, checkDate: homeworkDate ? null : date,
-      status: input.status ?? "cleared", submittedDate: input.status === "submitted" ? input.submittedDate ?? null : null },
+      status: input.status ?? "cleared", submittedDate: input.status === "submitted" ? input.submittedDate ?? null : null,
+      ...(kept ? { keptAsIssue: true } : {}) },
   });
   return result;
 }

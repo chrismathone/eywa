@@ -15,7 +15,7 @@ import { PlanPreviewDialog } from "./plan-preview-dialog";
 
 /** 0268a 이전 배정 — 교시를 안 고르고 **축**으로 태웠다. `slotPicks`가 없을 때만 쓴다. */
 const AXIS_LABEL: Record<string, string> = { class: "정규 수업", jj: "JJ 자습실" };
-const PACE_LABEL: Record<string, string> = { period: "교시마다 1차수", day: "하루에 1차수" };
+const PACE_LABEL: Record<string, string> = { period: "교시마다 1차수", day: "하루에 1차수", min25: "25분 수업" };
 
 /** 요일 글자 — 이 화면은 사무실만 보므로 한글 한 벌이면 된다(강사 시트는 사전을 쓴다). */
 const DOW_KO: Record<string, string> = { mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일" };

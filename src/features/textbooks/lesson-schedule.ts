@@ -17,6 +17,11 @@
  *  ③ **단위(pace)**: `period` = 교시 하나가 차수 하나(1시간씩) / `day` = 그 날 그 축의 **모든 교시**가
  *     같은 차수(2시간씩). 후자는 지어낸 규칙이 아니라 이미 쓰이는 패턴이다 — 실측(2026-09-16) 교시가
  *     둘 이상인 반-날짜 628건 중 **93건(15%)** 이 두 교시에 같은 (교재, 진도)를 적어 두고 있었다.
+ *     `min25` = **25분 수업**(원장 2026-10-13~14). 배치는 `period`와 **똑같이 교시 하나에 차수 하나**다 —
+ *     1시간 교시라도 한 차수만 넣고, 남는 25분은 **다른 교재를 같은 교시에 배정**해 채운다(원장 *"25분짜리
+ *     1시간수업이라도 하나만 들어가게 … 다른 교재로 또 25분 추가할수있자나"*). 🔴 교시 길이로 차수를 여러 개
+ *     밀어 넣지 말 것 — 한 번 그렇게 만들었다가 원장이 되돌렸다. 값이 따로 있는 건 배정 목록에서 "이 교재는
+ *     25분짜리"라는 사실을 보이기 위해서다.
  */
 import { slotsByDateOf, type MonthScheduleRow, type MonthSlot } from "@/features/class-sheets/lib/month-assemble";
 import { holidayNameOn, type HolidayMap } from "@/features/class-sheets/lib/holiday";
@@ -27,7 +32,16 @@ import { LAB_ROOM_LABEL, SELF_STUDY_ROOM_LABEL } from "@/features/timetable/lib/
 /** 차수를 태울 교시 축. LAB은 축이 아니다(위 ②). */
 export type SlotAxis = "class" | "jj";
 /** 차수 1개가 소비하는 단위. */
-export type LessonPace = "period" | "day";
+export type LessonPace = "period" | "day" | "min25";
+
+/**
+ * DB·입력의 단위 문자열 → `LessonPace`. 모르는 값은 `period`(가장 오래된 기본값).
+ * 🔴 단위를 읽는 자리는 전부 이 함수를 탄다 — 자리마다 `=== "day" ? "day" : "period"`를 적으면
+ *    새 단위를 더할 때 한 곳만 빠져도 그 화면만 조용히 다른 단위로 읽힌다.
+ */
+export function normalizeLessonPace(value: unknown): LessonPace {
+  return value === "day" || value === "min25" ? value : "period";
+}
 
 /**
  * 시작일부터 몇 날까지 훑을지의 상한. 200차수를 1차수/교시로 태워도(주 6교시 기준 ≈ 233일) 닿는 길이라

@@ -63,7 +63,8 @@ export function RoundEditor({ cell, today, busy, save, onClose, onAssign }: {
       disabled={busy || !row.editable} onDone={onClose} /> : null}
     <p className={styles.dim}>{rejecting ? "다른 숙제에 올라간 영상이면 반려하지 말고 영상 배정 변경에서 옮겨 주세요." : round.videoId ? "미확인은 수동 검사 기록만 지웁니다. 연결된 영상이 있으면 자동으로 완료됩니다. 영상 연결은 배정 변경에서 수정할 수 있습니다."
       : round.assigned ? "미확인으로 바꾸면 이 숙제의 검사 기록이 지워집니다."
-      : "보고서에 영상 과제 표시가 없는 기록입니다. 미확인으로 바꾸면 기록이 지워져 이 회차가 장부에서 빠집니다."}</p>
+      : round.homeworkDate ? "보고서에 영상 과제 표시가 없는 수업입니다. 미확인으로 바꿔도 이 칸은 남습니다."
+      : "숙제일이 없는 옛 기록입니다. 미확인으로 바꾸면 기록이 지워져 이 회차가 장부에서 빠집니다."}</p>
     {rejecting ? null : row.editable ? <button type="submit" className={styles.primary} disabled={busy}>{busy ? "저장 중…" : "기록 저장"}</button>
       : <p className={styles.dim}>이 기록은 읽기 전용입니다.</p>}
   </form>;

@@ -21,8 +21,8 @@ beforeEach(() => {
       { id: "today", tenant_id: "t", student_id: "s", class_id: "c", report_date: TODAY, video_homework: false },
     ],
     video_homework_extra_issues: [
-      { tenant_id: "t", class_id: "c", student_id: "s", homework_date: PREV, teacher_id: "teacher" },
-      { tenant_id: "t", class_id: "c", student_id: "s", homework_date: TODAY, teacher_id: "teacher" },
+      { tenant_id: "t", class_id: "c", student_id: "s", homework_date: PREV, teacher_id: "teacher", kept: false },
+      { tenant_id: "t", class_id: "c", student_id: "s", homework_date: TODAY, teacher_id: "teacher", kept: false },
     ],
   });
 });
@@ -32,6 +32,11 @@ it("지난 수업일에 따로 낸 숙제가 있으면 '있음' — 검사 칸�
   expect(hidesNextCheck(map, "s", PREV, "c")).toBe(false);
   expect(map?.[assignmentKey("s", PREV, "c")]).toBe(true);
   expect(map?.[assignmentKey("s", TODAY, "c")]).toBe(false);
+});
+it("🔴 검사 기록 칸에서 옮겨 남긴 숙제(kept)는 '있음'으로 덮지 않는다 — 선생님이 낸 숙제가 아니다", async () => {
+  m.db.tables.video_homework_extra_issues = [{ tenant_id: "t", class_id: "c", student_id: "s", homework_date: PREV, teacher_id: "teacher", kept: true }];
+  const map = await getVideoHomeworkAssignments("t", ["s"], [TODAY, PREV], { issuedDates: [PREV] });
+  expect(map?.[assignmentKey("s", PREV, "c")]).toBe(false);
 });
 it("넘기지 않으면 종전대로(보고서 값만)", async () => {
   const map = await getVideoHomeworkAssignments("t", ["s"], [TODAY, PREV]);

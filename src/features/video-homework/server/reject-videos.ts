@@ -19,6 +19,7 @@ import { ledgerRoundWriteError, loadVideoHomeworkTarget } from "./mark-write";
 import { reconcileVideoHomework } from "./reconcile-outcomes";
 import { rejectionsReady } from "./rejections";
 import { rejectTargets } from "../reject-targets";
+import { keepMarkOnlyRound } from "./keep-round";
 import { homeworkVideoSource } from "./video-source";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -74,7 +75,11 @@ export async function rejectHomeworkVideos(input: { classId: string; studentId: 
     if (!targets.length) return { ok: false, error: "이 숙제에 붙은 영상이 없습니다. 화면을 새로고침해 주세요." };
     if (targets.length > MAX_VIDEOS) return { ok: false, error: `이 숙제에 붙은 영상이 ${targets.length}개라 한 번에 반려할 수 없습니다(최대 ${MAX_VIDEOS}개). 영상을 먼저 다른 숙제로 옮겨 주세요.` };
     // 그 칸에 붙어 있던 숙제일 없는 옛 기록 — 남기면 반려 뒤에도 칸이 그 기록(예: 완료)으로 보인다.
-    const mark = rounds.find((r) => r.homeworkDate === homeworkDate)?.mark;
+    const round = rounds.find((r) => r.homeworkDate === homeworkDate);
+    const mark = round?.mark;
+    // 검사 기록만으로 선 숙제 칸이면 반려 전에 따로 낸 숙제로 남긴다 — 기록을 지우면 칸이 사라져 반려 표시도 설 자리가 없다(keep-round.ts).
+    const keep = round && !round.assigned && !round.kept ? await keepMarkOnlyRound(db, user.tenantId, user.id, { classId, studentId, date: homeworkDate }) : null;
+    if (keep === "failed") return { ok: false, error: "숙제 칸을 남기지 못했습니다. 잠시 뒤 다시 시도해 주세요." };
     const legacyCheck = mark && !mark.homeworkDate ? mark.checkDate : null;
     const source = await homeworkVideoSource(db);
     const rows = await fetchInChunks<{ id: string; drive_file_id: string | null; route: unknown }>(targets, (chunk) =>
@@ -94,7 +99,7 @@ export async function rejectHomeworkVideos(input: { classId: string; studentId: 
     const reopened = today <= addDays(homeworkDate, SITE_HOMEWORK_DAYS);
     await logAction({ action: "lesson_report_video_homework_reject", targetType: "video_homework",
       targetLabel: [target.studentName, target.className].filter(Boolean).join(" · ") || null,
-      metadata: { classId, studentId, homeworkDate, videos: targets.length, ...trash, reopened } });
+      metadata: { classId, studentId, homeworkDate, videos: targets.length, ...trash, reopened, ...(keep === "kept" ? { keptAsIssue: true } : {}) } });
     after(async () => {
       try { await reconcileVideoHomework(user.tenantId, { studentId }); }
       catch (error) { reportError(error, { scope: "video-homework.after-reject", tenantId: user.tenantId, studentId }); }

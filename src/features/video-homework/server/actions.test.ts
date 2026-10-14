@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setVideoHomeworkMark, setVideoHomeworkMarksBulk, setVideoHomeworkRound } from "./actions";
+import { _resetExtraIssuesProbeForTest } from "./extra-issues";
 
-type Call = { table: string; op: "select" | "update" | "delete" | "upsert"; filters: unknown[][]; payload?: unknown; opts?: unknown };
+type Call = { table: string; op: "select" | "update" | "delete" | "upsert" | "insert"; filters: unknown[][]; payload?: unknown; opts?: unknown };
 const mocks = vi.hoisted(() => ({
   user: vi.fn(), readonly: vi.fn(), teacher: vi.fn(), teaching: vi.fn(), access: vi.fn(), canWrite: vi.fn(), log: vi.fn(),
   calls: [] as Call[], respond: (() => ({ data: null, error: null })) as (call: Call) => { data: unknown; error: unknown },
@@ -26,6 +27,7 @@ vi.mock("@/lib/supabase/admin", () => ({
         query[name] = (...args: unknown[]) => { if (name !== "select") call.filters.push([name, ...args]); return query; };
       query.update = (payload: unknown) => { call.op = "update"; call.payload = payload; return query; };
       query.delete = () => { call.op = "delete"; return query; };
+      query.insert = (payload: unknown) => { call.op = "insert"; call.payload = payload; return finish(); };
       query.upsert = (payload: unknown, opts: unknown) => { call.op = "upsert"; call.payload = payload; call.opts = opts; return finish(); };
       query.maybeSingle = finish;
       query.then = (resolve: (v: unknown) => unknown, reject: (e: unknown) => unknown) => finish().then(resolve, reject);
@@ -37,15 +39,16 @@ vi.mock("@/lib/supabase/admin", () => ({
 const has = (call: Call, ...filter: unknown[]) => call.filters.some((f) => JSON.stringify(f) === JSON.stringify(filter));
 const writes = () => mocks.calls.filter((call) => call.op !== "select");
 /** 기본 세계: 반·학생이 있고 정규 수강 중 · 같은 숙제 기록 없음 · 그날 보고서에 '영상 과제 있음'. */
-function world(over: { sameHomework?: { id: string }[]; assigned?: boolean; own?: boolean } = {}) {
+function world(over: { sameHomework?: { id: string }[]; assigned?: boolean; own?: boolean; report?: Record<string, unknown>[]; insertError?: { code: string } } = {}) {
   mocks.respond = (call) => {
+    if (call.op === "insert") return { data: null, error: over.insertError ?? null };
     if (call.op !== "select") return { data: null, error: null };
     if (call.table === "classes") return { data: { subject: "math", class_name: "수학 A" }, error: null };
     if (call.table === "students") return { data: { grade: "중1", name: "김민준" }, error: null };
     if (call.table === "enrollments") return { data: [{ start_date: "2026-01-01", end_date: null, on_hold: false, is_transferred: false }], error: null };
     // 낸 사람 확인(created_by)은 따로 답한다 — 기본은 내가 낸 숙제.
     if (call.table === "lesson_reports" && call.filters.some((f) => f[1] === "created_by")) return { data: over.own === false ? [] : [{ id: "r1" }], error: null };
-    if (call.table === "lesson_reports") return { data: over.assigned === false ? [] : [{ id: "r1" }], error: null };
+    if (call.table === "lesson_reports") return { data: over.report ?? (over.assigned === false ? [] : [{ id: "r1", video_homework: true }]), error: null };
     if (call.table === "video_homework_marks") return { data: call.filters.some((f) => f[1] === "homework_date") ? over.sameHomework ?? [] : [], error: null };
     return { data: [], error: null };
   };
@@ -53,6 +56,7 @@ function world(over: { sameHomework?: { id: string }[]; assigned?: boolean; own?
 
 beforeEach(() => {
   vi.clearAllMocks();
+  _resetExtraIssuesProbeForTest();
   mocks.calls = [];
   mocks.user.mockResolvedValue({ id: "staff-a", tenantId: "tenant-a", systemRole: "master" });
   mocks.readonly.mockResolvedValue(null);
@@ -148,6 +152,39 @@ describe("영상 제출 현황 회차(setVideoHomeworkRound)", () => {
     const slot = mocks.calls.find((c) => c.table === "video_homework_marks" && has(c, "eq", "check_date", "2026-09-30"))!;
     expect(has(slot, "or", "homework_date.is.null,homework_date.eq.2026-09-29")).toBe(true);
     expect(writes().map((c) => c.op)).toEqual(["delete"]);
+  });
+  it("🔴 검사 기록만으로 선 칸(보고서 표시 없음)을 미확인으로 = 그 날짜를 옮겨 남긴 숙제로 넣고 지운다 — 칸이 사라지지 않는다(박한비 9/28·10/1)", async () => {
+    world({ sameHomework: [{ id: "m9" }], assigned: false });
+    expect((await setVideoHomeworkRound({ ...round, status: null, submittedDate: null })).ok).toBe(true);
+    expect(writes().map((c) => [c.table, c.op])).toEqual([["video_homework_extra_issues", "insert"], ["video_homework_marks", "delete"]]);
+    expect(writes()[0].payload).toEqual({ tenant_id: "tenant-a", class_id: "class-a", student_id: "student-a", homework_date: "2026-09-29",
+      teacher_id: "staff-a", issued_by: "staff-a", kept: true });
+    expect(mocks.log).toHaveBeenCalledWith(expect.objectContaining({ metadata: expect.objectContaining({ status: "cleared", keptAsIssue: true }) }));
+  });
+  it("남기는 숙제의 선생님 = 그날 보고서를 쓴 사람(보고서가 '없음'이어도 칸은 남긴다 — 검사 기록 칸과 같은 칸) · 이미 숙제면 그대로 지운다", async () => {
+    for (const value of [null, false]) {
+      mocks.calls = [];
+      world({ sameHomework: [{ id: "m9" }], report: [{ id: "r1", video_homework: value, created_by: "teacher-r" }] });
+      await setVideoHomeworkRound({ ...round, status: null, submittedDate: null });
+      expect(writes().map((c) => c.op)).toEqual(["insert", "delete"]);
+      expect(writes()[0].payload).toMatchObject({ teacher_id: "teacher-r", issued_by: "staff-a", kept: true });
+    }
+    mocks.calls = [];
+    world({ sameHomework: [{ id: "m9" }], report: [{ id: "r1", video_homework: true }] });
+    expect((await setVideoHomeworkRound({ ...round, status: null, submittedDate: null })).ok).toBe(true);
+    expect(writes().map((c) => c.op)).toEqual(["delete"]);
+  });
+  it("남기는 숙제의 선생님 — 그날 보고서가 없으면 반 담임", async () => {
+    world({ sameHomework: [{ id: "m9" }], assigned: false });
+    const base = mocks.respond;
+    mocks.respond = (call) => call.table === "classes" && call.op === "select" ? { data: { subject: "math", class_name: "수학 A", teacher_id: "homeroom" }, error: null } : base(call);
+    await setVideoHomeworkRound({ ...round, status: null, submittedDate: null });
+    expect(writes()[0].payload).toMatchObject({ teacher_id: "homeroom", kept: true });
+  });
+  it("숙제로 남기지 못하면 기록도 지우지 않는다(칸이 사라지지 않게)", async () => {
+    world({ sameHomework: [{ id: "m9" }], assigned: false, insertError: { code: "42501" } });
+    expect(await setVideoHomeworkRound({ ...round, status: null, submittedDate: null })).toEqual({ ok: false, error: "숙제 칸을 남기지 못했습니다. 잠시 뒤 다시 시도해 주세요." });
+    expect(writes().map((c) => c.op)).toEqual(["insert"]);
   });
   it("이미 찍힌 같은 숙제는 그 줄을 고친다(원스크린이 찍은 기록도)", async () => {
     world({ sameHomework: [{ id: "m9" }] });

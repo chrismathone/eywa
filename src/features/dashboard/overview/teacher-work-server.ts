@@ -82,6 +82,7 @@ export async function loadTeacherWork(tenantId: string, today: string, scope: Te
     nowMinutes: kstMinutesOfDay(), holidays: settings.operations.holidays.map((h) => h.date) });
   return teacherWork(workClasses, workReports, outcomes.map((r) => ({ classId: r.class_id, studentId: r.student_id,
     date: r.homework_date, status: r.status, observedAt: r.observed_at })), range, obligations,
-    extraIssues.filter((x) => { const student = extraStudentOf.get(x.studentId); return !!student && !student.is_test
+    // 옮겨 남긴 숙제(kept)는 선생님이 낸 숙제가 아니라 셀 일이 아니다(extra-issues.ts).
+    extraIssues.filter((x) => { const student = extraStudentOf.get(x.studentId); return !x.kept && !!student && !student.is_test
       && isVideoHomeworkEnabled(settings.report.videoHomeworkPolicy, { classId: x.classId, subjectKey: subjects.get(x.classId) ?? "", grade: student.grade }); }));
 }
