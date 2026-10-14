@@ -18,21 +18,23 @@ describe("내부 탭은 메뉴가 아니다", () => {
       expect(hrefs.has(tab.parent), tab.parent).toBe(true);
       for (const d of tab.items) expect(hrefs.has(d.href), d.href).toBe(false);
     }
-    for (const href of ["/billing?tab=textbooks", "/billing?tab=refunds", "/shuttle/today", "/lesson-reports?tab=report", "/lesson-reports?tab=ai_ment"]) {
+    for (const href of ["/billing?tab=refunds", "/billing?tab=sessions", "/shuttle/today", "/lesson-reports?tab=report", "/lesson-reports?tab=ai_ment"]) {
       expect(hrefs.has(href), href).toBe(false);
     }
   });
 
-  it("내부 탭 목록 = 그 화면의 탭 그대로(사이드바 하부탭 표와 같은 면) — 부모 자신의 면은 넣지 않는다", () => {
-    const facesOf = (menu: "billing" | "shuttle") => (SUBTABS_BY_MENU[menu] ?? []).map((f) => f.href).filter((h) => h !== `/${menu}`);
+  it("내부 탭 목록 = 그 화면의 탭 그대로(사이드바 하부탭 표와 같은 면) — 부모 자신과 메뉴 버튼인 면(교재·지출)은 넣지 않는다", () => {
+    const menu = new Set(menuHrefs([...HUB_GROUPS, ...SUPPORT_GROUPS]));
+    const facesOf = (key: "billing" | "shuttle") => (SUBTABS_BY_MENU[key] ?? []).map((f) => f.href).filter((h) => !menu.has(h));
     expect(INNER_TABS.find((t) => t.parent === "/billing")!.items.map((d) => d.href).sort()).toEqual(facesOf("billing").sort());
     expect(INNER_TABS.find((t) => t.parent === "/shuttle")!.items.map((d) => d.href).sort()).toEqual(facesOf("shuttle").sort());
   });
 
-  it("수납관리 = 화면 하나라 메뉴 판을 거치지 않고 바로 연다", () => {
+  it("🔴 수납관리 = 수납 · 교재 · 지출 버튼(원장 2026-10-15 *\"교재와 지출은 … 이전처럼\"*) — 나머지 면은 화면 위 탭으로만", () => {
     const billing = HUB_GROUPS.find((g) => g.id === "billing")!;
-    expect(billing.kind).toBe("direct");
-    expect(billing.items.map((d) => d.href)).toEqual(["/billing"]);
+    expect(billing.kind).toBe("hub");
+    expect(billing.items.map((d) => d.href)).toEqual(["/billing", "/billing?tab=textbooks", "/billing?tab=expenses"]);
+    expect(INNER_TABS.find((t) => t.parent === "/billing")!.items.map((d) => d.href)).toEqual(["/billing?tab=refunds", "/billing?tab=calculator", "/billing?tab=sessions"]);
   });
 
   it("오늘 출결·출결 모드는 출석부 화면 위 탭이 아니라 따로 선 화면이라 메뉴에 남는다(빼면 갈 길이 없다)", () => {
@@ -57,7 +59,7 @@ describe("내부 탭은 메뉴가 아니다", () => {
 
   it("검색은 내부 탭도 찾는다 — 부모 메뉴가 보일 때만, 면마다의 권한으로", () => {
     const master = { systemRole: "master" as const, isMaster: true };
-    expect(innerTabsOf("/billing", master).map((d) => d.label)).toEqual(expect.arrayContaining(["교재", "지출", "환불 요청서"]));
+    expect(innerTabsOf("/billing", master).map((d) => d.label)).toEqual(["환불 요청서", "수강료 계산기", "회차 확정"]);
     expect(innerTabsOf("/lesson-reports", master).map((d) => d.href)).toEqual(["/lesson-reports?tab=report", "/lesson-reports?tab=ai_ment"]);
     // 관리자 역할은 보고서 설정·AI 멘트 권한이 기본 '없음' — 수업보고서는 보여도 그 탭은 검색에 안 선다.
     expect(innerTabsOf("/lesson-reports", { systemRole: "admin" })).toEqual([]);

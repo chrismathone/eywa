@@ -4,6 +4,7 @@ import { fetchInChunks } from "@/lib/supabase/batch";
 import { normalizeDashboard } from "@/features/dashboard/layout/normalize";
 import { sameItems } from "@/features/dashboard/layout/engine";
 import { permissionsSchema, SPECIAL_ACCESS_ID_LISTS, type PermissionsSettings } from "../settings-types";
+import { effectivePayslipManagerIds } from "../payslip-permissions";
 
 /** 지점 설정 대상에서 운영자 계정을 제외한다. 조회 실패는 빈 명단으로 취급하지 않는다. */
 export async function platformAccountIds(ids: readonly string[]): Promise<Set<string>> {
@@ -48,7 +49,9 @@ export async function platformSettingsError(section: string, next: unknown, prev
     const ids = await platformAccountIds([...permissionAccountIds(after), ...permissionAccountIds(before)]);
     if (!equalRows(after.userOverrides.filter((row) => ids.has(row.userId)), before.userOverrides.filter((row) => ids.has(row.userId)))) return DENIED;
     for (const key of SPECIAL_ACCESS_ID_LISTS) {
-      if (!equalRows((after.specialAccess[key] ?? []).filter((id) => ids.has(id)), (before.specialAccess[key] ?? []).filter((id) => ids.has(id)))) return DENIED;
+      const list = (value: PermissionsSettings) => key === "payslipManagerIds"
+        ? effectivePayslipManagerIds(value.specialAccess) : value.specialAccess[key] ?? [];
+      if (!equalRows(list(after).filter((id) => ids.has(id)), list(before).filter((id) => ids.has(id)))) return DENIED;
     }
     const scopesOf = (value: PermissionsSettings) => value.specialAccess.staffSubjectScopes.filter((row) => ids.has(row.userId));
     if (!equalRows(scopesOf(after), scopesOf(before))) return DENIED;

@@ -105,10 +105,11 @@ describe("저장 검증·손상값·이전 화면·초기화", () => {
     expect(b.navigation.menus).toEqual([]);
     expect(all.find((g) => g.id === "class")!.items.some((d) => d.label === "운영비")).toBe(false);
   });
-  it("🔴 화면 안 내부 탭(수납·셔틀·수업보고서 설정 면)의 옛 줄은 읽을 때 지워진다 — 메뉴가 아니라 저장을 막지 않는다(원장 2026-10-14)", () => {
-    const raw = { menus: [{ href: "/billing?tab=expenses", label: "운영비", groupId: "custom-desk" }, { href: "/shuttle/today", hidden: true }, { href: "/lesson-reports?tab=ai_ment", order: 0 }, { href: "/billing", order: 1 }], groups };
+  it("🔴 화면 안 내부 탭(수납의 환불·계산기·회차 확정 · 셔틀 · 수업보고서 설정 면)의 옛 줄은 읽을 때 지워진다 — 메뉴가 아니라 저장을 막지 않는다(원장 2026-10-14)", () => {
+    const raw = { menus: [{ href: "/billing?tab=refunds", label: "운영비", groupId: "custom-desk" }, { href: "/shuttle/today", hidden: true }, { href: "/lesson-reports?tab=ai_ment", order: 0 }, { href: "/billing", order: 1 }, { href: "/billing?tab=expenses", label: "지출 결의" }], groups };
     const normalized = normalizeNavigationSettings(raw);
-    expect(normalized.menus).toEqual([{ href: "/billing", order: 1 }]);
+    // 교재·지출은 메뉴 버튼이라(원장 2026-10-15) 그 줄은 남는다.
+    expect(normalized.menus).toEqual([{ href: "/billing", order: 1 }, { href: "/billing?tab=expenses", label: "지출 결의" }]);
     expect(navigationSchema.safeParse(normalized).success).toBe(true);
   });
   it("폐기된 메뉴·그룹과 없는 소속을 정리한 뒤 저장 검증과 baseline이 일치한다", () => {

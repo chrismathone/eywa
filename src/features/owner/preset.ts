@@ -13,6 +13,7 @@
 import { DEFAULT_SETTINGS } from "./defaults";
 import { GENERIC_SETTINGS } from "./generic-defaults";
 import type { TenantPreset, TenantSettings } from "./settings-types";
+import { effectivePayslipManagerIds } from "./payslip-permissions";
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -84,6 +85,13 @@ export function prepareSectionForSave(
       }
       out.specialAccess = special;
     }
+    // Freeze PRE-SAVE legacy capability, including when an old form omits the whole specialAccess object.
+    // Explicit invalid/empty stored fields remain explicit and are never rebuilt from viewers.
+    const special = isPlainObject(out.specialAccess) ? { ...out.specialAccess } : {};
+    if (!Object.hasOwn(special, "payslipManagerIds")) {
+      special.payslipManagerIds = effectivePayslipManagerIds(storedSpecial);
+    }
+    out.specialAccess = special;
     return out;
   }
   // 탭 및 메뉴 구성 — 배포 순간 열린 옛 화면이 강사뷰 칸(teacherMenus) 없이 보내면 스키마 기본값([])이 채워진다.

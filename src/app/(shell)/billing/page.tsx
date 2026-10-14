@@ -100,16 +100,21 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
 
   return (
     <div className="space-y-4 print:space-y-0">
-      {(effectiveTab === "billing" || effectiveTab === "textbooks") && (
-        <div className="print:hidden">
-          {/* 교재 면의 기본 하위탭은 '교재신청'이고 그걸 갱신하는 도메인은 textbook_checks다.
-              예전엔 catalog(= sync-all 임포터 목록에 없는 수동 도메인)를 가리켜 배지 날짜가 한 달째
-              굳어 있었고, 옆의 '지금 동기화'를 눌러도 영원히 안 바뀌었다(고장난 것처럼 보임). */}
-          <MakeeduSyncBadge domain={effectiveTab === "billing" ? "invoices" : "textbook_checks"} />
-        </div>
-      )}
+      {/* 동기화 시각은 면 탭과 **같은 줄 오른쪽 끝**(원장 2026-10-15 *"동기화 6시간 우상단 이것 때문에 여백낭비 … 같은행으로 맞춰서 여백 최소화"*) —
+          예전엔 배지가 제 줄을 따로 써서 탭 위가 한 줄 비었다. 좁으면 배지가 탭 아래 줄로 접힌다(flex-wrap).
+          탭은 위에 붙인다(self-start) — 경고를 펼치면 배지 칸만 아래로 자라고 탭이 가운데로 내려앉지 않게. */}
       <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
-        <FaceTabs faces={faces} active={effectiveTab} ariaLabel="수납관리 면 전환" />
+        <div className="min-w-0 max-w-full self-start">
+          <FaceTabs faces={faces} active={effectiveTab} ariaLabel="수납관리 면 전환" />
+        </div>
+        {effectiveTab === "billing" || effectiveTab === "textbooks" ? (
+          <div className="ml-auto">
+            {/* 교재 면의 기본 하위탭은 '교재신청'이고 그걸 갱신하는 도메인은 textbook_checks다.
+                예전엔 catalog(= sync-all 임포터 목록에 없는 수동 도메인)를 가리켜 배지 날짜가 한 달째
+                굳어 있었고, 옆의 '지금 동기화'를 눌러도 영원히 안 바뀌었다(고장난 것처럼 보임). */}
+            <MakeeduSyncBadge domain={effectiveTab === "billing" ? "invoices" : "textbook_checks"} />
+          </div>
+        ) : null}
       </div>
       {effectiveTab === "textbooks" ? (
         <TextbooksFace sp={sp} />

@@ -7,6 +7,7 @@ import { normalizeNavigationSettings } from "./normalize-navigation";
 import { normalizeDashboard } from "@/features/dashboard/layout/normalize";
 import type { AccountSetting, BillingSettings, SubjectSetting, TenantSettings } from "./settings-types";
 import { normalizeMakeupSettings } from "@/features/makeups/config";
+import { effectivePayslipManagerIds } from "./payslip-permissions";
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -112,12 +113,22 @@ function normalizeBilling(b: BillingSettings): BillingSettings {
 export function resolveSettings(stored: unknown, tenant: { name: string }): TenantSettings {
   const preset = presetOfStored(stored);
   const base = baseSettingsFor(preset);
+  const storedPermissions = isPlainObject(stored) && isPlainObject(stored.permissions) ? stored.permissions : undefined;
+  // 기본값 병합 전에 원문의 속성 존재 여부로 결정한다. 명시 []·null은 레거시 누락과 다르다.
+  const managerIds = effectivePayslipManagerIds(storedPermissions?.specialAccess);
   const merged = deepMerge(base, stored);
   const storedOperations = isPlainObject(stored) && isPlainObject(stored.operations) ? stored.operations : undefined;
   return {
     ...merged,
     // 프리셋은 저장값이 아니라 판정 결과다 — 행에 preset이 없어도(침산) 판정값을 싣는다.
     preset,
+    permissions: {
+      ...merged.permissions,
+      specialAccess: {
+        ...merged.permissions.specialAccess,
+        payslipManagerIds: managerIds,
+      },
+    },
     profile: { ...merged.profile, name: merged.profile.name || tenant.name },
     operations: {
       ...merged.operations,
