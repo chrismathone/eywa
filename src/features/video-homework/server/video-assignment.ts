@@ -85,7 +85,7 @@ export async function getVideoAssignmentOptions(input: { classId: string; studen
       return { id: String(v.id), postedAt: String(v.posted_at), className: byClass.get(String(route.classId))?.class_name ?? null,
         classId: typeof route.classId === "string" ? route.classId : null,
         homeworkDate: typeof route.homeworkDate === "string" ? route.homeworkDate : null, source: v.source === "link" ? "제출 링크" : "ClassNote / Drive",
-        note: typeof route.note === "string" && route.note.trim() ? route.note.trim().slice(0, 100) : null,
+        note: typeof route.note === "string" && route.note.trim() ? route.note.trim().slice(0, 100) : null, free: route.free === true,
         postId: typeof v.post_id === "number" ? v.post_id : null, revision: Number(v.assignment_revision), excluded: route.excluded === true,
         playback: links ? { ...links, uploadedAt: v.uploaded_at as string | null } : null };
     }) };

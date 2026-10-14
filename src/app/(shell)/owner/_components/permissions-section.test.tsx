@@ -172,7 +172,7 @@ describe("일반판 권한 설정", () => {
     fireEvent.click(screen.getByRole("button", { name: "추가·변경" }));
     expect(payload().userOverrides).toContainEqual(hiddenOverride);
     expect(payload().userOverrides).toContainEqual({ userId: staff[0].id, menu: "staff", access: "full" });
-    expect(payload().specialAccess).toEqual({ payslipViewerIds: [operator.id], leaveAdjusterIds: [operator.id], classSplitterIds: [], staffSubjectScopes: [] });
+    expect(payload().specialAccess).toEqual({ payslipViewerIds: [operator.id], payslipManagerIds: [operator.id], leaveAdjusterIds: [operator.id], classSplitterIds: [], staffSubjectScopes: [] });
   });
 });
 
@@ -197,7 +197,7 @@ describe("개인별 기능 권한 — 사람을 지정해서 여는 기능을 �
     view();
     fireEvent.change(screen.getByLabelText("연차 조정 담당자 선택"), { target: { value: staff[0].id } });
     fireEvent.click(screen.getByRole("button", { name: "연차 조정 담당자 추가" }));
-    expect(payload().specialAccess).toEqual({ payslipViewerIds: [], leaveAdjusterIds: [staff[0].id], classSplitterIds: [], staffSubjectScopes: [] });
+    expect(payload().specialAccess).toEqual({ payslipViewerIds: [], payslipManagerIds: [], leaveAdjusterIds: [staff[0].id], classSplitterIds: [], staffSubjectScopes: [] });
     fireEvent.click(screen.getByRole("button", { name: "가 선생 연차 조정 해제" }));
     expect(payload().specialAccess.leaveAdjusterIds).toEqual([]);
   });
@@ -223,7 +223,7 @@ describe("개인별 기능 권한 — 사람을 지정해서 여는 기능을 �
     // 다른 칸을 고쳐도 감춘 칸의 값은 빠지지 않는다.
     fireEvent.change(screen.getByLabelText("연차 조정 담당자 선택"), { target: { value: staff[1].id } });
     fireEvent.click(screen.getByRole("button", { name: "연차 조정 담당자 추가" }));
-    expect(payload().specialAccess).toEqual({ payslipViewerIds: [], leaveAdjusterIds: [staff[1].id], classSplitterIds: [staff[0].id], staffSubjectScopes: [] });
+    expect(payload().specialAccess).toEqual({ payslipViewerIds: [], payslipManagerIds: [], leaveAdjusterIds: [staff[1].id], classSplitterIds: [staff[0].id], staffSubjectScopes: [] });
   });
 
   it("직원관리 과목 범위 — 과목은 학원 설정의 과목에서 고르고, 누른 차례가 아니라 설정 차례로 실린다", () => {
@@ -301,8 +301,27 @@ describe("개인별 기능 권한 — 사람을 지정해서 여는 기능을 �
   it("급여 기능이 꺼진 학원엔 급여명세서 칸이 없다 — 저장값은 그대로 실려 간다", () => {
     view({ ...EMPTY, specialAccess: { ...EMPTY.specialAccess, payslipViewerIds: [staff[0].id] } } as typeof EMPTY, { disabledModules: ["payroll"] });
     expect(screen.queryByLabelText("급여명세서 열람 담당자 선택")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("급여명세서 관리 담당자 선택")).not.toBeInTheDocument();
     expect(screen.getByLabelText("연차 조정 담당자 선택")).toBeInTheDocument();
     expect(payload().specialAccess.payslipViewerIds).toEqual([staff[0].id]);
+    expect(payload().specialAccess.payslipManagerIds).toEqual([staff[0].id]);
+    fireEvent.change(screen.getByLabelText("연차 조정 담당자 선택"), { target: { value: staff[1].id } });
+    fireEvent.click(screen.getByRole("button", { name: "연차 조정 담당자 추가" }));
+    expect(payload().specialAccess.payslipManagerIds).toEqual([staff[0].id]);
+  });
+
+  it("새 열람자는 조회·인쇄만, 관리자는 열람 명단에 중복 지정하지 않는다", () => {
+    view();
+    fireEvent.change(screen.getByLabelText("급여명세서 열람 담당자 선택"), { target: { value: staff[0].id } });
+    fireEvent.click(screen.getByRole("button", { name: "급여명세서 열람 담당자 추가" }));
+    expect(payload().specialAccess.payslipManagerIds).toEqual([]);
+    fireEvent.change(screen.getByLabelText("급여명세서 관리 담당자 선택"), { target: { value: staff[1].id } });
+    fireEvent.click(screen.getByRole("button", { name: "급여명세서 관리 담당자 추가" }));
+    expect(payload().specialAccess.payslipViewerIds).toEqual([staff[0].id]);
+    expect(payload().specialAccess.payslipManagerIds).toEqual([staff[1].id]);
+    expect(screen.getByText(/조회·인쇄할 수 있는 사람/)).toBeInTheDocument();
+    expect(screen.getByText(/열람을 포함해 조정 저장·발행·발행취소/)).toBeInTheDocument();
+    expect(screen.queryByText(/슈퍼관리자|슈퍼어드민|super_admin|총괄/)).not.toBeInTheDocument();
   });
 
   it("운영자 계정의 지정은 화면에 세우지 않고 그대로 실어 보낸다", () => {
@@ -318,7 +337,7 @@ describe("개인별 기능 권한 — 사람을 지정해서 여는 기능을 �
     expect(screen.getByText("범위가 지정된 직원 없음")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("연차 조정 담당자 선택"), { target: { value: staff[0].id } });
     fireEvent.click(screen.getByRole("button", { name: "연차 조정 담당자 추가" }));
-    expect(payload().specialAccess).toEqual({ ...special, leaveAdjusterIds: [staff[0].id] });
+    expect(payload().specialAccess).toEqual({ ...special, payslipManagerIds: [operator.id], leaveAdjusterIds: [staff[0].id] });
   });
 });
 

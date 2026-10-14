@@ -21,6 +21,7 @@ import { MODULES } from "@/lib/modules";
 import { CHINSAN_SCHOOL_SAVE_ALIASES } from "@/features/schools/school-name";
 import { HUB_GROUPS, SUPPORT_GROUPS } from "@/lib/menu-hub";
 import { BUNDLES, BUNDLE_LABELS } from "@/features/dashboard/layout/types";
+import { effectivePayslipManagerIds } from "./payslip-permissions";
 
 export type SettingChange = { label: string; from?: string; to?: string; note?: string };
 export type SettingsDiff = { changes: SettingChange[]; others: number };
@@ -259,11 +260,13 @@ function diffPermissions(before: unknown, after: unknown): SettingsDiff {
     if (isObj(v.specialAccess)) {
       for (const [key, label] of [
         ["payslipViewerIds", "급여명세서 열람"],
+        ["payslipManagerIds", "급여명세서 관리"],
         ["leaveAdjusterIds", "연차 조정"],
         ["classSplitterIds", "수업 나누기"],
         ["enrollmentDateEditorIds", "수강 날짜 수정"],
       ] as const) {
-        for (const id of Array.isArray(v.specialAccess[key]) ? v.specialAccess[key] : []) {
+        const ids = key === "payslipManagerIds" ? effectivePayslipManagerIds(v.specialAccess) : v.specialAccess[key];
+        for (const id of Array.isArray(ids) ? ids : []) {
           if (typeof id !== "string") continue;
           out.set(`special:${key}:${id}`, { label: `${label} · ${id.slice(0, 8)}`, access: "full" });
         }

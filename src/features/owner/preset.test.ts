@@ -159,7 +159,7 @@ describe("일반판 — 새로 연 학원", () => {
 
   it("민감 기능 담당자와 개인 메뉴 권한은 비어 있고, 옛 설정 폼 저장이 명단을 지우지 않는다", () => {
     expect(g.permissions.userOverrides).toEqual([]);
-    expect(g.permissions.specialAccess).toEqual({ payslipViewerIds: [], leaveAdjusterIds: [], classSplitterIds: [], enrollmentDateEditorIds: [], staffSubjectScopes: [] });
+    expect(g.permissions.specialAccess).toEqual({ payslipViewerIds: [], payslipManagerIds: [], leaveAdjusterIds: [], classSplitterIds: [], enrollmentDateEditorIds: [], staffSubjectScopes: [] });
     const stored = {
       userOverrides: [{ userId: "11111111-1111-4111-8111-111111111111", menu: "staff", access: "full" }],
       specialAccess: { payslipViewerIds: ["11111111-1111-4111-8111-111111111111"], leaveAdjusterIds: [], classSplitterIds: [], staffSubjectScopes: [] },
@@ -167,7 +167,7 @@ describe("일반판 — 새로 연 학원", () => {
     const parsed = { overrides: [], userOverrides: [], specialAccess: { payslipViewerIds: [], leaveAdjusterIds: [], classSplitterIds: [], staffSubjectScopes: [] } };
     const saved = prepareSectionForSave("generic", "permissions", { overrides: [] }, parsed, stored) as typeof parsed;
     expect(saved.userOverrides).toEqual(stored.userOverrides);
-    expect(saved.specialAccess).toEqual(stored.specialAccess);
+    expect(saved.specialAccess).toEqual({ ...stored.specialAccess, payslipManagerIds: stored.specialAccess.payslipViewerIds });
   });
 
   it("개인별 기능 권한은 어느 학원에서나 저장한다 — 침산도 보낸 값이 그대로 실린다(원장 2026-10-06)", () => {
@@ -175,7 +175,7 @@ describe("일반판 — 새로 연 학원", () => {
     const sent = { overrides: [], userOverrides: [], specialAccess: { payslipViewerIds: [person], leaveAdjusterIds: [], classSplitterIds: [person], staffSubjectScopes: [{ userId: person, subjects: ["math"] }] } };
     for (const preset of ["chinsan", "generic"] as const) {
       const saved = prepareSectionForSave(preset, "permissions", sent, sent, {}) as typeof sent;
-      expect(saved.specialAccess).toEqual(sent.specialAccess);
+      expect(saved.specialAccess).toEqual({ ...sent.specialAccess, payslipManagerIds: [] });
     }
   });
 
@@ -188,10 +188,11 @@ describe("일반판 — 새로 연 학원", () => {
     for (const preset of ["chinsan", "generic"] as const) {
       const saved = prepareSectionForSave(preset, "permissions", raw, parsed, { specialAccess: storedSpecial }) as typeof parsed;
       // 보낸 칸은 보낸 값으로(급여명세서는 비웠고 연차 조정은 넣었다), 안 보낸 칸은 저장돼 있던 값으로.
-      expect(saved.specialAccess).toEqual({ payslipViewerIds: [], leaveAdjusterIds: [person], classSplitterIds: [person], staffSubjectScopes: storedSpecial.staffSubjectScopes });
-      // 저장된 적 없는 칸은 만들지 않는다(읽을 때 기본값으로 채워진다).
+      // 실제 액션은 관리 필드 없는 열람 변경을 먼저 거절한다. 준비 함수만 호출하면 변경 전 관리 능력을 보존한다.
+      expect(saved.specialAccess).toEqual({ payslipViewerIds: [], payslipManagerIds: [person], leaveAdjusterIds: [person], classSplitterIds: [person], staffSubjectScopes: storedSpecial.staffSubjectScopes });
+      // 새 관리 칸만 명시화하고, 그 밖에 저장된 적 없는 칸은 만들지 않는다.
       const fresh = prepareSectionForSave(preset, "permissions", raw, parsed, {}) as { specialAccess: Record<string, unknown> };
-      expect(Object.keys(fresh.specialAccess).sort()).toEqual(["leaveAdjusterIds", "payslipViewerIds"]);
+      expect(Object.keys(fresh.specialAccess).sort()).toEqual(["leaveAdjusterIds", "payslipManagerIds", "payslipViewerIds"]);
     }
   });
 
@@ -201,7 +202,7 @@ describe("일반판 — 새로 연 학원", () => {
     const stored = { specialAccess: { payslipViewerIds: [], futureKeyIds: [person] } };
     for (const preset of ["chinsan", "generic"] as const) {
       const saved = prepareSectionForSave(preset, "permissions", sent, sent, stored) as { specialAccess: Record<string, unknown> };
-      expect(saved.specialAccess).toEqual({ ...sent.specialAccess, futureKeyIds: [person] });
+      expect(saved.specialAccess).toEqual({ ...sent.specialAccess, payslipManagerIds: [], futureKeyIds: [person] });
     }
   });
 

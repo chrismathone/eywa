@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { landingPath } from "@/lib/auth/teacher-home";
 import { getPayslipData } from "@/features/payroll/server/payslip-queries";
-import { canViewPayslipNow } from "@/features/payroll/server/payslip-gate";
+import { canManagePayslipNow, canViewPayslipNow } from "@/features/payroll/server/payslip-gate";
 import { kstMonth } from "@/lib/date-kst";
 import { PrintActions } from "@/app/(print)/enrollment/[id]/print/print-actions";
 import { PayslipDocument } from "./payslip-document";
@@ -69,7 +69,7 @@ export default async function PayslipPrintPage({
    *    아직 발행 전이면 본문이 '산정 불가'와 사유를 이미 보이지만, **발행본**은 본문이 동결 금액 그대로라(스냅샷 — 출석부를
    *    다시 조립하지 않는다) 안내가 없으면 별지만 빠진 종이가 말없이 인쇄된다(재리뷰 2026-10-06). 그 밖의 오류는 그대로 던진다.
    */
-  const [appendixResult, settings] = await Promise.all([
+  const [appendixResult, settings, canManage] = await Promise.all([
     data.tuitionBasis === "sheet"
       ? loadTeacherSheet(user.tenantId, teacherId, period).then(
           (sheet) => ({ groups: sheet.groups.map((g) => ({ classId: g.classId, className: g.className, isSpecial: g.isSpecial, matrix: g.matrix })), missing: false }),
@@ -86,6 +86,7 @@ export default async function PayslipPrintPage({
           })),
         ).then((groups) => ({ groups, missing: false })),
     getTenantSettings(),
+    canManagePayslipNow(),
   ]);
   // 대상 학년을 좁힌 선생님 — 별지도 수업료와 같은 학년 학생만 싣는다(학년을 모르는 학생은 남긴다 — 본문이 '빠진 줄'로 알린다).
   const sheetLevels = data.sheetLevels?.length ? data.sheetLevels : null;
@@ -105,12 +106,12 @@ export default async function PayslipPrintPage({
     <>
       <div className="print-portrait payslip-doc mx-auto max-w-[210mm] bg-white px-12 py-10 text-black print:p-0">
         <PrintActions embedded={embedded} />
-        <AdjustmentsEditor
+        {canManage ? <AdjustmentsEditor
           teacherId={teacherId}
           period={period}
           adjustments={data.adjustments}
           canIssue={data.settlement !== null && data.amounts.netPay >= 0}
-        />
+        /> : null}
         <PayslipDocument data={data} />
         {appendixMissing ? (
           <p className="border-line bg-bg-soft mt-6 rounded-lg border px-4 py-3 text-sm break-keep print:hidden">
