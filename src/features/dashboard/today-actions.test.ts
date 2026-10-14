@@ -586,6 +586,10 @@ describe("수업보고서 작성 대상", () => {
     expect(absentClassKeysOf([row("a", "16:00", "absent", "2026-09-28T07:00:00Z"), row("b", "16:00", "present", "2026-09-28T08:00:00Z")]).size).toBe(0);
     // 두 교시 중 하나는 출석
     expect(absentClassKeysOf([row("a", "16:00", "absent", "2026-09-28T07:00:00Z"), row("b", "17:00", "present", "2026-09-28T07:00:00Z")]).size).toBe(0);
+    // 공결도 결석 — 보고서 분모에서 빠진다(원장 2026-10-14 *"결석이 있으면 분모에서 빼야함"*)
+    expect([...absentClassKeysOf([row("a", "16:00", "excused", "2026-09-28T07:00:00Z")])]).toEqual(["s1::c1"]);
+    expect([...absentClassKeysOf([row("a", "16:00", "absent", "2026-09-28T07:00:00Z"), row("b", "17:00", "excused", "2026-09-28T07:00:00Z")])]).toEqual(["s1::c1"]);
+    expect(absentClassKeysOf([row("a", "16:00", "excused", "2026-09-28T07:00:00Z"), row("b", "17:00", "late", "2026-09-28T07:00:00Z")]).size).toBe(0);
   });
 });
 
