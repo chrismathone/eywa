@@ -234,7 +234,7 @@ describe("메뉴에서 감춘 항목은 '자주 방문한 메뉴'에도 안 뜬�
  * 이름으로도 찾혀야 한다 — 그래서 팰릿은 이제 이 목록을 읽는다.
  */
 describe("검색 팰릿 메뉴 축 — 메뉴 화면에 선 버튼은 전부 이름으로 찾힌다", () => {
-  // 팰릿처럼 메뉴 바로 뒤에 그 화면 위 탭(`INNER_TABS`)을 싣는다(command-palette.tsx `innerTabsOf`).
+  // 팰릿처럼 메뉴 판의 버튼에 더해 그 화면 위 탭(`INNER_TABS`)도 싣는다(command-palette.tsx `innerTabsOf` — 여기선 찾히는지만 본다).
   const rows = ALL.flatMap((g) =>
     g.items.flatMap((item) => [item, ...(INNER_TABS.find((t) => t.parent === item.href)?.items ?? [])]).map((dest) => ({ dest, group: g.label })),
   );

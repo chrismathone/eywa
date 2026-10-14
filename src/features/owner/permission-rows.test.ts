@@ -135,8 +135,8 @@ describe("차례 = 왼쪽 탭 → 그 탭의 내부 메뉴", () => {
   });
 
   it("권한 하나가 여는 면이 여럿이면 그 이름을 함께 적는다 — 수납의 화면 위 탭까지 · 출석부의 세 화면", () => {
-    // 수납의 교재·지출·환불 등은 메뉴가 아니라 화면 위 탭이지만(원장 2026-10-14) 이 권한이 여는 화면이라 이름을 적는다.
-    expect(group("billing")!.rows.find((r) => r.menu === "billing")!.covers).toEqual(["수납관리", "교재", "지출", "환불 요청서", "수강료 계산기", "회차 확정"]);
+    // 수납 · 교재 · 지출은 메뉴 버튼, 환불·계산기·회차 확정은 화면 위 탭(원장 2026-10-14·15) — 탭도 이 권한이 여는 화면이라 이름을 적는다(메뉴 판 버튼 다음 — 화면 탭 차례).
+    expect(group("billing")!.rows.find((r) => r.menu === "billing")!.covers).toEqual(["수납", "교재", "지출", "환불 요청서", "수강료 계산기", "회차 확정"]);
     expect(group("operation")!.rows.find((r) => r.menu === "shuttle")!.covers).toEqual(["셔틀", "주간 시간표", "오늘 등하원", "운행 현황", "실시간 위치"]);
     // 따로 권한이 있는 탭(보고서 설정 · AI 멘트)은 수업보고서 줄에 적지 않는다 — 제 줄이 따로 선다.
     expect(group("class")!.rows.find((r) => r.menu === "lesson_reports")!.covers).toEqual([]);
