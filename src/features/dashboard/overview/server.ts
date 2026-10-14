@@ -8,7 +8,7 @@ import { canAccess, MENU_KEYS, type MenuKey } from "@/lib/permissions";
 import { unstable_cache } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fetchAllPaged } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { kstTimeOf, kstToday } from "@/lib/date-kst";
 import {
   countEnrolledStudents,
@@ -37,10 +37,10 @@ import { isMergedStudent } from "@/features/students/merged";
 import { getIntakeOnDay } from "@/features/enrollment/server/intake-day";
 import { getFirstClassStudents } from "@/features/dashboard/server/day-arrivals-query";
 import { getEnrolledToday } from "@/features/dashboard/server/enrolled-today";
-import { loadEnrolledTrend } from "./enrolled-trend-server";
+import { loadEnrolledTrend, loadEnrolledTrendSlicer } from "./enrolled-trend-server";
 import { getScopedAbsentStudents } from "@/features/dashboard/server/absent-students";
 import { absentKpiDate } from "./kpi-links";
-import { getUpcomingMakeupOverview } from "@/features/dashboard/server/makeup-upcoming";
+import { loadUpcomingMakeup } from "@/features/dashboard/server/makeup-upcoming";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { getRecentAnnouncements } from "@/features/dashboard/server/queries";
 import { getDailyProcessingStatus } from "@/features/attendance/server/queries";
@@ -55,7 +55,16 @@ import {
 import { attendanceOverview, attendanceWindowStart } from "./attendance-day";
 import { getGradeLevel, isPreschoolGrade } from "@/lib/format/school-grade";
 import { summarizeInvoices } from "@/features/billing/calc";
-import { getRecentEnrollmentStats } from "@/features/enrollment/server/stats-queries";
+import {
+  classifyInvoice,
+  enrollmentInMonth,
+  summarizeSubjectBilling,
+  type ClassifiedInvoice,
+  type InvoiceForSubject,
+  type SubjectBillingSummary,
+} from "./billing-subject";
+import { getRecentConsultationRows, getRecentEnrollmentStats } from "@/features/enrollment/server/stats-queries";
+import { summarizeRecentEnrollment } from "@/features/enrollment/recent-stats";
 import { getStudentConsultationCounts } from "@/features/consultations/server/queries";
 import { getNewcomers } from "@/features/newcomers/server/queries";
 import {
@@ -63,8 +72,8 @@ import {
   shiftDate,
 } from "@/features/newcomers/onboarding-items";
 import {
-  getHomeworkRisk,
   getUnreadReports,
+  loadHomeworkRisk,
 } from "@/features/dashboard/onescreen/server/queries";
 import { getTodaySchedule } from "@/features/timetable/server/queries";
 import { mergeContinuousClasses } from "./continuous-classes";
@@ -110,8 +119,9 @@ import { reportError } from "@/lib/observability/report-error";
 import { loadViewerBundle } from "@/features/dashboard/layout/viewer-server";
 import { loadPlan, resolveView, type ResolvedView } from "@/features/dashboard/layout/view";
 import { shapeSections } from "@/features/dashboard/layout/shape";
+import { inSliceAny, sliceGroupOf, sliceGroupsOf, sliceKey, slicePredicate, subjectsNamedIn, type SlicePredicate, type SliceTable } from "@/features/dashboard/layout/slices";
 import { EMPTY_DASHBOARD } from "@/features/dashboard/layout/types";
-import { programSubjectsOf, subjectGroupOf } from "@/features/students/program";
+import { programOf, programSubjectsOf, subjectGroupOf } from "@/features/students/program";
 import {
   admissionsEventBaseKind,
   admissionsEventKind,
@@ -120,13 +130,14 @@ import {
 } from "./display";
 import { isCancelledEventTitle } from "@/features/calendar/cancelled";
 import { monthAheadWindow } from "./upcoming-window";
-import { consultProgress } from "./consultation-progress-server";
+import { consultProgressData, consultProgressList } from "./consultation-progress-server";
 import { staffComposition } from "./staff-subjects";
 import {
   distribution,
   monthlyChanges,
   monthKeys,
   type Area,
+  type MonthChange,
   type CareSummary,
   type OperationCount,
   type OverviewData,
@@ -147,7 +158,7 @@ type Settings = Awaited<ReturnType<typeof getTenantSettings>>;
 async function students(
   scope: TeacherScope | null,
   settingsPromise: Promise<Settings>,
-): Promise<OverviewData["students"]> {
+): Promise<(pred: SlicePredicate | null) => OverviewData["students"]> {
   const db = await createClient();
   const today = kstToday();
   const [studentRows, rows, settings] = await Promise.all([
@@ -160,41 +171,61 @@ async function students(
   //    서버 액션이라 React cache가 조회를 묶지 않는다 — 여기서 한 번 받은 것을 넘긴다는 이 함수의 규약 그대로).
   const notStarted = notYetStartedStudentIds(rows, today);
   const enrolled = await countEnrolledStudents(db, scope, notStarted);
-  const composition = composeEnrolled({
-    students: studentRows,
-    rows,
-    scope,
-    subjects: settings.operations.subjects,
-    today,
-  });
-  const counts = enrolledSubjectCounts(rows, scope, today);
-  const visible = composition.students;
-  const programs = summarizePrograms(
-    visible.map((r) => r.id),
-    composition.programs,
-    composition.active,
-  );
-  return {
-    enrolled,
-    subjects: Object.entries(counts.bySubject)
-      .map(([label, value]) => ({ label, value }))
-      .sort((a, b) => b.value - a.value),
-    levels: distribution(
-      visible.map((r) =>
-        isPreschoolGrade(r.grade)
-          ? "미취학"
-          : ({ 초: "초등", 중: "중등", 고: "고등" }[getGradeLevel(r.grade)] ??
-            (r.grade ? "기타" : "미입력")),
+  const subjects = settings.operations.subjects;
+  // `total` = 카드 숫자 — 학원 전체는 원생목록과 같은 count(head), 과목 관리자는 명단 길이(null).
+  // `comboRows` = 과목 수강 조합을 셀 줄(과목 관리자는 담당 학생의 **전체** 수강 — 영어 관리자에게도 '영어·수학'이 선다).
+  const build = (list: typeof studentRows, countRows: typeof rows, total: number | null, comboRows: typeof rows = countRows) => {
+    const composition = composeEnrolled({ students: list, rows, scope, subjects, today });
+    const counts = enrolledSubjectCounts(countRows, scope, today);
+    const visible = composition.students;
+    const programs = summarizePrograms(
+      visible.map((r) => r.id),
+      composition.programs,
+      composition.active,
+    );
+    return {
+      enrolled: total ?? visible.length,
+      subjects: Object.entries(counts.bySubject)
+        .map(([label, value]) => ({ label, value }))
+        .sort((a, b) => b.value - a.value),
+      levels: distribution(
+        visible.map((r) =>
+          isPreschoolGrade(r.grade)
+            ? "미취학"
+            : ({ 초: "초등", 중: "중등", 고: "고등" }[getGradeLevel(r.grade)] ??
+              (r.grade ? "기타" : "미입력")),
+        ),
       ),
-    ),
-    schools: distribution(visible.map((r) => r.school)),
-    schoolGroups: schoolsByLevel(visible, composition.programs, composition.active),
-    // 동시 수강 = 영어 + 수학(원장 2026-09-11 재정의) — gradeSplit 보라 합계와 같은 subjectMixOf 판정.
-    concurrent: programs.both,
-    subjectCombinations: counts.combinations,
-    programs,
-    gradeSplit: gradeSplit(visible, composition.programs, settings.operations.gradeLevels),
-    levelSplit: levelSubjectSplit(visible, composition.programs),
+      schools: distribution(visible.map((r) => r.school)),
+      schoolGroups: schoolsByLevel(visible, composition.programs, composition.active),
+      // 동시 수강 = 영어 + 수학(원장 2026-09-11 재정의) — gradeSplit 보라 합계와 같은 subjectMixOf 판정.
+      concurrent: programs.both,
+      subjectCombinations: comboRows === countRows ? counts.combinations : enrolledSubjectCounts(comboRows, scope, today).combinations,
+      programs,
+      gradeSplit: gradeSplit(visible, composition.programs, settings.operations.gradeLevels),
+      levelSplit: levelSubjectSplit(visible, composition.programs),
+    };
+  };
+  return (pred) => {
+    if (!pred) return build(studentRows, rows, enrolled);
+    // 과목 관리자(원장 2026-10-14 2단계) — 그 과목 반에서 **이미 수업을 시작한** 학생 + 아직 반이 없는 학생(모름 = 모두에게).
+    // 두 과목 학생은 양쪽 관리자 모두에게 든다. 동시 수강·학년별 막대의 영어/수학 구분은 그 학생의 **전체 수강**으로 판정한다.
+    const subjectOfRow = (r: (typeof rows)[number]) => (Array.isArray(r.class) ? r.class[0] : r.class)?.subject ?? null;
+    const started = (r: (typeof rows)[number]) => !r.start_date || r.start_date.slice(0, 10) <= today;
+    const sliceRows = rows.filter((r) => pred(subjectOfRow(r)));
+    const hasRow = new Set(rows.map((r) => r.student_id));
+    const members = new Set(sliceRows.filter(started).map((r) => r.student_id));
+    const list = studentRows.filter((s) => members.has(s.id) || !hasRow.has(s.id));
+    const value = build(list, sliceRows.filter((r) => members.has(r.student_id)), null, rows.filter((r) => members.has(r.student_id)));
+    // 담당 묶음이 아닌 프로그램 칸은 비운다(영어 관리자 화면에 '수학 N'이 서지 않게 — 동시 수강 칸은 남는다).
+    const englishIn = subjects.some((s) => { const p = programOf({ subject: s.key }, subjects); return (p === "eie" || p === "injaewon") && pred(s.key); });
+    const mathIn = subjects.some((s) => programOf({ subject: s.key }, subjects) === "math" && pred(s.key));
+    const p = value.programs;
+    return {
+      ...value,
+      programs: { ...p, eie: englishIn ? p.eie : 0, injaewon: englishIn ? p.injaewon : 0, math: mathIn ? p.math : 0, both: englishIn || mathIn ? p.both : 0 },
+      concurrent: englishIn || mathIn ? value.concurrent : 0,
+    };
   };
 }
 
@@ -254,7 +285,9 @@ async function changes(
   today: string,
   scope: TeacherScope | null,
   withdrawalRows: Promise<WindowWithdrawal[]>,
-) {
+  /** 과목별 값을 만들 때만(과목 관리자·미리보기 원본) 등록 학생의 수강 과목을 함께 읽는다. */
+  withSubjects: boolean,
+): Promise<(pred: SlicePredicate | null) => MonthChange[]> {
   const db = await createClient();
   const fromDate = `${monthKeys(today)[0]}-01`;
   const [enrolled, withdrawn] = await Promise.all([
@@ -271,16 +304,32 @@ async function changes(
   const ids = scope ? new Set(scope.studentIds) : null;
   // 🔴 이 조회는 **status를 보지 않는다**(퇴원했다 복구된 학생의 그 달 등록을 살리려고) — 그래서 중복 병합된
   //    학생도 그대로 등록으로 세고 있었다(원장 2026-09-13). 퇴원 칸은 `withdrawalRows`가 이미 걸러 온다.
-  return monthlyChanges(
-    today,
-    enrolled
-      .filter((r) => (!ids || ids.has(r.id)) && !isMergedStudent(r.notes))
-      .map((r) => r.enrolled_at),
-    withdrawn.map((r) => r.withdrawnAt),
-  );
+  const joined = enrolled.filter((r) => (!ids || ids.has(r.id)) && !isMergedStudent(r.notes));
+  // 과목 관리자(원장 2026-10-14 2단계) — 등록은 그 학생이 들은(듣는) 반의 과목, 퇴원은 퇴원 무렵 끝난 과목(없으면 마지막 반).
+  // 수강 기록이 없는 등록 학생(반 배정 전)은 '모름'이라 모든 과목 관리자에게 든다 · 두 과목이면 양쪽 모두.
+  const subjectsOf = new Map<string, string[]>();
+  if (withSubjects && joined.length) {
+    const rows = await fetchAllPagedInChunks<{ student_id: string; class: { subject: string | null } | { subject: string | null }[] | null }>(
+      joined.map((r) => r.id),
+      (chunk, from, to) =>
+        db.from("enrollments").select("student_id, class:class_id ( subject )").in("student_id", chunk).order("id").range(from, to),
+    );
+    for (const r of rows) {
+      const subject = (Array.isArray(r.class) ? r.class[0] : r.class)?.subject;
+      if (subject) subjectsOf.set(r.student_id, [...(subjectsOf.get(r.student_id) ?? []), subject]);
+    }
+  }
+  const exitSubjects = (r: WindowWithdrawal) =>
+    r.exitClasses.length ? r.exitClasses.map((c) => c.subject) : r.lastClassSubject ? [r.lastClassSubject] : [];
+  return (pred) =>
+    monthlyChanges(
+      today,
+      joined.filter((r) => !pred || inSliceAny(pred, subjectsOf.get(r.id) ?? [])).map((r) => r.enrolled_at),
+      withdrawn.filter((r) => !pred || inSliceAny(pred, exitSubjects(r))).map((r) => r.withdrawnAt),
+    );
 }
 
-async function attendanceHistory(today: string) {
+async function attendanceHistory(today: string, withSubjects: boolean) {
   const db = await createClient();
   const rows = await fetchAllPaged<
     EffectiveAttendanceRecord & { status: string }
@@ -300,7 +349,24 @@ async function attendanceHistory(today: string) {
   // ⚠️ 도넛은 **찍힌 기록 전건**(명단·반 필터 없음 — 자리 칸·테스트 학생 기록 포함)이라 같은 카드의
   //    '예정학생 미처리·입력 중 N반'(`getDailyProcessingStatus` = 예정 명단 기준, 테스트 학생 제외 — 2026-09-14)과
   //    기준이 다르다. 기록은 사실이라 여기선 거르지 않는다(원장 요청 범위 = 오늘 출결·처리현황).
-  return attendanceOverview(effectiveAttendanceRecords(rows), today);
+  const cells = effectiveAttendanceRecords(rows);
+  // 과목 관리자(원장 2026-10-14 2단계) — 출결 칸의 반 과목으로 가른다. 반 과목은 과목 값이 필요할 때만 읽는다(B3 청크).
+  const subjectOf = new Map<string, string | null>();
+  if (withSubjects) {
+    const ids = [...new Set(cells.map((c) => c.class_id).filter(Boolean))];
+    const classes = await fetchInChunks<{ id: string; subject: string | null }>(ids, (chunk) => db.from("classes").select("id,subject").in("id", chunk));
+    for (const c of classes) subjectOf.set(c.id, c.subject);
+  }
+  // '출결 현황'·'출석률 추이' 두 영역이 같은 집계를 쓴다 — 묶음(`groups`)마다 한 번만 계산한다(학원 전체 = 빈 키).
+  const memo = new Map<string, ReturnType<typeof attendanceOverview>>();
+  return (pred: SlicePredicate | null, groups?: readonly string[]) => {
+    const key = pred ? (groups ? sliceKey(groups) : null) : "";
+    const hit = key === null ? undefined : memo.get(key);
+    if (hit) return hit;
+    const value = attendanceOverview(pred ? cells.filter((c) => pred(subjectOf.get(c.class_id) ?? null)) : cells, today);
+    if (key !== null) memo.set(key, value);
+    return value;
+  };
 }
 
 type InvoiceTrendRow = {
@@ -355,12 +421,12 @@ const loadPastInvoiceMonths = (tenantId: string, months: string[]) =>
     { tags: [`dashboard-invoice-trend:${tenantId}`], revalidate: 300 },
   )();
 
-async function billing(today: string, tenantId: string) {
+async function billing(today: string, tenantId: string, withSubjects: boolean): Promise<(pred: SlicePredicate | null) => SubjectBillingSummary[]> {
   const db = await createClient();
   // 최근 6개월(원장 2026-09-13 "청구 6개월로 바꾸자. 다시 돌려" — 12개월로 넓혔더니 청구서가 2026-01부터라 앞 석 달이 빈 칸이었다).
   const months = monthKeys(today);
   const current = months[months.length - 1];
-  const [past, currentRows] = await Promise.all([
+  const [past, currentRows, classified] = await Promise.all([
     loadPastInvoiceMonths(tenantId, months.slice(0, -1)),
     fetchAllPaged<InvoiceTrendRow>((from, to) =>
       db
@@ -371,26 +437,77 @@ async function billing(today: string, tenantId: string) {
         .order("id")
         .range(from, to),
     ),
+    // 과목 관리자 값(원장 2026-10-14 2단계 — 청구 항목별)은 그 값이 필요할 때만 줄 항목·수강을 읽는다.
+    withSubjects
+      ? Promise.all([loadPastClassifiedInvoices(tenantId, months.slice(0, -1)), classifiedInvoices(db, [current])]).then(([a, b]) => [...a, ...b])
+      : Promise.resolve([] as ClassifiedInvoice[]),
   ]);
-  return [...past, ...summarizeInvoiceMonths(currentRows, [current])];
+  const academy = [...past, ...summarizeInvoiceMonths(currentRows, [current])];
+  return (pred) => (pred ? summarizeSubjectBilling(classified, months, (subject) => pred(subject)) : academy);
 }
 
-async function newcomers(settingsPromise: Promise<Settings>): Promise<CareSummary> {
+type Db = Awaited<ReturnType<typeof createClient>> | ReturnType<typeof createAdminClient>;
+
+/**
+ * 그 달들의 청구서 줄마다 과목을 정한다(`billing-subject.ts`). 학생의 반 = 그 달에 수강이 걸린 반(종료된 수강 포함 — 지난 달 청구서).
+ * 청구서는 달마다 수백 장이라 페이지로(B2), 수강은 학생 id 청크 × 페이지로(B3 · 청크 안 1,000행 절단 방지).
+ * `tenantId`는 admin(캐시 안) 경로에서만 — RLS를 우회하므로 지점 필터가 필수다([[#104]]).
+ */
+async function classifiedInvoices(client: Db, months: string[], tenantId?: string): Promise<ClassifiedInvoice[]> {
+  if (!months.length) return [];
+  type Inv = InvoiceForSubject & { student_id: string | null };
+  const invoices = await fetchAllPaged<Inv>((from, to) => {
+    let q = client.from("invoices").select("student_id,period,status,amount_total,amount_paid,amount_discount,line_items").in("period", months).neq("status", "void");
+    if (tenantId) q = q.eq("tenant_id", tenantId);
+    return q.order("id").range(from, to);
+  });
+  type One<T> = T | T[] | null;
+  const studentIds = [...new Set(invoices.map((i) => i.student_id).filter((id): id is string => !!id))];
+  const enrollments = await fetchAllPagedInChunks<{ student_id: string; class_id: string; start_date: string | null; end_date: string | null; class: One<{ class_name: string | null; subject: string | null }> }>(
+    studentIds,
+    (chunk, from, to) => {
+      let q = client.from("enrollments").select("student_id,class_id,start_date,end_date,class:class_id ( class_name, subject )").in("student_id", chunk);
+      if (tenantId) q = q.eq("tenant_id", tenantId);
+      return q.order("id").range(from, to);
+    },
+  );
+  const byStudent = new Map<string, typeof enrollments>();
+  for (const e of enrollments) byStudent.set(e.student_id, [...(byStudent.get(e.student_id) ?? []), e]);
+  return invoices.map((inv) => {
+    const classes = (inv.student_id ? byStudent.get(inv.student_id) ?? [] : [])
+      .filter((e) => enrollmentInMonth({ start: e.start_date, end: e.end_date }, inv.period))
+      .map((e) => {
+        const klass = Array.isArray(e.class) ? e.class[0] : e.class;
+        return { classId: e.class_id, className: klass?.class_name ?? null, subject: klass?.subject ?? null };
+      });
+    return classifyInvoice(inv, classes);
+  });
+}
+
+/** 지난 달들의 과목 판정 결과 — 지난 달 요약(`loadPastInvoiceMonths`)과 같은 5분 캐시(지점·달 키, admin + 지점 필터). */
+const loadPastClassifiedInvoices = (tenantId: string, months: string[]) =>
+  unstable_cache(
+    () => classifiedInvoices(createAdminClient(), months, tenantId),
+    ["dashboard-invoice-subjects-v1", tenantId, months.join(",")],
+    { tags: [`dashboard-invoice-trend:${tenantId}`], revalidate: 300 },
+  )();
+
+async function newcomers(settingsPromise: Promise<Settings>): Promise<(pred: SlicePredicate | null) => CareSummary> {
   const [view, settings] = await Promise.all([getNewcomers(), settingsPromise]);
   // The source page remains usable when the check table is unavailable. Do not manufacture overdue counts.
   const available = view.checksAvailable && !view.checksError;
-  return {
-    total: view.rows.length,
-    stages: newcomerStages(view.rows, settings.operations.subjects),
+  const build = (rows: typeof view.rows, careRows: typeof view.rows): CareSummary => ({
+    total: rows.length,
+    stages: newcomerStages(rows, settings.operations.subjects),
     checksAvailable: available,
     items: available
       ? ONBOARDING_ITEMS.map((item) => {
-          const statuses = view.rows.map((r) =>
+          const statuses = careRows.map((r) =>
             careStatus(item, r, view.today),
           );
           return {
             label: item.shortLabel,
-            needs: view.rows
+            needs: careRows
               .filter(
                 (_, i) => statuses[i] === "due" || statuses[i] === "overdue",
               )
@@ -405,6 +522,18 @@ async function newcomers(settingsPromise: Promise<Settings>): Promise<CareSummar
           };
         })
       : [],
+  });
+  return (pred) => {
+    if (!pred) return build(view.rows, view.rows);
+    // 과목 관리자(원장 2026-10-14 2단계) — 그 과목 줄이 있거나 아직 과목이 없는(반 배정 전) 신규생. 체크 판정은 그 과목 줄로만
+    // 하고(다른 과목 콜이 늦어도 이 관리자의 '지연'이 아니다), 단계별 막대의 영어·수학·동시 색은 학생 전체 과목 그대로 둔다.
+    const parts = (r: (typeof view.rows)[number]) => r.subjects ?? [r];
+    const mine = view.rows.filter((r) => parts(r).every((p) => !p.subject) || parts(r).some((p) => !!p.subject && pred(p.subject)));
+    const careRows = mine.map((r) => {
+      const own = (r.subjects ?? []).filter((p) => !p.subject || pred(p.subject));
+      return own.length ? { ...r, subjects: own } : r;
+    });
+    return build(mine, careRows);
   };
 }
 
@@ -413,7 +542,7 @@ async function newcomers(settingsPromise: Promise<Settings>): Promise<CareSummar
  * 구분 · 과목 없는 강사는 진한 회색 · 관리자도 마찬가지"*). 판정·라벨은 순수 함수(staff-subjects.ts)이고 과목 묶음은
  * 학년별 재원생 막대와 같은 `subjectGroupOf`라 학원설정 과목을 읽는다(하드코딩 금지).
  */
-async function staff(settingsPromise: Promise<Settings>) {
+async function staff(settingsPromise: Promise<Settings>): Promise<(pred: SlicePredicate | null) => OverviewData["staff"]> {
   const db = await createClient();
   const [rows, settings] = await Promise.all([
     fetchAllPaged<{ id: string; system_role: string; subjects: string[] | null }>(
@@ -428,10 +557,10 @@ async function staff(settingsPromise: Promise<Settings>) {
     ),
     settingsPromise,
   ]);
-  return staffComposition(
-    rows.map((r) => ({ role: staffDisplayRole(r, isChinsanTenant(settings)), subjects: r.subjects })),
-    settings.operations.subjects,
-  );
+  const people = rows.map((r) => ({ role: staffDisplayRole(r, isChinsanTenant(settings)), subjects: r.subjects }));
+  // 과목 관리자(원장 2026-10-14 2단계) — 그 과목을 맡은 직원 + 담당 과목이 없는 공용 직원(데스크 등 — '모름'은 모두에게).
+  return (pred) =>
+    staffComposition(pred ? people.filter((p) => inSliceAny(pred, p.subjects ?? [])) : people, settings.operations.subjects);
 }
 
 async function operations(
@@ -580,6 +709,22 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
     view.activeSubject = subjectView.active?.key;
     view.subjectChoices = subjectView.choices;
   }
+  const programSubjects = programSubjectsOf(subjectLabels);
+  const groupOf = (key: string | null | undefined) => subjectGroupOf(key, programSubjects);
+  // 과목 값 판정의 과목 목록 = **학원 설정의 과목만**(재리뷰 2026-10-14) — `subjectLabelRecord`의 옛 표시용 라벨(예술·사회·기타)을
+  // 섞으면 자유 입력 '기타'가 설정에 있는 과목이 되어 아무 과목 관리자에게도 안 보이고, 미리보기 묶음도 쓸데없이 는다.
+  const sliceSubjects = settingsNow.operations.subjects.map((s) => ({ key: s.key, label: s.label }));
+  const groups = [...new Set(viewingSubjects.map(groupOf).filter((g): g is string => g !== null))];
+  // 과목별 값(원장 2026-10-14 2단계, `slices.ts`)을 만들 묶음 — 과목 관리자는 담당 묶음 하나(여럿이면 합집합 한 벌),
+  // 미리보기 원본(full)은 묶음마다 한 벌(편집기가 과목을 골라 본다). 그 밖의 역할은 만들지 않는다(계산 0).
+  const sliceSets: string[][] = options.full
+    ? [...new Set(sliceSubjects.map((s) => groupOf(s.key)).filter((g): g is string => g !== null))].map((g) => [g])
+    : view.subjectScoped && groups.length ? [groups] : [];
+  const slices: SliceTable = {};
+  // 과목별 값의 묶음 판정 — 설정에 없는 과목·빈 과목은 '모름'(모든 과목 관리자에게 든다, 원장 2026-10-14).
+  // 콜&상담 과목 칸은 자유 입력이라 한 칸에서 묶음을 여럿 읽는다('EiE' → 영어 · '영어 수학' → 둘 다, `sliceGroupsOf`).
+  const sliceGroups = sliceGroupsOf(sliceSubjects, groupOf);
+  const sliceGroup = sliceGroupOf(sliceSubjects, groupOf);
   // 조회 계획 = 놓인 카드가 읽는 영역 ∩ 메뉴 권한(`loadPlan`, 순수 — 테스트가 역할별로 잠근다).
   const needed = loadPlan(view, new Set(allowed));
   if (options.full) for (const area of Object.keys(AREA_MENUS) as Area[]) {
@@ -600,7 +745,7 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
   // 공유 약속이 영역보다 먼저 거절돼도 '처리 안 된 거절'로 새지 않게 — 각 영역은 자기 try/catch에서 다시 받는다.
   for (const shared of [teacherIdPromise, scopePromise, withdrawalRows, consultationRows]) void shared?.catch(() => undefined);
   const history = allowed.includes("attendance") && needs("attendance", "attendanceTrend")
-    ? attendanceHistory(today)
+    ? attendanceHistory(today, sliceSets.length > 0)
     : null;
   // 🔴 **예산은 여기서부터** 잰다 — `requestedAt`(함수 진입)으로 재면 인증·권한 조회가 느린 날 남은 예산이
   //    0이 되어 **카드 25개가 통째로** 빈다(적대 리뷰 2026-09-16). `requestedAt`은 스냅샷 순서를 가리는 값이라
@@ -632,94 +777,181 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
       })(),
     );
   }
-  add("students", ["students"], async () => students(await scopePromise, settingsPromise));
-  add("changes", ["students"], async () => changes(today, await scopePromise, withdrawalRows));
-  add("enrolledTrend", ["students"], async () => ((await scopePromise) ? null : loadEnrolledTrend(user.tenantId, today)));
+  /**
+   * 과목으로 다시 집계하는 영역 — 조회는 **한 번**(`load`), 받은 행으로 학원 전체 값(`compute(null)`)과 묶음마다 과목별 값
+   * (`compute(판정)`)을 같은 함수로 만든다. 과목 관리자 화면은 `shapeSections`가 과목별 값으로 갈아 끼운다.
+   */
+  function addSliced<K extends Area>(
+    area: K,
+    menus: MenuKey[],
+    /** `groups` = 그 값의 묶음(건수만 세는 영역은 묶음마다 미리 센 값을 고른다 — 행이 없어 판정 함수로 못 거른다). */
+    load: () => Promise<(pred: SlicePredicate | null, groups?: readonly string[]) => OverviewData[K]>,
+  ) {
+    add(area, menus, async () => {
+      const compute = await load();
+      if (sliceSets.length) {
+        Object.assign(slices, { [area]: Object.fromEntries(sliceSets.map((gs) => [sliceKey(gs), compute(slicePredicate(gs, sliceGroups), gs)])) });
+      }
+      return compute(null);
+    });
+  }
+  addSliced("students", ["students"], async () => students(await scopePromise, settingsPromise));
+  addSliced("changes", ["students"], async () => changes(today, await scopePromise, withdrawalRows, sliceSets.length > 0));
+  // 과목 관리자 = 그 과목 반 수강이 그날 걸려 있던 재원생(원장 2026-10-14 *"재원생 추이도 마찬가지"*). 원본은 과목 값이 필요할 때만 받는다.
+  addSliced("enrolledTrend", ["students"], async () => {
+    if (await scopePromise) return () => null;
+    const [academy, slicer] = await Promise.all([
+      loadEnrolledTrend(user.tenantId, today),
+      sliceSets.length ? loadEnrolledTrendSlicer(user.tenantId, today) : Promise.resolve(null),
+    ]);
+    return (pred) => (pred && slicer ? slicer(pred) : academy);
+  });
   // ── KPI 여섯 칸(원장 2026-09-11) — 카드·팝업·목적지 화면이 같은 함수를 부른다.
   add("withdrawals", ["withdrawals"], () => monthWithdrawals(withdrawalRows, today, settingsPromise));
-  add("intake", ["enrollment"], async () =>
-    (await getIntakeOnDay(today)).map((row) => ({
+  // 과목 관리자 = 상담 과목이 담당 과목이거나 과목을 안 고른 상담(원장 2026-10-14 — 모르는 것은 모두에게).
+  addSliced("intake", ["enrollment"], async () => {
+    const rows = await getIntakeOnDay(today);
+    return (pred) => rows.filter((row) => !pred || pred(row.subject)).map((row) => ({
       id: row.id,
       name: row.name,
       time: kstTimeOf(row.createdAt),
-    })),
-  );
+    }));
+  });
   // '금일 등록'(원장 2026-09-23) — 오늘 콜&상담 '등록 완료'로 옮긴 상담. 카드·팝업이 같은 배열.
-  add("enrolledToday", ["enrollment"], () => getEnrolledToday(today));
+  addSliced("enrolledToday", ["enrollment"], async () => {
+    const rows = await getEnrolledToday(today);
+    return (pred) => (pred ? rows.filter((row) => pred(row.subject)) : rows);
+  });
   add("firstClass", ["students"], async () => firstClasses(today, await scopePromise, settingsPromise));
   // '보강예정'(원장 2026-09-14) — **오늘부터 한 달**(원장 2026-09-16) 보강 예약 + 지난 미이행. 창은 `monthAheadWindow` 한 함수
   // (아래 '레벨테스트 및 첫수업 일정'과 같은 끝 날짜) · 반 집합·기간 조회는 시간표 '보강' 탭과 같은 두 함수.
-  add("makeup", ["attendance"], async () => getUpcomingMakeupOverview(today, await teacherIdPromise));
+  // 과목 관리자 = 보강 반의 과목으로(창 뒤 예약 수도 그 과목 반만 더한다).
+  addSliced("makeup", ["attendance"], async () => {
+    const { overview, subjectOf, laterByClass } = await loadUpcomingMakeup(today, await teacherIdPromise, sliceSets.length > 0);
+    return (pred) => {
+      if (!pred) return overview;
+      const mine = (classId: string) => pred(subjectOf.get(classId));
+      const later = [...laterByClass].reduce((sum, [classId, n]) => sum + (mine(classId) ? n : 0), 0);
+      return { ...overview, rows: overview.rows.filter((row) => mine(row.classId)), later };
+    };
+  });
   // 출석부 `?status=absent`와 같은 함수·같은 강사 스코프(teacher-axis) — 겸직 강사뷰면 그 강사가 가르치는 반만.
   // 조회한 날을 `date`로 함께 실어 보낸다 — 카드·팝업·↗가 그 값을 읽어 셋이 같은 날을 말한다.
   add("absent", ["attendance"], async () => ({
     date: absentDate,
     ...(await getScopedAbsentStudents(absentDate, await teacherIdPromise)),
   }));
-  add("attendance", ["attendance"], async () => (await history)!.snapshot);
-  add("processing", ["attendance"], () => getDailyProcessingStatus(today));
+  // 과목 관리자 = 그 과목 반의 출결 칸 · 그 과목 반의 처리 현황(원장 2026-10-14 2단계).
+  addSliced("attendance", ["attendance"], async () => {
+    const overview = (await history)!;
+    return (pred, gs) => overview(pred, gs).snapshot;
+  });
+  addSliced("processing", ["attendance"], async () => {
+    const rows = await getDailyProcessingStatus(today);
+    return (pred) => (pred ? rows.filter((row) => pred(row.subject)) : rows);
+  });
   // 휴원일(학원설정 휴일 목록)이면 위 처리 현황은 빈 목록이다 — 그날 **실제로 입력된 것**만 따로 센다(분모·완료율 없음).
   // 오늘 출결 휴원일 화면·출석부 요약과 같은 조회라 세 화면이 같은 "입력 N명 · M반"을 말한다(강사뷰면 그 강사 반만).
   // 평일은 null(조회 없음). 입력 현황 조회가 실패하면 휴일 이름은 살리고 숫자만 비운다(0명으로 접지 않는다).
-  add("holidayAttendance", ["attendance"], async () => {
+  addSliced("holidayAttendance", ["attendance"], async () => {
     const name = await holidayNameOrNull(today);
-    if (!name) return null;
-    const counts = await getHolidayDayActivity(today)
-      .then(holidayActivityCounts)
-      .catch((error: unknown) => {
-        reportError(error, { scope: "dashboard.holiday-attendance", date: today });
-        return null;
-      });
-    return { name, counts };
+    if (!name) return () => null;
+    const activity = await getHolidayDayActivity(today).catch((error: unknown) => {
+      reportError(error, { scope: "dashboard.holiday-attendance", date: today });
+      return null;
+    });
+    // 과목 관리자 = 그 과목 반에 입력된 것만(학생 수는 겹침 없이 다시 센다).
+    return (pred) => {
+      if (!activity) return { name, counts: null };
+      if (!pred) return { name, counts: holidayActivityCounts(activity) };
+      const rows = activity.rows.filter((r) => pred(r.subject));
+      return {
+        name,
+        counts: {
+          students: new Set(rows.flatMap((r) => r.students.map((st) => st.studentId))).size,
+          classes: rows.filter((r) => r.students.length > 0).length,
+          reservations: rows.reduce((sum, r) => sum + r.reservations.length, 0),
+        },
+      };
+    };
   });
-  add("attendanceTrend", ["attendance"], async () => (await history)!.trend);
-  add("billing", ["billing"], () => billing(today, user.tenantId));
+  addSliced("attendanceTrend", ["attendance"], async () => {
+    const overview = (await history)!;
+    return (pred, gs) => overview(pred, gs).trend;
+  });
+  addSliced("billing", ["billing"], () => billing(today, user.tenantId, sliceSets.length > 0));
   add("expenses", ["billing"], async () =>
     summarizeExpenses(
       await getExpensesForMonth(today.slice(0, 7)),
       today.slice(0, 7),
     ),
   );
-  add("absences", ["attendance"], async () => {
+  addSliced("absences", ["attendance"], async () => {
     const db = { supabase: await createClient(), tenantId: user.tenantId };
     const [rows, anchor] = await Promise.all([
       getAbsenceRiskStudents(),
       getAbsenceRiskAnchor(db),
     ]);
-    if (!anchor) return { anchor: null, rows: [] };
+    if (!anchor) return () => ({ anchor: null, rows: [] });
     const breakdown = await getAbsenceBreakdown(
       db,
       rows.map((r) => r.studentId),
       anchor,
     );
-    return {
+    const all = rows
+      .map((r) => ({
+        ...r,
+        unexplained: unexplainedAbsences(
+          r.absences,
+          breakdown.reasons.get(r.studentId),
+        ),
+      }))
+      .filter((r) => r.unexplained >= 3);
+    // 과목 관리자(원장 2026-10-14 2단계) — 그 과목 반의 결석이 하나라도 있는 학생(반 과목을 모르는 결석은 모두에게).
+    // ⚠️ 숫자(결석·사유 없는 결석)는 학생 전체 그대로다 — 반복 결석은 과목을 가리지 않고 챙길 신호라 줄이지 않는다.
+    return (pred) => ({
       anchor,
-      rows: rows
-        .map((r) => ({
-          ...r,
-          unexplained: unexplainedAbsences(
-            r.absences,
-            breakdown.reasons.get(r.studentId),
-          ),
-        }))
-        .filter((r) => r.unexplained >= 3),
-    };
+      rows: pred ? all.filter((r) => (breakdown.subjects.get(r.studentId) ?? []).some((e) => e.count > 0 && pred(e.subject || null))) : all,
+    });
   });
-  add("admissions", ["enrollment"], () =>
-    getRecentEnrollmentStats(today),
-  );
-  add("consultations", ["consultations"], getStudentConsultationCounts);
-  add("newcomers", ["newcomers"], () => newcomers(settingsPromise));
-  add("homework", ["lesson_reports"], getHomeworkRisk);
+  // 과목 관리자 = 상담 과목이 담당 과목이거나 과목을 안 고른 상담. 학원 전체 값은 종전 DB 함수 그대로(행은 과목 값이 필요할 때만 받는다).
+  addSliced("admissions", ["enrollment"], async () => {
+    const [stats, rows] = await Promise.all([
+      getRecentEnrollmentStats(today),
+      sliceSets.length ? getRecentConsultationRows(today) : Promise.resolve([]),
+    ]);
+    return (pred) => (pred ? summarizeRecentEnrollment(rows.filter((r) => pred(r.subject)), today) : stats);
+  });
+  // 과목 관리자 = 다른 과목(키·라벨)의 상담만 빼고 센다 — 과목이 비었거나 설정에 없는 과목은 '모름'이라 남는다.
+  // 건수 조회(head count)라 행이 없다 → 묶음마다 같은 조회를 과목 조건만 더해 한 벌씩 센다(B2 — 행을 받아 세지 않는다).
+  addSliced("consultations", ["consultations"], async () => {
+    const otherSubjects = (gs: readonly string[]) =>
+      sliceSubjects.filter((s) => { const g = sliceGroup(s.key); return g !== null && !gs.includes(g); }).flatMap((s) => [s.key, s.label]);
+    const [academy, ...perSlice] = await Promise.all([
+      getStudentConsultationCounts(),
+      ...sliceSets.map((gs) => getStudentConsultationCounts({ excludeSubjects: otherSubjects(gs) })),
+    ]);
+    const bySlice = new Map(sliceSets.map((gs, i) => [sliceKey(gs), perSlice[i]!]));
+    return (pred, gs) => (pred && gs ? bySlice.get(sliceKey(gs))! : academy);
+  });
+  addSliced("newcomers", ["newcomers"], () => newcomers(settingsPromise));
+  // 담당 과목 키 — 설정에 있는 과목 중 그 묶음의 것(보고서는 과목 키로 저장된다).
+  const sliceSubjectKeys = (gs: readonly string[]) => sliceSubjects.filter((s) => { const g = sliceGroup(s.key); return g !== null && gs.includes(g); }).map((s) => s.key);
+  addSliced("homework", ["lesson_reports"], async () => {
+    const view = await loadHomeworkRisk();
+    return (pred, gs) => view(pred && gs ? sliceSubjectKeys(gs) : null);
+  });
   add("teacherWork", ["lesson_reports"], async () => loadTeacherWork(user.tenantId, today, await scopePromise, settingsNow));
   // 학부모 미열람 = ClassNote 읽음 기록이 소스 — ClassNote 기능이 꺼진 학원엔 이 카드가 없다(2026-09-30 "꺼지면 흔적 없이").
   // 🔑 영역 등록을 설정 대기로 막지 않는다(뒤 영역들이 늦게 출발하지 않게) — 조회 안에서 판정하고,
   //    꺼졌으면 조회 없이 빈 값을 돌린 뒤 아래 반환 직전에 영역째 뺀다.
-  add("unread", ["lesson_reports"], async () =>
-    isModuleEnabled((await settingsPromise).modules.disabled, "classnote")
-      ? getUnreadReports()
-      : (null as unknown as OverviewData["unread"]),
-  );
+  addSliced("unread", ["lesson_reports"], async () => {
+    if (!isModuleEnabled((await settingsPromise).modules.disabled, "classnote")) return () => null as unknown as OverviewData["unread"];
+    // 건수 조회라 묶음마다 한 번 더 센다(행을 받지 않는다 — B2).
+    const [academy, ...perSlice] = await Promise.all([getUnreadReports(), ...sliceSets.map((gs) => getUnreadReports(sliceSubjectKeys(gs)))]);
+    const bySlice = new Map(sliceSets.map((gs, i) => [sliceKey(gs), perSlice[i]!]));
+    return (pred, gs) => (pred && gs ? bySlice.get(sliceKey(gs))! : academy);
+  });
   // 이어지는 교시(같은 반·강사·교실)는 한 줄로 — 원장 2026-09-13, 규칙은 continuous-classes.ts.
   add("schedule", ["timetable"], async () =>
     mergeContinuousClasses(
@@ -748,10 +980,10 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
       ),
     ),
   );
-  add("staff", ["staff"], () => staff(settingsPromise));
+  addSliced("staff", ["staff"], () => staff(settingsPromise));
   add("operations", [], () => operations(allowed, user.id));
   add("notices", [], () => getRecentAnnouncements(user.systemRole, 4));
-  add("calendar", ["calendar"], async () => {
+  addSliced("calendar", ["calendar"], async () => {
     // 창 = **오늘부터 한 달**(원장 2026-09-16 *"오늘 기준으로 1달 이내로"*, 그전엔 7일) — `monthAheadWindow` 한 함수를
     // 패널 머리·빈 문구(화면)와 '보강예정' 카드가 함께 쓴다. 일정 조회·첫 수업 연결 후보가 모두 이 `end`를 쓴다.
     const { end } = monthAheadWindow(today);
@@ -809,7 +1041,7 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
         families = null;
       }
     }
-    return upcoming.map((event) => {
+    const rows = upcoming.map((event) => {
       // 취소된 일정 = 목록에 취소선으로만(원장 2026-09-30). 반·콜&상담 링크·이름 바로잡기·단계 칩을 붙이지 않고
       // `kind`는 null(금일입테·열 건수에서 빠진다), 원래 종류는 `cancelledKind`로만 싣는다.
       if (isCancelledEventTitle(event.title)) {
@@ -853,10 +1085,24 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
         matchedConsultation,
       };
     });
+    // 일정의 과목(원장 2026-10-14 2단계) — 연결된 상담의 과목 · 연결된 반의 과목 · 제목·태그에 적힌 과목 이름. 하나도 없으면
+    // '모름'이라 모든 과목 관리자에게 보인다(입테 일정은 과목을 안 적는 일이 흔하다 — 숨기면 아무도 못 본다).
+    // 제목 속 과목 이름은 낱말로 선 것만 읽는다(`subjectsNamedIn` — 콜&상담과 같은 이름표라 'EiE'도 영어).
+    const classSubject = new Map([...candidates, ...classSlots].map((c) => [c.classId, c.subject]));
+    const consultSubject = new Map(consultations.map((c) => [c.id, c.subject]));
+    const subjectsOf = rows.map((row, i) => {
+      const named = subjectsNamedIn(`${upcoming[i]!.title} ${upcoming[i]!.tag?.name ?? ""}`, sliceSubjects, groupOf);
+      return [
+        ...(row.matchedConsultation ? [consultSubject.get(row.matchedConsultation.id) ?? null] : []),
+        ...(row.matchedClass ? [classSubject.get(row.matchedClass.id) ?? null] : []),
+        ...named,
+      ].filter((k): k is string => !!k);
+    });
+    return (pred) => (pred ? rows.filter((_, i) => inSliceAny(pred, subjectsOf[i]!)) : rows);
   });
   // '상담 진행'(원장 2026-09-22) — 콜&상담 단계별 인원 + 멈춘 상담 + 줄마다 단계 칩. 판정은 consultation-progress.ts 한 벌이고
   // 단계는 칸반과 같은 stageOfCard다. 입테는 캘린더를 읽을 수 있을 때만(못 읽으면 '모름' — 0으로 적지 않는다).
-  add("consultProgress", ["enrollment"], async () => {
+  addSliced("consultProgress", ["enrollment"], async () => {
     const { end } = monthAheadWindow(today);
     const [rows, calendar, progressSettings] = await Promise.all([
       consultationRows!,
@@ -870,7 +1116,9 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
       settingsPromise,
     ]);
     const notNames = Object.values(subjectLabelRecord(progressSettings.operations.subjects));
-    return consultProgress(rows, calendar?.ready ? calendar.events : null, notNames, consultationSince, today);
+    const { list, levelTestKnown } = await consultProgressList(rows, calendar?.ready ? calendar.events : null, notNames, consultationSince, today);
+    // 과목 관리자 = 상담 과목이 담당 과목이거나 과목을 안 고른 상담만 센다(단계별 인원·멈춘 상담·칩 모두 같은 줄).
+    return (pred) => consultProgressData(pred ? list.filter((p) => pred(p.subject)) : list, levelTestKnown, today);
   });
   add("englishSheet", ["ecs"], async () => {
     const result = await getSheetLanding(null);
@@ -909,10 +1157,9 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
   if (!isModuleEnabled(settings.modules.disabled, "classnote")) delete sections.unread; // ClassNote 꺼짐 = 카드 없음
   // 🔴 값 정리는 서버에서 — 금액·전화번호·담당 과목 밖 값은 직렬화되기 전에 여기서 비운다(브라우저가 가리는 게 아니다).
   //    `full`(설정 '대시보드 관리'의 미리보기 원본, 원장·총괄만)은 원장 시점 그대로 — 편집기가 역할마다 같은 함수를 다시 돌린다.
-  const programSubjects = programSubjectsOf(subjectLabelRecord(settings.operations.subjects));
-  const groupOf = (key: string | null | undefined) => subjectGroupOf(key, programSubjects);
-  const groups = [...new Set(viewingSubjects.map(groupOf).filter((g): g is string => g !== null))];
-  const shaped = options.full ? sections : shapeSections({ ...sections }, view, { groups, groupOf });
+  // 마감에 걸려 비운 영역의 과목별 값은 버린다 — 학원 전체 칸은 비었는데 과목별 값만 늦게 들어오면 그 값이 실린다.
+  for (const area of Object.keys(slices) as Area[]) if (sections[area]?.data == null) delete slices[area];
+  const shaped = options.full ? sections : shapeSections({ ...sections }, view, { groups, groupOf: sliceGroup, slices });
   return {
     scope: `${user.tenantId}:${user.id}:${user.systemRole}:${teacherId ?? "all"}:${view.rev}${options.full ? ":full" : ""}`,
     tenantId: user.tenantId,
@@ -923,6 +1170,8 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
     subjects: subjectLabelRecord(settings.operations.subjects),
     ...(isModuleEnabled(settings.modules.disabled, "eie") ? {} : { eie: false as const }),
     view,
+    // 과목별 값은 미리보기 원본에만 싣는다(편집기가 과목 관리자 배치를 그 과목 값으로 그린다) — 다른 화면엔 안 내려보낸다.
+    ...(options.full ? { slices: { ...slices }, sliceSubjectKeys: sliceSubjects.map((s) => s.key) } : {}),
     // 🔑 **복사해서** 돌려준다 — 마감 뒤 늦게 끝난 조회가 직렬화 도중 같은 객체를 고치면 한 렌더 안에서
     //    카드가 실패 → 성공으로 뒤집힌다(그 결과는 이미 화면에 못 실린다).
     sections: { ...shaped },

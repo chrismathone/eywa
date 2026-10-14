@@ -310,8 +310,8 @@ function kpiSnapshot(allowed = ALL_MENUS): OverviewSnapshot {
       // 금일 등록(원장 2026-09-23) — 오늘 콜&상담 '등록 완료'로 옮긴 상담 둘(반 배정 하나 · 배정 전 하나).
       enrolledToday: {
         data: [
-          { id: "r1", name: "등록가", schoolGrade: "침산중1", time: "15:10", assigned: true },
-          { id: "r2", name: "등록나", schoolGrade: null, time: "11:02", assigned: false },
+          { id: "r1", name: "등록가", schoolGrade: "침산중1", time: "15:10", assigned: true, subject: null },
+          { id: "r2", name: "등록나", schoolGrade: null, time: "11:02", assigned: false, subject: null },
         ],
         ...ok,
       },

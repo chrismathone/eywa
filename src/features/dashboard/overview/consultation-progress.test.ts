@@ -147,7 +147,7 @@ describe("배선 — 칩과 카드는 한 표를 읽는다", () => {
   const read = (p: string) => readFileSync(p, "utf8");
   it("서버: 일정 카드와 같은 상담 조회를 공유하고, 판정은 consultProgress 한 곳", () => {
     const server = read("src/features/dashboard/overview/server.ts");
-    expect(server).toContain('add("consultProgress", ["enrollment"]');
+    expect(server).toContain('addSliced("consultProgress", ["enrollment"]');
     expect(server).toContain("consultationRows!");
     expect(server.match(/admissionsConsultationCandidates\(consultationSince\)/g)?.length).toBe(1);
   });

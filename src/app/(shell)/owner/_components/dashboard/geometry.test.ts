@@ -71,8 +71,10 @@ describe("민감 6가지 꼬리표(기본 모두 가림)", () => {
   it("권한 없는 카드는 '권한 없어 안 보임', 과목 관리자의 학원 전체 카드는 '학원 전체'", () => {
     const noBilling = new Set<MenuKey>(MENU_KEYS.filter((m) => m !== "billing"));
     expect(badgesFor({ id: "panel:billing6", w: 12, h: 1 }, "desk", noBilling)[0]?.text).toBe("권한 없어 안 보임");
-    expect(badgesFor({ id: "panel:attendance", w: 6, h: 1 }, "subject", ALL).map((b) => b.text)).toContain("학원 전체 값");
-    expect(scopeLine("panel:attendance", "subject")).toContain("학원 전체 값으로 보입니다");
+    expect(badgesFor({ id: "panel:expenses", w: 6, h: 1 }, "subject", ALL).map((b) => b.text)).toContain("학원 전체 값");
+    expect(scopeLine("panel:expenses", "subject")).toContain("학원 전체 값으로 보입니다");
+    // 2단계(원장 2026-10-14) — 출결은 담당 과목으로 다시 센다.
+    expect(scopeLine("panel:attendance", "subject")).toContain("담당 과목");
     expect(scopeLine("panel:subjects", "subject")).toContain("담당 과목");
     expect(scopeLine("panel:subjects", "desk")).toBeNull();
   });

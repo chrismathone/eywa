@@ -461,6 +461,34 @@ export function Overview({
                 danger={bill.unpaidCount + bill.partialCount > 0}
               />
             )}
+            {/* 과목 관리자 화면(원장 2026-10-14 2단계 — 청구 항목별) — 반 이름으로 과목을 못 가른 청구 항목은 어느 과목에도 안 넣고
+                따로 적는다(모든 과목 관리자에게 같은 값). 학원 전체 화면엔 이 칸이 없다(`unclassified` 없음).
+                옆 칸과 같은 뜻으로 — 금액이 보이면 과목 모름 줄에 남은 **미수**, 가렸으면 그런 청구서 **건수**(재리뷰 2026-10-14:
+                과목 모름 줄에만 미수가 남은 청구서가 어느 과목 화면에도 안 보였다). 청구 총액·항목 수는 툴팁으로. */}
+            {bill.unclassified && bill.unclassified.lines > 0 ? (
+              billingAmounts ? (
+                <InlineStat
+                  label="과목 모름 미수"
+                  value={
+                    <span title={`과목을 가리지 못한 청구 항목 ${number(bill.unclassified.lines)}개 · 청구 ${number(bill.unclassified.billed)}원 · 미수가 남은 청구서 ${number(bill.unclassified.count)}건`}>
+                      {bill.unclassified.outstanding < 10_000 ? `${number(bill.unclassified.outstanding)}원` : money(bill.unclassified.outstanding)}
+                    </span>
+                  }
+                  danger={bill.unclassified.outstanding > 0}
+                />
+              ) : (
+                <InlineStat
+                  label="과목 모름 미납·부분납"
+                  value={
+                    <span title={`과목을 가리지 못한 청구 항목 ${number(bill.unclassified.lines)}개`}>
+                      {number(bill.unclassified.count)}
+                      <small>건</small>
+                    </span>
+                  }
+                  danger={bill.unclassified.count > 0}
+                />
+              )
+            ) : null}
           </div>
         </>
       )}

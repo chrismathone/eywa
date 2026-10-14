@@ -73,13 +73,25 @@ describe("과목 관리자 — 담당 과목으로 좁히기(서버)", () => {
     expect(rows[1]?.statuses).toEqual(["excused"]); // 상태가 하나면 모든 칸이 그 상태 — 그대로
   });
 
-  it("퇴원 명단은 마지막 수강 프로그램으로 가르고, 강사 시트는 담당 과목 것만", () => {
-    expect(math.withdrawals?.data?.rows.map((r) => r.id)).toEqual(["w1"]);
+  it("퇴원 명단은 마지막 수강 프로그램으로 가르고(둘 다 모르면 모두에게), 강사 시트는 담당 과목 것만", () => {
+    expect(math.withdrawals?.data?.rows.map((r) => r.id)).toEqual(["w1", "w3"]);
     expect(math.mathSheet).toBeDefined();
     expect(math.englishSheet).toBeUndefined();
     const korean = narrowBySubject(sections, ["korean"], groupOf, false);
-    expect(korean.withdrawals?.data?.rows).toEqual([]);
+    expect(korean.withdrawals?.data?.rows.map((r) => r.id)).toEqual(["w3"]);
     expect(korean.mathSheet).toBeUndefined();
+  });
+
+  it("과목을 모르는 결석·첫수업 학생은 모든 과목 관리자에게(원장 2026-10-14 결정 1)", () => {
+    const unknown = { ...sections,
+      absent: ok({ date: "2026-09-30", absent: [{ studentId: "u", name: "모", subject: null, classes: [], preNotified: false, statuses: ["absent"] }], partial: [] }),
+      firstClass: ok([{ studentId: "u", name: "모", kind: "first", subjects: [null] }]),
+    } as unknown as Sections;
+    for (const g of [["math"], ["english"]]) {
+      const out = narrowBySubject(unknown, g, groupOf, false);
+      expect(out.absent?.data?.absent.map((r) => r.studentId)).toEqual(["u"]);
+      expect(out.firstClass?.data?.map((r) => r.studentId)).toEqual(["u"]);
+    }
   });
 
   it("담당 과목을 못 정했으면(빈 묶음) 아무것도 통과시키지 않는다", () => {
