@@ -13,7 +13,7 @@ export const PENDING_NOTE: Record<PendingMetricId, string> = {
   punctuality: "메이크에듀 출퇴근 기록의 지각·결근 횟수(연차 제외)로 매깁니다. 연동 앱이 출퇴근을 가져오는 4단계에서 들어옵니다.",
 };
 
-export const PENDING_IDS = Object.keys(PENDING_NOTE) as PendingMetricId[];
+export const PENDING_IDS = (Object.keys(PENDING_NOTE) as PendingMetricId[]).filter(id => id !== "churn");
 
 /** 원생 소개(옛 '과목 소개' 자리) — 소개한 사람을 적는 칸(3단계)이 들어오기 전이라 인정된 소개는 0건이다(자료 없음이 아니라 0건). */
 export function referralItem(): ExpansionMetric {

@@ -6,15 +6,16 @@ import { subscribeRecordSaved } from "@/lib/realtime/record-channel";
 import { configuredHubGroups, HUB_GROUPS, SUPPORT_GROUPS, hubDestinationForPath, type HubGroup } from "@/lib/menu-hub";
 import { applyMenuPresentation, type MenuLayout, type MenuGroupLayout } from "./menu-layout";
 import type { Win } from "@/components/workspace/window-store";
+import type { MenuKey } from "@/lib/permissions";
 
 const ADMIN_SOURCE = [...HUB_GROUPS, ...SUPPORT_GROUPS];
-type NavigationContextValue = { menus: MenuLayout; groups: MenuGroupLayout; source: readonly HubGroup[]; tenantId?: string };
+type NavigationContextValue = { menus: MenuLayout; groups: MenuGroupLayout; source: readonly HubGroup[]; tenantId?: string; laboratoryMenus?: readonly MenuKey[] };
 const EMPTY: NavigationContextValue = { menus: [], groups: [], source: ADMIN_SOURCE };
 const NavigationContext = createContext<NavigationContextValue>(EMPTY);
 
-export function NavigationProvider({ menus, groups = EMPTY.groups, source = ADMIN_SOURCE, tenantId, children }: Omit<NavigationContextValue, "groups" | "source"> & { groups?: MenuGroupLayout; source?: readonly HubGroup[]; children: ReactNode }) {
+export function NavigationProvider({ menus, groups = EMPTY.groups, source = ADMIN_SOURCE, tenantId, laboratoryMenus, children }: Omit<NavigationContextValue, "groups" | "source"> & { groups?: MenuGroupLayout; source?: readonly HubGroup[]; children: ReactNode }) {
   const router = useRouter();
-  const value = useMemo(() => ({ menus, groups, source, tenantId }), [menus, groups, source, tenantId]);
+  const value = useMemo(() => ({ menus, groups, source, tenantId, laboratoryMenus }), [menus, groups, source, tenantId, laboratoryMenus]);
   // iframe 액션의 캐시 무효화는 부모 문서를 다시 렌더하지 않는다. 저장 확정 신호만 받고 서버값을 다시 읽는다.
   useEffect(() => tenantId ? subscribeRecordSaved((message) => {
     if (message.scope === `navigation:${tenantId}`) router.refresh();

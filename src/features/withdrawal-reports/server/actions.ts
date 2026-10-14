@@ -6,8 +6,9 @@ import { logAction } from "@/features/audit/server/log";
 import { pokeSlack } from "@/features/slack/server/poke";
 import { describeDbError } from "@/lib/supabase/db-error";
 import { recordMathWithdrawalToSheet } from "@/features/withdrawals/server/withdrawal-sheet";
-import { bodySchema, requestSchema, submissionError, missingReportSchema, REPORT_ACTION_LABEL, type ReportAction, type WithdrawalReport } from "../model";
+import { bodySchema, batchRequestSchema, submissionError, missingReportSchema, REPORT_ACTION_LABEL, type ReportAction, type WithdrawalReport } from "../model";
 import { reportViewer, getReport } from "./queries";
+import { completedEnrollmentIds } from "./completed-target";
 
 export type ReportResult = { ok: true; id: string } | { error: string };
 function refresh() {
@@ -18,20 +19,22 @@ async function finish(r: WithdrawalReport, action: keyof typeof REPORT_ACTION_LA
     targetLabel: r.snapshot.name, metadata: { reportId: r.id, operation: REPORT_ACTION_LABEL[action], date: r.effective_date } });
   if (action !== "save") pokeSlack(r.tenant_id);
   if (r.status === "completed") await recordMathWithdrawalToSheet({ tenantId: r.tenant_id, studentId: r.student_id, date: r.effective_date,
-    enrollmentIds: r.snapshot.courses.filter(c => r.subjects.includes(c.subject)).map(c => c.id) });
+    enrollmentIds: await completedEnrollmentIds(r) });
   refresh();
 }
 export async function requestWithdrawalReport(input: unknown): Promise<ReportResult> {
   const viewer = await reportViewer();
   if (!viewer?.request) return { error: "보고서 작성 요청 권한이 없습니다." };
-  const parsed = requestSchema.safeParse(input);
+  const parsed = batchRequestSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "입력 내용을 확인해 주세요." };
   if (viewer.scope && parsed.data.subjects.some(s => !viewer.scope!.includes(s))) return { error: "담당 과목의 보고서만 요청할 수 있습니다." };
-  const { data, error } = await createAdminClient().rpc("transition_withdrawal_report", {
-    p_tenant: viewer.user.tenantId, p_actor: viewer.user.id, p_report: null, p_action: "request", p_payload: parsed.data,
-  }).single();
+  const db = createAdminClient();
+  const { data, error } = await db.rpc("request_withdrawal_report_group", {
+    p_tenant: viewer.user.tenantId, p_actor: viewer.user.id, p_payload: parsed.data,
+  });
   if (error) return { error: missingReportSchema(error) ? "퇴원보고서 기능을 준비 중입니다." : error.code === "23505" ? "이 학생의 진행 중인 보고서가 있습니다. 기존 요청을 먼저 확인해 주세요." : describeDbError(error, { fallback: "보고서 작성을 요청하지 못했습니다." }).message };
-  const report = data as WithdrawalReport;
+  const { data: report, error: readError } = await db.from("withdrawal_reports").select("*").eq("tenant_id", viewer.user.tenantId).eq("group_id", data).eq("group_leader", true).single();
+  if (readError || !report) { refresh(); return { error: "요청은 저장됐지만 화면을 불러오지 못했습니다. 목록에서 확인해 주세요." }; }
   await finish(report, "request");
   return { ok: true, id: report.id };
 }

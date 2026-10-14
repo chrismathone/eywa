@@ -39,11 +39,13 @@ describe("report read boundaries", () => {
     expect(canReadReport(report, viewer)).toBe(true);
     expect(canReadReport({ ...report, teacher_id: "someone_else" }, viewer)).toBe(false);
   });
-  it("manager participation does not open other subject reports", async () => {
+  it("an explicitly appointed reviewer can read each batch report, unrelated reviewers cannot", async () => {
     state.user.systemRole = "admin"; state.scope = ["math"];
     const viewer = (await reportViewer())!;
     expect(canReadReport({ ...report, teacher_id: "teacher", manager_id: "actor" }, viewer)).toBe(true);
-    expect(canReadReport({ ...report, teacher_id: "teacher", manager_id: "actor", subjects: ["english"] }, viewer)).toBe(false);
+    expect(canReadReport({ ...report, teacher_id: "teacher", manager_id: "actor", subjects: ["english"] }, viewer)).toBe(true);
+    expect(canReadReport({ ...report, teacher_id: "teacher", manager_ids: ["actor", "manager"] }, viewer)).toBe(true);
+    expect(canReadReport({ ...report, teacher_id: "teacher", manager_ids: ["manager"] }, viewer)).toBe(false);
   });
   it("principal reads reports in their tenant query", async () => {
     state.user.systemRole = "master";

@@ -119,12 +119,13 @@ export type StudentsMetric = MetricCommon<"students", StudentEvent> & { tracking
 export type RevenueMetric = MetricCommon<"revenue", RevenueClassRow> & Pick<RevenueResult, "amount" | "subjectTotal" | "subjectLabel" | "subjects" | "unassigned" | "unclassified">;
 export type ExpansionMetric = MetricCommon<"expansion", never>;
 export type CoverageMetric = MetricCommon<"coverage", CoverageRow> & Pick<CoverageResult, "due" | "done" | "pending" | "early">;
+export type ChurnMetric = MetricCommon<"churn", { studentId: string; day: string; subjects: string[]; className: string }>;
 export type PendingMetric = MetricCommon<PendingMetricId, never>;
 /** 원장이 직접 만든 지표 — 달마다 입력한 숫자가 원래 수치다. */
 export type ManualMetricItem = MetricCommon<`manual:${string}`, never> & { unit: string; note?: string };
 export type Metric =
   | ReportMetric | AttendanceMetric | FollowMetric | QualityMetric | StudentsMetric | RevenueMetric | ExpansionMetric | CoverageMetric
-  | PendingMetric | ManualMetricItem;
+  | PendingMetric | ManualMetricItem | ChurnMetric;
 /** 한 달의 항목 id — 기본 지표 또는 `manual:<key>`. */
 export type ItemId = Metric["id"];
 export type MetricOf<Id extends MetricId> = Extract<Metric, { id: Id }>;
