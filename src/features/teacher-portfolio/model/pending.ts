@@ -2,7 +2,7 @@
  * 아직 계산이 들어오지 않은 원장 구성 지표(2026-10-13 *"지금 바로 원장 8개 구성으로 바꿔"*) — 수치 없이 자리만 선다.
  * 수치가 null이라 지표의 '자료가 없을 때' 규칙(기본 0점, 결정 4)으로 매겨진다. 계산이 들어오면 그 지표는 여기서 빠진다.
  */
-import { METRIC_MAX, type ExpansionMetric, type PendingMetric, type PendingMetricId } from "./types";
+import { METRIC_MAX, type PendingMetric, type PendingMetricId } from "./types";
 
 /** 지표 → 들어오는 단계 · 무엇을 세게 되는지(근거 화면이 그대로 보인다). */
 export const PENDING_NOTE: Record<PendingMetricId, string> = {
@@ -12,14 +12,6 @@ export const PENDING_NOTE: Record<PendingMetricId, string> = {
 };
 
 export const PENDING_IDS = Object.keys(PENDING_NOTE) as PendingMetricId[];
-
-/** 원생 소개(옛 '과목 소개' 자리) — 소개한 사람을 적는 칸(3단계)이 들어오기 전이라 인정된 소개는 0건이다(자료 없음이 아니라 0건). */
-export function referralItem(): ExpansionMetric {
-  return {
-    id: "expansion", max: METRIC_MAX.expansion, value: 0, raw: 0, basis: "인정된 소개 0건", detail: [], uncounted: true,
-    reason: "인정된 소개가 아직 없습니다. 콜&상담에 '소개한 사람'을 적는 칸이 들어오면(3단계) 친구 소개·다른 과목 소개를 상담만 받아도 1건으로 셉니다.",
-  };
-}
 
 export function pendingItems(): PendingMetric[] {
   return PENDING_IDS.map((id) => ({ id, max: METRIC_MAX[id], value: null, raw: null, basis: "아직 계산 전", reason: PENDING_NOTE[id], detail: [], uncounted: true }));

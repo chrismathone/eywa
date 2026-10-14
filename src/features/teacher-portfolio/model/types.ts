@@ -8,8 +8,8 @@
 
 import type { EvaluationConfig } from "../evaluation/config";
 
-export type { SnapshotUser, SnapshotClass, SnapshotSchedule, SnapshotEnrollment, SnapshotAttendance, SnapshotReport, SnapshotConsultation, SnapshotReviewSheet, SnapshotReview, SnapshotTransition, SnapshotDelegation, SnapshotInvoice, SnapshotTerm, SnapshotMakeup } from "./snapshot-types";
-import type { SnapshotUser, SnapshotClass, SnapshotSchedule, SnapshotEnrollment, SnapshotAttendance, SnapshotReport, SnapshotConsultation, SnapshotReview, SnapshotTransition, SnapshotDelegation, SnapshotInvoice, SnapshotTerm, SnapshotMakeup } from "./snapshot-types";
+export type { SnapshotUser, SnapshotClass, SnapshotSchedule, SnapshotEnrollment, SnapshotAttendance, SnapshotReport, SnapshotConsultation, SnapshotReviewSheet, SnapshotReview, SnapshotTransition, SnapshotDelegation, SnapshotInvoice, SnapshotTerm, SnapshotMakeup, SnapshotReferral, SnapshotAttendanceTouch } from "./snapshot-types";
+import type { SnapshotUser, SnapshotClass, SnapshotSchedule, SnapshotEnrollment, SnapshotAttendance, SnapshotReport, SnapshotConsultation, SnapshotReview, SnapshotTransition, SnapshotDelegation, SnapshotInvoice, SnapshotTerm, SnapshotMakeup, SnapshotReferral, SnapshotAttendanceTouch } from "./snapshot-types";
 
 /** 기록을 시작하기 전에 끝난 달의 처리. 항목마다 시작일과 기준 달을 따로 갖는다. */
 export type PreRecordItem = { before: string; reference: string[] };
@@ -45,14 +45,20 @@ export type PortfolioSnapshot = {
   /** 퇴원율 — 창 끝 다음 한 달 안에 시작하는 수강(월말에 반을 옮긴 학생을 퇴원으로 세지 않게) · 학생의 퇴원 사유(퇴원관리와 같은 곳). */
   futureEnrollments?: SnapshotEnrollment[];
   studentReasons?: { id: string; reason: string | null }[];
+  /** 원생 소개 — 소개한 사람이 이어진 콜&상담 전부(같은 사람 판정에 창 밖 상담도 필요하다). 옛 스냅샷·0361a 전 DB엔 없다. */
+  referrals?: SnapshotReferral[];
+  /** 출결 입력·수정 기록(활동 기록) — 마감하지 않은 달만 읽는다(`touchesSince`). 없으면 출결 행의 현재 입력자·시각으로만 판정한다. */
+  attendanceTouches?: SnapshotAttendanceTouch[];
 };
 
 /** 아직 계산이 들어오지 않은 원장 구성 지표(2026-10-13) — 수치 없이 자리만 선다(자료 없음 규칙으로 매긴다). */
 export type PendingMetricId = "grades" | "satisfaction" | "punctuality";
-export type MetricId = "report" | "attendance" | "follow" | "quality" | "students" | "revenue" | "expansion" | "coverage" | "churn" | "payRatio" | PendingMetricId;
+export type MetricId =
+  | "report" | "attendance" | "follow" | "counsel" | "quality" | "students" | "revenue" | "expansion" | "coverage" | "churn" | "payRatio"
+  | PendingMetricId;
 /** 계산 코드가 처음 매기는 만점(옛 고정 배점) — 화면의 만점은 설정이 덮는다. 옛 저장 행의 기준표도 이 값이다. */
 export const METRIC_MAX: Record<MetricId, number> = {
-  report: 20, attendance: 10, follow: 10, quality: 10, students: 20, revenue: 10, expansion: 10, coverage: 10,
+  report: 20, attendance: 10, follow: 10, counsel: 10, quality: 10, students: 20, revenue: 10, expansion: 10, coverage: 10,
   payRatio: 20, churn: 20, grades: 10, satisfaction: 0, punctuality: 10,
 };
 
@@ -117,10 +123,15 @@ type MetricCommon<Id extends string, Detail> = {
 export type ReportMetric = MetricCommon<"report", ReportCell>;
 export type AttendanceMetric = MetricCommon<"attendance", AttendanceRow>;
 export type FollowMetric = MetricCommon<"follow", FollowRow>;
+/** 원생상담 — 그 달 담당 학생 한 명 한 줄(상담했는지 · 처음 상담한 날 · 반). */
+export type CounselRow = { studentId: string; consulted: boolean; day: string | null; className: string };
+export type CounselMetric = MetricCommon<"counsel", CounselRow> & { total: number; consulted: number };
 export type QualityMetric = MetricCommon<"quality", QualityRow>;
 export type StudentsMetric = MetricCommon<"students", StudentEvent> & { tracking: StudentTracking };
 export type RevenueMetric = MetricCommon<"revenue", RevenueClassRow> & Pick<RevenueResult, "amount" | "subjectTotal" | "subjectLabel" | "subjects" | "unassigned" | "unclassified">;
-export type ExpansionMetric = MetricCommon<"expansion", never>;
+/** 원생 소개 한 건 — 소개받은 사람(상담 이름) · 소개한 원생(id — 이름은 화면이 붙인다) 또는 직원 본인. */
+export type ReferralRow = { consultationId: string; day: string; prospect: string; referrerStudentId: string | null; byStaff: boolean; subject: string | null };
+export type ExpansionMetric = MetricCommon<"expansion", ReferralRow>;
 export type CoverageMetric = MetricCommon<"coverage", CoverageRow> & Pick<CoverageResult, "due" | "done" | "pending" | "early">;
 export type PendingMetric = MetricCommon<PendingMetricId, never>;
 /** 퇴원율의 그만둔 학생 한 줄 — 셌는지(counted)와 뺀 까닭(note). */
@@ -135,7 +146,7 @@ export type PayRatioMetric = MetricCommon<"payRatio", never> & {
 export type ManualMetricItem = MetricCommon<`manual:${string}`, never> & { unit: string; note?: string };
 export type Metric =
   | ReportMetric | AttendanceMetric | FollowMetric | QualityMetric | StudentsMetric | RevenueMetric | ExpansionMetric | CoverageMetric
-  | ChurnMetric | PayRatioMetric | PendingMetric | ManualMetricItem;
+  | ChurnMetric | PayRatioMetric | CounselMetric | PendingMetric | ManualMetricItem;
 /** 한 달의 항목 id — 기본 지표 또는 `manual:<key>`. */
 export type ItemId = Metric["id"];
 export type MetricOf<Id extends MetricId> = Extract<Metric, { id: Id }>;

@@ -14,6 +14,7 @@ import { periodLabel } from "@/features/teacher-portfolio/view";
 import { DetailDialog, type DetailTarget } from "./detail-dialog";
 import { ManualEntryDialog } from "./manual-entry-dialog";
 import { ClassBox, EvidencePanel, MonthlyTable } from "./lower-panels";
+import { RuleBoxPrefProvider } from "./rule-box-pref";
 import { ScoreHero } from "./score-hero";
 import { TeacherList, TeacherPicker } from "./teacher-list";
 
@@ -29,6 +30,8 @@ type Props = {
   /** 서버가 만든 집계 시각 글자(한국 시간). 클라이언트에서 다시 만들지 않는다. */
   computedLabel: string;
   canRefresh: boolean;
+  /** 항목별 내역 '점수 기준' 상자를 접어 둘지 — 계정 귀속(`ui_prefs.portfolio.ruleCollapsed`). */
+  ruleCollapsed?: boolean;
 };
 type Weeks = Partial<Record<"attendance" | "follow", number>>;
 /** 화면에 보이는 달 수 — 그다음 한 달은 전월 비교에만 쓴다. */
@@ -47,7 +50,7 @@ export function RefreshButton({ label = "지금 집계" }: { label?: string }) {
   return <ToolbarButton onClick={run} disabled={pending} aria-busy={pending}>{pending ? "집계 중…" : label}</ToolbarButton>;
 }
 
-export function PortfolioBoard({ teachers, selected, studentNames, computedLabel, canRefresh }: Props) {
+export function PortfolioBoard({ teachers, selected, studentNames, computedLabel, canRefresh, ruleCollapsed = false }: Props) {
   const router = useRouter();
   const embed = useEmbed();
   const [moving, startTransition] = useTransition();
@@ -79,6 +82,7 @@ export function PortfolioBoard({ teachers, selected, studentNames, computedLabel
   const list = { teachers, selectedId: selected.id, month: period.month, period, hrefOf, onSelect: selectTeacher };
 
   return (
+    <RuleBoxPrefProvider initialCollapsed={ruleCollapsed}>
     <div className="flex min-w-0 flex-col gap-4">
       <Toolbar>
         <HrefSelect axisLabel="평가 기간" ariaLabel="평가 기간 선택" value={period.month} onSelect={setMonthKey}
@@ -116,5 +120,6 @@ export function PortfolioBoard({ teachers, selected, studentNames, computedLabel
           period={period} teacherId={selected.id} teacherName={selected.name} />
       ) : null}
     </div>
+    </RuleBoxPrefProvider>
   );
 }

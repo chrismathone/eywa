@@ -223,6 +223,12 @@ describe("mergeStudents", () => {
     expect(m.paths).toHaveBeenCalledWith("/students");
   });
 
+  it("진 쪽이 소개한 콜&상담(0361a)의 소개 연결도 남는 쪽으로 옮긴다 — 강사평가 원생 소개가 담임을 잃지 않게", async () => {
+    seed({});
+    m.tables.enrollment_consultations = [{ id: "ref-1", student_id: null, referrer_student_id: MERGEE }, { id: "ref-2", student_id: null, referrer_student_id: "other" }];
+    await mergeStudents(undefined, form());
+    expect(m.tables.enrollment_consultations.map((r) => r.referrer_student_id)).toEqual([KEEPER, "other"]);
+  });
   it("옮길 기록이 하나도 없는 두 학생도 병합된다(진 쪽만 퇴원한다)", async () => {
     seed({});
     expect(await mergeStudents(undefined, form())).toEqual({ mergedRows: 0 });

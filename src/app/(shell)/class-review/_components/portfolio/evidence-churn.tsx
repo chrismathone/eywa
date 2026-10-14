@@ -1,7 +1,7 @@
 "use client";
 
 import { metricOf } from "@/features/teacher-portfolio/model/types";
-import { dayLabel, pointsText, ruleText } from "@/features/teacher-portfolio/view";
+import { dayLabel, pointsText } from "@/features/teacher-portfolio/view";
 import type { EvidenceProps } from "./evidence-records";
 import { StudentCell } from "./evidence-records";
 import { DataTable, SectionTitle, StatTiles, StatusChip } from "./parts";
@@ -21,7 +21,6 @@ export function ChurnEvidence({ period, nameOf }: EvidenceProps) {
       ]} />
       <p className="bg-primary-softer mt-4 rounded-lg px-3.5 py-3 text-xs leading-relaxed">
         지난달 이 선생님이 {m.need}일 이상 맡은 학생만 분모에 넣습니다(한두 번 맡은 학생은 넣지 않습니다).
-        {ruleText(period, "churn") ? <span className="mt-1 block">점수 규칙: {ruleText(period, "churn")}</span> : null}
       </p>
       <SectionTitle sub={`${m.detail.length}건`}>이 달에 그만둔 학생</SectionTitle>
       <DataTable headers={["학생 · 반", "날짜", "구분", "사유", "퇴원율"]} kinds={["text", "num", "num", "text", "num"]}

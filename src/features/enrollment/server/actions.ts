@@ -32,6 +32,9 @@ import { notifyClassAssignment } from "@/features/notifications/server/notify";
 import { logAction } from "@/features/audit/server/log";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { summarizeConsultationChanges } from "@/features/enrollment/consultation-audit";
+import { referrerChanged, referrerColumns, type ReferrerColumns } from "@/features/enrollment/referrer";
+import { readReferrerBefore, referrerLabelOf } from "@/features/enrollment/server/referrer-queries";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 /** DB 오류 → 화면용 한글 이유 + 로그(scope로 Vercel 로그 검색, [[#138]]). 모르는 오류면 fallback 그대로 — 영문 원문은 안 내보낸다. */
 function dbWhy(error: unknown, scope: string, fallback: string, op?: "write" | "delete"): string {
@@ -173,6 +176,9 @@ export async function createEnrollmentConsultation(
   // 넣으면 경로가 비어 있는 옛 상담(2023~2025, 기재율 31%)을 **수정할 때마다** 모르는 값을 고르게 되고,
   // 지어낸 경로는 미기재보다 나쁘다(틀린 값은 아무도 못 알아본다).
   if (!parsed.data.consultationPath) return { error: "상담 경로를 선택해주세요" };
+  // 소개한 사람(0361a) — 폼에 칸이 있을 때만 쓴다. 같은 학원 사람인지는 DB 트리거가 막는다.
+  const referrer = referrerColumns(formData);
+  if ("error" in referrer) return { error: referrer.error };
 
   const learningHistory: Record<string, unknown> = {};
   if (parsed.data.prevAcademy) learningHistory.prevAcademy = parsed.data.prevAcademy;
@@ -188,6 +194,7 @@ export async function createEnrollmentConsultation(
       learningHistory,
       audioPath,
       Number(formData.get("audioSizeBytes") ?? 0),
+      referrer.cols,
     );
   }
 
@@ -197,6 +204,7 @@ export async function createEnrollmentConsultation(
     .insert({
       tenant_id: user.tenantId,
       ...buildConsultationRow(parsed.data, await schoolAliases()),
+      ...referrer.cols,
       learning_history: Object.keys(learningHistory).length > 0 ? learningHistory : null,
       consultant_id: user.id,
       outcome: "consulted",
@@ -211,7 +219,12 @@ export async function createEnrollmentConsultation(
     action: "enrollment_consultation_create",
     targetType: "enrollment_consultations",
     targetLabel: parsed.data.prospectName,
-    metadata: { consultationId: data.id, subject: parsed.data.subject || null },
+    metadata: {
+      consultationId: data.id, subject: parsed.data.subject || null,
+      // 소개한 사람 — 강사평가 원생 소개 점수에 바로 들어가는 값이라 누구로 이었는지 남긴다.
+      ...(referrer.cols.referrer_student_id || referrer.cols.referrer_staff_id
+        ? { referrer: await referrerLabelOf(supabase as unknown as SupabaseClient, referrer.cols) } : {}),
+    },
   });
 
   revalidatePath("/enrollment");
@@ -230,6 +243,7 @@ async function createConsultationWithAudio(
   learningHistory: Record<string, unknown>,
   audioPath: string,
   audioSizeBytes: number,
+  referrer: Partial<ReferrerColumns>,
 ): Promise<CreateConsultationState> {
   const admin = createAdminClient();
   if (!isTenantAudioPath(audioPath, user.tenantId)) return { error: "파일 경로가 잘못되었습니다" };
@@ -250,6 +264,7 @@ async function createConsultationWithAudio(
     .insert({
       tenant_id: user.tenantId,
       ...buildConsultationRow(data, await schoolAliases()),
+      ...referrer,
       learning_history: Object.keys(learningHistory).length > 0 ? learningHistory : null,
       consultant_id: user.id,
       outcome: "consulted",
@@ -267,7 +282,10 @@ async function createConsultationWithAudio(
     action: "enrollment_consultation_create",
     targetType: "enrollment_consultations",
     targetLabel: data.prospectName,
-    metadata: { consultationId: consult.id, subject: data.subject || null, withAudio: true },
+    metadata: {
+      consultationId: consult.id, subject: data.subject || null, withAudio: true,
+      ...(referrer.referrer_student_id || referrer.referrer_staff_id ? { referrer: await referrerLabelOf(admin as unknown as SupabaseClient, referrer) } : {}),
+    },
   });
 
   const err = await insertRecordingAndTranscribe(admin, {
@@ -460,7 +478,11 @@ export async function updateEnrollmentConsultation(
     !!existing?.from_public_intake &&
     ["pending", "scheduled"].includes(String(existing?.outcome ?? ""));
 
-  const row = buildConsultationRow(parsed.data, await schoolAliases());
+  const referrer = referrerColumns(formData);
+  if ("error" in referrer) return { error: referrer.error };
+  // 소개한 사람의 저장 전 값 — 따로·실패해도 되게 읽는다(위 선조회에 넣으면 칸이 없는 DB에서 학습 이력 보존 조회까지 함께 실패한다, #95).
+  const referrerBefore = "referrer_student_id" in referrer.cols ? await readReferrerBefore(supabase as unknown as SupabaseClient, id) : null;
+  const row = { ...buildConsultationRow(parsed.data, await schoolAliases()), ...referrer.cols };
   const { error } = await supabase
     .from("enrollment_consultations")
     .update({
@@ -476,6 +498,13 @@ export async function updateEnrollmentConsultation(
   // 감사로그(2026-09-10 김근우 건) — 이름·학교·학년·보호자는 자동 연결의 키라 전후 값까지, 연락처·상담 내용은
   // 항목 이름만. 아무것도 안 바뀐 저장(그냥 '저장'을 누름)은 남기지 않는다(감사로그가 소음에 묻힌다).
   const summary = summarizeConsultationChanges(existing, row);
+  if (referrerBefore && referrerChanged(referrerBefore, referrer.cols)) {
+    // 점수(원생 소개)에 바로 들어가는 값이라 누구에서 누구로 바꿨는지 남긴다(본인을 고르는 경우까지 되짚을 수 있게).
+    const db = supabase as unknown as SupabaseClient;
+    const [from, to] = await Promise.all([referrerLabelOf(db, referrerBefore), referrerLabelOf(db, referrer.cols)]);
+    summary.changed.push("소개한 사람");
+    summary.changes.push({ field: "소개한 사람", from, to });
+  }
   if (summary.changed.length > 0 || promoteToConsulted) {
     await logAction({
       action: "enrollment_consultation_update",

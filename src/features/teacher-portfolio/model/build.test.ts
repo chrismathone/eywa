@@ -23,8 +23,9 @@ const report = (day: string, createdAt = `${day}T09:00:00Z`, over: Partial<Snaps
 });
 const present = (day: string, recordedAt = `${day}T09:00:00Z`, over: Partial<SnapshotAttendance> = {}): SnapshotAttendance => ({
   id: `a${day}`, class_id: "c", student_id: "s", session_date: day, slot_start: "14:00", status: "present", recorded_at: recordedAt,
-  supersedes_id: null, seat_label: null, recorded_via: null, taught_by: null, note: null, ...over,
+  supersedes_id: null, seat_label: null, recorded_via: null, taught_by: null, note: null, recorded_by: "teacher", ...over,
 });
+const stateOn = (d: PortfolioSnapshot, month: string, day: string) => score(d, month, "report").detail.find((c) => c.day === day)?.state;
 /** 이 파일은 그 전 직원 포트폴리오의 점수를 지킨다 — 옛 구성으로 매긴다(기본값은 원장 구성, evaluation.test). */
 const buildPortfolio = (d: PortfolioSnapshot, opts: Parameters<typeof build>[1] = {}) => build(d, { evaluation: { config: PORTFOLIO_V1_CONFIG }, ...opts });
 const months = (d: PortfolioSnapshot) => Object.fromEntries(buildPortfolio(d).teachers.find((t) => t.name === "강사")!.periods.map((w) => [w.month, w]));
@@ -50,13 +51,17 @@ describe("8개 항목 100점", () => {
     const m = score(d, "2026-09", "report");
     expect([m.value, m.detail.length]).toEqual([20, 5]);
   });
-  it("대리 작성은 본인 실적이 아니고, 작성자를 모르면 '자료 없음'으로 0점이다(원장 2026-10-13 — 총점은 그대로 나온다)", () => {
+  it("🔴 본인이 수업 당일(한국 시간)에 쓴 보고서만 작성 — 대리·작성자 모름·다음 날 작성은 전부 미작성(원장 2026-10-14)", () => {
     const d = fixture();
     d.reports = [report("2026-09-02", undefined, { created_by: "proxy" })];
-    expect(score(d, "2026-09", "report").detail.find((c) => c.day === "2026-09-02")?.state).toBe("proxy");
-    d.reports[0].created_by = null;
-    expect([score(d, "2026-09", "report").value, score(d, "2026-09", "report").missing]).toEqual([0, true]);
+    expect(stateOn(d, "2026-09", "2026-09-02")).toBe("missing");
+    d.reports = [report("2026-09-02", undefined, { created_by: null })];
+    expect([stateOn(d, "2026-09", "2026-09-02"), score(d, "2026-09", "report").value]).toEqual(["missing", 0]);
     expect(months(d)["2026-09"].total).not.toBeNull();
+    d.reports = [report("2026-09-02", "2026-09-02T14:59:59.999Z")];
+    expect(stateOn(d, "2026-09", "2026-09-02")).toBe("own");
+    d.reports = [report("2026-09-02", "2026-09-02T15:00:00.000Z")];
+    expect(stateOn(d, "2026-09", "2026-09-02")).toBe("missing");
   });
   it("다른 반의 보고서·결석한 날·휴원일은 의무를 채우지도 만들지도 않는다", () => {
     const other = fixture();
@@ -69,10 +74,24 @@ describe("8개 항목 100점", () => {
     holiday.settings.holidays = [{ date: "2026-09-02" }];
     expect(score(holiday, "2026-09", "report").detail.some((c) => c.day === "2026-09-02")).toBe(false);
   });
-  it("출결은 수업을 맡은 강사 것이다 — 누가 입력했는지는 보지 않는다", () => {
+  it("🔴 출결은 본인이 수업 당일에 넣은 것만 작성 — 다른 사람·키오스크·다음 날 입력은 미작성(원장 2026-10-14)", () => {
     const d = fixture();
     d.attendance = wednesdays("2026-09").map((day) => present(day));
     expect(score(d, "2026-09", "attendance").value).toBe(10);
+    d.attendance = wednesdays("2026-09").map((day) => present(day, undefined, { recorded_by: "proxy" }));
+    expect(score(d, "2026-09", "attendance").value).toBe(0);
+    d.attendance = wednesdays("2026-09").map((day) => present(day, undefined, { recorded_by: null }));
+    expect(score(d, "2026-09", "attendance").value).toBe(0);
+    d.attendance = wednesdays("2026-09").map((day) => present(day, `${day}T15:00:00Z`));
+    expect(score(d, "2026-09", "attendance").value).toBe(0);
+    // 출결은 고칠 때 같은 행을 덮어쓴다 — 본인이 그날 넣은 뒤 다음 날 다른 사람이 고쳐도, 활동 기록에 그날 본인 입력이 남아 작성이다.
+    d.attendance = [present("2026-09-02", "2026-09-05T00:00:00Z", { recorded_by: "proxy" })];
+    expect(score(d, "2026-09", "attendance").detail.find((r) => r.day === "2026-09-02")?.done).toBe(false);
+    d.attendanceTouches = [{ row_id: "a2026-09-02", actor_id: "teacher", day: "2026-09-02" }, { row_id: "a2026-09-02", actor_id: "proxy", day: "2026-09-05" }];
+    expect(score(d, "2026-09", "attendance").detail.find((r) => r.day === "2026-09-02")?.done).toBe(true);
+    // 본인 기록이어도 다음 날이면 미작성.
+    d.attendanceTouches = [{ row_id: "a2026-09-02", actor_id: "teacher", day: "2026-09-03" }];
+    expect(score(d, "2026-09", "attendance").detail.find((r) => r.day === "2026-09-02")?.done).toBe(false);
   });
   it("보고 대상 과목 목록이 비어 있으면 전부 센다 — 조용히 산출불가가 되지 않는다(운영실과 같은 판정)", () => {
     const d = fixture();
@@ -127,18 +146,17 @@ describe("직원 평가", () => {
 });
 
 describe("🔴 말일 마감 — 이후의 보충은 지난달 점수를 바꾸지 않는다", () => {
-  it("한국 시간 말일 마지막 순간까지 인정하고, 다음 달 첫 순간부터는 제외한다", () => {
+  it("말일 수업도 그날 안(한국 시간)에 쓴 것만 — 다음 날 첫 순간부터는 미작성", () => {
     const d = fixture();
     d.reports = [report("2026-09-30", "2026-09-30T14:59:59.999Z")];
-    expect(score(d, "2026-09", "report").detail.find((c) => c.day === "2026-09-30")?.state).toBe("own");
+    expect(stateOn(d, "2026-09", "2026-09-30")).toBe("own");
     d.reports = [report("2026-09-30", "2026-09-30T15:00:00.000Z")];
-    expect(score(d, "2026-09", "report").detail.find((c) => c.day === "2026-09-30")?.state).toBe("late");
-    expect(score(d, "2026-09", "report").value).toBe(0);
+    expect([stateOn(d, "2026-09", "2026-09-30"), score(d, "2026-09", "report").value]).toEqual(["missing", 0]);
   });
-  it("진행 중인 달은 달 안에서 보충한 기록을 인정한다 — 기준일은 수업 날짜의 끝일 뿐이다", () => {
+  it("진행 중인 달도 달 안에서 뒤늦게 보충한 보고서는 미작성이다(당일 작성만 — 원장 2026-10-14)", () => {
     const d = fixture();
     d.reports = [report("2026-10-07", "2026-10-12T00:00:00Z")];
-    expect(score(d, "2026-10", "report").detail.find((c) => c.day === "2026-10-07")?.state).toBe("own");
+    expect(stateOn(d, "2026-10", "2026-10-07")).toBe("missing");
   });
   it("마감 뒤에 입력한 출결은 처리로 세지 않고, 마감 뒤의 정정이 마감 전 기록을 지우지 않는다", () => {
     const d = fixture();
@@ -196,11 +214,10 @@ describe("기록을 시작하기 전인 달 — 같은 강사의 기준 달 평�
     expect(awaitsReference(june, d.preRecord, "2026-08")).toBe(true);
     expect(awaitsReference(months(d)["2026-09"], d.preRecord, "2026-08")).toBe(false);
   });
-  it("확인할 수 없는 기준 달은 평균에서 빼고, 쓸 달이 하나도 없으면 그 항목은 '자료 없음' 0점이다", () => {
+  it("작성자를 모르는 보고서는 미작성이라 기준 달도 그 점수 그대로 평균에 든다(빼지 않는다 — 작성/미작성만, 원장 2026-10-14)", () => {
     const d = early();
-    d.reports.find((r) => r.report_date.startsWith("2026-08"))!.created_by = null;
-    expect([score(d, "2026-08", "report").value, score(d, "2026-06", "report").value]).toEqual([0, 20]);
     for (const r of d.reports) r.created_by = null;
-    expect([score(d, "2026-06", "report").value, score(d, "2026-06", "report").missing, months(d)["2026-06"].total === null]).toEqual([0, true, false]);
+    expect([score(d, "2026-08", "report").value, score(d, "2026-09", "report").value, score(d, "2026-06", "report").value]).toEqual([0, 0, 0]);
+    expect(months(d)["2026-06"].total === null).toBe(false);
   });
 });

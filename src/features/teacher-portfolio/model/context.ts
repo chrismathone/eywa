@@ -88,6 +88,10 @@ export function buildContext(d: PortfolioSnapshot) {
   const recordedOn = new Map(d.attendance.map((r) => [r.id, kstDateOf(r.recorded_at) ?? ""]));
   const reportCreatedOn = new Map(d.reports.map((r) => [r.id, kstDateOf(r.created_at)]));
   const reportsByStudentDay = groupBy(d.reports, (r) => `${r.student_id}|${r.report_date}`);
+  /** 출결의 모든 판(고친 판·고치기 전 판) — '본인이 그날 넣었나'는 처음 넣은 판까지 봐야 한다(duties.ts). */
+  const attendanceVersionsByClassDay = groupBy(d.attendance, (r) => `${r.class_id}|${r.session_date}`);
+  /** 출결 행 → 그 행을 넣거나 고친 사람·날짜(활동 기록). 고칠 때 행이 덮여도 그날 넣은 사실이 여기 남는다. */
+  const attendanceTouchesByRow = groupBy(d.attendanceTouches ?? [], (t) => t.row_id);
   const recordsCache = new Map<string, RecordsAsOf>();
   /** `cutoff`(한국 날짜)까지 입력된 기록만 남긴다. 그 뒤의 보충·정정은 지난달 점수를 바꾸지 않는다. */
   function recordsAsOf(cutoff: string): RecordsAsOf {
@@ -115,6 +119,6 @@ export function buildContext(d: PortfolioSnapshot) {
     return value;
   }
 
-  return { owner, holidays, classDays, recordsAsOf, reportCreatedOn };
+  return { owner, holidays, classDays, recordsAsOf, reportCreatedOn, attendanceVersionsByClassDay, attendanceTouchesByRow };
 }
 export type PortfolioContext = ReturnType<typeof buildContext>;

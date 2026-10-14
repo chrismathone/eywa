@@ -1,11 +1,16 @@
 import { BackLink } from "@/components/back-link";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireAccess } from "@/lib/auth/require-access";
+import { createClient } from "@/lib/supabase/server";
+import { referrerColumnsReady } from "@/features/enrollment/server/referrer-queries";
 import { NewConsultationForm } from "./form";
 
 export const metadata = { title: "신규 콜&상담 — 에이와" };
 
 export default async function NewEnrollmentPage() {
   const viewer = await requireAccess("enrollment");
+  // 소개한 사람 칸(0361a)이 DB에 있을 때만 그린다(#95) — 행을 받지 않는 확인 한 번.
+  const referrerReady = await referrerColumnsReady((await createClient()) as unknown as SupabaseClient);
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -20,7 +25,7 @@ export default async function NewEnrollmentPage() {
         </p>
       </header>
 
-      <NewConsultationForm recordingOwner={{ tenantId: viewer.tenantId, userId: viewer.id }} />
+      <NewConsultationForm recordingOwner={{ tenantId: viewer.tenantId, userId: viewer.id }} referrerReady={referrerReady} />
     </div>
   );
 }

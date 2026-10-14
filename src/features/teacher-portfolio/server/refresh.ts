@@ -52,14 +52,20 @@ export async function refreshTenantPortfolio(
     const [evaluation, entries] = await Promise.all([loadEvaluationConfig(admin, tenantId), loadManualEntries(admin, tenantId, months)]);
     return { evaluation, entries, stamp: `${evaluation.updatedAt ?? ""}|${JSON.stringify(entries)}` };
   };
-  const [settings, openMonths, first, withRaws] = await Promise.all([
+  const [settings, openMonths, first, withRaws, storedRows] = await Promise.all([
     getTenantSettingsByTenantId(tenantId, { failOnReadError: true }),
     loadOpenMonths(admin, tenantId, portfolioFloor(periodEnd)),
     loadScoring(),
     portfolioRawsReady(admin, tenantId),
+    // 저장된 줄이 하나도 없으면 첫 집계 — 창의 지난달들이 이번에 계산되자마자 마감된다(행은 받지 않는다).
+    admin.from("teacher_portfolio_months").select("*", { count: "exact", head: true }).eq("tenant_id", tenantId),
   ]);
+  // 출결 입력·수정 기록은 마감하지 않은 가장 이른 달부터만 읽는다(마감한 달은 다시 매기지 않는다 · 활동 기록은 많다).
+  // 🔴 첫 집계(저장된 줄 0 · 확인 실패 포함)면 창의 가장 이른 달부터 — 그 달들이 이번에 바로 마감돼 굳는다(한 번만 무겁다).
+  const firstRun = storedRows.error !== null || !storedRows.count;
+  const touchMonth = firstRun ? portfolioFloor(periodEnd) : [periodEnd.slice(0, 7), ...[...openMonths.values()].flat()].sort()[0];
   const snapshot = await loadPortfolioSnapshot(admin, tenantId, {
-    end: periodEnd, now,
+    end: periodEnd, now, touchesSince: `${touchMonth}-01`,
     settings: {
       holidays: settings.operations.holidays, subjects: settings.operations.subjects,
       report_subjects: settings.report.classnoteSubjects, report_exempt: settings.report.writingExemptTeachers,

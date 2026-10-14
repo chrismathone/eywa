@@ -35,6 +35,8 @@ const DB_COLUMNS = [
   "sync_added_at", "counselor", "received_date", "student_type", "siblings_details", "consultation_date",
   "makeedu_pushed_at", "intake_checklist", "prep_brief", "prep_brief_at", "prep_brief_status",
   "prep_brief_error", "receiver", "legacy_key", "legacy_source",
+  // 0361a 소개한 사람
+  "referrer_student_id", "referrer_staff_id", "referrer_name",
 ] as const;
 
 const covered = [...SKIP_COLUMNS, ...SCALAR_COLUMNS, ...APPEND_COLUMNS, ...Object.values(ATOMIC_SETS).flat()];
