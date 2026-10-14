@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { after } from "next/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { readonlyTeacherViewError } from "@/lib/auth/view-mode";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -100,10 +99,9 @@ export async function rejectHomeworkVideos(input: { classId: string; studentId: 
     await logAction({ action: "lesson_report_video_homework_reject", targetType: "video_homework",
       targetLabel: [target.studentName, target.className].filter(Boolean).join(" · ") || null,
       metadata: { classId, studentId, homeworkDate, videos: targets.length, ...trash, reopened, ...(keep === "kept" ? { keptAsIssue: true } : {}) } });
-    after(async () => {
-      try { await reconcileVideoHomework(user.tenantId, { studentId }); }
-      catch (error) { reportError(error, { scope: "video-homework.after-reject", tenantId: user.tenantId, studentId }); }
-    });
+    // 응답 전에 끝낸다 — 판정 전 상태로 장부가 다시 그려지지 않게(원장 2026-10-14, 영상 배정과 같은 까닭). 실패해도 반려는 끝났다.
+    try { await reconcileVideoHomework(user.tenantId, { studentId }); }
+    catch (error) { reportError(error, { scope: "video-homework.after-reject", tenantId: user.tenantId, studentId }); }
     revalidatePath("/onescreen/video-homework"); revalidatePath("/lesson-reports/video-homework"); revalidatePath(`/students/${studentId}`);
     return { ok: true, rejected: targets.length, ...trash, reopened };
   } catch (error) {

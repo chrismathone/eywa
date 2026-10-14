@@ -47,7 +47,10 @@ export function portfolioMonthKeys(now: Date = new Date()): string[] {
 function studentIdsIn(periods: readonly StoredPeriod[]): string[] {
   const ids = new Set<string>();
   for (const w of periods) for (const m of w.items) {
-    for (const row of m.detail as { studentId?: string }[]) if (row.studentId) ids.add(row.studentId);
+    for (const row of m.detail as { studentId?: string; referrerStudentId?: string | null }[]) {
+      if (row.studentId) ids.add(row.studentId);
+      if (row.referrerStudentId) ids.add(row.referrerStudentId); // 원생 소개 — 소개한 원생 이름
+    }
   }
   return [...ids];
 }

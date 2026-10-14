@@ -29,7 +29,7 @@ const row = (className: string, extra: Partial<StudentClassRow> = {}): StudentCl
 });
 const show = async () => render(await ClassesTab({
   student: { id: "student", status: "enrolled" } as StudentDetail,
-  canEnd: false, canEditDates: false, canEditSchedule: false, canDeleteEnrollment: false,
+  canEnd: false, dateAccess: { allowed: false, classIds: [] }, canEditSchedule: false, canDeleteEnrollment: false,
 }));
 const section = (name: string) => within(screen.getByRole("heading", { name: new RegExp(name) }).closest("section")!);
 beforeEach(() => { vi.clearAllMocks(); mocks.teacher.mockResolvedValue(new Map()); });

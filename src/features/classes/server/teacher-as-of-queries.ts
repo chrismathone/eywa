@@ -1,7 +1,8 @@
 import "server-only";
-import { auditScoped, systemAuditScope } from "@/features/audit/server/system-read";
+import { auditScoped, systemAuditScope, systemAuditScopeFor } from "@/features/audit/server/system-read";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
+import { attendanceDb, attendanceReadContext, memoInReadContext, readContextKey, scopeTenant } from "@/features/attendance/server/read-context";
 import { kstToday, kstDateOf } from "@/lib/date-kst";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { markFolded } from "@/lib/folded-read";
@@ -28,9 +29,12 @@ import {
  *    **이름이 유일할 때만** 쓴다(resolveTransitionClassId 주석 — 잘못 붙이느니 비운다).
  * ⚠️ React `cache` — 한 요청에서 시간표·출석부가 같이 물어도 왕복 1회.
  */
-const loadTeacherTransitions = cache(
-  async (): Promise<{ transitions: TeacherTransition[]; since: string; incomplete: boolean }> => {
-    const supabase = await createClient();
+// 인자 = 로그인 없는 조립 문맥의 지점(`readContextKey`) — 캐시가 지점을 넘나들지 않게(화면은 늘 빈 글자).
+const loadTeacherTransitionsCached = cache(
+  async (tenantKey: string): Promise<{ transitions: TeacherTransition[]; since: string; incomplete: boolean }> => {
+    void tenantKey; // 캐시 키 전용(지점마다 따로 캐시)
+    const { db: supabase, tenantId } = await attendanceDb();
+    const ctx = attendanceReadContext();
     const since = historyWindowStart(kstToday());
     // 읽기 실패 표식 — 화면은 종전대로 접지만(빈 이력 = 전부 보여 준다), 금액에 쓰는 자리는 이 표식을 보고 산정을 멈춘다.
     let incomplete = false;
@@ -47,7 +51,8 @@ const loadTeacherTransitions = cache(
       fetchAllPaged<{ metadata: Record<string, unknown> | null; target_label: string | null; created_at: string }>(
         async (from, to) => {
           // 인수인계 적용 + **폼에서 담임을 바꾼 것**(class_update, 2026-08-04 신설) 둘 다가 전이다.
-          const scope = await systemAuditScope(["class_handover_apply", "class_update"]);
+          // 로그인 없는 조립 문맥이면 그 지점으로(세션이 없어 null이 되면 이력이 조용히 비어 넘긴 칸까지 이 강사 몫이 된다).
+          const scope = ctx ? systemAuditScopeFor(ctx.tenantId, ["class_handover_apply", "class_update"]) : await systemAuditScope(["class_handover_apply", "class_update"]);
           if (!scope) return { data: [], error: null } as never;
           return auditScoped(
             scope.admin.from("audit_logs").select("metadata, target_label, created_at"),
@@ -62,7 +67,7 @@ const loadTeacherTransitions = cache(
       // 🔴 whitelist(이름→id)라 무페이징 select 금지(B2). 활성/비활성 **전부** 담는다 —
       //    종강한 반의 옛 인계도 이력이고, 중복 이름 판정은 좁게 보면 거짓 유일이 된다.
       fetchAllPaged<{ id: string; class_name: string | null }>((from, to) =>
-        supabase.from("classes").select("id, class_name").order("id").range(from, to),
+        scopeTenant(supabase.from("classes").select("id, class_name"), tenantId).order("id").range(from, to),
       ).catch(failSoft),
     ]);
 
@@ -105,6 +110,8 @@ const loadTeacherTransitions = cache(
     return { transitions, since, incomplete };
   },
 );
+const loadTeacherTransitions = () =>
+  memoInReadContext("teacherTransitions", () => loadTeacherTransitionsCached(readContextKey()), (r) => !r.incomplete);
 
 /**
  * "이 사람이 이 반 담임이 된 날" 인덱스(id 기준) — 강사 축 출석부가 **담임 이전 칸**을 가리는 데 쓴다.
@@ -115,19 +122,24 @@ const loadTeacherTransitions = cache(
  * ⚠️ 보고서 작성자 폴백은 **쓰지 않는다**(teacher-as-of.ts 주석 — 작성자는 담임이 아니다). 그래서 이
  *    로더는 `lesson_reports`를 아예 읽지 않는다(출석부에 얹히는 왕복도 그만큼 적다).
  */
-export const getHomeroomSinceIndex = cache(async (): Promise<HomeroomSinceIndex> => {
+const getHomeroomSinceIndexCached = cache(async (tenantKey: string): Promise<HomeroomSinceIndex> => {
+  void tenantKey; // 캐시 키 전용(지점마다 따로 캐시)
   const { transitions, since, incomplete } = await loadTeacherTransitions();
   return buildHomeroomSinceIndex(transitions, since, incomplete);
 });
+export const getHomeroomSinceIndex = (): Promise<HomeroomSinceIndex> =>
+  memoInReadContext("homeroomSince", () => getHomeroomSinceIndexCached(readContextKey()), (r) => !r.incomplete);
 
 /** 출석일 당시의 담임 복원. 작성자 추정 없이 적용된 인수인계만 사용한다. */
-export const getHomeroomHistoryIndex = cache(async () => {
+const getHomeroomHistoryIndexCached = cache(async (tenantKey: string) => {
+  void tenantKey; // 캐시 키 전용(지점마다 따로 캐시)
   const { transitions, incomplete } = await loadTeacherTransitions();
   const index = buildHomeroomHistoryIndex(transitions);
   // 원자료를 못 읽어 빈 이력이면 표식을 남긴다 — 이 호출은 서버 액션 안에선 요청 캐시가 없어 `getHomeroomSinceIndex`와
   // **따로** 돈다(한쪽만 실패할 수 있다). 금액 조립은 이 표식을 반 목록·매트릭스를 거쳐 받아 멈춘다.
   return incomplete ? markFolded(index, "담임 변경 기록을 읽지 못했습니다") : index;
 });
+export const getHomeroomHistoryIndex = () => memoInReadContext("homeroomHistory", () => getHomeroomHistoryIndexCached(readContextKey()));
 
 /**
  * "그 주 담임" 복원 인덱스 — 인수인계 감사로그(사실) + 그 달 보고서 작성자(추정), **최근 2개월**만.

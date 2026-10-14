@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/atoms/pill";
 import { requireAccess } from "@/lib/auth/require-access";
 import { accessLevelTenant, canManageTenant } from "@/lib/auth/perm-matrix";
+import { getEnrollmentDateAccess } from "@/features/enrollments/server/date-access";
+import { canEditEnrollmentDateClass } from "@/features/enrollments/date-access";
 import { BackLink } from "@/components/back-link";
 import { EditableDateCell } from "@/features/enrollments/components/editable-date-cell";
 import { EditableAttendanceCell } from "@/features/enrollments/components/editable-attendance-cell";
@@ -103,8 +105,7 @@ export default async function ClassDetailPage({
   // 반**을 "학생이 있다"며 못 지우게 막는다(반대로도 위험: 실제 재원생을 못 보고 지우는 것).
   const onRosterCount = students.length - upcoming.length;
 
-  // 수강 시작일 더블클릭 수정 = owner(원장) 권한 이상만(관리자 정정). 학생 상세 수업 탭과 동일 게이트.
-  const canEditDates = (await accessLevelTenant(user.systemRole, "owner")) === "full";
+  const canEditDates = canEditEnrollmentDateClass(await getEnrollmentDateAccess(), id);
   // 분리등원 요일 더블클릭 편집 — 서버 `updateEnrollmentsAttendanceBatch`는 **관리자(full)만** 통과시킨다.
   // ⚠️ 종전 `canWriteTenant`는 scoped(강사)도 통과시켜, 강사에게 편집 칸이 열리고 저장만 거절됐다(#77 반대 꼴).
   const canEditSchedule = await canManageTenant(user.systemRole, "classes");

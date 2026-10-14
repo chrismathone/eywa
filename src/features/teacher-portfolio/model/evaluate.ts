@@ -42,6 +42,7 @@ function scoreItem<M extends Metric>(m: M, s: MetricSetting): M {
     m.gap = m.gap ?? "자료 없음";
   } else {
     delete m.missing;
+    delete m.gap; // 수치가 있으면 '근거 확인' 꼬리표는 낡은 것이다(계산 코드가 값 null로 넘긴 지표).
     m.value = pointsFor(raw, s.scoring, s.max);
   }
   return m;

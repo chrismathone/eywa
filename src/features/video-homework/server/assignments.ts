@@ -152,27 +152,33 @@ export async function getAssignedVideoHomework(
   tenantId: string,
   fromDate: string,
   toDate: string,
+  /** 한 학생만 — 화면에서 고친 직후의 재판정(응답 전에 돈다)이 지점 전체 보고서를 읽지 않게. */
+  options: { studentId?: string } = {},
 ): Promise<{ classId: string; studentId: string; date: string; extra?: true; kept?: true; rejectedAt?: string }[] | null> {
   const db = createAdminClient();
   if (!(await videoHomeworkColumnReady(db))) return null;
+  const { studentId } = options;
   const [rows, extra, rejections] = await Promise.all([
-    fetchAllPaged<ReportRow>((from, to) => db
-      .from("lesson_reports")
-      .select("student_id,class_id,report_date,video_homework")
-      .eq("tenant_id", tenantId)
-      .eq("video_homework", true)
-      .not("class_id", "is", null)
-      .gte("report_date", fromDate)
-      .lte("report_date", toDate)
-      .order("id", { ascending: true })
-      .range(from, to)),
+    fetchAllPaged<ReportRow>((from, to) => {
+      const query = db
+        .from("lesson_reports")
+        .select("student_id,class_id,report_date,video_homework")
+        .eq("tenant_id", tenantId)
+        .eq("video_homework", true)
+        .not("class_id", "is", null)
+        .gte("report_date", fromDate)
+        .lte("report_date", toDate);
+      if (studentId) query.eq("student_id", studentId);
+      return query.order("id", { ascending: true }).range(from, to);
+    }),
     listExtraIssues(db, tenantId, { fromDate, toDate }),
     // 반려 표시(원장 2026-10-13) — 그 숙제 칸에 반려 전 영상이 자동으로 다시 붙지 않게 숙제에 싣는다(rounds.ts ②).
-    listRejections(db, tenantId, { fromDate, toDate }),
+    listRejections(db, tenantId, { fromDate, toDate, ...(studentId ? { studentIds: [studentId] } : {}) }),
   ]);
   const out = new Map<string, { classId: string; studentId: string; date: string; extra?: true; kept?: true; rejectedAt?: string }>();
-  for (const r of rows) if (r.class_id) out.set(`${r.class_id}:${r.student_id}:${r.report_date}`, { classId: r.class_id, studentId: r.student_id, date: r.report_date });
+  for (const r of rows) if (r.class_id && (!studentId || r.student_id === studentId)) out.set(`${r.class_id}:${r.student_id}:${r.report_date}`, { classId: r.class_id, studentId: r.student_id, date: r.report_date });
   for (const x of extra) {
+    if (studentId && x.studentId !== studentId) continue;
     const key = `${x.classId}:${x.studentId}:${x.date}`;
     if (!x.kept) out.set(key, { classId: x.classId, studentId: x.studentId, date: x.date, extra: true });
     else if (!out.has(key)) out.set(key, { classId: x.classId, studentId: x.studentId, date: x.date, kept: true });

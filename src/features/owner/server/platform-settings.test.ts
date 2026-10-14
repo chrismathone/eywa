@@ -10,7 +10,7 @@ beforeEach(() => {
   m.query.mockReset().mockImplementation(async (_key: string, ids: string[]) => ({ data: ids.filter((id) => id === sa).map((id) => ({ id })), error: null }));
 });
 const rule = { userId: sa, menu: "staff", access: "full" };
-const permissions = { overrides: [], userOverrides: [rule], specialAccess: { payslipViewerIds: [sa], leaveAdjusterIds: [sa], classSplitterIds: [sa], staffSubjectScopes: [{ userId: sa, subjects: ["math"] }] } };
+const permissions = { overrides: [], userOverrides: [rule], specialAccess: { payslipViewerIds: [sa], leaveAdjusterIds: [sa], classSplitterIds: [sa], enrollmentDateEditorIds: [sa], staffSubjectScopes: [{ userId: sa, subjects: ["math"] }] } };
 const layout = { role: "super", items: [{ id: "panel:notices", w: 6, h: 1 }] };
 const assignment = { userId: sa, scope: "all", subjects: [], adminLayout: "desk" };
 const dashboard = { version: 1, layouts: [layout], assignments: [assignment] };
@@ -36,7 +36,7 @@ describe("지점 설정과 운영자 설정 경계", () => {
     expect(await platformSettingsError("permissions", permissions, undefined)).not.toBeNull();
     expect(await platformSettingsError("permissions", { ...permissions, userOverrides: [] }, permissions)).not.toBeNull();
     expect(await platformSettingsError("permissions", { ...permissions, userOverrides: [{ ...rule, access: "none" }] }, permissions)).not.toBeNull();
-    for (const key of ["payslipViewerIds", "leaveAdjusterIds", "classSplitterIds", "staffSubjectScopes"] as const) {
+    for (const key of ["payslipViewerIds", "leaveAdjusterIds", "classSplitterIds", "enrollmentDateEditorIds", "staffSubjectScopes"] as const) {
       expect(await platformSettingsError("permissions", { ...permissions, specialAccess: { ...permissions.specialAccess, [key]: [] } }, permissions)).not.toBeNull();
     }
     // 과목 범위는 과목만 바꾸는 것도 변경이다.
@@ -54,7 +54,7 @@ describe("지점 설정과 운영자 설정 경계", () => {
     } as unknown as PermissionsSettings;
     expect(permissionAccountIds(broken)).toEqual([sa, sa, staff]);
     expect(permissionAccountIds({ overrides: [] } as unknown as PermissionsSettings)).toEqual([]);
-    expect(permissionAccountIds(permissions as PermissionsSettings)).toEqual([sa, sa, sa, sa, sa]);
+    expect(permissionAccountIds(permissions as PermissionsSettings)).toEqual([sa, sa, sa, sa, sa, sa]);
   });
   it("보호 여부 조회는 작은 묶음으로 나누고 오류를 숨기지 않는다", async () => {
     await platformAccountIds(Array.from({ length: 201 }, (_, i) => String(i)));

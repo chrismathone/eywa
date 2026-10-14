@@ -23,6 +23,9 @@ import { WindowLink } from "@/components/workspace/window-link";
 import { COMMON_FIELDS, ENGLISH_GROUPS, GENDER_OPTIONS, SUBJECT_TABS } from "@/features/enrollment/form-config";
 import { outcomeBadge } from "@/features/enrollment/outcome-meta";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { loadConsultationReferrer } from "@/features/enrollment/server/referrer-queries";
+import { createClient } from "@/lib/supabase/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { isModuleEnabled } from "@/lib/modules";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { getClassesList } from "@/features/classes/server/queries";
@@ -81,7 +84,7 @@ export default async function EnrollmentDetailPage({
 }) {
   const user = await requireAccess("enrollment");
   const { id } = await params;
-  const [consult, allClasses, settings, siblings, canWrite, canRequestTextbook] = await Promise.all([
+  const [consult, allClasses, settings, siblings, canWrite, canRequestTextbook, referrer] = await Promise.all([
     getEnrollmentConsultationById(id),
     getClassesList({ active: "active" }),
     getTenantSettings(),
@@ -90,6 +93,8 @@ export default async function EnrollmentDetailPage({
     // 수학 반 배정 직후 '교재 신청서' 경로를 그릴지(원장 2026-09-09) — 못 여는 사람에게 그리면
     // 눌러도 권한 화면으로 튕기는 죽은 버튼이 된다. 진짜 게이트는 교재 화면의 requireAccess다([[#77]]).
     canWriteTenant(user.systemRole, "textbook_requests"),
+    // 소개한 사람(0362a) — 기본 조회와 따로·실패해도 되게(#95).
+    createClient().then((db) => loadConsultationReferrer(db as unknown as SupabaseClient, id)),
   ]);
   if (!consult) {
     // 🔴 병합으로 사라진 상담이면 **404 대신 남은 쪽으로 보낸다**(원장 2026-09-01 제보) — 병합
@@ -378,6 +383,9 @@ export default async function EnrollmentDetailPage({
             ["상담자", f.counselor ?? consult.consultantName],
             ["접수일", f.receivedDate, true],
             ["상담 경로", f.consultationPath],
+            ["소개한 사람", referrer.referrer
+              ? `${referrer.referrer.label}${referrer.referrer.hint ? ` · ${referrer.referrer.hint}` : ""}`
+              : referrer.referrerName ? `${referrer.referrerName}(신청서에 적은 이름 · 아직 연결 전)` : null],
           ]}
         />
 

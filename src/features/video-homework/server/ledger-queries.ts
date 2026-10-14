@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { addDays, kstToday } from "@/lib/date-kst";
 import { buildVideoHomeworkLessonPairs, type LedgerClass, type LedgerEnrollment, type LedgerSchedule } from "../ledger-roster";
-import { buildLedgerRounds, VIDEO_MATCH_WINDOW_DAYS, videoArrivedAt, videoFingerprint, videoMatchRange } from "../rounds";
+import { buildLedgerRounds, VIDEO_MATCH_WINDOW_DAYS, videoArrivedAt, videoFingerprint, videoMatchRange, type RoundOwners } from "../rounds";
 import { type VideoArrival, type VideoHomeworkMark, type VideoHomeworkRosterRow, type VideoHomeworkStatus } from "../types";
 import { getAssignedVideoHomework } from "./assignments";
 import { loadBlankFacts } from "./blank-facts";
@@ -144,8 +144,12 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
   for (const row of assigned ?? []) addDate(row.classId, row.studentId, row.date);
   for (const mark of marks) if (mark.homeworkDate) addDate(mark.classId, mark.studentId, mark.homeworkDate);
   for (const pair of pairs) ownDates.set(`${pair.classId}:${pair.studentId}`, ownDates.get(`${pair.classId}:${pair.studentId}`) ?? new Set());
-  const assignmentRows = pairs.map(pair => ({ ...pair,
-    assignedDates: (assignedByPair.get(`${pair.classId}:${pair.studentId}`) ?? []).filter(date => date >= fromDate && date <= toDate) }));
+  // 배정 후보 영상을 읽을 숙제일 = 숙제(보고서 · 따로 낸 숙제) + 검사 기록만 있는 숙제일(배정하면 옮겨 남긴 숙제가 된다, video-assignment.ts).
+  const inRange = (date: string | null): date is string => !!date && date >= fromDate && date <= toDate;
+  const markDates = new Map<string, string[]>();
+  for (const { classId, studentId, homeworkDate } of marks) if (inRange(homeworkDate)) markDates.set(`${classId}:${studentId}`, [...(markDates.get(`${classId}:${studentId}`) ?? []), homeworkDate]);
+  const assignmentRows = pairs.map(pair => ({ ...pair, assignedDates: [...new Set([
+    ...(assignedByPair.get(`${pair.classId}:${pair.studentId}`) ?? []).filter(inRange), ...(markDates.get(`${pair.classId}:${pair.studentId}`) ?? [])])] }));
   const [students, videos, blankFacts, assignmentCandidates] = await Promise.all([
     fetchAllPagedInChunks<{ id: string; name: string; school: string | null; grade: string | null }>(studentIds,
       (chunk, from, to) => db.from("students").select("id,name,school,grade").eq("tenant_id", tenantId)
@@ -169,16 +173,22 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
     if (!roundRows.has(key)) roundRows.set(key, { classId: row.classId, studentId: row.studentId, tracked: true, assignedDates: assignedByPair.get(key) ?? [],
       rejected: rejectedByPair.get(key), kept: keptByPair.get(key) });
   }
-  const assignmentRounds = buildLedgerRounds({ rows: [...roundRows.values()], marks, videos: videos ?? [], fromDate: wideFrom, toDate: wideTo });
-  const assignedVideoIds = new Set([...assignmentRounds.values()].flatMap(rounds => rounds.flatMap(round => round.videoId ? [round.videoId] : [])));
-  // 기간 안의 **영상이 없는** 숙제 칸(미확인·미수행)만 — 완료(영상·손 기록) 칸은 붙일 자리가 아니다. 옮겨 남긴 숙제도 손 배정할 수 있는 숙제다
-  // (DB 함수가 따로 낸 숙제 줄을 숙제로 본다). 검사 기록만 있는 칸은 손 배정이 거절한다.
-  const openRows = assignmentRows.map(row => ({ ...row, assignedDates: (assignmentRounds.get(`${row.classId}:${row.studentId}`) ?? [])
-    .filter(round => (round.assigned || round.kept) && !!round.homeworkDate && !round.videoId && round.status !== "submitted"
-      && round.homeworkDate >= fromDate && round.homeworkDate <= toDate).map(round => round.homeworkDate!) }));
+  const owners: RoundOwners = new Map();
+  const assignmentRounds = buildLedgerRounds({ rows: [...roundRows.values()], marks, videos: videos ?? [], fromDate: wideFrom, toDate: wideTo, owners });
+  // 붙은 영상 — 미확인·미수행 칸에는 칸의 대표 영상만(같은 날 둘째 영상은 다른 숙제 것일 수 있어 '안 붙음'으로 알린다 — 10/13 그대로),
+  // 손 완료('수동') 칸에는 칸이 세거나 접어 둔 영상 전부(손 완료는 흔해서, 같은 날 둘째 영상 · 같은 파일 사본마다 버튼이 뜨면 10/13의 오해가 돌아온다 — 적대적 리뷰 2026-10-14).
+  const representative = new Set([...assignmentRounds.values()].flatMap(rounds => rounds.flatMap(round => round.videoId ? [round.videoId] : [])));
+  const owned = new Set([...representative, ...owners.keys()]);
+  // 기간 안의 **영상이 안 붙은** 숙제 칸 — 미확인 · 미수행 · 손으로 찍은 '수동' 완료 · 검사 기록 칸까지(원장 2026-10-14 *"수동 영상들 다 학생들이
+  // 업로드해서 배정하고 싶은데 배정이 불가능함"*). 영상이 붙은 칸은 붙일 자리가 아니다(원장 2026-10-13 *"오해를 불러일으키겠는데"*).
+  // `manual` = 손 완료 칸만 / 아니면 미확인·미수행 칸만 — 위의 '붙은 영상' 기준이 둘이 다르다.
+  const openRows = (manual: boolean) => assignmentRows.map(row => ({ ...row, assignedDates: (assignmentRounds.get(`${row.classId}:${row.studentId}`) ?? [])
+    .filter(round => !round.videoId && (round.status === "submitted") === manual && inRange(round.homeworkDate)).map(round => round.homeworkDate!) }));
   const subjectOfClass = new Map(classes.map((row) => [row.id, row.subject]));
+  const subjectOf = (classId: string) => subjectOfClass.get(classId);
   const assignablePairs = assigned !== null && videos !== null && assignmentCandidates !== null
-    ? unassignedVideoPairs(openRows, assignmentCandidates, assignedVideoIds, (classId) => subjectOfClass.get(classId)) : null;
+    ? new Set([...unassignedVideoPairs(openRows(false), assignmentCandidates, representative, subjectOf),
+      ...unassignedVideoPairs(openRows(true), assignmentCandidates, owned, subjectOf)]) : null;
   const byClass = new Map(classes.map((row) => [row.id, row]));
   const byStudent = new Map(students.map((row) => [row.id, row]));
   const rows = pairs.flatMap((pair): VideoHomeworkLedgerBaseRow[] => {

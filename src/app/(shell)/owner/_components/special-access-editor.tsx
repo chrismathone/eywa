@@ -1,16 +1,15 @@
 "use client";
 
-import { useState } from "react";
 import { CLASS_SPLIT_ENABLED } from "@/features/class-splits/access";
 import { useModuleOn } from "@/features/owner/operations-context";
 import type { PermissionsSettings } from "@/features/owner/settings-types";
 import { SettingsCard } from "./settings-card";
 import { StaffScopeEditor } from "./staff-scope-editor";
+import { SpecialAccessList } from "./special-access-list";
 
 type SpecialAccess = PermissionsSettings["specialAccess"];
 type StaffOption = { id: string; name: string; role: string };
 type ListKey = "payslipViewerIds" | "leaveAdjusterIds" | "classSplitterIds";
-const MAX_PEOPLE = 80;
 const LISTS: readonly { key: ListKey; label: string; hint: string }[] = [
   { key: "payslipViewerIds", label: "급여명세서 열람", hint: "급여명세서를 열람 · 작성 · 발행할 수 있는 사람입니다. 원장과 여기서 지정한 사람만 봅니다. 지정한 사람은 출석부 메뉴 권한도 있어야 합니다." },
   { key: "leaveAdjusterIds", label: "연차 조정", hint: "직원의 연차 부여 일수를 고칠 수 있는 사람입니다. 직원관리 메뉴 권한도 있어야 합니다." },
@@ -35,16 +34,10 @@ export function SpecialAccessEditor({ value, hiddenUserIds, staffOptions, nameOf
   nameOf: (userId: string) => string;
   onChange: (next: (value: SpecialAccess) => SpecialAccess) => void;
 }) {
-  const [picked, setPicked] = useState<Record<string, string>>({});
   const payrollOn = useModuleOn("payroll");
   const hidden = new Set(hiddenUserIds);
   const pickable = staffOptions.filter((s) => !hidden.has(s.id) && s.role !== "master");
   const lists = LISTS.filter(({ key }) => (key !== "payslipViewerIds" || payrollOn) && (key !== "classSplitterIds" || CLASS_SPLIT_ENABLED));
-  const add = (key: ListKey, id: string) => {
-    if (!id) return;
-    onChange((prev) => (prev[key].includes(id) || prev[key].length >= MAX_PEOPLE ? prev : { ...prev, [key]: [...prev[key], id] }));
-  };
-  const select = "border-border bg-card rounded border px-2 py-1.5 text-xs";
   return (
     <SettingsCard
       title="개인별 기능 권한"
@@ -53,61 +46,24 @@ export function SpecialAccessEditor({ value, hiddenUserIds, staffOptions, nameOf
       description="메뉴 권한과 별개로, 사람을 지정해서 여는 기능입니다. 원장은 지정하지 않아도 전부 할 수 있습니다. 지정한 사람은 × 로 거둘 수 있습니다."
     >
       <div className="space-y-5">
-        {lists.map(({ key, label, hint }) => {
-          const shown = value[key].filter((id) => !hidden.has(id));
-          return (
-            <div key={key} className="space-y-2">
-              <div>
-                <p className="text-xs font-bold">{label}</p>
-                <p className="text-text-dim text-xs">{hint}</p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <select aria-label={`${label} 담당자 선택`} value={picked[key] ?? ""} onChange={(e) => setPicked((p) => ({ ...p, [key]: e.target.value }))} className={select}>
-                  <option value="">직원 선택</option>
-                  {pickable.filter((s) => !value[key].includes(s.id)).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-                <button
-                  type="button"
-                  aria-label={`${label} 담당자 추가`}
-                  onClick={() => {
-                    add(key, picked[key] ?? "");
-                    setPicked((p) => ({ ...p, [key]: "" }));
-                  }}
-                  disabled={!picked[key] || value[key].length >= MAX_PEOPLE}
-                  className="border-border bg-card rounded border px-3 py-1.5 text-xs font-bold disabled:opacity-40"
-                >
-                  담당자 추가
-                </button>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {shown.length === 0 ? (
-                  <span className="text-text-dim text-xs">지정된 직원 없음</span>
-                ) : (
-                  shown.map((id) => (
-                    <span key={id} className="border-border bg-card inline-flex items-center gap-1 rounded border px-2 py-1 text-xs">
-                      {nameOf(id)}{" "}
-                      <button
-                        type="button"
-                        aria-label={`${nameOf(id)} ${label} 해제`}
-                        title="해제"
-                        onClick={() => onChange((prev) => ({ ...prev, [key]: prev[key].filter((v) => v !== id) }))}
-                        className="text-text-dim hover:text-danger leading-none"
-                      >
-                        ×
-                      </button>
-                    </span>
-                  ))
-                )}
-              </div>
-            </div>
-          );
-        })}
+        {lists.map(({ key, label, hint }) => <SpecialAccessList key={key} label={label} hint={hint}
+          ids={value[key]} hiddenUserIds={hiddenUserIds} staffOptions={pickable} nameOf={nameOf}
+          onChange={(update) => onChange((prev) => ({ ...prev, [key]: update(prev[key]) }))} />)}
         <StaffScopeEditor
           scopes={value.staffSubjectScopes}
           hiddenUserIds={hiddenUserIds}
           staffOptions={pickable}
           nameOf={nameOf}
           onChange={(next) => onChange((prev) => ({ ...prev, staffSubjectScopes: next(prev.staffSubjectScopes) }))}
+        />
+        <SpecialAccessList
+          label="수강 날짜 수정"
+          hint="수강 시작일·종료일을 수정할 수 있는 사람입니다. 학생목록·수업목록·퇴원관리 중 접근할 메뉴 권한이 필요하며, 기존 담당 범위를 따릅니다. 수강 이력 삭제 권한은 포함하지 않습니다."
+          ids={value.enrollmentDateEditorIds ?? []}
+          hiddenUserIds={hiddenUserIds}
+          staffOptions={pickable}
+          nameOf={nameOf}
+          onChange={(update) => onChange((prev) => ({ ...prev, enrollmentDateEditorIds: update(prev.enrollmentDateEditorIds ?? []) }))}
         />
       </div>
     </SettingsCard>

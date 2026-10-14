@@ -50,7 +50,9 @@ describe("강사 전체 보기 조립 — 화면과 명세서가 같은 호출�
   it("🔴 명세서 조립은 금액이다 — 보는 사람의 강사 렌즈·접힌 재료를 그대로 쓰지 않고 멈춘다", () => {
     const s = flat(sheet);
     // 아래 조회들은 보는 사람의 강사 렌즈로 반을 좁힌다 — 대상 강사와 다르면 부분 금액이 오류 없이 나온다.
-    expect(s).toContain("const lens = await effectiveTeacherId(); if (lens && lens !== teacherId) { throw new TeacherSheetError(");
+    // 로그인 없는 조립 문맥(강사평가 밤 집계)은 렌즈가 없고 다른 지점은 조립하지 않는다(read-context.ts).
+    expect(s).toContain("const lens = readCtx ? null : await effectiveTeacherId(); if (lens && lens !== teacherId) { throw new TeacherSheetError(");
+    expect(s).toContain("if (readCtx && readCtx.tenantId !== tenantId) throw new TeacherSheetError(");
     // 화면은 접지만 돈은 접힌 재료로 계산하지 않는다: 담임 이력 · 대신 보강 귀속 · 보강 반 · 청구 조회(이월·보강 반 청구).
     expect(s).toContain("if (sinceIdx.incomplete) throw new TeacherSheetError(");
     expect(s).toContain('if (taughtBy === "unknown") throw new TeacherSheetError(');

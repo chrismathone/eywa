@@ -6,6 +6,7 @@ import type { VideoArrival, VideoHomeworkLedgerRow, VideoHomeworkMark } from "..
 
 const mocks = vi.hoisted(() => ({ save: vi.fn() }));
 vi.mock("../server/actions", () => ({ setVideoHomeworkRound: mocks.save }));
+vi.mock("next/navigation", async (load) => ({ ...(await load<typeof import("next/navigation")>()), useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/components/embed-link", () => ({ EmbedHiddenInput: () => null }));
 
@@ -90,6 +91,35 @@ describe("영상 제출 현황 — ▶ 현재 화면 재생 · 수동", () => {
   });
 });
 
+describe("영상 제출 현황 — 서버가 새 기록을 내려주면 다시 그린다(원장 2026-10-14 '배정하고도 안바뀌길래')", () => {
+  const missing = [marks[0]!, { ...marks[1]!, status: "missing" as const, submittedDate: null }];
+  const view = (initial: VideoHomeworkMark[]) => <VideoHomeworkManagement rows={rows} initialMarks={initial} videos={videos} blankFacts={facts}
+    fromDate="2026-10-01" toDate={today} today={today} />;
+  it("🔴 배정 뒤 다시 그린 화면의 기록을 따른다 — 처음 받은 '미수행'을 붙들지 않는다", () => {
+    const { rerender } = render(view(missing));
+    expect(screen.getByRole("button", { name: "이서연 2회 2026-10-13 미수행" })).toBeInTheDocument();
+    rerender(view([...marks]));
+    expect(screen.getByRole("button", { name: "이서연 2회 2026-10-13 완료" })).toBeInTheDocument();
+  });
+  it("저장 중에 온 값은 저장이 끝난 뒤에 맞춘다 — 방금 그린 칸을 저장 도중에 덮지 않는다", async () => {
+    let finish: (value: { ok: boolean }) => void = () => {};
+    mocks.save.mockReturnValueOnce(new Promise((resolve) => { finish = resolve; }));
+    const { rerender } = render(view(marks));
+    fireEvent.click(screen.getByRole("button", { name: "김민준 3회 2026-10-20 미확인" }));
+    expect(screen.getByRole("status")).toHaveTextContent("기록 저장 중");
+    rerender(view(missing));
+    expect(screen.getByRole("button", { name: "이서연 2회 2026-10-13 완료" })).toBeInTheDocument();
+    finish({ ok: true });
+    expect(await screen.findByRole("button", { name: "이서연 2회 2026-10-13 미수행" })).toBeInTheDocument();
+    // 🔴 저장 중에 온 값은 저장 전에 만든 것일 수 있다 — 방금 저장한 칸은 '미확인'으로 돌아가지 않는다(적대 리뷰)
+    expect(screen.getByRole("button", { name: "김민준 3회 2026-10-20 완료" })).toBeInTheDocument();
+    // 저장이 끝난 뒤에 온 값은 그대로 따른다
+    rerender(view([...marks]));
+    expect(screen.getByRole("button", { name: "이서연 2회 2026-10-13 완료" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "김민준 3회 2026-10-20 미확인" })).toBeInTheDocument();
+  });
+});
+
 describe("영상 제출 현황 — 결석은 —, 숙제없음은 사유 표시(회차 수는 그대로)", () => {
   it("이서연의 결석 칸은 — · 10.20 숙제없음, 박도윤은 입반 전이라 —", () => {
     show();
@@ -106,6 +136,12 @@ describe("영상 제출 현황 — 결석은 —, 숙제없음은 사유 표시(
     const two = within(screen.getByRole("row", { name: /이서연/ }));
     expect(two.getByText("/1")).toBeInTheDocument(); // m = 자기 회차 1개
     expect(screen.queryByText("결석")).not.toBeInTheDocument();
+  });
+  // 원장 2026-10-14 *"날짜 순서가 이상한데"* — 전주율: 10/1 숙제없음이 10/8·10/12 회차 뒤 3회 자리에 섰다.
+  it("🔴 빈 칸도 날짜순으로 회차 사이에 선다 — 이서연: 10/06 결석(—) · 10/13 회차 · 10/20 숙제없음", () => {
+    show();
+    const cells = within(screen.getByRole("row", { name: /이서연/ })).getAllByRole("cell").slice(-3);
+    expect(cells.map((td) => td.textContent)).toEqual(["—", expect.stringContaining("10.13"), "10.20숙제없음"]);
   });
   it("안내 줄에 표시 뜻이 한 줄 들어간다", () => {
     show();

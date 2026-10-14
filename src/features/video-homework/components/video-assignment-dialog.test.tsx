@@ -28,6 +28,16 @@ it("다른 반 영상의 원래 게시물과 숙제를 확인한 뒤 사유를 �
   await waitFor(() => expect(m.save).toHaveBeenCalledWith(expect.objectContaining({ classId: "math", videoId: "v", revision: 4, homeworkDate: "2026-10-01" })));
   await waitFor(() => expect(close).toHaveBeenCalled()); expect(m.refresh).toHaveBeenCalled();
 });
+it("칸에서 연 배정 창은 그 칸의 숙제를 먼저 골라 둔다 — 목록에 없는 날이면 종전대로", async () => {
+  const original = await m.options();
+  m.options.mockResolvedValue({ ...original, dates: ["2026-10-08", "2026-10-01"] });
+  // 종전 규칙이면 영상이 들어갈 수 있는 첫 숙제(10/01)를 고른다 — 칸에서 열었으면 그 칸(10/08)이 먼저다.
+  render(<VideoAssignmentDialog row={row} initialDate="2026-10-08" fromDate="2026-10-01" toDate="2026-10-31" onClose={vi.fn()} />);
+  expect(await screen.findByRole("combobox", { name: "배정할 영상 숙제" })).toHaveValue("2026-10-08");
+  cleanup();
+  render(<VideoAssignmentDialog row={row} initialDate="2026-09-01" fromDate="2026-10-01" toDate="2026-10-31" onClose={vi.fn()} />);
+  expect(await screen.findByRole("combobox", { name: "배정할 영상 숙제" })).toHaveValue("2026-10-01");
+});
 it("저장 충돌은 창을 닫지 않고 이유를 보여 준다", async () => {
   m.save.mockResolvedValue({ ok: false, error: "다른 곳에서 변경됐습니다." }); const close = vi.fn();
   render(<VideoAssignmentDialog row={row} fromDate="2026-10-01" toDate="2026-10-31" onClose={close} />);
