@@ -141,7 +141,7 @@ export function BulkApplyPopover({
     mode === "copy"
       ? canCopy
       : !!(attitude || homework || textbook.trim() || homeworkToday.trim() || progress.trim() || att ||
-          note.trim() || hasTest || video.check || video.homework !== null);
+          note.trim() || hasTest || video.check || video.homework !== null || video.due !== null);
   // 과목이 하나뿐이면 고를 것도 없다 — 그대로 그 과목.
   const activeSubject = subjects.find((s) => s.key === (subjectKey ?? subjects[0]?.key)) ?? subjects[0] ?? null;
 
@@ -216,6 +216,8 @@ export function BulkApplyPopover({
         // 영상 과제 — 고른 때만. 링크 넣기는 '있음'과 함께 켠 때만 싣는다(안 켰으면 그 값은 건드리지 않는다).
         ...(video.homework !== null ? { videoHomework: video.homework } : {}),
         ...(video.homework === true && video.link ? { videoSubmitLink: true } : {}),
+        // 마감 — 고른 때만('없음'을 고르면 마감 줄이 숨고 값도 버린다). 영상 과제가 켜진 행에만 들어간다(planBulkApply).
+        ...(video.due !== null && video.homework !== false ? { videoHomeworkDue: video.due } : {}),
       },
       onlyEmpty,
       activeSubject?.key ?? "",

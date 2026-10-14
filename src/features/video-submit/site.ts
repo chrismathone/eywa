@@ -78,32 +78,33 @@ export function siteNote(value: unknown): string | null {
 }
 
 /**
- * 사이트로 숙제를 올릴 수 있는 기간 — 숙제가 나간 수업일부터 이 날수가 지난 날까지(KST, 그날 포함). 원장 2026-10-03
- * *"링크가 숙제날짜 기준 7일로 하면 좋겠네"* — 10/1 숙제면 10/8까지. 숙제 목록·제출 화면·업로드 시작이 같은 값을 본다.
+ * 사이트로 숙제를 올릴 수 있는 **기본** 기간 — 숙제가 나간 수업일부터 이 날수가 지난 날까지(KST, 그날 포함). 원장 2026-10-03
+ * *"링크가 숙제날짜 기준 7일로 하면 좋겠네"* — 10/1 숙제면 10/8까지. 선생님이 '다음 수업'을 고른 숙제는 그 수업일까지다(원장 2026-10-15) —
+ * 숙제마다의 마감은 video-homework/due.ts `homeworkDue`로만 읽는다(숙제 목록·제출 화면·업로드 시작·미수행 판정이 같은 값을 본다).
  */
 export const SITE_HOMEWORK_DAYS = 7;
 
-/** 그 숙제를 사이트로 올릴 수 있는 마지막 날(KST) — 숙제일 + `SITE_HOMEWORK_DAYS`. */
+/** 마감을 고르지 않은 숙제의 마지막 날(KST) — 숙제일 + `SITE_HOMEWORK_DAYS`. 숙제마다의 마감은 due.ts `homeworkDue`. */
 export const siteHomeworkLastDay = (homeworkDate: string): string => shareExpiryDate(homeworkDate, SITE_HOMEWORK_DAYS);
 
 /**
  * 사이트가 만든 링크가 끝나는 순간 — 마지막으로 쓸 수 있는 날(`lastDay`)의 다음 날 0시(KST).
  * `lastDay` = 그 학생 × 반의 **안 낸 숙제 중 가장 늦게 끝나는 것**의 마지막 날 — 링크 하나로 같은 반의 다른 숙제도 올리므로(제출 화면의
  * '이 반의 다른 영상 숙제') 링크는 가장 늦은 숙제까지 살고, 숙제마다의 기한은 업로드 시작·제출 화면이 숙제일로 따로 막는다.
- * 만든 날에서 길어야 `SITE_HOMEWORK_DAYS` + 1일 — 링크 수를 세는 곳은 이 기간을 덮어야 한다(`SITE_LINK_LOOKBACK_DAYS`).
+ * 만든 날에서 길어야 마감의 최대 거리(due.ts `VIDEO_HOMEWORK_MAX_DUE_DAYS`, 14일) + 1일 — 링크 수를 세는 곳은 이 기간을 덮어야 한다(`SITE_LINK_LOOKBACK_DAYS`).
  */
 export function siteLinkExpiresAt(lastDay: string): string {
   return `${shareExpiryDate(lastDay, 1)}T00:00:00+09:00`;
 }
 
 /**
- * 제출 화면의 "언제까지" — 링크가 끝나는 날(끝나는 순간 1ms 전의 KST 날짜). 고른 숙제가 있으면 그 숙제의 기한(숙제일 + 7일)과 중 이른 날.
- * 링크는 같은 반의 가장 늦은 숙제까지 살지만, 학생에게는 "지금 고른 숙제를 언제까지 올리나"가 중요하다.
+ * 제출 화면의 "언제까지" — 링크가 끝나는 날(끝나는 순간 1ms 전의 KST 날짜). 고른 숙제가 있으면 그 숙제의 마감(`due` — 서버가 읽은 값,
+ * 없으면 숙제일 + 7일)과 중 이른 날. 링크는 같은 반의 가장 늦은 숙제까지 살지만, 학생에게는 "지금 고른 숙제를 언제까지 올리나"가 중요하다.
  */
-export function uploadLastDay(expiresAtIso: string, homeworkDate: string | null): string {
+export function uploadLastDay(expiresAtIso: string, homeworkDate: string | null, due?: string | null): string {
   const linkLast = kstDateOf(new Date(Date.parse(expiresAtIso) - 1)) ?? "";
   if (!homeworkDate) return linkLast;
-  const homeworkLast = siteHomeworkLastDay(homeworkDate);
+  const homeworkLast = due ?? siteHomeworkLastDay(homeworkDate);
   return linkLast && linkLast < homeworkLast ? linkLast : homeworkLast;
 }
 
@@ -113,14 +114,19 @@ export function uploadLastDay(expiresAtIso: string, homeworkDate: string | null)
  */
 export const VIDEO_UPLOAD_OTHER_WAYS = "숙제 영상은 ClassNote 알림장에 올리거나, 숙제 영상 올리기 사이트에서 휴대폰 번호 뒷 4자리와 이름을 넣고 올려 주세요.";
 
-/** 살아 있을 수 있는 사이트 링크를 찾을 때 거슬러 볼 날수(만든 날 기준) — 링크 수명의 최댓값 + 하루 여유. */
-export const SITE_LINK_LOOKBACK_DAYS = SITE_HOMEWORK_DAYS + 2;
+/**
+ * 살아 있을 수 있는 사이트 링크를 찾을 때 거슬러 볼 날수(만든 날 기준) — 링크 수명의 최댓값(마감의 최대 거리 14일 + 1일) + 하루 여유.
+ * 14 = video-homework/due.ts `VIDEO_HOMEWORK_MAX_DUE_DAYS`(그 모듈이 이 파일을 읽어 여기서는 숫자로 적는다 — site.test.ts가 같은 값인지 잠근다).
+ */
+export const SITE_LINK_LOOKBACK_DAYS = 14 + 2;
 
 /**
  * 화면에 보이는 숙제 한 줄 — 학생 번호·반 번호·보고서 번호는 내려보내지 않는다(고른 값은 `id`로만 돌아온다).
  * `homeworkLabel` = 그 숙제가 나간 수업일("10/1 (목)"). 숙제 **내용**은 싣지 않는다(약한 확인으로 보고서 글을 보여 주지 않는다).
  */
 export type SiteChoice = { id: string; studentLabel: string; className: string; homeworkLabel: string;
+  /** 언제까지 내나 — "10/22 (목)까지" · "다음 수업 10/15 (목)까지"(due.ts `homeworkDueText`). 숙제 줄에만. */
+  dueLabel?: string;
   /** 숙제 없이 그 반에 올리기(메모 필수) — `homeworkLabel`은 빈 글자다. */
   free?: true };
 

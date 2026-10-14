@@ -4,6 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { assignmentKey, type VideoHomeworkAssignments } from "../assignment";
 import { extraIssuesReady, listExtraIssues } from "./extra-issues";
+import { videoHomeworkDueColumnReady } from "./report-due";
+import { isCustomDue } from "../due";
 import { listRejections } from "./rejections";
 
 /**
@@ -39,7 +41,7 @@ export function _resetVideoHomeworkProbeForTest(): void {
   columnKnownReady = false;
 }
 
-type ReportRow = { student_id: string; class_id: string | null; report_date: string; video_homework: boolean | null };
+type ReportRow = { student_id: string; class_id: string | null; report_date: string; video_homework: boolean | null; video_homework_due?: string | null };
 
 /**
  * 원스크린용 — 학생들의 **정해진 날짜들**(각 행의 직전 수업일 + 오늘)의 영상 과제 값만 → `학생|날짜|반 → true/false`.
@@ -145,6 +147,7 @@ export async function getOthersReportKeys(
  * (같은 날 보고서에도 켜져 있으면 한 줄이고 `extra`는 그대로 — 따로 낸 표시를 지울 수 있게).
  * 검사 기록 칸에서 **옮겨 남긴 숙제**(`kept`, keep-round.ts)는 `kept`를 단다 — 장부는 검사 기록 칸처럼 짜고, 자동 판정은 뺀다
  * (같은 날 보고서에 '영상 과제 있음'이 있으면 보고서 쪽 한 줄).
+ * 보고서에 고른 마감('다음 수업', due.ts)은 `due`로 싣는다 — 마감 칸이 아직 없으면(#95) 빼고 읽는다(전부 7일).
  * 컬럼 미적용·probe 실패는 **null**(= 모른다) — 화면이 "기록만 보인다"고 알린다. 조회 자체의 오류는 그대로 던진다
  * (숙제가 없는 것처럼 조용히 비우면 미확인이 통째로 사라진다).
  */
@@ -154,33 +157,37 @@ export async function getAssignedVideoHomework(
   toDate: string,
   /** 한 학생만 — 화면에서 고친 직후의 재판정(응답 전에 돈다)이 지점 전체 보고서를 읽지 않게. */
   options: { studentId?: string } = {},
-): Promise<{ classId: string; studentId: string; date: string; extra?: true; kept?: true; rejectedAt?: string }[] | null> {
+): Promise<{ classId: string; studentId: string; date: string; extra?: true; kept?: true; rejectedAt?: string; due?: string }[] | null> {
   const db = createAdminClient();
-  if (!(await videoHomeworkColumnReady(db))) return null;
+  const [ready, dueReady] = await Promise.all([videoHomeworkColumnReady(db), videoHomeworkDueColumnReady(db)]);
+  if (!ready) return null;
   const { studentId } = options;
   const [rows, extra, rejections] = await Promise.all([
     fetchAllPaged<ReportRow>((from, to) => {
       const query = db
         .from("lesson_reports")
-        .select("student_id,class_id,report_date,video_homework")
+        .select(dueReady ? "student_id,class_id,report_date,video_homework,video_homework_due" : "student_id,class_id,report_date,video_homework")
         .eq("tenant_id", tenantId)
         .eq("video_homework", true)
         .not("class_id", "is", null)
         .gte("report_date", fromDate)
         .lte("report_date", toDate);
       if (studentId) query.eq("student_id", studentId);
-      return query.order("id", { ascending: true }).range(from, to);
+      // 마감 칸은 생성 타입에 아직 없어(SQL 적용 전에도 돌아야 한다, #95) 고른 열을 타입이 못 읽는다 — 줄 모양은 ReportRow로 적는다.
+      return query.order("id", { ascending: true }).range(from, to) as unknown as PromiseLike<{ data: ReportRow[] | null; error: { message: string } | null }>;
     }),
     listExtraIssues(db, tenantId, { fromDate, toDate }),
     // 반려 표시(원장 2026-10-13) — 그 숙제 칸에 반려 전 영상이 자동으로 다시 붙지 않게 숙제에 싣는다(rounds.ts ②).
     listRejections(db, tenantId, { fromDate, toDate, ...(studentId ? { studentIds: [studentId] } : {}) }),
   ]);
-  const out = new Map<string, { classId: string; studentId: string; date: string; extra?: true; kept?: true; rejectedAt?: string }>();
-  for (const r of rows) if (r.class_id && (!studentId || r.student_id === studentId)) out.set(`${r.class_id}:${r.student_id}:${r.report_date}`, { classId: r.class_id, studentId: r.student_id, date: r.report_date });
+  const out = new Map<string, { classId: string; studentId: string; date: string; extra?: true; kept?: true; rejectedAt?: string; due?: string }>();
+  for (const r of rows) if (r.class_id && (!studentId || r.student_id === studentId)) out.set(`${r.class_id}:${r.student_id}:${r.report_date}`, {
+    classId: r.class_id, studentId: r.student_id, date: r.report_date, ...(isCustomDue(r.report_date, r.video_homework_due) ? { due: r.video_homework_due } : {}) });
   for (const x of extra) {
     if (studentId && x.studentId !== studentId) continue;
     const key = `${x.classId}:${x.studentId}:${x.date}`;
-    if (!x.kept) out.set(key, { classId: x.classId, studentId: x.studentId, date: x.date, extra: true });
+    // 같은 날 보고서에도 켜져 있으면 그 보고서의 마감을 그대로 둔다(따로 낸 표시만 더한다).
+    if (!x.kept) { const due = out.get(key)?.due; out.set(key, { classId: x.classId, studentId: x.studentId, date: x.date, extra: true, ...(due ? { due } : {}) }); }
     else if (!out.has(key)) out.set(key, { classId: x.classId, studentId: x.studentId, date: x.date, kept: true });
   }
   for (const r of rejections) {

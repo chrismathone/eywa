@@ -47,6 +47,7 @@ import { FieldSelect } from "./field-select";
 import { HomeworkRateInput } from "./homework-rate-input";
 import { VideoHomeworkCheck } from "@/features/video-homework/components/video-homework-provider";
 import { VideoHomeworkToggle } from "@/features/video-homework/components/video-homework-toggle";
+import { VideoHomeworkDueToggle } from "@/features/video-homework/components/video-homework-due-toggle";
 import { VideoSubmitLinkToggle } from "@/features/video-homework/components/video-submit-link-toggle";
 import { ProgressModePills } from "./progress-mode-pills";
 import { ProgressSelector } from "./progress-selector";
@@ -101,6 +102,8 @@ export type GridFieldHandlers = {
   onVideoHomework?: (studentId: string, subjectName: string) => void;
   /** 영상 첨부 링크 넣기 켜고 끄기(0328a) — '영상 과제'를 켠 행에서만 뜬다. 없으면 칸이 잠긴다. */
   onVideoSubmitLink?: (studentId: string, subjectName: string) => void;
+  /** 영상 숙제 마감(7일 · 다음 수업) 고르기 — '영상 과제'를 켠 행에서만 뜬다. 없으면 칸이 잠긴다. */
+  onVideoHomeworkDue?: (studentId: string, subjectName: string, mode: "week" | "next") => void;
 };
 
 /** 행 단위 액션. */
@@ -719,6 +722,15 @@ export function GridBodyRow({
             grade={student.grade}
             studentName={student.name}
             subjectName={subject.name}
+          />
+          {/* 영상 숙제 마감(원장 2026-10-15) — '영상 과제'를 켠 행에만. 7일(기본) · 다음 수업. */}
+          <VideoHomeworkDueToggle
+            shown={!!subject.videoHomework}
+            mode={subject.videoHomeworkDue}
+            dueDate={subject.videoHomeworkDueDate}
+            onChange={(mode) => fields.onVideoHomeworkDue?.(student.id, subject.name, mode)}
+            disabled={rowLocked || !fields.onVideoHomeworkDue}
+            row={{ studentId: student.id, classId: subject.classId, subjectKey: subject.subjectKey, grade: student.grade, studentName: student.name, subjectName: subject.name }}
           />
           {/* 영상 첨부 링크 넣기(0328a) — '영상 과제'를 켠 행에만. 켠 보고서 글에만 영상 올리는 링크가 함께 나간다. */}
           <VideoSubmitLinkToggle

@@ -87,7 +87,8 @@ const FULL: ParentReportCardProps = {
 
 it("영상 과제가 있는 보고서만 오늘 과제 아래에 실제 제출 날짜를 표시한다", () => {
   const html = renderToStaticMarkup(<ParentReportCard {...FULL} report={{ ...FULL.report, reportDate: "2026-10-02", videoHomework: true }} />);
-  expect(html).toContain("~10/9 (금)");
+  // 언제까지 내나 — 올리기 사이트·멘트와 같은 문구(video-homework/due.ts, 원장 2026-10-15).
+  expect(html).toContain("10/9 (금)까지");
   expect(html.indexOf("영상 숙제")).toBeGreaterThan(html.indexOf("오늘 과제"));
   expect(html).not.toContain("영상숙제 기한");
   expect(renderToStaticMarkup(<ParentReportCard {...FULL} />)).not.toContain("영상 숙제");

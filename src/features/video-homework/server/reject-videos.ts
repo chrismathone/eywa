@@ -5,10 +5,10 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { readonlyTeacherViewError } from "@/lib/auth/view-mode";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchInChunks } from "@/lib/supabase/batch";
-import { addDays, kstToday } from "@/lib/date-kst";
+import { kstToday } from "@/lib/date-kst";
 import { reportError } from "@/lib/observability/report-error";
 import { logAction } from "@/features/audit/server/log";
-import { SITE_HOMEWORK_DAYS } from "@/features/video-submit/site";
+import { homeworkOpen } from "../due";
 import { loadPairRoundMaterials, pairRounds } from "@/features/video-submit/server/site-homework";
 import { readPinnedVideoDriveCredential } from "@/features/video-submit/server/drive-credentials";
 import { driveRequest, trashDriveFile } from "@/features/video-submit/server/drive-api";
@@ -30,7 +30,7 @@ export type RejectResult = {
   ok: boolean; error?: string; rejected?: number;
   /** Drive 휴지통으로 옮긴 수 · 못 옮긴 수 · 다른 영상 줄과 같은 파일이라 남겨 둔 수. */
   trashed?: number; trashFailed?: number; trashShared?: number;
-  /** 기한(숙제일 + 7일) 안이라 학생이 다시 올릴 수 있다. */
+  /** 마감(선생님이 고른 다음 수업 또는 숙제일 + 7일, due.ts) 안이라 학생이 다시 올릴 수 있다. */
   reopened?: boolean;
 };
 
@@ -42,7 +42,7 @@ export type RejectResult = {
  *  2. DB 함수 `reject_homework_videos`가 **한 거래로** 반려 표시(그 시각에 이미 있던 영상은 그 칸에 다시 안 붙는다) · 집계 제외(배정 이력에
  *     사유·처리자) · 그 숙제의 검사 기록 삭제를 한다. 그사이 영상 연결이 바뀌었으면 아무것도 안 바꾸고 'changed'.
  *  3. Drive 파일은 업로드 때 각인된 폴더·계정 자격으로 **휴지통**(30일 복구). 다른 영상 줄이 같은 파일을 쓰면 남겨 둔다. 못 옮겨도 반려는 그대로다.
- *  4. 기한(숙제일 + 7일) 안이면 그 숙제가 올리기 사이트 목록에 다시 선다, 지났으면 미수행이 된다.
+ *  4. 마감(due.ts — 기본 숙제일 + 7일) 안이면 그 숙제가 올리기 사이트 목록에 다시 선다, 지났으면 미수행이 된다.
  * 권한 = 칸 편집과 같다(`ledgerRoundWriteError` — 수업보고서 전체 권한이거나 자기가 낸 숙제).
  */
 export async function rejectHomeworkVideos(input: { classId: string; studentId: string; homeworkDate: string }): Promise<RejectResult> {
@@ -95,7 +95,8 @@ export async function rejectHomeworkVideos(input: { classId: string; studentId: 
     if (data !== "rejected") return { ok: false, error: "영상을 반려하지 못했습니다. 화면을 새로고침한 뒤 다시 시도해 주세요." };
     const routeOf = (row: { route: unknown }) => (row.route && typeof row.route === "object" ? row.route as Record<string, unknown> : {});
     const trash = await trashFiles(db, user.tenantId, rows.map((row) => ({ id: row.id, fileId: row.drive_file_id, route: routeOf(row) })));
-    const reopened = today <= addDays(homeworkDate, SITE_HOMEWORK_DAYS);
+    // 학생이 다시 올릴 수 있나 = 그 숙제의 마감 안(due.ts — 선생님이 고른 '다음 수업' 또는 숙제일 + 7일).
+    const reopened = homeworkOpen(homeworkDate, today, round?.due);
     await logAction({ action: "lesson_report_video_homework_reject", targetType: "video_homework",
       targetLabel: [target.studentName, target.className].filter(Boolean).join(" · ") || null,
       metadata: { classId, studentId, homeworkDate, videos: targets.length, ...trash, reopened, ...(keep === "kept" ? { keptAsIssue: true } : {}) } });

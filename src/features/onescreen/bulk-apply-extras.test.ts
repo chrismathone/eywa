@@ -63,6 +63,20 @@ describe("영상 과제 · 영상 첨부 링크 넣기", () => {
     const plan = setOf([videoRow({ videoHomework: false }), videoRow({ studentId: "b" })], { videoHomework: true, videoSubmitLink: true }, true);
     expect(plan).toEqual([{ videoHomework: true, videoSubmitLink: true }]);
   });
+  // 원장 2026-10-15 *"이것도 일괄입력에 넣을 수 있게 배선해주고"* — 마감(7일 · 다음 수업)도 일괄로.
+  it("마감은 마감을 고를 수 있고 영상 과제가 켜진(이번에 켜는 것 포함) 행에만 · 같은 값이면 건드리지 않는다", () => {
+    const due = (over: Partial<BulkTarget> = {}) => videoRow({ dueOk: true, ...over });
+    expect(setOf([due()], { videoHomework: true, videoHomeworkDue: "next" })).toEqual([{ videoHomework: true, videoHomeworkDue: "next" }]);
+    expect(setOf([due({ videoHomework: true })], { videoHomeworkDue: "next" })).toEqual([{ videoHomeworkDue: "next" }]);
+    expect(setOf([due({ videoHomework: false })], { videoHomeworkDue: "next" })).toEqual([]);
+    expect(setOf([due({ videoHomework: true, videoHomeworkDue: "next" })], { videoHomeworkDue: "next" })).toEqual([]);
+    // 마감 칸이 준비되지 않은 행(dueOk 없음)엔 과제만
+    expect(setOf([videoRow()], { videoHomework: true, videoHomeworkDue: "next" })).toEqual([{ videoHomework: true }]);
+    // '빈 칸만'은 고른 적 없는 행에만
+    expect(setOf([due({ videoHomework: true, videoHomeworkDue: "week" }), due({ studentId: "b", videoHomework: true })], { videoHomeworkDue: "next" }, true))
+      .toEqual([{ videoHomeworkDue: "next" }]);
+    expect(setOf([due({ videoHomework: true, locked: true })], { videoHomeworkDue: "next" })).toEqual([]);
+  });
   it("잠긴 행(발송 완료·결석)엔 아무것도 넣지 않는다", () => {
     expect(setOf([videoRow({ locked: true })], { videoHomework: true, videoSubmitLink: true, note: "메모", dailyScore: 3 })).toEqual([]);
   });

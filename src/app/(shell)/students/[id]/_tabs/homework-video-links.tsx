@@ -64,7 +64,7 @@ export async function HomeworkVideoLinks({ studentId }: { studentId: string }) {
         <h3 className="text-base font-bold"><SheetText value={"숙제 영상 올리기"} /></h3>
         {siteUrl ? (
           <p className="text-text-dim mt-1 text-sm break-keep">
-            <SheetText value={"학생은 "} /><span className="text-foreground font-bold break-all">{siteUrl}</span> <SheetText value={"에서 휴대폰 뒷 4자리와 이름을 넣고, 원스크린에서 ‘영상 과제 있음’으로 낸 숙제를 골라 올립니다(숙제가 나간 날로부터 "} />{SITE_HOMEWORK_DAYS}<SheetText value={"일 뒤까지 — 10/1 숙제면 10/8까지). ClassNote에 올려도 됩니다."} /></p>
+            <SheetText value={"학생은 "} /><span className="text-foreground font-bold break-all">{siteUrl}</span> <SheetText value={"에서 휴대폰 뒷 4자리와 이름을 넣고, 원스크린에서 ‘영상 과제 있음’으로 낸 숙제를 골라 올립니다(선생님이 정한 마감까지 — 기본은 숙제가 나간 날로부터 "} />{SITE_HOMEWORK_DAYS}<SheetText value={"일 뒤, 10/1 숙제면 10/8까지 · ‘다음 수업’을 고르면 그 수업일까지). ClassNote에 올려도 됩니다."} /></p>
         ) : null}
         {rows.length ? (
           <p className="text-text-dim mt-1 text-sm break-keep">
