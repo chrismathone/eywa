@@ -36,7 +36,13 @@ export function slicePredicate(groups: readonly string[], groupsOf: GroupsOf): S
 
 const SEPARATOR = /[\s,+/·&()[\]]/;
 
-/** 과목 이름표 — 키·이름(학원 설정에 **있는** 과목만) + 영어 갈래 이름(EiE·인재원 영어 — `english_track`, 코드 고정 개념). 긴 이름 먼저. */
+/**
+ * 과목 이름이 아닌 **프로그램 이름** → 묶음(원장 2026-10-14 *"매쓰몽 수학"*). 학원 설정에 과목 별칭 칸이 없어 여기 둔다 —
+ * 그 묶음이 학원 설정에 있을 때만 쓴다(수학이 없는 지점엔 아무 일도 안 한다). 설정에 별칭 칸이 생기면 그리로 옮길 것.
+ */
+const PROGRAM_NAMES: Readonly<Record<string, string>> = { 매쓰몽: "math" };
+
+/** 과목 이름표 — 키·이름(학원 설정에 **있는** 과목만) + 영어 갈래 이름(EiE·인재원 영어 — `english_track`, 코드 고정 개념) + 프로그램 이름(`PROGRAM_NAMES`). 긴 이름 먼저. */
 function subjectNames(subjects: readonly { key: string; label: string }[], groupOf: GroupOf): [name: string, group: string][] {
   const names: [string, string][] = [];
   for (const s of subjects) {
@@ -46,6 +52,7 @@ function subjectNames(subjects: readonly { key: string; label: string }[], group
     if (s.label.trim()) names.push([s.label.trim().toLowerCase(), g]);
   }
   if (names.some(([, g]) => g === "english")) for (const label of Object.values(ENGLISH_TRACK_LABEL)) names.push([label.toLowerCase(), "english"]);
+  for (const [name, g] of Object.entries(PROGRAM_NAMES)) if (names.some(([, k]) => k === g)) names.push([name, g]);
   // 긴 이름 먼저 — 'subject_10'을 'subject_1'로, '수학(심화)'를 '수학'으로 잘못 끊지 않게.
   return names.filter(([name]) => name).sort((a, b) => b[0].length - a[0].length);
 }
@@ -55,9 +62,9 @@ function subjectNames(subjects: readonly { key: string; label: string }[], group
  * 자유 입력 '기타'가 설정에 있는 과목이 되어 아무에게도 안 보인다 — 재리뷰 2026-10-14).
  * 콜&상담의 과목 칸은 **자유 입력**이라(옛 기록 실측: 'EIE' 195 · '영어 수학' 148 · 'EiE' 132 · '영어, 수학' 75 …) 칸을 앞에서부터
  * 읽는다 — 구분자(띄어쓰기·쉼표·+·/·괄호)는 건너뛰고, 그 자리에서 시작하는 가장 긴 과목 이름을 읽는다('영어수학' · 'EIE, 수학'
- * → 영어+수학, 영문은 대소문자 무시). **못 읽는 낱말이 하나라도 남으면 칸 전체가 '모름'**(빈 목록 = 모든 과목 관리자에게) —
- * 'EiE 매쓰몽'을 영어로만 읽으면 매쓰몽이 수학일 때 수학 관리자에게서 사라진다. '중국어'·'과학고'·'수학 특강'도 모름이다
- * (숨는 쪽보다 더 보이는 쪽이 낫다 — 원장 결정 1).
+ * → 영어+수학, 영문은 대소문자 무시 · '매쓰몽' = 수학). **못 읽는 낱말이 하나라도 남으면 칸 전체가 '모름'**(빈 목록 = 모든 과목
+ * 관리자에게) — 'EiE 고등특강'을 영어로만 읽으면 특강이 수학일 때 수학 관리자에게서 사라진다(재리뷰 2026-10-14). '중국어'·'과학고'·
+ * '수학 특강'도 모름이다(숨는 쪽보다 더 보이는 쪽이 낫다 — 원장 결정 1).
  * 두 묶음이 읽히면 양쪽 관리자 모두에게 든다(원장 결정 4). 원장 2026-10-14 *"EiE와 영어가 왜 과목 이름이 맞지 않지? 영어 아닌가"*.
  * 🔴 읽는 방법일 뿐 — 카드의 조회 기간(오늘·60일·두 달)은 그대로다. 옛 기록까지 연결하지 않는다(원장 *"너무 과거건까지 연결하지말것"*).
  */

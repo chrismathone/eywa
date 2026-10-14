@@ -39,7 +39,12 @@ describe("과목별 값(원장 2026-10-14 2단계)", () => {
     expect(new Set(groupsOf("국어 영어 수학"))).toEqual(new Set(["korean", "english", "math"]));
     // 못 읽는 낱말이 하나라도 남으면 칸 전체가 모름(재리뷰 2026-10-14) — 'EiE 매쓰몽'을 영어로만 읽으면 매쓰몽(수학일 수 있다)이 수학 관리자에게서 사라진다.
     // 오탐하던 부분 일치('중국어'·'과학고')와 첫 글자 줄임('영수'·'수영')도 모름 — 숨는 쪽보다 더 보이는 쪽.
-    for (const unknown of ["매쓰몽", "EiE 매쓰몽", "매쓰몽 EIE", "수학 특강", "수학상담", "중국어 수학", "과학고 대비", "영수", "수영", "기타", "mathmong",
+    // 프로그램 이름 '매쓰몽' = 수학(원장 2026-10-14 *"매쓰몽 수학"*)
+    expect(groupsOf("매쓰몽")).toEqual(["math"]);
+    expect(new Set(groupsOf("EiE 매쓰몽"))).toEqual(new Set(["english", "math"]));
+    expect(new Set(groupsOf("매쓰몽 EIE"))).toEqual(new Set(["english", "math"]));
+    expect(sliceGroupsOf(programSubjectsOf({ english: "영어" }), (k) => subjectGroupOf(k, programSubjectsOf({ english: "영어" })))("매쓰몽")).toEqual([]); // 수학 없는 지점엔 안 쓴다
+    for (const unknown of ["매쓰몽 교과", "EiE 고등특강", "수학 특강", "수학상담", "중국어 수학", "과학고 대비", "영수", "수영", "기타", "mathmong",
       "고등특강", "설명회", "엉여", "인재원300", "010-3370-1764", "", null]) expect(groupsOf(unknown), String(unknown)).toEqual([]);
     // 한 값이 필요한 곳은 묶음이 하나일 때만
     expect(group("EiE")).toBe("english");
@@ -55,7 +60,8 @@ describe("과목별 값(원장 2026-10-14 2단계)", () => {
     expect(math("영어 수학")).toBe(true);
     expect(english("영어 수학")).toBe(true);
     expect(korean("영어 수학")).toBe(false);
-    expect(korean("매쓰몽")).toBe(true); // 모름 = 모두에게
+    expect(korean("고등특강")).toBe(true); // 모름 = 모두에게
+    expect(korean("매쓰몽")).toBe(false); // 매쓰몽 = 수학
     expect(math("math")).toBe(true);
     expect(math("english")).toBe(false);
     expect(math(null)).toBe(true);
