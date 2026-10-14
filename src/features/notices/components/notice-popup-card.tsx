@@ -22,7 +22,7 @@ const LINK_CLASS =
  * 두 체크박스는 상호배타(한쪽을 켜면 다른 쪽이 꺼진다) — 같은 축의 강도 선택이라 동시 선택은 뜻이 없다.
  * 이미지 클릭 = 원본 크기 라이트박스(카드 폭에 맞춰 축소된 썸네일을 화면 가득 크게 — body 포털 z-100, 레이어 z-55 위).
  */
-export function NoticePopupCard({ popup }: { popup: ActivePopup }) {
+export function NoticePopupCard({ popup, onClose }: { popup: ActivePopup; onClose?: () => void }) {
   // 껍데기 글자만 사전을 탄다 — 제목·본문·링크 라벨은 **서버가 이미 번역본으로 내려준다**(0249a).
   const t = useSheetT();
   const [closed, setClosed] = useState(false);
@@ -70,7 +70,11 @@ export function NoticePopupCard({ popup }: { popup: ActivePopup }) {
   const isInternal = !!popup.linkUrl && popup.linkUrl.startsWith("/") && !popup.linkUrl.startsWith("//");
 
   // 닫기는 이 화면에서 치우기만 한다 — "안 보기" 저장은 이미 체크 시점에 끝났다(위 주석).
-  const close = () => setClosed(true);
+  // onClose = 레이어가 닫은 카드를 기억한다(주기 재조회로 카드가 내려갔다 다시 와도 되살아나지 않게).
+  const close = () => {
+    setClosed(true);
+    onClose?.();
+  };
 
   /** 체크 즉시 저장(해제면 삭제). 실패하면 체크 상태를 되돌리고 이유를 보여준다 — 조용히 삼키면 다음 진입에 또 뜬다. */
   const choose = async (next: DismissMode | null) => {

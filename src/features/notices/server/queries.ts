@@ -4,8 +4,9 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { resolveBrandingSrc } from "@/lib/storage/media-storage";
+import { reportError } from "@/lib/observability/report-error";
 import type { SystemRole } from "@/lib/permissions";
-import { audienceMatchesRole } from "../audience";
+import { audienceMatchesRole, isWithinWindow } from "../audience";
 import { isDismissed, type DismissRecord } from "../dismiss";
 // 화면 언어(2026-09-03) — 영어로 보는 사람에게만 캐시된 번역을 덮어씌운다(0249a).
 import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
@@ -36,13 +37,16 @@ const ACTIVE_SELECT =
  * 테넌트 활성 팝업 raw — tenantId별 `unstable_cache`로 캐싱(B6: 멀티윈도우 셸 재실행 공유).
  * admin client + 신뢰 tenantId 키라 쿠키 없이 안전(getTenantSettings 패턴). 이미지 signed URL(GCS)
  * resolve도 캐시 안에서 1회 → 매 네비마다 GCS 호출 방지(TTL 60s, CRUD가 updateTag로 즉시 무효화).
- * 노출기간(starts/ends) 필터는 캐시 시점 기준(≤60s 지연 허용 — 팝업 스케줄에 충분).
+ * 🔴 노출기간(starts/ends)은 캐시 **밖**에서 요청 시각으로 거른다(`isWithinWindow`) — 캐시 안에서 거르면 시작 시각이 지나도
+ *    최대 60초 동안 빠진 목록이 재사용되고, 열린 화면이 주기적으로 다시 물어도(`/api/notice-popups`) 제때 안 뜬다.
  */
 const loadActivePopupsRaw = (tenantId: string) =>
   unstable_cache(
-    async (): Promise<(ActivePopup & { audience: string })[]> => {
+    async (): Promise<(ActivePopup & { audience: string; startsAt: string | null; endsAt: string | null })[]> => {
       const admin = createAdminClient();
-      const { data } = await admin
+      // 🔴 조회 실패는 던진다 — 빈 목록으로 삼키면 그 빈 목록이 60초 캐시에 앉아 지점 전원의 열린 화면에서 팝업이
+      //    사라졌다가 다시 뜬다(주기 재조회가 생긴 뒤의 일 · unstable_cache는 던진 결과를 담지 않는다).
+      const { data, error } = await admin
         .from("notice_popups")
         .select(ACTIVE_SELECT)
         .eq("tenant_id", tenantId)
@@ -50,12 +54,12 @@ const loadActivePopupsRaw = (tenantId: string) =>
         .order("priority", { ascending: false })
         .order("created_at", { ascending: false })
         .limit(20);
-      const now = Date.now();
-      const rows = (data ?? []).filter((r) => {
-        const starts = r.starts_at ? new Date(r.starts_at as string).getTime() : null;
-        const ends = r.ends_at ? new Date(r.ends_at as string).getTime() : null;
-        return (starts === null || starts <= now) && (ends === null || ends >= now);
-      });
+      if (error) throw error;
+      // 기간 밖(예약)도 담는다 — 기간 판정은 요청마다(getActivePopupsOrThrow). 이미 끝난 것만 여기서 뺀다(끝난 공지는 다시
+      // 시작하지 않는다 — 기간을 고치면 updateTag로 캐시가 비워진다). ⚠️ 위 limit 20 **뒤**에 거르므로 켜 둔 채 끝난
+      // 공지도 20개 자리는 차지한다(종전과 같다 — 끝난 공지는 끄면 된다).
+      const builtAt = Date.now();
+      const rows = (data ?? []).filter((r) => !r.ends_at || new Date(r.ends_at as string).getTime() >= builtAt);
       return Promise.all(
         rows.map(async (r) => ({
           id: r.id as string,
@@ -68,6 +72,8 @@ const loadActivePopupsRaw = (tenantId: string) =>
           position: (r.position as string | null) ?? "cascade",
           audience: r.audience as string,
           updatedAt: r.updated_at as string,
+          startsAt: (r.starts_at as string | null) ?? null,
+          endsAt: (r.ends_at as string | null) ?? null,
         })),
       );
     },
@@ -86,12 +92,30 @@ export async function getActivePopups(
   tenantId: string,
   userId: string,
 ): Promise<ActivePopup[]> {
+  // 셸은 팝업 때문에 죽지 않는다 — 실패하면 이번 화면엔 팝업 없이(종전과 같은 결과), 원인은 로그로.
+  return getActivePopupsOrThrow(role, tenantId, userId).catch((error) => {
+    reportError(error, { scope: "notices.active-popups" });
+    return [];
+  });
+}
+
+/**
+ * `getActivePopups`와 같은 판정이되 **조회 실패를 던진다** — 열린 화면의 주기 재조회(`/api/notice-popups`)용.
+ * 실패를 빈 목록으로 답하면 레이어가 카드를 전부 내렸다가 다음 조회에 다시 띄운다(X로 닫은 카드도, '다시 보지 않기'로
+ * 끈 공지도). 실패는 500이 되고 레이어는 보던 목록을 그대로 둔다.
+ */
+export async function getActivePopupsOrThrow(
+  role: SystemRole,
+  tenantId: string,
+  userId: string,
+): Promise<ActivePopup[]> {
   const all = await loadActivePopupsRaw(tenantId);
-  const forRole = all.filter((p) => audienceMatchesRole(p.audience, role));
+  const now = Date.now();
+  const forRole = all.filter((p) => isWithinWindow(p.startsAt, p.endsAt, now) && audienceMatchesRole(p.audience, role));
   if (forRole.length === 0) return [];
 
   const supabase = await createClient();
-  const { data: rows } = await supabase
+  const { data: rows, error } = await supabase
     .from("notice_dismissals")
     .select("popup_id, until, version")
     .eq("user_id", userId)
@@ -100,13 +124,14 @@ export async function getActivePopups(
       "popup_id",
       forRole.map((p) => p.id),
     );
+  // 끈 기록을 못 읽었는데 그냥 띄우면 '다시 보지 않기'로 끈 공지가 새 카드로 뜬다 — 던진다.
+  if (error) throw error;
   const dismissed = new Map<string, DismissRecord>(
     (rows ?? []).map((r) => [
       r.popup_id as string,
       { until: (r.until as string | null) ?? null, version: r.version as string },
     ]),
   );
-  const now = Date.now();
 
   const shown = forRole
     .filter((p) => !isDismissed(dismissed.get(p.id), p.updatedAt, now))

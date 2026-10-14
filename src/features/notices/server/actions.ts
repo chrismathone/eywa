@@ -12,14 +12,9 @@ import { noticePopupsTag } from "./queries";
 // 영문 번역(0249a) — 저장 시점 백그라운드 · [영문 만들기] 버튼. 🔴 페이지 로드에서 부르지 말 것.
 import { buildNoticeTranslation } from "./translate";
 import { humanizeDbError } from "@/lib/supabase/db-error";
+import { kstLocalToIso } from "@/lib/date-kst";
 
 export type NoticePopupActionState = { error?: string; ok?: boolean } | undefined;
-
-function parseDt(v: string): string | null {
-  if (!v) return null;
-  const t = new Date(v).getTime();
-  return Number.isFinite(t) ? new Date(t).toISOString() : null;
-}
 
 function readForm(formData: FormData) {
   const get = (k: string) => String(formData.get(k) ?? "").trim();
@@ -41,8 +36,11 @@ function readForm(formData: FormData) {
     position,
     priority,
     isActive: formData.get("isActive") === "on" || formData.get("isActive") === "true",
-    startsAt: parseDt(get("startsAt")),
-    endsAt: parseDt(get("endsAt")),
+    // 🔴 노출 시작·종료는 `datetime-local`(시간대 없는 KST 벽시계)이다 — `new Date(값)`으로 읽으면 서버(UTC)가
+    //    **9시간 늦게** 저장한다(원장 2026-10-14 *"강사 대상으로 작성하면 그 즉시 팝업되나"* — 15:58에 쓴 공지가
+    //    다음 날 00:58부터로 앉아 아무에게도 안 떴다). 상담 시각과 같은 함수(date-kst).
+    startsAt: kstLocalToIso(get("startsAt")),
+    endsAt: kstLocalToIso(get("endsAt")),
   };
 }
 
