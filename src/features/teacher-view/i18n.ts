@@ -2294,7 +2294,7 @@ export const SHEET_DICT = {
   },
   "stu.empty.title": { ko: "결과 없음", en: "No results" },
   "stu.empty.desc": { ko: "검색어/필터를 조정해보세요.", en: "Try adjusting the search or the filters." },
-  "stu.col.student": { ko: "학생", en: "Student" },
+  "stu.col.student": { ko: "이름", en: "Name" },
   "stu.col.status": { ko: "상태", en: "Status" },
   "stu.col.subjects": { ko: "수강 과목", en: "Subjects" },
   "stu.col.teacher": { ko: "담당 강사", en: "Assigned teacher" },
