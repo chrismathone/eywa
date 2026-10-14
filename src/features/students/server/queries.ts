@@ -8,6 +8,7 @@ import {
   loadActiveEnrolledEnrollments,
 } from "./enrolled-programs";
 import { NO_SUBJECT, parseMulti } from "../list-filter-values";
+import { isGradeSort, sortByGrade } from "../grade-sort";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
@@ -106,7 +107,27 @@ export type StudentListRow = {
   //   '의심'(dup_suspect)은 학생 상세(getStudentById)와 데이터 정리(findDuplicateStudents — 병합 후보 + 짝 없는 '의심')가 따로 읽는다.
 };
 
-export type StudentSort = "grade" | "name" | "recent";
+/**
+ * 정렬 = 열 머리의 오름·내림 화살표(원장 2026-10-14 *"각 필터에 오름차순 내림차순이 있어야지"*). 축은 이름·학년 둘 —
+ * 등록일순은 붙일 열이 없어 없앴다(원장 선택 *"등록일 정렬 없앰"*). 방향은 값에 싣는다(저장·주소가 한 값).
+ */
+export type StudentSort = "grade" | "grade_desc" | "name" | "name_desc";
+
+/**
+ * 정렬 → DB 순서. 🔴 학년 정렬의 **최종 순서는 DB가 아니라 `sortByGrade`**(grade-sort.ts)다 — DB는 학년을 글자로 줄 세워
+ * `7세 → 고 → 중 → 초`가 된다. 학년 정렬이면 호출부가 id 전건을 받아 JS로 줄 세운다(getStudentsPage·getStudents).
+ * 끝에 id를 붙여 같은 값끼리도 순서가 정해진다(쪽 경계에서 학생이 빠지거나 겹치지 않게).
+ */
+function orderStudents<T extends { order: (col: string, opts: { ascending: boolean }) => T }>(qb: T, sort: StudentSort | undefined): T {
+  switch (sort) {
+    case "name":
+      return qb.order("name", { ascending: true }).order("id", { ascending: true });
+    case "name_desc":
+      return qb.order("name", { ascending: false }).order("id", { ascending: true });
+    default:
+      return qb.order("grade", { ascending: true }).order("name", { ascending: true }).order("id", { ascending: true });
+  }
+}
 export type SearchField = "all" | "name" | "school" | "phone" | "address" | "email" | "memo";
 
 export type StudentListFilters = {
@@ -308,15 +329,11 @@ export async function getStudentsList(
     if (grades.length > 0) qb = qb.in("grade", grades);
     // 강사 필터는 아래 in-memory(과목별 담당 강사 기준) — primary_teacher_id 제거로 쿼리단 필터 없음.
     qb = applySearch(qb, options?.q, options?.searchField, memoIds);
-    const sorted =
-      options?.sort === "name"
-        ? qb.order("name", { ascending: true })
-        : options?.sort === "recent"
-          ? qb.order("enrolled_at", { ascending: false, nullsFirst: false })
-          : qb.order("grade", { ascending: true }).order("name", { ascending: true });
-    return sorted.range(from, to);
+    return orderStudents(qb, options?.sort).range(from, to);
   });
-  const data = scopeIds ? all.filter((r) => scopeIds.has(r.id)) : all;
+  const scoped = scopeIds ? all.filter((r) => scopeIds.has(r.id)) : all;
+  // 학년 정렬은 화면 목록과 같은 순서로(grade-sort.ts) — 엑셀 내보내기 행 = 목록 행 순서.
+  const data = isGradeSort(options?.sort) ? sortByGrade(scoped, options?.sort === "grade_desc") : scoped;
   if (data.length === 0) return [];
 
   // 학생별 수강 과목 unique + 과목별 담당 강사(반의 teacher_id). id를 청크로 .in()(414 + error삼킴 방지).
@@ -541,18 +558,14 @@ export async function getStudentsPage(
     }
     if (idWhitelist) qb = qb.in("id", idWhitelist);
     // 정렬 — 필터 적용(.eq/.or/.in/.not) 다음에 .order(이후엔 transform 빌더). 기본 grade.
-    return options?.sort === "name"
-      ? qb.order("name", { ascending: true })
-      : options?.sort === "recent"
-        ? qb.order("enrolled_at", { ascending: false, nullsFirst: false })
-        : qb.order("grade", { ascending: true }).order("name", { ascending: true });
+    return orderStudents(qb, options?.sort);
   };
 
   let pageData: StudentPageRecord[];
   let total: number;
   const restrictIds = options?.restrictIds ?? null;
   // 운영실 집합(restrictIds)·'미수강' 판정(subjectKeep)·여러 담당 강사(teacherKeep) — 전부 "id 전건 → JS" 경로를 탄다.
-  const restrict =
+  const restrictBy =
     restrictIds || subjectKeep || teacherKeep
       ? {
           has: (id: string) =>
@@ -562,34 +575,36 @@ export async function getStudentsPage(
           empty: restrictIds?.size === 0,
         }
       : null;
+  // 학년 정렬(기본)도 id 전건 경로를 탄다 — 학년 순서(미취학 → 초 → 중 → 고)는 DB 글자순으로 못 내서 JS로 줄 세운다(grade-sort.ts).
+  // 학생 수 규모라 한두 쪽(id·학년·이름만) + 그 쪽 50명 — 종전 한 번 조회보다 한 왕복 더 든다.
+  const gradeSort = isGradeSort(options?.sort);
+  const restrict = restrictBy ?? (gradeSort ? { has: () => true, empty: false } : null);
   if (restrict) {
     // 🔑 운영실 KPI ↗(`program=`·`first=`)가 넘긴 학생 집합 — 수백 명이라 `.in("id", …)`에 싣지 않는다(URL 414·헤더
     //    초과, 위 enrollmentEmbed 🔴 2026-07-29 사고). 같은 필터·정렬로 **id 전건**을 받아(학생 수 규모 — 한두 쪽,
     //    unique tie-break `id`로 OFFSET 안정화) JS로 거른 뒤 자르고, 그 쪽(≤ pageSize명)만 다시 받는다.
-    const ordered =
+    // 🔑 전건을 목록 칸(STUDENT_PAGE_COLUMNS)까지 **한 번에** 받는다 — 거른 뒤 그 쪽만 다시 받으면 기본 화면(학년순)이
+    //    직렬 왕복 하나를 더 낸다(리뷰 2026-10-14). 순서는 orderStudents(끝이 id)라 1000행씩 넘겨도 안정적이다.
+    const fetched =
       restrict.empty
         ? []
-        : await fetchAllPaged<{ id: string }>(
+        : await fetchAllPaged<StudentPageRecord>(
             (f, t) =>
-              buildQuery("id", false).order("id").range(f, t) as unknown as PromiseLike<{
-                data: { id: string }[] | null;
+              buildQuery(STUDENT_PAGE_COLUMNS, false).range(f, t) as unknown as PromiseLike<{
+                data: StudentPageRecord[] | null;
                 error: { message: string } | null;
               }>,
           );
-    const matched = [...new Set(ordered.map((r) => r.id))].filter((id) => restrict.has(id));
-    total = matched.length;
-    const pageIds = matched.slice(from, to + 1);
-    if (pageIds.length === 0) {
-      pageData = [];
-    } else {
-      const { data, error } = await supabase.from("students").select(STUDENT_PAGE_COLUMNS).in("id", pageIds);
-      if (error) throw new Error(`학생 목록을 불러오지 못했습니다: ${error.message}`);
-      const byId = new Map(((data ?? []) as unknown as StudentPageRecord[]).map((r) => [r.id, r]));
-      pageData = pageIds.flatMap((id) => {
-        const row = byId.get(id);
-        return row ? [row] : [];
-      });
+    const matched: StudentPageRecord[] = [];
+    const seen = new Set<string>();
+    for (const row of gradeSort ? sortByGrade(fetched, options?.sort === "grade_desc") : fetched) {
+      const id = row.id;
+      if (seen.has(id) || !restrict.has(id)) continue;
+      seen.add(id);
+      matched.push(row);
     }
+    total = matched.length;
+    pageData = matched.slice(from, to + 1);
   } else {
     const { data, count, error } = await buildQuery(STUDENT_PAGE_COLUMNS, true).range(from, to);
     // 🔴 `data ?? []`로 삼키지 말 것 — 이 버그가 "8초 뒤 학생 0명"으로 보인 직접 원인이다.

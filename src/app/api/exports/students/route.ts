@@ -33,7 +33,7 @@ export async function GET(request: Request) {
   const teacherId = url.searchParams.get("teacher") ?? undefined;
   const sortParam = url.searchParams.get("sort");
   const sort: StudentSort | undefined =
-    sortParam === "name" || sortParam === "recent" ? sortParam : undefined;
+    sortParam === "name" || sortParam === "name_desc" || sortParam === "grade_desc" ? sortParam : undefined;
   const fieldParam = url.searchParams.get("field");
   const searchField = (fieldParam ?? undefined) as SearchField | undefined;
   const excludeNoEnrollment = url.searchParams.get("noenr") === "1";

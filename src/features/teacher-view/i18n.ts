@@ -2327,11 +2327,12 @@ export const SHEET_DICT = {
   "stu.filter.field.address": { ko: "주소", en: "Address" },
   "stu.filter.field.email": { ko: "이메일", en: "Email" },
   "stu.filter.field.memo": { ko: "메모", en: "Memo" },
-  "stu.filter.sort": { ko: "정렬", en: "Sort" },
-  "stu.filter.sortAria": { ko: "정렬 기준", en: "Sort by" },
-  "stu.filter.sort.grade": { ko: "학년순", en: "By grade" },
-  "stu.filter.sort.name": { ko: "이름순", en: "By name" },
-  "stu.filter.sort.recent": { ko: "등록일순", en: "By date added" },
+  // 열 머리 정렬 화살표(원장 2026-10-14) — 누르면 이 방향으로 정렬한다(읽어 주는 이름 = 누르면 일어날 일).
+  // 이름 정렬의 축은 한글 이름이다(영어 화면에 보이는 영어 이름이 아니다 — 출석부 ATTENDANCE_SORT_LABEL_EN과 같은 이유로 밝힌다).
+  "stu.sort.name.asc": { ko: "이름 오름차순 정렬", en: "Sort by Korean name, ascending" },
+  "stu.sort.name.desc": { ko: "이름 내림차순 정렬", en: "Sort by Korean name, descending" },
+  "stu.sort.grade.asc": { ko: "학년 오름차순 정렬", en: "Sort by grade, ascending" },
+  "stu.sort.grade.desc": { ko: "학년 내림차순 정렬", en: "Sort by grade, descending" },
   "stu.filter.noEnrollment": { ko: "미수강 제외", en: "Hide unenrolled" },
   "stu.filter.searchPh": { ko: "이름·학교·연락처·메모", en: "Name, school, phone or memo" },
   // 운영실 KPI ↗가 넘긴 학생 집합 칩(원장 2026-09-11) — 눌러 푼다. 프로그램 이름(EiE·인재원 영어)은 번역하지 않는다.

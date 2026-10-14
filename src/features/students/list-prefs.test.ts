@@ -23,13 +23,16 @@ describe("학생목록 보기 설정(users.ui_prefs.students)", () => {
 
   it("저장된 값은 그대로 살린다(상태·검색어는 애초에 키가 없다)", () => {
     expect(
-      parseStudentListPrefs({ subject: "math", grade: "중2", teacher: "t1", field: "school", sort: "recent", noenr: true, status: "all", q: "김" }),
-    ).toEqual({ subject: "math", grade: "중2", teacher: "t1", field: "school", sort: "recent", noenr: true });
+      parseStudentListPrefs({ subject: "math", grade: "중2", teacher: "t1", field: "school", sort: "name_desc", noenr: true, status: "all", q: "김" }),
+    ).toEqual({ subject: "math", grade: "중2", teacher: "t1", field: "school", sort: "name_desc", noenr: true });
   });
 
   it("정렬·검색 필드는 허용 목록 밖이면 기본값", () => {
     expect(parseStudentSort("name")).toBe("name");
+    expect(parseStudentSort("grade_desc")).toBe("grade_desc");
     expect(parseStudentSort("bogus")).toBe("grade");
+    // 없앤 등록일순(원장 2026-10-14 *"등록일 정렬 없앰"*) — 저장값·옛 링크에 남아 있어도 학년 오름차순으로.
+    expect(parseStudentSort("recent")).toBe("grade");
     expect(parseSearchField("memo")).toBe("memo");
     expect(parseSearchField(undefined)).toBe("all");
   });

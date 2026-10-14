@@ -18,6 +18,7 @@ import {
   getEnrolledStatCounts,
   getTeacherOptions,
   getScopedTeacherOptions,
+  type StudentSort,
 } from "@/features/students/server/queries";
 import { effectiveTeacherScope } from "@/lib/auth/view-mode";
 import {
@@ -68,6 +69,7 @@ import {
   type StudentMixFilter,
 } from "@/features/students/list-filter-values";
 import { EnrolledStatCard } from "./_components/enrolled-stat-card";
+import { SortArrow } from "./_components/sort-arrow";
 import { PAGE_TITLE_SUFFIX } from "@/lib/config/site-metadata";
 
 export async function generateMetadata() {
@@ -82,10 +84,6 @@ const STATUS_OPTION_KEYS = [
   { value: "on_hold", key: "stu.filter.status.onHold" },
   { value: "withdrawn", key: "stu.filter.status.withdrawn" },
 ] as const;
-const SORT_OPTION_KEYS = [
-  { value: "name", key: "stu.filter.sort.name" },
-  { value: "recent", key: "stu.filter.sort.recent" },
-] as const;
 const FIELD_OPTION_KEYS = [
   { value: "name", key: "stu.filter.field.name" },
   { value: "school", key: "stu.filter.field.school" },
@@ -95,6 +93,13 @@ const FIELD_OPTION_KEYS = [
   { value: "memo", key: "stu.filter.field.memo" },
 ] as const;
 const PAGE_SIZE = 50;
+/** 정렬 화살표의 읽어 주는 이름 = 누르면 걸릴 정렬(사전 키 — 강사 미니셸 영어 화면도 따라간다). */
+const SORT_LABEL_KEY = {
+  name: "stu.sort.name.asc",
+  name_desc: "stu.sort.name.desc",
+  grade: "stu.sort.grade.asc",
+  grade_desc: "stu.sort.grade.desc",
+} as const satisfies Record<StudentSort, string>;
 
 /** 운영실 '재원생 구성' 칩 글자 — `초등 · 영어만·동시수강`(학교급·수강 구성 라벨은 list-filter-values 한 곳). */
 function compositionChipLabel(levels: readonly StudentLevel[], mixes: readonly StudentMixFilter[]): string {
@@ -216,7 +221,6 @@ export default async function StudentsPage({
     ...(status !== "withdrawn" ? [{ value: NO_SUBJECT, label: sheetT(lang, "stu.filter.subject.none") }] : []),
   ];
   const statusOptions = STATUS_OPTION_KEYS.map((o) => ({ value: o.value, label: sheetT(lang, o.key) }));
-  const sortOptions = SORT_OPTION_KEYS.map((o) => ({ value: o.value, label: sheetT(lang, o.key) }));
   const hideSubjectFilter = !showSubjectFilter(axis);
   const gradeOptions = settings.operations.gradeLevels.map((g) => ({ value: g, label: sheetSchoolGrade(null, g, lang) }));
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -290,6 +294,22 @@ export default async function StudentsPage({
     return s ? `/students?${s}` : "/students";
   };
   const pageHref = (p: number) => listParams({ page: p });
+  // 열 머리 정렬 화살표(원장 2026-10-14) — 다른 열이면 그 열 오름차순, 같은 열이면 방향을 뒤집는다.
+  // 🔴 주소는 **지금 주소 그대로에 sort만** 바꾼다(종전 정렬 드롭다운 = FilterSelect와 같다) — listParams로 만들면 저장값에서 온
+  //    축의 **보정값**(강사뷰의 담당 과목 축 등)이 주소에 적혀 RememberPrefs가 계정 저장값을 덮는다(2026-09-03 리뷰가 막은 결함).
+  //    운영실에서 들어온 화면이면 방문 표식·운영실 축을 뗀다(exit — 종전 드롭다운의 clearParams와 같다). 쪽은 처음으로.
+  const sortArrow = (axis: "name" | "grade") => {
+    const active = sort === axis || sort === `${axis}_desc`;
+    const dir: "asc" | "desc" = sort === `${axis}_desc` ? "desc" : "asc";
+    const next: StudentSort = active && dir === "asc" ? `${axis}_desc` : axis;
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(sp)) if (typeof value === "string" && key !== "page") params.set(key, value);
+    for (const key of exit("sort")) params.delete(key);
+    params.set("sort", next);
+    return { active, dir, href: `/students?${params}`, label: sheetT(lang, SORT_LABEL_KEY[next]) };
+  };
+  const ariaSortOf = (axis: "name" | "grade") =>
+    sort === axis ? ("ascending" as const) : sort === `${axis}_desc` ? ("descending" as const) : ("none" as const);
   // 엑셀 API는 저장값을 모른다 — 지금 걸린 값 중 기본값이 아닌 것만 그대로 넘긴다(옛 링크와 같은 모양).
   const exportHref = `/api/exports/students?${new URLSearchParams({
     ...(status !== "all" ? { status } : {}),
@@ -444,15 +464,16 @@ export default async function StudentsPage({
               {/* 열 폭 — 2026-10-14 이름·학교·학년 열 분리 때 Pretendard로 다시 잰 값(표 폭 935 = 최소 창 960, 칸 내용 폭 = 열폭 − th px-3 24).
                   머리 트리거 = 굵게 16px 라벨 + 크롬 32(px-1 8 + gap-2 8 + 쉐브론 16). 🔴 트리거는 **말줄임되지 않고 넘친다**(바깥 상자가
                   `inline-block w-auto`) — 넘쳐도 가운데 정렬이라 양쪽 th 여백(12px씩) 안이면 옆 칸 글자와 겹치지 않는다.
-                  이름 19% → 154 ≥ `이름` 36 + 4 + `정렬: 학년순 ⌄` 109 = 149(`등록일순` 163은 최소 창에서만 둘째 줄로) /
-                  학교·학년 13% → 98 ≥ `학년: 중1 ⌄` 89·값 `대구외국어고1` 90(학년 여럿 `학년: 중1 외 1 ⌄` 118은 여백 안, `외 13` 131은 경계를 5px 넘는다) /
-                  상태 16% → 126 ≥ `상태: 재원 ⌄` 96(`상태: 예비·상담 ⌄` 128은 여백 안) /
+                  2026-10-14 정렬을 열 머리 화살표(22)로 옮기며 이름 열의 드롭다운 몫을 학교·학년 열로, 상태 열 여유를 이름 열로 넘겼다:
+                  이름 17% → 135 ≥ `이름` 36 + 2 + 화살표 22 = 60(값 = 이름 + 동명이인 접미사 · '수정 중' 꼬리표 — 종전 154에서 19 줄었다) /
+                  학교·학년 16% → 126 ≥ `학년: 중1 ⌄` 89 + 2 + 화살표 22 = 113·값 `대구외국어고1` 90(학년 여럿 `학년: 중1 외 1 ⌄` 142는 여백 안) /
+                  상태 15% → 116 ≥ `상태: 재원 ⌄` 96(`상태: 예비·상담 ⌄` 128은 여백 안 — 양쪽 6 ≤ 12) /
                   과목 18% → 144 ≥ `수강 과목: 수학 ⌄` 127(기본 과목 `수학(심화)` 167은 여백 안 — 16%였을 땐 담당 강사 글자와 겹쳤다) /
                   담당 강사 18% → 144 ≥ `담당 강사: 이수진 ⌄` 141 / 연락처 16% → 126 ≥ `010-0000-0000`(고정폭 숫자) 122. */}
               <colgroup>
-                <col className="w-[19%]" />
-                <col className="w-[13%]" />
+                <col className="w-[17%]" />
                 <col className="w-[16%]" />
+                <col className="w-[15%]" />
                 <col className="w-[18%]" />
                 <col className="w-[18%]" />
                 <col className="w-[16%]" />
@@ -460,39 +481,32 @@ export default async function StudentsPage({
               <thead className="border-line border-b">
                 {/* 열 제목과 값은 같은 축(가운데 — 원장 2026-09-18). 폰 카드(`.stack-rows`)는 globals.css가 전부 왼쪽으로 되돌린다. */}
                 <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:text-center [&>th]:font-bold [&>th]:whitespace-nowrap">
-                  <th scope="col">
-                    <span className="flex flex-wrap items-center justify-center gap-1">
-                      {/* 열 이름은 글자로 남긴다 — 정렬 필터만 있으면 이 열의 접근성 이름이 "정렬 필터"가 된다(정렬은 표 전체 축이지 이 열의 이름이 아니다).
-                          ⚠️ 폰(<768px)에선 `.stack-rows`가 이 글자를 감춘다(data-cell="label") — 카드엔 열이 없어 열 이름이 뜻을 잃는다. */}
-                      <span className="px-1" data-cell="label">{sheetT(lang, "stu.col.student")}</span>
-                      {/* 저장값을 이기려면 "전체"도 URL에 적혀야 한다(explicitAll) — 학년·과목·담임·정렬 넷이 그렇다. */}
-                      <span data-help="st-sort">
-                      <HeaderFilter
-                        paramName="sort"
-                        clearParams={exit("sort")}
-                        value={sort}
-                        options={sortOptions}
-                        axisLabel={sheetT(lang, "stu.filter.sort")}
-                        allValue="grade"
-                        allLabel={sheetT(lang, "stu.filter.sort.grade")}
-                        explicitAll
-                        showAll
-                      />
-                      </span>
+                  <th scope="col" aria-sort={ariaSortOf("name")}>
+                    {/* 정렬은 열마다 오름·내림 화살표(원장 2026-10-14 *"정렬 학년순이 왜 여깄는지 수정. 각 필터에 오름차순 내림차순이
+                        있어야지"*) — 이름 열 = 이름순, 학교·학년 열 = 학년순. 등록일순은 붙일 열이 없어 없앴다(원장 선택).
+                        필터가 없는 열이라 열 이름 글자까지 링크다(글자를 눌러도 정렬 · 폰 칩 줄에서도 무엇의 정렬인지 보인다). */}
+                    <span className="flex items-center justify-center" data-help="st-sort">
+                      <SortArrow {...sortArrow("name")} hintId="students-sort-name-hint">
+                        <span className="text-foreground">{sheetT(lang, "stu.col.student")}</span>
+                      </SortArrow>
                     </span>
                   </th>
                   {/* 학교·학년 열 머리 = 학년 필터 하나(상태 열과 같은 꼴) — 값이 `경명여고1`처럼 학교와 학년을 붙여 적는 열이다. */}
-                  <th scope="col" data-help="st-grade">
-                    <HeaderFilter
-                      paramName="grade"
-                      clearParams={exit("grade")}
-                      value={grade}
-                      options={gradeOptions}
-                      axisLabel={sheetT(lang, "stu.filter.grade")}
-                      allValue="all"
-                      explicitAll
-                      multiple
-                    />
+                  <th scope="col" data-help="st-grade" aria-sort={ariaSortOf("grade")}>
+                    {/* 저장값을 이기려면 "전체"도 URL에 적혀야 한다(explicitAll) — 학년·과목·담임이 그렇다. */}
+                    <span className="inline-flex items-center gap-0.5">
+                      <HeaderFilter
+                        paramName="grade"
+                        clearParams={exit("grade")}
+                        value={grade}
+                        options={gradeOptions}
+                        axisLabel={sheetT(lang, "stu.filter.grade")}
+                        allValue="all"
+                        explicitAll
+                        multiple
+                      />
+                      <SortArrow {...sortArrow("grade")} />
+                    </span>
                   </th>
                   <th scope="col" data-help="st-status">
                     {/* 기본값(재원)이 휴원·퇴원을 **숨기므로** 값을 항상 적는다(showAll). */}

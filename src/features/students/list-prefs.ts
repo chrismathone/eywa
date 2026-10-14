@@ -32,10 +32,10 @@ export const DEFAULT_STUDENT_LIST_PREFS: StudentListPrefs = {
   noenr: false,
 };
 
-const SORTS: readonly StudentSort[] = ["grade", "name", "recent"];
+const SORTS: readonly StudentSort[] = ["grade", "grade_desc", "name", "name_desc"];
 const FIELDS: readonly SearchField[] = ["all", "name", "school", "phone", "address", "email", "memo"];
 
-/** 정렬 값 — 모르는 값은 기본(학년순). URL·저장값 둘 다 이 한 곳을 지난다. */
+/** 정렬 값 — 모르는 값은 기본(학년 오름차순). URL·저장값 둘 다 이 한 곳을 지난다. 없앤 등록일순(`recent`)도 여기서 학년으로 돌아간다. */
 export function parseStudentSort(raw: unknown): StudentSort {
   return typeof raw === "string" && (SORTS as readonly string[]).includes(raw) ? (raw as StudentSort) : "grade";
 }
