@@ -24,7 +24,7 @@
 
 ## 2026-10-14 수학 내신 → 중간·기말 (0363a)
 
-`0363a_student_grades_math_no_school.sql`은 수학 성적의 '내신' 칸 저장을 막는 제약이다. **단독으로 돌리지 않는다** — 수학 내신 행이 남아 있으면 실패한다. 새 앱 배포를 확인한 뒤 `node --env-file=.env.local scripts/_oneoff/math-school-to-midterm.mjs`(미리 돌려 보기) → `--apply`가 한 트랜잭션에서 내신 → 2026년 2학기 중간고사 이관 · 감사로그 · 이 제약을 함께 적용한다. 0289a를 되돌리는 쪽이다.
+`0363a_student_grades_math_no_school.sql`은 수학 성적의 '내신' 칸 저장을 막는 제약이다. **단독으로 돌리지 않는다** — 수학 내신 행이 남아 있으면 실패한다. 새 앱 배포를 확인한 뒤 `node --env-file=.env.local scripts/_oneoff/math-school-to-midterm.mjs`(미리 돌려 보기) → `--apply`가 한 트랜잭션에서 내신 → 2026년 2학기 중간고사 이관 · 감사로그 · 이 제약을 함께 적용한다. 0289a를 되돌리는 쪽이다. ✅ 2026-10-14 운영 적용(49건 이관 · 제약 확인).
 
 ## 2026-09-23 수학 내신 통합
 
