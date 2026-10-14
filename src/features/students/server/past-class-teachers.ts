@@ -7,14 +7,22 @@ import { foldedReason } from "@/lib/folded-read";
 import { kstDateOf } from "@/lib/date-kst";
 import { resolvePastClassTeacher, type PastClassTarget, type PastTeacher, type TeacherEvidence } from "../lib/past-class-teacher";
 
-/** 학생 상세의 지난 수업 표시 전용. 추정값은 담당 배정·권한·시수 정산을 변경하지 않는다. */
-export async function getPastClassTeachers(targets: readonly PastClassTarget[]): Promise<Map<string, PastTeacher>> {
+/**
+ * 학생 상세의 지난 수업 표시 전용(+ 시간표 X 겹침의 묶음). 추정값은 담당 배정·권한·시수 정산을 변경하지 않는다.
+ * `opts`는 겹침 전용 — `history`: 이미 읽은 담임 이력(서버 액션엔 요청 캐시가 없어 두 번 읽지 않게) ·
+ * `evidenceFrom`: 보고서·출결 근거를 이 날부터만 읽는다(석 달 창의 반 수십 개 × 보고서 전건 = 9페이지 왕복을 줄인다).
+ * 학생 상세는 옵션 없이 부른다(판정 그대로).
+ */
+export async function getPastClassTeachers(
+  targets: readonly PastClassTarget[],
+  opts?: { history?: Awaited<ReturnType<typeof getHomeroomHistoryIndex>>; evidenceFrom?: string },
+): Promise<Map<string, PastTeacher>> {
   const result = new Map<string, PastTeacher>();
   if (!targets.length) return result;
   const db = await createClient();
   const classIds = [...new Set(targets.map(r => r.classId))];
   const [history, classes] = await Promise.all([
-    getHomeroomHistoryIndex(),
+    opts?.history ?? getHomeroomHistoryIndex(),
     fetchInChunks<{ id: string; teacher_id: string | null; created_at: string }>(classIds, ids => db.from("classes").select("id, teacher_id, created_at").in("id", ids)),
   ]);
   const classById = new Map(classes.map(r => [r.id, r]));
@@ -37,13 +45,17 @@ export async function getPastClassTeachers(targets: readonly PastClassTarget[]):
   let attendance: TeacherEvidence[] = [];
   if (missing.length) {
     const missingIds = [...new Set(missing.map(t => t.classId))];
-    const from = missing.reduce((d, t) => t.startDate < d ? t.startDate : d, missing[0]!.startDate);
+    const earliest = missing.reduce((d, t) => t.startDate < d ? t.startDate : d, missing[0]!.startDate);
+    const floor = opts?.evidenceFrom;
+    const from = floor && floor > earliest ? floor : earliest;
     const to = missing.reduce((d, t) => t.lastDate > d ? t.lastDate : d, missing[0]!.lastDate);
     const [reportRows, attendanceRows] = await Promise.all([
-      fetchAllPagedInChunks<{ class_id: string; report_date: string; teacher_name: string | null }>(missingIds, (chunk, f, t) => db
-        .from("lesson_reports").select("class_id, report_date, teacher_name").in("class_id", chunk)
-        .lte("report_date", to).or("makeup.is.null,makeup.eq.false")
-        .is("revoked_at", null).order("id").range(f, t)),
+      fetchAllPagedInChunks<{ class_id: string; report_date: string; teacher_name: string | null }>(missingIds, (chunk, f, t) => {
+        const q = db.from("lesson_reports").select("class_id, report_date, teacher_name").in("class_id", chunk);
+        return (floor ? q.gte("report_date", floor) : q)
+          .lte("report_date", to).or("makeup.is.null,makeup.eq.false")
+          .is("revoked_at", null).order("id").range(f, t);
+      }),
       fetchAllPagedInChunks<{ class_id: string; session_date: string; recorder: { display_name: string | null } | { display_name: string | null }[] | null }>(missingIds, (chunk, f, t) => db
         .from("attendance_records").select("class_id, session_date, recorder:recorded_by ( display_name )").in("class_id", chunk)
         .gte("session_date", from).lte("session_date", to).eq("recorded_via", "teacher")
