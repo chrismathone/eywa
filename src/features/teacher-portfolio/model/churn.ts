@@ -9,29 +9,25 @@
  *   늘 빼는 것 = 반 이동(옮겨 간 반을 하루도 안 다녔으면 그만둔 것) · 수업이 끝남(반 폐지·종강·운영 기간 종료·폐강) · 끝난 특강 ·
  *   같은 과목의 다른 반을 계속(또는 곧 · 휴원 포함) 다님,
  *   원장이 고르는 것 = 뺄 퇴원 사유(기본 졸업·이사·질병·권고퇴원) · 수강종료(학원의 다른 수업은 계속 다님)를 셀지.
- * - 사유 = 그 수강의 종료 사유 → 없거나 '퇴원에 따른 자동 종료'면 학생의 퇴원 사유(퇴원관리와 같은 곳, 퇴원일 때만).
+ * - 사유 = 그 수강의 종료 사유 → 없거나 '퇴원에 따른 자동 종료'면 학생의 퇴원 사유(퇴원관리와 같은 곳 · 퇴원일 때만 · 그 퇴원일이
+ *   그만둔 날 ±14일 안일 때만 — `exit-reason.ts`).
  * - 수치(raw) = 분자 ÷ 분모 × 100(%). 분모가 0이면 null(자료 없음 규칙).
  * 🔴 미리 등록했다가 취소된 수강(종료일 = 시작일 — 퇴원 처리가 그렇게 닫는다)은 '다닌다'로 보지 않는다(적대적 리뷰 2026-10-13).
  */
 import { isSpecialLecture } from "@/features/classes/special-lecture";
 import { normalizeReason, REASON_LABEL, type WithdrawalReason } from "@/features/withdrawals/types";
-import { excludedReasonOf } from "@/features/withdrawals/reason-key";
 import type { ChurnOptions } from "../evaluation/config";
 import { addDays, daysBetween, round1 } from "./dates";
+import { AUTO_END_TEXT, SOON_DAYS, endedWithWithdrawal, excusedReasonOf, reasonsOf, stillAttending, studentReasonAt } from "./exit-reason";
 import type { ChurnSource } from "./students";
 import type { ChurnMetric, ChurnRow, PeriodWindow, PortfolioSnapshot, SnapshotClass, SnapshotEnrollment } from "./types";
 
 /** 자유 글로 남는 구조적 종료(classes/server의 ARCHIVE_REASON · CLOSE_TERM_REASON · PERIOD_END_REASON과 같은 글 — churn.test가 잠근다). */
 export const CLASS_END_TEXT: readonly string[] = ["반 폐지", "종강", "운영 기간 종료"];
 const TRANSFER_TEXT = "반 이동";
-const AUTO_END_TEXT = "퇴원에 따른 자동 종료";
 
 const codeOf = (text: string | null | undefined): WithdrawalReason | null => (text && /^[a-z_]+$/i.test(text) ? normalizeReason(text.toLowerCase()) : null);
-/** '곧 다님'의 끝 — 그만둔 날부터 31일 안에 시작하는 수강까지(다음 달 시작 수강을 읽는 창과 같다). 몇 달 뒤 재등록은 '다님'이 아니다. */
-const SOON_DAYS = 31;
 const futureCache = new WeakMap<readonly SnapshotEnrollment[], Map<string, SnapshotEnrollment[]>>();
-type StudentReason = { id: string; reason: string | null; withdrawn_at?: string | null };
-const reasonCache = new WeakMap<readonly StudentReason[], Map<string, StudentReason>>();
 function futureOf(rows: readonly SnapshotEnrollment[]): Map<string, SnapshotEnrollment[]> {
   let map = futureCache.get(rows);
   if (!map) {
@@ -41,13 +37,7 @@ function futureOf(rows: readonly SnapshotEnrollment[]): Map<string, SnapshotEnro
   }
   return map;
 }
-function reasonsOf(rows: readonly StudentReason[]): Map<string, StudentReason> {
-  let map = reasonCache.get(rows);
-  if (!map) reasonCache.set(rows, (map = new Map(rows.map((r) => [r.id, r]))));
-  return map;
-}
 const NO_FUTURE: SnapshotEnrollment[] = [];
-const NO_REASONS: StudentReason[] = [];
 
 export type ChurnInput = {
   source: ChurnSource; classes: ReadonlyMap<string, SnapshotClass>; teacherId: string; w: Pick<PeriodWindow, "start" | "end">; options: ChurnOptions;
@@ -103,7 +93,7 @@ export function churnResult(input: ChurnInput): ChurnResult {
   }
   const base = new Set([...days].filter(([, n]) => n >= need).map(([id]) => id));
   const future = futureOf(input.futureEnrollments ?? NO_FUTURE);
-  const studentReason = reasonsOf(input.studentReasons ?? NO_REASONS);
+  const studentReason = reasonsOf(input.studentReasons);
 
   const rows: ChurnRow[] = [];
   const counted = new Set<string>();
@@ -120,15 +110,8 @@ export function churnResult(input: ChurnInput): ChurnResult {
     };
     const mineDays = seen.get(studentId) ?? [];
     for (const exit of source.exitsOf(studentId, w.start, w.end)) {
-      const soon = addDays(exit.day, SOON_DAYS);
-      const endedIds = new Set(exit.ended.map((x) => x.id));
-      // 이 날 뒤에도 다니는(또는 31일 안에 시작하는) 다른 수강 — 휴원도 다님(퇴원관리와 같다) · 취소된 미래 수강(종료일 ≤ 시작일)·
-      // 보강 반·닫힌 반은 뺀다. 끝난 수강은 줄(id)로 뺀다 — 같은 반에 다음 날 다시 등록한 것은 '다님'이다.
-      const others = history.filter((x) => {
-        const c = classes.get(x.class_id);
-        return !endedIds.has(x.id) && !c?.is_makeup_pool && (!c?.closed_at || c.closed_at > exit.day) && x.start_date <= soon
-          && (!x.end_date || (x.end_date > exit.day && x.end_date > x.start_date));
-      });
+      // 이 날 뒤에도 다니는(또는 31일 안에 시작하는) 다른 수강 — 학생 배정·유지의 사유 판정과 한 벌(`stillAttending`).
+      const others = stillAttending(history, classes, exit.day, new Set(exit.ended.map((x) => x.id)));
       const keeps = (x: SnapshotEnrollment) => others.some((o) => subjectOf(o) === subjectOf(x));
       // 이 선생님 몫 = 이 선생님이 맡았던 반의 끝 · 또는 이 선생님이 정규 수업으로 가르친 과목을 통째로 끊은 끝(다른 선생님 반으로
       // 옮긴 뒤라도 — 단 이 선생님에게서 끊김 없이 이어진 수강만: 그만두고 한참 뒤 다른 반에 다시 등록했다 끊은 것은 이 선생님 몫이 아니다).
@@ -146,14 +129,14 @@ export function churnResult(input: ChurnInput): ChurnResult {
         const cancelled = cancelledMove(x);
         // 취소된 반 이동의 사유 = 옮겨 갈 반을 닫은 사유('반 이동' 글은 사유가 아니다).
         const text = (cancelled ? cancelled.map((b) => b.withdrawal_reason?.trim()).find(Boolean) : x.withdrawal_reason?.trim()) || null;
-        // 학생의 퇴원 사유 = 퇴원일 때만 · 수강 사유가 비었거나 그 퇴원이 이번 그만둠 무렵(14일 안)일 때만(다시 등록하기 전의 옛 사유를 쓰지 않게).
-        const s = type === "퇴원" ? studentReason.get(studentId) : undefined;
-        const near = !!s?.withdrawn_at && s.withdrawn_at.slice(0, 10) >= addDays(exit.day, -14) && s.withdrawn_at.slice(0, 10) <= addDays(exit.day, 14);
-        const student = s && (!text || text === AUTO_END_TEXT || near) ? s.reason : null;
         // 🔴 강사 탓이 아닌 사유(원장이 고른 사유 — 이사·졸업 등)는 퇴원·수강종료 모두 퇴원율에 넣지 않는다 — 수강 종료 사유 · 학생 퇴원
-        // 사유 중 하나라도, 표준 키든 라벨 글('이사')이든(원장 2026-10-14 *"모든 곳에서"*, 판정 한 벌 `reason-key.ts`).
-        const off = excludedReasonOf([text, student], options.excludeReasons);
-        const code = off ?? codeOf(text) ?? (!text || text === AUTO_END_TEXT ? codeOf(student) : null);
+        // 사유(퇴원일 때 · 그 무렵 것만) 중 하나라도(원장 2026-10-14 *"모든 곳에서"* — 학생 배정·유지와 같은 판정 `exit-reason.ts`).
+        const s = studentReason.get(studentId);
+        const together = (at: string) => endedWithWithdrawal(x, history, classes, at);
+        const off = excusedReasonOf({ text, type, student: s, exitDay: exit.day, excludeReasons: options.excludeReasons, together });
+        // 사유 칸(라벨)도 같은 조건 — 사유 없이 그만둔 줄에 몇 달 뒤 퇴원 사유를 붙이지 않는다.
+        const student = !text || text === AUTO_END_TEXT ? studentReasonAt(type, s, text, exit.day, together) : null;
+        const code = off ?? codeOf(text) ?? codeOf(student);
         const reason = code ? REASON_LABEL[code] : text && !codeOf(text) ? text : "사유 없음";
         let note: string | null = null;
         if (!cancelled && (text === TRANSFER_TEXT || x.is_transferred)) note = "반 이동";

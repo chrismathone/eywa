@@ -52,9 +52,14 @@ describe("시간표 X 겹침 배선", () => {
     expect(CONTEXT).toContain("const owner = buildHomeroomOwner(d.classes, d.transitions);");
     expect(SERVER).toContain("const owner = buildHomeroomOwner(source.classes, source.transitions);");
     // 계산 — 강사평가가 부르는 것과 같은 명단(`buildStudentTracking`) · 같은 계산기(`buildChurnModel`) · 같은 입력 모양.
-    expect(BUILD).toContain("buildStudentTracking({ from: d.from, end: d.end, classes: d.classes, schedules: d.schedules, enrollments: d.enrollments, owner: ctx.owner })");
+    // 강사평가는 배정·유지 감점에 쓰는 사유를 더 넘긴다(명단·수강 끝은 그대로 — 겹침은 명단만 읽는다).
+    expect(BUILD).toContain("from: d.from, end: d.end, classes: d.classes, schedules: d.schedules, enrollments: d.enrollments, owner: ctx.owner,");
+    expect(BUILD).toContain("reasons: { studentReasons: d.studentReasons, excludeReasons: churnOptions.excludeReasons, futureEnrollments: d.futureEnrollments },");
+    // 사유 없이 끝난 줄의 학생 퇴원 사유 = 그 퇴원과 함께 끝난 수강인가 — 겹침과 같은 `endedWithExit` · 같은 폭.
+    expect(read("src/features/teacher-portfolio/model/exit-reason.ts")).toContain("endedWithExit(rows, withdrawnDay, ref, OVERLAY_LOOKBACK_DAYS)");
     expect(SERVER).toContain("buildStudentTracking({ from: source.from, end: source.end, classes: source.classes, schedules: source.schedules, enrollments: source.enrollments, owner })");
-    expect(BUILD).toContain("buildChurnModel({ source: students.churnSource, classes: d.classes, options: config.metrics.churn.churn ?? DEFAULT_CHURN_OPTIONS, futureEnrollments: d.futureEnrollments, studentReasons: d.studentReasons })");
+    expect(BUILD).toContain("const churnOptions = config.metrics.churn.churn ?? DEFAULT_CHURN_OPTIONS;");
+    expect(BUILD).toContain("buildChurnModel({ source: students.churnSource, classes: d.classes, options: churnOptions, futureEnrollments: d.futureEnrollments, studentReasons: d.studentReasons })");
     expect(SERVER).toContain("buildChurnModel({ source: tracking.churnSource, classes: source.classes, options: source.options, futureEnrollments: source.futureEnrollments, studentReasons: source.studentReasons })");
     expect(BUILD).toContain("...churn.period(teacherId, w)");
     expect(SERVER).toContain("churn.exits(id, w)");
@@ -113,8 +118,11 @@ describe("시간표 X 겹침 배선", () => {
     expect(PAGE).toContain('const showExitOverlay = !teacherId && (await canAccessTenant(user.systemRole, "withdrawals"));');
   });
 
-  it("🔴 강사 탓이 아닌 사유 판정 = 한 벌(`reason-key.ts`) — 강사평가 퇴원율 · 겹침 · 급여명세서 퇴원생률(원장 2026-10-14 '모든 곳에서')", () => {
-    expect(read("src/features/teacher-portfolio/model/churn.ts")).toContain('import { excludedReasonOf } from "@/features/withdrawals/reason-key";');
+  it("🔴 강사 탓이 아닌 사유 판정 = 한 벌(`reason-key.ts`) — 강사평가 퇴원율·배정·유지 · 겹침 · 급여명세서 퇴원생률(원장 2026-10-14 '모든 곳에서')", () => {
+    // 강사평가 둘(퇴원율 · 학생 배정·유지)은 `exit-reason.ts`(학생 퇴원 사유를 언제 쓰나)를 거쳐 같은 판정으로.
+    expect(read("src/features/teacher-portfolio/model/exit-reason.ts")).toContain('import { endedWithExit, excludedReasonOf } from "@/features/withdrawals/reason-key";');
+    expect(read("src/features/teacher-portfolio/model/churn.ts")).toContain('import { AUTO_END_TEXT, SOON_DAYS, endedWithWithdrawal, excusedReasonOf, reasonsOf, stillAttending, studentReasonAt } from "./exit-reason";');
+    expect(read("src/features/teacher-portfolio/model/students.ts")).toContain('import { excusedExitOf, reasonsOf, type StudentReason } from "./exit-reason";');
     expect(read("src/features/withdrawals/exit-overlay-model.ts")).toContain('import { excludedReasonOf } from "./reason-key";');
     expect(read("src/features/payroll/payslip-metrics.ts")).toContain('import { endedWithExit, excludedReasonOf, type EndedRowRef } from "@/features/withdrawals/reason-key";');
     // 사유 목록 = 강사평가 설정 한 곳(겹침·명세서 둘 다).

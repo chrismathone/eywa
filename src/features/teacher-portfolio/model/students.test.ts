@@ -138,3 +138,55 @@ describe("가감", () => {
     expect(result(down).value).toBe(0);
   });
 });
+
+describe("🔴 강사 탓이 아닌 사유는 감점하지 않는다 — 퇴원율과 같은 판정(원장 2026-10-14 '사유 규칙 적용')", () => {
+  const reasons = (studentReasons: { id: string; reason: string | null; withdrawn_at?: string | null }[] = []) =>
+    ({ studentReasons, excludeReasons: ["graduated", "relocation", "illness", "advised"] });
+  const judged = (d: Fixture, r: Parameters<typeof buildStudentTracking>[0]["reasons"]) =>
+    buildStudentTracking({ ...d, owner: (c) => c.teacher_id, reasons: r }).period("t", october);
+  it("수강 종료 사유가 졸업이면 줄은 남기고 0 · 까닭을 단다 · 사유를 안 넘기면(시간표 X 명단) 종전대로", () => {
+    const d = fixture();
+    Object.assign(d.enrollments[0], { end_date: "2026-10-06", withdrawal_reason: "graduated" });
+    const r = judged(d, reasons());
+    expect([r.value, r.exitCount, r.excused, r.unscored, r.detail[0]?.points, r.detail[0]?.note]).toEqual([10, 0, 1, 1, 0, "사유 졸업"]);
+    expect([result(d).value, result(d).exitCount]).toEqual([9, 1]);
+  });
+  it("퇴원이면 그 무렵 학생 퇴원 사유(라벨 글 '이사'도) · 옛 퇴원 사유와 수강종료엔 학생 사유를 쓰지 않는다", () => {
+    const d = fixture();
+    d.enrollments[0].end_date = "2026-10-06";
+    expect(judged(d, reasons([{ id: "s", reason: "이사", withdrawn_at: "2026-10-06T09:00:00Z" }])).value).toBe(10);
+    d.enrollments[0].withdrawal_reason = "competitor";
+    expect(judged(d, reasons([{ id: "s", reason: "relocation", withdrawn_at: "2026-03-01T00:00:00Z" }])).value).toBe(9);
+    const e = fixture();
+    addClass(e, "other", "english");
+    e.enrollments.push(enroll({ id: "e2", class_id: "c2" }));
+    e.enrollments[0].end_date = "2026-10-06";
+    expect(judged(e, reasons([{ id: "s", reason: "relocation", withdrawn_at: "2026-10-06" }])).endedCount).toBe(1);
+  });
+  it("학생 퇴원 사유는 퇴원율과 같은 때만 — 다른 과목을 곧 다니면(수강종료) 안 쓰고 · 사유 없이 끝난 줄은 그 퇴원과 함께 끝났을 때만", () => {
+    const d = fixture();
+    d.enrollments[0].end_date = "2026-10-06";
+    // 다음 날 영어를 시작 — 배정·유지 표시는 '퇴원'이어도 퇴원율처럼 수강종료로 보고 학생 사유를 쓰지 않는다.
+    addClass(d, "other", "english");
+    d.enrollments.push(enroll({ id: "e2", class_id: "c2", start_date: "2026-10-07" }));
+    expect(judged(d, reasons([{ id: "s", reason: "relocation", withdrawn_at: "2026-10-06" }])).value).toBe(9);
+    // 수강종료로 남았다 늦게(11월) 이사 퇴원 처리 = 면제 · 그 사이 다시 등록했다 퇴원했으면(옛 그만둠) 감점.
+    const late = fixture();
+    late.enrollments[0].end_date = "2026-10-06";
+    expect(judged(late, reasons([{ id: "s", reason: "relocation", withdrawn_at: "2026-11-20" }])).value).toBe(10);
+    late.enrollments.push(enroll({ id: "e3", start_date: "2026-11-10", end_date: "2027-01-05" }));
+    expect(judged(late, reasons([{ id: "s", reason: "relocation", withdrawn_at: "2027-01-05" }])).value).toBe(9);
+    // 퇴원일 기록이 없는 옛 학생은 종전대로(수강 사유가 비었으면 학생 사유).
+    expect(judged(fixture(), reasons([{ id: "s", reason: "relocation" }])).value).toBe(10);
+  });
+  it("함께 끝난 수강 중 하나라도 고른 사유가 아니면 감점 · 원장이 고른 목록을 따른다", () => {
+    const d = fixture();
+    addClass(d, "t");
+    Object.assign(d.enrollments[0], { end_date: "2026-10-06", withdrawal_reason: "graduated" });
+    d.enrollments.push(enroll({ id: "e2", class_id: "c2", end_date: "2026-10-06", withdrawal_reason: "competitor" }));
+    expect(judged(d, reasons()).value).toBe(9);
+    d.enrollments[1].withdrawal_reason = "졸업";
+    expect(judged(d, reasons()).value).toBe(10);
+    expect(judged(d, { excludeReasons: ["relocation"] }).value).toBe(9);
+  });
+});

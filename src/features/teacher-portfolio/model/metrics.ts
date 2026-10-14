@@ -1,7 +1,9 @@
-/** 원생상담 · 직원 평가 항목 — 기록을 그 달에 한 번만 센다. */
+/** 원생상담 · 직원 평가 항목 — 기록을 그 달에 한 번만 센다. 학생 배정·유지의 설명 문구도 여기(집계 · 마감 달 사유 규칙이 같이 쓴다). */
 import { computeTotals, sanitizeAreas, type ScoreSheet } from "@/features/class-review/checklist";
 import { between, kstDateOf, round1 } from "./dates";
 import { METRIC_MAX, type FollowRow, type Metric, type PeriodWindow, type PortfolioSnapshot, type QualityRow, type SnapshotUser } from "./types";
+
+export const STUDENTS_REASON = "매월 1일 새로 셉니다. 신규 +1, 퇴원·수강종료 −1, 반이동 유입 +0.5·유출 −0.5를 더한 값이 이 항목의 수치입니다. 강사 탓이 아닌 사유(퇴원율에서 빼는 사유와 같음)로 그만둔 학생은 −1을 하지 않습니다. 담임·부담임을 포함하고 같은 학생은 강사별 한 번만 계산합니다. 같은 강사가 계속 맡는 반이동과 역할 변경은 가감하지 않습니다. 추가 수강·재등록은 신규·반이동으로 추정하지 않고 별도로 표시합니다.";
 
 /** 후속 기한이 이 달에 도래한 상담 중 마감 전 완료 비율. 상담을 많이 쓴 것 자체에는 점수를 주지 않는다. */
 export function followMetric(d: PortfolioSnapshot, user: SnapshotUser, w: PeriodWindow, cutoff: string): Metric {

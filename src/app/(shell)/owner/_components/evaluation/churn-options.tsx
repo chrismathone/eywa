@@ -14,7 +14,7 @@ export function ChurnOptionsEditor({ value, onChange, label }: { value: ChurnOpt
   return (
     <fieldset className="space-y-2 rounded-lg border border-line-faint px-3 py-2.5">
       <legend className="px-1 text-sm font-medium">세는 법</legend>
-      <p className="text-xs">퇴원율에서 뺄 퇴원 사유(강사 탓이 아닌 퇴원):</p>
+      <p className="text-xs">퇴원율에서 뺄 퇴원 사유(강사 탓이 아닌 퇴원 — 시간표 X 퇴원 카드 · 급여명세서 퇴원생률에서도 빼고, 학생 배정·유지에서도 −1을 하지 않습니다):</p>
       <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-sm">
         {WITHDRAWAL_REASONS.map((code) => (
           <label key={code} className="flex items-center gap-1.5">

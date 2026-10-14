@@ -1,14 +1,14 @@
 /**
- * 학생 배정·유지 — 매월 기본 10점에서 새로 시작한다(누적·이월 없음).
- *
- * 기준은 그날 **마감 후** 명단이다: 수강 종료일에 종료로 반영하고 다음 달에 다시 세지 않는다.
- * 담임은 당시 인수인계 이력, 부담임은 유효한 시간표 담당(`class_schedules.teacher_id`)으로 판정한다.
- * 같은 강사가 계속 맡는 반이동·역할 변경은 가감하지 않고, 추가 수강·재등록·담당 변경은
- * 신규·반이동으로 짐작하지 않고 따로 표시만 한다(점수 0).
+ * 학생 배정·유지 — 매월 기본 10점에서 새로 시작한다(누적·이월 없음). 기준은 그날 **마감 후** 명단이다(수강 종료일에 종료로 반영).
+ * 담임 = 당시 인수인계 이력 · 부담임 = 유효한 시간표 담당. 같은 강사가 계속 맡는 반이동·역할 변경은 가감하지 않고, 추가 수강·재등록·담당 변경은 표시만(0).
+ * 🔴 강사 탓이 아닌 사유(원장이 고른 사유 — 이사·졸업 등)로 그만둔 퇴원·수강종료는 감점하지 않는다 — 퇴원율과 같은 판정
+ *    (`exit-reason.ts` · 원장 2026-10-14 *"사유 규칙 적용"*). 줄은 남기고 까닭(`note`)을 단다.
  */
 import { axisSlotFromRow, isSeatSlot } from "@/features/attendance/teacher-axis";
 import { enrollmentAttendsOnDay } from "@/features/enrollments/eligibility";
+import { REASON_LABEL } from "@/features/withdrawals/types";
 import { addDays } from "./dates";
+import { excusedExitOf, reasonsOf, type StudentReason } from "./exit-reason";
 import type {
   PeriodWindow, SnapshotClass, SnapshotEnrollment, SnapshotSchedule, StudentEvent, StudentEventType, StudentTracking,
 } from "./types";
@@ -22,9 +22,8 @@ type TrackedEvent = StudentEvent & { teacherId: string; month: string };
 /** 학생이 수강을 끝낸 날 — 그날 끝난 수강 줄 전부(끝 = 종료일과 반이 닫힌 날 중 이른 날 · 보강 반·하루도 안 다닌 줄 제외). */
 export type StudentExit = { day: string; ended: readonly SnapshotEnrollment[] };
 /**
- * 퇴원율이 쓰는 재료 — 그날 강사별 명단(학생 추적과 같은 명단 한 벌)과 학생별 수강 끝.
- * 🔴 끝은 강사 명단의 차이가 아니라 학생 수강에서 읽는다 — 다른 선생님 반으로 옮긴 뒤 그만둔 학생은 옛 선생님 명단에서
- *    '반이동 유출'로만 빠져 어느 선생님에게도 퇴원으로 안 잡혔다(main 퇴원율과 합칠 때 적대적 리뷰 2026-10-14).
+ * 퇴원율이 쓰는 재료 — 그날 강사별 명단(학생 추적과 같은 명단 한 벌)과 학생별 수강 끝. 🔴 끝은 학생 수강에서 읽는다 — 명단 차이로 읽으면
+ * 다른 선생님 반으로 옮긴 뒤 그만둔 학생이 '반이동 유출'로만 빠져 어느 선생님에게도 퇴원으로 안 잡혔다(적대적 리뷰 2026-10-14).
  */
 export type ChurnSource = {
   rosterOf: (day: string, teacherId: string) => ReadonlyMap<string, {
@@ -37,23 +36,20 @@ export type ChurnSource = {
 
 export function buildStudentTracking(input: {
   from: string; end: string;
-  classes: readonly SnapshotClass[];
-  schedules: readonly SnapshotSchedule[];
-  enrollments: readonly SnapshotEnrollment[];
+  classes: readonly SnapshotClass[]; schedules: readonly SnapshotSchedule[]; enrollments: readonly SnapshotEnrollment[];
   owner: (c: SnapshotClass, day: string) => string | null;
+  /** 강사 탓이 아닌 사유 — 학생 퇴원 사유와 원장이 고른 사유(퇴원율 세는 법). 없으면 사유를 보지 않는다(시간표 X는 명단만 읽는다). */
+  reasons?: { studentReasons?: readonly StudentReason[]; excludeReasons: readonly string[]; futureEnrollments?: readonly SnapshotEnrollment[] };
 }) {
   const { owner } = input;
+  const studentReasons = reasonsOf(input.reasons?.studentReasons);
   const baseline = addDays(input.from, -1);
   const classes = new Map(input.classes.map((c) => [c.id, c]));
   const schedules = new Map(input.classes.map((c) => [
     c.id, input.schedules.filter((s) => s.class_id === c.id && !isSeatSlot(axisSlotFromRow(s))),
   ]));
   const enrollmentByStudent = new Map<string, SnapshotEnrollment[]>();
-  for (const e of input.enrollments) {
-    const rows = enrollmentByStudent.get(e.student_id);
-    if (rows) rows.push(e);
-    else enrollmentByStudent.set(e.student_id, [e]);
-  }
+  for (const e of input.enrollments) (enrollmentByStudent.get(e.student_id) ?? enrollmentByStudent.set(e.student_id, []).get(e.student_id)!).push(e);
   const validAtClose = (e: SnapshotEnrollment, day: string) => !e.on_hold && e.start_date <= day && (!e.end_date || e.end_date > day);
   const openClass = (c: SnapshotClass | undefined, day: string) => Boolean(c) && !c!.is_makeup_pool && (!c!.closed_at || c!.closed_at > day);
 
@@ -102,11 +98,9 @@ export function buildStudentTracking(input: {
     if (memo) return memo;
     const events: TrackedEvent[] = [];
     for (let day = addDays(baseline, 1); day <= input.end; day = addDays(day, 1)) {
-      const before = roster(addDays(day, -1));
-      const after = roster(day);
+      const before = roster(addDays(day, -1)), after = roster(day);
       for (const teacherId of new Set([...before.keys(), ...after.keys()])) {
-        const prev = before.get(teacherId) ?? new Map<string, Relation>();
-        const next = after.get(teacherId) ?? new Map<string, Relation>();
+        const prev = before.get(teacherId) ?? new Map<string, Relation>(), next = after.get(teacherId) ?? new Map<string, Relation>();
         for (const incoming of [true, false]) {
           const source = incoming ? next : prev;
           const other = incoming ? prev : next;
@@ -115,6 +109,7 @@ export function buildStudentTracking(input: {
             const history = enrollmentByStudent.get(studentId) ?? [];
             let type: StudentEventType = "담당 변경";
             let points = 0;
+            let note: string | null = null;
             if (incoming) {
               const starts = history.filter((e) => relation.classes.has(e.class_id) && e.start_date === day);
               const transfers = starts.filter((b) => b.is_transferred_in);
@@ -131,15 +126,18 @@ export function buildStudentTracking(input: {
               if (sameTeacher) type = "같은 강사 내 반이동";
               else if (transfers.length) { type = "반이동 유출"; points = -0.5; }
               else if (ended.length) {
-                // 다른 수업이 남아 있으면 수강종료, 학원 수강이 모두 끝나면 퇴원. 둘 다 −1점이다.
+                // 다른 수업이 남아 있으면 수강종료, 학원 수강이 모두 끝나면 퇴원. 둘 다 −1점이다(강사 탓이 아닌 사유면 0 · 까닭을 단다).
                 type = history.some((e) => openClass(classes.get(e.class_id), day) && validAtClose(e, day)) ? "수강종료" : "퇴원";
-                points = -1;
+                const r = input.reasons, future = r?.futureEnrollments?.filter((e) => e.student_id === studentId) ?? [];
+                const off = r ? excusedExitOf({ ended, history: [...history, ...future], classes, student: studentReasons.get(studentId), exitDay: day, excludeReasons: r.excludeReasons }) : null;
+                points = off ? 0 : -1;
+                if (off) note = `사유 ${REASON_LABEL[off]}`;
               }
             }
             events.push({
               teacherId, month: day.slice(0, 7), studentId, day, type, points, direction: incoming ? "유입" : "유출",
               className: [...relation.classes].map((id) => classes.get(id)?.class_name || "").join(", "),
-              role: [...relation.roles].join("·"),
+              role: [...relation.roles].join("·"), ...(note ? { note } : {}),
             });
           }
         }
@@ -157,7 +155,8 @@ export function buildStudentTracking(input: {
     days.set(day, [...(days.get(day) ?? []), e]);
   }
 
-  const count = (rows: readonly StudentEvent[], type: StudentEventType) => rows.filter((r) => r.type === type).length;
+  // 가감한 변동만 센다(사유로 감점하지 않은 퇴원·수강종료는 `excused`) — 나머지 종류는 늘 점수가 붙어 종전과 같다.
+  const count = (rows: readonly StudentEvent[], type: StudentEventType) => rows.filter((r) => r.type === type && r.points !== 0).length;
   const resultCache = new Map<string, StudentTracking>();
   const churnSource: ChurnSource = {
     rosterOf: (day, teacherId) => roster(day).get(teacherId) ?? new Map(),
@@ -176,6 +175,7 @@ export function buildStudentTracking(input: {
       const mine = allEvents().filter((e) => e.teacherId === teacherId);
       const detail: StudentEvent[] = mine.filter((e) => e.day >= w.start && e.day <= w.end).map((e) => ({
         studentId: e.studentId, day: e.day, type: e.type, points: e.points, direction: e.direction, className: e.className, role: e.role,
+        ...(e.note ? { note: e.note } : {}),
       }));
       const adjustment = detail.reduce((n, e) => n + e.points, 0);
       const value = clampScore(STUDENT_BASE_POINTS + adjustment);
@@ -188,7 +188,7 @@ export function buildStudentTracking(input: {
         value, basePoints: STUDENT_BASE_POINTS, adjustment, previousPoints, previous: previous.size, current: current.size,
         change: value - previousPoints, newCount: count(detail, "신규"), exitCount: count(detail, "퇴원"),
         endedCount: count(detail, "수강종료"), transferIn: count(detail, "반이동 유입"), transferOut: count(detail, "반이동 유출"),
-        unscored: detail.filter((e) => e.points === 0).length,
+        unscored: detail.filter((e) => e.points === 0).length, excused: detail.filter((e) => e.note).length,
         homeroom: [...current.values()].filter((r) => r.roles.has("담임")).length,
         assistant: [...current.values()].filter((r) => r.roles.has("부담임")).length,
         detail,

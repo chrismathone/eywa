@@ -250,6 +250,8 @@ const FALLBACK_ID_LABEL: Record<string, string> = {
 export const SYSTEM_ACTOR_PREFIX = "system:";
 const SYSTEM_ACTOR_LABEL: Record<string, string> = {
   "teacher-portfolio": "직원 포트폴리오 매일 집계",
+  // 마감한 달에 바뀐 규칙을 얹는 운영 스크립트(원장 지시 때만 — 2026-10-14 강사 탓이 아닌 사유).
+  "teacher-portfolio-rule-patch": "직원 포트폴리오 마감 달 규칙 반영",
   "grant-class-review": "직원 평가 권한 부여",
   "grant-seat-attendance": "자리 출석부 권한 부여",
   "narrow-staff-menu": "직원관리 권한 조정",
@@ -679,6 +681,12 @@ export function auditDetail(
         teachers === null ? null : `강사 ${teachers}명`,
         closed.length ? `마감 ${closed.join(", ")}` : null,
       );
+    }
+    case "teacher_portfolio_rule_patch": {
+      const months = Array.isArray(m.months) ? m.months.filter((v): v is string => typeof v === "string") : [];
+      const rows = num(m.rows);
+      const excused = num(m.excused);
+      return join(months.length ? months.join(", ") : null, rows === null ? null : `${rows}행`, excused === null ? null : `감점 뺀 퇴원 ${excused}건`);
     }
     case "teacher_evaluation_settings_save": {
       const enabled = num(m.enabled);

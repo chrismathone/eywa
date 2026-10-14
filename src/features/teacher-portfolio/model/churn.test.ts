@@ -92,6 +92,18 @@ describe("퇴원율", () => {
     const stale = churn(classes, [enroll("s1", "A", "2026-08-01", "2026-10-10", "other")], DEFAULT_CHURN_OPTIONS,
       { studentReasons: [{ id: "s1", reason: "graduated", withdrawn_at: "2026-03-02" }] });
     expect(stale.detail.map((x) => x.counted)).toEqual([true]);
+    // 수강 사유가 비면 학생 퇴원 사유는 그 퇴원과 함께 끝난 수강일 때만(시간표 X와 같은 `endedWithExit`) — 그 사이 다시 등록했다
+    // 퇴원했으면 쓰지 않고(사유 칸에도 안 붙인다), 수강종료로 남았다 늦게 퇴원 처리됐으면 쓴다(적대적 리뷰 2026-10-14).
+    const reEnrolled = churn(classes, [enroll("s1", "A", "2026-08-01", "2026-10-10"), enroll("s1", "B", "2026-12-01", "2027-01-20")], DEFAULT_CHURN_OPTIONS,
+      { studentReasons: [{ id: "s1", reason: "relocation", withdrawn_at: "2027-01-20" }] });
+    expect(reEnrolled.detail.map((x) => [x.reason, x.counted])).toEqual([["사유 없음", true]]);
+    const late = churn(classes, [enroll("s1", "A", "2026-08-01", "2026-10-10")], DEFAULT_CHURN_OPTIONS,
+      { studentReasons: [{ id: "s1", reason: "relocation", withdrawn_at: "2026-11-25" }] });
+    expect(late.detail.map((x) => [x.reason, x.note])).toEqual([["이사", "사유 이사"]]);
+    // '퇴원에 따른 자동 종료'는 그 퇴원 때문에 닫힌 줄 — 퇴원일이 멀어도 학생 사유.
+    const autoEnd = churn(classes, [enroll("s1", "A", "2026-08-01", "2026-10-10", "퇴원에 따른 자동 종료")], DEFAULT_CHURN_OPTIONS,
+      { studentReasons: [{ id: "s1", reason: "graduated", withdrawn_at: "2026-03-02" }] });
+    expect(autoEnd.detail.map((x) => [x.reason, x.note])).toEqual([["졸업", "사유 졸업"]]);
     // 수강종료(다른 과목은 다님)도 같다 · 사람이 라벨 글('이사')로 적어도.
     const ended = churn(classes, [enroll("s1", "A", "2026-08-01", "2026-10-09", "이사"), enroll("s1", "EN", "2026-08-01", null)]);
     expect(ended.detail.map((x) => [x.type, x.reason, x.note])).toEqual([["수강종료", "이사", "사유 이사"]]);
