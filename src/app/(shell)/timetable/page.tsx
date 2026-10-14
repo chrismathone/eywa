@@ -111,6 +111,7 @@ import { ClassMoveProvider } from "./_components/class-move-context";
 import { buildClassMoveIndex } from "@/features/timetable/lib/class-move";
 import { TimetableColorPrefSync } from "./_components/color-mode-toggle";
 import { TimetableFontPrefSync, TimetableZoomArea } from "./_components/font-size-toggle";
+import { TimetableExitOverlay } from "./_components/exit-overlay/exit-overlay";
 import { TimetableViewSettings } from "./_components/view-settings";
 import { applyGradeFilter } from "@/features/timetable/lib/view-prefs";
 import { getTimetableEntryPreferences } from "@/features/timetable/server/view-prefs-queries";
@@ -475,6 +476,9 @@ export default async function TimetablePage({
   // 시간표 편집기(연습본) 바로가기 — 편집기는 아직 **영어 전용**이라 영어를 볼 때만, 편집기 화면·연습본 API와
   // **같은 판정**(`canUseTimetableEditor` = 시간표·반 관리)을 통과한 사람에게만 보인다(#77: 눌러도 튕기는 죽은 버튼 금지).
   const showEditorShortcut = subject === "english" && (await canUseTimetableEditor(user.systemRole));
+  // X 겹침(석 달 퇴원·수강종료, 원장 2026-10-14) — 퇴원관리를 볼 수 있는 사람만(액션이 같은 판정으로 한 번 더 막는다).
+  // 강사 화면(본인·'다른 강사 뷰')엔 없다 — 그 화면은 강사 범위인데 겹침은 과목 전체라서.
+  const showExitOverlay = !teacherId && (await canAccessTenant(user.systemRole, "withdrawals"));
   // 통합뷰 섹션 = 커스텀 그룹(학원설정 과목별)이 켜져 있으면 그것, 아니면 "N교시 시작" 자동 그룹.
   // 엑셀·시트 빌더도 같은 해석기를 쓴다(화면과 배치 일치가 이 기능의 존재 이유).
   // 🔴 **미래 주는 그 주에 쓸 줄로 그린다**(원장 2026-08-29 *"통합뷰 그룹설정(줄)은 반영안된거같은데?"*).
@@ -742,6 +746,8 @@ export default async function TimetablePage({
       <TimetableColorPrefSync mode={viewPrefs.colorMode} />
       {/* 글씨 크기(계정) → 스토어 주입. 색 강도와 같은 단방향 동기화 — 토글은 뷰 설정 팝오버에 있다. */}
       <TimetableFontPrefSync fontSize={viewPrefs.fontSize} />
+      {/* X 겹침 — 키를 누를 때만 읽는다(첫 화면 비용 0). 교실 지도는 과목 축이 아니라 뺀다. */}
+      {showExitOverlay && !isRooms ? <TimetableExitOverlay subject={subject} /> : null}
       {/* Editorial 문법 ① — 헤더 위계. 시간표는 세로 공간이 가장 귀한 화면이라 **창(임베드)에선 이 줄을
           통째로 접는다**(컴팩트 1행조차 아까움 — 2026-07-20 원장 "여전히 많은 공간"). 최상위 프레임은 풀 헤더 유지.
           (우측 학생 인원 집계는 2026-09-28 삭제 — 원장 "헷갈리니까".) */}
