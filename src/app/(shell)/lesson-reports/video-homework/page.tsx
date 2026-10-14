@@ -14,7 +14,10 @@ import { Suspense } from "react";
 import { isModuleEnabled } from "@/lib/modules";
 import { ManualDriveReviewNote } from "@/features/video-homework/components/manual-drive-review-note";
 import { classnoteReplyMode } from "@/features/owner/classnote-gate";
-import { ledgerPairKey } from "@/features/video-homework/ledger";
+import { ledgerPairKey, ownRoundKey } from "@/features/video-homework/ledger";
+import { listVideoHomeworkIssues } from "@/features/video-homework/server/own-homework";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { fetchInChunks } from "@/lib/supabase/batch";
 import { ledgerInitialFilters, ledgerPeriod } from "@/features/video-homework/ledger-period";
 import { buildLedgerRounds } from "@/features/video-homework/rounds";
 
@@ -22,6 +25,22 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "영상숙제 확인 · 에이와" };
 
 const NOTE = "border-line bg-bg-soft rounded-lg border px-3 py-2 text-xs";
+
+const warnTeacherFilter = (e: unknown) =>
+  console.warn(JSON.stringify({ level: "warn", scope: "videoHomework.teacherFilter", message: e instanceof Error ? e.message : "unknown" }));
+
+/**
+ * 강사 필터 재료 — 숙제를 낸 사람 판정(강사뷰와 같은 `listVideoHomeworkIssues`)과 그 사람들의 표시 이름. 이름은 판정이 끝나는 대로
+ * 이어서 읽는다(장부 조회와 나란히, B4). 둘 중 하나라도 못 읽으면 null — 필터만 빠지고 장부는 그대로다.
+ */
+async function loadIssuers(tenantId: string, fromDate: string, toDate: string) {
+  const db = createAdminClient();
+  const issues = await listVideoHomeworkIssues(db, tenantId, fromDate, toDate);
+  const ids = [...new Set(issues.flatMap((issue) => issue.teacherIds))];
+  const users = await fetchInChunks<{ id: string; display_name: string | null }>(ids, (chunk) =>
+    db.from("users").select("id,display_name").eq("tenant_id", tenantId).in("id", chunk));
+  return { issues, names: new Map(users.flatMap((u) => (u.display_name?.trim() ? [[u.id, u.display_name.trim()] as const] : []))) };
+}
 
 export default async function VideoHomeworkPage({ searchParams }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -31,7 +50,7 @@ export default async function VideoHomeworkPage({ searchParams }: {
   const param = (name: string) => typeof params[name] === "string" ? params[name] as string : "";
   const today = kstToday();
   const { fromDate, toDate, rangeTooLong } = ledgerPeriod(param, today);
-  const [ledger, canSend, lessonReportsLevel, canReportSettings, canAiMent, aiOn, settings] = await Promise.all([
+  const [ledger, canSend, lessonReportsLevel, canReportSettings, canAiMent, aiOn, settings, issuers] = await Promise.all([
     getVideoHomeworkLedger(user.tenantId, fromDate, toDate),
     canWriteTenant(user.systemRole, "lesson_reports"),
     accessLevelTenant(user.systemRole, "lesson_reports"),
@@ -39,6 +58,7 @@ export default async function VideoHomeworkPage({ searchParams }: {
     canAccessTenant(user.systemRole, "ai_ment"),
     isFeatureLicensed(user.tenantId, "ai_analysis"),
     getTenantSettings(),
+    loadIssuers(user.tenantId, fromDate, toDate).catch((e: unknown) => { warnTeacherFilter(e); return null; }),
   ]);
   // 칸 편집 = 수업보고서 전체 권한(서버 ledgerRoundWriteError와 같다 — 담당 권한은 강사뷰에서 자기가 낸 숙제만 찍는다).
   const canEdit = lessonReportsLevel === "full";
@@ -56,7 +76,18 @@ export default async function VideoHomeworkPage({ searchParams }: {
   // 기간 안에 회차가 하나도 없는 반은 세우지 않는다(숙제가 나간 날만 회차 — 원장 2026-10-01). 그 반 명단은 회차가 있는 반만.
   const activeClasses = new Set(displayRows.filter((row) => rounds.get(ledgerPairKey(row))?.length).map((row) => row.classId));
   const ledgerRows = displayRows.filter((row) => activeClasses.has(row.classId));
-  const initialFilters = ledgerInitialFilters(param, activeClasses);
+  // 강사 필터(원장 2026-10-14 *"숙제 제출 현황에서 강사 필터링 가능하게 … 관리자뷰에서"*) — 강사 → 그 강사가 낸 칸.
+  // 보이는 줄의 칸만, 이름을 아는 강사만 싣는다(선택지에 못 서는 id는 화면으로 내려보내지 않는다). 고르면 그 강사의 강사뷰와
+  // 같은 칸이 선다(열쇠가 같다).
+  const shownPairs = new Set(ledgerRows.map((row) => ledgerPairKey(row)));
+  const teacherRounds: Record<string, string[]> = {};
+  for (const issue of issuers?.issues ?? []) {
+    if (!shownPairs.has(ledgerPairKey(issue))) continue;
+    for (const id of issue.teacherIds) if (issuers!.names.has(id)) (teacherRounds[id] ??= []).push(ownRoundKey(issue, issue.date));
+  }
+  const teacherOptions = Object.keys(teacherRounds).map((id) => ({ value: id, label: issuers!.names.get(id)! }))
+    .sort((a, b) => a.label.localeCompare(b.label, "ko"));
+  const initialFilters = ledgerInitialFilters(param, activeClasses, new Set(teacherOptions.map((option) => option.value)));
   return <main className="w-full min-w-0 space-y-4">
     <PageHeader eyebrow="수업보고서 · 학습 관리" title="영상숙제 확인"
       description="숙제가 나간 수업을 학생별 회차로 세어 제출 여부를 확인합니다." />
@@ -75,6 +106,7 @@ export default async function VideoHomeworkPage({ searchParams }: {
     {canEdit && !ledger.assignmentVideosKnown ? <p role="status" className={NOTE}>배정할 영상 목록을 확인하지 못했습니다. 잠시 뒤 새로고침해 주세요.</p> : null}
     {rangeTooLong ? <p role="status" className="text-text-dim text-xs">한 번에 최대 366일을 조회할 수 있어 종료일이 속한 달을 표시했습니다.</p> : null}
     <VideoHomeworkManagement key={`${fromDate}:${toDate}`} rows={ledgerRows} initialMarks={ledger.marks} videos={ledger.videos} blankFacts={ledger.blankFacts} videosKnown={ledger.videosKnown}
-      fromDate={fromDate} toDate={toDate} today={today} initialFilters={initialFilters} showTeacher />
+      fromDate={fromDate} toDate={toDate} today={today} initialFilters={initialFilters} showTeacher
+      teacherRounds={teacherRounds} teacherOptions={teacherOptions} />
   </main>;
 }

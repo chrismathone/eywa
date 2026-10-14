@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_LEDGER_FILTERS, filterLedgerRows, groupLedgerRows, ledgerCounts, ledgerCsv, ledgerSummary } from "./ledger";
+import { DEFAULT_LEDGER_FILTERS, filterLedgerRows, groupLedgerRows, ledgerCounts, ledgerCsv, ledgerSummary, teacherLedgerKeep } from "./ledger";
+import { ledgerInitialFilters } from "./ledger-period";
 import { keepLedgerRounds, ownRoundKey } from "./ledger";
 import { buildLedgerRounds } from "./rounds";
 import type { VideoArrival, VideoHomeworkLedgerRow, VideoHomeworkMark } from "./types";
@@ -75,5 +76,22 @@ describe("강사뷰 — 보일 회차만 남긴다(keepLedgerRounds, 원장 2026
     expect(kept.get("B:s1")).toEqual([]);
     // 원본은 그대로(관리자 화면과 같은 판정 결과를 거르기만 한다)
     expect(all.get("A:s1")).toHaveLength(3);
+  });
+});
+
+describe("강사 필터 재료(원장 2026-10-14)", () => {
+  it("고른 강사의 칸 열쇠와 그 반 × 학생 — 전체면 거르지 않는다", () => {
+    const keep = teacherLedgerKeep({ lee: ["a:one:2026-09-01", "b:two:2026-09-04"] }, "lee");
+    expect([...keep!.pairs]).toEqual(["a:one", "b:two"]);
+    expect(keep!.keys.has("a:one:2026-09-01")).toBe(true);
+    expect(teacherLedgerKeep({ lee: [] }, "all")).toBeNull();
+    expect(teacherLedgerKeep(undefined, "lee")).toBeNull();
+    expect(teacherLedgerKeep({}, "gone")!.pairs.size).toBe(0);
+  });
+  it("주소의 강사는 이 기간에 숙제를 낸 강사일 때만 — 아니면 전체(모르는 id를 선택지로 세우지 않는다)", () => {
+    const param = (value: string) => (name: string) => (name === "teacher" ? value : "");
+    expect(ledgerInitialFilters(param("lee"), new Set(), new Set(["lee"])).teacher).toBe("lee");
+    expect(ledgerInitialFilters(param("gone"), new Set(), new Set(["lee"])).teacher).toBe("all");
+    expect(ledgerInitialFilters(param("lee"), new Set()).teacher).toBe("all");
   });
 });

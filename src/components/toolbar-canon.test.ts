@@ -263,6 +263,8 @@ const CANON_SURFACES = [
   "src/app/(shell)/staff/page.tsx",
   "src/app/(shell)/meetings/page.tsx",
   "src/app/(shell)/withdrawals/page.tsx",
+  // 퇴원보고서(2026-10-14) — 기존 스프레드시트 기록을 한 목록에 합치며 상태·기간·과목·작성 강사 드롭다운과 미연결 칩을 부품으로.
+  "src/app/(shell)/withdrawal-reports/_components/list-toolbar.tsx",
   // 슈퍼관리자(2026-09-25 전면 정리) — 손으로 적은 GET 폼·필터 줄을 부품으로(영역 가드: super-admin-design.test.ts).
   "src/app/(super-admin)/super-admin/tenants/page.tsx",
   "src/app/(super-admin)/super-admin/audit/page.tsx",

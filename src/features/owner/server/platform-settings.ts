@@ -48,7 +48,7 @@ export async function platformSettingsError(section: string, next: unknown, prev
     const ids = await platformAccountIds([...permissionAccountIds(after), ...permissionAccountIds(before)]);
     if (!equalRows(after.userOverrides.filter((row) => ids.has(row.userId)), before.userOverrides.filter((row) => ids.has(row.userId)))) return DENIED;
     for (const key of SPECIAL_ACCESS_ID_LISTS) {
-      if (!equalRows(after.specialAccess[key].filter((id) => ids.has(id)), before.specialAccess[key].filter((id) => ids.has(id)))) return DENIED;
+      if (!equalRows((after.specialAccess[key] ?? []).filter((id) => ids.has(id)), (before.specialAccess[key] ?? []).filter((id) => ids.has(id)))) return DENIED;
     }
     const scopesOf = (value: PermissionsSettings) => value.specialAccess.staffSubjectScopes.filter((row) => ids.has(row.userId));
     if (!equalRows(scopesOf(after), scopesOf(before))) return DENIED;

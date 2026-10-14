@@ -19,7 +19,7 @@ export function specialAccessTargets(next: SpecialAccess, stored: unknown): { us
   const before = isRecord(stored) ? stored : {};
   const added = SPECIAL_ACCESS_ID_LISTS.flatMap((key) => {
     const had = new Set(strings(before[key]));
-    return next[key].filter((id) => !had.has(id));
+    return (next[key] ?? []).filter((id) => !had.has(id));
   });
   const keptScopes = new Set(
     (Array.isArray(before.staffSubjectScopes) ? before.staffSubjectScopes : []).flatMap((row) =>
