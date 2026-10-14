@@ -31,7 +31,7 @@ const ROW = `${SUB} items-baseline px-2 py-0.5 text-xs`;
 const CELL = "min-w-0 truncate";
 // 일반 화면 문구 — 평가 메뉴(실험실) 이름을 쓰지 않는다(꺼진 지점에선 있었는지도 모르게).
 const UNCOUNTED_TIP =
-  "선생님 퇴원 수에 넣지 않은 퇴원입니다 — 지난달 절반 이상 맡은 선생님이 없거나(온 지 얼마 안 된 학생 등), 이사 · 질병 · 권고퇴원 · 졸업, 끝난 특강 등.";
+  "선생님 퇴원 수에 넣지 않은 퇴원입니다 — 지난달 절반 이상 맡은 선생님이 없거나(온 지 얼마 안 된 학생 등), 줄을 그은 사유, 끝난 특강 등.";
 
 function Row({ row }: { row: OverlayRow }) {
   const strike = row.excluded ? "line-through" : "";
@@ -157,7 +157,7 @@ export function ExitOverlayCard({
           <span><Kbd>Esc</Kbd> 닫기</span>
         </span>
         <span className="min-w-0 flex-[1_1_340px]">
-          선생님 = 그날 담임 + 교시 담당(지난달 절반 이상 맡은 학생). 과목을 끊은 학생도 퇴원으로 셉니다. 이사 · 질병 · 권고퇴원 · 졸업은 줄을 긋고 건수에서 뺍니다. 데이터 정리 일괄 퇴원과 휴원은 넣지 않습니다.
+          선생님 = 그날 담임 + 교시 담당(지난달 절반 이상 맡은 학생). {data?.rulesNote} 데이터 정리 일괄 퇴원과 휴원은 넣지 않습니다.
         </span>
         {data ? (
           <WindowLink href={data.withdrawalsHref} className="text-primary font-bold hover:underline">

@@ -2,11 +2,12 @@
  * 시간표 X 겹침의 **퇴원 담당 선생님**(순수 · Vitest) — 강사평가 퇴원율이 낸 값을 **읽기만** 한다.
  *
  * 🔴 원장 2026-10-14 *"모든 데이터가 일치해야함. 이쪽만 다른 출력이 되면 안됨"* — 겹침은 담당을 새로 판정하지 않는다.
- *    서버가 강사평가 퇴원율(`buildChurn`, 그날 담임 + 교시 담당 · 지난달 절반 이상 맡은 학생)을 달마다 돌려
+ *    서버가 강사평가 퇴원율(`buildChurnModel`, 그날 담임 + 교시 담당 · 지난달 절반 이상 맡은 학생)을 달마다 돌려
  *    `ChurnView`로 넘기고, 여기서는 줄 → 그 퇴원을 퇴원율에 넣은 선생님, 달 → 퇴원율 0인 선생님을 꺼낸다.
  *    (전에는 학생 상세 '지난 수업'의 추정 — 보고서 작성자·출결 — 을 썼다. 강사평가와 다른 선생님이 붙었다.)
  */
 import { shiftMonth } from "@/lib/date-kst";
+import { exitDayOf, type EndedRowRef, type ExitClassRef } from "./reason-key";
 
 const byKo = (a: string, b: string) => a.localeCompare(b, "ko");
 
@@ -19,6 +20,23 @@ export function churnMonthsFor(anchor: string, thisMonth: string): string[] {
   const next = shiftMonth(anchor, 1);
   return [...(next <= thisMonth ? [next] : []), anchor, shiftMonth(anchor, -1), shiftMonth(anchor, -2), shiftMonth(anchor, -3)];
 }
+
+/**
+ * 줄의 퇴원을 퇴원율에서 찾을 달 — 퇴원율이 그만둔 날로 보는 날(종료일과 반이 닫힌 날 중 이른 날 · 하루도 안 다닌 줄은 뺀다 —
+ * `buildStudentTracking`과 같은 규칙) 중 마지막, 정규 반만(특강·보강 반은 퇴원율도 안 센다). 모르면 줄의 달.
+ * 🔴 퇴원하며 함께 닫힌 다음 달 반(시작일 = 종료일)으로 달을 잡으면 퇴원율이 센 달과 어긋나 선생님이 빠졌다(적대 리뷰 2026-10-14).
+ */
+export function churnMonthOf(ended: readonly EndedRowRef[], date: string, classOf: (classId: string) => ExitClassRef | undefined): string {
+  const days = ended.flatMap((r) => {
+    const c = classOf(r.classId);
+    const day = c?.regular ? exitDayOf(r, c) : null;
+    return day ? [day] : [];
+  });
+  return (days.sort().at(-1) ?? date).slice(0, 7);
+}
+
+/** X가 '함께 끝난 수강'을 찾는 폭 — 퇴원일보다 넉 달 앞까지(수강종료로 남아 있다가 늦게 퇴원 처리된 학생). 재료는 그보다 넓게 읽는다. */
+export const OVERLAY_LOOKBACK_DAYS = 120;
 
 /** 한 달 퇴원율 결과(`YYYY-MM` → …). */
 export type ChurnMonth = {

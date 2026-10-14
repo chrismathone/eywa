@@ -13,6 +13,7 @@ import { isVideoHomeworkDate } from "../types";
 import { isOtherSubjectVideo, isVideoAssignableToDate, videoAssignmentRange, type VideoAssignmentOptions } from "../video-assignment";
 import { reconcileVideoHomework } from "./reconcile-outcomes";
 import { listExtraIssuesFor } from "./extra-issues";
+import { keepMarkOnlyRound } from "./keep-round";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 class AssignmentError extends Error {}
@@ -33,16 +34,24 @@ async function context(classId: string, studentId: string, period?: { fromDate: 
     .eq("student_id", studentId).eq("video_homework", true).order("report_date", { ascending: false });
   // 기간을 먼저 좁혀야 오래 다닌 학생의 과거 숙제가 최근 366건 제한에서 잘리지 않는다.
   if (period) reportQuery.gte("report_date", period.fromDate).lt("report_date", addDays(period.toDate, 1));
+  // 검사 기록만 있는 숙제일 — 보고서에 '영상 과제' 표시 없이 선생님이 손으로 찍은 칸(원장 2026-10-14 *"수동 영상들 다 학생들이 업로드해서
+  // 배정하고 싶은데 배정이 불가능함"*). 장부에 숙제 칸으로 서 있으니 영상도 붙일 수 있어야 한다 — 배정할 때 옮겨 남긴 숙제로 먼저 남긴다(아래).
+  const markQuery = db.from("video_homework_marks").select("homework_date").eq("tenant_id", user.tenantId).eq("class_id", classId)
+    .eq("student_id", studentId).not("homework_date", "is", null).order("homework_date", { ascending: false });
+  if (period) markQuery.gte("homework_date", period.fromDate).lt("homework_date", addDays(period.toDate, 1));
   // 보고서 없이 따로 낸 숙제(extra-issues.ts)도 같은 숙제다 — 기간이 없으면(집계 제외) 있는지만 본다.
-  const [reports, extra] = await Promise.all([
+  const [reports, extra, marks] = await Promise.all([
     reportQuery.limit(period ? 366 : 1),
     listExtraIssuesFor(db, user.tenantId, { studentIds: [studentId], classIds: [classId],
       ...(period ? { fromDate: period.fromDate, toDate: period.toDate, limit: 366 } : { limit: 1 }) }).catch(() => null),
+    markQuery.limit(period ? 366 : 1),
   ]);
-  if (reports.error || extra === null) throw new AssignmentError("학생의 영상 숙제를 읽지 못했습니다.");
-  const dates = [...new Set([...(reports.data ?? []).map(r => String(r.report_date)), ...extra.map(issue => issue.date)])].sort().reverse();
+  if (reports.error || extra === null || marks.error) throw new AssignmentError("학생의 영상 숙제를 읽지 못했습니다.");
+  const issued = new Set([...(reports.data ?? []).map(r => String(r.report_date)), ...extra.map(issue => issue.date)]);
+  const markOnly = new Set((marks.data ?? []).map(r => String(r.homework_date)).filter(date => !issued.has(date)));
+  const dates = [...new Set([...issued, ...markOnly])].sort().reverse();
   if (!dates.length) throw new AssignmentError("이 반에 배정할 영상 숙제가 없습니다.");
-  return { user, db, full, delegated: viewAs?.access === "full", dates };
+  return { user, db, full, delegated: viewAs?.access === "full", dates, markOnly };
 }
 
 export async function getVideoAssignmentOptions(input: { classId: string; studentId: string; fromDate: string; toDate: string }): Promise<VideoAssignmentOptions> {
@@ -88,7 +97,7 @@ export async function assignHomeworkVideo(input: { classId: string; studentId: s
     || typeof input.reason !== "string" || !input.reason.trim() || input.reason.trim().length > 300
     || (!input.excluded && (!input.homeworkDate || !isVideoHomeworkDate(input.homeworkDate)))) return { ok: false, error: "영상·숙제 날짜와 변경 사유를 확인해 주세요." };
   try {
-    const { user, db, full, delegated, dates } = await context(input.classId, input.studentId,
+    const { user, db, full, delegated, dates, markOnly } = await context(input.classId, input.studentId,
       input.excluded ? undefined : { fromDate: input.homeworkDate!, toDate: input.homeworkDate! });
     if (!input.excluded && !dates.includes(input.homeworkDate!)) return { ok: false, error: "이 학생에게 낸 영상 숙제를 골라 주세요." };
     if (input.excluded && delegated && !full) {
@@ -113,6 +122,14 @@ export async function assignHomeworkVideo(input: { classId: string; studentId: s
       const subjectOf = new Map((subjects.data ?? []).map((c) => [c.id as string, c.subject as string | null]));
       if (isOtherSubjectVideo({ classSubject: typeof videoClass === "string" ? subjectOf.get(videoClass) : null, subject: video.data.subject as string | null }, subjectOf.get(input.classId)))
         return { ok: false, error: "다른 과목 영상은 이 반 숙제에 배정할 수 없습니다." };
+      // 검사 기록만 있는 숙제일 — DB 함수는 보고서 표시나 따로 낸 숙제만 숙제로 받는다. 그 칸을 옮겨 남긴 숙제로 먼저 남긴다(keep-round.ts:
+      // 판정·알림·'내 숙제'에는 안 들고 칸·손 배정에서만 숙제다). 손 기록(완료 등)은 그대로 둔다 — 붙은 영상이 ▶로 보인다.
+      if (markOnly.has(input.homeworkDate!)) {
+        const keep = await keepMarkOnlyRound(db, user.tenantId, user.id, { classId: input.classId, studentId: input.studentId, date: input.homeworkDate! });
+        if (keep !== "kept" && keep !== "assigned") return { ok: false, error: "이 숙제 칸을 영상을 붙일 수 있게 남기지 못했습니다. 잠시 뒤 다시 시도해 주세요." };
+        // 🔴 배정이 실패해도 남긴 줄은 거두지 않는다 — 거두는 사이 다른 창이 그 칸을 미확인으로 지우면 칸이 통째로 사라진다(재리뷰 2026-10-14).
+        //    남은 줄은 칸을 지킬 뿐이다(판정·알림·'내 숙제'에 안 든다 — 미확인으로 바꿀 때 생기는 줄과 같다).
+      }
     }
     const { data, error } = await db.rpc("set_homework_video_assignment", {
       // 대상의 담당 반은 위에서 검증했다. 실제 편집자의 id를 대상 강사 id로 바꾸지 않는다.

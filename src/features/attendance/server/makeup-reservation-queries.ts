@@ -1,4 +1,5 @@
 import "server-only";
+import { attendanceDb } from "./read-context";
 
 /**
  * 보강 예약(0264a) **조회** — 규칙은 순수부 [`makeup-reservation.ts`](../makeup-reservation.ts).
@@ -88,7 +89,8 @@ export async function getClassReservationsInRange(
   from: string,
   to: string,
 ): Promise<MakeupReservation[]> {
-  const supabase = await createClient();
+  // 로그인 없는 출석부 조립 문맥이면 관리 클라이언트(반 id로 좁히는 조회 — read-context.ts).
+  const { db: supabase } = await attendanceDb();
   const { data, error } = await supabase
     .from("makeup_reservations")
     .select(SELECT)

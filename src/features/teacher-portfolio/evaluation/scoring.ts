@@ -92,3 +92,30 @@ export function describeScoring(scoring: Scoring, max: number, unit: string): st
       return `1${unit || "건"}당 ${fmt(scoring.points)}점${scoring.cap ? `(${fmt(max)}점까지)` : "(상한 없음)"}`;
   }
 }
+
+/**
+ * 점수표 — 항목별 내역 맨 위 '점수 기준' 상자가 줄마다 그린다(원장 2026-10-14 *"각 탭마다 세부 점수 지표 알려놓을것"*).
+ * 문장(`describeScoring`)과 같은 규칙을 표 줄로 — 왼쪽 = 원래 수치의 조건, 오른쪽 = 점수.
+ */
+export function scoringTable(scoring: Scoring, max: number, unit: string): { when: string; points: string }[] {
+  switch (scoring.mode) {
+    case "linear": {
+      if (scoring.full === scoring.zero) return [{ when: `${fmt(scoring.full)}${unit} 이상`, points: `${fmt(max)}점` }, { when: "그 아래", points: "0점" }];
+      const up = scoring.full > scoring.zero;
+      return [
+        { when: `${fmt(scoring.full)}${unit} ${up ? "이상" : "이하"}`, points: `${fmt(max)}점(만점)` },
+        { when: `${fmt(Math.min(scoring.zero, scoring.full))}${unit} ~ ${fmt(Math.max(scoring.zero, scoring.full))}${unit} 사이`, points: "비례" },
+        { when: `${fmt(scoring.zero)}${unit} ${up ? "이하" : "이상"}`, points: "0점" },
+      ];
+    }
+    case "bands":
+      return scoring.bands.map((b, i) => ({
+        when: i > 0 && b.from === null && b.to === null ? "그 밖" : bandRange(b, unit), points: `${fmt(clamp(b.points, 0, max))}점`,
+      }));
+    case "perUnit":
+      return [
+        { when: `1${unit || "건"}당`, points: `${fmt(scoring.points)}점` },
+        { when: "상한", points: max === 0 && !scoring.cap ? "없음 — 총점에 그대로 더하고 뺍니다" : scoring.cap ? `${fmt(max)}점까지` : "없음" },
+      ];
+  }
+}

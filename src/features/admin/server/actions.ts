@@ -148,6 +148,19 @@ export async function mergeStudents(
     if (count < expected) return stop(step, { short: { expected, done: count } });
   }
 
+  // 소개한 원생(0362a) — 진 쪽이 소개한 콜&상담의 연결도 남는 쪽으로(강사평가 원생 소개가 퇴원 처리된 쪽에서 담임을 못 찾아
+  // 0건이 되지 않게). 보조 연결이라 실패해도 병합은 멈추지 않고 로그만 남긴다 · 칸이 없는 DB(적용 전)는 조용히 건너뛴다.
+  // 옮길 것이 없으면 쓰지 않는다(위 표들과 같은 규칙). 한 줄만 읽어 본다 — 건수 조회(head)는 오류 문구가 비어 '칸 없음'을 못 가른다.
+  const referrerProbe = await supabase.from("enrollment_consultations").select("id").eq("referrer_student_id", mergeeId).range(0, 0);
+  const skipReferrer = (e: { message?: string } | null) => !e || /referrer_student_id/.test(e.message ?? "");
+  if (referrerProbe.error && !skipReferrer(referrerProbe.error)) logDbError(referrerProbe.error, "admin.mergeStudents.referrer");
+  if (!referrerProbe.error && referrerProbe.data?.length) {
+    const referrerMove = await supabase.from("enrollment_consultations")
+      .update({ referrer_student_id: keeperId }, { count: "exact" }).eq("referrer_student_id", mergeeId);
+    if (referrerMove.error && !skipReferrer(referrerMove.error)) logDbError(referrerMove.error, "admin.mergeStudents.referrer");
+    else if (referrerMove.count) moved["enrollment_consultations.referrer"] = referrerMove.count;
+  }
+
   // mergee soft delete — 🔴 실제로 한 줄이 바뀌었는지 본다(`.select`). 권한이 막으면 오류 없이 0줄이고,
   //    그걸 완료로 치면 "병합했다"는 기록과 달리 학생은 재원인 채 남는다.
   const today = kstToday();

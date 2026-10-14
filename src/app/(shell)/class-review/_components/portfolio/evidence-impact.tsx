@@ -7,6 +7,11 @@ import { METRIC_COLOR, SHORTFALL_COLOR, dayLabel, itemOf, pointsText, ruleText, 
 import {
   AttendanceEvidence, EstimatedEvidence, FollowEvidence, ReportEvidence, StudentCell, type EvidenceProps,
 } from "./evidence-records";
+import { ChurnEvidence } from "./evidence-churn";
+import { CounselEvidence } from "./evidence-counsel";
+import { ReferralEvidence } from "./evidence-referral";
+import { ScoreRuleBox } from "./score-rule-box";
+import { PayRatioEvidence } from "./evidence-pay";
 import { BarList, DataTable, Delta, SectionTitle, StackBar, StatTiles, StatusChip } from "./parts";
 
 /** 학원 운영 영향 쪽 내역 — 배정·유지 · 매출 · 과목 소개 · 보강, 그리고 직원 평가. */
@@ -39,7 +44,7 @@ function StudentsEvidence({ period, nameOf }: EvidenceProps) {
       ]} />
       {/* 매월 새로 센다 — 전월 변동은 이 식에 들어가지 않는다. 몇 점인지는 그 달을 매긴 설정의 규칙. */}
       <p className="bg-primary-softer mt-4 rounded-lg px-3.5 py-3 text-xs leading-relaxed">
-        {ruleText(period, "students") ?? "기본 10점에서 이번 달 변동을 더하고 빼 0~20점 범위로 반영합니다."}
+        {period.evaluation ? "변동값의 합이 이 항목의 수치입니다 — 몇 점인지는 위 점수 기준." : "기본 10점에서 이번 달 변동을 더하고 빼 0~20점 범위로 반영합니다."}
       </p>
       <ul className="mt-4 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
         {flows.map(([label, count, points]) => (
@@ -140,7 +145,6 @@ function PendingEvidence({ metric, period }: { metric: Metric } & Pick<EvidenceP
       <StatTiles items={[{ label: "이 달 수치", value: metric.basis }, { label: "점수", value: pointsText(metric, period) }]} />
       {/* '계산 전'은 그 행이 계산 전으로 매겨졌을 때만 — 옛 행(raw 없음)의 과목 소개는 실제로 0건으로 매긴 달이다. */}
       <EmptyNote count={metric.uncounted && (metric.raw === null || metric.raw === undefined) ? "계산 전" : metric.basis} text={metric.reason} />
-      {ruleText(period, metric.id) ? <p className="mt-3 text-xs leading-relaxed">점수 규칙: {ruleText(period, metric.id)}</p> : null}
     </>
   );
 }
@@ -155,14 +159,19 @@ function ManualEvidence({ metric, period }: { metric: ManualMetricItem } & Pick<
       ]} />
       {metric.note ? <p className="bg-primary-softer mt-4 rounded-lg px-3.5 py-3 text-xs leading-relaxed">{metric.note}</p> : null}
       <p className="mt-4 text-xs leading-relaxed">{metric.reason}</p>
-      {ruleText(period, metric.id) ? <p className="mt-2 text-xs leading-relaxed">점수 규칙: {ruleText(period, metric.id)}</p> : null}
       <p className="mt-2 text-xs leading-relaxed">원장이 달마다 넣는 지표입니다. 값은 직원 포트폴리오의 ‘직접 입력 지표’에서 넣습니다.</p>
     </>
   );
 }
 
-/** 항목 하나의 내역. 기록 시작 전이라 평균으로 둔 달은 기록 표를 그리지 않는다. */
+/** 항목 하나의 내역 — 맨 위에 점수 기준 상자(원장 2026-10-14), 그 아래 근거. */
 export function MetricEvidence({ id, ...props }: EvidenceProps & { id: ItemId }) {
+  if (!itemOf(props.period, id)) return null;
+  return <><ScoreRuleBox period={props.period} id={id} /><EvidenceBody id={id} {...props} /></>;
+}
+
+/** 기록 시작 전이라 평균으로 둔 달은 기록 표를 그리지 않는다. */
+function EvidenceBody({ id, ...props }: EvidenceProps & { id: ItemId }) {
   const item = itemOf(props.period, id);
   if (!item) return null;
   if (isManualId(item.id)) return <ManualEvidence metric={item as ManualMetricItem} period={props.period} />;
@@ -172,17 +181,15 @@ export function MetricEvidence({ id, ...props }: EvidenceProps & { id: ItemId })
     case "report": return <ReportEvidence {...props} />;
     case "attendance": return <AttendanceEvidence {...props} />;
     case "follow": return <FollowEvidence {...props} />;
+    case "counsel": return <CounselEvidence {...props} />;
     case "quality": return <QualityEvidence {...props} />;
     case "students": return <StudentsEvidence {...props} />;
     case "revenue": return <RevenueEvidence {...props} />;
     case "coverage": return <CoverageEvidence {...props} />;
-    case "churn": return <ChurnEvidence {...props} />;
+    // 계산이 들어오기 전에 매긴 달(계산 전 자리)은 그 안내 카드로.
+    case "churn": return item.uncounted ? <PendingEvidence metric={item} period={props.period} /> : <ChurnEvidence {...props} />;
+    case "payRatio": return item.uncounted ? <PendingEvidence metric={item} period={props.period} /> : <PayRatioEvidence period={props.period} />;
+    case "expansion": return item.uncounted || !Array.isArray(item.detail) ? <PendingEvidence metric={item} period={props.period} /> : <ReferralEvidence {...props} />;
     default: return <PendingEvidence metric={item} period={props.period} />;
   }
-}
-
-function ChurnEvidence({ period, nameOf, sticky }: EvidenceProps) {
-  const m = metricOf(period, "churn");
-  if (m.uncounted && m.raw == null) return <PendingEvidence metric={m} period={period} />;
-  return <><StatTiles items={[{ label: "이 달 퇴원율", value: m.raw == null ? "담당 학생 없음" : `${m.raw.toFixed(1)}%` }, { label: "집계 기준", value: m.basis }]} /><SectionTitle>퇴원·수강종료 학생</SectionTitle><DataTable sticky={sticky} headers={["날짜", "학생", "반"]} empty="해당하는 퇴원·수강종료 학생이 없습니다." rows={m.detail.map(r => ({ key: r.studentId, cells: [r.day, nameOf(r.studentId), r.className] }))} /><p className="mt-3 text-xs leading-relaxed">{m.reason}</p></>;
 }

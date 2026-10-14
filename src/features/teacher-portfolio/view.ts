@@ -12,7 +12,7 @@ import type { FollowRow, ItemId, Metric, MetricId, PeriodWindow, PortfolioPeriod
 
 /** 이름이 없는 옛 저장 행의 기본 이름(그 행의 '과목 소개'는 그대로 과목 소개다). 새 행은 설정의 이름을 싣는다. */
 export const METRIC_LABEL: Record<MetricId, string> = {
-  report: "수업보고서", attendance: "출결 기록", follow: "원생상담", quality: "직원 평가",
+  report: "수업보고서", attendance: "출결 기록", follow: "원생상담", counsel: "원생상담", quality: "직원 평가",
   students: "학생 배정·유지", revenue: "매출 기여", expansion: "과목 소개", coverage: "보강관리",
   payRatio: "매출 대비 급여", churn: "퇴원율", grades: "성적 관리", satisfaction: "학부모 만족도", punctuality: "강사 근태",
 };
@@ -43,7 +43,6 @@ export const itemOf = (p: Pick<PortfolioPeriod, "items">, id: ItemId): Metric | 
 export const periodMax = (p: Pick<PortfolioPeriod, "evaluation" | "knownMax">): number => (p.evaluation ? p.knownMax : 100);
 /** 채워지지 않은 몫(미작성·미처리)의 색. */
 export const SHORTFALL_COLOR = "color-mix(in srgb, var(--color-amber) 45%, var(--color-card))";
-export const PROXY_COLOR = "color-mix(in srgb, var(--color-purple) 55%, var(--color-card))";
 
 export const fmtScore = (value: number | null): string => (value === null ? "산출불가" : value.toFixed(1));
 
@@ -111,12 +110,13 @@ export const DELTA_CLASS = { up: "text-danger", down: "text-blue", flat: "", non
 export type StatusTone = SemanticTone;
 /** 처리 상태 → 의미색. 화면마다 따로 정하지 않는다. */
 export function statusTone(state: string): StatusTone {
-  if (["완료", "인정", "기한 전 완료", "작성"].includes(state)) return "brand";
-  if (["미완료", "기한 초과", "미작성", "마감 후 작성"].includes(state)) return "caution";
+  if (["완료", "인정", "기한 전 완료", "작성", "상담함"].includes(state)) return "brand";
+  if (["미완료", "기한 초과", "미작성", "마감 후 작성", "셈", "미상담"].includes(state)) return "caution";
   if (state === "대리") return "special";
   return "inert";
 }
-export const REPORT_STATE_LABEL = { own: "작성", proxy: "대리", missing: "미작성", late: "마감 후 작성", unknown: "확인 필요" } as const;
+/** 보고서 칸 — 작성/미작성 둘만(원장 2026-10-14). 지난 달에 남은 대리·마감 후·확인 필요도 점수에서 본인 작성이 아니었으니 미작성으로 보인다. */
+export const REPORT_STATE_LABEL = { own: "작성", proxy: "미작성", missing: "미작성", late: "미작성", unknown: "미작성" } as const;
 
 export type WeekGroup<T> = { index: number; start: string; end: string; rows: T[] };
 /** 한 달을 월~일 주로 나눠 줄을 담는다. `dayOf`가 null이면 그 줄은 어느 주에도 넣지 않는다. */

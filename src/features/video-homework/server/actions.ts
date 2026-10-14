@@ -201,10 +201,14 @@ export async function setVideoHomeworkRound(input: {
   }
   // 검사 기록만으로 선 숙제 칸을 미확인으로 = 그 날짜를 따로 낸 숙제로 남긴 뒤 지운다 — 그냥 지우면 칸이 통째로 사라진다(keep-round.ts).
   let kept = false;
+  // 지울 기록이 이미 없는데 여기까지 왔으면 그날은 숙제(보고서 표시 · 따로 낸 숙제)다 — 칸이 남는다. 다른 창에서 먼저 미확인으로 바꿔 기록이
+  // 지워진 칸을 낡은 창에서 다시 미확인으로 저장해도 그 창이 칸을 지우지 않게(적대적 리뷰 2026-10-14).
+  let stays = input.status === null && !recorded.data?.length;
   if (input.status === null && homeworkDate && recorded.data?.length) {
     const keep = await keepMarkOnlyRound(db, user.tenantId, user.id, { classId: input.classId, studentId: input.studentId, date: homeworkDate });
     if (keep === "failed") return { ok: false, error: "숙제 칸을 남기지 못했습니다. 잠시 뒤 다시 시도해 주세요." };
     kept = keep === "kept";
+    stays = kept || keep === "assigned";
   }
   const result = await writeVideoHomeworkMark(db, { tenantId: user.tenantId, userId: user.id, classId: input.classId,
     studentId: input.studentId, slotDate: homeworkDate ? addDays(homeworkDate, 1) : date, homeworkDate,
@@ -217,5 +221,7 @@ export async function setVideoHomeworkRound(input: {
       status: input.status ?? "cleared", submittedDate: input.status === "submitted" ? input.submittedDate ?? null : null,
       ...(kept ? { keptAsIssue: true } : {}) },
   });
-  return result;
+  // 칸이 남았음을 화면에 알린다 — 화면은 기록만 지우고 서버 값을 다시 읽기 전이라, 이 표시가 없으면 남은 칸을 지운 채로 그린다
+  // (원장 2026-10-14 홍채민 10/2 — 서버는 옮겨 남겼는데 화면에서 칸이 사라졌다).
+  return result.ok && stays ? { ...result, kept: true } : result;
 }

@@ -9,8 +9,10 @@ import { isVideoAssignableToDate, type VideoAssignmentOptions } from "../video-a
 import type { VideoHomeworkLedgerRow } from "../types";
 import { assignmentLabel, VideoAssignmentSelect } from "./video-assignment-select";
 
-export function VideoAssignmentDialog({ row, fromDate, toDate, onClose, linked }: {
+export function VideoAssignmentDialog({ row, initialDate, fromDate, toDate, onClose, linked }: {
   row: VideoHomeworkLedgerRow; fromDate: string; toDate: string; onClose: () => void;
+  /** 먼저 골라 둘 숙제일 — 칸 편집 창에서 그 칸에 붙이려고 열었을 때. 목록에 없으면 종전대로 고른다. */
+  initialDate?: string;
   /** 장부가 이 줄에 자동으로 붙인 영상(영상 id → 숙제일) — 표기에만 쓴다. */
   linked?: ReadonlyMap<string, string>;
 }) {
@@ -22,10 +24,12 @@ export function VideoAssignmentDialog({ row, fromDate, toDate, onClose, linked }
     let active = true;
     void getVideoAssignmentOptions({ classId: row.classId, studentId: row.studentId, fromDate, toDate }).then(result => {
       if (!active) return;
-      setOptions(result); if (result.ok) setDate(result.dates.find(date => result.videos.some(video => isVideoAssignableToDate(video.postedAt, date))) ?? result.dates[0] ?? "");
+      setOptions(result);
+      if (result.ok) setDate(initialDate && result.dates.includes(initialDate) ? initialDate
+        : result.dates.find(date => result.videos.some(video => isVideoAssignableToDate(video.postedAt, date))) ?? result.dates[0] ?? "");
     }).catch(() => { if (active) setOptions({ ok: false, error: "영상 목록을 읽지 못했습니다." }); });
     return () => { active = false; };
-  }, [row.classId, row.studentId, fromDate, toDate]);
+  }, [row.classId, row.studentId, fromDate, toDate, initialDate]);
   const videos = options?.ok ? options.videos.filter(video => date === "exclude"
     ? options.dates.some(date => isVideoAssignableToDate(video.postedAt, date)) : isVideoAssignableToDate(video.postedAt, date)).slice(0, 100) : [];
   const selected = videos.find(v => v.id === videoId);

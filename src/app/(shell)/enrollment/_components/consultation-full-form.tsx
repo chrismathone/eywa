@@ -22,6 +22,8 @@ import { EditingBanner } from "@/features/presence/editing-badge";
 import type { IntakeChecklist } from "@/features/enrollment/intake-checklist";
 import { sanitizeScoreInput } from "@/features/enrollment/score-input";
 import { ChecklistView } from "./checklist-view";
+import { ReferrerField } from "./referrer-field";
+import type { ReferrerOption } from "@/features/enrollment/referrer";
 import { AudioRecorderField } from "./audio-recorder-field";
 import { RecordingRecoveryNotice } from "@/components/forms/recording-recovery-notice";
 import { clearRecovery, consultationRecordingKey, type RecordingOwner } from "@/lib/recording-recovery";
@@ -105,6 +107,12 @@ export type ConsultationFormInitial = {
   consultationDate?: string | null;
   prevAcademy?: string | null;
   lastScore?: string | null;
+  /** 소개한 사람(0362a) — 칸이 DB에 있을 때만 그린다(없으면 저장도 소개 칸을 건드리지 않는다, #95). */
+  referrerReady?: boolean;
+  /** 연결된 원생·직원 · 신청서에 적은 이름 · 글에 이름이 나온 후보(수정 화면만). */
+  referrer?: ReferrerOption | null;
+  referrerName?: string | null;
+  referrerCandidates?: ReferrerOption[];
 };
 
 export function ConsultationFullForm({
@@ -212,6 +220,8 @@ export function ConsultationFullForm({
     scope: draftScope,
     // 항상 기본값이 채워지는 날짜/상태 필드는 "의미 있는 입력" 판정에서 제외(빈 폼 오탐 배너 방지).
     ignoreForBanner: ["receivedDate", "consultationDate", "registrationStatus", "parentRelation", "recordingDraftId"],
+    // 소개한 사람은 고르기 칸의 상태(이름 표시)와 숨은 칸이 짝이라 초안으로 되살리지 않는다(값만 돌아오고 이름은 옛것인 채로 저장되지 않게).
+    exclude: ["referrer", "referrerName"],
     formRef,
     onRestore: (vals) => {
       if (formRef.current) syncRecordingSubject(formRef.current);
@@ -448,6 +458,16 @@ export function ConsultationFullForm({
                 ))}
               </select>
             </L>
+            {/* 소개한 사람(0362a) — 강사평가 '원생 소개'가 이 연결만 센다. 고르기 칸 안에 버튼이 있어 <label>로 감싸지 않는다. */}
+            {v.referrerReady ? (
+              <div className="space-y-1">
+                <span className="text-text-dim flex items-center gap-1 text-xs font-medium">
+                  <Users className="size-3 shrink-0" />
+                  소개한 사람
+                </span>
+                <ReferrerField initial={v.referrer ?? null} initialName={v.referrerName ?? null} candidates={v.referrerCandidates ?? []} />
+              </div>
+            ) : null}
           </Grid>
         </Card>
 

@@ -12,7 +12,9 @@ import { isOwnVideoHomework } from "./own-homework";
 import type { VideoHomeworkStatus } from "../types";
 
 type Db = ReturnType<typeof createAdminClient>;
-export type MarkWriteResult = { ok: boolean; error?: string };
+export type MarkWriteResult = { ok: boolean; error?: string;
+  /** 미확인으로 지웠어도 그 칸이 숙제로 남는다(옮겨 남긴 숙제 · 이미 숙제인 날, keep-round.ts) — 화면이 칸을 지우지 않는다. */
+  kept?: true };
 
 /** 수업보고서 전체 권한이거나, 그날 그 반을 맡은 강사인가(원스크린·영상 제출 현황 공용 게이트). */
 export async function videoHomeworkWriteError(user: CurrentUser, classId: string, date: string): Promise<string | null> {

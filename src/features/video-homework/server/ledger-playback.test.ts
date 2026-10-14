@@ -87,6 +87,41 @@ it("영상이 없는 숙제 칸이 있고 그 칸에 들어갈 붙지 않은 영
   expect(other.rows[0].hasAssignableVideos).toBe(false);
 });
 
+// 원장 2026-10-14 *"수동 영상들 다 학생들이 업로드해서 배정하고 싶은데 배정이 불가능함"* — 10/13에 손 완료 칸을 붙일 자리에서 뺐더니
+// 학생이 올린 영상을 붙일 길이 없어졌다. 영상이 안 붙은 칸이면 손 완료 · 검사 기록만 있는 칸도 붙일 자리다.
+it("영상 없이 손으로 찍은 완료 칸 · 검사 기록만 있는 칸도 붙일 자리다 — 들어갈 수 있는 붙지 않은 영상이 있으면 배정 버튼을 띄운다", async () => {
+  const mark = { class_id: "a", student_id: "one", check_date: "2026-10-07", homework_date: "2026-10-06", submitted_date: "2026-10-07", status: "submitted", updated_at: "2026-10-07T00:00:00Z" };
+  m.assigned = [{ classId: "a", studentId: "one", date: "2026-10-06" }];
+  m.rows.student_homework_videos = [];
+  m.rows.homework_video_ledger_videos = [{ id: "spare", student_id: "one", posted_at: "2026-10-08T00:00:00Z", route: {} }];
+  m.rows.video_homework_marks = [mark];
+  const manual = await getVideoHomeworkLedger("tenant-a", "2026-10-01", "2026-10-10");
+  expect(manual.rows[0].hasAssignableVideos).toBe(true);
+  // 보고서에 '영상 과제' 표시가 없는 수업 — 검사 기록만으로 선 칸(홍채민 10/2 · 김동리 10/2 · 이준형 10/1)
+  m.assigned = [];
+  const markOnly = await getVideoHomeworkLedger("tenant-a", "2026-10-01", "2026-10-10");
+  expect(markOnly.rows.map((row) => row.studentId)).toEqual(["one"]);
+  expect(markOnly.rows[0].hasAssignableVideos).toBe(true);
+  // 숙제일 + 14일을 넘긴 영상은 그 칸에 못 간다
+  m.rows.homework_video_ledger_videos = [{ id: "late", student_id: "one", posted_at: "2026-10-21T00:00:00Z", route: {} }];
+  expect((await getVideoHomeworkLedger("tenant-a", "2026-10-01", "2026-10-10")).rows[0].hasAssignableVideos).toBe(false);
+});
+
+// 적대적 리뷰 2026-10-14 — 대표 영상만 '붙음'으로 세면 같은 날 둘째 영상이 '안 붙음'으로 남아, 손 완료 칸이 붙일 자리가 된 뒤로 버튼이 흔하게 떴다.
+// 재리뷰 — 그렇다고 전부 '붙음'으로 세면 미확인 칸(10/13 규칙에서 버튼이 뜨던 자리)의 단서가 사라진다 → 기준을 칸 종류로 나눈다.
+it("같은 날 둘째 영상 — 미확인 칸이 있으면 버튼을 띄우고(10/13 그대로), 손 완료 칸만 있으면 띄우지 않는다", async () => {
+  m.assigned = [{ classId: "a", studentId: "one", date: "2026-10-06" }, { classId: "a", studentId: "one", date: "2026-10-08" }];
+  const up = (id: string, at: string) => ({ id, student_id: "one", class_id: "a", posted_at: at, created_at: at, uploaded_at: at, drive_file_id: "syntheticDriveFile123", status: "uploaded" });
+  m.rows.student_homework_videos = [up("v1", "2026-10-09T01:00:00Z"), up("v2", "2026-10-09T02:00:00Z")];
+  m.rows.homework_video_ledger_videos = [
+    { id: "v1", student_id: "one", posted_at: "2026-10-09T01:00:00Z", route: { classId: "a" } },
+    { id: "v2", student_id: "one", posted_at: "2026-10-09T02:00:00Z", route: { classId: "a" } },
+  ];
+  expect((await getVideoHomeworkLedger("tenant-a", "2026-10-01", "2026-10-10")).rows[0].hasAssignableVideos).toBe(true);
+  m.rows.video_homework_marks = [{ class_id: "a", student_id: "one", check_date: "2026-10-09", homework_date: "2026-10-08", submitted_date: "2026-10-09", status: "submitted", updated_at: "2026-10-09T00:00:00Z" }];
+  expect((await getVideoHomeworkLedger("tenant-a", "2026-10-01", "2026-10-10")).rows[0].hasAssignableVideos).toBe(false);
+});
+
 it("조회 기간 밖의 숙제에 자동 배정된 영상도 미배정으로 되돌리지 않는다", async () => {
   m.assigned.push({ classId: "a", studentId: "one", date: "2026-09-30" });
   m.rows.student_homework_videos = (m.rows.student_homework_videos as { id: string }[]).filter(video => video.id === "uploaded");

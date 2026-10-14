@@ -1,4 +1,5 @@
 import "server-only";
+import { attendanceDb } from "@/features/attendance/server/read-context";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { fetchInChunks } from "@/lib/supabase/batch";
@@ -68,7 +69,8 @@ export async function getSplitsTouchingClasses(
 ): Promise<ClassSplit[]> {
   const ids = [...new Set(classIds.filter(Boolean))];
   if (ids.length === 0) return [];
-  const supabase = await createClient();
+  // 로그인 없는 출석부 조립 문맥이면 관리 클라이언트(반 id로 좁히는 조회 — attendance/server/read-context.ts).
+  const { db: supabase } = await attendanceDb();
   try {
     // 보내는 쪽·받는 쪽은 서로 독립 조회(B4).
     const [out, inc] = await Promise.all([

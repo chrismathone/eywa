@@ -94,6 +94,10 @@ export function ledgerSummary(rows: VideoHomeworkLedgerRow[], rounds: LedgerRoun
   }, { submitted: 0, missing: 0, unchecked: 0 });
 }
 
+/**
+ * 장부 CSV — 'N회'는 그 학생의 N번째 **회차**다(결석 · 숙제없음 빈 칸은 회차가 아니라 넣지 않는다). 화면은 빈 칸을 날짜순으로 끼워 그리므로
+ * (`ledgerRowCells`) 빈 칸이 앞에 선 학생은 화면 N번째 열과 CSV 'N회'가 다를 수 있다 — 칸마다 'N회 숙제일'로 맞춰 본다.
+ */
 export function ledgerCsv(groups: LedgerGroup[], rounds: LedgerRounds) {
   const width = Math.max(0, ...groups.map((group) => group.roundCount));
   const header = ["반", "과목", "학생", "학교", "학년", "완료", "미수행", "미확인",

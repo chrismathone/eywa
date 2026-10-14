@@ -2,7 +2,7 @@
 
 import { metricOf, type Metric, type StoredPeriod } from "@/features/teacher-portfolio/model/types";
 import {
-  METRIC_COLOR, PROXY_COLOR, REPORT_STATE_LABEL, SHORTFALL_COLOR, dayLabel, fmtScore, followAnchor, groupByWeek, itemColor, pickWeek, weekRange,
+  METRIC_COLOR, REPORT_STATE_LABEL, SHORTFALL_COLOR, dayLabel, fmtScore, followAnchor, groupByWeek, itemColor, pickWeek, weekRange,
   type WeekGroup,
 } from "@/features/teacher-portfolio/view";
 import { BarList, DataTable, SectionTitle, StackBar, StatTiles, StatusChip, type TableRow } from "./parts";
@@ -45,16 +45,16 @@ export function EstimatedEvidence({ metric }: { metric: Metric }) {
   );
 }
 
+/** 보고서 = 작성/미작성 둘만(원장 2026-10-14 *"대리 이런건 됐고, 오로지 작성/미작성만"*) — 본인이 당일에 쓴 것이 작성, 나머지는 미작성. */
 export function ReportEvidence({ period, onOpenStudents, sticky }: EvidenceProps) {
   const m = metricOf(period, "report");
-  const count = (...states: string[]) => m.detail.filter((c) => states.includes(c.state)).length;
+  const written = m.detail.filter((c) => c.state === "own").length;
   return (
     <>
       <StatTiles items={[
         { label: "대상", value: `${m.detail.length}건` },
-        { label: "본인 작성", value: `${count("own")}건`, className: "text-primary" },
-        { label: "대리 작성", value: `${count("proxy")}건`, className: "text-purple" },
-        { label: "미작성", value: `${count("missing", "late")}건`, className: "text-amber" },
+        { label: "작성", value: `${written}건`, className: "text-primary" },
+        { label: "미작성", value: `${m.detail.length - written}건`, className: "text-amber" },
       ]} />
       <div className="mt-5 mb-2.5 flex items-center justify-between gap-2">
         <h4 className="text-sm font-bold">일자별 수업보고서</h4>
@@ -62,36 +62,35 @@ export function ReportEvidence({ period, onOpenStudents, sticky }: EvidenceProps
           <button type="button" onClick={onOpenStudents} className="text-primary text-xs font-medium whitespace-nowrap hover:underline">학생별 보기</button>
         ) : null}
       </div>
-      <DataTable fixed sticky={sticky} headers={["날짜", "작성 현황", "대상", "본인", "대리", "미작성"]} kinds={["text", "bar"]}
+      <DataTable fixed sticky={sticky} headers={["날짜", "작성 현황", "대상", "작성", "미작성"]} kinds={["text", "bar"]}
         rows={period.dayStats.map((s) => ({
           key: s.day,
           cells: s.holiday
-            ? [dayLabel(s.day), HOLIDAY, "—", "—", "—", "—"]
+            ? [dayLabel(s.day), HOLIDAY, "—", "—", "—"]
             : [dayLabel(s.day), <StackBar key="bar" total={s.target} parts={[
-              { color: METRIC_COLOR.report, count: s.own }, { color: PROXY_COLOR, count: s.proxy }, { color: SHORTFALL_COLOR, count: s.missing },
-            ]} />, s.target, s.own, s.proxy, s.missing],
+              { color: METRIC_COLOR.report, count: s.own }, { color: SHORTFALL_COLOR, count: s.target - s.own },
+            ]} />, s.target, s.own, s.target - s.own],
         }))} />
-      <p className="mt-3 text-xs">학생 1명당 하루 한 번 인정 · 마감 후 작성 {count("late")}건 제외</p>
+      <p className="mt-3 text-xs">학생 1명당 하루 한 번 · 본인이 수업 당일에 쓴 보고서만 작성(다른 사람이 쓴 것·다음 날 이후에 쓴 것은 미작성)</p>
     </>
   );
 }
 
-/** 학생 × 날짜 상태표 — 상세 창에서만 연다(넓다). */
+/** 학생 × 날짜 상태표 — 상세 창에서만 연다(넓다). 열 = 누군가 보고 대상인 날만 · 대상이 아닌 칸은 비운다
+ *  (원장 2026-10-14 — 수업이 없는 날까지 '—'가 적혀 헷갈렸다). */
 export function ReportMatrix({ period, nameOf }: Pick<EvidenceProps, "period" | "nameOf">) {
   const m = metricOf(period, "report");
-  const days = period.dayStats.map((s) => s.day);
+  const days = period.dayStats.map((s) => s.day).filter((d) => m.detail.some((c) => c.day === d));
   const cells = new Map(m.detail.map((c) => [`${c.studentId}|${c.day}`, c]));
   const students = [...new Set(m.detail.map((c) => c.studentId))].sort((a, b) => nameOf(a).localeCompare(nameOf(b), "ko"));
-  return (
+  return (<>
     <DataTable headers={["학생", ...days.map(dayLabel)]} empty="이 달 보고 대상이 없습니다."
-      rows={students.map((id) => ({
-        key: id,
-        cells: [<span key="name" className="whitespace-nowrap">{nameOf(id)}</span>, ...days.map((day) => {
-          const cell = cells.get(`${id}|${day}`);
-          return cell ? <StatusChip key={day} state={REPORT_STATE_LABEL[cell.state]} /> : "—";
-        })],
-      }))} />
-  );
+      rows={students.map((id) => ({ key: id, cells: [<span key="name" className="whitespace-nowrap">{nameOf(id)}</span>, ...days.map((day) => {
+        const cell = cells.get(`${id}|${day}`);
+        return cell ? <StatusChip key={day} state={REPORT_STATE_LABEL[cell.state]} /> : "";
+      })] }))} />
+    {students.length ? <p className="mt-2 text-xs">빈 칸 = 그날 그 학생은 보고 대상이 아닙니다.</p> : null}
+  </>);
 }
 
 function weekRows<T>(weeks: WeekGroup<T>[], picked: number, onPick: (index: number) => void, cells: (rows: T[]) => TableRow["cells"]): TableRow[] {

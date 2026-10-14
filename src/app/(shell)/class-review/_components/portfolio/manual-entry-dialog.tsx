@@ -9,11 +9,27 @@ import { Dialog, DialogClose, DialogContent, DialogTitle } from "@/components/ui
 import { Input } from "@/components/ui/input";
 import type { ManualMetricItem, StoredPeriod } from "@/features/teacher-portfolio/model/types";
 import { loadEvaluationEntries, saveEvaluationEntries, type EntryDraft } from "@/features/teacher-portfolio/server/evaluation-actions";
+import { PAY_OVERRIDE_KEY } from "@/features/teacher-portfolio/evaluation/config";
 import { itemLabel, monthName } from "@/features/teacher-portfolio/view";
 
 type Draft = Record<string, { value: string; note: string }>;
 const NUMBER = /^-?\d+(\.\d+)?$/;
-const keyOf = (m: ManualMetricItem) => m.id.slice("manual:".length);
+/** 창의 한 줄 — 원장이 만든 지표, 또는 매출 대비 급여의 급여 직접 입력(`PAY_OVERRIDE_KEY`). */
+type EntryRow = { key: string; label: string; hint: string; reason: string };
+
+function rowsOf(period: StoredPeriod): EntryRow[] {
+  const rows: EntryRow[] = period.items
+    .filter((m): m is ManualMetricItem => m.id.startsWith("manual:") && !m.off)
+    .map((m) => ({ key: m.id.slice("manual:".length), label: itemLabel(m), hint: `${m.unit || "값"} · ${m.max > 0 ? `만점 ${m.max}점` : "가감"}`, reason: m.reason }));
+  // 매출 대비 급여를 켠 달 — 시급·업무별 단가·혼합 계약처럼 계약서로 못 읽는 급여를 원장이 넣는다(비우면 계약서 월급 → 출석부 실급여).
+  if (period.items.some((m) => m.id === "payRatio" && !m.off)) {
+    rows.push({
+      key: PAY_OVERRIDE_KEY, label: "급여(세전) 직접 입력", hint: "원 · 매출 대비 급여",
+      reason: "비우면 계약서 월급 → 출석부 실급여 순으로 씁니다. 넣은 금액은 이 창에서만 보이고, 포트폴리오에는 급여 비율로만 반영됩니다(10만 원 이상).",
+    });
+  }
+  return rows;
+}
 
 /**
  * 직접 입력 지표 — 그 강사 · 그 달의 값을 원장이 넣는다(원장 2026-10-13 *"수동 지표는 수동으로 입력"*).
@@ -25,7 +41,7 @@ export function ManualEntryDialog({ open, onClose, period, teacherId, teacherNam
   open: boolean; onClose: () => void; period: StoredPeriod; teacherId: string; teacherName: string;
 }) {
   const router = useRouter();
-  const items = period.items.filter((m): m is ManualMetricItem => m.id.startsWith("manual:") && !m.off);
+  const items = rowsOf(period);
   const [base, setBase] = useState<Draft | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>({});
@@ -45,17 +61,17 @@ export function ManualEntryDialog({ open, onClose, period, teacherId, teacherNam
     return () => { live = false; };
   }, [teacherId, period.month]);
   const closed = Boolean(period.closing.closedAt);
-  const cell = (m: ManualMetricItem) => draft[keyOf(m)] ?? { value: "", note: "" };
+  const cell = (m: EntryRow) => draft[m.key] ?? { value: "", note: "" };
   const invalid = items.filter((m) => { const t = cell(m).value.trim(); return t !== "" && !NUMBER.test(t); });
   const changed = base ? items.filter((m) => {
-    const was = base[keyOf(m)] ?? { value: "", note: "" };
+    const was = base[m.key] ?? { value: "", note: "" };
     return cell(m).value.trim() !== was.value.trim() || cell(m).note.trim() !== was.note.trim();
   }) : [];
-  const edit = (m: ManualMetricItem, patch: Partial<Draft[string]>) => setDraft((d) => ({ ...d, [keyOf(m)]: { ...cell(m), ...patch } }));
+  const edit = (m: EntryRow, patch: Partial<Draft[string]>) => setDraft((d) => ({ ...d, [m.key]: { ...cell(m), ...patch } }));
   const save = () => startTransition(async () => {
     const rows = changed.map((m) => {
       const t = cell(m).value.trim();
-      return { teacherId, metricKey: keyOf(m), value: t === "" ? null : Number(t), note: cell(m).note.trim() || null };
+      return { teacherId, metricKey: m.key, value: t === "" ? null : Number(t), note: cell(m).note.trim() || null };
     });
     const result = await saveEvaluationEntries(period.month, rows);
     if (!result.ok) { toast.error(result.error ?? "저장하지 못했습니다"); return; }
@@ -77,18 +93,18 @@ export function ManualEntryDialog({ open, onClose, period, teacherId, teacherNam
           {closed ? <p role="status" className="bg-amber-soft rounded-lg px-3.5 py-2.5 text-sm">마감한 달이라 값을 바꿀 수 없습니다(점수가 그때 값으로 굳어 있습니다).</p> : null}
           {loadError ? <p role="alert" className="text-danger text-sm">{loadError}</p> : !ready ? <p role="status" className="text-sm">입력한 값을 불러오는 중…</p> : null}
           {items.map((m) => (
-            <fieldset key={m.id} disabled={closed || !ready} className="space-y-2">
-              <legend className="text-sm font-bold">{itemLabel(m)} <span className="text-xs font-medium">({m.unit || "값"} · {m.max > 0 ? `만점 ${m.max}점` : "가감"})</span></legend>
+            <fieldset key={m.key} disabled={closed || !ready} className="space-y-2">
+              <legend className="text-sm font-bold">{m.label} <span className="text-xs font-medium">({m.hint})</span></legend>
               {m.reason ? <p className="text-xs">{m.reason}</p> : null}
               <div className="grid gap-2 sm:grid-cols-[9rem_minmax(0,1fr)]">
-                <Input aria-label={`${itemLabel(m)} 값`} inputMode="decimal" value={cell(m).value} placeholder="비우면 입력 없음"
+                <Input aria-label={`${m.label} 값`} inputMode="decimal" value={cell(m).value} placeholder="비우면 입력 없음"
                   className="num text-right" onChange={(e) => edit(m, { value: e.target.value })} />
-                <Input aria-label={`${itemLabel(m)} 메모`} value={cell(m).note} maxLength={500} placeholder="근거 메모(선택)"
+                <Input aria-label={`${m.label} 메모`} value={cell(m).note} maxLength={500} placeholder="근거 메모(선택)"
                   onChange={(e) => edit(m, { note: e.target.value })} />
               </div>
             </fieldset>
           ))}
-          {invalid.length ? <p role="alert" className="text-danger text-xs">{invalid.map(itemLabel).join(", ")} 칸에는 숫자만 넣을 수 있습니다.</p> : null}
+          {invalid.length ? <p role="alert" className="text-danger text-xs">{invalid.map((m) => m.label).join(", ")} 칸에는 숫자만 넣을 수 있습니다.</p> : null}
         </div>
         <div className="border-line flex justify-end gap-2 border-t px-5 py-3">
           <Button type="button" variant="ghost" onClick={onClose}>닫기</Button>

@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { foldedReason } from "@/lib/folded-read";
 import { loadVisibleClassAxisRows } from "./teacher-axis-queries";
+import { attendanceReadContext } from "./read-context";
 import { loadTeacherTermWeights, type TeacherTermScope } from "./teacher-term-share";
 import { teacherTermSessions } from "../teacher-term-share";
 import { loadMoneyCarryIns, loadMoneyCarryOuts } from "@/features/billing/session-terms/server/money-carryover-queries";
@@ -98,7 +99,9 @@ export async function getAttendanceClassBilledAmounts(
   roster: readonly { classId: string; studentIds: readonly string[] }[],
   options: AttendanceClassBillingOptions = {},
 ): Promise<AttendanceClassBilling> {
-  const user = await requireAccess("attendance");
+  // 로그인 없는 출석부 조립 문맥(강사평가 밤 집계 — read-context.ts)은 서버 코드만 들어오는 길이라 권한 확인 대신 그 지점으로.
+  const readCtx = attendanceReadContext();
+  const user = readCtx ? { tenantId: readCtx.tenantId } : await requireAccess("attendance");
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || roster.length === 0) return empty();
   const { from, to } = monthRange(month);
   const admin = createAdminClient();
