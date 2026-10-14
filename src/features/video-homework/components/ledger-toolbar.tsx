@@ -20,7 +20,7 @@ function FilterSelect({ label, name, value, options, disabled, onChange }: {
 }) {
   const missing = value !== ALL && !options.some((option) => option.value === value);
   return <label className={styles.filter}><span className="sr-only">{label}</span><select className={TOOLBAR_SELECT} name={name} aria-label={label} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)}>
-    <option value={ALL}>전체 {label}</option>{missing ? <option value={value}>{value} (조회기간에 없음)</option> : null}
+    <option value={ALL}>전체 {label}</option>{missing ? <option value={value}>{value} (선택 조건에 없음)</option> : null}
     {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
   </select></label>;
 }
@@ -30,7 +30,8 @@ export function LedgerToolbar({ filters, update, reset, classes, options, fromDa
   filters: LedgerFilters; update: <K extends keyof LedgerFilters>(key: K, value: LedgerFilters[K]) => void; reset: () => void;
   /** 반 선택지 — 이름과 지금 필터에 걸리는 학생 수. */
   classes: (Option & { count: number })[];
-  options: { subjects: Option[]; schools: Option[]; grades: Option[] };
+  /** `teachers` = 숙제를 낸 강사(관리자 화면만 — 비면 강사 필터를 안 세운다. 강사뷰는 이미 본인 칸뿐). */
+  options: { subjects: Option[]; schools: Option[]; grades: Option[]; teachers: Option[] };
   fromDate: string; toDate: string; today: string; busy: boolean; onDownload: (() => void) | null;
 }) {
   const pathname = usePathname();
@@ -58,6 +59,7 @@ export function LedgerToolbar({ filters, update, reset, classes, options, fromDa
       <label className={styles.dateFilter}><span className="sr-only">종료일</span><input className={TOOLBAR_SELECT} aria-label="조회 종료일" name="to" type="date" defaultValue={toDate} max={today} required disabled={busy} /></label>
       <ToolbarButton type="submit" variant="primary" disabled={busy}>기간 조회</ToolbarButton>
       <label className={`${TOOLBAR_SEARCH_BOX} ${styles.search}`}><EyIcon name="search" size={18} /><input aria-label="학생·반·학교 통합 검색" name="q" placeholder="학생·반·학교 검색" value={filters.query} disabled={busy} onChange={(event) => update("query", event.target.value)} /></label>
+      {options.teachers.length ? <FilterSelect label="강사" name="teacher" value={filters.teacher} options={options.teachers} disabled={busy} onChange={(value) => update("teacher", value)} /> : null}
       <SearchableSelect className={styles.classPicker} triggerClassName={TOOLBAR_SELECT} ariaLabel="반" placeholder="전체 반"
         value={filters.classIds.length ? filters.classIds.join(",") : ALL} multiValues={filters.classIds} multiSummary={(count) => `반 ${count}개`}
         cap={classes.length + 1} onValueChange={toggleClass}

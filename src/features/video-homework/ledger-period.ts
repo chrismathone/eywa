@@ -18,9 +18,12 @@ export function ledgerPeriod(param: (name: string) => string, today: string) {
   return { fromDate, toDate, rangeTooLong };
 }
 
-/** 주소에 남은 필터 → 처음 필터. 이 기간에 없는 반(다른 기간에서 골라 둔 반)은 버린다 — 버튼은 '전체 반'인데 목록이 비는 일이 없게. */
-export function ledgerInitialFilters(param: (name: string) => string, activeClasses: ReadonlySet<string>): LedgerFilters {
-  return { ...DEFAULT_LEDGER_FILTERS,
+/**
+ * 주소에 남은 필터 → 처음 필터. 이 기간에 없는 반(다른 기간에서 골라 둔 반)은 버린다 — 버튼은 '전체 반'인데 목록이 비는 일이 없게.
+ * 강사도 같다 — 이 기간에 숙제를 낸 강사(`teachers`, 관리자 화면만)가 아니면 전체로(선택지에 없는 id가 화면에 새지 않게).
+ */
+export function ledgerInitialFilters(param: (name: string) => string, activeClasses: ReadonlySet<string>, teachers?: ReadonlySet<string>): LedgerFilters {
+  return { ...DEFAULT_LEDGER_FILTERS, teacher: teachers?.has(param("teacher")) ? param("teacher") : "all",
     classIds: parseMulti(param("class"), "all").filter((id) => activeClasses.has(id)), subject: param("subject") || "all",
     school: param("school") || "all", grade: param("grade") || "all", query: param("q"),
     status: ["submitted", "missing", "unchecked"].includes(param("status")) ? param("status") as LedgerFilters["status"] : "all",
