@@ -3,8 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { VideoHomeworkManagement } from "./video-homework-management";
 import type { VideoArrival, VideoHomeworkLedgerRow, VideoHomeworkMark } from "../types";
 
-const mocks = vi.hoisted(() => ({ save: vi.fn(), success: vi.fn(), error: vi.fn() }));
+const mocks = vi.hoisted(() => ({ save: vi.fn(), success: vi.fn(), error: vi.fn(), reject: vi.fn(), refresh: vi.fn() }));
 vi.mock("../server/actions", () => ({ setVideoHomeworkRound: mocks.save }));
+vi.mock("../server/reject-videos", () => ({ rejectHomeworkVideos: mocks.reject }));
+vi.mock("next/navigation", async (load) => ({ ...(await load<typeof import("next/navigation")>()), useRouter: () => ({ refresh: mocks.refresh }) }));
 vi.mock("sonner", () => ({ toast: { success: mocks.success, error: mocks.error } }));
 vi.mock("@/components/embed-link", () => ({ EmbedHiddenInput: () => null }));
 
@@ -108,12 +110,29 @@ describe("영상 제출 현황 — 회차는 학생별 '숙제가 나간 날' �
     fireEvent.click(auto);
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText(/2026-09-04에 이 반으로 올라와/)).toBeInTheDocument();
-    expect(within(dialog).getByRole("button", { name: "미확인" })).toBeDisabled();
+    // 영상이 붙은 칸의 미확인 = 그 숙제의 영상 반려(원장 2026-10-13) — 고르면 기록 저장 대신 반려 버튼이 선다.
+    fireEvent.click(within(dialog).getByRole("button", { name: "미확인" }));
+    expect(within(dialog).getByRole("button", { name: "영상 반려하고 미확인으로" })).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "기록 저장" })).not.toBeInTheDocument();
+    expect(within(dialog).getByText(/Drive 휴지통으로 옮깁니다/)).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "완료" }));
     expect(within(dialog).getByLabelText("제출일")).toHaveValue("2026-09-04");
     fireEvent.click(within(dialog).getByRole("button", { name: "기록 저장" }));
     await waitFor(() => expect(mocks.success).toHaveBeenCalled());
     expect(mocks.save).toHaveBeenCalledWith({ classId: "a", studentId: "two", roundKey: "h:2026-09-02", status: "submitted", submittedDate: "2026-09-04" });
     expect(cell("이서연 1회 2026-09-02 완료")).toBeInTheDocument();
+  });
+  it("영상이 붙은 칸을 미확인으로 → 그 숙제의 영상 반려 — 서버에 반·학생·숙제일을 보내고 결과를 알린다", async () => {
+    mocks.reject.mockResolvedValue({ ok: true, rejected: 2, trashed: 2, trashFailed: 0, reopened: true });
+    show({ videos: [{ id: "vt", studentId: "two", classId: "a", postedAt: "2026-09-04T19:00:00+09:00" }] });
+    fireEvent.click(cell("이서연 1회 2026-09-02 완료(영상)"));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "미확인" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "영상 반려하고 미확인으로" }));
+    await waitFor(() => expect(mocks.reject).toHaveBeenCalledWith({ classId: "a", studentId: "two", homeworkDate: "2026-09-02" }));
+    await waitFor(() => expect(mocks.success).toHaveBeenCalledWith(expect.stringContaining("영상 2개를 반려했습니다")));
+    expect(mocks.refresh).toHaveBeenCalled();
+    expect(mocks.save).not.toHaveBeenCalled(); // 기록 저장이 아니라 반려다
   });
   it("일괄 적용은 학생마다 N번째 숙제에 — 같은 2회라도 날짜가 다르다 · 그 회차가 없는 학생은 뺀다", async () => {
     show({ rows: [...rows.slice(0, 2), row({ studentId: "three", studentName: "박하준", assignedDates: ["2026-09-01"] })] });

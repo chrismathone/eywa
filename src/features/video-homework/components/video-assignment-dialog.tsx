@@ -7,9 +7,13 @@ import { HomeworkVideoPlayer } from "@/features/students/components/homework-vid
 import { getVideoAssignmentOptions, assignHomeworkVideo } from "../server/video-assignment";
 import { isVideoAssignableToDate, type VideoAssignmentOptions } from "../video-assignment";
 import type { VideoHomeworkLedgerRow } from "../types";
-import { VideoAssignmentSelect } from "./video-assignment-select";
+import { assignmentLabel, VideoAssignmentSelect } from "./video-assignment-select";
 
-export function VideoAssignmentDialog({ row, fromDate, toDate, onClose }: { row: VideoHomeworkLedgerRow; fromDate: string; toDate: string; onClose: () => void }) {
+export function VideoAssignmentDialog({ row, fromDate, toDate, onClose, linked }: {
+  row: VideoHomeworkLedgerRow; fromDate: string; toDate: string; onClose: () => void;
+  /** 장부가 이 줄에 자동으로 붙인 영상(영상 id → 숙제일) — 표기에만 쓴다. */
+  linked?: ReadonlyMap<string, string>;
+}) {
   const router = useRouter();
   const [options, setOptions] = useState<VideoAssignmentOptions | null>(null);
   const [videoId, setVideoId] = useState(""); const [date, setDate] = useState(""); const [reason, setReason] = useState("");
@@ -38,18 +42,18 @@ export function VideoAssignmentDialog({ row, fromDate, toDate, onClose }: { row:
   return <Dialog open onOpenChange={open => { if (!open && !busy) onClose(); }}>
     <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl" showCloseButton={!busy}>
       <DialogHeader><DialogTitle>{row.studentName} · 영상 숙제 배정</DialogTitle>
-        <DialogDescription>{row.className}의 숙제에 영상을 연결합니다. 같은 학생의 다른 반에 잘못 올라간 영상도 선택할 수 있습니다.</DialogDescription></DialogHeader>
+        <DialogDescription>{row.className}의 숙제에 영상을 연결합니다. 같은 과목이면 이 학생의 다른 반에 잘못 올라간 영상도 고를 수 있습니다(확실히 다른 과목인 영상은 보이지 않습니다).</DialogDescription></DialogHeader>
       {!options ? <p role="status">영상 목록을 읽는 중…</p> : !options.ok ? <p role="alert">{options.error}</p> : !options.dates.length ? <p>조회 기간에 배정할 영상 숙제가 없습니다.</p> : <div className="space-y-4 text-sm">
         <label className="block space-y-1"><span>배정할 영상 숙제</span><select className="border-line w-full rounded border p-2" value={date} disabled={busy} onChange={e => { setDate(e.target.value); setVideoId(""); setError(""); }}>
           {options.dates.map(d => <option key={d} value={d}>{row.className} · {d}</option>)}<option value="exclude">숙제 완료 집계에서 제외</option>
         </select></label>
         <div className="space-y-1"><p>영상 선택{videos.length ? ` (${videos.length}개)` : ""}</p>
-          <VideoAssignmentSelect key={date} videos={videos} value={videoId} disabled={busy} onChange={setVideoId} />
+          <VideoAssignmentSelect key={date} videos={videos} value={videoId} disabled={busy} onChange={setVideoId} linked={linked} rowClassId={row.classId} />
           <p className="text-text-dim text-xs">{date === "exclude" ? "조회 기간의 각 숙제를" : "선택한 숙제를"} 낸 날부터 14일 뒤까지 게시된 영상만 표시합니다. 최대 100개까지 최신순으로 보여 줍니다.</p>
           {!videos.length ? <p role="status">이 기간에 배정할 수 있는 업로드 완료 영상이 없습니다.</p>
             : !selected ? <p className="text-text-dim text-xs">영상을 고르면 아래에서 바로 재생해 볼 수 있습니다. 저장을 누르기 전에는 아무것도 바뀌지 않습니다.</p> : null}
         </div>
-        {selected ? <div className="space-y-2"><p>현재 연결: {selected.className ?? "반 미지정"} · {selected.homeworkDate ?? "날짜 자동 추정"}{selected.postId ? ` · 게시물 ${selected.postId}` : ""}</p>
+        {selected ? <div className="space-y-2"><p>현재 연결: {selected.className ?? "반 미지정"} · {assignmentLabel(selected, linked, row.classId)}{selected.postId ? ` · 게시물 ${selected.postId}` : ""}</p>
           {selected.note ? <p className="bg-bg-soft rounded-md px-3 py-2 break-keep">학생 메모: {selected.note}</p> : null}
           {selected.playback ? <HomeworkVideoPlayer key={selected.id} {...selected.playback} title={`${row.studentName} 배정할 영상`} /> : <p>이 영상은 아직 재생할 수 없습니다.</p>}</div> : null}
         <label className="block space-y-1"><span>변경 사유</span><input className="border-line w-full rounded border p-2" value={reason} maxLength={300} disabled={busy} onChange={e => setReason(e.target.value)} placeholder="예: 영어 게시물에 잘못 올린 수학 숙제" /></label>

@@ -422,3 +422,103 @@ describe("학생이 고른 숙제(올리기 사이트, 원장 2026-10-03) — �
     expect(view(build({ rows: [row("s1", ["2026-10-06"], { tracked: false })], videos: [video("s1", "2026-10-07", { homeworkDate: "2026-10-06" })] }))).toEqual([]);
   });
 });
+
+describe("반려한 숙제 칸(원장 2026-10-13)", () => {
+  const base = { classId: "c", studentId: "s", tracked: true };
+  const v = (id: string, postedAt: string, patch: Partial<VideoArrival> = {}): VideoArrival =>
+    ({ id, studentId: "s", classId: "c", postedAt, playback: { preview: "p", thumbnail: "t", uploadedAt: null }, ...patch });
+  it("🔴 반려 시각 전에 올라온 영상은 그 칸에 자동으로 붙지 않는다 — 다른 숙제의 영상이 비운 칸으로 당겨지지 않는다", () => {
+    const rows = [{ ...base, assignedDates: ["2026-10-01", "2026-10-03"], rejected: { "2026-10-01": "2026-10-05T03:00:00Z" } }];
+    const rounds = buildLedgerRounds({ rows, marks: [], videos: [v("v2", "2026-10-04T12:00:00+09:00")], fromDate: "2026-10-01", toDate: "2026-10-09" }).get("c:s")!;
+    expect(rounds.map((r) => [r.homeworkDate, r.videoId])).toEqual([["2026-10-01", null], ["2026-10-03", "v2"]]);
+  });
+  it("반려 뒤에 올라온 영상 · 그 숙제를 고른 영상은 붙는다", () => {
+    const rows = [{ ...base, assignedDates: ["2026-10-01"], rejected: { "2026-10-01": "2026-10-05T03:00:00Z" } }];
+    const later = buildLedgerRounds({ rows, marks: [], videos: [v("new", "2026-10-06T12:00:00+09:00")], fromDate: "2026-10-01", toDate: "2026-10-09" }).get("c:s")!;
+    expect(later[0].videoId).toBe("new");
+    const picked = buildLedgerRounds({ rows, marks: [], videos: [v("old", "2026-10-02T12:00:00+09:00", { homeworkDate: "2026-10-01", manuallyAssigned: true })], fromDate: "2026-10-01", toDate: "2026-10-09" }).get("c:s")!;
+    expect(picked[0].videoId).toBe("old");
+  });
+});
+
+describe("반려한 칸 — 기준은 '반려할 때 이미 aywa에 있던 영상'(적대적 리뷰 2026-10-13)", () => {
+  const base = { classId: "c", studentId: "s", tracked: true, assignedDates: ["2026-10-01"], rejected: { "2026-10-01": "2026-10-05T03:00:00Z" } };
+  const v = (id: string, postedAt: string, createdAt: string): VideoArrival =>
+    ({ id, studentId: "s", classId: "c", postedAt, createdAt, playback: { preview: "p", thumbnail: "t", uploadedAt: null } });
+  const take = (videos: VideoArrival[]) => buildLedgerRounds({ rows: [base], marks: [], videos, fromDate: "2026-10-01", toDate: "2026-10-09" }).get("c:s")![0].videoId;
+  it("같은 날 옛 영상과 새로 올린 영상이 섞여도 새 영상이 칸을 채운다", () => {
+    expect(take([v("old", "2026-10-05T09:00:00+09:00", "2026-10-05T00:10:00Z"), v("new", "2026-10-05T14:00:00+09:00", "2026-10-05T05:00:00Z")])).toBe("new");
+  });
+  it("반려 전에 게시됐어도 반려 뒤에 수집된(선생님이 본 적 없는) 영상은 붙는다 · 반려 때 이미 있던 영상은 안 붙는다", () => {
+    expect(take([v("late", "2026-10-04T20:00:00+09:00", "2026-10-05T06:00:00Z")])).toBe("late");
+    expect(take([v("seen", "2026-10-04T20:00:00+09:00", "2026-10-04T11:05:00Z")])).toBeNull();
+  });
+  it("🔴 반려한 칸이 새 영상으로 그날을 가져가도, 그날의 반려 전 영상은 받고 있던 다음 칸에 그대로 남는다(재리뷰 2026-10-13)", () => {
+    // 10/1 반려(10/6 15:00) · 10/6 오전에 올린 O가 10/5 칸을 채우고 있다 · 저녁에 10/1 숙제를 다시 올렸다(N)
+    const rows = [{ ...base, assignedDates: ["2026-10-01", "2026-10-05"], rejected: { "2026-10-01": "2026-10-06T06:00:00Z" } }];
+    const owners = new Map();
+    const rounds = buildLedgerRounds({ rows, marks: [], fromDate: "2026-10-01", toDate: "2026-10-09", owners, videos: [
+      v("O", "2026-10-06T10:00:00+09:00", "2026-10-06T01:00:00Z"), v("N", "2026-10-06T20:00:00+09:00", "2026-10-06T11:00:00Z")] }).get("c:s")!;
+    expect(rounds.map((r) => [r.homeworkDate, r.videoId, r.status])).toEqual([["2026-10-01", "N", "submitted"], ["2026-10-05", "O", "submitted"]]);
+    expect([...owners].map(([id, held]) => [id, [...held].map((r) => r.homeworkDate)])).toEqual([["N", ["2026-10-01"]], ["O", ["2026-10-05"]]]);
+  });
+});
+
+describe("칸마다 센 영상(owners — 반려 대상의 근거)", () => {
+  const base = { classId: "c", studentId: "s", tracked: true, assignedDates: ["2026-10-01", "2026-10-03"] };
+  const v = (id: string, postedAt: string, patch: Partial<VideoArrival> = {}): VideoArrival =>
+    ({ id, studentId: "s", classId: "c", postedAt, playback: { preview: "p", thumbnail: "t", uploadedAt: null }, ...patch });
+  const owned = (videos: VideoArrival[]) => {
+    const owners = new Map();
+    buildLedgerRounds({ rows: [base], marks: [], videos, fromDate: "2026-10-01", toDate: "2026-10-09", owners });
+    return Object.fromEntries([...owners].map(([id, held]) => [id, [...held].map((r: { homeworkDate: string }) => r.homeworkDate).sort()]));
+  };
+  it("②로 함께 가져간 같은 날 영상은 그 칸 · 고른 영상 뒤에 접힌 영상은 접어 둔 칸 전부", () => {
+    expect(owned([v("a", "2026-10-02T09:00:00+09:00"), v("b", "2026-10-02T10:00:00+09:00")])).toEqual({ a: ["2026-10-01"], b: ["2026-10-01"] });
+    // 같은 날 두 숙제를 각각 골라 올리고, 그 뒤에 ClassNote로 한 번 더 — 두 칸이 함께 접어 둔다
+    expect(owned([
+      v("p1", "2026-10-04T09:00:00+09:00", { homeworkDate: "2026-10-01", arrivedAt: "2026-10-04T00:00:00Z" }),
+      v("p2", "2026-10-04T10:00:00+09:00", { homeworkDate: "2026-10-03", arrivedAt: "2026-10-04T01:00:00Z" }),
+      v("late", "2026-10-04T11:00:00+09:00", { arrivedAt: "2026-10-04T02:00:00Z" }),
+    ])).toEqual({ p1: ["2026-10-01"], p2: ["2026-10-03"], late: ["2026-10-01", "2026-10-03"] });
+  });
+  it("같은 파일 사본은 그 파일을 고른 칸이 접어 둔다 · 숙제일 전 사본은 ②로 간다", () => {
+    expect(owned([
+      v("pick", "2026-10-04T09:00:00+09:00", { homeworkDate: "2026-10-03", fingerprint: "f" }),
+      v("copy", "2026-10-05T09:00:00+09:00", { fingerprint: "f" }),
+      v("before", "2026-10-02T09:00:00+09:00", { fingerprint: "f" }),
+    ])).toEqual({ pick: ["2026-10-03"], copy: ["2026-10-03"], before: ["2026-10-01"] });
+  });
+});
+
+describe("검사 기록만으로 선 숙제 칸 = 뒷순위로 영상을 받는다(원장 2026-10-13 — 패치 전 수업)", () => {
+  it("어느 영상 과제 칸에도 못 가는 영상만 받는다 — 손 기록 '미수행'은 영상이 이긴다(안 그러면 붙은 영상이 ▶ 없이 숨는다)", () => {
+    const rounds = build({ from: "2026-09-20", rows: [row("s1", ["2026-10-08"])], marks: [mark("s1", "2026-09-28", "missing")],
+      videos: [video("s1", "2026-09-30"), video("s1", "2026-10-09")] });
+    expect(rounds.get("A:s1")!.map((r) => [r.date, r.videoDate, r.status, r.auto]))
+      .toEqual([["2026-09-28", "2026-09-30", "submitted", true], ["2026-10-08", "2026-10-09", "submitted", true]]);
+  });
+  it("손 기록 '완료' 칸은 그대로 완료이고 영상이 붙는다(▶)", () => {
+    const rounds = build({ from: "2026-09-20", rows: [row("s1", [])], marks: [mark("s1", "2026-09-28", "submitted", { submittedDate: "2026-09-29" })],
+      videos: [video("s1", "2026-09-30")] });
+    expect(rounds.get("A:s1")!.map((r) => [r.date, r.videoDate, r.status, r.submittedDate])).toEqual([["2026-09-28", "2026-09-30", "submitted", "2026-09-29"]]);
+  });
+  it("🔴 옮겨 남긴 숙제(kept)는 기록 없이도 칸이 서고, 검사 기록 칸처럼 뒷순위다 — 더 오래돼도 정식 칸의 영상을 가져가지 않는다", () => {
+    const rows = [{ ...row("s1", ["2026-09-24", "2026-10-01"]), kept: ["2026-09-24"] }];
+    const rounds = build({ from: "2026-09-20", rows, videos: [video("s1", "2026-10-02")] });
+    expect(rounds.get("A:s1")!.map((r) => [r.date, r.assigned, r.kept ?? false, r.videoDate, r.status]))
+      .toEqual([["2026-09-24", false, true, null, "unchecked"], ["2026-10-01", true, false, "2026-10-02", "submitted"]]);
+    const alone = build({ from: "2026-09-20", rows, videos: [video("s1", "2026-09-25")] });
+    expect(alone.get("A:s1")!.map((r) => [r.date, r.videoDate])).toEqual([["2026-09-24", "2026-09-25"], ["2026-10-01", null]]);
+  });
+  it("🔴 영상 과제 칸으로 가던 영상은 그대로 — 더 오래된 검사 기록 칸이 가로채지 않는다", () => {
+    const rounds = build({ from: "2026-09-20", rows: [row("s1", ["2026-10-01"])],
+      marks: [mark("s1", "2026-09-28", "submitted", { submittedDate: "2026-09-29" })], videos: [video("s1", "2026-10-02")] });
+    expect(rounds.get("A:s1")!.map((r) => [r.date, r.videoDate])).toEqual([["2026-09-28", null], ["2026-10-01", "2026-10-02"]]);
+  });
+  it("숙제일 없는 옛 기록 자리와 14일이 지난 칸은 받지 않는다", () => {
+    const rounds = build({ from: "2026-09-01", rows: [row("s1", [])],
+      marks: [mark("s1", null, "submitted", { checkDate: "2026-09-20" }), mark("s1", "2026-09-01", "missing")], videos: [video("s1", "2026-09-21")] });
+    expect(rounds.get("A:s1")!.map((r) => [r.date, r.videoDate])).toEqual([["2026-09-01", null], ["2026-09-20", null]]);
+  });
+});

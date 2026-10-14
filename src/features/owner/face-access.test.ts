@@ -160,11 +160,11 @@ describe("배선 — 설정 화면", () => {
     expect(code).toContain(".filter((face) => allowedTabs.get(face.key))");
   });
 
-  it("🔴 자체 판정을 하는 면(데이터 정리 · 데이터 가져오기 · 감사로그)은 학원 설정 fieldset 밖에 선다", () => {
-    expect(code).toContain('const SELF_GATED_TABS: ReadonlySet<OwnerTab | "modules"> = new Set(["data", "import", "audit"]);');
+  it("🔴 자체 판정을 하는 면(데이터 정리 · 데이터 가져오기 · 감사로그 · 강사평가)은 학원 설정 fieldset 밖에 선다", () => {
+    expect(code).toContain('const SELF_GATED_TABS: ReadonlySet<OwnerTab | "modules"> = new Set(["data", "import", "audit", "evaluation"]);');
     const fieldsetEnd = code.indexOf("</fieldset>");
     expect(fieldsetEnd).toBeGreaterThan(-1);
-    for (const tag of ["<DataFace ", "<DuplicatesFace ", "<ImportHubFace ", "<AuditFace "]) {
+    for (const tag of ["<DataFace ", "<DuplicatesFace ", "<ImportHubFace ", "<AuditFace ", "<EvaluationFace "]) {
       expect(code.indexOf(tag), tag).toBeGreaterThan(fieldsetEnd);
     }
     // 설정 '읽기 전용' 안내도 이 면들에는 서지 않는다.

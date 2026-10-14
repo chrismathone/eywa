@@ -10,6 +10,7 @@ import { collectAuditNameIds, systemActorMatches, SYSTEM_ACTOR_PREFIX } from "..
 // 운영 감사로그 액션 키 + 라벨 — logAction 호출부와 뷰어 필터가 공유.
 // ⚠️ 새 logAction 액션 키는 반드시 여기 등록(안 하면 뷰어에 영문 키 원문 노출) + describe.ts에 상세 한글화 추가.
 export const AUDIT_ACTIONS = {
+  withdrawal_report_update: "퇴원보고서 처리",
   // ── 학원 설정 감사 커버리지(2026-08-27 원장 점검) — 연동·프롬프트·강의실 수정·팝업 수정이
   //    통째로 무기록이었다. 특히 연동은 user_integrations에 updated_by조차 없어 흔적이 0이었다.
   integration_sync_toggle: "makeedu 자동 동기화 토글",
@@ -46,6 +47,12 @@ export const AUDIT_ACTIONS = {
   ment_style_rebuild: "강사 말투 프로파일 갱신",
   // 직원 포트폴리오(0357a) — [지금 집계]와, 매일 cron이 달을 마감했을 때 남긴다(매일의 재집계는 남기지 않는다).
   teacher_portfolio_refresh: "직원 포트폴리오 집계",
+  // 강사평가 설정(0359a) — 지표 켜고 끄기·만점·점수 규칙. 원장만 바꾼다.
+  teacher_evaluation_settings_save: "강사평가 설정 저장",
+  teacher_evaluation_entries_save: "강사평가 직접 입력 지표 저장",
+  // 강사평가 구성 저장·삭제(0360a) — 이름 붙인 구성. 불러오기는 화면에서만 하니 남기지 않는다(점수를 바꾸는 건 설정 저장).
+  teacher_evaluation_preset_save: "강사평가 구성 저장",
+  teacher_evaluation_preset_delete: "강사평가 구성 삭제",
   classroom_update: "강의실 수정",
   notice_popup_update: "팝업 공지 수정",
   notice_popup_toggle: "팝업 공지 노출 전환",
@@ -421,6 +428,7 @@ export const AUDIT_ACTIONS = {
   // 영상 제출 현황의 '숙제없음' 칸에서 그 날짜의 영상 숙제를 뒤늦게 냄(보고서 없이) · 그 숙제를 거둠(원장 2026-10-13).
   lesson_report_video_homework_issue: "영상 숙제 따로 내기",
   lesson_report_video_homework_issue_cancel: "따로 낸 영상 숙제 취소",
+  lesson_report_video_homework_reject: "영상 숙제 영상 반려",
   share_link_revoke: "학부모 공유 링크 회수",
   share_link_reissue: "학부모 공유 링크 재발급",
   // 숙제 영상 제출 링크(0325a) — 발급(학생 상세 복사·수업보고서 글) · 끊기 · 학부모 업로드 완료.

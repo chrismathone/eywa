@@ -1,30 +1,43 @@
 import { addDays, kstDateOf } from "@/lib/date-kst";
 import { SITE_HOMEWORK_DAYS } from "@/features/video-submit/site";
 import { buildLedgerRounds, roundPairKey, VIDEO_MATCH_WINDOW_DAYS } from "./rounds";
-import type { VideoArrival } from "./types";
+import type { VideoArrival, VideoHomeworkMark } from "./types";
 
-export type AssignedHomework = { classId: string; studentId: string; date: string };
+export type AssignedHomework = { classId: string; studentId: string; date: string; /** 반려 시각(장부와 같은 칸이 서게) */ rejectedAt?: string;
+  /** 검사 기록 칸에서 옮겨 남긴 숙제(keep-round.ts) — 판정하지 않는다. 그 칸이 받은 영상만 미배정에서 뺀다. */ kept?: true };
 export type AutoOutcome = { classId: string; studentId: string; homeworkDate: string; status: "submitted" | "missing" | "unchecked"; videoId: string | null };
 
-/** 실제 파일로만 최종 판정한다. 수동 체크는 학생의 업로드나 영상 배정 순서를 바꾸지 않는다. */
-export function videoHomeworkOutcomes(assignments: AssignedHomework[], videos: VideoArrival[], today: string, fromDate: string) {
-  const rows = new Map<string, { classId: string; studentId: string; assignedDates: string[]; tracked: boolean }>();
-  for (const homework of assignments) {
-    const key = roundPairKey(homework);
-    const row = rows.get(key) ?? { ...homework, assignedDates: [], tracked: true };
-    row.assignedDates.push(homework.date);
+/**
+ * 실제 파일로만 최종 판정한다. 수동 체크는 학생의 업로드나 영상 배정 순서를 바꾸지 않는다.
+ * 판정(저장 상태·알림)은 **정식 숙제 칸**만 — 옮겨 남긴 숙제(`kept`)와 검사 기록만 있는 칸(`marks`)은 장부가 ②의 뒷순위로 영상을 붙이는 자리라
+ * 같은 칸을 짜서 그 칸이 받은 영상을 미배정에서만 뺀다(장부와 알림이 같은 말을 하게 — 적대적 리뷰 2026-10-13). 기록은 정식 칸의 영상 짝을 바꾸지 않는다.
+ */
+export function videoHomeworkOutcomes(assignments: AssignedHomework[], videos: VideoArrival[], today: string, fromDate: string,
+  marks: readonly VideoHomeworkMark[] = []) {
+  const rows = new Map<string, { classId: string; studentId: string; assignedDates: string[]; tracked: boolean; rejected: Record<string, string>; kept: string[] }>();
+  const rowOf = (pair: { classId: string; studentId: string }) => {
+    const key = roundPairKey(pair);
+    const row = rows.get(key) ?? { classId: pair.classId, studentId: pair.studentId, assignedDates: [], tracked: true, rejected: {}, kept: [] };
     rows.set(key, row);
+    return row;
+  };
+  for (const homework of assignments) {
+    const row = rowOf(homework);
+    row.assignedDates.push(homework.date);
+    if (homework.kept) row.kept.push(homework.date);
+    if (homework.rejectedAt) row.rejected[homework.date] = homework.rejectedAt;
   }
+  for (const mark of marks) if (mark.homeworkDate) rowOf(mark);
   const uploaded = videos.filter(video => {
     const day = kstDateOf(video.postedAt);
     return !!video.playback && !!day && day <= today;
   });
-  const rounds = buildLedgerRounds({ rows: [...rows.values()], marks: [], videos: uploaded, fromDate, toDate: today });
+  const rounds = buildLedgerRounds({ rows: [...rows.values()], marks: marks.filter((mark) => !!mark.homeworkDate), videos: uploaded, fromDate, toDate: today });
   const outcomes: AutoOutcome[] = [];
   const used = new Set<string>();
   for (const row of rows.values()) for (const round of rounds.get(roundPairKey(row)) ?? []) {
-    if (!round.homeworkDate) continue;
     if (round.videoId) used.add(round.videoId);
+    if (!round.homeworkDate || !round.assigned) continue;
     // 숙제일 + 7일 당일 끝까지 받는다. 예: 10/1 숙제는 10/8까지, 10/9부터 미제출.
     outcomes.push({
       classId: row.classId, studentId: row.studentId, homeworkDate: round.homeworkDate,

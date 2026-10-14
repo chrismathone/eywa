@@ -46,3 +46,19 @@ it("🔴 숙제 없이 올린 영상(free · 메모)은 남은 숙제를 자동�
   expect(assigned.outcomes.map(o => o.videoId)).toEqual([null, "free"]);
   expect(assigned.unmatched).toEqual([]);
 });
+it("🔴 옮겨 남긴 숙제·검사 기록 칸은 판정하지 않는다 — 그 칸이 뒷순위로 받은 영상만 미배정에서 뺀다(장부와 같은 말)", () => {
+  const kept = { classId: "math", studentId: "s1", date: "2026-09-24", kept: true as const };
+  const mark = { classId: "math", studentId: "s1", checkDate: "2026-09-29", homeworkDate: "2026-09-28", status: "missing" as const };
+  // 9/25 영상 = 남긴 9/24 칸 · 9/29 영상 = 기록 9/28 칸(둘 다 10/01 숙제보다 먼저라 정식 칸에는 못 간다) · 10/02 영상 = 정식 10/01 칸
+  const result = videoHomeworkOutcomes([kept, ...assignments], [video("a", "2026-09-25"), video("b", "2026-09-29"), video("c", "2026-10-02")],
+    "2026-10-05", "2026-09-01", [mark]);
+  expect(result.outcomes.map(o => [o.homeworkDate, o.videoId])).toEqual([["2026-10-01", "c"]]);
+  expect(result.unmatched.map(v => v.id)).toEqual([]);
+  // 기록·남긴 숙제를 안 넘기면 종전대로 미배정
+  expect(videoHomeworkOutcomes(assignments, [video("b", "2026-09-29")], "2026-10-05", "2026-09-01").unmatched.map(v => v.id)).toEqual(["b"]);
+});
+it("🔴 옮겨 남긴 더 오래된 빈 숙제가 정식 칸의 영상을 가져가지 않는다(적대적 리뷰 2026-10-13)", () => {
+  const kept = { classId: "math", studentId: "s1", date: "2026-09-24", kept: true as const };
+  const result = videoHomeworkOutcomes([kept, ...assignments], [video("c", "2026-10-02")], "2026-10-12", "2026-09-01");
+  expect(result.outcomes.map(o => [o.homeworkDate, o.status, o.videoId])).toEqual([["2026-10-01", "submitted", "c"], ["2026-10-08", "unchecked", null]]);
+});

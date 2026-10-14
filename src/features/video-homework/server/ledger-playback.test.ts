@@ -59,13 +59,32 @@ it("모든 후보 영상이 자동 배정됐으면 다른 반의 영상까지 �
   expect(result.videos.map(video => video.id)).toEqual(["uploaded"]);
 });
 
-it("숙제가 완료됐어도 미배정 후보가 남아 있으면 배정 버튼을 유지한다", async () => {
+// 원장 2026-10-13 *"오해를 불러일으키겠는데"* — 숙제가 다 영상으로 채워졌는데 지난 숙제의 옛 영상 하나 때문에 '영상 배정'이 떠서 "배정이 안 됐다"로 읽혔다.
+it("🔴 숙제가 다 영상으로 채워졌으면 붙지 않은 영상이 남아 있어도 배정 버튼을 띄우지 않는다", async () => {
   m.rows.homework_video_ledger_videos = [
     { id: "uploaded", student_id: "one", posted_at: "2026-10-07T00:00:00Z", route: { classId: "a" } },
     { id: "spare", student_id: "one", posted_at: "2026-10-08T00:00:00Z", route: {} },
   ];
   const result = await getVideoHomeworkLedger("tenant-a", "2026-10-01", "2026-10-10", { pairs: new Set(["a:one"]) });
-  expect(result.rows[0].hasAssignableVideos).toBe(true);
+  expect(result.rows[0].hasAssignableVideos).toBe(false);
+});
+
+it("영상이 없는 숙제 칸이 있고 그 칸에 들어갈 붙지 않은 영상이 있으면 배정 버튼을 띄운다 — 확실히 다른 과목 영상은 세지 않는다", async () => {
+  m.assigned.push({ classId: "a", studentId: "one", date: "2026-10-08" });
+  m.rows.homework_video_ledger_videos = [
+    { id: "uploaded", student_id: "one", posted_at: "2026-10-07T00:00:00Z", route: { classId: "a" } },
+    { id: "spare", student_id: "one", posted_at: "2026-10-08T00:00:00Z", route: {} },
+  ];
+  const open = await getVideoHomeworkLedger("tenant-a", "2026-10-01", "2026-10-10", { pairs: new Set(["a:one"]) });
+  expect(open.rows[0].hasAssignableVideos).toBe(true);
+  // 같은 영상이 영어 반으로 분류돼 있으면(확실한 다른 과목) 세지 않는다
+  (m.rows.classes as unknown[]).push({ id: "e", class_name: "영어 반", subject: "english", is_active: true, closed_at: null });
+  m.rows.homework_video_ledger_videos = [
+    { id: "uploaded", student_id: "one", posted_at: "2026-10-07T00:00:00Z", route: { classId: "a" } },
+    { id: "spare", student_id: "one", posted_at: "2026-10-08T00:00:00Z", route: { classId: "e" }, subject: "english" },
+  ];
+  const other = await getVideoHomeworkLedger("tenant-a", "2026-10-01", "2026-10-10", { pairs: new Set(["a:one"]) });
+  expect(other.rows[0].hasAssignableVideos).toBe(false);
 });
 
 it("조회 기간 밖의 숙제에 자동 배정된 영상도 미배정으로 되돌리지 않는다", async () => {

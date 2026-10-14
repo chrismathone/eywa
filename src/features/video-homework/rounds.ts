@@ -14,9 +14,13 @@
  * 자동 집계(반 × 학생 단위 — 원장 2026-10-01 *"반 매칭 되는 영상에 한해서 횟수 체크"*):
  *  ⓪ 워커가 **그 반으로 분류한 영상**(`route.classId`)만 센다. 반을 못 정했거나 아직 분류 전인 영상은 어느 줄에도 찍지 않는다 —
  *     같은 과목 반을 둘 다니는 학생의 영상 하나가 두 반에 동시에 찍히지 않는다.
- *  ① 같은 날 올라온 영상은 한 번으로 센다.
+ *  ① 같은 날 올라온 영상은 한 번으로 센다(예외 하나: 반려한 칸이 반려 뒤 영상만 가져간 날 — 아래 ② 루프).
  *  ② 영상은 게시일순으로, **그날까지 나간 숙제 중 아직 영상을 못 받은 가장 오래된 것**에 하나씩 간다.
  *     수동 완료·미수행과 무관하게 영상을 배정한다. 저장된 상태는 자동 판정 작업이 실제 파일과 기한으로 갱신한다.
+ *     뒷순위 = **검사 기록만으로 선 숙제 칸**(보고서에 '영상 과제' 표시가 없는 수업 — 표시는 2026-10-01부터 저장됐다): 그날 영상이 어느
+ *     '영상 과제' 칸에도 못 갈 때만 받는다(원장 2026-10-13 *"패치이전 영상들이 이런 현상"*). 앞 순위의 결과는 바뀌지 않는다.
+ *     자동 판정(`auto-outcomes.ts`)은 이 칸까지 넣어 짜되 판정(저장 상태·미제출 알림)은 정식 숙제 칸만 하고, 이 칸이 받은 영상은 미배정 알림에서 뺀다.
+ *     ⚠️ DB의 미배정 묶음 건수(`notify_unassigned_homework_videos`)는 판정 줄로 다시 세어, 이 칸이 받은 영상이 14일 동안 건수에 남을 수 있다.
  *     그래서 영상으로 센 칸을 확정해도, 미확인 칸을 한 번 눌러 완료로 바꿔도 **다른 칸의 판정이 흔들리지 않는다**.
  *  🔴 숙제보다 먼저 올라온 영상·`VIDEO_MATCH_WINDOW_DAYS`를 넘겨 올라온 영상은 짝이 아니다. 수동 체크가 이후 업로드를 막지 않는다.
  *  🔴 **숙제 없이 올린 영상**(`free`, 올리기 사이트 · 메모 — 원장 2026-10-13)은 ②를 타지 않는다 — 학생이 "숙제가 아니다"라고 밝힌 영상이라
@@ -82,9 +86,16 @@ export type LedgerRound = {
    * 영상이 짝지어진 칸은 **직접 찍은 '완료'여도 영상 쪽이 이긴다**(▶ 표시): 영상은 그 칸이 받은 증거이고(②), 손 기록은 영상 없이 찍은 칸만 '수동'이다.
    */
   videoId: string | null;
+  /** 반려한 시각(ISO) — 이 시각 전에 올라온 영상은 ②로 이 칸에 붙지 않는다(고른 영상 · 손 배정은 붙는다). */
+  rejectedAt?: string;
+  /**
+   * 검사 기록 칸에서 **옮겨 남긴 숙제**(`VideoHomeworkLedgerRow.kept` · keep-round.ts) — `assigned`는 false라 검사 기록 칸과 똑같이 ②의
+   * 뒷순위로만 영상을 받는다. 기록이 없어도 칸이 서고, 영상을 손으로 붙이거나 올리기 사이트에서 고를 수 있는 숙제다.
+   */
+  kept?: true;
 };
 
-type PairRow = Pick<VideoHomeworkLedgerRow, "classId" | "studentId" | "assignedDates" | "tracked">;
+type PairRow = Pick<VideoHomeworkLedgerRow, "classId" | "studentId" | "assignedDates" | "tracked" | "rejected" | "kept">;
 export const roundPairKey = (row: { classId: string; studentId: string }) => `${row.classId}:${row.studentId}`;
 export const markRoundKey = (mark: Pick<VideoHomeworkMark, "homeworkDate" | "checkDate">) =>
   mark.homeworkDate ? `h:${mark.homeworkDate}` : `c:${mark.checkDate}`;
@@ -97,7 +108,8 @@ export const roundWriteKey = (round: Pick<LedgerRound, "key" | "mark">) => (roun
 export const newerMark = (a: VideoHomeworkMark, b: VideoHomeworkMark) =>
   (a.updatedAt ?? "") > (b.updatedAt ?? "") || (a.updatedAt ?? "") === (b.updatedAt ?? "") && a.checkDate >= b.checkDate ? a : b;
 
-type VideoDay = { day: string; firstAt: number; id: string };
+/** 그날의 영상들(게시 순) — 대표는 맨 앞. `createdAt` = aywa에 줄이 생긴 시각(반려 판정, 아래 `takeFrom`). */
+type VideoDay = { day: string; firstAt: number; id: string; members: { id: string; at: number; createdAt: number }[] };
 
 function videoDays(videos: VideoArrival[]): Map<string, VideoDay[]> {
   const byPair = new Map<string, Map<string, VideoDay>>();
@@ -108,12 +120,16 @@ function videoDays(videos: VideoArrival[]): Map<string, VideoDay[]> {
     const key = roundPairKey({ classId: video.classId, studentId: video.studentId });
     const days = byPair.get(key) ?? new Map<string, VideoDay>();
     const at = Date.parse(video.postedAt);
+    const created = Date.parse(video.createdAt ?? video.arrivedAt ?? video.postedAt);
+    const member = { id: video.id, at, createdAt: Number.isNaN(created) ? at : created };
     const seen = days.get(day);
-    if (seen) { if (at < seen.firstAt) Object.assign(seen, { firstAt: at, id: video.id }); }
-    else days.set(day, { day, firstAt: at, id: video.id });
+    if (seen) { if (at < seen.firstAt) Object.assign(seen, { firstAt: at, id: video.id }); seen.members.push(member); }
+    else days.set(day, { day, firstAt: at, id: video.id, members: [member] });
     byPair.set(key, days);
   }
-  return new Map([...byPair].map(([key, days]) => [key, [...days.values()].sort((a, b) => a.day.localeCompare(b.day))]));
+  return new Map([...byPair].map(([key, days]) => [key, [...days.values()]
+    .map((d) => ({ ...d, members: [...d.members].sort((a, b) => a.at - b.at) }))
+    .sort((a, b) => a.day.localeCompare(b.day))]));
 }
 
 const fresh = (key: string, date: string, homeworkDate: string | null, assigned: boolean): LedgerRound =>
@@ -124,10 +140,19 @@ function attach(round: LedgerRound, mark: VideoHomeworkMark) {
   round.submittedDate = round.mark.status === "submitted" ? round.mark.submittedDate ?? null : null;
 }
 
-/** 수동 수행 체크는 영상 수신을 막지 않는다. 날짜가 맞고 아직 영상을 못 받은 숙제에 붙인다. */
-function canTake(round: LedgerRound, video: VideoDay): boolean {
-  if (round.videoDate || round.date > video.day || video.day > addDays(round.date, VIDEO_MATCH_WINDOW_DAYS)) return false;
-  return round.assigned;
+/**
+ * 수동 수행 체크는 영상 수신을 막지 않는다. 날짜가 맞고 아직 영상을 못 받은 숙제에 붙인다 — 붙일 영상 id(없으면 null).
+ * 반려한 칸(원장 2026-10-13)은 **반려할 때 이미 aywa에 있던 영상**을 다시 받지 않는다 — 그 뒤에 들어온 영상만(그날 가장 먼저 올린 것).
+ * 🔴 게시 시각으로 자르지 말 것: 선생님이 누르기 전에 올렸지만 늦게 수집된 ClassNote 영상은 선생님이 본 적이 없는 영상이다(적대적 리뷰).
+ *    그날의 첫 영상 하나로 자르지도 말 것: 같은 날 옛 영상과 섞이면 새로 낸 영상까지 막힌다.
+ */
+function takeFrom(round: LedgerRound, video: VideoDay, markOnly = false): string | null {
+  if (round.videoDate || round.date > video.day || video.day > addDays(round.date, VIDEO_MATCH_WINDOW_DAYS)) return null;
+  // 뒷순위(`markOnly`) = 검사 기록만으로 선 숙제 칸(보고서에 '영상 과제' 표시가 없는 수업 — 아래 ② 루프). 숙제일 없는 옛 기록 자리(`c:`)는 아니다.
+  if (markOnly ? round.assigned || !round.homeworkDate : !round.assigned) return null;
+  if (!round.rejectedAt) return video.id;
+  const cut = Date.parse(round.rejectedAt);
+  return video.members.find((m) => m.createdAt > cut)?.id ?? null;
 }
 
 /**
@@ -166,15 +191,31 @@ export function videoFingerprint(md5: unknown, bytes: unknown): string | null {
   return `${hex.slice(0, 16)}:${size}`;
 }
 
-/** (반 × 학생)별 회차 — 조회 기간 밖 여유분까지 넣어 짝을 맞춘 뒤, 기간 안의 회차만 돌려준다. */
+/**
+ * 영상 id → 그 영상을 **세고 있는 칸**(반려가 쓴다 — `reject-targets.ts`). 대표 영상 · ②로 함께 가져간 같은 날 영상은 그 칸 하나,
+ * 고른 영상 뒤에 접힌 영상 · 같은 파일 사본은 접어 둔 칸 전부(한 칸만 빠져도 다른 칸이 여전히 접어 두면 풀리지 않는다).
+ */
+export type RoundOwners = Map<string, Set<LedgerRound>>;
+
+/** (반 × 학생)별 회차 — 조회 기간 밖 여유분까지 넣어 짝을 맞춘 뒤, 기간 안의 회차만 돌려준다. `owners`를 넘기면 칸마다 센 영상을 채운다. */
 export function buildLedgerRounds(input: {
-  rows: PairRow[]; marks: Iterable<VideoHomeworkMark>; videos: VideoArrival[]; fromDate: string; toDate: string;
+  rows: PairRow[]; marks: Iterable<VideoHomeworkMark>; videos: VideoArrival[]; fromDate: string; toDate: string; owners?: RoundOwners;
 }): Map<string, LedgerRound[]> {
+  const own = (id: string, round: LedgerRound) => {
+    if (input.owners) (input.owners.get(id) ?? input.owners.set(id, new Set()).get(id)!).add(round);
+  };
   const all = new Map<string, Map<string, LedgerRound>>();
   const tracked = new Set<string>();
   for (const row of input.rows) {
     const rounds = new Map<string, LedgerRound>();
-    if (row.tracked) for (const date of row.assignedDates) rounds.set(`h:${date}`, fresh(`h:${date}`, date, date, true));
+    const kept = new Set(row.kept ?? []);
+    if (row.tracked) for (const date of row.assignedDates) {
+      const round = fresh(`h:${date}`, date, date, !kept.has(date));
+      if (kept.has(date)) round.kept = true;
+      const rejectedAt = row.rejected?.[date];
+      if (rejectedAt) round.rejectedAt = rejectedAt;
+      rounds.set(`h:${date}`, round);
+    }
     all.set(roundPairKey(row), rounds);
     if (row.tracked) tracked.add(roundPairKey(row));
   }
@@ -209,11 +250,13 @@ export function buildLedgerRounds(input: {
     const at = v.arrivedAt ? Date.parse(v.arrivedAt) : NaN;
     return Number.isNaN(at) ? Date.parse(v.postedAt) : at;
   };
-  const pickedAt = new Map<string, number>();
-  // `반:학생:지문` → 그 파일을 골라 칸에 붙인 숙제일(여럿이면 가장 이른 날). 그날 이후에 올라온 같은 파일의 안 고른 사본은 세지 않는다.
+  // `반:학생:게시일` → 그날 칸에 붙은 고른 영상(칸 · 들어온 시각). 접힘은 그중 가장 먼저 들어온 것보다 늦은가로 본다.
+  const pickedAt = new Map<string, { round: LedgerRound; at: number }[]>();
+  // `반:학생:지문` → 그 파일을 골라 칸에 붙인 숙제(칸 · 숙제일). 그 숙제일(여럿이면 가장 이른 날) 이후에 올라온 같은 파일의 안 고른 사본은 세지 않는다.
   // 🔴 반 × 학생 단위다(⓪과 같다) — 학생 단위로 넓히면 장부(기간에 회차가 있는 반만 읽는다)·올리기 사이트(그 반만 읽는다)·제출 화면이
   //    서로 다른 고른 영상을 보게 돼 같은 칸 판정이 화면마다 갈린다.
-  const pickedFiles = new Map<string, string>();
+  const pickedFiles = new Map<string, { round: LedgerRound; date: string }[]>();
+  const push = <T,>(map: Map<string, T[]>, key: string, value: T) => (map.get(key) ?? map.set(key, []).get(key)!).push(value);
   for (const video of picked) {
     const pair = roundPairKey({ classId: video.classId!, studentId: video.studentId });
     const day = kstDateOf(video.postedAt);
@@ -221,34 +264,55 @@ export function buildLedgerRounds(input: {
     if (!round || !day || round.videoDate || (!video.manuallyAssigned && (day < round.date || day > addDays(round.date, VIDEO_MATCH_WINDOW_DAYS)))) continue;
     round.videoDate = day;
     round.videoId = video.id;
-    pickedAt.set(`${pair}:${day}`, Math.min(pickedAt.get(`${pair}:${day}`) ?? Infinity, arrived(video)));
-    if (video.fingerprint) {
-      const file = `${pair}:${video.fingerprint}`;
-      const since = pickedFiles.get(file);
-      if (!since || round.date < since) pickedFiles.set(file, round.date);
-    }
+    own(video.id, round);
+    push(pickedAt, `${pair}:${day}`, { round, at: arrived(video) });
+    if (video.fingerprint) push(pickedFiles, `${pair}:${video.fingerprint}`, { round, date: round.date });
     if (!round.mark) Object.assign(round, { auto: true, status: "submitted", submittedDate: day });
   }
-  const afterPicked = (v: VideoArrival) => {
-    const at = v.classId ? pickedAt.get(`${roundPairKey({ classId: v.classId, studentId: v.studentId })}:${kstDateOf(v.postedAt)}`) : undefined;
-    return at !== undefined && arrived(v) >= at;
+  /** 이 안 고른 영상을 접어 두는 칸들 — 비면 접히지 않는다(②로 간다). */
+  const foldedInto = (v: VideoArrival): LedgerRound[] => {
+    if (!v.classId) return [];
+    const pair = roundPairKey({ classId: v.classId, studentId: v.studentId });
+    const day = kstDateOf(v.postedAt);
+    const sameDay = (pickedAt.get(`${pair}:${day}`) ?? []).filter((p) => arrived(v) >= p.at);
+    const sameFile = v.fingerprint && day ? (pickedFiles.get(`${pair}:${v.fingerprint}`) ?? []).filter((p) => day >= p.date) : [];
+    return [...sameDay, ...sameFile].map((p) => p.round);
   };
-  const sameFile = (v: VideoArrival) => {
-    const since = v.fingerprint && v.classId ? pickedFiles.get(`${roundPairKey({ classId: v.classId, studentId: v.studentId })}:${v.fingerprint}`) : undefined;
-    const day = since ? kstDateOf(v.postedAt) : null;
-    return !!since && !!day && day >= since;
-  };
-  const days = videoDays(input.videos.filter((v) => v.playback !== null && !v.homeworkDate && !v.free && !afterPicked(v) && !sameFile(v)));
+  const unpicked = input.videos.filter((v) => v.playback !== null && !v.homeworkDate && !v.free);
+  const counted: VideoArrival[] = [];
+  for (const v of unpicked) {
+    const folded = foldedInto(v);
+    if (!folded.length) counted.push(v);
+    for (const round of folded) own(v.id, round);
+  }
+  const days = videoDays(counted);
   for (const [pair, rounds] of all) {
     const available = tracked.has(pair) ? days.get(pair) : undefined;
     if (!available?.length) continue;
     const queue = [...rounds.values()].sort((a, b) => a.date.localeCompare(b.date));
     for (const video of available) {
-      const round = queue.find((r) => canTake(r, video));
-      if (!round) continue;
-      round.videoDate = video.day;
-      round.videoId = video.id;
-      if (!round.mark) Object.assign(round, { auto: true, status: "submitted", submittedDate: video.day });
+      // 반려한 칸은 반려 뒤에 생긴 영상만 가져간다 — 그날의 반려 전 영상은 따로 남아 다음 칸을 찾는다(적대적 재리뷰 2026-10-13:
+      // 통째로 가져가면 그 영상을 받고 있던 다른 칸이 완료 → 미확인으로 되돌아간다). 그 밖의 칸은 그날을 통째로 가져간다(①).
+      let group: VideoDay | null = video;
+      while (group) {
+        let round: LedgerRound | undefined;
+        let id: string | null = null;
+        for (const candidate of queue) { id = takeFrom(candidate, group); if (id) { round = candidate; break; } }
+        // 어느 '영상 과제' 칸에도 못 간 날만 검사 기록으로 선 숙제 칸을 본다(원장 2026-10-13 *"자동 매칭 가능한거 있으면 매칭"* — 패치 전
+        // 수업은 보고서에 표시가 없어 그 영상이 어디에도 안 붙었다). 날짜순이고 영상 과제 칸의 빈자리는 줄기만 하므로 이미 붙던 영상은 그대로다.
+        let late = false;
+        if (!round) for (const candidate of queue) { id = takeFrom(candidate, group, true); if (id) { round = candidate; late = true; break; } }
+        if (!round || !id) break;
+        round.videoDate = group.day;
+        round.videoId = id;
+        // 뒷순위 칸의 손 기록 '미수행'은 영상이 이긴다 — 자동 판정이 이 칸을 모르므로(auto-outcomes.ts) 여기서 완료로 보이지 않으면
+        // 붙은 영상이 ▶ 없이 숨는다(미배정 목록에서도 빠진다 — 적대적 리뷰 2026-10-13). 정식 숙제 칸은 자동 판정이 기록을 고친다.
+        if (!round.mark || (late && round.mark.status === "missing")) Object.assign(round, { auto: true, status: "submitted", submittedDate: group.day });
+        const cut = round.rejectedAt ? Date.parse(round.rejectedAt) : NaN;
+        const kept: VideoDay["members"] = Number.isNaN(cut) ? [] : group.members.filter((m) => m.createdAt <= cut);
+        for (const member of group.members) if (!kept.includes(member)) own(member.id, round);
+        group = kept.length ? { day: group.day, firstAt: kept[0].at, id: kept[0].id, members: kept } : null;
+      }
     }
   }
   return new Map([...all].map(([pair, rounds]) => [pair, [...rounds.values()]

@@ -1,5 +1,11 @@
 # Supabase 마이그레이션 — 적용 방식·순서·현재 상태
 
+## 2026-10-13 실험실 퇴원보고서
+
+`20261013203000_withdrawal_reports.sql`은 보고서·처리 이력·서비스 전용 상태 전이 RPC·실험실 메뉴 배치를 추가한다. 기존 원생·수강 표를 변경하지 않는다. `20261013210000_withdrawal_report_reasons.sql`은 병행 추가된 질병·권고퇴원 사유를 반영한다. `20261013215000_withdrawal_report_request_recovery.sql`은 요청자와 지정 원장이 퇴직해 고착된 요청을 현재 원장이 취소할 수 있게 한다. 지정자만 순서대로 승인하는 규칙은 유지한다.
+
+대상 프로젝트를 확인하는 `node --env-file=.env.local scripts/withdrawal-reports-db.mjs --apply` → `--upgrade` → `--test`로 이 기능만 적용·검증한다. 테스트의 가상 지점·학생·수강·알림은 전부 롤백된다. 앱은 적용 전에도 기존 퇴원관리·예약 작업을 유지한다. 일반 브라우저 역할에는 새 표의 읽기·쓰기와 RPC 실행을 부여하지 않는다. 보고서 승인 뒤 실제 퇴원일이 된 예약은 기존 `apply-due-withdrawals` 작업이 처리한다.
+
 ## 2026-10-04 오늘의수학 v2 원본 SQL (운영 적용 완료)
 
 `0337a_todays_math_sync_v2.sql`은 원본 제어·권한 세대·트랜잭션 outbox·동결 스냅샷·일회 SSO 코드와 서비스 역할 전용 RPC를 추가한다. Supabase CLI 2.81.3이 만든 `20261003083350_todays_math_sync_v2.sql`을 아래 alpha 규칙의 다음 번호로 옮겼다. 기존 업무 컬럼은 변경하지 않으며 최초 binding은 shadow, 구성 RPC는 기본 미리보기이다. 실제 PostgreSQL 17 격리 검증 및 운영 적용을 완료했다. 인터페이스·적용 전 조건·검증은 [원본 SQL 보고서](../../docs/todays-math-sync-source-sql-report.md), 현재 상태는 [운영 적용 기록](../../docs/todays-math-sync-production-2026-10-03.md)을 참조한다.
@@ -241,6 +247,8 @@ pnpm db:alphas
 | `0341a_homework_video_drive_account_credentials` | Vault 갱신 토큰 저장, 동일 계정 재연결 버전 갱신, 지점·루트·연결이 일치하는 자격 조회 RPC. 웹 클라이언트 비밀은 저장하지 않는다. |
 | `0342a_homework_video_drive_account_routes` | 연결 번호를 포함한 폴더 저장, 시작한 영상의 지점·루트·계정 변경 금지, 이전 저장 RPC 차단. 위의 원자 적용 순서를 따른다. |
 | `0357a_teacher_portfolio_months` | **직원 포트폴리오 월간 점수**(원장 2026-10-12 *"모든 점수는 말일 마감하고 1일부터 새점수"*) — 강사 × 월 한 행(`payload` jsonb에 점수와 근거). RLS 켬 + 정책 없음(service_role 전용 — 전 강사 점수·담당 매출이 실린다). 마감한 행(`closed_at`)은 트리거가 UPDATE를 막는다. 새 표 하나라 기존 화면 무영향, 앱은 표가 없어도 돈다. |
+| `0359a_teacher_evaluation_settings` | **강사평가 설정**(원장 2026-10-13 *"'이것까지 커스터마이징 가능해?' 할 정도로"* · *"만점이 100점이 아니여도 됨"*) — `teacher_evaluation_settings`(지점마다 설정 한 줄 · 지표 켜고 끄기·만점·점수 규칙·자료 없을 때) + `teacher_evaluation_entries`(원장이 만든 지표의 월 입력). 두 표 모두 RLS 켬 + 정책 없음(service_role 전용). `teacher_portfolio_months`의 총점 0~100 · 항목 수 0~8 제약을 풀고 `raws`(설정 미리보기용 원래 수치)를 더한다. 앱은 이 SQL 전에도 돈다(기본 설정으로 계산 · raws 없이 저장). |
+| `0360a_teacher_evaluation_presets` | **강사평가 구성 저장·불러오기**(원장 2026-10-13 *"폼 저장? 불러오기?"*) — `teacher_evaluation_presets`(지점 × 이름 유일 · 구성 jsonb ≤256KB · 지점당 20개는 앱이 막는다). RLS 켬 + 정책 없음(service_role 전용). 불러오기는 화면에 얹을 뿐이고 점수를 매기는 설정은 [저장]으로만 바뀐다. 앱은 이 SQL 전에도 돈다(목록 빈 칸 · 저장만 준비 안내). ✅ 2026-10-13 운영 적용(CLI). |
 
 새 alpha를 추가할 때: 다음 번호의 `000Na_*` 또는 `000Nb_*`로 만들고, 멱등 패턴을 지키고, **이 표에 추가**한다.
 상세 흐름은 [`../../CLAUDE.md`](../../CLAUDE.md) "마이그레이션 & 시드 흐름" 참고.

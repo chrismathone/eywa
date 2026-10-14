@@ -42,4 +42,9 @@ describe("disk backup names", () => {
     expect(AUDIO_FILE_ACCEPT.split(",")).toContain(".webm");
     expect(validateAudioFile({ name: "콜앤상담녹음_A.webm", type: "video/webm", size: 100 })).toBeNull();
   });
+  it.each([["audio/mp4", "m4a"], ["audio/ogg;codecs=opus", "ogg"], ["audio/webm;codecs=opus", "webm"]])("uses the recording format's extension (%s)", (mime, extension) => {
+    const name = recordingFileName("meeting", "회의", time, "abcd1234", mime);
+    expect(name).toMatch(new RegExp(`\\.${extension}$`));
+    expect(validateAudioFile({ name, type: mime, size: 100 })).toBeNull();
+  });
 });

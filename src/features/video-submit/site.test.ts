@@ -105,7 +105,9 @@ describe("배선 가드", () => {
     expect(page).toContain("openHomeworkDates(db, link.tenant_id, [{ studentId: link.student_id, classId: link.class_id }], kstToday())");
     expect(page).toContain(".filter((date) => date !== homeworkDate)");
     // 올리기 사이트 링크에서만(학생 상세에서 복사한 링크는 숙제를 고르지 않는다)
-    expect(page).toContain('if (link.origin === "site") {');
+    expect(page).toContain('otherHomework = link.origin === "site"');
+    // 이미 영상을 낸 숙제는 다시 올리지 않고 숙제 없이 올리기로(원장 2026-10-13)
+    expect(page).toContain('if (homeworkDate && openDates && !openDates.includes(homeworkDate))');
     const form = read("src", "app", "(share)", "v", "[token]", "video-submit-form.tsx");
     expect(form).toContain("href={`/v/${props.token}?h=${hw.date}`}");
     // 고른 숙제가 없어졌으면(invalid) 같은 거절을 되풀이하지 않고 새로 고친다 — 페이지가 처음 화면으로 보낸다

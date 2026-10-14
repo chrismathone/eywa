@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildPortfolio } from "./build";
+import { PORTFOLIO_V1_CONFIG } from "../evaluation/config";
+import { buildPortfolio as build } from "./build";
 import { awaitsReference } from "./pre-record";
 import { metricOf, type MetricId, type PortfolioSnapshot, type SnapshotAttendance, type SnapshotReport, type SnapshotReview } from "./types";
 
@@ -24,6 +25,8 @@ const present = (day: string, recordedAt = `${day}T09:00:00Z`, over: Partial<Sna
   id: `a${day}`, class_id: "c", student_id: "s", session_date: day, slot_start: "14:00", status: "present", recorded_at: recordedAt,
   supersedes_id: null, seat_label: null, recorded_via: null, taught_by: null, note: null, ...over,
 });
+/** 이 파일은 그 전 직원 포트폴리오의 점수를 지킨다 — 옛 구성으로 매긴다(기본값은 원장 구성, evaluation.test). */
+const buildPortfolio = (d: PortfolioSnapshot, opts: Parameters<typeof build>[1] = {}) => build(d, { evaluation: { config: PORTFOLIO_V1_CONFIG }, ...opts });
 const months = (d: PortfolioSnapshot) => Object.fromEntries(buildPortfolio(d).teachers.find((t) => t.name === "강사")!.periods.map((w) => [w.month, w]));
 const score = <Id extends MetricId>(d: PortfolioSnapshot, month: string, id: Id) => metricOf(months(d)[month], id);
 const wednesdays = (month: string) => Array.from({ length: 31 }, (_, i) => `${month}-${String(i + 1).padStart(2, "0")}`)
@@ -35,7 +38,8 @@ describe("8개 항목 100점", () => {
     const periods = out.teachers[0].periods;
     expect(periods.map((w) => w.month)).toEqual(["2026-10", "2026-09", "2026-08", "2026-07", "2026-06", "2026-05", "2026-04"]);
     expect(out.months).toHaveLength(6);
-    expect(periods.every((w) => w.items.length === 8 && w.items.reduce((n, m) => n + m.max, 0) === 100)).toBe(true);
+    const shown = (w: (typeof periods)[number]) => w.items.filter((m) => !m.off);
+    expect(periods.every((w) => shown(w).length === 8 && shown(w).reduce((n, m) => n + m.max, 0) === 100)).toBe(true);
     expect([periods[0].partial, periods[0].end, periods[1].partial, periods[1].end]).toEqual([true, "2026-10-11", false, "2026-09-30"]);
   });
   it("본인 보고서는 의무 하나를 채우고, 보고서·교시가 여럿이어도 점수는 불지 않는다", () => {
@@ -46,13 +50,13 @@ describe("8개 항목 100점", () => {
     const m = score(d, "2026-09", "report");
     expect([m.value, m.detail.length]).toEqual([20, 5]);
   });
-  it("대리 작성은 본인 실적이 아니고, 작성자를 모르면 0점이 아니라 산출불가다", () => {
+  it("대리 작성은 본인 실적이 아니고, 작성자를 모르면 '자료 없음'으로 0점이다(원장 2026-10-13 — 총점은 그대로 나온다)", () => {
     const d = fixture();
     d.reports = [report("2026-09-02", undefined, { created_by: "proxy" })];
     expect(score(d, "2026-09", "report").detail.find((c) => c.day === "2026-09-02")?.state).toBe("proxy");
     d.reports[0].created_by = null;
-    expect(score(d, "2026-09", "report").value).toBeNull();
-    expect(months(d)["2026-09"].total).toBeNull();
+    expect([score(d, "2026-09", "report").value, score(d, "2026-09", "report").missing]).toEqual([0, true]);
+    expect(months(d)["2026-09"].total).not.toBeNull();
   });
   it("다른 반의 보고서·결석한 날·휴원일은 의무를 채우지도 만들지도 않는다", () => {
     const other = fixture();
@@ -76,7 +80,7 @@ describe("8개 항목 100점", () => {
     d.reports = wednesdays("2026-09").map((day) => report(day));
     expect(score(d, "2026-09", "report").value).toBe(20);
     d.settings.report_subjects = ["english"];
-    expect(score(d, "2026-09", "report").value).toBeNull();
+    expect([score(d, "2026-09", "report").value, score(d, "2026-09", "report").missing]).toEqual([0, true]);
   });
   it("영어는 보고서가 없으면 0점, 직원 평가·과목 소개는 실적이 없으면 0점이다", () => {
     const d = fixture();
@@ -146,7 +150,7 @@ describe("🔴 말일 마감 — 이후의 보충은 지난달 점수를 바꾸�
   it("마감 뒤에 수정된 상담은 당시 완료 여부를 확정하지 않는다", () => {
     const d = fixture();
     d.consultations = [{ id: "k", student_id: "s", counselor_id: "teacher", consulted_at: "2026-09-15T00:00:00Z", follow_up_date: "2026-09-30", follow_up_done: true, updated_at: "2026-10-01T00:00:00Z" }];
-    expect(score(d, "2026-09", "follow").value).toBeNull();
+    expect([score(d, "2026-09", "follow").raw, score(d, "2026-09", "follow").value, score(d, "2026-09", "follow").gap]).toEqual([null, 0, "마감 시점 확인"]);
   });
 });
 
@@ -192,11 +196,11 @@ describe("기록을 시작하기 전인 달 — 같은 강사의 기준 달 평�
     expect(awaitsReference(june, d.preRecord, "2026-08")).toBe(true);
     expect(awaitsReference(months(d)["2026-09"], d.preRecord, "2026-08")).toBe(false);
   });
-  it("산출불가인 기준 달은 평균에서 빼고, 쓸 달이 하나도 없으면 그 항목과 총점이 산출불가다", () => {
+  it("확인할 수 없는 기준 달은 평균에서 빼고, 쓸 달이 하나도 없으면 그 항목은 '자료 없음' 0점이다", () => {
     const d = early();
     d.reports.find((r) => r.report_date.startsWith("2026-08"))!.created_by = null;
-    expect([score(d, "2026-08", "report").value, score(d, "2026-06", "report").value]).toEqual([null, 20]);
+    expect([score(d, "2026-08", "report").value, score(d, "2026-06", "report").value]).toEqual([0, 20]);
     for (const r of d.reports) r.created_by = null;
-    expect([score(d, "2026-06", "report").value, months(d)["2026-06"].total]).toEqual([null, null]);
+    expect([score(d, "2026-06", "report").value, score(d, "2026-06", "report").missing, months(d)["2026-06"].total === null]).toEqual([0, true, false]);
   });
 });

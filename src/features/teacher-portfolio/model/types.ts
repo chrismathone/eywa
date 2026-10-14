@@ -6,55 +6,10 @@
  * 점수와 근거를 함께 굳히기 위해서다. 학생은 id로만 싣고 이름은 화면이 읽을 때 붙인다.
  */
 
-export type SnapshotUser = { id: string; display_name: string; status: string; subjects: string[] | null };
-export type SnapshotClass = {
-  id: string; class_name: string; subject: string; english_track: string | null; teacher_id: string | null;
-  is_active: boolean; closed_at: string | null; report_optout: boolean | null; is_makeup_pool: boolean | null;
-};
-export type SnapshotSchedule = {
-  id: string; class_id: string; day_of_week: string; start_time: string; end_time: string | null;
-  teacher_id: string | null; slot_teacher_label: string | null; lab_separate: boolean | null;
-  valid_from: string; valid_to: string | null;
-};
-export type SnapshotEnrollment = {
-  id: string; student_id: string; class_id: string; start_date: string; end_date: string | null;
-  on_hold: boolean; attendance_days: string[] | null; is_transferred: boolean; is_transferred_in: boolean;
-};
-export type SnapshotAttendance = {
-  id: string; class_id: string; student_id: string; session_date: string; slot_start: string | null;
-  status: string; recorded_at: string; supersedes_id: string | null; seat_label: string | null;
-  recorded_via: string | null; taught_by: string | null; note: string | null;
-};
-export type SnapshotReport = {
-  id: string; student_id: string; class_id: string | null; report_date: string; created_by: string | null;
-  created_at: string | null; covers_date: string | null; makeup: boolean | null;
-};
-export type SnapshotConsultation = {
-  id: string; student_id: string; counselor_id: string | null; follow_up_date: string | null;
-  follow_up_done: boolean | null; consulted_at: string; updated_at: string | null;
-};
-export type SnapshotReviewSheet = { scores?: unknown; submittedAt?: string | null; completedAt?: string | null; byId?: string | null };
-export type SnapshotReview = {
-  id: string; staff_user_id: string | null; header: { teacherId?: string | null } | null; areas: unknown;
-  template_name: string | null; submissions: Record<string, SnapshotReviewSheet>;
-};
-export type SnapshotTransition = {
-  class_id: string | null; target_label: string | null; teacher_id: string; previous_teacher_id: string | null; date: string;
-};
-export type SnapshotDelegation = { class_id: string; delegate_user_id: string; from_date: string; to_date: string };
-export type SnapshotInvoice = {
-  id: string; student_id: string; period: string; amount_total: number | string; amount_discount: number | string | null;
-  line_items: unknown;
-};
-export type SnapshotTerm = {
-  id: string; invoice_id: string; class_id: string; amount: number | string | null; confirmed_sessions: number | string | null;
-  allocation_line_index: number | null; allocation_amount: number | string | null; allocation_source: unknown;
-  allocation_base_amount: number | string | null;
-};
-export type SnapshotMakeup = {
-  id: string; student_id: string; class_id: string; absence_date: string | null; makeup_date: string | null;
-  status: string; done_at: string | null;
-};
+import type { EvaluationConfig } from "../evaluation/config";
+
+export type { SnapshotUser, SnapshotClass, SnapshotSchedule, SnapshotEnrollment, SnapshotAttendance, SnapshotReport, SnapshotConsultation, SnapshotReviewSheet, SnapshotReview, SnapshotTransition, SnapshotDelegation, SnapshotInvoice, SnapshotTerm, SnapshotMakeup } from "./snapshot-types";
+import type { SnapshotUser, SnapshotClass, SnapshotSchedule, SnapshotEnrollment, SnapshotAttendance, SnapshotReport, SnapshotConsultation, SnapshotReview, SnapshotTransition, SnapshotDelegation, SnapshotInvoice, SnapshotTerm, SnapshotMakeup } from "./snapshot-types";
 
 /** 기록을 시작하기 전에 끝난 달의 처리. 항목마다 시작일과 기준 달을 따로 갖는다. */
 export type PreRecordItem = { before: string; reference: string[] };
@@ -89,10 +44,13 @@ export type PortfolioSnapshot = {
   makeupLegacy: SnapshotMakeup[];
 };
 
-export type MetricId = "report" | "attendance" | "follow" | "quality" | "students" | "revenue" | "expansion" | "coverage";
-export const METRIC_IDS: readonly MetricId[] = ["report", "attendance", "follow", "quality", "students", "revenue", "expansion", "coverage"];
+/** 아직 계산이 들어오지 않은 원장 구성 지표(2026-10-13) — 수치 없이 자리만 선다(자료 없음 규칙으로 매긴다). */
+export type PendingMetricId = "payRatio" | "churn" | "grades" | "satisfaction" | "punctuality";
+export type MetricId = "report" | "attendance" | "follow" | "quality" | "students" | "revenue" | "expansion" | "coverage" | PendingMetricId;
+/** 계산 코드가 처음 매기는 만점(옛 고정 배점) — 화면의 만점은 설정이 덮는다. 옛 저장 행의 기준표도 이 값이다. */
 export const METRIC_MAX: Record<MetricId, number> = {
   report: 20, attendance: 10, follow: 10, quality: 10, students: 20, revenue: 10, expansion: 10, coverage: 10,
+  payRatio: 20, churn: 20, grades: 10, satisfaction: 0, punctuality: 10,
 };
 
 export type PeriodWindow = { month: string; start: string; end: string; partial: boolean };
@@ -132,12 +90,26 @@ export type CoverageResult = {
   value: number; due: number; done: number; pending: number; early: number; unconfirmed: number; detail: CoverageRow[];
 };
 
-/** 기록 시작 전이라 기준 달 평균으로 둔 항목에 붙는다. `detail`은 비운다 — 없는 기록을 만들지 않는다. */
-export type Estimated = { since: string; targets: number; reference: { month: string; value: number }[] };
+/**
+ * 기록 시작 전이라 기준 달 평균으로 둔 항목에 붙는다. `detail`은 비운다 — 없는 기록을 만들지 않는다.
+ * `unit`이 있으면 기준 값은 원래 수치(%)다. 없으면 옛 저장 행이라 점수다.
+ */
+export type Estimated = { since: string; targets: number; reference: { month: string; value: number }[]; unit?: string };
 
-type MetricCommon<Id extends MetricId, Detail> = {
+type MetricCommon<Id extends string, Detail> = {
+  /** `value` = 원장 설정으로 매긴 점수 · `max` = 그 지표의 만점(설정). null = 합계에서 뺀 지표. */
   id: Id; max: number; value: number | null; basis: string; reason: string; detail: Detail[];
   gap?: string; estimated?: Estimated;
+  /** 원래 수치(설정 단위 — % · 점 · 건). 자료가 없으면 null. 설정을 바꾸면 이 값으로 다시 매긴다. 옛 저장 행엔 없다. */
+  raw?: number | null;
+  /** 원장이 정한 이름 — 옛 저장 행엔 없어 기본 이름으로 보인다. */
+  label?: string;
+  /** 원장이 끈 지표 — 미리보기를 위해 저장은 하되 화면·합계엔 없다. */
+  off?: boolean;
+  /** 자료가 없어 '자료가 없을 때' 규칙(0점·만점·빼기)으로 매겼다. */
+  missing?: boolean;
+  /** 아직 자동으로 세지 않는 지표(계산이 들어오기 전) — 화면이 '자료 없음'과 갈라 '계산 전'으로 적는다. */
+  uncounted?: boolean;
 };
 export type ReportMetric = MetricCommon<"report", ReportCell>;
 export type AttendanceMetric = MetricCommon<"attendance", AttendanceRow>;
@@ -147,8 +119,14 @@ export type StudentsMetric = MetricCommon<"students", StudentEvent> & { tracking
 export type RevenueMetric = MetricCommon<"revenue", RevenueClassRow> & Pick<RevenueResult, "amount" | "subjectTotal" | "subjectLabel" | "subjects" | "unassigned" | "unclassified">;
 export type ExpansionMetric = MetricCommon<"expansion", never>;
 export type CoverageMetric = MetricCommon<"coverage", CoverageRow> & Pick<CoverageResult, "due" | "done" | "pending" | "early">;
+export type PendingMetric = MetricCommon<PendingMetricId, never>;
+/** 원장이 직접 만든 지표 — 달마다 입력한 숫자가 원래 수치다. */
+export type ManualMetricItem = MetricCommon<`manual:${string}`, never> & { unit: string; note?: string };
 export type Metric =
-  | ReportMetric | AttendanceMetric | FollowMetric | QualityMetric | StudentsMetric | RevenueMetric | ExpansionMetric | CoverageMetric;
+  | ReportMetric | AttendanceMetric | FollowMetric | QualityMetric | StudentsMetric | RevenueMetric | ExpansionMetric | CoverageMetric
+  | PendingMetric | ManualMetricItem;
+/** 한 달의 항목 id — 기본 지표 또는 `manual:<key>`. */
+export type ItemId = Metric["id"];
 export type MetricOf<Id extends MetricId> = Extract<Metric, { id: Id }>;
 
 export type DayStat = { day: string; holiday: boolean; target: number; own: number; proxy: number; missing: number; late: number };
@@ -158,11 +136,17 @@ export type PortfolioPeriod = PeriodWindow & {
   classes: string[];
   students: number;
   items: Metric[];
+  /** 합계에 든 항목 수 · 점수 합 · 만점 합(켠 지표의 만점 합 — 100점이 아니어도 된다). */
   knownCount: number;
   knownScore: number;
   knownMax: number;
-  /** 8개 항목이 모두 산출됐을 때만 합계. 하나라도 산출불가면 null — 100점으로 다시 환산하지 않는다. */
+  /**
+   * 총점 = 켠 지표 점수의 합(원장 2026-10-13 — 자료가 없는 항목은 0점이라 총점이 늘 나온다).
+   * null은 옛 저장 행(2026-10-13 전 규칙: 하나라도 산출불가면 총점 산출불가)에만 있다.
+   */
   total: number | null;
+  /** 이 달을 매긴 설정의 사본 — 마감한 달은 그때의 설정으로 굳는다. 옛 저장 행엔 없다. */
+  evaluation?: EvaluationConfig;
   ownReportRecords: number;
   holidays: string[];
   dayStats: DayStat[];

@@ -7,11 +7,12 @@ import { EmptyState } from "@/components/empty-state";
 import { HrefSelect } from "@/components/href-select";
 import { Toolbar, ToolbarButton } from "@/components/toolbar";
 import { useEmbed, withEmbed } from "@/components/workspace/embed-context";
-import type { MetricId, StoredPeriod } from "@/features/teacher-portfolio/model/types";
+import type { ItemId, StoredPeriod } from "@/features/teacher-portfolio/model/types";
 import { refreshTeacherPortfolioNow } from "@/features/teacher-portfolio/server/actions";
 import type { PortfolioTeacherEntry } from "@/features/teacher-portfolio/server/queries";
 import { periodLabel } from "@/features/teacher-portfolio/view";
 import { DetailDialog, type DetailTarget } from "./detail-dialog";
+import { ManualEntryDialog } from "./manual-entry-dialog";
 import { ClassBox, EvidencePanel, MonthlyTable } from "./lower-panels";
 import { ScoreHero } from "./score-hero";
 import { TeacherList, TeacherPicker } from "./teacher-list";
@@ -51,7 +52,8 @@ export function PortfolioBoard({ teachers, selected, studentNames, computedLabel
   const embed = useEmbed();
   const [moving, startTransition] = useTransition();
   const [monthKey, setMonthKey] = useState<string | null>(null);
-  const [tab, setTab] = useState<MetricId>("report");
+  const [tab, setTab] = useState<ItemId>("report");
+  const [entryOpen, setEntryOpen] = useState(false);
   const [detail, setDetail] = useState<DetailTarget | null>(null);
   const shown = selected.periods.slice(0, SHOWN_MONTHS);
   const index = Math.max(0, shown.findIndex((w) => w.month === monthKey));
@@ -82,6 +84,9 @@ export function PortfolioBoard({ teachers, selected, studentNames, computedLabel
         <HrefSelect axisLabel="평가 기간" ariaLabel="평가 기간 선택" value={period.month} onSelect={setMonthKey}
           options={shown.map((w) => ({ value: w.month, label: periodLabel(w) }))} />
         <ToolbarButton onClick={() => setDetail({ kind: "criteria" })}>평가 기준</ToolbarButton>
+        {/* 원장이 만든 지표가 이 달에 있으면 그 값을 넣는 입구 — 쓰기 권한(집계와 같은 문)이 있을 때만. */}
+        {canRefresh && period.items.some((m) => m.id.startsWith("manual:") && !m.off)
+          ? <ToolbarButton onClick={() => setEntryOpen(true)}>직접 입력</ToolbarButton> : null}
         <span className="num ml-auto text-xs whitespace-nowrap">집계 {computedLabel}</span>
         {canRefresh ? <RefreshButton /> : null}
       </Toolbar>
@@ -106,6 +111,10 @@ export function PortfolioBoard({ teachers, selected, studentNames, computedLabel
         </div>
       </div>
       <DetailDialog target={detail} onClose={() => setDetail(null)} periods={shown} teacherName={selected.name} evidence={evidence} />
+      {entryOpen ? (
+        <ManualEntryDialog key={`${selected.id}|${period.month}`} open onClose={() => setEntryOpen(false)}
+          period={period} teacherId={selected.id} teacherName={selected.name} />
+      ) : null}
     </div>
   );
 }

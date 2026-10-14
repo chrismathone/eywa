@@ -56,6 +56,7 @@ export const TEACHER_MENU_LINKS: readonly TeacherMenuLink[] = [
   // 수업 평가 — 강사는 **자기 평가 전용**(본인 평가지의 본인 채점만 보이고 쓸 수 있다, 원장 2026-08-19).
   // 기본 teacher=none이라 학원설정에서 연 학원에서만 보인다.
   { href: "/class-review", labelKey: "menu.item.class_review", icon: MENU_ICON.class_review, menu: "class_review" },
+  { href: "/withdrawal-reports", labelKey: "menu.item.withdrawal_reports", icon: MENU_ICON.withdrawal_reports, menu: "withdrawal_reports" },
   // 데이터베이스(서식 저장소) — 강사 readonly(빈 양식 다운로드). 테넌트 공용 자료라 스코핑 무관.
   { href: "/documents", labelKey: "menu.item.documents", icon: MENU_ICON.documents, menu: "documents" },
 ];

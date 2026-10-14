@@ -171,6 +171,7 @@ export const AYWA_ICON_CATALOG = [
   { name: "alarm", label: "알람", family: "interface", meaning: "지정 시간 알림" },
   { name: "copyPlus", label: "복사본 추가", family: "interface", meaning: "복제해 새 항목 만들기" },
   { name: "listChecks", label: "완료 목록", family: "interface", meaning: "여러 작업의 점검 상태" },
+  { name: "gauge", label: "점수 계기판", family: "interface", meaning: "평가 점수와 그 기준" },
   { name: "pinOff", label: "고정 해제", family: "interface", meaning: "고정된 위치와 항목 풀기" },
   { name: "doorOpen", label: "열린 문", family: "interface", meaning: "공간 출입과 열린 상태" },
   { name: "percentBadge", label: "할인 배지", family: "interface", meaning: "할인율과 비율 혜택" },
@@ -876,6 +877,12 @@ const EXTENDED_ICON_GLYPHS = {
       <path d="M16 8V4H4v12h4M14 11v6M11 14h6" />
     </>
   ),
+  gauge: (
+    <>
+      <path d="M3 17a9 9 0 0 1 18 0" />
+      <path d="M12 17l5-6M3 17h18" />
+    </>
+  ),
   listChecks: (
     <>
       <polyline points="3,5 5,7 8,4" />
@@ -1262,6 +1269,7 @@ export const MENU_ICON = {
   enrollment: "userPlus",
   consultations: "messages",
   withdrawals: "userMinus",
+  withdrawal_reports: "report",
   retention: "shield",
   // 신규생 관리 — 체크리스트 7항목이 정체성이다(이탈 방어의 "방패"와 뜻이 달라 그림도 다르다).
   newcomers: "userCheck",

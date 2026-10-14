@@ -40,10 +40,8 @@ export function VideoHomeworkManagement({ rows, initialMarks, videos = NO_VIDEOS
   // 회차·완료 판정은 한 벌 — 표·요약·필터·CSV가 전부 이 결과를 읽는다(저장 직후에도 같은 규칙으로 다시 센다).
   const keep = useMemo(() => (keepRounds ? new Set(keepRounds) : null), [keepRounds]);
   // 판정은 전체 회차로 먼저 하고, 보일 칸만 거른다(keepLedgerRounds — 거른 뒤 짝을 지으면 관리자 화면과 판정이 갈린다).
-  const rounds = useMemo(() => {
-    const all = buildLedgerRounds({ rows, marks: marks.values(), videos, fromDate, toDate });
-    return keep ? keepLedgerRounds(all, keep) : all;
-  }, [rows, marks, videos, fromDate, toDate, keep]);
+  const allRounds = useMemo(() => buildLedgerRounds({ rows, marks: marks.values(), videos, fromDate, toDate }), [rows, marks, videos, fromDate, toDate]);
+  const rounds = useMemo(() => (keep ? keepLedgerRounds(allRounds, keep) : allRounds), [allRounds, keep]);
   const groups = useMemo(() => groupLedgerRows(rows, rounds), [rows, rounds]);
   const visible = useMemo(() => filterLedgerRows(rows, rounds, { ...filters, query }), [rows, rounds, filters, query]);
   const classCounts = useMemo(() => {
@@ -103,6 +101,8 @@ export function VideoHomeworkManagement({ rows, initialMarks, videos = NO_VIDEOS
     <LedgerVideoDialog cell={playing} video={playing ? videos.find((video) => video.id === playing.round.videoId
       && video.studentId === playing.row.studentId && video.classId === playing.row.classId) ?? null : null} onClose={() => setPlaying(null)} />
     {menu ? <IssueMenu key={`${ledgerPairKey(menu.row)}:${menu.kind}:${menu.date}`} target={menu} onClose={() => setMenu(null)} /> : null}
-    {assigning ? <VideoAssignmentDialog key={ledgerPairKey(assigning)} row={assigning} fromDate={fromDate} toDate={toDate} onClose={() => setAssigning(null)} /> : null}
+    {assigning ? <VideoAssignmentDialog key={ledgerPairKey(assigning)} row={assigning} fromDate={fromDate} toDate={toDate} onClose={() => setAssigning(null)}
+      // 거르기 전 칸으로 — 강사뷰에서 동료가 낸 숙제에 붙은 영상도 "안 붙음"으로 보이지 않게.
+      linked={new Map((allRounds.get(ledgerPairKey(assigning)) ?? []).flatMap((round) => round.videoId && round.homeworkDate ? [[round.videoId, round.homeworkDate] as const] : []))} /> : null}
   </div>;
 }

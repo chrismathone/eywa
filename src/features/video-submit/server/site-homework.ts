@@ -1,13 +1,14 @@
 import "server-only";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { addDays } from "@/lib/date-kst";
-import { buildLedgerRounds, roundPairKey, videoArrivedAt, videoFingerprint, videoMatchRange } from "@/features/video-homework/rounds";
+import { buildLedgerRounds, roundPairKey, videoArrivedAt, videoFingerprint, videoMatchRange, type RoundOwners } from "@/features/video-homework/rounds";
 import { videoHomeworkColumnReady } from "@/features/video-homework/server/assignments";
 import { isVideoHomeworkDate, type VideoArrival, type VideoHomeworkMark, type VideoHomeworkStatus } from "@/features/video-homework/types";
 import { homeworkVideoLinks } from "@/features/students/homework-videos";
 import { SITE_HOMEWORK_DAYS } from "../site";
 import { homeworkVideoSource } from "@/features/video-homework/server/video-source";
 import { findExtraIssue, listExtraIssuesFor } from "@/features/video-homework/server/extra-issues";
+import { listRejections, rejectionsByPair } from "@/features/video-homework/server/rejections";
 
 type Db = ReturnType<typeof createAdminClient>;
 export type HomeworkPair = { studentId: string; classId: string };
@@ -38,14 +39,53 @@ const ROW_LIMIT = 500;
 export async function openHomeworkDates(db: Db, tenantId: string, pairs: readonly HomeworkPair[], today: string): Promise<Map<string, string[]> | null> {
   const out = new Map<string, string[]>();
   if (!pairs.length) return out;
+  const materials = await loadPairRoundMaterials(db, tenantId, pairs, today);
+  if (!materials) return null;
+  const rounds = pairRounds(materials);
+  for (const p of pairs) {
+    const key = roundPairKey(p);
+    const dates = (rounds.get(key) ?? [])
+      .filter((round) => (round.assigned || round.kept) && !!round.homeworkDate && !round.videoId)
+      .map((round) => round.homeworkDate!)
+      .sort((a, b) => b.localeCompare(a));
+    if (dates.length) out.set(key, dates);
+  }
+  return out;
+}
+
+/** 숙제 칸 판정 재료(그 학생 × 반들) — 숙제(보고서 ∪ 따로 낸 숙제) · 기록 · 그 반으로 분류된 업로드 완료 영상. */
+export type PairRoundMaterials = {
+  pairs: readonly HomeworkPair[]; from: string; today: string;
+  assigned: Map<string, Set<string>>; marks: VideoHomeworkMark[]; videos: VideoArrival[];
+  /** 반려한 숙제(`반:학생` → 숙제일 → 반려 시각) — 장부와 같은 칸이 서게(rounds.ts ②). */
+  rejected: Map<string, Record<string, string>>;
+  /** `assigned` 중 검사 기록 칸에서 옮겨 남긴 숙제(keep-round.ts) — 장부와 같게 검사 기록 칸처럼 짠다(rounds.ts `kept`). */
+  kept?: Map<string, Set<string>>;
+};
+
+/** 재료 → 숙제 칸(장부와 같은 `buildLedgerRounds`). `owners`를 넘기면 칸마다 센 영상을 채운다(반려가 쓴다). */
+export function pairRounds(m: PairRoundMaterials, owners?: RoundOwners) {
+  return buildLedgerRounds({
+    rows: m.pairs.map((p) => ({ classId: p.classId, studentId: p.studentId, assignedDates: [...(m.assigned.get(roundPairKey(p)) ?? [])].sort(), tracked: true,
+      rejected: m.rejected.get(roundPairKey(p)), kept: [...(m.kept?.get(roundPairKey(p)) ?? [])] })),
+    marks: m.marks, videos: m.videos, fromDate: m.from, toDate: m.today, owners,
+  });
+}
+
+/**
+ * `openHomeworkDates`·반려(`reject-videos.ts`)가 같이 쓰는 재료 읽기. `from` = 칸을 볼 첫 날(기본 = 올릴 수 있는 기간의 첫 날).
+ * `null` = 보고서의 영상 과제 칸을 읽을 수 없다(0308a 전, [[#95]]).
+ */
+export async function loadPairRoundMaterials(db: Db, tenantId: string, pairs: readonly HomeworkPair[], today: string,
+  options: { from?: string } = {}): Promise<PairRoundMaterials | null> {
   if (!(await videoHomeworkColumnReady(db))) return null;
   const students = [...new Set(pairs.map((p) => p.studentId))];
   const classes = [...new Set(pairs.map((p) => p.classId))];
   const wanted = new Set(pairs.map(roundPairKey));
-  const from = addDays(today, -SITE_HOMEWORK_DAYS);
+  const from = options.from ?? addDays(today, -SITE_HOMEWORK_DAYS);
   const wide = videoMatchRange(from, today, today);
   const videoSource = await homeworkVideoSource(db);
-  const [reports, extra, marks, videos] = await Promise.all([
+  const [reports, extra, marks, videos, rejections] = await Promise.all([
     db.from("lesson_reports").select("student_id,class_id,report_date")
       .eq("tenant_id", tenantId).eq("video_homework", true).in("student_id", students).in("class_id", classes)
       .gte("report_date", wide.from).lt("report_date", addDays(today, 1)).order("id", { ascending: true }).limit(ROW_LIMIT + 1),
@@ -58,6 +98,7 @@ export async function openHomeworkDates(db: Db, tenantId: string, pairs: readonl
       .eq("tenant_id", tenantId).in("student_id", students).in("route->>classId", classes)
       .eq("status", "uploaded").not("drive_file_id", "is", null)
       .or(`posted_at.gte.${wide.from}T00:00:00+09:00,route->>manualAssignment.eq.true`).order("id", { ascending: true }).limit(ROW_LIMIT + 1),
+    listRejections(db, tenantId, { studentIds: students, fromDate: wide.from, toDate: today }),
   ]);
   if (reports.error) throw new Error("영상 숙제 조회 실패");
   if (marks.error) throw new Error("영상 숙제 기록 조회 실패");
@@ -69,11 +110,18 @@ export async function openHomeworkDates(db: Db, tenantId: string, pairs: readonl
   if (reportRows.length > ROW_LIMIT || extra.length > ROW_LIMIT || markRows.length > ROW_LIMIT || videoRows.length > ROW_LIMIT) throw new Error("영상 숙제 조회 범위 초과");
 
   const assigned = new Map<string, Set<string>>();
-  const issued = [...reportRows.map((r) => ({ classId: r.class_id, studentId: r.student_id, date: r.report_date })), ...extra];
+  const kept = new Map<string, Set<string>>();
+  const add = (map: Map<string, Set<string>>, key: string, date: string) => (map.get(key) ?? map.set(key, new Set()).get(key)!).add(date);
+  const issued = [...reportRows.map((r) => ({ classId: r.class_id, studentId: r.student_id, date: r.report_date })), ...extra.filter((x) => !x.kept)];
   for (const r of issued) {
     if (!r.classId) continue;
     const key = roundPairKey({ classId: r.classId, studentId: r.studentId });
-    if (wanted.has(key)) (assigned.get(key) ?? assigned.set(key, new Set()).get(key)!).add(r.date);
+    if (wanted.has(key)) add(assigned, key, r.date);
+  }
+  // 옮겨 남긴 숙제 — 같은 날 정식 숙제가 있으면 정식 숙제 쪽(장부 `getAssignedVideoHomework`와 같다).
+  for (const x of extra.filter((issue) => issue.kept)) {
+    const key = roundPairKey(x);
+    if (wanted.has(key) && !assigned.get(key)?.has(x.date)) { add(assigned, key, x.date); add(kept, key, x.date); }
   }
   const videoArrivals = videoRows.flatMap((row): VideoArrival[] => {
     const route = row.route && typeof row.route === "object" && !Array.isArray(row.route) ? (row.route as Record<string, unknown>) : {};
@@ -82,33 +130,23 @@ export async function openHomeworkDates(db: Db, tenantId: string, pairs: readonl
     const classId = typeof route.classId === "string" ? route.classId : null;
     const picked = typeof route.homeworkDate === "string" && route.homeworkDate ? route.homeworkDate : null;
     const arrivedAt = videoArrivedAt({ createdAt: row.created_at, postedAt: row.posted_at, uploadedAt: row.uploaded_at, fromClassnote: row.post_id != null, picked: !!picked });
-    return classId ? [{ id: row.id, studentId: row.student_id, classId, postedAt: row.posted_at, arrivedAt, homeworkDate: picked,
+    return classId ? [{ id: row.id, studentId: row.student_id, classId, postedAt: row.posted_at, arrivedAt, createdAt: row.created_at ?? null, homeworkDate: picked,
       playback: { ...links, uploadedAt: row.uploaded_at ?? null },
       manuallyAssigned: route.manualAssignment === true, free: route.free === true,
       fingerprint: videoFingerprint(row.md5, row.bytes) }] : [];
   });
-  const rounds = buildLedgerRounds({
-    rows: pairs.map((p) => ({ classId: p.classId, studentId: p.studentId, assignedDates: [...(assigned.get(roundPairKey(p)) ?? [])].sort(), tracked: true })),
+  return {
+    pairs, from, today, assigned, kept, videos: videoArrivals,
+    rejected: new Map([...rejectionsByPair(rejections)].filter(([key]) => wanted.has(key))),
     marks: markRows.map((row): VideoHomeworkMark => ({ classId: row.class_id, studentId: row.student_id, checkDate: row.check_date,
       homeworkDate: row.homework_date, submittedDate: row.submitted_date ?? null, status: row.status as VideoHomeworkStatus, updatedAt: row.updated_at })),
-    videos: videoArrivals,
-    fromDate: from,
-    toDate: today,
-  });
-  for (const p of pairs) {
-    const key = roundPairKey(p);
-    const dates = (rounds.get(key) ?? [])
-      .filter((round) => round.assigned && !!round.homeworkDate && !round.videoId)
-      .map((round) => round.homeworkDate!)
-      .sort((a, b) => b.localeCompare(a));
-    if (dates.length) out.set(key, dates);
-  }
-  return out;
+  };
 }
 
 /**
  * 그날이 그 학생 × 반에 **실제로 나간 영상 숙제**이고 아직 올릴 수 있는 기간(숙제일 + 7일) 안인가 — 업로드 시작·제출 화면이 주소의 숙제일을
- * 그대로 믿지 않고 여기서 다시 확인한다. 이미 낸 숙제여도 참이다(같은 숙제에 영상을 한 번 더 올리는 것을 막지 않는다).
+ * 그대로 믿지 않고 여기서 다시 확인한다. 이미 낸 숙제여도 참이다 — 이미 영상을 받았는지는 따로 본다(`openHomeworkDates` — 업로드 시작·제출 화면이
+ * 이미 낸 숙제엔 다시 올리지 않고 숙제 없이 올리기로 보낸다, 원장 2026-10-13).
  * 🔴 영상 과제 칸을 읽을 수 없으면(0308a 전·순간 오류) **던진다** — "숙제가 아니다"로 읽으면 올리기 사이트 링크가 "숙제를 다시 고르라"며
  *    학생을 돌려보낸다(조회 쪽은 같은 상황을 "지금은 받을 수 없다"로 닫는다 — 같은 원칙).
  */

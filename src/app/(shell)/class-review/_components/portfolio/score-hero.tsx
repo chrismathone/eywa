@@ -2,14 +2,14 @@
 
 import { useLayoutEffect, useRef } from "react";
 import { Pill } from "@/components/atoms/pill";
-import { metricOf, type Metric, type MetricId, type StoredPeriod } from "@/features/teacher-portfolio/model/types";
+import type { ItemId, Metric, StoredPeriod } from "@/features/teacher-portfolio/model/types";
 import {
-  IMPACT_METRICS, MANAGEMENT_METRICS, METRIC_COLOR, METRIC_LABEL, SCORE_SCALE, closingLabel, fmtScore, scoreColor,
+  closingLabel, fmtScore, itemColor, itemLabel, itemOf, missingTag, pendingShown, periodMax, scoreColor, scoreScale, shortItems, shownItems,
 } from "@/features/teacher-portfolio/view";
 import { Delta } from "./parts";
 
 /**
- * 기간 평가 점수 — 총점 원 그래프와 8개 항목 막대.
+ * 기간 평가 점수 — 총점 원 그래프와 항목 막대(원장이 켠 지표만, 강사평가 설정의 이름·만점 그대로).
  *
  * 달이나 강사를 바꾸면 게이지가 이전 값에서 새 값으로 움직인다(원장 2026-10-12). 이 컴포넌트는 그 사이
  * 다시 마운트되지 않으므로 폭·호 길이는 CSS 전환이 하고, 숫자만 아래 훅이 이어 센다.
@@ -41,59 +41,63 @@ function useCountTo(value: number | null) {
   return ref;
 }
 
-function ScoreRing({ total, onOpen }: { total: number | null; onOpen: () => void }) {
-  const arc = total ?? 0;
+function ScoreRing({ total, max, onOpen }: { total: number | null; max: number; onOpen: () => void }) {
+  // 호는 만점 대비 비율만큼 — 만점이 100점이 아니어도 같은 원을 쓴다.
+  const arc = total === null || max <= 0 ? 0 : Math.min(100, Math.max(0, (total / max) * 100));
   const number = useCountTo(total);
+  const ticks = scoreScale(max);
   return (
     <div className="flex w-full flex-col items-center gap-4">
       <button type="button" onClick={onOpen} data-total={total ?? "unknown"}
-        aria-label={total === null ? "합계 산출불가. 점수 근거 보기" : `잠정 점수 ${fmtScore(total)}점, 100점 만점. 점수 근거 보기`}
+        aria-label={total === null ? "합계 산출불가. 점수 근거 보기" : `잠정 점수 ${fmtScore(total)}점, ${max}점 만점. 점수 근거 보기`}
         className="focus-visible:outline-primary relative size-56 shrink-0 rounded-full focus-visible:outline-2 focus-visible:outline-offset-4">
         <svg viewBox="0 0 240 240" aria-hidden fill="none" className="block size-full">
           <circle cx="120" cy="120" r="94" strokeWidth="34" className="stroke-bg-soft" />
           {/* 호 하나가 총점만큼만 이어진다. 0점·산출불가도 그려 두어야 달이 바뀔 때 양쪽으로 움직인다. */}
           <circle data-ring-arc cx="120" cy="120" r="94" strokeWidth="34" pathLength={100} transform="rotate(-90 120 120)"
-            className={`transition-[stroke-dasharray,stroke] ${MOTION}`} style={{ strokeDasharray: `${arc} ${100 - arc}`, stroke: scoreColor(total) }} />
+            className={`transition-[stroke-dasharray,stroke] ${MOTION}`} style={{ strokeDasharray: `${arc} ${100 - arc}`, stroke: scoreColor(total, max) }} />
         </svg>
         <span className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
           <small className="text-xs">{total === null ? "기간 평가 점수" : "잠정 점수"}</small>
           <strong className={`num mt-1 leading-none font-bold whitespace-nowrap ${total === null ? "text-xl" : "text-4xl"}`}>
             {total === null ? "산출불가" : <><span ref={number}>{fmtScore(total)}</span><em className="ml-1 text-sm not-italic">점</em></>}
           </strong>
-          <small className="mt-2 text-xs">{total === null ? "일부 항목 확인 필요" : "100점 만점"}</small>
+          <small className="mt-2 text-xs">{total === null ? "일부 항목 확인 필요" : `${max}점 만점`}</small>
         </span>
       </button>
       <div className="w-full max-w-64">
         <div aria-hidden className="h-1.5 rounded-full" style={{ background: `linear-gradient(to right, ${scoreColor(0)}, ${scoreColor(50)}, ${scoreColor(100)})` }} />
         <div aria-hidden className="num mt-1.5 flex justify-between text-xs">
-          {SCORE_SCALE.map((n) => <span key={n}>{n}{n === 100 ? "점" : ""}</span>)}
+          {ticks.map((n, i) => <span key={i}>{n}{i === ticks.length - 1 ? "점" : ""}</span>)}
         </div>
       </div>
     </div>
   );
 }
 
-function MetricRow({ metric, before, onOpen }: { metric: Metric; before: number | null | undefined; onOpen: (id: MetricId) => void }) {
+function MetricRow({ metric, color, before, tag, legacy, onOpen }: {
+  metric: Metric; color: string; before: number | null | undefined; tag: string | null; legacy: boolean; onOpen: (id: ItemId) => void;
+}) {
   const number = useCountTo(metric.value);
-  const pct = metric.value === null ? 0 : (metric.value / metric.max) * 100;
-  const label = METRIC_LABEL[metric.id];
+  const pct = metric.value === null || metric.max <= 0 ? 0 : Math.min(100, Math.max(0, (metric.value / metric.max) * 100));
+  const label = itemLabel(metric);
   return (
     <button type="button" onClick={() => onOpen(metric.id)} data-metric-row={metric.id}
-      aria-label={`${label} ${fmtScore(metric.value)}${metric.value === null ? "" : "점"}, 근거 보기`}
-      className="border-line-faint hover:bg-primary-softer focus-visible:outline-primary flex min-h-28 w-full flex-col justify-center border-b py-3.5 text-left last:border-b-0 focus-visible:outline-2">
+      aria-label={`${label} ${metric.value === null ? (legacy ? "산출불가" : "합계에서 뺌") : `${fmtScore(metric.value)}점`}${tag ? ` (${tag})` : ""}, 근거 보기`}
+      className="border-line-faint hover:bg-primary-softer focus-visible:outline-primary flex min-h-28 w-full flex-col justify-center border-b px-5 py-3.5 text-left focus-visible:outline-2">
       <span className="mb-2 flex items-center justify-between gap-2">
-        <span className="text-sm font-bold">{label}</span>
+        <span className="text-sm font-bold">{label}{tag ? <small className="ml-1.5 text-xs font-medium">{tag}</small> : null}</span>
         <b className={`num leading-none font-bold whitespace-nowrap ${metric.value === null ? "text-base" : "text-xl"}`}>
-          <span ref={number}>{fmtScore(metric.value)}</span>
-          <small className="ml-1 text-xs font-medium">/ {metric.max}점</small>
+          <span ref={number}>{metric.value === null ? (legacy ? "산출불가" : "제외") : fmtScore(metric.value)}</span>
+          <small className="ml-1 text-xs font-medium">{metric.max > 0 ? `/ ${metric.max}점` : "가감"}</small>
         </b>
       </span>
       <span className="bg-bg-soft relative block h-2 w-full rounded-full" style={metric.value === null ? { background: BULLET_STRIPES } : undefined}>
-        <span data-bar className={`block h-full rounded-full transition-[width] ${MOTION}`} style={{ width: `${pct}%`, background: METRIC_COLOR[metric.id] }} />
+        <span data-bar className={`block h-full rounded-full transition-[width] ${MOTION}`} style={{ width: `${pct}%`, background: color }} />
         {/* 검은 눈금 = 전월 점수. 값은 아래 증감이 말한다. */}
-        {before !== null && before !== undefined ? (
+        {before !== null && before !== undefined && metric.max > 0 ? (
           <span aria-hidden className={`bg-foreground ring-card absolute -top-1 h-4 w-[3px] ring-1 transition-[left] ${MOTION}`}
-            style={{ left: `${Math.min(100, (before / metric.max) * 100)}%` }} />
+            style={{ left: `${Math.min(100, Math.max(0, (before / metric.max) * 100))}%` }} />
         ) : null}
       </span>
       <span className="mt-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 text-xs">
@@ -104,16 +108,22 @@ function MetricRow({ metric, before, onOpen }: { metric: Metric; before: number 
   );
 }
 
+/** 전월 점수 — 만점이 같을 때만 견준다(설정을 바꿔 10점 → 20점이 된 항목의 '+10'은 실적이 아니라 배점 변화다). */
+function beforeOf(previous: StoredPeriod | undefined, m: Metric): number | null | undefined {
+  const was = previous ? itemOf(previous, m.id) : undefined;
+  return was && was.max === m.max ? was.value : undefined;
+}
+
 export function ScoreHero({ period, previous, onOpenMetric, onOpenLedger }: {
-  period: StoredPeriod; previous: StoredPeriod | undefined; onOpenMetric: (id: MetricId) => void; onOpenLedger: () => void;
+  period: StoredPeriod; previous: StoredPeriod | undefined; onOpenMetric: (id: ItemId) => void; onOpenLedger: () => void;
 }) {
-  const unavailable = period.items.filter((m) => m.value === null).map((m) => METRIC_LABEL[m.id]);
-  const column = (title: string, ids: readonly MetricId[]) => (
-    <section className="flex min-w-0 flex-col p-5">
-      <h3 className="mb-1 text-base font-bold">{title} <span className="num text-xs font-medium">50점</span></h3>
-      {ids.map((id) => <MetricRow key={id} metric={metricOf(period, id)} before={previous ? metricOf(previous, id).value : undefined} onOpen={onOpenMetric} />)}
-    </section>
-  );
+  const items = shownItems(period);
+  const max = periodMax(period);
+  // 자료가 없어 깎이거나 빠진 항목만 — '마감 대상 없음 · 만점'처럼 손해가 없는 항목은 안내에 올리지 않는다.
+  const missing = shortItems(period).map(itemLabel);
+  const pending = pendingShown(period).map(itemLabel);
+  // 2026-10-13 전에 저장된 달 — 설정 사본이 없고, 산출불가 규칙이 그때 것이다.
+  const legacy = !period.evaluation;
   return (
     <div className="bg-card shadow-card grid min-w-0 grid-cols-1 overflow-hidden rounded-2xl lg:grid-cols-[minmax(17rem,0.72fr)_minmax(0,1.8fr)]">
       <section className="border-line flex min-w-0 flex-col gap-4 border-b p-5 lg:border-r lg:border-b-0">
@@ -121,20 +131,35 @@ export function ScoreHero({ period, previous, onOpenMetric, onOpenLedger }: {
           <h3 className="text-base font-bold">기간 평가 점수</h3>
           <Pill color={period.closing.closedAt ? "neutral" : "blue"}>{closingLabel(period)}</Pill>
         </div>
-        <ScoreRing total={period.total} onOpen={onOpenLedger} />
+        <ScoreRing total={period.total} max={max} onOpen={onOpenLedger} />
         <dl className="grid gap-2 text-xs">
-          {([["점수 산출", `${period.knownCount} / 8개 항목`], ["산출된 항목 합계", `${period.knownScore.toFixed(1)} / ${period.knownMax}점`], ["전체 배점", "100점"]] as const).map(([k, v]) => (
+          {([["합계에 든 항목", `${period.knownCount} / ${items.length}개`], ["항목 점수 합계", `${period.knownScore.toFixed(1)} / ${period.knownMax}점`], ["만점", `${max}점`]] as const).map(([k, v]) => (
             <div key={k} className="flex justify-between gap-2"><dt>{k}</dt><dd className="num font-bold whitespace-nowrap">{v}</dd></div>
           ))}
         </dl>
         <p className="border-line-faint mt-auto border-t pt-3 text-xs leading-relaxed">
-          {unavailable.length ? `${unavailable.join(" · ")} 항목의 근거가 더 필요합니다.` : "8개 항목을 합산한 점수입니다."}
+          {pending.length ? (
+            <span className="block">
+              {pending.join(" · ")} 항목은 아직 자동으로 세지 않아 정해 둔 규칙으로 매겼습니다
+              {/* 마감한 달은 그때 점수로 굳는다 — 계산이 나중에 들어와도 이 달은 바뀌지 않는다(적대적 리뷰 2026-10-13). */}
+              {period.closing.closedAt ? " — 이 달은 마감돼 그 점수로 굳었습니다." : " — 계산이 들어오면 진행 중인 달부터 점수가 섭니다."}
+            </span>
+          ) : null}
+          {!missing.length
+            ? (pending.length ? null : `${items.length}개 항목을 합산한 점수입니다.`)
+            : legacy
+              ? `${missing.join(" · ")} 항목의 근거가 더 필요합니다.`
+              : `${missing.join(" · ")} 항목은 자료가 없어 정해 둔 규칙으로 매겼습니다.`}
         </p>
       </section>
-      <div className="divide-line-faint grid min-w-0 grid-cols-1 divide-y sm:grid-cols-2 sm:divide-x sm:divide-y-0">
-        {column("수업·학생 관리", MANAGEMENT_METRICS)}
-        {column("학원 운영 영향", IMPACT_METRICS)}
-      </div>
+      <section className="flex min-w-0 flex-col">
+        <h3 className="px-5 pt-5 pb-1 text-base font-bold">항목별 점수 <span className="num text-xs font-medium">{items.length}개 · {max}점</span></h3>
+        <div className="sm:[&>*]:border-line-faint grid min-w-0 grid-cols-1 sm:grid-cols-2 sm:[&>*:nth-child(odd)]:border-r">
+          {items.map((m) => (
+            <MetricRow key={m.id} metric={m} color={itemColor(m, items)} before={beforeOf(previous, m)} tag={missingTag(m, period)} legacy={legacy} onOpen={onOpenMetric} />
+          ))}
+        </div>
+      </section>
     </div>
   );
 }

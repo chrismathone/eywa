@@ -56,27 +56,28 @@ export function applyPreRecord(monthly: WorkingPeriod[], policy: PreRecordPolicy
       const rule = policy[id];
       const targets = w.duty[id];
       if (!rule || w.end >= rule.before || !targets) continue;
+      // 기준 달의 **원래 수치**(작성률·처리율 %)를 평균한다 — 점수는 그 뒤 강사평가 설정이 매긴다(evaluate.ts).
       const used = monthly
         .filter((r) => rule.reference.includes(r.month) && !r.partial && r.end >= rule.before)
-        .map((r) => ({ month: r.month, value: metricOf(r, id).value, targets: r.duty[id] }))
+        .map((r) => ({ month: r.month, value: metricOf(r, id).raw ?? null, targets: r.duty[id] }))
         .filter((r): r is { month: string; value: number; targets: number } => r.targets > 0 && r.value !== null)
         .map(({ month, value }) => ({ month, value }))
         .sort((a, b) => a.month.localeCompare(b.month));
       const m = metricOf(w, id);
       const label = referenceLabel(used.map((r) => r.month));
-      m.value = used.length ? round1(used.reduce((n, r) => n + r.value, 0) / used.length) : null;
-      m.estimated = { since: rule.before, targets, reference: used };
+      m.raw = used.length ? used.reduce((n, r) => n + r.value, 0) / used.length : null;
+      m.value = null; // 설정이 매긴다.
+      m.estimated = { since: rule.before, targets, reference: used, unit: "%" };
       m.detail = [];
-      m.basis = used.length ? `기록 시작 전 · ${label}` : "기록 시작 전 · 기준 달 점수 없음";
+      m.basis = used.length ? `기록 시작 전 · ${label}` : "기록 시작 전 · 기준 달 기록 없음";
       m.reason = used.length
-        ? `${koreanDate(rule.before)}부터 기록했습니다. 그 전 달은 같은 강사의 ${label}${label.endsWith("평균") ? "으로" : "로"} 둡니다. ${used.map((r) => `${Number(r.month.slice(5))}월 ${r.value.toFixed(1)}점`).join(" · ")}.`
-        : `${koreanDate(rule.before)}부터 기록했습니다. 기준으로 삼을 달의 점수가 없어 산출하지 않았습니다.`;
-      if (m.value === null) m.gap = "기준 달 점수 없음";
+        ? `${koreanDate(rule.before)}부터 기록했습니다. 그 전 달은 같은 강사의 ${label}${label.endsWith("평균") ? "으로" : "로"} 둡니다. ${used.map((r) => `${Number(r.month.slice(5))}월 ${r.value.toFixed(1)}%`).join(" · ")}.`
+        : `${koreanDate(rule.before)}부터 기록했습니다. 기준으로 삼을 달의 기록이 없습니다.`;
+      if (m.raw === null) m.gap = "기준 달 기록 없음";
       else delete m.gap;
       changed = true;
     }
     if (!changed) continue;
-    Object.assign(w, scoreTotals(w.items));
     if (metricOf(w, "report").estimated) {
       w.dayStats = w.dayStats.map((s) => ({ ...s, target: 0, own: 0, proxy: 0, missing: 0, late: 0 }));
     }

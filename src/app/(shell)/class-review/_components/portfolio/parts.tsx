@@ -106,11 +106,12 @@ export function SectionTitle({ children, sub }: { children: ReactNode; sub?: str
   );
 }
 
-export function ScoreValue({ value, max, className = "" }: { value: number | null; max: number; className?: string }) {
+/** 점수 / 만점. 점수가 없으면 `empty`(설정으로 매긴 달 = '합계에서 뺌', 옛 달 = '산출불가')만. */
+export function ScoreValue({ value, max, empty = "산출불가", className = "" }: { value: number | null; max: number; empty?: string; className?: string }) {
   return (
     <b className={`num leading-none font-bold whitespace-nowrap ${className}`}>
-      {fmtScore(value)}
-      <small className="ml-1 text-xs font-medium">/ {max}점</small>
+      {value === null ? empty : fmtScore(value)}
+      {value === null ? null : <small className="ml-1 text-xs font-medium">{max > 0 ? `/ ${max}점` : "가감"}</small>}
     </b>
   );
 }

@@ -680,6 +680,19 @@ export function auditDetail(
         closed.length ? `마감 ${closed.join(", ")}` : null,
       );
     }
+    case "teacher_evaluation_settings_save": {
+      const enabled = num(m.enabled);
+      const maxTotal = num(m.maxTotal);
+      return join(enabled === null ? null : `지표 ${enabled}개`, maxTotal === null ? null : `만점 ${maxTotal}점`);
+    }
+    case "teacher_evaluation_preset_save":
+    case "teacher_evaluation_preset_delete":
+      return typeof m.name === "string" ? `‘${m.name}’` : null;
+    case "teacher_evaluation_entries_save": {
+      const saved = num(m.saved);
+      const cleared = num(m.cleared);
+      return join(saved ? `${saved}칸 입력` : null, cleared ? `${cleared}칸 비움` : null);
+    }
     case "ment_style_rebuild": {
       const built = num(m.built);
       const unchanged = num(m.unchanged);
@@ -1009,6 +1022,8 @@ export function auditDetail(
         reason ? `사유: ${reason}` : null,
       );
     }
+    case "withdrawal_report_update":
+      return join(str(m.operation), str(m.date) ? `처리일 ${str(m.date)}` : null);
     // 잘못 만든 수업 이력 **삭제**(원장·super_admin) — 행이 사라지므로 이 로그가 유일한 흔적이다.
     // metadata.snapshot에 삭제된 행 전체가 들어 있다(뷰어 title 툴팁의 원문 JSON으로 확인).
     case "enrollment_delete": {
@@ -2354,6 +2369,14 @@ export function auditDetail(
       // 보고서 없이 따로 낸 영상 숙제 — 어느 수업의 숙제인가(+ 낼 때는 제출 기한).
       const hw = str(m.homeworkDate);
       return join(hw ? `숙제 ${hw}` : null, str(m.deadline) ? `기한 ${str(m.deadline)}` : null);
+    }
+
+    case "lesson_report_video_homework_reject": {
+      // 영상이 붙은 칸을 미확인으로 되돌려 그 숙제의 영상을 반려 — 몇 개를 떼고 몇 개를 Drive 휴지통으로 옮겼나.
+      const hw = str(m.homeworkDate);
+      const n = (k: string) => (typeof m[k] === "number" && Number.isFinite(m[k]) ? (m[k] as number) : null);
+      return join(hw ? `숙제 ${hw}` : null, n("videos") !== null ? `영상 ${n("videos")}개 반려` : null,
+        n("trashed") !== null ? `휴지통 ${n("trashed")}개` : null, n("trashFailed") ? `휴지통 이동 실패 ${n("trashFailed")}개` : null);
     }
 
     case "demo_roster_apply": {

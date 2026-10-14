@@ -23,6 +23,8 @@ export type VideoHomeworkLedgerBaseRow = VideoHomeworkRosterRow & {
   assignedDates: string[]; teacherName: string | null; hasAssignableVideos: boolean;
   /** 보고서 없이 따로 낸 숙제의 날짜(extra-issues.ts) — 조회 기간 안의 것만. 칸의 '따로 낸 숙제' 표시와 취소에 쓴다. */
   extraDates: string[];
+  /** 반려한 숙제(숙제일 → 반려 시각, rejections.ts) — 칸을 짜는 쪽(화면)이 같은 칸을 세우게. */
+  rejected?: Record<string, string>;
 };
 
 /**
@@ -51,6 +53,7 @@ export async function loadClassVideos(tenantId: string, studentIds: string[], fr
       return { id: row.id, studentId: row.student_id, classId: row.class_id, postedAt: row.posted_at, homeworkDate, fingerprint: videoFingerprint(row.md5, row.bytes),
         manuallyAssigned: row.manual_assignment === "true", free: row.free === "true",
         playback: links ? { ...links, uploadedAt: row.uploaded_at } : null,
+        createdAt: row.created_at,
         arrivedAt: videoArrivedAt({ createdAt: row.created_at, postedAt: row.posted_at, uploadedAt: row.uploaded_at, fromClassnote: row.post_id != null, picked: !!homeworkDate }) };
     });
   } catch (e) {
@@ -112,15 +115,24 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
     .filter((pair) => activeClasses.has(pair.classId) && (!scope || scope.pairs.has(`${pair.classId}:${pair.studentId}`)));
   const assignedByPair = new Map<string, string[]>();
   const extraByPair = new Map<string, string[]>();
+  // 반려한 숙제(숙제일 → 반려 시각) — 화면·버튼 판정이 같은 칸을 짜게 줄에 싣는다(rounds.ts ②).
+  const rejectedByPair = new Map<string, Record<string, string>>();
+  // 검사 기록 칸에서 옮겨 남긴 숙제(keep-round.ts) — 칸은 서되 검사 기록 칸처럼 짠다(rounds.ts `kept`).
+  const keptByPair = new Map<string, string[]>();
   for (const row of assigned ?? []) {
     const key = `${row.classId}:${row.studentId}`;
     assignedByPair.set(key, [...(assignedByPair.get(key) ?? []), row.date]);
+    if (row.kept) keptByPair.set(key, [...(keptByPair.get(key) ?? []), row.date]);
     if (row.extra && row.date >= fromDate && row.date <= toDate) extraByPair.set(key, [...(extraByPair.get(key) ?? []), row.date]);
+    if (row.rejectedAt) rejectedByPair.set(key, { ...(rejectedByPair.get(key) ?? {}), [row.date]: row.rejectedAt });
   }
   const shownPairs = new Set(pairs.map((pair) => `${pair.classId}:${pair.studentId}`));
   const studentIds = [...new Set(pairs.map((row) => row.studentId))];
-  // 영상은 숙제가 나간 적이 있는 학생만 — 숙제가 없으면 채울 칸도 없다.
-  const homeworkStudents = [...new Set(pairs.filter((row) => assignedByPair.has(`${row.classId}:${row.studentId}`)).map((row) => row.studentId))];
+  // 영상은 숙제 칸이 있는 학생만 — 숙제가 없으면 채울 칸도 없다. 검사 기록만으로 선 숙제 칸도 ②의 뒷순위로 영상을 받으므로 함께 읽는다
+  // (안 읽으면 그 칸에 붙을 영상이 장부에서만 안 보이고, 자동 판정·미배정 알림과 다른 말을 한다 — 재리뷰 2026-10-13).
+  const markPairs = new Set(marks.filter((mark) => !!mark.homeworkDate).map((mark) => `${mark.classId}:${mark.studentId}`));
+  const homeworkStudents = [...new Set(pairs.filter((row) => assignedByPair.has(`${row.classId}:${row.studentId}`)
+    || markPairs.has(`${row.classId}:${row.studentId}`)).map((row) => row.studentId))];
   // 빈 칸 사유 재료 — 반별 숙제 날짜(기간 안) · 학생별 이미 있는 회차 날짜. 출결은 반·기간 범위로 한 번에(blank-facts.ts).
   const classDates = new Map<string, Set<string>>();
   const ownDates = new Map<string, Set<string>>();
@@ -148,11 +160,25 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
   // 원본 영상·숙제·기록은 이미 넓혀 읽었다. 학생마다 추가 조회하지 않고 그 재료를 그대로 쓴다.
   const videoPairs = new Map((videos ?? []).flatMap(video => video.classId ? [[`${video.classId}:${video.studentId}`,
     { classId: video.classId, studentId: video.studentId, tracked: true,
-      assignedDates: assignedByPair.get(`${video.classId}:${video.studentId}`) ?? [] }] as const] : []));
-  const assignmentRounds = buildLedgerRounds({ rows: [...videoPairs.values()], marks, videos: videos ?? [], fromDate: wideFrom, toDate: wideTo });
+      assignedDates: assignedByPair.get(`${video.classId}:${video.studentId}`) ?? [], rejected: rejectedByPair.get(`${video.classId}:${video.studentId}`),
+      kept: keptByPair.get(`${video.classId}:${video.studentId}`) }] as const] : []));
+  // 명단 줄의 칸도 같이 짠다 — '영상 배정'은 아직 영상이 없는 숙제 칸이 있는 줄에만 띄운다(아래).
+  const roundRows = new Map<string, { classId: string; studentId: string; tracked: boolean; assignedDates: string[]; rejected?: Record<string, string>; kept?: string[] }>(videoPairs);
+  for (const row of assignmentRows) {
+    const key = `${row.classId}:${row.studentId}`;
+    if (!roundRows.has(key)) roundRows.set(key, { classId: row.classId, studentId: row.studentId, tracked: true, assignedDates: assignedByPair.get(key) ?? [],
+      rejected: rejectedByPair.get(key), kept: keptByPair.get(key) });
+  }
+  const assignmentRounds = buildLedgerRounds({ rows: [...roundRows.values()], marks, videos: videos ?? [], fromDate: wideFrom, toDate: wideTo });
   const assignedVideoIds = new Set([...assignmentRounds.values()].flatMap(rounds => rounds.flatMap(round => round.videoId ? [round.videoId] : [])));
+  // 기간 안의 **영상이 없는** 숙제 칸(미확인·미수행)만 — 완료(영상·손 기록) 칸은 붙일 자리가 아니다. 옮겨 남긴 숙제도 손 배정할 수 있는 숙제다
+  // (DB 함수가 따로 낸 숙제 줄을 숙제로 본다). 검사 기록만 있는 칸은 손 배정이 거절한다.
+  const openRows = assignmentRows.map(row => ({ ...row, assignedDates: (assignmentRounds.get(`${row.classId}:${row.studentId}`) ?? [])
+    .filter(round => (round.assigned || round.kept) && !!round.homeworkDate && !round.videoId && round.status !== "submitted"
+      && round.homeworkDate >= fromDate && round.homeworkDate <= toDate).map(round => round.homeworkDate!) }));
+  const subjectOfClass = new Map(classes.map((row) => [row.id, row.subject]));
   const assignablePairs = assigned !== null && videos !== null && assignmentCandidates !== null
-    ? unassignedVideoPairs(assignmentRows, assignmentCandidates, assignedVideoIds) : null;
+    ? unassignedVideoPairs(openRows, assignmentCandidates, assignedVideoIds, (classId) => subjectOfClass.get(classId)) : null;
   const byClass = new Map(classes.map((row) => [row.id, row]));
   const byStudent = new Map(students.map((row) => [row.id, row]));
   const rows = pairs.flatMap((pair): VideoHomeworkLedgerBaseRow[] => {
@@ -163,6 +189,8 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
       studentName: student.name, school: student.school, grade: student.grade,
       hasAssignableVideos: assignablePairs?.has(`${pair.classId}:${pair.studentId}`) ?? false,
       extraDates: [...(extraByPair.get(`${pair.classId}:${pair.studentId}`) ?? [])].sort(),
+      ...(rejectedByPair.has(`${pair.classId}:${pair.studentId}`) ? { rejected: rejectedByPair.get(`${pair.classId}:${pair.studentId}`) } : {}),
+      ...(keptByPair.has(`${pair.classId}:${pair.studentId}`) ? { kept: [...keptByPair.get(`${pair.classId}:${pair.studentId}`)!].sort() } : {}),
       assignedDates: [...new Set(assignedByPair.get(`${pair.classId}:${pair.studentId}`) ?? [])].sort() }] : [];
   });
   // 화면으로는 명단에 선 (반 × 학생)의 기록만 — 넓혀 읽은 지점 전체 기록을 내려보내지 않는다.

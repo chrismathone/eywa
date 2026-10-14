@@ -23,6 +23,7 @@ export function followMetric(d: PortfolioSnapshot, user: SnapshotUser, w: Period
     });
   return {
     id: "follow", max: METRIC_MAX.follow, value: unresolved ? null : due.length ? round1((10 * completed) / due.length) : 0,
+    raw: unresolved || !due.length ? null : (100 * completed) / due.length,
     basis: `상담 ${consulted}건 · 후속 기한 도래 ${due.length}건`,
     reason: unresolved
       ? `마감 이후 수정되었거나 수정 시각이 없는 ${unresolved}건은 마감 당시 완료 상태를 확인해야 합니다.`
@@ -54,11 +55,12 @@ export function qualityMetric(d: PortfolioSnapshot, user: SnapshotUser, w: Perio
     }
   }
   const sameVersion = new Set(sheets.map((s) => s.version)).size === 1;
-  const value = !sheets.length ? 0 : sameVersion ? round1((10 * sheets.reduce((n, s) => n + s.rawAverage, 0)) / sheets.length / 4) : null;
+  const average = sheets.length && sameVersion ? sheets.reduce((n, s) => n + s.rawAverage, 0) / sheets.length : null;
+  const value = !sheets.length ? 0 : average === null ? null : round1((10 * average) / 4);
   return {
-    id: "quality", max: METRIC_MAX.quality, value, basis: `완료된 타인 평가 ${sheets.length}건`,
+    id: "quality", max: METRIC_MAX.quality, value, raw: average, basis: `완료된 타인 평가 ${sheets.length}건`,
     reason: !sheets.length
-      ? "해당 월에 완료된 타인 평가가 없어 0점입니다."
+      ? "해당 월에 완료된 타인 평가가 없습니다."
       : value === null
         ? "평가 문항이 달라 하나의 평균으로 합치지 않았습니다."
         : "처음 완료된 날이 속한 달에 반영했습니다. 자기 평가와 미완성 평가는 제외했습니다.",
