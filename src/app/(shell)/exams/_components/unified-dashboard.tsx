@@ -26,7 +26,7 @@ import { ScheduleTab } from "./schedule-tab";
 type Params = { from?: string; to?: string; subject?: string; kind?: string; missing?: string; student?: string; cohortClass?: string;
   schoolGroup?: string; gradeGroup?: string; page?: string; tab?: string; q?: string; month?: string;
   embed?: string; level?: string; tlevel?: string;
-  sort?: string; dir?: string; fSchool?: string; fClass?: string; fTeacher?: string; fScore?: string; fDelta?: string; fConsult?: string;
+  sort?: string; dir?: string; fSchool?: string; fClass?: string; fTeacher?: string; fKind?: string; fInfo?: string; fScore?: string; fDelta?: string; fConsult?: string;
   entry?: string; entryYear?: string; entryTerm?: string; entrySubject?: string; entrySlot?: string; entryClass?: string; entryDate?: string; entryMax?: string };
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 const validDate = (value: string | undefined): value is string => {
@@ -85,7 +85,8 @@ export async function UnifiedDashboard({ searchParams }: { searchParams: Params 
     ...(searchParams.embed === "1" ? { embed: "1" } : {}) };
   // 원장 정렬·필터는 원장 링크(페이지 이동·정렬 머리)에만 싣는다 — 다른 면으로 가면 풀린다.
   const ledgerHref = (patch: Record<string, string>) => href({ ...Object.fromEntries(Object.entries({ sort: searchParams.sort, dir: searchParams.dir, fSchool: searchParams.fSchool,
-    fClass: searchParams.fClass, fTeacher: searchParams.fTeacher, fScore: searchParams.fScore, fDelta: searchParams.fDelta, fConsult: searchParams.fConsult })
+    fClass: searchParams.fClass, fTeacher: searchParams.fTeacher, fKind: searchParams.fKind, fInfo: searchParams.fInfo,
+    fScore: searchParams.fScore, fDelta: searchParams.fDelta, fConsult: searchParams.fConsult })
     .filter((e): e is [string, string] => !!e[1])), ...patch });
   const href = (patch: Record<string, string>) => `/exams?${new URLSearchParams({ ...base, ...patch }).toString()}`;
   const exportHref = `/api/exams/unified-export?${new URLSearchParams({ from, to, subject, kind, missing: showMissing ? "1" : "0" })}`;

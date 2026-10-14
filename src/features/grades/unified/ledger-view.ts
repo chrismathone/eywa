@@ -1,5 +1,6 @@
 import { EXAM_SLOT_LABEL, isExamSlot } from "@/features/grades/exam-slots";
-import { schoolGradeLabel, scorePercent, type UnifiedRow } from "./model";
+import { BLANK_LABEL, BLANK_VALUE, parseValueFilter, passesValueFilter, type ValueFilter } from "@/lib/value-filter";
+import { KIND_LABEL, schoolGradeLabel, scorePercent, type UnifiedKind, type UnifiedRow } from "./model";
 
 /**
  * 성적 원장 열 머리의 **정렬·필터** — 순수 함수 한 벌(화면 머리의 선택지와 실제 거르기가 같은 판정을 쓴다).
@@ -9,7 +10,11 @@ export const LEDGER_SORTS = ["date", "name", "school", "subject", "class", "teac
 export type LedgerSort = (typeof LEDGER_SORTS)[number];
 export type LedgerView = {
   sort: LedgerSort; dir: "asc" | "desc";
-  school?: string; classId?: string; teacher?: string;
+  /**
+   * 엑셀식 값 필터(원장 2026-10-14) — 학교학년·반(id)·담임·시험(종류 키)·시험정보. 주소 규칙은 `value-filter.ts`
+   * (`a,b` = 이것만 · `!a,b` = 이것만 뺀다). 옛 단일 값 링크(`fClass=c2`)는 '이것만' 하나로 그대로 읽힌다.
+   */
+  school?: ValueFilter; classId?: ValueFilter; teacher?: ValueFilter; kind?: ValueFilter; info?: ValueFilter;
   score?: "high" | "mid" | "low"; delta?: "up" | "down" | "same"; consult?: "done" | "none";
 };
 
@@ -17,7 +22,8 @@ export function parseLedgerView(raw: Record<string, string | undefined>): Ledger
   const sort = (LEDGER_SORTS as readonly string[]).includes(raw.sort ?? "") ? raw.sort as LedgerSort : "date";
   const dir = raw.dir === "asc" || raw.dir === "desc" ? raw.dir : sort === "date" || sort === "score" || sort === "delta" ? "desc" : "asc";
   const pick = <T extends string>(v: string | undefined, allowed: readonly T[]) => (allowed as readonly string[]).includes(v ?? "") ? v as T : undefined;
-  return { sort, dir, school: raw.fSchool || undefined, classId: raw.fClass || undefined, teacher: raw.fTeacher || undefined,
+  const values = (v: string | undefined) => parseValueFilter(v) ?? undefined;
+  return { sort, dir, school: values(raw.fSchool), classId: values(raw.fClass), teacher: values(raw.fTeacher), kind: values(raw.fKind), info: values(raw.fInfo),
     score: pick(raw.fScore, ["high", "mid", "low"] as const), delta: pick(raw.fDelta, ["up", "down", "same"] as const),
     consult: pick(raw.fConsult, ["done", "none"] as const) };
 }
@@ -62,9 +68,11 @@ function sortKey(row: UnifiedRow, sort: LedgerSort): string | number | null {
 
 export function applyLedgerView(rows: readonly UnifiedRow[], view: LedgerView): UnifiedRow[] {
   const kept = rows.filter((row) =>
-    (!view.school || schoolOf(row) === view.school) &&
-    (!view.classId || row.classes.some((c) => c.id === view.classId)) &&
-    (!view.teacher || teachersOf(row).includes(view.teacher)) &&
+    passesValueFilter(view.school, [schoolOf(row)]) &&
+    passesValueFilter(view.classId, row.classes.map((c) => c.id)) &&
+    passesValueFilter(view.teacher, teachersOf(row)) &&
+    passesValueFilter(view.kind, [row.kind]) &&
+    passesValueFilter(view.info, infoValues(row)) &&
     (!view.score || scoreBand(row) === view.score) &&
     (!view.delta || (view.delta === "up" ? (row.delta ?? 0) > 0 : view.delta === "down" ? (row.delta ?? 0) < 0 : row.delta === 0)) &&
     (!view.consult || (view.consult === "done") === consulted(row)));
@@ -77,20 +85,42 @@ export function applyLedgerView(rows: readonly UnifiedRow[], view: LedgerView): 
   }).map((x) => x.row);
 }
 
-/** 열 머리 드롭다운 선택지 — 열 필터를 걸기 **전** 행에서 만든다(걸면 선택지가 사라져 되돌릴 수 없다). */
+const infoValues = (row: UnifiedRow) => {
+  const info = examInfoOf(row);
+  return info ? [info] : [];
+};
+
+/**
+ * 열 머리 필터 값 목록 — 열 필터를 걸기 **전** 행에서 만든다(걸면 선택지가 사라져 되돌릴 수 없다).
+ * 값이 빈 줄(반·담임·시험정보가 없는 줄)이 있으면 그 열 끝에 '(공백)'을 둔다(엑셀과 같다).
+ */
 export function ledgerOptions(rows: readonly UnifiedRow[]) {
   const schools = new Set<string>();
   const classes = new Map<string, string>();
   const teachers = new Set<string>();
+  const kinds = new Set<UnifiedKind>();
+  const infos = new Map<string, string>();
+  const blank = { classes: false, teachers: false, infos: false };
   for (const row of rows) {
     schools.add(schoolOf(row));
     for (const c of row.classes) classes.set(c.id, c.name);
-    for (const t of teachersOf(row)) teachers.add(t);
+    const ts = teachersOf(row);
+    for (const t of ts) teachers.add(t);
+    kinds.add(row.kind);
+    const info = examInfoOf(row);
+    // 시험정보는 최근 시험이 위로 — 글자순이면 `2026년 10월`이 `2026년 9월` 앞에 선다.
+    if (info) infos.set(info, (infos.get(info) ?? "") > row.date ? infos.get(info)! : row.date);
+    blank.classes ||= row.classes.length === 0;
+    blank.teachers ||= ts.length === 0;
+    blank.infos ||= !info;
   }
   const ko = (a: string, b: string) => a.localeCompare(b, "ko");
+  const withBlank = (list: { value: string; label: string }[], has: boolean) => has ? [...list, { value: BLANK_VALUE, label: BLANK_LABEL }] : list;
   return {
     schools: [...schools].sort(ko).map((s) => ({ value: s, label: s })),
-    classes: [...classes].sort((a, b) => ko(a[1], b[1])).map(([value, label]) => ({ value, label })),
-    teachers: [...teachers].sort(ko).map((t) => ({ value: t, label: t })),
+    classes: withBlank([...classes].sort((a, b) => ko(a[1], b[1])).map(([value, label]) => ({ value, label })), blank.classes),
+    teachers: withBlank([...teachers].sort(ko).map((t) => ({ value: t, label: t })), blank.teachers),
+    kinds: (Object.keys(KIND_LABEL) as UnifiedKind[]).filter((k) => kinds.has(k)).map((k) => ({ value: k, label: KIND_LABEL[k] })),
+    infos: withBlank([...infos].sort((a, b) => b[1].localeCompare(a[1]) || ko(a[0], b[0])).map(([info]) => ({ value: info, label: info })), blank.infos),
   };
 }
