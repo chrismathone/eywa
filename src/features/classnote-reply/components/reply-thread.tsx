@@ -48,7 +48,7 @@ export function ReplyThread({ view, ctx, hideReaction }: { view: Thread; ctx: Ex
                 {e.focus ? <span className="text-primary font-bold">답글 대상</span> : null}
               </div>
               <p className="text-foreground text-sm leading-relaxed whitespace-pre-wrap break-keep [overflow-wrap:anywhere]">{e.content}</p>
-              <ThreadMedia videos={e.videos} photos={e.photos} title={e.source === "comment" ? "학부모 댓글" : "학부모 글"} />
+              <ThreadMedia videos={e.videos} photos={e.photos} messageId={e.messageId} title={e.source === "comment" ? "학부모 댓글" : "학부모 글"} />
               {e.mediaNote ? <p className="text-text-dim mt-2 text-xs break-keep">{e.mediaNote}</p> : null}
             </li>
           ) : (

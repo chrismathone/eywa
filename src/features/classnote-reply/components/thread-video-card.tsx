@@ -45,10 +45,10 @@ export function VideoStatusLine({ video }: { video: ThreadVideo }) {
 }
 
 /**
- * 영상 팝업 — 이 창 위에 iframe(Drive 미리보기)으로 바로 재생. 재생기는 학생 '숙제 영상' 탭과 같은 `HomeworkVideoPlayer`
- * (접근 확인·권한 없음 문구 포함). Drive로 나가는 링크는 두지 않는다(원장 2026-10-04).
+ * 영상 팝업 — 학생 '숙제 영상' 탭과 같은 `HomeworkVideoPlayer`로 원본을 재생한다(실패 시 재시도·호환 재생).
+ * 학생 미확정 영상의 권한 판정에는 지금 글의 messageId를 넘긴다. Drive로 나가는 링크는 두지 않는다(원장 2026-10-04).
  */
-export function VideoDialog({ video, number, title, onClose }: { video: ThreadVideo | null; number: number; title: string; onClose: () => void }) {
+export function VideoDialog({ video, number, title, onClose, messageId }: { video: ThreadVideo | null; number: number; title: string; onClose: () => void; messageId?: string }) {
   const links = video?.playable ? video.links : null;
   return (
     <Dialog open={!!links} onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -58,7 +58,7 @@ export function VideoDialog({ video, number, title, onClose }: { video: ThreadVi
           <DialogDescription>학부모가 ClassNote에 올린 영상입니다.</DialogDescription>
         </DialogHeader>
         {links && video ? (
-          <HomeworkVideoPlayer preview={links.preview} thumbnail={links.thumbnail} uploadedAt={video.uploadedAt} title={`${title} 영상 ${number}`} />
+          <HomeworkVideoPlayer key={video.id} videoId={video.id} messageId={messageId} preview={links.preview} thumbnail={links.thumbnail} uploadedAt={video.uploadedAt} title={`${title} 영상 ${number}`} />
         ) : null}
       </DialogContent>
     </Dialog>
