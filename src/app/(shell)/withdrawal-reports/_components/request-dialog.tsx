@@ -9,6 +9,7 @@ import { useInFrame } from "@/components/workspace/use-in-frame";
 import { withEmbed } from "@/components/workspace/embed-context";
 import { requestWithdrawalReport } from "@/features/withdrawal-reports/server/actions";
 import { automaticExitKind, type StaffOption, type StudentOption } from "@/features/withdrawal-reports/model";
+import { requestManagers } from "@/features/withdrawal-reports/request-options";
 
 const control = "w-full rounded-md border bg-background px-3 py-2 text-sm";
 const toggle = (items: string[], id: string) => items.includes(id) ? items.filter(x => x !== id) : [...items, id];
@@ -28,25 +29,33 @@ export function RequestDialog({ staff, students, labels, scope }: {
   const inFrame = useInFrame();
   const student = students.find(s => s.id === studentId);
   const eligible = staff.filter(s => student?.courses.some(c => c.teacherId === s.id && subjects.includes(c.subject)));
-  const managers = staff.filter(s => ["admin", "manager", "master"].includes(s.role) && !teacherIds.includes(s.id) && !directorIds.includes(s.id));
-  const directors = staff.filter(s => s.role === "master" && !teacherIds.includes(s.id) && !managerIds.includes(s.id));
+  const managers = requestManagers(staff, student?.courses ?? [], subjects, teacherIds, directorIds);
+  const selectedManagers = managerIds.filter(id => managers.some(u => u.id === id));
+  const directors = staff.filter(s => s.role === "master" && !teacherIds.includes(s.id) && !selectedManagers.includes(s.id));
   const kind = automaticExitKind(student?.courses ?? [], subjects);
   const missingTeacher = student?.courses.some(c => subjects.includes(c.subject) && (!c.teacherId || !teacherIds.includes(c.teacherId)));
   function chooseSubjects(s: StudentOption | undefined, next: string[]) {
     setSubjects(next);
     const authors = eligibleAuthors(s, next);
     setTeachers(authors);
-    setManagers(staff.filter(u => ["admin", "manager", "master"].includes(u.role) && !authors.includes(u.id) && (u.approvalSubjects ?? u.subjects).some(x => next.includes(x))).map(u => u.id));
+    setManagers(requestManagers(staff, s?.courses ?? [], next, authors).map(u => u.id));
     setDirectors([]); setError("");
   }
   function eligibleAuthors(s: StudentOption | undefined, selected: string[]) {
     return staff.filter(u => s?.courses.some(c => selected.includes(c.subject) && c.teacherId === u.id)).map(u => u.id);
   }
+  function chooseTeachers(next: string[]) {
+    const principals = directorIds.filter(id => !next.includes(id));
+    const candidates = requestManagers(staff, student?.courses ?? [], subjects, next, principals);
+    // Keep valid manual choices; newly included subjects receive their default managers.
+    setManagers(candidates.filter(u => managerIds.includes(u.id) || !managers.some(previous => previous.id === u.id)).map(u => u.id));
+    setTeachers(next); setDirectors(principals); setError("");
+  }
   function submit() {
     setError("");
     startTransition(async () => {
       try {
-        const res = await requestWithdrawalReport({ studentId, teacherIds, managerIds, directorIds, subjects, effectiveDate: date, note });
+        const res = await requestWithdrawalReport({ studentId, teacherIds, managerIds: selectedManagers, directorIds, subjects, effectiveDate: date, note });
         if ("error" in res) { setError(res.error); return; }
         toast.success(`${teacherIds.length}명의 강사에게 보고서 작성을 요청했습니다.`);
         window.location.assign(inFrame ? withEmbed("/withdrawal-reports") : "/withdrawal-reports");
@@ -65,16 +74,17 @@ export function RequestDialog({ staff, students, labels, scope }: {
         </div>
         {student && <fieldset className="rounded-lg border px-3 py-2"><legend className="px-1 text-sm">종료할 과목</legend><div className="flex flex-wrap gap-x-5 gap-y-2">{[...new Set(student.courses.map(c => c.subject))].map(s => <label key={s} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={subjects.includes(s)} disabled={!!scope && !scope.includes(s)} onChange={() => chooseSubjects(student, toggle(subjects, s))} />{labels[s] ?? s}</label>)}</div><p className="mt-2 text-xs text-muted-foreground">{student.courses.filter(c => subjects.includes(c.subject)).map(c => c.className).join(" · ")}</p></fieldset>}
         <div className="grid gap-3 sm:grid-cols-3">
-          <div className="space-y-1 text-sm"><p>작성 강사</p><SearchableSelect portal options={staffOptions(eligible)} value="" multiValues={teacherIds} ariaLabel="작성 강사" placeholder="담당 강사 선택" onValueChange={id => { if (pending) return; const next = toggle(teacherIds, id); setTeachers(next); setManagers(v => v.filter(x => !next.includes(x))); setDirectors(v => v.filter(x => !next.includes(x))); }} /></div>
-          <div className="space-y-1 text-sm"><p>관리자 승인</p><SearchableSelect portal options={staffOptions(managers)} value="" multiValues={managerIds} ariaLabel="관리자 승인" placeholder="관리자 선택" onValueChange={id => { if (!pending) setManagers(v => toggle(v, id)); }} /></div>
+          <div className="space-y-1 text-sm"><p>작성 강사</p><SearchableSelect portal options={staffOptions(eligible)} value="" multiValues={teacherIds} ariaLabel="작성 강사" placeholder="담당 강사 선택" onValueChange={id => { if (!pending && eligible.some(u => u.id === id)) chooseTeachers(toggle(teacherIds, id)); }} /></div>
+          <div className="space-y-1 text-sm"><p>관리자 승인</p><SearchableSelect portal options={staffOptions(managers)} value="" multiValues={selectedManagers} ariaLabel="관리자 승인" placeholder={teacherIds.length ? "해당 과목 관리자 선택" : "담당 강사를 먼저 선택"} onValueChange={id => { if (!pending && managers.some(u => u.id === id)) setManagers(toggle(selectedManagers, id)); }} /></div>
           <div className="space-y-1 text-sm"><p>원장 승인 <span className="text-muted-foreground">(선택)</span></p><SearchableSelect portal options={staffOptions(directors)} value="" multiValues={directorIds} ariaLabel="원장 승인" placeholder="선택하지 않음" onValueChange={id => { if (!pending) setDirectors(v => toggle(v, id)); }} /></div>
         </div>
         <p className="text-xs text-muted-foreground">{directorIds.length ? "관리자 전원 승인 후, 선택한 원장 전원이 승인합니다." : "원장을 선택하지 않으면 지정한 관리자들이 최종 승인합니다."}</p>
+        {teacherIds.length > 0 && managers.length === 0 && <p className="text-sm text-att-late-ink">선택할 수 있는 해당 과목 관리자가 없습니다. 담당 과목과 승인자 선택을 확인해 주세요.</p>}
         <label className="block space-y-1 text-sm">강사에게 전달할 내용<textarea className={control} rows={2} maxLength={1000} value={note} onChange={e => setNote(e.target.value)} placeholder="확인할 내용이나 작성 요청 사유" /></label>
         {missingTeacher && <p className="text-sm text-att-late-ink">종료할 수강의 담당 강사를 모두 선택해 주세요. 담당자가 없는 반은 먼저 강사를 배정해 주세요.</p>}
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t bg-muted/20 px-5 py-3"><p className="text-xs text-muted-foreground">{student && subjects.length ? `${kind === "withdrawal" ? "전체 퇴원" : "과목 수강종료"} · 강사별 ${teacherIds.length}건` : "학생과 종료 과목을 선택해 주세요."}</p><div className="flex gap-2"><Button variant="outline" disabled={pending} onClick={() => setOpen(false)}>닫기</Button><Button disabled={pending || !studentId || !subjects.length || !teacherIds.length || !managerIds.length || missingTeacher} onClick={submit}>{pending ? "요청 중…" : "강사에게 작성 요청"}</Button></div></div>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t bg-muted/20 px-5 py-3"><p className="text-xs text-muted-foreground">{student && subjects.length ? `${kind === "withdrawal" ? "전체 퇴원" : "과목 수강종료"} · 강사별 ${teacherIds.length}건` : "학생과 종료 과목을 선택해 주세요."}</p><div className="flex gap-2"><Button variant="outline" disabled={pending} onClick={() => setOpen(false)}>닫기</Button><Button disabled={pending || !studentId || !subjects.length || !teacherIds.length || !selectedManagers.length || missingTeacher} onClick={submit}>{pending ? "요청 중…" : "강사에게 작성 요청"}</Button></div></div>
     </DialogContent>
   </Dialog>;
 }
