@@ -85,12 +85,12 @@ describe("eyebrow = 사이드바 그룹", () => {
   });
 
   it("메뉴를 다른 그룹(새 그룹)으로 옮기면 그 그룹 이름", () => {
-    nav.pathname = "/billing";
-    nav.search = "tab=expenses";
+    nav.pathname = "/attendance/live";
+    nav.search = "date=2026-09-01";
     const { container } = render(
       withNav(
-        <PageHeader eyebrow="수납 관리" title="수납 현황" />,
-        [{ href: "/billing?tab=expenses", groupId: "custom-office" }],
+        <PageHeader eyebrow="수업" title="오늘 출결" />,
+        [{ href: "/attendance/live", groupId: "custom-office" }],
         [{ id: "custom-office", label: "교무실", icon: "folder" }],
       ),
     );

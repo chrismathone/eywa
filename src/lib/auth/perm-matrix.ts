@@ -9,6 +9,7 @@ import {
   canWrite,
   mergeMostPermissive,
   resolveMatrix,
+  SYSTEM_ROLES,
   type Access,
   type AccessMatrix,
   type MenuKey,
@@ -80,6 +81,30 @@ export const getPermMatrix = cache(async (): Promise<AccessMatrix> => {
     return capLaboratory(capMakeupMode(resolveMatrix([]), "off"), (await getCurrentUser())?.tenantId ?? "");
   }
 });
+
+/**
+ * 이 지점에서 **아무도** 열 수 없는 메뉴 — 꺼 둔 기능 · 보강 모드 '끔' · 실험실에 들지 않은 지점의 실험실 메뉴 · AI 라이선스가 없는 AI 멘트.
+ * 역할 권한 · 개인 예외와 무관하게 위 조립의 **지점 단위 덮개만**(같은 함수 · 같은 차례) 전부 열린 표에 씌워 본다.
+ * '탭 및 메뉴 구성' 편집기가 '없는 메뉴'를 세우지 않는 데 쓴다(원장 2026-10-14 *"없는 메뉴 (접근할 수 없는)"*).
+ * 🔴 덮개를 더하면(새 지점 단위 제한) 여기에도 씌울 것. 조회 실패면 빈 목록 — 편집기가 메뉴를 더 보여 줄 뿐 아무것도 막지 않는다.
+ */
+export async function tenantClosedMenus(): Promise<MenuKey[]> {
+  try {
+    const [settings, user] = await Promise.all([getTenantSettings(), getCurrentUser()]);
+    const tenantId = user?.tenantId ?? "";
+    const open = Object.fromEntries(
+      MENU_KEYS.map((menu) => [menu, Object.fromEntries(SYSTEM_ROLES.map((role) => [role, "full"]))]),
+    ) as AccessMatrix;
+    const base = capMakeupMode(capDisabledModules(open, settings.modules.disabled), normalizeMakeupSettings(settings.makeups).mode);
+    // AI 멘트 라이선스는 역할마다 같은 판정이라 원장 줄로 한 번 본다(capSettingFeatures).
+    const capped = await capSettingFeatures(await capLaboratory(base, tenantId), tenantId, "master");
+    return MENU_KEYS.filter((menu) => SYSTEM_ROLES.every((role) => capped[menu][role] === "none"));
+  } catch (e) {
+    unstable_rethrow(e);
+    console.error("[perm-matrix] 지점에서 닫힌 메뉴 계산 실패 — 빈 목록으로(메뉴 구성 편집기가 더 보여 줄 뿐이다)", e);
+    return [];
+  }
+}
 
 /**
  * '지점 보기'(읽기 전용)에서 **아예 닫는** 메뉴 — DB가 이 화면들의 지점을 `auth_tenant_id()`가 아니라 로그인한 사람의

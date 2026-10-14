@@ -29,9 +29,9 @@ import { NavigationSection } from "./_components/navigation-section";
 import { ModulesSection } from "./_components/modules-section";
 import { MakeupsSection } from "./_components/makeups-section";
 import { isGenericTenant } from "@/features/owner/preset";
-import { capDisabledModules, isModuleEnabled } from "@/lib/modules";
-import { canAccess, resolveMatrix } from "@/lib/permissions";
-import { teacherMenuKeysFor } from "@/lib/navigation";
+import { isModuleEnabled } from "@/lib/modules";
+import { canAccess } from "@/lib/permissions";
+import { navigationEditorGates } from "@/features/owner/server/navigation-editor-gates";
 import { DataFace } from "./_components/data-face";
 import { DuplicatesFace } from "./_components/duplicates-face";
 import { SameNameFace } from "./_components/same-name-face";
@@ -204,6 +204,8 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
     permissionsSource ? getPermissionStaffOptions() : [],
     permissionsSource ? platformAccountIds(permissionPeople).then((ids) => [...ids]) : [],
   ]);
+  // 탭 및 메뉴 구성 — 편집기가 세우지 않을 메뉴(지점에서 닫힌 메뉴 · 강사 권한) 판정. 그 면을 열 때만 조회한다.
+  const navigationGates = tab === "navigation" ? await navigationEditorGates(settings) : null;
   // 세션 기간(과목 운영 안)의 연도. 기본은 KST 올해(세션은 연 단위로 편집한다).
   const thisYear = Number(kstToday().slice(0, 4));
   const yearParam = Number(sp.year);
@@ -320,12 +322,11 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
       {tab === "navigation" ? (
         <NavigationSection
           initial={settings.navigation}
-          // 강사뷰 안내 줄("강사 권한이 꺼져 있어 안 보입니다")의 근거 = 이 학원의 **강사 역할** 권한(override + 꺼진 모듈).
-          // 보는 사람의 매트릭스(getUserPermMatrix)를 쓰지 않는 이유 — 총괄은 잠금을 무시한 병합이라 실제 강사 화면과 달라진다.
-          teacherOpen={teacherMenuKeysFor(
-            "teacher",
-            capDisabledModules(resolveMatrix(settings.permissions.overrides), settings.modules.disabled),
-          )}
+          // 강사뷰 편집기에 세울 메뉴의 근거 = 이 학원의 **강사 역할** 권한(override + 지점에서 닫힌 메뉴) — 판정은 navigation-editor-gates.ts.
+          teacherOpen={navigationGates?.teacherOpen ?? []}
+          // 개인별 메뉴 권한으로 강사 계정에게 연 메뉴는 강사뷰 편집기에 남긴다 · 지점에서 아무도 못 여는 메뉴는 편집기에 세우지 않는다(원장 2026-10-14 "없는 메뉴").
+          teacherPersonal={navigationGates?.teacherPersonal}
+          closedMenus={navigationGates?.closed}
         />
       ) : null}
       {/* '기능' 면 = 원장·총괄만 편집(saveOwnerSection·0281a 트리거와 같은 선) — 위임 계정엔 저장이 실패할 폼 대신 안내.

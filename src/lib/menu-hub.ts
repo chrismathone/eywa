@@ -125,8 +125,6 @@ export const HUB_GROUPS: HubGroup[] = [
       fromMenu("classes", "반 목록·반 정보 관리"),
       fromMenu("textbooks", "교재·차수별 진도·과제"),
       fromMenu("lesson_reports", "수업보고서 작성·발송"),
-      face("lesson_reports", "/lesson-reports?tab=report", "보고서 설정", undefined, { tool: true, icon: MENU_ICON.report_settings }),
-      face("lesson_reports", "/lesson-reports?tab=ai_ment", "AI 멘트", undefined, { tool: true, icon: MENU_ICON.ai_ment }),
       fromMenu("class_review", "수업 참관·평가 기록"),
       fromMenu("teacher_onescreen", "담당 학생 수업 마감", { teacherOnly: true }),
       // 출석부의 다른 면 — 자주 쓰는 자리는 위 버튼이고, 나머지는 작은 줄로.
@@ -161,20 +159,14 @@ export const HUB_GROUPS: HubGroup[] = [
       fromMenu("withdrawal_reports", "담임 작성·관리자 승인"),
     ]),
   },
+  // 수납관리 = 화면 하나(`/billing`) — 교재·지출·환불·계산기·회차 확정은 그 화면 위 탭이라 메뉴에 따로 세우지 않는다(아래 `INNER_TABS`).
+  // 버튼이 하나뿐이라 메뉴 판을 거치지 않고 바로 연다(회의록과 같은 `direct`).
   {
     id: "billing",
     label: "수납관리",
     icon: MENU_ICON.billing,
-    kind: "hub",
-    note: "청구·수납과 관련 도구입니다.",
-    items: keep([
-      billingFace("/billing", "월별 청구·수납 현황", { icon: "wallet" }),
-      billingFace("/billing?tab=textbooks", "교재 신청·정산", { icon: "bookMarked" }),
-      billingFace("/billing?tab=expenses", "지출 결의·집행", { icon: "receipt" }),
-      billingFace("/billing?tab=refunds", "환불 요청서 처리", { icon: "undo" }),
-      billingFace("/billing?tab=calculator", undefined, { tool: true }),
-      billingFace("/billing?tab=sessions", undefined, { tool: true }),
-    ]),
+    kind: "direct",
+    items: keep([fromMenu("billing", "청구·수납 · 교재 · 지출 · 환불")]),
   },
   {
     id: "operation",
@@ -186,11 +178,6 @@ export const HUB_GROUPS: HubGroup[] = [
       fromMenu("staff", "직원 명부·근무 설정"),
       fromMenu("shuttle", "노선 편성·등하원 기록"),
       fromMenu("inventory", "자산·대여·실사·소모품"),
-      face("shuttle", "/shuttle/week", "주간 시간표", undefined, { tool: true, icon: "calendarClock" }),
-      face("shuttle", "/shuttle/today", "오늘 등하원", undefined, { tool: true, icon: "busStop" }),
-      face("shuttle", "/shuttle/live", "운행 현황", undefined, { tool: true, icon: "steering" }),
-      // ⚠️ 실시간 위치는 아직 준비 화면이다(인수인계 §7) — 그래도 **입구는 남긴다**(사이드바 하부탭에 있던 자리).
-      face("shuttle", "/shuttle/track", "실시간 위치", undefined, { tool: true, icon: "mapPin" }),
     ]),
   },
   // 🔴 **회의록은 업무군에 넣지 않고 왼쪽 탭 한 줄로 세운다** (원장 2026-09-10:
@@ -213,6 +200,45 @@ export const HUB_GROUPS: HubGroup[] = [
     items: keep([
       fromMenu("approvals", "기안·결재함"),
       fromMenu("documents", "서식·문서 저장소"),
+    ]),
+  },
+];
+
+/**
+ * 화면 안 **내부 탭**(면) — 메뉴(탭 및 메뉴 구성 · 사이드바 · 메뉴 판 · 휴대폰 메뉴)에 **따로 세우지 않는다**
+ * (원장 2026-10-14 *"내부 탭에 있는 메뉴는 따로 탭 및 메뉴 구성에 넣지 말것"* — 2026-09-02 재고관리 *"내부탭은 왼쪽 탭에서
+ * 안보여도 돼 … 그냥 '재고관리' 1개"*와 같은 결). 그 화면 위 탭바(FaceTabs)로 오간다.
+ * 🔴 여기 적는 것은 **부모 화면 위 탭바에 실제로 있는 면**뿐이다 — 탭바가 없는 화면(오늘 출결 `/attendance/live` · 출결 모드)은
+ *    메뉴에서 빼면 갈 길이 없어 위 업무군에 그대로 둔다.
+ * 이 목록을 읽는 곳 = 검색 팰릿(Shift+F, `innerTabsOf` — 탭바의 버튼도 이름으로 찾혀야 한다 · 부모 메뉴가 보일 때만) · 글의 메뉴 링크(멘션) ·
+ * 권한 표의 '이 권한으로 열리는 메뉴' · 부모 권한 없이 탭 권한만 받은 사람의 대신 입구(`hubGroupsFor`).
+ * ⚠️ 메뉴 구성의 저장값은 이 주소들을 모른다(읽을 때 지워진다 — `normalizeNavigationSettings`). 이름·숨김은 그 화면의 탭이 정한다.
+ */
+export const INNER_TABS: { parent: string; items: HubDest[] }[] = [
+  {
+    parent: "/lesson-reports",
+    items: keep([
+      face("lesson_reports", "/lesson-reports?tab=report", "보고서 설정", undefined, { icon: MENU_ICON.report_settings }),
+      face("lesson_reports", "/lesson-reports?tab=ai_ment", "AI 멘트", undefined, { icon: MENU_ICON.ai_ment }),
+    ]),
+  },
+  {
+    parent: "/billing",
+    items: keep([
+      billingFace("/billing?tab=textbooks", "교재 신청·정산", { icon: "bookMarked" }),
+      billingFace("/billing?tab=expenses", "지출 결의·집행", { icon: "receipt" }),
+      billingFace("/billing?tab=refunds", "환불 요청서 처리", { icon: "undo" }),
+      billingFace("/billing?tab=calculator"),
+      billingFace("/billing?tab=sessions"),
+    ]),
+  },
+  {
+    parent: "/shuttle",
+    items: keep([
+      face("shuttle", "/shuttle/week", "주간 시간표", undefined, { icon: "calendarClock" }),
+      face("shuttle", "/shuttle/today", "오늘 등하원", undefined, { icon: "busStop" }),
+      face("shuttle", "/shuttle/live", "운행 현황", undefined, { icon: "steering" }),
+      face("shuttle", "/shuttle/track", "실시간 위치", undefined, { icon: "mapPin" }),
     ]),
   },
 ];
@@ -300,6 +326,8 @@ export const SUPPORT_GROUPS: HubGroup[] = [
  */
 export const DEFAULT_FREQUENT_KEYS: MenuKey[] = ["timetable", "ecs", "attendance", "students"];
 
+export type HubGate = Gate;
+
 type Gate = {
   systemRole: SystemRole;
   permMatrix?: AccessMatrix;
@@ -341,9 +369,21 @@ export function hubGroupsFor(groups: HubGroup[], gate: Gate): HubGroup[] {
     .filter((g) => !g.hidden)
     .map((g) => ({
       ...g,
-      items: sortByMenuLayout(g.items.filter((d) => allowed(d, gate)), gate.menuLayout),
+      // 대신 입구는 부모 자리에 선다(정렬 뒤에 바꾼다 — 탭 주소엔 저장된 순서가 없다).
+      items: sortByMenuLayout(g.items.filter((d) => allowed(d, gate) || standInsOf(d, gate).length > 0), gate.menuLayout)
+        .flatMap((d) => (allowed(d, gate) ? [d] : standInsOf(d, gate))),
     }))
     .filter((g) => g.items.length > 0);
+}
+
+/**
+ * 부모 메뉴 권한은 없는데 그 화면 위 탭 중 **따로 권한이 있는 면**(보고서 설정 · AI 멘트)만 받은 사람의 입구 — 그 탭을 부모 자리에 대신 세운다.
+ * 내부 탭은 메뉴에 따로 세우지 않지만(원장 2026-10-14), 이런 사람은 부모 화면(수업보고서)에 못 들어가 탭바까지 닿지 못한다(리뷰 2026-10-14).
+ * 부모를 볼 수 있으면(권한 있음) 대신 세우지 않는다 · 부모를 메뉴 구성에서 감췄으면 이 사람에게도 감춘다.
+ */
+function standInsOf(parent: HubDest, gate: Gate): HubDest[] {
+  if (canAccess(gate.systemRole, parent.menuKey, gate.permMatrix) || isMenuHiddenByLayout(parent.href, gate.menuLayout)) return [];
+  return innerTabsOf(parent.href, gate).filter((t) => t.menuKey !== parent.menuKey);
 }
 
 /** 모든 표면이 공유하는 배치 해석. 외부 입력으로 목적지/권한을 만들지 않는다. */
@@ -389,6 +429,14 @@ export function configuredHubGroups(groups: readonly HubGroup[], menus?: MenuLay
 }
 
 /**
+ * 이 메뉴 화면 위 탭바의 면 — 검색 팰릿이 그 메뉴 바로 뒤에 싣는다. 권한(면마다의 권한 키)·꺼진 모듈의 면은 메뉴와 같은 게이트로 거른다.
+ * `parentHref`는 **이 사람에게 보이는** 메뉴의 주소여야 한다(부모가 안 보이면 면도 안 선다 — 호출부가 `hubGroupsFor`의 결과로 부른다).
+ */
+export function innerTabsOf(parentHref: string, gate: Gate): HubDest[] {
+  return (INNER_TABS.find((t) => t.parent === parentHref)?.items ?? []).filter((d) => allowed(d, gate));
+}
+
+/**
  * '자주 방문한 메뉴' 줄 — 방문 기록 순서(`keys`)를 목적지로 바꾼다. 권한이 없으면 그 줄만 빠진다.
  * ⚠️ 기록이 비면 첫 화면용 기본값으로 떨어진다(빈 자리를 남기지 않는다).
  */
@@ -412,7 +460,7 @@ export function frequentFor(gate: Gate, keys?: readonly MenuKey[]): HubDest[] {
  *
  * 🔴 팰릿의 메뉴 축은 이제 여기(HUB 목적지)를 읽는다 — 전엔 `NAV_GROUPS`만 읽어서, 메뉴 화면엔 있는데
  *    검색으론 못 가는 목적지가 23개 있었다(수학 강사 시트 · 수납 6면 · 학원 설정 11면 · 오늘 출결·출결 모드 · 셔틀 3면).
- *    사람이 눈으로 본 버튼은 이름으로도 찾혀야 한다.
+ *    사람이 눈으로 본 버튼은 이름으로도 찾혀야 한다 — 메뉴에서 뺀 화면 위 탭(`INNER_TABS`)도 팰릿이 부모 메뉴 뒤에 싣는다.
  * 🔴 **별칭은 그 메뉴 자신에게만** 붙인다(`href`가 메뉴 정의와 같을 때) — 면(`/billing?tab=…`)이 부모
  *    별칭을 물려받으면 "청구" 한 번에 수납 면 7개가 통째로 선다. 별칭 규칙 자체는
  *    [`menuSearchKeywords`](./navigation.ts) 한 곳이 정한다(두 벌로 적지 않는다).

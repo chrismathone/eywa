@@ -7,7 +7,7 @@
  *
  * 🔴 차례·묶음·이름은 여기서 새로 적지 않는다 — 사이드바·메뉴 판·'탭 및 메뉴 구성' 편집기가 쓰는 **같은 해석**
  *    ([`configuredHubGroups`](@/lib/menu-hub))을 그대로 부른다. 원장이 탭을 옮기거나 이름을 바꾸면 이 표도 따라 바뀐다.
- * 🔴 줄의 단위는 **권한 키**다(목적지가 아니다) — 수납의 일곱 면은 권한이 하나라 줄도 하나다. 그 줄이 함께 여는 내부 메뉴는
+ * 🔴 줄의 단위는 **권한 키**다(목적지가 아니다) — 출석부의 세 화면은 권한이 하나라 줄도 하나다(수납·셔틀의 면은 2026-10-14부터 메뉴가 아닌 화면 안 탭이다). 그 줄이 함께 여는 내부 메뉴는
  *    `covers`에 이름으로 적는다(무엇이 열리는지 표에서 보이게).
  * 🔴 이 목록은 메뉴 구성에서 감춘 줄도 **지우지 않고** `hiddenInMenu` 표식을 단다 — 감추는 것은 입구뿐이고 권한은 그대로다
  *    (주소를 치면 열린다, [[#77]]). 화면에 세울지는 아래 `editablePermissionRowGroups`가 정한다(감춘 줄은 세우지 않는다).
@@ -16,7 +16,7 @@
  *    구성에서 감춘 메뉴, 어느 역할의 칸도 바꿀 수 없는 역할 전용 화면 둘(선생님 원스크린 · 내 학습)은 세우지 않는다.
  * 강사 '내 메뉴' 표시 칸의 차례는 [`teacher-toggle-rows.ts`](./teacher-toggle-rows.ts)가 같은 방식으로 정한다.
  */
-import { configuredHubGroups, HUB_GROUPS, hubDestinationForPath, SUPPORT_GROUPS, type HubDest } from "@/lib/menu-hub";
+import { configuredHubGroups, HUB_GROUPS, hubDestinationForPath, INNER_TABS, SUPPORT_GROUPS, type HubDest } from "@/lib/menu-hub";
 import { navItemByKey } from "@/lib/navigation";
 import { isRoleOnlyMenu, MENU_KEYS, MENU_LABEL, type MenuKey } from "@/lib/permissions";
 import { SETTINGS_ROLE_HREF, SETTINGS_ROLE_KEYS, type SettingsRoleKey } from "@/lib/settings-role-catalog";
@@ -116,7 +116,13 @@ export function permissionRowGroups(navigation?: PermissionNavigation, options?:
       if (!visible(d)) continue;
       const at = placed.get(d.menuKey) ?? { row: newRow(d.menuKey), dests: [] };
       // 원장만 들어가는 면은 "이 권한으로 열리는 메뉴"로 적지 않는다 — 다른 역할에게 이 줄을 열어도 그 면은 안 열린다.
-      at.dests.push({ label: d.label, renamed: renamed(d), hidden: g.hidden === true || isMenuHiddenByLayout(d.href, menus), listed: !d.masterOnly });
+      const hidden = g.hidden === true || isMenuHiddenByLayout(d.href, menus);
+      at.dests.push({ label: d.label, renamed: renamed(d), hidden, listed: !d.masterOnly });
+      // 같은 권한으로 열리는 그 화면 위 탭(수납의 교재·지출 · 셔틀의 오늘 등하원 …)도 '이 권한으로 열리는 메뉴'에 적는다 — 메뉴에선 뺐지만
+      // (원장 2026-10-14) 이 줄이 여는 화면이다. 감춤은 부모를 따른다(탭은 부모 화면 안에 있다). 따로 권한이 있는 탭은 제 줄이 적는다.
+      for (const tab of INNER_TABS.find((x) => x.parent === d.href)?.items ?? []) {
+        if (tab.menuKey === d.menuKey && visible(tab)) at.dests.push({ label: tab.label, renamed: false, hidden, listed: !tab.masterOnly });
+      }
       placed.set(d.menuKey, at);
       keys.push(...rowsAt(d));
     }

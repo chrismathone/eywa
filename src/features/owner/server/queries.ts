@@ -164,6 +164,22 @@ export async function getUserDisplayNames(ids: readonly string[]): Promise<Recor
   return Object.fromEntries((data ?? []).map((u) => [u.id as string, (u.display_name as string) ?? ""]));
 }
 
+/**
+ * 계정의 시스템 역할 — '탭 및 메뉴 구성 → 강사뷰' 편집기가 개인별 메뉴 권한 중 **강사 계정 것만** 세는 데 쓴다(개인별 권한은 그 사람 역할의 칸만 고친다).
+ * 조회 실패는 null — 호출부가 전부 센다(편집기가 메뉴를 더 보여 줄 뿐이다).
+ */
+export async function getUserSystemRoles(ids: readonly string[]): Promise<Record<string, string> | null> {
+  if (ids.length === 0) return {};
+  const supabase = await createClient();
+  // 개인별 메뉴 권한은 스키마가 80줄로 묶는다 — `.in()` 한 번이면 된다(B3 기준 아래).
+  const { data, error } = await supabase.from("users").select("id, system_role").in("id", [...new Set(ids)]);
+  if (error) {
+    console.error("[owner] 계정 역할 조회 실패 — 개인별 메뉴 권한을 전부 센다", error);
+    return null;
+  }
+  return Object.fromEntries((data ?? []).map((u) => [String(u.id), String(u.system_role)]));
+}
+
 /** 역할·권한 면의 개인별 메뉴 권한 · 담당자 지정에서 고를 직원(재직 · 학생 제외). 어느 학원에서나 쓴다. 화면에 세우지 않는 계정은 뺀다. */
 export async function getPermissionStaffOptions(): Promise<{ id: string; name: string; role: string }[]> {
   const viewer = await getCurrentUser();

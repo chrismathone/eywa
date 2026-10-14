@@ -29,7 +29,8 @@ const BUSY: PermissionNavigation = {
     { id: "counsel", label: "상담", order: 1 },
   ],
   menus: [
-    { href: "/billing?tab=textbooks", groupId: "custom-desk", order: 0 },
+    // 같은 권한(출석부)의 면 하나만 새 탭으로 — 수납의 면은 2026-10-14부터 메뉴가 아니다(화면 안 탭).
+    { href: "/attendance/quick", groupId: "custom-desk", order: 0 },
     { href: "/students", groupId: "custom-desk", order: 1, label: "학생 명부" },
     { href: "/classes", order: 0 },
     { href: "/timetable", hidden: true },
@@ -42,9 +43,9 @@ describe("화면에 세우는 줄 — 탭 및 메뉴 구성에서 쓰고 있는 
   for (const [name, nav, generic, hiddenMenus] of [
     ["저장된 구성이 없을 때", undefined, false, []],
     ["일반판(기능 면 포함)", undefined, true, []],
-    // 강사뷰에서 감춘 교재 요청만 더 빠진다 — 시간표는 관리자뷰에서 감췄어도 강사 '내 메뉴'에 보여 남고,
-    // 수납관리는 탭을 감췄어도 다른 탭으로 옮긴 면(교재)이 보여 남는다.
-    ["옮김 · 감춤 · 개명 · 새 탭이 섞인 구성", BUSY, false, ["textbook_requests"]],
+    // 강사뷰에서 감춘 교재 요청 · 감춘 수납관리 탭(과 그 안의 급여 정책 설정)이 더 빠진다 — 시간표는 관리자뷰에서 감췄어도
+    // 강사 '내 메뉴'에 보여 남는다. 수납관리는 화면이 하나라(2026-10-14) 탭을 감추면 입구가 없다.
+    ["옮김 · 감춤 · 개명 · 새 탭이 섞인 구성", BUSY, false, ["textbook_requests", "billing", "payroll_settings"]],
   ] as const) {
     it(name, () => {
       const shown = editablePermissionRowGroups(nav, { generic }).flatMap((g) => g.rows.map((r) => r.menu));
@@ -90,16 +91,18 @@ describe("화면에 세우는 줄 — 탭 및 메뉴 구성에서 쓰고 있는 
     expect(rows.find((r) => r.menu === "timetable")?.hiddenInMenu).toBe(true);
     // 표식이 달린 채 선 줄은 강사 '내 메뉴'가 쓰는 메뉴뿐이다.
     expect(rows.filter((r) => r.hiddenInMenu).map((r) => r.menu)).toEqual(["timetable"]);
-    // 묶음 표식도 지우지 않는다 — 수납관리 탭은 감췄지만 다른 탭으로 옮긴 면(교재)이 보여서 남는다.
-    expect(editablePermissionRowGroups(BUSY).find((g) => g.id === "billing")?.hiddenInMenu).toBe(true);
+    // 감춘 수납관리 탭은 입구가 하나도 없어 묶음째 서지 않는다(전체 목록에는 표식과 함께 남는다 — 아래 describe).
+    expect(editablePermissionRowGroups(BUSY).some((g) => g.id === "billing")).toBe(false);
   });
 
   it("🔴 설정 권한은 관리자뷰만 따른다 — 강사뷰의 '설정' 묶음에 입구가 있어도 관리자뷰에서 감추면 빠진다", () => {
     const base = shownMenus({});
     expect(base).toEqual(expect.arrayContaining(["report_settings", "ai_ment"]));
-    const nav: PermissionNavigation = { menus: [{ href: SETTINGS_ROLE_HREF.report_settings, hidden: true }] };
-    expect(shownMenus(nav)).not.toContain("report_settings");
-    expect(shownMenus(nav)).toHaveLength(base.length - 1);
+    // 보고서 설정·AI 멘트는 수업보고서 화면 위 탭이라(2026-10-14) 수업보고서를 감추면 함께 빠진다.
+    const nav: PermissionNavigation = { menus: [{ href: "/lesson-reports", hidden: true }] };
+    expect(SETTINGS_ROLE_HREF.report_settings.startsWith("/lesson-reports")).toBe(true);
+    for (const menu of ["lesson_reports", "report_settings", "ai_ment"]) expect(shownMenus(nav)).not.toContain(menu);
+    expect(shownMenus(nav)).toHaveLength(base.length - 3);
   });
 });
 
@@ -131,9 +134,12 @@ describe("차례 = 왼쪽 탭 → 그 탭의 내부 메뉴", () => {
     expect(menusOf("class").filter((menu) => fromMenu.includes(menu))).toEqual(fromMenu);
   });
 
-  it("권한 하나가 여는 면이 여럿이면 그 이름을 함께 적는다 — 수납의 면 전부 · 출석부의 세 화면", () => {
-    const billing = group("billing")!.rows.find((r) => r.menu === "billing")!;
-    expect(billing.covers).toEqual(HUB_GROUPS.find((g) => g.id === "billing")!.items.map((d) => d.label));
+  it("권한 하나가 여는 면이 여럿이면 그 이름을 함께 적는다 — 수납의 화면 위 탭까지 · 출석부의 세 화면", () => {
+    // 수납의 교재·지출·환불 등은 메뉴가 아니라 화면 위 탭이지만(원장 2026-10-14) 이 권한이 여는 화면이라 이름을 적는다.
+    expect(group("billing")!.rows.find((r) => r.menu === "billing")!.covers).toEqual(["수납관리", "교재", "지출", "환불 요청서", "수강료 계산기", "회차 확정"]);
+    expect(group("operation")!.rows.find((r) => r.menu === "shuttle")!.covers).toEqual(["셔틀", "주간 시간표", "오늘 등하원", "운행 현황", "실시간 위치"]);
+    // 따로 권한이 있는 탭(보고서 설정 · AI 멘트)은 수업보고서 줄에 적지 않는다 — 제 줄이 따로 선다.
+    expect(group("class")!.rows.find((r) => r.menu === "lesson_reports")!.covers).toEqual([]);
     expect(group("class")!.rows.find((r) => r.menu === "attendance")!.covers).toEqual(["출석부", "오늘 출결", "출결 모드"]);
     // 면이 하나뿐이고 이름도 그대로면 적지 않는다(같은 말을 두 번 쓰지 않는다).
     expect(group("student")!.rows.find((r) => r.menu === "students")!.covers).toEqual([]);
@@ -162,6 +168,9 @@ describe("메뉴 버튼이 없는 권한은 그 권한을 쓰는 화면 아래�
     return inner;
   };
 
+  it("수업보고서 ← 보고서 설정 · AI 멘트 — 수업보고서 화면 위 탭이라 메뉴 버튼이 없다(원장 2026-10-14)", () => {
+    expect(after("class", "lesson_reports")).toEqual(["report_settings", "ai_ment"]);
+  });
   it("출석부 ← 랩실·JJ실 출석부 · 출석부 급여 비율 설정", () => {
     expect(after("class", "attendance")).toEqual(["seat_attendance", "attendance_salary_settings"]);
   });
@@ -197,8 +206,8 @@ describe("원장이 메뉴 구성을 바꾸면 표도 따라 바뀐다", () => {
   });
 
   it("면 하나만 다른 탭으로 옮겨도 그 권한의 줄은 대표 화면이 있는 탭에 남는다", () => {
-    expect(menusOf("custom-desk", BUSY)).not.toContain("billing");
-    expect(menusOf("billing", BUSY)).toContain("billing");
+    expect(menusOf("custom-desk", BUSY)).not.toContain("attendance");
+    expect(menusOf("class", BUSY)).toContain("attendance");
   });
 
   it("🔴 감춘 메뉴·감춘 탭의 권한도 전체 목록에는 남는다(표식만 단다) — 감춤은 입구뿐이고 권한은 그대로다. 화면에 세울지는 위 describe", () => {

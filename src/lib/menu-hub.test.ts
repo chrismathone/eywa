@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_FREQUENT_KEYS,
   HUB_GROUPS,
+  INNER_TABS,
   SUPPORT_GROUPS,
   frequentFor,
   hubGroupOfPath,
@@ -154,8 +155,9 @@ describe("면(하부탭)도 갈 길이 남아야 한다 — 사이드바에서 �
     "/help/icons",
   ]);
 
-  it("모든 하부탭 면이 허브 목적지에 있다", () => {
-    const hrefs = new Set(allDests.map((d) => d.href));
+  it("모든 하부탭 면이 허브 목적지에 있다 — 또는 부모 화면 위 탭(내부 탭)으로 간다", () => {
+    // 내부 탭(수납·셔틀의 면)은 메뉴에 따로 서지 않고(원장 2026-10-14) 그 화면 위 탭바로 간다 — 목록은 `INNER_TABS` 한 곳.
+    const hrefs = new Set([...allDests, ...INNER_TABS.flatMap((t) => t.items)].map((d) => d.href));
     const missing: string[] = [];
     for (const [, faces] of Object.entries(SUBTABS_BY_MENU)) {
       for (const f of faces ?? []) {
@@ -232,7 +234,10 @@ describe("메뉴에서 감춘 항목은 '자주 방문한 메뉴'에도 안 뜬�
  * 이름으로도 찾혀야 한다 — 그래서 팰릿은 이제 이 목록을 읽는다.
  */
 describe("검색 팰릿 메뉴 축 — 메뉴 화면에 선 버튼은 전부 이름으로 찾힌다", () => {
-  const rows = ALL.flatMap((g) => g.items.map((dest) => ({ dest, group: g.label })));
+  // 팰릿처럼 메뉴 바로 뒤에 그 화면 위 탭(`INNER_TABS`)을 싣는다(command-palette.tsx `innerTabsOf`).
+  const rows = ALL.flatMap((g) =>
+    g.items.flatMap((item) => [item, ...(INNER_TABS.find((t) => t.parent === item.href)?.items ?? [])]).map((dest) => ({ dest, group: g.label })),
+  );
   /** 팰릿과 **같은 매칭**을 재현한다(팰릿은 `keywords.includes(q)` 한 줄). */
   const hits = (q: string) =>
     rows
