@@ -55,6 +55,7 @@ export const INTERFACE_EN: Readonly<Record<string, string>> = {
   "상담 이력": "Counseling history", "+ 새 상담 기록": "+ New counseling record", "입학 상담": "Admission counseling",
   "상담 기록이 없습니다": "No counseling records", "건 더 보기": " more records", "후속 조치": "Follow-up",
   "예정일:": "Due:", "입학 상담 상세": "Admission counseling details", "상세 보기": "View details", "상담 내용": "Counseling notes", "진로·목표": "Plans and goals", "후속": "Follow-up",
+  "값 검색": "Search values", "모두 선택": "Select all", "(공백)": "(Blanks)",
   "성적 기록": "Grade records", "성적 흐름 · 월별 평균 정답률": "Grade trend · monthly average accuracy", "링크 끊기": "Revoke link",
   "숙제 영상 올리기": "Upload homework videos", "숙제 영상 보관 기능을 준비 중입니다.": "Homework video storage is not available yet.",
   "아직 보관된 숙제 영상이 없습니다.": "No homework videos have been saved yet.",

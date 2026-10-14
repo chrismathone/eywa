@@ -27,6 +27,26 @@ describe("성적 원장 정렬·필터", () => {
     expect(applyLedgerView(rows, parseLedgerView({ fConsult: "none" })).map((r) => r.key)).toEqual(["b"]);
     expect(ledgerOptions(rows).teachers.map((t) => t.value)).toEqual(["김", "이"]);
   });
+  it("엑셀식 값 필터 — 여러 값 · 뺀다 · (공백) · 시험·시험정보(원장 2026-10-14)", () => {
+    const rows = [
+      row({ key: "a", kind: "monthly", date: "2026-09-21", classes: [{ id: "c1", name: "A반", teacher: "김", days: 1 }] }),
+      row({ key: "b", kind: "school", date: "2026-07-01", schoolYear: 2026, term: 1, slot: "final", classes: [{ id: "c2", name: "B반", teacher: "이", days: 1 }] }),
+      row({ key: "c", kind: "daily", date: "2026-10-02", classes: [] }),
+      row({ key: "d", kind: "monthly", date: "2026-10-20", classes: [{ id: "c1", name: "A반", teacher: "김", days: 1 }] }),
+    ];
+    const keys = (q: Record<string, string>) => applyLedgerView(rows, parseLedgerView(q)).map((r) => r.key).sort();
+    expect(keys({ fClass: "c1,c2" })).toEqual(["a", "b", "d"]);
+    expect(keys({ fClass: "!c1" })).toEqual(["b", "c"]);
+    expect(keys({ fClass: "__blank" })).toEqual(["c"]);
+    expect(keys({ fTeacher: "!__blank" })).toEqual(["a", "b", "d"]);
+    expect(keys({ fKind: "monthly" })).toEqual(["a", "d"]);
+    expect(keys({ fInfo: "2026년 1학기 · 기말고사,__blank" })).toEqual(["b", "c"]);
+    const opts = ledgerOptions(rows);
+    expect(opts.classes.at(-1)).toEqual({ value: "__blank", label: "(공백)" });
+    expect(opts.kinds.map((k) => k.label)).toEqual(["일일테스트", "내신", "월말평가"]);
+    // 시험정보는 최근 시험이 위로(글자순이면 10월이 9월 앞에 선다)
+    expect(opts.infos.map((i) => i.value)).toEqual(["2026년 10월", "2026년 9월", "2026년 1학기 · 기말고사", "__blank"]);
+  });
   it("시험정보 — 월말은 몇 월, 내신은 연도·학기·시험", () => {
     const { examInfoOf } = helpers;
     expect(examInfoOf({ kind: "monthly", date: "2026-09-21" })).toBe("2026년 9월");
