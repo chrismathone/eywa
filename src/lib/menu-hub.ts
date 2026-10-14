@@ -159,14 +159,19 @@ export const HUB_GROUPS: HubGroup[] = [
       fromMenu("withdrawal_reports", "담임 작성·관리자 승인"),
     ]),
   },
-  // 수납관리 = 화면 하나(`/billing`) — 교재·지출·환불·계산기·회차 확정은 그 화면 위 탭이라 메뉴에 따로 세우지 않는다(아래 `INNER_TABS`).
-  // 버튼이 하나뿐이라 메뉴 판을 거치지 않고 바로 연다(회의록과 같은 `direct`).
+  // 수납관리 = 수납 · 교재 · 지출 버튼(원장 2026-10-15 *"교재와 지출은 수납에서 따로 내부탭에서 빼서 이전처럼 만들것"* — 10-14에 내부 탭으로
+  // 접었던 것을 되돌렸다). 환불 요청서·수강료 계산기·회차 확정은 그 화면 위 탭으로만 오간다(아래 `INNER_TABS`).
   {
     id: "billing",
     label: "수납관리",
     icon: MENU_ICON.billing,
-    kind: "direct",
-    items: keep([fromMenu("billing", "청구·수납 · 교재 · 지출 · 환불")]),
+    kind: "hub",
+    note: "청구·수납과 관련 도구입니다.",
+    items: keep([
+      billingFace("/billing", "월별 청구·수납 현황", { icon: "wallet" }),
+      billingFace("/billing?tab=textbooks", "교재 신청·정산", { icon: "bookMarked" }),
+      billingFace("/billing?tab=expenses", "지출 결의·집행", { icon: "receipt" }),
+    ]),
   },
   {
     id: "operation",
@@ -206,6 +211,7 @@ export const HUB_GROUPS: HubGroup[] = [
 
 /**
  * 화면 안 **내부 탭**(면) — 메뉴(탭 및 메뉴 구성 · 사이드바 · 메뉴 판 · 휴대폰 메뉴)에 **따로 세우지 않는다**
+ * (예외 = 수납의 교재·지출은 메뉴 버튼 — 원장 2026-10-15 *"이전처럼"*)
  * (원장 2026-10-14 *"내부 탭에 있는 메뉴는 따로 탭 및 메뉴 구성에 넣지 말것"* — 2026-09-02 재고관리 *"내부탭은 왼쪽 탭에서
  * 안보여도 돼 … 그냥 '재고관리' 1개"*와 같은 결). 그 화면 위 탭바(FaceTabs)로 오간다.
  * 🔴 여기 적는 것은 **부모 화면 위 탭바에 실제로 있는 면**뿐이다 — 탭바가 없는 화면(오늘 출결 `/attendance/live` · 출결 모드)은
@@ -225,8 +231,7 @@ export const INNER_TABS: { parent: string; items: HubDest[] }[] = [
   {
     parent: "/billing",
     items: keep([
-      billingFace("/billing?tab=textbooks", "교재 신청·정산", { icon: "bookMarked" }),
-      billingFace("/billing?tab=expenses", "지출 결의·집행", { icon: "receipt" }),
+      // 교재·지출은 메뉴 버튼이다(위 수납관리 — 원장 2026-10-15) · 여기엔 탭으로만 오가는 면만.
       billingFace("/billing?tab=refunds", "환불 요청서 처리", { icon: "undo" }),
       billingFace("/billing?tab=calculator"),
       billingFace("/billing?tab=sessions"),

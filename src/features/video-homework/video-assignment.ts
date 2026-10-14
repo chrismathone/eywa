@@ -22,6 +22,8 @@ export type AssignableVideo = {
   classId?: string | null;
   /** 학생이 숙제 없이 올리며 남긴 메모(올리기 사이트, 2026-10-13) — 무슨 영상인지. 없으면 null. */
   note: string | null;
+  /** 학생이 올리기 사이트에서 **숙제를 고르지 않고** 올렸다(`route.free`) — 장부가 숙제 칸을 자동으로 채우지 않는다(rounds.ts ②). */
+  free?: boolean;
   postId: number | null; revision: number; excluded: boolean;
   playback: { preview: string; thumbnail: string; uploadedAt: string | null } | null;
 };

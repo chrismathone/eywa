@@ -1,12 +1,14 @@
 import "server-only";
 import { isModuleEnabled } from "@/lib/modules";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
-import { canViewPayslip } from "../payslip-access";
+import { canManagePayslip, canViewPayslip } from "../payslip-access";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { readonlyTeacherViewError } from "@/lib/auth/view-as";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import type { SystemRole } from "@/lib/permissions";
 
 /**
- * 급여명세서 열람 게이트 — **모든 호출부(화면·조회·저장·발행·취소)가 이 함수 하나만 쓴다.**
+ * 급여명세서 열람 게이트 — 화면·조회·진입 링크가 함께 쓴다. 쓰기는 아래 관리 게이트를 쓴다.
  *
  * 통과 조건 = 원장 역할 · 학원 설정에서 지정한 사람(payslip-access.ts) **또는** super_admin.
  *
@@ -23,5 +25,18 @@ export async function canViewPayslipNow(user: { id: string; systemRole: SystemRo
   const settings = await getTenantSettings();
   if (!isModuleEnabled(settings.modules.disabled, "payroll")) return false;
   if (await isCurrentUserSuperAdmin()) return true;
-  return canViewPayslip(user, { viewerIds: settings.permissions.specialAccess.payslipViewerIds });
+  return canViewPayslip(user, {
+    viewerIds: settings.permissions.specialAccess.payslipViewerIds,
+    managerIds: settings.permissions.specialAccess.payslipManagerIds,
+  });
+}
+
+/** Actual caller only. Readonly restrictions precede all implicit owner/privileged allowances. */
+export async function canManagePayslipNow(): Promise<boolean> {
+  const user = await getCurrentUser();
+  if (!user || user.tenantView || await readonlyTeacherViewError()) return false;
+  const settings = await getTenantSettings();
+  if (!isModuleEnabled(settings.modules.disabled, "payroll")) return false;
+  if (await isCurrentUserSuperAdmin()) return true;
+  return canManagePayslip(user, { managerIds: settings.permissions.specialAccess.payslipManagerIds });
 }

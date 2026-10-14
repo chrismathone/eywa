@@ -110,9 +110,10 @@ export function CommandPalette({
       isGenericTenant,
     };
     return hubGroupsFor([...HUB_GROUPS, ...SUPPORT_GROUPS], gate).flatMap((group) =>
-      // 메뉴 뒤에 그 화면 위 탭바의 면(수납의 교재·환불 · 셔틀의 오늘 등하원 …)을 싣는다 — 메뉴엔 따로 안 서지만(원장 2026-10-14)
+      // 메뉴 뒤에 그 화면 위 탭바의 면(수납의 환불 요청서 · 셔틀의 오늘 등하원 …)을 싣는다 — 메뉴엔 따로 안 서지만(원장 2026-10-14)
       // 탭바의 버튼도 이름으로 찾혀야 한다. 면은 부모 메뉴가 보일 때만(`innerTabsOf`).
-      group.items.flatMap((item) => [item, ...innerTabsOf(item.href, gate)]).map((dest) => ({
+      // 차례 = 메뉴 판의 버튼 전부 → 그 뒤에 화면 위 탭(수납 · 교재 · 지출 → 환불 …, 리뷰 2026-10-15).
+      [...group.items, ...group.items.flatMap((item) => innerTabsOf(item.href, gate))].map((dest) => ({
         dest,
         group: group.label,
         // 라벨+업무군+영문 키+별칭 — 규칙은 [`hubSearchKeywords`](@/lib/menu-hub) 한 곳에 있다.
