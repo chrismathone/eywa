@@ -2,7 +2,7 @@
 
 /**
  * 일괄 입력 팝오버의 **추가 칸**(원장 2026-10-02 *"일괄 입력에 지금 없는거 추가"*) — 표 행에는 있는데 일괄 입력엔 없던 것:
- * 일일·확인 테스트 · 지난 영상 숙제 검사 · 오늘 영상 과제(+ 영상 첨부 링크 넣기) · 특이사항.
+ * 일일·확인 테스트 · 지난 영상 숙제 검사 · 오늘 영상 과제(+ 영상 첨부 링크 넣기 · 마감) · 특이사항.
  * 상태는 팝오버(bulk-apply.tsx)가 들고, 여기는 그리기만 한다(그 파일이 더 커지지 않게 갈랐다).
  *
  * ⚠️ 타임(시수)은 여기 없다 — 이미 '출결'과 함께 들어간다(새 기록에만). 찍혀 있는 기록의 시수를 일괄로 바꾸는 길은
@@ -23,6 +23,8 @@ export type BulkFieldConfig = {
   videoRows: number;
   /** '영상 첨부 링크 넣기'를 고를 수 있는 행 수. */
   linkRows: number;
+  /** 영상 숙제 마감(7일 · 다음 수업)을 고를 수 있는 행 수 — 마감 칸이 준비되지 않았으면 0(줄을 안 그린다). 안 주면 0. */
+  dueRows?: number;
   /** 지난 영상 숙제 검사 칸이 있는 행 수 — 읽기 전용 화면이면 0. */
   videoCheckRows: number;
   /**
@@ -91,12 +93,14 @@ export type BulkVideoState = {
   homework: boolean | null;
   /** 영상 첨부 링크 넣기 — '있음'을 고른 때만 뜻이 있다. */
   link: boolean;
+  /** 마감(원장 2026-10-15) — null = 적용 안 함. 영상 과제가 켜진(이번에 켜는 것 포함) 행에만 들어간다. */
+  due: "week" | "next" | null;
 };
-export const EMPTY_BULK_VIDEO: BulkVideoState = { check: null, homework: null, link: false };
+export const EMPTY_BULK_VIDEO: BulkVideoState = { check: null, homework: null, link: false, due: null };
 
 /** 영상 — 지난 숙제 검사(✓/✕) + 오늘 영상 과제(있음/없음) + 영상 첨부 링크 넣기. 대상 행이 없는 줄은 그리지 않는다. */
 export function BulkVideoFields({ config, value, onChange, checkPlan = null }: {
-  config: Pick<BulkFieldConfig, "videoRows" | "linkRows" | "videoCheckRows">;
+  config: Pick<BulkFieldConfig, "videoRows" | "linkRows" | "videoCheckRows" | "dueRows">;
   value: BulkVideoState;
   onChange: (next: BulkVideoState) => void;
   /** 고른 검사의 대상(찍을 칸·바꾸는 칸) — 고르는 즉시 보여 준다(눌러 보고 나서 알면 늦다). */
@@ -139,9 +143,24 @@ export function BulkVideoFields({ config, value, onChange, checkPlan = null }: {
           </button>
           {([true, false] as const).map((on) => (
             <button key={String(on)} type="button" aria-pressed={value.homework === on}
-              onClick={() => onChange(value.homework === on ? { ...value, homework: null, link: false } : { ...value, homework: on, link: on ? value.link : false })}
+              onClick={() => onChange(value.homework === on ? { ...value, homework: null, link: false } : { ...value, homework: on, link: on ? value.link : false, due: on ? value.due : null })}
               className={pill(value.homework === on)}>
               {on ? t("os.bulk.videoHwOn") : t("os.bulk.videoHwOff")}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {/* 마감(7일 · 다음 수업) — '없음'을 고르면 숨는다. 영상 과제가 켜진 행(이번에 켜는 것 포함)에만 들어간다(grid.ts planBulkApply). */}
+      {config.videoRows && config.dueRows && value.homework !== false ? (
+        <div className="flex flex-wrap items-center gap-1" title={t("os.row.videoDueTip")}>
+          <span className="text-text-dim mr-1 text-xs">{t("os.bulk.videoDue")}</span>
+          <button type="button" onClick={() => onChange({ ...value, due: null })} aria-pressed={value.due === null} className={pill(value.due === null)}>
+            {t("os.bulk.attNone")}
+          </button>
+          {(["week", "next"] as const).map((due) => (
+            <button key={due} type="button" aria-pressed={value.due === due}
+              onClick={() => onChange({ ...value, due: value.due === due ? null : due })} className={pill(value.due === due)}>
+              {t(due === "week" ? "os.row.videoDueWeek" : "os.row.videoDueNext")}
             </button>
           ))}
         </div>

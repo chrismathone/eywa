@@ -15,6 +15,7 @@ import { TodayAttendanceStrip } from "@/features/attendance/live/components/toda
 import { VideoHomeworkProvider } from "@/features/video-homework/components/video-homework-provider";
 import { getVideoHomeworkMarks } from "@/features/video-homework/server/queries";
 import { getOthersReportKeys, getVideoHomeworkAssignments } from "@/features/video-homework/server/assignments";
+import { getVideoHomeworkDues, type VideoHomeworkDueUi } from "@/features/video-homework/server/report-due";
 import { pickLessonMarks } from "@/features/video-homework/lesson-marks";
 import { assignmentKey, assignmentOf } from "@/features/video-homework/assignment";
 import { getSubmitLinkUi } from "@/features/video-submit/server/link-choice-db";
@@ -88,7 +89,8 @@ export default async function OneScreenPage({
     su.classId ? [{ classId: su.classId, studentId: st.id, homeworkDate: su.prevReport?.date ?? null }] : []));
   // 영상 첨부 링크 넣기(0328a) — 토글을 그릴 단계와 오늘 저장된 고르기. 실패·칸 미적용은 off(토글 없음 · 값 안 보냄).
   // 다른 선생님이 처음 쓴 오늘 보고서 줄(작성 계정 0172a) — 그 줄의 '영상 과제'는 잠근다(report-owner.ts 화면 겹, 실패 = 안 잠금).
-  const [loadedMarks, loadedAssignments, submitLinkUi, othersReportKeys] = await Promise.all([
+  // 영상 숙제 마감(원장 2026-10-15) — 오늘 저장된 '다음 수업' 마감. 실패·칸 미적용은 ready=false(마감 토글 없음 · 값 안 보냄).
+  const [loadedMarks, loadedAssignments, submitLinkUi, othersReportKeys, videoDueUi] = await Promise.all([
     getVideoHomeworkMarks(user.tenantId, rosterStudentIds, roster.date,
       videoHwPolicy.enabled ? videoHwTargets.flatMap((t) => (t.homeworkDate ? [t.homeworkDate] : [])) : []),
     // 지난 수업일엔 보고서 없이 따로 낸 숙제도 '있음'으로(검사 칸이 숨지 않게) — 오늘 값은 보고서 토글이라 덮지 않는다.
@@ -100,6 +102,9 @@ export default async function OneScreenPage({
     videoHwPolicy.enabled
       ? getOthersReportKeys(user.tenantId, rosterStudentIds, roster.date, viewAs?.id ?? user.id)
       : Promise.resolve([] as string[]),
+    videoHwPolicy.enabled
+      ? getVideoHomeworkDues(user.tenantId, rosterStudentIds, roster.date)
+      : Promise.resolve({ ready: false, dues: {} } as VideoHomeworkDueUi),
   ]);
   const othersReports = new Set(othersReportKeys);
   // null = 못 읽음 → 그 세션 동안 '영상 과제' 값을 보내지 않는다(저장돼 있던 '있음'을 '없음'으로 덮지 않게, 공급자 known=false).
@@ -114,12 +119,19 @@ export default async function OneScreenPage({
       if (othersReports.has(assignmentKey(st.id, roster.date, su.classId))) {
         su.videoHomework = assignmentOf(videoHomeworkAssignments, st.id, roster.date, su.classId) ?? undefined;
         su.videoSubmitLink = assignmentOf(submitLinkUi.choices, st.id, roster.date, su.classId) ?? undefined;
+        const othersDue = videoDueUi.dues[assignmentKey(st.id, roster.date, su.classId)];
+        su.videoHomeworkDue = othersDue ? "next" : undefined;
+        su.videoHomeworkDueDate = othersDue;
         continue;
       }
       if (su.videoHomework == null) {
         const saved = assignmentOf(videoHomeworkAssignments, st.id, roster.date, su.classId);
         if (saved != null) su.videoHomework = saved;
       }
+      // 마감 — 저장된 '다음 수업' 날짜는 늘 싣는다(표시). 고른 값은 세션이 없을 때만 저장값으로(날짜가 있으면 '다음 수업', 없으면 고른 적 없음 = 7일).
+      const savedDue = videoDueUi.dues[assignmentKey(st.id, roster.date, su.classId)];
+      if (su.videoHomeworkDue == null && savedDue) su.videoHomeworkDue = "next";
+      if (savedDue) su.videoHomeworkDueDate = savedDue;
       // 링크 넣기도 같은 규약 — 세션에 값이 없을 때만 저장된 보고서 값으로 되채운다.
       if (su.videoSubmitLink == null) {
         const savedLink = assignmentOf(submitLinkUi.choices, st.id, roster.date, su.classId);
@@ -149,7 +161,7 @@ export default async function OneScreenPage({
           "이미 찍힘"으로 건너뛰어 화면엔 찍힌 듯 보이고 새 날짜엔 기록이 없다(적대 리뷰 2026-10-02). */}
       <VideoHomeworkProvider key={roster.date} initial={videoHomeworkMarks} checkDate={roster.date}
         policy={roster.reportSettings.videoHomeworkPolicy} assignments={videoHomeworkAssignments}
-        assignmentsKnown={loadedAssignments !== null} submitLinkMode={submitLinkUi.mode} othersReports={othersReportKeys}>
+        assignmentsKnown={loadedAssignments !== null} submitLinkMode={submitLinkUi.mode} dueReady={videoDueUi.ready} othersReports={othersReportKeys}>
       <OneScreenClient
       key={roster.date}
       initial={roster.students}

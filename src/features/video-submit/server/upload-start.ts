@@ -75,7 +75,7 @@ async function freeUploadClassLive(db: ReturnType<typeof createAdminClient>, lin
 
 /**
  * 횟수 제한을 셀 링크들 — 보고서·원생 탭 링크는 그 링크 하나, **사이트 링크는 같은 학생 × 반의 최근 사이트 링크 전부**
- * (사이트 링크는 숙제일 + 7일까지 살아 만든 날에서 길어야 8일 — `SITE_LINK_LOOKBACK_DAYS`면 살아 있는 것을 다 덮는다).
+ * (사이트 링크는 숙제의 마감까지 살아 만든 날에서 길어야 15일(마감 최대 14일 + 1, due.ts) — `SITE_LINK_LOOKBACK_DAYS`면 살아 있는 것을 다 덮는다).
  */
 async function uploadLimitLinkIds(db: ReturnType<typeof createAdminClient>, link: { id: string; tenant_id: string; student_id: string; class_id: string; origin: string }): Promise<string[]> {
   if (link.origin !== "site") return [link.id];
@@ -155,7 +155,7 @@ export async function startLinkUpload(input: {
     // 되돌리면(영상 반려 — reject-videos.ts) 다시 열린다. 못 읽으면(null) 막지 않는다 — 숙제 확인은 위에서 끝났다.
     if (homeworkOk) {
       const open = await openHomeworkDates(db, link.tenant_id, [{ studentId: link.student_id, classId: link.class_id }], kstToday());
-      if (open && !(open.get(`${link.class_id}:${link.student_id}`) ?? []).includes(input.homeworkDate as string)) return fail("invalid", ALREADY_SUBMITTED);
+      if (open && !(open.get(`${link.class_id}:${link.student_id}`) ?? []).some((homework) => homework.date === input.homeworkDate)) return fail("invalid", ALREADY_SUBMITTED);
     }
     const note = link.origin === "site" && !homeworkOk ? siteNote(input.note) : null;
     const free = link.origin === "site" && !homeworkOk;

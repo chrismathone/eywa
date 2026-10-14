@@ -17,6 +17,7 @@ import { DEFAULT_PROMPTS, interpolate, assembleSingle } from "./prompt-defaults"
 import { isSkipStatus } from "./progress-status";
 import { asProgressMode, progressFactLabel } from "./progress-mode";
 import { progressInline } from "./progress-range";
+import { homeworkDueText } from "@/features/video-homework/due";
 
 const PLAIN_COMMENT_STYLE = "\n\n[말투 보완]\n기존 선생님의 말투와 문장 구성을 유지하세요. 기록에 없는 칭찬·다짐·전망을 덧붙이지 말고, '성장이 기대됩니다', '꾸준한 노력으로', '한 걸음 더 나아갔습니다' 같은 상투적인 마무리는 피하세요.";
 const VIDEO_COMMENT_GUIDANCE = "\n\n[영상 과제]\n제출 사실만으로 성실함이나 이해도를 평가하지 마세요. 영상 제출 여부는 별도로 확인해 붙이므로, 입력에 없는 지난 영상 숙제의 제출·미제출 문장을 만들지 마세요.";
@@ -51,6 +52,11 @@ export type ReportCommentInput = {
   homework: string; // 지난 과제 수행률("90%"). "" = 미입력/—. 옛 기록은 "완료"·"미제출"도 온다.
   homeworkToday: string; // 오늘 내준 과제(숙제 내용) — 0096a. 멘트 마무리 "오늘 과제는 ~입니다" 재료. "" = 미입력
   videoHomework?: boolean;
+  /**
+   * 영상 숙제를 언제까지 내나(원장 2026-10-15 — 학생이 숙제일을 내는 날로 헷갈렸다) — "10/22 (목)까지" · "다음 수업 10/15 (목)까지"
+   * (video-homework/due.ts `homeworkDueText`). 영상 과제가 있을 때만. 없으면 마감을 말하지 않는다(종전대로).
+   */
+  videoHomeworkDue?: string;
   textbook: string; // 교재명 — 공지 모드 B의 P1(수업 내용)에 사용. "" = 미입력
   specialNote: string; // 특이사항(강사 메모) — 0093a. 모드 A는 종합, B는 P2에 사용. "" = 미입력
   // 반 공통 서술(G6) — 강사가 반 단위로 1회 쓴 수업 맥락("2단원 심화, 대체로 이해도 좋았다").
@@ -90,6 +96,16 @@ function testLine(score: number | null, max: number, prev: number | null): strin
   return s;
 }
 
+/**
+ * 영상 숙제 마감을 사실 한 줄에 붙인다 — ". 영상 제출 마감: 10/22 (목)까지. 마감 날짜는 바꾸지 말고 그대로 쓰세요". 학생이 숙제일을 내는 날로
+ * 헷갈려 숙제 없이 올린 일이 있어(원장 2026-10-15) 날짜를 바꾸거나 빼지 말라고 함께 적는다. ⚠️ 지시를 값 옆 괄호에 넣지 말 것 — 모델이 괄호째
+ * 학부모 문장에 베낀다(아래 '라벨에 괄호 설명' 주석과 같은 까닭). 값은 화면이 만든 문구라 한 줄 · 길이 제한으로만 받는다.
+ */
+function dueClause(input: ReportCommentInput): string {
+  const due = input.videoHomeworkDue ? flatten(input.videoHomeworkDue).slice(0, 40) : "";
+  return due ? `. 영상 제출 마감: ${due}. 마감 날짜는 바꾸지 말고 그대로 쓰세요` : "";
+}
+
 /** onescreen 학생 + 과목 인덱스 → 멘트 입력. 빈 값은 빈 문자열(프롬프트가 침묵하도록). */
 export function buildReportCommentInput(
   st: OneScreenStudent,
@@ -100,6 +116,8 @@ export function buildReportCommentInput(
    *    모델이 6명분 관찰을 지어내 멘트가 서로 복사본처럼 된다(2026-08-13 실측).
    */
   classNotices?: ReadonlyMap<string, string>,
+  /** 보고서 날짜(수업일) — 영상 숙제 마감 문구의 기준(7일 = 이 날 + 7일). 안 주면 마감을 싣지 않는다. */
+  reportDate?: string,
 ): ReportCommentInput {
   const su = st.subjects[subjectIndex];
   // 🔴 평가값은 **그 행의 값**이다(row-fields.ts) — 학생 값을 그대로 쓰면 보강 행 멘트에 정규 수업의
@@ -122,6 +140,10 @@ export function buildReportCommentInput(
     // 되는 어긋남이 안 생긴다. 순수·멱등이라 이미 단위가 붙은 값은 그대로 지나간다(homework-pages.ts).
     homeworkToday: normalizeHomeworkPages(su?.homeworkToday ?? ""),
     ...(typeof su?.videoHomework === "boolean" ? { videoHomework: su.videoHomework } : {}),
+    // 마감 — 저장(서버)이 정하는 값과 같은 규칙(due.ts). '다음 수업'인데 아직 저장 전이라 날짜를 모르면 "다음 수업 전까지".
+    ...(su?.videoHomework === true && reportDate
+      ? { videoHomeworkDue: homeworkDueText(reportDate, su.videoHomeworkDue === "next" ? su.videoHomeworkDueDate : null, su.videoHomeworkDue === "next") }
+      : {}),
     textbook: su?.textbook ?? "",
     specialNote,
     classNotice,
@@ -162,7 +184,7 @@ export function buildFactBlock(input: ReportCommentInput): string {
   //    (2026-08-28 실측). 판정·표기는 homework-rate.ts 단일 소스(폴백 템플릿 homeworkRateClause와 같은 뜻).
   if (input.homework) facts.push(`과제: ${homeworkFactValue(flatten(input.homework))}`);
   if (input.homeworkToday) facts.push(`오늘 과제: ${flatten(input.homeworkToday)}`); // 마무리 문장 재료(0096a)
-  if (input.videoHomework === true) facts.push("오늘 영상 과제: 있음. 오늘 과제 안내에 짧게 포함하되 이미 영상 과제를 언급했다면 반복하지 마세요. 지난 숙제의 제출 여부를 뜻하지 않습니다.");
+  if (input.videoHomework === true) facts.push(`오늘 영상 과제: 있음${dueClause(input)}. 오늘 과제 안내에 짧게 포함하되 이미 영상 과제를 언급했다면 반복하지 마세요. 지난 숙제의 제출 여부를 뜻하지 않습니다.`);
   if (input.specialNote) facts.push(`특이사항: ${flatten(input.specialNote)}`);
   // 반 전체 안내 — 라벨에 **취급법까지** 적는다(프롬프트 본문은 원장이 편집 가능해 사라질 수 있다).
   if (input.classNotice)
@@ -208,7 +230,7 @@ export function buildP1FactBlock(input: ReportCommentInput): string | null {
   //    "하나도 해오지 못함"이 들어가 뜻이 뒤집힌다. (수행률 폴백 자체가 의미상 어색하나 모드 B는 현재 미사용.)
   const hw = flatten(input.homeworkToday || input.homework);
   if (hw) facts.push(`과제: ${hw}`);
-  if (input.videoHomework === true) facts.push("오늘 영상 과제: 있음. 오늘 과제 안내에 한 번만 짧게 포함하세요. 지난 숙제의 제출 여부는 추측하지 마세요.");
+  if (input.videoHomework === true) facts.push(`오늘 영상 과제: 있음${dueClause(input)}. 오늘 과제 안내에 한 번만 짧게 포함하세요. 지난 숙제의 제출 여부는 추측하지 마세요.`);
   // 반 공통 서술(G6)은 수업 내용 문단(P1)에만 — P2(태도·특이사항)에 새면 "항목 섞지 마세요" 규칙 위반.
   // ⚠️ 개별 P1 사실(교재·진도·과제)이 있을 때만 동봉 — 없으면 P1은 원래대로 null(문단 생략).
   // 반 서술 단독 P1은 "이 학생의 수업 내용"을 반 맥락만으로 지어내는 환각 벡터(태도만 입력된 케이스 등).

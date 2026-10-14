@@ -180,7 +180,7 @@ export function VideoSubmitForm(props: {
       <section className="bg-card border-line relative space-y-4 rounded-2xl border p-5">
         <ul className="text-text-dim space-y-1 text-sm break-keep">
           <li>영상 한 개에 {props.maxLabel}까지 올릴 수 있습니다.</li>
-          {/* 고른 숙제가 있으면 그 숙제의 기한(숙제일 + 7일), 없으면 링크가 끝나는 날 */}
+          {/* 고른 숙제가 있으면 그 숙제의 마감(선생님이 고른 다음 수업 또는 숙제일 + 7일, video-homework/due.ts), 없으면 링크가 끝나는 날 */}
           <li>{props.homeworkLabel ? `${props.lastDayLabel}까지 올릴 수 있습니다.` : `${props.lastDayLabel}까지 쓸 수 있는 링크입니다.`}</li>
           <li>올린 영상은 담당 선생님만 봅니다.</li>
           {props.freeUpload ? <li>숙제 없이 올리는 영상은 하루 {SITE_FREE_UPLOADS_PER_DAY}개까지 올릴 수 있습니다.</li> : null}

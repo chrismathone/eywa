@@ -182,6 +182,8 @@ type OnescreenSessionRow = {
       videoHomework?: boolean;
       /** 영상 첨부 링크 넣기(0328a) — saveOnescreenSession 입력과 같은 키. */
       videoSubmitLink?: boolean;
+      /** 영상 숙제 마감(원장 2026-10-15) — saveOnescreenSession 입력과 같은 키. */
+      videoHomeworkDue?: "week" | "next";
       /** 영어 템플릿 모드(2026-09-10) — 영어 행만 실린다(saveOnescreenSession 입력과 같은 키). */
       templateId?: string;
       nextTest?: string;
@@ -1666,6 +1668,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
         if (entry?.homeworkToday != null) su.homeworkToday = entry.homeworkToday;
         if (typeof entry?.videoHomework === "boolean") su.videoHomework = entry.videoHomework;
         if (typeof entry?.videoSubmitLink === "boolean") su.videoSubmitLink = entry.videoSubmitLink;
+        if (entry?.videoHomeworkDue === "week" || entry?.videoHomeworkDue === "next") su.videoHomeworkDue = entry.videoHomeworkDue;
         // 미발송 멘트/추세 초안 복원 — 세션에 실제 텍스트가 있을 때만 발송본 폴백 위에 덮는다.
         // (lesson_reports엔 updated_at이 없어 신구 비교 불가 → 빈 세션 초안은 발송본 복원을 지우지 않음.)
         if (entry?.draft?.trim()) su.draft = entry.draft;

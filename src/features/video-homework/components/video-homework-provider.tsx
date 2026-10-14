@@ -27,6 +27,8 @@ type Store = {
   assignmentsKnown: boolean;
   /** '영상 첨부 링크 넣기'를 고를 수 있는 단계(0328a) — off면 토글을 그리지 않고 그 값을 저장에 싣지도 않는다. */
   submitLinkMode: SubmitLinkMode;
+  /** 영상 숙제 마감(7일 · 다음 수업) 칸이 있고 그날 값을 읽었나(report-due.ts) — false면 마감 토글을 그리지 않고 저장에 싣지 않는다. */
+  dueReady: boolean;
   /** 오늘(checkDate) 다른 선생님이 처음 쓴 보고서 줄(`학생|날짜|반`) — 그 줄의 '영상 과제'는 잠근다(report-owner.ts 화면 겹). */
   othersReports: ReadonlySet<string>;
   /**
@@ -45,9 +47,9 @@ const keyOf = (classId: string, studentId: string) => `${classId}:${studentId}`;
 const EMPTY: VideoHomeworkAssignments = {};
 const NONE: readonly string[] = [];
 
-export function VideoHomeworkProvider({ initial, checkDate, policy = DEFAULT_VIDEO_HOMEWORK_POLICY, assignments = EMPTY, assignmentsKnown = true, submitLinkMode = "off", othersReports: othersReportList = NONE, children }: {
+export function VideoHomeworkProvider({ initial, checkDate, policy = DEFAULT_VIDEO_HOMEWORK_POLICY, assignments = EMPTY, assignmentsKnown = true, submitLinkMode = "off", dueReady = false, othersReports: othersReportList = NONE, children }: {
   initial: VideoHomeworkMark[]; checkDate: string; policy?: VideoHomeworkPolicy;
-  assignments?: VideoHomeworkAssignments; assignmentsKnown?: boolean; submitLinkMode?: SubmitLinkMode;
+  assignments?: VideoHomeworkAssignments; assignmentsKnown?: boolean; submitLinkMode?: SubmitLinkMode; dueReady?: boolean;
   othersReports?: readonly string[]; children: ReactNode;
 }) {
   const othersReports = useMemo(() => new Set(othersReportList), [othersReportList]);
@@ -108,8 +110,8 @@ export function VideoHomeworkProvider({ initial, checkDate, policy = DEFAULT_VID
     }
     return { applied: appliedKeys.size, failed: cells.length - appliedKeys.size };
   }, [checkDate, marks, t]);
-  const value = useMemo(() => ({ checkDate, marks, pending, policy, assignments, assignmentsKnown, submitLinkMode, othersReports, keptToday, markKept, change, changeMany }),
-    [checkDate, marks, pending, policy, assignments, assignmentsKnown, submitLinkMode, othersReports, keptToday, markKept, change, changeMany]);
+  const value = useMemo(() => ({ checkDate, marks, pending, policy, assignments, assignmentsKnown, submitLinkMode, dueReady, othersReports, keptToday, markKept, change, changeMany }),
+    [checkDate, marks, pending, policy, assignments, assignmentsKnown, submitLinkMode, dueReady, othersReports, keptToday, markKept, change, changeMany]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 
@@ -159,6 +161,12 @@ export function useVideoHomeworkSavedToday(): (studentId: string, classId: strin
 /** '영상 첨부 링크 넣기' 단계 — 공급자 밖이면 off(토글 없음 · 저장에 안 실림). */
 export function useSubmitLinkMode(): SubmitLinkMode {
   return useContext(Context)?.submitLinkMode ?? "off";
+}
+
+/** 영상 숙제 마감 토글을 그려도 되나(칸 있음 + 그날 값을 읽음) — 공급자 밖이면 false(토글 없음 · 저장에 안 실림). */
+export function useVideoHomeworkDueReady(): boolean {
+  const store = useContext(Context);
+  return !!store && store.dueReady && store.assignmentsKnown;
 }
 
 /** 영상 숙제 검사 저장소 — 공급자 밖이면 null(일괄 입력이 검사 칸을 다룰 수 있는지 가른다). */

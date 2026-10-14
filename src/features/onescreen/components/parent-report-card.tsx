@@ -59,6 +59,10 @@ export type ParentReportCardProps = {
     homeworkScore: string | null;
     homeworkToday: string | null; // 오늘 과제(숙제 내용) — 0096a(showHomeworkToday 토글)
     videoHomework?: boolean | null;
+    /** 영상 숙제 마감(저장값 — '다음 수업' 날짜, video-homework/due.ts). 없으면 수업일 + 7일. */
+    videoHomeworkDue?: string | null;
+    /** '다음 수업'을 골랐다(저장 전 미리보기 — 날짜를 아직 모른다). 안 주면 저장값으로 가른다. */
+    videoHomeworkNext?: boolean;
     attitude: string | null;
     notes: string | null;
     trendNote: string | null; // 학습 추세(종합분석) — 0091a(showTrendNote 토글)
@@ -105,7 +109,7 @@ export function ParentReportCard({
   const [ry, rm, rd] = (report.reportDate ?? "").split("-");
   const reportDate = ry && rm && rd ? `${ry}년 ${rm}월 ${rd}일` : "";
   const schoolGrade = fmtSchoolGrade(student?.school, student?.grade);
-  const videoDue = videoHomeworkDueLabel(report.reportDate, report.videoHomework);
+  const videoDue = videoHomeworkDueLabel(report.reportDate, report.videoHomework, report.videoHomeworkDue, report.videoHomeworkNext);
   // 성적 추이 그래프 표시 여부 — 토글 ON + 시험 또는 과제 중 하나라도 유효점 2개 이상(빈 카드 방지).
   const showTrendGraph =
     rpt.showTrendGraph && !!trend && (hasTrend(trend, "exam") || hasTrend(trend, "homework"));

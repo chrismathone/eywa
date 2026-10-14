@@ -63,7 +63,7 @@ export function RoundEditor({ cell, today, busy, save, onClose, onAssign }: {
         영상을 세지 않아 붙여도 보이지 않는다(rounds.ts ③ — tracked). */}
     {row.canAssignVideos && row.tracked && round.homeworkDate && onAssign ?<button type="button" className="text-primary w-fit text-sm underline" disabled={busy} onClick={onAssign}>
       {round.videoId ? "영상 배정 변경" : "이 숙제에 영상 배정"}</button> : null}
-    {rejecting ? <RejectVideosButton classId={row.classId} studentId={row.studentId} homeworkDate={round.homeworkDate!} today={today}
+    {rejecting ? <RejectVideosButton classId={row.classId} studentId={row.studentId} homeworkDate={round.homeworkDate!} due={round.due} today={today}
       disabled={busy || !row.editable} onDone={onClose} /> : null}
     <p className={styles.dim}>{rejecting ? "다른 숙제에 올라간 영상이면 반려하지 말고 영상 배정 변경에서 옮겨 주세요."
       // 검사 기록 칸 · 옮겨 남긴 숙제는 붙은 영상이 손 '미수행'을 이긴다(rounds.ts) — 저장이 무시된 것처럼 보이지 않게 먼저 알린다(재리뷰 2026-10-14).

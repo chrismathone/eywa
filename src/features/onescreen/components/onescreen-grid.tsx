@@ -19,7 +19,7 @@ import { GridToolbar, type GridBulkActions } from "./grid-toolbar";
 import { GridBodyRow, type GridConfig, type GridFieldHandlers, type GridRowActions } from "./grid-row";
 import { PrevRow } from "./prev-row";
 import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
-import { useSubmitLinkMode, useVideoHomeworkPolicy, useVideoHomeworkSaveOk, useVideoHomeworkStore } from "@/features/video-homework/components/video-homework-provider";
+import { useSubmitLinkMode, useVideoHomeworkDueReady, useVideoHomeworkPolicy, useVideoHomeworkSaveOk, useVideoHomeworkStore } from "@/features/video-homework/components/video-homework-provider";
 import { isVideoHomeworkEnabled } from "@/features/video-homework/policy";
 import { countCheckOverwrites, hasVideoCheckCell, planBulkVideoCheck, type BulkCheckRow } from "@/features/video-homework/bulk-check";
 import { submitLinkChoosable } from "@/features/video-submit/link-choice";
@@ -211,15 +211,19 @@ export function OneScreenGrid({
   const videoHwSaveOk = useVideoHomeworkSaveOk();
   const videoHwStore = useVideoHomeworkStore();
   const submitLinkMode = useSubmitLinkMode();
+  const videoDueReady = useVideoHomeworkDueReady();
   const checkRowOf = (r: (typeof copyRows)[number]): BulkCheckRow => ({
     classId: r.subject.classId, studentId: r.student.id, subjectKey: r.subject.subjectKey,
     grade: r.student.grade, homeworkDate: r.subject.prevReport?.date,
   });
+  const videoRows = videoHwPolicy && videoHwSaveOk
+    ? copyRows.filter((r) => !!r.subject.classId && isVideoHomeworkEnabled(videoHwPolicy, {
+        classId: r.subject.classId, subjectKey: r.subject.subjectKey ?? "math", grade: r.student.grade })).length
+    : 0;
   const bulkVideo = {
-    videoRows: videoHwPolicy && videoHwSaveOk
-      ? copyRows.filter((r) => !!r.subject.classId && isVideoHomeworkEnabled(videoHwPolicy, {
-          classId: r.subject.classId, subjectKey: r.subject.subjectKey ?? "math", grade: r.student.grade })).length
-      : 0,
+    videoRows,
+    // 마감(7일 · 다음 수업) — 행의 마감 토글과 같은 조건(영상 과제 행 + 마감 칸 준비됨).
+    dueRows: videoDueReady ? videoRows : 0,
     linkRows: videoHwSaveOk
       ? copyRows.filter((r) => submitLinkChoosable(submitLinkMode, videoHwPolicy, {
           classId: r.subject.classId, subjectKey: r.subject.subjectKey, grade: r.student.grade, studentName: r.student.name })).length
