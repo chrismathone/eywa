@@ -41,7 +41,8 @@ export function ExamsToolbar({ from, to, subject, kind, missing, q, subjectOptio
     <span aria-hidden>~</span>
     <input type="date" aria-label="종료일" className={dateInput} value={to} min={from} onChange={(e) => setDate("to", e.target.value)} />
     <FilterSelect paramName="subject" axisLabel="과목" value={subject} allValue="all" options={subjectOptions} />
-    <FilterSelect paramName="kind" axisLabel="시험" value={kind} allValue="all" options={kindOptions} />
+    {/* 열 머리 '시험'(fKind)·'시험정보'(fInfo)는 이 값 안에서 다시 좁힌다 — 여기를 바꾸면 둘을 푼다(어긋나 0건이 되지 않게, 리뷰 2026-10-14). */}
+    <FilterSelect paramName="kind" axisLabel="시험" value={kind} allValue="all" options={kindOptions} clearParams={["fKind", "fInfo"]} />
     <FilterSelect paramName="missing" axisLabel="미입력" allLabel="숨김" value={missing ? "1" : ""} options={[{ value: "1", label: "표시" }]} />
     <SearchToggle placeholder="학생 이름" defaultValue={q} />
     <span className="ml-auto" />

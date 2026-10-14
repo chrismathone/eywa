@@ -15,7 +15,6 @@ export function DashboardAssignmentForm({ user, initial, subjects }: {
 }) {
   const inherited = dashboardAssignmentOf(user, initial);
   const [value, setValue] = useState(inherited.assignment);
-  const [baseline, setBaseline] = useState(JSON.stringify(initial ?? null));
   const [note, setNote] = useState<{ error?: string; ok?: boolean } | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
@@ -26,9 +25,9 @@ export function DashboardAssignmentForm({ user, initial, subjects }: {
     startTransition(async () => {
       const next = { ...value, subjects: value.scope === "subjects" ? value.subjects : [] };
       try {
-        const result = await saveStaffDashboardAssignment(next, baseline);
+        const result = await saveStaffDashboardAssignment(next);
         setNote(result);
-        if ("ok" in result) { setBaseline(JSON.stringify(next)); router.refresh(); }
+        if ("ok" in result) router.refresh();
       } catch { setNote({ error: "저장하지 못했습니다. 잠시 뒤 다시 시도해 주세요." }); }
     });
   }}>

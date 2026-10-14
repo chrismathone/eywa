@@ -5,21 +5,8 @@ import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { isMergedStudent } from "@/features/students/merged";
 import type { OverlayHoldInput } from "../exit-overlay-model";
 
-/** 시간표 X 겹침의 조회 셋(`exit-overlay.ts`가 조립한다). */
+/** 시간표 X 겹침의 조회(`exit-overlay.ts`가 조립한다 — 담당 선생님 재료는 강사평가의 `loadChurnSource`). */
 type Supabase = Awaited<ReturnType<typeof createClient>>;
-export type ClassRow = { id: string; teacher_id: string | null; created_at: string; closed_at: string | null; class_name: string | null; is_special: boolean | null; is_active: boolean };
-
-/** 그 과목 반 전부 — 폐지·종강한 반도(지난 달의 그때 담임 · 퇴원 줄의 반을 찾는다). */
-export async function loadSubjectClasses(supabase: Supabase, subject: string): Promise<ClassRow[]> {
-  return fetchAllPaged<ClassRow>((f, t) =>
-    supabase
-      .from("classes")
-      .select("id, teacher_id, created_at, closed_at, class_name, is_special, is_active")
-      .eq("subject", subject)
-      .order("id")
-      .range(f, t),
-  );
-}
 
 export type HoldRow = Omit<OverlayHoldInput, "teacher"> & { subject: string; teacherId: string | null };
 type One<T> = T | T[] | null;
@@ -60,9 +47,10 @@ export async function loadCurrentHolds(supabase: Supabase, today: string): Promi
   });
 }
 
+/** 선생님 이름 — 직원관리에 있는 사람만(학생 계정 제외 · 퇴사자 포함, `getStaffList`와 같은 범위). */
 export async function teacherNames(supabase: Supabase, ids: string[]): Promise<Map<string, string>> {
   const rows = await fetchInChunks<{ id: string; display_name: string | null }>(ids, (chunk) =>
-    supabase.from("users").select("id, display_name").in("id", chunk),
+    supabase.from("users").select("id, display_name").in("id", chunk).neq("system_role", "student"),
   );
   return new Map(rows.flatMap((r) => (r.display_name ? [[r.id, r.display_name] as [string, string]] : [])));
 }

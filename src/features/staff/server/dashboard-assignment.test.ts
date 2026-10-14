@@ -18,16 +18,16 @@ beforeEach(() => { vi.clearAllMocks(); m.superAdmin = false; m.status.mockResolv
 describe("직원관리 대시보드 배정의 지점 경계", () => {
   it.each([false, true])("운영자 계정은 지점에서 배정하지 않는다 (행위자 운영자: %s)", async (isSuper) => {
     m.superAdmin = isSuper; m.status.mockResolvedValue("protected");
-    expect(await saveStaffDashboardAssignment(input, "null")).toMatchObject({ error: expect.stringContaining("지점에서 변경할 수 없습니다") });
+    expect(await saveStaffDashboardAssignment(input)).toMatchObject({ error: expect.stringContaining("지점에서 변경할 수 없습니다") });
     expect(m.save).not.toHaveBeenCalled();
   });
   it("보호 여부를 모르면 저장하지 않는다", async () => {
     m.status.mockResolvedValue("unknown");
-    expect(await saveStaffDashboardAssignment(input, "null")).toMatchObject({ error: expect.stringContaining("확인하지 못했습니다") });
+    expect(await saveStaffDashboardAssignment(input)).toMatchObject({ error: expect.stringContaining("확인하지 못했습니다") });
     expect(m.save).not.toHaveBeenCalled();
   });
   it("일반 지점 직원의 배정은 기존 저장 경로로 전달한다", async () => {
-    expect(await saveStaffDashboardAssignment(input, "null")).toEqual({ ok: true });
+    expect(await saveStaffDashboardAssignment(input)).toEqual({ ok: true });
     expect(m.save).toHaveBeenCalledOnce();
   });
 });

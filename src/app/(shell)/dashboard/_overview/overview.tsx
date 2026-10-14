@@ -283,7 +283,7 @@ export function Overview({
       sections={[v.students]}
     >
       {student && (student.levelSplit
-        ? <LevelSplitChart split={student.levelSplit} noEnrollment={student.programs.noEnrollment} />
+        ? <LevelSplitChart split={student.levelSplit} noEnrollment={student.academy?.noEnrollment ?? student.programs.noEnrollment} />
         : <Donut data={student.levels} label="전체 재원" />)}
     </Panel>
     ),
@@ -709,7 +709,7 @@ export function Overview({
       href={studentsEnrolledHref()}
       sections={[v.students]}
     >
-      {student && <GradeSplitChart split={student.gradeSplit} noEnrollment={student.programs.noEnrollment} />}
+      {student && <GradeSplitChart split={student.gradeSplit} noEnrollment={student.academy?.noEnrollment ?? student.programs.noEnrollment} />}
     </Panel>
     ),
     schools: (

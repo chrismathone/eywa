@@ -43,12 +43,22 @@ describe("resolveView — 보는 사람의 배치", () => {
     expect(mixed.phones).toBe(false);
   });
 
-  it("과목 관리자 — 제목 뒤 담당 과목, 과목으로 구분할 수 없는 카드는 제외", () => {
+  it("과목 관리자 — 제목 뒤 담당 과목, 원장이 넣은 카드는 다 보이고 과목으로 못 나누는 카드엔 '(학원 전체)'", () => {
+    // 원장 2026-10-14 *"위젯은 똑같이 넣어주고 내가 커스텀"* — 예전엔 학원 전체 카드를 숨겼다.
     const v = resolveView({ stored: stored("subject", [{ id: "panel:subjects", w: 6, h: 1 }, { id: "panel:attendance", w: 6, h: 1 }]), bundle: "subject", menus: ALL, subjectLabels: ["수학"] });
     expect(v.scopeLabel).toBe("수학");
-    expect(v.academyWide).toEqual([]);
+    expect(v.items?.map((i) => i.id)).toEqual(["panel:subjects", "panel:attendance"]);
+    expect(v.academyWide).toEqual(["panel:attendance"]);
+    expect(loadPlan(v, ALL).has("attendance")).toBe(true);
+    // 메뉴 권한 상한은 그대로 — 권한이 없으면 빠진다.
+    const capped = resolveView({ stored: stored("subject", [{ id: "panel:attendance", w: 6, h: 1 }]), bundle: "subject", menus: new Set(), subjectLabels: ["수학"] });
+    expect(capped.items?.map((i) => i.id)).toEqual([]);
+  });
+
+  it("과목 범위를 받은 다른 역할(실장 등)은 종전대로 학원 전체 카드를 숨긴다 — 편집기에 꼬리표가 안 서는 역할이라(리뷰 2026-10-14)", () => {
+    const v = resolveView({ stored: stored("manager", [{ id: "panel:subjects", w: 6, h: 1 }, { id: "panel:attendance", w: 6, h: 1 }]), bundle: "manager", menus: ALL, subjectScoped: true, subjectLabels: ["수학"] });
     expect(v.items?.map((i) => i.id)).toEqual(["panel:subjects"]);
-    expect(loadPlan(v, ALL).has("attendance")).toBe(false);
+    expect(v.academyWide).toEqual([]);
   });
 
   it("배치가 바뀌면 rev가 바뀐다(갱신이 옛 배치를 안 붙든다)", () => {
