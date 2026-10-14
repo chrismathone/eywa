@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { after } from "next/server";
 import { reportError } from "@/lib/observability/report-error";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { readonlyTeacherViewError, viewAsTeacher } from "@/lib/auth/view-mode";
@@ -124,12 +123,12 @@ export async function assignHomeworkVideo(input: { classId: string; studentId: s
       if (isOtherSubjectVideo({ classSubject: typeof videoClass === "string" ? subjectOf.get(videoClass) : null, subject: video.data.subject as string | null }, subjectOf.get(input.classId)))
         return { ok: false, error: "다른 과목 영상은 이 반 숙제에 배정할 수 없습니다." };
       // 검사 기록만 있는 숙제일 — DB 함수는 보고서 표시나 따로 낸 숙제만 숙제로 받는다. 그 칸을 옮겨 남긴 숙제로 먼저 남긴다(keep-round.ts:
-      // 판정·알림·'내 숙제'에는 안 들고 칸·손 배정에서만 숙제다). 손 기록(완료 등)은 그대로 둔다 — 붙은 영상이 ▶로 보인다.
+      // 판정·알림에는 안 들고 칸·손 배정에서만 숙제다). 손 기록(완료 등)은 그대로 둔다 — 붙은 영상이 ▶로 보인다.
       if (markOnly.has(input.homeworkDate!)) {
         const keep = await keepMarkOnlyRound(db, user.tenantId, user.id, { classId: input.classId, studentId: input.studentId, date: input.homeworkDate! });
         if (keep !== "kept" && keep !== "assigned") return { ok: false, error: "이 숙제 칸을 영상을 붙일 수 있게 남기지 못했습니다. 잠시 뒤 다시 시도해 주세요." };
         // 🔴 배정이 실패해도 남긴 줄은 거두지 않는다 — 거두는 사이 다른 창이 그 칸을 미확인으로 지우면 칸이 통째로 사라진다(재리뷰 2026-10-14).
-        //    남은 줄은 칸을 지킬 뿐이다(판정·알림·'내 숙제'에 안 든다 — 미확인으로 바꿀 때 생기는 줄과 같다).
+        //    남은 줄은 칸을 지킬 뿐이다(판정·알림에 안 든다 — 미확인으로 바꿀 때 생기는 줄과 같다).
       }
     }
     const { data, error } = await db.rpc("set_homework_video_assignment", {
@@ -140,10 +139,10 @@ export async function assignHomeworkVideo(input: { classId: string; studentId: s
     if (error) return { ok: false, error: "영상 배정을 저장하지 못했습니다. 잠시 뒤 다시 시도해 주세요." };
     const errors: Record<string, string> = { conflict: "다른 곳에서 영상 배정이 변경됐습니다. 창을 닫고 다시 열어 확인해 주세요.", denied: "이 영상의 배정을 변경할 권한이 없습니다.", unavailable: "업로드가 완료된 학생 영상만 배정할 수 있습니다.", invalid_homework: "해당 학생에게 실제로 낸 영상 숙제를 골라 주세요." };
     if (data !== "saved") return { ok: false, error: errors[String(data)] ?? "영상 배정 정보를 확인해 주세요." };
-    after(async () => {
-      try { await reconcileVideoHomework(user.tenantId, { studentId: input.studentId }); }
-      catch (error) { reportError(error, { scope: "video-homework.after-assignment", tenantId: user.tenantId }); }
-    });
+    // 응답 전에 끝낸다 — `after()`로 미루면 저장 응답이 다시 그린 장부에 판정 전 '미수행'이 남아 배정한 칸이 새로고침 전까지
+    // 안 바뀌었다(원장 2026-10-14 *"배정하고도 안바뀌길래 안된줄 알았더니 새로고침하니까 되네"*). 실패해도 배정은 저장됐다(정기 확인이 맞춘다).
+    try { await reconcileVideoHomework(user.tenantId, { studentId: input.studentId }); }
+    catch (error) { reportError(error, { scope: "video-homework.after-assignment", tenantId: user.tenantId }); }
     revalidatePath("/onescreen/video-homework"); revalidatePath("/lesson-reports/video-homework"); revalidatePath(`/students/${input.studentId}`);
     return { ok: true };
   } catch (e) { return { ok: false, error: e instanceof AssignmentError ? e.message : "영상 배정을 저장하지 못했습니다." }; }

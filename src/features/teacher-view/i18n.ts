@@ -2327,11 +2327,12 @@ export const SHEET_DICT = {
   "stu.filter.field.address": { ko: "주소", en: "Address" },
   "stu.filter.field.email": { ko: "이메일", en: "Email" },
   "stu.filter.field.memo": { ko: "메모", en: "Memo" },
-  "stu.filter.sort": { ko: "정렬", en: "Sort" },
-  "stu.filter.sortAria": { ko: "정렬 기준", en: "Sort by" },
-  "stu.filter.sort.grade": { ko: "학년순", en: "By grade" },
-  "stu.filter.sort.name": { ko: "이름순", en: "By name" },
-  "stu.filter.sort.recent": { ko: "등록일순", en: "By date added" },
+  // 열 머리 정렬 화살표(원장 2026-10-14) — 누르면 이 방향으로 정렬한다(읽어 주는 이름 = 누르면 일어날 일).
+  // 이름 정렬의 축은 한글 이름이다(영어 화면에 보이는 영어 이름이 아니다 — 출석부 ATTENDANCE_SORT_LABEL_EN과 같은 이유로 밝힌다).
+  "stu.sort.name.asc": { ko: "이름 오름차순 정렬", en: "Sort by Korean name, ascending" },
+  "stu.sort.name.desc": { ko: "이름 내림차순 정렬", en: "Sort by Korean name, descending" },
+  "stu.sort.grade.asc": { ko: "학년 오름차순 정렬", en: "Sort by grade, ascending" },
+  "stu.sort.grade.desc": { ko: "학년 내림차순 정렬", en: "Sort by grade, descending" },
   "stu.filter.noEnrollment": { ko: "미수강 제외", en: "Hide unenrolled" },
   "stu.filter.searchPh": { ko: "이름·학교·연락처·메모", en: "Name, school, phone or memo" },
   // 운영실 KPI ↗가 넘긴 학생 집합 칩(원장 2026-09-11) — 눌러 푼다. 프로그램 이름(EiE·인재원 영어)은 번역하지 않는다.
@@ -4441,17 +4442,19 @@ export const SHEET_DICT = {
   "cls.filter.dayAria": { ko: "요일 필터", en: "Day filter" },
   "cls.filter.teacher": { ko: "강사", en: "Teacher" },
   "cls.filter.teacherAria": { ko: "강사 필터", en: "Teacher filter" },
-  "cls.filter.sort": { ko: "정렬", en: "Sort" },
-  "cls.filter.sortAria": { ko: "정렬 기준", en: "Sort by" },
   "cls.filter.searchPh": { ko: "수업명, 강사, 강의실 검색", en: "Search class, teacher, room" },
   // ⚠️ 한국어 쪽 예시(`본원602`)는 실제 강의실 이름이라 영어 문장엔 넣지 않는다(영문 값에 한글 금지).
   "cls.filter.searchTitle": {
     ko: "수업명 · 강사명 · 강의실명으로 찾습니다(예: 본원602)",
     en: "Searches by class name, teacher name and room name",
   },
-  "cls.sort.name": { ko: "수업명순", en: "By class name" },
-  "cls.sort.students": { ko: "학생수순", en: "By student count" },
-  "cls.sort.teacher": { ko: "강사명순", en: "By teacher name" },
+  // 열 머리 정렬 화살표(원장 2026-10-14) — 누르면 이 정렬이 걸린다(읽어 주는 이름).
+  "cls.sort.name": { ko: "반 이름 오름차순 정렬", en: "Sort by class name, ascending" },
+  "cls.sort.name.desc": { ko: "반 이름 내림차순 정렬", en: "Sort by class name, descending" },
+  "cls.sort.students": { ko: "학생 많은 순으로 정렬", en: "Sort by student count, most first" },
+  "cls.sort.students.asc": { ko: "학생 적은 순으로 정렬", en: "Sort by student count, fewest first" },
+  "cls.sort.teacher": { ko: "담임 오름차순 정렬", en: "Sort by homeroom, ascending" },
+  "cls.sort.teacher.desc": { ko: "담임 내림차순 정렬", en: "Sort by homeroom, descending" },
   "cls.view.table": { ko: "테이블", en: "Table view" },
   "cls.view.cards": { ko: "카드", en: "Card view" },
 

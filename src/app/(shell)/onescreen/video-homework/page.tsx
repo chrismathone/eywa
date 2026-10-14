@@ -28,7 +28,8 @@ const NOTE = "border-line bg-bg-soft rounded-lg border px-3 py-2 text-xs";
  * *"관리자뷰에서는 모두가 보이지만, 각 강사뷰에서는 내가 출제한것만"* · *"강사뷰에서도 수동 체크. 관리자와 동일하게 스스로 낸 숙제만 체크 하게"*.
  *  · ⚠️ 게이트는 원스크린과 같은 **뷰 기준**(실 강사 · 겸직 강사뷰 · '다른 강사 뷰') — `teacher_onescreen`은 관리자 계열 역할이 none이라
  *    `requireAccess`로 막으면 겸직이 튕긴다(원스크린 page.tsx와 같은 이유).
- *  · 내가 낸 숙제 = 보고서 작성 계정(`created_by`)이 나이고 '영상 과제 있음'인 수업 + 내가 따로 낸 숙제(`teacher_id`, `getOwnVideoHomework`). '다른 강사 뷰'(열람 전용)면
+ *  · 내가 낸 숙제 = 보고서 작성 계정(`created_by`)이 나이고 '영상 과제 있음'인 수업 + 내가 선생님인 따로 낸 숙제 + 따로 낸 숙제가 없는 칸 중
+ *    검사 기록·옮겨 남긴 숙제로 선 날의 보고서를 내가 쓴 칸(`getOwnVideoHomework` — 원장 2026-10-14 관리자 강사 필터와 같은 칸). '다른 강사 뷰'(열람 전용)면
  *    그 강사가 낸 숙제를 보고(`effectiveTeacherId`), 체크는 열지 않는다.
  *  · 🔴 판정은 관리자 화면과 같다 — 그 반 × 학생의 숙제·기록·영상을 **전부** 넘겨 짝을 지은 뒤 내가 낸 칸만 세운다(`keepRounds`).
  *    ⚠️ 그래서 같은 반 × 학생의 남이 낸 숙제 날짜·기록도 화면 재료로 내려간다(그 칸은 안 그린다 — 판정을 관리자 화면과 같게 하려는 대가).
@@ -85,7 +86,7 @@ export default async function TeacherVideoHomeworkPage({ searchParams }: {
   const blankFacts = Object.fromEntries(Object.entries(ledger.blankFacts).filter(([pair]) => shown.has(pair)));
   const initialFilters = ledgerInitialFilters(param, new Set(rows.map((row) => row.classId)));
   return <main className="w-full min-w-0 space-y-4">
-    <PageHeader eyebrow="강사뷰" title="영상 제출 현황" description="내가 '영상 과제 있음'으로 낸 수업과 따로 낸 숙제만 학생별 회차로 셉니다." />
+    <PageHeader eyebrow="강사뷰" title="영상 제출 현황" description="내가 '영상 과제 있음'으로 낸 수업 · 따로 낸 숙제 · 내가 보고서를 쓴 날 손으로 확인한 숙제를 학생별 회차로 셉니다." />
     {own === null ? <p role="status" className={NOTE}>내가 낸 영상 숙제를 읽지 못했습니다. 잠시 뒤 다시 열어 주세요.</p> : null}
     {!settings.report.videoHomeworkPolicy.enabled ? <p className={NOTE}>
       영상 제출 검사가 꺼져 있습니다. 지난 기록은 장부에서 읽기 전용으로 확인할 수 있습니다.

@@ -50,8 +50,8 @@ describe("D1 — 운영실에서 온 원생목록의 보기 설정 저장", () =
   });
 
   it("운영실 축이 아닌 필터(정렬·상태)를 바꿔도 운영실 축은 저장값으로 돌아간다", () => {
-    const sorted = change(LANDING, "sort", "recent");
-    expect(studentListPrefsFromUrl(sorted, SAVED)).toEqual({ ...SAVED, sort: "recent" });
+    const sorted = change(LANDING, "sort", "name_desc");
+    expect(studentListPrefsFromUrl(sorted, SAVED)).toEqual({ ...SAVED, sort: "name_desc" });
     const status = change(LANDING, "status", "on_hold");
     expect(studentListPrefsFromUrl(status, SAVED)).toEqual(SAVED); // 상태는 저장 축이 아니다 → 저장할 것 없음
   });

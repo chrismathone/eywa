@@ -55,11 +55,14 @@ import {
   parseClassView,
   SORT_OPTIONS,
   STATUS_FILTERS,
+  classSortArrow,
+  type ClassSortAxis,
   teacherTeaches,
   type ViewMode,
 } from "@/features/classes/list-filters";
 import { NewClassTrigger } from "./_components/new-class-trigger";
 import { HeaderDayFilter } from "./_components/header-day-filter";
+import { SortArrow } from "@/components/sort-arrow";
 import { PAGE_TITLE_SUFFIX } from "@/lib/config/site-metadata";
 
 export async function generateMetadata() {
@@ -112,7 +115,10 @@ export default async function ClassesPage({
   const teacherRaw = sp.teacher ?? prefs.teacher;
   // 요일(다중, 콤마구분) — `days=all`은 파서가 빈 배열로 접는다(전체를 URL에 **명시**하는 값, HeaderDayFilter 주석).
   const days = sp.days !== undefined ? parseClassDays(sp.days) : prefs.days;
-  const sort = parseClassSort(sp.sort ?? prefs.sort);
+  const sortChosen = parseClassSort(sp.sort ?? prefs.sort);
+  // 강사 스코프엔 담임 열이 없다 — 담임 정렬(관리자뷰에서 저장한 값·옛 링크)은 **보여 주기·조회만** 반 이름순으로 접는다.
+  // 안 접으면 보이지 않는 열 기준으로 줄이 서고 어느 화살표도 진하지 않다(리뷰 2026-10-14). 저장값은 그대로(아래 `current`).
+  const sort = scopedTeacherId && (sortChosen === "teacher" || sortChosen === "teacher_desc") ? "name" : sortChosen;
   const view = parseClassView(sp.view ?? prefs.view);
 
   const settingsPromise = getTenantSettings();
@@ -189,7 +195,7 @@ export default async function ClassesPage({
     teacher: teacherReset ? "all" : (sp.teacher ?? prefs.teacher),
     days,
     // URL 값이 선택지 밖(옛 링크의 모르는 정렬·보기)이면 기본값으로 **보여 주기만** 하고 저장값은 건드리지 않는다(리뷰 2026-09-04).
-    sort: sp.sort === undefined || parseClassSort(sp.sort) === sp.sort ? sort : prefs.sort,
+    sort: sp.sort === undefined || parseClassSort(sp.sort) === sp.sort ? sortChosen : prefs.sort,
     view: sp.view === undefined || parseClassView(sp.view) === sp.view ? view : prefs.view,
   });
 
@@ -233,8 +239,23 @@ export default async function ClassesPage({
     status,
   }).toString()}`;
 
+  // 열 머리 정렬 화살표(원장 2026-10-14 *"수업목록도 똑같이 바꿔"* — 원생목록과 같은 꼴). 주소 = **지금 주소에 sort만**
+  // 바꾼다(종전 정렬 드롭다운 = HeaderFilter와 같다 — 보정값이 계정 저장값을 덮지 않게) · 쪽은 처음으로.
+  const sortLink = (axis: ClassSortAxis) => {
+    const { active, dir, next } = classSortArrow(sort, axis);
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(sp)) if (typeof value === "string" && key !== "page") params.set(key, value);
+    params.set("sort", next);
+    const label = sheetT(lang, SORT_OPTIONS.find((o) => o.value === next)!.key);
+    return { active, dir, href: `/classes?${params}`, label };
+  };
+  const ariaSortOf = (axis: ClassSortAxis) => {
+    const { active, dir } = classSortArrow(sort, axis);
+    return active ? (dir === "asc" ? ("ascending" as const) : ("descending" as const)) : ("none" as const);
+  };
   // 열 머리 필터 한 벌 — 표 보기는 `<th>` 안에, 카드 보기는 격자 위 머리 줄에 **같은 것**이 선다(필터 코드를 두 벌 두지 않는다).
-  const head = {
+  const head: HeadCells = {
+    ariaSort: { name: ariaSortOf("name"), students: ariaSortOf("students"), teacher: ariaSortOf("teacher") },
     kind: (
       <HeaderFilter
         paramName="kind"
@@ -248,22 +269,23 @@ export default async function ClassesPage({
     subject: (
       <HeaderFilter paramName="subject" value={subject} options={subjectOptions} axisLabel={sheetT(lang, "cls.filter.subject")} allValue="all" explicitAll />
     ),
-    sort: (
-      <HeaderFilter
-        paramName="sort"
-        value={sort}
-        options={SORT_OPTIONS.filter((o) => o.value !== "name" && (showTeacher || o.value !== "teacher" || sort === "teacher")).map((o) => ({
-          value: o.value,
-          label: sheetT(lang, o.key),
-        }))}
-        axisLabel={sheetT(lang, "cls.filter.sort")}
-        allValue="name"
-        allLabel={sheetT(lang, "cls.sort.name")}
-        explicitAll
-        showAll
-      />
+    // 필터가 없는 열(반 이름·학생 수)은 열 이름 글자까지 정렬 링크다. hintId = 문서 안에서 하나뿐(표·카드 보기는 둘 중 하나만 선다).
+    name: (
+      <SortArrow {...sortLink("name")} hintId="classes-sort-name-hint">
+        <span className="text-foreground">{sheetT(lang, "cls.col.name")}</span>
+      </SortArrow>
     ),
-    teacher: <HeaderFilter paramName="teacher" value={teacherId} options={teacherOptions} axisLabel={sheetT(lang, "cls.col.teacher")} allValue="all" explicitAll cap={200} />,
+    students: (
+      <SortArrow {...sortLink("students")} hintId="classes-sort-students-hint">
+        <span className="text-foreground">{sheetT(lang, "cls.col.students")}</span>
+      </SortArrow>
+    ),
+    teacher: (
+      <span className="inline-flex items-center gap-0.5">
+        <HeaderFilter paramName="teacher" value={teacherId} options={teacherOptions} axisLabel={sheetT(lang, "cls.col.teacher")} allValue="all" explicitAll cap={200} />
+        <SortArrow {...sortLink("teacher")} />
+      </span>
+    ),
     days: <HeaderDayFilter value={days} />,
     // 기본값(운영)이 종강·폐지를 **숨기므로** 값을 항상 적는다(showAll). 저장하지 않는 축이라 explicitAll은 아니다(기본은 파라미터 없음).
     status: (
@@ -355,7 +377,12 @@ export default async function ClassesPage({
   );
 }
 
-type HeadCells = { kind: React.ReactNode; subject: React.ReactNode; sort: React.ReactNode; teacher: React.ReactNode; days: React.ReactNode; status: React.ReactNode };
+type HeadCells = {
+  kind: React.ReactNode; subject: React.ReactNode; name: React.ReactNode; students: React.ReactNode;
+  teacher: React.ReactNode; days: React.ReactNode; status: React.ReactNode;
+  /** 정렬 열의 지금 상태 — 표 보기 `<th aria-sort>`(카드 보기엔 열이 없다). */
+  ariaSort: Record<ClassSortAxis, "ascending" | "descending" | "none">;
+};
 
 /** 빈 상태 — 설명 문장 없이 제목만(§4). 기본 필터(운영)가 숨긴 것일 수 있어 '전체 상태로 보기' 링크 하나(폐지 42 · 종강 5 실재). */
 function emptyState(
@@ -471,15 +498,19 @@ function TableView({
         {/* 열 폭 — 최소 창(1050 본문)에서 **값이 걸린 열 머리**가 제 칸에 들어가는 폭(실측 2026-09-18): `상태: 종강 ⌄`(≈112px) 13% ·
             `구분: 특강 ⌄`·`과목: 수학 ⌄`(≈96px) 10%씩(머리 칸 좌우 여백을 `px-1`로 줄여서) — 7%로 두면 34px가 옆 칸으로 넘쳐
             제목이 값보다 23px 오른쪽에 섰다. 🔴 넘친 머리는 가운데 정렬이 안 먹어(넘치면 왼쪽부터 선다) 이 열의 요청 자체가 깨진다.
-            요일 20%는 요일마다 시각이 다른 두 요일(`월16:20 목17:00`)이 한 줄에 서는 폭 — 그 몫을 메모(7%, 전문은 마우스 오버)에서 냈다. */}
+            요일 20%는 요일마다 시각이 다른 두 요일(`월16:20 목17:00`)이 한 줄에 서는 폭 — 그 몫을 메모(7%, 전문은 마우스 오버)에서 냈다.
+            2026-10-14 정렬을 열 머리 화살표(24)로 옮기며 반 이름 열의 `정렬: 수업명순 ⌄`(≈140) 몫이 빠졌다 → 반 이름 18→15%(158 ≥ `반 이름` 52 + 화살표 24 + 여백 24)
+            · 담임 8→10%(105 − 여백 8 ≥ `담임 ⌄` 66 + 화살표 24) · 학생 6→7%(73 − 여백 8 ≥ `학생` 32 + 화살표 24). 담임·학생 머리는 여백을
+            `px-1`로 줄인다(`data-tight`). 강사 스코프(담임 열 없음)는 영어 화면의 `Students ↓`(≈92)가 들어가게 학생 10% · 반 이름 22%.
+            ⚠️ 담임에 값이 걸리면(`담임: 이성우 ⌄` + 화살표 ≈137) 아직 옆 칸으로 넘친다 — 종전(8%)에도 넘치던 자리라 폭을 더 떼지 않았다. */}
         <colgroup>
           <col className="w-[10%]" />
           <col className="w-[10%]" />
-          <col className={showTeacher ? "w-[18%]" : "w-[26%]"} />
-          {showTeacher ? <col className="w-[8%]" /> : null}
+          <col className={showTeacher ? "w-[15%]" : "w-[22%]"} />
+          {showTeacher ? <col className="w-[10%]" /> : null}
           <col className="w-[8%]" />
           <col className="w-[20%]" />
-          <col className="w-[6%]" />
+          <col className={showTeacher ? "w-[7%]" : "w-[10%]"} />
           <col className="w-[13%]" />
           <col className="w-[7%]" />
         </colgroup>
@@ -487,24 +518,25 @@ function TableView({
           {/* 🔴 열 제목과 본문 값은 **같은 축(가운데)**에 선다(원장 2026-09-18 *"행제목과 밑에 내용이 어긋난거 같은데 정렬해주고"*) —
               08-05 표 규약은 "제목만 가운데, 본문은 왼쪽"이었는데 이 표는 칸이 넓어 제목과 값이 서로 다른 자리에 섰다
               (반 이름 제목이 값보다 80px 오른쪽). 폰 카드(`.stack-rows`)는 globals.css가 전부 왼쪽으로 되돌린다. */}
-          {/* 앞 두 칸(구분·과목)은 좌우 여백을 줄인다 — `!`로 덮지 말 것(레이어 안 important가 폰 카드의 `padding:0 !important`를 이긴다). */}
-          <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:text-center [&>th]:font-bold [&>th]:whitespace-nowrap [&>th:nth-child(-n+2)]:px-1">
+          {/* 앞 두 칸(구분·과목)과 화살표가 붙는 좁은 칸(`data-tight` — 담임·학생)은 좌우 여백을 줄인다 — `!`로 덮지 말 것(레이어 안
+              important가 폰 카드의 `padding:0 !important`를 이긴다). */}
+          <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:text-center [&>th]:font-bold [&>th]:whitespace-nowrap [&>th:nth-child(-n+2)]:px-1 [&>th[data-tight]]:px-1">
             <th scope="col">{head.kind}</th>
             <th scope="col">{head.subject}</th>
-            <th scope="col">
-              <span className="flex flex-wrap items-center justify-center gap-1">
-                <span className="px-1" data-cell="label">{sheetT(lang, "cls.col.name")}</span>
-                {head.sort}
-              </span>
-            </th>
-            {showTeacher ? <th scope="col">{head.teacher}</th> : null}
+            {/* 정렬은 열마다 화살표(반 이름 · 담임 · 학생 수) — 2026-10-14 반 이름 열의 '정렬' 드롭다운을 걷었다. */}
+            <th scope="col" aria-sort={head.ariaSort.name}>{head.name}</th>
+            {showTeacher ? (
+              <th scope="col" aria-sort={head.ariaSort.teacher} data-tight="">
+                {head.teacher}
+              </th>
+            ) : null}
             {/* 라벨만 있는 머리는 th 자체에 표식 — 폰 카드에선 열이 없어 열 이름이 뜻을 잃고, span만 감추면 0×0 th가 칩 줄 간격을 먹는다. */}
             <th scope="col" data-cell="label">
               <span className="px-1">{sheetT(lang, "cls.col.room")}</span>
             </th>
             <th scope="col">{head.days}</th>
-            <th scope="col" data-cell="label">
-              <span className="px-1">{sheetT(lang, "cls.col.students")}</span>
+            <th scope="col" aria-sort={head.ariaSort.students} data-tight="">
+              {head.students}
             </th>
             <th scope="col">{head.status}</th>
             <th scope="col" data-cell="label">
@@ -605,8 +637,9 @@ function CardsView({
       <div className="text-text-dim flex flex-wrap items-center gap-x-4 gap-y-1 px-2 text-sm font-bold">
         {head.kind}
         {head.subject}
-        {head.sort}
+        {head.name}
         {showTeacher ? head.teacher : null}
+        {head.students}
         {head.days}
         {head.status}
       </div>

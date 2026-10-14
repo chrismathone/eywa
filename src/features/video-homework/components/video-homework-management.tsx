@@ -1,7 +1,6 @@
 "use client";
 
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { DEFAULT_LEDGER_FILTERS, filterLedgerRows, groupLedgerRows, keepLedgerRounds, ledgerCsv, ledgerPairKey, ledgerSummary, teacherLedgerKeep, type LedgerFilters } from "../ledger";
@@ -9,6 +8,7 @@ import { buildLedgerRounds } from "../rounds";
 import type { BlankFacts } from "../no-homework";
 import type { VideoArrival, VideoHomeworkLedgerRow, VideoHomeworkMark } from "../types";
 import { useLedgerMarks } from "./use-ledger-marks";
+import { useLedgerRefresh } from "./ledger-refresh";
 import { ClassLedger } from "./class-ledger";
 import { LedgerToolbar } from "./ledger-toolbar";
 import { RoundEditor, type ActiveCell } from "./round-editor";
@@ -52,8 +52,8 @@ export function VideoHomeworkManagement({ rows: serverRows, initialMarks, videos
   const [playing, setPlaying] = useState<ActiveCell | null>(null);
   // 영상 배정 창 — 칸에서 열면 그 칸의 숙제일을 먼저 골라 둔다.
   const [assigning, setAssigning] = useState<{ row: VideoHomeworkLedgerRow; date?: string } | null>(null);
-  const router = useRouter();
-  const { marks, kept, progress, save } = useLedgerMarks(initialMarks, () => router.refresh());
+  const refresh = useLedgerRefresh();
+  const { marks, kept, progress, save } = useLedgerMarks(initialMarks, refresh);
   const rows = useMemo(() => withKept(serverRows, kept), [serverRows, kept]);
   // 숙제없음 칸의 '숙제 출제' · 따로 낸 숙제 칸의 '출제 취소'(원장 2026-10-13) — 처리와 새로고침은 메뉴가 한다.
   const [menu, setMenu] = useState<IssueMenuTarget | null>(null);

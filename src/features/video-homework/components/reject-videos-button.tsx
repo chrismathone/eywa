@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { addDays } from "@/lib/date-kst";
 import { SITE_HOMEWORK_DAYS } from "@/features/video-submit/site";
 import { rejectHomeworkVideos } from "../server/reject-videos";
+import { useLedgerRefresh } from "./ledger-refresh";
 import styles from "./video-homework-management.module.css";
 
 /**
@@ -16,7 +16,7 @@ import styles from "./video-homework-management.module.css";
 export function RejectVideosButton({ classId, studentId, homeworkDate, today, disabled, onDone }: {
   classId: string; studentId: string; homeworkDate: string; today: string; disabled: boolean; onDone: () => void;
 }) {
-  const router = useRouter();
+  const refresh = useLedgerRefresh();
   const [busy, setBusy] = useState(false);
   const open = today <= addDays(homeworkDate, SITE_HOMEWORK_DAYS);
   async function reject() {
@@ -24,12 +24,12 @@ export function RejectVideosButton({ classId, studentId, homeworkDate, today, di
     setBusy(true);
     try {
       const result = await rejectHomeworkVideos({ classId, studentId, homeworkDate });
-      if (!result.ok) { toast.error(result.error ?? "영상을 반려하지 못했습니다."); if (result.rejected) router.refresh(); return; }
+      if (!result.ok) { toast.error(result.error ?? "영상을 반려하지 못했습니다."); if (result.rejected) refresh(); return; }
       const trash = [result.trashed ? ` Drive 휴지통으로 ${result.trashed}개 옮겼습니다.` : "",
         result.trashShared ? ` 다른 영상과 같은 파일 ${result.trashShared}개는 Drive에 남겨 두었습니다.` : "",
         result.trashFailed ? ` Drive 휴지통으로 옮기지 못한 영상이 ${result.trashFailed}개 있습니다(숙제에서는 뗐습니다).` : ""].join("");
       toast.success(`영상 ${result.rejected}개를 반려했습니다.${trash}${result.reopened ? " 학생이 이 숙제에 다시 올릴 수 있습니다." : ""}`);
-      router.refresh();
+      refresh();
       onDone();
     } catch { toast.error("연결을 확인한 뒤 다시 시도해 주세요."); } finally { setBusy(false); }
   }

@@ -20,8 +20,10 @@ const TABLE = "video_homework_extra_issues";
 /**
  * `kept` = 검사 기록 칸에서 **옮겨 남긴 숙제**(20261013220000 · keep-round.ts) — 선생님이 낸 숙제가 아니라, 보고서 표시 없이 검사 기록으로만
  * 서 있던 칸을 미확인·반려 뒤에도 남기려고 둔 줄이다. 칸·손 배정·올리기 사이트에는 숙제로 서지만 장부 ②는 뒷순위로만 영상을 주고,
- * 자동 판정·미제출 알림·강사의 '내 숙제'·운영실 집계·'따로 낸 숙제' 표시에서는 뺀다(정식 숙제로 치면 더 오래된 빈 칸이 다른 칸의 영상을
- * 가져가 그 칸이 미수행이 되고 알림이 나간다 — 적대적 리뷰 2026-10-13).
+ * 자동 판정·미제출 알림·운영실 집계·'따로 낸 숙제' 표시에서는 뺀다(정식 숙제로 치면 더 오래된 빈 칸이 다른 칸의 영상을
+ * 가져가 그 칸이 미수행이 되고 알림이 나간다 — 적대적 리뷰 2026-10-13). 강사뷰 · 관리자 강사 필터에서는 검사 기록 칸처럼 **그날 보고서를
+ * 쓴 선생님**의 칸으로 선다(원장 2026-10-14 *"필터하면 2회, 필터 안하면 3회"* — 장부에 서는 칸은 누구의 칸이든 잡혀야 한다, own-homework.ts).
+ * 🔴 kept의 `teacher_id`로 칸 주인을 정하지 말 것 — 그날 보고서가 없으면 지금 담임·누른 사람이 적혀 누르는 순간 주인이 바뀐다.
  */
 export type ExtraIssue = { classId: string; studentId: string; date: string; teacherId: string | null; kept: boolean };
 type Row = { class_id: string; student_id: string; homework_date: string; teacher_id: string | null; kept?: boolean | null };
