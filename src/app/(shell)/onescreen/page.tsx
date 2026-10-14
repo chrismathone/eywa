@@ -5,7 +5,7 @@ import { getShellView, viewAsTeacher } from "@/lib/auth/view-mode";
 import { getPermMatrix } from "@/lib/auth/perm-matrix";
 import { roleHome } from "@/lib/permissions";
 import { getTeacherRoster } from "@/features/onescreen/server/roster";
-import { resolveReportAuthorName } from "@/features/onescreen/server/report-author-name";
+import { resolveReportAuthorSettings } from "@/features/onescreen/server/report-author-name";
 import { getJjAccess } from "@/features/ijw/server/queries";
 import { getClassnoteMatchMap } from "@/features/onescreen/server/classnote-match";
 import { pickCnForClasses } from "@/features/onescreen/classnote-match";
@@ -64,7 +64,7 @@ export default async function OneScreenPage({
   const viewAs = await viewAsTeacher();
   const [roster, sendName, jjAccess, classnoteMatch] = await Promise.all([
     getTeacherRoster(date, all === "1"),
-    resolveReportAuthorName(user.tenantId, viewAs?.displayName ?? user.displayName),
+    resolveReportAuthorSettings(user.tenantId, viewAs?.displayName ?? user.displayName),
     // 인재원 짝 잇기 권한 — JJ실 짝 잇기 구역과 **같은 함수**(ijw/server/viewer.ts). 영어 칸 '미연결' 줄의 링크만 켠다.
     // 실패해도 링크만 빠진다(관리자에게 요청하라는 문구로 떨어진다) — 전원 핫패스라 이 조회가 화면을 막으면 안 된다.
     getJjAccess().catch(() => null),
@@ -178,7 +178,8 @@ export default async function OneScreenPage({
       holidayName={roster.holidayName}
       // 카드 뷰 우측 '학부모 미리보기'(2026-08-05) — /r·인쇄와 같은 컴포넌트에 넘길 재료. 표시 전용.
       // 발송용 이름이 있으면 그 이름으로(지금 저장·발송될 보고서 기준) — 저장되는 teacher_name(귀속 축)은 불변.
-      teacherName={sendName ?? roster.teacherName}
+      teacherName={sendName.name ?? roster.teacherName}
+      reportClassNamePrefix={sendName.includeClassName}
       reportSettings={roster.reportSettings}
       academyName={roster.academyName}
       logoSrc={roster.logoSrc}

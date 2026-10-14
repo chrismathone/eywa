@@ -22,11 +22,13 @@ const inputClass =
 export function ReportNameCard({
   realName,
   initialName,
+  initialIncludeClassName = false,
   mappingBlocked,
   classnoteOn = true,
 }: {
   realName: string;
   initialName: string | null;
+  initialIncludeClassName?: boolean;
   /** 이름은 저장돼 있는데 발송 매핑이 안 걸리는 상태(동명 직원 등) — 카드가 사실을 밝힌다([[#89]]). */
   mappingBlocked: boolean;
   /** ClassNote 기능(모듈) 켜짐 — 꺼진 학원엔 설명에서 ClassNote를 말하지 않는다(2026-09-30). */
@@ -35,6 +37,7 @@ export function ReportNameCard({
   const t = useSheetT();
   const [state, action, pending] = useActionState<MeAccountState, FormData>(updateMyReportName, undefined);
   const [name, setName] = useState(initialName ?? "");
+  const [includeClassName, setIncludeClassName] = useState(initialIncludeClassName);
   const seen = useRef<MeAccountState>(undefined);
   useEffect(() => {
     if (!state || state === seen.current) return;
@@ -57,6 +60,7 @@ export function ReportNameCard({
           e.preventDefault(); // #83 자동 리셋 차단 — 에러가 돌아와도 입력이 남는다.
           const fd = new FormData();
           fd.set("reportName", name);
+          fd.set("includeClassName", String(includeClassName));
           startTransition(() => action(fd));
         }}
         className="mt-4"
@@ -69,6 +73,7 @@ export function ReportNameCard({
             id="me-report-name"
             name="reportName"
             value={name}
+            disabled={pending}
             onChange={(e) => setName(e.target.value)}
             maxLength={REPORT_NAME_MAX}
             // 예시에 실명("OO 선생님")을 섞지 않는다 — 원장 지시 2026-08-18 "하드 코딩된 이름 삭제".
@@ -81,9 +86,29 @@ export function ReportNameCard({
             {t("me.save")}
           </Button>
         </div>
+        <label className="mt-3 flex w-fit cursor-pointer items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            role="switch"
+            name="includeClassName"
+            checked={includeClassName}
+            onChange={(e) => setIncludeClassName(e.target.checked)}
+            disabled={pending}
+            className="peer sr-only"
+          />
+          <span aria-hidden="true" className="bg-line peer-checked:bg-primary peer-focus-visible:ring-primary relative h-5 w-9 shrink-0 rounded-full transition peer-focus-visible:ring-2 peer-focus-visible:ring-offset-2 peer-checked:[&>span]:translate-x-4">
+            <span className="absolute left-0.5 top-0.5 size-4 rounded-full bg-white shadow-sm transition-transform" />
+          </span>
+          {t("me.reportName.classPrefix")}
+        </label>
+        {includeClassName ? (
+          <p className="text-text-dim mt-1 text-xs" aria-live="polite">
+            {t("me.reportName.preview")}: {t("me.reportName.classPlaceholder")} {name.trim() || realName}
+          </p>
+        ) : null}
       </form>
       {mappingBlocked ? (
-        <p className="mt-2 text-xs leading-snug text-amber-700">
+        <p className="mt-2 text-xs leading-snug text-amber">
           {t("me.reportName.blocked.a")} <b>{t("me.reportName.blocked.b")}</b>
           {t("me.reportName.blocked.c")}
         </p>

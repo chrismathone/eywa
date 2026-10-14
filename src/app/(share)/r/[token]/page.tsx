@@ -10,7 +10,8 @@ import { isShareExpired } from "@/features/onescreen/share-expiry";
 import { expiredLinkHref } from "@/features/link-expired/kinds";
 import { visibleAttachments } from "@/features/onescreen/attachment-utils";
 import { fetchReportTrendRows, fetchSpecialClassIds } from "@/features/onescreen/server/score-history";
-import { resolveReportAuthorName } from "@/features/onescreen/server/report-author-name";
+import { resolveReportAuthorSettings } from "@/features/onescreen/server/report-author-name";
+import { formatReportAuthorName } from "@/features/onescreen/report-author-name";
 import { buildTrendPoints } from "@/features/onescreen/report-trend";
 import { ParentReportCard } from "@/features/onescreen/components/parent-report-card";
 import { reportVideoHomework } from "@/features/onescreen/server/report-video-homework";
@@ -92,7 +93,7 @@ export default async function PublicLessonReportPage({
     }).catch(() => []),
     // 발송용 이름(0217a) — 강사가 정했으면 '담임' 칸에 실명 대신 표시. fail-soft(실패=실명 그대로).
     // ClassNote 게시 이미지는 이 페이지의 워커 스크린샷이라 여기 한 곳으로 이미지 표기가 함께 바뀐다.
-    resolveReportAuthorName(report.tenant_id as string, report.teacher_name as string | null),
+    resolveReportAuthorSettings(report.tenant_id as string, report.teacher_name as string | null),
     // 영어 보고서의 인재원 그림 재료(0261a, 저장 때 묶인 동결본) — 위 SELECT에 섞지 않고 **따로** 읽는다(#95).
     // 표가 없거나 실패하면 null = 그림 자리만 빈다(글은 그대로). 워커 캡처도 이 페이지라 ClassNote 이미지에 같이 실린다.
     report.subject === "english"
@@ -143,7 +144,7 @@ export default async function PublicLessonReportPage({
       <ParentReportCard
         report={{
           reportDate: report.report_date,
-          teacherName: sendName ?? report.teacher_name,
+          teacherName: formatReportAuthorName(report.teacher_name, sendName, reportClass?.class_name),
           textbook: report.textbook,
           progress: report.progress,
           dailyTest: report.daily_test,

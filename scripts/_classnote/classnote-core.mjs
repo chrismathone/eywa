@@ -1,4 +1,5 @@
 import { protectScreenshotHeaders } from "./screenshot-auth.mjs";
+import { buildReportAuthorMap, reportAuthorNameFor } from "./report-author-name.mjs";
 // scripts/_classnote/classnote-core.mjs — ClassNote 발송 처리 코어 (one-shot·데몬 공용).
 //
 // stale 복구 + SKIP LOCKED 원자 클레임 + 건별 스크린샷·내부 API 게시·재시도 로직을 processQueueOnce로 묶어
@@ -561,25 +562,28 @@ export async function processQueueOnce(sql, browser, opts) {
   // + **같은 표시 이름(display_name)의 직원이 2명 이상이면 매핑하지 않는다**(남의 보고서에 다른 사람 발송용
   // 이름이 붙는 오표시 방지 — 이때는 지금처럼 실명이 나간다). ⚠️ fail-soft: 0217a 미적용(컬럼 부재)·조회
   // 실패면 빈 맵 = 전건 실명 그대로(#95 expand/contract — 발송 자체는 절대 안 막는다).
-  const reportNameByTeacher = new Map();
+  let reportNameByTeacher = new Map();
+  let reportClassNames = new Map();
   try {
     // 학생 계정 제외 = 앱 resolveReportAuthorName과 동일 필터(동명 학생이 매핑을 끄면 안 된다). 퇴사자는 포함.
-    const nameRows = await sql`select display_name, report_display_name from users
+    const classIds = [...new Set(claimed.map((r) => r.class_id).filter(Boolean))];
+    const [nameRows, classRows] = await Promise.all([
+      sql`select display_name, report_display_name, report_class_name_prefix from users
+        where tenant_id = ${tenant} and system_role <> 'student'`.catch(async (e) => {
+          if (e?.code !== "42703" || !String(e.message).includes("report_class_name_prefix")) throw e;
+          return sql`select display_name, report_display_name from users
       where tenant_id = ${tenant} and system_role <> 'student'`;
-    const seenNames = new Set();
-    for (const u of nameRows) {
-      const dn = u.display_name ?? ""; // raw 키(트림 금지 — 위 주석)
-      if (!dn.trim()) continue;
-      if (seenNames.has(dn)) { reportNameByTeacher.delete(dn); continue; } // 동명 = 모호 → 매핑 제외
-      seenNames.add(dn);
-      const rn = (u.report_display_name ?? "").trim();
-      if (rn) reportNameByTeacher.set(dn, rn);
-    }
+        }),
+      classIds.length ? sql`select id, class_name from classes where tenant_id = ${tenant} and id in ${sql(classIds)}`
+        .catch((e) => { log(`[worker] 반명 조회 실패 — 반명 없이 표시: ${e instanceof Error ? e.message : e}`); return []; }) : [],
+    ]);
+    reportNameByTeacher = buildReportAuthorMap(nameRows);
+    reportClassNames = new Map(classRows.map((r) => [r.id, r.class_name]));
   } catch (e) {
     log(`[worker] 발송용 이름 조회 실패(0217a 미적용이면 정상) — 실명으로 발송: ${e instanceof Error ? e.message : e}`);
   }
   /** 이 보고서의 게시 작성자명 — 발송용 이름이 있으면 그 이름, 없으면 저장된 teacher_name 그대로. */
-  const authorNameFor = (row) => reportNameByTeacher.get(row.teacher_name ?? "") ?? row.teacher_name;
+  const authorNameFor = (row) => reportAuthorNameFor(row, reportNameByTeacher, reportClassNames);
 
   // 3) 프리플라이트 준비(실게시 모드만) — ClassNote 로그인 1회 + 보드 전건 1회 캐시 + 발송 예외 목록.
   // 오발송 방지 게이트(공유 보드 차단)의 근거 데이터. **fail-closed**: 준비에 실패해 보드를 검증할 수 없으면
