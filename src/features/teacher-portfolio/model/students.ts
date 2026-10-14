@@ -16,12 +16,15 @@ import type {
 export const STUDENT_BASE_POINTS = 10;
 const clampScore = (n: number) => Math.min(20, Math.max(0, n));
 type Role = "담임" | "부담임";
-type Relation = { classes: Set<string>; roles: Set<Role> };
+/** `homeClasses` = 그중 담임인 반(원생상담이 담임 반 학생·반 이름만 본다). */
+type Relation = { classes: Set<string>; homeClasses: Set<string>; roles: Set<Role> };
 /** `ended` = 유출 이벤트를 만든 종료 수강(퇴원율이 사유·특강·과목을 본다). 화면 근거(detail)엔 싣지 않는다. */
 type TrackedEvent = StudentEvent & { teacherId: string; month: string; ended?: SnapshotEnrollment[] };
 /** 퇴원율이 쓰는 재료 — 그날 강사별 명단과 유출 이벤트(학생 추적과 같은 판정 한 벌). */
 export type ChurnSource = {
-  rosterOf: (day: string, teacherId: string) => ReadonlyMap<string, { classes: ReadonlySet<string> }>;
+  rosterOf: (day: string, teacherId: string) => ReadonlyMap<string, {
+    classes: ReadonlySet<string>; homeClasses: ReadonlySet<string>; roles: ReadonlySet<"담임" | "부담임">;
+  }>;
   exitsOf: (teacherId: string, start: string, end: string) => readonly TrackedEvent[];
   enrollmentsOf: (studentId: string) => readonly SnapshotEnrollment[];
 };
@@ -73,8 +76,9 @@ export function buildStudentTracking(input: {
       if (!c || !openClass(c, day) || !validAtClose(e, day)) continue;
       for (const [teacherId, role] of teachersFor(e, day)) {
         const students = map.get(teacherId) ?? map.set(teacherId, new Map()).get(teacherId)!;
-        const relation = students.get(e.student_id) ?? students.set(e.student_id, { classes: new Set(), roles: new Set() }).get(e.student_id)!;
+        const relation = students.get(e.student_id) ?? students.set(e.student_id, { classes: new Set(), homeClasses: new Set(), roles: new Set() }).get(e.student_id)!;
         relation.classes.add(c.id);
+        if (role === "담임") relation.homeClasses.add(c.id);
         relation.roles.add(role);
       }
     }

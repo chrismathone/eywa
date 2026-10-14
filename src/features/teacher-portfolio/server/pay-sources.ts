@@ -2,7 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadAttendanceSalaryRates } from "@/features/attendance/server/salary-rates";
 import { runWithAttendanceReadContext } from "@/features/attendance/server/read-context";
-import { loadTeacherSheet, sheetBilledOf, sheetSalaryOf } from "@/features/attendance/server/teacher-sheet";
+import { loadTeacherSheet, sheetSalaryOf } from "@/features/attendance/server/teacher-sheet";
 import { TeacherSheetError } from "@/features/attendance/teacher-sheet-error";
 import { rowKey } from "@/features/attendance/grid/model";
 import type { TenantSettings } from "@/features/owner/settings-types";
@@ -11,13 +11,19 @@ import { fetchAllPaged } from "@/lib/supabase/batch";
 import { PAY_OVERRIDE_KEY } from "../evaluation/config";
 import { contractMonthlyPay, type ContractRow } from "../model/contract-pay";
 import { indexEntries, type ManualEntryRow } from "../model/evaluate";
-import { payRatioOf, type PayFacts, type PayResult } from "../model/pay-ratio";
+import { MIN_BILLED_SHARE, payRatioOf, type PayFacts, type PayResult } from "../model/pay-ratio";
+import { rowRevenue } from "../model/pay-revenue";
 import type { PortfolioResult } from "../model/types";
+import { loadMonthRevenue, type MonthRevenue } from "./pay-invoices";
 
 /**
  * 강사평가 '매출 대비 급여'의 재료 — 원장 2026-10-13 *"출석부 하단에 합계 있을텐데"* · *"청구액 그대로"* · *"계약서에 적힌 금액"*.
  *
- * - 매출 = 그 강사 출석부(강사 전체 보기) 합계 행의 **청구액**(`sheetBilledOf` — 화면과 같은 조립 `loadTeacherSheet`).
+ * - 매출 = 그 강사 출석부(강사 전체 보기)의 줄(학생 × 담당 반, 보강 묶음 제외)마다 그 반 청구액(할인 전)의 합(`rowRevenue`) —
+ *   회차 행이 있는 청구서는 출석부 청구액 열 그대로, 없으면 **그 달 청구서에서 그 반 항목 금액**(반 이름·코드 맞춤).
+ *   🔴 회차 확정을 기다리지 않는다(원장 2026-10-14 *"회차 확정으로 하지말고 청구액으로 잡을것"*).
+ *   영어 청구서 항목은 교재 이름이라 반 이름과 안 맞는다(실측) — 그 학생의 못 맞춘 반 하나 · 남은 수강료 항목 하나면 그 짝으로
+ *   바로 잡는다(`soleLeftover`). 짝이 여럿인 줄(반 이동한 달 등)만 회차 확정 배분 뒤에 잡히고, 그사이 맞춘 줄이 80% 미만이면 비율을 내지 않는다.
  * - 급여 후보 = 계약서 월급(`contractMonthlyPay`) · 출석부 **실급여**(프리랜서 — 명세서와 같은 `sheetSalaryOf`).
  *   원장 직접 입력이 있으면 그것이 먼저다(그 결정은 모델 `payRatioOf`가 한다).
  * 🔴 로그인 없이(밤 집계) 출석부를 조립하므로 `runWithAttendanceReadContext`(지점 · 관리 클라이언트 · 이미 읽은 학원 설정) 안에서 부른다.
@@ -40,6 +46,15 @@ export async function loadSheetFacts(input: {
   const queue = [...input.pairs];
   // 실급여는 급여 모듈을 쓰는 지점만(화면의 실급여 열과 같은 스위치) — 꺼져 있으면 계약서 월급·직접 입력만 쓴다.
   const payrollOn = isModuleEnabled(settings.modules.disabled, "payroll");
+  const invoicesByMonth = new Map<string, Promise<MonthRevenue>>();
+  const invoicesOf = (month: string) => {
+    // 못 읽으면 그 달 강사 모두 같은 사유로 '다시 셀 칸'(emptyFacts retry) — 출석부 실패로 적지 않는다.
+    if (!invoicesByMonth.has(month)) invoicesByMonth.set(month, loadMonthRevenue(admin, tenantId, month).catch((e: unknown) => {
+      console.error("[teacher-portfolio/pay] 청구서 조회 실패", month, e instanceof Error ? e.message : e);
+      throw new TeacherSheetError("청구서를 읽지 못했습니다(마감 전이면 다음 집계에서 다시 셉니다)");
+    }));
+    return invoicesByMonth.get(month)!;
+  };
   await runWithAttendanceReadContext({ tenantId, db: admin, settings }, async () => {
     const work = async () => {
       for (let next = queue.shift(); next; next = queue.shift()) {
@@ -51,25 +66,43 @@ export async function loadSheetFacts(input: {
         try {
           // 실급여 비율표를 못 읽어도 매출(청구액)은 산다 — 급여는 계약서 월급·직접 입력으로 갈 수 있다.
           let payReadFailed = false;
-          const [sheet, rates] = await Promise.all([
+          const [sheet, rates, revenueOf] = await Promise.all([
             loadTeacherSheet(tenantId, teacherId, month),
             payrollOn ? loadAttendanceSalaryRates(tenantId, teacherId).catch((e: unknown) => {
               console.error("[teacher-portfolio/pay] 실급여 비율 조회 실패", teacherId, e instanceof Error ? e.message : e);
               payReadFailed = true;
               return null;
             }) : Promise.resolve(null),
+            invoicesOf(month),
           ]);
           const groups = sheet.groups.filter((g) => !g.makeupPool);
-          // 청구액이 잡힐 줄 = 보강 묶음 밖에서 청구서가 살아 있는 학생의 줄 — 청구서가 없거나 취소된 줄(출석부 '—')은
-          // 회차 확정이 끝나도 청구액이 안 생기니 '덜 됐다'의 분모에 넣지 않는다(판정을 안 한 지점은 빈 맵 = 전부 센다).
-          const state = sheet.billing.invoiceStateByStudent;
-          const keys = groups.flatMap((g) => g.matrix.students
-            .filter((s) => state[s.id] !== "none" && state[s.id] !== "void")
-            .map((s) => rowKey(g.classId, s.id)));
+          // 줄(학생 × 반)마다 그 반 청구액(`rowRevenue`). 청구서가 없는 학생의 줄은 분모에 넣지 않는다(청구할 게 없다).
+          let revenue = 0, rows = 0, matched = 0;
+          for (const g of groups) for (const s of g.matrix.students) {
+            const bills = revenueOf.invoices.get(s.id);
+            if (!bills?.length) continue;
+            const billed = sheet.billing.billed[rowKey(g.classId, s.id)];
+            const enrolled = Boolean(revenueOf.enrolled.get(s.id)?.has(g.classId));
+            // 그 달 그 반 수강이 없는 줄(보강 방문)은 출석부 청구액이 있을 때만 센다 — 그 반 매출이 아니다(분모에도 안 넣는다).
+            if (!enrolled && billed === undefined) continue;
+            rows++;
+            const amount = rowRevenue({ classId: g.classId, className: g.className, billed, invoices: bills, sole: revenueOf.sole.get(s.id), enrolled });
+            if (amount !== null) { matched++; revenue += amount; }
+          }
+          // 프리랜서 실급여는 출석부 단가(회차 확정)로 셈한다 — 단가가 잡힌 줄이 모자라면(달 중간·확정 전) 0원으로 만점이 되지 않게
+          // 급여를 모르는 것으로 둔다(직접 입력으로 넣을 수 있다). 분모는 단가를 못 정한 줄(`no-price`)만 — 비율 없음·학년 미상으로
+          // 빠진 줄은 회차 확정을 기다려도 안 풀리고, 명세서도 그 줄 없이 나간다(그 합계가 실제 받는 돈).
+          const salary = rates && sheet.sessionBillingOn ? sheetSalaryOf(sheet, rates.rates) : null;
+          // 청구서가 없는 학생의 줄은 매출처럼 여기서도 뺀다(회차 행이 청구서에 붙어 단가가 영영 안 선다).
+          const noPrice = salary ? salary.excluded.filter((x) => x.reason === "no-price" && revenueOf.invoices.get(x.studentId)?.length) : [];
+          const priced = salary ? salary.lines.length / Math.max(1, salary.lines.length + noPrice.length) : 0;
+          // '기다림'(마감 미룸) = 회차 확정 단가가 아직 없는 줄만 — 단가는 있는데 못 쓰는 줄(월 정액 · 단가 여럿 · 일수 기준)은 확정 뒤에도
+          // 그대로라 기다리지 않는다. 그래도 80% 분모에는 남긴다(빼면 일부 줄 급여 ÷ 전체 매출이 되어 비율이 낮게 나온다 — 그 달은 '급여 모름').
+          const unpriced = noPrice.filter((x) => !sheet.billing.confirmedPrices[rowKey(x.classId, x.studentId)]?.length).length;
+          const sheetPay = salary && salary.total !== null && priced >= MIN_BILLED_SHARE ? salary.total : null;
           out.set(`${teacherId}|${month}`, {
-            revenue: sheetBilledOf(sheet),
-            rows: keys.length, billedRows: keys.filter((k) => typeof sheet.billing.billed[k] === "number").length,
-            sheetPay: rates && sheet.sessionBillingOn ? sheetSalaryOf(sheet, rates.rates).total : null,
+            revenue: matched ? revenue : null, rows, billedRows: matched,
+            sheetPay, payPending: unpriced > 0 && sheetPay === null,
             students: new Set(groups.flatMap((g) => g.matrix.students.map((s) => s.id))).size,
             classes: groups.length,
             enrollments: groups.reduce((n, g) => n + g.matrix.students.length, 0),

@@ -16,6 +16,15 @@ export function classCode(className: string): string | null {
 
 const norm = (s: string) => s.replace(/\s+/g, "").trim();
 
+/** 청구 항목 하나가 그 반 것인가(금액은 안 본다 — 부분 환불이라 금액을 못 정해도 그 반 항목이다). 규칙은 `classInvoiceAmount`와 같다. */
+export function lineMatchesClass(className: string, li: LineItemLike): boolean {
+  const desc = (li.description ?? li.name ?? "").toString();
+  if (!className || !desc) return false;
+  const code = classCode(className);
+  // 코드가 공백 구분 토큰으로 등장(부분문자열 오매칭 방지 — JJ3J≠JJ3K).
+  return code ? desc.split(/\s+/).includes(code) : norm(desc).includes(norm(className));
+}
+
 /**
  * 그 반에 해당하는 line_items 금액 합계. 매칭 2단계:
  *  ① 코드 있는 반: 수납명 토큰에 그 코드가 정확히 들어간 라인(예 "초등M 초5 BS2C 월목" ∋ "BS2C").
@@ -24,22 +33,10 @@ const norm = (s: string) => s.replace(/\s+/g, "").trim();
  */
 export function classInvoiceAmount(className: string, lineItems: LineItemLike[]): number | null {
   if (!className || lineItems.length === 0) return null;
-  const code = classCode(className);
-  const nClass = norm(className);
-
   let sum = 0;
   let matched = 0;
   for (const li of lineItems) {
-    const desc = (li.description ?? li.name ?? "").toString();
-    if (!desc) continue;
-    let hit = false;
-    if (code) {
-      // 코드가 공백 구분 토큰으로 등장(부분문자열 오매칭 방지 — JJ3J≠JJ3K).
-      hit = desc.split(/\s+/).includes(code);
-    } else {
-      hit = norm(desc).includes(nClass);
-    }
-    if (hit) {
+    if (lineMatchesClass(className, li)) {
       const value = receiptSalaryAmount(li);
       if (value === null) return null;
       sum += value;

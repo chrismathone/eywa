@@ -14,7 +14,6 @@ import { attendanceUnitSuffix, type AttendanceUnitSuffix } from "../unit-suffix"
 import type { AttendanceSalaryRates } from "../salary-rates";
 import { getAttendanceClassBilledAmounts, mergeAttendanceClassBilling, type AttendanceClassBilling } from "./class-billing";
 import { attendanceReadContext } from "./read-context";
-import { rowKey } from "../grid/model";
 import { findMakeupPoolClass } from "./makeup-pool";
 import { getMonthlyAttendanceMatrix, type AttendanceMatrix } from "./queries";
 import { taughtByColumnState } from "./taught-by-db";
@@ -153,21 +152,6 @@ export const loadTeacherSheet = cache(async (tenantId: string, teacherId: string
     handovers: scope.handovers.map((h) => ({ className: classById.get(h.classId)?.className ?? "", kind: h.kind, since: h.since })),
   };
 });
-
-/**
- * 그 출석부의 **청구액 합계** — 화면 합계 행의 청구액 칸과 같은 정의(표의 모든 줄의 `billing.billed[rowKey(반, 학생)]` 중 숫자만 더함 —
- * `live-totals.tsx`). 강사평가 '매출 대비 급여'의 매출(원장 2026-10-13 *"청구액 그대로"* — 함께 맡은 반도 그 줄 금액 그대로).
- * 줄이 하나도 없거나 청구액이 하나도 없으면 null(0원을 지어내지 않는다).
- */
-export function sheetBilledOf(sheet: TeacherSheet): number | null {
-  let total = 0;
-  let any = false;
-  for (const g of sheet.groups) for (const s of g.matrix.students) {
-    const v = sheet.billing.billed[rowKey(g.classId, s.id)];
-    if (typeof v === "number" && Number.isFinite(v)) { total += v; any = true; }
-  }
-  return any ? total : null;
-}
 
 /**
  * 그 출석부의 **실급여**(줄 + 합계) — 화면 합계 행과 같은 식(`teacherSheetSalary`).

@@ -8,8 +8,11 @@ const consult = (student: string, at: string, counselor = "t"): SnapshotConsulta
   id: `${student}|${at}|${counselor}`, student_id: student, counselor_id: counselor, consulted_at: at, follow_up_date: null, follow_up_done: null, updated_at: null,
 });
 const run = (consultations: SnapshotConsultation[], students = ["a", "b", "c", "d"]) => counselItem({
-  d: { consultations } as unknown as PortfolioSnapshot, teacherId: "t", w, classNameOf: () => "반",
-  roster: () => new Map(students.map((s) => [s, { classes: new Set(["c1"]) }])),
+  d: { consultations } as unknown as PortfolioSnapshot, teacherId: "t", w, classNameOf: (id) => id,
+  roster: () => new Map(students.map((s) => [s, {
+    classes: new Set(s === "both" ? ["c1", "jj"] : [s === "sub" ? "jj" : "c1"]), homeClasses: new Set(s === "sub" ? [] : ["c1"]),
+    roles: new Set<"담임" | "부담임">(s === "sub" ? ["부담임"] : s === "both" ? ["담임", "부담임"] : ["담임"]),
+  }])),
 });
 
 describe("원생상담 = 담당 학생 상담 비율", () => {
@@ -23,6 +26,12 @@ describe("원생상담 = 담당 학생 상담 비율", () => {
     expect([m.consulted, m.total, m.raw]).toEqual([2, 4, 50]);
     expect(m.detail.find((r) => r.studentId === "a")?.day).toBe("2026-10-05");
     expect(m.detail[0].consulted).toBe(false);
+  });
+  it("부담임으로만 맡은 학생은 빼고 담임 반 학생만 센다(원장 2026-10-14)", () => {
+    const m = run([consult("a", "2026-10-05T01:00:00Z")], ["a", "sub", "both"]);
+    expect([m.consulted, m.total, m.raw]).toEqual([1, 2, 50]);
+    // 담임 반과 부담임 반(JJ)을 함께 듣는 학생도 반 이름은 담임 반만.
+    expect(m.detail.find((r) => r.studentId === "both")?.className).toBe("c1");
   });
   it("담당 학생이 없으면 자료 없음", () => {
     expect(run([], []).raw).toBeNull();
