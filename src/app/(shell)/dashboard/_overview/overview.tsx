@@ -1153,7 +1153,7 @@ export function Overview({
     ),
     teacherWork: (
       <Panel title={t("teacherWork", "강사별 업무 현황")}
-        note="현재 담당 반 · 보고서 최근 7일 · 영상 숙제 최근 30일" sections={[v.teacherWork]}>
+        note={teacherWorkNote(v.teacherWork?.data)} sections={[v.teacherWork]}>
         {v.teacherWork?.data ? <TeacherWorkCard data={v.teacherWork.data} subjects={snapshot.subjects} /> : null}
       </Panel>
     ),
@@ -1479,4 +1479,11 @@ export function Overview({
     </div>
     </ConsultChipsProvider>
   );
+}
+
+/** 강사별 업무 현황 머리 안내 — 기능이 꺼진 지점엔 그 줄의 기간도 적지 않는다(카드의 표시 여부와 같은 값). */
+function teacherWorkNote(data: { deliveryShown?: boolean; counselShown?: boolean } | null | undefined): string {
+  return ["현재 담당 반", "보고서 최근 7일", "출결 어제까지 7일",
+    data?.deliveryShown === true ? "학부모 미확인·영상 숙제 최근 30일" : "영상 숙제 최근 30일",
+    ...(data?.counselShown === true ? ["원생상담 이번 달"] : [])].join(" · ");
 }
