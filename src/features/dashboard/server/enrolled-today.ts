@@ -16,6 +16,8 @@ export type EnrolledTodayRow = {
   time: string | null;
   /** 칸반 '반 배정 완료'와 같은 판정(`countAssignedClasses`). */
   assigned: boolean;
+  /** 상담 과목 키(안 골랐으면 null) — 과목 관리자 카드가 담당 과목으로 거른다. */
+  subject: string | null;
 };
 
 type OutcomeLog = { metadata: { consultationId?: unknown; to?: unknown } | null; created_at: string };
@@ -79,6 +81,7 @@ export async function getEnrolledToday(today: string): Promise<EnrolledTodayRow[
       schoolGrade: schoolGradeLabel(row.prospect_school, row.prospect_grade) || null,
       time: kstTimeOf(movedAt.get(row.id)),
       assigned: assigned[i] > 0,
+      subject: row.subject || null,
     }))
     .sort((a, b) => at(b.id).localeCompare(at(a.id)) || a.id.localeCompare(b.id));
 }

@@ -238,3 +238,36 @@ describe("반은 드롭다운 하나에서 여러 개를 함께 고른다(반 �
     expect(mocks.save).not.toHaveBeenCalled();
   });
 });
+
+describe("관리자 화면 강사 필터 — 고른 강사가 낸 칸만(원장 2026-10-14)", () => {
+  // 김민준 9/01은 이성우가, 9/03은 유형숙이 냈다. 이서연·영어 B는 유형숙만.
+  const teacherRounds = { lee: ["a:one:2026-09-01"], yoo: ["a:one:2026-09-03", "a:two:2026-09-02", "a:two:2026-09-09", "b:one:2026-09-04"] };
+  const teacherOptions = [{ value: "lee", label: "이성우" }, { value: "yoo", label: "유형숙" }];
+  it("강사를 고르면 그 강사가 낸 칸과 그 칸이 있는 반 × 학생만 — 회차 번호는 남은 칸끼리", () => {
+    render(<VideoHomeworkManagement rows={rows} initialMarks={[]} fromDate="2026-09-01" toDate={today} today={today}
+      teacherRounds={teacherRounds} teacherOptions={teacherOptions} />);
+    fireEvent.change(screen.getByRole("combobox", { name: "강사" }), { target: { value: "lee" } });
+    expect(cell("김민준 1회 2026-09-01 미확인")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /김민준 2회/ })).toBeNull();
+    expect(screen.queryByText("이서연")).toBeNull();
+    expect(screen.queryByRole("table", { name: /영어 B/ })).toBeNull();
+    fireEvent.change(screen.getByRole("combobox", { name: "강사" }), { target: { value: "yoo" } });
+    expect(cell("김민준 1회 2026-09-03 미확인")).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: /영어 B/ })).toBeInTheDocument();
+  });
+  it("고른 강사가 새로고침으로 선택지에서 사라지면 전체로 — 사용자 id가 드롭다운에 안 뜬다 · 과목 선택지도 거른 줄에서", () => {
+    const view = render(<VideoHomeworkManagement rows={rows} initialMarks={[]} fromDate="2026-09-01" toDate={today} today={today}
+      teacherRounds={teacherRounds} teacherOptions={teacherOptions} />);
+    fireEvent.change(screen.getByRole("combobox", { name: "강사" }), { target: { value: "lee" } });
+    expect(within(screen.getByRole("combobox", { name: "과목" })).queryByRole("option", { name: "영어" })).toBeNull();
+    view.rerender(<VideoHomeworkManagement rows={rows} initialMarks={[]} fromDate="2026-09-01" toDate={today} today={today}
+      teacherRounds={{ yoo: teacherRounds.yoo }} teacherOptions={[teacherOptions[1]!]} />);
+    expect(screen.getByRole("combobox", { name: "강사" })).toHaveValue("all");
+    expect(screen.queryByText(/조건에 없음/)).toBeNull();
+    expect(screen.getByText("이서연")).toBeInTheDocument();
+  });
+  it("강사뷰(선택지 없음)엔 강사 필터가 없다 — 이미 본인 칸뿐", () => {
+    show();
+    expect(screen.queryByRole("combobox", { name: "강사" })).toBeNull();
+  });
+});

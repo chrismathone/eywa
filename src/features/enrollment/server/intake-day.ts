@@ -5,7 +5,8 @@ import { kstDayBounds } from "../kst-bounds";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 
-export type IntakeRow = { id: string; name: string; createdAt: string };
+/** `subject` = 상담 과목 키(안 골랐으면 null) — 운영실 과목 관리자 카드가 담당 과목으로 거른다. */
+export type IntakeRow = { id: string; name: string; createdAt: string; subject: string | null };
 
 /**
  * 그날(KST) 접수된 콜&상담 — 운영실 '신규문의' 카드·팝업과 일일 브리핑 '오늘 접수' 신호의 **단일 소스**.
@@ -22,11 +23,11 @@ export async function getIntakeOnDay(
 ): Promise<IntakeRow[]> {
   const supabase = deps?.supabase ?? (await createClient());
   const { startIso, endIso } = kstDayBounds(date);
-  const rows = await fetchAllPaged<{ id: string; prospect_name: string | null; created_at: string }>(
+  const rows = await fetchAllPaged<{ id: string; prospect_name: string | null; created_at: string; subject: string | null }>(
     (from, to) => {
       let q = supabase
         .from("enrollment_consultations")
-        .select("id, prospect_name, created_at")
+        .select("id, prospect_name, created_at, subject")
         .gte("created_at", startIso)
         .lt("created_at", endIso);
       if (deps?.tenantId) q = q.eq("tenant_id", deps.tenantId);
@@ -37,5 +38,6 @@ export async function getIntakeOnDay(
     id: row.id,
     name: row.prospect_name?.trim() || "(이름 미상)",
     createdAt: row.created_at,
+    subject: row.subject ?? null,
   }));
 }

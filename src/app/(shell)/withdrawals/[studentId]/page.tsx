@@ -3,6 +3,8 @@ import { BookOpen, MessagesSquare, ScrollText } from "@/components/icons/aywa-ic
 import type { ReactNode } from "react";
 import { requireAccess } from "@/lib/auth/require-access";
 import { accessLevelTenant, canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
+import { getEnrollmentDateAccess } from "@/features/enrollments/server/date-access";
+import { canEditEnrollmentDateClass } from "@/features/enrollments/date-access";
 import { WindowLink } from "@/components/workspace/window-link";
 import { BackLink } from "@/components/back-link";
 import { EditableDateCell } from "@/features/enrollments/components/editable-date-cell";
@@ -33,15 +35,14 @@ export default async function WithdrawalDetailPage({
   ]);
   if (!detail) notFound();
   const subjects = buildSubjectMaps(settings.operations.subjects);
-  // 수강 이력 시작/종료일 더블클릭 정정 = owner(원장) 권한 이상만(다른 화면과 동일 게이트).
+  // 날짜 정정 자격은 개인별 기능 지정이며, 다른 화면과 같은 판정이다.
   // 권한 판정 셋은 서로 독립 → 병렬(B4).
-  const [ownerLvl, canWrite, canManageStudents, studentsLvl] = await Promise.all([
-    accessLevelTenant(user.systemRole, "owner"),
+  const [dateAccess, canWrite, canManageStudents, studentsLvl] = await Promise.all([
+    getEnrollmentDateAccess(),
     canWriteTenant(user.systemRole, "withdrawals"),
     canManageTenant(user.systemRole, "students"),
     accessLevelTenant(user.systemRole, "students"),
   ]);
-  const canEditDates = ownerLvl === "full";
   // 재원 복구 = 서버 게이트와 같은 두 문(퇴원관리 쓰기 ∧ 원생 기록 변경) — 못 누를 사람에겐 안 보인다(감사 E9·S6).
   const canReactivate = canWrite && canManageStudents;
   const canOpenStudent = studentsLvl !== "none";
@@ -146,7 +147,7 @@ export default async function WithdrawalDetailPage({
               <li key={e.id} className="flex items-center justify-between px-5 py-3">
                 <div>
                   <p className="text-sm font-medium">{e.className}</p>
-                  {canEditDates ? (
+                  {canEditEnrollmentDateClass(dateAccess, e.classId) ? (
                     <div className="text-muted-foreground inline-flex flex-wrap items-center gap-1 text-xs">
                       <span>
                         {subjects.labelOf(e.subject)} · 담임 {e.teacherName ?? "미배정"} ·

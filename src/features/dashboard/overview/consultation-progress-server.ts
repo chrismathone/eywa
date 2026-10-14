@@ -10,6 +10,7 @@ import {
   chipOf,
   progressOf,
   summarizeProgress,
+  type ConsultProgress,
   type ConsultProgressData,
   type ProgressEnrollment,
 } from "./consultation-progress";
@@ -77,6 +78,18 @@ export async function consultProgress(
   since: string,
   today: string,
 ): Promise<ConsultProgressData> {
+  const { list, levelTestKnown } = await consultProgressList(consultations, events, notNames, since, today);
+  return consultProgressData(list, levelTestKnown, today);
+}
+
+/** 상담마다 지금 단계(조회 포함) — 운영실은 이것을 한 번 만들어 학원 전체·과목별 값으로 나눠 센다(`consultProgressData`). */
+export async function consultProgressList(
+  consultations: readonly ConsultationRow[],
+  events: readonly CalendarEvent[] | null,
+  notNames: readonly string[],
+  since: string,
+  today: string,
+): Promise<{ list: ConsultProgress[]; levelTestKnown: boolean }> {
   const studentIds = [...new Set(consultations.flatMap((c) => (c.studentId ? [c.studentId] : [])))];
   // 수강 조회와 입테 연결은 서로 독립이라 함께(B4).
   const [enrollments, levelTests] = await Promise.all([
@@ -91,8 +104,13 @@ export async function consultProgress(
       today,
     ),
   );
+  return { list, levelTestKnown: levelTests !== null };
+}
+
+/** 단계별 인원·멈춘 상담·칩 — 순수(조회 없음). */
+export function consultProgressData(list: readonly ConsultProgress[], levelTestKnown: boolean, today: string): ConsultProgressData {
   return {
-    summary: summarizeProgress(list, today, levelTests !== null),
+    summary: summarizeProgress(list, today, levelTestKnown),
     chips: Object.fromEntries(list.map((p) => [p.id, chipOf(p, today)])),
   };
 }

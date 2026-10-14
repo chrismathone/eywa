@@ -27,7 +27,7 @@ describe("레지스트리 = 운영실 카드 전부", () => {
   });
 
   it("서버 add(영역, 메뉴)와 영역-메뉴 표가 같다(배치 필터가 서버 조회와 어긋나지 않게)", () => {
-    const calls = [...SERVER.matchAll(/add\("(\w+)", \[([^\]]*)\]/g)].map((m) => [m[1]!, m[2]!.match(/"(\w+)"/g)?.map((s) => s.slice(1, -1)) ?? []] as const);
+    const calls = [...SERVER.matchAll(/(?<![\w.])add(?:Sliced)?\("(\w+)", \[([^\]]*)\]/g)].map((m) => [m[1]!, m[2]!.match(/"(\w+)"/g)?.map((s) => s.slice(1, -1)) ?? []] as const);
     expect(calls.length).toBe(Object.keys(AREA_MENUS).length);
     for (const [area, menus] of calls) expect(AREA_MENUS[area as keyof typeof AREA_MENUS], area).toEqual(menus);
   });

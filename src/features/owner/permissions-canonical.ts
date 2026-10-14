@@ -25,6 +25,7 @@ export function permissionsCanonical(permissions: PermissionsSettings): string {
     payslip: sortedIds(permissions?.specialAccess?.payslipViewerIds),
     leave: sortedIds(permissions?.specialAccess?.leaveAdjusterIds),
     split: sortedIds(permissions?.specialAccess?.classSplitterIds),
+    dates: sortedIds(permissions?.specialAccess?.enrollmentDateEditorIds),
     scopes: rowsByCell(permissions?.specialAccess?.staffSubjectScopes, ["userId"]),
   });
 }

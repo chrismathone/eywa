@@ -1,20 +1,121 @@
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
+import { Pagination } from "@/components/pagination";
 import { requireAccess } from "@/lib/auth/require-access";
+import { kstToday } from "@/lib/date-kst";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
 import { listReports, reportViewer, reportStaff, requestStudents, reportSubjectLabels } from "@/features/withdrawal-reports/server/queries";
+import { listArchives } from "@/features/withdrawal-reports/server/archives";
+import {
+  LIST_PAGE_SIZE,
+  buildListItems,
+  filterListItems,
+  listHref,
+  listWindow,
+  parseListFilters,
+  teacherOptions,
+} from "@/features/withdrawal-reports/list-items";
 import { ReportList } from "./_components/report-list";
-import { EmbedLink } from "@/components/embed-link";
+import { ListToolbar } from "./_components/list-toolbar";
+import { RequestDialog } from "./_components/request-dialog";
 
 export const metadata = { title: "퇴원보고서 — 에이와" };
-export default async function WithdrawalReportsPage() {
+
+type SearchParams = Record<string, string | string[] | undefined>;
+/** 같은 이름이 여럿이면 첫 값 — 필터는 한 값씩이다. */
+const flat = (sp: SearchParams) =>
+  Object.fromEntries(Object.entries(sp).map(([k, v]) => [k, Array.isArray(v) ? v[0] : v])) as Record<string, string | undefined>;
+
+/**
+ * 퇴원보고서 — 웹 보고서와 기존 스프레드시트 기록을 한 목록에(원장 2026-10-14). 필터·쪽은 주소에 싣고 서버가 거른다
+ * (퇴원관리와 같은 방식). 기존 기록은 작성 요청 권한이 있는 사람만 본다(`listArchives`가 같은 판정으로 비운다).
+ */
+export default async function WithdrawalReportsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   await requireAccess("withdrawal_reports");
   const viewer = await reportViewer();
   if (!viewer) notFound();
-  const [list, staff, students, labels] = await Promise.all([listReports(), reportStaff(), requestStudents(), reportSubjectLabels()]);
-  return <div className="min-w-0 space-y-5 p-4 md:p-6">
-    <PageHeader eyebrow="실험실" title="퇴원보고서" description="관리자가 작성을 요청하고, 강사별로 보고서를 제출합니다. 원장을 선택하지 않으면 관리자가 최종 승인합니다." />
-    {viewer.request && <EmbedLink href="/withdrawal-reports/archive" className="inline-block text-sm text-primary hover:underline">기존 스프레드시트 보고서 보기 →</EmbedLink>}
-    {list.available ? <ReportList reports={list.rows} completedLimited={list.completedLimited} staff={staff} students={students} labels={labels} userId={viewer.user.id} canRequest={viewer.request} scope={viewer.scope} />
-      : <p className="rounded-lg border bg-muted/30 p-6 text-sm">퇴원보고서 기능을 준비 중입니다. 잠시 후 다시 확인해 주세요.</p>}
-  </div>;
+  const sp = flat(await searchParams);
+  // 🔑 독립 조회 — 한 번에(B4). 기존 기록을 못 읽어도 웹 보고서는 보여야 하니 그쪽 실패만 안내로 접는다.
+  const [list, staff, students, labels, settings, archives] = await Promise.all([
+    listReports(),
+    reportStaff(),
+    requestStudents(),
+    reportSubjectLabels(),
+    getTenantSettings(),
+    listArchives().catch((error: unknown) => {
+      console.error("[withdrawal-reports] 기존 스프레드시트 기록 조회 실패", error);
+      return null;
+    }),
+  ]);
+  const header = (
+    <PageHeader
+      eyebrow="실험실"
+      title="퇴원보고서"
+      description="관리자가 작성을 요청하고, 강사별로 보고서를 제출합니다. 원장을 선택하지 않으면 관리자가 최종 승인합니다."
+    />
+  );
+  if (!list.available) {
+    return (
+      <div className="min-w-0 space-y-5 p-4 md:p-6">
+        {header}
+        <p className="bg-muted/30 rounded-lg border p-6 text-sm">퇴원보고서 기능을 준비 중입니다. 잠시 후 다시 확인해 주세요.</p>
+      </div>
+    );
+  }
+
+  const subjectMaps = buildSubjectMaps(settings.operations.subjects);
+  const canSeeArchive = viewer.request;
+  const items = buildListItems({ reports: list.rows, archives: archives ?? [], staff, labelOf: subjectMaps.labelOf, userId: viewer.user.id });
+  const filters = parseListFilters(sp, canSeeArchive);
+  const rangeWindow = listWindow(filters, kstToday());
+  const found = filterListItems(items, filters, rangeWindow);
+  const totalPages = Math.max(1, Math.ceil(found.length / LIST_PAGE_SIZE));
+  const page = Math.min(totalPages, Math.max(1, Math.floor(Number(sp.page)) || 1));
+  const shown = found.slice((page - 1) * LIST_PAGE_SIZE, page * LIST_PAGE_SIZE);
+  // 칩 건수 = 칩을 켰을 때 보일 줄 수(칩은 상태를 걷으므로 상태만 빼고 나머지 필터를 건다).
+  const unmappedCount = filterListItems(items, { ...filters, status: "all", unmapped: true }, rangeWindow).length;
+  const filterActive =
+    filters.status !== "all" || filters.range !== "all" || filters.subject !== "all" || filters.teacher !== "all" || filters.unmapped || !!filters.q;
+  // 과목 선택지 = 학원설정 단일 소스. 과목 범위가 있는 사람은 그 과목만(목록도 그 범위로만 온다).
+  const subjects = viewer.scope ? subjectMaps.options.filter((o) => viewer.scope!.includes(o.value)) : subjectMaps.options;
+
+  return (
+    <div className="min-w-0 space-y-5 p-4 md:p-6">
+      {header}
+      <ListToolbar
+        filters={filters}
+        custom={"custom" in rangeWindow ? rangeWindow.custom : undefined}
+        subjects={subjects}
+        teachers={teacherOptions(items)}
+        // 미연결 칩 — 켜면 상태 필터는 걷는다(미연결은 기존 기록에만 있다), 다시 누르면 끈다.
+        unmapped={
+          canSeeArchive
+            ? { href: listHref(sp, filters.unmapped ? { link: null } : { link: "unmapped", status: null }), count: unmappedCount }
+            : null
+        }
+        resultText={filterActive ? `${found.length}건 / 전체 ${items.length}건` : `전체 ${items.length}건`}
+        resetHref={filterActive ? listHref(sp.embed ? { embed: sp.embed } : {}, {}) : null}
+        request={viewer.request ? <RequestDialog staff={staff} students={students} labels={labels} scope={viewer.scope} /> : null}
+      />
+      {archives === null && canSeeArchive ? (
+        <p role="alert" className="text-danger text-sm">
+          기존 스프레드시트 기록을 불러오지 못했습니다. 웹에서 작성한 보고서만 표시합니다.
+        </p>
+      ) : null}
+      <ReportList items={shown} />
+      {totalPages > 1 ? (
+        <Pagination
+          page={page}
+          totalPages={totalPages}
+          total={found.length}
+          hrefForPage={(p) => listHref(sp, { page: p > 1 ? String(p) : null })}
+          scroll={false}
+        />
+      ) : null}
+      {list.completedLimited && (
+        <p className="text-muted-foreground text-xs">진행 중인 요청은 모두 표시하며, 완료·취소 건은 최근 200건까지 표시합니다.</p>
+      )}
+    </div>
+  );
 }

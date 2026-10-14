@@ -15,7 +15,7 @@ import "server-only";
  *    (적대 리뷰 2026-09-14). 창 뒤로 잡힌 예약은 `later`로 따로 센다(카드 보조 줄 · 카드 집합엔 안 든다).
  */
 import { createClient } from "@/lib/supabase/server";
-import { fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { shiftDays, weekBoundsOf } from "@/features/timetable/lib/week";
 import { listMakeupScopeClasses } from "@/features/attendance/server/makeup-reservation-scope";
@@ -77,7 +77,42 @@ async function countLater(supabase: Sb, after: string, classIds: readonly string
   return counts.reduce((sum, n) => sum + n, 0);
 }
 
+/**
+ * 창 뒤 예약 수를 **반별로** — 과목 관리자 카드가 담당 과목 반의 수만 더한다(원장 2026-10-14 2단계). 과목 값이 필요할 때만 부른다
+ * (원장 화면은 위 `countLater` 그대로). 반 id 한 칸만 받는다(창 뒤 '예약' 상태만이라 수십 건 수준). 반 id는 청크 · 청크 안은 페이지(B2·B3).
+ */
+async function countLaterByClass(supabase: Sb, after: string, classIds: readonly string[]): Promise<Map<string, number>> {
+  const rows = await fetchAllPagedInChunks<{ class_id: string }>(
+    [...classIds],
+    (chunk, from, to) =>
+      supabase
+        .from("makeup_reservations")
+        .select("class_id")
+        .eq("status", "reserved")
+        .gt("makeup_date", after)
+        .in("class_id", chunk)
+        .order("id")
+        .range(from, to),
+    CLASS_CHUNK,
+  );
+  const out = new Map<string, number>();
+  for (const r of rows) out.set(r.class_id, (out.get(r.class_id) ?? 0) + 1);
+  return out;
+}
+
 export async function getUpcomingMakeupOverview(today: string, teacherId: string | null): Promise<UpcomingMakeupOverview> {
+  return (await loadUpcomingMakeup(today, teacherId)).overview;
+}
+
+/**
+ * 보강예정 카드 원본 + 과목으로 다시 가를 재료(반 → 과목 · 반별 창 뒤 예약 수). 운영실은 이것을 받아 과목 관리자 값을 만든다.
+ * 재료는 스냅샷에 싣지 않는다(반 id별 숫자는 화면에 필요 없다).
+ */
+export async function loadUpcomingMakeup(today: string, teacherId: string | null, byClass = false): Promise<{
+  overview: UpcomingMakeupOverview;
+  subjectOf: ReadonlyMap<string, string>;
+  laterByClass: ReadonlyMap<string, number>;
+}> {
   const range = monthAheadWindow(today);
   // 🔴 반 집합("누구의 반인가")은 **이번 주(월~일)** 기준 그대로 — 시간표 보강 탭이 이번 주에 고르는 반과 같다.
   //    한 달 창으로 넓히면 강사 범위에서 다음 달에 교시가 시작될 **남의 반** 예약이 섞이고, 월요일~어제 끝난 교시·위임 반이
@@ -89,7 +124,9 @@ export async function getUpcomingMakeupOverview(today: string, teacherId: string
   const [reservations, later, nativeOutcome] = await Promise.all([
     // 지난 60일(미이행) ~ 창 끝을 **한 조회**로 — 오늘 이전 날짜가 곧 `overdue`다. 시간표 탭과 같은 함수(fail-soft).
     getReservationsInRange(shiftDays(today, -OVERDUE_LOOKBACK_DAYS), range.end, classIds),
-    countLater(supabase, range.end, classIds).catch(() => 0),
+    byClass
+      ? countLaterByClass(supabase, range.end, classIds).catch(() => new Map<string, number>())
+      : countLater(supabase, range.end, classIds).catch(() => 0),
     loadNativeParticipants({ date_from: shiftDays(today, -OVERDUE_LOOKBACK_DAYS), date_to: range.end, limit: 500 }, { sharedRead: true }),
   ]);
   const native = (nativeOutcome.status === "off" || nativeOutcome.status === "schema_missing"
@@ -152,5 +189,6 @@ export async function getUpcomingMakeupOverview(today: string, teacherId: string
     });
   }
   rows.sort((a, b) => a.makeupDate.localeCompare(b.makeupDate) || a.slotStart.localeCompare(b.slotStart) || a.name.localeCompare(b.name, "ko"));
-  return { range, rows, later };
+  const total = typeof later === "number" ? later : [...later.values()].reduce((sum, n) => sum + n, 0);
+  return { overview: { range, rows, later: total }, subjectOf: new Map(classes.map((c) => [c.id, c.subject])), laterByClass: typeof later === "number" ? new Map() : later };
 }

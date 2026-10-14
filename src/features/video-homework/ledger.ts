@@ -6,9 +6,11 @@ export type LedgerFilters = {
   classIds: string[]; subject: string; school: string; grade: string; query: string;
   status: "all" | RoundStatus;
   sort: "name" | "missing" | "completion";
+  /** 숙제를 낸 강사(사용자 id) — 관리자 화면만(원장 2026-10-14). 강사뷰는 늘 "all"(이미 본인 칸뿐). */
+  teacher: string;
 };
 export const DEFAULT_LEDGER_FILTERS: LedgerFilters = {
-  classIds: [], subject: "all", school: "all", grade: "all", query: "", status: "all", sort: "name",
+  classIds: [], subject: "all", school: "all", grade: "all", query: "", status: "all", sort: "name", teacher: "all",
 };
 export const ledgerPairKey = roundPairKey;
 /** (반 × 학생) → 그 학생의 회차 목록(`buildLedgerRounds` 결과). 요약·필터·표·CSV가 전부 이 한 벌을 읽는다. */
@@ -18,6 +20,18 @@ export const roundsOf = (rounds: LedgerRounds, row: { classId: string; studentId
 
 /** 보일 회차 하나의 열쇠 — `반:학생:숙제일`. */
 export const ownRoundKey = (pair: { classId: string; studentId: string }, homeworkDate: string) => `${roundPairKey(pair)}:${homeworkDate}`;
+
+/**
+ * 관리자 화면 강사 필터(원장 2026-10-14 *"숙제 제출 현황에서 강사 필터링 가능하게 … 관리자뷰에서"*) — 그 강사가 낸 칸과
+ * 그 칸이 있는 반 × 학생. 열쇠는 강사뷰의 `keepRounds`와 같은 것(`listVideoHomeworkIssues` 한 벌)이라, 고르면 그 강사의
+ * 강사뷰와 같은 칸이 선다. 판정은 이 역시 전체 회차로 먼저 하고 칸만 거른다(`keepLedgerRounds`).
+ */
+export function teacherLedgerKeep(teacherRounds: Readonly<Record<string, readonly string[]>> | undefined, teacher: string) {
+  if (!teacherRounds || teacher === "all") return null;
+  const keys = new Set(teacherRounds[teacher] ?? []);
+  // 열쇠 = `반:학생:숙제일`(ownRoundKey) — 날짜에는 ':'가 없으니 마지막 ':' 앞이 반 × 학생이다.
+  return { keys, pairs: new Set([...keys].map((key) => key.slice(0, key.lastIndexOf(":")))) };
+}
 
 /**
  * 화면에 세울 회차만 남긴다 — 강사뷰 '영상 제출 현황'(원장 2026-10-03 *"각 강사뷰에서는 내가 출제한것만"*).
