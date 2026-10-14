@@ -1291,14 +1291,17 @@ describe("🔴 수업목록(목록)·공용 조각 — 한글 리터럴 0", () =
       "cls.status.retired",
       "cls.filter.all",
       "cls.sort.name",
+      "cls.sort.name.desc",
       "cls.sort.students",
+      "cls.sort.students.asc",
       "cls.sort.teacher",
+      "cls.sort.teacher.desc",
     ]) {
       expect(SHEET_DICT[k as keyof typeof SHEET_DICT], k).toBeDefined();
       expect(src, k).toContain(`"${k}"`);
     }
     // 값은 그대로 — 하나라도 바뀌면 저장된 링크·복원값이 통째로 깨진다.
-    for (const v of ["operating", "ended", "retired", "all", "name", "students", "teacher"]) {
+    for (const v of ["operating", "ended", "retired", "all", "name", "students", "teacher", "name_desc", "students_asc", "teacher_desc"]) {
       expect(src, v).toContain(`"${v}"`);
     }
     // 🔴 **어휘 파일엔 문구를 두지 않는다**(값 + 사전 키만) — 라우트는 그 키를 `sheetT`로 풀어 쓰므로

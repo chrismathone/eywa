@@ -1,4 +1,5 @@
 import "server-only";
+import { sortClassRows } from "../sort-rows";
 import { createClient } from "@/lib/supabase/server";
 import { readEnglishTrack, type EnglishTrack } from "../english-track";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
@@ -52,7 +53,11 @@ export type ClassListRow = {
 };
 
 /** 수업목록 정렬 기준 — ijw 패리티(수업명/학생수/강사명). */
-export type ClassSort = "name" | "students" | "teacher";
+/**
+ * 정렬 = 열 머리의 오름·내림 화살표(원장 2026-10-14 *"수업목록도 똑같이 바꿔"* — 원생목록과 같은 꼴). 옛 값 셋은 뜻 그대로
+ * (`name` = 반 이름 오름차순 · `students` = 학생 많은 순 · `teacher` = 담임 오름차순) — 저장값·옛 링크가 그대로 산다.
+ */
+export type ClassSort = "name" | "name_desc" | "students" | "students_asc" | "teacher" | "teacher_desc";
 
 /**
  * 수업 상태 필터 — 화면의 '상태' 배지와 **같은 세 갈래**다(page.tsx TableView/CardsView와 한 몸).
@@ -454,16 +459,6 @@ export async function getClassesStats(): Promise<{ total: number; active: number
   return { total: total.count ?? 0, active: active.count ?? 0, totalSeats: seats.count ?? 0 };
 }
 
-/** 수업목록 정렬 — 수업명(기본)·학생수(많은순)·강사명(가나다, 미정은 끝). 동률은 수업명 보조정렬. */
-function sortClassRows(rows: ClassListRow[], sort: ClassSort): void {
-  const byName = (a: ClassListRow, b: ClassListRow) => a.className.localeCompare(b.className, "ko");
-  rows.sort((a, b) => {
-    if (sort === "students") return b.studentCount - a.studentCount || byName(a, b);
-    if (sort === "teacher")
-      return (a.teacherName ?? "힣").localeCompare(b.teacherName ?? "힣", "ko") || byName(a, b);
-    return byName(a, b);
-  });
-}
 
 /**
  * 수업목록 — 모집단이 작아(학원 단위 수업 ~수백) 매칭 전건을 가져와 메모리에서 정렬·페이지네이션한다.

@@ -69,7 +69,7 @@ import {
   type StudentMixFilter,
 } from "@/features/students/list-filter-values";
 import { EnrolledStatCard } from "./_components/enrolled-stat-card";
-import { SortArrow } from "./_components/sort-arrow";
+import { SortArrow } from "@/components/sort-arrow";
 import { PAGE_TITLE_SUFFIX } from "@/lib/config/site-metadata";
 
 export async function generateMetadata() {
