@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  bigint,
   date,
   index,
   integer,
@@ -1915,6 +1916,13 @@ export const labMenuAssignments = pgTable("lab_menu_assignments", {
 });
 
 // Laboratory withdrawal reports. Only service transactions write these records.
+export const withdrawalReportGroups = pgTable("withdrawal_report_groups", {
+  id: uuid("id").primaryKey().defaultRandom(), tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  studentId: uuid("student_id").notNull().references(() => students.id), requestedBy: uuid("requested_by").notNull().references(() => users.id),
+  teacherIds: uuid("teacher_ids").array().notNull(), managerIds: uuid("manager_ids").array().notNull(), directorIds: uuid("director_ids").array().notNull().default(sql`'{}'::uuid[]`),
+  subjects: text("subjects").array().notNull(), effectiveDate: date("effective_date").notNull(), exitKind: text("exit_kind").notNull(), snapshot: jsonb("snapshot").notNull(),
+  status: text("status").notNull().default("pending"), createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(), appliedAt: timestamp("applied_at", { withTimezone: true }),
+}, t => [uniqueIndex("withdrawal_report_groups_pending").on(t.tenantId, t.studentId).where(sql`status not in ('completed','canceled')`)]);
 export const withdrawalReports = pgTable("withdrawal_reports", {
   id: uuid("id").primaryKey().defaultRandom(),
   tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
@@ -1922,7 +1930,10 @@ export const withdrawalReports = pgTable("withdrawal_reports", {
   requestedBy: uuid("requested_by").notNull().references(() => users.id, { onDelete: "restrict" }),
   teacherId: uuid("teacher_id").notNull().references(() => users.id, { onDelete: "restrict" }),
   managerId: uuid("manager_id").notNull().references(() => users.id, { onDelete: "restrict" }),
-  directorId: uuid("director_id").notNull().references(() => users.id, { onDelete: "restrict" }),
+  directorId: uuid("director_id").references(() => users.id, { onDelete: "restrict" }),
+  groupId: uuid("group_id").references(() => withdrawalReportGroups.id, { onDelete: "restrict" }), groupLeader: boolean("group_leader").notNull().default(false),
+  managerIds: uuid("manager_ids").array(), directorIds: uuid("director_ids").array(),
+  managerDecisions: jsonb("manager_decisions").notNull().default(sql`'{}'::jsonb`), directorDecisions: jsonb("director_decisions").notNull().default(sql`'{}'::jsonb`),
   exitKind: text("exit_kind").notNull(), subjects: text("subjects").array().notNull(),
   effectiveDate: date("effective_date").notNull(), requestNote: text("request_note").notNull().default(""),
   snapshot: jsonb("snapshot").notNull(), body: jsonb("body").notNull().default(sql`'{}'::jsonb`),
@@ -1933,7 +1944,8 @@ export const withdrawalReports = pgTable("withdrawal_reports", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, t => [index("withdrawal_reports_tenant_created").on(t.tenantId, t.createdAt),
-  uniqueIndex("withdrawal_reports_one_pending").on(t.tenantId, t.studentId).where(sql`status not in ('completed','canceled')`)]);
+  uniqueIndex("withdrawal_reports_one_pending").on(t.tenantId, t.studentId).where(sql`group_id is null and status not in ('completed','canceled')`),
+  uniqueIndex("withdrawal_reports_group_teacher").on(t.groupId, t.teacherId).where(sql`group_id is not null`)]);
 export const withdrawalReportEvents = pgTable("withdrawal_report_events", {
   id: uuid("id").primaryKey().defaultRandom(),
   tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
@@ -1943,6 +1955,22 @@ export const withdrawalReportEvents = pgTable("withdrawal_report_events", {
   body: jsonb("body"), comment: text("comment"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, t => [index("withdrawal_report_events_report").on(t.tenantId, t.reportId, t.createdAt)]);
+
+export const withdrawalReportSources = pgTable("withdrawal_report_sources", {
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }), spreadsheetId: text("spreadsheet_id").notNull(), sheetId: bigint("sheet_id", { mode: "number" }).notNull(),
+  sheetTitle: text("sheet_title").notNull(), hidden: boolean("hidden").notNull(), grid: jsonb("grid").notNull(), importedAt: timestamp("imported_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => [primaryKey({ columns: [t.tenantId, t.spreadsheetId, t.sheetId] })]);
+export const withdrawalReportArchives = pgTable("withdrawal_report_archives", {
+  id: uuid("id").primaryKey().defaultRandom(), tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  spreadsheetId: text("spreadsheet_id").notNull(), sourceKey: text("source_key").notNull(), sheetId: bigint("sheet_id", { mode: "number" }).notNull(), sheetTitle: text("sheet_title").notNull(), sourceRange: text("source_range").notNull(),
+  studentName: text("student_name").notNull(), schoolGrade: text("school_grade").notNull(), className: text("class_name").notNull(), subject: text("subject"), exitDate: date("exit_date"), rawExitDate: text("raw_exit_date").notNull(), teacherName: text("teacher_name").notNull(),
+  fields: jsonb("fields").notNull(), signatures: jsonb("signatures").notNull(), rawGrid: jsonb("raw_grid").notNull(), mappedStudentId: uuid("mapped_student_id").references(() => students.id),
+  mappingKind: text("mapping_kind").notNull().default("unmapped"), mappingEvidence: jsonb("mapping_evidence").notNull().default(sql`'{}'::jsonb`), revision: integer("revision").notNull().default(1), importedAt: timestamp("imported_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => [uniqueIndex("withdrawal_report_archives_source").on(t.tenantId, t.spreadsheetId, t.sourceKey), index("withdrawal_report_archives_tenant_date").on(t.tenantId, t.exitDate)]);
+export const withdrawalReportArchiveMappings = pgTable("withdrawal_report_archive_mappings", {
+  id: uuid("id").primaryKey().defaultRandom(), tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }), archiveId: uuid("archive_id").notNull().references(() => withdrawalReportArchives.id, { onDelete: "cascade" }),
+  actorId: uuid("actor_id").notNull().references(() => users.id), previousStudentId: uuid("previous_student_id"), studentId: uuid("student_id"), createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 // === super_admin_audit_logs (SaaS owner 액션 추적) ===
 // 모든 super-admin mutation을 INSERT-only로 기록. service_role로만 write.

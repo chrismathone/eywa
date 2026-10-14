@@ -33,6 +33,7 @@ import {
   MAX_LOOKAHEAD_DAYS,
   parseSlotPick,
   slotPickKey,
+  normalizeLessonPace,
   type LessonPace,
   type SlotAxis,
 } from "../lesson-schedule";
@@ -120,7 +121,7 @@ export async function saveClassTextbookPlan(input: ClassTextbookPlanInput): Prom
     return { ok: false, error: `한 배정에 교시를 ${MAX_SLOT_PICKS}칸까지 고를 수 있습니다` };
   }
   const axis: SlotAxis = input.slotAxis === "jj" ? "jj" : "class";
-  const pace: LessonPace = input.pace === "day" ? "day" : "period";
+  const pace: LessonPace = normalizeLessonPace(input.pace);
   const termMode = input.termMode === "exam" ? "exam" : "regular";
   const startLessonNo = Math.max(1, Math.min(200, Math.trunc(Number(input.startLessonNo) || 1)));
 
@@ -326,7 +327,7 @@ async function loadPlan(planId: string, opts: { write: boolean } = { write: true
       classId: String(data.class_id),
       textbookId: String(data.textbook_id),
       axis: data.slot_axis === "jj" ? "jj" : "class",
-      pace: data.pace === "day" ? "day" : "period",
+      pace: normalizeLessonPace(data.pace),
       termMode: data.term_mode === "exam" ? "exam" : "regular",
       startDate: String(data.start_date),
       startLessonNo: Number(data.start_lesson_no ?? 1),
@@ -729,7 +730,7 @@ async function loadFillInput(input: TextbookFillInput): Promise<LoadedPlan | { e
       classId: input.classId,
       textbookId: input.textbookId,
       axis: "class",
-      pace: input.pace === "day" ? "day" : "period",
+      pace: normalizeLessonPace(input.pace),
       termMode: input.termMode === "exam" ? "exam" : "regular",
       startDate: input.startDate,
       startLessonNo: Math.max(1, Math.min(200, Math.trunc(Number(input.startLessonNo) || 1))),

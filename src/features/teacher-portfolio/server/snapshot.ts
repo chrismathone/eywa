@@ -2,6 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { addDays, monthOf, monthRange, shiftMonth } from "@/lib/date-kst";
 import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
+import { MERGE_NOTE_PREFIX } from "@/features/students/merged";
 import { PORTFOLIO_MONTHS } from "../model/build";
 import { kstDateOf } from "../model/dates";
 import { referenceMonthsAfter } from "../model/pre-record";
@@ -105,13 +106,13 @@ export async function loadPortfolioSnapshot(
     reportsByCover, followUps, consulted, reviewDocs, transitions, delegations, invoices, makeupByAbsence, makeupByDate,
   ] = await Promise.all([
     table("tenants").select("id, name").eq("id", tenantId).maybeSingle(),
-    paged<{ id: string }>((a, b) => inTenant("students", "id").eq("is_test", true).order("id").range(a, b)),
+    paged<{ id: string }>((a, b) => inTenant("students", "id").or(`is_test.eq.true,notes.like.${MERGE_NOTE_PREFIX}%`).order("id").range(a, b)),
     paged<SnapshotUser>((a, b) => inTenant("users", "id, display_name, status, subjects").order("id").range(a, b)),
-    paged<SnapshotClass>((a, b) => inTenant("classes", "id, class_name, subject, english_track, teacher_id, is_active, closed_at, report_optout, is_makeup_pool").order("id").range(a, b)),
+    paged<SnapshotClass>((a, b) => inTenant("classes", "id, class_name, subject, english_track, teacher_id, is_active, closed_at, report_optout, is_makeup_pool, is_special").order("id").range(a, b)),
     // 시간표는 이력을 함께 담는다(#88). 창과 겹치는 배치만 — 끝이 없는 것과 창 안에서 끝난 것.
     paged<SnapshotSchedule>((a, b) => inTenant("class_schedules", SCHEDULE_COLUMNS).lte("valid_from", billingEnd).is("valid_to", null).order("id").range(a, b)),
     paged<SnapshotSchedule>((a, b) => inTenant("class_schedules", SCHEDULE_COLUMNS).lte("valid_from", billingEnd).gte("valid_to", attendanceFrom).order("id").range(a, b)),
-    paged<SnapshotEnrollment>((a, b) => inTenant("enrollments", "id, student_id, class_id, start_date, end_date, on_hold, attendance_days, is_transferred, is_transferred_in").lte("start_date", billingEnd).order("id").range(a, b)),
+    paged<SnapshotEnrollment>((a, b) => inTenant("enrollments", "id, student_id, class_id, start_date, end_date, on_hold, attendance_days, is_transferred, is_transferred_in, withdrawal_reason").lte("start_date", billingEnd).order("id").range(a, b)),
     paged<SnapshotAttendance>((a, b) => inTenant("attendance_records", "id, class_id, student_id, session_date, slot_start, status, recorded_at, supersedes_id, seat_label, recorded_via, taught_by, note").gte("session_date", attendanceFrom).lte("session_date", end).order("id").range(a, b)),
     paged<SnapshotReport>((a, b) => inTenant("lesson_reports", REPORT_COLUMNS).is("revoked_at", null).gte("report_date", from).lte("report_date", end).order("id").range(a, b)),
     paged<SnapshotReport>((a, b) => inTenant("lesson_reports", REPORT_COLUMNS).is("revoked_at", null).gte("covers_date", from).lte("covers_date", end).order("id").range(a, b)),

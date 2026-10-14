@@ -7,6 +7,7 @@ import {
   slotsOfPicks,
   parseSlotPick,
   MAX_LOOKAHEAD_DAYS,
+  normalizeLessonPace,
 } from "./lesson-schedule";
 
 // 2026-09-14(월) 주. 실제 영어 반 모양에 맞춰 월·수 2교시 + 같은 날 JJ 1교시를 둔다.
@@ -114,6 +115,23 @@ describe("buildLessonSchedule — 단위(pace)", () => {
       lookaheadDays: 14,
     });
     expect(s.targets.map((t) => `${t.lessonNo}@${t.date}`)).toEqual(["1@2026-09-14", "2@2026-09-16"]);
+  });
+});
+
+describe("25분 수업(min25) — 원장 2026-10-14 정정", () => {
+  it("1시간 교시라도 차수는 하나만 — '교시마다 1차수'와 같은 배치", () => {
+    const base = { startDate: "2026-09-14", lessonNos: [1, 2, 3, 4], schedules: MON_WED, holidays: {}, axis: "class" as const, lookaheadDays: 14 };
+    const min25 = buildLessonSchedule({ ...base, pace: "min25" });
+    expect(min25.targets).toEqual(buildLessonSchedule({ ...base, pace: "period" }).targets);
+    expect(min25.targets.filter((t) => t.date === "2026-09-14" && t.slotStart === "18:20")).toHaveLength(1);
+  });
+
+  it("단위 문자열은 한 함수로 읽는다 — 모르는 값은 period", () => {
+    expect(normalizeLessonPace("min25")).toBe("min25");
+    expect(normalizeLessonPace("day")).toBe("day");
+    expect(normalizeLessonPace("period")).toBe("period");
+    expect(normalizeLessonPace(null)).toBe("period");
+    expect(normalizeLessonPace("week")).toBe("period");
   });
 });
 

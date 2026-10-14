@@ -361,6 +361,7 @@ export function TextbookFillDialog({
                   >
                     <option value="period">{t("fill.pace.period")}</option>
                     <option value="day">{t("fill.pace.day")}</option>
+                    <option value="min25">{t("fill.pace.min25")}</option>
                   </select>
 <span className="text-text-faint text-xs">{t("fill.pace.hint")}</span>
                 </label>

@@ -965,6 +965,7 @@ export const SHEET_DICT = {
   "fill.pace": { ko: "차수 단위", en: "Lesson unit" },
   "fill.pace.period": { ko: "교시마다 1차수 (1시간씩)", en: "One lesson per period (1 hour)" },
   "fill.pace.day": { ko: "하루에 1차수 (2시간씩)", en: "One lesson per day (2 hours)" },
+  "fill.pace.min25": { ko: "25분 수업 (교시마다 1차수 · 남는 시간은 다른 교재)", en: "25-min lesson (one per period · fill the rest with another book)" },
   "fill.pace.hint": {
     ko: "하루에 두 교시를 골랐다면, ‘하루에 1차수’는 그 두 칸에 같은 차수가 들어갑니다.",
     en: "If you picked two periods on the same day, “one lesson per day” puts the same lesson in both cells.",
