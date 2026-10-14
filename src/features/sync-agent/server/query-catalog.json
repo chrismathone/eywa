@@ -5477,6 +5477,26 @@
       "sql.json({ replyId: o.id, messageId: o.message_id ?? null, postId: Number(row.classnote_post_id), action: RECOVERED_STEP, ok: true, status: \"success\", kind: \"recovered\", commentId, author: o.author_label })"
     ]
   },
+  "a2d69ec56a5d20417d499db8a8f884c87a5668c6a326c76c36b8355facb8d4ff": {
+    "parts": [
+      "select display_name, report_display_name, report_class_name_prefix from users\n        where tenant_id = ",
+      " and system_role <> 'student'"
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/classnote-core.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenant"
+    ]
+  },
   "a304d745a6e174ee15abc0443abf7bee0ea9c0ae98a1c88d4cea0640bb4f525b": {
     "parts": [
       "update lesson_reports set classnote_status='failed',\n        classnote_error=",
@@ -6653,6 +6673,41 @@
     ],
     "expressions": [
       "r.id"
+    ]
+  },
+  "bf7c3087504b7c493462960c0c9f7641ec93ea3915a02988b0882b86c8719395": {
+    "parts": [
+      "select c.id as class_id,c.class_name,c.subject,c.teacher_id,\n        u.display_name as teacher_name,u.status as teacher_status,\n        (select count(*) from users names where names.tenant_id=",
+      " and names.status='active' and names.display_name=u.display_name) as same_name_count\n        from classes c left join users u on u.id=c.teacher_id and u.tenant_id=",
+      "\n        where c.tenant_id=",
+      " and c.id=",
+      ""
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/video-teacher-route.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenantId",
+      "tenantId",
+      "tenantId",
+      "report.classId"
     ]
   },
   "c11f455cfcb2f2e4e1b9ecc0939b168c45e5efb4f52fcdc2b976611b189a7626": {
@@ -8532,6 +8587,31 @@
     "expressions": [
       "t.makeedu_id",
       "t.id"
+    ]
+  },
+  "f59abb620c9d5c19f5262fc323b26450d817cb684978488f69b0189ccd9bba56": {
+    "parts": [
+      "select id, class_name from classes where tenant_id = ",
+      " and id in ",
+      ""
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/classnote-core.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "list"
+      }
+    ],
+    "expressions": [
+      "tenant",
+      "sql(classIds)"
     ]
   },
   "f5a9dc84df90d51efc7a23cea0c79b309e543c315cc3e061cddbd478141569b4": {

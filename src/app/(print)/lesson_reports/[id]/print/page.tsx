@@ -7,7 +7,8 @@ import { createClient } from "@/lib/supabase/server";
 import { resolveBrandingSrc, resolveTenantReadUrls } from "@/lib/storage/media-storage";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { fetchReportTrendRows, fetchSpecialClassIds } from "@/features/onescreen/server/score-history";
-import { resolveReportAuthorName } from "@/features/onescreen/server/report-author-name";
+import { resolveReportAuthorSettings } from "@/features/onescreen/server/report-author-name";
+import { formatReportAuthorName } from "@/features/onescreen/report-author-name";
 import { buildTrendPoints } from "@/features/onescreen/report-trend";
 import { ParentReportCard } from "@/features/onescreen/components/parent-report-card";
 import { reportVideoHomework } from "@/features/onescreen/server/report-video-homework";
@@ -80,7 +81,7 @@ export default async function LessonReportPrintPage({
       )
       .catch(() => []),
     // 발송용 이름(0217a) — /r·ClassNote 이미지와 같은 표기(강사 미리보기 = 실제 발송물). fail-soft.
-    resolveReportAuthorName(user.tenantId, report.teacher_name as string | null),
+    resolveReportAuthorSettings(user.tenantId, report.teacher_name as string | null),
     // 영어 보고서의 인재원 그림 재료(0261a) — /r과 같은 저장본을 **따로** 읽는다(SELECT 불변, #95). 실패 = 그림 자리만 빈다.
     report.subject === "english" ? loadReportJjSnapshot(user.tenantId, report.id as string) : Promise.resolve(null),
     // 제목 "[특강]"(원장 2026-09-30) — /r과 같은 판정(수업목록 '구분'). RLS 클라이언트라 tenant 자동.
@@ -126,7 +127,7 @@ export default async function LessonReportPrintPage({
         <ParentReportCard
           report={{
             reportDate: report.report_date,
-            teacherName: sendName ?? report.teacher_name,
+            teacherName: formatReportAuthorName(report.teacher_name, sendName, reportClass?.class_name),
             textbook: report.textbook,
             progress: report.progress,
             dailyTest: report.daily_test,
