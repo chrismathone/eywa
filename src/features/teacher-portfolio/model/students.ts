@@ -18,14 +18,19 @@ const clampScore = (n: number) => Math.min(20, Math.max(0, n));
 type Role = "담임" | "부담임";
 /** `homeClasses` = 그중 담임인 반(원생상담이 담임 반 학생·반 이름만 본다). */
 type Relation = { classes: Set<string>; homeClasses: Set<string>; roles: Set<Role> };
-/** `ended` = 유출 이벤트를 만든 종료 수강(퇴원율이 사유·특강·과목을 본다). 화면 근거(detail)엔 싣지 않는다. */
-type TrackedEvent = StudentEvent & { teacherId: string; month: string; ended?: SnapshotEnrollment[] };
-/** 퇴원율이 쓰는 재료 — 그날 강사별 명단과 유출 이벤트(학생 추적과 같은 판정 한 벌). */
+type TrackedEvent = StudentEvent & { teacherId: string; month: string };
+/** 학생이 수강을 끝낸 날 — 그날 끝난 수강 줄 전부(끝 = 종료일과 반이 닫힌 날 중 이른 날 · 보강 반·하루도 안 다닌 줄 제외). */
+export type StudentExit = { day: string; ended: readonly SnapshotEnrollment[] };
+/**
+ * 퇴원율이 쓰는 재료 — 그날 강사별 명단(학생 추적과 같은 명단 한 벌)과 학생별 수강 끝.
+ * 🔴 끝은 강사 명단의 차이가 아니라 학생 수강에서 읽는다 — 다른 선생님 반으로 옮긴 뒤 그만둔 학생은 옛 선생님 명단에서
+ *    '반이동 유출'로만 빠져 어느 선생님에게도 퇴원으로 안 잡혔다(main 퇴원율과 합칠 때 적대적 리뷰 2026-10-14).
+ */
 export type ChurnSource = {
   rosterOf: (day: string, teacherId: string) => ReadonlyMap<string, {
     classes: ReadonlySet<string>; homeClasses: ReadonlySet<string>; roles: ReadonlySet<"담임" | "부담임">;
   }>;
-  exitsOf: (teacherId: string, start: string, end: string) => readonly TrackedEvent[];
+  exitsOf: (studentId: string, start: string, end: string) => readonly StudentExit[];
   enrollmentsOf: (studentId: string) => readonly SnapshotEnrollment[];
 };
 
@@ -106,7 +111,6 @@ export function buildStudentTracking(input: {
           const history = enrollmentByStudent.get(studentId) ?? [];
           let type: StudentEventType = "담당 변경";
           let points = 0;
-          let endedRows: SnapshotEnrollment[] | undefined;
           if (incoming) {
             const starts = history.filter((e) => relation.classes.has(e.class_id) && e.start_date === day);
             const transfers = starts.filter((b) => b.is_transferred_in);
@@ -118,7 +122,6 @@ export function buildStudentTracking(input: {
           } else {
             const ended = history.filter((e) => relation.classes.has(e.class_id)
               && (e.end_date === day || classes.get(e.class_id)?.closed_at === day));
-            endedRows = ended;
             const transfers = ended.filter((e) => e.is_transferred && e.end_date === day);
             const sameTeacher = transfers.some((a) => history.some((b) => linked(a, b) && teachersFor(b, b.start_date).has(teacherId)));
             if (sameTeacher) type = "같은 강사 내 반이동";
@@ -133,19 +136,27 @@ export function buildStudentTracking(input: {
             teacherId, month: day.slice(0, 7), studentId, day, type, points, direction: incoming ? "유입" : "유출",
             className: [...relation.classes].map((id) => classes.get(id)?.class_name || "").join(", "),
             role: [...relation.roles].join("·"),
-            ...(endedRows ? { ended: endedRows } : {}),
           });
         }
       }
     }
   }
 
+  const exitsByStudent = new Map<string, Map<string, SnapshotEnrollment[]>>();
+  for (const e of input.enrollments) {
+    const c = classes.get(e.class_id);
+    const day = [e.end_date, c?.closed_at].filter((d): d is string => Boolean(d)).sort()[0];
+    if (!c || c.is_makeup_pool || !day || day <= e.start_date) continue;
+    const days = exitsByStudent.get(e.student_id) ?? exitsByStudent.set(e.student_id, new Map()).get(e.student_id)!;
+    days.set(day, [...(days.get(day) ?? []), e]);
+  }
+
   const count = (rows: readonly StudentEvent[], type: StudentEventType) => rows.filter((r) => r.type === type).length;
   const resultCache = new Map<string, StudentTracking>();
   const churnSource: ChurnSource = {
     rosterOf: (day, teacherId) => roster(day).get(teacherId) ?? new Map(),
-    exitsOf: (teacherId, start, end) => events.filter((e) => e.teacherId === teacherId && e.direction === "유출"
-      && (e.type === "퇴원" || e.type === "수강종료") && e.day >= start && e.day <= end),
+    exitsOf: (studentId, start, end) => [...(exitsByStudent.get(studentId) ?? [])]
+      .filter(([day]) => day >= start && day <= end).sort(([a], [b]) => a.localeCompare(b)).map(([day, ended]) => ({ day, ended })),
     enrollmentsOf: (studentId) => enrollmentByStudent.get(studentId) ?? [],
   };
   return {

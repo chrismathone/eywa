@@ -346,7 +346,7 @@ describe("지점 보기 — 화면과 권한", () => {
     // 감시는 보는 중이거나 보기를 열 수 있는 사람의 화면에만 놓인다.
     expect(layout).toContain("const tenantViewSync = user.tenantView || canOpenTenantView");
     // 🔴 그 판정은 설정 조회와 **나란히** 묻는다 — 따로 먼저 기다리면 모든 사용자의 창 첫 페인트 앞에 조회 하나가 줄을 선다(B4).
-    expect(layout).toMatch(/const \[settings, showMakeupSettings, showEvaluationSettings, canOpenTenantView\] = await Promise\.all\(\[\s+getTenantSettings\(\),\s+isLaboratoryMenuAvailable\(user\.tenantId, "makeups"\),[\s\S]*?isLaboratoryMenuAvailable\(user\.tenantId, "class_review"\),\s+user\.tenantView \? false : isCurrentUserSuperAdmin\(\),\s+\]\);/);
+    expect(layout).toMatch(/const \[settings, showMakeupSettings, showEvaluationSettings, canOpenTenantView, laboratoryMenus\] = await Promise\.all\(\[\s+getTenantSettings\(\),\s+isLaboratoryMenuAvailable\(user\.tenantId, "makeups"\),[\s\S]*?isLaboratoryMenuAvailable\(user\.tenantId, "class_review"\),\s+user\.tenantView \? false : isCurrentUserSuperAdmin\(\),\s+getLaboratoryMenus\(\),\s+\]\);/);
     expect(layout).not.toContain("(await isCurrentUserSuperAdmin())\n    ? <TenantViewSync");
   });
 

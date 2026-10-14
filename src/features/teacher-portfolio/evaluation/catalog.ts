@@ -21,7 +21,7 @@ export type MetricMeta = {
 
 export const METRIC_META: Record<BuiltinMetricId, MetricMeta> = {
   payRatio: { unit: "%", short: "급여 비율", color: "var(--color-amber)", measure: "그 달 급여(세전: 직접 입력 → 계약서 월급 → 출석부 실급여) ÷ 담당 매출(담당 반 학생 청구서의 그 반 금액, 할인 전 — 회차 확정 전에도 · 이름이 안 맞으면 짝이 하나일 때) — 금액은 보이지 않고 비율만" },
-  churn: { unit: "%", short: "퇴원율", color: "var(--color-blue)", measure: "이 달에 그만둔 학생 ÷ 지난달 담당 학생(그 달 절반 이상 맡은 학생) — 고른 사유·반 이동·수업 끝남·끝난 특강·같은 과목 다른 반은 뺀다" },
+  churn: { unit: "%", short: "퇴원율", color: "var(--color-blue)", measure: "이 달에 그만둔 학생 ÷ 지난달 담당 학생(담임·교시 담당 모두 · 정규 수업으로 그 달 절반 이상 맡은 학생) — 다른 반으로 옮긴 뒤 그만둬도 센다 · 고른 사유·반 이동·수업 끝남·끝난 특강·같은 과목 다른 반은 뺀다" },
   grades: { unit: "%", short: "성적", color: "var(--color-purple)", measure: "성적관리에 등록된 성적(일일·확인 테스트 · 월말평가 · 내신)", pending: "5단계" },
   satisfaction: { unit: "점", short: "만족도", color: "var(--color-green)", measure: "학부모 글·댓글 판정과 클레임의 가감 합 — 만점 없이 총점에 그대로 더하고 뺀다", pending: "3단계" },
   punctuality: { unit: "회", short: "근태", color: "var(--color-gold)", measure: "메이크에듀 출퇴근 기록의 지각·결근 횟수(연차 제외)", pending: "4단계" },

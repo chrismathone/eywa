@@ -3,7 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { isMergedStudent } from "@/features/students/merged";
 import { isSystemBulkWithdrawal } from "../system-bulk";
-import { inWithdrawalWindow, lastEndedByStudent, pickLastEnded, withdrawalSubjects } from "../window";
+import { normalizeReason } from "../types";
+import { endedTogether, inWithdrawalWindow, lastEndedByStudent, pickLastEnded, withdrawalSubjects, type EndedClassRef } from "../window";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 type One<T> = T | T[] | null;
@@ -11,8 +12,11 @@ type One<T> = T | T[] | null;
 export type EndedEnrollmentRow = {
   id: string;
   student_id: string;
+  class_id: string;
   start_date: string | null;
   end_date: string | null;
+  /** 반이동으로 닫힌 수강 — 옛 반 마지막 수업일은 종료일 전날(`enrollmentLastDate`). */
+  is_transferred: boolean | null;
   withdrawal_reason: string | null;
   class: One<{ class_name?: string | null; subject?: string | null; english_track?: string | null }>;
 };
@@ -30,7 +34,7 @@ export async function loadEndedEnrollments(
     supabase
       .from("enrollments")
       .select(
-        "id, student_id, start_date, end_date, withdrawal_reason, class:class_id ( class_name, subject, english_track )",
+        "id, student_id, class_id, start_date, end_date, is_transferred, withdrawal_reason, class:class_id ( class_name, subject, english_track )",
       )
       .in("student_id", chunk)
       .not("end_date", "is", null)
@@ -50,6 +54,18 @@ export function lastClassOf(row: EndedEnrollmentRow | undefined) {
   };
 }
 
+/**
+ * 퇴원 사유·메모. 사유 = 퇴원 메타데이터의 키, 없으면 **마지막 종료 수강의 종료 사유 원문** — 퇴원관리 목록의
+ * `withdrawalReason`과 같은 폴백(`md?.reason ? … : last.reason`). 메모는 메타데이터에만 있다.
+ */
+function exitReasonOf(raw: unknown, lastReason: string | null): { reason: string | null; memo: string | null } {
+  const m = raw && typeof raw === "object" ? (raw as { reason?: unknown; memo?: unknown }) : {};
+  return {
+    reason: normalizeReason(typeof m.reason === "string" ? m.reason : null) ?? lastReason,
+    memo: typeof m.memo === "string" && m.memo.trim() ? m.memo.trim() : null,
+  };
+}
+
 export type WindowWithdrawal = {
   id: string;
   name: string;
@@ -59,8 +75,20 @@ export type WindowWithdrawal = {
   lastClassName: string | null;
   lastClassSubject: string | null;
   lastClassEnglishTrack: string | null;
-  /** 퇴원 무렵 종료된 과목 각각의 마지막 반. KPI의 과목별 집계에 사용한다. */
-  exitClasses: { subject: string; englishTrack: string | null; className: string | null }[];
+  /**
+   * 퇴원 무렵 종료된 과목 각각의 마지막 반. KPI의 과목별 집계에 사용한다.
+   * `endedTogether` = 그 과목에서 함께 끝난 수강(첫째 = 마지막 반) — 시간표 X 겹침이 그때 담임·'퇴원 0'을 가리는 재료다.
+   */
+  exitClasses: {
+    subject: string;
+    englishTrack: string | null;
+    className: string | null;
+    endedTogether: EndedClassRef[];
+  }[];
+  /** 퇴원 사유 — 메타데이터 키(표기 흔들림 흡수), 없으면 마지막 종료 수강의 사유 원문(퇴원관리와 같은 폴백). */
+  reason: string | null;
+  /** 퇴원 메모(사람이 적은 사유) — 없으면 null. */
+  memo: string | null;
 };
 
 /**
@@ -77,10 +105,11 @@ export async function getWithdrawalsInWindow(from: string, to: string): Promise<
     grade: string | null;
     withdrawn_at: string | null;
     notes: string | null;
+    withdrawal_metadata: unknown;
   }>((f, t) =>
     supabase
       .from("students")
-      .select("id, name, school, grade, withdrawn_at, notes")
+      .select("id, name, school, grade, withdrawn_at, notes, withdrawal_metadata")
       .eq("status", "withdrawn")
       .gte("withdrawn_at", from)
       .lte("withdrawn_at", to)
@@ -108,8 +137,20 @@ export async function getWithdrawalsInWindow(from: string, to: string): Promise<
     const history = byStudent.get(s.id) ?? [];
     const exitClasses = withdrawalSubjects(history.map((e) => ({ endDate: e.end_date, subject: lastClassOf(e).subject })))
       .map((subject) => {
-        const lastSubject = lastClassOf(pickLastEnded(history.filter((e) => lastClassOf(e).subject === subject)) ?? undefined);
-        return { subject, englishTrack: lastSubject.englishTrack, className: lastSubject.className };
+        const rows = history.filter((e) => lastClassOf(e).subject === subject);
+        const lastSubject = lastClassOf(pickLastEnded(rows) ?? undefined);
+        return {
+          subject,
+          englishTrack: lastSubject.englishTrack,
+          className: lastSubject.className,
+          endedTogether: endedTogether(rows).map((e) => ({
+            enrollmentId: e.id,
+            classId: e.class_id,
+            startDate: e.start_date,
+            endDate: e.end_date,
+            isTransferred: e.is_transferred === true,
+          })),
+        };
       });
     const systemBulk = isSystemBulkWithdrawal({ withdrawnAt: s.withdrawn_at, hasEnrollmentHistory: !!row });
     if (!inWithdrawalWindow({ withdrawnAt: s.withdrawn_at, systemBulk }, from, to)) return [];
@@ -124,6 +165,7 @@ export async function getWithdrawalsInWindow(from: string, to: string): Promise<
         lastClassSubject: klass.subject,
         lastClassEnglishTrack: klass.englishTrack,
         exitClasses,
+        ...exitReasonOf(s.withdrawal_metadata, klass.reason),
       },
     ];
   });

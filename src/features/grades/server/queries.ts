@@ -176,9 +176,7 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
               .eq("subject", sel.subject)
               .eq("school_year", sel.year)
               .eq("term", sel.term);
-            q = sel.subject === "math" && sel.slot === "school"
-              ? q.in("exam_slot", ["school", "midterm", "final"])
-              : q.eq("exam_slot", sel.slot);
+            q = q.eq("exam_slot", sel.slot);
             // 🔴 월말평가는 달마다 다른 칸이다(0288a) — 안 좁히면 9월·10월 두 행이 같이 와서
             //    Map이 아무거나 하나를 집는다(화면이 지난달 점수를 이번 달로 보여 준다).
             // ⚠️ 0288a 미적용이면 그 컬럼이 없어 필터 자체가 PostgREST 400이다 — 그땐 안 건다([[#95]]).
@@ -194,9 +192,8 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
 
   const studentById = new Map(students.map((s) => [s.id, s]));
   const num = (v: string | number | null): number | null => (v == null ? null : Number(v));
-  // 이관 전 수학 중간·기말은 내신으로 읽는다. 겹치면 내신 원본을 우선하고 과거 행은 원장에 남긴다.
-  const orderedScores = [...scores].sort((a, b) =>
-    (a.exam_slot === "school" ? 1 : 0) - (b.exam_slot === "school" ? 1 : 0) || (a.taken_on ?? "").localeCompare(b.taken_on ?? ""));
+  // 같은 칸에 행이 둘이면(유니크 축이라 정상이면 없다) 시험일이 늦은 쪽이 이긴다 — Map은 나중 값을 남긴다.
+  const orderedScores = [...scores].sort((a, b) => (a.taken_on ?? "").localeCompare(b.taken_on ?? ""));
   const scoreByStudent = new Map(
     orderedScores.map((s) => [
       s.student_id,

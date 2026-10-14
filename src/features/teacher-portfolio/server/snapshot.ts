@@ -2,6 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { addDays, monthOf, monthRange, shiftMonth } from "@/lib/date-kst";
 import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
+import { isMergedStudent, MERGE_NOTE_PREFIX } from "@/features/students/merged";
 import { PORTFOLIO_MONTHS } from "../model/build";
 import { kstDateOf } from "../model/dates";
 import { referenceMonthsAfter } from "../model/pre-record";
@@ -110,7 +111,8 @@ export async function loadPortfolioSnapshot(
     futureEnrollments, studentReasons, referrals, touches,
   ] = await Promise.all([
     table("tenants").select("id, name").eq("id", tenantId).maybeSingle(),
-    paged<{ id: string }>((a, b) => inTenant("students", "id").eq("is_test", true).order("id").range(a, b)),
+    // 병합 표식은 접두로 먼저 좁히고 모양으로 다시 본다(`isMergedStudent` — 사람이 쓴 '중복 병합: 확인 요망' 메모는 병합이 아니다).
+    paged<{ id: string; is_test: boolean | null; notes: string | null }>((a, b) => inTenant("students", "id, is_test, notes").or(`is_test.eq.true,notes.like.${MERGE_NOTE_PREFIX}%`).order("id").range(a, b)),
     paged<SnapshotUser>((a, b) => inTenant("users", "id, display_name, status, subjects").order("id").range(a, b)),
     paged<SnapshotClass>((a, b) => inTenant("classes", "id, class_name, subject, english_track, teacher_id, is_active, closed_at, report_optout, is_makeup_pool, is_special").order("id").range(a, b)),
     // 시간표는 이력을 함께 담는다(#88). 창과 겹치는 배치만 — 끝이 없는 것과 창 안에서 끝난 것.
@@ -149,7 +151,7 @@ export async function loadPortfolioSnapshot(
   ]);
   if (tenantRes.error || !tenantRes.data) throw new Error(`지점 조회 실패: ${tenantRes.error?.message ?? "없는 지점"}`);
 
-  const test = new Set(testStudents.map((s) => s.id));
+  const test = new Set(testStudents.filter((s) => s.is_test || isMergedStudent(s.notes)).map((s) => s.id));
   const [firstReport, firstAttendance] = await Promise.all([
     firstRecordDay(admin, tenantId, "report", test),
     firstRecordDay(admin, tenantId, "attendance", test),

@@ -6,7 +6,6 @@ import { Pagination } from "@/components/pagination";
 import { MakeeduSyncBadge } from "@/components/makeedu-sync-badge";
 import { MakeeduOriginTag } from "@/components/makeedu-origin-tag";
 import { DupSuspectTag } from "@/components/dup-suspect-tag";
-import { MergedTag } from "@/components/merged-tag";
 import { EditingBadge } from "@/features/presence/editing-badge";
 import { FilterSelect } from "@/components/filter-select";
 import { HeaderFilter } from "@/components/header-filter";
@@ -436,21 +435,28 @@ export default async function StudentsPage({
           {/* 표 — 이 메뉴의 최소 창(960)에 맞춘 고정 열(`table-fixed`)이라 창 안에선 가로 스크롤이 없다. 🔴 폰에서도 `overflow-x-auto`
               상자로 싸지 않는다 — overflow-x가 auto면 overflow-y도 auto가 되어 열 머리 팝업(absolute)이 짧은 표 안에서 잘린다(리뷰 2026-09-04;
               폰에선 이 팝업이 유일한 필터다). 폰(최상위 프레임 <768px)은 `.stack-rows`(globals.css)가 열 머리를 필터 칩 줄로, 행을
-              [이름 학교·학년 | 상태] / [과목 · 담당 강사 · 연락처] 두 줄 카드로 접는다(2026-09-13 모바일 전수검사 — 그전엔 표 736px가
+              [이름 | 상태] / [학교·학년 · 과목 · 담당 강사 · 연락처] 두 줄 카드로 접는다(2026-09-13 모바일 전수검사 — 그전엔 표 736px가
               본문을 가로로 밀어 상태 뒤 열이 전부 화면 밖이었다). 칸의 자리는 `data-cell`이 정한다. ⚠️ `max-md:min-w-[46rem]`은
               **창(iframe) 안을 위해 남긴다** — 창을 768 아래로 스냅하면 `.stack-rows`가 안 걸리고(창 제외 스코프) 이 min-w가 종전대로 표를
               736px로 지켜 창이 가로로 스크롤한다(`WindowMinSizeNotice`의 "가로 스크롤로" 안내와 일치). 폰에선 `.stack-rows`가 이 값을 덮는다.
-              행 = 이름(학교·학년) + 상태 + 과목 + 담당 강사 + 연락처 한 줄, 행 사이 헤어라인(§11). */}
+              행 = 이름 + 학교·학년 + 상태 + 과목 + 담당 강사 + 연락처 한 줄, 행 사이 헤어라인(§11). 이름과 학교·학년은 다른 열이다
+              (원장 2026-10-14 *"이름과 학교학년 열 분리"* — 한 칸에 붙여 두면 이름 길이마다 학교·학년의 시작점이 달라 위아래로 못 훑는다). */}
           <div className="stack-rows bg-card shadow-card rounded-2xl">
             <table className="w-full table-fixed text-sm max-md:min-w-[46rem] [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-l-line-faint">
-              {/* 열 폭 — 2026-09-08 v5 글자 기준 실측(트리거 라벨 16px, 표 폭 935): 라벨 자리 = 열폭 − th px-3 24 − 크롬 32(px-1 8 + gap-2 8 + 쉐브론 16).
-                  상태 18% → 112px ≥ `상태: 예비·상담`(110px) / 담당 강사 20% → 131px ≥ `담당 강사: 이수진`(125px).
-                  옛 30/16/20/18/16은 14px 시절 예산(`상태: 예비·상담 ⌄` 128px)이라 v5에서 `truncate`가 발동했다. 늘린 몫은 이름(30→28%, 238px ≥ 이름+학교학년 151px)·과목(20→18%)에서. */}
+              {/* 열 폭 — 2026-10-14 이름·학교·학년 열 분리 때 Pretendard로 다시 잰 값(표 폭 935 = 최소 창 960, 칸 내용 폭 = 열폭 − th px-3 24).
+                  머리 트리거 = 굵게 16px 라벨 + 크롬 32(px-1 8 + gap-2 8 + 쉐브론 16). 🔴 트리거는 **말줄임되지 않고 넘친다**(바깥 상자가
+                  `inline-block w-auto`) — 넘쳐도 가운데 정렬이라 양쪽 th 여백(12px씩) 안이면 옆 칸 글자와 겹치지 않는다.
+                  이름 19% → 154 ≥ `이름` 36 + 4 + `정렬: 학년순 ⌄` 109 = 149(`등록일순` 163은 최소 창에서만 둘째 줄로) /
+                  학교·학년 13% → 98 ≥ `학년: 중1 ⌄` 89·값 `대구외국어고1` 90(학년 여럿 `학년: 중1 외 1 ⌄` 118은 여백 안, `외 13` 131은 경계를 5px 넘는다) /
+                  상태 16% → 126 ≥ `상태: 재원 ⌄` 96(`상태: 예비·상담 ⌄` 128은 여백 안) /
+                  과목 18% → 144 ≥ `수강 과목: 수학 ⌄` 127(기본 과목 `수학(심화)` 167은 여백 안 — 16%였을 땐 담당 강사 글자와 겹쳤다) /
+                  담당 강사 18% → 144 ≥ `담당 강사: 이수진 ⌄` 141 / 연락처 16% → 126 ≥ `010-0000-0000`(고정폭 숫자) 122. */}
               <colgroup>
-                <col className="w-[28%]" />
+                <col className="w-[19%]" />
+                <col className="w-[13%]" />
+                <col className="w-[16%]" />
                 <col className="w-[18%]" />
                 <col className="w-[18%]" />
-                <col className="w-[20%]" />
                 <col className="w-[16%]" />
               </colgroup>
               <thead className="border-line border-b">
@@ -458,21 +464,11 @@ export default async function StudentsPage({
                 <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:text-center [&>th]:font-bold [&>th]:whitespace-nowrap">
                   <th scope="col">
                     <span className="flex flex-wrap items-center justify-center gap-1">
-                      {/* 열 이름은 글자로 남긴다 — 필터 둘만 있으면 이 열의 접근성 이름이 "학년 필터 정렬 필터"가 된다(리뷰).
+                      {/* 열 이름은 글자로 남긴다 — 정렬 필터만 있으면 이 열의 접근성 이름이 "정렬 필터"가 된다(정렬은 표 전체 축이지 이 열의 이름이 아니다).
                           ⚠️ 폰(<768px)에선 `.stack-rows`가 이 글자를 감춘다(data-cell="label") — 카드엔 열이 없어 열 이름이 뜻을 잃는다. */}
                       <span className="px-1" data-cell="label">{sheetT(lang, "stu.col.student")}</span>
                       {/* 저장값을 이기려면 "전체"도 URL에 적혀야 한다(explicitAll) — 학년·과목·담임·정렬 넷이 그렇다. */}
-                      <span data-help="st-grade" className="inline-flex flex-wrap items-center justify-center gap-1">
-                      <HeaderFilter
-                        paramName="grade"
-                        clearParams={exit("grade")}
-                        value={grade}
-                        options={gradeOptions}
-                        axisLabel={sheetT(lang, "stu.filter.grade")}
-                        allValue="all"
-                        explicitAll
-                        multiple
-                      />
+                      <span data-help="st-sort">
                       <HeaderFilter
                         paramName="sort"
                         clearParams={exit("sort")}
@@ -486,6 +482,19 @@ export default async function StudentsPage({
                       />
                       </span>
                     </span>
+                  </th>
+                  {/* 학교·학년 열 머리 = 학년 필터 하나(상태 열과 같은 꼴) — 값이 `경명여고1`처럼 학교와 학년을 붙여 적는 열이다. */}
+                  <th scope="col" data-help="st-grade">
+                    <HeaderFilter
+                      paramName="grade"
+                      clearParams={exit("grade")}
+                      value={grade}
+                      options={gradeOptions}
+                      axisLabel={sheetT(lang, "stu.filter.grade")}
+                      allValue="all"
+                      explicitAll
+                      multiple
+                    />
                   </th>
                   <th scope="col" data-help="st-status">
                     {/* 기본값(재원)이 휴원·퇴원을 **숨기므로** 값을 항상 적는다(showAll). */}
@@ -548,7 +557,7 @@ export default async function StudentsPage({
               <tbody className="divide-line divide-y">
                 {rows.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-3 py-4">
+                    <td colSpan={6} className="px-3 py-4">
                       {/* 설명 문장은 넣지 않는다(§4). 검색어만 0건을 만들면 그 q만 지우고, 저장된 필터는 둔다. */}
                       <EmptyState
                         image={q ? "search" : "students"}
@@ -573,14 +582,16 @@ export default async function StudentsPage({
                     label: s.status,
                     color: "neutral" as PillColor,
                   };
-                  // 이름 + 학교·학년 압축 라벨("경명여중1")을 **한 줄**에(§11 "한 행 = 이름 + 값") — 두 줄 셀은 행을 키운다.
+                  // 학교·학년 압축 라벨("경명여중1") — 이름 옆 열에 따로 선다(원장 2026-10-14).
                   const sg = sheetSchoolGrade(s.school, s.grade, lang);
                   const shownName = studentDisplayName(s.name, s.englishName, lang);
                   return (
                     <tr key={s.id} data-help="st-row" className="hover:bg-bg-soft/50 transition-colors [&>td]:px-3 [&>td]:py-2.5 [&>td]:text-center">
                       <td data-cell="primary">
-                        <span className="phone:justify-start flex min-w-0 items-center justify-center gap-1.5">
-                          {/* 이름은 1차 식별자라 줄지 않는다(§1 "1차 핵심값 ellipsis 금지") — 좁으면 학교·학년(2차)이 먼저 접힌다. */}
+                        {/* `justify-center-safe` — 이름 + 꼬리표가 칸보다 길면(긴 이름 + 동기화 + 의심 · '수정 중' 꼬리표) 가운데 정렬이
+                            양쪽으로 넘쳐 카드 왼쪽 밖으로 나간다. 넘칠 때만 왼쪽 정렬로 바뀌어 넘침이 오른쪽 한쪽에만 생긴다. */}
+                        <span className="phone:justify-start flex min-w-0 items-center justify-center-safe gap-1.5">
+                          {/* 이름은 1차 식별자라 줄지 않는다(§1 "1차 핵심값 ellipsis 금지"). */}
                           <WindowLink
                             href={`/students/${s.id}`}
                             title={shownName}
@@ -589,14 +600,21 @@ export default async function StudentsPage({
                           >
                             {shownName}
                           </WindowLink>
-                          {sg ? <span className="text-text-dim min-w-0 truncate text-sm">{sg}</span> : null}
                           {s.syncNew ? <MakeeduOriginTag /> : null}
                           {s.dupSuspect ? <DupSuspectTag /> : null}
-                          {/* 병합된 학생은 집계(퇴원 수·등록 추이)에서만 빠지고 목록에는 남는다 —
-                              감추면 데스크가 병합을 확인하거나 되짚을 길이 사라진다(원장 2026-09-13). */}
-                          {s.merged ? <MergedTag /> : null}
+                          {/* 중복 병합된 학생의 '병합됨' 꼬리표는 걷었다(원장 2026-10-14 — 학생은 목록에 그대로 선다). */}
                           <EditingBadge scope={`student:${s.id}`} />
                         </span>
+                      </td>
+                      {/* 학교가 길면 최소 창에서만 말줄임 — 전체는 title. 폰 카드에선 둘째 줄 맨 앞(원래 순서대로 흐른다). */}
+                      <td className="text-text-dim" data-empty={sg ? undefined : "true"}>
+                        {sg ? (
+                          <span className="block truncate" title={sg}>
+                            {sg}
+                          </span>
+                        ) : (
+                          <span className="text-text-faint">—</span>
+                        )}
                       </td>
                       <td data-cell="status">
                         <Pill color={meta.color}>{meta.label}</Pill>

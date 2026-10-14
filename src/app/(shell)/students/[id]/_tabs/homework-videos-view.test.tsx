@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { HomeworkVideosView } from "./homework-videos-view";
 import { dedupeHomeworkVideos, homeworkVideoLinks, type HomeworkVideo } from "@/features/students/homework-videos";
 
-const row: HomeworkVideo = { id: "video", subject: "english", posted_at: "2026-09-30T04:36:00Z", created_at: "2026-09-30T04:36:00Z",
+const row: HomeworkVideo = { id: "11111111-1111-4111-8111-111111111111", subject: "english", posted_at: "2026-09-30T04:36:00Z", created_at: "2026-09-30T04:36:00Z",
   comment_id: 12, status: "uploaded", drive_file_id: "drivefile12345", bytes: 7873117, uploaded_at: "2026-09-30T05:00:00Z" };
 const settings = (window as unknown as { happyDOM: { settings: { disableIframePageLoading: boolean } } }).happyDOM.settings;
 const previous = settings.disableIframePageLoading;
@@ -19,25 +19,18 @@ beforeAll(() => {
 });
 afterAll(() => { settings.disableIframePageLoading = previous; consoleSpy.mockRestore(); });
 describe("학생 숙제 영상 뷰어", () => {
-  it("과목·출처로 목록을 나누고, 선택한 영상은 Drive 접근을 확인한 뒤에만 불러온다", () => {
+  it("과목·출처로 목록을 나누고, 선택한 영상은 인증된 원본 재생기로 불러온다", () => {
     const { container } = render(<HomeworkVideosView rows={[row]} subjectLabels={{ english: "영어" }} />);
     expect(screen.getByRole("region", { name: "영어 숙제 영상" })).toBeInTheDocument();
-    expect(container.querySelector("iframe")).toBeNull();
+    expect(container.querySelector("video")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /학부모 댓글/ }));
-    // 확인 중엔 iframe을 숨긴 채 미리 불러 둔다(권한이 없으면 구글 로그인 화면이 보이지 않게, 있으면 바로 재생되게)
-    expect(container.querySelector("iframe")?.className).toContain("invisible");
-    expect(screen.getByRole("status")).toHaveTextContent("영상을 불러오는 중입니다.");
-    const probe = container.querySelector("img");
-    expect(probe?.getAttribute("src")).toBe("https://drive.google.com/thumbnail?id=drivefile12345&sz=w64");
-    fireEvent.load(probe!);
-    expect(container.querySelector("iframe")?.src).toBe("https://drive.google.com/file/d/drivefile12345/preview");
-    expect(container.querySelector("iframe")?.className).not.toContain("invisible");
-    expect(screen.queryByRole("status")).toBeNull();
+    expect(container.querySelector("video")?.getAttribute("src")).toBe(`/api/homework-videos/${row.id}/stream`);
+    expect(container.querySelector("iframe")).toBeNull();
     expect(container.querySelector("img")).toBeNull();
     // 구글 로그인 안내 문구는 걷었다(원장 2026-10-01)
     expect(screen.queryByText(/Google 계정으로 로그인/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "닫기" }));
-    expect(container.querySelector("iframe")).toBeNull();
+    expect(container.querySelector("video")).toBeNull();
   });
   it("담임 폴더에 직접 올린 영상은 '직접 제출'·날짜만, 제출 링크는 '제출 링크'로 보인다(원시값 노출 없음)", () => {
     render(<HomeworkVideosView rows={[
@@ -58,19 +51,21 @@ describe("학생 숙제 영상 뷰어", () => {
     expect(result.map((r) => r.id)).toEqual(["dr", "x", "nomd5"]);
     expect(result.every((r) => !("md5" in r))).toBe(true);
   });
-  it("구글 계정에 권한이 없으면 영상 자리에 권한 없음 안내를 띄운다", () => {
+  it("재생 실패는 권한 오류로 단정하지 않고 다시 불러오기와 호환 재생을 제공한다", () => {
     const { container } = render(<HomeworkVideosView rows={[row]} subjectLabels={{ english: "영어" }} />);
     fireEvent.click(screen.getByRole("button", { name: /학부모 댓글/ }));
-    fireEvent.error(container.querySelector("img")!);
-    expect(screen.getByRole("status")).toHaveTextContent("권한이 없어서 영상을 재생할 수 없습니다.");
+    fireEvent.error(container.querySelector("video")!);
+    expect(screen.getByRole("alert")).toHaveTextContent("영상을 불러오지 못했습니다.");
+    expect(screen.getByRole("button", { name: "다시 불러오기" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "호환 재생" })).toBeEnabled();
     expect(container.querySelector("iframe")).toBeNull();
   });
-  it("막 올라간 영상은 썸네일이 아직 없으니 확인 없이 바로 연다", () => {
+  it("막 올라간 영상도 오래된 영상과 같은 재생 경로이며 썸네일로 막지 않는다", () => {
     const fresh = { ...row, uploaded_at: new Date(Date.now() - 10 * 60_000).toISOString() };
     const { container } = render(<HomeworkVideosView rows={[fresh]} subjectLabels={{ english: "영어" }} />);
     fireEvent.click(screen.getByRole("button", { name: /학부모 댓글/ }));
     expect(container.querySelector("img")).toBeNull();
-    expect(container.querySelector("iframe")?.className).not.toContain("invisible");
+    expect(container.querySelector("video")?.getAttribute("src")).toBe(`/api/homework-videos/${row.id}/stream`);
   });
   it("🔴 Drive로 나가는 링크는 어디에도 없다 — 재생 주소(미리보기·썸네일)만 만든다", () => {
     const { container } = render(<HomeworkVideosView rows={[row]} subjectLabels={{ english: "영어" }} />);
@@ -82,10 +77,10 @@ describe("학생 숙제 영상 뷰어", () => {
     expect(Object.keys(homeworkVideoLinks("drivefile12345")!).sort()).toEqual(["preview", "thumbnail"]);
   });
   it("영상 제출 현황의 ▶ — `video`로 넘어온 id의 영상이 미리 골라진 채 열린다(이 학생 영상이 아닌 id는 무시)", () => {
-    const other: HomeworkVideo = { ...row, id: "video-2", posted_at: "2026-09-29T04:36:00Z", drive_file_id: "otherfile12345" };
-    const { container, unmount } = render(<HomeworkVideosView rows={[row, other]} subjectLabels={{ english: "영어" }} initialVideoId="video-2" />);
+    const other: HomeworkVideo = { ...row, id: "22222222-2222-4222-8222-222222222222", posted_at: "2026-09-29T04:36:00Z", drive_file_id: "otherfile12345" };
+    const { container, unmount } = render(<HomeworkVideosView rows={[row, other]} subjectLabels={{ english: "영어" }} initialVideoId={other.id} />);
     expect(screen.getByRole("region", { name: "숙제 영상 뷰어" })).toBeInTheDocument();
-    expect(container.querySelector("img")?.getAttribute("src")).toContain("otherfile12345");
+    expect(container.querySelector("video")?.getAttribute("src")).toContain(other.id);
     unmount();
     render(<HomeworkVideosView rows={[row]} subjectLabels={{ english: "영어" }} initialVideoId="남의-영상-id" />);
     expect(screen.queryByRole("region", { name: "숙제 영상 뷰어" })).toBeNull();

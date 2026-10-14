@@ -7,12 +7,12 @@ import { Button } from "@/components/ui/button";
 import type { SystemRole } from "@/lib/permissions";
 import { REASON_LABEL } from "@/features/withdrawals/types";
 import { changeWithdrawalReport } from "@/features/withdrawal-reports/server/actions";
-import { EMPTY_BODY, REPORT_STATUS, REPORT_ACTION_LABEL, reportCapabilities, type WithdrawalReport, type ReportEvent, type StaffOption, type ReportAction, type ReportBody } from "@/features/withdrawal-reports/model";
+import { EMPTY_BODY, REPORT_STATUS, REPORT_ACTION_LABEL, managerIds, directorIds, reportCapabilities, type WithdrawalReport, type ReportEvent, type StaffOption, type ReportAction, type ReportBody } from "@/features/withdrawal-reports/model";
 
 const control = "w-full min-w-0 rounded-md border bg-background px-3 py-2 text-sm disabled:bg-muted/20 disabled:text-foreground";
 const dateTime = (v: string) => new Date(v).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "short", timeStyle: "short" });
-export function ReportDetail({ report: r, events, staff, labels, userId, writable, role }: {
-  report: WithdrawalReport; events: ReportEvent[]; staff: StaffOption[]; labels: Record<string, string>; userId: string; writable: boolean; role?: SystemRole;
+export function ReportDetail({ report: r, events, staff, labels, userId, writable, role, assignmentChanged = false }: {
+  report: WithdrawalReport; events: ReportEvent[]; staff: StaffOption[]; labels: Record<string, string>; userId: string; writable: boolean; role?: SystemRole; assignmentChanged?: boolean;
 }) {
   const router = useRouter();
   const [body, setBody] = useState<ReportBody>({ ...EMPTY_BODY, ...r.body });
@@ -21,8 +21,8 @@ export function ReportDetail({ report: r, events, staff, labels, userId, writabl
   const [comment, setComment] = useState("");
   const [pending, startTransition] = useTransition();
   const capabilities = reportCapabilities(r, userId, writable, role);
-  const nameOf = (id: string | null) => id ? staff.find(s => s.id === id)?.name ?? "이전 담당자" : "자동 처리";
-  const courses = r.snapshot.courses.filter(c => r.subjects.includes(c.subject));
+  const nameOf = (id: string | null) => id ? staff.find(s => s.id === id)?.name ?? r.snapshot.courses.find(c => c.teacherId === id)?.teacherName ?? "이전 담당자" : "자동 처리";
+  const courses = r.snapshot.courses.filter(c => r.subjects.includes(c.subject) && (!r.group_id || c.teacherId === r.teacher_id));
   const update = <K extends keyof ReportBody>(key: K, value: ReportBody[K]) => setBody(b => ({ ...b, [key]: value }));
   function change(action: ReportAction) {
     setError("");
@@ -38,11 +38,14 @@ export function ReportDetail({ report: r, events, staff, labels, userId, writabl
   return <>
     <div className="flex flex-wrap items-center justify-between gap-3"><Link className="text-sm text-primary hover:underline" href="/withdrawal-reports">← 보고서 목록</Link><span className="rounded-full bg-muted px-3 py-1.5 text-sm">{REPORT_STATUS[r.status]}</span></div>
     <div className="grid gap-3 md:grid-cols-3">
-      {[["작성 강사", r.teacher_id, null], ["관리자 승인", r.manager_id, r.manager_approved_at], ["원장 승인", r.director_id, r.director_approved_at]].map(([title, id, at]) => <div key={title} className={`rounded-lg border p-4 ${at ? "border-att-present-ink/20 bg-att-present/40" : "bg-card"}`}><div className="text-xs text-muted-foreground">{title}</div><div className="mt-1 font-semibold">{nameOf(id)}</div><div className="mt-1 text-xs text-muted-foreground">{at ? `✓ ${dateTime(at)}` : title === "작성 강사" ? "보고서 작성 담당" : "승인 전"}</div></div>)}
+      <div className="rounded-lg border bg-card p-4"><div className="text-xs text-muted-foreground">작성 강사</div><div className="mt-1 font-semibold">{nameOf(r.teacher_id)}</div></div>
+      {(["manager", "director"] as const).map(kind => <div key={kind} className="rounded-lg border bg-card p-4"><div className="text-xs text-muted-foreground">{kind === "manager" ? "관리자 승인" : "원장 승인"}</div><div className="mt-2 space-y-2">{(kind === "manager" ? managerIds(r) : directorIds(r)).map(id => { const at = (kind === "manager" ? r.manager_decisions?.[id] ?? r.manager_approved_at : r.director_decisions?.[id] ?? r.director_approved_at); return <div key={id} className="text-sm"><span className={at ? "font-medium text-att-present-ink" : "font-medium"}>{at ? "✓" : "○"} {nameOf(id)}</span>{at && <div className="mt-0.5 text-xs text-muted-foreground">{dateTime(at)}</div>}</div>; })}{kind === "director" && !directorIds(r).length && <p className="text-sm text-muted-foreground">관리자가 최종 승인합니다.</p>}</div></div>)}
     </div>
     {r.request_note && <div className="rounded-lg border bg-muted/20 p-4 text-sm"><div className="mb-2 font-medium">작성 요청 · {nameOf(r.requested_by)}</div><p className="whitespace-pre-wrap">{r.request_note}</p></div>}
     {r.last_comment && <p className="whitespace-pre-wrap rounded-lg border border-att-late-ink/20 bg-att-late p-4 text-sm text-att-late-ink">{r.last_comment}</p>}
     {r.status === "scheduled" && <p className="rounded-lg border bg-muted/20 p-4 text-sm">승인이 완료되었습니다. {r.effective_date}에 처리하며, 그 전까지는 기존 수강 상태를 유지합니다.</p>}
+    {r.status === "approved" && <p className="rounded-lg border bg-muted/20 p-4 text-sm">이 보고서는 승인이 완료되었습니다. 함께 요청한 다른 강사의 보고서 승인까지 모두 끝나면 처리합니다.</p>}
+    {assignmentChanged && <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive">요청 이후 학생·수강·담당 강사가 변경되었습니다. 아래 내용은 요청 당시 기록이며, 제출·승인을 진행할 수 없습니다. 관리자가 요청을 취소하고 현재 담당 기준으로 다시 요청해 주세요.</p>}
     <section className="space-y-6 rounded-xl border bg-card p-5 md:p-7" aria-label="퇴원 처리서">
       <div className="border-b pb-4"><h2 className="text-xl font-semibold">퇴원 처리서</h2><p className="mt-1 text-sm text-muted-foreground">{r.exit_kind === "withdrawal" ? "전체 퇴원" : "과목 수강종료"} · {r.subjects.map(s => labels[s] ?? "기타 과목").join(" · ")}</p></div>
       <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -58,16 +61,16 @@ export function ReportDetail({ report: r, events, staff, labels, userId, writabl
       <div className="grid gap-5 md:grid-cols-2"><label className="space-y-2 text-sm"><span className="font-medium">원비</span><input className={control} value={body.tuition} maxLength={200} disabled={!capabilities.edit || pending} onChange={e => update("tuition", e.target.value)} placeholder="금액·환불 등 확인한 내용" /></label>
         <label className="space-y-2 text-sm"><span className="font-medium">미납 여부</span><select className={control} value={body.arrears} disabled={!capabilities.edit || pending} onChange={e => update("arrears", e.target.value as ReportBody["arrears"])}><option value="unknown">확인 필요</option><option value="no">미납 없음</option><option value="yes">미납 있음</option></select></label></div>
       {textField("arrearsNote", "원비·미납 확인 메모", 2)}
-      <div className="border-t pt-4 text-sm"><span className="text-muted-foreground">퇴원처리 · </span>{r.applied_at ? `${dateTime(r.applied_at)} 처리 완료` : "관리자 및 원장 승인 후 처리"}</div>
+      <div className="border-t pt-4 text-sm"><span className="text-muted-foreground">퇴원처리 · </span>{r.applied_at ? `${dateTime(r.applied_at)} 처리 완료` : directorIds(r).length ? "관리자·원장 전원 승인 후 처리" : "관리자 전원 승인 후 처리"}</div>
     </section>
     {error && <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
     <div className="flex flex-wrap gap-2">
-      {capabilities.edit && <><Button disabled={pending} variant="outline" onClick={() => change("save")}>임시 저장</Button><Button disabled={pending} onClick={() => setDecision("submit")}>관리자에게 제출</Button></>}
-      {capabilities.approve && <><Button disabled={pending} onClick={() => setDecision("approve")}>승인</Button><Button disabled={pending} variant="outline" onClick={() => setDecision("reject")}>반려</Button></>}
+      {capabilities.edit && <><Button disabled={pending} variant="outline" onClick={() => change("save")}>임시 저장</Button><Button disabled={pending || assignmentChanged} onClick={() => setDecision("submit")}>관리자에게 제출</Button></>}
+      {capabilities.approve && <><Button disabled={pending || assignmentChanged} onClick={() => setDecision("approve")}>승인</Button><Button disabled={pending} variant="outline" onClick={() => setDecision("reject")}>반려</Button></>}
       {capabilities.cancel && <Button variant="ghost" disabled={pending} onClick={() => setDecision("cancel")}>요청 취소</Button>}
     </div>
     {decision && <section className="space-y-3 rounded-xl border bg-muted/20 p-5" aria-label="처리 확인">
-      <p className="text-sm">{decision === "submit" ? "보고서를 제출하면 관리자 검토가 시작됩니다. 이후 수정은 반려 후 가능합니다." : decision === "approve" ? r.status === "director_pending" ? `${r.effective_date} 기준으로 ${r.exit_kind === "withdrawal" ? "전체 퇴원을" : "선택 과목의 수강종료를"} 승인합니다. 처리일이 지났다면 즉시 반영됩니다.` : "관리자 승인을 완료하고 원장에게 최종 승인을 요청합니다." : decision === "cancel" ? "작성 요청을 취소합니다. 학생의 수강 상태는 유지됩니다." : "수정이 필요한 내용을 적어 주세요. 강사가 수정 후 다시 제출합니다."}</p>
+      <p className="text-sm">{decision === "submit" ? "보고서를 제출하면 관리자 검토가 시작됩니다. 이후 수정은 반려 후 가능합니다." : decision === "approve" ? `이 보고서를 승인합니다. ${r.status === "manager_pending" && directorIds(r).length ? "관리자 전원 승인 후 원장 검토로 넘어갑니다." : `함께 요청한 보고서와 모든 승인자의 승인이 끝나면 ${r.effective_date}에 ${r.exit_kind === "withdrawal" ? "전체 퇴원" : "선택 과목 수강종료"}을 처리합니다. 처리일이 지났다면 즉시 반영됩니다.`}` : decision === "cancel" ? "함께 요청한 모든 강사의 보고서를 취소합니다. 학생의 수강 상태는 유지됩니다." : "수정이 필요한 내용을 적어 주세요. 이 보고서의 승인을 초기화하고 강사가 수정 후 다시 제출합니다."}</p>
       {decision === "reject" && <textarea className={control} aria-label="반려 사유" rows={3} maxLength={1000} value={comment} onChange={e => setComment(e.target.value)} />}
       <div className="flex gap-2"><Button disabled={pending || (decision === "reject" && !comment.trim())} onClick={() => change(decision)}>{pending ? "처리 중…" : `${REPORT_ACTION_LABEL[decision]} 확인`}</Button><Button variant="outline" disabled={pending} onClick={() => setDecision(null)}>닫기</Button></div>
     </section>}

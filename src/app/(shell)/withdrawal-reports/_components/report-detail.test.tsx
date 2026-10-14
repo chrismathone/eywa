@@ -15,6 +15,18 @@ const r: WithdrawalReport = { id: "10000000-0000-4000-8000-000000000001", tenant
   body: EMPTY_BODY, status: "requested", revision: 3, manager_approved_at: null, director_approved_at: null, applied_at: null, last_comment: null, created_at: "2026-10-13T01:00:00Z", updated_at: "2026-10-13T01:00:00Z" };
 const props = { report: r, staff: [], labels: { math: "수학" }, userId: teacher, writable: true, events: [] };
 describe("report submission and review", () => {
+  it("a grouped report shows only its own homeroom classes even when another teacher teaches the same subject", () => {
+    const course = { id: "course", classId: "class", className: "내 담당반", subject: "math", teacherId: teacher, teacherName: "담임", startDate: "2026-01-01", endDate: null, onHold: false };
+    render(<ReportDetail {...props} report={{ ...r, group_id: "group", snapshot: { ...r.snapshot, courses: [course, { ...course, id: "other", classId: "other", className: "다른 강사반", teacherId: "someone_else" }] } }} />);
+    expect(screen.getAllByText(/내 담당반/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/다른 강사반/)).not.toBeInTheDocument();
+  });
+  it("warns about a changed live assignment and blocks submission while keeping the draft editable", () => {
+    render(<ReportDetail {...props} assignmentChanged />);
+    expect(screen.getByRole("alert")).toHaveTextContent("담당 강사가 변경");
+    expect(screen.getByRole("button", { name: "관리자에게 제출" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "임시 저장" })).toBeEnabled();
+  });
   beforeEach(() => { cleanup(); vi.clearAllMocks(); mocks.change.mockResolvedValue({ ok: true, id: r.id }); });
   it("submits the entered report only after explicit confirmation", async () => {
     render(<ReportDetail {...props} />);
@@ -50,7 +62,7 @@ describe("report submission and review", () => {
   it("shows final withdrawal consequences before director approval", async () => {
     render(<ReportDetail {...props} report={{ ...r, status: "director_pending", manager_approved_at: r.created_at }} userId={director} />);
     fireEvent.click(screen.getByRole("button", { name: "승인" }));
-    expect(screen.getByText(/전체 퇴원을 승인합니다/)).toBeInTheDocument();
+    expect(screen.getByText(/전체 퇴원을 처리합니다/)).toBeInTheDocument();
     expect(mocks.change).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "승인 확인" }));
     await waitFor(() => expect(mocks.change).toHaveBeenCalledWith(r.id, "approve", 3, undefined));
