@@ -589,6 +589,8 @@ const staffSubjectScopeSchema = z.object({
  */
 const specialAccessSchema = z.object({
   payslipViewerIds: z.array(z.string().uuid()).max(80).default([]),
+  // Optional for old forms; absence in persisted settings preserves the previous viewers' management.
+  payslipManagerIds: z.array(z.string().uuid()).max(80).optional(),
   leaveAdjusterIds: z.array(z.string().uuid()).max(80).default([]),
   classSplitterIds: z.array(z.string().uuid()).max(80).default([]),
   // 새 칸을 모르는 화면·기존 저장값과 호환. 미지정은 빈 명단과 같다.
@@ -596,7 +598,7 @@ const specialAccessSchema = z.object({
   staffSubjectScopes: z.array(staffSubjectScopeSchema).max(80).default([]),
 });
 /** 사람 id 목록인 칸(과목 범위는 줄 모양이 달라 따로 다룬다). */
-export const SPECIAL_ACCESS_ID_LISTS = ["payslipViewerIds", "leaveAdjusterIds", "classSplitterIds", "enrollmentDateEditorIds"] as const;
+export const SPECIAL_ACCESS_ID_LISTS = ["payslipViewerIds", "payslipManagerIds", "leaveAdjusterIds", "classSplitterIds", "enrollmentDateEditorIds"] as const;
 export const permissionsSchema = z
   .object({
     overrides: z.array(permissionOverrideSchema).max(MENU_KEYS.length * SYSTEM_ROLES.length),

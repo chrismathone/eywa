@@ -5,17 +5,19 @@ import { PageHeaderSkeleton } from "@/components/page-header";
 // 스트리밍한다. 예전엔 이 라우트에 loading이 없어 **창=iframe으로 열면 응답이 올 때까지 흰 화면**이었다
 // ("수납관리 창이 너무 느리다"의 체감 대부분이 이 구간).
 //
-// ⚠️ 실제 렌더와 블록 순서·높이를 맞춘다(동기화 배지 → 면탭 → 헤더 → 툴바 → KPI 5 → 진행률 → 표).
+// ⚠️ 실제 렌더와 블록 순서·높이를 맞춘다(면탭 + 오른쪽 끝 동기화 배지 한 줄 → 헤더 → 툴바 → KPI 5 → 진행률 → 표).
 //    어긋나면 데이터 도착 순간 레이아웃이 튀어 스켈레톤이 없느니만 못하다(시간표 loading의 교훈).
 //    간격도 실제와 같이 중첩한다 — 바깥 space-y-4(page.tsx) 안에 BillingContent의 space-y-5.
 export default function BillingLoading() {
   return (
     <div className="space-y-4">
-      {/* 동기화 배지 줄 */}
-      <div className="bg-bg-soft h-6 w-56 animate-pulse rounded-pill" />
-      {/* 면 탭 — 실제 `FaceTabs`는 **테두리 상자 하나**(`h-(--control-h) rounded-lg border`) 안에 항목이 든 모양이다.
-          옛 스켈레톤은 알약 7개를 따로 그려(32px) 로딩→본문에서 모양과 높이가 함께 바뀌었다. */}
-      <div className="bg-bg-soft h-(--control-h) w-[30rem] max-w-full animate-pulse rounded-lg" />
+      {/* 면 탭 줄 — 실제 `FaceTabs`는 **테두리 상자 하나**(`h-(--control-h) rounded-lg border`) 안에 항목이 든 모양이다.
+          옛 스켈레톤은 알약 7개를 따로 그려(32px) 로딩→본문에서 모양과 높이가 함께 바뀌었다.
+          동기화 배지는 2026-10-15부터 **같은 줄 오른쪽 끝**이다(page.tsx) — 배지 줄을 따로 그리면 데이터 도착 때 본문이 40px 튄다. */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="bg-bg-soft h-(--control-h) w-[30rem] max-w-full animate-pulse rounded-lg" />
+        <div className="bg-bg-soft ml-auto h-5 w-36 animate-pulse rounded-pill" />
+      </div>
       <div className="space-y-5">
         {/* PageHeader — 한 줄(데스크톱) · 컴팩트(창·모바일)에서도 **통째로 숨기면 안 된다**. 수납 헤더는 embedLabel과
             actions(머리 상시 버튼 둘)를 넘기므로 compact에서도 한 줄이 실제로 렌더된다(page-header.tsx).

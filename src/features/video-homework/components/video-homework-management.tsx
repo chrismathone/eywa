@@ -67,6 +67,13 @@ export function VideoHomeworkManagement({ rows: serverRows, initialMarks, videos
   // 판정은 전체 회차로 먼저 하고, 보일 칸만 거른다(keepLedgerRounds — 거른 뒤 짝을 지으면 관리자 화면과 판정이 갈린다).
   const allRounds = useMemo(() => buildLedgerRounds({ rows, marks: marks.values(), videos, fromDate, toDate }), [rows, marks, videos, fromDate, toDate]);
   const rounds = useMemo(() => (keep ? keepLedgerRounds(allRounds, keep) : allRounds), [allRounds, keep]);
+  // 배정 창의 '자동 연결됨' — 거르기 전 칸으로(강사뷰에서 동료가 낸 숙제에 붙은 영상도) · 기간 밖 숙제까지(장부는 기간 앞뒤를 넓혀 읽어 짝을
+  // 짓고 화면에만 기간 안 칸을 세운다 — 기간 안 칸만 보면 9/29 숙제에 붙은 10/2 영상이 '연결 안 됨'으로 보인다, 2026-10-15). 같은 재료 · 기간만 풀어서.
+  const linked = useMemo(() => {
+    if (!assigning) return undefined;
+    const pair = buildLedgerRounds({ rows, marks: marks.values(), videos, fromDate: "0000-01-01", toDate: "9999-12-31" }).get(ledgerPairKey(assigning.row)) ?? [];
+    return new Map(pair.flatMap((round) => round.videoId && round.homeworkDate ? [[round.videoId, round.homeworkDate] as const] : []));
+  }, [assigning, rows, marks, videos]);
   // 강사를 고르면 그 강사가 낸 칸이 있는 반 × 학생만 — 대상 외 학생은 남은 칸이 있을 때만 선다(강사뷰 page.tsx와 같은 규칙).
   const shownRows = useMemo(() => (byTeacher
     ? rows.filter((row) => byTeacher.pairs.has(ledgerPairKey(row)) && (row.tracked || !!rounds.get(ledgerPairKey(row))?.length))
@@ -143,8 +150,6 @@ export function VideoHomeworkManagement({ rows: serverRows, initialMarks, videos
       && video.studentId === playing.row.studentId && video.classId === playing.row.classId) ?? null : null} onClose={() => setPlaying(null)} />
     {menu ? <IssueMenu key={`${ledgerPairKey(menu.row)}:${menu.kind}:${menu.date}`} target={menu} onClose={() => setMenu(null)} /> : null}
     {assigning ? <VideoAssignmentDialog key={`${ledgerPairKey(assigning.row)}:${assigning.date ?? ""}`} row={assigning.row} initialDate={assigning.date}
-      fromDate={fromDate} toDate={toDate} onClose={() => setAssigning(null)}
-      // 거르기 전 칸으로 — 강사뷰에서 동료가 낸 숙제에 붙은 영상도 "안 붙음"으로 보이지 않게.
-      linked={new Map((allRounds.get(ledgerPairKey(assigning.row)) ?? []).flatMap((round) => round.videoId && round.homeworkDate ? [[round.videoId, round.homeworkDate] as const] : []))} /> : null}
+      fromDate={fromDate} toDate={toDate} onClose={() => setAssigning(null)} linked={linked} /> : null}
   </div>;
 }

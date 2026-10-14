@@ -25,7 +25,7 @@ const m = vi.hoisted(() => ({
   beforeWrite: null as null | (() => void),
   /** 운영자 계정(지점에서 바꿀 수 없는 대상). */
   platformIds: new Set<string>(),
-  staff: [] as { id: string; system_role: string; status: string }[],
+  staff: [] as { id: string; system_role: string; status: string; tenant_id?: string }[],
   writes: 0,
   audit: vi.fn(),
 }));
@@ -46,13 +46,14 @@ vi.mock("@/lib/supabase/admin", () => ({
         }
         // users — 권한 대상이 현재 지점의 재직 직원인지 확인하는 조회.
         let wanted: string[] = [];
+        let tenant = "";
         const chain = {
-          eq: () => chain,
+          eq: (_column: string, id: string) => { tenant = id; return chain; },
           in: (_column: string, ids: string[]) => {
             wanted = ids;
             return chain;
           },
-          limit: async () => ({ data: m.staff.filter((u) => wanted.includes(u.id)), error: null }),
+          limit: async () => ({ data: m.staff.filter((u) => wanted.includes(u.id) && (u.tenant_id ?? "tenant-a") === tenant), error: null }),
         };
         return chain;
       },
@@ -152,6 +153,86 @@ beforeEach(() => {
   seed("chinsan");
 });
 afterEach(() => vi.useRealTimers());
+
+describe("급여명세서 관리 — 실제 저장 호환성과 보호", () => {
+  const oldForm = (p: PermissionsSettings) => {
+    const specialAccess = { ...p.specialAccess };
+    delete specialAccess.payslipManagerIds;
+    return { ...p, specialAccess };
+  };
+  it.each(["chinsan", "generic"] as const)("%s legacy viewers materialize without revalidating retired/protected grants", async (preset) => {
+    seed(preset, { overrides: [], specialAccess: { payslipViewerIds: [STAFF_B, OPERATOR] } });
+    m.platformIds = new Set([OPERATOR]);
+    m.staff = [];
+    const w = openWindow();
+    expect(w.draft.specialAccess.payslipManagerIds).toEqual([STAFF_B, OPERATOR]);
+    expect((await w.save({ ...oldForm(w.draft), overrides: [] }))?.ok).toBe(true);
+    expect(rawStored().specialAccess).toMatchObject({ payslipManagerIds: [STAFF_B, OPERATOR] });
+    const again = openWindow();
+    expect((await again.save(again.draft))?.ok).toBe(true);
+  });
+  it.each([{ viewers: [STAFF_A, STAFF_B] }, { viewers: [] }])("old form viewer add/remove $viewers is rejected with zero mutation", async ({ viewers }) => {
+    seed("chinsan", { overrides: [], specialAccess: { payslipViewerIds: [STAFF_A] } });
+    const w = openWindow();
+    const old = oldForm(w.draft);
+    const res = await w.save({ ...old, specialAccess: { ...old.specialAccess, payslipViewerIds: viewers } });
+    expect(res?.error).toContain("새로고침");
+    expect(m.writes).toBe(0);
+    expect(rawStored().specialAccess).not.toHaveProperty("payslipManagerIds");
+  });
+  it("new UI adds viewer-only, revokes management explicitly, and old unrelated saves keep the revoke", async () => {
+    seed("chinsan", { overrides: [], specialAccess: { payslipViewerIds: [STAFF_A] } });
+    let w = openWindow();
+    expect((await w.save({ ...w.draft, specialAccess: { ...w.draft.specialAccess, payslipViewerIds: [STAFF_A, STAFF_B] } }))?.ok).toBe(true);
+    expect(stored().specialAccess.payslipManagerIds).toEqual([STAFF_A]);
+    w = openWindow();
+    expect((await w.save({ ...w.draft, specialAccess: { ...w.draft.specialAccess, payslipManagerIds: [] } }))?.ok).toBe(true);
+    w = openWindow();
+    expect((await w.save(oldForm(w.draft)))?.ok).toBe(true);
+    expect(rawStored().specialAccess).toMatchObject({ payslipManagerIds: [] });
+    w = openWindow();
+    expect((await w.save({ ...oldForm(w.draft), specialAccess: { ...oldForm(w.draft).specialAccess, payslipViewerIds: [] } }))?.error).toContain("새로고침");
+    expect(stored().specialAccess.payslipManagerIds).toEqual([]);
+  });
+  it("old form preserves explicit managers even if they have no viewer assignment", async () => {
+    seed("generic", { overrides: [], specialAccess: { payslipViewerIds: [], payslipManagerIds: [STAFF_A] } });
+    const w = openWindow();
+    expect((await w.save(oldForm(w.draft)))?.ok).toBe(true);
+    expect(rawStored().specialAccess).toMatchObject({ payslipViewerIds: [], payslipManagerIds: [STAFF_A] });
+  });
+  it("new marker-only tenant can grant view without granting management", async () => {
+    m.row = { data: { version: 1, preset: "generic" }, updated_at: "2026-10-06T00:00:00.000Z" };
+    const w = openWindow();
+    expect(w.draft.specialAccess.payslipManagerIds).toEqual([]);
+    expect((await w.save({ ...w.draft, specialAccess: { ...w.draft.specialAccess, payslipViewerIds: [STAFF_A] } }))?.ok).toBe(true);
+    expect(stored().specialAccess.payslipManagerIds).toEqual([]);
+  });
+  it.each(["foreign", "student", "retired"])("new %s management grant is denied", async (kind) => {
+    seed("generic", { overrides: [] });
+    m.staff = [{ id: STAFF_B, tenant_id: kind === "foreign" ? "tenant-b" : "tenant-a", system_role: kind === "student" ? "student" : "admin", status: kind === "retired" ? "inactive" : "active" }];
+    const w = openWindow();
+    expect((await w.save({ ...w.draft, specialAccess: { ...w.draft.specialAccess, payslipManagerIds: [STAFF_B] } }))?.error).toContain("재직 직원");
+    expect(m.writes).toBe(0);
+  });
+  it("protected management cannot be added or revoked, including legacy materialization", async () => {
+    m.platformIds = new Set([OPERATOR]);
+    seed("chinsan", { overrides: [], specialAccess: { payslipViewerIds: [OPERATOR] } });
+    let w = openWindow();
+    expect((await w.save({ ...w.draft, specialAccess: { ...w.draft.specialAccess, payslipManagerIds: [] } }))?.error).toBeTruthy();
+    expect(m.writes).toBe(0);
+    expect((await w.save(w.draft))?.ok).toBe(true);
+    seed("chinsan", { overrides: [], specialAccess: { payslipViewerIds: [OPERATOR], payslipManagerIds: [] } });
+    w = openWindow();
+    const writes = m.writes;
+    expect((await w.save({ ...w.draft, specialAccess: { ...w.draft.specialAccess, payslipManagerIds: [OPERATOR] } }))?.error).toBeTruthy();
+    expect(m.writes).toBe(writes);
+  });
+  it.each([null, "bad", ["not-a-uuid"], [STAFF_A, STAFF_A]].map((value) => ({ value })))("explicit malformed $value save is rejected without mutation", async ({ value }) => {
+    const w = openWindow();
+    expect((await w.save({ ...w.draft, specialAccess: { ...w.draft.specialAccess, payslipManagerIds: value } }))?.error).toBeTruthy();
+    expect(m.writes).toBe(0);
+  });
+});
 
 describe("기준 token이 있어야 저장한다", () => {
   it("🔴 기준 없이 온 저장(배포 전에 열어 둔 화면 · 직접 만든 요청)은 받지 않는다", async () => {
@@ -325,7 +406,7 @@ describe("자기 저장 뒤 재저장", () => {
 
   it("침산 — 개인별 기능 권한을 저장하고, 응답 token은 그렇게 저장된 값의 것이다(어긋나면 재저장이 막힌다)", async () => {
     const w = openWindow();
-    const sent = { ...w.draft, specialAccess: { payslipViewerIds: [STAFF_A], leaveAdjusterIds: [], classSplitterIds: [STAFF_B], enrollmentDateEditorIds: [], staffSubjectScopes: [{ userId: STAFF_B, subjects: ["english"] }] } };
+    const sent = { ...w.draft, specialAccess: { payslipViewerIds: [STAFF_A], payslipManagerIds: [], leaveAdjusterIds: [], classSplitterIds: [STAFF_B], enrollmentDateEditorIds: [], staffSubjectScopes: [{ userId: STAFF_B, subjects: ["english"] }] } };
     const res = await w.save(sent);
     expect(res?.ok).toBe(true);
     expect(stored().specialAccess).toEqual(sent.specialAccess);
@@ -339,13 +420,13 @@ describe("자기 저장 뒤 재저장", () => {
   it("일반판 — 담당자 명단을 저장하고 이어서 다시 저장한다", async () => {
     seed("generic");
     const w = openWindow();
-    const res = await w.save({ ...w.draft, specialAccess: { payslipViewerIds: [STAFF_B], leaveAdjusterIds: [STAFF_A], classSplitterIds: [], staffSubjectScopes: [] } });
+    const res = await w.save({ ...w.draft, specialAccess: { payslipViewerIds: [STAFF_B], payslipManagerIds: [], leaveAdjusterIds: [STAFF_A], classSplitterIds: [], staffSubjectScopes: [] } });
     expect(res?.ok).toBe(true);
-    expect(stored().specialAccess).toEqual({ payslipViewerIds: [STAFF_B], leaveAdjusterIds: [STAFF_A], classSplitterIds: [], enrollmentDateEditorIds: [], staffSubjectScopes: [] });
+    expect(stored().specialAccess).toEqual({ payslipViewerIds: [STAFF_B], payslipManagerIds: [], leaveAdjusterIds: [STAFF_A], classSplitterIds: [], enrollmentDateEditorIds: [], staffSubjectScopes: [] });
     expect(res?.permissions?.token).toBe(permissionsToken(stored()));
     const again = await w.save({ ...stored(), userOverrides: [] }, res!.permissions!.token);
     expect(again?.ok).toBe(true);
-    expect(stored().specialAccess).toEqual({ payslipViewerIds: [STAFF_B], leaveAdjusterIds: [STAFF_A], classSplitterIds: [], enrollmentDateEditorIds: [], staffSubjectScopes: [] });
+    expect(stored().specialAccess).toEqual({ payslipViewerIds: [STAFF_B], payslipManagerIds: [], leaveAdjusterIds: [STAFF_A], classSplitterIds: [], enrollmentDateEditorIds: [], staffSubjectScopes: [] });
   });
 });
 
@@ -431,7 +512,7 @@ describe("개인별 기능 권한 — 어느 학원에서나 화면에서 지정
     const bad = openWindow();
     expect((await bad.save({ ...bad.draft, specialAccess: { ...bad.draft.specialAccess, enrollmentDateEditorIds: ["77777777-7777-4777-8777-777777777777"] } }))?.error).toContain("재직 직원");
   });
-  const none = { payslipViewerIds: [], leaveAdjusterIds: [], classSplitterIds: [], enrollmentDateEditorIds: [], staffSubjectScopes: [] };
+  const none = { payslipViewerIds: [], payslipManagerIds: [], leaveAdjusterIds: [], classSplitterIds: [], enrollmentDateEditorIds: [], staffSubjectScopes: [] };
 
   it("🔴 새로 지정하는 사람은 지금 이 학원의 재직 직원이어야 한다 — 칸마다 본다", async () => {
     seed("chinsan");
