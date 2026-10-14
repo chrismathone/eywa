@@ -1,6 +1,7 @@
 "use client";
 
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { DEFAULT_LEDGER_FILTERS, filterLedgerRows, groupLedgerRows, keepLedgerRounds, ledgerCsv, ledgerPairKey, ledgerSummary, type LedgerFilters } from "../ledger";
@@ -20,7 +21,21 @@ const NO_VIDEOS: VideoArrival[] = [];
 const NO_FACTS: BlankFacts = {};
 const unique = (values: string[]) => [...new Set(values)].sort((a, b) => a.localeCompare(b, "ko", { numeric: true })).map((value) => ({ value, label: value }));
 
-export function VideoHomeworkManagement({ rows, initialMarks, videos = NO_VIDEOS, blankFacts = NO_FACTS, videosKnown = true, showTeacher = false, fromDate, toDate, today, initialFilters = DEFAULT_LEDGER_FILTERS, keepRounds }: {
+/** 미확인으로 지웠지만 숙제로 남은 칸(`반:학생:숙제일`, use-ledger-marks.ts)을 그 줄의 옮겨 남긴 숙제로 더한다 — 서버 값을 다시 받기 전에도 칸이 선다. */
+function withKept(rows: VideoHomeworkLedgerRow[], kept: ReadonlySet<string>): VideoHomeworkLedgerRow[] {
+  if (!kept.size) return rows;
+  const byPair = new Map<string, string[]>();
+  for (const key of kept) {
+    const cut = key.lastIndexOf(":");
+    byPair.set(key.slice(0, cut), [...(byPair.get(key.slice(0, cut)) ?? []), key.slice(cut + 1)]);
+  }
+  return rows.map((row) => {
+    const dates = byPair.get(ledgerPairKey(row))?.filter((date) => !row.assignedDates.includes(date));
+    return dates?.length ? { ...row, assignedDates: [...row.assignedDates, ...dates].sort(), kept: [...(row.kept ?? []), ...dates].sort() } : row;
+  });
+}
+
+export function VideoHomeworkManagement({ rows: serverRows, initialMarks, videos = NO_VIDEOS, blankFacts = NO_FACTS, videosKnown = true, showTeacher = false, fromDate, toDate, today, initialFilters = DEFAULT_LEDGER_FILTERS, keepRounds }: {
   rows: VideoHomeworkLedgerRow[]; initialMarks: VideoHomeworkMark[]; videos?: VideoArrival[]; blankFacts?: BlankFacts; videosKnown?: boolean;
   showTeacher?: boolean;
   fromDate: string; toDate: string; today: string; initialFilters?: LedgerFilters;
@@ -32,8 +47,11 @@ export function VideoHomeworkManagement({ rows, initialMarks, videos = NO_VIDEOS
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [active, setActive] = useState<ActiveCell | null>(null);
   const [playing, setPlaying] = useState<ActiveCell | null>(null);
-  const [assigning, setAssigning] = useState<VideoHomeworkLedgerRow | null>(null);
-  const { marks, progress, save } = useLedgerMarks(initialMarks);
+  // 영상 배정 창 — 칸에서 열면 그 칸의 숙제일을 먼저 골라 둔다.
+  const [assigning, setAssigning] = useState<{ row: VideoHomeworkLedgerRow; date?: string } | null>(null);
+  const router = useRouter();
+  const { marks, kept, progress, save } = useLedgerMarks(initialMarks, () => router.refresh());
+  const rows = useMemo(() => withKept(serverRows, kept), [serverRows, kept]);
   // 숙제없음 칸의 '숙제 출제' · 따로 낸 숙제 칸의 '출제 취소'(원장 2026-10-13) — 처리와 새로고침은 메뉴가 한다.
   const [menu, setMenu] = useState<IssueMenuTarget | null>(null);
   const busy = progress !== null;
@@ -89,20 +107,22 @@ export function VideoHomeworkManagement({ rows, initialMarks, videos = NO_VIDEOS
     <p className={styles.hint}>수업보고서에 영상 과제가 나간 수업과 따로 낸 숙제만 회차로 셉니다 — 1회·2회는 학생마다의 순서라 같은 회차도 날짜가 다를 수 있습니다.
       칸 위 날짜 = 숙제가 나간 날 · <EyIcon name="check" size={12} className="inline-block align-middle" /> 뒤 날짜 = 제출일 · 날짜 없이 완료 = 제출일 미기록 · ▶ = 영상 재생 · 초록 테두리 = 영상으로 자동 완료(반이 확인된 영상만 자동으로 셉니다) · × 미수행 · 미확인 = 숙제가 나갔는데 아직 확인 전. 미확인 칸을 누르면 오늘 날짜로 완료됩니다.</p>
     {progress ? <p className={styles.saving} role="status">기록 저장 중 {progress.done} / {progress.total}건</p> : null}
-    {visibleGroups.length ? visibleGroups.map((group) => <ClassLedger key={`${group.classId}:${filterKey}`} group={group} rounds={rounds} blankFacts={blankFacts} videosKnown={videosKnown} showTeacher={showTeacher} today={today} busy={busy} save={save} onEdit={setActive} onPlay={setPlaying} onAssign={setAssigning} onIssueMenu={setMenu}
+    {visibleGroups.length ? visibleGroups.map((group) => <ClassLedger key={`${group.classId}:${filterKey}`} group={group} rounds={rounds} blankFacts={blankFacts} videosKnown={videosKnown} showTeacher={showTeacher} today={today} busy={busy} save={save} onEdit={setActive} onPlay={setPlaying} onAssign={(row) => setAssigning({ row })} onIssueMenu={setMenu}
       collapsed={collapsed.has(group.classId)} onToggle={() => setCollapsed((current) => { const next = new Set(current); if (next.has(group.classId)) next.delete(group.classId); else next.add(group.classId); return next; })} />)
       : <div className={styles.empty}><strong>{rows.length ? "조건에 맞는 학생이 없습니다." : "조회 기간에 영상 과제가 나간 수업이 없습니다."}</strong><p>{rows.length ? "검색어와 필터를 조정해 주세요." : "원스크린에서 '영상 과제'를 켜고 저장한 수업부터 회차가 생깁니다."}</p></div>}
     <Dialog open={active !== null} onOpenChange={(open) => { if (!open && !busy) setActive(null); }}>
       <DialogContent showCloseButton={!busy}>
         {active ? <RoundEditor key={`${ledgerPairKey(active.row)}:${active.round.key}`} cell={active} today={today} busy={busy} save={save} onClose={() => setActive(null)}
-          onAssign={() => { setAssigning(active.row); setActive(null); }} /> : null}
+          // 영상이 없는 칸에서 열면 그 숙제를 골라 둔다(그 칸에 붙이려고 연 것이다). 영상이 붙은 칸의 '배정 변경'은 옮길 곳을 고르는 것이라 종전대로.
+          onAssign={() => { setAssigning({ row: active.row, date: active.round.videoId ? undefined : active.round.homeworkDate ?? undefined }); setActive(null); }} /> : null}
       </DialogContent>
     </Dialog>
     <LedgerVideoDialog cell={playing} video={playing ? videos.find((video) => video.id === playing.round.videoId
       && video.studentId === playing.row.studentId && video.classId === playing.row.classId) ?? null : null} onClose={() => setPlaying(null)} />
     {menu ? <IssueMenu key={`${ledgerPairKey(menu.row)}:${menu.kind}:${menu.date}`} target={menu} onClose={() => setMenu(null)} /> : null}
-    {assigning ? <VideoAssignmentDialog key={ledgerPairKey(assigning)} row={assigning} fromDate={fromDate} toDate={toDate} onClose={() => setAssigning(null)}
+    {assigning ? <VideoAssignmentDialog key={`${ledgerPairKey(assigning.row)}:${assigning.date ?? ""}`} row={assigning.row} initialDate={assigning.date}
+      fromDate={fromDate} toDate={toDate} onClose={() => setAssigning(null)}
       // 거르기 전 칸으로 — 강사뷰에서 동료가 낸 숙제에 붙은 영상도 "안 붙음"으로 보이지 않게.
-      linked={new Map((allRounds.get(ledgerPairKey(assigning)) ?? []).flatMap((round) => round.videoId && round.homeworkDate ? [[round.videoId, round.homeworkDate] as const] : []))} /> : null}
+      linked={new Map((allRounds.get(ledgerPairKey(assigning.row)) ?? []).flatMap((round) => round.videoId && round.homeworkDate ? [[round.videoId, round.homeworkDate] as const] : []))} /> : null}
   </div>;
 }

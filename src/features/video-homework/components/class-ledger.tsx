@@ -3,7 +3,7 @@
 import { useState, type CSSProperties } from "react";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { ledgerCounts, ledgerPairKey, ledgerSummary, roundsOf, type LedgerGroup, type LedgerRounds } from "../ledger";
-import { blankCells, type BlankFacts } from "../no-homework";
+import { blankCells, ledgerRowCells, type BlankFacts } from "../no-homework";
 import type { LedgerRound } from "../rounds";
 import type { VideoHomeworkLedgerRow, VideoHomeworkStatus } from "../types";
 import { isVideoHomeworkDate } from "../types";
@@ -42,9 +42,14 @@ export function ClassLedger({ group, rounds, blankFacts, videosKnown = true, sho
   const numbers = Array.from({ length: Math.min(ROUND_SIZE, group.roundCount - roundOffset) }, (_, i) => roundOffset + i + 1);
   const editable = paged.filter((row) => row.editable);
   const selectedRows = paged.filter((row) => row.editable && selected.has(row.studentId));
-  // 같은 N회라도 학생마다 숙제일이 다르다 — 칸마다 그 학생의 N번째 숙제에 적는다.
+  // 줄의 칸 차례 = 회차와 빈 칸(결석 · 숙제없음)을 날짜순으로(ledgerRowCells) — 빈 칸은 반에 숙제가 나간 날 중 이 학생에게 없는 날이다(회차 수에는 안 든다).
+  const cellsOf = (row: VideoHomeworkLedgerRow) => {
+    const own = roundsOf(rounds, row);
+    return ledgerRowCells(own, blankCells({ classDates: group.homeworkDates, own, facts: blankFacts[ledgerPairKey(row)], slots: group.roundCount - own.length }));
+  };
+  // 같은 N회라도 학생마다 숙제일이 다르다 — 화면의 N번째 칸에 적는다(빈 칸이면 그 학생은 뺀다).
   const batchChanges = selectedRows.flatMap((row): LedgerChange[] => {
-    const round = roundsOf(rounds, row)[batchRound - 1];
+    const round = cellsOf(row)[batchRound - 1]?.round;
     if (!round || batchStatus === "unchecked" && !round.mark) return [];
     if (batchStatus === "submitted" && round.homeworkDate && submittedDate < round.homeworkDate) return [];
     return [{ classId: row.classId, studentId: row.studentId, round, status: batchStatus === "unchecked" ? null : batchStatus,
@@ -109,16 +114,14 @@ export function ClassLedger({ group, rounds, blankFacts, videosKnown = true, sho
           </tr></thead>
           <tbody>{paged.map((row) => {
             const counts = ledgerCounts(row, rounds);
-            const own = roundsOf(rounds, row);
-            // 회차 밖 빈 칸 — 반에 숙제가 나간 날 중 이 학생에게 없는 날을 결석·숙제없음으로(회차 수에는 안 들어간다).
-            const blanks = blankCells({ classDates: group.homeworkDates, own, facts: blankFacts[ledgerPairKey(row)], slots: group.roundCount - own.length });
+            const cells = cellsOf(row);
             return <tr key={ledgerPairKey(row)} data-selected={selected.has(row.studentId) || undefined}>
               <td className={styles.selectCell}><input type="checkbox" aria-label={`${group.className} ${row.studentName} 선택`} disabled={busy || !row.editable} checked={selected.has(row.studentId)} onChange={() => toggleStudent(row.studentId)} /></td>
               <th scope="row" className={styles.studentCell}><span title={row.studentName}>{row.studentName}</span>{!row.editable ? <small title="읽기 전용">조회</small> : null}
-                {row.canAssignVideos && row.hasAssignableVideos && onAssign ? <button type="button" className="text-primary mt-1 block text-xs underline underline-offset-2" disabled={busy} aria-label={`${group.className} ${row.studentName} 영상 배정`} onClick={() => onAssign(row)}>영상 배정</button> : null}</th>
+                {row.canAssignVideos && row.tracked && row.hasAssignableVideos && onAssign ?<button type="button" className="text-primary mt-1 block text-xs underline underline-offset-2" disabled={busy} aria-label={`${group.className} ${row.studentName} 영상 배정`} onClick={() => onAssign(row)}>영상 배정</button> : null}</th>
               <td className={styles.schoolCell} title={`${row.school ?? "학교 미등록"} ${row.grade ?? ""}`}>{row.school || "미등록"} <span>{row.grade}</span></td>
               <td className={styles.countCell}><strong>{counts.submitted}</strong><span>/{counts.total}</span></td>
-              {numbers.map((n) => <RoundCell key={n} row={row} round={own[n - 1]} blank={blanks[n - 1 - own.length]} number={n} busy={busy} videosKnown={videosKnown}
+              {numbers.map((n) => <RoundCell key={n} row={row} round={cells[n - 1]?.round} blank={cells[n - 1]?.blank} number={n} busy={busy} videosKnown={videosKnown}
                 onOpen={(round) => open(row, round, n)} onPlay={(round) => onPlay({ row, round, number: n })}
                 onMenu={row.editable && onIssueMenu ? (kind, date, at) => onIssueMenu({ kind, row, date, ...at }) : undefined} />)}
             </tr>;

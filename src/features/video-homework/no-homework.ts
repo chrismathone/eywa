@@ -90,3 +90,23 @@ export function blankCells(input: {
   }
   return cells;
 }
+
+/** 한 줄에 그릴 칸 하나 — 회차 또는 빈 칸(결석 · 숙제없음). */
+export type LedgerRowCell = { round: LedgerRound; blank?: never } | { round?: never; blank: BlankCell };
+
+/**
+ * 한 줄의 칸 차례 — 회차와 빈 칸을 **날짜순으로 섞는다**(원장 2026-10-14 *"날짜 순서가 이상한데"* — 빈 칸을 회차 뒤에 붙였더니 전주율의
+ * 10/1 숙제없음이 10/8·10/12 회차 뒤 3회 자리에 섰다). 같은 날이면 회차가 먼저다 — 빈 칸은 그 학생에게 그 숙제일의 회차가 없는 날이지만,
+ * 숙제일 없는 옛 기록(c:) 회차는 검사일에 서서 같은 날 빈 칸과 나란히 설 수 있다(그 기록은 앞선 숙제를 검사한 것이라 다른 칸이다).
+ * 회차끼리의 차례(`buildLedgerRounds`)는 그대로다 — 빈 칸이 사이에 끼어들 뿐, 회차 수 · 완료 n/m은 바뀌지 않는다.
+ */
+export function ledgerRowCells(own: readonly LedgerRound[], blanks: readonly BlankCell[]): LedgerRowCell[] {
+  const cells: LedgerRowCell[] = [];
+  let b = 0;
+  for (const round of own) {
+    while (b < blanks.length && blanks[b].date < round.date) cells.push({ blank: blanks[b++] });
+    cells.push({ round });
+  }
+  while (b < blanks.length) cells.push({ blank: blanks[b++] });
+  return cells;
+}

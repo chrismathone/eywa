@@ -174,6 +174,20 @@ describe("영상 제출 현황 회차(setVideoHomeworkRound)", () => {
     expect((await setVideoHomeworkRound({ ...round, status: null, submittedDate: null })).ok).toBe(true);
     expect(writes().map((c) => c.op)).toEqual(["delete"]);
   });
+  // 원장 2026-10-14 홍채민 10/2 — 서버는 남겼는데 화면이 칸을 지웠다. 화면이 칸을 지우지 않게 결과에 싣는다.
+  it("🔴 미확인 저장 결과에 '칸이 남는다'(kept)를 싣는다 — 기록만 있던 칸 · 이미 숙제인 칸 · 다른 창이 먼저 지운 칸", async () => {
+    world({ sameHomework: [{ id: "m9" }], assigned: false });
+    expect(await setVideoHomeworkRound({ ...round, status: null, submittedDate: null })).toEqual({ ok: true, kept: true });
+    world({ sameHomework: [{ id: "m9" }] });
+    expect(await setVideoHomeworkRound({ ...round, status: null, submittedDate: null })).toEqual({ ok: true, kept: true });
+    world({ assigned: false });
+    const base = mocks.respond;
+    mocks.respond = (call) => call.table === "video_homework_extra_issues" && call.op === "select"
+      ? { data: [{ class_id: "class-a", student_id: "student-a", homework_date: "2026-09-29", teacher_id: "staff-a", kept: true }], error: null } : base(call);
+    expect(await setVideoHomeworkRound({ ...round, status: null, submittedDate: null })).toEqual({ ok: true, kept: true });
+    world({ sameHomework: [{ id: "m9" }] });
+    expect(await setVideoHomeworkRound(round)).toEqual({ ok: true });
+  });
   it("남기는 숙제의 선생님 — 그날 보고서가 없으면 반 담임", async () => {
     world({ sameHomework: [{ id: "m9" }], assigned: false });
     const base = mocks.respond;

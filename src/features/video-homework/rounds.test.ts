@@ -23,6 +23,17 @@ describe("영어·수학 구분과 담당자의 수동 배정", () => {
     const rounds = build({ rows, videos: [video("s1", "2026-10-02", { classId: "english", homeworkDate: "2026-10-01" })] });
     expect(view(rounds)[0]?.[1]).toBe("unchecked"); expect(view(rounds, "english:s1")[0]?.[1]).toBe("submitted");
   });
+  // 적대적 리뷰 2026-10-14 — 손 '미수행'만 찍힌 검사 기록 칸에 '이 숙제에 영상 배정'으로 붙인 영상이 ▶ 없이 '× 미수행'으로 숨었다.
+  it("🔴 검사 기록 칸 · 옮겨 남긴 숙제의 손 '미수행'에 손으로 붙인 영상은 영상이 이긴다 — 정식 숙제 칸은 기록 그대로(자동 판정이 고친다)", () => {
+    const v = { ...video("s1", "2026-10-03", { homeworkDate: "2026-10-02" }), manuallyAssigned: true };
+    const missing = [mark("s1", "2026-10-02", "missing")];
+    const make = (rows: Parameters<typeof buildLedgerRounds>[0]["rows"]) =>
+      buildLedgerRounds({ rows, marks: missing, videos: [v], fromDate: "2026-10-01", toDate: "2026-10-31" }).get("A:s1")![0];
+    expect(make([{ classId: "A", studentId: "s1", assignedDates: ["2026-10-02"], tracked: true, kept: ["2026-10-02"] }]))
+      .toMatchObject({ status: "submitted", videoId: v.id, kept: true });
+    expect(make([{ classId: "A", studentId: "s1", assignedDates: [], tracked: true }])).toMatchObject({ status: "submitted", videoId: v.id, assigned: false });
+    expect(make([{ classId: "A", studentId: "s1", assignedDates: ["2026-10-02"], tracked: true }])).toMatchObject({ status: "missing", videoId: v.id, assigned: true });
+  });
   it("수동으로 정한 숙제는 14일 추정 범위를 넘어도 그 칸에만 붙는다", () => {
     const v = { ...video("s1", "2026-10-25", { homeworkDate: "2026-10-01" }), manuallyAssigned: true };
     const rows = [row("s1", ["2026-10-01", "2026-10-20"])];

@@ -37,6 +37,47 @@ describe("영상 제출 현황 — 회차는 학생별 '숙제가 나간 날' �
     expect(await screen.findByRole("button", { name: "영상 배정 변경" })).toBeInTheDocument();
     expect(screen.getByText(/미확인은 수동 검사 기록만 지웁니다/)).toBeInTheDocument();
   });
+  // 원장 2026-10-14 *"수동 영상들 다 학생들이 업로드해서 배정하고 싶은데 배정이 불가능함"* — 영상 없이 손으로 찍은 완료 칸도 영상을 받는 자리다.
+  it("영상 없이 손으로 찍은 완료('수동') 칸에서도 그 숙제에 영상을 배정할 수 있다", async () => {
+    show({ rows: [row({ assignedDates: ["2026-09-01"], canAssignVideos: true, hasAssignableVideos: false })],
+      marks: [{ ...marks[0], status: "submitted", submittedDate: "2026-09-02" }] });
+    fireEvent.click(cell("김민준 1회 2026-09-01 완료"));
+    expect(await screen.findByRole("button", { name: "이 숙제에 영상 배정" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "영상 배정 변경" })).toBeNull();
+  });
+  it("검사 대상 밖 줄에는 '이 숙제에 영상 배정'이 없다 — 붙여도 영상을 세지 않는다", async () => {
+    show({ rows: [row({ assignedDates: ["2026-09-01"], canAssignVideos: true, tracked: false, editable: false })],
+      marks: [{ ...marks[0], status: "submitted", submittedDate: "2026-09-02" }] });
+    fireEvent.click(cell("김민준 1회 2026-09-01 완료"));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "이 숙제에 영상 배정" })).toBeNull();
+  });
+  // 원장 2026-10-14 *"있던 숙제가 사라지면 안되지 미확인으로 돌렸다고해서"* — 홍채민 10/2: 서버는 옮겨 남겼는데 화면이 칸을 지웠다.
+  it("🔴 검사 기록만으로 선 칸을 미확인으로 — 서버가 남기면 칸이 그대로 서고 서버 값을 다시 읽는다", async () => {
+    mocks.save.mockResolvedValue({ ok: true, kept: true });
+    show({ rows: [row({ assignedDates: ["2026-09-03"] })],
+      marks: [{ classId: "a", studentId: "one", checkDate: "2026-09-02", homeworkDate: "2026-09-01", status: "submitted", submittedDate: "2026-09-02" }] });
+    fireEvent.click(cell("김민준 1회 2026-09-01 완료"));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/미확인으로 바꿔도 이 칸은 남습니다/)).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "미확인" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "기록 저장" }));
+    await waitFor(() => expect(mocks.refresh).toHaveBeenCalled());
+    expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ roundKey: "h:2026-09-01", status: null }));
+    expect(cell("김민준 1회 2026-09-01 미확인")).toBeInTheDocument();
+    expect(cell("김민준 2회 2026-09-03 미확인")).toBeInTheDocument();
+  });
+  it("서버가 칸을 남기지 못했다고 하면(표 없음) 종전대로 칸이 빠지고 다시 읽지 않는다", async () => {
+    show({ rows: [row({ assignedDates: ["2026-09-03"] })],
+      marks: [{ classId: "a", studentId: "one", checkDate: "2026-09-02", homeworkDate: "2026-09-01", status: "submitted", submittedDate: "2026-09-02" }] });
+    fireEvent.click(cell("김민준 1회 2026-09-01 완료"));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "미확인" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "기록 저장" }));
+    await waitFor(() => expect(mocks.success).toHaveBeenCalled());
+    expect(screen.queryByRole("button", { name: /2026-09-01/ })).toBeNull();
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
   it("배정 권한과 기간에 맞는 미배정 영상이 있을 때만 영상 배정을 표시한다", () => {
     show({ rows: [
       row({ assignedDates: ["2026-09-01"], canAssignVideos: true, hasAssignableVideos: true }),
