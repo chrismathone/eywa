@@ -88,6 +88,28 @@ export type OverviewData = {
       className?: string;
     }[];
   };
+  /**
+   * '등록 후 3개월 내 퇴원'(원장 2026-10-15) — 이번 달 1일 ~ 오늘(KST) 퇴원한 학생 **전부**와 등록일부터 며칠 만인지(`days`,
+   * 판정 못 하면 null — `early-exit.ts`). KPI '퇴원&수업종료'가 읽는 퇴원 행과 같은 조회·같은 창(시스템 정리·병합 제외). 카드가 30·60·90일로 다시 센다 —
+   * 퇴원관리 `?type=withdrawn&range=month&early=3m`와 같은 수다(과목 관리자 화면은 담당 과목으로 좁힌 수 — 카드가 밝힌다). `subjects` = 퇴원 무렵 끝난 과목(과목 관리자 좁히기).
+   * 인원은 달로 끊는다(원장 2026-09-28) — 월초에 0만 보이지 않게 지난 달들도 **달마다** 센다(`history`, 등록·퇴원 추이와 같은 6개월 조회).
+   */
+  earlyExits: {
+    month: string;
+    /** 달 칸(오래된 달 → 이번 달) — 등록·퇴원 추이와 같은 6개월(`monthKeys`). */
+    months: string[];
+    rows: {
+      id: string;
+      name: string;
+      schoolGrade: string | null;
+      enrolledAt: string | null;
+      withdrawnAt: string;
+      days: number | null;
+      subjects: string[];
+    }[];
+    /** 이번 달 전 달들의 퇴원 — 이름 없이 퇴원 달·일수·과목만(달마다 세는 재료). */
+    history: { month: string; days: number | null; subjects: string[] }[];
+  };
   /** KPI '신규문의' — 오늘(KST) 접수된 콜&상담. time = 접수 시각(KST HH:MM). */
   intake: { id: string; name: string; time: string | null }[];
   /**

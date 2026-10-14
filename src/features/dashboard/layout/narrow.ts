@@ -104,6 +104,12 @@ export function narrowBySubject(sections: Sections, groups: readonly string[], g
   if (wd?.data) {
     out.withdrawals = { ...wd, data: { ...wd.data, rows: wd.data.rows.filter((r) => r.subject ? same(r.subject) : r.program ? groups.includes(programGroup(r.program) ?? "") : same(null)) } };
   }
+  // 등록 후 3개월 내 퇴원 — 퇴원 무렵 끝난 과목 중 하나라도 담당이면(두 과목이면 양쪽에). 과목을 모르면 모든 과목 관리자에게.
+  const early = live("earlyExits");
+  if (early?.data) {
+    const mine = (r: { subjects: string[] }) => (r.subjects.length ? r.subjects.some(same) : same(null));
+    out.earlyExits = { ...early, data: { ...early.data, rows: early.data.rows.filter(mine), history: early.data.history.filter(mine) } };
+  }
   // 강사 시트는 과목마다 하나뿐 — 담당 과목 것만 남긴다.
   if (!groups.includes("english")) delete out.englishSheet;
   if (!groups.includes("math")) delete out.mathSheet;

@@ -5,6 +5,7 @@
  */
 import type { OverviewSnapshot } from "@/features/dashboard/overview/model";
 import { todayLevelTestList } from "@/features/dashboard/overview/display";
+import { earlyCounts } from "@/features/withdrawals/early-exit";
 import { cardDef } from "./registry";
 
 export type Summary = { value: string; unit?: string; detail?: string; danger?: boolean };
@@ -64,6 +65,12 @@ export function summaryOf(id: string, snap: OverviewSnapshot, opts: { amounts?: 
       if (!c) return null;
       const overdue = c.items.filter((r) => !r.optional).reduce((s, r) => s + r.overdue, 0);
       return { value: n(c.total), unit: "명", detail: `등록 90일 · 기한 경과 ${n(overdue)}건`, danger: overdue > 0 };
+    }
+    case "earlyExits": {
+      const e = v.earlyExits?.data;
+      if (!e) return null;
+      const c = earlyCounts(e.rows);
+      return { value: n(c["3m"]), unit: "명", detail: `이번 달 · 1개월 ${n(c["1m"])} · 2개월 ${n(c["2m"])}`, danger: c["3m"] > 0 };
     }
     case "changes": {
       const m = v.changes?.data?.at(-1);

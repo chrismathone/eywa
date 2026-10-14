@@ -27,6 +27,7 @@ import { useOverview } from "./use-overview";
 import { DetailPopup } from "./detail-popup";
 import { CurrentClasses } from "./current-classes";
 import { TeacherWorkCard } from "./teacher-work-card";
+import { EarlyExitsBody, earlyExitsHref } from "./early-exits-card";
 import { SchoolDistribution } from "./school-distribution";
 import { AdmissionsSchedule } from "./admissions-schedule";
 import { KpiStrip, kpiCards } from "./kpi-strip";
@@ -581,6 +582,20 @@ export function Overview({
             ]}
           />
         </>
+      )}
+    </Panel>
+    ),
+    /* 등록 후 3개월 내 퇴원(원장 2026-10-15) — 이번 달 퇴원 중 등록일부터 30·60·90일 안에 그만둔 학생. 판정은 퇴원관리
+    '등록 후' 필터와 같은 함수(early-exit.ts) · ↗ = 퇴원관리의 같은 필터(3개월 이내). */
+    earlyExits: (
+    <Panel
+      title={t("earlyExits", "등록 후 3개월 내 퇴원")}
+      note="이번 달 퇴원 · 등록일부터 30·60·90일"
+      href={earlyExitsHref(v.earlyExits?.data?.month ?? snapshot.today.slice(0, 7))}
+      sections={[v.earlyExits]}
+    >
+      {v.earlyExits?.data && (
+        <EarlyExitsBody data={v.earlyExits.data} scope={view?.subjectScoped ? (view.scopeLabel ?? null) : null} />
       )}
     </Panel>
     ),

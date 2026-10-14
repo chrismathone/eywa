@@ -8,6 +8,8 @@ export type ScopeParts = {
   subject?: string | null;
   reason?: string | null;
   consult?: string | null;
+  /** 등록 후 조기 퇴원 필터 라벨('1개월 이내' — `early-exit.ts`). */
+  early?: string | null;
   q?: string | null;
 };
 
@@ -18,6 +20,7 @@ export function scopeText(p: ScopeParts): string {
     p.subject ? `과목 ${p.subject}` : null,
     p.reason ? `사유 ${p.reason}` : null,
     p.consult ?? null,
+    p.early ? `등록 후 ${p.early} 퇴원` : null,
     p.q ? `'${p.q}' 검색` : null,
   ].filter((b): b is string => !!b);
   return bits.length ? bits.join(" · ") : "학원 전체";
