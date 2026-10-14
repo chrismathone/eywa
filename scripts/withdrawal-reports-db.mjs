@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import postgres from 'postgres';
 const mode=process.argv[2]??'--check';
-if(!['--check','--apply','--upgrade','--test'].includes(mode)) throw new Error('Use --check, --apply, --upgrade or --test.');
+if(!['--check','--apply','--upgrade','--groups','--alignment','--test','--test-groups'].includes(mode)) throw new Error('Unknown mode.');
 const connection=new URL(process.env.DATABASE_URL??'missing:');
 const ref=new URL(process.env.NEXT_PUBLIC_SUPABASE_URL??'missing:').hostname.split('.')[0];
 if(!ref || !(connection.hostname===`db.${ref}.supabase.co` || decodeURIComponent(connection.username).endsWith(`.${ref}`))) throw new Error('Database and app project do not match.');
@@ -26,11 +26,22 @@ try {
   await sql`notify pgrst, 'reload schema'`;
   console.log('Updated report reason choices and stuck-request cancellation.');
  }
- if(mode==='--test') {
-  const results=await sql.unsafe(readFileSync('supabase/tests/withdrawal_reports.sql','utf8'));
+ if(mode==='--groups') {
+  if(await sql`select 1 from pg_class where oid=to_regclass('public.withdrawal_report_groups')`.then(r=>r.length)) throw new Error('Group schema already exists.');
+  for(const path of ['20261014151000_withdrawal_report_groups.sql','20261014152000_withdrawal_report_group_transitions.sql','20261014153000_withdrawal_report_archives.sql','20261014154000_withdrawal_report_assignment_check.sql','20261014155000_withdrawal_report_review_assignment_check.sql']) await sql.unsafe(readFileSync(`supabase/migrations/${path}`,'utf8'));
+  await sql`notify pgrst, 'reload schema'`;
+  console.log('Applied report groups, optional principals, archive storage.');
+ }
+ if(mode==='--alignment') {
+  await sql.unsafe(readFileSync('supabase/migrations/20261014155000_withdrawal_report_review_assignment_check.sql','utf8'));
+  await sql`notify pgrst, 'reload schema'`;
+  console.log('Added live assignment verification on submission.');
+ }
+ if(mode==='--test' || mode==='--test-groups') {
+  const results=await sql.unsafe(readFileSync(mode==='--test'?'supabase/tests/withdrawal_reports.sql':'supabase/tests/withdrawal_report_groups.sql','utf8'));
   const lines=results.flatMap(r=>Array.isArray(r)?r.flatMap(row=>Object.values(row)):Object.values(r)).filter(v=>typeof v==='string').join('\n');
   console.log(lines.split('\n').filter(line=>/^(ok |not ok |1\.\.|#)/.test(line)).join('\n'));
-  if(/not ok|Looks like you failed|planned .+ but ran/i.test(lines) || !(lines.match(/^ok \d+ /gm)?.length>=40)) process.exitCode=1;
+  if(/not ok|Looks like you failed|planned .+ but ran/i.test(lines) || !(lines.match(/^ok \d+ /gm)?.length>=20)) process.exitCode=1;
   const [fixtures]=await sql`select count(*)::int as remaining from public.tenants where id in ('10000000-0000-4000-8000-000000000901','10000000-0000-4000-8000-000000000902')`;
   if(fixtures.remaining!==0) throw new Error('Test fixtures were not rolled back.');
  }

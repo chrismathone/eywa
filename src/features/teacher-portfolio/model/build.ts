@@ -20,6 +20,7 @@ import { applyPreRecord, scoreTotals, type WorkingPeriod } from "./pre-record";
 import { deepMathKeyOf } from "./receipt";
 import { buildRevenue } from "./revenue";
 import { buildStudentTracking } from "./students";
+import { buildChurn } from "./churn";
 import {
   METRIC_MAX, type Metric, type PeriodWindow, type PortfolioPeriod, type PortfolioResult, type PortfolioSnapshot,
   type PortfolioTeacher, type SnapshotUser,
@@ -37,6 +38,7 @@ type Models = {
   ctx: PortfolioContext;
   revenue: ReturnType<typeof buildRevenue>;
   students: ReturnType<typeof buildStudentTracking>;
+  churn: ReturnType<typeof buildChurn>;
   subjectOf: (classId: string) => string;
   classNameOf: (classId: string) => string;
 };
@@ -108,6 +110,7 @@ function teacherPeriod(d: PortfolioSnapshot, m: Models, user: SnapshotUser, w: P
       detail: coverage.detail, due: coverage.due, done: coverage.done, pending: coverage.pending, early: coverage.early,
     },
     ...pendingItems(),
+    m.churn.period(user.id, w),
   ];
   for (const item of items) if (item.value === null) item.gap = GAP_LABEL[item.id] ?? "근거 확인";
 
@@ -162,6 +165,7 @@ export function buildPortfolio(d: PortfolioSnapshot, opts: {
       holidays: ctx.holidays, subjectLabel: (key) => labels[key] ?? key, deepMathKey: deepMathKeyOf(d.settings.subjects), owner: ctx.owner,
     }),
     students: buildStudentTracking({ from: d.from, end: d.end, classes: d.classes, schedules: d.schedules, enrollments: d.enrollments, owner: ctx.owner }),
+    churn: buildChurn({ classes: d.classes, schedules: d.schedules, enrollments: d.enrollments, owner: ctx.owner }),
     subjectOf: (id) => classes.get(id)?.subject ?? "",
     classNameOf: (id) => classes.get(id)?.class_name ?? "",
   };

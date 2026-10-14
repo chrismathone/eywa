@@ -66,7 +66,7 @@ import { HideInFrame } from "@/components/workspace/hide-in-frame";
 import { ScreenHelpOverlay } from "@/components/help/screen-help-overlay";
 import { menuLayoutWithModules } from "@/lib/modules";
 import { isGenericTenant } from "@/features/owner/preset";
-import { isLaboratoryMenuAvailable } from "@/lib/laboratory/server";
+import { getLaboratoryMenus, isLaboratoryMenuAvailable } from "@/lib/laboratory/server";
 import { TenantViewBanner } from "@/components/tenant-view-banner";
 import { TenantViewSync } from "@/components/tenant-view-sync";
 import { tenantViewServerNow, tenantViewSignedOutRedirect } from "@/lib/auth/tenant-view";
@@ -87,12 +87,13 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   // getTenantSettings는 React cache라 아래 분기들이 같은 라운드트립을 공유(임베드 포함).
   // 운영 계정 판정(아래 감시용)도 **여기서 나란히** 묻는다 — 따로 먼저 기다리면 모든 사용자의 창(embed) 첫 페인트 앞에 조회 하나가
   // 줄을 선다(B4). 이 판정은 권한 매트릭스가 어차피 부르는 요청 캐시라 조회 수는 늘지 않는다.
-  const [settings, showMakeupSettings, showEvaluationSettings, canOpenTenantView] = await Promise.all([
+  const [settings, showMakeupSettings, showEvaluationSettings, canOpenTenantView, laboratoryMenus] = await Promise.all([
     getTenantSettings(),
     isLaboratoryMenuAvailable(user.tenantId, "makeups"),
     // 강사평가 설정 면은 직원 평가(실험실 메뉴)가 열린 지점에서만 — 꺼진 지점에선 입구도 없다(설정 화면은 따로 막는다).
     isLaboratoryMenuAvailable(user.tenantId, "class_review"),
     user.tenantView ? false : isCurrentUserSuperAdmin(),
+    getLaboratoryMenus(),
   ]);
   // 운영 콘솔의 '지점 보기'(읽기 전용) — 탭마다 "그려진 화면"과 "브라우저의 실제 상태"가 어긋났는지 지켜보는 감시
   // (tenant-view-sync.tsx). 보는 중이거나 보기를 열 수 있는 사람(운영 계정)에게만 싣는다 — 그 밖의 사용자의 화면에는 놓이지 않는다.
@@ -145,7 +146,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
     //    클라 컴포넌트는 provider가 없어 한국어인 **반반 화면**이 된다. 관리자에겐 이 값이 항상 한국어라
     //    (그 함수가 `getShellView()!=="teacher"`에서 조회 없이 즉시 반환) 풀셸 동작은 한 글자도 안 바뀐다.
     return (
-      <NavigationProvider menus={teacherEmbed ? settings.navigation.teacherMenus : menuLayout} groups={teacherEmbed ? settings.navigation.teacherGroups : settings.navigation.groups} source={teacherEmbed ? teacherNavigationSource(embedLang) : undefined} tenantId={user.tenantId}>
+      <NavigationProvider laboratoryMenus={laboratoryMenus} menus={teacherEmbed ? settings.navigation.teacherMenus : menuLayout} groups={teacherEmbed ? settings.navigation.teacherGroups : settings.navigation.groups} source={teacherEmbed ? teacherNavigationSource(embedLang) : undefined} tenantId={user.tenantId}>
       <EmbedProvider embed>
         <TeacherNamesProvider names={await getTeacherEnglishNames()}>
         <SheetLangProvider lang={embedLang}>
@@ -325,7 +326,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           메뉴는 한글인데 본문만 영어가 된다(둘이 같은 값을 봐야 한다). 학생 미니셸에는 안 걸린다. */}
       <TeacherNamesProvider names={teacherNames}>
       <SheetLangProvider lang={teacherLang}>
-      <NavigationProvider menus={view === "teacher" ? settings.navigation.teacherMenus : []} groups={view === "teacher" ? settings.navigation.teacherGroups : []} source={teacherNavigationSource(teacherLang)} tenantId={user.tenantId}>
+      <NavigationProvider laboratoryMenus={laboratoryMenus} menus={view === "teacher" ? settings.navigation.teacherMenus : []} groups={view === "teacher" ? settings.navigation.teacherGroups : []} source={teacherNavigationSource(teacherLang)} tenantId={user.tenantId}>
       <div style={brandStyle} className="bg-background text-foreground flex h-screen flex-col overflow-hidden print:h-auto print:overflow-visible">
         {/* z-[60]: 공지 팝업 레이어(z-55)가 좁은 미니셸에선 헤더 버튼('내 메뉴'·사용자 메뉴)까지 덮어
             클릭이 팝업에 먹혔다(2026-08-04 실측) — 내비 크롬은 공지보다 항상 위. */}
@@ -463,7 +464,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
     // useSubjectMaps()가 buildSubjectMaps([]) 폴백을 타 과목이 "수학" 대신 raw 키 `math`로 떴다
     // (2026-07-22 전수검사 — 학생 요약 peek 창, 진입=커맨드 팰릿 학생 검색).
     // 라우트 창(iframe)은 자식 문서가 위 embed 분기에서 다시 받으므로 무관했다.
-    <NavigationProvider menus={menuLayout} groups={settings.navigation.groups} tenantId={user.tenantId}>
+    <NavigationProvider laboratoryMenus={laboratoryMenus} menus={menuLayout} groups={settings.navigation.groups} tenantId={user.tenantId}>
     <OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels} jobTitles={settings.operations.jobTitles} jobTitlesByDepartment={settings.operations.jobTitlesByDepartment} disabledModules={settings.modules.disabled} licenses={await licensesPromise}>
     <WorkspaceEnabledProvider enabled={windowMode}>
     <ShellModeProvider mode={shellMode} epoch={shellInfo.epoch}>

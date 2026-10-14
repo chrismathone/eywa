@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bodySchema, EMPTY_BODY, requestSchema, reportCapabilities, submissionError, missingReportSchema, canRequestReport, type WithdrawalReport } from "./model";
+import { bodySchema, EMPTY_BODY, requestSchema, batchRequestSchema, automaticExitKind, reportCapabilities, submissionError, missingReportSchema, canRequestReport, type WithdrawalReport } from "./model";
 const id = "10000000-0000-4000-8000-000000000001";
 const teacher = "10000000-0000-4000-8000-000000000002";
 const manager = "10000000-0000-4000-8000-000000000003";
@@ -7,6 +7,23 @@ const director = "10000000-0000-4000-8000-000000000004";
 const request = { studentId: id, teacherId: teacher, managerId: manager, directorId: director, exitKind: "subject_end", subjects: ["math"], effectiveDate: "2026-10-13", note: "" };
 const report = { teacher_id: teacher, manager_id: manager, director_id: director, requested_by: manager, status: "requested" } as WithdrawalReport;
 describe("withdrawal reports", () => {
+  it("allows manager-only final approval and multiple authors without role overlap", () => {
+    const batch = { studentId: id, teacherIds: [teacher], managerIds: [manager], directorIds: [], subjects: ["math"], effectiveDate: "2026-10-14", note: "" };
+    expect(batchRequestSchema.safeParse(batch).success).toBe(true);
+    expect(batchRequestSchema.safeParse({ ...batch, managerIds: [] }).success).toBe(false);
+    expect(batchRequestSchema.safeParse({ ...batch, directorIds: [manager] }).success).toBe(false);
+    expect(batchRequestSchema.safeParse({ ...batch, managerIds: [teacher] }).success).toBe(false);
+  });
+  it("infers whole withdrawal only when every actual subject is selected", () => {
+    expect(automaticExitKind([{ subject: "math" }, { subject: "english" }], ["math"])).toBe("subject_end");
+    expect(automaticExitKind([{ subject: "math" }, { subject: "english" }], ["math", "english"])).toBe("withdrawal");
+    expect(automaticExitKind([], [])).toBe("subject_end");
+  });
+  it("each appointed reviewer acts once in their stage", () => {
+    const multi = { ...report, status: "manager_pending" as const, manager_ids: [manager, "other"], manager_decisions: { [manager]: "2026-10-14" } };
+    expect(reportCapabilities(multi, "other", true).approve).toBe(true);
+    expect(reportCapabilities(multi, manager, true).approve).toBe(false);
+  });
   it("requires two distinct reviewers who are not the author", () => {
     expect(requestSchema.safeParse(request).success).toBe(true);
     for (const invalid of [{ teacherId: manager }, { directorId: manager }, { directorId: teacher }]) expect(requestSchema.safeParse({ ...request, ...invalid }).success).toBe(false);
