@@ -124,12 +124,12 @@ export async function assignHomeworkVideo(input: { classId: string; studentId: s
       if (isOtherSubjectVideo({ classSubject: typeof videoClass === "string" ? subjectOf.get(videoClass) : null, subject: video.data.subject as string | null }, subjectOf.get(input.classId)))
         return { ok: false, error: "다른 과목 영상은 이 반 숙제에 배정할 수 없습니다." };
       // 검사 기록만 있는 숙제일 — DB 함수는 보고서 표시나 따로 낸 숙제만 숙제로 받는다. 그 칸을 옮겨 남긴 숙제로 먼저 남긴다(keep-round.ts:
-      // 판정·알림·'내 숙제'에는 안 들고 칸·손 배정에서만 숙제다). 손 기록(완료 등)은 그대로 둔다 — 붙은 영상이 ▶로 보인다.
+      // 판정·알림에는 안 들고 칸·손 배정에서만 숙제다). 손 기록(완료 등)은 그대로 둔다 — 붙은 영상이 ▶로 보인다.
       if (markOnly.has(input.homeworkDate!)) {
         const keep = await keepMarkOnlyRound(db, user.tenantId, user.id, { classId: input.classId, studentId: input.studentId, date: input.homeworkDate! });
         if (keep !== "kept" && keep !== "assigned") return { ok: false, error: "이 숙제 칸을 영상을 붙일 수 있게 남기지 못했습니다. 잠시 뒤 다시 시도해 주세요." };
         // 🔴 배정이 실패해도 남긴 줄은 거두지 않는다 — 거두는 사이 다른 창이 그 칸을 미확인으로 지우면 칸이 통째로 사라진다(재리뷰 2026-10-14).
-        //    남은 줄은 칸을 지킬 뿐이다(판정·알림·'내 숙제'에 안 든다 — 미확인으로 바꿀 때 생기는 줄과 같다).
+        //    남은 줄은 칸을 지킬 뿐이다(판정·알림에 안 든다 — 미확인으로 바꿀 때 생기는 줄과 같다).
       }
     }
     const { data, error } = await db.rpc("set_homework_video_assignment", {

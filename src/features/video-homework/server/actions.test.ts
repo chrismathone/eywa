@@ -39,7 +39,7 @@ vi.mock("@/lib/supabase/admin", () => ({
 const has = (call: Call, ...filter: unknown[]) => call.filters.some((f) => JSON.stringify(f) === JSON.stringify(filter));
 const writes = () => mocks.calls.filter((call) => call.op !== "select");
 /** 기본 세계: 반·학생이 있고 정규 수강 중 · 같은 숙제 기록 없음 · 그날 보고서에 '영상 과제 있음'. */
-function world(over: { sameHomework?: { id: string }[]; assigned?: boolean; own?: boolean; report?: Record<string, unknown>[]; insertError?: { code: string } } = {}) {
+function world(over: { sameHomework?: { id: string }[]; assigned?: boolean; own?: boolean; ownFlag?: boolean | null; report?: Record<string, unknown>[]; extra?: Record<string, unknown>[]; insertError?: { code: string } } = {}) {
   mocks.respond = (call) => {
     if (call.op === "insert") return { data: null, error: over.insertError ?? null };
     if (call.op !== "select") return { data: null, error: null };
@@ -47,9 +47,10 @@ function world(over: { sameHomework?: { id: string }[]; assigned?: boolean; own?
     if (call.table === "students") return { data: { grade: "중1", name: "김민준" }, error: null };
     if (call.table === "enrollments") return { data: [{ start_date: "2026-01-01", end_date: null, on_hold: false, is_transferred: false }], error: null };
     // 낸 사람 확인(created_by)은 따로 답한다 — 기본은 내가 낸 숙제.
-    if (call.table === "lesson_reports" && call.filters.some((f) => f[1] === "created_by")) return { data: over.own === false ? [] : [{ id: "r1" }], error: null };
+    if (call.table === "lesson_reports" && call.filters.some((f) => f[1] === "created_by")) return { data: over.own === false ? [] : [{ id: "r1", video_homework: over.ownFlag === undefined ? true : over.ownFlag }], error: null };
     if (call.table === "lesson_reports") return { data: over.report ?? (over.assigned === false ? [] : [{ id: "r1", video_homework: true }]), error: null };
     if (call.table === "video_homework_marks") return { data: call.filters.some((f) => f[1] === "homework_date") ? over.sameHomework ?? [] : [], error: null };
+    if (call.table === "video_homework_extra_issues") return { data: over.extra ?? [], error: null };
     return { data: [], error: null };
   };
 }
@@ -127,7 +128,7 @@ describe("영상 제출 현황 회차(setVideoHomeworkRound)", () => {
     mocks.teacher.mockResolvedValue("teacher-b");
     const base = mocks.respond;
     mocks.respond = call => call.table === "lesson_reports" && call.filters.some(f => f[1] === "created_by")
-      ? { data: has(call, "eq", "created_by", "teacher-b") ? [{ id: "r1" }] : [], error: null } : base(call);
+      ? { data: has(call, "eq", "created_by", "teacher-b") ? [{ id: "r1", video_homework: true }] : [], error: null } : base(call);
     expect(await setVideoHomeworkRound(round)).toEqual({ ok: true });
     expect(writes()[0].payload).toMatchObject({ updated_by: "staff-a" });
     mocks.calls = [];
@@ -229,7 +230,20 @@ describe("영상 제출 현황 회차(setVideoHomeworkRound)", () => {
     world();
     expect(await setVideoHomeworkRound(round)).toEqual({ ok: true });
     const ownCheck = mocks.calls.find((c) => c.table === "lesson_reports" && has(c, "eq", "created_by", "teacher-a"))!;
-    expect(has(ownCheck, "eq", "report_date", "2026-09-29") && has(ownCheck, "eq", "video_homework", true) && has(ownCheck, "eq", "tenant_id", "tenant-a")).toBe(true);
+    expect(has(ownCheck, "eq", "report_date", "2026-09-29") && has(ownCheck, "eq", "tenant_id", "tenant-a")).toBe(true);
+    mocks.calls = [];
+    // 원장 2026-10-14 — 내 보고서에 '영상 과제' 표시가 없어도 그날 검사 기록이 있으면(손 기록 칸) 내 칸이다 · 기록도 없으면 아니다.
+    world({ ownFlag: null, sameHomework: [{ id: "m9" }] });
+    expect((await setVideoHomeworkRound(round)).ok).toBe(true);
+    mocks.calls = [];
+    world({ ownFlag: null });
+    expect(await setVideoHomeworkRound(round)).toEqual({ ok: false, error: "내가 낸 숙제만 기록할 수 있습니다." });
+    // 🔴 그 칸에 다른 선생님이 따로 낸 숙제가 있으면 보고서만 쓴 나는 못 찍는다(적대적 리뷰 2026-10-14) · 옮겨 남긴 숙제 칸은 그날 보고서를 쓴 내 칸.
+    const extraRow = { class_id: "class-a", student_id: "student-a", homework_date: "2026-09-29" };
+    world({ ownFlag: null, sameHomework: [{ id: "m9" }], extra: [{ ...extraRow, teacher_id: "teacher-b", kept: false }] });
+    expect(await setVideoHomeworkRound(round)).toEqual({ ok: false, error: "내가 낸 숙제만 기록할 수 있습니다." });
+    world({ ownFlag: null, extra: [{ ...extraRow, teacher_id: "homeroom", kept: true }] });
+    expect((await setVideoHomeworkRound(round)).ok).toBe(true);
     mocks.calls = [];
     world({ own: false });
     expect(await setVideoHomeworkRound(round)).toEqual({ ok: false, error: "내가 낸 숙제만 기록할 수 있습니다." });

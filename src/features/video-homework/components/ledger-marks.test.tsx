@@ -6,7 +6,7 @@ import type { VideoArrival, VideoHomeworkLedgerRow, VideoHomeworkMark } from "..
 
 const mocks = vi.hoisted(() => ({ save: vi.fn() }));
 vi.mock("../server/actions", () => ({ setVideoHomeworkRound: mocks.save }));
-vi.mock("next/navigation", async (load) => ({ ...(await load<typeof import("next/navigation")>()), useRouter: () => ({ refresh: vi.fn() }) }));
+vi.mock("next/navigation", async (load) => ({ ...(await load<typeof import("next/navigation")>()), useRouter: () => ({ replace: vi.fn() }) }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/components/embed-link", () => ({ EmbedHiddenInput: () => null }));
 
