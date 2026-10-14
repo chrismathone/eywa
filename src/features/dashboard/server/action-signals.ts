@@ -1,4 +1,5 @@
 import "server-only";
+import { judgeClassAttendanceDay } from "../unrecorded-attendance";
 import { isModuleEnabled, type ModuleId } from "@/lib/modules";
 import { fetchReportOptoutClassIds } from "@/features/classes/server/report-optout-ids";
 import { createClient } from "@/lib/supabase/server";
@@ -233,28 +234,10 @@ async function unrecordedClassesSignal(
     //    admin(cron) 경로는 tenantId가 유일한 격리선이라 반드시 넘긴다. 조회 실패 = 빈 집합(fail-open) = 지금 동작.
     getTestStudentIds(supabase, db?.tenantId),
   ]);
-  const expectedByClass = new Map<string, Set<string>>();
-  for (const row of enrollmentRows) {
-    if (
-      !isEnrollmentActiveOn(
-        {
-          startDate: row.start_date,
-          endDate: row.end_date,
-          onHold: row.on_hold,
-          isTransferred: row.is_transferred,
-        },
-        date,
-      ) || !enrollmentAttendsOnDay(row.attendance_days, dayKey)
-    ) {
-      continue;
-    }
-    // 판정(그날 유효·등원 요일) 뒤에 뺀다 — 처리현황과 같은 순서. 테스트 학생뿐인 반은 명단이 비어
-    // 아래 `hasUnrecordedStudent`가 거짓이 되므로 행째 빠진다(수강 없는 반과 같은 결과 — 이 신호는 원래 0명 반을 안 낸다).
-    if (testStudentIds.has(row.student_id)) continue;
-    const students = expectedByClass.get(row.class_id) ?? new Set<string>();
-    students.add(row.student_id);
-    expectedByClass.set(row.class_id, students);
-  }
+  // 명단·미입력 판정은 '강사별 업무 현황'의 출결 미입력 행과 같은 함수(unrecorded-attendance.ts — 같은 원본).
+  // 테스트 학생은 판정(그날 유효·등원 요일) 뒤에 뺀다 — 테스트 학생뿐인 반은 명단이 비어 행째 빠진다(수강 없는 반과 같은 결과).
+  const enrollmentsByClass = new Map<string, typeof enrollmentRows>();
+  for (const row of enrollmentRows) enrollmentsByClass.set(row.class_id, [...(enrollmentsByClass.get(row.class_id) ?? []), row]);
   const recordedByClass = new Map<string, Set<string>>();
   for (const row of attendanceRows) {
     const students = recordedByClass.get(row.class_id) ?? new Set<string>();
@@ -267,11 +250,15 @@ async function unrecordedClassesSignal(
   // 한글 이름 반(수학)**만 뜨고 영어반은 미기록이 아무리 많아도 '외 N'에 묻힌다(gotcha #84).
   // 그래서 자르는 일은 소비처가 과목별로 고르게 한다 — 여기선 정렬만 하고 카테고리 정보를 넘긴다.
   return classIds.flatMap((classId) => {
-    const expected = expectedByClass.get(classId) ?? new Set<string>();
-    const recorded = recordedByClass.get(classId) ?? new Set<string>();
-    const hasUnrecordedStudent = [...expected].some((studentId) => !recorded.has(studentId));
+    const { unrecorded } = judgeClassAttendanceDay({
+      enrollments: enrollmentsByClass.get(classId) ?? [],
+      recorded: recordedByClass.get(classId) ?? new Set<string>(),
+      date,
+      dayKey,
+      excluded: testStudentIds,
+    });
     const klass = classNames.get(classId);
-    return hasUnrecordedStudent
+    return unrecorded
       ? [{ classId, className: klass?.name ?? "?", subject: klass?.subject ?? "" }]
       : [];
   }).sort((a, b) => a.className.localeCompare(b.className, "ko"));

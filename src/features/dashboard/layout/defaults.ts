@@ -39,7 +39,7 @@ function without(drop: readonly PanelId[]): OverviewLayout {
 }
 
 /**
- * 과목 관리자 — KPI 셋(담당 과목으로 좁혀지는 칸, 1×1이라 한 줄을 채운다) + 오늘 수업(넓게) · 과목별 수강 · 공지.
+ * 과목 관리자 — KPI 셋(담당 과목으로 좁혀지는 칸, 1×1이라 한 줄을 채운다) + 오늘 수업(넓게) · 반복 결석 학생 · 공지 · 강사별 업무 현황.
  * KPI를 ½×1로 두면 오늘 수업 카드가 같은 줄로 올라와 KPI 칸이 카드 높이만큼 길어진다.
  */
 const SUBJECT_ITEMS: readonly Item[] = [
@@ -48,7 +48,8 @@ const SUBJECT_ITEMS: readonly Item[] = [
   { id: "kpi:firstClass", w: 6, h: 1 },
   { id: "kpi:absent", w: 6, h: 1 },
   { id: "panel:nowClasses", w: 12, h: 1 },
-  newItem("panel:subjects"),
+  // 과목별 수강 → 반복 결석 학생(원장 2026-10-15) — 과목이 하나인 관리자에겐 과목별 수강이 재원생 칸의 보조 숫자와 같은 숫자였다.
+  newItem("panel:repeatAbsence"),
   newItem("panel:notices"),
   newItem("panel:teacherWork"),
 ];

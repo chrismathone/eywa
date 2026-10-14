@@ -1,5 +1,12 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-10-15 — 운영실 '강사별 업무 현황': 보고서 네 줄 → 두 줄 · 학부모 미확인 · 출결 미입력 · 원생상담 줄 · 과목 운영형 기본에 반복 결석 학생
+
+- 원장 *"보고서 작성/발송, 보고서 미발송/미작성은 사실상 하나만 있어도 되지 않나? … 다른 데이터를 표시해주면 좋을듯"* → 행 = 보고서 작성(+오늘 미작성) · 발송 확인(작성했는데 안 나간 것 + 오류) · 학부모 미확인 · 출결 미입력 · 원생상담 · 영상 제출 · 영상 미제출([`teacher-work-card.tsx`](../src/app/(shell)/dashboard/_overview/teacher-work-card.tsx)). 결정 본문 = [`docs/decisions/dashboard.md`](decisions/dashboard.md) 2026-10-15.
+- 같은 원본: 학부모 미확인 = 학습·학부모 보고 카드(`getUnreadReports`) 판정의 순수 함수 짝([`judgeUnreadReport`](../src/features/report-admin/unread-filter.ts)) · 출결 미입력 = 운영실 '어제 출결 미입력' 신호 안의 판정을 꺼낸 [`judgeClassAttendanceDay`](../src/features/dashboard/unrecorded-attendance.ts)(신호도 이 함수를 쓴다) · 원생상담 = 직원 포트폴리오 저장값(`raws.counsel`). 새 조회는 원생상담 저장 행 한 번뿐.
+- 과목 운영형 코드 기본 배치의 '과목별 수강' → '반복 결석 학생'([`defaults.ts`](../src/features/dashboard/layout/defaults.ts)).
+- 적대적 리뷰 수리: 기능이 꺼진 지점엔 줄째 뺀다(ClassNote → 발송 확인·학부모 미확인 · 직원 평가/실험실 → 원생상담) · 출결 미입력 반 범위를 신호와 같게(보고서 미발송 반·창 안에 닫힌 반 포함) · 회수한 보고서는 발송 확인에서 뺀다 · 안내 문구를 실제 창·단위로.
+
 ## 2026-10-15 — 수납관리: 교재·지출을 다시 메뉴 버튼으로 · 동기화 시각을 면 탭 줄 오른쪽 끝으로
 
 - 원장 *"교재와 지출은 수납에서 따로 내부탭에서 빼서 이전처럼 만들것"* → 수납관리 메뉴 판 = 수납 · 교재 · 지출(10-14 이전처럼). 환불 요청서·수강료 계산기·회차 확정은 화면 위 탭으로만([`INNER_TABS`](../src/lib/menu-hub.ts)).
