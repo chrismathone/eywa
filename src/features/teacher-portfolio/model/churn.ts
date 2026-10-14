@@ -38,7 +38,7 @@ export function buildChurn(input: { classes: readonly SnapshotClass[]; schedules
           if (!c || !regular(c) || e.is_transferred || !e.end_date || e.end_date < w.start || e.end_date > w.end) continue;
           if (["graduated", "relocation", "illness", "advised"].includes(normalizeReason(e.withdrawal_reason) ?? "")) continue;
           // Ending a single class while another regular/special course in that subject remains is not subject withdrawal.
-          if ((byStudent.get(e.student_id) ?? []).some(other => { const oc = classes.get(other.class_id); return other.id !== e.id && oc && !oc.is_makeup_pool && oc.subject === c.subject && (!other.end_date || other.end_date > e.end_date! || other.is_transferred && other.end_date === e.end_date) && (!oc.closed_at || oc.closed_at >= addDays(e.end_date!, 1)); })) continue;
+          if ((byStudent.get(e.student_id) ?? []).some(other => { const oc = classes.get(other.class_id); return other.id !== e.id && oc && !oc.is_makeup_pool && oc.subject === c.subject && (!other.end_date || other.end_date > e.end_date!) && (!oc.closed_at || oc.closed_at >= addDays(e.end_date!, 1)); })) continue;
           const rows = exits.get(e.student_id) ?? []; exits.set(e.student_id, rows);
           if (!rows.some(row => row.subject === c.subject && row.date === e.end_date)) rows.push({ subject: c.subject, date: e.end_date, className: c.class_name });
         }

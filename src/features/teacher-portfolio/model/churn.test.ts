@@ -30,6 +30,11 @@ describe("withdrawal rate uses all actual assigned teachers", () => {
     const m = model({ classes: [c, { ...c, id: "other", teacher_id: "other" }], enrollments: [e, { ...e, id: "other", class_id: "other", start_date: "2026-10-06", end_date: null }] });
     expect(m.period("home", window).raw).toBe(0);
   });
+  it("a previous transfer ending on the same day cannot hide the final subject withdrawal", () => {
+    const m = model({ classes: [c, { ...c, id: "old", teacher_id: "previous" }], enrollments: [e, { ...e, id: "old", class_id: "old", is_transferred: true }] });
+    expect(m.period("home", window).raw).toBe(100);
+    expect(m.period("period", window).detail).toHaveLength(1);
+  });
   it("keeps denominator complete and uses actual owner history", () => {
     const m = buildChurn({ classes: [c], schedules: [slot], enrollments: [e, { ...e, id: "staying", student_id: "stay", end_date: null }], owner: () => "previousHome" });
     expect(m.period("previousHome", window).raw).toBe(50);
