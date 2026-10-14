@@ -61,7 +61,7 @@ export function HomeworkVideosView({ rows, subjectLabels, initialVideoId = null 
             <h3 className="text-base font-bold">{subjectLabel(selected.subject)} · {rowDate(selected)}</h3>
             <Button type="button" variant="outline" onClick={() => setSelectedId(null)}><SheetText value={"닫기"} /></Button>
           </div>
-          <HomeworkVideoPlayer key={selected.id} preview={links.preview} thumbnail={links.thumbnail} uploadedAt={selected.uploaded_at}
+          <HomeworkVideoPlayer key={selected.id} videoId={selected.id} preview={links.preview} thumbnail={links.thumbnail} uploadedAt={selected.uploaded_at}
             title={`${subjectLabel(selected.subject)} 숙제 영상 ${rowDate(selected)}`} />
         </section> : <div className="border-line flex aspect-video items-center justify-center rounded-xl border bg-muted/30 p-6 text-sm"><SheetText value={"목록에서 재생할 영상을 선택하세요."} /></div>}
       </div>

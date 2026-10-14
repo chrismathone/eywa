@@ -7,10 +7,10 @@ import { VideoDialog, VideoStatusLine, VideoTile } from "./thread-video-card";
 
 /**
  * 학부모 글·댓글 하나의 첨부 — 메신저처럼 **영상·사진을 한 줄의 작은 칸으로**(원장 2026-10-01 *"영상&사진 같은느낌으로"* ·
- * *"사진은 썸네일이 좋아. 누르면 크게."*). 영상 칸(▶)을 누르면 iframe 팝업으로 바로 재생, 사진 칸을 누르면 크게.
+ * *"사진은 썸네일이 좋아. 누르면 크게."*). 영상 칸(▶)을 누르면 공용 재생기 팝업으로 바로 재생, 사진 칸을 누르면 크게.
  * 아직 재생할 수 없는 영상(보관 중·실패·확인 필요)은 칸 대신 한글 상태 한 줄(보관 중이면 창이 열려 있는 동안 다시 확인한다).
  */
-export function ThreadMedia({ videos, photos, title }: { videos: ThreadVideo[]; photos: ThreadPhoto[]; title: string }) {
+export function ThreadMedia({ videos, photos, title, messageId }: { videos: ThreadVideo[]; photos: ThreadPhoto[]; title: string; messageId?: string }) {
   const [video, setVideo] = useState<number | null>(null);
   const [photo, setPhoto] = useState<number | null>(null);
   if (!videos.length && !photos.length) return null;
@@ -36,7 +36,7 @@ export function ThreadMedia({ videos, photos, title }: { videos: ThreadVideo[]; 
         </ul>
       ) : null}
       {waiting.map(({ v }) => <VideoStatusLine key={v.id} video={v} />)}
-      <VideoDialog video={open?.v ?? null} number={open?.n ?? 0} title={title} onClose={() => setVideo(null)} />
+      <VideoDialog video={open?.v ?? null} number={open?.n ?? 0} title={title} messageId={messageId} onClose={() => setVideo(null)} />
       <PhotoDialog photos={photos} index={photo} title={title} onIndex={setPhoto} />
     </>
   );
