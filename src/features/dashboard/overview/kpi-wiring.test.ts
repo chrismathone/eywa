@@ -35,7 +35,9 @@ describe("① 재원생 — 원생목록과 같은 조회·같은 순수 집계"
   it("운영실은 행을 한 번 받아 원생목록과 같은 순수 집계에 넘긴다(B1 — 서버 액션엔 요청 캐시가 없다)", () => {
     expect(SERVER).toContain("countEnrolledStudents(db, scope, notStarted)");
     expect(SERVER).toContain("fetchActiveEnrolledEnrollments(db)");
-    expect(SERVER).toContain("enrolledSubjectCounts(rows, scope, today)");
+    // 학원 전체 값은 받은 행 그대로(`build(studentRows, rows, enrolled)`), 과목 관리자 값은 같은 집계에 과목으로 거른 행을 넘긴다.
+    expect(SERVER).toContain("enrolledSubjectCounts(countRows, scope, today)");
+    expect(SERVER).toContain("if (!pred) return build(studentRows, rows, enrolled);");
     expect(SERVER).toMatch(/composeEnrolled\(\{/);
     expect(SERVER).toContain("gradeSplit(visible, composition.programs, settings.operations.gradeLevels)");
     expect(SERVER).toContain("concurrent: programs.both");
@@ -130,7 +132,7 @@ describe("② 퇴원&수업종료 — 1일~오늘, 퇴원관리의 과목 전체
     expect(count(SERVER, "getWithdrawalsInWindow(")).toBe(1);
     expect(SERVER).toContain("withdrawalMonthWindow(month, today)");
     expect(SERVER).toMatch(/inWithdrawalWindow\(\{ withdrawnAt: row\.withdrawnAt, systemBulk: false \}, win\.from, win\.to\)/);
-    expect(SERVER).toContain("withdrawn.map((r) => r.withdrawnAt)");
+    expect(SERVER).toContain("withdrawn.filter((r) => !pred || inSliceAny(pred, exitSubjects(r))).map((r) => r.withdrawnAt)");
     expect(SERVER).toContain("getSubjectEndedStudents()");
     expect(SERVER).toContain("rows: includeSubjectEnds(");
     expect(SERVER).not.toContain("datedWithdrawals");
@@ -264,7 +266,8 @@ describe("④-2 금일 등록 — 등록 완료로 옮긴 로그 한 벌, 반 �
   const QUERY = src("src/features/dashboard/server/enrolled-today.ts");
   const ACTIONS = src("src/features/enrollment/server/actions.ts");
   it("카드·팝업이 같은 서버 배열, 자리는 금일입테 오른쪽", () => {
-    expect(SERVER).toContain('add("enrolledToday", ["enrollment"], () => getEnrolledToday(today));');
+    expect(SERVER).toContain('addSliced("enrolledToday", ["enrollment"], async () => {');
+    expect(SERVER).toContain("const rows = await getEnrolledToday(today);");
     expect(STRIP).toContain("<EnrolledTodayPopup rows={registered}");
     expect(STRIP.indexOf('label="금일 등록"')).toBeGreaterThan(STRIP.indexOf('label="금일 입테"'));
     expect(STRIP.indexOf('label="금일 등록"')).toBeLessThan(STRIP.indexOf('label="오늘첫수업"'));
@@ -436,14 +439,17 @@ describe("⑦ 보강예정 — 오늘부터 한 달, 카드·팝업·시간표 �
   const POPUPS_DAY = src("src/app/(shell)/dashboard/_overview/kpi-popups-day.tsx");
 
   it("서버는 강사 스코프를 넘겨 한 달 창(같은 함수)으로 센다 — 지난 미이행 ~ 창 끝을 한 조회로", () => {
-    expect(SERVER).toContain("getUpcomingMakeupOverview(today, await teacherIdPromise)");
+    // 반별 창 뒤 예약 수(행 조회)는 과목 값이 필요할 때만 — 원장 화면은 건수 조회(head) 그대로.
+    expect(SERVER).toContain("loadUpcomingMakeup(today, await teacherIdPromise, sliceSets.length > 0)");
     expect(UPCOMING).toContain("const range = monthAheadWindow(today);");
     // 반 집합(누구의 반인가)은 이번 주 — 시간표 탭이 이번 주에 고르는 반과 같다(한 달로 넓히면 남의 반이 섞인다).
     expect(UPCOMING).toContain("listMakeupScopeClasses(teacherId, weekBoundsOf(today))");
     expect(UPCOMING).toContain("getReservationsInRange(shiftDays(today, -OVERDUE_LOOKBACK_DAYS), range.end, classIds)");
-    expect(UPCOMING).toContain("countLater(supabase, range.end, classIds)");
+    expect(UPCOMING).toContain("countLaterByClass(supabase, range.end, classIds)");
+    expect(UPCOMING).toContain(": countLater(supabase, range.end, classIds).catch(() => 0)");
+    expect(UPCOMING).toContain('.select("id", { count: "exact", head: true })');
     expect(UPCOMING).toContain("overdue: r.makeupDate < today,");
-    expect(UPCOMING).toContain("return { range, rows, later };");
+    expect(UPCOMING).toContain("return { overview: { range, rows, later: total }, subjectOf: new Map(classes.map((c) => [c.id, c.subject])), laterByClass: typeof later === \"number\" ? new Map() : later };");
     // 옛 주 조회가 남아 있으면 카드와 팝업이 다른 기간을 말한다.
     expect(UPCOMING).not.toContain("getReservationsInWeek");
     // 이름 조회 실패를 빈 배열로 삼키면 카드가 "0건"이라는 거짓을 말한다 — 던져서 칸이 '조회 실패'로 서야 한다.

@@ -1,4 +1,3 @@
-import type { BillingSummary } from "@/features/billing/calc";
 import type {
   AttendanceSnapshot,
   AnnouncementRow,
@@ -121,7 +120,8 @@ export type OverviewData = {
     counts: import("@/features/attendance/holiday-activity").HolidayActivityCounts | null;
   } | null;
   attendanceTrend: { date: string; rate: number | null; total: number }[];
-  billing: BillingSummary[];
+  /** 달마다 수납 요약 — 과목 관리자 값에는 과목으로 못 가른 금액(`unclassified`)이 따로 실린다(`billing-subject.ts`). */
+  billing: import("./billing-subject").SubjectBillingSummary[];
   expenses: ExpenseSummary;
   absences: {
     anchor: string | null;
@@ -211,6 +211,10 @@ export type OverviewSnapshot = {
    */
   view?: import("@/features/dashboard/layout/view").ResolvedView;
   sections: Sections;
+  /** 과목별 값 표 — **미리보기 원본(`loadOverview({ full })`)에만** 있다. 편집기가 과목 관리자 배치를 그 과목 값으로 그린다. */
+  slices?: import("@/features/dashboard/layout/slices").SliceTable;
+  /** 학원 설정의 과목(키) — 미리보기 원본에만. `subjects`엔 옛 표시용 라벨이 섞여 있어 과목 판정은 이것으로 거른다(서버와 같은 목록). */
+  sliceSubjectKeys?: string[];
 };
 
 /** A failed refresh never turns the last successful reading into a zero. Revoked areas disappear. */
