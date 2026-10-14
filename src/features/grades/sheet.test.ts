@@ -237,9 +237,16 @@ describe("안내 시트 축 — 왕복", () => {
   });
 
   it("영어가 아니면 트랙은 비워서 왕복(다른 과목엔 트랙이 없다)", () => {
-    const math: GradeSheetAxis = { ...AXIS, subject: "math", track: null, slot: "school" };
-    const parsed = parseAxisSheetRows(axisSheetRows(math, { subjectLabel: "수학", slotLabel: "내신", trackLabel: "" }));
+    const math: GradeSheetAxis = { ...AXIS, subject: "math", track: null, slot: "midterm" };
+    const parsed = parseAxisSheetRows(axisSheetRows(math, { subjectLabel: "수학", slotLabel: "중간고사", trackLabel: "" }));
     expect(parsed.ok && parsed.row).toEqual(math);
+  });
+
+  it("🔴 옛 수학 '내신' 서식은 거절하고 새 서식을 받으라고 말한다(2026-10-14 중간·기말로 나뉨 — 어느 쪽인지 지어내지 않는다)", () => {
+    const old: GradeSheetAxis = { ...AXIS, subject: "math", track: null, slot: "school" };
+    const parsed = parseAxisSheetRows(axisSheetRows(old, { subjectLabel: "수학", slotLabel: "내신", trackLabel: "" }));
+    expect(parsed.ok).toBe(false);
+    expect(!parsed.ok && parsed.error).toContain("중간고사·기말고사");
   });
 
   it("안내 문구 줄이 섞여 있어도 축만 읽는다", () => {

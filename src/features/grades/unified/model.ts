@@ -74,12 +74,13 @@ export function scorePercent(record: Pick<UnifiedRecord, "score" | "maxScore">):
 /**
  * 동일 학생·과목·시험 종류의 직전 유효 점수와 비교한다. **만점이 같을 때만** 원래 단위로 차이를 적고,
  * 만점이 다르면 증감을 비운다(환산 차이를 적지 않는다 — 원장 2026-09-24).
+ * 영어 듣기평가는 학교 시험이지만 **듣기끼리만** 잇는다 — 중간고사의 '이전 점수'가 같은 학기 듣기평가가 되면 다른 시험의 차이가 증감에 찍힌다.
  */
 export function withPreviousScores(records: readonly UnifiedRecord[]): UnifiedRow[] {
   const sorted = [...records].sort((a, b) => a.date.localeCompare(b.date) || a.key.localeCompare(b.key));
   const previous = new Map<string, UnifiedRecord>();
   const rows = sorted.map((record) => {
-    const key = `${record.studentId}|${record.subject}|${record.kind}`;
+    const key = `${record.studentId}|${record.subject}|${record.kind}${record.slot === "listening" ? ":listening" : ""}`;
     const earlier = previous.get(key);
     const currentPct = scorePercent(record);
     const earlierPct = earlier ? scorePercent(earlier) : null;
