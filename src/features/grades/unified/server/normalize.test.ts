@@ -8,6 +8,11 @@ describe("기존 시험 종류 통합", () => {
     expect(gradeKind("school", "내신")).toBe("school");
   });
 
+  it("영어 듣기평가도 학교 시험이다(시험정보 `26-2-듣기`)", () => {
+    expect(gradeKind("listening", "듣기평가")).toBe("school");
+    expect(gradeKind(null, "듣기평가")).toBe("school");
+  });
+
   it("새로 추가한 테스트와 월말평가를 별도 종류로 구분한다", () => {
     expect(gradeKind(null, "일일테스트")).toBe("daily");
     expect(gradeKind(null, "확인테스트")).toBe("check");

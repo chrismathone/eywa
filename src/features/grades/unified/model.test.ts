@@ -32,6 +32,16 @@ describe("통합 성적 원장", () => {
     expect(rows.find((row) => row.kind === "school")?.delta).toBeNull();
   });
 
+  it("영어 듣기평가는 듣기끼리만 잇는다 — 중간고사의 이전 점수가 듣기평가가 되지 않는다", () => {
+    const eng = (date: string, score: number, slot: string): UnifiedRecord =>
+      ({ ...student, subject: "english", key: date + slot, date, score, maxScore: 100, kind: "school", slot });
+    const rows = withPreviousScores([
+      eng("2026-04-20", 80, "midterm"), eng("2026-09-08", 95, "listening"), eng("2026-10-02", 85, "midterm"), eng("2026-10-20", 90, "listening"),
+    ]);
+    expect(rows.find((r) => r.date === "2026-10-02")).toMatchObject({ previousScore: 80, delta: 5 });
+    expect(rows.find((r) => r.date === "2026-10-20")).toMatchObject({ previousScore: 95, delta: -5 });
+  });
+
   it("만점이 다르면 증감을 비우고 반별 추이는 시험 당시 반으로 집계한다", () => {
     const earlier = { ...grade("2026-08-31", 8, 10), trendClasses: [{ id: "old", name: "이전 반", teacher: null, days: 1 }] };
     const later = { ...grade("2026-09-30", 15, 20), trendClasses: [{ id: "new", name: "현재 반", teacher: null, days: 2 }] };

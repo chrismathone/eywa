@@ -24,17 +24,35 @@ import { issueBrandingUploadTicket } from "@/features/owner/server/actions";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import type { AdminPopup } from "@/features/notices/server/queries";
 import { MenuMentionEditor } from "@/components/editor/menu-mention-editor";
+import { kstDateTimeLocal, kstShortStamp } from "@/lib/date-kst";
 
 const INPUT = "border-border bg-card text-foreground min-w-0 w-full rounded-md border px-2.5 py-1.5 text-sm";
 const LABEL = "text-text-dim text-xs font-medium";
 
-/** ISO → datetime-local 입력값("YYYY-MM-DDTHH:mm", 로컬 시각). 빈 값은 "". */
+/**
+ * ISO → datetime-local 입력값("YYYY-MM-DDTHH:mm", **KST**). 빈 값은 "".
+ * 🔴 런타임 로컬 게터로 풀지 말 것 — 서버 렌더(UTC)와 브라우저가 9시간 다른 값을 박는다. 저장은 같은 벽시계를
+ *    KST로 읽는다(actions.ts `kstLocalToIso`) — 이 둘이 짝이라 고치지 않고 다시 저장해도 시각이 그대로다.
+ */
 function toLocalInput(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  return Number.isNaN(d.getTime()) ? "" : kstDateTimeLocal(d);
+}
+
+/**
+ * 목록의 노출 기간 한 줄 — 시각이 화면에 안 보이면 저장이 어긋나도 아무도 모른다(2026-10-14: 9시간 늦게 저장된 공지가
+ * 목록엔 그냥 '켜짐'으로 보였다). 상태는 지금 시각으로 판정(예약·노출 중·종료) — 꺼 둔 공지는 켜고 끄기 칩이 말한다.
+ */
+function periodLine(p: AdminPopup, now: number): string {
+  const from = p.startsAt ? kstShortStamp(p.startsAt) : null;
+  const to = p.endsAt ? kstShortStamp(p.endsAt) : null;
+  const range = from || to ? `${from ?? "바로"} ~ ${to ?? "계속"}` : "기간 없음";
+  if (!p.isActive) return range;
+  const starts = p.startsAt ? new Date(p.startsAt).getTime() : null;
+  const ends = p.endsAt ? new Date(p.endsAt).getTime() : null;
+  const state = starts !== null && starts > now ? "예약" : ends !== null && ends < now ? "종료" : "노출 중";
+  return `${range} · ${state}`;
 }
 
 function SubmitBtn({ label }: { label: string }) {
@@ -220,6 +238,8 @@ export function PopupsManager({ items }: { items: AdminPopup[] }) {
   const [editing, setEditing] = useState<AdminPopup | null>(null);
   const [imageUrl, setImageUrl] = useState("");
   const [formKey, setFormKey] = useState(0);
+  // 목록의 예약·노출 중·종료 판정 기준 = 이 화면을 연 시각(오래 열어 두면 새로고침해야 바뀐다). 서버 렌더와 몇 초 차이는 suppressHydrationWarning.
+  const [now] = useState(() => Date.now());
   const formRef = useRef<HTMLFormElement>(null);
 
   const [state, action] = useActionState<NoticePopupActionState, FormData>(
@@ -350,6 +370,9 @@ export function PopupsManager({ items }: { items: AdminPopup[] }) {
                     <p className="text-foreground truncate text-sm font-bold">{p.title}</p>
                     <p className="text-text-faint mt-0.5 text-xs">
                       {AUDIENCE_LABEL[p.audience as PopupAudience] ?? p.audience} · {POSITION_LABEL[p.position as PopupPosition] ?? p.position} · 우선 {p.priority}
+                    </p>
+                    <p className="text-text-faint mt-0.5 text-xs" suppressHydrationWarning>
+                      {periodLine(p, now)}
                     </p>
                   </div>
                 </div>

@@ -44,7 +44,7 @@ beforeEach(() => vi.clearAllMocks());
 afterEach(cleanup);
 
 describe("영상 제출 현황 — ▶ 현재 화면 재생 · 수동", () => {
-  it("▶는 장부 위 재생 팝업 — 학생 상세 이동·완료 저장·편집 없이 그 영상만 열고 닫으면 iframe 제거", async () => {
+  it("▶는 장부 위 재생 팝업 — 학생 상세 이동·완료 저장·편집 없이 그 영상만 열고 닫으면 재생기 제거", async () => {
     show();
     const play = screen.getByRole("button", { name: "숙제 영상 보기" });
     expect(screen.queryByRole("link", { name: "숙제 영상 보기" })).toBeNull();
@@ -53,12 +53,12 @@ describe("영상 제출 현황 — ▶ 현재 화면 재생 · 수동", () => {
     fireEvent.click(play);
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByRole("heading")).toHaveTextContent("김민준 · 숙제 영상 1회");
-    const frame = within(dialog).getByTitle("김민준 · 숙제 영상 1회");
-    expect(frame).toHaveAttribute("src", videos[0].playback!.preview);
+    const player = within(dialog).getByLabelText("김민준 · 숙제 영상 1회");
+    expect(player).toHaveAttribute("src", `/api/homework-videos/${videos[0].id}/stream`);
     expect(screen.queryByRole("button", { name: "기록 저장" })).toBeNull();
     expect(mocks.save).not.toHaveBeenCalled();
     fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
-    await waitFor(() => expect(document.querySelector("iframe")).toBeNull());
+    await waitFor(() => expect(document.querySelector("video,iframe")).toBeNull());
     expect(screen.getByRole("table", { name: /수학 A/ })).toBeInTheDocument();
     expect(mocks.save).not.toHaveBeenCalled();
   });

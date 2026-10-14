@@ -5,6 +5,8 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { Mic, CircleStop, X, Download } from "@/components/icons/aywa-icon-compat";
 import { useRecordingLock } from "@/components/workspace/use-recording-lock";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { useWindowStore } from "@/components/workspace/window-store";
 import { formatSeconds, downloadFile } from "@/lib/audio-upload";
 import { adoptRecordingOwner, releaseRecordingOwner, dismissBrowserRecording, getBrowserRecording, getServerRecording, recordingIsActive, stopBrowserRecording, subscribeBrowserRecording, type BrowserRecording } from "@/lib/browser-recording";
@@ -101,21 +103,24 @@ function RecordingControls({ recording, hasFile, onStop, onDownload, onDismiss, 
   return (
     <div ref={attachAnchor} className={styles.anchor} data-recording-id={recording.requestId} data-open={expanded ? "true" : undefined}>
       {expanded ? createPortal(<section ref={panel} id={panelId} aria-label="녹음 진행" onKeyDown={(event) => closeOnEscape(event, true)} className={`${styles.panel} bg-background border-border rounded-xl border p-4 shadow-lg`}>
-        <div className="flex items-start justify-between gap-3">
+        {/* 시간은 정보창에 따로 적지 않는다 — 열려 있는 동안 캡슐이 펼친 채 보여 준다(원장 2026-10-14 "안내창은 녹음 시간 안보여도됨"). */}
+        <div className="mb-3 flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <p className="text-text-dim text-xs">{{ meeting: "회의 녹음", consultation: "콜앤상담 녹음", "student-consultation": "학생 상담 녹음" }[recording.kind]}</p>
             <p className="mt-1 truncate text-sm font-semibold" title={recording.scope.label}>{recording.scope.label}</p>
           </div>
-          <button type="button" aria-label="녹음 진행 접기" onClick={() => setExpanded(false)} className="text-text-dim shrink-0 rounded p-1"><X className="size-4" /></button>
+          <button type="button" aria-label="녹음 진행 접기" onClick={() => setExpanded(false)} className={cn(buttonVariants({ variant: "ghost", size: "icon-sm" }), "text-text-dim")}><X className="size-4" /></button>
         </div>
-        <p className="num my-3 text-2xl font-bold">{time}</p>
         {recording.error ? <p role="alert" className="text-danger mb-3 text-xs">{recording.error}</p> : null}
         {!active && hasFile ? <p className="text-text-dim mb-3 text-xs">녹음을 보관했습니다. 작성 화면에서 저장·분석할 수 있습니다.</p> : null}
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          {active ? <button type="button" disabled={recording.status === "stopping"} onClick={onStop} className="bg-danger text-white inline-flex items-center gap-1 rounded-lg px-3 py-2"><CircleStop className="size-4" />녹음 중지</button> : null}
-          {onOpen ? <button type="button" onClick={onOpen} className="border-border rounded-lg border px-3 py-2">작성 화면 열기</button> : <Link href={recording.href} prefetch={false} className="border-border rounded-lg border px-3 py-2">작성 화면 열기</Link>}
-          {hasFile ? <button type="button" onClick={onDownload} className="border-border inline-flex items-center gap-1 rounded-lg border px-3 py-2"><Download className="size-4" />파일 저장</button> : null}
-          {!active ? <button type="button" onClick={onDismiss} className="text-text-dim rounded-lg px-2 py-2">안내 닫기</button> : null}
+        {/* 버튼은 공용 모양(buttonVariants) — 올리면 색이 바뀌고 누르면 눌린다(원장 2026-10-14 "마우스 올려도 눌린다는 효과가 없어서 헷갈림"). */}
+        <div className="flex flex-wrap items-center gap-2">
+          {active ? <button type="button" disabled={recording.status === "stopping"} onClick={onStop} className={cn(buttonVariants(), "bg-danger text-white hover:bg-danger/85")}><CircleStop />녹음 중지</button> : null}
+          {/* 작성 화면으로 가면 정보창은 닫는다 — 이미 그 화면이어도 눌렀다는 것이 보인다. */}
+          {onOpen ? <button type="button" onClick={() => { setExpanded(false); onOpen(); }} className={cn(buttonVariants({ variant: "outline" }))}>작성 화면 열기</button>
+            : <Link href={recording.href} prefetch={false} onClick={() => setExpanded(false)} className={cn(buttonVariants({ variant: "outline" }))}>작성 화면 열기</Link>}
+          {hasFile ? <button type="button" onClick={onDownload} className={cn(buttonVariants({ variant: "outline" }))}><Download />파일 저장</button> : null}
+          {!active ? <button type="button" onClick={onDismiss} className={cn(buttonVariants({ variant: "outline" }), "text-text-dim")}>안내 닫기</button> : null}
         </div>
       </section>, document.body) : null}
       <button ref={capsule} type="button" aria-label={`${label} · ${time} · 진행 확인`} aria-expanded={expanded} aria-controls={expanded ? panelId : undefined}

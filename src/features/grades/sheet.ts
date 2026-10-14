@@ -188,6 +188,10 @@ export function parseAxisSheetRows(
 
   const slotRaw = norm(pick("slot"));
   const slots = examSlotsFor(subject);
+  // 2026-10-14 전에 받은 수학 서식은 '내신' 한 칸이었다 — 중간·기말 중 어디인지 지어내지 않고 새 서식을 받게 한다.
+  if (subject === "math" && slotRaw === "school") {
+    return bad(`수학 '내신' 칸은 중간고사·기말고사로 나뉘었습니다 — [서식 내려받기]로 새 파일을 받아 다시 적어 주세요`);
+  }
   if (!isExamSlot(slotRaw) || !slots.includes(slotRaw)) {
     return bad(`'${AXIS_LABEL.slot}'을(를) 읽지 못했습니다 — 내려받은 서식의 값을 그대로 두세요`);
   }

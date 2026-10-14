@@ -1,4 +1,4 @@
-import { EXAM_SLOT_LABEL, isExamSlot } from "@/features/grades/exam-slots";
+import { isExamSlot, type ExamSlotKey } from "@/features/grades/exam-slots";
 import { BLANK_LABEL, BLANK_VALUE, parseValueFilter, passesValueFilter, type ValueFilter } from "@/lib/value-filter";
 import { KIND_LABEL, schoolGradeLabel, scorePercent, type UnifiedKind, type UnifiedRow } from "./model";
 
@@ -30,16 +30,35 @@ export function parseLedgerView(raw: Record<string, string | undefined>): Ledger
 
 export const teachersOf = (row: UnifiedRow) => [...new Set(row.classes.map((c) => c.teacher).filter((t): t is string => !!t))];
 export const schoolOf = (row: UnifiedRow) => schoolGradeLabel(row.school, row.grade);
+/** 시험정보의 짧은 시험 이름 — `26-2-중간`의 마지막 조각. 옛 수학 `내신` 행(2026-10-14 전)은 그대로 `내신`. */
+const SHORT_SLOT: Record<ExamSlotKey, string> = { midterm: "중간", final: "기말", listening: "듣기", school: "내신", monthly: "월말" };
+
 /**
- * '시험정보' 열(원장 2026-09-23) — 월말평가는 **몇 월**, 내신은 **몇 년도 몇 학기 어떤 시험**. 저장된 축 그대로 읽는다
+ * '시험정보' 열(원장 2026-09-23) — 월말평가는 **몇 월**, 학교 시험은 **`26-2-중간`**(년도 끝 두 자리 · 학기 · 시험 —
+ * 원장 2026-10-14 *"시험정보를 26-2-중간/기말 이렇게 분류"*, 영어·수학 공통). 저장된 축 그대로 읽는다
  * (월은 시험일에서 — 월말평가의 월은 저장값이 아니라 시험일에서 도출하는 규약, `gradeMonthOf`와 같다).
- * 수업보고서·입학테스트는 그런 축이 없어 null(화면은 —).
+ * 수업보고서·입학테스트는 그런 축이 없어 null(화면은 —). 정렬은 이 글자가 아니라 `examInfoSortKey`다.
  */
 export function examInfoOf(row: Pick<UnifiedRow, "kind" | "date" | "slot" | "schoolYear" | "term">): string | null {
   if (row.kind === "monthly") return `${row.date.slice(0, 4)}년 ${Number(row.date.slice(5, 7))}월`;
   if (row.kind === "school" && row.schoolYear && row.term) {
-    const slot = isExamSlot(row.slot) ? EXAM_SLOT_LABEL[row.slot] : "내신";
-    return `${row.schoolYear}년 ${row.term}학기 · ${slot}`;
+    const slot = isExamSlot(row.slot) ? SHORT_SLOT[row.slot] : "내신";
+    return `${String(row.schoolYear).slice(-2)}-${row.term}-${slot}`;
+  }
+  return null;
+}
+/** 학교 시험의 학기 안 차례 — 듣기평가 → 중간고사 → (옛 수학 내신) → 기말고사. */
+const SLOT_ORDER: Record<ExamSlotKey, number> = { listening: 1, midterm: 2, school: 3, final: 4, monthly: 0 };
+
+/**
+ * '시험정보' 정렬 키 — 글자(`2026년 9월`·`26-2-중간`)로 견주면 형식이 달라 월말평가가 해와 상관없이 한쪽에 몰리고,
+ * 같은 학기 안은 가나다순(기말 < 듣기 < 중간)이 된다. 그래서 숫자로: **년도** → 그 해 안에서는 월말평가(월 순) 다음
+ * 학교 시험(학기 → 듣기·중간·기말). 같은 시험(`26-2-중간`)은 키가 같아 한데 모인다.
+ */
+export function examInfoSortKey(row: Pick<UnifiedRow, "kind" | "date" | "slot" | "schoolYear" | "term">): number | null {
+  if (row.kind === "monthly") return Number(row.date.slice(0, 4)) * 1000 + Number(row.date.slice(5, 7));
+  if (row.kind === "school" && row.schoolYear && row.term) {
+    return row.schoolYear * 1000 + 100 + row.term * 10 + (isExamSlot(row.slot) ? SLOT_ORDER[row.slot] : SLOT_ORDER.school);
   }
   return null;
 }
@@ -60,7 +79,7 @@ function sortKey(row: UnifiedRow, sort: LedgerSort): string | number | null {
     case "class": return row.classes.map((c) => c.name).join(" / ") || null;
     case "teacher": return teachersOf(row).join(" / ") || null;
     case "kind": return row.kind;
-    case "info": return examInfoOf(row);
+    case "info": return examInfoSortKey(row);
     case "score": return scorePercent(row);
     case "delta": return row.delta;
   }
