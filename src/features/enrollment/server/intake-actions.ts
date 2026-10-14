@@ -24,6 +24,7 @@ import {
   RELATION_OPTIONS,
   CONSULTATION_PATHS,
 } from "@/features/enrollment/form-config";
+import { cleanReferrerName } from "@/features/enrollment/referrer";
 
 // ───────────────────────── 토큰 관리 (직원, 인증) ─────────────────────────
 
@@ -241,6 +242,8 @@ export async function submitPublicIntake(
   const parentPhone = clip(formData.get("parentPhone"), 20);
   const parentRelation = clip(formData.get("parentRelation"), 10);
   const consultationPath = clip(formData.get("consultationPath"), 40);
+  // 소개해 준 분(0362a) — 글로만 받는다(직원이 콜&상담에서 원생·직원으로 이어야 강사평가가 센다). 비면 칸을 쓰지 않는다.
+  const referrerName = cleanReferrerName(formData.get("referrerName"));
 
   if (!prospectSchool) return { error: "학교를 입력해주세요" };
   if (!parentName) return { error: "보호자 이름을 입력해주세요" };
@@ -271,7 +274,7 @@ export async function submitPublicIntake(
   // 학부모는 자기 아이 이름을 그대로 적으면 되고, 동명이인 판단은 **직원이 상담을 학생으로 전환할 때**
   // convertConsultationToStudent가 접미사를 붙이며 그 자리에서 알린다. 이름을 학부모 화면에서 고쳐
   // 보여주면 "내 아이 이름이 왜 바뀌지?"가 되고, 접수 자체를 막으면 상담 유입이 끊긴다.
-  const { data: inserted, error: insErr } = await admin.from("enrollment_consultations").insert({
+  const row = {
     tenant_id: tok.tenant_id,
     prospect_name: prospectName,
     prospect_grade: prospectGrade,
@@ -285,6 +288,7 @@ export async function submitPublicIntake(
     parent_relation: parentRelation,
     address: clip(formData.get("address"), 120) || null,
     consultation_path: consultationPath,
+    ...(referrerName ? { referrer_name: referrerName } : {}),
     career_goal: clip(formData.get("careerGoal"), 60) || null,
     siblings,
     subject,
@@ -297,7 +301,14 @@ export async function submitPublicIntake(
     from_public_intake: true,
     intake_token_id: tok.id,
     consultant_id: null,
-  }).select("id").single();
+  };
+  let { data: inserted, error: insErr } = await admin.from("enrollment_consultations").insert(row).select("id").single();
+  // 소개자 칸(0362a)이 아직 없는 DB면 그 칸만 빼고 다시 — 신규 문의가 소개자 이름 하나 때문에 사라지지 않게(#95).
+  if (insErr && referrerName && /referrer_name/.test(insErr.message ?? "")) {
+    const { referrer_name: _skip, ...withoutReferrer } = row as typeof row & { referrer_name?: string };
+    void _skip;
+    ({ data: inserted, error: insErr } = await admin.from("enrollment_consultations").insert(withoutReferrer).select("id").single());
+  }
   if (insErr) {
     // 학부모가 보는 공개 화면 — 내부 이유(권한·연결 등)는 보이지 않고 로그로만 남긴다([[#138]]).
     explainDbError(insErr, { scope: "enrollment.intake.submit", fallback: "" });

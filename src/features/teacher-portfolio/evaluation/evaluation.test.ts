@@ -45,6 +45,17 @@ describe("설정 저장값 해석", () => {
     expect([zeroMaxIssue({ mode: "perUnit", points: 1, cap: false }, 0), zeroMaxIssue({ mode: "linear", zero: 0, full: 100 }, 10)]).toEqual([null, null]);
     expect(zeroMaxIssue({ mode: "linear", zero: 0, full: 100 }, 0)).toContain("늘 0점");
   });
+  it("🔴 기본 제공 구성·10-13에 저장한 구성은 그대로 저장된다 — 새 '원생상담'(상담 비율)과 이름이 겹치지 않는다", () => {
+    expect(evaluationConfigSchema.safeParse(PORTFOLIO_V1_CONFIG).success).toBe(true);
+    expect(evaluationConfigSchema.safeParse(DEFAULT_EVALUATION_CONFIG).success).toBe(true);
+    // 10-13 기본값(원생상담 = 후속 처리 follow)으로 저장해 counsel이 없는 구성.
+    const stored = structuredClone(DEFAULT_EVALUATION_CONFIG) as unknown as { metrics: Record<string, { label: string; enabled: boolean }> };
+    delete stored.metrics.counsel;
+    stored.metrics.follow = { ...stored.metrics.follow, label: "원생상담", enabled: true };
+    const c = resolveEvaluationConfig(stored);
+    expect([c.metrics.follow.label, c.metrics.counsel.label, c.metrics.counsel.enabled]).toEqual(["원생상담", "원생상담(새 항목)", false]);
+    expect(evaluationConfigSchema.safeParse(c).success).toBe(true);
+  });
   it("차례에서 모르는 지표는 빼고, 빠진 지표는 뒤에 붙인다 — 나중에 더한 기본 지표가 숨지 않게", () => {
     const c = resolveEvaluationConfig({ order: ["coverage", "nope", "report"] });
     expect(c.order.slice(0, 2)).toEqual(["coverage", "report"]);
@@ -74,17 +85,18 @@ describe("한 달에 설정 얹기", () => {
   });
   it("기본 설정 = 원장 8개 구성(100점) — 아직 계산 전인 지표는 0점, 만족도는 만점 없이 더하고 뺀다, 옛 5개는 꺼 둔다", () => {
     const p = period();
-    p.items.push(...(["payRatio", "churn", "grades", "satisfaction", "punctuality"] as const).map((id) => item(id, null)));
+    p.items.push(...(["payRatio", "churn", "grades", "satisfaction", "punctuality"] as const).map((id) => item(id, null)), item("counsel", 100));
     applyEvaluation(p, DEFAULT_EVALUATION_CONFIG);
     const shown = p.items.filter((m) => !m.off);
+    // 원생상담 = 담당 학생 상담 비율(counsel, 원장 2026-10-14) — 옛 원생상담(후속 처리, follow)은 꺼 둔다.
     expect(shown.map((m) => [m.id, m.value, m.max])).toEqual([
-      ["payRatio", 0, 20], ["churn", 0, 20], ["report", 5, 10], ["follow", 10, 10], ["grades", 0, 10], ["expansion", 0, 20], ["satisfaction", 0, 0], ["punctuality", 0, 10],
+      ["payRatio", 0, 20], ["churn", 0, 20], ["report", 5, 10], ["counsel", 10, 10], ["grades", 0, 10], ["expansion", 0, 20], ["satisfaction", 0, 0], ["punctuality", 0, 10],
     ]);
     expect([p.total, p.knownMax]).toEqual([15, 100]);
-    expect(p.items.filter((m) => m.off).map((m) => m.id)).toEqual(["attendance", "quality", "students", "revenue", "coverage"]);
+    expect(p.items.filter((m) => m.off).map((m) => m.id)).toEqual(["follow", "attendance", "quality", "students", "revenue", "coverage"]);
     // 만족도는 만점 0 · 상한 없음 — 칭찬 3점이면 총점에 +3(만점 합계는 그대로 100).
     const q = period();
-    q.items.push(...(["payRatio", "churn", "grades", "punctuality"] as const).map((id) => item(id, null)), item("satisfaction", 3));
+    q.items.push(...(["payRatio", "churn", "grades", "punctuality"] as const).map((id) => item(id, null)), item("satisfaction", 3), item("counsel", 100));
     applyEvaluation(q, DEFAULT_EVALUATION_CONFIG);
     expect([q.items.find((m) => m.id === "satisfaction")?.value, q.knownMax]).toEqual([3, 100]);
   });

@@ -3,6 +3,7 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import type { SystemRole } from "@/lib/permissions";
 import { kstDateOf, kstTimeOf } from "@/lib/date-kst";
 import { getPortfolioView } from "@/features/teacher-portfolio/server/queries";
+import { readMyUiPrefs } from "@/lib/ui-prefs/read";
 import { dayLabel } from "@/features/teacher-portfolio/view";
 import { PortfolioBoard, RefreshButton } from "./portfolio-board";
 
@@ -11,7 +12,9 @@ import { PortfolioBoard, RefreshButton } from "./portfolio-board";
  * 저장 표가 아직 없거나(SQL 적용 전) 첫 집계 전이면 빈 상태로 안내한다(화면이 죽지 않는다 — #95).
  */
 export async function PortfolioFace({ role, teacherId }: { role: SystemRole; teacherId: string | null }) {
-  const [view, canRefresh] = await Promise.all([getPortfolioView({ teacherId }), canWriteTenant(role, "class_review")]);
+  const [view, canRefresh, prefs] = await Promise.all([getPortfolioView({ teacherId }), canWriteTenant(role, "class_review"), readMyUiPrefs()]);
+  // 항목별 내역 '점수 기준' 상자 접힘 — 계정 귀속(원장 2026-10-14 *"접고 펼치기해서 컴팩트 가능하게"*).
+  const ruleCollapsed = (prefs.portfolio as { ruleCollapsed?: unknown } | undefined)?.ruleCollapsed === true;
   if (!view) return <EmptyState compact title="직원 포트폴리오를 볼 권한이 없습니다" />;
   if (view.state !== "ready") {
     return view.state === "tableMissing"
@@ -24,7 +27,7 @@ export async function PortfolioFace({ role, teacherId }: { role: SystemRole; tea
   const computedAt = view.selected.periods[0]?.closing.computedAt ?? null;
   const day = kstDateOf(computedAt);
   return (
-    <PortfolioBoard teachers={view.teachers} selected={view.selected} studentNames={view.studentNames} canRefresh={canRefresh}
+    <PortfolioBoard teachers={view.teachers} selected={view.selected} studentNames={view.studentNames} canRefresh={canRefresh} ruleCollapsed={ruleCollapsed}
       computedLabel={day ? `${dayLabel(day)} ${kstTimeOf(computedAt) ?? ""}`.trim() : "—"} />
   );
 }

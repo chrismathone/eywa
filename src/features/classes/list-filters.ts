@@ -111,15 +111,41 @@ export const DAY_FILTERS = [
 ];
 export const DAY_KEYS = new Set(DAY_FILTERS.map((d) => d.key));
 
-// 정렬 옵션 — 드롭다운에 전부 노출(기본 name 포함).
+// 정렬 값 6개(기본 name) — 열마다 화살표 하나가 오름·내림을 오간다(SORT_AXES).
 // 문구는 사전 한 곳(`cls.sort.*`) — 여기엔 값과 키만(위 상태 표와 같은 규약).
-export const SORT_OPTIONS: { value: ClassSort; key: "cls.sort.name" | "cls.sort.students" | "cls.sort.teacher" }[] = [
+// 정렬은 열 머리 화살표(원장 2026-10-14 *"수업목록도 똑같이 바꿔"*) — 키 = 그 정렬을 거는 화살표가 읽어 주는 이름.
+export const SORT_OPTIONS: {
+  value: ClassSort;
+  key: "cls.sort.name" | "cls.sort.name.desc" | "cls.sort.students" | "cls.sort.students.asc" | "cls.sort.teacher" | "cls.sort.teacher.desc";
+}[] = [
   { value: "name", key: "cls.sort.name" },
+  { value: "name_desc", key: "cls.sort.name.desc" },
   { value: "students", key: "cls.sort.students" },
+  { value: "students_asc", key: "cls.sort.students.asc" },
   { value: "teacher", key: "cls.sort.teacher" },
+  { value: "teacher_desc", key: "cls.sort.teacher.desc" },
 ];
 
-/** 정렬 — 모르는 값은 기본(수업명순). URL·저장값 둘 다 이 한 곳을 지난다. */
+export type ClassSortAxis = "name" | "students" | "teacher";
+/** 열마다 오름·내림 값과 **처음 누를 때의 방향**(이름·담임 = 오름차순, 학생 수 = 많은 순 — 종전 '학생수순'과 같다). */
+const SORT_AXES: Record<ClassSortAxis, { asc: ClassSort; desc: ClassSort; first: "asc" | "desc" }> = {
+  name: { asc: "name", desc: "name_desc", first: "asc" },
+  students: { asc: "students_asc", desc: "students", first: "desc" },
+  teacher: { asc: "teacher", desc: "teacher_desc", first: "asc" },
+};
+
+/**
+ * 열 머리 화살표 상태 — 지금 이 열로 정렬 중인가 · 방향(정렬 중이면 지금 방향, 아니면 누르면 걸릴 방향) · 누르면 걸 값.
+ * 다른 열이면 그 열의 처음 방향, 같은 열이면 뒤집는다.
+ */
+export function classSortArrow(sort: ClassSort, axis: ClassSortAxis): { active: boolean; dir: "asc" | "desc"; next: ClassSort } {
+  const a = SORT_AXES[axis];
+  const now = sort === a.asc ? "asc" : sort === a.desc ? "desc" : null;
+  if (now === null) return { active: false, dir: a.first, next: a[a.first] };
+  return { active: true, dir: now, next: now === "asc" ? a.desc : a.asc };
+}
+
+/** 정렬 — 모르는 값은 기본(반 이름 오름차순). URL·저장값 둘 다 이 한 곳을 지난다. */
 export function parseClassSort(raw: unknown): ClassSort {
   return SORT_OPTIONS.some((o) => o.value === raw) ? (raw as ClassSort) : "name";
 }

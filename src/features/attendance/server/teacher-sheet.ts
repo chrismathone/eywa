@@ -13,6 +13,7 @@ import { TeacherSheetError } from "../teacher-sheet-error";
 import { attendanceUnitSuffix, type AttendanceUnitSuffix } from "../unit-suffix";
 import type { AttendanceSalaryRates } from "../salary-rates";
 import { getAttendanceClassBilledAmounts, mergeAttendanceClassBilling, type AttendanceClassBilling } from "./class-billing";
+import { attendanceReadContext } from "./read-context";
 import { findMakeupPoolClass } from "./makeup-pool";
 import { getMonthlyAttendanceMatrix, type AttendanceMatrix } from "./queries";
 import { taughtByColumnState } from "./taught-by-db";
@@ -69,15 +70,18 @@ function stopIfFolded(reasons: readonly (string | null | undefined)[]): void {
 }
 
 export const loadTeacherSheet = cache(async (tenantId: string, teacherId: string, month: string): Promise<TeacherSheet> => {
+  // 로그인 없는 조립 문맥(강사평가 밤 집계 — read-context.ts)은 렌즈가 없고(관리자뷰와 같다) 학원 설정은 문맥이 읽어 둔 것이다.
+  const readCtx = attendanceReadContext();
+  if (readCtx && readCtx.tenantId !== tenantId) throw new TeacherSheetError("다른 지점의 출석부는 조립하지 않습니다.");
   // ① 보는 사람의 강사 렌즈 — 대상 강사와 다르면 아래 조회 전부가 그 사람 반으로 좁혀진다(같으면 결과도 같다).
-  const lens = await effectiveTeacherId();
+  const lens = readCtx ? null : await effectiveTeacherId();
   if (lens && lens !== teacherId) {
     throw new TeacherSheetError("강사뷰 상태에서는 다른 선생님의 출석부 금액을 계산할 수 없습니다 — 관리자뷰로 돌아간 뒤 다시 열어 주세요.");
   }
   // 반 목록(경량) · 학원설정 · 담임 시작일 · 대신 보강 귀속 확인은 서로 독립(B4).
   const [base, settings, sinceIdx, taughtBy] = await Promise.all([
     getMonthlyAttendanceMatrix(month, null),
-    getTenantSettings(),
+    readCtx ? Promise.resolve(readCtx.settings) : getTenantSettings(),
     getHomeroomSinceIndex(),
     taughtByColumnState(),
   ]);

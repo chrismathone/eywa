@@ -65,7 +65,17 @@ export type AuditScope = {
 export async function systemAuditScope(
   actions: readonly SystemReadableAuditAction[],
 ): Promise<AuditScope | null> {
-  const tenantId = await auditReadTenant();
+  return systemAuditScopeFor(await auditReadTenant(), actions);
+}
+
+/**
+ * 지점을 **세션이 아니라 서버 코드가** 정할 때(로그인 없는 출석부 조립 문맥 — `attendance/server/read-context.ts`).
+ * 허용 action 목록은 위와 같은 한 벌이다(문맥이 있다고 더 넓게 읽지 않는다).
+ */
+export function systemAuditScopeFor(
+  tenantId: string | null,
+  actions: readonly SystemReadableAuditAction[],
+): AuditScope | null {
   if (!tenantId) return null;
   // 목록 밖 값은 조용히 빠진다(타입이 1차 방어, 이 필터가 2차).
   const allowed = actions.filter((a) => (SYSTEM_READABLE_AUDIT_ACTIONS as readonly string[]).includes(a));

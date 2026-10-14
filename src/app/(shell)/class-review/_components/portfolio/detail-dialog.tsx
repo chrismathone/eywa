@@ -9,9 +9,10 @@ import { METRIC_META } from "@/features/teacher-portfolio/evaluation/catalog";
 import { MISSING_LABEL, isManualId, type BuiltinMetricId } from "@/features/teacher-portfolio/evaluation/config";
 import { settingOf } from "@/features/teacher-portfolio/evaluation/preview";
 import { describeScoring } from "@/features/teacher-portfolio/evaluation/scoring";
-import { METRIC_MAX, type ItemId, type MetricId, type StoredPeriod } from "@/features/teacher-portfolio/model/types";
-import { METRIC_LABEL, fmtScore, itemLabel, itemOf, maxLabel, monthName, periodLabel, periodMax, pointsText, ruleText, shownItems } from "@/features/teacher-portfolio/view";
+import { METRIC_MAX, type ItemId, type Metric, type MetricId, type StoredPeriod } from "@/features/teacher-portfolio/model/types";
+import { METRIC_LABEL, fmtScore, itemLabel, itemOf, maxLabel, monthName, periodLabel, periodMax, pointsText, shownItems } from "@/features/teacher-portfolio/view";
 import { MetricEvidence } from "./evidence-impact";
+import { ScoreRuleBox } from "./score-rule-box";
 import { ReportMatrix, type EvidenceProps } from "./evidence-records";
 import { BarList, DataTable, StatTiles } from "./parts";
 
@@ -94,8 +95,8 @@ function Ledger({ period, teacherName }: { period: StoredPeriod; teacherName: st
   );
 }
 
-/** 근거 카드가 설명·규칙을 직접 적는 항목(직접 입력 · 원생 소개 · 계산 전 지표). */
-const selfExplained = (id: ItemId) => isManualId(id) || id === "expansion" || (PENDING_IDS as readonly string[]).includes(id);
+/** 근거 카드가 설명·규칙을 직접 적는 항목(직접 입력 · 원생 소개 · 계산 전 지표 — 계산 전에 매긴 옛 달 포함). */
+const selfExplained = (m: Pick<Metric, "id" | "uncounted">) => isManualId(m.id) || m.id === "expansion" || Boolean(m.uncounted) || (PENDING_IDS as readonly string[]).includes(m.id);
 
 export function DetailDialog({ target, onClose, periods, teacherName, evidence }: {
   target: DetailTarget | null; onClose: () => void; periods: readonly StoredPeriod[]; teacherName: string; evidence: EvidenceProps;
@@ -116,11 +117,10 @@ export function DetailDialog({ target, onClose, periods, teacherName, evidence }
       <>
         <p className="mb-4 text-xs"><b className="num text-sm">{pointsText(m, period)}</b> · {m.basis}</p>
         {target.id === "report" && !m.estimated
-          ? <div className="overflow-auto"><ReportMatrix period={period} nameOf={evidence.nameOf} /></div>
+          ? <><ScoreRuleBox period={period} id="report" /><div className="overflow-auto"><ReportMatrix period={period} nameOf={evidence.nameOf} /></div></>
           : <MetricEvidence id={target.id} {...evidence} sticky={false} onOpenStudents={undefined} />}
-        {m.estimated || selfExplained(m.id) ? null : <p className="mt-4 text-xs leading-relaxed">{m.reason}</p>}
-        {/* 배정·유지·매출·직접 입력·계산 전 지표는 근거 안에서 이미 규칙을 적는다(두 번 적지 않게). */}
-        {!selfExplained(m.id) && m.id !== "students" && m.id !== "revenue" && ruleText(period, m.id) ? <p className="mt-2 text-xs leading-relaxed">점수 규칙: {ruleText(period, m.id)}</p> : null}
+        {/* 점수 기준은 맨 위 상자 한 곳(원장 2026-10-14 *"규칙을 최상단에 따로 테두리같은거 넣어서 깔끔하게"*). */}
+        {m.estimated || selfExplained(m) || m.id === "payRatio" || m.id === "counsel" ? null : <p className="mt-4 text-xs leading-relaxed">{m.reason}</p>}
       </>
     );
   }

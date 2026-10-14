@@ -18,6 +18,7 @@ const WINDOW = read("src/features/withdrawals/server/window.ts");
 const CONTEXT = read("src/features/teacher-portfolio/model/context.ts");
 const BUILD = read("src/features/teacher-portfolio/model/build.ts");
 const SNAPSHOT = read("src/features/teacher-portfolio/server/snapshot.ts");
+const CHURN_SOURCE = read("src/features/teacher-portfolio/server/churn-source.ts");
 const ADMIN = read("src/features/admin/server/actions.ts");
 const CARD = read("src/app/(shell)/timetable/_components/exit-overlay/exit-overlay-card.tsx");
 const HINT = read("src/app/(shell)/timetable/_components/exit-overlay/exit-overlay-hint.tsx");
@@ -30,21 +31,33 @@ describe("시간표 X 겹침 배선", () => {
   });
 
   it("🔴 담당 선생님 = 강사평가 퇴원율과 같은 재료 · 같은 담임 판정 · 같은 계산(새로 판정하지 않는다)", () => {
-    // 재료 — 강사평가 스냅샷과 같은 파일·같은 조회 정의.
+    // 재료 — 강사평가 스냅샷과 같은 조회 정의(churn-source.ts 한 곳을 두 쪽이 쓴다).
     expect(SERVER).toContain("loadChurnSource(createAdminClient(), tenantId,");
-    expect(SNAPSHOT).toContain("export async function loadChurnSource(");
-    expect(SNAPSHOT).toContain('paged<SnapshotClass>((a, b) => inTenant("classes", CLASS_COLUMNS)');
-    expect(SNAPSHOT).toContain('inTenant("enrollments", ENROLLMENT_COLUMNS).lte("start_date", billingEnd)');
-    expect(SNAPSHOT.match(/transitionRows\(admin, tenantId\)/g)).toHaveLength(2);
-    expect(SNAPSHOT.match(/nonRealStudents\(admin, tenantId\)/g)).toHaveLength(2);
-    expect(SNAPSHOT).toContain("transitions: toTransitions(transitions)");
+    expect(CHURN_SOURCE).toContain("export async function loadChurnSource(");
+    for (const src of [SNAPSHOT, CHURN_SOURCE]) {
+      expect(src).toContain('paged<SnapshotClass>((a, b) => inTenant("classes", CLASS_COLUMNS)');
+      expect(src).toContain("transitionRows(admin, tenantId)");
+      expect(src).toContain("nonRealStudents(admin, tenantId)");
+      expect(src).toContain("transitions: toTransitions(transitions)");
+      expect(src).toContain("studentReasonRows(admin, tenantId)");
+    }
+    expect(SNAPSHOT).toContain('inTenant("enrollments", ENROLLMENT_COLUMNS).lte("start_date", billingEnd).order("id")');
+    expect(CHURN_SOURCE).toContain('inTenant("enrollments", ENROLLMENT_COLUMNS).lte("start_date", end).or(`end_date.is.null,end_date.gte.${from}`).order("id")');
+    expect(SNAPSHOT).toContain("futureEnrollmentRows(admin, tenantId, billingEnd)");
+    expect(CHURN_SOURCE).toContain("futureEnrollmentRows(admin, tenantId, end)");
+    // 원장이 고른 세는 법(뺄 사유·수강종료)도 강사평가 설정 그대로.
+    expect(CHURN_SOURCE).toContain("loadEvaluationConfig(admin, tenantId)");
+    expect(CHURN_SOURCE).toContain("options: evaluation.config.metrics.churn.churn ?? DEFAULT_CHURN_OPTIONS");
     // 그날 담임 — 강사평가 전 지표와 한 함수.
     expect(CONTEXT).toContain("const owner = buildHomeroomOwner(d.classes, d.transitions);");
     expect(SERVER).toContain("const owner = buildHomeroomOwner(source.classes, source.transitions);");
-    // 계산 — 강사평가가 부르는 것과 같은 `buildChurn` · 같은 입력 모양.
-    expect(BUILD).toContain("churn: buildChurn({ classes: d.classes, schedules: d.schedules, enrollments: d.enrollments, owner: ctx.owner })");
-    expect(SERVER).toContain("buildChurn({ classes: source.classes, schedules: source.schedules, enrollments: source.enrollments, owner })");
-    expect(SERVER).toContain("churn.period(id, w).detail");
+    // 계산 — 강사평가가 부르는 것과 같은 명단(`buildStudentTracking`) · 같은 계산기(`buildChurnModel`) · 같은 입력 모양.
+    expect(BUILD).toContain("buildStudentTracking({ from: d.from, end: d.end, classes: d.classes, schedules: d.schedules, enrollments: d.enrollments, owner: ctx.owner })");
+    expect(SERVER).toContain("buildStudentTracking({ from: source.from, end: source.end, classes: source.classes, schedules: source.schedules, enrollments: source.enrollments, owner })");
+    expect(BUILD).toContain("buildChurnModel({ source: students.churnSource, classes: d.classes, options: config.metrics.churn.churn ?? DEFAULT_CHURN_OPTIONS, futureEnrollments: d.futureEnrollments, studentReasons: d.studentReasons })");
+    expect(SERVER).toContain("buildChurnModel({ source: tracking.churnSource, classes: source.classes, options: source.options, futureEnrollments: source.futureEnrollments, studentReasons: source.studentReasons })");
+    expect(BUILD).toContain("...churn.period(teacherId, w)");
+    expect(SERVER).toContain("churn.exits(id, w)");
     expect(SERVER).toContain("churn.eligibleSubjects(w)");
     expect(SERVER).toContain("churnZeroIds(view, subject, m)");
     // 🔴 재료의 끝 = 이번 달 말일 고정 · 계산 달 = 열 + 앞뒤 한 달 — 기준 달을 넘겨도 같은 줄은 같은 선생님(적대 리뷰 2026-10-14).
@@ -56,10 +69,16 @@ describe("시간표 X 겹침 배선", () => {
     expect(SERVER).not.toContain("getHomeroomHistoryIndex");
   });
 
-  it("퇴원율이 세는 달 = 함께 끝난 정규 수강의 종료일 — 퇴원·수강종료 둘 다 같은 규칙(`endedTogether`)", () => {
-    expect(SERVER.match(/endMonthOf\(/g)).toHaveLength(2);
-    expect(WINDOW).toContain("endedTogether: endedTogether(rows).map(");
-    expect(QUERIES).toContain("endedTogether: endedTogether(subjectRows).map(");
+  it("퇴원율이 세는 달·함께 끝난 수강 사유 = 강사평가와 같은 재료에서 같은 규칙(`endedWithExit` · `churnMonthOf`) — 퇴원·수강종료 둘 다", () => {
+    expect(SERVER.match(/endedOf\(/g)).toHaveLength(2);
+    expect(SERVER).toContain("for (const e of source.enrollments) {");
+    expect(SERVER).toContain("const ended = endedWithExit(subjectRows.get(studentId) ?? [], date, classOf, OVERLAY_LOOKBACK_DAYS);");
+    expect(SERVER).toContain("from: monthRange(shiftMonth(anchor, -7)).from,");
+    expect(SERVER).toContain("endMonth: churnMonthOf(ended, date, classOf), endReasons: ended.map((r) => r.reason)");
+    // 긋는 사유·수강종료 셈 = 강사평가와 같은 원장 설정 · 퇴원율이 셌는지는 선생님 id로.
+    expect(SERVER).toContain("rules: source.options,");
+    expect(SERVER).toContain("rulesNote: exclusionNote(source.options),");
+    expect(SERVER).toContain("counted: rowTeacherIds[i]!.length > 0");
   });
 
   it("🔴 '데이터 정리 일괄 퇴원'은 줄에서 뺀다 — 일괄 퇴원 액션이 적는 글과 판정이 한 상수", () => {
@@ -94,6 +113,16 @@ describe("시간표 X 겹침 배선", () => {
     expect(PAGE).toContain('const showExitOverlay = !teacherId && (await canAccessTenant(user.systemRole, "withdrawals"));');
   });
 
+  it("🔴 강사 탓이 아닌 사유 판정 = 한 벌(`reason-key.ts`) — 강사평가 퇴원율 · 겹침 · 급여명세서 퇴원생률(원장 2026-10-14 '모든 곳에서')", () => {
+    expect(read("src/features/teacher-portfolio/model/churn.ts")).toContain('import { excludedReasonOf } from "@/features/withdrawals/reason-key";');
+    expect(read("src/features/withdrawals/exit-overlay-model.ts")).toContain('import { excludedReasonOf } from "./reason-key";');
+    expect(read("src/features/payroll/payslip-metrics.ts")).toContain('import { endedWithExit, excludedReasonOf, type EndedRowRef } from "@/features/withdrawals/reason-key";');
+    // 사유 목록 = 강사평가 설정 한 곳(겹침·명세서 둘 다).
+    expect(SERVER).toContain("rules: source.options,");
+    const PAYSLIP = read("src/features/payroll/server/payslip-queries.ts");
+    expect(PAYSLIP).toContain("loadEvaluationConfig(admin, user.tenantId)");
+    expect(PAYSLIP).toContain("withoutExcludedExits(");
+  });
   it("데이터는 키를 누를 때만 읽는다 — 페이지는 겹침 부품만 싣고 조회하지 않는다", () => {
     expect(PAGE).not.toContain("getExitOverlay(");
     expect(PAGE).toContain("<TimetableExitOverlay subject={subject} />");

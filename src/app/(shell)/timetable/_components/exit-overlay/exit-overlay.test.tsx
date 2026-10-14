@@ -42,6 +42,7 @@ function data(anchor: string, canNewer: boolean): ExitOverlayData {
     canNewer,
     canOlder: true,
     withdrawalsHref: "/withdrawals?range=custom",
+    rulesNote: "과목을 끊은 학생도 퇴원으로 셉니다.",
   };
 }
 

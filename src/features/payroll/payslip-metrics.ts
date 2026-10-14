@@ -8,6 +8,7 @@
 // aywa는 수강(enrollments) + 학생 상태에서 직접 낸다 — 사람이 안 채워도 되고, 틀릴 일도 없다.
 import { attendanceRateLevel, salaryRowOutOfScope, type AttendanceSalaryRates } from "@/features/attendance/salary-rates";
 import { isSpecialLecture } from "@/features/classes/special-lecture";
+import { endedWithExit, excludedReasonOf, type EndedRowRef } from "@/features/withdrawals/reason-key";
 
 /** 학생만으로 거르지 않는다 — 같은 학생의 특강이 포함되어도 대상 밖 정규 수강은 제외한다. */
 export function salaryScopedEnrollments<T extends { student_id: string; class_id: string }>(
@@ -155,6 +156,30 @@ export function withdrawalStats(
     rate: studentsThisMonth.length === 0 ? null : names.length / studentsThisMonth.length,
     unknownDateCount,
   };
+}
+
+/**
+ * 🔴 강사 탓이 아닌 퇴원(원장이 고른 사유 — 기본 졸업·이사·질병·권고퇴원)은 퇴원생 수·명단·퇴원생율·연 누계에 넣지 않는다
+ *    (원장 2026-10-14 *"이사 졸업 이런건은 퇴원율로 잡지 않는다"* · *"모든 곳에서"*). 학생 퇴원 사유 · 그 퇴원과 함께 끝난 이 선생님 반
+ *    수강(`endedWithExit` — 시간표 X와 같은 규칙)의 종료 사유 중 하나라도 그 사유면 뺀다 — 판정 한 벌(`reason-key.ts`) · 사유 목록은 강사평가 설정.
+ */
+export function withoutExcludedExits<T extends { studentId: string; withdrawnAt: string | null; reason: string | null }>(
+  withdrawn: readonly T[],
+  spans: readonly { student_id: string; class_id: string; start_date: string | null; end_date: string | null; withdrawal_reason: string | null }[],
+  classes: readonly { id: string; className: string; isSpecial?: boolean }[],
+  reasons: readonly string[],
+): T[] {
+  const regular = new Map(classes.map((c) => [c.id, !isSpecialLecture({ isSpecial: c.isSpecial, className: c.className })]));
+  const classOf = (id: string) => ({ closedAt: null, regular: regular.get(id) ?? true });
+  const byStudent = new Map<string, (EndedRowRef & { reason: string | null })[]>();
+  for (const s of spans) {
+    if (!s.end_date) continue;
+    byStudent.set(s.student_id, [...(byStudent.get(s.student_id) ?? []), { classId: s.class_id, startDate: s.start_date, endDate: s.end_date, reason: s.withdrawal_reason }]);
+  }
+  return withdrawn.filter((w) => {
+    const ended = w.withdrawnAt ? endedWithExit(byStudent.get(w.studentId) ?? [], w.withdrawnAt, classOf) : [];
+    return excludedReasonOf([w.reason, ...ended.map((r) => r.reason)], reasons) == null;
+  });
 }
 
 /** 퇴원생율 표시 — 시트는 소수 둘째 자리 퍼센트("6.00%"). */

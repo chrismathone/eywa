@@ -28,6 +28,12 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 /** 새 지점을 시작하지 않는 시점 — 한 지점이 화면 집계 상한(120초)만큼 걸려도 300초 안에 저장·감사로그·응답까지 남긴다. */
 const START_BUDGET_MS = 160_000;
+/**
+ * 급여 비율 출석부 조립(강사평가)의 시간 — 지점마다 최대 120초, 그러나 실행 전체로는 240초까지(그 뒤 저장·응답 몫).
+ * 못 센 칸은 그 달 마감을 미루고 다음 실행이 다시 센다(refresh.ts).
+ */
+const PAY_BUDGET_MS = 120_000;
+const PAY_END_MS = 240_000;
 
 export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;
@@ -60,7 +66,7 @@ export async function GET(req: Request) {
         results[tenantId] = "건너뜀: 실험실 메뉴가 열리지 않은 지점";
         continue;
       }
-      const summary = await refreshTenantPortfolio(admin, tenantId);
+      const summary = await refreshTenantPortfolio(admin, tenantId, { payDeadline: Math.min(Date.now() + PAY_BUDGET_MS, startedAt + PAY_END_MS) });
       if (summary.tableMissing) {
         results[tenantId] = "표 미적용(0357a) — 건너뜀";
         continue;

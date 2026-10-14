@@ -92,6 +92,12 @@ describe("저장", () => {
     const summary = await savePortfolioMonths(admin, "t1", r, now);
     expect(summary.closedMonths).toEqual(["2026-04"]);
   });
+  it("급여 비율을 일시 실패로 못 센 칸은 마감을 미룬다 — 0점으로 굳지 않게 다음 집계가 다시 센다", async () => {
+    const { admin, upserted } = fakeAdmin([]);
+    const summary = await savePortfolioMonths(admin, "t1", result(["a"]), now, { holdClose: (t, m) => t === "a" && m === "2026-09" });
+    expect(summary.closedMonths).toEqual([]);
+    expect(upserted.find((r) => r.month === "2026-09")?.closed_at).toBeNull();
+  });
   it("🔴 이미 마감한 달은 다시 쓰지 않는다", async () => {
     const { admin, upserted } = fakeAdmin([stored("a", "2026-09", true), stored("a", "2026-10", false)]);
     const summary = await savePortfolioMonths(admin, "t1", result(["a"]), now);

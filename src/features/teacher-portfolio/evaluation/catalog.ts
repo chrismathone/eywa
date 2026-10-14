@@ -20,18 +20,19 @@ export type MetricMeta = {
 };
 
 export const METRIC_META: Record<BuiltinMetricId, MetricMeta> = {
-  payRatio: { unit: "%", short: "급여 비율", color: "var(--color-amber)", measure: "그 달 급여(세전) ÷ 담당 매출(할인 전 청구액) — 금액은 보이지 않고 비율만", pending: "2단계" },
-  churn: { unit: "%", short: "퇴원율", color: "var(--color-blue)", measure: "이 달에 그만둔 학생 ÷ 지난달 담당 학생(그 달 절반 이상 맡은 학생) — 담임·교시 담당 모두 포함. 졸업·이사·질병·권고퇴원·끝난 특강·같은 과목 다른 반은 뺀다" },
+  payRatio: { unit: "%", short: "급여 비율", color: "var(--color-amber)", measure: "그 달 급여(세전: 직접 입력 → 계약서 월급 → 출석부 실급여) ÷ 담당 매출(담당 반 학생 청구서의 그 반 금액, 할인 전 — 회차 확정 전에도 · 이름이 안 맞으면 짝이 하나일 때) — 금액은 보이지 않고 비율만" },
+  churn: { unit: "%", short: "퇴원율", color: "var(--color-blue)", measure: "이 달에 그만둔 학생 ÷ 지난달 담당 학생(담임·교시 담당 모두 · 정규 수업으로 그 달 절반 이상 맡은 학생) — 다른 반으로 옮긴 뒤 그만둬도 센다 · 고른 사유·반 이동·수업 끝남·끝난 특강·같은 과목 다른 반은 뺀다" },
   grades: { unit: "%", short: "성적", color: "var(--color-purple)", measure: "성적관리에 등록된 성적(일일·확인 테스트 · 월말평가 · 내신)", pending: "5단계" },
   satisfaction: { unit: "점", short: "만족도", color: "var(--color-green)", measure: "학부모 글·댓글 판정과 클레임의 가감 합 — 만점 없이 총점에 그대로 더하고 뺀다", pending: "3단계" },
   punctuality: { unit: "회", short: "근태", color: "var(--color-gold)", measure: "메이크에듀 출퇴근 기록의 지각·결근 횟수(연차 제외)", pending: "4단계" },
-  report: { unit: "%", short: "보고서", color: "var(--color-primary)", measure: "본인이 쓴 수업보고서 ÷ 보고 대상(학생·수업일, 결석·휴원·제외 반 빼고)" },
-  attendance: { unit: "%", short: "출결", color: "var(--color-green)", measure: "처리한 출결 ÷ 출결 대상(수업을 맡은 강사 기준)" },
-  follow: { unit: "%", short: "상담", color: "var(--color-rose)", measure: "마감 전에 마친 후속 처리 ÷ 후속 기한이 이 달인 상담" },
+  report: { unit: "%", short: "보고서", color: "var(--color-primary)", measure: "본인이 수업 당일에 쓴 수업보고서 ÷ 보고 대상(학생·수업일, 결석·휴원·제외 반 빼고) — 대리·다음 날 이후 작성은 미작성" },
+  attendance: { unit: "%", short: "출결", color: "var(--color-green)", measure: "본인이 수업 당일에 넣은 출결 ÷ 출결 대상(수업을 맡은 날) — 다른 사람·다음 날 이후 입력은 미작성" },
+  counsel: { unit: "%", short: "상담", color: "var(--color-rose)", measure: "이 달 담임인 반의 학생 중 본인이 1회 이상 상담한 학생 ÷ 담임 반 학생(부담임 학생은 뺀다)" },
+  follow: { unit: "%", short: "후속 처리", color: "var(--color-rose)", measure: "마감 전에 마친 후속 처리 ÷ 후속 기한이 이 달인 상담" },
   quality: { unit: "점", short: "평가", color: "var(--color-purple)", measure: "이 달에 처음 완료된 타인 평가의 문항 평균(4점 만점, 자기 평가 제외)" },
   students: { unit: "", short: "배정·유지", color: "var(--color-blue)", measure: "신규 +1 · 퇴원·수강종료 −1 · 반이동 유입 +0.5 · 유출 −0.5를 더한 값" },
   revenue: { unit: "%", short: "매출", color: "var(--color-amber)", measure: "담당 매출 ÷ 그 과목 전체 매출" },
-  expansion: { unit: "건", short: "소개", color: "var(--color-chart-5)", measure: "인정된 소개 건수(친구 소개·다른 과목 소개, 상담만 받아도 인정)", pending: "3단계" },
+  expansion: { unit: "건", short: "소개", color: "var(--color-chart-5)", measure: "콜&상담에서 '소개한 사람'으로 이어진 소개 건수(상담만 받아도 인정 · 소개한 원생의 상담일 담임 또는 소개한 직원에게 1건 · 같은 사람은 한 번)" },
   coverage: { unit: "%", short: "보강", color: "var(--color-gold)", measure: "기한 안에 마친 보강 ÷ 기한이 이 달에 끝나는 보강" },
 };
 

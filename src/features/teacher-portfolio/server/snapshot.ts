@@ -1,16 +1,18 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { addDays, monthOf, monthRange, shiftMonth } from "@/lib/date-kst";
-import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
-import { MERGE_NOTE_PREFIX } from "@/features/students/merged";
+import { fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { PORTFOLIO_MONTHS } from "../model/build";
 import { kstDateOf } from "../model/dates";
 import { referenceMonthsAfter } from "../model/pre-record";
 import type {
   PortfolioSnapshot, PreRecordPolicy, SnapshotAttendance, SnapshotClass, SnapshotConsultation, SnapshotDelegation,
-  SnapshotEnrollment, SnapshotInvoice, SnapshotMakeup, SnapshotReport, SnapshotReview, SnapshotSchedule, SnapshotTerm,
-  SnapshotTransition, SnapshotUser,
+  SnapshotAttendanceTouch, SnapshotEnrollment, SnapshotInvoice, SnapshotMakeup, SnapshotReferral, SnapshotReport, SnapshotReview, SnapshotSchedule, SnapshotTerm,
+  SnapshotUser,
 } from "../model/types";
+import {
+  byId, CLASS_COLUMNS, ENROLLMENT_COLUMNS, futureEnrollmentRows, nonRealStudents, paged, SCHEDULE_COLUMNS, studentReasonRows, toTransitions, transitionRows,
+} from "./churn-source";
 
 /**
  * 직원 포트폴리오 계산의 입력 — 한 지점의 최근 7개월 원자료.
@@ -24,62 +26,14 @@ import type {
 
 /** 보강 기한(결석 다음 달 같은 날)을 대조하려면 표시 범위보다 앞선 결석이 필요하다. */
 const ATTENDANCE_LEAD_DAYS = 62;
-const SCHEDULE_COLUMNS = "id, class_id, day_of_week, start_time, end_time, teacher_id, slot_teacher_label, lab_separate, valid_from, valid_to";
-const CLASS_COLUMNS = "id, class_name, subject, english_track, teacher_id, is_active, closed_at, report_optout, is_makeup_pool, is_special";
-const ENROLLMENT_COLUMNS = "id, student_id, class_id, start_date, end_date, on_hold, attendance_days, is_transferred, is_transferred_in, withdrawal_reason";
-const TRANSITION_COLUMNS = "target_label, created_at, class_id:metadata->>classId, teacher_id:metadata->>newTeacherId, previous_teacher_id:metadata->>previousTeacherId, effective_date:metadata->>effectiveDate";
 const REPORT_COLUMNS = "id, student_id, class_id, report_date, created_by, created_at, covers_date, makeup";
 const CONSULT_COLUMNS = "id, student_id, counselor_id, follow_up_date, follow_up_done, consulted_at, updated_at";
 const MAKEUP_COLUMNS = "id, student_id, class_id, absence_date, makeup_date, status, done_at";
+const REFERRAL_COLUMNS = "id, referrer_student_id, referrer_staff_id, consultation_date, received_date, created_at, subject, student_id, prospect_name, prospect_school, prospect_grade";
 const dayStartIso = (ymd: string) => new Date(`${ymd}T00:00:00+09:00`).toISOString();
-const byId = <T extends { id: string }>(...lists: T[][]): T[] => [...new Map(lists.flat().map((row) => [row.id, row])).values()];
 
 type Admin = SupabaseClient;
 type ReviewDocRow = { id: string; staff_user_id: string | null; form_data: Record<string, unknown> | null };
-type TransitionRow = {
-  target_label: string | null; created_at: string; class_id: string | null; teacher_id: string | null;
-  previous_teacher_id: string | null; effective_date: string | null;
-};
-
-const paged = <T,>(run: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>) =>
-  fetchAllPaged<T>(run as (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>);
-
-/** 테스트 학생·병합된 학생 — 기록에서 뺀다. */
-const nonRealStudents = (admin: Admin, tenantId: string) =>
-  paged<{ id: string }>((a, b) => admin.from("students").select("id").eq("tenant_id", tenantId).or(`is_test.eq.true,notes.like.${MERGE_NOTE_PREFIX}%`).order("id").range(a, b));
-const transitionRows = (admin: Admin, tenantId: string) =>
-  paged<TransitionRow>((a, b) => admin.from("audit_logs").select(TRANSITION_COLUMNS).eq("tenant_id", tenantId)
-    .in("action", ["class_handover_apply", "class_update"]).not("metadata->>newTeacherId", "is", null).order("created_at").order("id").range(a, b));
-function toTransitions(rows: readonly TransitionRow[]): SnapshotTransition[] {
-  return rows.flatMap((t): SnapshotTransition[] => {
-    const date = t.effective_date?.slice(0, 10) || kstDateOf(t.created_at);
-    return t.teacher_id && date ? [{ class_id: t.class_id, target_label: t.target_label, teacher_id: t.teacher_id, previous_teacher_id: t.previous_teacher_id, date }] : [];
-  });
-}
-
-/**
- * 강사평가 퇴원율(`buildChurn`)의 재료만 — 시간표 X 겹침이 퇴원 담당 선생님을 **강사평가와 같은 계산**으로 낸다(원장 2026-10-14
- * *"모든 데이터가 일치해야함"*). 조회 정의는 아래 `loadPortfolioSnapshot`과 같다. `from` 전에 끝난 수강·배치는 [from, end] 안의
- * 퇴원율 결과를 바꾸지 않아(분모는 그 기간 수업일, 분자는 그 기간 종료) 읽지 않는다.
- */
-export async function loadChurnSource(admin: Admin, tenantId: string, input: { from: string; end: string }) {
-  const { from, end } = input;
-  const inTenant = (name: string, columns: string) => admin.from(name).select(columns).eq("tenant_id", tenantId);
-  const [testStudents, classes, liveSchedules, endedSchedules, enrollments, transitions] = await Promise.all([
-    nonRealStudents(admin, tenantId),
-    paged<SnapshotClass>((a, b) => inTenant("classes", CLASS_COLUMNS).order("id").range(a, b)),
-    paged<SnapshotSchedule>((a, b) => inTenant("class_schedules", SCHEDULE_COLUMNS).lte("valid_from", end).is("valid_to", null).order("id").range(a, b)),
-    paged<SnapshotSchedule>((a, b) => inTenant("class_schedules", SCHEDULE_COLUMNS).lte("valid_from", end).gte("valid_to", from).order("id").range(a, b)),
-    paged<SnapshotEnrollment>((a, b) => inTenant("enrollments", ENROLLMENT_COLUMNS).lte("start_date", end).or(`end_date.is.null,end_date.gte.${from}`).order("id").range(a, b)),
-    transitionRows(admin, tenantId),
-  ]);
-  const test = new Set(testStudents.map((s) => s.id));
-  return {
-    classes, schedules: byId(liveSchedules, endedSchedules),
-    enrollments: enrollments.filter((e) => !test.has(e.student_id)), transitions: toTransitions(transitions),
-  };
-}
-
 function reviewOf(row: ReviewDocRow): SnapshotReview {
   const doc = row.form_data ?? {};
   const header = (doc.header ?? null) as { teacherId?: string | null } | null;
@@ -128,10 +82,12 @@ function preRecordPolicy(from: string, firstReport: string | null, firstAttendan
   return policy.report || policy.attendance ? policy : null;
 }
 
+
 export async function loadPortfolioSnapshot(
-  admin: Admin, tenantId: string, input: { end: string; now: Date; settings: PortfolioSnapshot["settings"] },
+  admin: Admin, tenantId: string,
+  input: { end: string; now: Date; settings: PortfolioSnapshot["settings"]; /** 출결 입력·수정 기록을 읽을 첫날(마감 안 한 가장 이른 달 1일). 없으면 안 읽는다. */ touchesSince?: string },
 ): Promise<PortfolioSnapshot> {
-  const { end } = input;
+  const { end, touchesSince } = input;
   const endMonth = monthOf(end);
   const fromMonth = shiftMonth(endMonth, -(PORTFOLIO_MONTHS - 1));
   const from = monthRange(fromMonth).from;
@@ -143,6 +99,7 @@ export async function loadPortfolioSnapshot(
   const [
     tenantRes, testStudents, users, classes, liveSchedules, endedSchedules, enrollments, attendance, reportsByDate,
     reportsByCover, followUps, consulted, reviewDocs, transitions, delegations, invoices, makeupByAbsence, makeupByDate,
+    futureEnrollments, studentReasons, referrals, touches,
   ] = await Promise.all([
     table("tenants").select("id, name").eq("id", tenantId).maybeSingle(),
     nonRealStudents(admin, tenantId),
@@ -152,7 +109,7 @@ export async function loadPortfolioSnapshot(
     paged<SnapshotSchedule>((a, b) => inTenant("class_schedules", SCHEDULE_COLUMNS).lte("valid_from", billingEnd).is("valid_to", null).order("id").range(a, b)),
     paged<SnapshotSchedule>((a, b) => inTenant("class_schedules", SCHEDULE_COLUMNS).lte("valid_from", billingEnd).gte("valid_to", attendanceFrom).order("id").range(a, b)),
     paged<SnapshotEnrollment>((a, b) => inTenant("enrollments", ENROLLMENT_COLUMNS).lte("start_date", billingEnd).order("id").range(a, b)),
-    paged<SnapshotAttendance>((a, b) => inTenant("attendance_records", "id, class_id, student_id, session_date, slot_start, status, recorded_at, supersedes_id, seat_label, recorded_via, taught_by, note").gte("session_date", attendanceFrom).lte("session_date", end).order("id").range(a, b)),
+    paged<SnapshotAttendance>((a, b) => inTenant("attendance_records", "id, class_id, student_id, session_date, slot_start, status, recorded_at, supersedes_id, seat_label, recorded_via, taught_by, note, recorded_by").gte("session_date", attendanceFrom).lte("session_date", end).order("id").range(a, b)),
     paged<SnapshotReport>((a, b) => inTenant("lesson_reports", REPORT_COLUMNS).is("revoked_at", null).gte("report_date", from).lte("report_date", end).order("id").range(a, b)),
     paged<SnapshotReport>((a, b) => inTenant("lesson_reports", REPORT_COLUMNS).is("revoked_at", null).gte("covers_date", from).lte("covers_date", end).order("id").range(a, b)),
     paged<SnapshotConsultation>((a, b) => inTenant("student_consultations", CONSULT_COLUMNS).gte("follow_up_date", from).lte("follow_up_date", end).order("id").range(a, b)),
@@ -163,10 +120,27 @@ export async function loadPortfolioSnapshot(
     paged<SnapshotInvoice>((a, b) => inTenant("invoices", "id, student_id, period, amount_total, amount_discount, line_items").neq("status", "void").eq("category", "tuition").gte("period", fromMonth).lte("period", endMonth).order("id").range(a, b)),
     paged<SnapshotMakeup>((a, b) => inTenant("makeup_reservations", MAKEUP_COLUMNS).gte("absence_date", attendanceFrom).lte("absence_date", end).order("id").range(a, b)),
     paged<SnapshotMakeup>((a, b) => inTenant("makeup_reservations", MAKEUP_COLUMNS).gte("makeup_date", attendanceFrom).lte("makeup_date", end).order("id").range(a, b)),
+    // 퇴원율 — 창 끝 다음 한 달 안에 시작하는 수강(말일에 끝나고 1일에 같은 과목 반을 시작한 학생) · 학생의 퇴원 사유(퇴원관리와 같은 곳).
+    futureEnrollmentRows(admin, tenantId, billingEnd),
+    studentReasonRows(admin, tenantId),
+    // 원생 소개(0362a) — 소개한 사람이 이어진 상담 전부(같은 사람 판정에 창 밖 상담도 필요하다).
+    // 칸이 아직 없는 DB(0362a 적용 전)만 빈 목록 — 집계 전체를 멈추지 않는다(#95). 다른 오류는 다른 조회처럼 멈춘다(마감 날 0건으로 굳지 않게).
+    paged<SnapshotReferral>((a, b) => inTenant("enrollment_consultations", REFERRAL_COLUMNS)
+      .or("referrer_student_id.not.is.null,referrer_staff_id.not.is.null").order("id").range(a, b))
+      .catch((e: unknown) => {
+        if (e instanceof Error && /referrer_\w+ does not exist/.test(e.message)) return [] as SnapshotReferral[];
+        throw e;
+      }),
+    // 출결 입력·수정 기록(활동 기록) — 보고서·출결 당일·본인 규칙. 마감한 달은 굳어 다시 안 쓰므로 마감 안 한 달부터만(무겁다).
+    touchesSince
+      ? paged<{ row_id: string; actor_id: string; created_at: string }>((a, b) => inTenant("activity_log", "row_id, actor_id, created_at")
+        .eq("table_name", "attendance_records").in("op", ["INSERT", "UPDATE"]).not("actor_id", "is", null).not("row_id", "is", null)
+        .gte("created_at", dayStartIso(touchesSince)).order("created_at").order("id").range(a, b))
+      : Promise.resolve([]),
   ]);
   if (tenantRes.error || !tenantRes.data) throw new Error(`지점 조회 실패: ${tenantRes.error?.message ?? "없는 지점"}`);
 
-  const test = new Set(testStudents.map((s) => s.id));
+  const test = testStudents;
   const [firstReport, firstAttendance] = await Promise.all([
     firstRecordDay(admin, tenantId, "report", test),
     firstRecordDay(admin, tenantId, "attendance", test),
@@ -194,5 +168,8 @@ export async function loadPortfolioSnapshot(
     transitions: toTransitions(transitions),
     delegations, invoices: tuition, terms,
     makeupLegacy: real(byId(makeupByAbsence, makeupByDate)),
+    futureEnrollments: real(futureEnrollments), studentReasons,
+    attendanceTouches: touches.flatMap((t): SnapshotAttendanceTouch[] => { const day = kstDateOf(t.created_at); return day ? [{ row_id: t.row_id, actor_id: t.actor_id, day }] : []; }),
+    referrals: referrals.filter((r) => !(r.student_id && test.has(r.student_id)) && !(r.referrer_student_id && test.has(r.referrer_student_id))),
   };
 }

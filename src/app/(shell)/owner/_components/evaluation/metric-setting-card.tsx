@@ -3,6 +3,8 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MISSING_LABEL, missingSchema, type ManualMetricSetting, type MetricSetting } from "@/features/teacher-portfolio/evaluation/config";
+import { ChurnOptionsEditor } from "./churn-options";
+import { ReferralOptionsEditor } from "./referral-options";
 import { NumField, ScoringEditor } from "./scoring-editor";
 
 /** 지표 한 장 — 켜기 · 이름 · 만점 · 차례 · 원래 수치 · 점수 규칙 · 자료가 없을 때. 직접 만든 지표는 단위·설명과 삭제가 더 있다. */
@@ -58,6 +60,8 @@ export function MetricSettingCard({ setting, measure, pending, unit, manual, pos
           {pending ? <p className="bg-amber-soft rounded-lg px-3 py-2 text-xs">아직 자동으로 세지 않습니다({pending}에서 들어옵니다). 그 전까지는 수치가 없거나 0건으로 매겨집니다.</p> : null}
         </>
       )}
+      {setting.churn ? <ChurnOptionsEditor label={label} value={setting.churn} onChange={(churn) => set({ churn })} /> : null}
+      {setting.referral ? <ReferralOptionsEditor label={label} value={setting.referral} onChange={(referral) => set({ referral })} /> : null}
       <ScoringEditor label={label} scoring={setting.scoring} max={setting.max} unit={unit} onChange={(scoring) => set({ scoring })} />
       <label className="flex flex-wrap items-center gap-2 text-sm">
         <span className="font-medium">자료가 없을 때</span>
