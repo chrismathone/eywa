@@ -325,7 +325,7 @@ describe("자기 저장 뒤 재저장", () => {
 
   it("침산 — 개인별 기능 권한을 저장하고, 응답 token은 그렇게 저장된 값의 것이다(어긋나면 재저장이 막힌다)", async () => {
     const w = openWindow();
-    const sent = { ...w.draft, specialAccess: { payslipViewerIds: [STAFF_A], leaveAdjusterIds: [], classSplitterIds: [STAFF_B], staffSubjectScopes: [{ userId: STAFF_B, subjects: ["english"] }] } };
+    const sent = { ...w.draft, specialAccess: { payslipViewerIds: [STAFF_A], leaveAdjusterIds: [], classSplitterIds: [STAFF_B], enrollmentDateEditorIds: [], staffSubjectScopes: [{ userId: STAFF_B, subjects: ["english"] }] } };
     const res = await w.save(sent);
     expect(res?.ok).toBe(true);
     expect(stored().specialAccess).toEqual(sent.specialAccess);
@@ -341,11 +341,11 @@ describe("자기 저장 뒤 재저장", () => {
     const w = openWindow();
     const res = await w.save({ ...w.draft, specialAccess: { payslipViewerIds: [STAFF_B], leaveAdjusterIds: [STAFF_A], classSplitterIds: [], staffSubjectScopes: [] } });
     expect(res?.ok).toBe(true);
-    expect(stored().specialAccess).toEqual({ payslipViewerIds: [STAFF_B], leaveAdjusterIds: [STAFF_A], classSplitterIds: [], staffSubjectScopes: [] });
+    expect(stored().specialAccess).toEqual({ payslipViewerIds: [STAFF_B], leaveAdjusterIds: [STAFF_A], classSplitterIds: [], enrollmentDateEditorIds: [], staffSubjectScopes: [] });
     expect(res?.permissions?.token).toBe(permissionsToken(stored()));
     const again = await w.save({ ...stored(), userOverrides: [] }, res!.permissions!.token);
     expect(again?.ok).toBe(true);
-    expect(stored().specialAccess).toEqual({ payslipViewerIds: [STAFF_B], leaveAdjusterIds: [STAFF_A], classSplitterIds: [], staffSubjectScopes: [] });
+    expect(stored().specialAccess).toEqual({ payslipViewerIds: [STAFF_B], leaveAdjusterIds: [STAFF_A], classSplitterIds: [], enrollmentDateEditorIds: [], staffSubjectScopes: [] });
   });
 });
 
@@ -414,7 +414,24 @@ describe("기존 보호는 그대로다", () => {
 });
 
 describe("개인별 기능 권한 — 어느 학원에서나 화면에서 지정한다(원장 2026-10-06)", () => {
-  const none = { payslipViewerIds: [], leaveAdjusterIds: [], classSplitterIds: [], staffSubjectScopes: [] };
+  it("수강 날짜 수정 지정·해제와 옛 폼 보존·신규 직원 검증이 함께 동작한다", async () => {
+    const w = openWindow();
+    const next = { ...w.draft, specialAccess: { ...w.draft.specialAccess, enrollmentDateEditorIds: [STAFF_A] } };
+    const res = await w.save(next);
+    expect(res?.ok).toBe(true);
+    expect(stored().specialAccess.enrollmentDateEditorIds).toEqual([STAFF_A]);
+    expect(res?.permissions?.token).toBe(permissionsToken(stored()));
+    const old = openWindow();
+    const legacy = { ...old.draft.specialAccess }; delete legacy.enrollmentDateEditorIds;
+    expect((await old.save({ ...old.draft, specialAccess: legacy }))?.ok).toBe(true);
+    expect(stored().specialAccess.enrollmentDateEditorIds).toEqual([STAFF_A]);
+    const clear = openWindow();
+    expect((await clear.save({ ...clear.draft, specialAccess: { ...clear.draft.specialAccess, enrollmentDateEditorIds: [] } }))?.ok).toBe(true);
+    expect(stored().specialAccess.enrollmentDateEditorIds).toEqual([]);
+    const bad = openWindow();
+    expect((await bad.save({ ...bad.draft, specialAccess: { ...bad.draft.specialAccess, enrollmentDateEditorIds: ["77777777-7777-4777-8777-777777777777"] } }))?.error).toContain("재직 직원");
+  });
+  const none = { payslipViewerIds: [], leaveAdjusterIds: [], classSplitterIds: [], enrollmentDateEditorIds: [], staffSubjectScopes: [] };
 
   it("🔴 새로 지정하는 사람은 지금 이 학원의 재직 직원이어야 한다 — 칸마다 본다", async () => {
     seed("chinsan");

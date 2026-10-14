@@ -123,6 +123,7 @@ export type WithdrawalDetail = WithdrawalRow & {
   parentName: string | null;
   enrollmentHistory: {
     id: string;
+    classId: string | null;
     className: string;
     subject: string;
     /** 그 반의 담임(classes.teacher_id) 표시명 — 과목별 담당강사. 미배정이면 null. */
@@ -168,6 +169,7 @@ export async function getWithdrawalDetail(studentId: string): Promise<Withdrawal
         | undefined;
       return {
         id: e.id,
+        classId: k?.id ?? null,
         className: k?.class_name ?? "?",
         subject: k?.subject ?? "?",
         teacherName: kt?.display_name ?? null,

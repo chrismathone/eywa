@@ -6,6 +6,7 @@ import { Pencil } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
 import { accessLevelTenant, canAccessTenant, canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
+import { getEnrollmentDateAccess } from "@/features/enrollments/server/date-access";
 import { canSeeStudentEnrollment } from "@/features/students/server/enrollment-gate";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { BackLink } from "@/components/back-link";
@@ -150,15 +151,14 @@ export default async function StudentDetailPage({
     : [];
   // 학생 영구 삭제 = 관리 도구(admin) 쓰기 권한(기본 master) — 파괴적이라 조임. 잘못 추가 정정용.
   const canDeleteStudent = await canWriteTenant(user.systemRole, "admin");
-  // 시작/종료일 더블클릭 수정 = owner(원장) 콘솔 권한 이상만(관리자 정정).
-  const canEditDates = (await accessLevelTenant(user.systemRole, "owner")) === "full";
+  const dateAccess = await getEnrollmentDateAccess();
   // 분리등원 요일(스케줄) 더블클릭 편집 — 서버 `updateEnrollmentsAttendanceBatch`는 **관리자(full)만**.
   // ⚠️ 종전 `canWriteTenant`는 scoped(강사)도 통과시켜, 강사에게 편집 칸이 열리고 저장만 거절됐다(#77 반대 꼴).
   const canEditSchedule = await canManageTenant(user.systemRole, "classes");
   // 잘못 만든 **수업 이력 삭제** = 원장(owner 콘솔 full) + super_admin(원장 2026-08-20).
   // 🔴 super_admin은 새 게이트를 항상 통과한다(원장 2026-08-13). 서버 `deleteEnrollment`가 같은 판정을
   //    다시 하고 붙은 기록까지 검사한다 — 화면 조건은 게이트가 아니다(#77).
-  const canDeleteEnrollment = canEditDates || (await isCurrentUserSuperAdmin());
+  const canDeleteEnrollment = (await accessLevelTenant(user.systemRole, "owner")) === "full" || (await isCurrentUserSuperAdmin());
   // 입학 상담(등록상담) 상담탭 노출.
   // ① enrollment 접근권한(원장·상담사 등) → 카드 + '상세 보기' 링크 모두.
   // ② 권한 없어도 **강사가 본인 담당 학생**이면 카드는 노출(읽기) — 단 '상세 보기'(/enrollment/[id])는
@@ -288,7 +288,7 @@ export default async function StudentDetailPage({
           <ClassesTab
             student={student}
             canEnd={canManageStudent}
-            canEditDates={canEditDates}
+            dateAccess={dateAccess}
             canEditSchedule={canEditSchedule}
             canDeleteEnrollment={canDeleteEnrollment}
           />
