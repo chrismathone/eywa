@@ -15,7 +15,7 @@ import { diffSettingsSection } from "../settings-diff";
 import { tenantSettingsTag } from "./queries";
 import { SECTION_SCHEMAS, SECTION_LABELS, type SectionKey, type PermissionsSettings } from "../settings-types";
 import { prepareSectionForSave, presetOfStored } from "../preset";
-import { normalizeDashboard } from "@/features/dashboard/layout/normalize";
+import { dashboardSavePart, mergeDashboardSave, normalizeDashboard } from "@/features/dashboard/layout/normalize";
 import { validateDashboardAssignments } from "./dashboard-assignments";
 import { navigationRevision } from "../normalize-navigation";
 import { explainDbError, logDbError } from "@/lib/supabase/db-error";
@@ -228,14 +228,23 @@ export async function saveOwnerSection(
     }
   }
   const base = (existing?.data as Record<string, unknown> | null) ?? {};
+  // 대시보드 동시 저장 = 마지막 저장이 이긴다(원장 2026-10-14) — 고친 부분(`dashboardPart`)을 밝혀 보내는 화면은 기준선 비교 없이
+  // 지금 저장본 위에 그 부분만 덮어쓴다(mergeDashboardSave). 밝히지 않는 옛 요청만 종전대로 기준선이 다르면 거절한다.
+  const dashboardPart = section === "dashboard" ? dashboardSavePart(formData.get("dashboardPart"), formData.get("dashboardTouched")) : null;
+  if (dashboardPart === "invalid") return { error: "저장 요청을 읽지 못했습니다. 새로고침한 뒤 다시 저장해 주세요." };
   if (section === "dashboard") {
     const expected = formData.get("dashboardBaseline");
-    if (typeof expected === "string" && expected !== JSON.stringify(normalizeDashboard(base.dashboard))) {
+    if (!dashboardPart && typeof expected === "string" && expected !== JSON.stringify(normalizeDashboard(base.dashboard))) {
       return { error: "다른 창에서 대시보드 설정이 변경되었습니다. 새로고침한 뒤 다시 저장해 주세요." };
     }
-    const assignments = normalizeDashboard(result?.data).assignments;
-    if ((result?.data as { assignments?: unknown }).assignments !== undefined && assignments?.length) {
-      const error = await validateDashboardAssignments(actor.tenantId, assignments);
+    // 검사는 실제로 저장될 배정만 — 고친 부분을 밝힌 요청은 고친 직원 줄만 들어가므로(배치 저장이면 배정은 안 바뀐다)
+    // 함께 실려 온 다른 직원 줄(그사이 퇴사·역할 변경)로 이 저장을 막지 않는다(리뷰 2026-10-14).
+    const sent = normalizeDashboard(result?.data).assignments ?? [];
+    const toCheck = dashboardPart
+      ? (dashboardPart.part === "assignments" ? sent.filter((a) => dashboardPart.touched.includes(a.userId)) : [])
+      : ((result?.data as { assignments?: unknown }).assignments !== undefined ? sent : []);
+    if (toCheck.length) {
+      const error = await validateDashboardAssignments(actor.tenantId, toCheck);
       if (error) return { error };
     }
   }
@@ -263,7 +272,9 @@ export async function saveOwnerSection(
   } else if (section === "dashboard") {
     // 대시보드 배치는 걸러서(모르는 카드·이탈 좌표) 저장하고, 기본 배치와 같은 역할은 저장값을 만들지 않는다(기본 개선이 따라오게).
     const submitted = result?.data as { assignments?: unknown };
-    sectionData = normalizeDashboard({ ...submitted, assignments: submitted.assignments ?? normalizeDashboard(base.dashboard).assignments }, { dropDefaults: true });
+    sectionData = dashboardPart
+      ? normalizeDashboard(mergeDashboardSave(base.dashboard, submitted, dashboardPart.part, dashboardPart.touched), { dropDefaults: true })
+      : normalizeDashboard({ ...submitted, assignments: submitted.assignments ?? normalizeDashboard(base.dashboard).assignments }, { dropDefaults: true });
   } else {
     sectionData = prepareSectionForSave(preset, section, parsedJson, result?.data, base[section]);
   }
@@ -299,7 +310,11 @@ export async function saveOwnerSection(
   if (error) {
     return { error: plainSettingsReason(explainDbError(error, { scope: "owner.saveOwnerSection", fallback: "설정을 저장하지 못했습니다. 잠시 뒤 다시 시도해 주세요." }).message) };
   }
-  if (!resultWrite.data?.length) return { error: "다른 창에서 설정이 먼저 저장되었습니다. 새로고침한 뒤 다시 저장해 주세요." };
+  if (!resultWrite.data?.length) {
+    // 대시보드는 마지막 저장이 이긴다 — 읽고 쓰는 그 짧은 사이에 겹친 것뿐이니 새로고침(편집이 사라진다) 대신 다시 누르게 한다.
+    if (dashboardPart) return { error: "다른 저장과 겹쳐 저장하지 못했습니다. 편집한 내용은 그대로이니 저장을 한 번 더 눌러 주세요." };
+    return { error: "다른 창에서 설정이 먼저 저장되었습니다. 새로고침한 뒤 다시 저장해 주세요." };
+  }
 
   // 🔴 **무엇이 바뀌었는지**를 함께 남긴다(원장 점검 2026-08-27) — 종전엔 `{section}`뿐이라
   //    "누가 언제 운영 체계를 저장했다"만 남고 되짚을 근거가 없었다. 비밀값·미등록 필드는 실리지 않는다.

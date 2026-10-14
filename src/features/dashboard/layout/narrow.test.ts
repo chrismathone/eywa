@@ -53,6 +53,14 @@ describe("과목 관리자 — 담당 과목으로 좁히기(서버)", () => {
     expect(math.students?.data?.programs).toMatchObject({ eie: 0, injaewon: 0, math: 200, noEnrollment: 0, otherOnly: 0 });
     expect(math.students?.data?.schools).toEqual([]);
     expect(narrowBySubject(sections, ["math"], groupOf, true).students?.data?.schools).toHaveLength(1);
+    expect(math.students?.data?.academy).toBeUndefined();
+  });
+
+  it("학년·학교 구성 칸이 놓이면 재원생·미수강도 학원 전체 값을 함께 싣는다 — '(학원 전체)' 카드 한 장에 두 범위가 섞이지 않게(리뷰 2026-10-14)", () => {
+    const wide = narrowBySubject(sections, ["math"], groupOf, true).students?.data;
+    const all = sections.students?.data;
+    expect(wide?.enrolled).toBe(200);
+    expect(wide?.academy).toEqual({ enrolled: all?.enrolled, noEnrollment: all?.programs.noEnrollment });
   });
 
   it("오늘첫수업·전일 결석은 담당 과목 학생만, 다른 과목 반·상태는 지운다", () => {

@@ -89,7 +89,13 @@ export function resolveView({ stored, bundle, menus, subjectLabels = [], subject
   if (!classic) {
     const base = role ? sanitizeItems(role.items) : defaultItems(bundle);
     // 권한 상한 — 못 보는 카드는 빠지고(흐름이라 뒤 카드가 앞으로 당겨진다), 카드가 없어진 구역의 머리줄도 뺀다.
-    items = dropEmptyHeadings(base.filter((i) => isStructuralId(i.id) || (cardDef(i.id) && canSeeCard(cardDef(i.id)!, menus) && (!subjectScoped || cardDef(i.id)!.subjectScope !== "academy"))));
+    // 과목 관리자도 원장이 넣은 카드는 다 본다(원장 2026-10-14 *"위젯은 똑같이 넣어주고 내가 커스텀"*) — 아직 과목으로
+    // 못 나누는 카드는 숨기지 않고 아래 `academyWide`로 '(학원 전체)'를 붙인다.
+    // 🔴 과목 범위를 받은 **다른 역할**(실장·경영지원 등)은 종전대로 그 카드를 숨긴다 — 원장이 그 역할 배치를 고칠 때 편집기에
+    //    '학원 전체 값' 꼬리표가 안 서서, 열면 원장 모르게 학원 전체 카드가 새로 뜬다(리뷰 2026-10-14). 과목으로 나누면(2단계) 함께 연다.
+    const hideAcademy = subjectScoped && bundle !== "subject";
+    items = dropEmptyHeadings(base.filter((i) => isStructuralId(i.id) || (cardDef(i.id) && canSeeCard(cardDef(i.id)!, menus)
+      && !(hideAcademy && cardDef(i.id)!.subjectScope === "academy"))));
     // 미지정은 학원 전체 집계로 폴백하지 않는다. 범위를 정할 때까지 공지만 표시한다.
     if (subjectScoped && !subjectLabels.length) items = items.filter((i) => cardDef(i.id)?.subjectScope === "none");
   }

@@ -8,7 +8,6 @@ import { useUnsavedGuard } from "@/components/workspace/use-unsaved-guard";
 import { FormActionBar } from "@/components/forms/form-action-bar";
 import { useNavigationSettings } from "@/features/owner/navigation-context";
 import { publishRecordSaved } from "@/lib/realtime/record-channel";
-import { normalizeDashboard } from "@/features/dashboard/layout/normalize";
 import { serializeForm } from "@/lib/realtime/form-snapshot";
 
 /**
@@ -20,7 +19,6 @@ export function SectionForm({
   payload,
   savedNonce,
   navigationBaseline,
-  dashboardBaseline,
   extraFields,
   onSubmit,
   onSaved,
@@ -36,7 +34,6 @@ export function SectionForm({
   /** 폼 밖에서 서버 확정된 변경(과목 흡수 삭제 등) 신호 — baseline 재스냅샷(거짓 '미저장' 확인 방지). */
   savedNonce?: number;
   navigationBaseline?: string;
-  dashboardBaseline?: string;
   /** 저장 요청에 함께 싣는 칸(운영 섹션의 면·기준 token 등). 값이 없는 칸은 싣지 않는다. */
   extraFields?: Record<string, string | undefined>;
   /** 제출 직전 — 면이 "지금 값이 제출한 값"임을 적어 둔다(useSectionDraft.noteSubmitted). */
@@ -61,8 +58,6 @@ export function SectionForm({
     undefined,
   );
   const formRef = useRef<HTMLFormElement>(null);
-  const dashboardRevision = useRef(dashboardBaseline);
-  const dashboardSubmitted = useRef(dashboardBaseline);
   const { notifySaved, rebaseline } = useConcurrentEditGuard({ scope: `tenant-settings:${section}`, formRef });
   const { markSaved } = useUnsavedGuard({ formRef });
 
@@ -97,12 +92,6 @@ export function SectionForm({
     fd.set("data", JSON.stringify(payload));
     for (const [name, value] of Object.entries(extraFields ?? {})) if (value !== undefined) fd.set(name, value);
     if (navigationBaseline !== undefined) fd.set("navigationBaseline", navigationBaseline);
-    if (dashboardRevision.current !== undefined) {
-      fd.set("dashboardBaseline", dashboardRevision.current);
-      const saved = normalizeDashboard(payload, { dropDefaults: true });
-      const previous = JSON.parse(dashboardRevision.current) as { assignments?: unknown };
-      dashboardSubmitted.current = JSON.stringify(normalizeDashboard({ ...saved, assignments: previous.assignments }));
-    }
     startTransition(() => formAction(fd));
   };
 
@@ -111,7 +100,6 @@ export function SectionForm({
   useEffect(() => {
     if (state?.ok && state.nonce && state.nonce !== handledNonce.current) {
       handledNonce.current = state.nonce;
-      dashboardRevision.current = dashboardSubmitted.current;
       onSavedRef.current?.(state);
       // 두 가드 모두 **제출한 스냅샷**을 기준으로 — 저장 도중 더 고친 것은 계속 '미저장'으로 남는다.
       notifySaved(submittedSnapshot.current);
