@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_CHURN_OPTIONS, type ChurnOptions } from "../evaluation/config";
 import { readFileSync } from "node:fs";
 import { buildChurn, CLASS_END_TEXT } from "./churn";
+import { buildChurnModel } from "./churn-model";
 import { buildStudentTracking } from "./students";
 import type { SnapshotClass, SnapshotEnrollment, SnapshotSchedule } from "./types";
 
@@ -18,7 +19,7 @@ const enroll = (student: string, classId: string, start: string, end: string | n
 const october = { start: "2026-10-01", end: "2026-10-31" };
 
 function churn(classes: SnapshotClass[], enrollments: SnapshotEnrollment[], options: ChurnOptions = DEFAULT_CHURN_OPTIONS,
-  extra: { futureEnrollments?: SnapshotEnrollment[]; studentReasons?: { id: string; reason: string | null }[] } = {}) {
+  extra: { futureEnrollments?: SnapshotEnrollment[]; studentReasons?: { id: string; reason: string | null; withdrawn_at?: string | null }[] } = {}) {
   const tracking = buildStudentTracking({ from: "2026-09-01", end: "2026-10-31", classes, schedules: [], enrollments, owner: (c) => c.teacher_id });
   return buildChurn({ source: tracking.churnSource, classes: new Map(classes.map((c) => [c.id, c])), teacherId: "t", w: october, options, ...extra });
 }
@@ -82,6 +83,23 @@ describe("퇴원율", () => {
     const mixed = churn(two, [enroll("s1", "A", "2026-08-01", "2026-10-10", "graduated"), enroll("s1", "A2", "2026-08-01", "2026-10-10", "competitor")]);
     expect(mixed.detail.map((x) => [x.reason, x.counted])).toEqual([["타 학원으로 이동", true]]);
   });
+  it("🔴 강사 탓이 아닌 사유는 퇴원·수강종료 모두 뺀다 — 수강 사유·학생 퇴원 사유 중 하나라도 · 라벨 글도(원장 2026-10-14 '모든 곳에서')", () => {
+    // 수강 사유는 '기타'인데 학생 퇴원 사유가 '졸업'(그 무렵 퇴원) → 뺀다.
+    const both = churn(classes, [enroll("s1", "A", "2026-08-01", "2026-10-10", "other")], DEFAULT_CHURN_OPTIONS,
+      { studentReasons: [{ id: "s1", reason: "graduated", withdrawn_at: "2026-10-10T09:00:00+09:00" }] });
+    expect(both.detail.map((x) => [x.reason, x.note])).toEqual([["졸업", "사유 졸업"]]);
+    // 다시 등록하기 전의 옛 퇴원 사유(퇴원일이 멀다)는 이번 그만둠에 쓰지 않는다.
+    const stale = churn(classes, [enroll("s1", "A", "2026-08-01", "2026-10-10", "other")], DEFAULT_CHURN_OPTIONS,
+      { studentReasons: [{ id: "s1", reason: "graduated", withdrawn_at: "2026-03-02" }] });
+    expect(stale.detail.map((x) => x.counted)).toEqual([true]);
+    // 수강종료(다른 과목은 다님)도 같다 · 사람이 라벨 글('이사')로 적어도.
+    const ended = churn(classes, [enroll("s1", "A", "2026-08-01", "2026-10-09", "이사"), enroll("s1", "EN", "2026-08-01", null)]);
+    expect(ended.detail.map((x) => [x.type, x.reason, x.note])).toEqual([["수강종료", "이사", "사유 이사"]]);
+    // 수강종료엔 학생 퇴원 사유를 쓰지 않는다(그 학생은 퇴원하지 않았다).
+    const keepOn = churn(classes, [enroll("s1", "A", "2026-08-01", "2026-10-09", "other"), enroll("s1", "EN", "2026-08-01", null)], DEFAULT_CHURN_OPTIONS,
+      { studentReasons: [{ id: "s1", reason: "relocation", withdrawn_at: "2026-10-09" }] });
+    expect(keepOn.detail.map((x) => x.counted)).toEqual([true]);
+  });
   it("몇 달 뒤 재등록은 '다님'이 아니다 · 같은 반에 다음 날 다시 등록하면 다님 · 닫힌 반에 남은 수강은 다님이 아니다", () => {
     const later = churn(classes, [enroll("s1", "A", "2026-08-01", "2026-10-10", "other"), enroll("s1", "B", "2026-12-15", null)]);
     expect(later.detail.map((x) => [x.type, x.counted])).toEqual([["퇴원", true]]);
@@ -126,6 +144,20 @@ describe("퇴원율 — 교시 담당 · 같은 날 반 이동", () => {
   it("등원하지 않는 요일 · 끝난 교시 배정은 그 선생님 담당이 아니다", () => {
     expect(run("period", [slot("period")], [{ ...left(), attendance_days: ["thu"] }]).raw).toBeNull();
     expect(run("period", [slot("period", { valid_to: "2026-08-31" })], [left()]).raw).toBeNull();
+  });
+  it("분모가 있는 선생님 → 분모 학생을 가르친 과목 · 퇴원율에 넣은 그만둠의 학생·과목(시간표 X 겹침이 같은 계산기를 읽는다)", () => {
+    const classes = [klass("A", { teacher_id: "home" }), klass("EN", { subject: "english", teacher_id: "home" })];
+    const schedules = [slot("period"), slot("native", { id: "slot-en", class_id: "EN" })];
+    const tracking = buildStudentTracking({ from: "2026-09-01", end: "2026-10-31", classes, schedules, enrollments: [left(), enroll("s", "EN", "2026-08-01", null)], owner: (c) => c.teacher_id });
+    const model = buildChurnModel({ source: tracking.churnSource, classes, options: DEFAULT_CHURN_OPTIONS });
+    const subjects = model.eligibleSubjects(october);
+    expect([...subjects.get("home") ?? []].sort()).toEqual(["english", "math"]);
+    expect([...subjects.get("period") ?? []]).toEqual(["math"]);
+    expect([...subjects.get("native") ?? []]).toEqual(["english"]);
+    expect(subjects.has("unrelated")).toBe(false);
+    expect(model.exits("period", october)).toEqual([{ studentId: "s", subjects: ["math"] }]);
+    expect(model.exits("native", october)).toEqual([]);
+    expect([model.period("home", october).counted, model.period("home", october).detail[0]?.type]).toEqual([1, "수강종료"]);
   });
   it("같은 날 끝난 반 이동이 마지막 퇴원을 가리지 않는다", () => {
     const classes = [klass("A", { teacher_id: "home" }), klass("OLD", { teacher_id: "previous" })];

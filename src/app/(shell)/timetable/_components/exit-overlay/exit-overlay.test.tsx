@@ -19,13 +19,12 @@ function data(anchor: string, canNewer: boolean): ExitOverlayData {
     month: m,
     label: `${Number(m.slice(5))}월`,
     live,
-    counts: { withdrawn: 1, subjectEnded: 0, excluded: 0 },
+    count: 1,
     groups: [
       {
         teacher: "박도윤",
         count: 1,
-        inferred: 0,
-        rows: [{ key: `r${m}`, kind: "withdrawn" as const, name: `학생${m.slice(5)}`, schoolGrade: "침산중2", dateLabel: `${Number(m.slice(5))}/2`, reason: "잦은 강사 변경", reasonTitle: "타 학원으로 이동 · 잦은 강사 변경", excluded: false, teacherNote: null }],
+        rows: [{ key: `r${m}`, kind: "withdrawn" as const, name: `학생${m.slice(5)}`, schoolGrade: "침산중2", dateLabel: `${Number(m.slice(5))}/2`, reason: "잦은 강사 변경", reasonTitle: "타 학원으로 이동 · 잦은 강사 변경", excluded: false }],
       },
     ],
     zero: ["윤하람"],
@@ -43,6 +42,7 @@ function data(anchor: string, canNewer: boolean): ExitOverlayData {
     canNewer,
     canOlder: true,
     withdrawalsHref: "/withdrawals?range=custom",
+    rulesNote: "과목을 끊은 학생도 퇴원으로 셉니다.",
   };
 }
 
@@ -67,7 +67,7 @@ describe("시간표 X 겹침", () => {
     render(<TimetableExitOverlay subject="math" />);
     await press("KeyX", { key: "ㅌ" });
     expect(loadExitOverlay).toHaveBeenCalledWith({ subject: "math", anchor: null });
-    expect(await screen.findByRole("dialog", { name: "퇴원 · 수강종료 석 달" })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: "퇴원 석 달" })).toBeTruthy();
     expect(screen.getByText("10월")).toBeTruthy();
     expect(screen.getByText("8월")).toBeTruthy();
     expect(screen.getAllByText("박도윤").length).toBe(3);

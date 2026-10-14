@@ -6,6 +6,7 @@ import {
   spanOverlapsMonth,
   studentIdsInMonth,
   withdrawalStats,
+  withoutExcludedExits,
   yearlyClassMetrics,
   salaryScopedEnrollments,
   type EnrollSpanRow,
@@ -116,6 +117,28 @@ describe("연 누적 지표", () => {
 
 describe("퇴원 지표", () => {
   const students = ["s1", "s2", "s3"];
+
+  it("🔴 강사 탓이 아닌 퇴원(이사·졸업 등)은 뺀다 — 학생 퇴원 사유 · 그 퇴원과 함께 끝난 이 선생님 반 수강 사유 중 하나라도(원장 '모든 곳에서')", () => {
+    const reasons = ["graduated", "relocation", "illness", "advised"];
+    const classes = [{ id: "A", className: "중2 기본" }, { id: "B", className: "중2 심화" }, { id: "SP", className: "겨울특강", isSpecial: true }];
+    const row = (studentId: string, reason: string | null, withdrawnAt = "2026-02-20") => ({ studentId, name: studentId, withdrawnAt, reason });
+    const span = (student_id: string, class_id: string, start_date: string, end_date: string, withdrawal_reason: string | null) => ({ student_id, class_id, start_date, end_date, withdrawal_reason });
+    // 학생 사유가 이사 → 뺀다 · 학생 사유는 기타지만 함께 끝난 수강이 졸업 → 뺀다 · 둘 다 아니면 센다.
+    expect(withoutExcludedExits([row("s1", "relocation"), row("s2", "other"), row("s3", "competitor")], [
+      span("s2", "A", "2025-03-01", "2026-02-18", "졸업"), span("s3", "A", "2025-03-01", "2026-02-18", "competitor"),
+    ], classes, reasons).map((r) => r.studentId)).toEqual(["s3"]);
+    // 퇴원하며 닫힌 미리 등록한 반(시작일 = 종료일)이 마지막이어도 실제로 그만둔 반의 '졸업'을 본다(적대 리뷰 2026-10-14).
+    expect(withoutExcludedExits([row("s4", "competitor")], [
+      span("s4", "A", "2025-03-01", "2026-02-14", "graduated"), span("s4", "B", "2026-03-02", "2026-03-02", "competitor"),
+    ], classes, reasons)).toEqual([]);
+    // 특강이 며칠 늦게 끝나도 정규 반 사유를 본다 · 한참 전에 끝난 이 선생님 반(졸업 후 다른 반으로 옮김)은 이번 퇴원 사유가 아니다.
+    expect(withoutExcludedExits([row("s5", "competitor", "2026-02-28")], [
+      span("s5", "A", "2025-03-01", "2026-02-10", "graduated"), span("s5", "SP", "2026-01-05", "2026-02-28", "competitor"),
+    ], classes, reasons)).toEqual([]);
+    expect(withoutExcludedExits([row("s6", "competitor", "2026-07-15")], [span("s6", "A", "2025-03-01", "2026-02-28", "graduated")], classes, reasons))
+      .toHaveLength(1);
+    expect(withoutExcludedExits([row("s1", "relocation")], [], classes, [])).toHaveLength(1);
+  });
 
   it("그 달 퇴원만 세고 명단은 가나다순", () => {
     const w = withdrawalStats(

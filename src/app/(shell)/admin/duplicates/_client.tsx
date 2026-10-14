@@ -11,6 +11,7 @@ import { mergeStudents, type MergeStudentsState } from "@/features/admin/server/
 import type { DuplicateGroup } from "@/features/admin/server/queries";
 import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-change-signal";
 import { MENU_LABEL } from "@/lib/permissions";
+import { SuspectLine } from "./suspects";
 
 /**
  * 병합은 수강(enrollments)을 남길 학생 앞으로 옮기고 다른 학생을 퇴원시킨다 — 끝나면 열린 회차 확정 창에 알린다
@@ -57,6 +58,7 @@ function optionLabel(s: Student): string {
 export function DuplicatesClient({
   groups,
   canManage,
+  canConfirm = false,
 }: {
   groups: DuplicateGroup[];
   /**
@@ -64,17 +66,19 @@ export function DuplicatesClient({
    * (화면을 맞추는 값일 뿐 게이트가 아니다 — 자물쇠는 액션의 권한 검사다.)
    */
   canManage: boolean;
+  /** '의심' 학생의 '정상 확인'을 누를 수 있는가 — 학생 상세와 같은 판정(원생 관리 전체 권한). 병합 권한과 따로다. */
+  canConfirm?: boolean;
 }) {
   return (
     <ul className="space-y-3">
       {groups.map((g) => (
-        <GroupCard key={g.key} group={g} canManage={canManage} />
+        <GroupCard key={g.key} group={g} canManage={canManage} canConfirm={canConfirm} />
       ))}
     </ul>
   );
 }
 
-function GroupCard({ group, canManage }: { group: DuplicateGroup; canManage: boolean }) {
+function GroupCard({ group, canManage, canConfirm }: { group: DuplicateGroup; canManage: boolean; canConfirm: boolean }) {
   const [keeperId, setKeeperId] = useState(group.students[0].id);
   const [mergeeId, setMergeeId] = useState(group.students[1]?.id ?? "");
   // 🔴 병합은 되돌릴 수 없다 — **두 번 눌러야** 실행되고, 두 번째 화면이 누구의 기록을 누구에게 옮기는지 이름으로 적는다.
@@ -119,22 +123,24 @@ function GroupCard({ group, canManage }: { group: DuplicateGroup; canManage: boo
 
       <ul className="space-y-1.5">
         {group.students.map((s) => (
-          <li
-            key={s.id}
-            className="bg-bg-soft/30 border-border flex items-center gap-3 rounded-sm border px-3 py-1.5 text-xs"
-          >
-            <span className="num text-muted-foreground shrink-0">{s.id.slice(0, 8)}</span>
-            {/* 이름은 안 줄인다 — 접미사 한 글자가 두 사람을 가르는 유일한 표시다([[#111]]). */}
-            <span className="text-foreground shrink-0 font-medium whitespace-nowrap">{s.name}</span>
-            {s.dupSuspect ? <DupSuspectTag className="shrink-0" /> : null}
-            <span className="text-muted-foreground min-w-0 truncate">
-              {s.grade ?? "—"}
-              {s.school ? ` · ${s.school}` : ""}
-            </span>
-            <span className="text-muted-foreground shrink-0">{statusLabel(s.status)}</span>
-            <span className="text-muted-foreground num ml-auto shrink-0">
-              {s.enrolledAt ?? "—"}
-            </span>
+          <li key={s.id} className="bg-bg-soft/30 border-border rounded-sm border px-3 py-1.5 text-xs">
+            <div className="flex items-center gap-3">
+              <span className="num text-muted-foreground shrink-0">{s.id.slice(0, 8)}</span>
+              {/* 이름은 안 줄인다 — 접미사 한 글자가 두 사람을 가르는 유일한 표시다([[#111]]). */}
+              <span className="text-foreground shrink-0 font-medium whitespace-nowrap">{s.name}</span>
+              {s.dupSuspect ? <DupSuspectTag className="shrink-0" /> : null}
+              <span className="text-muted-foreground min-w-0 truncate">
+                {s.grade ?? "—"}
+                {s.school ? ` · ${s.school}` : ""}
+              </span>
+              <span className="text-muted-foreground shrink-0">{statusLabel(s.status)}</span>
+              <span className="text-muted-foreground num ml-auto shrink-0">
+                {s.enrolledAt ?? "—"}
+              </span>
+            </div>
+            {/* 왜 의심인지 한 줄 + '정상 확인'(원장 2026-10-14) — 다른 학생이 맞으면 병합 대신 표식을 내린다.
+                정보 줄과 따로 둔다(정보 줄이 접히면 학교 이름 길이마다 행 높이가 달라진다). */}
+            {s.dupSuspect ? <SuspectLine studentId={s.id} name={s.name} canConfirm={canConfirm} /> : null}
           </li>
         ))}
       </ul>

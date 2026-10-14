@@ -6,7 +6,9 @@ import {
   autoSuffixKey,
   duplicateReasons,
   groupDuplicateCandidates,
+  loneSuspects,
   stripAutoSuffix,
+  suspectReason,
   type DuplicateInput,
 } from "./duplicate-candidates";
 
@@ -152,6 +154,27 @@ describe("(c) 접미사 신호 — 원장 제보 2026-09-10 '중복 병합으로
       student({ id: "y", name: "권민서B", grade: "초6", school: "칠성초" }),
     ];
     expect(groupDuplicateCandidates(rows)).toEqual([]);
+  });
+});
+
+describe("짝 없는 '의심' · 왜 의심인지(원장 2026-10-14 — 데이터 정리에서 계속 정리)", () => {
+  it("왜 의심인지 한 줄 — 🔴 붙인 글자를 단정하지 않는다(원래 이름이 대문자로 끝날 수 있다)", () => {
+    expect(suspectReason("권민서B")).toBe("동기화 때 같은 이름이 이미 있어 끝에 알파벳을 붙여 따로 등록");
+    expect(suspectReason("김민서GA")).toBe("동기화 때 같은 이름이 이미 있어 끝에 알파벳을 붙여 따로 등록");
+  });
+  it("끝이 알파벳이 아니면(이름을 고쳤다) 지어내지 않는다", () => {
+    expect(suspectReason("권민서")).toBe("동기화 때 같은 이름이 이미 있어 따로 등록");
+  });
+  it("표식이 살아 있는데 어느 그룹에도 안 든 학생만 — 짝이 퇴원해 목록에 없어도 남는다", () => {
+    const rows = [
+      student({ id: "x", name: "권민서A", grade: "중2", dupSuspect: true }), // 짝 권민서B와 그룹
+      student({ id: "y", name: "권민서B", grade: "중2", dupSuspect: true }),
+      student({ id: "z", name: "이지호B", grade: "중1", dupSuspect: true }), // 짝 이지호A는 퇴원(목록 밖)
+      student({ id: "w", name: "박하늘", grade: "중1" }), // 표식 없음
+    ];
+    const groups = groupDuplicateCandidates(rows);
+    expect(groups.map((g) => g.students.map((s) => s.id))).toEqual([["x", "y"]]);
+    expect(loneSuspects(rows, groups).map((s) => s.id)).toEqual(["z"]);
   });
 });
 

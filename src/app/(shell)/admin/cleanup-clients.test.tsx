@@ -10,7 +10,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  *  · 여러 학생의 기록을 바꾸는 작업은 **두 번 눌러야** 실행되고, 확인은 한 번의 실행에만 쓰인다.
  *  · 병합의 확인 문장은 누구의 기록을 누구에게 옮기는지 이름·학년·학교로 적는다(되돌릴 수 없다).
  */
-const m = vi.hoisted(() => ({ merge: vi.fn(), close: vi.fn(), withdraw: vi.fn(), remove: vi.fn(), signal: vi.fn() }));
+const m = vi.hoisted(() => ({
+  merge: vi.fn(), close: vi.fn(), withdraw: vi.fn(), remove: vi.fn(), signal: vi.fn(), clear: vi.fn(),
+}));
 vi.mock("@/features/admin/server/actions", () => ({
   mergeStudents: m.merge,
   closeOrphanEnrollments: m.close,
@@ -18,6 +20,7 @@ vi.mock("@/features/admin/server/actions", () => ({
   bulkDeleteStudents: m.remove,
 }));
 vi.mock("@/features/billing/session-terms/plan-change-signal", () => ({ notifyTermPlansChanged: m.signal }));
+vi.mock("@/features/students/server/actions", () => ({ clearDupSuspect: m.clear }));
 vi.mock("next/link", () => ({
   default: ({ href, children, ...rest }: { href: string; children?: ReactNode }) => <a href={href} {...rest}>{children}</a>,
 }));
@@ -27,6 +30,7 @@ import { MERGE_SCOPE_LABEL, MERGE_TABLES } from "@/features/admin/merge-scope";
 import { MENU_LABEL } from "@/lib/permissions";
 import { CleanupClient } from "./cleanup/_client";
 import { DuplicatesClient } from "./duplicates/_client";
+import { LoneSuspects } from "./duplicates/suspects";
 
 const report = (patch: Partial<OrphanReport> = {}): OrphanReport => ({
   studentsWithoutEnrollments: [
@@ -58,7 +62,7 @@ const press = (el: HTMLElement) => act(async () => fireEvent.click(el));
 
 beforeEach(() => {
   vi.clearAllMocks();
-  for (const fn of [m.merge, m.close, m.withdraw, m.remove]) fn.mockReset();
+  for (const fn of [m.merge, m.close, m.withdraw, m.remove, m.clear]) fn.mockReset();
 });
 afterEach(cleanup);
 
@@ -374,6 +378,50 @@ describe("병합", () => {
     await press(screen.getByRole("button", { name: "병합" }));
     await press(screen.getByRole("button", { name: "병합 확정" }));
     expect(screen.getByText("표식을 내리지 못했습니다")).toBeTruthy();
+  });
+});
+
+describe("'의심' 정리 — 왜 의심인지 + '정상 확인'(원장 2026-10-14)", () => {
+  const suspect = () => group([student("aaaaaaaa-1", "권민서A"), student("bbbbbbbb-2", "권민서B", { dupSuspect: true })]);
+
+  it("의심 학생 줄에 이유 한 줄과 '정상 확인' — 누르면 그 학생 표식을 내린다", async () => {
+    m.clear.mockResolvedValue({ ok: true });
+    render(<DuplicatesClient groups={[suspect()]} canManage canConfirm />);
+    expect(screen.getByText("왜 의심: 동기화 때 같은 이름이 이미 있어 끝에 알파벳을 붙여 따로 등록")).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: "정상 확인" })).toHaveLength(1); // 표식 없는 권민서A에는 없다
+    await press(screen.getByRole("button", { name: "정상 확인" }));
+    expect(m.clear).toHaveBeenCalledWith("bbbbbbbb-2");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("권한이 없으면 이유는 보이고 버튼은 없다 · 실패하면 사유를 그 자리에", async () => {
+    const { unmount } = render(<DuplicatesClient groups={[suspect()]} canManage={false} />);
+    expect(screen.getByText(/왜 의심: /)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "정상 확인" })).toBeNull();
+    unmount();
+    m.clear.mockResolvedValue({ error: "학생 정보 변경 권한이 없습니다" });
+    render(<DuplicatesClient groups={[suspect()]} canManage canConfirm />);
+    await press(screen.getByRole("button", { name: "정상 확인" }));
+    expect(screen.getByRole("alert").textContent).toContain("학생 정보 변경 권한이 없습니다");
+  });
+
+  it("짝 없는 '의심' 학생 — 이름은 학생 상세로, 이유와 '정상 확인'", async () => {
+    m.clear.mockResolvedValue({ ok: true });
+    const lone = [student("cccccccc-3", "이지호B", { dupSuspect: true, status: "on_hold" })];
+    const { unmount } = render(<LoneSuspects students={lone} canConfirm />);
+    expect(screen.getByRole("heading", { name: /짝 없는 .의심. 학생\s*1명/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "이지호B" }).getAttribute("href")).toBe("/students/cccccccc-3");
+    expect(screen.getByText("휴원")).toBeTruthy();
+    // 확인할 곳 = 원생목록 퇴원 보기(학생 상세는 퇴원한 짝을 안 보여 주고 다시 이 면을 가리킨다).
+    expect(screen.getByText(/원생목록에서 상태를 .퇴원.으로 바꿔 같은 이름을 찾아보세요/)).toBeTruthy();
+    expect(screen.getByText(/정상 확인.으로 표식을 내립니다/)).toBeTruthy();
+    await press(screen.getByRole("button", { name: "정상 확인" }));
+    expect(m.clear).toHaveBeenCalledWith("cccccccc-3");
+    unmount();
+    // 버튼이 없는 사람에게는 '정상 확인' 안내도 없다(없는 버튼을 말하지 않는다).
+    render(<LoneSuspects students={lone} canConfirm={false} />);
+    expect(screen.queryByRole("button", { name: "정상 확인" })).toBeNull();
+    expect(screen.queryByText(/정상 확인.으로 표식을 내립니다/)).toBeNull();
   });
 });
 

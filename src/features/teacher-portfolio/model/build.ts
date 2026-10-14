@@ -10,7 +10,7 @@
 import { subjectLabelRecord } from "@/features/owner/subjects";
 import type { SubjectSetting } from "@/features/owner/settings-types";
 import { DEFAULT_CHURN_OPTIONS, DEFAULT_EVALUATION_CONFIG, DEFAULT_REFERRAL_OPTIONS, type EvaluationConfig } from "../evaluation/config";
-import { buildChurn } from "./churn";
+import { buildChurnModel } from "./churn-model";
 import { payRatioItem, type PayResult } from "./pay-ratio";
 import { buildContext, type PortfolioContext } from "./context";
 import { applyEvaluation, indexEntries, type ManualEntryRow } from "./evaluate";
@@ -134,6 +134,8 @@ export function buildPortfolio(d: PortfolioSnapshot, opts: {
   const labels = subjectLabelRecord(d.settings.subjects as SubjectSetting[]);
   const config = opts.evaluation?.config ?? DEFAULT_EVALUATION_CONFIG;
   const students = buildStudentTracking({ from: d.from, end: d.end, classes: d.classes, schedules: d.schedules, enrollments: d.enrollments, owner: ctx.owner });
+  // 퇴원율 — 시간표 X 겹침도 이 계산기를 같은 모양으로 부른다(withdrawals/server/exit-overlay.ts · 가드 exit-overlay-wiring.test).
+  const churn = buildChurnModel({ source: students.churnSource, classes: d.classes, options: config.metrics.churn.churn ?? DEFAULT_CHURN_OPTIONS, futureEnrollments: d.futureEnrollments, studentReasons: d.studentReasons });
   const models: Models = {
     ctx,
     revenue: buildRevenue({
@@ -141,7 +143,7 @@ export function buildPortfolio(d: PortfolioSnapshot, opts: {
       holidays: ctx.holidays, subjectLabel: (key) => labels[key] ?? key, deepMathKey: deepMathKeyOf(d.settings.subjects), owner: ctx.owner,
     }),
     students,
-    churn: (teacherId, w) => ({ id: "churn", max: METRIC_MAX.churn, value: null, ...buildChurn({ source: students.churnSource, classes, teacherId, w, options: config.metrics.churn.churn ?? DEFAULT_CHURN_OPTIONS, futureEnrollments: d.futureEnrollments, studentReasons: d.studentReasons }) }),
+    churn: (teacherId, w) => ({ id: "churn", max: METRIC_MAX.churn, value: null, ...churn.period(teacherId, w) }),
     payRatio: (teacherId, month) => payRatioItem(opts.pay?.get(`${teacherId}|${month}`)),
     referral: buildReferrals({ referrals: d.referrals ?? [], enrollments: d.enrollments, classes, owner: ctx.owner, options: config.metrics.expansion.referral ?? DEFAULT_REFERRAL_OPTIONS }),
     subjectOf: (id) => classes.get(id)?.subject ?? "",

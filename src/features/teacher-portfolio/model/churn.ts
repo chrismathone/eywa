@@ -15,6 +15,7 @@
  */
 import { isSpecialLecture } from "@/features/classes/special-lecture";
 import { normalizeReason, REASON_LABEL, type WithdrawalReason } from "@/features/withdrawals/types";
+import { excludedReasonOf } from "@/features/withdrawals/reason-key";
 import type { ChurnOptions } from "../evaluation/config";
 import { addDays, daysBetween, round1 } from "./dates";
 import type { ChurnSource } from "./students";
@@ -29,7 +30,8 @@ const codeOf = (text: string | null | undefined): WithdrawalReason | null => (te
 /** '곧 다님'의 끝 — 그만둔 날부터 31일 안에 시작하는 수강까지(다음 달 시작 수강을 읽는 창과 같다). 몇 달 뒤 재등록은 '다님'이 아니다. */
 const SOON_DAYS = 31;
 const futureCache = new WeakMap<readonly SnapshotEnrollment[], Map<string, SnapshotEnrollment[]>>();
-const reasonCache = new WeakMap<readonly { id: string; reason: string | null }[], Map<string, string | null>>();
+type StudentReason = { id: string; reason: string | null; withdrawn_at?: string | null };
+const reasonCache = new WeakMap<readonly StudentReason[], Map<string, StudentReason>>();
 function futureOf(rows: readonly SnapshotEnrollment[]): Map<string, SnapshotEnrollment[]> {
   let map = futureCache.get(rows);
   if (!map) {
@@ -39,17 +41,31 @@ function futureOf(rows: readonly SnapshotEnrollment[]): Map<string, SnapshotEnro
   }
   return map;
 }
-function reasonsOf(rows: readonly { id: string; reason: string | null }[]): Map<string, string | null> {
+function reasonsOf(rows: readonly StudentReason[]): Map<string, StudentReason> {
   let map = reasonCache.get(rows);
-  if (!map) reasonCache.set(rows, (map = new Map(rows.map((r) => [r.id, r.reason]))));
+  if (!map) reasonCache.set(rows, (map = new Map(rows.map((r) => [r.id, r]))));
   return map;
 }
 const NO_FUTURE: SnapshotEnrollment[] = [];
-const NO_REASONS: { id: string; reason: string | null }[] = [];
+const NO_REASONS: StudentReason[] = [];
 
-export function buildChurn(input: {
+export type ChurnInput = {
   source: ChurnSource; classes: ReadonlyMap<string, SnapshotClass>; teacherId: string; w: Pick<PeriodWindow, "start" | "end">; options: ChurnOptions;
-} & Pick<PortfolioSnapshot, "futureEnrollments" | "studentReasons">): Omit<ChurnMetric, "id" | "max" | "value"> {
+} & Pick<PortfolioSnapshot, "futureEnrollments" | "studentReasons">;
+/**
+ * `metric` = 근거 화면·점수 · `subjects` = 분모 학생을 정규 수업으로 가르친 과목 · `exits` = 퇴원율에 넣은 그만둠(같은 학생 한 번만으로
+ * 접힌 줄 포함)의 학생·과목 — 뒤의 둘은 시간표 X 겹침이 같은 계산을 읽는 자리다(`churn-model.ts`). 저장하지 않는다.
+ */
+export type ChurnResult = {
+  metric: Omit<ChurnMetric, "id" | "max" | "value">; subjects: ReadonlySet<string>;
+  exits: readonly { studentId: string; subjects: readonly string[] }[];
+};
+
+export function buildChurn(input: ChurnInput): Omit<ChurnMetric, "id" | "max" | "value"> {
+  return churnResult(input).metric;
+}
+
+export function churnResult(input: ChurnInput): ChurnResult {
   const { source, classes, teacherId, w, options } = input;
   const prevEnd = addDays(w.start, -1);
   const prevDays = daysBetween(`${prevEnd.slice(0, 7)}-01`, prevEnd);
@@ -69,13 +85,17 @@ export function buildChurn(input: {
   const days = new Map<string, number>();
   const firstDay = new Map<string, Map<string, string>>();
   const seen = new Map<string, string[]>();
+  const prevSubjects = new Map<string, Set<string>>();
   for (const day of [...prevDays, ...daysBetween(w.start, w.end)]) {
     for (const [studentId, relation] of source.rosterOf(day, teacherId)) {
       const mine = firstDay.get(studentId) ?? firstDay.set(studentId, new Map()).get(studentId)!;
       let anyRegular = false;
       for (const id of relation.classes) {
         if (!mine.has(id)) mine.set(id, day);
-        if (!anyRegular && regular(id)) anyRegular = true;
+        if (regular(id)) {
+          anyRegular = true;
+          if (day <= prevEnd) (prevSubjects.get(studentId) ?? prevSubjects.set(studentId, new Set()).get(studentId)!).add(classes.get(id)!.subject);
+        }
       }
       (seen.get(studentId) ?? seen.set(studentId, []).get(studentId)!).push(day);
       if (day <= prevEnd && anyRegular) days.set(studentId, (days.get(studentId) ?? 0) + 1);
@@ -87,6 +107,7 @@ export function buildChurn(input: {
 
   const rows: ChurnRow[] = [];
   const counted = new Set<string>();
+  const exits: ChurnResult["exits"][number][] = [];
   for (const studentId of base) {
     const history = [...source.enrollmentsOf(studentId), ...(future.get(studentId) ?? [])];
     // 반 이동했지만 옮겨 간 반을 하루도 안 다녔다(시작 전·당일 퇴원 — 퇴원 처리가 그 수강을 종료일 = 시작일로 닫는다) = 그만둔 것.
@@ -125,14 +146,21 @@ export function buildChurn(input: {
         const cancelled = cancelledMove(x);
         // 취소된 반 이동의 사유 = 옮겨 갈 반을 닫은 사유('반 이동' 글은 사유가 아니다).
         const text = (cancelled ? cancelled.map((b) => b.withdrawal_reason?.trim()).find(Boolean) : x.withdrawal_reason?.trim()) || null;
-        const code = codeOf(text) ?? (type === "퇴원" && (!text || text === AUTO_END_TEXT) ? codeOf(studentReason.get(studentId)) : null);
+        // 학생의 퇴원 사유 = 퇴원일 때만 · 수강 사유가 비었거나 그 퇴원이 이번 그만둠 무렵(14일 안)일 때만(다시 등록하기 전의 옛 사유를 쓰지 않게).
+        const s = type === "퇴원" ? studentReason.get(studentId) : undefined;
+        const near = !!s?.withdrawn_at && s.withdrawn_at.slice(0, 10) >= addDays(exit.day, -14) && s.withdrawn_at.slice(0, 10) <= addDays(exit.day, 14);
+        const student = s && (!text || text === AUTO_END_TEXT || near) ? s.reason : null;
+        // 🔴 강사 탓이 아닌 사유(원장이 고른 사유 — 이사·졸업 등)는 퇴원·수강종료 모두 퇴원율에 넣지 않는다 — 수강 종료 사유 · 학생 퇴원
+        // 사유 중 하나라도, 표준 키든 라벨 글('이사')이든(원장 2026-10-14 *"모든 곳에서"*, 판정 한 벌 `reason-key.ts`).
+        const off = excludedReasonOf([text, student], options.excludeReasons);
+        const code = off ?? codeOf(text) ?? (!text || text === AUTO_END_TEXT ? codeOf(student) : null);
         const reason = code ? REASON_LABEL[code] : text && !codeOf(text) ? text : "사유 없음";
         let note: string | null = null;
         if (!cancelled && (text === TRANSFER_TEXT || x.is_transferred)) note = "반 이동";
         else if ((text && CLASS_END_TEXT.includes(text)) || c?.closed_at === exit.day) note = "수업이 끝남";
         else if (isSpecialLecture({ isSpecial: c?.is_special, className: c?.class_name })) note = "끝난 특강";
         else if (keeps(x)) note = "같은 과목 다른 반을 다님";
-        else if (code && options.excludeReasons.includes(code)) note = `사유 ${REASON_LABEL[code]}`;
+        else if (off) note = `사유 ${REASON_LABEL[off]}`;
         return { reason, note };
       });
       const kept = judged.find((j) => !j.note);
@@ -140,6 +168,7 @@ export function buildChurn(input: {
       if (!note && type === "수강종료" && !options.countEnded) note = "수강종료는 세지 않음";
       const again = !note && counted.has(studentId);
       if (!note && !again) counted.add(studentId);
+      if (!note) exits.push({ studentId, subjects: [...new Set(ended.filter((_, i) => !judged[i]!.note).flatMap((x) => subjectOf(x) ?? []))] });
       rows.push({
         studentId, day: exit.day, type, className: ended.map((x) => classes.get(x.class_id)?.class_name || "").join(", "),
         reason: (kept ?? judged[0])?.reason ?? "사유 없음", counted: !note && !again, note: note ?? (again ? "같은 학생 한 번만" : null),
@@ -148,9 +177,10 @@ export function buildChurn(input: {
   }
   rows.sort((a, b) => a.day.localeCompare(b.day));
   const raw = base.size ? round1((100 * counted.size) / base.size) : null;
-  return {
+  const subjects = new Set([...base].flatMap((id) => [...(prevSubjects.get(id) ?? [])]));
+  return { subjects, exits, metric: {
     raw, base: base.size, need, counted: counted.size, detail: rows,
     basis: base.size ? `그만둠 ${counted.size} / 지난달 담당 ${base.size}명` : "지난달 담당 학생 없음",
     reason: `지난달(${Number(prevEnd.slice(5, 7))}월) 이 선생님이 정규 수업으로 ${need}일 이상 맡은 학생(담임·교시 담당 모두) ${base.size}명 중 이 달에 그 선생님 반이나 가르친 과목을 그만둔(퇴원·수강종료) 학생의 비율입니다. 다른 선생님 반으로 옮긴 뒤 그만둬도 셉니다. 원장이 고른 사유·반 이동·수업이 끝남·끝난 특강·같은 과목의 다른 반을 다니는 경우는 빼고, 한 학생은 한 번만 셉니다.`,
-  };
+  } };
 }

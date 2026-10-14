@@ -8,6 +8,7 @@ import { WITHDRAW_CANDIDATE_DAYS, selectWithdrawCandidates } from "../withdraw-c
 import { groupSameNameStudents } from "../same-name";
 import {
   groupDuplicateCandidates,
+  loneSuspects,
   type DuplicateReason,
 } from "../duplicate-candidates";
 
@@ -22,10 +23,15 @@ export type DuplicateGroup = {
     school: string | null;
     status: string;
     enrolledAt: string | null;
-    /** 동기화가 이름 충돌로 자동 구분(접미사)한 학생 — 학생 상세의 '정상 확인'이 내린다. */
+    /** 동기화가 이름 충돌로 자동 구분(접미사)한 학생 — '정상 확인'(학생 상세·데이터 정리)이 내린다. */
     dupSuspect: boolean;
   }[];
 };
+
+export type DuplicateStudent = DuplicateGroup["students"][number];
+
+/** 데이터 정리 '중복 의심 학생' 면의 재료 — 병합 후보 그룹 + 짝 없는 '의심' 학생(원장 2026-10-14). */
+export type DuplicateReview = { groups: DuplicateGroup[]; loneSuspects: DuplicateStudent[] };
 
 /**
  * 중복 의심 학생 그룹. 판정·근거·정렬은 순수 모듈
@@ -36,7 +42,7 @@ export type DuplicateGroup = {
  *    **영원히** 후보가 못 돼서, 학생 상세 배너가 가리키는 이 화면이 늘 비어 있었다(원장 2026-09-10).
  * 🔴 **자동 병합은 없다** — 이 함수는 후보만 만들고, 합치는 것은 사람이 `mergeStudents`를 누를 때다.
  */
-export async function findDuplicateStudents(): Promise<DuplicateGroup[]> {
+export async function findDuplicateStudents(): Promise<DuplicateReview> {
   const supabase = await createClient();
   // ⚠️ 퇴원(withdrawn)생은 중복 후보에서 제외한다. 자연키 유니크 인덱스가 `WHERE status<>'withdrawn'`이라
   //    퇴원생은 애초에 중복 충돌 대상이 아니고, 병합(mergeStudents)은 mergee를 withdrawn으로 만든다.
@@ -60,34 +66,33 @@ export async function findDuplicateStudents(): Promise<DuplicateGroup[]> {
       .order("id")
       .range(from, to),
   );
-  if (data.length === 0) return [];
+  if (data.length === 0) return { groups: [], loneSuspects: [] };
 
-  const groups = groupDuplicateCandidates(
-    data.map((r) => ({
-      id: r.id,
-      name: r.name,
-      grade: r.grade,
-      school: r.school,
-      parentPhone: r.parent_phone,
-      dupSuspect: r.dup_suspect === true,
-      status: r.status,
-      enrolledAt: r.enrolled_at,
-    })),
-  );
-
-  return groups.map((g) => ({
-    key: g.key,
-    reasons: g.reasons,
-    students: g.students.map((s) => ({
-      id: s.id,
-      name: s.name,
-      grade: s.grade,
-      school: s.school,
-      status: s.status,
-      enrolledAt: s.enrolledAt,
-      dupSuspect: s.dupSuspect === true,
-    })),
+  const inputs = data.map((r) => ({
+    id: r.id,
+    name: r.name,
+    grade: r.grade,
+    school: r.school,
+    parentPhone: r.parent_phone,
+    dupSuspect: r.dup_suspect === true,
+    status: r.status,
+    enrolledAt: r.enrolled_at,
   }));
+  const groups = groupDuplicateCandidates(inputs);
+  const toStudent = (s: (typeof inputs)[number]): DuplicateStudent => ({
+    id: s.id,
+    name: s.name,
+    grade: s.grade,
+    school: s.school,
+    status: s.status,
+    enrolledAt: s.enrolledAt,
+    dupSuspect: s.dupSuspect === true,
+  });
+
+  return {
+    groups: groups.map((g) => ({ key: g.key, reasons: g.reasons, students: g.students.map(toStudent) })),
+    loneSuspects: loneSuspects(inputs, groups).map(toStudent),
+  };
 }
 
 /** '같은 이름' 섹션의 한 줄 — 데스크가 **같은 사람인지 다른 사람인지** 고를 근거를 나란히 싣는다. */

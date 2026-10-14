@@ -4,8 +4,6 @@ import { Pill, type PillColor } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { Pagination } from "@/components/pagination";
 import { MakeeduSyncBadge } from "@/components/makeedu-sync-badge";
-import { MakeeduOriginTag } from "@/components/makeedu-origin-tag";
-import { DupSuspectTag } from "@/components/dup-suspect-tag";
 import { EditingBadge } from "@/features/presence/editing-badge";
 import { FilterSelect } from "@/components/filter-select";
 import { HeaderFilter } from "@/components/header-filter";
@@ -588,7 +586,7 @@ export default async function StudentsPage({
                   return (
                     <tr key={s.id} data-help="st-row" className="hover:bg-bg-soft/50 transition-colors [&>td]:px-3 [&>td]:py-2.5 [&>td]:text-center">
                       <td data-cell="primary">
-                        {/* `justify-center-safe` — 이름 + 꼬리표가 칸보다 길면(긴 이름 + 동기화 + 의심 · '수정 중' 꼬리표) 가운데 정렬이
+                        {/* `justify-center-safe` — 이름 + 꼬리표가 칸보다 길면(긴 이름 + '수정 중' 꼬리표) 가운데 정렬이
                             양쪽으로 넘쳐 카드 왼쪽 밖으로 나간다. 넘칠 때만 왼쪽 정렬로 바뀌어 넘침이 오른쪽 한쪽에만 생긴다. */}
                         <span className="phone:justify-start flex min-w-0 items-center justify-center-safe gap-1.5">
                           {/* 이름은 1차 식별자라 줄지 않는다(§1 "1차 핵심값 ellipsis 금지"). */}
@@ -600,9 +598,9 @@ export default async function StudentsPage({
                           >
                             {shownName}
                           </WindowLink>
-                          {s.syncNew ? <MakeeduOriginTag /> : null}
-                          {s.dupSuspect ? <DupSuspectTag /> : null}
-                          {/* 중복 병합된 학생의 '병합됨' 꼬리표는 걷었다(원장 2026-10-14 — 학생은 목록에 그대로 선다). */}
+                          {/* 이름 옆 꼬리표는 2026-10-14 전부 걷었다 — '병합됨'은 원장 *"이상한 라벨은 붙일 필요 없을거같은데"*,
+                              남은 '동기화'·'의심'은 지울지 묻자 *"어"*. '의심'(동명이인 확인 필요)은 학생 상세 배지로 남고,
+                              학원 설정 → 데이터 정리에서 이유와 함께 정리한다(짝이 없어도 뜬다 — *"데이터 정리에서는 여전히 정리할 수 있게"*). */}
                           <EditingBadge scope={`student:${s.id}`} />
                         </span>
                       </td>

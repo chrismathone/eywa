@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { emptyRowBands, fitContentRows, insertGridRows, removeGridRows, rowBoundaries } from "./grid-rows";
+import { boundaryNear, emptyBandAt, emptyRowBands, fitContentRows, insertGridRows, removeGridRows, rowBoundaries } from "./grid-rows";
 import { overlaps, positionItems } from "./fixed-grid";
 import { normalizeDashboard } from "./normalize";
 import { dashboardSchema } from "@/features/owner/settings-types";
@@ -22,6 +22,17 @@ describe("대시보드 행 편집", () => {
     expect(insertGridRows(items, 6, 2)).toEqual(items);
     expect(rowBoundaries(items)).not.toContain(7);
     expect(removeGridRows(insertGridRows(items, 1, 3), 1, 3)).toEqual(items);
+  });
+  it("우클릭 자리 → 가장 가까운 행 경계 · 카드 한가운데면 그 카드의 위·아래 경계로(원장 2026-10-14)", () => {
+    // 경계 = 0~5, 9(카드가 5~9행을 차지해 6~8은 없다)
+    expect(boundaryNear(items, 0.2)).toBe(0);
+    expect(boundaryNear(items, 2.6)).toBe(3);
+    expect(boundaryNear(items, 6.2)).toBe(5); // 카드 위쪽 절반 → 카드 위 경계
+    expect(boundaryNear(items, 8.1)).toBe(9); // 카드 아래쪽 → 카드 아래 경계
+    expect(boundaryNear(items, 30)).toBe(9); // 맨 아래보다 더 아래 → 맨 끝
+    expect(boundaryNear(items, -3)).toBe(0);
+    expect(emptyBandAt(items, 2)).toEqual({ y: 1, h: 4 });
+    expect(emptyBandAt(items, 6)).toBeNull();
   });
   it("맨 끝에 추가한 빈 행은 저장 후에도 유지하며, 빈 행을 모두 없앨 수 있다", () => {
     const added = insertGridRows(items, 9, 4, "space:last");

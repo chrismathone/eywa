@@ -12,10 +12,13 @@ import {
   spanOverlapsMonth,
   studentIdsInMonth,
   withdrawalStats,
+  withoutExcludedExits,
   yearlyClassMetrics,
   salaryScopedEnrollments,
   type EnrollSpanRow,
 } from "@/features/payroll/payslip-metrics";
+import { DEFAULT_CHURN_OPTIONS } from "@/features/teacher-portfolio/evaluation/options";
+import { loadEvaluationConfig } from "@/features/teacher-portfolio/server/evaluation-store";
 import { currentContract } from "@/features/staff/contract";
 import type { PayslipData, PayslipAdjustments } from "@/features/payroll/payslip-view";
 import { emptyAdjustments } from "@/features/payroll/payslip-view";
@@ -159,11 +162,18 @@ export async function getPayslipData(teacherId: string, period: string): Promise
   };
   // 지표(수업인원·퇴원)는 수업료와 같은 학년만 센다 — 대상 학년은 수업료 조립이 알려 준다(조회 자체는 나란히 돈다).
   const tuitionPromise = tuitionOf();
+  // 퇴원생에서 뺄 사유(강사 탓이 아닌 퇴원) = 강사평가 설정의 퇴원율 세는 법 한 곳. 못 읽으면 기본값(명세서를 막지 않는다).
+  const excludeReasons = loadEvaluationConfig(admin, user.tenantId)
+    .then((e) => e.config.metrics.churn.churn?.excludeReasons ?? DEFAULT_CHURN_OPTIONS.excludeReasons)
+    .catch((err: unknown) => {
+      console.error("[payslip] 퇴원 사유 설정 조회 실패 — 기본값 사용", err);
+      return DEFAULT_CHURN_OPTIONS.excludeReasons;
+    });
   const [tuition, metrics, resume] = await Promise.all([
     tuitionPromise,
     loadMetrics(supabase, period, year, tuitionPromise.then((t) => ({
       levels: t.sheet?.levels, includeSpecial: t.sheet?.includeSpecial, classes: t.sheet?.classScope ?? classes,
-    }))),
+    })), excludeReasons),
     supabase
       .from("academy_documents")
       .select("form_data")
@@ -298,6 +308,7 @@ async function loadMetrics(
   scopeOf: Promise<Pick<AttendanceSalaryRates, "levels" | "includeSpecial"> & {
     classes: { id: string; className: string; isSpecial: boolean }[];
   }>,
+  excludeReasons: Promise<readonly string[]>,
 ): Promise<{ value: PayslipData["metrics"]; warning: string | null }> {
   const empty = {
     value: {
@@ -319,10 +330,11 @@ async function loadMetrics(
     class_id: string;
     start_date: string | null;
     end_date: string | null;
+    withdrawal_reason: string | null;
   }>(classIds, (chunk, f, t) =>
     supabase
       .from("enrollments")
-      .select("student_id, class_id, start_date, end_date")
+      .select("student_id, class_id, start_date, end_date, withdrawal_reason")
       .in("class_id", chunk)
       .lte("start_date", `${year}-12-31`)
       .or(`end_date.is.null,end_date.gte.${year}-01-01`)
@@ -361,12 +373,18 @@ async function loadMetrics(
   const withdrawn =
     yearStudentIds.length === 0
       ? []
-      : await fetchInChunks<{ id: string; name: string; status: string; withdrawn_at: string | null }>(
+      : await fetchInChunks<{ id: string; name: string; status: string; withdrawn_at: string | null; reason: string | null }>(
           yearStudentIds,
           (chunk) =>
-            supabase.from("students").select("id, name, status, withdrawn_at").in("id", chunk).eq("status", "withdrawn"),
+            supabase.from("students").select("id, name, status, withdrawn_at, reason:withdrawal_metadata->>reason").in("id", chunk).eq("status", "withdrawn"),
         );
-  const withdrawnRows = withdrawn.map((s) => ({ studentId: s.id, name: s.name, withdrawnAt: s.withdrawn_at }));
+  // 강사 탓이 아닌 퇴원(이사·졸업 등)은 그 달·연 누계 모두에서 뺀다(`withoutExcludedExits`).
+  const withdrawnRows = withoutExcludedExits(
+    withdrawn.map((s) => ({ studentId: s.id, name: s.name, withdrawnAt: s.withdrawn_at, reason: s.reason })),
+    spans,
+    scope.classes,
+    await excludeReasons,
+  );
 
   /**
    * 🔑 정본 판정은 `isSystemBulkWithdrawal` = **일괄 날짜 AND 수강 이력 없음**이다.

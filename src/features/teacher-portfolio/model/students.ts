@@ -31,12 +31,12 @@ export type ChurnSource = {
     classes: ReadonlySet<string>; homeClasses: ReadonlySet<string>; roles: ReadonlySet<"담임" | "부담임">;
   }>;
   exitsOf: (studentId: string, start: string, end: string) => readonly StudentExit[];
+  teachersOn: (day: string) => Iterable<string>;
   enrollmentsOf: (studentId: string) => readonly SnapshotEnrollment[];
 };
 
 export function buildStudentTracking(input: {
-  from: string;
-  end: string;
+  from: string; end: string;
   classes: readonly SnapshotClass[];
   schedules: readonly SnapshotSchedule[];
   enrollments: readonly SnapshotEnrollment[];
@@ -96,51 +96,57 @@ export function buildStudentTracking(input: {
   const linked = (a: SnapshotEnrollment, b: SnapshotEnrollment) => a.class_id !== b.class_id && a.is_transferred && b.is_transferred_in
     && Boolean(a.end_date) && [a.end_date, addDays(a.end_date!, 1)].includes(b.start_date) && sameSubject(a, b);
 
-  const events: TrackedEvent[] = [];
-  for (let day = addDays(baseline, 1); day <= input.end; day = addDays(day, 1)) {
-    const before = roster(addDays(day, -1));
-    const after = roster(day);
-    for (const teacherId of new Set([...before.keys(), ...after.keys()])) {
-      const prev = before.get(teacherId) ?? new Map<string, Relation>();
-      const next = after.get(teacherId) ?? new Map<string, Relation>();
-      for (const incoming of [true, false]) {
-        const source = incoming ? next : prev;
-        const other = incoming ? prev : next;
-        for (const [studentId, relation] of source) {
-          if (other.has(studentId)) continue; // 같은 강사가 다른 반·역할로 계속 맡는다.
-          const history = enrollmentByStudent.get(studentId) ?? [];
-          let type: StudentEventType = "담당 변경";
-          let points = 0;
-          if (incoming) {
-            const starts = history.filter((e) => relation.classes.has(e.class_id) && e.start_date === day);
-            const transfers = starts.filter((b) => b.is_transferred_in);
-            const sameTeacher = transfers.some((b) => history.some((a) => linked(a, b) && teachersFor(a, addDays(a.end_date!, -1)).has(teacherId)));
-            if (sameTeacher) type = "같은 강사 내 반이동";
-            else if (transfers.length) { type = "반이동 유입"; points = 0.5; }
-            else if (starts.length && !history.some((e) => e.start_date < day)) { type = "신규"; points = 1; }
-            else if (starts.length) type = history.some((e) => validAtClose(e, addDays(day, -1))) ? "추가 수강" : "재등록";
-          } else {
-            const ended = history.filter((e) => relation.classes.has(e.class_id)
-              && (e.end_date === day || classes.get(e.class_id)?.closed_at === day));
-            const transfers = ended.filter((e) => e.is_transferred && e.end_date === day);
-            const sameTeacher = transfers.some((a) => history.some((b) => linked(a, b) && teachersFor(b, b.start_date).has(teacherId)));
-            if (sameTeacher) type = "같은 강사 내 반이동";
-            else if (transfers.length) { type = "반이동 유출"; points = -0.5; }
-            else if (ended.length) {
-              // 다른 수업이 남아 있으면 수강종료, 학원 수강이 모두 끝나면 퇴원. 둘 다 −1점이다.
-              type = history.some((e) => openClass(classes.get(e.class_id), day) && validAtClose(e, day)) ? "수강종료" : "퇴원";
-              points = -1;
+  // 학생 배정·유지의 유입·유출 이벤트 — 처음 쓸 때 한 번 만든다(퇴원율만 쓰는 시간표 X 겹침은 명단·수강 끝만 읽는다).
+  let memo: TrackedEvent[] | null = null;
+  const allEvents = (): TrackedEvent[] => {
+    if (memo) return memo;
+    const events: TrackedEvent[] = [];
+    for (let day = addDays(baseline, 1); day <= input.end; day = addDays(day, 1)) {
+      const before = roster(addDays(day, -1));
+      const after = roster(day);
+      for (const teacherId of new Set([...before.keys(), ...after.keys()])) {
+        const prev = before.get(teacherId) ?? new Map<string, Relation>();
+        const next = after.get(teacherId) ?? new Map<string, Relation>();
+        for (const incoming of [true, false]) {
+          const source = incoming ? next : prev;
+          const other = incoming ? prev : next;
+          for (const [studentId, relation] of source) {
+            if (other.has(studentId)) continue; // 같은 강사가 다른 반·역할로 계속 맡는다.
+            const history = enrollmentByStudent.get(studentId) ?? [];
+            let type: StudentEventType = "담당 변경";
+            let points = 0;
+            if (incoming) {
+              const starts = history.filter((e) => relation.classes.has(e.class_id) && e.start_date === day);
+              const transfers = starts.filter((b) => b.is_transferred_in);
+              const sameTeacher = transfers.some((b) => history.some((a) => linked(a, b) && teachersFor(a, addDays(a.end_date!, -1)).has(teacherId)));
+              if (sameTeacher) type = "같은 강사 내 반이동";
+              else if (transfers.length) { type = "반이동 유입"; points = 0.5; }
+              else if (starts.length && !history.some((e) => e.start_date < day)) { type = "신규"; points = 1; }
+              else if (starts.length) type = history.some((e) => validAtClose(e, addDays(day, -1))) ? "추가 수강" : "재등록";
+            } else {
+              const ended = history.filter((e) => relation.classes.has(e.class_id)
+                && (e.end_date === day || classes.get(e.class_id)?.closed_at === day));
+              const transfers = ended.filter((e) => e.is_transferred && e.end_date === day);
+              const sameTeacher = transfers.some((a) => history.some((b) => linked(a, b) && teachersFor(b, b.start_date).has(teacherId)));
+              if (sameTeacher) type = "같은 강사 내 반이동";
+              else if (transfers.length) { type = "반이동 유출"; points = -0.5; }
+              else if (ended.length) {
+                // 다른 수업이 남아 있으면 수강종료, 학원 수강이 모두 끝나면 퇴원. 둘 다 −1점이다.
+                type = history.some((e) => openClass(classes.get(e.class_id), day) && validAtClose(e, day)) ? "수강종료" : "퇴원";
+                points = -1;
+              }
             }
+            events.push({
+              teacherId, month: day.slice(0, 7), studentId, day, type, points, direction: incoming ? "유입" : "유출",
+              className: [...relation.classes].map((id) => classes.get(id)?.class_name || "").join(", "),
+              role: [...relation.roles].join("·"),
+            });
           }
-          events.push({
-            teacherId, month: day.slice(0, 7), studentId, day, type, points, direction: incoming ? "유입" : "유출",
-            className: [...relation.classes].map((id) => classes.get(id)?.class_name || "").join(", "),
-            role: [...relation.roles].join("·"),
-          });
         }
       }
     }
-  }
+    return (memo = events);
+  };
 
   const exitsByStudent = new Map<string, Map<string, SnapshotEnrollment[]>>();
   for (const e of input.enrollments) {
@@ -155,6 +161,7 @@ export function buildStudentTracking(input: {
   const resultCache = new Map<string, StudentTracking>();
   const churnSource: ChurnSource = {
     rosterOf: (day, teacherId) => roster(day).get(teacherId) ?? new Map(),
+    teachersOn: (day) => roster(day).keys(),
     exitsOf: (studentId, start, end) => [...(exitsByStudent.get(studentId) ?? [])]
       .filter(([day]) => day >= start && day <= end).sort(([a], [b]) => a.localeCompare(b)).map(([day, ended]) => ({ day, ended })),
     enrollmentsOf: (studentId) => enrollmentByStudent.get(studentId) ?? [],
@@ -166,7 +173,7 @@ export function buildStudentTracking(input: {
       const key = `${teacherId}|${w.start}|${w.end}`;
       const cached = resultCache.get(key);
       if (cached) return cached;
-      const mine = events.filter((e) => e.teacherId === teacherId);
+      const mine = allEvents().filter((e) => e.teacherId === teacherId);
       const detail: StudentEvent[] = mine.filter((e) => e.day >= w.start && e.day <= w.end).map((e) => ({
         studentId: e.studentId, day: e.day, type: e.type, points: e.points, direction: e.direction, className: e.className, role: e.role,
       }));

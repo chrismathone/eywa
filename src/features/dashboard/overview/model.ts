@@ -64,6 +64,11 @@ export type OverviewData = {
     programs: ProgramSummary;
     gradeSplit: GradeSplit;
     levelSplit?: import("./student-composition").LevelSubjectSplit;
+    /**
+     * 과목 관리자 화면에서 '(학원 전체)'로 서는 구성 카드(재원생 구성·학년별·학교별)용 **학원 전체** 재원생·미수강 —
+     * 위 `enrolled`·`programs`는 담당 과목으로 좁혀져 있어, 학원 전체 막대 옆에 그 값을 쓰면 숫자가 섞인다(narrow.ts).
+     */
+    academy?: { enrolled: number; noEnrollment: number };
   };
   changes: MonthChange[];
   /** 재원생 추이(월말·연말 재원생 수, 원장 2026-09-29) — 강사 스코프면 null(지금 담당 학생으로 과거를 셀 수 없다). */

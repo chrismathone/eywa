@@ -55,6 +55,8 @@ export function DashboardEditor({ initial, roleMenus, subjects, members, preview
   const [full, setFull] = useState<OverviewSnapshot | null | "failed">(null);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const { subject, setSubject } = ed;
+  // 동시 저장 = 마지막 저장이 이긴다(원장 2026-10-14) — 저장 기준(처음 받은 값 → 내가 저장할 때마다 그 값)과 달라진 배치(`ed.touched`)만 보낸다.
+  const submittedRef = useRef<DashboardSettings | null>(null);
   const [width, setWidth] = useState(1200);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const itemsRef = useRef(items);
@@ -92,7 +94,8 @@ export function DashboardEditor({ initial, roleMenus, subjects, members, preview
     () => (original ? previewSnapshot(original, { role, items: ALL_ITEMS, menus, subject: previewSubject }) : null),
     [original, role, menus, previewSubject],
   );
-  const unused = useMemo(() => CARDS.filter((c) => (role !== "subject" || c.subjectScope !== "academy") && !items.some((i) => i.id === c.id)).map((c) => c.id), [items, role]);
+  // 역할마다 같은 위젯 목록(원장 2026-10-14) — 과목 관리자도 다 넣을 수 있고, 과목으로 못 나누는 카드는 '(학원 전체)'로 보인다.
+  const unused = useMemo(() => CARDS.filter((c) => !items.some((i) => i.id === c.id)).map((c) => c.id), [items]);
   const selectedItem = items.find((i) => i.id === selected) ?? null;
 
   const onRemoved = useCallback(
@@ -136,7 +139,13 @@ export function DashboardEditor({ initial, roleMenus, subjects, members, preview
 
   const listMode = width < LIST_BELOW;
   return (
-    <SectionForm section="dashboard" payload={ed.payload} dashboardBaseline={JSON.stringify(initial)}>
+    <SectionForm
+      section="dashboard"
+      payload={ed.payload}
+      extraFields={{ dashboardPart: "layouts", dashboardTouched: JSON.stringify(ed.touched) }}
+      onSubmit={() => { submittedRef.current = ed.payload; }}
+      onSaved={() => { if (submittedRef.current) ed.markSaved(submittedRef.current); }}
+    >
       <div ref={rootRef} className={e.editor} style={{ "--spring-linear": SPRING } as CSSProperties}>
         <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(280px,380px)]">
         <div className="flex min-w-0 flex-col gap-3">

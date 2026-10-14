@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_CHURN_OPTIONS } from "@/features/teacher-portfolio/evaluation/options";
 import {
   buildOverlayMonth,
+  exclusionNote,
   isExcludedExit,
   isExitOverlayHotkey,
   monthHeading,
@@ -9,7 +11,7 @@ import {
 } from "./exit-overlay-model";
 import { teacherTints, TEACHER_TINTS } from "./exit-overlay-teachers";
 
-const exit = (p: Partial<OverlayExitInput> & Pick<OverlayExitInput, "key" | "teacher" | "date">): OverlayExitInput => ({
+const exit = (p: Partial<OverlayExitInput> & Pick<OverlayExitInput, "key" | "teachers" | "date">): OverlayExitInput => ({
   kind: "withdrawn",
   name: p.key,
   schoolGrade: "칠성초6",
@@ -18,7 +20,9 @@ const exit = (p: Partial<OverlayExitInput> & Pick<OverlayExitInput, "key" | "tea
   ...p,
 });
 
-describe("사유 → 제외 판정(이사·질병·권고퇴원·졸업)", () => {
+const RULES = DEFAULT_CHURN_OPTIONS;
+
+describe("사유 → 제외 판정(기본 이사·질병·권고퇴원·졸업 — 강사평가 설정)", () => {
   it("표준 키·라벨과 같은 글·표기 흔들림은 키로 본다", () => {
     expect(reasonKeyOf("relocation")).toBe("relocation");
     expect(reasonKeyOf("이사")).toBe("relocation");
@@ -30,43 +34,48 @@ describe("사유 → 제외 판정(이사·질병·권고퇴원·졸업)", () =>
     expect(reasonKeyOf("")).toBeNull();
     expect(reasonKeyOf(null)).toBeNull();
   });
-  it("넷만 제외 — 수업 불만족·타 학원·기타는 센다", () => {
-    for (const r of ["relocation", "illness", "advised", "graduated", "이사", "질병", "졸업"]) expect(isExcludedExit(r)).toBe(true);
-    for (const r of ["dissatisfaction", "competitor", "other", "종강", null]) expect(isExcludedExit(r)).toBe(false);
+  it("기본은 넷만 제외 — 수업 불만족·타 학원·기타는 센다", () => {
+    for (const r of ["relocation", "illness", "advised", "graduated", "이사", "질병", "졸업"]) expect(isExcludedExit(r, RULES.excludeReasons)).toBe(true);
+    for (const r of ["dissatisfaction", "competitor", "other", "종강", null]) expect(isExcludedExit(r, RULES.excludeReasons)).toBe(false);
+  });
+  it("원장이 고른 사유를 그대로 — 졸업을 다시 세고 타 학원을 빼면 그렇게", () => {
+    const reasons = ["relocation", "illness", "advised", "competitor"];
+    expect(isExcludedExit("graduated", reasons)).toBe(false);
+    expect(isExcludedExit("타 학원으로 이동", reasons)).toBe(true);
   });
 });
 
 describe("한 달 열", () => {
   const exits: OverlayExitInput[] = [
-    exit({ key: "a", teacher: "오세린", date: "2026-10-01", memo: "수업 따라가기 힘들어함" }),
-    exit({ key: "b", teacher: "박도윤", date: "2026-10-02" }),
-    exit({ key: "c", teacher: "박도윤", date: "2026-10-02", kind: "subject-ended", reasonRaw: "종강", keepSubjects: ["영어"] }),
-    exit({ key: "d", teacher: "한지수", date: "2026-10-06", reasonRaw: "relocation", memo: "대전으로" }),
-    exit({ key: "e", teacher: null, date: "2026-10-07" }),
-    exit({ key: "g", teacher: "오세린", date: "2026-10-09", teacherNote: "마지막 보고서 작성자 10/8" }),
-    exit({ key: "f", teacher: "오세린", date: "2026-09-30" }), // 지난달 — 이 열에 안 선다
+    exit({ key: "a", teachers: ["오세린"], date: "2026-10-01", memo: "수업 따라가기 힘들어함" }),
+    // 담임 + 교시 담당 둘 다 퇴원율에 넣은 줄 — 두 묶음에 선다(건수는 한 번).
+    exit({ key: "b", teachers: ["박도윤", "오세린"], date: "2026-10-02" }),
+    exit({ key: "c", teachers: ["박도윤"], date: "2026-10-02", kind: "subject-ended", reasonRaw: "종강", keepSubjects: ["영어"] }),
+    exit({ key: "d", teachers: [], date: "2026-10-06", reasonRaw: "relocation", memo: "대전으로" }),
+    exit({ key: "e", teachers: [], date: "2026-10-07" }),
+    exit({ key: "f", teachers: ["오세린"], date: "2026-09-30" }), // 지난달 — 이 열에 안 선다
   ];
   const month = buildOverlayMonth({
     month: "2026-10",
     today: "2026-10-14",
     exits,
-    homeroomTeachers: ["오세린", "박도윤", "한지수", "윤하람", "윤하람"],
+    zeroTeachers: ["오세린", "한지수", "윤하람", "윤하람"],
     holds: [{ key: "h", name: "최지안", schoolGrade: "달성초4", teacher: "최가온", className: "초4 기본" }],
+    rules: RULES,
   });
 
-  it("묶음 = 센 건수 많은 순 · 같으면 가나다 · 담임 미상은 맨 뒤", () => {
+  it("묶음 = 강사평가 퇴원율이 넣은 선생님마다 · 센 건수 많은 순 · 같으면 가나다 · 선생님 미반영은 맨 뒤", () => {
     expect(month.groups.map((g) => [g.teacher, g.count])).toEqual([
       ["박도윤", 2],
       ["오세린", 2],
-      ["한지수", 0],
       [null, 1],
     ]);
   });
-  it("건수 = 제외 줄을 뺀 퇴원·수강종료 · 다른 달 줄은 안 선다", () => {
-    expect(month.counts).toEqual({ withdrawn: 4, subjectEnded: 1, excluded: 1 });
+  it("🔴 건수 = 수강종료까지 합친 퇴원에서 줄 그은 줄만 뺀 수 — 여러 묶음에 선 줄도 한 번 · 다른 달 줄은 안 선다", () => {
+    expect(month.count).toBe(4);
     expect(month.groups.flatMap((g) => g.rows).map((r) => r.key)).not.toContain("f");
   });
-  it("퇴원 0 = 그 달 담임 중 센 건수가 0 — 제외 줄만 있는 선생님도 들어간다(중복 없음, 가나다)", () => {
+  it("퇴원 0 = 서버가 준 퇴원율 0 명단에서 이 겹침에 센 줄이 있는 선생님을 한 번 더 뺀다(중복 없음, 가나다)", () => {
     expect(month.zero).toEqual(["윤하람", "한지수"]);
   });
   it("줄 글자 — 메모가 있으면 메모 · 제외 줄은 사유 라벨 · 날짜는 M/D · 수강종료는 계속 다니는 과목을 툴팁에", () => {
@@ -79,16 +88,41 @@ describe("한 달 열", () => {
     expect(rows.c!.reason).toBe("종강");
     expect(rows.c!.reasonTitle).toContain("영어 계속 다님");
   });
-  it("추정한 선생님 = 묶음 머리에 줄 수 · 줄 툴팁 끝에 근거(기록으로 확인한 줄은 없음)", () => {
-    const se = month.groups.find((g) => g.teacher === "오세린")!;
-    expect(se.inferred).toBe(1);
-    expect(se.rows.find((r) => r.key === "g")!.reasonTitle).toContain("선생님 추정 — 마지막 보고서 작성자 10/8");
-    expect(se.rows.find((r) => r.key === "a")!.teacherNote).toBeNull();
-    expect(month.groups.find((g) => g.teacher === "박도윤")!.inferred).toBe(0);
+  it("담당을 못 찾은 줄(서버가 빈 배열)은 '선생님 미반영' 묶음에 선다 — 줄 그은 줄도 줄 그은 채", () => {
+    const none = month.groups.find((g) => g.teacher === null)!;
+    expect(none.rows.map((r) => [r.key, r.excluded])).toEqual([["d", true], ["e", false]]);
   });
-  it("🔴 '퇴원 0'을 가릴 수 없는 달(null)은 null 그대로 — 빈 명단으로 바꾸지 않는다", () => {
-    const m = buildOverlayMonth({ month: "2026-10", today: "2026-10-14", exits, homeroomTeachers: null, holds: null });
-    expect(m.zero).toBeNull();
+  it("줄 긋기는 줄의 사유 칸(학생 퇴원 사유)으로 — 선생님 묶음에 선 줄도 그 사유면 긋는다(원장 '지금대로')", () => {
+    const m = buildOverlayMonth({ month: "2026-10", today: "2026-10-14", zeroTeachers: [], holds: null, rules: RULES,
+      exits: [exit({ key: "x", teachers: ["박도윤"], date: "2026-10-03", reasonRaw: "graduated" })] });
+    expect(m.groups.map((g) => [g.teacher, g.count, g.rows[0]!.excluded])).toEqual([["박도윤", 0, true]]);
+    expect(m.count).toBe(0);
+  });
+  it("원장 설정을 따른다 — 졸업을 다시 세면 안 긋고 · 수강종료를 안 세면 퇴원율에 안 든 수강종료를 긋는다", () => {
+    const rules = { excludeReasons: ["relocation"], countEnded: false };
+    const m = buildOverlayMonth({ month: "2026-10", today: "2026-10-14", zeroTeachers: [], holds: null, rules,
+      exits: [
+        exit({ key: "g", teachers: [], date: "2026-10-03", reasonRaw: "graduated" }),
+        exit({ key: "s", teachers: [], date: "2026-10-04", kind: "subject-ended", reasonRaw: "dissatisfaction" }),
+      ] });
+    const rows = Object.fromEntries(m.groups.flatMap((g) => g.rows).map((r) => [r.key, r]));
+    expect([rows.g!.excluded, rows.s!.excluded, m.count]).toEqual([false, true, 1]);
+    expect(rows.s!.reasonTitle).toBe("수업 불만족 · 수강종료는 세지 않음");
+    // 퇴원율이 '퇴원'으로 센 수강종료 줄(선생님이 붙음)은 긋지 않는다 — 선생님 건수 = 강사평가.
+    const t = buildOverlayMonth({ month: "2026-10", today: "2026-10-14", zeroTeachers: [], holds: null, rules,
+      exits: [exit({ key: "t", teachers: ["박도윤"], date: "2026-10-04", kind: "subject-ended", reasonRaw: "dissatisfaction" })] });
+    expect(t.groups.map((g) => [g.teacher, g.count])).toEqual([["박도윤", 1]]);
+  });
+  it("🔴 함께 끝난 수강의 종료 사유도 본다 — 사유 칸이 '기타'여도 수강 사유가 '졸업'이면 긋고 그 사유를 적는다(원장 '모든 곳에서')", () => {
+    const m = buildOverlayMonth({ month: "2026-10", today: "2026-10-14", zeroTeachers: [], holds: null, rules: RULES,
+      exits: [exit({ key: "y", teachers: [], date: "2026-10-03", reasonRaw: "other", endReasons: ["graduated"] })] });
+    const r = m.groups[0]!.rows[0]!;
+    expect([r.excluded, r.reason, r.reasonTitle, m.count]).toEqual([true, "졸업", "기타 · 졸업", 0]);
+  });
+  it("안내 한 줄 = 고른 세는 법 그대로(사유는 사유 표 순서)", () => {
+    expect(exclusionNote(RULES)).toBe("과목을 끊은 학생도 퇴원으로 셉니다. 줄을 긋고 건수에서 빼는 것: 졸업 · 이사 · 질병 · 권고퇴원.");
+    expect(exclusionNote({ excludeReasons: [], countEnded: false })).toBe("줄을 긋고 건수에서 빼는 것: 과목만 끊은 수강종료.");
+    expect(exclusionNote({ excludeReasons: [], countEnded: true })).toBe("과목을 끊은 학생도 퇴원으로 셉니다.");
   });
   it("이번 달이면 '진행 중' · 휴원은 넘겨준 그대로(건수에 안 섞는다)", () => {
     expect(month.live).toBe(true);

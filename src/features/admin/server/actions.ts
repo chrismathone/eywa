@@ -9,6 +9,7 @@ import { kstToday } from "@/lib/date-kst";
 import { logAction } from "@/features/audit/server/log";
 import { mergeNoteFor } from "@/features/students/merged";
 import type { WithdrawalMetadata } from "@/features/withdrawals/types";
+import { CLEANUP_WITHDRAWAL_MEMO } from "@/features/withdrawals/system-bulk";
 import { explainDbError, logDbError } from "@/lib/supabase/db-error";
 import { MERGE_TABLES } from "../merge-scope";
 
@@ -382,7 +383,7 @@ export async function bulkWithdrawStudents(
   const today = kstToday();
   const metadata: WithdrawalMetadata = {
     reason: "other",
-    memo: "데이터 정리 일괄 퇴원",
+    memo: CLEANUP_WITHDRAWAL_MEMO,
     consultation: { adminCalledParent: false, teacherCalledParent: false, talkedWithStudent: false },
   };
 
