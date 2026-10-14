@@ -102,9 +102,8 @@ export type StudentListRow = {
   enrolledAt: string | null;
   parentPhone: string | null;
   subjects: string[]; // 수강 중인 과목 unique list
-  syncNew: boolean; // 지난 동기화가 새로 추가한 학생(sync_added_at != null) → "↻ 동기화" 배지 (다음 동기화 성공 시 해제)
-  dupSuspect: boolean; // 동기화 자동 접미사(동명이인 판정) → "확인 필요" 배지 (사람이 정상 확인/병합할 때까지 유지)
-  // 중복 병합으로 흡수된 쪽의 '병합됨' 꼬리표는 2026-10-14 걷었다(원장 — 목록엔 그대로 서고 표시만 없다, students/merged.ts).
+  // 목록 이름 옆 꼬리표('병합됨'·'동기화'·'의심')는 2026-10-14 걷었다(원장) — 그 값들은 여기서 읽지 않는다.
+  //   '의심'(dup_suspect)은 학생 상세(getStudentById)와 데이터 정리(findDuplicateStudents — 병합 후보 + 짝 없는 '의심')가 따로 읽는다.
 };
 
 export type StudentSort = "grade" | "name" | "recent";
@@ -132,7 +131,7 @@ export type StudentListFilters = {
 
 /** getStudentsPage가 students에서 직접 읽는 컬럼(아래 StudentPageRecord와 함께 고칠 것). */
 const STUDENT_PAGE_COLUMNS =
-  "id, name, english_name, school, grade, status, enrolled_at, parent_phone, sync_added_at, dup_suspect";
+  "id, name, english_name, school, grade, status, enrolled_at, parent_phone";
 
 // 검색 필드 → 컬럼 매핑. all은 데스크 응대 빈도 높은 이름·학교·전화·보호자명 묶음.
 const SEARCH_FIELD_COLS: Record<SearchField, string[]> = {
@@ -273,8 +272,6 @@ type StudentPageRecord = {
   status: string;
   enrolled_at: string | null;
   parent_phone: string | null;
-  sync_added_at: string | null;
-  dup_suspect: boolean | null;
 };
 
 export async function getStudentsList(
@@ -305,7 +302,7 @@ export async function getStudentsList(
     let qb = supabase
       .from("students")
       .select(
-        `id, name, english_name, school, grade, status, enrolled_at, parent_phone, sync_added_at, dup_suspect`,
+        `id, name, english_name, school, grade, status, enrolled_at, parent_phone`,
       );
     if (options?.status && options.status !== "all") qb = qb.eq("status", options.status);
     if (grades.length > 0) qb = qb.in("grade", grades);
@@ -388,8 +385,6 @@ export async function getStudentsList(
         enrolledAt: r.enrolled_at,
         parentPhone: r.parent_phone,
         subjects: narrowSubjects(axis, Array.from(subjectsByStudent.get(r.id) ?? []).sort()),
-        syncNew: r.sync_added_at != null,
-        dupSuspect: r.dup_suspect === true,
       }) satisfies StudentListRow,
   );
 
@@ -651,8 +646,6 @@ export async function getStudentsPage(
       enrolledAt: r.enrolled_at,
       parentPhone: r.parent_phone,
       subjects: narrowSubjects(axis, Array.from(subjectsByStudent.get(r.id) ?? []).sort()),
-      syncNew: r.sync_added_at != null,
-      dupSuspect: r.dup_suspect === true,
     } satisfies StudentListRow;
   });
 

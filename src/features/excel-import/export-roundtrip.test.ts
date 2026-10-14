@@ -36,8 +36,8 @@ async function readExport(wb: ExcelJS.Workbook, spec: SheetSpec, single: boolean
 describe("엑셀 내보내기 → 그대로 가져오기", () => {
   it("원생목록 — 학부모 연락처·상태·등록일을 알아보고, 수강 과목·담당 강사는 조용히 무시", async () => {
     const rows = [
-      { id: "s1", name: "김하늘", school: "칠성중", grade: "중1", status: "enrolled", teacherNames: ["박선생"], enrolledAt: "2026-03-02", parentPhone: "010-1234-5678", subjects: ["math"], syncNew: false, dupSuspect: false },
-      { id: "s2", name: "이바다", school: null, grade: null, status: "on_hold", teacherNames: [], enrolledAt: null, parentPhone: null, subjects: [], syncNew: false, dupSuspect: false },
+      { id: "s1", name: "김하늘", school: "칠성중", grade: "중1", status: "enrolled", teacherNames: ["박선생"], enrolledAt: "2026-03-02", parentPhone: "010-1234-5678", subjects: ["math"] },
+      { id: "s2", name: "이바다", school: null, grade: null, status: "on_hold", teacherNames: [], enrolledAt: null, parentPhone: null, subjects: [] },
     ] satisfies StudentListRow[];
     const read = await readExport(await buildStudentsWorkbook(rows, () => "수학"), studentsDef.sheets[0]!, true);
     expect([...read.map.keys()].sort()).toEqual(["enrolledAt", "grade", "name", "parentPhone", "school", "status"].sort());
