@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { getMakeeduSyncState, type MakeeduSyncDomain } from "@/features/integrations/server/makeedu-sync";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
@@ -6,6 +7,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { getUserPermMatrix } from "@/lib/auth/perm-matrix";
 import { canAccess } from "@/lib/permissions";
 import { WindowLink } from "@/components/workspace/window-link";
+import { DismissibleDetails } from "@/components/dismissible-details";
 import { humanizeMakeeduSyncError } from "@/features/integrations/sync-error";
 
 /**
@@ -48,8 +50,13 @@ function fullSince(iso: string, lang: SheetLang): string {
  * 🔑 화면 언어는 **여기서 직접 읽는다**(async 서버 컴포넌트라 안전) — 이 배지는 목록 화면 5곳이
  *    같은 모양으로 쓰므로 화면마다 prop을 배선하면 한 곳만 빠뜨려도 그 화면만 한글로 남는다.
  *    `getTeacherViewLang()`은 강사 미니셸이 아니면 한국어를 돌려주니 사무실 화면은 불변이다.
+ *
+ * `overlay` = 경고 상세를 **배지 아래에 띄운다**(흐름에서 뺀다) — 배지가 면 탭과 한 줄을 나눠 쓰는 화면(수납관리)용.
+ *   흐름 안에서 펼치면 상자 폭만큼 배지 칸이 넓어져 줄이 넘어가고, 방금 누른 배지가 탭 아래 줄로 옮겨 간다(2026-10-15).
+ *   ⚠️ 띄운 상자의 바탕은 불투명(카드) 위에 경고색 — `amber-soft`는 반투명이라 아래 표가 비친다(#74).
+ *   ⚠️ 띄운 상자는 아래 툴바를 덮으므로 바깥 클릭·Esc로도 닫힌다(`DismissibleDetails`) · 겹침은 z-20(F1 도움말 막 z-30 아래).
  */
-export async function MakeeduSyncBadge({ domain }: { domain: MakeeduSyncDomain }) {
+export async function MakeeduSyncBadge({ domain, overlay = false }: { domain: MakeeduSyncDomain; overlay?: boolean }) {
   const [state, lang] = await Promise.all([getMakeeduSyncState(domain), getTeacherViewLang()]);
   if (!state) return null;
   const failed = state.status !== "ok";
@@ -83,19 +90,36 @@ export async function MakeeduSyncBadge({ domain }: { domain: MakeeduSyncDomain }
   const [user, matrix] = await Promise.all([getCurrentUser(), getUserPermMatrix()]);
   const canManage = user != null && canAccess(user.systemRole, "owner", matrix);
   return <div className="flex justify-end">
-    <details className="group min-w-0 max-w-xl">
+    {wrapDetails(overlay, domain, <>
       <summary className="flex cursor-pointer list-none items-center justify-end gap-1 rounded-sm focus-visible:outline-2 focus-visible:outline-primary [&::-webkit-details-marker]:hidden">
         {badge}
         <span className={`text-xs underline underline-offset-2 ${tone}`}>{sheetT(lang, "sync.details")}</span>
         <span className="shrink-0 transition-transform group-open:rotate-180"><EyIcon name="chevronDown" size={12} /></span>
       </summary>
-      <div className="mt-2 space-y-2 rounded-lg border border-amber/40 bg-amber-soft p-3 text-left text-sm" role="region" aria-label={sheetT(lang, "sync.detailsTitle")}>
+      {wrapOverlay(overlay, <div className={`${overlay ? "" : "mt-2 "}space-y-2 rounded-lg border border-amber/40 bg-amber-soft p-3 text-left text-sm`} role="region" aria-label={sheetT(lang, "sync.detailsTitle")}>
         <p className="font-bold">{sheetT(lang, "sync.detailsTitle")}</p>
         <p className="break-words" title={state.issue ?? undefined}>{failed ? humanizeMakeeduSyncError(state.issue) || sheetT(lang, "sync.failed") : issue}</p>
         {domain === "invoices" ? <p className="text-text-dim">{sheetT(lang, "sync.invoiceGuide")}</p> : null}
         {canManage ? <WindowLink href="/owner?tab=sheets&sub=makeedu" className="inline-flex font-semibold text-primary underline underline-offset-2">{sheetT(lang, "sync.openSettings")}</WindowLink>
           : <p className="text-text-dim">{sheetT(lang, "sync.askManager")}</p>}
-      </div>
-    </details>
+      </div>)}
+    </>)}
   </div>;
+}
+
+/**
+ * 상세를 품는 `<details>` — 흐름 안이면 그대로, 띄우면(`overlay`) 바깥 클릭·Esc로 닫히는 부품.
+ * key = 도메인: 면 탭으로 수납 ↔ 교재를 오가면 같은 자리에 다시 그려지는데, 그대로 두면 열린 상자가 새 면의 툴바를 덮는다.
+ */
+function wrapDetails(overlay: boolean, domain: MakeeduSyncDomain, inner: ReactNode) {
+  return overlay
+    ? <DismissibleDetails key={domain} className="group relative min-w-0 max-w-xl">{inner}</DismissibleDetails>
+    : <details className="group min-w-0 max-w-xl">{inner}</details>;
+}
+
+/** `overlay`면 상세 상자를 배지 오른쪽 끝에 맞춰 아래로 띄운다(불투명 카드 바탕 · 창 폭을 넘지 않게). */
+function wrapOverlay(overlay: boolean, panel: ReactNode) {
+  return overlay
+    ? <div className="absolute right-0 top-full z-20 mt-2 w-max max-w-[min(36rem,calc(100vw-2rem))] rounded-lg bg-card shadow-lg">{panel}</div>
+    : panel;
 }

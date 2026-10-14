@@ -1,5 +1,11 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-10-15 — 남은 작은 것 둘: 원생상담 1일 '—' · 수납관리 동기화 경고 펼침
+
+- 운영실 '강사별 업무 현황' 원생상담 — 매달 1일엔 포트폴리오 이번 달 줄이 아직 없어(집계는 어제까지) 하루 내내 '—'였다 → 지난달 줄도 함께 읽어 이번 달 줄이 없으면 지난달 값을 그 달 이름과 함께 보인다([`counsel-period.ts`](../src/features/dashboard/overview/counsel-period.ts)).
+- 수납관리 동기화 경고 — 면 탭과 같은 줄로 옮긴 뒤 '상세 확인'을 펼치면 상자 폭만큼 배지가 탭 아래 줄로 밀려났다 → 상세 상자를 배지 아래에 띄운다(불투명 바탕 · 바깥 클릭·Esc·면 전환에 닫힘 · `MakeeduSyncBadge` `overlay` + [`DismissibleDetails`](../src/components/dismissible-details.tsx), 수납관리만 · 다른 목록 화면은 그대로).
+- 침산 옛 메뉴 저장값의 보고서 설정·AI 멘트 숨김은 되살리지 않는다(결정 = [`docs/decisions/shell.md`](decisions/shell.md) 10-14 항목 끝).
+
 ## 2026-10-15 — 운영실 '강사별 업무 현황': 보고서 네 줄 → 두 줄 · 학부모 미확인 · 출결 미입력 · 원생상담 줄 · 과목 운영형 기본에 반복 결석 학생
 
 - 원장 *"보고서 작성/발송, 보고서 미발송/미작성은 사실상 하나만 있어도 되지 않나? … 다른 데이터를 표시해주면 좋을듯"* → 행 = 보고서 작성(+오늘 미작성) · 발송 확인(작성했는데 안 나간 것 + 오류) · 학부모 미확인 · 출결 미입력 · 원생상담 · 영상 제출 · 영상 미제출([`teacher-work-card.tsx`](../src/app/(shell)/dashboard/_overview/teacher-work-card.tsx)). 결정 본문 = [`docs/decisions/dashboard.md`](decisions/dashboard.md) 2026-10-15.

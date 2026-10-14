@@ -2,6 +2,7 @@
 
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { TeacherWork, TeacherWorkRow } from "@/features/dashboard/overview/teacher-work";
+import { counselPeriodLabel } from "@/features/dashboard/overview/counsel-period";
 import { WindowLink } from "@/components/workspace/window-link";
 import { kstTimeOf } from "@/lib/date-kst";
 import s from "./teacher-work-card.module.css";
@@ -85,6 +86,6 @@ export function TeacherWorkCard({ data, subjects }: { data: TeacherWork; subject
     {!data.rows.length ? <p className={s.empty}>집계할 담당 반이 없습니다.</p> : null}
     <p className={s.note}>보고서({span(data.reportFrom, data.to) ?? "최근 7일"}): 작성할 전체 건수 기준 · 결석·휴원·테스트반 제외{data.deliveryShown === true ? " · 발송 확인 = 작성했는데 아직 학부모에게 안 나간 것(오류 포함 · 회수 제외)" : ""}.</p>
     <p className={s.note}>{data.deliveryShown === true ? `학부모 미확인: ${span(data.unreadFrom, data.to) ?? "최근 30일"} 수업 보고서 중 발송 뒤 48시간이 지나도 안 읽은 것. ` : ""}출결 미입력: {span(data.attendanceFrom, data.attendanceTo) ?? "어제까지 7일"} 수업한 반×날 중 출결을 다 못 찍은 횟수(보고서를 안 쓰는 반 포함).</p>
-    <p className={s.note}>{data.counselShown === true ? `원생상담: 이번 달 담임 반 학생 중 상담한 비율${data.counselAsOf ? `(${data.counselAsOf.slice(5).replace("-", "/")} 기준)` : ""}. ` : ""}영상: 배정한 숙제 중 실제 업로드 기준 · {data.videoCheckedAt ? `영상 확인 ${kstTimeOf(data.videoCheckedAt)} 기준` : "영상 상태 확인 대기"}. 분모가 0이면 비율은 —로 표시합니다.</p>
+    <p className={s.note}>{data.counselShown === true ? `원생상담: ${counselPeriodLabel(data.counselMonth, data.to)} 담임 반 학생 중 상담한 비율${data.counselAsOf ? `(${data.counselAsOf.slice(5).replace("-", "/")} 기준)` : ""}. ` : ""}영상: 배정한 숙제 중 실제 업로드 기준 · {data.videoCheckedAt ? `영상 확인 ${kstTimeOf(data.videoCheckedAt)} 기준` : "영상 상태 확인 대기"}. 분모가 0이면 비율은 —로 표시합니다.</p>
   </div>;
 }

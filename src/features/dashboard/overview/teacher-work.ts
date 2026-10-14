@@ -15,12 +15,12 @@ export type TeacherWorkRow = {
   unreadJudged: number; unread: number;
   /** 출결 미입력 — 수업한 반×날 중 출결을 다 못 찍은 날(`judgeClassAttendanceDay`). */
   attendanceDays: number; attendanceUnrecorded: number;
-  /** 원생상담 — 이번 달 담임 반 학생 중 상담한 비율(%) · 직원 포트폴리오 저장값. 없으면 null. */
+  /** 원생상담 — 그 달(이번 달 · 1일엔 지난달, `counselMonth`) 담임 반 학생 중 상담한 비율(%) · 직원 포트폴리오 저장값. 없으면 null. */
   counselRate: number | null;
 };
 export type TeacherWork = { reportFrom: string; videoFrom: string; to: string; videoCheckedAt: string | null; rows: TeacherWorkRow[];
-  /** 출결 미입력 창(어제까지) · 학부모 미확인 창 시작 · 원생상담 집계 기준일 — 카드 아래 안내가 적는다. */
-  attendanceFrom?: string; attendanceTo?: string; unreadFrom?: string; counselAsOf?: string | null;
+  /** 출결 미입력 창(어제까지) · 학부모 미확인 창 시작 · 원생상담 집계 기준일과 그 달(YYYY-MM — 1일엔 지난달, `pickCounselMonth`) — 카드 아래 안내가 적는다. */
+  attendanceFrom?: string; attendanceTo?: string; unreadFrom?: string; counselAsOf?: string | null; counselMonth?: string | null;
   /** 줄 표시 여부 — 기능이 꺼진 지점엔 그 줄이 흔적 없이 빠진다(ClassNote 꺼짐 = 발송 확인·학부모 미확인 · 직원 평가 꺼짐·실험실 밖 = 원생상담). */
   deliveryShown?: boolean; counselShown?: boolean };
 
@@ -102,9 +102,9 @@ export type TeacherWorkExtras = {
   unread: readonly { classId: string; judgeable: boolean; unread: boolean }[];
   /** 반의 담임·과목도 싣는다 — 보고서 미발송 반(이 표의 열에 없는 반)은 같은 담임·과목 열에 붙인다(운영실 신호와 같은 반 범위). */
   attendance: readonly { classId: string; teacherId: string | null; subject: string; unrecorded: boolean }[];
-  /** 강사 id → 이번 달 원생상담 비율(%). 과목이 둘인 강사는 두 열에 같은 값(담임 반 전체 기준이라 과목으로 못 가른다). */
+  /** 강사 id → 그 달(`counselMonth`) 원생상담 비율(%). 과목이 둘인 강사는 두 열에 같은 값(담임 반 전체 기준이라 과목으로 못 가른다). */
   counsel: ReadonlyMap<string, number | null>;
-  attendanceFrom: string; attendanceTo: string; unreadFrom: string; counselAsOf: string | null;
+  attendanceFrom: string; attendanceTo: string; unreadFrom: string; counselAsOf: string | null; counselMonth: string | null;
   deliveryShown: boolean; counselShown: boolean;
 };
 
@@ -128,5 +128,6 @@ export function withTeacherWorkExtras(work: TeacherWork, extras: TeacherWorkExtr
   }
   for (const row of rows) row.counselRate = extras.counselShown && row.teacherId ? extras.counsel.get(row.teacherId) ?? null : null;
   return { ...work, rows, attendanceFrom: extras.attendanceFrom, attendanceTo: extras.attendanceTo, unreadFrom: extras.unreadFrom,
-    counselAsOf: extras.counselShown ? extras.counselAsOf : null, deliveryShown: extras.deliveryShown, counselShown: extras.counselShown };
+    counselAsOf: extras.counselShown ? extras.counselAsOf : null, counselMonth: extras.counselShown ? extras.counselMonth : null,
+    deliveryShown: extras.deliveryShown, counselShown: extras.counselShown };
 }

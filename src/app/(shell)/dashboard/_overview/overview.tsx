@@ -27,6 +27,7 @@ import { useOverview } from "./use-overview";
 import { DetailPopup } from "./detail-popup";
 import { CurrentClasses } from "./current-classes";
 import { TeacherWorkCard } from "./teacher-work-card";
+import { counselPeriodLabel } from "@/features/dashboard/overview/counsel-period";
 import { SchoolDistribution } from "./school-distribution";
 import { AdmissionsSchedule } from "./admissions-schedule";
 import { KpiStrip, kpiCards } from "./kpi-strip";
@@ -1467,8 +1468,8 @@ export function Overview({
 }
 
 /** 강사별 업무 현황 머리 안내 — 기능이 꺼진 지점엔 그 줄의 기간도 적지 않는다(카드의 표시 여부와 같은 값). */
-function teacherWorkNote(data: { deliveryShown?: boolean; counselShown?: boolean } | null | undefined): string {
+function teacherWorkNote(data: { deliveryShown?: boolean; counselShown?: boolean; to?: string; counselMonth?: string | null } | null | undefined): string {
   return ["현재 담당 반", "보고서 최근 7일", "출결 어제까지 7일",
     data?.deliveryShown === true ? "학부모 미확인·영상 숙제 최근 30일" : "영상 숙제 최근 30일",
-    ...(data?.counselShown === true ? ["원생상담 이번 달"] : [])].join(" · ");
+    ...(data?.counselShown === true ? [`원생상담 ${counselPeriodLabel(data.counselMonth, data.to ?? "")}`] : [])].join(" · ");
 }
