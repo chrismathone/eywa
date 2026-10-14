@@ -105,12 +105,31 @@ export function withdrawalSubjects(ended: readonly { endDate: string | null; sub
   let last: string | null = null;
   for (const e of ended) if (e.endDate && (!last || e.endDate > last)) last = e.endDate;
   if (!last) return [];
-  const floor = new Date(Date.parse(`${last.slice(0, 10)}T00:00:00Z`) - WITHDRAW_SUBJECT_SPAN_DAYS * 86_400_000)
-    .toISOString()
-    .slice(0, 10);
+  const floor = spanFloor(last);
   const out = new Set<string>();
   for (const e of ended) if (e.subject && e.endDate && e.endDate.slice(0, 10) >= floor) out.add(e.subject);
   return [...out].sort();
+}
+
+function spanFloor(lastEnd: string): string {
+  return new Date(Date.parse(`${lastEnd.slice(0, 10)}T00:00:00Z`) - WITHDRAW_SUBJECT_SPAN_DAYS * 86_400_000).toISOString().slice(0, 10);
+}
+
+/** 이탈 줄의 반 하나 — 시간표 X 겹침이 그때 담임과 '퇴원 0'을 가리는 재료. */
+export type EndedClassRef = { enrollmentId: string; classId: string; startDate: string | null; endDate: string | null; isTransferred: boolean };
+
+/**
+ * 한 과목에서 마지막 종료와 **함께**(14일 안) 끝난 수강 — 종료 늦은 순(첫째 = `pickLastEnded`).
+ * 요일을 나눠 두 반을 다니다 떠나면 두 반 모두 떠난 반이다(한 반만 보면 다른 반 담임이 '퇴원 0'에 선다 — 적대 리뷰 2026-10-14).
+ * 반이동으로 닫힌 수강은 뺀다(옮겨 갔을 뿐 그 반을 떠난 이탈이 아니다) — 마지막 줄 자신은 그대로 둔다.
+ */
+export function endedTogether<T extends EndedEnrollment & { is_transferred?: boolean | null }>(rows: readonly T[]): T[] {
+  const last = pickLastEnded(rows);
+  if (!last?.end_date) return [];
+  const floor = spanFloor(last.end_date);
+  return rows
+    .filter((r) => r === last || (!!r.end_date && r.end_date.slice(0, 10) >= floor && r.is_transferred !== true))
+    .sort((a, b) => compareEnded(b, a));
 }
 
 /** 프로그램별 행 수 — 합(eie+injaewon+math+other) = total. */

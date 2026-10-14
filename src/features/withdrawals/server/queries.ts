@@ -7,7 +7,7 @@ import { REASON_LABEL, normalizeReason, type WithdrawalMetadata } from "../types
 import { countsForSubjectExit, getEndedSubjects } from "../subject-ended";
 import { isSpecialLecture } from "@/features/classes/special-lecture";
 import { isSystemBulkWithdrawal } from "../system-bulk";
-import { lastEndedByStudent, pickLastEnded } from "../window";
+import { endedTogether, lastEndedByStudent, pickLastEnded, type EndedClassRef } from "../window";
 import { withdrawalSubjects } from "../exit-rows";
 import { lastClassOf, loadEndedEnrollments } from "./window";
 
@@ -222,27 +222,37 @@ export type SubjectEndedRow = {
     /** 그 과목 마지막 수강의 종료 사유 원문(`enrollments.withdrawal_reason`). */
     reason: string | null;
     isTransferred?: boolean;
+    /**
+     * 그 과목에서 함께 끝난 수강(특강 제외, 첫째 = 마지막 수강) — 시간표 X 겹침이 그때 담임·'퇴원 0'을 가리는 재료.
+     * 종료일은 수강마다다 — `endedAt`은 특강까지 본 과목 종료일이라 다를 수 있다(담임은 그 반의 그 날로 찾는다).
+     */
+    endedTogether?: EndedClassRef[];
   }[];
 };
 
 type ClassBits = { subject?: string; class_name?: string | null; english_track?: string | null; is_special?: boolean | null };
+type StudentBits = { id: string; name: string; school: string | null; grade: string | null; status: string };
 
-export async function getSubjectEndedStudents(): Promise<SubjectEndedRow[]> {
+/**
+ * `endedWithin`을 주면 **그 기간에 끝난 수강이 있는 학생만** 후보로 읽는다(시간표 X 겹침 — 석 달 창).
+ * 🔑 판정은 그대로다: 수강종료 날짜(`endedAt`)는 그 학생 수강 중 하나의 종료일이므로, 날짜가 창 안인 줄은
+ *    반드시 창 안에 끝난 수강을 가진 학생에게서 나온다 — 후보를 좁혀도 창 안의 줄은 전부 같다(창 밖 줄은 호출부가 거른다).
+ */
+export async function getSubjectEndedStudents(opts?: {
+  endedWithin?: { from: string; to: string };
+}): Promise<SubjectEndedRow[]> {
   const supabase = await createClient();
-  // 재원/휴원 학생 전수 — .range() 페이지네이션으로 1000행 절단 방지(#54).
-  const students = await fetchAllPaged<{
-    id: string;
-    name: string;
-    school: string | null;
-    grade: string | null;
-    status: string;
-  }>((from, to) =>
-    supabase
-      .from("students")
-      .select("id, name, school, grade, status")
-      .in("status", ["enrolled", "on_hold"])
-      .range(from, to),
-  );
+  const within = opts?.endedWithin;
+  const students: StudentBits[] = within
+    ? await loadEndedWithinStudents(supabase, within)
+    : // 재원/휴원 학생 전수 — .range() 페이지네이션으로 1000행 절단 방지(#54).
+      await fetchAllPaged<StudentBits>((from, to) =>
+        supabase
+          .from("students")
+          .select("id, name, school, grade, status")
+          .in("status", ["enrolled", "on_hold"])
+          .range(from, to),
+      );
   if (students.length === 0) return [];
 
   const ids = students.map((s) => s.id);
@@ -251,6 +261,7 @@ export async function getSubjectEndedStudents(): Promise<SubjectEndedRow[]> {
   const enrollments = await fetchAllPagedInChunks<{
     id: string;
     student_id: string;
+    class_id: string;
     start_date: string | null;
     end_date: string | null;
     is_transferred: boolean | null;
@@ -260,7 +271,7 @@ export async function getSubjectEndedStudents(): Promise<SubjectEndedRow[]> {
     supabase
       .from("enrollments")
       .select(
-        "id, student_id, start_date, end_date, is_transferred, withdrawal_reason, class:class_id ( subject, class_name, english_track, is_special )",
+        "id, student_id, class_id, start_date, end_date, is_transferred, withdrawal_reason, class:class_id ( subject, class_name, english_track, is_special )",
       )
       .in("student_id", chunk)
       .order("id")
@@ -269,6 +280,7 @@ export async function getSubjectEndedStudents(): Promise<SubjectEndedRow[]> {
 
   type Enr = {
     id: string;
+    classId: string;
     subject: string;
     startDate: string | null;
     endDate: string | null;
@@ -286,6 +298,7 @@ export async function getSubjectEndedStudents(): Promise<SubjectEndedRow[]> {
     const arr = bySt.get(e.student_id) ?? [];
     arr.push({
       id: e.id,
+      classId: e.class_id,
       subject,
       startDate: e.start_date,
       endDate: e.end_date,
@@ -318,11 +331,10 @@ export async function getSubjectEndedStudents(): Promise<SubjectEndedRow[]> {
     // 과목마다 마지막으로 끝난 수강 — 날짜·반 이름·프로그램 재료. 고르는 규칙은 `pickLastEnded`(종료일 → 시작일 →
     // id, window.ts)와 같다 — 같은 날 끝난 두 반을 화면마다 다르게 고르면 반 이름·프로그램이 갈린다.
     const endedDetail = ended.map((subject) => {
-      const best = pickLastEnded(
-        enr
-          .filter((e) => e.subject === subject)
-          .map((e) => ({ ...e, end_date: e.endDate, start_date: e.startDate })),
-      );
+      const subjectRows = enr
+        .filter((e) => e.subject === subject)
+        .map((e) => ({ ...e, end_date: e.endDate, start_date: e.startDate, is_transferred: e.isTransferred }));
+      const best = pickLastEnded(subjectRows);
       return {
         subject,
         endedAt: lastEndOf(subject) ?? best?.endDate ?? null,
@@ -331,6 +343,13 @@ export async function getSubjectEndedStudents(): Promise<SubjectEndedRow[]> {
         // 그 과목 마지막 수강의 종료 사유(원문) — 퇴원관리 사유 카드·필터가 퇴원 사유와 함께 센다.
         reason: best?.reason ?? null,
         isTransferred: best?.isTransferred === true,
+        endedTogether: endedTogether(subjectRows).map((e) => ({
+          enrollmentId: e.id,
+          classId: e.classId,
+          startDate: e.startDate,
+          endDate: e.endDate,
+          isTransferred: e.isTransferred === true,
+        })),
       };
     });
     rows.push({
@@ -347,6 +366,33 @@ export async function getSubjectEndedStudents(): Promise<SubjectEndedRow[]> {
   }
   rows.sort((a, b) => (b.lastEndedAt ?? "").localeCompare(a.lastEndedAt ?? "")); // 최근 종료순
   return rows;
+}
+
+/** 기간 안에 끝난 수강이 있는 재원·휴원 학생(수강종료 후보) — `getSubjectEndedStudents({ endedWithin })` 전용. */
+async function loadEndedWithinStudents(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  within: { from: string; to: string },
+): Promise<StudentBits[]> {
+  const endedRows = await fetchAllPaged<{ student_id: string }>((from, to) =>
+    supabase
+      .from("enrollments")
+      .select("student_id")
+      .gte("end_date", within.from)
+      .lte("end_date", within.to)
+      .order("id")
+      .range(from, to),
+  );
+  const ids = [...new Set(endedRows.map((r) => r.student_id))];
+  if (ids.length === 0) return [];
+  return fetchAllPagedInChunks<StudentBits>(ids, (chunk, from, to) =>
+    supabase
+      .from("students")
+      .select("id, name, school, grade, status")
+      .in("id", chunk)
+      .in("status", ["enrolled", "on_hold"])
+      .order("id")
+      .range(from, to),
+  );
 }
 
 export function enrollmentDuration(startIso: string | null, endIso: string | null): string {
