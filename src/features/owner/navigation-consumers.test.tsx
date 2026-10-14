@@ -31,7 +31,7 @@ describe("실제 설정 편집기", () => {
     render(<NavigationSection initial={empty} teacherOpen={[]} onPreview={save} />);
     fireEvent.click(screen.getByRole("button", { name: "+ 탭 추가" }));
     fireEvent.change(screen.getByLabelText("큰 탭 이름"), { target: { value: "교무실" } });
-    fireEvent.click(screen.getByRole("button", { name: /시간표.*이동/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^시간표.*이동/ }));
     fireEvent.change(screen.getByLabelText("시간표 메뉴 이름"), { target: { value: "우리 일정" } });
     fireEvent.click(screen.getByLabelText("시간표 아이콘 선택"));
     fireEvent.click(within(screen.getByRole("dialog", { name: "시간표 아이콘" })).getByRole("button", { name: "별" }));
@@ -55,7 +55,7 @@ describe("실제 설정 편집기", () => {
     fireEvent.click(screen.getByRole("button", { name: "강사뷰" }));
     fireEvent.click(screen.getByRole("button", { name: "+ 탭 추가" }));
     fireEvent.change(screen.getByLabelText("큰 탭 이름"), { target: { value: "수업 준비" } });
-    fireEvent.click(screen.getByRole("button", { name: /시간표.*이동/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^시간표.*이동/ }));
     fireEvent.change(screen.getByLabelText("시간표 메뉴 이름"), { target: { value: "우리 수업 일정" } });
     fireEvent.click(screen.getByRole("button", { name: "미리보기에 적용" }));
     const saved = save.mock.calls[0][0] as NavigationSettings;

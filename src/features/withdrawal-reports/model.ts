@@ -6,6 +6,7 @@ export const REPORT_STATUS = {
   requested: "작성 요청", revision: "반려 · 수정 요청", manager_pending: "관리자 승인 대기",
   director_pending: "원장 승인 대기", scheduled: "처리 예약", completed: "처리 완료",
   blocked: "수강 변경 · 재검토 필요", canceled: "요청 취소",
+  approved: "승인 완료 · 다른 보고서 대기",
 } as const;
 export type ReportStatus = keyof typeof REPORT_STATUS;
 export type ReportAction = "save" | "submit" | "approve" | "reject" | "cancel";
@@ -28,10 +29,23 @@ export const requestSchema = z.object({
     ctx.addIssue({ code: "custom", message: "작성 강사, 관리자, 원장은 서로 다른 사람을 지정해 주세요." });
 });
 export type ReportRequest = z.infer<typeof requestSchema>;
+export const batchRequestSchema = z.object({
+  studentId: z.uuid(), teacherIds: z.array(z.uuid()).min(1).max(20), managerIds: z.array(z.uuid()).min(1).max(20),
+  directorIds: z.array(z.uuid()).max(20), subjects: z.array(z.string().min(1).max(80)).min(1).max(20),
+  effectiveDate: z.iso.date(), note: z.string().trim().max(1000),
+}).superRefine((r, ctx) => {
+  if (r.teacherIds.some(id => [...r.managerIds, ...r.directorIds].includes(id)) || r.managerIds.some(id => r.directorIds.includes(id)))
+    ctx.addIssue({ code: "custom", message: "작성자·관리자·원장을 서로 다르게 지정해 주세요." });
+});
+export function automaticExitKind(courses: { subject: string }[], subjects: readonly string[]) {
+  return courses.length > 0 && courses.every(c => subjects.includes(c.subject)) ? "withdrawal" as const : "subject_end" as const;
+}
 export type CourseSnapshot = { id: string; classId: string; className: string; subject: string; teacherId: string | null; teacherName: string | null; startDate: string; endDate: string | null; onHold: boolean };
 export type StudentSnapshot = { name: string; school: string | null; grade: string | null; enrolledAt: string | null; status: string; withdrawnAt: string | null; courses: CourseSnapshot[] };
 export type WithdrawalReport = {
-  id: string; tenant_id: string; student_id: string; requested_by: string; teacher_id: string; manager_id: string; director_id: string;
+  id: string; tenant_id: string; student_id: string; requested_by: string; teacher_id: string; manager_id: string; director_id: string | null;
+  group_id?: string | null; group_leader?: boolean; manager_ids?: string[] | null; director_ids?: string[] | null;
+  manager_decisions?: Record<string, string>; director_decisions?: Record<string, string>;
   exit_kind: "withdrawal" | "subject_end"; subjects: string[]; effective_date: string; request_note: string;
   snapshot: StudentSnapshot; body: ReportBody; status: ReportStatus; revision: number;
   manager_approved_at: string | null; director_approved_at: string | null; applied_at: string | null;
@@ -39,18 +53,25 @@ export type WithdrawalReport = {
 };
 export type ReportEvent = { id: string; actor_id: string | null; action: keyof typeof REPORT_ACTION_LABEL; from_status: ReportStatus | null; to_status: ReportStatus; comment: string | null; created_at: string };
 export type ReportListRow = Omit<WithdrawalReport, "body">;
-export type StaffOption = { id: string; name: string; role: SystemRole; subjects: string[] };
+export type StaffOption = { id: string; name: string; role: SystemRole; subjects: string[]; approvalSubjects?: string[] };
 export type StudentOption = { id: string; name: string; school: string | null; grade: string | null; courses: CourseSnapshot[] };
+export function snapshotMatches(a: StudentSnapshot, b: StudentSnapshot) {
+  const key = (s: StudentSnapshot) => JSON.stringify([s.name, s.school, s.grade, s.enrolledAt, s.status, s.withdrawnAt,
+    [...s.courses].sort((x, y) => x.id.localeCompare(y.id)).map(c => [c.id, c.classId, c.className, c.subject, c.teacherId, c.teacherName, c.startDate, c.endDate, c.onHold])]);
+  return key(a) === key(b);
+}
 export function canRequestReport(role: SystemRole) { return role === "master" || role === "admin" || role === "manager"; }
-export function isParticipant(r: Pick<WithdrawalReport, "requested_by" | "teacher_id" | "manager_id" | "director_id">, userId: string) {
-  return [r.requested_by, r.teacher_id, r.manager_id, r.director_id].includes(userId);
+export function managerIds(r: Pick<WithdrawalReport, "manager_id" | "manager_ids">) { return r.manager_ids ?? [r.manager_id]; }
+export function directorIds(r: Pick<WithdrawalReport, "director_id" | "director_ids">) { return r.director_ids ?? (r.director_id ? [r.director_id] : []); }
+export function isParticipant(r: Pick<WithdrawalReport, "requested_by" | "teacher_id" | "manager_id" | "director_id" | "manager_ids" | "director_ids">, userId: string) {
+  return [r.requested_by, r.teacher_id, ...managerIds(r), ...directorIds(r)].includes(userId);
 }
 export function reportCapabilities(r: WithdrawalReport, userId: string, writable: boolean, role?: SystemRole) {
   const draft = r.status === "requested" || r.status === "revision";
   return {
     edit: writable && draft && r.teacher_id === userId,
-    approve: writable && ((r.status === "manager_pending" && r.manager_id === userId) || (r.status === "director_pending" && r.director_id === userId)),
-    cancel: writable && (role === "master" || [r.requested_by, r.director_id].includes(userId)) && !["completed", "canceled"].includes(r.status),
+    approve: writable && ((r.status === "manager_pending" && managerIds(r).includes(userId) && !r.manager_decisions?.[userId]) || (r.status === "director_pending" && directorIds(r).includes(userId) && !r.director_decisions?.[userId])),
+    cancel: writable && (role === "master" || [r.requested_by, ...directorIds(r)].includes(userId)) && !["completed", "canceled"].includes(r.status),
   };
 }
 export function submissionError(body: ReportBody): string | null {

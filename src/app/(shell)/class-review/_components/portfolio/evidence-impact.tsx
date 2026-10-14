@@ -176,6 +176,13 @@ export function MetricEvidence({ id, ...props }: EvidenceProps & { id: ItemId })
     case "students": return <StudentsEvidence {...props} />;
     case "revenue": return <RevenueEvidence {...props} />;
     case "coverage": return <CoverageEvidence {...props} />;
+    case "churn": return <ChurnEvidence {...props} />;
     default: return <PendingEvidence metric={item} period={props.period} />;
   }
+}
+
+function ChurnEvidence({ period, nameOf, sticky }: EvidenceProps) {
+  const m = metricOf(period, "churn");
+  if (m.uncounted && m.raw == null) return <PendingEvidence metric={m} period={period} />;
+  return <><StatTiles items={[{ label: "이 달 퇴원율", value: m.raw == null ? "담당 학생 없음" : `${m.raw.toFixed(1)}%` }, { label: "집계 기준", value: m.basis }]} /><SectionTitle>퇴원·수강종료 학생</SectionTitle><DataTable sticky={sticky} headers={["날짜", "학생", "반"]} empty="해당하는 퇴원·수강종료 학생이 없습니다." rows={m.detail.map(r => ({ key: r.studentId, cells: [r.day, nameOf(r.studentId), r.className] }))} /><p className="mt-3 text-xs leading-relaxed">{m.reason}</p></>;
 }

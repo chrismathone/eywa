@@ -158,6 +158,7 @@ export const HUB_GROUPS: HubGroup[] = [
       fromMenu("newcomers", "신입 90일 체크리스트"),
       fromMenu("retention", "이탈 위험 원생 관리"),
       fromMenu("withdrawals", "퇴원·수강 종료 기록"),
+      fromMenu("withdrawal_reports", "담임 작성·관리자 승인"),
     ]),
   },
   {
