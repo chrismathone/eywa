@@ -11,6 +11,7 @@ import { summaryOf } from "@/features/dashboard/layout/summary";
 import type { Bundle, Item } from "@/features/dashboard/layout/types";
 import { badgesFor, exposureOf, type Exposure } from "./badges";
 import { WidgetFace } from "./widget-face";
+import { groupTitle, matchesWidget } from "./widget-search";
 import g from "./gallery.module.css";
 
 /** 미리보기 실제 크기 — 캔버스 한 열 폭(넓은 화면 근사)과 칸 안쪽 폭. */
@@ -93,26 +94,39 @@ export function WidgetGallery({
   snapshot: OverviewSnapshot | null;
   onAdd: (id: string, z: SizePreset) => void;
 }) {
+  const [query, setQuery] = useState("");
   const placed = new Set(items.map((i) => i.id));
   const exposure = exposureOf(items, role, menus);
+  // 역할마다 같은 목록(원장 2026-10-14 *"위젯은 똑같이 넣어주고 내가 커스텀"*) — 과목 관리자 배치에도 다 보인다.
+  const shown = CARDS.filter((c) => matchesWidget(c, query));
+  const groups = CARD_GROUPS.map((group) => ({ group, cards: shown.filter((c) => c.group === group) })).filter((x) => x.cards.length);
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(next) => { if (!next) setQuery(""); onOpenChange(next); }}>
       <DialogContent className={`${g.dialog} sm:max-w-5xl`}>
         <DialogTitle>위젯 추가</DialogTitle>
         <DialogDescription>크기를 좌우로 넘겨 보고 ‘+ 추가’를 누르세요. 넣은 카드는 맨 뒤에 붙고, 끌어서 옮길 수 있습니다.</DialogDescription>
+        <input
+          type="search"
+          value={query}
+          onChange={(ev) => setQuery(ev.target.value)}
+          placeholder="위젯 검색 — 이름이나 묶음(예: 수납, 상담, 출결)"
+          aria-label="위젯 검색"
+          className={g.search}
+        />
         <div className={g.scroll}>
-          {CARD_GROUPS.map((group) => (
+          {groups.length ? groups.map(({ group, cards }) => (
             <section key={group} className={g.group} aria-label={group}>
-              <h4>{group === "KPI" ? "숫자 칸(KPI)" : group}</h4>
+              <h4>{groupTitle(group)}</h4>
               <ul className={g.list}>
-                {CARDS.filter((c) => c.group === group && (role !== "subject" || c.subjectScope !== "academy")).map((def) => (
+                {cards.map((def) => (
                   <GalleryCard key={def.id} def={def} placed={placed.has(def.id)} role={role} menus={menus} snapshot={snapshot} exposure={exposure} items={items} onAdd={onAdd} />
                 ))}
               </ul>
             </section>
-          ))}
+          )) : <p className={g.empty}>‘{query.trim()}’에 맞는 위젯이 없습니다.</p>}
         </div>
       </DialogContent>
     </Dialog>
   );
 }
+

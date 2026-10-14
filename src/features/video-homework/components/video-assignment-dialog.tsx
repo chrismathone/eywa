@@ -55,7 +55,7 @@ export function VideoAssignmentDialog({ row, fromDate, toDate, onClose, linked }
         </div>
         {selected ? <div className="space-y-2"><p>현재 연결: {selected.className ?? "반 미지정"} · {assignmentLabel(selected, linked, row.classId)}{selected.postId ? ` · 게시물 ${selected.postId}` : ""}</p>
           {selected.note ? <p className="bg-bg-soft rounded-md px-3 py-2 break-keep">학생 메모: {selected.note}</p> : null}
-          {selected.playback ? <HomeworkVideoPlayer key={selected.id} {...selected.playback} title={`${row.studentName} 배정할 영상`} /> : <p>이 영상은 아직 재생할 수 없습니다.</p>}</div> : null}
+          {selected.playback ? <HomeworkVideoPlayer key={selected.id} videoId={selected.id} {...selected.playback} title={`${row.studentName} 배정할 영상`} /> : <p>이 영상은 아직 재생할 수 없습니다.</p>}</div> : null}
         <label className="block space-y-1"><span>변경 사유</span><input className="border-line w-full rounded border p-2" value={reason} maxLength={300} disabled={busy} onChange={e => setReason(e.target.value)} placeholder="예: 영어 게시물에 잘못 올린 수학 숙제" /></label>
         <p className="text-text-dim">저장하면 영상의 기존 연결이 바뀝니다. 수행 상태는 실제 영상과 제출 기한에 따라 갱신됩니다. 변경 전후와 처리자를 기록합니다.</p>
         {error ? <p role="alert" className="text-danger">{error}</p> : null}

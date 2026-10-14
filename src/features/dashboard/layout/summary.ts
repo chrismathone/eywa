@@ -40,7 +40,7 @@ export function summaryOf(id: string, snap: OverviewSnapshot, opts: { amounts?: 
       const d = v.students?.data;
       if (!d) return null;
       const levels = d.levelSplit?.rows.filter((r) => r.total > 0).slice(0, 3).map((r) => `${r.label} ${n(r.total)}`).join(" · ");
-      return { value: n(d.enrolled), unit: "명", detail: levels || "현재 재원생 구성" };
+      return { value: n(d.academy?.enrolled ?? d.enrolled), unit: "명", detail: levels || "현재 재원생 구성" };
     }
     case "attendance": {
       const a = v.attendance?.data;
@@ -78,7 +78,7 @@ export function summaryOf(id: string, snap: OverviewSnapshot, opts: { amounts?: 
     case "subjects":
       return v.students?.data ? { value: n(v.students.data.concurrent), unit: "명", detail: top(v.students.data.subjects, snap.subjects) || "과목별 수강" } : null;
     case "grades":
-      return v.students?.data ? { value: n(v.students.data.enrolled), unit: "명", detail: "학년별 재원생" } : null;
+      return v.students?.data ? { value: n(v.students.data.academy?.enrolled ?? v.students.data.enrolled), unit: "명", detail: "학년별 재원생" } : null;
     case "schools":
       return v.students?.data ? { value: n(v.students.data.schools.length), unit: "곳", detail: top(v.students.data.schools, {}, 2) } : null;
     case "admissions": {

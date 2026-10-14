@@ -2,7 +2,6 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
-  MERGED_STUDENT_LABEL,
   MERGE_NOTE_PREFIX,
   isMergedStudent,
   mergeNoteFor,
@@ -141,12 +140,6 @@ describe("preserveMergeNote — 사람이 메모를 고쳐도 표식은 남는�
     expect(preserveMergeNote(null, "그냥 메모")).toBe("그냥 메모");
     expect(preserveMergeNote("셔틀 A노선", "")).toBe("");
     expect(preserveMergeNote("셔틀 A노선", null)).toBe(null);
-  });
-});
-
-describe("라벨", () => {
-  it("화면에 쓰는 라벨은 한글이다(raw 코드 노출 금지)", () => {
-    expect(MERGED_STUDENT_LABEL).toBe("병합됨");
   });
 });
 

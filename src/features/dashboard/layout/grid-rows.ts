@@ -26,6 +26,22 @@ export function rowBoundaries(items: readonly Item[]): number[] {
     .filter((y) => !cards.some((i) => i.y < y && y < i.y + i.h));
 }
 
+/**
+ * 우클릭한 자리에서 가장 가까운 행 경계(카드를 가로지르지 않는 곳) — `row`는 행 단위 실수 좌표(0 = 맨 위 경계).
+ * 카드 한가운데를 눌러도 그 카드의 위·아래 경계 중 가까운 쪽으로 붙는다. 같은 거리면 위쪽.
+ */
+export function boundaryNear(items: readonly Item[], row: number): number {
+  const all = rowBoundaries(items);
+  let best = all[0] ?? 0;
+  for (const y of all) if (Math.abs(y - row) < Math.abs(best - row)) best = y;
+  return best;
+}
+
+/** 우클릭한 행(정수)이 들어 있는 '완전히 빈 행' 묶음 — 없으면 null. */
+export function emptyBandAt(items: readonly Item[], row: number): RowBand | null {
+  return emptyRowBands(items).find((b) => b.y <= row && row < b.y + b.h) ?? null;
+}
+
 export function insertGridRows(items: readonly Item[], at: number, count = 1, spaceId = "space:inserted"): Item[] {
   const placed = positionItems(items);
   if (!Number.isInteger(at) || !Number.isInteger(count) || count < 1 || count > MAX_ROW_SPAN || !rowBoundaries(placed).includes(at) || rowsOf(placed) + count > MAX_GRID_Y) return [...items];

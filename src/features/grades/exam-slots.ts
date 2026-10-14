@@ -26,11 +26,15 @@ const DEFAULT_SLOTS: readonly ExamSlotKey[] = ["midterm", "final"];
 
 /**
  * 과목 표준 키별 예외. 여기 없는 과목은 전부 기본 두 칸.
- * ⚠️ 수학의 `내신`·`월말평가`는 원장 2026-09-22 추가 — **수학에만** 세운다(다른 과목은 요청이 없었다).
+ * ⚠️ 수학의 `월말평가`는 원장 2026-09-22 추가 — **수학에만** 세운다(다른 과목은 요청이 없었다).
+ * 🔴 수학 학교 시험은 **중간·기말**이다(원장 2026-10-14 *"성적에서 중간/기말 구분이 필요함"* · *"현재 수학 입력되어있는건
+ *    26년도 2학기 중간으로 전체 분류"*) — 2026-09-23에 둘을 `내신` 한 칸으로 합쳤던 것을(0289a) 되돌렸다. 그때 적힌 수학
+ *    `내신` 49건(전부 2026년 2학기)은 배포 직후 중간고사로 옮기고(`scripts/_oneoff/math-school-to-midterm.mjs`), DB 제약
+ *    0363a가 수학 내신 저장을 막는다. `school` 키·라벨은 옛 행을 읽기 위해서만 남긴다(새로 쓰지 않는다).
  */
 const SLOTS_BY_SUBJECT: Record<string, readonly ExamSlotKey[]> = {
   english: ["listening", "midterm", "final"],
-  math: ["school", "monthly"],
+  math: ["midterm", "final", "monthly"],
 };
 
 /**
@@ -78,7 +82,6 @@ export function isExamSlot(v: unknown): v is ExamSlotKey {
 export function normalizeExamSlot(subjectKey: string, raw: unknown): ExamSlotKey {
   const slots = examSlotsFor(subjectKey);
   const v = typeof raw === "string" ? raw.trim() : "";
-  if (subjectKey === "math" && (v === "midterm" || v === "final")) return "school";
   return isExamSlot(v) && slots.includes(v) ? v : slots[0]!;
 }
 

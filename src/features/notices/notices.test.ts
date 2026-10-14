@@ -4,6 +4,7 @@ import {
   NOTICE_AUDIENCES,
   audienceMatchesRole,
   audiencesForRole,
+  isWithinWindow,
   normalizeNoticeAudience,
   noticesForRole,
   type NoticeAudience,
@@ -92,5 +93,25 @@ describe("dismissUntil", () => {
   it("today=1일, week=7일 뒤", () => {
     expect(dismissUntil("today", NOW)).toBe(NOW + 86_400_000);
     expect(dismissUntil("week", NOW)).toBe(NOW + 7 * 86_400_000);
+  });
+});
+
+describe("isWithinWindow (팝업 노출 기간 — 요청 시각 판정)", () => {
+  const at = (iso: string) => new Date(iso).getTime();
+  it("빈 값은 그쪽 제한 없음", () => {
+    expect(isWithinWindow(null, null, at("2026-10-14T06:58:00Z"))).toBe(true);
+  });
+  it("시작 전은 안 뜨고, 시작 시각부터 뜬다(경계 포함)", () => {
+    const start = "2026-10-14T15:58:00+09:00";
+    expect(isWithinWindow(start, null, at("2026-10-14T15:57:59+09:00"))).toBe(false);
+    expect(isWithinWindow(start, null, at("2026-10-14T15:58:00+09:00"))).toBe(true);
+  });
+  it("종료 시각까지 뜨고 지나면 안 뜬다(경계 포함)", () => {
+    const end = "2026-10-23T18:00:00+09:00";
+    expect(isWithinWindow(null, end, at("2026-10-23T18:00:00+09:00"))).toBe(true);
+    expect(isWithinWindow(null, end, at("2026-10-23T18:00:01+09:00"))).toBe(false);
+  });
+  it("해석 못 하는 값은 띄우지 않는다", () => {
+    expect(isWithinWindow("엉뚱한 값", null, at("2026-10-14T06:58:00Z"))).toBe(false);
   });
 });

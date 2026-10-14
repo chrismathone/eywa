@@ -35,7 +35,7 @@ export function StudentGradeRecords({ rows, studentId, notesById, subjectLabel, 
           <th className={`${th} text-left`}><span className="inline-flex items-center gap-0.5">
             <HeaderFilter paramName="kind" axisLabel="시험" value={filters.kind} options={filters.kinds} /><SortButton sort="kind" view={view} href={href} /></span></th>
           <th className={`${th} text-left`}><span className="inline-flex items-center gap-0.5">
-            <HeaderFilter paramName="fScore" axisLabel="정답률" value={view.score}
+            <HeaderFilter paramName="fScore" axisLabel="점수" value={view.score}
               options={[{ value: "high", label: "90% 이상" }, { value: "mid", label: "60~89%" }, { value: "low", label: "60% 미만" }]} />
             <SortButton sort="score" view={view} href={href} /></span></th>
           <th className={`${th} text-left`}><span className="inline-flex items-center gap-0.5">

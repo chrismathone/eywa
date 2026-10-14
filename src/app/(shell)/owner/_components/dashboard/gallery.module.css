@@ -80,3 +80,24 @@
   gap: 8px;
   font-size: var(--text-sm);
 }
+/* 위젯 검색(원장 2026-10-14) — 머리말 아래 한 줄. 높이는 컨트롤 프리셋, 글자는 토큰. */
+.search {
+  height: var(--control-h, 2.5rem);
+  width: 100%;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  font-size: var(--text-sm);
+  line-height: normal;
+}
+.search:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+.empty {
+  margin: 24px 0;
+  text-align: center;
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+}

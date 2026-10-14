@@ -50,7 +50,8 @@ function narrowStudents(st: OverviewData["students"], groups: readonly string[],
     programs,
   };
   // 학년·학교·수준 구성은 과목으로 못 나뉜다 — 그 칸이 배치에 있을 때만 학원 전체 값을 싣고, 없으면 비운다(안 쓰는 값을 내려보내지 않는다).
-  if (keepAcademyWide) return narrowed;
+  // 그 칸은 '(학원 전체)'로 서므로 재원생 수·미수강도 학원 전체 값을 함께 싣는다 — 좁힌 `enrolled`를 쓰면 한 카드에 두 범위가 섞인다.
+  if (keepAcademyWide) return { ...narrowed, academy: { enrolled: st.enrolled, noEnrollment: p.noEnrollment } };
   return { ...narrowed, levels: [], schools: [], schoolGroups: undefined, levelSplit: undefined, gradeSplit: { rows: [], neither: 0 } };
 }
 

@@ -89,3 +89,14 @@ export function noticesForRole<T extends { audience: string }>(
   }
   return visible;
 }
+
+/**
+ * 팝업 노출 기간 안인가(시작·종료 둘 다 포함, 빈 값 = 그쪽 제한 없음). 요청 시각으로 판정한다 — 캐시 안에서 거르면
+ * 시작 시각이 지나도 캐시 수명 동안 빠진다(server/queries.ts). 해석 못 하는 값은 제한이 없는 것으로 보지 않고 안 띄운다.
+ */
+export function isWithinWindow(startsAt: string | null, endsAt: string | null, now: number): boolean {
+  const starts = startsAt ? new Date(startsAt).getTime() : null;
+  const ends = endsAt ? new Date(endsAt).getTime() : null;
+  if (Number.isNaN(starts) || Number.isNaN(ends)) return false;
+  return (starts === null || starts <= now) && (ends === null || ends >= now);
+}
