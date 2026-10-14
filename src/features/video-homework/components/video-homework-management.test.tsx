@@ -1,11 +1,13 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { VideoHomeworkManagement } from "./video-homework-management";
 import type { VideoArrival, VideoHomeworkLedgerRow, VideoHomeworkMark } from "../types";
 
-const mocks = vi.hoisted(() => ({ save: vi.fn(), success: vi.fn(), error: vi.fn(), reject: vi.fn(), refresh: vi.fn() }));
+const mocks = vi.hoisted(() => ({ save: vi.fn(), success: vi.fn(), error: vi.fn(), reject: vi.fn(), refresh: vi.fn(), options: vi.fn() }));
 vi.mock("../server/actions", () => ({ setVideoHomeworkRound: mocks.save }));
 vi.mock("../server/reject-videos", () => ({ rejectHomeworkVideos: mocks.reject }));
+vi.mock("../server/video-assignment", () => ({ getVideoAssignmentOptions: mocks.options, assignHomeworkVideo: vi.fn() }));
 vi.mock("next/navigation", async (load) => ({ ...(await load<typeof import("next/navigation")>()), useRouter: () => ({ replace: mocks.refresh }) }));
 vi.mock("sonner", () => ({ toast: { success: mocks.success, error: mocks.error } }));
 vi.mock("@/components/embed-link", () => ({ EmbedHiddenInput: () => null }));
@@ -90,6 +92,19 @@ describe("영상 제출 현황 — 회차는 학생별 '숙제가 나간 날' �
     expect(screen.queryByRole("button", { name: "수학 A 조회학생 영상 배정" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "수학 A 배정완료 영상 배정" })).not.toBeInTheDocument();
     expect(cell("배정완료 1회 2026-09-01 완료(영상)")).toBeInTheDocument();
+  });
+  // 2026-10-15 — 장부는 기간 앞뒤를 넓혀 읽어 짝을 짓는다. 기간(9/1~) 안 칸만 보면 8/29 숙제에 자동으로 붙은 9/2 영상이 '연결 안 됨'으로 보였다.
+  it("배정 창은 기간 밖 숙제에 자동으로 붙은 영상도 그 숙제로 말한다", async () => {
+    mocks.options.mockResolvedValue({ ok: true, dates: ["2026-09-01"], videos: [{ id: "early", postedAt: "2026-09-02T10:00:00+09:00", className: "수학 A", classId: "a",
+      homeworkDate: null, source: "ClassNote / Drive", note: null, postId: null, revision: 0, excluded: false, playback: null }] });
+    show({ rows: [row({ assignedDates: ["2026-08-29", "2026-09-01"], canAssignVideos: true, hasAssignableVideos: true })], marks: [],
+      videos: [{ id: "early", classId: "a", studentId: "one", postedAt: "2026-09-02T10:00:00+09:00" }] });
+    expect(cell("김민준 1회 2026-09-01 미확인")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "수학 A 김민준 영상 배정" }));
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("combobox", { name: "영상 선택" }));
+    expect(await screen.findByRole("option", { name: /08\.29 숙제에 자동 연결됨/ })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /연결 안 됨/ })).toBeNull();
   });
   it("열 머리는 N회만, 칸 안에 그 학생의 숙제일 — 숙제가 없는 회차는 —", () => {
     show();
