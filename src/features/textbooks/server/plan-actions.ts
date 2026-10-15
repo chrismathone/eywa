@@ -28,6 +28,7 @@ import { dowKeyOf } from "@/features/class-sheets/lib/week";
 import { slotLiveOnDate } from "@/features/timetable/lib/week";
 import type { MonthScheduleRow } from "@/features/class-sheets/lib/month-assemble";
 import { kstToday } from "@/lib/date-kst";
+import { recordImportBatch, snapshotPlanLines } from "./import-batch";
 import { reportError } from "@/lib/observability/report-error";
 import { planLineFromRow } from "@/features/class-sheets/lib/plan-line";
 import type { PlanLineDTO } from "@/features/class-sheets/server/actions";
@@ -807,7 +808,15 @@ export async function applyTextbookFill(
 
 // ── 가져오기 — 월간계획(일정)을 한 달치 **실제**로 옮긴다 ────────────────────────
 
-export type ImportPlannedResult = { ok: true; result: ApplyResult; cells: number } | { ok: false; error: string };
+export type ImportPlannedResult =
+  | {
+      ok: true;
+      result: ApplyResult;
+      cells: number;
+      /** 되돌리기 기록 id — 바뀐 칸이 없거나 기록을 못 남겼으면(표 미적용 등) null. 알림의 [실행 취소]가 쓴다. */
+      undoBatchId: string | null;
+    }
+  | { ok: false; error: string };
 
 /** 한 번에 가져올 수 있는 날 수 — 세션 한 달(최대 ~40일)을 넉넉히 덮는 상한. 락·시간 예산 가드. */
 const IMPORT_MAX_DAYS = 62;
@@ -863,6 +872,14 @@ export async function importPlannedRange(input: {
     groups.set(key, [...(groups.get(key) ?? []), l]);
   }
 
+  // 되돌리기 기록용 — 가져오기 **전** 모습. 못 읽으면 가져오기는 그대로 하고 되돌리기만 없다.
+  const before = await snapshotPlanLines(admin, gate.access.tenantId, input.classId, input.from, input.to).catch(
+    (e: unknown) => {
+      reportError(e, { scope: "textbooks.import-batch.snapshot", classId: input.classId });
+      return null;
+    },
+  );
+
   const total: ApplyResult = { applied: 0, filled: 0, added: 0, skipped: 0, truncated: 0 };
   for (const group of groups.values()) {
     const head = group[0]!;
@@ -896,6 +913,19 @@ export async function importPlannedRange(input: {
     }
   }
 
+  const undoBatchId =
+    before && total.added + total.filled > 0
+      ? await recordImportBatch({
+          admin,
+          tenantId: gate.access.tenantId,
+          classId: input.classId,
+          from: input.from,
+          to: input.to,
+          actorId: gate.access.user.id,
+          before,
+        })
+      : null;
+
   await logAction({
     action: "textbook_plan_import",
     targetType: "class",
@@ -905,7 +935,7 @@ export async function importPlannedRange(input: {
   // 실제 줄이 바뀌었다 — 그 반의 시트·월간을 통째로 무효화한다([[#102]] 계열 — `"layout"` 필수).
   revalidatePath(`/ecs/${input.classId}`, "layout");
   revalidatePath("/ecs");
-  return { ok: true, result: total, cells: cells.length };
+  return { ok: true, result: total, cells: cells.length, undoBatchId };
 }
 
 // ── 회차 미루기·당기기 — 그 칸에서 차수를 어떻게 할지 ─────────────────────────

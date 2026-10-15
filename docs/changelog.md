@@ -1,5 +1,10 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-10-15 — 월간계획 전체 가져오기 되돌리기
+
+- 원장 *"월간계획 전체 가져왔을때 실행취소 하는 방법이 필요"* → 툴바 상시 버튼은 어색하다는 의견으로 **알림의 [실행 취소](10초) + 가져오기 버튼 옆 ▾ 메뉴 "마지막 가져오기 되돌리기 (날짜 시각 · N줄)"**. ▾는 되돌릴 가져오기가 있을 때만 선다.
+- 가져오기 앞뒤 차이를 `class_plan_import_batches`(**SQL `20261015170000` 손으로 적용 필요**)에 기록 → 되돌리기는 손대지 않은 칸만 원래대로(고쳐 쓴·옮긴 줄은 남기고 수를 알림). 규칙 = [`import-undo.ts`](../src/features/textbooks/import-undo.ts) · 버튼 = [`import-plan-button.tsx`](../src/features/class-sheets/components/import-plan-button.tsx). 가드 = `import-undo.test.ts` 5건 + `textbooks-wiring` 1건.
+
 ## 2026-10-15 — 필터 10분 초기화: 새로 열 때 10분 넘게 안 본 화면이면 필터는 기본값
 
 - 원장 *"상단 필터 다시 접속하면 필터 초기화하게"* → *"필터는 10분이상 페이지 재접속하지 않으면 리셋되도록"* → *"다른 필터들도 같은 방식 적용"*. 행을 좁히는 필터와 쪽 번호만 되돌리고 정렬·기간·탭·보기·글자 크기는 그대로(결정 = [`docs/decisions/shell.md`](decisions/shell.md) 10-15 항).

@@ -1,5 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { loadLastImport, type LastImport } from "@/features/textbooks/server/import-batch";
 import { eieModuleOn } from "./eie-on";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 // 슬롯 담당 해석 — 주간 시트(`queries.ts`)·시간표 3뷰와 **같은 두 함수**를 쓴다(갈리면 같은 교시가
@@ -102,6 +103,8 @@ export type ClassSheetMonthData = {
   lessonIndex: LessonIndex;
   /** 미루기·당기기 표식(0282a) — `"날짜|교시"` → `skip` | `advance`. 달력의 토글 상태다. */
   shiftBySlot: Record<string, "skip" | "advance">;
+  /** 그 반의 마지막 월간계획 가져오기(되돌릴 수 있는 것만) — 가져오기 버튼 옆 ▾ 메뉴. 없으면 null. */
+  lastImport: LastImport | null;
   /** 계획 줄 전체(평면) — 경고 판정·목표 대조가 날짜를 넘나들며 쓴다. */
   lines: MonthPlanLine[];
   /** `YYYY-MM-DD|HH:MM` → 교시 라벨(표시 전용, 학원설정이 단일 소스). */
@@ -267,7 +270,7 @@ export async function getClassSheetMonth(
   const footerDate = mpFooterDate(month);
 
   // 독립 조회는 병렬(B4). 계획 줄만 페이지네이션 — 20줄 × 40교시면 이론상 1,000행에 닿는다(B2).
-  const [scheduleRes, lineRows, goalRes, settings, mpRes, teacherRes, memoRes, roomsRes, labelMap, plannedRes] =
+  const [scheduleRes, lineRows, goalRes, settings, mpRes, teacherRes, memoRes, roomsRes, labelMap, plannedRes, lastImport] =
     await Promise.all([
     admin
       .from("class_schedules")
@@ -350,6 +353,8 @@ export async function getClassSheetMonth(
       from,
       to,
     }),
+    // 마지막 가져오기(되돌리기 ▾ 메뉴) — 쓰기 권한이 있을 때만 읽는다. 표가 없거나 실패해도 null([[#95]]).
+    access.canWrite ? loadLastImport(admin, access.tenantId, classId) : Promise.resolve(null),
   ]);
 
   if (scheduleRes.error) return { ok: false, error: "시간표를 불러오지 못했습니다" };
@@ -547,6 +552,7 @@ export async function getClassSheetMonth(
       plannedBySlot: plannedRes.baselineByCell,
       lessonIndex: plannedRes.lessonIndex,
       shiftBySlot: plannedRes.shiftByCell,
+      lastImport,
       lines,
       periodLabelBySlot,
       goals,

@@ -264,8 +264,28 @@ describe("교재 배정 — 계획과 실제를 가른다", () => {
     const table = read("src", "features", "class-sheets", "components", "plan-table.tsx");
     expect(table).not.toContain("plan.fromPlan");
     expect(table).toContain("PlanCompareButton");
+    // 버튼은 되돌리기와 함께 `ImportPlanButton`으로 나갔다(2026-10-15).
     const month = read("src", "features", "class-sheets", "components", "month-client.tsx");
-    expect(month).toContain("importPlannedRange");
+    expect(month).toContain("<ImportPlanButton");
+    const button = read("src", "features", "class-sheets", "components", "import-plan-button.tsx");
+    expect(button).toContain("importPlannedRange");
+  });
+
+  it("🔴 가져오기는 되돌릴 수 있다 — 알림 [실행 취소] + ▾ 메뉴, 손대지 않은 칸만(원장 2026-10-15)", () => {
+    const button = read("src", "features", "class-sheets", "components", "import-plan-button.tsx");
+    expect(button).toContain("undoPlanImport");
+    expect(button).toContain("month.importUndo.action"); // 알림의 [실행 취소]
+    expect(button).toContain("month.importUndo.menu"); // ▾ 메뉴
+    // 가져오기가 기록을 남기고(앞 스냅숏 → 뒤 차이) 되돌리기는 같은 쓰기 게이트를 탄다.
+    const importFn = plan.slice(plan.indexOf("export async function importPlannedRange"));
+    expect(importFn).toContain("snapshotPlanLines(");
+    expect(importFn).toContain("recordImportBatch(");
+    const undo = read("src", "features", "textbooks", "server", "import-undo-actions.ts");
+    expect(undo).toContain("requireEcsClassAccess(input.classId, { write: true })");
+    expect(undo).toContain("planUndo(");
+    // 표가 없어도 가져오기·월간 화면은 산다([[#95]]).
+    const batch = read("src", "features", "textbooks", "server", "import-batch.ts");
+    expect(batch).toContain('"PGRST205"');
   });
 
   it("🔴 시트가 못 읽어도 죽지 않는다 — 0266a 미적용이면 빈 계획으로 돈다", () => {
