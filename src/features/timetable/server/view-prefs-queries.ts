@@ -7,6 +7,7 @@ import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { parseViewPrefs, type TimetableViewPrefs } from "../lib/view-prefs";
+import { freshSavedFilters } from "@/lib/filter-reset/server";
 
 type EntryPreferences = { viewPrefs: TimetableViewPrefs; subjects: string[] };
 const subjectKeys = (value: unknown): string[] =>
@@ -41,9 +42,16 @@ export const getMyTimetableViewPrefs = cache(async (): Promise<TimetableViewPref
   return (await getMyTimetableAccountPreferences()).viewPrefs;
 });
 
-/** 일반 진입은 기존 계정 설정 조회 한 번으로 끝난다. 다른 강사 뷰만 그 강사의 담당 과목을 읽는다. */
+/**
+ * 일반 진입은 기존 계정 설정 조회 한 번으로 끝난다. 다른 강사 뷰만 그 강사의 담당 과목을 읽는다.
+ * 화면 진입이라 필터(학년·영어 구분)는 10분 규칙을 지난다 — 10분 넘게 안 본 시간표면 기본값으로(원장 2026-10-15,
+ * src/lib/filter-reset/rules.ts). 다른 표시 설정은 그대로. 다른 곳(내보내기 등)이 읽는 `getMyTimetableViewPrefs`는 거르지 않는다.
+ */
 export const getTimetableEntryPreferences = cache(async (): Promise<EntryPreferences> => {
-  const ownPromise = getMyTimetableAccountPreferences();
+  const ownPromise = getMyTimetableAccountPreferences().then(async (own) => ({
+    ...own,
+    viewPrefs: await freshSavedFilters("timetable", own.viewPrefs, parseViewPrefs(null)),
+  }));
   const [user, teacherId] = await Promise.all([getCurrentUser(), effectiveTeacherId()]);
   if (!user || !teacherId || teacherId === user.id) return ownPromise;
   // 임의 id를 받지 않고 검증된 뷰 대상만 읽는다. 표시 선호는 여전히 로그인한 본인의 것이다.

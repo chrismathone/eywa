@@ -67,3 +67,11 @@ function getServerSnapshot() {
 export function useIsDesktop() {
   return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }
+
+/**
+ * 지금 이 문서가 데스크톱 셸인가 — **효과 안에서 한 번 묻는 자리**용(필터 기록기 `filter-seen-tracker.tsx`).
+ * 훅은 하이드레이션 첫 렌더에 서버 스냅샷(false)을 돌려줘서, 그 렌더의 효과는 잠깐 틀린 값을 본다.
+ */
+export function isDesktopNow(): boolean {
+  return getSnapshot();
+}

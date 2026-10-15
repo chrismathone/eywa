@@ -61,6 +61,7 @@ import { EmbedFocusSignal } from "@/components/workspace/embed-focus-signal";
 import { EmbedRefreshListener } from "@/components/workspace/embed-refresh-listener";
 import { EmbedUrlKeeper } from "@/components/workspace/embed-url-keeper";
 import { UsageTracker } from "@/features/usage/usage-tracker";
+import { FilterSeenTracker } from "@/components/filter-seen-tracker";
 import { WindowMinSizeNotice } from "@/components/workspace/window-min-size-notice";
 import { HideInFrame } from "@/components/workspace/hide-in-frame";
 import { ScreenHelpOverlay } from "@/components/help/screen-help-overlay";
@@ -194,6 +195,8 @@ export default async function ShellLayout({ children }: { children: ReactNode })
             <Suspense fallback={null}>
               <UsageTracker />
             </Suspense>
+            {/* 필터 10분 초기화 — 이 화면을 마지막으로 본 시각(src/lib/filter-reset/rules.ts). 그리는 것 없음. */}
+            <FilterSeenTracker />
             {/* 창 안에서도 Shift+F/Ctrl·Cmd+K로 검색 팰릿 — keydown은 프레임을 못 넘어 postMessage 포워딩. */}
             <PaletteHotkeyForward />
             {/* 창이 그 메뉴의 최소 크기(ROUTE_WINDOW_SIZE)보다 작으면 맨 위에 안내 — 화면은 접지 않는다(원장 2026-09-03). */}
@@ -412,6 +415,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
             <Suspense fallback={null}>
               <UsageTracker />
             </Suspense>
+            <FilterSeenTracker />
             {children}
           </OperationsProvider></EditPresenceProvider>
         </main>
@@ -523,6 +527,8 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           <Suspense fallback={null}>
             <UsageTracker />
           </Suspense>
+          {/* 필터 10분 초기화의 기록기 — 창 엔진을 쓰는 데스크톱(창 모드·이전 화면 유지)에선 쉬고 창 문서가 적는다(filter-seen-tracker.tsx). */}
+          <FilterSeenTracker />
           <EditPresenceProvider trackDisabled={viewAs?.access === "readonly" || !!user.tenantView} user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}>
             {/* 배경(운영실) F1 은 창(z-40) 아래 — 창을 보고 있는데 대시보드 설명이 덮이지 않게. */}
             <ScreenHelpOverlay beneathWindows />

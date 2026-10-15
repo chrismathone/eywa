@@ -29,6 +29,7 @@ import type { OtherSpan } from "@/features/attendance/enrollment-span";
 import { userTaughtClassSet } from "@/features/attendance/live/server/write-policy";
 import { isWithinAttendanceEditWindow } from "@/features/attendance/edit-window";
 import { readEcsFontSize, type EcsFontSize } from "../font-size";
+import { freshRawUiPrefs } from "@/lib/filter-reset/server";
 import {
   DEFAULT_ECS_ENGLISH_TRACK,
   readEcsCollapsedRosterGroups,
@@ -816,6 +817,11 @@ export type SheetLandingEmptyReason =
 
 export async function getSheetLanding(
   weekParam?: string | null,
+  /**
+   * 영어 시트 화면에서 부를 때 true — 10분 넘게 안 본 영어 시트면 프로그램·담임 필터를 기본값으로 쓰고 저장값도 지운다(원장 2026-10-15,
+   * src/lib/filter-reset/rules.ts). 운영실 카드 같은 다른 곳은 종전대로 저장값을 읽고 아무것도 지우지 않는다.
+   */
+  options: { resetStaleFilters?: boolean } = {},
 ): Promise<
   | {
       ok: true;
@@ -903,11 +909,13 @@ export async function getSheetLanding(
         ).data?.ui_prefs
       : prefsRes.data?.ui_prefs,
   );
+  // 프로그램·담임 필터는 10분 넘게 안 본 영어 시트면 기본값(원장 2026-10-15 — src/lib/filter-reset/rules.ts). 순서는 위에서 그대로 읽었다.
+  const myPrefs = options.resetStaleFilters ? await freshRawUiPrefs("ecs", prefsRes.data?.ui_prefs) : prefsRes.data?.ui_prefs;
   // EiE 구분(모듈)이 꺼진 학원은 프로그램 필터가 없다 — 저장된 옛 선택이 목록을 몰래 좁히지 않게 항상 '전체'(2026-09-30).
   const trackFilter: EnglishTrackFilter = isModuleEnabled(settings.modules.disabled, "eie")
-    ? readEcsEnglishTrack(prefsRes.data?.ui_prefs)
+    ? readEcsEnglishTrack(myPrefs)
     : "all";
-  const storedTeacher = readEcsTeacher(prefsRes.data?.ui_prefs);
+  const storedTeacher = readEcsTeacher(myPrefs);
   // 강사 스코프는 JS 교집합(스코프 id를 .in에 넣지 않는다 — 대량 .in 상한/silent cap 회피, B3).
   // 담당 반 ∪ 부담임 반 ∪ **임시 위임 반**(ecsVisibleClassFilter — 게이트 requireEcsClassAccess와 같은
   // 세 갈래. 갈라지면 "목록엔 뜨는데 열면 거절" → ecs-scope-sources.test.ts가 두 곳을 함께 잠근다).

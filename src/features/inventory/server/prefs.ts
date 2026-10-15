@@ -2,6 +2,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { freshSavedFilters } from "@/lib/filter-reset/server";
 import { parseInventoryPrefs, type InventoryPrefs } from "../prefs";
 
 /**
@@ -43,5 +44,6 @@ export async function loadInventoryPrefs(): Promise<InventoryPrefs> {
   const admin = createAdminClient();
   const { data } = await admin.from("users").select("ui_prefs").eq("id", user.id).eq("tenant_id", user.tenantId).maybeSingle();
   const raw = data?.ui_prefs as Record<string, unknown> | null | undefined;
-  return parseInventoryPrefs(raw?.inventory);
+  // 10분 넘게 안 본 화면이면 필터만 기본값으로(원장 2026-10-15 — src/lib/filter-reset/rules.ts).
+  return freshSavedFilters("inventory", parseInventoryPrefs(raw?.inventory), parseInventoryPrefs(undefined));
 }

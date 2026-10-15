@@ -163,7 +163,7 @@ export default async function EcsLandingPage({
       />
     );
   }
-  const res = await getSheetLanding(week ?? null);
+  const res = await getSheetLanding(week ?? null, { resetStaleFilters: true });
 
   if (!res.ok) {
     return (

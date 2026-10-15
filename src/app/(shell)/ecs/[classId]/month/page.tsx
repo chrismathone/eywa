@@ -42,7 +42,7 @@ export default async function EcsMonthPage({
   const [res, landing, textbookOptions, settings] = await Promise.all([
     // `week`도 넘긴다 — 세션 축이면 '왔던 주'가 든 세션을 연다(주소의 달은 달력 기준이라 경계에서 틀린다).
     getClassSheetMonth(classId, month ?? null, { period, week }),
-    getSheetLanding(null), // 반 전환 드롭다운(주간 시트와 같은 스코프)
+    getSheetLanding(null, { resetStaleFilters: true }), // 반 전환 드롭다운(주간 시트와 같은 스코프)
     // '그 날 고치기' 창이 주간 시트와 같은 계획 표를 쓴다 — 제안 목록도 같이 내려준다(B4: 같은 묶음).
     loadEcsTextbookOptions(),
     // [교재 배정] 입구 — 교재목록 모듈을 끈 학원엔 세우지 않는다(서버 액션도 같은 판정으로 거절한다, #77).
