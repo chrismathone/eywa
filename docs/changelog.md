@@ -1,5 +1,11 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-10-15 — 퇴원관리 분석 보강 1차: 과목 · 강사 · 학년 · 학교 축 · 장부 정리 분리 · 사유 막대 눌러 보기
+
+- 원장 *"과목별을 기본으로 강사별, 학년별, 학교별 통계 … 강사는 누구지, 몇학년이지, 어느 학교가 많이 그만두지"* → '과목별 분포' 자리에 축 전환 카드([`breakdown-card.tsx`](../src/app/(shell)/withdrawals/_components/breakdown-card.tsx)) · 칸을 누르면 명단이 걸러진다(`grade=` · `school=` · `teacher=` · 툴바 칩) · 축은 계정 귀속. 결정 = [`docs/decisions/students.md`](decisions/students.md).
+- 강사 = 시간표 X의 담당 선생님 판정을 [`exit-teacher-judge.ts`](../src/features/withdrawals/server/exit-teacher-judge.ts)로 꺼내 두 화면이 같은 함수 · 달별 퇴원율은 물어본 달만 계산(`churnMonthsFor` 폐지 — X가 기준 달 앞뒤 밖에서 끝난 수강의 선생님을 못 찾던 것도 함께 풀림).
+- 원장 *"퇴원사유 대부분이 기타이니 … 눌러서 들어가 볼 수 있게"* → 장부 정리(일괄 퇴원 메모 153건)를 사유 통계에서 따로 · 사유 막대를 누르면 명단 · 명단 줄에 사유·메모 · 자유 글 사유('반 폐지')는 기타로 뭉개지 않음([`reasonFacetOf`](../src/features/withdrawals/breakdown.ts)). 사유 2단계 세분화(대분류·세부 약 50)는 2차.
+
 ## 2026-10-15 — 퇴원관리 '등록 후 3개월 내 퇴원' 추적 + 운영실 위젯
 
 - 원장 *"등록일 기준으로 3개월 이내에 퇴원한 학생들을 추적하려고 해. 1개월, 2개월, 3개월을 기간으로 두고"* + *"대시보드에서도 볼 수 있게 위젯으로도"*. 판정 한 벌 = [`early-exit.ts`](../src/features/withdrawals/early-exit.ts): 등록일 = `students.enrolled_at`(신규생 관리와 같은 칸) · 1·2·3개월 = **30·60·90일, 양끝 포함, 누적** · **퇴원만**(수강종료는 학생 등록일과 그 과목 시작이 달라 같은 잣대가 아니다) · 판정 못 하는 퇴원(등록일 없음 · 퇴원일이 등록일보다 앞섬 — 침산 5건 · 시스템 정리)은 세지 않고 '등록일로 판정할 수 없는 N명 제외'로 밝힌다.

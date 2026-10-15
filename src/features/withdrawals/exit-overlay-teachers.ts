@@ -6,20 +6,9 @@
  *    `ChurnView`로 넘기고, 여기서는 줄 → 그 퇴원을 퇴원율에 넣은 선생님, 달 → 퇴원율 0인 선생님을 꺼낸다.
  *    (전에는 학생 상세 '지난 수업'의 추정 — 보고서 작성자·출결 — 을 썼다. 강사평가와 다른 선생님이 붙었다.)
  */
-import { shiftMonth } from "@/lib/date-kst";
 import { exitDayOf, type EndedRowRef, type ExitClassRef } from "./reason-key";
 
 const byKo = (a: string, b: string) => a.localeCompare(b, "ko");
-
-/**
- * 퇴원율을 돌릴 달 — 석 달 열 + 앞뒤 한 달(이번 달을 넘지 않는다). 열은 퇴원일의 달인데 퇴원율은 **수강이 끝난 달**로
- * 세므로 한 달 어긋난 줄(퇴원 8/31 · 수강 9/1 끝)도 찾게 앞뒤로 넓힌다. 🔴 어느 달을 기준으로 열어도 같은 줄은 같은
- * 선생님이어야 한다(적대 리뷰 2026-10-14 — 기준 달을 넘길 때마다 담당이 바뀌었다) → 재료의 끝은 서버가 이번 달 말일로 고정한다.
- */
-export function churnMonthsFor(anchor: string, thisMonth: string): string[] {
-  const next = shiftMonth(anchor, 1);
-  return [...(next <= thisMonth ? [next] : []), anchor, shiftMonth(anchor, -1), shiftMonth(anchor, -2), shiftMonth(anchor, -3)];
-}
 
 /**
  * 줄의 퇴원을 퇴원율에서 찾을 달 — 퇴원율이 그만둔 날로 보는 날(종료일과 반이 닫힌 날 중 이른 날 · 하루도 안 다닌 줄은 뺀다 —
@@ -38,14 +27,18 @@ export function churnMonthOf(ended: readonly EndedRowRef[], date: string, classO
 /** X가 '함께 끝난 수강'을 찾는 폭 — 퇴원일보다 넉 달 앞까지(수강종료로 남아 있다가 늦게 퇴원 처리된 학생). 재료는 그보다 넓게 읽는다. */
 export const OVERLAY_LOOKBACK_DAYS = 120;
 
-/** 한 달 퇴원율 결과(`YYYY-MM` → …). */
+/**
+ * 한 달 퇴원율 결과(`YYYY-MM` → …). 퇴원율은 **수강이 끝난 달**로 세므로 줄의 달(퇴원일)과 어긋날 수 있다 — 달은 물어볼 때
+ * 계산한다(`server/exit-teacher-judge.ts`). 🔴 어느 달을 기준으로 열어도 같은 줄은 같은 선생님이어야 한다(적대 리뷰 2026-10-14)
+ * → 재료의 끝은 서버가 이번 달 말일로 고정한다.
+ */
 export type ChurnMonth = {
   /** 선생님 id → 그 달 퇴원율 분자(학생 · 그 선생님에게서 끊은 과목). */
   detail: ReadonlyMap<string, readonly { studentId: string; subjects: readonly string[] }[]>;
   /** 분모가 있는 선생님 id → 분모 학생을 가르친 과목. */
   eligible: ReadonlyMap<string, ReadonlySet<string>>;
 };
-export type ChurnView = ReadonlyMap<string, ChurnMonth>;
+export type ChurnView = { get(month: string): ChurnMonth | undefined };
 
 /** 이 학생의 이 과목 퇴원을 `month` 퇴원율에 넣은 선생님 id(가나다는 이름을 안 뒤에). 없으면 빈 배열 = 선생님 미반영. */
 export function churnTeachersOf(view: ChurnView, studentId: string, subject: string, month: string): string[] {

@@ -6,7 +6,7 @@ import { isMergedStudent } from "@/features/students/merged";
 import { REASON_LABEL, normalizeReason, type WithdrawalMetadata } from "../types";
 import { countsForSubjectExit, getEndedSubjects } from "../subject-ended";
 import { isSpecialLecture } from "@/features/classes/special-lecture";
-import { isSystemBulkWithdrawal } from "../system-bulk";
+import { isCleanupWithdrawal, isSystemBulkWithdrawal } from "../system-bulk";
 import { endedTogether, lastEndedByStudent, pickLastEnded, type EndedClassRef } from "../window";
 import { withdrawalSubjects } from "../exit-rows";
 import { lastClassOf, loadEndedEnrollments } from "./window";
@@ -38,6 +38,10 @@ export type WithdrawalRow = {
   systemBulk: boolean;
   /** 퇴원 무렵 끝난 수강의 과목 전부(`withdrawalSubjects`) — 과목 필터가 본다. 상세 화면은 안 채운다. */
   exitSubjects?: string[];
+  /** 퇴원 메모 원문(`withdrawal_metadata.memo` — 사유가 없어도) — 퇴원관리 명단의 사유 칸. 상세 화면은 안 채운다. */
+  memoText?: string | null;
+  /** 장부 정리 일괄 퇴원(`isCleanupWithdrawal` — 실제 사유가 아니다). 상세 화면은 안 채운다. */
+  cleanup?: boolean;
 };
 
 function parseMetadata(raw: unknown): WithdrawalMetadata | null {
@@ -98,6 +102,9 @@ export async function getWithdrawnStudents(): Promise<WithdrawalRow[]> {
     // 수강(종료) 이력 유무 = '시스템 정리(날짜 미상)' 판정 입력. lastClassName은 반 조인 실패로도 null이 될 수
     // 있어 신뢰할 수 없으므로, **enrollment 행의 존재 자체**로 본다.
     const hasEnrollmentHistory = !!lastRow;
+    // 메모는 사유와 따로 읽는다 — `parseMetadata`는 사유가 없으면 메타데이터를 통째로 버린다(장부 정리 메모는 사유가 비기도 한다).
+    const rawMemo = (s.withdrawal_metadata as { memo?: unknown } | null)?.memo;
+    const memoText = typeof rawMemo === "string" && rawMemo.trim() ? rawMemo.trim() : null;
     return {
       id: s.id,
       name: s.name,
@@ -113,6 +120,8 @@ export async function getWithdrawnStudents(): Promise<WithdrawalRow[]> {
       hasEnrollmentHistory,
       systemBulk: isSystemBulkWithdrawal({ withdrawnAt: s.withdrawn_at, hasEnrollmentHistory }),
       exitSubjects: withdrawalSubjects(endedByStudent.get(s.id) ?? []),
+      memoText,
+      cleanup: isCleanupWithdrawal(memoText),
     };
   });
 }
