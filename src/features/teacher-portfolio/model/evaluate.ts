@@ -3,6 +3,7 @@
  * 계산 코드는 수치만 내고, 몇 점인지는 여기서 설정이 정한다(원장 2026-10-13 *"가능한 모든것을 커스터마이징"*).
  *
  * - 자료가 없으면(`raw` null) 지표의 '자료가 없을 때' 규칙: 0점(기본) · 만점 · 합계에서 제외.
+ *   예외 = 급여 비율의 새로 온 선생님(지난달 담당 반 없음 · `newcomer`)은 규칙과 상관없이 합계에서 제외(원장 2026-10-15).
  * - 끈 지표는 저장은 하되(설정 미리보기가 그 수치를 쓴다) 화면·합계엔 없다.
  * - 총점 = 합계에 든 점수의 합, 만점 = 그 지표들 만점의 합 — 100점이 아니어도 된다.
  */
@@ -38,7 +39,7 @@ function scoreItem<M extends Metric>(m: M, s: MetricSetting): M {
   const raw = m.raw ?? null;
   if (raw === null) {
     m.missing = true;
-    m.value = missingPoints(s);
+    m.value = (m as { newcomer?: boolean }).newcomer ? null : missingPoints(s);
     m.gap = m.gap ?? "자료 없음";
   } else {
     delete m.missing;

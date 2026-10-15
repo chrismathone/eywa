@@ -61,4 +61,21 @@ describe("매출 대비 급여", () => {
     const waiting = payRatioItem(payRatioOf(facts({ sheetPay: null, payPending: true }), null, null, "2026-09"));
     expect(waiting.basis).toBe("지난달(9월) 값 · 출석부 실급여(급여명세서 수업료와 같은 계산)가 아직 다 잡히지 않았습니다 — 급여를 직접 입력할 수 있습니다");
   });
+  it("지난달 담당 반이 없던 새 선생님은 합계에서 제외 표식 — 그 달 값으로 매기는 달엔 없다(원장 2026-10-15)", () => {
+    const none = facts({ revenue: null, rows: 0, billedRows: 0, classes: 0, students: 0, enrollments: 0 });
+    const r = payRatioOf(none, 3_000_000, null, "2026-09");
+    expect(r).toMatchObject({ raw: null, newcomer: true, retry: false, problem: "그 달 담당 반이 없습니다(새로 맡은 선생님 — 합계에서 제외)" });
+    expect(payRatioItem(r)).toMatchObject({ newcomer: true, basis: "지난달(9월) 값 · 그 달 담당 반이 없습니다(새로 맡은 선생님 — 합계에서 제외)" });
+    expect(payRatioOf(none, 3_000_000, null)?.newcomer).toBeUndefined();
+    // 조회 실패로 빈 재료(emptyFacts)는 새 선생님이 아니다 — 다시 셀 칸.
+    expect(payRatioOf({ ...none, problem: "출석부를 읽지 못했습니다", retry: true }, null, null, "2026-09")?.newcomer).toBeUndefined();
+    expect(payRatioOf(facts(), 3_000_000, null, "2026-09")?.newcomer).toBeUndefined();
+  });
+  it("반별 비중은 근거 줄로 싣는다 — 금액은 없다(원장 2026-10-15)", () => {
+    const byClass = [{ className: "A반", students: 10, rows: 10, billed: 10, share: 60 }, { className: "B반", students: 5, rows: 5, billed: 4, share: 40 }];
+    const item = payRatioItem(payRatioOf(facts({ byClass }), 3_000_000, null, "2026-09"));
+    expect(item.detail).toEqual(byClass);
+    expect(JSON.stringify(item)).not.toMatch(/9000000|3000000|3600000/);
+    expect(payRatioItem(payRatioOf(facts(), 3_000_000, null)).detail).toEqual([]);
+  });
 });
