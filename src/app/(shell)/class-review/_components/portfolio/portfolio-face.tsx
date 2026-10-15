@@ -15,6 +15,10 @@ export async function PortfolioFace({ role, teacherId }: { role: SystemRole; tea
   const [view, canRefresh, prefs] = await Promise.all([getPortfolioView({ teacherId }), canWriteTenant(role, "class_review"), readMyUiPrefs()]);
   // 항목별 내역 '점수 기준' 상자 접힘 — 계정 귀속(원장 2026-10-14 *"접고 펼치기해서 컴팩트 가능하게"*).
   const ruleCollapsed = (prefs.portfolio as { ruleCollapsed?: unknown } | undefined)?.ruleCollapsed === true;
+  // 직원 비교 표의 정렬 — 계정 귀속(모든 뷰 세팅). 모양이 틀리면 기본(총점 높은 순).
+  const saved = (prefs.portfolio as { compareSort?: { key?: unknown; dir?: unknown } } | undefined)?.compareSort;
+  const compareSort = typeof saved?.key === "string" && (saved.dir === "asc" || saved.dir === "desc")
+    ? { key: saved.key, dir: saved.dir as "asc" | "desc" } : undefined;
   if (!view) return <EmptyState compact title="직원 포트폴리오를 볼 권한이 없습니다" />;
   if (view.state !== "ready") {
     return view.state === "tableMissing"
@@ -27,7 +31,7 @@ export async function PortfolioFace({ role, teacherId }: { role: SystemRole; tea
   const computedAt = view.selected.periods[0]?.closing.computedAt ?? null;
   const day = kstDateOf(computedAt);
   return (
-    <PortfolioBoard teachers={view.teachers} selected={view.selected} studentNames={view.studentNames} canRefresh={canRefresh} ruleCollapsed={ruleCollapsed}
+    <PortfolioBoard teachers={view.teachers} selected={view.selected} studentNames={view.studentNames} canRefresh={canRefresh} ruleCollapsed={ruleCollapsed} compareSort={compareSort}
       computedLabel={day ? `${dayLabel(day)} ${kstTimeOf(computedAt) ?? ""}`.trim() : "—"} />
   );
 }

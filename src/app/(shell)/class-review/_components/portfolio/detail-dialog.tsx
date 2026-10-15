@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { Dialog, DialogClose, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { PENDING_IDS } from "@/features/teacher-portfolio/model/pending";
+import { SOURCE_IDS } from "@/features/teacher-portfolio/model/pending";
 import { referenceLabel } from "@/features/teacher-portfolio/model/pre-record";
 import { METRIC_META } from "@/features/teacher-portfolio/evaluation/catalog";
 import { MISSING_LABEL, isManualId, type BuiltinMetricId } from "@/features/teacher-portfolio/evaluation/config";
@@ -95,8 +95,8 @@ function Ledger({ period, teacherName }: { period: StoredPeriod; teacherName: st
   );
 }
 
-/** 근거 카드가 설명·규칙을 직접 적는 항목(직접 입력 · 원생 소개 · 계산 전 지표 — 계산 전에 매긴 옛 달 포함). */
-const selfExplained = (m: Pick<Metric, "id" | "uncounted">) => isManualId(m.id) || m.id === "expansion" || Boolean(m.uncounted) || (PENDING_IDS as readonly string[]).includes(m.id);
+/** 근거 카드가 설명·규칙을 직접 적는 항목(직접 입력 · 원생 소개 · 성적·만족도·근태 · 계산 전에 매긴 옛 달). */
+const selfExplained = (m: Pick<Metric, "id" | "uncounted">) => isManualId(m.id) || m.id === "expansion" || Boolean(m.uncounted) || (SOURCE_IDS as readonly string[]).includes(m.id);
 
 export function DetailDialog({ target, onClose, periods, teacherName, evidence }: {
   target: DetailTarget | null; onClose: () => void; periods: readonly StoredPeriod[]; teacherName: string; evidence: EvidenceProps;

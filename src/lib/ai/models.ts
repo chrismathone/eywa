@@ -61,10 +61,11 @@ export const FEATURE_KEY_GROUP: Readonly<Record<string, AiKeyGroup>> = {
   student_care: "consultations",
   // 운영실 일일 브리핑
   daily_briefing: "briefing",
-  // 출결 — 요약 · 학부모 결석 문자 판별
+  // 출결 — 요약 · 학부모 결석 문자 판별 · 학부모 글 만족도(강사평가 — 같은 학부모 글 분류 계열, 애매한 글만)
   attendance_recap: "attendance",
   parent_attendance_intent: "attendance",
   parent_attendance_jev_shadow: "attendance",
+  parent_satisfaction: "attendance",
   // 공지 번역
   notice_translate: "notice",
   // 직원 계약서 — 글자 PDF 추출 · 스캔 OCR(Claude 전용)

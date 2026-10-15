@@ -11,3 +11,10 @@ import { patchMyUiPrefs } from "@/lib/ui-prefs/patch";
 export async function saveRuleBoxCollapsed(collapsed: boolean): Promise<{ ok: boolean; error?: string }> {
   return patchMyUiPrefs("portfolio", { ruleCollapsed: collapsed ? true : undefined });
 }
+
+/** 직원 비교 표의 정렬(`ui_prefs.portfolio.compareSort`) — 기본(총점 높은 순)은 저장하지 않는다. */
+export async function saveCompareSort(sort: { key: string; dir: "asc" | "desc" }): Promise<{ ok: boolean; error?: string }> {
+  const valid = typeof sort?.key === "string" && /^[a-zA-Z0-9:]{1,40}$/.test(sort.key) && (sort.dir === "asc" || sort.dir === "desc");
+  if (!valid) return { ok: false, error: "정렬 값을 확인해 주세요" };
+  return patchMyUiPrefs("portfolio", { compareSort: sort.key === "total" && sort.dir === "desc" ? undefined : { key: sort.key, dir: sort.dir } });
+}

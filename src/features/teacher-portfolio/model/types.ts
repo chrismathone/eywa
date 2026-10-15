@@ -1,12 +1,10 @@
 /**
- * 직원 포트폴리오 — 월간 점수 계산의 입력(스냅샷)과 결과(강사 × 월).
- *
- * 입력은 DB 행 모양 그대로다(snake_case). 계산은 순수 함수라서 화면·cron·테스트가 같은 값을 낸다.
- * 결과의 한 달(`PortfolioPeriod`)이 그대로 `teacher_portfolio_months.payload`에 저장된다 — 마감한 달은
- * 점수와 근거를 함께 굳히기 위해서다. 학생은 id로만 싣고 이름은 화면이 읽을 때 붙인다.
+ * 직원 포트폴리오 — 월간 점수 계산의 입력(스냅샷, DB 행 모양 그대로)과 결과(강사 × 월). 계산은 순수 함수라 화면·cron·테스트가 같은 값을 낸다.
+ * 결과의 한 달(`PortfolioPeriod`)이 그대로 `teacher_portfolio_months.payload`에 저장된다(마감한 달은 점수와 근거를 함께 굳힌다). 학생은 id로만 싣는다.
  */
-
 import type { EvaluationConfig } from "../evaluation/config";
+import type { EvaluationSources, GradeKindStat, GradeRow, PunctualityRow, SatisfactionRow } from "./source-types";
+export type { EvaluationSources } from "./source-types";
 
 export type { SnapshotUser, SnapshotClass, SnapshotSchedule, SnapshotEnrollment, SnapshotAttendance, SnapshotReport, SnapshotConsultation, SnapshotReviewSheet, SnapshotReview, SnapshotTransition, SnapshotDelegation, SnapshotInvoice, SnapshotTerm, SnapshotMakeup, SnapshotReferral, SnapshotAttendanceTouch } from "./snapshot-types";
 import type { SnapshotUser, SnapshotClass, SnapshotSchedule, SnapshotEnrollment, SnapshotAttendance, SnapshotReport, SnapshotConsultation, SnapshotReview, SnapshotTransition, SnapshotDelegation, SnapshotInvoice, SnapshotTerm, SnapshotMakeup, SnapshotReferral, SnapshotAttendanceTouch } from "./snapshot-types";
@@ -49,13 +47,13 @@ export type PortfolioSnapshot = {
   referrals?: SnapshotReferral[];
   /** 출결 입력·수정 기록(활동 기록) — 마감하지 않은 달만 읽는다(`touchesSince`). 없으면 출결 행의 현재 입력자·시각으로만 판정한다. */
   attendanceTouches?: SnapshotAttendanceTouch[];
+  /** 성적(성적 입력 + 보고서 시험) · 학부모 글 판정·클레임 · 직원 출퇴근·휴가 — 옛 스냅샷엔 없다(그 지표는 '계산 전'). */
+  sources?: EvaluationSources;
 };
 
-/** 아직 계산이 들어오지 않은 원장 구성 지표(2026-10-13) — 수치 없이 자리만 선다(자료 없음 규칙으로 매긴다). */
-export type PendingMetricId = "grades" | "satisfaction" | "punctuality";
 export type MetricId =
   | "report" | "attendance" | "follow" | "counsel" | "quality" | "students" | "revenue" | "expansion" | "coverage" | "churn" | "payRatio"
-  | PendingMetricId;
+  | "grades" | "satisfaction" | "punctuality";
 /** 계산 코드가 처음 매기는 만점(옛 고정 배점) — 화면의 만점은 설정이 덮는다. 옛 저장 행의 기준표도 이 값이다. */
 export const METRIC_MAX: Record<MetricId, number> = {
   report: 20, attendance: 10, follow: 10, counsel: 10, quality: 10, students: 20, revenue: 10, expansion: 10, coverage: 10,
@@ -135,7 +133,10 @@ export type RevenueMetric = MetricCommon<"revenue", RevenueClassRow> & Pick<Reve
 export type ReferralRow = { consultationId: string; day: string; prospect: string; referrerStudentId: string | null; byStaff: boolean; subject: string | null };
 export type ExpansionMetric = MetricCommon<"expansion", ReferralRow>;
 export type CoverageMetric = MetricCommon<"coverage", CoverageRow> & Pick<CoverageResult, "due" | "done" | "pending" | "early">;
-export type PendingMetric = MetricCommon<PendingMetricId, never>;
+/** 성적 관리 · 학부모 만족도 · 강사 근태(2026-10-15 계산 시작) — 그 전에 저장된 달은 `uncounted` 자리라 아래 칸이 없다. */
+export type GradesMetric = MetricCommon<"grades", GradeRow> & { tests?: number; students?: number; kinds?: GradeKindStat[] };
+export type SatisfactionMetric = MetricCommon<"satisfaction", SatisfactionRow> & { plus?: number; minus?: number; claims?: number; waiting?: number };
+export type PunctualityMetric = MetricCommon<"punctuality", PunctualityRow> & { late?: number; absent?: number; excused?: number; days?: number; manual?: boolean };
 /** 퇴원율의 그만둔 학생 한 줄 — 셌는지(counted)와 뺀 까닭(note). */
 export type ChurnRow = { studentId: string; day: string; type: "퇴원" | "수강종료"; className: string; reason: string; counted: boolean; note: string | null };
 /** base = 지난달 담당 학생(그 달 절반 이상) · need = 절반 일수 · counted = 센 학생 수. */
@@ -148,7 +149,7 @@ export type PayRatioMetric = MetricCommon<"payRatio", never> & {
 export type ManualMetricItem = MetricCommon<`manual:${string}`, never> & { unit: string; note?: string };
 export type Metric =
   | ReportMetric | AttendanceMetric | FollowMetric | QualityMetric | StudentsMetric | RevenueMetric | ExpansionMetric | CoverageMetric
-  | ChurnMetric | PayRatioMetric | CounselMetric | PendingMetric | ManualMetricItem;
+  | ChurnMetric | PayRatioMetric | CounselMetric | GradesMetric | SatisfactionMetric | PunctualityMetric | ManualMetricItem;
 /** 한 달의 항목 id — 기본 지표 또는 `manual:<key>`. */
 export type ItemId = Metric["id"];
 export type MetricOf<Id extends MetricId> = Extract<Metric, { id: Id }>;

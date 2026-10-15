@@ -8,7 +8,11 @@
  * ⚠️ 지표 설정은 **id로 묶은 객체**다 — 배열로 두면 나중에 더한 기본 지표가 저장된 배열에 가려 안 보인다.
  */
 import { z } from "zod";
-import { DEFAULT_CHURN_OPTIONS, DEFAULT_REFERRAL_OPTIONS, churnOptionsSchema, referralOptionsSchema } from "./options";
+import {
+  DEFAULT_CHURN_OPTIONS, DEFAULT_GRADES_OPTIONS, DEFAULT_PUNCTUALITY_OPTIONS, DEFAULT_REFERRAL_OPTIONS, DEFAULT_SATISFACTION_OPTIONS,
+  churnOptionsSchema, gradesOptionsSchema, punctualityOptionsSchema, referralOptionsSchema, satisfactionOptionsSchema,
+} from "./options";
+import { finite, missingSchema, scoringSchema, type Scoring } from "./scoring-schema";
 
 /**
  * 기본 지표 — 차례 = 기본 화면 차례. 앞 8개가 원장 구성(2026-10-13 *"지금 바로 원장 8개 구성으로 바꿔"* · *"디폴트로 해놓고"*),
@@ -21,37 +25,25 @@ export const BUILTIN_METRICS = [
 export type BuiltinMetricId = (typeof BUILTIN_METRICS)[number];
 export type ManualMetricId = `manual:${string}`;
 
-const finite = z.number().finite();
-/** 기준·점수 칸 — 총점 칸(numeric(8,1))이 넘치지 않게 범위를 둔다. */
-const bounded = finite.min(-1_000_000, "100만 이하로 적어 주세요").max(1_000_000, "100만 이하로 적어 주세요");
-/** 구간 — 위에서부터 처음 맞는 구간의 점수. 양 끝 포함, 비우면 끝이 없다. */
-export const bandSchema = z.object({ from: bounded.nullable(), to: bounded.nullable(), points: bounded });
-export const scoringSchema = z.discriminatedUnion("mode", [
-  /** 수치가 `zero`면 0점, `full`이면 만점, 사이는 비례(밖은 0~만점으로 자른다). 낮을수록 좋은 지표는 zero > full. */
-  z.object({ mode: z.literal("linear"), zero: bounded, full: bounded }),
-  z.object({ mode: z.literal("bands"), bands: z.array(bandSchema).min(1).max(20) }),
-  /** 1건(1 단위)마다 점수. `cap`이면 만점에서 멈춘다. */
-  z.object({ mode: z.literal("perUnit"), points: bounded, cap: z.boolean() }),
-]);
-export type Scoring = z.infer<typeof scoringSchema>;
-export type Band = z.infer<typeof bandSchema>;
-
-/** 자료가 없을 때 — 0점(원장 기본) · 만점 · 합계에서 빼기(만점에서도 뺀다). */
-export const missingSchema = z.enum(["zero", "full", "exclude"]);
-export type MissingRule = z.infer<typeof missingSchema>;
-export const MISSING_LABEL: Record<MissingRule, string> = { zero: "0점", full: "만점", exclude: "합계에서 빼기" };
+export { MISSING_LABEL, bandSchema, missingSchema, scoringSchema, type Band, type MissingRule, type Scoring } from "./scoring-schema";
 
 const label = z.string().trim().min(1, "이름을 적어 주세요").max(30, "이름은 30자까지입니다");
-export { DEFAULT_CHURN_OPTIONS, DEFAULT_REFERRAL_OPTIONS, type ChurnOptions, type ReferralOptions } from "./options";
+export {
+  DEFAULT_CHURN_OPTIONS, DEFAULT_GRADES_OPTIONS, DEFAULT_PUNCTUALITY_OPTIONS, DEFAULT_REFERRAL_OPTIONS, DEFAULT_SATISFACTION_OPTIONS,
+  type ChurnOptions, type GradesOptions, type PunctualityOptions, type ReferralOptions, type SatisfactionOptions,
+} from "./options";
 export const metricSettingSchema = z.object({
   enabled: z.boolean(),
   label,
   max: finite.min(0, "만점은 0 이상입니다").max(1000, "만점은 1000점까지입니다"),
   scoring: scoringSchema,
   missing: missingSchema,
-  /** 지표만의 세는 법(options.ts) — 퇴원율(churn) · 원생 소개(referral). 다른 지표엔 없다. */
+  /** 지표만의 세는 법(options.ts) — 퇴원율 · 원생 소개 · 성적 관리 · 학부모 만족도 · 강사 근태. 다른 지표엔 없다. */
   churn: churnOptionsSchema.optional(),
   referral: referralOptionsSchema.optional(),
+  grades: gradesOptionsSchema.optional(),
+  satisfaction: satisfactionOptionsSchema.optional(),
+  punctuality: punctualityOptionsSchema.optional(),
 });
 export type MetricSetting = z.infer<typeof metricSettingSchema>;
 
@@ -60,10 +52,12 @@ export type MetricSetting = z.infer<typeof metricSettingSchema>;
  * (만드는 키는 `m` + 무작위라 겹치지 않지만, 저장값을 손으로 고쳐도 막는다). 이 칸만 큰 금액(원)을 받는다.
  */
 export const PAY_OVERRIDE_KEY = "pay";
+/** 같은 표에서 **강사 근태의 원장 월 입력**(그 달 지각·결근 횟수)이 쓰는 칸 이름 — 출퇴근 기록이 아직 안 들어오는 달을 원장이 넣는다(계획서 '원장 월 입력'). */
+export const PUNCTUALITY_OVERRIDE_KEY = "late";
 
 /** 원장이 만드는 지표 — 자동으로 셀 수 없으니 달마다 숫자를 넣는다. */
 export const manualMetricSchema = metricSettingSchema.extend({
-  key: z.string().regex(/^[a-z0-9]{1,16}$/).refine((k) => k !== PAY_OVERRIDE_KEY, "쓸 수 없는 지표 키입니다"),
+  key: z.string().regex(/^[a-z0-9]{1,16}$/).refine((k) => k !== PAY_OVERRIDE_KEY && k !== PUNCTUALITY_OVERRIDE_KEY, "쓸 수 없는 지표 키입니다"),
   unit: z.string().trim().max(10, "단위는 10자까지입니다"),
   description: z.string().trim().max(200, "설명은 200자까지입니다"),
 });
@@ -107,7 +101,7 @@ const V1_METRICS = {
  * 원생 소개 20(1건 5점) · 학부모 만족도(총점에 그대로 더하고 뺀다 — 만점 0) · 강사 근태 10 = 100점.
  * 급여 비율 구간 = 원장 결정 3(≤33% 20 · ≤40% 16 · ≤50% 12 · ≤60% 8 · 그 이상 4) — 첫 구간 끝은 33.3%(*"급여의 3배가 매출이면 만점"* =
  * 1/3 = 33.3%가 만점이어야 한다 — 33으로 두면 정확히 3배가 16점이 된다). 퇴원율·근태·성적의 구간은 원장이 고칠 자리(처음 값).
- * 아직 계산이 들어오지 않은 지표는 결정 4(자료 없음 = 0점)대로 0점이다 — 들어오는 대로 점수가 선다.
+ * 성적·만족도·근태는 2026-10-15부터 계산한다 — 재료가 없으면 결정 4(자료 없음 = 0점)대로 0점.
  */
 export const DEFAULT_EVALUATION_CONFIG: EvaluationConfig = {
   version: 1,
@@ -118,10 +112,10 @@ export const DEFAULT_EVALUATION_CONFIG: EvaluationConfig = {
     report: { enabled: true, label: "수업보고서", max: 10, scoring: linear(0, 100), missing: "zero" },
     // 원생상담 = 담당 학생 중 이 달에 본인이 1회 이상 상담한 비율(원장 2026-10-14 *"전부 1회 이상 상담하면 만점"* · *"비율에 따라"*).
     counsel: { enabled: true, label: "원생상담", max: 10, scoring: linear(0, 100), missing: "zero" },
-    grades: { enabled: true, label: "성적 관리", max: 10, scoring: linear(0, 100), missing: "zero" },
+    grades: { enabled: true, label: "성적 관리", max: 10, scoring: linear(0, 100), missing: "zero", grades: DEFAULT_GRADES_OPTIONS },
     expansion: { enabled: true, label: "원생 소개", max: 20, scoring: { mode: "perUnit", points: 5, cap: true }, missing: "zero", referral: DEFAULT_REFERRAL_OPTIONS },
-    satisfaction: { enabled: true, label: "학부모 만족도", max: 0, scoring: { mode: "perUnit", points: 1, cap: false }, missing: "zero" },
-    punctuality: { enabled: true, label: "강사 근태", max: 10, scoring: linear(5, 0), missing: "zero" },
+    satisfaction: { enabled: true, label: "학부모 만족도", max: 0, scoring: { mode: "perUnit", points: 1, cap: false }, missing: "zero", satisfaction: DEFAULT_SATISFACTION_OPTIONS },
+    punctuality: { enabled: true, label: "강사 근태", max: 10, scoring: linear(5, 0), missing: "zero", punctuality: DEFAULT_PUNCTUALITY_OPTIONS },
     // 옛 '원생상담'(후속 처리 기한 안 완료율) — 목록에 남겨 꺼 둔다(옛 구성이 쓴다).
     follow: { enabled: false, label: "상담 후속 처리", max: 10, scoring: linear(0, 100), missing: "zero" },
     ...(Object.fromEntries(Object.entries(V1_METRICS).map(([id, s]) => [id, { ...s, enabled: false }])) as Pick<EvaluationConfig["metrics"], keyof typeof V1_METRICS>),
@@ -171,9 +165,12 @@ export function resolveEvaluationConfig(stored: unknown): EvaluationConfig {
     if (taken.has(metrics[id].label)) metrics[id] = { ...metrics[id], label: `${metrics[id].label}(새 항목)`.slice(0, 30) };
     taken.add(metrics[id].label);
   }
-  // 세는 법이 생기기 전에 저장한 퇴원율에는 그 칸이 없다 — 기본값을 채워 설정 화면에 칸이 서게(계산도 같은 기본값).
-  if (!metrics.churn.churn) metrics.churn = { ...metrics.churn, churn: DEFAULT_CHURN_OPTIONS };
-  if (!metrics.expansion.referral) metrics.expansion = { ...metrics.expansion, referral: DEFAULT_REFERRAL_OPTIONS };
+  // 세는 법이 생기기 전에 저장한 지표에는 그 칸이 없다 — 기본값을 채워 설정 화면에 칸이 서게(계산도 같은 기본값).
+  metrics.churn.churn ??= DEFAULT_CHURN_OPTIONS;
+  metrics.expansion.referral ??= DEFAULT_REFERRAL_OPTIONS;
+  metrics.grades.grades ??= DEFAULT_GRADES_OPTIONS;
+  metrics.satisfaction.satisfaction ??= DEFAULT_SATISFACTION_OPTIONS;
+  metrics.punctuality.punctuality ??= DEFAULT_PUNCTUALITY_OPTIONS;
   const manualRaw = Array.isArray(raw.manual) ? raw.manual : [];
   const seen = new Set<string>();
   const manual = manualRaw.flatMap((m) => {
