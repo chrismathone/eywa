@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { MISSING_LABEL, missingSchema, type ManualMetricSetting, type MetricSetting } from "@/features/teacher-portfolio/evaluation/config";
 import { ChurnOptionsEditor } from "./churn-options";
 import { ReferralOptionsEditor } from "./referral-options";
+import { PunctualityOptionsEditor } from "./punctuality-options";
 import { GradesOptionsEditor, SatisfactionOptionsEditor } from "./source-options";
 import { NumField, ScoringEditor } from "./scoring-editor";
 
@@ -67,7 +68,7 @@ export function MetricSettingCard({ setting, measure, pending, unit, manual, pos
       {/* 글 칸은 칸을 떠날 때 읽는다 — 구성 불러오기처럼 밖에서 값이 바뀌면 새로 그린다(key). */}
       {setting.satisfaction ? <SatisfactionOptionsEditor key={JSON.stringify([setting.satisfaction.positive, setting.satisfaction.negative, setting.satisfaction.ignore, setting.satisfaction.hedges])}
         label={label} value={setting.satisfaction} onChange={(satisfaction) => set({ satisfaction })} /> : null}
-      {/* 강사 근태의 지각·결근 가중(세는 법)은 출퇴근 가져오기가 붙은 뒤에 연다 — 지금은 원장 월 입력만 있어 바꿔도 결과가 같다(소비처 없는 설정 노출 금지). */}
+      {setting.punctuality ? <PunctualityOptionsEditor label={label} value={setting.punctuality} onChange={(punctuality) => set({ punctuality })} /> : null}
       <ScoringEditor label={label} scoring={setting.scoring} max={setting.max} unit={unit} onChange={(scoring) => set({ scoring })} />
       <label className="flex flex-wrap items-center gap-2 text-sm">
         <span className="font-medium">자료가 없을 때</span>

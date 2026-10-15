@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { FormActionBar } from "@/components/forms/form-action-bar";
@@ -15,6 +15,7 @@ import { saveEvaluationSettings } from "@/features/teacher-portfolio/server/eval
 import { SettingsCard } from "../settings-card";
 import { MetricSettingCard } from "./metric-setting-card";
 import { PresetBar, type PresetOption } from "./preset-bar";
+import { EvaluationStaffContext } from "./punctuality-options";
 import { PreviewCard, type PreviewData } from "./preview-card";
 
 /** 기본 제공 구성 — 원장 구성(기본값)과 그 전 직원 포트폴리오(같은 점수). 지울 수 없다. */
@@ -78,6 +79,7 @@ export function EvaluationEditor({ initial, tableMissing, readOnly = false, prev
   });
 
   const on = config.order.map((id) => settingOf(config, id)).filter((s): s is MetricSetting => Boolean(s?.enabled));
+  const staff = useMemo(() => preview.rows.map((r) => ({ id: r.teacherId, name: r.name })), [preview.rows]);
   const maxTotal = on.reduce((n, s) => n + s.max, 0);
   return (
     <form ref={formRef} onSubmit={(e) => { e.preventDefault(); save(); }} className="min-w-0 space-y-4">
@@ -97,6 +99,7 @@ export function EvaluationEditor({ initial, tableMissing, readOnly = false, prev
       <PresetBar presets={[...BUILTIN_PRESETS, ...presets]} draft={config} dirty={JSON.stringify(config) !== JSON.stringify(saved)}
         readOnly={readOnly} tableMissing={presetsMissing} onLoad={setConfig} />
       <fieldset disabled={readOnly} className="m-0 grid min-w-0 gap-4 border-0 p-0 xl:grid-cols-[minmax(0,1fr)_22rem] xl:items-start">
+        <EvaluationStaffContext.Provider value={staff}>
         <div className="min-w-0 space-y-3">
           {config.order.map((id, i) => {
             const s = settingOf(config, id);
@@ -112,6 +115,7 @@ export function EvaluationEditor({ initial, tableMissing, readOnly = false, prev
           })}
           <Button type="button" variant="outline" onClick={addManual} disabled={config.manual.length >= 20}>직접 입력 지표 추가</Button>
         </div>
+        </EvaluationStaffContext.Provider>
         <PreviewCard saved={saved} draft={config} preview={preview} />
       </fieldset>
       <FormActionBar>

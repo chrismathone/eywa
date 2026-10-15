@@ -35,12 +35,19 @@ export type SatisfactionRow = {
 /** 직원 출퇴근 한 줄(0365a) — 지각·결근 판정은 원본(메이크에듀) 표시 그대로. */
 export type SnapshotStaffDay = {
   user_id: string; work_date: string; status: "present" | "late" | "absent" | "leave" | "off"; late_minutes: number | null; check_in_at: string | null;
+  /** 옛 스냅샷엔 없다(조퇴를 세지 않는다). */
+  check_out_at?: string | null;
 };
 /** 결재된 휴가(연차·반차·반반차) — 그날의 지각·결근은 세지 않는다(법정 휴가 감점 금지). */
 export type SnapshotLeave = { user_id: string; start_date: string; end_date: string };
-/** 근태 근거 한 줄 = 지각·결근한 날 하나(뺀 까닭이 있으면 `excuse`). */
+/**
+ * 근태 근거 한 줄 = 지각·결근·조퇴한 날 하나 · 태그는 없지만 그날 직접 쓴 출결·보고서로 출근을 인정한 날(`recorded`, 세지 않는다).
+ * `expected` = 그날 기준 시각(지각은 출근 기준 · 조퇴는 퇴근 기준) · `basis` = 기준을 어디서 정했나 · `minutes` = 기준과의 차이(분).
+ * 2026-10-15 전에 마감된 달의 줄은 `lateMinutes`만 있다(화면이 둘 다 읽는다).
+ */
 export type PunctualityRow = {
-  day: string; status: "late" | "absent"; lateMinutes: number | null; checkIn: string | null; counted: boolean; excuse: string | null;
+  day: string; status: "late" | "absent" | "early" | "recorded"; checkIn: string | null; counted: boolean; excuse: string | null;
+  checkOut?: string | null; expected?: string | null; basis?: "personal" | "lessons" | null; minutes?: number | null; lateMinutes?: number | null;
 };
 
 export type EvaluationSources = {
@@ -48,5 +55,6 @@ export type EvaluationSources = {
   /** null = 판정 표(0364a)가 아직 없다. */
   satisfaction: { judgments: SnapshotJudgment[]; claims: SnapshotClaim[] } | null;
   /** days = null이면 출퇴근 표(0365a)가 아직 없다(원장 직접 입력만 쓴다). */
-  punctuality: { days: SnapshotStaffDay[] | null; leaves: SnapshotLeave[] };
+  /** `latest` = 메이크에듀 출퇴근의 가장 늦은 날짜(이 날짜 전날까지는 다 받았다 · 옛 스냅샷엔 없다). */
+  punctuality: { days: SnapshotStaffDay[] | null; leaves: SnapshotLeave[]; latest?: string | null };
 };

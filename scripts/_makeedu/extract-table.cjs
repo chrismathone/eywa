@@ -7,8 +7,26 @@ function extractTable() {
   }
   if (!best) return { headers: [], rows: [], invoiceRefunds: {} };
   const clean = (s) => (s || "").replace(/\s+/g, " ").trim();
-  const headers = Array.from(best.querySelectorAll("thead th, thead td"), (h) => clean(h.textContent));
+  let headers = Array.from(best.querySelectorAll("thead th, thead td"), (h) => clean(h.textContent));
   const invoiceTable = headers.some((h) => h.includes("청구월")) && headers.some((h) => h.includes("수납명"));
+  // 직원 출퇴근(/config/staffAttList.do) — 머리가 두 줄(출근·퇴근 아래 일시·태그IP·사진)이라 셀과 열 이름을 칸 단위로 다시 맞추고,
+  // 줄에 숨은 메이크에듀 직원 번호(staffMno)를 마지막 칸 '직원번호'로 붙인다(다시 가져와도 같은 줄을 알아보게). 다른 목록은 그대로.
+  const staffAttendance = headers.includes("태그IP") && headers.includes("출근") && headers.includes("퇴근");
+  if (staffAttendance) {
+    const grid = [];
+    Array.from(best.querySelectorAll("thead tr"), (tr, r) => {
+      grid[r] = grid[r] || [];
+      let c = 0;
+      for (const cell of Array.from(tr.children)) {
+        while (grid[r][c] !== undefined) c++;
+        const rows = Number(cell.getAttribute("rowspan")) || 1, cols = Number(cell.getAttribute("colspan")) || 1;
+        for (let dr = 0; dr < rows; dr++) for (let dc = 0; dc < cols; dc++) (grid[r + dr] = grid[r + dr] || [])[c + dc] = clean(cell.textContent);
+        c += cols;
+      }
+    });
+    const width = Math.max(0, ...grid.map((row) => row.length));
+    headers = Array.from({ length: width }, (_, i) => [...new Set(grid.map((row) => row[i]).filter(Boolean))].join(" ")).concat("직원번호");
+  }
   const rows = [], invoiceRefunds = {};
   // Read current control values without concatenating neighbouring cells or all select options.
   const displayed = (node) => {
@@ -61,6 +79,7 @@ function extractTable() {
       invoiceRefunds[parent].push({ type, amount, date, method: selections.find((s) => /카드|현금|계좌/.test(s)) || null, status: "active", source: "makeedu" });
       continue;
     }
+    if (staffAttendance) cells.push(clean(tr.querySelector('input[name="staffMno"]')?.value));
     rows.push(cells);
     if (invoiceTable) {
       const name = cells[headers.findIndex((h) => h.includes("이름"))];

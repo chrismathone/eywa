@@ -43,6 +43,8 @@ const LISTS = {
   // 퇴원생 관리(원장 확인 2026-07-30). makeedu는 실제 결제·환불을 처리하므로 **퇴원일이 aywa보다 정확**하다 —
   // aywa의 2026-07-10 일괄분(장부 날짜)을 교정·검증하는 근거로 쓴다(compare-withdrawal-dates.mjs).
   withdrawn: { url: process.env.MAKEEDU_WITHDRAWN_URL || "/member/student/stopList.do" },
+  // 직원 출퇴근(원장 2026-10-15) — 강사평가 '강사 근태'. 지난달 1일 ~ 오늘 · 재직·퇴사 전부 · 출퇴근내역 보기.
+  staff_attendance: { url: "/config/staffAttList.do", prepare: (page) => require("./staff-attendance.cjs").prepareStaffAttendance(page) },
 };
 
 // 페이지 내 실행: 가장 큰 테이블을 헤더+행배열로. 셀값 = select 선택값 > innerText > input.value.
@@ -278,7 +280,8 @@ async function scrapeList(page, key, cfg) {
   // ⚠️ 순서 주의: **페이지 크기를 먼저** 올리고, 그 다음 검색 조건을 넣어 **한 번의 조회**로 끝낸다.
   //    (반대로 하면 조회 뒤에 페이지크기 변경이 또 한 번 리로드를 일으켜 두 반영이 서로를 흔든다.)
   await maximizeListSize(page, cfg.pageSizeCap);
-  if (cfg.prepare) await cfg.prepare(page);
+  // 준비가 돌려준 값(출퇴근 = 넣은 기간)은 결과에 `meta`로 싣는다 — 가져오기가 검색이 실제로 걸렸는지 확인한다.
+  const meta = cfg.prepare ? await cfg.prepare(page) : undefined;
   await waitForStableTable(page);
   // 화면이 스스로 말하는 총건수 — 수집 결과와 대조해 **조용한 절단**을 잡는다(페이지 순회 중단·목록 개편).
   const totalReported = await readReportedTotal(page);
@@ -323,7 +326,7 @@ async function scrapeList(page, key, cfg) {
     await page.waitForLoadState("networkidle").catch(() => {});
     await waitForStableTable(page); // 다음 페이지 정착 대기
   }
-  return { key, scrapedAt: new Date().toISOString(), headers, rows: all, totalReported, reportedSummary, ...(key === "invoices" ? { invoiceRefunds } : {}) };
+  return { key, scrapedAt: new Date().toISOString(), headers, rows: all, totalReported, reportedSummary, ...(meta ? { meta } : {}), ...(key === "invoices" ? { invoiceRefunds } : {}) };
 }
 
 /**

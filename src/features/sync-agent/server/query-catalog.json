@@ -1001,6 +1001,26 @@
       "only"
     ]
   },
+  "1d8add5d5282239b47e6d6744117f94bbb380d65fbce14ce30639fabcd2fd327": {
+    "parts": [
+      "select id, display_name, english_name, status from users where tenant_id = ",
+      " and system_role <> 'student'"
+    ],
+    "modules": [
+      "makeedu"
+    ],
+    "sources": [
+      "scripts/_makeedu/import-staff-attendance.cjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenantId"
+    ]
+  },
   "1d8b51ec4454929b81dd16083618b714f13043d23815b1e56e64fce52a2ef4d6": {
     "parts": [
       "\n    select last_seen_post_id from classnote_feed_state\n    where tenant_id = ",
@@ -1049,6 +1069,71 @@
     "expressions": [
       "b.seq",
       "b.existingId"
+    ]
+  },
+  "22a0c5031ac17a9ad23e0533d0baf778fa14a2d151432b66f23893ef1c07fe26": {
+    "parts": [
+      "\n        insert into staff_attendance_days (tenant_id, user_id, work_date, check_in_at, check_out_at, status, late_minutes, source, source_key, note)\n        values (",
+      ", ",
+      ", ",
+      ", ",
+      ", ",
+      ", ",
+      ", ",
+      ", ",
+      ", ",
+      ", ",
+      ")\n        on conflict (tenant_id, source, source_key) do update set\n          user_id = excluded.user_id, work_date = excluded.work_date, check_in_at = excluded.check_in_at, check_out_at = excluded.check_out_at,\n          status = excluded.status, note = excluded.note, updated_at = now()"
+    ],
+    "modules": [
+      "makeedu"
+    ],
+    "sources": [
+      "scripts/_makeedu/import-staff-attendance.cjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "r.tenant_id",
+      "r.user_id",
+      "r.work_date",
+      "r.check_in_at",
+      "r.check_out_at",
+      "r.status",
+      "r.late_minutes",
+      "r.source",
+      "r.source_key",
+      "r.note"
     ]
   },
   "23c6d2b24a88cc028d711d303ac9d2a318a8234506c8e95e2d4ff2b4f67a1fa3": {
@@ -3524,6 +3609,36 @@
       "runId"
     ]
   },
+  "72351bd151ee7121adb431b54ca50d9a62519fc3a796d2cab0e05997915d9698": {
+    "parts": [
+      "select source_key, user_id, work_date::text as work_date, check_in_at, check_out_at, note from staff_attendance_days\n      where tenant_id = ",
+      " and source = 'makeedu' and work_date >= ",
+      " and work_date <= ",
+      ""
+    ],
+    "modules": [
+      "makeedu"
+    ],
+    "sources": [
+      "scripts/_makeedu/import-staff-attendance.cjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenantId",
+      "range.from",
+      "range.to"
+    ]
+  },
   "75b8ad4e78c31159cd3f9cfa9c8b78b255b45e8495a1b34aad3c3d1791792834": {
     "parts": [
       "select distinct e.student_id from enrollments e join students s on s.id = e.student_id\n      where e.tenant_id = ",
@@ -4770,6 +4885,31 @@
       "it.seq"
     ]
   },
+  "8eab9568dc23db9ffb744c55a5c0d0330a3f50bcc91b7cd0bf76e109a12fecd5": {
+    "parts": [
+      "delete from staff_attendance_days where tenant_id = ",
+      " and source = 'makeedu' and source_key = ",
+      ""
+    ],
+    "modules": [
+      "makeedu"
+    ],
+    "sources": [
+      "scripts/_makeedu/import-staff-attendance.cjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenantId",
+      "key"
+    ]
+  },
   "8edb8c1a1e1297debaa6ceb19687905800d899c3223cc765f053ea30f0bc2ee8": {
     "parts": [
       "select coalesce(data->'report'->'classnoteSharedBoardAllowlist', '[]'::jsonb) as list\n    from tenant_settings where tenant_id=",
@@ -5282,6 +5422,27 @@
     "expressions": [
       "makeupWriteBack",
       "r.id"
+    ]
+  },
+  "9d38f9cb76731f846ff3bea2cd216b4284f5e1b2059eeb66207b8a97711961fa": {
+    "parts": [
+      "select public.sync_agent_staff_attendance_ready(",
+      ") as ready"
+    ],
+    "modules": [
+      "makeedu"
+    ],
+    "sources": [
+      "scripts/_makeedu/import-staff-attendance.cjs",
+      "scripts/_makeedu/sync-all.cjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenantIdG"
     ]
   },
   "9d524bae4e67cddc8d177c298f431857cddb051f9d5325fb79054a3385ebd0f8": {
