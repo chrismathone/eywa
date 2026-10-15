@@ -1,4 +1,4 @@
-const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const path=require('node:path');const crypto=require('node:crypto');
+const {test}=require('node:test');const assert=require('node:assert/strict');const fs=process.versions.electron?require('original-fs'):require('node:fs');const path=require('node:path');const crypto=require('node:crypto');
 const {extractVerified,download,Updater}=require('../lib/update.cjs');const {zipBytes}=require('./zip-fixture.cjs');
 const sha=b=>crypto.createHash('sha256').update(b).digest('hex');const base=path.resolve(__dirname,'../../../work');
 const entries=[{name:'AywaSyncRuntime.exe',data:'fixture-exe'},{name:'resources/app.asar',data:'fixture-app'}];
@@ -60,4 +60,13 @@ test('failure records a fixed reason, cleans only its staging files and permits 
   await updater.check();assert.equal(updater.state,'error');assert.equal(updater.failure,'download_failed');assert.equal(updater.ready,null);assert.equal(updater.progress,null);assert.equal(updater.pending,false);
   assert.deepEqual(events.at(-1).at(-1),{updateError:'download_failed',version:m.version});assert.equal(JSON.stringify(events).includes('private-path-or-token'),false);assert.deepEqual(fs.readdirSync(path.join(root,'versions')),['1']);
   await updater.check();assert.equal(calls,1);fail=false;updater.nextCheck=0;await updater.check();assert.equal(calls,2);assert.equal(updater.state,'ready');assert.equal(updater.failure,null);assert.equal(fs.readFileSync(path.join(root,'versions/1/keep.txt'),'utf8'),'active');
+});
+test('a newer download removes a superseded version folder with its app.asar and stages the new one',async()=>{
+  const pair=crypto.generateKeyPairSync('rsa',{modulusLength:2048}),root=fs.mkdtempSync(path.join(base,'updater-cleanup-'));
+  const sign=m=>{const bytes=Buffer.from(JSON.stringify(m));return{payload:bytes.toString('base64'),signature:crypto.sign('RSA-SHA256',bytes,pair.privateKey).toString('base64')};};
+  const old=path.join(root,'versions','2'),oldApp=path.join(root,'old-app');fs.mkdirSync(path.join(old,'resources'),{recursive:true});fs.mkdirSync(oldApp);fs.writeFileSync(path.join(oldApp,'main.js'),'old');
+  fs.writeFileSync(path.join(old,'release.json'),JSON.stringify(sign(manifest())));await require('@electron/asar').createPackage(oldApp,path.join(old,'resources/app.asar'));
+  const updater=new Updater({root,api:{call:async()=>({release:sign({...manifest(),sequence:4,version:'1.3.0'})})},publicKey:pair.publicKey,sequence:3,event:()=>{},fetchImpl:async()=>new Response(zipBytes(entries))});
+  await updater.check();assert.equal(updater.failure,null);assert.equal(updater.state,'ready');assert.equal(updater.ready.sequence,4);
+  assert.deepEqual(fs.readdirSync(path.join(root,'versions')),['4']);assert.equal(fs.readFileSync(path.join(root,'versions/4/resources/app.asar'),'utf8'),'fixture-app');
 });
