@@ -53,8 +53,9 @@ describe("매출 대비 급여", () => {
     expect(item).toMatchObject({ id: "payRatio", raw: 33.3, source: "계약서 월급", basis: "급여 비율 33.3% · 계약서 월급" });
     expect(payRatioItem(undefined)).toMatchObject({ raw: null, uncounted: true, basis: "아직 계산 전" });
   });
-  it("2026-10부터 지난달 값으로 매기고 근거에 그 달을 밝힌다 — 그 전 달은 그 달 값(원장 2026-10-15)", () => {
-    expect([payDataMonth("2026-10"), payDataMonth("2027-01"), payDataMonth("2026-09")]).toEqual(["2026-09", "2026-12", "2026-09"]);
+  it("지난달 값으로 매기고 근거에 그 달을 밝힌다 — 모든 달(원장 2026-10-15)", () => {
+    // 모든 달이 지난달 값(원장 2026-10-15 "다 지난달 기록으로" — 마감한 달도 한 달씩 밀어 다시 집계).
+    expect([payDataMonth("2026-10"), payDataMonth("2027-01"), payDataMonth("2026-09")]).toEqual(["2026-09", "2026-12", "2026-08"]);
     const prev = payRatioItem(payRatioOf(facts(), 3_000_000, null, "2026-09"));
     expect(prev.basis).toBe("지난달(9월) 급여 비율 33.3% · 계약서 월급");
     expect(prev.reason).toMatch(/^이번 달 급여는 월말이 돼야 확정되므로 지난달\(9월\) 급여 ÷ 지난달\(9월\) 매출로 매깁니다/);

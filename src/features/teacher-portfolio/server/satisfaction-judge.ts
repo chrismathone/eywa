@@ -5,7 +5,7 @@ import { isAttachOnlyContent } from "@/features/classnote-reply/notification-mat
 import { resolveBoard } from "@/features/classnote-reply/server/reply-data";
 import { isLaboratoryMenuAvailable } from "@/lib/laboratory/server";
 import { isModuleEnabled } from "@/lib/modules";
-import { kstToday } from "@/lib/date-kst";
+import { kstToday, shiftMonth } from "@/lib/date-kst";
 import { reportWarning } from "@/lib/observability/report-error";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { DEFAULT_SATISFACTION_OPTIONS } from "../evaluation/options";
@@ -35,8 +35,9 @@ export type JudgeOutcome = { judged: number; applied: number; pending: number; f
 const missingTable = (e: { code?: string } | null) => Boolean(e && (e.code === "42P01" || e.code === "PGRST205"));
 
 /**
- * 지점 → 마감하지 않은 가장 이른 달(열린 포트폴리오 줄이 없으면 이번 달) — 단 계산 창(7개월) 밖은 다시 계산되지 않으니 창의 첫 달로 자른다.
- * 판정·확인 대기가 이 달부터만 움직인다(클레임은 강사×달 마감을 따로 본다 — 마감은 줄마다라서).
+ * 지점 → 마감하지 않은 가장 이른 점수 달의 **재료 달**(그 지난달 · 열린 포트폴리오 줄이 없으면 이번 점수 달의 지난달) — 단 계산 창(7개월) 밖은
+ * 다시 계산되지 않으니 창의 첫 점수 달로 자른다. 판정·확인 대기가 이 재료 달부터만 움직인다(10월 점수 = 9월 글 · `dataWindowOf`).
+ * 클레임은 강사×점수 달 마감을 따로 본다(마감은 줄마다라서).
  */
 export async function openFloorMonths(admin: Admin, tenantId?: string): Promise<Map<string, string>> {
   const rows = await fetchAllPaged<{ tenant_id: string; month: string }>((a, b) => {
@@ -46,10 +47,10 @@ export async function openFloorMonths(admin: Admin, tenantId?: string): Promise<
   const out = new Map<string, string>();
   const windowStart = portfolioFloor(kstToday());
   for (const r of rows) {
-    const month = r.month < windowStart ? windowStart : r.month;
+    const month = shiftMonth(r.month < windowStart ? windowStart : r.month, -1);
     if (!out.has(r.tenant_id) || month < out.get(r.tenant_id)!) out.set(r.tenant_id, month);
   }
-  if (tenantId && !out.has(tenantId)) out.set(tenantId, kstToday().slice(0, 7));
+  if (tenantId && !out.has(tenantId)) out.set(tenantId, shiftMonth(kstToday().slice(0, 7), -1));
   return out;
 }
 

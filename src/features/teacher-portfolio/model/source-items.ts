@@ -38,8 +38,13 @@ export function buildSourceItems(d: PortfolioSnapshot, input: {
   const punctuality = m.punctuality.punctuality ?? DEFAULT_PUNCTUALITY_OPTIONS;
   const basis = src ? buildPunctualityBasis(d, { classDays: input.classDays }, punctuality) : null;
 
-  /** `targets` = 그 달 이 강사의 보고서 대상 칸(`duties.ts` `reportTargets` — 작성률과 같은 칸) — 일일테스트 제출률의 분모. */
-  return function items(teacherId: string, w: PeriodWindow, cutoff: string, targets: readonly GradeTarget[] = []): [GradesMetric, SatisfactionMetric, PunctualityMetric] {
+  /**
+   * `w` = 재료 창(지난달) · `targets` = 그 달 이 강사의 보고서 대상 칸(`duties.ts` `reportTargets` — 작성률과 같은 칸, 일일테스트 제출률의 분모) ·
+   * `scoreMonth` = 점수 달 — 원장 직접 입력(근태 월 입력)은 점수 달 창에 넣는다.
+   */
+  return function items(
+    teacherId: string, w: PeriodWindow, cutoff: string, targets: readonly GradeTarget[] = [], scoreMonth: string = w.month,
+  ): [GradesMetric, SatisfactionMetric, PunctualityMetric] {
     const g = grades?.(teacherId, w, recordStart && w.end < recordStart ? "9999-12-31" : cutoff, m.grades.grades ?? DEFAULT_GRADES_OPTIONS, input.classNameOf, targets);
     const kind = (k: string) => g?.kinds.find((x) => x.kind === k);
     const daily = kind("daily"), monthly = kind("monthly");
@@ -48,7 +53,7 @@ export function buildSourceItems(d: PortfolioSnapshot, input: {
       g.tests ? `시험 ${g.tests}건` : "",
     ].filter(Boolean) : [];
     const s = satisfaction?.(teacherId, w, m.satisfaction.satisfaction ?? DEFAULT_SATISFACTION_OPTIONS);
-    const manual = input.entriesOf(teacherId, w.month).get(PUNCTUALITY_OVERRIDE_KEY)?.value ?? null;
+    const manual = input.entriesOf(teacherId, scoreMonth).get(PUNCTUALITY_OVERRIDE_KEY)?.value ?? null;
     const p = src && basis ? punctualityOf({
       days: src.punctuality.days ?? [], leaves: src.punctuality.leaves, holidays: input.holidays, teacherId, w, options: punctuality, manual,
       basisOn: (day) => basis.basisOn(teacherId, day), evidenceOn: (day, b) => basis.evidenceOn(teacherId, day, b), latest: src.punctuality.latest ?? null,

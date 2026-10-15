@@ -3,7 +3,9 @@
 import { useId, type KeyboardEvent } from "react";
 import { TOOLBAR_SEG_BOX_WRAP, TOOLBAR_SEG_ITEM, TOOLBAR_SEG_OFF } from "@/components/toolbar-controls";
 import type { ItemId, Metric, StoredPeriod } from "@/features/teacher-portfolio/model/types";
-import { closingLabel, dayLabel, fmtScore, itemLabel, itemOf, itemShort, monthName, periodLabel, periodMax, scoreText, shownItems } from "@/features/teacher-portfolio/view";
+import {
+  closingLabel, dataMonthLabel, dayLabel, fmtScore, itemLabel, itemOf, itemShort, monthName, periodLabel, periodMax, scoreText, shownItems,
+} from "@/features/teacher-portfolio/view";
 import type { DetailTarget } from "./detail-dialog";
 import { MetricEvidence } from "./evidence-impact";
 import type { EvidenceProps } from "./evidence-records";
@@ -108,7 +110,9 @@ export function MonthlyTable({ periods, selected, onMonth, onOpen }: {
                 className={`border-line-faint border-b last:border-b-0 [&_td]:px-1 [&_td]:py-2.5 ${w.month === selected ? "bg-primary-softer" : ""}`}>
                 <td className="text-left">
                   <button type="button" onClick={() => onMonth(w.month)} aria-label={monthName(w.month)} className={cellButton}>{shortMonth(w.month)}</button>
-                  <small className="mt-1 block text-xs break-keep whitespace-normal [overflow-wrap:normal]">{w.partial ? `${dayLabel(w.end)}까지` : closingLabel(w)}</small>
+                  <small className="mt-1 block text-xs break-keep whitespace-normal [overflow-wrap:normal]">
+                    {dataMonthLabel(w) ? `${dataMonthLabel(w)} 실적 · ${closingLabel(w)}` : w.partial ? `${dayLabel(w.end)}까지` : closingLabel(w)}
+                  </small>
                 </td>
                 <td className="text-center text-sm font-bold">
                   <button type="button" onClick={() => onOpen(w.month, { kind: "ledger" })} aria-label={`${monthName(w.month)} 총점 ${fmtScore(w.total)} / ${periodMax(w)}점`} className={cellButton}>

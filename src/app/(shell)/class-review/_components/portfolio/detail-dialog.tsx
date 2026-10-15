@@ -52,8 +52,8 @@ function Criteria({ periods, period }: { periods: readonly StoredPeriod[]; perio
   return (
     <div className="flex flex-col gap-4 text-xs leading-relaxed">
       <div className="bg-primary-softer rounded-lg p-4">
-        <b className="text-sm">매월 1일 시작 → 말일 마감</b>
-        <p className="mt-1.5">모든 점수는 월별로 새로 계산합니다. 전월 점수는 비교에만 쓰며, 마감 이후 작성·발송·입력한 내용은 지난달 점수를 바꾸지 않습니다.</p>
+        <b className="text-sm">매월 1일 시작 → 말일 마감 · 지난달 기록으로 매긴다</b>
+        <p className="mt-1.5">모든 점수는 월별로 새로 계산합니다. 이번 달은 월말이 돼야 기록이 다 차므로, 이 달 점수는 <b>지난달 기록</b>으로 매깁니다(10월 점수 = 9월 실적). 지난달 기록을 이 달 안에 늦게 넣으면 반영되고(보고서·출결은 수업 당일에 쓴 것만 작성으로 칩니다), 이 달이 마감된 뒤에 넣은 것은 반영되지 않습니다. 아래 설명의 &lsquo;이 달&rsquo;은 기록한 달(지난달)입니다. 전월 점수는 비교에만 씁니다.</p>
       </div>
       <p>{monthName(period.month)}을 매긴 기준입니다{period.evaluation ? " — 학원 설정 → 강사평가에서 바꾼 기준은 진행 중인 달부터 적용됩니다" : ""}. 만점 합계 {periodMax(period)}점.</p>
       <DataTable headers={["평가 항목", "만점", "계산 기준"]} kinds={["text", "num", "text"]}

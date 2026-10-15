@@ -11,7 +11,8 @@ import type { StoredPeriod } from "@/features/teacher-portfolio/model/types";
 import {
   addSatisfactionClaim, cancelSatisfactionClaim, decideJudgment, loadSatisfactionBoard, refreshAfterSatisfaction, type SatisfactionBoard,
 } from "@/features/teacher-portfolio/server/satisfaction-actions";
-import { dayLabel, monthName } from "@/features/teacher-portfolio/view";
+import { dataMonthOf } from "@/features/teacher-portfolio/model/dates";
+import { dayLabel, periodLabel } from "@/features/teacher-portfolio/view";
 import { kstToday } from "@/lib/date-kst";
 import { SectionTitle } from "./parts";
 
@@ -29,6 +30,8 @@ export function SatisfactionDialog({ open, onClose, period, teacherId, teacherNa
   const [pending, start] = useTransition();
   const [claim, setClaim] = useState({ day: "", points: "", content: "" });
   const [changed, setChanged] = useState(false);
+  // 이 점수 달의 재료 달(지난달) — 반영하는 글·클레임 날짜가 이 달이다.
+  const dataMonth = dataMonthOf(period);
   const metric = period.items.find((m) => m.id === "satisfaction");
   const appliedIds = (Array.isArray(metric?.detail) ? (metric!.detail as { key: string; source: string; waiting: boolean }[]) : [])
     .filter((r) => r.source === "글" && !r.waiting).map((r) => r.key);
@@ -36,14 +39,14 @@ export function SatisfactionDialog({ open, onClose, period, teacherId, teacherNa
   useEffect(() => {
     if (!open) return;
     let live = true;
-    loadSatisfactionBoard(teacherId, period.month, idsKey ? idsKey.split(",") : []).then(
+    loadSatisfactionBoard(teacherId, dataMonth, idsKey ? idsKey.split(",") : []).then(
       (r) => { if (live) setBoard(r); },
       () => { if (live) setBoard({ ok: false, error: "불러오지 못했습니다. 잠시 후 다시 열어 주세요" }); },
     );
     return () => { live = false; };
-  }, [open, teacherId, period.month, idsKey, version]);
+  }, [open, teacherId, dataMonth, idsKey, version]);
   const ok = board?.ok ? board : null;
-  const closed = Boolean(period.closing.closedAt) || (ok ? period.month < ok.floor : false);
+  const closed = Boolean(period.closing.closedAt) || (ok ? dataMonth < ok.floor : false);
   const run = (task: () => Promise<{ ok: boolean; error?: string; notice?: string }>) => start(async () => {
     setChanged(true); // 응답 전에 창을 닫아도 다시 매기게(저장은 이미 출발했다)
     const r = await task();
@@ -58,12 +61,12 @@ export function SatisfactionDialog({ open, onClose, period, teacherId, teacherNa
     void refreshAfterSatisfaction().then((r) => { if (r.ok) { toast.success("점수를 다시 매기고 있습니다 — 1분쯤 뒤 새로고침하면 반영됩니다"); router.refresh(); } });
   };
   const points = Number(claim.points);
-  const claimReady = /^\d{4}-\d{2}-\d{2}$/.test(claim.day) && claim.day.startsWith(period.month) && Number.isFinite(points) && points !== 0 && claim.content.trim() !== "";
+  const claimReady = /^\d{4}-\d{2}-\d{2}$/.test(claim.day) && claim.day.startsWith(dataMonth) && Number.isFinite(points) && points !== 0 && claim.content.trim() !== "";
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!next) close(); }}>
       <DialogContent showCloseButton={false} className="flex max-h-[min(90dvh,52rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl">
         <div className="border-line flex items-center justify-between gap-3 border-b px-5 py-3.5">
-          <DialogTitle className="text-base font-bold">학부모 만족도 · {teacherName} · {monthName(period.month)}</DialogTitle>
+          <DialogTitle className="text-base font-bold">학부모 만족도 · {teacherName} · {periodLabel(period)}</DialogTitle>
           <DialogClose aria-label="닫기" className="hover:bg-muted focus-visible:outline-primary rounded-lg p-1.5 focus-visible:outline-2"><EyIcon name="close" size={18} /></DialogClose>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4" aria-busy={pending}>
@@ -72,6 +75,8 @@ export function SatisfactionDialog({ open, onClose, period, teacherId, teacherNa
           {ok && !ok.tableMissing ? (
             <>
               <SectionTitle sub={`${ok.queueMore ? `${ok.queue.length}건 넘음` : `${ok.queue.length}건`} · 학원 전체 · 마감 안 한 달`}>확인 대기</SectionTitle>
+              {/* 점수 달의 재료는 지난달(원장 2026-10-15) — 글은 올라온 달의 다음 달 점수에 든다. */}
+              <p className="mb-2 text-xs">반영한 글은 그 글이 올라온 달의 다음 달 점수에 들어갑니다(9월 글 → 10월 점수).</p>
               <p className="mb-1 text-xs">과목을 모르는 보드의 글은 그날 담임이 한 명일 때만 그 담임에게 셉니다.</p>
               {ok.queue.length ? (
                 <ul className="divide-line-faint divide-y">
@@ -111,7 +116,7 @@ export function SatisfactionDialog({ open, onClose, period, teacherId, teacherNa
               </ul>
               {closed ? <p className="mt-2 text-xs">마감한 달이라 클레임을 넣거나 취소해도 점수가 바뀌지 않아 막아 두었습니다.</p> : (
                 <fieldset disabled={pending} className="mt-3 grid gap-2 sm:grid-cols-[10rem_7rem_minmax(0,1fr)_auto]">
-                  <Input type="date" aria-label="날짜" value={claim.day} min={`${period.month}-01`} max={period.end > kstToday() ? kstToday() : period.end} onChange={(e) => setClaim((c) => ({ ...c, day: e.target.value }))} />
+                  <Input type="date" aria-label="날짜" value={claim.day} min={`${dataMonth}-01`} max={period.end > kstToday() ? kstToday() : period.end} onChange={(e) => setClaim((c) => ({ ...c, day: e.target.value }))} />
                   <Input aria-label="점수(±)" inputMode="decimal" placeholder="-2 또는 1" className="num text-right" value={claim.points} onChange={(e) => setClaim((c) => ({ ...c, points: e.target.value }))} />
                   <Input aria-label="내용" maxLength={500} placeholder="클레임·칭찬 내용" value={claim.content} onChange={(e) => setClaim((c) => ({ ...c, content: e.target.value }))} />
                   <Button type="button" disabled={!claimReady} onClick={() => run(async () => {

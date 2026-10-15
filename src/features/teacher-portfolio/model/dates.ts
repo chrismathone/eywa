@@ -41,6 +41,18 @@ export function monthWindows(end: string, count: number): PeriodWindow[] {
   });
 }
 
+/**
+ * 🔴 점수 달의 재료 = **지난달 전체**(원장 2026-10-15 *"다 지난달 기록으로 보는게 맞겠는데"* — 마감한 4~9월도 한 달씩 밀어 다시 집계).
+ * 10월 점수 = 9월 실적: 이번 달은 월말이 돼야 다 차서, 다 찬 지난달로 매긴다. 재료 창은 늘 그 달 전체다(`partial` 없음).
+ */
+export function dataWindowOf(w: Pick<PeriodWindow, "month">): PeriodWindow {
+  const month = shiftMonth(w.month, -1);
+  const { from, to } = monthRange(month);
+  return { month, start: from, end: to, partial: false };
+}
+/** 저장된 달의 재료 달 — 줄의 `start`가 재료 창의 첫날이다(2026-10-15 전에 저장된 줄은 점수 달과 같다). */
+export const dataMonthOf = (p: Pick<PeriodWindow, "start">): string => p.start.slice(0, 7);
+
 /** 월~일 주. 달(또는 기준일) 경계에서 자른다. */
 export function weeksOf(window: Pick<PeriodWindow, "start" | "end">): { start: string; end: string }[] {
   const weeks: { start: string; end: string }[] = [];

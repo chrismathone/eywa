@@ -28,7 +28,8 @@ const present = (day: string, recordedAt = `${day}T09:00:00Z`, over: Partial<Sna
 const stateOn = (d: PortfolioSnapshot, month: string, day: string) => score(d, month, "report").detail.find((c) => c.day === day)?.state;
 /** 이 파일은 그 전 직원 포트폴리오의 점수를 지킨다 — 옛 구성으로 매긴다(기본값은 원장 구성, evaluation.test). */
 const buildPortfolio = (d: PortfolioSnapshot, opts: Parameters<typeof build>[1] = {}) => build(d, { evaluation: { config: PORTFOLIO_V1_CONFIG }, ...opts });
-const months = (d: PortfolioSnapshot) => Object.fromEntries(buildPortfolio(d).teachers.find((t) => t.name === "강사")!.periods.map((w) => [w.month, w]));
+/** 강사의 달 — **재료 달**로 찾는다(10월 점수 = 9월 실적 · 원장 2026-10-15). 아래 테스트의 달은 그 기록이 있는 달이다. */
+const months = (d: PortfolioSnapshot) => Object.fromEntries(buildPortfolio(d).teachers.find((t) => t.name === "강사")!.periods.map((w) => [w.start.slice(0, 7), w]));
 const score = <Id extends MetricId>(d: PortfolioSnapshot, month: string, id: Id) => metricOf(months(d)[month], id);
 const wednesdays = (month: string) => Array.from({ length: 31 }, (_, i) => `${month}-${String(i + 1).padStart(2, "0")}`)
   .filter((day) => { const at = new Date(`${day}T00:00:00Z`); return at.getUTCMonth() === Number(month.slice(5)) - 1 && at.getUTCDay() === 3; });
@@ -41,7 +42,8 @@ describe("8개 항목 100점", () => {
     expect(out.months).toHaveLength(6);
     const shown = (w: (typeof periods)[number]) => w.items.filter((m) => !m.off);
     expect(periods.every((w) => shown(w).length === 8 && shown(w).reduce((n, m) => n + m.max, 0) === 100)).toBe(true);
-    expect([periods[0].partial, periods[0].end, periods[1].partial, periods[1].end]).toEqual([true, "2026-10-11", false, "2026-09-30"]);
+    // 점수 달은 진행 중(10월)이어도 재료는 다 찬 지난달 전체 — 10월 줄 = 9/1~9/30 · 9월 줄 = 8/1~8/31.
+    expect([periods[0].partial, periods[0].start, periods[0].end, periods[1].partial, periods[1].end]).toEqual([true, "2026-09-01", "2026-09-30", false, "2026-08-31"]);
   });
   it("본인 보고서는 의무 하나를 채우고, 보고서·교시가 여럿이어도 점수는 불지 않는다", () => {
     const d = fixture();
@@ -111,12 +113,18 @@ describe("8개 항목 100점", () => {
 });
 
 describe("계산 대상 강사", () => {
-  it("지금은 수업 담당이 아니어도, 마감 전 달이 남은 강사는 그 달만 계속 계산한다", () => {
+  it("지금은 수업 담당이 아니어도, 마감 전 달 + 마지막 줄의 다음 달이 지금 점수 달이면 그 줄(퇴직한 달의 실적 · 그 달에 반이 있을 때)을 계산한다(2026-10-15)", () => {
     const d = fixture();
     d.users[0].status = "inactive";
-    expect(buildPortfolio(d).teachers.map((t) => t.id)).toEqual([]);
-    const kept = buildPortfolio(d, { openMonths: new Map([["teacher", ["2026-09"]]]) }).teachers;
-    expect(kept.map((t) => [t.id, t.periods.map((w) => w.month)])).toEqual([["teacher", ["2026-09"]]]);
+    d.classes[0].closed_at = "2026-09-30"; // 9월까지 수업 → 10월 점수(9월 실적)
+    const months = (opts: Parameters<typeof build>[1]) => buildPortfolio(d, opts).teachers.map((t) => [t.id, t.periods.map((w) => w.month)]);
+    expect(months({})).toEqual([]); // 줄이 한 번도 없던 강사에게 지난 달 줄을 만들지 않는다
+    expect(months({ lastMonths: new Map([["teacher", "2026-09"]]) })).toEqual([["teacher", ["2026-10"]]]);
+    // 지난 점수 달 줄은 새로 만들지 않는다(출결 수정 기록을 다 못 읽은 채 바로 마감되므로 — 재리뷰 2026-10-15).
+    expect(months({ lastMonths: new Map([["teacher", "2026-08"]]) })).toEqual([]);
+    d.classes[0].closed_at = "2026-08-31"; // 9월엔 반이 없다 → 10월 줄 없음
+    expect(months({ lastMonths: new Map([["teacher", "2026-09"]]) })).toEqual([]);
+    expect(months({ openMonths: new Map([["teacher", ["2026-10"]]]) })).toEqual([["teacher", ["2026-10"]]]);
   });
   it("수업에서 빠진 강사는 학생이 없어도 마감 전 달을 놓지 않는다", () => {
     const d = fixture();
@@ -133,8 +141,8 @@ describe("직원 평가", () => {
   });
   it("평가는 처음 완료된 달에 한 번만 센다 — 다음 달에 고쳐 저장해도 그 달로 옮겨 가지 않는다", () => {
     const d = fixture();
-    d.reviews = [review({ scores: [4, 2], submittedAt: "2026-10-05T01:00:00Z", completedAt: "2026-09-20T01:00:00Z" })];
-    expect([score(d, "2026-09", "quality").value, score(d, "2026-10", "quality").value]).toEqual([7.5, 0]);
+    d.reviews = [review({ scores: [4, 2], submittedAt: "2026-09-05T01:00:00Z", completedAt: "2026-08-20T01:00:00Z" })];
+    expect([score(d, "2026-08", "quality").value, score(d, "2026-09", "quality").value]).toEqual([7.5, 0]);
   });
   it("처음 완료 시각이 없는 옛 장은 제출 시각으로, 미완성 장은 세지 않는다", () => {
     const d = fixture();
@@ -145,6 +153,10 @@ describe("직원 평가", () => {
   });
 });
 
+/**
+ * 마감 = **점수 달** 말일(재료는 지난달 — 9월 기록은 10월 점수 · 10월 말일까지 넣은 것을 센다). 아래 8월 기록은 9월 점수 줄이고,
+ * 그 줄은 9/30에 마감됐다(기준일 10/11).
+ */
 describe("🔴 말일 마감 — 이후의 보충은 지난달 점수를 바꾸지 않는다", () => {
   it("말일 수업도 그날 안(한국 시간)에 쓴 것만 — 다음 날 첫 순간부터는 미작성", () => {
     const d = fixture();
@@ -153,22 +165,26 @@ describe("🔴 말일 마감 — 이후의 보충은 지난달 점수를 바꾸�
     d.reports = [report("2026-09-30", "2026-09-30T15:00:00.000Z")];
     expect([stateOn(d, "2026-09", "2026-09-30"), score(d, "2026-09", "report").value]).toEqual(["missing", 0]);
   });
-  it("진행 중인 달도 달 안에서 뒤늦게 보충한 보고서는 미작성이다(당일 작성만 — 원장 2026-10-14)", () => {
+  it("진행 중인 점수 달 안에서 뒤늦게 보충한 보고서도 미작성이다(당일 작성만 — 원장 2026-10-14)", () => {
     const d = fixture();
-    d.reports = [report("2026-10-07", "2026-10-12T00:00:00Z")];
-    expect(stateOn(d, "2026-10", "2026-10-07")).toBe("missing");
+    d.reports = [report("2026-09-09", "2026-10-02T00:00:00Z")];
+    expect(stateOn(d, "2026-09", "2026-09-09")).toBe("missing");
   });
   it("마감 뒤에 입력한 출결은 처리로 세지 않고, 마감 뒤의 정정이 마감 전 기록을 지우지 않는다", () => {
     const d = fixture();
-    d.attendance = [present("2026-09-30", "2026-10-01T00:00:00Z")];
-    expect(score(d, "2026-09", "attendance").detail.find((r) => r.day === "2026-09-30")?.done).toBe(false);
-    d.attendance = [present("2026-09-30", "2026-09-30T14:59:59Z"), present("2026-09-30", "2026-10-01T00:00:00Z", { id: "b", status: "absent", supersedes_id: "a2026-09-30" })];
-    expect(score(d, "2026-09", "report").detail.some((r) => r.day === "2026-09-30")).toBe(true);
+    d.attendance = [present("2026-08-26", "2026-08-27T00:00:00Z")];
+    expect(score(d, "2026-08", "attendance").detail.find((r) => r.day === "2026-08-26")?.done).toBe(false);
+    // 9월 점수(8월 기록)는 9/30에 마감 — 10/1의 결석 정정은 그 줄을 바꾸지 않는다.
+    d.attendance = [present("2026-08-26", "2026-08-26T09:00:00Z"), present("2026-08-26", "2026-10-01T00:00:00Z", { id: "b", status: "absent", supersedes_id: "a2026-08-26" })];
+    expect(score(d, "2026-08", "report").detail.some((r) => r.day === "2026-08-26")).toBe(true);
+    // 점수 달 안의 정정은 반영한다 — 9/5에 결석으로 고치면 그날은 보고 대상이 아니다.
+    d.attendance = [present("2026-08-26", "2026-08-26T09:00:00Z"), present("2026-08-26", "2026-09-05T00:00:00Z", { id: "b", status: "absent", supersedes_id: "a2026-08-26" })];
+    expect(score(d, "2026-08", "report").detail.some((r) => r.day === "2026-08-26")).toBe(false);
   });
   it("마감 뒤에 수정된 상담은 당시 완료 여부를 확정하지 않는다", () => {
     const d = fixture();
-    d.consultations = [{ id: "k", student_id: "s", counselor_id: "teacher", consulted_at: "2026-09-15T00:00:00Z", follow_up_date: "2026-09-30", follow_up_done: true, updated_at: "2026-10-01T00:00:00Z" }];
-    expect([score(d, "2026-09", "follow").raw, score(d, "2026-09", "follow").value, score(d, "2026-09", "follow").gap]).toEqual([null, 0, "마감 시점 확인"]);
+    d.consultations = [{ id: "k", student_id: "s", counselor_id: "teacher", consulted_at: "2026-08-14T00:00:00Z", follow_up_date: "2026-08-31", follow_up_done: true, updated_at: "2026-10-01T00:00:00Z" }];
+    expect([score(d, "2026-08", "follow").raw, score(d, "2026-08", "follow").value, score(d, "2026-08", "follow").gap]).toEqual([null, 0, "마감 시점 확인"]);
   });
 });
 

@@ -10,7 +10,7 @@
  * - 평균으로 둔 달에는 기록처럼 보이는 줄을 만들지 않는다(`detail`을 비우고 `estimated`에 근거를 싣는다).
  */
 import { monthOf, shiftMonth } from "@/lib/date-kst";
-import { round1 } from "./dates";
+import { dataMonthOf, round1 } from "./dates";
 import { metricOf, type PortfolioPeriod, type PreRecordPolicy } from "./types";
 
 export type DutyCounts = { report: number; attendance: number };
@@ -40,14 +40,18 @@ export function referenceMonthsAfter(before: string, count = 2): string[] {
 /**
  * 기준 달 평균을 쓴 달이 **아직 마감하면 안 되는가** — 기준 달이 하나라도 아직 끝나지 않았으면 기다린다.
  * 기록을 막 시작한 지점은 기준 달이 미래라 지금 마감하면 영영 산출불가로 굳는다(적대적 리뷰 2026-10-13).
+ * 기준 달은 **재료 달**이다 — `lastDataMonth` = 다 찬 가장 늦은 재료 달(지금 점수 달의 지난달 · `lastCompleteDataMonth`).
  */
-export function awaitsReference(period: Pick<PortfolioPeriod, "items">, policy: PreRecordPolicy | null, lastClosedMonth: string | null): boolean {
+export function awaitsReference(period: Pick<PortfolioPeriod, "items">, policy: PreRecordPolicy | null, lastDataMonth: string | null): boolean {
   if (!policy) return false;
   return period.items.some((m) => {
     const rule = m.estimated && (m.id === "report" || m.id === "attendance") ? policy[m.id] : undefined;
-    return Boolean(rule?.reference.some((month) => !lastClosedMonth || month > lastClosedMonth));
+    return Boolean(rule?.reference.some((month) => !lastDataMonth || month > lastDataMonth));
   });
 }
+
+/** 다 찬 가장 늦은 재료 달 — 창의 가장 새 점수 달의 지난달(재료 창은 늘 그 달 전체 · `dataWindowOf`). */
+export const lastCompleteDataMonth = (months: readonly { month: string }[]): string | null => (months[0] ? shiftMonth(months[0].month, -1) : null);
 
 export function applyPreRecord(monthly: WorkingPeriod[], policy: PreRecordPolicy): void {
   for (const w of monthly) {
@@ -57,9 +61,10 @@ export function applyPreRecord(monthly: WorkingPeriod[], policy: PreRecordPolicy
       const targets = w.duty[id];
       if (!rule || w.end >= rule.before || !targets) continue;
       // 기준 달의 **원래 수치**(작성률·처리율 %)를 평균한다 — 점수는 그 뒤 강사평가 설정이 매긴다(evaluate.ts).
+      // 기준 달 = 재료 달(`dataMonthOf`) — 재료 창은 늘 다 찬 달이라 진행 중인 점수 달의 줄도 기준이 된다.
       const used = monthly
-        .filter((r) => rule.reference.includes(r.month) && !r.partial && r.end >= rule.before)
-        .map((r) => ({ month: r.month, value: metricOf(r, id).raw ?? null, targets: r.duty[id] }))
+        .filter((r) => rule.reference.includes(dataMonthOf(r)) && r.end >= rule.before)
+        .map((r) => ({ month: dataMonthOf(r), value: metricOf(r, id).raw ?? null, targets: r.duty[id] }))
         .filter((r): r is { month: string; value: number; targets: number } => r.targets > 0 && r.value !== null)
         .map(({ month, value }) => ({ month, value }))
         .sort((a, b) => a.month.localeCompare(b.month));
