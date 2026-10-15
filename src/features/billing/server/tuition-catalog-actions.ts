@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import type { SystemRole } from "@/lib/permissions";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { normalizePricingMode, type PricingMode } from "@/features/billing/tuition-catalog";
+import { logAction } from "@/features/audit/server/log";
 
 export type TuitionCatalogActionState = { error?: string; ok?: boolean } | undefined;
 
@@ -54,6 +55,13 @@ export async function createTuitionItem(
   });
   if (error) return { error: error.message };
 
+  // 🔴 단가(price)·비고(note)는 담지 않는다 — 감사로그의 일은 "누가 무엇을 바꿨나"다.
+  await logAction({
+    action: "tuition_catalog_create",
+    targetType: "tuition_catalog",
+    targetLabel: f.name,
+    metadata: { pricingMode: f.pricingMode },
+  });
   revalidatePath("/billing");
   return { ok: true };
 }
@@ -72,12 +80,21 @@ export async function updateTuitionItem(
   if (f.error) return { error: f.error };
 
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from("tuition_catalog")
     .update({ category: f.category, name: f.name, price: f.price, pricing_mode: f.pricingMode, note: f.note })
-    .eq("id", id);
+    .eq("id", id)
+    .select("id"); // 0행(이미 지워진 항목)이면 감사로그를 남기지 않는다.
   if (error) return { error: error.message };
 
+  if (updated?.length) {
+    await logAction({
+      action: "tuition_catalog_update",
+      targetType: "tuition_catalog",
+      targetLabel: f.name,
+      metadata: { itemId: id, pricingMode: f.pricingMode },
+    });
+  }
   revalidatePath("/billing");
   return { ok: true };
 }
@@ -94,9 +111,17 @@ export async function deleteTuitionItem(
   if (!id) return { error: "항목 ID가 누락되었습니다" };
 
   const supabase = await createClient();
-  const { error } = await supabase.from("tuition_catalog").delete().eq("id", id);
+  const { data: removed, error } = await supabase.from("tuition_catalog").delete().eq("id", id).select("name");
   if (error) return { error: error.message };
 
+  if (removed?.length) {
+    await logAction({
+      action: "tuition_catalog_delete",
+      targetType: "tuition_catalog",
+      targetLabel: (removed[0].name as string | null) ?? null,
+      metadata: { itemId: id },
+    });
+  }
   revalidatePath("/billing");
   return { ok: true };
 }
@@ -124,9 +149,21 @@ export async function setTuitionPricingMode(
   const pricingMode = normalizePricingMode(String(formData.get("pricing_mode") ?? ""));
 
   const supabase = await createClient();
-  const { error } = await supabase.from("tuition_catalog").update({ pricing_mode: pricingMode }).eq("id", id);
+  const { data: changed, error } = await supabase
+    .from("tuition_catalog")
+    .update({ pricing_mode: pricingMode })
+    .eq("id", id)
+    .select("name");
   if (error) return { error: error.message };
 
+  if (changed?.length) {
+    await logAction({
+      action: "tuition_catalog_pricing_mode",
+      targetType: "tuition_catalog",
+      targetLabel: (changed[0].name as string | null) ?? null,
+      metadata: { itemId: id, pricingMode },
+    });
+  }
   revalidatePath("/billing");
   return { ok: true };
 }
@@ -144,9 +181,21 @@ export async function toggleTuitionActive(
   if (!id) return { error: "항목 ID가 누락되었습니다" };
 
   const supabase = await createClient();
-  const { error } = await supabase.from("tuition_catalog").update({ is_active: next }).eq("id", id);
+  const { data: toggled, error } = await supabase
+    .from("tuition_catalog")
+    .update({ is_active: next })
+    .eq("id", id)
+    .select("name");
   if (error) return { error: error.message };
 
+  if (toggled?.length) {
+    await logAction({
+      action: "tuition_catalog_toggle",
+      targetType: "tuition_catalog",
+      targetLabel: (toggled[0].name as string | null) ?? null,
+      metadata: { itemId: id, active: next },
+    });
+  }
   revalidatePath("/billing");
   return { ok: true };
 }

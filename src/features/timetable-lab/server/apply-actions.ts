@@ -3,6 +3,7 @@
 import { getCurrentUser } from '@/lib/auth/current-user';
 import { canManageTenant } from '@/lib/auth/perm-matrix';
 import { tenantViewWriteError } from '@/lib/auth/tenant-view';
+import { logAction } from '@/features/audit/server/log';
 import { canUseTimetableEditor } from './access';
 import { draftSnapshotSchema, boundedJson } from '../draft-schema';
 import { openMasterDb } from '@/features/timetable/server/master-sheet-store';
@@ -100,9 +101,16 @@ export async function queueTimetableLabApply(input: Request & { expectedHash: st
         return row!;
       });
       if (new Date(job.at).getTime() <= Date.now() && job.status === 'pending') {
-        await runApplyJob(job.id);
+        await runApplyJob(job.id); // 즉시 적용 — 적용 자체는 runApplyJob이 timetable_structure_apply로 남긴다
         return { job: { ...job, status: 'applied' } };
       }
+      // 나중에 적용할 예약 — 적용 때까지 기록이 없어 예약 자체를 남긴다(누가 · 언제 적용할지).
+      await logAction({
+        action: 'timetable_lab_apply_schedule',
+        targetType: 'timetable',
+        targetLabel: '시간표 연습본 적용 예약',
+        metadata: { jobId: job.id, applyAt: job.at, effectiveDate: prepared.time.date },
+      });
       return { job };
     } finally { await sql.end({ timeout: 5 }); }
   } catch (error) { return { error: friendly(error) }; }
@@ -128,6 +136,7 @@ export async function cancelTimetableLabApplyJob(id: string): Promise<{ ok: true
     try {
       const rows = await sql`update timetable_lab_apply_jobs set status='cancelled',finished_at=now() where tenant_id=${user.tenantId} and actor_id=${user.id} and id=${id}::uuid and status='pending' and apply_at>now() returning id`;
       if (!rows.length) throw new Error('이미 적용 시간이 지났거나 취소된 예약입니다.');
+      await logAction({ action: 'timetable_lab_apply_cancel', targetType: 'timetable', targetLabel: '시간표 연습본 적용 예약', metadata: { jobId: id } });
       return { ok: true };
     } finally { await sql.end({ timeout: 5 }); }
   } catch (error) { return { error: friendly(error) }; }

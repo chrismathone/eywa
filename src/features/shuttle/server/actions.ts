@@ -363,6 +363,7 @@ export async function updateRunStopTime(formData: FormData): Promise<ShuttleActi
     .eq("tenant_id", ctx.tenantId);
   if (error) return { error: friendly(error, "시각을 저장하지 못했습니다") };
 
+  await logAction({ action: "shuttle_run_stop_time", targetType: "shuttle", metadata: { runStopId: id, atTime: raw || null } });
   refresh();
   return { ok: true };
 }
@@ -430,6 +431,7 @@ export async function reorderRunStops(runId: string, orderedIds: string[]): Prom
   const failed = results.find((r) => r.error);
   if (failed?.error) return { error: friendly(failed.error, "순서를 저장하지 못했습니다") };
 
+  await logAction({ action: "shuttle_run_stop_reorder", targetType: "shuttle", metadata: { runId, stops: orderedIds.length } });
   refresh();
   return { ok: true };
 }
@@ -501,13 +503,22 @@ export async function updateRiderWeekdays(formData: FormData): Promise<ShuttleAc
   if (weekdays.length === 0) return { error: "요일을 모두 끄려면 배정을 삭제하세요" };
 
   const admin = createAdminClient();
-  const { error } = await admin
+  const { data: rider, error } = await admin
     .from("shuttle_riders")
     .update({ weekdays })
     .eq("id", id)
-    .eq("tenant_id", ctx.tenantId);
+    .eq("tenant_id", ctx.tenantId)
+    .select("student_id")
+    .maybeSingle();
   if (error) return { error: friendly(error, "요일을 저장하지 못했습니다") };
 
+  if (rider) {
+    await logAction({
+      action: "shuttle_rider_weekdays",
+      targetType: "shuttle",
+      metadata: { riderId: id, studentId: (rider.student_id as string | null) ?? null, weekdays },
+    });
+  }
   refresh();
   return { ok: true };
 }

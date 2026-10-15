@@ -5,7 +5,7 @@ import { orderReportRows, reportRowGroup } from "../report-row-order";
 import { CLASS_GROUP_MAKEUP, CLASS_GROUP_OTHER } from "../class-tags";
 import { Fragment, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { buildGridRows, buildRowRenderMeta, effectiveClassnoteStatus, isRowActionable, isRowInputEditable, rowInClass } from "../grid";
+import { buildGridRows, buildRowRenderMeta, effectiveClassnoteStatus, isRowActionable, isRowInputEditable, rowClassName, rowInClass } from "../grid";
 import { hasTextBesidesMarkers } from "@/features/report-templates/image-slots";
 import { BulkPresentButton, type BulkPresentProps } from "./bulk-present-button";
 import { planBulkAttendance } from "../bulk-attendance";
@@ -293,6 +293,10 @@ export function OneScreenGrid({
                 checkEnabled: config.checkEnabled,
                 allowTestMax: config.allowTestMax,
                 ...bulkVideo,
+                classRows: copyRows.flatMap((r) => {
+                  const className = rowClassName(r.subject);
+                  return className ? [{ className, subjectKey: r.subject.subjectKey ?? "math" }] : [];
+                }),
               }}
               subjects={bulkSubjects}
               studyGrade={bulkStudyGrade}

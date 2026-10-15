@@ -17,6 +17,54 @@ const ctx = (names: Record<string, string> = {}) => ({
   subjectLabel: (key: string) => ({ math: "수학", english: "영어" })[key] ?? key,
 });
 
+describe("auditDetail — 원스크린 일괄 입력(2026-10-15)", () => {
+  const C1 = "c1111111-2222-3333-4444-555555555555";
+  const C2 = "c2222222-2222-3333-4444-555555555555";
+  it("방식 · 날짜 · 행 수 · 반 이름 · 칸(한글) — 모르는 칸 키는 안 보인다", () => {
+    const line = auditDetail(
+      "onescreen_bulk_apply",
+      { mode: "copy", date: "2026-10-15", rows: 16, classIds: [C1, C2], fields: ["today", "homeworkToday", "weird"] },
+      ctx({ [C1]: "MS2A", [C2]: "PS3A" }),
+    );
+    expect(line).toBe("맨 위 행 복사 · 2026-10-15 · 16행 · 반 MS2A·PS3A · 칸 진도·오늘 과제");
+  });
+  it("배열로 적은 반 id도 이름 조회 대상이다 — 쓰는 분기가 없는 학생 id 배열은 안 모은다(조회 폭증)", () => {
+    expect(collectAuditNameIds([{ metadata: { classIds: [C1, "x", C2], studentIds: [SID] } }])).toEqual({ studentIds: [], userIds: [], classIds: [C1, C2] });
+  });
+});
+
+describe("auditDetail — 감사로그 빈틈 메우기(2026-10-15)", () => {
+  it("학생 기록은 누구 · 과목(한글) · 날짜 — 점수·본문은 기록에 없다", () => {
+    expect(auditDetail("student_grade_create", { studentId: SID, subject: "math", year: 2026, term: 2, slot: "mid", date: "2026-10-15" }, ctx({ [SID]: "김학생" })))
+      .toBe("김학생 · 수학 · 2026-10-15");
+    expect(auditDetail("student_grade_comment_delete", { commentId: "x", studentId: SID, subject: "english" }, ctx({ [SID]: "김학생" }))).toBe("김학생 · 영어");
+  });
+  it("켜고 끄는 기록은 방향을 말한다", () => {
+    expect(auditDetail("student_memo_pin", { studentId: SID, pinned: false }, ctx({ [SID]: "김학생" }))).toBe("김학생 · 고정 해제");
+    expect(auditDetail("progress_anomaly_resolve", { studentId: SID, resolved: true }, ctx({ [SID]: "김학생" }))).toBe("김학생 · 이상 없음으로 확인");
+    expect(auditDetail("tuition_catalog_toggle", { itemId: "x", active: false }, ctx())).toBe("중지로");
+    expect(auditDetail("shuttle_rider_weekdays", { studentId: SID, weekdays: ["mon", "wed"] }, ctx({ [SID]: "김학생" }))).toContain("김학생");
+  });
+  it("보강 연결 — 메모만 붙인 것과 시수까지 고친 것을 가른다 · 보강관리 처리는 명령 이름 한글로", () => {
+    expect(auditDetail("attendance_makeup_link", { studentId: SID, absentDate: "2026-10-01", makeupDate: "2026-10-03", memoOnly: true }, ctx({ [SID]: "김학생" })))
+      .toBe("김학생 · 결석 2026-10-01 · 보강 2026-10-03 · 메모만 연결");
+    // 시수까지 고친 옛 기록 — 보강 반·결석 반 이름이 보인다.
+    const CA = "ca111111-2222-3333-4444-555555555555";
+    const CB = "cb111111-2222-3333-4444-555555555555";
+    expect(auditDetail("attendance_makeup_link", { studentId: SID, classId: CA, absentClassId: CB, absentDate: "2026-10-01", makeupDate: "2026-10-03", units: 2 }, ctx({ [SID]: "김학생", [CA]: "MS1A", [CB]: "MS2A" })))
+      .toBe("김학생 · 결석 2026-10-01 MS2A · 보강 2026-10-03 MS1A · 보강 칸 시수 2");
+    expect(collectAuditNameIds([{ metadata: { absentClassId: CB } }]).classIds).toEqual([CB]);
+    expect(auditDetail("makeup_case_command", { command: "reserve", studentId: SID }, ctx({ [SID]: "김학생" }))).toBe("예약 · 김학생");
+    expect(auditDetail("makeup_case_command", { command: "weird" }, ctx())).toBeNull();
+  });
+  it("반 생성의 담임 id도 이름 조회 대상이다", () => {
+    expect(collectAuditNameIds([{ metadata: { teacherId: UID } }]).userIds).toEqual([UID]);
+  });
+  it("새 대상 유형은 한글 라벨이 있다", () => {
+    for (const t of ["textbook_catalog", "tuition_catalog", "tuition_quote", "staff_leave", "withdrawal_report_archive", "makeup"]) expect(AUDIT_TYPE_LABEL[t], t).toBeTruthy();
+  });
+});
+
 describe("auditDetail — 청구 회차 행 생성(출석부 줄에 맞춤, 2026-09-18)", () => {
   it("영문 이름 변경은 이전·이후 이름을 남긴다", () => {
     expect(auditDetail("student_english_name_update", { studentId: SID, before: "Lucy", after: "Luna" }, ctx({ [SID]: "김학생" }))).toContain("영문 이름 Lucy → Luna");

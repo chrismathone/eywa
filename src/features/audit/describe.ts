@@ -33,6 +33,7 @@ import {
   type TextbookFieldChange,
 } from "@/features/billing/textbook-audit";
 import { modelDisplayLabel } from "@/lib/ai/model-label";
+import { MAKEUP_ACTION } from "@/features/makeups/status";
 import { assetStatusLabel } from "@/features/inventory/status";
 import { loanStatusLabel } from "@/features/inventory/loan-status";
 import { assetCategoryLabel } from "@/features/inventory/category";
@@ -118,6 +119,13 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   help_post: "도움말 질문",
   help_answer: "도움말 답변",
   support_request: "개선요청",
+  // 감사로그 빈틈 메우기(2026-10-15) — 수납 단가표·견적 · 직원 휴가.
+  textbook_catalog: "교재 단가표",
+  tuition_catalog: "수강료 단가",
+  tuition_quote: "수강료 견적",
+  staff_leave: "직원 휴가",
+  withdrawal_report_archive: "퇴원보고서 원본 기록",
+  makeup: "보강관리",
 };
 
 // 시험유형은 운영 enum이 아니라 코드 고정(CLAUDE.md) — exams 화면과 동일 라벨.
@@ -322,14 +330,23 @@ export function collectAuditNameIds(rows: Array<{ metadata: Meta | null }>): {
     const sid = str(m.studentId);
     if (sid && UUID_RE.test(sid)) students.add(sid);
     // scopeTeacherId = 출석부 강사 전체 보기의 주인(출결 저장 로그, 2026-09-11).
-    for (const key of ["userId", "newTeacherId", "delegateUserId", "scopeTeacherId"]) {
+    for (const key of ["userId", "newTeacherId", "delegateUserId", "scopeTeacherId", "teacherId"]) {
       const uid = str(m[key]);
       if (uid && UUID_RE.test(uid)) users.add(uid);
     }
     // fromClassId·toClassId = 보강 반 바꾸기(makeup_class_change, 2026-09-30)의 옛 반·새 반.
-    for (const key of ["classId", "fromClassId", "toClassId"]) {
+    for (const key of ["classId", "fromClassId", "toClassId", "absentClassId"]) {
       const cid = str(m[key]);
       if (cid && UUID_RE.test(cid)) classes.add(cid);
+    }
+    // 여러 반을 한 줄에 남기는 일괄 기록(원스크린 일괄 입력, 2026-10-15) — 배열도 이름으로 읽는다(앞 50개).
+    // ⚠️ 이름으로 쓰는 분기가 있는 배열만 모은다 — 옛 일괄 로그의 `studentIds`까지 모으면 한 쪽에 조회가 수천 건이 된다.
+    const classList = m.classIds;
+    if (Array.isArray(classList)) {
+      for (const v of classList.slice(0, 50)) {
+        const id = str(v);
+        if (id && UUID_RE.test(id)) classes.add(id);
+      }
     }
   }
   return { studentIds: [...students], userIds: [...users], classIds: [...classes] };
@@ -387,6 +404,66 @@ export function auditDetail(
 ): string | null {
   const m = metadata ?? {};
   switch (action) {
+    // 원스크린 일괄 입력(2026-10-15) — 방식 · 날짜 · 몇 행 · 어느 반 · 어떤 칸. 글 내용은 기록에 없다(bulk-log-actions.ts).
+    case "onescreen_bulk_apply": {
+      const FIELD: Record<string, string> = {
+        today: "진도", textbook: "교재", homeworkToday: "오늘 과제", attitude: "태도", homework: "과제", note: "특이사항",
+        dailyScore: "데일리 점수", dailyMax: "데일리 문항수", checkScore: "체크 점수", checkMax: "체크 문항수",
+        videoHomework: "영상 과제", videoSubmitLink: "영상 링크", videoHomeworkDue: "영상 마감",
+      };
+      const classes = Array.isArray(m.classIds) ? m.classIds.map((id) => ctx.nameOf(id)).filter((n): n is string => !!n) : [];
+      const fields = Array.isArray(m.fields) ? m.fields.map((f) => FIELD[String(f)]).filter((f): f is string => !!f) : [];
+      const rows = num(m.rows);
+      return join(
+        m.mode === "copy" ? "맨 위 행 복사" : "직접 입력",
+        str(m.date),
+        rows != null ? `${rows}행` : null,
+        classes.length ? `반 ${classes.join("·")}` : null,
+        fields.length ? `칸 ${fields.join("·")}` : null,
+      );
+    }
+    // 학생 상세의 성적·레벨테스트·목표·학습 코멘트(감사로그 빈틈 메우기 2026-10-15) — 누구 · 과목 · 날짜. 점수·본문은 기록에 없다.
+    case "student_grade_create":
+    case "student_grade_delete":
+    case "student_level_test_create":
+    case "student_level_test_delete":
+    case "student_goal_create":
+    case "student_goal_delete":
+    case "student_grade_comment_create":
+    case "student_grade_comment_update":
+    case "student_grade_comment_delete": {
+      const subject = str(m.subject);
+      return join(ctx.nameOf(m.studentId), subject ? ctx.subjectLabel(subject) : null, str(m.date));
+    }
+    // 켜고 끄는 기록(2026-10-15) — 기본 분기는 불리언을 숨겨 방향이 사라진다.
+    case "student_memo_pin":
+      return join(ctx.nameOf(m.studentId), m.pinned === true ? "고정" : m.pinned === false ? "고정 해제" : null);
+    case "progress_anomaly_resolve":
+      return join(ctx.nameOf(m.studentId), m.resolved === true ? "이상 없음으로 확인" : m.resolved === false ? "확인 되돌림" : null);
+    case "textbook_catalog_toggle":
+    case "tuition_catalog_toggle":
+      return m.active === true ? "사용으로" : m.active === false ? "중지로" : null;
+    case "shuttle_run_stop_time":
+      return str(m.atTime) ? `정류장 시각 ${str(m.atTime)}` : "정류장 시각 지움";
+    case "shuttle_run_stop_reorder":
+      return num(m.stops) != null ? `정류장 ${num(m.stops)}곳 순서` : null;
+    case "shuttle_rider_weekdays": {
+      const days = Array.isArray(m.weekdays) ? compactWeekdays(m.weekdays.map(String)) : "";
+      return join(ctx.nameOf(m.studentId), days || null);
+    }
+    case "enrollment_consultation_report_edit":
+      return join("AI 분석 한 섹션 수정", num(m.chars) != null ? `${num(m.chars)}자` : null);
+    // 보강 칸 ↔ 결석 연결 — 시수까지 고치는 연결과 메모만 붙이는 연결(memoOnly)이 같은 키다.
+    case "attendance_makeup_link":
+      return join(
+        ctx.nameOf(m.studentId),
+        str(m.absentDate) ? `결석 ${str(m.absentDate)}${ctx.nameOf(m.absentClassId) ? ` ${ctx.nameOf(m.absentClassId)}` : ""}` : null,
+        str(m.makeupDate) ? `보강 ${str(m.makeupDate)}${ctx.nameOf(m.classId) ? ` ${ctx.nameOf(m.classId)}` : ""}` : null,
+        m.memoOnly === true ? "메모만 연결" : num(m.units) != null ? `보강 칸 시수 ${num(m.units)}` : null,
+        m.alreadyLinked === true ? "이미 연결됨" : null,
+      );
+    case "makeup_case_command":
+      return join(MAKEUP_ACTION[String(m.command)] ?? null, ctx.nameOf(m.studentId));
     // 숙제 영상 제출 링크(0325a) — 어느 반 · 어디서 만든 링크 · 언제까지 / 몇 개 끊었나 / 어느 폴더에 얼마나.
     case "lesson_report_video_link_issue":
       return join(

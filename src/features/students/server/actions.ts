@@ -1101,6 +1101,13 @@ export async function createStudentMemo(
 
   if (error) return { error: dbWhy(error, "students.memo.create", "메모를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.") };
 
+  // 🔴 메모 **본문은 담지 않는다**(학생 서술) — 분류·검색 허용 여부까지만.
+  await logAction({
+    action: "student_memo_create",
+    targetType: "student",
+    metadata: { studentId, category, searchable },
+  });
+
   revalidatePath(`/students/${studentId}`);
   // 성공을 undefined로 돌리면 useActionState 소비처가 성공을 감지할 수 없다(성공 시 reset·초안 삭제가 죽는다).
   return { ok: true };
@@ -1123,8 +1130,17 @@ export async function deleteStudentMemo(
   if (scopeErr) return { error: scopeErr };
 
   const supabase = await createClient();
-  const { error } = await supabase.from("student_memos").delete().eq("id", id);
+  const { data: gone, error } = await supabase.from("student_memos").delete().eq("id", id).select("student_id");
   if (error) return { error: dbWhy(error, "students.memo.delete", "메모를 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.", "delete") };
+
+  // 지운 행이 없으면(이미 지워졌거나 DB가 허락하지 않음) 남기지 않는다 — 없는 삭제를 기록하지 않는다.
+  if (gone?.length) {
+    await logAction({
+      action: "student_memo_delete",
+      targetType: "student",
+      metadata: { memoId: id, studentId: (gone[0].student_id as string | null) ?? (studentId || null) },
+    });
+  }
 
   if (studentId) revalidatePath(`/students/${studentId}`);
   return undefined;
@@ -1151,11 +1167,21 @@ export async function updateStudentMemo(
   if (scopeErr) return { error: scopeErr };
 
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data: saved, error } = await supabase
     .from("student_memos")
     .update({ category, content, searchable, updated_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq("id", id)
+    .select("student_id");
   if (error) return { error: dbWhy(error, "students.memo.update", "메모를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.") };
+
+  // 본문은 담지 않는다(작성과 같은 규칙). 바뀐 행이 없으면 남기지 않는다.
+  if (saved?.length) {
+    await logAction({
+      action: "student_memo_update",
+      targetType: "student",
+      metadata: { memoId: id, studentId: (saved[0].student_id as string | null) ?? (studentId || null), category, searchable },
+    });
+  }
 
   if (studentId) revalidatePath(`/students/${studentId}`);
   return { ok: true };
@@ -1179,11 +1205,20 @@ export async function toggleStudentMemoPin(
   if (scopeErr) return { error: scopeErr };
 
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data: saved, error } = await supabase
     .from("student_memos")
     .update({ pinned, updated_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq("id", id)
+    .select("student_id");
   if (error) return { error: dbWhy(error, "students.memo.pin", "메모 고정을 바꾸지 못했습니다. 잠시 후 다시 시도해 주세요.") };
+
+  if (saved?.length) {
+    await logAction({
+      action: "student_memo_pin",
+      targetType: "student",
+      metadata: { memoId: id, studentId: (saved[0].student_id as string | null) ?? (studentId || null), pinned },
+    });
+  }
 
   if (studentId) revalidatePath(`/students/${studentId}`);
   return undefined;
@@ -1246,6 +1281,13 @@ export async function createStudentGrade(
     return { error: e instanceof Error ? e.message : "성적을 저장하지 못했습니다" };
   }
 
+  // 🔴 점수·메모는 담지 않는다 — 어느 학생·과목·학기·시험 칸에 적었는지만(성적 원장 저장 `exam_scores`와 같은 축).
+  await logAction({
+    action: "student_grade_create",
+    targetType: "student",
+    metadata: { studentId, subject, year, term, slot, date: takenOn },
+  });
+
   revalidatePath(`/students/${studentId}`);
   return undefined;
 }
@@ -1268,8 +1310,22 @@ export async function deleteStudentGrade(
   if (scopeErr) return { error: scopeErr };
 
   const supabase = await createClient();
-  const { error } = await supabase.from("student_grades").delete().eq("id", id);
+  const { data: gone, error } = await supabase
+    .from("student_grades")
+    .delete()
+    .eq("id", id)
+    .select("student_id, subject, taken_on");
   if (error) return { error: dbWhy(error, "students.grade.delete", "성적을 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.", "delete") };
+
+  // 🔴 점수는 담지 않는다 — 어느 학생·과목·시험일의 성적을 지웠는지만. 지운 행이 없으면 남기지 않는다.
+  if (gone?.length) {
+    const g = gone[0] as { student_id: string | null; subject: string | null; taken_on: string | null };
+    await logAction({
+      action: "student_grade_delete",
+      targetType: "student",
+      metadata: { gradeId: id, studentId: g.student_id ?? (studentId || null), subject: g.subject, date: g.taken_on },
+    });
+  }
 
   if (studentId) revalidatePath(`/students/${studentId}`);
   return undefined;
@@ -1327,6 +1383,13 @@ export async function createStudentLevelTest(
   });
   if (error) return { error: dbWhy(error, "students.levelTest.create", "레벨테스트를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.") };
 
+  // 🔴 결과(레벨·세부점수)와 메모는 담지 않는다 — 언제·무슨 시험을 적었는지만.
+  await logAction({
+    action: "student_level_test_create",
+    targetType: "student",
+    metadata: { studentId, subject, testType, date: testedOn },
+  });
+
   revalidatePath(`/students/${studentId}`);
   return undefined;
 }
@@ -1346,8 +1409,21 @@ export async function deleteStudentLevelTest(
   if (scopeErr) return { error: scopeErr };
 
   const supabase = await createClient();
-  const { error } = await supabase.from("level_tests").delete().eq("id", id);
+  const { data: gone, error } = await supabase
+    .from("level_tests")
+    .delete()
+    .eq("id", id)
+    .select("student_id, subject, test_type, tested_on");
   if (error) return { error: dbWhy(error, "students.levelTest.delete", "레벨테스트를 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.", "delete") };
+
+  if (gone?.length) {
+    const t = gone[0] as { student_id: string | null; subject: string | null; test_type: string | null; tested_on: string | null };
+    await logAction({
+      action: "student_level_test_delete",
+      targetType: "student",
+      metadata: { levelTestId: id, studentId: t.student_id ?? (studentId || null), subject: t.subject, testType: t.test_type, date: t.tested_on },
+    });
+  }
 
   if (studentId) revalidatePath(`/students/${studentId}`);
   return undefined;
@@ -1426,6 +1502,13 @@ export async function createStudentGoal(_prev: GoalState, formData: FormData): P
     return { error: why.message };
   }
 
+  // 🔴 목표 점수·사유는 담지 않는다 — 어느 시험 칸에 목표를 두었는지만.
+  await logAction({
+    action: "student_goal_create",
+    targetType: "student",
+    metadata: { studentId, subject: axis.subject, year: axis.year, term: axis.term, slot: axis.slot, month: axis.month },
+  });
+
   revalidatePath(`/students/${studentId}`);
   revalidatePath("/exams");
   return { ok: true };
@@ -1442,8 +1525,17 @@ export async function deleteStudentGoal(_prev: GoalState, formData: FormData): P
   if (scopeErr) return { error: scopeErr };
 
   const supabase = await createClient();
-  const { error: delErr } = await supabase.from("grade_goals").delete().eq("id", id);
+  const { data: gone, error: delErr } = await supabase.from("grade_goals").delete().eq("id", id).select("student_id, subject");
   if (delErr) return { error: dbWhy(delErr, "students.goal.delete", "목표를 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.", "delete") };
+
+  if (gone?.length) {
+    const g = gone[0] as { student_id: string | null; subject: string | null };
+    await logAction({
+      action: "student_goal_delete",
+      targetType: "student",
+      metadata: { goalId: id, studentId: g.student_id ?? (studentId || null), subject: g.subject },
+    });
+  }
 
   if (studentId) revalidatePath(`/students/${studentId}`);
   revalidatePath("/exams");
@@ -1490,6 +1582,13 @@ export async function createStudentGradeComment(
   });
   if (insErr) return { error: dbWhy(insErr, "students.gradeComment.create", "코멘트를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.") };
 
+  // 🔴 코멘트 **본문은 담지 않는다** — 분류·과목·기간·학부모 공유 여부까지만.
+  await logAction({
+    action: "student_grade_comment_create",
+    targetType: "student",
+    metadata: { studentId, category: f.category, subject: f.subject, period: f.period, sharedWithParent: f.sharedWithParent },
+  });
+
   revalidatePath(`/students/${studentId}`);
   return { ok: true };
 }
@@ -1511,7 +1610,7 @@ export async function updateStudentGradeComment(
   if (scopeErr) return { error: scopeErr };
 
   const supabase = await createClient();
-  const { error: updErr } = await supabase
+  const { data: saved, error: updErr } = await supabase
     .from("grade_comments")
     .update({
       category: f.category,
@@ -1520,8 +1619,25 @@ export async function updateStudentGradeComment(
       period: f.period,
       shared_with_parent: f.sharedWithParent,
     })
-    .eq("id", id);
+    .eq("id", id)
+    .select("student_id");
   if (updErr) return { error: dbWhy(updErr, "students.gradeComment.update", "코멘트를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.") };
+
+  // 본문은 담지 않는다(작성과 같은 규칙). 바뀐 행이 없으면 남기지 않는다.
+  if (saved?.length) {
+    await logAction({
+      action: "student_grade_comment_update",
+      targetType: "student",
+      metadata: {
+        commentId: id,
+        studentId: (saved[0].student_id as string | null) ?? (studentId || null),
+        category: f.category,
+        subject: f.subject,
+        period: f.period,
+        sharedWithParent: f.sharedWithParent,
+      },
+    });
+  }
 
   if (studentId) revalidatePath(`/students/${studentId}`);
   return { ok: true };
@@ -1541,8 +1657,21 @@ export async function deleteStudentGradeComment(
   if (scopeErr) return { error: scopeErr };
 
   const supabase = await createClient();
-  const { error: delErr } = await supabase.from("grade_comments").delete().eq("id", id);
+  const { data: gone, error: delErr } = await supabase
+    .from("grade_comments")
+    .delete()
+    .eq("id", id)
+    .select("student_id, category, subject, period");
   if (delErr) return { error: dbWhy(delErr, "students.gradeComment.delete", "코멘트를 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.", "delete") };
+
+  if (gone?.length) {
+    const c = gone[0] as { student_id: string | null; category: string | null; subject: string | null; period: string | null };
+    await logAction({
+      action: "student_grade_comment_delete",
+      targetType: "student",
+      metadata: { commentId: id, studentId: c.student_id ?? (studentId || null), category: c.category, subject: c.subject, period: c.period },
+    });
+  }
 
   if (studentId) revalidatePath(`/students/${studentId}`);
   return undefined;

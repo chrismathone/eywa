@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { teacherOwnsStudent } from "@/features/onescreen/server/scope";
+import { logAction } from "@/features/audit/server/log";
 import { canResolveProgressAnomaly } from "../anomaly-gate";
 
 type Result = { ok: boolean; error?: string };
@@ -49,6 +50,13 @@ export async function setProgressAnomalyResolved(eventId: string, resolved: bool
     )
     .eq("id", eventId);
   if (updateError) return { ok: false, error: updateError.message };
+
+  // 감사로그 — 경고 신호를 끄는(또는 되살리는) 판단이라 누가 했는지 남긴다. 학생 이름은 뷰어가 metadata.studentId로 푼다.
+  await logAction({
+    action: "progress_anomaly_resolve",
+    targetType: "student",
+    metadata: { eventId, studentId: event.student_id, eventType: event.event_type, resolved },
+  });
 
   // 진도 탭(이 화면) + 원스크린 배지가 같은 신호를 읽으므로 둘 다 무효화.
   revalidatePath(`/students/${event.student_id}`);

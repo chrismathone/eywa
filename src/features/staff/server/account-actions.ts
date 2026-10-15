@@ -439,6 +439,13 @@ export async function updateWorkSchedule(
     .eq("tenant_id", actor.tenantId);
   if (error) return { error: explainDbError(error, { scope: "staff.account.workSchedule", fallback: "근무 설정을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요." }).message };
 
+  // admin 클라이언트라 DB 트리거가 행위자를 못 본다 — 누가 바꿨는지는 이 줄이 유일한 기록이다.
+  await logAction({
+    action: "staff_work_schedule_update",
+    targetType: "staff",
+    targetLabel: target.displayName ?? target.email,
+    metadata: { userId: id, dayCount: Object.keys(clean).length },
+  });
   revalidatePath(`/staff/${id}`);
   return { ok: true };
 }

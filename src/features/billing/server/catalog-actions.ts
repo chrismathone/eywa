@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import type { SystemRole } from "@/lib/permissions";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
+import { logAction } from "@/features/audit/server/log";
 
 export type CatalogActionState = { error?: string; ok?: boolean } | undefined;
 
@@ -56,6 +57,12 @@ export async function createCatalogItem(
   });
   if (error) return { error: error.message };
 
+  // 🔴 단가(price)는 담지 않는다 — 감사로그의 일은 "누가 무엇을 바꿨나"다.
+  await logAction({
+    action: "textbook_catalog_create",
+    targetType: "textbook_catalog",
+    targetLabel: f.title,
+  });
   revalidatePath("/billing");
   return { ok: true };
 }
@@ -74,7 +81,7 @@ export async function updateCatalogItem(
   if (f.error) return { error: f.error };
 
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from("textbook_catalog")
     .update({
       title: f.title,
@@ -84,9 +91,18 @@ export async function updateCatalogItem(
       publisher: f.publisher,
       price: f.price,
     })
-    .eq("id", id);
+    .eq("id", id)
+    .select("id"); // 0행(이미 지워진 항목)이면 감사로그를 남기지 않는다.
   if (error) return { error: error.message };
 
+  if (updated?.length) {
+    await logAction({
+      action: "textbook_catalog_update",
+      targetType: "textbook_catalog",
+      targetLabel: f.title,
+      metadata: { itemId: id },
+    });
+  }
   revalidatePath("/billing");
   return { ok: true };
 }
@@ -103,9 +119,17 @@ export async function deleteCatalogItem(
   if (!id) return { error: "교재 ID가 누락되었습니다" };
 
   const supabase = await createClient();
-  const { error } = await supabase.from("textbook_catalog").delete().eq("id", id);
+  const { data: removed, error } = await supabase.from("textbook_catalog").delete().eq("id", id).select("title");
   if (error) return { error: error.message };
 
+  if (removed?.length) {
+    await logAction({
+      action: "textbook_catalog_delete",
+      targetType: "textbook_catalog",
+      targetLabel: (removed[0].title as string | null) ?? null,
+      metadata: { itemId: id },
+    });
+  }
   revalidatePath("/billing");
   return { ok: true };
 }
@@ -123,9 +147,21 @@ export async function toggleCatalogActive(
   if (!id) return { error: "교재 ID가 누락되었습니다" };
 
   const supabase = await createClient();
-  const { error } = await supabase.from("textbook_catalog").update({ is_active: next }).eq("id", id);
+  const { data: toggled, error } = await supabase
+    .from("textbook_catalog")
+    .update({ is_active: next })
+    .eq("id", id)
+    .select("title");
   if (error) return { error: error.message };
 
+  if (toggled?.length) {
+    await logAction({
+      action: "textbook_catalog_toggle",
+      targetType: "textbook_catalog",
+      targetLabel: (toggled[0].title as string | null) ?? null,
+      metadata: { itemId: id, active: next },
+    });
+  }
   revalidatePath("/billing");
   return { ok: true };
 }

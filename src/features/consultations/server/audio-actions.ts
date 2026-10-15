@@ -1,7 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { kstToday } from "@/lib/date-kst";
+import { kstDateOf, kstToday } from "@/lib/date-kst";
+import { logAction } from "@/features/audit/server/log";
 import { submitTranscript } from "@/lib/ai/assemblyai";
 import { getAssemblyaiWebhookUrl } from "@/lib/config/app-url";
 import { getCurrentUser } from "@/lib/auth/current-user";
@@ -106,9 +107,25 @@ export async function startStudentConsultationFromAudio(
       audio_size_bytes: verifiedSize,
       processing_status: "uploaded",
     })
-    .select("id")
+    .select("id, consulted_at")
     .single();
   if (insertErr || !row) return { error: explainDbError(insertErr, { scope: "consultations.createFromAudio", fallback: "상담을 만들지 못했습니다. 잠시 후 다시 시도해 주세요." }).message };
+
+  // 전사 제출이 실패해도 상담 행은 이미 생겼다 — 생성 사실은 여기서 남긴다(등록상담 녹음과 같은 자리).
+  // 🔴 녹음·전사 **내용은 담지 않는다** — 텍스트 작성과 같은 키에 `withAudio`만 더한다.
+  await logAction({
+    action: "student_consultation_create",
+    targetType: "student_consultation",
+    metadata: {
+      consultationId: row.id as string,
+      studentId,
+      consultedAt: kstDateOf(row.consulted_at),
+      category,
+      audience,
+      withAudio: true,
+      sizeBytes: verifiedSize,
+    },
+  });
 
   const webhookUrl = getAssemblyaiWebhookUrl();
 
@@ -159,7 +176,7 @@ export async function runStudentConsultationAnalysis(
   const { data: row } = await supabase
     .from("student_consultations")
     .select(
-      "id, counselor_id, summary, transcription, consulted_at, audience, category, student:student_id ( name, grade, school )",
+      "id, student_id, counselor_id, summary, transcription, consulted_at, audience, category, student:student_id ( name, grade, school )",
     )
     .eq("id", id)
     .single();
@@ -181,6 +198,7 @@ export async function runStudentConsultationAnalysis(
     | { name?: string; grade?: string | null; school?: string | null }
     | undefined;
 
+  let modelId: string | null = null;
   try {
     const { report, model } = await analyzeStudentConsultation(text, {
       studentName: student?.name ?? "학생",
@@ -203,10 +221,24 @@ export async function runStudentConsultationAnalysis(
       })
       .eq("id", id);
     if (updErr) return { error: explainDbError(updErr, { scope: "consultations.analysis.save", fallback: "분석 결과를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요." }).message };
+    modelId = model;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return { error: `AI 분석 실패: ${msg}` };
   }
+
+  // 명시 버튼으로 돈 유료 AI 호출이라 누가 돌렸는지 남긴다(회의 재분석·케어 분석과 같은 결).
+  // 🔴 분석 **본문**과 전사는 담지 않는다 — 입력 분량과 모델만.
+  await logAction({
+    action: "student_consultation_analysis",
+    targetType: "student_consultation",
+    metadata: {
+      consultationId: id,
+      studentId: (row.student_id as string | null) ?? null,
+      model: modelId,
+      transcriptChars: text.length,
+    },
+  });
 
   revalidatePath(`/consultations/${id}/edit`);
   revalidatePath("/consultations");

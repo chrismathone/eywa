@@ -3550,6 +3550,10 @@ export const SHEET_DICT = {
     en: "· {n} attendance cells will be recorded as '{label}' — {over} of them overwrite an existing record.\n  Attendance goes into the attendance sheet the moment it is saved and cannot be undone here.",
   },
   "os.bulk.confirmTail": { ko: "계속할까요?", en: "Continue?" },
+  "os.bulk.warnMultiClass": {
+    ko: "· 서로 다른 반 {n}개({names})에 같은 진도·교재·오늘 과제가 들어갑니다.\n  한 반만 채우려면 그 반을 골라 두고 적용하세요.",
+    en: "· The same progress, book and homework go into {n} different classes ({names}).\n  To fill one class only, pick that class first.",
+  },
   "os.bulk.warnHoliday": {
     ko: "· 이 날짜는 학원 휴원일({name})입니다. 수업하지 않은 날이면 출결 {n}건을 기록하지 마세요.",
     en: "· This date is an academy holiday ({name}). If there was no lesson, do not record these {n} attendance cells.",
@@ -3577,8 +3581,8 @@ export const SHEET_DICT = {
   "os.bulk.copyNotB": { ko: "복사되지 않습니다", en: "not copied" },
   "os.bulk.copyNotC": { ko: "(학생마다 다른 기록)", en: " (each student's own record)" },
   "os.bulk.copySkip": {
-    ko: "다른 과목 행 · 발송 완료 행은 건너뜁니다",
-    en: "Rows of another subject and rows already sent are skipped",
+    ko: "다른 과목·다른 반 행 · 발송 완료 행은 건너뜁니다",
+    en: "Rows of another subject or class and rows already sent are skipped",
   },
   "os.bulk.subjectAria": { ko: "진도를 넣을 과목", en: "Subject to put the progress in" },
   "os.bulk.subjectOpt": { ko: "{name} ({n}행)", en: "{name} ({n} rows)" },
@@ -3895,6 +3899,8 @@ export const SHEET_DICT = {
   "os.c.copyNoRow": { ko: "복사할 아래 행이 없습니다", en: "There is no row below to copy into" },
   "os.c.copyWhyLocked": { ko: "입력 잠김 {n}행", en: "{n} rows locked" },
   "os.c.copyWhySubject": { ko: "다른 과목 {n}행", en: "{n} of another subject" },
+  "os.c.copyWhyClass": { ko: "다른 반 {n}행", en: "{n} of another class" },
+  "os.c.copyWhyNoClass": { ko: "반을 모르는 {n}행(반을 골라 다시)", en: "{n} with no class (pick the class and retry)" },
   "os.c.copyWhyFilled": { ko: "이미 입력됨 {n}행", en: "{n} rows already filled" },
   "os.c.copyNoneWhy": { ko: "복사할 칸이 없습니다 — {why}", en: "There is no cell to copy into — {why}" },
   "os.c.copyNeedFirst": { ko: "맨 위 행에 먼저 진도를 입력하세요", en: "Enter the progress in the top row first" },
@@ -3902,6 +3908,8 @@ export const SHEET_DICT = {
   "os.c.copySkipped": { ko: " · 건너뜀 {n}행({why})", en: " · {n} skipped ({why})" },
   "os.c.copySkipLocked": { ko: "입력 잠김 {n}", en: "{n} locked" },
   "os.c.copySkipSubject": { ko: "다른 과목 {n}", en: "{n} another subject" },
+  "os.c.copySkipClass": { ko: "다른 반 {n}", en: "{n} another class" },
+  "os.c.copySkipNoClass": { ko: "반 모름 {n}", en: "{n} no class" },
   "os.c.copySkipFilled": { ko: "이미 입력 {n}", en: "{n} already filled" },
   "os.c.prevFillNone": {
     ko: "가져올 빈 칸이 없습니다 — 이미 입력됐거나 이전 회차 값이 없습니다",

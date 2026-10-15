@@ -44,6 +44,7 @@ const RULES: readonly [string, string][] = [
   ["retention_", "students"],
   ["makeup_remove", "attendance"],
   ["ecs_attendance_clear", "attendance"],
+  ["ecs_attendance_mark", "attendance"],
   ["seat_jj_", "sheets"],
   ["attendance_", "attendance"],
   ["makeup_", "attendance"],
@@ -58,10 +59,13 @@ const RULES: readonly [string, string][] = [
   ["makeedu_paid_recovery", "billing"],
   ["expense_", "billing"],
   ["refund_request_", "billing"],
+  ["tuition_", "billing"],
   ["class_review_", "staff"],
   // 직원 포트폴리오 집계(달 마감) — 기록에는 강사 수·마감한 달만 있고 점수는 없다.
   ["teacher_portfolio_", "staff"],
   ["teacher_evaluation_", "staff"],
+  // 강사 급여 정책(누구만 남는다) — 급여 분류라 고를 수 없다.
+  ["teacher_comp_", "payroll"],
   ["class_sheet_", "sheets"],
   ["class_", "classes"],
   ["classroom_", "classes"],
@@ -74,6 +78,7 @@ const RULES: readonly [string, string][] = [
   ["textbook_notice_send", "reports"],
   ["ecs_", "sheets"],
   ["mcs_", "sheets"],
+  ["progress_", "sheets"],
   ["textbook_", "sheets"],
   ["exam_", "sheets"],
   ["staff_", "staff"],
@@ -104,6 +109,10 @@ const RULES: readonly [string, string][] = [
   ["ai_prompt_", "settings"],
   ["ment_style_", "settings"],
   ["sheets_sync_now", "settings"],
+  ["sync_agent_", "settings"],
+  ["ijw_", "settings"],
+  // 원스크린 일괄 입력(맨 위 행 복사 · 직접 입력) — 보고서 칸을 채우는 동작.
+  ["onescreen_", "reports"],
   ["data_export_", "settings"],
   ["demo_", "settings"],
   // 공용 엑셀 가져오기 한 번 = 한 줄(무엇을·몇 줄). 행별 기록(excelImport 표식)은 발송기가 건너뛴다.
@@ -112,7 +121,7 @@ const RULES: readonly [string, string][] = [
 
 /** 고를 수 없는 액션 — 분류 통째(급여) + 개별 키. */
 const FORBID_CATEGORIES = new Set(["payroll"]);
-const FORBID_PREFIXES = ["resume_", "staff_contract_", "staff_create_from_resume", "staff_link_from_resume", "slack_connection_token"];
+const FORBID_PREFIXES = ["resume_", "staff_resume_", "staff_contract_", "staff_create_from_resume", "staff_link_from_resume", "slack_connection_token"];
 const FORBID_KEYS = new Set([
   "staff_password_reset",
   "self_password_change",
@@ -129,7 +138,7 @@ const FORBID_KEYS = new Set([
 ]);
 /** 대상 문구 없이 — 돈 계열(금액·계좌가 대상 라벨에 섞일 수 있다) + 연차. */
 const OPAQUE_CATEGORIES = new Set(["billing"]);
-const OPAQUE_PREFIXES = ["leave_"];
+const OPAQUE_PREFIXES = ["leave_", "staff_leave_"];
 
 export function activityCategoryOf(action: string): string | null {
   for (const [rule, cat] of RULES) {

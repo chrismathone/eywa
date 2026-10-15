@@ -342,6 +342,22 @@ export async function createClass(
     }
   }
 
+  // 반과 수업 시간이 모두 저장된 뒤에만 남긴다(수업 시간 실패로 반을 지운 경우는 위에서 돌아갔다).
+  // 종강·폐지 반 이름을 비운 일은 class-name-guard가 따로 남긴다.
+  await logAction({
+    action: "class_create",
+    targetType: "class",
+    targetLabel: input.className,
+    metadata: {
+      classId: data.id,
+      subject: input.subject,
+      teacherId: input.teacherId,
+      isSpecial: input.isSpecial,
+      schedules: input.schedules.length,
+      ...(input.validFrom || input.validTo ? { validFrom: input.validFrom ?? null, validTo: input.validTo ?? null } : {}),
+    },
+  });
+
   revalidatePath("/classes");
   revalidatePath("/timetable");
   // redirect 대신 결과 반환 — 클라가 성공 확정(nonce) 후 초안 삭제·동시편집 신호·이동(B-2).

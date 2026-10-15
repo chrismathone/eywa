@@ -41,6 +41,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { isTrendOptedOut, trendOptOutKey } from "../trend-optout";
 import { removeMakeupEntry } from "../server/makeup-remove-actions";
+import { logOnescreenBulkApply } from "../server/bulk-log-actions";
 import { canRemoveMakeupRow, makeupRemoveBlockReason } from "../makeup-remove-plan";
 import { makeupRowName } from "../makeup-label";
 import { isBoardBlockedStatus, isBoardWaitStatus } from "../send-class";
@@ -181,6 +182,7 @@ import {
   planBulkPrevFill,
   planPrevComments,
   planCopyFirstRow,
+  rowClassName,
   rowInClass,
   studentInClass,
   summarizeSendGaps,
@@ -2925,7 +2927,18 @@ export function OneScreenClient({
         }));
     }
     const done: string[] = [];
-    if (plan.length) done.push(tf("os.c.doneRows", { n: plan.length }));
+    if (plan.length) {
+      done.push(tf("os.c.doneRows", { n: plan.length }));
+      // 감사로그 한 줄 — 값 칸만(출결·영상 검사는 그 저장 액션이 따로 남긴다). 글 내용은 안 싣는다.
+      const planned = new Set(plan.map((p) => `${p.studentId}::${p.subjectName}`));
+      void logOnescreenBulkApply({
+        mode: "input",
+        date: activeDate,
+        rows: plan.length,
+        classIds: rows.filter((r) => planned.has(`${r.student.id}::${r.subject.name}`)).map((r) => r.subject.classId),
+        fields: [...new Set(plan.flatMap((p) => Object.keys(p.set)))],
+      }).catch(() => {});
+    }
 
     if (attendance) {
       // 팝오버가 미리보기에 쓴 것과 **같은 순수 계획**(같은 행·같은 규칙) — 화면 숫자와 실제가 어긋나지 않게.
@@ -3031,9 +3044,14 @@ export function OneScreenClient({
       toast.message(t("os.c.copyNoRow"));
       return;
     }
+    // 같은 반 판정의 열쇠 = 반 필터와 같은 반 이름(보강 행은 앵커 반). 반을 고른 보기에선 보이는 행이 전부 그 반이라
+    // 모르는 행도 그 반으로 본다(종전과 같다) — '전체' 보기에서만 반이 다르거나 모르는 행을 건너뛴다.
+    const classKeyOf = (r: (typeof rows)[number]) => rowClassName(r.subject) ?? activeClassFilter;
     const res = planCopyFirstRow(
       {
         subjectKey: first.subject.subjectKey ?? "math",
+        // 같은 반 행에만 복사한다(원장 2026-10-15 — '전체' 보기에서 다른 반 빈 칸까지 채우던 것).
+        classKey: classKeyOf(first),
         today: first.subject.today ?? "",
         textbook: first.subject.textbook ?? "",
         homeworkToday: first.subject.homeworkToday ?? "",
@@ -3043,6 +3061,7 @@ export function OneScreenClient({
         subjectName: r.subject.name,
         subjectIndex: r.subjectIndex,
         subjectKey: r.subject.subjectKey ?? "math",
+        classKey: classKeyOf(r),
         today: r.subject.today ?? "",
         textbook: r.subject.textbook ?? "",
         homeworkToday: r.subject.homeworkToday ?? "",
@@ -3068,6 +3087,8 @@ export function OneScreenClient({
         //    **잠김**이 셋 다 참인 유일한 이름이다.
         res.skippedSent ? tf("os.c.copyWhyLocked", { n: res.skippedSent }) : "",
         res.skippedSubject ? tf("os.c.copyWhySubject", { n: res.skippedSubject }) : "",
+        res.skippedClass ? tf("os.c.copyWhyClass", { n: res.skippedClass }) : "",
+        res.skippedNoClass ? tf("os.c.copyWhyNoClass", { n: res.skippedNoClass }) : "",
         res.skippedFilled ? tf("os.c.copyWhyFilled", { n: res.skippedFilled }) : "",
       ].filter(Boolean);
       toast.message(
@@ -3080,7 +3101,17 @@ export function OneScreenClient({
       if (p.set.textbook !== undefined) setTextbookFor(p.studentId, p.subjectName, p.set.textbook);
       if (p.set.homeworkToday !== undefined) setHomeworkTodayFor(p.studentId, p.subjectName, p.set.homeworkToday);
     }
-    const skipped = res.skippedSent + res.skippedSubject + res.skippedFilled;
+    // 감사로그 한 줄(칸 저장은 건마다 남기지 않는다 — bulk-log-actions.ts). 글 내용은 안 싣는다.
+    void logOnescreenBulkApply({
+      mode: "copy",
+      date: activeDate,
+      rows: res.plan.length,
+      // 보강 행은 반 대신 앵커 반(보강을 넣은 수업)으로 적는다.
+      classIds: [first, ...rest.filter((r) => res.plan.some((p) => p.studentId === r.student.id && p.subjectName === r.subject.name))]
+        .map((r) => r.subject.classId ?? r.subject.makeupClassId ?? null),
+      fields: [...new Set(res.plan.flatMap((p) => Object.keys(p.set)))],
+    }).catch(() => {});
+    const skipped = res.skippedSent + res.skippedSubject + res.skippedClass + res.skippedNoClass + res.skippedFilled;
     toast.success(
       tf("os.c.copyDone", { name: first.student.name, n: res.plan.length }) +
         (skipped
@@ -3089,6 +3120,8 @@ export function OneScreenClient({
               why: [
                 res.skippedSent ? tf("os.c.copySkipLocked", { n: res.skippedSent }) : "",
                 res.skippedSubject ? tf("os.c.copySkipSubject", { n: res.skippedSubject }) : "",
+                res.skippedClass ? tf("os.c.copySkipClass", { n: res.skippedClass }) : "",
+                res.skippedNoClass ? tf("os.c.copySkipNoClass", { n: res.skippedNoClass }) : "",
                 res.skippedFilled ? tf("os.c.copySkipFilled", { n: res.skippedFilled }) : "",
               ]
                 .filter(Boolean)

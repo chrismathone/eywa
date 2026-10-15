@@ -69,6 +69,15 @@ export function rowInClass(subject: Subject, classFilter: string | null): boolea
 }
 
 /**
+ * 이 행의 반(이름) — 반 필터(`rowInClass`)와 **같은 열쇠**. 보강 행(반 없음)은 보강을 넣은 수업(앵커), 모르면 null.
+ * 일괄 동작이 "같은 반인가"를 볼 때 쓴다(원장 2026-10-15 — 맨 위 행 복사가 다른 반까지 채우던 것).
+ */
+export function rowClassName(subject: Pick<Subject, "makeup" | "classId" | "className" | "makeupClassName">): string | null {
+  if (subject.makeup && !subject.classId) return subject.makeupClassName ?? null;
+  return subject.className ?? null;
+}
+
+/**
  * 이 학생이 필터한 반의 **실제 수강생**인가 — 좌측 그룹 라벨을 필터 반으로 리맵할지의 기준이기도 하다.
  * `tags`(수강 반 전체)가 원천이고, 비면 대표 `tag`로 폴백(로스터 규약, roster.ts `os.tags`).
  */
@@ -539,6 +548,11 @@ export function planBulkPrevFill(rows: readonly PrevFillRow[], attitudes: readon
  */
 export type CopyRowValues = {
   subjectKey: string; // 과목 일치 판정 키(미지정은 "math"로 간주 — isMathSubject와 동일 규칙)
+  /**
+   * 이 행의 반(`rowClassName` — 보강 행은 앵커 반) — 같은 반 행에만 복사한다(원장 2026-10-15). 반을 고른 보기에선 부르는 쪽이
+   * 모르는 행을 그 반으로 채워 넘긴다(보이는 행이 전부 그 반이라 종전과 같다). 안 주면 모름.
+   */
+  classKey?: string | null;
   today: string;
   textbook: string;
   homeworkToday: string;
@@ -562,6 +576,8 @@ export type CopyRowResult = {
   plan: CopyRowPlan[];
   skippedSent: number; // 발송 완료라 건너뜀
   skippedSubject: number; // 과목이 달라 건너뜀
+  skippedClass: number; // 반이 달라 건너뜀(맨 위 행의 반을 모르면 반을 아는 행도 여기)
+  skippedNoClass: number; // 이 행의 반을 몰라 건너뜀('전체' 보기에서만 생긴다)
   skippedFilled: number; // 이미 값이 있어 건너뜀(덮어쓰기 끔)
 };
 
@@ -581,7 +597,8 @@ export function planCopyFirstRow(
 ): CopyRowResult {
   const fields = copyableFields(source);
   const srcKey = source.subjectKey || "math";
-  const res: CopyRowResult = { plan: [], skippedSent: 0, skippedSubject: 0, skippedFilled: 0 };
+  const res: CopyRowResult = { plan: [], skippedSent: 0, skippedSubject: 0, skippedClass: 0, skippedNoClass: 0, skippedFilled: 0 };
+  const srcClass = source.classKey ?? null;
   if (Object.keys(fields).length === 0) return res;
 
   for (const t of targets) {
@@ -591,6 +608,20 @@ export function planCopyFirstRow(
     }
     if ((t.subjectKey || "math") !== srcKey) {
       res.skippedSubject++;
+      continue;
+    }
+    // 🔴 반도 같아야 한다(원장 2026-10-15) — 원스크린은 처음 열면 그날 모든 반을 한 표에 보여 줘서, 행을 안 고르고 누르면
+    //    다른 반(학년도 다른)의 빈 칸까지 맨 위 행의 진도·오늘 과제로 채웠다(10/15 PS3A ← MS1A · 9/21엔 MS2A 2명이 그대로 발송).
+    //    같은 내용을 여러 반에 넣고 싶으면 '직접 입력' 일괄을 쓴다(그쪽은 반 이름을 밝히고 확인받는다).
+    //    반을 모르는 쪽이 있으면 넣지 않는다 — 맨 위 행 반을 몰라도(보강 행이 위로 온 이름순 등) 같은 사고가 난다.
+    //    단 둘 다 모르면(반 정보가 아예 없는 표) 종전대로 과목만 본다.
+    const tClass = t.classKey ?? null;
+    if (srcClass !== null && tClass === null) {
+      res.skippedNoClass++;
+      continue;
+    }
+    if (tClass !== srcClass) {
+      res.skippedClass++;
       continue;
     }
     const set: CopyRowPlan["set"] = {};

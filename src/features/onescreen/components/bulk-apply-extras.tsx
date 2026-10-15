@@ -32,6 +32,12 @@ export type BulkFieldConfig = {
    * 검사는 적용 즉시 기록되고 '미제출'은 적어 둔 제출일까지 지우므로, 바꾸는 칸이 있으면 적용 전에 밝힌다(출결과 같은 규칙).
    */
   videoCheckPlan?: (status: VideoHomeworkStatus, onlyEmpty: boolean) => BulkVideoCheckPlan;
+  /**
+   * 대상 행의 반 이름 · 과목 — 내용이 들어갈 행의 반이 둘 이상인데 진도·교재·오늘 과제를 넣으면 확인창에 반 이름을 밝힌다(원장 2026-10-15 —
+   * '전체' 보기에서 다른 반까지 같은 내용이 들어가던 것). 진도는 고른 과목 행에만 들어가므로 그 과목 행의 반만 센다. 막지는 않는다
+   * (시험 대비처럼 여러 반에 일부러 같은 내용을 넣는 때가 있다). 안 주면 묻지 않는다.
+   */
+  classRows?: readonly { className: string; subjectKey: string }[];
 };
 export type BulkVideoCheckPlan = { cells: number; overwrite: number };
 
