@@ -28,6 +28,10 @@ import { dowKeyOf } from "@/features/class-sheets/lib/week";
 import { slotLiveOnDate } from "@/features/timetable/lib/week";
 import type { MonthScheduleRow } from "@/features/class-sheets/lib/month-assemble";
 import { kstToday } from "@/lib/date-kst";
+import { reportError } from "@/lib/observability/report-error";
+import { planLineFromRow } from "@/features/class-sheets/lib/plan-line";
+import type { PlanLineDTO } from "@/features/class-sheets/server/actions";
+import { shiftActualLines } from "./shift-lines";
 import {
   buildLessonSchedule,
   MAX_LOOKAHEAD_DAYS,
@@ -908,24 +912,34 @@ export async function importPlannedRange(input: {
 
 export type LessonShiftKind = "skip" | "advance";
 export type LessonShiftResult =
-  | { ok: true; kind: LessonShiftKind | null }
+  | {
+      ok: true;
+      kind: LessonShiftKind | null;
+      /** 옮긴 칸 수(0 = 아직 실제 줄이 없어 표식만 남겼다). */
+      moved: number;
+      /** 누른 칸의 줄 전부(평시·내신) — 화면이 그 칸만 즉시 갈아 끼운다. 표식만 지운 경우엔 없다. */
+      lines?: PlanLineDTO[];
+    }
   | { ok: false; error: string };
 
 /**
- * **한 주 미루기 / 당기기**(0282a) — 그 (반, 날짜, 교시)에서 차수를 건너뛸지(`skip`) 버릴지(`advance`).
+ * **한 주 미루기 / 당기기** — 그 (반, 날짜, 교시)부터 **실제 진도를 한 주씩 민다/당긴다**.
  *
- * 🔴 원장 2026-09-22: *"실제 에서는 수업 회차를 한주 미루거나 당기거나 할수있게 … 미루면 차수 무시하고
- *    수업내용 기입해서 쓸수있게"*. `skip`을 걸면 그 칸 **계획이 비므로** 강사가 실제 내용을 자유로 적고,
- *    그 뒤 차수는 한 칸씩 밀린다(휴일과 같은 규칙 — `buildLessonSchedule`).
- * 🔴 **실제 계획 줄은 한 줄도 안 바꾼다** — 이미 적어 둔 진도는 그대로 남고, 바뀌는 건 "앞으로 어느 칸에
- *    몇 차수가 오는가"뿐이다. 그래서 눌러도 잃을 게 없고 다시 눌러 되돌릴 수 있다.
- * 🔑 **토글**이다 — 같은 종류를 다시 누르면 표식을 지운다(그 칸이 원래대로 돌아온다).
+ * 🔴 원장 2026-10-15: *"미룰때 미루는 거기 복사하고 한주씩 쭉 밀기로 했자나"* — 1차 구현(2026-09-22)은
+ *    표식(0282a)만 남기고 실제 줄은 안 건드려서, [월간계획 전체 가져오기]로 이미 채운 칸에선 얼럿만 뜨고
+ *    **아무것도 안 움직였다**(가져오기는 빈 칸만 채운다). 규칙은 [`planLessonShift`](../lesson-shift-chain.ts):
+ *    · 미룸 = 누른 칸은 그대로(복사) + 그 요일·교시의 뒤 칸이 전부 한 주씩 뒤로
+ *    · 당김 = 누른 칸에 다음 주 내용 + 뒤가 전부 한 주씩 앞으로(미룸의 반대 — 미룸 뒤 당김 = 원래대로)
+ * 🔑 **표식도 함께 남긴다** — 아직 가져오지 않은 먼 칸은 표식으로 계산되는 일정에서 온다. 표식은 그 줄의
+ *    **순(net) 횟수**만 맞으면 되므로, 반대 표식이 누른 칸에 있으면 지우고 아니면 비어 있는 첫 칸에 더한다.
+ *    원래 월간계획(표식 없이 펼친 쪽)은 표식을 안 보므로 [계획 비교]는 밀린 만큼 'N차수 늦음'으로 잡는다.
+ * 🔑 **토글이 아니다** — 두 번 누르면 두 주 밀린다. 되돌리기는 반대 버튼이다.
+ * `kind: null`은 표식만 지운다(옛 호출 호환 — 줄은 안 건드린다).
  */
 export async function setLessonShift(input: {
   classId: string;
   date: string;
   slotStart: string;
-  /** null이면 표식을 지운다(원래대로). */
   kind: LessonShiftKind | null;
 }): Promise<LessonShiftResult> {
   const gate = await requireEcsClassAccess(input.classId, { write: true });
@@ -933,58 +947,93 @@ export async function setLessonShift(input: {
   if (!YMD_RE.test(input.date)) return { ok: false, error: "날짜가 올바르지 않습니다" };
   const slot = String(input.slotStart).slice(0, 5);
   if (!/^[0-2]\d:[0-5]\d$/.test(slot)) return { ok: false, error: "교시가 올바르지 않습니다" };
-  const asked = input.kind === "skip" || input.kind === "advance" ? input.kind : null;
+  const kind = input.kind === "skip" || input.kind === "advance" ? input.kind : null;
 
   const admin = createAdminClient();
-  const where = { tenant_id: gate.access.tenantId, class_id: input.classId, plan_date: input.date, slot_start: slot };
+  const tenantId = gate.access.tenantId;
+  const markerTable = () => admin.from("class_lesson_shifts");
+  const markerCell = <Q extends { eq: (column: string, value: string) => Q }>(q: Q, at: string): Q =>
+    q.eq("tenant_id", tenantId).eq("class_id", input.classId).eq("plan_date", at).eq("slot_start", slot);
+  const missing = (error: { code?: string; message?: string } | null) =>
+    error && isMissingTextbookTable(error)
+      ? "회차 미루기는 마이그레이션 0282a가 필요합니다 — 적용한 뒤 다시 시도해 주세요"
+      : null;
 
-  /**
-   * 🔑 **토글은 서버가 판정한다** — 화면이 지금 상태를 몰라도 같은 버튼으로 켜고 끌 수 있다.
-   *    (상태를 클라까지 내려보내지 않는 화면이 있어서 — 주간 시트 — 거기서도 버튼이 제대로 돈다.)
-   * ⚠️ 표가 없으면(0282a 미적용) 조회도 실패한다 — 그건 아래 쓰기 단계에서 한글로 안내한다.
-   */
-  const cur = asked
-    ? await admin
-        .from("class_lesson_shifts")
-        .select("kind")
-        .eq("tenant_id", where.tenant_id)
-        .eq("class_id", where.class_id)
-        .eq("plan_date", where.plan_date)
-        .eq("slot_start", where.slot_start)
-        .maybeSingle()
-    : null;
-  const kind = asked && cur?.data?.kind === asked ? null : asked;
-
-  const { error } = kind
-    ? // 🔴 일반 유니크(부분 술어 없음, [[#113]])라 이 축으로 추론된다 — 토글이 같은 칸을 갈아끼운다.
-      await admin
-        .from("class_lesson_shifts")
-        .upsert({ ...where, kind, created_by: gate.access.user.id, updated_at: new Date().toISOString() }, {
-          onConflict: "tenant_id,class_id,plan_date,slot_start",
-        })
-    : await admin
-        .from("class_lesson_shifts")
-        .delete()
-        .eq("tenant_id", where.tenant_id)
-        .eq("class_id", where.class_id)
-        .eq("plan_date", where.plan_date)
-        .eq("slot_start", where.slot_start);
-
-  if (error) {
-    // 0282a 미적용 — 원인을 단정하지 않고 무엇이 필요한지 말한다([[#95]]).
-    if (isMissingTextbookTable(error)) {
-      return { ok: false, error: "회차 미루기는 마이그레이션 0282a가 필요합니다 — 적용한 뒤 다시 시도해 주세요" };
-    }
-    return { ok: false, error: friendlyTextbookError(error, "회차를 바꾸지 못했습니다") };
+  if (!kind) {
+    const { error } = await markerCell(markerTable().delete(), input.date);
+    if (error) return { ok: false, error: missing(error) ?? friendlyTextbookError(error, "회차를 바꾸지 못했습니다") };
+    revalidatePath(`/ecs/${input.classId}`, "layout");
+    return { ok: true, kind: null, moved: 0 };
   }
+
+  // ① 실제 줄을 옮긴다. 옮길 줄이 아예 없으면(아직 가져오기 전) 표식만 남긴다.
+  // ⚠️ 조회 실패는 throw로 온다(fetchAllPaged) — 잡지 않으면 화면엔 아무 안내 없이 끝난다.
+  const moved = await shiftActualLines({
+    admin,
+    tenantId,
+    classId: input.classId,
+    date: input.date,
+    slot,
+    kind,
+    userId: gate.access.user.id,
+  }).catch((e: unknown) => {
+    reportError(e, { scope: "textbooks.lesson-shift", classId: input.classId, date: input.date });
+    return { ok: false as const, error: "진도를 불러오지 못해 옮기지 않았습니다 — 잠시 뒤 다시 시도해 주세요", noContent: false, chain: [] };
+  });
+  if (!moved.ok && !moved.noContent) return { ok: false, error: moved.error };
+
+  // ② 표식 — 순 횟수를 맞춘다(위 🔑).
+  const { data: marks, error: readErr } = await markerTable()
+    .select("plan_date, kind")
+    .eq("tenant_id", tenantId)
+    .eq("class_id", input.classId)
+    .eq("slot_start", slot)
+    .in("plan_date", moved.chain);
+  let markerError = readErr;
+  if (!markerError) {
+    const at = new Map((marks ?? []).map((m) => [String(m.plan_date).slice(0, 10), String(m.kind)]));
+    const opposite = kind === "skip" ? "advance" : "skip";
+    if (at.get(input.date) === opposite) {
+      ({ error: markerError } = await markerCell(markerTable().delete(), input.date));
+    } else {
+      const free = moved.chain.find((d) => !at.has(d));
+      if (free) {
+        ({ error: markerError } = await markerTable().upsert(
+          { tenant_id: tenantId, class_id: input.classId, plan_date: free, slot_start: slot, kind, created_by: gate.access.user.id, updated_at: new Date().toISOString() },
+          { onConflict: "tenant_id,class_id,plan_date,slot_start" },
+        ));
+      }
+    }
+  }
+  // 줄은 이미 옮겼으니 표식 실패는 화면을 막지 않는다 — 단 줄이 없어 표식이 전부였다면 실패를 알린다.
+  if (markerError && !moved.ok) {
+    return { ok: false, error: missing(markerError) ?? friendlyTextbookError(markerError, "회차를 바꾸지 못했습니다") };
+  }
+
+  // ③ 누른 칸의 줄을 다시 읽어 화면에 준다(당김이면 바뀌었다).
+  const { data: cellRows } = await admin
+    .from("class_sheet_plan_lines")
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .eq("class_id", input.classId)
+    .eq("plan_date", input.date)
+    .eq("slot_start", slot)
+    .order("term_mode")
+    .order("line_no")
+    .order("id");
 
   await logAction({
     action: "textbook_lesson_shift",
     targetType: "class",
     targetLabel: gate.access.className,
-    metadata: { date: input.date, slot, kind },
+    metadata: { date: input.date, slot, kind, moved: moved.ok ? moved.moved : 0 },
   });
-  // 계획은 파생값이라 이 한 줄이 그 반의 앞으로 전부를 바꾼다([[#102]] 계열 — `"layout"` 필수).
+  // 그 반의 앞으로 전부가 바뀐다([[#102]] 계열 — `"layout"` 필수).
   revalidatePath(`/ecs/${input.classId}`, "layout");
-  return { ok: true, kind };
+  return {
+    ok: true,
+    kind,
+    moved: moved.ok ? moved.moved : 0,
+    lines: cellRows ? cellRows.map((r) => planLineFromRow(r as Record<string, unknown>)) : undefined,
+  };
 }

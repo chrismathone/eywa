@@ -291,9 +291,17 @@ describe("교재 배정 — 회차 미루기·당기기", () => {
     expect(sql).not.toMatch(/create unique index[^;]*where/i);
   });
 
-  it("🔴 표식은 **실제 줄을 안 건드린다** — 바뀌는 건 앞으로의 계획뿐이다", () => {
+  it("🔴 미룸·당김은 **실제 진도를 한 주씩 옮긴다**(원장 2026-10-15) — 규칙은 planLessonShift 한 곳", () => {
+    // 1차(2026-09-22)는 표식만 남겨 이미 가져온 칸에선 아무것도 안 움직였다 — "얼럿만 뜨고 안 밀림".
     const body = plan.slice(plan.indexOf("export async function setLessonShift"));
-    expect(body).not.toContain("class_sheet_plan_lines");
+    expect(body).toContain("shiftActualLines(");
+    const io = read("src", "features", "textbooks", "server", "shift-lines.ts");
+    expect(io).toContain("planLessonShift(");
+    // 평시 줄만 — 같은 칸의 내신 줄은 그 날짜에 남는다.
+    expect(io).toContain('term_mode: "regular"');
+    // 옮기기는 새 행 복제 → 원래 행 삭제(id를 따라 보내면 옛 주를 연 창의 편집이 엉뚱한 주에 써진다).
+    expect(io).not.toMatch(/\.update\(\{\s*plan_date/);
+    // 가져오기 RPC(빈 칸만 채움)를 다시 부르지 않는다 — 그게 1차 구현이 안 움직인 이유다.
     expect(body).not.toContain("ecs_apply_textbook_lessons");
   });
 

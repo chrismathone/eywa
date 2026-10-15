@@ -7,6 +7,11 @@
 - 계정 저장 필터 10곳(원생·수업·직원·시간표·영어 시트·오늘 출결·학교별 통계·재고·셔틀 오늘·수업평가)의 로더가 [`freshSavedFilters`](../src/lib/filter-reset/server.ts)/`freshRawUiPrefs`를 지나 10분 넘었으면 필터 키만 기본값 + 그리는 도중에 그 키만 지움(공용 `patchMyUiPrefs` · `after()`는 지점 보기 차단이 안 서서 안 씀 · 되살아났으면 한 번 더). 운영실 영어 시트 카드는 저장값 그대로. 주소·화면 안 필터는 원래 새로 열면 기본값.
 - 걷은 안: 열어 둔 화면(숨은 창·이전 화면 유지·탭 복귀)을 그 자리에서 다시 불러 되돌리기 — 떠나기 확인 없는 입력 초안이 사라져서(적대 재리뷰).
 
+## 2026-10-15 — 영어 강사 시트 미룸·당김이 실제 진도를 한 주씩 옮긴다
+
+- 원장 제보 *"계획 미룸, 당김 기능이 제대로 동작하지않음 얼럿창은 떴는데 당기거나 미뤄지지않음"* → *"미루는 거기 복사하고 한주씩 쭉 밀기로 했자나"*. 원인: 표식(0282a)만 남기고 실제 줄은 안 건드려서, [월간계획 전체 가져오기]로 이미 채운 칸(실측 `중고E_중1 MED` 10/19~11/2)은 그대로였다.
+- 이제 같은 요일·교시의 평시 진도가 한 주씩 밀리거나 당겨진다([`planLessonShift`](../src/features/textbooks/lesson-shift-chain.ts) + [`shift-lines.ts`](../src/features/textbooks/server/shift-lines.ts)). 미룸은 누른 칸을 그대로 두고(복사) 당김은 다음 주 내용을 가져온다. 토글을 없애고(누를 때마다 한 주) 연타 가드·저장 큐 flush를 붙였다. 가드 = `lesson-shift-chain.test.ts` 8건 + `textbooks-wiring` 갱신.
+
 ## 2026-10-15 — 퇴원관리 분석 보강 1차: 과목 · 강사 · 학년 · 학교 축 · 장부 정리 분리 · 사유 막대 눌러 보기
 
 - 원장 *"과목별을 기본으로 강사별, 학년별, 학교별 통계 … 강사는 누구지, 몇학년이지, 어느 학교가 많이 그만두지"* → '과목별 분포' 자리에 축 전환 카드([`breakdown-card.tsx`](../src/app/(shell)/withdrawals/_components/breakdown-card.tsx)) · 칸을 누르면 명단이 걸러진다(`grade=` · `school=` · `teacher=` · 툴바 칩) · 축은 계정 귀속. 결정 = [`docs/decisions/students.md`](decisions/students.md).

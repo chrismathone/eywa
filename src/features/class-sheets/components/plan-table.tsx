@@ -33,7 +33,6 @@ export function PlanTable({
   handlers,
   canEdit,
   showExamTerm,
-  shift,
 }: {
   date: string;
   slotStart: string;
@@ -43,8 +42,8 @@ export function PlanTable({
   handlers: PlanHandlers;
   canEdit: boolean;
   /**
-   * 이 칸의 회차 표식(0282a) — 버튼의 **눌린 상태**를 그린다.
-   * ⚠️ **없어도 버튼은 돈다**(토글은 서버가 판정한다) — 상태를 안 내려보내는 화면에선 강조만 없다.
+   * 이 칸의 회차 표식(0282a). ⚠️ 2026-10-15부터 버튼이 토글이 아니라(누를 때마다 한 주) **안 읽는다** —
+   * 넘기는 화면이 여럿이라 prop은 남겨 둔다.
    */
   shift?: "skip" | "advance" | null;
   /**
@@ -115,20 +114,15 @@ export function PlanTable({
                   원장 원문도 *"실제 에서는 수업 회차를 한주 미루거나 당기거나"*였다.
                   ⚠️ 지난 날짜에도 **막지 않는다** — "지난주에 못 나갔다"를 뒤늦게 미루는 게 정상 흐름이고,
                      실제 줄은 안 건드리므로 눌러도 잃을 게 없다(바뀌는 건 앞으로의 차수 배치뿐).
-                  🔑 `shift`를 안 받는 화면에서도 **같은 버튼으로 켜고 끈다** — 토글은 서버가 판정한다. */}
+                  🔑 2026-10-15부터 **실제 진도를 한 주씩 민다/당긴다**(*"미루는 거기 복사하고 한주씩 쭉 밀기"*)
+                     — 토글이 아니라 누를 때마다 한 주. 되돌리기는 반대 버튼이다. */}
               {canEdit && term.key === "regular" && handlers.setShift
                 ? (["skip", "advance"] as const).map((kind) => {
-                    const on = shift === kind;
                     return (
                       <button
                         key={kind}
                         type="button"
-                        aria-pressed={on}
-                        className={`cursor-pointer rounded-full border px-2 py-0.5 text-xs font-bold ${
-                          on
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-line-strong text-foreground hover:text-primary hover:border-primary"
-                        }`}
+                        className="border-line-strong text-foreground hover:text-primary hover:border-primary cursor-pointer rounded-full border px-2 py-0.5 text-xs font-bold"
                         title={sheetT(lang, kind === "skip" ? "plan.shift.skip.title" : "plan.shift.advance.title")}
                         onClick={() => handlers.setShift?.(date, slotStart, kind)}
                       >
