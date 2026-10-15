@@ -1,6 +1,7 @@
 "use client";
 
 import { KIND_LABEL } from "@/features/grades/unified/model";
+import type { GradeKindStat } from "@/features/teacher-portfolio/model/source-types";
 import { metricOf } from "@/features/teacher-portfolio/model/types";
 import { dayLabel, pointsText } from "@/features/teacher-portfolio/view";
 import { StudentCell, type EvidenceProps } from "./evidence-records";
@@ -12,20 +13,34 @@ import { DataTable, SectionTitle, StatTiles, StatusChip } from "./parts";
  */
 const pct = (n: number | null | undefined) => (n === null || n === undefined ? "—" : `${n.toFixed(1)}%`);
 
+/** 종류별 셈(원장 2026-10-15) — 이 칸이 생기기 전에 저장(마감)된 달은 전부 점수율이다. */
+const MEASURE = { submit: "제출률", take: "응시율", score: "점수율" } as const;
+const targetText = (k: GradeKindStat) => (k.measure === "submit" ? `${k.done ?? 0}/${k.count}칸` : k.measure === "take" ? `${k.done ?? 0}/${k.count}명` : `${k.count}건`);
+
 function GradesEvidence({ period, nameOf }: EvidenceProps) {
   const m = metricOf(period, "grades");
+  const kinds = m.kinds ?? [];
+  const daily = kinds.find((k) => k.measure === "submit"), monthly = kinds.find((k) => k.measure === "take");
   return (
     <>
       <StatTiles items={[
-        { label: "시험", value: `${m.tests ?? 0}건` }, { label: "학생", value: `${m.students ?? 0}명` },
-        { label: "점수율", value: pct(m.raw), className: "text-primary" }, { label: "점수", value: pointsText(m, period) },
+        { label: "일일테스트 제출", value: daily ? pct(daily.average) : "—" }, { label: "월말평가 응시", value: monthly ? pct(monthly.average) : "—" },
+        { label: "시험", value: `${m.tests ?? 0}건` }, { label: "종합(가중 평균)", value: pct(m.raw), className: "text-primary" },
+        { label: "점수", value: pointsText(m, period) },
       ]} />
-      <SectionTitle sub="종류마다 평균을 낸 뒤 비중으로 가중 평균">종류별</SectionTitle>
-      <DataTable headers={["종류", "시험", "평균 점수율", "비중"]} kinds={["text", "num", "num", "num"]} empty="이 달 담임 반 학생의 시험 기록이 없습니다."
-        rows={(m.kinds ?? []).map((k) => ({ key: k.kind, cells: [KIND_LABEL[k.kind], `${k.count}건`, pct(k.average), String(k.weight)] }))} />
+      <SectionTitle sub="일일테스트는 제출률 · 월말평가는 응시율 · 나머지는 점수율 — 종류마다 값을 낸 뒤 비중으로 가중 평균">종류별</SectionTitle>
+      <DataTable headers={["종류", "셈", "대상", "값", "비중"]} kinds={["text", "text", "num", "num", "num"]}
+        empty="이 달 일일테스트·월말평가 대상과 시험 기록이 없습니다."
+        rows={kinds.map((k) => ({ key: k.kind, cells: [KIND_LABEL[k.kind], MEASURE[k.measure ?? "score"], targetText(k), pct(k.average), String(k.weight)] }))} />
       <SectionTitle sub={`${m.students ?? 0}명`}>학생별</SectionTitle>
-      <DataTable headers={["학생 · 반", "시험", "평균 점수율"]} kinds={["text", "num", "num"]}
-        rows={m.detail.map((r) => ({ key: r.studentId, cells: [<StudentCell key="s" name={nameOf(r.studentId)} sub={`${r.className || "—"} · ${r.kinds}`} />, `${r.tests}건`, pct(r.average)] }))} />
+      <DataTable headers={["학생 · 반", "일일테스트 제출", "월말평가", "시험", "평균 점수율"]} kinds={["text", "num", "text", "num", "num"]}
+        rows={m.detail.map((r) => ({
+          key: r.studentId,
+          cells: [<StudentCell key="s" name={nameOf(r.studentId)} sub={[r.className || "—", r.kinds].filter(Boolean).join(" · ")} />,
+            r.daily ? `${r.daily.done}/${r.daily.total}칸` : "—",
+            r.monthly === undefined ? "—" : <StatusChip key="m" state={r.monthly ? "응시" : "미응시"} />,
+            r.tests ? `${r.tests}건` : "—", pct(r.average)],
+        }))} />
       <p className="mt-3 text-xs leading-relaxed">{m.reason}</p>
     </>
   );
@@ -62,6 +77,8 @@ function PunctualityEvidence({ period }: EvidenceProps) {
   return (
     <>
       <StatTiles items={[
+        // 출근·퇴근 기록 = 그 달 시각이 찍힌 날 수(원장 2026-10-15) — 이 칸이 생기기 전에 저장(마감)된 달엔 없다(—).
+        { label: "출근 기록", value: m.checkIns === undefined ? "—" : `${m.checkIns}일` }, { label: "퇴근 기록", value: m.checkOuts === undefined ? "—" : `${m.checkOuts}일` },
         { label: "지각", value: `${m.late ?? 0}회` }, { label: "결근", value: `${m.absent ?? 0}회` }, { label: "조퇴", value: `${m.early ?? 0}회` },
         { label: "제외한 날(결재된 휴가)", value: `${m.excused ?? 0}일` }, { label: "점수", value: pointsText(m, period) },
       ]} />

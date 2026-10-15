@@ -10,6 +10,7 @@ import { isModuleEnabled } from "@/lib/modules";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { PAY_OVERRIDE_KEY } from "../evaluation/config";
 import { contractMonthlyPay, type ContractRow } from "../model/contract-pay";
+import { round1 } from "../model/dates";
 import { indexEntries, type ManualEntryRow } from "../model/evaluate";
 import { MIN_BILLED_SHARE, payDataMonth, payRatioOf, type PayFacts, type PayResult } from "../model/pay-ratio";
 import { rowRevenue } from "../model/pay-revenue";
@@ -28,6 +29,7 @@ import { loadMonthRevenue, type MonthRevenue } from "./pay-invoices";
  *   원장 직접 입력이 있으면 그것이 먼저다(그 결정은 모델 `payRatioOf`가 한다).
  * 🔴 로그인 없이(밤 집계) 출석부를 조립하므로 `runWithAttendanceReadContext`(지점 · 관리 클라이언트 · 이미 읽은 학원 설정) 안에서 부른다.
  * 🔴 금액은 이 모듈 밖으로 비율 재료로만 나간다 — 저장 행·화면엔 비율만(원장 *"비율만 노출하면됨"*). 외부 AI로 보내지 않는다.
+ *    반별로도 금액이 아니라 매출 비중(%)·학생 수만 낸다(`byClass` — 원장 2026-10-15 '반별 비중만').
  * ⚠️ 무겁다(강사 × 달마다 출석부 하나) — 호출부는 마감하지 않은 달만, 3개씩 나란히(명세서 목록과 같은 폭).
  */
 const CONCURRENCY = 3;
@@ -78,7 +80,11 @@ export async function loadSheetFacts(input: {
           const groups = sheet.groups.filter((g) => !g.makeupPool);
           // 줄(학생 × 반)마다 그 반 청구액(`rowRevenue`). 청구서가 없는 학생의 줄은 분모에 넣지 않는다(청구할 게 없다).
           let revenue = 0, rows = 0, matched = 0;
+          // 반별 몫 — 금액은 이 함수 안에서만(비중을 낸 뒤 버린다).
+          const perClass = new Map<string, { className: string; students: Set<string>; rows: number; billed: number; amount: number }>();
           for (const g of groups) for (const s of g.matrix.students) {
+            const c = perClass.get(g.classId) ?? perClass.set(g.classId, { className: g.className, students: new Set(), rows: 0, billed: 0, amount: 0 }).get(g.classId)!;
+            c.students.add(s.id);
             const bills = revenueOf.invoices.get(s.id);
             if (!bills?.length) continue;
             const billed = sheet.billing.billed[rowKey(g.classId, s.id)];
@@ -86,8 +92,9 @@ export async function loadSheetFacts(input: {
             // 그 달 그 반 수강이 없는 줄(보강 방문)은 출석부 청구액이 있을 때만 센다 — 그 반 매출이 아니다(분모에도 안 넣는다).
             if (!enrolled && billed === undefined) continue;
             rows++;
+            c.rows++;
             const amount = rowRevenue({ classId: g.classId, className: g.className, billed, invoices: bills, sole: revenueOf.sole.get(s.id), enrolled });
-            if (amount !== null) { matched++; revenue += amount; }
+            if (amount !== null) { matched++; revenue += amount; c.billed++; c.amount += amount; }
           }
           // 프리랜서 실급여는 출석부 단가(회차 확정)로 셈한다 — 단가가 잡힌 줄이 모자라면(달 중간·확정 전) 0원으로 만점이 되지 않게
           // 급여를 모르는 것으로 둔다(직접 입력으로 넣을 수 있다). 분모는 단가를 못 정한 줄(`no-price`)만 — 비율 없음·학년 미상으로
@@ -107,6 +114,11 @@ export async function loadSheetFacts(input: {
             classes: groups.length,
             enrollments: groups.reduce((n, g) => n + g.matrix.students.length, 0),
             problem: null, payReadFailed,
+            byClass: [...perClass.values()].map((c) => ({
+              className: c.className, students: c.students.size, rows: c.rows, billed: c.billed,
+              // 이 반에서 금액을 하나도 못 찾았으면 0%가 아니라 모름(null).
+              share: c.billed && revenue > 0 ? round1((100 * c.amount) / revenue) : null,
+            })).sort((a, b) => (b.share ?? -1) - (a.share ?? -1) || a.className.localeCompare(b.className, "ko")),
           });
         } catch (e) {
           // 출석부를 금액으로 쓸 수 없는 상태(접힌 재료·조회 실패)는 0이 아니라 '자료 없음' — 까닭을 남긴다.

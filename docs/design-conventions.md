@@ -161,9 +161,10 @@ sm = 본문·목록 1차 라벨·컨트롤 / base = 강조 본문·섹션 제목
   · ⚠️ `overflow-x: auto`(scroll이면 가짜 스크롤바 — gotcha #87) · ⚠️ 스크롤 컨테이너는 자식을 클리핑하므로
   **레일 안 팝오버·다이얼로그는 반드시 Portal**(base-ui `Popover.Portal`) · 그룹 경계는 구분선이 진다
   (레일에선 감기지 않으니 구분선을 지우지 말 것 — 라벨을 감춘 상태에서 지우면 칩이 한 덩어리로 읽힌다).
-- **판정 조건은 한 곳**: `compact-chrome`/`.toolbar-rail`의 미디어쿼리 = 데스크톱(`min-width:1024px and
-  pointer:fine`)의 여집합. 바꾸려면 [use-is-desktop.ts](../src/components/workspace/use-is-desktop.tsx)와
-  layout의 `lg:pointer-fine:`을 **함께** 고칠 것(와이드 터치 태블릿이 갈라지면 크롬만 바뀌고 헤더는 안 접힌다).
+- **판정 조건은 한 곳**: `compact-chrome`/`.toolbar-rail`의 미디어쿼리 = 데스크톱(`min-width:1240px and
+  any-pointer:fine`)의 여집합(`(max-width: 1239.98px), not all and (any-pointer: fine)` — 같은 글자를 쓰는 곳 전부는 가드 `desktop-breakpoint.test.ts`가 대조한다). 바꾸려면 [use-is-desktop.ts](../src/components/workspace/use-is-desktop.ts)와
+  layout의 `desk:`을 **함께** 고칠 것(와이드 터치 태블릿이 갈라지면 크롬만 바뀌고 헤더는 안 접힌다 · 가드 `desktop-breakpoint.test.ts`).
+  🔴 '마우스'는 **`any-pointer`**(하나라도) — 주 입력만 보는 `pointer`는 터치스크린 PC를 모바일로 보낸다. 손 기기에서 감추는 버튼은 `no-mouse:`.
 - ⚠️ **JS로 마커를 붙이지 말 것** — 첫 페인트에 풀 헤더가 떴다가 접히는 CLS가 매 페이지 발생한다. 순수 CSS.
 > 한 줄 규칙: 좁은 화면에선 제목을 크롬 한 줄이 갖고 본문 헤더는 접는다. 칩 툴바는 감지 말고 `.toolbar-rail`로 눕혀라.
 

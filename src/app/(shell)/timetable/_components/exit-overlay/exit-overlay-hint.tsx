@@ -11,7 +11,7 @@ export const KBD_CLASS =
  */
 export function ExitOverlayHint() {
   return (
-    <p className="timetable-footnote -mt-2 flex h-8 shrink-0 items-center px-1 text-xs compact-chrome:-mt-1 pointer-coarse:invisible">
+    <p className="timetable-footnote -mt-2 flex h-8 shrink-0 items-center px-1 text-xs compact-chrome:-mt-1 no-mouse:invisible">
       <kbd className={KBD_CLASS}>X</kbd>를 누르면 마우스 옆에 석 달 퇴원이 뜹니다.
     </p>
   );

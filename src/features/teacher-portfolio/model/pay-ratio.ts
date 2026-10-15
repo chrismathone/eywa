@@ -10,10 +10,14 @@
  * - 학생 수·반 수(원장 1-1 *"학생수와 생산성 모두 볼것"*)는 근거 화면에 같이 싣는다(점수엔 안 섞는다).
  * - 🔴 **지난달 값으로 매긴다**(원장 2026-10-15 *"매출대비 급여는 지난달 것을 다음달에 반영 … 이번달을 반영하려면 월말이 되야하는데
  *   기다리지 못할듯"*) — 10월 점수 = 9월 급여 ÷ 9월 매출(`payDataMonth`). 그 전에 마감한 달(4~9월)은 그 달 값 그대로다.
+ * - 🔴 지난달에 담당 반이 없던 선생님(새로 온 선생님)은 비율이 없어도 0점이 아니라 **합계에서 제외**(`newcomer` — 원장 2026-10-15,
+ *   설정의 '자료가 없을 때' 규칙보다 먼저). 지난달 값으로 매기는 달만 — 그 달 담당이 없으면 애초에 평가 대상이 아니다.
+ * - 반별 비중(원장 2026-10-15 *"급여 탭에서 상세 반별 매출 이런거 보면 좋겠는데"* → 비중만) = 반마다 학생 수 · 매출 중 그 반 몫(%) — 금액은 싣지 않는다.
  * 🔴 금액(매출·급여)은 결과에 싣지 않는다 — 비율과 출처만.
  */
 import { shiftMonth } from "@/lib/date-kst";
 import { round1 } from "./dates";
+import type { PayClassRow } from "./source-types";
 import { METRIC_MAX, type PayRatioMetric } from "./types";
 
 /**
@@ -29,6 +33,8 @@ import { METRIC_MAX, type PayRatioMetric } from "./types";
 export type PayFacts = {
   revenue: number | null; sheetPay: number | null; students: number; classes: number; enrollments: number;
   rows: number; billedRows: number; problem: string | null; retry?: boolean; payReadFailed?: boolean; payPending?: boolean;
+  /** 반별 학생 수 · 매출 비중(%) — 금액이 아니라 비중으로만 넘긴다(`loadSheetFacts`가 낸다). */
+  byClass?: PayClassRow[];
 };
 /**
  * 청구서 항목을 반에 맞춘 줄이 이보다 적으면 비율을 내지 않는다(매출이 덜 잡힌 채 한 달 급여를 나누면 비율이 부푼다).
@@ -46,6 +52,9 @@ export type PayResult = {
   retry: boolean;
   /** 재료의 달 — 점수 달과 다르면(지난달 값) 근거 문구가 그 달을 밝힌다. */
   dataMonth?: string;
+  /** 지난달 담당 반이 없다(새로 온 선생님) — 비율이 없으면 합계에서 제외한다. */
+  newcomer?: boolean;
+  byClass?: PayClassRow[];
 };
 
 export function payRatioOf(facts: PayFacts | undefined, contractPay: number | null, override: number | null, dataMonth?: string): PayResult | undefined {
@@ -55,11 +64,14 @@ export function payRatioOf(facts: PayFacts | undefined, contractPay: number | nu
       : facts.sheetPay !== null ? [facts.sheetPay, "출석부 실급여"] : [null, null];
   // 청구서가 있는 담당 줄이 하나도 없으면(보강 묶음만 · 전원 청구서 없음) 비율을 내지 않는다. 사유는 '못 맞춤'과 갈라 적는다.
   const share = facts.rows > 0 ? facts.billedRows / facts.rows : 0;
+  // 지난달 값으로 매기는 달에 지난달 담당 반이 하나도 없으면 새로 온 선생님 — 0점이 아니라 합계에서 제외(원장 2026-10-15).
+  const newcomer = Boolean(dataMonth) && !facts.problem && facts.classes === 0;
   // 출석부를 금액으로 쓸 수 없던 달(접힌 재료·조회 실패)은 다른 재료가 있어도 비율을 내지 않는다.
   const revenue = !facts.problem && facts.revenue !== null && facts.revenue > 0 && share >= MIN_BILLED_SHARE ? facts.revenue : null;
   const raw = revenue !== null && pay !== null && pay >= 0 ? round1((100 * pay) / revenue) : null;
   const problem = facts.problem
-    ?? (facts.rows === 0 && facts.classes === 0 ? "그 달 담당 반이 없습니다"
+    ?? (newcomer ? "그 달 담당 반이 없습니다(새로 맡은 선생님 — 합계에서 제외)"
+      : facts.rows === 0 && facts.classes === 0 ? "그 달 담당 반이 없습니다"
       : facts.rows === 0 ? "그 달 담당 학생의 청구서가 없습니다"
       : facts.revenue === null ? "청구서에서 담당 반 금액을 찾지 못했습니다"
       : facts.revenue <= 0 ? "담당 반 청구액이 0원입니다"
@@ -75,11 +87,12 @@ export function payRatioOf(facts: PayFacts | undefined, contractPay: number | nu
   return {
     raw, source: pay === null ? null : source, students: facts.students, classes: facts.classes, enrollments: facts.enrollments,
     problem: raw === null ? problem : null, retry, ...(dataMonth ? { dataMonth } : {}),
+    ...(raw === null && newcomer ? { newcomer: true } : {}), ...(facts.byClass?.length ? { byClass: facts.byClass } : {}),
   };
 }
 
 export function payRatioItem(r: PayResult | undefined): PayRatioMetric {
-  const base = { id: "payRatio" as const, max: METRIC_MAX.payRatio, value: null, detail: [] as never[] };
+  const base = { id: "payRatio" as const, max: METRIC_MAX.payRatio, value: null, detail: [] as PayClassRow[] };
   if (!r) {
     return {
       ...base, raw: null, uncounted: true, basis: "아직 계산 전",
@@ -90,6 +103,7 @@ export function payRatioItem(r: PayResult | undefined): PayRatioMetric {
   const prev = r.dataMonth ? `지난달(${Number(r.dataMonth.slice(5, 7))}월)` : null;
   return {
     ...base, raw: r.raw, source: r.source, students: r.students, classes: r.classes, enrollments: r.enrollments,
+    detail: r.byClass ?? [], ...(r.newcomer ? { newcomer: true } : {}),
     basis: r.raw !== null ? `${prev ? `${prev} ` : ""}급여 비율 ${r.raw.toFixed(1)}% · ${r.source}` : `${prev ? `${prev} 값 · ` : ""}${r.problem ?? "자료 없음"}`,
     reason: `${prev ? `이번 달 급여는 월말이 돼야 확정되므로 ${prev} 급여 ÷ ${prev} 매출로 매깁니다. ` : ""}급여(세전) ÷ 담당 매출(담당 반 학생 청구서의 그 반 금액, 할인 전)을 비율로만 보입니다. 급여는 원장 직접 입력 → 계약서 월급 → 출석부 실급여 순으로 처음 있는 것을 씁니다. 금액은 보이지 않습니다.`,
   };

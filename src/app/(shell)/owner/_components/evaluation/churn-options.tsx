@@ -5,8 +5,7 @@ import { REASON_LABEL, WITHDRAWAL_REASONS } from "@/features/withdrawals/types";
 
 /**
  * 퇴원율의 세는 법(원장 결정 6) — 강사 탓이 아닌 퇴원 사유를 골라 뺀다 · 수강종료(다른 과목은 다님)도 셀지.
- * 반 이동 · 수업이 끝남(반 폐지·종강) · 끝난 특강 · 이 선생님의 같은 과목 다른 반을 계속 다님은 늘 뺀다(고르는 칸이 아니다 —
- * 다른 선생님의 같은 과목 반으로 옮겨 다니면 센다, 원장 2026-10-15).
+ * 반 이동 · 수업이 끝남(반 폐지·종강) · 끝난 특강 · 같은 과목 다른 반을 계속 다님(어느 선생님 반이든)은 늘 뺀다(고르는 칸이 아니다).
  * ⚠️ 이 칸은 학생을 **세는** 법이라 미리보기(저장된 수치에 점수 규칙만 얹는다)엔 안 보이고, 저장 뒤 다시 매긴 점수에 반영된다.
  */
 export function ChurnOptionsEditor({ value, onChange, label }: { value: ChurnOptions; onChange: (next: ChurnOptions) => void; label: string }) {
@@ -29,7 +28,7 @@ export function ChurnOptionsEditor({ value, onChange, label }: { value: ChurnOpt
         <input type="checkbox" className="size-4" checked={value.countEnded} onChange={(e) => onChange({ ...value, countEnded: e.target.checked })} />
         수강종료(다른 과목은 계속 다님)도 그만둔 것으로 센다
       </label>
-      <p className="text-xs">반 이동·수업이 끝남(반 폐지·종강)·끝난 특강·이 선생님의 같은 과목 다른 반을 계속 다니는 경우는 늘 제외합니다(다른 선생님의 같은 과목 반으로 옮겨 다니면 셉니다). 이 칸을 바꾸면 미리보기엔 보이지 않고, 저장한 뒤 다시 매긴 점수에 반영됩니다.</p>
+      <p className="text-xs">반 이동·수업이 끝남(반 폐지·종강)·끝난 특강·같은 과목의 다른 반을 계속 다니는 경우(어느 선생님 반이든 — 반 이동처럼)는 늘 제외합니다. 이 칸을 바꾸면 미리보기엔 보이지 않고, 저장한 뒤 다시 매긴 점수에 반영됩니다.</p>
     </fieldset>
   );
 }

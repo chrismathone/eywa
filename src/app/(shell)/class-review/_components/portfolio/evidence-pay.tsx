@@ -4,11 +4,12 @@ import { payDataMonth } from "@/features/teacher-portfolio/model/pay-ratio";
 import { metricOf } from "@/features/teacher-portfolio/model/types";
 import { pointsText } from "@/features/teacher-portfolio/view";
 import type { EvidenceProps } from "./evidence-records";
-import { StatTiles } from "./parts";
+import { DataTable, SectionTitle, StatTiles } from "./parts";
 
 /**
  * 매출 대비 급여 내역 — 비율·급여 출처·담당 학생 수·반 수만(원장 *"금액을 포트폴리오에 그대로 노출할 필요없고 비율만"*).
  * 학생 수·반 수는 원장 1-1 *"학생수와 생산성 모두 볼것"* — 점수엔 안 섞고 옆에 둔다.
+ * 반별 표(원장 2026-10-15 *"급여 탭에서 상세 반별 매출 이런거 보면 좋겠는데"* → 비중만) = 반마다 학생 수 · 매출 비중(%) — 금액은 없다.
  */
 export function PayRatioEvidence({ period }: Pick<EvidenceProps, "period">) {
   const m = metricOf(period, "payRatio");
@@ -17,6 +18,8 @@ export function PayRatioEvidence({ period }: Pick<EvidenceProps, "period">) {
   // 2026-10부터 이 달 점수는 지난달 재료(원장 2026-10-15) — 담당 학생·반도 그 달 값이라 달을 붙인다.
   const data = payDataMonth(period.month);
   const prev = data === period.month ? null : `${Number(data.slice(5, 7))}월`;
+  // 반별 비중 — 이 칸이 생기기 전에 저장(마감)된 달은 빈 목록이다.
+  const byClass = Array.isArray(m.detail) ? m.detail : [];
   return (
     <>
       <StatTiles items={[
@@ -28,6 +31,13 @@ export function PayRatioEvidence({ period }: Pick<EvidenceProps, "period">) {
       ]} />
       {m.raw === null || m.raw === undefined
         ? <p role="status" className="bg-amber-soft mt-4 rounded-lg px-3.5 py-3 text-xs leading-relaxed">{m.basis}</p> : null}
+      <SectionTitle sub={`${prev ? `${prev} · ` : ""}금액 없이 비중만 — 매출 비중 = 금액을 찾은 매출 중 그 반 몫`}>반별</SectionTitle>
+      <DataTable headers={["반", "학생", "금액 찾은 학생", "매출 비중"]} kinds={["text", "num", "num", "num"]}
+        empty="반별 내역이 없습니다(그 달 담당 반이 없거나, 반별 내역을 싣기 전에 저장된 달입니다)."
+        rows={byClass.map((r, i) => ({
+          key: `${r.className}|${i}`,
+          cells: [r.className, `${r.students}명`, `${r.billed}/${r.rows}명`, r.share === null ? "—" : `${r.share.toFixed(1)}%`],
+        }))} />
       <div className="bg-primary-softer mt-4 space-y-1.5 rounded-lg px-3.5 py-3 text-xs leading-relaxed">
         {prev ? <p><b>지난달({prev}) 값으로 매깁니다</b> — 이번 달 급여는 월말이 돼야 확정되므로, 이 달 점수는 {prev} 급여 ÷ {prev} 매출입니다(계약서 월급·출석부 실급여·청구서 모두 {prev} 것).</p> : null}
         <p>급여 비율 = 그 달 급여(세전) ÷ 담당 매출. 매출은 그 선생님 출석부(강사 전체 보기)의 학생·반마다 그 달 <b>청구서의 그 반 금액</b>(할인 전)을 더한 값입니다 — 함께 맡은 반도 그 줄 금액 그대로입니다. 영어처럼 청구서 항목 이름이 반 이름과 다르면, 그 학생의 못 맞춘 반과 남은 수강료 항목이 하나씩일 때 그 둘을 짝지어 잡습니다(반을 옮긴 달처럼 짝이 여럿이면 이름만으로는 어느 반 금액인지 몰라, 출석부 청구액에 그 반 금액이 따로 잡혀 있지 않으면 못 찾은 줄로 셉니다).</p>

@@ -3,7 +3,7 @@
  * 결과의 한 달(`PortfolioPeriod`)이 그대로 `teacher_portfolio_months.payload`에 저장된다(마감한 달은 점수와 근거를 함께 굳힌다). 학생은 id로만 싣는다.
  */
 import type { EvaluationConfig } from "../evaluation/config";
-import type { EvaluationSources, GradeKindStat, GradeRow, PunctualityRow, SatisfactionRow } from "./source-types";
+import type { EvaluationSources, GradeKindStat, GradeRow, PayClassRow, PunctualityRow, SatisfactionRow } from "./source-types";
 export type { EvaluationSources } from "./source-types";
 
 export type { SnapshotUser, SnapshotClass, SnapshotSchedule, SnapshotEnrollment, SnapshotAttendance, SnapshotReport, SnapshotConsultation, SnapshotReviewSheet, SnapshotReview, SnapshotTransition, SnapshotDelegation, SnapshotInvoice, SnapshotTerm, SnapshotMakeup, SnapshotReferral, SnapshotAttendanceTouch } from "./snapshot-types";
@@ -136,14 +136,14 @@ export type CoverageMetric = MetricCommon<"coverage", CoverageRow> & Pick<Covera
 /** 성적 관리 · 학부모 만족도 · 강사 근태(2026-10-15 계산 시작) — 그 전에 저장된 달은 `uncounted` 자리라 아래 칸이 없다. */
 export type GradesMetric = MetricCommon<"grades", GradeRow> & { tests?: number; students?: number; kinds?: GradeKindStat[] };
 export type SatisfactionMetric = MetricCommon<"satisfaction", SatisfactionRow> & { plus?: number; minus?: number; claims?: number; waiting?: number };
-export type PunctualityMetric = MetricCommon<"punctuality", PunctualityRow> & { late?: number; absent?: number; early?: number; excused?: number; days?: number; manual?: boolean };
+export type PunctualityMetric = MetricCommon<"punctuality", PunctualityRow> & { late?: number; absent?: number; early?: number; excused?: number; days?: number; checkIns?: number; checkOuts?: number; manual?: boolean };
 /** 퇴원율의 그만둔 학생 한 줄 — 셌는지(counted)와 뺀 까닭(note). */
 export type ChurnRow = { studentId: string; day: string; type: "퇴원" | "수강종료"; className: string; reason: string; counted: boolean; note: string | null };
 /** base = 지난달 담당 학생(그 달 절반 이상) · need = 절반 일수 · counted = 센 학생 수. */
 export type ChurnMetric = MetricCommon<"churn", ChurnRow> & { base: number; need: number; counted: number };
-/** 매출 대비 급여 — 비율·출처·학생 수·반 수만(금액 없음). 계산 전 달은 `uncounted`라 출처 칸이 없다. */
-export type PayRatioMetric = MetricCommon<"payRatio", never> & {
-  source?: string | null; students?: number; classes?: number; enrollments?: number;
+/** 매출 대비 급여 — 비율·출처·학생 수·반 수·반별 비중만(금액 없음). 계산 전 달은 `uncounted`라 출처 칸이 없다. `newcomer` = 지난달 담당 반 없음(합계에서 제외). */
+export type PayRatioMetric = MetricCommon<"payRatio", PayClassRow> & {
+  source?: string | null; students?: number; classes?: number; enrollments?: number; newcomer?: boolean;
 };
 /** 원장이 직접 만든 지표 — 달마다 입력한 숫자가 원래 수치다. */
 export type ManualMetricItem = MetricCommon<`manual:${string}`, never> & { unit: string; note?: string };

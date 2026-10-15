@@ -28,6 +28,10 @@ const run = (days: SnapshotStaffDay[], { manual = null, options = DEFAULT_PUNCTU
   });
 
 describe("punctualityOf", () => {
+  it("출근·퇴근 기록 = 그 달 시각이 찍힌 날 수 · 같은 날 여러 줄은 하루(원장 2026-10-15)", () => {
+    const r = run([rec("2026-10-01", "13:50", "20:05"), rec("2026-10-01", "13:55", null), rec("2026-10-02", "13:50", null), rec("2026-10-05", null, "20:10")]);
+    expect([r.checkIns, r.checkOuts, r.days]).toEqual([2, 2, 3]);
+  });
   const month = [rec("2026-10-01", "13:55", "20:05"), rec("2026-10-02", "14:10", "19:30"), rec("2026-10-07", null, "20:10"),
     rec("2026-10-02", null, null, { user_id: "t2" }), rec("2026-09-30", "15:00", null)];
   it("기준보다 늦게 출근 = 지각 · 일찍 퇴근 = 조퇴 · 기준 있는 날 기록 없음 = 결근 · 퇴근만 찍은 날은 결근 아님", () => {

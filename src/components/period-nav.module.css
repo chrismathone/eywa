@@ -4,7 +4,7 @@
 .mobileLabel {
   display: none;
 }
-@media (max-width: 1239.98px), (pointer: coarse), (pointer: none) {
+@media (max-width: 1239.98px), not all and (any-pointer: fine) {
   .responsive {
     --period-label-width: calc(var(--control-label) * 10.5);
   }
