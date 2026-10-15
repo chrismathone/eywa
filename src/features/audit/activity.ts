@@ -1,6 +1,8 @@
 // 활동 로그(activity_log) 표시 헬퍼 — 순수 함수(서버/클라 공용). DB 트리거가 남긴 원시 diff를 사람이 읽는 요약으로.
 // 운영 enum 라벨(과목/학년 등)과 무관한 '컬럼 이름' 매핑이라 하드코딩 예외 아님(테넌트 설정 대상 아님).
 import { normalizeRefund, refundFieldList } from "@/features/billing/refund-request";
+import { reasonDisplay } from "@/features/withdrawals/types";
+import { reasonDetailOf } from "@/features/withdrawals/reason-detail";
 
 export type ActivityOp = "INSERT" | "UPDATE" | "DELETE";
 
@@ -55,7 +57,7 @@ const COLUMN_LABEL: Record<string, string> = {
   registered_at: "등록", paid_at: "납부", ordered_at: "주문", system_role: "역할", job_title: "직급",
   email: "이메일", memo: "메모", notes: "메모", score: "점수", max_score: "만점", exam_date: "시험일",
   title: "제목", category: "분류", restricted: "열람제한", is_active: "활성", closed_at: "종강",
-  withdrawn_at: "퇴원일", withdrawal_reason: "퇴원사유", registration_date: "등록일", exam_name: "시험명",
+  withdrawn_at: "퇴원일", withdrawal_reason: "퇴원사유", withdrawal_detail: "세부 사유", withdrawal_memo: "종료 메모", registration_date: "등록일", exam_name: "시험명",
   // 등록상담(enrollment_consultations)
   prospect_name: "상담자", prospect_grade: "학년", prospect_school: "학교", parent_name: "학부모",
   parent_request: "요청사항", learning_history: "학습이력", career_goal: "희망진로", siblings: "형제자매",
@@ -133,6 +135,20 @@ const VALUE_LABEL: Record<string, string> = {
 };
 
 const colLabel = (c: string) => COLUMN_LABEL[c] ?? c;
+
+/**
+ * 칸마다 다른 값 표 — 영문 키로 저장되는 퇴원 사유·세부 사유는 **그 칸에서만** 한글로(전역 `VALUE_LABEL`에 넣으면 다른 칸의
+ * 같은 글자까지 바뀐다). 모르는 값은 `shortVal` 그대로.
+ */
+const COLUMN_VALUE: Record<string, (v: string) => string | null> = {
+  withdrawal_reason: (v) => reasonDisplay(v),
+  withdrawal_detail: (v) => reasonDetailOf(v)?.label ?? null,
+};
+function colVal(col: string, v: unknown): string {
+  const map = Object.hasOwn(COLUMN_VALUE, col) ? COLUMN_VALUE[col] : undefined;
+  const mapped = map && typeof v === "string" && v.trim() ? map(v.trim()) : null;
+  return mapped ?? shortVal(v);
+}
 
 function shortVal(v: unknown): string {
   if (v === null || v === undefined || v === "") return "비움";
@@ -217,7 +233,7 @@ export function activityDetail(
       raw.push(`${colLabel(col)} 변경`);
       continue;
     }
-    raw.push(`${colLabel(col)} ${shortVal(c.old)}→${shortVal(c.new)}`);
+    raw.push(`${colLabel(col)} ${colVal(col, c.old)}→${colVal(col, c.new)}`);
   }
 
   const changes = raw.slice(0, CHANGES_CAP);

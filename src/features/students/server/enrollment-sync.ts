@@ -1,6 +1,7 @@
 import "server-only";
 import type { createClient } from "@/lib/supabase/server";
 import { explainDbError } from "@/lib/supabase/db-error";
+import { reasonKeyOf } from "@/features/withdrawals/reason-key";
 
 /**
  * 학생 상태 ↔ 수강(enrollments) 정합성 헬퍼.
@@ -36,10 +37,39 @@ export async function reopenEnrollmentsClosedByWithdrawal(
   if (!withdrawnDate) return null;
   const { error } = await supabase
     .from("enrollments")
-    .update({ end_date: null, withdrawal_reason: null, on_hold: false })
+    // 세부 사유·종료 메모도 함께 비운다(0367a) — 다시 연 수강을 나중에 메모 없이 닫으면 옛 메모가 퇴원관리 명단에 되살아난다.
+    .update({ end_date: null, withdrawal_reason: null, withdrawal_detail: null, withdrawal_memo: null, on_hold: false })
     .eq("student_id", studentId)
     .eq("end_date", withdrawnDate);
   return error ? why(error, "reopen", { studentId }) : null;
+}
+
+/**
+ * 퇴원 사유를 고칠 때, 그 퇴원이 함께 닫은 수강의 사유도 같은 사유로 맞춘다 — 퇴원일에 끝난 줄 중 반 이동이 아니고 사유가
+ * 옛 사유와 같은 키인 것만(그 전에 따로 끝난 수강·다른 사유로 끝난 줄은 그대로). 퇴원율·시간표 X는 수강 사유도 읽어서
+ * (`excusedReasonOf` — 둘 중 하나라도 뺄 사유면 뺀다) 학생 사유만 바꾸면 '졸업'에서 고친 퇴원이 계속 빠진다(2026-10-15 리뷰).
+ * 고친 줄 수를 돌려준다.
+ */
+export async function syncWithdrawalEnrollmentReasons(
+  supabase: Supabase,
+  studentId: string,
+  withdrawnDate: string | null,
+  fromReason: string | null | undefined,
+  toReason: string,
+): Promise<{ count: number; error?: string }> {
+  const from = reasonKeyOf(fromReason);
+  if (!withdrawnDate || !from || from === reasonKeyOf(toReason)) return { count: 0 };
+  const { data, error } = await supabase
+    .from("enrollments")
+    .select("id, withdrawal_reason")
+    .eq("student_id", studentId)
+    .eq("end_date", withdrawnDate)
+    .eq("is_transferred", false);
+  if (error) return { count: 0, error: why(error, "reasonSyncRead", { studentId }) };
+  const ids = (data ?? []).filter((r) => reasonKeyOf(r.withdrawal_reason) === from).map((r) => r.id);
+  if (!ids.length) return { count: 0 };
+  const { error: upErr } = await supabase.from("enrollments").update({ withdrawal_reason: toReason }).in("id", ids);
+  return upErr ? { count: 0, error: why(upErr, "reasonSync", { studentId }) } : { count: ids.length };
 }
 
 /**
@@ -75,6 +105,11 @@ export async function endEnrollmentById(
   enrollmentId: string,
   date: string,
   reason: string,
+  /**
+   * 세부 사유·메모(0367a) — 넘긴 호출부만 쓴다(학생 상태 전환 창의 부분 종료). 안 넘기면 두 칸을 건드리지 않는다
+   * (반 화면의 수강 종료 등 다른 호출부는 그대로).
+   */
+  notes?: { detail: string | null; memo: string | null },
 ): Promise<{
   error: string | null;
   /** 실제 저장된 종료일(클램프 반영) — 감사로그에 그대로 싣는다. */
@@ -92,7 +127,11 @@ export async function endEnrollmentById(
   const endDate = enr && String(enr.start_date) > date ? String(enr.start_date) : date;
   const { error } = await supabase
     .from("enrollments")
-    .update({ end_date: endDate, withdrawal_reason: reason })
+    .update({
+      end_date: endDate,
+      withdrawal_reason: reason,
+      ...(notes ? { withdrawal_detail: notes.detail, withdrawal_memo: notes.memo } : {}),
+    })
     .eq("id", enrollmentId);
   if (error) return { error: why(error, "endOne", { enrollmentId }) };
 

@@ -1,5 +1,11 @@
 # Supabase 마이그레이션 — 적용 방식·순서·현재 상태
 
+## 2026-10-15 퇴원·수강 종료 사유 2단계 (0367a)
+
+`0367a_withdrawal_reason_details.sql`은 `enrollments.withdrawal_detail`·`withdrawal_memo` 두 칸(nullable · 기본값 없음)을 더하고, 퇴원보고서 전이 함수 두 개(`transition_withdrawal_report`·`_v1`)의 사유 목록에 새 대분류 다섯을 더한다(본문은 그대로 · 목록 글자만 · 이미 바뀌었으면 건너뛰고, 바꿀 목록이 없으면 중단). **앱보다 먼저** 적용한다 — 부분 종료 저장과 수강 종료 되돌리기가 새 칸을 쓴다. 적용 뒤 앱 배포 → `node --env-file=.env.local scripts/_oneoff/withdrawal-reason-details-backfill.mjs`(미리 보기) → `--apply`.
+
+⚠️ 빈 DB에 파일 이름 순서로 처음부터 깔면(`pnpm db:alphas`) 이 파일이 퇴원보고서 함수를 만드는 `20261013203000`보다 먼저 돌아 함수를 못 찾고 통째로 멈춘다(칸도 안 생긴다 — `0366a`도 같은 순서 의존). 빈 DB에서는 타임스탬프 파일들을 다 깐 뒤 이 파일을 다시 돌린다. 이미 운영 중인 DB에 손으로 적용하는 데는 상관없다.
+
 ## 2026-10-13 실험실 퇴원보고서
 
 `20261013203000_withdrawal_reports.sql`은 보고서·처리 이력·서비스 전용 상태 전이 RPC·실험실 메뉴 배치를 추가한다. 기존 원생·수강 표를 변경하지 않는다. `20261013210000_withdrawal_report_reasons.sql`은 병행 추가된 질병·권고퇴원 사유를 반영한다. `20261013215000_withdrawal_report_request_recovery.sql`은 요청자와 지정 원장이 퇴직해 고착된 요청을 현재 원장이 취소할 수 있게 한다. 지정자만 순서대로 승인하는 규칙은 유지한다.

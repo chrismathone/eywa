@@ -549,6 +549,8 @@ export async function updateEnrollmentDates(
     start_date?: string;
     end_date?: string | null;
     withdrawal_reason?: string | null;
+    withdrawal_detail?: null;
+    withdrawal_memo?: null;
     is_transferred?: boolean;
   } =
     field === "start"
@@ -560,7 +562,8 @@ export async function updateEnrollmentDates(
             // 다시 열 때 이 값을 덮지 않는다(적대 리뷰 2026-09-18). 다른 사유(퇴원 사유 등)는 그대로 둔다.
             ...((current.withdrawal_reason as string | null) === PERIOD_END_REASON ? { withdrawal_reason: null } : {}),
           }
-        : { end_date: null, withdrawal_reason: null, is_transferred: false };
+        : // 종료 사유의 세부·메모(0367a)도 함께 비운다 — 되살린 수강이 다음에 다른 사유로 끝날 때 옛 메모가 붙어 나오지 않게.
+          { end_date: null, withdrawal_reason: null, withdrawal_detail: null, withdrawal_memo: null, is_transferred: false };
 
   // 기능 지정은 일반 수강 쓰기 권한을 넓히지 않는다. 이 경로에서 정해진 날짜 칸만 수정한다.
   let write = dateWriter.from("enrollments").update(patch).eq("id", enrollmentId)

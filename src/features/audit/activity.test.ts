@@ -18,6 +18,14 @@ describe("activityDetail — 사람이 읽는 요약", () => {
     expect(changes).toEqual(["납부 비움→2026. 07. 08. 20:33"]);
   });
 
+  it("퇴원 사유·세부 사유는 그 칸에서만 한글로(영문 키 원문 금지)", () => {
+    const { changes } = activityDetail("enrollments", "UPDATE", "홍길동", {
+      withdrawal_reason: { old: "other", new: "dissatisfaction" },
+      withdrawal_detail: { old: null, new: "teacher_left" },
+    });
+    expect(changes).toEqual(["퇴원사유 기타→수업·강사", "세부 사유 비움→강사 퇴사"]);
+  });
+
   it("미등록 값은 원문 폴백", () => {
     const { changes } = activityDetail("students", "UPDATE", "홍길동", {
       memo: { old: "abc", new: "def" },

@@ -6,9 +6,13 @@
  *    (`exit-overlay-model.ts`) · 급여명세서 퇴원생률(`payroll/payslip-metrics.ts`)이 모두 이 판정을 쓴다. 고르는 사유 목록은
  *    강사평가 설정의 퇴원율 세는 법(`ChurnOptions.excludeReasons`, 기본 졸업·이사·질병·권고퇴원) 한 곳이다.
  */
-import { REASON_LABEL, normalizeReason, type WithdrawalReason } from "./types";
+import { LEGACY_REASON_LABELS, REASON_LABEL, normalizeReason, type WithdrawalReason } from "./types";
 
-const LABEL_TO_KEY = new Map(Object.entries(REASON_LABEL).map(([k, v]) => [v, k as WithdrawalReason]));
+// 지금 라벨 + 바꾸기 전 라벨(2026-10-15 `수업 불만족` → `수업·강사` 등) — 글로 남은 옛 사유도 같은 키.
+const LABEL_TO_KEY = new Map<string, WithdrawalReason>([
+  ...(Object.entries(LEGACY_REASON_LABELS) as [string, WithdrawalReason][]),
+  ...Object.entries(REASON_LABEL).map(([k, v]) => [v, k as WithdrawalReason] as [string, WithdrawalReason]),
+]);
 
 /**
  * 사유 원문 → 표준 키. 영문 코드 모양은 대소문자 없이 표준 키·별칭(`moved`)으로, 모르는 코드는 '기타'(옛 `codeOf`와 같다).
