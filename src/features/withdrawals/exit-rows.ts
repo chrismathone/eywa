@@ -16,6 +16,7 @@
 import { inWithdrawalWindow, recentExitWindow } from "./window";
 export { withdrawalSubjects, WITHDRAW_SUBJECT_SPAN_DAYS } from "./window";
 import { normalizeReason, reasonDisplay } from "./types";
+import { detailFor } from "./reason-detail";
 import { tenureDays } from "./early-exit";
 
 export type ExitKind = "withdrawn" | "subject-ended";
@@ -43,9 +44,11 @@ export type ExitRow = {
   reasonKey: string | null;
   /** 사유 표시(사유 키 라벨 또는 옛 수강 사유). */
   reasonLabel: string | null;
+  /** 세부 사유 키(2단계 — `reason-detail.ts`) · 그 대분류의 것만(`detailFor`). 없으면 null. */
+  detail: string | null;
   /** 사후상담 여부 — 수강종료는 null(해당 없음). */
   consulted: boolean | null;
-  /** 퇴원 메모 원문(실제 사유가 적힌 곳 — '기타'의 속) — 수강종료는 null. */
+  /** 메모 원문(실제 사유가 적힌 곳 — '기타'의 속) — 퇴원 = `metadata.memo` · 수강종료 = 그 수강 행의 종료 메모(0367a). */
   memo: string | null;
   /** 장부 정리 일괄 퇴원(`isCleanupWithdrawal`) — 실제 사유가 아니라 사유 통계에서 따로 센다(`breakdown.ts`). 수강종료는 false. */
   cleanup: boolean;
@@ -133,6 +136,7 @@ type WithdrawnInput = {
   withdrawalReason: string | null;
   metadata: {
     reason?: string | null;
+    detail?: string | null;
     consultation?: { adminCalledParent: boolean; teacherCalledParent: boolean; talkedWithStudent: boolean };
   } | null;
   systemBulk: boolean;
@@ -154,6 +158,8 @@ type SubjectEndedInput = {
     className: string | null;
     englishTrack: string | null;
     reason?: string | null;
+    detail?: string | null;
+    memo?: string | null;
   }[];
 };
 
@@ -178,6 +184,7 @@ export function toExitRows(withdrawn: readonly WithdrawnInput[], subjectEnded: r
       systemBulk: r.systemBulk,
       reasonKey: r.metadata?.reason ?? null,
       reasonLabel: r.withdrawalReason,
+      detail: detailFor(r.metadata?.reason, r.metadata?.detail),
       consulted: !!c && (c.adminCalledParent || c.teacherCalledParent || c.talkedWithStudent),
       memo: r.memoText ?? null,
       cleanup: r.cleanup ?? false,
@@ -203,8 +210,9 @@ export function toExitRows(withdrawn: readonly WithdrawnInput[], subjectEnded: r
         reasonKey: normalizeReason(d.reason),
         // 표시는 원문 보존(‘종강’·‘반 폐지’는 그대로, 표준 키·표기 흔들림만 한글로 — reasonDisplay).
         reasonLabel: reasonDisplay(d.reason),
+        detail: detailFor(d.reason, d.detail),
         consulted: null,
-        memo: null,
+        memo: d.memo ?? null,
         cleanup: false,
         tenureDays: null,
         activeSubjects: s.activeSubjects,

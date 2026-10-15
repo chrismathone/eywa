@@ -1,8 +1,9 @@
+import { canManageStudentStatusNow } from "@/features/students/server/status-access";
 import { notFound } from "next/navigation";
 import { BookOpen, MessagesSquare, ScrollText } from "@/components/icons/aywa-icon-compat";
 import type { ReactNode } from "react";
 import { requireAccess } from "@/lib/auth/require-access";
-import { accessLevelTenant, canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
+import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { getEnrollmentDateAccess } from "@/features/enrollments/server/date-access";
 import { canEditEnrollmentDateClass } from "@/features/enrollments/date-access";
 import { WindowLink } from "@/components/workspace/window-link";
@@ -40,7 +41,7 @@ export default async function WithdrawalDetailPage({
   const [dateAccess, canWrite, canManageStudents, studentsLvl] = await Promise.all([
     getEnrollmentDateAccess(),
     canWriteTenant(user.systemRole, "withdrawals"),
-    canManageTenant(user.systemRole, "students"),
+    canManageStudentStatusNow(),
     accessLevelTenant(user.systemRole, "students"),
   ]);
   // 재원 복구 = 서버 게이트와 같은 두 문(퇴원관리 쓰기 ∧ 원생 기록 변경) — 못 누를 사람에겐 안 보인다(감사 E9·S6).
@@ -107,6 +108,7 @@ export default async function WithdrawalDetailPage({
           <WithdrawalReasonCard
             studentId={detail.id}
             initialReason={md?.reason ?? null}
+            initialDetail={md?.detail ?? null}
             initialMemo={md?.memo ?? null}
           />
         </Card>

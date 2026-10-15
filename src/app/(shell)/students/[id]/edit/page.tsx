@@ -1,3 +1,4 @@
+import { canManageStudentStatusNow } from "@/features/students/server/status-access";
 import { notFound, redirect } from "next/navigation";
 import { BackLink } from "@/components/back-link";
 import { requireAccess } from "@/lib/auth/require-access";
@@ -32,6 +33,7 @@ export default async function EditStudentPage({
       </header>
 
       <StudentForm
+        canManageStatus={await canManageStudentStatusNow()}
         mode="edit"
         scope={`student:${id}`}
         gradeLevels={operations.gradeLevels}

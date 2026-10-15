@@ -107,7 +107,7 @@ describe("한 달 열", () => {
       ] });
     const rows = Object.fromEntries(m.groups.flatMap((g) => g.rows).map((r) => [r.key, r]));
     expect([rows.g!.excluded, rows.s!.excluded, m.count]).toEqual([false, true, 1]);
-    expect(rows.s!.reasonTitle).toBe("수업 불만족 · 수강종료는 세지 않음");
+    expect(rows.s!.reasonTitle).toBe("수업·강사 · 수강종료는 세지 않음");
     // 퇴원율이 '퇴원'으로 센 수강종료 줄(선생님이 붙음)은 긋지 않는다 — 선생님 건수 = 강사평가.
     const t = buildOverlayMonth({ month: "2026-10", today: "2026-10-14", zeroTeachers: [], holds: null, rules,
       exits: [exit({ key: "t", teachers: ["박도윤"], date: "2026-10-04", kind: "subject-ended", reasonRaw: "dissatisfaction" })] });
@@ -120,7 +120,8 @@ describe("한 달 열", () => {
     expect([r.excluded, r.reason, r.reasonTitle, m.count]).toEqual([true, "졸업", "기타 · 졸업", 0]);
   });
   it("안내 한 줄 = 고른 세는 법 그대로(사유는 사유 표 순서)", () => {
-    expect(exclusionNote(RULES)).toBe("과목을 끊은 학생도 퇴원으로 셉니다. 줄을 긋고 건수에서 빼는 것: 졸업 · 이사 · 질병 · 권고퇴원.");
+    // 사유는 사유 표(REASON_LABEL) 순서 — 2026-10-15 사유 2단계에서 표 순서가 바뀌었다(이사·졸업이 뒤로).
+    expect(exclusionNote(RULES)).toBe("과목을 끊은 학생도 퇴원으로 셉니다. 줄을 긋고 건수에서 빼는 것: 질병 · 권고퇴원 · 이사 · 졸업.");
     expect(exclusionNote({ excludeReasons: [], countEnded: false })).toBe("줄을 긋고 건수에서 빼는 것: 과목만 끊은 수강종료.");
     expect(exclusionNote({ excludeReasons: [], countEnded: true })).toBe("과목을 끊은 학생도 퇴원으로 셉니다.");
   });

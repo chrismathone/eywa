@@ -1,3 +1,4 @@
+import { canManageStudentStatusNow } from "@/features/students/server/status-access";
 
 import { SheetText } from "@/features/teacher-view/interface-label";
 import { WindowLink } from "@/components/workspace/window-link";
@@ -137,7 +138,8 @@ export default async function StudentDetailPage({
   // 이 다이얼로그 자체가 없다. canManageStudent에 의존하므로 병렬화 대상이 아니다(B4는 독립 await 규칙).
   // ⚠️ 필터(end_date == null)는 서버가 실제로 닫는 기준(closeActiveEnrollmentsClamped)과 **같아야** 한다 —
   //    갈리면 화면이 보여준 목록과 실제로 닫히는 행이 어긋난다.
-  const openEnrollments = canManageStudent
+  const canManageStatus = await canManageStudentStatusNow();
+  const openEnrollments = canManageStatus
     ? (await getStudentEnrollments(student.id))
         .filter((e) => e.endDate == null)
         .map((e) => ({
@@ -223,10 +225,10 @@ export default async function StudentDetailPage({
               (수정 → 학생 수정) 좁은 화면에서 가로로 넘친다. 넘치는 대신 다음 줄로 내려간다. */}
           <div className="flex flex-wrap items-center justify-end gap-2">
             {/* 강사(scoped)는 열람 전용 — 상태 변경·학생 수정·AI 케어 전부 비노출(위 canManageStudent 주석). */}
-            {canManageStudent && scheduledWithdrawal ? (
+            {canManageStatus && scheduledWithdrawal ? (
               <CancelScheduledWithdrawal studentId={student.id} date={scheduledWithdrawal} />
             ) : null}
-            {canManageStudent ? (
+            {canManageStatus ? (
               <StatusAction
                 studentId={student.id}
                 studentName={student.name}
@@ -287,7 +289,8 @@ export default async function StudentDetailPage({
         ) : tab === "classes" ? (
           <ClassesTab
             student={student}
-            canEnd={canManageStudent}
+            canEnd={canManageStatus}
+            canAssign={canManageStudent}
             dateAccess={dateAccess}
             canEditSchedule={canEditSchedule}
             canDeleteEnrollment={canDeleteEnrollment}

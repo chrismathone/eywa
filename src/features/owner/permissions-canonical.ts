@@ -2,6 +2,7 @@ import { MENU_KEYS, SYSTEM_ROLES, type MenuKey, type SystemRole } from "@/lib/pe
 import { sortKeysDeep } from "@/lib/stable-json";
 import type { PermissionsSettings } from "./settings-types";
 import { effectivePayslipManagerIds } from "./payslip-permissions";
+import { studentStatusManagerIds } from "./student-status-permissions";
 
 /**
  * 역할·권한 설정의 표준 문자열 — "같은 저장값인가"를 가리는 기준(기준 token의 재료). 순수 함수.
@@ -28,6 +29,7 @@ export function permissionsCanonical(permissions: PermissionsSettings): string {
     leave: sortedIds(permissions?.specialAccess?.leaveAdjusterIds),
     split: sortedIds(permissions?.specialAccess?.classSplitterIds),
     dates: sortedIds(permissions?.specialAccess?.enrollmentDateEditorIds),
+    studentStatus: studentStatusManagerIds(permissions?.specialAccess) === undefined ? "legacy" : sortedIds(studentStatusManagerIds(permissions?.specialAccess)),
     scopes: rowsByCell(permissions?.specialAccess?.staffSubjectScopes, ["userId"]),
   });
 }

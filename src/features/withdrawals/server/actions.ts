@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import {
   clearOnHoldForActiveEnrollments,
   reopenEnrollmentsClosedByWithdrawal,
+  syncWithdrawalEnrollmentReasons,
 } from "@/features/students/server/enrollment-sync";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
@@ -18,6 +19,9 @@ import {
   type WithdrawalReason,
 } from "../types";
 import { logDbError } from "@/lib/supabase/db-error";
+import { canManageStudentStatusNow } from "@/features/students/server/status-access";
+import { STUDENT_STATUS_DENIED } from "@/features/students/status-access";
+import { checkReasonInput } from "../reason-detail";
 
 const REASONS: readonly WithdrawalReason[] = WITHDRAWAL_REASONS;
 
@@ -40,19 +44,23 @@ export async function updateWithdrawalReason(
 
   const studentId = String(formData.get("studentId") ?? "").trim();
   const reasonStr = String(formData.get("reason") ?? "").trim();
+  const detailStr = String(formData.get("detail") ?? "").trim() || null;
   const memo = String(formData.get("memo") ?? "").trim() || null;
 
   if (!studentId) return { error: "학생 ID가 누락되었습니다" };
   if (!REASONS.includes(reasonStr as WithdrawalReason)) {
     return { error: "유효한 퇴원 사유를 선택해주세요" };
   }
+  // 세부 사유(선택)는 그 대분류의 것만 · '기타'는 메모 필수(원장 2026-10-15 사유 2단계).
+  const checked = checkReasonInput({ reason: reasonStr as WithdrawalReason, detail: detailStr, memo });
+  if (checked.error !== undefined) return { error: checked.error };
 
   const supabase = await createClient();
 
   // Read current metadata, preserve consultation flags
   const { data: cur } = await supabase
     .from("students")
-    .select("withdrawal_metadata, status")
+    .select("withdrawal_metadata, status, withdrawn_at")
     .eq("id", studentId)
     .single();
 
@@ -60,8 +68,13 @@ export async function updateWithdrawalReason(
   if (cur.status !== "withdrawn") return { error: "퇴원 상태가 아닙니다" };
 
   const existing = (cur.withdrawal_metadata as Partial<WithdrawalMetadata> | null) ?? DEFAULT_WITHDRAWAL_METADATA;
+  // 다른 칸(퇴원보고서 번호 등)은 그대로 두고 사유·세부·메모만 바꾼다 — 세부를 고르지 않았으면 지운다.
+  const { detail: _oldDetail, ...rest } = existing;
+  void _oldDetail;
   const next: WithdrawalMetadata = {
+    ...rest,
     reason: reasonStr as WithdrawalReason,
+    ...(checked.detail ? { detail: checked.detail } : {}),
     memo,
     consultation: {
       adminCalledParent: !!existing.consultation?.adminCalledParent,
@@ -69,6 +82,17 @@ export async function updateWithdrawalReason(
       talkedWithStudent: !!existing.consultation?.talkedWithStudent,
     },
   };
+
+  // 그 퇴원이 함께 닫은 수강의 사유도 같은 사유로(퇴원율·시간표 X가 수강 사유도 읽는다 — 학생 사유만 바꾸면 숫자가 그대로다).
+  // 🔴 학생보다 **먼저** — 학생을 먼저 바꾸면 수강 쪽이 실패한 뒤 다시 눌렀을 때 옛 사유를 몰라 영영 못 맞춘다.
+  const synced = await syncWithdrawalEnrollmentReasons(
+    supabase,
+    studentId,
+    (cur.withdrawn_at as string | null) ?? null,
+    existing.reason,
+    reasonStr,
+  );
+  if (synced.error) return { error: synced.error };
 
   const { error } = await supabase
     .from("students")
@@ -80,7 +104,7 @@ export async function updateWithdrawalReason(
   await logAction({
     action: "withdrawal_update",
     targetType: "student",
-    metadata: { studentId, reason: reasonStr },
+    metadata: { studentId, reason: reasonStr, detail: checked.detail, enrollments: synced.count },
   });
   revalidatePath(`/withdrawals/${studentId}`);
   revalidatePath("/withdrawals");
@@ -119,7 +143,9 @@ export async function toggleConsultationStep(
   if (cur.status !== "withdrawn") return { error: "퇴원 상태가 아닙니다" };
 
   const existing = (cur.withdrawal_metadata as Partial<WithdrawalMetadata> | null) ?? DEFAULT_WITHDRAWAL_METADATA;
+  // 🔴 상담 칸만 바꾼다 — 메타데이터를 새로 지으면 세부 사유(detail)·퇴원보고서 번호 등 다른 칸이 지워진다.
   const updated: WithdrawalMetadata = {
+    ...existing,
     reason: existing.reason ?? "other",
     memo: existing.memo ?? null,
     consultation: {
@@ -163,6 +189,7 @@ export async function reactivateStudent(
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "withdrawals"))) return { error: "퇴원 관리 권한이 없습니다" };
   // 🔴 재원 복구는 **학생 기록 변경**이다 — 원생 상세의 재원 전환과 같은 문(students full)을 함께 요구한다(감사 S6).
+  if (!(await canManageStudentStatusNow())) return { error: STUDENT_STATUS_DENIED };
   //    퇴원관리만 full인 경리 계정이 여기서만 학생을 재원으로 되돌릴 수 있었다(#77).
   if (!(await canManageTenant(user.systemRole, "students"))) {
     return { error: "재원 복구 권한이 없습니다 — 원생 정보 변경 권한이 필요합니다" };

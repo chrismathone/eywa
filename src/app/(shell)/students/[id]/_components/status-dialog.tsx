@@ -22,7 +22,7 @@ import {
   type ChangeStatusState,
 } from "@/features/students/server/actions";
 import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-change-signal";
-import { REASON_LABEL, type WithdrawalReason } from "@/features/withdrawals/types";
+import { ReasonFields } from "@/features/withdrawals/reason-fields";
 
 type Target = "withdrawn" | "on_hold" | "enrolled";
 
@@ -37,10 +37,10 @@ export type OpenEnrollment = {
   onHold?: boolean;
 };
 
-// 퇴원 사유 라벨은 퇴원관리와 **한 벌**(REASON_LABEL) — 두 벌이면 여기서 고른 사유가 퇴원관리에선 다른 말로 보였다(감사 D4).
-const WITHDRAWAL_REASON_OPTIONS = (Object.entries(REASON_LABEL) as [WithdrawalReason, string][]).map(
-  ([value, label]) => ({ value, label }),
-);
+// 퇴원 사유(대분류·세부·메모)는 퇴원관리와 **한 벌**(`ReasonFields` · REASON_LABEL) — 두 벌이면 여기서 고른 사유가 퇴원관리에선
+// 다른 말로 보였다(감사 D4).
+const FIELD_LABEL = "text-foreground block text-sm font-medium";
+const FIELD_CONTROL = "border-border bg-card text-foreground w-full rounded-lg border px-3 py-2 text-sm";
 
 function SubmitBtn({ target, label, disabled }: { target: Target; label?: string; disabled?: boolean }) {
   const { pending } = useFormStatus();
@@ -244,35 +244,15 @@ export function StatusDialog({
                   </p>
                 ) : null}
               </div>
-              <div className="space-y-1.5">
-                <label className="text-foreground block text-sm font-medium">
-                  {isPartial ? "종료 사유" : "퇴원 사유"}
-                </label>
-                <select
-                  name="reason"
-                  required
-                  className="border-border bg-card text-foreground w-full rounded-lg border px-3 py-2 text-sm"
-                >
-                  {WITHDRAWAL_REASON_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {/* 메모는 퇴원(students.withdrawal_metadata)에만 저장 자리가 있다 — 부분 종료에서 보여 주면
-                  적어도 안 남는 거짓 약속이 된다(수강 행엔 메모 칼럼이 없다). */}
-              {isPartial ? null : (
-                <div className="space-y-1.5">
-                  <label className="text-foreground block text-sm font-medium">상세 메모</label>
-                  <textarea
-                    name="memo"
-                    rows={3}
-                    placeholder="배경 정보 (선택)"
-                    className="border-border bg-card text-foreground w-full rounded-lg border px-3 py-2 text-sm"
-                  />
-                </div>
-              )}
+              {/* 대분류 · 세부(선택) · 메모(기타는 필수) — 퇴원은 students.withdrawal_metadata, 부분 종료는 고른 수강 행
+                  (`enrollments.withdrawal_detail`·`withdrawal_memo`, 0367a)에 남는다(원장 2026-10-15 사유 2단계). */}
+              <ReasonFields
+                reasonLabel={isPartial ? "종료 사유" : "퇴원 사유"}
+                initialReason={null}
+                memoPlaceholder="배경 정보 (선택)"
+                labelClassName={FIELD_LABEL}
+                controlClassName={FIELD_CONTROL}
+              />
               {/* 결과를 **누르기 전에** 말한다 — 누른 뒤에 알게 되면 지금과 같은 말싸움이 난다. */}
               <p
                 className={`text-xs ${

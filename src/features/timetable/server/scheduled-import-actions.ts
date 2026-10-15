@@ -1,4 +1,6 @@
 "use server";
+import { canManageStudentStatusNow } from "@/features/students/server/status-access";
+import { STUDENT_STATUS_DENIED } from "@/features/students/status-access";
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
@@ -69,11 +71,14 @@ export async function cancelScheduledImport(
   // including those blocks, instead of leaving a half-restored timetable.
   const { data: masterRows, error: masterError } = await supabase
     .from("timetable_snapshots")
-    .select("source:payload->apply->masterSource, gridClasses:payload->gridClasses")
+    .select("source:payload->apply->masterSource, gridClasses:payload->gridClasses, removes:payload->removes")
     .in("id", group.snapshotIds);
   if (masterError) {
     logDbError(masterError, "timetable.cancelScheduledImport");
     return { error: "예약 내용을 확인하지 못했습니다. 다시 시도해 주세요." };
+  }
+  if ((masterRows ?? []).some((r) => Array.isArray(r.removes) && r.removes.length > 0) && !(await canManageStudentStatusNow())) {
+    return { error: STUDENT_STATUS_DENIED };
   }
   // 수학 시트 격자 가져오기가 만든 반 — 취소가 그 반을 지우므로 **반 만들기와 같은 자격**을 요구한다(적용 게이트와 대칭, #77).
   const allGridClasses = (masterRows ?? []).flatMap((r) =>

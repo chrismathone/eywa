@@ -99,8 +99,10 @@ export function StudentForm({
   gradeLevels,
   scope,
   showClassnoteName = true,
+  canManageStatus = false,
 }: {
   mode: Mode;
+  canManageStatus?: boolean;
   initialValue?: StudentFormValue;
   gradeLevels?: string[];
   /**
@@ -333,6 +335,7 @@ export function StudentForm({
         <legend className="px-1 text-base font-bold">등록 상태</legend>
         <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
           <Field label="상태" htmlFor="status">
+            {canManageStatus || mode === "create" ? (
             <select
               id="status"
               name="status"
@@ -340,11 +343,13 @@ export function StudentForm({
               className={inputClass}
             >
               {Object.entries(STATUS_LABEL).map(([k, label]) => (
+                canManageStatus || !["on_hold", "withdrawn"].includes(k) ?
                 <option key={k} value={k}>
                   {label}
-                </option>
+                </option> : null
               ))}
             </select>
+            ) : <p className="py-2 text-sm">{STATUS_LABEL[v.status] ?? v.status}</p>}
           </Field>
           <Field label="등록일" htmlFor="enrolledAt">
             <input
@@ -355,7 +360,7 @@ export function StudentForm({
               className={inputClass}
             />
           </Field>
-          <Field
+          {canManageStatus ? <Field
             label="퇴원일"
             htmlFor="withdrawnAt"
             error={errors.withdrawnAt}
@@ -367,7 +372,7 @@ export function StudentForm({
               defaultValue={v.withdrawnAt ?? ""}
               className={inputClass}
             />
-          </Field>
+          </Field> : <p className="text-sm text-muted-foreground">퇴원·휴원·복구와 퇴원 예약은 원생 상태 변경 담당자가 처리합니다.{v.withdrawnAt ? ` 퇴원일: ${v.withdrawnAt}` : ""}</p>}
         </div>
       </fieldset>
       <details className="rounded-lg border border-line p-3">

@@ -1,4 +1,6 @@
 import "server-only";
+import { canManageStudentStatusNow } from "@/features/students/server/status-access";
+import { STUDENT_STATUS_DENIED } from "@/features/students/status-access";
 import { revalidatePath } from "next/cache";
 import { logAction } from "@/features/audit/server/log";
 import { explainDbError } from "@/lib/supabase/db-error";
@@ -29,6 +31,7 @@ export async function executeGridPlan(
   plan: GridApplyPlan,
   effective: string,
 ): Promise<GridApplyState> {
+  if (plan.removes.length && !(await canManageStudentStatusNow())) return { error: STUDENT_STATUS_DENIED };
   // ① 반 + 수업 시간
   const made = await createGridClasses(supabase, user.tenantId, plan, effective);
   if (!made.ok) return made.state;

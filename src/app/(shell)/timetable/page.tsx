@@ -1,3 +1,4 @@
+import { canManageStudentStatusNow } from "@/features/students/server/status-access";
 import { ParamLink } from "./_components/param-link";
 import { isModuleEnabled } from "@/lib/modules";
 import { ParamSelect } from "./_components/param-select";
@@ -203,7 +204,7 @@ export default async function TimetablePage({
   // 명단 이동(통합뷰에서 대기/퇴원으로 끌어 놓기) = **학생 기록 변경**이라 문이 다르다 — 서버 액션의
   // 게이트(canManageStudentRecords = students full)와 같은 모양이어야 한다(#77: 끌 수는 있는데 저장에서
   // 거절당하면 그게 더 나쁘다). 강사는 학생 기록 열람 전용(원장 2026-08-18).
-  const canEditRoster = rel !== "past" && (await canManageTenant(user.systemRole, "students"));
+  const canEditRoster = rel !== "past" && (await canManageStudentStatusNow());
   // 이동 적용일 — 미래 주면 그 주 월요일에 예약, 이번 주면 오늘 즉시(undefined→RPC current_date).
   const effectiveDate = isFutureWeek ? week : undefined;
 

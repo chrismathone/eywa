@@ -17,7 +17,7 @@ describe("수업 이력 삭제 게이트", () => {
   it("미래 반 이동은 한쪽만 일반 삭제하지 못하게 한다", () => {
     expect(actions).toContain("enr.is_transferred_in && String(enr.start_date) > kstToday()");
     expect(actions).toContain("이전 반 수강도 함께 복구됩니다");
-    expect(actions.indexOf("이전 반 수강도 함께 복구됩니다")).toBeLessThan(actions.indexOf(".delete()\n    .eq(\"id\", enrollmentId)"));
+    expect(actions.indexOf("이전 반 수강도 함께 복구됩니다")).toBeLessThan(actions.indexOf('.rpc("delete_enrollment_history"'));
   });
   it("🔴 super_admin은 항상 통과한다(원장 2026-08-13 — 새 게이트에서 빼먹기 쉬운 결정)", () => {
     expect(actions).toContain("isCurrentUserSuperAdmin()");
@@ -29,7 +29,7 @@ describe("수업 이력 삭제 게이트", () => {
 
   it("붙은 기록 판정이 실제 삭제보다 **먼저** 일어난다", () => {
     const check = actions.indexOf("enrollmentDeleteBlockReason({");
-    const del = actions.indexOf(".delete()\n    .eq(\"id\", enrollmentId)");
+    const del = actions.indexOf('.rpc("delete_enrollment_history"');
     expect(check).toBeGreaterThan(-1);
     expect(del).toBeGreaterThan(-1);
     expect(check).toBeLessThan(del);
@@ -86,11 +86,12 @@ describe("수업 이력 삭제 게이트", () => {
   });
 
   it("지운 행을 통째로 스냅샷해 감사로그에 남긴다(원장 지시 '대신 감사 로그에는 남겨')", () => {
-    expect(actions).toContain('action: "enrollment_delete"');
-    expect(actions).toContain("snapshot: {");
+    const sql = read("supabase/migrations/20261015160300_enrollment_history_delete.sql");
+    expect(sql).toContain("'enrollment_delete'");
+    expect(sql).toContain("'snapshot',jsonb_build_object");
     // 손으로 되살릴 수 있을 만큼 — 기간·요일·휴원 표식까지.
-    for (const key of ["startDate:", "endDate:", "attendanceDays:", "onHold:", "withdrawalReason:"]) {
-      expect(actions).toContain(key);
+    for (const key of ["startDate", "endDate", "attendanceDays", "onHold", "withdrawalReason"]) {
+      expect(sql).toContain(`'${key}'`);
     }
   });
 });

@@ -6,6 +6,7 @@ import type { PermissionsSettings } from "@/features/owner/settings-types";
 import { SettingsCard } from "./settings-card";
 import { StaffScopeEditor } from "./staff-scope-editor";
 import { SpecialAccessList } from "./special-access-list";
+import { StudentStatusAccessEditor } from "./student-status-access-editor";
 
 type SpecialAccess = PermissionsSettings["specialAccess"];
 type StaffOption = { id: string; name: string; role: string };
@@ -47,6 +48,7 @@ export function SpecialAccessEditor({ value, hiddenUserIds, staffOptions, nameOf
       description="메뉴 권한과 별개로, 사람을 지정해서 여는 기능입니다. 원장은 지정하지 않아도 전부 할 수 있습니다. 지정한 사람은 × 로 거둘 수 있습니다."
     >
       <div className="space-y-5">
+        <StudentStatusAccessEditor value={value} hiddenUserIds={hiddenUserIds} staffOptions={pickable} nameOf={nameOf} onChange={onChange} />
         {lists.map(({ key, label, hint }) => <SpecialAccessList key={key} label={label} hint={hint}
           ids={value[key] ?? []} hiddenUserIds={hiddenUserIds} staffOptions={pickable} nameOf={nameOf}
           onChange={(update) => onChange((prev) => ({ ...prev, [key]: update(prev[key] ?? []) }))} />)}
@@ -59,7 +61,7 @@ export function SpecialAccessEditor({ value, hiddenUserIds, staffOptions, nameOf
         />
         <SpecialAccessList
           label="수강 날짜 수정"
-          hint="수강 시작일·종료일을 수정할 수 있는 사람입니다. 학생목록·수업목록·퇴원관리 중 접근할 메뉴 권한이 필요하며, 기존 담당 범위를 따릅니다. 수강 이력 삭제 권한은 포함하지 않습니다."
+          hint="수강 시작일·종료일을 수정할 수 있는 별도 권한입니다. 종료일 지정·비우기도 포함합니다. 학생목록·수업목록·퇴원관리 중 접근할 메뉴 권한이 필요하며, 기존 담당 범위를 따릅니다. 수강 이력 삭제 권한은 포함하지 않습니다."
           ids={value.enrollmentDateEditorIds ?? []}
           hiddenUserIds={hiddenUserIds}
           staffOptions={pickable}

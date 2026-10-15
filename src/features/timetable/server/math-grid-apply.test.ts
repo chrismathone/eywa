@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { GridApplyPlan } from "@/features/timetable/import/math-grid/apply-plan";
+const access = vi.hoisted(() => ({ allowed: true }));
+vi.mock("@/features/students/server/status-access", () => ({ canManageStudentStatusNow: async () => access.allowed }));
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/features/audit/server/log", () => ({ logAction: vi.fn(async () => {}) }));
@@ -198,4 +200,12 @@ describe("배선 — 예약 취소·되돌리기와의 약속", () => {
     const src = read("src", "features", "timetable", "server", "math-grid-context.ts");
     expect(src).toMatch(/\.filter\(\(e\) => mathIds\.has\(e\.class_id\)\)/);
   });
+});
+
+
+it("denied status removals stop before class creation, snapshots, or enrollment writes", async () => {
+  access.allowed = false;
+  const { db, calls } = fakeDb();
+  try { expect((await executeGridPlan(db, USER, PLAN, "2099-01-01")).error).toBeTruthy(); expect(calls).toEqual([]); }
+  finally { access.allowed = true; }
 });

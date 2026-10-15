@@ -1,6 +1,6 @@
+import { canManageStudentStatusNow } from "@/features/students/server/status-access";
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { canManageTenant } from "@/lib/auth/perm-matrix";
 import { loadEndScope } from "@/features/timetable/server/end-scope";
 
 /**
@@ -15,7 +15,7 @@ import { loadEndScope } from "@/features/timetable/server/end-scope";
  */
 export async function GET(request: Request) {
   const user = await getCurrentUser();
-  if (!user || !(await canManageTenant(user.systemRole, "students")))
+  if (!user || !(await canManageStudentStatusNow()))
     return NextResponse.json({ result: null });
   const url = new URL(request.url);
   const result = await loadEndScope({

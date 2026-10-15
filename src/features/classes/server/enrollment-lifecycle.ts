@@ -100,24 +100,7 @@ export async function reopenClassEnrollments(
   classId: string,
   reason: string,
 ): Promise<{ error?: string; studentIds: string[] }> {
-  const closed = await fetchAllPaged<{ student_id: string }>((from, to) =>
-    db
-      .from("enrollments")
-      .select("student_id")
-      .eq("class_id", classId)
-      .eq("withdrawal_reason", reason)
-      .not("end_date", "is", null)
-      .range(from, to),
-  );
-  if (closed.length === 0) return { studentIds: [] };
-
-  const { error } = await db
-    .from("enrollments")
-    .update({ end_date: null, withdrawal_reason: null })
-    .eq("class_id", classId)
-    .eq("withdrawal_reason", reason)
-    .not("end_date", "is", null);
+  const { data, error } = await db.rpc("reopen_class_enrollments", { p_class: classId, p_reason: reason });
   if (error) return { error: toKorean(error, "reopen"), studentIds: [] };
-
-  return { studentIds: [...new Set(closed.map((r) => r.student_id))] };
+  return { studentIds: [...new Set(((data ?? []) as { student_id: string }[]).map((r) => r.student_id))] };
 }

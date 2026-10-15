@@ -165,6 +165,13 @@ describe("auditDetail — 액션별 한글 상세", () => {
     expect(auditDetail("withdrawal_update", { studentId: SID, reason: "이사" }, ctx({ [SID]: "이윤건" }))).toBe(
       "이윤건 · 사유: 이사",
     );
+    // 사유·세부는 영문 키로 남는다 — 한글로(모르는 세부 키는 싣지 않는다).
+    expect(
+      auditDetail("withdrawal_update", { studentId: SID, reason: "dissatisfaction", detail: "teacher_left" }, ctx({ [SID]: "이윤건" })),
+    ).toBe("이윤건 · 사유: 수업·강사 · 세부: 강사 퇴사");
+    expect(auditDetail("withdrawal_update", { studentId: SID, reason: "grades", detail: "nope" }, ctx({ [SID]: "이윤건" }))).toBe(
+      "이윤건 · 사유: 성적",
+    );
   });
 
   it("withdrawal_consultation_step / intake_token_toggle: 한글 상세(감사 M3·M4)", () => {

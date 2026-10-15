@@ -8,6 +8,11 @@ export type WithdrawalReason =
   | "financial"
   | "schedule"
   | "dissatisfaction"
+  | "grades"
+  | "motivation"
+  | "method"
+  | "career"
+  | "peers"
   | "advised"
   | "other";
 
@@ -19,24 +24,39 @@ export type WithdrawalConsultation = {
 
 export type WithdrawalMetadata = {
   reason: WithdrawalReason;
+  /** 세부 사유 키(2단계 — [`reason-detail.ts`](./reason-detail.ts)) · 고르지 않았거나 옛 퇴원이면 없음. */
+  detail?: string | null;
   memo: string | null;
   consultation: WithdrawalConsultation;
 };
 
 /**
- * 사유 라벨 — 🔴 **고르는 목록의 단일 소스**(순서 = 화면 순서). 저장 액션의 허용 목록도 이 키에서 나온다(`WITHDRAWAL_REASONS`).
+ * 사유 라벨(대분류) — 🔴 **고르는 목록의 단일 소스**(순서 = 화면 순서). 저장 액션의 허용 목록도 이 키에서 나온다(`WITHDRAWAL_REASONS`).
  * 질병·권고퇴원은 원장 2026-10-13 강사평가 퇴원율 결정(*"이사 질병 권고퇴원을 신규 퇴원항목으로 추가"*) — 강사 탓이 아닌 퇴원을 가른다.
+ * 성적·학생 상태·공부 방법 변경·진로·진학·가족·친구는 원장 2026-10-15 사유 2단계 세분화(세부 = [`reason-detail.ts`](./reason-detail.ts)).
+ * 🔴 새 키는 **영문 소문자만**(강사평가 '뺄 사유' 저장 검사 `^[a-z]{1,20}$`) · 퇴원보고서 DB 함수의 사유 목록도 함께 늘린다(0367a).
+ * ⚠️ 옛 라벨(`수업 불만족`·`시간/일정 조정`)은 `LEGACY_REASON_LABELS`로 키를 찾는다 — 글로 저장된 옛 사유가 자유 글로 새지 않게.
  */
 export const REASON_LABEL: Record<WithdrawalReason, string> = {
-  graduated: "졸업",
-  relocation: "이사",
-  illness: "질병",
+  dissatisfaction: "수업·강사",
+  grades: "성적",
+  motivation: "학생 상태",
+  method: "공부 방법 변경",
   competitor: "타 학원으로 이동",
+  schedule: "시간/일정",
   financial: "경제적 이유",
-  schedule: "시간/일정 조정",
-  dissatisfaction: "수업 불만족",
+  career: "진로·진학",
+  peers: "가족·친구",
+  illness: "질병",
   advised: "권고퇴원",
+  relocation: "이사",
+  graduated: "졸업",
   other: "기타",
+};
+/** 바꾸기 전 라벨 → 키(2026-10-15 이름 정리). 글로 남은 옛 사유를 키로 읽는 데만 쓴다(고르는 목록엔 안 선다). */
+export const LEGACY_REASON_LABELS: Readonly<Record<string, WithdrawalReason>> = {
+  "수업 불만족": "dissatisfaction",
+  "시간/일정 조정": "schedule",
 };
 /** 저장 액션이 받는 사유 코드 — 라벨 표의 키 그대로(목록을 따로 적지 않는다). */
 export const WITHDRAWAL_REASONS = Object.keys(REASON_LABEL) as WithdrawalReason[];
@@ -49,14 +69,19 @@ export const WITHDRAWAL_REASONS = Object.keys(REASON_LABEL) as WithdrawalReason[
  * ⚠️ 자유 텍스트 사유("반 이동")는 **번역하지 않는다** — 사람이 쓴 사실이라 옮기면 그 자리에서 뜻이 바뀐다.
  */
 export const REASON_LABEL_EN: Record<WithdrawalReason, string> = {
-  graduated: "Graduated",
-  relocation: "Moved away",
-  illness: "Illness",
+  dissatisfaction: "Lessons / teacher",
+  grades: "Grades",
+  motivation: "Student condition",
+  method: "Changed study method",
   competitor: "Moved to another academy",
+  schedule: "Schedule",
   financial: "Financial reasons",
-  schedule: "Schedule conflict",
-  dissatisfaction: "Unhappy with lessons",
+  career: "Career / next school",
+  peers: "Family / friends",
+  illness: "Illness",
   advised: "Advised to leave",
+  relocation: "Moved away",
+  graduated: "Graduated",
   other: "Other",
 };
 

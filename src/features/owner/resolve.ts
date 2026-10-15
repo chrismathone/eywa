@@ -8,6 +8,7 @@ import { normalizeDashboard } from "@/features/dashboard/layout/normalize";
 import type { AccountSetting, BillingSettings, SubjectSetting, TenantSettings } from "./settings-types";
 import { normalizeMakeupSettings } from "@/features/makeups/config";
 import { effectivePayslipManagerIds } from "./payslip-permissions";
+import { studentStatusManagerIds } from "./student-status-permissions";
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -127,6 +128,7 @@ export function resolveSettings(stored: unknown, tenant: { name: string }): Tena
       specialAccess: {
         ...merged.permissions.specialAccess,
         payslipManagerIds: managerIds,
+        studentStatusManagerIds: studentStatusManagerIds(storedPermissions?.specialAccess),
       },
     },
     profile: { ...merged.profile, name: merged.profile.name || tenant.name },
