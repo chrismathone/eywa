@@ -30,6 +30,7 @@ import {
   type WithdrawalMetadata,
   type WithdrawalReason,
 } from "@/features/withdrawals/types";
+import { checkReasonInput } from "@/features/withdrawals/reason-detail";
 import { currentPeriod, isCommentCategory } from "../grades-meta";
 import { normalizeExamSlot } from "@/features/grades/exam-slots";
 import { defaultTermOf, normalizeTerm, normalizeYear, termWindow } from "@/features/grades/term";
@@ -498,6 +499,7 @@ export async function changeStudentStatus(
   const id = String(formData.get("id") ?? "").trim();
   const target = String(formData.get("target") ?? "").trim();
   const reasonStr = String(formData.get("reason") ?? "").trim();
+  const detailStr = String(formData.get("detail") ?? "").trim() || null;
   const memo = String(formData.get("memo") ?? "").trim() || null;
   const date = String(formData.get("date") ?? "").trim() || null;
 
@@ -527,6 +529,7 @@ export async function changeStudentStatus(
               studentId: id,
               date,
               reason: reasonStr,
+              detail: detailStr,
               memo,
               // 🔴 "어느 수강을 닫았는지"를 남긴다(원장 2026-08-18 역검수) — 부분 종료(enrollment_end)와
               //    전체 퇴원(student_withdraw)이 로그에서 구분되고, 전체 퇴원은 닫힌 반까지 보인다.
@@ -544,9 +547,13 @@ export async function changeStudentStatus(
       return { error: "퇴원 사유를 선택해주세요" };
     }
     if (!date) return { error: "퇴원일을 입력해주세요" };
+    // 세부 사유(선택)는 그 대분류의 것만 · '기타'는 메모 필수(원장 2026-10-15 사유 2단계 — `reason-detail.ts`).
+    const checked = checkReasonInput({ reason: reasonStr as WithdrawalReason, detail: detailStr, memo });
+    if (checked.error !== undefined) return { error: checked.error };
 
     const metadata: WithdrawalMetadata = {
       reason: reasonStr as WithdrawalReason,
+      ...(checked.detail ? { detail: checked.detail } : {}),
       memo,
       consultation: {
         adminCalledParent: false,
@@ -723,6 +730,8 @@ export async function endStudentEnrollments(
   const studentId = String(formData.get("studentId") ?? "").trim();
   const date = String(formData.get("date") ?? "").trim();
   const reasonStr = String(formData.get("reason") ?? "").trim();
+  const detailStr = String(formData.get("detail") ?? "").trim() || null;
+  const memo = String(formData.get("memo") ?? "").trim() || null;
   const picked = new Set(
     formData
       .getAll("enrollmentIds")
@@ -735,6 +744,8 @@ export async function endStudentEnrollments(
   if (!WITHDRAWAL_REASONS.includes(reasonStr as WithdrawalReason)) {
     return { error: "종료 사유를 선택해주세요" };
   }
+  const checked = checkReasonInput({ reason: reasonStr as WithdrawalReason, detail: detailStr, memo });
+  if (checked.error !== undefined) return { error: checked.error };
   if (picked.size === 0) return { error: "종료할 수업을 1개 이상 선택해주세요" };
 
   const supabase = await createClient();
@@ -749,7 +760,8 @@ export async function endStudentEnrollments(
   }
 
   for (const t of targets) {
-    const res = await endEnrollmentById(supabase, t.id, date, reasonStr);
+    // 세부·메모는 수강 행에 함께 남긴다(0367a `withdrawal_detail`·`withdrawal_memo` — 퇴원관리 명단·사유 카드가 읽는다).
+    const res = await endEnrollmentById(supabase, t.id, date, reasonStr, { detail: checked.detail, memo });
     if (res.error) {
       // 앞의 몇 건은 이미 닫혔다 — 그 기록은 아래 루프 밖이 아니라 **건별로** 남겼으므로 유실되지 않는다.
       return { error: "수강을 종료하지 못했습니다. 잠시 후 다시 시도해 주세요." };
@@ -764,6 +776,8 @@ export async function endStudentEnrollments(
         classId: res.classId,
         date: res.endDate,
         reason: reasonStr,
+        detail: checked.detail,
+        memo,
         source: "status_dialog",
         partial: targets.length < open.length,
       },
@@ -940,7 +954,7 @@ export async function endSingleEnrollment(
   const supabase = await createClient();
   // 종료 규약(미래 시작 클램프 + withdrawal_reason)은 공용 원시함수 한 곳에 있다 — 퇴원 다이얼로그의
   // 부분 종료(endStudentEnrollments)도 같은 함수를 돈다(#77: 표면마다 다시 짜면 한쪽만 고쳐진다).
-  const res = await endEnrollmentById(supabase, enrollmentId, date, reason, studentId || undefined);
+  const res = await endEnrollmentById(supabase, enrollmentId, date, reason, undefined, studentId || undefined);
   if (res.error) return { error: res.error };
   // 이 종료로 수학을 그만뒀으면(반이동 제외 · 다른 수학 반이 남아 있으면 아님) 시트에 적는다(원장 2026-10-07).
   const sheetStudent = res.studentId || null;

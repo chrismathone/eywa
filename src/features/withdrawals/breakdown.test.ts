@@ -5,6 +5,9 @@ import { describe, expect, it } from "vitest";
 import {
   FACET_NONE,
   REASON_CLEANUP,
+  detailFacetLabel,
+  detailItems,
+  reasonDetailFacetOf,
   attributeTeachers,
   gradeItems,
   judgeSubjects,
@@ -26,8 +29,11 @@ describe("사유 묶음 — 막대와 필터가 같은 값", () => {
     expect(facet({ cleanup: true, reasonKey: "other", reasonLabel: "기타" })).toEqual({ value: REASON_CLEANUP, label: "장부 정리" });
   });
   it("표준 사유 = 키(퇴원 사유 · 수강 종료 사유가 키든 한글 라벨이든 표기 흔들림이든)", () => {
-    expect(facet({ reasonKey: "dissatisfaction", reasonLabel: "수업 불만족" })).toEqual({ value: "dissatisfaction", label: "수업 불만족" });
-    expect(facet({ reasonKey: null, reasonLabel: "dissatisfied" })).toEqual({ value: "dissatisfaction", label: "수업 불만족" });
+    expect(facet({ reasonKey: "dissatisfaction", reasonLabel: "수업·강사" })).toEqual({ value: "dissatisfaction", label: "수업·강사" });
+    expect(facet({ reasonKey: null, reasonLabel: "dissatisfied" })).toEqual({ value: "dissatisfaction", label: "수업·강사" });
+    // 바꾸기 전 라벨이 글로 남은 옛 사유도 같은 키(2026-10-15 이름 정리 — `LEGACY_REASON_LABELS`).
+    expect(facet({ reasonKey: null, reasonLabel: "수업 불만족" })).toEqual({ value: "dissatisfaction", label: "수업·강사" });
+    expect(facet({ reasonKey: null, reasonLabel: "시간/일정 조정" })).toEqual({ value: "schedule", label: "시간/일정" });
     expect(facet({ reasonKey: null, reasonLabel: "졸업" })).toEqual({ value: "graduated", label: "졸업" });
   });
   it("🔴 자유 글(수강 종료의 '반 폐지' 등)은 기타로 뭉개지 않는다 — 키가 기타로 접혀 있어도", () => {
@@ -46,6 +52,20 @@ describe("사유 묶음 — 막대와 필터가 같은 값", () => {
     expect(reasonFacetLabel("unspecified")).toBe("미기재");
     expect(reasonFacetLabel("cleanup")).toBe("장부 정리");
     expect(reasonFacetLabel("nope")).toBeNull();
+  });
+});
+
+describe("세부 사유 막대 — 대분류를 고르면 그 아래", () => {
+  it("학원이 고르는 목록 순서(많은 순 아님) · 세부 미기재는 맨 끝 · 막대 값 = `detail=` 필터 값", () => {
+    const rows = [{ detail: "pace" }, { detail: "teacher_changes" }, { detail: "pace" }, { detail: null }];
+    expect(detailItems(rows, "dissatisfaction")).toEqual([
+      { value: "teacher_changes", label: "잦은 강사 변경", count: 1 },
+      { value: "pace", label: "진도 불만", count: 2 },
+      { value: FACET_NONE, label: "세부 미기재", count: 1 },
+    ]);
+    expect(rows.map(reasonDetailFacetOf)).toEqual(["pace", "teacher_changes", "pace", FACET_NONE]);
+    expect(detailFacetLabel(FACET_NONE)).toBe("세부 미기재");
+    expect(detailFacetLabel("nope")).toBeNull();
   });
 });
 

@@ -1,5 +1,14 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-10-15 — 퇴원관리 보강 2차: 퇴원·수강 종료 사유 2단계(대분류 14 · 세부 42)
+
+- 원장 *"퇴원사유를 50가지 정도로 세분화"* → 고른 시안대로 대분류 14(새 성적·학생 상태·공부 방법 변경·진로·진학·가족·친구 · `수업 불만족`→`수업·강사`) · 세부 42(선택) · 기타는 메모 필수. 표 = [`reason-detail.ts`](../src/features/withdrawals/reason-detail.ts) · 결정 = [`docs/decisions/students.md`](decisions/students.md).
+- 고르는 곳 셋(학생 상태 전환 창의 퇴원·부분 종료 · 퇴원 상세 사유 카드)이 한 부품 [`ReasonFields`](../src/features/withdrawals/reason-fields.tsx) · 서버 검사 `checkReasonInput` · 처음엔 아무 사유도 안 골라져 있다(예전엔 '졸업'이 저절로).
+- 0367a: `enrollments.withdrawal_detail`·`withdrawal_memo`(부분 종료에도 메모) + 퇴원보고서 DB 함수 두 개의 사유 목록. 퇴원관리 사유 카드 = 대분류를 고르면 세부 막대(`detail=`) · 명단 줄에 세부.
+- 상담 칸 토글이 메타데이터를 새로 지으며 다른 칸(퇴원보고서 번호 등)을 지우던 것도 고침(세부가 지워질 자리였다).
+- 옛 메모 55건 재분류 = [`withdrawal-reason-details-backfill.mjs`](../scripts/_oneoff/withdrawal-reason-details-backfill.mjs)(미리 보기 → `--apply` · 줄마다 감사로그 · 퇴원일에 함께 닫힌 수강 69줄의 사유도).
+- 적대 리뷰로 고침: 퇴원 상세에서 사유를 고치면 함께 닫힌 수강 사유도 맞춘다(`syncWithdrawalEnrollmentReasons` — 퇴원율·시간표 X가 수강 사유도 읽어 '졸업'에서 고친 퇴원이 계속 빠지던 것) · 재원 복구가 세부·메모도 비운다 · `reason=constructor` 주소로 화면이 죽던 것 · 감사·활동 이력의 사유·세부 영문 키를 한글로.
+
 ## 2026-10-15 — 월간계획 전체 가져오기 되돌리기
 
 - 원장 *"월간계획 전체 가져왔을때 실행취소 하는 방법이 필요"* → 툴바 상시 버튼은 어색하다는 의견으로 **알림의 [실행 취소](10초) + 가져오기 버튼 옆 ▾ 메뉴 "마지막 가져오기 되돌리기 (날짜 시각 · N줄)"**. ▾는 되돌릴 가져오기가 있을 때만 선다.

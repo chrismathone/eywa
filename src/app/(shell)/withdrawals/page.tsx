@@ -19,7 +19,6 @@ import {
   CalendarClock,
   ListChecks,
   Filter,
-  AlertCircle,
   UserX,
   BookOpen,
   X,
@@ -60,6 +59,9 @@ import {
   parseFacet,
   reasonFacetLabel,
   reasonFacetOf,
+  detailFacetLabel,
+  detailItems,
+  reasonDetailFacetOf,
   schoolItems,
   schoolOf,
   subjectItems,
@@ -89,6 +91,8 @@ import {
 } from "@/features/withdrawals/early-exit";
 import { EarlyExitBand } from "./_components/early-exit-band";
 import { WithdrawalBreakdownCard, type BreakdownRow, type BreakdownView } from "./_components/breakdown-card";
+import { ReasonAnalysisCard } from "./_components/reason-analysis-card";
+import { REASON_DETAILS, reasonDetailOf } from "@/features/withdrawals/reason-detail";
 import type { BreakdownAxis } from "@/features/withdrawals/breakdown";
 
 export const metadata = { title: "퇴원관리 — 에이와" };
@@ -156,6 +160,8 @@ type WdHrefParams = {
   to: string | null;
   month: string;
   reason: ReasonKey;
+  /** 세부 사유(2단계) — 세부가 있는 대분류를 골랐을 때만(`detail=` · 고르지 않은 줄은 `none`). */
+  detail: string | null;
   q: string;
   subject: string;
   program: Program | null;
@@ -177,6 +183,7 @@ function buildWdHref(p: WdHrefParams): string {
     sp.set("to", p.to);
   }
   if (p.reason !== "all") sp.set("reason", p.reason);
+  if (p.reason !== "all" && p.detail) sp.set("detail", p.detail);
   if (p.subject !== "all") sp.set("subject", p.subject);
   if (p.program) sp.set("program", p.program);
   if (p.consult !== "all") sp.set("consult", p.consult);
@@ -199,6 +206,7 @@ export default async function WithdrawalsPage({
     from?: string;
     to?: string;
     reason?: ReasonKey;
+    detail?: string;
     q?: string;
     subject?: string;
     program?: string;
@@ -218,6 +226,11 @@ export default async function WithdrawalsPage({
   const type = parseType(sp.type);
   const range: RangeKey = (sp.range as RangeKey) ?? "all";
   const reason: ReasonKey = parseFacet(sp.reason) ?? "all";
+  // 세부 사유 — 고른 대분류에 세부가 있고, 그 대분류의 세부(또는 '세부 미기재')일 때만 건다(다른 대분류의 세부가 붙어 와도 무시).
+  // 주소 값은 아무 글이나 올 수 있다 — `constructor` 같은 기본 속성 이름이 표를 뚫지 않게 제 칸만 본다.
+  const reasonDetails = Object.hasOwn(REASON_DETAILS, reason) ? REASON_DETAILS[reason as WithdrawalReason] : [];
+  const detailRaw = reasonDetails.length ? parseFacet(sp.detail) : null;
+  const detailF = detailRaw && (detailRaw === FACET_NONE || reasonDetailOf(detailRaw)?.reason === reason) ? detailRaw : null;
   // 분석 카드의 칸(학년·학교·강사) — 누르면 명단이 그 값으로 걸러진다(`breakdown.ts`).
   const gradeF = parseFacet(sp.grade);
   const schoolF = parseFacet(sp.school);
@@ -269,7 +282,7 @@ export default async function WithdrawalsPage({
   //    나중에 흘려보내고(Suspense) 나머지를 먼저 그린다 — 강사 축을 저장해 둔 계정의 모든 이동이 판정을 기다리지 않게.
   const [withdrawnRaw, subjectEndedRaw, settings, trendPrefs, blockingJudge] = await Promise.all([
     getWithdrawnStudents(),
-    withSubjectEnded ? getSubjectEndedStudents() : Promise.resolve([]),
+    withSubjectEnded ? getSubjectEndedStudents({ withNotes: true }) : Promise.resolve([]),
     getTenantSettings(),
     prefsP,
     teacherF ? judgeP : Promise.resolve(undefined),
@@ -297,7 +310,9 @@ export default async function WithdrawalsPage({
   const byType = (r: ExitRow) => type === "all" || r.kind === type;
   const byRange = (r: ExitRow) => inRange(r, rangeWindow);
   // 사유 = 사유 카드 막대와 같은 묶음(장부 정리 · 표준 사유 · 자유 글 · 미기재 — `reasonFacetOf`).
-  const byReason = (r: ExitRow) => reason === "all" || reasonFacetOf(r).value === reason;
+  // 세부 사유는 사유 축 안의 한 칸이다(사유 카드가 자기 축으로 함께 뺀다).
+  const byReason = (r: ExitRow) =>
+    (reason === "all" || reasonFacetOf(r).value === reason) && (!detailF || reasonDetailFacetOf(r) === detailF);
   const bySubject = (r: ExitRow) => subject === "all" || r.subjects.includes(subject);
   const byConsult = (r: ExitRow) =>
     consult === "all" || (r.consulted !== null && (consult === "done" ? r.consulted : !r.consulted));
@@ -404,7 +419,6 @@ export default async function WithdrawalsPage({
   }
   const topReasons = [...reasonGroups].sort((a, b) => b[1].count - a[1].count || a[1].label.localeCompare(b[1].label, "ko"));
   const reasonBase = reasonRows.length - cleanupCount;
-  const maxCount = topReasons[0]?.[1].count ?? 1;
 
   // 이번 달 — **기간 축만 뺀** 모집단(자기 기간을 이미 이번 달로 못박은 수치라 기간 필터를 또 걸 수 없다).
   // 🔴 운영실 '퇴원생'과 같은 창(`withdrawalMonthWindow`, 1일 ~ 오늘) — 원장 2026-09-28 *"최근 30일 -> 이번달"*.
@@ -434,6 +448,7 @@ export default async function WithdrawalsPage({
     to: custom?.to ?? null,
     month: monthKey,
     reason,
+    detail: detailF,
     q,
     subject,
     program,
@@ -474,6 +489,21 @@ export default async function WithdrawalsPage({
     EarlyKey,
     string
   >;
+  // 고른 대분류의 세부 막대 — 같은 모집단(사유 축 제외)에서 그 대분류 줄만 · 세부를 고르면 그 칸이 켜진다(다시 누르면 해제).
+  const detailView = reasonDetails.length
+    ? (() => {
+        const inReason = reasonRows.filter((r) => reasonFacetOf(r).value === reason);
+        return {
+          reasonLabel: reasonFacetLabel(reason) ?? "",
+          total: inReason.length,
+          rows: detailItems(inReason, reason as WithdrawalReason).map((i) => ({
+            ...i,
+            active: detailF === i.value,
+            href: hrefWith({ detail: detailF === i.value ? null : i.value }),
+          })),
+        };
+      })()
+    : null;
 
   // 선생님 이름 — 강사 칸에 선 사람 + 고른 사람(명단에 없어도 칩에 이름이 서게). 못 읽으면 이름만 비운다(카드는 산다).
   const namesFor = (map: ReadonlyMap<string, RowTeachers>) => {
@@ -501,7 +531,7 @@ export default async function WithdrawalsPage({
   const scopeParts = {
     program: program ? programLabel(program, settings.operations.subjects, isModuleEnabled(settings.modules.disabled, "eie")) : null,
     subject: subject !== "all" ? subjectMaps.labelOf(subject) : null,
-    reason: reason === "all" ? null : reasonFacetLabel(reason),
+    reason: reason === "all" ? null : [reasonFacetLabel(reason), detailF ? detailFacetLabel(detailF) : null].filter(Boolean).join(" · ") || null,
     consult: consult === "all" ? null : (CONSULT_OPTIONS.find((o) => o.value === consult)?.label ?? null),
     early: early ? earlySpan(early).label : null,
     grade: gradeF ? (gradeF === FACET_NONE ? "학년 미기재" : gradeF) : null,
@@ -696,6 +726,7 @@ export default async function WithdrawalsPage({
           options={reasonOptions}
           axisLabel="사유"
           ariaLabel="사유 필터"
+          clearParams={["detail"]}
           {...SELECT_PROPS}
         />
         {/* 과목 선택지는 학원설정 단일 소스(subjectMaps.options) — 하드코딩 금지. */}
@@ -739,6 +770,7 @@ export default async function WithdrawalsPage({
           />
         ) : null}
         {/* 분석 카드에서 고른 칸(학년·학교·강사) — 드롭다운이 없는 축이라 칩으로 보이고 × 로 푼다. */}
+        {detailF ? <FacetChip label={`세부: ${detailFacetLabel(detailF)}`} href={hrefWith({ detail: null })} /> : null}
         {gradeF ? <FacetChip label={`학년: ${scopeParts.grade}`} href={hrefWith({ grade: null })} /> : null}
         {schoolF ? <FacetChip label={`학교: ${scopeParts.school}`} href={hrefWith({ school: null })} /> : null}
         {teacherF ? (
@@ -836,75 +868,34 @@ export default async function WithdrawalsPage({
             </div>
           </section>
 
-          {/* 사유 분석 — 퇴원 사유 + 수강종료 사유(그 과목 수강의 종료 사유). 유형 필터를 따른다. */}
-          <section data-withdrawal-reasons className="bg-card shadow-card overflow-hidden rounded-2xl">
-            <header className="border-line border-b px-5 py-4">
-              <p className="micro text-amber">사유 분석</p>
-              <h2 className="text-foreground mt-1 text-base font-bold">상위 {noun} 사유</h2>
-              <p className="mt-1 text-xs">
-                {reasonBase}건 기준 · 사유 필터 제외
-                {reasonGroups.has(REASON_UNSPECIFIED) ? ` · 사유 미기재 ${reasonGroups.get(REASON_UNSPECIFIED)?.count ?? 0}건 포함` : ""}
-                {" · 막대를 누르면 명단이 그 사유로 걸러집니다(메모는 명단 줄에)"}
-              </p>
-            </header>
-            <div className="space-y-2 p-5">
-              {topReasons.map(([value, g]) => {
-                const on = reason === value;
-                return (
-                  <EmbedLink
-                    key={value}
-                    href={hrefWith({ reason: on ? "all" : value })}
-                    scroll={false}
-                    aria-current={on ? "true" : undefined}
-                    aria-label={`${g.label} ${g.count}건${on ? " · 필터 해제" : " · 명단 거르기"}`}
-                    className="hover:bg-bg-soft -mx-1 block rounded-md px-1 py-0.5 transition"
-                  >
-                    <span className="mb-1 flex items-baseline justify-between gap-2">
-                      <span className={`truncate text-xs font-bold ${on ? "text-primary" : "text-foreground"}`}>{g.label}</span>
-                      <span className="text-text-dim num shrink-0 text-xs">
-                        <span className="text-foreground font-bold">{g.count}</span>건 · {Math.round((g.count / Math.max(reasonBase, 1)) * 100)}%
-                      </span>
-                    </span>
-                    <span className="bg-bg-soft block h-2 overflow-hidden rounded-full">
-                      <span className={`${on ? "bg-primary" : "bg-rose"} block h-full`} style={{ width: `${(g.count / maxCount) * 100}%` }} />
-                    </span>
-                  </EmbedLink>
-                );
-              })}
-              {/* 장부 정리 = 일괄 퇴원(수업 없는 학생을 장부에서 정리한 것) — 실제 사유가 아니라 막대·비중에서 뺀다. 눌러서 명단은 볼 수 있다. */}
-              {cleanupCount > 0 ? (
-                <EmbedLink
-                  href={hrefWith({ reason: reason === REASON_CLEANUP ? "all" : REASON_CLEANUP })}
-                  scroll={false}
-                  aria-current={reason === REASON_CLEANUP ? "true" : undefined}
-                  className="text-text-faint hover:text-foreground block pt-1 text-xs transition"
-                >
-                  장부 정리(일괄 퇴원 · 실제 사유 아님) {cleanupCount}건은 사유 통계에서 뺐습니다 ·{" "}
-                  <span className="underline underline-offset-2">{reason === REASON_CLEANUP ? "필터 해제" : "명단 보기"}</span>
-                </EmbedLink>
-              ) : null}
-            </div>
-            {/* 규칙 기반 자동 요약 (LLM 아님) — sparkle(AI 마커) 대신 pulse로 라이브 AI와 구분 */}
-            <div className="border-line bg-amber-soft border-t px-5 py-4">
-              <div className="flex items-start gap-2.5">
-                <span className="bg-amber/15 text-amber flex size-7 shrink-0 items-center justify-center rounded-md">
-                  <AlertCircle size={13} strokeWidth={1.8} />
-                </span>
-                <div>
-                  <p className="text-amber text-xs font-bold">자동 요약</p>
-                  <p className="text-foreground mt-0.5 text-xs leading-relaxed">
-                    {topReasons[0]?.[0] === REASON_UNSPECIFIED
-                      ? "사유 미기재가 가장 많습니다. 기록된 사유를 보완해야 퇴원 원인을 비교할 수 있습니다."
-                      : topReasons[0]?.[0] === "other"
-                        ? "'기타'가 가장 많습니다. 막대를 눌러 명단 줄의 메모로 실제 사유를 확인하고, 알맞은 사유로 고쳐 주세요."
-                        : topReasons[0]
-                          ? `현재 가장 빈번한 ${noun} 사유는 "${topReasons[0][1].label}"입니다. 추세 모니터링과 사전 상담 강화를 고려해 보세요.`
-                          : `${noun} 사유가 등록되면 인사이트가 표시됩니다.`}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </section>
+          {/* 사유 분석 — 퇴원 사유 + 수강종료 사유(그 과목 수강의 종료 사유). 유형 필터를 따른다 · 대분류를 고르면 세부 막대. */}
+          <ReasonAnalysisCard
+            noun={noun}
+            base={reasonBase}
+            unspecified={reasonGroups.get(REASON_UNSPECIFIED)?.count ?? 0}
+            bars={topReasons.map(([value, g]) => ({
+              value,
+              label: g.label,
+              count: g.count,
+              active: reason === value,
+              href: hrefWith({ reason: reason === value ? "all" : value, detail: null }),
+            }))}
+            cleanup={
+              cleanupCount > 0
+                ? { count: cleanupCount, active: reason === REASON_CLEANUP, href: hrefWith({ reason: reason === REASON_CLEANUP ? "all" : REASON_CLEANUP, detail: null }) }
+                : null
+            }
+            details={detailView}
+            summary={
+              topReasons[0]?.[0] === REASON_UNSPECIFIED
+                ? "사유 미기재가 가장 많습니다. 기록된 사유를 보완해야 퇴원 원인을 비교할 수 있습니다."
+                : topReasons[0]?.[0] === "other"
+                  ? "'기타'가 가장 많습니다. 막대를 눌러 명단 줄의 메모로 실제 사유를 확인하고, 알맞은 사유로 고쳐 주세요."
+                  : topReasons[0]
+                    ? `현재 가장 빈번한 ${noun} 사유는 "${topReasons[0][1].label}"입니다. 추세 모니터링과 사전 상담 강화를 고려해 보세요.`
+                    : `${noun} 사유가 등록되면 인사이트가 표시됩니다.`
+            }
+          />
         </WithdrawalListLayout>
       )}
     </div>
@@ -918,6 +909,8 @@ function ExitRowItem({ row: r, labelOf, today }: { row: ExitRow; labelOf: (key: 
   const where = schoolGradeLabel(r.school, r.grade);
   const ended = r.kind === "subject-ended";
   const reason = reasonFacetOf(r);
+  const detail = r.detail ? reasonDetailOf(r.detail)?.label : null;
+  const reasonText = detail ? `${reason.label} · ${detail}` : reason.label;
   return (
     <li className="hover:bg-bg-soft/50 transition">
       <WindowLink
@@ -946,9 +939,9 @@ function ExitRowItem({ row: r, labelOf, today }: { row: ExitRow; labelOf: (key: 
         {/* 사유 · 메모 — '기타'의 실제 사유는 메모에 있다(원장 2026-10-15 *"눌러서 들어가 볼 수 있게"*). 잘리면 카드로 전문. */}
         <p
           className="text-text-dim hidden min-w-0 truncate text-sm sm:block"
-          {...tipProps({ title: r.name, rows: [["사유", reason.label], ["메모", r.memo ?? ""]] })}
+          {...tipProps({ title: r.name, rows: [["사유", reasonText], ["메모", r.memo ?? ""]] })}
         >
-          <span className={r.cleanup ? "text-text-faint" : "text-foreground font-semibold"}>{reason.label}</span>
+          <span className={r.cleanup ? "text-text-faint" : "text-foreground font-semibold"}>{reasonText}</span>
           {r.memo && !r.cleanup ? ` · ${r.memo}` : ""}
         </p>
         {/* 시스템 일괄 정리분 = 퇴원일이 실제 시점이 아니라 장부 날짜라 경과일을 표시하지 않는다

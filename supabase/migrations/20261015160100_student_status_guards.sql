@@ -51,15 +51,28 @@ begin
       and coalesce(new.on_hold,false)=coalesce(inherited,false)
       and (new.end_date is null or (period_end is not null and new.start_date<=period_end
         and new.withdrawal_reason='운영 기간 종료' and new.end_date=period_end)) then return new; end if;
-  elsif (new.on_hold,new.start_date,new.end_date,new.withdrawal_reason,new.is_transferred,new.is_transferred_in,new.student_id,new.class_id)
-    is not distinct from (old.on_hold,old.start_date,old.end_date,old.withdrawal_reason,old.is_transferred,old.is_transferred_in,old.student_id,old.class_id) then
+  elsif (new.on_hold,new.start_date,new.end_date,new.withdrawal_reason,new.is_transferred,new.is_transferred_in,new.student_id,new.class_id,
+      to_jsonb(new)->'withdrawal_detail',to_jsonb(new)->'withdrawal_memo')
+    is not distinct from (old.on_hold,old.start_date,old.end_date,old.withdrawal_reason,old.is_transferred,old.is_transferred_in,old.student_id,old.class_id,
+      to_jsonb(old)->'withdrawal_detail',to_jsonb(old)->'withdrawal_memo') then
     return new;
-  elsif (to_jsonb(new)-array['start_date','end_date','withdrawal_reason','is_transferred'])
-    = (to_jsonb(old)-array['start_date','end_date','withdrawal_reason','is_transferred'])
+  elsif old.end_date is not null and not coalesce(old.is_transferred,false)
+    and student_status_private.menu('withdrawals') in ('full','scoped')
+    and (to_jsonb(new)-'withdrawal_reason') = (to_jsonb(old)-'withdrawal_reason')
+    and exists(select 1 from public.students s where s.id=old.student_id and s.tenant_id=old.tenant_id
+      and s.status='withdrawn' and s.withdrawn_at::date=old.end_date) then
+    -- Updating an ended record's reason does not reopen/end/hold any enrollment.
+    return new;
+  elsif (to_jsonb(new)-array['start_date','end_date','withdrawal_reason','withdrawal_detail','withdrawal_memo','is_transferred'])
+    = (to_jsonb(old)-array['start_date','end_date','withdrawal_reason','withdrawal_detail','withdrawal_memo','is_transferred'])
     and student_status_private.date_allowed(old.class_id)
     and (new.withdrawal_reason is not distinct from old.withdrawal_reason or
       (new.withdrawal_reason is null and (new.end_date is null or old.withdrawal_reason='운영 기간 종료')))
     and (new.is_transferred is not distinct from old.is_transferred or (new.end_date is null and not new.is_transferred)) then
+    if (to_jsonb(new)->'withdrawal_detail',to_jsonb(new)->'withdrawal_memo') is distinct from
+      (to_jsonb(old)->'withdrawal_detail',to_jsonb(old)->'withdrawal_memo') and
+      not (new.end_date is null and coalesce(to_jsonb(new)->>'withdrawal_detail',to_jsonb(new)->>'withdrawal_memo') is null) then
+      raise exception '수강 날짜 수정 범위를 벗어난 변경입니다'; end if;
     return new;
   end if;
   if not student_status_private.allowed() then raise exception '원생 상태 변경 권한이 없습니다'; end if;

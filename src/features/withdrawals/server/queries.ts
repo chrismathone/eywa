@@ -1,9 +1,11 @@
 import "server-only";
 import { kstDateOf, kstToday } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
-import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
+import { reportWarning } from "@/lib/observability/report-error";
 import { isMergedStudent } from "@/features/students/merged";
 import { REASON_LABEL, normalizeReason, type WithdrawalMetadata } from "../types";
+import { detailFor } from "../reason-detail";
 import { countsForSubjectExit, getEndedSubjects } from "../subject-ended";
 import { isSpecialLecture } from "@/features/classes/special-lecture";
 import { isCleanupWithdrawal, isSystemBulkWithdrawal } from "../system-bulk";
@@ -51,6 +53,8 @@ function parseMetadata(raw: unknown): WithdrawalMetadata | null {
   if (!reason) return null;
   return {
     reason,
+    // 세부 사유(2단계) — 그 대분류의 것만 살린다(대분류를 바꾼 뒤 남은 옛 세부가 새 대분류 아래 서지 않게, `detailFor`).
+    ...(detailFor(reason, typeof m.detail === "string" ? m.detail : null) ? { detail: m.detail } : {}),
     memo: m.memo ?? null,
     consultation: {
       adminCalledParent: !!m.consultation?.adminCalledParent,
@@ -232,6 +236,11 @@ export type SubjectEndedRow = {
     englishTrack: string | null;
     /** 그 과목 마지막 수강의 종료 사유 원문(`enrollments.withdrawal_reason`). */
     reason: string | null;
+    /** 그 마지막 수강 행 id — 세부 사유·메모(`withNotes`)를 읽는 열쇠. */
+    enrollmentId?: string;
+    /** 세부 사유 키·메모(0367a `withdrawal_detail`·`withdrawal_memo`) — `withNotes`일 때만 채운다. */
+    detail?: string | null;
+    memo?: string | null;
     isTransferred?: boolean;
     /**
      * 그 과목에서 함께 끝난 수강(특강 제외, 첫째 = 마지막 수강) — 시간표 X 겹침이 그때 담임·'퇴원 0'을 가리는 재료.
@@ -251,6 +260,11 @@ type StudentBits = { id: string; name: string; school: string | null; grade: str
  */
 export async function getSubjectEndedStudents(opts?: {
   endedWithin?: { from: string; to: string };
+  /**
+   * 세부 사유·메모도 읽는다(퇴원관리 명단·사유 카드만) — 🔴 운영실·시간표 X가 쓰는 기본 조회엔 새 칸을 넣지 않는다(#95:
+   * SQL보다 앱이 먼저 나가도 그 화면들이 죽지 않게). 따로 읽고, 실패하면 메모 없이 그린다.
+   */
+  withNotes?: boolean;
 }): Promise<SubjectEndedRow[]> {
   const supabase = await createClient();
   const within = opts?.endedWithin;
@@ -353,6 +367,7 @@ export async function getSubjectEndedStudents(opts?: {
         englishTrack: best?.englishTrack ?? null,
         // 그 과목 마지막 수강의 종료 사유(원문) — 퇴원관리 사유 카드·필터가 퇴원 사유와 함께 센다.
         reason: best?.reason ?? null,
+        enrollmentId: best?.id,
         isTransferred: best?.isTransferred === true,
         endedTogether: endedTogether(subjectRows).map((e) => ({
           enrollmentId: e.id,
@@ -376,7 +391,27 @@ export async function getSubjectEndedStudents(opts?: {
     });
   }
   rows.sort((a, b) => (b.lastEndedAt ?? "").localeCompare(a.lastEndedAt ?? "")); // 최근 종료순
+  if (opts?.withNotes) await attachEndedNotes(supabase, rows);
   return rows;
+}
+
+/** 수강 종료 줄의 세부 사유·메모(0367a) — 그 줄의 마지막 수강 행에서. 실패(칸이 아직 없음 등)하면 경고만 남기고 비운 채 둔다. */
+async function attachEndedNotes(supabase: Awaited<ReturnType<typeof createClient>>, rows: SubjectEndedRow[]): Promise<void> {
+  const ids = [...new Set(rows.flatMap((r) => r.endedDetail.flatMap((d) => (d.enrollmentId ? [d.enrollmentId] : []))))];
+  try {
+    const notes = await fetchInChunks<{ id: string; withdrawal_detail: string | null; withdrawal_memo: string | null }>(ids, (chunk) =>
+      supabase.from("enrollments").select("id, withdrawal_detail, withdrawal_memo").in("id", chunk),
+    );
+    const byId = new Map(notes.map((n) => [n.id, n]));
+    for (const r of rows)
+      for (const d of r.endedDetail) {
+        const n = d.enrollmentId ? byId.get(d.enrollmentId) : undefined;
+        d.detail = n ? detailFor(d.reason, n.withdrawal_detail) : null;
+        d.memo = n?.withdrawal_memo?.trim() || null;
+      }
+  } catch (e) {
+    reportWarning("수강 종료 세부 사유·메모를 읽지 못함", { scope: "withdrawals.endedNotes", message: e instanceof Error ? e.message : String(e) });
+  }
 }
 
 /** 기간 안에 끝난 수강이 있는 재원·휴원 학생(수강종료 후보) — `getSubjectEndedStudents({ endedWithin })` 전용. */

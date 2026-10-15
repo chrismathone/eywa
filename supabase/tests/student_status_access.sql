@@ -5,7 +5,8 @@ insert into public.tenants(id,slug,name) values('10000000-0000-4000-8000-0000000
 insert into public.users(id,tenant_id,email,display_name,system_role,status) values
  ('20000000-0000-4000-8000-000000000951','10000000-0000-4000-8000-000000000951','status-basic@test.invalid','Basic','admin','active'),
  ('20000000-0000-4000-8000-000000000952','10000000-0000-4000-8000-000000000951','status-owner@test.invalid','Owner','master','active'),
- ('20000000-0000-4000-8000-000000000953','10000000-0000-4000-8000-000000000951','status-teacher@test.invalid','Teacher','teacher','active');
+ ('20000000-0000-4000-8000-000000000953','10000000-0000-4000-8000-000000000951','status-teacher@test.invalid','Teacher','teacher','active'),
+ ('20000000-0000-4000-8000-000000000954','10000000-0000-4000-8000-000000000951','status-accountant@test.invalid','Accountant','accountant','active');
 insert into public.tenant_settings(tenant_id,data) values('10000000-0000-4000-8000-000000000951','{"version":1,"preset":"generic","permissions":{"overrides":[],"userOverrides":[],"specialAccess":{}}}');
 insert into public.classes(id,tenant_id,class_name,subject,teacher_id) values
  ('30000000-0000-4000-8000-000000000951','10000000-0000-4000-8000-000000000951','Status A','math','20000000-0000-4000-8000-000000000953'),
@@ -84,6 +85,7 @@ insert into public.students(id,tenant_id,name,status) values('40000000-0000-4000
 insert into public.enrollments(id,tenant_id,student_id,class_id,start_date) values
  ('50000000-0000-4000-8000-000000000952','10000000-0000-4000-8000-000000000951','40000000-0000-4000-8000-000000000952','30000000-0000-4000-8000-000000000951','2020-01-01'),
  ('50000000-0000-4000-8000-000000000953','10000000-0000-4000-8000-000000000951','40000000-0000-4000-8000-000000000952','30000000-0000-4000-8000-000000000952',(now() at time zone 'Asia/Seoul')::date+20);
+update public.enrollments set withdrawal_detail='synthetic-detail',withdrawal_memo='Synthetic memo' where id='50000000-0000-4000-8000-000000000953';
 update public.tenant_settings set data=jsonb_set(data,'{permissions,specialAccess,studentStatusManagerIds}','[]') where tenant_id='10000000-0000-4000-8000-000000000951';
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"20000000-0000-4000-8000-000000000951","role":"authenticated"}',true);
@@ -96,9 +98,10 @@ reset role;
 select set_config('request.jwt.claims','{}',true);
 select is((select count(*)::int from public.audit_logs where tenant_id='10000000-0000-4000-8000-000000000951' and action='enrollment_delete' and metadata->>'via'='validated_rpc'),1,'direct validated delete leaves snapshot audit');
 select ok((select target_label='Status B' and metadata ?& array['studentId','classId','className','subject','recordCounts','cancelledBeforeStart','hadSiblingEnrollment','thisRowHasTier','siblingHasTier']
-  and metadata->'snapshot' ?& array['id','tenantId','studentId','classId','startDate','endDate','onHold','withdrawalReason','attendanceDays','isTransferred','isTransferredIn','salaryTier','createdAt']
+  and metadata->'snapshot' ?& array['id','tenantId','studentId','classId','startDate','endDate','onHold','withdrawalReason','withdrawalDetail','withdrawalMemo','attendanceDays','isTransferred','isTransferredIn','salaryTier','createdAt']
   and metadata->'recordCounts' ?& array['attendance','lessonReports','onescreenSessions','sheetMarks','followups','billing']
   and metadata->>'cancelledBeforeStart'='true'
+  and metadata#>>'{snapshot,withdrawalDetail}'='synthetic-detail' and metadata#>>'{snapshot,withdrawalMemo}'='Synthetic memo'
   from public.audit_logs where tenant_id='10000000-0000-4000-8000-000000000951' and action='enrollment_delete' and metadata->>'via'='validated_rpc'),'single audit preserves full camelCase snapshot and record-count contract');
 reset role;
 select set_config('request.jwt.claims','{}',true);
@@ -153,6 +156,30 @@ select set_config('request.jwt.claims','{"sub":"20000000-0000-4000-8000-00000000
 select throws_ok($q$insert into public.enrollments(tenant_id,student_id,class_id,start_date,end_date,withdrawal_reason) values('10000000-0000-4000-8000-000000000951','40000000-0000-4000-8000-000000000952','30000000-0000-4000-8000-000000000952',current_date,current_date,'운영 기간 종료')$q$,'P0001',null,'NULL operating period plus forged reason cannot authorize initial end');
 select lives_ok($q$insert into public.enrollments(tenant_id,student_id,class_id,start_date) values('10000000-0000-4000-8000-000000000951','40000000-0000-4000-8000-000000000952','30000000-0000-4000-8000-000000000954','2020-01-01')$q$,'actual ended operating period still derives enrollment end without status assignment');
 select is((select end_date from public.enrollments where student_id='40000000-0000-4000-8000-000000000952' and class_id='30000000-0000-4000-8000-000000000954'),current_date-1,'derived end matches actual operating period');
+reset role;
+select set_config('request.jwt.claims','{}',true);
+update public.students set status='withdrawn',withdrawn_at=current_date-1,withdrawal_metadata='{"reason":"schedule"}' where id='40000000-0000-4000-8000-000000000952';
+update public.enrollments set withdrawal_reason='schedule',withdrawal_detail='synthetic-detail',withdrawal_memo='Synthetic reason memo' where student_id='40000000-0000-4000-8000-000000000952' and class_id='30000000-0000-4000-8000-000000000954';
+insert into public.enrollments(tenant_id,student_id,class_id,start_date,end_date,withdrawal_reason) values('10000000-0000-4000-8000-000000000951','40000000-0000-4000-8000-000000000952','30000000-0000-4000-8000-000000000952','2020-01-01',current_date-3,'schedule');
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"20000000-0000-4000-8000-000000000954","role":"authenticated"}',true);
+select ok(not student_status_private.allowed(),'accountant reason editor has no direct status authority');
+select lives_ok($q$update public.enrollments set withdrawal_reason='grades' where student_id='40000000-0000-4000-8000-000000000952' and class_id='30000000-0000-4000-8000-000000000954'$q$,'independent companion reason editing preserves newly merged detail and memo');
+select is((select withdrawal_metadata->>'reason' from public.students where id='40000000-0000-4000-8000-000000000952'),'schedule','companion reason changes before student metadata in actual workflow');
+select lives_ok($q$update public.students set withdrawal_metadata='{"reason":"grades"}' where id='40000000-0000-4000-8000-000000000952'$q$,'accountant completes student metadata after companion reason sync');
+select throws_ok($q$update public.enrollments set withdrawal_reason='other' where student_id='40000000-0000-4000-8000-000000000952' and class_id='30000000-0000-4000-8000-000000000952'$q$,'P0001',null,'reason correction cannot alter enrollment from a different exit date');
+select throws_ok($q$update public.enrollments set end_date=null,withdrawal_reason='grades' where student_id='40000000-0000-4000-8000-000000000952' and class_id='30000000-0000-4000-8000-000000000954'$q$,'P0001',null,'reason editor cannot reopen enrollment');
+select throws_ok($q$update public.enrollments set on_hold=true,withdrawal_reason='grades' where student_id='40000000-0000-4000-8000-000000000952' and class_id='30000000-0000-4000-8000-000000000954'$q$,'P0001',null,'reason editor cannot hold enrollment');
+select throws_ok($q$update public.enrollments set withdrawal_reason='grades' where id='50000000-0000-4000-8000-000000000952'$q$,'P0001',null,'reason editor cannot change active enrollment reason');
+reset role;
+select set_config('request.jwt.claims','{}',true);
+update public.tenant_settings set data=jsonb_set(data,'{permissions,specialAccess,enrollmentDateEditorIds}','["20000000-0000-4000-8000-000000000951"]') where tenant_id='10000000-0000-4000-8000-000000000951';
+update public.tenant_settings set data=jsonb_set(data,'{permissions,userOverrides}','[{"userId":"20000000-0000-4000-8000-000000000951","menu":"withdrawals","access":"readonly"}]') where tenant_id='10000000-0000-4000-8000-000000000951';
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"20000000-0000-4000-8000-000000000951","role":"authenticated"}',true);
+select throws_ok($q$update public.enrollments set withdrawal_memo='invented' where student_id='40000000-0000-4000-8000-000000000952' and class_id='30000000-0000-4000-8000-000000000954'$q$,'P0001',null,'date-only editor cannot change memo through unchanged lifecycle shortcut');
+select lives_ok($q$update public.enrollments set end_date=null,withdrawal_reason=null,withdrawal_detail=null,withdrawal_memo=null,is_transferred=false where student_id='40000000-0000-4000-8000-000000000952' and class_id='30000000-0000-4000-8000-000000000954'$q$,'independent date restoration clears newly merged reason details and memo');
+select throws_ok($q$update public.enrollments set end_date=current_date+1,withdrawal_memo='invented' where student_id='40000000-0000-4000-8000-000000000952' and class_id='30000000-0000-4000-8000-000000000954'$q$,'P0001',null,'date editor cannot invent reason memo while ending');
 reset role;
 select set_config('request.jwt.claims','{}',true);
 select * from finish();

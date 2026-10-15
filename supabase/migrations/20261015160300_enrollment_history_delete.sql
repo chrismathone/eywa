@@ -55,6 +55,7 @@ begin
       jsonb_build_object('studentId',e.student_id,'classId',e.class_id,'className',class_name,'subject',class_subject,'via','validated_rpc',
         'snapshot',jsonb_build_object('id',e.id,'tenantId',e.tenant_id,'studentId',e.student_id,'classId',e.class_id,
           'startDate',e.start_date,'endDate',e.end_date,'onHold',e.on_hold,'withdrawalReason',e.withdrawal_reason,
+          'withdrawalDetail',to_jsonb(e)->'withdrawal_detail','withdrawalMemo',to_jsonb(e)->'withdrawal_memo',
           'attendanceDays',e.attendance_days,'isTransferred',e.is_transferred,'isTransferredIn',e.is_transferred_in,
           'salaryTier',e.salary_tier,'createdAt',e.created_at),
         'recordCounts',counts,'cancelledBeforeStart',e.start_date>(now() at time zone 'Asia/Seoul')::date,

@@ -108,6 +108,7 @@ export default async function WithdrawalDetailPage({
           <WithdrawalReasonCard
             studentId={detail.id}
             initialReason={md?.reason ?? null}
+            initialDetail={md?.detail ?? null}
             initialMemo={md?.memo ?? null}
           />
         </Card>

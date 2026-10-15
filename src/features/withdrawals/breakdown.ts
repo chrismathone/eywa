@@ -9,7 +9,8 @@
  * 🔴 강사 = 강사평가 퇴원율이 그 퇴원을 센 선생님(판정 한 벌 `server/exit-teacher-judge.ts` — 시간표 X와 같다).
  *    강사 탓이 아닌 사유 · 반 이동 · 같은 과목 계속 다님 · 지난달 절반 미만 담당 · 장부 정리는 선생님에 안 붙는다('담당 미반영').
  */
-import { REASON_LABEL } from "./types";
+import { REASON_LABEL, type WithdrawalReason } from "./types";
+import { REASON_DETAILS, reasonDetailOf } from "./reason-detail";
 import { reasonKeyOf } from "./reason-key";
 
 export type BreakdownAxis = "subject" | "teacher" | "grade" | "school";
@@ -140,12 +141,34 @@ export function reasonFacetOf(row: { cleanup: boolean; reasonKey: string | null;
   return { value: REASON_UNSPECIFIED, label: "미기재" };
 }
 
+/**
+ * 세부 사유 칸(2단계 — `reason-detail.ts`) — 대분류 막대를 고른 뒤 그 아래에 선다(`detail=` 필터와 같은 값: 세부 키 · 고르지 않은 줄은 `none`).
+ * 순서 = 학원이 고르는 목록 순서(많은 순 아님 — 같은 대분류 안에서 늘 같은 자리) · 세부 미기재는 맨 끝.
+ */
+export function reasonDetailFacetOf(row: { detail: string | null }): string {
+  return row.detail ?? FACET_NONE;
+}
+
+export function detailItems(rows: readonly { detail: string | null }[], reason: WithdrawalReason): BreakdownItem[] {
+  const counts = new Map<string, number>();
+  for (const r of rows) counts.set(reasonDetailFacetOf(r), (counts.get(reasonDetailFacetOf(r)) ?? 0) + 1);
+  const order = [...REASON_DETAILS[reason].map((d) => d.key), FACET_NONE];
+  return order
+    .filter((k) => counts.has(k))
+    .map((value) => ({ value, label: value === FACET_NONE ? "세부 미기재" : (reasonDetailOf(value)?.label ?? value), count: counts.get(value)! }));
+}
+
+/** 주소의 `detail=` 값 → 라벨. 모르는 값은 null. */
+export function detailFacetLabel(value: string): string | null {
+  return value === FACET_NONE ? "세부 미기재" : (reasonDetailOf(value)?.label ?? null);
+}
+
 /** 주소의 `reason=` 값 → 화면 라벨(범위 문구·드롭다운). 모르는 값은 null. */
 export function reasonFacetLabel(value: string): string | null {
   if (value === REASON_CLEANUP) return "장부 정리";
   if (value === REASON_UNSPECIFIED) return "미기재";
   if (value.startsWith(REASON_TEXT_PREFIX)) return value.slice(REASON_TEXT_PREFIX.length) || null;
-  return (REASON_LABEL as Record<string, string>)[value] ?? null;
+  return Object.hasOwn(REASON_LABEL, value) ? REASON_LABEL[value as WithdrawalReason] : null;
 }
 
 // ─────────────────────────────── 강사 가리기 ───────────────────────────────

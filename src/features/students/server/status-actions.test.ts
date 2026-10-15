@@ -13,6 +13,7 @@ vi.mock("next/server", () => ({ after: vi.fn() }));
 import { createStudent, updateStudent, changeStudentStatus, cancelScheduledWithdrawal, endStudentEnrollments,
   setStudentEnrollmentHolds, holdSingleEnrollment, endSingleEnrollment } from "./actions";
 import { reactivateStudent } from "@/features/withdrawals/server/actions";
+import { endEnrollmentById } from "./enrollment-sync";
 
 function form(status?: string, date?: string) {
   const fd = new FormData(); fd.set("id", "student"); fd.set("studentId", "student"); fd.set("enrollmentId", "enrollment");
@@ -87,5 +88,14 @@ describe("actual student actions reject status changes before side effects", () 
     m.client.mockResolvedValue({ from: vi.fn(() => q) });
     expect((await endSingleEnrollment(undefined, form()))?.error).toBeTruthy();
     expect(m.update).not.toHaveBeenCalled(); expect(m.audit).not.toHaveBeenCalled();
+  });
+  it("merged reason detail argument and expected student binding coexist", async () => {
+    const q: Record<string, unknown> = {};
+    for (const key of ["select", "eq"]) q[key] = vi.fn(() => q);
+    q.update = m.update.mockReturnValue(q);
+    q.maybeSingle = vi.fn(async () => ({ data: { start_date: "2026-01-01", student_id: "student", class_id: "class" }, error: null }));
+    q.then = (done: (value: unknown) => unknown) => Promise.resolve({ error: null }).then(done);
+    expect((await endEnrollmentById({ from: () => q } as never, "enrollment", "2026-10-15", "grades", { detail: "detail", memo: "memo" }, "student")).error).toBeNull();
+    expect(m.update).toHaveBeenCalledWith({ end_date: "2026-10-15", withdrawal_reason: "grades", withdrawal_detail: "detail", withdrawal_memo: "memo" });
   });
 });
