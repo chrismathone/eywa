@@ -42,7 +42,8 @@ const routePath = (href: string) => href.split(/[?#]/, 1)[0] ?? href;
  * 메뉴 목록 밖이지만 창으로 여는 화면 — 창 id는 메뉴 키가 아니라 **경로**다(창 링크·딥링크가 쓰던 id 그대로).
  * 2026-10-06 키오스크 설정을 설정 메뉴 판에 올리면서 메뉴 판의 목적지에도 이런 화면이 생겼다.
  */
-const PATH_ID_DESTS: Record<string, string> = { "/kiosk-settings": "kiosk-settings" };
+// 학부모 관리 현황(원장·관리자 전용)은 셔틀 탭 줄 밖의 화면이라 제 창이다(navigation.ts 주석).
+const PATH_ID_DESTS: Record<string, string> = { "/kiosk-settings": "kiosk-settings", "/shuttle/parents": "shuttle/parents" };
 
 function ownerMenuOf(d: HubDest): string {
   const byPath = PATH_ID_DESTS[routePath(d.href)];

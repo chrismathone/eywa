@@ -9,6 +9,7 @@ import {
   type RunRows,
   groupRowsByStop,
   stopGroupRemaining,
+  splitRowsByIo,
 } from "./today-board";
 import type { RideRow } from "./roster";
 import type { Direction, ShuttleRun, ShuttleVehicle } from "./types";
@@ -323,5 +324,20 @@ describe("stopGroupRemaining — 묶음 머리의 '남음'", () => {
   it("오늘 안 타는 줄은 세지 않는다", () => {
     // countProgress와 같은 규약 — 회색 줄은 화면에 남지만 '할 일'이 아니다.
     expect(stopGroupRemaining({ rows: [row("a", null, "in", "skipped"), row("b", null)] })).toBe(1);
+  });
+});
+
+describe("splitRowsByIo — 등·하원이 섞인 회차", () => {
+  it("섞이면 두 칸으로 가르고 회차 성격 쪽을 먼저 둔다", () => {
+    const rows = [row("a", null, "in"), row("b", null, "out"), row("c", "boarded", "in")];
+    expect(splitRowsByIo(rows, "in").map((s) => [s.io, s.rows.map((r) => r.key)])).toEqual([
+      ["in", ["a", "c"]],
+      ["out", ["b"]],
+    ]);
+    expect(splitRowsByIo(rows, "out").map((s) => s.io)).toEqual(["out", "in"]);
+  });
+  it("한쪽뿐이면 칸 하나다", () => {
+    expect(splitRowsByIo([row("a", null, "in")], "out").map((s) => s.io)).toEqual(["in"]);
+    expect(splitRowsByIo([], "in")).toEqual([]);
   });
 });

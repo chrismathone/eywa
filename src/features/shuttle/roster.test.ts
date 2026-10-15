@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   compactWeekdays,
   dayCodeOf,
+  isInactiveDay,
   mergePlanAndLog,
   plannedRidesOn,
   ridesOn,
@@ -303,5 +304,48 @@ describe("mergePlanAndLog — 한 회차 안에서 skip + add(정류장 하루 �
       "빌리브루센트 앞", // rs2 정기 s2
       "빌리브루센트 앞", // rs2 add s1
     ]);
+  });
+});
+
+describe("🔴 add만 걸어도 평소 줄은 대체된다(replaced) — 2026-09-27 결함 회귀", () => {
+  // '오늘 안 탐' 입구가 닫힌 뒤(2026-09-04) 화면에서 걸 수 있는 건 add뿐이다. 같은 회차에서 정류장만 바꾸면
+  // 평소 줄이 살아 있어 기록을 채갔고, "18:31 칠성초 정문에서 내렸어요"처럼 없던 일이 학부모에게 나갔다.
+  const WED = "2026-08-19";
+  const planned = () => plannedRidesOn(run, WED, [exc({ kind: "add", studentId: "s1", runStopId: "rs2", memo: "할머니 댁" })]);
+
+  it("평소 줄은 replaced, 새 자리는 added", () => {
+    const mine = planned().filter((r) => r.rider.studentId === "s1");
+    expect(mine.map((r) => [r.stopName, r.dayKind])).toEqual([
+      ["서대구 센트럴자이", "replaced"],
+      ["빌리브루센트 앞", "added"],
+    ]);
+    // 대체된 줄엔 이유(메모)는 싣되 되돌리기 id는 없다 — 되돌리는 건 add 쪽이다.
+    expect(mine[0]!.exceptionMemo).toBe("할머니 댁");
+    expect(mine[0]!.exceptionId).toBeNull();
+  });
+
+  it("기록은 오늘만 줄(added)이 가져가고, 평소 줄은 미기록으로 남는다", () => {
+    const rows = mergePlanAndLog(planned(), [
+      { id: "log1", studentId: "s1", runId: "run1", ioKind: "in", status: "boarded", memo: null, stopLabel: "빌리브루센트 앞" },
+    ]);
+    expect(rows.find((r) => r.dayKind === "added")!.logId).toBe("log1");
+    expect(rows.find((r) => r.dayKind === "replaced")!.status).toBeNull();
+  });
+
+  it("isInactiveDay — skipped·replaced만 true", () => {
+    expect(isInactiveDay("skipped")).toBe(true);
+    expect(isInactiveDay("replaced")).toBe(true);
+    expect(isInactiveDay("regular")).toBe(false);
+    expect(isInactiveDay("added")).toBe(false);
+  });
+
+  it("다른 회차(다른 차)의 add도 이 방향 평소 줄을 대체한다 — 하원을 두 번 할 수는 없다", () => {
+    const rows = plannedRidesOn(run, WED, [exc({ kind: "add", studentId: "s1", runStopId: "other-run-stop" })]);
+    expect(rows.find((r) => r.rider.studentId === "s1")!.dayKind).toBe("replaced");
+  });
+
+  it("다른 방향의 add는 대체하지 않는다(등원 평소 줄 + 하원 add)", () => {
+    const rows = plannedRidesOn(run, WED, [exc({ kind: "add", studentId: "s1", ioKind: "out", runStopId: "rs2" })]);
+    expect(rows.find((r) => r.rider.studentId === "s1" && r.rider.ioKind === "in")!.dayKind).toBe("regular");
   });
 });

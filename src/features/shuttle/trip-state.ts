@@ -14,6 +14,7 @@
 import type { SemanticTone } from "@/lib/design/semantic-color";
 import type { Progress } from "./today-board";
 import type { ShuttleTrip } from "./types";
+import { isInactiveDay, type RideRow } from "./roster";
 
 export type TripState = "ready" | "running" | "done";
 
@@ -104,4 +105,49 @@ export function canEndTrip(state: TripState, date: string, today: string): boole
  */
 export function canReopenTrip(state: TripState, date: string, today: string): boolean {
   return state === "done" && date === today;
+}
+
+/**
+ * 종료 전에 **아직 상태가 안 정해진 아이** 이름(사용자 2026-10-07 "하나의 상태라도 정해졌는지 체크하고 안 됐으면
+ * 누구누구 학생 확인이 필요합니다").
+ *
+ * 🔑 '정해짐' = 탑승·미탑승 기록이 **DB에 있다**(전송·저장 어느 쪽이든) **또는** 오늘 안 타는 줄(등원 안함·다른 정류장으로
+ *    대체)이다. 화면의 미전송 초안은 아직 DB에 없으므로 정해진 것이 아니다.
+ * 🔑 같은 아이가 등·하원 두 줄이면 이름은 한 번만(줄 순서 = 정류장 순서).
+ */
+export function uncheckedRiderNames(rows: readonly Pick<RideRow, "dayKind" | "status" | "studentName">[]): string[] {
+  const names: string[] = [];
+  for (const r of rows) {
+    if (isInactiveDay(r.dayKind) || r.status !== null) continue;
+    const name = r.studentName || "(추가 탑승)";
+    if (!names.includes(name)) names.push(name);
+  }
+  return names;
+}
+
+/** 종료를 막는 안내 문구 — 상태가 다 정해졌으면 null. */
+export function endTripBlockedMessage(names: readonly string[]): string | null {
+  if (names.length === 0) return null;
+  return `${names.join("·")} 학생 확인이 필요합니다 — 탑승·미탑승·등원 안함 중 하나를 정한 뒤 종료하세요`;
+}
+
+/**
+ * 출발 전에 **하원 체크가 안 된 아이** 이름(사용자 2026-10-07 "출발 누를 때 하원이 있을 경우 체크가 없고 하원 안함도
+ * 안 했을 경우 다시 확인").
+ *
+ * 🔑 여기서 보는 건 탑승·미탑승 기록이 아니라 **체크 표시**다 — "지금 이 아이가 차 앞에 있나"를 세는 표시(check-store.ts).
+ *    하원 줄만 본다. 오늘 안 타는 줄(하원 안함 · 다른 정류장으로 대체)은 정해진 것으로 친다.
+ * 🔑 같은 아이가 두 줄이면 이름은 한 번(줄 순서 = 정류장 순서).
+ */
+export function uncheckedDropOffNames(
+  rows: readonly Pick<RideRow, "key" | "ioKind" | "dayKind" | "studentName">[],
+  isChecked: (rowKey: string) => boolean,
+): string[] {
+  const names: string[] = [];
+  for (const r of rows) {
+    if (r.ioKind !== "out" || isInactiveDay(r.dayKind) || isChecked(r.key)) continue;
+    const name = r.studentName || "(추가 탑승)";
+    if (!names.includes(name)) names.push(name);
+  }
+  return names;
 }

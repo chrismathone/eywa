@@ -1,0 +1,42 @@
+﻿import { redirect } from "next/navigation";
+
+import { signOut } from "@/app/(auth)/login/actions";
+import { getPublicBrandingByTenantId } from "@/features/owner/server/public-branding";
+import { getParentViewer } from "@/features/shuttle/server/parent-viewer";
+import { loadParentNotices } from "@/features/shuttle/server/parent-departure";
+import { DepartureNoticeList } from "@/features/shuttle/components/departure-notice-list";
+import { ParentTabs } from "./_components/parent-tabs";
+
+/**
+ * 학부모 화면 공통 머리 — 학원명·학부모 이름·로그아웃 + 셔틀 알림 줄(출발·탑승) + 가로 탭(5칸). 섹션(실시간 차량·변경·확인·
+ * 수업 시간표)은 이 아래 `children`으로 바뀐다.
+ *
+ * 🔑 학부모 게이트를 여기서 한 번 건다 — 학부모가 아니면(직원 등) 자기 홈으로. 각 섹션도 데이터를 읽을 때
+ *    `getParentViewer()`를 다시 부르지만 요청 캐시라 왕복은 한 번이다.
+ */
+export default async function ParentSectionLayout({ children }: { children: React.ReactNode }) {
+  const viewer = await getParentViewer();
+  if (!viewer) redirect("/home");
+  const [branding, notices] = await Promise.all([getPublicBrandingByTenantId(viewer.tenantId), loadParentNotices(viewer)]);
+  const academy = branding?.settings.profile.name ?? "";
+
+  return (
+    <>
+      <header className="flex items-start justify-between gap-3">
+        <div>
+          {academy ? <p className="text-text-dim text-sm font-medium">{academy}</p> : null}
+          <p className="text-base font-bold">{viewer.displayName}</p>
+        </div>
+        <form action={signOut}>
+          <button type="submit" className="text-text-dim rounded-lg px-2 py-1 text-sm underline-offset-2 hover:underline">
+            로그아웃
+          </button>
+        </form>
+      </header>
+      {/* 셔틀 알림(차량 출발 · 등원 탑승, 0368a·0368b) — 푸시 가정판. 어느 탭에서든 맨 위에 뜬다. */}
+      <DepartureNoticeList notices={notices} />
+      <ParentTabs />
+      {children}
+    </>
+  );
+}
