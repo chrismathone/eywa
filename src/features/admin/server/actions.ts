@@ -1,4 +1,6 @@
 "use server";
+import { canManageAdministrativeStudentStatusNow } from "@/features/students/server/status-access";
+import { STUDENT_STATUS_DENIED } from "@/features/students/status-access";
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
@@ -44,6 +46,7 @@ export async function mergeStudents(
 ): Promise<MergeStudentsState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canManageAdministrativeStudentStatusNow())) return { error: STUDENT_STATUS_DENIED };
   // 관리 도구(admin 메뉴) 쓰기 — 기본 matrix는 master만이나, 원장이 역할·권한에서 위임(override)하면 열림(#58).
   if (!(await canWriteTenant(user.systemRole, "admin"))) return { error: "관리 도구 권한이 없습니다" };
 
@@ -223,6 +226,7 @@ export async function closeOrphanEnrollments(
 ): Promise<CleanupState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canManageAdministrativeStudentStatusNow())) return { error: STUDENT_STATUS_DENIED };
   // 관리 도구(admin 메뉴) 쓰기 — 기본 matrix는 master만이나, 원장이 역할·권한에서 위임(override)하면 열림(#58).
   if (!(await canWriteTenant(user.systemRole, "admin"))) return { error: "관리 도구 권한이 없습니다" };
 
@@ -373,6 +377,7 @@ export async function bulkWithdrawStudents(
 ): Promise<BulkStudentState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canManageAdministrativeStudentStatusNow())) return { error: STUDENT_STATUS_DENIED };
   // 관리 도구(admin 메뉴) 쓰기 — 기본 matrix는 master만이나, 원장이 역할·권한에서 위임(override)하면 열림(#58).
   if (!(await canWriteTenant(user.systemRole, "admin"))) return { error: "관리 도구 권한이 없습니다" };
 

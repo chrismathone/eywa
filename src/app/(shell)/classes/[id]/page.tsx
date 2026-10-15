@@ -1,3 +1,5 @@
+import { ClassStudentActions } from "./_components/class-student-actions";
+import { canManageStudentStatusNow } from "@/features/students/server/status-access";
 
 import { SheetRoomName, SheetText } from "@/features/teacher-view/interface-label";
 import { reportError } from "@/lib/observability/report-error";
@@ -17,8 +19,6 @@ import { EditableDateCell } from "@/features/enrollments/components/editable-dat
 import { EditableAttendanceCell } from "@/features/enrollments/components/editable-attendance-cell";
 import { LabSeparateToggle } from "@/features/enrollments/components/lab-separate-toggle";
 import { getClassLabSeparateEnrollmentIds } from "@/features/enrollments/server/lab-separate";
-import { EndEnrollmentAction } from "@/features/enrollments/components/end-enrollment-action";
-import { CancelAssignmentButton } from "@/features/enrollments/components/cancel-assignment-button";
 import { kstToday } from "@/lib/date-kst";
 import {
   getClassAttendanceStats,
@@ -171,6 +171,7 @@ export default async function ClassDetailPage({
   // 수강 종료 = 학생 기록 변경 — 서버 endSingleEnrollment의 게이트(canManageStudentRecords =
   // students full)와 **같은 모양**이어야 한다(#77: 버튼은 보이는데 누르면 거절 방지).
   const canManageStudents = await canManageTenant(user.systemRole, "students");
+  const canManageStatus = await canManageStudentStatusNow();
   const canAssign = classLevel === "full" || canManageStudents;
   // 인재원 학습(JJ실)을 이 반으로 좁혀 여는 입구(2026-09-11 "학생별 반별 유기적으로") — 연동 학원 · 영어 반 ·
   // 성적관리 열람 권한일 때만. JJ 화면 자체의 게이트(강사 = 담당 영어 반)는 그쪽이 다시 본다(#77).
@@ -578,33 +579,9 @@ export default async function ClassDetailPage({
                           다니는 학생 = **수강 종료**(학생 상세 수업 탭과 같은 한 벌) /
                           예정 학생 = **배정 취소**(행 삭제). 둘을 섞지 말 것 — 종료는 기록을 남기고
                           취소는 없던 일로 되돌린다. */}
-                      {canManageStudents ? (
-                        s.phase === "upcoming" ? (
-                          /* 예정(대기) 줄은 종료가 아니라 **배정 취소**다(원장 2026-09-01:
-                             *"배정 취소 하면 아무일도 없던것처럼 되는거지"*) — 아직 아무 기록도 안 붙었으므로
-                             행 자체를 지운다. 종료로 닫으면 시작일로 클램프돼 "하루짜리 수강"이 남는다. */
-                          canEditSchedule && scheduledByEnrollment.has(s.enrollmentId) ? (
-                            <ScheduledChangeActions change={scheduledByEnrollment.get(s.enrollmentId)!} today={today} />
-                          ) : s.isTransferredIn || s.isTransferred ? (
-                            <span className="text-text-dim text-xs">{sheetT(lang, "sched.moveReserved")}</span>
-                          ) : <CancelAssignmentButton
-                            enrollmentId={s.enrollmentId}
-                            className={klass.className}
-                            startDate={s.enrolledAt}
-                            studentName={s.name}
-                          />
-                        ) : (
-                          <EndEnrollmentAction
-                            enrollmentId={s.enrollmentId}
-                            studentId={s.studentId}
-                            studentName={s.name}
-                            className={klass.className}
-                            currentEndDate={s.endDate}
-                            startDate={s.enrolledAt}
-                            today={today}
-                          />
-                        )
-                      ) : null}
+                      <ClassStudentActions student={s} className={klass.className} today={today} lang={lang}
+                        permissions={{ basic: canManageStudents, status: canManageStatus, schedule: canEditSchedule }}
+                        scheduled={scheduledByEnrollment.get(s.enrollmentId)} />
                     </div>
                   </li>
                 ))}

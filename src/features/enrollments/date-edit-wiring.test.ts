@@ -122,7 +122,9 @@ describe("출결 밀림 확인 = 서버 게이트(#77)", () => {
    * '수강 종료 · 오늘까지'를 누르면 종료 규약이 배타로 읽혀 버튼 문구가 그 자리에서 거짓이 된다.
    */
   it("종료일을 비우면 withdrawal_reason과 is_transferred를 함께 되돌린다", () => {
-    expect(actions).toContain("end_date: null, withdrawal_reason: null, is_transferred: false");
+    expect(actions).toContain(
+      "end_date: null, withdrawal_reason: null, withdrawal_detail: null, withdrawal_memo: null, is_transferred: false",
+    );
   });
 
   it("감사로그가 붙어 있고, 확인 후 저장이면 그 사실도 함께 남는다", () => {

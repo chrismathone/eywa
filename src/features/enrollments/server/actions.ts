@@ -1,4 +1,6 @@
 "use server";
+import { canManageStudentStatusNow } from "@/features/students/server/status-access";
+import { STUDENT_STATUS_DENIED } from "@/features/students/status-access";
 
 import { revalidatePath } from "next/cache";
 // 🔴 DB 오류 한글 매핑은 **이 파일 밖**에 산다 — `"use server"` 파일은 async 함수만 export할 수
@@ -74,6 +76,7 @@ export async function createEnrollment(
   const startDate =
     String(formData.get("startDate") ?? "").trim() || kstToday();
   const endDate = String(formData.get("endDate") ?? "").trim() || null;
+  if (endDate && !(await canManageStudentStatusNow())) return { error: STUDENT_STATUS_DENIED };
   // 분리등원: 콤마구분 요일(예 "mon,thu"). 비거나 수업의 전 요일이면 [] = 전 요일 등원.
   const pickedDays = String(formData.get("attendanceDays") ?? "")
     .split(",")
@@ -549,6 +552,8 @@ export async function updateEnrollmentDates(
     start_date?: string;
     end_date?: string | null;
     withdrawal_reason?: string | null;
+    withdrawal_detail?: null;
+    withdrawal_memo?: null;
     is_transferred?: boolean;
   } =
     field === "start"
@@ -560,7 +565,8 @@ export async function updateEnrollmentDates(
             // 다시 열 때 이 값을 덮지 않는다(적대 리뷰 2026-09-18). 다른 사유(퇴원 사유 등)는 그대로 둔다.
             ...((current.withdrawal_reason as string | null) === PERIOD_END_REASON ? { withdrawal_reason: null } : {}),
           }
-        : { end_date: null, withdrawal_reason: null, is_transferred: false };
+        : // 종료 사유의 세부·메모(0367a)도 함께 비운다 — 되살린 수강이 다음에 다른 사유로 끝날 때 옛 메모가 붙어 나오지 않게.
+          { end_date: null, withdrawal_reason: null, withdrawal_detail: null, withdrawal_memo: null, is_transferred: false };
 
   // 기능 지정은 일반 수강 쓰기 권한을 넓히지 않는다. 이 경로에서 정해진 날짜 칸만 수정한다.
   let write = dateWriter.from("enrollments").update(patch).eq("id", enrollmentId)
@@ -822,8 +828,7 @@ export async function deleteEnrollment(
   // 🔴 형제 수강은 **개수만이 아니라 `salary_tier`까지** 읽는다 — 정산 매핑(collectTierRows)이 티어가
   //    지정된 행에서만 만들어져서, 티어를 가진 유일한 행을 지우면 정산액이 조용히 줄어든다(deletable.ts 주석).
   //    head 카운트로 되돌리면 그 구멍이 다시 열린다.
-  const [klassRes, siblingRes, counts] = await Promise.all([
-    supabase.from("classes").select("class_name, subject").eq("id", classId).maybeSingle(),
+  const [siblingRes, counts] = await Promise.all([
     supabase
       .from("enrollments")
       .select("id, salary_tier")
@@ -851,52 +856,17 @@ export async function deleteEnrollment(
 
   // 실제로 지워진 행을 확인한다 — RLS가 막으면 error 없이 0행이라 "성공"으로 위장한다([[#104]] 계열).
   const { data: deleted, error: delErr } = await supabase
-    .from("enrollments")
-    .delete()
-    .eq("id", enrollmentId)
-    .select("id");
+    .rpc("delete_enrollment_history", { p_id: enrollmentId, p_expected: {
+      student_id: enr.student_id, class_id: enr.class_id, start_date: enr.start_date, end_date: enr.end_date,
+      on_hold: enr.on_hold, is_transferred: enr.is_transferred, is_transferred_in: enr.is_transferred_in,
+      attendance_days: enr.attendance_days, salary_tier: enr.salary_tier,
+    } });
   if (delErr) return { error: toKoreanDbError(delErr, "수업 이력을 삭제하지 못했습니다", "enrollments.history.delete") };
   if (!deleted || deleted.length === 0) {
     return { error: "수업 이력을 삭제할 권한이 없거나 이미 삭제된 행입니다" };
   }
 
   // 🔴 원장 지시("대신 감사 로그에는 남겨") — 지운 행을 통째로. 손으로 되살릴 수 있을 만큼 담는다.
-  await logAction({
-    action: "enrollment_delete",
-    targetType: "student",
-    targetLabel: (klassRes.data?.class_name as string | null) ?? null,
-    metadata: {
-      studentId,
-      classId,
-      className: (klassRes.data?.class_name as string | null) ?? null,
-      subject: (klassRes.data?.subject as string | null) ?? null,
-      // 삭제된 행 스냅샷(복구용 원본 값).
-      snapshot: {
-        id: enr.id,
-        tenantId: enr.tenant_id,
-        studentId,
-        classId,
-        startDate: enr.start_date,
-        endDate: enr.end_date,
-        onHold: enr.on_hold,
-        withdrawalReason: enr.withdrawal_reason,
-        attendanceDays: enr.attendance_days,
-        isTransferred: enr.is_transferred,
-        isTransferredIn: enr.is_transferred_in,
-        salaryTier: enr.salary_tier,
-        createdAt: enr.created_at,
-      },
-      // 지울 때 붙어 있던 기록 수(0이 아니면 형제 수강이 있어 허용된 것) — 사후 역검수 재료.
-      recordCounts: counts,
-      // '배정 취소'(아직 시작 전)로 지운 것인가 — 원장이 아닌 사람이 지울 수 있는 유일한 경우라
-      // 역검수에서 이 표식으로 두 경로를 가른다(감사로그가 유일한 흔적이다).
-      cancelledBeforeStart: String(enr.start_date) > kstToday(),
-      hadSiblingEnrollment: hadSibling,
-      // 급여 단가(티어) 판정 근거 — 정산이 줄었다는 제보가 오면 여기부터 본다.
-      thisRowHasTier,
-      siblingHasTier,
-    },
-  });
 
   revalidatePath(`/students/${studentId}`);
   revalidatePath("/students");

@@ -5,17 +5,17 @@ import type { StudentClassRow, StudentDetail } from "@/features/students/server/
 
 const mocks = vi.hoisted(() => ({ rows: [] as StudentClassRow[], teacher: vi.fn() }));
 vi.mock("@/features/students/server/queries", () => ({ getStudentClassesDetail: async () => mocks.rows }));
-vi.mock("@/features/classes/server/queries", () => ({ getClassesList: async () => [] }));
+vi.mock("@/features/classes/server/queries", () => ({ getClassesList: async () => [{ id: "target", className: "Target", subject: "math", teacherName: "Teacher", studentCount: 0, days: [], isSpecial: false }] }));
 vi.mock("@/features/owner/server/queries", () => ({ getTenantSettings: async () => ({ operations: { subjects: [] } }) }));
 vi.mock("@/features/owner/subjects", () => ({ buildSubjectMaps: () => ({ labelOf: () => "수학", colorOf: () => "blue" }) }));
 vi.mock("@/features/timetable/lib/periods", () => ({ settingsToPeriodsConfig: () => ({}) }));
 vi.mock("@/features/students/lib/week-grid-row-mode", () => ({ usedRowSubjectsOf: () => [] }));
 vi.mock("@/features/students/server/past-class-teachers", () => ({ getPastClassTeachers: mocks.teacher }));
 vi.mock("@/lib/date-kst", async (original) => ({ ...await original<object>(), kstToday: () => "2026-10-02" }));
-vi.mock("../_components/student-assign-action", () => ({ StudentAssignAction: () => null }));
+vi.mock("../_components/student-assign-action", () => ({ StudentAssignAction: () => <button>assign</button> }));
 vi.mock("../_components/delete-enrollment-button", () => ({ DeleteEnrollmentButton: () => null }));
-vi.mock("../_components/move-enrollment-button", () => ({ MoveEnrollmentButton: () => null, MoveEnrollmentProvider: ({ children }: { children: ReactNode }) => children }));
-vi.mock("@/features/enrollments/components/end-enrollment-action", () => ({ EndEnrollmentAction: () => null }));
+vi.mock("../_components/move-enrollment-button", () => ({ MoveEnrollmentButton: () => <button>move</button>, MoveEnrollmentProvider: ({ children }: { children: ReactNode }) => children }));
+vi.mock("@/features/enrollments/components/end-enrollment-action", () => ({ EndEnrollmentAction: () => <button>end</button> }));
 vi.mock("@/features/enrollments/components/editable-date-cell", () => ({ EditableDateCell: () => null }));
 vi.mock("@/features/enrollments/components/editable-attendance-cell", () => ({ EditableAttendanceCell: () => null }));
 vi.mock("@/components/workspace/window-link", () => ({ WindowLink: ({ children }: { children: ReactNode }) => <span>{children}</span> }));
@@ -27,12 +27,27 @@ const row = (className: string, extra: Partial<StudentClassRow> = {}): StudentCl
   startDate: "2026-09-08", endDate: null, isTransferred: false, onHold: false,
   schedule: [], slots: [], attendanceDays: [], classDays: [], ...extra,
 });
-const show = async () => render(await ClassesTab({
+const show = async (overrides: Partial<Parameters<typeof ClassesTab>[0]> = {}) => render(await ClassesTab({
   student: { id: "student", status: "enrolled" } as StudentDetail,
   canEnd: false, dateAccess: { allowed: false, classIds: [] }, canEditSchedule: false, canDeleteEnrollment: false,
+  ...overrides,
 }));
 const section = (name: string) => within(screen.getByRole("heading", { name: new RegExp(name) }).closest("section")!);
 beforeEach(() => { vi.clearAllMocks(); mocks.teacher.mockResolvedValue(new Map()); });
+
+it("basic editors keep assignment and permitted transfer while direct end is hidden", async () => {
+  mocks.rows = [row("Current")];
+  await show({ canAssign: true, canEditSchedule: true, canEnd: false });
+  expect(screen.getByRole("button", { name: "assign" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "move" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "end" })).toBeNull();
+});
+it("readonly class tab hides assignment, move, and end", async () => {
+  mocks.rows = [row("Current")]; await show();
+  expect(screen.queryByRole("button", { name: "assign" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "move" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "end" })).toBeNull();
+});
 
 it("기존 10/2 반이동 기록은 수강 중 2개·지난 수업 1개로 표시하고 이전 반 종료는 10/1이다", async () => {
   mocks.rows = [row("BS1K", { startDate: "2026-10-02" }), row("BS1L", { endDate: "2026-10-02", isTransferred: true }), row("BS1D")];

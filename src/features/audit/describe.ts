@@ -10,6 +10,7 @@ import { STUDENT_STATUS_LABEL } from "@/features/students/status-labels";
 import { STATUS_TEXT } from "@/features/attendance/cell-display";
 import { ONBOARDING_ITEMS } from "@/features/newcomers/onboarding-items";
 import { reasonDisplay } from "@/features/withdrawals/types";
+import { reasonDetailOf } from "@/features/withdrawals/reason-detail";
 import {
   BOARDING_STATUS_LABEL,
   DIRECTION_LABEL,
@@ -140,6 +141,11 @@ type Meta = Record<string, unknown>;
 export type AuditNameOf = (id: unknown) => string | null;
 
 const str = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v.trim() : null);
+/** 퇴원 세부 사유(영문 키) → `세부: 담당 강사 변경` — 모르는 키는 싣지 않는다(키 원문을 화면에 흘리지 않는다). */
+const detailText = (v: unknown): string | null => {
+  const label = reasonDetailOf(str(v))?.label;
+  return label ? `세부: ${label}` : null;
+};
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const won = (v: unknown): string | null => {
   const n = num(v);
@@ -925,8 +931,8 @@ export function auditDetail(
       return join(ctx.nameOf(m.userId), w ? `지급 합계 ${w}` : null);
     }
     case "withdrawal_update": {
-      const reason = str(m.reason);
-      return join(ctx.nameOf(m.studentId), reason ? `사유: ${reason}` : null);
+      const reason = reasonDisplay(str(m.reason));
+      return join(ctx.nameOf(m.studentId), reason ? `사유: ${reason}` : null, detailText(m.detail));
     }
     case "withdrawal_consultation_step": {
       const STEP: Record<string, string> = {
@@ -972,6 +978,7 @@ export function auditDetail(
         m.scheduled ? "퇴원 예약" : m.applied === "scheduled" ? "예약된 퇴원 적용" : null,
         str(m.date) ? `퇴원일 ${str(m.date)}` : null,
         reason ? `사유: ${reason}` : null,
+        detailText(m.detail),
         str(m.memo),
       );
     }
@@ -1041,6 +1048,7 @@ export function auditDetail(
         ctx.nameOf(m.classId),
         str(m.date) ? `종료일 ${str(m.date)}` : null,
         reason ? `사유: ${reason}` : null,
+        detailText(m.detail),
       );
     }
     case "withdrawal_report_update":
