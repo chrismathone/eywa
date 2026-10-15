@@ -1,11 +1,14 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { Pill } from "@/components/atoms/pill";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TONE_COLOR } from "@/lib/design/semantic-color";
 import { kstTimeOf } from "@/lib/date-kst";
 import { SHUTTLE_ACTION } from "@/features/shuttle/control-size";
+import { isRowChecked } from "@/features/shuttle/check-store";
+import type { RideRow } from "@/features/shuttle/roster";
 import { endTrip, reopenTrip, startTrip } from "@/features/shuttle/server/actions";
 import {
   canEndTrip,
@@ -14,6 +17,7 @@ import {
   tripState,
   TRIP_STATE_LABEL,
   TRIP_TONE,
+  uncheckedDropOffNames,
 } from "@/features/shuttle/trip-state";
 import type { ShuttleTrip } from "@/features/shuttle/types";
 
@@ -34,8 +38,11 @@ import type { ShuttleTrip } from "@/features/shuttle/types";
  *
  * 🔴 **표가 없으면(0243a 미적용) 아무것도 그리지 않는다** — 실제로 돌고 있는 차를 "출발 전"이라고
  *    말하지 않기 위해서다. 없는 기능을 버튼으로 약속하지도 않는다([[#95]], 0229a와 같은 규약).
- * 🔴 **종료는 미기록이 남아도 막지 않는다** — 차는 이미 들어왔는데 화면이 거부하면 사실과 어긋난다.
- *    대신 관제가 그 회차를 '미기록 남음'으로 표시한다(막는 대신 보이게).
+ * 🔴 **종료는 명단 전원의 상태가 정해져야 된다**(사용자 2026-10-07) — 안 정해진 아이가 있으면 서버가
+ *    "누구누구 학생 확인이 필요합니다"를 돌려주고 `onError`로 뜬다(endTrip · trip-end-guard.ts).
+ * 🔑 **출발 전 하원 체크 확인**(사용자 2026-10-07) — 이 회차에 하원 아이가 있는데 체크도 [하원 안함]도 안 된 아이가 있으면
+ *    출발하지 않고 "누구누구 학생을 다시 확인해 주세요" 창을 띄운다. 체크는 탑승·미탑승 기록이 아니라 "지금 이 아이가
+ *    있나"를 세는 **화면 표시**(check-store.ts, DB에 없음)라 이 확인은 화면에서만 한다 — 서버는 모른다.
  * ⚠️ 판정(`canStartTrip` 등)은 순수 모듈에서 오고, **서버 액션이 같은 판정을 다시 한다**([[#77]]).
  */
 export function TripControl({
@@ -45,6 +52,7 @@ export function TripControl({
   date,
   today,
   canWrite,
+  rows = [],
   onError,
   onDone,
 }: {
@@ -56,10 +64,14 @@ export function TripControl({
   /** KST 오늘 — 지난 날짜·미래 날짜는 읽기만 한다. */
   today: string;
   canWrite: boolean;
+  /** 이 회차의 명단 — [출발] 전에 하원 줄의 체크를 본다. */
+  rows?: readonly RideRow[];
   onError: (msg: string | null) => void;
   onDone: () => void;
 }) {
   const [busy, startTransition] = useTransition();
+  /** 출발을 막은 하원 아이 이름 — 비어 있지 않으면 확인 창이 열려 있다. */
+  const [recheck, setRecheck] = useState<string[]>([]);
   const state = tripState(trip);
 
   if (!ready) return null;
@@ -74,6 +86,16 @@ export function TripControl({
       if (res?.error) onError(res.error);
       else onDone();
     });
+  }
+
+  /** [출발] — 하원 아이가 다 체크(또는 하원 안함)됐을 때만 보낸다. 누를 때 세션 값을 바로 읽는다(렌더 시점 값은 낡을 수 있다). */
+  function start() {
+    const names = uncheckedDropOffNames(rows, (key) => isRowChecked(date, key));
+    if (names.length > 0) {
+      setRecheck(names);
+      return;
+    }
+    run(startTrip);
   }
 
   // 🔴 시각은 KST로 찍는다 — `iso.slice(11,16)`은 UTC라 "13:46 출발"이 "04:46"으로 보인다.
@@ -110,7 +132,7 @@ export function TripControl({
         </span>
       )}
       {showStart && (
-        <Button className={SHUTTLE_ACTION} disabled={busy} onClick={() => run(startTrip)}>
+        <Button className={SHUTTLE_ACTION} disabled={busy} onClick={start}>
           출발
         </Button>
       )}
@@ -136,6 +158,15 @@ export function TripControl({
           종료 취소
         </Button>
       )}
+      <ConfirmDialog
+        open={recheck.length > 0}
+        title="하원 학생을 다시 확인해 주세요"
+        message={`${recheck.join("·")} 학생이 체크되지 않았습니다. 학생이 있으면 체크하고, 오늘 타지 않으면 [하원 안함]을 누른 뒤 출발하세요.`}
+        confirmLabel="확인"
+        cancelLabel={null}
+        onConfirm={() => setRecheck([])}
+        onCancel={() => setRecheck([])}
+      />
     </span>
   );
 }

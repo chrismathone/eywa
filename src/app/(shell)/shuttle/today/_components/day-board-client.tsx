@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FaceTabs } from "@/components/face-tabs";
 import { Pill } from "@/components/atoms/pill";
@@ -109,6 +109,14 @@ export function DayBoardClient({
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  /**
+   * 오류 띠는 보드 맨 위에 하나다 — 폰에서 아래쪽 회차의 [종료]가 "누구누구 학생 확인이 필요합니다"로 막히면
+   * 띠가 화면 밖이라 아무 일도 없는 것처럼 보였다(사용자 2026-10-07). 띠가 뜨면 보이는 곳까지 끌어온다.
+   */
+  const errorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [error]);
   /** 사람이 직접 접거나 편 회차 — 여기 없으면 "미기록이 남았나"로 자동 판정한다. */
   const [manualOpen, setManualOpen] = useState<Record<string, boolean>>({});
   const [exceptionOpen, setExceptionOpen] = useState(false);
@@ -160,14 +168,17 @@ export function DayBoardClient({
     () => groupRunsByVehicle(filterByDirection(byRun, dirFilter), vehicles),
     [byRun, dirFilter, vehicles],
   );
-  /** 위 요약은 **보고 있는 것**의 합이다(필터를 걸면 같이 줄어야 "남은 일"이 맞는다). */
-  const totals = useMemo(() => sumProgress(groups), [groups]);
-  /** 등하원 드롭다운 항목 hint에 붙일 방향별 남은 수(필터와 무관한 전체 기준) — 열면 어느 쪽에 일이 남았는지 보인다. 닫힌 상태의 합은 요약 줄 '미기록'. */
-  const remainByDir = useMemo(() => {
-    const of = (d: DirectionFilter) =>
-      countProgress(filterByDirection(byRun, d).flatMap((r) => r.rows)).unmarked;
-    return { all: of("all"), in: of("in"), out: of("out") };
-  }, [byRun]);
+  /**
+   * 숫자(요약 줄 · 호차 머리의 "N명 남음")는 **보기 필터와 무관하게 그날 DB 전체**(편성 × 기록)로 센다
+   * (사용자 2026-10-06 "보이는 기준말고 확실하게 디비에 남은 기준으로"). 필터는 **그리는 회차만** 좁힌다 —
+   * 숫자까지 따라 줄면 등원만 보는 중에 하원 미기록이 화면에서 사라진다.
+   */
+  const allGroups = useMemo(() => groupRunsByVehicle(byRun, vehicles), [byRun, vehicles]);
+  const totals = useMemo(() => sumProgress(allGroups), [allGroups]);
+  const progressByVehicle = useMemo(
+    () => new Map(allGroups.map((g) => [g.vehicleId, g.progress])),
+    [allGroups],
+  );
 
   const href = (d: string, s: Season = season) => `/shuttle/today?d=${d}&season=${s}`;
 
@@ -195,8 +206,8 @@ export function DayBoardClient({
       <div className={`${SHUTTLE_TOOLBAR} text-sm`}>
         {/* 등하원 보기 = `등하원: 전체` 드롭다운(§10 — 옛 알약 칩 셋). 계정 귀속 상태(URL 아님)라 `HrefSelect`의 **값 모드**
             (`onSelect`) — 목록이 Portal이라 폰의 `.toolbar-rail`(overflow-y hidden) 안에서도 열리고 검색 입력이 없다
-            (`SearchableSelect`는 인라인 목록이라 잘려서 안 열렸다 — 셔틀 리뷰 🔴 2026-09-04). 항목 옆 `hint` = 방향별
-            미기록 수(**필터와 무관한 전체 기준**). */}
+            (`SearchableSelect`는 인라인 목록이라 잘려서 안 열렸다 — 셔틀 리뷰 🔴 2026-09-04). 항목 옆 남은 수 hint는
+            뺐다 — 남은 명수는 호차 머리 하나만 말한다(사용자 2026-10-06). */}
         <HrefSelect
           axisLabel="등하원"
           ariaLabel="등하원 보기"
@@ -205,7 +216,6 @@ export function DayBoardClient({
           options={DIR_FILTERS.map((f) => ({
             value: f.value,
             label: f.label,
-            hint: remainByDir[f.value] > 0 ? `${remainByDir[f.value]}명 남음` : undefined,
           }))}
         />
         {/* 📐 **0인 숫자를 색 알약으로 강조하지 않는다**(2026-09-03). 아침엔 탑승·미탑승이 둘 다 0이라
@@ -213,10 +223,9 @@ export function DayBoardClient({
             🔴 **'미기록 N'은 닫힌 상태에서도 보여야 한다** — 옛 칩이 방향별 남은 수를 상시 보였는데 드롭다운으로 접으며
                사라졌다(셔틀 리뷰 🟠 2026-09-04). 할 일(미기록)은 caution, 일어난 일(탑승·미탑승)은 positive/critical —
                전부 0이면 흐린 글자. 방향별 분할은 드롭다운 항목의 hint가 든다.
-            🔴 필터를 걸면 이 숫자는 **보고 있는 것**의 합이다 — 무엇의 합인지 밝히지 않으면 드롭다운 hint의
-               전체 기준 숫자와 어긋나 보인다. */}
+            🔑 이 숫자는 **필터와 무관한 그날 전체**다(사용자 2026-10-06) — 드롭다운 hint와 같은 기준이라 서로 안 어긋난다. */}
         <span className="text-text-dim whitespace-nowrap">
-          {dirFilter !== "all" && `${DIRECTION_LABEL[dirFilter]} `}예정{" "}
+          전체 예정{" "}
           <span className="num text-foreground font-bold">{totals.planned}</span>명
         </span>
         {totals.unmarked > 0 ? (
@@ -260,7 +269,7 @@ export function DayBoardClient({
       </div>
 
       {error && (
-        <div className="border-danger/30 bg-danger-soft text-danger rounded-xl border px-3 py-2 text-xs">
+        <div ref={errorRef} role="alert" className="border-danger/30 bg-danger-soft text-danger rounded-xl border px-3 py-2 text-xs">
           {error}
         </div>
       )}
@@ -293,7 +302,11 @@ export function DayBoardClient({
 
       {groups.map((group) => (
         <section key={group.vehicleId} className="flex flex-col gap-2">
-          <VehicleHeader group={group} dirFilter={dirFilter} />
+          <VehicleHeader
+            group={group}
+            progress={progressByVehicle.get(group.vehicleId) ?? group.progress}
+            dirFilter={dirFilter}
+          />
           <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
             {group.runs.map(({ run, rows }) => {
               const progress = countProgress(rows);

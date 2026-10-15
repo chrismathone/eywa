@@ -122,13 +122,13 @@ export function ClassLedger({ group, rounds, blankFacts, videosKnown = true, sho
               <td className={styles.schoolCell} title={`${row.school ?? "학교 미등록"} ${row.grade ?? ""}`}>{row.school || "미등록"} <span>{row.grade}</span></td>
               <td className={styles.countCell}><strong>{counts.submitted}</strong><span>/{counts.total}</span></td>
               {numbers.map((n) => <RoundCell key={n} row={row} round={cells[n - 1]?.round} blank={cells[n - 1]?.blank} number={n} busy={busy} videosKnown={videosKnown}
-                onOpen={(round) => open(row, round, n)} onPlay={(round) => onPlay({ row, round, number: n })}
+                onOpen={(round) => open(row, round, n)} onEditor={(round) => onEdit({ row, round, number: n })} onPlay={(round) => onPlay({ row, round, number: n })}
                 onMenu={row.editable && onIssueMenu ? (kind, date, at) => onIssueMenu({ kind, row, date, ...at }) : undefined} />)}
             </tr>;
           })}</tbody>
         </table>
       </div>
-      <div className={styles.groupFooter}><span>{group.rows.length}명 중 {currentPage * PAGE_SIZE + 1}–{currentPage * PAGE_SIZE + paged.length}명 · 칸 위: 숙제가 나간 날 · 아래: 제출일 · ▶ 영상 · 수동 · 숙제없음 · — 회차 없음 · 숙제없음 우클릭 = 숙제 출제 · 점선 = 따로 낸 숙제</span>
+      <div className={styles.groupFooter}><span>{group.rows.length}명 중 {currentPage * PAGE_SIZE + 1}–{currentPage * PAGE_SIZE + paged.length}명 · 칸 위: 숙제가 나간 날 · 아래: 제출일 · ▶ 영상 · 수동 · 숙제없음 · — 회차 없음 · 칸·▶ 우클릭 = 편집 창 · 숙제없음 우클릭 = 숙제 출제 · 점선 = 따로 낸 숙제</span>
         {pages > 1 ? <div className={styles.roundPager}>
           <button type="button" disabled={busy || currentPage === 0} onClick={() => { setPage(currentPage - 1); setSelected(new Set()); }} aria-label={`${group.className} 이전 학생`}>이전</button>
           <span>{currentPage + 1} / {pages}</span>

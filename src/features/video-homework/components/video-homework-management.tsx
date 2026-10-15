@@ -133,7 +133,7 @@ export function VideoHomeworkManagement({ rows: serverRows, initialMarks, videos
       <div className={styles.expandActions}><button type="button" onClick={() => setCollapsed(new Set())}>모두 펼치기</button><button type="button" onClick={() => setCollapsed(new Set(visibleGroups.map((group) => group.classId)))}>모두 접기</button></div>
     </div>
     <p className={styles.hint}>수업보고서에 영상 과제가 나간 수업과 따로 낸 숙제만 회차로 셉니다 — 1회·2회는 학생마다의 순서라 같은 회차도 날짜가 다를 수 있습니다.
-      칸 위 날짜 = 숙제가 나간 날 · <EyIcon name="check" size={12} className="inline-block align-middle" /> 뒤 날짜 = 제출일 · 날짜 없이 완료 = 제출일 미기록 · ▶ = 영상 재생 · 초록 테두리 = 영상으로 자동 완료(반이 확인된 영상만 자동으로 셉니다) · × 미수행 · 미확인 = 숙제가 나갔는데 아직 확인 전. 미확인 칸을 누르면 오늘 날짜로 완료됩니다.</p>
+      칸 위 날짜 = 숙제가 나간 날 · <EyIcon name="check" size={12} className="inline-block align-middle" /> 뒤 날짜 = 제출일 · 날짜 없이 완료 = 제출일 미기록 · ▶ = 영상 재생 · 초록 테두리 = 영상으로 자동 완료(반이 확인된 영상만 자동으로 셉니다) · × 미수행 · 미확인 = 숙제가 나갔는데 아직 확인 전. 미확인 칸을 누르면 오늘 날짜로 완료됩니다. 칸이나 ▶를 우클릭하면 저장하지 않고 편집 창(영상 배정 변경 · 미확인 등)이 열립니다(영상 없는 따로 낸 숙제 칸은 출제 취소 메뉴).</p>
     {byTeacher ? <p className={styles.hint}>강사를 고르면 그 강사가 낸 숙제 칸만 셉니다(그 강사의 강사뷰와 같은 칸) — 숙제를 낸 사람을 모르는 옛 기록은 &lsquo;전체 강사&rsquo;에서만 보입니다.</p> : null}
     {progress ? <p className={styles.saving} role="status">기록 저장 중 {progress.done} / {progress.total}건</p> : null}
     {visibleGroups.length ? visibleGroups.map((group) => <ClassLedger key={`${group.classId}:${filterKey}`} group={group} rounds={rounds} blankFacts={blankFacts} videosKnown={videosKnown} showTeacher={showTeacher} today={today} busy={busy} save={save} onEdit={setActive} onPlay={setPlaying} onAssign={(row) => setAssigning({ row })} onIssueMenu={setMenu}

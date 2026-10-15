@@ -18,15 +18,16 @@ const pointOf = (event: MouseEvent<HTMLElement>) => {
   const box = event.currentTarget.getBoundingClientRect();
   return { x: box.left, y: box.bottom };
 };
-/** 완료 칸의 별도 재생 버튼. 수동은 누를 수 없는 표시다. */
-function SourceMark({ row, round, videosKnown, onPlay }: { row: VideoHomeworkLedgerRow; round: LedgerRound; videosKnown: boolean; onPlay: () => void }) {
+/** 완료 칸의 별도 재생 버튼. 수동은 누를 수 없는 표시다. 우클릭은 칸과 같이 편집 창(`onEditor` — 영상 칸을 ▶ 위에서 우클릭하는 일이 많다). */
+function SourceMark({ row, round, videosKnown, onPlay, onEditor }: { row: VideoHomeworkLedgerRow; round: LedgerRound; videosKnown: boolean; onPlay: () => void;
+  onEditor?: (event: MouseEvent<HTMLElement>) => void }) {
   const source = roundSource(round);
   // 🔴 영상 도착 기록을 못 읽었으면 영상 유무를 모른다 — 그때 '수동'은 거짓일 수 있어 띄우지 않는다.
   if (source === "manual") return videosKnown ? <span className={styles.manualTag} title="영상 없이 직접 찍은 완료(이 반으로 분류된 영상이 짝지어지지 않음)">수동</span> : null;
   if (source !== "video" || !round.videoId) return null;
   return <span className={styles.videoLink}>
     <button type="button" title={`${row.studentName} 숙제 영상 재생${round.auto ? " · 영상으로 자동 완료" : ""}`} aria-label="숙제 영상 보기"
-      onClick={(event) => { event.stopPropagation(); onPlay(); }}>
+      onClick={(event) => { event.stopPropagation(); onPlay(); }} onContextMenu={onEditor}>
       <EyIcon name="play" size={17} aria-hidden />
     </button>
   </span>;
@@ -48,9 +49,14 @@ export function BlankRoundCell({ blank, onMenu }: { blank: BlankCell | undefined
     onClick={open} onContextMenu={open}>{body}</button></td>;
 }
 
-export function RoundCell({ row, round, blank, number, busy, videosKnown = true, onOpen, onPlay, onMenu }: {
+export function RoundCell({ row, round, blank, number, busy, videosKnown = true, onOpen, onEditor, onPlay, onMenu }: {
   row: VideoHomeworkLedgerRow; round: LedgerRound | undefined; blank?: BlankCell; number: number; busy: boolean; videosKnown?: boolean;
   onOpen: (round: LedgerRound) => void; onPlay: (round: LedgerRound) => void;
+  /**
+   * 우클릭 = 칸 편집 창(원장 2026-10-15 — 영상이 붙은 칸을 우클릭해 배정을 찾았다). 누르기와 달리 **저장하지 않는다**(미확인 칸을 누르면
+   * 오늘로 완료가 찍히지만 우클릭은 창만 연다). 따로 낸 숙제의 '출제 취소' 메뉴가 서는 칸은 그 메뉴가 먼저다.
+   */
+  onEditor?: (round: LedgerRound) => void;
   /** 고칠 수 있는 줄에서만 준다 — 숙제없음 칸의 '숙제 출제' · 따로 낸 숙제 칸의 '출제 취소'. */
   onMenu?: OpenIssueMenu;
 }) {
@@ -60,6 +66,7 @@ export function RoundCell({ row, round, blank, number, busy, videosKnown = true,
   // 보고서 없이 따로 낸 숙제 — 점선으로 가르고, 영상이 붙지 않은 미확인·미수행 칸은 우클릭으로 거둘 수 있다(직접 찍은 기록이 있으면 서버가 거절한다).
   const extra = !!round.homeworkDate && !!row.extraDates?.includes(round.homeworkDate);
   const cancellable = extra && !!onMenu && round.status !== "submitted" && !round.videoId;
+  const openEditor = onEditor ? (event: MouseEvent<HTMLElement>) => { event.preventDefault(); if (!busy) onEditor(round); } : undefined;
   const tip = [roundDateText(round), label,
     round.submittedDate ? `제출 ${round.submittedDate}` : round.status === "submitted" ? "제출일이 기록되지 않은 완료" : null,
     round.videoDate ? `연결된 영상 게시일 ${round.videoDate}` : null,
@@ -68,12 +75,12 @@ export function RoundCell({ row, round, blank, number, busy, videosKnown = true,
   return <td><div className={styles.cellWrap} data-source={source === "manual" && !videosKnown ? undefined : source ?? undefined}>
     <button type="button" className={`${styles.mark} ${styles[round.status]} ${round.auto ? styles.auto : ""}`} disabled={busy} data-extra={extra || undefined}
       aria-label={`${row.studentName} ${number}회 ${round.homeworkDate ?? round.date} ${label}${extra ? " · 따로 낸 숙제" : ""}`} title={tip} onClick={() => onOpen(round)}
-      onContextMenu={cancellable ? (event) => { event.preventDefault(); onMenu("cancel", round.homeworkDate!, pointOf(event)); } : undefined}>
+      onContextMenu={cancellable ? (event) => { event.preventDefault(); onMenu("cancel", round.homeworkDate!, pointOf(event)); } : openEditor}>
       <small className={styles.markDate}>{shortDate(round.date)}</small>
       <span className={styles.markStatus}>{round.status === "submitted"
         ? <><EyIcon name="check" size={12} aria-hidden /><span>{round.submittedDate ? shortDate(round.submittedDate) : "완료"}</span></>
         : round.status === "missing" ? "× 미수행" : "미확인"}</span>
     </button>
-    <SourceMark row={row} round={round} videosKnown={videosKnown} onPlay={() => onPlay(round)} />
+    <SourceMark row={row} round={round} videosKnown={videosKnown} onPlay={() => onPlay(round)} onEditor={openEditor} />
   </div></td>;
 }
