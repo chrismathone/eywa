@@ -2732,8 +2732,9 @@ export function OneScreenClient({
         draft: text,
         // 작성 방식 스냅샷(0214a) — AI 성공분·템플릿 폴백 모두 "자동이 넣은 텍스트". 저장 시 draft와 비교.
         autoDraft: text,
-        // 추세는 생성 성공 시에만 갱신(표본 부족·실패면 기존 초안·수동 입력 보존).
-        ...(res.ok && res.trend ? { trendDraft: res.trend } : {}),
+        // 추세는 생성 성공 시에만 갱신(표본 부족·실패면 기존 초안·수동 입력 보존). 만들었지만 검사에 걸려 버렸으면 비운다
+        // (예전 초안이 그대로 나가지 않게 — 2026-10-15).
+        ...(res.ok && res.trend ? { trendDraft: res.trend } : res.ok && res.trendDropped ? { trendDraft: "" } : {}),
       }));
     } catch {
       const fallback = buildSubjectReport(student, idx);

@@ -11,7 +11,8 @@ import { effectiveTeacherId, readonlyTeacherViewError } from "@/lib/auth/view-mo
 import { addDays, kstToday, resolveReportDate } from "@/lib/date-kst";
 import { generateJSON } from "@/lib/ai/generate";
 import { commentBody, commentP1Body, commentP2Body, type ReportCommentInput } from "../report-comment";
-import { buildTrendInput, findImpossibleScaleSpans, trendBody } from "../trend-comment";
+import { buildTrendInput, findImpossibleScaleSpans, findTrendViolations, trendBody } from "../trend-comment";
+import { resolveReportClassId } from "@/features/report-admin/server/resolve-class";
 import {
   assembleCombined,
   commentStyleDirective,
@@ -1386,11 +1387,21 @@ export async function generateReportComment(
   input: ReportCommentInput,
   // classId = 이 행의 반. 정규/특강 분리(2026-07-23 원장 지시)에 쓴다 — 특강 보고서면 그 반 기록만,
   // 정규면 특강 기록을 제외한다. 미지정이면 기존 동작(안 가름).
-  trendCtx?: { studentId?: string; subject?: string; classId?: string | null; todayExamInfo?: string; todayHomework?: string; date?: string },
+  // resolveClass = 반을 모르는 화면(보고서 관리 > 직접 작성)이 넘긴다 — 저장과 같은 규칙(resolveReportClassId, 모호하면 null)으로
+  // 반을 정해 **시험은 그 반 기록만** 쓴다(원장 2026-10-15). 저장된 보고서엔 반이 붙는데 추세만 반을 모르면 문장과 그래프가 갈린다.
+  trendCtx?: {
+    studentId?: string;
+    subject?: string;
+    classId?: string | null;
+    todayExamInfo?: string;
+    todayHomework?: string;
+    date?: string;
+    resolveClass?: { teacherName?: string | null };
+  },
   // teacherStyle=false: 사무실 대리작성(보고서 관리 > 직접 작성)이 넘긴다 — 그 멘트는 **다른 강사 이름**으로 나가는 보고서라 호출자의
   // 말투 프로파일(0262a)을 붙이면 안 된다. 스코프 판정(effectiveTeacherId)만으론 겸직 관리자가 강사뷰 쿠키를 켠 채 그 화면을 열면 새므로(재리뷰).
   opts?: { teacherStyle?: boolean },
-): Promise<{ ok: boolean; comment?: string; trend?: string; error?: string }> {
+): Promise<{ ok: boolean; comment?: string; trend?: string; trendDropped?: boolean; error?: string }> {
   const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   // '다른 강사 뷰'(열람 전용) 차단 — DB 미변경이지만 AI 호출(비용)이라 열람에서 못 누르게 한다.
@@ -1479,17 +1490,29 @@ ${style}` : body) });
       const skipTrend =
         anchorDate < kstToday() && (await hasLaterScoredReport(supabase, trendCtx.studentId, trendCtx.subject, anchorDate));
       if (!skipTrend) {
-        const specialClassIds = await fetchSpecialClassIds(supabase);
+        const [specialClassIds, resolvedClassId] = await Promise.all([
+          fetchSpecialClassIds(supabase),
+          trendCtx.classId === undefined && trendCtx.resolveClass && trendCtx.subject
+            ? resolveReportClassId(supabase, {
+                studentId: trendCtx.studentId,
+                reportDate: anchorDate,
+                subject: trendCtx.subject,
+                teacherName: trendCtx.resolveClass.teacherName ?? null,
+              })
+            : Promise.resolve(undefined),
+        ]);
+        const trendClassId = trendCtx.classId !== undefined ? trendCtx.classId : (resolvedClassId ?? undefined);
         const history = await fetchScoreHistory(supabase, trendCtx.studentId, trendCtx.subject, anchorDate, 30, {
-          classId: trendCtx.classId,
+          classId: trendClassId,
           specialClassIds,
         });
         history.push({
           date: anchorDate,
           examInfo: trendCtx.todayExamInfo?.trim() || null,
           homeworkScore: trendCtx.todayHomework?.trim() || null,
+          classId: trendClassId ?? null,
         });
-        const ti = buildTrendInput(history);
+        const ti = buildTrendInput(history, { today: anchorDate });
         if (ti) {
           const ttpl = await loadActivePrompt(supabase, user.tenantId, "trend");
           sections.push({ type: "trend", field: "trend", body: trendBody(ti, ttpl) });
@@ -1519,20 +1542,27 @@ ${style}` : body) });
     //    **사실일 수 없는 표기**가 실제로 학부모에게 나갔다. 프롬프트 주의 문구가 이미 있었는데도 뚫렸으므로
     //    생성 뒤에도 한 번 더 본다. 걸리면 **추세를 아예 안 실는다** — 없는 것보다 거짓이 나쁘다.
     //    (추세는 선택 항목이라 빠져도 보고서는 성립한다. 멘트는 그대로 살린다.)
+    // 🔴 2026-10-15 추가: 기록에 있을 수 없는 문장(계획 "~겠습니다" · 원인 "집중력" · 원색 표현 · 전망 · "비교하기 어렵지만" 같은
+    //    내부 사정)도 같은 자리에서 거른다 — 프롬프트 예시 한 줄이 30일 90건 그대로 나갔다(권민서A 클레임). trend-comment.ts 참조.
     const rawTrend = hasTrend ? pick("trend") || undefined : undefined;
     const badSpans = rawTrend ? findImpossibleScaleSpans(rawTrend) : [];
-    if (badSpans.length)
+    const violations = rawTrend ? findTrendViolations(rawTrend) : [];
+    if (badSpans.length || violations.length)
       console.warn(
         JSON.stringify({
           level: "warn",
           scope: "generateReportComment.trend",
-          reason: "impossible_scale_span",
+          reason: badSpans.length ? "impossible_scale_span" : "banned_phrase",
           spans: badSpans,
-          message: "추세 문장에 사실일 수 없는 척도 표기가 있어 저장하지 않음",
+          violations,
+          message: "추세 문장에 기록에 없는 내용·사실일 수 없는 표기가 있어 저장하지 않음",
         }),
       );
-    const trend = badSpans.length ? undefined : rawTrend;
-    return { ok: true, comment, trend };
+    const dropped = badSpans.length > 0 || violations.length > 0;
+    const trend = dropped ? undefined : rawTrend;
+    // trendDropped = 이번에 만든 추세를 버렸다 — 화면은 추세 칸을 비운다(안 비우면 예전 초안이 그대로 발송된다, 적대적 리뷰 2026-10-15).
+    //    표본 부족(추세를 아예 안 만듦)은 종전대로 기존 초안·손 입력을 둔다.
+    return { ok: true, comment, trend, ...(dropped ? { trendDropped: true } : {}) };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "AI 생성 실패" };
   }

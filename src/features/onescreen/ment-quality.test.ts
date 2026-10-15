@@ -95,13 +95,19 @@ describe("출력 계약 — 줄바꿈 허용하되 JSON은 깨지지 않게", ()
 describe("추세 — 척도 혼합 감지", () => {
   const row = (date: string, examInfo: string | null) => ({ date, examInfo, homeworkScore: null });
   it("만점이 같으면 혼합 아님", () => {
-    const i = buildTrendInput([row("2026-07-01", "일일 6/10"), row("2026-07-08", "일일 8/10")])!;
+    const i = buildTrendInput([row("2026-07-01", "일일 6/10"), row("2026-07-08", "일일 8/10"), row("2026-07-15", "일일 9/10")])!;
     expect(i.scaleMixed).toBe(false);
     expect(trendBody(i)).not.toContain(TREND_MIXED_SCALE_NOTE);
   });
-  it("🔴 만점이 다르면 혼합 — 증감 서술을 막는 주의가 붙는다", () => {
+  it("🔴 회차마다 만점이 다르면 **입력에서 뺀다**(2026-10-15) — 증감을 이을 재료 자체가 없다", () => {
     // 실사례(이수진/곽경찬 07-27): "100점 만점에 56점 … 9문제 중 7개, 68점으로 내려갔습니다"
-    const i = buildTrendInput([row("2026-06-29", "일일 56/100"), row("2026-07-05", "일일 7/9")])!;
+    // 예전엔 둘 다 넘기고 주의를 붙였는데 "만점이 달라 직접 비교하기는 어렵지만"이 30일 261건 나갔다.
+    const i = buildTrendInput([row("2026-06-22", "일일 50/100"), row("2026-06-29", "일일 56/100"), row("2026-07-05", "일일 7/9"), row("2026-07-12", "일일 6/9")]);
+    // 같은 만점이 2회씩뿐이라 시험 줄이 없고, 과제 기록도 없으니 추세 자체가 없다(없는 것보다 거짓이 나쁘다).
+    expect(i).toBeNull();
+  });
+  it("🔴 한 회차에 만점이 다른 시험이 둘이면 혼합 — 증감 서술을 막는 주의가 붙는다", () => {
+    const i = buildTrendInput([row("2026-07-01", "일일 4/5, 확인 8/10"), row("2026-07-08", "일일 5/5, 확인 7/10"), row("2026-07-15", "일일 3/5, 확인 9/10")])!;
     expect(i.scaleMixed).toBe(true);
     expect(trendBody(i)).toContain(TREND_MIXED_SCALE_NOTE);
     expect(TREND_MIXED_SCALE_NOTE).toContain("만점이 다릅니다");
@@ -112,7 +118,7 @@ describe("추세 — 척도 혼합 감지", () => {
     expect(examScales("이름 없는 기록")).toEqual([]);
   });
   it("분모를 못 읽으면 혼합으로 단정하지 않는다", () => {
-    const i = buildTrendInput([row("2026-07-01", "잘함"), row("2026-07-08", "보통")])!;
+    const i = buildTrendInput([row("2026-07-01", "잘함"), row("2026-07-08", "보통"), row("2026-07-15", "잘함")])!;
     expect(i.scaleMixed).toBe(false);
   });
 });

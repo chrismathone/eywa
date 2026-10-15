@@ -4,6 +4,8 @@ import {
   assembleSingle,
   assembleCombined,
   DEFAULT_PROMPTS,
+  TONE_RULES,
+  CROSS_SECTION_RULES,
   promptUsedInModes,
   isPromptInUse,
 } from "./prompt-defaults";
@@ -48,6 +50,33 @@ describe("assembleCombined", () => {
       { type: "trend", field: "trend", body: "T" },
     ]);
     expect(p).toContain('{"p1": "...", "p2": "...", "trend": "..."}');
+  });
+});
+
+// 원장 2026-10-15 "말투도 좀 더 부드럽게. ai스럽지않게. 중복되는 내용 넣지않게" — 원장이 본문을 고쳐도 남도록 코드가 붙인다.
+describe("말투 바닥 · 항목 간 되풀이 금지(코드가 붙임)", () => {
+  it("단일·통합 조립 모두 말투 바닥이 붙는다", () => {
+    expect(assembleSingle("본문", "comment")).toContain(TONE_RULES);
+    expect(assembleSingle("본문", "trend")).toContain(TONE_RULES);
+    expect(assembleCombined([{ type: "comment", field: "comment", body: "멘트" }])).toContain(TONE_RULES);
+  });
+  it("학습 추세가 함께 있을 때만 항목 간 되풀이 금지가 붙는다", () => {
+    expect(
+      assembleCombined([
+        { type: "comment", field: "comment", body: "멘트" },
+        { type: "trend", field: "trend", body: "추세" },
+      ]),
+    ).toContain(CROSS_SECTION_RULES);
+    expect(assembleCombined([{ type: "comment", field: "comment", body: "멘트" }])).not.toContain(CROSS_SECTION_RULES);
+  });
+  it("보고서 말투를 이름으로 막는다 · 문장 끝은 강제하지 않는다(선생님 말투 지침이 정한다)", () => {
+    expect(TONE_RULES).toContain("모습을 보였습니다");
+    expect(TONE_RULES).toContain("말투 지침이 있으면 그것을");
+  });
+  it("🔴 추세 예시가 실데이터(권민서A 4/5·5/5·1/5) 모양이 아니고, 학원 계획 문장이 없다", () => {
+    expect(DEFAULT_PROMPTS.trend).not.toContain("1/5");
+    expect(DEFAULT_PROMPTS.trend).not.toContain("챙겨 보려");
+    expect(DEFAULT_PROMPTS.comment).not.toContain("무리 없이 따라왔");
   });
 });
 

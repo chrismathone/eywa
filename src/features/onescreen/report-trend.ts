@@ -12,6 +12,8 @@ export type TrendReportRow = {
   date: string; // YYYY-MM-DD
   examInfo: string | null; // "4/5" | "9/10" | "80점" | "20문제 중 18개" | null
   homeworkScore: string | null; // "100%" | "90" | "완료" | null
+  classId?: string | null; // 그 보고서의 반 — 시험 점은 이 보고서 반의 기록만(keepExamOfClass)
+  makeupClassId?: string | null; // 보강 행(반 없음)의 보강 반 — 반 판정에 함께 쓴다
 };
 
 /** 그래프 점 1개 — 날짜 + 시험/과제 백분율(없으면 null) + 현재 보고서 여부(강조점). */
