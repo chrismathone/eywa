@@ -102,8 +102,9 @@ export function usePlanHandlers({
   const tf = useSheetTf();
   const lang = useSheetLang();
   const feedback = useSheetFeedback();
-  return useMemo(
-    () => ({
+  return useMemo(() => {
+    let shiftBusy = false;
+    return {
       editCell: (lineId, field, value) => store.edit(lineId, field, value),
       resolveConflict: (saveKey, choice) => store.resolveConflict(saveKey, choice),
       addLine: (planDate, slotStart, termMode, skillArea) => {
@@ -171,24 +172,40 @@ export function usePlanHandlers({
         ? (planDate, slotStart) => api.comparePlan!({ classId, planDate, slotStart })
         : undefined,
       /**
-       * **회차 미루기·당기기**(원장 2026-09-22) — 계획이 파생값이라 표식 한 줄이 앞으로를 통째로 바꾼다.
-       * 🔴 **실제 줄은 안 건드린다** — 이미 적은 진도는 그대로다. 그래서 되돌리기도 같은 버튼 한 번이다.
-       * ⚠️ 화면 갱신은 서버 액션의 `revalidatePath`가 한다(계획은 서버가 계산해 내려보내는 값이다).
+       * **회차 미룸·당김**(원장 2026-09-22 → 2026-10-15 *"미루는 거기 복사하고 한주씩 쭉 밀기"*) — 서버가
+       * 같은 요일·교시의 **실제 진도**를 한 주씩 민다/당긴다. 누를 때마다 한 주(토글 아님).
+       * ⚠️ **반영 전 flush 필수** — 옮기기가 그 칸들의 행을 새로 만들므로, 큐에 남은 입력이 있으면 옮겨 가기
+       *    전 값이 옮겨지고 뒤늦은 저장은 지워진 행에 부딪힌다(copySlot과 같은 계약).
+       * 🔑 누른 칸만 즉시 갈아 끼운다(당김이면 바뀐다) — 다른 주는 그 주를 열 때 서버가 준다.
        */
       setShift: api.setShift
         ? (planDate, slotStart, kind) => {
             const call = api.setShift;
-            if (!call) return;
-            void call({ classId, planDate, slotStart }, kind).then((r) => {
-              if (!r.ok) return toast.error(feedback(r.error));
-              toast.success(
-                kind === "skip"
-                  ? t("plan.feedback.shiftSkip")
-                  : kind === "advance"
-                    ? t("plan.feedback.shiftAdvance")
-                    : t("month.shift.clear.done"),
-              );
-            });
+            if (!call || shiftBusy) return; // 연타로 두 번 밀리지 않게
+            shiftBusy = true;
+            void Promise.all([store.flush(), flushHost?.() ?? Promise.resolve()])
+              .then(([flushed]) => {
+                if (!flushed.ok && !window.confirm(t("today.copy.unsaved"))) return;
+                return call({ classId, planDate, slotStart }, kind).then((r) => {
+                  if (!r.ok) return void toast.error(feedback(r.error));
+                  if (r.lines) {
+                    onSlotLines(planDate, slotStart, r.lines);
+                    seedPlanLines(store, r.lines);
+                  }
+                  toast.success(
+                    kind === null
+                      ? t("month.shift.clear.done")
+                      : r.moved === 0
+                        ? t("plan.feedback.shiftMarkOnly")
+                        : kind === "skip"
+                          ? t("plan.feedback.shiftSkip")
+                          : t("plan.feedback.shiftAdvance"),
+                  );
+                });
+              })
+              .finally(() => {
+                shiftBusy = false;
+              });
           }
         : undefined,
       removeLine: (lineId, planDate, slotStart) => {
@@ -203,7 +220,6 @@ export function usePlanHandlers({
           onSlotLines(planDate, slotStart, r.lines);
         });
       },
-    }),
-    [api, store, classId, feedback, onSlotLines, flushHost, t, onCarried, tf, lang],
-  );
+    };
+  }, [api, store, classId, feedback, onSlotLines, flushHost, t, onCarried, tf, lang]);
 }

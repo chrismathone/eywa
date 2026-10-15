@@ -1,7 +1,7 @@
 "use client";
 
 import { useSheetFeedback } from "@/features/teacher-view/lang-context";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useEmbed, withEmbed } from "@/components/workspace/embed-context";
@@ -166,26 +166,34 @@ export function MonthClient({
   const t = useSheetT();
 
   /**
-   * 회차 미루기·당기기(0282a) — 계획이 파생값이라 표식 한 줄이 앞으로 전부를 바꾼다.
-   * 🔴 **실제 줄은 안 건드린다**(이미 적은 진도는 그대로) → 눌러도 잃을 게 없고 같은 버튼으로 되돌린다.
-   * ⚠️ 화면 갱신은 액션의 `revalidatePath`가 한다 — 계획은 서버가 계산해 내려보내는 값이다.
+   * 회차 미룸·당김 — 같은 요일·교시의 **실제 진도**가 한 주씩 밀리거나 당겨진다(2026-10-15, `setLessonShift`).
+   * 누를 때마다 한 주(토글 아님) · 연타는 `shiftBusy`로 막는다. 화면은 `router.refresh()`로 다시 받는다.
    */
+  const shiftBusy = useRef(false);
   const onShift = useCallback(
     (date: string, slotStart: string, kind: "skip" | "advance" | null) => {
-      void setLessonShift({ classId: data.classId, date, slotStart, kind }).then((r) => {
-        if (!r.ok) {
-          toast.error(feedback(r.error));
-          return;
-        }
-        toast.success(
-          kind === "skip"
-            ? t("month.shift.skip.done")
-            : kind === "advance"
-              ? t("month.shift.advance.done")
-              : t("month.shift.clear.done"),
-        );
-        router.refresh();
-      });
+      if (shiftBusy.current) return;
+      shiftBusy.current = true;
+      void setLessonShift({ classId: data.classId, date, slotStart, kind })
+        .then((r) => {
+          if (!r.ok) {
+            toast.error(feedback(r.error));
+            return;
+          }
+          toast.success(
+            kind === null
+              ? t("month.shift.clear.done")
+              : r.moved === 0
+                ? t("plan.feedback.shiftMarkOnly")
+                : kind === "skip"
+                  ? t("month.shift.skip.done")
+                  : t("month.shift.advance.done"),
+          );
+          router.refresh();
+        })
+        .finally(() => {
+          shiftBusy.current = false;
+        });
     },
     [data.classId, feedback, router, t],
   );

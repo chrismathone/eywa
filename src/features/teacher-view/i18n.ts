@@ -132,8 +132,9 @@ export const SHEET_DICT = {
   "plan.feedback.makeupRemoved": { ko: "보강 명단에서 뺐습니다", en: "Removed from the makeup roster." },
   "plan.feedback.notSaved": { ko: "{error} — 저장되지 않았습니다", en: "{error} — Not saved." },
   "plan.feedback.notSavedRefresh": { ko: "{error} — 저장되지 않았습니다(새로고침하면 이전 값으로 돌아갑니다)", en: "{error} — Not saved. Refreshing restores the previous value." },
-  "plan.feedback.shiftSkip": { ko: "이 회차를 미뤘습니다 — 이 칸은 계획 없이 직접 적고, 다음 수업일부터 차수가 이어집니다", en: "Lesson postponed. Fill this period manually; the planned sequence resumes next class day." },
-  "plan.feedback.shiftAdvance": { ko: "이 회차를 당겼습니다 — 이 칸엔 다음 차수가 옵니다", en: "Lesson advanced. The next planned lesson now appears in this period." },
+  "plan.feedback.shiftSkip": { ko: "한 주 미뤘습니다 — 이 칸 내용은 그대로 두고, 다음 주부터 진도가 한 주씩 밀렸습니다", en: "Pushed a week — this cell stays; later lessons each moved one week later." },
+  "plan.feedback.shiftMarkOnly": { ko: "아직 가져온 진도가 없어 월간계획 일정만 한 주 옮겼습니다 — 가져오기를 하면 반영됩니다", en: "No lessons written yet — only the plan schedule moved a week; it applies when you import." },
+  "plan.feedback.shiftAdvance": { ko: "한 주 당겼습니다 — 다음 주 진도가 이 칸으로 오고, 뒤 진도가 한 주씩 당겨졌습니다", en: "Pulled a week — next week's lesson is here now; later lessons each moved one week earlier." },
   "plan.feedback.shiftClear": { ko: "회차 표식을 지웠습니다 — 원래 차수로 돌아갑니다", en: "Lesson adjustment removed. The original sequence is restored." },
   "plan.holidayHint": { ko: "{holiday} — 휴일이지만 수업했다면 그대로 쓰실 수 있습니다", en: "{holiday} — a holiday. You can still enter records if you taught." },
   "plan.panel.homeroom.month": { ko: "담임 월간계획", en: "Homeroom monthly plan" },
@@ -635,13 +636,13 @@ export const SHEET_DICT = {
   //    달력 칸에만 뒀더니 정작 사람이 서 있는 자리에 없었다. 지난 날짜에도 막지 않는다(뒤늦게 미루는 게 정상).
   "plan.shift.skip": { ko: "한 주 미룸", en: "Push a week" },
   "plan.shift.skip.title": {
-    ko: "이 교시의 일정을 미룹니다 — 원래 월간계획은 그대로 두고, 가져올 차수만 다음 수업일부터 한 칸씩 밀립니다(이 칸은 직접 적습니다). 이미 적은 줄은 그대로 둡니다. 다시 누르면 되돌립니다.",
-    en: "Pushes this period's schedule — the original monthly plan stays; only the lessons to import slide one slot later (write this cell yourself). Written rows are left alone. Press again to undo.",
+    ko: "이 칸 내용을 다음 주로 복사하고, 그 뒤 진도를 전부 한 주씩 밉니다(같은 요일·교시). 이 칸은 실제 한 수업으로 고쳐 적으세요. 되돌리려면 '한 주 당김'.",
+    en: "Copies this cell to next week and pushes every later lesson one week (same weekday and period). Edit this cell to what you actually taught. To undo, press Pull a week.",
   },
   "plan.shift.advance": { ko: "한 주 당김", en: "Pull a week" },
   "plan.shift.advance.title": {
-    ko: "이 교시의 일정을 당깁니다 — 원래 월간계획은 그대로 두고, 이 칸에 가져올 차수가 다음 차수가 됩니다. 이미 적은 줄은 그대로 둡니다. 다시 누르면 되돌립니다.",
-    en: "Pulls this period's schedule — the original monthly plan stays; the next lesson becomes the one to import here. Written rows are left alone. Press again to undo.",
+    ko: "다음 주 진도를 이 칸으로 당기고, 그 뒤 진도를 전부 한 주씩 당깁니다(같은 요일·교시). 이 칸에 적힌 내용은 지워집니다. 되돌리려면 '한 주 미룸'.",
+    en: "Pulls next week's lesson into this cell and every later lesson one week earlier (same weekday and period). This cell's rows are replaced. To undo, press Push a week.",
   },
   // 계획 비교(원장 2026-09-28) — 이 칸의 **원래 월간계획 ↔ 실제**를 모달로 견준다(읽기 전용).
   //  🔴 옛 '월간계획 가져오기'(교시 한 칸)는 없앴다 — 가져오기는 월간 화면의 전체 가져오기 하나뿐이다.
@@ -1076,23 +1077,23 @@ export const SHEET_DICT = {
   // 월간계획(교재 배정에서 계산) — 아직 안 쓴 칸에만 무채색으로 뜨는 표식.
   // 회차 미루기·당기기(0282a, 원장 2026-09-22) — 계획 축의 결정이라 달력 칸에 단다.
   "month.shift.skip.done": {
-    ko: "일정을 미뤘습니다 — 원래 월간계획은 그대로이고, 가져올 차수가 다음 수업일부터 이어집니다",
-    en: "Pushed — the original plan stays; lessons to import resume next class day",
+    ko: "한 주 미뤘습니다 — 이 칸은 그대로 두고, 뒤 진도가 한 주씩 밀렸습니다",
+    en: "Pushed a week — this cell stays; later lessons moved one week later",
   },
   "month.shift.advance.done": {
-    ko: "일정을 당겼습니다 — 원래 월간계획은 그대로이고, 이 칸엔 다음 차수를 가져옵니다",
-    en: "Pulled — the original plan stays; the next lesson is imported here",
+    ko: "한 주 당겼습니다 — 다음 주 진도가 이 칸으로 오고, 뒤 진도가 한 주씩 당겨졌습니다",
+    en: "Pulled a week — next week's lesson is here; later lessons moved one week earlier",
   },
   "month.shift.clear.done": { ko: "회차 표식을 지웠습니다 — 원래 차수로 돌아갑니다", en: "Cleared — the original lesson order is back" },
   "month.shift.skip": { ko: "미룸", en: "Push" },
   "month.shift.skip.title": {
-    ko: "이 교시의 일정을 한 칸 미룹니다 — 원래 월간계획(아래 '계획')은 그대로 두고, 가져올 차수만 다음 수업일로 밀립니다. 다시 누르면 되돌립니다.",
-    en: "Pushes this period's schedule one slot — the original plan below stays; only the lessons to import slide to the next class day. Press again to undo.",
+    ko: "이 칸 내용을 다음 주로 복사하고, 그 뒤 진도를 전부 한 주씩 밉니다(같은 요일·교시). 되돌리려면 '당김'.",
+    en: "Copies this cell to next week and pushes every later lesson one week (same weekday and period). To undo, press Pull.",
   },
   "month.shift.advance": { ko: "당김", en: "Pull" },
   "month.shift.advance.title": {
-    ko: "이 교시의 일정을 한 칸 당깁니다 — 원래 월간계획은 그대로 두고, 이 칸엔 다음 차수를 가져옵니다. 다시 누르면 되돌립니다.",
-    en: "Pulls this period's schedule one slot — the original plan stays; the next lesson is imported here. Press again to undo.",
+    ko: "다음 주 진도를 이 칸으로 당기고, 그 뒤 진도를 전부 한 주씩 당깁니다(같은 요일·교시). 이 칸에 적힌 내용은 지워집니다. 되돌리려면 '미룸'.",
+    en: "Pulls next week's lesson into this cell and every later lesson one week earlier (same weekday and period). This cell's rows are replaced. To undo, press Push.",
   },
   // 월간계획 전체 가져오기(원장 2026-09-28) — 이 기간의 일정(미루기 반영)을 실제 빈 칸에 한 번에 넣는다.
   "month.importAll": { ko: "월간계획 전체 가져오기", en: "Import whole plan" },

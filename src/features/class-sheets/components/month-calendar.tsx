@@ -238,8 +238,6 @@ function DayCell({
         // 월간계획(교재 배정에서 계산) — 아직 실제가 없는 칸에만 쓴다(아래).
         const cellKey = slotKey(date, slot.slotStart);
         const planned = data.plannedBySlot[cellKey] ?? [];
-        // 회차 미루기·당기기(0282a) — 표식이 걸린 칸은 계획이 비거나(미루기) 다음 차수가 온다(당기기).
-        const shift = data.shiftBySlot[cellKey] ?? null;
         // 🔑 원래 계획 ↔ 실제 판정(원장 2026-09-28) — 칩에 판정을 적어 **열지 않아도** 보이게 한다.
         //    평시 줄만 견준다(배정은 평시 축뿐). 판정은 plan-compare 단일 소스(현황 페이지와 같은 답).
         const verdict =
@@ -287,33 +285,31 @@ function DayCell({
                       `계획` 표식을 달아 보여 준다. 실제가 한 줄이라도 있으면 안 그린다(이미 한 수업이다).
                       강사는 월간 화면의 [월간계획 전체 가져오기]로 이걸(일정) 옮긴 뒤 고쳐 쓴다. */}
                   {/* 🔴 **회차 미루기·당기기**(원장 2026-09-22 *"수업 회차를 한주 미루거나 당기거나 …
-                      미루면 차수 무시하고 수업내용 기입해서"*) — 계획이 파생값이라 이 표식 한 줄이 앞으로를
-                      통째로 바꾼다. **실제 줄은 안 건드린다**(이미 적은 진도는 그대로) → 눌러도 잃을 게 없고
-                      같은 버튼으로 되돌린다.
+                      미루면 차수 무시하고 수업내용 기입해서"*) → 2026-10-15 *"미루는 거기 복사하고 한주씩 쭉
+                      밀기"*: 같은 요일·교시의 **실제 진도**가 한 주씩 밀리거나 당겨진다(`setLessonShift`).
+                      🔴 **토글이 아니다** — 두 번 누르면 두 주 밀린다. 되돌리기는 반대 버튼이다.
                       ⚠️ **지난 날짜에도 세운다** — "지난주에 못 나갔다"를 뒤늦게 미루는 게 정상 흐름이다
                          (원장 제보 2026-09-22에서 9/4 칸을 보고 계셨다). 바뀌는 건 앞으로의 차수 배치뿐이다. */}
                   {onShift && data.canEdit ? (
                     <div className="flex flex-wrap gap-1">
                       {(["skip", "advance"] as const).map((kind) => {
-                        const on = shift === kind;
                         return (
                           <span
                             key={kind}
                             role="button"
                             tabIndex={0}
-                            aria-pressed={on}
                             title={t(kind === "skip" ? "month.shift.skip.title" : "month.shift.advance.title")}
                             // 날짜 칸은 이미 native button이다. 중첩 button은 SSR 파서를 깨뜨려
                             // 달력 조각이 셸 밖에 남으므로 내부 조작은 PlanCompareButton과 같은 형태로 둔다.
                             onClick={(e) => {
                               e.stopPropagation();
-                              onShift(date, slot.slotStart, on ? null : kind);
+                              onShift(date, slot.slotStart, kind);
                             }}
                             onKeyDown={(e) => {
                               if (e.key === "Enter" || e.key === " ") {
                                 e.stopPropagation();
                                 e.preventDefault();
-                                if (!e.repeat) onShift(date, slot.slotStart, on ? null : kind);
+                                if (!e.repeat) onShift(date, slot.slotStart, kind);
                               }
                             }}
                             onKeyUp={(e) => {
@@ -322,11 +318,7 @@ function DayCell({
                                 e.preventDefault();
                               }
                             }}
-                            className={`cursor-pointer rounded-full border px-1.5 text-xs font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
-                              on
-                                ? "border-primary bg-primary text-primary-foreground"
-                                : "border-line text-text-faint hover:border-primary hover:text-foreground"
-                            }`}
+                            className="border-line text-text-faint hover:border-primary hover:text-foreground focus-visible:outline-primary cursor-pointer rounded-full border px-1.5 text-xs font-bold focus-visible:outline-2 focus-visible:outline-offset-2"
                           >
                             {t(kind === "skip" ? "month.shift.skip" : "month.shift.advance")}
                           </span>
