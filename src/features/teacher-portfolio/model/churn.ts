@@ -7,7 +7,8 @@
  *   이 강사가 맡았던 반의 끝, 또는 이 강사가 정규 수업으로 가르친 과목을 통째로 끊은 끝(다른 선생님 반으로 옮긴 뒤라도 —
  *   main 퇴원율과 같은 셈 · 이 강사에게서 끊김 없이 이어진 수강만). 끝난 수강 **줄마다** 판정해 하나라도 남으면 센다:
  *   늘 빼는 것 = 반 이동(옮겨 간 반을 하루도 안 다녔으면 그만둔 것) · 수업이 끝남(반 폐지·종강·운영 기간 종료·폐강) · 끝난 특강 ·
- *   같은 과목의 다른 반을 계속(또는 곧 · 휴원 포함) 다님,
+ *   **이 선생님의** 같은 과목 다른 반을 계속(또는 곧 · 휴원 포함) 다님 — 다른 선생님의 같은 과목 반으로 옮겨 다니면 이 선생님에게서는
+ *   끝난 것이라 센다(원장 2026-10-15 *"내 담당 과목이 종료라면 퇴원율에 포함"*),
  *   원장이 고르는 것 = 뺄 퇴원 사유(기본 졸업·이사·질병·권고퇴원) · 수강종료(학원의 다른 수업은 계속 다님)를 셀지.
  * - 사유 = 그 수강의 종료 사유 → 없거나 '퇴원에 따른 자동 종료'면 학생의 퇴원 사유(퇴원관리와 같은 곳 · 퇴원일 때만 · 그 퇴원일이
  *   그만둔 날 ±14일 안일 때만 — `exit-reason.ts`).
@@ -113,16 +114,32 @@ export function churnResult(input: ChurnInput): ChurnResult {
       // 이 날 뒤에도 다니는(또는 31일 안에 시작하는) 다른 수강 — 학생 배정·유지의 사유 판정과 한 벌(`stillAttending`).
       const others = stillAttending(history, classes, exit.day, new Set(exit.ended.map((x) => x.id)));
       const keeps = (x: SnapshotEnrollment) => others.some((o) => subjectOf(o) === subjectOf(x));
-      // 이 선생님 몫 = 이 선생님이 맡았던 반의 끝 · 또는 이 선생님이 정규 수업으로 가르친 과목을 통째로 끊은 끝(다른 선생님 반으로
-      // 옮긴 뒤라도 — 단 이 선생님에게서 끊김 없이 이어진 수강만: 그만두고 한참 뒤 다른 반에 다시 등록했다 끊은 것은 이 선생님 몫이 아니다).
+      // 계속 다니는 같은 과목 반이 이 선생님 반인가 — 그 반을 다니는 날(창 안이면) 이 선생님 명단에 그 반이 있거나, 그 반 담임이 이 선생님.
+      const withMe = (o: SnapshotEnrollment) => {
+        const day = o.start_date > exit.day ? o.start_date : exit.day;
+        return (day <= w.end && Boolean(source.rosterOf(day, teacherId).get(studentId)?.classes.has(o.class_id)))
+          || classes.get(o.class_id)?.teacher_id === teacherId;
+      };
+      const keepsWithMe = (x: SnapshotEnrollment) => others.some((o) => subjectOf(o) === subjectOf(x) && withMe(o));
+      // 이 선생님 몫 = 이 선생님이 맡았던 반의 끝 · 또는 이 선생님이 정규 수업으로 가르친 과목을 통째로 끊은 끝(**반 이동으로** 다른 선생님
+      // 반에 옮긴 뒤라도 — 이 선생님에게서 끊김 없이 이어진 수강만: 그만두고 한참 뒤 다른 반에 다시 등록했다 끊은 것은 이 선생님 몫이 아니다).
+      // 반 이동 없이 옮긴 것은 옮긴 달에 이미 셌다(keepsWithMe) — 다음 달 그 반을 그만둔 것까지 다시 세지 않는다(적대적 리뷰 2026-10-15).
+      // 옮긴 달에 세지 않은 이동만 연다 = 반 이동으로 들어간 수강 · 또는 그 시작 ±1일에 이 선생님의 같은 과목 반이 반 이동(표시나 글 —
+      // 옛 자료는 한쪽에만 표시가 있다)이나 수업이 끝남(반 폐지·종강 — 그 뒤 일반 배정)으로 끝났을 때(재리뷰 2026-10-15).
       const taught = new Set([...(firstDay.get(studentId) ?? [])].filter(([, d]) => d < exit.day).map(([id]) => id));
       const subjects = new Set([...taught].filter(regular).map((id) => classes.get(id)?.subject));
       const last = mineDays.findLast((d) => d < exit.day);
+      const movedUncounted = (x: SnapshotEnrollment) => x.is_transferred_in || history.some((p) => p.class_id !== x.class_id
+        && taught.has(p.class_id) && subjectOf(p) === subjectOf(x) && p.end_date !== null
+        && p.end_date >= addDays(x.start_date, -1) && p.end_date <= addDays(x.start_date, 1)
+        && (p.is_transferred || p.withdrawal_reason?.trim() === TRANSFER_TEXT || CLASS_END_TEXT.includes(p.withdrawal_reason?.trim() ?? "")
+          || classes.get(p.class_id)?.closed_at === p.end_date));
       const ended = exit.ended.filter((x) => taught.has(x.class_id)
-        || (last !== undefined && x.start_date <= addDays(last, 1) && subjects.has(subjectOf(x)) && !keeps(x)));
-      // 같은 과목을 계속 다니는데 이 선생님이 계속 맡거나(반을 옮김·반이 닫혀 다른 반으로) 반 이동으로 옮겨 갔으면 그만둔 게 아니다 — 줄도 안 남긴다.
+        || (last !== undefined && movedUncounted(x) && x.start_date <= addDays(last, 1) && subjects.has(subjectOf(x)) && !keeps(x)));
+      // 같은 과목을 이 선생님 반에서 계속 다니거나(반을 옮김·반이 닫혀 다른 반으로) 반 이동으로 옮겨 갔으면 그만둔 게 아니다 — 줄도 안 남긴다.
+      // (다른 과목으로 이 선생님이 계속 맡아도, 이 과목을 다른 선생님 반으로 옮겼으면 줄은 선다.)
       const stays = source.rosterOf(exit.day, teacherId).has(studentId);
-      if (!ended.length || ended.every((x) => keeps(x) && (stays || (x.is_transferred && !cancelledMove(x))))) continue;
+      if (!ended.length || ended.every((x) => (keepsWithMe(x) && stays) || (keeps(x) && x.is_transferred && !cancelledMove(x)))) continue;
       const type: ChurnRow["type"] = others.length ? "수강종료" : "퇴원";
       const judged = ended.map((x) => {
         const c = classes.get(x.class_id);
@@ -142,7 +159,7 @@ export function churnResult(input: ChurnInput): ChurnResult {
         if (!cancelled && (text === TRANSFER_TEXT || x.is_transferred)) note = "반 이동";
         else if ((text && CLASS_END_TEXT.includes(text)) || c?.closed_at === exit.day) note = "수업이 끝남";
         else if (isSpecialLecture({ isSpecial: c?.is_special, className: c?.class_name })) note = "끝난 특강";
-        else if (keeps(x)) note = "같은 과목 다른 반을 다님";
+        else if (keepsWithMe(x)) note = "이 선생님의 같은 과목 다른 반을 다님";
         else if (off) note = `사유 ${REASON_LABEL[off]}`;
         return { reason, note };
       });
@@ -164,6 +181,6 @@ export function churnResult(input: ChurnInput): ChurnResult {
   return { subjects, exits, metric: {
     raw, base: base.size, need, counted: counted.size, detail: rows,
     basis: base.size ? `그만둠 ${counted.size} / 지난달 담당 ${base.size}명` : "지난달 담당 학생 없음",
-    reason: `지난달(${Number(prevEnd.slice(5, 7))}월) 이 선생님이 정규 수업으로 ${need}일 이상 맡은 학생(담임·교시 담당 모두) ${base.size}명 중 이 달에 그 선생님 반이나 가르친 과목을 그만둔(퇴원·수강종료) 학생의 비율입니다. 다른 선생님 반으로 옮긴 뒤 그만둬도 셉니다. 원장이 고른 사유·반 이동·수업이 끝남·끝난 특강·같은 과목의 다른 반을 다니는 경우는 빼고, 한 학생은 한 번만 셉니다.`,
+    reason: `지난달(${Number(prevEnd.slice(5, 7))}월) 이 선생님이 정규 수업으로 ${need}일 이상 맡은 학생(담임·교시 담당 모두) ${base.size}명 중 이 달에 그 선생님 반이나 가르친 과목을 그만둔(퇴원·수강종료) 학생의 비율입니다. 다른 선생님 반으로 옮긴 뒤 그만둬도 셉니다. 다른 선생님의 같은 과목 반으로 옮겨 다녀도 이 선생님 반을 그만둔 것이라 셉니다. 원장이 고른 사유·반 이동·수업이 끝남·끝난 특강·이 선생님의 같은 과목 다른 반을 계속 다니는 경우는 제외하고, 한 학생은 한 번만 셉니다.`,
   } };
 }

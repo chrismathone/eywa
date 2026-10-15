@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { payRatioItem, payRatioOf, type PayFacts } from "./pay-ratio";
+import { payDataMonth, payRatioItem, payRatioOf, type PayFacts } from "./pay-ratio";
 
 /** 매출 대비 급여 — 원장 2026-10-13 *"급여의 3배가 매출이면 만점"* · *"청구액 그대로"* · *"비율만 노출"*. */
 const facts = (over: Partial<PayFacts> = {}): PayFacts => ({
@@ -27,9 +27,9 @@ describe("매출 대비 급여", () => {
     expect(payRatioOf(undefined, 3_000_000, null)).toBeUndefined();
     // 담당 청구 줄이 없는 강사(보강 묶음만)는 비율을 내지 않고, '덜 됐다'와 다른 사유를 남긴다.
     expect(payRatioOf(facts({ rows: 0, billedRows: 0 }), 3_000_000, null)).toMatchObject({
-      raw: null, retry: false, problem: "이 달 담당 학생의 청구서가 없습니다",
+      raw: null, retry: false, problem: "그 달 담당 학생의 청구서가 없습니다",
     });
-    expect(payRatioOf(facts({ rows: 0, billedRows: 0, classes: 0, students: 0, enrollments: 0 }), 3_000_000, null)?.problem).toBe("이 달 담당 반이 없습니다");
+    expect(payRatioOf(facts({ rows: 0, billedRows: 0, classes: 0, students: 0, enrollments: 0 }), 3_000_000, null)?.problem).toBe("그 달 담당 반이 없습니다");
   });
   it("일시 실패(조회 실패·시간 초과·실급여 비율표)는 다시 셀 칸으로 표시한다 — 그 달 마감을 미룬다", () => {
     expect(payRatioOf(facts({ revenue: null, problem: "시간 초과", retry: true }), 3_000_000, null)).toMatchObject({ raw: null, retry: true });
@@ -52,5 +52,13 @@ describe("매출 대비 급여", () => {
     expect(JSON.stringify(item)).not.toMatch(/9000000|3000000|3600000/);
     expect(item).toMatchObject({ id: "payRatio", raw: 33.3, source: "계약서 월급", basis: "급여 비율 33.3% · 계약서 월급" });
     expect(payRatioItem(undefined)).toMatchObject({ raw: null, uncounted: true, basis: "아직 계산 전" });
+  });
+  it("2026-10부터 지난달 값으로 매기고 근거에 그 달을 밝힌다 — 그 전 달은 그 달 값(원장 2026-10-15)", () => {
+    expect([payDataMonth("2026-10"), payDataMonth("2027-01"), payDataMonth("2026-09")]).toEqual(["2026-09", "2026-12", "2026-09"]);
+    const prev = payRatioItem(payRatioOf(facts(), 3_000_000, null, "2026-09"));
+    expect(prev.basis).toBe("지난달(9월) 급여 비율 33.3% · 계약서 월급");
+    expect(prev.reason).toMatch(/^이번 달 급여는 월말이 돼야 확정되므로 지난달\(9월\) 급여 ÷ 지난달\(9월\) 매출로 매깁니다/);
+    const waiting = payRatioItem(payRatioOf(facts({ sheetPay: null, payPending: true }), null, null, "2026-09"));
+    expect(waiting.basis).toBe("지난달(9월) 값 · 출석부 실급여(급여명세서 수업료와 같은 계산)가 아직 다 잡히지 않았습니다 — 급여를 직접 입력할 수 있습니다");
   });
 });

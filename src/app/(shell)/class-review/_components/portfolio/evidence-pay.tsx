@@ -1,5 +1,6 @@
 "use client";
 
+import { payDataMonth } from "@/features/teacher-portfolio/model/pay-ratio";
 import { metricOf } from "@/features/teacher-portfolio/model/types";
 import { pointsText } from "@/features/teacher-portfolio/view";
 import type { EvidenceProps } from "./evidence-records";
@@ -13,18 +14,22 @@ export function PayRatioEvidence({ period }: Pick<EvidenceProps, "period">) {
   const m = metricOf(period, "payRatio");
   // 학생 1명이 이 선생님 반을 평균 몇 개 듣는지 — 학생 × 반 줄 ÷ 학생(보강 묶음 제외).
   const perStudent = m.students && m.enrollments ? (m.enrollments / m.students).toFixed(2) : null;
+  // 2026-10부터 이 달 점수는 지난달 재료(원장 2026-10-15) — 담당 학생·반도 그 달 값이라 달을 붙인다.
+  const data = payDataMonth(period.month);
+  const prev = data === period.month ? null : `${Number(data.slice(5, 7))}월`;
   return (
     <>
       <StatTiles items={[
         { label: "급여 비율", value: m.raw === null || m.raw === undefined ? "—" : `${m.raw.toFixed(1)}%` },
         { label: "점수", value: pointsText(m, period) },
         { label: "급여 출처", value: m.source ?? "없음" },
-        { label: "담당 학생", value: m.students === undefined ? "—" : `${m.students}명` },
-        { label: "담당 반", value: m.classes === undefined ? "—" : `${m.classes}개` },
+        { label: prev ? `담당 학생(${prev})` : "담당 학생", value: m.students === undefined ? "—" : `${m.students}명` },
+        { label: prev ? `담당 반(${prev})` : "담당 반", value: m.classes === undefined ? "—" : `${m.classes}개` },
       ]} />
       {m.raw === null || m.raw === undefined
         ? <p role="status" className="bg-amber-soft mt-4 rounded-lg px-3.5 py-3 text-xs leading-relaxed">{m.basis}</p> : null}
       <div className="bg-primary-softer mt-4 space-y-1.5 rounded-lg px-3.5 py-3 text-xs leading-relaxed">
+        {prev ? <p><b>지난달({prev}) 값으로 매깁니다</b> — 이번 달 급여는 월말이 돼야 확정되므로, 이 달 점수는 {prev} 급여 ÷ {prev} 매출입니다(계약서 월급·출석부 실급여·청구서 모두 {prev} 것).</p> : null}
         <p>급여 비율 = 그 달 급여(세전) ÷ 담당 매출. 매출은 그 선생님 출석부(강사 전체 보기)의 학생·반마다 그 달 <b>청구서의 그 반 금액</b>(할인 전)을 더한 값입니다 — 함께 맡은 반도 그 줄 금액 그대로입니다. 영어처럼 청구서 항목 이름이 반 이름과 다르면, 그 학생의 못 맞춘 반과 남은 수강료 항목이 하나씩일 때 그 둘을 짝지어 잡습니다(반을 옮긴 달처럼 짝이 여럿이면 이름만으로는 어느 반 금액인지 몰라, 출석부 청구액에 그 반 금액이 따로 잡혀 있지 않으면 못 찾은 줄로 셉니다).</p>
         <p>급여는 원장 직접 입력 → 계약서 월급 → 출석부 실급여(프리랜서) 순으로 처음 있는 것을 씁니다. 금액은 포트폴리오에 보이지 않습니다(직접 넣은 금액은 &lsquo;직접 입력&rsquo; 창에서만 보입니다).</p>
         <p>계약서 월급은 그 달의 가장 최근 계약 하나에서 한 달 금액(월급·기본급·급여계약금·&lsquo;○○만/월&rsquo;·연봉 ÷ 12)을 읽습니다. 그 계약에 금액이 둘 이상이거나 수당 금액·시급·업무별 단가가 적혀 있으면 읽지 않고(이전 계약으로 내려가지 않습니다), 월급과 비율이 함께 적힌 계약은 월급만 씁니다. 출석부 실급여는 프리랜서 명세서와 같은 계산이지만, 명세서에서 그 달에만 얹는 배분율 차감은 들어가지 않습니다. 다르면 직접 입력으로 바로잡아 주세요.</p>

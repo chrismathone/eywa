@@ -83,7 +83,7 @@ function MetricRow({ metric, color, before, tag, legacy, onOpen }: {
   const label = itemLabel(metric);
   return (
     <button type="button" onClick={() => onOpen(metric.id)} data-metric-row={metric.id}
-      aria-label={`${label} ${metric.value === null ? (legacy ? "산출불가" : "합계에서 뺌") : `${fmtScore(metric.value)}점`}${tag ? ` (${tag})` : ""}, 근거 보기`}
+      aria-label={`${label} ${metric.value === null ? (legacy ? "산출불가" : "합계에서 제외") : `${fmtScore(metric.value)}점`}${tag ? ` (${tag})` : ""}, 근거 보기`}
       className="border-line-faint hover:bg-primary-softer focus-visible:outline-primary flex min-h-28 w-full flex-col justify-center border-b px-5 py-3.5 text-left focus-visible:outline-2">
       <span className="mb-2 flex items-center justify-between gap-2">
         <span className="text-sm font-bold">{label}{tag ? <small className="ml-1.5 text-xs font-medium">{tag}</small> : null}</span>

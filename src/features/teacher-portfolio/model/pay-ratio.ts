@@ -8,8 +8,11 @@
  *   함께 맡은 반도 그 줄 금액 그대로.
  * - 급여 = 원장 직접 입력 → 계약서 월급 → 출석부 실급여(프리랜서) 순으로 처음 있는 것.
  * - 학생 수·반 수(원장 1-1 *"학생수와 생산성 모두 볼것"*)는 근거 화면에 같이 싣는다(점수엔 안 섞는다).
+ * - 🔴 **지난달 값으로 매긴다**(원장 2026-10-15 *"매출대비 급여는 지난달 것을 다음달에 반영 … 이번달을 반영하려면 월말이 되야하는데
+ *   기다리지 못할듯"*) — 10월 점수 = 9월 급여 ÷ 9월 매출(`payDataMonth`). 그 전에 마감한 달(4~9월)은 그 달 값 그대로다.
  * 🔴 금액(매출·급여)은 결과에 싣지 않는다 — 비율과 출처만.
  */
+import { shiftMonth } from "@/lib/date-kst";
 import { round1 } from "./dates";
 import { METRIC_MAX, type PayRatioMetric } from "./types";
 
@@ -32,14 +35,20 @@ export type PayFacts = {
  * 프리랜서 실급여도 단가가 잡힌 줄이 이보다 적으면 쓰지 않는다(pay-sources.ts).
  */
 export const MIN_BILLED_SHARE = 0.8;
+/** 이 달부터 급여 비율은 지난달 재료로 매긴다(원장 2026-10-15) — 그 전 달은 그 달 재료(이미 마감해 다시 세지 않는다). */
+export const PAY_PREV_MONTH_FROM = "2026-10";
+/** 이 달 점수의 급여 비율을 낼 재료의 달(급여·매출·계약서 월급 모두 이 달 것). */
+export const payDataMonth = (month: string): string => (month >= PAY_PREV_MONTH_FROM ? shiftMonth(month, -1) : month);
 export type PaySource = "직접 입력" | "계약서 월급" | "출석부 실급여";
 export type PayResult = {
   raw: number | null; source: PaySource | null; students: number; classes: number; enrollments: number; problem: string | null;
   /** 일시 실패·프리랜서 단가 대기로 비율을 못 냈다 — 집계가 그 달 마감을 미룬다(값 자체는 저장하지 않는다). */
   retry: boolean;
+  /** 재료의 달 — 점수 달과 다르면(지난달 값) 근거 문구가 그 달을 밝힌다. */
+  dataMonth?: string;
 };
 
-export function payRatioOf(facts: PayFacts | undefined, contractPay: number | null, override: number | null): PayResult | undefined {
+export function payRatioOf(facts: PayFacts | undefined, contractPay: number | null, override: number | null, dataMonth?: string): PayResult | undefined {
   if (!facts) return undefined;
   const [pay, source]: [number | null, PaySource | null] = override !== null ? [override, "직접 입력"]
     : contractPay !== null ? [contractPay, "계약서 월급"]
@@ -50,8 +59,8 @@ export function payRatioOf(facts: PayFacts | undefined, contractPay: number | nu
   const revenue = !facts.problem && facts.revenue !== null && facts.revenue > 0 && share >= MIN_BILLED_SHARE ? facts.revenue : null;
   const raw = revenue !== null && pay !== null && pay >= 0 ? round1((100 * pay) / revenue) : null;
   const problem = facts.problem
-    ?? (facts.rows === 0 && facts.classes === 0 ? "이 달 담당 반이 없습니다"
-      : facts.rows === 0 ? "이 달 담당 학생의 청구서가 없습니다"
+    ?? (facts.rows === 0 && facts.classes === 0 ? "그 달 담당 반이 없습니다"
+      : facts.rows === 0 ? "그 달 담당 학생의 청구서가 없습니다"
       : facts.revenue === null ? "청구서에서 담당 반 금액을 찾지 못했습니다"
       : facts.revenue <= 0 ? "담당 반 청구액이 0원입니다"
       : revenue === null ? `청구서에서 담당 반 금액을 찾지 못한 줄이 많습니다(찾은 줄 ${Math.round(share * 100)}%)`
@@ -65,7 +74,7 @@ export function payRatioOf(facts: PayFacts | undefined, contractPay: number | nu
   const retry = raw === null && (Boolean(facts.retry) || waiting);
   return {
     raw, source: pay === null ? null : source, students: facts.students, classes: facts.classes, enrollments: facts.enrollments,
-    problem: raw === null ? problem : null, retry,
+    problem: raw === null ? problem : null, retry, ...(dataMonth ? { dataMonth } : {}),
   };
 }
 
@@ -77,9 +86,11 @@ export function payRatioItem(r: PayResult | undefined): PayRatioMetric {
       reason: "이번 집계에서 급여 비율을 계산하지 못한 달입니다(재료 조회 실패 등 · 마감 전이면 다음 집계에서 다시 셉니다). 급여 비율을 만들기 전에 마감한 달도 이렇게 남습니다. 이 달은 계산하지 않은 채로 매겼습니다.",
     };
   }
+  // 지난달 값으로 매긴 달은 근거 첫머리에 그 달을 밝힌다(원장 2026-10-15 *"안내문구에도 그 문구 표시할것"*).
+  const prev = r.dataMonth ? `지난달(${Number(r.dataMonth.slice(5, 7))}월)` : null;
   return {
     ...base, raw: r.raw, source: r.source, students: r.students, classes: r.classes, enrollments: r.enrollments,
-    basis: r.raw !== null ? `급여 비율 ${r.raw.toFixed(1)}% · ${r.source}` : (r.problem ?? "자료 없음"),
-    reason: "그 달 급여(세전) ÷ 담당 매출(담당 반 학생 청구서의 그 반 금액, 할인 전)을 비율로만 보입니다. 급여는 원장 직접 입력 → 계약서 월급 → 출석부 실급여 순으로 처음 있는 것을 씁니다. 금액은 보이지 않습니다.",
+    basis: r.raw !== null ? `${prev ? `${prev} ` : ""}급여 비율 ${r.raw.toFixed(1)}% · ${r.source}` : `${prev ? `${prev} 값 · ` : ""}${r.problem ?? "자료 없음"}`,
+    reason: `${prev ? `이번 달 급여는 월말이 돼야 확정되므로 ${prev} 급여 ÷ ${prev} 매출로 매깁니다. ` : ""}급여(세전) ÷ 담당 매출(담당 반 학생 청구서의 그 반 금액, 할인 전)을 비율로만 보입니다. 급여는 원장 직접 입력 → 계약서 월급 → 출석부 실급여 순으로 처음 있는 것을 씁니다. 금액은 보이지 않습니다.`,
   };
 }

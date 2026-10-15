@@ -7,8 +7,8 @@ import { StudentCell } from "./evidence-records";
 import { DataTable, SectionTitle, StatTiles, StatusChip } from "./parts";
 
 /**
- * 퇴원율 내역 — 분모(지난달 절반 이상 맡은 학생)·분자(이 달에 그만둔 학생)와 그만둔 학생마다 셌는지·뺀 까닭.
- * 뺀 까닭: 원장이 고른 사유 · 반 이동 · 수업이 끝남 · 끝난 특강 · 같은 과목 다른 반 · 수강종료를 세지 않음 · 같은 학생.
+ * 퇴원율 내역 — 분모(지난달 절반 이상 맡은 학생)·분자(이 달에 그만둔 학생)와 그만둔 학생마다 포함했는지·제외한 까닭.
+ * 제외한 까닭: 원장이 고른 사유 · 반 이동 · 수업이 끝남 · 끝난 특강 · 이 선생님의 같은 과목 다른 반 · 수강종료를 세지 않음 · 같은 학생.
  */
 export function ChurnEvidence({ period, nameOf }: EvidenceProps) {
   const m = metricOf(period, "churn");
@@ -30,7 +30,7 @@ export function ChurnEvidence({ period, nameOf }: EvidenceProps) {
           cells: [
             <StudentCell key="s" name={nameOf(r.studentId)} sub={r.className} />, dayLabel(r.day), r.type, r.reason,
             <span key="c" className="inline-flex flex-col items-center gap-0.5">
-              <StatusChip state={r.counted ? "셈" : "뺌"} />
+              <StatusChip state={r.counted ? "포함" : "제외"} />
               {r.note ? <small className="text-xs">{r.note}</small> : null}
             </span>,
           ],
