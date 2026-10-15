@@ -215,7 +215,7 @@ export function ShuttleBoardClient({
         actions={
           // 📱 머리 버튼도 폰에선 44px — 툴바 래퍼와 같은 변수 덮어쓰기(SHUTTLE_PHONE_CONTROLS).
           <span className={`flex items-center gap-2 ${SHUTTLE_PHONE_CONTROLS}`}>
-            <span className="pointer-coarse:hidden">
+            <span className="no-mouse:hidden">
               <ShuttlePrintMenu season={season} />
             </span>
             {canWrite && <Button onClick={() => setStopDialogOpen(true)}>정류장 관리</Button>}
@@ -239,7 +239,7 @@ export function ShuttleBoardClient({
         )}
         {/* 엑셀 가져오기(정류장·승하차) — 이 면엔 검색이 없어 툴바 줄 오른쪽 끝(원장 2026-09-29 통일). 인쇄처럼 손 기기에선 감춘다. */}
         {canImport ? (
-          <span className="pointer-coarse:hidden">
+          <span className="no-mouse:hidden">
             <ExcelMenu importKind="shuttle" />
           </span>
         ) : null}

@@ -8,8 +8,9 @@ import { useSyncExternalStore } from "react";
  */
 export const DESKTOP_MIN_WIDTH = 1240;
 
-// 데스크톱 = 넓은 폭 + 정밀 포인터(마우스). 모바일/태블릿 터치는 false → Stage Manager 미마운트.
-const QUERY = `(min-width: ${DESKTOP_MIN_WIDTH}px) and (pointer: fine)`;
+// 데스크톱 = 넓은 폭 + 마우스·터치패드가 **하나라도**(`any-pointer`) — 주 입력만 보는 `pointer: fine`이면 터치스크린 PC가 마우스를
+// 꽂아도 모바일 셸이 됐다(원장 2026-10-15). 모바일/태블릿 터치(정밀 포인터 없음)는 false → Stage Manager 미마운트.
+const QUERY = `(min-width: ${DESKTOP_MIN_WIDTH}px) and (any-pointer: fine)`;
 
 /**
  * 🔑 `MediaQueryList`는 **문서당 하나**만 만든다.

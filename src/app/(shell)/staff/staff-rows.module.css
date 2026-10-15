@@ -1,4 +1,4 @@
-@media (max-width: 1239.98px), (pointer: coarse), (pointer: none) {
+@media (max-width: 1239.98px), not all and (any-pointer: fine) {
   .header [data-page-header-row],
   .header [data-page-header-title],
   .header [data-page-header-actions] {
