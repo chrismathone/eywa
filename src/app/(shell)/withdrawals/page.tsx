@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Suspense } from "react";
+import { Suspense, type ReactNode } from "react";
 import { isValidYm, kstMonth, kstToday, monthLabel, monthRange, shiftMonth } from "@/lib/date-kst";
 import { withdrawalMonthWindow, withdrawalProgram } from "@/features/withdrawals/window";
 import {
@@ -64,7 +64,11 @@ import {
   reasonDetailFacetOf,
   schoolItems,
   schoolOf,
+  subjectComboItems,
   subjectItems,
+  teacherCellText,
+  teacherFacetLabel,
+  teacherFilterOptions,
   teacherItems,
 } from "@/features/withdrawals/breakdown";
 import { loadExitTeacherJudge, type ExitTeacherJudge } from "@/features/withdrawals/server/exit-teacher-judge";
@@ -256,7 +260,8 @@ export default async function WithdrawalsPage({
   //    에선 아예 안 부른다(그 보기엔 수강종료 줄이 한 줄도 안 선다). `loading.tsx`는 두지 않는다 — 필터를 자주 바꾸는
   //    화면이라 바꿀 때마다 스켈레톤이 번쩍인다(CLAUDE.md B7 트레이드오프).
   const withSubjectEnded = type !== "withdrawn";
-  // 강사별 = 강사평가 퇴원율이 그 퇴원을 센 선생님(시간표 X와 같은 판정 한 벌) — 무거워서 **강사 축을 볼 때·강사 칸을 골랐을 때만** 읽는다.
+  // 강사별 = 강사평가 퇴원율이 그 퇴원을 센 선생님(시간표 X와 같은 판정 한 벌). 명단의 '담당강사' 열·담당강사 필터·강사 카드가 이 판정
+  // 하나를 같이 쓴다(원장 2026-10-15 *"모든 곳에서 담당이 일치하게 보이도록 같은 배선"*) — 무거워서 화면은 기다리지 않고 흘려받는다(아래).
   // 판정할 줄의 폭 = 기간 필터 창과 월별 추이(최근 12개월)를 덮는다 · '전체 기간'은 26개월 전 1일부터(시간표 X의 가장 오래된
   // 석 달 묶음 — 기준 달 24개월 전의 맨 왼쪽 열 — 과 같은 폭). '직접 지정'도 그보다 넓히지 않는다(재료가 무거워지고 '전체 기간'보다 숫자가 커진다).
   // 🔴 끝은 이번 달 말일로 고정(X와 같다) — 끝이 움직이면 같은 줄의 선생님이 화면마다 갈린다.
@@ -267,17 +272,15 @@ export default async function WithdrawalsPage({
   // 분석 축 = 주소(`axis=` — 카드가 고를 때 싣는다) → 계정 저장값. 저장이 안 되는 화면(운영 콘솔의 읽기 전용 지점 보기)에서도 주소로 산다.
   const axisParam = sp.axis ? parseBreakdownAxis(sp.axis) : null;
   const prefsP = loadWithdrawalTrendPrefs();
-  // undefined = 읽지 않음 · null = 읽다 실패(카드가 그렇다고 말한다 · 강사 칸 필터는 걸지 않는다).
-  const judgeP = prefsP.then((prefs) =>
-    (axisParam ?? prefs.axis) === "teacher" || teacherF
-      ? loadExitTeacherJudge(user.tenantId, { from: monthRange(shiftMonth(judgeFromMonth, -5)).from, end: monthRange(thisMonth).to }, { today, thisMonth }).catch(
-          (e: unknown) => {
-            reportWarning("퇴원관리 강사별 판정 실패", { scope: "withdrawals.teacherJudge", message: e instanceof Error ? e.message : String(e) });
-            return null;
-          },
-        )
-      : undefined,
-  );
+  // null = 읽다 실패(카드가 그렇다고 말한다 · 강사 칸 필터는 걸지 않는다 · 명단 담당 칸은 '—').
+  const judgeP: Promise<ExitTeacherJudge | null> = loadExitTeacherJudge(
+    user.tenantId,
+    { from: monthRange(shiftMonth(judgeFromMonth, -5)).from, end: monthRange(thisMonth).to },
+    { today, thisMonth },
+  ).catch((e: unknown) => {
+    reportWarning("퇴원관리 강사별 판정 실패", { scope: "withdrawals.teacherJudge", message: e instanceof Error ? e.message : String(e) });
+    return null;
+  });
   // 🔑 화면이 판정을 **기다리는 것은 강사 칸 필터가 걸렸을 때뿐**이다(명단이 판정으로 걸러진다). 강사 축만 볼 때는 강사 카드만
   //    나중에 흘려보내고(Suspense) 나머지를 먼저 그린다 — 강사 축을 저장해 둔 계정의 모든 이동이 판정을 기다리지 않게.
   const [withdrawnRaw, subjectEndedRaw, settings, trendPrefs, blockingJudge] = await Promise.all([
@@ -298,7 +301,8 @@ export default async function WithdrawalsPage({
    *
    * 🔴 왜 축을 빼나: 필터를 통째로 걸면 그 카드가 스스로를 부정한다 —
    *    · 월별 추이에 **기간**을 걸면 "최근 30일"에서 막대가 1~2개만 남아 12개월 추이가 사라진다.
-   *    · 과목별 분포에 **과목**을 걸면 막대가 자기 자신 하나만 남는다.
+   *    · ~~과목별 분포에 **과목**을 걸면 막대가 자기 자신 하나만 남는다~~ → 2026-10-15 원장 *"필터링 영향 받게 움직여야지"* —
+   *      과목을 고르면 과목 칸도 그 과목이 든 줄만, 함께 끊은 과목 묶음('수학' · '수학+영어')으로 센다(`subjectComboItems`).
    *    · 상담률에 **상담**을 걸면 0% 아니면 100%밖에 안 나온다.
    * ⚠️ 반대로 아무것도 안 걸면(예전 동작) 사유 카드만 필터를 따라 움직여 **한 화면이 서로 다른 모집단을
    *    말한다** — 원장 지적(2026-08-10)의 실체가 그것이었다.
@@ -426,7 +430,7 @@ export default async function WithdrawalsPage({
   const recentWindow = resolveRange("month", { today, month: withdrawalMonthWindow(kstMonth(), today) });
   const recent = trendRows.filter((r) => inRange(r, recentWindow)).length;
 
-  // 월별 추이 = 기간 축 제외 · 과목별 분포 = 과목 축 제외(위 술어 주석 참조).
+  // 월별 추이 = 기간 축 제외 · 과목별 분포 = 과목 필터가 없을 때만 과목 축 제외(고르면 명단과 같은 줄을 묶음으로 — 위 술어 주석).
   // ⚠️ **시스템 정리(날짜 미상)는 월별 추이에서 뺀다** — 퇴원일이 실제 시점이 아니라 일괄 처리된 장부 날짜라
   //    그대로 세면 그 달이 부풀어 "7월 퇴원 N명"이 사실과 달라진다(교정 전 152명이 그렇게 나왔다).
   //    목록에서는 숨기지 않는다(실제로 퇴원한 게 맞고 날짜만 모른다) — [system-bulk.ts](@/features/withdrawals/system-bulk) 참조.
@@ -517,7 +521,34 @@ export default async function WithdrawalsPage({
       : Promise.resolve(new Map<string, string>());
   };
   const names = teacherMap ? await namesFor(teacherMap) : new Map<string, string>();
-  const teacherLabel = (id: string) => (id === FACET_NONE ? "담당 미반영" : (names.get(id) ?? "선택한 강사"));
+  const teacherLabel = (id: string) => teacherFacetLabel(id, (x) => names.get(x) ?? null);
+  /**
+   * 담당 판정 한 벌 — 강사 카드 · 담당강사 필터 선택지 · 명단 '담당강사' 칸이 **같은 map·같은 이름**을 쓴다(원장 2026-10-15 *"모든 곳에서
+   * 담당이 일치하게 보이도록 같은 배선"*). 강사로 걸렀으면 이미 기다린 판정을, 아니면 흘려받을 약속을 같이 쓴다(두 번 계산하지 않게).
+   * null = 판정 실패(카드는 '못 불러옴', 칸은 '—', 필터는 고른 값만).
+   */
+  const teacherInfoP: Promise<{ map: ReadonlyMap<string, RowTeachers>; names: ReadonlyMap<string, string> } | null> = teacherF
+    ? Promise.resolve(teacherMap ? { map: teacherMap, names } : null)
+    : judgeP.then(async (judge) => {
+        if (!judge) return null;
+        try {
+          const map = attribute(judge);
+          return { map, names: await namesFor(map) };
+        } catch (e) {
+          reportWarning("퇴원관리 강사별 판정 실패", { scope: "withdrawals.teacherAttribution", message: e instanceof Error ? e.message : String(e) });
+          return null;
+        }
+      });
+  // 담당강사 필터 선택지 = 강사 카드 칸과 같은 값(강사 축만 뺀 모집단 — 다른 강사로 바로 갈아탈 수 있게).
+  const teacherOptionsP = teacherInfoP.then((info) =>
+    info
+      ? teacherFilterOptions(
+          teacherRows.map((r) => teacherFacetsOf(info.map, r, currentSubject)),
+          teacherF,
+          (id) => info.names.get(id) ?? null,
+        )
+      : null,
+  );
 
   // 🔑 수치마다 **언제부터·누구를** 센 것인지 적는다(원장 2026-09-29 *"전체 퇴원 458명이 언제부터의 수치인지? 올 한 해 단위로 …
   //    항상 수치에 관한 구체적인 언급이 필요"*). 위 카드 둘(올해 퇴원·올해 수강종료)은 **학원 전체**(필터 무관),
@@ -544,7 +575,7 @@ export default async function WithdrawalsPage({
   const consultScope = scopeText({ ...scopeParts, consult: null });
   const rangeText = rangeWindow.kind === "all" ? "전체 기간" : spanText(rangeWindow.from, rangeWindow.to);
 
-  // 분석 카드(원장 2026-10-15) — 축마다 자기 축만 뺀 모집단 · 칸을 누르면 명단이 그 값으로 걸러진다(고른 칸은 해제).
+  // 분석 카드(원장 2026-10-15) — 축마다 자기 축만 뺀 모집단(과목 칸은 과목을 고르면 그 필터도 따른다) · 칸을 누르면 명단이 그 값으로 걸러진다(고른 칸은 해제).
   // 설명 = 건수 · 기간 · 걸린 범위(자기 축은 빼고 — 적용 안 한 필터를 적으면 거짓말) · 자기 축 필터를 뺐다는 말.
   const caption = (n: number, skip: "subject" | "grade" | "school" | "teacher", on: boolean, label: string) =>
     `${n}건 · ${rangeText} · ${scopeText({ ...scopeParts, [skip]: null })}${on ? ` · ${label} 필터는 이 축이라 제외` : ""}`;
@@ -555,16 +586,29 @@ export default async function WithdrawalsPage({
   ): BreakdownRow[] =>
     items.map((i) => ({ ...i, active: picked === i.value, href: href(picked === i.value ? null : i.value) }));
   const breakdownViews = {
-    subject: {
-      caption: caption(subjectRows.length, "subject", subject !== "all", "과목"),
-      total: subjectRows.length,
-      share: true,
-      note: "두 과목을 함께 끊은 퇴원은 과목마다 셉니다.",
-      rows: toRows(subjectItems(subjectRows, subjectMaps.labelOf), subject === "all" ? null : subject, (v) => hrefWith({ subject: v ?? "all" })).map(
-        // 과목 미상은 거를 주소가 없다(과목 필터는 과목 키만 받는다).
-        (r) => (r.value === FACET_NONE ? { ...r, href: null } : r),
-      ),
-    },
+    // 과목을 고르면 과목 칸도 그 필터를 따른다(원장 2026-10-15 *"필터링 영향 받게 움직여야지"*) — 명단과 같은 줄을 함께 끊은 과목
+    // 묶음('수학' · '수학+영어')으로 한 번씩 센다. 묶음 칸으로 거르는 주소는 없다(필터를 푸는 길은 툴바 · '필터 초기화').
+    subject:
+      subject === "all"
+        ? {
+            caption: caption(subjectRows.length, "subject", false, "과목"),
+            total: subjectRows.length,
+            share: true,
+            note: "두 과목을 함께 끊은 퇴원은 과목마다 셉니다.",
+            rows: toRows(subjectItems(subjectRows, subjectMaps.labelOf), null, (v) => hrefWith({ subject: v ?? "all" })).map(
+              // 과목 미상은 거를 주소가 없다(과목 필터는 과목 키만 받는다).
+              (r) => (r.value === FACET_NONE ? { ...r, href: null } : r),
+            ),
+          }
+        : {
+            caption: `${rows.length}건 · ${rangeText} · ${scope}`,
+            total: rows.length,
+            share: true,
+            note: "함께 끊은 과목은 한 칸으로 묶어 셉니다.",
+            rows: subjectComboItems(rows, subject, settings.operations.subjects.map((s) => s.key), subjectMaps.labelOf).map(
+              (i) => ({ ...i, active: false, href: null }),
+            ),
+          },
     grade: {
       caption: caption(gradeRows.length, "grade", !!gradeF, "학년"),
       total: gradeRows.length,
@@ -615,13 +659,13 @@ export default async function WithdrawalsPage({
   const teacherNow: { view: BreakdownView | null; error: boolean } = teacherMap && blockingJudge
     ? { view: teacherView(teacherMap, blockingJudge.source.options, names), error: false }
     : { view: null, error: teacherFailed };
+  // 강사 칸 필터가 없으면 강사 카드는 늘 흘려받는다 — 판정은 명단 담당 칸 때문에 매 방문 계산하므로, 강사 축을 누를 때 다시 부르지 않게.
   const teacherLater =
-    !teacherF && axis === "teacher"
-      ? judgeP.then(async (judge) => {
-          if (!judge) return { view: null, error: judge === null };
+    !teacherF
+      ? Promise.all([judgeP, teacherInfoP]).then(([judge, info]) => {
+          if (!judge || !info) return { view: null, error: true };
           try {
-            const map = attribute(judge);
-            return { view: teacherView(map, judge.source.options, await namesFor(map)), error: false };
+            return { view: teacherView(info.map, judge.source.options, info.names), error: false };
           } catch (e) {
             reportWarning("퇴원관리 강사별 판정 실패", { scope: "withdrawals.teacherAttribution", message: e instanceof Error ? e.message : String(e) });
             return { view: null, error: true };
@@ -641,6 +685,14 @@ export default async function WithdrawalsPage({
   const total = rows.length;
   const { page, totalPages, start, end } = withdrawalPage(sp.page, total, size);
   const pageRows = rows.slice(start, end);
+  // 명단 '담당강사' 칸 — 강사 카드가 세는 값 그대로(`teacherCellText`). 판정은 흘려받는다(명단은 먼저 선다).
+  const teacherCellsP = teacherInfoP.then((info) =>
+    info
+      ? new Map(pageRows.map((r) => [r.key, teacherCellText(teacherFacetsOf(info.map, r, currentSubject), (id) => info.names.get(id) ?? null)]))
+      : null,
+  );
+  // 🔴 흘려받는 경계에 검색어 key — 같은 경계를 다시 쓰면 이동 내내 옛 화면을 붙들어 모든 필터·쪽 이동이 판정을 기다린다(아래 분석 카드와 같은 까닭).
+  const streamKey = new URLSearchParams(Object.entries(sp).flatMap(([k, v]) => (k !== "axis" && typeof v === "string" ? [[k, v]] : []))).toString();
   const pageHref = (p: number) => {
     const base = buildWdHref(current);
     const params = new URLSearchParams(base.split("?")[1]);
@@ -750,6 +802,16 @@ export default async function WithdrawalsPage({
           ariaLabel="프로그램 필터"
           {...SELECT_PROPS}
         />
+        {/* 담당강사(원장 2026-10-15) — 선택지 = 강사 카드 칸과 같은 판정(`teacherFilterOptions`) · 고르면 `teacher=`(강사 카드 칸과 같은 주소).
+            판정이 무거워 선택지는 흘려받는다 — 그동안은 고른 값만 든 같은 드롭다운. 판정에 실패하면 아래 칩이 '불러오지 못해 걸지 않음'. */}
+        {teacherF && !teacherMap ? null : (
+          <Suspense
+            key={`teacher-filter:${streamKey}`}
+            fallback={<TeacherFilter value={teacherF} options={teacherF ? [{ value: teacherF, label: teacherLabel(teacherF) }] : []} />}
+          >
+            <StreamedTeacherFilter value={teacherF} options={teacherOptionsP} />
+          </Suspense>
+        )}
         <FilterSelect
           paramName="consult"
           value={consult === "all" ? "" : consult}
@@ -769,16 +831,11 @@ export default async function WithdrawalsPage({
             {...SELECT_PROPS}
           />
         ) : null}
-        {/* 분석 카드에서 고른 칸(학년·학교·강사) — 드롭다운이 없는 축이라 칩으로 보이고 × 로 푼다. */}
+        {/* 분석 카드에서 고른 칸(학년·학교) — 드롭다운이 없는 축이라 칩으로 보이고 × 로 푼다(강사는 위 담당강사 드롭다운). */}
         {detailF ? <FacetChip label={`세부: ${detailFacetLabel(detailF)}`} href={hrefWith({ detail: null })} /> : null}
         {gradeF ? <FacetChip label={`학년: ${scopeParts.grade}`} href={hrefWith({ grade: null })} /> : null}
         {schoolF ? <FacetChip label={`학교: ${scopeParts.school}`} href={hrefWith({ school: null })} /> : null}
-        {teacherF ? (
-          <FacetChip
-            label={teacherMap ? `강사: ${scopeParts.teacher}` : "강사: 불러오지 못해 걸지 않음"}
-            href={hrefWith({ teacher: null })}
-          />
-        ) : null}
+        {teacherF && !teacherMap ? <FacetChip label="담당강사: 불러오지 못해 걸지 않음" href={hrefWith({ teacher: null })} /> : null}
         <SearchToggle placeholder="학생명" defaultValue={q} />
         {filterActive ? (
           <Link
@@ -817,7 +874,7 @@ export default async function WithdrawalsPage({
             </header>
             <WithdrawalTrendChart data={trendData} filterLabel={typeTrend ? scope : noun} initialPrefs={trendPrefs} unit={withdrawnOnly ? "명" : "건"} />
           </section>
-          {/* 분석 카드 — 과목 · 강사 · 학년 · 학교(원장 2026-10-15). 축마다 자기 축만 빼고 필터를 따른다(패싯) · 칸을 누르면 명단이 걸러진다.
+          {/* 분석 카드 — 과목 · 강사 · 학년 · 학교(원장 2026-10-15). 축마다 자기 축만 빼고 필터를 따른다(패싯 — 과목 칸은 과목을 고르면 그것도 따른다) · 칸을 누르면 명단이 걸러진다.
               🔴 Suspense에 검색어 key — Next는 검색어만 바뀌는 이동에서 같은 경계를 다시 쓰고, 이미 보인 경계는 이동 내내 옛 화면을 붙든다
               (= 모든 필터·쪽 이동이 판정 ~1초를 기다림). 이동마다 새 경계라 대기 카드가 바로 선다(적대 리뷰 2026-10-15). */}
           {teacherLater ? (
@@ -851,12 +908,22 @@ export default async function WithdrawalsPage({
                 {start + 1}–{end} / {total}건
               </p>
             </header>
-            {/* 행 = 유형 | 이름(학교학년) | 마지막 반 | 날짜 | 경과 — 한 줄(§11), 행 전체가 링크.
+            {/* 행 = 유형 | 이름(학교학년) | 마지막 반 | 담당강사 | 사유·메모 | 날짜 | 경과 — 한 줄(§11), 행 전체가 링크.
                 유형 라벨 = 퇴원(장미) · 수강종료(호박) — 원장 2026-09-28 "따로 라벨처리". 수강종료는 학생 상세로 간다
                 (퇴원 상세는 퇴원 사유·사후상담 화면이라 재원생에겐 맞지 않는다). */}
             <ul data-withdrawal-rows className="divide-line divide-y">
               {pageRows.map((r) => (
-                <ExitRowItem key={r.key} row={r} labelOf={subjectMaps.labelOf} today={today} />
+                <ExitRowItem
+                  key={r.key}
+                  row={r}
+                  labelOf={subjectMaps.labelOf}
+                  today={today}
+                  teacher={
+                    <Suspense key={`teacher-cell:${streamKey}:${r.key}`} fallback={<span className="text-text-faint" title="담당 확인 중">…</span>}>
+                      <TeacherCell cells={teacherCellsP} rowKey={r.key} />
+                    </Suspense>
+                  }
+                />
               ))}
             </ul>
             <div data-withdrawal-pager className="border-line border-t px-5 py-3">
@@ -903,7 +970,13 @@ export default async function WithdrawalsPage({
 }
 
 /** 목록 한 줄 — 퇴원과 수강종료가 같은 열에 선다(라벨로 가른다). */
-function ExitRowItem({ row: r, labelOf, today }: { row: ExitRow; labelOf: (key: string) => string; today: string }) {
+function ExitRowItem({ row: r, labelOf, today, teacher }: {
+  row: ExitRow;
+  labelOf: (key: string) => string;
+  today: string;
+  /** '담당강사' 칸 — 흘려받는 판정(`TeacherCell`). */
+  teacher: ReactNode;
+}) {
   // 오늘 이후 날짜 = 퇴원 예정(아직 다니는 중) — '오늘'이라 적으면 거짓이다.
   const ago = r.date && r.date > today ? "예정" : relativeDayKo(r.date, today);
   const where = schoolGradeLabel(r.school, r.grade);
@@ -916,7 +989,7 @@ function ExitRowItem({ row: r, labelOf, today }: { row: ExitRow; labelOf: (key: 
       <WindowLink
         href={ended ? `/students/${r.studentId}` : `/withdrawals/${r.studentId}`}
         title={r.name}
-        className="grid h-11 grid-cols-[auto_minmax(0,1fr)_6.5rem] items-center gap-3 px-5 sm:grid-cols-[4.75rem_minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,1fr)_6.5rem_5rem]"
+        className="grid h-11 grid-cols-[auto_minmax(0,1fr)_6.5rem] items-center gap-3 px-5 sm:grid-cols-[4.75rem_minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,1fr)_6.5rem_5rem] xl:grid-cols-[4.75rem_minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,0.55fr)_minmax(0,1fr)_6.5rem_5rem]"
       >
         <span className="whitespace-nowrap">
           <Pill color={ended ? "amber" : "rose"}>{ended ? "수강종료" : "퇴원"}</Pill>
@@ -936,6 +1009,9 @@ function ExitRowItem({ row: r, labelOf, today }: { row: ExitRow; labelOf: (key: 
           {r.className ?? "수강 반 없음"}
           {ended && r.activeSubjects?.length ? ` · ${r.activeSubjects.map(labelOf).join("·")} 수강중` : ""}
         </p>
+        {/* 담당강사(원장 2026-10-15) — 강사 카드·담당강사 필터·시간표 X와 같은 판정('담당 미반영' · 판정 폭 밖은 '—').
+            넓은 화면(xl)에서만 — 좁은 창에선 담당강사 필터·강사 카드로 본다. */}
+        <p className="text-text-dim hidden min-w-0 truncate text-sm xl:block">{teacher}</p>
         {/* 사유 · 메모 — '기타'의 실제 사유는 메모에 있다(원장 2026-10-15 *"눌러서 들어가 볼 수 있게"*). 잘리면 카드로 전문. */}
         <p
           className="text-text-dim hidden min-w-0 truncate text-sm sm:block"
@@ -974,6 +1050,23 @@ function FacetChip({ label, href }: { label: string; href: string }) {
       <X size={12} strokeWidth={2} />
     </EmbedLink>
   );
+}
+
+/** 명단 '담당강사' 칸 — 판정이 끝나면 그 줄의 글(`teacherCellText`), 판정 실패면 '—'. */
+async function TeacherCell({ cells, rowKey }: { cells: Promise<ReadonlyMap<string, string> | null>; rowKey: string }) {
+  const map = await cells;
+  const text = map?.get(rowKey) ?? "—";
+  return <span title={map ? text : "담당을 불러오지 못했습니다"}>{text}</span>;
+}
+
+/** 담당강사 드롭다운 — 고르면 `teacher=`(강사 카드 칸과 같은 주소 · 쪽은 1쪽으로). */
+function TeacherFilter({ value, options }: { value: string | null; options: { value: string; label: string }[] }) {
+  return <FilterSelect paramName="teacher" value={value ?? ""} options={options} axisLabel="담당강사" ariaLabel="담당강사 필터" {...SELECT_PROPS} />;
+}
+
+/** 담당강사 선택지를 흘려받아 그린다 — 판정 실패면 고른 값만(선택이 사라지지 않게). */
+async function StreamedTeacherFilter({ value, options }: { value: string | null; options: Promise<{ value: string; label: string }[] | null> }) {
+  return <TeacherFilter value={value} options={(await options) ?? []} />;
 }
 
 /** 강사 카드를 나중에 그린다 — 판정이 끝날 때까지 Suspense가 같은 카드(강사 칸 '세는 중')를 보인다. */

@@ -17,4 +17,7 @@
 
 @media (min-width: 1024px) {
   .layout { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); }
+  /* 옆 '사유 분석'은 명단 높이(창에 맞춘 높이)에서 멈추고 카드 안에서 스크롤한다 — 길어진 사유 카드가 명단을 늘려 아래가 비지 않게
+     (원장 2026-10-15). 한 열(<1024)에선 사유 카드가 명단 아래라 자르지 않는다. */
+  .layout > [data-withdrawal-reasons] { max-height: var(--withdrawal-list-height, none); overflow-y: auto; }
 }

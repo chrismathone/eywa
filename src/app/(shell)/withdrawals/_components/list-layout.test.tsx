@@ -59,8 +59,8 @@ describe("창 높이에 맞춘 명단 행 수", () => {
     expect(params.get("q")).toBe("Kim");
     expect(params.get("embed")).toBe("1");
     expect(options).toEqual({ scroll: false });
-    // 카드는 옆 카드보다 짧아 보이지 않게 최소 높이를 유지한다(행이 더 많으면 자연히 더 길어진다).
-    expect((container.firstChild as HTMLElement).style.getPropertyValue("--withdrawal-list-height")).toBe("400px");
+    // 두 카드 높이 = 창에 맞춘 명단 높이(머리 80 + 쪽 넘김 65 + 13행 × 45) — 옆 카드(400)가 아니다.
+    expect((container.firstChild as HTMLElement).style.getPropertyValue("--withdrawal-list-height")).toBe("730px");
   });
 
   it("이미 맞는 크기면 같은 크기를 재요청하지 않는다(왕복 진동 방지)", () => {
@@ -68,7 +68,22 @@ describe("창 높이에 맞춘 명단 행 수", () => {
       container: main,
     });
     expect(navigation.replace).not.toHaveBeenCalled();
-    expect((container.firstChild as HTMLElement).style.getPropertyValue("--withdrawal-list-height")).toBe("400px");
+    expect((container.firstChild as HTMLElement).style.getPropertyValue("--withdrawal-list-height")).toBe("730px");
+  });
+
+  it("🔴 옆 '사유 분석'이 창보다 길어도 명단 행 수·높이는 그대로 — 그 카드가 안에서 스크롤한다(원장 2026-10-15 · 적대 리뷰)", () => {
+    // 사유 2단계로 사유 카드가 1200px이 돼도 명단을 늘리지 않는다(늘리면 아래가 비고, 행 수를 늘리면 사유 막대가 바뀔 때마다 다시 불러온다).
+    vi.mocked(HTMLElement.prototype.getBoundingClientRect).mockImplementation(function (this: HTMLElement) {
+      if (this.tagName === "MAIN") return { top: 0, bottom: VIEWPORT, height: VIEWPORT } as DOMRect;
+      if (this.hasAttribute("data-withdrawal-rows")) return { top: ROWS_TOP, bottom: ROWS_TOP + 44, height: 44 } as DOMRect;
+      const height = this.hasAttribute("data-withdrawal-reasons") ? 1200
+        : this.hasAttribute("data-withdrawal-header") ? 80
+        : this.hasAttribute("data-withdrawal-pager") ? 65 : 44;
+      return { top: 0, bottom: height, height } as DOMRect;
+    });
+    const { container } = render(<WithdrawalListLayout size={13} total={99}>{fixture}</WithdrawalListLayout>, { container: main });
+    expect(navigation.replace).not.toHaveBeenCalled();
+    expect((container.firstChild as HTMLElement).style.getPropertyValue("--withdrawal-list-height")).toBe("730px");
   });
 
   it("좁은 화면에서는 창과 별도로 기본 8행을 사용한다 — 목록 아래에 '사유 분석'이 오기 때문", () => {
@@ -83,7 +98,9 @@ describe("창 높이에 맞춘 명단 행 수", () => {
   it("🔴 최소 창에서도 하한(5행) 아래로 떨어지지 않는다 — 1행 목록은 쪽 넘김을 무의미하게 만든다", () => {
     // 창이 목록 위 높이(300)보다 조금 큰 정도 = 남는 자리가 한 행도 안 된다.
     Object.defineProperty(main, "clientHeight", { value: 420, configurable: true });
-    render(<WithdrawalListLayout size={8} total={99}>{fixture}</WithdrawalListLayout>, { container: main });
+    const { container } = render(<WithdrawalListLayout size={8} total={99}>{fixture}</WithdrawalListLayout>, { container: main });
     expect(new URL(navigation.replace.mock.calls[0][0], "https://aywa.test").searchParams.get("size")).toBe("5");
+    // 하한에 걸린 창에선 두 카드 높이를 걸지 않는다 — 5행 높이로 사유 카드를 자르지 않게(리뷰 2026-10-15).
+    expect((container.firstChild as HTMLElement).style.getPropertyValue("--withdrawal-list-height")).toBe("");
   });
 });

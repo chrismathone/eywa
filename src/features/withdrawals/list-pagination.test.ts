@@ -59,14 +59,19 @@ describe("🔴 명단 행 수의 자 = 창(스크롤러)", () => {
     expect(src).not.toMatch(/\w\.scrollHeight/);
   });
 
-  it("옆 카드(사유 분석) 높이를 행 수의 자로 되돌리지 않는다 — 최소 높이로만 쓴다", () => {
-    const fit = src.slice(src.indexOf("const fit ="), src.indexOf("const asideHeight"));
-    expect(fit).not.toContain("aside");
-    expect(src).toContain("const asideHeight = aside.getBoundingClientRect().height");
+  it("옆 카드(사유 분석) 높이를 재지 않는다 — 두 카드 높이 = 창에 맞춘 명단 높이, 사유 카드는 그 안에서 스크롤(원장 2026-10-15)", () => {
+    // 옆 카드 높이로 명단을 늘리면 아래가 비고(원장 캡처), 행 수를 늘리면 사유 막대가 바뀔 때마다 다시 불러온다(적대 리뷰).
+    expect(src).not.toMatch(/aside\.getBoundingClientRect/);
+    expect(src).toContain("const stableHeight = sideBySide ? chrome + fit * rowHeight");
+    const css = readFileSync(join(process.cwd(), "src/app/(shell)/withdrawals/_components/list-layout.module.css"), "utf8");
+    const rule = css.slice(css.indexOf("[data-withdrawal-reasons]"));
+    expect(rule).toMatch(/max-height:\s*var\(--withdrawal-list-height/);
+    expect(rule).toMatch(/overflow-y:\s*auto/);
   });
 
   it("하한을 적용한다 — 최소 창에서 1행 목록이 되지 않게", () => {
-    expect(src).toContain("Math.max(WITHDRAWAL_PAGE_MIN, fitWithdrawalRows(avail, 0, rowHeight))");
+    expect(src).toContain("const windowFit = fitWithdrawalRows(avail, 0, rowHeight);");
+    expect(src).toContain("Math.max(WITHDRAWAL_PAGE_MIN, windowFit)");
   });
 
   it("창(iframe) 크기 변화도 듣는다 — 내용 높이가 그대로면 ResizeObserver가 안 깨어난다", () => {
