@@ -10,6 +10,10 @@ export type ScopeParts = {
   consult?: string | null;
   /** 등록 후 조기 퇴원 필터 라벨('1개월 이내' — `early-exit.ts`). */
   early?: string | null;
+  /** 분석 카드의 칸(원장 2026-10-15) — 학년 · 학교 · 강사 이름. */
+  grade?: string | null;
+  school?: string | null;
+  teacher?: string | null;
   q?: string | null;
 };
 
@@ -21,6 +25,9 @@ export function scopeText(p: ScopeParts): string {
     p.reason ? `사유 ${p.reason}` : null,
     p.consult ?? null,
     p.early ? `등록 후 ${p.early} 퇴원` : null,
+    p.grade ? `학년 ${p.grade}` : null,
+    p.school ? `학교 ${p.school}` : null,
+    p.teacher ? `강사 ${p.teacher}` : null,
     p.q ? `'${p.q}' 검색` : null,
   ].filter((b): b is string => !!b);
   return bits.length ? bits.join(" · ") : "학원 전체";

@@ -82,3 +82,23 @@ it("화면에 숨겨진 텍스트는 수납 금액 입력값보다 우선하지 
   expect(cell.textContent).toBe("0");
   expect(extractTable().rows[0].at(-1)).toBe("312,000");
 });
+it("직원 출퇴근 표는 두 줄 머리를 칸 단위로 맞추고 줄의 직원 번호를 마지막 칸에 붙인다", () => {
+  document.body.innerHTML = `<table class="list"><thead>
+    <tr><th rowspan="2">No</th><th rowspan="2">이름</th><th rowspan="2">고용형태</th><th rowspan="2">일자</th><th colspan="3">출근</th><th colspan="3">퇴근</th><th rowspan="2">근무시간</th><th rowspan="2">메모</th></tr>
+    <tr><th>일시</th><th>태그IP</th><th>사진</th><th>일시</th><th>태그IP</th><th>사진</th></tr></thead><tbody>
+    <tr><td>2<input type="hidden" name="attYmd" value="20261015"><input type="hidden" name="staffMno" value="040A055D20280817"></td><td>홍길동</td><td>정규직</td><td>2026-10-15</td><td>2026-10-15 13:27:32</td><td>1.2.3.4</td><td></td><td>2026-10-15 21:02:10</td><td>1.2.3.4</td><td></td><td>7시간 34분</td><td></td></tr>
+    <tr><td>1<input type="hidden" name="staffMno" value="040A051120331F3B"></td><td>김철수(Amy)</td><td>정규직</td><td>2026-10-14</td><td>2026-10-14 12:51:52</td><td></td><td></td><td></td><td></td><td></td><td></td><td>외근</td></tr>
+  </tbody></table>`;
+  const data = extractTable();
+  expect(data.headers).toEqual(["No", "이름", "고용형태", "일자", "출근 일시", "출근 태그IP", "출근 사진", "퇴근 일시", "퇴근 태그IP", "퇴근 사진", "근무시간", "메모", "직원번호"]);
+  expect(data.rows).toHaveLength(2);
+  expect(data.rows[0]).toHaveLength(13);
+  expect(data.rows[0].at(-1)).toBe("040A055D20280817");
+  expect(data.rows[1].at(-1)).toBe("040A051120331F3B");
+});
+it("두 줄 머리가 아닌 다른 목록의 열 이름·셀은 그대로다(직원 번호 칸을 붙이지 않는다)", () => {
+  table(parent("학생", 1));
+  const data = extractTable();
+  expect(data.headers).toEqual(["No", "이름", "청구월", "수납명", "청구액"]);
+  expect(data.rows[0]).toHaveLength(5);
+});

@@ -20,6 +20,8 @@ export type ClassDay = {
   reportOwner: string | null;
   /** 자리(LAB·JJ)를 뺀 교시별 수업 담당. */
   slotTeachers: (string | null)[];
+  /** 같은 교시의 시작·끝(`HH:MM:SS`) — 강사 근태의 그날 기준 시각(첫 수업 시작 · 마지막 수업 끝). `slotTeachers`와 같은 차례. */
+  slotTimes: { start: string; end: string | null }[];
   axisOf: (slotStart: string | null) => TeacherAxis;
 };
 
@@ -82,9 +84,11 @@ export function buildContext(d: PortfolioSnapshot) {
         if (!axis) axisCache.set(key, (axis = resolveTaughtBy({ homeroomTeacherId: homeroom, slots: axes, date: day, slotStart })));
         return axis;
       };
+      const lessons = live.filter((s) => !isSeatSlot(axisSlotFromRow(s)));
       out.push({
         c, day, students, axes, homeroom, reportOwner: reportOwner(c, day),
-        slotTeachers: live.filter((s) => !isSeatSlot(axisSlotFromRow(s))).map((s) => axisOf(s.start_time).teacherId),
+        slotTeachers: lessons.map((s) => axisOf(s.start_time).teacherId),
+        slotTimes: lessons.map((s) => ({ start: s.start_time, end: s.end_time })),
         axisOf,
       });
     }

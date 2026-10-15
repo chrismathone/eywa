@@ -45,6 +45,7 @@ const DOMAIN_LABEL: Record<string, string> = {
   prospects: "예비원생",
   catalog: "교재 단가표",
   textbook_checks: "교재 체크",
+  staff_attendance: "직원 출퇴근",
 };
 
 /**
@@ -57,8 +58,10 @@ const DOMAIN_LABEL: Record<string, string> = {
  *
  * ⚠️ 상태 오류(status<>'ok')는 여전히 잡는다 — 수동이라도 "실행했는데 실패"는 진짜 신호다.
  * ⚠️ sync-all.cjs의 IMPORTERS를 늘리거나 줄이면 여기도 같이 고칠 것(진실은 그쪽 목록).
+ * `staff_attendance`(직원 출퇴근)는 자동이지만 **강사평가를 쓰는 지점만** 돈다(0366a) — 기능을 끄면 그 상태 줄이 영원히 낡아 같은 영구 오탐이 된다.
+ * 연동이 멈춘 것은 다른 도메인이 잡는다.
  */
-const MANUAL_ONLY_DOMAINS = new Set(["catalog", "enrollments"]);
+const MANUAL_ONLY_DOMAINS = new Set(["catalog", "enrollments", "staff_attendance"]);
 
 /**
  * cron(세션 없음) 주입 계약 — admin client는 RLS를 우회하므로 tenantId 명시 격리가 필수

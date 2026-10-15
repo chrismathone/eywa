@@ -11,6 +11,9 @@ import { isCleanupWithdrawal } from "./system-bulk";
 const REPO = join(__dirname, "..", "..", "..");
 const read = (rel: string) => readFileSync(join(REPO, rel), "utf8");
 const SERVER = read("src/features/withdrawals/server/exit-overlay.ts");
+// 담당 선생님 판정 한 벌 — 시간표 X와 퇴원관리 '강사별'이 함께 부른다(2026-10-15).
+const JUDGE = read("src/features/withdrawals/server/exit-teacher-judge.ts");
+const WD_PAGE = read("src/app/(shell)/withdrawals/page.tsx");
 const ACTION = read("src/features/withdrawals/server/exit-overlay-actions.ts");
 const QUERIES = read("src/features/withdrawals/server/queries.ts");
 const PAGE = read("src/app/(shell)/timetable/page.tsx");
@@ -32,7 +35,8 @@ describe("시간표 X 겹침 배선", () => {
 
   it("🔴 담당 선생님 = 강사평가 퇴원율과 같은 재료 · 같은 담임 판정 · 같은 계산(새로 판정하지 않는다)", () => {
     // 재료 — 강사평가 스냅샷과 같은 조회 정의(churn-source.ts 한 곳을 두 쪽이 쓴다).
-    expect(SERVER).toContain("loadChurnSource(createAdminClient(), tenantId,");
+    expect(JUDGE).toContain("loadChurnSource(createAdminClient(), tenantId, range)");
+    expect(SERVER).toContain("loadExitTeacherJudge(tenantId, { from: monthRange(shiftMonth(anchor, -7)).from, end: monthRange(thisMonth).to }, { today, thisMonth })");
     expect(CHURN_SOURCE).toContain("export async function loadChurnSource(");
     for (const src of [SNAPSHOT, CHURN_SOURCE]) {
       expect(src).toContain('paged<SnapshotClass>((a, b) => inTenant("classes", CLASS_COLUMNS)');
@@ -50,36 +54,43 @@ describe("시간표 X 겹침 배선", () => {
     expect(CHURN_SOURCE).toContain("options: evaluation.config.metrics.churn.churn ?? DEFAULT_CHURN_OPTIONS");
     // 그날 담임 — 강사평가 전 지표와 한 함수.
     expect(CONTEXT).toContain("const owner = buildHomeroomOwner(d.classes, d.transitions);");
-    expect(SERVER).toContain("const owner = buildHomeroomOwner(source.classes, source.transitions);");
+    expect(JUDGE).toContain("const owner = buildHomeroomOwner(source.classes, source.transitions);");
     // 계산 — 강사평가가 부르는 것과 같은 명단(`buildStudentTracking`) · 같은 계산기(`buildChurnModel`) · 같은 입력 모양.
     // 강사평가는 배정·유지 감점에 쓰는 사유를 더 넘긴다(명단·수강 끝은 그대로 — 겹침은 명단만 읽는다).
     expect(BUILD).toContain("from: d.from, end: d.end, classes: d.classes, schedules: d.schedules, enrollments: d.enrollments, owner: ctx.owner,");
     expect(BUILD).toContain("reasons: { studentReasons: d.studentReasons, excludeReasons: churnOptions.excludeReasons, futureEnrollments: d.futureEnrollments },");
     // 사유 없이 끝난 줄의 학생 퇴원 사유 = 그 퇴원과 함께 끝난 수강인가 — 겹침과 같은 `endedWithExit` · 같은 폭.
     expect(read("src/features/teacher-portfolio/model/exit-reason.ts")).toContain("endedWithExit(rows, withdrawnDay, ref, OVERLAY_LOOKBACK_DAYS)");
-    expect(SERVER).toContain("buildStudentTracking({ from: source.from, end: source.end, classes: source.classes, schedules: source.schedules, enrollments: source.enrollments, owner })");
+    expect(JUDGE).toContain("buildStudentTracking({ from: source.from, end: source.end, classes: source.classes, schedules: source.schedules, enrollments: source.enrollments, owner })");
     expect(BUILD).toContain("const churnOptions = config.metrics.churn.churn ?? DEFAULT_CHURN_OPTIONS;");
     expect(BUILD).toContain("buildChurnModel({ source: students.churnSource, classes: d.classes, options: churnOptions, futureEnrollments: d.futureEnrollments, studentReasons: d.studentReasons })");
-    expect(SERVER).toContain("buildChurnModel({ source: tracking.churnSource, classes: source.classes, options: source.options, futureEnrollments: source.futureEnrollments, studentReasons: source.studentReasons })");
+    expect(JUDGE).toContain("buildChurnModel({ source: tracking.churnSource, classes: source.classes, options: source.options, futureEnrollments: source.futureEnrollments, studentReasons: source.studentReasons })");
     expect(BUILD).toContain("...churn.period(teacherId, w)");
-    expect(SERVER).toContain("churn.exits(id, w)");
-    expect(SERVER).toContain("churn.eligibleSubjects(w)");
-    expect(SERVER).toContain("churnZeroIds(view, subject, m)");
-    // 🔴 재료의 끝 = 이번 달 말일 고정 · 계산 달 = 열 + 앞뒤 한 달 — 기준 달을 넘겨도 같은 줄은 같은 선생님(적대 리뷰 2026-10-14).
-    expect(SERVER).toContain("end: monthRange(thisMonth).to })");
+    expect(JUDGE).toContain("churn.exits(id, w)");
+    expect(JUDGE).toContain("churn.eligibleSubjects(w)");
+    expect(JUDGE).toContain("churnZeroIds(view, subject, month)");
+    expect(SERVER).toContain("judge.zeroIdsOf(subject, m)");
+    expect(SERVER).toContain("judge.teachersOf(e.studentId, subject, e.endMonth)");
+    // 🔴 재료의 끝 = 이번 달 말일 고정 · 달별 퇴원율은 물어본 달만 — 기준 달을 넘겨도 같은 줄은 같은 선생님(적대 리뷰 2026-10-14).
+    expect(SERVER).toContain("end: monthRange(thisMonth).to }, { today, thisMonth })");
     expect(SERVER).not.toContain("end: to })");
-    expect(SERVER).toContain("const churnMonths = churnMonthsFor(anchor, thisMonth);");
+    // 퇴원율은 수강이 끝난 달로 세서 줄의 달과 어긋난다 — 달은 물어볼 때 계산한다(오지 않은 달은 없다).
+    expect(JUDGE).toContain("if (m > clock.thisMonth) return undefined;");
+    // 퇴원관리 '강사별'도 같은 판정 · 끝은 이번 달 말일로 고정(같은 줄은 화면마다 같은 선생님).
+    expect(WD_PAGE).toContain("loadExitTeacherJudge(");
+    expect(WD_PAGE).toContain("end: monthRange(thisMonth).to }");
     // 추정(보고서 작성자·출결)은 쓰지 않는다.
     expect(SERVER).not.toContain("getPastClassTeachers");
     expect(SERVER).not.toContain("getHomeroomHistoryIndex");
   });
 
   it("퇴원율이 세는 달·함께 끝난 수강 사유 = 강사평가와 같은 재료에서 같은 규칙(`endedWithExit` · `churnMonthOf`) — 퇴원·수강종료 둘 다", () => {
-    expect(SERVER.match(/endedOf\(/g)).toHaveLength(2);
-    expect(SERVER).toContain("for (const e of source.enrollments) {");
-    expect(SERVER).toContain("const ended = endedWithExit(subjectRows.get(studentId) ?? [], date, classOf, OVERLAY_LOOKBACK_DAYS);");
+    expect(SERVER.match(/= endedOf\(/g)).toHaveLength(2);
+    expect(SERVER).toContain("judge.endedOf(studentId, subject, date)");
+    expect(JUDGE).toContain("for (const e of source.enrollments) {");
+    expect(JUDGE).toContain("const ended = endedWithExit(endedRows.get(subject)?.get(studentId) ?? [], date, classOf, OVERLAY_LOOKBACK_DAYS);");
     expect(SERVER).toContain("from: monthRange(shiftMonth(anchor, -7)).from,");
-    expect(SERVER).toContain("endMonth: churnMonthOf(ended, date, classOf), endReasons: ended.map((r) => r.reason)");
+    expect(JUDGE).toContain("endMonth: churnMonthOf(ended, date, classOf), endReasons: ended.map((r) => r.reason)");
     // 긋는 사유·수강종료 셈 = 강사평가와 같은 원장 설정 · 퇴원율이 셌는지는 선생님 id로.
     expect(SERVER).toContain("rules: source.options,");
     expect(SERVER).toContain("rulesNote: exclusionNote(source.options),");

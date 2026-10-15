@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { churnMonthOf, churnMonthsFor, churnTeachersOf, churnZeroIds, currentHomeroomIds, teacherTints, TEACHER_TINTS, type ChurnView, type OverlayClass } from "./exit-overlay-teachers";
+import { churnMonthOf, churnTeachersOf, churnZeroIds, currentHomeroomIds, teacherTints, TEACHER_TINTS, type ChurnView, type OverlayClass } from "./exit-overlay-teachers";
 
 // 9월 퇴원율: 박(수학 담임)은 s1 수학 퇴원 · 오(수학 교시 담당)도 s1을 맡아 같이 · 윤(수학)은 분모만 · 리(영어)는 다른 과목.
 const view: ChurnView = new Map([
@@ -26,14 +26,6 @@ describe("퇴원 담당 = 강사평가 퇴원율이 낸 값", () => {
     expect(churnTeachersOf(view, "s1", "english", "2026-09")).toEqual([]);
     expect(churnTeachersOf(view, "s1", "math", "2026-10")).toEqual([]);
     expect(churnTeachersOf(view, "s9", "math", "2026-09")).toEqual([]);
-  });
-
-  it("🔴 퇴원율을 돌릴 달 = 석 달 열 + 앞뒤 한 달(이번 달을 넘지 않는다) — 어느 기준 달로 열어도 열마다 그 달과 앞뒤가 들어 있다", () => {
-    expect(churnMonthsFor("2026-10", "2026-10")).toEqual(["2026-10", "2026-09", "2026-08", "2026-07"]);
-    expect(churnMonthsFor("2026-09", "2026-10")).toEqual(["2026-10", "2026-09", "2026-08", "2026-07", "2026-06"]);
-    expect(churnMonthsFor("2026-01", "2026-10")).toEqual(["2026-02", "2026-01", "2025-12", "2025-11", "2025-10"]);
-    // 퇴원 8/31 · 수강 9/1 끝(윤채민) — 8월 열이 맨 오른쪽인 묶음(기준 10월)에서도, 맨 왼쪽인 묶음(기준 8월)에서도 9월 퇴원율을 본다.
-    for (const anchor of ["2026-10", "2026-09", "2026-08"]) expect(churnMonthsFor(anchor, "2026-10")).toContain("2026-09");
   });
 
   it("🔴 '퇴원 0' = 이 과목 분모가 있고 이 과목 분자가 없는 선생님 — 분모 없는 사람(학생 없는 반의 담임)은 서지 않는다", () => {

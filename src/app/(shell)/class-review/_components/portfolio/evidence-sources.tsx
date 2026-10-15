@@ -54,23 +54,29 @@ function SatisfactionEvidence({ period, nameOf }: EvidenceProps) {
   );
 }
 
-const STATUS = { late: "지각", absent: "결근" } as const;
+const STATUS = { late: "지각", absent: "결근", early: "조퇴", recorded: "기록으로 출근" } as const;
+const BASIS = { personal: "개인 시각", lessons: "수업" } as const;
+const clock = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hour12: false }) : "—");
 function PunctualityEvidence({ period }: EvidenceProps) {
   const m = metricOf(period, "punctuality");
   return (
     <>
       <StatTiles items={[
-        { label: "지각", value: `${m.late ?? 0}회` }, { label: "결근", value: `${m.absent ?? 0}회` },
-        { label: "뺀 날(휴가·휴원)", value: `${m.excused ?? 0}일` }, { label: "점수", value: pointsText(m, period) },
+        { label: "지각", value: `${m.late ?? 0}회` }, { label: "결근", value: `${m.absent ?? 0}회` }, { label: "조퇴", value: `${m.early ?? 0}회` },
+        { label: "뺀 날(결재된 휴가)", value: `${m.excused ?? 0}일` }, { label: "점수", value: pointsText(m, period) },
       ]} />
-      <SectionTitle sub={m.manual ? "원장 직접 입력이 이 달 수치입니다" : `출퇴근 기록 ${m.days ?? 0}일`}>지각·결근한 날</SectionTitle>
-      <DataTable headers={["날짜", "구분", "출근", "늦은 시간", "셈"]} kinds={["num", "text", "num", "num", "text"]}
-        empty={m.days ? "이 달 지각·결근이 없습니다." : "이 달 출퇴근 기록이 없습니다."}
-        rows={m.detail.map((r) => ({
-          key: r.day,
-          cells: [dayLabel(r.day), STATUS[r.status], r.checkIn ? new Date(r.checkIn).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit" }) : "—",
-            r.lateMinutes ? `${r.lateMinutes}분` : "—", <StatusChip key="c" state={r.counted ? "셈" : `뺌 · ${r.excuse}`} />],
-        }))} />
+      <SectionTitle sub={m.manual ? "원장 직접 입력이 이 달 수치입니다" : `출퇴근 기록 ${m.days ?? 0}일 · 기준 = 그날 맡은 수업(또는 개인 출퇴근 시각)`}>지각·결근·조퇴한 날</SectionTitle>
+      <DataTable headers={["날짜", "구분", "기준", "출근", "퇴근", "차이", "셈"]} kinds={["num", "text", "num", "num", "num", "num", "text"]}
+        empty={m.days ? "이 달 지각·결근·조퇴가 없습니다." : "이 달 출퇴근 기록이 없습니다."}
+        rows={m.detail.map((r) => {
+          const minutes = r.minutes ?? r.lateMinutes ?? null;
+          return {
+            key: `${r.day}|${r.status}`,
+            cells: [dayLabel(r.day), STATUS[r.status] ?? r.status, r.expected ? `${r.expected}${r.basis ? ` (${BASIS[r.basis]})` : ""}` : "—",
+              clock(r.checkIn), clock(r.checkOut), minutes ? `${minutes}분` : "—",
+              <StatusChip key="c" state={r.counted ? "셈" : `뺌 · ${r.excuse}`} />],
+          };
+        })} />
       <p className="mt-3 text-xs leading-relaxed">{m.reason}</p>
     </>
   );

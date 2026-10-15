@@ -26,7 +26,7 @@ export type SourceRows = Awaited<ReturnType<typeof fetchEvaluationSourceRows>>;
 
 export async function fetchEvaluationSourceRows(admin: Admin, tenantId: string, { from, end }: { from: string; end: string }) {
   const inTenant = (table: string, columns: string) => admin.from(table).select(columns).eq("tenant_id", tenantId);
-  const [grades, reports, judgments, claims, days, leaves] = await Promise.all([
+  const [grades, reports, judgments, claims, days, leaves, latest] = await Promise.all([
     paged<RawGrade>((a, b) => inTenant("student_grades", "id, student_id, exam_name, exam_slot, subject, class_id, score, max_score, taken_on, no_exam, created_at")
       .gte("taken_on", from).lte("taken_on", end).order("id").range(a, b)),
     // 성적 원장과 같은 줄 — 학부모 링크를 회수한 보고서(`revoked_at`)도 시험은 그대로 보인다.
@@ -39,18 +39,25 @@ export async function fetchEvaluationSourceRows(admin: Admin, tenantId: string, 
     paged<SnapshotClaim & { points: number | string }>((a, b) => inTenant("teacher_satisfaction_claims", "id, teacher_id, student_id, occurred_on, points, content")
       .is("cancelled_at", null).gte("occurred_on", from).lte("occurred_on", end).order("id").range(a, b))
       .catch((e: unknown) => { if (missing(e, "teacher_satisfaction_claims")) return null; throw e; }),
-    paged<SnapshotStaffDay>((a, b) => inTenant("staff_attendance_days", "user_id, work_date, status, late_minutes, check_in_at")
+    paged<SnapshotStaffDay>((a, b) => inTenant("staff_attendance_days", "user_id, work_date, status, late_minutes, check_in_at, check_out_at")
       .gte("work_date", from).lte("work_date", end).order("id").range(a, b))
       .catch((e: unknown) => { if (missing(e, "staff_attendance_days")) return null; throw e; }),
     // 결재된 휴가(연차·반차·반반차) — 전자결재 휴가 양식이 승인된 것만(달력 휴가 겹침과 같은 조회).
     paged<{ user_id: string; start_date: string; end_date: string }>((a, b) => admin.from("leave_forms")
       .select("user_id, start_date, end_date, doc:approval_documents!leave_forms_document_id_fkey!inner(status)")
       .eq("tenant_id", tenantId).eq("doc.status", "approved").lte("start_date", end).gte("end_date", from).order("document_id").range(a, b)),
+    // 메이크에듀 출퇴근을 어디까지 받았나 — 가장 늦은 날짜(창 밖 오늘 줄까지). 연동은 매번 지난달 1일 ~ 오늘을 통째로 받으므로
+    // 이 날짜 전날까지는 다 받은 것이다(그날 저녁 태그는 다음 동기화에 온다 — 근태가 '아직 안 받은 날'을 결근으로 세지 않게).
+    Promise.resolve(admin.from("staff_attendance_days").select("work_date").eq("tenant_id", tenantId).eq("source", "makeedu")
+      .order("work_date", { ascending: false }).limit(1)).then(({ data, error }) => {
+      if (error) { if (missing(new Error(error.message), "staff_attendance_days")) return null; throw new Error(`출퇴근 조회 실패: ${error.message}`); }
+      return (data?.[0]?.work_date as string | undefined) ?? null;
+    }),
   ]);
-  return { grades, reports, judgments, claims, days, leaves };
+  return { grades, reports, judgments, claims, days, leaves, latest };
 }
 
-export function toEvaluationSources({ grades, reports, judgments, claims, days, leaves }: SourceRows, input: {
+export function toEvaluationSources({ grades, reports, judgments, claims, days, leaves, latest }: SourceRows, input: {
   isTest: (studentId: string) => boolean; subjectOfClass: (classId: string) => string | null;
 }): EvaluationSources {
   const out: SnapshotGrade[] = [];
@@ -76,6 +83,6 @@ export function toEvaluationSources({ grades, reports, judgments, claims, days, 
   return {
     grades: out,
     satisfaction: judgments && claims ? { judgments: real(judgments), claims: real(claims).map((c) => ({ ...c, points: Number(c.points) })) } : null,
-    punctuality: { days, leaves: leaves.map((l): SnapshotLeave => ({ user_id: l.user_id, start_date: l.start_date, end_date: l.end_date })) },
+    punctuality: { days, latest, leaves: leaves.map((l): SnapshotLeave => ({ user_id: l.user_id, start_date: l.start_date, end_date: l.end_date })) },
   };
 }

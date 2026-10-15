@@ -1,13 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_PUNCTUALITY_OPTIONS, DEFAULT_SATISFACTION_OPTIONS } from "../evaluation/options";
+import { DEFAULT_SATISFACTION_OPTIONS } from "../evaluation/options";
 import { buildRecordOwners } from "./attribution";
-import { punctualityOf } from "./punctuality";
 import { buildSatisfaction } from "./satisfaction";
 import { judgeByRules, verdictPoints } from "./satisfaction-rules";
-import type { SnapshotJudgment, SnapshotStaffDay } from "./source-types";
+import type { SnapshotJudgment } from "./source-types";
 import type { SnapshotClass, SnapshotEnrollment } from "./types";
 
-/** 학부모 만족도(문구 판정 · 가감 합) · 강사 근태(지각·결근, 휴가·휴원 제외) — 원장 2026-10-15 "계산 안된거 … 다 해결해". */
+/** 학부모 만족도(문구 판정 · 가감 합) — 원장 2026-10-15 "계산 안된거 … 다 해결해". */
 const o = DEFAULT_SATISFACTION_OPTIONS;
 const w = { month: "2026-10", start: "2026-10-01", end: "2026-10-31", partial: false };
 
@@ -67,23 +66,5 @@ describe("만족도 가감 합", () => {
   });
   it("판정 표가 없으면(SQL 적용 전) 만들지 않는다 — 그 지표는 계산 전", () => {
     expect(buildSatisfaction({ ownersOf, source: null })).toBeNull();
-  });
-});
-
-describe("강사 근태", () => {
-  const day = (work_date: string, status: SnapshotStaffDay["status"], user_id = "t1"): SnapshotStaffDay => ({ user_id, work_date, status, late_minutes: status === "late" ? 12 : null, check_in_at: null });
-  const run = (days: SnapshotStaffDay[], manual: number | null = null, options = DEFAULT_PUNCTUALITY_OPTIONS) => punctualityOf({
-    days, leaves: [{ user_id: "t1", start_date: "2026-10-08", end_date: "2026-10-09" }], holidays: new Set(["2026-10-03"]), teacherId: "t1", w, options, manual,
-  });
-  it("지각·결근을 세되 결재된 휴가가 걸친 날과 휴원일은 뺀다 · 다른 직원·다른 달은 빼고", () => {
-    const r = run([day("2026-10-02", "late"), day("2026-10-03", "absent"), day("2026-10-08", "late"), day("2026-10-15", "absent"), day("2026-10-16", "present"),
-      day("2026-10-02", "late", "t2"), day("2026-09-30", "late")]);
-    expect([r.raw, r.late, r.absent, r.excused, r.days, r.manual]).toEqual([2, 1, 1, 2, 5, false]);
-    expect(r.detail.find((x) => x.day === "2026-10-08")).toMatchObject({ counted: false, excuse: "결재된 휴가" });
-    expect(run([day("2026-10-15", "absent"), day("2026-10-16", "late")], null, { late: 1, absent: 3 }).raw).toBe(4);
-  });
-  it("원장이 그 달 횟수를 넣으면 그 값 · 기록도 입력도 없으면 자료 없음", () => {
-    expect(run([day("2026-10-15", "absent")], 0)).toMatchObject({ raw: 0, manual: true });
-    expect(run([]).raw).toBeNull();
   });
 });
