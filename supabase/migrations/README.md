@@ -1,5 +1,9 @@
 # Supabase 마이그레이션 — 적용 방식·순서·현재 상태
 
+## 2026-10-15 퇴원보고서 처리 = 수강 줄에도 상세사유 메모 (0369a)
+
+`0369a_withdrawal_report_end_memo.sql`은 퇴원보고서 전이 함수 두 개(`transition_withdrawal_report`·`_v1`)가 수강 줄을 닫는 한 줄에 `withdrawal_memo`(보고서 상세사유 글)를 더한다(본문은 그대로 · 그 줄 글자만 · 바꿀 줄이 정확히 하나가 아니면 중단 · 이미 바뀌었으면 건너뜀 · 소유자·권한·security invoker 그대로). 함께 수강 보호 트리거(`student_status_private.guard_enrollment`, 20261015160100)의 '날짜 수정' 갈래에서 세부·메모 거절에 `and not student_status_private.allowed()`를 붙인다 — 종료일이 잡힌 수강을 같은 사유로 다시 종료하며 메모를 바꾸면 원장도 막혔다(원생 상태 변경 권한이 있으면 통과 · 날짜만 고칠 수 있는 사람은 그대로 막힘). 앱 배포와 순서 무관. 빈 DB 순서 의존은 아래 0367a와 같다(타임스탬프 파일들을 다 깐 뒤 다시 돌린다).
+
 ## 2026-10-15 퇴원·수강 종료 사유 2단계 (0367a)
 
 `0367a_withdrawal_reason_details.sql`은 `enrollments.withdrawal_detail`·`withdrawal_memo` 두 칸(nullable · 기본값 없음)을 더하고, 퇴원보고서 전이 함수 두 개(`transition_withdrawal_report`·`_v1`)의 사유 목록에 새 대분류 다섯을 더한다(본문은 그대로 · 목록 글자만 · 이미 바뀌었으면 건너뛰고, 바꿀 목록이 없으면 중단). **앱보다 먼저** 적용한다 — 부분 종료 저장과 수강 종료 되돌리기가 새 칸을 쓴다. 적용 뒤 앱 배포 → `node --env-file=.env.local scripts/_oneoff/withdrawal-reason-details-backfill.mjs`(미리 보기) → `--apply`.

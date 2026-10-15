@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { REASON_LABEL, REASON_LABEL_EN, WITHDRAWAL_REASONS } from "./types";
-import { REASON_DETAILS, checkReasonInput, detailFor, memoRequired, reasonDetailOf } from "./reason-detail";
+import { REASON_DETAILS, checkReasonInput, detailFor, memoRequired, readReasonForm, reasonDetailOf } from "./reason-detail";
 import { reasonKeyOf } from "./reason-key";
 import { reasonFacetLabel } from "./breakdown";
 
@@ -56,6 +56,27 @@ describe("세부 살리기 · 저장 검사", () => {
   });
 });
 
+describe("폼 사유 칸 읽기(readReasonForm) — 사유를 받는 서버 액션 공용", () => {
+  const fd = (o: Record<string, string>) => {
+    const f = new FormData();
+    for (const [k, v] of Object.entries(o)) f.set(k, v);
+    return f;
+  };
+  it("대분류를 안 골랐거나 모르는 값이면 거절 — 예전처럼 '기타'로 떨어지지 않는다", () => {
+    expect(readReasonForm(fd({}))).toEqual({ error: "퇴원 사유를 골라 주세요." });
+    expect(readReasonForm(fd({ reason: "nope" }), "종료")).toEqual({ error: "종료 사유를 골라 주세요." });
+  });
+  it("'기타'는 메모가 있어야 · 공백뿐인 메모는 없는 것", () => {
+    expect(readReasonForm(fd({ reason: "other", memo: "   " })).error).toBeTruthy();
+    expect(readReasonForm(fd({ reason: "other", memo: " 개인 사정 " }))).toEqual({ reason: "other", detail: null, memo: "개인 사정" });
+  });
+  it("세부는 선택 · 그 대분류의 세부만", () => {
+    expect(readReasonForm(fd({ reason: "dissatisfaction", detail: "teacher_left" }))).toEqual({ reason: "dissatisfaction", detail: "teacher_left", memo: null });
+    expect(readReasonForm(fd({ reason: "grades", detail: "teacher_left" })).error).toBeTruthy();
+    expect(readReasonForm(fd({ reason: "graduated" }))).toEqual({ reason: "graduated", detail: null, memo: null });
+  });
+});
+
 describe("배선 가드", () => {
   it("🔴 퇴원보고서 DB 함수의 사유 목록 = 앱 사유 목록(0367a) — 사유를 늘리면 함수 목록도 함께 늘린다(안 그러면 그 사유로 낸 보고서가 거절된다)", () => {
     const sql = read("supabase/migrations/0367a_withdrawal_reason_details.sql");
@@ -68,6 +89,38 @@ describe("배선 가드", () => {
     expect(students.match(/checkReasonInput\(/g)?.length).toBe(2);
     expect(students).toContain("endEnrollmentById(supabase, t.id, date, reasonStr, { detail: checked.detail, memo })");
     expect(read("src/features/withdrawals/server/actions.ts")).toContain("checkReasonInput(");
+  });
+  it("🔴 '기타는 메모 필수'가 모든 곳에 — 사유를 받는 길이 모두 같은 읽기·같은 부품을 지난다(원장 2026-10-15 *\"기타는 모든 곳을 일치하게\"*)", () => {
+    const students = read("src/features/students/server/actions.ts");
+    // 학생 등록·수정(새 퇴원·예약) · 수강 한 건 종료 — 사유 없이 '기타'로 떨어지는 기본값이 없어야 한다.
+    expect(students.match(/readReasonForm\(formData/g)?.length).toBe(3);
+    expect(students).not.toContain(`|| "other"`);
+    expect(students).not.toMatch(/withdrawal_metadata: createPlan\.kind === "none" \? null : DEFAULT_WITHDRAWAL_METADATA/);
+    const end = students.slice(students.indexOf("export async function endSingleEnrollment"), students.indexOf("// ────────────────────── 메모 + 성적"));
+    expect(end).toContain("{ detail: picked.detail, memo: picked.memo }");
+    // 화면 — 수강 종료 창 넷(반·학생 상세 · 시간표 Delete · 명단 끌기) + 학생 폼이 같은 부품.
+    for (const f of [
+      "src/features/enrollments/components/end-enrollment-action.tsx",
+      "src/app/(shell)/timetable/_components/timetable-board.tsx",
+      "src/app/(shell)/timetable/_components/roster-move.tsx",
+      "src/app/(shell)/students/_components/withdrawal-reason-slot.tsx",
+    ]) expect(read(f), f).toContain("<ReasonFields");
+    expect(read("src/app/(shell)/students/_components/student-form.tsx")).toContain("<WithdrawalReasonSlot");
+    // 엑셀 가져오기 — 새 퇴원생은 사유를 받고 기본 메타데이터를 박지 않는다.
+    const imp = read("src/features/excel-import/importers/students.ts");
+    expect(imp).toContain("checkReasonInput(");
+    expect(imp).not.toContain("DEFAULT_WITHDRAWAL_METADATA");
+    // 퇴원보고서 — 닫는 수강 줄에도 상세사유 메모(0369a).
+    const m = read("supabase/migrations/0369a_withdrawal_report_end_memo.sql");
+    expect(m).toContain("withdrawal_memo=(select nullif(btrim(q.body->>'detail'),'')");
+    expect(m).toContain("withdrawal_memo=nullif(btrim(r.body->>'detail'),'')");
+    // 같은 사유로 다시 종료하며 메모를 바꾸는 것 — 원생 상태 변경 권한이 있으면 보호 트리거가 막지 않는다(리뷰 2026-10-15).
+    expect(m).toContain("is null) and not student_status_private.allowed() then");
+  });
+  it("🔴 상태 전환 창은 서버가 거절해도 입력이 남는다 — 액션 폼(자동 초기화)이 아니라 submitAction", () => {
+    const dlg = read("src/app/(shell)/students/[id]/_components/status-dialog.tsx");
+    expect(dlg).toContain("onSubmit={(e) => submitAction(e,");
+    expect(dlg).not.toMatch(/<form\s+action=/);
   });
   it("🔴 상담 칸 토글은 메타데이터의 다른 칸(세부 사유 등)을 지우지 않는다", () => {
     const src = read("src/features/withdrawals/server/actions.ts");

@@ -1,9 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { planFormWithdrawal } from "./withdrawal-plan";
+import { formWithdrawalNeedsReason, planFormWithdrawal } from "./withdrawal-plan";
 
 const T = "2026-09-28";
 const plan = (a: Partial<Parameters<typeof planFormWithdrawal>[0]>) =>
   planFormWithdrawal({ prevStatus: "enrolled", status: "enrolled", withdrawnAt: null, today: T, ...a });
+
+describe("학생 폼 — 새 퇴원·예약일 때만 사유를 받는다(원장 2026-10-15 *\"기타는 모든 곳을 일치하게\"*)", () => {
+  const needs = (prevStatus: string | null, prevWithdrawnAt: string | null, a: Partial<Parameters<typeof planFormWithdrawal>[0]>) =>
+    formWithdrawalNeedsReason({ prevStatus, prevWithdrawnAt, kind: plan({ prevStatus, prevWithdrawnAt, ...a }).kind });
+  it("새 퇴원 · 새 예약 · 퇴원으로 등록 = 사유를 받는다", () => {
+    expect(needs("enrolled", null, { status: "withdrawn", withdrawnAt: T })).toBe(true);
+    expect(needs("enrolled", null, { withdrawnAt: "2026-10-01" })).toBe(true);
+    expect(needs(null, null, { status: "withdrawn", withdrawnAt: T })).toBe(true);
+    expect(needs(null, null, { status: "enrolled", withdrawnAt: "2026-10-01" })).toBe(true);
+  });
+  it("이미 퇴원한 학생 수정 · 예약 날짜만 바꿈 · 예약을 오늘로 당김 · 아무 일 없음 = 저장된 사유 그대로", () => {
+    expect(needs("withdrawn", "2026-09-01", { status: "withdrawn", withdrawnAt: "2026-09-01" })).toBe(false);
+    expect(needs("enrolled", "2026-10-01", { withdrawnAt: "2026-10-05" })).toBe(false);
+    expect(needs("enrolled", "2026-10-01", { status: "withdrawn", withdrawnAt: T })).toBe(false);
+    expect(needs("enrolled", null, {})).toBe(false);
+    expect(needs(null, null, { status: "enrolled" })).toBe(false);
+  });
+});
 
 describe("학생 폼 퇴원일 칸 → 퇴원 예약(원장 2026-09-28)", () => {
   it("재원 + 빈칸 = 아무 일 없음", () => {

@@ -11,7 +11,8 @@ import { STUDENT_STATUS_LABEL } from "@/features/students/status-labels";
 import { planFormWithdrawal } from "@/features/students/withdrawal-plan";
 import { canManageStudentStatusNow } from "@/features/students/server/status-access";
 import { statusCreationNeedsPermission, STUDENT_STATUS_DENIED } from "@/features/students/status-access";
-import { DEFAULT_WITHDRAWAL_METADATA } from "@/features/withdrawals/types";
+import { LEGACY_REASON_LABELS, REASON_LABEL, type WithdrawalMetadata, type WithdrawalReason } from "@/features/withdrawals/types";
+import { checkReasonInput } from "@/features/withdrawals/reason-detail";
 import { IMPORT_META } from "../kinds";
 import { duplicateKeyIssues, type ColumnSpec, type ImportPreviewRow, type SheetSpec } from "../spec";
 import type { ImporterDef } from "../server/types";
@@ -25,7 +26,8 @@ import type { ImporterDef } from "../server/types";
  */
 type K =
   | "code" | "name" | "englishName" | "school" | "grade" | "gender" | "birthDate" | "status"
-  | "studentPhone" | "parentName" | "parentRelation" | "parentPhone" | "address" | "email" | "enrolledAt" | "withdrawnAt" | "notes";
+  | "studentPhone" | "parentName" | "parentRelation" | "parentPhone" | "address" | "email" | "enrolledAt" | "withdrawnAt"
+  | "withdrawalReason" | "withdrawalMemo" | "notes";
 
 const STATUS_OPTIONS = [
   { label: "재원", value: "enrolled" },
@@ -34,6 +36,15 @@ const STATUS_OPTIONS = [
   { label: "휴원", value: "on_hold" },
   { label: "퇴원", value: "withdrawn" },
 ] as const;
+/**
+ * 퇴원 사유 = 퇴원관리와 같은 대분류(라벨 글로 적는다 · 옛 라벨도 받는다). 새로 넣는 원생이 퇴원·퇴원 예약이면 필수, '기타'면
+ * 퇴원메모도 필수(원장 2026-10-15 *"기타는 모든 곳을 일치하게"* — 예전엔 사유 없이 '기타'로 들어갔다). 세부 사유는 화면에서 고친다.
+ */
+const REASON_OPTIONS = (Object.entries(REASON_LABEL) as [WithdrawalReason, string][]).map(([value, label]) => ({
+  label,
+  value,
+  aliases: Object.entries(LEGACY_REASON_LABELS).filter(([, v]) => v === value).map(([old]) => old),
+}));
 const GENDER_OPTIONS = [
   { label: "남", value: "male", aliases: ["남자", "남성", "m"] },
   { label: "여", value: "female", aliases: ["여자", "여성", "f"] },
@@ -57,6 +68,8 @@ function columns(gradeLevels: readonly string[]): ColumnSpec<K>[] {
     { key: "email", header: "이메일", width: 20 },
     { key: "enrolledAt", header: "등록일", width: 12, aliases: ["입학일", "입원일"] },
     { key: "withdrawnAt", header: "퇴원일", width: 12, hint: "상태가 퇴원이면 필수. 오늘 이후 날짜면 퇴원 예약." },
+    { key: "withdrawalReason", header: "퇴원사유", width: 14, options: REASON_OPTIONS.map((o) => o.label), strictOptions: true, hint: "새로 넣는 원생이 퇴원(또는 퇴원 예약)이면 필수. '기타'면 퇴원메모도 적어 주세요." },
+    { key: "withdrawalMemo", header: "퇴원메모", width: 24, aliases: ["퇴원 메모", "퇴원사유 메모"], hint: "실제 사유('기타'는 필수)." },
     { key: "notes", header: "메모", width: 30, aliases: ["비고", "특이사항"] },
   ];
 }
@@ -71,8 +84,12 @@ type Existing = {
   parent_relation: string | null; parent_phone: string | null; address: string | null; email: string | null; enrolled_at: string | null;
   withdrawn_at: string | null; notes: string | null;
 };
-type Fields = Partial<Record<Exclude<K, "code" | "name" | "status">, string | null>>;
-type Insert = { rowNum: number; name: string; code: string | null; status: string; withdrawnAt: string | null; scheduled: boolean; fields: Fields };
+type Fields = Partial<Record<Exclude<K, "code" | "name" | "status" | "withdrawalReason" | "withdrawalMemo">, string | null>>;
+type Insert = {
+  rowNum: number; name: string; code: string | null; status: string; withdrawnAt: string | null; scheduled: boolean; fields: Fields;
+  /** 퇴원·퇴원 예약으로 넣는 줄의 사유(그 밖엔 null). */
+  withdrawal: WithdrawalMetadata | null;
+};
 type Update = { id: string; patch: Record<string, string | null> };
 type Plan = { inserts: Insert[]; updates: Update[] };
 
@@ -230,9 +247,35 @@ const def: ImporterDef<Plan> = {
         row.fail("withdrawnAt", "상태가 퇴원이면 퇴원일을 적어 주세요");
         continue;
       }
+      let withdrawal: WithdrawalMetadata | null = null;
+      if (w.kind !== "none") {
+        const reason = row.option("withdrawalReason", REASON_OPTIONS);
+        const memo = row.text("withdrawalMemo", { max: 2000 });
+        if (!row.ok) continue;
+        if (!reason) {
+          row.fail(
+            "withdrawalReason",
+            row.has("withdrawalReason")
+              ? "퇴원(또는 퇴원 예약)이면 퇴원사유를 골라 주세요"
+              // 2026-10-15 전에 받은 서식엔 이 칸이 없다 — 없는 칸을 고르라고 하면 길이 안 보인다.
+              : "퇴원(또는 퇴원 예약)이면 퇴원사유가 필요합니다 — 서식을 새로 내려받아 '퇴원사유' 칸을 채워 주세요",
+          );
+          continue;
+        }
+        const checked = checkReasonInput({ reason, detail: null, memo });
+        if (checked.error !== undefined) {
+          row.fail("withdrawalMemo", checked.error);
+          continue;
+        }
+        withdrawal = {
+          reason,
+          memo,
+          consultation: { adminCalledParent: false, teacherCalledParent: false, talkedWithStudent: false },
+        };
+      }
       const unique = resolveUniqueStudentName(name, taken);
       taken.add(unique.name);
-      plan.inserts.push({ rowNum: row.rowNum, name: unique.name, code, status: w.status, withdrawnAt: w.withdrawnAt, scheduled: w.kind === "schedule", fields });
+      plan.inserts.push({ rowNum: row.rowNum, name: unique.name, code, status: w.status, withdrawnAt: w.withdrawnAt, scheduled: w.kind === "schedule", fields, withdrawal });
       preview.push({
         sheet: SHEET,
         rowNum: row.rowNum,
@@ -284,7 +327,7 @@ const def: ImporterDef<Plan> = {
           enrolled_at: r.fields.enrolledAt ?? null,
           status: r.status,
           withdrawn_at: r.withdrawnAt,
-          withdrawal_metadata: r.withdrawnAt ? DEFAULT_WITHDRAWAL_METADATA : null,
+          withdrawal_metadata: r.withdrawnAt ? r.withdrawal : null,
           notes: r.fields.notes ?? null,
         })),
       );

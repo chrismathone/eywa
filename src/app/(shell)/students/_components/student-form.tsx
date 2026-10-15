@@ -21,6 +21,7 @@ import { useUnsavedGuard } from "@/components/workspace/use-unsaved-guard";
 import { FormActionBar } from "@/components/forms/form-action-bar";
 import { useFormDraft } from "@/components/forms/use-form-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
+import { WithdrawalReasonSlot } from "./withdrawal-reason-slot";
 
 type Mode = "create" | "edit";
 
@@ -373,6 +374,15 @@ export function StudentForm({
               className={inputClass}
             />
           </Field> : <p className="text-sm text-muted-foreground">퇴원·휴원·복구와 퇴원 예약은 원생 상태 변경 담당자가 처리합니다.{v.withdrawnAt ? ` 퇴원일: ${v.withdrawnAt}` : ""}</p>}
+          {/* 새 퇴원·퇴원 예약이면 사유를 고른다(원장 2026-10-15 *"기타는 모든 곳을 일치하게"*) — 서버와 같은 판정. */}
+          <WithdrawalReasonSlot
+            formRef={formRef}
+            prevStatus={mode === "create" ? null : v.status}
+            prevWithdrawnAt={mode === "create" ? null : v.withdrawnAt}
+            initialStatus={v.status}
+            initialWithdrawnAt={v.withdrawnAt}
+            controlClassName={inputClass}
+          />
         </div>
       </fieldset>
       <details className="rounded-lg border border-line p-3">

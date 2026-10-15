@@ -8,7 +8,7 @@
  * 🔴 키는 한 번 저장되면 바꾸지 않는다(라벨만 고친다). 강사평가 '뺄 사유'는 **대분류**로 고른다 — 세부는 분석용이다.
  * ⚠️ 장부 정리(일괄 퇴원)는 고르는 목록 밖이다(시스템이 표시만 한다 — `isCleanupWithdrawal`).
  */
-import { REASON_LABEL, normalizeReason, type WithdrawalReason } from "./types";
+import { REASON_LABEL, WITHDRAWAL_REASONS, normalizeReason, type WithdrawalReason } from "./types";
 
 export type ReasonDetail = { key: string; label: string };
 
@@ -125,4 +125,21 @@ export function checkReasonInput(input: {
     return { error: `'${REASON_LABEL.other}'는 메모에 실제 사유를 적어 주세요.` };
   }
   return { detail: raw };
+}
+
+/**
+ * 폼의 사유 칸 셋(`reason`·`detail`·`memo` — [`ReasonFields`](./reason-fields.tsx)) → 검사한 값. 사유를 받는 서버 액션은 모두 이것을
+ * 부른다(원장 2026-10-15 *"기타는 모든 곳을 일치하게"*). 대분류를 안 골랐거나 모르는 값이면 `{ error }`.
+ * `kind` = 오류 문구의 말(퇴원 사유 / 종료 사유).
+ */
+export function readReasonForm(
+  formData: FormData,
+  kind: "퇴원" | "종료" = "퇴원",
+): { reason: WithdrawalReason; detail: string | null; memo: string | null; error?: undefined } | { error: string } {
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (!(WITHDRAWAL_REASONS as readonly string[]).includes(reason)) return { error: `${kind} 사유를 골라 주세요.` };
+  const memo = String(formData.get("memo") ?? "").trim() || null;
+  const checked = checkReasonInput({ reason: reason as WithdrawalReason, detail: String(formData.get("detail") ?? ""), memo });
+  if (checked.error !== undefined) return { error: checked.error };
+  return { reason: reason as WithdrawalReason, detail: checked.detail, memo };
 }

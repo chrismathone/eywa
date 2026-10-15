@@ -8,7 +8,9 @@ const REASON_OPTIONS = (Object.entries(REASON_LABEL) as [WithdrawalReason, strin
 
 /**
  * 퇴원·수강 종료 사유 입력 한 벌 — 대분류(`reason`) · 세부(`detail`, 선택) · 메모(`memo`, 기타는 필수).
- * 학생 상태 전환 창(퇴원·부분 종료)과 퇴원 상세의 사유 카드가 같은 부품을 쓴다(두 벌이면 한쪽만 고쳐진다 — #77).
+ * 사유를 받는 **모든 곳**이 같은 부품을 쓴다(원장 2026-10-15 *"기타는 모든 곳을 일치하게"* — 두 벌이면 한쪽만 고쳐진다, #77):
+ * 학생 상태 전환 창(퇴원·부분 종료) · 퇴원 상세의 사유 카드 · 학생 정보 폼(새 퇴원·퇴원 예약) · 수강 종료 창(반·학생 상세) ·
+ * 시간표의 수강 종료(Delete 키 · 퇴원 칸으로 끌기). 서버 쪽 읽기는 `readReasonForm` 한 곳.
  * 서버도 같은 규칙으로 다시 본다(`checkReasonInput`) — 여기 `required`는 도움일 뿐 게이트가 아니다.
  * 세부는 대분류를 바꾸면 비운다(다른 대분류의 세부가 남지 않게 — `key`로 다시 마운트).
  * ⚠️ `<form action>` 폼은 제출하면 React가 폼을 처음 값으로 되돌린다(#83) — 고른 대분류(state)도 폼의 `reset`을 듣고 함께
@@ -22,6 +24,7 @@ export function ReasonFields({
   memoPlaceholder,
   labelClassName,
   controlClassName,
+  idPrefix = "withdrawal",
 }: {
   reasonLabel: string;
   /** null = 아직 안 고름(고르세요 칸에서 시작 — 첫 항목이 저절로 골라져 한쪽 사유로 쏠리지 않게). */
@@ -31,6 +34,8 @@ export function ReasonFields({
   memoPlaceholder: string;
   labelClassName: string;
   controlClassName: string;
+  /** 칸 id 앞글자 — 한 문서에 이 부품이 둘 뜰 수 있는 자리(학생 폼 · 수강 종료 창)는 다르게 준다(label이 엉뚱한 칸을 가리키지 않게). */
+  idPrefix?: string;
 }) {
   const [reason, setReason] = useState<WithdrawalReason | null>(initialReason);
   const selectRef = useRef<HTMLSelectElement>(null);
@@ -46,12 +51,12 @@ export function ReasonFields({
   return (
     <>
       <div className="space-y-1.5">
-        <label htmlFor="withdrawal-reason" className={labelClassName}>
+        <label htmlFor={`${idPrefix}-reason`} className={labelClassName}>
           {reasonLabel}
         </label>
         <select
           ref={selectRef}
-          id="withdrawal-reason"
+          id={`${idPrefix}-reason`}
           name="reason"
           required
           defaultValue={initialReason ?? ""}
@@ -72,12 +77,12 @@ export function ReasonFields({
       </div>
       {details.length ? (
         <div className="space-y-1.5">
-          <label htmlFor="withdrawal-detail" className={labelClassName}>
+          <label htmlFor={`${idPrefix}-detail`} className={labelClassName}>
             세부 사유 <span className="text-text-faint font-normal">(선택)</span>
           </label>
           <select
             key={reason}
-            id="withdrawal-detail"
+            id={`${idPrefix}-detail`}
             name="detail"
             defaultValue={detailFor(reason, initialDetail) ?? ""}
             className={controlClassName}
@@ -92,11 +97,11 @@ export function ReasonFields({
         </div>
       ) : null}
       <div className="space-y-1.5">
-        <label htmlFor="withdrawal-memo" className={labelClassName}>
+        <label htmlFor={`${idPrefix}-memo`} className={labelClassName}>
           {needsMemo ? "메모 (필수 — 실제 사유)" : "상세 메모"}
         </label>
         <textarea
-          id="withdrawal-memo"
+          id={`${idPrefix}-memo`}
           name="memo"
           rows={3}
           required={needsMemo}

@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { LogOut, Loader2, X } from "@/components/icons/aywa-icon-compat";
 import { kstToday } from "@/lib/date-kst";
 import { endChoices, type EndChoice } from "../end-choices";
 import { endSingleEnrollment } from "@/features/students/server/actions";
 import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-change-signal";
+import { ReasonFields } from "@/features/withdrawals/reason-fields";
 
 /**
  * 수강 종료 — 이 수강 **한 건**을 끝낸다(퇴원 아님·반 폐지 아님).
@@ -18,6 +19,9 @@ import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-ch
  *    (서버는 이미 `endSingleEnrollment` 하나로 모여 있고 종료 규약은 `endEnrollmentById`가 단일 소스다).
  * 🔴 권한은 **학생 쓰기(full)** — 강사는 학생 기록 열람 전용(원장 2026-08-18)이라 호출부가 버튼을
  *    숨기고, 서버 액션이 `canManageStudentRecords`로 한 번 더 막는다(#77 이중 방어).
+ * 🔑 **사유를 고른다**(원장 2026-10-15 *"기타는 모든 곳을 일치하게"*) — 상태 전환 창과 같은 칸(`ReasonFields`: 대분류 · 세부 ·
+ *    '기타'면 메모 필수). 예전엔 사유 없이 '기타'로 끝나 퇴원관리에 메모 없는 '기타'가 쌓였다. 날짜 버튼이 곧 저장이라
+ *    누르면 먼저 칸 검사(`reportValidity`)를 지난다 — 서버도 같은 규칙으로 다시 본다(`readReasonForm`).
  * ⚠️ 아직 시작 안 한 수강(배정 예정)엔 붙이지 말 것 — 종료일이 시작일로 클램프돼 두 갈래가 **같은
  *    결과**가 된다(그건 '종료'가 아니라 배정 취소라 학생 상세의 삭제가 맡는다).
  */
@@ -93,12 +97,16 @@ function EndDialog({
   const [pending, startTransition] = useTransition();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   const choices = endChoices(today, startDate);
 
   const submit = (choice: EndChoice) => {
+    const form = formRef.current;
+    // 사유 칸(대분류 필수 · '기타'면 메모 필수)을 먼저 — 비었으면 브라우저가 그 칸을 짚어 준다.
+    if (!form || !form.reportValidity()) return;
     setBusy(true);
     setError(null);
-    const fd = new FormData();
+    const fd = new FormData(form);
     fd.set("enrollmentId", enrollmentId);
     fd.set("studentId", studentId);
     fd.set("date", choice.date);
@@ -123,7 +131,7 @@ function EndDialog({
   const working = busy || pending;
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
-      <div className="bg-background border-border w-full max-w-md rounded-2xl border p-6 shadow-lg">
+      <div className="bg-background border-border max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl border p-6 shadow-lg">
         <header className="mb-4 flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="eyebrow">수강 종료</p>
@@ -150,6 +158,17 @@ function EndDialog({
             <X className="size-4" />
           </button>
         </header>
+
+        <form ref={formRef} onSubmit={(e) => e.preventDefault()} className="mb-4 space-y-3">
+          <ReasonFields
+            reasonLabel="종료 사유"
+            initialReason={null}
+            memoPlaceholder="배경 정보 (선택)"
+            labelClassName="text-foreground block text-sm font-medium"
+            controlClassName="border-border bg-card text-foreground w-full rounded-lg border px-3 py-2 text-sm"
+            idPrefix={`end-${enrollmentId}`}
+          />
+        </form>
 
         <p className="text-foreground mb-2 text-sm font-medium">언제까지 수업하나요?</p>
         <div className="space-y-2">

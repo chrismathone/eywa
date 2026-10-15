@@ -22,7 +22,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { accessLevelTenant, canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { logAction } from "@/features/audit/server/log";
 import { kstToday } from "@/lib/date-kst";
-import { planFormWithdrawal } from "../withdrawal-plan";
+import { formWithdrawalNeedsReason, planFormWithdrawal } from "../withdrawal-plan";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import {
   DEFAULT_WITHDRAWAL_METADATA,
@@ -30,7 +30,7 @@ import {
   type WithdrawalMetadata,
   type WithdrawalReason,
 } from "@/features/withdrawals/types";
-import { checkReasonInput } from "@/features/withdrawals/reason-detail";
+import { checkReasonInput, readReasonForm } from "@/features/withdrawals/reason-detail";
 import { currentPeriod, isCommentCategory } from "../grades-meta";
 import { normalizeExamSlot } from "@/features/grades/exam-slots";
 import { defaultTermOf, normalizeTerm, normalizeYear, termWindow } from "@/features/grades/term";
@@ -152,6 +152,16 @@ async function canManageStudentRecords(role: Parameters<typeof canManageTenant>[
 
 const STUDENT_MANAGE_DENIED = "학생 정보 변경 권한이 없습니다 — 강사 계정은 열람 전용입니다";
 
+/** 폼에서 읽은 사유 → 새 퇴원 메타데이터(상담 기록은 빈 채로 시작 — 상태 전환 창과 같은 모양). */
+function freshWithdrawalMetadata(r: { reason: WithdrawalReason; detail: string | null; memo: string | null }): WithdrawalMetadata {
+  return {
+    reason: r.reason,
+    ...(r.detail ? { detail: r.detail } : {}),
+    memo: r.memo,
+    consultation: { adminCalledParent: false, teacherCalledParent: false, talkedWithStudent: false },
+  };
+}
+
 export async function createStudent(
   _prev: StudentFormState,
   formData: FormData,
@@ -169,6 +179,14 @@ export async function createStudent(
   }
   const createPlan = planFormWithdrawal({ prevStatus: null, status: input.status, withdrawnAt: input.withdrawnAt, today: kstToday() });
   if (createPlan.error) return { fieldErrors: { withdrawnAt: createPlan.error } };
+  // 퇴원(또는 퇴원 예약)으로 등록하면 사유를 받는다 — 상태 전환 창과 같은 칸·같은 검사(원장 2026-10-15 *"기타는 모든 곳을
+  // 일치하게"*). 예전엔 사유 칸 없이 '기타'를 박았다.
+  let createMeta: WithdrawalMetadata | null = null;
+  if (formWithdrawalNeedsReason({ prevStatus: null, kind: createPlan.kind })) {
+    const picked = readReasonForm(formData);
+    if (picked.error !== undefined) return { error: picked.error };
+    createMeta = freshWithdrawalMetadata(picked);
+  }
   if (createPlan.status === "enrolled") {
     // 재원생 좌석 한도(슈퍼관리자 라이선스) — 한도가 없는 지점은 조회 한 번으로 통과.
     const seat = await seatBlockReason(user.tenantId, 1);
@@ -209,7 +227,7 @@ export async function createStudent(
       status: createPlan.status,
       enrolled_at: input.enrolledAt,
       withdrawn_at: createPlan.withdrawnAt,
-      withdrawal_metadata: createPlan.kind === "none" ? null : DEFAULT_WITHDRAWAL_METADATA,
+      withdrawal_metadata: createMeta,
       notes: input.notes,
     })
     .select("id")
@@ -223,7 +241,7 @@ export async function createStudent(
     action: "student_create",
     targetType: "student",
     targetLabel: resolvedName.name,
-    metadata: { studentId: data.id },
+    metadata: { studentId: data.id, ...(createMeta ? { reason: createMeta.reason, detail: createMeta.detail ?? null } : {}) },
   });
 
   revalidatePath("/students");
@@ -341,13 +359,24 @@ export async function updateStudent(
   if (withdrawalPlan.error) return { fieldErrors: { withdrawnAt: withdrawalPlan.error } };
   const schedulingNow = statusAccess && withdrawalPlan.kind === "schedule";
   const savedStatus = withdrawalPlan.status;
+  // 새 퇴원·퇴원 예약이면 사유를 받는다(원장 2026-10-15 *"기타는 모든 곳을 일치하게"*) — 판정은 폼이 사유 칸을 띄우는 것과 같은 함수.
+  let formReason: WithdrawalMetadata | null = null;
+  if (statusAccess && formWithdrawalNeedsReason({
+    prevStatus: prevStatus ?? null,
+    prevWithdrawnAt: (cur?.withdrawn_at as string | null) ?? null,
+    kind: withdrawalPlan.kind,
+  })) {
+    const picked = readReasonForm(formData);
+    if (picked.error !== undefined) return { error: picked.error };
+    formReason = freshWithdrawalMetadata(picked);
+  }
 
   let withdrawalMetadata: unknown = cur?.withdrawal_metadata ?? null;
   if (withdrawalPlan.kind === "withdraw" && prevStatus !== "withdrawn") {
-    // 예약돼 있던 사유는 살린다(폼엔 사유 칸이 없다) — 없으면 기본값.
-    withdrawalMetadata = scheduledPrev && cur?.withdrawal_metadata ? cur.withdrawal_metadata : DEFAULT_WITHDRAWAL_METADATA;
+    // 예약돼 있던 사유는 살린다(예약 때 골랐다) — 새 퇴원이면 방금 고른 사유. 예약인데 사유가 비어 있던 옛 줄만 기본값.
+    withdrawalMetadata = formReason ?? (scheduledPrev && cur?.withdrawal_metadata ? cur.withdrawal_metadata : DEFAULT_WITHDRAWAL_METADATA);
   } else if (schedulingNow) {
-    withdrawalMetadata = scheduledPrev && cur?.withdrawal_metadata ? cur.withdrawal_metadata : DEFAULT_WITHDRAWAL_METADATA;
+    withdrawalMetadata = formReason ?? (scheduledPrev && cur?.withdrawal_metadata ? cur.withdrawal_metadata : DEFAULT_WITHDRAWAL_METADATA);
   } else if (statusAccess && withdrawalPlan.kind === "none") {
     withdrawalMetadata = null;
   }
@@ -422,7 +451,14 @@ export async function updateStudent(
   // 상태 전환에 맞춰 활성 enrollment 정합성 유지 (changeStudentStatus와 동일 불변식).
   // 편집 폼 경로가 enrollment를 안 닫던 누수(F8) 보강 — 퇴원 시 종료, 복구/재원 시 on_hold 해제.
   if (savedStatus === "withdrawn" && prevStatus !== "withdrawn") {
-    const enrErr = await closeActiveEnrollmentsClamped(supabase, id, input.withdrawnAt ?? null);
+    // 닫는 수강에도 퇴원 사유를 적는다(상태 전환 창과 같다 — 퇴원율이 수강 사유도 읽는다).
+    const closingReason = (withdrawalMetadata as Partial<WithdrawalMetadata> | null)?.reason;
+    const enrErr = await closeActiveEnrollmentsClamped(
+      supabase,
+      id,
+      input.withdrawnAt ?? null,
+      closingReason ? { withdrawal_reason: closingReason } : {},
+    );
     if (enrErr) return { error: enrErr };
     // 수학 퇴원이면 '퇴원생 관리 차트' 시트에 적는다(원장 2026-10-07) — 응답 뒤에, 실패해도 퇴원은 그대로.
     const sheetDate = (savedWithdrawnAt ? String(savedWithdrawnAt).slice(0, 10) : null) ?? kstToday();
@@ -458,6 +494,7 @@ export async function updateStudent(
         ? { scheduledWithdrawal: input.withdrawnAt }
         : {}),
       ...(cancelledSchedule ? { cancelledWithdrawal: cancelledSchedule } : {}),
+      ...(formReason ? { reason: formReason.reason, detail: formReason.detail ?? null } : {}),
     },
   });
 
@@ -946,15 +983,19 @@ export async function endSingleEnrollment(
 
   const enrollmentId = String(formData.get("enrollmentId") ?? "").trim();
   const studentId = String(formData.get("studentId") ?? "").trim();
-  const reason = String(formData.get("reason") ?? "").trim() || "other";
   const date = String(formData.get("date") ?? "").trim() || kstToday();
 
   if (!enrollmentId) return { error: "수강 ID가 누락되었습니다" };
+  // 사유는 고른다 — 예전엔 칸 없이 '기타'를 박아 퇴원관리에 메모 없는 '기타'가 쌓였다(원장 2026-10-15 *"기타는 모든 곳을
+  // 일치하게"*). 반·학생 상세의 수강 종료 창과 시간표의 종료(Delete · 퇴원 칸 끌기)가 같은 칸(`ReasonFields`)을 보낸다.
+  const picked = readReasonForm(formData, "종료");
+  if (picked.error !== undefined) return { error: picked.error };
+  const reason = picked.reason;
 
   const supabase = await createClient();
   // 종료 규약(미래 시작 클램프 + withdrawal_reason)은 공용 원시함수 한 곳에 있다 — 퇴원 다이얼로그의
   // 부분 종료(endStudentEnrollments)도 같은 함수를 돈다(#77: 표면마다 다시 짜면 한쪽만 고쳐진다).
-  const res = await endEnrollmentById(supabase, enrollmentId, date, reason, undefined, studentId || undefined);
+  const res = await endEnrollmentById(supabase, enrollmentId, date, reason, { detail: picked.detail, memo: picked.memo }, studentId || undefined);
   if (res.error) return { error: res.error };
   // 이 종료로 수학을 그만뒀으면(반이동 제외 · 다른 수학 반이 남아 있으면 아님) 시트에 적는다(원장 2026-10-07).
   const sheetStudent = res.studentId || null;
@@ -974,6 +1015,8 @@ export async function endSingleEnrollment(
       classId: res.classId ?? null,
       date: res.endDate,
       reason,
+      detail: picked.detail,
+      memo: picked.memo,
     },
   });
 

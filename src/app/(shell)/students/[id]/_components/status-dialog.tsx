@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
-import { useFormStatus } from "react-dom";
+import { submitAction } from "@/components/forms/submit-action";
 import { kstToday } from "@/lib/date-kst";
 import { Loader2, Save, X } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
@@ -42,8 +42,7 @@ export type OpenEnrollment = {
 const FIELD_LABEL = "text-foreground block text-sm font-medium";
 const FIELD_CONTROL = "border-border bg-card text-foreground w-full rounded-lg border px-3 py-2 text-sm";
 
-function SubmitBtn({ target, label, disabled }: { target: Target; label?: string; disabled?: boolean }) {
-  const { pending } = useFormStatus();
+function SubmitBtn({ target, label, disabled, pending }: { target: Target; label?: string; disabled?: boolean; pending: boolean }) {
   const fallback =
     target === "withdrawn" ? "퇴원 처리" : target === "on_hold" ? "휴원 처리" : "재원 복구";
   return (
@@ -79,17 +78,18 @@ export function StatusDialog({
   onClose: (changed: boolean) => void;
 }) {
   const subjects = useSubjectMaps();
-  const [state, formAction] = useActionState<ChangeStatusState, FormData>(
+  // 🔑 세 번째 값 = 처리 중 — 이 폼은 `submitAction`(직접 넘김)이라 `useFormStatus`가 안 켜진다.
+  const [state, formAction, statusPending] = useActionState<ChangeStatusState, FormData>(
     changeStudentStatus,
     undefined,
   );
   // 부분 종료는 **다른 액션**(학생 상태를 안 바꾼다) — 같은 폼이 선택에 따라 행선지를 바꾼다.
-  const [partialState, partialAction] = useActionState<ChangeStatusState, FormData>(
+  const [partialState, partialAction, partialPending] = useActionState<ChangeStatusState, FormData>(
     endStudentEnrollments,
     undefined,
   );
   // 부분 휴원도 마찬가지(2026-09-16) — 고른 수강만 대기로, 체크가 풀린 대기는 수강으로 되돌린다.
-  const [holdState, holdAction] = useActionState<ChangeStatusState, FormData>(
+  const [holdState, holdAction, holdPending] = useActionState<ChangeStatusState, FormData>(
     setStudentEnrollmentHolds,
     undefined,
   );
@@ -206,9 +206,11 @@ export function StatusDialog({
           <ChipButton current={target} value="enrolled" onClick={setTarget} label="재원 복구" disabled={statusKey === "enrolled"} />
         </div>
 
-        {/* 🔴 부분 종료는 학생 상태를 안 바꾸므로 **다른 액션**으로 보낸다 — 선택이 바뀌면 행선지도 바뀐다. */}
+        {/* 🔴 부분 종료는 학생 상태를 안 바꾸므로 **다른 액션**으로 보낸다 — 선택이 바뀌면 행선지도 바뀐다.
+            🔴 `<form action>`이 아니라 `submitAction` — 액션 폼은 제출하면 React가 폼을 처음 값으로 되돌려(#83) 서버가 거절했을 때
+            고른 사유·세부·메모·날짜가 다 지워졌다(원장 2026-10-15 승인 *"상태 변경 창 입력 유지"*). 성공하면 창이 닫힌다. */}
         <form
-          action={usePartialAction ? partialAction : useHoldAction ? holdAction : formAction}
+          onSubmit={(e) => submitAction(e, usePartialAction ? partialAction : useHoldAction ? holdAction : formAction)}
           className="space-y-3"
         >
           <input type="hidden" name="id" value={studentId} />
@@ -323,6 +325,7 @@ export function StatusDialog({
               target={target}
               label={isWithdraw ? plan.buttonLabel : isHold ? holdPlan.buttonLabel : undefined}
               disabled={blocked}
+              pending={statusPending || partialPending || holdPending}
             />
           </footer>
         </form>
