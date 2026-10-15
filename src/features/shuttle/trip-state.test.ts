@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  endTripBlockedMessage,
+  uncheckedDropOffNames,
+  uncheckedRiderNames,
   canEndTrip,
   canReopenTrip,
   canStartTrip,
@@ -102,5 +105,45 @@ describe("출발·종료·되돌리기 가능 판정", () => {
     expect(canReopenTrip("done", today, today)).toBe(true);
     expect(canReopenTrip("running", today, today)).toBe(false);
     expect(canReopenTrip("done", "2026-09-01", today)).toBe(false);
+  });
+});
+
+describe("uncheckedRiderNames · endTripBlockedMessage — 종료 전 상태 확인", () => {
+  type Row = Parameters<typeof uncheckedRiderNames>[0][number];
+  const r = (studentName: string, status: Row["status"], dayKind: Row["dayKind"] = "regular"): Row => ({ studentName, status, dayKind });
+
+  it("기록 없는 아이만 고른다 — 탑승·미탑승 기록과 오늘 안 타는 줄은 정해진 것", () => {
+    const rows = [r("김민준", "boarded"), r("이서연", "missed"), r("임주원", null), r("정시우", null, "skipped"), r("한지우", null, "replaced"), r("박하늘", null)];
+    expect(uncheckedRiderNames(rows)).toEqual(["임주원", "박하늘"]);
+  });
+
+  it("같은 아이 두 줄은 이름 한 번", () => {
+    expect(uncheckedRiderNames([r("임주원", null), r("임주원", null)])).toEqual(["임주원"]);
+  });
+
+  it("모두 정해졌으면 막지 않는다(null), 아니면 이름을 대며 막는다", () => {
+    expect(endTripBlockedMessage([])).toBeNull();
+    expect(endTripBlockedMessage(["임주원", "정시우"])).toMatch(/^임주원·정시우 학생 확인이 필요합니다/);
+  });
+});
+
+describe("uncheckedDropOffNames — 출발 전 하원 체크 확인", () => {
+  type Row = Parameters<typeof uncheckedDropOffNames>[0][number];
+  const r = (key: string, studentName: string, ioKind: Row["ioKind"], dayKind: Row["dayKind"] = "regular"): Row => ({ key, studentName, ioKind, dayKind });
+  const rows = [
+    r("a", "김민준", "in"),
+    r("b", "한지우", "out"),
+    r("c", "박하늘", "out"),
+    r("d", "최다온", "out", "skipped"),
+    r("e", "윤서아", "out", "replaced"),
+  ];
+
+  it("체크도 하원 안함도 아닌 하원 아이만 고른다(등원 줄은 보지 않는다)", () => {
+    expect(uncheckedDropOffNames(rows, (k) => k === "c")).toEqual(["한지우"]);
+  });
+
+  it("하원 아이가 다 체크됐거나 하원이 없으면 빈 목록", () => {
+    expect(uncheckedDropOffNames(rows, () => true)).toEqual([]);
+    expect(uncheckedDropOffNames([r("a", "김민준", "in")], () => false)).toEqual([]);
   });
 });

@@ -19,6 +19,7 @@ import {
   runShortTitle,
 } from "@/features/shuttle/types";
 import { firstTime } from "@/features/shuttle/today-board";
+import { isInactiveDay } from "@/features/shuttle/roster";
 
 /**
  * 관제의 차 한 칸 — 차 머리 + 회차 줄. **읽기 전용**이다(찍는 버튼은 오늘 등하원 화면에 있다).
@@ -158,8 +159,8 @@ function LiveRunPanel({
               className={cn(
                 SHUTTLE_ROW_TEXT,
                 "flex items-center gap-2",
-                // 오늘 안 타는 줄은 회색으로 남긴다(지우지 않는다 — roster 규약).
-                row.dayKind === "skipped" && "opacity-50",
+                // 오늘 안 타는 줄·오늘만 승하차로 대체된 평소 줄은 회색으로 남긴다(지우지 않는다 — roster 규약).
+                isInactiveDay(row.dayKind) && "opacity-50",
               )}
             >
               <span className="text-foreground font-bold">{row.studentName || "—"}</span>

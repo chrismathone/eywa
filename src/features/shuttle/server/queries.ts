@@ -22,6 +22,8 @@ import {
   type ShuttleVehicle,
 } from "../types";
 import { dayCodeOf, type RideException } from "../roster";
+import { isMissingNotifyColumn } from "../notify-column";
+import { isMissingActorColumns } from "../actor-columns";
 
 /**
  * 셔틀 조회 — 읽기는 세션 클라이언트 + RLS(테넌트 전원, 0225a). 쓰기는 서버 액션(actions.ts).
@@ -309,6 +311,10 @@ export type BoardingLog = {
   ioKind: Direction;
   status: BoardingStatus;
   memo: string | null;
+  /** 찍은 시각(ISO) — 학부모 등하원이 "몇 시에 탔는지"로 읽는다(0225a부터 있던 칸). */
+  recordedAt: string | null;
+  /** 학부모 탑승 알림 대상인가(0368c) — [전송]=true · [저장]=false. */
+  notifyParent: boolean;
 };
 
 /**
@@ -320,11 +326,22 @@ export async function getBoardingsOn(ymd: string): Promise<{ ready: boolean; log
   const user = await getCurrentUser();
   if (!user) return { ready: false, logs: [] };
   const supabase = await createClient();
-  const { data, error } = await supabase
+  const first = await supabase
     .from("shuttle_boardings")
-    .select("id, student_id, run_id, stop_id, vehicle_label, stop_label, run_no, io_kind, status, memo")
+    .select("id, student_id, run_id, stop_id, vehicle_label, stop_label, run_no, io_kind, status, memo, recorded_at, notify_parent")
     .eq("boarded_on", ymd)
     .limit(2000);
+  // ⚠️ 0368c(notify_parent) 전 DB면 그 칸만 빼고 다시 읽는다 — 안 그러면 찍은 기록이 전부 '미기록'으로 보인다(notify-column.ts).
+  //    그때 기록은 전부 알림 대상(notify_parent=true)으로 친다.
+  const fallback = isMissingNotifyColumn(first.error)
+    ? await supabase
+        .from("shuttle_boardings")
+        .select("id, student_id, run_id, stop_id, vehicle_label, stop_label, run_no, io_kind, status, memo, recorded_at")
+        .eq("boarded_on", ymd)
+        .limit(2000)
+    : null;
+  const error = fallback ? fallback.error : first.error;
+  const data = fallback ? (fallback.data ?? []).map((r) => ({ ...r, notify_parent: true })) : first.data;
 
   if (isMissingTable(error)) return { ready: false, logs: [] };
   if (error) {
@@ -347,6 +364,8 @@ export async function getBoardingsOn(ymd: string): Promise<{ ready: boolean; log
       ioKind: r.io_kind,
       status: r.status,
       memo: r.memo,
+      recordedAt: r.recorded_at,
+      notifyParent: r.notify_parent !== false,
     });
   }
   return { ready: true, logs };
@@ -368,11 +387,23 @@ export async function getRideExceptionsOn(
   if (!user) return { ready: false, exceptions: [] };
   try {
     const supabase = await createClient();
-    const { data, error } = await supabase
+    const first = await supabase
       .from("shuttle_ride_exceptions")
-      .select("id, student_id, kind, io_kind, run_stop_id, memo")
+      .select("id, student_id, kind, io_kind, run_stop_id, memo, actor_kind, actor_name")
       .eq("on_date", ymd)
       .limit(500); // 하루 예외는 몇 건 규모 — 절단 방지 명시 상한(B2)
+    // 0321a 전 DB면 행위자 칸 없이 다시 읽는다([[#95]] — 안 그러면 그날 변경이 화면에서 통째로 사라진다).
+    const fallback = isMissingActorColumns(first.error)
+      ? await supabase
+          .from("shuttle_ride_exceptions")
+          .select("id, student_id, kind, io_kind, run_stop_id, memo")
+          .eq("on_date", ymd)
+          .limit(500)
+      : null;
+    const error = fallback ? fallback.error : first.error;
+    const data = fallback
+      ? (fallback.data ?? []).map((r) => ({ ...r, actor_kind: null as string | null, actor_name: null as string | null }))
+      : first.data;
 
     if (isMissingTable(error)) return { ready: false, exceptions: [] };
     if (error) {
@@ -396,6 +427,8 @@ export async function getRideExceptionsOn(
           ioKind: r.io_kind as Direction,
           runStopId: r.run_stop_id,
           memo: r.memo,
+          actorKind: r.actor_kind === "parent" || r.actor_kind === "staff" ? r.actor_kind : null,
+          actorName: r.actor_name ?? null,
         };
       }),
     };

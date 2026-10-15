@@ -94,6 +94,7 @@ const RULES: readonly [string, string][] = [
   ["notion_", "comms"],
   ["briefing_", "comms"],
   ["shuttle_", "ops"],
+  ["parent_account_", "ops"], // 학부모 계정 발급·삭제(셔틀 학부모 등하원)
   ["inventory_", "ops"],
   ["owner_", "settings"],
   ["integration_", "settings"],

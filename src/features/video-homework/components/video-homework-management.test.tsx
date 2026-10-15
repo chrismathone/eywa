@@ -122,6 +122,28 @@ describe("영상 제출 현황 — 회차는 학생별 '숙제가 나간 날' �
     expect(cell("이서연 2회 2026-09-09 완료")).toHaveTextContent("09.30");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
+  // 원장 2026-10-15 — 영상이 붙은 칸을 우클릭해 배정을 찾았다. 우클릭 = 편집 창만(누르기와 달리 저장하지 않는다).
+  it("칸 우클릭은 저장 없이 편집 창을 연다 — 미확인 칸도 완료로 찍지 않는다", async () => {
+    show();
+    fireEvent.contextMenu(cell("이서연 2회 2026-09-09 미확인"));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(mocks.save).not.toHaveBeenCalled();
+    // 창이 열리면 뒤 화면은 접근성 트리에서 가려진다 — 칸은 그대로 미확인.
+    expect(screen.getByRole("button", { name: "이서연 2회 2026-09-09 미확인", hidden: true })).toBeInTheDocument();
+  });
+  it("영상이 붙은 칸을 우클릭하면 그 창에서 영상 배정 변경", async () => {
+    show({ rows: [row({ assignedDates: ["2026-09-01"], canAssignVideos: true, hasAssignableVideos: false })], marks: [],
+      videos: [{ id: "v", classId: "a", studentId: "one", postedAt: "2026-09-02T12:00:00+09:00" }] });
+    fireEvent.contextMenu(cell("김민준 1회 2026-09-01 완료(영상)"));
+    expect(await screen.findByRole("button", { name: "영상 배정 변경" })).toBeInTheDocument();
+  });
+  it("▶ 재생 버튼을 우클릭해도 같은 편집 창 — 재생 창이 아니다", async () => {
+    show({ rows: [row({ assignedDates: ["2026-09-01"], canAssignVideos: true, hasAssignableVideos: false })], marks: [],
+      videos: [{ id: "v", classId: "a", studentId: "one", postedAt: "2026-09-02T12:00:00+09:00",
+        playback: { preview: "https://drive.google.com/p", thumbnail: "https://drive.google.com/t", uploadedAt: null } }] });
+    fireEvent.contextMenu(screen.getByRole("button", { name: "숙제 영상 보기" }));
+    expect(await screen.findByRole("button", { name: "영상 배정 변경" })).toBeInTheDocument();
+  });
   it("완료를 다시 누르면 날짜 수정 — 숙제일보다 빠른 날·미래는 막는다", async () => {
     show({ marks: [{ ...marks[0], status: "submitted", submittedDate: "2026-09-02" }] });
     fireEvent.click(cell("김민준 1회 2026-09-01 완료"));

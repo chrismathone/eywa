@@ -1578,6 +1578,15 @@ export function auditDetail(
       const parts = [on, isBoardingStatus(status) ? BOARDING_STATUS_LABEL[status] : null].filter(Boolean);
       return parts.length ? parts.join(" · ") : null;
     }
+    // 학부모 계정(0320a) — 대상 이름은 target_label에 있다. 이메일은 싣지 않는다.
+    case "parent_account_create": {
+      const rel = str(m.relationship);
+      return rel ? `원생 1명 연결 · ${rel}` : "원생 1명 연결";
+    }
+    case "parent_account_delete": {
+      const n = num(m.students);
+      return n ? `원생 연결 ${n}건 해제 · 로그인 삭제` : "로그인 삭제";
+    }
     // ── 재고관리(0242a) ────────────────────────────────────────────────────────────
     // 🔴 case가 없으면 폴백이 `status: on_loan` · `category: laptop`을 **영문 그대로** 내보낸다.
     case "inventory_asset_create": {
@@ -1796,6 +1805,10 @@ export function auditDetail(
      */
     case "shuttle_stop_location": {
       return m.cleared === true ? "위치 지움" : "위치 지정";
+    }
+    // 변경 내역 확인(0323a) — 어느 장부의 줄인지만(그날 변경 / 고정 변경).
+    case "shuttle_history_ack": {
+      return m.kind === "regular" ? "고정 시간 변경 확인" : m.kind === "ride" ? "그날 변경 확인" : null;
     }
 
     // ── 수업 평가(class_review) ──────────────────────────────────────────────────────

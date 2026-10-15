@@ -9,7 +9,7 @@
  *    `unmarked`를 따로 세고 `missed`와 절대 합치지 않는다.
  */
 import type { Direction, ShuttleRun, ShuttleVehicle } from "./types";
-import type { RideRow } from "./roster";
+import { isInactiveDay, type RideRow } from "./roster";
 
 /** 화면이 넘겨주는 회차 한 덩이(회차 + 그날 줄). */
 export type RunRows = { run: ShuttleRun; rows: RideRow[] };
@@ -53,7 +53,8 @@ export function countProgress(rows: readonly RideRow[]): Progress {
   let boarded = 0;
   let missed = 0;
   for (const r of rows) {
-    if (r.dayKind === "skipped") continue;
+    // '오늘만 승하차'로 대체된 평소 줄(replaced)도 같다 — 그 아이는 대체한 줄에서 센다.
+    if (isInactiveDay(r.dayKind)) continue;
     planned += 1;
     // 'extra'(예정에 없던 탑승)도 탄 것이다 — 남은 일에서 빼야 "완료"가 맞는다.
     if (r.status === "boarded" || r.status === "extra") boarded += 1;
@@ -211,6 +212,18 @@ export function groupRowsByStop(rows: readonly RideRow[]): StopGroup[] {
     out.push({ key: id, stopName: row.stopName, atTime: row.atTime, rows: [row] });
   }
   return out;
+}
+
+/**
+ * 회차 안 명단을 **등원/하원으로 가른다**(사용자 2026-10-06 "그 시간 학생들마다 등원인지 하원인지 명확하게").
+ * 한 회차에 등·하원이 섞이면(types.ts: rider.ioKind는 회차 성격과 따로) 두 칸으로 나누고,
+ * 회차 성격(`primary`) 쪽을 먼저 둔다. 한쪽뿐이면 칸 하나 — 화면은 섞였을 때만 칸 머리를 그린다.
+ */
+export function splitRowsByIo(rows: readonly RideRow[], primary: Direction): { io: Direction; rows: RideRow[] }[] {
+  const order: Direction[] = primary === "in" ? ["in", "out"] : ["out", "in"];
+  return order
+    .map((io) => ({ io, rows: rows.filter((r) => r.ioKind === io) }))
+    .filter((s) => s.rows.length > 0);
 }
 
 /** 그 정류장 묶음에서 아직 안 찍은 사람 수 — 묶음 머리에 "N명 남음"을 띄운다. */
