@@ -27,6 +27,16 @@ describe("재원생 추이 — 그날의 재원생(원장 2026-09-29)", () => {
     expect(enrolledOn([merged], en, "2026-01-01")).toBe(0);
     expect(enrolledOn([s("n", "enrolled", null)], en, "2026-09-29")).toBe(1);
   });
+  it("🔴 수업 기록 없는 장부 정리는 정리한 날 전에도 세지 않는다 — 수업 기록이 있으면 퇴원일까지 센다(원장 2026-10-15)", () => {
+    const none = { firstStart: new Map<string, string>(), ended: new Set<string>() };
+    const cleaned = { ...s("k", "withdrawn", "2026-06-22", "2026-07-08"), cleanup: true };
+    expect(enrolledOn([cleaned], none, "2026-07-01")).toBe(0);
+    const taught = { firstStart: new Map([["k", "2026-06-23"]]), ended: new Set(["k"]) };
+    expect(enrolledOn([cleaned], taught, "2026-07-01")).toBe(1);
+    expect(enrolledOn([cleaned], taught, "2026-07-08")).toBe(0);
+    // 다시 등록하면 재원으로 센다(메모가 남아 있어도 퇴원 학생이 아니다).
+    expect(enrolledOn([{ ...cleaned, status: "enrolled", withdrawnAt: null }], none, "2026-07-01")).toBe(1);
+  });
   it("월별 12칸 — 이번 달은 오늘, 연도별 — 올해는 오늘", () => {
     const m = monthlyPoints("2026-09-29");
     expect(m).toHaveLength(12);

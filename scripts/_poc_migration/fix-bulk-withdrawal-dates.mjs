@@ -17,6 +17,13 @@
  * 실행:
  *   node --env-file=.env.local scripts/_poc_migration/fix-bulk-withdrawal-dates.mjs           # dry-run
  *   node --env-file=.env.local scripts/_poc_migration/fix-bulk-withdrawal-dates.mjs --apply
+ *
+ * 2026-10-15 추가(원장 *"실제 퇴원일이 존재하면 실제 퇴원일로, 아니고 단체 정리면 그냥 장부 정리는 미출력되게"*):
+ *   `--tenant=<slug>` — 지점이 여럿이 된 뒤로 대상 지점을 고른다(하나뿐이면 생략 가능).
+ *   `--cleanup-only` — 장부 정리 메모(`system-bulk.ts` `isCleanupWithdrawal`과 같은 글)가 붙은 퇴원만 고친다. 그날 **실제로**
+ *     퇴원한 학생까지 마지막 수강 종료일로 옮기지 않게. 관리 도구 일괄 퇴원(2026-08-17 31명)은 이 옵션으로:
+ *     `--tenant=cs --date=2026-08-17 --cleanup-only`(침산)
+ *   수강 이력이 없는 장부 정리 퇴원은 여전히 손대지 않는다 — 화면이 모집단에서 뺀다(`isBookkeepingOnlyExit`).
  */
 import fs from "node:fs";
 import postgres from "postgres";
@@ -24,12 +31,19 @@ import postgres from "postgres";
 const APPLY = process.argv.includes("--apply");
 const BULK_DATE = process.argv.find((a) => a.startsWith("--date="))?.split("=")[1] ?? "2026-07-10";
 const UNDO_DIR = process.argv.find((a) => a.startsWith("--undo-dir="))?.split("=")[1] ?? "D:/tmp";
+const TENANT_SLUG = process.argv.find((a) => a.startsWith("--tenant="))?.split("=")[1] ?? null;
+const CLEANUP_ONLY = process.argv.includes("--cleanup-only");
 
 const sql = postgres(process.env.DATABASE_URL, { prepare: false, max: 1 });
 try {
   const tenants = await sql`select id, slug from tenants`;
-  if (tenants.length !== 1) throw new Error(`테넌트 ${tenants.length}개 — 대상을 특정할 수 없어 중단합니다`);
-  const tenant = tenants[0].id;
+  const picked = TENANT_SLUG ? tenants.filter((t) => t.slug === TENANT_SLUG) : tenants;
+  if (picked.length !== 1) throw new Error(`대상 지점 ${picked.length}개(전체 ${tenants.length}개) — --tenant=<slug>로 하나를 고르세요`);
+  const tenant = picked[0].id;
+  // 장부 정리 메모 = `src/features/withdrawals/system-bulk.ts`의 CLEANUP_WITHDRAWAL_MEMO · LEGACY_CLEANUP_MEMO_PREFIX(글을 바꾸면 함께).
+  const cleanupOnly = CLEANUP_ONLY
+    ? sql`and (s.withdrawal_metadata->>'memo' = '데이터 정리 일괄 퇴원' or s.withdrawal_metadata->>'memo' like '수강 반 없음 일괄 퇴원 처리%')`
+    : sql``;
 
   // 대상 = 그 날짜로 찍힌 퇴원생 중 **마지막 수강 종료일이 있는** 학생
   const rows = await sql`
@@ -37,7 +51,7 @@ try {
            to_char(max(e.end_date),'YYYY-MM-DD') as real_end
     from students s
     join enrollments e on e.student_id = s.id and e.tenant_id = ${tenant} and e.end_date is not null
-    where s.tenant_id = ${tenant} and s.status = 'withdrawn' and s.withdrawn_at = ${BULK_DATE}
+    where s.tenant_id = ${tenant} and s.status = 'withdrawn' and s.withdrawn_at = ${BULK_DATE} ${cleanupOnly}
     group by s.id, s.name, s.withdrawn_at
     order by 4, 2`;
 
@@ -53,7 +67,7 @@ try {
 
   const noHistory = await sql`
     select count(*)::int as n from students s
-    where s.tenant_id = ${tenant} and s.status='withdrawn' and s.withdrawn_at = ${BULK_DATE}
+    where s.tenant_id = ${tenant} and s.status='withdrawn' and s.withdrawn_at = ${BULK_DATE} ${cleanupOnly}
       and not exists (select 1 from enrollments e where e.student_id = s.id and e.tenant_id = ${tenant} and e.end_date is not null)`;
 
   const byMonth = new Map();
@@ -72,7 +86,7 @@ try {
   } else {
     // ── undo 스냅샷 먼저 ──
     const stamp = today.replace(/-/g, "");
-    const undoPath = `${UNDO_DIR}/undo-bulk-withdrawal-${stamp}.json`;
+    const undoPath = `${UNDO_DIR}/undo-bulk-withdrawal-${stamp}-${BULK_DATE}.json`;
     fs.writeFileSync(undoPath, JSON.stringify({ tenant, bulkDate: BULK_DATE, rows: targets.map((t) => ({ id: t.id, name: t.name, from: t.cur, to: t.real_end })) }, null, 2));
     console.log(`\nundo 스냅샷 저장: ${undoPath}`);
 

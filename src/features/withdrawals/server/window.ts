@@ -2,7 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { isMergedStudent } from "@/features/students/merged";
-import { isSystemBulkWithdrawal } from "../system-bulk";
+import { isBookkeepingOnlyExit, isSystemBulkWithdrawal } from "../system-bulk";
 import { normalizeReason } from "../types";
 import { endedTogether, inWithdrawalWindow, lastEndedByStudent, pickLastEnded, withdrawalSubjects, type EndedClassRef } from "../window";
 
@@ -123,7 +123,7 @@ export async function getWithdrawalsInWindow(from: string, to: string): Promise<
   // 🔴 중복 병합으로 흡수된 쪽은 **모집단 단계에서** 뺀다(집계 뒤 빼기가 아니라) — 병합은 퇴원이 아니다
   //    (원장 2026-09-13, [`students/merged.ts`](../../students/merged.ts)). 여기서 빼면 퇴원 수·프로그램
   //    분포·추이가 **한 번에** 맞는다. 병합된 학생은 수강이 0건이라 과목이 null이어서, 안 빼면 '기타·미상'
-  //    칸만 근거 없이 부푼다(김지유B·권민서B 실측).
+  //    칸만 근거 없이 부푼다(김지유B·권민서B 실측). 수업 기록 없는 장부 정리도 뺀다(수강을 읽은 뒤 — 아래).
   const students = withdrawnRows.filter((s) => !isMergedStudent(s.notes));
   if (students.length === 0) return [];
   const ended = await loadEndedEnrollments(supabase, students.map((s) => s.id));
@@ -136,6 +136,8 @@ export async function getWithdrawalsInWindow(from: string, to: string): Promise<
   }
   return students.flatMap((s) => {
     const row = last.get(s.id);
+    // 수업 기록 없는 장부 정리(단체 정리)는 퇴원이 아니다 — 퇴원관리와 같은 판정(`isBookkeepingOnlyExit`, 원장 2026-10-15).
+    if (isBookkeepingOnlyExit({ withdrawalMetadata: s.withdrawal_metadata, hasEnrollmentHistory: !!row })) return [];
     const klass = lastClassOf(row);
     const history = byStudent.get(s.id) ?? [];
     const exitClasses = withdrawalSubjects(history.map((e) => ({ endDate: e.end_date, subject: lastClassOf(e).subject })))
