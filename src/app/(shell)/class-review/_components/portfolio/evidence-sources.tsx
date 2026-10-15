@@ -62,6 +62,8 @@ function PunctualityEvidence({ period }: EvidenceProps) {
   return (
     <>
       <StatTiles items={[
+        // 출근·퇴근 기록 = 그 달 시각이 찍힌 날 수(원장 2026-10-15) — 이 칸이 생기기 전에 저장(마감)된 달엔 없다(—).
+        { label: "출근 기록", value: m.checkIns === undefined ? "—" : `${m.checkIns}일` }, { label: "퇴근 기록", value: m.checkOuts === undefined ? "—" : `${m.checkOuts}일` },
         { label: "지각", value: `${m.late ?? 0}회` }, { label: "결근", value: `${m.absent ?? 0}회` }, { label: "조퇴", value: `${m.early ?? 0}회` },
         { label: "제외한 날(결재된 휴가)", value: `${m.excused ?? 0}일` }, { label: "점수", value: pointsText(m, period) },
       ]} />

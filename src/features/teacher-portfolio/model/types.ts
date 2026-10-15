@@ -136,7 +136,7 @@ export type CoverageMetric = MetricCommon<"coverage", CoverageRow> & Pick<Covera
 /** 성적 관리 · 학부모 만족도 · 강사 근태(2026-10-15 계산 시작) — 그 전에 저장된 달은 `uncounted` 자리라 아래 칸이 없다. */
 export type GradesMetric = MetricCommon<"grades", GradeRow> & { tests?: number; students?: number; kinds?: GradeKindStat[] };
 export type SatisfactionMetric = MetricCommon<"satisfaction", SatisfactionRow> & { plus?: number; minus?: number; claims?: number; waiting?: number };
-export type PunctualityMetric = MetricCommon<"punctuality", PunctualityRow> & { late?: number; absent?: number; early?: number; excused?: number; days?: number; manual?: boolean };
+export type PunctualityMetric = MetricCommon<"punctuality", PunctualityRow> & { late?: number; absent?: number; early?: number; excused?: number; days?: number; checkIns?: number; checkOuts?: number; manual?: boolean };
 /** 퇴원율의 그만둔 학생 한 줄 — 셌는지(counted)와 뺀 까닭(note). */
 export type ChurnRow = { studentId: string; day: string; type: "퇴원" | "수강종료"; className: string; reason: string; counted: boolean; note: string | null };
 /** base = 지난달 담당 학생(그 달 절반 이상) · need = 절반 일수 · counted = 센 학생 수. */

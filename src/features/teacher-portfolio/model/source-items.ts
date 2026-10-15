@@ -55,7 +55,7 @@ export function buildSourceItems(d: PortfolioSnapshot, input: {
       } : uncountedItem("satisfaction"),
       p ? {
         id: "punctuality", max: METRIC_MAX.punctuality, value: null, raw: p.raw, reason: PUNCTUALITY_REASON, detail: p.detail,
-        late: p.late, absent: p.absent, early: p.early, excused: p.excused, days: p.days, manual: p.manual,
+        late: p.late, absent: p.absent, early: p.early, excused: p.excused, days: p.days, checkIns: p.checkIns, checkOuts: p.checkOuts, manual: p.manual,
         basis: p.manual ? `원장 입력 ${p.raw}회` : p.days ? `지각 ${p.late} · 결근 ${p.absent} · 조퇴 ${p.early}회${p.excused ? ` · 결재된 휴가 ${p.excused}일 제외` : ""}`
           : "이 달 출퇴근 기록 없음",
       } : uncountedItem("punctuality"),
