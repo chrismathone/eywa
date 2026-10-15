@@ -21,7 +21,7 @@ import {
   enrolledSubjectCounts,
   gradeSplit,
   summarizePrograms,
-} from "@/features/students/enrolled-composition";
+} from "@/features/students/enrollment/enrolled-composition";
 import { getWithdrawalsInWindow, type WindowWithdrawal } from "@/features/withdrawals/server/window";
 import { getSubjectEndedStudents } from "@/features/withdrawals/server/queries";
 import { includeSubjectEnds } from "./monthly-exits";
@@ -34,7 +34,7 @@ import {
   withdrawalMonthWindow,
   withdrawalProgram,
 } from "@/features/withdrawals/window";
-import { isMergedStudent } from "@/features/students/merged";
+import { isMergedStudent } from "@/features/students/status/merged";
 import { bookkeepingOnlyIds } from "@/features/withdrawals/server/bookkeeping";
 import { getIntakeOnDay } from "@/features/enrollment/server/intake-day";
 import { getFirstClassStudents } from "@/features/dashboard/server/day-arrivals-query";
@@ -123,7 +123,7 @@ import { loadPlan, resolveView, type ResolvedView } from "@/features/dashboard/l
 import { shapeSections } from "@/features/dashboard/layout/shape";
 import { inSliceAny, sliceGroupOf, sliceGroupsOf, sliceKey, slicePredicate, subjectsNamedIn, type SlicePredicate, type SliceTable } from "@/features/dashboard/layout/slices";
 import { EMPTY_DASHBOARD } from "@/features/dashboard/layout/types";
-import { programOf, programSubjectsOf, subjectGroupOf } from "@/features/students/program";
+import { programOf, programSubjectsOf, subjectGroupOf } from "@/features/students/enrollment/program";
 import {
   admissionsEventBaseKind,
   admissionsEventKind,

@@ -1,15 +1,15 @@
 import { redirect } from "next/navigation";
 
-import { formatKoreanDate, kstToday } from "@/lib/date-kst";
-import { getParentViewer } from "@/features/shuttle/server/parent-viewer";
-import { loadRideLegsFor } from "@/features/shuttle/server/parent-ride-data";
-import { AbsentButton } from "@/features/shuttle/components/absent-button";
+import { formatKoreanDate, kstMinutesOfDay, kstToday } from "@/lib/date-kst";
+import { getParentViewer } from "@/features/shuttle/parent/server/parent-viewer";
+import { loadRideLegsFor } from "@/features/shuttle/parent/server/parent-ride-data";
+import { AbsentButton } from "@/features/shuttle/parent/components/absent-button";
 import { KstClock } from "@/features/shuttle/components/kst-clock";
-import { ParentRideCard } from "@/features/shuttle/components/parent-ride-card";
-import { RegularRideDialog } from "@/features/shuttle/components/regular-ride-dialog";
-import { weekDates } from "@/features/shuttle/parent-rides";
+import { ParentRideCard } from "@/features/shuttle/parent/components/parent-ride-card";
+import { RegularRideDialog } from "@/features/shuttle/parent/components/regular-ride-dialog";
+import { legRode, weekDates } from "@/features/shuttle/parent/parent-rides";
 import { dayLabel, type DayCode } from "@/features/shuttle/types";
-import { loadAcademyHolidays, restDayName } from "@/features/shuttle/server/rest-days";
+import { loadAcademyHolidays, restDayName } from "@/features/shuttle/parent/server/rest-days";
 import { ParentMonthView } from "./_components/month-view";
 
 const TITLE = "등하원 시간 변경·확인";
@@ -75,6 +75,9 @@ export default async function ParentRidesPage({
   // 지난 날짜(이번 주 앞 요일)는 보기만 — 서버도 같은 판정을 한다(parent-ride-actions.ts).
   // 🔴 쉬는 날(법정공휴일 · 학원 휴원일)엔 일정 대신 "학원이 쉬어요"만 — 하루짜리 수정·타지 않기·결석을 잠근다
   //    (사용자 2026-10-01, 서버 `parentDayGate`와 같은 판정). 🔑 매주 반복되는 **고정시간 변경은 그대로 된다**.
+  // 🔒 그날 **이미 셔틀을 탄 아이**는 결석 대상에서 뺀다(사용자 2026-10-08) — 서버(absentRideCore)도 같은 판정으로 거절한다.
+  const rodeKids = new Set(viewer.children.filter((c) => (legs.get(c.id) ?? []).some(legRode)).map((c) => c.id));
+  const absentKids = viewer.children.filter((c) => !rodeKids.has(c.id)).map((c) => ({ id: c.id, name: c.name }));
   const restOf = (ymd: string) => restDayName(academyHolidays, ymd);
   const closedName = restOf(picked.ymd);
   const editable = picked.ymd >= today && !closedName;
@@ -143,6 +146,7 @@ export default async function ParentRidesPage({
             today={today}
             editable={editable}
             skipButtons
+            nowMinutes={kstMinutesOfDay()}
           />
         ))
       )}
@@ -151,7 +155,8 @@ export default async function ParentRidesPage({
         dayHref={live ? PATH : `${PATH}?day=${picked.day}`}
         editing={editing}
         pastDay={pastDay}
-        kids={viewer.children.map((c) => ({ id: c.id, name: c.name }))}
+        kids={absentKids}
+        rodeAll={viewer.children.length > 0 && absentKids.length === 0}
         onDate={picked.ymd}
         editable={editable}
       />
@@ -169,6 +174,7 @@ function ActionRow({
   editing,
   pastDay,
   kids,
+  rodeAll,
   onDate,
   editable,
 }: {
@@ -176,7 +182,10 @@ function ActionRow({
   editing: boolean;
   /** 지난 요일 — 수정 버튼을 잠그고 월별로 안내한다. */
   pastDay: boolean;
+  /** 결석을 걸 수 있는 아이 — 그날 이미 셔틀을 탄 아이는 빠져 있다. */
   kids: { id: string; name: string }[];
+  /** 자녀가 모두 이미 탔다 — 결석 버튼을 잠그고 이유를 툴팁으로. */
+  rodeAll: boolean;
   onDate: string;
   editable: boolean;
 }) {
@@ -203,7 +212,12 @@ function ActionRow({
       {editable && kids.length > 0 ? (
         <AbsentButton kids={kids} onDate={onDate} className={absentBtn} />
       ) : (
-        <button type="button" disabled className={`${absentBtn} opacity-40`}>
+        <button
+          type="button"
+          disabled
+          title={rodeAll ? "이미 셔틀을 탔어요 — 탄 뒤에는 결석으로 바꿀 수 없어요" : undefined}
+          className={`${absentBtn} opacity-40`}
+        >
           결석
         </button>
       )}

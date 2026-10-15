@@ -1,7 +1,7 @@
 import type { OverviewData } from "./model";
 import type { SubjectEndedRow } from "@/features/withdrawals/server/queries";
 import { inWithdrawalWindow, withdrawalProgram } from "@/features/withdrawals/window";
-import type { ProgramSubject } from "@/features/students/program";
+import type { ProgramSubject } from "@/features/students/enrollment/program";
 
 /** 과목 전체 종료만 더하며 반이동은 제외한다. 퇴원한 학생의 수강종료는 별도로 중복 계산하지 않는다. */
 export function includeSubjectEnds(

@@ -20,7 +20,7 @@ import { KIND_LABEL, scoreUnit } from "@/features/grades/unified/model";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { invoiceOutstanding } from "@/features/billing/calc";
 import { TabLink } from "../_components/tab-link";
-import { memoCategoryLabel } from "@/features/students/memo-category";
+import { memoCategoryLabel } from "@/features/students/detail/memo-category";
 import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
 import { getTeacherEnglishNames } from "@/features/teacher-view/server/teacher-names";
 import { teacherNameFor } from "@/features/teacher-view/teacher-name";

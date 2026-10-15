@@ -9,7 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
 import { logAction } from "@/features/audit/server/log";
-import { mergeNoteFor } from "@/features/students/merged";
+import { mergeNoteFor } from "@/features/students/status/merged";
 import type { WithdrawalMetadata } from "@/features/withdrawals/types";
 import { CLEANUP_WITHDRAWAL_MEMO } from "@/features/withdrawals/system-bulk";
 import { explainDbError, logDbError } from "@/lib/supabase/db-error";

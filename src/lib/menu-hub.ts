@@ -14,7 +14,7 @@ import {
   type MenuGroupLayout,
   type MenuLayout,
 } from "@/features/owner/menu-layout";
-import { canManageParentAccountsRole, SHUTTLE_PARENTS_PATH } from "@/features/shuttle/parent-access";
+import { canManageParentAccountsRole, SHUTTLE_PARENTS_PATH } from "@/features/shuttle/parent-accounts/parent-access";
 
 /**
  * 버튼형 메뉴 — **왼쪽에서 업무군을 고르면 본문에 그 업무의 메뉴 버튼이 뜬다**(원장 2026-09-07 확정:

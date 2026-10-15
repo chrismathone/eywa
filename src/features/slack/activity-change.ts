@@ -3,7 +3,7 @@ import { CONSULTATION_AUDIENCE_LABEL, CONSULTATION_CATEGORY_LABEL } from "@/feat
 import { OUTCOME_PILL } from "@/features/enrollment/outcome-meta";
 import { ASSET_STATUS_LABEL } from "@/features/inventory/status";
 import { ONBOARDING_ITEMS } from "@/features/newcomers/onboarding-items";
-import { STUDENT_STATUS_LABEL } from "@/features/students/status-labels";
+import { STUDENT_STATUS_LABEL } from "@/features/students/status/status-labels";
 import { activityDetail, blank } from "./activity-detail";
 import { scrubSensitive } from "./render";
 

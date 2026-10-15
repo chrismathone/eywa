@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { STUDENT_STATUS_LABEL } from "@/features/students/status-labels";
+import { STUDENT_STATUS_LABEL } from "@/features/students/status/status-labels";
 import {
   compareRosterMembers,
   type MasterRosterReview,

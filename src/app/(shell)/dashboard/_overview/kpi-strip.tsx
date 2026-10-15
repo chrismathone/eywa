@@ -17,7 +17,7 @@ import {
   withdrawalsMonthHref,
 } from "@/features/dashboard/overview/kpi-links";
 import { countWithdrawalPrograms } from "@/features/withdrawals/window";
-import { programLabel, programSubjectsOf, visiblePrograms, type Program } from "@/features/students/program";
+import { programLabel, programSubjectsOf, visiblePrograms, type Program } from "@/features/students/enrollment/program";
 import type { MenuKey } from "@/lib/permissions";
 import { number } from "./charts";
 import { KpiCard } from "./kpi-card";

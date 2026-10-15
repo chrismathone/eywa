@@ -4,7 +4,7 @@ import { WindowLink } from "@/components/workspace/window-link";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { Pill } from "@/components/atoms/pill";
 import { useSubjectMaps } from "@/features/owner/operations-context";
-import { studentStatusMeta } from "@/features/students/status-labels";
+import { studentStatusMeta } from "@/features/students/status/status-labels";
 import type { StudentSummary } from "@/features/students/server/queries";
 import { useSheetLang, useSheetText, useSheetTf } from "@/features/teacher-view/lang-context";
 import { SheetText } from "@/features/teacher-view/interface-label";

@@ -7,10 +7,10 @@ import { canAccessTenant } from "@/lib/auth/perm-matrix";
 import type { SystemRole } from "@/lib/permissions";
 import { getSeatDuties } from "@/features/attendance/seat/server/duty";
 import { getDeskAttendanceOptin } from "@/features/attendance/live/server/desk-optin";
-import { isStaffInSubjectScope } from "@/features/staff/subject-scope";
-import { RESUME_FORM_TYPE } from "@/features/staff/resume";
+import { isStaffInSubjectScope } from "@/features/staff/department/subject-scope";
+import { RESUME_FORM_TYPE } from "@/features/staff/resume/resume";
 import { workHoursLabel } from "@/features/staff/work-hours-label";
-import { canSeeStaffMember, getViewerStaffScope } from "./subject-scope";
+import { canSeeStaffMember, getViewerStaffScope } from "../department/server/subject-scope";
 import {
   WORK_DAYS,
   WORK_TIME_RANGE,

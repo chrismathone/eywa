@@ -14,7 +14,7 @@ vi.mock("@/lib/auth/perm-matrix", () => ({ getUserPermMatrix: vi.fn() }));
 vi.mock("@/lib/auth/teacher-home", () => ({ landingPath: vi.fn() }));
 vi.mock("@/features/audit/server/login-log", () => ({ pickClientIp: vi.fn(), recordLoginEvent: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
-vi.mock("@/features/shuttle/server/parent-viewer", () => ({ getParentViewer: vi.fn().mockResolvedValue(null) }));
+vi.mock("@/features/shuttle/parent/server/parent-viewer", () => ({ getParentViewer: vi.fn().mockResolvedValue(null) }));
 
 const request = { nextUrl: new URL("https://aywa.example/home"), headers: new Headers() } as NextRequest;
 

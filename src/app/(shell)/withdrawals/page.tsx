@@ -12,7 +12,7 @@ import {
   type RangeKey,
   type TypeKey,
 } from "@/features/withdrawals/exit-rows";
-import { parseProgram, programLabel, subjectGroupOf, visiblePrograms, type Program } from "@/features/students/program";
+import { parseProgram, programLabel, subjectGroupOf, visiblePrograms, type Program } from "@/features/students/enrollment/program";
 import { isModuleEnabled } from "@/lib/modules";
 import {
   UserMinus,

@@ -34,7 +34,7 @@ import {
   STUDENT_STATUS_LABEL,
   STUDENT_STATUS_LABEL_EN,
   studentStatusLabel,
-} from "@/features/students/status-labels";
+} from "@/features/students/status/status-labels";
 import {
   EMPLOYMENT_TYPE_EN,
   EMPLOYMENT_TYPES,
@@ -42,7 +42,7 @@ import {
   RESUME_COMPANIES,
   RESUME_DEPARTMENTS,
   WORKDAYS,
-} from "@/features/staff/resume";
+} from "@/features/staff/resume/resume";
 import { CLASS_GROUP_NONE, CLASS_GROUP_OTHER, CLASS_TAG_ALL } from "@/features/onescreen/class-tags";
 import {
   attendanceMarkLabel,

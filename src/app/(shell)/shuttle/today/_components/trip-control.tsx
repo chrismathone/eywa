@@ -7,7 +7,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TONE_COLOR } from "@/lib/design/semantic-color";
 import { kstTimeOf } from "@/lib/date-kst";
 import { SHUTTLE_ACTION } from "@/features/shuttle/control-size";
-import { isRowChecked } from "@/features/shuttle/check-store";
+import { isRowChecked } from "@/features/shuttle/today/check-store";
 import type { RideRow } from "@/features/shuttle/roster";
 import { endTrip, reopenTrip, startTrip } from "@/features/shuttle/server/actions";
 import {
@@ -18,8 +18,9 @@ import {
   TRIP_STATE_LABEL,
   TRIP_TONE,
   uncheckedDropOffNames,
-} from "@/features/shuttle/trip-state";
+} from "@/features/shuttle/today/trip-state";
 import type { ShuttleTrip } from "@/features/shuttle/types";
+import { markGpsOn } from "./trip-gps-sender";
 
 /**
  * 회차 하나의 **출발 / 종료**(0243a) — 회차 머리 줄 **오른쪽 끝에 인라인**으로 붙는다.
@@ -84,7 +85,11 @@ export function TripControl({
     startTransition(async () => {
       const res = await action(fd);
       if (res?.error) onError(res.error);
-      else onDone();
+      else {
+        // 📡 이 폰에서 출발을 눌렀으면 이 폰이 차 위치를 보낸다(trip-gps-sender.tsx).
+        if (action === startTrip) markGpsOn(date, runId);
+        onDone();
+      }
     });
   }
 

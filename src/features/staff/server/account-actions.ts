@@ -6,7 +6,7 @@ import type { SystemRole } from "@/lib/permissions";
 import { canManageStaffMember } from "@/lib/auth/role-hierarchy";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
-import { canSeeStaffMember, STAFF_SCOPE_DENIED_MSG } from "./subject-scope";
+import { canSeeStaffMember, STAFF_SCOPE_DENIED_MSG } from "../department/server/subject-scope";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { explainDbError, logDbError } from "@/lib/supabase/db-error";
 import { sanitizeWorkSchedule } from "@/features/staff/work-schedule";

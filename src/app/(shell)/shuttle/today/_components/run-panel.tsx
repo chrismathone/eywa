@@ -20,10 +20,14 @@ import {
   progressState,
   splitRowsByIo,
   type Progress,
-} from "@/features/shuttle/today-board";
-import { tripState } from "@/features/shuttle/trip-state";
+} from "@/features/shuttle/today/today-board";
+import { tripState } from "@/features/shuttle/today/trip-state";
 import { RideRowItem } from "./ride-row-item";
 import { TripControl } from "./trip-control";
+import { TripGpsSender } from "./trip-gps-sender";
+
+/** 등원 = info(파랑) · 하원 = special(보라) — 회차 머리 배지가 원래 쓰던 색 그대로. */
+const IO_TONE = { in: TONE_COLOR.info, out: TONE_COLOR.special } as const satisfies Record<Direction, unknown>;
 
 /** 등원 = info(파랑) · 하원 = special(보라) — 회차 머리 배지가 원래 쓰던 색 그대로. */
 const IO_TONE = { in: TONE_COLOR.info, out: TONE_COLOR.special } as const satisfies Record<Direction, unknown>;
@@ -170,6 +174,9 @@ export function RunPanel({
           onDone={onTripDone}
         />
       </div>
+
+      {/* 📡 차량 위치 보내기(0369a) — 오늘 운행 중인 회차에, 기록 권한이 있을 때만. 접혀 있어도 보인다(보내는 중인지 늘 알아야 한다). */}
+      {tripsReady && canWrite && date === today && tripState(trip) === "running" ? <TripGpsSender runId={run.id} date={date} /> : null}
 
       {open && (
         <div className="flex flex-col gap-3 px-2.5 pb-2.5">

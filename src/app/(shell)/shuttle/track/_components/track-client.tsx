@@ -1,37 +1,51 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { FaceTabs } from "@/components/face-tabs";
 import { Pill } from "@/components/atoms/pill";
 import { TONE_COLOR } from "@/lib/design/semantic-color";
-import { kstTimeOf } from "@/lib/date-kst";
+import { kstMinutesOfDay, kstTimeOf } from "@/lib/date-kst";
 import {
   hasCoords,
+  runShortTitle,
   type Season,
   type ShuttleRun,
   type ShuttleStop,
   type ShuttleTrip,
   type ShuttleVehicle,
 } from "@/features/shuttle/types";
-import { SHUTTLE_TOOLBAR } from "@/features/shuttle/control-size";
+import { SHUTTLE_CHIP, SHUTTLE_CHIP_OFF, SHUTTLE_CHIP_ON, SHUTTLE_TOOLBAR } from "@/features/shuttle/control-size";
 import { SHUTTLE_TRACK_PATH, shuttleFaces } from "@/features/shuttle/faces";
 import { mergePlanAndLog, plannedRidesOn, type RideException } from "@/features/shuttle/roster";
-import { groupRunsByVehicle } from "@/features/shuttle/today-board";
-import { buildLiveBoard, summarizeLive } from "@/features/shuttle/live-board";
-import { useShuttleLive } from "@/features/shuttle/use-shuttle-live";
+import { firstTime, groupRunsByVehicle } from "@/features/shuttle/today/today-board";
+import { buildLiveBoard, nearestRunId, summarizeLive } from "@/features/shuttle/live/live-board";
+import { useShuttleLive } from "@/features/shuttle/live/use-shuttle-live";
 import type { BoardingLog } from "@/features/shuttle/server/queries";
 import { TrackVehicleCard } from "./track-vehicle-card";
+import { TrackRunDetail } from "./track-run-detail";
+import { RunLineDiagram } from "./run-line-diagram";
+import { getRunRoadPath } from "@/features/shuttle/map/server/route-path";
+import type { RunRoadPath } from "@/features/shuttle/map/server/route-path-core";
+
+import { ParentLiveMap, type MapStop, type MapVehicle } from "@/features/shuttle/map/components/parent-live-map";
+import { useVehiclePositions } from "@/features/shuttle/map/components/use-vehicle-positions";
+import { getStaffVehiclePositions } from "@/features/shuttle/map/server/vehicle-position-actions";
+import { ageLabel, ageSeconds, STALE_AFTER_S } from "@/features/shuttle/map/vehicle-position";
+import { ACADEMY_LOCATION } from "@/features/shuttle/map/academy-location";
 import { ShuttleDayNav } from "../../_components/shuttle-day-nav";
 
+/** 빌드에 박히는 값 — 없으면 지도 대신 안내만(학부모 '실시간 차량'과 같은 판정). */
+const KAKAO_MAP_KEY = process.env.NEXT_PUBLIC_KAKAO_MAP_KEY ?? "";
+
 /**
- * 실시간 위치 — **차 한 대 = 카드 하나**, 그 안에 지도가 들어올 자리.
+ * 실시간 위치 — 위에 **카카오 지도 하나**(학원 + 그날 도는 노선 정류장, 2026-10-08) + **차 한 대 = 카드 하나**.
  *
  * 원장(2026-09-03): *"운행현황 옆에 버튼하나 더해서 실시간 위치 만들어서 쓸수있게 해주고"* +
  * *"지도키는 추후 개발예정이라 잡고 **영역만 만들어두려는것**"*.
  *
  * 🔴 **지금은 자리를 잡는 화면이다.** 위치를 보내는 기능도, 지도 키도 아직 없다 — 그래서 이 화면은
- *    차량 위치를 **아는 척하지 않고**, 무엇이 더 있어야 채워지는지를 말한다([`VehicleMapSlot`](./vehicle-map-slot)).
+ *    차량 위치를 **아는 척하지 않고**(차 마커 없음), 무엇이 더 있어야 채워지는지를 한 번 말한다.
  * 🔴 **집계를 여기서 손으로 세지 않는다** — 묶음·진행은 `today-board`, 상태 겹치기는 `live-board`가
  *    한다(Vitest). 운행 현황 탭과 **같은 숫자**여야 어느 쪽이 진실인지 묻지 않게 된다.
  * 🔑 **찍는 버튼이 없다**(읽기 전용) — 출발/종료·탑승 체크는 전부 `/shuttle/today`에 있다.
@@ -83,12 +97,13 @@ export function TrackClient({
       list.push(l);
       logsByRun.set(l.runId, list);
     }
-    return runs
-      .map((run) => ({
-        run,
-        rows: mergePlanAndLog(plannedRidesOn(run, date, exceptions), logsByRun.get(run.id) ?? []),
-      }))
-      .filter(({ rows }) => rows.length > 0);
+    // 🔑 **편성된 회차 전부**를 싣는다(사용자 2026-10-14 "호차별로 있는 노선들 다 가져와") — 운행 현황과 달리 이 면은
+    //    노선을 보는 곳이라, 그날 타는 아이가 없는 회차(예: 시각 없는 3회차)도 회차 칩·정류장이 보여야 한다.
+    //    탑승 없는 회차는 진행 0/0 · 경보 없음으로 접힌다(live-board 판정 그대로).
+    return runs.map((run) => ({
+      run,
+      rows: mergePlanAndLog(plannedRidesOn(run, date, exceptions), logsByRun.get(run.id) ?? []),
+    }));
   }, [runs, logs, date, exceptions]);
 
   const board = useMemo(
@@ -103,6 +118,95 @@ export function TrackClient({
     [stops],
   );
 
+  /**
+   * 🔑 **호차 → 회차** 고르기(사용자 2026-10-08 "각 호차별로 나눌 수 있게 · 회차별 데이터도"). 'all'이면 종전처럼 차 카드 전부.
+   *    호차를 고르면 그 차의 회차 칩 + 고른 회차의 정류장·아이들, 지도도 그 범위로 좁힌다. 화면 안 상태라 새로고침하면 '전체'.
+   */
+  const [vehicleId, setVehicleId] = useState<string>("all");
+  const [runPick, setRunPick] = useState<string | null>(null);
+  const vehicle = vehicleId === "all" ? null : board.find((v) => v.vehicleId === vehicleId) ?? null;
+  // 회차를 안 골랐으면 **지금 도는 회차**, 없으면 첫 회차를 보여 준다(고르기 전에도 빈 화면이 아니게).
+  const runId = vehicle
+    ? (vehicle.runs.find((r) => r.run.id === runPick) ?? vehicle.runs.find((r) => r.state === "running") ?? vehicle.runs[0])?.run.id ?? null
+    : null;
+  /**
+   * **이동 경로**(사용자 2026-10-14 "지도에 차가 어떻게 이동할지 이 노선에 맞게") — 카카오 길찾기로 구한 도로 위 경로.
+   * 🔑 호차만 눌러도 그 차의 노선들(정류장 좌표가 하나라도 있는 회차) 경로가 다 뜬다. 회차를 고르면 그 회차만.
+   * 🔑 회차마다 한 번만 묻는다(실시간 신호로 화면이 다시 그려져도 다시 안 묻는다 — 서버도 10분 캐시).
+   */
+  const coordStopIds = useMemo(() => new Set(stops.filter((s) => hasCoords(s)).map((s) => s.id)), [stops]);
+  /** 정류장 id → 좌표 — 노선도 위 🚌 자리 계산용. */
+  const coordById = useMemo(
+    () => new Map(stops.flatMap((s) => (hasCoords(s) ? [[s.id, { lat: s.lat, lng: s.lng }] as const] : []))),
+    [stops],
+  );
+  const routeRunIds = useMemo(() => {
+    if (!vehicle) return [];
+    const runs = runPick ? vehicle.runs.filter((r) => r.run.id === runPick) : vehicle.runs;
+    return runs.filter((r) => r.run.stops.some((st) => st.stopId && coordStopIds.has(st.stopId))).map((r) => r.run.id);
+  }, [vehicle, runPick, coordStopIds]);
+  const [roads, setRoads] = useState<Record<string, RunRoadPath>>({});
+  const routeKey = routeRunIds.join(",");
+  useEffect(() => {
+    let alive = true;
+    for (const id of routeKey ? routeKey.split(",") : []) {
+      getRunRoadPath(id).then((result) => {
+        if (alive) setRoads((prev) => (prev[id] ? prev : { ...prev, [id]: result }));
+      });
+    }
+    return () => {
+      alive = false;
+    };
+  }, [routeKey]);
+  const routeRows = routeRunIds.map((id) => ({ run: vehicle?.runs.find((r) => r.run.id === id) ?? null, result: roads[id] ?? null }));
+
+  /**
+   * 호차를 누르면 **지금 시각과 가장 가까운 회차**를 바로 편다(사용자 2026-10-14) — 운행 중이면 그 회차, 아니면 출발 시각이
+   * 가장 가까운 회차(`nearestRunId`). 그래서 노선도·지도·경로가 그 회차 하나로 뜬다. [전체]는 고른 회차를 비운다.
+   */
+  function pickVehicle(id: string) {
+    setVehicleId(id);
+    const v = board.find((x) => x.vehicleId === id);
+    setRunPick(v ? nearestRunId(v.runs, kstMinutesOfDay()) : null);
+  }
+
+  /**
+   * 지도에 찍을 정류장 — 전체: 없음(학원만) · 호차: 그 차 노선 전체 · 직접 고른 회차: 그 회차(순서 번호). 좌표가 있는 것만.
+   * 🔑 도는 회차는 위 `board`(운행 현황과 같은 계산)에서 온다 — 아무도 안 타는 노선의 정류장까지 늘어놓지 않는다.
+   * 🔑 회차를 골랐으면 **노선 순서 번호**를 이름 앞에 붙인다("2. 칠성초 정문") — 지도에서 도는 순서가 읽힌다.
+   */
+  const mapStops = useMemo<MapStop[]>(() => {
+    // 🔑 **[전체]에선 정류장 마커를 찍지 않는다**(사용자 2026-10-14 "호차를 눌렀을 때 보이게, 전체에 말고") — 학원만.
+    if (!vehicle) return [];
+    const byId = new Map(stops.map((s) => [s.id, s]));
+    // 회차를 **직접 고른** 경우만 그 회차 정류장(순서 번호). 호차만 누른 상태(아래 상세는 자동으로 한 회차를 펼친다)에선
+    // 그 차 노선 **전체** 정류장을 찍는다 — 호차를 누르자마자 그 차가 도는 곳이 다 보이게.
+    const run = runPick ? vehicle.runs.find((r) => r.run.id === runPick) ?? null : null;
+    if (run) {
+      const ordered = [...run.run.stops].sort((a, b) => a.sortOrder - b.sortOrder);
+      return ordered.flatMap((rs, i) => {
+        const s = rs.stopId ? byId.get(rs.stopId) : undefined;
+        return s && hasCoords(s) ? [{ stopId: `${s.id}#${i}`, name: `${i + 1}. ${s.name}`, lat: s.lat ?? null, lng: s.lng ?? null }] : [];
+      });
+    }
+    const used = new Set<string>();
+    for (const r of vehicle.runs) for (const s of r.run.stops) if (s.stopId) used.add(s.stopId);
+    return stops
+      .filter((s) => used.has(s.id) && hasCoords(s))
+      .map((s) => ({ stopId: s.id, name: s.name, lat: s.lat ?? null, lng: s.lng ?? null }));
+  }, [stops, vehicle, runPick]);
+
+  // 🚌 운행 중 차 위치(0369a) — 10초마다 다시 읽는다. [전체] = 모든 차 · 호차 = 그 차 · 회차 = 그 회차.
+  const { positions, now } = useVehiclePositions(getStaffVehiclePositions);
+  const mapVehicles: MapVehicle[] = positions.flatMap((p) => {
+    const owner = board.find((v) => v.runs.some((r) => r.run.id === p.runId));
+    if (!owner) return [];
+    if (vehicle && owner.vehicleId !== vehicle.vehicleId) return [];
+    if (vehicle && runPick && p.runId !== runPick) return [];
+    const age = ageSeconds(p.receivedAt, now);
+    return [{ key: p.runId, label: owner.vehicleName, lat: p.lat, lng: p.lng, age: ageLabel(age), stale: age > STALE_AFTER_S }];
+  });
+
   const href = (d: string, s: Season = season) => `${SHUTTLE_TRACK_PATH}?d=${d}&season=${s}`;
 
   return (
@@ -110,7 +214,7 @@ export function TrackClient({
       {/* 면 전환 + 날짜·시즌 한 줄 — 다른 셔틀 면과 같은 부품(ShuttleDayNav, 디자인 v5 17단계). */}
       <div className={SHUTTLE_TOOLBAR}>
         <span className="min-w-0 flex-1 basis-full sm:basis-auto">
-          <FaceTabs faces={shuttleFaces(season)} active={SHUTTLE_TRACK_PATH} ariaLabel="셔틀 면 전환" />
+          <FaceTabs faces={shuttleFaces(season, { track: true })} active={SHUTTLE_TRACK_PATH} ariaLabel="셔틀 면 전환" />
         </span>
         <ShuttleDayNav date={date} today={today} season={season} hrefFor={href} />
         {tripsReady && summary.running > 0 && (
@@ -125,11 +229,96 @@ export function TrackClient({
       </div>
 
       {/* 🔑 **왜 아직 비어 있는지를 한 번만** 말한다 — 카드마다 반복하면 잔소리가 된다. */}
+      {/* 호차 고르기 — [전체] + 그날 도는 차들. */}
+      {board.length > 0 && (
+        <div role="tablist" aria-label="호차 선택" className="flex flex-wrap gap-1.5">
+          {[{ id: "all", name: "전체" }, ...board.map((v) => ({ id: v.vehicleId, name: v.vehicleName }))].map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={vehicleId === t.id}
+              onClick={() => pickVehicle(t.id)}
+              // 크기는 셔틀 칩 캐논(폰 44px · control-size.ts) — 달리는 차 안에서도 누른다.
+              className={`${SHUTTLE_CHIP} px-4 font-bold ${vehicleId === t.id ? SHUTTLE_CHIP_ON : SHUTTLE_CHIP_OFF}`}
+            >
+              {t.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* 🚏 버스 노선도 — [전체]면 차마다 모든 회차, 호차를 고르면 그 차 회차들(누르면 그 회차를 고른다),
+          회차를 고르면 **그 회차만**(사용자 2026-10-14 "그 회차에 관한 노선만 위에 띄워줘"). */}
+      {board.length > 0 && (
+        <div className="flex flex-col gap-2">
+          {(vehicle ? [vehicle] : board).map((v) => (
+            <section key={v.vehicleId} className="flex flex-col gap-1.5">
+              {!vehicle && <h3 className="text-text-dim px-1 text-xs font-bold">{v.vehicleName}</h3>}
+              {(vehicle && runPick ? v.runs.filter((r) => r.run.id === runPick) : v.runs).map((r) => (
+                <RunLineDiagram
+                  key={r.run.id}
+                  run={r.run}
+                  active={!!vehicle && r.run.id === runPick}
+                  onPick={vehicle ? () => setRunPick(r.run.id) : undefined}
+                  coords={coordById}
+                  position={positions.find((p) => p.runId === r.run.id) ?? null}
+                  now={now}
+                />
+              ))}
+              {/* 회차 하나만 보는 중이면 다시 그 차 회차 전부로 돌아가는 문. */}
+              {vehicle && runPick ? (
+                <button type="button" onClick={() => setRunPick(null)} className="text-primary self-start px-1 text-xs font-bold underline">
+                  {v.vehicleName} 회차 전부 보기
+                </button>
+              ) : null}
+            </section>
+          ))}
+        </div>
+      )}
+
+      {/* 🔑 지도 하나에 학원 + 그날 도는 노선의 정류장 + 운행 중 차(🚌 기사 폰 GPS, 0369a). */}
+      {KAKAO_MAP_KEY ? (
+        <ParentLiveMap
+          appKey={KAKAO_MAP_KEY}
+          academy={ACADEMY_LOCATION}
+          stops={mapStops}
+          paths={routeRows.flatMap((x) => (x.result?.ok ? x.result.legs.map((l) => ({ path: l.path, kind: l.kind })) : []))}
+          vehicles={mapVehicles}
+        />
+      ) : null}
+      {/* 이동 경로 요약 — 회차마다 한 줄. 거리·시간은 카카오 길찾기(추천 경로) 기준 추정치다. */}
+      {vehicle ? (
+        <div className="text-text-dim -mt-1 flex flex-col gap-0.5 text-xs break-keep">
+          {routeRows.length === 0 ? (
+            <p>이 차 노선엔 위치가 찍힌 정류장이 없어 이동 경로를 그릴 수 없습니다 — [노선 편성 → 정류장 관리]에서 위치를 찍으세요.</p>
+          ) : (
+            routeRows.map(({ run, result }) => (
+              <p key={run?.run.id ?? "?"}>
+                🛣️ <b className="text-foreground">{run ? `${firstTime(run.run) || "—"} ${runShortTitle(run.run)}` : "회차"}</b>{" "}
+                {!result ? (
+                  "이동 경로를 불러오는 중…"
+                ) : result.ok ? (
+                  <>
+                    <span className="text-foreground num font-bold">{(result.distanceM / 1000).toFixed(1)}km</span> · 약{" "}
+                    <span className="text-foreground num font-bold">{Math.round(result.durationS / 60)}분</span> (정차 시간 제외)
+                    {result.skipped.length > 0 ? ` · 위치 없어 빠진 곳: ${result.skipped.join(", ")}` : ""}
+                  </>
+                ) : (
+                  result.error
+                )}
+              </p>
+            ))
+          )}
+        </div>
+      ) : null}
+
+      {/* 🔑 **왜 차가 아직 안 보이는지를 한 번만** 말한다 — 카드마다 반복하면 잔소리가 된다. */}
       <div className="border-line bg-card text-text-dim rounded-2xl border border-dashed px-3 py-2.5 text-xs leading-relaxed">
-        실시간 위치는 아직 <span className="text-foreground font-bold">자리만 잡혀</span> 있습니다.
-        차량이 지도에 뜨려면 두 가지가 더 필요합니다 —{" "}
-        <span className="text-foreground font-bold">① 운행 중 기사·동승 선생님 폰이 위치를 보내는 기능</span>{" "}
-        <span className="text-foreground font-bold">② 카카오 지도 키</span>. 지금은{" "}
+        지도에는 <span className="text-foreground font-bold">학원과 오늘 도는 노선의 정류장</span>이 표시됩니다. 차량 위치는
+        아직 없습니다 —{" "}
+        <span className="text-foreground font-bold">운행 중 기사·동승 선생님 폰이 위치를 보내는 기능</span>이 붙으면 이 지도에
+        차가 뜹니다{KAKAO_MAP_KEY ? "" : " (지도 키 NEXT_PUBLIC_KAKAO_MAP_KEY도 필요)"}. 지금은{" "}
         <Link href={`/shuttle/live?d=${date}&season=${season}`} className="text-primary font-bold underline">
           운행 현황
         </Link>{" "}
@@ -149,7 +338,11 @@ export function TrackClient({
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+      {vehicle ? (
+        <TrackRunDetail vehicle={vehicle} runId={runId} onPickRun={setRunPick} tripsReady={tripsReady} />
+      ) : null}
+
+      <div className={vehicle ? "hidden" : "grid grid-cols-1 gap-3 xl:grid-cols-2"}>
         {board.map((vehicle) => (
           <TrackVehicleCard
             key={vehicle.vehicleId}

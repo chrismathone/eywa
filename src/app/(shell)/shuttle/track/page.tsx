@@ -5,7 +5,8 @@ import {
   getShuttleBoard,
   getTripsOn,
 } from "@/features/shuttle/server/queries";
-import { requireShuttleView } from "@/features/shuttle/server/access";
+import { notFound } from "next/navigation";
+import { isShuttleAdmin, requireShuttleView } from "@/features/shuttle/server/access";
 import { isSeason, type Season } from "@/features/shuttle/types";
 import { TrackClient } from "./_components/track-client";
 
@@ -31,6 +32,8 @@ export default async function ShuttleTrackPage({
 }) {
   // 열람 = 메뉴 권한 또는 '셔틀 담당' 토글(access.ts). 반환값에 tenantId가 있어 따로 안 부른다.
   const user = await requireShuttleView();
+  // 🔒 원장·관리자·총괄 전용(2026-10-08) — 그 밖은 404(있는 화면인지조차 알리지 않는다, 학부모 관리 현황과 같은 결).
+  if (!(await isShuttleAdmin())) notFound();
   const sp = await searchParams;
   const date = sp.d && YMD.test(sp.d) ? sp.d : kstToday();
   const season: Season = isSeason(sp.season) ? sp.season : "term";

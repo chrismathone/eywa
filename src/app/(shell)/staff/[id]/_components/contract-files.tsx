@@ -5,13 +5,13 @@ import { toast } from "sonner";
 import { Download, Loader2, Paperclip, Trash2, Upload } from "@/components/icons/aywa-icon-compat";
 import { saveFileAs } from "@/lib/http/download-file";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
-import { issueContractPdfTicket } from "@/features/staff/server/contract-extract-actions";
+import { issueContractPdfTicket } from "@/features/staff/contract/server/contract-extract-actions";
 import {
   deleteStaffContractFile,
   registerStaffContractFile,
   signStaffContractFileUrl,
-} from "@/features/staff/server/contract-file-actions";
-import type { ContractFileRow } from "@/features/staff/server/contract-queries";
+} from "@/features/staff/contract/server/contract-file-actions";
+import type { ContractFileRow } from "@/features/staff/contract/server/contract-queries";
 
 function fmtSize(bytes: number | null): string {
   if (!bytes || bytes <= 0) return "";

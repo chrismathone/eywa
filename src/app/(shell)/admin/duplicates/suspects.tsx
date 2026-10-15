@@ -7,7 +7,7 @@ import { DupSuspectTag } from "@/components/dup-suspect-tag";
 import { WindowLink } from "@/components/workspace/window-link";
 import { suspectReason } from "@/features/admin/duplicate-candidates";
 import type { DuplicateStudent } from "@/features/admin/server/queries";
-import { studentStatusLabel } from "@/features/students/status-labels";
+import { studentStatusLabel } from "@/features/students/status/status-labels";
 import { clearDupSuspect } from "@/features/students/server/actions";
 
 /**

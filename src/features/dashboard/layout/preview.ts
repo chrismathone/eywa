@@ -7,7 +7,7 @@
  */
 import type { MenuKey } from "@/lib/permissions";
 import type { Area, OverviewSnapshot, Sections } from "@/features/dashboard/overview/model";
-import { programSubjectsOf, subjectGroupOf } from "@/features/students/program";
+import { programSubjectsOf, subjectGroupOf } from "@/features/students/enrollment/program";
 import { defaultItems } from "./defaults";
 import { sameItems } from "./engine";
 import { AREA_MENUS } from "./registry";

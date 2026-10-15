@@ -1,7 +1,7 @@
 import { kstDateOf } from "@/lib/date-kst";
 import { enrollmentLastDate } from "@/features/enrollments/eligibility";
 import { reasonDisplay } from "@/features/withdrawals/types";
-import { enrollmentTimeline, type TimelineEnrollment } from "./enrollment-timeline";
+import { enrollmentTimeline, type TimelineEnrollment } from "./enrollment/enrollment-timeline";
 
 export type EnrollmentActivity = {
   id: string;

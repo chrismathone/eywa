@@ -11,7 +11,7 @@ import {
   type GoalState,
 } from "@/features/students/server/actions";
 import type { GradeGoalRow } from "@/features/students/server/queries";
-import { goalAchievementRate } from "@/features/students/grades-meta";
+import { goalAchievementRate } from "@/features/students/detail/grades-meta";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { examSlotOptions, isExamSlot, slotUsesMonth } from "@/features/grades/exam-slots";
 import { TERM_OPTIONS, defaultTermOf, normalizeTerm, termMonths, termYearOptions } from "@/features/grades/term";

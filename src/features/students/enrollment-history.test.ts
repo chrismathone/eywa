@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { enrollmentHistoryTimeline, type EnrollmentActivity, type EnrollmentAudit } from "./enrollment-history";
-import type { TimelineEnrollment } from "./enrollment-timeline";
+import type { TimelineEnrollment } from "./enrollment/enrollment-timeline";
 
 const studentId = "student";
 const friday: TimelineEnrollment = { id: "friday", classId: "tp4e", className: "고등M 개별 TP4E", subject: "math", startDate: "2026-06-09", endDate: null, isTransferred: false, reason: null };

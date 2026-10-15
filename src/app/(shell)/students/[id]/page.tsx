@@ -13,7 +13,7 @@ import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { BackLink } from "@/components/back-link";
 import { DupSuspectTag } from "@/components/dup-suspect-tag";
 import { getStudentById, getStudentEnrollments } from "@/features/students/server/queries";
-import { studentStatusMeta } from "@/features/students/status-labels";
+import { studentStatusMeta } from "@/features/students/status/status-labels";
 import { Pill } from "@/components/atoms/pill";
 import { DupSuspectNotice } from "./_components/dup-suspect-notice";
 import { StudentTabsNav, isStudentTabKey } from "./_components/tabs-nav";

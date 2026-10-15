@@ -12,7 +12,7 @@ const GONE = "(없어진 과목)";
 
 /**
  * 직원관리 과목 범위 — 이 사람은 직원관리에서 **고른 과목의 선생님만** 본다(목록 · 상세 · 근무 설정 · 이력서 · 계약 전부,
- * `features/staff/server/subject-scope.ts`). 직원관리를 여는 것은 메뉴 권한이고, 여기는 연 뒤에 보이는 범위만 정한다.
+ * `features/staff/department/server/subject-scope.ts`). 직원관리를 여는 것은 메뉴 권한이고, 여기는 연 뒤에 보이는 범위만 정한다.
  *
  * 과목 선택지는 학원 설정의 과목이다(`useSubjectMaps` — 코드에 과목을 적지 않는다).
  * 🔴 화면에 안 보이는 사람(`hiddenUserIds`)의 줄은 손대지 않고 그대로 둔다.

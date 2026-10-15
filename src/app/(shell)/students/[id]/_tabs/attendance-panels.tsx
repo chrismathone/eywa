@@ -15,7 +15,7 @@ import {
   groupRecordsByDay,
   monthCells,
   seatDisplayName,
-} from "@/features/students/attendance-tab";
+} from "@/features/students/detail/attendance-tab";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 

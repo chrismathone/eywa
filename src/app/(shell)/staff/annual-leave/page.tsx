@@ -6,8 +6,8 @@ import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { canAdjustLeave } from "@/features/leave/access";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { getLeaveOverview } from "@/features/leave/server/admin";
-import { getViewerStaffScope } from "@/features/staff/server/subject-scope";
-import { isStaffInSubjectScope } from "@/features/staff/subject-scope";
+import { getViewerStaffScope } from "@/features/staff/department/server/subject-scope";
+import { isStaffInSubjectScope } from "@/features/staff/department/subject-scope";
 import { AdjustTable } from "./_adjust-table";
 
 export const metadata = { title: "연차 관리 — 에이와" };

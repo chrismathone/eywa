@@ -11,7 +11,7 @@ import {
   countSpansPerDay,
   type MonthCell,
 } from "@/lib/month-grid";
-import { taskSpans, type NotionTask } from "@/features/staff/notion-tasks";
+import { taskSpans, type NotionTask } from "@/features/staff/notion/notion-tasks";
 
 const MAX_LANES = 4; // 셀에 보일 최대 막대 줄 수 — 초과분은 "+N건 더"
 const NUM_ROW = 22; // 날짜 숫자 줄 높이(px)

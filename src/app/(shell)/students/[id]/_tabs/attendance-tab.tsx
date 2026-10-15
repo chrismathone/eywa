@@ -1,6 +1,6 @@
 
 import { SheetText } from "@/features/teacher-view/interface-label";
-import { buildAttendanceClassOptions } from "@/features/students/attendance-tab";
+import { buildAttendanceClassOptions } from "@/features/students/detail/attendance-tab";
 import {
   getStudentAttendanceFull,
   getStudentEnrollments,

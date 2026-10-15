@@ -16,7 +16,7 @@ import {
 import { isFullShellRole } from "@/lib/auth/view-as";
 import { protectionStatus } from "@/lib/auth/protected-accounts";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
-import { canSeeStaffMember, STAFF_SCOPE_DENIED_MSG } from "./subject-scope";
+import { canSeeStaffMember, STAFF_SCOPE_DENIED_MSG } from "../department/server/subject-scope";
 import { isAssignableTeacherRole } from "@/lib/permissions";
 import { moveLiveSlotTeacher, reassignHomeroom } from "@/features/classes/server/handover";
 import { notifyUsers } from "@/features/notifications/server/notify";

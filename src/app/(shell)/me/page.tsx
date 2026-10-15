@@ -5,10 +5,10 @@ import { PageHeader } from "@/components/page-header";
 import { landingPath } from "@/lib/auth/teacher-home";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { resolveTenantReadUrls } from "@/lib/storage/media-storage";
-import { emptyResume } from "@/features/staff/resume";
+import { emptyResume } from "@/features/staff/resume/resume";
 import { isImportArtifactEmail } from "@/features/staff/email";
 import { getStaffById } from "@/features/staff/server/queries";
-import { getResumeByStaffUser } from "@/features/staff/server/resume-queries";
+import { getResumeByStaffUser } from "@/features/staff/resume/server/resume-queries";
 import {
   fetchMyReportAuthorSettings,
   resolveReportAuthorSettings,

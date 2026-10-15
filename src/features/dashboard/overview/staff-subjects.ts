@@ -1,4 +1,4 @@
-import { subjectGroupOf, type ProgramSubject } from "@/features/students/program";
+import { subjectGroupOf, type ProgramSubject } from "@/features/students/enrollment/program";
 
 /**
  * 직원 한 사람의 담당 과목 묶음 — 원장 2026-09-12 *"하단 직원 구성에서 수학강사 영어강사 색깔 구분해줘. 과목 없는 강사는

@@ -21,15 +21,15 @@ import {
   plannedRidesOn,
   type RideException,
 } from "@/features/shuttle/roster";
-import { saveShuttleTodayPrefs } from "@/features/shuttle/server/today-prefs";
+import { saveShuttleTodayPrefs } from "@/features/shuttle/today/server/today-prefs";
 import {
   countProgress,
   filterByDirection,
   groupRunsByVehicle,
   sumProgress,
   type DirectionFilter,
-} from "@/features/shuttle/today-board";
-import { useShuttleLive } from "@/features/shuttle/use-shuttle-live";
+} from "@/features/shuttle/today/today-board";
+import { useShuttleLive } from "@/features/shuttle/live/use-shuttle-live";
 import type { BoardingLog } from "@/features/shuttle/server/queries";
 import type { AssignableStudent } from "@/features/shuttle/server/students";
 import { RideExceptionDialog } from "./ride-exception-dialog";
@@ -59,13 +59,14 @@ const DIR_FILTERS: { value: DirectionFilter; label: string }[] = [
  *    · 진행 요약(찍은 수/전체)을 호차·회차 머리에 둬서 **접힌 채로도 남은 일이 보인다**.
  *    PC는 2열 그리드 그대로 — 넓은 화면에선 한눈에 다 보이는 게 맞다.
  *
- * ⚠️ 묶음·정렬·집계는 순수 [`today-board.ts`](@/features/shuttle/today-board)가 한다(Vitest) —
+ * ⚠️ 묶음·정렬·집계는 순수 [`today-board.ts`](@/features/shuttle/today/today-board)가 한다(Vitest) —
  *    이 파일은 그리기만. 새 집계를 여기서 손으로 세지 말 것.
  *
  * 🔴 아직 안 찍은 줄은 **회색 '미기록'**이지 미탑승이 아니다 — 안 찍은 걸 미탑승으로 읽으면
  *    아침 내내 전원이 미탑승으로 보이고 그게 출결 신호로 새어나간다(roster 주석).
  */
 export function DayBoardClient({
+  showTrack = false,
   date,
   season,
   vehicles,
@@ -81,6 +82,8 @@ export function DayBoardClient({
   tripsReady,
   tenantId,
 }: {
+  /** 실시간 위치 탭을 붙일까 — 원장·관리자·총괄만(서버 `isShuttleAdmin`이 정한다). */
+  showTrack?: boolean;
   date: string;
   season: Season;
   vehicles: ShuttleVehicle[];
@@ -196,7 +199,7 @@ export function DayBoardClient({
           🔴 FaceTabs는 **공용 컴포넌트라 손대지 않는다** — 수납·학생상세 등이 같이 쓴다. 여기선 감싸는 자리만 바꾼다. */}
       <div className={SHUTTLE_TOOLBAR}>
         <span className="min-w-0 flex-1 basis-full sm:basis-auto">
-          <FaceTabs faces={shuttleFaces(season)} active={SHUTTLE_TODAY_PATH} ariaLabel="셔틀 면 전환" />
+          <FaceTabs faces={shuttleFaces(season, { track: showTrack })} active={SHUTTLE_TODAY_PATH} ariaLabel="셔틀 면 전환" />
         </span>
         <ShuttleDayNav date={date} today={today} season={season} hrefFor={href} />
       </div>

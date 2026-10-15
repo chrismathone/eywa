@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { CAREER_ROWS, emptyResume } from "@/features/staff/resume";
+import { CAREER_ROWS, emptyResume } from "@/features/staff/resume/resume";
 import { ResumeSheet } from "./resume-sheet";
 
 /**
@@ -15,7 +15,7 @@ vi.mock("@/lib/form-draft", async (importOriginal) => ({
   loadDraft: async () => null,
   clearDraft: async () => {},
 }));
-vi.mock("@/features/staff/server/resume-actions", () => ({
+vi.mock("@/features/staff/resume/server/resume-actions", () => ({
   saveStaffResume: vi.fn(),
   deleteStaffResume: vi.fn(),
 }));

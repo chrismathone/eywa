@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { canAccessTenant } from "@/lib/auth/perm-matrix";
-import { canSeeStaffMember, STAFF_SCOPE_DENIED_MSG } from "@/features/staff/server/subject-scope";
+import { canSeeStaffMember, STAFF_SCOPE_DENIED_MSG } from "@/features/staff/department/server/subject-scope";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { isChinsanTenant } from "@/features/owner/preset";
 import { createAdminClient } from "@/lib/supabase/admin";

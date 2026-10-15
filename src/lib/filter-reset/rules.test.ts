@@ -2,9 +2,9 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { STALE_AFTER_MS } from "@/components/workspace/window-signals-core";
-import { parseStudentListPrefs } from "@/features/students/list-prefs";
+import { parseStudentListPrefs } from "@/features/students/list/list-prefs";
 import { parseClassListPrefs } from "@/features/classes/list-prefs";
-import { parseStaffListPrefs } from "@/features/staff/list-prefs";
+import { parseStaffListPrefs } from "@/features/staff/list/list-prefs";
 import {
   FILTER_RESET_AFTER_MS,
   FILTER_SCREENS,

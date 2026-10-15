@@ -6,7 +6,7 @@ import { addDays, kstMinutesOfDay, shiftMonth } from "@/lib/date-kst";
 import type { TeacherScope } from "@/lib/auth/teacher-scope";
 import type { TenantSettings } from "@/features/owner/settings-types";
 import { classnoteModuleOn } from "@/features/owner/classnote-gate";
-import { programSubjectsOf, subjectGroupOf } from "@/features/students/program";
+import { programSubjectsOf, subjectGroupOf } from "@/features/students/enrollment/program";
 import { teacherWork, withTeacherWorkExtras, type WorkClass, type WorkReport } from "./teacher-work";
 import { pickCounselMonth } from "./counsel-period";
 import { dowOf, sessionDates } from "@/features/report-admin/english-writing";

@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
 import { RememberPrefs } from "@/components/remember-prefs";
-import { clampTableScale, type StaffFilterPrefs, type StaffViewPrefs } from "@/features/staff/list-prefs";
+import { clampTableScale, type StaffFilterPrefs, type StaffViewPrefs } from "@/features/staff/list/list-prefs";
 import { queueStaffPrefsSave, rememberPickedView, seedStaffView } from "./staff-prefs-queue";
 
 /**

@@ -10,7 +10,7 @@ import {
   composeEnrolled,
   summarizePrograms,
   type ActiveEnrollmentRow,
-} from "./enrolled-composition";
+} from "./enrollment/enrolled-composition";
 import { levelSubjectSplit } from "@/features/dashboard/overview/student-composition";
 import { STUDENT_LEVELS, levelKeyOfLabel, studentLevelOf, type StudentLevel } from "./list-filter-values";
 

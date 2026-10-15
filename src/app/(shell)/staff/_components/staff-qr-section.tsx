@@ -1,5 +1,5 @@
-import { buildStaffQrViews } from "@/features/staff/server/intake-qr";
-import { listStaffIntakeTokens } from "@/features/staff/server/intake-token";
+import { buildStaffQrViews } from "@/features/staff/intake/server/intake-qr";
+import { listStaffIntakeTokens } from "@/features/staff/intake/server/intake-token";
 import { StaffQrPanel } from "./staff-qr-panel";
 
 /**

@@ -1,7 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
-import type { ProgramSubject } from "@/features/students/program";
+import type { ProgramSubject } from "@/features/students/enrollment/program";
 import {
   resolveDayArrivals,
   type DayArrivals,

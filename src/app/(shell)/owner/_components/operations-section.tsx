@@ -4,7 +4,7 @@ import { withEmbed } from "@/components/workspace/embed-context";
 import { useModuleOn } from "@/features/owner/operations-context";
 import { useInFrame } from "@/components/workspace/use-in-frame";
 import type { OperationsSettings } from "@/features/owner/settings-types";
-import { RESUME_DEPARTMENTS } from "@/features/staff/resume";
+import { RESUME_DEPARTMENTS } from "@/features/staff/resume/resume";
 import type { ClassroomRow } from "@/features/owner/server/classroom-queries";
 import { SectionForm, SettingsCard } from "./section-form";
 import { useSectionDraft } from "./use-section-draft";

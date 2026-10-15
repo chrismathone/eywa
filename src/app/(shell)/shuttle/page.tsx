@@ -2,7 +2,7 @@ import { canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { getShuttleBoard } from "@/features/shuttle/server/queries";
 import { isSeason, type Season } from "@/features/shuttle/types";
 import { getAssignableStudents } from "@/features/shuttle/server/students";
-import { requireShuttleView } from "@/features/shuttle/server/access";
+import { isShuttleAdmin, requireShuttleView } from "@/features/shuttle/server/access";
 import { ShuttleBoardClient } from "./_components/shuttle-board-client";
 
 export const metadata = { title: "셔틀 — 에이와" };
@@ -43,6 +43,7 @@ export default async function ShuttlePage({
         </div>
       ) : (
         <ShuttleBoardClient
+          showTrack={await isShuttleAdmin()}
           season={season}
           vehicles={board.vehicles}
           runs={board.runs}

@@ -8,7 +8,7 @@
  * 없을 때(옛 스냅샷)의 폴백이다.
  */
 import type { Area, OverviewData, Sections } from "@/features/dashboard/overview/model";
-import type { Program } from "@/features/students/program";
+import type { Program } from "@/features/students/enrollment/program";
 
 export type GroupOf = (key: string | null | undefined) => string | null;
 

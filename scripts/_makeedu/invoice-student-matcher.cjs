@@ -1,6 +1,6 @@
 const L = require("./lib.cjs");
 
-// 앱의 src/features/students/merged.ts와 같은 판정. CJS 워커는 TS를 읽지 못하므로 동등성 테스트로 잠근다.
+// 앱의 src/features/students/status/merged.ts와 같은 판정. CJS 워커는 TS를 읽지 못하므로 동등성 테스트로 잠근다.
 function isMergedStudent(notes) {
   return typeof notes === "string" && /^중복 병합:\s*\S+와 통합됨/.test(notes.trimStart());
 }

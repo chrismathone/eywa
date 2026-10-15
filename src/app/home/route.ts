@@ -37,7 +37,7 @@ async function isSignedInAsInactive(): Promise<boolean> {
     return false;
   }
 }
-import { getParentViewer } from "@/features/shuttle/server/parent-viewer";
+import { getParentViewer } from "@/features/shuttle/parent/server/parent-viewer";
 
 /**
  * `/home` — **역할·과목에 맞는 홈으로 보내주는 서버측 리다이렉터**. 화면을 그리지 않는다(라우트 핸들러).

@@ -8,11 +8,11 @@ import { EMAIL_TAKEN_MESSAGE, isEmailTakenAuthError } from "@/lib/auth/auth-emai
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { EMAIL_RE } from "@/features/staff/email";
-import { subjectsFromDepartment } from "@/features/staff/department-subjects";
-import { EMPLOYMENT_TYPES } from "@/features/staff/resume";
+import { subjectsFromDepartment } from "@/features/staff/department/department-subjects";
+import { EMPLOYMENT_TYPES } from "@/features/staff/resume/resume";
 import { isLoginEmailTakenElsewhere } from "@/features/staff/server/login-email-taken";
-import { getViewerStaffScope } from "@/features/staff/server/subject-scope";
-import { isStaffInSubjectScope } from "@/features/staff/subject-scope";
+import { getViewerStaffScope } from "@/features/staff/department/server/subject-scope";
+import { isStaffInSubjectScope } from "@/features/staff/department/subject-scope";
 import { IMPORT_META } from "../kinds";
 import { duplicateKeyIssues, type ColumnSpec, type ImportPreviewRow, type SheetSpec } from "../spec";
 import type { ImporterDef } from "../server/types";

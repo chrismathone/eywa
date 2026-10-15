@@ -8,7 +8,7 @@ import {
   parseMixes,
   parseMulti,
 } from "./list-filter-values";
-import { parseStudentListPrefs, studentListPrefsFromUrl, DEFAULT_STUDENT_LIST_PREFS } from "./list-prefs";
+import { parseStudentListPrefs, studentListPrefsFromUrl, DEFAULT_STUDENT_LIST_PREFS } from "./list/list-prefs";
 import { coerceSubjectFilter } from "./scope-axis";
 
 describe("다중 선택 값(원장 2026-09-28)", () => {

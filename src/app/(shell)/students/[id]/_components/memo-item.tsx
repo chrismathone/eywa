@@ -14,7 +14,7 @@ import {
 import type { StudentMemoRow } from "@/features/students/server/queries";
 // 분류 목록·라벨·색은 단일 소스(여기에 복사본을 두지 말 것 — 그 복사가 '최근 메모'만 영문으로
 // 남게 만든 원인이다).
-import { MEMO_CATEGORIES, memoCategoryColor, memoCategoryLabel } from "@/features/students/memo-category";
+import { MEMO_CATEGORIES, memoCategoryColor, memoCategoryLabel } from "@/features/students/detail/memo-category";
 import { DeleteMemoButton } from "./memo-delete-button";
 
 function PinButton({ memo, studentId }: { memo: StudentMemoRow; studentId: string }) {

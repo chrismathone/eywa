@@ -22,7 +22,7 @@ import {
   type ShuttleVehicle,
 } from "../types";
 import { dayCodeOf, type RideException } from "../roster";
-import { isMissingNotifyColumn } from "../notify-column";
+import { isMissingNotifyColumn } from "../parent/notify-column";
 import { isMissingActorColumns } from "../actor-columns";
 
 /**

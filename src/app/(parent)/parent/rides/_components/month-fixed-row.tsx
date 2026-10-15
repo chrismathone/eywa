@@ -1,8 +1,8 @@
 import { addDays } from "@/lib/date-kst";
-import { RegularRideDialog } from "@/features/shuttle/components/regular-ride-dialog";
+import { RegularRideDialog } from "@/features/shuttle/parent/components/regular-ride-dialog";
 import { dayCodeOf } from "@/features/shuttle/roster";
-import { loadRideLegsFor } from "@/features/shuttle/server/parent-ride-data";
-import type { ParentViewer } from "@/features/shuttle/server/parent-viewer";
+import { loadRideLegsFor } from "@/features/shuttle/parent/server/parent-ride-data";
+import type { ParentViewer } from "@/features/shuttle/parent/server/parent-viewer";
 import { dayLabel, type DayCode } from "@/features/shuttle/types";
 
 const WEEKDAYS: DayCode[] = ["mon", "tue", "wed", "thu", "fri"];

@@ -7,9 +7,9 @@ import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import {
   extractContractFromPdf,
   issueContractPdfTicket,
-} from "@/features/staff/server/contract-extract-actions";
-import { registerStaffContractFile } from "@/features/staff/server/contract-file-actions";
-import type { ContractExtract } from "@/features/staff/contract-extract";
+} from "@/features/staff/contract/server/contract-extract-actions";
+import { registerStaffContractFile } from "@/features/staff/contract/server/contract-file-actions";
+import type { ContractExtract } from "@/features/staff/contract/contract-extract";
 
 /**
  * 계약서 PDF에서 기간·조건 읽어오기(원장 지시 2026-07-31).

@@ -8,7 +8,7 @@ import { createStudentMemo, type CreateMemoState } from "@/features/students/ser
 import { useFormDraft } from "@/components/forms/use-form-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
 // 분류는 단일 소스 — 화면 파일에 목록·라벨·색을 다시 적지 말 것.
-import { MEMO_CATEGORIES } from "@/features/students/memo-category";
+import { MEMO_CATEGORIES } from "@/features/students/detail/memo-category";
 
 function Submit() {
   const { pending } = useFormStatus();

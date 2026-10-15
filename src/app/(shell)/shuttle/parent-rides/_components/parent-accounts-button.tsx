@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { ParentAccountForm } from "@/features/shuttle/components/parent-account-form";
-import { ParentAccountList } from "@/features/shuttle/components/parent-account-list";
-import type { ParentAccount, ParentStudentOption } from "@/features/shuttle/server/parents";
+import { ParentAccountForm } from "@/features/shuttle/parent-accounts/components/parent-account-form";
+import { ParentAccountList } from "@/features/shuttle/parent-accounts/components/parent-account-list";
+import type { ParentAccount, ParentStudentOption } from "@/features/shuttle/parent-accounts/server/parents";
 
 /**
  * '학부모 등하원' 오른쪽 [학부모 관리 현황] — 누르면 계정 목록 + 발급 폼이 **모달**로 뜬다.

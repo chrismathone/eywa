@@ -7,7 +7,7 @@
  * 🔑 `from=dashboard` = 이 방문은 보기 설정을 **저장하지 않는다** — 명시값(전체)이 사용자의 저장된 필터를 덮으면 안 된다.
  */
 import { addDays } from "@/lib/date-kst";
-import type { Program } from "@/features/students/program";
+import type { Program } from "@/features/students/enrollment/program";
 import { NO_SUBJECT, type StudentLevel, type StudentMixFilter } from "@/features/students/list-filter-values";
 
 const STUDENT_AXES = "subject=all&grade=all&teacher=all&noenr=0&from=dashboard";

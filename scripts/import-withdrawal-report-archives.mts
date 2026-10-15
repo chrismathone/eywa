@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import postgres from "postgres";
 import { parseSourceReports, type SourceSheet } from "../src/features/withdrawal-reports/source-parser";
 import { matchArchive, type MatchStudent } from "../src/features/withdrawal-reports/archive-match";
-import { isMergedStudent } from "../src/features/students/merged";
+import { isMergedStudent } from "../src/features/students/status/merged";
 const path = process.argv[2];
 const tenant = process.argv[3];
 const apply = process.argv.includes("--apply");

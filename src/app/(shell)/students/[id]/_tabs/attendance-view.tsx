@@ -25,7 +25,7 @@ import {
   subjectFilterOptions,
   ymOf,
   type AttendanceClassOption,
-} from "@/features/students/attendance-tab";
+} from "@/features/students/detail/attendance-tab";
 import { AttendanceList, MonthCalendar } from "./attendance-panels";
 
 export function AttendanceView({

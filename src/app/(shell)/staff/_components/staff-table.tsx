@@ -10,7 +10,7 @@ import { useSubjectMaps } from "@/features/owner/operations-context";
 import type { StaffRow } from "@/features/staff/server/queries";
 import { StaffRowLink } from "./staff-row-link";
 import { useStaffViewPrefs } from "./staff-view-prefs";
-import { normalizeOrder, visibleColumns, type StaffColumnKey } from "@/features/staff/columns";
+import { normalizeOrder, visibleColumns, type StaffColumnKey } from "@/features/staff/list/columns";
 
 const CELL = "px-3 py-2.5";
 

@@ -475,7 +475,7 @@ describe("지점 보기 — Supabase를 거치지 않는 일(바깥으로 나가
 
   it("🔴 읽기 문만 지나거나 역할만 보던 진입점은 보기를 따로 거절한다", () => {
     // 노션 댓글 — 직원관리를 볼 수 있으면 남길 수 있는 액션이라 읽기 문(requireReader)을 지난다.
-    expect(body("src/features/staff/server/notion-actions.ts", "addTaskCommentAction")).toContain("await tenantViewWriteError()");
+    expect(body("src/features/staff/notion/server/notion-actions.ts", "addTaskCommentAction")).toContain("await tenantViewWriteError()");
     // 데모 재원 구성 바꾸기 — 역할만 보고, DB에 직접 접속해 쓴다.
     const demo = body("src/features/demo-roster/server/actions.ts", "switchDemoRoster");
     expect(demo.indexOf("await tenantViewWriteError()")).toBeGreaterThan(0);

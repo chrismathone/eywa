@@ -5,6 +5,8 @@ import { getUserPermMatrix } from "@/lib/auth/perm-matrix";
 import { landingPath } from "@/lib/auth/teacher-home";
 import { canAccess } from "@/lib/permissions";
 import { getShuttleDuty } from "./duty";
+import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
+import { canManageParentAccountsRole } from "../parent-accounts/parent-access";
 
 /**
  * 셔틀 화면 **열람** 게이트 — 메뉴 권한(`shuttle`) **또는** 직원 '셔틀 담당' 토글(0227a).
@@ -23,4 +25,14 @@ export async function requireShuttleView(): Promise<CurrentUser> {
   if (canAccess(user.systemRole, "shuttle", matrix)) return user;
   if (await getShuttleDuty(user.id, user.tenantId)) return user;
   redirect(await landingPath(user.systemRole, matrix));
+}
+
+/**
+ * 셔틀 **관리자** 면(실시간 위치)을 볼 수 있나 — 원장(master)·관리자(admin)·총괄(super_admin)(사용자 2026-10-08 "관리자 계정들만").
+ * 🔑 판정은 학부모 관리 현황과 같은 `canManageParentAccountsRole` — 메뉴판 `adminOnly`도 같은 함수를 지난다(입구·화면이 갈리지 않게).
+ */
+export async function isShuttleAdmin(): Promise<boolean> {
+  const user = await getCurrentUser();
+  if (!user) return false;
+  return canManageParentAccountsRole(user.systemRole, await isCurrentUserSuperAdmin());
 }

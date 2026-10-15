@@ -9,9 +9,9 @@ import { EyIcon } from "@/components/icons/aywa-icons";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Button } from "@/components/ui/button";
-import { getTaskComments, addTaskCommentAction, getTaskContent, toggleTaskDone } from "@/features/staff/server/notion-actions";
-import type { ContentLine, NotionTask, RichSpan } from "@/features/staff/notion-tasks";
-import type { TaskComment } from "@/features/staff/server/notion";
+import { getTaskComments, addTaskCommentAction, getTaskContent, toggleTaskDone } from "@/features/staff/notion/server/notion-actions";
+import type { ContentLine, NotionTask, RichSpan } from "@/features/staff/notion/notion-tasks";
+import type { TaskComment } from "@/features/staff/notion/server/notion";
 
 function timeLabel(iso: string | null): string {
   if (!iso) return "";

@@ -235,7 +235,7 @@ export const payrollRecords = pgTable(
 
 // === staff_leaves (강사 휴가) ===
 // 직원 계약 이력(0149a) — 직원 상세 '계약현황'. 기본은 첫 출근일부터 1년이고 차수만큼 이어진다.
-// 파생 계산은 features/staff/contract.ts(순수)가 단일 소스 — 이 테이블엔 **실제 기입·연장분만** 담는다.
+// 파생 계산은 features/staff/contract/contract.ts(순수)가 단일 소스 — 이 테이블엔 **실제 기입·연장분만** 담는다.
 export const staffContracts = pgTable(
   "staff_contracts",
   {
@@ -1842,7 +1842,7 @@ export const academyDocuments = pgTable(
     // kind='link' — 외부 문서(구글드라이브·노션 등) 링크. 사본을 만들지 않고 원본을 가리키기만 한다(0161a).
     linkUrl: text("link_url"),
     // kind='form' — 웹 작성 폼 문서(0072a). form_type='staff_resume' 등, form_data는 폼별 구조화 스키마
-    // (직원 이력서 = src/features/staff/resume.ts StaffResumeData). 작성 화면은 /staff?tab=resumes.
+    // (직원 이력서 = src/features/staff/resume/resume.ts StaffResumeData). 작성 화면은 /staff?tab=resumes.
     formType: text("form_type"),
     formData: jsonb("form_data"),
     // 사무실 전용 열람(주민번호·급여 등 민감 HR 문서) — RLS restrictive 정책(0072a)이 DB 레벨에서도 강제.

@@ -16,9 +16,9 @@ import {
 } from "../types";
 import { canRecordBoarding } from "./record-gate";
 import { explainDbError, logDbError } from "@/lib/supabase/db-error";
-import { runNotOpenMessage } from "./trip-open-guard";
-import { endTripUncheckedMessage } from "./trip-end-guard";
-import { isMissingNotifyColumn } from "../notify-column";
+import { runNotOpenMessage } from "../today/server/trip-open-guard";
+import { endTripUncheckedMessage } from "../today/server/trip-end-guard";
+import { isMissingNotifyColumn } from "../parent/notify-column";
 import { isMissingActorColumns, isMissingCancelFunction } from "../actor-columns";
 
 /**

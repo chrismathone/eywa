@@ -1,6 +1,6 @@
 // 직원 목록 '근무시간' 칸 문구 — 이력서 근무요일(체크) + 근무시간(한 줄 텍스트)을 한 줄로 합친다
 // (원장 2026-10-06 "월~금 다 체크되어 있으면 월~금 1-9시 이런 식으로 근무시간에 합쳐서 보이게"). 순수 함수(Vitest).
-import { WORKDAYS } from "./resume";
+import { WORKDAYS } from "./resume/resume";
 
 const ORDER: readonly string[] = WORKDAYS.map((d) => d.key);
 const LABEL: Record<string, string> = Object.fromEntries(WORKDAYS.map((d) => [d.key, d.label]));

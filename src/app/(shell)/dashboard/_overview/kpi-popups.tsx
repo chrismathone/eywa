@@ -7,7 +7,7 @@ import {
   withdrawalsMonthHref,
 } from "@/features/dashboard/overview/kpi-links";
 import { countWithdrawalPrograms } from "@/features/withdrawals/window";
-import { programLabel, visiblePrograms, type ProgramSubject } from "@/features/students/program";
+import { programLabel, visiblePrograms, type ProgramSubject } from "@/features/students/enrollment/program";
 import { dashboardProgramColor, dashboardCombinationColor } from "@/features/dashboard/overview/subject-colors";
 import { CountList, NameCell, PopupEmpty, PopupTotal, Tag, monthDay } from "./kpi-popup-parts";
 import s from "./overview.module.css";

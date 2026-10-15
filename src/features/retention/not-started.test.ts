@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { notYetStartedStudentIds } from "@/features/students/enrolled-composition";
+import { notYetStartedStudentIds } from "@/features/students/enrollment/enrolled-composition";
 import { retentionNotStartedStudentIds, type RetentionEnrollmentSpan } from "./not-started";
 
 /**

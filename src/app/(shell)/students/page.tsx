@@ -27,7 +27,7 @@ import {
   showSubjectFilter,
   coerceSubjectFilter,
 } from "@/features/students/scope-axis";
-import { loadStudentListPrefs, saveStudentListPrefs } from "@/features/students/server/list-prefs";
+import { loadStudentListPrefs, saveStudentListPrefs } from "@/features/students/list/server/list-prefs";
 import {
   DEFAULT_STUDENT_LIST_PREFS,
   dashboardExitParams,
@@ -35,12 +35,12 @@ import {
   parseStudentSort,
   studentListPrefsFromUrl,
   type StudentListPrefs,
-} from "@/features/students/list-prefs";
+} from "@/features/students/list/list-prefs";
 import { WindowLink } from "@/components/workspace/window-link";
 import { PageHeader } from "@/components/page-header";
 import { sheetSchoolGrade } from "@/features/teacher-view/school-grade";
 import { studentDisplayName } from "@/features/teacher-view/student-name";
-import { studentStatusMeta } from "@/features/students/status-labels";
+import { studentStatusMeta } from "@/features/students/status/status-labels";
 // 강사 미니셸이면 화면 언어를 따른다(원장 2026-09-04 "강사가 접근 가능한 모든 메뉴를 전환").
 import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
 import { sheetT, sheetTf } from "@/features/teacher-view/i18n";
@@ -54,7 +54,7 @@ import { StudentsMoreMenu } from "./_components/students-more-menu";
 import { RememberPrefs } from "@/components/remember-prefs";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { isValidYmd } from "@/lib/date-kst";
-import { parseProgram, programLabel, type Program } from "@/features/students/program";
+import { parseProgram, programLabel, type Program } from "@/features/students/enrollment/program";
 // 운영실 KPI ↗ 집합 — 엑셀 파일 라우트와 **같은 함수**(파일 행 = 목록 행).
 import { restrictIdsFor } from "@/features/students/server/restrict-ids";
 import {

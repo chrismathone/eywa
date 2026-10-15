@@ -3,7 +3,7 @@ import { kstDateOf, kstToday } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { reportWarning } from "@/lib/observability/report-error";
-import { isMergedStudent } from "@/features/students/merged";
+import { isMergedStudent } from "@/features/students/status/merged";
 import { REASON_LABEL, normalizeReason, type WithdrawalMetadata } from "../types";
 import { detailFor } from "../reason-detail";
 import { countsForSubjectExit, getEndedSubjects } from "../subject-ended";

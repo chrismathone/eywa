@@ -5,7 +5,7 @@ import { canAccessTenant } from "@/lib/auth/perm-matrix";
 import { effectiveTeacherId, effectiveTeacherScope } from "@/lib/auth/view-mode";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
-import { studentStatusLabel } from "@/features/students/status-labels";
+import { studentStatusLabel } from "@/features/students/status/status-labels";
 import { classStatusMeta } from "@/features/classes/list-filters";
 import { sheetT } from "@/features/teacher-view/i18n";
 import { getTenantSettings } from "@/features/owner/server/queries";

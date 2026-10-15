@@ -18,7 +18,7 @@ import {
 } from "@dnd-kit/sortable";
 import { ChevronDown, ChevronUp, Check, GripVertical, X } from "@/components/icons/aywa-icon-compat";
 import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
-import { LABEL_OF, moveColumn, normalizeOrder, STAFF_COLUMNS, type StaffColumnKey } from "@/features/staff/columns";
+import { LABEL_OF, moveColumn, normalizeOrder, STAFF_COLUMNS, type StaffColumnKey } from "@/features/staff/list/columns";
 import { useStaffViewPrefs } from "./staff-view-prefs";
 
 /**

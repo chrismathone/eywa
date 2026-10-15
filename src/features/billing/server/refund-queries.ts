@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { getStudentEnrollments } from "@/features/students/server/queries";
-import { studentStatusLabel } from "@/features/students/status-labels";
+import { studentStatusLabel } from "@/features/students/status/status-labels";
 import { normalizeRefund, REFUND_FORM_TYPE, type RefundRequestData } from "../refund-request";
 import type { RefundPrefillInvoice, RefundPrefillSource } from "../refund-prefill";
 

@@ -10,7 +10,7 @@
  * ⚠️ 영어·수학 어느 묶음도 아닌 과목(국어·과학·미상)과 **과목이 섞인 묶음**(보강 반)은 **안 붙인다** —
  *    모르는 것에 글자를 붙이면 그 단위가 사실인 것처럼 읽힌다.
  */
-import { subjectGroupOf, type ProgramSubject } from "@/features/students/program";
+import { subjectGroupOf, type ProgramSubject } from "@/features/students/enrollment/program";
 
 export type AttendanceUnitSuffix = "U" | "T" | null;
 

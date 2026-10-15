@@ -18,7 +18,7 @@
  *   · 휴원 중인 수강만        → 남는다(휴원 수강은 재료가 아니다 = 수강 없음과 같은 취급)
  *   · 시작일을 모르는 수강    → 남는다(모름을 '미시작'으로 읽지 않는다)
  */
-import { notYetStartedStudentIds } from "@/features/students/enrolled-composition";
+import { notYetStartedStudentIds } from "@/features/students/enrollment/enrolled-composition";
 
 export type RetentionEnrollmentSpan = {
   student_id: string;

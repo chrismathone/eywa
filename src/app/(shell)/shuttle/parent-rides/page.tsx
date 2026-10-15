@@ -1,20 +1,20 @@
 ﻿import { FaceTabs } from "@/components/face-tabs";
 import { kstToday, formatKoreanDate, isValidYmd } from "@/lib/date-kst";
 import { ParentRidesDayNav } from "./_components/parent-rides-day-nav";
-import { requireShuttleView } from "@/features/shuttle/server/access";
+import { isShuttleAdmin, requireShuttleView } from "@/features/shuttle/server/access";
 import {
   getBoardingsOn,
   getRideExceptionsOn,
   getShuttleBoard,
   getTripsOn,
 } from "@/features/shuttle/server/queries";
-import { getRegularChanges, getRideChangesOn } from "@/features/shuttle/server/change-history-queries";
-import { getParentAccounts, getParentLinkedStudentIds, getParentStudentOptions } from "@/features/shuttle/server/parents";
-import { parentAccountsActor } from "@/features/shuttle/server/parent-access";
+import { getRegularChanges, getRideChangesOn } from "@/features/shuttle/ride-change/server/change-history-queries";
+import { getParentAccounts, getParentLinkedStudentIds, getParentStudentOptions } from "@/features/shuttle/parent-accounts/server/parents";
+import { parentAccountsActor } from "@/features/shuttle/parent-accounts/server/parent-access";
 import { ParentAccountsButton } from "./_components/parent-accounts-button";
 import { ParentRidesBoard } from "./_components/parent-rides-board";
-import { buildRideLegs, type RideLeg } from "@/features/shuttle/parent-rides";
-import { ParentRideCard } from "@/features/shuttle/components/parent-ride-card";
+import { buildRideLegs, type RideLeg } from "@/features/shuttle/parent/parent-rides";
+import { ParentRideCard } from "@/features/shuttle/parent/components/parent-ride-card";
 import { SHUTTLE_PARENT_RIDES_PATH, shuttleFaces } from "@/features/shuttle/faces";
 import { SHUTTLE_TOOLBAR } from "@/features/shuttle/control-size";
 import { isSeason, type Season } from "@/features/shuttle/types";
@@ -125,7 +125,7 @@ export default async function ShuttleParentRidesPage({
     <div className="flex min-h-full w-full flex-col gap-3 p-3 md:px-5 md:py-4">
       <div className={SHUTTLE_TOOLBAR}>
         <span className="min-w-0 flex-1 basis-full sm:basis-auto">
-          <FaceTabs faces={shuttleFaces(season)} active={SHUTTLE_PARENT_RIDES_PATH} ariaLabel="셔틀 면 전환" />
+          <FaceTabs faces={shuttleFaces(season, { track: await isShuttleAdmin() })} active={SHUTTLE_PARENT_RIDES_PATH} ariaLabel="셔틀 면 전환" />
         </span>
         <ParentRidesDayNav date={date} today={today} season={season} />
       </div>

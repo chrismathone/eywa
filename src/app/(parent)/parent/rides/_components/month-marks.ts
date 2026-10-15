@@ -1,5 +1,5 @@
 import { TONE_TEXT } from "@/lib/design/semantic-color";
-import type { DirMark } from "@/features/shuttle/parent-month";
+import type { DirMark } from "@/features/shuttle/parent/parent-month";
 
 /**
  * 월별 달력의 표시 하나 — 기호 + 색(의미색 캐논: 탔음 초록 · 미탑승 주황 · 안 탐 회색 · 변경 보라).

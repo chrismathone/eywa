@@ -14,8 +14,8 @@ import {
   type EnrolledComposition,
   type EnrolledStudentRow,
   type StudentScope,
-} from "../enrolled-composition";
-import type { Program } from "../program";
+} from "../enrollment/enrolled-composition";
+import type { Program } from "../enrollment/program";
 import { NO_SUBJECT, type StudentLevel, type StudentMixFilter } from "../list-filter-values";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ATTENDANCE_STATUS_ORDER, attendanceStatusColor } from "@/features/students/attendance-tab";
+import { ATTENDANCE_STATUS_ORDER, attendanceStatusColor } from "@/features/students/detail/attendance-tab";
 import { ATT_SOFT, type AttendanceStatusKey } from "@/features/attendance/status-color";
 import { BILLING_BADGE, BILLING_LABEL, type BillingStatusKey } from "@/features/billing/status-color";
 import { OUTCOME_PILL } from "@/features/enrollment/outcome-meta";

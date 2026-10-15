@@ -1,5 +1,5 @@
 import { getGradeLevel, isPreschoolGrade } from "@/lib/format/school-grade";
-import { subjectMixOf, type GradeSplitRow, type StudentPrograms } from "@/features/students/enrolled-composition";
+import { subjectMixOf, type GradeSplitRow, type StudentPrograms } from "@/features/students/enrollment/enrolled-composition";
 import { STUDENT_LEVELS, levelLabel, studentLevelOf } from "@/features/students/list-filter-values";
 
 export type LevelSubjectSplit = { rows: (GradeSplitRow & { neither: number; total: number })[] };

@@ -21,7 +21,7 @@ import {
 } from "@/features/shuttle/types";
 import { isInactiveDay, type RideRow } from "@/features/shuttle/roster";
 import { clearBoarding, clearRideException, recordBoarding } from "@/features/shuttle/server/actions";
-import { setRowChecked, useRowChecked } from "@/features/shuttle/check-store";
+import { setRowChecked, useRowChecked } from "@/features/shuttle/today/check-store";
 import { StaffRideControls } from "./staff-ride-controls";
 
 /** 그날 변경을 건 사람 표식 — 학부모(파랑 info) / 직원(앰버, 직원 수정 버튼과 같은 색)으로 갈린다(사용자 2026-10-06). */

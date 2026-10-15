@@ -1,4 +1,4 @@
-import { programSubjectsOf, subjectGroupOf, type Program } from "@/features/students/program";
+import { programSubjectsOf, subjectGroupOf, type Program } from "@/features/students/enrollment/program";
 import type { StaffSubjectGroup } from "./staff-subjects";
 
 /** Dashboard subject colors: blue math, red English, warm violet English + math. */

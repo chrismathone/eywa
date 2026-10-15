@@ -3,7 +3,7 @@ import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { kstMonth, kstToday } from "@/lib/date-kst";
-import { notYetStartedStudentIds, type ActiveEnrollmentRow } from "@/features/students/enrolled-composition";
+import { notYetStartedStudentIds, type ActiveEnrollmentRow } from "@/features/students/enrollment/enrolled-composition";
 import { requireSuperAdmin } from "@/lib/auth/super-admin";
 
 

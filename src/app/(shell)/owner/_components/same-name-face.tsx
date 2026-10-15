@@ -2,7 +2,7 @@ import { Pill } from "@/components/atoms/pill";
 import { WindowLink } from "@/components/workspace/window-link";
 import { findSameNameStudents, type SameNameStudentGroup } from "@/features/admin/server/queries";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
-import { studentStatusMeta } from "@/features/students/status-labels";
+import { studentStatusMeta } from "@/features/students/status/status-labels";
 
 /**
  * **같은 이름을 쓰는 학생** 섹션 — 데이터 정리 면(owner ?tab=data).

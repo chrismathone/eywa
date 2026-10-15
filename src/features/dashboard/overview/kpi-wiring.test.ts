@@ -57,7 +57,7 @@ describe("① 재원생 — 원생목록과 같은 조회·같은 순수 집계"
    */
   it("④ 아직 시작 안 한 수강만 가진 학생은 총원·목록·과목에서 함께 빠진다", () => {
     // 집합을 만드는 곳은 순수 함수 한 벌
-    expect(src("src/features/students/enrolled-composition.ts")).toContain(
+    expect(src("src/features/students/enrollment/enrolled-composition.ts")).toContain(
       "export function notYetStartedStudentIds(",
     );
     // 총원(count head)과 목록(students 조회)이 같은 집합을 뺀다
@@ -70,7 +70,7 @@ describe("① 재원생 — 원생목록과 같은 조회·같은 순수 집계"
 
   it("A6 — 옛 '동시 수강'(과목 둘 이상) 값은 남기지 않는다", () => {
     expect(QUERIES).not.toContain("concurrent");
-    expect(src("src/features/students/subject-enrollment-summary.ts")).not.toMatch(/concurrent\s*[:=]/);
+    expect(src("src/features/students/enrollment/subject-enrollment-summary.ts")).not.toMatch(/concurrent\s*[:=]/);
   });
 
   it("🔴 좁힐 학생 집합을 .in(id)에 싣지 않는다(URL 414) — 같은 필터로 id 전건을 받아 JS로 거른다", () => {
@@ -90,7 +90,7 @@ describe("① 재원생 — 원생목록과 같은 조회·같은 순수 집계"
    * 같은 재료로 잠그고, 여기선 **표면이 그 함수를 부르는지**를 잠근다(주석은 강제력이 없다).
    */
   it("재원생 구성 막대·원생목록 level=·mix=·'미수강'이 같은 판정 함수를 지난다", () => {
-    const PURE = src("src/features/students/enrolled-composition.ts");
+    const PURE = src("src/features/students/enrollment/enrolled-composition.ts");
     // 운영실 active(미수강 막대의 여집합)와 목록 '미수강'이 같은 줄 판정(activeRows)
     expect(PURE).toMatch(/for \(const \[row, klass\] of activeRows\(input\.rows, input\.scope, input\.today\)\)/);
     expect(PURE).toMatch(/export function activeStudentIds[\s\S]*?activeRows\(rows, scope, today\)/);

@@ -70,6 +70,7 @@ const PANES = [
 type PaneKey = (typeof PANES)[number]["key"];
 
 export function ShuttleBoardClient({
+  showTrack = false,
   season,
   vehicles,
   runs,
@@ -80,6 +81,8 @@ export function ShuttleBoardClient({
   canImport = false,
   coordsReady,
 }: {
+  /** 실시간 위치 탭을 붙일까 — 원장·관리자·총괄만(서버 `isShuttleAdmin`이 정한다). */
+  showTrack?: boolean;
   season: Season;
   vehicles: ShuttleVehicle[];
   runs: ShuttleRun[];
@@ -229,7 +232,7 @@ export function ShuttleBoardClient({
           🔴 FaceTabs는 공용 컴포넌트라 손대지 않는다 — 감싸는 자리만 바꾼다. */}
       <div className={SHUTTLE_TOOLBAR}>
         <span className="min-w-0 flex-1 basis-full sm:basis-auto">
-          <FaceTabs faces={shuttleFaces(season)} active={SHUTTLE_BOARD_PATH} ariaLabel="셔틀 면 전환" />
+          <FaceTabs faces={shuttleFaces(season, { track: showTrack })} active={SHUTTLE_BOARD_PATH} ariaLabel="셔틀 면 전환" />
         </span>
         <ShuttleSeasonSelect season={season} hrefFor={(s) => `${SHUTTLE_BOARD_PATH}?season=${s}`} />
         {!canWrite && (

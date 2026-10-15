@@ -19,7 +19,7 @@ const read = (...parts: string[]) => readFileSync(join(process.cwd(), ...parts),
 
 const ACCOUNT_ACTIONS = join("src", "features", "staff", "server", "account-actions.ts");
 const STAFF_ACTIONS = join("src", "features", "staff", "server", "actions.ts");
-const RESUME_ACTIONS = join("src", "features", "staff", "server", "resume-actions.ts");
+const RESUME_ACTIONS = join("src", "features", "staff", "resume", "server", "resume-actions.ts");
 const STAFF_DETAIL_PAGE = join("src", "app", "(shell)", "staff", "[id]", "page.tsx");
 
 /** `export async function NAME(` 부터 다음 top-level export 직전까지 = 그 액션의 본문. */

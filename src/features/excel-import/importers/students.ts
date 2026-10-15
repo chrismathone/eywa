@@ -7,7 +7,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { canonicalSchoolName } from "@/features/schools/school-name";
 import { naturalKey } from "@/features/students/lib/student-import";
 import { resolveUniqueStudentName } from "@/features/students/name-suffix";
-import { STUDENT_STATUS_LABEL } from "@/features/students/status-labels";
+import { STUDENT_STATUS_LABEL } from "@/features/students/status/status-labels";
 import { planFormWithdrawal } from "@/features/students/withdrawal-plan";
 import { canManageStudentStatusNow } from "@/features/students/server/status-access";
 import { statusCreationNeedsPermission, STUDENT_STATUS_DENIED } from "@/features/students/status-access";

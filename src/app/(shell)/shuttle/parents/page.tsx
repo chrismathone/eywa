@@ -1,10 +1,10 @@
 import { FaceTabs } from "@/components/face-tabs";
-import { requireParentAccountsAccess } from "@/features/shuttle/server/parent-access";
-import { getParentAccounts, getParentStudentOptions } from "@/features/shuttle/server/parents";
+import { requireParentAccountsAccess } from "@/features/shuttle/parent-accounts/server/parent-access";
+import { getParentAccounts, getParentStudentOptions } from "@/features/shuttle/parent-accounts/server/parents";
 import { shuttleFaces } from "@/features/shuttle/faces";
-import { SHUTTLE_PARENTS_PATH } from "@/features/shuttle/parent-access";
-import { ParentAccountForm } from "@/features/shuttle/components/parent-account-form";
-import { ParentAccountList } from "@/features/shuttle/components/parent-account-list";
+import { SHUTTLE_PARENTS_PATH } from "@/features/shuttle/parent-accounts/parent-access";
+import { ParentAccountForm } from "@/features/shuttle/parent-accounts/components/parent-account-form";
+import { ParentAccountList } from "@/features/shuttle/parent-accounts/components/parent-account-list";
 
 export const metadata = { title: "셔틀 학부모 관리 현황 — aywa" };
 
@@ -14,7 +14,7 @@ export default async function ShuttleParentsPage() {
   const [accounts, students] = await Promise.all([getParentAccounts(), getParentStudentOptions()]);
   // 🔑 셔틀 탭 줄(SUBTABS_BY_MENU)에는 이 면이 없다 — 거기 두면 셔틀을 보는 모든 역할의 탭 줄에 선다.
   //    이 화면에서만 제자리(운행 현황 뒤)에 끼워 넣는다.
-  const faces = shuttleFaces("term");
+  const faces = shuttleFaces("term", { track: true }); // 이 화면은 원장·관리자만 — 실시간 위치 탭도 붙는다
   const afterLive = faces.findIndex((f) => f.key === "/shuttle/live") + 1;
   const parentFaces = [...faces.slice(0, afterLive), { key: SHUTTLE_PARENTS_PATH, label: "학부모 관리 현황", href: SHUTTLE_PARENTS_PATH }, ...faces.slice(afterLive)];
 

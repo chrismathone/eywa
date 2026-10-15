@@ -9,10 +9,10 @@ import {
   getActiveHomeroomClasses,
   type StaffDetail,
 } from "@/features/staff/server/queries";
-import { getStaffContractFiles, getStaffContracts } from "@/features/staff/server/contract-queries";
+import { getStaffContractFiles, getStaffContracts } from "@/features/staff/contract/server/contract-queries";
 import { getClassTeacherOptions } from "@/features/classes/server/queries";
-import type { ResumeDetail } from "@/features/staff/server/resume-queries";
-import { RESUME_CHECKS, WORKDAYS } from "@/features/staff/resume";
+import type { ResumeDetail } from "@/features/staff/resume/server/resume-queries";
+import { RESUME_CHECKS, WORKDAYS } from "@/features/staff/resume/resume";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { protectionStatus } from "@/lib/auth/protected-accounts";
 import { buildSubjectMaps } from "@/features/owner/subjects";

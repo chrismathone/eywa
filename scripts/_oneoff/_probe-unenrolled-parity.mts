@@ -11,7 +11,7 @@ import {
   notYetStartedStudentIds,
   summarizePrograms,
   type ActiveEnrollmentRow,
-} from "../../src/features/students/enrolled-composition";
+} from "../../src/features/students/enrollment/enrolled-composition";
 import { levelSubjectSplit } from "../../src/features/dashboard/overview/student-composition";
 import { levelKeyOfLabel, type StudentLevel } from "../../src/features/students/list-filter-values";
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { DIRECTION_LABEL } from "@/features/shuttle/types";
-import { progressState, type DirectionFilter, type Progress, type VehicleGroup } from "@/features/shuttle/today-board";
+import { progressState, type DirectionFilter, type Progress, type VehicleGroup } from "@/features/shuttle/today/today-board";
 
 /**
  * 호차 머리 — 폰에서 **스크롤 중에도 붙어 있다**(sticky). 차가 여럿일 때 "지금 몇 호차를 보는지"를

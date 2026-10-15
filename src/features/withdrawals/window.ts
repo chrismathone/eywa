@@ -8,7 +8,7 @@
  *    세면 사실이 아니다([system-bulk.ts]와 월별 추이가 이미 쓰는 규칙).
  */
 import { monthRange } from "@/lib/date-kst";
-import { programOf, type Program, type ProgramSubject } from "@/features/students/program";
+import { programOf, type Program, type ProgramSubject } from "@/features/students/enrollment/program";
 
 /**
  * '이번 달' 퇴원 창 — 그 달 1일 ~ **min(말일, 오늘)**(KST, 양끝 포함).

@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
 import { buildSubjectMaps, type SubjectMaps } from "./subjects";
-import { jobTitlesForDepartment } from "@/features/staff/department-job-titles";
+import { jobTitlesForDepartment } from "@/features/staff/department/department-job-titles";
 import type { SubjectSetting } from "./settings-types";
 import { isModuleEnabled, type ModuleId } from "@/lib/modules";
 import { useSheetLang } from "@/features/teacher-view/lang-context";
