@@ -40,6 +40,8 @@ import { resolveUniqueStudentName } from "../name-suffix";
 import { preserveMergeNote } from "../merged";
 import { resolveUniqueStudentNameFor } from "./unique-name";
 import { canViewStudentDetail } from "./read-scope";
+import { canManageStudentStatusNow } from "./status-access";
+import { statusCreationNeedsPermission, STUDENT_STATUS_DENIED } from "../status-access";
 
 export type StudentFormState =
   | {
@@ -161,6 +163,9 @@ export async function createStudent(
   const fieldErrors = validate(input);
   if (fieldErrors) return { fieldErrors };
   // 퇴원일 칸 — 미래면 퇴원 예약(상태 그대로), 재원·휴원에 지난 날짜는 거절(수정 폼과 같은 `planFormWithdrawal`).
+  if (statusCreationNeedsPermission(input.status, input.withdrawnAt) && !(await canManageStudentStatusNow())) {
+    return { error: STUDENT_STATUS_DENIED };
+  }
   const createPlan = planFormWithdrawal({ prevStatus: null, status: input.status, withdrawnAt: input.withdrawnAt, today: kstToday() });
   if (createPlan.error) return { fieldErrors: { withdrawnAt: createPlan.error } };
   if (createPlan.status === "enrolled") {
@@ -301,6 +306,14 @@ export async function updateStudent(
     .select("status, withdrawal_metadata, withdrawn_at, name, notes")
     .eq("id", id)
     .single();
+  if (!cur) return { error: "학생을 찾을 수 없습니다" };
+  // A basic edit omits these fields. Old forms may send unchanged values, but cannot change them.
+  if (!formData.has("status")) input.status = cur.status as StudentStatus;
+  if (!formData.has("withdrawnAt")) input.withdrawnAt = cur.withdrawn_at ? String(cur.withdrawn_at).slice(0, 10) : null;
+  const statusAccess = await canManageStudentStatusNow();
+  if (!statusAccess && (input.status !== cur.status || input.withdrawnAt !== (cur.withdrawn_at ? String(cur.withdrawn_at).slice(0, 10) : null))) {
+    return { error: STUDENT_STATUS_DENIED };
+  }
   const prevStatus = cur?.status as string | undefined;
   if (input.status === "enrolled" && prevStatus !== "enrolled") {
     const seat = await seatBlockReason(user.tenantId, 1, [id]);
@@ -316,15 +329,16 @@ export async function updateStudent(
   //    예전 식(`퇴원 아니면 withdrawn_at = null`)이면 이름 한 글자 고치는 저장이 예약을 조용히 지웠다.
   const today = kstToday();
   const scheduledPrev = prevStatus !== "withdrawn" && !!cur?.withdrawn_at;
-  const withdrawalPlan = planFormWithdrawal({
+  const withdrawalPlan = statusAccess ? planFormWithdrawal({
     prevStatus: prevStatus ?? null,
     prevWithdrawnAt: (cur?.withdrawn_at as string | null) ?? null,
     status: input.status,
     withdrawnAt: input.withdrawnAt,
     today,
-  });
+  }) : { status: cur.status as StudentStatus, withdrawnAt: cur.withdrawn_at ? String(cur.withdrawn_at).slice(0, 10) : null,
+    kind: scheduledPrev ? "schedule" as const : cur.status === "withdrawn" ? "withdraw" as const : "none" as const, error: undefined };
   if (withdrawalPlan.error) return { fieldErrors: { withdrawnAt: withdrawalPlan.error } };
-  const schedulingNow = withdrawalPlan.kind === "schedule";
+  const schedulingNow = statusAccess && withdrawalPlan.kind === "schedule";
   const savedStatus = withdrawalPlan.status;
 
   let withdrawalMetadata: unknown = cur?.withdrawal_metadata ?? null;
@@ -333,11 +347,11 @@ export async function updateStudent(
     withdrawalMetadata = scheduledPrev && cur?.withdrawal_metadata ? cur.withdrawal_metadata : DEFAULT_WITHDRAWAL_METADATA;
   } else if (schedulingNow) {
     withdrawalMetadata = scheduledPrev && cur?.withdrawal_metadata ? cur.withdrawal_metadata : DEFAULT_WITHDRAWAL_METADATA;
-  } else if (withdrawalPlan.kind === "none") {
+  } else if (statusAccess && withdrawalPlan.kind === "none") {
     withdrawalMetadata = null;
   }
   const savedWithdrawnAt = withdrawalPlan.withdrawnAt;
-  const cancelledSchedule = scheduledPrev && withdrawalPlan.kind === "none" ? String(cur?.withdrawn_at).slice(0, 10) : null;
+  const cancelledSchedule = statusAccess && scheduledPrev && withdrawalPlan.kind === "none" ? String(cur?.withdrawn_at).slice(0, 10) : null;
 
   // 이름을 새 값으로 바꾼 경우만 중복 검사 — 기존(=현재) 이름 유지 저장은 제외(원장 지시). 자기 자신(id)은 taken에서 빼서
   // 자기 이름과 충돌로 오인되지 않게. 신규 이름이 다른 학생과 겹치면 접미사(A·B·C…) 강제.
@@ -356,7 +370,7 @@ export async function updateStudent(
     renamed = resolved.suffixed;
   }
 
-  const { error } = await supabase
+  let update = supabase
     .from("students")
     .update({
       name: finalName,
@@ -380,10 +394,8 @@ export async function updateStudent(
       parent_name: input.parentName,
       parent_phone: input.parentPhone,
       parent_relation: input.parentRelation,
-      status: savedStatus,
+      ...(statusAccess ? { status: savedStatus, withdrawn_at: savedWithdrawnAt, withdrawal_metadata: withdrawalMetadata } : {}),
       enrolled_at: input.enrolledAt,
-      withdrawn_at: savedWithdrawnAt,
-      withdrawal_metadata: withdrawalMetadata,
       // 🔴 병합 표식은 사람이 지울 수 없다 — 이 칸('메모 / 특이사항')이 곧 `students.notes`라, 표식이
       //    사람 메모와 **같은 칸**에 들어 있다. 그냥 저장하면 표식이 날아가고 그 학생이 집계에서
       //    **퇴원으로 조용히 되살아난다**(에러도 경고도 없다). 병합된 학생이 아니면 입력값 그대로다.
@@ -394,9 +406,12 @@ export async function updateStudent(
         input.status === "withdrawn",
       ),
     })
-    .eq("id", id);
+    .eq("id", id).eq("status", cur.status);
+  update = cur.withdrawn_at === null ? update.is("withdrawn_at", null) : update.eq("withdrawn_at", cur.withdrawn_at);
+  const { data: changed, error } = await update.select("id").maybeSingle();
 
   if (error) return studentSaveError(error, "students.update", "학생 정보를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+  if (!changed) return { error: "원생 상태가 변경되었습니다. 새로고침한 뒤 다시 저장해 주세요." };
   // 인재원 짝이 있는 학생이면 학교·학년·생일을 인재원에 보낸다(원장 2026-10-08) — 응답 뒤에, 짝이 없으면 아무것도 안 한다.
   {
     const ijwTenant = user.tenantId;
@@ -478,7 +493,7 @@ export async function changeStudentStatus(
   const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   // 🔴 퇴원·휴원·복구 = full만(강사 차단, 원장 지시 2026-08-18) — canManageStudentRecords 주석 참조.
-  if (!(await canManageStudentRecords(user.systemRole))) return { error: STUDENT_MANAGE_DENIED };
+  if (!(await canManageStudentStatusNow())) return { error: STUDENT_STATUS_DENIED };
 
   const id = String(formData.get("id") ?? "").trim();
   const target = String(formData.get("target") ?? "").trim();
@@ -656,7 +671,7 @@ export async function cancelScheduledWithdrawal(
 ): Promise<ChangeStatusState> {
   const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canManageStudentRecords(user.systemRole))) return { error: STUDENT_MANAGE_DENIED };
+  if (!(await canManageStudentStatusNow())) return { error: STUDENT_STATUS_DENIED };
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "학생 ID가 누락되었습니다" };
 
@@ -703,7 +718,7 @@ export async function endStudentEnrollments(
   const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   // 🔴 단일 수강 종료와 **같은 게이트** — 강사(scoped)는 학생 기록 열람 전용(원장 2026-08-18).
-  if (!(await canManageStudentRecords(user.systemRole))) return { error: STUDENT_MANAGE_DENIED };
+  if (!(await canManageStudentStatusNow())) return { error: STUDENT_STATUS_DENIED };
 
   const studentId = String(formData.get("studentId") ?? "").trim();
   const date = String(formData.get("date") ?? "").trim();
@@ -789,7 +804,7 @@ export async function setStudentEnrollmentHolds(
   const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   // 🔴 퇴원·부분 종료와 **같은 게이트** — 강사(scoped)는 학생 기록 열람 전용(원장 2026-08-18).
-  if (!(await canManageStudentRecords(user.systemRole))) return { error: STUDENT_MANAGE_DENIED };
+  if (!(await canManageStudentStatusNow())) return { error: STUDENT_STATUS_DENIED };
 
   const studentId = String(formData.get("studentId") ?? "").trim();
   const date = String(formData.get("date") ?? "").trim() || kstToday();
@@ -865,7 +880,7 @@ export async function holdSingleEnrollment(
 ): Promise<ChangeStatusState> {
   const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canManageStudentRecords(user.systemRole))) return { error: STUDENT_MANAGE_DENIED };
+  if (!(await canManageStudentStatusNow())) return { error: STUDENT_STATUS_DENIED };
 
   const enrollmentId = String(formData.get("enrollmentId") ?? "").trim();
   const studentId = String(formData.get("studentId") ?? "").trim();
@@ -879,7 +894,7 @@ export async function holdSingleEnrollment(
     .eq("id", enrollmentId)
     .maybeSingle();
   if (readErr) return { error: dbWhy(readErr, "students.holdSingleEnrollment.read", "수강 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.") };
-  if (!row) return { error: "수강 기록을 찾을 수 없습니다" };
+  if (!row || (studentId && studentId !== row.student_id)) return { error: "수강 기록을 찾을 수 없습니다" };
   if (row.end_date) return { error: "이미 종료된 수강입니다" };
 
   if (!row.on_hold) {
@@ -889,7 +904,7 @@ export async function holdSingleEnrollment(
       action: "enrollment_hold",
       targetType: "student",
       metadata: {
-        studentId: studentId || row.student_id,
+        studentId: row.student_id,
         classId: row.class_id,
         date,
         source: "timetable_integrated_drag",
@@ -897,7 +912,7 @@ export async function holdSingleEnrollment(
     });
   }
 
-  const sid = studentId || row.student_id;
+  const sid = row.student_id;
   if (sid) revalidatePath(`/students/${sid}`);
   revalidatePath("/students");
   if (row.class_id) revalidatePath(`/classes/${row.class_id}`);
@@ -913,9 +928,7 @@ export async function endSingleEnrollment(
   const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   // 수강 종료 = 학생 쓰기(full) 권한 이상만(master·admin·manager·counselor). UI 숨김 + 이 서버 게이트 이중 방어.
-  if (!(await canManageStudentRecords(user.systemRole))) {
-    return { error: "수강 종료 권한이 없습니다" };
-  }
+  if (!(await canManageStudentStatusNow())) return { error: STUDENT_STATUS_DENIED };
 
   const enrollmentId = String(formData.get("enrollmentId") ?? "").trim();
   const studentId = String(formData.get("studentId") ?? "").trim();
@@ -927,10 +940,10 @@ export async function endSingleEnrollment(
   const supabase = await createClient();
   // 종료 규약(미래 시작 클램프 + withdrawal_reason)은 공용 원시함수 한 곳에 있다 — 퇴원 다이얼로그의
   // 부분 종료(endStudentEnrollments)도 같은 함수를 돈다(#77: 표면마다 다시 짜면 한쪽만 고쳐진다).
-  const res = await endEnrollmentById(supabase, enrollmentId, date, reason);
+  const res = await endEnrollmentById(supabase, enrollmentId, date, reason, studentId || undefined);
   if (res.error) return { error: res.error };
   // 이 종료로 수학을 그만뒀으면(반이동 제외 · 다른 수학 반이 남아 있으면 아님) 시트에 적는다(원장 2026-10-07).
-  const sheetStudent = studentId || res.studentId || null;
+  const sheetStudent = res.studentId || null;
   if (sheetStudent && res.endDate) {
     const sheetTenant = user.tenantId;
     const sheetDate = String(res.endDate).slice(0, 10);
@@ -943,7 +956,7 @@ export async function endSingleEnrollment(
     action: "enrollment_end",
     targetType: "student",
     metadata: {
-      studentId: studentId || res.studentId || null,
+      studentId: res.studentId || null,
       classId: res.classId ?? null,
       date: res.endDate,
       reason,

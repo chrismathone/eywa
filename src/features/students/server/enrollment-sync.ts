@@ -75,6 +75,7 @@ export async function endEnrollmentById(
   enrollmentId: string,
   date: string,
   reason: string,
+  expectedStudentId?: string,
 ): Promise<{
   error: string | null;
   /** 실제 저장된 종료일(클램프 반영) — 감사로그에 그대로 싣는다. */
@@ -88,6 +89,7 @@ export async function endEnrollmentById(
     .eq("id", enrollmentId)
     .maybeSingle();
   if (selErr) return { error: why(selErr, "endOne.read", { enrollmentId }) };
+  if (!enr || (expectedStudentId && enr.student_id !== expectedStudentId)) return { error: "수강 기록을 찾을 수 없습니다" };
 
   const endDate = enr && String(enr.start_date) > date ? String(enr.start_date) : date;
   const { error } = await supabase

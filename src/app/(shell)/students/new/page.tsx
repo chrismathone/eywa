@@ -1,3 +1,4 @@
+import { canManageStudentStatusNow } from "@/features/students/server/status-access";
 import { redirect } from "next/navigation";
 import { BackLink } from "@/components/back-link";
 import { requireAccess } from "@/lib/auth/require-access";
@@ -27,6 +28,7 @@ export default async function NewStudentPage() {
       </header>
 
       <StudentForm
+        canManageStatus={await canManageStudentStatusNow()}
         mode="create"
         gradeLevels={operations.gradeLevels}
         showClassnoteName={isModuleEnabled(modules.disabled, "classnote")}

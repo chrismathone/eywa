@@ -79,7 +79,7 @@ export async function createTenantWithMaster(
   //      계정보다 먼저 쓰는 이유: 여기서 실패하면 되돌릴 것이 학원 행 하나뿐이다(설정 행은 학원 삭제에 함께 지워진다 — FK cascade).
   const { error: settingsErr } = await admin
     .from("tenant_settings")
-    .insert({ tenant_id: tenantId, data: { version: 1, preset: "generic" } });
+    .insert({ tenant_id: tenantId, data: { version: 1, preset: "generic", permissions: { specialAccess: { studentStatusManagerIds: [] } } } });
   if (settingsErr) {
     await admin.from("tenants").delete().eq("id", tenantId);
     updateTag(PUBLIC_BRANDING_TENANTS_TAG);

@@ -258,12 +258,16 @@ function diffPermissions(before: unknown, after: unknown): SettingsDiff {
       });
     }
     if (isObj(v.specialAccess)) {
+      if (v.specialAccess.studentStatusManagerIds !== undefined) {
+        out.set("special:studentStatusMode", { label: "원생 상태 변경 · 담당자 지정 방식", access: "full" });
+      }
       for (const [key, label] of [
         ["payslipViewerIds", "급여명세서 열람"],
         ["payslipManagerIds", "급여명세서 관리"],
         ["leaveAdjusterIds", "연차 조정"],
         ["classSplitterIds", "수업 나누기"],
         ["enrollmentDateEditorIds", "수강 날짜 수정"],
+        ["studentStatusManagerIds", "원생 상태 변경"],
       ] as const) {
         const ids = key === "payslipManagerIds" ? effectivePayslipManagerIds(v.specialAccess) : v.specialAccess[key];
         for (const id of Array.isArray(ids) ? ids : []) {

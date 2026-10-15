@@ -6,7 +6,9 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { specialSlotLabel } from "@/features/timetable/lib/teacher-label";
 import { kstToday } from "@/lib/date-kst";
-import { fetchAllPaged } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
+import { canManageStudentStatusNow } from "@/features/students/server/status-access";
+import { STUDENT_STATUS_DENIED } from "@/features/students/status-access";
 import { createClient } from "@/lib/supabase/server";
 import { IMPORT_META } from "../kinds";
 import type { RowReader } from "../rows";
@@ -662,6 +664,18 @@ function DOW_ORDER_IDX(d: string): number {
 
 async function applyPlan(ctx: ImportCtx, plan: Plan): Promise<{ error?: string; notes?: string[] }> {
   const db = await createClient();
+  if (!(await canManageStudentStatusNow())) {
+    // Validate the whole plan before creating classes or changing schedules.
+    if (plan.enrollUpdates.some((r) => "end_date" in r.patch || "on_hold" in r.patch) || plan.enrollInserts.some((r) => r.endDate)) {
+      return { error: STUDENT_STATUS_DENIED };
+    }
+    const students = await fetchInChunks([...new Set(plan.enrollInserts.map((r) => r.studentId))], (ids) =>
+      db.from("students").select("id, status").eq("tenant_id", ctx.tenantId).in("id", ids));
+    const status = new Map(students.map((r) => [r.id, r.status]));
+    if (plan.enrollInserts.some((r) => !status.has(r.studentId) || r.onHold !== (status.get(r.studentId) === "on_hold"))) {
+      return { error: STUDENT_STATUS_DENIED };
+    }
+  }
   const done: string[] = [];
   const stop = (what: string, msg: string) => ({ error: `${what}에서 멈췄습니다 — ${msg}${done.length ? ` (이미 반영: ${done.join(" · ")})` : ""}` });
 

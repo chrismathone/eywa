@@ -1,4 +1,6 @@
 "use server";
+import { canManageStudentStatusNow } from "@/features/students/server/status-access";
+import { STUDENT_STATUS_DENIED } from "@/features/students/status-access";
 
 import { licenseBlockReason } from "@/lib/license/server";
 import ExcelJS from "exceljs";
@@ -343,6 +345,7 @@ async function applyDiff(
   source: { kind: "file" | "sheet"; subject?: string },
 ): Promise<ApplyState> {
   const today = effective;
+  if (diff.removes.length && !(await canManageStudentStatusNow())) return { error: STUDENT_STATUS_DENIED };
 
   // 1) 스냅샷 — 영향 enrollment의 before 상태(이동·삭제 대상) 백업
   const affectedIds = [

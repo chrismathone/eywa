@@ -59,12 +59,14 @@ const DAY_CHIP: Record<string, string> = {
 export async function ClassesTab({
   student,
   canEnd,
+  canAssign = false,
   dateAccess,
   canEditSchedule,
   canDeleteEnrollment,
 }: {
   student: StudentDetail;
   canEnd: boolean;
+  canAssign?: boolean;
   dateAccess: EnrollmentDateAccess;
   /** 분리등원 요일(스케줄 셀) 더블클릭 편집 노출 — canManageTenant("classes", 서버 액션과 같은 축). */
   canEditSchedule: boolean;
@@ -162,7 +164,7 @@ export async function ClassesTab({
         moveStudent={{ id: student.id, name: student.name, grade: student.grade }}
         action={
           // 반 배정도 학생 기록 변경 — 강사(열람 전용)에겐 숨긴다. 서버 createEnrollment 게이트(full)와 한 쌍(#77).
-          canEnd ? (
+          canAssign ? (
             <StudentAssignAction
               student={{ id: student.id, name: student.name, grade: student.grade }}
               classes={candidateClasses}
@@ -217,9 +219,10 @@ function Section({
   // 수강 종료/반 이동 컬럼: 쓰기 권한 + 비-지난 섹션에서만. 셀 버튼은 재원중(end_date==null)에만 —
   // 이미 종료일이 있는 행엔 버튼을 숨겨 "종료된 행 재클릭 시 팝업 반복" 버그를 막는다.
   const showEndCol = canEnd && kind !== "past";
+  const showMoveCol = canEditSchedule && kind === "current" && !!moveTargets && !!moveStudent;
   // 🔴 삭제(원장 정정)는 **세 구획 전부**에 선다 — 잘못 만든 이력은 대개 '지난 수업'(시작=종료)에 있다.
   //    그래서 액션 열은 '수강 종료'가 없는 구획에서도 열려야 한다.
-  const showActionCol = showEndCol || canDeleteEnrollment;
+  const showActionCol = showEndCol || showMoveCol || canDeleteEnrollment;
   return (
     <section className="bg-card border-border rounded-2xl border">
       <header className="border-border flex flex-wrap items-center justify-between gap-2 border-b px-5 py-3">
@@ -318,9 +321,9 @@ function Section({
                   {showActionCol ? (
                     <td className="px-2 py-2.5 text-right">
                       <div className="inline-flex items-center gap-1.5">
-                        {showEndCol && r.endDate == null ? (
+                        {(showEndCol || showMoveCol) && r.endDate == null ? (
                           <>
-                            {moveTargets && moveStudent ? (
+                            {showMoveCol && moveTargets && moveStudent ? (
                               <MoveEnrollmentButton
                                 enrollmentId={r.enrollmentId}
                                 student={moveStudent}
@@ -330,13 +333,13 @@ function Section({
                                 classes={moveTargets}
                               />
                             ) : null}
-                            <EndEnrollmentAction
+                            {showEndCol ? <EndEnrollmentAction
                               enrollmentId={r.enrollmentId}
                               studentId={studentId}
                               className={r.className}
                               currentEndDate={r.endDate}
                               startDate={r.startDate}
-                            />
+                            /> : null}
                           </>
                         ) : null}
                         {canDeleteEnrollment ? (
