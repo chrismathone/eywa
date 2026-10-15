@@ -24,7 +24,7 @@ export const METRIC_META: Record<BuiltinMetricId, MetricMeta> = {
   churn: { unit: "%", short: "퇴원율", color: "var(--color-blue)", measure: "이 달에 그만둔 학생 ÷ 지난달 담당 학생(담임·교시 담당 모두 · 정규 수업으로 그 달 절반 이상 맡은 학생) — 다른 반으로 옮긴 뒤 그만둬도 센다 · 고른 사유·반 이동·수업 끝남·끝난 특강·같은 과목 다른 반은 뺀다" },
   grades: { unit: "%", short: "성적", color: "var(--color-purple)", measure: "담임 반 학생이 이 달에 본 시험(성적관리의 일일·확인테스트 · 월말평가 · 학교 시험)의 점수율 — 종류별 평균을 아래 비중으로 가중 평균 · 시험은 그날 다니던 반의 담임에게" },
   satisfaction: { unit: "점", short: "만족도", color: "var(--color-green)", measure: "학부모 글·댓글 판정(확실한 문구는 바로, 애매한 글은 확인 뒤 반영)과 원장이 넣은 클레임·칭찬의 가감 합 — 만점 없이 총점에 그대로 더하고 뺀다" },
-  punctuality: { unit: "회", short: "근태", color: "var(--color-gold)", measure: "그 달 지각·결근 횟수 — 지금은 원장이 넣은 횟수(직접 입력 · 메이크에듀 출퇴근 가져오기 준비 중), 기록이 들어오면 결재된 휴가·휴원일을 뺀 지각·결근" },
+  punctuality: { unit: "회", short: "근태", color: "var(--color-gold)", measure: "그 달 지각·결근·조퇴 횟수(가중 합) — 메이크에듀 출퇴근 시각을 그날 맡은 수업(또는 개인 출퇴근 시각)과 견준다 · 결재된 휴가·휴원일은 뺀다 · 원장이 넣은 횟수가 있으면 그 값" },
   report: { unit: "%", short: "보고서", color: "var(--color-primary)", measure: "본인이 수업 당일에 쓴 수업보고서 ÷ 보고 대상(학생·수업일, 결석·휴원·제외 반 빼고) — 대리·다음 날 이후 작성은 미작성" },
   attendance: { unit: "%", short: "출결", color: "var(--color-green)", measure: "본인이 수업 당일에 넣은 출결 ÷ 출결 대상(수업을 맡은 날) — 다른 사람·다음 날 이후 입력은 미작성" },
   counsel: { unit: "%", short: "상담", color: "var(--color-rose)", measure: "이 달 담임인 반의 학생 중 본인이 1회 이상 상담한 학생 ÷ 담임 반 학생(부담임 학생은 뺀다)" },

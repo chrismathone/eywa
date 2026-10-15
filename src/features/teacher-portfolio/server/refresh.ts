@@ -92,6 +92,9 @@ export async function refreshTenantPortfolio(
     })
     : noPay;
   const holdFrom = shiftMonth(periodEnd.slice(0, 7), -1);
+  // 메이크에듀 출퇴근을 아직 다음 달 1일 이후로 못 받았으면(연동은 06·18시 — 말일 저녁 태그는 1일 아침에 온다) 근태를 켠 지점은 그 달 마감을 미룬다.
+  const attendanceLatest = snapshot.sources?.punctuality.latest ?? null;
+  const attendancePending = (month: string) => attendanceLatest !== null && attendanceLatest < `${shiftMonth(month, 1)}-01`;
   let scoring = first;
   let saved: SaveSummary | null = null;
   for (let pass = 0; ; pass++) {
@@ -100,7 +103,8 @@ export async function refreshTenantPortfolio(
     // 재료 조회 자체가 실패하면 어느 달을 못 셌는지도 모른다 — 그 실행은 마감을 모두 미룬다(다음 실행이 다시 센다).
     // 미루는 것은 다음 달 말까지 — 계속 나는 오류(깨진 비율표 등)로 달이 반년씩 열려 있지 않게, 그 뒤엔 사유를 남긴 채 마감한다.
     const holdClose = (teacherId: string, month: string) =>
-      month >= holdFrom && (payFailed || Boolean(pay.get(`${teacherId}|${month}`)?.retry));
+      month >= holdFrom && (payFailed || Boolean(pay.get(`${teacherId}|${month}`)?.retry)
+        || (scoring.evaluation.config.metrics.punctuality.enabled && attendancePending(month)));
     const once = await savePortfolioMonths(admin, tenantId, result, now, { withRaws, holdClose });
     saved = !saved ? once : {
       teachers: once.teachers, written: Math.max(saved.written, once.written), removed: saved.removed + once.removed,

@@ -26,7 +26,7 @@ function summarize(module,line) {
     else if(/동기화 완료.*실패 도메인: 없음/.test(line))logCode='makeedu_sync_complete';
     else if(/동기화 완료.*실패 도메인:/.test(line)){logCode='makeedu_sync_partial';level='error';}
     else if(/login ok|makeedu-health.*정상.*로그인 성공/.test(line))logCode='login_ok';
-    else {const stage=/─+ (students|classes|prospects|invoices|textbook_checks|consultations):/.exec(line)?.[1];if(stage)logCode='makeedu_'+stage;}
+    else {const stage=/─+ (students|classes|prospects|invoices|textbook_checks|staff_attendance|consultations):/.exec(line)?.[1];if(stage)logCode='makeedu_'+stage;}
   }
   return logCode?{logCode,level}:null;
 }

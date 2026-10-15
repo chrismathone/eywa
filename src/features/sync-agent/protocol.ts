@@ -23,7 +23,7 @@ export const TaskKind=z.enum(Object.keys(TASK_LABELS) as [keyof typeof TASK_LABE
 export const LOG_CODE_LABELS = {
   makeedu_sync_started:"메이크에듀 동기화 시작",makeedu_sync_complete:"동기화 처리 완료 · 실패 없음",makeedu_sync_partial:"동기화 일부 항목 확인 필요",
   makeedu_students:"학생 동기화 처리 중",makeedu_classes:"반 동기화 처리 중",makeedu_prospects:"예비 상담 동기화 처리 중",makeedu_invoices:"수납 동기화 처리 중",
-  makeedu_textbook_checks:"교재 체크 처리 중",makeedu_consultations:"재원 상담 동기화 처리 중",login_ok:"메이크에듀 로그인 확인 완료",
+  makeedu_textbook_checks:"교재 체크 처리 중",makeedu_staff_attendance:"직원 출퇴근 처리 중",makeedu_consultations:"재원 상담 동기화 처리 중",login_ok:"메이크에듀 로그인 확인 완료",
   status_failed:"실행 상태 기록 실패",result_failed:"동기화 완료 기록 저장 실패",poll_failed:"작업 조회 실패 · 다음 주기에 재확인",
 } as const;
 export const LogCode=z.enum(Object.keys(LOG_CODE_LABELS) as [keyof typeof LOG_CODE_LABELS,...Array<keyof typeof LOG_CODE_LABELS>]);
