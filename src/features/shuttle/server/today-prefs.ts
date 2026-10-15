@@ -2,6 +2,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { freshSavedFilters } from "@/lib/filter-reset/server";
 import { parseShuttleTodayPrefs, type ShuttleTodayPrefs } from "../today-prefs";
 
 /**
@@ -55,5 +56,6 @@ export async function loadShuttleTodayPrefs(): Promise<ShuttleTodayPrefs> {
     .eq("tenant_id", user.tenantId)
     .maybeSingle();
   const raw = data?.ui_prefs as Record<string, unknown> | null | undefined;
-  return parseShuttleTodayPrefs(raw?.shuttleToday);
+  // 10분 넘게 안 본 화면이면 필터만 기본값으로(원장 2026-10-15 — src/lib/filter-reset/rules.ts).
+  return freshSavedFilters("shuttleToday", parseShuttleTodayPrefs(raw?.shuttleToday), parseShuttleTodayPrefs(undefined));
 }

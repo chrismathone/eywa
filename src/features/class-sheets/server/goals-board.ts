@@ -27,6 +27,7 @@ import {
   type GoalsBoardView,
 } from "../lib/goals-board";
 import { readEcsGoalsRole, readEcsGoalsView } from "../view-prefs";
+import { freshRawUiPrefs } from "@/lib/filter-reset/server";
 import { ecsVisibleClassFilter } from "./access";
 import type { MonthSlot } from "../lib/month-assemble";
 
@@ -109,7 +110,8 @@ export async function getGoalsBoard(dateParam?: string | null): Promise<GoalsBoa
   if (classesRes.error) return { ok: false, error: `반 목록을 불러오지 못했습니다: ${classesRes.error.message}` };
   const english = settings.operations.subjects.find((s) => s.key === "english");
   const areas = resolveSkillAreas(english);
-  const role = readEcsGoalsRole(prefsRes.data?.ui_prefs);
+  // 담임/부담임 필터는 10분 넘게 안 본 영어 시트면 기본값(원장 2026-10-15 — src/lib/filter-reset/rules.ts). 보기 방식은 그대로.
+  const role = readEcsGoalsRole(await freshRawUiPrefs("ecs", prefsRes.data?.ui_prefs));
   const view = readEcsGoalsView(prefsRes.data?.ui_prefs);
 
   const scopeSet = scope.classIds ? new Set(scope.classIds) : null;

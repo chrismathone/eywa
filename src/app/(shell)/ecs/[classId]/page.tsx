@@ -28,7 +28,7 @@ export default async function EcsSheetPage({
   const user = await getCurrentUser();
   const [res, landing, textbookOptions] = await Promise.all([
     getClassSheetWeek(classId, week ?? null, { readOnly: readonly === "1" }),
-    getSheetLanding(week ?? null), // 반 전환 드롭다운 옵션(스코프 동일)
+    getSheetLanding(week ?? null, { resetStaleFilters: true }), // 반 전환 드롭다운 옵션(스코프 동일)
     // 독립 조회라 같은 Promise.all에 둔다(직렬 워터폴 금지 — B4).
     loadEcsTextbookOptions(),
   ]);

@@ -13,6 +13,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { freshSavedFilters } from "@/lib/filter-reset/server";
 import { parseLiveViewPrefs, parseSubjectFilter, type LiveViewPrefs } from "../view-prefs";
 
 const NAMESPACE = "attendanceLive";
@@ -40,7 +41,8 @@ export async function loadLiveViewPrefs(): Promise<LiveViewPrefs> {
     .eq("tenant_id", user.tenantId)
     .maybeSingle();
   const raw = data?.ui_prefs as Record<string, unknown> | null | undefined;
-  return parseLiveViewPrefs(raw?.[NAMESPACE]);
+  // 10분 넘게 안 본 화면이면 필터만 기본값으로(원장 2026-10-15 — src/lib/filter-reset/rules.ts).
+  return freshSavedFilters("attendanceLive", parseLiveViewPrefs(raw?.[NAMESPACE]), parseLiveViewPrefs(undefined));
 }
 
 /** `ui_prefs.attendanceLive`를 **필드 단위로** 갱신 — 읽고 → 고칠 필드만 바꿔 → 되쓴다. */

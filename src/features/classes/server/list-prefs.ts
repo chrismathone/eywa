@@ -2,6 +2,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { freshSavedFilters } from "@/lib/filter-reset/server";
 import { parseClassListPrefs, type ClassListPrefs } from "../list-prefs";
 
 /**
@@ -49,5 +50,6 @@ export async function loadClassListPrefs(): Promise<ClassListPrefs | null> {
   const { data, error } = await admin.from("users").select("ui_prefs").eq("id", user.id).eq("tenant_id", user.tenantId).maybeSingle();
   if (error) return null;
   const raw = data?.ui_prefs as Record<string, unknown> | null | undefined;
-  return parseClassListPrefs(raw?.classes);
+  // 10분 넘게 안 본 화면이면 필터 키만 기본값으로(원장 2026-10-15 — src/lib/filter-reset/rules.ts). 정렬·보기는 그대로.
+  return freshSavedFilters("classes", parseClassListPrefs(raw?.classes), parseClassListPrefs(undefined));
 }

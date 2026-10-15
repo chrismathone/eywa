@@ -19,6 +19,7 @@ import {
 } from "../checklist";
 import { canSeePortfolio } from "../faces";
 import { normalizeClassReviewFilter, type ClassReviewFilter } from "../list-filter";
+import { freshSavedFilters } from "@/lib/filter-reset/server";
 import { isOwnReview, isSelfOnlyReviewer, redactForSelfOnly } from "../self-only";
 
 // 수업 평가(참관) 저장 = academy_documents 행(kind='form', form_type='class_review') 재사용 — 새 테이블·SQL 0.
@@ -271,7 +272,13 @@ export async function getMyClassReviewFilter(user: CurrentUser): Promise<ClassRe
     ns && typeof ns === "object" && !Array.isArray(ns)
       ? (ns as Record<string, unknown>).listFilter
       : undefined;
-  return normalizeClassReviewFilter(listFilter);
+  // 10분 넘게 안 본 화면이면 필터만 기본값으로(원장 2026-10-15 — src/lib/filter-reset/rules.ts).
+  const fresh = await freshSavedFilters(
+    "classReview",
+    { listFilter: normalizeClassReviewFilter(listFilter) },
+    { listFilter: normalizeClassReviewFilter(undefined) },
+  );
+  return fresh.listFilter;
 }
 
 /** 문항 세트 하나(2026-08-05 복수화) — academy_documents 행 1개 = 세트 1개. */
