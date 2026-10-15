@@ -12,7 +12,7 @@ import { isEnrollmentEndedOn } from "@/features/enrollments/eligibility";
  *    → 오늘 점 = 카드 숫자(실측 2026-09-29 342 = 342).
  * ⚠️ 휴원 이력은 저장되지 않아 과거 달의 휴원생을 가를 수 없다 — 지금 휴원인 학생은 과거에도 빼고, 그때 휴원이었다가
  *    지금 재원인 학생은 과거에도 센다. 퇴원일을 모르는 시스템 정리분(`isSystemBulkWithdrawal`)은 통째로 뺀다
- *    (장부 날짜까지 재원으로 세면 3~6월이 부푼다).
+ *    (장부 날짜까지 재원으로 세면 3~6월이 부푼다). 수업 기록 없는 장부 정리(`isBookkeepingOnlyExit`)도 같은 이유로 통째로 뺀다.
  */
 export type TrendStudent = {
   id: string;
@@ -21,6 +21,8 @@ export type TrendStudent = {
   withdrawnAt: string | null;
   /** 병합 표식을 읽는다 — 흡수된 쪽은 퇴원으로 남아 있어 세면 한 사람이 두 번 든다(퇴원관리·운영실과 같이 뺀다). */
   notes?: string | null;
+  /** 장부 정리 메모(`isCleanupExit`) — 퇴원 학생이고 끝난 수강이 없을 때만 뺀다(`isBookkeepingOnlyExit`와 같은 판정). */
+  cleanup?: boolean;
 };
 /** `ended` = 끝난 수강이 있는 학생 — 시스템 정리분 판정 재료(퇴원관리 `loadEndedEnrollments`와 같은 뜻). */
 export type TrendEnrollments = { firstStart: ReadonlyMap<string, string>; ended: ReadonlySet<string> };
@@ -38,6 +40,9 @@ export function countedOn(s: TrendStudent, en: TrendEnrollments, d: string): boo
   if (out && out <= d) return false;
   if (s.status === "withdrawn" && !out) return false; // 퇴원했는데 날짜가 없으면 언제까지 다녔는지 모른다
   if (s.status === "withdrawn" && isSystemBulkWithdrawal({ withdrawnAt: s.withdrawnAt, hasEnrollmentHistory: ended.has(s.id) })) return false;
+  // 수업 기록 없는 장부 정리도 통째로 뺀다 — 수업 없이 장부에만 있던 학생이라 정리한 날까지 재원으로 세면 그날 퇴원이 몰려
+  // 보인다(원장 2026-10-15). 수업 기록이 있으면 보통 퇴원처럼 퇴원일까지 센다.
+  if (s.status === "withdrawn" && s.cleanup && !ended.has(s.id)) return false;
   const first = firstStart.get(s.id);
   if (first && first > d) return false;
   return true;

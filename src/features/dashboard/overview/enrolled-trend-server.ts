@@ -2,6 +2,7 @@ import "server-only";
 import { unstable_cache } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
+import { isCleanupExit } from "@/features/withdrawals/system-bulk";
 import { monthlyPoints, subjectTrendOf, trendOf, yearlyPoints, type TrendEnrollment, type TrendPoint, type TrendStudent } from "./enrolled-trend";
 
 export type EnrolledTrend = { monthly: TrendPoint[]; yearly: TrendPoint[]; recordsFrom: string | null };
@@ -20,8 +21,8 @@ export function loadEnrolledTrend(tenantId: string, today: string): Promise<Enro
 async function computeEnrolledTrend(tenantId: string, today: string): Promise<EnrolledTrend> {
   const db = createAdminClient();
   const [students, enrollments] = await Promise.all([
-    fetchAllPaged<{ id: string; status: string; enrolled_at: string | null; withdrawn_at: string | null; notes: string | null }>((from, to) =>
-      db.from("students").select("id,status,enrolled_at,withdrawn_at,notes").eq("tenant_id", tenantId).order("id").range(from, to),
+    fetchAllPaged<{ id: string; status: string; enrolled_at: string | null; withdrawn_at: string | null; notes: string | null; withdrawal_metadata: unknown }>((from, to) =>
+      db.from("students").select("id,status,enrolled_at,withdrawn_at,notes,withdrawal_metadata").eq("tenant_id", tenantId).order("id").range(from, to),
     ),
     fetchAllPaged<{ id: string; student_id: string; start_date: string | null; end_date: string | null }>((from, to) =>
       db.from("enrollments").select("id,student_id,start_date,end_date").eq("tenant_id", tenantId).order("id").range(from, to),
@@ -35,7 +36,7 @@ async function computeEnrolledTrend(tenantId: string, today: string): Promise<En
     const cur = firstStart.get(e.student_id);
     if (!cur || e.start_date < cur) firstStart.set(e.student_id, e.start_date);
   }
-  const rows: TrendStudent[] = students.map((s) => ({ id: s.id, status: s.status, enrolledAt: s.enrolled_at, withdrawnAt: s.withdrawn_at, notes: s.notes }));
+  const rows: TrendStudent[] = students.map((s) => ({ id: s.id, status: s.status, enrolledAt: s.enrolled_at, withdrawnAt: s.withdrawn_at, notes: s.notes, cleanup: isCleanupExit(s.withdrawal_metadata) }));
   const en = { firstStart, ended };
   const firstOut = students.reduce<string | null>((m, s) => (s.withdrawn_at && (!m || s.withdrawn_at < m) ? s.withdrawn_at : m), null);
   const fromYear = firstOut ? Number(firstOut.slice(0, 4)) : Number(today.slice(0, 4));
@@ -66,8 +67,8 @@ async function loadTrendRaw(tenantId: string, today: string): Promise<TrendRaw> 
   const db = createAdminClient();
   type One<T> = T | T[] | null;
   const [students, enrollments] = await Promise.all([
-    fetchAllPaged<{ id: string; status: string; enrolled_at: string | null; withdrawn_at: string | null; notes: string | null }>((from, to) =>
-      db.from("students").select("id,status,enrolled_at,withdrawn_at,notes").eq("tenant_id", tenantId).order("id").range(from, to),
+    fetchAllPaged<{ id: string; status: string; enrolled_at: string | null; withdrawn_at: string | null; notes: string | null; withdrawal_metadata: unknown }>((from, to) =>
+      db.from("students").select("id,status,enrolled_at,withdrawn_at,notes,withdrawal_metadata").eq("tenant_id", tenantId).order("id").range(from, to),
     ),
     fetchAllPaged<{ id: string; student_id: string; start_date: string | null; end_date: string | null; is_transferred: boolean | null; class: One<{ subject: string | null }> }>((from, to) =>
       db.from("enrollments").select("id,student_id,start_date,end_date,is_transferred,class:class_id ( subject )").eq("tenant_id", tenantId).order("id").range(from, to),
@@ -83,7 +84,7 @@ async function loadTrendRaw(tenantId: string, today: string): Promise<TrendRaw> 
   }
   const firstOut = students.reduce<string | null>((m, s) => (s.withdrawn_at && (!m || s.withdrawn_at < m) ? s.withdrawn_at : m), null);
   return {
-    students: students.map((s) => ({ id: s.id, status: s.status, enrolledAt: s.enrolled_at, withdrawnAt: s.withdrawn_at, notes: s.notes })),
+    students: students.map((s) => ({ id: s.id, status: s.status, enrolledAt: s.enrolled_at, withdrawnAt: s.withdrawn_at, notes: s.notes, cleanup: isCleanupExit(s.withdrawal_metadata) })),
     enrollments: enrollments.map((e) => ({
       studentId: e.student_id,
       subject: (Array.isArray(e.class) ? e.class[0] : e.class)?.subject ?? null,

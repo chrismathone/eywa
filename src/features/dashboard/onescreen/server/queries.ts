@@ -3,6 +3,7 @@ import { kstToday } from "@/lib/date-kst";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { isMergedStudent } from "@/features/students/merged";
+import { bookkeepingOnlyIds } from "@/features/withdrawals/server/bookkeeping";
 import {
   SENT_STATUS_SUCCESS,
   UNREAD_GRACE_HOURS,
@@ -33,8 +34,8 @@ export async function getWeeklyChange(weeks = 4): Promise<WeeklyChangeBucket[]> 
   const from = weeklyChangeStart(today, weeks);
   const supabase = await createClient();
   const [enrolledRes, withdrawnRes] = await Promise.all([
-    supabase.from("students").select("enrolled_at, notes").gte("enrolled_at", from),
-    supabase.from("students").select("withdrawn_at, notes").gte("withdrawn_at", from),
+    supabase.from("students").select("id, enrolled_at, notes, withdrawal_metadata").gte("enrolled_at", from),
+    supabase.from("students").select("id, withdrawn_at, notes, withdrawal_metadata").gte("withdrawn_at", from),
   ]);
   // 🔴 조회 실패를 빈 배열로 삼키지 않는다 — 그러면 "이번 달 아무도 안 들어왔다"는 **사실 주장**이 된다.
   //    호출부(페이지)가 실패 허용 래퍼로 감싸 카드만 비운다.
@@ -44,14 +45,15 @@ export async function getWeeklyChange(weeks = 4): Promise<WeeklyChangeBucket[]> 
   // 🔴 중복 병합으로 흡수된 쪽은 **양쪽 모두에서** 뺀다(원장 2026-09-13) — 그 학생은 등록한 적도 그만둔
   //    적도 없다. 한쪽만 빼면 같은 사람이 등록 막대에만 남아 증감이 어긋난다(김지유B가 그랬다).
   const notMerged = (r: unknown): boolean => !isMergedStudent((r as { notes: unknown }).notes as string | null);
+  // 수업 기록 없는 장부 정리(단체 정리)도 **양쪽 모두에서** 뺀다 — 병합과 같은 이유(퇴원관리·운영실과 같은 판정 — `isBookkeepingOnlyExit`).
+  type Row = { id: string; enrolled_at?: unknown; withdrawn_at?: unknown; withdrawal_metadata: unknown };
+  const enrolledRows = (enrolledRes.data ?? []).filter(notMerged) as Row[];
+  const withdrawnRows = (withdrawnRes.data ?? []).filter(notMerged) as Row[];
+  const bookkeeping = await bookkeepingOnlyIds(supabase, [...enrolledRows, ...withdrawnRows]);
   return buildWeeklyChange(
     {
-      enrolledOn: (enrolledRes.data ?? [])
-        .filter(notMerged)
-        .map((r) => ymd((r as { enrolled_at: unknown }).enrolled_at)),
-      withdrawnOn: (withdrawnRes.data ?? [])
-        .filter(notMerged)
-        .map((r) => ymd((r as { withdrawn_at: unknown }).withdrawn_at)),
+      enrolledOn: enrolledRows.filter((r) => !bookkeeping.has(r.id)).map((r) => ymd(r.enrolled_at)),
+      withdrawnOn: withdrawnRows.filter((r) => !bookkeeping.has(r.id)).map((r) => ymd(r.withdrawn_at)),
     },
     today,
     weeks,

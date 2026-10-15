@@ -8,7 +8,7 @@ import { REASON_LABEL, normalizeReason, type WithdrawalMetadata } from "../types
 import { detailFor } from "../reason-detail";
 import { countsForSubjectExit, getEndedSubjects } from "../subject-ended";
 import { isSpecialLecture } from "@/features/classes/special-lecture";
-import { isCleanupWithdrawal, isSystemBulkWithdrawal } from "../system-bulk";
+import { isBookkeepingOnlyExit, isCleanupExit, isSystemBulkWithdrawal } from "../system-bulk";
 import { endedTogether, lastEndedByStudent, pickLastEnded, type EndedClassRef } from "../window";
 import { withdrawalSubjects } from "../exit-rows";
 import { lastClassOf, loadEndedEnrollments } from "./window";
@@ -42,7 +42,7 @@ export type WithdrawalRow = {
   exitSubjects?: string[];
   /** 퇴원 메모 원문(`withdrawal_metadata.memo` — 사유가 없어도) — 퇴원관리 명단의 사유 칸. 상세 화면은 안 채운다. */
   memoText?: string | null;
-  /** 장부 정리 일괄 퇴원(`isCleanupWithdrawal` — 실제 사유가 아니다). 상세 화면은 안 채운다. */
+  /** 장부 정리 일괄 퇴원(`isCleanupExit` — 실제 사유가 아니다). 상세 화면은 안 채운다. */
   cleanup?: boolean;
 };
 
@@ -83,7 +83,7 @@ export async function getWithdrawnStudents(): Promise<WithdrawalRow[]> {
   );
 
   // 🔴 중복 병합으로 흡수된 쪽은 퇴원이 아니다 — 운영실 '퇴원생'(window.ts)과 **같은 모집단**이어야
-  //    두 화면의 숫자가 같다(원장 2026-09-13, `students/merged.ts`).
+  //    두 화면의 숫자가 같다(원장 2026-09-13, `students/merged.ts`). 수업 기록 없는 장부 정리는 수강을 읽은 뒤 뺀다(아래).
   const students = withdrawnRows.filter((s) => !isMergedStudent(s.notes));
 
   if (students.length === 0) return [];
@@ -99,7 +99,12 @@ export async function getWithdrawnStudents(): Promise<WithdrawalRow[]> {
     endedByStudent.set(e.student_id, list);
   }
 
-  return students.map((s) => {
+  // 수업 기록 없는 장부 정리(단체 정리)는 조용히 뺀다 — 운영실(window.ts)과 같은 판정(`isBookkeepingOnlyExit`, 원장 2026-10-15).
+  const visible = students.filter(
+    (s) => !isBookkeepingOnlyExit({ withdrawalMetadata: s.withdrawal_metadata, hasEnrollmentHistory: lastByStudent.has(s.id) }),
+  );
+
+  return visible.map((s) => {
     const lastRow = lastByStudent.get(s.id);
     const last = lastClassOf(lastRow);
     const md = parseMetadata(s.withdrawal_metadata);
@@ -125,7 +130,8 @@ export async function getWithdrawnStudents(): Promise<WithdrawalRow[]> {
       systemBulk: isSystemBulkWithdrawal({ withdrawnAt: s.withdrawn_at, hasEnrollmentHistory }),
       exitSubjects: withdrawalSubjects(endedByStudent.get(s.id) ?? []),
       memoText,
-      cleanup: isCleanupWithdrawal(memoText),
+      // 명단에서 빼는 판정과 같은 기준(메모 + 사유 '기타') — 사유를 고쳤으면 장부 정리 막대가 아니라 그 사유로 선다.
+      cleanup: isCleanupExit(s.withdrawal_metadata),
     };
   });
 }
