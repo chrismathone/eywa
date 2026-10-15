@@ -15,10 +15,28 @@ export type SnapshotGrade = {
   id: string; student_id: string; subject: string; class_id: string | null; day: string; entered: string | null;
   kind: GradeKind; score: number; max: number;
 };
-/** 성적 근거 한 줄 = 학생 한 명(시험 수 · 평균 점수율 · 종류별 건수 · 반). */
-export type GradeRow = { studentId: string; className: string; tests: number; average: number; kinds: string };
-/** 종류별 평균 — 비중은 그 달 설정의 값. */
-export type GradeKindStat = { kind: GradeKind; count: number; average: number; weight: number };
+/**
+ * 성적 근거 한 줄 = 학생 한 명 — `daily` = 일일테스트 제출 칸/대상 칸 · `monthly` = 월말평가 응시(대상이 아니면 없다) ·
+ * `tests`·`average`·`kinds` = 점수율로 재는 시험(확인테스트·내신·기타)의 수·평균·종류별 건수(없으면 average null).
+ * 2026-10-15 전에 저장된 달은 daily·monthly가 없고 average·kinds가 모든 시험의 값이다(화면이 둘 다 읽는다).
+ */
+export type GradeRow = {
+  studentId: string; className: string; tests: number; average: number | null; kinds: string;
+  daily?: { done: number; total: number }; monthly?: boolean;
+};
+/** 종류별 셈 — 일일테스트 = 제출률 · 월말평가 = 응시율 · 나머지 = 점수율(원장 2026-10-15). */
+export type GradeMeasure = "submit" | "take" | "score";
+/**
+ * 종류별 값(`average`, %) — 제출·응시는 `done`/`count`(칸·학생), 점수율은 `count` = 시험 수. 비중은 그 달 설정의 값.
+ * 2026-10-15 전에 저장된 달은 `measure`가 없다(전부 점수율).
+ */
+export type GradeKindStat = { kind: GradeKind; count: number; average: number; weight: number; measure?: GradeMeasure; done?: number };
+
+/**
+ * 매출 대비 급여 근거의 반 한 줄(원장 2026-10-15 — 금액 없이 비중만) — `share` = 그 달 맞춘 매출 중 이 반 몫(%, 맞춘 줄이 없으면 null) ·
+ * `rows` = 청구서가 있는 학생 줄 · `billed` = 그중 청구서 항목을 이 반에 맞춘 줄. 2026-10-15 전에 저장된 달엔 없다(빈 목록).
+ */
+export type PayClassRow = { className: string; students: number; rows: number; billed: number; share: number | null };
 
 /** 학부모 글 판정(0364a) — 반영·확인 대기만 싣는다. 본문은 싣지 않는다(근거 문구만). */
 export type SnapshotJudgment = {

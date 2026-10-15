@@ -9,11 +9,12 @@ import {
 import { buildRecordOwners } from "./attribution";
 import type { PortfolioContext } from "./context";
 import type { ManualEntry } from "./evaluate";
-import { GRADES_REASON, buildGrades } from "./grades";
+import { GRADES_REASON, buildGrades, type GradeTarget } from "./grades";
 import { uncountedItem } from "./pending";
 import { punctualityOf } from "./punctuality";
 import { buildPunctualityBasis } from "./punctuality-basis";
 import { buildSatisfaction } from "./satisfaction";
+import type { ChurnSource } from "./students";
 import { METRIC_MAX, type GradesMetric, type PeriodWindow, type PortfolioSnapshot, type PunctualityMetric, type SatisfactionMetric, type SnapshotClass } from "./types";
 
 const SATISFACTION_REASON = "그 달 학부모 글·댓글 판정과 원장이 넣은 클레임·칭찬의 가감 합입니다. 결석·지각 연락으로 분류된 글은 판정하지 않습니다. 확실한 문구는 바로 반영하고, 애매한 글은 확인한 뒤 반영합니다(확인 대기는 점수에 들지 않습니다). 글은 그 반 보드 또는 그 과목으로 그날 다니던 반의 담임에게 갑니다.";
@@ -23,10 +24,12 @@ export function buildSourceItems(d: PortfolioSnapshot, input: {
   classes: ReadonlyMap<string, SnapshotClass>; owner: (c: SnapshotClass, day: string) => string | null; holidays: ReadonlySet<string>;
   config: EvaluationConfig; entriesOf: (teacherId: string, month: string) => ReadonlyMap<string, ManualEntry>; classNameOf: (id: string) => string;
   classDays: PortfolioContext["classDays"];
+  /** 그날 강사별 명단(원생상담·퇴원율과 같은 명단) — 월말평가 응시율의 대상. */
+  rosterOf: ChurnSource["rosterOf"];
 }) {
   const src = d.sources;
   const ownersOf = buildRecordOwners({ enrollments: d.enrollments, classes: input.classes, owner: input.owner });
-  const grades = src ? buildGrades({ grades: src.grades, ownersOf }) : null;
+  const grades = src ? buildGrades({ grades: src.grades, ownersOf, classes: input.classes, rosterOf: input.rosterOf }) : null;
   const satisfaction = src ? buildSatisfaction({ source: src.satisfaction, ownersOf }) : null;
   const m = input.config.metrics;
   // 앱에 기록을 시작하기 전에 끝난 달(침산 2026-07-01 전)의 보고서 시험은 옛 프로그램에서 나중에 옮겨 온 기록이라 입력일이 그 달보다 늦다 —
@@ -35,8 +38,15 @@ export function buildSourceItems(d: PortfolioSnapshot, input: {
   const punctuality = m.punctuality.punctuality ?? DEFAULT_PUNCTUALITY_OPTIONS;
   const basis = src ? buildPunctualityBasis(d, { classDays: input.classDays }, punctuality) : null;
 
-  return function items(teacherId: string, w: PeriodWindow, cutoff: string): [GradesMetric, SatisfactionMetric, PunctualityMetric] {
-    const g = grades?.(teacherId, w, recordStart && w.end < recordStart ? "9999-12-31" : cutoff, m.grades.grades ?? DEFAULT_GRADES_OPTIONS, input.classNameOf);
+  /** `targets` = 그 달 이 강사의 보고서 대상 칸(`duties.ts` `reportTargets` — 작성률과 같은 칸) — 일일테스트 제출률의 분모. */
+  return function items(teacherId: string, w: PeriodWindow, cutoff: string, targets: readonly GradeTarget[] = []): [GradesMetric, SatisfactionMetric, PunctualityMetric] {
+    const g = grades?.(teacherId, w, recordStart && w.end < recordStart ? "9999-12-31" : cutoff, m.grades.grades ?? DEFAULT_GRADES_OPTIONS, input.classNameOf, targets);
+    const kind = (k: string) => g?.kinds.find((x) => x.kind === k);
+    const daily = kind("daily"), monthly = kind("monthly");
+    const gradeParts = g ? [
+      daily ? `일일테스트 제출 ${daily.done ?? 0}/${daily.count}칸` : "", monthly ? `월말평가 응시 ${monthly.done ?? 0}/${monthly.count}명` : "",
+      g.tests ? `시험 ${g.tests}건` : "",
+    ].filter(Boolean) : [];
     const s = satisfaction?.(teacherId, w, m.satisfaction.satisfaction ?? DEFAULT_SATISFACTION_OPTIONS);
     const manual = input.entriesOf(teacherId, w.month).get(PUNCTUALITY_OVERRIDE_KEY)?.value ?? null;
     const p = src && basis ? punctualityOf({
@@ -46,7 +56,7 @@ export function buildSourceItems(d: PortfolioSnapshot, input: {
     return [
       g ? {
         id: "grades", max: METRIC_MAX.grades, value: null, raw: g.raw, reason: GRADES_REASON, detail: g.detail, tests: g.tests, students: g.students, kinds: g.kinds,
-        basis: g.tests ? `시험 ${g.tests}건 · 학생 ${g.students}명 · 점수율 ${g.raw ?? "—"}%` : "이 달 담임 반 학생의 시험 기록 없음",
+        basis: g.raw !== null ? `${gradeParts.join(" · ")} · 종합 ${g.raw}%` : "이 달 일일테스트·월말평가 대상과 시험 기록 없음",
       } : uncountedItem("grades"),
       s ? {
         id: "satisfaction", max: METRIC_MAX.satisfaction, value: null, raw: s.raw, reason: SATISFACTION_REASON, detail: s.detail,

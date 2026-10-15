@@ -86,7 +86,7 @@ function teacherPeriod(d: PortfolioSnapshot, m: Models, user: SnapshotUser, w: P
       reason: `결석 다음 달 같은 날까지 완료한 보강만 인정합니다. 같은 날짜가 없으면 다음 달 말일까지입니다. 기한이 끝나는 달에 한 번 평가합니다. 기한이 남은 건은 감점하지 않습니다. 출석부의 보강 출결·완료 메모·완료 예약을 대조하고, 예정·취소·기한 초과와 중복 기록은 인정하지 않습니다. 대기 ${coverage.pending}건 · 기한 전 완료 ${coverage.early}건${coverage.unconfirmed ? ` · 연결 확인 필요 ${coverage.unconfirmed}건` : ""}.`,
       detail: coverage.detail, due: coverage.due, done: coverage.done, pending: coverage.pending, early: coverage.early,
     },
-    ...m.sources(user.id, w, cutoff),
+    ...m.sources(user.id, w, cutoff, duties.reportTargets),
   ];
   for (const item of items) if (item.value === null) item.gap = GAP_LABEL[item.id] ?? "근거 확인";
 
@@ -157,7 +157,9 @@ export function buildPortfolio(d: PortfolioSnapshot, opts: {
     referral: buildReferrals({ referrals: d.referrals ?? [], enrollments: d.enrollments, classes, owner: ctx.owner, options: config.metrics.expansion.referral ?? DEFAULT_REFERRAL_OPTIONS }),
     subjectOf: (id) => classes.get(id)?.subject ?? "",
     classNameOf,
-    sources: buildSourceItems(d, { classes, owner: ctx.owner, holidays: ctx.holidays, config, entriesOf, classNameOf, classDays: ctx.classDays }),
+    sources: buildSourceItems(d, {
+      classes, owner: ctx.owner, holidays: ctx.holidays, config, entriesOf, classNameOf, classDays: ctx.classDays, rosterOf: students.churnSource.rosterOf,
+    }),
   };
 
   // 수업을 맡는 재직자 — 운영 중인 반의 담임이거나 시간표에 담당으로 적힌 사람.

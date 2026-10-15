@@ -20,7 +20,7 @@ export function GradesOptionsEditor({ value, onChange, label }: { value: GradesO
   return (
     <fieldset className={BOX}>
       <legend className="px-1 text-sm font-medium">세는 법</legend>
-      <p className="text-xs">시험 종류별 비중 — 종류마다 평균 점수율을 낸 뒤 이 비중으로 가중 평균합니다. 0이면 그 종류는 세지 않습니다(입학·레벨 테스트는 늘 뺍니다).</p>
+      <p className="text-xs">시험 종류별 비중 — 일일테스트는 제출률, 월말평가는 응시율, 나머지는 평균 점수율을 낸 뒤 이 비중으로 가중 평균합니다. 0이면 그 종류는 세지 않습니다(입학·레벨 테스트는 늘 제외합니다).</p>
       <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
         {GRADE_KINDS.map((k) => (
           <label key={k} className="flex items-center gap-1.5">

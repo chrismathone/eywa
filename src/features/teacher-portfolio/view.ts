@@ -66,8 +66,10 @@ export function ruleText(p: Pick<PortfolioPeriod, "evaluation">, id: ItemId): st
   return s ? `${describeScoring(s.scoring, s.max, unitOf(p, id))} · 자료가 없으면 ${MISSING_LABEL[s.missing]}` : null;
 }
 /** 자료가 없어 규칙으로 매긴 항목의 꼬리표 — "자료 없음 · 0점" · "마감 대상 없음 · 만점". 옛 달은 null. */
-export function missingTag(m: Pick<Metric, "id" | "missing" | "uncounted" | "value">, p: Pick<PortfolioPeriod, "evaluation">): string | null {
+export function missingTag(m: Pick<Metric, "id" | "missing" | "uncounted" | "value"> & { newcomer?: boolean }, p: Pick<PortfolioPeriod, "evaluation">): string | null {
   if (m.uncounted) return m.value === null ? "계산 전 · 합계에서 제외" : `계산 전 · ${m.value.toFixed(1)}점`;
+  // 급여 비율 — 지난달 담당 반이 없던 새 선생님은 설정 규칙과 상관없이 뺀다(evaluate.ts).
+  if (m.missing && m.newcomer) return "지난달 담당 없음 · 합계에서 제외";
   const s = m.missing && p.evaluation ? settingOf(p.evaluation, m.id) : undefined;
   if (!s) return null;
   return `${m.id === "coverage" ? "마감 대상 없음" : "자료 없음"} · ${MISSING_LABEL[s.missing]}`;
@@ -110,8 +112,8 @@ export const DELTA_CLASS = { up: "text-danger", down: "text-blue", flat: "", non
 export type StatusTone = SemanticTone;
 /** 처리 상태 → 의미색. 화면마다 따로 정하지 않는다. */
 export function statusTone(state: string): StatusTone {
-  if (["완료", "인정", "기한 전 완료", "작성", "상담함"].includes(state)) return "brand";
-  if (["미완료", "기한 초과", "미작성", "마감 후 작성", "포함", "미상담"].includes(state)) return "caution";
+  if (["완료", "인정", "기한 전 완료", "작성", "상담함", "응시"].includes(state)) return "brand";
+  if (["미완료", "기한 초과", "미작성", "마감 후 작성", "포함", "미상담", "미응시"].includes(state)) return "caution";
   if (state === "대리") return "special";
   return "inert";
 }
