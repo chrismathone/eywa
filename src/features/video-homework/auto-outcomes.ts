@@ -1,10 +1,11 @@
 import { addDays, kstDateOf } from "@/lib/date-kst";
-import { SITE_HOMEWORK_DAYS } from "@/features/video-submit/site";
+import { homeworkDue } from "./due";
 import { buildLedgerRounds, roundPairKey, VIDEO_MATCH_WINDOW_DAYS } from "./rounds";
 import type { VideoArrival, VideoHomeworkMark } from "./types";
 
 export type AssignedHomework = { classId: string; studentId: string; date: string; /** 반려 시각(장부와 같은 칸이 서게) */ rejectedAt?: string;
-  /** 검사 기록 칸에서 옮겨 남긴 숙제(keep-round.ts) — 판정하지 않는다. 그 칸이 받은 영상만 미배정에서 뺀다. */ kept?: true };
+  /** 검사 기록 칸에서 옮겨 남긴 숙제(keep-round.ts) — 판정하지 않는다. 그 칸이 받은 영상만 미배정에서 뺀다. */ kept?: true;
+  /** 보고서에 고른 마감('다음 수업', due.ts) — 없으면 숙제일 + 7일. */ due?: string };
 export type AutoOutcome = { classId: string; studentId: string; homeworkDate: string; status: "submitted" | "missing" | "unchecked"; videoId: string | null };
 
 /**
@@ -14,10 +15,10 @@ export type AutoOutcome = { classId: string; studentId: string; homeworkDate: st
  */
 export function videoHomeworkOutcomes(assignments: AssignedHomework[], videos: VideoArrival[], today: string, fromDate: string,
   marks: readonly VideoHomeworkMark[] = []) {
-  const rows = new Map<string, { classId: string; studentId: string; assignedDates: string[]; tracked: boolean; rejected: Record<string, string>; kept: string[] }>();
+  const rows = new Map<string, { classId: string; studentId: string; assignedDates: string[]; tracked: boolean; rejected: Record<string, string>; kept: string[]; dues: Record<string, string> }>();
   const rowOf = (pair: { classId: string; studentId: string }) => {
     const key = roundPairKey(pair);
-    const row = rows.get(key) ?? { classId: pair.classId, studentId: pair.studentId, assignedDates: [], tracked: true, rejected: {}, kept: [] };
+    const row = rows.get(key) ?? { classId: pair.classId, studentId: pair.studentId, assignedDates: [], tracked: true, rejected: {}, kept: [], dues: {} };
     rows.set(key, row);
     return row;
   };
@@ -26,6 +27,7 @@ export function videoHomeworkOutcomes(assignments: AssignedHomework[], videos: V
     row.assignedDates.push(homework.date);
     if (homework.kept) row.kept.push(homework.date);
     if (homework.rejectedAt) row.rejected[homework.date] = homework.rejectedAt;
+    if (homework.due) row.dues[homework.date] = homework.due;
   }
   for (const mark of marks) if (mark.homeworkDate) rowOf(mark);
   const uploaded = videos.filter(video => {
@@ -38,10 +40,10 @@ export function videoHomeworkOutcomes(assignments: AssignedHomework[], videos: V
   for (const row of rows.values()) for (const round of rounds.get(roundPairKey(row)) ?? []) {
     if (round.videoId) used.add(round.videoId);
     if (!round.homeworkDate || !round.assigned) continue;
-    // 숙제일 + 7일 당일 끝까지 받는다. 예: 10/1 숙제는 10/8까지, 10/9부터 미제출.
+    // 마감 당일 끝까지 받는다(due.ts — 기본 숙제일 + 7일: 10/1 숙제는 10/8까지, 10/9부터 미제출 · '다음 수업'이면 그 수업일까지).
     outcomes.push({
       classId: row.classId, studentId: row.studentId, homeworkDate: round.homeworkDate,
-      status: round.videoId ? "submitted" : today > addDays(round.homeworkDate, SITE_HOMEWORK_DAYS) ? "missing" : "unchecked", videoId: round.videoId,
+      status: round.videoId ? "submitted" : today > homeworkDue(round.homeworkDate, round.due) ? "missing" : "unchecked", videoId: round.videoId,
     });
   }
   // 이미 배정된 같은 파일의 사본은 미배정 알림에서도 뺀다.

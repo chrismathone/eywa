@@ -9,7 +9,8 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { kstToday } from "@/lib/date-kst";
+import { kstToday, monthDayLabel } from "@/lib/date-kst";
+import type { SavedVideoHomeworkDue } from "@/features/video-homework/due";
 import { usePrintWindow } from "@/components/workspace/print-window";
 import { CLASS_TAGS, TODAY } from "../data";
 import { ATTITUDE } from "../attitude";
@@ -239,7 +240,7 @@ import { computeClientMentSource } from "../ment-source";
 import { cnLabelFor, CN_SUBJECT_KEYS, type CnMatchMap } from "../classnote-match";
 import { SendClassDialog, type SendClassAsk } from "./send-class-dialog";
 import { ClassnoteOnProvider } from "./classnote-on-context";
-import { useSubmitLinkMode, useVideoHomeworkOthersReport, useVideoHomeworkPolicy, useVideoHomeworkSaveOk, useVideoHomeworkStore } from "@/features/video-homework/components/video-homework-provider";
+import { useSubmitLinkMode, useVideoHomeworkDueReady, useVideoHomeworkOthersReport, useVideoHomeworkPolicy, useVideoHomeworkSaveOk, useVideoHomeworkStore } from "@/features/video-homework/components/video-homework-provider";
 import { submitLinkChoosable } from "@/features/video-submit/link-choice";
 import { planBulkVideoCheck } from "@/features/video-homework/bulk-check";
 import type { VideoHomeworkStatus } from "@/features/video-homework/types";
@@ -423,6 +424,7 @@ export function OneScreenClient({
   // 다른 선생님이 처음 쓴 줄 — '영상 과제'를 싣지 않는다(토글도 잠김, report-owner.ts 화면 겹).
   const videoHwByOther = useVideoHomeworkOthersReport();
   const submitLinkMode = useSubmitLinkMode();
+  const videoDueReady = useVideoHomeworkDueReady();
   const videoHwStore = useVideoHomeworkStore();
   const [students, setStudents] = useState<OneScreenStudent[]>(initial);
   const [noticeMode, setNoticeMode] = useState<"A" | "B" | null>(initialNoticeMode);
@@ -737,6 +739,8 @@ export function OneScreenClient({
               ...(su.videoHomework != null ? { videoHomework: su.videoHomework } : {}),
               // 영상 첨부 링크 넣기(0328a) — 고른 적 없는 행은 빼서 세션 모양을 그대로 둔다.
               ...(su.videoSubmitLink != null ? { videoSubmitLink: su.videoSubmitLink } : {}),
+              // 영상 숙제 마감(원장 2026-10-15) — 고른 적 없는 행은 빼서 세션 모양을 그대로 둔다(날짜는 서버가 정해 세션에 안 싣는다).
+              ...(su.videoHomeworkDue != null ? { videoHomeworkDue: su.videoHomeworkDue } : {}),
               // 영어 템플릿 모드(2026-09-10) — **영어 행만** 싣는다(수학 세션 모양 불변). 로스터가 같은 키로 복원한다.
               ...(su.subjectKey === "english"
                 ? {
@@ -2163,8 +2167,10 @@ export function OneScreenClient({
     patch(studentId, (s) => ({
       ...s,
       // 영상 과제를 끄면 링크 넣기도 함께 끈다(토글이 사라지는데 값만 켜진 채 남지 않게). 고른 적 없는 행은 그대로 둔다.
+      // 마감도 7일로 돌린다 — 끈 채 저장하면 서버가 마감을 지운다. 다시 켜면 7일에서 시작한다(옛 '다음 수업' 날짜가 남지 않게, 적대 리뷰 L3).
       subjects: s.subjects.map((su) => (su.name === subjectName
-        ? { ...su, videoHomework: !su.videoHomework, ...(su.videoHomework && su.videoSubmitLink ? { videoSubmitLink: false } : {}) }
+        ? { ...su, videoHomework: !su.videoHomework, ...(su.videoHomework && su.videoSubmitLink ? { videoSubmitLink: false } : {}),
+          ...(su.videoHomework && su.videoHomeworkDue ? { videoHomeworkDue: "week" as const, videoHomeworkDueDate: undefined } : {}) }
         : su)),
     }));
   }
@@ -2174,6 +2180,17 @@ export function OneScreenClient({
       ...s,
       subjects: s.subjects.map((su) => (su.name === subjectName ? { ...su, videoSubmitLink: !su.videoSubmitLink } : su)),
     }));
+  }
+  // 영상 숙제 마감(원장 2026-10-15) — 행별 7일 · 다음 수업. '영상 과제'를 켠 행에서만 토글이 뜬다. 자동저장에 실린다.
+  function setVideoHomeworkDueFor(studentId: string, subjectName: string, mode: "week" | "next") {
+    patch(studentId, (s) => ({
+      ...s,
+      subjects: s.subjects.map((su) => (su.name === subjectName ? { ...su, videoHomeworkDue: mode } : su)),
+    }));
+  }
+  function setVideoHomeworkDue(subjectName: string, mode: "week" | "next") {
+    if (!selected) return;
+    setVideoHomeworkDueFor(selected.id, subjectName, mode);
   }
   function toggleVideoSubmitLink(subjectName: string) {
     if (!selected) return;
@@ -2694,7 +2711,7 @@ export function OneScreenClient({
     );
     try {
       // 통합 1회 호출 — 멘트 + 추세를 한 번에 생성(비용·지연↓).
-      const res = await generateReportComment({ ...buildReportCommentInput(student, idx, classNotices), classContext }, {
+      const res = await generateReportComment({ ...buildReportCommentInput(student, idx, classNotices, activeDate), classContext }, {
         studentId: student.id,
         subject: subjectKey,
         classId: su?.classId ?? null, // 정규/특강 추세 분리(2026-07-23) — 이 행의 반.
@@ -2851,10 +2868,15 @@ export function OneScreenClient({
         checkMax: rowEval.tests.check.max,
         videoHomework: r.subject.videoHomework,
         videoSubmitLink: r.subject.videoSubmitLink,
+        videoHomeworkDue: r.subject.videoHomeworkDue,
         // 행의 토글이 그려지는 조건과 같다(VideoHomeworkToggle · VideoSubmitLinkToggle) — 토글 없는 행엔 값을 넣지 않는다.
         // 다른 선생님이 처음 쓴 줄은 토글이 잠겨 있다 — 일괄 적용도 값을 넣지 않는다.
         videoOk:
           videoHwSaveOk && !!videoHwPolicy && !!r.subject.classId && !videoHwByOther(r.student.id, r.subject.classId) &&
+          isVideoHomeworkEnabled(videoHwPolicy, { classId: r.subject.classId, subjectKey: r.subject.subjectKey ?? "math", grade: r.student.grade }),
+        // 마감 — 행의 마감 토글과 같은 조건(영상 과제 토글이 있는 행 + 마감 칸 준비됨).
+        dueOk:
+          videoDueReady && videoHwSaveOk && !!videoHwPolicy && !!r.subject.classId && !videoHwByOther(r.student.id, r.subject.classId) &&
           isVideoHomeworkEnabled(videoHwPolicy, { classId: r.subject.classId, subjectKey: r.subject.subjectKey ?? "math", grade: r.student.grade }),
         linkOk:
           videoHwSaveOk && !videoHwByOther(r.student.id, r.subject.classId) &&
@@ -2890,12 +2912,15 @@ export function OneScreenClient({
       if (p.set.dailyScore !== undefined) setScoreFor(p.studentId, p.subjectName, "daily", p.set.dailyScore);
       if (p.set.checkMax !== undefined) setMaxFor(p.studentId, p.subjectName, "check", p.set.checkMax);
       if (p.set.checkScore !== undefined) setScoreFor(p.studentId, p.subjectName, "check", p.set.checkScore);
-      const { videoHomework: bulkVideoHw, videoSubmitLink: bulkVideoLink } = p.set;
-      if (bulkVideoHw !== undefined || bulkVideoLink !== undefined)
+      const { videoHomework: bulkVideoHw, videoSubmitLink: bulkVideoLink, videoHomeworkDue: bulkVideoDue } = p.set;
+      if (bulkVideoHw !== undefined || bulkVideoLink !== undefined || bulkVideoDue !== undefined)
         patch(p.studentId, (s) => ({
           ...s,
           subjects: s.subjects.map((su) => (su.name === p.subjectName
-            ? { ...su, ...(bulkVideoHw !== undefined ? { videoHomework: bulkVideoHw } : {}), ...(bulkVideoLink !== undefined ? { videoSubmitLink: bulkVideoLink } : {}) }
+            ? { ...su, ...(bulkVideoHw !== undefined ? { videoHomework: bulkVideoHw } : {}), ...(bulkVideoLink !== undefined ? { videoSubmitLink: bulkVideoLink } : {}),
+              ...(bulkVideoDue !== undefined ? { videoHomeworkDue: bulkVideoDue } : {}),
+              // 일괄로 영상 과제를 끈 행은 마감도 7일로(행 토글과 같은 규칙)
+              ...(bulkVideoHw === false && su.videoHomeworkDue ? { videoHomeworkDue: "week" as const, videoHomeworkDueDate: undefined } : {}) }
             : su)),
         }));
     }
@@ -3301,6 +3326,13 @@ export function OneScreenClient({
         submitLinkChoosable(submitLinkMode, videoHwPolicy, { classId: su.classId, subjectKey: su.subjectKey, grade: student.grade, studentName: student.name })
           ? { videoSubmitLink: su.videoSubmitLink && su.videoHomework === true }
           : {}),
+        // 영상 숙제 마감(원장 2026-10-15) — 같은 규약: 고른 값이 있고 그 행에서 고를 수 있을 때만(영상 과제를 싣는 조건 + 마감 칸 준비됨).
+        // 영상 과제가 꺼진 행은 서버가 마감을 지운다(값을 보내지 않아도). '다음 수업' 날짜는 서버가 시간표로 정한다(화면 값을 믿지 않는다).
+        ...(videoDueReady && videoHwSaveOk && su?.videoHomework === true && su.videoHomeworkDue && su.classId && videoHwPolicy &&
+        !videoHwByOther(student.id, su.classId) &&
+        isVideoHomeworkEnabled(videoHwPolicy, { classId: su.classId, subjectKey: su.subjectKey ?? "math", grade: student.grade })
+          ? { videoHomeworkDue: su.videoHomeworkDue }
+          : {}),
         // 멘트 작성 방식(0214a) — 이번 세션 자동작성 스냅샷과 비교(최종은 서버 resolveMentSource가 sticky 판정).
         mentSource: computeClientMentSource(draft, fresh ? fresh.autoDraft : existing?.autoDraft),
         // 영어 결과지 고르기(2026-09-28) — 이 화면이 아는 값만 싣는다. 모르면(안 받음) 빼서 서버가 저장해 둔 고르기를 따르게.
@@ -3366,6 +3398,29 @@ export function OneScreenClient({
       ),
     }));
   }
+  /**
+   * 서버가 정한 영상 숙제 마감(원장 2026-10-15, due-write.ts) — '다음 수업' 날짜를 표시에 싣는다. 고른 것과 다르게 됐으면(7일로 됨 · 남이 쓴 줄)
+   * 토글을 저장값으로 되돌리고 까닭을 학생 이름과 함께 알린다(일괄 저장이면 여러 줄이 뜬다 — 누구인지 보이게). 세션도 따라 고쳐진다
+   * (고른 값이 남아 다음 저장에 또 실리지 않게). 남이 쓴 줄은 영상 과제와 같이 잠근다. 이 줄은 발송되지 않았다(saveAndQueueClassnote).
+   */
+  function applyVideoHomeworkDue(studentId: string, subjectName: string, res: { videoHomeworkDue?: SavedVideoHomeworkDue }) {
+    const saved = res.videoHomeworkDue;
+    if (!saved) return;
+    const row = studentsRef.current.find((s) => s.id === studentId);
+    const name = row?.name ?? "";
+    if (saved.kept) {
+      toast.message(tf("os.c.videoDueKept", { name }));
+      const keptClassId = row?.subjects.find((x) => x.name === subjectName)?.classId;
+      const keptVideo = row?.subjects.find((x) => x.name === subjectName)?.videoHomework;
+      if (keptClassId) videoHwStore?.markKept(studentId, keptClassId, keptVideo ?? null);
+    } else if (saved.fellBack === "none") toast.message(tf("os.c.videoDueFallback", { name }));
+    else if (saved.fellBack === "past") toast.message(tf("os.c.videoDuePast", { name, date: saved.missed ? monthDayLabel(saved.missed) : "" }));
+    else if (saved.fellBack === "error") toast.error(tf("os.c.videoDueError", { name }));
+    patch(studentId, (s) => ({
+      ...s,
+      subjects: s.subjects.map((x) => (x.name === subjectName ? { ...x, videoHomeworkDue: saved.mode, videoHomeworkDueDate: saved.date ?? undefined } : x)),
+    }));
+  }
   // ── 저장·발송 코어(카드·표 공용) — (학생,과목) 저장/큐잉 + reports state 반영. ──
   async function saveRecord(student: OneScreenStudent, subjectName: string) {
     // 이중 방어(진입부들이 이미 막지만 새 진입부 대비) — 호출부가 res를 바로 쓰므로 실패 객체로 반환.
@@ -3374,6 +3429,7 @@ export function OneScreenClient({
     const built = buildSaveInputFor(waited ? latestStudent(student, subjectName) : student, subjectName);
     const res = await saveLessonReport(built.input);
     applyKeptVideoHomework(student.id, subjectName, res);
+    applyVideoHomeworkDue(student.id, subjectName, res);
     if (res.ok) {
       notifyMakeupEffect(res.makeupEffect);
       // shareToken 보존 → report-card가 학부모 공개 링크(/r/[token])를 노출·복사. 기존 첨부·상태는 유지(merge).
@@ -3421,6 +3477,7 @@ export function OneScreenClient({
       }
     }
     applyKeptVideoHomework(student.id, subjectName, res);
+    applyVideoHomeworkDue(student.id, subjectName, res);
     // 보낼 반 안내는 강사뷰 언어로(서버 문장은 한국어 폴백) — status로 사전 키를 고른다.
     notifyMakeupEffect(res.makeupEffect);
     const sendClassKey =
@@ -4049,6 +4106,7 @@ export function OneScreenClient({
         }
         const saved = await saveLessonReport(built.input);
         applyKeptVideoHomework(studentId, subjectName, saved);
+        applyVideoHomeworkDue(studentId, subjectName, saved);
         if (!saved.ok || !saved.id) {
           toast.error(saved.error ?? t("os.c.saveFail"));
           return 0;
@@ -4281,6 +4339,7 @@ export function OneScreenClient({
             onMakeup: toggleMakeupFor,
             onVideoHomework: toggleVideoHomeworkFor,
             onVideoSubmitLink: toggleVideoSubmitLinkFor,
+            onVideoHomeworkDue: setVideoHomeworkDueFor,
           }}
           rowActions={{
             onSendRow: sendRow,
@@ -4372,6 +4431,7 @@ selected ? (
                 onMakeup={toggleMakeup}
                 onVideoHomework={toggleVideoHomework}
                 onVideoSubmitLink={toggleVideoSubmitLink}
+                onVideoHomeworkDue={setVideoHomeworkDue}
                 onRemoveMakeup={(subjectName) => void removeMakeupRow(selected, subjectName)}
                 onPickMakeupClass={(subjectName) => void pickMakeupClass(selected, subjectName)}
                 canRemoveMakeup={(subjectName) =>

@@ -62,3 +62,13 @@ it("🔴 옮겨 남긴 더 오래된 빈 숙제가 정식 칸의 영상을 가�
   const result = videoHomeworkOutcomes([kept, ...assignments], [video("c", "2026-10-02")], "2026-10-12", "2026-09-01");
   expect(result.outcomes.map(o => [o.homeworkDate, o.status, o.videoId])).toEqual([["2026-10-01", "submitted", "c"], ["2026-10-08", "unchecked", null]]);
 });
+// 원장 2026-10-15 — 선생님이 고른 마감('다음 수업')이 미수행을 가르는 날이다(DB 함수 reconcile_video_homework_outcomes와 같은 규칙).
+it("마감을 고른 숙제는 그 날까지 미확인, 다음 날부터 미제출 — 7일보다 이르든 늦든", () => {
+  const withDue = [{ classId: "math", studentId: "s1", date: "2026-10-01", due: "2026-10-03" }, { classId: "math", studentId: "s1", date: "2026-10-08", due: "2026-10-20" }];
+  const at = (today: string) => videoHomeworkOutcomes(withDue, [], today, "2026-09-01").outcomes.map(o => o.status);
+  expect(at("2026-10-03")).toEqual(["unchecked"]);
+  expect(at("2026-10-04")).toEqual(["missing"]);
+  expect(at("2026-10-16")).toEqual(["missing", "unchecked"]);
+  expect(at("2026-10-20")).toEqual(["missing", "unchecked"]);
+  expect(at("2026-10-21")).toEqual(["missing", "missing"]);
+});

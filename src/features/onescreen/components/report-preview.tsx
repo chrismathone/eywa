@@ -140,6 +140,9 @@ export function ReportPreview({
             homeworkScore: fields.homeworkScore || null,
             homeworkToday: fields.homeworkToday || null,
             videoHomework: subject.videoHomework,
+            // 마감 — 저장된 '다음 수업' 날짜가 있으면 그 날, 저장 전이면 "다음 수업 전까지"(발송될 카드와 같은 문구, video-homework/due.ts).
+            videoHomeworkDue: subject.videoHomeworkDue === "next" ? subject.videoHomeworkDueDate ?? null : null,
+            videoHomeworkNext: subject.videoHomeworkDue === "next",
             attitude: fields.attitude || null,
             notes: fields.notes || null,
             trendNote: fields.trendNote ?? null,

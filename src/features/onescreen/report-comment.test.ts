@@ -23,6 +23,22 @@ it("오늘 영상 과제는 멘트 재료로 전달하되 지난 영상 제출�
   expect(buildReportCommentPrompt(input, "{{facts}}")).toContain("기존 선생님의 말투와 문장 구성을 유지");
 });
 
+// 원장 2026-10-15 — 멘트도 언제까지 내는지 말한다(학생이 숙제일을 내는 날로 헷갈렸다). 지시는 값 옆 괄호에 두지 않는다(모델이 괄호째 베낀다).
+it("영상 과제 마감을 사실에 싣는다 — 7일 · 다음 수업(날짜를 알면 그 날) · 저장 전 · 보고서 날짜나 과제가 없으면 싣지 않는다", () => {
+  const row = (extra: Record<string, unknown>) => student({ subjects: [{ name: "수학", prev: "", today: "분수", videoHomework: true, ...extra }] });
+  const week = buildReportCommentInput(row({}), 0, undefined, "2026-10-12");
+  expect(buildFactBlock(week)).toContain("오늘 영상 과제: 있음. 영상 제출 마감: 10/19 (월)까지. 마감 날짜는 바꾸지 말고 그대로 쓰세요.");
+  expect(buildFactBlock(week)).not.toMatch(/\((제출 )?마감/);
+  const next = buildReportCommentInput(row({ videoHomeworkDue: "next", videoHomeworkDueDate: "2026-10-15" }), 0, undefined, "2026-10-12");
+  expect(buildP1FactBlock(next)).toContain("영상 제출 마감: 다음 수업 10/15 (목)까지");
+  expect(buildReportCommentInput(row({ videoHomeworkDue: "next" }), 0, undefined, "2026-10-12").videoHomeworkDue).toBe("다음 수업 전까지");
+  // 7일로 돌린 행은 지난 저장의 다음 수업 날짜를 쓰지 않는다
+  expect(buildReportCommentInput(row({ videoHomeworkDue: "week", videoHomeworkDueDate: "2026-10-15" }), 0, undefined, "2026-10-12").videoHomeworkDue).toBe("10/19 (월)까지");
+  expect(buildReportCommentInput(row({}), 0).videoHomeworkDue).toBeUndefined();
+  expect(buildReportCommentInput(row({ videoHomework: false }), 0, undefined, "2026-10-12").videoHomeworkDue).toBeUndefined();
+  expect(buildFactBlock(buildReportCommentInput(row({}), 0))).toContain("오늘 영상 과제: 있음. 오늘 과제 안내에");
+});
+
 it.each([true, false, undefined])("영상 지침은 오늘 체크된 과제에만 넣는다 (%s)", (videoHomework) => {
   const input = { ...buildReportCommentInput(student({ subjects: [{ name: "수학", prev: "", today: "분수" }] }), 0), videoHomework,
     attitude: "좋음" };

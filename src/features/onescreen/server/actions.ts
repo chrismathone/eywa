@@ -64,6 +64,10 @@ import { resolveMentSource, type MentSource } from "../ment-source";
 import { mentSourceColumnReady } from "./ment-source-db";
 import { videoHomeworkColumnReady } from "@/features/video-homework/server/assignments";
 import { videoHomeworkKept } from "@/features/video-homework/report-owner";
+import { resolveNextLessonDue, videoHomeworkDueColumnReady } from "@/features/video-homework/server/report-due";
+import type { SavedVideoHomeworkDue } from "@/features/video-homework/due";
+import { decideVideoHomeworkDue } from "@/features/video-homework/due-write";
+import { isCustomDue } from "@/features/video-homework/due";
 import { getVideoReceiptComment } from "@/features/video-homework/server/receipt-comment";
 import { appendVideoReceiptComment } from "@/features/video-homework/receipt-comment";
 import { videoSubmitLinkColumn } from "@/features/video-submit/server/link-choice-db";
@@ -73,6 +77,8 @@ import { prependParentAddress, splitParentAddress } from "../parent-address";
 import { logAction } from "@/features/audit/server/log";
 import { isSlotOnlyEnglishNotes, shouldCaptureJj } from "../jj-capture-plan";
 import { classRouteActive, NO_SEND_CLASS_ERROR, SEND_CLASS_SUBJECTS } from "../send-class";
+/** 영상 숙제 마감이 고른 것과 다르게 저장된 줄은 보내지 않는다(saveAndQueueClassnote — 까닭은 화면이 따로 알린다, due-write.ts). */
+const VIDEO_DUE_CHANGED_ERROR = "영상 숙제 마감이 고른 것과 달라져 보내지 않았습니다(저장은 했습니다) — 멘트의 마감을 확인한 뒤 다시 보내 주세요";
 import { classBoardLiveForStudent, explainBoardMissing, resolveMakeupSendClass } from "./send-class";
 import { captureReportJj } from "./jj-capture";
 import type { OneScreenStudent, PrevReport } from "../types";
@@ -100,6 +106,11 @@ export type SaveLessonReportInput = {
    * 발송 직전 판정(`reportGetsVideoLink`)이 이 값이 true인 보고서에만 '영상첨부' 줄을 붙인다.
    */
   videoSubmitLink?: boolean;
+  /**
+   * 영상 숙제 마감(원장 2026-10-15, video-homework/due.ts) — 7일 · 다음 수업. `undefined`면 손대지 않는다. 날짜는 받지 않는다 —
+   * '다음 수업'이면 서버가 시간표로 정한다. 칸이 아직 없으면 조용히 뺀다(#95).
+   */
+  videoHomeworkDue?: "week" | "next";
   progress: string; // "영어 Unit 8 · p.90"
   examInfo: string; // "일일 18/20, 확인 19/20" (roster prev-score 파싱용 합본 — 보존)
   homeworkScore: string; // 과제 상태
@@ -169,6 +180,8 @@ export async function saveLessonReport(
   needsAnchor?: boolean;
   /** 영상 과제 값을 작성 선생님 것으로 두었다([`report-owner.ts`]) — 화면이 이 값으로 되돌린다(나머지는 저장됨). */
   keptVideoHomework?: boolean | null;
+  /** 저장한 영상 숙제 마감 — 고른 마감을 적었을 때만. `fellBack` = 14일 안에 다음 수업이 없어 7일로 적었다(화면이 알린다). */
+  videoHomeworkDue?: SavedVideoHomeworkDue;
 }> {
   const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
@@ -222,10 +235,12 @@ export async function saveLessonReport(
   // ment_source(0214a) 기록 가능 여부 — 컬럼이 아직 없으면(마이그 미적용) 마커만 생략(#95, probe 캐시로 평시 왕복 0).
   // 영상 과제(0308a)도 같은 결 — 값을 실은 저장만 probe한다(나란히, B4). 적용 후엔 캐시라 왕복 0.
   // 영상 첨부 링크 넣기(0328a)도 같다 — 칸이 확인됐을 때만 적는다(없음·못 물어봄이면 이 값만 빠진다).
-  const [mentReady, videoHwReady, videoLinkReady] = await Promise.all([
+  // 영상 숙제 마감(원장 2026-10-15)은 영상 과제 값을 실은 저장마다 본다 — 과제를 끄면 마감도 지워야 해서(마감을 안 보내도).
+  const [mentReady, videoHwReady, videoLinkReady, videoDueReady] = await Promise.all([
     mentSourceColumnReady(supabase),
     input.videoHomework === undefined ? Promise.resolve(false) : videoHomeworkColumnReady(),
     input.videoSubmitLink === undefined ? Promise.resolve(false) : videoSubmitLinkColumn().then((state) => state === "ready"),
+    input.videoHomework === undefined ? Promise.resolve(false) : videoHomeworkDueColumnReady(),
   ]);
   const gateBase = supabase
     .from("lesson_reports")
@@ -235,7 +250,9 @@ export async function saveLessonReport(
     .select(
       (mentReady
         ? "id, classnote_status, classnote_sent_at, makeup_class_id, created_by, notes, ment_source"
-        : "id, classnote_status, classnote_sent_at, makeup_class_id, created_by") + (videoHwReady ? ", video_homework" : ""),
+        : "id, classnote_status, classnote_sent_at, makeup_class_id, created_by") + (videoHwReady ? ", video_homework" : "")
+        // 영상 숙제 마감(원장 2026-10-15)도 같은 사전 조회에 합승 — '다음 수업'으로 이미 정한 날짜는 다시 계산하지 않는다(due-write.ts).
+        + (videoHwReady && videoDueReady ? ", video_homework_due" : ""),
     )
     .eq("student_id", input.studentId)
     .eq("report_date", reportDate);
@@ -273,6 +290,7 @@ export async function saveLessonReport(
         notes?: string | null;
         ment_source?: string | null;
         video_homework?: boolean | null;
+        video_homework_due?: string | null;
       }
     | undefined;
   if (priorRow?.classnote_status === "success") {
@@ -347,6 +365,26 @@ export async function saveLessonReport(
   });
   if (reportBlock) return { ok: false, ...(priorRow ? { id: priorRow.id } : {}), error: reportBlock };
 
+  /**
+   * 🔴 영상 숙제 마감(원장 2026-10-15, video-homework/due.ts) — 영상 과제 값과 같은 주인이다: 그 숙제를 낸 선생님(이 줄을 처음 쓴 사람)만 바꾼다
+   * (report-owner.ts — 다른 선생님이 고치면 학부모에게 나간 마감이 바뀐다. 화면 겹은 토글 잠금).
+   *  · 판정 전부 = `decideVideoHomeworkDue`(video-homework/due-write.ts — 과제를 끄면 지움 · 7일 · 다음 수업은 시간표로 찾아 날짜로 고정 ·
+   *    이미 정한 날짜는 그대로 · 못 찾음/이미 지남/못 읽음은 7일로 알림 · 남이 쓴 줄은 저장값을 돌려줌). DB 트리거(20261015090000)가 남의 갱신을 한 번 더 막는다.
+   */
+  const videoDue = await decideVideoHomeworkDue({
+    ready: videoDueReady && videoHwReady, videoHomework: input.videoHomework, mode: input.videoHomeworkDue,
+    keptVideoHw: !!keptVideoHw, hasClass: !!input.classId,
+    owner: !priorRow?.created_by || priorRow.created_by === user.id,
+    priorDue: priorRow?.video_homework_due ?? null, reportDate, today: kstToday(),
+    resolveNext: () => resolveNextLessonDue(createAdminClient(), { tenantId: user.tenantId, classId: input.classId!, studentId: input.studentId, reportDate })
+      .catch((e) => {
+        console.warn(JSON.stringify({ level: "warn", scope: "saveLessonReport.videoHomeworkDue", message: e instanceof Error ? e.message : String(e) }));
+        throw e;
+      }),
+  });
+  const videoDueWrite = videoDue.write ?? null;
+  const videoDueSaved: SavedVideoHomeworkDue | null = videoDue.saved ?? null;
+
   // (student, date, 반|과목) 1행 upsert — 재저장 시 같은 행 갱신(0134a `unit_key` 유니크).
   // ⚠️ onConflict 타깃은 **생성열 unit_key**(= coalesce(class_id::text, subject)) — 부분·표현식 인덱스는
   //    supabase-js upsert가 타깃으로 못 잡아서(0083a 교훈) 생성열로 평범한 컬럼처럼 만들어 둔 것이다.
@@ -368,6 +406,7 @@ export async function saveLessonReport(
         // 작성 선생님이 아니면 영상 과제(와 거기 딸린 첨부 링크 선택)는 적지 않는다(keptVideoHw, 위).
         ...(videoHwReady && typeof input.videoHomework === "boolean" && !keptVideoHw ? { video_homework: input.videoHomework } : {}),
         ...(videoLinkReady && typeof input.videoSubmitLink === "boolean" && !keptVideoHw ? { video_submit_link: input.videoSubmitLink } : {}),
+        ...(videoDueWrite ?? {}),
         progress: input.progress || null,
         exam_info: input.examInfo || null,
         homework_score: normalizeNoneMarker(input.homeworkScore),
@@ -406,7 +445,10 @@ export async function saveLessonReport(
     // **저장된 그 값**을 되받는다(갱신 시 DB가 원 작성자를 보존하는 경로가 있어 화면 값과 갈릴 수 있다).
     // created_by도 되받는다 — 보강 출석부 칸의 **귀속 강사**(아래 훅)는 저장자가 아니라 이 소유 계정이다.
     // 영상 과제 값도 되받는다(칸이 확인됐을 때만) — 동시 첫 저장에서 DB 트리거(0336a)가 남의 값을 지켰는지 본다(아래 raceKept).
-    .select(videoHwReady ? "id, share_token, teacher_name, created_by, video_homework" : "id, share_token, teacher_name, created_by")
+    // 마감도 같다(트리거 20261015090000 — 아래 raceDue).
+    .select(videoHwReady
+      ? (videoDueReady ? "id, share_token, teacher_name, created_by, video_homework, video_homework_due" : "id, share_token, teacher_name, created_by, video_homework")
+      : "id, share_token, teacher_name, created_by")
     .single();
   // select가 두 리터럴 중 하나라 결과 타입을 추론하지 못한다 — 되받는 칸을 여기 적는다(위 select와 같이 고칠 것).
   const data = savedData as unknown as {
@@ -415,6 +457,7 @@ export async function saveLessonReport(
     teacher_name: string | null;
     created_by: string | null;
     video_homework?: boolean | null;
+    video_homework_due?: string | null;
   } | null;
   if (error || !data) {
     // 먼저 바꿔 둔 반(claimMakeupAnchorChange)을 되돌린다 — 저장이 안 됐는데 반만 바뀌면 칸과 갈린다.
@@ -529,6 +572,16 @@ export async function saveLessonReport(
       ? { kept: data.video_homework ?? null }
       : null;
   const keptVideoHwFinal = keptVideoHw ?? raceKept;
+  // 마감도 같은 경합 — 적으려던 마감과 저장된 마감이 다르면 DB 트리거가 작성 선생님의 마감을 지킨 것이다. 그 값을 화면에 돌려준다(`kept` —
+  // 화면이 저장값으로 맞추고 줄을 잠그며, 이 저장은 발송하지 않는다 — 내 화면이 말하던 마감으로 나가지 않게, 적대 재리뷰 2026-10-15).
+  const raceDue: SavedVideoHomeworkDue | null =
+    videoDueWrite && "video_homework_due" in data && !!data.created_by && data.created_by !== user.id
+    && (data.video_homework_due ?? null) !== videoDueWrite.video_homework_due
+      ? isCustomDue(reportDate, data.video_homework_due)
+        ? { mode: "next", date: data.video_homework_due, kept: true }
+        : { mode: "week", date: null, kept: true }
+      : null;
+  const videoDueFinal = raceDue ?? videoDueSaved;
 
   /**
    * 감사로그 — **누가 이 보고서를 고쳤나**의 유일한 근거다.
@@ -565,6 +618,7 @@ export async function saveLessonReport(
     makeupClassId: makeupAnchor,
     ...(warning ? { warning } : {}),
     ...(keptVideoHwFinal ? { keptVideoHomework: keptVideoHwFinal.kept } : {}),
+    ...(videoDueFinal ? { videoHomeworkDue: videoDueFinal } : {}),
     ...(makeupEffect ? { makeupEffect } : {}),
   };
 }
@@ -597,6 +651,8 @@ export async function saveAndQueueClassnote(
   warning?: string;
   /** 저장 단계에서 영상 과제 값을 작성 선생님 것으로 두었다(saveLessonReport 그대로) — 화면이 이 값으로 되돌린다. */
   keptVideoHomework?: boolean | null;
+  /** 저장 단계가 적은 영상 숙제 마감(saveLessonReport 그대로) — 화면이 '다음 수업' 날짜를 싣는다. */
+  videoHomeworkDue?: SavedVideoHomeworkDue;
   /** 저장 단계의 보강 기록 반영 알림(saveLessonReport `makeupEffect` 그대로) — 발송 결과와 무관하게 알린다. */
   makeupEffect?: MakeupEffectNotice;
   /** status="needs_class"일 때 — 고를 수 있는 반(반 정보 없는 보강 보고서의 'ClassNote로 보낼 반'). */
@@ -698,8 +754,26 @@ export async function saveAndQueueClassnote(
   const warn = {
     ...(saved.warning ? { warning: saved.warning } : {}),
     ...(saved.keptVideoHomework !== undefined ? { keptVideoHomework: saved.keptVideoHomework } : {}),
+    ...(saved.videoHomeworkDue ? { videoHomeworkDue: saved.videoHomeworkDue } : {}),
     ...(saved.makeupEffect ? { makeupEffect: saved.makeupEffect } : {}),
   };
+  // 🔴 영상 숙제 마감이 고른 것과 다르게 됐다(다음 수업을 못 찾음·이미 지남·시간표를 못 읽음 → 7일 · 남이 쓴 줄이라 그대로 둠) — 멘트·미리보기가
+  //    말한 마감과 학부모 카드의 마감이 갈린 채 나가지 않게 이 줄은 보내지 않는다(저장은 끝났다 — 화면이 마감을 고친 걸 보고 다시 보낸다, 적대 리뷰 M2).
+  if (saved.videoHomeworkDue?.fellBack || saved.videoHomeworkDue?.kept) {
+    // 대기 중(queued) 재고 회수 — 옆 게이트들과 같은 이유: 안 지우면 "보내지 않았습니다" 안내 직후 워커가 옛 대기분을 게시한다.
+    if (prior?.classnote_status === "queued") {
+      try {
+        await supabase
+          .from("lesson_reports")
+          .update({ classnote_status: null, classnote_queued_at: null })
+          .eq("id", saved.id)
+          .eq("classnote_status", "queued");
+      } catch {
+        // best-effort — 어차피 에러 반환이라 강사 재시도가 뒤따른다(옆 게이트와 같다)
+      }
+    }
+    return { ok: false, id: saved.id, shareToken: saved.shareToken, ...warn, error: VIDEO_DUE_CHANGED_ERROR };
+  }
 
   // 발송 안전 스위치 — 기본 OFF(dry-run). 원장이 승인(설정 토글)하기 전까지 **저장만** 하고 실제 큐잉(발송) 안 함.
   // 공유 DB + 라이브 워커라 승인 전 실발송 방지(classnote_status 미변경 → 워커가 안 잡음).
@@ -1133,6 +1207,8 @@ export type SaveOnescreenSessionInput = {
       videoHomework?: boolean;
       /** 영상 첨부 링크 넣기(0328a) — 같은 이유로 세션에도 싣는다(로스터가 같은 키로 복원). */
       videoSubmitLink?: boolean;
+      /** 영상 숙제 마감(원장 2026-10-15) — 고른 값만(날짜는 서버가 정해 보고서에 남는다). 로스터가 같은 키로 복원한다. */
+      videoHomeworkDue?: "week" | "next";
       /**
        * 영어 템플릿 모드(2026-09-10) — 고른 템플릿 · 다음 시간 테스트 · 마지막 AI 인사말/코멘트.
        * **영어 행만** 싣는다(수학 세션 모양 불변). 로스터 복원(roster.ts `OnescreenSessionRow`)이 같은 키를 읽는다.

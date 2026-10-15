@@ -71,6 +71,13 @@ export type Subject = {
    * ClassNote 글에 '영상첨부 : …/v/…' 줄이 붙는다. `undefined` = 고른 적 없음(저장에 싣지 않는다 — 저장돼 있던 값을 덮지 않게).
    */
   videoSubmitLink?: boolean;
+  /**
+   * 영상 숙제 **마감**(원장 2026-10-15) — 7일(기본) 또는 다음 수업. '영상 과제'를 켠 행에서만 고른다(video-homework/due.ts).
+   * `undefined` = 고른 적 없음(저장에 싣지 않는다 — 저장돼 있던 마감을 덮지 않게. 새 보고서는 7일).
+   */
+  videoHomeworkDue?: "week" | "next";
+  /** 서버가 정한 '다음 수업' 날짜(저장 뒤·다시 연 화면에서만 안다) — 표시·멘트 재료. */
+  videoHomeworkDueDate?: string;
 
   // ── 행(수업) 단위 평가값 (2026-08-13) — 해석·폴백은 [row-fields.ts](./row-fields.ts) 단일 소스 ──
   /**

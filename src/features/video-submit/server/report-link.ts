@@ -1,10 +1,11 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { addDays, kstToday } from "@/lib/date-kst";
+import { kstToday } from "@/lib/date-kst";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { videoHomeworkColumnReady } from "@/features/video-homework/server/assignments";
+import { videoHomeworkDueColumnReady } from "@/features/video-homework/server/report-due";
+import { homeworkOpen } from "@/features/video-homework/due";
 import { reportGetsVideoLink } from "../route";
-import { SITE_HOMEWORK_DAYS } from "../site";
 import { siteAvailability } from "./site";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -20,18 +21,24 @@ export { reportLineMode, TEST_STUDENT_NAME } from "../link-choice";
  * 조건 = 영상 과제 있음 + 검사 대상 반(영어·취소·반 없음 제외 — `reportGetsVideoLink`. 강사가 행마다 켜던 '영상 첨부 링크 넣기'는 거둬서
  * 영상 과제 있음이면 붙인다) + **이 보고서의 지점**이 올리기 사이트를 쓸 수 있음(없는 주소를 안내하지 않게 — 지점마다 따로 본다).
  * 글의 주소는 지점과 무관하게 `/v` 그대로다(주소에 지점을 넣지 않는다 — 지점이 여럿이면 학생이 화면에서 고른다).
- * 숙제 기한(보고서일 + 7일)이 이미 지난 보고서(기한 지난 지정 발송·재발송)엔 붙이지 않는다 — 들어가도 그 숙제는 목록에 없다.
+ * 숙제 마감(선생님이 고른 '다음 수업' 또는 보고서일 + 7일, due.ts)이 이미 지난 보고서(기한 지난 지정 발송·재발송)엔 붙이지 않는다 — 들어가도
+ * 그 숙제는 목록에 없다.
  * 🔴 어떤 실패도 false(줄 없이 발송) — 이 판정이 보고서 발송을 막으면 안 된다. 쓰는 것이 없어 감사로그도 없다(링크를 만들지 않는다).
  */
 export async function reportSiteLine(reportId: unknown): Promise<boolean> {
   if (typeof reportId !== "string" || !UUID_RE.test(reportId)) return false;
   const db = createAdminClient();
-  if (!(await videoHomeworkColumnReady(db))) return false;
-  const { data: report, error } = await db.from("lesson_reports")
-    .select("id,tenant_id,student_id,class_id,subject,report_date,video_homework,revoked_at")
+  const [ready, dueReady] = await Promise.all([videoHomeworkColumnReady(db), videoHomeworkDueColumnReady(db)]);
+  if (!ready) return false;
+  const { data, error } = await db.from("lesson_reports")
+    .select(dueReady ? "id,tenant_id,student_id,class_id,subject,report_date,video_homework,revoked_at,video_homework_due"
+      : "id,tenant_id,student_id,class_id,subject,report_date,video_homework,revoked_at")
     .eq("id", reportId).maybeSingle();
+  // 마감 칸은 생성 타입에 아직 없다(#95 — 칸이 없어도 돈다) — 줄 모양을 여기 적는다.
+  const report = data as unknown as { tenant_id: string; student_id: string | null; class_id: string | null; subject: string | null;
+    report_date: string; video_homework: boolean | null; revoked_at: string | null; video_homework_due?: string | null } | null;
   if (error || !report?.class_id || !report.student_id || report.video_homework !== true) return false;
-  if (!(String(report.report_date) >= addDays(kstToday(), -SITE_HOMEWORK_DAYS))) return false;
+  if (!homeworkOpen(String(report.report_date), kstToday(), report.video_homework_due)) return false;
   const tenantId = report.tenant_id as string;
   const [settings, classRes, studentRes] = await Promise.all([
     getTenantSettingsByTenantId(tenantId),

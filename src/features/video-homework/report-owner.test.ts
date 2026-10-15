@@ -59,7 +59,7 @@ describe("② 원스크린 저장 관문이 이 판정을 쓴다", () => {
   });
 
   it("동시 첫 저장 — 저장된 값을 되받아, DB가 남의 값을 지켰으면 그 값을 화면에 알린다", () => {
-    expect(body).toMatch(/\.select\(videoHwReady \? "id, share_token, teacher_name, created_by, video_homework" : "id, share_token, teacher_name, created_by"\)\s*\.single\(\)/);
+    expect(body).toMatch(/\.select\(videoHwReady\s*\? \(videoDueReady \? "id, share_token, teacher_name, created_by, video_homework, video_homework_due" : "id, share_token, teacher_name, created_by, video_homework"\)\s*: "id, share_token, teacher_name, created_by"\)\s*\.single\(\)/);
     expect(body).toMatch(/data\.created_by !== user\.id && \(data\.video_homework \?\? null\) !== input\.videoHomework/);
     expect(body).toMatch(/const keptVideoHwFinal = keptVideoHw \?\? raceKept;/);
   });
@@ -85,6 +85,54 @@ describe("② 원스크린 저장 관문이 이 판정을 쓴다", () => {
     };
     walk(join(process.cwd(), "src"));
     expect(writers.map((p) => p.slice(p.indexOf("src/")))).toEqual(["src/features/onescreen/server/actions.ts"]);
+  });
+
+  // 원장 2026-10-15 — 영상 숙제 마감(7일 · 다음 수업)은 그 숙제를 낸 선생님 것이다(학부모에게 나간 마감을 다른 선생님이 바꾸지 않게).
+  // 판정 자체는 due-write.test.ts가 잠근다 — 여기는 저장 관문이 그 판정에 올바른 재료를 넘기고 결과대로 쓰는지만 본다.
+  it("마감은 판정 함수 하나로 — 작성자 여부·영상 과제를 둔 저장·저장돼 있던 마감을 넘기고, upsert 전에 정하고, 그 결과만 쓴다", () => {
+    const call = body.indexOf("decideVideoHomeworkDue({");
+    expect(call).toBeGreaterThan(-1);
+    expect(call).toBeLessThan(body.indexOf(".upsert("));
+    expect(body).toMatch(/keptVideoHw: !!keptVideoHw/);
+    expect(body).toMatch(/owner: !priorRow\?\.created_by \|\| priorRow\.created_by === user\.id/);
+    expect(body).toMatch(/priorDue: priorRow\?\.video_homework_due \?\? null/);
+    expect(body).toMatch(/ready: videoDueReady && videoHwReady/);
+    expect(body).toMatch(/\+ \(videoHwReady && videoDueReady \? ", video_homework_due" : ""\)/);
+    expect(body).toMatch(/\.\.\.\(videoDueWrite \?\? \{\}\)/);
+    expect(body).toMatch(/videoDueFinal \? \{ videoHomeworkDue: videoDueFinal \}/);
+    // 동시 첫 저장 — 트리거가 작성 선생님의 마감을 지켰으면 그 값을 돌려준다(kept → 화면 잠금 · 발송 멈춤)
+    expect(body).toMatch(/\(data\.video_homework_due \?\? null\) !== videoDueWrite\.video_homework_due/);
+    expect(body).toMatch(/const videoDueFinal = raceDue \?\? videoDueSaved;/);
+  });
+  it("🔴 마감이 고른 것과 다르게 저장된 줄은 발송하지 않는다(멘트·미리보기가 말한 마감과 카드가 갈린 채 나가지 않게)", () => {
+    const send = src.slice(src.indexOf("export async function saveAndQueueClassnote("));
+    const guard = send.indexOf("if (saved.videoHomeworkDue?.fellBack || saved.videoHomeworkDue?.kept)");
+    expect(guard).toBeGreaterThan(-1);
+    expect(guard).toBeLessThan(send.indexOf("classnoteSendOn(settings)"));
+    // 막을 때 옛 대기분도 회수한다(옆 게이트와 같다 — 안내 직후 워커가 게시하지 않게)
+    expect(send.slice(guard, send.indexOf("classnoteSendOn(settings)"))).toMatch(/update\(\{ classnote_status: null, classnote_queued_at: null \}\)/);
+  });
+  it("마감 값을 쓰는 곳은 판정 함수 하나다(원스크린 저장만 부른다)", () => {
+    const writers: string[] = [];
+    const walk = (dir: string) => {
+      for (const name of readdirSync(dir, { withFileTypes: true })) {
+        const p = join(dir, name.name);
+        if (name.isDirectory()) walk(p);
+        else if (/\.(ts|tsx)$/.test(name.name) && !/\.test\./.test(name.name) && /\bvideo_homework_due:(?!\s*(?:string\b|"))/.test(readFileSync(p, "utf8"))) writers.push(p.replaceAll("\\", "/"));
+      }
+    };
+    walk(join(process.cwd(), "src"));
+    expect(writers.map((p) => p.slice(p.indexOf("src/")))).toEqual(["src/features/video-homework/due-write.ts"]);
+    const callers: string[] = [];
+    const find = (dir: string) => {
+      for (const name of readdirSync(dir, { withFileTypes: true })) {
+        const p = join(dir, name.name);
+        if (name.isDirectory()) find(p);
+        else if (/\.(ts|tsx)$/.test(name.name) && !/\.test\./.test(name.name) && /await decideVideoHomeworkDue\(/.test(readFileSync(p, "utf8"))) callers.push(p.replaceAll("\\", "/"));
+      }
+    };
+    find(join(process.cwd(), "src"));
+    expect(callers.map((p) => p.slice(p.indexOf("src/")))).toEqual(["src/features/onescreen/server/actions.ts"]);
   });
 });
 
@@ -142,5 +190,24 @@ describe("③ DB 겹(0336a) — 직접 쓰기·동시 첫 저장까지", () => {
 
   it("없을 수 있는 칸(video_submit_link)을 함수 본문에서 읽지 않는다 — 갱신을 통째로 죽이지 않게", () => {
     expect(body).not.toMatch(/video_submit_link/);
+  });
+});
+
+describe("③' DB 겹 넓힘(20261015090000) — 영상 숙제 마감도 작성자 것으로 둔다", () => {
+  const sql = read("supabase", "migrations", "20261015090000_video_homework_due.sql");
+  const fn = sql.slice(sql.lastIndexOf("create or replace function public.lesson_reports_keep_video_homework_owner"));
+
+  it("칸을 먼저 만들고 함수가 그 칸을 읽는다(칸이 없는 스키마에서 트리거가 갱신을 죽이지 않게)", () => {
+    expect(sql.indexOf("add column if not exists video_homework_due")).toBeGreaterThan(-1);
+    expect(sql.indexOf("add column if not exists video_homework_due")).toBeLessThan(sql.lastIndexOf("create or replace function public.lesson_reports_keep_video_homework_owner"));
+  });
+  it("0336a의 판정 그대로 + 마감도 원래 값으로 둔다 · 트리거는 두 칸의 갱신에 걸린다", () => {
+    expect(fn).toMatch(/old\.created_by is not null/);
+    expect(fn).toMatch(/auth\.uid\(\) is not null/);
+    expect(fn).toMatch(/auth\.uid\(\) <> old\.created_by/);
+    expect(fn).toMatch(/new\.video_homework := old\.video_homework;/);
+    expect(fn).toMatch(/new\.video_homework_due := old\.video_homework_due;/);
+    expect(fn).not.toMatch(/raise exception/);
+    expect(fn).toMatch(/before update of video_homework, video_homework_due on public\.lesson_reports/);
   });
 });

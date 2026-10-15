@@ -302,6 +302,8 @@ export type BulkPatch = {
   videoHomework?: boolean;
   /** 영상 첨부 링크 넣기 — 고를 수 있는 행(`linkOk`)이고 영상 과제가 켜진(이번에 켜는 것 포함) 행에만 켠다. */
   videoSubmitLink?: boolean;
+  /** 영상 숙제 마감(7일 · 다음 수업, 원장 2026-10-15) — 마감을 고를 수 있는 행(`dueOk`)이고 영상 과제가 켜진(이번에 켜는 것 포함) 행에만. */
+  videoHomeworkDue?: "week" | "next";
 };
 
 /** 일괄 적용 대상 행의 현재값(경량 shape — 테스트 용이). 태도·과제는 학생 단위, 교재·오늘과제·진도는 과목(행) 단위. */
@@ -326,10 +328,13 @@ export type BulkTarget = {
   /** 지금 값 — undefined = 고른 적 없음('빈 칸'). */
   videoHomework?: boolean;
   videoSubmitLink?: boolean;
+  videoHomeworkDue?: "week" | "next";
   /** 이 행에 '영상 과제' 토글이 있나(반 있음 + 학원 설정이 켠 반) — 화면 토글과 같은 판정. */
   videoOk?: boolean;
   /** 이 행에서 '영상 첨부 링크 넣기'를 고를 수 있나(`submitLinkChoosable`). */
   linkOk?: boolean;
+  /** 이 행에서 마감을 고를 수 있나 — `videoOk` + 마감 칸이 준비됨(행의 마감 토글과 같은 조건). */
+  dueOk?: boolean;
   /**
    * 입력이 잠긴 행(발송 완료·결석) — 값을 **밀어 넣지 않는다**.
    * ⚠️ 행 자체를 목록에서 빼는 게 아니라 값 적용만 건너뛴다 — 같은 목록을 출결 일괄 적용이 함께 쓰는데,
@@ -408,6 +413,10 @@ export function planBulkApply(
     else if (patch.videoSubmitLink === false && t.linkOk && (!onlyEmpty || t.videoSubmitLink === undefined))
       set.videoSubmitLink = false;
     if (set.videoHomework === false && t.videoSubmitLink) set.videoSubmitLink = false;
+    // 마감 — 영상 과제가 켜진(이번에 켜는 것 포함) 행에만. '빈 칸만'은 고른 적 없는 행에만(고른 적 없으면 7일이다).
+    if (patch.videoHomeworkDue !== undefined && t.dueOk && homeworkAfter === true && (!onlyEmpty || t.videoHomeworkDue === undefined)
+      && t.videoHomeworkDue !== patch.videoHomeworkDue)
+      set.videoHomeworkDue = patch.videoHomeworkDue;
     if (Object.keys(set).length)
       out.push({ studentId: t.studentId, subjectName: t.subjectName, subjectIndex: t.subjectIndex, set });
   }

@@ -22,6 +22,8 @@ vi.mock("@/lib/date-kst", async (load) => ({ ...(await load<typeof import("@/lib
 
 import { formatShortKoreanDate } from "@/lib/date-kst";
 import { _resetVideoHomeworkProbeForTest } from "@/features/video-homework/server/assignments";
+import { _resetVideoHomeworkDueProbeForTest } from "@/features/video-homework/server/report-due";
+import { isAssignedHomeworkDate } from "./site-homework";
 import { SITE_LINKS_PER_PAIR_PER_DAY, SITE_LOOKUPS_PER_HOUR, SITE_LOOKUPS_PER_HOUR_TENANT, SITE_MAX_STUDENTS_PER_LAST4, SITE_OPENS_PER_HOUR } from "../site";
 import { _resetVideoSubmitAvailabilityForTest } from "./availability";
 import { _resetVideoDriveConfigForTest } from "./drive-config";
@@ -89,6 +91,7 @@ beforeEach(() => {
   _resetVideoSubmitAvailabilityForTest();
   _resetVideoSiteForTest();
   _resetVideoHomeworkProbeForTest();
+  _resetVideoHomeworkDueProbeForTest();
   setup();
 });
 afterEach(() => vi.unstubAllEnvs());
@@ -137,6 +140,26 @@ describe("뒷 4자리 + 이름 조회 — 선생님이 낸 영상 숙제 중 아
   it("🔴 올릴 수 있는 숙제 = 숙제일 + 7일까지(원장 '숙제날짜 기준 7일') — 오늘(10/2)이면 9/25 숙제까지 · 9/24 숙제는 없다", async () => {
     db.tables.lesson_reports!.push(report("r8", S, C, "2026-09-25"), report("r9", S, C, "2026-09-24"));
     expect(dates(await look())).toEqual([`${label("2026-10-01")}|LT4`, `${label("2026-09-29")}|LT4`, `${label("2026-09-25")}|LT4`]);
+  });
+  // 원장 2026-10-15 *"다음수업 또는 7일 둘중에 하나 토글하게"* — 하은결이 '10/12 수업 숙제'를 10/15에 낼 숙제로 알고 숙제 없이 올렸다.
+  it("🔴 마감 = 선생님이 고른 '다음 수업'(7일이 지나도 그날까지 · 7일 전이라도 지나면 없다) · 줄마다 언제까지 내는지 적는다", async () => {
+    db.tables.lesson_reports!.push({ ...report("r10", S, C, "2026-09-20"), video_homework_due: "2026-10-03" });
+    Object.assign(db.tables.lesson_reports!.find((row) => row.id === "r2")!, { video_homework_due: "2026-10-01" });
+    const r = await look();
+    expect(dates(r)).toEqual([`${label("2026-10-01")}|LT4`, `${label("2026-09-20")}|LT4`]);
+    expect(r.ok && r.choices.filter((c) => !c.free).map((c) => c.dueLabel)).toEqual([`${label("2026-10-08")}까지`, `다음 수업 ${label("2026-10-03")}까지`]);
+    // 고른 숙제 확인(제출 화면 · 업로드 시작)도 같은 마감을 본다
+    const pair = { studentId: S, classId: C };
+    expect(await isAssignedHomeworkDate(db as never, T, pair, "2026-09-20", "2026-10-02")).toBe(true);
+    expect(await isAssignedHomeworkDate(db as never, T, pair, "2026-09-20", "2026-10-04")).toBe(false);
+    expect(await isAssignedHomeworkDate(db as never, T, pair, "2026-09-29", "2026-10-02")).toBe(false);
+    expect(await isAssignedHomeworkDate(db as never, T, pair, "2026-10-01", "2026-10-08")).toBe(true);
+  });
+  it("마감 칸이 아직 없는 DB(#95)면 마감 없이 읽는다 — 전부 7일 · 조회가 깨지지 않는다", async () => {
+    db.dropColumn("lesson_reports", "video_homework_due");
+    const r = await look();
+    expect(dates(r)).toEqual([`${label("2026-10-01")}|LT4`, `${label("2026-09-29")}|LT4`]);
+    expect(r.ok && r.choices.filter((c) => !c.free).map((c) => c.dueLabel)).toEqual([`${label("2026-10-08")}까지`, `${label("2026-10-06")}까지`]);
   });
   it("🔴 이름이 틀리면 '찾지 못했다' — 번호만 맞아서는 아무것도 안 나온다(다른 지점의 같은 이름도)", async () => {
     for (const name of ["류태영", "김태경", "박퇴원", "류태경이"]) {
@@ -353,6 +376,13 @@ describe("링크 열기 — 고른 숙제", () => {
       action: "lesson_report_video_link_issue", targetLabel: "류태경 · LT4",
       metadata: expect.objectContaining({ studentId: S, classId: C, origin: "site", lastDay: "2026-10-08", homeworkDate: "2026-09-29" }),
     }));
+  });
+  it("링크는 그 반의 안 낸 숙제 중 마감이 가장 늦은 것까지 산다 — '다음 수업' 마감이 7일보다 늦으면 그날까지", async () => {
+    Object.assign(db.tables.lesson_reports!.find((row) => row.id === "r2")!, { video_homework_due: "2026-10-12" });
+    const r = await open(await pick("2026-10-01"));
+    expect(r.ok).toBe(true);
+    expect(db.tables.homework_video_links![0]).toMatchObject({ expires_at: "2026-10-13T00:00:00+09:00" });
+    expect(m.audit).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ metadata: expect.objectContaining({ lastDay: "2026-10-12" }) }));
   });
   it("🔴 다른 번호·다른 이름·지어낸 지문으로는 만들지 않는다(서버가 같은 번호·이름으로 다시 조회한다)", async () => {
     const choice = await pick();

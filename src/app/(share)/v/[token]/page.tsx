@@ -10,7 +10,7 @@ import { uploadLastDay, VIDEO_UPLOAD_OTHER_WAYS } from "@/features/video-submit/
 import { expiredLinkHref } from "@/features/link-expired/kinds";
 import { videoSubmitAvailability } from "@/features/video-submit/server/availability";
 import { resolveSubmitToken } from "@/features/video-submit/server/links";
-import { isAssignedHomeworkDate, openHomeworkDates } from "@/features/video-submit/server/site-homework";
+import { isAssignedHomeworkDate, openHomeworkDates, type OpenHomework } from "@/features/video-submit/server/site-homework";
 import { siteAvailability } from "@/features/video-submit/server/site";
 import type { LinkRow } from "@/features/video-submit/server/links";
 import { VideoSubmitForm } from "./video-submit-form";
@@ -108,22 +108,22 @@ export default async function VideoSubmitPage({ params, searchParams }: { params
   // 번호·이름을 다시 넣게 하면 조회·열기 횟수 제한과 하루 링크 수 상한이 "학생당 한 번"이 아니라 "숙제 수"만큼 든다(리뷰 2026-10-03).
   // 못 읽으면 그냥 비운다(이 화면의 숙제는 이미 확인됐다).
   let otherHomework: { date: string; label: string }[] = [];
-  let openDates: string[] | null = null;
+  let openDates: OpenHomework[] | null = null;
   if (link.origin === "site" || homeworkDate) {
     try {
       const open = await openHomeworkDates(db, link.tenant_id, [{ studentId: link.student_id, classId: link.class_id }], kstToday());
       openDates = open ? open.get(`${link.class_id}:${link.student_id}`) ?? [] : null;
       // 다른 숙제 목록은 올리기 사이트 링크에서만(학생 상세에서 복사한 링크는 숙제를 고르지 않는다).
       otherHomework = link.origin === "site" ? (openDates ?? [])
-        .filter((date) => date !== homeworkDate)
-        .map((date) => ({ date, label: formatShortKoreanDate(date) })) : [];
+        .filter((homework) => homework.date !== homeworkDate)
+        .map((homework) => ({ date: homework.date, label: formatShortKoreanDate(homework.date) })) : [];
     } catch {
       otherHomework = [];
     }
   }
   // 이미 영상을 낸 숙제(예전 숙제 주소·새로고침) — 같은 숙제에 또 올리지 않고 숙제 없이 올리기로 보낸다(원장 2026-10-13). 선생님이 미확인으로
   // 되돌리면(영상 반려) 다시 열린다. 못 읽었으면(null) 막지 않는다 — 업로드 시작이 한 번 더 본다.
-  if (homeworkDate && openDates && !openDates.includes(homeworkDate)) {
+  if (homeworkDate && openDates && !openDates.some((homework) => homework.date === homeworkDate)) {
     return <Closed title="이미 영상을 낸 숙제입니다" toSite
       message="더 올릴 영상이 있으면 처음 화면에서 '숙제 없이 올리기'로 올려 주세요. 선생님이 다시 올리라고 하면 이 숙제에 다시 올릴 수 있습니다." />;
   }
@@ -137,9 +137,10 @@ export default async function VideoSubmitPage({ params, searchParams }: { params
       homeworkLabel={homeworkDate ? formatShortKoreanDate(homeworkDate) : null}
       freeUpload={freeUpload}
       otherHomework={otherHomework}
-      // 마지막으로 쓸 수 있는 날 — 서버에서 글자로 만들어 넘긴다(하이드레이션 차이 없음, [[#108]]). 고른 숙제가 있으면 그 숙제의 기한
-      // (숙제일 + 7일)과 링크가 끝나는 날 중 이른 날(학생에게는 "이 숙제를 언제까지 올리나"가 중요하다).
-      lastDayLabel={formatShortKoreanDate(uploadLastDay(link.expires_at, homeworkDate))}
+      // 마지막으로 쓸 수 있는 날 — 서버에서 글자로 만들어 넘긴다(하이드레이션 차이 없음, [[#108]]). 고른 숙제가 있으면 그 숙제의 마감
+      // (선생님이 고른 '다음 수업' 또는 숙제일 + 7일, due.ts)과 링크가 끝나는 날 중 이른 날(학생에게는 "이 숙제를 언제까지 올리나"가 중요하다).
+      lastDayLabel={formatShortKoreanDate(uploadLastDay(link.expires_at, homeworkDate,
+        openDates?.find((homework) => homework.date === homeworkDate)?.due))}
       maxLabel={HOMEWORK_VIDEO_MAX_LABEL}
     />
   );

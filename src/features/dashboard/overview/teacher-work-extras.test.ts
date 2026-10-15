@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { judgeUnreadReport, UNREAD_MATCHABLE_OR, SENT_STATUS_SUCCESS } from "@/features/report-admin/unread-filter";
 import { judgeClassAttendanceDay, type UnrecordedEnrollment } from "../unrecorded-attendance";
 import { teacherWork, withTeacherWorkExtras, type WorkClass } from "./teacher-work";
+import { counselPeriodLabel, pickCounselMonth } from "./counsel-period";
 
 const NOW = Date.parse("2026-10-15T03:00:00Z");
 const cutoff = NOW - 48 * 3_600_000;
@@ -81,7 +82,7 @@ describe("열(강사 × 과목) 배분", () => {
         { classId: "gone", teacherId: "t9", subject: "math", unrecorded: true },
       ],
       counsel: new Map([["t1", 42.5]]),
-      attendanceFrom: "2026-10-08", attendanceTo: "2026-10-14", unreadFrom: "2026-09-16", counselAsOf: "2026-10-14",
+      attendanceFrom: "2026-10-08", attendanceTo: "2026-10-14", unreadFrom: "2026-09-16", counselAsOf: "2026-10-14", counselMonth: "2026-10",
       deliveryShown: true, counselShown: true,
     });
     const math = work.rows.find((r) => r.subject === "math")!;
@@ -90,17 +91,17 @@ describe("열(강사 × 과목) 배분", () => {
     expect([math.attendanceUnrecorded, math.attendanceDays]).toEqual([2, 2]);
     expect([english.attendanceUnrecorded, english.attendanceDays]).toEqual([0, 1]);
     expect([math.counselRate, english.counselRate]).toEqual([42.5, 42.5]);
-    expect(work.counselAsOf).toBe("2026-10-14");
+    expect([work.counselAsOf, work.counselMonth]).toEqual(["2026-10-14", "2026-10"]);
     expect([work.deliveryShown, work.counselShown]).toEqual([true, true]);
   });
 
   it("🔴 직원 평가가 꺼진 지점(counselShown false)엔 저장값이 남아 있어도 원생상담을 싣지 않는다", () => {
     const work = withTeacherWorkExtras(teacherWork(classes, [], [], range, []), {
-      unread: [], attendance: [], counsel: new Map([["t1", 42.5]]), attendanceFrom: "", attendanceTo: "", unreadFrom: "", counselAsOf: "2026-10-14",
+      unread: [], attendance: [], counsel: new Map([["t1", 42.5]]), attendanceFrom: "", attendanceTo: "", unreadFrom: "", counselAsOf: "2026-10-14", counselMonth: "2026-10",
       deliveryShown: false, counselShown: false,
     });
     expect(work.rows.every((r) => r.counselRate === null)).toBe(true);
-    expect([work.counselAsOf, work.deliveryShown, work.counselShown]).toEqual([null, false, false]);
+    expect([work.counselAsOf, work.counselMonth, work.deliveryShown, work.counselShown]).toEqual([null, null, false, false]);
   });
 
   it("회수한 보고서는 '안 나간 것'이 아니다 — recalled로 따로 센다", () => {
@@ -116,9 +117,42 @@ describe("열(강사 × 과목) 배분", () => {
 
   it("담임이 없는 열·저장값이 없는 강사는 원생상담 '—'(null)", () => {
     const work = withTeacherWorkExtras(teacherWork([{ ...classes[0], teacherId: null, teacherName: "담당 미지정" }], [], [], range, []), {
-      unread: [], attendance: [], counsel: new Map([["t1", 10]]), attendanceFrom: "", attendanceTo: "", unreadFrom: "", counselAsOf: null,
+      unread: [], attendance: [], counsel: new Map([["t1", 10]]), attendanceFrom: "", attendanceTo: "", unreadFrom: "", counselAsOf: null, counselMonth: null,
       deliveryShown: true, counselShown: true,
     });
     expect(work.rows[0].counselRate).toBeNull();
+  });
+});
+
+describe("원생상담 달 — 1일엔 이번 달 줄이 없어 지난달 값을 그 달 이름으로", () => {
+  const row = (teacher_id: string, month: string, counsel: number | null) => ({ teacher_id, month, counsel });
+  it("이번 달 줄이 하나라도 있으면 이번 달만 쓴다(강사마다 달을 섞지 않는다)", () => {
+    const picked = pickCounselMonth([row("t1", "2026-10", 12), row("t1", "2026-09", 80), row("t2", "2026-09", 70)], "2026-10");
+    expect(picked.month).toBe("2026-10");
+    expect(picked.rows.map((r) => r.teacher_id)).toEqual(["t1"]);
+  });
+  it("이번 달 줄이 없으면(1일) 지난달 줄 · 둘 다 없으면 null", () => {
+    const picked = pickCounselMonth([row("t1", "2026-09", 80), row("t2", "2026-09", 70)], "2026-10");
+    expect([picked.month, picked.rows.length]).toEqual(["2026-09", 2]);
+    expect(pickCounselMonth([], "2026-10")).toEqual({ month: null, rows: [] });
+  });
+  it("🔴 다음 달 줄(시계가 어긋난 저장)은 지난달로 고르지 않는다", () => {
+    expect(pickCounselMonth([row("t1", "2026-11", 5)], "2026-10")).toEqual({ month: null, rows: [] });
+  });
+  it("기간 이름 = 이번 달이면 '이번 달', 아니면 그 달 · 해가 바뀌어도 달 숫자", () => {
+    expect(counselPeriodLabel("2026-10", "2026-10-15")).toBe("이번 달");
+    expect(counselPeriodLabel("2026-09", "2026-10-01")).toBe("9월");
+    expect(counselPeriodLabel("2026-12", "2027-01-01")).toBe("12월");
+    expect(counselPeriodLabel(null, "2026-10-01")).toBe("이번 달");
+  });
+  it("지난달 값이 열에 실리고 그 달이 함께 간다", () => {
+    const classes: WorkClass[] = [{ id: "c1", name: "중2A", teacherId: "t1", teacherName: "가", subject: "math", reportSource: "lesson" }];
+    const picked = pickCounselMonth([row("t1", "2026-09", 64)], "2026-10");
+    const work = withTeacherWorkExtras(teacherWork(classes, [], [], { reportFrom: "2026-09-25", videoFrom: "2026-09-02", to: "2026-10-01" }, []), {
+      unread: [], attendance: [], counsel: new Map(picked.rows.map((r) => [r.teacher_id, r.counsel] as const)),
+      attendanceFrom: "", attendanceTo: "", unreadFrom: "", counselAsOf: "2026-09-30", counselMonth: picked.month,
+      deliveryShown: true, counselShown: true,
+    });
+    expect([work.rows[0].counselRate, work.counselMonth, counselPeriodLabel(work.counselMonth, work.to)]).toEqual([64, "2026-09", "9월"]);
   });
 });
