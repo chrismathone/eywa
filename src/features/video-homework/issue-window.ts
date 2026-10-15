@@ -3,7 +3,7 @@
  * *"그냥 단순하게 저기서 우클릭해서 숙제 출제 시키는걸로 (해당날짜에. 기한은 7일. 따로 보고서 안감. 개별통지해야함)
  *  대신 추가 숙제 출제 가능한건 해당 학생 해당 반의 다음 수업 전까지"*.
  *
- *  · 숙제는 **그 수업 날짜**의 숙제로 선다(낸 날이 아니다) — 제출 기한도 종전 규칙 그대로 숙제일 + 7일(`SITE_HOMEWORK_DAYS`).
+ *  · 숙제는 **그 수업 날짜**의 숙제로 선다(낸 날이 아니다) — 제출 기한은 숙제일 + 7일(`SITE_HOMEWORK_DAYS` — 마감 저장값이 없다, due.ts).
  *  · 낼 수 있는 때 = 그 학생 × 그 반의 **다음 수업 전까지**. 다음 수업 =
  *      ① 숙제일 뒤(오늘 포함) 그 학생이 그 반에서 수업한 흔적(출결·수업보고서)이 있는 첫 날, 또는
  *      ② 숙제일 뒤 **어제까지** 시간표상 그 학생이 그 반 수업에 오는 첫 날(학원 휴원일 제외)
@@ -15,6 +15,7 @@ import { addDays } from "@/lib/date-kst";
 import { rosterIncludesEnrollment } from "@/features/onescreen/roster-filter";
 import type { LedgerEnrollment, LedgerSchedule } from "./ledger-roster";
 import { blankReasonOn, type DaySlot } from "./no-homework";
+import { VIDEO_HOMEWORK_MAX_DUE_DAYS } from "./due";
 
 /** 이보다 오래된 수업에는 따로 숙제를 내지 않는다(자동 판정이 보는 기간과 같다). */
 export const EXTRA_ISSUE_LOOKBACK_DAYS = 30;
@@ -41,6 +42,31 @@ export function extraIssueLessonError(input: {
   return input.slots.length || classMeetsOn(input.schedules, input.date) ? null : "그날은 이 반 수업이 없었습니다.";
 }
 
+/**
+ * 숙제일 뒤(그날 제외) `before` 전까지 **시간표상** 그 학생이 그 반 수업에 오는 첫 날 — 학원 휴원일은 건너뛴다.
+ * 반의 배치(요일·유효 기간)와 그 학생의 수강(수강 기간·휴원·분리 등원 요일 — `rosterIncludesEnrollment`)을 함께 본다.
+ */
+export function scheduledLessonAfter(input: {
+  homeworkDate: string; before: string;
+  schedules: readonly Schedule[]; enrollments: readonly Enrollment[];
+  isHoliday: (date: string) => boolean;
+}): string | null {
+  for (let date = addDays(input.homeworkDate, 1); date < input.before; date = addDays(date, 1)) {
+    if (input.isHoliday(date) || !classMeetsOn(input.schedules, date)) continue;
+    const day = weekdayOf(date);
+    if (input.enrollments.some((row) => rosterIncludesEnrollment(row, date, day, true))) return date;
+  }
+  return null;
+}
+
+/**
+ * 영상 숙제 마감 '다음 수업'(원장 2026-10-15, due.ts) — 숙제일 뒤 `VIDEO_HOMEWORK_MAX_DUE_DAYS` 안의 첫 수업일. 없으면 null(호출부가 7일로 둔다).
+ * 따로 낸 숙제의 '다음 수업 전까지'(아래)와 같은 판정이다 — 시간표로 다음 수업을 찾는 곳은 이 두 함수뿐이다.
+ */
+export function nextLessonDate(input: Omit<Parameters<typeof scheduledLessonAfter>[0], "before">): string | null {
+  return scheduledLessonAfter({ ...input, before: addDays(input.homeworkDate, VIDEO_HOMEWORK_MAX_DUE_DAYS + 1) });
+}
+
 /** 다음 수업 전인가 — 지났으면 그 수업일을 돌려준다. */
 export function extraIssueWindow(input: {
   homeworkDate: string; today: string;
@@ -50,12 +76,7 @@ export function extraIssueWindow(input: {
   lessonDates: readonly string[];
 }): { open: true } | { open: false; nextLesson: string } {
   const recorded = input.lessonDates.filter((date) => date > input.homeworkDate && date <= input.today).sort()[0] ?? null;
-  let scheduled: string | null = null;
-  for (let date = addDays(input.homeworkDate, 1); date < input.today; date = addDays(date, 1)) {
-    if (input.isHoliday(date) || !classMeetsOn(input.schedules, date)) continue;
-    const day = weekdayOf(date);
-    if (input.enrollments.some((row) => rosterIncludesEnrollment(row, date, day, true))) { scheduled = date; break; }
-  }
+  const scheduled = scheduledLessonAfter({ ...input, before: input.today });
   const next = [recorded, scheduled].filter((date): date is string => !!date).sort()[0];
   return next ? { open: false, nextLesson: next } : { open: true };
 }

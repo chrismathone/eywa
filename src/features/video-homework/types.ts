@@ -49,6 +49,8 @@ export type VideoHomeworkLedgerRow = VideoHomeworkRosterRow & {
    * ②의 뒷순위로만 영상을 받는다(`rounds.ts`). 자동 판정·미제출 알림에 들지 않는다. 강사뷰·강사 필터에는 그날 보고서를 쓴 선생님의 칸(own-homework.ts).
    */
   kept?: readonly string[];
+  /** 숙제일 → 보고서에 고른 마감('다음 수업', due.ts). 없는 날은 숙제일 + 7일이다. */
+  dues?: Readonly<Record<string, string>>;
 };
 
 /** 숙제 영상 한 건 — 반·시각·id와 재생 가능한 경우의 미리보기만 내려온다. 원본 다운로드 주소는 내리지 않는다. */

@@ -93,9 +93,11 @@ export type LedgerRound = {
    * 뒷순위로만 영상을 받는다. 기록이 없어도 칸이 서고, 영상을 손으로 붙이거나 올리기 사이트에서 고를 수 있는 숙제다.
    */
   kept?: true;
+  /** 보고서에 고른 마감('다음 수업' — `VideoHomeworkLedgerRow.dues`). 없으면 숙제일 + 7일 — 읽을 땐 due.ts `homeworkDue(homeworkDate, due)`. */
+  due?: string;
 };
 
-type PairRow = Pick<VideoHomeworkLedgerRow, "classId" | "studentId" | "assignedDates" | "tracked" | "rejected" | "kept">;
+type PairRow = Pick<VideoHomeworkLedgerRow, "classId" | "studentId" | "assignedDates" | "tracked" | "rejected" | "kept" | "dues">;
 export const roundPairKey = (row: { classId: string; studentId: string }) => `${row.classId}:${row.studentId}`;
 export const markRoundKey = (mark: Pick<VideoHomeworkMark, "homeworkDate" | "checkDate">) =>
   mark.homeworkDate ? `h:${mark.homeworkDate}` : `c:${mark.checkDate}`;
@@ -214,6 +216,8 @@ export function buildLedgerRounds(input: {
       if (kept.has(date)) round.kept = true;
       const rejectedAt = row.rejected?.[date];
       if (rejectedAt) round.rejectedAt = rejectedAt;
+      const due = row.dues?.[date];
+      if (due) round.due = due;
       rounds.set(`h:${date}`, round);
     }
     all.set(roundPairKey(row), rounds);

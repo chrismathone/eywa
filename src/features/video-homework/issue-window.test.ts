@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classMeetsOn, extraIssueLessonError, extraIssueWindow } from "./issue-window";
+import { classMeetsOn, extraIssueLessonError, extraIssueWindow, nextLessonDate } from "./issue-window";
 
 // 2026-10-06 = 화요일 · 10-09 = 금요일 · 10-13 = 화요일. 반은 화·금 수업.
 const schedules = [{ day_of_week: "tue", valid_from: "2026-03-01", valid_to: null }, { day_of_week: "fri", valid_from: "2026-03-01", valid_to: null }];
@@ -50,5 +50,25 @@ describe("따로 내는 숙제 — 다음 수업 전까지만", () => {
   it("배치의 유효 기간 밖 요일은 수업이 아니다", () => {
     expect(classMeetsOn([{ day_of_week: "fri", valid_from: "2026-10-10", valid_to: null }], "2026-10-09")).toBe(false);
     expect(classMeetsOn([{ day_of_week: "fri", valid_from: null, valid_to: "2026-10-09" }], "2026-10-09")).toBe(true);
+  });
+});
+
+// 원장 2026-10-15 — 영상 숙제 마감 '다음 수업' = 시간표상 그 학생의 다음 수업일(휴원일 제외 · 14일 안). 저장 때 서버가 정한다(report-due.ts).
+describe("영상 숙제 마감 — 다음 수업일", () => {
+  const base = { schedules, enrollments: [enrollment], isHoliday: none };
+  it("화요일 숙제 → 금요일 · 금요일 숙제 → 다음 화요일(그날은 빼고 뒤에서 찾는다)", () => {
+    expect(nextLessonDate({ ...base, homeworkDate: "2026-10-06" })).toBe("2026-10-09");
+    expect(nextLessonDate({ ...base, homeworkDate: "2026-10-09" })).toBe("2026-10-13");
+  });
+  it("휴원일은 건너뛴다 · 분리 등원(그 요일만 오는 학생)은 오는 요일만", () => {
+    expect(nextLessonDate({ ...base, homeworkDate: "2026-10-06", isHoliday: (d) => d === "2026-10-09" })).toBe("2026-10-13");
+    expect(nextLessonDate({ ...base, homeworkDate: "2026-10-06", enrollments: [{ ...enrollment, attendance_days: ["tue"] }] })).toBe("2026-10-13");
+  });
+  it("14일 안에 수업이 없으면(수강 끝 · 시간표 끝 · 긴 휴원) null — 호출부가 7일로 둔다", () => {
+    expect(nextLessonDate({ ...base, homeworkDate: "2026-10-06", enrollments: [{ ...enrollment, end_date: "2026-10-07" }] })).toBeNull();
+    expect(nextLessonDate({ ...base, homeworkDate: "2026-10-06", schedules: [{ ...schedules[0], valid_to: "2026-10-06" }] })).toBeNull();
+    expect(nextLessonDate({ ...base, homeworkDate: "2026-10-06", isHoliday: (d) => d <= "2026-10-20" })).toBeNull();
+    // 14일째(10/20 화)는 들어간다
+    expect(nextLessonDate({ ...base, homeworkDate: "2026-10-06", isHoliday: (d) => d < "2026-10-20" })).toBe("2026-10-20");
   });
 });

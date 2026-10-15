@@ -38,6 +38,7 @@ import { FieldSelect } from "./field-select";
 import { HomeworkRateInput } from "./homework-rate-input";
 import { VideoHomeworkCheck } from "@/features/video-homework/components/video-homework-provider";
 import { VideoHomeworkToggle } from "@/features/video-homework/components/video-homework-toggle";
+import { VideoHomeworkDueToggle } from "@/features/video-homework/components/video-homework-due-toggle";
 import { VideoSubmitLinkToggle } from "@/features/video-homework/components/video-submit-link-toggle";
 import { ENGLISH_DRAFT_TEXTAREA_ID, REPORT_ATTACHMENT_MAX, isImageAttachment } from "../attachment-utils";
 import { hasTextBesidesMarkers } from "@/features/report-templates/image-slots";
@@ -139,6 +140,7 @@ export function ReportCard({
   onMakeup,
   onVideoHomework,
   onVideoSubmitLink,
+  onVideoHomeworkDue,
   onRemoveMakeup,
   canRemoveMakeup,
   onPickMakeupClass,
@@ -179,6 +181,8 @@ export function ReportCard({
   onVideoHomework?: (subjectName: string) => void;
   /** 영상 첨부 링크 넣기(0328a) — '영상 과제'를 켠 행에서만 뜬다. 없으면 버튼이 잠긴다. */
   onVideoSubmitLink?: (subjectName: string) => void;
+  /** 영상 숙제 마감(7일 · 다음 수업, 원장 2026-10-15) — '영상 과제'를 켠 행에서만 뜬다. 없으면 잠긴다. */
+  onVideoHomeworkDue?: (subjectName: string, mode: "week" | "next") => void;
   /** 보강 빼기(2026-08-18) — 출결·저장된 보강 보고서를 지운다. 없으면 배지가 표시로만 남는다. */
   onRemoveMakeup?: (subjectName: string) => void;
   /** 이 행을 뺄 수 있나 — 발송·처리 중이면 false(발송된 보강은 취소 불가, 원장 2026-08-18). */
@@ -556,6 +560,15 @@ export function ReportCard({
               grade={student.grade}
               studentName={student.name}
               subjectName={subjectName}
+            />
+            <VideoHomeworkDueToggle
+              size="pill"
+              shown={!!subject.videoHomework}
+              mode={subject.videoHomeworkDue}
+              dueDate={subject.videoHomeworkDueDate}
+              onChange={(mode) => onVideoHomeworkDue?.(subjectName, mode)}
+              disabled={!onVideoHomeworkDue || locked}
+              row={{ studentId: student.id, classId: subject.classId, subjectKey: subject.subjectKey, grade: student.grade, studentName: student.name, subjectName }}
             />
             <VideoSubmitLinkToggle
               size="pill"

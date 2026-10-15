@@ -2763,6 +2763,30 @@ export const SHEET_DICT = {
     ko: "다른 선생님이 먼저 쓴 보고서라 영상 과제는 그 선생님만 바꿀 수 있습니다",
     en: "Another teacher wrote this report first — only they can change the video homework",
   },
+  "os.row.videoDue": { ko: "마감", en: "Due" },
+  "os.row.videoDueWeek": { ko: "7일", en: "7 days" },
+  "os.row.videoDueNext": { ko: "다음 수업", en: "Next class" },
+  "os.row.videoDueTip": {
+    ko: "학생이 영상을 올릴 수 있는 마지막 날 — 7일(수업일 + 7일) 또는 다음 수업일(저장할 때 시간표로 정합니다). 올리기 사이트와 미수행 판정이 이 날을 따릅니다",
+    en: "Last day students can upload the video — 7 days after the lesson, or the next class (set from the timetable when saved). The upload site and the missing check follow this date",
+  },
+  "os.row.videoDueAria": { ko: "{name} {subject} 영상 숙제 마감", en: "{name} {subject} video homework due" },
+  "os.c.videoDueFallback": {
+    ko: "{name}: 14일 안에 다음 수업이 시간표에 없어 영상 숙제 마감을 7일로 정했습니다 — 멘트의 마감을 확인해 주세요",
+    en: "{name}: no next class within 14 days in the timetable — the video homework due was set to 7 days. Check the due date in the message",
+  },
+  "os.c.videoDuePast": {
+    ko: "{name}: 다음 수업({date})이 이미 지나 영상 숙제 마감을 7일로 정했습니다 — 멘트의 마감을 확인해 주세요",
+    en: "{name}: the next class ({date}) has already passed — the video homework due was set to 7 days. Check the due date in the message",
+  },
+  "os.c.videoDueError": {
+    ko: "{name}: 시간표를 읽지 못해 영상 숙제 마감을 7일로 두었습니다 — 잠시 뒤 '다음 수업'을 다시 골라 저장해 주세요",
+    en: "{name}: could not read the timetable — the video homework due stays at 7 days. Pick 'Next class' again and save in a moment",
+  },
+  "os.c.videoDueKept": {
+    ko: "{name}: 영상 숙제 마감은 이 보고서를 처음 쓴 선생님만 바꿀 수 있어 그대로 두었습니다(나머지는 저장했습니다)",
+    en: "{name}: only the teacher who first wrote this report can change the video homework due — kept as is (the rest was saved)",
+  },
   "os.row.videoLink": { ko: "영상 첨부 링크 넣기", en: "Add video upload link" },
   "os.row.videoLinkTip": {
     ko: "켜면 이 보고서 글에 학생이 숙제 영상을 올리는 링크(7일)가 함께 나갑니다",
@@ -3606,6 +3630,7 @@ export const SHEET_DICT = {
   },
   "os.bulk.videoHwOn": { ko: "있음", en: "Set" },
   "os.bulk.videoHwOff": { ko: "없음", en: "None" },
+  "os.bulk.videoDue": { ko: "마감", en: "Due" },
   "os.bulk.videoRows": { ko: "영상 과제를 쓰는 반의 행에만 들어갑니다", en: "Only goes into rows of classes that use video homework" },
   "os.bulk.onlyFilled": { ko: "채운 필드만 적용됩니다", en: "Only the boxes you filled are applied" },
   "os.bulk.onlyEmpty": { ko: "빈 칸만 채우기", en: "Fill empty cells only" },

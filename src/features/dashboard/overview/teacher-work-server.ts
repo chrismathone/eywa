@@ -2,12 +2,13 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
-import { addDays, kstMinutesOfDay } from "@/lib/date-kst";
+import { addDays, kstMinutesOfDay, shiftMonth } from "@/lib/date-kst";
 import type { TeacherScope } from "@/lib/auth/teacher-scope";
 import type { TenantSettings } from "@/features/owner/settings-types";
 import { classnoteModuleOn } from "@/features/owner/classnote-gate";
 import { programSubjectsOf, subjectGroupOf } from "@/features/students/program";
 import { teacherWork, withTeacherWorkExtras, type WorkClass, type WorkReport } from "./teacher-work";
+import { pickCounselMonth } from "./counsel-period";
 import { dowOf, sessionDates } from "@/features/report-admin/english-writing";
 import { judgeUnreadReport, UNREAD_GRACE_HOURS } from "@/features/report-admin/unread-filter";
 import { UNREAD_WINDOW_DAYS } from "@/features/dashboard/onescreen/server/queries";
@@ -44,7 +45,7 @@ export async function loadTeacherWork(tenantId: string, today: string, scope: Te
     ? isLaboratoryMenuAvailable(tenantId, "class_review").catch(() => false) : Promise.resolve(false);
   // 반이 없어도 표시 여부는 싣는다 — 안 실으면 카드가 꺼진 기능의 안내 문장을 낼 수 있다(리뷰 2026-10-15).
   if (!classIds.length) return withTeacherWorkExtras(teacherWork([], [], [], range, []), { unread: [], attendance: [], counsel: new Map(),
-    attendanceFrom, attendanceTo, unreadFrom, counselAsOf: null, deliveryShown, counselShown: await counselShownP });
+    attendanceFrom, attendanceTo, unreadFrom, counselAsOf: null, counselMonth: null, deliveryShown, counselShown: await counselShownP });
   const admin = createAdminClient();
   const [teachers, reports, outcomes, schedules, enrollments, attendance, posts, unclassified, extraIssues, counselRows] = await Promise.all([
     fetchInChunks<{ id: string; display_name: string }>([...new Set(visible.flatMap((c) => c.teacher_id ? [c.teacher_id] : []))], (chunk) =>
@@ -82,8 +83,9 @@ export async function loadTeacherWork(tenantId: string, today: string, scope: Te
     // 원생상담 비율 — 직원 포트폴리오가 매일 저장하는 그 달 수치(`raws.counsel`, %) 그대로(같은 원본 · 다시 셈하지 않는다).
     // 원장 2026-10-15 결정으로 이 카드를 보는 관리자에게 이 한 수치만 연다(포트폴리오 본문·점수는 그대로 원장 역할만).
     // 큰 본문(payload)은 안 읽는다(30초마다 다시 돈다). 표·칸이 없거나 못 읽으면 칸만 '—'(카드가 죽지 않게).
-    counselShownP.then((on) => !on ? [] : Promise.resolve(admin.from("teacher_portfolio_months").select("teacher_id,period_end,counsel:raws->counsel").eq("tenant_id", tenantId).eq("month", today.slice(0, 7)))
-      .then(({ data, error }) => (error ? [] : (data ?? []) as { teacher_id: string; period_end: string | null; counsel: number | null }[]))
+    // 집계는 어제까지라 1일엔 이번 달 줄이 아직 없다 — 지난달 줄도 함께 읽어 고른다(`pickCounselMonth` · 강사 수 × 2줄).
+    counselShownP.then((on) => !on ? [] : Promise.resolve(admin.from("teacher_portfolio_months").select("teacher_id,month,period_end,counsel:raws->counsel").eq("tenant_id", tenantId).in("month", [today.slice(0, 7), shiftMonth(today.slice(0, 7), -1)]))
+      .then(({ data, error }) => (error ? [] : (data ?? []) as { teacher_id: string; month: string; period_end: string | null; counsel: number | null }[]))
       .catch(() => [])),
   ]);
   // 따로 낸 숙제의 학생 — 학년(학교급 제외 설정)·테스트 여부는 학생 표에서 읽는다(보고서가 없는 학생도 있다 · 장부와 같은 판정).
@@ -136,8 +138,9 @@ export async function loadTeacherWork(tenantId: string, today: string, scope: Te
       return judged.expected > 0 ? [{ classId: c.id, teacherId: c.teacher_id, subject: c.subject, unrecorded: judged.unrecorded }] : [];
     }));
   const counselShown = await counselShownP;
-  const counsel = new Map(counselRows.map((r) => [r.teacher_id, typeof r.counsel === "number" ? r.counsel : null] as const));
-  const counselAsOf = counselRows.map((r) => r.period_end?.slice(0, 10) ?? "").filter(Boolean).sort().at(-1) ?? null;
+  const counselPick = pickCounselMonth(counselRows, today.slice(0, 7));
+  const counsel = new Map(counselPick.rows.map((r) => [r.teacher_id, typeof r.counsel === "number" ? r.counsel : null] as const));
+  const counselAsOf = counselPick.rows.map((r) => r.period_end?.slice(0, 10) ?? "").filter(Boolean).sort().at(-1) ?? null;
   return withTeacherWorkExtras(work, { unread: deliveryShown ? unread : [], attendance: attendanceDays, counsel, attendanceFrom, attendanceTo, unreadFrom, counselAsOf,
-    deliveryShown, counselShown });
+    counselMonth: counselPick.month, deliveryShown, counselShown });
 }

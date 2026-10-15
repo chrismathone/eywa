@@ -119,12 +119,15 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
   const rejectedByPair = new Map<string, Record<string, string>>();
   // 검사 기록 칸에서 옮겨 남긴 숙제(keep-round.ts) — 칸은 서되 검사 기록 칸처럼 짠다(rounds.ts `kept`).
   const keptByPair = new Map<string, string[]>();
+  // 보고서에 고른 마감('다음 수업', due.ts) — 반려 버튼이 "언제까지 다시 올릴 수 있나"를 같은 값으로 말하게 줄에 싣는다.
+  const duesByPair = new Map<string, Record<string, string>>();
   for (const row of assigned ?? []) {
     const key = `${row.classId}:${row.studentId}`;
     assignedByPair.set(key, [...(assignedByPair.get(key) ?? []), row.date]);
     if (row.kept) keptByPair.set(key, [...(keptByPair.get(key) ?? []), row.date]);
     if (row.extra && row.date >= fromDate && row.date <= toDate) extraByPair.set(key, [...(extraByPair.get(key) ?? []), row.date]);
     if (row.rejectedAt) rejectedByPair.set(key, { ...(rejectedByPair.get(key) ?? {}), [row.date]: row.rejectedAt });
+    if (row.due) duesByPair.set(key, { ...(duesByPair.get(key) ?? {}), [row.date]: row.due });
   }
   const shownPairs = new Set(pairs.map((pair) => `${pair.classId}:${pair.studentId}`));
   const studentIds = [...new Set(pairs.map((row) => row.studentId))];
@@ -201,6 +204,7 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
       extraDates: [...(extraByPair.get(`${pair.classId}:${pair.studentId}`) ?? [])].sort(),
       ...(rejectedByPair.has(`${pair.classId}:${pair.studentId}`) ? { rejected: rejectedByPair.get(`${pair.classId}:${pair.studentId}`) } : {}),
       ...(keptByPair.has(`${pair.classId}:${pair.studentId}`) ? { kept: [...keptByPair.get(`${pair.classId}:${pair.studentId}`)!].sort() } : {}),
+      ...(duesByPair.has(`${pair.classId}:${pair.studentId}`) ? { dues: duesByPair.get(`${pair.classId}:${pair.studentId}`) } : {}),
       assignedDates: [...new Set(assignedByPair.get(`${pair.classId}:${pair.studentId}`) ?? [])].sort() }] : [];
   });
   // 화면으로는 명단에 선 (반 × 학생)의 기록만 — 넓혀 읽은 지점 전체 기록을 내려보내지 않는다.

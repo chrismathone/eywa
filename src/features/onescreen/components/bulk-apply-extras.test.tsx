@@ -42,7 +42,7 @@ describe("테스트 칸 — 학원 설정이 켠 테스트만, 문항수는 허�
 });
 
 describe("영상 칸 — 대상 행이 있는 줄만", () => {
-  const show = (config: { videoRows: number; linkRows: number; videoCheckRows: number }, value: BulkVideoState = EMPTY_BULK_VIDEO) => {
+  const show = (config: { videoRows: number; linkRows: number; videoCheckRows: number; dueRows?: number }, value: BulkVideoState = EMPTY_BULK_VIDEO) => {
     const onChange = vi.fn();
     const view = render(<BulkVideoFields config={config} value={value} onChange={onChange} />);
     return { onChange, ...view };
@@ -61,18 +61,35 @@ describe("영상 칸 — 대상 행이 있는 줄만", () => {
     cleanup();
     const { onChange } = show({ videoRows: 5, linkRows: 5, videoCheckRows: 0 }, { ...EMPTY_BULK_VIDEO, homework: true });
     fireEvent.click(screen.getByRole("checkbox"));
-    expect(onChange).toHaveBeenCalledWith({ check: null, homework: true, link: true });
+    expect(onChange).toHaveBeenCalledWith({ check: null, homework: true, link: true, due: null });
     cleanup();
     show({ videoRows: 5, linkRows: 0, videoCheckRows: 0 }, { ...EMPTY_BULK_VIDEO, homework: true });
     expect(screen.queryByText("영상 첨부 링크 넣기")).toBeNull();
   });
   it("'없음'으로 바꾸거나 적용 안 함으로 돌리면 링크 넣기도 꺼진다", () => {
-    const on = { check: null, homework: true, link: true } as const;
+    const on = { ...EMPTY_BULK_VIDEO, homework: true, link: true };
     const { onChange } = show({ videoRows: 5, linkRows: 5, videoCheckRows: 0 }, on);
     fireEvent.click(screen.getByRole("button", { name: "없음" }));
-    expect(onChange).toHaveBeenLastCalledWith({ check: null, homework: false, link: false });
+    expect(onChange).toHaveBeenLastCalledWith({ check: null, homework: false, link: false, due: null });
     fireEvent.click(screen.getByRole("button", { name: "적용 안 함" }));
-    expect(onChange).toHaveBeenLastCalledWith({ check: null, homework: null, link: false });
+    expect(onChange).toHaveBeenLastCalledWith({ check: null, homework: null, link: false, due: null });
+  });
+  // 원장 2026-10-15 *"이것도 일괄입력에 넣을 수 있게 배선해주고"* — 마감(7일 · 다음 수업)도 일괄로. '없음'을 고르면 줄이 숨고 값도 버린다.
+  it("마감 줄 — 마감 칸이 준비된 행이 있을 때만 · '있음'·적용 안 함에서 고른다 · '없음'이면 숨고 버린다", () => {
+    const { onChange } = show({ videoRows: 5, linkRows: 0, videoCheckRows: 0, dueRows: 5 }, { ...EMPTY_BULK_VIDEO, homework: true });
+    fireEvent.click(screen.getByRole("button", { name: "다음 수업" }));
+    expect(onChange).toHaveBeenLastCalledWith({ check: null, homework: true, link: false, due: "next" });
+    cleanup();
+    const off = show({ videoRows: 5, linkRows: 0, videoCheckRows: 0, dueRows: 5 }, { ...EMPTY_BULK_VIDEO, homework: true, due: "next" });
+    fireEvent.click(screen.getByRole("button", { name: "없음" }));
+    expect(off.onChange).toHaveBeenLastCalledWith({ check: null, homework: false, link: false, due: null });
+    cleanup();
+    show({ videoRows: 5, linkRows: 0, videoCheckRows: 0, dueRows: 5 }, { ...EMPTY_BULK_VIDEO, homework: false });
+    expect(screen.queryByRole("button", { name: "다음 수업" })).toBeNull();
+    cleanup();
+    // 마감 칸이 준비되지 않았으면(SQL 적용 전) 줄 자체가 없다
+    show({ videoRows: 5, linkRows: 0, videoCheckRows: 0, dueRows: 0 }, { ...EMPTY_BULK_VIDEO, homework: true });
+    expect(screen.queryByRole("button", { name: "다음 수업" })).toBeNull();
   });
   it("고른 검사의 대상을 그 자리에서 밝힌다 — 찍을 칸 수와 바꾸는 칸 수(적용 즉시 기록되므로)", () => {
     const view = render(<BulkVideoFields config={{ videoRows: 0, linkRows: 0, videoCheckRows: 5 }}
@@ -90,8 +107,8 @@ describe("영상 칸 — 대상 행이 있는 줄만", () => {
   it("검사는 같은 값을 다시 누르면 적용 안 함으로", () => {
     const { onChange } = show({ videoRows: 0, linkRows: 0, videoCheckRows: 2 }, { ...EMPTY_BULK_VIDEO, check: "submitted" });
     fireEvent.click(screen.getByRole("button", { name: "완료" }));
-    expect(onChange).toHaveBeenLastCalledWith({ check: null, homework: null, link: false });
+    expect(onChange).toHaveBeenLastCalledWith({ check: null, homework: null, link: false, due: null });
     fireEvent.click(screen.getByRole("button", { name: "미제출" }));
-    expect(onChange).toHaveBeenLastCalledWith({ check: "missing", homework: null, link: false });
+    expect(onChange).toHaveBeenLastCalledWith({ check: "missing", homework: null, link: false, due: null });
   });
 });

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MakeeduSyncBadge } from "./makeedu-sync-badge";
 import { resolveMatrix } from "@/lib/permissions";
@@ -48,6 +48,39 @@ describe("동기화 경고의 확인 경로", () => {
     expect(screen.queryByText("상세 확인")).toBeNull();
     unmount(); g.state = null;
     expect(await MakeeduSyncBadge({ domain: "invoices" })).toBeNull();
+  });
+  it("한 줄을 나눠 쓰는 화면(overlay)은 상세를 배지 아래에 띄운다 — 다른 화면은 흐름 안 그대로", async () => {
+    const floated = render(await MakeeduSyncBadge({ domain: "invoices", overlay: true }));
+    expect(floated.container.querySelector("details")?.className).toContain("relative");
+    const box = floated.container.querySelector('[role="region"]')!.parentElement!;
+    expect(box.className).toContain("absolute");
+    // 반투명 경고색 아래에 불투명 바탕 — 아래 표가 비치지 않게.
+    expect(box.className).toContain("bg-card");
+    floated.unmount();
+    const inline = render(await MakeeduSyncBadge({ domain: "invoices" }));
+    expect(inline.container.querySelector("details")?.className).not.toContain("relative");
+    expect(inline.container.querySelector('[role="region"]')!.parentElement!.tagName).toBe("DETAILS");
+  });
+  it("띄운 상세는 바깥 클릭·Esc(초점이 밖이어도)로 닫히고, 다른 면으로 다시 그리면 닫힌 채 선다", async () => {
+    const view = render(await MakeeduSyncBadge({ domain: "invoices", overlay: true }));
+    // 브라우저처럼 열고 toggle을 보낸다 — 열린 상태가 바깥 클릭 감시까지 이어지는지(배선)를 함께 본다.
+    const open = () => { const d = view.container.querySelector("details")!; d.open = true; fireEvent(d, new Event("toggle")); return d; };
+    const pointer = (type: string) => {
+      const Ctor = (globalThis as { PointerEvent?: typeof MouseEvent }).PointerEvent ?? MouseEvent;
+      const ev = new Ctor(type, { bubbles: true, cancelable: true, clientX: 5, clientY: 5, button: 0 });
+      Object.defineProperty(ev, "isPrimary", { value: true });
+      return ev;
+    };
+    let details = open();
+    act(() => { document.body.dispatchEvent(pointer("pointerdown")); document.body.dispatchEvent(pointer("pointerup")); });
+    expect(details.open).toBe(false);
+    details = open();
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(details.open).toBe(false);
+    // 면 전환(수납 → 교재)은 같은 자리에 다시 그린다 — 열린 상자를 물려받아 새 면 툴바를 덮지 않게.
+    open();
+    view.rerender(await MakeeduSyncBadge({ domain: "textbook_checks", overlay: true }));
+    expect(view.container.querySelector("details")!.open).toBe(false);
   });
   it("영어 화면에서도 경고 확인 경로를 번역하고 원본 경고는 보존한다", async () => {
     g.lang = "en";

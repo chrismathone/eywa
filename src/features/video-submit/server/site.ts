@@ -15,7 +15,6 @@ import {
   phoneEndsWith,
   siteNameMatches,
   SITE_LINK_LOOKBACK_DAYS,
-  siteHomeworkLastDay,
   siteLinkExpiresAt,
   SITE_LINKS_PER_PAIR_PER_DAY,
   SITE_LOOKUPS_PER_HOUR,
@@ -29,6 +28,7 @@ import {
 import { mintSubmitLink } from "./links";
 import { resolveSiteRequest, SITE_ATTEMPTS_TABLE } from "./site-branches";
 import { openHomeworkDates } from "./site-homework";
+import { homeworkDueText } from "@/features/video-homework/due";
 
 type Db = ReturnType<typeof createAdminClient>;
 
@@ -157,9 +157,10 @@ async function findCandidates(
   return { tooMany: false, matched: true, list };
 }
 
-type HomeworkChoice = Candidate & { homeworkDate: string };
+/** 숙제 줄 — `due` = 그 숙제의 마감(그날 포함) · `next` = 선생님이 '다음 수업'으로 고른 마감(due.ts). */
+type HomeworkChoice = Candidate & { homeworkDate: string; due: string; next: boolean };
 /** 고를 수 있는 줄 — 숙제(`homeworkDate`) 또는 숙제 없이 그 반에 올리기(`homeworkDate = null`). */
-type PickChoice = Candidate & { homeworkDate: string | null };
+type PickChoice = Candidate & { homeworkDate: string | null; due?: string; next?: boolean };
 
 /**
  * 숙제 줄 + **숙제 없이 올리기** 줄(학생 × 반마다 하나, 원장 2026-10-13) — 숙제가 먼저, 그 아래 반 줄. 둘 다 같은 후보(번호·이름·지금 다니는 반·
@@ -180,7 +181,7 @@ async function homeworkChoices(db: Db, tenantId: string, list: Candidate[], day:
   const open = await openHomeworkDates(db, tenantId, list.map((c) => ({ studentId: c.studentId, classId: c.classId })), day);
   if (!open) return null;
   return list
-    .flatMap((c) => (open.get(`${c.classId}:${c.studentId}`) ?? []).map((homeworkDate) => ({ ...c, homeworkDate })))
+    .flatMap((c) => (open.get(`${c.classId}:${c.studentId}`) ?? []).map((homework) => ({ ...c, homeworkDate: homework.date, due: homework.due, next: homework.next })))
     .sort((a, b) => b.homeworkDate.localeCompare(a.homeworkDate) || a.className.localeCompare(b.className, "ko") || a.studentName.localeCompare(b.studentName, "ko"))
     .slice(0, SITE_MAX_CHOICES);
 }
@@ -212,7 +213,10 @@ export async function lookupSite(input: { last4: unknown; name: unknown; ip: str
       choices: choices.map((c) => ({
         id: choiceId(site.tenantId, c.studentId, c.classId, c.homeworkDate ?? FREE, day),
         studentLabel: maskStudentName(c.studentName), className: c.className,
-        homeworkLabel: c.homeworkDate ? formatShortKoreanDate(c.homeworkDate) : "", ...(c.homeworkDate ? {} : { free: true as const }),
+        homeworkLabel: c.homeworkDate ? formatShortKoreanDate(c.homeworkDate) : "",
+        // 언제까지 내나(원장 2026-10-15 — 학생이 숙제일을 내는 날로 헷갈려 숙제 없이 올렸다). 마감은 날짜까지 정해져 있어 그대로 적는다.
+        ...(c.homeworkDate && c.due ? { dueLabel: homeworkDueText(c.homeworkDate, c.next ? c.due : null, c.next) } : {}),
+        ...(c.homeworkDate ? {} : { free: true as const }),
       })),
     };
   } catch (error) {
@@ -224,7 +228,7 @@ export async function lookupSite(input: { last4: unknown; name: unknown; ip: str
 /**
  * 그 학생 × 반의 최근 사이트 링크 — **오늘 만든 것**(오래된 순, 끊긴 것 포함)과, **오늘 선생님이 끊은 것**이 있는지.
  * 끊김은 만든 날이 아니라 끊은 날로 본다: 며칠 전 사이트로 연 링크(숙제 기한까지 살아 있다)를 오늘 끊어도 그날은 사이트로 다시 못 연다.
- * 🔴 살아 있을 수 있는 링크를 전부 읽는다(`SITE_LINK_LOOKBACK_DAYS` — 링크는 숙제일 + 7일까지 산다). 하루에 만들 수 있는 수에 상한이 있어
+ * 🔴 살아 있을 수 있는 링크를 전부 읽는다(`SITE_LINK_LOOKBACK_DAYS` — 링크는 숙제의 마감까지 산다, 길어야 숙제일 + 14일). 하루에 만들 수 있는 수에 상한이 있어
  *    줄 수는 작다 — 상한을 넘으면 조용히 자르지 않고 던진다(오늘 줄이 잘려 하루 상한이 새면 안 된다).
  */
 /** 한 학생 × 반의 살아 있을 수 있는 사이트 링크 줄 상한 — 하루 상한 × 거슬러 보는 날수보다 넉넉하다. */
@@ -249,7 +253,7 @@ async function pairLinksToday(db: Db, tenantId: string, c: Candidate, day: strin
 /**
  * 고른 숙제의 제출 링크를 만든다 — 서버가 **같은 뒷 4자리·이름으로 다시 조회**해 그 숙제가 실제로 그 안에 있을 때만(화면이 보낸 지문을 믿지 않는다).
  * 돌려주는 주소엔 고른 숙제일이 실린다(`?h=`) — 제출 화면과 업로드 시작이 그 값을 **다시 확인**해 영상을 그 숙제에 묶는다.
- * 링크는 그 학생 × 반의 안 낸 숙제 중 가장 늦게 끝나는 것의 기한(숙제일 + 7일)까지 — 숙제마다의 기한은 업로드 시작이 따로 막는다.
+ * 링크는 그 학생 × 반의 안 낸 숙제 중 마감이 가장 늦은 것까지(due.ts — 기본 숙제일 + 7일) — 숙제마다의 마감은 업로드 시작이 따로 막는다.
  * 한 학생 × 반이 하루에 만들 수 있는 수에 상한(링크마다 업로드 횟수 제한이 따로 있어, 새 링크로 우회하지 못하게).
  *  · 자정을 넘겨 고른 후보(어제 날짜 지문)도 받는다 — 23:59에 조회하고 00:00에 누른 학생이 막히지 않게.
  *  · 선생님이 오늘 그 학생 × 반의 사이트 링크를 끊었으면 그날은 사이트로 다시 열지 못한다('링크 끊기'가 사이트에도 효력을 갖게).
@@ -275,11 +279,11 @@ export async function openSiteLink(input: { last4: unknown; name: unknown; choic
     const before = await pairLinksToday(db, site.tenantId, picked, day);
     if (before.revokedToday) return { ok: false, code: "limit", error: PAIR_BLOCKED };
     if (before.todayIds.length >= SITE_LINKS_PER_PAIR_PER_DAY) return { ok: false, code: "limit", error: PAIR_BLOCKED };
-    // 링크는 그 학생 × 반의 안 낸 숙제 중 가장 늦게 끝나는 것까지 산다(고른 숙제가 그중 하나다).
-    // 숙제 없이 올리기만 있는 반은 오늘 하루(다음 날 0시까지) — 숙제가 있으면 그 기한까지(같은 링크로 숙제도 올린다).
-    const newest = choices.filter((c) => c.studentId === picked.studentId && c.classId === picked.classId && c.homeworkDate)
-      .reduce<string | null>((max, c) => (!max || c.homeworkDate! > max ? c.homeworkDate : max), null);
-    const lastDay = newest ? siteHomeworkLastDay(newest) : day;
+    // 링크는 그 학생 × 반의 안 낸 숙제 중 **마감이 가장 늦은 것**까지 산다(고른 숙제가 그중 하나다 — 마감은 숙제마다 다를 수 있다, due.ts).
+    // 숙제 없이 올리기만 있는 반은 오늘 하루(다음 날 0시까지) — 숙제가 있으면 그 마감까지(같은 링크로 숙제도 올린다).
+    const lastDue = choices.filter((c) => c.studentId === picked.studentId && c.classId === picked.classId && c.homeworkDate && c.due)
+      .reduce<string | null>((max, c) => (!max || c.due! > max ? c.due! : max), null);
+    const lastDay = lastDue ?? day;
     const minted = await mintSubmitLink(db, {
       tenantId: site.tenantId, studentId: picked.studentId, classId: picked.classId, origin: "site", baseDate: day, expiresAt: siteLinkExpiresAt(lastDay),
     });
