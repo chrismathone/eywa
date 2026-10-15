@@ -31,7 +31,7 @@ export function EstimatedEvidence({ metric }: { metric: Metric }) {
     <>
       <StatTiles items={[
         { label: "대상", value: `${e.targets}건` },
-        { label: "적용 점수", value: metric.value === null ? (rate ? "합계에서 뺌" : "산출불가") : `${fmtScore(metric.value)} / ${metric.max}점` },
+        { label: "적용 점수", value: metric.value === null ? (rate ? "합계에서 제외" : "산출불가") : `${fmtScore(metric.value)} / ${metric.max}점` },
       ]} />
       {e.reference.length ? (
         <>

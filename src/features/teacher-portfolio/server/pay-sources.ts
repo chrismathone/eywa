@@ -11,7 +11,7 @@ import { fetchAllPaged } from "@/lib/supabase/batch";
 import { PAY_OVERRIDE_KEY } from "../evaluation/config";
 import { contractMonthlyPay, type ContractRow } from "../model/contract-pay";
 import { indexEntries, type ManualEntryRow } from "../model/evaluate";
-import { MIN_BILLED_SHARE, payRatioOf, type PayFacts, type PayResult } from "../model/pay-ratio";
+import { MIN_BILLED_SHARE, payDataMonth, payRatioOf, type PayFacts, type PayResult } from "../model/pay-ratio";
 import { rowRevenue } from "../model/pay-revenue";
 import type { PortfolioResult } from "../model/types";
 import { loadMonthRevenue, type MonthRevenue } from "./pay-invoices";
@@ -142,6 +142,7 @@ export type PayPlan = { facts: Map<string, PayFacts>; contracts: Map<string, Con
 /**
  * 이번 집계에서 급여 비율을 낼 칸 — **아직 마감하지 않은 달 전부**(평소엔 진행 중인 달 하나 · 1일 새벽엔 마감할 지난달 · 마감을 미룬 달). 마감한 달은 굳어 있어 다시 셀 필요가 없고,
  * 출석부 조립은 무겁다. 1일 새벽 집계는 집계 끝 날이 지난달 말일이라 마감하는 그 달을 센다(마감 전에 값이 선다).
+ * 🔴 점수 달마다 **재료는 지난달 것**을 읽는다(`payDataMonth` — 원장 2026-10-15) · 결과 키는 점수 달 그대로.
  * 🔴 일시 실패로 마감을 미룬 달(`PayResult.retry`)도 여기 든다 — 두 달로 자르면 미룬 달이 한 달 뒤 계획 밖으로 밀려
  *    '계산 전' 0점으로 마감된다(적대적 재리뷰 2026-10-13). **오래된 달부터** 세서 시간 상한에 밀리지 않게 한다.
  */
@@ -159,21 +160,31 @@ export async function loadPayPlan(input: {
     .flatMap((t) => t.periods.filter((w) => !closed.has(`${t.id}|${w.month}`)).map((w) => ({ teacherId: t.id, month: w.month })))
     .sort((a, b) => a.month.localeCompare(b.month));
   if (!pairs.length) return { facts: new Map(), contracts: new Map() };
-  const [facts, contracts] = await Promise.all([
-    loadSheetFacts({ admin, tenantId, settings: input.settings, pairs, deadline: input.deadline }),
+  const data = pairs.map((p) => ({ teacherId: p.teacherId, month: payDataMonth(p.month) }));
+  const [byData, contracts] = await Promise.all([
+    loadSheetFacts({ admin, tenantId, settings: input.settings, pairs: data, deadline: input.deadline }),
     loadContracts(admin, tenantId, [...new Set(pairs.map((p) => p.teacherId))]),
   ]);
+  const facts = new Map<string, PayFacts>();
+  for (const p of pairs) {
+    const f = byData.get(`${p.teacherId}|${payDataMonth(p.month)}`);
+    if (f) facts.set(`${p.teacherId}|${p.month}`, f);
+  }
   return { facts, contracts };
 }
 
-/** 강사|달 → 비율 — 원장 직접 입력(직접 입력 표의 급여 칸)이 먼저. 입력은 다시 매길 때마다 새로 읽은 것을 쓴다. */
+/**
+ * 강사|달 → 비율 — 원장 직접 입력(직접 입력 표의 급여 칸)이 먼저. 입력은 다시 매길 때마다 새로 읽은 것을 쓴다.
+ * 직접 입력은 **점수 달에 저장된 값**(그 달 창에서 '9월 급여'로 넣는다) · 계약서 월급은 재료의 달(지난달) 것.
+ */
 export function payMapOf(plan: PayPlan, entries: readonly ManualEntryRow[]): Map<string, PayResult> {
   const entriesOf = indexEntries(entries.filter((e) => e.metric_key === PAY_OVERRIDE_KEY));
   const out = new Map<string, PayResult>();
   for (const [key, facts] of plan.facts) {
     const [teacherId, month] = key.split("|") as [string, string];
     const override = entriesOf(teacherId, month).get(PAY_OVERRIDE_KEY)?.value ?? null;
-    const result = payRatioOf(facts, contractPayOf(plan.contracts, teacherId, month), override);
+    const dataMonth = payDataMonth(month);
+    const result = payRatioOf(facts, contractPayOf(plan.contracts, teacherId, dataMonth), override, dataMonth === month ? undefined : dataMonth);
     if (result) out.set(key, result);
   }
   return out;
