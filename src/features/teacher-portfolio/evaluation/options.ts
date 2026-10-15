@@ -74,8 +74,26 @@ export const SATISFACTION_AI_LABEL: Record<SatisfactionOptions["ai"], string> = 
   all: "문구에 안 걸린 글은 모두 AI가 먼저 읽기(반영은 사람이 확인)",
 };
 
-/** 강사 근태의 세는 법 — 지각·결근 한 번을 몇 회로 셀지(결근을 더 무겁게 등). 연차·결재된 휴가·휴원일은 늘 뺀다. */
+/**
+ * 강사 근태의 세는 법(원장 2026-10-15 *"추천으로 진행. 직원마다 일부 출근시간 퇴근시간 다른 직원이 있음"*) — 메이크에듀는 출퇴근 시각만 남기므로
+ * 기준 시각을 aywa가 정한다: 그날 맡은 첫 수업 시작(− `beforeMinutes`분)까지 출근 · 마지막 수업 끝 전에 퇴근하면 조퇴. 출퇴근 시각이 따로
+ * 정해진 직원은 `hours`(요일별 출근·퇴근)가 그날의 기준이다. 지각·결근·조퇴 한 번을 몇 회로 셀지는 가중. 연차·결재된 휴가·휴원일은 늘 뺀다.
+ * ⚠️ 새 칸은 기본값이 있어야 한다 — 저장된 설정(지각·결근 가중만 있던 모양)이 검증에 떨어지면 그 지표가 통째로 기본값으로 돌아간다.
+ */
 const times = z.number().finite().min(0, "0 이상입니다").max(10, "10까지입니다");
-export const punctualityOptionsSchema = z.object({ late: times, absent: times });
+const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "시각은 00:00 모양입니다");
+export const WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
+export const WEEKDAY_LABEL: Record<(typeof WEEKDAYS)[number], string> = { mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일" };
+export const staffHoursSchema = z.object({
+  userId: z.string().uuid(), days: z.array(z.enum(WEEKDAYS)).min(1).max(7), start: hhmm, end: hhmm.nullable(),
+});
+export type StaffHours = z.infer<typeof staffHoursSchema>;
+export const punctualityOptionsSchema = z.object({
+  late: times, absent: times, early: times.default(1),
+  beforeMinutes: z.number().int().min(0).max(240).default(0),
+  /** 이 분까지는 지각·조퇴로 세지 않는다(21:02 퇴근 · 21:05 기준 같은 몇 분 차이 — 실데이터 2026-10-15). */
+  graceMinutes: z.number().int().min(0).max(60).default(5),
+  hours: z.array(staffHoursSchema).max(200).default([]),
+});
 export type PunctualityOptions = z.infer<typeof punctualityOptionsSchema>;
-export const DEFAULT_PUNCTUALITY_OPTIONS: PunctualityOptions = { late: 1, absent: 1 };
+export const DEFAULT_PUNCTUALITY_OPTIONS: PunctualityOptions = { late: 1, absent: 1, early: 1, beforeMinutes: 0, graceMinutes: 5, hours: [] };

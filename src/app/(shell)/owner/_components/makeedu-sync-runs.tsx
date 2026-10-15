@@ -114,6 +114,7 @@ const DOMAIN_LABEL: Record<string, string> = {
   catalog: "교재",
   enrollments: "수강",
   textbook_checks: "교재 체크",
+  staff_attendance: "직원 출퇴근",
 };
 
 // "반영 N건"의 도메인별 내역(rows>0만) — 다음 줄에 "학생 2 · 예비상담 1"처럼.

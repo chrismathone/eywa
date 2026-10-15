@@ -45,6 +45,10 @@ export type ExitRow = {
   reasonLabel: string | null;
   /** 사후상담 여부 — 수강종료는 null(해당 없음). */
   consulted: boolean | null;
+  /** 퇴원 메모 원문(실제 사유가 적힌 곳 — '기타'의 속) — 수강종료는 null. */
+  memo: string | null;
+  /** 장부 정리 일괄 퇴원(`isCleanupWithdrawal`) — 실제 사유가 아니라 사유 통계에서 따로 센다(`breakdown.ts`). 수강종료는 false. */
+  cleanup: boolean;
   /**
    * 등록일 → 퇴원일 일수(`early-exit.ts`) — **퇴원만**. 수강종료·시스템 정리(퇴원일 미상)·등록일을 모르는 줄은 null
    * (판정하지 않는다). 퇴원관리 '등록 후' 필터·띠가 본다.
@@ -133,6 +137,8 @@ type WithdrawnInput = {
   } | null;
   systemBulk: boolean;
   exitSubjects?: string[];
+  memoText?: string | null;
+  cleanup?: boolean;
 };
 
 type SubjectEndedInput = {
@@ -173,6 +179,8 @@ export function toExitRows(withdrawn: readonly WithdrawnInput[], subjectEnded: r
       reasonKey: r.metadata?.reason ?? null,
       reasonLabel: r.withdrawalReason,
       consulted: !!c && (c.adminCalledParent || c.teacherCalledParent || c.talkedWithStudent),
+      memo: r.memoText ?? null,
+      cleanup: r.cleanup ?? false,
       // 시스템 정리는 퇴원일이 장부 날짜라 며칠 만에 그만뒀는지 말할 수 없다.
       tenureDays: r.systemBulk ? null : tenureDays(r.enrolledAt, r.withdrawnAt),
     });
@@ -196,6 +204,8 @@ export function toExitRows(withdrawn: readonly WithdrawnInput[], subjectEnded: r
         // 표시는 원문 보존(‘종강’·‘반 폐지’는 그대로, 표준 키·표기 흔들림만 한글로 — reasonDisplay).
         reasonLabel: reasonDisplay(d.reason),
         consulted: null,
+        memo: null,
+        cleanup: false,
         tenureDays: null,
         activeSubjects: s.activeSubjects,
         onHold: s.status === "on_hold",

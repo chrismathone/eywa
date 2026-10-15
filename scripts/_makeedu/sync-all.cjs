@@ -41,7 +41,7 @@ const TRIGGERED_BY = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 // 스크랩 실패는 scrape.cjs가 목록 단위로 격리하므로(빈 JSON) invoices 적재는 그대로 진행된다.
 // 📌 이전 실행의 withdrawn.json이 남아 낡아도 **양방향으로 안전하게** 실패한다:
 //    재등원한 학생은 활성 수강 가드(④)가 막고, 새로 퇴원한 학생은 목록에 없어 보류될 뿐이다.
-const SCRAPE_LISTS = ["students", "classes", "prospects", "invoices", "withdrawn"];
+const SCRAPE_LISTS = ["students", "classes", "prospects", "invoices", "withdrawn", "staff_attendance"];
 const IMPORTERS = [
   ["students", "import-students-list.cjs"],
   ["classes", "import-classes.cjs"],
@@ -49,6 +49,8 @@ const IMPORTERS = [
   ["invoices", "import-invoices.cjs"],
   // 교재 자동 체크 — scrape가 갱신한 invoices.json(라인 단위)을 소비하므로 invoices 뒤·DB만 접근(Playwright 無).
   ["textbook_checks", "mirror-textbook-checks.cjs"],
+  // 직원 출퇴근(강사평가 근태 — 시각만 옮기고 지각·결근 판정은 aywa가 한다). DB만 접근(Playwright 無).
+  ["staff_attendance", "import-staff-attendance.cjs"],
   // 재원생 상담 증분(마지막 — 자체 Playwright 로그인·상세 fetch. 실패해도 앞 도메인은 무사).
   ["consultations", "sync-consultations-incremental.cjs"],
 ];
@@ -98,6 +100,8 @@ async function withDb(fn) {
 // 실행 로그(0070a) — 실패해도 동기화 자체를 막지 않게 best-effort.
 let runId = null;
 let tenantIdG = null;
+// 직원 출퇴근은 강사평가를 쓰는 지점만(0366a — 직원 포트폴리오 집계가 있는 지점). 꺼진 지점은 화면을 열지도 않는다(기능 스위치 = 워커까지).
+let staffAttendanceOn = false;
 const t0 = Date.now();
 
 async function finishRun(status, { failed = [], error = null, reasons = {} } = {}) {
@@ -148,6 +152,8 @@ async function finishRun(status, { failed = [], error = null, reasons = {} } = {
       insert into makeedu_sync_runs (tenant_id, trigger_source, triggered_by)
       values (${tenantIdG}, ${TRIGGER}, ${TRIGGERED_BY}) returning id`.catch(() => [null]);
     runId = r ? r.id : null;
+    const [g] = await sql`select public.sync_agent_staff_attendance_ready(${tenantIdG}) as ready`.catch(() => [null]);
+    staffAttendanceOn = Boolean(g && g.ready);
     console.log("▶  makeedu 동기화 시작 — tenant:", tenantIdG, "| trigger:", TRIGGER);
   });
   if (skipped) {
@@ -156,7 +162,8 @@ async function finishRun(status, { failed = [], error = null, reasons = {} } = {
   }
 
   // 2) 스크래핑(1 로그인, 4 리스트). --no-scrape면 기존 JSON 재사용(로컬 테스트).
-  if (!SKIP_SCRAPE) run("scrape", "scrape.cjs", [`--list=${SCRAPE_LISTS.join(",")}`]);
+  const lists = SCRAPE_LISTS.filter((k) => k !== "staff_attendance" || staffAttendanceOn);
+  if (!SKIP_SCRAPE) run("scrape", "scrape.cjs", [`--list=${lists.join(",")}`]);
   else console.log("\n(--no-scrape: 기존 JSON 재사용)");
 
   // 3) 임포터(--apply) 순차 — 한 도메인 실패가 나머지를 막지 않게 격리.
@@ -166,6 +173,7 @@ async function finishRun(status, { failed = [], error = null, reasons = {} } = {
   //    run()이 자식 stderr에서 진짜 원인을 뽑아 e.message에 실어 주는데(lastMeaningfulLine) 그걸 버리고 있었다.
   const failed = [];
   for (const [domain, file] of IMPORTERS) {
+    if (domain === "staff_attendance" && !staffAttendanceOn) continue;
     try {
       if (domain === "textbook_checks" && failed.some((f) => f.domain === "invoices")) {
         throw new Error("수납 수집·검증 실패로 교재 자동 체크도 중단합니다");

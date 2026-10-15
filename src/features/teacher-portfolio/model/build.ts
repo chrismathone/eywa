@@ -157,7 +157,7 @@ export function buildPortfolio(d: PortfolioSnapshot, opts: {
     referral: buildReferrals({ referrals: d.referrals ?? [], enrollments: d.enrollments, classes, owner: ctx.owner, options: config.metrics.expansion.referral ?? DEFAULT_REFERRAL_OPTIONS }),
     subjectOf: (id) => classes.get(id)?.subject ?? "",
     classNameOf,
-    sources: buildSourceItems(d, { classes, owner: ctx.owner, holidays: ctx.holidays, config, entriesOf, classNameOf }),
+    sources: buildSourceItems(d, { classes, owner: ctx.owner, holidays: ctx.holidays, config, entriesOf, classNameOf, classDays: ctx.classDays }),
   };
 
   // 수업을 맡는 재직자 — 운영 중인 반의 담임이거나 시간표에 담당으로 적힌 사람.
