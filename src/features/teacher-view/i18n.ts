@@ -1107,6 +1107,15 @@ export const SHEET_DICT = {
     ko: "빈 칸이 없어 채울 게 없습니다(이미 쓴 칸은 덮어쓰지 않습니다)",
     en: "Nothing to fill — written cells are never overwritten",
   },
+  // 가져오기 되돌리기(원장 2026-10-15) — 알림의 [실행 취소] + 버튼 옆 ▾ 메뉴. 손대지 않은 칸만 되돌린다.
+  "month.importUndo.action": { ko: "실행 취소", en: "Undo" },
+  "month.importUndo.more": { ko: "가져오기 되돌리기 메뉴", en: "Undo import menu" },
+  "month.importUndo.menu": { ko: "마지막 가져오기 되돌리기 ({at} · {n}줄)", en: "Undo last import ({at} · {n} rows)" },
+  "month.importUndo.done": { ko: "가져오기를 되돌렸습니다 — {n}줄을 원래대로 돌렸습니다", en: "Import undone — {n} rows restored" },
+  "month.importUndo.doneKept": {
+    ko: "가져오기를 되돌렸습니다 — {n}줄을 원래대로 돌리고, 그 뒤 고쳐 쓰거나 옮긴 {kept}줄은 남겼습니다",
+    en: "Import undone — {n} rows restored; {kept} rows edited or moved afterwards were kept",
+  },
   "month.importAll.truncated": { ko: " · {n}줄은 칸의 20줄 상한이라 못 넣었습니다", en: " · {n} rows skipped (20-row limit per cell)" },
   "month.plannedTag": { ko: "계획", en: "Plan" },
   "month.plannedNo": { ko: "{n}차수", en: "lesson {n}" },
