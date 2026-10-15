@@ -14,6 +14,7 @@ export type PanelId =
   | "billingMonth"
   | "newcomerStages"
   | "changes"
+  | "earlyExits"
   | "billing6"
   | "enrolledTrend"
   | "subjects"

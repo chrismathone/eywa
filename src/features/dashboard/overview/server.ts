@@ -25,6 +25,7 @@ import {
 import { getWithdrawalsInWindow, type WindowWithdrawal } from "@/features/withdrawals/server/window";
 import { getSubjectEndedStudents } from "@/features/withdrawals/server/queries";
 import { includeSubjectEnds } from "./monthly-exits";
+import { tenureDays } from "@/features/withdrawals/early-exit";
 import { loadTeacherWork } from "./teacher-work-server";
 import { selectSubjectView } from "../layout/subject-view";
 import { AREA_MENUS } from "@/features/dashboard/layout/registry";
@@ -261,6 +262,46 @@ async function monthWithdrawals(
         subject: klass.subject,
         program: withdrawalProgram({ lastClassSubject: klass.subject, lastClassEnglishTrack: klass.englishTrack }, settings.operations.subjects),
       }))), ended, win, settings.operations.subjects, (school, grade) => schoolGradeLabel(school, grade) || null),
+  };
+}
+
+/**
+ * '등록 후 3개월 내 퇴원'(원장 2026-10-15) — KPI '퇴원&수업종료'의 퇴원 행과 **같은 행·같은 창**(이번 달 1일 ~ 오늘)의 퇴원 전부에 등록 후 일수를 붙인다.
+ * 30·60·90일 판정은 카드가 `early-exit.ts`로 한다(퇴원관리 '등록 후' 필터와 같은 함수). 수강종료는 싣지 않는다(퇴원만 판정).
+ * 지난 달들(등록·퇴원 추이와 같은 6개월 조회)은 이름 없이 달·일수·과목만 싣는다 — 카드가 달마다 센다.
+ */
+async function monthEarlyExits(
+  rowsPromise: Promise<WindowWithdrawal[]>,
+  today: string,
+): Promise<OverviewData["earlyExits"]> {
+  const month = today.slice(0, 7);
+  const months = monthKeys(today);
+  const win = withdrawalMonthWindow(month, today);
+  const rows = await rowsPromise;
+  // 과목을 못 모으면 마지막 반 과목 — 둘 다 없으면 빈 목록(모든 과목 관리자에게, narrow.ts).
+  const subjectsOf = (row: WindowWithdrawal) =>
+    row.exitClasses.length ? row.exitClasses.map((c) => c.subject) : row.lastClassSubject ? [row.lastClassSubject] : [];
+  const inMonth = (row: WindowWithdrawal) =>
+    inWithdrawalWindow({ withdrawnAt: row.withdrawnAt, systemBulk: false }, win.from, win.to);
+  return {
+    month,
+    months,
+    rows: rows.filter(inMonth).map((row) => ({
+      id: row.id,
+      name: row.name,
+      schoolGrade: schoolGradeLabel(row.school, row.grade) || null,
+      enrolledAt: row.enrolledAt,
+      withdrawnAt: row.withdrawnAt,
+      days: tenureDays(row.enrolledAt, row.withdrawnAt),
+      subjects: subjectsOf(row),
+    })),
+    history: rows
+      .filter((row) => row.withdrawnAt < win.from && months.includes(row.withdrawnAt.slice(0, 7)))
+      .map((row) => ({
+        month: row.withdrawnAt.slice(0, 7),
+        days: tenureDays(row.enrolledAt, row.withdrawnAt),
+        subjects: subjectsOf(row),
+      })),
   };
 }
 
@@ -731,9 +772,9 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
     if (AREA_MENUS[area].every((menu) => allowed.includes(menu))) needed.add(area);
   }
   const needs = (...areas: Area[]) => areas.some((a) => needed.has(a));
-  // 실제 퇴원 행은 KPI와 추이가 공유한다. 과목 종료는 KPI에서만 추가한다.
+  // 실제 퇴원 행은 KPI·추이·등록 후 3개월 내 퇴원이 공유한다. 과목 종료는 KPI에서만 추가한다.
   const withdrawalRows =
-    (allowed.includes("withdrawals") || allowed.includes("students")) && needs("withdrawals", "changes")
+    (allowed.includes("withdrawals") || allowed.includes("students")) && needs("withdrawals", "changes", "earlyExits")
       ? getWithdrawalsInWindow(`${monthKeys(today)[0]}-01`, today)
       : Promise.resolve([] as WindowWithdrawal[]);
   // 최근 60일 콜&상담 — 일정 카드(일정↔상담 연결)와 '상담 진행' 카드가 **같은 한 번의 조회**를 쓴다(두 카드가 같은 상담 집합을
@@ -808,6 +849,8 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
   });
   // ── KPI 여섯 칸(원장 2026-09-11) — 카드·팝업·목적지 화면이 같은 함수를 부른다.
   add("withdrawals", ["withdrawals"], () => monthWithdrawals(withdrawalRows, today, settingsPromise));
+  // 과목 관리자는 행의 과목으로 좁힌다(narrow.ts — KPI '퇴원&수업종료'와 같은 결).
+  add("earlyExits", ["withdrawals"], () => monthEarlyExits(withdrawalRows, today));
   // 과목 관리자 = 상담 과목이 담당 과목이거나 과목을 안 고른 상담(원장 2026-10-14 — 모르는 것은 모두에게).
   addSliced("intake", ["enrollment"], async () => {
     const rows = await getIntakeOnDay(today);

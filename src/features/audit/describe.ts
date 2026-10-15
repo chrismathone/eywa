@@ -683,6 +683,12 @@ export function auditDetail(
         closed.length ? `마감 ${closed.join(", ")}` : null,
       );
     }
+    case "teacher_evaluation_satisfaction": {
+      const kind = { apply: "글 반영", dismiss: "글 무시", cancel: "글 반영 취소", claim_add: "클레임·칭찬 넣기", claim_cancel: "클레임·칭찬 취소" }[String(m.kind)] ?? null;
+      const points = num(m.points);
+      const day = typeof m.postedOn === "string" ? m.postedOn : typeof m.occurredOn === "string" ? m.occurredOn : null;
+      return join(kind, m.verdict === "plus" ? "가점" : m.verdict === "minus" ? "감점" : null, points === null ? null : `${points > 0 ? "+" : ""}${points}점`, day);
+    }
     case "teacher_portfolio_recompute": {
       const months = Array.isArray(m.months) ? m.months.filter((v): v is string => typeof v === "string") : [];
       const closed = num(m.closedRows);

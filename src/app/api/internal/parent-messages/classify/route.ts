@@ -1,6 +1,9 @@
 import { authorizeInternalWorker } from "@/features/sync-agent/server/internal-auth";
 import { NextResponse } from "next/server";
 import { classifyPendingParentMessages } from "@/features/attendance/parent-alerts/server/classify";
+import { judgeParentSatisfaction } from "@/features/teacher-portfolio/server/satisfaction-judge";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { reportWarning } from "@/lib/observability/report-error";
 
 /**
  * ClassNote 인바운드 워커 전용 — 방금 저장한 학부모 연락의 **출결 의도 분류 킥**.
@@ -27,7 +30,12 @@ export async function POST(request: Request) {
   }
   try {
     const result = await classifyPendingParentMessages(worker.tenantId ?? undefined);
-    return NextResponse.json({ ok: true, ...result });
+    // 강사평가 학부모 만족도 — 출결 연락이 아닌 글을 판정한다(같은 킥 = 명시 트리거). 실패해도 출결 분류 응답은 그대로(따로 다음 킥이 잇는다).
+    const satisfaction = await judgeParentSatisfaction(createAdminClient(), worker.tenantId ?? undefined).catch((e: unknown) => {
+      reportWarning("학부모 만족도 판정 실패", { scope: "parent-messages/classify", message: e instanceof Error ? e.message : String(e) });
+      return null;
+    });
+    return NextResponse.json({ ok: true, ...result, satisfaction });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     return NextResponse.json({ ok: false, error: worker.tenantId ? "classification_failed" : message }, { status: 500 });

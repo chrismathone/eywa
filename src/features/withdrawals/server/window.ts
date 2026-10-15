@@ -71,6 +71,8 @@ export type WindowWithdrawal = {
   name: string;
   school: string | null;
   grade: string | null;
+  /** 등록일(`students.enrolled_at`) — 운영실 '등록 후 3개월 내 퇴원'(`early-exit.ts`) 재료. 모르면 null. */
+  enrolledAt: string | null;
   withdrawnAt: string;
   lastClassName: string | null;
   lastClassSubject: string | null;
@@ -103,13 +105,14 @@ export async function getWithdrawalsInWindow(from: string, to: string): Promise<
     name: string;
     school: string | null;
     grade: string | null;
+    enrolled_at: string | null;
     withdrawn_at: string | null;
     notes: string | null;
     withdrawal_metadata: unknown;
   }>((f, t) =>
     supabase
       .from("students")
-      .select("id, name, school, grade, withdrawn_at, notes, withdrawal_metadata")
+      .select("id, name, school, grade, enrolled_at, withdrawn_at, notes, withdrawal_metadata")
       .eq("status", "withdrawn")
       .gte("withdrawn_at", from)
       .lte("withdrawn_at", to)
@@ -160,6 +163,7 @@ export async function getWithdrawalsInWindow(from: string, to: string): Promise<
         name: s.name,
         school: s.school,
         grade: s.grade,
+        enrolledAt: s.enrolled_at ? s.enrolled_at.slice(0, 10) : null,
         withdrawnAt: (s.withdrawn_at ?? "").slice(0, 10),
         lastClassName: klass.className,
         lastClassSubject: klass.subject,

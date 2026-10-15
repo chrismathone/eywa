@@ -19,6 +19,8 @@ export function sensitiveReason(id: string, role: Bundle): string | null {
   if (id === "panel:staff") return "직원 구성(역할·과목별 인원)이 보입니다";
   if (role === "subject" && id === "panel:sheets") return "담당 과목 강사 시트의 작성률이 보입니다";
   if (role === "subject" && id === "kpi:withdrawals") return "담당 과목 퇴원 학생 명단이 보입니다";
+  // ④ 과목 관리자 퇴원 명단과 같은 성격 — 등록 후 3개월 안에 그만둔 학생 이름이 보인다(2026-10-15).
+  if (role === "subject" && id === "panel:earlyExits") return "담당 과목 조기 퇴원 학생 명단이 보입니다";
   return null;
 }
 

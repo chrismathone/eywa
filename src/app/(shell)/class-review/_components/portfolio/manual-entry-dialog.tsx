@@ -9,12 +9,12 @@ import { Dialog, DialogClose, DialogContent, DialogTitle } from "@/components/ui
 import { Input } from "@/components/ui/input";
 import type { ManualMetricItem, StoredPeriod } from "@/features/teacher-portfolio/model/types";
 import { loadEvaluationEntries, saveEvaluationEntries, type EntryDraft } from "@/features/teacher-portfolio/server/evaluation-actions";
-import { PAY_OVERRIDE_KEY } from "@/features/teacher-portfolio/evaluation/config";
+import { PAY_OVERRIDE_KEY, PUNCTUALITY_OVERRIDE_KEY } from "@/features/teacher-portfolio/evaluation/config";
 import { itemLabel, monthName } from "@/features/teacher-portfolio/view";
 
 type Draft = Record<string, { value: string; note: string }>;
 const NUMBER = /^-?\d+(\.\d+)?$/;
-/** 창의 한 줄 — 원장이 만든 지표, 또는 매출 대비 급여의 급여 직접 입력(`PAY_OVERRIDE_KEY`). */
+/** 창의 한 줄 — 원장이 만든 지표 · 매출 대비 급여의 급여 직접 입력(`PAY_OVERRIDE_KEY`) · 강사 근태의 그 달 횟수(`PUNCTUALITY_OVERRIDE_KEY`). */
 type EntryRow = { key: string; label: string; hint: string; reason: string };
 
 function rowsOf(period: StoredPeriod): EntryRow[] {
@@ -26,6 +26,13 @@ function rowsOf(period: StoredPeriod): EntryRow[] {
     rows.push({
       key: PAY_OVERRIDE_KEY, label: "급여(세전) 직접 입력", hint: "원 · 매출 대비 급여",
       reason: "비우면 계약서 월급 → 출석부 실급여 순으로 씁니다. 넣은 금액은 이 창에서만 보이고, 포트폴리오에는 급여 비율로만 반영됩니다(10만 원 이상).",
+    });
+  }
+  // 강사 근태를 켠 달 — 출퇴근 기록이 아직 안 들어오는 달은 원장이 그 달 지각·결근 횟수를 넣는다(비우면 출퇴근 기록에서 센다).
+  if (period.items.some((m) => m.id === "punctuality" && !m.off)) {
+    rows.push({
+      key: PUNCTUALITY_OVERRIDE_KEY, label: "강사 근태 — 지각·결근 횟수", hint: "회 · 강사 근태",
+      reason: "지금은 출퇴근 기록을 가져오지 않아(메이크에듀 출퇴근 가져오기 준비 중) 이 횟수로 매깁니다. 비우면 자료 없음입니다. 결재된 휴가로 쉰 날은 빼고 세 주세요.",
     });
   }
   return rows;

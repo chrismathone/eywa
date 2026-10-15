@@ -82,6 +82,31 @@ describe("과목 관리자 — 담당 과목으로 좁히기(서버)", () => {
     expect(korean.mathSheet).toBeUndefined();
   });
 
+  it("등록 후 3개월 내 퇴원 — 끝난 과목 중 하나라도 담당이면(두 과목은 양쪽에), 과목을 모르면 모두에게", () => {
+    const withEarly = {
+      ...sections,
+      earlyExits: ok({
+        month: "2026-10",
+        rows: [
+          { id: "e1", subjects: ["math"] },
+          { id: "e2", subjects: ["english"] },
+          { id: "e3", subjects: ["english", "math"] },
+          { id: "e4", subjects: [] },
+        ],
+        // 지난 달들도 같은 판정으로 좁힌다(달마다 칸이 학원 전체 값으로 남지 않게).
+        history: [
+          { month: "2026-09", days: 10, subjects: ["math"] },
+          { month: "2026-09", days: 20, subjects: ["english"] },
+          { month: "2026-08", days: 30, subjects: [] },
+        ],
+      }),
+    } as unknown as Sections;
+    const math = narrowBySubject(withEarly, ["math"], groupOf, false).earlyExits?.data;
+    expect(math?.rows.map((r) => r.id)).toEqual(["e1", "e3", "e4"]);
+    expect(math?.history.map((h) => h.days)).toEqual([10, 30]);
+    expect(narrowBySubject(withEarly, ["english"], groupOf, false).earlyExits?.data?.rows.map((r) => r.id)).toEqual(["e2", "e3", "e4"]);
+  });
+
   it("과목을 모르는 결석·첫수업 학생은 모든 과목 관리자에게(원장 2026-10-14 결정 1)", () => {
     const unknown = { ...sections,
       absent: ok({ date: "2026-09-30", absent: [{ studentId: "u", name: "모", subject: null, classes: [], preNotified: false, statuses: ["absent"] }], partial: [] }),

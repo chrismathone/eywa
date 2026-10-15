@@ -13,6 +13,7 @@ import type {
 import {
   byId, CLASS_COLUMNS, ENROLLMENT_COLUMNS, futureEnrollmentRows, nonRealStudents, paged, SCHEDULE_COLUMNS, studentReasonRows, toTransitions, transitionRows,
 } from "./churn-source";
+import { fetchEvaluationSourceRows, toEvaluationSources } from "./evaluation-sources";
 
 /**
  * 직원 포트폴리오 계산의 입력 — 한 지점의 최근 7개월 원자료.
@@ -99,7 +100,7 @@ export async function loadPortfolioSnapshot(
   const [
     tenantRes, testStudents, users, classes, liveSchedules, endedSchedules, enrollments, attendance, reportsByDate,
     reportsByCover, followUps, consulted, reviewDocs, transitions, delegations, invoices, makeupByAbsence, makeupByDate,
-    futureEnrollments, studentReasons, referrals, touches,
+    futureEnrollments, studentReasons, referrals, touches, sourceRows,
   ] = await Promise.all([
     table("tenants").select("id, name").eq("id", tenantId).maybeSingle(),
     nonRealStudents(admin, tenantId),
@@ -137,14 +138,18 @@ export async function loadPortfolioSnapshot(
         .eq("table_name", "attendance_records").in("op", ["INSERT", "UPDATE"]).not("actor_id", "is", null).not("row_id", "is", null)
         .gte("created_at", dayStartIso(touchesSince)).order("created_at").order("id").range(a, b))
       : Promise.resolve([]),
+    // 성적 관리 · 학부모 만족도 · 강사 근태의 재료(새 표가 없는 DB에선 그 칸만 null — #95). 정리는 테스트 학생·반 과목을 안 뒤에.
+    fetchEvaluationSourceRows(admin, tenantId, { from, end }),
   ]);
   if (tenantRes.error || !tenantRes.data) throw new Error(`지점 조회 실패: ${tenantRes.error?.message ?? "없는 지점"}`);
 
   const test = testStudents;
+  const subjectOfClass = new Map(classes.map((c) => [c.id, c.subject]));
   const [firstReport, firstAttendance] = await Promise.all([
     firstRecordDay(admin, tenantId, "report", test),
     firstRecordDay(admin, tenantId, "attendance", test),
   ]);
+  const sources = toEvaluationSources(sourceRows, { isTest: (id) => test.has(id), subjectOfClass: (id) => subjectOfClass.get(id) ?? null });
   const real = <T extends { student_id: string }>(rows: T[]) => rows.filter((row) => !test.has(row.student_id));
   const tuition = real(invoices);
   const terms = await fetchAllPagedInChunks<SnapshotTerm>(tuition.map((i) => i.id), (chunk, a, b) =>
@@ -170,6 +175,7 @@ export async function loadPortfolioSnapshot(
     makeupLegacy: real(byId(makeupByAbsence, makeupByDate)),
     futureEnrollments: real(futureEnrollments), studentReasons,
     attendanceTouches: touches.flatMap((t): SnapshotAttendanceTouch[] => { const day = kstDateOf(t.created_at); return day ? [{ row_id: t.row_id, actor_id: t.actor_id, day }] : []; }),
+    sources,
     referrals: referrals.filter((r) => !(r.student_id && test.has(r.student_id)) && !(r.referrer_student_id && test.has(r.referrer_student_id))),
   };
 }

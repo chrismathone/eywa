@@ -138,3 +138,11 @@ export function pickWeek(weeks: readonly WeekGroup<unknown>[], chosen: number | 
 export function followAnchor(w: Pick<PeriodWindow, "start" | "end">, row: FollowRow): string | null {
   return row.day && row.day >= w.start && row.day <= w.end ? row.day : row.due;
 }
+
+/**
+ * 계산 전 자리의 안내 — 2026-10-15 전에 저장된 달은 "…단계에서 들어옵니다"로 굳어 있다(그 단계는 이미 들어왔다).
+ * 그 문장은 보일 때 바꿔 적는다(저장 행은 그대로 — 마감한 달은 바꾸지 않는다).
+ */
+export function shownReason(m: { id: string; reason: string; uncounted?: boolean }): string {
+  return m.uncounted && /단계에서 들어/.test(m.reason) ? "이 지표를 세기 시작(2026-10-15)하기 전에 매긴 달이라 '계산 전'으로 남아 있습니다." : m.reason;
+}

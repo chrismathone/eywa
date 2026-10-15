@@ -9,7 +9,7 @@ import { reportWarning } from "@/lib/observability/report-error";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { z } from "zod";
-import { evaluationConfigSchema, issueMessage, PAY_OVERRIDE_KEY, resolveEvaluationConfig } from "../evaluation/config";
+import { evaluationConfigSchema, issueMessage, PAY_OVERRIDE_KEY, PUNCTUALITY_OVERRIDE_KEY, resolveEvaluationConfig } from "../evaluation/config";
 import { loadEvaluationConfig, loadTeacherEntries, saveEvaluationConfig, saveManualEntries } from "./evaluation-store";
 import { getPortfolioGate } from "./queries";
 import { refreshTenantPortfolio } from "./refresh";
@@ -100,7 +100,7 @@ export async function saveEvaluationEntries(month: string, input: unknown): Prom
       fetchInChunks<{ teacher_id: string; closed_at: string | null }>(teacherIds, (chunk) =>
         admin.from("teacher_portfolio_months").select("teacher_id, closed_at").eq("tenant_id", gate.tenantId).eq("month", month).in("teacher_id", chunk)),
     ]);
-    keys = new Set([...config.manual.map((m) => m.key), PAY_OVERRIDE_KEY]);
+    keys = new Set([...config.manual.map((m) => m.key), PAY_OVERRIDE_KEY, PUNCTUALITY_OVERRIDE_KEY]);
     known = new Set(users.map((u) => u.id));
     closed = new Set(months.filter((m) => m.closed_at).map((m) => m.teacher_id));
   } catch (e) {
@@ -108,11 +108,11 @@ export async function saveEvaluationEntries(month: string, input: unknown): Prom
     return { ok: false, error: "입력을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요" };
   }
   if (rows.some((r) => closed.has(r.teacherId))) return { ok: false, error: "마감한 달이라 입력해도 점수가 바뀌지 않습니다" };
-  // 칸마다 범위 — 원장이 만든 지표는 ±100만(총점 칸이 넘치지 않게), 급여 직접 입력은 10만~1억 원(한 달 급여, 세전).
+  // 칸마다 범위 — 원장이 만든 지표는 ±100만(총점 칸이 넘치지 않게), 급여 직접 입력은 10만~1억 원(한 달 급여, 세전), 근태 횟수는 0~100.
   //   급여 칸에 0·1 같은 값이 들어가면 비율 0%로 만점이 된다 — 계약서 월급을 읽는 하한과 같은 10만 원부터 받는다.
-  if (rows.some((r) => r.value !== null && (r.metricKey === PAY_OVERRIDE_KEY ? r.value < 100_000 : Math.abs(r.value) > 1_000_000))) {
-    return { ok: false, error: "입력 값의 범위를 확인해 주세요(직접 만든 지표는 ±100만, 급여는 10만 원 이상)" };
-  }
+  const outOfRange = (r: (typeof rows)[number]) => r.value !== null && (r.metricKey === PAY_OVERRIDE_KEY ? r.value < 100_000
+    : r.metricKey === PUNCTUALITY_OVERRIDE_KEY ? r.value < 0 || r.value > 100 : Math.abs(r.value) > 1_000_000);
+  if (rows.some(outOfRange)) return { ok: false, error: "입력 값의 범위를 확인해 주세요(직접 만든 지표는 ±100만, 급여는 10만 원 이상, 근태 횟수는 0~100)" };
   const clean = rows.filter((r) => keys.has(r.metricKey) && known.has(r.teacherId));
   // 그사이 지표가 지워졌거나 사람이 이 지점에 없으면 그 칸은 쓸 곳이 없다 — 말없이 버리지 않고 다시 열게 한다.
   if (clean.length < rows.length) return { ok: false, error: "지표 설정이 바뀌었습니다. 창을 닫고 다시 열어 주세요" };

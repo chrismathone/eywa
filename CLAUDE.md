@@ -117,7 +117,7 @@ provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어�
 
 | Tier | Upstage (폴백) | Anthropic | DeepSeek | 용도 |
 |---|---|---|---|---|
-| `fast` | `solar-pro3` | **`claude-haiku-4-5`** | `deepseek-v4-flash` | **학부모 멘트 전용**(유일한 소비처 = `classnote_ment`). 🔴 deepseek 폴백은 **v4-flash**(원장 2026-08-28 *"haiku -> 폴백 deepseek v4 flash"*) — v4-pro를 걸었더니 자동작성 한 번에 **86초**(추론 6,505토큰)라 폴백이 또 다른 장애가 됐다. flash는 7.3초. **되돌리지 말 것**(같은 날 *"flash 말고 v4 pro"*를 실측 보고 뒤집은 것). |
+| `fast` | `solar-pro3` | **`claude-haiku-4-5`** | `deepseek-v4-flash` | **학부모 멘트** `classnote_ment` + **학부모 글 만족도 판정** `parent_satisfaction`(강사평가 · 문구로 애매한 글만 · DeepSeek flash 먼저 — 원장 2026-10-13). 🔴 deepseek 폴백은 **v4-flash**(원장 2026-08-28 *"haiku -> 폴백 deepseek v4 flash"*) — v4-pro를 걸었더니 자동작성 한 번에 **86초**(추론 6,505토큰)라 폴백이 또 다른 장애가 됐다. flash는 7.3초. **되돌리지 말 것**(같은 날 *"flash 말고 v4 pro"*를 실측 보고 뒤집은 것). |
 | `balanced` | `solar-pro3` | `claude-sonnet-5` | **`deepseek-v4-pro`** | 경량 호출 기본값 + **전사 분석 3종 기본**(아래). |
 | `reasoning` | — (없음) | `claude-opus-4-7` | — | **금지** (명시 요청 시만). reasoning은 Anthropic 고정. |
 
@@ -150,7 +150,7 @@ provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어�
 | `ENROLLMENT` | enrollment_analysis · enrollment_form_extract · enrollment_prep_brief | DeepSeek(분석·브리프) · Claude(폼) |
 | `CONSULTATIONS` | consultation_analysis · student_care | DeepSeek(분석) · Claude(케어) |
 | `BRIEFING` | daily_briefing | Claude |
-| `ATTENDANCE` | attendance_recap · parent_attendance_intent · parent_attendance_jev_shadow | DeepSeek · TypeSafe(비교 전용) |
+| `ATTENDANCE` | attendance_recap · parent_attendance_intent · parent_attendance_jev_shadow · parent_satisfaction | DeepSeek · TypeSafe(비교 전용) |
 | `NOTICE` | notice_translate | DeepSeek |
 | `STAFF` | staff_contract_pdf · staff_contract_pdf_ocr | Claude(OCR은 **Claude 전용**) |
 
@@ -415,6 +415,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - 신규생 관리 탭 = 신입 등록 후 90일 체크리스트 · 기준일이 둘이다
 - 신규생 체크 ↔ 원생상담 = 반자동(상담 등록 화면에서 사람이 확정) · AI 판정 없음 · 손 체크가 이긴다
 - 퇴원관리 = 퇴원 + 수강종료 한 목록(줄마다 라벨) · 기간 직접 지정 · 시간표 '퇴원'은 과목 단위라 뜻이 다르다(기준 카드로 밝힘)
+- 등록 후 3개월 내 퇴원 = 등록일(`enrolled_at`)부터 30·60·90일(누적) · 퇴원만(수강종료 제외) · 판정 못 하는 퇴원은 세지 않는다 · 운영실 위젯은 이번 달 + 달마다 칸(`early-exit.ts` 한 벌)
 - 메뉴에서 '학생'은 '원생'이라 부른다
 - 메뉴 '등록상담'은 '콜&상담'이라 부른다
 - 강사(teacher) = 학생 기록 열람 전용
@@ -476,7 +477,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - 급여명세서 열람 = 원장 역할 + 학원 설정에서 지정한 사람(코드 명단 없음 · 원장이 아닌 사람은 지정돼야 본다)
 
 ### 직원·권한·전자결재·연차 → [`docs/decisions/staff.md`](docs/decisions/staff.md)
-- 직원 포트폴리오 = 직원 평가의 내부 탭(`?tab=portfolio`) · 매월 1일 새 점수·말일 마감·마감 뒤 보충해도 그대로 · 8개 항목 100점 · 마감한 달은 DB가 굳힌다(0357a · 예외 = 원장 지시로 4~9월을 10월 구성으로 다시 집계 2026-10-14) · 원장 역할만 본다 · 직원 평가 메뉴(두 탭)는 당분간 실험실 메뉴 · 침산만 · 지표·만점·점수 규칙은 학원 설정 → 강사평가(0359a)에서 원장이 고친다(자료 없음 = 지표의 규칙, 기본 0점 · 만점 합계는 100점이 아니어도 된다) · 기본 구성 = 원장 8개 항목(옛 항목은 꺼 둠 · 계산 전 지표는 '계산 전') · 구성 저장·불러오기(0360a) 연다 · 보고서·출결 = 본인이 수업 당일에 쓴 것만 작성 · 원생상담 = 담임 반 학생 상담 비율 · 급여 비율의 매출 = 청구서의 그 반 금액(회차 확정 전에도 · 이름이 안 맞는 영어 항목은 짝이 하나일 때 바로 · 프리랜서 단가 대기·일시 실패만 다음 달 말까지 마감 미룸) · 원생 소개 = 콜&상담 '소개한 사람'으로 이은 것만 · 항목별 내역 맨 위 '점수 기준' 상자
+- 직원 포트폴리오 = 직원 평가의 내부 탭(`?tab=portfolio`) · 매월 1일 새 점수·말일 마감·마감 뒤 보충해도 그대로 · 8개 항목 100점 · 마감한 달은 DB가 굳힌다(0357a · 예외 = 원장 지시로 4~9월을 10월 구성으로 다시 집계 2026-10-14) · 원장 역할만 본다 · 직원 평가 메뉴(두 탭)는 당분간 실험실 메뉴 · 침산만 · 지표·만점·점수 규칙은 학원 설정 → 강사평가(0359a)에서 원장이 고친다(자료 없음 = 지표의 규칙, 기본 0점 · 만점 합계는 100점이 아니어도 된다) · 기본 구성 = 원장 8개 항목(옛 항목은 꺼 둠 · 2026-10-15부터 성적·만족도·근태도 계산 — 재료가 없을 때만 '계산 전') · 구성 저장·불러오기(0360a) 연다 · 보고서·출결 = 본인이 수업 당일에 쓴 것만 작성 · 원생상담 = 담임 반 학생 상담 비율 · 급여 비율의 매출 = 청구서의 그 반 금액(회차 확정 전에도 · 이름이 안 맞는 영어 항목은 짝이 하나일 때 바로 · 프리랜서 단가 대기·일시 실패만 다음 달 말까지 마감 미룸) · 원생 소개 = 콜&상담 '소개한 사람'으로 이은 것만 · 성적·만족도 글은 그날 다니던 반 담임에게 · 만족도 = 문구 즉시 + 애매하면 확인 대기(0364a) · 근태 = 출퇴근 기록 또는 원장 월 입력(0365a · 메이크에듀 가져오기 미완) · 직원 비교 표 · 항목별 내역 맨 위 '점수 기준' 상자
 - 직원 편집 창구는 셋이고 내용이 안 겹친다 — 겹치는 칸은 이력서가 단일 소스
 - super_admin은 새로 만드는 어떤 제한 명단·게이트도 자동 통과한다
 - super_admin 계정의 역할·재직 상태·삭제는 앱에서 못 바꾼다 — 운영자 스크립트 + 원장 명시 승인만(반드시 먼저 묻기)

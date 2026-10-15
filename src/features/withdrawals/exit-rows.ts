@@ -16,6 +16,7 @@
 import { inWithdrawalWindow, recentExitWindow } from "./window";
 export { withdrawalSubjects, WITHDRAW_SUBJECT_SPAN_DAYS } from "./window";
 import { normalizeReason, reasonDisplay } from "./types";
+import { tenureDays } from "./early-exit";
 
 export type ExitKind = "withdrawn" | "subject-ended";
 
@@ -44,6 +45,11 @@ export type ExitRow = {
   reasonLabel: string | null;
   /** 사후상담 여부 — 수강종료는 null(해당 없음). */
   consulted: boolean | null;
+  /**
+   * 등록일 → 퇴원일 일수(`early-exit.ts`) — **퇴원만**. 수강종료·시스템 정리(퇴원일 미상)·등록일을 모르는 줄은 null
+   * (판정하지 않는다). 퇴원관리 '등록 후' 필터·띠가 본다.
+   */
+  tenureDays: number | null;
   /** 수강종료 줄 — 아직 다니는 과목(표시). */
   activeSubjects?: string[];
   /** 수강종료 줄 — 학생이 휴원 중. */
@@ -114,6 +120,8 @@ type WithdrawnInput = {
   name: string;
   school: string | null;
   grade: string | null;
+  /** 등록일(`students.enrolled_at`) — 조기 퇴원 판정 재료. */
+  enrolledAt?: string | null;
   withdrawnAt: string | null;
   lastClassName: string | null;
   lastClassSubject: string | null;
@@ -165,6 +173,8 @@ export function toExitRows(withdrawn: readonly WithdrawnInput[], subjectEnded: r
       reasonKey: r.metadata?.reason ?? null,
       reasonLabel: r.withdrawalReason,
       consulted: !!c && (c.adminCalledParent || c.teacherCalledParent || c.talkedWithStudent),
+      // 시스템 정리는 퇴원일이 장부 날짜라 며칠 만에 그만뒀는지 말할 수 없다.
+      tenureDays: r.systemBulk ? null : tenureDays(r.enrolledAt, r.withdrawnAt),
     });
   }
   for (const s of subjectEnded) {
@@ -186,6 +196,7 @@ export function toExitRows(withdrawn: readonly WithdrawnInput[], subjectEnded: r
         // 표시는 원문 보존(‘종강’·‘반 폐지’는 그대로, 표준 키·표기 흔들림만 한글로 — reasonDisplay).
         reasonLabel: reasonDisplay(d.reason),
         consulted: null,
+        tenureDays: null,
         activeSubjects: s.activeSubjects,
         onHold: s.status === "on_hold",
       });

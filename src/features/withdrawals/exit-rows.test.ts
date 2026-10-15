@@ -93,6 +93,29 @@ describe("toExitRows — 한 목록", () => {
   it("날짜 늦은 순", () => {
     expect(sortExitRows([...rows]).map((r) => r.name)).toEqual(["장건욱", "김도연"]);
   });
+  it("등록 후 일수 = 퇴원만 · 시스템 정리와 수강종료는 판정 안 함(원장 2026-10-15 조기 퇴원 추적)", () => {
+    const base = {
+      name: "학생",
+      school: null,
+      grade: null,
+      lastClassName: null,
+      lastClassSubject: null,
+      withdrawalReason: null,
+      metadata: null,
+    };
+    const [early, bulk, unknown] = toExitRows(
+      [
+        { ...base, id: "a", enrolledAt: "2026-08-10", withdrawnAt: "2026-09-01", systemBulk: false },
+        { ...base, id: "b", enrolledAt: "2026-08-10", withdrawnAt: "2026-09-01", systemBulk: true },
+        { ...base, id: "c", enrolledAt: null, withdrawnAt: "2026-09-01", systemBulk: false },
+      ],
+      [],
+    );
+    expect(early!.tenureDays).toBe(22);
+    expect(bulk!.tenureDays).toBeNull();
+    expect(unknown!.tenureDays).toBeNull();
+    expect(rows[1]!.tenureDays).toBeNull();
+  });
 });
 
 describe("parseType", () => {

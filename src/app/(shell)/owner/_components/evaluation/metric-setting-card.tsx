@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { MISSING_LABEL, missingSchema, type ManualMetricSetting, type MetricSetting } from "@/features/teacher-portfolio/evaluation/config";
 import { ChurnOptionsEditor } from "./churn-options";
 import { ReferralOptionsEditor } from "./referral-options";
+import { GradesOptionsEditor, SatisfactionOptionsEditor } from "./source-options";
 import { NumField, ScoringEditor } from "./scoring-editor";
 
 /** 지표 한 장 — 켜기 · 이름 · 만점 · 차례 · 원래 수치 · 점수 규칙 · 자료가 없을 때. 직접 만든 지표는 단위·설명과 삭제가 더 있다. */
@@ -62,6 +63,11 @@ export function MetricSettingCard({ setting, measure, pending, unit, manual, pos
       )}
       {setting.churn ? <ChurnOptionsEditor label={label} value={setting.churn} onChange={(churn) => set({ churn })} /> : null}
       {setting.referral ? <ReferralOptionsEditor label={label} value={setting.referral} onChange={(referral) => set({ referral })} /> : null}
+      {setting.grades ? <GradesOptionsEditor label={label} value={setting.grades} onChange={(grades) => set({ grades })} /> : null}
+      {/* 글 칸은 칸을 떠날 때 읽는다 — 구성 불러오기처럼 밖에서 값이 바뀌면 새로 그린다(key). */}
+      {setting.satisfaction ? <SatisfactionOptionsEditor key={JSON.stringify([setting.satisfaction.positive, setting.satisfaction.negative, setting.satisfaction.ignore, setting.satisfaction.hedges])}
+        label={label} value={setting.satisfaction} onChange={(satisfaction) => set({ satisfaction })} /> : null}
+      {/* 강사 근태의 지각·결근 가중(세는 법)은 출퇴근 가져오기가 붙은 뒤에 연다 — 지금은 원장 월 입력만 있어 바꿔도 결과가 같다(소비처 없는 설정 노출 금지). */}
       <ScoringEditor label={label} scoring={setting.scoring} max={setting.max} unit={unit} onChange={(scoring) => set({ scoring })} />
       <label className="flex flex-wrap items-center gap-2 text-sm">
         <span className="font-medium">자료가 없을 때</span>

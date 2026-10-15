@@ -50,6 +50,16 @@ import { loadWithdrawalTrendPrefs } from "@/features/withdrawals/server/trend-pr
 import { WithdrawalListLayout } from "./_components/list-layout";
 import { CustomRange } from "./_components/custom-range";
 import { withdrawalPage, withdrawalPageSize } from "@/features/withdrawals/list-pagination";
+import {
+  EARLY_MAX_DAYS,
+  EARLY_SPANS,
+  earlyCounts,
+  earlySpan,
+  isEarlyWithin,
+  parseEarly,
+  type EarlyKey,
+} from "@/features/withdrawals/early-exit";
+import { EarlyExitBand } from "./_components/early-exit-band";
 
 export const metadata = { title: "퇴원관리 — 에이와" };
 
@@ -135,6 +145,7 @@ type WdHrefParams = {
   subject: string;
   program: Program | null;
   consult: ConsultKey;
+  early: EarlyKey | null;
 };
 
 function buildWdHref(p: WdHrefParams): string {
@@ -150,6 +161,7 @@ function buildWdHref(p: WdHrefParams): string {
   if (p.subject !== "all") sp.set("subject", p.subject);
   if (p.program) sp.set("program", p.program);
   if (p.consult !== "all") sp.set("consult", p.consult);
+  if (p.early) sp.set("early", p.early);
   if (p.q) sp.set("q", p.q);
   const s = sp.toString();
   return s ? `/withdrawals?${s}` : "/withdrawals";
@@ -169,6 +181,7 @@ export default async function WithdrawalsPage({
     subject?: string;
     program?: string;
     consult?: ConsultKey;
+    early?: string;
     page?: string;
     size?: string;
     embed?: string;
@@ -181,6 +194,10 @@ export default async function WithdrawalsPage({
   const reason: ReasonKey = (sp.reason as ReasonKey) ?? "all";
   const subject = sp.subject ?? "all";
   const consult: ConsultKey = (sp.consult as ConsultKey) ?? "all";
+  // 등록 후 조기 퇴원(원장 2026-10-15) — 1·2·3개월 이내(누적). 퇴원만 판정한다(`early-exit.ts`).
+  // '수강종료만' 보기에선 걸지 않는다 — 같이 걸면 목록이 통째로 비고 화면 말이 '퇴원'으로 바뀐다(리뷰 2026-10-15).
+  //   주소의 `early=`는 남겨 둬 유형을 되돌리면 다시 걸린다(툴바 칸도 그동안 숨긴다).
+  const early = type === "subject-ended" ? null : parseEarly(sp.early);
   const q = sp.q ?? "";
   const size = withdrawalPageSize(sp.size);
   const today = kstToday();
@@ -233,19 +250,27 @@ export default async function WithdrawalsPage({
       { lastClassSubject: r.programSubject, lastClassEnglishTrack: r.englishTrack },
       settings.operations.subjects,
     ) === program;
+  // 등록 후 조기 퇴원 — 퇴원만 판정한다(수강종료는 상담 필터처럼 빠진다 · 등록일을 모르는 퇴원도 빠진다).
+  const byEarly = (r: ExitRow) => !early || (r.kind === "withdrawn" && isEarlyWithin(r.tenureDays, early));
   // 유형·프로그램·이름은 어느 카드의 '자기 축'도 아니라 모든 모집단에 건다.
   const base = (r: ExitRow) => byName(r) && byProgram(r) && byType(r);
 
   // 목록 = **전 축** 적용(사용자가 고른 그대로).
-  const rows = all.filter((r) => base(r) && byRange(r) && byReason(r) && bySubject(r) && byConsult(r));
+  const rows = all.filter((r) => base(r) && byRange(r) && byReason(r) && bySubject(r) && byConsult(r) && byEarly(r));
   // 카드별 모집단 — 자기 축 하나만 뺀다.
-  const trendRows = all.filter((r) => base(r) && byReason(r) && bySubject(r) && byConsult(r)); // 기간 제외
-  const subjectRows = all.filter((r) => base(r) && byRange(r) && byReason(r) && byConsult(r)); // 과목 제외
+  const trendRows = all.filter((r) => base(r) && byReason(r) && bySubject(r) && byConsult(r) && byEarly(r)); // 기간 제외
+  const subjectRows = all.filter((r) => base(r) && byRange(r) && byReason(r) && byConsult(r) && byEarly(r)); // 과목 제외
   // 상담 카드는 퇴원만 — 수강종료에는 사후상담이 없다. 사유 카드는 둘 다(유형 필터를 따른다).
   const consultRows = all.filter(
-    (r) => r.kind === "withdrawn" && base(r) && byRange(r) && byReason(r) && bySubject(r),
+    (r) => r.kind === "withdrawn" && base(r) && byRange(r) && byReason(r) && bySubject(r) && byEarly(r),
   ); // 상담 제외
-  const reasonRows = all.filter((r) => base(r) && byRange(r) && bySubject(r) && byConsult(r)); // 사유 제외
+  const reasonRows = all.filter((r) => base(r) && byRange(r) && bySubject(r) && byConsult(r) && byEarly(r)); // 사유 제외
+  // 등록 후 띠는 퇴원만 — 등록 후 축 제외(고른 칸에 갇혀 나머지 칸이 0이 되지 않게).
+  const earlyRows = all.filter(
+    (r) => r.kind === "withdrawn" && base(r) && byRange(r) && byReason(r) && bySubject(r) && byConsult(r),
+  );
+  const earlyJudged = earlyRows.filter((r) => r.tenureDays !== null);
+  const earlyCount = earlyCounts(earlyJudged.map((r) => ({ days: r.tenureDays })));
 
   // 상담 미완료 worklist 집계 — **상담 축만 뺀** 모집단(상담 필터를 걸면 0%/100%밖에 안 나온다).
   const consultPending = consultRows.filter((r) => !r.consulted).length;
@@ -294,15 +319,34 @@ export default async function WithdrawalsPage({
     subject,
     program,
     consult,
+    // 주소에는 원래 값을 싣는다 — '수강종료만' 보기에서 숨긴 `early=`가 쪽 넘김에 빠지지 않게(유형을 되돌리면 다시 걸린다).
+    early: parseEarly(sp.early),
   };
   const filterActive =
-    type !== "all" || range !== "all" || reason !== "all" || subject !== "all" || consult !== "all" || !!program || !!q;
+    type !== "all" ||
+    range !== "all" ||
+    reason !== "all" ||
+    subject !== "all" ||
+    consult !== "all" ||
+    !!program ||
+    !!early ||
+    !!q;
   const rangeOptions = [
     { value: "month" as const, label: monthKey === kstMonth() ? "이번 달" : monthLabel(monthKey) },
     ...RANGE_OPTIONS,
   ];
-  // 화면 말 — 유형에 따라 '퇴원' / '수강종료' / '퇴원·수강종료'.
-  const noun = type === "withdrawn" ? "퇴원" : type === "subject-ended" ? "수강종료" : "퇴원·수강종료";
+  // 화면 말 — 유형에 따라 '퇴원' / '수강종료' / '퇴원·수강종료'. 등록 후 필터가 걸리면 퇴원만 남는다.
+  const withdrawnOnly = type === "withdrawn" || !!early;
+  const noun = withdrawnOnly ? "퇴원" : type === "subject-ended" ? "수강종료" : "퇴원·수강종료";
+  // 띠의 칸 주소 — 고른 칸을 다시 누르면 푼다.
+  // 목록 크기(`size=`)를 싣는다 — 빠지면 기본 크기로 한 번 그린 뒤 목록 틀이 크기를 다시 붙여 무거운 조회가 두 번 돈다(리뷰 2026-10-15).
+  // 창 안의 `embed=1`은 띠의 링크(`EmbedLink`)가 붙인다.
+  const earlyHrefs = Object.fromEntries(
+    EARLY_SPANS.map((s) => {
+      const href = buildWdHref({ ...current, early: early === s.key ? null : s.key });
+      return [s.key, `${href}${href.includes("?") ? "&" : "?"}size=${size}`];
+    }),
+  ) as Record<EarlyKey, string>;
 
   // 🔑 수치마다 **언제부터·누구를** 센 것인지 적는다(원장 2026-09-29 *"전체 퇴원 458명이 언제부터의 수치인지? 올 한 해 단위로 …
   //    항상 수치에 관한 구체적인 언급이 필요"*). 위 카드 둘(올해 퇴원·올해 수강종료)은 **학원 전체**(필터 무관),
@@ -313,22 +357,22 @@ export default async function WithdrawalsPage({
   const yearBulk = all.filter((r) => r.kind === "withdrawn" && r.systemBulk && inYear(r)).length;
   const yearEnded = all.filter((r) => r.kind === "subject-ended" && inYear(r)).length;
   const firstWithdrawn = all.reduce<string | null>((m, r) => (r.kind === "withdrawn" && r.date && (!m || r.date < m) ? r.date : m), null);
-  const scope = scopeText({
+  const scopeParts = {
     program: program ? programLabel(program, settings.operations.subjects, isModuleEnabled(settings.modules.disabled, "eie")) : null,
     subject: subject !== "all" ? subjectMaps.labelOf(subject) : null,
     reason: reason === "all" ? null : reason === "unspecified" ? "미기재" : (REASON_LABEL[reason as WithdrawalReason] ?? null),
     consult: consult === "all" ? null : (CONSULT_OPTIONS.find((o) => o.value === consult)?.label ?? null),
+    early: early ? earlySpan(early).label : null,
     q: q || null,
-  });
-  // 상담 카드는 상담 축을 일부러 뺀 모집단이다 — 그 필터 라벨을 적으면 적용 안 한 필터를 적은 셈이 된다.
-  const consultScope = scopeText({
-    program: program ? programLabel(program, settings.operations.subjects, isModuleEnabled(settings.modules.disabled, "eie")) : null,
-    subject: subject !== "all" ? subjectMaps.labelOf(subject) : null,
-    reason: reason === "all" ? null : reason === "unspecified" ? "미기재" : (REASON_LABEL[reason as WithdrawalReason] ?? null),
-    q: q || null,
-  });
+  };
+  const scope = scopeText(scopeParts);
+  // 상담 카드는 상담 축을, 등록 후 띠는 등록 후 축을 일부러 뺀 모집단이다 — 그 필터 라벨을 적으면 적용 안 한 필터를 적은 셈이 된다.
+  const consultScope = scopeText({ ...scopeParts, consult: null });
+  const rangeText = rangeWindow.kind === "all" ? "전체 기간" : spanText(rangeWindow.from, rangeWindow.to);
+  const earlyScope = `${rangeText} · ${scopeText({ ...scopeParts, early: null })}`;
   // 월별 추이의 **학원 전체** 막대(원장 *"과목별과는 별도로 전체 추이수치가 필요"*) — 유형만 따르고 다른 필터는 안 건다.
-  const typeRows = all.filter((r) => byType(r) && !r.systemBulk);
+  // 등록 후 필터가 걸리면 비교 막대도 퇴원만(수강종료 건을 섞으면 '명'과 '건'이 한 차트에 선다).
+  const typeRows = all.filter((r) => (withdrawnOnly ? r.kind === "withdrawn" : byType(r)) && !r.systemBulk);
   const narrowed = trendRows.filter((r) => !r.systemBulk).length !== typeRows.length;
   const typeTrend = narrowed ? monthlyExits(typeRows) : null;
   const trendData: WithdrawalMonthPoint[] = typeTrend ? trend.map((p, i) => ({ ...p, total: typeTrend[i]?.count ?? 0 })) : trend;
@@ -389,7 +433,7 @@ export default async function WithdrawalsPage({
           label="상담 미완료"
           value={consultPending}
           unit="명"
-          sub={`퇴원 사후상담 완료율 ${consultRate}% · ${rangeWindow.kind === "all" ? "전체 기간" : spanText(rangeWindow.from, rangeWindow.to)} · ${consultScope}`}
+          sub={`퇴원 사후상담 완료율 ${consultRate}% · ${rangeText} · ${consultScope}`}
           tone="amber"
           icon={<ListChecks size={16} strokeWidth={1.8} />}
         />
@@ -454,6 +498,17 @@ export default async function WithdrawalsPage({
           ariaLabel="상담 필터"
           {...SELECT_PROPS}
         />
+        {/* 등록 후 조기 퇴원(원장 2026-10-15) — 등록일부터 30·60·90일 이내 퇴원(누적). 수강종료는 빠진다. */}
+        {type !== "subject-ended" ? (
+          <FilterSelect
+            paramName="early"
+            value={early ?? ""}
+            options={EARLY_SPANS.map((s) => ({ value: s.key, label: s.label }))}
+            axisLabel="등록 후"
+            ariaLabel="등록 후 퇴원 기간 필터"
+            {...SELECT_PROPS}
+          />
+        ) : null}
         <SearchToggle placeholder="학생명" defaultValue={q} />
         {filterActive ? (
           <Link
@@ -464,6 +519,18 @@ export default async function WithdrawalsPage({
           </Link>
         ) : null}
       </div>
+
+      {/* 등록 후 3개월 내 퇴원 — 퇴원만 세므로 '수강종료만' 보기에선 세우지 않는다. */}
+      {all.length > 0 && type !== "subject-ended" ? (
+        <EarlyExitBand
+          counts={earlyCount}
+          judged={earlyJudged.length}
+          unjudged={earlyRows.length - earlyJudged.length}
+          active={early}
+          hrefs={earlyHrefs}
+          scope={earlyScope}
+        />
+      ) : null}
 
       {/* 통계 — 카드마다 **자기 축만 빼고** 필터 반영(패싯). 위 술어 주석 참조. */}
       {all.length > 0 ? (
@@ -478,7 +545,7 @@ export default async function WithdrawalsPage({
                 {systemBulkCount > 0 ? ` (시스템 정리 ${systemBulkCount}명 제외 — 퇴원일 미상)` : ""}
               </span>
             </header>
-            <WithdrawalTrendChart data={trendData} filterLabel={typeTrend ? scope : noun} initialPrefs={trendPrefs} unit={type === "withdrawn" ? "명" : "건"} />
+            <WithdrawalTrendChart data={trendData} filterLabel={typeTrend ? scope : noun} initialPrefs={trendPrefs} unit={withdrawnOnly ? "명" : "건"} />
           </section>
           <section className="bg-card shadow-card rounded-2xl p-5">
             <header className="mb-3">
@@ -623,6 +690,10 @@ function ExitRowItem({ row: r, labelOf, today }: { row: ExitRow; labelOf: (key: 
           {r.name}
           {where ? <span className="text-text-dim ml-1.5 text-sm font-semibold">{where}</span> : null}
           {r.onHold ? <span className="text-text-faint ml-1 text-sm font-normal">(휴원)</span> : null}
+          {/* 등록 후 3개월 안에 그만둔 퇴원 — 며칠 만인지(원장 2026-10-15 조기 퇴원 추적). */}
+          {r.tenureDays !== null && r.tenureDays <= EARLY_MAX_DAYS ? (
+            <span className="text-rose ml-1.5 text-sm font-semibold">등록 {r.tenureDays}일 만</span>
+          ) : null}
         </p>
         {/* 폰 폭에선 반·경과 열을 접는다 — 고정 열이 폭을 다 먹어 이름이 30px로 짓눌린다(리뷰 2026-09-28). */}
         <p className="text-text-dim hidden min-w-0 truncate text-sm sm:block">

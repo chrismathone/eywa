@@ -19,11 +19,11 @@ import { STUDENTS_REASON, followMetric, qualityMetric } from "./metrics";
 import { teacherDuties } from "./duties";
 import { attendanceItem, reportItem } from "./duty-items";
 import { counselItem } from "./counsel";
-import { pendingItems } from "./pending";
 import { buildReferrals } from "./referrals";
 import { applyPreRecord, scoreTotals, type WorkingPeriod } from "./pre-record";
 import { deepMathKeyOf } from "./receipt";
 import { buildRevenue } from "./revenue";
+import { buildSourceItems } from "./source-items";
 import { buildStudentTracking } from "./students";
 import {
   METRIC_MAX, type ChurnMetric, type Metric, type PayRatioMetric, type PeriodWindow, type PortfolioPeriod, type PortfolioResult, type PortfolioSnapshot,
@@ -43,6 +43,8 @@ type Models = {
   referral: ReturnType<typeof buildReferrals>;
   subjectOf: (classId: string) => string;
   classNameOf: (classId: string) => string;
+  /** 성적 관리 · 학부모 만족도 · 강사 근태(`source-items.ts`). */
+  sources: ReturnType<typeof buildSourceItems>;
 };
 function teacherPeriod(d: PortfolioSnapshot, m: Models, user: SnapshotUser, w: PeriodWindow): WorkingPeriod {
   // 진행 중인 달은 아직 열려 있다. 달 안에서 보충한 기록은 조회 시각까지 인정한다.
@@ -84,7 +86,7 @@ function teacherPeriod(d: PortfolioSnapshot, m: Models, user: SnapshotUser, w: P
       reason: `결석 다음 달 같은 날까지 완료한 보강만 인정합니다. 같은 날짜가 없으면 다음 달 말일까지입니다. 기한이 끝나는 달에 한 번 평가합니다. 기한이 남은 건은 감점하지 않습니다. 출석부의 보강 출결·완료 메모·완료 예약을 대조하고, 예정·취소·기한 초과와 중복 기록은 인정하지 않습니다. 대기 ${coverage.pending}건 · 기한 전 완료 ${coverage.early}건${coverage.unconfirmed ? ` · 연결 확인 필요 ${coverage.unconfirmed}건` : ""}.`,
       detail: coverage.detail, due: coverage.due, done: coverage.done, pending: coverage.pending, early: coverage.early,
     },
-    ...pendingItems(),
+    ...m.sources(user.id, w, cutoff),
   ];
   for (const item of items) if (item.value === null) item.gap = GAP_LABEL[item.id] ?? "근거 확인";
 
@@ -140,6 +142,8 @@ export function buildPortfolio(d: PortfolioSnapshot, opts: {
     reasons: { studentReasons: d.studentReasons, excludeReasons: churnOptions.excludeReasons, futureEnrollments: d.futureEnrollments },
   });
   // 퇴원율 — 시간표 X 겹침도 이 계산기를 같은 모양으로 부른다(withdrawals/server/exit-overlay.ts · 가드 exit-overlay-wiring.test).
+  const entriesOf = indexEntries(opts.evaluation?.entries ?? []);
+  const classNameOf = (id: string) => classes.get(id)?.class_name ?? "";
   const churn = buildChurnModel({ source: students.churnSource, classes: d.classes, options: churnOptions, futureEnrollments: d.futureEnrollments, studentReasons: d.studentReasons });
   const models: Models = {
     ctx,
@@ -152,7 +156,8 @@ export function buildPortfolio(d: PortfolioSnapshot, opts: {
     payRatio: (teacherId, month) => payRatioItem(opts.pay?.get(`${teacherId}|${month}`)),
     referral: buildReferrals({ referrals: d.referrals ?? [], enrollments: d.enrollments, classes, owner: ctx.owner, options: config.metrics.expansion.referral ?? DEFAULT_REFERRAL_OPTIONS }),
     subjectOf: (id) => classes.get(id)?.subject ?? "",
-    classNameOf: (id) => classes.get(id)?.class_name ?? "",
+    classNameOf,
+    sources: buildSourceItems(d, { classes, owner: ctx.owner, holidays: ctx.holidays, config, entriesOf, classNameOf }),
   };
 
   // 수업을 맡는 재직자 — 운영 중인 반의 담임이거나 시간표에 담당으로 적힌 사람.
@@ -161,7 +166,6 @@ export function buildPortfolio(d: PortfolioSnapshot, opts: {
   for (const s of d.schedules) if (s.teacher_id) teachingIds.add(s.teacher_id);
   const windows = monthWindows(d.end, PORTFOLIO_MONTHS);
   const open = opts.openMonths ?? new Map<string, readonly string[]>();
-  const entriesOf = indexEntries(opts.evaluation?.entries ?? []);
   const teaching = (u: SnapshotUser) => u.status === "active" && teachingIds.has(u.id);
 
   const teachers: PortfolioTeacher[] = d.users

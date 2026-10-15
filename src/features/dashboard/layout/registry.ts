@@ -18,6 +18,7 @@ export const AREA_MENUS: Record<Area, readonly MenuKey[]> = {
   changes: ["students"],
   enrolledTrend: ["students"],
   withdrawals: ["withdrawals"],
+  earlyExits: ["withdrawals"],
   intake: ["enrollment"],
   enrolledToday: ["enrollment"],
   firstClass: ["students"],
@@ -105,6 +106,8 @@ const PANELS: Record<PanelId, PanelSpec> = {
   billingMonth: { label: "이번 달 수납 현황", subjectScope: "subject", group: "수납·지출", thumb: "donut", areas: ["billing"], options: ["amounts"], sizes: CHART_S },
   newcomerStages: { label: "신규생 단계별 관리", subjectScope: "subject", group: "상담·신입", thumb: "bars", areas: ["newcomers"], sizes: LIST_S },
   changes: { label: "등록 · 퇴원 추이", subjectScope: "subject", group: "학생·재원", thumb: "columns", areas: ["changes"], size: { w: 12, h: 1 }, sizes: TREND_S },
+  // 원장 2026-10-15 — 이번 달 퇴원 중 등록 후 30·60·90일 안에 그만둔 학생(`early-exit.ts`). 과목 관리자에겐 퇴원 명단이라 '민감'(badges.ts).
+  earlyExits: { label: "등록 후 3개월 내 퇴원", subjectScope: "subject", group: "학생·재원", thumb: "list", areas: ["earlyExits"], sizes: LIST_S },
   billing6: { label: "6개월 청구 · 수납", subjectScope: "subject", group: "수납·지출", thumb: "columns", areas: ["billing"], size: { w: 12, h: 1 }, sizes: TREND_S },
   enrolledTrend: { label: "재원생 추이", subjectScope: "subject", group: "학생·재원", thumb: "columns", areas: ["enrolledTrend"], size: { w: 24, h: 1 }, sizes: TREND_S },
   subjects: { label: "과목별 수강", group: "학생·재원", thumb: "bars", areas: ["students"], subjectScope: "subject", sizes: LIST_S },
