@@ -21,7 +21,7 @@ export type MetricMeta = {
 
 export const METRIC_META: Record<BuiltinMetricId, MetricMeta> = {
   payRatio: { unit: "%", short: "급여 비율", color: "var(--color-amber)", measure: "지난달 급여(세전: 직접 입력 → 계약서 월급 → 출석부 실급여) ÷ 지난달 담당 매출(담당 반 학생 청구서의 그 반 금액, 할인 전 — 이름이 안 맞으면 짝이 하나일 때) — 이번 달 급여는 월말이 돼야 확정되므로 10월 점수 = 9월 값 · 금액은 보이지 않고 비율만" },
-  churn: { unit: "%", short: "퇴원율", color: "var(--color-blue)", measure: "이 달에 그만둔 학생 ÷ 지난달 담당 학생(담임·교시 담당 모두 · 정규 수업으로 그 달 절반 이상 맡은 학생) — 다른 반으로 옮긴 뒤 그만둬도 센다 · 다른 선생님의 같은 과목 반으로 옮겨 다녀도 센다 · 고른 사유·반 이동·수업 끝남·끝난 특강·이 선생님의 같은 과목 다른 반을 계속 다님은 제외" },
+  churn: { unit: "%", short: "퇴원율", color: "var(--color-blue)", measure: "이 달에 그만둔 학생 ÷ 지난달 담당 학생(담임·교시 담당 모두 · 정규 수업으로 그 달 절반 이상 맡은 학생) — 다른 반으로 옮긴 뒤 그 과목을 그만두면 센다 · 고른 사유·반 이동·수업 끝남·끝난 특강·같은 과목 다른 반을 계속 다님(어느 선생님 반이든 — 반 이동처럼)은 제외" },
   grades: { unit: "%", short: "성적", color: "var(--color-purple)", measure: "담임 반 학생이 이 달에 본 시험(성적관리의 일일·확인테스트 · 월말평가 · 학교 시험)의 점수율 — 종류별 평균을 아래 비중으로 가중 평균 · 시험은 그날 다니던 반의 담임에게" },
   satisfaction: { unit: "점", short: "만족도", color: "var(--color-green)", measure: "학부모 글·댓글 판정(확실한 문구는 바로, 애매한 글은 확인 뒤 반영)과 원장이 넣은 클레임·칭찬의 가감 합 — 만점 없이 총점에 그대로 더하고 뺀다" },
   punctuality: { unit: "회", short: "근태", color: "var(--color-gold)", measure: "그 달 지각·결근·조퇴 횟수(가중 합) — 메이크에듀 출퇴근 시각을 그날 맡은 수업(또는 개인 출퇴근 시각)과 견준다 · 결재된 휴가·휴원일은 뺀다 · 원장이 넣은 횟수가 있으면 그 값" },
