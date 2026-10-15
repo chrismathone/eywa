@@ -39,6 +39,7 @@ import { permissionsToken } from "./permissions-save";
 import { hasDuplicateRoleCells } from "../permissions-canonical";
 import { specialAccessTargets } from "../special-access";
 import { payslipRefreshRequired } from "../payslip-permissions";
+import { studentStatusRefreshRequired } from "../student-status-permissions";
 
 /**
  * `operations` = 운영 섹션 저장이 확정한 상태(면별 기준 token · 과목 삭제는 그 면의 값도) — 화면이 다음 저장의 기준으로 쓴다.
@@ -183,6 +184,9 @@ export async function saveOwnerSection(
   }
   if (section === "permissions" && payslipRefreshRequired(parsedJson, (existing?.data as Record<string, unknown> | null)?.permissions)) {
     return { error: "새로고침한 뒤 급여명세서 권한을 다시 설정해 주세요." };
+  }
+  if (section === "permissions" && studentStatusRefreshRequired(parsedJson, (existing?.data as Record<string, unknown> | null)?.permissions)) {
+    return { error: "원생 메뉴 권한을 바꾸기 전에 새로고침한 뒤 원생 상태 변경 담당자를 지정해 주세요." };
   }
   // 개인별 메뉴 권한의 대상 확인 — 어느 학원에서나 한다(침산도 역할 표 아래에서 개인별 권한을 준다, 원장 2026-10-06).
   //  · 개인별 메뉴 권한 — 새 학원(일반판): 종전대로 요청의 모든 줄을 본다. 침산: **새로 주거나 바꾸는 줄만** 본다 —

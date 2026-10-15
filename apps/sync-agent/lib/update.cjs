@@ -1,4 +1,6 @@
-const fs=require('node:fs');
+// Electron's fs treats *.asar paths as archives, so writing a release's resources/app.asar failed with
+// "Invalid package" (every PC update ended in extract_failed until 1.0.5). Use the unpatched module there.
+const fs=process.versions.electron?require('original-fs'):require('node:fs');
 const fsp=fs.promises;
 const path=require('node:path');
 const crypto=require('node:crypto');

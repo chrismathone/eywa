@@ -1,4 +1,6 @@
 "use server";
+import { canManageStudentStatusNow } from "@/features/students/server/status-access";
+import { STUDENT_STATUS_DENIED } from "@/features/students/status-access";
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
@@ -49,6 +51,7 @@ export async function createEnrollmentsBulk(input: {
   const studentIds = [...new Set((input.studentIds ?? []).map((id) => String(id).trim()).filter(Boolean))];
   const startDate = String(input.startDate ?? "").trim() || kstToday();
   const endDate = String(input.endDate ?? "").trim() || null;
+  if (endDate && !(await canManageStudentStatusNow())) return { error: STUDENT_STATUS_DENIED };
   const pickedDays = (input.attendanceDays ?? []).map((d) => String(d).trim()).filter((d) => VALID_DAYS.has(d));
 
   if (!classId) return { error: "반을 선택해주세요" };

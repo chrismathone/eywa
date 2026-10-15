@@ -2310,3 +2310,18 @@ ECS 월간 날짜 칸의 button 안에 미루기·당기기 button이 들어 있
 - ⚠️ `auth.uid()`는 옛 설정 `request.jwt.claim.sub`를 **먼저** 본다 — 같은 접속에서 앞서 넣어 둔 값이 있으면 `request.jwt.claims`를 바꿔도 그 사람으로 판정된다(검증 스크립트는 시작할 때 비울 것).
 - ⚠️ 하위 트랜잭션에서 `transaction_read_only`를 켰다가 예외로 빠져나오면 되돌아온다 — 읽기 전용에서만 통하는 길을 **같은 트랜잭션 안에서** 시험하고 흔적 없이 되돌릴 수 있다.
 - 📌 곁가지(미해결 · 성능): 지점 조건이 **Filter**로 걸리는 계획이 실측 1,218건 중 342건이다. 그 자리의 함수는 줄마다 불린다(줄당 0.06ms). 정책을 `tenant_id = (select auth_tenant_id())`로 감싸면 한 번만 계산된다 — 별도 작업으로 볼 만하다([[#91]]과 같은 원리).
+
+## #144 Electron 안에서 `*.asar` 파일을 **쓰면** "Invalid package"로 실패한다 — 연동 앱 PC 업데이트가 한 번도 안 됐다 (2026-10-15)
+
+**증상**: 연동 PC 앱(AywaSync) 업데이트 카드에 *"압축을 풀지 못했습니다. 디스크 상태를 확인하고 다시 시도해 주세요."* · 1.0.4가 그랬고, 10-09의 1.0.1→1.0.2 실패(그땐 원인 미확정 · 설치 파일 덮어 설치로 넘어감)도 같은 원인이었다. 디스크와 묶음은 멀쩡했다.
+
+**원인**: 업데이트는 Electron 주 프로세스에서 돈다. Electron은 `fs`를 고쳐 `*.asar` 경로를 **폴더(묶음)처럼** 다룬다 → 새 버전의 `resources/app.asar`를 `fs.createWriteStream`으로 열면 `Invalid package …\app.asar`(코드 없는 오류). 업데이트 코드는 이 오류를 이름 붙은 원인에 못 넣어 `extract_failed`(위 문구)로 냈다.
+
+**왜 못 잡았나**: 압축 해제 테스트·배포 검수가 전부 **일반 node**로 돌았다(같은 묶음 · 같은 코드가 node에선 10,000개 다 풀리고 앱 실행기에선 67번째 `app.asar`에서 멈춘다). 테스트 묶음에 `resources/app.asar`가 있었는데도 node엔 asar 패치가 없어서 통과했다.
+
+**고침**: [`apps/sync-agent/lib/update.cjs`](../apps/sync-agent/lib/update.cjs) 첫 줄 — Electron이면 `require('original-fs')`(asar 패치 없는 원래 `fs`) · 테스트도 같은 방식 · [`test/bundled-runtime.cjs`](../apps/sync-agent/test/bundled-runtime.cjs)가 `test/update.test.cjs`를 **포장된 실행기 안에서**(`ELECTRON_RUN_AS_NODE=1 AywaSyncRuntime.exe --test …`) 한 번 더 돌린다.
+
+- 🔴 버그는 **설치된 쪽**에 있다 — 1.0.4 이하 PC는 고친 1.0.5도 PC 안 업데이트로 못 받는다. 설치 파일로 한 번 덮어 설치(실행기가 설치된 순번이 더 크면 그 버전을 쓴다 — `native/Bootstrap.cs`).
+- ⚠️ 쓰기만이 아니다: 읽기·`rm -r`·`lstat`도 `.asar`를 묶음으로 본다. Electron 안에서 `.asar` 파일 자체를 다룰 땐 늘 `original-fs`.
+- 🔑 진단: 앱 화면은 고정 문구만 남긴다 → 게시 묶음을 받아 **앱 실행기로** 같은 코드를 돌려 원문 오류를 볼 것(`ELECTRON_RUN_AS_NODE=1`).
+- ⚠️ 곁가지: `app.setLoginItemSettings`가 쓰는 Run 값 이름은 `name`을 안 주면 **`electron.app.<실행 파일 제품 이름>`**(= `electron.app.AYWA 연동` · 개발 `electron.exe`로 띄우면 `electron.app.Electron`이라 개발 실행으로는 못 본다 — 포장 실행기 사본에 `resources/app` 프로브를 넣어 확인). 제거 스크립트가 엉뚱한 이름(`AYWA 연동`)을 지우고 있었다 → 실제 이름으로 · 덮어 설치(`${isUpdated}`) 땐 안 지운다. ⚠️ "덮어 설치하면 자동 실행이 지워진다"는 리뷰 가설은 이 실험으로 반증됐다(가설만으로 앱 시작 때 재등록을 넣었다가 되돌림 — 그건 작업 관리자의 '시작 앱 끔'을 매번 되살리는 부작용이 있다).

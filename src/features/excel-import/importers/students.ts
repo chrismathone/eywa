@@ -9,6 +9,8 @@ import { naturalKey } from "@/features/students/lib/student-import";
 import { resolveUniqueStudentName } from "@/features/students/name-suffix";
 import { STUDENT_STATUS_LABEL } from "@/features/students/status-labels";
 import { planFormWithdrawal } from "@/features/students/withdrawal-plan";
+import { canManageStudentStatusNow } from "@/features/students/server/status-access";
+import { statusCreationNeedsPermission, STUDENT_STATUS_DENIED } from "@/features/students/status-access";
 import { DEFAULT_WITHDRAWAL_METADATA } from "@/features/withdrawals/types";
 import { IMPORT_META } from "../kinds";
 import { duplicateKeyIssues, type ColumnSpec, type ImportPreviewRow, type SheetSpec } from "../spec";
@@ -253,6 +255,9 @@ const def: ImporterDef<Plan> = {
   },
 
   async apply({ ctx, plan }) {
+    if (plan.inserts.some((r) => statusCreationNeedsPermission(r.status, r.withdrawnAt)) && !(await canManageStudentStatusNow())) {
+      return { error: STUDENT_STATUS_DENIED };
+    }
     const adding = plan.inserts.filter((r) => r.status === "enrolled").length;
     const seat = await seatBlockReason(ctx.tenantId, adding);
     if (seat) return { error: seat };

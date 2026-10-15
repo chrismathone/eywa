@@ -187,7 +187,8 @@ describe("② 퇴원&수업종료 — 1일~오늘, 퇴원관리의 과목 전체
     const WEEKLY = src("src/features/dashboard/onescreen/server/queries.ts");
     // 이 조회는 status를 안 본다(복구된 학생의 그 달 등록을 살리려고) → 병합 학생이 그대로 세졌다.
     expect(SERVER).toMatch(/filter\(\([\w]+\) => \(!ids \|\| ids\.has\([\w.]+\)\) && !isMergedStudent\(/);
-    expect(SERVER).toContain('select("id,enrolled_at,notes")');
+    // 수업 기록 없는 장부 정리도 등록에서 뺀다(퇴원 메타데이터를 함께 읽는다 — `bookkeepingOnlyIds`, 원장 2026-10-15).
+    expect(SERVER).toContain('select("id,enrolled_at,notes,withdrawal_metadata")');
     // 이번 달 증감(등록·퇴원 양쪽) · 최근 7일 증감(등록·퇴원 양쪽) = 최소 4곳.
     // ⚠️ **하한**으로 잠근다 — 딱 맞는 수로 박으면 나중에 같은 파일에서 **다섯 번째 누수를 고치는 사람이**
     //    빨간 가드를 만나고, 그걸 푸는 가장 쉬운 길이 '숫자 올리기'라 가드를 편집하는 습관이 든다.

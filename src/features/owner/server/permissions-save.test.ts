@@ -652,3 +652,31 @@ describe("침산 — 개인별 메뉴 권한을 화면에서 준다(원장 2026-
     expect(stored().userOverrides).toEqual([{ userId: OPERATOR, menu: "staff", access: "full" }]);
   });
 });
+
+
+describe("student status actual settings saves", () => {
+  it("blocks legacy students menu changes until explicit transition", async () => {
+    seed("generic", { overrides: [], userOverrides: [], specialAccess: {} });
+    const w = openWindow();
+    const next = { ...w.draft, userOverrides: [{ userId: STAFF_A, menu: "students", access: "full" }] };
+    expect((await w.save(next))?.error).toBeTruthy(); expect(m.writes).toBe(0);
+    expect((await w.save({ ...next, specialAccess: { ...w.draft.specialAccess, studentStatusManagerIds: [STAFF_A] } }))?.ok).toBe(true);
+    expect(stored().specialAccess.studentStatusManagerIds).toEqual([STAFF_A]);
+  });
+  it("preserves explicit empty when an old form omits the field", async () => {
+    seed("generic", { overrides: [], specialAccess: { studentStatusManagerIds: [] } });
+    const w = openWindow(); const specialAccess = { ...w.draft.specialAccess }; delete specialAccess.studentStatusManagerIds;
+    expect((await w.save({ ...w.draft, specialAccess }))?.ok).toBe(true);
+    expect(rawStored().specialAccess).toMatchObject({ studentStatusManagerIds: [] });
+    expect(openWindow().draft.specialAccess.studentStatusManagerIds).toEqual([]);
+  });
+  it("rejects new inactive grants, malformed values, and hidden account changes without mutation", async () => {
+    seed("generic", { overrides: [], specialAccess: { studentStatusManagerIds: [] } });
+    const w = openWindow(); m.staff = [];
+    expect((await w.save({ ...w.draft, specialAccess: { ...w.draft.specialAccess, studentStatusManagerIds: [STAFF_A] } }))?.error).toBeTruthy();
+    m.staff = [{ id: OPERATOR, system_role: "admin", status: "active" }]; m.platformIds = new Set([OPERATOR]);
+    expect((await w.save({ ...w.draft, specialAccess: { ...w.draft.specialAccess, studentStatusManagerIds: [OPERATOR] } }))?.error).toBeTruthy();
+    expect((await w.save({ ...w.draft, specialAccess: { ...w.draft.specialAccess, studentStatusManagerIds: null } }))?.error).toBeTruthy();
+    expect(m.writes).toBe(0);
+  });
+});

@@ -22,6 +22,7 @@ import type { SystemRole } from "@/lib/permissions";
 import { summarizeInvoices } from "@/features/billing/calc";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { isMergedStudent } from "@/features/students/merged";
+import { bookkeepingOnlyIds } from "@/features/withdrawals/server/bookkeeping";
 import {
   buildDashboardTrendPoints,
   invoicePeriodsForRange,
@@ -109,6 +110,8 @@ type MonthlyChangeRecord = {
   enrolled_at?: string | null;
   withdrawn_at?: string | null;
   notes: string | null;
+  /** 퇴원 쪽만 — 수업 기록 없는 장부 정리 판정(`bookkeepingOnlyIds`). */
+  withdrawal_metadata?: unknown;
 };
 
 /**
@@ -139,7 +142,7 @@ export async function getMonthlyEnrollmentChanges(): Promise<EnrollmentChanges> 
     fetchAllPaged<MonthlyChangeRecord>((from, to) =>
       supabase
         .from("students")
-        .select("id, name, grade, school, withdrawn_at, notes")
+        .select("id, name, grade, school, withdrawn_at, notes, withdrawal_metadata")
         .eq("status", "withdrawn")
         .gte("withdrawn_at", startIso)
         .order("withdrawn_at", { ascending: false })
@@ -148,7 +151,10 @@ export async function getMonthlyEnrollmentChanges(): Promise<EnrollmentChanges> 
     ),
   ]);
   const newStudents = nw.filter((s) => !isMergedStudent(s.notes));
-  const withdrawn = wd.filter((s) => !isMergedStudent(s.notes));
+  // 수업 기록 없는 장부 정리는 퇴원으로 세지 않는다(퇴원관리·운영실과 같은 판정 — `isBookkeepingOnlyExit`).
+  const wdReal = wd.filter((s) => !isMergedStudent(s.notes));
+  const bookkeeping = await bookkeepingOnlyIds(supabase, wdReal);
+  const withdrawn = wdReal.filter((s) => !bookkeeping.has(s.id));
   return {
     newCount: newStudents.length,
     withdrawnCount: withdrawn.length,
@@ -201,10 +207,10 @@ export async function getEnrollmentChangeLast7d(days = 7): Promise<EnrollmentCha
         .order("id")
         .range(from, to),
     ),
-    fetchAllPaged<{ id: string; notes: string | null }>((from, to) =>
+    fetchAllPaged<{ id: string; notes: string | null; withdrawal_metadata: unknown }>((from, to) =>
       supabase
         .from("students")
-        .select("id, notes")
+        .select("id, notes, withdrawal_metadata")
         .eq("status", "withdrawn")
         .gte("withdrawn_at", since)
         .order("id")
@@ -212,7 +218,9 @@ export async function getEnrollmentChangeLast7d(days = 7): Promise<EnrollmentCha
     ),
   ]);
   const newIds = newRows.filter((r) => !isMergedStudent(r.notes)).map((r) => r.id);
-  const withdrawnIds = wdRows.filter((r) => !isMergedStudent(r.notes)).map((r) => r.id);
+  const wdReal = wdRows.filter((r) => !isMergedStudent(r.notes));
+  const bookkeeping = await bookkeepingOnlyIds(supabase, wdReal);
+  const withdrawnIds = wdReal.filter((r) => !bookkeeping.has(r.id)).map((r) => r.id);
   const newCount = newIds.length;
   const withdrawnCount = withdrawnIds.length;
 

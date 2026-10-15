@@ -19,6 +19,8 @@ import {
   type WithdrawalReason,
 } from "../types";
 import { logDbError } from "@/lib/supabase/db-error";
+import { canManageStudentStatusNow } from "@/features/students/server/status-access";
+import { STUDENT_STATUS_DENIED } from "@/features/students/status-access";
 import { checkReasonInput } from "../reason-detail";
 
 const REASONS: readonly WithdrawalReason[] = WITHDRAWAL_REASONS;
@@ -187,6 +189,7 @@ export async function reactivateStudent(
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "withdrawals"))) return { error: "퇴원 관리 권한이 없습니다" };
   // 🔴 재원 복구는 **학생 기록 변경**이다 — 원생 상세의 재원 전환과 같은 문(students full)을 함께 요구한다(감사 S6).
+  if (!(await canManageStudentStatusNow())) return { error: STUDENT_STATUS_DENIED };
   //    퇴원관리만 full인 경리 계정이 여기서만 학생을 재원으로 되돌릴 수 있었다(#77).
   if (!(await canManageTenant(user.systemRole, "students"))) {
     return { error: "재원 복구 권한이 없습니다 — 원생 정보 변경 권한이 필요합니다" };
