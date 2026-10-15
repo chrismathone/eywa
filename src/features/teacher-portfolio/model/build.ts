@@ -2,19 +2,21 @@
  * 직원 포트폴리오 — 스냅샷 하나로 강사 × 최근 7개월의 점수와 근거를 만든다(순수 함수).
  *
  * 🔴 모든 점수는 매월 1일에 새로 시작해 말일에 마감한다. 누적·이월이 없고 전월 점수는 비교에만 쓴다.
- * 🔴 마감한 달은 그 달 말일(한국 시간)까지 입력된 기록만 본다 — 이후에 보충한 보고서·출결은 점수를
- *    바꾸지 않는다. 진행 중인 달은 조회 시각까지 인정한다(`end`는 수업 대상 날짜의 끝일 뿐이다).
+ * 🔴 점수 달의 재료는 **지난달 기록**이다(10월 점수 = 9월 실적 · `dataWindowOf` · 원장 2026-10-15) — 줄의 `month`·`partial`(마감)은 점수 달,
+ *    `start`·`end`와 근거 날짜는 재료 달. 기록은 점수 달 말일(한국 시간)까지 입력된 것만 본다 — 이후에 보충한 것은 점수를 바꾸지 않는다.
+ *    진행 중인 점수 달은 조회 시각까지 인정한다(지난달 기록을 이번 달 안에 늦게 넣어도 센다).
  * 🔴 계산 코드는 지표의 원래 수치(`raw`)와 근거만 낸다 — 몇 점인지·만점·자료 없을 때는 강사평가 설정(`evaluate.ts`)이 정한다.
  *    그래서 근거 문장(`basis`·`reason`)에 배점 숫자를 적지 않는다(화면이 그 달 설정의 규칙 한 줄을 따로 붙인다).
  */
 import { subjectLabelRecord } from "@/features/owner/subjects";
+import { shiftMonth } from "@/lib/date-kst";
 import type { SubjectSetting } from "@/features/owner/settings-types";
 import { DEFAULT_CHURN_OPTIONS, DEFAULT_EVALUATION_CONFIG, DEFAULT_REFERRAL_OPTIONS, type EvaluationConfig } from "../evaluation/config";
 import { buildChurnModel } from "./churn-model";
 import { payRatioItem, type PayResult } from "./pay-ratio";
 import { buildContext, type PortfolioContext } from "./context";
 import { applyEvaluation, indexEntries, type ManualEntryRow } from "./evaluate";
-import { between, daysBetween, kstDateOf, monthWindows, unique } from "./dates";
+import { addDays, between, dataWindowOf, daysBetween, kstDateOf, monthWindows, unique } from "./dates";
 import { STUDENTS_REASON, followMetric, qualityMetric } from "./metrics";
 import { teacherDuties } from "./duties";
 import { attendanceItem, reportItem } from "./duty-items";
@@ -34,6 +36,7 @@ export const PORTFOLIO_MONTHS = 7;
 export type { ManualEntryRow } from "./evaluate";
 const GAP_LABEL: Partial<Record<Metric["id"], string>> = { report: "작성 근거 부족", follow: "마감 시점 확인", quality: "평가 기준 확인", students: "배정 기록 확인" };
 const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
+const monthNo = (day: string) => Number(day.slice(5, 7));
 type Models = {
   ctx: PortfolioContext;
   revenue: ReturnType<typeof buildRevenue>;
@@ -47,26 +50,27 @@ type Models = {
   sources: ReturnType<typeof buildSourceItems>;
 };
 function teacherPeriod(d: PortfolioSnapshot, m: Models, user: SnapshotUser, w: PeriodWindow): WorkingPeriod {
-  // 진행 중인 달은 아직 열려 있다. 달 안에서 보충한 기록은 조회 시각까지 인정한다.
+  // 점수 달 w · 재료 달 dw(지난달 전체). 기록 인정 시각은 점수 달 기준 — 진행 중이면 조회 시각, 마감한 달이면 그 달 말일.
   const cutoff = w.partial ? (kstDateOf(d.capturedAt) as string) : w.end;
+  const dw = dataWindowOf(w);
   const records = m.ctx.recordsAsOf(cutoff);
-  const days = daysBetween(w.start, w.end);
+  const days = daysBetween(dw.start, dw.end);
   const duties = teacherDuties({ d, ctx: m.ctx, records, cutoff, user, days });
   const cells = duties.reportCells;
   const subjectKeys = unique([...duties.classIds].map(m.subjectOf));
-  const tracking = m.students.period(user.id, w);
-  const revenue = m.revenue.period(user.id, w, subjectKeys);
-  const coverage = records.coverage.period(user.id, w);
+  const tracking = m.students.period(user.id, dw);
+  const revenue = m.revenue.period(user.id, dw, subjectKeys);
+  const coverage = records.coverage.period(user.id, dw);
 
   const items: Metric[] = [
     reportItem(duties),
     attendanceItem(duties),
-    followMetric(d, user, w, cutoff),
-    counselItem({ d, roster: m.students.churnSource.rosterOf, teacherId: user.id, w, classNameOf: m.classNameOf }),
-    qualityMetric(d, user, w),
+    followMetric(d, user, dw, cutoff),
+    counselItem({ d, roster: m.students.churnSource.rosterOf, teacherId: user.id, w: dw, classNameOf: m.classNameOf }),
+    qualityMetric(d, user, dw),
     {
       id: "students", max: METRIC_MAX.students, value: tracking.value, raw: tracking.adjustment,
-      basis: `전월 ${tracking.previous}명 → 이번 달 ${tracking.current}명`,
+      basis: `${monthNo(addDays(dw.start, -1))}월 ${tracking.previous}명 → ${monthNo(dw.start)}월 ${tracking.current}명`,
       reason: STUDENTS_REASON,
       detail: tracking.detail, tracking,
     },
@@ -78,27 +82,28 @@ function teacherPeriod(d: PortfolioSnapshot, m: Models, user: SnapshotUser, w: P
       detail: revenue.detail, amount: revenue.amount, subjectTotal: revenue.subjectTotal, subjectLabel: revenue.subjectLabel,
       subjects: revenue.subjects, unassigned: revenue.unassigned, unclassified: revenue.unclassified,
     },
-    m.churn(user.id, w), m.payRatio(user.id, w.month),
-    m.referral(user.id, w),
+    // 급여 비율은 점수 달 키 — 서버가 재료 달(지난달) 출석부로 낸다(`payDataMonth`).
+    m.churn(user.id, dw), m.payRatio(user.id, w.month),
+    m.referral(user.id, dw),
     {
       id: "coverage", max: METRIC_MAX.coverage, value: coverage.value, raw: coverage.due ? (100 * coverage.done) / coverage.due : null,
-      basis: coverage.due ? `기한 내 완료 ${coverage.done} / 마감 대상 ${coverage.due}건` : "이번 달 마감 대상 없음",
+      basis: coverage.due ? `기한 내 완료 ${coverage.done} / 마감 대상 ${coverage.due}건` : `${monthNo(dw.start)}월 마감 대상 없음`,
       reason: `결석 다음 달 같은 날까지 완료한 보강만 인정합니다. 같은 날짜가 없으면 다음 달 말일까지입니다. 기한이 끝나는 달에 한 번 평가합니다. 기한이 남은 건은 감점하지 않습니다. 출석부의 보강 출결·완료 메모·완료 예약을 대조하고, 예정·취소·기한 초과와 중복 기록은 인정하지 않습니다. 대기 ${coverage.pending}건 · 기한 전 완료 ${coverage.early}건${coverage.unconfirmed ? ` · 연결 확인 필요 ${coverage.unconfirmed}건` : ""}.`,
       detail: coverage.detail, due: coverage.due, done: coverage.done, pending: coverage.pending, early: coverage.early,
     },
-    ...m.sources(user.id, w, cutoff, duties.reportTargets),
+    ...m.sources(user.id, dw, cutoff, duties.reportTargets, w.month),
   ];
   for (const item of items) if (item.value === null) item.gap = GAP_LABEL[item.id] ?? "근거 확인";
 
   const cellsOn = (day: string, ...states: string[]) => cells.filter((c) => c.day === day && (!states.length || states.includes(c.state))).length;
   return {
-    ...w,
+    ...dw, month: w.month, partial: w.partial,
     subjects: subjectKeys,
     classes: [...duties.classIds].map(m.classNameOf).sort(),
     students: tracking.current,
     items,
     ...scoreTotals(items),
-    ownReportRecords: d.reports.filter((r) => r.created_by === user.id && between(r.report_date, w.start, w.end)
+    ownReportRecords: d.reports.filter((r) => r.created_by === user.id && between(r.report_date, dw.start, dw.end)
       && (m.ctx.reportCreatedOn.get(r.id) ?? "9999") <= cutoff).length,
     holidays: days.filter((day) => m.ctx.holidays.has(day)),
     dayStats: days.map((day) => ({
@@ -124,10 +129,11 @@ export function portfolioFloor(end: string): string {
 /**
  * @param opts.openMonths 아직 마감하지 않은 달(강사 → 달). 지금은 수업 담당이 아닌 강사도 그 달만은 마저 계산한다 —
  *   퇴직·폐강·인계로 대상에서 빠진 날 그 달을 지우면 다음 달 1일에 마감할 행이 없어진다(적대적 리뷰 2026-10-13).
- *   그런 강사에게 다른 달을 새로 만들지 않는다(1일 실행을 놓친 날 다음 달 줄이 생기지 않게).
+ * @param opts.lastMonths 강사 → 저장된 가장 늦은 달(마감 여부 무관 · `loadLastMonths`). 수업에서 빠진 강사에게 새로 만드는 달은 그 다음 달이
+ *   지금 점수 달일 때 그 하나뿐 — 퇴직한 달의 실적 줄(재료 = 지난달 · 2026-10-15).
  */
 export function buildPortfolio(d: PortfolioSnapshot, opts: {
-  openMonths?: ReadonlyMap<string, readonly string[]>;
+  openMonths?: ReadonlyMap<string, readonly string[]>; lastMonths?: ReadonlyMap<string, string>;
   /** 강사평가 설정과 직접 만든 지표의 입력값 · 매출 대비 급여(강사|달 → 비율, 마감하지 않은 달만 — 서버가 출석부로 낸다). */
   evaluation?: { config: EvaluationConfig; entries?: readonly ManualEntryRow[] }; pay?: ReadonlyMap<string, PayResult>;
 } = {}): PortfolioResult {
@@ -170,17 +176,20 @@ export function buildPortfolio(d: PortfolioSnapshot, opts: {
   const open = opts.openMonths ?? new Map<string, readonly string[]>();
   const teaching = (u: SnapshotUser) => u.status === "active" && teachingIds.has(u.id);
 
+  const last = opts.lastMonths ?? new Map<string, string>();
   const teachers: PortfolioTeacher[] = d.users
-    .filter((u) => teaching(u) || open.has(u.id))
+    .filter((u) => teaching(u) || open.has(u.id) || last.has(u.id))
     .sort((a, b) => a.display_name.localeCompare(b.display_name, "ko"))
     .flatMap((user) => {
       const monthly = windows.map((w) => teacherPeriod(d, models, user, w));
       if (d.preRecord) applyPreRecord(monthly, d.preRecord);
       for (const w of monthly) applyEvaluation(w, config, entriesOf(user.id, w.month));
       const all = monthly.map(withoutDuty);
-      // 수업에서 빠진 강사는 아직 마감하지 않은 달만 — 학생 수와 상관없이 그 달을 마감까지 데려간다.
+      // 수업에서 빠진 강사 = 아직 마감하지 않은 달(학생 수와 상관없이 마감까지) + 저장된 마지막 달의 다음 달이 **지금 점수 달**이면 그 줄(재료 = 그 마지막
+      // 달 — 퇴직한 달의 실적 · 그 달에 맡은 반이 있을 때만). 지난 달 줄은 새로 만들지 않는다(출결 수정 기록을 다 못 읽은 채 바로 마감된다 · 재리뷰 2026-10-15).
       const keep = new Set(open.get(user.id) ?? []);
-      const periods = teaching(user) ? (all.some((w) => w.students > 0) ? all : []) : all.filter((w) => keep.has(w.month));
+      const next = last.has(user.id) && shiftMonth(last.get(user.id)!, 1) === windows[0].month ? windows[0].month : null;
+      const periods = teaching(user) ? (all.some((w) => w.students > 0) ? all : []) : all.filter((w) => keep.has(w.month) || (w.month === next && w.classes.length > 0));
       return periods.length ? [{ id: user.id, name: user.display_name, subjects: user.subjects ?? [], periods }] : [];
     });
 

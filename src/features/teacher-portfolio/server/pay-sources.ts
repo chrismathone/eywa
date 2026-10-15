@@ -160,11 +160,13 @@ export type PayPlan = { facts: Map<string, PayFacts>; contracts: Map<string, Con
  */
 export async function loadPayPlan(input: {
   admin: SupabaseClient; tenantId: string; settings: TenantSettings; result: PortfolioResult; deadline: number;
+  /** 마감한 달도 센다 — 원장 지시로 마감한 달을 다시 집계하는 도구만(`recompute-all`). */
+  includeClosed?: boolean;
 }): Promise<PayPlan> {
   const { admin, tenantId, result } = input;
   const months = [...new Set(result.teachers.flatMap((t) => t.periods.map((w) => w.month)))];
   if (!months.length) return { facts: new Map(), contracts: new Map() };
-  const closedRows = await fetchAllPaged<{ teacher_id: string; month: string }>((from, to) =>
+  const closedRows = input.includeClosed ? [] : await fetchAllPaged<{ teacher_id: string; month: string }>((from, to) =>
     admin.from("teacher_portfolio_months").select("teacher_id, month").eq("tenant_id", tenantId).in("month", months)
       .not("closed_at", "is", null).order("teacher_id").order("month").range(from, to));
   const closed = new Set(closedRows.map((r) => `${r.teacher_id}|${r.month}`));

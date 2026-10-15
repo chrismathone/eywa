@@ -10,7 +10,7 @@ import { logAction } from "@/features/audit/server/log";
 import { reportWarning } from "@/lib/observability/report-error";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchInChunks } from "@/lib/supabase/batch";
-import { kstToday } from "@/lib/date-kst";
+import { kstToday, shiftMonth } from "@/lib/date-kst";
 import { getPortfolioGate } from "./queries";
 import { refreshTenantPortfolio } from "./refresh";
 import { openFloorMonths } from "./satisfaction-judge";
@@ -32,16 +32,22 @@ const uuid = z.string().uuid();
 const missing = (e: { code?: string } | null) => Boolean(e && (e.code === "42P01" || e.code === "PGRST205"));
 const monthEnd = (month: string) => new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).toISOString().slice(0, 10);
 const CLOSED = "마감한 달이라 바꿔도 그 달 점수는 바뀌지 않습니다";
-const floorOf = async (tenantId: string) => (await openFloorMonths(createAdminClient(), tenantId)).get(tenantId) ?? kstToday().slice(0, 7);
-/** 클레임은 강사가 정해져 있다 — 그 강사·그 달 줄이 마감됐는지(마감은 줄마다) · 계산 창 안인지(지점 하한)를 함께 본다. */
+const floorOf = async (tenantId: string) => (await openFloorMonths(createAdminClient(), tenantId)).get(tenantId) ?? shiftMonth(kstToday().slice(0, 7), -1);
+/**
+ * 클레임은 강사가 정해져 있다 — 그 날짜가 쓰이는 점수 달(다음 달 — 10월 점수 = 9월 기록)의 그 강사 줄이 마감됐는지(마감은 줄마다) ·
+ * 계산 창 안인지(지점의 재료 달 하한)를 함께 본다.
+ */
 async function claimMonthClosed(tenantId: string, teacherId: string, day: string): Promise<boolean> {
   if (day.slice(0, 7) < (await floorOf(tenantId))) return true;
   const { data } = await createAdminClient().from("teacher_portfolio_months").select("closed_at").eq("tenant_id", tenantId)
-    .eq("teacher_id", teacherId).eq("month", day.slice(0, 7)).maybeSingle();
+    .eq("teacher_id", teacherId).eq("month", shiftMonth(day.slice(0, 7), 1)).maybeSingle();
   return Boolean(data?.closed_at);
 }
 
-/** 관리 창이 열릴 때 — 마감 안 한 달의 확인 대기 글(최근 것부터) · 이 강사·이 달에 반영된 글(근거 화면의 판정 id) · 이 강사·이 달 클레임. */
+/**
+ * 관리 창이 열릴 때 — 마감 안 한 달의 확인 대기 글(최근 것부터) · 이 강사·이 달에 반영된 글(근거 화면의 판정 id) · 이 강사·이 달 클레임.
+ * `month` = **재료 달**(화면이 점수 달의 지난달을 넘긴다 · `dataMonthOf`) — 클레임 날짜는 그 달 안이다.
+ */
 export async function loadSatisfactionBoard(teacherId: string, month: string, appliedIds: string[]): Promise<SatisfactionBoard> {
   const gate = await getPortfolioGate();
   if (!gate) return { ok: false, error: EVALUATION_DENIED };

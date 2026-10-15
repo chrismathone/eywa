@@ -3,7 +3,7 @@
 import { isManualId } from "@/features/teacher-portfolio/evaluation/config";
 import { settingOf } from "@/features/teacher-portfolio/evaluation/preview";
 import { metricOf, type ItemId, type ManualMetricItem, type Metric, type MetricId } from "@/features/teacher-portfolio/model/types";
-import { METRIC_COLOR, SHORTFALL_COLOR, dayLabel, itemOf, pointsText, ruleText, shownReason, won } from "@/features/teacher-portfolio/view";
+import { METRIC_COLOR, SHORTFALL_COLOR, dayLabel, itemOf, pointsText, recordMonthNames, ruleText, shownReason, won } from "@/features/teacher-portfolio/view";
 import {
   AttendanceEvidence, EstimatedEvidence, FollowEvidence, ReportEvidence, StudentCell, type EvidenceProps,
 } from "./evidence-records";
@@ -32,6 +32,7 @@ const signed = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${Math.abs(n).
 function StudentsEvidence({ period, nameOf }: EvidenceProps) {
   const m = metricOf(period, "students");
   const t = m.tracking;
+  const names = recordMonthNames(period); // 기록한 달 · 그 전달(10월 점수 화면 = 9월 · 8월)
   const change = (n: number) => (period.evaluation ? <span className="num text-xs font-bold">{signed(n)}</span> : <Delta now={n} before={0} />);
   const flows: [string, number, number][] = [
     ["신규", t.newCount, 1], ["퇴원·수강종료", t.exitCount + t.endedCount, -1], ["반이동 유입", t.transferIn, 0.5], ["반이동 유출", t.transferOut, -0.5],
@@ -39,13 +40,13 @@ function StudentsEvidence({ period, nameOf }: EvidenceProps) {
   return (
     <>
       <StatTiles items={[
-        { label: "전월 말", value: `${t.previous}명` }, { label: "이번 달", value: `${t.current}명` },
-        { label: "이번 달 변동", value: signed(t.adjustment) },
+        { label: `${names.prev} 말`, value: `${t.previous}명` }, { label: `${names.cur} 말`, value: `${t.current}명` },
+        { label: `${names.cur} 변동`, value: signed(t.adjustment) },
         { label: "월간 점수", value: pointsText(m, period) },
       ]} />
       {/* 매월 새로 센다 — 전월 변동은 이 식에 들어가지 않는다. 몇 점인지는 그 달을 매긴 설정의 규칙. */}
       <p className="bg-primary-softer mt-4 rounded-lg px-3.5 py-3 text-xs leading-relaxed">
-        {period.evaluation ? "변동값의 합이 이 항목의 수치입니다 — 몇 점인지는 위 점수 기준." : "기본 10점에서 이번 달 변동을 더하고 빼 0~20점 범위로 반영합니다."}
+        {period.evaluation ? "변동값의 합이 이 항목의 수치입니다 — 몇 점인지는 위 점수 기준." : `기본 10점에서 ${names.cur} 변동을 더하고 빼 0~20점 범위로 반영합니다.`}
       </p>
       <ul className="mt-4 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
         {flows.map(([label, count, points]) => (
@@ -57,7 +58,7 @@ function StudentsEvidence({ period, nameOf }: EvidenceProps) {
         ))}
       </ul>
       <SectionTitle>학생 변동</SectionTitle>
-      <DataTable headers={["학생 · 반", "날짜", "변동", period.evaluation ? "변동값" : "점수"]} empty="이번 달 담당 학생 변동이 없습니다."
+      <DataTable headers={["학생 · 반", "날짜", "변동", period.evaluation ? "변동값" : "점수"]} empty={`${names.cur} 담당 학생 변동이 없습니다.`}
         rows={m.detail.map((r, i) => ({
           key: `${r.studentId}|${r.day}|${r.type}|${i}`,
           cells: [<StudentCell key="s" name={nameOf(r.studentId)} sub={`${r.className} · ${r.role}`} />, dayLabel(r.day), r.note ? `${r.type} · ${r.note}` : r.type, <span key="d">{change(r.points)}</span>],
@@ -108,17 +109,18 @@ function RevenueEvidence({ period }: EvidenceProps) {
 
 function CoverageEvidence({ period, nameOf }: EvidenceProps) {
   const m = metricOf(period, "coverage");
+  const names = recordMonthNames(period);
   return (
     <>
       <StatTiles items={[
-        { label: "이번 달 마감", value: `${m.due}건` }, { label: "기한 내 완료", value: `${m.done}건`, className: "text-primary" },
+        { label: `${names.cur} 마감`, value: `${m.due}건` }, { label: "기한 내 완료", value: `${m.done}건`, className: "text-primary" },
         { label: "미완료", value: `${m.due - m.done}건`, className: "text-amber" }, { label: "기한 내 대기", value: `${m.pending}건` },
       ]} />
       <div className="my-4">
         <StackBar total={m.due} parts={[{ color: METRIC_COLOR.coverage, count: m.done }, { color: SHORTFALL_COLOR, count: m.due - m.done }]} />
       </div>
       <DataTable headers={["학생 · 반", "결석일", "기한", "완료일", "반영"]}
-        empty={period.evaluation ? `이번 달 마감할 보강이 없습니다 — ${pointsText(m, period)}.` : "이번 달 마감할 보강이 없어 10점입니다."}
+        empty={period.evaluation ? `${names.cur}에 마감할 보강이 없습니다 — ${pointsText(m, period)}.` : `${names.cur}에 마감할 보강이 없어 10점입니다.`}
         rows={m.detail.map((r, i) => ({
           key: `${r.studentId}|${r.absence}|${i}`,
           cells: [<StudentCell key="s" name={nameOf(r.studentId)} sub={r.className} />, dayLabel(r.absence), dayLabel(r.deadline), r.makeup ? dayLabel(r.makeup) : "—", <StatusChip key="c" state={r.state} />],

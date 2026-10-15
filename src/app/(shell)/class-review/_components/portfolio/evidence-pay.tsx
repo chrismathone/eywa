@@ -1,6 +1,6 @@
 "use client";
 
-import { payDataMonth } from "@/features/teacher-portfolio/model/pay-ratio";
+import { dataMonthOf } from "@/features/teacher-portfolio/model/dates";
 import { metricOf } from "@/features/teacher-portfolio/model/types";
 import { pointsText } from "@/features/teacher-portfolio/view";
 import type { EvidenceProps } from "./evidence-records";
@@ -15,8 +15,8 @@ export function PayRatioEvidence({ period }: Pick<EvidenceProps, "period">) {
   const m = metricOf(period, "payRatio");
   // 학생 1명이 이 선생님 반을 평균 몇 개 듣는지 — 학생 × 반 줄 ÷ 학생(보강 묶음 제외).
   const perStudent = m.students && m.enrollments ? (m.enrollments / m.students).toFixed(2) : null;
-  // 2026-10부터 이 달 점수는 지난달 재료(원장 2026-10-15) — 담당 학생·반도 그 달 값이라 달을 붙인다.
-  const data = payDataMonth(period.month);
+  // 이 달 점수는 지난달 재료(원장 2026-10-15) — 담당 학생·반도 그 달 값이라 달을 붙인다. 저장된 줄의 재료 달로 읽는다(옛 줄은 그 달 그대로).
+  const data = dataMonthOf(period);
   const prev = data === period.month ? null : `${Number(data.slice(5, 7))}월`;
   // 반별 비중 — 이 칸이 생기기 전에 저장(마감)된 달은 빈 목록이다.
   const byClass = Array.isArray(m.detail) ? m.detail : [];
