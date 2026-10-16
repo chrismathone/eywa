@@ -1852,6 +1852,11 @@ export const SHEET_DICT = {
   "att.columns.all": { ko: "모두 표시", en: "Show all columns" },
   // '합계 및 실급여 보여주기' 버튼(원장 2026-09-21 → 2026-10-07 선생님별 스위치) — 관리자가 프리랜서 강사 전체 보기를 볼 때만 선다.
   "att.actualSalary.toggle": { ko: "합계 및 실급여 보여주기", en: "Show totals & net pay" },
+  // 혼합 계약(근로 + 용역, 2026-10-16)인데 용역 학년을 안 골랐다 — 스위치 대신 까닭.
+  "att.actualSalary.needsLevels": {
+    ko: "혼합 계약 — 용역 학년을 골라야 실급여가 섭니다(비율 설정)",
+    en: "Mixed contract — choose the freelance grade levels in rate settings to show net pay",
+  },
   "att.actualSalary.saveFailed": { ko: "합계 및 실급여 보여주기 설정을 저장하지 못했습니다. 다시 눌러 주세요.", en: "Couldn't save the totals & net pay setting. Please try again." },
   "att.actualSalary.savedOn": { ko: "이제 {m}월 출석부의 실급여와 합계가 이 선생님 본인에게도 보입니다", en: "Net pay and its total for month {m} now show on this teacher's own sheet too" },
   "att.actualSalary.savedOff": { ko: "{m}월 출석부에서 실급여를 감췄습니다(이 화면과 선생님 화면 모두)", en: "Net pay for month {m} is now hidden (here and for the teacher)" },

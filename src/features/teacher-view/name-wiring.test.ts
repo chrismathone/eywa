@@ -760,7 +760,8 @@ describe("🔴 이력서 종이 서식 — 화면만 언어를 타고 인쇄물�
   it("🔴 저장값(근무요일·근무형태·서류)은 한 글자도 안 바뀐다 — 영어는 표시 전용", () => {
     expect(WORKDAYS.map((d) => d.key)).toEqual(["mon", "tue", "wed", "thu", "fri", "sat", "sun"]);
     expect(WORKDAYS.map((d) => d.label)).toEqual(["월", "화", "수", "목", "금", "토", "일"]);
-    expect(EMPLOYMENT_TYPES).toEqual(["정규직", "아르바이트", "프리랜서"]);
+    // '혼합'(근로 + 용역)은 2026-10-16 원장 결정으로 더한 값 — 기존 세 값은 그대로다.
+    expect(EMPLOYMENT_TYPES).toEqual(["정규직", "아르바이트", "프리랜서", "혼합"]);
     expect(RESUME_CHECKS.map((c) => c.key)).toEqual([
       "sexCrime",
       "childAbuse",
