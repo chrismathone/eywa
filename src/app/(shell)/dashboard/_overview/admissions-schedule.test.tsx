@@ -6,6 +6,7 @@ vi.mock("@/components/workspace/window-link", () => ({
   WindowLink: ({ href, ariaLabel, children }: { href: string; ariaLabel?: string; children: ReactNode }) => <a href={href} aria-label={ariaLabel}>{children}</a>,
 }));
 import { AdmissionsSchedule } from "./admissions-schedule";
+import { ConsultChipsProvider } from "./consult-progress";
 
 it("입테가 많아도 첫 수업이 보이며, 각 열의 제한과 상세 링크를 유지한다", () => {
   const tests: OverviewData["calendar"] = Array.from({ length: 5 }, (_, i) => ({
@@ -22,6 +23,20 @@ it("입테가 많아도 첫 수업이 보이며, 각 열의 제한과 상세 링
   expect(within(left).getByText("외 2건")).toBeInTheDocument();
   expect(within(right).getByRole("link", { name: /수학 첫 수업/ })).toHaveAttribute("href", "/classes/math-class");
   expect(within(right).queryByText("입테 0")).not.toBeInTheDocument();
+});
+
+it("상담 단계 꼬리표는 입학 테스트 줄에만 — 첫 수업 줄엔 없다(원장 2026-10-16 '첫 수업 건에도 상담 완료 입테 끝이 붙어있는건 좀 이상해')", () => {
+  const chips = { c1: { label: "상담 완료", detail: "입테 끝", color: "blue" as const }, c2: { label: "상담 완료", detail: "입테 오늘", color: "blue" as const } };
+  render(
+    <ConsultChipsProvider chips={chips}>
+      <AdmissionsSchedule events={[
+        { id: "t", title: "영수입테 김세림", startDate: "2026-10-16", endDate: "2026-10-16", startTime: "17:00", source: "manual", kind: "levelTest", matchedConsultation: { id: "c2", name: "김세림" } },
+        { id: "f", title: "영어 첫 수업 장윤건", startDate: "2026-10-19", endDate: "2026-10-19", startTime: "14:20", source: "manual", kind: "firstClass", matchedConsultation: { id: "c1", name: "장윤건" } },
+      ]} />
+    </ConsultChipsProvider>,
+  );
+  expect(within(screen.getByRole("region", { name: "입학 테스트" })).getByText("상담 완료 · 입테 오늘")).toBeInTheDocument();
+  expect(within(screen.getByRole("region", { name: "첫 수업" })).queryByText(/상담 완료/)).not.toBeInTheDocument();
 });
 
 it("취소된 일정은 시간 순서 그대로 취소선·'취소' 표식으로 남고, 열 건수엔 안 들고 링크도 없다(2026-09-30)", () => {
