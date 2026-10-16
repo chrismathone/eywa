@@ -949,7 +949,18 @@ export const SHEET_DICT = {
     ko: "교시와 교재를 고르면 그 시각의 수업일마다 차수가 순서대로 월간계획에 섭니다. 연휴는 건너뜁니다. 실제 시트는 강사가 [월간계획 전체 가져오기]를 누를 때만 채워집니다.",
     en: "Pick periods and a book and the lessons line up on the monthly plan, class day by class day (holidays skipped). The actual sheet is filled only when a teacher presses [Import plan].",
   },
-  "fill.slots": { ko: "교시 — 고른 시각에 차수가 들어갑니다", en: "Periods — lessons go into the times you pick" },
+  "fill.slots": {
+    ko: "교시 — 선생님을 누르고, 요일과 차수 자리를 고르세요 (1차수 = 25분)",
+    en: "Periods — tap a teacher, then pick the days and lesson spots (1 lesson = 25 min)",
+  },
+  "fill.slots.days": { ko: "적용할 요일", en: "Apply on" },
+  "fill.slots.pos": { ko: "{n}차수", en: "Part {n}" },
+  "fill.slots.pos.title": {
+    ko: "한 교시 안의 25분 자리 — 1차수는 앞 25분, 2차수는 뒤 25분입니다. 둘 다 고르면 그 교시에 차수 2개가 들어갑니다.",
+    en: "25-minute spots inside one period — part 1 is the first 25 min, part 2 the second. Pick both to fit two lessons in that period.",
+  },
+  "fill.slots.pickDay": { ko: "요일을 골라 주세요.", en: "Pick at least one day." },
+  "fill.weekly": { ko: "한 주에 {n}차수", en: "{n} lessons a week" },
   "fill.slots.oneTeacher": {
     ko: "한 번에 한 선생님 교시만 담깁니다 — 다른 선생님 교시를 고르면 그쪽으로 바뀝니다(따로 배정하세요).",
     en: "One assignment covers one teacher — picking another teacher’s period switches to it (assign theirs separately).",
@@ -963,14 +974,6 @@ export const SHEET_DICT = {
     en: "Only books that have an area and a lesson count can be picked (set those in Textbooks).",
   },
   "fill.book.sessions": { ko: "{n}차수", en: "{n} lessons" },
-  "fill.pace": { ko: "차수 단위", en: "Lesson unit" },
-  "fill.pace.period": { ko: "교시마다 1차수 (1시간씩)", en: "One lesson per period (1 hour)" },
-  "fill.pace.day": { ko: "하루에 1차수 (2시간씩)", en: "One lesson per day (2 hours)" },
-  "fill.pace.min25": { ko: "25분 수업 (교시마다 1차수 · 남는 시간은 다른 교재)", en: "25-min lesson (one per period · fill the rest with another book)" },
-  "fill.pace.hint": {
-    ko: "하루에 두 교시를 골랐다면, ‘하루에 1차수’는 그 두 칸에 같은 차수가 들어갑니다.",
-    en: "If you picked two periods on the same day, “one lesson per day” puts the same lesson in both cells.",
-  },
   // ⚠️ `Start date`는 `res.f.startDate`(입사일)가 쓴다 — 뜻이 달라 같은 영어를 쓰면 안 된다.
   "fill.start": { ko: "시작일", en: "Starts on" },
   "fill.start.hint": { ko: "지난 날짜엔 넣지 않습니다.", en: "Past dates are never filled." },

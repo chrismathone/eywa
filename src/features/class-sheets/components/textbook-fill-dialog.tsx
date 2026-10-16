@@ -17,6 +17,7 @@ import {
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { sheetDowLabel, sheetDowLabelByIndex, type SheetLang } from "@/features/teacher-view/i18n";
 import type { ApplyPreview, ApplyPreviewRow, ClassSlotChoice, LessonPace } from "@/features/textbooks/types";
+import { slotPickKey } from "@/features/textbooks/lesson-schedule";
 import { TextbookFillExisting } from "./textbook-fill-existing";
 
 /**
@@ -62,6 +63,21 @@ type Book = { id: string; title: string; skillArea: string | null; sessionCount:
 /** 칩을 담당으로 묶는 키 — 담당이 없는 칸은 빈 문자열로 한 묶음이 된다(자기들끼리는 섞여도 된다). */
 const teacherKeyOf = (s: ClassSlotChoice): string => s.teacherLabel ?? "";
 
+/**
+ * 한 교시 안의 차수 자리 — 1차수(앞 25분)·2차수(뒤 25분). 원장 2026-10-16: *"교시에 선생님을 클릭하면 적용할
+ * 요일을 클릭하고 이후 화 1차수2차수 … 금1차수 이렇게 하면 해당 교재가 3차수씩 배정"*.
+ */
+const POSITIONS = [1, 2] as const;
+
+/**
+ * 🔴 차수 단위는 **25분 고정**이다(원장 2026-10-16 *"1시간 2시간 25분 필요없음 하나만"*) — 단위 선택을 걷었다.
+ *    한 교시에 몇 차수가 들어가는지는 단위가 아니라 **고른 자리 수**가 정한다(`lessonsInSlot`).
+ */
+const PACE: LessonPace = "min25";
+
+/** 칩에서 고른 요일들(요일 순). */
+const sortedDows = (s: ClassSlotChoice) => [...s.dows].sort((a, b) => DOW_ORDER.indexOf(a) - DOW_ORDER.indexOf(b));
+
 export function TextbookFillDialog({
   classId,
   className,
@@ -90,9 +106,12 @@ export function TextbookFillDialog({
 
   const [slots, setSlots] = useState<ClassSlotChoice[]>([]);
   const [books, setBooks] = useState<Book[]>([]);
+  /** 펼친 칩(시각·선생님) — 누르면 그 칩의 요일이 열린다. */
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  /** 고른 자리 — `"tue|17:20|2"`(= `slotPickKey`). 서버가 받는 값 그대로다. */
+  const [spots, setSpots] = useState<Set<string>>(new Set());
   const [bookId, setBookId] = useState("");
-  const [pace, setPace] = useState<LessonPace>("period");
+  const pace = PACE;
   const [termMode, setTermMode] = useState<"regular" | "exam">("regular");
   const [startDate, setStartDate] = useState(today);
   const [startLessonNo, setStartLessonNo] = useState(1);
@@ -141,7 +160,7 @@ export function TextbookFillDialog({
     setPreview(null);
   }
 
-  const canPreview = picked.size > 0 && !!bookId && !!startDate;
+  const canPreview = spots.size > 0 && !!bookId && !!startDate;
   /**
    * 지금 고른 담당. 아무것도 안 골랐으면 **null**(그때는 전부 고를 수 있다).
    * ⚠️ 담당 없는 칸은 `""`로 묶는다 — `?? null`로 접으면 "안 고름"과 구분이 안 돼 규칙이 새어 나간다.
@@ -153,10 +172,57 @@ export function TextbookFillDialog({
    * 🔴 **`useMemo`여야 한다** — 매 렌더 새 배열이면 아래 `runPreview`의 정체성이 계속 바뀌어
    *    자동 미리보기 effect가 무한히 돈다(요청이 끝없이 나간다).
    */
-  const pickedSlots = useMemo(
-    () => slots.filter((s) => picked.has(s.key)).flatMap((s) => s.picks),
-    [slots, picked],
-  );
+  const pickedSlots = useMemo(() => [...spots].sort(), [spots]);
+
+  /** 칩을 펼치거나 접는다. 접으면 그 칩에서 고른 자리도 함께 지운다(안 보이는 선택이 남지 않게). */
+  function toggleChip(s: ClassSlotChoice, otherTeacher: boolean) {
+    if (otherTeacher) {
+      // 🔴 **한 배정엔 한 담당만**(원장 2026-09-18 *"교사가 다르면 교재배정을 새로해야지"*) — 섞으면 차수가
+      //    두 선생님 칸에 번갈아 들어간다. 막는 대신 **고른 것으로 갈아탄다**(못 누르는 칩은 고장으로 읽힌다).
+      setPicked(new Set([s.key]));
+      setSpots(new Set());
+    } else if (picked.has(s.key)) {
+      setPicked((prev) => {
+        const next = new Set(prev);
+        next.delete(s.key);
+        return next;
+      });
+      setSpots((prev) => {
+        const next = new Set(prev);
+        for (const d of s.dows) for (const pos of POSITIONS) next.delete(slotPickKey(d, s.start, pos));
+        return next;
+      });
+    } else {
+      setPicked((prev) => new Set(prev).add(s.key));
+    }
+    invalidate();
+  }
+
+  /** 요일을 켜면 1차수 자리가 함께 켜진다(가장 흔한 선택), 끄면 그 요일의 자리를 전부 지운다. */
+  function toggleDay(s: ClassSlotChoice, dow: string) {
+    setSpots((prev) => {
+      const next = new Set(prev);
+      const keys = POSITIONS.map((pos) => slotPickKey(dow, s.start, pos));
+      if (keys.some((k) => next.has(k))) for (const k of keys) next.delete(k);
+      else next.add(keys[0]);
+      return next;
+    });
+    invalidate();
+  }
+
+  /** 자리 하나를 켜고 끈다 — 둘 다 끄면 그 요일이 꺼진 것과 같다. */
+  function toggleSpot(key: string) {
+    setSpots((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+    invalidate();
+  }
+
+  const dayOn = (s: ClassSlotChoice, dow: string) =>
+    POSITIONS.some((pos) => spots.has(slotPickKey(dow, s.start, pos)));
 
   const runPreview = useCallback(async () => {
     const token = ++gen.current;
@@ -285,27 +351,15 @@ export function TextbookFillDialog({
                       // 🔴 칩 하나 = **(시각, 담당)** 한 묶음이다(원장 2026-09-18) — 같은 17:20이라도
                       //    월은 추민아, 목은 JJ일 수 있어 시각으로 묶으면 남의 칸까지 데려간다.
                       const on = picked.has(s.key);
-                      const dows = [...s.dows].sort((a, b) => DOW_ORDER.indexOf(a) - DOW_ORDER.indexOf(b));
-                      // 다른 담당의 칩은 **같이 담기지 않는다**(아래 onClick) — 지금 고른 담당이 아니면 흐리게.
+                      const dows = sortedDows(s);
+                      // 다른 담당의 칩은 **같이 담기지 않는다**(toggleChip) — 지금 고른 담당이 아니면 흐리게.
                       const otherTeacher = pickedTeacher !== null && teacherKeyOf(s) !== pickedTeacher;
                       return (
                         <button
                           key={s.key}
                           type="button"
                           aria-pressed={on}
-                          onClick={() => {
-                            // 🔴 **한 배정엔 한 담당만**(원장 2026-09-18 *"교사가 다르면 교재배정을 새로해야지"*).
-                            //    섞으면 차수가 두 선생님 칸에 번갈아 들어가 둘 다 제 진도를 못 읽는다.
-                            //    막아 두는 대신 **고른 것으로 갈아탄다** — 못 누르는 칩은 고장으로 읽힌다.
-                            setPicked((prev) => {
-                              if (otherTeacher) return new Set([s.key]);
-                              const next = new Set(prev);
-                              if (next.has(s.key)) next.delete(s.key);
-                              else next.add(s.key);
-                              return next;
-                            });
-                            invalidate();
-                          }}
+                          onClick={() => toggleChip(s, otherTeacher)}
                           className={`rounded-lg border px-2.5 py-1 text-left text-xs transition ${
                             on
                               ? "border-primary bg-primary text-primary-foreground"
@@ -326,6 +380,77 @@ export function TextbookFillDialog({
                     })}
                   </div>
                 )}
+
+                {/* 펼친 칩마다: 적용할 요일 → 그 요일의 1차수·2차수 자리(원장 2026-10-16). */}
+                {slots
+                  .filter((s) => picked.has(s.key))
+                  .map((s) => {
+                    const dows = sortedDows(s);
+                    const onDays = dows.filter((d) => dayOn(s, d));
+                    return (
+                      <div key={s.key} className="border-line-faint flex flex-col gap-1.5 rounded-lg border px-2.5 py-2">
+                        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                          <span className="num font-bold">{s.start}</span>
+                          {s.periodLabel ? <span className="text-text-dim">{s.periodLabel}</span> : null}
+                          {s.seat || s.teacherLabel ? (
+                            <span className="text-text-dim">· {s.seat ?? s.teacherLabel}</span>
+                          ) : null}
+                          <span className="text-text-faint ml-2">{t("fill.slots.days")}</span>
+                          {dows.map((d) => {
+                            const on = dayOn(s, d);
+                            return (
+                              <button
+                                key={d}
+                                type="button"
+                                aria-pressed={on}
+                                onClick={() => toggleDay(s, d)}
+                                className={`h-7 min-w-9 rounded-md border px-2 font-bold transition ${
+                                  on
+                                    ? "border-primary bg-primary-soft text-primary"
+                                    : "border-line text-text-dim hover:border-primary hover:text-foreground"
+                                }`}
+                              >
+                                {sheetDowLabel(d, lang)}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {onDays.length === 0 ? (
+                          <span className="text-text-faint text-xs">{t("fill.slots.pickDay")}</span>
+                        ) : (
+                          onDays.map((d) => (
+                            <div key={d} className="flex flex-wrap items-center gap-1.5 text-xs">
+                              <span className="w-7 text-center font-bold">{sheetDowLabel(d, lang)}</span>
+                              {POSITIONS.map((pos) => {
+                                const key = slotPickKey(d, s.start, pos);
+                                const on = spots.has(key);
+                                return (
+                                  <button
+                                    key={pos}
+                                    type="button"
+                                    aria-pressed={on}
+                                    onClick={() => toggleSpot(key)}
+                                    title={t("fill.slots.pos.title")}
+                                    className={`h-7 rounded-md border px-2.5 font-semibold transition ${
+                                      on
+                                        ? "border-primary bg-primary text-primary-foreground"
+                                        : "border-line text-text-dim hover:border-primary hover:text-foreground"
+                                    }`}
+                                  >
+                                    {tf("fill.slots.pos", { n: pos })}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    );
+                  })}
+
+                {spots.size > 0 ? (
+                  <span className="text-xs font-bold">{tf("fill.weekly", { n: spots.size })}</span>
+                ) : null}
               </div>
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -347,23 +472,6 @@ export function TextbookFillDialog({
                     ))}
                   </select>
 <span className="text-text-faint text-xs">{t("fill.book.hint")}</span>
-                </label>
-
-                <label className="flex flex-col gap-1">
-                  <span className="text-text-dim text-xs font-bold">{t("fill.pace")}</span>
-                  <select
-                    value={pace}
-                    onChange={(e) => {
-                      setPace(e.target.value as LessonPace);
-                      invalidate();
-                    }}
-                    className="border-line focus:border-primary h-8 w-full rounded-lg border bg-transparent px-2.5 pr-7 text-base outline-none sm:text-xs"
-                  >
-                    <option value="period">{t("fill.pace.period")}</option>
-                    <option value="day">{t("fill.pace.day")}</option>
-                    <option value="min25">{t("fill.pace.min25")}</option>
-                  </select>
-<span className="text-text-faint text-xs">{t("fill.pace.hint")}</span>
                 </label>
 
                 <label className="flex flex-col gap-1">

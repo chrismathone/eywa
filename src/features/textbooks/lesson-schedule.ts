@@ -22,6 +22,9 @@
  *     1시간수업이라도 하나만 들어가게 … 다른 교재로 또 25분 추가할수있자나"*). 🔴 교시 길이로 차수를 여러 개
  *     밀어 넣지 말 것 — 한 번 그렇게 만들었다가 원장이 되돌렸다. 값이 따로 있는 건 배정 목록에서 "이 교재는
  *     25분짜리"라는 사실을 보이기 위해서다.
+ *     → **2026-10-16 원장: 차수는 25분 고정, 단위 선택 없음.** 대신 교시마다 **몇 번째 25분 자리**(1차수·2차수)에
+ *       넣을지를 고른다(`"tue|17:20|2"`). "화 1·2차 · 금 1차"면 그 교재가 한 주에 3차수 나간다 — 한 교시에
+ *       차수가 둘 들어갈 수 있다(`lessonsInSlot`). 단위 선택은 화면에서 걷었고 저장값은 `min25`다.
  */
 import { slotsByDateOf, type MonthScheduleRow, type MonthSlot } from "@/features/class-sheets/lib/month-assemble";
 import { holidayNameOn, type HolidayMap } from "@/features/class-sheets/lib/holiday";
@@ -49,7 +52,10 @@ export function normalizeLessonPace(value: unknown): LessonPace {
  */
 export const MAX_LOOKAHEAD_DAYS = 400;
 
-/** 차수 하나가 앉을 자리 한 칸. 같은 `lessonNo`가 여러 칸에 앉을 수 있다(pace="day"). */
+/**
+ * 차수 하나가 앉을 자리 한 칸. 같은 `lessonNo`가 여러 칸에 앉을 수 있고(pace="day"), 한 칸에 차수가 둘
+ * 앉을 수도 있다(그 교시의 1·2차수 자리를 둘 다 고른 경우 — 순서대로 붙는다).
+ */
 export type LessonTarget = { lessonNo: number; date: string; slotStart: string };
 
 export type LessonSchedule = {
@@ -86,20 +92,66 @@ export function slotsOfAxis(slots: readonly MonthSlot[], axis: SlotAxis): MonthS
 const DOW_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 const HHMM_RE = /^[0-2]\d:[0-5]\d$/;
 
-/** 화면·저장이 같은 글자를 쓰도록 키를 **한 곳에서** 만든다. */
-export function slotPickKey(dow: string, start: string): string {
-  return `${dow}|${start}`;
+/**
+ * 한 교시 안의 차수 자리 — `1`(앞 25분) · `2`(뒤 25분). 원장 2026-10-16: *"차수는 25분으로 고정 …
+ * 화 1차수2차수 금1차수 이렇게 하면 해당 교재가 3차수씩 배정"*. 상한은 넉넉히 4(2시간 교시까지).
+ */
+export const MAX_SLOT_POSITION = 4;
+
+/**
+ * 화면·저장이 같은 글자를 쓰도록 키를 **한 곳에서** 만든다.
+ * `pos`가 있으면 `"tue|17:20|2"`(그 교시의 2차수 자리), 없으면 옛 모양 `"tue|17:20"`(= 1자리).
+ */
+export function slotPickKey(dow: string, start: string, pos?: number): string {
+  return pos ? `${dow}|${start}|${pos}` : `${dow}|${start}`;
 }
 
-/** `"mon|17:20"` → `{ dow, start }`. 요일이 없으면 `dow: null`(모든 요일). 모양이 틀리면 null. */
-export function parseSlotPick(value: string): { dow: string | null; start: string } | null {
+/**
+ * `"mon|17:20"`·`"mon|17:20|2"` → `{ dow, start, pos }`. 요일이 없으면 `dow: null`(모든 요일).
+ * 자리 없는 옛 값은 `pos: null`(= 그 교시에 1차수). 모양이 틀리면 null.
+ */
+export function parseSlotPick(value: string): { dow: string | null; start: string; pos: number | null } | null {
   const raw = String(value ?? "").trim();
-  const bar = raw.indexOf("|");
-  if (bar < 0) return HHMM_RE.test(raw) ? { dow: null, start: raw } : null;
-  const dow = raw.slice(0, bar);
-  const start = raw.slice(bar + 1);
+  const parts = raw.split("|");
+  if (parts.length === 1) return HHMM_RE.test(raw) ? { dow: null, start: raw, pos: null } : null;
+  if (parts.length > 3) return null;
+  const [dow, start, posRaw] = parts as [string, string, string | undefined];
   if (!(DOW_KEYS as readonly string[]).includes(dow) || !HHMM_RE.test(start)) return null;
-  return { dow, start };
+  if (posRaw === undefined) return { dow, start, pos: null };
+  const pos = Number(posRaw);
+  if (!Number.isInteger(pos) || pos < 1 || pos > MAX_SLOT_POSITION || String(pos) !== posRaw) return null;
+  return { dow, start, pos };
+}
+
+/**
+ * 그 (요일, 시각) 교시 한 칸에 **차수가 몇 개** 들어가는가 — 고른 자리 수. 안 골랐으면 0.
+ * 옛 모양(자리 없음)은 1개로 센다 — 0268a 시절 배정은 "교시마다 1차수"였다.
+ */
+export function lessonsInSlot(picks: ReadonlySet<string>, dow: string, start: string): number {
+  let n = 0;
+  for (let pos = 1; pos <= MAX_SLOT_POSITION; pos += 1) if (picks.has(slotPickKey(dow, start, pos))) n += 1;
+  if (n > 0) return n;
+  return picks.has(slotPickKey(dow, start)) || picks.has(start) ? 1 : 0;
+}
+
+/**
+ * 고른 칸 목록 → 화면 표기용 묶음(요일 순 → 시각 순). `positions`가 빈 배열이면 자리 없는 옛 값이다.
+ * 교재목록·배정 창이 **같은 묶음**으로 적게 한 곳에 둔다.
+ */
+export function groupSlotPicks(picks: readonly string[]): { dow: string | null; start: string; positions: number[] }[] {
+  const acc = new Map<string, { dow: string | null; start: string; positions: number[] }>();
+  for (const v of picks) {
+    const p = parseSlotPick(v);
+    if (!p) continue;
+    const key = `${p.dow ?? ""}|${p.start}`;
+    const cur = acc.get(key) ?? { dow: p.dow, start: p.start, positions: [] };
+    if (p.pos !== null && !cur.positions.includes(p.pos)) cur.positions.push(p.pos);
+    acc.set(key, cur);
+  }
+  const dowRank = (d: string | null) => (d === null ? -1 : (DOW_KEYS as readonly string[]).indexOf(d));
+  return [...acc.values()]
+    .map((g) => ({ ...g, positions: g.positions.sort((a, b) => a - b) }))
+    .sort((a, b) => dowRank(a.dow) - dowRank(b.dow) || a.start.localeCompare(b.start));
 }
 
 /**
@@ -114,9 +166,7 @@ export function slotsOfPicks(
   picks: ReadonlySet<string>,
 ): MonthSlot[] {
   return slots.filter(
-    (s) =>
-      s.seat !== LAB_ROOM_LABEL &&
-      (picks.has(slotPickKey(dow, s.slotStart)) || picks.has(s.slotStart)),
+    (s) => s.seat !== LAB_ROOM_LABEL && lessonsInSlot(picks, dow, s.slotStart) > 0,
   );
 }
 
@@ -201,6 +251,7 @@ export function buildLessonSchedule(input: {
       continue;
     }
 
+    const dow = dowKeyOf(date);
     for (const slot of daySlots) {
       if (cursor >= lessonNos.length) break;
       const shift = shiftOf(slot.slotStart);
@@ -211,8 +262,13 @@ export function buildLessonSchedule(input: {
         cursor += 1;
         if (cursor >= lessonNos.length) break;
       }
-      targets.push({ lessonNo: lessonNos[cursor]!, date, slotStart: slot.slotStart });
-      cursor += 1;
+      // 🔑 한 교시에 차수가 **고른 자리 수만큼** 들어간다(25분 1차수 · 1시간 교시 = 최대 2차수, 원장
+      //    2026-10-16). 축 방식(옛 배정)과 자리 없는 옛 값은 1개다.
+      const count = picked ? Math.max(1, lessonsInSlot(picked, dow, slot.slotStart)) : 1;
+      for (let k = 0; k < count && cursor < lessonNos.length; k += 1) {
+        targets.push({ lessonNo: lessonNos[cursor]!, date, slotStart: slot.slotStart });
+        cursor += 1;
+      }
       lastDate = date;
     }
   }
