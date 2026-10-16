@@ -72,10 +72,15 @@ describe("화면 최대화 배선", () => {
   const block = maximizeBlock(css);
   const layout = read("src/app/(shell)/layout.tsx");
 
-  it("숨김 규칙은 데스크톱 셸과 같은 미디어쿼리 안에 있다(모바일 셸에선 잠든다 · 인쇄엔 안 걸린다)", () => {
-    const desk = css.match(/@custom-variant desk \{\s*@media ([^{]+)\{/)![1].trim();
+  it("숨김 규칙은 데스크톱 셸에서만(모바일 셸에선 잠든다) · 화면 한정이라 인쇄엔 안 걸린다", () => {
     expect(block).not.toBe("");
-    expect(block.match(/^@media screen and ([^{]+)\{/)![1].trim()).toBe(desk);
+    expect(block).toMatch(/^@media screen \{/);
+    // 데스크톱 셸 = `data-desk`(desk 변형과 같은 판정 — 미디어쿼리 + 실제 마우스 움직임, desk-detect.ts · 2026-10-16 갤럭시북).
+    //   블록 안 규칙마다 그 접두가 있어야 모바일 셸에서 잠든다.
+    const rules = block.split(/\r?\n/).filter((l) => /^\s*[^\s/*@].*\{\s*$/.test(l));
+    expect(rules.length).toBeGreaterThan(5);
+    for (const r of rules) expect(r.trim(), r).toMatch(/^:where\(\[data-desk\]\) \[data-page-maximize/);
+    expect(css).toMatch(/@custom-variant desk \{[\s\S]*?&:where\(:root\[data-desk\]/);
   });
 
   it("사이드바·머리글의 eyebrow·설명만 숨긴다 · 아래 여백·저장 바 밀착 규약은 그대로 · `:has(> …)` 없음", () => {

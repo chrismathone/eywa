@@ -167,8 +167,8 @@ export function MonthClient({
   const t = useSheetT();
 
   /**
-   * 회차 미룸·당김 — 같은 요일·교시의 **실제 진도**가 한 주씩 밀리거나 당겨진다(2026-10-15, `setLessonShift`).
-   * 누를 때마다 한 주(토글 아님) · 연타는 `shiftBusy`로 막는다. 화면은 `router.refresh()`로 다시 받는다.
+   * 회차 미룸·당김 — **실제 진도**가 한 칸씩 밀리거나 당겨진다(2026-10-15, `setLessonShift`). 배정 교재는 배정한
+   * 요일 순서대로, 그 밖의 줄은 같은 요일·교시끼리(2026-10-16). 누를 때마다 한 칸(토글 아님) · 연타는 `shiftBusy`로 막는다. 화면은 `router.refresh()`로 다시 받는다.
    */
   const shiftBusy = useRef(false);
   const onShift = useCallback(

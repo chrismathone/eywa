@@ -327,6 +327,22 @@ describe("교재 배정 — 회차 미루기·당기기", () => {
     expect(body).not.toContain("ecs_apply_textbook_lessons");
   });
 
+  it("🔴 배정 교재가 지나가는 칸은 **교재 순서로** 다시 깐다(원장 2026-10-16 — 화·금 교재 순서 꼬임)", () => {
+    const body = plan.slice(plan.indexOf("export async function setLessonShift"));
+    // 교재 경로가 먼저 — 같은 요일 이동이 먼저 돌면 화요일 칸만 움직여 순서가 꼬인다.
+    expect(body.indexOf("shiftAlongPlans(")).toBeGreaterThan(-1);
+    expect(body.indexOf("shiftAlongPlans(")).toBeLessThan(body.indexOf("shiftActualLines("));
+    const relay = read("src", "features", "textbooks", "server", "shift-relay.ts");
+    // 표식을 반영한 일정(월간계획과 같은 함수)이 정본 — 둘이 다른 순서를 말하지 않게.
+    expect(relay).toContain("expandPlans(");
+    expect(relay).toContain("placeShiftMarker(");
+    // 배정 교재의 줄(고쳐 쓴 줄 포함)은 요일 이동에서 뺀다(두 번 움직이거나 요일 축으로 다시 꼬이면 안 된다).
+    expect(relay).toContain("excludeIds: bookLineIds");
+    expect(relay).toContain("isBookLine(l, book)");
+    // 🔴 못 읽었으면 종전 방식으로 떨어뜨리지 않는다(그게 순서를 꼬던 길이다).
+    expect(relay).toMatch(/status !== "ok"\) \{\s*return \{ handled: true, ok: false/);
+  });
+
   it("🔴 버튼은 **실제를 적는 표**에 있다 — 달력에만 두면 사람이 못 찾는다", () => {
     // 원장 제보 2026-09-22 *"밀기 당기기는 어디에있음?"* — 처음엔 월간 달력 칸에만 뒀다.
     const table = read("src", "features", "class-sheets", "components", "plan-table.tsx");

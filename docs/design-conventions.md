@@ -164,7 +164,7 @@ sm = 본문·목록 1차 라벨·컨트롤 / base = 강조 본문·섹션 제목
 - **판정 조건은 한 곳**: `compact-chrome`/`.toolbar-rail`의 미디어쿼리 = 데스크톱(`min-width:1240px and
   any-pointer:fine`)의 여집합(`(max-width: 1239.98px), not all and (any-pointer: fine)` — 같은 글자를 쓰는 곳 전부는 가드 `desktop-breakpoint.test.ts`가 대조한다). 바꾸려면 [use-is-desktop.ts](../src/components/workspace/use-is-desktop.ts)와
   layout의 `desk:`을 **함께** 고칠 것(와이드 터치 태블릿이 갈라지면 크롬만 바뀌고 헤더는 안 접힌다 · 가드 `desktop-breakpoint.test.ts`).
-  🔴 '마우스'는 **`any-pointer`**(하나라도) — 주 입력만 보는 `pointer`는 터치스크린 PC를 모바일로 보낸다. 손 기기에서 감추는 버튼은 `no-mouse:`.
+  🔴 '마우스'는 **`any-pointer`**(하나라도) — 주 입력만 보는 `pointer`는 터치스크린 PC를 모바일로 보낸다. 손 기기에서 감추는 버튼은 `no-mouse:`. 브라우저가 '마우스 없음'으로 고정하는 기기는 실제 움직임으로(`data-desk` · desk-detect.ts) — **새 모바일 절을 만들면 선택자마다 `:where(:root:not([data-desk]), :root[data-print])`를 붙일 것**(인쇄 중엔 종전대로 걸리게 · 가드가 다섯 곳을 대조한다).
 - ⚠️ **JS로 마커를 붙이지 말 것** — 첫 페인트에 풀 헤더가 떴다가 접히는 CLS가 매 페이지 발생한다. 순수 CSS.
 > 한 줄 규칙: 좁은 화면에선 제목을 크롬 한 줄이 갖고 본문 헤더는 접는다. 칩 툴바는 감지 말고 `.toolbar-rail`로 눕혀라.
 

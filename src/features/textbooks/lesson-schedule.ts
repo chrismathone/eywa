@@ -179,6 +179,33 @@ export function lookaheadDates(startDate: string, days: number): string[] {
 }
 
 /**
+ * 그 배정이 **차수를 앉힐 수 있는 칸**(휴일 제외)을 날짜·교시 순으로 — `buildLessonSchedule`이 도는 칸과
+ * 같은 거르기다. 회차 미루기·당기기가 표식을 "다음 칸"에 둘 때 쓴다(원장 2026-10-16: 화·금을 번갈아 나가는
+ * 교재는 다음 칸이 다음 주 화요일이 아니라 이번 주 금요일이다).
+ * 🔑 키는 `"YYYY-MM-DD|HH:MM"`(미루기 표식 키와 같다) — 문자열 순서가 곧 시간 순서다.
+ */
+export function planCellKeys(input: {
+  startDate: string;
+  schedules: readonly MonthScheduleRow[];
+  holidays: HolidayMap | null | undefined;
+  axis: SlotAxis;
+  slotPicks?: readonly string[] | null;
+  lookaheadDays?: number;
+}): string[] {
+  const picked = input.slotPicks && input.slotPicks.length > 0 ? new Set(input.slotPicks) : null;
+  const dates = lookaheadDates(input.startDate, input.lookaheadDays ?? MAX_LOOKAHEAD_DAYS);
+  const slotsByDate = slotsByDateOf(dates, input.schedules);
+  const out: string[] = [];
+  for (const date of dates) {
+    const all = slotsByDate[date] ?? [];
+    const daySlots = picked ? slotsOfPicks(all, dowKeyOf(date), picked) : slotsOfAxis(all, input.axis);
+    if (daySlots.length === 0 || holidayNameOn(input.holidays, date) !== null) continue;
+    for (const s of daySlots) out.push(`${date}|${s.slotStart}`);
+  }
+  return out;
+}
+
+/**
  * 차수 번호 목록을 수업일·교시에 차례로 앉힌다.
  *
  * @param lessonNos 앉힐 차수 번호(오름차순·중복 없음이라고 가정 — 호출부가 만든다).
