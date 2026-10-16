@@ -119,22 +119,22 @@ describe("AI 사실 블록 — 라벨만 바뀐다", () => {
   };
 
   it("복습이면 '오늘 복습:'으로 준다(값엔 손대지 않는다)", () => {
-    expect(buildFactBlock({ ...base, progressMode: "복습" })).toContain("오늘 복습: 수학 다항식의 곱셈");
+    expect(buildFactBlock({ ...base, progressMode: "복습" })).toContain("오늘 복습: 다항식의 곱셈");
     // 값에 "(복습)" 같은 괄호를 달면 모델이 통째로 베낀다 — 값은 순수해야 한다.
     expect(buildFactBlock({ ...base, progressMode: "복습" })).not.toContain("(복습)");
   });
 
   it("모드 B(P1)는 짧은 라벨", () => {
-    expect(buildP1FactBlock({ ...base, progressMode: "문제풀이" })).toContain("문제풀이: 수학 다항식의 곱셈");
+    expect(buildP1FactBlock({ ...base, progressMode: "문제풀이" })).toContain("문제풀이: 다항식의 곱셈");
   });
 
   it("성격이 없으면 종전 그대로", () => {
-    expect(buildFactBlock(base)).toContain("오늘 진도: 수학 다항식의 곱셈");
+    expect(buildFactBlock(base)).toContain("오늘 진도: 다항식의 곱셈");
   });
 
   it("진도 중단일은 '오늘 수업' 라벨이 이긴다", () => {
     expect(buildFactBlock({ ...base, progress: "월말평가", progressMode: "복습" })).toContain(
-      "오늘 수업: 수학 월말평가",
+      "오늘 수업: 월말평가",
     );
   });
 });

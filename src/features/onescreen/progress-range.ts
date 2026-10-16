@@ -165,3 +165,25 @@ export function progressInline(today: string | null | undefined): string {
     .filter(Boolean)
     .join(", ");
 }
+
+/**
+ * **AI 멘트 재료용** 진도 — `progressInline`에서 **단원 번호(`2-4-3` · `2-4-3~2-4-5`)만** 뗀다. 카드·폴백 문장은 그대로 쓴다.
+ *
+ * 🔴 2026-10-16 Haiku 5.5 전환 비교(같은 입력 9건): 5.5는 "수학 2-4-3~2-4-5 비례식과 비례배분"을 번호째 옮겼다. 4.5는 사실상 늘 뺐다 —
+ *    30일 자동작성 발송 767건 중 진도에 번호가 있던 236건에서 본문에 번호가 실린 건 11건, 그것도 대부분 '오늘 과제'의 교재 번호였다.
+ *    학부모가 받아 온 모양을 지키려고 **AI에 넘기는 진도에서만** 뗀다. '오늘 과제'의 교재 번호(`3-1-1 오답`)는 건드리지 않는다.
+ * ⚠️ 번호만 있고 이름이 없으면(떼면 빈 값) 원문 그대로 — 진도를 통째로 잃는 것보다 번호가 남는 게 낫다.
+ * ⚠️ 학년·학기 표기(`중2-1`)는 마디가 둘이라 건드리지 않는다(번호는 세 마디만).
+ */
+export function progressForMent(today: string | null | undefined): string {
+  const inline = progressInline(today);
+  const CODE = String.raw`\d+-\d+-\d+(?:\s*~\s*\d+-\d+-\d+)?`;
+  const stripped = inline
+    .replace(new RegExp(String.raw`\(\s*${CODE}\s*\)`, "g"), "") // "소수의 나눗셈(2-2-1~2-2-5)"
+    .replace(new RegExp(String.raw`(^|[\s,])${CODE}(?=\s|,|$)\s*`, "g"), "$1") // "2-4-3~2-4-5 비례식과 비례배분"
+    .replace(/\s+,/g, ",")
+    .replace(/,\s*,/g, ",")
+    .replace(/\s{2,}/g, " ")
+    .replace(/^[\s,]+|[\s,]+$/g, "");
+  return /[가-힣A-Za-z]/.test(stripped) ? stripped : inline;
+}

@@ -32,9 +32,19 @@ export type StyleSampleRow = {
   /** ISO — 최신 순 정렬·corpus_until 계산에 쓴다. */
   createdAt: string;
   studentId?: string | null;
+  /** 자동작성 원문(0370a) — 자동작성 후 수정 표본에만. 없으면(기록 전·표 미적용) 종전대로 최종 글만 본다. */
+  draft?: string | null;
 };
 
-export type StyleSample = { id: string; text: string; source: StyleSampleSource; createdAt: string; studentId: string | null };
+export type StyleSample = {
+  id: string;
+  text: string;
+  source: StyleSampleSource;
+  createdAt: string;
+  studentId: string | null;
+  /** 고치기 전 자동작성 원문(0370a) — 있으면 프롬프트가 원문 ↔ 최종을 함께 보여 '늘 고치는 것'을 뽑는다. */
+  draft: string | null;
+};
 
 /** 첨부 줄(`[첨부: …]`)과 그림 자리 줄(`[시험결과지]`)은 문장이 아니다 — 둘 다 벗긴다. */
 const normalizeText = (s: string | null | undefined) =>
@@ -57,7 +67,9 @@ export function pickStyleSamples(rows: StyleSampleRow[]): StyleSample[] {
     const key = text.replace(/\s+/g, "");
     if (seen.has(key)) continue;
     seen.add(key);
-    clean.push({ id: r.id, text, source: r.source, createdAt: r.createdAt, studentId: r.studentId ?? null });
+    // 원문은 수정 표본에만, 최종과 같으면(실제로 안 고침) 버린다.
+    const draft = r.source === "auto_edited" ? normalizeText(r.draft) : "";
+    clean.push({ id: r.id, text, source: r.source, createdAt: r.createdAt, studentId: r.studentId ?? null, draft: draft && draft !== text ? draft : null });
   }
   const newestFirst = (a: StyleSample, b: StyleSample) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : a.id < b.id ? -1 : 1);
   const edited = clean.filter((s) => s.source === "auto_edited").sort(newestFirst).slice(0, MENT_STYLE_MAX_EDITED);
@@ -70,7 +82,8 @@ export function pickStyleSamples(rows: StyleSampleRow[]): StyleSample[] {
  * 버전을 섞는 이유: 표본이 그대로여도 프롬프트를 고쳤으면 다시 접어야 한다(안 섞으면 [지금 갱신]이 "변동 없음"으로 끝난다).
  */
 export function styleCorpusHash(samples: readonly StyleSample[], promptVersion: number): string {
-  const keys = samples.map((s) => `${s.id}:${s.source}`).sort();
+  // 원문 유무도 섞는다 — 같은 표본이라도 원문이 붙으면 다시 접어야 '늘 고치는 것'이 선다.
+  const keys = samples.map((s) => `${s.id}:${s.source}${s.draft ? "+d" : ""}`).sort();
   let h = 5381;
   for (const k of keys) for (let i = 0; i < k.length; i++) h = ((h * 33) ^ k.charCodeAt(i)) >>> 0;
   return `v${promptVersion}-${keys.length}-${h.toString(16)}`;
@@ -96,9 +109,35 @@ export type MentStyleProfile = {
   closing: string;
   /** 이 선생님이 쓰지 않는 표현(선택). */
   caution: string;
+  /**
+   * 자동작성에서 이 선생님이 **늘 고치는 것**(0370a 원문 ↔ 최종 — 지우는 말·바꾸는 말·덧붙이는 말). 원문이 쌓이기 전 프로파일엔 없다.
+   * 원장 2026-10-16 *"한계를 수정할 수 있을까"* — 0214a만으론 "고쳤다"는 사실만 알고 **무엇을** 고쳤는지는 몰랐다.
+   */
+  edits?: string[];
 };
 
-const LIMITS = { tone: 160, sentence: 200, length: 100, closing: 160, caution: 160, phrase: 24, phrases: 8 } as const;
+const LIMITS = { tone: 160, sentence: 200, length: 100, closing: 160, caution: 160, phrase: 24, phrases: 8, edit: 80, edits: 5 } as const;
+
+/**
+ * '늘 고치는 것'에서 버릴 줄(parseMentStyleProfile) — 재리뷰 2026-10-16이 낱말 목록의 우회("끝인사를 넣는다"·"마지막에 다음 수업 예고를 붙인다")와
+ * 오탐("'~하겠습니다'를 '~합니다'로 바꾼다")을 찾았다. 그래서 낱말이 아니라 **고침의 방향**으로 가른다:
+ *  · 무엇을 **덧붙이는** 줄은 늘 버린다 — [입력]에 없는 말(인사·예고·일정)을 지어내게 한다.
+ *  · 인사·계획·안내 같은 위험 낱말은 **지우거나 바꾸는** 줄일 때만 남긴다("'감사합니다'를 지운다"는 끝인사 금지와 같은 방향).
+ *  · 코드가 붙이는 문장(영상 과제 안내·학부모님께 드리는 말)에 대한 줄은 늘 버린다 — 따라 하면 [입력]의 영상 과제 사실이 빠진다.
+ */
+const EDIT_ADD = /덧붙|추가|넣는다|넣어|붙인다|붙여/;
+const EDIT_RISKY = /감사|고맙|안녕|인사|좋은\s*하루|수고|화이팅|파이팅|겠|려고|예고|안내|보강|일정|당부|부탁|다음\s*(?:수업|시간)/;
+const EDIT_REMOVE = /지운다|뺀다|없앤다|쓰지\s*않는다|바꾼다|고친다/;
+const EDIT_CODE = /영상|학부모님께/;
+const editBanned = (t: string) => EDIT_ADD.test(t) || EDIT_CODE.test(t) || (EDIT_RISKY.test(t) && !EDIT_REMOVE.test(t));
+
+/** '늘 고치는 것'을 뽑을 근거(고치기 전 원문이 붙은 표본)가 이만큼 없으면 비운다 — 원문 없이 받은 edits는 모델이 지어낸 것이다. */
+export const MENT_STYLE_MIN_DRAFTS_FOR_EDITS = 3;
+
+/** 원문이 붙은 표본이 모자라면 edits를 비운다(빌드가 부른다 — 0370a 적용 직후엔 전원이 원문 0개다). */
+export function keepGroundedEdits(profile: MentStyleProfile, samples: readonly StyleSample[], min = MENT_STYLE_MIN_DRAFTS_FOR_EDITS): MentStyleProfile {
+  return samples.filter((s) => s.draft).length >= min ? profile : { ...profile, edits: [] };
+}
 
 /** 문자열 칸 정리 — 프롬프트의 줄바꿈 기호(⏎)가 응답에 되돌아오면 뗀다(지침에 실리면 멘트 모델이 그 기호를 그대로 찍는다). */
 const clampText = (v: unknown, max: number): string =>
@@ -123,6 +162,16 @@ export function parseMentStyleProfile(raw: unknown): MentStyleProfile | null {
     phrases.push(t);
     if (phrases.length >= LIMITS.phrases) break;
   }
+  // '늘 고치는 것' — 짧은 한 줄씩, 숫자가 든 줄(점수·쪽수 = 그날의 내용)은 버린다. 길면 자르지 않고 버린다(표현과 같은 이유).
+  // 🔴 인사말·계획·덧붙이는 내용(일정·안내·당부)·코드가 붙이는 문장(영상 과제 안내·학부모님께 드리는 말)이 든 줄도 버린다 — "처음부터 그렇게
+  //    쓰세요"로 실리면 끝인사 금지(v3)를 다시 뚫거나 [입력]에 없는 말을 지어내게 한다(적대적 재리뷰 2026-10-16).
+  const edits: string[] = [];
+  for (const e of Array.isArray(o.edits) ? o.edits : []) {
+    const t = typeof e === "string" ? e.replace(/\s*\(⏎\)|⏎/g, "").replace(/\s+/g, " ").trim() : "";
+    if (!t || t.length > LIMITS.edit || /\d/.test(t) || editBanned(t) || edits.includes(t)) continue;
+    edits.push(t);
+    if (edits.length >= LIMITS.edits) break;
+  }
   return {
     tone,
     sentence,
@@ -130,6 +179,7 @@ export function parseMentStyleProfile(raw: unknown): MentStyleProfile | null {
     phrases,
     closing: clampText(o.closing, LIMITS.closing),
     caution: clampText(o.caution, LIMITS.caution),
+    edits,
   };
 }
 
@@ -161,7 +211,7 @@ const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
  *    안전(저장 거부)이고 빌드가 사유를 로그로 남긴다. 하나라도 있으면 저장하지 않는다(지침에 실린 이름은 다른 아이 알림장에 나간다).
  */
 export function profileMentionsAny(profile: MentStyleProfile, names: readonly string[]): string[] {
-  const hay = [profile.tone, profile.sentence, profile.length, profile.closing, profile.caution, ...profile.phrases].join("\n");
+  const hay = [profile.tone, profile.sentence, profile.length, profile.closing, profile.caution, ...profile.phrases, ...(profile.edits ?? [])].join("\n");
   const out: string[] = [];
   for (const raw of names) {
     const name = raw.trim();

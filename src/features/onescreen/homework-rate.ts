@@ -110,5 +110,11 @@ export function homeworkFactValue(raw: string): string {
   const s = raw.trim();
   if (s === NOT_SUBMITTED) return "제출하지 않음";
   if (isNoneValue(s)) return s;
-  return parseHomeworkRate(s) === 0 ? "하나도 해오지 못함" : s;
+  const n = parseHomeworkRate(s);
+  if (n === 0) return "하나도 해오지 못함";
+  // 🔴 100%(옛 표기 '완료' 포함)는 **말로** — 원장 2026-10-16 *"100% 같은것도 문구로 자연스럽게 풀어쓰면 어떨까? 100% -> 빠짐없이 잘"*.
+  //    Haiku 5.5는 "퍼센트는 적힌 그대로" 규칙을 글자대로 따라 "지난 과제는 100%를 해 왔습니다"라고 썼다(운영 조건 시험 10건 중 8건 —
+  //    4.5는 예시대로 "다 해왔습니다"로 풀었다). 숫자가 아니라 뜻이 같은 말이라 사실은 그대로다.
+  if (n === 100) return "빠짐없이 잘 해 옴";
+  return s;
 }

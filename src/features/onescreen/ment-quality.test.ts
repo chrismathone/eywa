@@ -117,9 +117,8 @@ describe("추세 — 척도 혼합 감지", () => {
     expect(examScales("88점(100점 만점)")).toEqual([100]);
     expect(examScales("이름 없는 기록")).toEqual([]);
   });
-  it("분모를 못 읽으면 혼합으로 단정하지 않는다", () => {
-    const i = buildTrendInput([row("2026-07-01", "잘함"), row("2026-07-08", "보통"), row("2026-07-15", "잘함")])!;
-    expect(i.scaleMixed).toBe(false);
+  it("분모를 못 읽으면 혼합으로 단정하지 않는다 — 그런 시험뿐이면 코드가 정리할 사실이 없어 추세 자체를 만들지 않는다(2026-10-16)", () => {
+    expect(buildTrendInput([row("2026-07-01", "잘함"), row("2026-07-08", "보통"), row("2026-07-15", "잘함")])).toBeNull();
   });
 });
 

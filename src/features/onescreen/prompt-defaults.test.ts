@@ -69,9 +69,12 @@ describe("말투 바닥 · 항목 간 되풀이 금지(코드가 붙임)", () =>
     ).toContain(CROSS_SECTION_RULES);
     expect(assembleCombined([{ type: "comment", field: "comment", body: "멘트" }])).not.toContain(CROSS_SECTION_RULES);
   });
-  it("보고서 말투를 이름으로 막는다 · 문장 끝은 강제하지 않는다(선생님 말투 지침이 정한다)", () => {
+  it("보고서 말투를 이름으로 막는다 · 종결형은 선생님 말투 지침을 따르고 한 글 안에서 섞지 않는다(2026-10-16)", () => {
     expect(TONE_RULES).toContain("모습을 보였습니다");
-    expect(TONE_RULES).toContain("말투 지침이 있으면 그것을");
+    expect(TONE_RULES).toContain("말투 지침이 있으면 그 종결형을");
+    // 🔴 5.5 시험 120건 중 46%가 합니다체·해요체를 한 글에 섞었다(4.5 운영 8% · 선생님 직접 작성 6%).
+    expect(TONE_RULES).toContain("한 글에 섞지 마세요");
+    expect(TONE_RULES).not.toContain("섞어도 됩니다");
   });
   it("🔴 추세 예시가 실데이터(권민서A 4/5·5/5·1/5) 모양이 아니고, 학원 계획 문장이 없다", () => {
     expect(DEFAULT_PROMPTS.trend).not.toContain("1/5");

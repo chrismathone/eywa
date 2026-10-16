@@ -158,10 +158,11 @@ describe("buildReportCommentPrompt", () => {
   it("채워진 사실만 [입력]에 넣고 JSON 출력 계약을 담는다", () => {
     const prompt = buildReportCommentPrompt(buildReportCommentInput(student(), 0));
     const sec = inputSection(prompt);
-    expect(sec).toContain("오늘 진도: 수학(상) 이차함수");
+    expect(sec).toContain("오늘 진도: 이차함수");
     expect(sec).toContain("일일테스트: 20문제 중 16개 맞음 (지난 회차 대비 ▲2)");
     expect(sec).toContain("수업 태도: 좋음");
-    expect(sec).toContain("과제: 완료");
+    expect(sec).toContain("과제: 빠짐없이 잘 해 옴"); // '완료' = 100% → 말로(원장 2026-10-16)
+    expect(sec).not.toContain("수학(상) 이차함수"); // 과목 라벨은 진도 앞에 붙이지 않는다(5.5가 그대로 옮긴다)
     expect(prompt).toContain("JSON"); // Upstage JSON mode 필수 토큰
     expect(prompt).toContain('{"comment"');
   });
@@ -178,7 +179,7 @@ describe("buildReportCommentPrompt", () => {
       ),
     );
     const sec = inputSection(prompt);
-    expect(sec).toContain("오늘 진도: 수학(상) 이차함수"); // 진도는 남아있음
+    expect(sec).toContain("오늘 진도: 이차함수"); // 진도는 남아있음
     expect(sec).not.toContain("일일테스트");
     expect(sec).not.toContain("확인테스트");
     expect(sec).not.toContain("수업 태도");
@@ -230,7 +231,7 @@ describe("공지 모드 B — P1/P2 + 특이사항 (4c)", () => {
   it("P1 = 교재·진도·과제(태도 값 제외)", () => {
     const p1 = buildCommentP1Prompt(full)!;
     expect(p1).toContain("교재: 개념원리 중2-1");
-    expect(p1).toContain("진도: 수학(상) 이차함수");
+    expect(p1).toContain("진도: 이차함수");
     expect(p1).toContain("과제: 완료");
     expect(p1).not.toContain("태도: 좋음");
     expect(p1).toContain('{"comment"');
@@ -280,7 +281,7 @@ describe("오늘 과제(homeworkToday, 0096a)", () => {
       0,
     );
     const facts = buildFactBlock(input);
-    expect(facts).toContain("과제: 완료");
+    expect(facts).toContain("과제: 빠짐없이 잘 해 옴");
     expect(facts).toContain("오늘 과제: 워크북 P32까지");
   });
 
@@ -396,14 +397,14 @@ describe("classContext 개행 접기 — 여러 줄 서술이 가드 라벨을 �
     const lines = facts.split("\n");
     expect(lines.filter((l) => l.includes("원의 접선의 방정식(2)"))).toHaveLength(1);
     // 2026-08-05: 같은 중단원 연속이라 범위로 접어 모델에 넘긴다 — 다 나열하면 멘트가 목록이 된다(원장).
-    expect(lines[0]).toBe("오늘 진도: 수학(상) 원과 직선의 위치 관계 ~ 원의 접선의 방정식(2)");
+    expect(lines[0]).toBe("오늘 진도: 원과 직선의 위치 관계 ~ 원의 접선의 방정식(2)");
     // 라벨 없는 맨줄로 새지 않음
     expect(lines.some((l) => l.trim() === "원의 접선의 방정식(1)")).toBe(false);
   });
 
   it("연속이 아닌 여러 줄 진도는 ', '로 접혀 한 줄에 들어간다(축약 없음)", () => {
     const facts = buildFactBlock({ ...base, progress: "평행이동\n원의 방정식" });
-    expect(facts.split("\n")[0]).toBe("오늘 진도: 수학(상) 평행이동, 원의 방정식");
+    expect(facts.split("\n")[0]).toBe("오늘 진도: 평행이동, 원의 방정식");
   });
 
   it("여러 줄 특이사항·오늘 과제도 각자 한 줄 안에 갇힌다", () => {
@@ -420,7 +421,7 @@ describe("classContext 개행 접기 — 여러 줄 서술이 가드 라벨을 �
 
   it("P1/P2 사실 블록도 같은 규약으로 접힌다", () => {
     const p1 = buildP1FactBlock({ ...base, progress: "원주각\n원주각의 활용" });
-    expect(p1).toContain("진도: 수학(상) 원주각, 원주각의 활용");
+    expect(p1).toContain("진도: 원주각, 원주각의 활용");
     const p2 = buildP2FactBlock({ ...base, attitude: "좋음", specialNote: "조퇴\n사유 미기재" });
     expect(p2?.split("\n").some((l) => l.trim() === "사유 미기재")).toBe(false);
   });
@@ -472,14 +473,14 @@ describe("월말평가 사실 라벨", () => {
 
   it("모드 A — '오늘 진도' 대신 '오늘 수업'으로 라벨링", () => {
     const block = buildFactBlock(base);
-    expect(block).toContain("오늘 수업: 수학 월말평가");
+    expect(block).toContain("오늘 수업: 월말평가");
     expect(block).not.toContain("오늘 진도:");
   });
 
   it("모드 B P1 — '진도' 대신 '오늘 수업'", () => {
     const block = buildP1FactBlock(base);
-    expect(block).toContain("오늘 수업: 수학 월말평가");
-    expect(block).not.toContain("진도: 수학 월말평가");
+    expect(block).toContain("오늘 수업: 월말평가");
+    expect(block).not.toContain("진도: 월말평가");
   });
 
   it("값에는 괄호 설명을 붙이지 않는다(모델이 통째로 베껴 학부모 문장에 넣는다)", () => {
@@ -488,6 +489,6 @@ describe("월말평가 사실 라벨", () => {
 
   it("일반 진도는 라벨이 그대로 '오늘 진도'", () => {
     const block = buildFactBlock({ ...base, progress: "1. 다항식의 연산" });
-    expect(block).toContain("오늘 진도: 수학 1. 다항식의 연산");
+    expect(block).toContain("오늘 진도: 1. 다항식의 연산");
   });
 });
