@@ -56,7 +56,7 @@ describe("업로드 시작 — 거절", () => {
     expect(await req()).toMatchObject({ ok: false, code: "expired", error: "만료된 링크입니다." });
     expect(drive.calls).toHaveLength(0);
   });
-  it("1GB 초과·영상 아님은 세션을 열지 않는다", async () => {
+  it("한도 초과·영상 아님은 세션을 열지 않는다", async () => {
     expect(await req({ file: { ...file, size: HOMEWORK_VIDEO_MAX_BYTES + 1 } })).toMatchObject({ ok: false, code: "file" });
     expect(await req({ file: { name: "a.pdf", size: 10, type: "application/pdf" } })).toMatchObject({ ok: false, code: "file" });
     expect(drive.calls).toHaveLength(0);

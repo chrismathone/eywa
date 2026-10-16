@@ -60,6 +60,8 @@ describe("성적 관리", () => {
     expect(m.raw).toBe(63.8); // (75×1 + 60×3) / 4 = 63.75 → 63.8
     expect(m.kinds.map((k) => [k.kind, k.measure, k.count, k.average])).toEqual([["check", "score", 2, 75], ["school", "score", 1, 60]]);
     expect(m.detail.find((r) => r.studentId === "a")).toMatchObject({ tests: 2, average: 80, kinds: "확인테스트 1 · 내신 1", className: "m1반" });
+    // 종류별 시험 수·평균 — 내역의 시험 종류 탭(원장 2026-10-16).
+    expect(m.detail.find((r) => r.studentId === "a")?.byKind).toEqual({ check: { count: 1, average: 100 }, school: { count: 1, average: 60 } });
   });
   it("일일테스트 = 제출률 — 보고서 대상 칸 중 그날 그 과목 기록이 있는 칸(점수·입력한 사람은 안 본다) · 그 시험을 안 하는 과목은 대상 아님", () => {
     const grades = [

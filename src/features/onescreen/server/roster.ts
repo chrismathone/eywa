@@ -175,6 +175,9 @@ type OnescreenSessionRow = {
       trendDraft?: string;
       /** 자동작성이 멘트 칸에 마지막으로 넣은 텍스트(0214a 스냅샷) — 복원해야 재접속 후 저장이 manual로 오표기되지 않는다. */
       autoDraft?: string;
+      /** 자동작성이 추세 칸에 마지막으로 넣은 글(2026-10-16) · autoDraft가 AI 원문이 아님(0370a) — 같은 규약으로 복원. */
+      trendAutoDraft?: string;
+      autoDraftTemplate?: boolean;
       textbook?: string;
       makeup?: boolean;
       homeworkToday?: string;
@@ -1676,6 +1679,8 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
         // 자동작성 스냅샷(0214a) — 초안과 같은 규약으로 복원. 없으면 미복원(발송본 notes 복원 행은 스냅샷을
         // 모른다 — 그 경우 저장 시 서버 sticky(resolveMentSource)가 기존 라벨로 보수 판정한다.
         if (entry?.autoDraft?.trim()) su.autoDraft = entry.autoDraft;
+        if (entry?.trendAutoDraft?.trim()) su.trendAutoDraft = entry.trendAutoDraft;
+        if (entry?.autoDraftTemplate === true) su.autoDraftTemplate = true;
         // 영어 템플릿 모드(2026-09-10) — 영어 행만 실려 있다(수학 세션엔 키 자체가 없어 아래는 전부 건너뛴다).
         if (entry?.templateId) su.templateId = entry.templateId;
         if (entry?.nextTest != null) su.nextTest = entry.nextTest;

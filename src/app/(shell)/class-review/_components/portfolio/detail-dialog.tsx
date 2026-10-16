@@ -13,7 +13,8 @@ import { METRIC_MAX, type ItemId, type Metric, type MetricId, type StoredPeriod 
 import { METRIC_LABEL, fmtScore, itemLabel, itemOf, maxLabel, monthName, periodLabel, periodMax, pointsText, shownItems } from "@/features/teacher-portfolio/view";
 import { MetricEvidence } from "./evidence-impact";
 import { ScoreRuleBox } from "./score-rule-box";
-import { ReportMatrix, type EvidenceProps } from "./evidence-records";
+import type { EvidenceProps } from "./evidence-records";
+import { ReportMatrix } from "./report-matrix";
 import { BarList, DataTable, StatTiles } from "./parts";
 
 /** 상세 창 — 평가 기준 · 점수 근거 · 항목별 근거(보고서는 학생 × 날짜 상태표). */
@@ -117,7 +118,7 @@ export function DetailDialog({ target, onClose, periods, teacherName, evidence }
       <>
         <p className="mb-4 text-xs"><b className="num text-sm">{pointsText(m, period)}</b> · {m.basis}</p>
         {target.id === "report" && !m.estimated
-          ? <><ScoreRuleBox period={period} id="report" /><div className="overflow-auto"><ReportMatrix period={period} nameOf={evidence.nameOf} /></div></>
+          ? <><ScoreRuleBox period={period} id="report" /><ReportMatrix period={period} nameOf={evidence.nameOf} schoolOf={evidence.schoolOf} /></>
           : <MetricEvidence id={target.id} {...evidence} sticky={false} onOpenStudents={undefined} />}
         {/* 점수 기준은 맨 위 상자 한 곳(원장 2026-10-14 *"규칙을 최상단에 따로 테두리같은거 넣어서 깔끔하게"*). */}
         {m.estimated || selfExplained(m) || m.id === "payRatio" || m.id === "counsel" ? null : <p className="mt-4 text-xs leading-relaxed">{m.reason}</p>}

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { keepExamOfClass, type TrendHistoryRow } from "../trend-comment";
+import { keepExamOfClass, TREND_HISTORY_FETCH_DAYS, type TrendHistoryRow } from "../trend-comment";
 import type { TrendReportRow } from "../report-trend";
 
 /** 기준일 − N일(YYYY-MM-DD). 비정상 날짜면 null(호출부가 빈 결과로 처리). UTC 고정 산술 = KST 경계 무관. */
@@ -77,13 +77,15 @@ export async function fetchScoreHistory(
   // buildTrendInput(순수)이 하므로 여기서 자르면 시험 기록이 과제-only 행에 밀려 사라진다(실측 26/215명).
   limit = 30,
   // 정규/특강 분리(applyClassScope). 미지정이면 기존 동작(안 가름) — 데모·구 호출부 보존.
-  scope?: { classId?: string | null; specialClassIds?: readonly string[] },
+  // lookbackDays = 반복 방지(trendNews)가 지난번 추세가 나간 회차와 그 회차의 창까지 읽는 기간(기본 30 = 종전 · 상한 90). 사실은 buildTrendInput이 30일 창만 쓴다.
+  scope?: { classId?: string | null; specialClassIds?: readonly string[]; lookbackDays?: number },
 ): Promise<TrendHistoryRow[]> {
-  const windowStart = windowStartOf(beforeDate, TREND_TEXT_WINDOW_DAYS);
+  const windowStart = windowStartOf(beforeDate, Math.max(TREND_TEXT_WINDOW_DAYS, Math.min(scope?.lookbackDays ?? TREND_TEXT_WINDOW_DAYS, TREND_HISTORY_FETCH_DAYS)));
   if (!windowStart) return []; // 비정상 beforeDate 방어 — 추세만 조용히 생략
   let q = supabase
     .from("lesson_reports")
-    .select("report_date, exam_info, homework_score, class_id, makeup_class_id")
+    // trend_note = 반복 방지(trendNews)가 "지난번에 추세가 실제로 나갔나"를 본다(0091a — 칸은 오래전부터 있다).
+    .select("report_date, exam_info, homework_score, class_id, makeup_class_id, trend_note")
     .eq("student_id", studentId)
     .lt("report_date", beforeDate)
     .gte("report_date", windowStart)
@@ -101,6 +103,7 @@ export async function fetchScoreHistory(
     homeworkScore: (r.homework_score as string | null) ?? null,
     classId: (r.class_id as string | null) ?? null,
     makeupClassId: (r.makeup_class_id as string | null) ?? null,
+    hadTrend: !!(r.trend_note as string | null)?.trim(),
   }));
   // 시험은 이 보고서 반의 기록만(원장 2026-10-15 — 수요일 반 추세가 화·금 반 시험을 인용했다).
   return keepExamOfClass(rows, scope?.classId).sort((a, b) => a.date.localeCompare(b.date));

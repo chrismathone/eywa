@@ -93,6 +93,9 @@ export function ComposeFace({
   // 자동작성이 본문 칸에 마지막으로 넣은 텍스트(0214a 스냅샷) — 저장 시 body와 비교해 작성 방식 판정.
   const [autoBody, setAutoBody] = useState("");
   const [trend, setTrend] = useState("");
+  // 자동작성이 추세 칸에 마지막으로 넣은 글 — '달라진 것 없음'이면 칸이 이 글 그대로일 때만 비운다(손으로 쓴 추세는 지킨다).
+  //   로컬 초안에도 실어 복원 뒤에도 가른다(재리뷰 2026-10-16).
+  const [autoTrend, setAutoTrend] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirmSend, setConfirmSend] = useState(false);
@@ -145,9 +148,9 @@ export function ComposeFace({
     () => ({
       studentId,
       studentName: ctx?.student.name ?? "",
-      reportDate, progress, textbook, makeup, dScore, dMax, cScore, cMax, attitude, homework, homeworkToday, note, body, autoBody, trend,
+      reportDate, progress, textbook, makeup, dScore, dMax, cScore, cMax, attitude, homework, homeworkToday, note, body, autoBody, trend, autoTrend,
     }),
-    [studentId, ctx, reportDate, progress, textbook, makeup, dScore, dMax, cScore, cMax, attitude, homework, homeworkToday, note, body, autoBody, trend],
+    [studentId, ctx, reportDate, progress, textbook, makeup, dScore, dMax, cScore, cMax, attitude, homework, homeworkToday, note, body, autoBody, trend, autoTrend],
   );
   const localDraft = useStateDraft({
     scope: "report-compose",
@@ -183,6 +186,7 @@ export function ComposeFace({
     setBody(d.body);
     setAutoBody(d.autoBody);
     setTrend(d.trend);
+    setAutoTrend(d.autoTrend ?? "");
   }
 
   const studentOptions: ComboOption[] = students.map((s) => ({
@@ -309,8 +313,12 @@ export function ComposeFace({
     if (res.ok && res.comment) {
       setBody(res.comment);
       setAutoBody(res.comment); // 작성 방식 스냅샷(0214a)
-      if (res.trend) setTrend(res.trend);
-      else if (res.trendDropped) setTrend(""); // 만들었지만 검사에 걸려 버렸다 — 예전 초안이 나가지 않게
+      if (res.trend) {
+        setTrend(res.trend);
+        setAutoTrend(res.trend);
+      } else if (res.trendDropped) setTrend(""); // 만들었지만 검사에 걸려 버렸다 — 예전 초안이 나가지 않게
+      // 달라진 게 없다 — 칸이 지난 자동작성 글 그대로일 때만 비운다(손으로 쓴 추세는 지킨다, 적대적 재리뷰 2026-10-16).
+      else if (res.trendQuiet && trend === autoTrend) setTrend("");
       toast.success("AI가 본문을 작성했습니다 — 검토 후 발송하세요");
     } else {
       // 폴백: 사실 기반 간단 문장(빈 본문 방지). 템플릿도 "자동이 넣은 텍스트"다(0214a 스냅샷 동일 취급).

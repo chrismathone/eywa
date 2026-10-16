@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { HOMEWORK_VIDEO_MAX_BYTES } from "@/features/students/homework-video-limits";
 import { parseUploadEvent, readUploadDiagnostics, uploadFailureText, type UploadEvent } from "./upload-diagnostics";
 import { uploadAttemptStatus, type HomeworkUploadAttempt } from "@/features/students/homework-upload-log";
 
@@ -9,6 +10,11 @@ describe("업로드 관측값", () => {
   });
   it.each([{ sequence: 0 }, { sentBytes: Infinity }, { elapsedMs: -1 }, { reason: "private error" }, { browser: "raw user agent" }, { httpStatus: 999 }, { sequence: 1.5 }])("잘못된 관측값을 거절한다 %j", patch => {
     expect(parseUploadEvent({ ...event, ...patch })).toBeNull();
+  });
+  it("보낸 양은 영상 한도까지 받는다 — 1GB를 넘긴 뒤의 실패 기록도 서버에 닿는다(2026-10-16)", () => {
+    expect(parseUploadEvent({ ...event, sentBytes: 1.5 * 1024 ** 3 })?.sentBytes).toBe(1.5 * 1024 ** 3);
+    expect(parseUploadEvent({ ...event, sentBytes: HOMEWORK_VIDEO_MAX_BYTES })).not.toBeNull();
+    expect(parseUploadEvent({ ...event, sentBytes: HOMEWORK_VIDEO_MAX_BYTES + 1 })).toBeNull();
   });
   it("손상된 저장값은 노출하지 않는다", () => {
     expect(readUploadDiagnostics({ last: { ...event, receivedAt: "invalid" }, history: [null, "broken"] })).toEqual({ last: undefined, lastError: undefined, history: [] });

@@ -137,6 +137,10 @@ export function buildGrades(input: {
       kinds: GRADE_KINDS.map((k) => [k, r.scores.filter((g) => g.kind === k).length] as const).filter(([, n]) => n > 0)
         .map(([k, n]) => `${KIND_LABEL[k]} ${n}`).join(" · "),
       ...(r.daily ? { daily: r.daily } : {}), ...(r.monthly === undefined ? {} : { monthly: r.monthly }),
+      ...(r.scores.length ? { byKind: Object.fromEntries(GRADE_KINDS.flatMap((k) => {
+        const xs = r.scores.filter((g) => g.kind === k);
+        return xs.length ? [[k, { count: xs.length, average: round1(avg(xs)) }]] : [];
+      })) } : {}),
     })).sort((a, b) => a.className.localeCompare(b.className, "ko") || dailyRate(a) - dailyRate(b) || (a.average ?? 101) - (b.average ?? 101));
     return { raw, tests: scored.length, students: perStudent.size, kinds, detail };
   };

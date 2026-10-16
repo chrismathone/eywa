@@ -30,7 +30,7 @@ describe("완료 확인 — Drive가 증거(브라우저 값을 믿지 않는다
     // 해시가 아직 없으면 실패가 아니라 '조금 뒤 다시'(Drive가 늦게 채운다).
     expect(verifyUploadedFile({ ...good, md5Checksum: undefined }, upload)).toBe(UPLOAD_NOT_READY);
   });
-  it("1GB를 넘는 파일은 크기가 맞아도 거절", () => {
+  it("한도를 넘는 파일은 크기가 맞아도 거절", () => {
     const big = HOMEWORK_VIDEO_MAX_BYTES + 1;
     expect(verifyUploadedFile({ ...good, size: String(big) }, { ...upload, bytes: big })).toContain("허용 크기");
   });

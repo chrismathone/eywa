@@ -2,7 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { addDays, kstToday } from "@/lib/date-kst";
 import { fetchAllPaged } from "@/lib/supabase/batch";
-import { excludedKey } from "../evaluation/preview";
+import { excludedKey, fullKey } from "../evaluation/preview";
 import { portfolioFloor } from "../model/build";
 import { missingColumn } from "./evaluation-store";
 import { awaitsReference } from "../model/pre-record";
@@ -100,10 +100,12 @@ export async function portfolioRawsReady(admin: SupabaseClient, tenantId: string
 /**
  * 설정 미리보기용 원래 수치 — 끈 지표까지 싣는다(켜 보면 몇 점인지 바로 보이게).
  * 규칙과 상관없이 합계에서 뺀 칸(급여 비율의 새 선생님)은 표식을 함께 — 미리보기도 집계처럼 뺀다(`excludedKey`).
+ * 규칙과 상관없이 만점인 칸(프리랜서 근태)도 표식을 함께(`fullKey`).
  */
 export function rawsOf(w: Pick<PortfolioPeriod, "items">): Record<string, number | null> {
   return Object.fromEntries(w.items.flatMap((m): [string, number | null][] =>
-    [[m.id, m.raw ?? null], ...("newcomer" in m && m.newcomer ? [[excludedKey(m.id), 1] as [string, number]] : [])]));
+    [[m.id, m.raw ?? null], ...("newcomer" in m && m.newcomer ? [[excludedKey(m.id), 1] as [string, number]] : []),
+      ...("freelancer" in m && m.freelancer ? [[fullKey(m.id), 1] as [string, number]] : [])]));
 }
 
 const CLOSED_LOCK = "마감한 달의 점수는 바꿀 수 없습니다";

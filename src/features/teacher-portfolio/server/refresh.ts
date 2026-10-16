@@ -105,9 +105,13 @@ export async function refreshTenantPortfolio(
     // 미루는 것은 다음 달 말까지 — 계속 나는 오류(깨진 비율표 등)로 달이 반년씩 열려 있지 않게, 그 뒤엔 사유를 남긴 채 마감한다.
     // 학부모 만족도 확인 대기가 남은 달도 미룬다 — 마감해 버리면 반영할 길이 없다(원장 2026-10-16 '9월을 이달 말까지 열어 두기').
     const waiting = waitingByPeriod(result.teachers);
+    // 프리랜서 근태는 출퇴근을 세지 않는다(만점) — 출퇴근을 아직 못 받은 달이어도 그 줄은 미루지 않는다(리뷰 2026-10-16).
+    const freelance = new Set(result.teachers.flatMap((t) => t.periods
+      .filter((w) => w.items.some((m) => m.id === "punctuality" && "freelancer" in m && m.freelancer)).map((w) => `${t.id}|${w.month}`)));
     const holdClose = (teacherId: string, month: string) =>
       month >= holdFrom && (payFailed || Boolean(pay.get(`${teacherId}|${month}`)?.retry)
-        || (scoring.evaluation.config.metrics.punctuality.enabled && attendancePending(month)) || waiting.has(`${teacherId}|${month}`));
+        || (scoring.evaluation.config.metrics.punctuality.enabled && attendancePending(month) && !freelance.has(`${teacherId}|${month}`))
+        || waiting.has(`${teacherId}|${month}`));
     const once = await savePortfolioMonths(admin, tenantId, result, now, { withRaws, holdClose });
     saved = !saved ? once : {
       teachers: once.teachers, written: Math.max(saved.written, once.written), removed: saved.removed + once.removed,

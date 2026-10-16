@@ -27,6 +27,7 @@ export async function loadPortfolioComparison(month: string): Promise<{ ok: true
         teacherId: r.teacher_id, total: r.total === null ? null : Number(r.total), knownMax: Number(r.known_max ?? 0), closed: Boolean(r.closed_at),
         items: (r.items ?? []).filter((m) => !m.off).map((m) => ({
           id: m.id, label: itemLabel(m), max: m.max, value: m.value, raw: m.raw ?? null, missing: Boolean(m.missing), uncounted: Boolean(m.uncounted),
+          ...("freelancer" in m && m.freelancer ? { freelancer: true } : {}),
         })),
       })),
     };

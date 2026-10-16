@@ -41,7 +41,7 @@ const MIME_BY_EXT: Record<string, string> = Object.fromEntries(
 export type VideoFileCheck = { ok: true; mimeType: string; ext: string } | { ok: false; error: string };
 
 /**
- * 고른 파일을 받을 수 있나 — 영상 형식만 · 1GB까지([`HOMEWORK_VIDEO_MAX_BYTES`] 한 값).
+ * 고른 파일을 받을 수 있나 — 영상 형식만 · 한도까지([`HOMEWORK_VIDEO_MAX_BYTES`] 한 값 — 지금 2GB).
  * 서버도 같은 함수로 다시 본다(화면 판정은 게이트가 아니다, [[#77]]).
  */
 export function checkVideoFile(file: { size?: unknown; type?: unknown; name?: unknown }): VideoFileCheck {

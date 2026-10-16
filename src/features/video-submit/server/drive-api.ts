@@ -83,7 +83,7 @@ export async function createTeacherFolder(request: DriveRequest, input: { id: st
 
 /**
  * 재개 가능 업로드 세션 — 메타데이터(번호·이름·폴더·표식)는 **여기서 서버가 정한다**. 브라우저는 받은 세션 주소로 바이트만 보낸다.
- * `Origin`을 실어야 Google이 그 출처의 브라우저 PUT을 CORS로 받아 준다. 크기는 `X-Upload-Content-Length`로 못박는다(1GB 상한은 호출부).
+ * `Origin`을 실어야 Google이 그 출처의 브라우저 PUT을 CORS로 받아 준다. 크기는 `X-Upload-Content-Length`로 못박는다(상한은 호출부 — `HOMEWORK_VIDEO_MAX_BYTES`).
  * appProperties `aywaSource=link`·`aywaUpload=<업로드 번호>` — 완료 확인의 대조 근거이자, 나중에 압축 워커가 표시를 더할 자리(막지 않는다).
  */
 export async function startResumableSession(request: DriveRequest, input: {

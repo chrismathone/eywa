@@ -33,7 +33,8 @@ function rowsOf(period: StoredPeriod): EntryRow[] {
     });
   }
   // 강사 근태를 켠 달 — 출퇴근 기록이 틀렸거나 없는 달은 원장이 그 달 수치(지각·결근·조퇴 가중 합)를 넣는다(비우면 출퇴근 기록에서 센다).
-  if (period.items.some((m) => m.id === "punctuality" && !m.off)) {
+  // 프리랜서는 근태를 세지 않고 만점이라 넣어도 반영되지 않는다 — 칸을 세우지 않는다(리뷰 2026-10-16 · 저장만 되는 칸 금지).
+  if (period.items.some((m) => m.id === "punctuality" && !m.off && !("freelancer" in m && m.freelancer))) {
     rows.push({
       key: PUNCTUALITY_OVERRIDE_KEY, label: "강사 근태 — 지각·결근·조퇴 횟수", hint: "회 · 강사 근태",
       reason: "넣으면 메이크에듀 출퇴근 기록 대신 이 수치로 매깁니다(기록이 틀렸거나 없는 달). 학원 설정의 가중을 곱해 더한 값을 넣어 주세요(기본은 한 번에 1회). 비우면 출퇴근 기록으로 셉니다. 결재된 휴가로 쉰 날은 빼고 세 주세요.",
