@@ -7,6 +7,10 @@
 - 저장 = `slot_picks`에 자리까지(`"tue|17:20|2"`, [`slotPickKey`](../src/features/textbooks/lesson-schedule.ts)) — 스키마 변경 없음. 자리 없는 옛 값은 그 교시 1차수로 읽는다. 배분([`buildLessonSchedule`](../src/features/textbooks/lesson-schedule.ts))은 교시마다 고른 자리 수만큼 차수를 넣고, 휴일·미루기는 그 교시 전체, 당기기는 차수 하나.
 - 🔴 한 교시에 같은 교재 차수가 둘이면 가져오기 RPC가 둘째 줄을 건너뛰므로(같은 교재명 줄 = 빈 칸만 채움) 앱이 넘기기 전에 **한 줄로 잇는다**(`Unit 1 / Unit 2`, [`mergeSameCellLessons`](../src/features/textbooks/plan-expand.ts)) · 계획 대조도 같은 규약으로 합쳐서 본다([`joinLessonTexts`](../src/features/textbooks/plan-compare.ts) — 안 그러면 가져온 그대로인 칸이 '다름'이 된다).
 
+## 2026-10-16 — 직원 포트폴리오: '지금 집계' 도중에도 강사를 고를 수 있게
+
+- 원장 *"집계중일때 왼쪽 선생님 리스트 클릭이 안되는듯"*. 집계 버튼이 서버 액션을 `startTransition(async …)`로 감싸 React가 그동안 새 트랜지션(강사 주소 이동)을 전부 같은 갈래에 묶어 집계가 끝날 때까지 커밋하지 않았다. 버튼이 트랜지션 없이 부르고 진행 표시는 `useState`로(`portfolio-board.tsx` `RefreshButton`). 이동해도 집계는 계속 돌고, 끝나면 알림과 함께 지금 화면을 새로 그린다. gotchas #102에 같은 계열로 덧붙임.
+
 ## 2026-10-15 — 수업보고서 자동작성 프롬프트 손질 · 학습 추세는 그 반 시험만
 
 - 원장 *"수업보고서 ai 문구 클레임 체크"*(권민서A — 수요일 부담임 반 추세가 화·금 반 시험 1/5 한 번으로 "예전만큼 안 나온다 · 집중력을 챙겨 보겠다") → *"프롬프트 전체적으로 손봐"* · *"4번까지 진행해"* · *"말투도 좀 더 부드럽게. ai스럽지않게. 중복되는 내용 넣지않게"*.
