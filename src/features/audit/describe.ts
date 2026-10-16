@@ -2490,6 +2490,13 @@ export function auditDetail(
       return join(hw ? `숙제 ${hw}` : null, str(m.deadline) ? `기한 ${str(m.deadline)}` : null);
     }
 
+    case "lesson_report_video_homework_cancel": {
+      // 영상 숙제를 거둠 — 어느 숙제였나 · 그날 보고서의 '영상 과제 있음'을 '없음'으로 바꿨나 · 미수행이던 숙제인가.
+      const hw = str(m.homeworkDate);
+      return join(hw ? `숙제 ${hw}` : null, m.fromReport === true ? "보고서 영상 과제 → 없음" : m.keptReport === true ? "따로 낸 표시만(남의 보고서 숙제는 그대로)" : null,
+        m.status === "missing" ? "미수행이던 숙제" : null);
+    }
+
     case "lesson_report_video_homework_reject": {
       // 영상이 붙은 칸을 미확인으로 되돌려 그 숙제의 영상을 반려 — 몇 개를 떼고 몇 개를 Drive 휴지통으로 옮겼나.
       const hw = str(m.homeworkDate);

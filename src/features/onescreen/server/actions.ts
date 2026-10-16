@@ -68,6 +68,7 @@ import { recordMentAiDraft } from "./ment-draft-db";
 import { MENT_STYLE_EXCLUDED_SUBJECTS } from "../ment-style";
 import { videoHomeworkColumnReady } from "@/features/video-homework/server/assignments";
 import { videoHomeworkKept } from "@/features/video-homework/report-owner";
+import { cancelledAfterSeen } from "@/features/video-homework/server/cancels";
 import { resolveNextLessonDue, videoHomeworkDueColumnReady } from "@/features/video-homework/server/report-due";
 import type { SavedVideoHomeworkDue } from "@/features/video-homework/due";
 import { decideVideoHomeworkDue } from "@/features/video-homework/due-write";
@@ -83,6 +84,8 @@ import { isSlotOnlyEnglishNotes, shouldCaptureJj } from "../jj-capture-plan";
 import { classRouteActive, NO_SEND_CLASS_ERROR, SEND_CLASS_SUBJECTS } from "../send-class";
 /** 영상 숙제 마감이 고른 것과 다르게 저장된 줄은 보내지 않는다(saveAndQueueClassnote — 까닭은 화면이 따로 알린다, due-write.ts). */
 const VIDEO_DUE_CHANGED_ERROR = "영상 숙제 마감이 고른 것과 달라져 보내지 않았습니다(저장은 했습니다) — 멘트의 마감을 확인한 뒤 다시 보내 주세요";
+/** 장부에서 취소된 영상 숙제를 이 화면이 모른 채 '있음'으로 보낸 줄 — '없음'을 지키고 보내지 않는다(원장 2026-10-16, cancels.ts). */
+const VIDEO_HW_CANCELLED_ERROR = "이 영상 숙제는 영상 제출 현황에서 취소돼 '없음'으로 되돌렸고, 보내지 않았습니다(저장은 했습니다) — 멘트에 영상 숙제 안내가 있으면 고친 뒤 다시 보내 주세요";
 import { classBoardLiveForStudent, explainBoardMissing, resolveMakeupSendClass } from "./send-class";
 import { captureReportJj } from "./jj-capture";
 import type { OneScreenStudent, PrevReport } from "../types";
@@ -105,6 +108,11 @@ export type SaveLessonReportInput = {
    * 서버가 조용히 뺀다(#95). 다음 수업의 '지난 수업 영상 숙제' 검사는 false일 때만 숨는다(assignment.ts).
    */
   videoHomework?: boolean;
+  /**
+   * 이 화면이 그 줄의 영상 과제 값을 DB와 맞춘 시각(ISO, 원스크린 공급자 `seenAtOf`) — 장부에서 취소한 숙제를 모른 채 보낸 '있음'을
+   * 가른다(`cancels.ts`). 없으면 모른 것으로 본다(취소 기록이 있을 때만 뜻이 있다).
+   */
+  videoHomeworkSeenAt?: string | null;
   /**
    * 영상 첨부 링크 넣기(0328a, 원장 2026-10-02) — `undefined`면 손대지 않는다. 컬럼이 아직 없으면 서버가 조용히 뺀다(#95).
    * 발송 직전 판정(`reportGetsVideoLink`)이 이 값이 true인 보고서에만 '영상첨부' 줄을 붙인다.
@@ -189,6 +197,9 @@ export async function saveLessonReport(
   needsAnchor?: boolean;
   /** 영상 과제 값을 작성 선생님 것으로 두었다([`report-owner.ts`]) — 화면이 이 값으로 되돌린다(나머지는 저장됨). */
   keptVideoHomework?: boolean | null;
+  /** 장부에서 취소된 숙제라 '없음'을 지켰다(`keptVideoHomework`=false와 함께) · 화면이 그 줄의 맞춘 시각으로 쓸 응답 시각. */
+  videoHomeworkCancelled?: true;
+  videoHomeworkSeenAt?: string;
   /** 저장한 영상 숙제 마감 — 고른 마감을 적었을 때만. `fellBack` = 14일 안에 다음 수업이 없어 7일로 적었다(화면이 알린다). */
   videoHomeworkDue?: SavedVideoHomeworkDue;
 }> {
@@ -312,11 +323,17 @@ export async function saveLessonReport(
   // 🔴 영상 과제 있음/없음은 이 줄을 처음 쓴 선생님만 바꾼다(원장 2026-10-03, [`report-owner.ts`]) — 강사뷰 '영상 제출 현황'이
   //    작성 계정으로 "내가 낸 숙제"를 가르므로, 다른 선생님이 켜면 켠 사람 장부에 안 뜬다. **거절하지 않고** 그 값만 두고
   //    나머지를 저장한다(거절하면 세션이 바꾼 값을 쥐고 있어 그 줄의 저장·발송이 계속 막힌다) — 둔 값은 화면에 돌려준다.
-  const keptVideoHw = videoHomeworkKept({
+  const ownerKept = videoHomeworkKept({
     prior: priorRow ? { createdBy: priorRow.created_by ?? null, videoHomework: priorRow.video_homework ?? null } : null,
     wanted: videoHwReady ? input.videoHomework : undefined,
     userId: user.id,
   });
+  // 🔴 장부에서 취소한 숙제(원장 2026-10-16, `cancels.ts`) — 이 화면이 그 취소를 **모른 채**(값을 맞춘 시각 < 취소 시각) '있음'을 보내면
+  //    '없음'을 지킨다(세션 초안이 쥔 옛 '있음'이 보고서에 다시 적히던 길). 같은 길로 그 값만 두고 나머지는 저장하고, 발송은 하지 않는다
+  //    (saveAndQueueClassnote — 멘트에 영상 숙제 안내가 남아 있을 수 있다). 기록은 '없음'인 줄에 '있음'을 보낼 때만 읽는다(평소 왕복 0).
+  const cancelKept = !ownerKept && videoHwReady && input.videoHomework === true && priorRow?.video_homework === false && !!input.classId
+    && await cancelledAfterSeen(createAdminClient(), user.tenantId, { classId: input.classId, studentId: input.studentId, date: reportDate }, input.videoHomeworkSeenAt);
+  const keptVideoHw = ownerKept ?? (cancelKept ? { kept: false } : null);
 
   /**
    * 🔴 보강 앵커(`makeup_class_id`) — **보고서 반 = 출석부 반 = 발송 반**의 단일 소스(원장 2026-09-30, [`makeup-anchor.ts`](../makeup-anchor.ts)).
@@ -620,8 +637,9 @@ export async function saveLessonReport(
       created: !priorRow,
       ...(input.makeup ? { makeup: true } : {}),
       ...(isMakeupRow ? { makeupClassId: makeupAnchor } : {}),
-      // 작성 선생님이 아니라 영상 과제 값을 두었다(바꾸려던 값은 적지 않았다).
+      // 작성 선생님이 아니라 영상 과제 값을 두었다(바꾸려던 값은 적지 않았다) · 장부에서 취소된 숙제라 '없음'을 지켰다.
       ...(keptVideoHwFinal ? { videoHomeworkKept: true } : {}),
+      ...(cancelKept ? { videoHomeworkCancelled: true } : {}),
     },
   });
 
@@ -634,6 +652,8 @@ export async function saveLessonReport(
     makeupClassId: makeupAnchor,
     ...(warning ? { warning } : {}),
     ...(keptVideoHwFinal ? { keptVideoHomework: keptVideoHwFinal.kept } : {}),
+    // 장부에서 취소된 숙제라 '없음'을 지켰다 — 화면은 값을 되돌리고 그 줄의 맞춘 시각을 이 응답 시각으로 옮긴다(다시 켜면 받는다).
+    ...(cancelKept ? { videoHomeworkCancelled: true, videoHomeworkSeenAt: new Date().toISOString() } : {}),
     ...(videoDueFinal ? { videoHomeworkDue: videoDueFinal } : {}),
     ...(makeupEffect ? { makeupEffect } : {}),
   };
@@ -667,6 +687,9 @@ export async function saveAndQueueClassnote(
   warning?: string;
   /** 저장 단계에서 영상 과제 값을 작성 선생님 것으로 두었다(saveLessonReport 그대로) — 화면이 이 값으로 되돌린다. */
   keptVideoHomework?: boolean | null;
+  /** 저장 단계에서 장부 취소를 지켰다(saveLessonReport 그대로) — 이 줄은 보내지 않았다. */
+  videoHomeworkCancelled?: true;
+  videoHomeworkSeenAt?: string;
   /** 저장 단계가 적은 영상 숙제 마감(saveLessonReport 그대로) — 화면이 '다음 수업' 날짜를 싣는다. */
   videoHomeworkDue?: SavedVideoHomeworkDue;
   /** 저장 단계의 보강 기록 반영 알림(saveLessonReport `makeupEffect` 그대로) — 발송 결과와 무관하게 알린다. */
@@ -770,12 +793,14 @@ export async function saveAndQueueClassnote(
   const warn = {
     ...(saved.warning ? { warning: saved.warning } : {}),
     ...(saved.keptVideoHomework !== undefined ? { keptVideoHomework: saved.keptVideoHomework } : {}),
+    ...(saved.videoHomeworkCancelled ? { videoHomeworkCancelled: saved.videoHomeworkCancelled, videoHomeworkSeenAt: saved.videoHomeworkSeenAt } : {}),
     ...(saved.videoHomeworkDue ? { videoHomeworkDue: saved.videoHomeworkDue } : {}),
     ...(saved.makeupEffect ? { makeupEffect: saved.makeupEffect } : {}),
   };
   // 🔴 영상 숙제 마감이 고른 것과 다르게 됐다(다음 수업을 못 찾음·이미 지남·시간표를 못 읽음 → 7일 · 남이 쓴 줄이라 그대로 둠) — 멘트·미리보기가
   //    말한 마감과 학부모 카드의 마감이 갈린 채 나가지 않게 이 줄은 보내지 않는다(저장은 끝났다 — 화면이 마감을 고친 걸 보고 다시 보낸다, 적대 리뷰 M2).
-  if (saved.videoHomeworkDue?.fellBack || saved.videoHomeworkDue?.kept) {
+  // 장부에서 취소된 숙제라 '없음'을 지켰다(원장 2026-10-16) — 멘트·미리보기가 영상 숙제를 말하고 있을 수 있어 같은 길로 보내지 않는다.
+  if (saved.videoHomeworkCancelled || saved.videoHomeworkDue?.fellBack || saved.videoHomeworkDue?.kept) {
     // 대기 중(queued) 재고 회수 — 옆 게이트들과 같은 이유: 안 지우면 "보내지 않았습니다" 안내 직후 워커가 옛 대기분을 게시한다.
     if (prior?.classnote_status === "queued") {
       try {
@@ -788,7 +813,8 @@ export async function saveAndQueueClassnote(
         // best-effort — 어차피 에러 반환이라 강사 재시도가 뒤따른다(옆 게이트와 같다)
       }
     }
-    return { ok: false, id: saved.id, shareToken: saved.shareToken, ...warn, error: VIDEO_DUE_CHANGED_ERROR };
+    return { ok: false, id: saved.id, shareToken: saved.shareToken, ...warn,
+      error: saved.videoHomeworkCancelled ? VIDEO_HW_CANCELLED_ERROR : VIDEO_DUE_CHANGED_ERROR };
   }
 
   // 발송 안전 스위치 — 기본 OFF(dry-run). 원장이 승인(설정 토글)하기 전까지 **저장만** 하고 실제 큐잉(발송) 안 함.

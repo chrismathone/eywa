@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
@@ -37,6 +37,12 @@ type Store = {
    */
   keptToday: Readonly<Record<string, boolean | null>>;
   markKept: (studentId: string, classId: string, kept: boolean | null) => void;
+  /**
+   * 이 화면이 그 줄의 영상 과제 값을 DB와 맞춘 시각(처음 = 화면을 읽은 시각 · 저장 관문이 "장부에서 취소됨"으로 되돌려 준 줄은 그 응답 시각) —
+   * 저장에 함께 실어 장부에서 취소한 숙제를 모른 채 '있음'으로 되살리지 않게 한다(원장 2026-10-16, `cancels.ts`).
+   */
+  seenAtOf: (studentId: string, classId: string) => string | null;
+  markSeen: (studentId: string, classId: string, at: string) => void;
   change: (classId: string, studentId: string, status: VideoHomeworkStatus | null, homeworkDate?: string | null) => Promise<void>;
   /** 일괄 입력 — 여러 칸을 한 왕복으로 찍는다. 화면엔 먼저 칠하고, 서버가 받지 않은 칸만 되돌린다. 찍힌 칸 수를 돌려준다. */
   changeMany: (cells: BulkCheckCell[], status: VideoHomeworkStatus) => Promise<{ applied: number; failed: number }>;
@@ -45,17 +51,43 @@ export type BulkCheckCell = { classId: string; studentId: string; homeworkDate: 
 const Context = createContext<Store | null>(null);
 const keyOf = (classId: string, studentId: string) => `${classId}:${studentId}`;
 const EMPTY: VideoHomeworkAssignments = {};
+const NO_CANCEL_INFO = { readAt: null, overridden: [] as readonly string[] };
 const NONE: readonly string[] = [];
 
-export function VideoHomeworkProvider({ initial, checkDate, policy = DEFAULT_VIDEO_HOMEWORK_POLICY, assignments = EMPTY, assignmentsKnown = true, submitLinkMode = "off", dueReady = false, othersReports: othersReportList = NONE, children }: {
+export function VideoHomeworkProvider({ initial, checkDate, policy = DEFAULT_VIDEO_HOMEWORK_POLICY, assignments = EMPTY, assignmentsKnown = true, submitLinkMode = "off", dueReady = false, othersReports: othersReportList = NONE, cancelInfo = NO_CANCEL_INFO, children }: {
   initial: VideoHomeworkMark[]; checkDate: string; policy?: VideoHomeworkPolicy;
   assignments?: VideoHomeworkAssignments; assignmentsKnown?: boolean; submitLinkMode?: SubmitLinkMode; dueReady?: boolean;
-  othersReports?: readonly string[]; children: ReactNode;
+  othersReports?: readonly string[];
+  /**
+   * 장부에서 취소한 숙제(원장 2026-10-16, `cancels.ts`) — `readAt` = 화면이 영상 과제 값(보고서 · 취소 기록)을 읽은 시각(ISO · 모르면 null —
+   * 저장 관문이 '모른 채'로 본다) · `overridden` = 초안의 '있음'을 '없음'으로 맞춘 줄(`학생|날짜|반`) — 화면을 열 때 한 번 알린다.
+   */
+  cancelInfo?: { readAt: string | null; overridden: readonly string[] };
+  children: ReactNode;
 }) {
   const othersReports = useMemo(() => new Set(othersReportList), [othersReportList]);
   const [keptToday, setKeptToday] = useState<Readonly<Record<string, boolean | null>>>({});
   const markKept = useCallback((studentId: string, classId: string, kept: boolean | null) =>
     setKeptToday((current) => ({ ...current, [assignmentKey(studentId, checkDate, classId)]: kept })), [checkDate]);
+  // 줄마다 DB와 다시 맞춘 시각 — ref다(저장 조립은 비동기 경로에서도 불려 옛 closure가 읽으면 안 된다 · 다시 그릴 일도 없다).
+  // 🔴 처음 시각은 **마운트 때 한 번만** 받는다 — 원스크린 학생 상태는 마운트 때 한 번 복사되는데(onescreen-client), 출결 저장의
+  //    revalidatePath·스트립의 router.refresh가 새 읽은 시각만 내려보내면 화면이 쥔 옛 '있음'이 취소 뒤에 열린 값처럼 통과한다(재리뷰 2026-10-16).
+  const [mountedSeenAt] = useState(cancelInfo.readAt);
+  const seenRef = useRef(new Map<string, string>());
+  const markSeen = useCallback((studentId: string, classId: string, at: string) => {
+    seenRef.current.set(assignmentKey(studentId, checkDate, classId), at);
+  }, [checkDate]);
+  const seenAtOf = useCallback((studentId: string, classId: string) =>
+    seenRef.current.get(assignmentKey(studentId, checkDate, classId)) ?? mountedSeenAt, [checkDate, mountedSeenAt]);
+  const tf = useSheetTf();
+  // 초안의 '있음'을 취소대로 '없음'으로 맞춘 줄이 있으면 한 번 알린다 — 취소 뒤 일부러 다시 켠 값이 조용히 사라지지 않게(다시 켜면 받는다).
+  const [overriddenCount] = useState(cancelInfo.overridden.length);
+  const noticed = useRef(false);
+  useEffect(() => {
+    if (noticed.current || !overriddenCount) return;
+    noticed.current = true;
+    toast.message(tf("os.c.videoHwCancelledOnLoad", { n: String(overriddenCount) }));
+  }, [overriddenCount, tf]);
   const [marks, setMarks] = useState(initial);
   const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
   const pendingRef = useRef(new Set<string>());
@@ -110,8 +142,8 @@ export function VideoHomeworkProvider({ initial, checkDate, policy = DEFAULT_VID
     }
     return { applied: appliedKeys.size, failed: cells.length - appliedKeys.size };
   }, [checkDate, marks, t]);
-  const value = useMemo(() => ({ checkDate, marks, pending, policy, assignments, assignmentsKnown, submitLinkMode, dueReady, othersReports, keptToday, markKept, change, changeMany }),
-    [checkDate, marks, pending, policy, assignments, assignmentsKnown, submitLinkMode, dueReady, othersReports, keptToday, markKept, change, changeMany]);
+  const value = useMemo(() => ({ checkDate, marks, pending, policy, assignments, assignmentsKnown, submitLinkMode, dueReady, othersReports, keptToday, markKept, seenAtOf, markSeen, change, changeMany }),
+    [checkDate, marks, pending, policy, assignments, assignmentsKnown, submitLinkMode, dueReady, othersReports, keptToday, markKept, seenAtOf, markSeen, change, changeMany]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 

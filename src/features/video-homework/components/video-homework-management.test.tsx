@@ -4,8 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { VideoHomeworkManagement } from "./video-homework-management";
 import type { VideoArrival, VideoHomeworkLedgerRow, VideoHomeworkMark } from "../types";
 
-const mocks = vi.hoisted(() => ({ save: vi.fn(), success: vi.fn(), error: vi.fn(), reject: vi.fn(), refresh: vi.fn(), options: vi.fn() }));
+const mocks = vi.hoisted(() => ({ save: vi.fn(), success: vi.fn(), error: vi.fn(), reject: vi.fn(), refresh: vi.fn(), options: vi.fn(), cancel: vi.fn() }));
 vi.mock("../server/actions", () => ({ setVideoHomeworkRound: mocks.save }));
+vi.mock("../server/cancel-homework", () => ({ cancelVideoHomework: mocks.cancel }));
 vi.mock("../server/reject-videos", () => ({ rejectHomeworkVideos: mocks.reject }));
 vi.mock("../server/video-assignment", () => ({ getVideoAssignmentOptions: mocks.options, assignHomeworkVideo: vi.fn() }));
 vi.mock("next/navigation", async (load) => ({ ...(await load<typeof import("next/navigation")>()), useRouter: () => ({ replace: mocks.refresh }) }));
@@ -306,5 +307,43 @@ describe("관리자 화면 강사 필터 — 고른 강사가 낸 칸만(원장 
   it("강사뷰(선택지 없음)엔 강사 필터가 없다 — 이미 본인 칸뿐", () => {
     show();
     expect(screen.queryByRole("combobox", { name: "강사" })).toBeNull();
+  });
+});
+
+// 원장 2026-10-16 *"미확인이나 미제출인 숙제에 한해서 숙제 취소할 수 있게"* — 보고서를 보낸 숙제도 칸 편집 창에서 거둔다.
+describe("영상 제출 현황 — 숙제 취소", () => {
+  it("미수행 칸은 '숙제 취소'를 두 번 눌러 거둔다(처음엔 무엇이 바뀌는지 읽게) · 끝나면 장부를 다시 읽는다", async () => {
+    mocks.cancel.mockResolvedValue({ ok: true });
+    show();
+    fireEvent.click(cell("김민준 1회 2026-09-01 미수행"));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "숙제 취소" }));
+    expect(mocks.cancel).not.toHaveBeenCalled();
+    expect(within(dialog).getByText(/ClassNote로 이미 나간 보고서 글은 바뀌지 않으니/)).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "숙제 취소 확정" }));
+    await waitFor(() => expect(mocks.cancel).toHaveBeenCalledWith({ classId: "a", studentId: "one", homeworkDate: "2026-09-01" }));
+    await waitFor(() => expect(mocks.success).toHaveBeenCalledWith(expect.stringContaining("영상 숙제를 취소했습니다")));
+    expect(mocks.refresh).toHaveBeenCalledWith(expect.any(String), { scroll: false });
+  });
+  it("완료 칸 · 영상이 붙은 칸 · 읽기 전용 줄에는 '숙제 취소'가 없다", async () => {
+    show({ marks: [{ ...marks[0], status: "submitted", submittedDate: "2026-09-02" }] });
+    fireEvent.click(cell("김민준 1회 2026-09-01 완료"));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "숙제 취소" })).toBeNull();
+    cleanup();
+    show({ rows: [row({ assignedDates: ["2026-09-01"] })], marks: [], videos: [{ id: "v", classId: "a", studentId: "one", postedAt: "2026-09-02T12:00:00+09:00" }] });
+    fireEvent.click(cell("김민준 1회 2026-09-01 완료(영상)"));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "숙제 취소" })).toBeNull();
+  });
+  it("서버가 거절하면 까닭을 띄우고 창은 그대로다", async () => {
+    mocks.cancel.mockResolvedValue({ ok: false, error: "학생이 지금 이 숙제에 영상을 올리는 중입니다." });
+    show();
+    fireEvent.click(cell("김민준 1회 2026-09-01 미수행"));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "숙제 취소" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "숙제 취소 확정" }));
+    await waitFor(() => expect(mocks.error).toHaveBeenCalledWith("학생이 지금 이 숙제에 영상을 올리는 중입니다."));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 });

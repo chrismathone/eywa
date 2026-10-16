@@ -2768,6 +2768,14 @@ export const SHEET_DICT = {
     ko: "영상 과제 기록을 읽지 못했습니다 — 새로고침하면 다시 저장할 수 있습니다",
     en: "Could not read video homework records — refresh to save again",
   },
+  "os.c.videoHwCancelledOnLoad": {
+    ko: "영상 제출 현황에서 취소한 영상 숙제 {n}건은 '없음'으로 맞췄습니다 — 다시 내려면 '영상 과제'를 켜 주세요",
+    en: "{n} video homework item(s) cancelled in the submission ledger were set to none — turn 'video homework' on again to reassign",
+  },
+  "os.c.videoHwCancelled": {
+    ko: "이 영상 숙제는 영상 제출 현황에서 취소돼 '없음'으로 되돌렸습니다(나머지는 저장했습니다)",
+    en: "This video homework was cancelled in the video submission ledger — set back to none (the rest was saved)",
+  },
   "os.c.videoHwKept": {
     ko: "영상 과제는 이 보고서를 처음 쓴 선생님만 바꿀 수 있어 그대로 두었습니다(나머지는 저장했습니다)",
     en: "Only the teacher who first wrote this report can change the video homework — kept as is (the rest was saved)",

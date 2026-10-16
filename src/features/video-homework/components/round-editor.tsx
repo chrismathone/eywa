@@ -7,6 +7,7 @@ import type { VideoHomeworkLedgerRow } from "../types";
 import { isVideoHomeworkDate } from "../types";
 import type { LedgerChange } from "./use-ledger-marks";
 import { RejectVideosButton } from "./reject-videos-button";
+import { CancelHomeworkButton } from "./cancel-homework-button";
 import styles from "./video-homework-management.module.css";
 
 export const LEDGER_STATUS_OPTIONS = [{ value: "submitted", label: "완료" }, { value: "missing", label: "미수행" }, { value: "unchecked", label: "미확인" }] as const;
@@ -74,5 +75,8 @@ export function RoundEditor({ cell, today, busy, save, onClose, onAssign }: {
       : "숙제일이 없는 옛 기록입니다. 미확인으로 바꾸면 기록이 지워져 이 회차가 장부에서 빠집니다."}</p>
     {rejecting ? null : row.editable ? <button type="submit" className={styles.primary} disabled={busy}>{busy ? "저장 중…" : "기록 저장"}</button>
       : <p className={styles.dim}>이 기록은 읽기 전용입니다.</p>}
+    {/* 숙제 취소(원장 2026-10-16) — 저장된 상태가 미확인 · 미수행이고 영상이 붙지 않은 숙제 칸만. 보고서를 보낸 숙제도 여기서 거둔다. */}
+    {row.editable && round.homeworkDate && round.status !== "submitted" && !round.videoId
+      ? <CancelHomeworkButton classId={row.classId} studentId={row.studentId} homeworkDate={round.homeworkDate} disabled={busy} onDone={onClose} /> : null}
   </form>;
 }
