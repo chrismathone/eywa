@@ -1,5 +1,13 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-10-16 — 여러 녹음: 켜 두는 것은 여럿, 소리를 담는 것은 하나(누른 녹음만 · 나머지 자동 일시정지)
+- 원장 *"상담이 여러명이 와버린거야"* → *"녹음이 3개가 켜지더라도 그 중에 하나만 녹음 … 나머지는 일시정지"*. 10-13의 계정 단위 잠금(새 녹음 차단)을 걷고 같은 대상만 잠근다. 결정 = [decisions/shell.md](decisions/shell.md) 2026-10-16.
+- 엔진 [`browser-recording.ts`](../src/lib/browser-recording.ts) = 문서마다 녹음 여러 개(`getBrowserRecordings`) · 시작/이어서 녹음 = 나머지 일시정지(`pauseBrowserRecording`·`resumeBrowserRecording`) · 담은 시간만 셈 · 문서 사이 신호·대상 잠금 [`browser-recording-channel.ts`](../src/lib/browser-recording-channel.ts).
+- 아이콘 [`recording-capsule.tsx`](../src/components/forms/recording-capsule.tsx) = 녹음마다 하나 · 붉은 테두리 안 마이크 + 제목 · 녹음 중 바탕 천천히 펄스 · 일시정지 점선 · 정보창 한 번에 하나(다른 아이콘 누르면 바로 전환) · 쌓인 아이콘 묶음을 피해 뜬다 · 끌어 겹치면 줄에 맞춰 붙는다([`recording-capsule-layout.ts`](../src/components/forms/recording-capsule-layout.ts)).
+- 작성 화면 3종(회의록·콜&상담·원생상담) = 공용 진행 칸 [`recording-session-controls.tsx`](../src/components/forms/recording-session-controls.tsx)(일시정지 · 이어서 녹음 · 녹음 끝내기) · "다른 화면에서 녹음 중" 차단 삭제(같은 대상만 안내).
+- 두 번째 작성 화면 = 녹음 중 작성 화면이 있으면 '새 X'가 새 작성 화면(창 = `openForm` 새 창 · 단일 화면 = `form=<id>`) · '작성 화면 열기' = 붙어 있으면 그대로, 떨어져 있으면 그 작성 화면으로 — 걸린 녹음을 누른 뒤의 임시 저장만 바로 복구(오래된 것은 안내) · 단일 화면에서 저장해도 다른 녹음이 끊기지 않게 머문다 · 시작하지 못한 녹음 탓에 멈춘 녹음은 되돌린다 · 작성 화면마다 임시 저장 칸 따로 · 떠날 때 마지막 입력 저장([`recording-resume.ts`](../src/lib/recording-resume.ts)).
+- Aywa 아이콘에 `pause`(일시정지) 추가. 실브라우저 확인(가짜 마이크): 셋 동시 → 나중 것만 녹음 · 이어서 녹음 전환 · 일시정지 거친 파일 정상 생성 · 정보창이 쌓인 아이콘을 안 덮음 · 끌어 겹치면 줄 정렬 · 펄스 3.2s.
+
 ## 2026-10-16 — 직원 포트폴리오: 지난달 대비 가감 · 요일 · 학교학년 · 반별 O/빗금 표 · 상담·성적 탭 · 프리랜서 근태 만점
 - 총점 원 바로 아래에 지난달 대비 가감 + '지난달 점수' 줄(바로 앞 달만 · 만점이 같을 때만 · `evidence-view.ts` `totalBefore`). 항목 증감의 '지난달'도 바로 앞 달로 고침(빈 달이 있으면 두 달 전을 견주던 것).
 - 일자별 보고서·출결 표 = 수업 있는 날만 · 날짜에 요일 · 학생 칸 = 이름 + 학교학년(퇴원율·상담·성적·출결·후속·학생 변동·보강·소개).
