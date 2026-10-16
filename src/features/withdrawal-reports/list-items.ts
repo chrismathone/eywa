@@ -1,6 +1,7 @@
 import { inRange, resolveRange, type RangeKey, type RangeWindow } from "@/features/withdrawals/exit-rows";
 import { monthRange } from "@/lib/date-kst";
 import type { ArchiveRow } from "./archive-model";
+import { archiveReason, webReportReason, type ListReason } from "./list-reason";
 import { REPORT_STATUS, directorIds, managerIds, type ReportListRow, type StaffOption } from "./model";
 
 /**
@@ -21,6 +22,8 @@ export type ListItem = {
   date: string | null;
   dateText: string;
   teacher: string;
+  /** 퇴원 사유 칸 — 우리 사유(대분류 · 세부) · 맞는 것이 없으면 기타 + 설명([`list-reason.ts`](./list-reason.ts)). */
+  reason: ListReason;
   subjects: string[];
   status: ListStatus;
   statusLabel: string;
@@ -54,6 +57,7 @@ export function buildListItems(input: {
   };
   const web = input.reports.map((r): ListItem => {
     const teacher = staffName(r.teacher_id);
+    const reason = webReportReason(r.status, r.body_reason, r.body_detail);
     return {
       key: `r:${r.id}`,
       href: `${LIST_PATH}/${r.id}`,
@@ -62,6 +66,7 @@ export function buildListItems(input: {
       date: r.effective_date,
       dateText: r.effective_date,
       teacher,
+      reason,
       subjects: r.subjects,
       status: r.status === "completed" ? "completed" : r.status === "canceled" ? "canceled" : "pending",
       statusLabel: REPORT_STATUS[r.status],
@@ -72,11 +77,12 @@ export function buildListItems(input: {
       ],
       link: null,
       myTurn: ["requested", "revision"].includes(r.status) && r.teacher_id === userId,
-      search: [r.snapshot.name, r.snapshot.school, r.snapshot.grade, ...r.snapshot.courses.map((c) => c.className), teacher].join(" "),
+      search: [r.snapshot.name, r.snapshot.school, r.snapshot.grade, ...r.snapshot.courses.map((c) => c.className), teacher, reason.text].join(" "),
     };
   });
   const archived = input.archives.map((a): ListItem => {
     const className = a.class_name.replace(/\s+/g, " ").trim();
+    const reason = archiveReason(a.reason_raw, a.detail_raw);
     return {
       key: `a:${a.id}`,
       href: `${LIST_PATH}/archive/${a.id}`,
@@ -85,6 +91,7 @@ export function buildListItems(input: {
       date: a.exit_date,
       dateText: a.exit_date || a.raw_exit_date || "미기재",
       teacher: a.teacher_name.trim() || NO_TEACHER,
+      reason,
       subjects: a.subject ? [a.subject] : [],
       status: "archive",
       statusLabel: "스프레드시트 기록",
@@ -92,7 +99,7 @@ export function buildListItems(input: {
       approval: [{ text: `원본 · ${a.sheet_title}`, muted: true }],
       link: a.mapped_student_id ? (a.mapping_kind === "manual" ? "manual" : "auto") : "unmapped",
       myTurn: false,
-      search: [a.student_name, a.school_grade, a.class_name, a.teacher_name, a.sheet_title].join(" "),
+      search: [a.student_name, a.school_grade, a.class_name, a.teacher_name, a.sheet_title, reason.text, a.reason_raw ?? ""].join(" "),
     };
   });
   // 🔑 진행 중(처리할 일)이 먼저 — 기본 보기가 '전체'라 지난 날짜로 요청된 진행 중 보고서가 기존 기록 사이로 묻히지 않게.

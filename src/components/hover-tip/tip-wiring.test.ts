@@ -40,6 +40,7 @@ const CARD_SURFACES: [string, string][] = [
   ["app/(shell)/staff/leaves/_client.tsx", "tipProps(l.reason)"],
   ["features/integrations/components/makeedu-push-card.tsx", "tipProps(c.note)"],
   ["app/(shell)/dashboard/_onescreen/panels.tsx", "tip={tipProps("],
+  ["app/(shell)/withdrawal-reports/_components/report-list.tsx", "tipProps(r.reason.note)"],
 ];
 
 /**

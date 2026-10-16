@@ -8,11 +8,12 @@ export async function listArchives() {
   if (!viewer?.request) return [] as ArchiveRow[];
   const rows: ArchiveRow[] = [];
   for (let offset = 0; ; offset += 400) {
-    let q = createAdminClient().from("withdrawal_report_archives").select("id,spreadsheet_id,sheet_id,sheet_title,source_range,student_name,school_grade,class_name,subject,exit_date,raw_exit_date,teacher_name,mapped_student_id,mapping_kind,revision").eq("tenant_id", viewer.user.tenantId);
+    let q = createAdminClient().from("withdrawal_report_archives").select("id,spreadsheet_id,sheet_id,sheet_title,source_range,student_name,school_grade,class_name,subject,exit_date,raw_exit_date,teacher_name,mapped_student_id,mapping_kind,revision,reason_raw:fields->>퇴원사유,detail_raw:fields->>상세사유").eq("tenant_id", viewer.user.tenantId);
     if (viewer.scope) q = q.or(`subject.is.null,subject.in.(${viewer.scope.join(",")})`);
     const { data, error } = await q.order("exit_date", { ascending: false, nullsFirst: false }).order("id").range(offset, offset + 399);
     if (error) throw new Error("기존 퇴원보고서를 불러오지 못했습니다.");
-    rows.push(...(data ?? []) as ArchiveRow[]);
+    // supabase 타입 해석기가 한글 JSON 키(`fields->>퇴원사유`)를 못 읽어 unknown을 거친다(실제 조회는 된다).
+    rows.push(...((data ?? []) as unknown as ArchiveRow[]));
     if (!data || data.length < 400) break;
   }
   return rows;
