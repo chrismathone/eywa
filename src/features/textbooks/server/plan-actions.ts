@@ -33,6 +33,7 @@ import { reportError } from "@/lib/observability/report-error";
 import { planLineFromRow } from "@/features/class-sheets/lib/plan-line";
 import type { PlanLineDTO } from "@/features/class-sheets/server/actions";
 import { shiftActualLines } from "./shift-lines";
+import { shiftAlongPlans } from "./shift-relay";
 import {
   buildLessonSchedule,
   MAX_LOOKAHEAD_DAYS,
@@ -967,7 +968,11 @@ export type LessonShiftResult =
  * 🔑 **표식도 함께 남긴다** — 아직 가져오지 않은 먼 칸은 표식으로 계산되는 일정에서 온다. 표식은 그 줄의
  *    **순(net) 횟수**만 맞으면 되므로, 반대 표식이 누른 칸에 있으면 지우고 아니면 비어 있는 첫 칸에 더한다.
  *    원래 월간계획(표식 없이 펼친 쪽)은 표식을 안 보므로 [계획 비교]는 밀린 만큼 'N차수 늦음'으로 잡는다.
- * 🔑 **토글이 아니다** — 두 번 누르면 두 주 밀린다. 되돌리기는 반대 버튼이다.
+ * 🔴 **배정 교재가 지나가는 칸이면 요일이 아니라 교재 순서로**(원장 2026-10-16, [`shiftAlongPlans`](./shift-relay.ts)):
+ *    화 1·2차수 + 금 1차수처럼 요일을 번갈아 나가는 교재를 같은 요일끼리 옮기면 화요일 칸만 움직여 순서가
+ *    꼬이고 월간계획과 실제가 갈렸다(중등E_중1 SKY). 그 칸은 표식을 교재 칸 순서로 두고, 표식을 반영한 일정대로
+ *    그 교재 줄을 다시 깐다. 배정 줄이 아닌 줄만 종전대로 같은 요일·교시끼리 옮긴다.
+ * 🔑 **토글이 아니다** — 두 번 누르면 두 칸 밀린다. 되돌리기는 반대 버튼이다.
  * `kind: null`은 표식만 지운다(옛 호출 호환 — 줄은 안 건드린다).
  */
 export async function setLessonShift(input: {
@@ -998,6 +1003,57 @@ export async function setLessonShift(input: {
     if (error) return { ok: false, error: missing(error) ?? friendlyTextbookError(error, "회차를 바꾸지 못했습니다") };
     revalidatePath(`/ecs/${input.classId}`, "layout");
     return { ok: true, kind: null, moved: 0 };
+  }
+
+  // ③ 마무리 — 누른 칸의 줄을 다시 읽어 화면에 준다(당김이면 바뀌었다) + 감사로그 + 무효화.
+  const finishShift = async (movedCount: number): Promise<LessonShiftResult> => {
+    const { data: cellRows } = await admin
+      .from("class_sheet_plan_lines")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .eq("class_id", input.classId)
+      .eq("plan_date", input.date)
+      .eq("slot_start", slot)
+      .order("term_mode")
+      .order("line_no")
+      .order("id");
+
+    await logAction({
+      action: "textbook_lesson_shift",
+      targetType: "class",
+      targetLabel: gate.access.className,
+      metadata: { date: input.date, slot, kind, moved: movedCount },
+    });
+    // 그 반의 앞으로 전부가 바뀐다([[#102]] 계열 — `"layout"` 필수).
+    revalidatePath(`/ecs/${input.classId}`, "layout");
+    return {
+      ok: true,
+      kind,
+      moved: movedCount,
+      lines: cellRows ? cellRows.map((r) => planLineFromRow(r as Record<string, unknown>)) : undefined,
+    };
+  };
+
+  // ⓪ 배정 교재가 지나가는 칸이면 교재 순서로(표식·줄을 그 경로가 함께 맞춘다).
+  const relay = await shiftAlongPlans({
+    admin,
+    tenantId,
+    classId: input.classId,
+    date: input.date,
+    slot,
+    kind,
+    userId: gate.access.user.id,
+  }).catch((e: unknown): { handled: true; ok: false; error: string } => {
+    reportError(e, { scope: "textbooks.lesson-shift-relay", classId: input.classId, date: input.date });
+    return { handled: true, ok: false, error: "진도를 불러오지 못해 옮기지 않았습니다 — 잠시 뒤 다시 시도해 주세요" };
+  });
+  if (relay.handled) {
+    if (!relay.ok) {
+      // 중간에 멈췄을 수 있다 — 화면은 다시 받게 한다.
+      revalidatePath(`/ecs/${input.classId}`, "layout");
+      return { ok: false, error: relay.error };
+    }
+    return finishShift(relay.moved);
   }
 
   // ① 실제 줄을 옮긴다. 옮길 줄이 아예 없으면(아직 가져오기 전) 표식만 남긴다.
@@ -1044,30 +1100,5 @@ export async function setLessonShift(input: {
     return { ok: false, error: missing(markerError) ?? friendlyTextbookError(markerError, "회차를 바꾸지 못했습니다") };
   }
 
-  // ③ 누른 칸의 줄을 다시 읽어 화면에 준다(당김이면 바뀌었다).
-  const { data: cellRows } = await admin
-    .from("class_sheet_plan_lines")
-    .select("*")
-    .eq("tenant_id", tenantId)
-    .eq("class_id", input.classId)
-    .eq("plan_date", input.date)
-    .eq("slot_start", slot)
-    .order("term_mode")
-    .order("line_no")
-    .order("id");
-
-  await logAction({
-    action: "textbook_lesson_shift",
-    targetType: "class",
-    targetLabel: gate.access.className,
-    metadata: { date: input.date, slot, kind, moved: moved.ok ? moved.moved : 0 },
-  });
-  // 그 반의 앞으로 전부가 바뀐다([[#102]] 계열 — `"layout"` 필수).
-  revalidatePath(`/ecs/${input.classId}`, "layout");
-  return {
-    ok: true,
-    kind,
-    moved: moved.ok ? moved.moved : 0,
-    lines: cellRows ? cellRows.map((r) => planLineFromRow(r as Record<string, unknown>)) : undefined,
-  };
+  return finishShift(moved.ok ? moved.moved : 0);
 }
