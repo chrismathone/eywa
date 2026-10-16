@@ -20,14 +20,30 @@ const lessons = (day: string): DayBasis | null => (weekday(day) ? { start: "14:0
 // 증거 — 10/5 수업 중에 넣은 출결(태그 없음) · 10/6 13:58에 넣은 출결.
 const evidence = (day: string): DayEvidence =>
   day === "2026-10-05" ? { recorded: true, firstAt: at(day, "15:00") } : day === "2026-10-06" ? { recorded: true, firstAt: at(day, "13:58") } : { recorded: false, firstAt: null };
-const run = (days: SnapshotStaffDay[], { manual = null, options = DEFAULT_PUNCTUALITY_OPTIONS, basisOn = lessons, latest = null as string | null }:
-  { manual?: number | null; options?: PunctualityOptions; basisOn?: (d: string) => DayBasis | null; latest?: string | null } = {}) =>
+const run = (days: SnapshotStaffDay[], { manual = null, options = DEFAULT_PUNCTUALITY_OPTIONS, basisOn = lessons, latest = null as string | null, countsOn }:
+  { manual?: number | null; options?: PunctualityOptions; basisOn?: (d: string) => DayBasis | null; latest?: string | null; countsOn?: (d: string) => boolean } = {}) =>
   punctualityOf({
     days, leaves: [{ user_id: "t1", start_date: "2026-10-08", end_date: "2026-10-08" }], holidays: new Set(["2026-10-09"]), teacherId: "t1", w, options, manual,
-    basisOn, evidenceOn: (day) => evidence(day), latest,
+    basisOn, evidenceOn: (day) => evidence(day), latest, ...(countsOn ? { countsOn } : {}),
   });
 
 describe("punctualityOf", () => {
+  it("🔴 혼합 계약 — 근로 요일이 아닌 날은 세지 않는다(메이크에듀가 지각·결근으로 적은 날도 · 원장 2026-10-16)", () => {
+    const days = [rec("2026-10-01", "13:55", "20:05"), rec("2026-10-02", "14:10", "19:30", { status: "late", late_minutes: 10 }), rec("2026-10-07", null, null, { status: "absent" })];
+    const all = run(days);
+    expect([all.late, all.absent, all.early]).toEqual([1, 1, 1]);
+    // 10/2(금)·10/7(수)는 용역 몫 요일 — 출퇴근 기록째 없는 날로 본다.
+    const r = run(days, { countsOn: (d) => d !== "2026-10-02" && d !== "2026-10-07" });
+    expect([r.raw, r.late, r.absent, r.early, r.days]).toEqual([0, 0, 0, 0, 1]);
+    expect(r.detail.some((x) => x.day === "2026-10-02" || x.day === "2026-10-07")).toBe(false);
+  });
+  it("🔴 용역 요일에만 태그를 찍었어도 근로 요일 결근은 센다 — '자료 없음'이 되지 않는다(적대 리뷰 2026-10-16)", () => {
+    // 10/2(금)에만 태그 — 근로 요일 = 월~목. 10/1(목)·10/7(수)엔 수업이 있는데 기록이 없다.
+    const r = run([rec("2026-10-02", "13:50", "20:05")], { countsOn: (d) => ![5, 6, 0].includes(new Date(`${d}T00:00:00Z`).getUTCDay()) });
+    expect(r.raw).not.toBeNull();
+    expect(r.detail.filter((x) => x.counted && x.status === "absent").map((x) => x.day)).toEqual(["2026-10-01", "2026-10-07"]);
+    expect(r.days).toBe(0);
+  });
   it("출근·퇴근 기록 = 그 달 시각이 찍힌 날 수 · 같은 날 여러 줄은 하루(원장 2026-10-15)", () => {
     const r = run([rec("2026-10-01", "13:50", "20:05"), rec("2026-10-01", "13:55", null), rec("2026-10-02", "13:50", null), rec("2026-10-05", null, "20:10")]);
     expect([r.checkIns, r.checkOuts, r.days]).toEqual([2, 2, 3]);

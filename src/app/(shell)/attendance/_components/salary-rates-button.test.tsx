@@ -45,6 +45,49 @@ describe("administrator salary rate editor", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("대상 학년을 하나 이상 골라 주세요");
     expect(save).not.toHaveBeenCalled();
   });
+  // 혼합 계약(근로 + 용역, 원장 2026-10-16) — 대상 학년 = 용역 몫, 근로 요일 = 강사평가 근태가 세는 요일.
+  describe("혼합 계약", () => {
+    const mixedRates = { regular: { 고등: 50 }, special: {}, classes: {}, levels: ["고등" as const], workDays: ["mon" as const, "fri" as const] };
+    const openMixed = () => {
+      render(<SalaryRatesButton teacherId={teacherId} teacherName="강사" month="2026-09" rates={mixedRates} classes={[]} mixed />);
+      fireEvent.click(screen.getByRole("button", { name: "비율 설정" }));
+    };
+    it("근로 요일 칸이 서고 저장된 요일로 열린다 — 혼합이 아니면 칸이 없다", () => {
+      openMixed();
+      expect(screen.getByRole("group", { name: "근로 요일" })).toBeTruthy();
+      expect(screen.getByRole("checkbox", { name: "월" })).toBeChecked();
+      expect(screen.getByRole("checkbox", { name: "화" })).not.toBeChecked();
+    });
+    it("근로 요일을 바꾸면 보낸다", async () => {
+      openMixed();
+      fireEvent.click(screen.getByRole("checkbox", { name: "화" }));
+      fireEvent.submit(screen.getByRole("button", { name: "저장" }).closest("form")!);
+      await waitFor(() => expect(refresh).toHaveBeenCalledOnce());
+      expect(save.mock.calls[0]![0].rates.workDays).toEqual(["mon", "tue", "fri"]);
+    });
+    it("🔴 근로 요일을 안 바꿨으면 보내지 않는다 — 열어 둔 다른 창이 그 사이 바꾼 근로 요일을 옛 값으로 덮지 않게", async () => {
+      openMixed();
+      fireEvent.change(screen.getByRole("spinbutton", { name: "정규 고등 비율" }), { target: { value: "52" } });
+      fireEvent.submit(screen.getByRole("button", { name: "저장" }).closest("form")!);
+      await waitFor(() => expect(refresh).toHaveBeenCalledOnce());
+      expect("workDays" in save.mock.calls[0]![0].rates).toBe(false);
+    });
+    it("🔴 학년을 전부 고르면 보내지 않고 이유를 말한다 — 근로 몫이 없어진다", async () => {
+      openMixed();
+      fireEvent.click(screen.getByRole("checkbox", { name: "초등" }));
+      fireEvent.click(screen.getByRole("checkbox", { name: "중등" }));
+      fireEvent.submit(screen.getByRole("button", { name: "저장" }).closest("form")!);
+      expect(await screen.findByRole("alert")).toHaveTextContent("혼합 계약은 용역 학년만");
+      expect(save).not.toHaveBeenCalled();
+    });
+  });
+  it("혼합이 아니면 근로 요일 칸이 없고 근로 요일을 보내지 않는다", async () => {
+    open();
+    expect(screen.queryByRole("group", { name: "근로 요일" })).toBeNull();
+    fireEvent.submit(screen.getByRole("button", { name: "저장" }).closest("form")!);
+    await waitFor(() => expect(refresh).toHaveBeenCalledOnce());
+    expect("workDays" in save.mock.calls[0]![0].rates).toBe(false);
+  });
   it("저장된 대상 학년으로 열린다", () => {
     render(<SalaryRatesButton teacherId={teacherId} teacherName="강사" month="2026-09"
       rates={{ regular: { 고등: 50 }, special: {}, classes: {}, levels: ["고등"] }} classes={[]} />);

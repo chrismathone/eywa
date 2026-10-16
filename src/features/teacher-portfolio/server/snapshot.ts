@@ -14,6 +14,7 @@ import {
   byId, CLASS_COLUMNS, ENROLLMENT_COLUMNS, futureEnrollmentRows, nonRealStudents, paged, SCHEDULE_COLUMNS, studentReasonRows, toTransitions, transitionRows,
 } from "./churn-source";
 import { fetchEvaluationSourceRows, toEvaluationSources } from "./evaluation-sources";
+import { isMixedEmployment, parseWorkDays } from "@/features/staff/employment";
 
 /**
  * 직원 포트폴리오 계산의 입력 — 한 지점의 최근 7개월 원자료.
@@ -84,6 +85,15 @@ function preRecordPolicy(from: string, firstReport: string | null, firstAttendan
 }
 
 
+/** 혼합 계약 직원에게만 근로 요일을 붙인다 — 다른 계약의 `workDays`(남아 있을 수 있다)는 근태에 쓰지 않는다. 모르는 값이면 붙이지 않는다. */
+function withWorkDays(users: SnapshotUser[], rows: readonly { teacher_id: string; work_days: unknown }[]): SnapshotUser[] {
+  const days = new Map(rows.map((r) => [r.teacher_id, parseWorkDays(r.work_days)]));
+  return users.map((u) => {
+    const own = isMixedEmployment(u.employment_type) ? days.get(u.id) : null;
+    return own?.length ? { ...u, work_days: own } : u;
+  });
+}
+
 export async function loadPortfolioSnapshot(
   admin: Admin, tenantId: string,
   input: { end: string; now: Date; settings: PortfolioSnapshot["settings"]; /** 출결 입력·수정 기록을 읽을 첫날(마감 안 한 가장 이른 달 1일). 없으면 안 읽는다. */ touchesSince?: string },
@@ -100,7 +110,7 @@ export async function loadPortfolioSnapshot(
   const [
     tenantRes, testStudents, users, classes, liveSchedules, endedSchedules, enrollments, attendance, reportsByDate,
     reportsByCover, followUps, consulted, reviewDocs, transitions, delegations, invoices, makeupByAbsence, makeupByDate,
-    futureEnrollments, studentReasons, referrals, touches, sourceRows,
+    futureEnrollments, studentReasons, referrals, touches, sourceRows, salaryDays,
   ] = await Promise.all([
     table("tenants").select("id, name").eq("id", tenantId).maybeSingle(),
     nonRealStudents(admin, tenantId),
@@ -140,6 +150,9 @@ export async function loadPortfolioSnapshot(
       : Promise.resolve([]),
     // 성적 관리 · 학부모 만족도 · 강사 근태의 재료(새 표가 없는 DB에선 그 칸만 null — #95). 정리는 테스트 학생·반 과목을 안 뒤에.
     fetchEvaluationSourceRows(admin, tenantId, { from, end }),
+    // 혼합 계약의 근로 요일(출석부 비율표 `workDays` — 원장 2026-10-16) — 근태가 세는 요일. 선생님마다 한 줄이라 적다.
+    paged<{ teacher_id: string; work_days: unknown }>((a, b) => inTenant("attendance_salary_rates", "teacher_id, work_days:rates->workDays")
+      .order("teacher_id").range(a, b)),
   ]);
   if (tenantRes.error || !tenantRes.data) throw new Error(`지점 조회 실패: ${tenantRes.error?.message ?? "없는 지점"}`);
 
@@ -163,7 +176,8 @@ export async function loadPortfolioSnapshot(
     from, end,
     settings: input.settings,
     preRecord: preRecordPolicy(from, firstReport, firstAttendance),
-    users, classes,
+    users: withWorkDays(users, salaryDays),
+    classes,
     schedules: byId(liveSchedules, endedSchedules),
     enrollments: real(enrollments),
     attendance: real(attendance),

@@ -22,6 +22,7 @@ import {
   isSeason,
 } from "@/features/shuttle/types";
 import { compactWeekdays } from "@/features/shuttle/roster";
+import { workDaysLabel } from "@/features/staff/employment";
 import {
   CONSULTATION_AUDIENCE_LABEL,
   CONSULTATION_CATEGORY_LABEL,
@@ -1001,6 +1002,10 @@ export function auditDetail(
     }
     case "payroll_sheet_special_scope_set":
       return join(ctx.nameOf(m.userId), m.includeSpecial === true ? "특강은 학년 제한 없이 포함" : "특강도 대상 학년만 포함");
+    case "payroll_contract_work_days_set": {
+      const days = Array.isArray(m.workDays) ? m.workDays.filter((x): x is string => typeof x === "string") : [];
+      return join(ctx.nameOf(m.userId), days.length > 0 ? `근로 요일 ${workDaysLabel(days)}` : "근로 요일 정하지 않음(모든 요일)");
+    }
     case "payroll_mark_paid":
     case "payroll_auto_compute":
     case "payroll_upsert": {

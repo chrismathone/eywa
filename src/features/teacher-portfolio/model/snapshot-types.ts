@@ -1,7 +1,12 @@
 /** 직원 포트폴리오 계산의 입력 — DB 행 모양 그대로(snake_case). `types.ts`가 다시 내보낸다. */
 
-/** `employment_type` = 계약구분(정규직·아르바이트·프리랜서) — 프리랜서는 근태 만점(원장 2026-10-16). 옛 스냅샷엔 없다. */
-export type SnapshotUser = { id: string; display_name: string; status: string; subjects: string[] | null; employment_type?: string | null };
+/**
+ * `employment_type` = 계약구분(정규직·아르바이트·프리랜서·혼합) — 프리랜서는 근태 만점(원장 2026-10-16). 옛 스냅샷엔 없다.
+ * `work_days` = 혼합 계약(근로 + 용역)의 근로 요일(`mon`…) — 근태는 이 요일만 센다(출석부 비율표 `workDays`, 혼합인 직원만 싣는다).
+ */
+export type SnapshotUser = {
+  id: string; display_name: string; status: string; subjects: string[] | null; employment_type?: string | null; work_days?: string[] | null;
+};
 export type SnapshotClass = {
   id: string; class_name: string; subject: string; english_track: string | null; teacher_id: string | null;
   is_active: boolean; closed_at: string | null; report_optout: boolean | null; is_makeup_pool: boolean | null;
