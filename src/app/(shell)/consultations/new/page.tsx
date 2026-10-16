@@ -8,16 +8,20 @@ import { getNewcomerLinkTargets } from "@/features/newcomers/server/consult-link
 import { hasClassSupport } from "@/features/consultations/server/class-support";
 import { ConsultationForm } from "../_components/consultation-form";
 import { AudioConsultationForm } from "../_components/audio-consultation-form";
+import { formInstanceKey } from "@/lib/recording-resume";
 
 export const metadata = { title: "새 원생상담 — 에이와" };
 
 export default async function NewConsultationPage({
   searchParams,
 }: {
-  searchParams: Promise<{ studentId?: string }>;
+  searchParams: Promise<{ studentId?: string; form?: string; recordStudent?: string }>;
 }) {
   const viewer = await requireAccess("consultations");
-  const { studentId } = await searchParams;
+  // `form` = 녹음이 걸린 상담 화면이 있을 때 연 새 작성 화면 · `recordStudent` = 녹음 아이콘의 '작성 화면 열기'로 돌아온
+  // 학생(recording-resume.ts). 같은 주소에서 쿼리만 바뀌면 Next가 폼을 그대로 두므로 둘로 key를 걸어 새로 그린다.
+  const { studentId, form, recordStudent } = await searchParams;
+  const instanceKey = `${formInstanceKey(form)}:${typeof recordStudent === "string" ? recordStudent : ""}`;
   const [students, counselors, settings, newcomerTargets, classSupported] = await Promise.all([
     getStudentOptionsForConsultation(),
     getTeacherOptions(),
@@ -40,36 +44,39 @@ export default async function NewConsultationPage({
         </p>
       </header>
 
-      <AudioConsultationForm students={students} recordingOwner={{ tenantId: viewer.tenantId, userId: viewer.id }} />
+      <div key={instanceKey} className="space-y-4">
+        <AudioConsultationForm students={students} recordingOwner={{ tenantId: viewer.tenantId, userId: viewer.id }}
+          initialStudentId={typeof recordStudent === "string" ? recordStudent : undefined} />
 
-      <ConsultationForm
-        mode="create"
-        students={students}
-        counselors={counselors}
-        subjectLabels={subjectLabelRecord(settings.operations.subjects)}
-        currentUserId={viewer.id}
-        templates={settings.consultations.templates}
-        currentUserName={viewer.displayName}
-        // 🔴 고를 수 있는 학생(담당 범위로 좁힌 목록)의 것만 내려보낸다 — 강사에게 전사 신입 명단이 새지 않게.
-        newcomerTargets={newcomerTargets.filter((t) => students.some((s) => s.id === t.studentId))}
-        classSupported={classSupported}
-        initialValue={
-          studentId
-            ? {
-                studentId,
-                counselorId: null,
-                consultedAt: new Date().toISOString(),
-                category: "general",
-                subject: null,
-                audience: "parent",
-                summary: "",
-                followUpAction: null,
-                followUpDate: null,
-                followUpDone: false,
-              }
-            : undefined
-        }
-      />
+        <ConsultationForm
+          mode="create"
+          students={students}
+          counselors={counselors}
+          subjectLabels={subjectLabelRecord(settings.operations.subjects)}
+          currentUserId={viewer.id}
+          templates={settings.consultations.templates}
+          currentUserName={viewer.displayName}
+          // 🔴 고를 수 있는 학생(담당 범위로 좁힌 목록)의 것만 내려보낸다 — 강사에게 전사 신입 명단이 새지 않게.
+          newcomerTargets={newcomerTargets.filter((t) => students.some((s) => s.id === t.studentId))}
+          classSupported={classSupported}
+          initialValue={
+            studentId
+              ? {
+                  studentId,
+                  counselorId: null,
+                  consultedAt: new Date().toISOString(),
+                  category: "general",
+                  subject: null,
+                  audience: "parent",
+                  summary: "",
+                  followUpAction: null,
+                  followUpDate: null,
+                  followUpDone: false,
+                }
+              : undefined
+          }
+        />
+      </div>
     </div>
   );
 }

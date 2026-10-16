@@ -1,11 +1,19 @@
 import { BackLink } from "@/components/back-link";
 import { requireAccess } from "@/lib/auth/require-access";
+import { formInstanceKey } from "@/lib/recording-resume";
 import { NewMeetingForm } from "./new-meeting-form";
 
 export const metadata = { title: "새 회의록 — 에이와" };
 
-export default async function NewMeetingPage() {
+export default async function NewMeetingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ form?: string }>;
+}) {
   const viewer = await requireAccess("meetings");
+  // 작성 화면 한 벌 = `form` — 녹음이 걸린 회의록이 있을 때 연 새 작성 화면(recording-resume.ts). 같은 주소에서 쿼리만
+  // 바뀌면 Next가 폼을 그대로 두므로 key로 갈라 새로 그린다.
+  const { form } = await searchParams;
 
   return (
     <div className="mx-auto max-w-xl space-y-6">
@@ -20,7 +28,8 @@ export default async function NewMeetingPage() {
         </p>
       </header>
 
-      <NewMeetingForm recordingOwner={{ tenantId: viewer.tenantId, userId: viewer.id }} />
+      <NewMeetingForm key={formInstanceKey(form)} recordingOwner={{ tenantId: viewer.tenantId, userId: viewer.id }}
+        instance={{ formId: typeof form === "string" ? form : undefined }} />
     </div>
   );
 }

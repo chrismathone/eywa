@@ -13,6 +13,10 @@
  *    남는다**(다시 깔지도, 요일 이동으로 옮기지도 않는다 — `isBookLine`).
  * 🔑 다시 까는 범위 = 누른 칸 ~ 그 교재 줄이 실제로 있는 마지막 날. 그 뒤는 아직 안 가져온 칸이라 손대지 않는다
  *    (밀려난 차수는 월간계획에 남아 있어 다음 [가져오기]에 들어온다).
+ * 🔴 **지우는 건 옛 일정이 그 교재를 놓았던 칸뿐이다**(2026-10-16 실데이터 점검) — `Listening (NTA)`처럼 차수
+ *    문구가 전부 `10개`인 교재는 교재가 끝난 뒤 칸에도 같은 문구를 선생님이 복사해 둔다. 새 일정에 그 칸이
+ *    없다고 지우면 선생님이 적은 줄이 사라진다(실측: 브릿지 C 10/29). 옛 일정에 없던 칸의 줄은 새 일정이 그
+ *    칸을 쓸 때만 고친다.
  * · 미룸: 누른 칸은 **그대로 둔다**(2026-10-15 결정 — 실제 한 수업으로 고쳐 적는 자리).
  * · 당김: 누른 칸도 새 일정으로 바뀐다.
  */
@@ -105,6 +109,8 @@ export function planRelay(input: {
   slot: string;
   lines: readonly RelayLine[];
   targets: readonly RelayTarget[];
+  /** 누르기 **전** 일정(같은 교재) — 지워도 되는 칸을 가른다(위 🔴). */
+  previous: readonly Pick<RelayTarget, "date" | "slot">[];
 }): { ops: RelayOp[]; end: string | null } {
   const pressed = cellKey(input.date, input.slot);
   const after = (k: string) => k >= pressed && !(input.kind === "skip" && k === pressed);
@@ -124,13 +130,14 @@ export function planRelay(input: {
     if (after(k) && t.date <= end) targetByCell.set(k, t);
   }
 
+  const placedBefore = new Set(input.previous.map((t) => cellKey(t.date, t.slot)));
   const ops: RelayOp[] = [];
   const inserts: RelayOp[] = [];
   for (const k of [...new Set([...linesByCell.keys(), ...targetByCell.keys()])].sort()) {
     const have = [...(linesByCell.get(k) ?? [])].sort((a, b) => a.lineNo - b.lineNo);
     const want = targetByCell.get(k);
     if (!want) {
-      for (const l of have) ops.push({ op: "delete", id: l.id });
+      if (placedBefore.has(k)) for (const l of have) ops.push({ op: "delete", id: l.id });
       continue;
     }
     const progress = clean(want.progress);

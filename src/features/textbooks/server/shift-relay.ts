@@ -29,7 +29,11 @@ type Admin = ReturnType<typeof createAdminClient>;
 
 export type ShiftRelayResult =
   | { handled: false }
-  | { handled: true; ok: true; moved: number }
+  /**
+   * `touched` = 줄이 바뀐 칸(`"YYYY-MM-DD|HH:MM"`) — 화면이 **같은 주의 다른 칸**까지 갈아 끼우는 데 쓴다
+   * (화·금 교재는 화요일을 누르면 그 주 금요일도 바뀐다 — 누른 칸만 바꾸면 금요일이 옛 진도로 남아 보인다).
+   */
+  | { handled: true; ok: true; moved: number; touched: string[] }
   | { handled: true; ok: false; error: string };
 
 /** RPC 한 번에 싣는 칸 수 — 가져오기(`importPlannedRange`)와 같은 예산. */
@@ -161,22 +165,33 @@ export async function shiftAlongPlans(input: {
     const mine = lines.filter((l) => isAssignedLine(l, book));
     const end = mine.map((l) => l.date).sort().at(-1);
     if (!end) continue; // 아직 가져오기 전 — 표식만으로 월간계획이 맞춰진다.
-    const byCell = expandPlans({
-      plans,
-      books: materials.books,
-      lessonsByBook: materials.lessonsByBook,
-      schedules: m!.schedules,
-      holidays: materials.holidays,
-      shifts,
-      from: date,
-      to: end,
-    });
-    const targets = mergeSameCellLessons(Object.values(byCell).flat());
-    const plan = planRelay({ kind, date, slot, lines: mine, targets });
+    const scheduleWith = (s: Record<string, "skip" | "advance">) =>
+      mergeSameCellLessons(
+        Object.values(
+          expandPlans({
+            plans,
+            books: materials.books,
+            lessonsByBook: materials.lessonsByBook,
+            schedules: m!.schedules,
+            holidays: materials.holidays,
+            shifts: s,
+            from: date,
+            to: end,
+          }),
+        ).flat(),
+      );
+    // 새 일정(표식 반영) + 누르기 전 일정(지워도 되는 칸을 가른다 — `planRelay`의 🔴).
+    const plan = planRelay({ kind, date, slot, lines: mine, targets: scheduleWith(shifts), previous: scheduleWith(m!.shifts ?? {}) });
     for (const op of plan.ops) ops.push({ book, op });
   }
 
   let moved = 0;
+  const lineCell = new Map(lines.map((l) => [l.id, `${l.date}|${l.slot}`]));
+  const touched = new Set<string>([pressedKey]);
+  for (const { op } of ops) {
+    const k = op.op === "insert" ? `${op.date}|${op.slot}` : lineCell.get(op.id);
+    if (k) touched.add(k);
+  }
   // 고치기·지우기 먼저(같은 칸의 옛 줄이 비켜야 새 줄이 안 겹친다).
   for (const { op } of ops) {
     if (op.op === "update") {
@@ -223,7 +238,7 @@ export async function shiftAlongPlans(input: {
     }
   }
 
-  return { handled: true, ok: true, moved };
+  return { handled: true, ok: true, moved, touched: [...touched].sort() };
 }
 
 function daysBetween(a: string, b: string): number {

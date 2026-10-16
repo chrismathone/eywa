@@ -3,12 +3,20 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireAccess } from "@/lib/auth/require-access";
 import { createClient } from "@/lib/supabase/server";
 import { referrerColumnsReady } from "@/features/enrollment/server/referrer-queries";
+import { formInstanceKey } from "@/lib/recording-resume";
 import { NewConsultationForm } from "./form";
 
 export const metadata = { title: "신규 콜&상담 — 에이와" };
 
-export default async function NewEnrollmentPage() {
+export default async function NewEnrollmentPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ form?: string }>;
+}) {
   const viewer = await requireAccess("enrollment");
+  // 작성 화면 한 벌 = `form` — 녹음이 걸린 상담이 있을 때 연 새 작성 화면(recording-resume.ts). 같은 주소에서 쿼리만
+  // 바뀌면 Next가 폼을 그대로 두므로 key로 갈라 새로 그린다.
+  const { form } = await searchParams;
   // 소개한 사람 칸(0362a)이 DB에 있을 때만 그린다(#95) — 행을 받지 않는 확인 한 번.
   const referrerReady = await referrerColumnsReady((await createClient()) as unknown as SupabaseClient);
 
@@ -25,7 +33,8 @@ export default async function NewEnrollmentPage() {
         </p>
       </header>
 
-      <NewConsultationForm recordingOwner={{ tenantId: viewer.tenantId, userId: viewer.id }} referrerReady={referrerReady} />
+      <NewConsultationForm key={formInstanceKey(form)} recordingOwner={{ tenantId: viewer.tenantId, userId: viewer.id }} referrerReady={referrerReady}
+        instance={{ formId: typeof form === "string" ? form : undefined }} />
     </div>
   );
 }

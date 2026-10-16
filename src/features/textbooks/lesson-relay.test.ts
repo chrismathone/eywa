@@ -92,12 +92,13 @@ function press(db: Db, shifts: Record<string, "skip" | "advance">, date: string,
   const pressedKey = `${date}|${SLOT}`;
   const cells = planCellKeys({ startDate: "2027-01-01", schedules: SCHEDULES, holidays: HOLIDAYS, axis: "class", slotPicks: PLAN.slot_picks as string[], lookaheadDays: 60 });
   expect(cells).toContain(pressedKey);
+  const previous = scheduleOf({ ...shifts });
   const mark = placeShiftMarker({ kind, pressedKey, sequence: cells.filter((k) => k >= pressedKey), shifts });
   if (!mark) throw new Error("no marker cell");
   if (mark.op === "delete") delete shifts[mark.key];
   else shifts[mark.key] = kind;
   const mine = [...db.values()].filter((l) => isAssignedLine(l, BOOK));
-  apply(db, planRelay({ kind, date, slot: SLOT, lines: mine, targets: scheduleOf(shifts) }).ops);
+  apply(db, planRelay({ kind, date, slot: SLOT, lines: mine, targets: scheduleOf(shifts), previous }).ops);
 }
 
 function freshDb(): Db {
@@ -194,7 +195,24 @@ describe("배정 교재 미루기·당기기 — 화 1·2차수 + 금 1차수(�
   });
 
   it("가져오기 전(실제 줄 없음)엔 아무것도 안 쓴다 — 표식만", () => {
-    expect(planRelay({ kind: "skip", date: "2027-01-05", slot: SLOT, lines: [], targets: scheduleOf({}) })).toEqual({ ops: [], end: null });
+    expect(planRelay({ kind: "skip", date: "2027-01-05", slot: SLOT, lines: [], targets: scheduleOf({}), previous: [] })).toEqual({ ops: [], end: null });
+  });
+
+  it("🔴 교재가 끝난 뒤 칸에 선생님이 복사해 둔 같은 문구 줄은 지우지 않는다(실데이터 2026-10-16: 브릿지 C 10/29)", () => {
+    // 차수 문구가 모두 같은 교재(`10개`) — 내용만으론 배정 줄과 구분이 안 된다. 옛 일정이 놓지 않은 칸이면 남긴다.
+    const line = (id: string, date: string): RelayLine => ({ id, date, slot: SLOT, skillArea: "grammar", lineNo: 1, textbook: "Grammar", progress: "Unit 1", homework: null });
+    const r = planRelay({
+      kind: "advance",
+      date: "2027-01-05",
+      slot: SLOT,
+      lines: [line("a", "2027-01-05"), line("b", "2027-01-08"), line("extra", "2027-01-12")],
+      targets: [{ date: "2027-01-05", slot: SLOT, progress: "Unit 1", homework: null }],
+      previous: [
+        { date: "2027-01-05", slot: SLOT },
+        { date: "2027-01-08", slot: SLOT },
+      ],
+    });
+    expect(r.ops).toEqual([{ op: "delete", id: "b" }]); // 1/8은 옛 일정 칸이라 비우고, 1/12(교재 밖)는 그대로
   });
 });
 

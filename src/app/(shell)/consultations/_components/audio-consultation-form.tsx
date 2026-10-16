@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useLicenseOn } from "@/features/owner/operations-context";
-import { Loader2, Mic, Square, Upload } from "@/components/icons/aywa-icon-compat";
+import { Loader2, Mic, Upload } from "@/components/icons/aywa-icon-compat";
 import { RecordingRecoveryNotice } from "@/components/forms/recording-recovery-notice";
 import { Button } from "@/components/ui/button";
 import { FilePickerButton } from "@/components/ui/file-picker-button";
@@ -16,7 +16,10 @@ import {
 } from "@/lib/recording-recovery";
 import { useBrowserRecording } from "@/components/forms/use-browser-recording";
 import { useMicrophone } from "@/components/forms/use-microphone";
-import { startBrowserRecording, stopBrowserRecording, dismissBrowserRecording } from "@/lib/browser-recording";
+import { RecordingSessionControls } from "@/components/forms/recording-session-controls";
+import { startBrowserRecording, dismissBrowserRecording } from "@/lib/browser-recording";
+import { documentHasLiveRecording, recordingReturnHref } from "@/lib/recording-resume";
+import { SavedStayNotice } from "@/components/forms/saved-stay-notice";
 import { useInFrame } from "@/components/workspace/use-in-frame";
 import { withEmbed } from "@/components/workspace/embed-context";
 import { startStudentConsultationFromAudio } from "@/features/consultations/server/audio-actions";
@@ -27,11 +30,21 @@ const KIND = "student-consultation" as const;
 /**
  * 녹음/음성 파일로 재원생 상담 생성 → 전사·AI 자동 분석(startStudentConsultationFromAudio).
  * 파일은 consultation-recordings 버킷에 클라이언트 업로드 후 경로만 액션에 전달(meetings 폼 패턴).
- * 공용 문서 녹음이 폼의 수명과 별개로 유지된다. 귀속은 시작할 때 고정하고, 모든 창·탭의 중복 시작은 잠금으로 막는다.
+ * 공용 문서 녹음이 폼의 수명과 별개로 유지된다. 귀속은 시작할 때 고정하고, 같은 학생의 중복 시작은 잠금으로 막는다.
+ * 다른 학생·다른 화면의 녹음과는 함께 켜 둘 수 있다 — 소리를 담는 것은 하나, 나머지는 일시정지(원장 2026-10-16).
+ * `initialStudentId` = 녹음 아이콘의 '작성 화면 열기'로 돌아온 학생(`recordStudent`) — 그 학생을 고른 채 녹음 칸을 펼친다.
  * IndexedDB 복구와 탭 이탈 경고는 회의록·등록상담 폼과 동일.
  */
-function AudioConsultationFormInner({ students, recordingOwner }: { students: StudentOption[]; recordingOwner: RecordingOwner }) {
-  const [studentId, setStudentId] = useState("");
+function AudioConsultationFormInner({ students, recordingOwner, initialStudentId }: {
+  students: StudentOption[];
+  recordingOwner: RecordingOwner;
+  initialStudentId?: string;
+}) {
+  const [studentId, setStudentId] = useState(() => (initialStudentId && students.some((s) => s.id === initialStudentId) ? initialStudentId : ""));
+  // 녹음 아이콘이 가리킨 학생이 목록에 없다(퇴원·담당 범위 변경) — 녹음을 다시 붙일 수 없으니 아이콘에서 끝내고 파일로 남기게 알린다.
+  const missingStudent = !!initialStudentId && !students.some((s) => s.id === initialStudentId);
+  /** 저장했지만 이 문서의 다른 녹음 때문에 머문다 — 상담으로 가는 링크(SavedStayNotice). */
+  const [stayHref, setStayHref] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startBusy] = useTransition();
@@ -44,17 +57,22 @@ function AudioConsultationFormInner({ students, recordingOwner }: { students: St
   const recorded = useBrowserRecording(KIND, scope, (f, id) => { setFile(f); setRecoveryId(id); });
   const microphone = useMicrophone();
   const recording = recorded.recording;
+  // 녹음이 붙어 있으면(녹음 중·일시정지 — '작성 화면 열기'로 돌아온 화면 포함) 접힌 칸을 펼쳐 바로 보이게 한다.
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    if (recording && detailsRef.current) detailsRef.current.open = true;
+  }, [recording]);
 
   async function startRec() {
     setError(null);
-    if (!scope) return setError("학생을 선택한 뒤 녹음을 시작해 주세요.");
-    const err = await startBrowserRecording(KIND, scope);
+    if (!scope || !student) return setError("학생을 선택한 뒤 녹음을 시작해 주세요.");
+    // 돌아올 곳 = 지금 작성 화면 + 그 학생 — '작성 화면 열기'가 학생을 고른 채 다시 연다(recording-resume.ts).
+    const err = await startBrowserRecording(KIND, scope, { href: recordingReturnHref({ recordStudent: student.id }) });
     if (err) setError(err);
   }
-  function stopRec() { stopBrowserRecording(recorded.requestId); }
 
   function submit() {
-    if (recording) return setError("녹음을 중지한 뒤 저장해 주세요.");
+    if (recording) return setError("녹음을 끝낸 뒤 저장해 주세요.");
     if (!studentId) return setError("학생을 선택해주세요");
     if (!file) return setError("음성 파일을 선택하거나 녹음하세요");
     setError(null);
@@ -88,10 +106,13 @@ function AudioConsultationFormInner({ students, recordingOwner }: { students: St
         return setError("상담이 저장됐을 수 있습니다. 목록에서 확인해 주세요.");
       }
       if (!res?.id) return setError(res?.error ?? "저장 결과를 확인하지 못했습니다. 목록에서 확인해 주세요.");
-      if (recoveryId) { await clearRecovery(recoveryId); dismissBrowserRecording(recoveryId); }
+      if (recoveryId) { await clearRecovery(recoveryId); dismissBrowserRecording({ recoveryId: recoveryId }); }
       setLeaving(true);
-      const dest = `/consultations/${res.id}/edit`;
-      window.location.assign(inFrame ? withEmbed(dest) : dest);
+      const path = `/consultations/${res.id}/edit`;
+      const dest = inFrame ? withEmbed(path) : path;
+      // 이 문서에 다른 녹음이 살아 있으면 떠나지 않는다 — 문서가 내려가면 그 녹음이 끝난다(단일 화면에서 여러 녹음).
+      if (documentHasLiveRecording()) setStayHref(dest);
+      else window.location.assign(dest);
     });
   }
 
@@ -99,7 +120,7 @@ function AudioConsultationFormInner({ students, recordingOwner }: { students: St
     <>
     <RecordingRecoveryNotice key={studentId} kind={KIND} scope={scope} selectedId={recoveryId ?? recorded.activeRecoveryId}
       disabled={busy || recording} onRestore={(recovered, meta) => { setFile(recovered); setRecoveryId(meta.id); }} />
-    <details className="border-border bg-muted/20 rounded-2xl border p-4" inert={leaving}>
+    <details ref={detailsRef} open={initialStudentId ? true : undefined} className="border-border bg-muted/20 rounded-2xl border p-4" inert={leaving}>
       <summary className="text-foreground inline-flex cursor-pointer items-center gap-1.5 text-sm font-bold">
         <Mic className="text-primary size-4" />
         녹음·음성 파일로 작성 (AI 자동 분석)
@@ -108,6 +129,9 @@ function AudioConsultationFormInner({ students, recordingOwner }: { students: St
         <p className="text-text-dim text-xs">
           학생을 고르고 상담을 녹음하거나 음성 파일을 올리면, 전사 후 AI가 7개 항목으로 분석합니다.
         </p>
+        {missingStudent ? (
+          <p role="alert" className="text-danger text-xs">녹음한 학생을 목록에서 찾을 수 없습니다. 녹음 아이콘에서 녹음을 끝낸 뒤 파일을 저장해 주세요.</p>
+        ) : null}
         <fieldset className="space-y-1.5" disabled={busy || recording}>
           <span className="text-foreground block text-sm font-medium">학생 *</span>
           <SearchableSelect
@@ -127,14 +151,11 @@ function AudioConsultationFormInner({ students, recordingOwner }: { students: St
           />
         </fieldset>
 
+        {recording ? <RecordingSessionControls status={recorded.status} seconds={recorded.seconds}
+          onPause={recorded.pause} onResume={recorded.resume} onStop={recorded.stop} /> : null}
         <div className="flex flex-wrap items-center gap-2">
-          {recording ? (
-            <Button type="button" variant="outline" size="sm" onClick={stopRec}>
-              <Square className="size-4" />
-              녹음 중지
-            </Button>
-          ) : (
-            <Button type="button" variant="outline" size="sm" onClick={startRec} disabled={busy || recorded.otherRecording || !microphone.available}>
+          {recording ? null : (
+            <Button type="button" variant="outline" size="sm" onClick={startRec} disabled={busy || recorded.elsewhere || !microphone.available}>
               <Mic className="size-4" />
               {microphone.available ? "녹음 시작" : microphone.message}
             </Button>
@@ -152,7 +173,8 @@ function AudioConsultationFormInner({ students, recordingOwner }: { students: St
             label="음성 파일 선택"
           />
         </div>
-        {recorded.otherRecording ? <p className="text-text-dim text-xs">다른 화면에서 녹음 중입니다. 진행 중인 녹음을 먼저 중지해 주세요.</p> : null}
+        {recorded.elsewhere ? <p className="text-text-dim text-xs">이 학생은 다른 창이나 탭에서 녹음하고 있습니다.</p> : null}
+        {!recording && recorded.othersRecording ? <p className="text-text-dim text-xs">녹음을 시작하면 지금 녹음 중인 다른 녹음은 일시정지됩니다.</p> : null}
 
         {file ? (
           <p className="text-text-dim text-xs">
@@ -168,6 +190,7 @@ function AudioConsultationFormInner({ students, recordingOwner }: { students: St
         </Button>
       </div>
     </details>
+    {stayHref ? <SavedStayNotice href={stayHref} saved="상담을 저장했습니다." /> : null}
     </>
   );
 }

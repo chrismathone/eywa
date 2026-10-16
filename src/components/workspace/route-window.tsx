@@ -253,12 +253,15 @@ export function RouteWindow({ win }: { win: Win }) {
           const initialPath = (href ?? "").split("?")[0];
           if (initialPath && path !== initialPath) {
             autoClosedRef.current = true;
-            close(win.id);
+            // 🔴 녹음 중인 창은 닫지 않는다 — 닫으면 iframe째 녹음이 끝난다(원생상담 창에서 수기 상담만 저장해도 그랬다,
+            //    재리뷰 2026-10-16). 그 창은 보통 창으로 남아 옮겨 간 화면을 기록하고, 목록만 새로 그린다.
+            const recording = !!useWindowStore.getState().busy[win.id];
+            if (!recording) close(win.id);
             if (!keepalive) router.refresh(); // 배경(최상위 프레임) 목록 갱신
             // 소스가 플로팅 창(iframe 안 "새 X")이면 그 창은 별도 문서라 router.refresh가 안 닿음 → 직접 reload
             // (신규 항목이 소스 리스트 창에 즉시 보이게). 이미 닫힌 창이면 no-op.
             if (win.params.spawnedBy) reloadWindow(win.params.spawnedBy);
-            return false;
+            if (!recording) return false;
           }
         }
         const url = path + cw.location.search;
