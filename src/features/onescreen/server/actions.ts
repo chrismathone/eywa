@@ -1618,7 +1618,10 @@ ${style}` : body) });
     const trend = dropped ? undefined : rawTrend;
     // trendDropped = 이번에 만든 추세를 버렸다 — 화면은 추세 칸을 비운다(안 비우면 예전 초안이 그대로 발송된다, 적대적 리뷰 2026-10-15).
     //    trendQuiet = 달라진 게 없어 안 만들었다 — 화면이 자동작성 글이면 비우고 손글씨면 둔다. 표본 부족은 종전대로 기존 초안·손 입력을 둔다.
-    return { ok: true, comment, trend, ...(dropped ? { trendDropped: true } : {}), ...(trendQuiet ? { trendQuiet: true } : {}) };
+    //    모델이 추세를 **비워 보냈다**(본문이 이미 같은 말을 했거나 오늘 값과 어긋나 쓸 말이 없다 — 2026-10-16 시험 120회 중 5회)도 같은 뜻이다.
+    //    ⚠️ 응답에 trend 키가 **아예 없는** 것(대체 provider가 계약을 빠뜨림)은 일부러 비운 게 아니다 — 지난 초안을 비우지 않는다(적대적 리뷰).
+    const quiet = trendQuiet || (hasTrend && typeof data.trend === "string" && !data.trend.trim());
+    return { ok: true, comment, trend, ...(dropped ? { trendDropped: true } : {}), ...(quiet ? { trendQuiet: true } : {}) };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "AI 생성 실패" };
   }

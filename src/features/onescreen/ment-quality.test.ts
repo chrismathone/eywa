@@ -17,6 +17,7 @@ import {
   compressRuns,
   examScales,
   findImpossibleScaleSpans,
+  findTrendViolations,
   isTrendScaleSane,
   trendBody,
   TREND_MIXED_SCALE_NOTE,
@@ -103,8 +104,9 @@ describe("추세 — 척도 혼합 감지", () => {
     // 실사례(이수진/곽경찬 07-27): "100점 만점에 56점 … 9문제 중 7개, 68점으로 내려갔습니다"
     // 예전엔 둘 다 넘기고 주의를 붙였는데 "만점이 달라 직접 비교하기는 어렵지만"이 30일 261건 나갔다.
     const i = buildTrendInput([row("2026-06-22", "일일 50/100"), row("2026-06-29", "일일 56/100"), row("2026-07-05", "일일 7/9"), row("2026-07-12", "일일 6/9")]);
-    // 같은 만점이 2회씩뿐이라 시험 줄이 없고, 과제 기록도 없으니 추세 자체가 없다(없는 것보다 거짓이 나쁘다).
-    expect(i).toBeNull();
+    // 같은 만점이 2회씩뿐이라 시험 줄이 없고, 과제 기록도 없으니 말할 것이 없다(없는 것보다 거짓이 나쁘다) — quiet(자동작성 추세 칸만 비운다, 2026-10-16).
+    expect(i!.facts).toEqual([]);
+    expect(i!.quiet).toBe(true);
   });
   it("🔴 한 회차에 만점이 다른 시험이 둘이면 혼합 — 증감 서술을 막는 주의가 붙는다", () => {
     const i = buildTrendInput([row("2026-07-01", "일일 4/5, 확인 8/10"), row("2026-07-08", "일일 5/5, 확인 7/10"), row("2026-07-15", "일일 3/5, 확인 9/10")])!;
@@ -117,8 +119,11 @@ describe("추세 — 척도 혼합 감지", () => {
     expect(examScales("88점(100점 만점)")).toEqual([100]);
     expect(examScales("이름 없는 기록")).toEqual([]);
   });
-  it("분모를 못 읽으면 혼합으로 단정하지 않는다 — 그런 시험뿐이면 코드가 정리할 사실이 없어 추세 자체를 만들지 않는다(2026-10-16)", () => {
-    expect(buildTrendInput([row("2026-07-01", "잘함"), row("2026-07-08", "보통"), row("2026-07-15", "잘함")])).toBeNull();
+  it("분모를 못 읽으면 혼합으로 단정하지 않는다 — 그런 시험뿐이면 코드가 정리할 사실이 없어 말할 것이 없다(quiet, 2026-10-16)", () => {
+    const i = buildTrendInput([row("2026-07-01", "잘함"), row("2026-07-08", "보통"), row("2026-07-15", "잘함")])!;
+    expect(i.facts).toEqual([]);
+    expect(i.quiet).toBe(true);
+    expect(i.scaleMixed).toBe(false);
   });
 });
 
@@ -185,8 +190,10 @@ describe("추세 — 사실일 수 없는 척도 표기 후검증", () => {
     expect(isTrendScaleSane("최근 몇 회차는 예전만큼 점수가 나오지는 않고 있습니다.")).toBe(true);
   });
 
-  it("주의 문구가 범위 표기를 이름으로 막는다(프롬프트 쪽 방어)", () => {
-    expect(TREND_MIXED_SCALE_NOTE).toContain("만점(문항 수)에 범위를 쓰지 마세요");
-    expect(TREND_MIXED_SCALE_NOTE).toContain("9~15문제 중 9~15개");
+  it("주의 문구는 숫자를 쓰지 말라고만 한다 — 숫자 예시를 주면 그대로 따라 써 '숫자' 검사로 추세가 버려진다(2026-10-16 저녁)", () => {
+    expect(TREND_MIXED_SCALE_NOTE).toContain("숫자(문항 수·점수·몇 개)는 쓰지 마세요");
+    expect(TREND_MIXED_SCALE_NOTE).not.toMatch(/\d/);
+    // 범위 표기는 생성 뒤 검사 두 겹이 막는다(척도 범위 · 숫자).
+    expect(findTrendViolations("9~15문제 중 9~15개 선을 유지하고 있습니다.")).toContain("숫자");
   });
 });

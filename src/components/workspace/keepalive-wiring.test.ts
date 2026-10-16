@@ -189,7 +189,8 @@ describe("이전 화면 유지 — 문서 하나 동안 방식 고정 · 바탕 
 
   it("규칙(복제 금지·사용 도장)은 영속본이 아니라 지금 그려진 방식(kaActive)을 본다", () => {
     const store = read("src/components/workspace/window-store.ts");
-    expect(store).toContain("if (s.kaActive) return get().open(kind, params, anchor);");
+    // 예외는 녹음 중 작성 화면의 새 작성 창(openForm)뿐 — 그것도 지금 그려진 방식을 본다.
+    expect(store).toContain("if (s.kaActive && !opts?.form) return get().open(kind, params, anchor);");
     expect(store).not.toContain('s.shellMode === "keepalive"');
     expect(read("src/components/workspace/workspace-canvas.tsx")).not.toContain('st.shellMode === "keepalive"');
   });

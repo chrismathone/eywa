@@ -3,11 +3,12 @@
 import { useActionState, useEffect, useRef, useState } from "react";
 import { kstDateTimeLocal } from "@/lib/date-kst";
 import { useFormStatus } from "react-dom";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle, Loader2, Save } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useFormDraft } from "@/components/forms/use-form-draft";
+import { FORM_PARAM, formDraftScope, recordingSince } from "@/lib/recording-resume";
 import { DraftBanner } from "@/components/forms/draft-banner";
 import { useConcurrentEditGuard } from "@/components/workspace/use-concurrent-edit-guard";
 import { useUnsavedGuard } from "@/components/workspace/use-unsaved-guard";
@@ -117,6 +118,8 @@ export function ConsultationForm({
   const action = mode === "create" ? createStudentConsultation : updateStudentConsultation;
   const [state, formAction] = useActionState<ConsultationFormState, FormData>(action, undefined);
   const router = useRouter();
+  // 작성 화면 한 벌(`form`) — 페이지가 이 값으로 폼을 새로 그린다(recording-resume.ts · gotchas #146).
+  const formId = useSearchParams()?.get(FORM_PARAM) ?? undefined;
 
   const v: ConsultationFormValue = initialValue ?? {
     studentId: "",
@@ -258,7 +261,9 @@ export function ConsultationForm({
   // ⚠️ scope는 등록상담(consultation:*)과 분리(student-consultation:*) — 안 그러면 두 폼이 IDB 초안을 덮어씀.
   const formRef = useRef<HTMLFormElement>(null);
   const draft = useFormDraft({
-    scope: mode === "create" ? "student-consultation:new" : `student-consultation:${initialValue?.id ?? "edit"}`,
+    // 작성 화면 한 벌마다 칸이 따로다(recording-resume.ts) — 이 화면에 걸린 녹음으로 돌아왔으면 그 뒤의 입력을 안내 없이 바로.
+    scope: mode === "create" ? formDraftScope("student-consultation:new", formId) : `student-consultation:${initialValue?.id ?? "edit"}`,
+    restoreSince: mode === "create" ? () => recordingSince(formId) : undefined,
     formRef,
     // 신규생 관리 칸은 학생마다 선택지가 달라 초안으로 되살리면 엉뚱한 칸이 잡힌다.
     // 반(classId·classPick)도 학생·일시에 따라 선택지가 달라 초안으로 되살리지 않는다(자동 판정이 다시 잡는다).
