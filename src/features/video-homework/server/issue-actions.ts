@@ -2,7 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { effectiveTeacherId, getShellView, readonlyTeacherViewError } from "@/lib/auth/view-mode";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
@@ -23,9 +22,8 @@ import { reconcileVideoHomework } from "./reconcile-outcomes";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 type Input = { classId: string; studentId: string; date: string };
-type Result = { ok: boolean; error?: string; deadline?: string;
-  /** 취소: 따로 낸 표시만 지웠다(그날 수업보고서에도 영상 과제가 있어 숙제는 그대로). */
-  kept?: boolean };
+/** 숙제 취소는 `cancel-homework.ts`(원장 2026-10-16 — 보고서를 보낸 숙제도 · 미확인 · 미수행만). */
+type Result = { ok: boolean; error?: string; deadline?: string };
 const TABLE = "video_homework_extra_issues";
 const shortDate = (date: string) => date.slice(5).replace("-", ".");
 const validInput = (input: Input) => !!input && typeof input.classId === "string" && typeof input.studentId === "string"
@@ -109,48 +107,5 @@ export async function issueExtraVideoHomework(input: Input): Promise<Result> {
   } catch (error) {
     reportError(error, { scope: "video-homework.extra-issue", tenantId: user.tenantId, studentId });
     return { ok: false, error: "영상 숙제를 내지 못했습니다. 잠시 뒤 다시 시도해 주세요." };
-  }
-}
-
-const CANCEL_ERRORS: Record<string, string> = {
-  missing: "따로 낸 숙제를 찾을 수 없습니다. 화면을 새로고침해 주세요.",
-  marked: "직접 찍은 기록이 있는 숙제입니다. 기록을 미확인으로 되돌린 뒤 취소해 주세요.",
-  has_video: "이미 영상이 올라온 숙제는 취소할 수 없습니다.",
-};
-
-/**
- * 따로 낸 숙제를 거둔다 — 잘못 낸 숙제가 7일 뒤 '미수행'으로 굳지 않게 하는 되돌리는 문([[#103]]).
- * 권한 = 수업보고서 전체 권한이거나 그 숙제의 선생님 본인. 영상이 붙었거나 직접 찍은 기록이 있으면 DB 함수가 거절한다(자동 판정과 같은 잠금).
- */
-export async function cancelExtraVideoHomework(input: Input): Promise<Result> {
-  const user = await getCurrentUser();
-  if (!user) return { ok: false, error: "로그인이 필요합니다." };
-  const readonlyError = await readonlyTeacherViewError();
-  if (readonlyError) return { ok: false, error: readonlyError };
-  if (!validInput(input)) return { ok: false, error: "반·학생·날짜를 확인해 주세요." };
-  const { classId, studentId, date } = input;
-  const db = createAdminClient();
-  try {
-    const [issue, level, target] = await Promise.all([
-      findExtraIssue(db, user.tenantId, { classId, studentId, date }),
-      accessLevelTenant(user.systemRole, "lesson_reports"),
-      loadVideoHomeworkTarget(db, user.tenantId, classId, studentId),
-    ]);
-    if (!issue) return { ok: false, error: CANCEL_ERRORS.missing };
-    if (level !== "full") {
-      if (!(await canWriteTenant(user.systemRole, "teacher_onescreen"))) return { ok: false, error: "수정 권한이 없습니다." };
-      if (issue.teacherId !== ((await effectiveTeacherId()) ?? user.id)) return { ok: false, error: "내가 낸 숙제만 취소할 수 있습니다." };
-    }
-    const { data, error } = await db.rpc("cancel_video_homework_extra_issue", { p_tenant: user.tenantId, p_class: classId, p_student: studentId, p_date: date });
-    if (error) return { ok: false, error: "숙제를 취소하지 못했습니다. 잠시 뒤 다시 시도해 주세요." };
-    if (data !== "cancelled" && data !== "kept") return { ok: false, error: CANCEL_ERRORS[String(data)] ?? "숙제를 취소하지 못했습니다." };
-    await logAction({ action: "lesson_report_video_homework_issue_cancel", targetType: "video_homework",
-      targetLabel: target.error === null ? [target.studentName, target.className].filter(Boolean).join(" · ") || null : null,
-      metadata: { classId, studentId, homeworkDate: date, ...(data === "kept" ? { keptByReport: true } : {}) } });
-    await refresh(user.tenantId, studentId);
-    return { ok: true, ...(data === "kept" ? { kept: true } : {}) };
-  } catch (error) {
-    reportError(error, { scope: "video-homework.extra-issue-cancel", tenantId: user.tenantId, studentId });
-    return { ok: false, error: "숙제를 취소하지 못했습니다. 잠시 뒤 다시 시도해 주세요." };
   }
 }

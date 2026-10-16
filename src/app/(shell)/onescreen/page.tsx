@@ -16,6 +16,7 @@ import { VideoHomeworkProvider } from "@/features/video-homework/components/vide
 import { getVideoHomeworkMarks } from "@/features/video-homework/server/queries";
 import { getOthersReportKeys, getVideoHomeworkAssignments } from "@/features/video-homework/server/assignments";
 import { getVideoHomeworkDues, type VideoHomeworkDueUi } from "@/features/video-homework/server/report-due";
+import { readVideoHomeworkCancels } from "@/features/video-homework/server/cancels";
 import { pickLessonMarks } from "@/features/video-homework/lesson-marks";
 import { assignmentKey, assignmentOf } from "@/features/video-homework/assignment";
 import { getSubmitLinkUi } from "@/features/video-submit/server/link-choice-db";
@@ -90,7 +91,9 @@ export default async function OneScreenPage({
   // 영상 첨부 링크 넣기(0328a) — 토글을 그릴 단계와 오늘 저장된 고르기. 실패·칸 미적용은 off(토글 없음 · 값 안 보냄).
   // 다른 선생님이 처음 쓴 오늘 보고서 줄(작성 계정 0172a) — 그 줄의 '영상 과제'는 잠근다(report-owner.ts 화면 겹, 실패 = 안 잠금).
   // 영상 숙제 마감(원장 2026-10-15) — 오늘 저장된 '다음 수업' 마감. 실패·칸 미적용은 ready=false(마감 토글 없음 · 값 안 보냄).
-  const [loadedMarks, loadedAssignments, submitLinkUi, othersReportKeys, videoDueUi] = await Promise.all([
+  // 장부에서 취소한 오늘 숙제(원장 2026-10-16, `cancels.ts`) — 세션 초안이 쥔 '있음'보다 보고서의 '없음'이 이긴다(아래). 읽은 시각은
+  // 저장 관문이 "이 화면이 취소를 알았나"를 가를 때 쓴다(공급자 `seenAt`). 실패·표 없음은 빈 지도(종전 동작).
+  const [loadedMarks, loadedAssignments, submitLinkUi, othersReportKeys, videoDueUi, videoHwCancels] = await Promise.all([
     getVideoHomeworkMarks(user.tenantId, rosterStudentIds, roster.date,
       videoHwPolicy.enabled ? videoHwTargets.flatMap((t) => (t.homeworkDate ? [t.homeworkDate] : [])) : []),
     // 지난 수업일엔 보고서 없이 따로 낸 숙제도 '있음'으로(검사 칸이 숨지 않게) — 오늘 값은 보고서 토글이라 덮지 않는다.
@@ -105,12 +108,16 @@ export default async function OneScreenPage({
     videoHwPolicy.enabled
       ? getVideoHomeworkDues(user.tenantId, rosterStudentIds, roster.date)
       : Promise.resolve({ ready: false, dues: {} } as VideoHomeworkDueUi),
+    videoHwPolicy.enabled
+      ? readVideoHomeworkCancels(user.tenantId, rosterStudentIds, roster.date)
+      : Promise.resolve({ cancels: new Map<string, string>(), readAt: null }),
   ]);
   const othersReports = new Set(othersReportKeys);
   // null = 못 읽음 → 그 세션 동안 '영상 과제' 값을 보내지 않는다(저장돼 있던 '있음'을 '없음'으로 덮지 않게, 공급자 known=false).
   const videoHomeworkAssignments = loadedAssignments ?? {};
   const videoHomeworkMarks = pickLessonMarks(loadedMarks, videoHwTargets, roster.date);
   // 오늘 이미 저장한 보고서의 '영상 과제' — 세션에 값이 없을 때만 되채운다(세션 = 작업 중 편집이 이긴다, roster ⑤ 규약).
+  const cancelOverridden: string[] = [];
   for (const st of roster.students) {
     for (const su of st.subjects) {
       if (!su.classId) continue;
@@ -122,6 +129,17 @@ export default async function OneScreenPage({
         const othersDue = videoDueUi.dues[assignmentKey(st.id, roster.date, su.classId)];
         su.videoHomeworkDue = othersDue ? "next" : undefined;
         su.videoHomeworkDueDate = othersDue;
+        continue;
+      }
+      // 장부에서 취소한 숙제(보고서 '없음' + 취소 기록) — 초안이 쥔 '있음'(취소 전에 눌렀거나 열어 둔 화면이 다시 저장한 값)보다
+      // '없음'이 이긴다. 링크 넣기·마감도 함께 비운다(원스크린에서 끈 것과 같다). 다시 켜면 그때부터는 선생님 값이다(seenAt).
+      if (videoHwCancels.cancels.has(assignmentKey(st.id, roster.date, su.classId))
+        && assignmentOf(videoHomeworkAssignments, st.id, roster.date, su.classId) === false) {
+        if (su.videoHomework === true) cancelOverridden.push(assignmentKey(st.id, roster.date, su.classId));
+        su.videoHomework = false;
+        su.videoSubmitLink = false;
+        su.videoHomeworkDue = undefined;
+        su.videoHomeworkDueDate = undefined;
         continue;
       }
       if (su.videoHomework == null) {
@@ -161,7 +179,8 @@ export default async function OneScreenPage({
           "이미 찍힘"으로 건너뛰어 화면엔 찍힌 듯 보이고 새 날짜엔 기록이 없다(적대 리뷰 2026-10-02). */}
       <VideoHomeworkProvider key={roster.date} initial={videoHomeworkMarks} checkDate={roster.date}
         policy={roster.reportSettings.videoHomeworkPolicy} assignments={videoHomeworkAssignments}
-        assignmentsKnown={loadedAssignments !== null} submitLinkMode={submitLinkUi.mode} dueReady={videoDueUi.ready} othersReports={othersReportKeys}>
+        assignmentsKnown={loadedAssignments !== null} submitLinkMode={submitLinkUi.mode} dueReady={videoDueUi.ready} othersReports={othersReportKeys}
+        cancelInfo={{ readAt: videoHwCancels.readAt, overridden: cancelOverridden }}>
       <OneScreenClient
       key={roster.date}
       initial={roster.students}

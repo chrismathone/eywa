@@ -3370,7 +3370,8 @@ export function OneScreenClient({
         ...(videoHwSaveOk && typeof su?.videoHomework === "boolean" && su.classId && videoHwPolicy &&
         !videoHwByOther(student.id, su.classId) &&
         isVideoHomeworkEnabled(videoHwPolicy, { classId: su.classId, subjectKey: su.subjectKey ?? "math", grade: student.grade })
-          ? { videoHomework: su.videoHomework }
+          // 그 값을 DB와 맞춘 시각도 함께 — 장부에서 취소한 숙제를 모른 채 '있음'으로 되살리지 않게(서버 `cancels.ts`, 원장 2026-10-16).
+          ? { videoHomework: su.videoHomework, videoHomeworkSeenAt: videoHwStore?.seenAtOf(student.id, su.classId) ?? null }
           : {}),
         // 영상 첨부 링크 넣기(0328a) — 같은 규약: 고른 값이 있고 그 행에서 고를 수 있을 때만 싣는다(토글이 안 보이는 행·단계는
         // 싣지 않아 저장돼 있던 값을 덮지 않는다). 영상 과제가 꺼진 행은 false로 — 과제 없이 링크만 켜진 값이 남지 않게.
@@ -3438,19 +3439,29 @@ export function OneScreenClient({
    * 서버가 '영상 과제' 값을 작성 선생님 것으로 두었다(report-owner.ts — 나머지는 저장됨) → 화면도 그 값으로 되돌린다.
    * 🔴 안 되돌리면 세션(임시저장)이 내 값을 쥐고 있어 새로 고쳐도 같은 값이 다시 실린다(적대 리뷰). patch가 세션도 고친다.
    */
-  function applyKeptVideoHomework(studentId: string, subjectName: string, res: { keptVideoHomework?: boolean | null }) {
+  function applyKeptVideoHomework(studentId: string, subjectName: string,
+    res: { ok?: boolean; keptVideoHomework?: boolean | null; videoHomeworkCancelled?: true; videoHomeworkSeenAt?: string }) {
     if (res.keptVideoHomework === undefined) return;
     const kept = res.keptVideoHomework;
-    // 화면 겹(토글 잠금)을 지나 여기 온 건 그사이 남이 먼저 쓴 경우뿐이라 드물다 — 일괄 저장이어도 행마다 알린다.
-    toast.message(t("os.c.videoHwKept"));
-    // 그 줄을 잠금에 더한다 — 열어 두면 다시 눌러 또 되돌려진다(잠긴 줄의 체크 표시는 공급자의 저장된 값).
     const keptClassId = studentsRef.current.find((s) => s.id === studentId)?.subjects.find((x) => x.name === subjectName)?.classId;
-    if (keptClassId) videoHwStore?.markKept(studentId, keptClassId, kept);
+    const cancelled = !!res.videoHomeworkCancelled;
+    if (cancelled) {
+      // 장부에서 취소된 숙제(원장 2026-10-16) — 줄은 잠그지 않는다(다시 켜면 그때부터 선생님 값이다). 그 줄의 맞춘 시각을 응답 시각으로 옮긴다.
+      if (keptClassId && res.videoHomeworkSeenAt) videoHwStore?.markSeen(studentId, keptClassId, res.videoHomeworkSeenAt);
+      // 발송 경로는 서버 문장("보내지 않았습니다")이 따로 뜬다 — 저장만 한 경로에서만 알린다.
+      if (res.ok) toast.message(t("os.c.videoHwCancelled"));
+    } else {
+      // 화면 겹(토글 잠금)을 지나 여기 온 건 그사이 남이 먼저 쓴 경우뿐이라 드물다 — 일괄 저장이어도 행마다 알린다.
+      toast.message(t("os.c.videoHwKept"));
+      // 그 줄을 잠금에 더한다 — 열어 두면 다시 눌러 또 되돌려진다(잠긴 줄의 체크 표시는 공급자의 저장된 값).
+      if (keptClassId) videoHwStore?.markKept(studentId, keptClassId, kept);
+    }
     patch(studentId, (s) => ({
       ...s,
       subjects: s.subjects.map((x) =>
-        // 모름(null)은 화면 모양대로 undefined — 세션에서도 빠져 저장된 값(모름)을 따른다.
-        x.name === subjectName ? { ...x, videoHomework: kept ?? undefined, ...(kept !== true ? { videoSubmitLink: false } : {}) } : x,
+        // 모름(null)은 화면 모양대로 undefined — 세션에서도 빠져 저장된 값(모름)을 따른다. 취소된 숙제는 마감 고르기도 비운다.
+        x.name === subjectName ? { ...x, videoHomework: kept ?? undefined, ...(kept !== true ? { videoSubmitLink: false } : {}),
+          ...(cancelled ? { videoHomeworkDue: undefined, videoHomeworkDueDate: undefined } : {}) } : x,
       ),
     }));
   }

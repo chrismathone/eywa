@@ -22,7 +22,7 @@ vi.mock("./mark-write", () => ({
   loadVideoHomeworkTarget: async () => ({ error: null, className: "초등M A", studentName: "김민준", enabled: m.enabled }),
 }));
 import { _resetExtraIssuesProbeForTest } from "./extra-issues";
-import { cancelExtraVideoHomework, issueExtraVideoHomework } from "./issue-actions";
+import { issueExtraVideoHomework } from "./issue-actions";
 
 const C = "11111111-1111-4111-8111-111111111111", S = "22222222-2222-4222-8222-222222222222";
 const input = { classId: C, studentId: S, date: "2026-10-06" };
@@ -107,34 +107,6 @@ describe("숙제없음 칸에서 영상 숙제 내기", () => {
     m.db.dropColumn("video_homework_extra_issues", "homework_date");
     expect(await issueExtraVideoHomework(input)).toMatchObject({ ok: false, error: expect.stringContaining("내지 못했습니다") });
     expect(m.db.tables.video_homework_extra_issues).toHaveLength(0);
-    expect(m.log).not.toHaveBeenCalled();
-  });
-});
-
-describe("따로 낸 숙제 취소", () => {
-  beforeEach(() => { m.db.tables.video_homework_extra_issues = [{ ...scope, student_id: S, homework_date: "2026-10-06", teacher_id: "teacher" }]; m.db.defineRpc("cancel_video_homework_extra_issue", () => "cancelled"); });
-  it("낸 강사는 거둔다 — DB 함수가 영상·기록을 다시 확인한다", async () => {
-    expect(await cancelExtraVideoHomework(input)).toEqual({ ok: true });
-    expect(m.db.rpcCalls.at(-1)).toMatchObject({ name: "cancel_video_homework_extra_issue", args: { p_tenant: "tenant", p_class: C, p_student: S, p_date: "2026-10-06" } });
-    expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ action: "lesson_report_video_homework_issue_cancel" }));
-  });
-  it("남이 낸 숙제는 강사가 못 거둔다 · 전체 권한은 거둔다", async () => {
-    m.db.tables.video_homework_extra_issues![0]!.teacher_id = "other";
-    expect(await cancelExtraVideoHomework(input)).toMatchObject({ ok: false, error: expect.stringContaining("내가 낸") });
-    expect(m.db.rpcCalls).toHaveLength(0);
-    m.level = "full";
-    expect((await cancelExtraVideoHomework(input)).ok).toBe(true);
-  });
-  it("그날 보고서에도 영상 과제가 있으면 따로 낸 표시만 지웠다고 알린다(숙제는 그대로)", async () => {
-    m.db.defineRpc("cancel_video_homework_extra_issue", () => "kept");
-    expect(await cancelExtraVideoHomework(input)).toEqual({ ok: true, kept: true });
-    expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ metadata: expect.objectContaining({ keptByReport: true }) }));
-  });
-  it("영상이 붙었거나 직접 찍은 기록이 있으면 까닭을 말한다", async () => {
-    m.db.defineRpc("cancel_video_homework_extra_issue", () => "has_video");
-    expect(await cancelExtraVideoHomework(input)).toMatchObject({ ok: false, error: expect.stringContaining("영상이 올라온") });
-    m.db.defineRpc("cancel_video_homework_extra_issue", () => "marked");
-    expect(await cancelExtraVideoHomework(input)).toMatchObject({ ok: false, error: expect.stringContaining("직접 찍은") });
     expect(m.log).not.toHaveBeenCalled();
   });
 });

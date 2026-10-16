@@ -3,6 +3,7 @@ import { JetBrains_Mono } from "next/font/google";
 import { AppProviders } from "@/lib/providers/app-providers";
 import { brandLabels, getPublicBranding } from "@/features/owner/server/public-branding";
 import { AYWA_SHARE_METADATA, AYWA_SITE_DESCRIPTION } from "@/lib/config/site-metadata";
+import { deskDetectScript } from "@/components/workspace/desk-detect";
 import { pretendard } from "./fonts";
 import "./globals.css";
 
@@ -49,7 +50,13 @@ export default function RootLayout({
     <html
       lang="ko"
       className={`${pretendard.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      // 판정 스크립트가 하이드레이션 전에 `data-desk`·`data-mouse`를 붙인다 — 그 두 속성의 불일치 경고만 끈다(이 요소 한 단계).
+      suppressHydrationWarning
     >
+      <head>
+        {/* 데스크톱 셸 판정 — 실제 마우스 움직임(desk-detect.ts). 본문보다 먼저 돌아 첫 페인트부터 맞는 셸(번쩍임 없음). */}
+        <script dangerouslySetInnerHTML={{ __html: deskDetectScript() }} />
+      </head>
       <body className="bg-background text-foreground min-h-full font-sans">
         <AppProviders>{children}</AppProviders>
       </body>

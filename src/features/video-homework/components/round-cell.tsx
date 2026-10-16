@@ -63,7 +63,7 @@ export function RoundCell({ row, round, blank, number, busy, videosKnown = true,
   if (!round) return <BlankRoundCell blank={blank} onMenu={onMenu} />;
   const label = roundStatusLabel(round);
   const source = roundSource(round);
-  // 보고서 없이 따로 낸 숙제 — 점선으로 가르고, 영상이 붙지 않은 미확인·미수행 칸은 우클릭으로 거둘 수 있다(직접 찍은 기록이 있으면 서버가 거절한다).
+  // 보고서 없이 따로 낸 숙제 — 점선으로 가르고, 영상이 붙지 않은 미확인·미수행 칸은 우클릭으로 거둘 수 있다(`cancel-homework.ts` — 완료로 찍힌 칸은 서버가 거절한다).
   const extra = !!round.homeworkDate && !!row.extraDates?.includes(round.homeworkDate);
   const cancellable = extra && !!onMenu && round.status !== "submitted" && !round.videoId;
   const openEditor = onEditor ? (event: MouseEvent<HTMLElement>) => { event.preventDefault(); if (!busy) onEditor(round); } : undefined;
