@@ -136,6 +136,8 @@ export const AUDIT_ACTIONS = {
   // 실급여·명세서 대상 학년(원장 2026-10-07 — 고등학생에게만 프리랜서를 적용하는 선생님). 비율 숫자는 남기지 않는다.
   payroll_sheet_levels_set: "실급여·명세서 대상 학년 설정",
   payroll_sheet_special_scope_set: "실급여·명세서 특강 학년 제한 설정",
+  // 혼합 계약(근로 + 용역, 원장 2026-10-16)의 근로 요일 — 강사평가 근태가 세는 요일. 금액엔 쓰지 않는다.
+  payroll_contract_work_days_set: "혼합 계약 근로 요일 설정",
   class_salary_update: "반별 급여 설정 변경",
   session_splits_save: "강사 분배 스냅샷 저장",
   withdrawal_update: "퇴원 사유",

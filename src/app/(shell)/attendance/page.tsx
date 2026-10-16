@@ -1335,10 +1335,12 @@ export default async function AttendancePage({
             optionsExtra={salaryConfig?.manage ? <>
               {salaryConfig.canEdit ? <SalaryRatesButton teacherId={salaryConfig.teacherId} month={month}
                 teacherName={allTeacherOptions.find((t) => t.value === salaryConfig.teacherId)?.label ?? ""}
-                rates={salaryConfig.rates} classes={teacherClasses.map((c) => ({ id: c.id, name: c.className }))} /> : null}
+                rates={salaryConfig.rates} mixed={salaryConfig.mixed} classes={teacherClasses.map((c) => ({ id: c.id, name: c.className }))} /> : null}
               {/* '합계 및 실급여 보여주기'(원장 2026-09-21 *"관리자 출석부 우측에 토글"* → 2026-10-07 선생님별 스위치) — 열이 설 수 있는
                   보기(관리자 + 프리랜서 강사 전체 보기)에서만. 🔴 계정 귀속 보기 설정이 아니다 — 켜면 그 선생님 본인 화면에도 보인다. */}
-              {showActualAmount ? <SalaryVisibleButton key={`${salaryConfig.teacherId}:${month}`} teacherId={salaryConfig.teacherId} month={month} checked={salaryConfig.visible} canEdit={salaryConfig.canEdit} /> : null}
+              {/* 혼합 계약인데 용역 학년을 안 골랐다 — 실급여를 싣지 않는다(명세서도 산정하지 않는 금액). 스위치 대신 까닭. */}
+              {showActualAmount && salaryConfig.needsLevels ? <span className="text-danger text-xs break-keep">혼합 계약 — 용역 학년을 골라야 실급여가 섭니다(비율 설정)</span>
+                : showActualAmount ? <SalaryVisibleButton key={`${salaryConfig.teacherId}:${month}`} teacherId={salaryConfig.teacherId} month={month} checked={salaryConfig.visible} canEdit={salaryConfig.canEdit} /> : null}
             </> : undefined}
             termSessionsByRow={sessionBillingOn ? classBilledAmounts.confirmedSessions : {}}
             confirmedPricesByRow={sessionBillingOn ? classBilledAmounts.confirmedPrices : {}}
