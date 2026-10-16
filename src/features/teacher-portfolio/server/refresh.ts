@@ -79,7 +79,7 @@ export async function refreshTenantPortfolio(
   //   재료를 못 모으면(마감 확인·계약서 조회 실패) 급여 비율만 '계산 전'으로 두고 나머지 지표는 그대로 저장한다.
   //   🔴 일시 실패(조회 실패·시간 초과)로 못 센 달은 **마감하지 않는다** — 1일 새벽 마감 때 0점으로 굳지 않게 다음 집계가 다시 센다
   //      (기준 달을 기다리는 달과 같은 방식 · 창 끝 달은 그래도 마감).
-  const noPay: PayPlan = { facts: new Map(), contracts: new Map() };
+  const noPay: PayPlan = { facts: new Map(), contracts: new Map(), mixed: new Set() };
   const payOn = first.evaluation.config.metrics.payRatio.enabled;
   let payFailed = false;
   const plan: PayPlan = payOn

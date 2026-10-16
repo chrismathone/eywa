@@ -232,4 +232,27 @@ describe("프리랜서 근태", () => {
     // 정규직·계약구분 없음은 종전대로(이 스냅샷엔 출퇴근 재료가 없어 계산 전).
     expect([punctualityOf(fixture()).freelancer, punctualityOf(fixture()).uncounted]).toEqual([undefined, true]);
   });
+
+  it("🔴 혼합 계약(근로 + 용역)은 근로 요일만 센다 — 근로 요일이 아닌 날의 지각은 세지 않는다(원장 2026-10-16)", () => {
+    const punctualityOf = (d: PortfolioSnapshot) => metricOf(build(d).teachers.find((t) => t.name === "강사")!.periods.find((w) => w.month === "2026-09")!, "punctuality");
+    // 수요일 14시 수업 — 9/2(수) 20분 늦게 출근.
+    const withLate = (user: Partial<PortfolioSnapshot["users"][number]>) => {
+      const d = fixture();
+      d.users[0] = { ...d.users[0], ...user };
+      d.sources = { grades: [], satisfaction: null, punctuality: { days: wednesdays("2026-09").map((day) => ({
+        user_id: "teacher", work_date: day, status: day === "2026-09-02" ? "late" as const : "present" as const, late_minutes: day === "2026-09-02" ? 20 : null,
+        check_in_at: `${day}T${day === "2026-09-02" ? "14:20" : "13:50"}:00+09:00`, check_out_at: `${day}T15:00:00+09:00`,
+      })), leaves: [], latest: null } };
+      return punctualityOf(d);
+    };
+    expect(withLate({ employment_type: "정규직" }).late).toBe(1);
+    // 수요일이 근로 요일이면 그대로 센다 · 아니면(용역 몫 요일) 세지 않는다.
+    expect(withLate({ employment_type: "혼합", work_days: ["mon", "wed"] }).late).toBe(1);
+    const off = withLate({ employment_type: "혼합", work_days: ["mon", "tue", "thu", "fri"] });
+    expect([off.late, off.days, off.freelancer]).toEqual([0, 0, undefined]);
+    expect(off.basis).toContain("근로 요일(월·화·목·금)만");
+    expect(off.reason).toContain("혼합 계약");
+    // 근로 요일을 안 정한 혼합은 일반 직원처럼 모든 요일을 센다.
+    expect(withLate({ employment_type: "혼합" }).late).toBe(1);
+  });
 });

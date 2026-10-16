@@ -52,7 +52,10 @@ export type WithdrawalReport = {
   last_comment: string | null; created_at: string; updated_at: string;
 };
 export type ReportEvent = { id: string; actor_id: string | null; action: keyof typeof REPORT_ACTION_LABEL; from_status: ReportStatus | null; to_status: ReportStatus; comment: string | null; created_at: string };
-export type ReportListRow = Omit<WithdrawalReport, "body">;
+export type ReportListRow = Omit<WithdrawalReport, "body"> & {
+  /** 목록 조회만 싣는 본문의 사유·상세 사유(본문 전체는 상세 화면에서만 읽는다). */
+  body_reason?: string | null; body_detail?: string | null;
+};
 export type StaffOption = { id: string; name: string; role: SystemRole; subjects: string[]; approvalSubjects?: string[] };
 export type StudentOption = { id: string; name: string; school: string | null; grade: string | null; courses: CourseSnapshot[] };
 export function snapshotMatches(a: StudentSnapshot, b: StudentSnapshot) {

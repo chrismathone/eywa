@@ -164,6 +164,69 @@ describe("합계 및 실급여 보여주기 — 관리자 화면", () => {
   });
 });
 
+/**
+ * 혼합 계약(근로 + 용역, 원장 2026-10-16) — 대상 학년이 용역 몫(프리랜서처럼 실급여)이고 근로 요일은 강사평가 근태가 세는 요일이다.
+ */
+describe("혼합 계약 — 용역 학년 · 근로 요일", () => {
+  const mixedTeacher = { data: { employment_type: "혼합", commission_rate: 10, commission_rates: {}, display_name: "이강사" }, error: null };
+  const high = { ...rates, levels: ["고등"] };
+  it("프리랜서처럼 비율을 읽고 혼합임을 함께 돌려준다", async () => {
+    h.replies = [mixedTeacher, { data: { rates: high, updated_at: "2026-10-16" }, error: null }];
+    expect(await loadAttendanceSalaryRates("tenant", teacherId)).toEqual({ rates: high, updatedAt: "2026-10-16", mixed: true });
+  });
+  it("🔴 학년을 전부 고른(= 저장 안 함) 비율은 거절한다 — 근로 몫 학생까지 프리랜서 금액이 된다", async () => {
+    h.replies = [mixedTeacher];
+    expect(await saveAttendanceSalaryRates({ teacherId, month: MONTH, rates })).toEqual({ ok: false, error: expect.stringContaining("용역 학년") });
+    expect(h.writes).toEqual([]);
+  });
+  it("근로 요일을 저장하고, 바뀌었을 때 감사로그를 남긴다", async () => {
+    h.replies = [mixedTeacher, { data: { rates: high }, error: null }, { error: null }];
+    const next = { ...high, workDays: ["mon", "tue", "thu", "fri"] };
+    expect(await saveAttendanceSalaryRates({ teacherId, month: MONTH, rates: next as never })).toEqual({ ok: true });
+    expect(h.writes).toEqual([expect.objectContaining({ rates: next })]);
+    expect(h.log).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+      action: "payroll_contract_work_days_set", metadata: { userId: teacherId, workDays: ["mon", "tue", "thu", "fri"], before: [] },
+    }));
+  });
+  it("🔴 근로 요일을 싣지 않은 저장(배포 전에 열어 둔 창)은 저장된 근로 요일을 지우지 않는다", async () => {
+    h.replies = [mixedTeacher, { data: { rates: { ...high, workDays: ["mon", "fri"] } }, error: null }, { error: null }];
+    expect(await saveAttendanceSalaryRates({ teacherId, month: MONTH, rates: high as never })).toEqual({ ok: true });
+    expect(h.writes).toEqual([expect.objectContaining({ rates: { ...high, workDays: ["mon", "fri"] } })]);
+    expect(h.log).not.toHaveBeenCalled();
+  });
+  it("빈 근로 요일을 보내면 지운다(정하지 않음 = 모든 요일)", async () => {
+    h.replies = [mixedTeacher, { data: { rates: { ...high, workDays: ["mon"] } }, error: null }, { error: null }];
+    expect(await saveAttendanceSalaryRates({ teacherId, month: MONTH, rates: { ...high, workDays: [] } as never })).toEqual({ ok: true });
+    expect(h.writes).toEqual([expect.objectContaining({ rates: high })]);
+  });
+  it("모르는 요일은 저장하지 않는다", async () => {
+    h.replies = [mixedTeacher];
+    expect((await saveAttendanceSalaryRates({ teacherId, month: MONTH, rates: { ...high, workDays: ["monday"] } as never })).ok).toBe(false);
+    expect(h.writes).toEqual([]);
+  });
+  it("🔴 관리자 출석부도 용역 학년을 안 고른 혼합 선생님은 실급여를 싣지 않고 까닭을 세운다 — 비율 설정 창은 그대로", async () => {
+    h.visible = { data: { visible: true }, error: null };
+    h.replies = [mixedTeacher, savedRates];
+    expect(await getAttendanceSalaryRates(teacherId, MONTH)).toMatchObject({ manage: true, visible: false, mixed: true, needsLevels: true, rates });
+  });
+  it("🔴 용역 학년을 안 고른 혼합 선생님은 '합계 및 실급여 보여주기'를 켜지 않는다(끄기는 된다)", async () => {
+    h.replies = [mixedTeacher, savedRates];
+    expect(await saveAttendanceSalaryVisible({ teacherId, month: MONTH, visible: true })).toEqual({ ok: false, error: expect.stringContaining("용역 학년") });
+    expect(h.writes).toEqual([]);
+    h.replies = [mixedTeacher];
+    expect((await saveAttendanceSalaryVisible({ teacherId, month: MONTH, visible: false })).ok).toBe(true);
+    h.replies = [mixedTeacher, { data: { rates: high }, error: null }];
+    expect((await saveAttendanceSalaryVisible({ teacherId, month: MONTH, visible: true })).ok).toBe(true);
+  });
+  it("🔴 용역 학년을 안 고른 혼합 선생님의 본인 화면엔 실급여를 싣지 않는다(명세서도 산정하지 않는 금액)", async () => {
+    h.access.mockResolvedValue({ id: teacherId, tenantId: "tenant", systemRole: "teacher" });
+    h.effective.mockResolvedValue(teacherId);
+    h.visible = { data: { visible: true }, error: null };
+    h.replies = [mixedTeacher, savedRates];
+    expect(await getAttendanceSalaryRates(teacherId, MONTH)).toBeNull();
+  });
+});
+
 describe("합계 및 실급여 보여주기 — 선생님 본인 화면", () => {
   const asTeacher = () => {
     h.access.mockResolvedValue({ id: teacherId, tenantId: "tenant", systemRole: "teacher" });
@@ -173,7 +236,7 @@ describe("합계 및 실급여 보여주기 — 선생님 본인 화면", () => 
     asTeacher();
     h.visible = { data: { visible: true }, error: null };
     h.replies = [freelancer, savedRates];
-    expect(await getAttendanceSalaryRates(teacherId, MONTH)).toEqual({ teacherId, rates, updatedAt: "2026-09-21", manage: false, canEdit: false, visible: true });
+    expect(await getAttendanceSalaryRates(teacherId, MONTH)).toEqual({ teacherId, rates, updatedAt: "2026-09-21", manage: false, canEdit: false, visible: true, mixed: false });
   });
   it("🔴 꺼져 있으면 비율·급여를 읽지도 않는다 — 스위치 표 한 번만 본다", async () => {
     asTeacher();

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actualLessonSalary, actualSalaryBase, attendanceRateLevel, attendanceSalaryRate, parseAttendanceRates, salaryBilledCap, salaryRowOutOfScope, type AttendanceSalaryRates } from "./salary-rates";
+import { actualLessonSalary, actualSalaryBase, attendanceRateLevel, attendanceSalaryRate, mixedWithoutLevels, parseAttendanceRates, salaryBilledCap, salaryRowOutOfScope, type AttendanceSalaryRates } from "./salary-rates";
 const cls = "aaaaaaaa-1111-1111-1111-111111111111";
 const rates: AttendanceSalaryRates = { regular: { 초등: 40, 중등: 45, 고등: 50 }, special: { 초등: 55, 중등: 60, 고등: 65 }, classes: {} };
 
@@ -22,6 +22,18 @@ describe("regular/special × student grade rates", () => {
     expect(attendanceSalaryRate({ ...scoped, special: { 초등: 50, 중등: 50, 고등: 50 } }, row)).toBe(50);
     expect(attendanceSalaryRate({ ...scoped, classes: { [cls]: 0 } }, row)).toBe(0);
     expect(attendanceSalaryRate(scoped, { ...row, className: "정규" })).toBeNull();
+  });
+  it("혼합 계약의 근로 요일(원장 2026-10-16) — 아는 요일만 월→일 순서로 저장 · 빈 목록은 저장하지 않음 · 모르는 값은 거절", () => {
+    expect(parseAttendanceRates({ ...rates, workDays: ["fri", "mon"] })?.workDays).toEqual(["mon", "fri"]);
+    expect(parseAttendanceRates({ ...rates, workDays: [] })).toEqual(rates);
+    expect(parseAttendanceRates({ ...rates, workDays: ["monday"] })).toBeNull();
+    expect(parseAttendanceRates({ ...rates, workDays: "mon" })).toBeNull();
+  });
+  it("혼합인데 대상(용역) 학년이 없으면 금액을 쓰는 자리가 멈춘다 — 프리랜서·학년을 고른 혼합은 그대로", () => {
+    expect(mixedWithoutLevels({ rates, mixed: true })).toBe(true);
+    expect(mixedWithoutLevels({ rates: { ...rates, levels: ["고등"] }, mixed: true })).toBe(false);
+    expect(mixedWithoutLevels({ rates, mixed: false })).toBe(false);
+    expect(mixedWithoutLevels({ rates })).toBe(false);
   });
   it("특강 예외 저장값은 boolean만 받고, 기존 설정의 기본 동작을 바꾸지 않는다", () => {
     expect(parseAttendanceRates({ ...rates, includeSpecial: true })?.includeSpecial).toBe(true);

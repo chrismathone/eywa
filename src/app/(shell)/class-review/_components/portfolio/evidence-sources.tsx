@@ -64,7 +64,8 @@ function PunctualityEvidence({ period }: EvidenceProps) {
       ]} />
       <SectionTitle sub={m.manual ? "원장 직접 입력이 이 달 수치입니다" : `출퇴근 기록 ${m.days ?? 0}일 · 기준 = 그날 맡은 수업(또는 개인 출퇴근 시각)`}>지각·결근·조퇴한 날</SectionTitle>
       <DataTable headers={["날짜", "구분", "기준", "출근", "퇴근", "차이", "반영"]} kinds={["num", "text", "num", "num", "num", "num", "text"]}
-        empty={m.days ? "이 달 지각·결근·조퇴가 없습니다." : "이 달 출퇴근 기록이 없습니다."}
+        // 혼합 계약(근로 요일만 센다)은 기록이 용역 요일에만 있어도 근로 요일을 셌다(raw가 선다) — 날 수(근로 요일 기록)만 보면 '기록 없음'으로 거꾸로 말한다.
+        empty={m.days || (m.raw !== null && !m.manual) ? "이 달 지각·결근·조퇴가 없습니다." : "이 달 출퇴근 기록이 없습니다."}
         rows={m.detail.map((r) => {
           const minutes = r.minutes ?? r.lateMinutes ?? null;
           return {

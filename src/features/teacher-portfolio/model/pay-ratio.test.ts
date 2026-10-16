@@ -31,6 +31,27 @@ describe("매출 대비 급여", () => {
     });
     expect(payRatioOf(facts({ rows: 0, billedRows: 0, classes: 0, students: 0, enrollments: 0 }), 3_000_000, null)?.problem).toBe("그 달 담당 반이 없습니다");
   });
+  it("🔴 혼합 계약(근로 + 용역) = 계약서 월급 + 출석부 실급여 · 하나라도 모르면 비율을 내지 않는다(원장 2026-10-16)", () => {
+    // 매출 900만 · 월급 200만 + 실급여 160만 = 40%.
+    expect(payRatioOf(facts({ sheetPay: 1_600_000 }), 2_000_000, null, undefined, true)).toMatchObject({ raw: 40, source: "계약서 월급 + 출석부 실급여" });
+    expect(payRatioOf(facts(), 2_000_000, 2_700_000, undefined, true)).toMatchObject({ raw: 30, source: "직접 입력" });
+    // 월급을 모르면 실급여만으로 나누지 않는다(급여가 덜 잡혀 비율이 좋게 나온다) — 기다려도 안 풀리니 미루지도 않는다.
+    expect(payRatioOf(facts(), null, null, undefined, true)).toMatchObject({ raw: null, retry: false, problem: expect.stringContaining("계약서 월급을 찾지 못했습니다") });
+    expect(payRatioOf(facts({ sheetPay: null, payPending: true }), null, null, undefined, true)?.retry).toBe(false);
+    // 실급여만 모르면 월급만으로 나누지 않는다 · 단가 대기면 미룬다 · 용역 학년 미선택이면 그 까닭.
+    expect(payRatioOf(facts({ sheetPay: null }), 2_000_000, null, undefined, true)).toMatchObject({ raw: null, problem: expect.stringContaining("출석부 실급여(용역 학년)") });
+    expect(payRatioOf(facts({ sheetPay: null, payPending: true }), 2_000_000, null, undefined, true)).toMatchObject({ raw: null, retry: true });
+    expect(payRatioOf(facts({ sheetPay: null, payProblem: "혼합 계약(근로 + 용역)은 용역 학년을 골라야 산정합니다" }), 2_000_000, null, undefined, true)?.problem).toContain("용역 학년을 골라야");
+    // 출석부 실급여를 쓰지 않는 지점(급여·회차 정산 꺼짐) — 혼합의 용역 몫을 셀 길이 없다고 사실대로 말한다.
+    expect(payRatioOf(facts({ sheetPay: null, sheetOff: true }), 2_000_000, null, undefined, true)?.problem).toContain("출석부 실급여를 쓰지 않아");
+    // 학년을 안 골랐어도 실급여를 쓰지 않는 지점이면 그 사실이 먼저다(학년을 골라도 안 풀린다).
+    expect(payRatioOf(facts({ sheetPay: null, sheetOff: true, payProblem: "혼합 계약(근로 + 용역)은 용역 학년을 골라야 산정합니다" }), 2_000_000, null, undefined, true)?.problem).toContain("출석부 실급여를 쓰지 않아");
+    // 실급여가 0원으로 넘어오면(산정된 줄의 합이 0) 월급 ÷ 매출 — 줄이 없는 달을 0원으로 지어내지는 않는다(pay-sources는 null로 넘긴다).
+    expect(payRatioOf(facts({ sheetPay: 0 }), 1_800_000, null, undefined, true)).toMatchObject({ raw: 20, source: "계약서 월급 + 출석부 실급여" });
+    // 혼합이 아니면 종전대로 처음 있는 하나.
+    expect(payRatioOf(facts({ sheetPay: 1_600_000 }), 2_000_000, null)).toMatchObject({ raw: 22.2, source: "계약서 월급" });
+  });
+
   it("일시 실패(조회 실패·시간 초과·실급여 비율표)는 다시 셀 칸으로 표시한다 — 그 달 마감을 미룬다", () => {
     expect(payRatioOf(facts({ revenue: null, problem: "시간 초과", retry: true }), 3_000_000, null)).toMatchObject({ raw: null, retry: true });
     expect(payRatioOf(facts({ sheetPay: null, payReadFailed: true }), null, null)).toMatchObject({

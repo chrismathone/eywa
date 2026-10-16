@@ -1,6 +1,8 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadAttendanceSalaryRates } from "@/features/attendance/server/salary-rates";
+import { MIXED_NEEDS_LEVELS, mixedWithoutLevels } from "@/features/attendance/salary-rates";
+import { MIXED_EMPLOYMENT } from "@/features/staff/employment";
 import { runWithAttendanceReadContext } from "@/features/attendance/server/read-context";
 import { loadTeacherSheet, sheetSalaryOf } from "@/features/attendance/server/teacher-sheet";
 import { TeacherSheetError } from "@/features/attendance/teacher-sheet-error";
@@ -99,13 +101,17 @@ export async function loadSheetFacts(input: {
           // 프리랜서 실급여는 출석부 단가(회차 확정)로 셈한다 — 단가가 잡힌 줄이 모자라면(달 중간·확정 전) 0원으로 만점이 되지 않게
           // 급여를 모르는 것으로 둔다(직접 입력으로 넣을 수 있다). 분모는 단가를 못 정한 줄(`no-price`)만 — 비율 없음·학년 미상으로
           // 빠진 줄은 회차 확정을 기다려도 안 풀리고, 명세서도 그 줄 없이 나간다(그 합계가 실제 받는 돈).
-          const salary = rates && sheet.sessionBillingOn ? sheetSalaryOf(sheet, rates.rates) : null;
+          // 혼합 계약인데 용역 학년을 안 골랐다 — 그대로 세면 근로 몫 학생까지 실급여가 된다(명세서도 산정하지 않는다).
+          const needsLevels = Boolean(rates && mixedWithoutLevels(rates));
+          const salary = rates && sheet.sessionBillingOn && !needsLevels ? sheetSalaryOf(sheet, rates.rates) : null;
           // 청구서가 없는 학생의 줄은 매출처럼 여기서도 뺀다(회차 행이 청구서에 붙어 단가가 영영 안 선다).
           const noPrice = salary ? salary.excluded.filter((x) => x.reason === "no-price" && revenueOf.invoices.get(x.studentId)?.length) : [];
           const priced = salary ? salary.lines.length / Math.max(1, salary.lines.length + noPrice.length) : 0;
           // '기다림'(마감 미룸) = 회차 확정 단가가 아직 없는 줄만 — 단가는 있는데 못 쓰는 줄(월 정액 · 단가 여럿 · 일수 기준)은 확정 뒤에도
           // 그대로라 기다리지 않는다. 그래도 80% 분모에는 남긴다(빼면 일부 줄 급여 ÷ 전체 매출이 되어 비율이 낮게 나온다 — 그 달은 '급여 모름').
           const unpriced = noPrice.filter((x) => !sheet.billing.confirmedPrices[rowKey(x.classId, x.studentId)]?.length).length;
+          // 🔴 줄이 없는 달을 0원으로 보지 않는다 — 출결 시수가 비어 있는 용역 학년 학생도 줄이 없어(시수 0은 학년 판정 전에 빠진다)
+          //    0원을 지어내게 되고, 같은 달 명세서·정산 면은 '산정 불가'다(재리뷰 2026-10-16). 혼합 강사는 문구가 직접 입력을 안내한다.
           const sheetPay = salary && salary.total !== null && priced >= MIN_BILLED_SHARE ? salary.total : null;
           out.set(`${teacherId}|${month}`, {
             revenue: matched ? revenue : null, rows, billedRows: matched,
@@ -113,7 +119,9 @@ export async function loadSheetFacts(input: {
             students: new Set(groups.flatMap((g) => g.matrix.students.map((s) => s.id))).size,
             classes: groups.length,
             enrollments: groups.reduce((n, g) => n + g.matrix.students.length, 0),
-            problem: null, payReadFailed,
+            problem: null, payReadFailed, ...(needsLevels ? { payProblem: MIXED_NEEDS_LEVELS } : {}),
+            // 출석부 실급여를 쓰지 않는 지점(급여 모듈·회차 정산 꺼짐) — 혼합 계약의 용역 몫을 셀 길이 없다(문구가 그 사실을 말한다).
+            ...(!payrollOn || !sheet.sessionBillingOn ? { sheetOff: true } : {}),
             byClass: [...perClass.values()].map((c) => ({
               className: c.className, students: c.students.size, rows: c.rows, billed: c.billed,
               // 이 반에서 금액을 하나도 못 찾았으면 0%가 아니라 모름(null).
@@ -149,7 +157,18 @@ export function contractPayOf(contracts: ReadonlyMap<string, ContractRow[]>, tea
   return contractMonthlyPay(contracts.get(teacherId) ?? [], month);
 }
 
-export type PayPlan = { facts: Map<string, PayFacts>; contracts: Map<string, ContractRow[]> };
+/** `mixed` = 계약구분 '혼합'(근로 + 용역) 강사 — 급여가 계약서 월급 + 출석부 실급여다(`payRatioOf`). */
+export type PayPlan = { facts: Map<string, PayFacts>; contracts: Map<string, ContractRow[]>; mixed: ReadonlySet<string> };
+
+/**
+ * 혼합 계약 강사 — 직원 정보의 계약구분으로 본다(실급여 비율표를 못 읽은 달에도 갈래가 바뀌지 않게 따로 읽는다). 적어서 지점 전체를 읽는다.
+ * 🔴 못 읽으면 던진다 — 혼합을 일반으로 읽으면 계약서 월급만으로 비율을 내 좋게 나온다.
+ */
+async function loadMixedTeachers(admin: SupabaseClient, tenantId: string): Promise<Set<string>> {
+  const { data, error } = await admin.from("users").select("id").eq("tenant_id", tenantId).eq("employment_type", MIXED_EMPLOYMENT);
+  if (error) throw new Error(`계약구분 조회 실패: ${error.message}`);
+  return new Set((data ?? []).map((r) => r.id as string));
+}
 
 /**
  * 이번 집계에서 급여 비율을 낼 칸 — **아직 마감하지 않은 달 전부**(평소엔 진행 중인 달 하나 · 1일 새벽엔 마감할 지난달 · 마감을 미룬 달). 마감한 달은 굳어 있어 다시 셀 필요가 없고,
@@ -165,7 +184,7 @@ export async function loadPayPlan(input: {
 }): Promise<PayPlan> {
   const { admin, tenantId, result } = input;
   const months = [...new Set(result.teachers.flatMap((t) => t.periods.map((w) => w.month)))];
-  if (!months.length) return { facts: new Map(), contracts: new Map() };
+  if (!months.length) return { facts: new Map(), contracts: new Map(), mixed: new Set() };
   const closedRows = input.includeClosed ? [] : await fetchAllPaged<{ teacher_id: string; month: string }>((from, to) =>
     admin.from("teacher_portfolio_months").select("teacher_id, month").eq("tenant_id", tenantId).in("month", months)
       .not("closed_at", "is", null).order("teacher_id").order("month").range(from, to));
@@ -173,19 +192,20 @@ export async function loadPayPlan(input: {
   const pairs = result.teachers
     .flatMap((t) => t.periods.filter((w) => !closed.has(`${t.id}|${w.month}`)).map((w) => ({ teacherId: t.id, month: w.month })))
     .sort((a, b) => a.month.localeCompare(b.month));
-  if (!pairs.length) return { facts: new Map(), contracts: new Map() };
+  if (!pairs.length) return { facts: new Map(), contracts: new Map(), mixed: new Set() };
   // 같은 강사·같은 재료 달은 한 번만 센다 — 확인 대기로 열어 둔 9월과 10월(재료 = 9월)이 같은 출석부를 두 번 읽지 않게.
   const data = [...new Map(pairs.map((p) => [`${p.teacherId}|${payDataMonth(p.month)}`, { teacherId: p.teacherId, month: payDataMonth(p.month) }])).values()];
-  const [byData, contracts] = await Promise.all([
+  const [byData, contracts, mixed] = await Promise.all([
     loadSheetFacts({ admin, tenantId, settings: input.settings, pairs: data, deadline: input.deadline }),
     loadContracts(admin, tenantId, [...new Set(pairs.map((p) => p.teacherId))]),
+    loadMixedTeachers(admin, tenantId),
   ]);
   const facts = new Map<string, PayFacts>();
   for (const p of pairs) {
     const f = byData.get(`${p.teacherId}|${payDataMonth(p.month)}`);
     if (f) facts.set(`${p.teacherId}|${p.month}`, f);
   }
-  return { facts, contracts };
+  return { facts, contracts, mixed };
 }
 
 /**
@@ -199,7 +219,7 @@ export function payMapOf(plan: PayPlan, entries: readonly ManualEntryRow[]): Map
     const [teacherId, month] = key.split("|") as [string, string];
     const override = entriesOf(teacherId, month).get(PAY_OVERRIDE_KEY)?.value ?? null;
     const dataMonth = payDataMonth(month);
-    const result = payRatioOf(facts, contractPayOf(plan.contracts, teacherId, dataMonth), override, dataMonth === month ? undefined : dataMonth);
+    const result = payRatioOf(facts, contractPayOf(plan.contracts, teacherId, dataMonth), override, dataMonth === month ? undefined : dataMonth, plan.mixed.has(teacherId));
     if (result) out.set(key, result);
   }
   return out;

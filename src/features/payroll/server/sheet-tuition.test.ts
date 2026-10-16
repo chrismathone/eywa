@@ -104,6 +104,20 @@ describe("프리랜서 명세서 수업료 = 출석부 실급여 합계(원장 2
     expect(await computeSheetTuition(args)).toBeNull();
   });
 
+  it("🔴 혼합 계약(근로 + 용역)인데 용역 학년을 안 골랐으면 산정하지 않고 까닭을 적는다 — 근로 몫 학생까지 프리랜서 금액이 되지 않게", async () => {
+    mocks.rates.mockResolvedValue({ rates: rates(), mixed: true });
+    const r = (await computeSheetTuition(args))!;
+    expect(r.settlement).toBeNull();
+    expect(r.warnings.join("\n")).toContain("용역 학년을 골라야 산정합니다");
+  });
+
+  it("혼합 계약도 용역 학년을 골랐으면 그 학년 학생만 프리랜서처럼 산정한다", async () => {
+    mocks.rates.mockResolvedValue({ rates: { ...rates(), levels: ["중등"] }, mixed: true });
+    const r = (await computeSheetTuition(args))!;
+    expect(r.levels).toEqual(["중등"]);
+    expect(r.warnings.join("\n")).not.toContain("용역 학년을 골라야");
+  });
+
   it("회차 정산이 꺼진 학원도 null — 출석부에 단가·실급여가 없다", async () => {
     mocks.sheet.mockResolvedValue(sheet({ sessionBillingOn: false }));
     expect(await computeSheetTuition(args)).toBeNull();
@@ -222,10 +236,10 @@ describe("배선 — 명세서와 강사 정산 면이 같은 갈림을 탄다",
   const payslip = read("src/features/payroll/server/payslip-queries.ts");
   const face = read("src/features/payroll/server/tuition-view.ts");
 
-  it("🔴 프리랜서만 출석부 기준이다 — 판정은 출석부가 실급여 열을 세우는 값(`users.employment_type`)", () => {
-    expect(payslip).toContain('const isFreelancer = (teacher.employment_type as string | null) === "프리랜서";');
+  it("🔴 프리랜서·혼합만 출석부 기준이다 — 판정은 출석부가 실급여 열을 세우는 값(`users.employment_type`) 하나(`hasFreelancePart`)", () => {
+    expect(payslip).toContain("const isFreelancer = hasFreelancePart(teacher.employment_type as string | null);");
     expect(payslip).toContain("isFreelancer ? await computeSheetTuition(");
-    expect(face).toContain('return u.employment_type === "프리랜서" && !(slip?.status === "issued" && slip.print_payload);');
+    expect(face).toContain('return hasFreelancePart(u.employment_type) && !(slip?.status === "issued" && slip.print_payload);');
     expect(face).toContain("await computeSheetTuition(");
     // 정산 면은 프리랜서 출석부를 몇 명씩만 동시에 조립한다(전원을 한꺼번에 띄우지 않는다).
     expect(face).toContain("for (let i = 0; i < sheetTargets.length; i += SHEET_CONCURRENCY)");

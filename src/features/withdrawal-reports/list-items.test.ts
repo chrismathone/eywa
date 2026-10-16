@@ -47,6 +47,28 @@ describe("퇴원보고서 목록 한 벌 — 웹 보고서 + 기존 스프레드
     expect(build([], [archive({ mapped_student_id: "s9", mapping_kind: "manual" })])[0]!.link).toBe("manual");
   });
 
+  it("사유 칸 — 웹 보고서는 고른 사유, 기존 기록은 원문 글을 우리 사유로(없으면 기타 + 원문) · 사유로도 찾는다", () => {
+    const [web, old, odd] = build(
+      [report({ body_reason: "career", body_detail: "예체능으로 진로를 정함" })],
+      [archive({ reason_raw: "학업의욕상실", detail_raw: "" }), archive({ id: "a2", exit_date: "2026-09-01", reason_raw: "학습태도 불량 / 금전적인 문제(집안사정)" })],
+    );
+    expect(web!.reason).toEqual({ text: "진로·진학", note: null });
+    expect(old!.reason).toEqual({ text: "학생 상태 · 학습 의욕 저하", note: null });
+    expect(odd!.reason).toEqual({ text: "기타", note: "학습태도 불량 / 금전적인 문제(집안사정)" });
+    const found = filterListItems([web!, old!, odd!], { ...all, q: "학습 의욕" }, listWindow(all, "2026-10-16"));
+    expect(keys(found)).toEqual(["a:a1"]);
+  });
+
+  it("사유 아래 설명 줄로도 찾는다 — 매핑 설명('힘듦') · 기타의 설명", () => {
+    const [web, old] = build(
+      [report({ body_reason: "other", body_detail: "집안 사정으로 쉬기로" })],
+      [archive({ reason_raw: "수업진행이 빡세서", detail_raw: "" })],
+    );
+    expect(old!.reason).toEqual({ text: "수업·강사", note: "힘듦" });
+    expect(keys(filterListItems([web!, old!], { ...all, q: "힘듦" }, listWindow(all, "2026-10-16")))).toEqual(["a:a1"]);
+    expect(keys(filterListItems([web!, old!], { ...all, q: "집안 사정" }, listWindow(all, "2026-10-16")))).toEqual([web!.key]);
+  });
+
   it("퇴원·종료일 늦은 순, 날짜를 못 읽은 원문은 맨 뒤(원문 표기 그대로 보인다)", () => {
     const items = build([report({ id: "r2", effective_date: "2026-10-01" })], [archive(), archive({ id: "a2", exit_date: null, raw_exit_date: "9월 말" })]);
     expect(keys(items)).toEqual(["r:r2", "a:a1", "a:a2"]);

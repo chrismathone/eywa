@@ -8,8 +8,9 @@ import { isReadonlyTeacherView } from "@/lib/auth/view-as";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseGroupRates } from "@/features/payroll/salary-group";
-import { ATTENDANCE_RATE_LEVELS, emptyAttendanceRates, parseAttendanceRates, type AttendanceSalaryRates } from "../salary-rates";
+import { ATTENDANCE_RATE_LEVELS, emptyAttendanceRates, mixedWithoutLevels, parseAttendanceRates, type AttendanceSalaryRates } from "../salary-rates";
 import { loadSalarySheetVisible } from "./salary-visibility";
+import { hasFreelancePart, isMixedEmployment } from "@/features/staff/employment";
 
 export async function requireAttendanceSalaryAdmin(write = true) {
   const user = await requireAccess("attendance");
@@ -55,7 +56,9 @@ export async function loadAttendanceSalaryRates(tenantId: string, teacherId: str
     if (opts.screen) return null;
     throw new Error("강사 정보를 불러오지 못했습니다 — 잠시 후 다시 시도해 주세요");
   }
-  if (teacher?.employment_type !== "프리랜서") return null;
+  // 프리랜서 · 혼합(근로 + 용역 — 용역 학년만, `employment.ts`). 혼합인데 대상 학년이 없으면 금액을 쓰는 자리가 멈춘다(`mixed`).
+  if (!teacher || !hasFreelancePart(teacher.employment_type)) return null;
+  const mixed = isMixedEmployment(teacher.employment_type);
   const { data: saved, error: ratesError } = await db.from("attendance_salary_rates").select("rates, updated_at")
     .eq("tenant_id", tenantId).eq("teacher_id", teacherId).maybeSingle();
   if (ratesError) throw new Error(`출석부 급여 비율을 불러오지 못했습니다: ${ratesError.message}`);
@@ -72,8 +75,9 @@ export async function loadAttendanceSalaryRates(tenantId: string, teacherId: str
       if (special !== undefined) rates.special[level] = special;
     }
   }
-  return { rates, updatedAt: saved?.updated_at as string | undefined };
+  return { rates, updatedAt: saved?.updated_at as string | undefined, mixed };
 }
+
 
 /** 월별 출석부가 받는 실급여 재료 — 누가 보는 화면인지(`manage`)와 표에 실을지(`visible`)를 함께 싣는다. */
 export type AttendanceSalarySheet = {
@@ -85,6 +89,13 @@ export type AttendanceSalarySheet = {
   canEdit: boolean;
   /** 그 달의 '합계 및 실급여 보여주기'가 켜져 있는가(선생님 × 달, 0352a·0353a) — 켜져 있을 때만 표에 실급여 값을 싣는다. */
   visible: boolean;
+  /** 계약구분 '혼합'(근로 + 용역) — 비율 설정 창이 근로 요일 칸을 세우고 용역 학년을 꼭 고르게 한다. */
+  mixed: boolean;
+  /**
+   * 혼합인데 용역 학년을 안 골랐다 — 실급여를 싣지 않고(`visible` false) '합계 및 실급여 보여주기' 대신 안내를 세운다.
+   * 명세서·강사 정산 면·강사평가가 산정하지 않는 금액을 이 화면만 보이지 않게(적대 리뷰 2026-10-16).
+   */
+  needsLevels?: boolean;
 };
 
 /**
@@ -111,7 +122,10 @@ export async function getAttendanceSalaryRates(teacherId: string | null, month: 
       canManageTenant(admin.systemRole, "attendance_salary_settings"),
     ]);
     if (!loaded) return null;
-    return { teacherId, rates: loaded.rates, updatedAt: loaded.updatedAt, manage: true, canEdit, visible };
+    if (mixedWithoutLevels(loaded)) {
+      return { teacherId, rates: loaded.rates, updatedAt: loaded.updatedAt, manage: true, canEdit, visible: false, mixed: true, needsLevels: true };
+    }
+    return { teacherId, rates: loaded.rates, updatedAt: loaded.updatedAt, manage: true, canEdit, visible, mixed: loaded.mixed };
   }
   const user = await requireAccess("attendance");
   if ((await effectiveTeacherId()) !== teacherId) return null;
@@ -120,8 +134,9 @@ export async function getAttendanceSalaryRates(teacherId: string | null, month: 
   if (!(await loadSalarySheetVisible(user.tenantId, teacherId, month))) return null;
   try {
     const loaded = await loadAttendanceSalaryRates(user.tenantId, teacherId, { screen: true });
-    if (!loaded) return null;
-    return { teacherId, rates: loaded.rates, updatedAt: loaded.updatedAt, manage: false, canEdit: false, visible: true };
+    // 혼합인데 용역 학년을 안 골랐다 — 명세서가 산정하지 않는 금액을 선생님 화면에 보이지 않는다(관리자 화면은 비율 설정 창 때문에 받는다).
+    if (!loaded || mixedWithoutLevels(loaded)) return null;
+    return { teacherId, rates: loaded.rates, updatedAt: loaded.updatedAt, manage: false, canEdit: false, visible: true, mixed: loaded.mixed };
   } catch (error) {
     console.error("[attendance-salary-rates] 선생님 화면 실급여 재료 조회 실패", teacherId, error instanceof Error ? error.message : error);
     return null;

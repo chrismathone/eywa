@@ -2,6 +2,7 @@ import { getGradeLevel } from "@/lib/format/school-grade";
 import { isSpecialLecture } from "@/features/classes/special-lecture";
 import { NET_MULTIPLIER } from "@/features/payroll/settlement";
 import { floor1 } from "@/features/payroll/tier-settlement";
+import { parseWorkDays, type WorkDay } from "@/features/staff/employment";
 import { actualLessonAmount } from "./actual-amount";
 import type { AttendanceConfirmedPrice, AttendanceTermSessions } from "./class-billing";
 
@@ -20,8 +21,21 @@ export type AttendanceSalaryRates = {
   levels?: AttendanceRateLevel[];
   /** 이 선생님의 특강은 대상 학년 제한 없이 포함한다(기본은 기존 학년 제한). */
   includeSpecial?: boolean;
+  /**
+   * **근로 요일** — 계약구분 '혼합'(근로 + 용역, 원장 2026-10-16)의 근로 몫. 강사평가 근태는 이 요일만 센다(`employment.ts`).
+   * 금액 계산엔 쓰지 않는다(용역 몫은 위 대상 학년이 가른다). 비어 있으면 저장하지 않는다(정하지 않음 = 모든 요일을 센다).
+   */
+  workDays?: WorkDay[];
 };
 export const emptyAttendanceRates = (): AttendanceSalaryRates => ({ regular: {}, special: {}, classes: {} });
+
+/**
+ * 혼합 계약인데 용역 학년(대상 학년)을 안 골랐다 — 그대로 계산하면 근로 몫 학생까지 프리랜서 금액이 된다. 금액을 쓰는 자리(명세서·
+ * 강사 정산 면·강사평가 급여)는 이 문구로 멈춘다(0원을 지어내지 않는다).
+ */
+export const MIXED_NEEDS_LEVELS = "혼합 계약(근로 + 용역)은 용역 학년을 골라야 산정합니다 — 직원 상세 '개인별 급여 설정' 또는 출석부 '비율 설정'에서 대상 학년을 고르세요.";
+export const mixedWithoutLevels = (loaded: { rates: Pick<AttendanceSalaryRates, "levels">; mixed?: boolean }): boolean =>
+  Boolean(loaded.mixed) && !loaded.rates.levels?.length;
 
 /** Strict save validation, including zero as an intentional rate. */
 export function parseAttendanceRates(value: unknown): AttendanceSalaryRates | null {
@@ -47,6 +61,11 @@ export function parseAttendanceRates(value: unknown): AttendanceSalaryRates | nu
   if (input.includeSpecial !== undefined) {
     if (typeof input.includeSpecial !== "boolean") return null;
     if (input.includeSpecial) out.includeSpecial = true;
+  }
+  if (input.workDays !== undefined && input.workDays !== null) {
+    const days = parseWorkDays(input.workDays);
+    if (!days) return null;
+    if (days.length) out.workDays = days;
   }
   return out;
 }

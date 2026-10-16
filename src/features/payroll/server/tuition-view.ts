@@ -13,6 +13,7 @@ import { appliedRatesOf } from "./tuition";
 import { computeSheetTuition } from "./sheet-tuition";
 import { collectTierRows } from "./tier-rows";
 import { computeTierSettlement } from "@/features/payroll/tier-settlement";
+import { hasFreelancePart } from "@/features/staff/employment";
 
 export type TuitionRow = {
   teacherId: string;
@@ -141,7 +142,7 @@ export async function getTeacherTuitionView(period: string): Promise<TuitionView
   const sheetByUser = new Map<string, SheetOutcome>();
   const sheetTargets = users.filter((u) => {
     const slip = slipByUser.get(u.id);
-    return u.employment_type === "프리랜서" && !(slip?.status === "issued" && slip.print_payload);
+    return hasFreelancePart(u.employment_type) && !(slip?.status === "issued" && slip.print_payload);
   });
   for (let i = 0; i < sheetTargets.length; i += SHEET_CONCURRENCY) {
     await Promise.all(

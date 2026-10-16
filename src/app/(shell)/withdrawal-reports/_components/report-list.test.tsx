@@ -1,12 +1,13 @@
 import { afterEach, describe, expect, it } from "vitest";
 import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen } from "@testing-library/react";
+import { tipText } from "@/components/hover-tip/tip";
 import type { ListItem } from "@/features/withdrawal-reports/list-items";
 import { ReportList } from "./report-list";
 
 const item = (over: Partial<ListItem>): ListItem => ({
   key: "r:1", href: "/withdrawal-reports/1", name: "김학생", detail: "전체 퇴원 · 수학", date: "2026-10-10", dateText: "2026-10-10",
-  teacher: "이성우", subjects: ["math"], status: "pending", statusLabel: "관리자 승인 대기", tone: "muted",
+  teacher: "이성우", reason: { text: "이사", note: null }, subjects: ["math"], status: "pending", statusLabel: "관리자 승인 대기", tone: "muted",
   approval: [{ text: "관리자 ○ 관리자" }, { text: "관리자가 최종 승인", muted: true }], link: null, myTurn: false, search: "",
   ...over,
 });
@@ -26,6 +27,22 @@ describe("퇴원보고서 목록 표 — 웹 보고서와 기존 기록 한 표(
     expect(screen.getByText("학생 연결 필요")).toBeInTheDocument();
     expect(screen.getByText("원본 · 9월 퇴원")).toBeInTheDocument();
     expect(screen.getByText("내 작성 대기")).toBeInTheDocument();
+  });
+  it("퇴원 사유 칸 — 우리 사유, '기타'는 아래에 설명(전체는 메모 카드)", () => {
+    render(
+      <ReportList
+        items={[
+          item({ key: "r:1" }),
+          item({ key: "a:2", name: "박원생", reason: { text: "기타", note: "학습태도 불량 / 금전적인 문제(집안사정)" } }),
+        ]}
+      />,
+    );
+    expect(screen.getByRole("columnheader", { name: "퇴원 사유" })).toBeInTheDocument();
+    expect(screen.getByText("이사")).toBeInTheDocument();
+    expect(screen.getByText("기타")).toBeInTheDocument();
+    const note = screen.getByText("학습태도 불량 / 금전적인 문제(집안사정)");
+    expect(note).not.toHaveAttribute("title");
+    expect(tipText(note.getAttribute("data-tip"))).toContain("학습태도 불량 / 금전적인 문제(집안사정)");
   });
   it("없으면 빈 안내", () => {
     render(<ReportList items={[]} />);

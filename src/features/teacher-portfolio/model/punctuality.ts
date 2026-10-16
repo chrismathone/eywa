@@ -28,14 +28,25 @@ export function punctualityOf(input: {
   basisOn: (day: string) => DayBasis | null; evidenceOn: (day: string, basis: DayBasis) => DayEvidence;
   /** 메이크에듀 출퇴근의 가장 늦은 날짜 — 그날과 그 뒤는 아직 다 받지 않았을 수 있어 결근으로 세지 않는다(없으면 제한 없음). */
   latest?: string | null;
+  /**
+   * 근태를 세는 날인가 — 혼합 계약(근로 + 용역)은 근로 요일만(원장 2026-10-16). 아닌 날은 출퇴근 기록째 없는 날로 본다
+   * (메이크에듀가 '지각·결근'으로 적어 둔 날도 — 그날은 용역 몫이라 근무 시각에 매이지 않는다). 없으면 모든 날.
+   */
+  countsOn?: (day: string) => boolean;
 }): PunctualityResult {
   const { w, teacherId, options } = input;
   const leaveOn = (day: string) => input.leaves.some((l) => l.user_id === teacherId && l.start_date <= day && l.end_date >= day);
   // 같은 날 줄이 여럿이면(출처가 둘) 가장 이른 출근 · 가장 늦은 퇴근 · 가장 무거운 표시(결근 > 지각 > 그 밖).
   const weight = (s: SnapshotStaffDay["status"]) => (s === "absent" ? 3 : s === "late" ? 2 : s === "leave" || s === "off" ? 1 : 0);
   const byDay = new Map<string, SnapshotStaffDay>();
+  const counts = input.countsOn ?? (() => true);
+  // 🔴 '출퇴근 자료가 있는 사람인가'는 거르기 전 기록으로 본다 — 용역 요일에만 태그를 찍은 혼합 선생님이 근로 요일 결근 대신
+  //    '자료 없음'이 되지 않게(적대 리뷰 2026-10-16). 세는 날만 거르는 것은 아래 판정과 날 수다.
+  let hasRecords = false;
   for (const d of input.days) {
     if (d.user_id !== teacherId || d.work_date < w.start || d.work_date > w.end) continue;
+    hasRecords = true;
+    if (!counts(d.work_date)) continue;
     const was = byDay.get(d.work_date);
     if (!was) { byDay.set(d.work_date, d); continue; }
     const pick = <T,>(a: T | null | undefined, b: T | null | undefined, first: (x: T, y: T) => boolean) => (a == null ? b ?? null : b == null ? a : first(a, b) ? a : b);
@@ -46,7 +57,8 @@ export function punctualityOf(input: {
     });
   }
   const detail: PunctualityRow[] = [];
-  for (const day of byDay.size ? daysBetween(w.start, w.end) : []) {
+  for (const day of hasRecords ? daysBetween(w.start, w.end) : []) {
+    if (!counts(day)) continue;
     const rec = byDay.get(day);
     // 휴원일은 나올 날이 아니다(시간표엔 수업이 서 있어도) — 판정하지 않는다. 결재된 휴가는 '제외한 날'로 남긴다(그날 수업이 있었다).
     if (input.holidays.has(day) || (rec && (rec.status === "leave" || rec.status === "off"))) continue;
@@ -85,6 +97,6 @@ export function punctualityOf(input: {
     checkIns: recs.filter((r) => r.check_in_at).length, checkOuts: recs.filter((r) => r.check_out_at).length,
   };
   if (input.manual !== null) return { raw: input.manual, manual: true, ...result };
-  const raw = byDay.size ? Math.round((late * options.late + absent * options.absent + early * options.early) * 10) / 10 : null;
+  const raw = hasRecords ? Math.round((late * options.late + absent * options.absent + early * options.early) * 10) / 10 : null;
   return { raw, manual: false, ...result };
 }
