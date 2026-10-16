@@ -103,11 +103,10 @@ function AdmissionEvents({ events }: { events: OverviewData["calendar"] }) {
             ) : (
               <span title={original}>{shown}</span>
             )}
-            {/* 그 일정의 콜&상담이 지금 어느 단계인지(원장 2026-09-22) — 연결된 상담이 있을 때만. */}
-            <ConsultStageChip
-              id={event.matchedConsultation?.id}
-              shownFirstClassDate={event.kind === "firstClass" ? event.startDate : undefined}
-            />
+            {/* 그 일정의 콜&상담이 지금 어느 단계인지(원장 2026-09-22) — 연결된 상담이 있을 때만 · **입학 테스트 줄만**.
+                첫 수업 줄엔 붙이지 않는다(원장 2026-10-16 *"첫 수업 건에도 상담 완료 입테 끝이 붙어있는건 좀 이상해. 여기 라벨은 지워도 될듯"* —
+                첫 수업이 잡혔으면 상담·입테는 이미 지난 단계라 덧말이다). */}
+            {event.kind !== "firstClass" && <ConsultStageChip id={event.matchedConsultation?.id} />}
           </div>
         );
       })}
