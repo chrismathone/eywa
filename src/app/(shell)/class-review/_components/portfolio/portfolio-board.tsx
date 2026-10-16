@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { startTransition as startSyncTransition, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/empty-state";
@@ -42,16 +42,37 @@ type Weeks = Partial<Record<"attendance" | "follow", number>>;
 /** 화면에 보이는 달 수 — 그다음 한 달은 전월 비교에만 쓴다. */
 const SHOWN_MONTHS = 6;
 
+/** 이 문서에서 집계가 도는 중인지 — 집계 중 면을 바꿨다 돌아와 버튼이 새로 떠도 두 번째 집계를 시작하지 않는다. */
+let running = false;
+
+/**
+ * 집계는 수십 초 걸린다 — 트랜지션(`startTransition(async …)`)으로 감싸지 않는다. React는 비동기 트랜지션이 도는 동안
+ * 새 트랜지션(강사를 고르는 주소 이동 포함)을 모두 그 갈래에 묶어 집계가 끝날 때까지 화면을 안 바꾼다(원장 2026-10-16
+ * *"집계중일때 왼쪽 선생님 리스트 클릭이 안되는듯"*). 진행 표시는 보통 상태값으로 둔다.
+ */
 export function RefreshButton({ label = "지금 집계" }: { label?: string }) {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
-  const run = () => startTransition(async () => {
-    const result = await refreshTeacherPortfolioNow();
-    if (result.ok) {
-      toast.success(result.notice ?? "집계했습니다");
-      router.refresh();
-    } else toast.error(result.error ?? "집계에 실패했습니다");
-  });
+  const [pending, setPending] = useState(false);
+  const run = async () => {
+    if (running) return void toast.info("집계가 아직 진행 중입니다");
+    running = true;
+    setPending(true);
+    let ok = false;
+    try {
+      const result = await refreshTeacherPortfolioNow();
+      ok = result.ok;
+      if (result.ok) toast.success(result.notice ?? "집계했습니다");
+      else toast.error(result.error ?? "집계에 실패했습니다");
+    } catch {
+      toast.error("집계에 실패했습니다. 잠시 후 다시 시도해 주세요");
+    } finally {
+      running = false;
+    }
+    // 새로 그리기는 따로 부르지 않는다 — 액션의 `revalidatePath` 응답이 지금 화면을 다시 그리고, 그사이 강사를 옮겼으면 라우터가 옮긴
+    // 화면을 새로 받는다(`needsRefresh`). 따로 부른 refresh가 이동과 겹치면 옮기기 전 화면으로 되돌아갈 수 있다(재리뷰 2026-10-16).
+    // 성공이면 버튼 풀기를 트랜지션에 — 새 점수와 함께 풀린다(동기 콜백이라 갈래를 묶지 않는다).
+    if (ok) startSyncTransition(() => setPending(false));
+    else setPending(false);
+  };
   return <ToolbarButton onClick={run} disabled={pending} aria-busy={pending}>{pending ? "집계 중…" : label}</ToolbarButton>;
 }
 
