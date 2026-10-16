@@ -118,6 +118,12 @@ export function MentStyleCard({ initial, canEdit = true }: { initial: MentStyleV
                       <dd>{r.profile.caution}</dd>
                     </>
                   ) : null}
+                  {r.profile.edits?.length ? (
+                    <>
+                      <dt className="font-bold">늘 고치는 것</dt>
+                      <dd>{r.profile.edits.join(" · ")}</dd>
+                    </>
+                  ) : null}
                 </dl>
               ) : null}
             </li>

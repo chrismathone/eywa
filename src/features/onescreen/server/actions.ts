@@ -11,7 +11,7 @@ import { effectiveTeacherId, readonlyTeacherViewError } from "@/lib/auth/view-mo
 import { addDays, kstToday, resolveReportDate } from "@/lib/date-kst";
 import { generateJSON } from "@/lib/ai/generate";
 import { commentBody, commentP1Body, commentP2Body, type ReportCommentInput } from "../report-comment";
-import { buildTrendInput, findImpossibleScaleSpans, findTrendViolations, trendBody } from "../trend-comment";
+import { buildTrendInput, findImpossibleScaleSpans, findTrendContradictions, findTrendViolations, trendBody, TREND_HISTORY_FETCH_DAYS, type TrendInput } from "../trend-comment";
 import { resolveReportClassId } from "@/features/report-admin/server/resolve-class";
 import {
   assembleCombined,
@@ -46,6 +46,7 @@ import {
 import { claimMakeupAnchorChange, finishMakeupAnchor, prepareMakeupAnchor } from "./makeup-anchor-sync";
 import { ingestReport } from "@/features/progress/server/ingest";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { after } from "next/server";
 import {
   nextTrendOptOut,
   readTrendOptOut,
@@ -63,6 +64,8 @@ import {
 import { LEGACY_REPORT_SUBJECT, reportSubject } from "@/features/timetable/lib/report-subject";
 import { resolveMentSource, type MentSource } from "../ment-source";
 import { mentSourceColumnReady } from "./ment-source-db";
+import { recordMentAiDraft } from "./ment-draft-db";
+import { MENT_STYLE_EXCLUDED_SUBJECTS } from "../ment-style";
 import { videoHomeworkColumnReady } from "@/features/video-homework/server/assignments";
 import { videoHomeworkKept } from "@/features/video-homework/report-owner";
 import { resolveNextLessonDue, videoHomeworkDueColumnReady } from "@/features/video-homework/server/report-due";
@@ -73,7 +76,7 @@ import { getVideoReceiptComment } from "@/features/video-homework/server/receipt
 import { appendVideoReceiptComment } from "@/features/video-homework/receipt-comment";
 import { videoSubmitLinkColumn } from "@/features/video-submit/server/link-choice-db";
 import { loadTeacherMentStyle } from "./ment-style-db";
-import { mentStyleDirective } from "../ment-style-prompt";
+import { mentStyleDirective, mentStyleToneDirective } from "../ment-style-prompt";
 import { prependParentAddress, splitParentAddress } from "../parent-address";
 import { logAction } from "@/features/audit/server/log";
 import { isSlotOnlyEnglishNotes, shouldCaptureJj } from "../jj-capture-plan";
@@ -142,6 +145,11 @@ export type SaveLessonReportInput = {
    * 미지정(구 클라·직접 호출)이어도 저장은 그대로 — 라벨만 보수적으로(null 또는 auto_edited) 남는다.
    */
   mentSource?: MentSource;
+  /**
+   * 자동작성 원문(0370a) — 화면이 `mentSource: 'auto_edited'`일 때만 싣는다(선생님이 고친 그 자동작성 글). 말투 프로파일이
+   * 원문 ↔ 최종을 견줘 '늘 고치는 것'을 배운다(원장 2026-10-16). 저장 응답 뒤에 따로 적는다 — 본 저장과 무관, 실패해도 저장은 성공.
+   */
+  mentAutoDraft?: string;
   /**
    * 영어 결과지 고르기(2026-09-28) — 그림 칸 `[시험결과지]`에 붙일 인재원 응시 id. `undefined` = 이 보고서에 저장해 둔
    * 고르기를 따른다(일괄 발송·옛 화면처럼 고르기를 모르는 경로가 고른 것을 풀지 않게), `null` = 기본(그날 낸 시험 전부).
@@ -386,6 +394,12 @@ export async function saveLessonReport(
   const videoDueWrite = videoDue.write ?? null;
   const videoDueSaved: SavedVideoHomeworkDue | null = videoDue.saved ?? null;
 
+  // 멘트 작성 방식(0214a) — 클라 판정 + 기존 라벨 sticky 합산(ment-source.ts). 컬럼 없으면 통째 생략(#95).
+  //    아래 자동작성 원문 기록(0370a)도 이 최종 값으로 판정한다.
+  const mentSourceFinal = mentReady
+    ? resolveMentSource({ client: input.mentSource, prevSource: priorRow?.ment_source, prevNotes: priorRow?.notes, nextNotes: input.notes })
+    : null;
+
   // (student, date, 반|과목) 1행 upsert — 재저장 시 같은 행 갱신(0134a `unit_key` 유니크).
   // ⚠️ onConflict 타깃은 **생성열 unit_key**(= coalesce(class_id::text, subject)) — 부분·표현식 인덱스는
   //    supabase-js upsert가 타깃으로 못 잡아서(0083a 교훈) 생성열로 평범한 컬럼처럼 만들어 둔 것이다.
@@ -428,17 +442,8 @@ export async function saveLessonReport(
         // 옛 화면(체크 전 상태)이 저장하면 추세가 다시 실린다([[#77]]). 발송(saveAndQueueClassnote)도 이 함수를 지난다.
         trend_note: trendOptedOut ? null : input.trendNote || null,
         source: "onescreen",
-        // 멘트 작성 방식(0214a) — 클라 판정 + 기존 라벨 sticky 합산(ment-source.ts). 컬럼 없으면 통째 생략(#95).
-        ...(mentReady
-          ? {
-              ment_source: resolveMentSource({
-                client: input.mentSource,
-                prevSource: priorRow?.ment_source,
-                prevNotes: priorRow?.notes,
-                nextNotes: input.notes,
-              }),
-            }
-          : {}),
+        // 멘트 작성 방식(0214a) — 위 mentSourceFinal. 컬럼 없으면 통째 생략(#95).
+        ...(mentReady ? { ment_source: mentSourceFinal } : {}),
       },
       { onConflict: "tenant_id,student_id,report_date,unit_key" },
     )
@@ -465,6 +470,16 @@ export async function saveLessonReport(
     if (priorRow && makeupAnchor && makeupAnchor !== priorAnchor)
       await claimMakeupAnchorChange({ tenantId: user.tenantId, reportId: priorRow.id, from: makeupAnchor, to: priorAnchor }).catch(() => undefined);
     return { ok: false, error: error?.message ?? "보고서 저장에 실패했습니다" };
+  }
+
+  // 선생님이 자동작성 글을 **고쳐** 저장했으면 그 자동작성 원문을 따로 남긴다(0370a) — 말투 프로파일이 '늘 고치는 것'을 배운다.
+  // 🔴 응답 뒤에(`after`) — 원스크린 저장은 전원이 매일 쓰는 길이라 늦추지 않는다. 표가 없으면 도우미가 조용히 건너뛴다(#95).
+  // 영어는 템플릿 모드라 코퍼스 밖(MENT_STYLE_EXCLUDED_SUBJECTS). 화면도 'auto_edited'라고 말한 저장만 — sticky 강등(어제 AI 글을 오늘
+  // 새 세션에서 고침)은 원문 스냅샷이 화면에 없다.
+  const aiDraft = input.mentAutoDraft?.trim();
+  if (mentSourceFinal === "auto_edited" && input.mentSource === "auto_edited" && aiDraft && !MENT_STYLE_EXCLUDED_SUBJECTS.includes(input.subject ?? "")) {
+    const draftRow = { tenantId: user.tenantId, reportId: data.id, teacherId: data.created_by ?? user.id, draft: aiDraft };
+    after(() => recordMentAiDraft(createAdminClient(), draftRow));
   }
 
   /**
@@ -1201,6 +1216,10 @@ export type SaveOnescreenSessionInput = {
        * 뒤에도 "이 멘트는 AI에서 출발했다"를 안다(안 실으면 복원 후 저장이 전부 manual로 오표기 = 코퍼스 오염).
        */
       autoDraft?: string;
+      /** 자동작성이 추세 칸에 마지막으로 넣은 글 — 새로고침 뒤에도 '달라진 것 없음'이 낡은 AI 추세를 지울 수 있게(2026-10-16). */
+      trendAutoDraft?: string;
+      /** autoDraft가 AI 원문이 아니다(실패 폴백 템플릿·지난 회차 복사) — 자동작성 원문(0370a)으로 싣지 않는다. */
+      autoDraftTemplate?: boolean;
       textbook?: string;
       makeup?: boolean;
       homeworkToday?: string;
@@ -1401,7 +1420,7 @@ export async function generateReportComment(
   // teacherStyle=false: 사무실 대리작성(보고서 관리 > 직접 작성)이 넘긴다 — 그 멘트는 **다른 강사 이름**으로 나가는 보고서라 호출자의
   // 말투 프로파일(0262a)을 붙이면 안 된다. 스코프 판정(effectiveTeacherId)만으론 겸직 관리자가 강사뷰 쿠키를 켠 채 그 화면을 열면 새므로(재리뷰).
   opts?: { teacherStyle?: boolean },
-): Promise<{ ok: boolean; comment?: string; trend?: string; trendDropped?: boolean; error?: string }> {
+): Promise<{ ok: boolean; comment?: string; trend?: string; trendDropped?: boolean; trendQuiet?: boolean; error?: string }> {
   const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   // '다른 강사 뷰'(열람 전용) 차단 — DB 미변경이지만 AI 호출(비용)이라 열람에서 못 누르게 한다.
@@ -1455,6 +1474,8 @@ export async function generateReportComment(
     ]);
     const styleBlock = mentStyle ? mentStyleDirective(mentStyle) : "";
     const withTeacherStyle = (body: string) => (styleBlock ? `${body}\n\n${styleBlock}` : body);
+    // 추세엔 **어조·문장 결만** — 선생님 표현·마무리("다음 시간에 ~하겠습니다")까지 붙이면 추세 금지(계획)에 걸려 버려진다(2026-10-16).
+    const toneBlock = mentStyle ? mentStyleToneDirective(mentStyle) : "";
     const mode = (meRow?.report_notice_mode as "A" | "B" | null | undefined) ?? settings.report.noticeMode ?? "A";
 
     const sections: PromptSection[] = [];
@@ -1485,6 +1506,11 @@ ${style}` : body) });
     // 추세 섹션(선택) — 컨텍스트 있고 표본 충분할 때만. 대상 날짜(작업중, 미저장일 수 있음) 포함(edutrix 패리티).
     // ⚠️ 과거 날짜 보고서: 그 뒤에 이미 채점 이력이 있으면 추세 미반영 — 뒤늦게 끼우는 과거 점이 추세 그래프/서술을 흐트러뜨림(원장 2026-07-14).
     let hasTrend = false;
+    // 생성 뒤 대조(findTrendContradictions)에 쓴다 — 끝난 연속을 이어지는 말로 쓰면 추세를 싣지 않는다.
+    let trendInput: TrendInput | null = null;
+    // 지난 보고서와 달라진 게 없다(trendNews) — 이번 회차엔 추세를 쓰지 않는다. 칸은 화면이 정한다: 지난 자동작성이 넣은 글 그대로면
+    //   비우고, 선생님이 손으로 쓰거나 고친 글이면 둔다(적대적 재리뷰 2026-10-16 — 일괄 자동작성이 반 전체의 손글씨 추세를 지웠을 것).
+    let trendQuiet = false;
     if (trendCtx?.studentId) {
       const anchorDate = resolveReportDate(trendCtx.date); // 대상 날짜(빈값·미래→오늘)
       const skipTrend =
@@ -1502,9 +1528,11 @@ ${style}` : body) });
             : Promise.resolve(undefined),
         ]);
         const trendClassId = trendCtx.classId !== undefined ? trendCtx.classId : (resolvedClassId ?? undefined);
-        const history = await fetchScoreHistory(supabase, trendCtx.studentId, trendCtx.subject, anchorDate, 30, {
+        // 90일을 읽는다 — 반복 방지가 최근 60일 안의 지난 추세 회차를 그 회차의 30일 창으로 다시 계산한다(사실은 30일 창만, buildTrendInput).
+        const history = await fetchScoreHistory(supabase, trendCtx.studentId, trendCtx.subject, anchorDate, 90, {
           classId: trendClassId,
           specialClassIds,
+          lookbackDays: TREND_HISTORY_FETCH_DAYS,
         });
         history.push({
           date: anchorDate,
@@ -1513,18 +1541,20 @@ ${style}` : body) });
           classId: trendClassId ?? null,
         });
         const ti = buildTrendInput(history, { today: anchorDate });
-        if (ti) {
+        if (ti && ti.facts.length) {
           const ttpl = await loadActivePrompt(supabase, user.tenantId, "trend");
-          sections.push({ type: "trend", field: "trend", body: trendBody(ti, ttpl) });
+          const tbody = trendBody(ti, ttpl);
+          sections.push({ type: "trend", field: "trend", body: toneBlock ? `${tbody}\n\n${toneBlock}` : tbody });
           hasTrend = true;
-        }
+          trendInput = ti;
+        } else if (ti?.quiet) trendQuiet = true;
       }
     }
 
     if (sections.length === 0) return { ok: false, error: "생성할 내용이 없습니다" };
 
     // 통합 1회 호출 — 멘트(·추세)를 한 번에 {comment|p1|p2, trend}로 생성. temp 0.3·reasoning minimal(Solar 후보정) 적용.
-    // 보고서 멘트·추세는 **fast tier**(Claude Haiku 4.5 / 키 죽으면 Solar 폴백) — 사실 서술형이라 Sonnet 불요, 비용 절감(원장 결정 2026-07-14).
+    // 보고서 멘트·추세는 **fast tier**(Claude Haiku 5.5 — 2026-10-16 4.5에서 올림 / 키 죽으면 DeepSeek → Solar 폴백) — 사실 서술형이라 Sonnet 불요, 비용 절감(원장 결정 2026-07-14).
     // ⚠️ 이 tier 지정은 **멘트 호출에만** — 등록상담·회의록 분석은 balanced(Sonnet 5) 유지. Haiku도 Anthropic 키가 살아야 동작(아니면 Solar).
     const { data } = await generateJSON<Record<string, string>>({
       prompt: assembleCombined(sections),
@@ -1546,7 +1576,7 @@ ${style}` : body) });
     //    내부 사정)도 같은 자리에서 거른다 — 프롬프트 예시 한 줄이 30일 90건 그대로 나갔다(권민서A 클레임). trend-comment.ts 참조.
     const rawTrend = hasTrend ? pick("trend") || undefined : undefined;
     const badSpans = rawTrend ? findImpossibleScaleSpans(rawTrend) : [];
-    const violations = rawTrend ? findTrendViolations(rawTrend) : [];
+    const violations = rawTrend ? [...findTrendViolations(rawTrend), ...(trendInput ? findTrendContradictions(trendInput, rawTrend) : [])] : [];
     if (badSpans.length || violations.length)
       console.warn(
         JSON.stringify({
@@ -1561,8 +1591,8 @@ ${style}` : body) });
     const dropped = badSpans.length > 0 || violations.length > 0;
     const trend = dropped ? undefined : rawTrend;
     // trendDropped = 이번에 만든 추세를 버렸다 — 화면은 추세 칸을 비운다(안 비우면 예전 초안이 그대로 발송된다, 적대적 리뷰 2026-10-15).
-    //    표본 부족(추세를 아예 안 만듦)은 종전대로 기존 초안·손 입력을 둔다.
-    return { ok: true, comment, trend, ...(dropped ? { trendDropped: true } : {}) };
+    //    trendQuiet = 달라진 게 없어 안 만들었다 — 화면이 자동작성 글이면 비우고 손글씨면 둔다. 표본 부족은 종전대로 기존 초안·손 입력을 둔다.
+    return { ok: true, comment, trend, ...(dropped ? { trendDropped: true } : {}), ...(trendQuiet ? { trendQuiet: true } : {}) };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "AI 생성 실패" };
   }

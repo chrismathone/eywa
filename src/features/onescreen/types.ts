@@ -122,6 +122,10 @@ export type Subject = {
   trendDraft?: string;
   // 자동작성이 멘트 칸에 마지막으로 넣은 텍스트(0214a 판정 스냅샷) — 세션에서만 복원(발송본엔 없음).
   autoDraft?: string;
+  /** 자동작성이 추세 칸에 마지막으로 넣은 글(세션에서만 복원) — '달라진 것 없음'이면 칸이 이 글 그대로일 때만 비운다. */
+  trendAutoDraft?: string;
+  /** autoDraft가 AI 원문이 아니다(실패 폴백 템플릿·지난 회차 복사) — 자동작성 원문(0370a)으로 싣지 않는다. */
+  autoDraftTemplate?: boolean;
   /**
    * 영어 템플릿 모드(2026-09-10) — 세션에서 복원한 값. **영어 행에서만** 쓰인다(수학 세션엔 키가 없다).
    * templateId = 고른 템플릿(없으면 기본) · nextTest = 다음 시간 테스트 안내 ·

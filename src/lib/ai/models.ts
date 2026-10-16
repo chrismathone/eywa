@@ -20,7 +20,9 @@ export type AiKeyName = "default" | "consultations";
 //    ⚠️ v4-flash가 전사 분석 A/B에서 warnings를 붕괴시킨 건 사실이나 그건 **balanced tier(등록상담·회의록)**
 //    이야기다. 거긴 지금도 v4-pro이고, 여기는 사실 나열형 한 단락이라 급이 다르다.
 export const AI_MODELS: Record<AiTier, Record<AiProvider, string | null>> = {
-  fast: { anthropic: "claude-haiku-4-5", upstage: "solar-pro3", deepseek: "deepseek-v4-flash" },
+  // Haiku 5.5(원장 2026-10-16 *"운영 모델도 5.5로 올려"*) — 4.5의 1/10 값. 5 계열 제약(temperature 400 · 생각 기본 켜짐)은
+  // generate.ts `isClaude5Model`이 흡수한다. 구독으로 같은 입력 9건 비교 뒤 적용(추세 날짜·진도 단원 코드 대응 포함).
+  fast: { anthropic: "claude-haiku-5-5", upstage: "solar-pro3", deepseek: "deepseek-v4-flash" },
   balanced: { anthropic: "claude-sonnet-5", upstage: "solar-pro3", deepseek: "deepseek-v4-pro" },
   reasoning: { anthropic: "claude-opus-4-7", upstage: null, deepseek: null },
 };

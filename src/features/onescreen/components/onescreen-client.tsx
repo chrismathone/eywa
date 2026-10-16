@@ -281,6 +281,8 @@ function initReports(students: OneScreenStudent[]): ReportsState {
         draft: su.draft ?? "",
         trendDraft: su.trendDraft,
         autoDraft: su.autoDraft, // 자동작성 스냅샷(0214a) — 세션 복원값. 저장 시 draft와 비교해 작성 방식 판정.
+        trendAutoDraft: su.trendAutoDraft, // 자동작성 추세 스냅샷(2026-10-16) — '달라진 것 없음' 때 칸을 비울지 가른다.
+        autoDraftTemplate: su.autoDraftTemplate, // AI 원문 아님(0370a)
         sent: su.reportSent ?? false,
         shareToken: su.shareToken,
         classnoteStatus: su.classnoteStatus,
@@ -734,6 +736,9 @@ export function OneScreenClient({
               trendDraft: r?.[su.name]?.trendDraft ?? "",
               // 자동작성 스냅샷(0214a) — 초안과 함께 영속해야 재접속 후 저장이 manual로 오표기되지 않는다.
               autoDraft: r?.[su.name]?.autoDraft ?? "",
+              // 추세 스냅샷·AI 원문 아님 표시도 같은 규약(새로고침 뒤에도 낡은 AI 추세를 지우고, 템플릿·복사 글을 원문으로 싣지 않게).
+              ...(r?.[su.name]?.trendAutoDraft ? { trendAutoDraft: r[su.name]!.trendAutoDraft } : {}),
+              ...(r?.[su.name]?.autoDraftTemplate ? { autoDraftTemplate: true } : {}),
               textbook: su.textbook ?? "",
               makeup: su.makeup ?? false,
               homeworkToday: su.homeworkToday ?? "",
@@ -2732,13 +2737,22 @@ export function OneScreenClient({
         draft: text,
         // 작성 방식 스냅샷(0214a) — AI 성공분·템플릿 폴백 모두 "자동이 넣은 텍스트". 저장 시 draft와 비교.
         autoDraft: text,
+        // 폴백 템플릿이면 표시 — 자동작성 원문(0370a)으로 싣지 않는다.
+        autoDraftTemplate: !(res.ok && res.comment),
         // 추세는 생성 성공 시에만 갱신(표본 부족·실패면 기존 초안·수동 입력 보존). 만들었지만 검사에 걸려 버렸으면 비운다
-        // (예전 초안이 그대로 나가지 않게 — 2026-10-15).
-        ...(res.ok && res.trend ? { trendDraft: res.trend } : res.ok && res.trendDropped ? { trendDraft: "" } : {}),
+        // (예전 초안이 그대로 나가지 않게 — 2026-10-15). 달라진 게 없으면(trendQuiet) 칸이 지난 자동작성 글 그대로일 때만 비운다
+        // — 선생님이 손으로 쓰거나 고친 추세는 지킨다(적대적 재리뷰 2026-10-16).
+        ...(res.ok && res.trend
+          ? { trendDraft: res.trend, trendAutoDraft: res.trend }
+          : res.ok && res.trendDropped
+            ? { trendDraft: "", trendAutoDraft: "" }
+            : res.ok && res.trendQuiet && (r.trendDraft ?? "") === (r.trendAutoDraft ?? "")
+              ? { trendDraft: "", trendAutoDraft: "" }
+              : {}),
       }));
     } catch {
       const fallback = buildSubjectReport(student, idx);
-      patchReport(student.id, subjectName, (r) => ({ ...r, draft: fallback, autoDraft: fallback }));
+      patchReport(student.id, subjectName, (r) => ({ ...r, draft: fallback, autoDraft: fallback, autoDraftTemplate: true }));
       toast.message(t("os.c.aiFallback"));
     }
   }
@@ -3243,7 +3257,8 @@ export function OneScreenClient({
     for (const p of plan) {
       const su = studentsRef.current.find(s => s.id === p.studentId)?.subjects.find(s => s.name === p.subjectName);
       if (!su || !isRowInputEditable(su, effectiveClassnoteStatus(liveClassnoteStatus(p.studentId, p.subjectName), su.classnoteStatus))) continue;
-      patchReport(p.studentId, p.subjectName, r => r.draft.trim() ? r : ({ ...r, draft: p.comment, autoDraft: p.comment }));
+      // 지난 회차 글은 AI 원문이 아니다(선생님이 직접 쓴 글일 수 있다) — 자동작성 원문(0370a)으로 싣지 않게 표시.
+      patchReport(p.studentId, p.subjectName, r => r.draft.trim() ? r : ({ ...r, draft: p.comment, autoDraft: p.comment, autoDraftTemplate: true }));
     }
     toast.success(tf("os.c.prevComments", { n: plan.length }));
   }
@@ -3311,6 +3326,9 @@ export function OneScreenClient({
     // 영어 행: 손대지 않은 자동 글이면 지금 칸 값으로 다시 조립해서 저장한다(기록과 다른 글이 나가지 않게).
     const fresh = su?.subjectKey === "english" ? freshEnglishDraft(student, subjectName) : null;
     const draft = fresh ? fresh.draft : (existing?.draft ?? "");
+    // 자동작성 스냅샷(0214a) — 작성 방식 판정과 자동작성 원문(0370a)이 같은 값을 본다.
+    const autoSnap = fresh ? fresh.autoDraft : existing?.autoDraft;
+    const mentSource = computeClientMentSource(draft, autoSnap);
     // 표시 필드(교재·진도·시험·태도·멘트…)는 **카드 미리보기와 같은 함수**로 만든다(report-fields.ts).
     // 여기서 따로 조립하면 "화면에 보이던 것"과 "학부모가 받은 것"이 조용히 갈라진다.
     // 🔴 평가값(태도·점수·과제 수행률)은 **행 단위**로 해석한다(row-fields.ts) — 보강은 정규와 따로 나가는
@@ -3368,7 +3386,11 @@ export function OneScreenClient({
           ? { videoHomeworkDue: su.videoHomeworkDue }
           : {}),
         // 멘트 작성 방식(0214a) — 이번 세션 자동작성 스냅샷과 비교(최종은 서버 resolveMentSource가 sticky 판정).
-        mentSource: computeClientMentSource(draft, fresh ? fresh.autoDraft : existing?.autoDraft),
+        mentSource,
+        // 자동작성 후 고친 멘트면 그 자동작성 원문도 싣는다(0370a) — 말투 프로파일이 선생님이 '늘 고치는 것'을 배운다(원장 2026-10-16).
+        //   영어는 템플릿 모드라 뺀다(코퍼스 밖).
+        //   AI 실패 폴백 템플릿은 AI 원문이 아니라 뺀다.
+        ...(mentSource === "auto_edited" && su?.subjectKey !== "english" && autoSnap && !existing?.autoDraftTemplate ? { mentAutoDraft: autoSnap } : {}),
         // 영어 결과지 고르기(2026-09-28) — 이 화면이 아는 값만 싣는다. 모르면(안 받음) 빼서 서버가 저장해 둔 고르기를 따르게.
         ...(su?.subjectKey === "english" && jjDayKey(student.id, activeDate) in jj.picksRef.current
           ? { jjExamPick: jj.picksRef.current[jjDayKey(student.id, activeDate)] }
