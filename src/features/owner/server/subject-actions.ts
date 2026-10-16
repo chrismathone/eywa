@@ -41,7 +41,7 @@ function readFailureMessage(error: unknown, scope: string): string {
 
 const SCALAR_TABLES = [
   { table: "classes", label: "반" },
-  { table: "enrollment_consultations", label: "콜&상담" },
+  { table: "enrollment_consultations", label: "신규 콜&상담" },
   { table: "student_consultations", label: "학생상담" },
   { table: "student_grades", label: "성적" },
   { table: "exams", label: "시험" },

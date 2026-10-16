@@ -74,8 +74,8 @@ export const IMPORT_META: Record<ImportKind, ImportMeta> = {
     step: 3,
   },
   "enrollment-consultations": {
-    title: "콜&상담",
-    where: "콜&상담",
+    title: "신규 콜&상담",
+    where: "신규 콜&상담",
     templateNote: "시트: 상담 · 안내. 빈 서식입니다(과거 상담 기록을 옮길 때).",
     keyHint: "상담일 + 학생 이름 + 보호자 연락처",
     modeHelp: { append: "같은 날 같은 학생·연락처 상담은 건너뛰고 새것만", overwrite: "같은 상담은 파일 값으로 바꾸고 새것도 넣기" },

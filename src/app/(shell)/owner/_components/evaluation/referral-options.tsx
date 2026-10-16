@@ -21,7 +21,7 @@ export function ReferralOptionsEditor({ value, onChange, label }: { value: Refer
           </label>
         ))}
       </div>
-      <p className="text-xs">콜&상담에서 소개한 사람을 원생·직원으로 이은 상담만 셉니다. 이 칸을 바꾸면 미리보기엔 보이지 않고, 저장한 뒤 다시 매긴 점수에 반영됩니다.</p>
+      <p className="text-xs">신규 콜&상담에서 소개한 사람을 원생·직원으로 이은 상담만 셉니다. 이 칸을 바꾸면 미리보기엔 보이지 않고, 저장한 뒤 다시 매긴 점수에 반영됩니다.</p>
     </fieldset>
   );
 }

@@ -2,7 +2,7 @@ import type { HelpManual } from "../types";
 
 export const enrollment: HelpManual = {
   slug: "enrollment",
-  title: "콜&상담",
+  title: "신규 콜&상담",
   href: "/enrollment",
   menuKey: "enrollment",
   group: "원생",

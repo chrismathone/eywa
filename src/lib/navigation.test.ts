@@ -21,8 +21,8 @@ describe("navigation presentation", () => {
 
   it("등록상담은 별도 권한을 가진 탐색 메뉴로 노출한다", () => {
     const enrollment = findNavItem("/enrollment");
-    // 라벨 = 페이지 metadata.title("콜&상담 — aywa")과 동일 — 창 타이틀바가 문서 제목을 보여주므로.
-    expect(enrollment).toMatchObject({ label: "콜&상담", menuKey: "enrollment" });
+    // 라벨 = 페이지 metadata.title("신규 콜&상담 — aywa")과 동일 — 창 타이틀바가 문서 제목을 보여주므로.
+    expect(enrollment).toMatchObject({ label: "신규 콜&상담", menuKey: "enrollment" });
     expect(enrollment!.hidden).not.toBe(true);
   });
 

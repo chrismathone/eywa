@@ -15,7 +15,7 @@ export type ActivityCategory = { id: string; label: string };
 
 export const ACTIVITY_CATEGORIES: readonly ActivityCategory[] = [
   { id: "students", label: "원생·수강" },
-  { id: "consult", label: "콜&상담·학생상담" },
+  { id: "consult", label: "신규 콜&상담·학생상담" },
   { id: "attendance", label: "출결·보강·자리" },
   { id: "billing", label: "청구·수납·지출" },
   { id: "payroll", label: "급여" },

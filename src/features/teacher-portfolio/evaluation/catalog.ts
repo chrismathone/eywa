@@ -32,7 +32,7 @@ export const METRIC_META: Record<BuiltinMetricId, MetricMeta> = {
   quality: { unit: "점", short: "평가", color: "var(--color-purple)", measure: "이 달에 처음 완료된 타인 평가의 문항 평균(4점 만점, 자기 평가 제외)" },
   students: { unit: "", short: "배정·유지", color: "var(--color-blue)", measure: "신규 +1 · 퇴원·수강종료 −1(강사 탓이 아닌 사유는 빼고) · 반이동 유입 +0.5 · 유출 −0.5를 더한 값" },
   revenue: { unit: "%", short: "매출", color: "var(--color-amber)", measure: "담당 매출 ÷ 그 과목 전체 매출" },
-  expansion: { unit: "건", short: "소개", color: "var(--color-chart-5)", measure: "콜&상담에서 '소개한 사람'으로 이어진 소개 건수(상담만 받아도 인정 · 소개한 원생의 상담일 담임 또는 소개한 직원에게 1건 · 같은 사람은 한 번)" },
+  expansion: { unit: "건", short: "소개", color: "var(--color-chart-5)", measure: "신규 콜&상담에서 '소개한 사람'으로 이어진 소개 건수(상담만 받아도 인정 · 소개한 원생의 상담일 담임 또는 소개한 직원에게 1건 · 같은 사람은 한 번)" },
   coverage: { unit: "%", short: "보강", color: "var(--color-gold)", measure: "기한 안에 마친 보강 ÷ 기한이 이 달에 끝나는 보강" },
 };
 

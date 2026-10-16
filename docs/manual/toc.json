@@ -193,11 +193,11 @@
         },
         {
           "slug": "enrollment",
-          "title": "콜&상담",
+          "title": "신규 콜&상담",
           "faces": [
             {
               "slug": "enrollment",
-              "title": "콜&상담"
+              "title": "신규 콜&상담"
             }
           ]
         },

@@ -475,7 +475,7 @@ export function ConsultationFullForm({
         <Card title="접수 정보">
           <Grid cols={3}>
             <L label="상담자" icon={UserCheck}>
-              <input name="counselor" defaultValue={v.counselor ?? ""} placeholder="상담 선생님" className={input} />
+              <input name="counselor" defaultValue={v.counselor ?? ""} className={input} />
             </L>
             <L label="접수일" icon={Calendar}>
               <input name="receivedDate" type="date" defaultValue={v.receivedDate ?? (isCreate ? kstToday() : "")} className={`${input} num`} />
@@ -517,12 +517,12 @@ export function ConsultationFullForm({
                 <input name="prospectName" defaultValue={v.prospectName ?? ""} readOnly={recordingActive} disabled={busy} className={lockedInput} />
               </L>
               <L label="학생 전화" icon={MessageSquare}>
-                <input name="studentPhone" defaultValue={v.studentPhone ?? ""} readOnly={recordingActive} disabled={busy} placeholder="010-0000-0000" className={lockedInput} />
+                <input name="studentPhone" defaultValue={v.studentPhone ?? ""} readOnly={recordingActive} disabled={busy} className={lockedInput} />
               </L>
             </Grid>
             <Grid cols={2}>
               <L label="보호자 성함" icon={User}>
-                <input name="parentName" defaultValue={v.parentName ?? ""} placeholder="김영희" className={input} />
+                <input name="parentName" defaultValue={v.parentName ?? ""} className={input} />
               </L>
               <L label="보호자 연락처" icon={MessageSquare}>
                 <input name="parentPhone" defaultValue={v.parentPhone ?? ""} readOnly={recordingActive} disabled={busy} className={lockedInput} />
@@ -550,7 +550,7 @@ export function ConsultationFullForm({
               </L>
             </Grid>
             <L label="주소 (동 또는 아파트)" icon={MapPin}>
-              <input name="address" defaultValue={v.address ?? ""} placeholder="복현동" className={input} />
+              <input name="address" defaultValue={v.address ?? ""} className={input} />
             </L>
             <Grid cols={2}>
               <L label="상세주소" icon={MapPin}>
@@ -627,7 +627,7 @@ export function ConsultationFullForm({
                 ref={parentRequestRef}
                 name="parentRequest"
                 defaultValue={v.parentRequest ?? ""}
-                placeholder="상담 내용 / 학부모 요구사항 / 관찰"
+                placeholder="학부모 요구사항 / 관찰"
                 className={`${input} min-h-40 flex-1 resize-none`}
               />
             </label>
@@ -684,7 +684,7 @@ export function ConsultationFullForm({
           </L>
           <Grid cols={2}>
             <L label="희망진로" icon={Target}>
-              <input name="careerGoal" defaultValue={v.careerGoal ?? ""} placeholder="의사, 교사 등" className={input} />
+              <input name="careerGoal" defaultValue={v.careerGoal ?? ""} className={input} />
             </L>
             <L label="학생 구분" icon={Tag}>
               <input name="studentType" defaultValue={v.studentType ?? ""} placeholder="예비/재원" className={input} />
@@ -731,7 +731,7 @@ export function ConsultationFullForm({
             </L>
           </Grid>
           <L label="미등록 사유" icon={XCircle}>
-            <input name="nonRegistrationReason" defaultValue={v.nonRegistrationReason ?? ""} placeholder="등록 안한 이유" className={input} />
+            <input name="nonRegistrationReason" defaultValue={v.nonRegistrationReason ?? ""} className={input} />
           </L>
         </Collapsible>
 

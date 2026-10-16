@@ -55,7 +55,7 @@ button.metric:hover:not(:disabled) { background: #f8faff; }
 .tools { display: flex; gap: 6px; align-items: center; margin-left: auto; flex-wrap: wrap; }
 .search { display: flex; align-items: center; gap: 6px; border: 1px solid var(--nc-line); border-radius: 6px; padding: 0 8px; color: var(--nc-muted); height: 31px; background: #fafbfd; }
 .search input { width: 156px; min-width: 0; font-size: var(--nc-font-size); color: var(--nc-ink); background: transparent; border: 0; height: 27px; }
-.search input::placeholder { color: #718198; }
+.search input::placeholder { color: var(--text-placeholder); }
 .tools select, .density { border: 1px solid var(--nc-line); border-radius: 6px; background: var(--nc-surface); color: var(--nc-ink); font-size: var(--nc-font-size); height: 31px; padding: 0 7px; }
 .tools select { max-width: 180px; }
 .density { display: flex; align-items: center; gap: 4px; }

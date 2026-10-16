@@ -154,6 +154,7 @@
   --color-ink: var(--ink);
   --color-text-dim: var(--text-dim);
   --color-text-faint: var(--text-faint);
+  --color-text-placeholder: var(--text-placeholder);
   --color-neutral-fill: var(--neutral-fill);
 
   --font-sans:
@@ -288,6 +289,7 @@
 
   /* text — **한 값으로 통일 #121212 = rgb(18,18,18)**(원장 2026-09-08: *"모든 기본 글자색을 rgb값을 18 18 18 로"*
      → *"모든 회색계열은 18 18 18 로"*, 툴바 캡처로 보조 라벨·설명문·placeholder를 지목). 흰 배경 대비 18.7:1.
+     🔴 placeholder만은 2026-10-16 원장이 뒤집었다(*"플레이스홀더는 완전히 연하게"*) → 아래 `--text-placeholder`. 되돌리지 말 것.
      🔴 3단 위계(기본 #1d1d1f / 중간 #3f3f45 / 보조 #58585e)는 **의도적으로 폐기**됐다 — 09-03 *"배경 위 연한 회색
      텍스트 삭제"*의 끝점이다. 토큰 세 개는 소비처가 수백 곳이라 **이름은 남기고 값만 같게** 둔다(일괄 치환 금지).
      회색을 되살리려면 이 세 줄만 고친다. ⚠️ 글자 얘기다 — 테두리(--line*)·배경(--bg-soft·--muted·--secondary)
@@ -296,6 +298,13 @@
   --ink: #121212;
   --text-dim: #121212;
   --text-faint: #121212;
+
+  /* 입력칸 **플레이스홀더**만 연한 회색(원장 2026-10-16 *"예시 글자가 너무 플레이스홀더에 비해 검정색이 진하니까
+     못알아봤네. 플레이스홀더는 완전히 연하게 해야지"* — 보호자 성함 칸의 예시 '김영희'를 입력된 값으로 읽었다).
+     09-08 '글자는 한 값'의 예외는 이것 하나다 — 플레이스홀더는 글이 아니라 빈칸 표시라서 값과 같은 색이면 안 된다.
+     소비처는 아래 레이어 밖 `::placeholder` 규칙 한 곳(유틸 `placeholder:text-*`를 전부 덮는다) + 글자로 그리는 placeholder
+     (`searchable-select`의 빈 값 · Base UI `select`의 `data-placeholder`)는 `text-text-placeholder` 유틸. */
+  --text-placeholder: #b3b3b8;
 
   /* 글자가 아닌 **중립 회색 면** — 차트 조각·솔리드 배지·점·링처럼 색이 "뜻 없음/기타"를 나르는 자리.
      🔴 09-08부터 글자색이 한 값(#121212)이라 --text-faint를 면에 재사용하면 그 자리가 새까매진다
@@ -982,6 +991,21 @@
  * ─────────────────────────────────────────────── */
 main:has(.sticky-save-bar) {
   padding-bottom: 0;
+}
+
+/* ───────────────────────────────────────────────
+ * 플레이스홀더 = 연한 회색 한 값(`--text-placeholder`, 원장 2026-10-16). 입력칸 `::placeholder`와
+ * 에디터(TipTap)의 빈 첫 문단 안내가 같은 색이다.
+ * ⚠️ 레이어 밖(unlayered) — 화면마다 붙은 `placeholder:text-text-faint`·`placeholder:text-muted-foreground`
+ * (@layer utilities, 둘 다 #121212)를 손대지 않고 한 곳에서 덮는다. 새 입력칸에 placeholder 색 클래스를 달 필요 없다.
+ * 플레이스홀더는 뭘 적어야 할지 모르는 칸에만 둔다 — 라벨을 되풀이하거나 예시 이름·번호를 적지 않는다.
+ * ─────────────────────────────────────────────── */
+::placeholder {
+  color: var(--text-placeholder);
+  opacity: 1;
+}
+.is-editor-empty:first-child::before {
+  color: var(--text-placeholder);
 }
 
 /* ───────────────────────────────────────────────
@@ -1712,7 +1736,7 @@ html[data-stage="on"] main {
 /* 에디터 placeholder — 비었을 때 첫 문단에 회색 안내(TipTap Placeholder 규약). */
 .rich-content p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
-  color: var(--text-faint);
+  color: var(--text-placeholder);
   float: left;
   height: 0;
   pointer-events: none;

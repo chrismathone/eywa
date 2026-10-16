@@ -169,7 +169,7 @@ export async function createEnrollmentConsultation(
 
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "콜&상담 권한이 없습니다" };
+  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "신규 콜&상담 권한이 없습니다" };
 
   // 🔴 유입경로는 **신규 생성일 때만** 필수(원장 2026-08-04). 화면 `required`는 게이트가 아니라서
   // (#77) 서버에서도 막는다. 단 `createSchema`는 수정 액션과 공유하므로 스키마에 required를 넣지 않는다 —
@@ -442,7 +442,7 @@ export async function updateEnrollmentConsultation(
 ): Promise<UpdateConsultationState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "콜&상담 권한이 없습니다" };
+  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "신규 콜&상담 권한이 없습니다" };
 
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "상담 ID가 누락되었습니다" };
@@ -561,7 +561,7 @@ export async function setEnrollmentOutcome(
 ): Promise<SetOutcomeState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "콜&상담 권한이 없습니다" };
+  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "신규 콜&상담 권한이 없습니다" };
 
   const id = String(formData.get("id") ?? "").trim();
   const outcome = String(formData.get("outcome") ?? "") as Outcome;
@@ -646,7 +646,7 @@ export type PatchCellsState = { ok: true } | { error: string };
 export async function patchConsultationCells(id: string, patch: ConsultationCellPatch): Promise<PatchCellsState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "콜&상담 권한이 없습니다" };
+  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "신규 콜&상담 권한이 없습니다" };
   if (!id?.trim()) return { error: "상담 ID가 누락되었습니다" };
 
   // 객체가 아니거나 모르는 칸이 섞였으면(strict) zod 기본 영문 문구가 아니라 한글로 — 화면에 그대로 뜨는 문장이다.
@@ -742,7 +742,7 @@ export async function deleteEnrollmentConsultation(
 ): Promise<DeleteConsultationState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "콜&상담 권한이 없습니다" };
+  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "신규 콜&상담 권한이 없습니다" };
 
   const id = String(formData.get("id") ?? "").trim();
   const redirectTo = String(formData.get("redirectTo") ?? "").trim();
@@ -863,7 +863,7 @@ export async function convertConsultationToStudent(
 ): Promise<ConvertToStudentState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "콜&상담 권한이 없습니다" };
+  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "신규 콜&상담 권한이 없습니다" };
 
   const consultationId = String(formData.get("consultationId") ?? "").trim();
   if (!consultationId) return { error: "상담 ID가 누락되었습니다" };
@@ -1138,7 +1138,7 @@ export async function updateConsultationReportSection(
 ): Promise<UpdateConsultationReportState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "콜&상담 권한이 없습니다" };
+  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "신규 콜&상담 권한이 없습니다" };
 
   const analysisId = String(formData.get("analysisId") ?? "").trim();
   const consultationId = String(formData.get("consultationId") ?? "").trim();
@@ -1202,7 +1202,7 @@ export async function regenerateConsultationAnalysis(
 ): Promise<{ ok?: boolean; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "콜&상담 권한이 없습니다" };
+  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "신규 콜&상담 권한이 없습니다" };
   if (!consultationId) return { error: "상담 ID가 누락되었습니다" };
 
   const supabase = await createClient();
@@ -1344,7 +1344,7 @@ export async function appendAiSummaryToConsultationContent(
 ): Promise<{ ok?: boolean; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "콜&상담 권한이 없습니다" };
+  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "신규 콜&상담 권한이 없습니다" };
   if (!consultationId) return { error: "상담 ID가 누락되었습니다" };
 
   const supabase = await createClient();

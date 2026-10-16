@@ -50,7 +50,7 @@ export function buildReferrals(input: {
     return {
       id: "expansion", max: METRIC_MAX.expansion, value: null, raw: detail.length, detail,
       basis: `인정된 소개 ${detail.length}건`,
-      reason: "콜&상담에서 '소개한 사람'을 원생·직원으로 이은 상담만 셉니다(상담만 받아도 인정). 소개한 원생의 상담일 담임(직원이 직접 소개했으면 그 직원)에게 1건이고, 같은 사람을 여러 번 상담해도 처음 한 번만 셉니다.",
+      reason: "신규 콜&상담에서 '소개한 사람'을 원생·직원으로 이은 상담만 셉니다(상담만 받아도 인정). 소개한 원생의 상담일 담임(직원이 직접 소개했으면 그 직원)에게 1건이고, 같은 사람을 여러 번 상담해도 처음 한 번만 셉니다.",
     };
   };
 }

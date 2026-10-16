@@ -18,7 +18,7 @@ export const ACTIVITY_TABLE_LABEL: Record<string, string> = {
   exams: "시험",
   level_tests: "레벨테스트",
   student_consultations: "학생상담",
-  enrollment_consultations: "콜&상담",
+  enrollment_consultations: "신규 콜&상담",
   textbook_orders: "교재",
   users: "직원",
   academy_documents: "문서",

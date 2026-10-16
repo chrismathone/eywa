@@ -14,7 +14,7 @@ import { useOutsideDismiss } from "./use-outside-dismiss";
 import { RECORDING_LAYOUT_EVENT, useRecordingPosition } from "./use-recording-position";
 import styles from "./recording-runtime.module.css";
 
-const KIND_LABEL = { meeting: "회의 녹음", consultation: "콜&상담 녹음", "student-consultation": "원생상담 녹음" } as const;
+const KIND_LABEL = { meeting: "회의 녹음", consultation: "신규 콜&상담 녹음", "student-consultation": "원생상담 녹음" } as const;
 /** 정보창은 한 번에 하나 — 다른 녹음 아이콘을 누르면 그 녹음의 정보창으로 바로 바뀐다. */
 const PANEL_EVENT = "eywa-recording-panel";
 const STATUS_LABEL = { starting: "녹음 준비 중", recording: "녹음 중", paused: "일시정지", stopping: "녹음 마무리 중", ready: "녹음 완료", failed: "녹음 확인 필요" } as const;

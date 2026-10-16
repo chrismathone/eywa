@@ -55,6 +55,11 @@ sm = 본문·목록 1차 라벨·컨트롤 / base = 강조 본문·섹션 제목
   `--muted-foreground`…)은 소비처가 수백 곳이라 **남기고 값만 같게** 뒀다 — 회색을 되살리려면 globals.css 그 줄만 고친다.
   🔴 **글자 얘기다** — 테두리(`--line*`)·배경(`--bg-soft`·`--muted`·`--secondary`)의 회색은 그대로다(같이 바꾸면 화면이
   새까매진다). 🔴 종이 서식(`(print)` 라우트)의 `text-gray-*`도 그대로 — 지면 위계라 화면 규칙 밖이다.
+- **예외 하나 = 플레이스홀더는 연한 회색 `--text-placeholder`**(원장 2026-10-16 *"플레이스홀더는 완전히 연하게"*) — 값과
+  같은 색이면 예시를 입력된 값으로 읽는다(보호자 성함 '김영희'). 색은 globals.css 레이어 밖 `::placeholder` 한 곳이 정하니
+  새 입력칸에 `placeholder:text-*` 클래스를 달 필요 없다. 글자로 그리는 placeholder(`searchable-select` 빈 값 · `select`의
+  `data-placeholder`)는 `::placeholder`가 아니니 `text-text-placeholder` 유틸을 단다. 플레이스홀더는 **뭘 적어야 할지 모르는 칸에만** 둔다 — 라벨
+  되풀이·예시 이름/번호(`김영희`·`010-0000-0000`)는 금지.
 - 라운드: `--radius-xl/2xl/3xl` 전부 **12px**(모서리는 8~12px까지 — 알약형·큰 라운드 남발 금지). `rounded-full`은
   본문 배지에만 남는다(컨트롤엔 금지 — 툴바 캐논 그대로).
 
