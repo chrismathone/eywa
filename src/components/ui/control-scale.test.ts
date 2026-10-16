@@ -74,6 +74,15 @@ describe("타입 스케일 v5 — 임의 px 글자 크기를 화면에 적지 �
     for (const t of ["foreground", "ink", "text-dim", "text-faint"]) {
       expect(css, `--${t}`).toMatch(new RegExp(`--${t}: #121212;`));
     }
+    // 예외 하나 = 플레이스홀더는 연한 회색(원장 2026-10-16 "플레이스홀더는 완전히 연하게") — 값과 같은 색이면
+    // 예시 글자('김영희')를 입력된 값으로 읽는다. 규칙은 레이어 밖(줄 맨 앞)이어야 `placeholder:text-*` 유틸을 덮는다.
+    expect(css).toMatch(/--text-placeholder: #[0-9a-f]{6};/);
+    expect(css).not.toMatch(/--text-placeholder: #121212;/);
+    expect(css).toMatch(/\n::placeholder \{\s*color: var\(--text-placeholder\);/);
+    // 글자로 그리는 placeholder(공용 선택 칸의 빈 값)는 `::placeholder`가 아니라서 같은 색 유틸을 단다.
+    expect(css).toMatch(/--color-text-placeholder: var\(--text-placeholder\);/);
+    expect(readFileSync(join(SRC, "components/ui/searchable-select.tsx"), "utf8")).toMatch(/selected \? "" : "text-text-placeholder"/);
+    expect(readFileSync(join(SRC, "components/ui/select.tsx"), "utf8")).toContain("data-placeholder:text-text-placeholder");
     // 카드 = 헤어라인 링 하나, 블러 없음(원장 2026-09-03 "적당한 테두리는 있어야") — 313곳이 이 토큰을 읽는다.
     expect(css).toMatch(/--shadow-card: 0 0 0 1px rgba\(29, 29, 31, 0\.14\);/);
   });

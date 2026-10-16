@@ -1136,6 +1136,36 @@
       "r.note"
     ]
   },
+  "23bbd5ff1978d5563d2e73319a4b85a2d69fbf92618ee8b2f98b7e5c4759aec7": {
+    "parts": [
+      "update student_homework_videos set locked_at = now()\n      where id = ",
+      " and tenant_id = ",
+      " and lock_token = ",
+      " returning id"
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/video-link-compress-job.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "row.id",
+      "tenant",
+      "token"
+    ]
+  },
   "23c6d2b24a88cc028d711d303ac9d2a318a8234506c8e95e2d4ff2b4f67a1fa3": {
     "parts": [
       "select data #> '{operations,subjects}' as subjects from tenant_settings where tenant_id = ",
@@ -1683,6 +1713,41 @@
     "expressions": [
       "`🔴 반별 발송 교차 확인 이상 — 같은 반 다른 원아(${cc.leakedTo.length}명)의 알림장에서 이 보고서가 보입니다. 반별 발송을 멈췄습니다. ClassNote에서 확인하세요`",
       "r.id"
+    ]
+  },
+  "2fa948830f9520e3a170b824faf575d4f020e5af57d24ffe532f00deb7231f13": {
+    "parts": [
+      "update student_homework_videos set lock_token = null, locked_at = null,\n      route = coalesce(route, '{}'::jsonb) || jsonb_build_object('archive', ",
+      "::jsonb)\n    where id = ",
+      " and tenant_id = ",
+      " and lock_token = ",
+      " returning id"
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/video-link-compress-job.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "sql.json(archive)",
+      "row.id",
+      "tenant",
+      "token"
     ]
   },
   "2fcc71732938d3dd0e9ee5dcae5ff956e2c496636547807bddf13de08184a708": {
@@ -3637,6 +3702,36 @@
       "tenantId",
       "range.from",
       "range.to"
+    ]
+  },
+  "732f8e10760face0d3cd8c866bfb00b98789a98210ebafe1b7ac4b204621de01": {
+    "parts": [
+      "update student_homework_videos set lock_token = null, locked_at = null\n          where id = ",
+      " and tenant_id = ",
+      " and lock_token = ",
+      ""
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/video-link-compress-job.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "row.id",
+      "tenant",
+      "token"
     ]
   },
   "75b8ad4e78c31159cd3f9cfa9c8b78b255b45e8495a1b34aad3c3d1791792834": {
@@ -5638,6 +5733,36 @@
       "sql.json({ replyId: o.id, messageId: o.message_id ?? null, postId: Number(row.classnote_post_id), action: RECOVERED_STEP, ok: true, status: \"success\", kind: \"recovered\", commentId, author: o.author_label })"
     ]
   },
+  "a1f992e7bbbc80e8c3d89d17c4df7414d5de7aca130134759e040f934c32c51d": {
+    "parts": [
+      "update student_homework_videos set lock_token = ",
+      ", locked_at = now()\n      where id = ",
+      " and tenant_id = ",
+      " and source = 'link' and status = 'uploaded'\n        and (lock_token is null or locked_at < now() - interval '10 minutes')\n        and (route->'archive' is null or route->'archive'->>'state' = 'retry')\n      returning id, drive_file_id, md5, bytes, route"
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/video-link-compress.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "token",
+      "row.id",
+      "tenant"
+    ]
+  },
   "a2d69ec56a5d20417d499db8a8f884c87a5668c6a326c76c36b8355facb8d4ff": {
     "parts": [
       "select display_name, report_display_name, report_class_name_prefix from users\n        where tenant_id = ",
@@ -7232,6 +7357,36 @@
     ],
     "expressions": [
       "tenant"
+    ]
+  },
+  "ca5e06006a3dfdb5ad52cc30e547242955bbd13ad8613cbf32428f706ef8e658": {
+    "parts": [
+      "select id, drive_file_id, md5, bytes, route from student_homework_videos\n    where tenant_id = ",
+      " and source = 'link' and status = 'uploaded' and drive_file_id is not null and md5 is not null and bytes > 0\n      and coalesce(route->>'rootId', '') <> ''\n      and (route->'archive' is null or (route->'archive'->>'state' = 'retry' and route->'archive'->>'retryAt' <= ",
+      "))\n      and (lock_token is null or locked_at < now() - interval '10 minutes')\n    order by uploaded_at desc nulls last, id limit ",
+      ""
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/video-link-compress.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenant",
+      "nowIso",
+      "4 + resting"
     ]
   },
   "cb6b01c72605c428943f6cc3044a653329106ee0cae829d758d0fda32ac6febe": {

@@ -195,7 +195,7 @@ export function ConsultationReportEditor({
 
   function downloadTxt() {
     const lines: string[] = [
-      "콜&상담 AI 분석 보고서",
+      "신규 콜&상담 AI 분석 보고서",
       "=".repeat(40),
       studentName ? `학생: ${studentName}` : "",
       consultationDate ? `상담일: ${consultationDate}` : "",

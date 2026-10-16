@@ -85,7 +85,7 @@ export function EnrolledTodayPopup({
           ))}
         </ul>
       )}
-      <p className={s.footnote}>시각 = 콜&상담에서 등록 완료로 옮긴 때. 반 배정은 칸반의 ‘반 배정 완료’와 같은 기준입니다.</p>
+      <p className={s.footnote}>시각 = 신규 콜&상담에서 등록 완료로 옮긴 때. 반 배정은 칸반의 ‘반 배정 완료’와 같은 기준입니다.</p>
     </>
   );
 }
@@ -176,8 +176,8 @@ export function LevelTestPopup({ list }: { list: LevelTestList | null }) {
                 // 🔴 WindowLink의 title = 창 제목(영속) — 일정 원문(전화번호)을 싣지 않고 상담 이름만.
                 <WindowLink
                   href={`/enrollment/${event.matchedConsultation.id}`}
-                  title={`${event.matchedConsultation.name} 콜&상담`}
-                  ariaLabel={`${event.displayTitle ?? event.title} · ${event.matchedConsultation.name} 콜&상담 상세`}
+                  title={`${event.matchedConsultation.name} 신규 콜&상담`}
+                  ariaLabel={`${event.displayTitle ?? event.title} · ${event.matchedConsultation.name} 신규 콜&상담 상세`}
                   className={`${s.kpiListMeta} ${s.studentLink}`}
                 >
                   <span title={originalTitleNote(event)}>{event.displayTitle ?? event.title}</span>

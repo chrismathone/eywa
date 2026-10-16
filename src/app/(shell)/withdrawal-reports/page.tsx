@@ -3,6 +3,7 @@ import { PageHeader } from "@/components/page-header";
 import { Pagination } from "@/components/pagination";
 import { requireAccess } from "@/lib/auth/require-access";
 import { kstToday } from "@/lib/date-kst";
+import { getShellView } from "@/lib/auth/view-mode";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { listReports, reportViewer, reportStaff, requestStudents, reportSubjectLabels } from "@/features/withdrawal-reports/server/queries";
@@ -37,7 +38,7 @@ export default async function WithdrawalReportsPage({ searchParams }: { searchPa
   if (!viewer) notFound();
   const sp = flat(await searchParams);
   // 🔑 독립 조회 — 한 번에(B4). 기존 기록을 못 읽어도 웹 보고서는 보여야 하니 그쪽 실패만 안내로 접는다.
-  const [list, staff, students, labels, settings, archives] = await Promise.all([
+  const [list, staff, students, labels, settings, archives, shell] = await Promise.all([
     listReports(),
     reportStaff(),
     requestStudents(),
@@ -47,12 +48,19 @@ export default async function WithdrawalReportsPage({ searchParams }: { searchPa
       console.error("[withdrawal-reports] 기존 스프레드시트 기록 조회 실패", error);
       return null;
     }),
+    getShellView(),
   ]);
+  // 설명은 보는 화면의 일로 — 강사뷰(좁은 머리글)는 제목을 접고 이 한 줄만 보여 주는데, 결재 절차 설명이 강사 화면에 그대로 떴다(원장 2026-10-16).
+  //   겸직이 강사뷰로 볼 때도 강사 문구(권한이 아니라 셸로 가른다).
   const header = (
     <PageHeader
       eyebrow="실험실"
       title="퇴원보고서"
-      description="관리자가 작성을 요청하고, 강사별로 보고서를 제출합니다. 원장을 선택하지 않으면 관리자가 최종 승인합니다."
+      description={
+        shell !== "teacher"
+          ? "관리자가 작성을 요청하고, 강사별로 보고서를 제출합니다. 원장을 선택하지 않으면 관리자가 최종 승인합니다."
+          : "작성을 요청받은 퇴원보고서를 작성해 제출합니다."
+      }
     />
   );
   if (!list.available) {

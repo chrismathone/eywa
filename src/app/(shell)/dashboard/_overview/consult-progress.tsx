@@ -85,8 +85,8 @@ function StalledList({ rows, subjects }: { rows: StalledConsult[]; subjects: Rec
           {/* 🔴 WindowLink의 title = 창 제목(영속) — 이름만 싣는다. */}
           <WindowLink
             href={`/enrollment/${row.id}`}
-            title={`${row.name} 콜&상담`}
-            ariaLabel={`${row.name} 콜&상담 상세 · ${row.label}`}
+            title={`${row.name} 신규 콜&상담`}
+            ariaLabel={`${row.name} 신규 콜&상담 상세 · ${row.label}`}
             className={`${s.studentLink} font-bold whitespace-nowrap`}
           >
             {row.name}
@@ -108,9 +108,9 @@ export function ConsultProgressBody({ data, subjects }: { data: ConsultProgressD
   return (
     <div className="space-y-4">
       {counts.received === 0 ? (
-        <p className={s.empty}>최근 30일 콜&amp;상담이 없습니다.</p>
+        <p className={s.empty}>최근 30일 신규 콜&amp;상담이 없습니다.</p>
       ) : (
-        <ol className="flex flex-wrap items-center gap-x-1.5 gap-y-2" aria-label="콜&상담 단계별 인원">
+        <ol className="flex flex-wrap items-center gap-x-1.5 gap-y-2" aria-label="신규 콜&상담 단계별 인원">
           {steps.map((step, i) => (
             <li key={step.key} className="flex items-center gap-1.5">
               {i > 0 && (

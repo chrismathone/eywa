@@ -39,6 +39,59 @@ function verifyExisting(file, video, folderId) {
 }
 
 /**
+ * 열린 재개 전송 세션(`session`)으로 파일을 8MiB 조각씩 보낸다 — 처음과 끊긴 뒤엔 받은 위치를 물어(probe) 이어 보낸다.
+ * 세션이 사라지면(404) `restart()`가 새 세션 주소를 돌려주고 처음부터 보낸다. 끝나면(200·201) 돌아오고, 그 밖은 던진다.
+ * 새 파일 업로드(아래)와 `/v` 영상 사후 압축의 내용 교체(video-drive-replace.mjs)가 같이 쓴다.
+ * `options.signal`(선택)이 끊기면 보내던 조각도 끊고 멈춘다(ClassNote 업로드는 넘기지 않아 종전 그대로).
+ */
+export async function sendResumableFile(request, filePath, bytes, { session, restart, sleep: wait = sleep, signal } = {}) {
+  let url = session;
+  let offset = 0;
+  let failures = 0;
+  let needsProbe = true;
+  const file = await open(filePath, "r");
+  try {
+    for (;;) {
+      signal?.throwIfAborted();
+      let response;
+      try {
+        if (needsProbe) {
+          response = await request(url, { method: "PUT", signal, headers: { "Content-Length": "0", "Content-Range": `bytes */${bytes}` } });
+        } else {
+          const buffer = Buffer.alloc(Math.min(CHUNK_BYTES, bytes - offset));
+          const { bytesRead } = await file.read(buffer, 0, buffer.length, offset);
+          if (!bytesRead) throw new Error("전송할 영상 데이터가 없습니다.");
+          response = await request(url, { method: "PUT", signal, headers: { "Content-Type": "video/mp4",
+            "Content-Length": String(bytesRead), "Content-Range": `bytes ${offset}-${offset + bytesRead - 1}/${bytes}` }, body: buffer.subarray(0, bytesRead) });
+        }
+      } catch (error) {
+        // '나중에'(잠금·인증 사정 — `/v` 사후 압축)는 연결 실패로 바꾸지 않고 그대로 올린다. ClassNote 업로드는 이런 오류를 내지 않는다.
+        if (error?.later) throw error;
+        if (++failures > 3) throw new Error("Drive 전송 연결 실패 — 재실행하면 이어서 업로드합니다.");
+        needsProbe = true; await wait(1000 * 2 ** failures); continue;
+      }
+      if (response.status === 200 || response.status === 201) return;
+      if (response.status === 308) {
+        const range = response.headers.get("range");
+        const nextOffset = range ? Number(/^bytes=0-(\d+)$/.exec(range)?.[1]) + 1 : 0;
+        if (!Number.isSafeInteger(nextOffset) || nextOffset < 0 || nextOffset >= bytes) throw new Error("Drive 이어올리기 위치가 올바르지 않습니다.");
+        if (!needsProbe && nextOffset <= offset) {
+          if (++failures > 3) throw new Error("Drive 업로드가 진행되지 않아 중단했습니다. 작업 상태를 보존했습니다.");
+          needsProbe = true; await wait(1000 * 2 ** failures); continue;
+        }
+        offset = nextOffset;
+        needsProbe = false; continue;
+      }
+      if (response.status === 404 && ++failures <= 3) { url = await restart(); offset = 0; needsProbe = true; continue; }
+      if ((response.status === 429 || response.status >= 500) && ++failures <= 3) {
+        needsProbe = true; await wait(1000 * 2 ** failures); continue;
+      }
+      throw new Error(`Drive 업로드 HTTP ${response.status} — 작업 상태를 보존했습니다.`);
+    }
+  } finally { await file.close(); }
+}
+
+/**
  * 1건 업로드: 원본 키 중복 방지, 고정 Drive ID, 재시작 가능한 전송 세션, 업로드 후 해시 대조.
  * `options.prepareUpload(video)`(선택, video-compress.mjs)는 **정말 올려야 할 때만** 불린다 — 압축본을 돌려주면 그 파일을 올리고,
  * 중복·예약·재시도 판정은 끝까지 원본 지문(video.md5·bytes)으로 한다.
@@ -105,47 +158,9 @@ export async function uploadVideoToDrive(video, folderId, options) {
   }
   if (state.session && new URL(state.session).origin !== "https://www.googleapis.com") throw new Error("저장된 Drive 세션 주소가 올바르지 않습니다.");
   if (!state.session) await start();
-  let offset = 0;
-  let failures = 0;
-  let complete = false;
-  let needsProbe = true;
-  const file = await open(body.filePath, "r");
-  try {
-    while (!complete) {
-      let response;
-      try {
-        if (needsProbe) {
-          response = await request(state.session, { method: "PUT", headers: { "Content-Length": "0", "Content-Range": `bytes */${body.bytes}` } });
-        } else {
-          const buffer = Buffer.alloc(Math.min(CHUNK_BYTES, body.bytes - offset));
-          const { bytesRead } = await file.read(buffer, 0, buffer.length, offset);
-          if (!bytesRead) throw new Error("전송할 영상 데이터가 없습니다.");
-          response = await request(state.session, { method: "PUT", headers: { "Content-Type": "video/mp4",
-            "Content-Length": String(bytesRead), "Content-Range": `bytes ${offset}-${offset + bytesRead - 1}/${body.bytes}` }, body: buffer.subarray(0, bytesRead) });
-        }
-      } catch {
-        if (++failures > 3) throw new Error("Drive 전송 연결 실패 — 재실행하면 이어서 업로드합니다.");
-        needsProbe = true; await (options.sleep ?? sleep)(1000 * 2 ** failures); continue;
-      }
-      if (response.status === 200 || response.status === 201) { complete = true; break; }
-      if (response.status === 308) {
-        const range = response.headers.get("range");
-        const nextOffset = range ? Number(/^bytes=0-(\d+)$/.exec(range)?.[1]) + 1 : 0;
-        if (!Number.isSafeInteger(nextOffset) || nextOffset < 0 || nextOffset >= body.bytes) throw new Error("Drive 이어올리기 위치가 올바르지 않습니다.");
-        if (!needsProbe && nextOffset <= offset) {
-          if (++failures > 3) throw new Error("Drive 업로드가 진행되지 않아 중단했습니다. 작업 상태를 보존했습니다.");
-          needsProbe = true; await (options.sleep ?? sleep)(1000 * 2 ** failures); continue;
-        }
-        offset = nextOffset;
-        needsProbe = false; continue;
-      }
-      if (response.status === 404 && ++failures <= 3) { await start(); offset = 0; needsProbe = true; continue; }
-      if ((response.status === 429 || response.status >= 500) && ++failures <= 3) {
-        needsProbe = true; await (options.sleep ?? sleep)(1000 * 2 ** failures); continue;
-      }
-      throw new Error(`Drive 업로드 HTTP ${response.status} — 작업 상태를 보존했습니다.`);
-    }
-  } finally { await file.close(); }
+  await sendResumableFile(request, body.filePath, body.bytes, {
+    session: state.session, restart: async () => { await start(); return state.session; }, sleep: options.sleep,
+  });
   const saved = verify(await json(await request(fileUrl), "Drive 저장 확인"), body, folderId);
   state.session = null; state.completed = true; await persist();
   return { ...saved, status: "uploaded" };

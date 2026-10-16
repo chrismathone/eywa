@@ -18,8 +18,11 @@ describe("자동작성이 강사 말투를 읽는다", () => {
     const body = src.slice(start, end);
     expect(body).toContain("loadTeacherMentStyle(");
     expect(body).toContain("mentStyleDirective(");
+    // 조립은 미리보기와 같은 공용 함수(ment-assembly.ts, 2026-10-16) — 운영이 말투·어조를 그 함수에 넘긴다
+    expect(body).toMatch(/mentSections\(\{[\s\S]*styleBlock,[\s\S]*toneBlock,/);
     // 호출 = 모드 A 한 곳 + 모드 B P1·P2 두 곳(정의 `= (body` 는 `withTeacherStyle(`에 안 걸린다)
-    expect(body.match(/withTeacherStyle\(/g)?.length).toBeGreaterThanOrEqual(3);
+    const assembly = read("src/features/onescreen/ment-assembly.ts");
+    expect(assembly.match(/withTeacherStyle\(/g)?.length).toBeGreaterThanOrEqual(3);
     // 프로파일 주인은 화면의 강사(겸직 강사뷰 포함) — 로그인 계정으로만 고르면 겸직이 관리자 계정 프로파일을 찾는다
     expect(body).toContain("effectiveTeacherId()");
     // 스코프가 없으면(관리자 뷰 = 사무실 대리작성) 프로파일을 읽지 않는다 — 다른 강사 이름으로 나가는 보고서에 사무실 말투가 붙지 않게
@@ -37,7 +40,7 @@ describe("자동작성이 강사 말투를 읽는다", () => {
     const end = src.indexOf("\nexport async function", start + 1);
     const body = src.slice(start, end);
     expect(body).toContain("mentStyleToneDirective(");
-    expect(body).toMatch(/type: "trend", field: "trend", body: toneBlock \?/);
+    expect(read("src/features/onescreen/ment-assembly.ts")).toMatch(/type: "trend", field: "trend", body: a\.toneBlock \?/);
   });
   it("지침 머리가 프롬프트에 실리는 글자 그대로다", () => {
     expect(MENT_STYLE_DIRECTIVE_HEAD).toBe("[이 선생님의 말투 — 따라 쓰기]");

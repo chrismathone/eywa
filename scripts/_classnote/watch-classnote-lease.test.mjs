@@ -8,7 +8,7 @@ const source = fs.readFileSync(path.resolve("scripts/_classnote/watch-classnote-
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
 const stages = ["processQueueOnce", "processNoticesOnce", "processClassNoticesOnce", "processRecallsOnce", "autoSyncTick",
   "processSyncRequestOnce", "processParentRepliesOnce", "processParentReactionsOnce", "provisionDailyOnce", "syncMathClassBoardsDaily",
-  "syncChildMapOnce", "pollParentPostsOnce", "pollParentCommentsOnce", "kickVideoWorker", "pollReportReadsOnce", "snapshotBoardRosterOnce"];
+  "syncChildMapOnce", "pollParentPostsOnce", "pollParentCommentsOnce", "kickVideoWorker", "kickLinkVideoCompress", "pollReportReadsOnce", "snapshotBoardRosterOnce"];
 
 async function oneLoop({ local = true, approved = true, legacy = false, missingSchema = false, moduleOn = true, loseAfterFirst = false, managed = false, drainAfterFirst = false } = {}) {
   const calls = [], writes = [], exits = [];
@@ -24,7 +24,8 @@ async function oneLoop({ local = true, approved = true, legacy = false, missingS
     return { ran: false, processed: 0, claimed: 0 };
   }]));
   const common = { ...work, managed, legacyCutover: async () => false, result:()=>{}, state:async()=>({drain:drainAfterFirst&&calls.includes("processQueueOnce")}),
-    waitForVideoIdle:async()=>{calls.push("video-drained");},waitForAttachmentIdle:async()=>{calls.push("attachments-drained");}, BATCH: 2, resolveTenant: async () => "tenant-fixture", isClassnoteModuleEnabled: async () => moduleOn,
+    waitForVideoIdle:async()=>{calls.push("video-drained");},waitForAttachmentIdle:async()=>{calls.push("attachments-drained");},
+    stopLinkVideoCompress:()=>{calls.push("link-compress-stopped");},waitForLinkCompressIdle:async()=>{calls.push("link-compress-drained");},videoWorkerBusy:()=>false, BATCH: 2, resolveTenant: async () => "tenant-fixture", isClassnoteModuleEnabled: async () => moduleOn,
     launchBrowser: async () => { calls.push("browser"); return { close: async () => {} }; }, closeClassnoteAdminSession: async () => {},
     autoSyncMode: () => "on", stateFile: () => null, stateDirLabel: () => "fixture", isWorkerIssueLine: () => false,
     loadWorkerVideoDriveSetting: async () => ({ enabled: false, rootId: null }), videoArchiveHeartbeat: () => ({}),
@@ -56,13 +57,13 @@ describe("실제 클래스노트 실행기의 잠금 배선", () => {
     expect(result.calls).not.toContain("browser");
     expect(result.writes).toEqual([]);
   });
-  it("승인된 실행은 기존 16개 처리 단계를 순서대로 유지한다", async () => {
+  it("승인된 실행은 기존 17개 처리 단계를 순서대로 유지한다", async () => {
     const result = await oneLoop();
     expect(result.calls.filter((name) => stages.includes(name))).toEqual(stages);
     const payload = result.writes[0].values.find((value) => value?.executionInstanceId);
     expect(payload).toMatchObject({ executionInstanceId: "fixture-instance", executionLeaseVersion: 1, postMode: true });
   });
-  it("통합 앱도 기존 16개 처리 단계를 같은 순서로 연결한다", async () => {
+  it("통합 앱도 기존 17개 처리 단계를 같은 순서로 연결한다", async () => {
     const result = await oneLoop({ managed: true });
     expect(result.calls.filter((name) => stages.includes(name))).toEqual(stages);
     expect(result.writes).toHaveLength(1);
@@ -78,8 +79,9 @@ describe("실제 클래스노트 실행기의 잠금 배선", () => {
   });
 });
 
-it("통합 앱의 종료 요청은 현재 작업 뒤 다음 단계를 시작하지 않고 영상·첨부 마무리를 기다린다", async()=>{
+it("통합 앱의 종료 요청은 현재 작업 뒤 다음 단계를 시작하지 않고 영상·첨부 마무리를 기다린다(`/v` 압축은 끊고 기다린다)", async()=>{
   const result=await oneLoop({managed:true,drainAfterFirst:true});
   expect(result.calls.filter(name=>stages.includes(name))).toEqual(["processQueueOnce"]);
-  expect(result.calls).toContain("video-drained");expect(result.calls).toContain("attachments-drained");expect(result.calls.at(-1)).toBe("lock-released");
+  expect(result.calls).toContain("video-drained");expect(result.calls).toContain("attachments-drained");
+  expect(result.calls.indexOf("link-compress-stopped")).toBeLessThan(result.calls.indexOf("link-compress-drained"));expect(result.calls.at(-1)).toBe("lock-released");
 });

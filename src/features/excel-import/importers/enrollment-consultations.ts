@@ -223,7 +223,7 @@ const def: ImporterDef<Plan> = {
     }
     issues.push(...duplicateKeyIssues(SHEET, parsed, (r) => r.key, "상담(상담일·학생이름·보호자연락처)"));
     return {
-      counts: [{ label: "콜&상담", total: sheet?.rows.length ?? 0, insert: plan.inserts.length, update: plan.updates.length, skip }],
+      counts: [{ label: "신규 콜&상담", total: sheet?.rows.length ?? 0, insert: plan.inserts.length, update: plan.updates.length, skip }],
       preview,
       notes,
       plan,

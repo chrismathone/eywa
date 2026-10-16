@@ -171,7 +171,7 @@ export function kpiCards(snapshot: OverviewSnapshot, opts: KpiCardOptions = {}):
           icon={<MenuGlyph name="messages" size={20} />}
           error={v.intake.error}
           popupTitle="오늘 신규문의"
-          jump={can("enrollment") ? { href: intakeDayHref(today), label: "콜&상담에서 오늘 접수 보기" } : null}
+          jump={can("enrollment") ? { href: intakeDayHref(today), label: "신규 콜&상담에서 오늘 접수 보기" } : null}
         >
           <IntakePopup rows={intake} canOpen={can("enrollment")} />
         </KpiCard>
@@ -218,7 +218,7 @@ export function kpiCards(snapshot: OverviewSnapshot, opts: KpiCardOptions = {}):
           detail={
             registered
               ? `반 배정 ${number(registeredAssigned)} · 배정 전 ${number(registered.length - registeredAssigned)}`
-              : "콜&상담 등록 완료 기준"
+              : "신규 콜&상담 등록 완료 기준"
           }
           icon={<MenuGlyph name="userCheck" size={20} />}
           error={v.enrolledToday.error}

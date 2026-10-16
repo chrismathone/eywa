@@ -86,7 +86,7 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   video_homework: "영상 과제",
   lesson_report: "수업보고서",
   approval_document: "결재 문서",
-  enrollment_consultations: "콜&상담",
+  enrollment_consultations: "신규 콜&상담",
   document: "문서",
   // 셔틀(0225a) — 없으면 감사로그 '대상' 열에 영문 "shuttle"이 그대로 뜬다(2026-08-17 원장 제보와 같은 증상).
   shuttle: "셔틀",

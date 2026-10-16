@@ -11,7 +11,7 @@ export const MERGE_TABLES = [
   { table: "student_consultations", label: "원생상담" },
   { table: "student_grades", label: "성적" },
   { table: "student_memos", label: "메모" },
-  { table: "enrollment_consultations", label: "콜&상담" },
+  { table: "enrollment_consultations", label: "신규 콜&상담" },
 ] as const;
 
 /** 화면 안내용 — "수강 · 출결 · …". */

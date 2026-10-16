@@ -8,6 +8,26 @@
 - 강사평가: 근태는 근로 요일만(`punctualityOf` `countsOn`) · 급여 비율 = 계약서 월급 + 출석부 실급여(하나라도 모르면 비율 없음).
 - ⏳ 운영 데이터는 바꾸지 않았다 — 원장이 이성우 선생님 이력서의 계약구분을 '혼합'으로 고치고(지금 이력서 '정규직' · 직원 표 '프리랜서'), 직원 상세에서 근로 요일(월·화·목·금)을 고른다. 메이크에듀 출퇴근이 0건이라 근태는 '자료 없음'으로 나온다(이름 연결 확인 필요).
 
+## 2026-10-16 — `/v` 영상 사후 압축(학생이 올린 원본 → 발송 PC가 줄여 같은 Drive 파일에 새 버전)
+
+- 원장 *"학생이 업로드하면 바로 압축하고 전송하는건?"* → *"그렇게 진행해"* · *"다 되면 밀어"*. 2GB 상향(같은 날) 뒤 Drive가 원본 크기로 차는 것을 막는다.
+- 발송 PC(`--post`)가 2분마다 `/v` 줄(`source='link'` · `uploaded`)을 새것부터 한 건씩: Drive에서 나눠 받기 → 원본 해시 확인 → `prepareCompressedUpload`(ClassNote와 같은 CRF 22 · 15% 규칙) → 같은 파일 번호에 새 버전(`video/mp4` · 이름 `.mp4`) → 원본 해시의 옛 버전 삭제. 줄지 않으면 표식만.
+- DB 지문(`md5`·`bytes`)·`status`·`attempts`는 그대로 · 결과는 `route.archive`(done·kept·skipped·retry·failed) · Drive 공개 `properties`에 원본·새 내용 지문(판정 기록을 잃어도 이어 간다) · `appProperties`는 안 건드림.
+- 손대지 않음: 올린 뒤 바뀐 파일 · 휴지통(반려) · 받는 사이 바뀐 파일 · 담임이 직접 올린 파일. 실패는 30분·2시간·6시간·24시간 뒤, 다섯 번째에 그만둠. PC·설정 사정(인증·디스크·저장 계정이 고칠 수 없는 파일·Drive 남은 공간 부족·한도 거절·잠금 확인)은 세지 않고 1시간부터 두 배씩 하루까지. 공유 드라이브 파일은 편집 권한(`capabilities.canEdit`)으로 판정. 연동 앱 종료·업데이트는 인코딩·전송을 바로 끊는다(`stopLinkVideoCompress` · Drive 요청에도 끊기 신호).
+- 적대적 리뷰 수리: 하트비트는 세 번 잇달아 실패해야 잠금 잃음 + 교체 직전 DB 재확인 · 판정 기록 실패는 두 번 더 · 세 번 못 남긴 줄은 그 실행 동안 쉼 · 지난 실행의 임시 파일 정리 · 연동 앱 결과 보고 작업 이름 `video` · 판정 규칙은 `video-link-compress-rules.mjs`.
+- 공통 조각 전송을 `sendResumableFile`로 뺐다(새 업로드·내용 교체가 같이 씀) · ffmpeg 인코딩에 끊기 신호 · 하트비트 `caps.homeworkVideoLinkCompress` · 쿼리 목록 재생성. SQL 없음. 연동 앱 1.0.6(순번 8) 게시·등록 완료(2026-10-16) — PC에서 '지금 업데이트'를 눌러야 적용된다.
+
+## 2026-10-16 — 메뉴 '콜&상담' → '신규 콜&상담' · 플레이스홀더는 연한 회색 · 상담 폼의 불필요한 플레이스홀더 삭제
+
+- 원장 *"여기 보호자 이름에 왜 '김영희'가 들어가있지? 비어있어야하는데"* → *"예시 글자가 너무 플레이스홀더에 비해 검정색이 진하니까 못알아봤네. 플레이스홀더는 완전히 연하게 해야지"* · *"플레이스홀더가 필요없는곳이니까 지워도 돼. 정말 필요한 곳에만 플레이스홀더가 있으면 됨 (뭘 적어야할지 모르겠는 부분에)"*. 값은 비어 있었고 '김영희'는 placeholder였는데, 09-08 글자색 통일로 placeholder도 #121212라 입력값과 구별이 안 됐다.
+- 색: `--text-placeholder: #b3b3b8` + globals.css 레이어 밖 `::placeholder`·에디터 빈 문단 안내 한 곳(유틸 `placeholder:text-*` 51곳을 손대지 않고 덮는다) · 신규생 보드·영상 제출 현황 검색칸 CSS 모듈도 같은 토큰 · 글자로 그리는 placeholder(공용 `searchable-select` 빈 값 — '소개한 사람'의 '이름으로 찾기' 등 · Base UI `select`의 `data-placeholder`)는 `text-text-placeholder`. 가드 `control-scale.test.ts`.
+- 콜&상담 작성·수정 폼: 상담자·학생 전화·보호자 성함·주소·희망진로·미등록 사유의 placeholder 삭제 · 상담 내용은 '학부모 요구사항 / 관찰'만 · 안전사항·학생 구분·남매 관계 기록·결제 금액은 유지(뭘 적을지 안내).
+- 원장 *"현재 콜&상담 되어있는 부분을 '신규 콜&상담'으로 변경"* — 화면에 보이는 '콜&상담' 88줄(사이드바·검색·권한·도움말·운영실·감사로그·오류 문구 등)을 '신규 콜&상담'으로. 새 상담 창은 '신규 콜&상담 작성'. 사용설명서 원고(`docs/manual` 17쪽)·도입 체크리스트 원본도 바꿨다(PDF는 다음 `pnpm manual:shots`·`manual:build` 때 반영). 데이터·권한키·URL·주석·홍보 페이지는 그대로. 결정 = [`docs/decisions/students.md`](decisions/students.md) · [`docs/decisions/design.md`](decisions/design.md).
+
+## 2026-10-16 — AI 멘트 탭 미리보기 = 운영 자동작성과 같게 · 기본값과 같은 글은 저장하지 않음
+
+- 원장 *"Ai 멘트 탭 미리보기 후속도 마무리되고 진행"*. 조립·응답 읽기·생성 뒤 검사를 `ment-assembly.ts` 한 곳으로 떼어 운영(`generateReportComment`)과 미리보기가 같은 함수를 쓴다. 미리보기(`server/ment-preview.ts`)는 그 보고서를 쓴 선생님의 그날 특이사항·반 전체 안내·말투·공지 모드·영상 접수 문장으로, 같은 모델(fast)·상한으로 쓰고 추세가 운영에서 어떻게 되는지(버려짐·달라진 것 없음·표본 부족)를 함께 보여 준다. 기본값과 같은 글을 저장하면 사용자 지정을 끄고 기본값을 따른다(감사로그). 결 변형 시드에 보고서 날짜(원스크린 오늘 = 빈 값이라 날마다 같은 결이었다). 결정 = [`docs/decisions/reports-ai.md`](decisions/reports-ai.md).
+
 ## 2026-10-16 — 여러 녹음: 켜 두는 것은 여럿, 소리를 담는 것은 하나(누른 녹음만 · 나머지 자동 일시정지)
 - 원장 *"상담이 여러명이 와버린거야"* → *"녹음이 3개가 켜지더라도 그 중에 하나만 녹음 … 나머지는 일시정지"*. 10-13의 계정 단위 잠금(새 녹음 차단)을 걷고 같은 대상만 잠근다. 결정 = [decisions/shell.md](decisions/shell.md) 2026-10-16.
 - 엔진 [`browser-recording.ts`](../src/lib/browser-recording.ts) = 문서마다 녹음 여러 개(`getBrowserRecordings`) · 시작/이어서 녹음 = 나머지 일시정지(`pauseBrowserRecording`·`resumeBrowserRecording`) · 담은 시간만 셈 · 문서 사이 신호·대상 잠금 [`browser-recording-channel.ts`](../src/lib/browser-recording-channel.ts).

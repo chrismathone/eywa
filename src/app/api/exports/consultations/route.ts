@@ -69,7 +69,7 @@ export async function GET(req: Request) {
   // 반출 접속기록(보안 감사 2026-09-29) — **호출마다** 남긴다(첫 페이지만 남기면 offset을 1부터 줘서 기록을 피한다).
   // 조건(offset·limit 포함)은 metadata.filters에 원문으로 남는다.
   if (kind === "student" || kind === "enrollment") {
-    await logExportDownloadAs(tenantId, "상담 반출 API", req, kind === "student" ? "원생 상담 반출" : "콜&상담 반출");
+    await logExportDownloadAs(tenantId, "상담 반출 API", req, kind === "student" ? "원생 상담 반출" : "신규 콜&상담 반출");
   }
 
   if (kind === "student") {

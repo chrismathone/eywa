@@ -26,7 +26,8 @@ import { DEFAULT_KEEP_DAYS, DEFAULT_MAX_BYTES, archiveName, needsRotation, prune
 import { LEASE_REFRESH_MS, LEASE_SECONDS, createLocalWorkerLock } from "./worker-lease.mjs";
 import { createExecutionLease, workerLeaseApi } from "./worker-execution-lease.mjs";
 import managedWorker from "../_sync-agent/managed-worker.cjs";
-import { waitForVideoIdle } from "./video-worker.mjs";
+import { waitForVideoIdle, videoWorkerBusy } from "./video-worker.mjs";
+import { kickLinkVideoCompress, stopLinkVideoCompress, waitForLinkCompressIdle } from "./video-link-compress.mjs";
 import { waitForAttachmentIdle } from "./repair-attachment-messages.mjs";
 import { BATCH, closeClassnoteAdminSession, isClassnoteModuleEnabled, launchBrowser, processQueueOnce, resolveTenant } from "./classnote-core.mjs";
 import { processNoticesOnce } from "./classnote-notice-core.mjs";
@@ -115,7 +116,8 @@ const recentIssues = [];
 // 새 PC 번들 전에는 키 부재만으로 준비 안 됨으로 보면 안 된다(지금 도는 워커가 막힌다). 다른 루트 첫 각인은 DB 가드가 거절한다.
 // homeworkVideoReportLink=보고서 글에 댓글로 올린 영상을 그 보고서의 숙제에 묶는 버전인가(2026-10-06, video-report-link.mjs).
 // 앱은 이 키로 아무것도 막지 않는다 — 이 키가 없는 옛 워커가 올린 영상은 예전처럼 '가장 오래된 미확인 숙제부터' 센다(적용 확인용).
-const WORKER_CAPS = { autoBoardSync: POST && autoSyncMode() === "on", classNoticeImages: true, noticeClassRoute: true, noticeAttachments: true, nativePublish: true, reportAuthorClassPrefix: true, reportRecall: true, kageFailReasons: true, mathClassRoute: true, classWideNotice: true, classBoardSync: true, syncRequests: true, homeworkVideoArchive: true, homeworkVideoTenantFolders: true, homeworkVideoTenantAccounts: true, homeworkVideoReportLink: true, parentReply: true, parentReplySettings: true, parentReaction: true, attachmentMessageRepair: true };
+// homeworkVideoLinkCompress=`/v`로 학생이 올린 영상을 발송 PC가 사후 압축하는 버전인가(2026-10-16, video-link-compress.mjs). 적용 확인용.
+const WORKER_CAPS = { autoBoardSync: POST && autoSyncMode() === "on", classNoticeImages: true, noticeClassRoute: true, noticeAttachments: true, nativePublish: true, reportAuthorClassPrefix: true, reportRecall: true, kageFailReasons: true, mathClassRoute: true, classWideNotice: true, classBoardSync: true, syncRequests: true, homeworkVideoArchive: true, homeworkVideoTenantFolders: true, homeworkVideoTenantAccounts: true, homeworkVideoReportLink: true, homeworkVideoLinkCompress: true, parentReply: true, parentReplySettings: true, parentReaction: true, attachmentMessageRepair: true };
 
 // 로그 타임스탬프 = KST(UTC+9) 고정 오프셋 — 연동 PC의 시스템 로케일/타임존과 무관하게 "YYYY-MM-DD HH:MM:SS".
 // watch.log이 UTC(…Z)로 찍혀 실제 시각과 9시간 어긋나 보이던 문제(2026-07-22 원장 제보). DB/하트비트는 ISO 유지(기계용).
@@ -235,7 +237,8 @@ async function assertExecutionLease() {
   if(managedWorker.managed&&(await managedWorker.state("stage")).drain)throw Object.assign(new Error("작업 종료 요청"),{code:"AGENT_DRAIN"});
 }
 async function finishDraining(){
-  await Promise.allSettled([waitForVideoIdle(),waitForAttachmentIdle()]);
+  stopLinkVideoCompress(); // 긴 인코딩(최대 60분)이 종료·업데이트를 붙잡지 않게 끊는다(시도로 세지 않는다)
+  await Promise.allSettled([waitForVideoIdle(),waitForAttachmentIdle(),waitForLinkCompressIdle()]);
   await dropBrowser();await dropDb();await executionLease?.release?.();
   await leaseSql?.end({timeout:1});await localLock?.release();
 }
@@ -468,6 +471,8 @@ async function main() {
       }
       await assertExecutionLease();
       if (POST) kickVideoWorker(b, tenant, log, { setting: driveSetting });
+      // `/v`로 학생이 올린 원본 영상 → 발송 PC가 압축해 같은 Drive 파일에 새 버전으로(원장 2026-10-16). 기다리지 않는다.
+      if (POST) kickLinkVideoCompress(tenant, log, { setting: driveSetting, busy: videoWorkerBusy });
       // 6) 학부모 읽음 동기화(0122a, 읽기 전용 GET) → aywa lesson_reports.classnote_read_at.
       //    ⚠️ ClassNote에 아무것도 쓰지 않으므로 --post와 무관하게 돈다(읽음은 사실 데이터).
       //    30분 가드 내장. 읽음은 발송 뒤 며칠에 걸쳐 채워져 워터마크 없이 창(14일)을 매번 재조회한다.

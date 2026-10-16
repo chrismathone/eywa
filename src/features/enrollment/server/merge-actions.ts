@@ -26,7 +26,7 @@ async function requireMergeWrite(): Promise<Gate> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "enrollment"))) {
-    return { error: "콜&상담 권한이 없습니다" };
+    return { error: "신규 콜&상담 권한이 없습니다" };
   }
   return { user };
 }

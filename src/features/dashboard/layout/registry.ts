@@ -113,7 +113,7 @@ const PANELS: Record<PanelId, PanelSpec> = {
   subjects: { label: "과목별 수강", group: "학생·재원", thumb: "bars", areas: ["students"], subjectScope: "subject", sizes: LIST_S },
   grades: { label: "학년별 재원생", subjectScope: "subject", group: "학생·재원", thumb: "bars", areas: ["students"], sizes: LIST },
   schools: { label: "학교별 학생", subjectScope: "subject", group: "학생·재원", thumb: "list", areas: ["students"], size: { w: 6, h: 2 }, sizes: LIST_S },
-  admissions: { label: "콜&상담 전환", subjectScope: "subject", group: "상담·신입", thumb: "table", areas: ["admissions"], sizes: LIST_S },
+  admissions: { label: "신규 콜&상담 전환", subjectScope: "subject", group: "상담·신입", thumb: "table", areas: ["admissions"], sizes: LIST_S },
   repeatAbsence: { label: "반복 결석 학생", subjectScope: "subject", group: "출결·수업", thumb: "list", areas: ["absences"], sizes: LIST_S },
   attendance14: { label: "최근 14일 등원율", subjectScope: "subject", group: "출결·수업", thumb: "line", areas: ["attendanceTrend"], sizes: TREND_S },
   consultProgress: { label: "상담 진행", subjectScope: "subject", group: "상담·신입", thumb: "stack", areas: ["consultProgress"], sizes: LIST_S },

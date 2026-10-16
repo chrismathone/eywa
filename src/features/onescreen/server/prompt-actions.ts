@@ -5,27 +5,16 @@
 import { requireAiMentAccess } from "@/features/report-admin/server/ai-ment-access";
 import { logAction } from "@/features/audit/server/log";
 import { createClient } from "@/lib/supabase/server";
-import { kstToday } from "@/lib/date-kst";
-import { generateJSON } from "@/lib/ai/generate";
 import {
   DEFAULT_PROMPTS,
   isPromptInUse,
-  MENT_AI_TUNING,
   PROMPT_TYPES,
   PROMPT_TYPE_LABELS,
   REQUIRED_PLACEHOLDER,
   type PromptType,
 } from "../prompt-defaults";
 import { getTenantSettings } from "@/features/owner/server/queries";
-import { buildSubjectMaps } from "@/features/owner/subjects";
-import {
-  buildReportCommentPrompt,
-  buildCommentP1Prompt,
-  buildCommentP2Prompt,
-  type ReportCommentInput,
-} from "../report-comment";
-import { buildTrendInput, buildTrendPrompt, TREND_HISTORY_FETCH_DAYS } from "../trend-comment";
-import { fetchScoreHistory, fetchSpecialClassIds } from "./score-history";
+import { runMentPreview } from "./ment-preview";
 
 export type PromptRow = {
   type: PromptType;
@@ -97,8 +86,12 @@ export async function getActivePrompts(): Promise<{ ok: boolean; prompts?: Promp
   return { ok: true, prompts };
 }
 
-/** 프롬프트 저장 — 활성 비활성화 후 새 활성 insert(버전 append). AI 멘트 변경 권한 + 자리표시자 검증. */
-export async function savePrompt(type: string, text: string): Promise<{ ok: boolean; error?: string }> {
+/**
+ * 프롬프트 저장 — 활성 비활성화 후 새 활성 insert(버전 append). AI 멘트 변경 권한 + 자리표시자 검증.
+ * 🔴 **기본값과 같은 글은 사용자 지정으로 저장하지 않는다**(원장 2026-10-16 후속) — 저장하면 그 시점의 기본값이 이 학원에 굳어,
+ *    뒤에 기본 프롬프트를 고쳐도(예: 추세 '정도로만') 이 학원엔 닿지 않는다. 대신 사용자 지정을 끄고 기본값을 따르게 한다.
+ */
+export async function savePrompt(type: string, text: string): Promise<{ ok: boolean; usedDefault?: boolean; error?: string }> {
   const gate = await requireAiMentAccess(true);
   if ("error" in gate) return { ok: false, error: gate.error };
   if (!isPromptType(type)) return { ok: false, error: "알 수 없는 프롬프트 유형" };
@@ -109,6 +102,7 @@ export async function savePrompt(type: string, text: string): Promise<{ ok: bool
     return { ok: false, error: `프롬프트에 ${REQUIRED_PLACEHOLDER[type]} 자리표시자가 반드시 있어야 합니다` };
   }
   const supabase = await createClient();
+  if (isSameAsDefault(type, trimmed)) return switchToDefaultPrompt(supabase, gate.user.tenantId, type);
   // 버전 교체를 한 트랜잭션으로 실행한다. 저장 실패나 권한 회수 중에도 기존 활성 버전이 사라지지 않는다.
   const { error } = await supabase.rpc("save_ai_prompt_setting", { p_type: type, p_text: trimmed });
   if (error) return { ok: false, error: error.message };
@@ -121,6 +115,38 @@ export async function savePrompt(type: string, text: string): Promise<{ ok: bool
     metadata: { type, length: trimmed.length },
   });
   return { ok: true };
+}
+
+/** 줄바꿈(CRLF)·앞뒤 공백만 다른 글은 같은 글이다 — 화면 textarea가 줄바꿈을 바꿔 보낼 수 있다. */
+function isSameAsDefault(type: PromptType, text: string): boolean {
+  const norm = (s: string) => s.replace(/\r\n?/g, "\n").trim();
+  return norm(text) === norm(DEFAULT_PROMPTS[type]);
+}
+
+/** 기본값과 같은 저장 = 사용자 지정이 켜져 있으면 끈다(복원과 같은 RPC · 감사로그), 없으면 아무것도 쓰지 않는다. */
+async function switchToDefaultPrompt(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  tenantId: string,
+  type: PromptType,
+): Promise<{ ok: boolean; usedDefault?: boolean; error?: string }> {
+  const { data: active, error: readError } = await supabase
+    .from("ai_prompt_overrides")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .eq("prompt_type", type)
+    .eq("is_active", true)
+    .limit(1);
+  if (readError) return { ok: false, error: "지금 저장된 프롬프트를 확인하지 못했습니다" };
+  if (!active?.length) return { ok: true, usedDefault: true };
+  const { error } = await supabase.rpc("save_ai_prompt_setting", { p_type: type, p_text: null });
+  if (error) return { ok: false, error: error.message };
+  await logAction({
+    action: "ai_prompt_reset",
+    targetType: "ai_prompt",
+    targetLabel: PROMPT_TYPE_LABELS[type] ?? type,
+    metadata: { type, reason: "same_as_default" },
+  });
+  return { ok: true, usedDefault: true };
 }
 
 /** 기본값 복원 — 활성 오버라이드 비활성화(이력은 남김). 이후 기본 프롬프트 사용. */
@@ -179,6 +205,8 @@ export async function getRecentReportsForTest(): Promise<{ ok: boolean; reports?
     .select("id, report_date, progress, student_id")
     .eq("tenant_id", user.tenantId)
     .not("progress", "is", null)
+    // 영어 행은 원스크린에서 템플릿 모드라 이 프롬프트를 쓰지 않는다 — 시험 목록에서 뺀다(옛 보고서는 과목 없음 = 수학).
+    .or("subject.is.null,subject.neq.english")
     .order("report_date", { ascending: false })
     .limit(30);
   const rows = reports ?? [];
@@ -194,7 +222,11 @@ export async function getRecentReportsForTest(): Promise<{ ok: boolean; reports?
   return { ok: true, reports: options };
 }
 
-/** 저장 없이 미리보기 — 편집 중 텍스트 + 실 보고서 데이터로 생성해 결과만 반환(edutrix testNoticePromptByType). */
+/**
+ * 저장 없이 미리보기 — 편집 중 텍스트 + 실 보고서로 생성해 결과만 반환.
+ * 🔴 운영 자동작성과 **같은 재료·조립·모델(fast)·생성 뒤 검사**(ment-preview.ts · 원장 2026-10-16 후속) — 예전엔 특이사항 없이·Sonnet으로·
+ *    검사 없이 돌아 여기서 본 글과 실제 글이 달랐다.
+ */
 export async function testPrompt(
   type: string,
   text: string,
@@ -209,85 +241,9 @@ export async function testPrompt(
   if (!trimmed.includes(REQUIRED_PLACEHOLDER[type])) {
     return { ok: false, error: `프롬프트에 ${REQUIRED_PLACEHOLDER[type]} 자리표시자가 필요합니다` };
   }
-  const supabase = await createClient();
-  const { data: r } = await supabase
-    .from("lesson_reports")
-    .select("student_id, class_id, subject, report_date, exam_info, progress, daily_test, check_test, attitude, homework_score, textbook, homework_today")
-    .eq("id", reportId)
-    .maybeSingle();
-  if (!r) return { ok: false, error: "보고서를 찾을 수 없습니다" };
-  const { data: stu } = await supabase.from("students").select("name").eq("id", r.student_id as string).maybeSingle();
-
-  // 미리보기 멘트 진도에서 뗄 과목 라벨(학원설정 단일 소스 — 저장된 진도 칸은 "수학 …"처럼 라벨을 붙여 둔다).
-  const subjectLabel = r.subject ? buildSubjectMaps((await getTenantSettings()).operations.subjects).labelOf(r.subject as string) : "";
-  let prompt: string | null;
-  let key: "comment" | "trend";
-  if (type === "trend") {
-    key = "trend";
-    // 미리보기도 프로덕션과 같은 표본을 봐야 한다 — 정규/특강 분리(2026-07-23).
-    const specialClassIds = await fetchSpecialClassIds(supabase);
-    // 고른 보고서의 **그 날짜** 기준 + 그 보고서 행을 끝에 — 운영(generateReportComment)과 같은 모양이라야 '달라진 것만'이 맞다
-    // (적대적 재리뷰 2026-10-16: 오늘 기준으로 읽고 "이 보고서 시점엔"이라 말했다).
-    const reportDate = (r.report_date as string | null) ?? kstToday();
-    const history = await fetchScoreHistory(
-      supabase,
-      r.student_id as string,
-      (r.subject as string) ?? undefined,
-      reportDate,
-      90,
-      { classId: (r.class_id as string | null) ?? null, specialClassIds, lookbackDays: TREND_HISTORY_FETCH_DAYS },
-    );
-    history.push({
-      date: reportDate,
-      examInfo: (r.exam_info as string | null) ?? null,
-      homeworkScore: (r.homework_score as string | null) ?? null,
-      classId: (r.class_id as string | null) ?? null,
-    });
-    const input = buildTrendInput(history, { today: reportDate });
-    if (!input) return { ok: false, error: "이 학생은 추세 표본이 부족합니다 — 다른 보고서를 선택하세요" };
-    if (input.quiet) return { ok: false, error: "이 보고서 시점엔 지난 보고서와 달라진 점이 없거나 말할 흐름이 없어 추세를 쓰지 않습니다 — 다른 보고서를 선택하세요" };
-    prompt = buildTrendPrompt(input, trimmed);
-  } else {
-    // comment | comment_p1 | comment_p2 — 저장 보고서엔 특이사항이 없으므로 specialNote=""(P2는 태도만).
-    key = "comment";
-    const input: ReportCommentInput = {
-      studentName: (stu?.name as string) ?? "",
-      subject: "",
-      // 저장된 진도 칸은 카드용으로 과목 라벨을 붙여 둔다("수학 …") — 운영 자동작성은 라벨 없는 진도를 받으니 미리보기도 맨 앞 라벨을 뗀다.
-      progress: stripSubjectLabel((r.progress as string) ?? "", subjectLabel),
-      dailyTest: (r.daily_test as string) ?? "",
-      checkTest: (r.check_test as string) ?? "",
-      attitude: (r.attitude as string) ?? "",
-      homework: r.homework_score && r.homework_score !== "—" ? (r.homework_score as string) : "",
-      homeworkToday: (r.homework_today as string) ?? "",
-      textbook: (r.textbook as string) ?? "",
-      specialNote: "",
-    };
-    prompt =
-      type === "comment_p1"
-        ? buildCommentP1Prompt(input, trimmed)
-        : type === "comment_p2"
-          ? buildCommentP2Prompt(input, trimmed)
-          : buildReportCommentPrompt(input, trimmed);
-    if (!prompt) return { ok: false, error: "이 보고서엔 해당 문단의 입력이 없습니다 — 다른 보고서를 선택하세요" };
-  }
-
   try {
-    const { data } = await generateJSON<{ comment?: string; trend?: string }>({
-      prompt,
-      maxTokens: 700,
-      keyName: "default",
-      meta: { feature: "ment_prompt_preview", tenantId: user.tenantId },
-      ...MENT_AI_TUNING,
-    });
-    const out = ((key === "comment" ? data.comment : data.trend) ?? "").trim();
-    return { ok: true, output: out || "(빈 응답)" };
+    return await runMentPreview(await createClient(), user.tenantId, type, trimmed, reportId);
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "생성 실패" };
   }
-}
-
-/** 저장된 진도("수학 2-4-3 …")의 맨 앞 과목 라벨을 뗀다 — 운영 자동작성 입력과 같은 모양(미리보기 전용). */
-function stripSubjectLabel(progress: string, label: string): string {
-  return label && progress.startsWith(`${label} `) ? progress.slice(label.length + 1) : progress;
 }

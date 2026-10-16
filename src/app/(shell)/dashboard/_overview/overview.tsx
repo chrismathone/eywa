@@ -774,7 +774,7 @@ export function Overview({
     ),
     admissions: (
     <Panel
-      title={t("admissions", "콜&상담 전환")}
+      title={t("admissions", "신규 콜&상담 전환")}
       note="지난달 · 이번 달 · 상담일 기준"
       sections={[v.admissions]}
     >
