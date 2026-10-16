@@ -19,7 +19,7 @@ export function ReferralEvidence({ period, nameOf, schoolOf }: EvidenceProps) {
       <StatTiles items={[{ label: "인정된 소개", value: `${m.detail.length}건` }, { label: "점수", value: pointsText(m, period) }]} />
       <SectionTitle sub={`${m.detail.length}건`}>이 달에 인정된 소개</SectionTitle>
       <DataTable headers={["소개받은 학생", "상담일", "소개한 사람", "상담 과목"]} kinds={["text", "num", "text", "text"]}
-        empty="이 달에 인정된 소개가 없습니다. 콜&상담에서 '소개한 사람'을 원생·직원으로 이으면 셉니다."
+        empty="이 달에 인정된 소개가 없습니다. 신규 콜&상담에서 '소개한 사람'을 원생·직원으로 이으면 셉니다."
         rows={m.detail.map((r) => ({
           key: r.consultationId,
           cells: [

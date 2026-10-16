@@ -30,7 +30,7 @@ export const dashboard: HelpManual = {
       key: "dash-intake",
       label: "신규문의",
       zone: "header",
-      body: "오늘 [[enrollment|콜&상담]]에 접수된 건수입니다(만든 시각 기준). ↗는 콜&상담의 오늘 접수 필터입니다.",
+      body: "오늘 [[enrollment|신규 콜&상담]]에 접수된 건수입니다(만든 시각 기준). ↗는 신규 콜&상담의 오늘 접수 필터입니다.",
     },
     {
       n: 4,
@@ -44,7 +44,7 @@ export const dashboard: HelpManual = {
       key: "dash-enrolled-today",
       label: "금일 등록",
       zone: "header",
-      body: "오늘 [[enrollment|콜&상담]]에서 **등록 완료**로 옮긴 원생입니다(칸반 드래그·상태 변경·수업 배정 모두). 보조 줄은 반 배정까지 끝난 수와 아직 배정 전인 수입니다. 카드를 누르면 오늘 명단이 열리고, 이름을 누르면 그 상담으로 갑니다.",
+      body: "오늘 [[enrollment|신규 콜&상담]]에서 **등록 완료**로 옮긴 원생입니다(칸반 드래그·상태 변경·수업 배정 모두). 보조 줄은 반 배정까지 끝난 수와 아직 배정 전인 수입니다. 카드를 누르면 오늘 명단이 열리고, 이름을 누르면 그 상담으로 갑니다.",
     },
     {
       n: 6,

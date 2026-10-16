@@ -228,7 +228,7 @@ export function SearchableSelect({
       >
         {/* 굵기는 박스 스타일과 안 겹쳐서 triggerClassName을 넘긴 호출부에서도 안전하게 붙는다. */}
         <span
-          className={`truncate ${selected ? "" : "text-text-faint"} ${highlightOn ? "font-bold" : ""}`}
+          className={`truncate ${selected ? "" : "text-text-placeholder"} ${highlightOn ? "font-bold" : ""}`}
         >
           {selected
             ? valuePrefix

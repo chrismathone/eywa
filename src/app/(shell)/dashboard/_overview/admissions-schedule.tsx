@@ -78,8 +78,8 @@ function AdmissionEvents({ events }: { events: OverviewData["calendar"] }) {
           : event.matchedConsultation
             ? {
                 href: `/enrollment/${event.matchedConsultation.id}`,
-                title: `${event.matchedConsultation.name} 콜&상담`,
-                aria: `${shown} · ${event.matchedConsultation.name} 콜&상담 상세`,
+                title: `${event.matchedConsultation.name} 신규 콜&상담`,
+                aria: `${shown} · ${event.matchedConsultation.name} 신규 콜&상담 상세`,
               }
             : null;
         return (

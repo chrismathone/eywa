@@ -793,7 +793,7 @@ export async function getTodayActionSignals(
       enabled("enrollment"),
       {
         key: "enrollment-analysis",
-        label: "콜&상담 분석",
+        label: "신규 콜&상담 분석",
         href: "/enrollment",
         menuKey: "enrollment",
         requiredAccess: "write",

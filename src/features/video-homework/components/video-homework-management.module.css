@@ -12,7 +12,7 @@
 .search{flex:1 0 210px;min-width:210px;max-width:320px}
 .search svg{flex:none}
 .search input{height:100%;width:100%;min-width:0;background:transparent;border:0;outline-offset:-2px;font:inherit;line-height:normal}
-.search input::placeholder{color:var(--text-dim)}
+.search input::placeholder{color:var(--text-placeholder)}
 .summary{display:flex;gap:16px;flex-wrap:wrap;align-items:center;padding:8px 0;font-size:var(--text-sm)}
 .summary strong{font-weight:700;margin-left:3px}
 .green{color:var(--green)}.red{color:var(--danger)}.amber{color:var(--amber)}.dim{color:var(--text-dim)}

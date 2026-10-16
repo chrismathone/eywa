@@ -33,7 +33,7 @@ export const studentDetail: HelpManual = {
       n: 4,
       label: "상담 기록",
       zone: "board",
-      body: "이 원생의 [[consultations|원생상담]]과 연결된 [[enrollment|콜&상담]]이 함께 보입니다.",
+      body: "이 원생의 [[consultations|원생상담]]과 연결된 [[enrollment|신규 콜&상담]]이 함께 보입니다.",
     },
     {
       n: 5,

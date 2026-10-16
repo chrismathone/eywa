@@ -45,7 +45,7 @@ import { MakeeduPushSection } from "./_components/makeedu-push-section";
 import { MakeeduPushButton } from "./_components/makeedu-push-button";
 import { canPushToMakeedu } from "@/features/integrations/server/makeedu-push-access";
 
-export const metadata = { title: "콜&상담 — 에이와" };
+export const metadata = { title: "신규 콜&상담 — 에이와" };
 
 // 전 목록 공통(표·카드) — 변경 시 학생·수납 등 다른 목록과 함께 바꿀 것.
 const PAGE_SIZE = 50;
@@ -209,8 +209,8 @@ export default async function EnrollmentPage({
       <NewConsultationWatcher initialCount={totalCount ?? 0} />
 
       <PageHeader
-        eyebrow="콜&상담"
-        title="콜&상담"
+        eyebrow="신규 콜&상담"
+        title="신규 콜&상담"
         // 🔴 설명 문장은 뺐다(원장 2026-09-01 *"멘트 제거"*) — 매일 보는 화면에서 같은 문장이
         // 한 줄을 계속 먹는다. 숫자(전체·AI·배정)는 아래 툴바 검색창 왼쪽으로 옮겼다.
         actions={

@@ -412,7 +412,7 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     render(<Overview initial={mocks.data} />);
     const href = (name: string) => screen.getByRole("link", { name }).getAttribute("href");
     expect(href("이번 달 퇴원·수업종료 보기")).toBe("/withdrawals?type=all&range=month&month=2026-09");
-    expect(href("콜&상담에서 오늘 접수 보기")).toBe("/enrollment?view=table&received=2026-09-10");
+    expect(href("신규 콜&상담에서 오늘 접수 보기")).toBe("/enrollment?view=table&received=2026-09-10");
     expect(href("원생목록에서 오늘 첫 수업 보기")).toBe(
       "/students?first=2026-09-10&status=all&subject=all&grade=all&teacher=all&noenr=0&from=dashboard",
     );

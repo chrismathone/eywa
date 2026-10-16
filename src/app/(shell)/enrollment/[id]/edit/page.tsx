@@ -7,7 +7,7 @@ import { loadConsultationReferrer, referrerCandidatesFor } from "@/features/enro
 import { createClient } from "@/lib/supabase/server";
 import { ConsultationFullForm } from "../../_components/consultation-full-form";
 
-export const metadata = { title: "콜&상담 수정 — 에이와" };
+export const metadata = { title: "신규 콜&상담 수정 — 에이와" };
 
 export default async function EditEnrollmentPage({
   params,
@@ -30,7 +30,7 @@ export default async function EditEnrollmentPage({
     <div className="mx-auto max-w-4xl space-y-6">
       <BackLink href={`/enrollment/${id}`} label="상세로" />
       <header className="border-border space-y-1 border-b pb-5">
-        <p className="eyebrow">콜&상담 수정</p>
+        <p className="eyebrow">신규 콜&상담 수정</p>
         <h1 className="font-bold tracking-tight text-foreground text-2xl">{c.prospectName}</h1>
       </header>
 

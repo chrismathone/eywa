@@ -33,15 +33,15 @@ export function EnrollmentListCard({
 }) {
   return (
     <DashCard
-      title="콜&상담"
+      title="신규 콜&상담"
       count={!unavailable && list.total > 0 ? `최근 30일 ${list.total}건` : undefined}
       href="/enrollment"
       hrefLabel="전체"
     >
       {unavailable ? (
-        <DashEmpty>콜&상담을 불러오지 못했습니다. 콜&상담 화면에서 확인해 주세요.</DashEmpty>
+        <DashEmpty>신규 콜&상담을 불러오지 못했습니다. 신규 콜&상담 화면에서 확인해 주세요.</DashEmpty>
       ) : list.rows.length === 0 ? (
-        <DashEmpty>최근 30일 진행 중인 등록상담이 없습니다</DashEmpty>
+        <DashEmpty>최근 30일 진행 중인 신규 콜&상담이 없습니다</DashEmpty>
       ) : (
         <ul className="divide-border min-h-0 flex-1 divide-y overflow-y-auto">
           {list.rows.map((c) => {

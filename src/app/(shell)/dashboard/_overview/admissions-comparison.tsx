@@ -20,7 +20,7 @@ export function AdmissionsComparison({ stats, today }: { stats: EnrollmentStats;
   }));
   return <>
     <div className={s.admissionMonths}>
-      {months.map(({ key, data }, i) => <section key={key} aria-label={`${key} 콜&상담 전환`}>
+      {months.map(({ key, data }, i) => <section key={key} aria-label={`${key} 신규 콜&상담 전환`}>
         <header><b>{Number(key.slice(5))}월</b><span>{i === 0 ? "지난달" : "이번 달"}</span></header>
         <strong className={s.admissionRate}>{data && data.total > 0 ? `${(data.enrolled / data.total * 100).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}%` : "—"}</strong>
         <p>등록 전환율</p>

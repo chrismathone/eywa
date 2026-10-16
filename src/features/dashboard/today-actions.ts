@@ -467,7 +467,7 @@ export function buildTodayActions(
     {
       key: "failed-analysis-enrollment",
       count: raw.failedAnalysis.enrollment,
-      label: "콜&상담 녹음 분석 실패",
+      label: "신규 콜&상담 녹음 분석 실패",
       href: "/enrollment",
       menuKey: "enrollment",
       requiredAccess: "write",
