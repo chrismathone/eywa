@@ -104,6 +104,7 @@ export const AYWA_ICON_CATALOG = [
   { name: "arrowLeft", label: "왼쪽 화살표", family: "interface", meaning: "이전 위치로 이동" },
   { name: "calculator", label: "계산기", family: "interface", meaning: "금액과 수치 계산" },
   { name: "stop", label: "중지", family: "interface", meaning: "진행 중인 작업 종료" },
+  { name: "pause", label: "일시정지", family: "interface", meaning: "멈췄다가 이어서 하기" },
   { name: "layers", label: "레이어", family: "interface", meaning: "겹친 창과 단계" },
   { name: "logOut", label: "나가기", family: "interface", meaning: "세션과 공간에서 나가기" },
   { name: "mapPin", label: "위치", family: "interface", meaning: "주소와 장소" },
@@ -477,6 +478,12 @@ const EXTENDED_ICON_GLYPHS = {
     <>
       <circle cx="12" cy="12" r="9" />
       <rect x="9" y="9" width="6" height="6" rx="0.5" />
+    </>
+  ),
+  pause: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M10 8.5v7M14 8.5v7" />
     </>
   ),
   layers: (

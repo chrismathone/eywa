@@ -819,3 +819,111 @@ describe("window-store 없는 창의 보고는 흔적을 되살리지 않는다"
     expect(st.busy[A]).toBeUndefined();
   });
 });
+/** 원장 2026-10-16 "창 모드의 경우 창이 그냥 여러개 열리면 바로 이해 될것 같고" — 녹음 중 작성 창이 있으면 새 작성 창. */
+describe("window-store openForm() — 녹음이 걸린 작성 창이 있으면 새 작성 창", () => {
+  const FORM = windowId("route", "enrollment/new");
+  const params = { id: "enrollment/new", title: "신규 콜&상담", href: "/enrollment/new", autoClose: true };
+  beforeEach(() => {
+    reset();
+    useWindowStore.setState({ kaActive: false });
+  });
+  afterEach(() => useWindowStore.setState({ kaActive: false }));
+
+  it("녹음이 안 걸렸으면 종전처럼 그 작성 창으로(한 벌만)", () => {
+    const s = useWindowStore.getState();
+    s.openForm("route", params);
+    s.openForm("route", params);
+    expect(Object.keys(useWindowStore.getState().windows)).toEqual([FORM]);
+  });
+
+  it("작성 창이 녹음 중이면 새 작성 창 — 임시 저장 칸을 가르는 form 표식을 단다 · 둘 다 녹음 중이면 또 하나", () => {
+    const s = useWindowStore.getState();
+    s.openForm("route", params);
+    s.setWindowBusy(FORM, true);
+    s.openForm("route", params);
+    let st = useWindowStore.getState();
+    expect(st.windows[`${FORM}#1`]?.params.href).toMatch(/^\/enrollment\/new\?form=[\w-]+$/);
+    expect(st.windows[`${FORM}#1`]?.params.autoClose).toBe(true);
+    expect(st.focusedId).toBe(`${FORM}#1`);
+    expect(st.windows[FORM]?.params.href).toBe("/enrollment/new");
+    st.setWindowBusy(`${FORM}#1`, true);
+    st.openForm("route", params);
+    st = useWindowStore.getState();
+    expect(st.windows[`${FORM}#2`]).toBeDefined();
+    expect(st.windows[`${FORM}#2`]?.params.href).not.toBe(st.windows[`${FORM}#1`]?.params.href);
+  });
+
+  it("녹음이 안 걸린 작성 창이 따로 있으면 새로 열지 않고 그 창을 앞으로", () => {
+    const s = useWindowStore.getState();
+    s.openForm("route", params);
+    s.setWindowBusy(FORM, true);
+    s.openForm("route", params);
+    const before = useWindowStore.getState().windows[`${FORM}#1`]?.params.href;
+    s.focus(FORM);
+    s.setWindowDirty(`${FORM}#1`, true);
+    s.openForm("route", params);
+    const st = useWindowStore.getState();
+    expect(st.windows[`${FORM}#2`]).toBeUndefined();
+    expect(st.focusedId).toBe(`${FORM}#1`);
+    // 🔴 앞으로만 — 표식을 떼고 '새 X' 주소로 옮기면 쓰던 것이 사라지고 녹음 중인 첫 작성 화면의 임시 저장 칸을 쓴다(재리뷰 2026-10-16).
+    expect(st.windows[`${FORM}#1`]?.params.href).toBe(before);
+    expect(before).toMatch(/form=/);
+  });
+
+  it("🔴 입력 중인 작성 창은 다른 주소로 옮기지 않는다 — 새 작성 창을 연다", () => {
+    const s = useWindowStore.getState();
+    s.openForm("route", params);
+    s.setWindowBusy(FORM, true);
+    s.openForm("route", params);
+    const before = useWindowStore.getState().windows[`${FORM}#1`]?.params.href;
+    s.setWindowDirty(`${FORM}#1`, true);
+    useWindowStore.getState().openForm("route", { ...params, href: "/enrollment/new?studentId=b" });
+    const st = useWindowStore.getState();
+    expect(st.windows[`${FORM}#1`]?.params.href).toBe(before);
+    expect(st.windows[`${FORM}#2`]?.params.href).toMatch(/^\/enrollment\/new\?studentId=b&form=[\w-]+$/);
+    expect(st.focusedId).toBe(`${FORM}#2`);
+  });
+
+  it("이전 화면 유지 방식도 녹음 중 작성 화면만 예외로 한 벌 더 — Shift+클릭 복제는 여전히 없다", () => {
+    useWindowStore.setState({ kaActive: true });
+    const s = useWindowStore.getState();
+    s.openNewInstance("route", { id: "students", title: "원생", href: "/students" });
+    s.openNewInstance("route", { id: "students", title: "원생", href: "/students" });
+    expect(useWindowStore.getState().windows[`${windowId("route", "students")}#1`]).toBeUndefined();
+    s.openForm("route", params);
+    s.setWindowBusy(FORM, true);
+    s.openForm("route", params);
+    expect(useWindowStore.getState().windows[`${FORM}#1`]?.params.href).toMatch(/form=/);
+  });
+
+  it("🔴 보관(닫힌) 원본이 있어도 새 작성 창은 새 번호로 — 원본을 되살려 그 첫 화면 주소를 바꾸지 않는다", () => {
+    const s = useWindowStore.getState();
+    s.openForm("route", params);
+    s.setWindowBusy(FORM, true);
+    s.openForm("route", params);
+    s.setWindowBusy(`${FORM}#1`, true);
+    s.setWindowBusy(FORM, false);
+    useWindowStore.setState({ cached: [FORM] });
+    useWindowStore.getState().openForm("route", params);
+    const st = useWindowStore.getState();
+    expect(st.windows[`${FORM}#2`]?.params.href).toMatch(/form=/);
+    expect(st.windows[FORM]?.params.href).toBe("/enrollment/new");
+    expect(st.windows[FORM]?.params.autoClose).toBe(true);
+    expect(st.cached).toContain(FORM);
+  });
+
+  it("녹음이 안 걸린 작성 창이 있는데 다른 주소(학생을 고른 '상담 기록 +')면 그 창을 그 주소로 옮긴다 — 그 창의 form 표식은 그대로", () => {
+    const s = useWindowStore.getState();
+    s.openForm("route", params);
+    s.setWindowBusy(FORM, true);
+    s.openForm("route", params);
+    const formId = new URL(useWindowStore.getState().windows[`${FORM}#1`]!.params.href!, "http://x").searchParams.get("form");
+    useWindowStore.getState().openForm("route", { ...params, href: "/enrollment/new?studentId=b" });
+    const st = useWindowStore.getState();
+    const href = `/enrollment/new?studentId=b&form=${formId}`;
+    expect(st.windows[`${FORM}#1`]?.params.href).toBe(href);
+    expect(st.nav[`${FORM}#1`]).toEqual([href]);
+    expect(st.focusedId).toBe(`${FORM}#1`);
+    expect(st.windows[FORM]?.params.href).toBe("/enrollment/new");
+  });
+});

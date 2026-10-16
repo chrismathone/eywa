@@ -7,6 +7,8 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
  */
 const m = vi.hoisted(() => ({
   inFrame: true,
+  /** 이 문서에 다른 녹음이 살아 있나(recording-resume `documentHasLiveRecording`). */
+  liveElsewhere: false,
   updateEnrollmentConsultation: vi.fn(),
   createEnrollmentConsultation: vi.fn(),
   clearRecovery: vi.fn(),
@@ -41,12 +43,20 @@ vi.mock("@/lib/realtime/record-channel", () => ({
   publishRecordSaved: vi.fn(),
   subscribeRecordSaved: () => () => {},
 }));
-vi.mock("./audio-recorder-field", () => ({ AudioRecorderField: ({ onChange, scope, file }: {
-  onChange: (file: File, id: string) => void; scope: unknown; file: File | null;
+vi.mock("./audio-recorder-field", () => ({ AudioRecorderField: ({ onChange, scope, file, onRecordingChange }: {
+  onChange: (file: File, id: string) => void; scope: unknown; file: File | null; onRecordingChange?: (live: boolean, paused: boolean) => void;
 }) => {
   m.recorderScope(scope);
-  return <><button type="button" onClick={() => onChange(new File(["A"], "A.webm", { type: "audio/webm" }), "recording-a")}>테스트 녹음 선택</button><span>{file?.name}</span></>;
+  return <>
+    <button type="button" onClick={() => onChange(new File(["A"], "A.webm", { type: "audio/webm" }), "recording-a")}>테스트 녹음 선택</button>
+    <button type="button" onClick={() => onRecordingChange?.(true, false)}>테스트 녹음 시작</button>
+    <span>{file?.name}</span>
+  </>;
 } }));
+vi.mock("@/lib/recording-resume", async (original) => ({
+  ...(await original<typeof import("@/lib/recording-resume")>()),
+  documentHasLiveRecording: () => m.liveElsewhere,
+}));
 vi.mock("@/components/workspace/use-in-frame", () => ({ useInFrame: () => m.inFrame }));
 
 import { ConsultationFullForm } from "./consultation-full-form";
@@ -54,6 +64,7 @@ import { ConsultationFullForm } from "./consultation-full-form";
 let assign: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   m.inFrame = true;
+  m.liveElsewhere = false;
   m.updateEnrollmentConsultation.mockReset();
   m.createEnrollmentConsultation.mockReset();
   m.clearRecovery.mockReset();
@@ -100,6 +111,16 @@ describe("콜&상담 수정 저장 뒤 이동(#102)", () => {
     expect(assign).toHaveBeenCalledWith("/enrollment/c1");
   });
 
+  it("🔴 이 문서에 다른 녹음이 살아 있으면 떠나지 않고 '저장했습니다 · 열기'를 보인다 — 풀 문서 이동은 그 녹음을 끊는다", async () => {
+    m.liveElsewhere = true;
+    m.updateEnrollmentConsultation.mockResolvedValue({ ok: true });
+    const form = await saveEdit();
+    expect(assign).not.toHaveBeenCalled();
+    expect(screen.getByRole("status")).toHaveTextContent("다른 녹음이 이어지도록");
+    expect(screen.getByRole("link", { name: "열기" })).toHaveAttribute("href", "/enrollment/c1?embed=1");
+    expect(form).toHaveAttribute("inert");
+  });
+
   it("저장이 실패하면 이동도 잠금도 없다(고쳐서 다시 저장할 수 있게)", async () => {
     m.updateEnrollmentConsultation.mockResolvedValue({ error: "콜&상담 권한이 없습니다" });
     const form = await saveEdit();
@@ -143,6 +164,17 @@ describe("콜앤상담 녹음 저장과 대상 구분", () => {
     expect(m.clearRecovery).not.toHaveBeenCalled();
     expect(assign).not.toHaveBeenCalled();
   });
+  it("🔴 녹음 중엔 이름·연락처를 readOnly로 잠근다 — disabled면 임시 저장에서 빠져 돌아온 화면에 녹음이 안 붙는다", async () => {
+    const { container } = render(<ConsultationFullForm mode="create" recordingOwner={{ tenantId: "t1", userId: "u1" }} />);
+    fireEvent.input(container.querySelector('[name="prospectName"]')!, { target: { value: "A" } });
+    fireEvent.click(screen.getByRole("button", { name: "테스트 녹음 시작" }));
+    for (const name of ["prospectName", "studentPhone", "parentPhone"]) {
+      const input = container.querySelector<HTMLInputElement>(`[name="${name}"]`)!;
+      expect(input.readOnly).toBe(true);
+      expect(input.disabled).toBe(false);
+    }
+  });
+
   it("A -> B changes the scope and detaches A's selected recording without deleting it", async () => {
     const { container } = render(<ConsultationFullForm mode="create" recordingOwner={{ tenantId: "t1", userId: "u1" }} />);
     const name = container.querySelector<HTMLInputElement>('[name="prospectName"]')!;

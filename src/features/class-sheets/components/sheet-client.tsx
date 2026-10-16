@@ -574,6 +574,8 @@ export function SheetClient({
     store,
     onSlotLines: applySlotLines,
     onCarried: applyCarried,
+    // 한 주 전체를 그리는 화면 — 미룸·당김이 바꾼 그 주의 다른 칸(화를 누르면 금요일)도 함께 갈아 끼운다.
+    multiSlot: true,
   });
 
   // ── 핸들러(객체 ref 고정 — memoized row의 안정 콜백) ──────────────────────

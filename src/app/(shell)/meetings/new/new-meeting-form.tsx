@@ -6,7 +6,7 @@ import { kstDateTimeLocal } from "@/lib/date-kst";
 import { useRouter } from "next/navigation";
 import { useStateDraft } from "@/components/forms/use-state-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
-import { CircleStop, Loader2, Mic, Upload, X } from "@/components/icons/aywa-icon-compat";
+import { Loader2, Mic, Upload, X } from "@/components/icons/aywa-icon-compat";
 import { RecordingRecoveryNotice } from "@/components/forms/recording-recovery-notice";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,7 +15,10 @@ import {
 } from "@/lib/recording-recovery";
 import { useBrowserRecording } from "@/components/forms/use-browser-recording";
 import { useMicrophone } from "@/components/forms/use-microphone";
-import { startBrowserRecording, stopBrowserRecording, dismissBrowserRecording } from "@/lib/browser-recording";
+import { RecordingSessionControls } from "@/components/forms/recording-session-controls";
+import { startBrowserRecording, dismissBrowserRecording } from "@/lib/browser-recording";
+import { documentHasLiveRecording, formDraftScope, recordingReturnHref, recordingSince } from "@/lib/recording-resume";
+import { SavedStayNotice } from "@/components/forms/saved-stay-notice";
 import { withEmbed } from "@/components/workspace/embed-context";
 import { useInFrame } from "@/components/workspace/use-in-frame";
 import { startMeetingFromAudio, createTextMeeting } from "@/features/meetings/server/actions";
@@ -24,7 +27,6 @@ import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import {
   AUDIO_FILE_ACCEPT,
   formatBytes,
-  formatSeconds,
   validateAudioFile,
   MAX_AUDIO_SIZE_LABEL,
 } from "@/lib/audio-upload";
@@ -35,7 +37,15 @@ const nowLocalIso = (): string => kstDateTimeLocal();
 /** 만든 뒤 이동이 이만큼 안 끝나면 목적지 링크를 함께 보인다(아래 leaveTo). */
 const LEAVE_FALLBACK_MS = 5000;
 
-export function NewMeetingForm({ onSuccess, recordingOwner }: { onSuccess?: () => void; recordingOwner: RecordingOwner }) {
+/**
+ * `instance` = 작성 화면 한 벌(recording-resume.ts) — `formId`가 있으면 임시 저장 칸을 따로 쓴다. 이 화면에 걸린 녹음이 있으면
+ * (녹음 아이콘의 '작성 화면 열기'·뒤로 가기로 돌아옴) 그 뒤의 임시 저장을 안내 없이 되살린다. 페이지가 `formId`로 key를 건다.
+ */
+export function NewMeetingForm({ onSuccess, recordingOwner, instance }: {
+  onSuccess?: () => void;
+  recordingOwner: RecordingOwner;
+  instance?: { formId?: string };
+}) {
   // 녹음·전사 라이선스가 꺼진 지점엔 '음성' 칸이 없다 — 메모장만으로 회의록을 만든다(2026-09-30 "꺼지면 흔적 없이").
   const recordingOn = useLicenseOn("meeting_recording");
   const router = useRouter();
@@ -53,6 +63,8 @@ export function NewMeetingForm({ onSuccess, recordingOwner }: { onSuccess?: () =
   const [phase, setPhase] = useState<"idle" | "uploading" | "submitting" | "leaving">("idle");
   /** 떠나기가 끝나지 않을 때 줄 목적지 링크(LEAVE_FALLBACK_MS 뒤에만 채워진다). */
   const [stalledHref, setStalledHref] = useState<string | null>(null);
+  /** 만들었지만 이 문서의 다른 녹음 때문에 머문다 — 회의록으로 가는 링크(SavedStayNotice). */
+  const [stayHref, setStayHref] = useState<string | null>(null);
   /** 서버 액션 호출 자체가 실패했을 때의 원문 — 화면엔 한글 요약만, 원문은 툴팁(title)으로. */
   const [errorDetail, setErrorDetail] = useState<string | null>(null);
   // 떠나기 폴백 타이머·목적지 — pagehide/pageshow 핸들러가 렌더 밖에서 읽는다.
@@ -75,20 +87,30 @@ export function NewMeetingForm({ onSuccess, recordingOwner }: { onSuccess?: () =
     () => ({ title, attendees, heldAt, notepad }),
     [title, attendees, heldAt, notepad],
   );
-  const localDraft = useStateDraft({
-    scope: "meeting:new",
-    snapshot: draftSnapshot,
-    // heldAt은 항상 기본값(지금)이 채워지므로 빈 폼 판정에서 제외.
-    hasContent: (s) => s.title.trim() !== "" || s.attendees.trim() !== "" || s.notepad.trim() !== "",
-  });
-
-  function restoreTextDraft() {
-    const d = localDraft.restore();
-    if (!d) return;
+  function applyTextDraft(d: typeof draftSnapshot) {
     setTitle(d.title);
     setAttendees(d.attendees);
     if (d.heldAt) setHeldAt(d.heldAt);
     setNotepad(d.notepad);
+  }
+  const localDraft = useStateDraft({
+    scope: formDraftScope("meeting:new", instance?.formId),
+    snapshot: draftSnapshot,
+    // heldAt은 항상 기본값(지금)이 채워지므로 빈 폼 판정에서 제외.
+    hasContent: (s) => s.title.trim() !== "" || s.attendees.trim() !== "" || s.notepad.trim() !== "",
+    // 이 화면에 걸린 녹음으로 돌아왔으면 그 녹음 뒤의 제목·일시까지 바로 — 녹음 대상(제목+날짜)이 다시 맞아 녹음이 붙는다.
+    autoRestore: applyTextDraft,
+    restoreSince: () => recordingSince(instance?.formId),
+  });
+  // 녹음이 붙는 순간 지금 입력을 바로 남긴다 — 그 뒤 아무것도 안 치고 떠나도 돌아온 화면이 이 값을 되살린다(restoreSince).
+  const saveDraftNow = localDraft.save;
+  useEffect(() => {
+    if (isRecording) saveDraftNow();
+  }, [isRecording, saveDraftNow]);
+
+  function restoreTextDraft() {
+    const d = localDraft.restore();
+    if (d) applyTextDraft(d);
   }
 
   // 떠나기 폴백 타이머의 수명 — 문서가 실제로 내려가면(pagehide) 풀어 둔다(이동 중에 안내가 끼어들지 않게).
@@ -132,11 +154,9 @@ export function NewMeetingForm({ onSuccess, recordingOwner }: { onSuccess?: () =
   async function startRecording() {
     setError(null);
     if (!recordingScope) return setError("회의 제목을 입력한 뒤 녹음을 시작해 주세요.");
-    const err = await startBrowserRecording("meeting", recordingScope);
+    const err = await startBrowserRecording("meeting", recordingScope, { href: recordingReturnHref() });
     if (err) setError(err);
   }
-
-  function stopRecording() { stopBrowserRecording(recorded.requestId); }
 
   /**
    * 만든 뒤 떠나기 — 🔴 `router.push`가 아니라 **풀 문서 이동**. 서버 액션 직후의 push는 액션 응답이
@@ -150,8 +170,10 @@ export function NewMeetingForm({ onSuccess, recordingOwner }: { onSuccess?: () =
    */
   function leaveTo(href: string) {
     const dest = inFrame ? withEmbed(href) : href;
-    leaveDestRef.current = dest;
     setPhase("leaving");
+    // 이 문서에 다른 녹음이 살아 있으면 떠나지 않는다 — 문서가 내려가면 그 녹음이 끝난다(단일 화면에서 여러 녹음).
+    if (documentHasLiveRecording()) return setStayHref(dest);
+    leaveDestRef.current = dest;
     window.location.assign(dest);
     leaveTimerRef.current = window.setTimeout(() => setStalledHref(dest), LEAVE_FALLBACK_MS);
   }
@@ -165,7 +187,7 @@ export function NewMeetingForm({ onSuccess, recordingOwner }: { onSuccess?: () =
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (isRecording) return setError("녹음을 중지한 뒤 저장해 주세요.");
+    if (isRecording) return setError("녹음을 끝낸 뒤 저장해 주세요.");
     setError(null);
     setErrorDetail(null);
 
@@ -267,7 +289,7 @@ export function NewMeetingForm({ onSuccess, recordingOwner }: { onSuccess?: () =
       // 여기부터는 회의록 행이 **있다** — 성공, 또는 행을 만든 뒤 전사 제출만 실패(상세의 '처리 실패' 칸에 사유와
       // '전사부터 다시'가 뜬다). 버튼을 다시 열면 업로드·행·전사 과금이 한 벌 더 생기니 그 회의록으로 떠난다.
       // 서버에 보관된 이 녹음의 복구본만 비운다. 다른 녹음과 PC 다운로드 파일은 보존한다.
-      if (recoveryId) { await clearRecovery(recoveryId); dismissBrowserRecording(recoveryId); }
+      if (recoveryId) { await clearRecovery(recoveryId); dismissBrowserRecording({ recoveryId: recoveryId }); }
       localDraft.clear();
       if (onSuccess) {
         onSuccess();
@@ -293,7 +315,7 @@ export function NewMeetingForm({ onSuccess, recordingOwner }: { onSuccess?: () =
       {recordingOn ? <RecordingRecoveryNotice key={recordingScope?.recordKey ?? "empty"} kind="meeting" scope={recordingScope}
         selectedId={recoveryId ?? recorded.activeRecoveryId} disabled={busy || isRecording}
         onRestore={(recovered, meta) => { setFile(recovered); setRecoveryId(meta.id); }} /> : null}
-      {recordingOn && recorded.otherRecording ? <p className="text-text-dim text-xs">다른 화면에서 녹음 중입니다. 진행 중인 녹음을 먼저 중지해 주세요.</p> : null}
+      {recordingOn && recorded.elsewhere ? <p className="text-text-dim text-xs">이 회의는 다른 창이나 탭에서 녹음하고 있습니다.</p> : null}
 
       {/* Title */}
       <div className="space-y-1.5">
@@ -367,24 +389,8 @@ export function NewMeetingForm({ onSuccess, recordingOwner }: { onSuccess?: () =
             </button>
           </div>
         ) : isRecording ? (
-          <div className="border-chart-4 bg-chart-4/5 flex items-center justify-between rounded-md border px-3 py-3">
-            <div className="inline-flex items-center gap-3">
-              <span className="relative inline-flex size-2.5">
-                <span className="bg-chart-4 absolute inset-0 animate-ping rounded-full opacity-60" />
-                <span className="bg-chart-4 relative inline-flex size-2.5 rounded-full" />
-              </span>
-              <span className="text-foreground block text-sm font-medium">녹음 중</span>
-              <span className="text-muted-foreground num text-sm">{formatSeconds(recordSeconds)}</span>
-            </div>
-            <button
-              type="button"
-              onClick={stopRecording}
-              className="text-chart-4 inline-flex items-center gap-1.5 text-sm font-medium"
-            >
-              <CircleStop className="size-4" />
-              녹음 중지
-            </button>
-          </div>
+          <RecordingSessionControls status={recorded.status} seconds={recordSeconds}
+            onPause={recorded.pause} onResume={recorded.resume} onStop={recorded.stop} />
         ) : (
           <div className="grid grid-cols-2 gap-2">
             <button
@@ -400,12 +406,12 @@ export function NewMeetingForm({ onSuccess, recordingOwner }: { onSuccess?: () =
             <button
               type="button"
               onClick={startRecording}
-              disabled={busy || recorded.otherRecording || !microphone.available}
+              disabled={busy || recorded.elsewhere || !microphone.available}
               className="border-border hover:border-foreground/40 hover:bg-accent/30 flex flex-col items-center gap-1.5 rounded-md border border-dashed px-3 py-5 transition"
             >
               <Mic className="text-muted-foreground size-5" />
               <span className="text-foreground block text-sm font-medium">{microphone.available ? "바로 녹음" : microphone.message}</span>
-              {microphone.available ? <span className="text-muted-foreground text-xs">브라우저 마이크 사용</span> : null}
+              {microphone.available ? <span className="text-muted-foreground text-xs">{recorded.othersRecording ? "지금 녹음 중인 다른 녹음은 일시정지됩니다" : "브라우저 마이크 사용"}</span> : null}
             </button>
           </div>
         )}
@@ -448,6 +454,7 @@ export function NewMeetingForm({ onSuccess, recordingOwner }: { onSuccess?: () =
       {/* 떠나기가 늦을 때(leaveTo) — 만들어졌다는 사실 + 직접 가는 길. 아직 가는 중일 수 있어 문구는 진행형이다
           (링크는 평범한 풀 문서 이동이라 누르면 처음부터 다시 연다). 뒤로가기로 되살아난 화면이면 이동은 끝났으니
           '이미 만든 회의록' + [새로 작성](새로고침 = 폼을 새로 연다 — 이 폼은 중복 방지로 계속 잠겨 있다). */}
+      {stayHref ? <SavedStayNotice href={stayHref} saved="회의록을 만들었습니다." /> : null}
       {stalledHref ? (
         <p className="border-border bg-muted/30 text-foreground rounded-md border px-3 py-2 text-sm">
           {restored ? (
