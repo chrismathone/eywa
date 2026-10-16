@@ -135,6 +135,7 @@ export const SHEET_DICT = {
   "plan.feedback.shiftSkip": { ko: "한 칸 미뤘습니다 — 이 칸 내용은 그대로 두고, 뒤 진도가 한 칸씩 밀렸습니다", en: "Pushed back — this cell stays; later lessons each moved one slot later." },
   "plan.feedback.shiftMarkOnly": { ko: "아직 가져온 진도가 없어 월간계획 일정만 옮겼습니다 — 가져오기를 하면 반영됩니다", en: "No lessons written yet — only the plan schedule moved; it applies when you import." },
   "plan.feedback.shiftAdvance": { ko: "한 칸 당겼습니다 — 다음 진도가 이 칸으로 오고, 뒤 진도가 한 칸씩 당겨졌습니다", en: "Pulled forward — the next lesson is here now; later lessons each moved one slot earlier." },
+  "plan.feedback.shiftOtherCells": { ko: "이 교재의 다른 날 칸도 함께 바뀌었습니다 — 그 칸은 새로고침하면 보입니다", en: "Other days of this textbook changed too — refresh to see them." },
   "plan.feedback.shiftClear": { ko: "회차 표식을 지웠습니다 — 원래 차수로 돌아갑니다", en: "Lesson adjustment removed. The original sequence is restored." },
   "plan.holidayHint": { ko: "{holiday} — 휴일이지만 수업했다면 그대로 쓰실 수 있습니다", en: "{holiday} — a holiday. You can still enter records if you taught." },
   "plan.panel.homeroom.month": { ko: "담임 월간계획", en: "Homeroom monthly plan" },

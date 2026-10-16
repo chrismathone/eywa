@@ -83,6 +83,7 @@ export function usePlanHandlers({
   onSlotLines,
   onCarried,
   flushHost,
+  multiSlot = false,
 }: {
   classId: string;
   /** 저장이 나갈 문 — 로그인 `ECS_PLAN_API` / 공개 자리 PIN `seatPlanApi(seat)`. 안정 참조로 넘길 것. */
@@ -97,6 +98,12 @@ export function usePlanHandlers({
    *    **화면(지난 값)과 DB(내 입력)가 갈린다**.
    */
   flushHost?: () => Promise<unknown>;
+  /**
+   * 이 화면이 **여러 칸**을 그리나(주간 시트) — 그러면 미룸·당김이 돌려준 그 주의 다른 칸도 `onSlotLines`로
+   * 갈아 끼운다. 한 칸짜리 화면(`SlotPlanBlock`)은 `onSlotLines`가 날짜·교시를 안 보고 **자기 칸을 통째로**
+   * 바꾸므로 절대 넘기지 말 것 — 남의 칸 진도가 이 칸에 그려진다.
+   */
+  multiSlot?: boolean;
 }): PlanHandlers {
   const t = useSheetT();
   const tf = useSheetTf();
@@ -173,10 +180,12 @@ export function usePlanHandlers({
         : undefined,
       /**
        * **회차 미룸·당김**(원장 2026-09-22 → 2026-10-15 *"미루는 거기 복사하고 한주씩 쭉 밀기"*) — 서버가
-       * 같은 요일·교시의 **실제 진도**를 한 주씩 민다/당긴다. 누를 때마다 한 주(토글 아님).
+       * **실제 진도**를 한 칸씩 민다/당긴다 — 배정 교재는 배정한 요일 순서로, 그 밖의 줄은 같은 요일·교시끼리
+       * (2026-10-16). 누를 때마다 한 칸(토글 아님).
        * ⚠️ **반영 전 flush 필수** — 옮기기가 그 칸들의 행을 새로 만들므로, 큐에 남은 입력이 있으면 옮겨 가기
        *    전 값이 옮겨지고 뒤늦은 저장은 지워진 행에 부딪힌다(copySlot과 같은 계약).
-       * 🔑 누른 칸만 즉시 갈아 끼운다(당김이면 바뀐다) — 다른 주는 그 주를 열 때 서버가 준다.
+       * 🔑 누른 칸 + **그 주의 다른 바뀐 칸**(배정 교재가 요일을 건너 다시 깔릴 때)을 즉시 갈아 끼운다(`multiSlot`) —
+       *    다른 주는 그 주를 열 때 서버가 준다.
        */
       setShift: api.setShift
         ? (planDate, slotStart, kind) => {
@@ -191,6 +200,16 @@ export function usePlanHandlers({
                   if (r.lines) {
                     onSlotLines(planDate, slotStart, r.lines);
                     seedPlanLines(store, r.lines);
+                  }
+                  // 배정 교재는 요일을 건너 다시 깔린다(화를 누르면 그 주 금요일도) — 같은 화면의 다른 칸도 갈아 끼운다.
+                  const others = (r.cells ?? []).filter((c) => !(c.date === planDate && c.slotStart === slotStart));
+                  if (multiSlot) {
+                    for (const c of others) {
+                      onSlotLines(c.date, c.slotStart, c.lines);
+                      seedPlanLines(store, c.lines);
+                    }
+                  } else if (others.length > 0) {
+                    toast.info(t("plan.feedback.shiftOtherCells"));
                   }
                   toast.success(
                     kind === null
@@ -221,5 +240,5 @@ export function usePlanHandlers({
         });
       },
     };
-  }, [api, store, classId, feedback, onSlotLines, flushHost, t, onCarried, tf, lang]);
+  }, [api, store, classId, feedback, onSlotLines, flushHost, t, onCarried, tf, lang, multiSlot]);
 }

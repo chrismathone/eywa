@@ -25,7 +25,7 @@ import { resolvePeriodLabel, tableToEntries } from "@/features/class-sheets/lib/
 import { isWeekendDow } from "@/features/class-sheets/lib/grid-rows";
 import { canonicalSlotTeacherLabel } from "@/features/timetable/lib/teacher-label";
 import { dowKeyOf } from "@/features/class-sheets/lib/week";
-import { slotLiveOnDate } from "@/features/timetable/lib/week";
+import { mondayOf, shiftDays, slotLiveOnDate } from "@/features/timetable/lib/week";
 import type { MonthScheduleRow } from "@/features/class-sheets/lib/month-assemble";
 import { kstToday } from "@/lib/date-kst";
 import { recordImportBatch, snapshotPlanLines } from "./import-batch";
@@ -954,6 +954,12 @@ export type LessonShiftResult =
       moved: number;
       /** 누른 칸의 줄 전부(평시·내신) — 화면이 그 칸만 즉시 갈아 끼운다. 표식만 지운 경우엔 없다. */
       lines?: PlanLineDTO[];
+      /**
+       * 누른 칸이 있는 **그 주(월~일)** 에서 줄이 바뀐 칸 전부(누른 칸 포함) — 여러 칸을 그리는 화면(주간 시트)이
+       * 함께 갈아 끼운다. 배정 교재는 요일을 건너 다시 깔리므로(화를 누르면 그 주 금요일도 바뀐다) 누른 칸만
+       * 바꾸면 같은 화면의 금요일이 옛 진도로 남는다(2026-10-16 재점검).
+       */
+      cells?: { date: string; slotStart: string; lines: PlanLineDTO[] }[];
     }
   | { ok: false; error: string };
 
@@ -1006,17 +1012,27 @@ export async function setLessonShift(input: {
   }
 
   // ③ 마무리 — 누른 칸의 줄을 다시 읽어 화면에 준다(당김이면 바뀌었다) + 감사로그 + 무효화.
-  const finishShift = async (movedCount: number): Promise<LessonShiftResult> => {
-    const { data: cellRows } = await admin
+  const finishShift = async (movedCount: number, touched: readonly string[] = []): Promise<LessonShiftResult> => {
+    // 그 주(월~일)에서 바뀐 칸 + 누른 칸을 한 번에 읽는다(주 하나라 행 수가 작다).
+    const monday = mondayOf(input.date);
+    const pressedKey = `${input.date}|${slot}`;
+    const keys = new Set([pressedKey, ...touched.filter((k) => k >= monday && k.slice(0, 10) <= shiftDays(monday, 6))]);
+    const { data: weekRows } = await admin
       .from("class_sheet_plan_lines")
       .select("*")
       .eq("tenant_id", tenantId)
       .eq("class_id", input.classId)
-      .eq("plan_date", input.date)
-      .eq("slot_start", slot)
+      .gte("plan_date", monday)
+      .lte("plan_date", shiftDays(monday, 6))
       .order("term_mode")
       .order("line_no")
       .order("id");
+    const byCell = new Map<string, PlanLineDTO[]>([...keys].map((k) => [k, []]));
+    for (const r of (weekRows ?? []) as Record<string, unknown>[]) {
+      const k = `${String(r.plan_date).slice(0, 10)}|${String(r.slot_start).slice(0, 5)}`;
+      byCell.get(k)?.push(planLineFromRow(r));
+    }
+    const cellRows = weekRows ? byCell.get(pressedKey)! : null;
 
     await logAction({
       action: "textbook_lesson_shift",
@@ -1030,7 +1046,10 @@ export async function setLessonShift(input: {
       ok: true,
       kind,
       moved: movedCount,
-      lines: cellRows ? cellRows.map((r) => planLineFromRow(r as Record<string, unknown>)) : undefined,
+      lines: cellRows ?? undefined,
+      cells: weekRows
+        ? [...byCell.entries()].map(([k, lines]) => ({ date: k.slice(0, 10), slotStart: k.slice(11), lines }))
+        : undefined,
     };
   };
 
@@ -1053,7 +1072,7 @@ export async function setLessonShift(input: {
       revalidatePath(`/ecs/${input.classId}`, "layout");
       return { ok: false, error: relay.error };
     }
-    return finishShift(relay.moved);
+    return finishShift(relay.moved, relay.touched);
   }
 
   // ① 실제 줄을 옮긴다. 옮길 줄이 아예 없으면(아직 가져오기 전) 표식만 남긴다.
