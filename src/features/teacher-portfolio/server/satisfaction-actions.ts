@@ -10,7 +10,7 @@ import { logAction } from "@/features/audit/server/log";
 import { reportWarning } from "@/lib/observability/report-error";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchInChunks } from "@/lib/supabase/batch";
-import { kstToday, shiftMonth } from "@/lib/date-kst";
+import { kstToday } from "@/lib/date-kst";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { getPortfolioGate } from "./queries";
 import { refreshTenantPortfolio } from "./refresh";
@@ -40,7 +40,7 @@ const NOT_MINE = "이 선생님 몫이 아닙니다. 창을 닫고 다시 열어
 /**
  * 관리 창이 열릴 때 — **이 강사 몫의 글만**(원장 2026-10-16 *"이성우라고 열었는데 전체가 다보이나본데, 오해를 일으키기에 충분함"*):
  * 화면이 그 달 근거 표(`detail`)의 글 판정 id를 넘기고(누구 몫인지는 집계가 정한다 — 그날 그 반 담임), 여기서 지금 상태로 가른다
- * (확인 대기 · 반영). 클레임은 이 강사·이 달 것. `month` = **재료 달**(점수 달의 지난달 · `dataMonthOf`) — 클레임 날짜는 그 달 안이다.
+ * (확인 대기 · 반영). 클레임은 이 강사·이 달 것. `month` = 점수 달 — 글·클레임 날짜는 그 달 안이다.
  */
 export async function loadSatisfactionBoard(teacherId: string, month: string, judgmentIds: string[]): Promise<SatisfactionBoard> {
   const gate = await getPortfolioGate();
@@ -113,7 +113,7 @@ export async function decideJudgment(id: string, decision: "plus" | "minus" | "d
   const posted = (row.posted_on as string).slice(0, 7);
   let owned: { closed: boolean } | null;
   try {
-    owned = await ownsJudgment(gate.tenantId, teacherId, id, shiftMonth(posted, 1));
+    owned = await ownsJudgment(gate.tenantId, teacherId, id, posted);
   } catch (e) {
     reportWarning("만족도 판정 담당 확인 실패", { scope: "decideJudgment", message: e instanceof Error ? e.message : String(e) });
     return { ok: false, error: "저장하지 못했습니다. 잠시 후 다시 시도해 주세요" };

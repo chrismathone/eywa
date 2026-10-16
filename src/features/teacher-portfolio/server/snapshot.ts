@@ -86,12 +86,11 @@ function preRecordPolicy(from: string, firstReport: string | null, firstAttendan
 
 export async function loadPortfolioSnapshot(
   admin: Admin, tenantId: string,
-  input: { end: string; now: Date; settings: PortfolioSnapshot["settings"]; /** 출결 입력·수정 기록을 읽을 첫날(마감 안 한 가장 이른 점수 달의 재료 달(지난달) 1일). 없으면 안 읽는다. */ touchesSince?: string },
+  input: { end: string; now: Date; settings: PortfolioSnapshot["settings"]; /** 출결 입력·수정 기록을 읽을 첫날(마감 안 한 가장 이른 달 1일). 없으면 안 읽는다. */ touchesSince?: string },
 ): Promise<PortfolioSnapshot> {
   const { end, touchesSince } = input;
   const endMonth = monthOf(end);
-  // 점수 달의 재료는 지난달(`dataWindowOf`) — 창의 가장 이른 점수 달의 지난달부터 읽는다(7개월 창 + 1).
-  const fromMonth = shiftMonth(endMonth, -PORTFOLIO_MONTHS);
+  const fromMonth = shiftMonth(endMonth, -(PORTFOLIO_MONTHS - 1));
   const from = monthRange(fromMonth).from;
   const billingEnd = monthRange(endMonth).to;
   const attendanceFrom = addDays(from, -ATTENDANCE_LEAD_DAYS);

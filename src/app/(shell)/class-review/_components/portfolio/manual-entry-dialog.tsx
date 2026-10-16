@@ -11,7 +11,7 @@ import type { ManualMetricItem, StoredPeriod } from "@/features/teacher-portfoli
 import { loadEvaluationEntries, saveEvaluationEntries, type EntryDraft } from "@/features/teacher-portfolio/server/evaluation-actions";
 import { PAY_OVERRIDE_KEY, PUNCTUALITY_OVERRIDE_KEY } from "@/features/teacher-portfolio/evaluation/config";
 import { payDataMonth } from "@/features/teacher-portfolio/model/pay-ratio";
-import { itemLabel, periodLabel } from "@/features/teacher-portfolio/view";
+import { itemLabel, monthName } from "@/features/teacher-portfolio/view";
 
 type Draft = Record<string, { value: string; note: string }>;
 const NUMBER = /^-?\d+(\.\d+)?$/;
@@ -23,7 +23,7 @@ function rowsOf(period: StoredPeriod): EntryRow[] {
     .filter((m): m is ManualMetricItem => m.id.startsWith("manual:") && !m.off)
     .map((m) => ({ key: m.id.slice("manual:".length), label: itemLabel(m), hint: `${m.unit || "값"} · ${m.max > 0 ? `만점 ${m.max}점` : "가감"}`, reason: m.reason }));
   // 매출 대비 급여를 켠 달 — 시급·업무별 단가·혼합 계약처럼 계약서로 못 읽는 급여를 원장이 넣는다(비우면 계약서 월급 → 출석부 실급여).
-  // 이 달 점수는 지난달 급여 ÷ 지난달 매출(원장 2026-10-15 — 모든 지표가 지난달 기록) — 넣는 급여도 그 달(지난달) 급여다.
+  // 2026-10부터 이 달 점수는 지난달 급여 ÷ 지난달 매출(원장 2026-10-15) — 넣는 급여도 그 달(지난달) 급여다.
   if (period.items.some((m) => m.id === "payRatio" && !m.off)) {
     const data = payDataMonth(period.month);
     const prev = data === period.month ? null : `${Number(data.slice(5, 7))}월`;
@@ -34,10 +34,9 @@ function rowsOf(period: StoredPeriod): EntryRow[] {
   }
   // 강사 근태를 켠 달 — 출퇴근 기록이 틀렸거나 없는 달은 원장이 그 달 수치(지각·결근·조퇴 가중 합)를 넣는다(비우면 출퇴근 기록에서 센다).
   if (period.items.some((m) => m.id === "punctuality" && !m.off)) {
-    const data = `${Number(payDataMonth(period.month).slice(5, 7))}월`;
     rows.push({
-      key: PUNCTUALITY_OVERRIDE_KEY, label: `강사 근태 — ${data ? `${data} ` : ""}지각·결근·조퇴 횟수`, hint: "회 · 강사 근태",
-      reason: `${data ? `이 달 점수는 ${data} 기록으로 매기므로 ${data} 횟수를 넣습니다. ` : ""}넣으면 메이크에듀 출퇴근 기록 대신 이 수치로 매깁니다(기록이 틀렸거나 없는 달). 학원 설정의 가중을 곱해 더한 값을 넣어 주세요(기본은 한 번에 1회). 비우면 출퇴근 기록으로 셉니다. 결재된 휴가로 쉰 날은 빼고 세 주세요.`,
+      key: PUNCTUALITY_OVERRIDE_KEY, label: "강사 근태 — 지각·결근·조퇴 횟수", hint: "회 · 강사 근태",
+      reason: "넣으면 메이크에듀 출퇴근 기록 대신 이 수치로 매깁니다(기록이 틀렸거나 없는 달). 학원 설정의 가중을 곱해 더한 값을 넣어 주세요(기본은 한 번에 1회). 비우면 출퇴근 기록으로 셉니다. 결재된 휴가로 쉰 날은 빼고 세 주세요.",
     });
   }
   return rows;
@@ -96,7 +95,7 @@ export function ManualEntryDialog({ open, onClose, period, teacherId, teacherNam
     <Dialog open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
       <DialogContent showCloseButton={false} className="flex max-h-[min(90dvh,48rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
         <div className="border-line flex items-center justify-between gap-3 border-b px-5 py-3.5">
-          <DialogTitle className="text-base font-bold">직접 입력 지표 · {teacherName} · {periodLabel(period)}</DialogTitle>
+          <DialogTitle className="text-base font-bold">직접 입력 지표 · {teacherName} · {monthName(period.month)}</DialogTitle>
           <DialogClose aria-label="닫기" className="hover:bg-muted focus-visible:outline-primary rounded-lg p-1.5 focus-visible:outline-2">
             <EyIcon name="close" size={18} />
           </DialogClose>

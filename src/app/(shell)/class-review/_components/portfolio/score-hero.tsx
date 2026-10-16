@@ -2,6 +2,7 @@
 
 import { useLayoutEffect, useRef } from "react";
 import { Pill } from "@/components/atoms/pill";
+import { toneColor } from "@/lib/design/semantic-color";
 import { metricBar } from "@/features/teacher-portfolio/metric-bar";
 import type { ItemId, Metric, StoredPeriod } from "@/features/teacher-portfolio/model/types";
 import {
@@ -78,8 +79,9 @@ function ScoreRing({ total, max, onOpen }: { total: number | null; max: number; 
   );
 }
 
-function MetricRow({ metric, color, before, tag, legacy, axis, onOpen }: {
-  metric: Metric; color: string; before: number | null | undefined; tag: string | null; legacy: boolean; axis: boolean; onOpen: (id: ItemId) => void;
+function MetricRow({ metric, color, before, tag, legacy, axis, closed, onOpen }: {
+  metric: Metric; color: string; before: number | null | undefined; tag: string | null; legacy: boolean; axis: boolean; closed: boolean;
+  onOpen: (id: ItemId) => void;
 }) {
   const plus = metric.max <= 0; // 가감 항목(만점 0)
   const number = useCountTo(metric.value, plus);
@@ -87,12 +89,18 @@ function MetricRow({ metric, color, before, tag, legacy, axis, onOpen }: {
   const bar = metricBar(metric.value, metric.uncounted ? null : before, metric.max, axis);
   const signed = bar.signed;
   const label = itemLabel(metric);
+  // 확인 대기 글은 이름 옆 칩으로 눈에 띄게(원장 2026-10-16 *"확인대기는 눈에 띄도록 라벨화"*) — 반영하기 전엔 점수에 들지 않는다.
+  const waiting = metric.id === "satisfaction" ? metric.waiting ?? 0 : 0;
   return (
     <button type="button" onClick={() => onOpen(metric.id)} data-metric-row={metric.id}
-      aria-label={`${label} ${metric.value === null ? (legacy ? "산출불가" : "합계에서 제외") : `${fmtScore(metric.value)}점`}${tag ? ` (${tag})` : ""}, 근거 보기`}
+      aria-label={`${label} ${metric.value === null ? (legacy ? "산출불가" : "합계에서 제외") : `${fmtScore(metric.value)}점`}${tag ? ` (${tag})` : ""}${waiting ? `, 확인 대기 ${waiting}건` : ""}, 근거 보기`}
       className="border-line-faint hover:bg-primary-softer focus-visible:outline-primary flex min-h-28 w-full flex-col justify-center border-b px-5 py-3.5 text-left focus-visible:outline-2">
       <span className="mb-2 flex items-center justify-between gap-2">
-        <span className="text-sm font-bold">{label}{tag ? <small className="ml-1.5 text-xs font-medium">{tag}</small> : null}</span>
+        <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm font-bold">
+          {label}{tag ? <small className="text-xs font-medium">{tag}</small> : null}
+          {/* 마감한 달은 더 반영할 수 없다 — 주의색 대신 회색 '미확인'(누를 일이 없는데 누르라고 하지 않게). */}
+          {waiting ? <Pill color={toneColor(closed ? "inert" : "caution")} className="whitespace-nowrap">{closed ? `미확인 ${waiting}건` : `확인 대기 ${waiting}건`}</Pill> : null}
+        </span>
         <b className={`num leading-none font-bold whitespace-nowrap ${metric.value === null ? "text-base" : "text-xl"}`}>
           <span ref={number}>{metric.value === null ? (legacy ? "산출불가" : "제외") : numText(metric.value, plus)}</span>
           <small className="ml-1 text-xs font-medium">{metric.max > 0 ? `/ ${metric.max}점` : "가감"}</small>
@@ -172,7 +180,7 @@ export function ScoreHero({ period, previous, signedIds, onOpenMetric, onOpenLed
         <h3 className="px-5 pt-5 pb-1 text-base font-bold">항목별 점수 <span className="num text-xs font-medium">{items.length}개 · {max}점</span></h3>
         <div className="sm:[&>*]:border-line-faint grid min-w-0 grid-cols-1 sm:grid-cols-2 sm:[&>*:nth-child(odd)]:border-r">
           {items.map((m) => (
-            <MetricRow key={m.id} metric={m} color={itemColor(m, items)} before={beforeOf(previous, m)} tag={missingTag(m, period)} legacy={legacy} axis={signedIds.has(m.id)} onOpen={onOpenMetric} />
+            <MetricRow key={m.id} metric={m} color={itemColor(m, items)} before={beforeOf(previous, m)} tag={missingTag(m, period)} legacy={legacy} axis={signedIds.has(m.id)} closed={Boolean(period.closing.closedAt)} onOpen={onOpenMetric} />
           ))}
         </div>
       </section>

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_SATISFACTION_OPTIONS } from "../evaluation/options";
 import { buildRecordOwners } from "./attribution";
-import { buildSatisfaction } from "./satisfaction";
+import { buildSatisfaction, waitingByPeriod } from "./satisfaction";
 import { judgeByRules, verdictPoints } from "./satisfaction-rules";
 import type { SnapshotJudgment } from "./source-types";
 import type { SnapshotClass, SnapshotEnrollment } from "./types";
@@ -76,5 +76,16 @@ describe("만족도 가감 합", () => {
   });
   it("판정 표가 없으면(SQL 적용 전) 만들지 않는다 — 그 지표는 계산 전", () => {
     expect(buildSatisfaction({ ownersOf, source: null })).toBeNull();
+  });
+});
+
+describe("확인 대기가 남은 달 = 마감 미룸 대상(원장 2026-10-16 '9월을 이달 말까지 열어 두기')", () => {
+  it("켠 만족도 항목의 확인 대기 수만 — 끈 항목·0건은 빼고", () => {
+    const period = (month: string, waiting: number, off = false) => ({ month, items: [{ id: "satisfaction", waiting, off }, { id: "report" }] });
+    const got = waitingByPeriod([
+      { id: "t1", periods: [period("2026-09", 3), period("2026-10", 0)] },
+      { id: "t2", periods: [period("2026-09", 2, true)] },
+    ]);
+    expect([...got]).toEqual([["t1|2026-09", 3]]);
   });
 });

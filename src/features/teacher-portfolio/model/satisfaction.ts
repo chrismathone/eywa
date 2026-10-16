@@ -55,3 +55,16 @@ export function buildSatisfaction(input: { source: EvaluationSources["satisfacti
     };
   };
 }
+
+/**
+ * 강사|달 → 확인 대기 글 수(켠 만족도 항목만). 남은 달은 다음 달 말까지 마감을 미룬다 — 원장 2026-10-16 '9월을 이달 말까지 열어 두기'
+ * (확인 대기는 사람이 정해야 점수에 들어 가므로, 마감해 버리면 반영할 길이 없다). 밤 집계와 재집계가 같은 값을 쓴다.
+ */
+export function waitingByPeriod(teachers: readonly { id: string; periods: readonly { month: string; items: readonly { id: string; off?: boolean }[] }[] }[]): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const t of teachers) for (const w of t.periods) {
+    const m = w.items.find((x) => x.id === "satisfaction" && !x.off) as { waiting?: number } | undefined;
+    if (m?.waiting) out.set(`${t.id}|${w.month}`, m.waiting);
+  }
+  return out;
+}

@@ -7,8 +7,7 @@ import { MANUAL_COLORS, METRIC_META } from "./evaluation/catalog";
 import { isManualId, MISSING_LABEL, type BuiltinMetricId, type ManualMetricSetting } from "./evaluation/config";
 import { settingOf } from "./evaluation/preview";
 import { describeScoring } from "./evaluation/scoring";
-import { shiftMonth } from "@/lib/date-kst";
-import { dataMonthOf, weeksOf } from "./model/dates";
+import { weeksOf } from "./model/dates";
 import type { FollowRow, ItemId, Metric, MetricId, PeriodWindow, PortfolioPeriod, StoredPeriod } from "./model/types";
 
 /** 이름이 없는 옛 저장 행의 기본 이름(그 행의 '과목 소개'는 그대로 과목 소개다). 새 행은 설정의 이름을 싣는다. */
@@ -83,23 +82,9 @@ export const pendingShown = (p: Pick<PortfolioPeriod, "items">): Metric[] => sho
 export const dayLabel = (ymd: string): string => ymd.slice(5).replace("-", ".");
 export const won = (n: number): string => `${Number(n || 0).toLocaleString("ko-KR")}원`;
 export const monthName = (month: string): string => `${Number(month.slice(0, 4))}년 ${Number(month.slice(5, 7))}월`;
-/**
- * 기간 이름 — 점수 달의 재료가 지난달이면(2026-10-15부터 · `dataWindowOf`) "2026년 10월 · 9월 실적".
- * 그 전에 저장된 줄(재료 = 그 달)은 종전대로 "2026년 10월 · 10.14까지".
- */
-export function periodLabel(w: Pick<PeriodWindow, "month" | "start" | "end" | "partial">): string {
-  const data = dataMonthOf(w);
-  if (data !== w.month) return `${monthName(w.month)} · ${Number(data.slice(5, 7))}월 실적`;
+export function periodLabel(w: Pick<PeriodWindow, "month" | "end" | "partial">): string {
   return `${monthName(w.month)}${w.partial ? ` · ${dayLabel(w.end)}까지` : ""}`;
 }
-/** 근거 화면의 달 이름 — 기록한 달(재료 달)과 그 전달("9월" · "8월"). 옛 줄은 그 달 그대로라 둘 다 맞다. */
-export function recordMonthNames(w: Pick<PeriodWindow, "start">): { cur: string; prev: string } {
-  const data = dataMonthOf(w);
-  return { cur: `${Number(data.slice(5, 7))}월`, prev: `${Number(shiftMonth(data, -1).slice(5, 7))}월` };
-}
-/** 점수 달의 재료 달 이름("9월") — 재료가 그 달이면 null. */
-export const dataMonthLabel = (w: Pick<PeriodWindow, "month" | "start">): string | null =>
-  (dataMonthOf(w) === w.month ? null : `${Number(dataMonthOf(w).slice(5, 7))}월`);
 export function closingLabel(w: Pick<StoredPeriod, "closing">): "집계 중" | "마감" | "마감 · 재구성" {
   return !w.closing.closedAt ? "집계 중" : w.closing.source === "reconstructed" ? "마감 · 재구성" : "마감";
 }
@@ -130,6 +115,7 @@ export function statusTone(state: string): StatusTone {
   if (["완료", "인정", "기한 전 완료", "작성", "상담함", "응시"].includes(state)) return "brand";
   if (["미완료", "기한 초과", "미작성", "마감 후 작성", "포함", "미상담", "미응시"].includes(state)) return "caution";
   if (state === "대리") return "special";
+  if (state.startsWith("확인 대기")) return "caution"; // 반영 전이라 점수에 안 든 글 — 눈에 띄게(원장 2026-10-16)
   return "inert";
 }
 /** 보고서 칸 — 작성/미작성 둘만(원장 2026-10-14). 지난 달에 남은 대리·마감 후·확인 필요도 점수에서 본인 작성이 아니었으니 미작성으로 보인다. */

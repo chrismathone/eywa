@@ -9,7 +9,7 @@
  * - 급여 = 원장 직접 입력 → 계약서 월급 → 출석부 실급여(프리랜서) 순으로 처음 있는 것.
  * - 학생 수·반 수(원장 1-1 *"학생수와 생산성 모두 볼것"*)는 근거 화면에 같이 싣는다(점수엔 안 섞는다).
  * - 🔴 **지난달 값으로 매긴다**(원장 2026-10-15 *"매출대비 급여는 지난달 것을 다음달에 반영 … 이번달을 반영하려면 월말이 되야하는데
- *   기다리지 못할듯"*) → 같은 날 *"다 지난달 기록으로"*(모든 지표 · 마감한 달도) — 10월 점수 = 9월 급여 ÷ 9월 매출(`payDataMonth`).
+ *   기다리지 못할듯"*) — 10월 점수 = 9월 급여 ÷ 9월 매출(`payDataMonth`). 그 전에 마감한 달(4~9월)은 그 달 값 그대로다.
  * - 🔴 지난달에 담당 반이 없던 선생님(새로 온 선생님)은 비율이 없어도 0점이 아니라 **합계에서 제외**(`newcomer` — 원장 2026-10-15,
  *   설정의 '자료가 없을 때' 규칙보다 먼저). 지난달 값으로 매기는 달만 — 그 달 담당이 없으면 애초에 평가 대상이 아니다.
  * - 반별 비중(원장 2026-10-15 *"급여 탭에서 상세 반별 매출 이런거 보면 좋겠는데"* → 비중만) = 반마다 학생 수 · 매출 중 그 반 몫(%) — 금액은 싣지 않는다.
@@ -41,8 +41,10 @@ export type PayFacts = {
  * 프리랜서 실급여도 단가가 잡힌 줄이 이보다 적으면 쓰지 않는다(pay-sources.ts).
  */
 export const MIN_BILLED_SHARE = 0.8;
-/** 이 달 점수의 급여 비율을 낼 재료의 달 = 지난달(급여·매출·계약서 월급 모두 그 달 것 — 다른 지표의 재료 달 `dataWindowOf`와 같다). */
-export const payDataMonth = (month: string): string => shiftMonth(month, -1);
+/** 이 달부터 급여 비율은 지난달 재료로 매긴다(원장 2026-10-15) — 그 전 달은 그 달 재료(이미 마감해 다시 세지 않는다). */
+export const PAY_PREV_MONTH_FROM = "2026-10";
+/** 이 달 점수의 급여 비율을 낼 재료의 달(급여·매출·계약서 월급 모두 이 달 것). */
+export const payDataMonth = (month: string): string => (month >= PAY_PREV_MONTH_FROM ? shiftMonth(month, -1) : month);
 export type PaySource = "직접 입력" | "계약서 월급" | "출석부 실급여";
 export type PayResult = {
   raw: number | null; source: PaySource | null; students: number; classes: number; enrollments: number; problem: string | null;

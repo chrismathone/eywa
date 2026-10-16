@@ -160,7 +160,7 @@ export type PayPlan = { facts: Map<string, PayFacts>; contracts: Map<string, Con
  */
 export async function loadPayPlan(input: {
   admin: SupabaseClient; tenantId: string; settings: TenantSettings; result: PortfolioResult; deadline: number;
-  /** 마감한 달도 센다 — 원장 지시로 마감한 달을 다시 집계하는 도구만(`recompute-all`). */
+  /** 마감한 달도 센다 — 원장 지시로 마감한 달을 다시 집계할 때만(밤 집계는 마감한 달을 다시 쓰지 않는다). */
   includeClosed?: boolean;
 }): Promise<PayPlan> {
   const { admin, tenantId, result } = input;
@@ -174,7 +174,8 @@ export async function loadPayPlan(input: {
     .flatMap((t) => t.periods.filter((w) => !closed.has(`${t.id}|${w.month}`)).map((w) => ({ teacherId: t.id, month: w.month })))
     .sort((a, b) => a.month.localeCompare(b.month));
   if (!pairs.length) return { facts: new Map(), contracts: new Map() };
-  const data = pairs.map((p) => ({ teacherId: p.teacherId, month: payDataMonth(p.month) }));
+  // 같은 강사·같은 재료 달은 한 번만 센다 — 확인 대기로 열어 둔 9월과 10월(재료 = 9월)이 같은 출석부를 두 번 읽지 않게.
+  const data = [...new Map(pairs.map((p) => [`${p.teacherId}|${payDataMonth(p.month)}`, { teacherId: p.teacherId, month: payDataMonth(p.month) }])).values()];
   const [byData, contracts] = await Promise.all([
     loadSheetFacts({ admin, tenantId, settings: input.settings, pairs: data, deadline: input.deadline }),
     loadContracts(admin, tenantId, [...new Set(pairs.map((p) => p.teacherId))]),
