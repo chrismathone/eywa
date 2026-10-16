@@ -210,11 +210,38 @@ function menuOf(key: string): string {
  *    그 화면 크기로 안내한다(이 수리 전과 같다).
  * ⚠️ **여는 크기는 이 함수가 아니다** — 여는 크기는 창 id(`routeWindowSize(params.id)`) 그대로다.
  */
+/**
+ * **최소 크기만** 따로 낮추는 화면(여는 크기는 `ROUTE_WINDOW_SIZE` 그대로) — 폰에서 쓰도록 반응형으로 만든 면.
+ * 사용자 2026-10-16 *"반응형이 1180까지만 막혀있네 — 원래 폰 화면에서 보던 비율까지는"*: 셔틀은 1180으로 열리지만
+ * 오늘 등하원·학부모 등하원·운행 현황·실시간 위치·학부모 관리 현황은 폰 레이아웃이 있어 폰 폭(390)까지 줄여도 깨지지 않는다.
+ * 🔑 편성 보드(`/shuttle`)는 넣지 않는다 — 3열 드래그 편성이 `lg`부터라 그 아래로는 종전 1180 바닥이 맞다.
+ * ⚠️ 키는 세그먼트 longest-prefix로 찾는다(상세 주소도 상속). 창 id가 아니라 **창이 보는 주소**로만 본다.
+ */
+const ROUTE_WINDOW_MIN: Record<string, { w: number; h: number }> = {
+  "shuttle/today": { w: 390, h: 560 },
+  "shuttle/parent-rides": { w: 390, h: 560 },
+  "shuttle/live": { w: 390, h: 560 },
+  "shuttle/track": { w: 390, h: 560 },
+  "shuttle/parents": { w: 390, h: 560 },
+};
+
+function routeMinOverride(path: string): { w: number; h: number } | undefined {
+  const seg = path.split("/");
+  for (let i = seg.length; i >= 2; i--) {
+    const k = seg.slice(0, i).join("/");
+    if (Object.prototype.hasOwnProperty.call(ROUTE_WINDOW_MIN, k)) return ROUTE_WINDOW_MIN[k];
+  }
+  return undefined;
+}
+
 export function windowMinSize(id: string, href?: string | null): { w: number; h: number } {
   // 스토어 모양의 창 id(`route:attendance#1`)가 와도 크기 표 키 모양으로 — 접두와 복제 번호를 뗀다.
   const key = id.replace(/^(route|student):/, "").split("#")[0] ?? id;
   const byId = routeSizeMatch(key);
   const path = href ? pathKey(href) : "";
+  // 반응형 면은 최소 크기만 따로(여는 크기와 무관) — 같은 메뉴 안에서만.
+  const minOverride = path && menuOf(path) === menuOf(key) ? routeMinOverride(path) : undefined;
+  if (minOverride) return minOverride;
   const byPath = path && menuOf(path) === menuOf(key) ? routeSizeMatch(path) : undefined;
   if (byPath && byPath.depth >= (byId?.depth ?? 0)) return byPath.size;
   return byId?.size ?? DEFAULT_WINDOW;

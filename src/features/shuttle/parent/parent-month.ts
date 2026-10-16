@@ -34,7 +34,13 @@ export type MonthDay = {
   out: DirMark;
 };
 
-export type MonthRegular = { direction: Direction; weekdays: readonly DayCode[]; runStopId: string };
+export type MonthRegular = {
+  direction: Direction;
+  weekdays: readonly DayCode[];
+  runStopId: string;
+  /** 평소 자리 글자("1호차 2회차 · 칠성초 정문 18:20") — 직원 월별 상세용. */
+  label?: string | null;
+};
 export type MonthException = {
   onDate: string;
   direction: Direction;
@@ -43,6 +49,8 @@ export type MonthException = {
   memo: string | null;
   /** 바뀐 자리 글자("1호차 2회차 · 칠성초 정문 18:20") — 변경 목록용. */
   label?: string | null;
+  /** 마지막으로 바꾼 사람("학부모 김민지" · "직원 이수진") — 직원 월별 상세 전용(학부모 화면엔 싣지 않는다). */
+  actor?: string | null;
 };
 export type MonthBoarding = { date: string; direction: Direction; status: "boarded" | "extra" | "missed" };
 

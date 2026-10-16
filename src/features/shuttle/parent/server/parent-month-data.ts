@@ -92,16 +92,23 @@ async function load(tenantId: string, studentId: string, month: string): Promise
   };
 }
 
-/** 노선 칸 → "1호차 2회차 · 칠성초 정문 18:20". 정류장 이름·시각뿐(다른 아이 정보 없음). */
-async function stopLabels(admin: ReturnType<typeof createAdminClient>, tenantId: string, runStopIds: string[]): Promise<Map<string, string>> {
+/**
+ * 노선 칸 → "1호차 2회차 · 칠성초 정문 18:20". 정류장 이름·시각뿐(다른 아이 정보 없음).
+ * 직원 월별(`loadStaffMonth`)도 학원 전체 자리로 부른다 — 칸 id가 많을 수 있어 300개씩 나눠 읽는다.
+ */
+export async function stopLabels(admin: ReturnType<typeof createAdminClient>, tenantId: string, runStopIds: string[]): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   const ids = [...new Set(runStopIds)];
   if (ids.length === 0) return out;
-  const { data: stops, error } = await admin.from("shuttle_run_stops").select("id, run_id, stop_id, at_time")
-    .eq("tenant_id", tenantId).in("id", ids);
-  if (error) throw error;
-  const runIds = [...new Set((stops ?? []).map((s) => s.run_id as string))];
-  const stopIds = [...new Set((stops ?? []).flatMap((s) => (s.stop_id ? [s.stop_id as string] : [])))];
+  const stops: { id: string; run_id: string; stop_id: string | null; at_time: string | null }[] = [];
+  for (let i = 0; i < ids.length; i += 300) {
+    const { data, error } = await admin.from("shuttle_run_stops").select("id, run_id, stop_id, at_time")
+      .eq("tenant_id", tenantId).in("id", ids.slice(i, i + 300));
+    if (error) throw error;
+    stops.push(...((data ?? []) as typeof stops));
+  }
+  const runIds = [...new Set(stops.map((s) => s.run_id as string))];
+  const stopIds = [...new Set(stops.flatMap((s) => (s.stop_id ? [s.stop_id as string] : [])))];
   const [runsRes, namesRes] = await Promise.all([
     admin.from("shuttle_runs").select("id, run_no, label, vehicle_id").eq("tenant_id", tenantId).in("id", runIds),
     stopIds.length
@@ -114,7 +121,7 @@ async function stopLabels(admin: ReturnType<typeof createAdminClient>, tenantId:
     ? await admin.from("shuttle_vehicles").select("id, name").eq("tenant_id", tenantId).in("id", vehicleIds)
     : { data: [] as { id: string; name: string }[], error: null };
   if (vehiclesError) throw vehiclesError;
-  for (const s of stops ?? []) {
+  for (const s of stops) {
     const run = (runsRes.data ?? []).find((r) => r.id === s.run_id);
     const vehicle = (vehicles ?? []).find((v) => v.id === run?.vehicle_id)?.name ?? "";
     const runName = run ? run.label?.trim() || `${run.run_no}회차` : "";

@@ -179,7 +179,8 @@ export function RunPanel({
       {tripsReady && canWrite && date === today && tripState(trip) === "running" ? <TripGpsSender runId={run.id} date={date} /> : null}
 
       {open && (
-        <div className="flex flex-col gap-3 px-2.5 pb-2.5">
+        // `@container` — 아래 명단의 한 칸/두 칸을 **이 판의 실제 폭**으로 정한다(창·전체 화면 어디서든 같은 기준).
+        <div className="@container flex flex-col gap-3 px-2.5 pb-2.5">
           {ended && (
             <p role="status" className="bg-muted text-text-dim rounded-lg px-3 py-2 text-center text-sm font-bold">
               운행이 종료됐습니다{canWrite ? " — 바꾸려면 [종료 취소]를 누르세요" : ""}
@@ -209,8 +210,9 @@ export function RunPanel({
                   {/* 📐 **넓으면 두 사람씩**(2026-09-03) — PC에서 이름과 [탑승]/[미탑승] 사이가 700px 가까이 비었다.
                       🔴 **폰은 그대로 한 줄**이다 — 두 열로 쪼개면 44px 버튼 두 개가 한 칸에 들어가지
                          못해 달리는 차 안에서 오조작이 난다(셔틀 결정: 탭 타겟 44px).
-                      ⚠️ 기준을 `sm`(640px)으로 잡은 이유: 셔틀 창은 기본 480px로 열린다. */}
-                  <ul className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+                      🔑 기준은 **판의 폭**(@6xl = 72rem, 사용자 2026-10-16 "전체 화면에서 깨져") — 화면 폭(sm)으로 두 칸을 나누면
+                         한 칸이 330px까지 좁아져 이름이 한 글자씩 꺾이고 버튼이 겹쳤다. 두 칸일 때도 한 칸이 한 줄 배치(@lg/row) 이상이다. */}
+                  <ul className="grid grid-cols-1 gap-1 @6xl:grid-cols-2">
                     {sec.rows.map((row) => (
                       <RideRowItem
                         key={row.key}

@@ -1,16 +1,5 @@
-import { TONE_TEXT } from "@/lib/design/semantic-color";
-import type { DirMark } from "@/features/shuttle/parent/parent-month";
-
-/**
- * 월별 달력의 표시 하나 — 기호 + 색(의미색 캐논: 탔음 초록 · 미탑승 주황 · 안 탐 회색 · 변경 보라).
- * ⚠️ 일반 모듈이다 — 서버(범례)와 클라(달력 칸)가 함께 읽는다(`"use client"` 파일의 상수는 서버에서 undefined, [[#81]]).
- */
-export const MARK: Record<Exclude<DirMark, null>, { glyph: string; label: string; tone: string }> = {
-  rode: { glyph: "✓", label: "탔음", tone: TONE_TEXT.positive },
-  missed: { glyph: "!", label: "미탑승", tone: TONE_TEXT.caution },
-  skip: { glyph: "–", label: "안 탐", tone: TONE_TEXT.inert },
-  changed: { glyph: "●", label: "변경", tone: TONE_TEXT.special },
-};
+// 표시 하나(기호·색)는 학부모 월별과 직원 '학부모 등하원 → 월별'이 함께 쓴다 — features 쪽 한 벌(중복 금지).
+export { MARK } from "@/features/shuttle/parent/month-mark";
 
 /**
  * 달력 칸 안 글자 크기(px) — 폰 폭에서 한 칸이 70px 남짓이라 앱 기본 최소 글자(14px)로는 "대체공휴일"이 잘리고

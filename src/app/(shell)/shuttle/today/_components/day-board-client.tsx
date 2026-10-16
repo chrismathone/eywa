@@ -198,7 +198,7 @@ export function DayBoardClient({
           탭 바는 `min-w-0`으로 줄어들고 남는 폭을 날짜·시즌이 쓴다. 좁아지면 `toolbar-rail`이 눕혀 한 줄을 유지한다.
           🔴 FaceTabs는 **공용 컴포넌트라 손대지 않는다** — 수납·학생상세 등이 같이 쓴다. 여기선 감싸는 자리만 바꾼다. */}
       <div className={SHUTTLE_TOOLBAR}>
-        <span className="min-w-0 flex-1 basis-full sm:basis-auto">
+        <span className="min-w-0 flex-1 basis-full lg:basis-auto">
           <FaceTabs faces={shuttleFaces(season, { track: showTrack })} active={SHUTTLE_TODAY_PATH} ariaLabel="셔틀 면 전환" />
         </span>
         <ShuttleDayNav date={date} today={today} season={season} hrefFor={href} />
@@ -303,14 +303,19 @@ export function DayBoardClient({
         />
       )}
 
+      {/* 🚌 **호차는 옆으로, 회차는 밑으로**(사용자 2026-10-16 "호차가 밑으로 나열이자나 이걸 옆으로 · 내용은 밑으로") —
+          호차마다 한 열. 몇 열이 서는지는 **이 판의 실제 폭**으로 정한다(열 하나 최소 24rem — 그보다 좁으면 종전처럼 위아래로 쌓인다, 폰 포함). */}
+      <div className="@container/board">
+       <div className="grid grid-cols-1 items-start gap-4 @3xl/board:grid-cols-[repeat(auto-fit,minmax(24rem,1fr))]">
       {groups.map((group) => (
-        <section key={group.vehicleId} className="flex flex-col gap-2">
+        <section key={group.vehicleId} className="flex min-w-0 flex-col gap-2">
           <VehicleHeader
             group={group}
             progress={progressByVehicle.get(group.vehicleId) ?? group.progress}
             dirFilter={dirFilter}
           />
-          <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+          {/* 그 호차의 회차는 위에서 아래로(시간순) — 열 안에서 내용이 밑으로 밀린다. */}
+          <div className="flex flex-col gap-3">
             {group.runs.map(({ run, rows }) => {
               const progress = countProgress(rows);
               const open = manualOpen[run.id] ?? progress.unmarked > 0;
@@ -337,6 +342,8 @@ export function DayBoardClient({
           </div>
         </section>
       ))}
+       </div>
+      </div>
     </div>
   );
 }

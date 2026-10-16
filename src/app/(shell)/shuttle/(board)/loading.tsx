@@ -2,6 +2,8 @@
  * 셔틀 편성 스켈레톤 — 보드 조회가 차량·정류장·회차·노선·배정·학생을 여러 왕복으로 모으므로
  * 첫 페인트를 막지 않게 즉시 흘려보낸다(B7). 창(iframe)으로 열면 빈 화면이 특히 길게 보인다.
  * 모양은 실제 3열 레이아웃과 같은 라운드(2xl)·같은 열 폭이라 로드 후 튀지 않는다.
+ * 🔑 `(board)` 묶음 안에 둔다 — `shuttle/` 바로 아래면 하위 면(학부모 등하원 등) 전부를 감싸, 이 3열 뼈대가
+ *    먼저 뜨고 그 면 스켈레톤으로 다시 바뀌어 "두 번 로딩"처럼 보였다(사용자 2026-10-16).
  */
 import { PageHeaderSkeleton } from "@/components/page-header";
 import { SHUTTLE_TOOLBAR } from "@/features/shuttle/control-size";

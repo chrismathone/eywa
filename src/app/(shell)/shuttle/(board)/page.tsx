@@ -3,7 +3,7 @@ import { getShuttleBoard } from "@/features/shuttle/server/queries";
 import { isSeason, type Season } from "@/features/shuttle/types";
 import { getAssignableStudents } from "@/features/shuttle/server/students";
 import { isShuttleAdmin, requireShuttleView } from "@/features/shuttle/server/access";
-import { ShuttleBoardClient } from "./_components/shuttle-board-client";
+import { ShuttleBoardClient } from "../_components/shuttle-board-client";
 
 export const metadata = { title: "셔틀 — 에이와" };
 
