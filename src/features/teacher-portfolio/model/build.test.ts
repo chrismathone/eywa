@@ -221,3 +221,15 @@ describe("기록을 시작하기 전인 달 — 같은 강사의 기준 달 평�
     expect(months(d)["2026-06"].total === null).toBe(false);
   });
 });
+
+describe("프리랜서 근태", () => {
+  it("🔴 계약구분이 프리랜서면 근태를 세지 않고 만점 — 출퇴근 재료가 없는 스냅샷이어도(원장 2026-10-16)", () => {
+    const punctualityOf = (d: PortfolioSnapshot) => metricOf(build(d).teachers.find((t) => t.name === "강사")!.periods.find((w) => w.month === "2026-09")!, "punctuality");
+    const d = fixture();
+    d.users[0] = { ...d.users[0], employment_type: "프리랜서" };
+    const m = punctualityOf(d);
+    expect([m.freelancer, m.value, m.max, m.uncounted, m.detail]).toEqual([true, 10, 10, undefined, []]);
+    // 정규직·계약구분 없음은 종전대로(이 스냅샷엔 출퇴근 재료가 없어 계산 전).
+    expect([punctualityOf(fixture()).freelancer, punctualityOf(fixture()).uncounted]).toEqual([undefined, true]);
+  });
+});

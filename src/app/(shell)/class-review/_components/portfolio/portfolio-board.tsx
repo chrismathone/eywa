@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/empty-state";
 import { HrefSelect } from "@/components/href-select";
 import { Toolbar, ToolbarButton } from "@/components/toolbar";
 import { useEmbed, withEmbed } from "@/components/workspace/embed-context";
+import { previousPeriod } from "@/features/teacher-portfolio/evidence-view";
 import type { ItemId, StoredPeriod } from "@/features/teacher-portfolio/model/types";
 import { refreshTeacherPortfolioNow } from "@/features/teacher-portfolio/server/actions";
 import type { PortfolioTeacherEntry } from "@/features/teacher-portfolio/server/queries";
@@ -127,7 +128,8 @@ export function PortfolioBoard({ teachers, selected, studentNames, studentSchool
         {/* 직원별 항목 비교 — 한 달을 골라 직원 × 항목 표(원장 2026-10-15). */}
         <ToolbarButton onClick={() => setCompareOpen(true)}>직원 비교</ToolbarButton>
         {/* 원장이 만든 지표 · 매출 대비 급여(급여 직접 입력) · 강사 근태(그 달 횟수)가 이 달에 있으면 그 값을 넣는 입구 — 쓰기 권한(집계와 같은 문)이 있을 때만. */}
-        {canRefresh && period.items.some((m) => (m.id.startsWith("manual:") || m.id === "payRatio" || m.id === "punctuality") && !m.off)
+        {/* 프리랜서 근태는 넣을 칸이 없다(만점 — 직접 입력 창도 그 줄을 세우지 않는다). */}
+        {canRefresh && period.items.some((m) => (m.id.startsWith("manual:") || m.id === "payRatio" || (m.id === "punctuality" && !("freelancer" in m && m.freelancer))) && !m.off)
           ? <ToolbarButton onClick={() => setEntryOpen(true)}>직접 입력</ToolbarButton> : null}
         {/* 학부모 만족도 — 확인 대기 글 반영/무시 · 클레임·칭찬 넣기(계획서 3번). */}
         {canSatisfaction ? <ToolbarButton onClick={() => setSatisfactionOpen(true)}>만족도 관리</ToolbarButton> : null}
@@ -142,12 +144,13 @@ export function PortfolioBoard({ teachers, selected, studentNames, studentSchool
         <TeacherList {...list} />
         <div aria-busy={moving} className={`@container/board flex min-w-0 flex-col gap-5 transition-opacity ${moving ? "opacity-60 delay-100" : ""}`}>
           <TeacherPicker {...list} />
-          <ScoreHero period={period} previous={selected.periods[index + 1]} signedIds={signedIds} onOpenMetric={(id) => setDetail({ kind: "metric", id })}
+          <ScoreHero period={period} previous={previousPeriod(selected.periods, period.month)} signedIds={signedIds} onOpenMetric={(id) => setDetail({ kind: "metric", id })}
             onOpenLedger={() => setDetail({ kind: "ledger" })} />
           {/* 내역과 월간 점수를 나란히 = 본문 폭이 64rem 이상일 때만(창 폭이 아니라 — 앱 메뉴·강사 목록을 뺀 폭이 좁으면 월간 표가
               카드 밖으로 잘렸다, 원장 2026-10-14). 좁으면 위아래로 쌓는다. */}
           <div className="grid flex-1 grid-cols-1 gap-5 @5xl/board:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] @5xl/board:items-stretch">
-            <EvidencePanel active={tab} onTab={setTab} evidence={{ ...evidence, onOpenStudents: () => setDetail({ kind: "metric", id: "report" }) }} />
+            {/* key = 상담·성적 탭은 그 강사·그 달에서만 뜻이 있다 — 바꾸면 처음 탭부터(주 고르기와 같다). */}
+            <EvidencePanel key={scope} active={tab} onTab={setTab} evidence={{ ...evidence, onOpenStudents: () => setDetail({ kind: "metric", id: "report" }) }} />
             <div className="flex min-w-0 flex-col gap-5">
               <MonthlyTable periods={shown} selected={period.month} onMonth={setMonthKey}
                 onOpen={(month, target) => { setMonthKey(month); if (target.kind === "metric") setTab(target.id); setDetail(target); }} />

@@ -23,6 +23,8 @@ export type SnapshotGrade = {
 export type GradeRow = {
   studentId: string; className: string; tests: number; average: number | null; kinds: string;
   daily?: { done: number; total: number }; monthly?: boolean;
+  /** 점수율 시험의 종류별 시험 수·평균(%) — 내역의 시험 종류 탭(원장 2026-10-16). 그 전에 저장된 달엔 없다(`kinds` 글자로 대신 센다). */
+  byKind?: Partial<Record<GradeKind, { count: number; average: number }>>;
 };
 /** 종류별 셈 — 일일테스트 = 제출률 · 월말평가 = 응시율 · 나머지 = 점수율(원장 2026-10-15). */
 export type GradeMeasure = "submit" | "take" | "score";

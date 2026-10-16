@@ -37,6 +37,13 @@ function scoreItem<M extends Metric>(m: M, s: MetricSetting): M {
   m.max = s.max;
   m.off = !s.enabled || undefined;
   const raw = m.raw ?? null;
+  // 프리랜서 근태 = 만점(원장 2026-10-16) — 설정의 점수 규칙과 상관없이(만점을 바꾸면 바꾼 만점).
+  if ((m as { freelancer?: boolean }).freelancer) {
+    delete m.missing;
+    delete m.gap;
+    m.value = s.max;
+    return m;
+  }
   if (raw === null) {
     m.missing = true;
     m.value = (m as { newcomer?: boolean }).newcomer ? null : missingPoints(s);

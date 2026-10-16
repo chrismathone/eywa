@@ -5,8 +5,8 @@
 import { METRIC_META } from "./evaluation/catalog";
 import type { BuiltinMetricId } from "./evaluation/config";
 
-/** 한 칸 — 점수 · 원래 수치 · 자료 없음/계산 전. */
-export type CompareCell = { value: number | null; raw: number | null; missing: boolean; uncounted: boolean };
+/** 한 칸 — 점수 · 원래 수치 · 자료 없음/계산 전 · 프리랜서 근태(세지 않고 만점 — 원장 2026-10-16). */
+export type CompareCell = { value: number | null; raw: number | null; missing: boolean; uncounted: boolean; freelancer?: boolean };
 export type CompareItem = { id: string; label: string; max: number };
 export type CompareRow = { teacherId: string; total: number | null; knownMax: number; closed: boolean; items: (CompareItem & CompareCell)[] };
 export type CompareColumn = CompareItem & { unit: string };

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { applyEvaluation, indexEntries } from "../model/evaluate";
 import type { Metric, PortfolioPeriod } from "../model/types";
 import { BUILTIN_METRICS, DEFAULT_EVALUATION_CONFIG, PORTFOLIO_V1_CONFIG, evaluationConfigSchema, issueMessage, resolveEvaluationConfig, type EvaluationConfig } from "./config";
-import { excludedKey, previewScore } from "./preview";
+import { excludedKey, fullKey, previewScore } from "./preview";
 import { bandIssues, describeScoring, pointsFor, zeroMaxIssue } from "./scoring";
 
 /** 강사평가 설정(원장 2026-10-13) — 지표마다 켜고 끄기·만점·점수 규칙·자료 없을 때, 직접 만든 지표. */
@@ -100,6 +100,15 @@ describe("한 달에 설정 얹기", () => {
     q.items.push(...(["payRatio", "churn", "grades", "punctuality"] as const).map((id) => item(id, null)), item("satisfaction", 3), item("counsel", 100));
     applyEvaluation(q, DEFAULT_EVALUATION_CONFIG);
     expect([q.items.find((m) => m.id === "satisfaction")?.value, q.knownMax]).toEqual([3, 100]);
+  });
+  it("🔴 프리랜서 근태는 설정 규칙과 상관없이 만점 — 미리보기도 같게(원장 2026-10-16)", () => {
+    const p = period();
+    p.items.push({ ...item("punctuality", 7), freelancer: true } as Metric, item("payRatio", null));
+    applyEvaluation(p, DEFAULT_EVALUATION_CONFIG);
+    const m = p.items.find((x) => x.id === "punctuality")!;
+    expect([m.value, m.max, m.missing]).toEqual([10, 10, undefined]);
+    expect(previewScore({ punctuality: 7, [fullKey("punctuality")]: 1 }, DEFAULT_EVALUATION_CONFIG).points.punctuality).toBe(10);
+    expect(previewScore({ punctuality: 7 }, DEFAULT_EVALUATION_CONFIG).points.punctuality).toBeLessThan(10);
   });
   it("끈 지표·합계에서 뺀 지표는 총점과 만점에서 빠진다 — 만점이 100점이 아니어도 된다", () => {
     const c = v1();
