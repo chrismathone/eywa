@@ -42,6 +42,7 @@ import {
   type LessonPace,
   type SlotAxis,
 } from "../lesson-schedule";
+import { mergeSameCellLessons } from "../plan-expand";
 import type { ApplyPreview, ApplyPreviewRow, ApplyResult, ClassSlotChoice, ClassTextbookPlanRow } from "../types";
 import { friendlyTextbookError, isMissingTextbookTable, SLOTS_NOT_READY, TEXTBOOKS_NOT_READY } from "./access";
 
@@ -82,7 +83,7 @@ function normalizeSlotPicks(raw: readonly string[] | null | undefined): string[]
   for (const v of raw ?? []) {
     const parsed = parseSlotPick(String(v));
     if (!parsed) continue;
-    out.add(parsed.dow ? slotPickKey(parsed.dow, parsed.start) : parsed.start);
+    out.add(parsed.dow ? slotPickKey(parsed.dow, parsed.start, parsed.pos ?? undefined) : parsed.start);
   }
   return [...out].sort();
 }
@@ -96,6 +97,15 @@ function normalizeSlotPicks(raw: readonly string[] | null | undefined): string[]
 function isMissingSlotPicksColumn(error: { code?: string; message?: string } | null | undefined): boolean {
   if (!error) return false;
   return error.code === "42703" || error.code === "PGRST204";
+}
+
+/**
+ * 단위 CHECK(`class_textbook_plans_pace_chk`)가 `min25`를 거절했나 — 0361a가 아직 손으로 적용되지 않은 DB다.
+ * 🔑 그때는 `period`로 다시 쓴다: 칸 선택(`slot_picks`)이 있으면 두 단위의 배치가 **글자 그대로 같다**
+ *    (교시마다 고른 자리 수만큼 — `buildLessonSchedule`). 거절해 버리면 SQL 하나 때문에 배정 자체가 막힌다([[#95]]).
+ */
+function isPaceRejected(error: { code?: string; message?: string } | null | undefined): boolean {
+  return !!error && error.code === "23514" && /pace_chk/.test(error.message ?? "");
 }
 
 /**
@@ -208,11 +218,10 @@ export async function saveClassTextbookPlan(input: ClassTextbookPlanInput): Prom
   const targetId = input.id ?? existing;
 
   if (targetId) {
-    let { error } = await admin
-      .from("class_textbook_plans")
-      .update(withSlots)
-      .eq("tenant_id", gate.access.tenantId)
-      .eq("id", targetId);
+    const updateWith = (row: Record<string, unknown>) =>
+      admin.from("class_textbook_plans").update(row).eq("tenant_id", gate.access.tenantId).eq("id", targetId);
+    let { error } = await updateWith(withSlots);
+    if (isPaceRejected(error) && pace === "min25") ({ error } = await updateWith({ ...withSlots, pace: "period" }));
     if (error && isMissingSlotPicksColumn(error)) {
       // 🔴 **고른 교시가 있으면 조용히 떨어뜨리지 않는다**(적대적 리뷰 P0) — 축으로 폴백하면 사람이
       //    고르지도 않은 교시에까지 차수가 깔린다(16:20만 골랐는데 16:20·17:20·18:20 전부, 3배 속도로).
@@ -236,11 +245,12 @@ export async function saveClassTextbookPlan(input: ClassTextbookPlanInput): Prom
   }
 
   const base = { tenant_id: gate.access.tenantId, created_by: gate.access.user.id };
-  let { data, error } = await admin
-    .from("class_textbook_plans")
-    .insert({ ...withSlots, ...base })
-    .select("id")
-    .single();
+  const insertWith = (row: Record<string, unknown>) =>
+    admin.from("class_textbook_plans").insert(row).select("id").single();
+  let { data, error } = await insertWith({ ...withSlots, ...base });
+  if (isPaceRejected(error) && pace === "min25") {
+    ({ data, error } = await insertWith({ ...withSlots, ...base, pace: "period" }));
+  }
   if (error && isMissingSlotPicksColumn(error)) {
     // 🔴 위와 같은 이유 — 고른 교시가 있으면 거절한다(P0).
     if (slotPicks.length > 0) return { ok: false, error: SLOTS_NOT_READY };
@@ -883,10 +893,9 @@ export async function importPlannedRange(input: {
   const total: ApplyResult = { applied: 0, filled: 0, added: 0, skipped: 0, truncated: 0 };
   for (const group of groups.values()) {
     const head = group[0]!;
-    // 날짜·교시 오름차순(동시 호출도 같은 순서로 락을 잡는다 — 0266a 교착 회피 규약).
-    const sorted = [...group].sort((a, b) =>
-      a.date === b.date ? a.slotStart.localeCompare(b.slotStart) : a.date.localeCompare(b.date),
-    );
+    // 한 교시에 같은 교재 1·2차수면 한 줄로 합친다(`mergeSameCellLessons` — 안 합치면 2차수가 사라진다).
+    // 결과는 날짜·교시 오름차순이다(동시 호출도 같은 순서로 락을 잡는다 — 0266a 교착 회피 규약).
+    const sorted = mergeSameCellLessons(group);
     for (let i = 0; i < sorted.length; i += IMPORT_CHUNK) {
       const { data, error } = await admin.rpc("ecs_apply_textbook_lessons", {
         p_tenant: gate.access.tenantId,
@@ -896,12 +905,7 @@ export async function importPlannedRange(input: {
         p_skill_area: head.skillArea,
         p_title: head.title,
         p_page_time: head.pageTime,
-        p_targets: sorted.slice(i, i + IMPORT_CHUNK).map((l) => ({
-          date: l.date,
-          slot: l.slotStart,
-          progress: l.progress,
-          homework: l.homework,
-        })),
+        p_targets: sorted.slice(i, i + IMPORT_CHUNK),
       });
       if (error) return { ok: false, error: friendlyTextbookError(error, "가져오지 못했습니다") };
       const out = (data ?? {}) as Partial<ApplyResult>;

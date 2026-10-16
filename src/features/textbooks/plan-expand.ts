@@ -11,7 +11,7 @@
 import type { HolidayMap } from "@/features/class-sheets/lib/holiday";
 import type { MonthScheduleRow } from "@/features/class-sheets/lib/month-assemble";
 import { buildLessonSchedule, MAX_LOOKAHEAD_DAYS, normalizeLessonPace, type SlotAxis } from "./lesson-schedule";
-import { addToLessonIndex, type LessonIndex } from "./plan-compare";
+import { addToLessonIndex, joinLessonTexts, type LessonIndex } from "./plan-compare";
 
 /** 계획 한 줄 — 그 날 그 교시에 **오기로 되어 있는** 차수. 실제 줄(`class_sheet_plan_lines`)이 아니다. */
 export type PlannedLine = {
@@ -117,10 +117,45 @@ export function expandPlans(input: {
   // 칸 안 순서를 고정한다 — 구분 → 교재명. 호출마다 줄 순서가 흔들리면 화면이 깜빡이고 비교가 안 된다.
   for (const key of Object.keys(byCell)) {
     byCell[key]!.sort((a, b) =>
-      a.skillArea !== b.skillArea ? a.skillArea.localeCompare(b.skillArea) : a.title.localeCompare(b.title, "ko"),
+      a.skillArea !== b.skillArea
+        ? a.skillArea.localeCompare(b.skillArea)
+        : a.title !== b.title
+          ? a.title.localeCompare(b.title, "ko")
+          : a.lessonNo - b.lessonNo, // 한 교시에 같은 교재 1·2차수 — 차수 순
     );
   }
   return byCell;
+}
+
+/**
+ * 가져오기(RPC) 대상 — **한 교시에 같은 교재 차수가 둘 이상이면 한 줄로 합친다**(진도·과제를 `joinLessonTexts` 규약으로 잇는다 — 대조도 같은 규약).
+ *
+ * 🔴 RPC(`ecs_apply_textbook_lessons`)는 그 칸에 **같은 교재명 줄이 있으면 빈 칸만 채운다** — 1차수를 쓴 뒤
+ *    2차수가 오면 같은 줄을 만나 **조용히 건너뛴다**(2차수 진도가 사라진다). 원장 2026-10-16 "화 1·2차수"가
+ *    바로 이 모양이라 RPC를 고치지 않고(SQL 손 적용 간격 [[#95]]) 앱이 넘기기 전에 합친다.
+ * @param lines 한 교재(시기·구분·교재명이 같은) 줄들.
+ */
+export function mergeSameCellLessons(
+  lines: readonly Pick<PlannedLine, "date" | "slotStart" | "lessonNo" | "progress" | "homework">[],
+): { date: string; slot: string; progress: string | null; homework: string | null }[] {
+  const byCell = new Map<string, Pick<PlannedLine, "date" | "slotStart" | "lessonNo" | "progress" | "homework">[]>();
+  for (const l of lines) {
+    const key = `${l.date}|${l.slotStart}`;
+    byCell.set(key, [...(byCell.get(key) ?? []), l]);
+  }
+  const join = joinLessonTexts;
+  return [...byCell.values()]
+    .map((cell) => {
+      const sorted = [...cell].sort((a, b) => a.lessonNo - b.lessonNo);
+      return {
+        date: sorted[0]!.date,
+        slot: sorted[0]!.slotStart,
+        progress: join(sorted.map((l) => l.progress)),
+        homework: join(sorted.map((l) => l.homework)),
+      };
+    })
+    // 날짜·교시 오름차순(동시 호출도 같은 순서로 락을 잡는다 — 0266a 교착 회피 규약).
+    .sort((a, b) => (a.date === b.date ? a.slot.localeCompare(b.slot) : a.date.localeCompare(b.date)));
 }
 
 /** 배정된 교재들의 차수표 — 실제 진도 문구 → 차수를 되짚는 재료(plan-compare). */
