@@ -28,3 +28,18 @@ test('native bootstrap verifies the signed file list, rolls back bad starts and 
     }
   }
 });
+test('native bootstrap keeps relaunching after repeated update exits (42) — 업데이트 세 번째부터 앱이 사라지지 않는다(1.0.7)',{timeout:60000},()=>{
+  const root=fs.mkdtempSync(path.resolve(__dirname,'../../../work/bootstrap-42-')),profile=path.join(root,'profile');fs.mkdirSync(profile,{recursive:true});
+  const source=fs.readFileSync(path.resolve(__dirname,'../native/Bootstrap.cs'),'utf8').replace('__PUBLIC_KEY_XML__','<RSAKeyValue><Modulus>AQAB</Modulus><Exponent>AQAB</Exponent></RSAKeyValue>').replace('__SEQUENCE__','1')
+    .replace(/static string root=Path.Combine\([^\n]+;/,`static string root=${JSON.stringify(profile)};`).replace(/MessageBox.Show\([^;]+;/,'File.WriteAllText(Path.Combine(root,"unexpected-error"),"error");');
+  const bootstrapSource=path.join(root,'Bootstrap.cs');fs.writeFileSync(bootstrapSource,source);
+  execFileSync(csc,['/nologo','/target:winexe',`/out:${path.join(root,'AywaSync.exe')}`,'/r:System.Web.Extensions.dll','/r:System.Windows.Forms.dll',bootstrapSource],{windowsHide:true,stdio:'pipe'});
+  // 가짜 앱: 1~3번째는 건강 확인 뒤 42, 4~6번째는 건강 확인 전 42(두 경로 각각 세 번 — 한쪽만 고쳐져도 실패한다) · 7번째는 정상 종료.
+  const runtimeSource=path.join(root,'Runtime.cs');
+  fs.writeFileSync(runtimeSource,'using System;using System.IO;class Runtime{static int Main(){var runs=Path.Combine('+JSON.stringify(profile)+',"runs");File.AppendAllText(runs,"x"+Environment.NewLine);int n=File.ReadAllLines(runs).Length;'
+    +'if(n<=3||n==7)File.WriteAllText(Environment.GetEnvironmentVariable("AYWA_HEALTH_FILE"),"ready");return n<7?42:0;}}');
+  execFileSync(csc,['/nologo','/target:winexe',`/out:${path.join(root,'AywaSyncRuntime.exe')}`,runtimeSource],{windowsHide:true,stdio:'pipe'});
+  execFileSync(path.join(root,'AywaSync.exe'),[],{windowsHide:true,timeout:30000});
+  assert.equal(fs.existsSync(path.join(profile,'unexpected-error')),false);
+  assert.equal(fs.readFileSync(path.join(profile,'runs'),'utf8').trim().split(/\r?\n/).length,7);
+});

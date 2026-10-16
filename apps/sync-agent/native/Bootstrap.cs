@@ -61,11 +61,18 @@ class Bootstrap {
           using(var process=Process.Start(start)){
             var deadline=DateTime.UtcNow.AddSeconds(180);
             while(!process.HasExited&&!File.Exists(health)&&DateTime.UtcNow<deadline)Thread.Sleep(250);
+            // 건강 확인 전에 42(업데이트 적용)로 끝났으면 실패가 아니다 — 새 버전으로 다시 띄운다.
+            if(!File.Exists(health)&&process.HasExited&&process.ExitCode==42){
+              // 시험 실행(아직 검증 전)이 다음 버전을 적용했으면 되돌릴 곳은 이 버전이 아니라 그 전의 검증된 버전이다.
+              if(trial){try{var next=Read(journal);if(Number(next,"previous",InstalledSequence)==sequence){next["previous"]=previous;Save(next);}}catch{}}
+              attempt=-1;continue;
+            }
             if(!File.Exists(health)){if(!process.HasExited)process.Kill();throw new Exception("health");}
             File.Delete(health);
             if(trial){state["current"]=sequence;state["previous"]=previous;state["trial"]=false;Save(state);}
             process.WaitForExit();
-            if(process.ExitCode==42)continue;
+            // 42 = 업데이트 적용 — 새 버전을 띄우는 것은 실패가 아니다(세면 세 번째 업데이트부터 새 버전이 안 뜬다, 1.0.7).
+            if(process.ExitCode==42){attempt=-1;continue;}
             return;
           }
         }catch{

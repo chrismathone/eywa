@@ -11,7 +11,7 @@ const stages = ["processQueueOnce", "processNoticesOnce", "processClassNoticesOn
   "syncChildMapOnce", "pollParentPostsOnce", "pollParentCommentsOnce", "kickVideoWorker", "kickLinkVideoCompress", "pollReportReadsOnce", "snapshotBoardRosterOnce"];
 
 async function oneLoop({ local = true, approved = true, legacy = false, missingSchema = false, moduleOn = true, loseAfterFirst = false, managed = false, drainAfterFirst = false } = {}) {
-  const calls = [], writes = [], exits = [];
+  const calls = [], writes = [], exits = [], tasks = [];
   let held = false;
   const sql = Object.assign(async (parts, ...values) => {
     const text = parts.join("?");
@@ -23,7 +23,8 @@ async function oneLoop({ local = true, approved = true, legacy = false, missingS
     if (name === "processQueueOnce" && loseAfterFirst) held = false;
     return { ran: false, processed: 0, claimed: 0 };
   }]));
-  const common = { ...work, managed, legacyCutover: async () => false, result:()=>{}, state:async()=>({drain:drainAfterFirst&&calls.includes("processQueueOnce")}),
+  const common = { ...work, managed, legacyCutover: async () => false, result:()=>{}, activity:async(task)=>{tasks.push(task??"idle");},
+    state:async(_phase,task)=>{if(task)tasks.push(task);return {drain:drainAfterFirst&&calls.includes("processQueueOnce")};},
     waitForVideoIdle:async()=>{calls.push("video-drained");},waitForAttachmentIdle:async()=>{calls.push("attachments-drained");},
     stopLinkVideoCompress:()=>{calls.push("link-compress-stopped");},waitForLinkCompressIdle:async()=>{calls.push("link-compress-drained");},videoWorkerBusy:()=>false, BATCH: 2, resolveTenant: async () => "tenant-fixture", isClassnoteModuleEnabled: async () => moduleOn,
     launchBrowser: async () => { calls.push("browser"); return { close: async () => {} }; }, closeClassnoteAdminSession: async () => {},
@@ -47,7 +48,7 @@ async function oneLoop({ local = true, approved = true, legacy = false, missingS
     setTimeout: () => { throw new Error("fixture loop complete"); }, clearTimeout() {},
     setInterval: () => ({ unref() {} }),
   }, { timeout: 1000 });
-  return { calls, writes, exits };
+  return { calls, writes, exits, tasks };
 }
 
 describe("실제 클래스노트 실행기의 잠금 배선", () => {
@@ -67,6 +68,9 @@ describe("실제 클래스노트 실행기의 잠금 배선", () => {
     const result = await oneLoop({ managed: true });
     expect(result.calls.filter((name) => stages.includes(name))).toEqual(stages);
     expect(result.writes).toHaveLength(1);
+    // 단계마다 이어서 할 일을 연동 앱에 알린다(업데이트가 기다리는 작업 표시, 1.0.7) — 쉬기 전엔 비운다.
+    expect(result.tasks).toEqual(["queue", "notice", "classNotice", "recall", "autoSync", "syncNow", "parentReply", "parentReaction", "provision",
+      "classBoardSync", "childmap", "posts", "comments", "video", "reads", "roster", "idle"]);
   });
   it("첫 단계 뒤 잠금이 소실되면 다음 작업을 시작하지 않는다", async () => {
     const result = await oneLoop({ loseAfterFirst: true });

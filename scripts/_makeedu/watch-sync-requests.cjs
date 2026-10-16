@@ -217,6 +217,7 @@ async function heartbeat() {
         const requester = claimed.map((c) => c.requested_by).find(Boolean) || null;
         log(`동기화 요청 ${claimed.length}건 감지 → sync-all 실행`);
         await beat(); // 블로킹 실행 직전에 갱신 — 실행 중 '오프라인' 오표시 최소화
+        await managedWorker.activity("syncNow"); // 연동 앱 표시: 업데이트가 기다리는 작업
         const { ok, tail } = await runSync(requester);
         managedWorker.result("syncNow",{ok});
         await finish(claimed, ok, ok ? null : tail || "sync-all 실패");
@@ -242,6 +243,7 @@ async function heartbeat() {
       if ((await pendingPushCount()) > 0) {
         log(`푸시 요청 감지 → push-consultations 실행`);
         await beat();
+        await managedWorker.activity("push");
         const { ok, tail } = await runPush();
         managedWorker.result("push",{ok});
         log(ok ? "✅ 푸시 완료 (done)" : `✖ 푸시 실패/부분실패: ${tail}`);
@@ -250,6 +252,7 @@ async function heartbeat() {
       log(`폴링 오류(다음 폴에서 재시도): ${e.message}`);
       await dropDb();
     }
+    await managedWorker.activity(null); // 쉬는 동안엔 '다음 주기 대기'(연동 앱 표시)
     await new Promise((r) => setTimeout(r, POLL_MS));
   }
 })();
