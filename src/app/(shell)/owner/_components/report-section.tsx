@@ -298,6 +298,7 @@ export function ReportSection({
                   <div className="pt-2">
                     <TextField
                       label="보고서 제목"
+                      hint="비우거나 '수업 보고서'로 두면 과목 이름(수학 보고서)"
                       value={r.title}
                       onChange={(v) => set({ title: v })}
                       placeholder="수업 보고서"
