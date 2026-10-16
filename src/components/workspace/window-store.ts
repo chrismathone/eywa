@@ -22,6 +22,7 @@ import {
 } from "./window-geometry";
 import type { ShellMode } from "@/lib/license/shell-mode";
 import { needsModeReset, planKeepalive, type KeepaliveOpts } from "./keepalive-rules";
+import { formInstanceOf, withFormInstance, withoutFormInstance } from "@/lib/recording-resume";
 
 export type WindowKind = "student" | "route"; // student=요약 peek, route=메뉴 풀화면(iframe)
 export type WindowParams = {
@@ -376,8 +377,18 @@ type Actions = {
    * — 이유 안내는 스토어가 띄우니 호출부는 "창이 떴다"를 전제로 한 후속 동작만 건너뛰면 된다.
    */
   open: (kind: WindowKind, params: WindowParams, anchor?: { x: number; y: number }) => boolean;
-  /** 탭/링크 shift+클릭 — 기존 창을 포커스하지 않고 **새 인스턴스**로 연다(primary 비었으면 primary, 아니면 #n). 반환값은 open과 같다. */
-  openNewInstance: (kind: WindowKind, params: WindowParams, anchor?: { x: number; y: number }) => boolean;
+  /**
+   * 탭/링크 shift+클릭 — 기존 창을 포커스하지 않고 **새 인스턴스**로 연다(primary 비었으면 primary, 아니면 #n). 반환값은 open과 같다.
+   * 이전 화면 유지 방식엔 한 벌 더가 없다(그 화면을 연다) — `form`은 `openForm`의 예외(녹음 중 작성 화면의 새 작성 창)만 쓴다:
+   * 이전 화면 유지에서도 열고, 보관된 원본을 되살리지 않는다(되살리면 그 창의 첫 화면 주소가 새 작성 화면으로 바뀐다).
+   */
+  openNewInstance: (kind: WindowKind, params: WindowParams, anchor?: { x: number; y: number }, opts?: { form?: boolean }) => boolean;
+  /**
+   * "새 X" 작성 폼 창(`useOpenFormWindow`) — 녹음이 걸리지 않은 같은 작성 창이 있으면 그 창(종전 `open`과 같다). 그 메뉴의
+   * 작성 창이 **전부 녹음 중**이면 새 작성 창을 `form=<id>`로 한 벌 더 연다(원장 2026-10-16 "창이 그냥 여러개 열리면").
+   * 이전 화면 유지 방식도 이때만 한 벌 더(2026-10-01 '복제 없음'의 예외 — 녹음 중 작성 화면만).
+   */
+  openForm: (kind: WindowKind, params: WindowParams, anchor?: { x: number; y: number }) => boolean;
   /** 라우트 창을 같은 화면(현재 URL/제목)으로 한 벌 더 띄운다 — 복제본(#n, window-only). 반환값은 open과 같다. */
   duplicate: (winId: string) => boolean;
   close: (id: string) => void;
@@ -712,14 +723,15 @@ export const useWindowStore = create<State & Actions>()(
 
       // 탭/링크 shift+클릭 — 기존 창을 포커스(open)하지 않고 항상 새 인스턴스를 연다. primary가 비었으면
       // primary, 이미 있으면 다음 빈 #n. 반복 shift+클릭 = 듀얼/멀티 창.
-      openNewInstance: (kind, params, anchor) => {
+      openNewInstance: (kind, params, anchor, opts) => {
         const s = get();
         // 이전 화면 유지 방식엔 '같은 화면 한 벌 더'(듀얼 창)가 없다 — Shift+클릭도 그 화면을 연다(복제 금지, 원장 2026-10-01).
-        if (s.kaActive) return get().open(kind, params, anchor);
+        // 예외는 녹음 중 작성 화면 하나뿐(openForm).
+        if (s.kaActive && !opts?.form) return get().open(kind, params, anchor);
         const primary = windowId(kind, params.id);
         // 원본이 보관(닫힘) 중이면 새 번호 대신 원본을 되살린다 — 숨은 원본을 두고 '(2)'가 뜨던 것(리뷰 2026-09-11).
-        // 되살리기는 open()이 한다(창 개수 한도·첫 화면 규칙 포함).
-        if (s.cached.includes(primary)) return get().open(kind, params, anchor);
+        // 되살리기는 open()이 한다(창 개수 한도·첫 화면 규칙 포함). 새 작성 창(openForm)은 늘 새 번호다.
+        if (s.cached.includes(primary) && !opts?.form) return get().open(kind, params, anchor);
         let targetId = primary;
         if (s.windows[primary]) {
           let n = 1;
@@ -745,6 +757,39 @@ export const useWindowStore = create<State & Actions>()(
           snapAssist: null,
         });
         return true;
+      },
+
+      openForm: (kind, params, anchor) => {
+        const s = get();
+        const base = windowId(kind, params.id);
+        const family = Object.keys(s.windows).filter((id) => baseWindowId(id) === base && !s.cached.includes(id));
+        const free = family.filter((id) => !s.busy[id]);
+        const want = params.href;
+        // 같은 화면(작성 화면 표식 `form`만 다르다)이면 그 창을 앞으로. 다른 화면(학생을 고른 '상담 기록 +')이면 입력 중이
+        // 아닌 창만 그 주소로 옮긴다 — 입력 중인 창을 옮기면 쓰던 것이 사라진다(재리뷰 2026-10-16). 둘 다 없으면 새 작성 창.
+        const same = (id: string) => want === undefined || withoutFormInstance(s.windows[id].params.href ?? "") === withoutFormInstance(want);
+        const target = free.find(same) ?? free.find((id) => !s.dirty[id]);
+        if (!family.length || target === base) return get().open(kind, params, anchor);
+        if (target) {
+          const w = s.windows[target];
+          if (want !== undefined && !same(target)) {
+            // 🔴 그 창의 표식은 그대로 — 떼면 녹음 중인 첫 작성 화면과 같은 임시 저장 칸을 쓰게 된다.
+            const formId = formInstanceOf(w.params.href ?? "");
+            const href = formId ? withFormInstance(want, formId) : want;
+            const title = params.title ?? w.params.title;
+            set({
+              windows: { ...s.windows, [target]: { ...w, params: { ...w.params, href, title } } },
+              nav: { ...s.nav, [target]: [href] },
+              live: { ...s.live, [target]: { title, canBack: false } },
+              pendingNav: omitKey(s.pendingNav, target),
+            });
+          }
+          get().restore(target);
+          return true;
+        }
+        // 전부 녹음 중 — 새 작성 창. 임시 저장 칸도 따로 쓰도록 `form=<id>`를 단다(recording-resume.ts).
+        const href = params.href ? withFormInstance(params.href) : params.href;
+        return get().openNewInstance(kind, { ...params, href }, anchor, { form: true });
       },
 
       // 라우트 창 복제 — 같은 화면(현재 URL·제목)으로 한 벌 더. primary id는 손대지 않고 #n 접미사 복제본 생성.

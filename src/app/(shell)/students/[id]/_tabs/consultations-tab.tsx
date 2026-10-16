@@ -9,6 +9,7 @@ import {
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { WindowLink } from "@/components/workspace/window-link";
+import { NewConsultationLink } from "../../../consultations/_components/new-consultation-link";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { ConsultationDeleteButton } from "../../../consultations/_components/consultation-delete-button";
 import { FollowUpToggle } from "../../../consultations/_components/follow-up-toggle";
@@ -76,11 +77,8 @@ export async function ConsultationsTab({
             <span className="text-muted-foreground num ml-2 text-xs font-normal">{consults.length}<SheetText value={"건"} /></span>
           ) : null}
         </h2>
-        <Link
-          href={`/consultations/new?studentId=${studentId}`}
-          className="text-chart-1 hover:underline text-xs"
-        >
-          <SheetText value={"+ 새 상담 기록"} /></Link>
+        <NewConsultationLink studentId={studentId} className="text-chart-1 hover:underline text-xs">
+          <SheetText value={"+ 새 상담 기록"} /></NewConsultationLink>
       </header>
 
       {/* 입학 상담(등록상담) — 아주 중요한 상담이라 상단 고정. 별도 테이블(enrollment_consultations).

@@ -13,8 +13,11 @@
  */
 export const PANEL_GAP = 16;
 export const VIEWPORT_EDGE = 16;
-/** 펼친 캡슐 폭 — CSS(`recording-runtime.module.css`)의 128px과 같은 값. */
-export const CAPSULE_EXPANDED_WIDTH = 128;
+/** 접힌 캡슐(마이크 + 그 밑의 제목) — CSS(`recording-runtime.module.css`)의 88×60px과 같은 값. */
+export const CAPSULE_WIDTH = 88;
+export const CAPSULE_HEIGHT = 60;
+/** 펼친 캡슐 폭(시간까지) — CSS의 152px과 같은 값. */
+export const CAPSULE_EXPANDED_WIDTH = 152;
 /** 높이를 줄여 넣을 때 이보다 낮아지면 쓸 수 없는 판이라 그 자리를 버린다. */
 const MIN_PANEL_HEIGHT = 120;
 
@@ -32,6 +35,34 @@ export function capsuleFootprint(anchor: Box, side: string | undefined): Box {
   const width = Math.max(anchor.width, CAPSULE_EXPANDED_WIDTH);
   const left = side === "right" ? anchor.left : anchor.left + anchor.width - width;
   return { left, top: anchor.top, width, height: anchor.height };
+}
+
+/** 쌓인 녹음 아이콘을 한 묶음으로 보는 간격 — 새 아이콘은 12px 간격으로 위에 쌓인다(use-recording-position). */
+const STACK_NEAR = 16;
+
+/**
+ * 정보창이 피해야 할 녹음 아이콘 묶음 — 이 아이콘과, 그것과 같은 줄(가로가 겹친다)로 맞닿아 쌓인 다른 녹음 아이콘들을 합친
+ * 상자(원장 2026-10-16 여러 녹음). 자기 아이콘만 피하면 정보창이 위에 쌓인 다른 녹음 아이콘을 덮어 누를 수 없었다.
+ * 끌어서 따로 떨어뜨린 아이콘은 묶지 않는다(화면 반대편 아이콘까지 묶으면 정보창 자리가 사라진다).
+ */
+export function stackFootprint(own: Box, others: readonly Box[]): Box {
+  let union = own;
+  const rest = [...others];
+  for (let grew = true; grew;) {
+    grew = false;
+    for (let i = rest.length - 1; i >= 0; i--) {
+      const box = rest[i];
+      const sameColumn = box.left < union.left + union.width && union.left < box.left + box.width;
+      const touching = box.top <= union.top + union.height + STACK_NEAR && union.top <= box.top + box.height + STACK_NEAR;
+      if (!sameColumn || !touching) continue;
+      const left = Math.min(union.left, box.left);
+      const top = Math.min(union.top, box.top);
+      union = { left, top, width: Math.max(union.left + union.width, box.left + box.width) - left, height: Math.max(union.top + union.height, box.top + box.height) - top };
+      rest.splice(i, 1);
+      grew = true;
+    }
+  }
+  return union;
 }
 
 /** 캡슐 중심이 축의 어느 1/3에 있는지로 정보창의 시작 좌표를 고른다(끝 맞춤·가운데·시작 맞춤). */

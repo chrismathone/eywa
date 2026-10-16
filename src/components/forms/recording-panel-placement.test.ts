@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { CAPSULE_EXPANDED_WIDTH, PANEL_GAP, VIEWPORT_EDGE, capsuleFootprint, placeRecordingPanel, type Box, type PanelPlacement } from "./recording-panel-placement";
+import { CAPSULE_EXPANDED_WIDTH, PANEL_GAP, VIEWPORT_EDGE, capsuleFootprint, placeRecordingPanel, stackFootprint, type Box, type PanelPlacement } from "./recording-panel-placement";
 
 /**
  * 녹음 정보창 자리(원장 2026-10-14 "녹음 아이콘 위치에 따라 스마트하게 보기 좋은 위치로. 너무 몰려있지않게").
- * 캡슐 = 48px 앵커가 펼친 128px 자리. 앵커 좌표는 use-recording-position이 화면 16px 안으로 묶는다.
+ * 캡슐 = 앵커가 펼친 CAPSULE_EXPANDED_WIDTH 자리(자리 계산은 앵커 크기와 무관한 순수 함수라 여기선 48px 상자로 잰다).
+ * 앵커 좌표는 use-recording-position이 화면 16px 안으로 묶는다.
  */
 const DESK = { width: 1440, height: 900 };
 const PANEL = { width: 320, height: 200 };
@@ -29,10 +30,11 @@ function expectInsideAndClear(result: ReturnType<typeof place>) {
 }
 
 describe("capsuleFootprint — 정보창이 피해야 할 펼친 캡슐", () => {
-  it("왼쪽으로 펼치면 앵커 오른쪽 끝에서, 오른쪽으로 펼치면 앵커 왼쪽 끝에서 128px", () => {
-    expect(capsuleFootprint(anchorAt(1376, 772), "left")).toEqual({ left: 1296, top: 772, width: 128, height: 48 });
-    expect(capsuleFootprint(anchorAt(16, 772), "right")).toEqual({ left: 16, top: 772, width: 128, height: 48 });
-    expect(capsuleFootprint(anchorAt(16, 772), undefined).left).toBe(16 + 48 - 128);
+  it("왼쪽으로 펼치면 앵커 오른쪽 끝에서, 오른쪽으로 펼치면 앵커 왼쪽 끝에서 펼친 폭만큼", () => {
+    const wide = CAPSULE_EXPANDED_WIDTH;
+    expect(capsuleFootprint(anchorAt(1376, 772), "left")).toEqual({ left: 1376 + 48 - wide, top: 772, width: wide, height: 48 });
+    expect(capsuleFootprint(anchorAt(16, 772), "right")).toEqual({ left: 16, top: 772, width: wide, height: 48 });
+    expect(capsuleFootprint(anchorAt(16, 772), undefined).left).toBe(16 + 48 - wide);
   });
 });
 
@@ -115,5 +117,23 @@ describe("placeRecordingPanel — 좁은 화면·화면 끝", () => {
   });
   it("정보창이 길어지면(녹음 완료 안내·오류) 다시 재도 캡슐을 덮지 않는다", () => {
     for (const height of [180, 260, 420, 700]) expectInsideAndClear(place(anchorAt(1376, 772), DESK, { width: 320, height }));
+  });
+});
+/** 원장 2026-10-16 여러 녹음 — 정보창이 위에 쌓인 다른 녹음 아이콘을 덮으면 그 녹음으로 옮겨 갈 수 없다. */
+describe("stackFootprint — 쌓인 녹음 아이콘 묶음", () => {
+  const icon = (top: number, left = 1175): Box => ({ left, top, width: 88, height: 60 });
+  it("같은 줄로 맞닿아 쌓인 아이콘은 하나로 묶고, 정보창은 묶음 전체를 피한다", () => {
+    const own = icon(748);
+    const stack = stackFootprint(own, [icon(676), icon(604)]);
+    expect(stack).toEqual({ left: 1175, top: 604, width: 88, height: 204 });
+    const at = placeRecordingPanel({ capsule: stack, panel: PANEL, viewport: DESK });
+    expect(overlaps({ left: at.left, top: at.top, width: PANEL.width, height: at.maxHeight ?? PANEL.height }, stack)).toBe(false);
+  });
+  it("끌어서 떨어뜨린 아이콘(다른 줄·멀리)은 묶지 않는다", () => {
+    const own = icon(748);
+    expect(stackFootprint(own, [icon(100, 16), icon(400)])).toEqual(own);
+  });
+  it("가운데가 빠져도 이어진 것만 — 사이가 벌어지면 끊는다", () => {
+    expect(stackFootprint(icon(748), [icon(676), icon(300)])).toEqual({ left: 1175, top: 676, width: 88, height: 132 });
   });
 });

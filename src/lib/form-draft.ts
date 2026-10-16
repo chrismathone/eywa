@@ -20,6 +20,8 @@ const BACKSTOP_MAX_BYTES = 256 * 1024;
 const BACKSTOP_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 /** 정리는 세션당 한 번(용량 초과 시에만 강제 재실행). */
 let swept = false;
+/** 작성 화면 한 벌의 초안 정리도 세션당 한 번. */
+let instancesSwept = false;
 
 /** 입력 멈춤 후 저장까지 디바운스(ms). */
 export const DRAFT_DEBOUNCE_MS = 700;
@@ -246,8 +248,36 @@ export function pickNewerDraft(fromDb: FormDraft | null, backstop: FormDraft | n
   return backstop.savedAt > fromDb.savedAt ? backstop : fromDb;
 }
 
+/**
+ * 작성 화면 한 벌(`form=<id>`, recording-resume.ts)의 초안 칸(`…#<id>`)은 그 주소로만 다시 열린다 — 저장하지 않고 떠난 것이
+ * IDB에 무기한 쌓이지 않게(이름·연락처가 든다 · 공용 PC) 백스톱과 같은 기간이 지난 것을 지운다. 세션 첫 조회에서만.
+ */
+function sweepInstanceDrafts(): void {
+  if (instancesSwept) return;
+  instancesSwept = true;
+  try {
+    void openDB().then(
+      (db) => {
+        const now = Date.now();
+        const req = db.transaction(STORE, "readwrite").objectStore(STORE).openCursor();
+        req.onsuccess = () => {
+          const cursor = req.result;
+          if (!cursor) return;
+          const draft = cursor.value as FormDraft | undefined;
+          if (String(cursor.key).includes("#") && (!draft?.savedAt || now - draft.savedAt > BACKSTOP_MAX_AGE_MS)) cursor.delete();
+          cursor.continue();
+        };
+      },
+      () => {},
+    );
+  } catch {
+    /* 정리는 best-effort */
+  }
+}
+
 export async function loadDraft(scope: string): Promise<FormDraft | null> {
   sweepBackstops(); // 세션 첫 조회에서만 — 오래된 백스톱이 공용 통에 쌓이지 않게
+  sweepInstanceDrafts();
   const fromDb = await new Promise<FormDraft | null>((resolve) => {
     try {
       void openDB().then(

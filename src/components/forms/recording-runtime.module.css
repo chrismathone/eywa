@@ -1,17 +1,19 @@
+/* 녹음 아이콘 = 붉은 테두리 하나에 마이크 + 그 밑의 제목(원장 2026-10-16). 크기는 recording-panel-placement.ts의
+   CAPSULE_WIDTH·CAPSULE_HEIGHT·CAPSULE_EXPANDED_WIDTH와 같은 값(88 × 60 · 펼치면 152). */
 .anchor {
   position: fixed;
-  width: 48px;
-  height: 48px;
+  width: 88px;
+  height: 60px;
   z-index: 10000;
 }
 
 .capsule {
   position: absolute;
   top: 0;
-  width: 48px;
-  height: 48px;
+  width: 88px;
+  height: 60px;
   border: 2px solid var(--danger);
-  border-radius: 999px;
+  border-radius: 16px;
   background: var(--background);
   color: var(--foreground);
   box-shadow: 0 4px 18px rgb(0 0 0 / 14%);
@@ -25,49 +27,100 @@
 .anchor[data-side="right"] .capsule { left: 0; }
 .anchor[data-side="left"] .capsule { right: 0; }
 .capsule:focus-visible { outline: 2px solid var(--danger); outline-offset: 4px; }
-.capsule:focus-visible { width: 128px; }
+.capsule:focus-visible { width: 152px; }
 @media (hover: hover) {
-  .capsule:hover { width: 128px; }
+  .capsule:hover { width: 152px; }
 }
+/* 소리를 담는 녹음은 하나 — 녹음 중 = 옅은 붉은 바탕이 아주 천천히 숨 쉬듯 깜빡인다(원장 2026-10-16 "내부 셀도 아주 천천히 펄스"),
+   일시정지 = 점선 테두리(여러 개가 떠 있어도 어느 것이 녹음 중인지 보인다). 테두리는 그대로. */
+.anchor[data-state="recording"] .capsule {
+  background: color-mix(in srgb, var(--danger) 8%, var(--background));
+  animation: recording-breathe 3.2s ease-in-out infinite;
+}
+@keyframes recording-breathe {
+  0%, 100% { background-color: color-mix(in srgb, var(--danger) 5%, var(--background)); }
+  50% { background-color: color-mix(in srgb, var(--danger) 20%, var(--background)); }
+}
+.anchor[data-state="paused"] .capsule { border-style: dashed; }
 
-.microphone {
+.face {
   position: absolute;
   top: 0;
-  width: 44px;
-  height: 44px;
+  width: 84px;
+  height: 56px;
+  padding: 0 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+.anchor[data-side="right"] .face { left: 0; }
+.anchor[data-side="left"] .face { right: 0; }
+
+.microphone {
+  position: relative;
+  height: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
-.microphone svg { width: 19.2px; height: 19.2px; }
-.anchor[data-side="right"] .microphone { left: 0; }
-.anchor[data-side="left"] .microphone { right: 0; }
+.microphone > svg:first-child { width: 19.2px; height: 19.2px; }
+.dot {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+}
+.badge {
+  position: absolute;
+  top: -3px;
+  right: -9px;
+  width: 12px;
+  height: 12px;
+}
+
+/* 제목은 앞부분만 — 넘치면 말줄임(원장 "너무 길면 적당한 길이로 잘라버릴것 앞부분만"). 전체는 정보창에. */
+.label {
+  max-width: 100%;
+  font-size: var(--text-xs);
+  line-height: 18px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.anchor[data-state="paused"] .label { color: var(--text-dim); }
 
 .timer {
   position: absolute;
   top: 0;
-  height: 44px;
-  width: 80px;
+  height: 56px;
+  width: 64px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  font-size: var(--text-xs);
   font-weight: 600;
   white-space: nowrap;
   opacity: 0;
   transform: translateX(-6px);
   transition: opacity 180ms ease, transform 300ms cubic-bezier(.22, 1, .36, 1);
 }
-.anchor[data-side="right"] .timer { right: 0; padding-right: 8px; }
-.anchor[data-side="left"] .timer { left: 0; padding-left: 8px; transform: translateX(6px); }
+.anchor[data-side="right"] .timer { right: 0; padding-right: 6px; }
+.anchor[data-side="left"] .timer { left: 0; padding-left: 6px; transform: translateX(6px); }
 .capsule:focus-visible .timer { opacity: 1; transform: translateX(0); transition-delay: 80ms; }
 @media (hover: hover) {
   .capsule:hover .timer { opacity: 1; transform: translateX(0); transition-delay: 80ms; }
 }
 /* 정보창이 열린 동안은 마우스가 떠나도 캡슐을 펼쳐 둔다 — 시간이 계속 보인다(원장 2026-10-14). 끄는 동안만 접는다(아래). */
-.anchor[data-open="true"] .capsule { width: 128px; }
+.anchor[data-open="true"] .capsule { width: 152px; }
 .anchor[data-open="true"] .timer { opacity: 1; transform: translateX(0); }
-.anchor[data-dragging="true"] .capsule { width: 48px; cursor: grabbing; }
+.anchor[data-dragging="true"] .capsule { width: 88px; cursor: grabbing; }
+/* 다른 아이콘에 겹치게 놓으면 줄에 맞춰 짧게 미끄러져 붙는다(use-recording-position SETTLE_MS와 같은 시간). */
+.anchor[data-settling="true"] { transition: left 240ms cubic-bezier(.22, 1, .36, 1), top 240ms cubic-bezier(.22, 1, .36, 1); }
 .anchor[data-dragging="true"] .timer { opacity: 0; transition-delay: 0ms; }
 
 .panel {
@@ -84,5 +137,6 @@
 .panel[data-placed="true"] { opacity: 1; pointer-events: auto; }
 
 @media (prefers-reduced-motion: reduce) {
-  .capsule, .timer { transition: none; }
+  .capsule, .timer, .anchor[data-settling="true"] { transition: none; }
+  .anchor[data-state="recording"] .capsule { animation: none; }
 }

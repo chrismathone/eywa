@@ -143,7 +143,7 @@ async function submitInlineRecording() {
   } });
   await renderForm();
   await click(/바로 녹음/);
-  await click(/녹음 중지/);
+  await click(/녹음 끝내기/);
   await click(/업로드 및 분석 시작/);
 }
 
