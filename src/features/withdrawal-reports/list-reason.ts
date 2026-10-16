@@ -15,8 +15,11 @@ export type ListReason = { text: string; note: string | null; muted?: boolean };
 
 const fold = (s: string) => s.replace(/\s+/g, "");
 
+/** `note` = 맞는 세부가 없을 때 사유 아래에 붙는 설명(기타의 설명 줄과 같은 자리 · 원장 2026-10-16). */
+type SheetReason = { reason: WithdrawalReason; detail?: string; note?: string };
+
 /** 옛 양식 사유 글(공백 뺀 모양) → 우리 사유. 2026-10-16 운영 원문 421건의 사유 글 전수에서 뜻이 하나인 것만. */
-export const SHEET_REASONS: Readonly<Record<string, { reason: WithdrawalReason; detail?: string }>> = {
+export const SHEET_REASONS: Readonly<Record<string, SheetReason>> = {
   강사교체: { reason: "dissatisfaction", detail: "teacher_reassigned" },
   잦은강사교체불만: { reason: "dissatisfaction", detail: "teacher_changes" },
   잦은강사변경: { reason: "dissatisfaction", detail: "teacher_changes" },
@@ -25,7 +28,8 @@ export const SHEET_REASONS: Readonly<Record<string, { reason: WithdrawalReason; 
   반레벨과맞지않음: { reason: "dissatisfaction", detail: "class_grouping" },
   학원관리미흡: { reason: "dissatisfaction", detail: "care_lacking" },
   선생님과맞지않아서: { reason: "dissatisfaction" },
-  수업진행이빡세서: { reason: "dissatisfaction" },
+  // 원장 2026-10-16 *"수업·강사 (힘듦)"* — 수업·강사엔 '힘듦' 세부가 없어 설명으로.
+  수업진행이빡세서: { reason: "dissatisfaction", note: "힘듦" },
   "학습부진,수업따라오기벅참": { reason: "motivation", detail: "struggling" },
   학업의욕상실: { reason: "motivation", detail: "low_motivation" },
   시험성적이기대만큼안나옴: { reason: "grades", detail: "score_stalled" },
@@ -53,7 +57,7 @@ const LABELS = (() => {
   ];
   const seen = new Map<string, number>();
   for (const [k] of all) seen.set(k, (seen.get(k) ?? 0) + 1);
-  return new Map<string, { reason: WithdrawalReason; detail?: string }>(all.filter(([k]) => seen.get(k) === 1));
+  return new Map<string, SheetReason>(all.filter(([k]) => seen.get(k) === 1));
 })();
 
 const text = (reason: WithdrawalReason, detail?: string | null) => {
@@ -68,7 +72,7 @@ export function archiveReason(rawReason: string | null | undefined, rawDetail: s
   const raw = firstLine(rawReason);
   const key = raw ? fold(raw) : "";
   const hit = (Object.hasOwn(SHEET_REASONS, key) ? SHEET_REASONS[key] : undefined) ?? LABELS.get(key);
-  if (hit && hit.reason !== "other") return { text: text(hit.reason, hit.detail), note: null };
+  if (hit && hit.reason !== "other") return { text: text(hit.reason, hit.detail), note: hit.note ?? null };
   // 원문이 '기타'·빈칸 = 상세 사유가 설명 · 그 밖의 글 = 그 글이 설명(우리 사유로 바꾸지 않는다).
   if (raw && !hit) return other(raw);
   const detail = firstLine(rawDetail);

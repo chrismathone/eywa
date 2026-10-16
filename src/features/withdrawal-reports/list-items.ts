@@ -77,7 +77,7 @@ export function buildListItems(input: {
       ],
       link: null,
       myTurn: ["requested", "revision"].includes(r.status) && r.teacher_id === userId,
-      search: [r.snapshot.name, r.snapshot.school, r.snapshot.grade, ...r.snapshot.courses.map((c) => c.className), teacher, reason.text].join(" "),
+      search: [r.snapshot.name, r.snapshot.school, r.snapshot.grade, ...r.snapshot.courses.map((c) => c.className), teacher, reason.text, reason.note ?? ""].join(" "),
     };
   });
   const archived = input.archives.map((a): ListItem => {
@@ -99,7 +99,7 @@ export function buildListItems(input: {
       approval: [{ text: `원본 · ${a.sheet_title}`, muted: true }],
       link: a.mapped_student_id ? (a.mapping_kind === "manual" ? "manual" : "auto") : "unmapped",
       myTurn: false,
-      search: [a.student_name, a.school_grade, a.class_name, a.teacher_name, a.sheet_title, reason.text, a.reason_raw ?? ""].join(" "),
+      search: [a.student_name, a.school_grade, a.class_name, a.teacher_name, a.sheet_title, reason.text, reason.note ?? "", a.reason_raw ?? ""].join(" "),
     };
   });
   // 🔑 진행 중(처리할 일)이 먼저 — 기본 보기가 '전체'라 지난 날짜로 요청된 진행 중 보고서가 기존 기록 사이로 묻히지 않게.

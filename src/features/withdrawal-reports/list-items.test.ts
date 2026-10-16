@@ -59,6 +59,16 @@ describe("퇴원보고서 목록 한 벌 — 웹 보고서 + 기존 스프레드
     expect(keys(found)).toEqual(["a:a1"]);
   });
 
+  it("사유 아래 설명 줄로도 찾는다 — 매핑 설명('힘듦') · 기타의 설명", () => {
+    const [web, old] = build(
+      [report({ body_reason: "other", body_detail: "집안 사정으로 쉬기로" })],
+      [archive({ reason_raw: "수업진행이 빡세서", detail_raw: "" })],
+    );
+    expect(old!.reason).toEqual({ text: "수업·강사", note: "힘듦" });
+    expect(keys(filterListItems([web!, old!], { ...all, q: "힘듦" }, listWindow(all, "2026-10-16")))).toEqual(["a:a1"]);
+    expect(keys(filterListItems([web!, old!], { ...all, q: "집안 사정" }, listWindow(all, "2026-10-16")))).toEqual([web!.key]);
+  });
+
   it("퇴원·종료일 늦은 순, 날짜를 못 읽은 원문은 맨 뒤(원문 표기 그대로 보인다)", () => {
     const items = build([report({ id: "r2", effective_date: "2026-10-01" })], [archive(), archive({ id: "a2", exit_date: null, raw_exit_date: "9월 말" })]);
     expect(keys(items)).toEqual(["r:r2", "a:a1", "a:a2"]);

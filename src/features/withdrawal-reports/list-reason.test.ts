@@ -13,6 +13,12 @@ describe("퇴원보고서 목록의 사유 칸 — 우리 사유 그대로, 없�
     expect(archiveReason(" 강사  교체 ", null)).toEqual({ text: "수업·강사 · 담당 강사 변경", note: null });
   });
 
+  it("맞는 세부가 없으면 매핑의 설명이 사유 아래 설명 줄로 — 수업진행이 빡세서 = 수업·강사 (힘듦)(원장 2026-10-16)", () => {
+    expect(archiveReason("수업진행이 빡세서", "상세 사유 원문")).toEqual({ text: "수업·강사", note: "힘듦" });
+    // 설명이 없는 매핑은 종전대로 설명 없음
+    expect(archiveReason("선생님과 맞지않아서", "상세")).toEqual({ text: "수업·강사", note: null });
+  });
+
   it("뜻이 하나로 안 정해지거나 표에 없는 글은 지어 붙이지 않는다 — '기타' + 그 글이 설명", () => {
     expect(archiveReason("학습태도 불량 / 금전적인 문제(집안사정)", "상세")).toEqual({ text: "기타", note: "학습태도 불량 / 금전적인 문제(집안사정)" });
     expect(archiveReason("친구 및 반 분위기가 안좋아서", null)).toEqual({ text: "기타", note: "친구 및 반 분위기가 안좋아서" });
