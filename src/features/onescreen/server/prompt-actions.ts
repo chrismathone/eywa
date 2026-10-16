@@ -245,7 +245,7 @@ export async function testPrompt(
     });
     const input = buildTrendInput(history, { today: reportDate });
     if (!input) return { ok: false, error: "이 학생은 추세 표본이 부족합니다 — 다른 보고서를 선택하세요" };
-    if (input.quiet) return { ok: false, error: "이 보고서 시점엔 지난 보고서와 달라진 점이 없어 추세를 쓰지 않습니다 — 다른 보고서를 선택하세요" };
+    if (input.quiet) return { ok: false, error: "이 보고서 시점엔 지난 보고서와 달라진 점이 없거나 말할 흐름이 없어 추세를 쓰지 않습니다 — 다른 보고서를 선택하세요" };
     prompt = buildTrendPrompt(input, trimmed);
   } else {
     // comment | comment_p1 | comment_p2 — 저장 보고서엔 특이사항이 없으므로 specialNote=""(P2는 태도만).
