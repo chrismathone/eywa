@@ -85,8 +85,8 @@ function flatten(s: string): string {
     .join(", ");
 }
 
-/** 점수 → 사람이 읽는 문장. 미입력이면 "". 직전 회차 있으면 증감(▲/▼) 부기. 표기는 공유 포맷. */
-function testLine(score: number | null, max: number, prev: number | null): string {
+/** 점수 → 사람이 읽는 문장. 미입력이면 "". 직전 회차 있으면 증감(▲/▼) 부기. 표기는 공유 포맷. AI 멘트 탭 미리보기도 이 함수(ment-preview-input.ts). */
+export function testLine(score: number | null, max: number, prev: number | null): string {
   if (score == null) return "";
   let s = formatTestScore(score, max);
   if (prev != null) {

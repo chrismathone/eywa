@@ -68,7 +68,12 @@ function PromptEditor({ row, reports, canEdit }: { row: PromptRow; reports: Test
     setSaving(true);
     const res = await savePrompt(row.type, text);
     setSaving(false);
-    if (res.ok) {
+    if (res.ok && res.usedDefault) {
+      // 기본값과 같은 글은 사용자 지정으로 굳히지 않는다 — 기본값이 나중에 나아지면 그대로 따라간다(서버 savePrompt).
+      setCustom(false);
+      setHistory(null);
+      toast.success("기본값과 같아 따로 저장하지 않았습니다 — 기본값을 그대로 씁니다");
+    } else if (res.ok) {
       setCustom(true);
       toast.success("저장했습니다 — 이제 이 프롬프트로 생성됩니다");
       setHistory(null); // 이력 갱신 유도(다음에 열 때 재조회)
@@ -176,6 +181,9 @@ function PromptEditor({ row, reports, canEdit }: { row: PromptRow; reports: Test
       {/* 실데이터 미리보기 — 저장 없이 편집 중 프롬프트로 생성해 결과만 확인. */}
       <div className="border-line mt-3 rounded-md border p-3">
         <p className="text-text-faint mb-1.5 text-xs font-bold">실데이터로 테스트</p>
+        <p className="text-text-faint mb-1.5 text-xs break-keep">
+          고른 보고서를 실제 자동작성과 같은 재료(특이사항·선생님 말투)·같은 모델로 다시 써 봅니다. 저장·발송하지 않습니다.
+        </p>
         <div className="flex flex-wrap items-center gap-2">
           <select
             value={testReport}

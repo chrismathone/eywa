@@ -10,15 +10,11 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { effectiveTeacherId, readonlyTeacherViewError } from "@/lib/auth/view-mode";
 import { addDays, kstToday, resolveReportDate } from "@/lib/date-kst";
 import { generateJSON } from "@/lib/ai/generate";
-import { commentBody, commentP1Body, commentP2Body, type ReportCommentInput } from "../report-comment";
-import { buildTrendInput, findImpossibleScaleSpans, findTrendContradictions, findTrendViolations, trendBody, TREND_HISTORY_FETCH_DAYS, type TrendInput } from "../trend-comment";
+import { type ReportCommentInput } from "../report-comment";
+import { mentMaxTokens, mentSections, readMentResponse } from "../ment-assembly";
+import { buildTrendInput, TREND_HISTORY_FETCH_DAYS, type TrendInput } from "../trend-comment";
 import { resolveReportClassId } from "@/features/report-admin/server/resolve-class";
-import {
-  assembleCombined,
-  commentStyleDirective,
-  MENT_AI_TUNING,
-  type PromptSection,
-} from "../prompt-defaults";
+import { assembleCombined, MENT_AI_TUNING } from "../prompt-defaults";
 import { loadActivePrompt } from "./prompt-loader";
 import {
   fetchReportTrendRows,
@@ -1499,40 +1495,13 @@ export async function generateReportComment(
       getVideoReceiptComment(user.tenantId, trendCtx ?? {}).catch(() => null),
     ]);
     const styleBlock = mentStyle ? mentStyleDirective(mentStyle) : "";
-    const withTeacherStyle = (body: string) => (styleBlock ? `${body}\n\n${styleBlock}` : body);
     // 추세엔 **어조·문장 결만** — 선생님 표현·마무리("다음 시간에 ~하겠습니다")까지 붙이면 추세 금지(계획)에 걸려 버려진다(2026-10-16).
     const toneBlock = mentStyle ? mentStyleToneDirective(mentStyle) : "";
     const mode = (meRow?.report_notice_mode as "A" | "B" | null | undefined) ?? settings.report.noticeMode ?? "A";
 
-    const sections: PromptSection[] = [];
-    // 멘트 섹션 — 모드 A=단일(사실+특이사항 종합), B=수업내용(P1)+태도·특이사항(P2). 사실 없는 문단은 생략.
-    if (mode === "B") {
-      const [p1tpl, p2tpl] = await Promise.all([
-        loadActivePrompt(supabase, user.tenantId, "comment_p1"),
-        loadActivePrompt(supabase, user.tenantId, "comment_p2"),
-      ]);
-      const p1 = commentP1Body(safeInput, p1tpl);
-      const p2 = commentP2Body(safeInput, p2tpl);
-      if (p1) sections.push({ type: "comment_p1", field: "p1", body: withTeacherStyle(p1) });
-      if (p2) sections.push({ type: "comment_p2", field: "p2", body: withTeacherStyle(p2) });
-    } else {
-      const tpl = await loadActivePrompt(supabase, user.tenantId, "comment"); // DB 활성값 > 기본
-      // 문체 변형(2026-07-30) — 같은 반 학생들이 한 낱말만 다른 복사본을 받지 않게 **어디서부터 이야기를
-      // 열지**를 학생·날짜별로 돌린다. 사실은 그대로, 순서·초점만 바뀐다(prompt-defaults 주석 참조).
-      // 시드가 결정적이라 같은 학생·같은 날 재생성해도 결이 흔들리지 않는다.
-      const styleSeed = `${input.studentName}|${trendCtx?.date ?? ""}|${input.subject}`;
-      const style = commentStyleDirective(styleSeed);
-      const body = commentBody(safeInput, tpl);
-      // 순서가 뜻이다 — 말투 지침의 마지막 줄이 바로 위 '이번 알림장의 결'을 가리킨다(첫 문장 여는 자리는 결이 이긴다).
-      sections.push({ type: "comment", field: "comment", body: withTeacherStyle(style ? `${body}
-
-${style}` : body) });
-    }
-
-    // 추세 섹션(선택) — 컨텍스트 있고 표본 충분할 때만. 대상 날짜(작업중, 미저장일 수 있음) 포함(edutrix 패리티).
+    // 추세(선택) — 컨텍스트 있고 표본 충분할 때만. 대상 날짜(작업중, 미저장일 수 있음) 포함(edutrix 패리티).
     // ⚠️ 과거 날짜 보고서: 그 뒤에 이미 채점 이력이 있으면 추세 미반영 — 뒤늦게 끼우는 과거 점이 추세 그래프/서술을 흐트러뜨림(원장 2026-07-14).
-    let hasTrend = false;
-    // 생성 뒤 대조(findTrendContradictions)에 쓴다 — 끝난 연속을 이어지는 말로 쓰면 추세를 싣지 않는다.
+    // 사실 줄이 있을 때만 — 추세 섹션을 만들고, 생성 뒤 대조(findTrendContradictions)에도 쓴다.
     let trendInput: TrendInput | null = null;
     // 지난 보고서와 달라진 게 없다(trendNews) — 이번 회차엔 추세를 쓰지 않는다. 칸은 화면이 정한다: 지난 자동작성이 넣은 글 그대로면
     //   비우고, 선생님이 손으로 쓰거나 고친 글이면 둔다(적대적 재리뷰 2026-10-16 — 일괄 자동작성이 반 전체의 손글씨 추세를 지웠을 것).
@@ -1567,61 +1536,63 @@ ${style}` : body) });
           classId: trendClassId ?? null,
         });
         const ti = buildTrendInput(history, { today: anchorDate });
-        if (ti && ti.facts.length) {
-          const ttpl = await loadActivePrompt(supabase, user.tenantId, "trend");
-          const tbody = trendBody(ti, ttpl);
-          sections.push({ type: "trend", field: "trend", body: toneBlock ? `${tbody}\n\n${toneBlock}` : tbody });
-          hasTrend = true;
-          trendInput = ti;
-        } else if (ti?.quiet) trendQuiet = true;
+        if (ti && ti.facts.length) trendInput = ti;
+        else if (ti?.quiet) trendQuiet = true;
       }
     }
 
+    // 🔴 조립·응답 읽기·생성 뒤 검사 = AI 멘트 탭 미리보기와 **같은 함수**(ment-assembly.ts — 원장 2026-10-16 미리보기 = 실제와 같게).
+    //    활성 프롬프트(DB > 기본)는 이 모드·추세에 쓰는 것만 읽는다 — 넷은 서로 독립(B4).
+    const [tplComment, tplP1, tplP2, tplTrend] = await Promise.all([
+      mode === "B" ? null : loadActivePrompt(supabase, user.tenantId, "comment"),
+      mode === "B" ? loadActivePrompt(supabase, user.tenantId, "comment_p1") : null,
+      mode === "B" ? loadActivePrompt(supabase, user.tenantId, "comment_p2") : null,
+      trendInput ? loadActivePrompt(supabase, user.tenantId, "trend") : null,
+    ]);
+    const sections = mentSections({
+      mode,
+      input: safeInput,
+      templates: { comment: tplComment, comment_p1: tplP1, comment_p2: tplP2, trend: tplTrend },
+      // 결 변형 시드가 결정적이라 같은 학생·같은 날 재생성해도 결이 흔들리지 않는다. 날짜는 **보고서 날짜**(빈 값 = 오늘) —
+      //   원스크린은 오늘을 볼 때 date를 비워 보내 시드가 `이름||과목`이 됐고, 한 학생이 날마다 같은 결로 열렸다(2026-10-16 미리보기 후속에서 발견).
+      styleSeed: `${input.studentName}|${resolveReportDate(trendCtx?.date)}|${input.subject}`,
+      styleBlock,
+      toneBlock,
+      trend: trendInput,
+    });
     if (sections.length === 0) return { ok: false, error: "생성할 내용이 없습니다" };
 
     // 통합 1회 호출 — 멘트(·추세)를 한 번에 {comment|p1|p2, trend}로 생성. temp 0.3·reasoning minimal(Solar 후보정) 적용.
     // 보고서 멘트·추세는 **fast tier**(Claude Haiku 5.5 — 2026-10-16 4.5에서 올림 / 키 죽으면 DeepSeek → Solar 폴백) — 사실 서술형이라 Sonnet 불요, 비용 절감(원장 결정 2026-07-14).
     // ⚠️ 이 tier 지정은 **멘트 호출에만** — 등록상담·회의록 분석은 balanced(Sonnet 5) 유지. Haiku도 Anthropic 키가 살아야 동작(아니면 Solar).
-    const { data } = await generateJSON<Record<string, string>>({
+    const { data } = await generateJSON<Record<string, unknown>>({
       prompt: assembleCombined(sections),
-      maxTokens: safeInput.specialNote || safeInput.classNotice ? 1800 : 1000,
+      maxTokens: mentMaxTokens(safeInput),
       keyName: "default",
       tier: "fast",
       meta: { feature: "classnote_ment", tenantId: user.tenantId },
       ...MENT_AI_TUNING,
     });
-    const pick = (k: string) => (data[k] ?? "").trim();
-    const aiComment = mode === "B" ? [pick("p1"), pick("p2")].filter(Boolean).join("\n\n") : pick("comment");
-    if (!aiComment) return { ok: false, error: "빈 응답" };
-    const comment = prependParentAddress(appendVideoReceiptComment(aiComment, videoReceipt), parentAddress);
-    // 🔴 추세 문장 후검증(2026-08-13) — 척도가 섞인 학생에게서 *"9~15문제 중 9~15개 선을 유지"* 같은
-    //    **사실일 수 없는 표기**가 실제로 학부모에게 나갔다. 프롬프트 주의 문구가 이미 있었는데도 뚫렸으므로
-    //    생성 뒤에도 한 번 더 본다. 걸리면 **추세를 아예 안 실는다** — 없는 것보다 거짓이 나쁘다.
-    //    (추세는 선택 항목이라 빠져도 보고서는 성립한다. 멘트는 그대로 살린다.)
-    // 🔴 2026-10-15 추가: 기록에 있을 수 없는 문장(계획 "~겠습니다" · 원인 "집중력" · 원색 표현 · 전망 · "비교하기 어렵지만" 같은
-    //    내부 사정)도 같은 자리에서 거른다 — 프롬프트 예시 한 줄이 30일 90건 그대로 나갔다(권민서A 클레임). trend-comment.ts 참조.
-    const rawTrend = hasTrend ? pick("trend") || undefined : undefined;
-    const badSpans = rawTrend ? findImpossibleScaleSpans(rawTrend) : [];
-    const violations = rawTrend ? [...findTrendViolations(rawTrend), ...(trendInput ? findTrendContradictions(trendInput, rawTrend) : [])] : [];
-    if (badSpans.length || violations.length)
+    const res = readMentResponse(data, mode, trendInput);
+    if (!res.comment) return { ok: false, error: "빈 응답" };
+    const comment = prependParentAddress(appendVideoReceiptComment(res.comment, videoReceipt), parentAddress);
+    if (res.dropped)
       console.warn(
         JSON.stringify({
           level: "warn",
           scope: "generateReportComment.trend",
-          reason: badSpans.length ? "impossible_scale_span" : "banned_phrase",
-          spans: badSpans,
-          violations,
+          reason: res.badSpans.length ? "impossible_scale_span" : "banned_phrase",
+          spans: res.badSpans,
+          violations: res.violations,
           message: "추세 문장에 기록에 없는 내용·사실일 수 없는 표기가 있어 저장하지 않음",
         }),
       );
-    const dropped = badSpans.length > 0 || violations.length > 0;
-    const trend = dropped ? undefined : rawTrend;
     // trendDropped = 이번에 만든 추세를 버렸다 — 화면은 추세 칸을 비운다(안 비우면 예전 초안이 그대로 발송된다, 적대적 리뷰 2026-10-15).
     //    trendQuiet = 달라진 게 없어 안 만들었다 — 화면이 자동작성 글이면 비우고 손글씨면 둔다. 표본 부족은 종전대로 기존 초안·손 입력을 둔다.
     //    모델이 추세를 **비워 보냈다**(본문이 이미 같은 말을 했거나 오늘 값과 어긋나 쓸 말이 없다 — 2026-10-16 시험 120회 중 5회)도 같은 뜻이다.
     //    ⚠️ 응답에 trend 키가 **아예 없는** 것(대체 provider가 계약을 빠뜨림)은 일부러 비운 게 아니다 — 지난 초안을 비우지 않는다(적대적 리뷰).
-    const quiet = trendQuiet || (hasTrend && typeof data.trend === "string" && !data.trend.trim());
-    return { ok: true, comment, trend, ...(dropped ? { trendDropped: true } : {}), ...(quiet ? { trendQuiet: true } : {}) };
+    const quiet = trendQuiet || res.quietByModel;
+    return { ok: true, comment, trend: res.trend, ...(res.dropped ? { trendDropped: true } : {}), ...(quiet ? { trendQuiet: true } : {}) };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "AI 생성 실패" };
   }
