@@ -272,3 +272,49 @@ describe("useFormDraft — enabled 토글 세션 경계", () => {
     expect(saveOnHideSpy).not.toHaveBeenCalled();
   });
 });
+/**
+ * 같은 문서 안에서 화면을 떠날 때(단일 화면에서 녹음하며 다른 메뉴로 — 원장 2026-10-16) 디바운스 안의 마지막 입력도 남긴다.
+ * 안 그러면 녹음 아이콘의 '작성 화면 열기'가 덜 된 내용을 되살린다.
+ */
+describe("화면을 떠날 때(언마운트) 마지막 입력 저장", () => {
+  it("useFormDraft — 디바운스 대기 중에 떠나면 그 입력까지 저장한다 · 대기가 없으면 저장하지 않는다", async () => {
+    const view = render(<FormHarness />);
+    await act(async () => {});
+    const input = view.container.querySelector("input[name=content]") as HTMLInputElement;
+    act(() => {
+      typeInto(input, "상담 메모");
+      vi.advanceTimersByTime(300);
+    });
+    view.unmount();
+    expect(saveDraftSpy).toHaveBeenCalledTimes(1);
+    expect(saveDraftSpy.mock.calls[0]![1]).toMatchObject({ content: "상담 메모" });
+
+    saveDraftSpy.mockClear();
+    const again = render(<FormHarness />);
+    await act(async () => {});
+    again.unmount();
+    expect(saveDraftSpy).not.toHaveBeenCalled();
+  });
+
+  it("useStateDraft — 디바운스 대기 중에 떠나면 마지막 스냅샷을 저장한다 · 서버 저장(clear) 뒤엔 저장하지 않는다", async () => {
+    const api = {} as StateApi;
+    const view = render(<StateHarness onReady={(a) => Object.assign(api, a)} />);
+    await act(async () => {});
+    act(() => api.setText("회의 제목"));
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    view.unmount();
+    expect(saveDraftSpy).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(saveDraftSpy.mock.calls[0]![1].__json).text).toBe("회의 제목");
+
+    saveDraftSpy.mockClear();
+    const next = {} as StateApi;
+    const saved = render(<StateHarness onReady={(a) => Object.assign(next, a)} />);
+    await act(async () => {});
+    act(() => next.setText("저장한 회의"));
+    act(() => next.clear());
+    saved.unmount();
+    expect(saveDraftSpy).not.toHaveBeenCalled();
+  });
+});

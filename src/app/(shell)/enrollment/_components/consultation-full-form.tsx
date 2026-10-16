@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { useLicenseOn, useModuleOn } from "@/features/owner/operations-context";
 import {
   AlertCircle, AlertTriangle, ArrowRight, Banknote, BookOpen, Bus, Cake, Calendar,
@@ -28,6 +28,8 @@ import { AudioRecorderField } from "./audio-recorder-field";
 import { RecordingRecoveryNotice } from "@/components/forms/recording-recovery-notice";
 import { clearRecovery, consultationRecordingKey, type RecordingOwner } from "@/lib/recording-recovery";
 import { dismissBrowserRecording } from "@/lib/browser-recording";
+import { documentHasLiveRecording, formDraftScope, recordingSince } from "@/lib/recording-resume";
+import { SavedStayNotice } from "@/components/forms/saved-stay-notice";
 import { issueAudioUploadTicket } from "@/features/media/server/upload-actions";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import {
@@ -52,6 +54,11 @@ import {
 // 컴팩트 입력(ijw 밀도) — aywa 토큰. 카드/라벨/그리드는 아래 헬퍼로 통일.
 const input =
   "border-border bg-card text-foreground placeholder:text-text-faint w-full rounded-md border px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
+/**
+ * 녹음 대상(이름·연락처) 칸 — 녹음 중엔 `disabled`가 아니라 `readOnly`로 잠근다. disabled 칸은 임시 저장에서 빠져서
+ * (form-draft `readFormValues`) 돌아온 작성 화면에 이름이 비고, 녹음이 다시 붙지 않았다.
+ */
+const lockedInput = `${input} read-only:bg-muted/40 read-only:text-text-dim`;
 
 // 기존 녹음 "마지막 M/D HH:mm" 라벨 — KST 고정(서버/클라 하이드레이션 일치).
 const KST_REC_LABEL = new Intl.DateTimeFormat("ko-KR", {
@@ -122,6 +129,7 @@ export function ConsultationFullForm({
   existingRecordings = [],
   confirmConsultedOnSave = false,
   recordingOwner,
+  instance,
 }: {
   mode: "create" | "edit";
   initial?: ConsultationFormInitial;
@@ -132,6 +140,11 @@ export function ConsultationFullForm({
   /** QR 접수 + 대기·예약 건(수정 모드) — 저장 시 "상담 완료로 변경?" 확인 팝업을 띄운다(서버도 조건 재검증). */
   confirmConsultedOnSave?: boolean;
   recordingOwner: RecordingOwner;
+  /**
+   * 작성 화면 한 벌(recording-resume.ts) — `formId`가 있으면(녹음이 걸린 신규 작성 화면이 있을 때 연 새 화면) 임시 저장 칸을 따로
+   * 쓴다. 이 화면에 걸린 녹음이 있으면(녹음 아이콘의 '작성 화면 열기'·뒤로 가기로 돌아옴) 그 뒤의 임시 저장을 안내 없이 되살린다.
+   */
+  instance?: { formId?: string };
 }) {
   const subjects = useSubjectMaps();
   const gradeLevels = useGradeLevels();
@@ -169,10 +182,22 @@ export function ConsultationFullForm({
     setRecordingSubject({ name, phone });
   }
   const [recordingActive, setRecordingActive] = useState(false);
+  const [recordingPaused, setRecordingPaused] = useState(false);
+  const onRecordingChange = useCallback((live: boolean, paused: boolean) => {
+    setRecordingActive(live);
+    setRecordingPaused(paused);
+  }, []);
+  // 녹음이 붙어 있으면(녹음 중·일시정지 — '작성 화면 열기'로 돌아온 화면 포함) 녹음 칸을 펼쳐 바로 보이게 한다.
+  const recordingDetailsRef = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    if (recordingActive && recordingDetailsRef.current) recordingDetailsRef.current.open = true;
+  }, [recordingActive]);
   const [phase, setPhase] = useState<"idle" | "uploading" | "submitting">("idle");
   const [submitError, setSubmitError] = useState<string | null>(null);
   /** 저장이 끝나 상세로 떠나는 중 — 폼 전체를 잠근다(아래 form의 inert 주석). */
   const [leaving, setLeaving] = useState(false);
+  /** 저장했지만 이 문서의 다른 녹음 때문에 머문다 — 상세로 가는 링크(SavedStayNotice). */
+  const [stayHref, setStayHref] = useState<string | null>(null);
   const busy = phase !== "idle";
 
   // 상단 탭(ijw 구조): 기본 정보 + 과목별 상담. AI 분석은 상세 화면에서 보여준다(폼은 입력 전용).
@@ -215,7 +240,7 @@ export function ConsultationFullForm({
 
   // 로컬 초안 자동저장 — 입력 중 IDB 보관, 다시 열면 복구 배너. 서버 저장 성공 시 clear.
   const formRef = useRef<HTMLFormElement>(null);
-  const draftScope = isCreate ? "consultation:new" : `consultation:${v.id ?? "edit"}`;
+  const draftScope = isCreate ? formDraftScope("consultation:new", instance?.formId) : `consultation:${v.id ?? "edit"}`;
   const draft = useFormDraft({
     scope: draftScope,
     // 항상 기본값이 채워지는 날짜/상태 필드는 "의미 있는 입력" 판정에서 제외(빈 폼 오탐 배너 방지).
@@ -223,6 +248,8 @@ export function ConsultationFullForm({
     // 소개한 사람은 고르기 칸의 상태(이름 표시)와 숨은 칸이 짝이라 초안으로 되살리지 않는다(값만 돌아오고 이름은 옛것인 채로 저장되지 않게).
     exclude: ["referrer", "referrerName"],
     formRef,
+    // 이 화면에 걸린 녹음으로 돌아왔으면 그 녹음 뒤의 입력을 안내 없이 바로 — 이름·연락처가 되살아나 녹음이 다시 붙는다.
+    restoreSince: () => recordingSince(instance?.formId),
     onRestore: (vals) => {
       if (formRef.current) syncRecordingSubject(formRef.current);
       setRecordingDraftId(vals.recordingDraftId || crypto.randomUUID());
@@ -236,6 +263,19 @@ export function ConsultationFullForm({
     },
   });
   const clearDraft = draft.clear;
+  // 녹음이 붙는 순간 지금 입력을 바로 남긴다 — 그 뒤 아무것도 안 치고 떠나도 돌아온 화면이 이 값을 되살린다(restoreSince).
+  const saveDraftNow = draft.save;
+  useEffect(() => {
+    if (recordingActive) saveDraftNow();
+  }, [recordingActive, saveDraftNow]);
+
+  /** 저장 뒤 상세로 — 풀 문서 이동(#102). 이 문서에 다른 녹음이 살아 있으면 떠나지 않고 링크를 보인다(문서가 내려가면 끊긴다). */
+  function leaveTo(path: string) {
+    const dest = inFrame ? withEmbed(path) : path;
+    setLeaving(true);
+    if (documentHasLiveRecording()) setStayHref(dest);
+    else window.location.assign(dest);
+  }
 
   // 동시편집 가드(same-browser 저장경고) + cross-user "수정중" presence(edit 모드) — 둘 다 공존.
   const editScope = !isCreate && v.id ? `consultation:${v.id}` : undefined;
@@ -260,7 +300,7 @@ export function ConsultationFullForm({
     e.preventDefault();
     setSubmitError(null);
     if (recordingActive) {
-      setSubmitError("녹음을 먼저 중지한 후 저장해주세요.");
+      setSubmitError("녹음을 끝낸 뒤 저장해 주세요.");
       return;
     }
     const fd = new FormData(e.currentTarget);
@@ -309,12 +349,10 @@ export function ConsultationFullForm({
           setSubmitError(result.error);
           setPhase("idle");
         } else if (result?.id) {
-          if (audioRecoveryId) { await clearRecovery(audioRecoveryId); dismissBrowserRecording(audioRecoveryId); }
+          if (audioRecoveryId) { await clearRecovery(audioRecoveryId); dismissBrowserRecording({ recoveryId: audioRecoveryId }); }
           clearDraft();
           markSaved();
-          setLeaving(true);
-          const dest = `/enrollment/${result.id}`;
-          window.location.assign(inFrame ? withEmbed(dest) : dest);
+          leaveTo(`/enrollment/${result.id}`);
         } else {
           setSubmitError("저장 결과를 확인하지 못했습니다. 목록에서 확인해 주세요.");
           setPhase("idle");
@@ -329,16 +367,14 @@ export function ConsultationFullForm({
           return;
         }
         if (result?.ok && v.id) {
-          if (audioRecoveryId) { await clearRecovery(audioRecoveryId); dismissBrowserRecording(audioRecoveryId); }
+          if (audioRecoveryId) { await clearRecovery(audioRecoveryId); dismissBrowserRecording({ recoveryId: audioRecoveryId }); }
           clearDraft();
           notifySaved();
           markSaved(); // ⚠️ 이동보다 먼저 — 뒤면 풀 문서 이동에 미저장 가드의 '떠나시겠습니까?'가 뜬다
           // 🔴 `router.push`가 아니라 풀 문서 이동 — 서버 액션 직후의 push는 액션 응답이 이 수정 폼 트리를
           //    다시 적용하면서 삼켜진다(#102: 저장됐는데 수정 폼에 그대로 머문다). 풀 로드라 상세는 항상 새로
           //    그려진다(refresh 불필요). phase는 '저장 중…'인 채로 둔다 — 이동 중에 다시 누르면 녹음이 한 번 더 붙는다.
-          const dest = `/enrollment/${v.id}`;
-          setLeaving(true);
-          window.location.assign(inFrame ? withEmbed(dest) : dest);
+          leaveTo(`/enrollment/${v.id}`);
         }
       }
     } catch (err) {
@@ -351,9 +387,11 @@ export function ConsultationFullForm({
   const errorMsg = submitError;
 
   return (
-    // 🔴 저장 뒤 이동 대기 중엔 폼 전체를 잠근다(inert = 입력·포커스·클릭 불가). 풀 문서 이동은 응답이 올 때까지
-    //    이 화면이 살아 있는데, 그 사이 칸에 치면 ① 초안 자동저장이 방금 지운 초안을 pagehide에서 되살리고
-    //    ② 미저장 가드가 다시 dirty가 되어 이동에 '떠나시겠습니까?'가 뜬다.
+    <>
+    {stayHref ? <SavedStayNotice href={stayHref} saved={isCreate ? "상담을 저장했습니다." : "저장했습니다."} /> : null}
+    {/* 🔴 저장 뒤 이동 대기 중엔 폼 전체를 잠근다(inert = 입력·포커스·클릭 불가). 풀 문서 이동은 응답이 올 때까지
+        이 화면이 살아 있는데, 그 사이 칸에 치면 ① 초안 자동저장이 방금 지운 초안을 pagehide에서 되살리고
+        ② 미저장 가드가 다시 dirty가 되어 이동에 '떠나시겠습니까?'가 뜬다. 머무는 동안(stayHref)도 잠근 채 둔다. */}
     <form ref={formRef} onSubmit={handleSubmit} onInput={(e) => syncRecordingSubject(e.currentTarget)} className="space-y-3" inert={leaving}>
       {mode === "edit" && v.id ? <input type="hidden" name="id" value={v.id} /> : null}
       <input type="hidden" name="subjectDetails" value={JSON.stringify(details)} />
@@ -367,9 +405,9 @@ export function ConsultationFullForm({
 
       {/* 녹음 바 — 생성·수정 공통. 저장 시 자동 전사·13섹션 AI 분석(입력값 보존).
           수정: 녹음은 여러 행으로 **누적**(0068a) — 여러 상담사가 각자 추가하고, 분석은 전체 합본으로 갱신. */}
-      <details className="border-line rounded-lg border px-3 py-2">
+      <details ref={recordingDetailsRef} className="border-line rounded-lg border px-3 py-2">
         <summary className="cursor-pointer text-sm font-bold">
-          상담 녹음·파일 첨부 <span className="ml-2 font-medium" aria-live="polite">{recordingActive ? "녹음 중 · 열어서 정지" : audioFile ? audioFile.name : existingRecordings.length > 0 ? `기존 녹음 ${existingRecordings.length}개 · 추가 가능` : "선택 · 저장 후 전사·AI 분석"}</span>
+          상담 녹음·파일 첨부 <span className="ml-2 font-medium" aria-live="polite">{recordingActive ? recordingPaused ? "일시정지 · 열어서 이어서 녹음" : "녹음 중 · 열어서 일시정지·끝내기" : audioFile ? audioFile.name : existingRecordings.length > 0 ? `기존 녹음 ${existingRecordings.length}개 · 추가 가능` : "선택 · 저장 후 전사·AI 분석"}</span>
         </summary>
         <div className="mt-3 space-y-2.5">
         {!isCreate && existingRecordings.length > 0 ? (
@@ -386,7 +424,7 @@ export function ConsultationFullForm({
           scope={recordingScope}
           selectedRecoveryId={audioRecoveryId}
           showRecovery={false}
-          onRecordingChange={setRecordingActive}
+          onRecordingChange={onRecordingChange}
           disabled={busy}
         />
         {/* 안내 — 흐린 11px 한 줄이라 잘 안 보이던 것 → 아이콘 + 핵심 강조 + 12px로 또렷하게. */}
@@ -476,10 +514,10 @@ export function ConsultationFullForm({
           <Card title="학생 정보">
             <Grid cols={2}>
               <L label="학생 이름" icon={User} required>
-                <input name="prospectName" defaultValue={v.prospectName ?? ""} disabled={recordingActive || busy} className={input} />
+                <input name="prospectName" defaultValue={v.prospectName ?? ""} readOnly={recordingActive} disabled={busy} className={lockedInput} />
               </L>
               <L label="학생 전화" icon={MessageSquare}>
-                <input name="studentPhone" defaultValue={v.studentPhone ?? ""} disabled={recordingActive || busy} className={input} />
+                <input name="studentPhone" defaultValue={v.studentPhone ?? ""} readOnly={recordingActive} disabled={busy} className={lockedInput} />
               </L>
             </Grid>
             <Grid cols={2}>
@@ -487,7 +525,7 @@ export function ConsultationFullForm({
                 <input name="parentName" defaultValue={v.parentName ?? ""} className={input} />
               </L>
               <L label="보호자 연락처" icon={MessageSquare}>
-                <input name="parentPhone" defaultValue={v.parentPhone ?? ""} disabled={recordingActive || busy} className={input} />
+                <input name="parentPhone" defaultValue={v.parentPhone ?? ""} readOnly={recordingActive} disabled={busy} className={lockedInput} />
               </L>
             </Grid>
             <Grid cols={2}>
@@ -815,7 +853,7 @@ export function ConsultationFullForm({
       <FormActionBar>
         <Button type="submit" disabled={busy || recordingActive}>
           {recordingActive
-            ? "녹음 중 — 정지 후 저장"
+            ? "녹음 중 — 녹음을 끝낸 뒤 저장"
             : phase === "uploading"
               ? "음성 업로드 중…"
               : phase === "submitting"
@@ -827,6 +865,7 @@ export function ConsultationFullForm({
         </Button>
       </FormActionBar>
     </form>
+    </>
   );
 }
 

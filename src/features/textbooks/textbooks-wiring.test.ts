@@ -343,6 +343,22 @@ describe("교재 배정 — 회차 미루기·당기기", () => {
     expect(relay).toMatch(/status !== "ok"\) \{\s*return \{ handled: true, ok: false/);
   });
 
+  it("🔴 같은 주의 다른 칸도 화면에 갈아 끼운다 — 한 칸짜리 화면엔 넘기지 않는다(2026-10-16 재점검)", () => {
+    // 화를 누르면 그 주 금요일도 바뀐다 — 주간 시트가 누른 칸만 바꾸면 금요일이 옛 진도로 남아 보인다.
+    const body = plan.slice(plan.indexOf("export async function setLessonShift"));
+    expect(body).toContain("cells: weekRows");
+    const handlers = read("src", "features", "class-sheets", "components", "use-plan-handlers.ts");
+    expect(handlers).toContain("if (multiSlot)");
+    const sheet = read("src", "features", "class-sheets", "components", "sheet-client.tsx");
+    expect(sheet).toContain("multiSlot: true");
+    // 🔴 SlotPlanBlock의 onSlotLines는 날짜·교시를 안 보고 자기 칸을 통째로 바꾼다 — 넘기면 남의 칸이 그려진다.
+    const block = read("src", "features", "class-sheets", "components", "slot-plan-block.tsx");
+    expect(block).not.toContain("multiSlot");
+    // 🔴 지우는 건 옛 일정이 그 교재를 놓았던 칸뿐(교재가 끝난 뒤 복사해 둔 같은 문구 줄을 지우지 않게).
+    const relay = read("src", "features", "textbooks", "server", "shift-relay.ts");
+    expect(relay).toContain("previous: scheduleWith(m!.shifts ?? {})");
+  });
+
   it("🔴 버튼은 **실제를 적는 표**에 있다 — 달력에만 두면 사람이 못 찾는다", () => {
     // 원장 제보 2026-09-22 *"밀기 당기기는 어디에있음?"* — 처음엔 월간 달력 칸에만 뒀다.
     const table = read("src", "features", "class-sheets", "components", "plan-table.tsx");

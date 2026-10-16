@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -13,7 +13,8 @@ vi.mock("@/lib/recording-recovery", async (original) => ({
   startRecoverySession: async (kind: string, mimeType: string) => ({ id: "session", kind, mimeType, fileName: "회의.webm" }),
 }));
 vi.mock("@/lib/audio-upload", async (original) => ({ ...await original<typeof import("@/lib/audio-upload")>(), downloadFile: () => {} }));
-vi.mock("next/navigation", () => ({ usePathname: () => "/meetings/new", useRouter: () => ({ push: vi.fn() }) }));
+const router = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock("next/navigation", () => ({ usePathname: () => "/meetings/new", useRouter: () => router }));
 // Next Link처럼 기본 이동은 막고 onClick만 부른다(happy-dom이 실제로 주소를 옮기지 않게).
 vi.mock("next/link", () => ({ default: ({ href, children, className, onClick }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }) =>
   <a href={href} className={className} onClick={(event) => { event.preventDefault(); onClick?.(event); }}>{children}</a> }));
@@ -37,7 +38,7 @@ function stubLayout() {
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
     const left = parseFloat(this.style.left) || 0;
     const top = parseFloat(this.style.top) || 0;
-    const [width, height] = this.dataset.recordingId ? [48, 48] : [320, 200];
+    const [width, height] = this.dataset.recordingId ? [88, 60] : [320, 200];
     return { left, top, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON: () => ({}) } as DOMRect;
   });
   vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function (this: HTMLElement) { return this.getAttribute("aria-label") === "녹음 진행" ? 320 : 0; });
@@ -127,13 +128,13 @@ describe("녹음 정보창 — 띄워 둔 동안 시간이 계속 보인다", ()
   it("녹음을 멈춰도(녹음 완료) 열어 둔 정보창과 펼친 캡슐은 그대로 · '작성 화면 열기'는 그 화면으로 가며 정보창을 닫는다", async () => {
     open();
     act(() => { vi.advanceTimersByTime(3000); });
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "녹음 중지" })); await vi.runOnlyPendingTimersAsync(); });
-    expect(capsule()).toHaveAccessibleName(/^녹음 완료 · 00:03 · /);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "녹음 끝내기" })); await vi.runOnlyPendingTimersAsync(); });
+    expect(capsule()).toHaveAccessibleName(/ · 녹음 완료 · 00:03 · /);
     expect(anchor().textContent).toContain("00:03");
     expect(anchor().dataset.open).toBe("true");
-    const link = screen.getByRole("link", { name: "작성 화면 열기" });
-    expect(link).toHaveAttribute("href", window.location.pathname + window.location.search);
-    fireEvent.click(link);
+    // 작성 폼이 화면에 없으니 돌아갈 곳(녹음을 시작한 주소)으로 간다.
+    fireEvent.click(screen.getByRole("button", { name: "작성 화면 열기" }));
+    expect(router.push).toHaveBeenCalledWith(window.location.pathname + window.location.search);
     expect(panel()).toBeNull();
     expect(anchor().dataset.open).toBeUndefined();
   });
@@ -159,7 +160,7 @@ describe("녹음 정보창 — 사용자가 닫을 때만 닫힌다", () => {
   });
   it("Esc — 정보창 안이면 캡슐로 초점을 돌려준다", () => {
     open();
-    fireEvent.keyDown(screen.getByRole("button", { name: "녹음 중지" }), { key: "Escape" });
+    fireEvent.keyDown(screen.getByRole("button", { name: "녹음 끝내기" }), { key: "Escape" });
     expect(panel()).toBeNull();
     expect(document.activeElement).toBe(capsule());
     open();
@@ -235,7 +236,15 @@ describe("녹음 정보창 — 바깥 클릭은 정보창만 닫고 그 클릭�
 
 it("긴 회의 제목은 한 줄 말줄임 + 전체는 title", () => {
   open();
-  const title = screen.getByText(LONG_TITLE);
+  const title = within(panel()!).getByText(LONG_TITLE);
   expect(title.className).toContain("truncate");
   expect(title).toHaveAttribute("title", LONG_TITLE);
+});
+
+/** 원장 2026-10-16 "녹음 아이콘 밑에 현재 녹음 제목" · "아이콘과 이 제목(라벨)을 하나의 붉은 테두리로 묶어서" */
+it("아이콘 안에 마이크와 제목이 함께 있다 — 넘치는 제목은 앞부분만(말줄임은 CSS)", () => {
+  const label = within(capsule()).getByText(LONG_TITLE);
+  expect(label.parentElement?.contains(capsule().querySelector("svg"))).toBe(true);
+  expect(label.className).toMatch(/label/);
+  expect(anchor().dataset.state).toBe("recording");
 });

@@ -348,3 +348,39 @@ describe("RouteWindow — 녹음 잠금은 창이 사라질 때 풀린다", () =
     expect(useWindowStore.getState().busy[ID]).toBe(true);
   });
 });
+
+/**
+ * '새 X' 작성 창(autoClose)은 저장해 작성 화면을 벗어나면 닫힌다. 🔴 녹음 중이면 닫지 않는다 — 원생상담 작성 창에서 수기
+ * 상담만 저장해도(router.push) 창째 닫혀 같은 창의 음성 녹음이 '끝내기' 없이 끊겼다(재리뷰 2026-10-16).
+ */
+describe("RouteWindow — 작성 창(autoClose)의 저장 뒤 닫기", () => {
+  const FORM_ID = windowId("route", "consultations/new");
+  const formWin = (): Win => ({
+    id: FORM_ID,
+    kind: "route",
+    params: { id: "consultations/new", title: "상담 기록", href: "/consultations/new?studentId=a", autoClose: true },
+    rect: { x: 0, y: 0, w: 800, h: 600 },
+    minimized: false,
+    maximized: false,
+  });
+  beforeEach(() => {
+    useWindowStore.setState({ windows: { [FORM_ID]: formWin() }, order: [FORM_ID], focusedId: FORM_ID, busy: {} });
+  });
+
+  it("녹음이 없으면 작성 화면을 벗어날 때 닫는다(종전)", () => {
+    const { container } = render(<RouteWindow win={formWin()} />);
+    const f = fakeFrame(container, { pathname: "/consultations", search: "?embed=1" }, "원생상담");
+    act(() => { fireEvent.load(f.iframe); });
+    expect(useWindowStore.getState().order).not.toContain(FORM_ID);
+  });
+
+  it("🔴 녹음 중이면 작성 화면을 벗어나도 닫지 않고 옮겨 간 화면을 기록한다", () => {
+    useWindowStore.setState({ busy: { [FORM_ID]: true } });
+    const { container } = render(<RouteWindow win={formWin()} />);
+    const f = fakeFrame(container, { pathname: "/consultations", search: "?embed=1" }, "원생상담");
+    act(() => { fireEvent.load(f.iframe); });
+    const st = useWindowStore.getState();
+    expect(st.order).toContain(FORM_ID);
+    expect(st.nav[FORM_ID]?.at(-1)).toBe("/consultations?embed=1");
+  });
+});

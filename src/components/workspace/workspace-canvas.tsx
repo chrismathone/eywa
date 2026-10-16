@@ -227,7 +227,9 @@ export function WorkspaceCanvas({ owner, homeHref = "/dashboard" }: { owner: str
         };
         // 창 안 Shift+클릭(`newInstance`) = 최상위 Shift+클릭과 같은 뜻 — 같은 화면을 새 창으로 한 벌 더.
         // 종전엔 open()이라 이미 떠 있는 그 창이 그 주소로 옮겨져 보던 자리를 잃었다(2026-09-11 리뷰).
+        // "새 X" 작성 폼(autoClose)은 그 메뉴의 작성 창이 전부 녹음 중이면 새 작성 창을 한 벌 더(openForm — 원장 2026-10-16).
         if (data.newInstance === true) st.openNewInstance("route", params);
+        else if (params.autoClose) st.openForm("route", params);
         else st.open("route", params);
         return;
       }
