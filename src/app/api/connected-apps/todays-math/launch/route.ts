@@ -7,16 +7,16 @@ import { signSsoToken, usableSsoSecret } from "@/features/connected-apps/sso";
 import { sourceBindingForTenant, sourceControl, syncErrorResponse } from "@/features/integrations/todays-math/sync-server";
 
 /**
- * 사이드바 '연결 앱 → 오늘의 수학'의 출발점 — 로그인한 사람의 자동 로그인 표를 붙여 오늘의 수학으로 보낸다(302).
+ * 사이드바 '연결 앱 → 오늘 수학'의 출발점 — 로그인한 사람의 자동 로그인 표를 붙여 오늘 수학으로 보낸다(302).
  *
  * 활성 v2 binding의 연동 대상은 서비스의 state/PKCE 시작 경로로 보낸다. 연동 대상이 아니면 대상 로그인 화면으로 보낸다.
  * binding 미설정 때는 기존 v1 연결을 유지한다. shadow는 대상 첫 화면으로 보내며, 관리 대상의 v1 우회는 대상에서 차단한다.
  * v1 표의 신원은 eywa 사용자 id(`sub`)이며 이메일만으로 계정을 연결하지 않는다.
  * - 비로그인 → eywa 로그인 화면.
- * - 학생 계정 → 표 없이 오늘의 수학 첫 화면(학생은 오늘의 수학 원장 계정과 연결할 일이 없다 — 연결 시도 자체를 안 연다).
+ * - 학생 계정 → 표 없이 오늘 수학 첫 화면(학생은 오늘 수학 원장 계정과 연결할 일이 없다 — 연결 시도 자체를 안 연다).
  * - 이 사람에게 링크가 안 서면 → 그 사람의 홈(`/home`). 판정은 메뉴와 같은 `getMyConnectedApps` — 지점이 꺼져 있거나
  *   영어 전담 선생님이면 주소를 쳐도 표를 받지 못한다.
- * - v1 `EYWA_SSO_SECRET`이 없거나 짧으면 → 표 없이 오늘의 수학 첫 화면. v2 설정/제어 오류는 거절한다.
+ * - v1 `EYWA_SSO_SECRET`이 없거나 짧으면 → 표 없이 오늘 수학 첫 화면. v2 설정/제어 오류는 거절한다.
  * 코드와 v1 표는 캐시·리퍼러에 남기지 않는다(no-store · no-referrer). 수명은 60초.
  */
 export const dynamic = "force-dynamic";

@@ -8,7 +8,7 @@ import type { OptInFeature } from "@/lib/license/rule";
  *
  * - 켜고 끄는 곳 = 슈퍼관리자 학원 상세 '기능·라이선스'(`TOGGLE_FEATURES`, **기본 꺼짐** — 켠 지점에만 선다).
  * - 여는 방법 = **보통 링크**(새 탭) → eywa 출발 라우트(`launchPath`)가 자동 로그인 표를 붙여 그 앱으로 보낸다.
- *   🔴 플로팅 창(iframe)에 넣지 말 것 — 오늘의 수학의 로그인 쿠키가 `SameSite=Lax`라 다른 사이트 안에선
+ *   🔴 플로팅 창(iframe)에 넣지 말 것 — 오늘 수학의 로그인 쿠키가 `SameSite=Lax`라 다른 사이트 안에선
  *   로그인이 유지되지 않는다.
  * - 메뉴 판(`menu-hub.ts`)·검색 팰릿·메뉴 구성 편집기에는 넣지 않는다 — 그쪽은 aywa 안의 화면(권한 키·창)만 다룬다.
  *
@@ -29,7 +29,7 @@ export type ConnectedApp = {
   /** 표의 `aud` — 받는 쪽이 자기 이름인지 확인한다. */
   audience: string;
   /**
-   * 담당 과목(직원관리 `users.subjects`)이 **전부 이 안에 드는 사람**에겐 세우지 않는다 — 오늘의 수학은 수학 앱이라
+   * 담당 과목(직원관리 `users.subjects`)이 **전부 이 안에 드는 사람**에겐 세우지 않는다 — 오늘 수학은 수학 앱이라
    * 지점을 켜도 영어 선생님에겐 안 보인다(원장 2026-09-26). 판정은 `connectedAppVisibleTo` 한 곳.
    */
   hiddenForOnlySubjects?: readonly string[];
@@ -38,7 +38,7 @@ export type ConnectedApp = {
 export const CONNECTED_APPS: readonly ConnectedApp[] = [
   {
     feature: "todays_math",
-    label: "오늘의 수학",
+    label: "오늘 수학",
     href: "https://todays-math.vercel.app",
     launchPath: "/api/connected-apps/todays-math/launch",
     ssoPath: "/api/sso/eywa",

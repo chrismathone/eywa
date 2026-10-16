@@ -79,7 +79,7 @@ export const SEAT_FEATURES = [{ key: "student_seats", label: "재원생 좌석" 
  * (행이 없는데 '꺼짐'으로 그리면, 실제로는 도는 기능을 꺼진 것처럼 속인다).
  * - 녹음·시트·AI = 기본 켜짐: 라이선스 카드가 생기기 전부터 쓰던 기능이라 행이 없으면 허용([`rule.ts`](src/lib/license/rule.ts)).
  * - 카카오 알림 = 기본 꺼짐: 학부모에게 실제 메시지가 나가는 기능이라 **명시로 켠 지점만** 보낸다(`resolveKakaoChannel`).
- * - 오늘의 수학 연결 = 기본 꺼짐: 외부 앱 메뉴·데이터 반출이라 **명시로 켠 지점만**(`isFeatureOptedIn`).
+ * - 오늘 수학 연결 = 기본 꺼짐: 외부 앱 메뉴·데이터 반출이라 **명시로 켠 지점만**(`isFeatureOptedIn`).
  * 🔴 여기 한 줄을 더하면 **그 키를 읽는 곳**(게이트)도 함께 만들 것 — 읽는 곳 없는 스위치는 거짓 약속이다(2026-09-25 전수 확인).
  */
 export const TOGGLE_FEATURES = [
@@ -90,9 +90,9 @@ export const TOGGLE_FEATURES = [
   // 화면 방식 — 켜짐 = PC 관리자뷰에서 메뉴마다 플로팅 창(iframe) · 꺼짐 = 일반 웹앱처럼 본문 하나(원장 2026-09-25).
   // 강사·학생 화면과 폰은 원래 창이 없어 이 스위치와 무관하다. 읽는 곳 = (shell)/layout.tsx.
   { key: "window_mode", label: "창 모드(메뉴를 플로팅 창으로)", defaultOn: true },
-  // 연결 앱 — 켠 지점만 왼쪽 '연결 앱'에 바로가기가 서고, 오늘의 수학이 당겨 가는 명단·진도 API도 이 스위치를 본다
+  // 연결 앱 — 켠 지점만 왼쪽 '연결 앱'에 바로가기가 서고, 오늘 수학이 당겨 가는 명단·진도 API도 이 스위치를 본다
   // (원장 2026-09-26). 읽는 곳 = (shell)/layout.tsx · api/integrations/todays-math/*. 목록 = features/connected-apps.
-  { key: "todays_math", label: "오늘의 수학 연결", defaultOn: false },
+  { key: "todays_math", label: "오늘 수학 연결", defaultOn: false },
   // 슬랙 알림 — 켠 지점만 학원 설정 '연동' 면에 슬랙 카드가 서고, aywa 알림을 슬랙 채널·본인 1:1로 보낸다(원장 2026-09-28).
   // 학생 이름 등이 외부 메신저로 나가므로 기본 꺼짐. 읽는 곳 = features/slack/server/{dispatch,gate,queries}.ts + 0298a 인박스 트리거.
   { key: "slack", label: "슬랙 알림 연결", defaultOn: false },
