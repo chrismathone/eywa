@@ -1,9 +1,9 @@
 "use client";
 
+import { dayWeekLabel } from "@/features/teacher-portfolio/evidence-view";
 import { metricOf, type Metric, type StoredPeriod } from "@/features/teacher-portfolio/model/types";
 import {
-  METRIC_COLOR, REPORT_STATE_LABEL, SHORTFALL_COLOR, dayLabel, fmtScore, followAnchor, groupByWeek, itemColor, pickWeek, weekRange,
-  type WeekGroup,
+  METRIC_COLOR, SHORTFALL_COLOR, fmtScore, followAnchor, groupByWeek, itemColor, pickWeek, weekRange, type WeekGroup,
 } from "@/features/teacher-portfolio/view";
 import { BarList, DataTable, SectionTitle, StackBar, StatTiles, StatusChip, type TableRow } from "./parts";
 
@@ -20,8 +20,6 @@ export type EvidenceProps = {
   /** 표 제목행을 스크롤 영역 위에 붙인다(내역 카드 안에서만). */
   sticky?: boolean;
 };
-
-const HOLIDAY = <span className="text-xs">휴원일</span>;
 
 /** 기록을 시작하기 전인 달 — 기록 표 대신 대상 건수와 기준 달 점수만 보인다. */
 export function EstimatedEvidence({ metric }: { metric: Metric }) {
@@ -63,35 +61,17 @@ export function ReportEvidence({ period, onOpenStudents, sticky }: EvidenceProps
           <button type="button" onClick={onOpenStudents} className="text-primary text-xs font-medium whitespace-nowrap hover:underline">학생별 보기</button>
         ) : null}
       </div>
-      <DataTable fixed sticky={sticky} headers={["날짜", "작성 현황", "대상", "작성", "미작성"]} kinds={["text", "bar"]}
-        rows={period.dayStats.map((s) => ({
+      {/* 수업이 없는 날(대상 0 · 휴원일)은 줄을 세우지 않는다(원장 2026-10-16 *"일자별 수업보고서에 수업이 없는 날은 제외"*). */}
+      <DataTable fixed sticky={sticky} headers={["날짜", "작성 현황", "대상", "작성", "미작성"]} kinds={["text", "bar"]} empty="이 달 보고 대상이 없습니다."
+        rows={period.dayStats.filter((s) => s.target > 0 && !s.holiday).map((s) => ({
           key: s.day,
-          cells: s.holiday
-            ? [dayLabel(s.day), HOLIDAY, "—", "—", "—"]
-            : [dayLabel(s.day), <StackBar key="bar" total={s.target} parts={[
-              { color: METRIC_COLOR.report, count: s.own }, { color: SHORTFALL_COLOR, count: s.target - s.own },
-            ]} />, s.target, s.own, s.target - s.own],
+          cells: [dayWeekLabel(s.day), <StackBar key="bar" total={s.target} parts={[
+            { color: METRIC_COLOR.report, count: s.own }, { color: SHORTFALL_COLOR, count: s.target - s.own },
+          ]} />, s.target, s.own, s.target - s.own],
         }))} />
       <p className="mt-3 text-xs">학생 1명당 하루 한 번 · 본인이 수업 당일에 쓴 보고서만 작성(다른 사람이 쓴 것·다음 날 이후에 쓴 것은 미작성)</p>
     </>
   );
-}
-
-/** 학생 × 날짜 상태표 — 상세 창에서만 연다(넓다). 열 = 누군가 보고 대상인 날만 · 대상이 아닌 칸은 비운다
- *  (원장 2026-10-14 — 수업이 없는 날까지 '—'가 적혀 헷갈렸다). */
-export function ReportMatrix({ period, nameOf }: Pick<EvidenceProps, "period" | "nameOf">) {
-  const m = metricOf(period, "report");
-  const days = period.dayStats.map((s) => s.day).filter((d) => m.detail.some((c) => c.day === d));
-  const cells = new Map(m.detail.map((c) => [`${c.studentId}|${c.day}`, c]));
-  const students = [...new Set(m.detail.map((c) => c.studentId))].sort((a, b) => nameOf(a).localeCompare(nameOf(b), "ko"));
-  return (<>
-    <DataTable headers={["학생", ...days.map(dayLabel)]} empty="이 달 보고 대상이 없습니다."
-      rows={students.map((id) => ({ key: id, cells: [<span key="name" className="whitespace-nowrap">{nameOf(id)}</span>, ...days.map((day) => {
-        const cell = cells.get(`${id}|${day}`);
-        return cell ? <StatusChip key={day} state={REPORT_STATE_LABEL[cell.state]} /> : "";
-      })] }))} />
-    {students.length ? <p className="mt-2 text-xs">빈 칸 = 그날 그 학생은 보고 대상이 아닙니다.</p> : null}
-  </>);
 }
 
 function weekRows<T>(weeks: WeekGroup<T>[], picked: number, onPick: (index: number) => void, cells: (rows: T[]) => TableRow["cells"]): TableRow[] {
@@ -107,7 +87,7 @@ function weekRows<T>(weeks: WeekGroup<T>[], picked: number, onPick: (index: numb
   }));
 }
 
-export function AttendanceEvidence({ period, nameOf, week, onWeek, sticky }: EvidenceProps) {
+export function AttendanceEvidence({ period, nameOf, schoolOf, week, onWeek, sticky }: EvidenceProps) {
   const rows = metricOf(period, "attendance").detail;
   const done = (a: typeof rows) => a.filter((r) => r.done).length;
   const weeks = groupByWeek(period, rows, (r) => r.day);
@@ -117,9 +97,8 @@ export function AttendanceEvidence({ period, nameOf, week, onWeek, sticky }: Evi
     <StackBar key="bar" total={a.length} parts={[{ color: METRIC_COLOR.attendance, count: done(a) }, { color: SHORTFALL_COLOR, count: a.length - done(a) }]} />
   );
   const counts = (a: typeof rows) => [a.length, done(a), a.length - done(a)];
-  const days = current
-    ? [...new Set([...current.rows.map((r) => r.day), ...period.holidays.filter((day) => day >= current.start && day <= current.end)])].sort()
-    : [];
+  // 출결 대상이 있던 날만(수업이 없는 날 · 휴원일은 줄을 세우지 않는다 — 원장 2026-10-16, 보고서 일자별 표와 같은 규칙).
+  const days = current ? [...new Set(current.rows.map((r) => r.day))].sort() : [];
   return (
     <>
       <StatTiles items={[
@@ -136,7 +115,7 @@ export function AttendanceEvidence({ period, nameOf, week, onWeek, sticky }: Evi
           <DataTable fixed headers={["날짜", "처리 현황", "대상", "처리", "미처리"]} kinds={["text", "bar"]} empty="이 주에는 출결 대상이 없습니다."
             rows={days.map((day) => {
               const a = current.rows.filter((r) => r.day === day);
-              return { key: day, cells: period.holidays.includes(day) ? [dayLabel(day), HOLIDAY, "—", "—", "—"] : [dayLabel(day), bar(a), ...counts(a)] };
+              return { key: day, cells: [dayWeekLabel(day), bar(a), ...counts(a)] };
             })} />
           {current.rows.length ? (
             <>
@@ -144,7 +123,7 @@ export function AttendanceEvidence({ period, nameOf, week, onWeek, sticky }: Evi
               <DataTable headers={["날짜", "학생 · 반", "처리"]} kinds={["text", "text", "num"]}
                 rows={current.rows.map((r) => ({
                   key: `${r.day}|${r.studentId}|${r.className}`,
-                  cells: [dayLabel(r.day), <StudentCell key="s" name={nameOf(r.studentId)} sub={r.className} />, <StatusChip key="c" state={r.done ? "완료" : r.ambiguous ? "담당 확인" : "미완료"} />],
+                  cells: [dayWeekLabel(r.day), <StudentCell key="s" name={nameOf(r.studentId)} school={schoolOf?.(r.studentId)} sub={r.className} />, <StatusChip key="c" state={r.done ? "완료" : r.ambiguous ? "담당 확인" : "미완료"} />],
                 }))} />
             </>
           ) : null}
@@ -154,7 +133,7 @@ export function AttendanceEvidence({ period, nameOf, week, onWeek, sticky }: Evi
   );
 }
 
-export function FollowEvidence({ period, nameOf, week, onWeek, sticky }: EvidenceProps) {
+export function FollowEvidence({ period, nameOf, schoolOf, week, onWeek, sticky }: EvidenceProps) {
   const rows = metricOf(period, "follow").detail;
   const due = (a: typeof rows) => a.filter((r) => r.scored);
   const finished = (a: typeof rows) => due(a).filter((r) => r.state === "완료").length;
@@ -182,7 +161,8 @@ export function FollowEvidence({ period, nameOf, week, onWeek, sticky }: Evidenc
           <DataTable headers={["학생", "상담일", "후속 기한", "처리"]} empty="이 주에는 상담 기록이 없습니다."
             rows={[...current.rows].sort((a, b) => (followAnchor(period, a) ?? "").localeCompare(followAnchor(period, b) ?? "")).map((r, i) => ({
               key: `${r.studentId}|${r.day}|${r.due}|${i}`,
-              cells: [nameOf(r.studentId), r.day ? dayLabel(r.day) : "—", r.due ? dayLabel(r.due) : "—", <StatusChip key="c" state={r.state} />],
+              cells: [<StudentCell key="s" name={nameOf(r.studentId)} school={schoolOf?.(r.studentId)} />, r.day ? dayWeekLabel(r.day) : "—", r.due ? dayWeekLabel(r.due) : "—",
+                <StatusChip key="c" state={r.state} />],
             }))} />
         </>
       ) : null}
@@ -190,11 +170,12 @@ export function FollowEvidence({ period, nameOf, week, onWeek, sticky }: Evidenc
   );
 }
 
-export function StudentCell({ name, sub }: { name: string; sub: string }) {
+/** 학생 칸 — 이름 옆 학교학년(원장 2026-10-16 *"항목별 내역에서 학교 학년 추가 가능한곳은 전부"* · 모르면 비운다) · 아래 줄 = 반 등. */
+export function StudentCell({ name, school, sub }: { name: string; school?: string; sub?: string }) {
   return (
     <span className="block min-w-0">
-      {name}
-      <small className="mt-0.5 block text-xs break-keep">{sub}</small>
+      {name}{school ? <small className="ml-1.5 text-xs">{school}</small> : null}
+      {sub ? <small className="mt-0.5 block text-xs break-keep">{sub}</small> : null}
     </span>
   );
 }

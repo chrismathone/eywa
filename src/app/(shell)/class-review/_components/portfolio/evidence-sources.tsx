@@ -1,52 +1,17 @@
 "use client";
 
-import { KIND_LABEL } from "@/features/grades/unified/model";
-import type { GradeKindStat } from "@/features/teacher-portfolio/model/source-types";
 import { Button } from "@/components/ui/button";
+import { dayWeekLabel } from "@/features/teacher-portfolio/evidence-view";
 import { metricOf } from "@/features/teacher-portfolio/model/types";
-import { dayLabel, pointsText } from "@/features/teacher-portfolio/view";
-import { StudentCell, type EvidenceProps } from "./evidence-records";
+import { pointsText } from "@/features/teacher-portfolio/view";
+import { GradesEvidence } from "./evidence-grades";
+import type { EvidenceProps } from "./evidence-records";
 import { DataTable, SectionTitle, StatTiles, StatusChip } from "./parts";
 
 /**
  * 계산이 들어온 원장 구성 지표 셋의 내역 — 성적 관리 · 학부모 만족도 · 강사 근태(원장 2026-10-15 *"계산 안된거 다음 단계라고 적힌거 다 해결해"*).
  * 숫자가 어떻게 나왔는지(종류별 평균과 비중 · 반영한 글과 클레임 · 센 날과 뺀 날)를 그대로 보인다.
  */
-const pct = (n: number | null | undefined) => (n === null || n === undefined ? "—" : `${n.toFixed(1)}%`);
-
-/** 종류별 셈(원장 2026-10-15) — 이 칸이 생기기 전에 저장(마감)된 달은 전부 점수율이다. */
-const MEASURE = { submit: "제출률", take: "응시율", score: "점수율" } as const;
-const targetText = (k: GradeKindStat) => (k.measure === "submit" ? `${k.done ?? 0}/${k.count}칸` : k.measure === "take" ? `${k.done ?? 0}/${k.count}명` : `${k.count}건`);
-
-function GradesEvidence({ period, nameOf }: EvidenceProps) {
-  const m = metricOf(period, "grades");
-  const kinds = m.kinds ?? [];
-  const daily = kinds.find((k) => k.measure === "submit"), monthly = kinds.find((k) => k.measure === "take");
-  return (
-    <>
-      <StatTiles items={[
-        { label: "일일테스트 제출", value: daily ? pct(daily.average) : "—" }, { label: "월말평가 응시", value: monthly ? pct(monthly.average) : "—" },
-        { label: "시험", value: `${m.tests ?? 0}건` }, { label: "종합(가중 평균)", value: pct(m.raw), className: "text-primary" },
-        { label: "점수", value: pointsText(m, period) },
-      ]} />
-      <SectionTitle sub="일일테스트는 제출률 · 월말평가는 응시율 · 나머지는 점수율 — 종류마다 값을 낸 뒤 비중으로 가중 평균">종류별</SectionTitle>
-      <DataTable headers={["종류", "셈", "대상", "값", "비중"]} kinds={["text", "text", "num", "num", "num"]}
-        empty="이 달 일일테스트·월말평가 대상과 시험 기록이 없습니다."
-        rows={kinds.map((k) => ({ key: k.kind, cells: [KIND_LABEL[k.kind], MEASURE[k.measure ?? "score"], targetText(k), pct(k.average), String(k.weight)] }))} />
-      <SectionTitle sub={`${m.students ?? 0}명`}>학생별</SectionTitle>
-      <DataTable headers={["학생 · 반", "일일테스트 제출", "월말평가", "시험", "평균 점수율"]} kinds={["text", "num", "text", "num", "num"]}
-        rows={m.detail.map((r) => ({
-          key: r.studentId,
-          cells: [<StudentCell key="s" name={nameOf(r.studentId)} sub={[r.className || "—", r.kinds].filter(Boolean).join(" · ")} />,
-            r.daily ? `${r.daily.done}/${r.daily.total}칸` : "—",
-            r.monthly === undefined ? "—" : <StatusChip key="m" state={r.monthly ? "응시" : "미응시"} />,
-            r.tests ? `${r.tests}건` : "—", pct(r.average)],
-        }))} />
-      <p className="mt-3 text-xs leading-relaxed">{m.reason}</p>
-    </>
-  );
-}
-
 function SatisfactionEvidence({ period, nameOf, schoolOf, onSatisfaction }: EvidenceProps) {
   const m = metricOf(period, "satisfaction");
   const sign = (n: number) => `${n > 0 ? "+" : ""}${n.toFixed(1)}`;
@@ -68,7 +33,7 @@ function SatisfactionEvidence({ period, nameOf, schoolOf, onSatisfaction }: Evid
         empty="이 달 반영한 학부모 글·클레임이 없습니다."
         rows={m.detail.map((r) => ({
           key: r.key,
-          cells: [dayLabel(r.day), r.studentId ? nameOf(r.studentId) : "—", (r.studentId && schoolOf?.(r.studentId)) || "—", r.className || "—",
+          cells: [dayWeekLabel(r.day), r.studentId ? nameOf(r.studentId) : "—", (r.studentId && schoolOf?.(r.studentId)) || "—", r.className || "—",
             r.text ? `${r.source === "글" ? "“" : ""}${r.text}${r.source === "글" ? "”" : ""}` : "—",
             <StatusChip key="h" state={r.how} />, r.points === null ? "—" : sign(r.points)],
         }))} />
@@ -82,6 +47,13 @@ const BASIS = { personal: "개인 시각", lessons: "수업" } as const;
 const clock = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hour12: false }) : "—");
 function PunctualityEvidence({ period }: EvidenceProps) {
   const m = metricOf(period, "punctuality");
+  // 프리랜서 = 근태를 세지 않고 만점(원장 2026-10-16 *"프리랜서 라벨 붙이고 부연설명"*).
+  if (m.freelancer) return (
+    <>
+      <StatTiles items={[{ label: "계약구분", value: "프리랜서", className: "text-primary" }, { label: "점수", value: pointsText(m, period) }]} />
+      <p className="bg-primary-softer mt-4 rounded-lg px-3.5 py-3 text-xs leading-relaxed">{m.reason}</p>
+    </>
+  );
   return (
     <>
       <StatTiles items={[
@@ -97,7 +69,7 @@ function PunctualityEvidence({ period }: EvidenceProps) {
           const minutes = r.minutes ?? r.lateMinutes ?? null;
           return {
             key: `${r.day}|${r.status}`,
-            cells: [dayLabel(r.day), STATUS[r.status] ?? r.status, r.expected ? `${r.expected}${r.basis ? ` (${BASIS[r.basis]})` : ""}` : "—",
+            cells: [dayWeekLabel(r.day), STATUS[r.status] ?? r.status, r.expected ? `${r.expected}${r.basis ? ` (${BASIS[r.basis]})` : ""}` : "—",
               clock(r.checkIn), clock(r.checkOut), minutes ? `${minutes}분` : "—",
               <StatusChip key="c" state={r.counted ? "포함" : `제외 · ${r.excuse}`} />],
           };

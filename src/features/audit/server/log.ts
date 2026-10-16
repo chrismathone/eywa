@@ -444,6 +444,8 @@ export const AUDIT_ACTIONS = {
   // 영상 제출 현황의 '숙제없음' 칸에서 그 날짜의 영상 숙제를 뒤늦게 냄(보고서 없이) · 그 숙제를 거둠(원장 2026-10-13).
   lesson_report_video_homework_issue: "영상 숙제 따로 내기",
   lesson_report_video_homework_issue_cancel: "따로 낸 영상 숙제 취소",
+  // 영상 숙제를 거둠 — 미확인 · 미수행만 · 보고서를 보낸 숙제도(그날 보고서의 영상 과제 → 없음, 원장 2026-10-16).
+  lesson_report_video_homework_cancel: "영상 숙제 취소",
   lesson_report_video_homework_reject: "영상 숙제 영상 반려",
   share_link_revoke: "학부모 공유 링크 회수",
   share_link_reissue: "학부모 공유 링크 재발급",

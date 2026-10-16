@@ -1,7 +1,8 @@
 "use client";
 
+import { dayWeekLabel } from "@/features/teacher-portfolio/evidence-view";
 import { metricOf } from "@/features/teacher-portfolio/model/types";
-import { dayLabel, pointsText } from "@/features/teacher-portfolio/view";
+import { pointsText } from "@/features/teacher-portfolio/view";
 import type { EvidenceProps } from "./evidence-records";
 import { StudentCell } from "./evidence-records";
 import { DataTable, SectionTitle, StatTiles, StatusChip } from "./parts";
@@ -10,7 +11,7 @@ import { DataTable, SectionTitle, StatTiles, StatusChip } from "./parts";
  * 퇴원율 내역 — 분모(지난달 절반 이상 맡은 학생)·분자(이 달에 그만둔 학생)와 그만둔 학생마다 포함했는지·제외한 까닭.
  * 제외한 까닭: 원장이 고른 사유 · 반 이동 · 수업이 끝남 · 끝난 특강 · 같은 과목 다른 반(어느 선생님 반이든) · 수강종료를 세지 않음 · 같은 학생.
  */
-export function ChurnEvidence({ period, nameOf }: EvidenceProps) {
+export function ChurnEvidence({ period, nameOf, schoolOf }: EvidenceProps) {
   const m = metricOf(period, "churn");
   const rate = m.raw === null || m.raw === undefined ? "—" : `${m.raw.toFixed(1)}%`;
   return (
@@ -28,7 +29,7 @@ export function ChurnEvidence({ period, nameOf }: EvidenceProps) {
         rows={m.detail.map((r, i) => ({
           key: `${r.studentId}|${r.day}|${i}`,
           cells: [
-            <StudentCell key="s" name={nameOf(r.studentId)} sub={r.className} />, dayLabel(r.day), r.type, r.reason,
+            <StudentCell key="s" name={nameOf(r.studentId)} school={schoolOf?.(r.studentId)} sub={r.className} />, dayWeekLabel(r.day), r.type, r.reason,
             <span key="c" className="inline-flex flex-col items-center gap-0.5">
               <StatusChip state={r.counted ? "포함" : "제외"} />
               {r.note ? <small className="text-xs">{r.note}</small> : null}

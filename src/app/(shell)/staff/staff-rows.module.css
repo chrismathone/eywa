@@ -1,24 +1,25 @@
 @media (max-width: 1239.98px), not all and (any-pointer: fine) {
-  .header [data-page-header-row],
-  .header [data-page-header-title],
-  .header [data-page-header-actions] {
+  /* 마우스 움직임으로 데스크톱 셸이 된 기기(`data-desk`)는 건너뛴다(desk-detect.ts) — :where라 명시도는 그대로. 인쇄하는 동안(`data-print`)은 종전대로. */
+  :where(:root:not([data-desk]), :root[data-print]) .header [data-page-header-row],
+  :where(:root:not([data-desk]), :root[data-print]) .header [data-page-header-title],
+  :where(:root:not([data-desk]), :root[data-print]) .header [data-page-header-actions] {
     flex-direction: row;
     flex-wrap: nowrap;
     align-items: center;
     white-space: nowrap;
   }
-  .header [data-page-header-row] { gap: 1.5rem; }
-  .stats section {
+  :where(:root:not([data-desk]), :root[data-print]) .header [data-page-header-row] { gap: 1.5rem; }
+  :where(:root:not([data-desk]), :root[data-print]) .stats section {
     grid-template-columns: none;
     grid-auto-flow: column;
     grid-auto-columns: minmax(9rem, 1fr);
   }
-  .stats [data-stat-value] { flex-wrap: nowrap; }
-  .toolbar [data-toolbar],
-  .toolbar [data-toolbar] > div,
-  .toolbar [data-toolbar] > div > div {
+  :where(:root:not([data-desk]), :root[data-print]) .stats [data-stat-value] { flex-wrap: nowrap; }
+  :where(:root:not([data-desk]), :root[data-print]) .toolbar [data-toolbar],
+  :where(:root:not([data-desk]), :root[data-print]) .toolbar [data-toolbar] > div,
+  :where(:root:not([data-desk]), :root[data-print]) .toolbar [data-toolbar] > div > div {
     flex-wrap: nowrap;
     white-space: nowrap;
   }
-  .toolbar [data-toolbar] > * { flex-shrink: 0; }
+  :where(:root:not([data-desk]), :root[data-print]) .toolbar [data-toolbar] > * { flex-shrink: 0; }
 }

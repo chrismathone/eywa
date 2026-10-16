@@ -1,7 +1,6 @@
 "use client";
 
 import { createContext, useContext, type ReactNode } from "react";
-import { monthDayLabel } from "@/lib/date-kst";
 import { WindowLink } from "@/components/workspace/window-link";
 import { TONE_SOFT, type SemanticTone } from "@/lib/design/semantic-color";
 import type { BoardStageColor } from "@/features/enrollment/board-stages";
@@ -39,16 +38,13 @@ const TONE: Record<BoardStageColor, SemanticTone> = {
   green: "positive",
 };
 
-function chipText(chip: ProgressChip, shownFirstClassDate?: string): string {
-  // 일정 위에 같은 첫 수업 날짜가 있으면 단계만 표시한다. 입테 등 다른 정보는 그대로 남긴다.
-  if (shownFirstClassDate && chip.detail === `첫 수업 ${monthDayLabel(shownFirstClassDate)}`) return chip.label;
+function chipText(chip: ProgressChip): string {
   return chip.detail ? `${chip.label} · ${chip.detail}` : chip.label;
 }
 
-export function ConsultStageChip({ id, className = "", shownFirstClassDate }: {
+export function ConsultStageChip({ id, className = "" }: {
   id: string | null | undefined;
   className?: string;
-  shownFirstClassDate?: string;
 }) {
   const chips = useContext(ChipContext);
   const chip = id ? chips?.[id] : undefined;
@@ -57,7 +53,7 @@ export function ConsultStageChip({ id, className = "", shownFirstClassDate }: {
     <span
       className={`inline-flex w-fit shrink-0 items-center whitespace-nowrap rounded-full px-2 text-xs leading-5 font-bold ${TONE_SOFT[TONE[chip.color]]} ${className}`}
     >
-      {chipText(chip, shownFirstClassDate)}
+      {chipText(chip)}
     </span>
   );
 }

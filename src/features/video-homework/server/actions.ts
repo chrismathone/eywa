@@ -8,6 +8,7 @@ import { logAction } from "@/features/audit/server/log";
 import { addDays, kstToday } from "@/lib/date-kst";
 import { isVideoHomeworkDate, type VideoHomeworkStatus } from "../types";
 import { videoHomeworkColumnReady } from "./assignments";
+import { isCancelledHomework } from "./cancels";
 import { findExtraIssue } from "./extra-issues";
 import { keepMarkOnlyRound } from "./keep-round";
 import { ledgerRoundWriteError, loadVideoHomeworkTarget, videoHomeworkWriteError, writeVideoHomeworkMark, type MarkWriteResult } from "./mark-write";
@@ -55,6 +56,10 @@ async function writeCheckedMark(db: Db, user: { tenantId: string; userId: string
     const target = await loadVideoHomeworkTarget(db, user.tenantId, input.classId, input.studentId);
     if (target.error !== null) return { ok: false, error: target.error };
     if (!target.enabled) return { ok: false, error: "영상 제출 검사 대상이 아닙니다. 보고서 설정을 확인해 주세요." };
+    // 장부에서 취소한 숙제(원장 2026-10-16, cancels.ts) — 다음 수업 원스크린을 열어 둔 채 취소하면 검사 칸이 남아 있다. 거기 찍으면
+    // 취소한 숙제가 '검사 기록 칸'으로 되살아난다 — 다시 낸 숙제(보고서 '있음' · 따로 낸 숙제)가 아니면 적지 않는다(되돌리기는 막지 않는다).
+    if (input.homeworkDate && await isCancelledHomework(db, user.tenantId, { classId: input.classId, studentId: input.studentId, date: input.homeworkDate }))
+      return { ok: false, error: "영상 제출 현황에서 취소한 숙제입니다. 화면을 새로고침해 주세요." };
   }
   const { data: enrollments, error: enrollmentError } = await db
     .from("enrollments")

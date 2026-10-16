@@ -4,11 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { addDays } from "@/lib/date-kst";
 import { SITE_HOMEWORK_DAYS } from "@/features/video-submit/site";
-import { cancelExtraVideoHomework, issueExtraVideoHomework } from "../server/issue-actions";
+import { issueExtraVideoHomework } from "../server/issue-actions";
+import { cancelVideoHomework } from "../server/cancel-homework";
 import type { VideoHomeworkLedgerRow } from "../types";
 import { useLedgerRefresh } from "./ledger-refresh";
 
-/** 칸에서 연 메뉴 — `issue` = 숙제없음 칸에 숙제 내기, `cancel` = 따로 낸 숙제 거두기. 좌표는 누른 자리(화면 기준). */
+/** 칸에서 연 메뉴 — `issue` = 숙제없음 칸에 숙제 내기, `cancel` = 따로 낸 숙제 거두기(`cancel-homework.ts` — 칸 편집 창의 '숙제 취소'와 같다). 좌표는 누른 자리(화면 기준). */
 export type IssueMenuTarget = { kind: "issue" | "cancel"; row: VideoHomeworkLedgerRow; date: string; x: number; y: number };
 
 const shortDate = (date: string) => date.slice(5).replace("-", ".");
@@ -35,11 +36,12 @@ export function IssueMenu({ target, onClose }: { target: IssueMenuTarget; onClos
     setBusy(true);
     try {
       const input = { classId: target.row.classId, studentId: target.row.studentId, date: target.date };
-      const result = issue ? await issueExtraVideoHomework(input) : await cancelExtraVideoHomework(input);
+      // 취소 = 칸 편집 창의 '숙제 취소'와 같은 길(원장 2026-10-16 — 미확인 · 미수행만 · 그날 보고서의 영상 과제도 '없음'으로).
+      const result = issue ? await issueExtraVideoHomework(input) : await cancelVideoHomework({ classId: input.classId, studentId: input.studentId, homeworkDate: input.date });
       if (!result.ok) { toast.error(result.error ?? "처리하지 못했습니다."); return; }
       toast.success(issue
-        ? `${target.row.studentName} 학생에게 ${target.date} 영상 숙제를 냈습니다${result.deadline ? ` · 기한 ${result.deadline}` : ""}. 수업보고서는 다시 나가지 않으니 학생에게 직접 알려 주세요.`
-        : "kept" in result && result.kept ? `따로 낸 표시만 지웠습니다. ${target.date} 수업보고서에도 영상 과제가 있어 숙제는 그대로입니다.`
+        ? `${target.row.studentName} 학생에게 ${target.date} 영상 숙제를 냈습니다${"deadline" in result && result.deadline ? ` · 기한 ${result.deadline}` : ""}. 수업보고서는 다시 나가지 않으니 학생에게 직접 알려 주세요.`
+        : "kept" in result && result.kept ? `${target.date} 수업보고서에 다른 선생님이 낸 영상 과제가 있어 따로 낸 표시만 지웠습니다(숙제는 그대로입니다).`
         : `${target.row.studentName} 학생의 ${target.date} 숙제를 취소했습니다.`);
       refresh();
     } catch { toast.error("연결을 확인한 뒤 다시 시도해 주세요."); }
@@ -56,7 +58,7 @@ export function IssueMenu({ target, onClose }: { target: IssueMenuTarget; onClos
       </button>
       <p className="text-text-dim px-2 pb-1 text-xs leading-snug break-keep">{issue
         ? `이 날짜의 영상 숙제로 냅니다. 제출 기한은 ${shortDate(addDays(target.date, SITE_HOMEWORK_DAYS))}까지(${SITE_HOMEWORK_DAYS}일)입니다. 수업보고서는 다시 나가지 않으니 학생에게 직접 알려 주세요. 다음 수업 전까지만 낼 수 있습니다.`
-        : "따로 낸 숙제입니다. 취소하면 이 회차가 사라집니다(그날 수업보고서에도 영상 과제가 있으면 따로 낸 표시만 지워집니다). 영상이 올라왔거나 직접 찍은 기록이 있으면 취소할 수 없습니다."}</p>
+        : "따로 낸 숙제입니다. 취소하면 이 회차가 사라집니다(그날 수업보고서에 영상 과제가 있으면 '없음'으로 바뀌고 검사 기록도 지워집니다). 영상이 붙었거나 완료로 찍힌 숙제는 취소할 수 없습니다."}</p>
     </div>
   </>;
 }
