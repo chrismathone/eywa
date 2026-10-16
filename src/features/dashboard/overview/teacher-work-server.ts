@@ -141,7 +141,6 @@ export async function loadTeacherWork(tenantId: string, today: string, scope: Te
   const counselPick = pickCounselMonth(counselRows, today.slice(0, 7));
   const counsel = new Map(counselPick.rows.map((r) => [r.teacher_id, typeof r.counsel === "number" ? r.counsel : null] as const));
   const counselAsOf = counselPick.rows.map((r) => r.period_end?.slice(0, 10) ?? "").filter(Boolean).sort().at(-1) ?? null;
-  // 포트폴리오 점수 달의 재료는 지난달 기록(원장 2026-10-15) — 이름표는 줄의 재료 달(`period_end`의 달 · 10월 줄 = 9월 실적)로 단다.
   return withTeacherWorkExtras(work, { unread: deliveryShown ? unread : [], attendance: attendanceDays, counsel, attendanceFrom, attendanceTo, unreadFrom, counselAsOf,
-    counselMonth: counselAsOf?.slice(0, 7) ?? counselPick.month, deliveryShown, counselShown });
+    counselMonth: counselPick.month, deliveryShown, counselShown });
 }

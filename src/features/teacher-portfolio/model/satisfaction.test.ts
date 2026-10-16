@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_SATISFACTION_OPTIONS } from "../evaluation/options";
 import { buildRecordOwners } from "./attribution";
-import { buildSatisfaction } from "./satisfaction";
+import { buildSatisfaction, waitingByPeriod } from "./satisfaction";
 import { judgeByRules, verdictPoints } from "./satisfaction-rules";
 import type { SnapshotJudgment } from "./source-types";
 import type { SnapshotClass, SnapshotEnrollment } from "./types";
@@ -57,6 +57,16 @@ describe("만족도 가감 합", () => {
     expect([r.raw, r.plus, r.minus, r.claims, r.waiting]).toEqual([1 - 2 - 3, 1, 1, 1, 1]);
     expect(r.detail.find((x) => x.key === "j3")).toMatchObject({ points: null, waiting: true, how: "확인 대기 · 감점 제안" });
     expect(period("t2", w, o).raw).toBe(1); // 영어 보드 글은 영어 반 담임
+    // 글 줄엔 이 선생님에게 온 반 이름(2026-10-16) — 클레임 줄엔 없다.
+    const named = period("t1", w, o, (id) => `반-${id}`).detail;
+    expect(named.find((x) => x.key === "j1")?.className).toBe("반-m1");
+    expect(named.find((x) => x.key === "c1")?.className).toBeUndefined();
+    expect(named.find((x) => x.key === "j1")?.sharedWith).toBeUndefined();
+  });
+  it("두 과목 글이 두 담임 몫이면 서로를 적는다 — 판정 줄은 하나다", () => {
+    const period = buildSatisfaction({ ownersOf, source: { judgments: [j("j8", { subjects: ["math", "english"] })], claims: [] } })!;
+    expect(period("t1", w, o).detail[0]).toMatchObject({ key: "j8", sharedWith: ["t2"] });
+    expect(period("t2", w, o).detail[0]).toMatchObject({ key: "j8", sharedWith: ["t1"] });
   });
   it("과목을 모르는 글은 그날 담임이 한 명일 때만 — 여럿이면 아무에게도 잇지 않는다", () => {
     const period = buildSatisfaction({ ownersOf, source: { judgments: [j("j6", { subjects: [] })], claims: [] } })!;
@@ -66,5 +76,16 @@ describe("만족도 가감 합", () => {
   });
   it("판정 표가 없으면(SQL 적용 전) 만들지 않는다 — 그 지표는 계산 전", () => {
     expect(buildSatisfaction({ ownersOf, source: null })).toBeNull();
+  });
+});
+
+describe("확인 대기가 남은 달 = 마감 미룸 대상(원장 2026-10-16 '9월을 이달 말까지 열어 두기')", () => {
+  it("켠 만족도 항목의 확인 대기 수만 — 끈 항목·0건은 빼고", () => {
+    const period = (month: string, waiting: number, off = false) => ({ month, items: [{ id: "satisfaction", waiting, off }, { id: "report" }] });
+    const got = waitingByPeriod([
+      { id: "t1", periods: [period("2026-09", 3), period("2026-10", 0)] },
+      { id: "t2", periods: [period("2026-09", 2, true)] },
+    ]);
+    expect([...got]).toEqual([["t1|2026-09", 3]]);
   });
 });

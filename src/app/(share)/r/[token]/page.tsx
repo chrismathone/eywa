@@ -19,9 +19,12 @@ import { classKindMeta } from "@/features/classes/list-filters";
 import { loadReportJjSnapshot } from "@/features/ijw/server/report-snapshot";
 import { ClosedReportScreen } from "./_closed";
 import { NEUTRAL_ACADEMY_NAME } from "@/features/owner/defaults";
+import { buildSubjectMaps } from "@/features/owner/subjects";
+import { subjectReportLabel } from "@/features/onescreen/report-title";
+import { reportSubject } from "@/features/timetable/lib/report-subject";
 
-// 학생 PII 문서 — 검색엔진 색인 차단(링크 유출 시에도 인덱싱 방지).
-export const metadata = { title: "수업 보고서", robots: { index: false, follow: false } };
+// 학생 PII 문서 — 검색엔진 색인 차단(링크 유출 시에도 인덱싱 방지). 탭 제목은 과목을 모르는 자리라 '보고서'(카드 제목은 과목 보고서 — 원장 2026-10-16).
+export const metadata = { title: "보고서", robots: { index: false, follow: false } };
 
 /**
  * 학부모 공개 수업 보고서 — 강사 원스크린 "카톡용/문자용 저장"이 만든 공유 링크(/r/[token])로 진입.
@@ -103,7 +106,7 @@ export default async function PublicLessonReportPage({
     report.class_id
       ? admin
           .from("classes")
-          .select("is_special, class_name")
+          .select("is_special, class_name, subject")
           .eq("tenant_id", report.tenant_id as string)
           .eq("id", report.class_id as string)
           .maybeSingle()
@@ -162,6 +165,8 @@ export default async function PublicLessonReportPage({
           special: reportClass
             ? classKindMeta({ isSpecial: reportClass.is_special as boolean | null, className: reportClass.class_name as string }).kind === "special"
             : false,
+          // 과목 = 다른 화면과 같은 판정(과목이 빈 이관분은 수학 — `reportSubject`).
+          subjectLabel: subjectReportLabel(buildSubjectMaps(settings.operations.subjects).labelOf, reportSubject({ subject: report.subject as string | null, classSubject: (reportClass?.subject as string | null | undefined) ?? null })),
         }}
         student={student ?? null}
         academyName={academyName}

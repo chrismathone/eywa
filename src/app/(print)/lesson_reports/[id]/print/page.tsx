@@ -6,6 +6,9 @@ import { canViewStudentDetail } from "@/features/students/server/read-scope";
 import { createClient } from "@/lib/supabase/server";
 import { resolveBrandingSrc, resolveTenantReadUrls } from "@/lib/storage/media-storage";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
+import { subjectReportLabel } from "@/features/onescreen/report-title";
+import { reportSubject } from "@/features/timetable/lib/report-subject";
 import { fetchReportTrendRows, fetchSpecialClassIds } from "@/features/onescreen/server/score-history";
 import { resolveReportAuthorSettings } from "@/features/onescreen/server/report-author-name";
 import { formatReportAuthorName } from "@/features/onescreen/report-author-name";
@@ -17,7 +20,7 @@ import { loadReportJjSnapshot } from "@/features/ijw/server/report-snapshot";
 import { PrintActions } from "@/app/(print)/enrollment/[id]/print/print-actions";
 import { NEUTRAL_ACADEMY_NAME } from "@/features/owner/defaults";
 
-export const metadata = { title: "수업 보고서 — 에이와" };
+export const metadata = { title: "보고서 — 에이와" };
 
 /**
  * 수업 보고서(lesson_reports) 강사 PDF 미리보기 — 원스크린 "PDF" 버튼이 여는 인쇄 문서.
@@ -88,7 +91,7 @@ export default async function LessonReportPrintPage({
     report.class_id
       ? supabase
           .from("classes")
-          .select("is_special, class_name")
+          .select("is_special, class_name, subject")
           .eq("id", report.class_id as string)
           .maybeSingle()
           .then(({ data }) => data, () => null)
@@ -145,6 +148,7 @@ export default async function LessonReportPrintPage({
             special: reportClass
               ? classKindMeta({ isSpecial: reportClass.is_special as boolean | null, className: reportClass.class_name as string }).kind === "special"
               : false,
+            subjectLabel: subjectReportLabel(buildSubjectMaps(settings.operations.subjects).labelOf, reportSubject({ subject: report.subject as string | null, classSubject: (reportClass?.subject as string | null | undefined) ?? null })),
           }}
           student={student ?? null}
           academyName={academyName}

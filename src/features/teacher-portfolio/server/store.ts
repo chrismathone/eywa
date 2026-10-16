@@ -1,11 +1,11 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { addDays, kstToday, monthRange, shiftMonth } from "@/lib/date-kst";
+import { addDays, kstToday } from "@/lib/date-kst";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { excludedKey } from "../evaluation/preview";
 import { portfolioFloor } from "../model/build";
 import { missingColumn } from "./evaluation-store";
-import { awaitsReference, lastCompleteDataMonth } from "../model/pre-record";
+import { awaitsReference } from "../model/pre-record";
 import type { ClosingSource, PortfolioPeriod, PortfolioResult, StoredPeriod } from "../model/types";
 
 /**
@@ -42,19 +42,6 @@ export async function loadOpenMonths(admin: SupabaseClient, tenantId: string, fl
   const open = new Map<string, string[]>();
   for (const r of rows) open.set(r.teacher_id, [...(open.get(r.teacher_id) ?? []), r.month]);
   return open;
-}
-
-/**
- * 강사 → 저장된 가장 늦은 달(마감 여부 무관 · 창 하한 한 달 전부터). 수업에서 빠진 강사의 마지막 실적 줄(그 다음 달 — 재료 = 지난달)을
- * 만드는 데 쓴다(`buildPortfolio` `lastMonths`).
- */
-export async function loadLastMonths(admin: SupabaseClient, tenantId: string, floor: string): Promise<Map<string, string>> {
-  const rows = await fetchAllPaged<{ teacher_id: string; month: string }>((from, to) =>
-    admin.from(TABLE).select("teacher_id, month").eq("tenant_id", tenantId).gte("month", shiftMonth(floor, -1))
-      .order("teacher_id").order("month").range(from, to));
-  const last = new Map<string, string>();
-  for (const r of rows) if (!last.has(r.teacher_id) || r.month > last.get(r.teacher_id)!) last.set(r.teacher_id, r.month);
-  return last;
 }
 
 /** 표가 있는지만 본다 — 무거운 집계를 시작하기 전에. */
@@ -157,7 +144,7 @@ export async function savePortfolioMonths(
         .order("teacher_id").order("month").range(from, to))
     : [];
   const closed = new Set(existing.filter((r) => r.closed_at).map((r) => `${r.teacher_id}|${r.month}`));
-  const lastDataMonth = lastCompleteDataMonth(result.months);
+  const lastClosedMonth = result.months.find((w) => !w.partial)?.month ?? null;
   // 창의 가장 오래된 달은 다음 실행에서 창 밖으로 밀려나 다시 계산할 수 없다 — 기준 달을 기다리던 달도 이때 마감한다.
   const floor = portfolioFloor(result.end);
   const computedAt = now.toISOString();
@@ -169,13 +156,12 @@ export async function savePortfolioMonths(
     live.add(key);
     if (closed.has(key)) continue;
     const closes = !w.partial && (w.month <= floor
-      || (!awaitsReference(w, result.preRecord, lastDataMonth) && !opts.holdClose?.(teacher.id, w.month)));
+      || (!awaitsReference(w, result.preRecord, lastClosedMonth) && !opts.holdClose?.(teacher.id, w.month)));
     if (closes) closedMonths.add(w.month);
     rows.push({
       tenant_id: tenantId, teacher_id: teacher.id, month: w.month, period_end: w.end, total: w.total, known_count: w.knownCount,
       class_count: w.classes.length, subjects: w.subjects, payload: w, computed_at: computedAt,
-      // 마감 출처는 점수 달 말일 기준(`w.end`는 재료 달 말일이다).
-      closed_at: closes ? computedAt : null, closing_source: closes ? closingSourceFor(monthRange(w.month).to, now) : null,
+      closed_at: closes ? computedAt : null, closing_source: closes ? closingSourceFor(w.end, now) : null,
       ...(opts.withRaws ? { raws: rawsOf(w) } : {}),
     });
   }

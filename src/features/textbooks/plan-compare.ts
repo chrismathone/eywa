@@ -66,6 +66,35 @@ export type CellCompare = {
   lines: LineCompare[];
 };
 
+/**
+ * 한 교시에 같은 교재 차수가 둘 이상일 때(원장 2026-10-16 "화 1·2차수") 진도·과제를 **한 줄로 잇는 규약**.
+ * 가져오기([`mergeSameCellLessons`](./plan-expand.ts))와 대조(`compareCell`)가 **같은 함수**를 써야 한다 —
+ * 둘이 다르게 이으면 그대로 가져온 칸이 '다름'으로 잡힌다. 빈 값은 건너뛰고 같은 문구는 한 번만.
+ */
+export const LESSON_JOIN = " / ";
+export function joinLessonTexts(vals: readonly (string | null | undefined)[]): string | null {
+  const kept = vals.filter((v): v is string => !!v && v.trim() !== "");
+  const uniq = kept.filter((v, i) => kept.indexOf(v) === i);
+  return uniq.length > 0 ? uniq.join(LESSON_JOIN) : null;
+}
+
+/**
+ * 같은 칸의 원래 계획에서 **같은 구분·같은 교재** 줄을 한 줄로 합친다(차수 순, 차수 번호는 첫 차수).
+ * 실제 줄은 가져오기에서 이미 한 줄로 합쳐져 있다 — 계획만 둘이면 둘째가 짝을 못 찾아 '다름'이 된다.
+ */
+function mergeBaseline(baseline: readonly BaselineLine[]): BaselineLine[] {
+  const groups = new Map<string, BaselineLine[]>();
+  for (const b of baseline) {
+    const key = `${b.skillArea}|${normalizeBookName(b.title)}`;
+    groups.set(key, [...(groups.get(key) ?? []), b]);
+  }
+  return [...groups.values()].map((g) => {
+    if (g.length === 1) return g[0]!;
+    const sorted = [...g].sort((a, b) => a.lessonNo - b.lessonNo);
+    return { ...sorted[0]!, progress: joinLessonTexts(sorted.map((l) => l.progress)) };
+  });
+}
+
 /** 진도 비교 키 — 공백을 접고 소문자로. 표시에는 쓰지 않는다. */
 export function normalizeProgress(v: string | null | undefined): string {
   return String(v ?? "")
@@ -99,6 +128,9 @@ export function lessonNoOf(index: LessonIndex, title: string, progress: string |
   for (const [book, map] of Object.entries(index)) {
     if (map[p] !== undefined && sameBookName(book, title)) return map[p]!;
   }
+  // 한 교시에 차수 둘을 이은 진도(`Unit 1 / Unit 2`) — **첫 차수**로 잰다(이은 줄의 차수 번호도 첫 차수다).
+  const head = String(progress ?? "").split(LESSON_JOIN)[0];
+  if (head !== undefined && head !== progress && head.trim()) return lessonNoOf(index, title, head);
   return null;
 }
 
@@ -115,7 +147,8 @@ export function compareCell(input: {
   /** 그 칸이 오늘보다 뒤인가. 오늘은 지난 날이다(앱 전역 `d <= today` 규약). */
   isFuture: boolean;
 }): CellCompare {
-  const { baseline, lessonIndex, isFuture } = input;
+  const { lessonIndex, isFuture } = input;
+  const baseline = mergeBaseline(input.baseline);
   const actual = input.actual.filter(hasContent);
   if (baseline.length === 0) return { verdict: "noPlan", lag: 0, lines: [] };
 

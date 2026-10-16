@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { startTransition as startSyncTransition, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/empty-state";
@@ -30,6 +30,8 @@ type Props = {
   teachers: PortfolioTeacherEntry[];
   selected: { id: string; name: string; periods: StoredPeriod[] };
   studentNames: Record<string, string>;
+  /** 학생 → 학교·학년(지금 값). */
+  studentSchools: Record<string, string>;
   /** 서버가 만든 집계 시각 글자(한국 시간). 클라이언트에서 다시 만들지 않는다. */
   computedLabel: string;
   canRefresh: boolean;
@@ -42,20 +44,41 @@ type Weeks = Partial<Record<"attendance" | "follow", number>>;
 /** 화면에 보이는 달 수 — 그다음 한 달은 전월 비교에만 쓴다. */
 const SHOWN_MONTHS = 6;
 
+/** 이 문서에서 집계가 도는 중인지 — 집계 중 면을 바꿨다 돌아와 버튼이 새로 떠도 두 번째 집계를 시작하지 않는다. */
+let running = false;
+
+/**
+ * 집계는 수십 초 걸린다 — 트랜지션(`startTransition(async …)`)으로 감싸지 않는다. React는 비동기 트랜지션이 도는 동안
+ * 새 트랜지션(강사를 고르는 주소 이동 포함)을 모두 그 갈래에 묶어 집계가 끝날 때까지 화면을 안 바꾼다(원장 2026-10-16
+ * *"집계중일때 왼쪽 선생님 리스트 클릭이 안되는듯"*). 진행 표시는 보통 상태값으로 둔다.
+ */
 export function RefreshButton({ label = "지금 집계" }: { label?: string }) {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
-  const run = () => startTransition(async () => {
-    const result = await refreshTeacherPortfolioNow();
-    if (result.ok) {
-      toast.success(result.notice ?? "집계했습니다");
-      router.refresh();
-    } else toast.error(result.error ?? "집계에 실패했습니다");
-  });
+  const [pending, setPending] = useState(false);
+  const run = async () => {
+    if (running) return void toast.info("집계가 아직 진행 중입니다");
+    running = true;
+    setPending(true);
+    let ok = false;
+    try {
+      const result = await refreshTeacherPortfolioNow();
+      ok = result.ok;
+      if (result.ok) toast.success(result.notice ?? "집계했습니다");
+      else toast.error(result.error ?? "집계에 실패했습니다");
+    } catch {
+      toast.error("집계에 실패했습니다. 잠시 후 다시 시도해 주세요");
+    } finally {
+      running = false;
+    }
+    // 새로 그리기는 따로 부르지 않는다 — 액션의 `revalidatePath` 응답이 지금 화면을 다시 그리고, 그사이 강사를 옮겼으면 라우터가 옮긴
+    // 화면을 새로 받는다(`needsRefresh`). 따로 부른 refresh가 이동과 겹치면 옮기기 전 화면으로 되돌아갈 수 있다(재리뷰 2026-10-16).
+    // 성공이면 버튼 풀기를 트랜지션에 — 새 점수와 함께 풀린다(동기 콜백이라 갈래를 묶지 않는다).
+    if (ok) startSyncTransition(() => setPending(false));
+    else setPending(false);
+  };
   return <ToolbarButton onClick={run} disabled={pending} aria-busy={pending}>{pending ? "집계 중…" : label}</ToolbarButton>;
 }
 
-export function PortfolioBoard({ teachers, selected, studentNames, computedLabel, canRefresh, ruleCollapsed = false, compareSort }: Props) {
+export function PortfolioBoard({ teachers, selected, studentNames, studentSchools, computedLabel, canRefresh, ruleCollapsed = false, compareSort }: Props) {
   const router = useRouter();
   const embed = useEmbed();
   const [moving, startTransition] = useTransition();
@@ -81,9 +104,15 @@ export function PortfolioBoard({ teachers, selected, studentNames, computedLabel
     const href = hrefOf(teacherId);
     startTransition(() => router.push(embed ? withEmbed(href) : href, { scroll: false }));
   };
+  // 0 가운데 막대로 그릴 항목 — 보이는 달 전체로 한 번(가감 · 어느 달이든 음수). 달을 바꿔도 축이 그대로다.
+  const signedIds = new Set(shown.flatMap((w) => w.items.filter((m) => m.max <= 0 || (m.value ?? 0) < 0).map((m) => m.id)));
+  // 만족도 관리 입구 — 도구줄 버튼과 같은 조건(쓰기 권한 · 그 달 만족도 켜짐).
+  const canSatisfaction = canRefresh && period.items.some((m) => m.id === "satisfaction" && !m.off);
   const evidence = {
     period, week,
     nameOf: (studentId: string) => studentNames[studentId] || "학생",
+    schoolOf: (studentId: string) => studentSchools[studentId] ?? "",
+    onSatisfaction: canSatisfaction ? () => { setDetail(null); setSatisfactionOpen(true); } : undefined,
     onWeek: (metric: "attendance" | "follow", at: number) => setWeekState({ scope, weeks: { ...week, [metric]: at } }),
   };
   const list = { teachers, selectedId: selected.id, month: period.month, period, hrefOf, onSelect: selectTeacher };
@@ -101,8 +130,7 @@ export function PortfolioBoard({ teachers, selected, studentNames, computedLabel
         {canRefresh && period.items.some((m) => (m.id.startsWith("manual:") || m.id === "payRatio" || m.id === "punctuality") && !m.off)
           ? <ToolbarButton onClick={() => setEntryOpen(true)}>직접 입력</ToolbarButton> : null}
         {/* 학부모 만족도 — 확인 대기 글 반영/무시 · 클레임·칭찬 넣기(계획서 3번). */}
-        {canRefresh && period.items.some((m) => m.id === "satisfaction" && !m.off)
-          ? <ToolbarButton onClick={() => setSatisfactionOpen(true)}>만족도 관리</ToolbarButton> : null}
+        {canSatisfaction ? <ToolbarButton onClick={() => setSatisfactionOpen(true)}>만족도 관리</ToolbarButton> : null}
         <span className="num ml-auto text-xs whitespace-nowrap">집계 {computedLabel}</span>
         {canRefresh ? <RefreshButton /> : null}
       </Toolbar>
@@ -114,7 +142,7 @@ export function PortfolioBoard({ teachers, selected, studentNames, computedLabel
         <TeacherList {...list} />
         <div aria-busy={moving} className={`@container/board flex min-w-0 flex-col gap-5 transition-opacity ${moving ? "opacity-60 delay-100" : ""}`}>
           <TeacherPicker {...list} />
-          <ScoreHero period={period} previous={selected.periods[index + 1]} onOpenMetric={(id) => setDetail({ kind: "metric", id })}
+          <ScoreHero period={period} previous={selected.periods[index + 1]} signedIds={signedIds} onOpenMetric={(id) => setDetail({ kind: "metric", id })}
             onOpenLedger={() => setDetail({ kind: "ledger" })} />
           {/* 내역과 월간 점수를 나란히 = 본문 폭이 64rem 이상일 때만(창 폭이 아니라 — 앱 메뉴·강사 목록을 뺀 폭이 좁으면 월간 표가
               카드 밖으로 잘렸다, 원장 2026-10-14). 좁으면 위아래로 쌓는다. */}
@@ -139,7 +167,7 @@ export function PortfolioBoard({ teachers, selected, studentNames, computedLabel
       ) : null}
       {satisfactionOpen ? (
         <SatisfactionDialog key={`${selected.id}|${period.month}`} open onClose={() => setSatisfactionOpen(false)}
-          period={period} teacherId={selected.id} teacherName={selected.name} />
+          period={period} teacherId={selected.id} teacherName={selected.name} nameOfTeacher={(id) => teachers.find((t) => t.id === id)?.name || "다른 선생님"} />
       ) : null}
     </div>
     </RuleBoxPrefProvider>

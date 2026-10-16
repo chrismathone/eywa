@@ -2,9 +2,9 @@ import "server-only";
 import { secretMatches } from "@/lib/http/secret-compare";
 
 /**
- * 오늘의수학(testautocreator) 진도 연계 — **계약의 순수 로직**.
+ * 오늘 수학(testautocreator) 진도 연계 — **계약의 순수 로직**.
  *
- * 소비자: 오늘의수학이 이 두 라우트를 주기적으로 당겨 학생별 확인테스트를 낸다.
+ * 소비자: 오늘 수학이 이 두 라우트를 주기적으로 당겨 학생별 확인테스트를 낸다.
  *   GET /api/integrations/todays-math/roster
  *   GET /api/integrations/todays-math/progress?cursor=<token>
  *
@@ -15,7 +15,7 @@ import { secretMatches } from "@/lib/http/secret-compare";
  * ## 인증·키
  *
  * `TODAYS_MATH_API_KEY` — 이 연계 전용. CRON_SECRET 재사용 금지(회전이 따로
- * 돌아야 한다). **회전 절차**: 새 키를 양쪽(.env.local / 오늘의수학 Vercel env)에
+ * 돌아야 한다). **회전 절차**: 새 키를 양쪽(.env.local / 오늘 수학 Vercel env)에
  * 넣고 재시작 — 소비자가 하나뿐이라 중첩 키 인프라는 두지 않는다.
  * `TODAYS_MATH_TENANT_ID` — 이 키가 주는 데이터의 테넌트. 라우트는 모든 질의의
  * **모든 테이블**에 이 값을 강제한다(admin 클라이언트는 RLS 를 우회하므로

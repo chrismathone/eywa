@@ -48,6 +48,10 @@ export type SnapshotClaim = { id: string; teacher_id: string; student_id: string
 /** 만족도 근거 한 줄 — 학부모 글 판정 또는 클레임. 확인 대기는 점수가 없다(반영 전). */
 export type SatisfactionRow = {
   key: string; source: "글" | "클레임"; day: string; studentId: string | null; points: number | null; text: string | null; how: string; waiting: boolean;
+  /** 글이 이 선생님에게 온 반(그날 그 반 담임 — `attribution.ts`). 2026-10-16 전에 저장한 줄엔 없다. */
+  className?: string;
+  /** 같은 글을 함께 받는 다른 선생님(판정 줄은 하나라 반영·취소가 함께 움직인다). 없으면 생략. */
+  sharedWith?: string[];
 };
 
 /** 직원 출퇴근 한 줄(0365a) — 지각·결근 판정은 원본(메이크에듀) 표시 그대로. */

@@ -7,7 +7,7 @@ const todaysMath = CONNECTED_APPS.find((a) => a.feature === "todays_math")!;
 const read = (...p: string[]) => readFileSync(join(process.cwd(), ...p), "utf8");
 
 describe("연결 앱 — 담당 과목 축(원장 2026-09-26 *\"영어교사는 탭이 안보여야함\"*)", () => {
-  it("오늘의 수학은 영어만 맡은 사람에게 안 보인다", () => {
+  it("오늘 수학은 영어만 맡은 사람에게 안 보인다", () => {
     expect(connectedAppVisibleTo(todaysMath, ["english"])).toBe(false);
   });
 

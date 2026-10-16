@@ -2,6 +2,8 @@
 
 import { useLayoutEffect, useRef } from "react";
 import { Pill } from "@/components/atoms/pill";
+import { toneColor } from "@/lib/design/semantic-color";
+import { metricBar } from "@/features/teacher-portfolio/metric-bar";
 import type { ItemId, Metric, StoredPeriod } from "@/features/teacher-portfolio/model/types";
 import {
   closingLabel, fmtScore, itemColor, itemLabel, itemOf, missingTag, pendingShown, periodMax, scoreColor, scoreScale, shortItems, shownItems,
@@ -16,9 +18,11 @@ import { Delta } from "./parts";
  */
 const MOTION = "duration-700 ease-out motion-reduce:transition-none";
 const BULLET_STRIPES = "repeating-linear-gradient(135deg, var(--color-bg-soft) 0 4px, var(--color-card) 4px 8px)";
+/** 숫자 글자 — 가감 항목은 양수에 '+'를 붙인다(세는 도중에도 같은 규칙이라 '+-1.5'가 보이지 않는다). */
+const numText = (n: number, plus: boolean) => `${plus && n > 0 ? "+" : ""}${n.toFixed(1)}`;
 
 /** 값이 바뀌면 이전 숫자에서 새 숫자로 이어 센다. 움직임 줄이기 설정이면 바로 바꾼다. */
-function useCountTo(value: number | null) {
+function useCountTo(value: number | null, plus = false) {
   const ref = useRef<HTMLSpanElement>(null);
   const shown = useRef<number | null>(value);
   // 레이아웃 단계에서 시작한다 — 새 숫자가 한 프레임 먼저 보였다가 되돌아가지 않게.
@@ -28,7 +32,7 @@ function useCountTo(value: number | null) {
     const el = ref.current;
     if (!el || value === null || from === null || from === value || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const started = performance.now();
-    const at = (k: number) => (from + (value - from) * (1 - (1 - k) ** 3)).toFixed(1);
+    const at = (k: number) => numText(from + (value - from) * (1 - (1 - k) ** 3), plus);
     el.textContent = at(0);
     let frame = requestAnimationFrame(function step(now: number) {
       const k = Math.min(1, (now - started) / 650);
@@ -37,7 +41,7 @@ function useCountTo(value: number | null) {
     });
     // 글자는 건드리지 않는다 — 끊긴 뒤의 값은 React가 이미 써 두었다.
     return () => cancelAnimationFrame(frame);
-  }, [value]);
+  }, [value, plus]);
   return ref;
 }
 
@@ -75,30 +79,46 @@ function ScoreRing({ total, max, onOpen }: { total: number | null; max: number; 
   );
 }
 
-function MetricRow({ metric, color, before, tag, legacy, onOpen }: {
-  metric: Metric; color: string; before: number | null | undefined; tag: string | null; legacy: boolean; onOpen: (id: ItemId) => void;
+function MetricRow({ metric, color, before, tag, legacy, axis, closed, onOpen }: {
+  metric: Metric; color: string; before: number | null | undefined; tag: string | null; legacy: boolean; axis: boolean; closed: boolean;
+  onOpen: (id: ItemId) => void;
 }) {
-  const number = useCountTo(metric.value);
-  const pct = metric.value === null || metric.max <= 0 ? 0 : Math.min(100, Math.max(0, (metric.value / metric.max) * 100));
+  const plus = metric.max <= 0; // 가감 항목(만점 0)
+  const number = useCountTo(metric.value, plus);
+  // 가감·음수 항목은 0을 가운데 두고 +는 오른쪽, −는 왼쪽으로 비례해 그린다(원장 2026-10-16 — 모양 계산은 `metric-bar.ts`).
+  const bar = metricBar(metric.value, metric.uncounted ? null : before, metric.max, axis);
+  const signed = bar.signed;
   const label = itemLabel(metric);
+  // 확인 대기 글은 이름 옆 칩으로 눈에 띄게(원장 2026-10-16 *"확인대기는 눈에 띄도록 라벨화"*) — 반영하기 전엔 점수에 들지 않는다.
+  const waiting = metric.id === "satisfaction" ? metric.waiting ?? 0 : 0;
   return (
     <button type="button" onClick={() => onOpen(metric.id)} data-metric-row={metric.id}
-      aria-label={`${label} ${metric.value === null ? (legacy ? "산출불가" : "합계에서 제외") : `${fmtScore(metric.value)}점`}${tag ? ` (${tag})` : ""}, 근거 보기`}
+      aria-label={`${label} ${metric.value === null ? (legacy ? "산출불가" : "합계에서 제외") : `${fmtScore(metric.value)}점`}${tag ? ` (${tag})` : ""}${waiting ? `, 확인 대기 ${waiting}건` : ""}, 근거 보기`}
       className="border-line-faint hover:bg-primary-softer focus-visible:outline-primary flex min-h-28 w-full flex-col justify-center border-b px-5 py-3.5 text-left focus-visible:outline-2">
       <span className="mb-2 flex items-center justify-between gap-2">
-        <span className="text-sm font-bold">{label}{tag ? <small className="ml-1.5 text-xs font-medium">{tag}</small> : null}</span>
+        <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm font-bold">
+          {label}{tag ? <small className="text-xs font-medium">{tag}</small> : null}
+          {/* 마감한 달은 더 반영할 수 없다 — 주의색 대신 회색 '미확인'(누를 일이 없는데 누르라고 하지 않게). */}
+          {waiting ? <Pill color={toneColor(closed ? "inert" : "caution")} className="whitespace-nowrap">{closed ? `미확인 ${waiting}건` : `확인 대기 ${waiting}건`}</Pill> : null}
+        </span>
         <b className={`num leading-none font-bold whitespace-nowrap ${metric.value === null ? "text-base" : "text-xl"}`}>
-          <span ref={number}>{metric.value === null ? (legacy ? "산출불가" : "제외") : fmtScore(metric.value)}</span>
+          <span ref={number}>{metric.value === null ? (legacy ? "산출불가" : "제외") : numText(metric.value, plus)}</span>
           <small className="ml-1 text-xs font-medium">{metric.max > 0 ? `/ ${metric.max}점` : "가감"}</small>
         </b>
       </span>
-      <span className="bg-bg-soft relative block h-2 w-full rounded-full" style={metric.value === null ? { background: BULLET_STRIPES } : undefined}>
-        <span data-bar className={`block h-full rounded-full transition-[width] ${MOTION}`} style={{ width: `${pct}%`, background: color }} />
-        {/* 검은 눈금 = 전월 점수. 값은 아래 증감이 말한다. */}
-        {before !== null && before !== undefined && metric.max > 0 && !metric.uncounted ? (
-          <span aria-hidden className={`bg-foreground ring-card absolute -top-1 h-4 w-[3px] ring-1 transition-[left] ${MOTION}`}
-            style={{ left: `${Math.min(100, Math.max(0, (before / metric.max) * 100))}%` }} />
-        ) : null}
+      <span className="flex items-center gap-1.5">
+        {signed ? <span aria-hidden className="num text-xs leading-none font-bold">−</span> : null}
+        <span className="bg-bg-soft relative block h-2 w-full rounded-full" style={metric.value === null ? { background: BULLET_STRIPES } : undefined}>
+          {/* 가운데 세로선 = 0점. */}
+          {signed ? <span aria-hidden className="bg-line-strong absolute -top-1 left-1/2 h-4 w-px" /> : null}
+          <span data-bar className={`absolute inset-y-0 rounded-full transition-[left,width] ${MOTION}`}
+            style={{ left: `${bar.left}%`, width: `${bar.width}%`, background: color }} />
+          {/* 검은 눈금 = 전월 점수. 값은 아래 증감이 말한다. */}
+          {bar.before !== null ? (
+            <span aria-hidden className={`bg-foreground ring-card absolute -top-1 h-4 w-[3px] ring-1 transition-[left] ${MOTION}`} style={{ left: `${bar.before}%` }} />
+          ) : null}
+        </span>
+        {signed ? <span aria-hidden className="num text-xs leading-none font-bold">+</span> : null}
       </span>
       <span className="mt-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 text-xs">
         <span className="min-w-0">{metric.basis}</span>
@@ -116,8 +136,10 @@ function beforeOf(previous: StoredPeriod | undefined, m: Metric): number | null 
   return was && was.max === m.max && !was.uncounted ? was.value : undefined;
 }
 
-export function ScoreHero({ period, previous, onOpenMetric, onOpenLedger }: {
+export function ScoreHero({ period, previous, signedIds, onOpenMetric, onOpenLedger }: {
   period: StoredPeriod; previous: StoredPeriod | undefined; onOpenMetric: (id: ItemId) => void; onOpenLedger: () => void;
+  /** 가운데 축(0 가운데)으로 그릴 항목 — 보이는 달 전체로 정한다(가감 · 어느 달이든 음수). */
+  signedIds: ReadonlySet<string>;
 }) {
   const items = shownItems(period);
   const max = periodMax(period);
@@ -158,7 +180,7 @@ export function ScoreHero({ period, previous, onOpenMetric, onOpenLedger }: {
         <h3 className="px-5 pt-5 pb-1 text-base font-bold">항목별 점수 <span className="num text-xs font-medium">{items.length}개 · {max}점</span></h3>
         <div className="sm:[&>*]:border-line-faint grid min-w-0 grid-cols-1 sm:grid-cols-2 sm:[&>*:nth-child(odd)]:border-r">
           {items.map((m) => (
-            <MetricRow key={m.id} metric={m} color={itemColor(m, items)} before={beforeOf(previous, m)} tag={missingTag(m, period)} legacy={legacy} onOpen={onOpenMetric} />
+            <MetricRow key={m.id} metric={m} color={itemColor(m, items)} before={beforeOf(previous, m)} tag={missingTag(m, period)} legacy={legacy} axis={signedIds.has(m.id)} closed={Boolean(period.closing.closedAt)} onOpen={onOpenMetric} />
           ))}
         </div>
       </section>

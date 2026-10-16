@@ -31,7 +31,7 @@ export async function PortfolioFace({ role, teacherId }: { role: SystemRole; tea
   const computedAt = view.selected.periods[0]?.closing.computedAt ?? null;
   const day = kstDateOf(computedAt);
   return (
-    <PortfolioBoard teachers={view.teachers} selected={view.selected} studentNames={view.studentNames} canRefresh={canRefresh} ruleCollapsed={ruleCollapsed} compareSort={compareSort}
+    <PortfolioBoard teachers={view.teachers} selected={view.selected} studentNames={view.studentNames} studentSchools={view.studentSchools} canRefresh={canRefresh} ruleCollapsed={ruleCollapsed} compareSort={compareSort}
       computedLabel={day ? `${dayLabel(day)} ${kstTimeOf(computedAt) ?? ""}`.trim() : "—"} />
   );
 }

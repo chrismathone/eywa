@@ -3,6 +3,7 @@ import { getReviewPrivileges } from "@/features/class-review/server/queries";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant } from "@/lib/auth/perm-matrix";
 import { addDays, kstToday } from "@/lib/date-kst";
+import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { PORTFOLIO_MONTHS } from "../model/build";
@@ -31,6 +32,8 @@ export type PortfolioView =
     teachers: PortfolioTeacherEntry[];
     selected: { id: string; name: string; periods: StoredPeriod[] };
     studentNames: Record<string, string>;
+    /** 학생 → 학교·학년(지금 값 · `schoolGradeLabel`). */
+    studentSchools: Record<string, string>;
   };
 
 export async function getPortfolioGate(): Promise<{ tenantId: string; userId: string } | null> {
@@ -83,10 +86,11 @@ export async function getPortfolioView(opts: { teacherId?: string | null }): Pro
   const selected = teachers.find((t) => t.id === opts.teacherId) ?? teachers[0];
   const periods = await loadTeacherPeriods(admin, gate.tenantId, selected.id, months);
   const studentIds = studentIdsIn(periods);
-  const students = await fetchInChunks<{ id: string; name: string | null }>(studentIds, (chunk) =>
-    admin.from("students").select("id, name").eq("tenant_id", gate.tenantId).in("id", chunk));
+  const students = await fetchInChunks<{ id: string; name: string | null; school: string | null; grade: string | null }>(studentIds, (chunk) =>
+    admin.from("students").select("id, name, school, grade").eq("tenant_id", gate.tenantId).in("id", chunk));
   return {
     state: "ready", teachers, selected: { id: selected.id, name: selected.name, periods },
     studentNames: Object.fromEntries(students.map((s) => [s.id, s.name ?? ""])),
+    studentSchools: Object.fromEntries(students.map((s) => [s.id, schoolGradeLabel(s.school, s.grade)])),
   };
 }

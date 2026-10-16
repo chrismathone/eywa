@@ -9,13 +9,20 @@ import { Button } from "@/components/ui/button";
 import { deleteClassTextbookPlan, loadClassTextbookPlans } from "@/features/textbooks/server/plan-actions";
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { sheetDowLabel } from "@/features/teacher-view/i18n";
+import { groupSlotPicks } from "@/features/textbooks/lesson-schedule";
 import type { ClassTextbookPlanRow } from "@/features/textbooks/types";
 
-/** `"mon|17:20"` → 사전의 요일 글자 + 시각. 요일이 없는 옛 값은 시각만. */
-function pickLabel(pick: string, lang: ReturnType<typeof useSheetLang>): string {
-  const bar = pick.indexOf("|");
-  if (bar < 0) return pick;
-  return `${sheetDowLabel(pick.slice(0, bar), lang)} ${pick.slice(bar + 1)}`;
+/**
+ * 고른 칸 → 사전의 요일 글자 + 시각 + 자리(`화 17:20 1·2`). 자리가 없는 옛 값은 요일·시각만,
+ * 요일도 없는 더 옛 값은 시각만. 묶음은 교재목록과 같은 [`groupSlotPicks`] 한 벌이다.
+ */
+function picksLabel(picks: readonly string[], lang: ReturnType<typeof useSheetLang>, posLabel: (n: number) => string): string {
+  return groupSlotPicks(picks)
+    .map((g) => {
+      const head = g.dow ? `${sheetDowLabel(g.dow, lang)} ${g.start}` : g.start;
+      return g.positions.length > 0 ? `${head} ${g.positions.map(posLabel).join("·")}` : head;
+    })
+    .join(" · ");
 }
 
 /**
@@ -110,7 +117,7 @@ export function TextbookFillExisting({ classId }: { classId: string }) {
             <li key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-2.5 py-1.5 text-xs">
               <span className="font-bold">{p.textbookTitle}</span>
               {p.slotPicks ? (
-                <span className="num text-text-dim">{p.slotPicks.map((s) => pickLabel(s, lang)).join(" · ")}</span>
+                <span className="num text-text-dim">{picksLabel(p.slotPicks, lang, (n) => tf("fill.slots.pos", { n }))}</span>
               ) : null}
               <span className="num text-text-dim">
                 {tf("fill.existing.from", { date: p.startDate.slice(5).replace("-", "/") })}

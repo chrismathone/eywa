@@ -201,7 +201,9 @@ describe("교재 배정 — 칸은 요일까지 고른다", () => {
 describe("교재 배정 — 한 배정엔 한 담당만", () => {
   it("창은 다른 담당을 고르면 그쪽으로 갈아탄다(섞이지 않는다)", () => {
     const dlg = read("src", "features", "class-sheets", "components", "textbook-fill-dialog.tsx");
-    expect(dlg).toContain("if (otherTeacher) return new Set([s.key]);");
+    expect(dlg).toContain("setPicked(new Set([s.key]));");
+    // 갈아탈 때 앞 담당의 자리(요일·차수)도 함께 비운다 — 남으면 두 담당이 한 배정에 섞인다.
+    expect(dlg).toContain("setSpots(new Set());");
     // 규칙을 말로도 적는다 — 칩이 흐려진 이유를 사람이 알 수 있어야 한다.
     expect(dlg).toContain("fill.slots.oneTeacher");
   });

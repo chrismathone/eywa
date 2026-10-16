@@ -29,7 +29,7 @@ export const VIDEO_SUBMIT_LINK_DAYS = 7;
 export type ExpiredLinkKind = "report" | "video" | "intake" | "staff";
 
 const KIND_DETAIL: Record<ExpiredLinkKind, string> = {
-  report: `수업보고서 링크는 보고서일로부터 ${REPORT_SHARE_LINK_DAYS}일 동안 열 수 있습니다. 담당 선생님께 다시 요청해 주세요.`,
+  report: `보고서 링크는 보고서일로부터 ${REPORT_SHARE_LINK_DAYS}일 동안 열 수 있습니다. 담당 선생님께 다시 요청해 주세요.`,
   // 2026-10-03부터 학생마다 링크를 새로 만들지 않는다 — '다음 보고서의 새 링크'·'선생님께 새 링크'는 막다른 안내다.
   video: `영상 제출 링크는 ${VIDEO_SUBMIT_LINK_DAYS}일 동안 쓸 수 있습니다. 숙제 영상은 ClassNote 알림장에 올리거나, 숙제 영상 올리기 사이트에서 휴대폰 번호 뒷 4자리와 이름을 넣고 올려 주세요.`,
   // 접수 QR·직원 등록 QR은 학원이 링크마다 마감일을 정한다 — 숫자를 적지 않는다(링크마다 다르다).

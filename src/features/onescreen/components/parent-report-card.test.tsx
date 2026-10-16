@@ -177,6 +177,11 @@ describe("ParentReportCard — 템플릿 모드(영어)", () => {
     expect(html).not.toContain('viewBox="0 0 660 200"');
   });
 
+  it("과목 이름을 받으면 제목이 과목 보고서(원장 2026-10-16)", () => {
+    expect(markup({ ...FULL, report: { ...FULL.report, subjectLabel: "수학" } })).toContain("2026년 09월 10일 수학 보고서");
+    expect(english(EIE, { report: { ...FULL.report, notes: EIE, subjectLabel: "영어" } })).toContain("2026년 09월 10일 영어 보고서");
+  });
+
   it("머리·학생 정보·첨부·바닥글은 수학과 같다", () => {
     const html = english(EIE);
     expect(html).toContain("2026년 09월 10일 수업 보고서");

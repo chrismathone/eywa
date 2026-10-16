@@ -74,6 +74,8 @@ export type ParentReportCardProps = {
     hasClass?: boolean;
     /** 특강 반 보고서 — 제목 앞에 "[특강]"(원장 2026-09-30, report-title.ts). 판정은 호출부가 `classKindMeta`로. */
     special?: boolean;
+    /** 과목 이름 — 제목 "수학 보고서"(원장 2026-10-16 · `subjectReportLabel`로 학원 설정에서 푼 값). 없으면 기본 제목. */
+    subjectLabel?: string | null;
   };
   student: { name: string | null; school: string | null; grade: string | null } | null;
   academyName: string;

@@ -20,12 +20,12 @@ export async function TodaysMathSyncStatus({ tenantId }: { tenantId: string }) {
       status = statuses.find((item) => item.bindingId === binding.bindingId && item.tenantId === tenantId);
     }
   } catch {
-    return <Panel title="오늘의수학 동기화"><p className="text-danger text-sm">동기화 상태를 확인하지 못했습니다. 연결 설정과 DB 적용 상태를 확인해 주세요.</p></Panel>;
+    return <Panel title="오늘 수학 동기화"><p className="text-danger text-sm">동기화 상태를 확인하지 못했습니다. 연결 설정과 DB 적용 상태를 확인해 주세요.</p></Panel>;
   }
-  if (!configured) return <Panel title="오늘의수학 동기화"><p className="text-text-dim text-sm">이 지점의 연결 설정이 아직 등록되지 않았습니다.</p></Panel>;
-    if (!status) return <Panel title="오늘의수학 동기화"><p className="text-text-dim text-sm">연결 등록 전입니다. 미리보기 검증 후 등록해 주세요.</p></Panel>;
+  if (!configured) return <Panel title="오늘 수학 동기화"><p className="text-text-dim text-sm">이 지점의 연결 설정이 아직 등록되지 않았습니다.</p></Panel>;
+    if (!status) return <Panel title="오늘 수학 동기화"><p className="text-text-dim text-sm">연결 등록 전입니다. 미리보기 검증 후 등록해 주세요.</p></Panel>;
     const pending = ["pending", "leased", "received", "retry"].reduce((sum, key) => sum + (status.outbox[key] ?? 0), 0);
-    return <Panel title="오늘의수학 동기화" description="계정과 수강 정보 전달 상태입니다. 서비스 사용 여부는 위 라이선스 스위치를 따릅니다.">
+    return <Panel title="오늘 수학 동기화" description="계정과 수강 정보 전달 상태입니다. 서비스 사용 여부는 위 라이선스 스위치를 따릅니다.">
       <dl className="grid grid-cols-2 gap-4 text-sm">
         <div><dt className="text-text-dim">연결 모드</dt><dd>{status.mode === "active" ? "적용 중" : "미리보기"}</dd></div>
         <div><dt className="text-text-dim">원본 검증</dt><dd>{status.healthy ? "정상" : "확인 필요"}</dd></div>

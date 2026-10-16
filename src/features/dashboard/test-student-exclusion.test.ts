@@ -102,7 +102,7 @@ describe("알림 4경로가 모두 테스트 학생을 뺀다", () => {
 describe("이미 같은 축을 쓰던 곳들이 그대로다", () => {
   const cases: [string, string[]][] = [
     ["작성률(report-admin)", ["src", "features", "report-admin", "server", "queries.ts"]],
-    ["오늘의 수학(연동)", ["src", "features", "integrations", "todays-math", "service.ts"]],
+    ["오늘 수학(연동)", ["src", "features", "integrations", "todays-math", "service.ts"]],
     ["발송 실패 알림", ["src", "features", "notifications", "server", "failed-notify-sweep.ts"]],
     ["보드 명단", ["src", "features", "report-admin", "server", "board-roster-queries.ts"]],
   ];

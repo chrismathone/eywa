@@ -9,22 +9,29 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
 import { skillAreaColorOf, skillAreaLabelOf } from "@/features/owner/skill-areas";
 import { deleteClassTextbookPlan } from "@/features/textbooks/server/plan-actions";
+import { groupSlotPicks } from "@/features/textbooks/lesson-schedule";
 import type { ClassTextbookPlanRow } from "@/features/textbooks/types";
 import { DialogShell, FIELD, FormError, useRun } from "./form-bits";
 import { PlanPreviewDialog } from "./plan-preview-dialog";
 
 /** 0268a 이전 배정 — 교시를 안 고르고 **축**으로 태웠다. `slotPicks`가 없을 때만 쓴다. */
 const AXIS_LABEL: Record<string, string> = { class: "정규 수업", jj: "JJ 자습실" };
-const PACE_LABEL: Record<string, string> = { period: "교시마다 1차수", day: "하루에 1차수", min25: "25분 수업" };
+const PACE_LABEL: Record<string, string> = { period: "교시마다 1차수", day: "하루에 1차수", min25: "25분 1차수" };
 
 /** 요일 글자 — 이 화면은 사무실만 보므로 한글 한 벌이면 된다(강사 시트는 사전을 쓴다). */
 const DOW_KO: Record<string, string> = { mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일" };
 
-/** `"mon|17:20"` → `"월 17:20"`. 요일이 없는 옛 값은 시각만 적는다. */
-function slotPickLabel(pick: string): string {
-  const bar = pick.indexOf("|");
-  if (bar < 0) return pick;
-  return `${DOW_KO[pick.slice(0, bar)] ?? pick.slice(0, bar)} ${pick.slice(bar + 1)}`;
+/**
+ * 고른 칸 → `"화 17:20 1·2차수 · 금 17:20 1차수"`. 자리(1·2차수, 원장 2026-10-16)가 없는 옛 값은 요일·시각만,
+ * 요일도 없는 더 옛 값은 시각만 적는다. 묶음은 배정 창과 같은 [`groupSlotPicks`] 한 벌이다.
+ */
+function slotPicksLabel(picks: readonly string[]): string {
+  return groupSlotPicks(picks)
+    .map((g) => {
+      const head = g.dow ? `${DOW_KO[g.dow] ?? g.dow} ${g.start}` : g.start;
+      return g.positions.length > 0 ? `${head} ${g.positions.join("·")}차수` : head;
+    })
+    .join(" · ");
 }
 
 /**
@@ -142,7 +149,7 @@ export function PlansFace({ rows, skillAreas }: { rows: ClassTextbookPlanRow[]; 
                     {/* 고른 칸이 있으면 **요일·시각**을 그대로 보여 준다 — 축(정규/JJ)은 0268a 이전 배정의 폴백이다. */}
                     <td className="py-1.5 text-center text-xs">
                       {p.slotPicks ? (
-                        <span className="num">{p.slotPicks.map(slotPickLabel).join(" · ")}</span>
+                        <span className="num">{slotPicksLabel(p.slotPicks)}</span>
                       ) : (
                         (AXIS_LABEL[p.slotAxis] ?? p.slotAxis)
                       )}

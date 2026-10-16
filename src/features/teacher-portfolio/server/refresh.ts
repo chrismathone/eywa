@@ -5,10 +5,11 @@ import { reportWarning } from "@/lib/observability/report-error";
 import { addDays, kstToday, shiftMonth } from "@/lib/date-kst";
 import { PORTFOLIO_MONTHS, buildPortfolio, portfolioFloor } from "../model/build";
 import { monthWindows } from "../model/dates";
+import { waitingByPeriod } from "../model/satisfaction";
 import { loadEvaluationConfig, loadManualEntries } from "./evaluation-store";
 import { loadPayPlan, payMapOf, type PayPlan } from "./pay-sources";
 import { loadPortfolioSnapshot } from "./snapshot";
-import { loadLastMonths, loadOpenMonths, portfolioRawsReady, portfolioTableReady, savePortfolioMonths, type SaveSummary } from "./store";
+import { loadOpenMonths, portfolioRawsReady, portfolioTableReady, savePortfolioMonths, type SaveSummary } from "./store";
 
 /**
  * 한 지점의 직원 포트폴리오를 다시 집계한다 — 매일 cron과 화면의 [지금 집계]가 같은 함수를 부른다.
@@ -52,10 +53,9 @@ export async function refreshTenantPortfolio(
     const [evaluation, entries] = await Promise.all([loadEvaluationConfig(admin, tenantId), loadManualEntries(admin, tenantId, months)]);
     return { evaluation, entries, stamp: `${evaluation.updatedAt ?? ""}|${JSON.stringify(entries)}` };
   };
-  const [settings, openMonths, lastMonths, first, withRaws, storedRows] = await Promise.all([
+  const [settings, openMonths, first, withRaws, storedRows] = await Promise.all([
     getTenantSettingsByTenantId(tenantId, { failOnReadError: true }),
     loadOpenMonths(admin, tenantId, portfolioFloor(periodEnd)),
-    loadLastMonths(admin, tenantId, portfolioFloor(periodEnd)),
     loadScoring(),
     portfolioRawsReady(admin, tenantId),
     // 저장된 줄이 하나도 없으면 첫 집계 — 창의 지난달들이 이번에 계산되자마자 마감된다(행은 받지 않는다).
@@ -64,8 +64,7 @@ export async function refreshTenantPortfolio(
   // 출결 입력·수정 기록은 마감하지 않은 가장 이른 달부터만 읽는다(마감한 달은 다시 매기지 않는다 · 활동 기록은 많다).
   // 🔴 첫 집계(저장된 줄 0 · 확인 실패 포함)면 창의 가장 이른 달부터 — 그 달들이 이번에 바로 마감돼 굳는다(한 번만 무겁다).
   const firstRun = storedRows.error !== null || !storedRows.count;
-  // 점수 달의 재료는 지난달 — 기록은 그 점수 달의 지난달부터 읽는다.
-  const touchMonth = shiftMonth(firstRun ? portfolioFloor(periodEnd) : [periodEnd.slice(0, 7), ...[...openMonths.values()].flat()].sort()[0], -1);
+  const touchMonth = firstRun ? portfolioFloor(periodEnd) : [periodEnd.slice(0, 7), ...[...openMonths.values()].flat()].sort()[0];
   const snapshot = await loadPortfolioSnapshot(admin, tenantId, {
     end: periodEnd, now, touchesSince: `${touchMonth}-01`,
     settings: {
@@ -86,7 +85,7 @@ export async function refreshTenantPortfolio(
   const plan: PayPlan = payOn
     ? await loadPayPlan({
       admin, tenantId, settings, deadline: opts.payDeadline ?? Date.now() + SCREEN_PAY_BUDGET_MS,
-      result: buildPortfolio(snapshot, { openMonths, lastMonths, evaluation: { config: first.evaluation.config, entries: first.entries } }),
+      result: buildPortfolio(snapshot, { openMonths, evaluation: { config: first.evaluation.config, entries: first.entries } }),
     }).catch((e: unknown) => {
       reportWarning("강사평가 급여 비율 재료 조회 실패", { scope: "refreshTenantPortfolio", message: e instanceof Error ? e.message : String(e) });
       payFailed = true;
@@ -94,20 +93,21 @@ export async function refreshTenantPortfolio(
     })
     : noPay;
   const holdFrom = shiftMonth(periodEnd.slice(0, 7), -1);
-  // 메이크에듀 출퇴근을 재료 달(점수 달의 지난달) 다음 날 1일 이후로 아직 못 받았으면(연동은 06·18시 — 말일 저녁 태그는 1일 아침에 온다)
-  // 근태를 켠 지점은 그 점수 달 마감을 미룬다.
+  // 메이크에듀 출퇴근을 아직 다음 달 1일 이후로 못 받았으면(연동은 06·18시 — 말일 저녁 태그는 1일 아침에 온다) 근태를 켠 지점은 그 달 마감을 미룬다.
   const attendanceLatest = snapshot.sources?.punctuality.latest ?? null;
-  const attendancePending = (month: string) => attendanceLatest !== null && attendanceLatest < `${month}-01`;
+  const attendancePending = (month: string) => attendanceLatest !== null && attendanceLatest < `${shiftMonth(month, 1)}-01`;
   let scoring = first;
   let saved: SaveSummary | null = null;
   for (let pass = 0; ; pass++) {
     const pay = payMapOf(plan, scoring.entries);
-    const result = buildPortfolio(snapshot, { openMonths, lastMonths, evaluation: { config: scoring.evaluation.config, entries: scoring.entries }, pay });
+    const result = buildPortfolio(snapshot, { openMonths, evaluation: { config: scoring.evaluation.config, entries: scoring.entries }, pay });
     // 재료 조회 자체가 실패하면 어느 달을 못 셌는지도 모른다 — 그 실행은 마감을 모두 미룬다(다음 실행이 다시 센다).
     // 미루는 것은 다음 달 말까지 — 계속 나는 오류(깨진 비율표 등)로 달이 반년씩 열려 있지 않게, 그 뒤엔 사유를 남긴 채 마감한다.
+    // 학부모 만족도 확인 대기가 남은 달도 미룬다 — 마감해 버리면 반영할 길이 없다(원장 2026-10-16 '9월을 이달 말까지 열어 두기').
+    const waiting = waitingByPeriod(result.teachers);
     const holdClose = (teacherId: string, month: string) =>
       month >= holdFrom && (payFailed || Boolean(pay.get(`${teacherId}|${month}`)?.retry)
-        || (scoring.evaluation.config.metrics.punctuality.enabled && attendancePending(month)));
+        || (scoring.evaluation.config.metrics.punctuality.enabled && attendancePending(month)) || waiting.has(`${teacherId}|${month}`));
     const once = await savePortfolioMonths(admin, tenantId, result, now, { withRaws, holdClose });
     saved = !saved ? once : {
       teachers: once.teachers, written: Math.max(saved.written, once.written), removed: saved.removed + once.removed,

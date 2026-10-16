@@ -38,13 +38,8 @@ export function buildSourceItems(d: PortfolioSnapshot, input: {
   const punctuality = m.punctuality.punctuality ?? DEFAULT_PUNCTUALITY_OPTIONS;
   const basis = src ? buildPunctualityBasis(d, { classDays: input.classDays }, punctuality) : null;
 
-  /**
-   * `w` = 재료 창(지난달) · `targets` = 그 달 이 강사의 보고서 대상 칸(`duties.ts` `reportTargets` — 작성률과 같은 칸, 일일테스트 제출률의 분모) ·
-   * `scoreMonth` = 점수 달 — 원장 직접 입력(근태 월 입력)은 점수 달 창에 넣는다.
-   */
-  return function items(
-    teacherId: string, w: PeriodWindow, cutoff: string, targets: readonly GradeTarget[] = [], scoreMonth: string = w.month,
-  ): [GradesMetric, SatisfactionMetric, PunctualityMetric] {
+  /** `targets` = 그 달 이 강사의 보고서 대상 칸(`duties.ts` `reportTargets` — 작성률과 같은 칸) — 일일테스트 제출률의 분모. */
+  return function items(teacherId: string, w: PeriodWindow, cutoff: string, targets: readonly GradeTarget[] = []): [GradesMetric, SatisfactionMetric, PunctualityMetric] {
     const g = grades?.(teacherId, w, recordStart && w.end < recordStart ? "9999-12-31" : cutoff, m.grades.grades ?? DEFAULT_GRADES_OPTIONS, input.classNameOf, targets);
     const kind = (k: string) => g?.kinds.find((x) => x.kind === k);
     const daily = kind("daily"), monthly = kind("monthly");
@@ -52,8 +47,8 @@ export function buildSourceItems(d: PortfolioSnapshot, input: {
       daily ? `일일테스트 제출 ${daily.done ?? 0}/${daily.count}칸` : "", monthly ? `월말평가 응시 ${monthly.done ?? 0}/${monthly.count}명` : "",
       g.tests ? `시험 ${g.tests}건` : "",
     ].filter(Boolean) : [];
-    const s = satisfaction?.(teacherId, w, m.satisfaction.satisfaction ?? DEFAULT_SATISFACTION_OPTIONS);
-    const manual = input.entriesOf(teacherId, scoreMonth).get(PUNCTUALITY_OVERRIDE_KEY)?.value ?? null;
+    const s = satisfaction?.(teacherId, w, m.satisfaction.satisfaction ?? DEFAULT_SATISFACTION_OPTIONS, input.classNameOf);
+    const manual = input.entriesOf(teacherId, w.month).get(PUNCTUALITY_OVERRIDE_KEY)?.value ?? null;
     const p = src && basis ? punctualityOf({
       days: src.punctuality.days ?? [], leaves: src.punctuality.leaves, holidays: input.holidays, teacherId, w, options: punctuality, manual,
       basisOn: (day) => basis.basisOn(teacherId, day), evidenceOn: (day, b) => basis.evidenceOn(teacherId, day, b), latest: src.punctuality.latest ?? null,
@@ -66,7 +61,8 @@ export function buildSourceItems(d: PortfolioSnapshot, input: {
       s ? {
         id: "satisfaction", max: METRIC_MAX.satisfaction, value: null, raw: s.raw, reason: SATISFACTION_REASON, detail: s.detail,
         plus: s.plus, minus: s.minus, claims: s.claims, waiting: s.waiting,
-        basis: `가점 글 ${s.plus} · 감점 글 ${s.minus} · 클레임·칭찬 ${s.claims}건${s.waiting ? ` · 확인 대기 ${s.waiting}건` : ""}`,
+        // 확인 대기는 항목 이름 옆 칩이 말한다(원장 2026-10-16 *"확인대기는 눈에 띄도록 라벨화"*) — 여기 다시 적지 않는다.
+        basis: `가점 글 ${s.plus} · 감점 글 ${s.minus} · 클레임·칭찬 ${s.claims}건`,
       } : uncountedItem("satisfaction"),
       p ? {
         id: "punctuality", max: METRIC_MAX.punctuality, value: null, raw: p.raw, reason: PUNCTUALITY_REASON, detail: p.detail,
