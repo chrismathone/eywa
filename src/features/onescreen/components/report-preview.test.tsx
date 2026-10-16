@@ -23,6 +23,7 @@ const ctx: ReportPreviewContext = {
 const subject: Subject = {
   name: "수학",
   subjectLabel: "수학",
+  subjectKey: "math",
   prev: "",
   today: "1-1-1 백 알아보기",
   textbook: "개념원리 초2-1",
@@ -74,6 +75,7 @@ describe("ReportPreview", () => {
     renderPreview();
     expect(screen.getByText("이윤건")).toBeTruthy();
     expect(screen.getByText("달성초2")).toBeTruthy(); // fmtSchoolGrade 압축 표기
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toContain("수학 보고서"); // 발송본과 같은 과목 보고서 제목
     expect(screen.getByText("박소선")).toBeTruthy(); // 담임
     expect(screen.getByText("수학 1-1-1 백 알아보기")).toBeTruthy();
     expect(screen.getByText("개념원리 초2-1")).toBeTruthy();

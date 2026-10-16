@@ -19,6 +19,7 @@
  *    학습 추이 그래프는 지연 조회(`loadReportTrend`)로 채운다 — 지난 회차는 서버, 오늘 회차는 지금 입력값.
  */
 import { ParentReportCard } from "./parent-report-card";
+import { subjectReportLabel } from "../report-title";
 import { formatReportAuthorName } from "../report-author-name";
 import { classKindMeta } from "@/features/classes/list-filters";
 import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
@@ -151,6 +152,9 @@ export function ReportPreview({
             hasClass: subject.classId != null,
             // 특강 반이면 제목 앞 "[특강]"(원장 2026-09-30) — 수업목록 '구분'과 같은 판정.
             special: classKindMeta({ isSpecial: subject.isSpecial, className: subject.className }).kind === "special",
+            // 과목 보고서(원장 2026-10-16) — 발송본과 같은 판정(`subjectReportLabel` — 키가 그대로 돌아온 라벨은 빼고 기본 제목).
+            // 순수 과목 라벨만 쓴다(`name`은 반 이름이 붙을 수 있다). 과목 키가 없는 행은 저장도 라벨로 돼 발송본이 기본 제목이라 여기도 기본 제목.
+            subjectLabel: subjectReportLabel((k) => subject.subjectLabel ?? k, subject.subjectKey ?? null),
           }}
           student={{ name: student.name, school: student.school ?? null, grade: student.grade }}
           academyName={ctx.academyName}

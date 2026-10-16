@@ -457,6 +457,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - AI provider 전역 기본 = Anthropic Claude Sonnet 5
 - 전사 분석 3종(회의록·등록상담·재원생 상담) = DeepSeek v4-pro
 - 음성 전사 엔진 = AssemblyAI `universal-2` 유지
+- 학부모 보고서 제목 = 과목 보고서('수학 보고서' · 설정 제목이 기본값일 때 · `reportTitleText` 한 곳)
 - 수업보고서 테스트 표기 = "N문제 중 M개 맞음" 하나뿐
 - 오늘 과제의 쪽수는 강제가 아니라 후보정
 - 분석 화면에 AI 모델 라벨 노출
