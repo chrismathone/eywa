@@ -7,7 +7,7 @@
 - DB 지문(`md5`·`bytes`)·`status`·`attempts`는 그대로 · 결과는 `route.archive`(done·kept·skipped·retry·failed) · Drive 공개 `properties`에 원본·새 내용 지문(판정 기록을 잃어도 이어 간다) · `appProperties`는 안 건드림.
 - 손대지 않음: 올린 뒤 바뀐 파일 · 휴지통(반려) · 받는 사이 바뀐 파일 · 담임이 직접 올린 파일. 실패는 30분·2시간·6시간·24시간 뒤, 다섯 번째에 그만둠. PC·설정 사정(인증·디스크·저장 계정이 고칠 수 없는 파일·Drive 남은 공간 부족·한도 거절·잠금 확인)은 세지 않고 1시간부터 두 배씩 하루까지. 공유 드라이브 파일은 편집 권한(`capabilities.canEdit`)으로 판정. 연동 앱 종료·업데이트는 인코딩·전송을 바로 끊는다(`stopLinkVideoCompress` · Drive 요청에도 끊기 신호).
 - 적대적 리뷰 수리: 하트비트는 세 번 잇달아 실패해야 잠금 잃음 + 교체 직전 DB 재확인 · 판정 기록 실패는 두 번 더 · 세 번 못 남긴 줄은 그 실행 동안 쉼 · 지난 실행의 임시 파일 정리 · 연동 앱 결과 보고 작업 이름 `video` · 판정 규칙은 `video-link-compress-rules.mjs`.
-- 공통 조각 전송을 `sendResumableFile`로 뺐다(새 업로드·내용 교체가 같이 씀) · ffmpeg 인코딩에 끊기 신호 · 하트비트 `caps.homeworkVideoLinkCompress` · 쿼리 목록 재생성. SQL 없음. 연동 앱 1.0.6(순번 8) 게시 필요.
+- 공통 조각 전송을 `sendResumableFile`로 뺐다(새 업로드·내용 교체가 같이 씀) · ffmpeg 인코딩에 끊기 신호 · 하트비트 `caps.homeworkVideoLinkCompress` · 쿼리 목록 재생성. SQL 없음. 연동 앱 1.0.6(순번 8) 게시·등록 완료(2026-10-16) — PC에서 '지금 업데이트'를 눌러야 적용된다.
 
 ## 2026-10-16 — 메뉴 '콜&상담' → '신규 콜&상담' · 플레이스홀더는 연한 회색 · 상담 폼의 불필요한 플레이스홀더 삭제
 
