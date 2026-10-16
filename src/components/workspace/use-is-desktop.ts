@@ -1,12 +1,10 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { DESKTOP_MIN_WIDTH, DESK_CHANGE_EVENT } from "./desk-detect";
 
-/**
- * 데스크톱 셸의 최소 화면 폭 — 원장 2026-09-28 "대시보드 기준으로 전체 적용"(globals.css `desk` 변형 주석).
- * 🔴 CSS 쪽(`desk`·`compact-chrome`·`.toolbar-rail`·period-nav)과 같은 값이어야 한다(가드 desktop-breakpoint.test.ts).
- */
-export const DESKTOP_MIN_WIDTH = 1240;
+// 값은 일반 모듈(desk-detect.ts)에 산다 — 서버 루트 레이아웃도 읽어야 해서(`"use client"` 모듈 상수는 서버에서 undefined, [[#81]]).
+export { DESKTOP_MIN_WIDTH };
 
 // 데스크톱 = 넓은 폭 + 마우스·터치패드가 **하나라도**(`any-pointer`) — 주 입력만 보는 `pointer: fine`이면 터치스크린 PC가 마우스를
 // 꽂아도 모바일 셸이 됐다(원장 2026-10-15). 모바일/태블릿 터치(정밀 포인터 없음)는 false → Stage Manager 미마운트.
@@ -46,12 +44,15 @@ function subscribe(cb: () => void) {
   listeners.add(cb);
   if (!attached) {
     mq.addEventListener("change", notify);
+    // 실제 마우스 움직임으로 데스크톱이 된 순간(desk-detect.ts 스크립트가 보낸다) — 미디어쿼리는 안 바뀐다.
+    window.addEventListener(DESK_CHANGE_EVENT, notify);
     attached = true;
   }
   return () => {
     listeners.delete(cb);
     if (listeners.size === 0 && attached) {
       mq.removeEventListener("change", notify);
+      window.removeEventListener(DESK_CHANGE_EVENT, notify);
       attached = false;
     }
   };
@@ -59,7 +60,8 @@ function subscribe(cb: () => void) {
 function getSnapshot() {
   // 임베드 iframe 안에서는 Stage Manager 캔버스가 없으므로 false(창 열기 트리거는 Sheet 폴백).
   if (inFrame()) return false;
-  return mediaQuery()?.matches ?? false;
+  // 미디어쿼리 또는 실제 마우스 움직임 표시(`data-desk`, desk-detect.ts) — 터치 모니터 PC는 브라우저가 마우스를 못 알아본다(2026-10-16).
+  return (mediaQuery()?.matches ?? false) || document.documentElement.hasAttribute("data-desk");
 }
 function getServerSnapshot() {
   return false; // SSR/모바일 우선 — hydration 후 데스크톱이면 확정

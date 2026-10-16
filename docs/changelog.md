@@ -1,5 +1,11 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-10-16 — 터치 모니터 PC(갤럭시북)가 마우스를 써도 모바일 셸 — '마우스'를 실제 움직임으로도 판정
+
+- 원장 *"여전하네. 대시보드가 여전히 상단이야"* · *"화면을 아무리 축소해도 대시보드가 상단임"* — 10-15 `any-pointer` 수정(d3f0ead9a) 뒤에도 그대로. 콘솔 실측: 폭 1672 · 배율 150% · `any-pointer: fine` false(USB 마우스를 꽂아도 false).
+- 루트 레이아웃 `<head>` 판정 스크립트(`desk-detect.ts`)가 `pointermove`의 `pointerType === "mouse"`를 보면 기억하고 `<html data-desk>` — CSS `desk` 변형 갈래 · 모바일 절 다섯 곳·`no-mouse`·`compact-chrome` 건너뜀 · 최대화 블록 · `useIsDesktop`이 함께 본다. 정상 기기는 미디어쿼리 그대로. 결정 = [`docs/decisions/shell.md`](decisions/shell.md).
+- 적대적 리뷰 반영: 인쇄하는 동안은 표시를 무시(`data-print` — 인쇄물은 종전대로) · 브라우저가 마우스를 보고하는 기기는 기억하지 않음 · React가 `<html>`을 다시 만들어 표시가 지워지면 다시 붙임(MutationObserver). 남은 것 = 이 기기의 `hover` 미디어 확인.
+
 ## 2026-10-16 — 강사평가: 점수 달의 재료를 다시 그 달 기록으로(9월 점수 = 9월 실적) · 확인 대기 칩
 
 - 원장 *"대규모 정정. 기간평가를 지난달로 한다고 저번에 말했는데, 이번달로 하자. 9월건 그냥 9월 가서 보면 되는거잖아"* → 10-15의 '모든 지표 = 지난달 기록'(`473e3cf01`)을 되돌림(`dataWindowOf`·`dataMonthOf`·`recordMonthNames`·`loadLastMonths` 등 걷음 · 스냅샷·출결 수정 기록·근태 마감 미룸·기록 시작 전 기준 달·마감 출처·만족도 판정 하한·클레임 마감·운영실 원생상담 이름표가 그 달 기준으로). **매출 대비 급여만 지난달 값 그대로**(원장이 따로 정한 규칙 · 10월 점수부터 `PAY_PREV_MONTH_FROM`).
