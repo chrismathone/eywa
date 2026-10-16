@@ -21,6 +21,12 @@ import { pickVideoJob } from "./video-job-pick.mjs";
 
 let running = null;
 export async function waitForVideoIdle() { if (running) await running; }
+/**
+ * ClassNote 영상 작업이 도는 중인가 — `/v` 사후 압축(video-link-compress.mjs)은 이 동안 새로 시작하지 않는다.
+ * 반대 방향은 막지 않는다: `/v` 압축(최대 60분)이 도는 중에 ClassNote 영상이 오면 둘이 함께 돈다(발송 쪽을 늦추지 않으려고 —
+ * 인코딩 스레드가 각각 CPU 절반이라 그동안 PC가 바쁘다).
+ */
+export const videoWorkerBusy = () => running !== null;
 let nextPoll = 0;
 /** 마지막으로 로그에 남긴 Drive 인증 실패 사유 — 풀리면 비운다. */
 let authFailure = null;

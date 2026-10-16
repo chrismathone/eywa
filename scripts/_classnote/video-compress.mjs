@@ -107,7 +107,7 @@ const keep = (marker) => ({ decision: "kept", marker });
 const KEPT_REASON = { "kept-hdr": "HDR 영상", "kept-bitrate": "이미 충분히 압축된 영상", "kept-savings": "절감 15% 미만" };
 const encodeTimeout = (seconds) => Math.min(60, Math.max(10, Math.ceil((seconds * 8) / 60) + 2)) * 60_000;
 
-async function compressOnce(video, paths, tools, { runner, profile, threads }) {
+async function compressOnce(video, paths, tools, { runner, profile, threads, signal }) {
   const source = await probeVideo(tools, video.filePath, runner);
   if (!source) throw new Error("영상 정보를 읽지 못했습니다.");
   if (source.hdr) return keep("kept-hdr");
@@ -118,7 +118,7 @@ async function compressOnce(video, paths, tools, { runner, profile, threads }) {
   const timeoutMs = encodeTimeout(source.duration);
   const near = (a, b) => Math.abs(a - b) <= Math.max(0.5, b * 0.01);
   try {
-    await runner.encode(tools.ffmpeg, ffmpegArgs(video.filePath, partial, source, { threads, legacyVsync: tools.legacyVsync, profile }), { timeoutMs });
+    await runner.encode(tools.ffmpeg, ffmpegArgs(video.filePath, partial, source, { threads, legacyVsync: tools.legacyVsync, profile }), { timeoutMs, signal });
     const out = await probeVideo(tools, partial, runner);
     // 잘린 출력(입력 손상·중단)을 압축본으로 올리면 영상 일부가 사라진다 — 길이(파일·영상 각각)·크기·소리 유무가 원본과 맞아야 쓴다.
     if (!out || out.width !== size.width || out.height !== size.height || out.rotation % 360 !== 0 || !out.audio !== !source.audio ||
@@ -135,8 +135,9 @@ async function compressOnce(video, paths, tools, { runner, profile, threads }) {
  * Drive 업로드 직전에 부른다(uploadVideoToDrive의 `prepareUpload`). 반환:
  *   null — 원본을 그대로(압축 판단 없음: 꺼짐·ffmpeg 없음·실패) · { marker } — 원본을 그대로(판단함: 이미 낮은 비트레이트·절감 부족·HDR)
  *   { marker, filePath, md5, bytes, sha256 } — 압축본을 올린다.
+ * `signal`(선택)이 끊기면 인코딩을 멈추고 **던진다**(실패로 기억하지 않는다 — 다음에 처음부터 다시 판단한다).
  */
-export async function prepareCompressedUpload(video, { log = console.log, env = process.env, runner = defaultRunner, profile = COMPRESS_PROFILE, threads } = {}) {
+export async function prepareCompressedUpload(video, { log = console.log, env = process.env, runner = defaultRunner, profile = COMPRESS_PROFILE, threads, signal } = {}) {
   const tools = compressionDisabled(env) ? null : await findFfmpeg({ env, runner });
   stats.ffmpeg = compressionDisabled(env) ? "off" : tools ? "ok" : "missing";
   if (announced !== stats.ffmpeg) { // 상태가 바뀔 때만 한 번(영상마다 찍지 않는다)
@@ -154,7 +155,7 @@ export async function prepareCompressedUpload(video, { log = console.log, env = 
         await unlink(path.join(paths.dir, name)).catch(() => {});
       const cpu = os.availableParallelism?.() ?? os.cpus().length;
       result = await remember(paths, video, profile, await compressOnce(video, paths, tools,
-        { runner, profile, threads: threads ?? Math.max(1, Math.min(8, Math.floor(cpu / 2))) }));
+        { runner, profile, threads: threads ?? Math.max(1, Math.min(8, Math.floor(cpu / 2))), signal }));
       const mb = (n) => `${(n / 1048576).toFixed(1)}MB`;
       if (result.decision === "compressed") {
         stats.compressed++; stats.savedBytes += video.bytes - result.upload.bytes;
@@ -165,9 +166,10 @@ export async function prepareCompressedUpload(video, { log = console.log, env = 
     if (result.decision === "kept") return { marker: result.marker };
     return { marker: result.marker, filePath: paths.output, md5: result.upload.md5, bytes: result.upload.bytes, sha256: result.upload.sha256 };
   } catch (error) {
+    if (signal?.aborted) throw signal.reason;
     stats.failed++;
     await remember(paths, video, profile, { decision: "failed" }).catch(() => {});
-    log(`[영상 압축] 실패 — 원본을 올립니다. (${String(error?.message ?? error).slice(0, 120)})`);
+    log(`[영상 압축] 실패 — 원본 그대로 씁니다. (${String(error?.message ?? error).slice(0, 120)})`);
     return null;
   }
 }
