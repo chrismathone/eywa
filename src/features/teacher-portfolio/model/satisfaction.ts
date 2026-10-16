@@ -20,21 +20,26 @@ const HOW: Record<SnapshotJudgment["method"], string> = { rule: "문구", ai: "A
 export function buildSatisfaction(input: { source: EvaluationSources["satisfaction"]; ownersOf: ReturnType<typeof buildRecordOwners> }) {
   const source = input.source;
   if (!source) return null;
-  const byTeacher = new Map<string, SnapshotJudgment[]>();
+  // 글마다 이 선생님에게 온 반도 함께 — 근거 표·만족도 관리가 반 이름을 보인다(원장 2026-10-16).
+  // 한 글이 두 선생님 몫이면(과목 둘 · 담임 둘) 서로를 적어 둔다 — 판정 줄은 하나라 한쪽 창의 반영이 다른 쪽 점수도 움직인다(적대적 리뷰 2026-10-16).
+  const byTeacher = new Map<string, { j: SnapshotJudgment; classId: string; others: string[] }[]>();
   for (const j of source.judgments) {
-    for (const { teacherId } of input.ownersOf({ studentId: j.student_id, day: j.posted_on, subjects: j.subjects, classId: j.class_id })) {
+    const owners = input.ownersOf({ studentId: j.student_id, day: j.posted_on, subjects: j.subjects, classId: j.class_id });
+    for (const { teacherId, classId } of owners) {
+      const entry = { j, classId, others: owners.filter((o) => o.teacherId !== teacherId).map((o) => o.teacherId) };
       const list = byTeacher.get(teacherId);
-      if (list) list.push(j); else byTeacher.set(teacherId, [j]);
+      if (list) list.push(entry); else byTeacher.set(teacherId, [entry]);
     }
   }
-  return function period(teacherId: string, w: PeriodWindow, o: SatisfactionOptions): SatisfactionResult {
-    const judged = (byTeacher.get(teacherId) ?? []).filter((j) => between(j.posted_on, w.start, w.end));
+  return function period(teacherId: string, w: PeriodWindow, o: SatisfactionOptions, classNameOf: (id: string) => string = () => ""): SatisfactionResult {
+    const judged = (byTeacher.get(teacherId) ?? []).filter(({ j }) => between(j.posted_on, w.start, w.end));
     const claims = source.claims.filter((c) => c.teacher_id === teacherId && between(c.occurred_on, w.start, w.end));
     const detail: SatisfactionRow[] = [
-      ...judged.map((j): SatisfactionRow => {
+      ...judged.map(({ j, classId, others }): SatisfactionRow => {
         const waiting = j.state !== "applied" || !j.verdict;
         return {
-          key: j.id, source: "글", day: j.posted_on, studentId: j.student_id, text: j.phrase, waiting,
+          key: j.id, source: "글", day: j.posted_on, studentId: j.student_id, text: j.phrase, waiting, className: classNameOf(classId),
+          ...(others.length ? { sharedWith: others } : {}),
           points: waiting ? null : verdictPoints(j.verdict!, j.phrase, o),
           how: waiting ? `확인 대기${j.verdict ? ` · ${j.verdict === "plus" ? "가점" : "감점"} 제안` : ""}` : HOW[j.method],
         };

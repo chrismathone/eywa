@@ -52,7 +52,7 @@ export function buildSourceItems(d: PortfolioSnapshot, input: {
       daily ? `일일테스트 제출 ${daily.done ?? 0}/${daily.count}칸` : "", monthly ? `월말평가 응시 ${monthly.done ?? 0}/${monthly.count}명` : "",
       g.tests ? `시험 ${g.tests}건` : "",
     ].filter(Boolean) : [];
-    const s = satisfaction?.(teacherId, w, m.satisfaction.satisfaction ?? DEFAULT_SATISFACTION_OPTIONS);
+    const s = satisfaction?.(teacherId, w, m.satisfaction.satisfaction ?? DEFAULT_SATISFACTION_OPTIONS, input.classNameOf);
     const manual = input.entriesOf(teacherId, scoreMonth).get(PUNCTUALITY_OVERRIDE_KEY)?.value ?? null;
     const p = src && basis ? punctualityOf({
       days: src.punctuality.days ?? [], leaves: src.punctuality.leaves, holidays: input.holidays, teacherId, w, options: punctuality, manual,

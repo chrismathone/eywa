@@ -2,6 +2,7 @@
 
 import { KIND_LABEL } from "@/features/grades/unified/model";
 import type { GradeKindStat } from "@/features/teacher-portfolio/model/source-types";
+import { Button } from "@/components/ui/button";
 import { metricOf } from "@/features/teacher-portfolio/model/types";
 import { dayLabel, pointsText } from "@/features/teacher-portfolio/view";
 import { StudentCell, type EvidenceProps } from "./evidence-records";
@@ -46,7 +47,7 @@ function GradesEvidence({ period, nameOf }: EvidenceProps) {
   );
 }
 
-function SatisfactionEvidence({ period, nameOf }: EvidenceProps) {
+function SatisfactionEvidence({ period, nameOf, schoolOf, onSatisfaction }: EvidenceProps) {
   const m = metricOf(period, "satisfaction");
   const sign = (n: number) => `${n > 0 ? "+" : ""}${n.toFixed(1)}`;
   return (
@@ -55,13 +56,20 @@ function SatisfactionEvidence({ period, nameOf }: EvidenceProps) {
         { label: "가점 글", value: `${m.plus ?? 0}건` }, { label: "감점 글", value: `${m.minus ?? 0}건` },
         { label: "클레임·칭찬", value: `${m.claims ?? 0}건` }, { label: "점수", value: pointsText(m, period) },
       ]} />
-      {m.waiting ? <p className="mt-3 text-xs">확인 대기 {m.waiting}건 — 위 도구줄의 [만족도 관리]에서 반영하기 전엔 점수에 들지 않습니다.</p> : null}
+      {/* 확인 대기는 여기서 바로 만족도 관리로 이어 간다(원장 2026-10-16 *"여기서도 만족도관리 이어질 수 있게"*). */}
+      {m.waiting || onSatisfaction ? (
+        <p className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+          {m.waiting ? <span>확인 대기 {m.waiting}건 — 반영하기 전엔 점수에 들지 않습니다.</span> : null}
+          {onSatisfaction ? <Button type="button" size="sm" variant="outline" onClick={onSatisfaction}>만족도 관리</Button> : null}
+        </p>
+      ) : null}
       <SectionTitle sub={`${m.detail.length}건`}>글 판정 · 클레임</SectionTitle>
-      <DataTable headers={["날짜", "학생", "근거", "판정", "점수"]} kinds={["num", "text", "text", "text", "num"]}
+      <DataTable headers={["날짜", "학생", "학교학년", "반", "근거", "판정", "점수"]} kinds={["num", "text", "text", "text", "text", "text", "num"]}
         empty="이 달 반영한 학부모 글·클레임이 없습니다."
         rows={m.detail.map((r) => ({
           key: r.key,
-          cells: [dayLabel(r.day), r.studentId ? nameOf(r.studentId) : "—", r.text ? `${r.source === "글" ? "“" : ""}${r.text}${r.source === "글" ? "”" : ""}` : "—",
+          cells: [dayLabel(r.day), r.studentId ? nameOf(r.studentId) : "—", (r.studentId && schoolOf?.(r.studentId)) || "—", r.className || "—",
+            r.text ? `${r.source === "글" ? "“" : ""}${r.text}${r.source === "글" ? "”" : ""}` : "—",
             <StatusChip key="h" state={r.how} />, r.points === null ? "—" : sign(r.points)],
         }))} />
       <p className="mt-3 text-xs leading-relaxed">{m.reason}</p>

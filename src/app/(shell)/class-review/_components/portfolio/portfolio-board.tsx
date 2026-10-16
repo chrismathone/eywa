@@ -30,6 +30,8 @@ type Props = {
   teachers: PortfolioTeacherEntry[];
   selected: { id: string; name: string; periods: StoredPeriod[] };
   studentNames: Record<string, string>;
+  /** 학생 → 학교·학년(지금 값). */
+  studentSchools: Record<string, string>;
   /** 서버가 만든 집계 시각 글자(한국 시간). 클라이언트에서 다시 만들지 않는다. */
   computedLabel: string;
   canRefresh: boolean;
@@ -76,7 +78,7 @@ export function RefreshButton({ label = "지금 집계" }: { label?: string }) {
   return <ToolbarButton onClick={run} disabled={pending} aria-busy={pending}>{pending ? "집계 중…" : label}</ToolbarButton>;
 }
 
-export function PortfolioBoard({ teachers, selected, studentNames, computedLabel, canRefresh, ruleCollapsed = false, compareSort }: Props) {
+export function PortfolioBoard({ teachers, selected, studentNames, studentSchools, computedLabel, canRefresh, ruleCollapsed = false, compareSort }: Props) {
   const router = useRouter();
   const embed = useEmbed();
   const [moving, startTransition] = useTransition();
@@ -102,9 +104,15 @@ export function PortfolioBoard({ teachers, selected, studentNames, computedLabel
     const href = hrefOf(teacherId);
     startTransition(() => router.push(embed ? withEmbed(href) : href, { scroll: false }));
   };
+  // 0 가운데 막대로 그릴 항목 — 보이는 달 전체로 한 번(가감 · 어느 달이든 음수). 달을 바꿔도 축이 그대로다.
+  const signedIds = new Set(shown.flatMap((w) => w.items.filter((m) => m.max <= 0 || (m.value ?? 0) < 0).map((m) => m.id)));
+  // 만족도 관리 입구 — 도구줄 버튼과 같은 조건(쓰기 권한 · 그 달 만족도 켜짐).
+  const canSatisfaction = canRefresh && period.items.some((m) => m.id === "satisfaction" && !m.off);
   const evidence = {
     period, week,
     nameOf: (studentId: string) => studentNames[studentId] || "학생",
+    schoolOf: (studentId: string) => studentSchools[studentId] ?? "",
+    onSatisfaction: canSatisfaction ? () => { setDetail(null); setSatisfactionOpen(true); } : undefined,
     onWeek: (metric: "attendance" | "follow", at: number) => setWeekState({ scope, weeks: { ...week, [metric]: at } }),
   };
   const list = { teachers, selectedId: selected.id, month: period.month, period, hrefOf, onSelect: selectTeacher };
@@ -122,8 +130,7 @@ export function PortfolioBoard({ teachers, selected, studentNames, computedLabel
         {canRefresh && period.items.some((m) => (m.id.startsWith("manual:") || m.id === "payRatio" || m.id === "punctuality") && !m.off)
           ? <ToolbarButton onClick={() => setEntryOpen(true)}>직접 입력</ToolbarButton> : null}
         {/* 학부모 만족도 — 확인 대기 글 반영/무시 · 클레임·칭찬 넣기(계획서 3번). */}
-        {canRefresh && period.items.some((m) => m.id === "satisfaction" && !m.off)
-          ? <ToolbarButton onClick={() => setSatisfactionOpen(true)}>만족도 관리</ToolbarButton> : null}
+        {canSatisfaction ? <ToolbarButton onClick={() => setSatisfactionOpen(true)}>만족도 관리</ToolbarButton> : null}
         <span className="num ml-auto text-xs whitespace-nowrap">집계 {computedLabel}</span>
         {canRefresh ? <RefreshButton /> : null}
       </Toolbar>
@@ -135,7 +142,7 @@ export function PortfolioBoard({ teachers, selected, studentNames, computedLabel
         <TeacherList {...list} />
         <div aria-busy={moving} className={`@container/board flex min-w-0 flex-col gap-5 transition-opacity ${moving ? "opacity-60 delay-100" : ""}`}>
           <TeacherPicker {...list} />
-          <ScoreHero period={period} previous={selected.periods[index + 1]} onOpenMetric={(id) => setDetail({ kind: "metric", id })}
+          <ScoreHero period={period} previous={selected.periods[index + 1]} signedIds={signedIds} onOpenMetric={(id) => setDetail({ kind: "metric", id })}
             onOpenLedger={() => setDetail({ kind: "ledger" })} />
           {/* 내역과 월간 점수를 나란히 = 본문 폭이 64rem 이상일 때만(창 폭이 아니라 — 앱 메뉴·강사 목록을 뺀 폭이 좁으면 월간 표가
               카드 밖으로 잘렸다, 원장 2026-10-14). 좁으면 위아래로 쌓는다. */}
@@ -160,7 +167,7 @@ export function PortfolioBoard({ teachers, selected, studentNames, computedLabel
       ) : null}
       {satisfactionOpen ? (
         <SatisfactionDialog key={`${selected.id}|${period.month}`} open onClose={() => setSatisfactionOpen(false)}
-          period={period} teacherId={selected.id} teacherName={selected.name} />
+          period={period} teacherId={selected.id} teacherName={selected.name} nameOfTeacher={(id) => teachers.find((t) => t.id === id)?.name || "다른 선생님"} />
       ) : null}
     </div>
     </RuleBoxPrefProvider>

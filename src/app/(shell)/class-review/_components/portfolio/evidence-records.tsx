@@ -8,7 +8,6 @@ import {
 import { BarList, DataTable, SectionTitle, StackBar, StatTiles, StatusChip, type TableRow } from "./parts";
 
 /** 수업·학생 관리 쪽 내역 — 보고서(일자별) · 출결·상담(주간, 주를 누르면 그 아래 상세). */
-
 export type EvidenceProps = {
   period: StoredPeriod;
   nameOf: (studentId: string) => string;
@@ -16,6 +15,8 @@ export type EvidenceProps = {
   week: Partial<Record<"attendance" | "follow", number>>;
   onWeek: (metric: "attendance" | "follow", index: number) => void;
   onOpenStudents?: () => void;
+  /** 학생의 학교·학년(지금 값 · 없으면 빈 글자) · 만족도 관리 창 열기(쓰기 권한 + 그 달 만족도 켜짐일 때만 — 근거 표에서 이어 간다). */
+  schoolOf?: (studentId: string) => string; onSatisfaction?: () => void;
   /** 표 제목행을 스크롤 영역 위에 붙인다(내역 카드 안에서만). */
   sticky?: boolean;
 };
