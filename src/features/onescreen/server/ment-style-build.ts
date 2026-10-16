@@ -11,6 +11,7 @@ import {
   MENT_STYLE_WINDOW_DAYS,
   corpusUntil,
   isMentStyleTableMissingError,
+  keepGroundedEdits,
   keepRecurringPhrases,
   parseMentStyleProfile,
   pickStyleSamples,
@@ -19,6 +20,7 @@ import {
   type StyleSampleRow,
 } from "../ment-style";
 import { MENT_STYLE_PROMPT_VERSION, buildMentStylePrompt, dropTemplatePhrases } from "../ment-style-prompt";
+import { loadMentAiDrafts } from "./ment-draft-db";
 
 /**
  * 강사별 말투 프로파일(0262a) — **빌드**. cron(주 1회)과 학원설정 [지금 갱신]이 같은 함수를 부른다.
@@ -57,7 +59,9 @@ async function fetchTeacherCorpus(admin: SupabaseClient, tenantId: string, teach
   // 두 출처는 서로 독립 — 직렬 금지(B4). 🔴 상한은 **중복 제거 앞**의 행 수라 넉넉해야 한다 — 첫 빌드(2026-09-12)에서 정형 문장 21개를
   //    돌려쓰는 강사(226행 → 서로 다른 글 21개)가 최신 80행만 받아 12건 미만으로 떨어져 '표본 부족'이 됐다. notes는 짧아 페이로드가 작다.
   const [manual, edited] = await Promise.all([pull("manual", MENT_STYLE_MAX_SAMPLES * 4), pull("auto_edited", MENT_STYLE_MAX_EDITED * 4)]);
-  return [...manual, ...edited];
+  // 수정 표본의 자동작성 원문(0370a) — 원문 ↔ 최종을 견줘 '늘 고치는 것'을 뽑는다. 표가 없으면 빈 맵(종전대로 최종 글만).
+  const drafts = await loadMentAiDrafts(admin, tenantId, edited.map((r) => r.id));
+  return [...manual, ...edited.map((r) => ({ ...r, draft: drafts.get(r.id) ?? null }))];
 }
 
 /**
@@ -128,7 +132,8 @@ export async function rebuildTenantMentStyles(
       if (!parsed) return teachers.push({ teacherId, teacherName, outcome: "rejected", samples: samples.length, reason: "응답 모양이 맞지 않음" });
       // 표현은 표본 2개 이상에 실제로 되풀이되는 것만(한 번 나온 어구는 그날의 내용) — 그리고 **AI 템플릿 획일성 문구를 품은 어구는 뺀다**(수정본 위주
       // 강사의 표본엔 AI 템플릿 문구가 되풀이되니 '되풀이' 검사를 통과한다 — 첫 빌드에서 "오늘은"·"오늘 과제는"이 선생님 표현으로 섰다).
-      const profile = dropTemplatePhrases(keepRecurringPhrases(parsed, samples));
+      // '늘 고치는 것'은 고치기 전 원문이 붙은 표본이 충분할 때만(keepGroundedEdits).
+      const profile = keepGroundedEdits(dropTemplatePhrases(keepRecurringPhrases(parsed, samples)), samples);
       const leaked = profileMentionsAny(profile, names);
       if (leaked.length) {
         reportWarning("강사 말투 프로파일에 학생 이름이 새어 저장하지 않음", { scope: "rebuildTenantMentStyles", teacherId, leaked });

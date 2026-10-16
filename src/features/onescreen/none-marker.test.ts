@@ -49,10 +49,12 @@ describe("추세에서 제외 — '없음'은 미제출이 아니다", () => {
     const input = buildTrendInput([
       row("2026-07-01", null, "없음"),
       row("2026-07-08", null, "완료"),
+      row("2026-07-12", null, "완료"),
       row("2026-07-15", null, "완료"),
     ])!;
     // 연속 같은 값은 코드가 묶는다(compressRuns, 2026-07-30) — 모델이 날짜를 나열할 재료 자체를 줄인다.
-    expect(input.assignTrend).toBe("[07-08~07-15] 완료(2회)");
+    expect(input.assignTrend).toBe("[07-08~07-15] 완료(3회)");
+    expect(input.facts).toEqual(["과제: 최근 3회 연속 빠짐없이 잘 해 옴"]); // '없음'은 연속을 끊지도 세지도 않는다
     expect(input.assignTrend).not.toContain("없음");
   });
 

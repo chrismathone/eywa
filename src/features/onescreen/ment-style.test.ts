@@ -5,13 +5,22 @@ import {
   corpusUntil,
   isMentStyleTableMissingError,
   keepRecurringPhrases,
+  keepGroundedEdits,
   parseMentStyleProfile,
   pickStyleSamples,
   profileMentionsAny,
   styleCorpusHash,
   type StyleSampleRow,
 } from "./ment-style";
-import { MENT_STYLE_DIRECTIVE_HEAD, MENT_STYLE_PROMPT_VERSION, buildMentStylePrompt, dropTemplatePhrases, mentStyleDirective } from "./ment-style-prompt";
+import {
+  MENT_STYLE_DIRECTIVE_HEAD,
+  MENT_STYLE_PROMPT_VERSION,
+  MENT_STYLE_TONE_HEAD,
+  buildMentStylePrompt,
+  dropTemplatePhrases,
+  mentStyleDirective,
+  mentStyleToneDirective,
+} from "./ment-style-prompt";
 
 const row = (id: string, notes: string, source: StyleSampleRow["source"] = "manual", day = 10): StyleSampleRow => ({
   id,
@@ -196,6 +205,20 @@ describe("mentStyleDirective — 프롬프트 지침 렌더", () => {
   });
 });
 
+// 2026-10-16 원장 "한계를 수정할 수 있을까" — 학습 추세엔 말투가 안 붙던 것. 어조만 붙인다.
+describe("mentStyleToneDirective — 학습 추세용(어조·문장 결만)", () => {
+  it("🔴 표현·마무리·쓰지 않는 표현은 싣지 않는다 — 선생님 표현('~하겠습니다')을 따라 쓰면 추세 금지(계획)에 걸려 버려진다", () => {
+    const d = mentStyleToneDirective({ tone: "해요체", sentence: "짧게 끊는다", length: "길다", phrases: ["다음 시간에 마무리하겠습니다"], closing: "다음 수업 예고", caution: "칭찬 남발" });
+    expect(d.split("\n")[0]).toBe(MENT_STYLE_TONE_HEAD);
+    expect(d).toContain("- 어조: 해요체");
+    expect(d).toContain("- 문장: 짧게 끊는다");
+    expect(d).not.toContain("마무리하겠습니다");
+    expect(d).not.toContain("다음 수업 예고");
+    expect(d).not.toContain("칭찬 남발");
+    expect(d).toContain("[기록]에 없는 말은 덧붙이지 마세요");
+  });
+});
+
 describe("buildMentStylePrompt — 표본 번호·출처 표시·내용 금지", () => {
   it("표본을 번호 매겨 싣고 [수정] 표시와 개수를 적는다", () => {
     const samples = pickStyleSamples([row("a", "직접 쓴 멘트입니다.\n둘째 줄"), row("b", "고친 멘트입니다.", "auto_edited")]);
@@ -208,8 +231,68 @@ describe("buildMentStylePrompt — 표본 번호·출처 표시·내용 금지",
     expect(prompt).toContain("내용은 절대 옮기지 마세요");
     expect(prompt).toContain("맞춤법이 틀린 어구는 표현에 넣지 마세요");
     // 끝인사는 알림장 규칙이 금지한다 — 프로파일이 "감사합니다로 마무리"를 배우면 그 규칙과 프롬프트 안에서 부딪힌다(재리뷰)
-    expect(prompt).toContain("closing·phrases에 인사말을 적지 마세요");
+    expect(prompt).toContain("closing·phrases·edits에 인사말을 적지 마세요");
     expect(prompt).toContain('"phrases"');
+  });
+  // 2026-10-16 원장 "한계를 수정할 수 있을까" — 무엇을 고쳤는지(0370a 원문)를 함께 보여 '늘 고치는 것'을 받는다.
+  it("수정 표본에 고치기 전 자동작성 원문이 있으면 옆에 싣고 'edits'를 받는다", () => {
+    const samples = pickStyleSamples([
+      row("a", "직접 쓴 멘트입니다."),
+      { ...row("b", "도수분포다각형을 배웠습니다. 오늘 과제는 교재 마무리 & 프린트 단원 총괄 풀이입니다.", "auto_edited"), draft: "도수분포다각형을 알아보았습니다. 오늘 과제는 교재 마무리와 프린트입니다." },
+    ]);
+    const prompt = buildMentStylePrompt(samples);
+    expect(prompt).toContain("2. [수정] 도수분포다각형을 배웠습니다.");
+    expect(prompt).toContain("   ↳ 고치기 전 자동작성: 도수분포다각형을 알아보았습니다.");
+    expect(prompt).toContain("(그중 고치기 전 원문이 있는 것 1)");
+    expect(prompt).toContain('"edits"');
+    expect(prompt).toContain("사실을 바로잡은 것");
+  });
+  it("원문은 수정 표본에만 · 최종과 같으면 버린다 · 원문이 붙으면 지문이 바뀐다(다시 접는다)", () => {
+    const same = pickStyleSamples([{ ...row("b", "고친 멘트입니다.", "auto_edited"), draft: "고친 멘트입니다." }]);
+    expect(same[0]!.draft).toBeNull();
+    const manual = pickStyleSamples([{ ...row("a", "직접 쓴 멘트입니다."), draft: "AI 글" }]);
+    expect(manual[0]!.draft).toBeNull();
+    const without = pickStyleSamples([row("b", "고친 멘트입니다.", "auto_edited")]);
+    const withDraft = pickStyleSamples([{ ...row("b", "고친 멘트입니다.", "auto_edited"), draft: "AI가 쓴 멘트입니다." }]);
+    expect(styleCorpusHash(without, 5)).not.toBe(styleCorpusHash(withDraft, 5));
+  });
+});
+
+describe("늘 고치는 것(edits) — 검증·지침·이름 가드", () => {
+  const base = { tone: "합니다체", sentence: "짧게", length: "", phrases: [], closing: "", caution: "" };
+  it("🔴 인사말·계획·덧붙이는 내용·코드가 붙이는 문장은 버린다 — 끝인사 금지를 다시 뚫거나 없는 말을 지어내지 않게(재리뷰 2026-10-16)", () => {
+    const p = parseMentStyleProfile({
+      ...base,
+      edits: ["끝에 '감사합니다'를 붙인다", "'다음 시간에 오답 확인하겠습니다'를 덧붙인다", "보강 일정을 안내한다", "영상 과제 안내 문장을 지운다", "'아주 좋았습니다'를 지운다"],
+    })!;
+    expect(p.edits).toEqual(["'아주 좋았습니다'를 지운다"]);
+    // 낱말이 아니라 고침의 방향 — 덧붙이는 줄은 늘 버리고, 지우고 바꾸는 줄은 남긴다(재리뷰 2026-10-16)
+    const q = parseMentStyleProfile({
+      ...base,
+      edits: ["끝인사를 넣는다", "마지막에 '고맙습니다'를 붙인다", "마지막에 다음 수업 예고를 붙인다", "끝에 보강 안내를 넣는다", "'~하겠습니다'를 '~합니다'로 바꾼다", "'감사합니다'를 지운다"],
+    })!;
+    expect(q.edits).toEqual(["'~하겠습니다'를 '~합니다'로 바꾼다", "'감사합니다'를 지운다"]);
+  });
+  it("고치기 전 원문이 붙은 표본이 3개 미만이면 edits를 비운다 — 원문 없이 받은 edits는 지어낸 것", () => {
+    const prof = { ...base, edits: ["'아주 좋았습니다'를 지운다"] };
+    const two = pickStyleSamples([1, 2].map((k) => ({ ...row(`e${k}`, `고친 멘트 ${k}번입니다.`, "auto_edited"), draft: `AI 멘트 ${k}번입니다.` })));
+    expect(keepGroundedEdits(prof, two).edits).toEqual([]);
+    const three = pickStyleSamples([1, 2, 3].map((k) => ({ ...row(`e${k}`, `고친 멘트 ${k}번입니다.`, "auto_edited"), draft: `AI 멘트 ${k}번입니다.` })));
+    expect(keepGroundedEdits(prof, three).edits).toEqual(["'아주 좋았습니다'를 지운다"]);
+  });
+  it("짧은 줄만 최대 5개 · 숫자 든 줄(그날의 내용)·너무 긴 줄은 버린다 · 옛 프로파일(칸 없음)은 빈 배열", () => {
+    const p = parseMentStyleProfile({ ...base, edits: ["'아주 좋았습니다'를 지운다", "18문제 중 14개로 고친다", "가".repeat(81), "오늘 과제는 입력 그대로 다 적는다", "a", "b", "c", "d"] })!;
+    expect(p.edits).toEqual(["'아주 좋았습니다'를 지운다", "오늘 과제는 입력 그대로 다 적는다", "a", "b", "c"]);
+    expect(parseMentStyleProfile(base)!.edits).toEqual([]);
+  });
+  it("지침에 한 줄로 싣는다 — 비면 줄이 없다", () => {
+    expect(mentStyleDirective({ ...base, edits: ["'아주 좋았습니다'를 지운다", "오늘 과제는 입력 그대로 다 적는다"] })).toContain(
+      "- 이 선생님이 자동작성 글에서 늘 고치는 것([입력]의 사실 안에서 처음부터 그렇게 쓰세요): '아주 좋았습니다'를 지운다 · 오늘 과제는 입력 그대로 다 적는다",
+    );
+    expect(mentStyleDirective({ ...base, edits: [] })).not.toContain("늘 고치는 것");
+  });
+  it("🔴 학생 이름이 '늘 고치는 것'에 새도 잡는다(다른 아이 알림장에 나간다)", () => {
+    expect(profileMentionsAny({ ...base, edits: ["서연이 이름을 앞에 붙인다"] }, ["박서연"])).toEqual(["박서연"]);
   });
 });
 

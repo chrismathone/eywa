@@ -17,13 +17,14 @@ import {
   type PromptType,
 } from "../prompt-defaults";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
 import {
   buildReportCommentPrompt,
   buildCommentP1Prompt,
   buildCommentP2Prompt,
   type ReportCommentInput,
 } from "../report-comment";
-import { buildTrendInput, buildTrendPrompt } from "../trend-comment";
+import { buildTrendInput, buildTrendPrompt, TREND_HISTORY_FETCH_DAYS } from "../trend-comment";
 import { fetchScoreHistory, fetchSpecialClassIds } from "./score-history";
 
 export type PromptRow = {
@@ -211,36 +212,49 @@ export async function testPrompt(
   const supabase = await createClient();
   const { data: r } = await supabase
     .from("lesson_reports")
-    .select("student_id, class_id, subject, progress, daily_test, check_test, attitude, homework_score, textbook, homework_today")
+    .select("student_id, class_id, subject, report_date, exam_info, progress, daily_test, check_test, attitude, homework_score, textbook, homework_today")
     .eq("id", reportId)
     .maybeSingle();
   if (!r) return { ok: false, error: "보고서를 찾을 수 없습니다" };
   const { data: stu } = await supabase.from("students").select("name").eq("id", r.student_id as string).maybeSingle();
 
+  // 미리보기 멘트 진도에서 뗄 과목 라벨(학원설정 단일 소스 — 저장된 진도 칸은 "수학 …"처럼 라벨을 붙여 둔다).
+  const subjectLabel = r.subject ? buildSubjectMaps((await getTenantSettings()).operations.subjects).labelOf(r.subject as string) : "";
   let prompt: string | null;
   let key: "comment" | "trend";
   if (type === "trend") {
     key = "trend";
     // 미리보기도 프로덕션과 같은 표본을 봐야 한다 — 정규/특강 분리(2026-07-23).
     const specialClassIds = await fetchSpecialClassIds(supabase);
+    // 고른 보고서의 **그 날짜** 기준 + 그 보고서 행을 끝에 — 운영(generateReportComment)과 같은 모양이라야 '달라진 것만'이 맞다
+    // (적대적 재리뷰 2026-10-16: 오늘 기준으로 읽고 "이 보고서 시점엔"이라 말했다).
+    const reportDate = (r.report_date as string | null) ?? kstToday();
     const history = await fetchScoreHistory(
       supabase,
       r.student_id as string,
       (r.subject as string) ?? undefined,
-      kstToday(),
-      30,
-      { classId: (r.class_id as string | null) ?? null, specialClassIds },
+      reportDate,
+      90,
+      { classId: (r.class_id as string | null) ?? null, specialClassIds, lookbackDays: TREND_HISTORY_FETCH_DAYS },
     );
-    const input = buildTrendInput(history);
+    history.push({
+      date: reportDate,
+      examInfo: (r.exam_info as string | null) ?? null,
+      homeworkScore: (r.homework_score as string | null) ?? null,
+      classId: (r.class_id as string | null) ?? null,
+    });
+    const input = buildTrendInput(history, { today: reportDate });
     if (!input) return { ok: false, error: "이 학생은 추세 표본이 부족합니다 — 다른 보고서를 선택하세요" };
+    if (input.quiet) return { ok: false, error: "이 보고서 시점엔 지난 보고서와 달라진 점이 없어 추세를 쓰지 않습니다 — 다른 보고서를 선택하세요" };
     prompt = buildTrendPrompt(input, trimmed);
   } else {
     // comment | comment_p1 | comment_p2 — 저장 보고서엔 특이사항이 없으므로 specialNote=""(P2는 태도만).
     key = "comment";
     const input: ReportCommentInput = {
       studentName: (stu?.name as string) ?? "",
-      subject: "", // progress에 과목 라벨 포함(예 "수학 …")
-      progress: (r.progress as string) ?? "",
+      subject: "",
+      // 저장된 진도 칸은 카드용으로 과목 라벨을 붙여 둔다("수학 …") — 운영 자동작성은 라벨 없는 진도를 받으니 미리보기도 맨 앞 라벨을 뗀다.
+      progress: stripSubjectLabel((r.progress as string) ?? "", subjectLabel),
       dailyTest: (r.daily_test as string) ?? "",
       checkTest: (r.check_test as string) ?? "",
       attitude: (r.attitude as string) ?? "",
@@ -271,4 +285,9 @@ export async function testPrompt(
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "생성 실패" };
   }
+}
+
+/** 저장된 진도("수학 2-4-3 …")의 맨 앞 과목 라벨을 뗀다 — 운영 자동작성 입력과 같은 모양(미리보기 전용). */
+function stripSubjectLabel(progress: string, label: string): string {
+  return label && progress.startsWith(`${label} `) ? progress.slice(label.length + 1) : progress;
 }

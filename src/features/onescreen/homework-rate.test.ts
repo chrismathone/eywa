@@ -121,8 +121,12 @@ describe("homeworkFactValue — AI 입력에서 0%와 미제출을 말로 가른
 
   it("0이 아닌 퍼센트는 숫자 그대로 (프롬프트가 '적힌 그대로 쓰라'고 못박은 값)", () => {
     expect(homeworkFactValue("90%")).toBe("90%");
-    expect(homeworkFactValue("100%")).toBe("100%");
     expect(homeworkFactValue("70%")).toBe("70%");
+  });
+
+  it("🔴 100%('완료' 포함)는 말로 — 원장 2026-10-16 \"100% -> 빠짐없이 잘\" · Haiku 5.5가 \"100%를 해 왔습니다\"로 옮겼다", () => {
+    expect(homeworkFactValue("100%")).toBe("빠짐없이 잘 해 옴");
+    expect(homeworkFactValue("완료")).toBe("빠짐없이 잘 해 옴");
   });
 
   it("'없음'(과제가 없던 날)은 건드리지 않는다 — 프롬프트가 따로 다룬다", () => {
@@ -130,8 +134,8 @@ describe("homeworkFactValue — AI 입력에서 0%와 미제출을 말로 가른
     expect(homeworkFactValue("-")).toBe("-");
   });
 
-  it("옛 정성값은 그대로 통과(완료·일부 미흡)", () => {
-    expect(homeworkFactValue("완료")).toBe("완료");
+  it("옛 정성값은 그대로 통과(일부 미흡) — '완료'는 100%라 말로 바뀐다(2026-10-16)", () => {
+    expect(homeworkFactValue("완료")).toBe("빠짐없이 잘 해 옴");
     expect(homeworkFactValue("일부 미흡")).toBe("일부 미흡");
   });
 

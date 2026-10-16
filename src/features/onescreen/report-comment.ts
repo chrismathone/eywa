@@ -16,7 +16,7 @@ const EMPTY_NOTICES: ReadonlyMap<string, string> = new Map();
 import { DEFAULT_PROMPTS, interpolate, assembleSingle } from "./prompt-defaults";
 import { isSkipStatus } from "./progress-status";
 import { asProgressMode, progressFactLabel } from "./progress-mode";
-import { progressInline } from "./progress-range";
+import { progressForMent } from "./progress-range";
 import { homeworkDueText } from "@/features/video-homework/due";
 
 const PLAIN_COMMENT_STYLE = "\n\n[말투 보완]\n기존 선생님의 말투와 문장 구성을 유지하세요. 기록에 없는 칭찬·다짐·전망을 덧붙이지 말고, '성장이 기대됩니다', '꾸준한 노력으로', '한 걸음 더 나아갔습니다' 같은 상투적인 마무리는 피하세요.";
@@ -159,7 +159,10 @@ function progressFact(input: ReportCommentInput, label: string): string | null {
   // 다중 차시는 **물결 축약**(progress-range.ts)으로 넘긴다 — 9차시를 그대로 주면 모델이 다 나열해
   // 학부모 본문이 목록이 된다(원장 2026-08-05: "진도를 전부 적으면 그것이야말로 스팸").
   // 접기는 사실 보존적(같은 중단원 연속만)이라 grounding이 안 깨지고, 카드 진도와 **같은 표기**가 된다.
-  const prog = [input.subject, progressInline(input.progress)].filter(Boolean).join(" ");
+  // 단원 번호(2-4-3)는 떼고 넘긴다 — Haiku 5.5가 번호째 학부모 글에 옮긴다(progressForMent, 2026-10-16).
+  // 과목 라벨("수학")도 붙이지 않는다 — 5.5는 "수학 도수분포다각형과 상대도수를 배웠습니다"처럼 그대로 옮겼다(4.5는 알아서 뺐다).
+  //   알림장이 이미 그 과목의 글이라 학부모에게 새 정보가 아니다(2026-10-16 운영 조건 시험 10건 중 8건).
+  const prog = progressForMent(input.progress);
   if (!prog) return null;
   // 진도 중단일 > 수업 성격(복습·문제풀이) > 평소 '진도' 순으로 라벨이 정해진다.
   // (중단일엔 성격이 붙을 수 없다 — 나간 차시가 없으니 그 차시의 복습도 성립하지 않는다.)

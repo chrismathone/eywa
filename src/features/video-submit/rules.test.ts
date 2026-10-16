@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HOMEWORK_VIDEO_MAX_BYTES } from "@/features/students/homework-video-limits";
+import { HOMEWORK_VIDEO_MAX_BYTES, HOMEWORK_VIDEO_MAX_LABEL } from "@/features/students/homework-video-limits";
 import { isShareExpired } from "@/features/onescreen/share-expiry";
 import { expiredLinkHref, VIDEO_SUBMIT_LINK_DAYS } from "@/features/link-expired/kinds";
 import {
@@ -29,11 +29,16 @@ describe("공개 화면 이름 가림", () => {
 });
 
 describe("영상 파일 검사 — 한도는 상수 하나", () => {
-  it("1GB까지 받고 1바이트라도 넘으면 거절한다(안내 문구도 1GB)", () => {
+  it("한도는 2GB — 숫자와 안내 문구가 같은 값(원장 2026-10-16)", () => {
+    expect(HOMEWORK_VIDEO_MAX_BYTES).toBe(2 * 1024 ** 3);
+    expect(HOMEWORK_VIDEO_MAX_LABEL).toBe("2GB");
+    expect(checkVideoFile({ size: 1.5 * 1024 ** 3, type: "video/mp4" }).ok).toBe(true); // 예전 1GB 한도에 걸리던 크기
+  });
+  it("한도까지 받고 1바이트라도 넘으면 거절한다(안내 문구도 같은 한도)", () => {
     expect(checkVideoFile({ size: HOMEWORK_VIDEO_MAX_BYTES, type: "video/mp4" })).toEqual({ ok: true, mimeType: "video/mp4", ext: ".mp4" });
     const over = checkVideoFile({ size: HOMEWORK_VIDEO_MAX_BYTES + 1, type: "video/mp4" });
     expect(over.ok).toBe(false);
-    expect(!over.ok && over.error).toContain("1GB");
+    expect(!over.ok && over.error).toContain(HOMEWORK_VIDEO_MAX_LABEL);
   });
   it("폰 기본 형식(.mov)·빈 형식+확장자는 받고, 영상이 아니면 거절한다", () => {
     expect(checkVideoFile({ size: 10, type: "video/quicktime", name: "IMG_1.MOV" })).toEqual({ ok: true, mimeType: "video/quicktime", ext: ".mov" });

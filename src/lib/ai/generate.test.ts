@@ -17,7 +17,10 @@ vi.mock("./anthropic", () => ({
 }));
 
 import {
+  AnthropicRefusalError,
+  CLAUDE5_MIN_MAX_TOKENS,
   generateJSON,
+  isClaude5Model,
   isCreditExhaustedError,
   isRetryableProviderError,
   isTemperatureDeprecatedError,
@@ -319,14 +322,9 @@ describe("generateJSON 폴백", () => {
     expect(anthropicCreate).not.toHaveBeenCalled();
   });
 
-  it("anthropic temperature deprecated 400 → temperature만 떼고 같은 모델로 1회 재시도", async () => {
-    anthropicCreate.mockRejectedValueOnce(
-      Object.assign(new Error('400 {"error":{"message":"`temperature` is deprecated for this model."}}'), {
-        status: 400,
-      }),
-    );
+  it("Claude 5 계열엔 temperature를 처음부터 안 보낸다 — 400 → 재시도 왕복 없이 한 번에(2026-10-16 Haiku 5.5 전환)", async () => {
     anthropicCreate.mockResolvedValueOnce(anthropicOk('{"ok":true}'));
-    const { data, model } = await generateJSON<{ ok: boolean }>({ meta: TEST_META, 
+    const { data, model } = await generateJSON<{ ok: boolean }>({ meta: TEST_META,
       prompt: "JSON 주세요",
       maxTokens: 100,
       provider: "anthropic",
@@ -334,10 +332,80 @@ describe("generateJSON 폴백", () => {
     });
     expect(data).toEqual({ ok: true });
     expect(model).toBe("claude-sonnet-5");
+    expect(anthropicCreate).toHaveBeenCalledTimes(1);
+    expect(anthropicCreate.mock.calls[0][0]).not.toHaveProperty("temperature");
+    // 생각 토큰이 상한을 먹지 않게 바닥을 올린다(쓴 만큼만 과금).
+    expect(anthropicCreate.mock.calls[0][0].max_tokens).toBe(CLAUDE5_MIN_MAX_TOKENS);
+  });
+
+  it("fast tier = Haiku 5.5 · 멘트의 reasoningEffort 'minimal' → effort low", async () => {
+    anthropicCreate.mockResolvedValueOnce(anthropicOk('{"ok":true}'));
+    const { model } = await generateJSON<{ ok: boolean }>({ meta: TEST_META,
+      prompt: "JSON 주세요",
+      maxTokens: 1000,
+      provider: "anthropic",
+      tier: "fast",
+      temperature: 0.3,
+      reasoningEffort: "minimal",
+    });
+    expect(model).toBe("claude-haiku-5-5");
+    const params = anthropicCreate.mock.calls[0][0];
+    expect(params.output_config).toEqual({ effort: "low" });
+    expect(params).not.toHaveProperty("temperature");
+    expect(params.max_tokens).toBe(CLAUDE5_MIN_MAX_TOKENS);
+  });
+
+  it("Claude 5가 아닌 모델은 temperature를 보내고, deprecated류 400이면 떼고 같은 모델로 1회 재시도", async () => {
+    anthropicCreate.mockRejectedValueOnce(
+      Object.assign(new Error('400 {"error":{"message":"`temperature` is deprecated for this model."}}'), {
+        status: 400,
+      }),
+    );
+    anthropicCreate.mockResolvedValueOnce(anthropicOk('{"ok":true}'));
+    const { data, model } = await generateJSON<{ ok: boolean }>({ meta: TEST_META,
+      prompt: "JSON 주세요",
+      maxTokens: 100,
+      provider: "anthropic",
+      tier: "reasoning",
+      temperature: 0.3,
+    });
+    expect(data).toEqual({ ok: true });
+    expect(model).toBe("claude-opus-4-7");
     expect(anthropicCreate).toHaveBeenCalledTimes(2);
     expect(anthropicCreate.mock.calls[0][0]).toHaveProperty("temperature", 0.3);
+    expect(anthropicCreate.mock.calls[0][0].max_tokens).toBe(100);
+    expect(anthropicCreate.mock.calls[0][0]).not.toHaveProperty("output_config");
     expect(anthropicCreate.mock.calls[1][0]).not.toHaveProperty("temperature");
     expect(upstageCreate).not.toHaveBeenCalled();
+  });
+
+  it("isClaude5Model — 5 계열만(4.x·날짜 접미 없는 ID)", () => {
+    for (const m of ["claude-haiku-5-5", "claude-sonnet-5", "claude-sonnet-5-5", "claude-opus-5-5", "claude-opus-5", "claude-fable-5-1", "claude-mythos-5-1"])
+      expect(isClaude5Model(m), m).toBe(true);
+    for (const m of ["claude-haiku-4-5", "claude-opus-4-7", "claude-sonnet-4-6", "deepseek-v4-flash", "solar-pro3"])
+      expect(isClaude5Model(m), m).toBe(false);
+  });
+
+  it("Anthropic 안전 거절(refusal) → 다음 provider로 넘긴다(Haiku 5.5엔 서버 쪽 대체 모델이 없다)", async () => {
+    anthropicCreate.mockResolvedValueOnce({ content: [], stop_reason: "refusal", stop_details: { category: "cyber" }, usage: { input_tokens: 10, output_tokens: 0 } });
+    upstageCreate.mockResolvedValueOnce(upstageOk('{"ok":true}'));
+    const { data, model } = await generateJSON<{ ok: boolean }>({ meta: TEST_META, prompt: "JSON 주세요", maxTokens: 100, provider: "anthropic" });
+    expect(data).toEqual({ ok: true });
+    expect(model).toBe("solar-pro3");
+    expect(isRetryableProviderError(new AnthropicRefusalError(null))).toBe(true);
+  });
+
+  it("넘길 회사가 없으면(문서 경로 = Claude 전용) 거절을 한글 안내로 — 영문 원문('refusal: …')을 화면에 내지 않는다", async () => {
+    anthropicCreate.mockResolvedValueOnce({ content: [], stop_reason: "refusal", stop_details: { category: "cyber" }, usage: { input_tokens: 10, output_tokens: 0 } });
+    const run = generateJSON({
+      meta: TEST_META,
+      prompt: "JSON 주세요",
+      maxTokens: 100,
+      provider: "anthropic",
+      document: { mediaType: "application/pdf", dataBase64: "AA==" },
+    });
+    await expect(run).rejects.toThrow("AI가 이 내용으로는 글을 쓰지 않았습니다");
+    await expect(run).rejects.not.toThrow(/refusal/);
   });
 
   it("temperature 미지정이면 deprecated류 400도 재시도 없이 throw", async () => {

@@ -109,7 +109,7 @@ export type GenerateJSONOptions = {
   temperature?: number;
   /**
    * Upstage(Solar) reasoning_effort. 멘트="minimal" — 안 하면 추론 과정이 본문에 섞임(edutrix 후보정).
-   * Anthropic엔 무시(extended thinking 미사용). 도메인별 opt-in(전역 기본 미변경).
+   * Anthropic은 Claude 5 계열에만 `output_config.effort`로 전한다(minimal → low, ANTHROPIC_EFFORT). 그 밖의 Anthropic 모델엔 무시.
    */
   reasoningEffort?: "minimal" | "low" | "medium" | "high";
   /**
@@ -203,6 +203,10 @@ function rethrowAi(provider: AiProvider, err: unknown): never {
       ? Number((err as { status?: unknown }).status)
       : undefined;
   const raw = err instanceof Error ? err.message : String(err);
+  // 안전 거절이 마지막 후보에서 나면 영문 원문("refusal: general_harms")이 화면에 뜨지 않게 할 일을 한글로(원문 노출 금지).
+  if (err instanceof AnthropicRefusalError) {
+    throw new Error("AI가 이 내용으로는 글을 쓰지 않았습니다. 입력한 내용을 확인해 다시 시도하거나 직접 작성해 주세요.");
+  }
   // 🔴 잔액 소진을 **가장 먼저** 판정한다 — 키 오류·429보다 구체적이고, 조치가 다르다(갱신·대기가 아니라 **충전**).
   //    여기까지 왔다는 건 폴백 사다리의 provider가 전부 막혔다는 뜻이라, 원문 영문 대신 할 일을 한글로 말한다.
   if (isCreditExhaustedError(err)) {
@@ -262,6 +266,7 @@ export function isCreditExhaustedError(err: unknown): boolean {
 
 /** 다른 provider로 폴백할 가치가 있는 오류인가 — 인증(401/403)·한도(429)·**잔액 소진**, 또는 키 무효 메시지. */
 export function isRetryableProviderError(err: unknown): boolean {
+  if (err instanceof AnthropicRefusalError) return true;
   const status = providerErrorStatus(err);
   if (status === 401 || status === 403 || status === 429) return true;
   if (isCreditExhaustedError(err)) return true;
@@ -280,7 +285,35 @@ export function isTemperatureDeprecatedError(err: unknown): boolean {
       : typeof err === "object" && err !== null && "message" in err
         ? String((err as { message?: unknown }).message ?? "")
         : String(err);
-  return /temperature[\s\S]*deprecated/i.test(raw);
+  return /temperature[\s\S]*(deprecated|not supported|must be|only)/i.test(raw);
+}
+
+/**
+ * Claude 5 계열(Opus·Sonnet·Haiku 5·5.5, Fable, Mythos)인가 — 이 계열은 ① 기본값이 아닌 temperature가 400(Haiku 5.5는 문구도
+ * 달라 위 재시도가 못 알아볼 수 있다 — 아예 안 보낸다) ② 생각(thinking)이 기본으로 켜져 그 토큰도 `max_tokens`에 든다.
+ * 🔴 2026-10-16 Haiku 5.5 전환 실측(구독 비교 9건 · effort low): 출력 740~2,000토큰 — 멘트 상한 1,000이면 절반이 답 전에 잘린다.
+ */
+export function isClaude5Model(model: string): boolean {
+  return /^claude-(?:opus|sonnet|haiku)-5(?:-|$)|^claude-(?:fable|mythos)-/.test(model);
+}
+/** Claude 5 계열의 출력 상한 바닥 — 생각 토큰이 상한을 먹어 JSON 전에 잘리지 않게(쓴 만큼만 과금된다). */
+export const CLAUDE5_MIN_MAX_TOKENS = 4096;
+/** 호출부의 reasoningEffort(Upstage 표기) → Anthropic effort. 'minimal'은 Anthropic에 없어 low. */
+const ANTHROPIC_EFFORT: Record<NonNullable<GenerateJSONOptions["reasoningEffort"]>, "low" | "medium" | "high"> = {
+  minimal: "low",
+  low: "low",
+  medium: "medium",
+  high: "high",
+};
+
+/** Anthropic 안전 분류기 거절(`stop_reason: "refusal"`) — Haiku 5.5엔 서버 쪽 대체 모델이 없어 다음 provider로 넘긴다. */
+export class AnthropicRefusalError extends Error {
+  constructor(
+    readonly category: string | null,
+    readonly usage: { inputTokens: number | null; outputTokens: number | null } | null = null,
+  ) {
+    super(`Anthropic 안전 거절(refusal${category ? `: ${category}` : ""})`);
+  }
 }
 
 /** provider별 1회 호출 — 응답 텍스트+usage 반환(throw는 generateJSON 루프가 처리). */
@@ -361,15 +394,18 @@ async function callProvider(
         { type: "text" as const, text: opts.prompt },
       ] satisfies Anthropic.ContentBlockParam[])
     : opts.prompt;
+  const claude5 = isClaude5Model(model);
   const anthropicParams = (withTemperature: boolean) => ({
     model,
-    max_tokens: opts.maxTokens,
-    ...(withTemperature && opts.temperature != null ? { temperature: opts.temperature } : {}),
+    max_tokens: claude5 ? Math.max(opts.maxTokens, CLAUDE5_MIN_MAX_TOKENS) : opts.maxTokens,
+    // Claude 5 계열엔 temperature를 아예 안 보낸다(400 → 재시도 왕복을 없앤다). 그 밖은 호출부 값(멘트 0.3 등) 유지.
+    ...(withTemperature && !claude5 && opts.temperature != null ? { temperature: opts.temperature } : {}),
+    // 생각 깊이 — 호출부가 정한 때만(멘트 'minimal' → low). 안 정하면 모델 기본(Haiku 5.5 = medium).
+    ...(claude5 && opts.reasoningEffort ? { output_config: { effort: ANTHROPIC_EFFORT[opts.reasoningEffort] } } : {}),
     ...(opts.system ? { system: opts.system } : {}),
     messages: [{ role: "user" as const, content: userContent }],
   });
-  // Claude 5 계열은 temperature가 deprecated(400) — 호출부의 temperature 지정(멘트 0.3 등)은
-  // 지원 모델(Haiku 4.5 등)에선 유지하고, 거부하는 모델에서만 떼고 1회 재시도(자가 회복).
+  // Claude 5 계열엔 처음부터 temperature를 안 보낸다(위). 그 밖의 모델이 거부하면(문구 판정) 떼고 1회 재시도(자가 회복).
   const res = await client.messages.create(anthropicParams(true)).catch((e: unknown) => {
     if (opts.temperature == null || !isTemperatureDeprecatedError(e)) throw e;
     reportWarning("Anthropic temperature deprecated — 파라미터 제거 후 재시도", {
@@ -378,6 +414,12 @@ async function callProvider(
     });
     return client.messages.create(anthropicParams(false));
   });
+  if (res.stop_reason === "refusal") {
+    const details = (res as { stop_details?: { category?: string | null } | null }).stop_details;
+    // 거절도 입력 토큰은 쓴다 — 사용량 기록이 빠지지 않게 오류에 싣는다(generateJSON 루프가 기록).
+    const usage = res.usage ? { inputTokens: res.usage.input_tokens ?? null, outputTokens: res.usage.output_tokens ?? null } : null;
+    throw new AnthropicRefusalError(details?.category ?? null, usage);
+  }
   // content[0]만 보지 말고 모든 text 블록을 이어붙인다 — thinking 등 비-text 블록이 앞설 수 있어
   // 첫 블록만 읽으면 빈 문자열이 되는 모델(Sonnet 5 등)에서 파싱 실패("no json")가 난다.
   return {
@@ -479,6 +521,7 @@ export async function generateJSON(rawOpts: GenerateJSONOptions | GenerateDecisi
         model,
         keyName: keyLabel(provider),
         ok: false,
+        ...(e instanceof AnthropicRefusalError && e.usage ? { usage: e.usage } : {}),
         error: e instanceof Error ? e.message.slice(0, 500) : String(e).slice(0, 500),
       });
       // 인증/한도 오류 + 다음 후보가 있으면 다른 provider로 폴백(B1: 무효·만료 키도 자동 회복).
@@ -505,9 +548,9 @@ export async function generateJSON(rawOpts: GenerateJSONOptions | GenerateDecisi
       // 잘린 응답의 파싱 실패는 "모델이 이상한 걸 뱉었다"가 아니라 "한도가 모자랐다"이다 —
       // 원인을 라우트·화면 오류 문구까지 그대로 들고 가야 max_tokens를 올릴 생각을 한다.
       if (call.truncated) {
-        throw new Error(
-          `AI 응답이 최대 길이(${opts.maxTokens} 토큰)에서 잘려 해석하지 못했습니다. 응답 한도를 늘리거나 요청을 줄여 주세요.`,
-        );
+        // 실제로 보낸 상한을 말한다 — Claude 5 계열은 바닥값(CLAUDE5_MIN_MAX_TOKENS)으로 올려 보낸다.
+        const sent = provider === "anthropic" && isClaude5Model(model) ? Math.max(opts.maxTokens, CLAUDE5_MIN_MAX_TOKENS) : opts.maxTokens;
+        throw new Error(`AI 응답이 최대 길이(${sent} 토큰)에서 잘려 해석하지 못했습니다. 응답 한도를 늘리거나 요청을 줄여 주세요.`);
       }
       throw e;
     }

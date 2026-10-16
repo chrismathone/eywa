@@ -57,6 +57,10 @@ export type SubjectReport = {
   trendDraft?: string; // 학습 추세(종합분석) 초안 — 4a. 멘트(draft)와 별개, 자동작성 시 함께 채움.
   // 자동작성이 멘트 칸에 마지막으로 넣은 텍스트(0214a) — 저장 시 draft와 비교해 작성 방식(ment_source) 판정.
   autoDraft?: string;
+  /** autoDraft가 AI 원문이 아니다(실패 폴백 템플릿·지난 회차 복사) — 자동작성 원문(0370a)으로 싣지 않는다(말투 학습이 엉뚱한 차이를 배우지 않게). */
+  autoDraftTemplate?: boolean;
+  /** 자동작성이 추세 칸에 마지막으로 넣은 글 — '달라진 것 없음'(trendQuiet)이면 칸이 이 글 그대로일 때만 비운다(손글씨는 지킨다). */
+  trendAutoDraft?: string;
   sent: boolean;
   shareToken?: string;
   /** null = 이번 세션에서 명시적으로 해제됨(재발급·첨부변경). undefined = 아직 모름 — 둘은 다르다. */

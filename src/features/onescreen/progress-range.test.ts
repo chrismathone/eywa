@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { collapseProgressRanges, progressInline } from "./progress-range";
+import { collapseProgressRanges, progressForMent, progressInline } from "./progress-range";
 import { MONTHLY_EXAM_LABEL } from "./progress-status";
 
 /** 실제 저장 포맷 — 첫 줄만 과목 라벨 접두(buildReportFields). */
@@ -132,5 +132,24 @@ describe("progressInline", () => {
   it("빈 값은 빈 문자열", () => {
     expect(progressInline(null)).toBe("");
     expect(progressInline("")).toBe("");
+  });
+});
+
+// 2026-10-16 Haiku 5.5 전환 — 5.5는 단원 번호를 학부모 글에 그대로 옮긴다. AI 재료에서만 뗀다(4.5 때의 발송 모양 유지).
+describe("progressForMent — AI 멘트 재료에서 단원 번호만 뗀다", () => {
+  it("앞에 붙은 번호·범위 번호", () => {
+    expect(progressForMent("2-4-3~2-4-5 비례식과 비례배분")).toBe("비례식과 비례배분");
+    expect(progressForMent("2-4-6 마름모\n2-4-7 여러 가지 사각형")).toBe("마름모, 여러 가지 사각형");
+  });
+  it("괄호 속 번호", () => {
+    expect(progressForMent("소수의 나눗셈(2-2-1~2-2-5)")).toBe("소수의 나눗셈");
+  });
+  it("학년·학기 표기(중2-1)·번호 없는 진도는 그대로", () => {
+    expect(progressForMent("중2-1 일차함수의 그래프")).toBe("중2-1 일차함수의 그래프");
+    expect(progressForMent("평행이동\n원의 방정식")).toBe("평행이동, 원의 방정식");
+  });
+  it("번호만 있으면 원문 그대로(진도를 통째로 잃지 않게) · 빈 값은 빈 문자열", () => {
+    expect(progressForMent("2-4-3")).toBe("2-4-3");
+    expect(progressForMent(null)).toBe("");
   });
 });
