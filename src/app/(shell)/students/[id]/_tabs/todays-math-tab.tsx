@@ -2,6 +2,7 @@
 import { SheetText } from "@/features/teacher-view/interface-label";
 import { Suspense } from "react";
 import { getStudentMathStatus } from "@/features/integrations/todays-math/student-status";
+import { TodaysMathRecentTests } from "./todays-math-recent-tests";
 
 async function StudentMathContent({ studentId }: { studentId: string }) {
   const result = await getStudentMathStatus(studentId);
@@ -26,6 +27,7 @@ async function StudentMathContent({ studentId }: { studentId: string }) {
         <dt className="text-text-dim text-sm">{label}</dt><dd className="mt-2 text-lg font-semibold">{value}</dd>
       </div>)}
     </dl>
+    {data.recentTests ? <TodaysMathRecentTests tests={data.recentTests} /> : null}
     <section className="bg-card border-line rounded-xl border p-5">
       <h3 className="text-sm font-semibold"><SheetText value={"오늘 수학 수강 반"} /></h3>
       {activeClasses.length ? <ul className="mt-3 space-y-2 text-sm">{activeClasses.map((item) => <li key={item.sourceClassId}>{item.name}</li>)}</ul>
