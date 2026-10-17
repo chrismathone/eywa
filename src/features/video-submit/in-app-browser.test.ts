@@ -10,13 +10,13 @@ const SAFARI = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebK
 const SAMSUNG = "Mozilla/5.0 (Linux; Android 14; SM-S918N) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/25.0 Chrome/121.0 Mobile Safari/537.36";
 
 describe("인앱 브라우저 판정", () => {
-  it("카카오톡(아이폰·안드로이드)은 카카오톡으로 알아보고 기본 브라우저 열기를 쓴다", () => {
-    expect(detectInAppBrowser(IOS_KAKAO)).toEqual({ name: "카카오톡", kakao: true });
-    expect(detectInAppBrowser(ANDROID_KAKAO)).toEqual({ name: "카카오톡", kakao: true });
+  it("카카오톡(아이폰·안드로이드)은 기본 브라우저 열기를 쓴다", () => {
+    expect(detectInAppBrowser(IOS_KAKAO)).toEqual({ kakao: true });
+    expect(detectInAppBrowser(ANDROID_KAKAO)).toEqual({ kakao: true });
   });
-  it("다른 앱은 이름만, 이름 모르는 안드로이드 웹뷰는 '앱'", () => {
-    expect(detectInAppBrowser(NAVER)).toEqual({ name: "네이버 앱", kakao: false });
-    expect(detectInAppBrowser(WEBVIEW)).toEqual({ name: "앱", kakao: false });
+  it("다른 앱·이름 모르는 안드로이드 웹뷰도 앱 안으로 본다(기본 브라우저 열기 버튼은 없음)", () => {
+    expect(detectInAppBrowser(NAVER)).toEqual({ kakao: false });
+    expect(detectInAppBrowser(WEBVIEW)).toEqual({ kakao: false });
   });
   it("일반 브라우저는 경고하지 않는다", () => {
     for (const ua of [CHROME, SAFARI, SAMSUNG, ""]) expect(detectInAppBrowser(ua)).toBeNull();

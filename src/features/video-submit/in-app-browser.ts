@@ -3,23 +3,16 @@
  * 실측: 한 학생이 카카오톡 안에서 800MB~1.4GB 영상을 5번 올리다 4번이 끊겼다(앱을 내리거나 화면을 벗어나면 전송이 멈춘다).
  * 판정은 경고에만 쓴다 — 업로드를 막지 않는다(못 알아본 앱은 경고 없이 지금처럼 올린다).
  */
-const APPS: Array<{ test: RegExp; name: string }> = [
-  { test: /KAKAOTALK/i, name: "카카오톡" },
-  { test: /NAVER\(inapp/i, name: "네이버 앱" },
-  { test: /DaumApps/i, name: "다음 앱" },
-  { test: /Instagram/i, name: "인스타그램" },
-  { test: /FBAN|FBAV/i, name: "페이스북" },
-  { test: /\bLine\//, name: "라인" },
-  { test: /\bBAND\//i, name: "밴드" },
-];
+// 이름은 판정에만 쓴다 — 화면 문구는 앱 이름을 말하지 않는다(원장 2026-10-17 *"카카오톡으로 한정짓는 말보다는"*).
+const APPS: RegExp[] = [/KAKAOTALK/i, /NAVER\(inapp/i, /DaumApps/i, /Instagram/i, /FBAN|FBAV/i, /\bLine\//, /\bBAND\//i];
 
-export type InAppBrowser = { name: string; kakao: boolean };
+/** `kakao` = 기본 브라우저로 여는 길(카카오톡 전용 스킴)이 있다. */
+export type InAppBrowser = { kakao: boolean };
 
-/** `null` = 일반 브라우저(또는 못 알아봄). 안드로이드 웹뷰(`; wv)`)는 앱 이름을 몰라도 '앱'으로 본다. */
+/** `null` = 일반 브라우저(또는 못 알아봄). 이름 모르는 안드로이드 웹뷰(`; wv)`)도 앱 안으로 본다. */
 export function detectInAppBrowser(userAgent: string): InAppBrowser | null {
-  const app = APPS.find((a) => a.test.test(userAgent));
-  if (app) return { name: app.name, kakao: app.name === "카카오톡" };
-  if (/Android/i.test(userAgent) && /; wv\)/.test(userAgent)) return { name: "앱", kakao: false };
+  if (APPS.some((test) => test.test(userAgent)) || (/Android/i.test(userAgent) && /; wv\)/.test(userAgent)))
+    return { kakao: /KAKAOTALK/i.test(userAgent) };
   return null;
 }
 
