@@ -52,7 +52,15 @@ describe("results sync", () => {
       `/api/integrations/eywa/v2/results?bindingId=${bindingId}&from=2026-09-02&to=2026-10-24`,
       `/api/integrations/eywa/v2/results/2026-10-15?bindingId=${bindingId}`,
     ]);
-    expect(mocks.rpc).toHaveBeenCalledWith("todays_math_apply_result_day", { p_tenant: tenantId, p_date: "2026-10-15", p_digest: A, p_rows: [row] });
+    expect(mocks.rpc).toHaveBeenCalledWith("todays_math_apply_result_day", { p_tenant: tenantId, p_date: "2026-10-15", p_digest: A, p_rows: [{ ...row, maxScore: null }] });
+  });
+
+  it("passes the max score through when Today Math sends it (0372a)", async () => {
+    mocks.target.mockImplementation(async (_c: unknown, path: string) => path.includes("results?")
+      ? { bindingId, from: "2026-09-02", to: "2026-10-24", days: [{ date: "2026-10-15", count: 1, sha256: A }] }
+      : { bindingId, date: "2026-10-15", sha256: A, rows: [{ ...row, maxScore: 88.33 }] });
+    await syncTodaysMathResults();
+    expect(mocks.rpc.mock.calls[0][1].p_rows[0].maxScore).toBe(88.33);
   });
 
   it("does nothing when the digest is unchanged", async () => {

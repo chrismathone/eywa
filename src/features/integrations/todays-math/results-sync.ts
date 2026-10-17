@@ -33,7 +33,10 @@ const rowSchema = z.object({
   sourceTestId: uuidSchema, sourceStudentId: uuidSchema, sourceClassId: uuidSchema.nullable(),
   kind: z.enum(["daily", "review", "monthly", "unit", "school", "other"]),
   title: z.string().max(200).nullable(), unitName: z.string().max(200).nullable(), testDate: date,
-  questionCount: z.number().int().min(0).max(1000), absent: z.boolean(),
+  questionCount: z.number().int().min(0).max(1000),
+  // 만점(0372a) — 이 칸을 안 보내는 옛 오늘 수학 배포면 null로 받는다.
+  maxScore: z.number().finite().positive().max(10000).nullable().optional().transform((v) => v ?? null),
+  absent: z.boolean(),
   score: z.number().finite().min(0).max(10000).nullable(), correctCount: z.number().int().nonnegative().nullable(),
   takenAt: timestampSchema,
 });

@@ -1,5 +1,9 @@
 # Supabase 마이그레이션 — 적용 방식·순서·현재 상태
 
+## 2026-10-17 오늘 수학 결과 만점 칸 (0372a · 운영 적용 완료)
+
+`0372a_todays_math_result_max_score.sql`은 `todays_math_test_results.max_score`(시험지 만점 · nullable)를 더하고 반영 함수를 교체한다(0371a 본문 + 만점 · 범위 밖 만점은 null). 같은 날 운영 DB에 CLI로 적용 — 그 전에 운영 DB 트랜잭션 안에서 표본 반영 후 롤백으로 확인. 성적관리 월말평가 '채우기'가 만점이 같을 때만 쓰는 값이다.
+
 ## 2026-10-17 오늘 수학 채점 결과 보관 (0371a · 운영 적용 완료)
 
 `0371a_todays_math_test_results.sql`은 `todays_math_test_results`(오늘 수학 시험 × 학생의 마지막 채점)·`todays_math_result_days`(날짜별 반영 지문) 표와 서버 전용 함수 `todays_math_apply_result_day`(그날 행을 한 거래로 갈아끼움)를 만든다. 정책 0개 = 의도(서버 키만). 2026-10-17 운영 DB에 CLI로 적용 — 그 전에 같은 SQL을 운영 DB 트랜잭션 안에서 실행·표본 반영(결시 점수 제거 · 없는 학생 건너뜀 · 날짜 불일치 거절 · 빈 날 비우기 · service_role 실행)·롤백으로 확인했다. 앱(`/api/cron/todays-math-results`)은 표가 없으면 "준비 전"으로 건너뛴다.

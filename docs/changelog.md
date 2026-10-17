@@ -1,5 +1,11 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-10-17 — 성적관리 수학 월말평가: 오늘 수학 결과 '채우기' 단추(개발 중 · 학원 설정 토글 · 0372a)
+
+- 원장 *"그래 같은 탭에 토글로 진행해"*. 학원 설정 → 연동 → 오늘 수학의 둘째 토글 '성적관리 월말평가 채우기'(`report.todaysMathMonthlyFill`, 기본 꺼짐). 켜면 성적관리 입력(수학 · 월말평가)에 **'오늘 수학 결과 채우기'** 단추가 선다 — 같은 달 오늘 수학 월말평가 점수를 **빈 칸에만** 넣고(시험없음 · 해당 없음 줄 제외), **저장은 선생님이 평소처럼**(자동 저장 아님 — 저장 단일 경로 `writeGradeCells`·권한을 그대로 지난다). 규칙 = [`todays-math-monthly.ts`](../src/features/grades/todays-math-monthly.ts) · 조회 = [`server/todays-math-monthly.ts`](../src/features/grades/server/todays-math-monthly.ts).
+- 🔴 **만점이 같을 때만 채운다** — 오늘 수학 점수는 배점 합이라 시험마다 만점이 다르다. 그래서 오늘 수학 피드에 `maxScore`(채점과 같은 배점 규칙)를 더하고 **0372a**로 `todays_math_test_results.max_score`를 더했다(2026-10-17 운영 DB에 CLI 적용 · 적용 전 트랜잭션 시험·롤백). 만점이 다르면 "만점이 달라 못 채우는 칸 N (오늘 수학 X점 만점)"만 알린다. 오늘 수학이 지문 버전을 올려(v2) 기간 안의 날을 다시 받는다 — 🔴 배포 순서 = aywa 먼저(이 칸을 받을 수 있게) → 오늘 수학.
+- 채운 칸 옆 '오늘 수학' 표시는 값이 그대로일 때만(고치면 사라짐).
+
 ## 2026-10-17 — 원스크린 수학 행: 오늘 수학 채점 결과로 일일·확인테스트 빈칸 채우기(개발 중 · 학원 설정 토글)
 
 - 원장 *"진행해"* · *"현재는 개발중인 기능이므로 원장 설정에서 오늘의 수학 탭에서 토글 온 되어있어야 연동되게"*. 켜는 곳 = 학원 설정 → 연동 → **오늘 수학**(지점 라이선스 `todays_math`가 켜진 학원에만 탭이 선다 · [`todays-math-card.tsx`](../src/app/(shell)/owner/_components/todays-math-card.tsx)) · 값 = `report.todaysMathTestFill`(기본 꺼짐) · 소비처 = 로스터([`todays-math-fill.ts`](../src/features/onescreen/server/todays-math-fill.ts) → 규칙 [`todays-math-fill-rules.ts`](../src/features/onescreen/todays-math-fill-rules.ts)). 토글이 꺼진 학원은 조회 자체가 없다.

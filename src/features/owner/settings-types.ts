@@ -502,6 +502,10 @@ export const reportSchema = z.object({
   // 수학 탭에서 토글 온 되어있어야 연동되게"*). 기본 꺼짐. 지점 라이선스(todays_math)도 켜져 있어야 동작한다.
   // 화면 = 학원 설정 → 연동 → 오늘 수학 · 소비처 = onescreen/server/todays-math-fill.ts(로스터).
   todaysMathTestFill: z.boolean().default(false),
+  // 오늘 수학 월말평가 결과로 성적관리 수학 월말평가 빈칸 채우기(2026-10-17 · 개발 중 — 원장 *"같은 탭에 토글로"*). 기본 꺼짐.
+  // 자동 저장이 아니다 — 성적 입력 화면에 '채우기' 단추가 서고, 저장은 선생님이 평소처럼 누른다(저장 단일 경로 writeGradeCells).
+  // 소비처 = exams/input/page.tsx → features/grades/server/todays-math-monthly.ts.
+  todaysMathMonthlyFill: z.boolean().default(false),
   // 영상 제출 검사 대상 — 과목·학생 학교급·반 중 하나라도 꺼지면 강사 체크와 관리자 당일 명단에서 제외.
   // 기존 검사 이력은 보존한다. 옛 설정에는 키가 없으므로 전체 사용으로 폴백한다.
   videoHomeworkPolicy: z.object({

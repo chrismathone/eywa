@@ -17,6 +17,7 @@ import { EXAM_SLOT_LABEL, examSlotOptions, slotUsesMonth } from "@/features/grad
 import { resolveGradeSelection } from "@/features/grades/selection";
 import { gradeWriteError } from "@/features/grades/server/access";
 import { getGradeSheet } from "@/features/grades/server/queries";
+import { loadTodaysMathMonthly } from "@/features/grades/server/todays-math-monthly";
 import { GRADE_SCOPE_PARTIAL_MESSAGE } from "@/features/grades/server/teacher-classes";
 import { loadGradeSortPref, saveGradeSortPref } from "@/features/grades/server/list-prefs";
 import { axisLabelFor, axisOptionsFrom, axisValueOf } from "@/features/grades/subject-axis";
@@ -220,6 +221,8 @@ export default async function ExamsPage({
     { value: "jj_exam", label: "JJ실(시험)", href: buildHref({ view: "jj_exam" }) },
   ];
 
+  // 오늘 수학 월말평가 결과(개발 중 — 학원 설정 토글 ∧ 라이선스 ∧ 수학 월말평가 칸일 때만, 아니면 null = 단추 없음).
+  const todaysMath = sheet && sheet.rows.length > 0 ? await loadTodaysMathMonthly(sel, sheet.rows.map((r) => r.studentId)) : null;
   const canWrite = !writeError;
   const lockReason =
     writeError ??
@@ -343,6 +346,7 @@ export default async function ExamsPage({
           canWrite={canWrite}
           slotLabel={EXAM_SLOT_LABEL[sel.slot]}
           lockReason={lockReason}
+          todaysMath={todaysMath}
         />
       ) : (
         <EmptyState

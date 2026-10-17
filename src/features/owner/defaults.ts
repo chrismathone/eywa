@@ -241,6 +241,7 @@ export const DEFAULT_SETTINGS: TenantSettings = {
     showAttachments: true,
     allowTeacherTestMax: false, // 기본: 강사는 과목 설정값(문항수) 고정 사용. 켜면 원스크린에서 /N 직접 변경 가능.
     todaysMathTestFill: false, // 오늘 수학 채점 결과로 원스크린 시험 빈칸 채우기 — 개발 중이라 기본 꺼짐.
+    todaysMathMonthlyFill: false, // 오늘 수학 월말평가로 성적관리 월말평가 빈칸 채우기 — 개발 중이라 기본 꺼짐.
     videoHomeworkPolicy: { enabled: true, disabledSubjectKeys: [], disabledSchoolLevels: [], disabledClassIds: [] },
     writingExemptTeachers: [], // 작성률 예외 강사(빈=전원 집계) — 강사별 작성률 표에서 제외할 표시 이름.
     noticeMode: "A", // 기본: 단일 문단 멘트. B=수업내용+태도·특이사항 2문단 분리(0093a).

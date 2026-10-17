@@ -7,24 +7,28 @@ import { ToggleField } from "./fields";
 
 /**
  * 학원 설정 → 연동 → 오늘 수학(2026-10-17). 지점에 오늘 수학이 켜져 있을 때만 이 탭이 선다(integrations-face.tsx).
- * 개발 중 기능은 여기서 켠 학원만 동작한다(원장 *"원장 설정에서 오늘의 수학 탭에서 토글 온 되어있어야 연동되게"*).
- * 값은 보고서 섹션(`report.todaysMathTestFill`)에 산다 — 저장은 다른 설정과 같은 길(saveOwnerSection)로 섹션째.
+ * 개발 중 기능은 여기서 켠 학원만 동작한다(원장 *"원장 설정에서 오늘의 수학 탭에서 토글 온 되어있어야 연동되게"* ·
+ * *"같은 탭에 토글로 진행해"*). 값은 보고서 섹션(`report.todaysMath*`)에 산다 — 저장은 다른 설정과 같은 길(saveOwnerSection)로 섹션째.
  */
 export function TodaysMathCard({ report }: { report: ReportSettings }) {
   const [fill, setFill] = useState(report.todaysMathTestFill);
+  const [monthly, setMonthly] = useState(report.todaysMathMonthlyFill);
   return (
-    <SectionForm section="report" payload={{ ...report, todaysMathTestFill: fill }}>
-      <SettingsCard
-        title="시험 결과 채우기"
-        description="오늘 수학에서 채점한 일일테스트·확인테스트 결과를 원스크린 수학 행의 빈 시험 칸에 채웁니다. 선생님이 입력한 값은 바꾸지 않고, 결시는 채우지 않습니다. 개발 중인 기능입니다."
-      >
-        <ToggleField
-          label="원스크린 시험 칸 채우기"
-          hint="끄면 채우지 않습니다"
-          value={fill}
-          onChange={setFill}
-        />
-      </SettingsCard>
+    <SectionForm section="report" payload={{ ...report, todaysMathTestFill: fill, todaysMathMonthlyFill: monthly }}>
+      <div className="grid items-start gap-4 xl:grid-cols-2">
+        <SettingsCard
+          title="원스크린 시험 칸 채우기"
+          description="오늘 수학에서 채점한 일일테스트·확인테스트 결과를 원스크린 수학 행의 빈 시험 칸에 채웁니다. 선생님이 입력한 값은 바꾸지 않고, 결시는 채우지 않습니다. 개발 중인 기능입니다."
+        >
+          <ToggleField label="원스크린 시험 칸 채우기" hint="끄면 채우지 않습니다" value={fill} onChange={setFill} />
+        </SettingsCard>
+        <SettingsCard
+          title="성적관리 월말평가 채우기"
+          description="성적관리에서 수학 월말평가를 열면 '오늘 수학 결과 채우기' 단추가 생깁니다. 누르면 같은 달 오늘 수학 월말평가 점수를 빈 칸에만 넣고, 저장은 평소처럼 직접 누릅니다. 만점이 다른 시험은 채우지 않습니다. 개발 중인 기능입니다."
+        >
+          <ToggleField label="성적관리 월말평가 채우기" hint="끄면 단추가 없습니다" value={monthly} onChange={setMonthly} />
+        </SettingsCard>
+      </div>
     </SectionForm>
   );
 }
