@@ -10,7 +10,9 @@ import type { BindingConfig } from "./sync-contract";
 /**
  * 오늘 수학 채점 결과 → aywa(`todays_math_test_results`, 0371a) — 역방향 2단계(2026-10-17).
  *
- * 10분마다(`/api/cron/todays-math-results`) 켜진 지점마다: ① 기간의 날짜별 지문을 받고 ② 저장해 둔 지문과 다른 날만
+ * 깨우는 길 둘(원장 2026-10-17 *"섞는 방식으로"*): ① 오늘 수학이 채점을 저장하면 서명한 신호만 보낸다
+ * (`/api/integrations/todays-math/v2/results-wake` → 그 지점만 바로) ② 신호가 빠졌을 때의 안전망으로 1시간마다
+ * (`/api/cron/todays-math-results`) 켜진 지점 전부. 어느 쪽이든 하는 일은 같다: ① 기간의 날짜별 지문을 받고 ② 저장해 둔 지문과 다른 날만
  * 그날 행 전부를 받아 ③ DB 함수가 그날을 통째로 갈아끼운다. 오늘 수학은 연결이 꺼졌거나 확인이 안 되면 **오류**를 준다 —
  * 그때는 아무것도 바꾸지 않는다(빈 목록으로 지우지 않는다).
  *
@@ -54,7 +56,7 @@ export type ResultsSyncTenant = { tenantId: string; status: "synced" | "not_read
 
 const isMissingTable = (error: { code?: string } | null) => error?.code === "42P01" || error?.code === "PGRST205" || error?.code === "PGRST202";
 
-async function syncTenant(config: BindingConfig): Promise<ResultsSyncTenant> {
+export async function syncTenant(config: BindingConfig): Promise<ResultsSyncTenant> {
   const admin = createAdminClient();
   const tenantId = config.tenantId;
   const today = kstToday();

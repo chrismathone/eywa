@@ -15,7 +15,7 @@
     },
     {
       "path": "/api/cron/todays-math-results",
-      "schedule": "*/10 * * * *"
+      "schedule": "7 * * * *"
     },
     {
       "path": "/api/cron/demo-refresh",

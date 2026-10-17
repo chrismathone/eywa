@@ -2,6 +2,8 @@
 
 ## 2026-10-17 — 오늘 수학 채점 결과를 aywa에 보관(역방향 2단계 · 0371a)
 
+- **같은 날 갱신 — 섞는 방식**(원장 *"크론 잡스 하면 비용 상승 하는거 아닌가? 웹훅으로"* → *"섞는 방식으로 바꿔줘"*): 오늘 수학이 채점을 저장하면(`/api/tests/{id}/submit` · `/grade`) 응답 뒤에 서명한 **내용 없는 신호**를 보내고(`src/lib/eywa/resultsWake.ts`), aywa [`results-wake`](../src/app/api/integrations/todays-math/v2/results-wake/route.ts)가 202로 답한 뒤 그 지점만 바로 끌어온다. cron은 신호가 빠졌을 때의 안전망으로 **1시간마다(:07)**. 신호 실패는 채점에 영향 없음.
+
 - 원장 *"2단계부터 진행해"* · *"sql은 cli로 적용해"*. 10분 cron(`/api/cron/todays-math-results` → [`results-sync.ts`](../src/features/integrations/todays-math/results-sync.ts))이 오늘 수학이 켜진 지점마다 기간(KST 오늘 45일 전 ~ 7일 뒤)의 **날짜별 지문**을 받아, 저장한 지문(`todays_math_result_days`)과 다른 날만 그날 행 전부를 받아 DB 함수가 **그날을 통째로 갈아끼운다**(빠진 행 = 지워진 시험). 한 번에 15일 · 최근 날짜부터 · 한 날 실패는 그 날만 건너뜀.
 - 🔴 오늘 수학은 연결이 꺼졌거나 확인이 안 되면 **오류**를 준다(빈 목록 금지 — 빈 목록이면 aywa가 그날을 지운다). 결시는 점수·맞은 수 없음(표 CHECK). 행 = 시험 × 학생의 마지막 채점(재채점 덮어씀). 오늘 수학 쪽 = `src/lib/eywa/managedTestResults.ts` · `/api/integrations/eywa/v2/results{,/[date]}`.
 - 아직 읽는 화면 없음 — 다음: 원스크린 수학 행의 일일·확인테스트 빈칸 채우기 → 성적관리 월말평가 칸. ⚠️ 소비처는 지점 라이선스(`todays_math`)가 꺼지면 이 표를 안 읽어야 한다(꺼진 기능은 흔적 없이).
