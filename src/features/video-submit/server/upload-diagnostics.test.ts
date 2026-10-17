@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { seedDb, TOKEN, T, OTHER_T } from "./test-fixture.test-util";
+import { seedDb, TOKEN, T, OTHER_T, S } from "./test-fixture.test-util";
 import type { FakeDb } from "./fake-db.test-util";
 const m = vi.hoisted(() => ({ db: null as unknown as FakeDb }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => m.db }));
@@ -33,5 +33,29 @@ describe("업로드 기록 API 권한", () => {
   it("속도 제한과 일시 장애를 구분해 큐가 재시도할 수 있다", async () => {
     m.db.defineRpc("record_homework_video_upload_event", () => "limited"); expect(await send()).toBe(429);
     m.db.defineRpc("record_homework_video_upload_event", () => { throw new Error("offline"); }); expect(await send()).toBe(503);
+  });
+});
+describe("이미 올라간 같은 영상의 중단 — 알리지 않는다(2026-10-17)", () => {
+  const video = (patch = {}) => ({ id: "V1", tenant_id: T, student_id: S, bytes: 100, status: "uploaded", drive_file_id: "drive-1", route: {}, ...patch });
+  const message = () => m.db.rpcCalls.at(-1)?.args.p_failure_message;
+  it("같은 학생·같은 크기 영상이 저장돼 있으면 기록만 하고 알림 문구를 넘기지 않는다", async () => {
+    m.db.tables.student_homework_videos = [video()];
+    expect(await send()).toBe(204); expect(message()).toBeNull();
+    expect(await send({ event: { ...event, kind: "page_left", reason: null } })).toBe(204); expect(message()).toBeNull();
+  });
+  it.each([
+    ["저장된 영상 없음", []],
+    ["크기가 다름", [video({ bytes: 99 })]],
+    ["다른 학생", [video({ student_id: "other" })]],
+    ["아직 저장 중", [video({ status: "processing" })]],
+    ["반려된 영상", [video({ route: { excluded: true } })]],
+  ])("%s이면 지금처럼 알린다", async (_label, rows) => {
+    m.db.tables.student_homework_videos = rows;
+    expect(await send()).toBe(204); expect(message()).toBeTruthy();
+  });
+  it("배정 반영 뷰가 있으면 뷰를 본다", async () => {
+    m.db.tables.student_homework_videos = [video()];
+    m.db.tables.homework_video_ledger_videos = [video({ route: { excluded: true } })];
+    expect(await send()).toBe(204); expect(message()).toBeTruthy();
   });
 });
