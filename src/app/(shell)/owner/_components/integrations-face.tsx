@@ -9,17 +9,21 @@ import { AgentCard } from "./agent-card";
 import { agentTabAvailable } from "@/features/sync-agent/server/availability";
 import { getMakeeduSyncWorkers } from "@/features/integrations/server/makeedu-sync";
 import { MakeeduWorkerStatus } from "./makeedu-worker-status";
+import { TodaysMathCard } from "./todays-math-card";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { isFeatureOptedIn } from "@/lib/license/server";
 
 /**
  * 학원 설정 '연동' 면 = **켜진 연동만 내부 탭으로**(원장 2026-09-28 *"연동 탭이 좀 깔끔해지도록 (현재 너무 세로스크롤이
  * 길어짐) admin이 on/off 한 항목에 따라 적절한 내부탭 디자인화"*). 예전엔 슬랙·makeedu·구글 시트가 한 면에 세로로 쌓였다.
  * 탭 = 슬랙 설정 게이트(`slackGate` — 지점 스위치 ∧ 원장·총괄) · 학원 기능(makeedu·sheet_sync 모듈) · 숙제영상 드라이브(ClassNote 모듈,
  * 2026-10-04 — 숙제 영상을 받는 기능이 그 모듈에 있다). 꺼진 연동은 탭도 조회도 없다.
- * 주소 `?tab=sheets&sub=slack|makeedu|sheets|video` — 고른 탭만 서버에서 읽는다(무거운 면 지연, FaceTabs 규약).
+ * 오늘 수학(지점 라이선스 todays_math — 개발 중 기능 스위치, 2026-10-17).
+ * 주소 `?tab=sheets&sub=slack|makeedu|sheets|video|agent|todaysMath` — 고른 탭만 서버에서 읽는다(무거운 면 지연, FaceTabs 규약).
  */
-export type IntegrationSub = "slack" | "makeedu" | "sheets" | "video" | "agent";
+export type IntegrationSub = "slack" | "makeedu" | "sheets" | "video" | "agent" | "todaysMath";
 
-const LABEL: Record<IntegrationSub, string> = { slack: "슬랙", makeedu: "makeedu 동기화", sheets: "구글 시트", video: "숙제영상 드라이브", agent: "연동 PC" };
+const LABEL: Record<IntegrationSub, string> = { slack: "슬랙", makeedu: "makeedu 동기화", sheets: "구글 시트", video: "숙제영상 드라이브", agent: "연동 PC", todaysMath: "오늘 수학" };
 
 export async function IntegrationsFace({
   sub,
@@ -35,7 +39,9 @@ export async function IntegrationsFace({
   isEmbed: boolean;
 }) {
   // 슬랙 탭 = 설정 게이트와 같은 판정(지점 스위치 ∧ 원장·총괄) — 위임 관리자에게 빈 슬랙 탭이 첫 탭으로 뜨지 않게.
-  const [gate,agentOn] = await Promise.all([slackGate(false),agentTabAvailable(modulesOn.makeedu||classnoteModuleOn(settings))]);
+  // 오늘 수학 탭 = 지점 라이선스(todays_math)가 켜진 학원만(2026-10-17 — 개발 중 기능의 켜기 스위치가 여기 산다).
+  const todaysMathOn = getCurrentUser().then((u) => (u ? isFeatureOptedIn(u.tenantId, "todays_math") : false));
+  const [gate,agentOn,mathOn] = await Promise.all([slackGate(false),agentTabAvailable(modulesOn.makeedu||classnoteModuleOn(settings)),todaysMathOn]);
   const slackOn = !("error" in gate);
   const available: IntegrationSub[] = [
     ...(slackOn ? (["slack"] as const) : []),
@@ -44,6 +50,7 @@ export async function IntegrationsFace({
     // 숙제영상 드라이브 = ClassNote 기능이 있는 지점만(조회·저장 서버 게이트와 같은 판정 — drive-settings-actions).
     ...(classnoteModuleOn(settings) ? (["video"] as const) : []),
     ...(agentOn ? (["agent"] as const) : []),
+    ...(mathOn ? (["todaysMath"] as const) : []),
   ];
   if (available.length === 0) {
     return (
@@ -72,6 +79,7 @@ export async function IntegrationsFace({
         />
       ) : null}
       {active === "video" ? <VideoDriveCard /> : null}
+      {active === "todaysMath" ? <TodaysMathCard report={settings.report} /> : null}
       {active === "agent" ? <AgentCard classnoteOn={classnoteModuleOn(settings)} makeeduOn={modulesOn.makeedu}
         legacyPC={modulesOn.makeedu?<LegacyMakeeduPC />:null} /> : null}
     </div>

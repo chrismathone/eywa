@@ -7,6 +7,8 @@ import { TestMaxInput } from "./test-max-input";
 import type { Tests } from "../types";
 import type { OneScreenStudent, TestScore } from "../types";
 import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+import { TodaysMathMark } from "./todays-math-mark";
+import { todaysMathMarked } from "../todays-math-fill-rules";
 
 function clamp(n: number, max: number) {
   return Math.max(0, Math.min(max, n));
@@ -19,10 +21,13 @@ function ScoreBlock({
   onChange,
   allowMax,
   onMax,
+  fromTodaysMath,
 }: {
   kicker: string;
   range: string;
   test: TestScore;
+  /** 오늘 수학 채점 결과로 채운 값 그대로인가(표시 전용, todays-math-fill-rules.ts). */
+  fromTodaysMath?: boolean;
   onChange: (v: number | null) => void;
   allowMax?: boolean; // 학원설정: 강사 문항수 변경 허용
   onMax?: (v: number) => void;
@@ -45,6 +50,7 @@ function ScoreBlock({
         <span className="text-foreground shrink-0 text-sm font-bold whitespace-nowrap">{kicker}</span>
         <div className="flex min-w-0 items-center gap-2">
           <span className="text-text-faint truncate text-xs">{range}</span>
+          {fromTodaysMath ? <TodaysMathMark /> : null}
         </div>
       </div>
       <div className="mt-2 flex items-center gap-2">
@@ -156,6 +162,7 @@ export function TestCard({
             kicker={t("os.test.daily")}
             range={options.hidePrevious ? "" : tf("os.test.prevRange", { range: prevRange })}
             test={shown.daily}
+            fromTodaysMath={student.subjects.length === 1 && todaysMathMarked(student.subjects[0], "daily", shown.daily)}
             onChange={(v) => onScore("daily", v)}
             allowMax={allowMax}
             onMax={onMax ? (v) => onMax("daily", v) : undefined}
@@ -166,6 +173,7 @@ export function TestCard({
             kicker={t("os.test.check")}
             range={tf("os.test.todayRange", { range: todayRange })}
             test={shown.check}
+            fromTodaysMath={student.subjects.length === 1 && todaysMathMarked(student.subjects[0], "check", shown.check)}
             onChange={(v) => onScore("check", v)}
             allowMax={allowMax}
             onMax={onMax ? (v) => onMax("check", v) : undefined}

@@ -2941,6 +2941,8 @@ export const SHEET_DICT = {
   "os.score.maxAria": { ko: "{label} 문항수", en: "{label} number of questions" },
   "os.score.maxTitle": { ko: "문항수(만점)", en: "Number of questions (full marks)" },
   "os.score.up": { ko: "점수 올림", en: "Score up" },
+  "os.score.todaysMath": { ko: "오늘 수학", en: "Today's Math" },
+  "os.score.todaysMathTip": { ko: "오늘 수학 채점 결과로 채운 값", en: "Filled from Today's Math grading" },
   "os.score.down": { ko: "점수 내림", en: "Score down" },
   "os.score.aria": { ko: "{label} 점수", en: "{label} score" },
   "os.hw.notSubmittedTitle": {

@@ -498,6 +498,10 @@ export const reportSchema = z.object({
   showTrendGraph: z.boolean().default(true), // 성적 추이 그래프(시험·과제 순수 SVG) — edutrix ReportPaper 그래프 이식
   showAttachments: z.boolean(), // 학생 사진 첨부(P2b) — /r·ClassNote 게시 이미지에 표시
   allowTeacherTestMax: z.boolean(), // 강사가 원스크린에서 테스트 문항수(/N)를 직접 변경 가능한지. off=과목 설정값 고정.
+  // 오늘 수학 채점 결과로 원스크린 수학 행의 일일·확인테스트 빈칸 채우기(2026-10-17 · 개발 중 — 원장 *"원장 설정에서 오늘의
+  // 수학 탭에서 토글 온 되어있어야 연동되게"*). 기본 꺼짐. 지점 라이선스(todays_math)도 켜져 있어야 동작한다.
+  // 화면 = 학원 설정 → 연동 → 오늘 수학 · 소비처 = onescreen/server/todays-math-fill.ts(로스터).
+  todaysMathTestFill: z.boolean().default(false),
   // 영상 제출 검사 대상 — 과목·학생 학교급·반 중 하나라도 꺼지면 강사 체크와 관리자 당일 명단에서 제외.
   // 기존 검사 이력은 보존한다. 옛 설정에는 키가 없으므로 전체 사용으로 폴백한다.
   videoHomeworkPolicy: z.object({

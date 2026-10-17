@@ -97,6 +97,7 @@ const FIELD_LABELS: Record<string, Record<string, string>> = {
   },
   report: {
     allowTeacherTestMax: "강사 문항수 변경 허용",
+    todaysMathTestFill: "오늘 수학 시험 결과 채우기",
     classnoteSendWindowStart: "발송 시작 시각",
     classnoteSendWindowEnd: "발송 종료 시각",
     classnoteParentReplyMode: "학부모 글 답글·공감",

@@ -1,5 +1,10 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-10-17 — 원스크린 수학 행: 오늘 수학 채점 결과로 일일·확인테스트 빈칸 채우기(개발 중 · 학원 설정 토글)
+
+- 원장 *"진행해"* · *"현재는 개발중인 기능이므로 원장 설정에서 오늘의 수학 탭에서 토글 온 되어있어야 연동되게"*. 켜는 곳 = 학원 설정 → 연동 → **오늘 수학**(지점 라이선스 `todays_math`가 켜진 학원에만 탭이 선다 · [`todays-math-card.tsx`](../src/app/(shell)/owner/_components/todays-math-card.tsx)) · 값 = `report.todaysMathTestFill`(기본 꺼짐) · 소비처 = 로스터([`todays-math-fill.ts`](../src/features/onescreen/server/todays-math-fill.ts) → 규칙 [`todays-math-fill-rules.ts`](../src/features/onescreen/todays-math-fill-rules.ts)). 토글이 꺼진 학원은 조회 자체가 없다.
+- 규칙: 오늘 수학 일일 → 일일 칸 · 확인 → 확인 칸, `N문제 중 M개` 그대로(문항 수도 오늘 수학 값) · **빈 칸만**(세션·오늘 보고서·시트가 다 지난 뒤) · 선생님 값과 다르면 안 건드림 · 보낸 행·보강·나눔 행 제외 · 결시·맞은 수 모름·문항 0은 안 채움 · 반으로 짝(반 연결 없는 결과는 수학 행이 하나일 때만) · 여럿이면 마지막 채점. 채운 칸(또는 같은 값)엔 작은 '오늘 수학' 표시 — 칸 값이 그대로일 때만(고치면 저절로 사라짐 · 저장 안 됨). 채운 칸의 문항 수가 직전 회차와 다르면 직전 점수를 버린다(허위 증감 방지 — 기존 척도 경계 규칙과 같다). 표가 없거나 조회 실패 = 채우지 않음(fail-soft, [[#95]]).
+
 ## 2026-10-17 — 오늘 수학 채점 결과를 aywa에 보관(역방향 2단계 · 0371a)
 
 - **같은 날 갱신 — 섞는 방식**(원장 *"크론 잡스 하면 비용 상승 하는거 아닌가? 웹훅으로"* → *"섞는 방식으로 바꿔줘"*): 오늘 수학이 채점을 저장하면(`/api/tests/{id}/submit` · `/grade`) 응답 뒤에 서명한 **내용 없는 신호**를 보내고(`src/lib/eywa/resultsWake.ts`), aywa [`results-wake`](../src/app/api/integrations/todays-math/v2/results-wake/route.ts)가 202로 답한 뒤 그 지점만 바로 끌어온다. cron은 신호가 빠졌을 때의 안전망으로 **1시간마다(:07)**. 신호 실패는 채점에 영향 없음.

@@ -95,6 +95,12 @@ export type Subject = {
   note?: string;
   dailyScore?: number | null;
   dailyMax?: number;
+  /**
+   * 오늘 수학 채점 결과로 채웠거나 같은 값인 칸(2026-10-17 · `todays-math-fill-rules.ts`) — 화면의 '오늘 수학' 표식 전용.
+   * 오늘 수학이 준 값을 그대로 들고 있고, 화면은 **지금 칸 값이 이 값과 같을 때만** 표식을 단다(`todaysMathMarked`) —
+   * 선생님이 어느 길(직접 입력 · 일괄 적용 · 복사)로 고치든 표식이 저절로 풀린다. 저장(세션·보고서)엔 싣지 않는다.
+   */
+  todaysMath?: { daily?: { score: number; max: number }; check?: { score: number; max: number } };
   checkScore?: number | null;
   checkMax?: number;
 
