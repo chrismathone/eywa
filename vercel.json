@@ -14,6 +14,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/cron/todays-math-results",
+      "schedule": "*/10 * * * *"
+    },
+    {
       "path": "/api/cron/demo-refresh",
       "schedule": "5 21 * * *"
     },
