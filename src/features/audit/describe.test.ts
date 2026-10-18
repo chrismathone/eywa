@@ -198,6 +198,14 @@ describe("auditDetail — 액션별 한글 상세", () => {
 
   it("exam_scores / student_import / classroom_auto_assign: 건수 풀어쓰기", () => {
     expect(auditDetail("exam_scores", { saved: 12, students: 15 }, ctx())).toBe("학생 15명 중 점수 12건 저장");
+    expect(auditDetail("exam_scores", { saved: 12, students: 15, todaysMathSame: 3 }, ctx())).toBe("학생 15명 중 점수 12건 저장 · 오늘 수학 결과와 같은 값 3건");
+    // 보고서 저장 줄은 종전 기본 분기 그대로 + 출처 표시만 덧붙는다(옛 기록의 상세가 비지 않게).
+    const meta = { reportId: "r", studentId: "s", date: "2026-10-18", subject: "math", classId: "c", via: "teacher", created: true };
+    const base = auditDetail("__fallback_probe__", meta, ctx());
+    expect(base).not.toBeNull();
+    expect(auditDetail("lesson_report_save", meta, ctx())).toBe(base);
+    expect(auditDetail("lesson_report_save", { ...meta, todaysMathSame: ["daily", "check"] }, ctx())).toBe(`${base} · 일일·확인테스트가 오늘 수학 결과와 같은 값`);
+    expect(auditDetail("lesson_report_save", { ...meta, todaysMathSame: ["weird"] }, ctx())).toBe(base);
     expect(auditDetail("student_import", { inserted: 5, skipped: 2, failed: 0 }, ctx())).toBe(
       "추가 5명 · 건너뜀 2명",
     );

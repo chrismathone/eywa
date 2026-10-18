@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyTodaysMathFill, todaysMathMarked, type TodaysMathFillRow } from "./todays-math-fill-rules";
+import { applyTodaysMathFill, parseTestText, todaysMathMarked, todaysMathSameOnSave, type TodaysMathFillRow } from "./todays-math-fill-rules";
 import { resolveRowFields } from "./row-fields";
 import type { OneScreenStudent, Subject } from "./types";
 
@@ -74,5 +74,32 @@ describe("오늘 수학 결과로 원스크린 시험 칸 채우기", () => {
     expect(s.subjects[0].dailyScore).toBe(19);
     expect(todaysMathMarked(s.subjects[0], "daily", { score: 17, max: 20 })).toBe(false);
     expect(todaysMathMarked(s.subjects[0], "daily", { score: 19, max: 25 })).toBe(false);
+  });
+});
+
+describe("감사로그 출처 표시 — 저장값이 오늘 수학 결과와 같은가 (2026-10-18)", () => {
+  const row = (over: Partial<TodaysMathFillRow> = {}): TodaysMathFillRow => ({
+    student_id: "s1", class_id: "c1", kind: "daily", question_count: 5, absent: false, correct_count: 4, taken_at: "2026-10-18T01:00:00Z", ...over,
+  });
+  it("parses the saved notation and ignores other shapes", () => {
+    expect(parseTestText("5문제 중 4개 맞음")).toEqual({ max: 5, score: 4 });
+    expect(parseTestText("20문제 중 18개")).toEqual({ max: 20, score: 18 });
+    expect(parseTestText("80점")).toBeNull();
+    expect(parseTestText(null)).toBeNull();
+  });
+  it("same value in the same class → marked; a different value, max or class → not", () => {
+    const rows = [row(), row({ kind: "review", correct_count: 3 })];
+    expect(todaysMathSameOnSave(rows, { studentId: "s1", classId: "c1", dailyTest: "5문제 중 4개 맞음", checkTest: "5문제 중 3개 맞음" })).toEqual(["daily", "check"]);
+    expect(todaysMathSameOnSave(rows, { studentId: "s1", classId: "c1", dailyTest: "5문제 중 5개 맞음" })).toEqual([]);
+    expect(todaysMathSameOnSave(rows, { studentId: "s1", classId: "c1", dailyTest: "10문제 중 4개 맞음" })).toEqual([]);
+    expect(todaysMathSameOnSave(rows, { studentId: "s1", classId: "c2", dailyTest: "5문제 중 4개 맞음" })).toEqual([]);
+    expect(todaysMathSameOnSave(rows, { studentId: "s2", classId: "c1", dailyTest: "5문제 중 4개 맞음" })).toEqual([]);
+  });
+  it("uses the latest grading; a class-less result counts only when no same-class result exists; absent never", () => {
+    const regraded = [row(), row({ correct_count: 5, taken_at: "2026-10-18T02:00:00Z" })];
+    expect(todaysMathSameOnSave(regraded, { studentId: "s1", classId: "c1", dailyTest: "5문제 중 4개 맞음" })).toEqual([]);
+    expect(todaysMathSameOnSave(regraded, { studentId: "s1", classId: "c1", dailyTest: "5문제 중 5개 맞음" })).toEqual(["daily"]);
+    expect(todaysMathSameOnSave([row({ class_id: null })], { studentId: "s1", classId: "c9", dailyTest: "5문제 중 4개 맞음" })).toEqual(["daily"]);
+    expect(todaysMathSameOnSave([row({ absent: true, correct_count: null })], { studentId: "s1", classId: "c1", dailyTest: "5문제 중 0개 맞음" })).toEqual([]);
   });
 });

@@ -58,6 +58,7 @@ import {
   type OnescreenFontSize,
 } from "../font-size";
 import { LEGACY_REPORT_SUBJECT, reportSubject } from "@/features/timetable/lib/report-subject";
+import { todaysMathSameForReport } from "./todays-math-fill";
 import { resolveMentSource, type MentSource } from "../ment-source";
 import { mentSourceColumnReady } from "./ment-source-db";
 import { recordMentAiDraft } from "./ment-draft-db";
@@ -620,6 +621,11 @@ export async function saveLessonReport(
    * ⚠️ 발송(`saveAndQueueClassnote`)은 이 함수를 그대로 거치므로 저장 1줄 + 발송 1줄이 남는다
    *    (같은 보고서 id로 이어 읽힌다 — 발송이 내용까지 바꿨다는 사실이 저장 줄에 남아야 한다).
    */
+  // 저장한 일일·확인 칸이 오늘 수학 결과와 같은 값이면 기록에 남긴다(출처 추적 · 채우기 토글이 꺼진 학원은 조회 없음).
+  const todaysMathSame = await todaysMathSameForReport(user.tenantId, {
+    studentId: input.studentId, classId: input.classId || null, subject: input.subject || null, date: reportDate,
+    dailyTest: input.dailyTest, checkTest: input.checkTest,
+  });
   await logAction({
     action: "lesson_report_save",
     targetType: "lesson_report",
@@ -636,6 +642,7 @@ export async function saveLessonReport(
       // 작성 선생님이 아니라 영상 과제 값을 두었다(바꾸려던 값은 적지 않았다) · 장부에서 취소된 숙제라 '없음'을 지켰다.
       ...(keptVideoHwFinal ? { videoHomeworkKept: true } : {}),
       ...(cancelKept ? { videoHomeworkCancelled: true } : {}),
+      ...(todaysMathSame.length ? { todaysMathSame } : {}),
     },
   });
 

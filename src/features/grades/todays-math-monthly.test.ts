@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { monthlyFromTodaysMath, planMonthlyFill, type TodaysMathMonthly } from "./todays-math-monthly";
+import { countTodaysMathSame, monthlyFromTodaysMath, planMonthlyFill, type TodaysMathMonthly } from "./todays-math-monthly";
 
 const r = (score: number, maxScore: number | null = 100) => ({ score, maxScore, testDate: "2026-10-28", title: "10월 월말평가" });
 
@@ -25,5 +25,16 @@ describe("성적관리 월말평가 ← 오늘 수학", () => {
     expect(monthlyFromTodaysMath(results, "a", "85", 50)).toBe(false);
     expect(monthlyFromTodaysMath(results, "a", "", 100)).toBe(false);
     expect(monthlyFromTodaysMath(null, "a", "85", 100)).toBe(false);
+  });
+});
+
+describe("감사로그 출처 표시 — 오늘 수학과 같은 값 (2026-10-18)", () => {
+  it("counts only same score at the same full mark; cleared cells and unknown students don't count", () => {
+    const results: TodaysMathMonthly = { a: r(84), b: r(90), c: r(70, 88) };
+    expect(countTodaysMathSame(results, [
+      { studentId: "a", score: 84 }, { studentId: "b", score: 91 }, { studentId: "c", score: 70 },
+      { studentId: "d", score: 60 }, { studentId: "a", score: null },
+    ], 100)).toBe(1);
+    expect(countTodaysMathSame(null, [{ studentId: "a", score: 84 }], 100)).toBe(0);
   });
 });

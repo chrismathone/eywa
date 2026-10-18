@@ -14,6 +14,8 @@ import { gradeWriteError } from "./access";
 import { getGradeSheet } from "./queries";
 import { hasUntouchedMark } from "../keep";
 import { gradeMarksReady, gradeNoExamReady, gradesSchemaReady, writeGradeCells } from "./write";
+import { loadTodaysMathMonthly } from "./todays-math-monthly";
+import { countTodaysMathSame } from "../todays-math-monthly";
 
 export type GradeSaveState =
   | { error?: string; ok?: boolean; saved?: number; cleared?: number; /** DB 원문 — 화면은 title 툴팁으로만. */ detail?: string }
@@ -188,6 +190,14 @@ export async function saveGradeScores(
     return { error: "성적을 저장하지 못했습니다" };
   }
 
+  // 점수가 실제로 바뀐 칸만 — 표식만 바뀐 줄은 옛 점수를 그대로 싣고 있어 세면 안 된다.
+  const scoreWritten = changed.filter((c) => c.score != null && c.score !== rowByStudent.get(c.studentId)?.score);
+  // 저장한 점수 중 오늘 수학 월말평가와 같은 값(출처 추적). 수학 · 월말평가 · 토글 ∧ 라이선스일 때만 조회(로더가 판정 · 실패 = 0).
+  const todaysMathSame = countTodaysMathSame(
+    await loadTodaysMathMonthly(sel, scoreWritten.map((c) => c.studentId)),
+    scoreWritten,
+    sel.maxScore,
+  );
   await logAction({
     action: "exam_scores",
     targetType: "grades",
@@ -205,6 +215,7 @@ export async function saveGradeScores(
       saved: result.saved,
       cleared: result.cleared,
       students: sheet.rows.length,
+      ...(todaysMathSame ? { todaysMathSame } : {}),
     },
   });
 

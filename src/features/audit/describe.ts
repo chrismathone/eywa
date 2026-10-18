@@ -936,8 +936,16 @@ export function auditDetail(
     case "exam_scores": {
       const saved = num(m.saved);
       const students = num(m.students);
+      const same = num(m.todaysMathSame);
       if (saved === null && students === null) return null;
-      return `학생 ${students ?? "?"}명 중 점수 ${saved ?? "?"}건 저장`;
+      return join(`학생 ${students ?? "?"}명 중 점수 ${saved ?? "?"}건 저장`, same ? `오늘 수학 결과와 같은 값 ${same}건` : null);
+    }
+    // 수업보고서 저장 — 종전처럼 기본 분기(학생 · 반 · 날짜 …)를 그대로 쓰고, 오늘 수학 출처 표시만 덧붙인다(2026-10-18).
+    // 🔴 이 case가 기본 분기를 가로채면 옛 기록까지 상세 칸이 빈다 — 표시 키만 떼어 기본 분기로 돌린다.
+    case "lesson_report_save": {
+      const { todaysMathSame, ...rest } = m;
+      const same = Array.isArray(todaysMathSame) ? todaysMathSame.map((w) => ({ daily: "일일", check: "확인" } as Record<string, string>)[String(w)]).filter(Boolean) : [];
+      return join(auditDetail("lesson_report_save:base", rest, ctx), same.length ? `${same.join("·")}테스트가 오늘 수학 결과와 같은 값` : null);
     }
     case "class_salary_update": {
       const fmt = (v: unknown): string | null => {

@@ -66,3 +66,31 @@ export function todaysMathMarked(
   const filled = su?.todaysMath?.[which];
   return !!filled && now.score === filled.score && now.max === filled.max;
 }
+
+/** 보고서에 저장되는 시험 글("20문제 중 18개 맞음") → 문항 수 · 맞은 수. 모양이 다르면 null. */
+export function parseTestText(text: string | null | undefined): { max: number; score: number } | null {
+  const m = /(\d+)\s*문제\s*중\s*(\d+)\s*개/.exec(text ?? "");
+  return m ? { max: Number(m[1]), score: Number(m[2]) } : null;
+}
+
+/**
+ * 감사로그용(2026-10-18) — 저장한 일일·확인 칸이 그날 오늘 수학 채점 결과와 **같은 값**인가. 채움 규칙과 같은 짝짓기
+ * (같은 반 우선 · 반 연결 없는 결과는 같은 반 결과가 없을 때만 · 마지막 채점). 같은 값이라는 사실만 말한다 — 선생님이
+ * 같은 값을 직접 쳤을 수도 있다(그래서 '오늘 수학에서 왔다'가 아니라 '같다'로 적는다).
+ */
+export function todaysMathSameOnSave(
+  rows: readonly TodaysMathFillRow[],
+  saved: { studentId: string; classId: string | null; dailyTest?: string | null; checkTest?: string | null },
+): Which[] {
+  const out: Which[] = [];
+  for (const which of ["daily", "check"] as const) {
+    const text = parseTestText(which === "daily" ? saved.dailyTest : saved.checkTest);
+    if (!text) continue;
+    const ofKind = rows.filter((r) => r.student_id === saved.studentId && KIND_TO[r.kind] === which && !r.absent && r.correct_count != null);
+    const sameClass = ofKind.filter((r) => saved.classId != null && r.class_id === saved.classId);
+    const pool = sameClass.length ? sameClass : ofKind.filter((r) => r.class_id == null);
+    const pick = [...pool].sort((a, b) => b.taken_at.localeCompare(a.taken_at))[0];
+    if (pick && pick.correct_count === text.score && pick.question_count === text.max) out.push(which);
+  }
+  return out;
+}

@@ -38,3 +38,16 @@ export function monthlyFromTodaysMath(results: TodaysMathMonthly | null | undefi
   const r = results?.[id];
   return !!r && r.maxScore === gridMax && value.trim() !== "" && Number(value) === r.score;
 }
+
+/** 감사로그용(2026-10-18) — 이번에 저장한 점수 중 같은 달 오늘 수학 월말평가와 **같은 값**(같은 만점)인 칸 수. 같다는 사실만 센다. */
+export function countTodaysMathSame(
+  results: TodaysMathMonthly | null | undefined,
+  saved: readonly { studentId: string; score: number | null }[],
+  gridMax: number,
+): number {
+  if (!results) return 0;
+  return saved.filter((c) => {
+    const r = results[c.studentId];
+    return !!r && c.score != null && r.maxScore === gridMax && r.score === c.score;
+  }).length;
+}
