@@ -4,6 +4,8 @@ const mocks = vi.hoisted(() => ({ target: vi.fn(), binding: vi.fn(), rpc: vi.fn(
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/date-kst", async (original) => ({ ...await original<object>(), kstToday: () => "2026-10-17" }));
 vi.mock("./sync-server", () => ({ sourceBindingForTenant: mocks.binding, targetRequest: mocks.target }));
+// 성적표 첨부(0373a)는 따로 시험한다(exam-report-plan.test.ts) — 여기서는 결과 반영만.
+vi.mock("./exam-report-attach", () => ({ attachTodaysMathExamReports: async () => ({ status: "off", attached: 0, notified: 0, failed: 0 }) }));
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     rpc: mocks.rpc,
@@ -47,7 +49,7 @@ describe("results sync", () => {
   });
 
   it("fetches the changed day with the fixed binding and window, and replaces it through the DB function", async () => {
-    expect(await syncTodaysMathResults()).toEqual([{ tenantId, status: "synced", days: 1, rows: 1 }]);
+    expect(await syncTodaysMathResults()).toMatchObject([{ tenantId, status: "synced", days: 1, rows: 1 }]);
     expect(mocks.target.mock.calls.map((c) => c[1])).toEqual([
       `/api/integrations/eywa/v2/results?bindingId=${bindingId}&from=2026-09-02&to=2026-10-24`,
       `/api/integrations/eywa/v2/results/2026-10-15?bindingId=${bindingId}`,
@@ -65,13 +67,13 @@ describe("results sync", () => {
 
   it("does nothing when the digest is unchanged", async () => {
     mocks.stored = { data: [{ test_date: "2026-10-15", digest: A, row_count: 1 }], error: null };
-    expect(await syncTodaysMathResults()).toEqual([{ tenantId, status: "synced", days: 0, rows: 0 }]);
+    expect(await syncTodaysMathResults()).toMatchObject([{ tenantId, status: "synced", days: 0, rows: 0 }]);
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
 
   it("🔴 an outage or refusal changes nothing (never applies an empty day)", async () => {
     mocks.target.mockRejectedValue(new Error("target_unavailable"));
-    expect(await syncTodaysMathResults()).toEqual([{ tenantId, status: "unavailable", days: 0, rows: 0 }]);
+    expect(await syncTodaysMathResults()).toMatchObject([{ tenantId, status: "unavailable", days: 0, rows: 0 }]);
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
 
@@ -89,13 +91,13 @@ describe("results sync", () => {
       if (path.includes("2026-10-15")) throw new Error("target_unavailable");
       return { bindingId, date: "2026-10-14", sha256: B, rows: [{ ...row, testDate: "2026-10-14" }] };
     });
-    expect(await syncTodaysMathResults()).toEqual([{ tenantId, status: "synced", days: 1, rows: 1 }]);
+    expect(await syncTodaysMathResults()).toMatchObject([{ tenantId, status: "synced", days: 1, rows: 1 }]);
     expect(mocks.rpc).toHaveBeenCalledTimes(1);
   });
 
   it("skips quietly before the SQL is applied, and skips tenants without the license or a binding", async () => {
     mocks.stored = { data: [], error: { code: "PGRST205" } };
-    expect(await syncTodaysMathResults()).toEqual([{ tenantId, status: "not_ready", days: 0, rows: 0 }]);
+    expect(await syncTodaysMathResults()).toMatchObject([{ tenantId, status: "not_ready", days: 0, rows: 0 }]);
     mocks.licenses = [{ tenant_id: tenantId, is_active: false, expires_at: null }];
     expect(await syncTodaysMathResults()).toEqual([]);
     mocks.licenses = [{ tenant_id: tenantId, is_active: true, expires_at: null }];

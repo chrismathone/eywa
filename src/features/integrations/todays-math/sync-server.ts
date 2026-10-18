@@ -90,6 +90,28 @@ export async function targetRequest(config: BindingConfig, path: string, method:
   const raw = await readBoundedBody(response);
   return JSON.parse(raw);
 }
+/** 오늘 수학이 내주는 PDF 한 파일 — 같은 서명 · 고정 주소 · 크기 상한(넘으면 끊는다). 내용 검증(지문 · 서두)은 부르는 쪽. */
+export async function targetRequestPdf(config: BindingConfig, path: string, maxBytes: number): Promise<Buffer> {
+  if (!path.startsWith("/api/integrations/eywa/v2/") || path.startsWith("//")) throw new Error("invalid_target_path");
+  const response = await fetch(new URL(path, config.targetBaseUrl), {
+    method: "GET", headers: signedHeaders(config, "webhook", "GET", path, ""),
+    cache: "no-store", redirect: "error", signal: AbortSignal.timeout(30_000),
+  });
+  if (!response.ok) throw new SyncHttpError(503, "target_unavailable");
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("empty_pdf");
+  const chunks: Uint8Array[] = []; let bytes = 0;
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > maxBytes) { await reader.cancel(); throw new Error("pdf_too_large"); }
+      chunks.push(value);
+    }
+  } finally { reader.releaseLock(); }
+  return Buffer.concat(chunks);
+}
 const claimSchema = z.array(z.object({ event: eventSchema, leaseToken: z.string().uuid(), attempts: z.number().int().nonnegative() }));
 export type DispatchResult = { claimed: number; applied: number; received: number; conflict: number; superseded: number; retry: number; leaseLost: number; receiverSweeps: number; receiverUnavailable: number };
 export async function dispatchSyncEvents(): Promise<DispatchResult> {

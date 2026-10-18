@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({ auth: vi.fn(), optIn: vi.fn(), sync: vi.fn(), 
 vi.mock("server-only", () => ({}));
 vi.mock("next/server", () => ({ after: mocks.after }));
 vi.mock("@/lib/license/server", () => ({ isFeatureOptedIn: mocks.optIn }));
-vi.mock("@/features/integrations/todays-math/results-sync", () => ({ syncTenant: mocks.sync }));
+vi.mock("@/features/integrations/todays-math/results-sync", () => ({ syncTenantWithReports: mocks.sync }));
 vi.mock("@/features/integrations/todays-math/sync-server", async () => {
   class SyncHttpError extends Error { constructor(public status: number, public code: string) { super(code); } }
   return {

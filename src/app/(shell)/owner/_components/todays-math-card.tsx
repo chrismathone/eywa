@@ -13,8 +13,9 @@ import { ToggleField } from "./fields";
 export function TodaysMathCard({ report }: { report: ReportSettings }) {
   const [fill, setFill] = useState(report.todaysMathTestFill);
   const [monthly, setMonthly] = useState(report.todaysMathMonthlyFill);
+  const [pdf, setPdf] = useState(report.todaysMathReportPdf);
   return (
-    <SectionForm section="report" payload={{ ...report, todaysMathTestFill: fill, todaysMathMonthlyFill: monthly }}>
+    <SectionForm section="report" payload={{ ...report, todaysMathTestFill: fill, todaysMathMonthlyFill: monthly, todaysMathReportPdf: pdf }}>
       <div className="grid items-start gap-4 xl:grid-cols-2">
         <SettingsCard
           title="원스크린 시험 칸 채우기"
@@ -27,6 +28,12 @@ export function TodaysMathCard({ report }: { report: ReportSettings }) {
           description="성적관리에서 수학 월말평가를 열면 '오늘 수학 결과 채우기' 단추가 생깁니다. 누르면 같은 달 오늘 수학 월말평가 점수를 빈 칸에만 넣고, 저장은 평소처럼 직접 누릅니다. 만점이 다른 시험은 채우지 않습니다. 개발 중인 기능입니다."
         >
           <ToggleField label="성적관리 월말평가 채우기" hint="끄면 단추가 없습니다" value={monthly} onChange={setMonthly} />
+        </SettingsCard>
+        <SettingsCard
+          title="월말평가 성적표 보고서 첨부"
+          description="오늘 수학에서 확정한 월말평가 성적표(PDF)를 그 학생의 시험일 수학 보고서에 첨부합니다. 아직 보내지 않은 보고서에만 붙고, 이미 보낸 보고서이거나 그날 보고서가 없으면 붙이지 않고 선생님에게 알립니다. 한 시간마다 확인하니 시험일 보고서는 저장한 뒤 조금 기다렸다 보내 주세요. 개발 중인 기능입니다."
+        >
+          <ToggleField label="월말평가 성적표 보고서 첨부" hint="끄면 붙이지 않습니다" value={pdf} onChange={setPdf} />
         </SettingsCard>
       </div>
     </SectionForm>

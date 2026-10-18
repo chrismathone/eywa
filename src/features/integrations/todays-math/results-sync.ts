@@ -6,6 +6,7 @@ import { licenseExplicitlyOn } from "@/lib/license/rule";
 import { uuidSchema, timestampSchema } from "./sync-contract";
 import { sourceBindingForTenant, targetRequest } from "./sync-server";
 import type { BindingConfig } from "./sync-contract";
+import { attachTodaysMathExamReports, type ExamReportAttachResult } from "./exam-report-attach";
 
 /**
  * 오늘 수학 채점 결과 → aywa(`todays_math_test_results`, 0371a) — 역방향 2단계(2026-10-17).
@@ -55,16 +56,34 @@ export function changedResultDays(
   return [...new Set(dates)].sort((a, b) => b.localeCompare(a));
 }
 
-export type ResultsSyncTenant = { tenantId: string; status: "synced" | "not_ready" | "unavailable"; days: number; rows: number };
+export type ResultsSyncTenant = {
+  tenantId: string; status: "synced" | "not_ready" | "unavailable"; days: number; rows: number;
+  /** 결과 반영 뒤 월말평가 성적표 PDF 첨부(0373a) — 꺼졌으면 status "off". */
+  examReports?: ExamReportAttachResult;
+};
+
+/** 결과를 받는 기간 — 오늘(KST) 45일 전 ~ 7일 뒤. 성적표 첨부도 같은 기간만 본다. */
+export function resultsWindow(today = kstToday()): { from: string; to: string } {
+  return { from: addDays(today, -RESULTS_BACK_DAYS), to: addDays(today, RESULTS_AHEAD_DAYS) };
+}
+
+/** 결과 반영 → 성적표 첨부. 첨부가 실패해도 결과 반영 값은 그대로 돌려준다(서로 막지 않는다). cron · 신호가 함께 쓴다. */
+export async function syncTenantWithReports(config: BindingConfig): Promise<ResultsSyncTenant> {
+  const synced = await syncTenant(config);
+  try {
+    return { ...synced, examReports: await attachTodaysMathExamReports(config, resultsWindow()) };
+  } catch (e) {
+    console.error("[todays-math-exam-report] 지점 첨부 실패", config.tenantId, e instanceof Error ? e.message : "unknown");
+    return synced;
+  }
+}
 
 const isMissingTable = (error: { code?: string } | null) => error?.code === "42P01" || error?.code === "PGRST205" || error?.code === "PGRST202";
 
 export async function syncTenant(config: BindingConfig): Promise<ResultsSyncTenant> {
   const admin = createAdminClient();
   const tenantId = config.tenantId;
-  const today = kstToday();
-  const from = addDays(today, -RESULTS_BACK_DAYS);
-  const to = addDays(today, RESULTS_AHEAD_DAYS);
+  const { from, to } = resultsWindow();
   const stored = await admin.from("todays_math_result_days").select("test_date, digest, row_count")
     .eq("tenant_id", tenantId).gte("test_date", from).lte("test_date", to);
   if (isMissingTable(stored.error)) return { tenantId, status: "not_ready", days: 0, rows: 0 };
@@ -105,7 +124,7 @@ export async function syncTodaysMathResults(): Promise<ResultsSyncTenant[]> {
     let config: BindingConfig | undefined;
     try { config = sourceBindingForTenant(tenantId); } catch { config = undefined; }
     if (!config) continue;
-    try { out.push(await syncTenant(config)); }
+    try { out.push(await syncTenantWithReports(config)); }
     catch (e) {
       // 원문(개인정보·키) 없이 까닭 코드만.
       console.error("[todays-math-results] 지점 동기화 실패", tenantId, e instanceof Error ? e.message : "unknown");

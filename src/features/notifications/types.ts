@@ -14,6 +14,8 @@ export type NotificationType =
   | "video_homework_missing"
   | "video_homework_unassigned"
   | "homework_video_upload_failed"
+  // 오늘 수학 월말평가 성적표를 보고서에 못 붙임(보고서 없음 · 이미 보냄 · 첨부 가득) → 그 보고서를 쓴 선생님, 없으면 그 반 담임(0373a).
+  | "todays_math_exam_report"
   | "enrollment_assigned" // 내 반에 학생 배정
   | "enrollment_transferred_in" // 반이동으로 내 반에 전입
   | "teacher_handover" // 강사 인수인계로 내가 새 담임 지정

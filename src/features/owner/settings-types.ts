@@ -506,6 +506,10 @@ export const reportSchema = z.object({
   // 자동 저장이 아니다 — 성적 입력 화면에 '채우기' 단추가 서고, 저장은 선생님이 평소처럼 누른다(저장 단일 경로 writeGradeCells).
   // 소비처 = exams/input/page.tsx → features/grades/server/todays-math-monthly.ts.
   todaysMathMonthlyFill: z.boolean().default(false),
+  // 오늘 수학 월말평가 성적표(확정된 PDF)를 그 학생의 그날 수학 보고서 첨부에 붙이기(2026-10-18 · 개발 중 — 원장 *"오늘 수학에
+  // 완성되면 pdf 첨부하는 방향으로"*). 기본 꺼짐 · 지점 라이선스(todays_math)도 켜져 있어야 동작한다. 안 보낸 보고서에만 붙는다.
+  // 소비처 = integrations/todays-math/exam-report-attach.ts(결과 동기화 뒤 · 0373a).
+  todaysMathReportPdf: z.boolean().default(false),
   // 영상 제출 검사 대상 — 과목·학생 학교급·반 중 하나라도 꺼지면 강사 체크와 관리자 당일 명단에서 제외.
   // 기존 검사 이력은 보존한다. 옛 설정에는 키가 없으므로 전체 사용으로 폴백한다.
   videoHomeworkPolicy: z.object({
