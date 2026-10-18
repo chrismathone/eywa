@@ -66,20 +66,19 @@ export function examReportAttachmentName(testDate: string): string {
 
 /**
  * 알릴 상태 — 같은 상태로는 한 번만. 붙음·처리 중은 알리지 않는다.
+ * 이미 보낸 보고서도 알리지 않는다 — 확정 전에 보낸 것은 선생님이 알고 보낸 것이라 성적표 없이 나간 것으로 끝(원장 2026-10-18).
  * '보고서 없음'은 시험일이 지난 뒤에만 — 채점은 보통 그날 저녁이고 선생님이 아직 보고서를 쓰는 중일 수 있다(그날 붙으면 알릴 일이 없다).
  */
-export function shouldNotify(state: string, notifiedState: string | null, testDate: string, today: string): state is "waiting_report" | "report_sent" | "attach_full" {
+export function shouldNotify(state: string, notifiedState: string | null, testDate: string, today: string): state is "waiting_report" | "attach_full" {
   if (state === "waiting_report" && today <= testDate) return false;
-  return (state === "waiting_report" || state === "report_sent" || state === "attach_full") && state !== notifiedState;
+  return (state === "waiting_report" || state === "attach_full") && state !== notifiedState;
 }
 
-export function examReportNotice(state: "waiting_report" | "report_sent" | "attach_full", studentName: string, testDate: string) {
+export function examReportNotice(state: "waiting_report" | "attach_full", studentName: string, testDate: string) {
   const day = `${Number(testDate.slice(5, 7))}/${Number(testDate.slice(8, 10))}`;
   const who = `${studentName} 학생의 ${day} 월말평가 성적표`;
   const body = state === "waiting_report"
     ? `${who}를 붙일 그날 수학 보고서가 없습니다. 보고서를 보내면 성적표가 함께 붙어 나갑니다.`
-    : state === "report_sent"
-      ? `${who}가 확정됐지만 그날 보고서가 이미 발송돼 붙이지 않았습니다. 필요하면 학부모께 따로 전해 주세요.`
-      : `${who}를 붙이지 못했습니다 — 보고서 첨부가 6개로 가득 찼습니다. 첨부를 하나 지우면 다음 확인 때 붙습니다.`;
+    : `${who}를 붙이지 못했습니다 — 보고서 첨부가 6개로 가득 찼습니다. 첨부를 하나 지우면 다음 확인 때 붙습니다.`;
   return { title: "월말평가 성적표", body };
 }

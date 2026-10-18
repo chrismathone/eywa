@@ -53,11 +53,11 @@ describe("PDF 검사", () => {
 });
 
 describe("알림", () => {
-  it("같은 상태로는 한 번만 · 붙음 · 처리 중은 알리지 않는다", () => {
+  it("같은 상태로는 한 번만 · 붙음 · 이미 보냄 · 처리 중은 알리지 않는다", () => {
     const d = "2026-10-20", next = "2026-10-21";
     expect(shouldNotify("waiting_report", null, d, next)).toBe(true);
     expect(shouldNotify("waiting_report", "waiting_report", d, next)).toBe(false);
-    expect(shouldNotify("report_sent", "waiting_report", d, d)).toBe(true);
+    expect(shouldNotify("report_sent", null, d, next)).toBe(false);
     expect(shouldNotify("attached", null, d, next)).toBe(false);
     expect(shouldNotify("report_busy", null, d, next)).toBe(false);
   });
@@ -66,7 +66,7 @@ describe("알림", () => {
     expect(shouldNotify("attach_full", null, "2026-10-20", "2026-10-20")).toBe(true);
   });
   it("문구는 학생 · 날짜를 말한다", () => {
-    expect(examReportNotice("report_sent", "김하나", "2026-10-05").body).toContain("김하나 학생의 10/5 월말평가 성적표");
+    expect(examReportNotice("attach_full", "김하나", "2026-10-05").body).toContain("김하나 학생의 10/5 월말평가 성적표");
     expect(examReportAttachmentName("2026-09-30")).toBe("월말평가 성적표(9월).pdf");
   });
 });
