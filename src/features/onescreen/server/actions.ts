@@ -213,6 +213,11 @@ export async function saveLessonReport(
   // 대상 날짜 = 고른 날짜 클램프(빈값·미래→KST 오늘). report_date 단일 소스 = 학부모 카드 표시일 = ClassNote 게시일.
   // 수강생 스코프 판정도 이 날짜 기준(과거 마감 시 그날 수강생) — roster·setAttendanceCell과 통일.
   const reportDate = resolveReportDate(input.reportDate);
+  // 감사로그의 오늘 수학 출처 대조는 저장과 **함께** 돌린다(직렬이면 저장 응답이 그만큼 늦다 · 실패해도 빈 배열 — 저장을 막지 않는다).
+  const todaysMathSamePromise = todaysMathSameForReport(user.tenantId, {
+    studentId: input.studentId, classId: input.classId || null, subject: input.subject || null, date: reportDate,
+    dailyTest: input.dailyTest, checkTest: input.checkTest,
+  });
 
   // 강사 스코프: 기본은 '내 담당 반, 대상 날짜 시점 수강생'만. 단 outOfClass(보강·수업외 수동추가)면 같은 학원 학생 전체 허용
   // (원장 승인 정책). RLS가 테넌트 격리 → 학원 밖 학생은 select null로 걸러져 거부됨.
@@ -622,10 +627,7 @@ export async function saveLessonReport(
    *    (같은 보고서 id로 이어 읽힌다 — 발송이 내용까지 바꿨다는 사실이 저장 줄에 남아야 한다).
    */
   // 저장한 일일·확인 칸이 오늘 수학 결과와 같은 값이면 기록에 남긴다(출처 추적 · 채우기 토글이 꺼진 학원은 조회 없음).
-  const todaysMathSame = await todaysMathSameForReport(user.tenantId, {
-    studentId: input.studentId, classId: input.classId || null, subject: input.subject || null, date: reportDate,
-    dailyTest: input.dailyTest, checkTest: input.checkTest,
-  });
+  const todaysMathSame = await todaysMathSamePromise;
   await logAction({
     action: "lesson_report_save",
     targetType: "lesson_report",

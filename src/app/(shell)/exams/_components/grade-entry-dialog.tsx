@@ -12,6 +12,7 @@ import { saveGradeScores } from "@/features/grades/server/actions";
 import { createUnifiedGrade } from "@/features/grades/unified/server/create-action";
 import { loadSchoolRoster, type SchoolRoster } from "@/features/grades/unified/server/entry-actions";
 import { KIND_LABEL, schoolGradeLabel } from "@/features/grades/unified/model";
+import { prefillFromTodaysMath } from "@/features/grades/todays-math-monthly";
 import { EntryGrid, type EntryGridRow, type EntryResult } from "./entry-grid";
 import { SchoolGradeFields } from "./school-grade-fields";
 
@@ -78,7 +79,8 @@ export function GradeEntryDialog({ canWrite, today, subjects, students, classes,
       .map((s) => ({ studentId: s.id, name: s.name, school: s.school, grade: s.grade, className: classNamesOf[`${s.id}|${baseSubject}`] ?? (cls?.studentIds.includes(s.id) ? cls.name : "추가한 학생") }));
   }, [classes, classId, extraIds, byId, classNamesOf, baseSubject]);
   const schoolRows: EntryGridRow[] = (roster?.rows ?? []).map((r) => ({ studentId: r.studentId, name: r.name, school: r.school, grade: r.grade,
-    className: classNamesOf[`${r.studentId}|${baseSubject}`] ?? r.className, existing: r.score, lockedReason: r.withdrawn ? "퇴원" : !r.applies ? "해당 없는 시험" : null }));
+    className: classNamesOf[`${r.studentId}|${baseSubject}`] ?? r.className, existing: r.score, lockedReason: r.withdrawn ? "퇴원" : !r.applies ? "해당 없는 시험" : null,
+    todaysMath: roster?.todaysMath?.[r.studentId]?.maxScore === roster?.selection.maxScore ? roster?.todaysMath?.[r.studentId]?.score ?? null : null }));
   const rows = school ? schoolRows : quickRows;
   const maxNum = school ? roster?.selection.maxScore ?? Number(max) : Number(max);
   const filled = rows.filter((r) => !r.lockedReason && (scores[r.studentId] ?? "") !== "");
@@ -92,7 +94,13 @@ export function GradeEntryDialog({ canWrite, today, subjects, students, classes,
       slot: kind === "monthly" ? "monthly" : slot || schoolSlots[0]?.value });
     if ("error" in res) { setNotice({ ok: false, text: res.error }); return; }
     setRoster(res.roster);
-    setScores(Object.fromEntries(res.roster.rows.filter((r) => r.score != null).map((r) => [r.studentId, String(r.score)])));
+    // 오늘 수학 월말평가가 있으면 빈 칸에 바로 채운다(단추 없음 · 저장은 사람이) — 만점이 다르면 채우지 않고 알린다.
+    const pre = prefillFromTodaysMath(res.roster.ready ? res.roster.todaysMath : null, res.roster.rows,
+      Object.fromEntries(res.roster.rows.filter((r) => r.score != null).map((r) => [r.studentId, String(r.score)])), res.roster.selection.maxScore);
+    setScores(pre.scores);
+    const filledN = Object.keys(pre.fill).length;
+    if (filledN || pre.maxMismatch) setNotice({ ok: true, text: [filledN ? `오늘 수학 월말평가 ${filledN}명을 빈 칸에 채웠습니다 · 확인 후 저장하세요` : "",
+      pre.maxMismatch ? `만점이 달라 못 채운 ${pre.maxMismatch}명(오늘 수학 ${pre.otherMax ?? "?"}점 만점)` : ""].filter(Boolean).join(" · ") });
   });
 
   const save = () => start(async () => {

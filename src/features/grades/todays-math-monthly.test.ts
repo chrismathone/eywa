@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countTodaysMathSame, monthlyFromTodaysMath, planMonthlyFill, type TodaysMathMonthly } from "./todays-math-monthly";
+import { countTodaysMathSame, monthlyFromTodaysMath, planMonthlyFill, prefillFromTodaysMath, type TodaysMathMonthly } from "./todays-math-monthly";
 
 const r = (score: number, maxScore: number | null = 100) => ({ score, maxScore, testDate: "2026-10-28", title: "10월 월말평가" });
 
@@ -36,5 +36,22 @@ describe("감사로그 출처 표시 — 오늘 수학과 같은 값 (2026-10-18
       { studentId: "d", score: 60 }, { studentId: "a", score: null },
     ], 100)).toBe(1);
     expect(countTodaysMathSame(null, [{ studentId: "a", score: 84 }], 100)).toBe(0);
+  });
+});
+
+describe("성적 입력 창 자동 채움 (2026-10-18)", () => {
+  it("fills empty applicable cells at the same full mark; keeps typed, withdrawn, non-applying and noExam rows", () => {
+    const results: TodaysMathMonthly = { a: r(84), b: r(90), c: r(70), d: r(60), e: r(80, 88), f: r(77) };
+    const row = (studentId: string, over: Partial<{ applies: boolean; withdrawn: boolean; noExam: boolean }> = {}) =>
+      ({ studentId, applies: true, withdrawn: false, noExam: false, ...over });
+    const out = prefillFromTodaysMath(results,
+      [row("a"), row("b"), row("c", { withdrawn: true }), row("d", { applies: false }), row("e"), row("f", { noExam: true })],
+      { b: "70" }, 100);
+    expect(out.scores).toEqual({ a: "84", b: "70" });
+    expect(out.maxMismatch).toBe(1);
+    expect(out.otherMax).toBe(88);
+  });
+  it("no results → scores untouched", () => {
+    expect(prefillFromTodaysMath(null, [], { x: "1" }, 100)).toEqual({ fill: {}, maxMismatch: 0, otherMax: null, scores: { x: "1" } });
   });
 });

@@ -10,6 +10,7 @@ import { examInfoOf } from "@/features/grades/unified/ledger-view";
 import { GoalBadge } from "@/features/grades/components/goal-badge";
 import type { GoalView } from "@/features/grades/goals";
 import { DeltaBadge, KindPill, ScoreLine } from "./tab-parts";
+import { TodaysMathChip } from "./todays-math-chip";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { SUBJECT_SOFT } from "@/features/owner/subjects";
 
@@ -23,7 +24,7 @@ const BTN = "border-line hover:bg-bg-soft rounded-md border px-2 py-1 text-sm fo
  * 🔴 저장 요청은 **이 줄의 state로 직접** 만든다. 옛 줄은 입력칸을 `form=` 속성으로 숨은 폼에 묶었는데,
  *    날짜 칸이 요청에 실리지 않아 DB엔 멀쩡한 날짜가 있는데도 "시험일을 확인해 주세요"가 떴다(원장 제보 2026-09-23).
  */
-function LedgerRow({ row, canWrite, goal }: { row: UnifiedRow; canWrite: boolean; goal?: GoalView }) {
+function LedgerRow({ row, canWrite, goal, todaysMath }: { row: UnifiedRow; canWrite: boolean; goal?: GoalView; todaysMath?: boolean }) {
   const initialConsult = row.consultationDate ?? row.manualConsultationDate ?? "";
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -70,7 +71,8 @@ function LedgerRow({ row, canWrite, goal }: { row: UnifiedRow; canWrite: boolean
       <td className="max-w-0 px-2 py-2" title={classNames}><span className="block truncate">{classNames || "—"}</span></td>
       <td className="max-w-0 px-2 py-2 text-center" title={teacherNames}><span className="block truncate">{teacherNames || "—"}</span></td>
       <td className="px-2 py-2 text-center"><KindPill kind={row.kind} /></td>
-      <td className="px-2 py-2 text-center text-sm">{examInfoOf(row) ?? <span className="text-text-dim">—</span>}</td>
+      <td className="px-2 py-2 text-center text-sm">{todaysMath ? <span className="inline-flex flex-wrap items-center justify-center gap-1">{examInfoOf(row)}<TodaysMathChip /></span>
+        : examInfoOf(row) ?? <span className="text-text-dim">—</span>}</td>
       <td className="px-2 py-2 text-left">
         {editing ? <div className="flex items-center gap-1">
           <input type="number" min="0" step="0.01" value={score} onChange={(e) => setScore(e.target.value)} placeholder="점수" aria-label={`${row.name} 점수`} className={`${INPUT} w-16`} />
@@ -109,11 +111,14 @@ function LedgerRow({ row, canWrite, goal }: { row: UnifiedRow; canWrite: boolean
   );
 }
 
-export function UnifiedLedger({ rows, canWrite, head, goals = {} }: {
+export function UnifiedLedger({ rows, canWrite, head, goals = {}, todaysMathKeys = [] }: {
   rows: UnifiedRow[]; canWrite: boolean; head: ReactNode;
+  /** 오늘 수학 채점 결과와 같은 값인 줄 key(서버 `loadTodaysMathMarks`) — 시험정보에 '오늘 수학' 표시. */
+  todaysMathKeys?: string[];
   /** 줄 key → 시험 목표 대비(서버 `goalViewsForRows`). 목표가 없는 줄은 비어 있다. */
   goals?: Record<string, GoalView>;
 }) {
+  const marked = new Set(todaysMathKeys);
   return (
     // 열 머리 필터 팝업이 짧은 표에서 잘리지 않게 최소 높이를 둔다(overflow 컨테이너 안 absolute 팝업 — header-filter 주석).
     <div className="bg-card shadow-card min-h-[26rem] overflow-x-auto rounded-2xl">
@@ -124,7 +129,7 @@ export function UnifiedLedger({ rows, canWrite, head, goals = {} }: {
           <col className="w-[7.5rem]" /><col className="w-[8.5rem]" />
         </colgroup>
         {head}
-        <tbody>{rows.map((row) => <LedgerRow key={row.key} row={row} canWrite={canWrite} goal={goals[row.key]} />)}</tbody>
+        <tbody>{rows.map((row) => <LedgerRow key={row.key} row={row} canWrite={canWrite} goal={goals[row.key]} todaysMath={marked.has(row.key)} />)}</tbody>
       </table>
       {rows.length === 0 ? <p className="text-text-dim p-8 text-center text-sm"><SheetText value={"조건에 맞는 성적 기록이 없습니다. 필터나 검색어를 바꿔 보세요."} /></p> : null}
     </div>

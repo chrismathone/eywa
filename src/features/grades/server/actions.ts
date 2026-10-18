@@ -168,6 +168,10 @@ export async function saveGradeScores(
 
   if (changed.length === 0) return { ok: true, saved: 0, cleared: 0 };
 
+  // 점수가 실제로 바뀐 칸만 — 표식만 바뀐 줄은 옛 점수를 그대로 싣고 있어 세면 안 된다.
+  const scoreWritten = changed.filter((c) => c.score != null && c.score !== rowByStudent.get(c.studentId)?.score);
+  // 감사로그의 오늘 수학 출처 대조 — 쓰기와 함께 돌린다(직렬 대기 없음 · 로더는 실패해도 null).
+  const todaysMathPromise = loadTodaysMathMonthly(sel, scoreWritten.map((c) => c.studentId));
   let result: { saved: number; cleared: number };
   try {
     result = await writeGradeCells(
@@ -190,11 +194,9 @@ export async function saveGradeScores(
     return { error: "성적을 저장하지 못했습니다" };
   }
 
-  // 점수가 실제로 바뀐 칸만 — 표식만 바뀐 줄은 옛 점수를 그대로 싣고 있어 세면 안 된다.
-  const scoreWritten = changed.filter((c) => c.score != null && c.score !== rowByStudent.get(c.studentId)?.score);
   // 저장한 점수 중 오늘 수학 월말평가와 같은 값(출처 추적). 수학 · 월말평가 · 토글 ∧ 라이선스일 때만 조회(로더가 판정 · 실패 = 0).
   const todaysMathSame = countTodaysMathSame(
-    await loadTodaysMathMonthly(sel, scoreWritten.map((c) => c.studentId)),
+    await todaysMathPromise,
     scoreWritten,
     sel.maxScore,
   );

@@ -6,6 +6,7 @@ import { applyLedgerView, ledgerOptions, parseLedgerView } from "@/features/grad
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { getUnifiedGrades } from "@/features/grades/unified/server/queries";
+import { loadTodaysMathMarks } from "@/features/grades/unified/server/todays-math-marks";
 import { aggregateBy, KIND_LABEL, withPreviousScores, type UnifiedRow } from "@/features/grades/unified/model";
 import { kstToday } from "@/lib/date-kst";
 import { goalViewsForRows } from "@/features/grades/server/goals";
@@ -124,9 +125,11 @@ export async function UnifiedDashboard({ searchParams }: { searchParams: Params 
   // 시험 목표 대비(원장 2026-09-24, codex 합의) — 화면에 서는 줄만 붙인다(성적 현황 한 쪽 · 고른 학생). 판정은 원생 상세와 같은 함수.
   const pageRows = tab === "records" ? ledgerRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE) : [];
   const studentRows = tab === "student" && selectedStudent ? rows.filter((row) => row.studentId === selectedStudent.studentId) : [];
-  const [goalViews, studentGoals] = await Promise.all([
+  const [goalViews, studentGoals, todaysMathKeys] = await Promise.all([
     goalViewsForRows([...pageRows, ...studentRows]),
     selectedStudent && tab === "student" ? getStudentGradeGoals(selectedStudent.studentId) : Promise.resolve([]),
+    // '시험정보'의 오늘 수학 표시 — 화면에 선 줄만(라이선스 ∧ 채우기 토글 · 실패 = 표시 없음).
+    loadTodaysMathMarks(pageRows),
   ]);
   const dayHref = Object.fromEntries(calendarItems.map((item) => [item.date, href({ tab: "records", from: item.date, to: item.date, kind: "all", page: "1" })]));
 
@@ -143,7 +146,7 @@ export async function UnifiedDashboard({ searchParams }: { searchParams: Params 
 
     {tab === "records" ? <div className="space-y-3">
       <RecordsPager page={page} pageSize={PAGE_SIZE} total={ledgerRows.length} href={ledgerHref} note={showMissing ? "미입력 포함" : undefined} />
-      <UnifiedLedger rows={pageRows} canWrite={!writeError} goals={goalViews}
+      <UnifiedLedger rows={pageRows} canWrite={!writeError} goals={goalViews} todaysMathKeys={todaysMathKeys}
         head={<LedgerHead view={ledgerView} href={ledgerHref} options={ledgerOptions(rows)} subject={subject} subjects={subjectOptions} />} />
       {writeError ? <p className="text-danger text-sm">{writeError}</p> : null}
       <RecordsPager page={page} pageSize={PAGE_SIZE} total={ledgerRows.length} href={ledgerHref} note="수업보고서 테스트일은 보고서 날짜와 연결됩니다" />

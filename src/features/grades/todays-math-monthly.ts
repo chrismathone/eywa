@@ -33,6 +33,23 @@ export function planMonthlyFill(
   return { fill, maxMismatch, otherMax };
 }
 
+/**
+ * 성적 입력 창: 명단을 불러오면 **단추 없이** 빈 칸에 오늘 수학 월말평가를 채운다(원장 2026-10-18 *"따로 불러오지 않더라도
+ * 오늘 수학이 연동된 학생들의 점수는 자동으로 불러와져야"* · *"모든 배선이 on 상태라면"*). 규칙은 `planMonthlyFill` 그대로 —
+ * 빈 칸만 · 만점이 같을 때만. 저장은 선생님이 누른다(자동 저장 아님).
+ */
+export function prefillFromTodaysMath(
+  results: TodaysMathMonthly | null | undefined,
+  rows: readonly { studentId: string; applies: boolean; withdrawn: boolean; noExam: boolean }[],
+  scores: Record<string, string>,
+  gridMax: number,
+): MonthlyFillPlan & { scores: Record<string, string> } {
+  if (!results) return { fill: {}, maxMismatch: 0, otherMax: null, scores };
+  const plan = planMonthlyFill(results, rows.map((r) => ({ studentId: r.studentId, applies: r.applies && !r.withdrawn })),
+    { scores, noExam: Object.fromEntries(rows.map((r) => [r.studentId, r.noExam])) }, gridMax);
+  return { ...plan, scores: { ...scores, ...plan.fill } };
+}
+
 /** 이 칸의 지금 값이 오늘 수학 결과 그대로인가 — '오늘 수학' 표시 전용(고치면 사라진다). */
 export function monthlyFromTodaysMath(results: TodaysMathMonthly | null | undefined, id: string, value: string, gridMax: number): boolean {
   const r = results?.[id];

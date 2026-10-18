@@ -16,14 +16,15 @@ import type { TodaysMathMonthly } from "../todays-math-monthly";
  */
 export async function loadTodaysMathMonthly(sel: GradeSelection, studentIds: string[]): Promise<TodaysMathMonthly | null> {
   if (sel.subject !== "math" || sel.slot !== "monthly" || studentIds.length === 0) return null;
-  const user = await getCurrentUser({ teacherView: true });
-  if (!user) return null;
-  const [settings, licensed] = await Promise.all([getTenantSettings(), isFeatureOptedIn(user.tenantId, "todays_math")]);
-  if (!settings.report.todaysMathMonthlyFill || !licensed) return null;
-  const month = sel.date.slice(0, 7);
-  const [y, m] = month.split("-").map(Number);
-  const last = new Date(Date.UTC(y!, m!, 0)).getUTCDate();
+  // 🔴 본문 전체를 감싼다 — 저장 액션이 이 약속을 쓰기와 함께 띄워 두므로, 어디서든 던지면 처리 안 된 거부가 된다.
   try {
+    const user = await getCurrentUser({ teacherView: true });
+    if (!user) return null;
+    const [settings, licensed] = await Promise.all([getTenantSettings(), isFeatureOptedIn(user.tenantId, "todays_math")]);
+    if (!settings.report.todaysMathMonthlyFill || !licensed) return null;
+    const month = sel.date.slice(0, 7);
+    const [y, m] = month.split("-").map(Number);
+    const last = new Date(Date.UTC(y!, m!, 0)).getUTCDate();
     const rows = await fetchInChunks<{ student_id: string; score: number | string; max_score: number | string | null; test_date: string; taken_at: string; title: string | null }>(
       [...new Set(studentIds)],
       (chunk) =>
