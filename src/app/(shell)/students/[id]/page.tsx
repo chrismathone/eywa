@@ -32,6 +32,7 @@ import { BillingTab } from "./_tabs/billing-tab";
 import { GradesTab } from "./_tabs/grades-tab";
 import { SrsTab } from "./_tabs/srs-tab";
 import { TodaysMathTab } from "./_tabs/todays-math-tab";
+import { getMathEnrollmentSummary } from "@/features/integrations/todays-math/student-status";
 import { isFeatureOptedIn } from "@/lib/license/server";
 import { ijwConfigFor } from "@/features/ijw/server/client";
 import { getJjAccess, hasIjwLink } from "@/features/ijw/server/queries";
@@ -99,7 +100,9 @@ export default async function StudentDetailPage({
   // 되돌린다(화면에서 감추는 것만으로는 게이트가 아니다, [[#77]]). 인재원을 부르지 않는 가벼운 판정이다.
   const jjAccess = await getJjAccess();
   const showSrs = !!jjAccess && !!ijwConfigFor(jjAccess.tenantId) && (await hasIjwLink(jjAccess.tenantId, id));
-  const showTodaysMath = await isFeatureOptedIn(user.tenantId, "todays_math");
+  // 오늘 수학 탭 = 지점 라이선스 + 수학 반을 다닌 적 있는 학생만(영어만 다니면 연결될 일이 없다 · 2026-10-18).
+  const mathEnrollment = (await isFeatureOptedIn(user.tenantId, "todays_math")) ? await getMathEnrollmentSummary(id) : undefined;
+  const showTodaysMath = mathEnrollment !== undefined && (mathEnrollment === null || mathEnrollment.ever);
   const tab =
     requestedTab === "billing" && !canSeeBilling
       ? "overview"
@@ -301,7 +304,7 @@ export default async function StudentDetailPage({
         ) : tab === "srs" ? (
           <SrsTab studentId={student.id} jjFrom={jjFrom} jjTo={jjTo} />
         ) : tab === "todays-math" ? (
-          <TodaysMathTab studentId={student.id} />
+          <TodaysMathTab studentId={student.id} aywaMathClasses={mathEnrollment?.current ?? null} />
         ) : tab === "progress" ? (
           <ProgressTab
             studentId={student.id}

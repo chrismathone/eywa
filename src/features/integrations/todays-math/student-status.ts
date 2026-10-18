@@ -3,6 +3,9 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { isFeatureOptedIn } from "@/lib/license/server";
 import { getStudentById } from "@/features/students/server/queries";
+import { createClient } from "@/lib/supabase/server";
+import { kstToday } from "@/lib/date-kst";
+import { isEnrollmentOnRosterOn } from "@/features/enrollments/eligibility";
 import { timestampSchema, uuidSchema } from "./sync-contract";
 import { sourceBindingForTenant, targetRequest } from "./sync-server";
 
@@ -56,10 +59,54 @@ export const studentMathStatusSchema = z.object({
   recentTests: z.array(recentTestSchema).max(50).optional(),
   // 옛 배포면 undefined — '미발급'으로 채우지 않는다(모르는 것을 없다고 말하게 된다).
   account: accountSchema.nullable().optional(),
+  // 오늘 수학 동기화가 이 학생을 수학에서 내보낸 시각(퇴원 · 수학 반을 다 그만둠). 옛 배포면 undefined.
+  withdrawnAt: timestampSchema.nullable().optional(),
+  // false = 오늘 수학 쪽 연결 자체가 지금 안 된다(학생 연결 여부를 말할 수 없다). 옛 배포면 undefined.
+  available: z.boolean().optional(),
   lastActivityAt: timestampSchema.nullable(),
 });
 export type StudentMathStatus = z.infer<typeof studentMathStatusSchema>;
 export type StudentMathStatusResult = { status: "ready"; data: StudentMathStatus } | { status: "hidden" | "not_configured" | "unavailable" };
+
+export type MathEnrollmentSummary = {
+  /** 수학 반을 한 번이라도 다녔나 — 탭을 세울지(영어만 다니면 연결될 일이 없다 · 원장 2026-10-18) */
+  ever: boolean;
+  /** aywa에서 지금 다니는 수학 반 이름 — 오늘 수학 명단에 설 조건(수강 · 반 활성 · 퇴원 · 테스트 학생). 반이 없는 이유를 가른다 */
+  current: string[];
+};
+
+/**
+ * 이 학생의 aywa 수학 수강 요약. 지난 수학 수강도 센다 — 그만둔 학생도 오늘 수학 기록이 남아 있다.
+ * 표시용 판정이라 조회가 실패하면 null(탭은 세우고, 탭 안은 이유를 단정하지 않는다).
+ */
+export async function getMathEnrollmentSummary(studentId: string): Promise<MathEnrollmentSummary | null> {
+  const supabase = await createClient();
+  const [{ data, error }, { data: student, error: studentError }] = await Promise.all([
+    supabase
+      .from("enrollments")
+      .select("start_date, end_date, is_transferred, class:class_id!inner(class_name, subject, is_active, closed_at)")
+      .eq("student_id", studentId)
+      .eq("class.subject", "math")
+      .limit(200),
+    supabase.from("students").select("status, is_test, withdrawn_at").eq("id", studentId).maybeSingle(),
+  ]);
+  if (error || studentError) {
+    console.error("[todays-math] math enrollment check failed", (error ?? studentError)?.code);
+    return null;
+  }
+  const today = kstToday();
+  const current = new Set<string>();
+  // 오늘 수학 명단(동기화 스냅숏)은 퇴원(퇴원일 당일부터)·테스트 학생을 뺀다 — 여기서도 '지금 반 없음'으로 본다.
+  // 안 그러면 퇴원 당일 내내 "동기화 오류일 수 있어요"가 뜬다(퇴원일까지 수강이 열려 있다).
+  const outOfRoster = !student || student.is_test === true || student.status === "withdrawn"
+    || (typeof student.withdrawn_at === "string" && student.withdrawn_at.slice(0, 10) <= today);
+  for (const row of outOfRoster ? [] : data ?? []) {
+    const cls = Array.isArray(row.class) ? row.class[0] : row.class;
+    if (!cls?.class_name || !cls.is_active || cls.closed_at || !row.start_date) continue;
+    if (isEnrollmentOnRosterOn({ startDate: row.start_date, endDate: row.end_date, isTransferred: row.is_transferred === true }, today)) current.add(cls.class_name);
+  }
+  return { ever: (data ?? []).length > 0, current: [...current] };
+}
 
 /** The same scoped student lookup as the parent page; never bypass it with service_role. */
 export async function getStudentMathStatus(studentId: string): Promise<StudentMathStatusResult> {
