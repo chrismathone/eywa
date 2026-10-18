@@ -25,7 +25,7 @@ async function StudentMathContent({ studentId, aywaMathClasses }: { studentId: s
   if (!data.linked) {
     return <section className="rounded-xl border p-5">
       <h3 className="text-sm font-semibold"><SheetText value={"오늘 수학에 연결되지 않은 학생이에요"} /></h3>
-      <TodaysMathClassGap gap={classGap({ linked: false, withdrawnAt: null, aywaMathClasses })} pastClasses={[]} />
+      <TodaysMathClassGap gap={classGap(aywaMathClasses)} />
     </section>;
   }
   const activeClasses = data.classes.filter((item) => item.active);
@@ -44,8 +44,7 @@ async function StudentMathContent({ studentId, aywaMathClasses }: { studentId: s
     <section className="bg-card border-line rounded-xl border p-5">
       <h3 className="text-sm font-semibold"><SheetText value={"오늘 수학 수강 반"} /></h3>
       {activeClasses.length ? <ul className="mt-3 space-y-2 text-sm">{activeClasses.map((item) => <li key={item.sourceClassId}>{item.name}</li>)}</ul>
-        : <TodaysMathClassGap gap={classGap({ linked: true, withdrawnAt: data.withdrawnAt, aywaMathClasses })}
-          pastClasses={data.classes.map((item) => item.name)} />}
+        : <TodaysMathClassGap gap={classGap(aywaMathClasses)} />}
       <p className="text-text-dim mt-4 text-xs"><SheetText value={"최근 학습: "} />{data.lastActivityAt
         ? new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "medium", timeStyle: "short" }).format(new Date(data.lastActivityAt))
         : "아직 기록이 없어요"}</p>

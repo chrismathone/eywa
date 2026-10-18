@@ -22,7 +22,7 @@ vi.mock("@/lib/supabase/server", () => ({
     return { from: (...a: unknown[]) => { enrollQuery.calls.push(["from", ...a]); return chain; } };
   },
 }));
-import { accountStateLabel, getStudentMathStatus, getMathEnrollmentSummary, recentTestKindLabel } from "./student-status";
+import { accountStateLabel, getStudentMathStatus, getCurrentMathClasses, recentTestKindLabel } from "./student-status";
 const studentId = "00000000-0000-4000-8000-000000000001";
 const bindingId = "00000000-0000-4000-8000-000000000002";
 beforeEach(() => {
@@ -105,13 +105,13 @@ describe("student login account from Today Math (read-only, 2026-10-18)", () => 
     expect(future.status === "ready" && accountStateLabel(future.data.account ?? null)).toBe("확인 필요");
   });
 });
-describe("aywa math enrollment summary for the tab (2026-10-18)", () => {
+describe("current math classes gate the tab (지금 수학 재원생만 · 2026-10-18)", () => {
   const cls = (over: object = {}) => ({ class_name: "중2A", subject: "math", is_active: true, closed_at: null, ...over });
-  it("English-only → never; past math → ever but not current; current class named; lookup failure → null", async () => {
+  it("English-only or past math only → no current class (no tab); current class named; lookup failure → null", async () => {
     vi.useFakeTimers(); vi.setSystemTime(new Date("2026-10-18T03:00:00Z"));
     enrollQuery.calls = [];
     enrollQuery.result = { data: [], error: null };
-    expect(await getMathEnrollmentSummary(studentId)).toEqual({ ever: false, current: [] });
+    expect(await getCurrentMathClasses(studentId)).toEqual([]);
     expect(enrollQuery.calls).toContainEqual(["eq", "class.subject", "math"]);
     expect(enrollQuery.calls).toContainEqual(["eq", "student_id", studentId]);
     enrollQuery.result = { data: [
@@ -119,9 +119,9 @@ describe("aywa math enrollment summary for the tab (2026-10-18)", () => {
       { start_date: "2026-11-01", end_date: null, is_transferred: false, class: cls({ class_name: "다음달반" }) },
       { start_date: "2026-09-01", end_date: null, is_transferred: false, class: cls({ class_name: "닫힌반", is_active: false }) },
     ], error: null };
-    expect(await getMathEnrollmentSummary(studentId)).toEqual({ ever: true, current: [] });
+    expect(await getCurrentMathClasses(studentId)).toEqual([]);
     enrollQuery.result = { data: [{ start_date: "2026-09-01", end_date: null, is_transferred: false, class: cls() }], error: null };
-    expect(await getMathEnrollmentSummary(studentId)).toEqual({ ever: true, current: ["중2A"] });
+    expect(await getCurrentMathClasses(studentId)).toEqual(["중2A"]);
     // 오늘 수학 명단처럼: 퇴원일 당일(수강은 아직 열림)·상태 퇴원·테스트 학생은 '지금 반 없음'
     for (const st of [
       { status: "enrolled", is_test: false, withdrawn_at: "2026-10-18" },
@@ -129,22 +129,21 @@ describe("aywa math enrollment summary for the tab (2026-10-18)", () => {
       { status: "enrolled", is_test: true, withdrawn_at: null },
     ]) {
       enrollQuery.student = { data: st, error: null };
-      expect(await getMathEnrollmentSummary(studentId)).toEqual({ ever: true, current: [] });
+      expect(await getCurrentMathClasses(studentId)).toEqual([]);
     }
     enrollQuery.student = { data: { status: "enrolled", is_test: false, withdrawn_at: "2026-10-19" }, error: null };
-    expect(await getMathEnrollmentSummary(studentId)).toEqual({ ever: true, current: ["중2A"] });
+    expect(await getCurrentMathClasses(studentId)).toEqual(["중2A"]);
     vi.spyOn(console, "error").mockImplementation(() => {});
     enrollQuery.result = { data: null, error: { code: "57014" } };
-    expect(await getMathEnrollmentSummary(studentId)).toBeNull();
+    expect(await getCurrentMathClasses(studentId)).toBeNull();
     enrollQuery.result = { data: [], error: null };
     enrollQuery.student = { data: null, error: { code: "57014" } };
-    expect(await getMathEnrollmentSummary(studentId)).toBeNull();
+    expect(await getCurrentMathClasses(studentId)).toBeNull();
     enrollQuery.student = { data: { status: "enrolled", is_test: false, withdrawn_at: null }, error: null };
     vi.useRealTimers();
   });
-  it("an older Today Math deploy without withdrawnAt still loads", async () => {
+  it("an older Today Math deploy without `available` still loads", async () => {
     const result = await getStudentMathStatus(studentId);
-    expect(result.status === "ready" && result.data.withdrawnAt).toBeUndefined();
     expect(result.status === "ready" && result.data.available).toBeUndefined();
   });
 });
