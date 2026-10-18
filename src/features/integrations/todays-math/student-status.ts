@@ -71,7 +71,13 @@ export type StudentMathStatusResult = { status: "ready"; data: StudentMathStatus
  * 오늘 수학 탭은 지금 수학 재원생에게만 연다(원장 2026-10-18 *"지난 수강건은 필요가 없음. 오늘 수학은 현재 수학
  * 재원생에게만 오픈"*) — 빈 배열이면 탭이 없다. 표시용 판정이라 조회가 실패하면 null(탭은 세우고 까닭을 단정하지 않는다).
  */
-export async function getCurrentMathClasses(studentId: string): Promise<string[] | null> {
+export type CurrentMathClasses = {
+  classes: string[];
+  /** 테스트 학생 — 오늘 수학 명단 동기화에서 빠진다. 지금 수학 반이 있으면 탭은 세우되(기능 시험용) '반영 대기'로 말하지 않는다. */
+  isTest: boolean;
+};
+
+export async function getCurrentMathClasses(studentId: string): Promise<CurrentMathClasses | null> {
   const supabase = await createClient();
   const [{ data, error }, { data: student, error: studentError }] = await Promise.all([
     supabase
@@ -88,16 +94,17 @@ export async function getCurrentMathClasses(studentId: string): Promise<string[]
   }
   const today = kstToday();
   const current = new Set<string>();
-  // 오늘 수학 명단(동기화 스냅숏)은 퇴원(퇴원일 당일부터)·테스트 학생을 뺀다 — 여기서도 '지금 반 없음'으로 본다.
+  // 오늘 수학 명단(동기화 스냅숏)은 퇴원(퇴원일 당일부터)을 뺀다 — 여기서도 '지금 반 없음'으로 본다.
   // 안 그러면 퇴원 당일 내내 "동기화 오류일 수 있어요"가 뜬다(퇴원일까지 수강이 열려 있다).
-  const outOfRoster = !student || student.is_test === true || student.status === "withdrawn"
+  // 테스트 학생은 반을 세되 isTest로 따로 알린다(원장 2026-10-18 *"만든 모든 기능을 테스트 할 수 있게"*).
+  const outOfRoster = !student || student.status === "withdrawn"
     || (typeof student.withdrawn_at === "string" && student.withdrawn_at.slice(0, 10) <= today);
   for (const row of outOfRoster ? [] : data ?? []) {
     const cls = Array.isArray(row.class) ? row.class[0] : row.class;
     if (!cls?.class_name || !cls.is_active || cls.closed_at || !row.start_date) continue;
     if (isEnrollmentOnRosterOn({ startDate: row.start_date, endDate: row.end_date, isTransferred: row.is_transferred === true }, today)) current.add(cls.class_name);
   }
-  return [...current];
+  return { classes: [...current], isTest: student?.is_test === true };
 }
 
 /** The same scoped student lookup as the parent page; never bypass it with service_role. */

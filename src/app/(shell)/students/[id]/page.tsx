@@ -102,7 +102,7 @@ export default async function StudentDetailPage({
   const showSrs = !!jjAccess && !!ijwConfigFor(jjAccess.tenantId) && (await hasIjwLink(jjAccess.tenantId, id));
   // 오늘 수학 탭 = 지점 라이선스 + 지금 수학 반을 다니는 학생만(원장 2026-10-18 — 지난 수강·영어만 다니는 학생은 탭 없음).
   const mathClasses = (await isFeatureOptedIn(user.tenantId, "todays_math")) ? await getCurrentMathClasses(id) : undefined;
-  const showTodaysMath = mathClasses !== undefined && (mathClasses === null || mathClasses.length > 0);
+  const showTodaysMath = mathClasses !== undefined && (mathClasses === null || mathClasses.classes.length > 0);
   const tab =
     requestedTab === "billing" && !canSeeBilling
       ? "overview"
@@ -304,7 +304,7 @@ export default async function StudentDetailPage({
         ) : tab === "srs" ? (
           <SrsTab studentId={student.id} jjFrom={jjFrom} jjTo={jjTo} />
         ) : tab === "todays-math" ? (
-          <TodaysMathTab studentId={student.id} aywaMathClasses={mathClasses ?? null} />
+          <TodaysMathTab studentId={student.id} aywaMathClasses={mathClasses?.classes ?? null} isTestStudent={mathClasses?.isTest ?? false} />
         ) : tab === "progress" ? (
           <ProgressTab
             studentId={student.id}

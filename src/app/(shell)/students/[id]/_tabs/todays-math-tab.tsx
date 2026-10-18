@@ -7,7 +7,7 @@ import { TodaysMathAccountCard } from "./todays-math-account";
 import { TodaysMathClassGap } from "./todays-math-class-gap";
 import { classGap } from "@/features/integrations/todays-math/class-gap";
 
-async function StudentMathContent({ studentId, aywaMathClasses }: { studentId: string; aywaMathClasses: string[] | null }) {
+async function StudentMathContent({ studentId, aywaMathClasses, isTestStudent }: { studentId: string; aywaMathClasses: string[] | null; isTestStudent: boolean }) {
   const result = await getStudentMathStatus(studentId);
   if (result.status === "hidden") return null;
   if (result.status !== "ready") {
@@ -25,7 +25,7 @@ async function StudentMathContent({ studentId, aywaMathClasses }: { studentId: s
   if (!data.linked) {
     return <section className="rounded-xl border p-5">
       <h3 className="text-sm font-semibold"><SheetText value={"오늘 수학에 연결되지 않은 학생이에요"} /></h3>
-      <TodaysMathClassGap gap={classGap(aywaMathClasses)} />
+      <TodaysMathClassGap gap={classGap(aywaMathClasses, isTestStudent)} />
     </section>;
   }
   const activeClasses = data.classes.filter((item) => item.active);
@@ -44,7 +44,7 @@ async function StudentMathContent({ studentId, aywaMathClasses }: { studentId: s
     <section className="bg-card border-line rounded-xl border p-5">
       <h3 className="text-sm font-semibold"><SheetText value={"오늘 수학 수강 반"} /></h3>
       {activeClasses.length ? <ul className="mt-3 space-y-2 text-sm">{activeClasses.map((item) => <li key={item.sourceClassId}>{item.name}</li>)}</ul>
-        : <TodaysMathClassGap gap={classGap(aywaMathClasses)} />}
+        : <TodaysMathClassGap gap={classGap(aywaMathClasses, isTestStudent)} />}
       <p className="text-text-dim mt-4 text-xs"><SheetText value={"최근 학습: "} />{data.lastActivityAt
         ? new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "medium", timeStyle: "short" }).format(new Date(data.lastActivityAt))
         : "아직 기록이 없어요"}</p>
@@ -52,11 +52,11 @@ async function StudentMathContent({ studentId, aywaMathClasses }: { studentId: s
   </div>;
 }
 
-export function TodaysMathTab({ studentId, aywaMathClasses }: { studentId: string; aywaMathClasses: string[] | null }) {
+export function TodaysMathTab({ studentId, aywaMathClasses, isTestStudent = false }: { studentId: string; aywaMathClasses: string[] | null; isTestStudent?: boolean }) {
   return <div className="space-y-4">
     <header className="border-border border-b pb-3"><h2 className="text-foreground text-base font-bold"><SheetText value={"오늘 수학"} /></h2></header>
     <Suspense fallback={<p className="text-text-dim text-sm" role="status"><SheetText value={"오늘 수학 현황을 불러오는 중이에요."} /></p>}>
-      <StudentMathContent studentId={studentId} aywaMathClasses={aywaMathClasses} />
+      <StudentMathContent studentId={studentId} aywaMathClasses={aywaMathClasses} isTestStudent={isTestStudent} />
     </Suspense>
   </div>;
 }

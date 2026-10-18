@@ -111,7 +111,7 @@ describe("current math classes gate the tab (지금 수학 재원생만 · 2026-
     vi.useFakeTimers(); vi.setSystemTime(new Date("2026-10-18T03:00:00Z"));
     enrollQuery.calls = [];
     enrollQuery.result = { data: [], error: null };
-    expect(await getCurrentMathClasses(studentId)).toEqual([]);
+    expect(await getCurrentMathClasses(studentId)).toEqual({ classes: [], isTest: false });
     expect(enrollQuery.calls).toContainEqual(["eq", "class.subject", "math"]);
     expect(enrollQuery.calls).toContainEqual(["eq", "student_id", studentId]);
     enrollQuery.result = { data: [
@@ -119,20 +119,22 @@ describe("current math classes gate the tab (지금 수학 재원생만 · 2026-
       { start_date: "2026-11-01", end_date: null, is_transferred: false, class: cls({ class_name: "다음달반" }) },
       { start_date: "2026-09-01", end_date: null, is_transferred: false, class: cls({ class_name: "닫힌반", is_active: false }) },
     ], error: null };
-    expect(await getCurrentMathClasses(studentId)).toEqual([]);
+    expect(await getCurrentMathClasses(studentId)).toEqual({ classes: [], isTest: false });
     enrollQuery.result = { data: [{ start_date: "2026-09-01", end_date: null, is_transferred: false, class: cls() }], error: null };
-    expect(await getCurrentMathClasses(studentId)).toEqual(["중2A"]);
-    // 오늘 수학 명단처럼: 퇴원일 당일(수강은 아직 열림)·상태 퇴원·테스트 학생은 '지금 반 없음'
+    expect(await getCurrentMathClasses(studentId)).toEqual({ classes: ["중2A"], isTest: false });
+    // 오늘 수학 명단처럼: 퇴원일 당일(수강은 아직 열림)·상태 퇴원은 '지금 반 없음'
     for (const st of [
       { status: "enrolled", is_test: false, withdrawn_at: "2026-10-18" },
       { status: "withdrawn", is_test: false, withdrawn_at: null },
-      { status: "enrolled", is_test: true, withdrawn_at: null },
     ]) {
       enrollQuery.student = { data: st, error: null };
-      expect(await getCurrentMathClasses(studentId)).toEqual([]);
+      expect(await getCurrentMathClasses(studentId)).toEqual({ classes: [], isTest: false });
     }
+    // 테스트 학생은 반을 세되 따로 알린다(기능 시험용 탭 · '반영 대기'로 말하지 않는다)
+    enrollQuery.student = { data: { status: "enrolled", is_test: true, withdrawn_at: null }, error: null };
+    expect(await getCurrentMathClasses(studentId)).toEqual({ classes: ["중2A"], isTest: true });
     enrollQuery.student = { data: { status: "enrolled", is_test: false, withdrawn_at: "2026-10-19" }, error: null };
-    expect(await getCurrentMathClasses(studentId)).toEqual(["중2A"]);
+    expect(await getCurrentMathClasses(studentId)).toEqual({ classes: ["중2A"], isTest: false });
     vi.spyOn(console, "error").mockImplementation(() => {});
     enrollQuery.result = { data: null, error: { code: "57014" } };
     expect(await getCurrentMathClasses(studentId)).toBeNull();
