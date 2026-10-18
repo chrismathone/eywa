@@ -33,6 +33,20 @@ export function recentTestKindLabel(kind: string): string {
   return RECENT_TEST_KIND_LABELS[kind] ?? "시험";
 }
 
+// 오늘 수학 학생 로그인 계정(2026-10-18) — null = 미발급. 아이디·비밀번호는 오지 않는다.
+// 상태는 문자열로 받는다: 저쪽에 상태가 늘어도 학생 현황 전체를 버리지 않고 '확인 필요'로 부른다.
+const accountSchema = z.object({
+  state: z.string().max(100), issuedAt: timestampSchema, lastLoginAt: timestampSchema.nullable(),
+});
+export type StudentMathAccount = z.infer<typeof accountSchema>;
+
+const ACCOUNT_STATE_LABELS: Record<string, string> = {
+  active: "발급됨", disabled: "꺼짐", blocked: "로그인 막힘", locked: "잠김", withdrawn: "퇴원 · 로그인 막힘",
+};
+export function accountStateLabel(account: StudentMathAccount | null): string {
+  return account ? ACCOUNT_STATE_LABELS[account.state] ?? "확인 필요" : "미발급";
+}
+
 export const studentMathStatusSchema = z.object({
   bindingId: uuidSchema, sourceStudentId: uuidSchema, linked: z.boolean(), mode: z.enum(["shadow", "active"]),
   classes: z.array(z.object({ sourceClassId: uuidSchema, name: z.string().max(10_000), active: z.boolean() })),
@@ -40,6 +54,8 @@ export const studentMathStatusSchema = z.object({
   // 최근 시험(읽기 전용 · 2026-10-17). 이 칸을 안 보내는 옛 오늘 수학 배포면 undefined — 빈 목록으로 채우지 않는다
   // ("배정된 시험이 없어요"가 거짓말이 된다). 화면은 칸이 없으면 그 구역을 그리지 않는다.
   recentTests: z.array(recentTestSchema).max(50).optional(),
+  // 옛 배포면 undefined — '미발급'으로 채우지 않는다(모르는 것을 없다고 말하게 된다).
+  account: accountSchema.nullable().optional(),
   lastActivityAt: timestampSchema.nullable(),
 });
 export type StudentMathStatus = z.infer<typeof studentMathStatusSchema>;

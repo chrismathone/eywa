@@ -3,6 +3,7 @@ import { SheetText } from "@/features/teacher-view/interface-label";
 import { Suspense } from "react";
 import { getStudentMathStatus } from "@/features/integrations/todays-math/student-status";
 import { TodaysMathRecentTests } from "./todays-math-recent-tests";
+import { TodaysMathAccountCard } from "./todays-math-account";
 
 async function StudentMathContent({ studentId }: { studentId: string }) {
   const result = await getStudentMathStatus(studentId);
@@ -18,7 +19,7 @@ async function StudentMathContent({ studentId }: { studentId: string }) {
   }
   const activeClasses = data.classes.filter((item) => item.active);
   return <div className="space-y-5">
-    <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+    <dl className={`grid grid-cols-1 gap-3 ${data.account === undefined ? "sm:grid-cols-3" : "sm:grid-cols-2 lg:grid-cols-4"}`}>
       {[
         ["연결 상태", "연결됨"],
         ["배정된 시험", `${data.tests.assigned.toLocaleString("ko-KR")}개`],
@@ -26,6 +27,7 @@ async function StudentMathContent({ studentId }: { studentId: string }) {
       ].map(([label, value]) => <div key={label} className="bg-card border-line rounded-xl border p-4">
         <dt className="text-text-dim text-sm">{label}</dt><dd className="mt-2 text-lg font-semibold">{value}</dd>
       </div>)}
+      {data.account === undefined ? null : <TodaysMathAccountCard account={data.account} />}
     </dl>
     {data.recentTests ? <TodaysMathRecentTests tests={data.recentTests} /> : null}
     <section className="bg-card border-line rounded-xl border p-5">
