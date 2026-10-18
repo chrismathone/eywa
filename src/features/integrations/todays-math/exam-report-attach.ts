@@ -6,7 +6,8 @@ import { removeObject } from "@/lib/storage/media-storage";
 import { isTenantReportAttachmentPath } from "@/lib/storage/legacy-audio-path";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { notifyUsers } from "@/features/notifications/server/notify";
-import { targetRequest, targetRequestPdf } from "./sync-server";
+import { isFeatureOptedIn } from "@/lib/license/server";
+import { sourceBindingForTenant, targetRequest, targetRequestPdf } from "./sync-server";
 import type { BindingConfig } from "./sync-contract";
 import {
   EXAM_REPORT_PDF_MAX, examReportAttachmentName, examReportNotice, isExpectedPdf, isSettled, parseExamReportDay, shouldNotify,
@@ -117,4 +118,52 @@ export async function attachTodaysMathExamReports(config: BindingConfig, window:
     }
   }
   return out;
+}
+
+const SEND_ATTACH_TIMEOUT_MS = 8_000;
+
+/**
+ * 발송 직전 한 학생 — 선생님이 시험일 보고서를 저장하자마자 보내도 성적표가 함께 나가게(1시간 확인을 기다리지 않는다).
+ * 원스크린 발송(`saveAndQueueClassnote`)이 큐에 올리기 **바로 앞**에서 부른다. 순서 = 토글(메모리) → 그날 그 반 월말평가 결과가 있나
+ * (색인 한 번) → 라이선스 → 오늘 수학 목록에서 이 학생 것만 → 붙이기(위와 같은 함수 · 같은 DB 함수).
+ * 🔴 실패해도 발송을 막지 않는다(fail-open · 최대 8초) — 성적표가 아직 확정 전이거나 오늘 수학이 느리면 보고서만 나가고,
+ *    1시간 확인이 이어서 '이미 발송' 알림을 남긴다. 시간을 넘긴 작업이 뒤에서 끝나도 DB 함수가 그 순간 상태를 다시 본다
+ *    (워커가 집었으면 처리 중 · 보냈으면 이미 발송 — 보낸 글에 붙지 않는다).
+ */
+export async function attachExamReportBeforeSend(args: {
+  tenantId: string; studentId: string; classId: string; reportDate: string; enabled: boolean;
+}): Promise<"attached" | "skipped"> {
+  if (!args.enabled) return "skipped";
+  const run = async (): Promise<"attached" | "skipped"> => {
+    const admin = createAdminClient();
+    const { data, error } = await admin.from("todays_math_test_results").select("source_test_id")
+      .eq("tenant_id", args.tenantId).eq("student_id", args.studentId).eq("class_id", args.classId)
+      .eq("test_date", args.reportDate).eq("kind", "monthly").eq("absent", false).limit(1);
+    if (error || !data?.length) return "skipped";
+    if (!(await isFeatureOptedIn(args.tenantId, "todays_math"))) return "skipped";
+    const config = sourceBindingForTenant(args.tenantId);
+    if (!config) return "skipped";
+    const day = parseExamReportDay(
+      await targetRequest(config, `/api/integrations/eywa/v2/exam-reports/${args.reportDate}?bindingId=${config.bindingId}`, "GET"),
+      config.bindingId, args.reportDate,
+    );
+    let attached = false;
+    for (const item of day.items) {
+      if (item.sourceStudentId !== args.studentId || item.sourceClassId !== args.classId) continue;
+      const reply = await attachOne(config, item);
+      if (reply.usedPath || reply.state === "attached") attached = true;
+      await notifyOnce(args.tenantId, item, reply);
+    }
+    return attached ? "attached" : "skipped";
+  };
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      run(),
+      new Promise<"skipped">((resolve) => { timer = setTimeout(() => resolve("skipped"), SEND_ATTACH_TIMEOUT_MS); }),
+    ]);
+  } catch (e) {
+    console.error("[todays-math-exam-report] 발송 전 첨부 실패", args.tenantId, e instanceof Error ? e.message : "unknown");
+    return "skipped";
+  } finally { if (timer) clearTimeout(timer); }
 }

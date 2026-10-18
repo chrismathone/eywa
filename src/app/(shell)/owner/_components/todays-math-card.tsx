@@ -31,7 +31,7 @@ export function TodaysMathCard({ report }: { report: ReportSettings }) {
         </SettingsCard>
         <SettingsCard
           title="월말평가 성적표 보고서 첨부"
-          description="오늘 수학에서 확정한 월말평가 성적표(PDF)를 그 학생의 시험일 수학 보고서에 첨부합니다. 아직 보내지 않은 보고서에만 붙고, 이미 보낸 보고서이거나 그날 보고서가 없으면 붙이지 않고 선생님에게 알립니다. 한 시간마다 확인하니 시험일 보고서는 저장한 뒤 조금 기다렸다 보내 주세요. 개발 중인 기능입니다."
+          description="오늘 수학에서 확정한 월말평가 성적표(PDF)를 그 학생의 시험일 수학 보고서에 첨부합니다. 아직 보내지 않은 보고서에만 붙고, 이미 보낸 보고서이거나 그날 보고서가 없으면 붙이지 않고 선생님에게 알립니다. 선생님이 보고서를 보낼 때 그 학생의 성적표를 바로 확인해 함께 붙이고, 한 시간마다 한 번 더 확인합니다. 개발 중인 기능입니다."
         >
           <ToggleField label="월말평가 성적표 보고서 첨부" hint="끄면 붙이지 않습니다" value={pdf} onChange={setPdf} />
         </SettingsCard>

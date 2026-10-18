@@ -77,7 +77,7 @@ export function examReportNotice(state: "waiting_report" | "report_sent" | "atta
   const day = `${Number(testDate.slice(5, 7))}/${Number(testDate.slice(8, 10))}`;
   const who = `${studentName} 학생의 ${day} 월말평가 성적표`;
   const body = state === "waiting_report"
-    ? `${who}를 붙일 그날 수학 보고서가 없습니다. 보고서를 저장하면 한 시간 안에 붙습니다 — 붙은 뒤 보내 주세요.`
+    ? `${who}를 붙일 그날 수학 보고서가 없습니다. 보고서를 보내면 성적표가 함께 붙어 나갑니다.`
     : state === "report_sent"
       ? `${who}가 확정됐지만 그날 보고서가 이미 발송돼 붙이지 않았습니다. 필요하면 학부모께 따로 전해 주세요.`
       : `${who}를 붙이지 못했습니다 — 보고서 첨부가 6개로 가득 찼습니다. 첨부를 하나 지우면 다음 확인 때 붙습니다.`;

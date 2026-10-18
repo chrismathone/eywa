@@ -59,6 +59,7 @@ import {
 } from "../font-size";
 import { LEGACY_REPORT_SUBJECT, reportSubject } from "@/features/timetable/lib/report-subject";
 import { todaysMathSameForReport } from "./todays-math-fill";
+import { attachExamReportBeforeSend } from "@/features/integrations/todays-math/exam-report-attach";
 import { resolveMentSource, type MentSource } from "../ment-source";
 import { mentSourceColumnReady } from "./ment-source-db";
 import { recordMentAiDraft } from "./ment-draft-db";
@@ -1057,6 +1058,15 @@ export async function saveAndQueueClassnote(
       // '보낼 반'(0303a)은 저장이 이미 보강 반으로 적었다(복사본) — 여기서 따로 적지 않는다.
       sendClassPick = { classId: pick.classId, via: pick.via };
     }
+  }
+
+  // 오늘 수학 월말평가 성적표(0373a) — 시험일 보고서를 저장하자마자 보내도 성적표가 함께 나가게 큐에 올리기 바로 앞에서 붙인다.
+  // 토글이 꺼졌거나 그날 그 반 월말평가 결과가 없으면 색인 한 번(또는 0번)으로 끝 · 실패해도 발송은 그대로(최대 8초).
+  if (input.classId) {
+    await attachExamReportBeforeSend({
+      tenantId: user.tenantId, studentId: input.studentId, classId: input.classId, reportDate,
+      enabled: settings.report.todaysMathReportPdf,
+    });
   }
 
   // too_old(전 달 1일 이전) 아니면 queued로 재적재(재발송). 오늘 저장은 항상 통과하나 규약상 명시.
