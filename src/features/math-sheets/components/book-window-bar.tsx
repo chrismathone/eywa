@@ -1,27 +1,28 @@
 "use client";
 
-import type { CSSProperties } from "react";
-import { LEARNING_LESSON_WIDTH } from "../lib/learning-axis";
 import { useMathTextbooks } from "./math-textbook-context";
-import rails from "./learning-rails.module.css";
 import overview from "./learning-overview.module.css";
+import local from "./book-window.module.css";
 
 /** 계획 대비 판정 — 목표 레일과 같은 너그러움(±1차시 = 계획대로, goal-rail.ts). */
-function stateOf(done: number, planned: number): string {
+function stateOf(done: number, planned: number): { text: string; tone: "on" | "behind" | "ahead" } {
   const gap = done - planned;
-  if (Math.abs(gap) <= 1) return "계획대로";
-  return gap > 0 ? `${gap}차시 빠름` : `${-gap}차시 느림`;
+  if (Math.abs(gap) <= 1) return { text: "계획대로", tone: "on" };
+  return gap > 0 ? { text: `${gap}차시 빠름`, tone: "ahead" } : { text: `${-gap}차시 느림`, tone: "behind" };
 }
 
 const short = (date: string) => date.slice(5).replace("-", ".");
 const volume = (title: string) => title.match(/(\d+)권/)?.[1] ?? "";
 
+type CellState = "done" | "late" | "todo";
+
 /**
- * 교재 3개월 레일 — 주문일+7일부터 3개월 안에 주문한 권 ~ 그 학기 마지막 권을 끝내는 계획과 지금 위치(원장 2026-10-19).
+ * 교재 3개월 진행표 — 주문일+7일부터 3개월 안에 주문한 권 ~ 그 학기 마지막 권을 끝내는 계획과 지금 위치(원장 2026-10-19).
  *
- * 🔴 **전체 목표 레일과 같은 모양**으로 그린다(원장 *"기존 디자인이랑 너무 동떨어짐"*) — `learning-rails.module.css`를
- *    그대로 쓴다: 파랑 1행 = 클래스노트로 실제 나간 보고서의 진도(현재) · 빨강 2행 = 3개월 계획 · 눈금 = 권 경계.
- *    한 차시 폭도 전체 목표 레일과 같은 상한(`LEARNING_LESSON_WIDTH`)을 쓴다.
+ * 🔑 **차시 한 칸 = 한 칸**으로 그린다(원장 *"디자인이나 가시성이 너무 별로"* — 레일 복제판은 짧고 원이 겹쳤다).
+ *    차시는 셀 수 있는 단위라 칸이 그대로 읽힌다: 파랑 = 클래스노트로 나간 보고서 기준 나간 차시 ·
+ *    빨강 = 오늘까지 계획인데 아직 못 나간 차시 · 회색 = 남은 차시. 권마다 묶고 아래에 권 이름.
+ * 색은 진도 레일과 같은 두 색(`--mcs-actual` 파랑 · `--mcs-goal` 빨강)을 쓴다.
  * 계산은 서버(`bookWindow`)가 끝내고 여기는 그리기만 한다. 주문 기록이 없는 학생은 아무것도 안 그린다.
  */
 export function BookWindowBar({ studentId }: { studentId: string }) {
@@ -33,78 +34,70 @@ export function BookWindowBar({ studentId }: { studentId: string }) {
   const name = w.books.length > 1 ? `${first.replace(/\s*\d+권$/, "")} ${volume(first)}~${volume(last)}권` : first;
 
   const done = w.done ?? 0;
-  const status =
-    w.referenceDate < w.startDate ? `${short(w.startDate)} 시작`
-      : w.done === null ? "진도 확인 필요"
-      : w.referenceDate > w.endDate ? (w.done >= w.total ? "기간 내 완료" : `기간 종료 · ${w.total - w.done}차시 남음`)
-      : `기준일 계획 ${w.planned}차시 · ${stateOf(w.done, w.planned)}`;
+  const notStarted = w.referenceDate < w.startDate;
+  const ended = w.referenceDate > w.endDate;
+  const planned = notStarted ? 0 : w.planned;
+  const state = notStarted
+    ? { text: `${short(w.startDate)} 시작`, tone: undefined }
+    : w.done === null
+      ? { text: "진도 확인 필요", tone: undefined }
+      : ended
+        ? w.done >= w.total
+          ? { text: "기간 내 완료", tone: "on" as const }
+          : { text: `기간 종료 · ${w.total - w.done}차시 남음`, tone: "behind" as const }
+        : stateOf(w.done, planned);
 
-  // 현재 위치 라벨 — "4권 1차시 · 삼각형에서 평행선 사이의 선분의 길이의 비". 창 앞 권이면 그 권을 말한다.
-  const currentLabel = w.position
-    ? `${volume(w.position.title)}권 ${w.position.lessonNo}차시 · ${w.position.unit}`
-    : "발송된 보고서 진도 확인 필요";
-  const pct = (n: number) => `${Math.max(0, Math.min(100, (n / w.total) * 100))}%`;
-  const ends = w.books.map((b, i) => ({ id: b.id, title: b.title, at: w.books.slice(0, i + 1).reduce((n, x) => n + x.lessons, 0) }));
-  const variables = {
-    "--current-position": pct(done),
-    "--target-position": "100%",
-    "--lesson-count": w.total,
-    "--scale-lessons": w.total,
-    "--lesson-max-width": `${LEARNING_LESSON_WIDTH * 2}px`,
-  } as CSSProperties;
+  // 권마다 칸을 묶는다 — 칸 번호(누적) = 앞 권들의 차시 + 이 권 안 번호.
+  const groups = w.books.map((b, bi) => {
+    const offset = w.books.slice(0, bi).reduce((n, x) => n + x.lessons, 0);
+    return {
+      id: b.id,
+      label: `${volume(b.title)}권`,
+      cells: Array.from({ length: b.lessons }, (_, i): { no: number; state: CellState } => {
+        const at = offset + i + 1;
+        return { no: i + 1, state: at <= done ? "done" : at <= planned ? "late" : "todo" };
+      }),
+    };
+  });
 
   return (
-    <div style={{ marginTop: 14 }}>
-      <div className={overview.course}>
-        <strong>교재 3개월 · {name}</strong>
-        <span>
-          {short(w.startDate)} – {short(w.endDate)} · {status}
+    <section className={local.panel} aria-label={`교재 3개월 진행 · ${name}`}>
+      <div className={local.head}>
+        <span className={local.tag}>교재 3개월</span>
+        <strong className={local.name}>{name}</strong>
+        <span className={local.period}>
+          {short(w.startDate)} – {short(w.endDate)}
+        </span>
+        <span className={local.figures}>
+          <b>{w.done ?? "—"}</b>/{w.total}차시{!notStarted && !ended ? ` · 계획 ${planned}` : ""}
+        </span>
+        <span className={overview.status} data-tone={state.tone}>
+          {state.text}
         </span>
       </div>
-      <div className={rails.viewport}>
-        <div className={rails.rails} style={variables} data-planned>
-          <div className={rails.plot}>
-            <div
-              className={`${rails.annotation} ${rails.currentAnnotation}`}
-              title={w.position ? `${w.position.date} 클래스노트 발송 보고서 · ${w.position.title} ${w.position.lessonNo}차시` : undefined}
-            >
-              <span className={rails.annotationTag}>현재</span>
-              <span className={rails.blockName}>{currentLabel}</span>
-            </div>
-            <div className={`${rails.track} ${rails.currentTrack}`} role="progressbar" aria-label="교재 현재 진도"
-              aria-valuemin={0} aria-valuemax={w.total} aria-valuenow={done}>
-              <span className={rails.currentFill} />
-            </div>
-            {w.done !== null ? <span className={rails.currentMarker} aria-hidden="true" /> : null}
-            <div className={`${rails.track} ${rails.targetTrack}`} role="img" aria-label={`3개월 계획 ${w.total}차시`}>
-              <span className={rails.targetFill} />
-            </div>
-            {/* 기준일 계획 자리 — 목표 레일의 정거장과 같은 빈 원. */}
-            {w.referenceDate >= w.startDate && w.referenceDate <= w.endDate ? (
-              <span className={rails.targetMarker} style={{ left: pct(w.planned) }} title={`기준일 계획 ${w.planned}차시`} />
-            ) : null}
-            {ends.map((e, i) => (
-              <span key={e.id} className={rails.targetMarker} data-final={i === ends.length - 1 || undefined}
-                style={{ left: pct(e.at) }} title={`${e.title} 끝 · ${e.at}차시`} />
-            ))}
-            <div className={rails.scale} aria-label="권 눈금">
-              {ends.map((e) => (
-                <span key={e.id} className={rails.scaleTick} style={{ left: pct(e.at) }}>
-                  {volume(e.title)}권
-                </span>
+      <div className={local.groups}>
+        {groups.map((g) => (
+          <div key={g.id} className={local.group} style={{ flexGrow: g.cells.length }}>
+            <div className={local.cells}>
+              {g.cells.map((c) => (
+                <span key={c.no} className={local.cell} data-state={c.state} title={`${g.label} ${c.no}차시`} />
               ))}
             </div>
-            <div className={`${rails.annotation} ${rails.targetAnnotation}`}>
-              <span className={rails.annotationTag}>3개월 목표</span>
-              <span className={rails.blockName}>{last} 끝 · {short(w.endDate)}</span>
-            </div>
+            <span className={local.volume}>{g.label}</span>
           </div>
-          <div className={rails.values} aria-hidden="true">
-            <span className={rails.currentValue}>{w.done === null ? "—" : <><b>{w.done}</b><small>차시</small></>}</span>
-            <span className={rails.targetValue}><b>{w.total}</b><small>차시 목표</small></span>
-          </div>
-        </div>
+        ))}
       </div>
-    </div>
+      <p className={local.now}>
+        <span className={local.nowTag}>현재</span>
+        {w.position ? (
+          <>
+            {volume(w.position.title)}권 {w.position.lessonNo}차시 · {w.position.unit}
+            <span className={local.source}>{short(w.position.date)} 발송 보고서</span>
+          </>
+        ) : (
+          "발송된 보고서에서 진도를 아직 못 찾았습니다"
+        )}
+      </p>
+    </section>
   );
 }
