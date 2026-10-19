@@ -71,7 +71,7 @@ export function BookWindowBar({ studentId, embedded = false }: { studentId: stri
           {short(w.startDate)} – {short(w.endDate)}
         </span>
         <span className={local.figures}>
-          <b>{w.done ?? "—"}</b>/{w.total}차시{!notStarted && !ended ? ` · 계획 ${planned}` : ""}
+          <b>{w.done ?? "—"}</b>/{w.total}차시{!notStarted && !ended ? ` · 3개월 계획 ${planned}` : ""}
         </span>
         <span className={overview.status} data-tone={state.tone}>
           {state.text}
