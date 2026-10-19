@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { cn } from "@/lib/utils";
 import { SHUTTLE_CHIP, SHUTTLE_CHIP_OFF, SHUTTLE_CHIP_ON } from "@/features/shuttle/control-size";
 import { reportVehiclePosition } from "@/features/shuttle/map/server/vehicle-position-actions";
-import { ageLabel, SEND_EVERY_MS } from "@/features/shuttle/map/vehicle-position";
+import { ageLabel, FIX_MAX_AGE_S, ROUGH_ACCURACY_M, SEND_EVERY_MS } from "@/features/shuttle/map/vehicle-position";
 
 /** 이 폰이 그 회차 위치를 보내기로 했나 — 이 기기에만 남는다(다른 직원 폰이 같은 회차를 열어도 보내지 않게). */
 const flagKey = (date: string, runId: string) => `shuttle-gps:${date}:${runId}`;
@@ -49,7 +49,7 @@ type NavigatorWithWakeLock = Navigator & { wakeLock?: { request(type: "screen"):
 type Fix = { lat: number; lng: number; accuracy: number; heading: number | null; speed: number | null; at: number };
 
 /**
- * 운행 중 회차의 **차량 위치 보내기**(0369a, 사용자 2026-10-15 "휴대폰으로 GPS") — 회차 머리 아래 한 줄.
+ * 운행 중 회차의 **차량 위치 보내기**(0374a, 사용자 2026-10-15 "휴대폰으로 GPS") — 회차 머리 아래 한 줄.
  *
  * 🔑 브라우저 `navigator.geolocation.watchPosition`으로 좌표를 받고 `SEND_EVERY_MS`(10초)마다 최신 좌표를 서버로 보낸다.
  * 🔑 **이 폰에서 [출발]을 누르면 자동으로 켜진다**(`markGpsOn`). 다른 폰에선 [📡 위치 보내기]를 눌러야 보낸다 —
@@ -91,6 +91,10 @@ export function TripGpsSender({ runId, date }: { runId: string; date: string }) 
           speed: p.coords.speed,
           at: p.timestamp,
         };
+        // 🔑 방금 받은 정확한 좌표(GPS)를 곧이어 온 대략적 좌표(와이파이·기지국)로 덮지 않는다 — 오차가 2배 넘게 나빠지면
+        //    앞 좌표가 아직 신선한 동안(전송 간격 안)은 앞 것을 쓴다.
+        const prev = fixRef.current;
+        if (prev && f.accuracy > prev.accuracy * 2 && f.at - prev.at < SEND_EVERY_MS) return;
         fixRef.current = f;
         setFix(f);
         setProblem(null);
@@ -104,12 +108,19 @@ export function TripGpsSender({ runId, date }: { runId: string; date: string }) 
               : "위치를 받는 데 시간이 걸리고 있어요",
         );
       },
-      { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
+      // 🔑 maximumAge 0 — 브라우저가 들고 있던 옛 좌표 말고 매번 새로 잰 좌표를 받는다.
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 },
     );
 
     async function send() {
       const f = fixRef.current;
       if (!f || stopped) return;
+      // 🔴 묵은 좌표는 보내지 않는다 — 서버는 받은 시각으로 "방금"을 그리므로, GPS가 멈춘 채 보내면 차가 몇 분 전 자리에 "방금"으로 찍힌다.
+      //    f.at과 Date.now()는 같은 기기 시계라 시계 오차가 없다.
+      if (Date.now() - f.at > FIX_MAX_AGE_S * 1000) {
+        setProblem("GPS가 새 위치를 못 받고 있어요 — 화면을 켜 두고, 창가나 밖에서 잠시 기다려 주세요");
+        return;
+      }
       const res = await reportVehiclePosition({
         runId,
         lat: f.lat,
@@ -194,7 +205,16 @@ export function TripGpsSender({ runId, date }: { runId: string; date: string }) 
               ? `📡 위치 보내는 중 · ±${Math.round(fix.accuracy)}m · ${sentAt ? `${ageLabel(Math.round((now - sentAt) / 1000))} 보냄` : "보내는 중…"}`
               : "📡 위치를 잡는 중… (처음엔 위치 권한을 물어요)"
             : "📡 이 폰은 차 위치를 보내지 않고 있어요"}
-        {on && !shown ? <span className="text-text-dim block font-medium">운행 중엔 이 화면을 켜 두세요</span> : null}
+        {on && !shown ? (
+          fix && fix.accuracy > ROUGH_ACCURACY_M ? (
+            // GPS가 아니라 와이파이·기지국 위치 — 대개 폰의 '정확한 위치'가 꺼졌거나 실내다.
+            <span className="text-danger block font-medium">
+              위치가 대략적이에요 — 폰 설정에서 이 브라우저의 &lsquo;정확한 위치&rsquo;를 켜 주세요
+            </span>
+          ) : (
+            <span className="text-text-dim block font-medium">운행 중엔 이 화면을 켜 두세요</span>
+          )
+        ) : null}
       </span>
       <button type="button" onClick={toggle} className={cn(SHUTTLE_CHIP, "shrink-0", on ? SHUTTLE_CHIP_OFF : SHUTTLE_CHIP_ON)}>
         {on ? "멈춤" : "위치 보내기"}

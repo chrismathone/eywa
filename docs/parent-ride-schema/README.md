@@ -8,7 +8,7 @@
   `0322a_shuttle_regular_ride_change` → `0323a_shuttle_history_acks` (로컬 번호는 0290a~0293a). 전부 손으로 적용하는 alpha 파일이고 앱 배포보다 먼저.
 - 10/7 추가(학부모 알림 · [저장]): `0368a_parent_departure_acks` → `0368b_parent_notice_key` → `0368c_boarding_notify_parent`
   (로컬 0294a~0294c) — [10/7 정리](../parent-ride-summary-2026-10-07.md). 아래 표·§1-추가·§5에 반영했다.
-- 10/15 추가(차량 GPS): `0369a_shuttle_vehicle_positions`(로컬 0295a) — [10/15 정리](../parent-ride-summary-2026-10-15.md). 아래 표·§2-추가2·§4·§5에 반영했다.
+- 10/15 추가(차량 GPS): `0374a_shuttle_vehicle_positions`(로컬 0295a) — [10/15 정리](../parent-ride-summary-2026-10-15.md). 아래 표·§2-추가2·§4·§5에 반영했다.
 - Drizzle `schema.ts`엔 **하나도 없다** — 앱은 Supabase 클라이언트로 읽고 쓴다(RLS·트리거·함수는 drizzle이 표현 못 해 alpha로만 둔다).
 
 ## 한눈에
@@ -22,7 +22,7 @@
 | 새 표 | `shuttle_history_acks` | 0323a | 변경 내역 '확인' 표식 |
 | 새 표 | `parent_departure_acks` | 0368a·0368b | 학부모 알림(출발·탑승·미탑승·하차) '확인' 표식 — 학부모 계정마다 |
 | 바꾼 표 | `shuttle_boardings` | 0368c | 칸 `notify_parent` — [전송]=true · [저장]=false |
-| 새 표 | `shuttle_vehicle_positions` | 0369a | 운행 중 차량 최신 위치(기사 폰 GPS) — 회차마다 한 줄 |
+| 새 표 | `shuttle_vehicle_positions` | 0374a | 운행 중 차량 최신 위치(기사 폰 GPS) — 회차마다 한 줄 |
 | 바꾼 표 | `shuttle_ride_exceptions`(0229a) | 0321a | 칸 3개 + 제약 2개 + 이력 트리거 |
 | 새 함수 | `shuttle_ride_exception_label` · `tg_shuttle_ride_exception_history` · `tg_shuttle_ride_exception_history_append_only` · `cancel_shuttle_ride_exception` · `change_shuttle_regular_ride` | 0321a·0322a | 아래 §3 |
 | 바꾼 함수 | `tg_sync_user_from_auth`(0075a) | 0320a | 학부모 로그인은 직원 표로 복사하지 않음 |
@@ -143,7 +143,7 @@
 |---|---|---|
 | 칸 `notify_parent` | boolean NOT NULL DEFAULT `true` | 셔틀 [전송]=true(학부모 알림) · 등원 [저장]=false(기록만). 기존 줄은 기본값으로 알림 대상 |
 
-### 2-추가2. 새 표 — `shuttle_vehicle_positions` (0369a) — 차량 최신 위치
+### 2-추가2. 새 표 — `shuttle_vehicle_positions` (0374a) — 차량 최신 위치
 
 운행 중(`shuttle_trips` 출발~종료) 기사 폰 브라우저가 보낸 GPS. **회차마다 최신 한 줄만**(upsert) — 지나온 자취(이력)는 두지 않는다.
 
@@ -191,7 +191,7 @@
 ## 5. 되돌리기 (역순)
 
 ```sql
--- 0369a
+-- 0374a
 drop table if exists public.shuttle_vehicle_positions;
 -- 0368c
 alter table public.shuttle_boardings drop column if exists notify_parent;

@@ -196,7 +196,7 @@ export function TrackClient({
       .map((s) => ({ stopId: s.id, name: s.name, lat: s.lat ?? null, lng: s.lng ?? null }));
   }, [stops, vehicle, runPick]);
 
-  // 🚌 운행 중 차 위치(0369a) — 10초마다 다시 읽는다. [전체] = 모든 차 · 호차 = 그 차 · 회차 = 그 회차.
+  // 🚌 운행 중 차 위치(0374a) — 10초마다 다시 읽는다. [전체] = 모든 차 · 호차 = 그 차 · 회차 = 그 회차.
   const { positions, now } = useVehiclePositions(getStaffVehiclePositions);
   const mapVehicles: MapVehicle[] = positions.flatMap((p) => {
     const owner = board.find((v) => v.runs.some((r) => r.run.id === p.runId));
@@ -277,7 +277,7 @@ export function TrackClient({
         </div>
       )}
 
-      {/* 🔑 지도 하나에 학원 + 그날 도는 노선의 정류장 + 운행 중 차(🚌 기사 폰 GPS, 0369a). */}
+      {/* 🔑 지도 하나에 학원 + 그날 도는 노선의 정류장 + 운행 중 차(🚌 기사 폰 GPS, 0374a). */}
       {KAKAO_MAP_KEY ? (
         <ParentLiveMap
           appKey={KAKAO_MAP_KEY}

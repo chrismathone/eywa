@@ -8,7 +8,7 @@
 
 ## 배포 전에 할 일
 
-1. **DB** — `supabase/migrations/0369a_shuttle_vehicle_positions.sql` 적용(새 표 하나 · 앱 배포보다 먼저). 안 깔려 있으면 차량 위치만 안 뜨고 나머지는 그대로 돈다.
+1. **DB** — `supabase/migrations/0374a_shuttle_vehicle_positions.sql` 적용(새 표 하나 · 앱 배포보다 먼저). 안 깔려 있으면 차량 위치만 안 뜨고 나머지는 그대로 돈다.
 2. **환경변수**
    - `NEXT_PUBLIC_KAKAO_MAP_KEY` — 카카오 **JavaScript 키**(지도). 카카오 개발자 콘솔 → 플랫폼 키 → JavaScript 키 → **JavaScript SDK 도메인**에 운영 주소를 등록해야 지도가 뜬다.
    - `KAKAO_REST_API_KEY` — 카카오 **REST 키**(서버 전용 — 회차 도로 경로 · 카카오모빌리티 길찾기). 없으면 경로 선만 안 그려지고 정류장·차량은 뜬다. 🔴 저장소에 넣지 않는다.

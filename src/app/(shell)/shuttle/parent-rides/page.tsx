@@ -16,7 +16,7 @@ import { ParentRidesBoard } from "./_components/parent-rides-board";
 import { buildRideLegs, type RideLeg } from "@/features/shuttle/parent/parent-rides";
 import { ParentRideCard } from "@/features/shuttle/parent/components/parent-ride-card";
 import { SHUTTLE_PARENT_RIDES_PATH, shuttleFaces } from "@/features/shuttle/faces";
-import { SHUTTLE_TOOLBAR } from "@/features/shuttle/control-size";
+import { SHUTTLE_PHONE_CONTROLS } from "@/features/shuttle/control-size";
 import { isSeason, type Season } from "@/features/shuttle/types";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -39,6 +39,17 @@ function viewHref(view: "day" | "month", opts: { season: Season; d?: string; m?:
   const qs = q.toString();
   return qs ? `${SHUTTLE_PARENT_RIDES_PATH}?${qs}` : SHUTTLE_PARENT_RIDES_PATH;
 }
+
+/**
+ * 면 탭 + 날짜(달) 이동 줄 — 공용 `SHUTTLE_TOOLBAR`에서 `toolbar-rail`만 뺐다(사용자 2026-10-19 "폰 화면일 때 깨지네").
+ * 레일은 폰에서 한 줄 가로 스크롤이라 날짜 이동이 화면 밖(오른쪽)으로 밀려 안 보였다 — 여기선 **감는다**:
+ * 폰 = 탭 한 줄(탭 자체가 가로 스크롤) + 날짜 이동 한 줄 · 넓으면 한 줄.
+ */
+const TOOLBAR = `flex flex-wrap items-center gap-2 ${SHUTTLE_PHONE_CONTROLS}`;
+
+/** 설명 문장 + [일별][월별][학부모 관리 현황] 줄 — 폰에선 문장이 한 줄을 다 쓰고 버튼은 그 아래(문장이 버튼 옆에 끼어 세로로 꺾이던 것). */
+const INTRO_ROW = "flex flex-wrap items-center justify-between gap-x-3 gap-y-2";
+const INTRO_TEXT = "text-text-dim min-w-0 flex-1 basis-full text-sm break-keep md:basis-0";
 
 function ViewToggle({ view, season, date, month }: { view: "day" | "month"; season: Season; date: string; month: string }) {
   const item = (v: "day" | "month", label: string, href: string) => (
@@ -95,7 +106,7 @@ export default async function ShuttleParentRidesPage({
     const weeks = staffMonthCalendar({ month, today, holidays }, monthData);
     return (
       <div className="flex min-h-full w-full flex-col gap-3 p-3 md:px-5 md:py-4">
-        <div className={SHUTTLE_TOOLBAR}>
+        <div className={TOOLBAR}>
           <span className="min-w-0 flex-1 basis-full lg:basis-auto">
             <FaceTabs faces={shuttleFaces(season, { track: showTrack })} active={SHUTTLE_PARENT_RIDES_PATH} ariaLabel="셔틀 면 전환" />
           </span>
@@ -109,8 +120,8 @@ export default async function ShuttleParentRidesPage({
             </Link>
           </span>
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-text-dim min-w-0 flex-1 text-sm break-keep">
+        <div className={INTRO_ROW}>
+          <p className={INTRO_TEXT}>
             {monthLabel(month)} · 셔틀 {monthData.rows.length}명 — 달력 칸은 그날 학원 전체(탄 아이 수 + 챙길 아이 이름), 아래 표는 학부모 [월별] 달력을 아이마다 한 줄로 모은 것입니다. 달력 날짜·표 칸을 누르면 그날 상세가 뜹니다.
             {monthData.ok ? null : " ⚠️ 이 달 기록을 불러오지 못했습니다 — 잠시 후 다시 열어 주세요."}
           </p>
@@ -208,14 +219,14 @@ export default async function ShuttleParentRidesPage({
 
   return (
     <div className="flex min-h-full w-full flex-col gap-3 p-3 md:px-5 md:py-4">
-      <div className={SHUTTLE_TOOLBAR}>
+      <div className={TOOLBAR}>
         <span className="min-w-0 flex-1 basis-full lg:basis-auto">
           <FaceTabs faces={shuttleFaces(season, { track: await isShuttleAdmin() })} active={SHUTTLE_PARENT_RIDES_PATH} ariaLabel="셔틀 면 전환" />
         </span>
         <ParentRidesDayNav date={date} today={today} season={season} />
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-text-dim min-w-0 flex-1 text-sm">
+      <div className={INTRO_ROW}>
+        <p className={INTRO_TEXT}>
           {formatKoreanDate(date)} · {date === today ? "오늘" : "그날"} 셔틀 {students.length}명 · 학부모 계정 연결 {linkedCount}명 — 굵은 문장과
           노선이 학부모 화면에 그대로 보이는 것이고, 맨 아래 줄(차량·기록·메모)은 직원에게만 보입니다.
         </p>

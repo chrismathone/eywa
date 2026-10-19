@@ -8,6 +8,10 @@ import type { StaffCalendarDay } from "@/features/shuttle/parent/staff-month";
 const HEAD = ["월", "화", "수", "목", "금"];
 /** 칸 하나에 이름을 몇 명까지 적나 — 넘치면 "외 N명". */
 const SHOW_NAMES = 3;
+/*
+ * 📱 폰(sm 미만, 사용자 2026-10-19 "폰 화면일 때 깨지네") — 한 칸이 70px 남짓이라 "✓ 탔음 1명"이 세 줄로 꺾였다.
+ * 폰에선 **기호 + 수**만(뜻은 아래 표 범례와 같은 기호) · 공휴일 이름은 자르지 않고 다음 줄로. 넓은 화면은 종전 그대로.
+ */
 
 function Names({ glyph, tone, label, names }: { glyph: string; tone: string; label: string; names: string[] }) {
   if (names.length === 0) return null;
@@ -16,7 +20,9 @@ function Names({ glyph, tone, label, names }: { glyph: string; tone: string; lab
   return (
     <p className="text-xs leading-4 break-keep" title={`${label}: ${names.join(", ")}`}>
       <span className={cn("font-bold", tone)}>
-        {glyph} {label} {names.length}
+        {/* 기호가 없는 줄(결석)은 폰에서도 글자를 남긴다 — 수만 남으면 뜻을 알 수 없다. */}
+        {glyph} <span className={glyph ? "max-sm:hidden" : undefined}>{label} </span>
+        {names.length}
       </span>{" "}
       <span className="text-text-dim">
         {head}
@@ -53,21 +59,23 @@ export function StaffMonthCalendar({ weeks, onOpenDay }: { weeks: StaffCalendarD
                 onClick={() => onOpenDay(d.date)}
                 title={`${d.date} 상세 보기`}
                 className={cn(
-                  "border-line-faint hover:bg-bg-soft flex min-h-24 min-w-0 flex-col gap-0.5 border-r p-1.5 text-left last:border-r-0",
+                  "border-line-faint hover:bg-bg-soft flex min-h-24 min-w-0 flex-col gap-0.5 border-r p-1.5 text-left last:border-r-0 max-sm:p-1",
                   d.holiday && "bg-muted/60",
                   d.isToday && "bg-primary/5 ring-primary ring-2 ring-inset",
                 )}
               >
-                <span className="flex items-baseline gap-1">
+                <span className="flex flex-wrap items-baseline gap-x-1">
                   <span className={cn("num text-sm font-bold", d.isToday && "text-primary")}>{d.day}</span>
                   {d.isToday ? <span className="text-primary text-xs font-bold">오늘</span> : null}
-                  {d.holiday ? <span className="text-text-faint truncate text-xs">{d.holiday}</span> : null}
+                  {d.holiday ? <span className="text-text-faint min-w-0 truncate text-xs max-sm:basis-full max-sm:leading-4 max-sm:break-keep max-sm:whitespace-normal">{d.holiday}</span> : null}
                 </span>
                 {d.holiday ? null : (
                   <>
                     {d.rode > 0 ? (
                       <p className={cn("text-xs leading-4 font-bold", MARK.rode.tone)}>
-                        {MARK.rode.glyph} 탔음 {d.rode}명
+                        {MARK.rode.glyph} <span className="max-sm:hidden">탔음 </span>
+                        {d.rode}
+                        <span className="max-sm:hidden">명</span>
                       </p>
                     ) : null}
                     <Names glyph={MARK.missed.glyph} tone={MARK.missed.tone} label="미탑승" names={d.missed} />

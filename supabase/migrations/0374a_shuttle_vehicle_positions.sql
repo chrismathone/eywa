@@ -1,4 +1,4 @@
--- 0369a — 셔틀 차량 위치(기사 폰 GPS) (사용자 2026-10-15 "GPS 기능 추가")
+-- 0374a — 셔틀 차량 위치(기사 폰 GPS) (사용자 2026-10-15 "GPS 기능 추가")
 --
 -- 운행 중(0243a `shuttle_trips` 출발~종료) 기사 폰 브라우저가 `navigator.geolocation`으로 받은 좌표를
 -- 몇 초마다 서버로 보내고, 학부모 '실시간 차량' · 관리자 '실시간 위치' 지도가 🚌 마커로 그린다.
@@ -33,7 +33,7 @@ create table if not exists public.shuttle_vehicle_positions (
 );
 
 comment on table public.shuttle_vehicle_positions is
-  '셔틀 차량 최신 위치(0369a) — 운행 중 기사 폰 GPS, 회차마다 한 줄(upsert).';
+  '셔틀 차량 최신 위치(0374a) — 운행 중 기사 폰 GPS, 회차마다 한 줄(upsert).';
 
 -- 🔴 부분 유니크(WHERE) 금지 — 이 축으로 upsert한다([[#113]]).
 create unique index if not exists shuttle_vehicle_positions_day_run_uniq
