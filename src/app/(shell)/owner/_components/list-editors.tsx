@@ -21,7 +21,7 @@ import {
 } from "@dnd-kit/sortable";
 import { GripVertical, Plus, X } from "@/components/icons/aywa-icon-compat";
 import { SUBJECT_COLORS, SUBJECT_DEFAULT_VIEW_OPTIONS, type ConsultationTemplate, type HolidaySetting, type PeriodTimeRow, type ShuttleSetting, type SubjectSetting, type TermSetting } from "@/features/owner/settings-types";
-import { SUBJECT_SOLID, KNOWN_SUBJECT_KEYS } from "@/features/owner/subjects";
+import { SUBJECT_SOLID, KNOWN_SUBJECT_KEYS, counselByClassTeacher } from "@/features/owner/subjects";
 import { SUBJECT_COLOR_LABEL } from "@/features/owner/subject-color-label";
 import { WEEKDAY_GROUPING_OPTIONS } from "@/features/timetable/lib/weekday-groups";
 import { STATE_RESERVED_COLORS } from "@/lib/design/semantic-color";
@@ -238,15 +238,15 @@ export function SubjectListEditor({
                 />
                 {s.hiddenFromIntake ? "숨김" : "노출"}
               </label>
-              {/* 원생상담 의무(원장 2026-10-19) — 기본 = 가장 많은 요일을 맡은 선생님만. 고르면 종전대로 학생 반의 담임 모두(직원 평가 원생상담). */}
+              {/* 원생상담 의무(원장 2026-10-19) — 요일 많은 선생님 / 수업 담당(반에 '담당'으로 세팅된 선생님). 미설정 기본은 영어만 수업 담당(counselByClassTeacher). */}
               <select
                 className={`${cellCls} w-[112px]`}
                 aria-label={`${s.label || "과목"} 원생상담 의무`}
-                value={s.counselAllHomerooms ? "all" : "most"}
-                onChange={(e) => set(i, { counselAllHomerooms: e.target.value === "all" ? true : undefined })}
+                value={counselByClassTeacher(s) ? "all" : "most"}
+                onChange={(e) => set(i, { counselAllHomerooms: e.target.value === "all" })}
               >
                 <option value="most">요일 많은 선생님</option>
-                <option value="all">담임 모두</option>
+                <option value="all">수업 담당</option>
               </select>
               {/* 내부 ID — 읽기전용(데이터 보존용, 자동 확정·고정) */}
               <span

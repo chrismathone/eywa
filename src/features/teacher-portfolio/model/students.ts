@@ -34,8 +34,8 @@ export type ChurnSource = {
   enrollmentsOf: (studentId: string) => readonly SnapshotEnrollment[];
   /**
    * 원생상담 의무 학생(원장 2026-10-19) — 그날 그 강사에게 상담 의무가 있는 학생 → 반(이름 표시용).
-   * 과목마다: 학생이 그 과목에서 다니는 요일을 교시 담당(없으면 담임)별로 세어 **가장 많은 선생님만**(같으면 모두).
-   * `allHomerooms(subject)`가 참인 과목은 종전대로 그 학생 반의 담임 모두. 자리(JJ·LAB) 칸은 사람이 없어 세지 않는다.
+   * 과목마다: 학생이 그 과목에서 다니는 반들의 **담당**(반에 '담당'으로 세팅된 선생님)별로 요일을 세어 **가장 많은 담당만**(같으면 모두).
+   * 교시만 들어가는 부담임은 의무가 없다 · 보고서 미발송 반은 빼되 그런 반만 다니면 그 반 담당 · `allHomerooms(subject)`가 참이면 반 담당 모두.
    */
   counselDutyOf: (day: string, teacherId: string, allHomerooms: (subject: string) => boolean) => ReadonlyMap<string, ReadonlySet<string>>;
 };
@@ -93,27 +93,26 @@ export function buildStudentTracking(input: {
     return map;
   }
 
-  type DutyGroup = { subject: string; home: Map<string, Set<string>>; days: Map<string, Set<string>>; classesOf: Map<string, Set<string>> };
+  // 학생 × 과목의 반들 — 반마다 담당(그날 담임 이력)·학생이 그 반에 오는 요일·보고서 미발송 반인지.
+  type DutyClass = { classId: string; owner: string | null; days: Set<string>; optout: boolean };
+  type DutyGroup = { subject: string; rows: DutyClass[] };
   const dutyCache = new Map<string, Map<string, DutyGroup>>();
   function dutyGroups(day: string): Map<string, DutyGroup> {
     const cached = dutyCache.get(day);
     if (cached) return cached;
     const groups = new Map<string, DutyGroup>();
-    const add = <T,>(m: Map<string, Set<T>>, k: string, v: T) => (m.get(k) ?? m.set(k, new Set()).get(k)!).add(v);
     for (const e of input.enrollments) {
       const c = classes.get(e.class_id);
       if (!c || !openClass(c, day) || !validAtClose(e, day)) continue;
       const key = `${e.student_id}|${c.subject}`;
-      const g = groups.get(key) ?? groups.set(key, { subject: c.subject, home: new Map(), days: new Map(), classesOf: new Map() }).get(key)!;
-      const home = owner(c, day);
-      if (home) add(g.home, home, c.id);
+      const g = groups.get(key) ?? groups.set(key, { subject: c.subject, rows: [] }).get(key)!;
+      // 요일은 반의 담당 몫 — 교시만 들어가는 부담임(JJ 등)은 의무를 받지 않는다(원장 2026-10-19 *"JJ같은 부담임은 상담할 필요가 없다"*).
+      const days = new Set<string>();
       for (const s of schedules.get(c.id) ?? []) {
         if (s.valid_from > day || (s.valid_to && s.valid_to < day) || !enrollmentAttendsOnDay(e.attendance_days, s.day_of_week)) continue;
-        const teacher = s.teacher_id ?? home;
-        if (!teacher) continue;
-        add(g.days, teacher, s.day_of_week);
-        add(g.classesOf, teacher, c.id);
+        days.add(s.day_of_week);
       }
+      g.rows.push({ classId: c.id, owner: owner(c, day), days, optout: c.report_optout === true });
     }
     dutyCache.set(day, groups);
     return groups;
@@ -122,15 +121,21 @@ export function buildStudentTracking(input: {
     const out = new Map<string, Set<string>>();
     for (const [key, g] of dutyGroups(day)) {
       const studentId = key.slice(0, key.indexOf("|"));
-      let mine: Set<string> | undefined;
-      if (allHomerooms(g.subject) || g.days.size === 0) mine = g.home.get(teacherId);
+      // 보고서 미발송 반은 상담 의무도 없다(원장 2026-10-19) — 그 과목에 그런 반만 다니면 그 반 담당이 맡는다(아무도 안 맡는 학생이 없게).
+      const sent = g.rows.filter((r) => !r.optout && r.owner);
+      const rows = sent.length ? sent : g.rows.filter((r) => r.owner);
+      let picked: DutyClass[];
+      if (allHomerooms(g.subject)) picked = rows;
       else {
-        const most = Math.max(...[...g.days.values()].map((d) => d.size));
-        if ((g.days.get(teacherId)?.size ?? 0) === most) mine = new Set([...(g.classesOf.get(teacherId) ?? []), ...(g.home.get(teacherId) ?? [])]);
+        const daysOf = new Map<string, Set<string>>();
+        for (const r of rows) for (const d of r.days) (daysOf.get(r.owner!) ?? daysOf.set(r.owner!, new Set()).get(r.owner!)!).add(d);
+        const most = Math.max(0, ...[...daysOf.values()].map((d) => d.size));
+        // 요일을 모르는 반만 있으면(시간표 없음) 담당 모두 — 같으면 모두.
+        picked = most === 0 ? rows : rows.filter((r) => (daysOf.get(r.owner!)?.size ?? 0) === most);
       }
-      if (!mine?.size) continue;
-      const prev = out.get(studentId);
-      out.set(studentId, prev ? new Set([...prev, ...mine]) : new Set(mine));
+      const mine = picked.filter((r) => r.owner === teacherId).map((r) => r.classId);
+      if (!mine.length) continue;
+      out.set(studentId, new Set([...(out.get(studentId) ?? []), ...mine]));
     }
     return out;
   }

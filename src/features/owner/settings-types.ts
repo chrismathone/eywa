@@ -147,8 +147,9 @@ export const subjectSchema = z.object({
   // 신규 상담으로 받지 않는 과목용. 미설정/false = 노출(기존 동작 유지). 내부 화면·시간표엔 영향 없음.
   // (.default(false)가 아니라 .optional() — 예외 플래그라 과목마다 적어넣게 만들지 않는다. weekdayPeriods와 동일.)
   hiddenFromIntake: z.boolean().optional(),
-  // 원생상담 의무(직원 평가 · 원장 2026-10-19) — 미설정/false = 그 과목에서 학생을 **가장 많은 요일 맡은 선생님만** 의무(같으면 모두).
-  // true = 종전대로 학생이 다니는 반의 담임 모두. 소비처 = teacher-portfolio `counselDutyOf`.
+  // 원생상담 의무(직원 평가 · 원장 2026-10-19) — false = 그 과목에서 학생을 **가장 많은 요일 맡은 선생님만** 의무(같으면 모두).
+  // true = 학생이 다니는 반의 **수업 담당**(반에 '담당'으로 세팅된 선생님) 모두. 미설정 = 영어(english)는 수업 담당, 그 밖은 요일 많은 선생님
+  // (원장 2026-10-19 *"영어과목은 '담당'으로 수업에서 세팅된 선생님"* — 영어는 원어민이 교시를 많이 맡는다). 판정 = `counselByClassTeacher`.
   counselAllHomerooms: z.boolean().optional(),
   // 강사뷰(강사별시간표) 내부 가로줄 시각("HH:MM") — 큰 섹션 경계 표시. 미설정 = 영어 기본 6시각.
   teacherViewLines: z.array(z.string().regex(HHMM, "HH:MM 형식")).max(40).optional(),

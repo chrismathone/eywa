@@ -51,14 +51,39 @@ describe("상담 의무 = 같은 과목에서 가장 많은 요일을 맡은 선
     expect(src.counselDutyOf("2026-10-31", "b", no).size).toBe(0);
     expect(src.counselDutyOf("2026-10-31", "b", () => true).size).toBe(1);
   });
-  it("요일 수가 같으면 둘 다 · 교시 담당은 그 요일의 선생님으로 센다 · 다른 과목은 따로", () => {
+  it("교시만 들어가는 부담임(JJ)은 의무 없음 — 요일은 반 담당 몫 · 다른 과목은 따로", () => {
     const src = source([klass("A", "a"), klass("B", "b"), klass("E", "e", "english")],
-      [slot("A", "mon"), slot("A", "tue", "b"), slot("B", "wed"), slot("E", "thu")], [enroll("s", "A"), enroll("s", "B"), enroll("s", "E")]);
-    // 수학: a = 월 1 · b = 화(교시 담당) + 수 = 2 → b만. 영어는 e 혼자.
-    expect(src.counselDutyOf("2026-10-31", "a", no).size).toBe(0);
-    expect([...src.counselDutyOf("2026-10-31", "b", no).get("s") ?? []].sort()).toEqual(["A", "B"]);
+      [slot("A", "mon"), slot("A", "tue", "jj"), slot("B", "wed"), slot("E", "thu")], [enroll("s", "A"), enroll("s", "B"), enroll("s", "E")]);
+    // 수학: a = 월·화(화요일 교시는 JJ 부담임이 들어가도 A반 담당 몫) 2 · b = 수 1 → a만. JJ 부담임은 없음. 영어는 e 혼자.
+    expect([...src.counselDutyOf("2026-10-31", "a", no).get("s") ?? []]).toEqual(["A"]);
+    expect(src.counselDutyOf("2026-10-31", "b", no).size).toBe(0);
+    expect(src.counselDutyOf("2026-10-31", "jj", no).size).toBe(0);
     expect(src.counselDutyOf("2026-10-31", "e", no).size).toBe(1);
     const tie = source([klass("A", "a"), klass("B", "b")], [slot("A", "mon"), slot("B", "fri")], [enroll("s", "A"), enroll("s", "B")]);
     expect(tie.counselDutyOf("2026-10-31", "a", no).size + tie.counselDutyOf("2026-10-31", "b", no).size).toBe(2);
+  });
+  it("보고서 미발송 반은 의무에서 빠진다 — 그런 반만 다니면 그 반 담당", () => {
+    const optout = (id: string, teacher: string) => ({ ...klass(id, teacher), report_optout: true });
+    const src = source([klass("A", "a"), optout("J", "j")], [slot("A", "mon"), slot("J", "tue"), slot("J", "wed")], [enroll("s", "A"), enroll("s", "J")]);
+    expect(src.counselDutyOf("2026-10-31", "a", no).size).toBe(1);
+    expect(src.counselDutyOf("2026-10-31", "j", no).size).toBe(0);
+    const only = source([optout("J", "j")], [slot("J", "tue")], [enroll("s", "J")]);
+    expect(only.counselDutyOf("2026-10-31", "j", no).size).toBe(1);
+  });
+});
+
+describe("영어는 기본이 수업 담당(원장 2026-10-19)", () => {
+  it("저장값이 없으면 영어만 수업 담당 · 저장값이 있으면 그대로", async () => {
+    const { counselByClassTeacher } = await import("@/features/owner/subjects");
+    expect(counselByClassTeacher({ key: "english" })).toBe(true);
+    expect(counselByClassTeacher({ key: "math" })).toBe(false);
+    expect(counselByClassTeacher({ key: "english", counselAllHomerooms: false })).toBe(false);
+    expect(counselByClassTeacher({ key: "math", counselAllHomerooms: true })).toBe(true);
+  });
+  it("영어 반: 원어민이 교시를 더 많이 맡아도 상담 의무는 반의 담당", () => {
+    const d = { consultations: [], settings: { subjects: [{ key: "english", label: "영어" }] } } as unknown as PortfolioSnapshot;
+    const seen: boolean[] = [];
+    counselItem({ d, teacherId: "t", w, classNameOf: (id) => id, duty: (_day, _t, all) => { seen.push(all("english"), all("math")); return new Map(); } });
+    expect(seen).toEqual([true, false]);
   });
 });
