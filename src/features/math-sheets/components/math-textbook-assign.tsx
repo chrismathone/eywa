@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { assignmentConflict, effectiveMathBook, type AssignmentConflict } from "@/features/textbooks/math-assignment";
+import { assignmentConflict, type AssignmentConflict } from "@/features/textbooks/math-assignment";
 import { saveMathTextbookAssignment } from "@/features/textbooks/server/math-assignment-actions";
 import { useMathTextbooks } from "./math-textbook-context";
 import styles from "./learning-overview.module.css";
@@ -39,9 +39,14 @@ export function StudentTextbookChip({ studentId, studentName }: { studentId: str
   const ctx = useMathTextbooks();
   const [open, setOpen] = useState(false);
   if (!ctx) return null;
-  const book = effectiveMathBook(ctx.classBook, ctx.byStudent[studentId] ?? null);
+  const now = ctx.now[studentId] ?? null;
   const editable = ctx.canWrite && ctx.status === "ok";
-  const text = book ? `${book.title}${book.source === "class" ? " (반)" : ""}` : "교재 미배정";
+  // (반) = 반 교재를 받는 중 · (기록) = 배정은 없고 보고서 교재 칸에서 읽은 교재(배정하면 그쪽이 이긴다).
+  const source = now?.source === "class" ? " (반)" : now?.source === "report" ? " (기록)" : "";
+  const step = now?.position ? ` · ${now.position.lessonNo}/${now.position.total}차수` : now ? " · 차수 미확인" : "";
+  const text = now ? `${now.book.title}${source}${step}` : "교재 미배정";
+  const tip = now?.position ? `${now.position.date} 보고서 진도: ${now.position.unit}` : undefined;
+  const book = now;
   // 🔴 이 칩은 클릭하면 학생 집중 보기로 가는 행(<tr onClick>) 안에 있다 — 창은 포털이지만 React 이벤트는
   //    트리를 따라 행까지 올라가므로(바깥 딤 클릭 포함) 여기서 한 번에 끊는다.
   return (
@@ -51,13 +56,13 @@ export function StudentTextbookChip({ studentId, studentName }: { studentId: str
           type="button"
           className={local.chip}
           data-empty={book ? undefined : true}
-          title="이 학생의 교재 배정"
+          title={tip ? `${tip} · 눌러서 교재 배정` : "이 학생의 교재 배정"}
           onClick={() => setOpen(true)}
         >
           {text}
         </button>
       ) : (
-        <span className={local.chip} data-empty={book ? undefined : true} data-static>
+        <span className={local.chip} data-empty={book ? undefined : true} data-static title={tip}>
           {text}
         </span>
       )}
