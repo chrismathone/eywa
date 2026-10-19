@@ -11,10 +11,26 @@ const data = {
   classId: "class", month: "2026-10", today: "2026-10-03", dows: ["wed"],
   weeks: [{ monday: "2026-10-05", index: 2, dates: ["2026-10-07"] }],
   slotsByDate: { "2026-10-07": [{ slotStart: "16:00", slotEnd: "17:00", teacherLabel: "강사", roomLabel: null, seat: null }] },
-  linesBySlot: {}, plannedBySlot: {}, shiftBySlot: {}, periodLabelBySlot: {},
+  // 🔴 버튼은 **실제 줄이 있는 칸에만** 선다(원장 2026-10-19 "계획만 있으면 버튼 숨겨").
+  linesBySlot: {
+    "2026-10-07|16:00": [
+      { id: "l1", planDate: "2026-10-07", slotStart: "16:00", termMode: "regular", skillArea: "grammar", lineNo: 1,
+        textbook: "SKY", pageRange: "25분", progress: "Unit 1", homework: null, updatedAt: "" },
+    ],
+  },
+  plannedBySlot: {}, shiftBySlot: {}, periodLabelBySlot: {},
   skillAreas: [], holidays: {}, canEdit: true, lessonIndex: {},
 } as unknown as ClassSheetMonthData;
 const props = { data, goals: {}, display: { homework: true, seat: true } };
+/** 실제 줄이 없고 월간계획만 있는 칸. */
+const planOnly = {
+  ...data,
+  linesBySlot: {},
+  plannedBySlot: {
+    "2026-10-07|16:00": [{ lessonNo: 1, date: "2026-10-07", slotStart: "16:00", skillArea: "grammar", title: "SKY",
+      pageTime: "25분", progress: "Unit 1", homework: null, termMode: "regular" }],
+  },
+} as unknown as ClassSheetMonthData;
 afterEach(cleanup);
 
 describe("월간 달력 내부 조작", () => {
@@ -34,6 +50,12 @@ describe("월간 달력 내부 조작", () => {
     else { fireEvent.keyDown(shift, { key }); fireEvent.keyUp(shift, { key }); }
     expect(onShift).toHaveBeenCalledExactlyOnceWith("2026-10-07", "16:00", "skip");
     expect(onOpenDay).not.toHaveBeenCalled();
+  });
+
+  it("🔴 월간계획만 있고 실제 줄이 없는 칸엔 미룸·당김이 없다(원장 2026-10-19)", () => {
+    render(<MonthCalendar {...props} data={planOnly} onOpenDay={vi.fn()} onShift={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: "미룸" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "당김" })).toBeNull();
   });
 
   it("키 반복은 중복 조작을 만들지 않고 날짜 칸의 기본 동작은 유지한다", () => {

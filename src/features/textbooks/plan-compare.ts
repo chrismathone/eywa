@@ -67,9 +67,10 @@ export type CellCompare = {
 };
 
 /**
- * 한 교시에 같은 교재 차수가 둘 이상일 때(원장 2026-10-16 "화 1·2차수") 진도·과제를 **한 줄로 잇는 규약**.
- * 가져오기([`mergeSameCellLessons`](./plan-expand.ts))와 대조(`compareCell`)가 **같은 함수**를 써야 한다 —
- * 둘이 다르게 이으면 그대로 가져온 칸이 '다름'으로 잡힌다. 빈 값은 건너뛰고 같은 문구는 한 번만.
+ * 한 교시에 같은 교재 차수가 둘 이상일 때 진도·과제를 **한 줄로 잇는 규약**(2026-10-16~19의 가져오기 모양).
+ * 2026-10-19부터 가져오기는 **차수 하나 = 줄 하나**로 쓰지만(원장 *"차시마다 한줄씩"*), 그전에 이어 쓴 줄이
+ * 남아 있어 대조(`compareCell`)와 옛 줄 나누기(`planCellExtras`)가 이 규약을 계속 읽는다.
+ * 빈 값은 건너뛰고 같은 문구는 한 번만.
  */
 export const LESSON_JOIN = " / ";
 export function joinLessonTexts(vals: readonly (string | null | undefined)[]): string | null {
@@ -79,19 +80,26 @@ export function joinLessonTexts(vals: readonly (string | null | undefined)[]): s
 }
 
 /**
- * 같은 칸의 원래 계획에서 **같은 구분·같은 교재** 줄을 한 줄로 합친다(차수 순, 차수 번호는 첫 차수).
- * 실제 줄은 가져오기에서 이미 한 줄로 합쳐져 있다 — 계획만 둘이면 둘째가 짝을 못 찾아 '다름'이 된다.
+ * 같은 칸의 원래 계획에서 **같은 구분·같은 교재** 차수가 둘 이상일 때 — 실제 줄이 차수만큼 있으면 **따로**
+ * 견주고(2026-10-19~ 차수 하나 = 줄 하나), 모자라면(옛 `A / B` 한 줄) 한 줄로 합쳐 견준다(차수 번호는 첫 차수).
+ * 합치지 않으면 옛 칸의 둘째 차수가 짝을 못 찾아 '다름'이 되고, 늘 합치면 새 칸의 둘째 줄이 남는다.
  */
-function mergeBaseline(baseline: readonly BaselineLine[]): BaselineLine[] {
+function mergeBaseline(baseline: readonly BaselineLine[], actual: readonly ActualLine[]): BaselineLine[] {
   const groups = new Map<string, BaselineLine[]>();
   for (const b of baseline) {
     const key = `${b.skillArea}|${normalizeBookName(b.title)}`;
     groups.set(key, [...(groups.get(key) ?? []), b]);
   }
-  return [...groups.values()].map((g) => {
-    if (g.length === 1) return g[0]!;
+  return [...groups.values()].flatMap((g) => {
     const sorted = [...g].sort((a, b) => a.lessonNo - b.lessonNo);
-    return { ...sorted[0]!, progress: joinLessonTexts(sorted.map((l) => l.progress)) };
+    if (sorted.length === 1) return sorted;
+    const head = sorted[0]!;
+    const written = actual.filter(
+      // 쓰기(`applyCellLessons`)와 같은 판정 — 교재명이 글자까지 같은 줄만 센다(비슷한 이름의 손 줄은 안 센다).
+      (a) => a.skillArea === head.skillArea && String(a.textbook ?? "").trim().toLowerCase() === head.title.trim().toLowerCase(),
+    ).length;
+    if (written >= sorted.length) return sorted;
+    return [{ ...head, progress: joinLessonTexts(sorted.map((l) => l.progress)) }];
   });
 }
 
@@ -148,8 +156,8 @@ export function compareCell(input: {
   isFuture: boolean;
 }): CellCompare {
   const { lessonIndex, isFuture } = input;
-  const baseline = mergeBaseline(input.baseline);
   const actual = input.actual.filter(hasContent);
+  const baseline = mergeBaseline(input.baseline, actual);
   if (baseline.length === 0) return { verdict: "noPlan", lag: 0, lines: [] };
 
   const used = new Set<number>();

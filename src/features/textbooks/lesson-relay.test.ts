@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { MonthScheduleRow } from "@/features/class-sheets/lib/month-assemble";
 import { planCellKeys } from "./lesson-schedule";
-import { expandPlans, mergeSameCellLessons, type BookInfo, type LessonText, type PlanRow } from "./plan-expand";
+import { expandPlans, groupCellLessons, type BookInfo, type CellLessons, type LessonText, type PlanRow } from "./plan-expand";
 import {
   composedOfLessons,
   isAssignedLine,
@@ -45,9 +45,11 @@ const BOOK: RelayBook = {
 };
 const SLOT = "18:20";
 const END = "2027-01-29";
+const WIDE = "2027-03-31";
 
-const scheduleOf = (shifts: Record<string, "skip" | "advance">) =>
-  mergeSameCellLessons(
+/** 일정 — 가져오기는 END까지만(그 뒤는 아직 안 가져온 칸), 다시 깔기 계산은 넉넉히(서버와 같게). */
+const scheduleOf = (shifts: Record<string, "skip" | "advance">, to: string = END) =>
+  groupCellLessons(
     Object.values(
       expandPlans({
         plans: [PLAN],
@@ -57,48 +59,62 @@ const scheduleOf = (shifts: Record<string, "skip" | "advance">) =>
         holidays: HOLIDAYS,
         shifts,
         from: "2027-01-01",
-        to: END,
+        to,
       }),
     ).flat(),
   );
 
-/** 실제 칸 — 날짜 → 줄들. 가져오기(빈 칸만)를 흉내 낸다. */
+/** 실제 칸 — id → 줄. 가져오기(차수 하나 = 줄 하나, 이미 있는 k번째 줄은 그대로)를 흉내 낸다. */
 type Db = Map<string, RelayLine>;
 let seq = 0;
-function importInto(db: Db, targets: ReturnType<typeof scheduleOf>) {
-  for (const t of targets) {
-    const sameTitle = [...db.values()].some((l) => l.date === t.date && l.slot === t.slot && l.textbook === "Grammar");
-    if (sameTitle) continue; // RPC: 같은 교재명 줄이 있으면 빈 칸만 채운다(여기선 다 차 있다).
-    const id = `r${(seq += 1)}`;
-    db.set(id, { id, date: t.date, slot: t.slot, skillArea: "grammar", lineNo: 1, textbook: "Grammar", progress: t.progress, homework: t.homework });
+function importInto(db: Db, cells: readonly CellLessons[]) {
+  for (const c of cells) {
+    const have = [...db.values()]
+      .filter((l) => l.date === c.date && l.slot === c.slot && l.textbook === "Grammar")
+      .sort((a, b) => a.lineNo - b.lineNo);
+    const maxNo = Math.max(0, ...[...db.values()].filter((l) => l.date === c.date && l.slot === c.slot).map((l) => l.lineNo));
+    c.lessons.forEach((lesson, i) => {
+      if (have[i]) return; // 그 차수 자리의 줄이 이미 있다 — 빈 칸만 채운다(여기선 다 차 있다).
+      const id = `r${(seq += 1)}`;
+      db.set(id, { id, date: c.date, slot: c.slot, skillArea: "grammar", lineNo: maxNo + i + 1, textbook: "Grammar", progress: lesson.progress, homework: lesson.homework });
+    });
   }
 }
 function apply(db: Db, ops: RelayOp[]) {
-  const inserts: ReturnType<typeof scheduleOf> = [];
+  const inserts: CellLessons[] = [];
   for (const o of ops) {
     if (o.op === "update") db.set(o.id, { ...db.get(o.id)!, progress: o.progress, homework: o.homework });
     else if (o.op === "delete") db.delete(o.id);
-    else inserts.push({ date: o.date, slot: o.slot, progress: o.progress, homework: o.homework });
+    else inserts.push({ date: o.date, slot: o.slot, lessons: o.lessons });
   }
   importInto(db, inserts);
 }
-const view = (db: Db) =>
-  Object.fromEntries(
-    [...db.values()].sort((a, b) => a.date.localeCompare(b.date)).map((l) => [l.date.slice(5), l.progress]),
+/** 날짜 → 그 칸 줄들의 진도(줄 번호 순, 보기 좋게 ` / `로 — 저장은 줄마다 따로다). */
+const view = (db: Db) => {
+  const byDate = new Map<string, RelayLine[]>();
+  for (const l of db.values()) byDate.set(l.date, [...(byDate.get(l.date) ?? []), l]);
+  return Object.fromEntries(
+    [...byDate.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([d, ls]) => [d.slice(5), ls.sort((a, b) => a.lineNo - b.lineNo).map((l) => l.progress).join(" / ")]),
   );
+};
+/** 날짜 → 줄 수. */
+const lineCount = (db: Db, date: string) => [...db.values()].filter((l) => l.date === date).length;
 
 /** 서버가 하는 일 그대로: 표식 → 새 일정 → 다시 깔기. */
 function press(db: Db, shifts: Record<string, "skip" | "advance">, date: string, kind: "skip" | "advance") {
   const pressedKey = `${date}|${SLOT}`;
   const cells = planCellKeys({ startDate: "2027-01-01", schedules: SCHEDULES, holidays: HOLIDAYS, axis: "class", slotPicks: PLAN.slot_picks as string[], lookaheadDays: 60 });
   expect(cells).toContain(pressedKey);
-  const previous = scheduleOf({ ...shifts });
+  const previous = scheduleOf({ ...shifts }, WIDE);
   const mark = placeShiftMarker({ kind, pressedKey, sequence: cells.filter((k) => k >= pressedKey), shifts });
   if (!mark) throw new Error("no marker cell");
   if (mark.op === "delete") delete shifts[mark.key];
   else shifts[mark.key] = kind;
   const mine = [...db.values()].filter((l) => isAssignedLine(l, BOOK));
-  apply(db, planRelay({ kind, date, slot: SLOT, lines: mine, targets: scheduleOf(shifts), previous }).ops);
+  const edited = [...db.values()].filter((l) => !isAssignedLine(l, BOOK));
+  apply(db, planRelay({ kind, date, slot: SLOT, lines: mine, edited, targets: scheduleOf(shifts, WIDE), previous }).ops);
 }
 
 function freshDb(): Db {
@@ -123,11 +139,16 @@ describe("배정 교재 미루기·당기기 — 화 1·2차수 + 금 1차수(�
     expect(view(freshDb())).toEqual(ORIGINAL);
   });
 
-  it("🔴 1/5 미룸 — 누른 칸은 그대로, 뒤는 **교재 순서로** 한 칸씩(금요일도 함께)", () => {
+  it("🔴 한 교시 1·2차수 = 줄 두 개(원장 2026-10-19 — 차시마다 한 줄)", () => {
+    const db = freshDb();
+    expect(lineCount(db, "2027-01-05")).toBe(2);
+    expect(lineCount(db, "2027-01-08")).toBe(1);
+  });
+
+  it("🔴 1/5 미룸 — 누른 칸은 비고(원장 2026-10-19), 뒤는 **교재 순서로** 한 칸씩(금요일도 함께)", () => {
     const db = freshDb();
     press(db, {}, "2027-01-05", "skip");
     expect(view(db)).toEqual({
-      "01-05": "Unit 1 / Unit 2", // 누른 칸 = 복사(실제 한 수업으로 고쳐 적는 자리)
       "01-08": "Unit 1",
       "01-12": "Unit 2 / Unit 3",
       "01-15": "Unit 4",
@@ -135,6 +156,7 @@ describe("배정 교재 미루기·당기기 — 화 1·2차수 + 금 1차수(�
       "01-22": "Unit 7",
       "01-26": "Unit 8 / Unit 9",
       "01-29": "Unit 10",
+      "02-02": "Unit 11 / Unit 12", // 범위 밖으로 밀린 차수는 다음 칸에 — 가져와 둔 차수가 하나도 안 사라진다
     });
   });
 
@@ -144,7 +166,23 @@ describe("배정 교재 미루기·당기기 — 화 1·2차수 + 금 1차수(�
     press(db, shifts, "2027-01-05", "skip");
     press(db, shifts, "2027-01-05", "advance");
     expect(shifts).toEqual({});
-    expect(view(db)).toEqual(ORIGINAL);
+    // 가져와 둔 칸은 전부 원래대로. 미룸이 다음 칸(2/2)까지 썼으므로 당김은 그 칸을 일정대로 채운다
+    // (당김의 끝 칸 = 다음 차수 — 종전 당김 그대로). 정확히 누르기 전으로는 [되돌리기](shift-undo.ts).
+    const { "02-02": tail, ...rest } = view(db);
+    expect(rest).toEqual(ORIGINAL);
+    expect(tail).toBe("Unit 13 / Unit 14");
+    expect(lineCount(db, "2027-01-05")).toBe(2);
+  });
+
+  it("🔑 옛 `A / B` 한 줄도 다시 깔리면 차수마다 한 줄로 나뉜다", () => {
+    const db: Db = new Map();
+    db.set("old", { id: "old", date: "2027-01-05", slot: SLOT, skillArea: "grammar", lineNo: 1, textbook: "Grammar", progress: "Unit 1 / Unit 2", homework: null });
+    db.set("fri", { id: "fri", date: "2027-01-08", slot: SLOT, skillArea: "grammar", lineNo: 1, textbook: "Grammar", progress: "Unit 3", homework: null });
+    const shifts: Record<string, "skip" | "advance"> = {};
+    press(db, shifts, "2027-01-05", "skip");
+    press(db, shifts, "2027-01-05", "advance");
+    expect(view(db)["01-05"]).toBe("Unit 1 / Unit 2");
+    expect(lineCount(db, "2027-01-05")).toBe(2);
   });
 
   it("🔴 당김을 두 번 — 차수가 순서를 지키고, 버린 차수만 빠진다(지워져 사라지는 차수 없음)", () => {
@@ -172,8 +210,8 @@ describe("배정 교재 미루기·당기기 — 화 1·2차수 + 금 1차수(�
     const shifts: Record<string, "skip" | "advance"> = {};
     press(db, shifts, "2027-01-12", "skip");
     for (const t of scheduleOf(shifts)) {
-      if (t.date <= "2027-01-12") continue; // 누른 칸(복사)과 그 앞은 그대로
-      expect(view(db)[t.date.slice(5)]).toBe(t.progress);
+      if (t.date <= "2027-01-12") continue; // 누른 칸과 그 앞은 따로 본다
+      expect(view(db)[t.date.slice(5)]).toBe(t.lessons.map((l) => l.progress).join(" / "));
     }
   });
 
@@ -182,7 +220,8 @@ describe("배정 교재 미루기·당기기 — 화 1·2차수 + 금 1차수(�
     const edited = [...db.values()].find((l) => l.date === "2027-01-12")!;
     db.set(edited.id, { ...edited, progress: "Unit 4 복습" });
     press(db, {}, "2027-01-05", "skip");
-    expect(view(db)["01-12"]).toBe("Unit 4 복습");
+    // 고쳐 쓴 1번 줄은 그대로, 2번 자리에 그 칸의 2번째 차수(Unit 3)가 온다 — 차수가 사라지거나 자리를 바꾸지 않는다.
+    expect(view(db)["01-12"]).toBe("Unit 4 복습 / Unit 3");
     expect(view(db)["01-15"]).toBe("Unit 4");
   });
 
@@ -190,8 +229,23 @@ describe("배정 교재 미루기·당기기 — 화 1·2차수 + 금 1차수(�
     const db = freshDb();
     press(db, {}, "2027-01-15", "skip");
     const v = view(db);
-    expect([v["01-05"], v["01-08"], v["01-12"], v["01-15"]]).toEqual(["Unit 1 / Unit 2", "Unit 3", "Unit 4 / Unit 5", "Unit 6"]);
+    expect([v["01-05"], v["01-08"], v["01-12"]]).toEqual(["Unit 1 / Unit 2", "Unit 3", "Unit 4 / Unit 5"]);
+    expect(v["01-15"]).toBeUndefined(); // 누른 칸은 비었다
     expect(v["01-19"]).toBe("Unit 6 / Unit 7");
+  });
+
+  it("🔴 마지막 줄이 있는 칸에서 미뤄도 그 차수는 다음 칸에 남는다(사라지지 않는다)", () => {
+    const db = freshDb();
+    press(db, {}, "2027-01-29", "skip");
+    expect(view(db)["01-29"]).toBeUndefined();
+    expect(view(db)["02-02"]).toBe("Unit 12 / Unit 13"); // 1/29의 Unit 12가 다음 칸(화 1·2차수)으로
+  });
+
+  it("🔴 미룸 = 누른 칸의 배정 줄을 지운다(해당 영역 날리기)", () => {
+    const db = freshDb();
+    press(db, {}, "2027-01-12", "skip");
+    expect(lineCount(db, "2027-01-12")).toBe(0);
+    expect(view(db)["01-15"]).toBe("Unit 4");
   });
 
   it("가져오기 전(실제 줄 없음)엔 아무것도 안 쓴다 — 표식만", () => {
@@ -206,7 +260,7 @@ describe("배정 교재 미루기·당기기 — 화 1·2차수 + 금 1차수(�
       date: "2027-01-05",
       slot: SLOT,
       lines: [line("a", "2027-01-05"), line("b", "2027-01-08"), line("extra", "2027-01-12")],
-      targets: [{ date: "2027-01-05", slot: SLOT, progress: "Unit 1", homework: null }],
+      targets: [{ date: "2027-01-05", slot: SLOT, lessons: [{ progress: "Unit 1", homework: null }] }],
       previous: [
         { date: "2027-01-05", slot: SLOT },
         { date: "2027-01-08", slot: SLOT },
