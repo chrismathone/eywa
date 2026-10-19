@@ -16,6 +16,8 @@ import { MENU_LABEL, type MenuKey, type SystemRole } from "@/lib/permissions";
 import type { SemanticTone } from "@/lib/design/semantic-color";
 import { isSupportStatus, SUPPORT_STATUS_META } from "@/features/support/types";
 import { isShellMode, SHELL_MODE_LABEL } from "@/lib/license/shell-mode";
+import { AI_MODEL_CHOICES } from "@/lib/ai/model-pins";
+import { TENANT_MODEL_FEATURES } from "@/lib/ai/model-features";
 
 function supportStatusLabel(v: string): string {
   return isSupportStatus(v) ? SUPPORT_STATUS_META[v].label : "알 수 없는 상태";
@@ -129,6 +131,7 @@ export const AUDIT_ACTIONS = {
   grant_license: { label: "좌석 설정", tone: "info" },
   toggle_license: { label: "기능 켜기·끄기", tone: "info" },
   toggle_laboratory_menu: { label: "실험실 메뉴 지정", tone: "info" },
+  set_ai_model: { label: "AI 모델 선택", tone: "info" },
   change_user_role: { label: "역할 변경", tone: "caution" },
   reset_user_password: { label: "비밀번호 재설정", tone: "critical" },
   set_user_active: { label: "계정 활성·비활성", tone: "caution" },
@@ -191,6 +194,13 @@ export function auditDetail(action: string, metadata: Record<string, unknown> | 
       // 화면 방식 변경은 셋 중 무엇으로 바꿨는지가 사실이다(켬/끔으로는 안 읽힌다).
       if (m.feature === "window_mode" && isShellMode(m.mode)) return `화면 방식 → ${SHELL_MODE_LABEL[m.mode]}`;
       return `${featureLabel(m.feature)} ${m.active === true ? "켬" : "끔"}`;
+    }
+    case "set_ai_model": {
+      // 원시 id 대신 화면 이름으로(원문 노출 금지). 목록 밖 값은 '기타'.
+      const feature = TENANT_MODEL_FEATURES.find((f) => f.key === m.feature);
+      const featureName = feature ? `${feature.area} ${feature.label}` : "AI 기능";
+      const model = AI_MODEL_CHOICES.find((c) => c.model === m.model);
+      return `${featureName} → ${m.model == null ? "기본값" : model ? model.label : "기타 모델"}`;
     }
     case "toggle_laboratory_menu": {
       const menu = str(m.menu) as MenuKey | null;

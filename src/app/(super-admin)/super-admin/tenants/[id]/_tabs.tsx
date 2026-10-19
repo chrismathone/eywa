@@ -13,6 +13,7 @@ import {
 export const TENANT_TABS = [
   { key: "accounts", label: "계정" },
   { key: "license", label: "기능·라이선스" },
+  { key: "ai", label: "AI 모델" },
   { key: "settings", label: "기본 정보" },
 ] as const;
 
