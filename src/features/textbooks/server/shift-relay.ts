@@ -17,13 +17,15 @@ import "server-only";
  */
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
+import { reportError } from "@/lib/observability/report-error";
 import { shiftDays } from "@/features/timetable/lib/week";
 import { MAX_LOOKAHEAD_DAYS, planCellKeys, type SlotAxis } from "../lesson-schedule";
-import { expandPlans, mergeSameCellLessons, type PlanRow } from "../plan-expand";
+import { expandPlans, groupCellLessons, type PlanRow } from "../plan-expand";
 import { isAssignedLine, isBookLine, placeShiftMarker, planRelay, type RelayBook, type RelayLine, type RelayOp } from "../lesson-relay";
 import { loadPlanMaterials } from "./month-plan";
 import { isMissingTextbookTable } from "./access";
 import { shiftActualLines } from "./shift-lines";
+import { applyCellLessons } from "./apply-cell-lessons";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -36,8 +38,6 @@ export type ShiftRelayResult =
   | { handled: true; ok: true; moved: number; touched: string[] }
   | { handled: true; ok: false; error: string };
 
-/** RPC 한 번에 싣는 칸 수 — 가져오기(`importPlannedRange`)와 같은 예산. */
-const RPC_CHUNK = 100;
 const STOPPED = "진도를 옮기다 멈췄습니다 — 새로고침 후 확인해 주세요";
 
 export async function shiftAlongPlans(input: {
@@ -163,10 +163,11 @@ export async function shiftAlongPlans(input: {
     const book = bookOf(textbookId);
     if (!book) continue;
     const mine = lines.filter((l) => isAssignedLine(l, book));
+    const edited = lines.filter((l) => isBookLine(l, book) && !isAssignedLine(l, book));
     const end = mine.map((l) => l.date).sort().at(-1);
     if (!end) continue; // 아직 가져오기 전 — 표식만으로 월간계획이 맞춰진다.
     const scheduleWith = (s: Record<string, "skip" | "advance">) =>
-      mergeSameCellLessons(
+      groupCellLessons(
         Object.values(
           expandPlans({
             plans,
@@ -176,12 +177,13 @@ export async function shiftAlongPlans(input: {
             holidays: materials.holidays,
             shifts: s,
             from: date,
-            to: end,
+            // 범위는 planRelay가 자른다 — 미룸은 마지막 줄 다음 칸까지 쓰므로 그 칸이 보이게 넉넉히 펼친다.
+            to: shiftDays(end, 120),
           }),
         ).flat(),
       );
     // 새 일정(표식 반영) + 누르기 전 일정(지워도 되는 칸을 가른다 — `planRelay`의 🔴).
-    const plan = planRelay({ kind, date, slot, lines: mine, targets: scheduleWith(shifts), previous: scheduleWith(m!.shifts ?? {}) });
+    const plan = planRelay({ kind, date, slot, lines: mine, edited, targets: scheduleWith(shifts), previous: scheduleWith(m!.shifts ?? {}) });
     for (const op of plan.ops) ops.push({ book, op });
   }
 
@@ -215,26 +217,28 @@ export async function shiftAlongPlans(input: {
   if (weekly.ok) moved += weekly.moved;
   else if (weekly.stopped) return { handled: true, ok: false, error: STOPPED };
 
-  // 빈 칸에 새로 쓰기 — 가져오기와 같은 RPC(같은 교재명 줄이 있으면 빈 칸만 채운다 = 고쳐 쓴 줄을 안 덮는다).
+  // 모자란 줄 채우기 — 가져오기와 **같은 쓰기**(차수 하나 = 줄 하나, 같은 교재 줄이 있으면 빈 칸만 채운다
+  // = 고쳐 쓴 줄을 안 덮는다).
   const inserts = new Map<Book, Extract<RelayOp, { op: "insert" }>[]>();
   for (const { book, op } of ops) if (op.op === "insert") inserts.set(book, [...(inserts.get(book) ?? []), op]);
   for (const [book, list] of inserts) {
-    const targets = list
-      .map((o) => ({ date: o.date, slot: o.slot, progress: o.progress, homework: o.homework }))
+    const cells = list
+      .map((o) => ({ date: o.date, slot: o.slot, lessons: o.lessons }))
       .sort((a, b) => (a.date === b.date ? a.slot.localeCompare(b.slot) : a.date.localeCompare(b.date)));
-    for (let i = 0; i < targets.length; i += RPC_CHUNK) {
-      const { data, error } = await admin.rpc("ecs_apply_textbook_lessons", {
-        p_tenant: tenantId,
-        p_actor: userId,
-        p_class: classId,
-        p_term_mode: "regular",
-        p_skill_area: book.skillArea,
-        p_title: book.title,
-        p_page_time: book.pageTime,
-        p_targets: targets.slice(i, i + RPC_CHUNK),
+    try {
+      const out = await applyCellLessons({
+        admin,
+        tenantId,
+        actorId: userId,
+        classId,
+        termMode: "regular",
+        book: { skillArea: book.skillArea, title: book.title, pageTime: book.pageTime },
+        cells,
       });
-      if (error) return { handled: true, ok: false, error: STOPPED };
-      moved += Number((data as { applied?: number } | null)?.applied ?? 0);
+      moved += out.applied;
+    } catch (e) {
+      reportError(e, { scope: "textbooks.shift-relay.insert", classId });
+      return { handled: true, ok: false, error: STOPPED };
     }
   }
 

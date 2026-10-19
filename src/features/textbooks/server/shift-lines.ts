@@ -164,11 +164,7 @@ export async function shiftActualLines(input: {
   let moved = 0;
   for (const op of plan.ops) {
     const ok =
-      op.op === "clear"
-        ? await remove(op.at)
-        : op.op === "copy"
-          ? await duplicate(op.from, op.to)
-          : (await duplicate(op.from, op.to)) && (await remove(op.from));
+      op.op === "clear" ? await remove(op.at) : (await duplicate(op.from, op.to)) && (await remove(op.from));
     if (!ok) return fail;
     moved += 1;
   }

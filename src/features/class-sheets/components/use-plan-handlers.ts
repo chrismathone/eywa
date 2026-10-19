@@ -26,7 +26,7 @@
 import { sheetCarrySummary } from "@/features/teacher-view/feedback";
 import { useSheetLang, useSheetTf, useSheetT } from "@/features/teacher-view/lang-context";
 import { useSheetFeedback } from "@/features/teacher-view/lang-context";
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { toast } from "sonner";
 import type { CarryPatch } from "../lib/carry-marks";
 import type { PlanPatchField } from "../lib/plan-codec";
@@ -109,8 +109,34 @@ export function usePlanHandlers({
   const tf = useSheetTf();
   const lang = useSheetLang();
   const feedback = useSheetFeedback();
+  // 미룸·당김·되돌리기 연타 막기 — **ref**다. 되돌리기 버튼은 토스트에 10초 살아 있어 옛 memo를 쥐고 있으므로,
+  // memo 안 `let`이면 새 memo의 미룸과 옛 memo의 되돌리기가 동시에 돈다(적대적 리뷰 2026-10-19).
+  const shiftBusyRef = useRef(false);
   return useMemo(() => {
-    let shiftBusy = false;
+    /**
+     * 미룸·당김·되돌리기 결과를 화면에 — 누른 칸 + 그 주의 다른 바뀐 칸(배정 교재는 요일을 건너 다시 깔린다 —
+     * 화를 누르면 그 주 금요일도). 한 칸짜리 화면은 다른 칸을 못 그리니 안내만 한다(`multiSlot` 🔴).
+     */
+    const applyCells = (
+      planDate: string,
+      slotStart: string,
+      lines: PlanLineDTO[] | undefined,
+      cells: { date: string; slotStart: string; lines: PlanLineDTO[] }[] | undefined,
+    ) => {
+      if (lines) {
+        onSlotLines(planDate, slotStart, lines);
+        seedPlanLines(store, lines);
+      }
+      const others = (cells ?? []).filter((c) => !(c.date === planDate && c.slotStart === slotStart));
+      if (multiSlot) {
+        for (const c of others) {
+          onSlotLines(c.date, c.slotStart, c.lines);
+          seedPlanLines(store, c.lines);
+        }
+      } else if (others.length > 0) {
+        toast.info(t("plan.feedback.shiftOtherCells"));
+      }
+    };
     return {
       editCell: (lineId, field, value) => store.edit(lineId, field, value),
       resolveConflict: (saveKey, choice) => store.resolveConflict(saveKey, choice),
@@ -190,27 +216,37 @@ export function usePlanHandlers({
       setShift: api.setShift
         ? (planDate, slotStart, kind) => {
             const call = api.setShift;
-            if (!call || shiftBusy) return; // 연타로 두 번 밀리지 않게
-            shiftBusy = true;
+            if (!call || shiftBusyRef.current) return; // 연타로 두 번 밀리지 않게
+            shiftBusyRef.current = true;
             void Promise.all([store.flush(), flushHost?.() ?? Promise.resolve()])
               .then(([flushed]) => {
                 if (!flushed.ok && !window.confirm(t("today.copy.unsaved"))) return;
                 return call({ classId, planDate, slotStart }, kind).then((r) => {
-                  if (!r.ok) return void toast.error(feedback(r.error));
-                  if (r.lines) {
-                    onSlotLines(planDate, slotStart, r.lines);
-                    seedPlanLines(store, r.lines);
-                  }
-                  // 배정 교재는 요일을 건너 다시 깔린다(화를 누르면 그 주 금요일도) — 같은 화면의 다른 칸도 갈아 끼운다.
-                  const others = (r.cells ?? []).filter((c) => !(c.date === planDate && c.slotStart === slotStart));
-                  if (multiSlot) {
-                    for (const c of others) {
-                      onSlotLines(c.date, c.slotStart, c.lines);
-                      seedPlanLines(store, c.lines);
-                    }
-                  } else if (others.length > 0) {
-                    toast.info(t("plan.feedback.shiftOtherCells"));
-                  }
+                  if (r.ok) applyCells(planDate, slotStart, r.lines, r.cells);
+                  // [되돌리기](원장 2026-10-19 "덮어쓰기(되돌리기)") — 누르기 전 줄을 그대로 돌려놓는다.
+                  // 옮기다 멈춘 경우에도 기록이 오면 단다(미룸은 누른 칸을 지우므로 멈춘 채 두면 잃는다).
+                  const token = r.undo;
+                  const undoCall = api.undoShift;
+                  const undo =
+                    token && undoCall
+                      ? () => {
+                          if (shiftBusyRef.current) return;
+                          shiftBusyRef.current = true;
+                          void Promise.all([store.flush(), flushHost?.() ?? Promise.resolve()])
+                            .then(() => undoCall(classId, token))
+                            .then((u) => {
+                              if (!u.ok) return void toast.error(feedback(u.error));
+                              const pressed = u.cells?.find((c) => c.date === planDate && c.slotStart === slotStart);
+                              applyCells(planDate, slotStart, pressed?.lines, u.cells);
+                              toast.success(t("plan.shift.undo.done"));
+                            })
+                            .finally(() => {
+                              shiftBusyRef.current = false;
+                            });
+                        }
+                      : null;
+                  const undoAction = undo ? { duration: 10_000, action: { label: t("plan.shift.undo"), onClick: undo } } : undefined;
+                  if (!r.ok) return void toast.error(feedback(r.error), undoAction);
                   toast.success(
                     kind === null
                       ? t("month.shift.clear.done")
@@ -219,11 +255,12 @@ export function usePlanHandlers({
                         : kind === "skip"
                           ? t("plan.feedback.shiftSkip")
                           : t("plan.feedback.shiftAdvance"),
+                    undoAction,
                   );
                 });
               })
               .finally(() => {
-                shiftBusy = false;
+                shiftBusyRef.current = false;
               });
           }
         : undefined,

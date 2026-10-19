@@ -346,7 +346,7 @@ describe("교재 배정 — 회차 미루기·당기기", () => {
   it("🔴 같은 주의 다른 칸도 화면에 갈아 끼운다 — 한 칸짜리 화면엔 넘기지 않는다(2026-10-16 재점검)", () => {
     // 화를 누르면 그 주 금요일도 바뀐다 — 주간 시트가 누른 칸만 바꾸면 금요일이 옛 진도로 남아 보인다.
     const body = plan.slice(plan.indexOf("export async function setLessonShift"));
-    expect(body).toContain("cells: weekRows");
+    expect(body).toContain("readWeekCells(");
     const handlers = read("src", "features", "class-sheets", "components", "use-plan-handlers.ts");
     expect(handlers).toContain("if (multiSlot)");
     const sheet = read("src", "features", "class-sheets", "components", "sheet-client.tsx");
@@ -357,6 +357,39 @@ describe("교재 배정 — 회차 미루기·당기기", () => {
     // 🔴 지우는 건 옛 일정이 그 교재를 놓았던 칸뿐(교재가 끝난 뒤 복사해 둔 같은 문구 줄을 지우지 않게).
     const relay = read("src", "features", "textbooks", "server", "shift-relay.ts");
     expect(relay).toContain("previous: scheduleWith(m!.shifts ?? {})");
+  });
+
+  it("🔴 차수 하나 = 줄 하나 — 가져오기·미룸·당김이 같은 쓰기를 탄다(원장 2026-10-19 \"차시마다 한줄씩\")", () => {
+    // 한 줄로 잇던 옛 함수가 되살아나면 `25분` 줄 하나에 차수가 둘 들어간다.
+    expect(plan).not.toContain("mergeSameCellLessons");
+    const body = plan.slice(plan.indexOf("export async function importPlannedRange"));
+    expect(body).toContain("applyCellLessons(");
+    expect(body).toContain("groupCellLessons(");
+    const relay = read("src", "features", "textbooks", "server", "shift-relay.ts");
+    expect(relay).toContain("applyCellLessons(");
+    expect(relay).not.toContain('rpc("ecs_apply_textbook_lessons"');
+    // 고쳐 쓴 줄도 차수 자리를 차지한다(1차수 줄을 고친 칸에서 2차수가 1번 자리로 밀려 들어가지 않게).
+    expect(relay).toContain("lines: mine, edited,");
+  });
+
+  it("🔴 되돌리기 — 같은 게이트 · 클라 기록을 그대로 믿지 않는다(원장 2026-10-19 \"덮어쓰기(되돌리기)\")", () => {
+    const undo = read("src", "features", "textbooks", "server", "shift-undo-actions.ts");
+    expect(undo).toContain("requireEcsClassAccess(input.classId, { write: true })");
+    expect(undo).toContain("validToken(input.token, input.classId)");
+    expect(undo).toContain("planShiftUndo(");
+    // 누르기 전 모습은 setLessonShift가 옮기기 **전에** 읽는다.
+    const body = plan.slice(plan.indexOf("export async function setLessonShift"));
+    expect(body.indexOf("snapshotShiftState(")).toBeLessThan(body.indexOf("shiftAlongPlans("));
+  });
+
+  it("🔴 버튼은 실제 줄이 있는 칸에만 · 누르면 확인 창부터(원장 2026-10-19)", () => {
+    const table = read("src", "features", "class-sheets", "components", "plan-table.tsx");
+    const cal = read("src", "features", "class-sheets", "components", "month-calendar.tsx");
+    const month = read("src", "features", "class-sheets", "components", "month-client.tsx");
+    expect(table).toContain("canShiftCell(rows)");
+    expect(table).toContain("shiftConfirm.ask(");
+    expect(cal).toContain("canShiftCell(lines)");
+    expect(month).toContain("onShift={shiftConfirm.ask}");
   });
 
   it("🔴 버튼은 **실제를 적는 표**에 있다 — 달력에만 두면 사람이 못 찾는다", () => {

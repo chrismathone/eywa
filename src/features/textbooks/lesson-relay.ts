@@ -17,10 +17,15 @@
  *    문구가 전부 `10개`인 교재는 교재가 끝난 뒤 칸에도 같은 문구를 선생님이 복사해 둔다. 새 일정에 그 칸이
  *    없다고 지우면 선생님이 적은 줄이 사라진다(실측: 브릿지 C 10/29). 옛 일정에 없던 칸의 줄은 새 일정이 그
  *    칸을 쓸 때만 고친다.
- * · 미룸: 누른 칸은 **그대로 둔다**(2026-10-15 결정 — 실제 한 수업으로 고쳐 적는 자리).
+ * · 미룸: 누른 칸의 배정 줄을 **지운다**(원장 2026-10-19 *"미루면 해당영역 날리고"* — 2026-10-15의 "누른 칸은
+ *   복사해 두기"를 뒤집었다). 뒤 칸은 새 일정대로 한 칸씩 밀린다. 실수로 눌렀으면 [되돌리기](./shift-undo.ts).
  * · 당김: 누른 칸도 새 일정으로 바뀐다.
+ * 🔑 **차수 하나 = 줄 하나**(원장 2026-10-19) — 한 칸에 1·2차수면 그 교재 줄이 두 줄이다. 칸 안에서는 줄 번호
+ *    순서와 차수 순서를 짝지어 고친다. 2026-10-16~19의 `A / B` 한 줄은 첫 줄을 첫 차수로 고치고 나머지를 새로
+ *    쓴다(`composedOfLessons`가 이은 값도 배정 줄로 알아보므로 자연히 그렇게 된다).
  */
 import { LESSON_JOIN } from "./plan-compare";
+import type { CellLesson, CellLessons } from "./plan-expand";
 
 /** 실제 계획 줄 한 줄(평시). */
 export type RelayLine = {
@@ -44,14 +49,17 @@ export type RelayBook = {
   homeworkTexts: ReadonlySet<string>;
 };
 
-/** 새 일정 한 칸(한 교시에 차수가 둘이면 이미 한 줄로 이은 값 — `mergeSameCellLessons`). */
-export type RelayTarget = { date: string; slot: string; progress: string | null; homework: string | null };
+/** 새 일정 한 칸 — 그 칸에 올 이 교재의 차수들(차수 순, `groupCellLessons`). */
+export type RelayTarget = CellLessons;
 
 export type RelayOp =
   | { op: "update"; id: string; progress: string | null; homework: string | null }
   | { op: "delete"; id: string }
-  /** 빈 칸에 새로 쓴다 — 서버는 가져오기와 같은 RPC(빈 칸만 채움)로 쓴다. */
-  | { op: "insert"; date: string; slot: string; progress: string | null; homework: string | null };
+  /**
+   * 그 칸에 줄이 모자란다 — 서버는 가져오기와 같은 쓰기([`applyCellLessons`](./server/apply-cell-lessons.ts))에
+   * 그 칸 차수 **전부**를 넘긴다(이미 있는 줄은 빈 칸만 채우고, 모자란 만큼 새 줄을 만든다).
+   */
+  | { op: "insert"; date: string; slot: string; lessons: CellLesson[] };
 
 const cellKey = (date: string, slot: string) => `${date}|${slot}`;
 const norm = (v: string | null | undefined) => String(v ?? "").trim().toLowerCase();
@@ -108,49 +116,80 @@ export function planRelay(input: {
   date: string;
   slot: string;
   lines: readonly RelayLine[];
+  /**
+   * 같은 교재의 **고쳐 쓴** 줄(`isBookLine`이지만 `isAssignedLine`은 아닌 줄) — 손대지 않되 **차수 자리는
+   * 차지한다**. 칸 안 k번째 같은 교재 줄 = k번째 차수라는 쓰기 규약(`planCellExtras`)과 맞춰야, 1차수 줄을 고쳐
+   * 쓴 칸에서 2차수가 1차수 자리로 밀려 들어가거나 사라지지 않는다.
+   */
+  edited?: readonly RelayLine[];
   targets: readonly RelayTarget[];
   /** 누르기 **전** 일정(같은 교재) — 지워도 되는 칸을 가른다(위 🔴). */
   previous: readonly Pick<RelayTarget, "date" | "slot">[];
 }): { ops: RelayOp[]; end: string | null } {
   const pressed = cellKey(input.date, input.slot);
-  const after = (k: string) => k >= pressed && !(input.kind === "skip" && k === pressed);
-  const lines = input.lines.filter((l) => cellKey(l.date, l.slot) >= pressed);
+  const after = (k: string) => k >= pressed;
+  const lines = input.lines.filter((l) => after(cellKey(l.date, l.slot)));
   if (lines.length === 0) return { ops: [], end: null };
-  const end = lines.map((l) => l.date).sort().at(-1)!;
+  let end = lines.map((l) => l.date).sort().at(-1)!;
+  // 🔴 미룸은 마지막 줄의 차수를 **다음 칸까지** 밀어 쓴다(2026-10-19 실데이터 점검) — 누른 칸을 비우게 된 뒤로,
+  //    마지막 줄이 있는 칸에서 미루면 그 차수가 범위(end) 밖으로 밀려 **어디에도 안 남았다**(다음 가져오기 전까지).
+  if (input.kind === "skip") {
+    const lastKey = lines.map((l) => cellKey(l.date, l.slot)).sort().at(-1)!;
+    const next = input.targets
+      .filter((t) => t.lessons.length > 0 && cellKey(t.date, t.slot) > lastKey)
+      .map((t) => t.date)
+      .sort()[0];
+    if (next) end = next;
+  }
 
   const linesByCell = new Map<string, RelayLine[]>();
   for (const l of lines) {
     const k = cellKey(l.date, l.slot);
-    if (!after(k)) continue;
     linesByCell.set(k, [...(linesByCell.get(k) ?? []), l]);
   }
+  const editedByCell = new Map<string, RelayLine[]>();
+  for (const l of input.edited ?? []) {
+    const k = cellKey(l.date, l.slot);
+    if (after(k) && l.date <= end) editedByCell.set(k, [...(editedByCell.get(k) ?? []), l]);
+  }
+  const editedIds = new Set((input.edited ?? []).map((l) => l.id));
   const targetByCell = new Map<string, RelayTarget>();
   for (const t of input.targets) {
     const k = cellKey(t.date, t.slot);
-    if (after(k) && t.date <= end) targetByCell.set(k, t);
+    if (after(k) && t.date <= end && t.lessons.length > 0) targetByCell.set(k, t);
   }
 
   const placedBefore = new Set(input.previous.map((t) => cellKey(t.date, t.slot)));
   const ops: RelayOp[] = [];
   const inserts: RelayOp[] = [];
   for (const k of [...new Set([...linesByCell.keys(), ...targetByCell.keys()])].sort()) {
-    const have = [...(linesByCell.get(k) ?? [])].sort((a, b) => a.lineNo - b.lineNo);
+    const assigned = linesByCell.get(k) ?? [];
+    // 자리 = 배정 줄 + 고쳐 쓴 줄(줄 번호 순). 고쳐 쓴 줄은 자리만 차지하고 고치지도 지우지도 않는다.
+    const have = [...assigned, ...(editedByCell.get(k) ?? [])].sort((a, b) => a.lineNo - b.lineNo);
     const want = targetByCell.get(k);
     if (!want) {
-      if (placedBefore.has(k)) for (const l of have) ops.push({ op: "delete", id: l.id });
+      if (placedBefore.has(k)) for (const l of assigned) ops.push({ op: "delete", id: l.id });
       continue;
     }
-    const progress = clean(want.progress);
-    const homework = clean(want.homework);
-    const [first, ...rest] = have;
-    if (!first) {
-      inserts.push({ op: "insert", date: want.date, slot: want.slot, progress, homework });
-      continue;
+    // 칸 안에서 줄 번호 순 ↔ 차수 순으로 짝짓는다. 남는 배정 줄은 지우고, 모자라면 새로 쓴다.
+    want.lessons.forEach((lesson, i) => {
+      const line = have[i];
+      if (!line || editedIds.has(line.id)) return;
+      const progress = clean(lesson.progress);
+      const homework = clean(lesson.homework);
+      if (clean(line.progress) !== progress || clean(line.homework) !== homework) {
+        ops.push({ op: "update", id: line.id, progress, homework });
+      }
+    });
+    for (const l of have.slice(want.lessons.length)) if (!editedIds.has(l.id)) ops.push({ op: "delete", id: l.id });
+    if (have.length < want.lessons.length) {
+      inserts.push({
+        op: "insert",
+        date: want.date,
+        slot: want.slot,
+        lessons: want.lessons.map((l) => ({ progress: clean(l.progress), homework: clean(l.homework) })),
+      });
     }
-    if (clean(first.progress) !== progress || clean(first.homework) !== homework) {
-      ops.push({ op: "update", id: first.id, progress, homework });
-    }
-    for (const l of rest) ops.push({ op: "delete", id: l.id });
   }
   // 새로 쓰는 칸은 맨 뒤 — 지우고 고친 다음에 채워야 같은 칸의 옛 줄과 안 겹친다.
   return { ops: [...ops, ...inserts], end };

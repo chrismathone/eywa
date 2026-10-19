@@ -34,6 +34,8 @@ import {
   type LessonShiftResult,
 } from "@/features/textbooks/server/plan-actions";
 import { getSlotPlanCompare, type SlotCompareResult } from "@/features/textbooks/server/compare-actions";
+import { undoLessonShift, type ShiftUndoResult } from "@/features/textbooks/server/shift-undo-actions";
+import type { ShiftUndoToken } from "@/features/textbooks/shift-undo";
 
 export type PlanWriteApi = {
   flushPatches: (ref: PlanSlotRef, patches: unknown) => Promise<PlanPatchesResult>;
@@ -56,6 +58,8 @@ export type PlanWriteApi = {
    * **회차 미루기·당기기**(0282a) — 그 칸에서 차수를 건너뛸지/버릴지. `comparePlan`과 같은 이유로 선택이다.
    */
   setShift?: (ref: PlanSlotRef, kind: LessonShiftKind | null) => Promise<LessonShiftResult>;
+  /** 미루기·당기기 **되돌리기**(원장 2026-10-19) — `setShift`가 돌려준 기록을 그대로 돌려보낸다. 짝이라 함께 낸다. */
+  undoShift?: (classId: string, token: ShiftUndoToken) => Promise<ShiftUndoResult>;
   /**
    * 계획 **칸 값** 감사로그 — 칸을 떠날 때 한 줄(원장 결정 2026-09-14). 저장과 **같은 문**을 지난다.
    * ⚠️ 없으면 그 문의 계획 칸은 기록되지 않는다(가드 `edit-audit-wiring.test.ts`가 두 문 모두 구현했는지 본다).
@@ -88,5 +92,6 @@ export const ECS_PLAN_API: PlanWriteApi = {
     getSlotPlanCompare({ classId: ref.classId, date: ref.planDate, slotStart: ref.slotStart }),
   setShift: (ref, kind) =>
     setLessonShift({ classId: ref.classId, date: ref.planDate, slotStart: ref.slotStart, kind }),
+  undoShift: (classId, token) => undoLessonShift({ classId, token }),
   commitEdits: (ref, edits) => commitSheetEdits({ classId: ref.classId, edits }),
 };

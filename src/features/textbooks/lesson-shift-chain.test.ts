@@ -9,7 +9,7 @@ function apply(cells: Record<string, string>, ops: ShiftOp[]): Record<string, st
     else {
       expect(out[o.to]).toBeUndefined(); // 옮겨 갈 칸은 언제나 비어 있어야 한다(위치 유니크)
       out[o.to] = out[o.from]!;
-      if (o.op === "move") delete out[o.from];
+      delete out[o.from];
     }
   }
   return out;
@@ -18,12 +18,11 @@ function apply(cells: Record<string, string>, ops: ShiftOp[]): Record<string, st
 const MONDAYS = ["2026-10-19", "2026-10-26", "2026-11-02", "2026-11-09", "2026-11-16"];
 
 describe("planLessonShift", () => {
-  it("미룸 — 누른 칸은 그대로(복사), 뒤가 한 주씩 밀린다", () => {
+  it("🔴 미룸 — 누른 칸은 비고(원장 2026-10-19 \"해당영역 날리고\"), 뒤가 한 주씩 밀린다", () => {
     const cells = { "2026-10-19": "S5", "2026-10-26": "S6", "2026-11-02": "S7" };
     const r = planLessonShift({ kind: "skip", fromDate: "2026-10-19", liveDates: MONDAYS, filledDates: Object.keys(cells) });
     if (!r.ok) throw new Error(r.reason);
     expect(apply(cells, r.ops)).toEqual({
-      "2026-10-19": "S5",
       "2026-10-26": "S5",
       "2026-11-02": "S6",
       "2026-11-09": "S7",
@@ -51,7 +50,7 @@ describe("planLessonShift", () => {
     const cells = { "2026-10-19": "A", "2026-11-02": "B" };
     const r = planLessonShift({ kind: "skip", fromDate: "2026-10-19", liveDates: MONDAYS, filledDates: Object.keys(cells) });
     if (!r.ok) throw new Error(r.reason);
-    expect(apply(cells, r.ops)).toEqual({ "2026-10-19": "A", "2026-10-26": "A", "2026-11-09": "B" });
+    expect(apply(cells, r.ops)).toEqual({ "2026-10-26": "A", "2026-11-09": "B" });
   });
 
   it("휴일(수업일 목록에 없는 주)은 건너뛴다", () => {
@@ -59,14 +58,14 @@ describe("planLessonShift", () => {
     const cells = { "2026-10-19": "S5", "2026-11-02": "S6" };
     const r = planLessonShift({ kind: "skip", fromDate: "2026-10-19", liveDates: live, filledDates: Object.keys(cells) });
     if (!r.ok) throw new Error(r.reason);
-    expect(apply(cells, r.ops)).toEqual({ "2026-10-19": "S5", "2026-11-02": "S5", "2026-11-09": "S6" });
+    expect(apply(cells, r.ops)).toEqual({ "2026-11-02": "S5", "2026-11-09": "S6" });
   });
 
   it("누른 칸보다 앞의 칸은 건드리지 않는다", () => {
     const cells = { "2026-10-12": "S4", "2026-10-19": "S5" };
     const r = planLessonShift({ kind: "skip", fromDate: "2026-10-19", liveDates: ["2026-10-12", ...MONDAYS], filledDates: Object.keys(cells) });
     if (!r.ok) throw new Error(r.reason);
-    expect(apply(cells, r.ops)).toEqual({ "2026-10-12": "S4", "2026-10-19": "S5", "2026-10-26": "S5" });
+    expect(apply(cells, r.ops)).toEqual({ "2026-10-12": "S4", "2026-10-26": "S5" });
   });
 
   it("거절 — 내용 없음 · 다음 수업일 없음 · 당겨올 내용 없음", () => {
