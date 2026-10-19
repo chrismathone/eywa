@@ -10,6 +10,7 @@ export type SuperAdminAction =
   | "grant_license"
   | "toggle_license"
   | "toggle_laboratory_menu"
+  | "set_ai_model"
   | "change_user_role"
   | "reset_user_password"
   | "set_user_active"

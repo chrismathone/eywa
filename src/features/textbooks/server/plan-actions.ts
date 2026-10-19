@@ -35,18 +35,18 @@ import { shiftActualLines } from "./shift-lines";
 import { shiftAlongPlans } from "./shift-relay";
 import { readWeekCells, snapshotShiftState, type ShiftSnapshot } from "./shift-snapshot";
 import { diffShift, isEmptyUndo, type ShiftUndoToken } from "../shift-undo";
+import { clearPlanLines } from "./plan-delete-lines";
 import {
   buildLessonSchedule,
   MAX_LOOKAHEAD_DAYS,
-  parseSlotPick,
-  slotPickKey,
+  normalizeSlotPicks,
   normalizeLessonPace,
   type LessonPace,
   type SlotAxis,
 } from "../lesson-schedule";
 import { groupCellLessons } from "../plan-expand";
 import { applyCellLessons, ApplyCellLessonsError } from "./apply-cell-lessons";
-import type { ApplyPreview, ApplyPreviewRow, ApplyResult, ClassSlotChoice, ClassTextbookPlanRow } from "../types";
+import type { ApplyPreview, ApplyPreviewRow, ApplyResult, ClassSlotChoice, ClassTextbookPlanRow, PlanRestoreRow } from "../types";
 import { friendlyTextbookError, isMissingTextbookTable, SLOTS_NOT_READY, TEXTBOOKS_NOT_READY } from "./access";
 
 export type PlanActionResult = { ok: true; id: string } | { ok: false; error: string };
@@ -76,20 +76,6 @@ const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
  * 넉넉해야 한다 — 주 6일 × 하루 4교시 = 24가 현실 최대다.
  */
 const MAX_SLOT_PICKS = 48;
-
-/**
- * 고른 교시를 정규화한다 — 모양이 틀린 값은 **버린다**(형식은 앱이 지킨다, 0268a CHECK는 개수만 본다).
- * ⚠️ 정렬해 둔다: RPC가 날짜·교시 오름차순을 전제로 락을 잡고(교착 회피), 감사로그도 같은 순서로 남는다.
- */
-function normalizeSlotPicks(raw: readonly string[] | null | undefined): string[] {
-  const out = new Set<string>();
-  for (const v of raw ?? []) {
-    const parsed = parseSlotPick(String(v));
-    if (!parsed) continue;
-    out.add(parsed.dow ? slotPickKey(parsed.dow, parsed.start, parsed.pos ?? undefined) : parsed.start);
-  }
-  return [...out].sort();
-}
 
 /**
  * `slot_picks`(0268a)가 아직 없는 DB인가.
@@ -279,23 +265,137 @@ export async function saveClassTextbookPlan(input: ClassTextbookPlanInput): Prom
   return { ok: true, id: data.id as string };
 }
 
-export async function deleteClassTextbookPlan(planId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+export type PlanDeleteResult =
+  | {
+      ok: true;
+      /** 함께 지운 진도 줄·표식 수(`withLines`일 때만). */
+      cleared?: { lines: number; markers: number };
+      /** 되돌리기 재료 — 배정 한 줄 + (함께 지웠으면) 줄·표식 차이. 못 만들었으면 없다(되돌리기 버튼이 안 선다). */
+      undo?: { plan: PlanRestoreRow; lines?: ShiftUndoToken };
+      /** 배정은 지웠는데 진도 줄 지우기가 멈췄다 — 화면이 안내한다. */
+      warning?: string;
+    }
+  | { ok: false; error: string };
+
+/**
+ * 배정 삭제. `withLines`면 **그 교재로 들어간 진도 줄과 그 칸의 미룸·당김 표식도** 함께 지운다(원장 2026-10-19 —
+ * 잘못 배정한 교재 줄을 칸마다 하나씩 지우고 있었다). 범위·규칙은 [`clearPlanLines`](./plan-delete-lines.ts).
+ * 🔑 배정을 **먼저** 지운다 — 줄 지우기가 멈춰도 배정은 사라졌으니 계획이 실제를 다시 채우지 않는다(그때는 경고 +
+ *    그때까지의 되돌리기 기록).
+ */
+export async function deleteClassTextbookPlan(
+  planId: string,
+  opts: { withLines?: boolean } = {},
+): Promise<PlanDeleteResult> {
   const loaded = await loadPlan(planId);
   if ("error" in loaded) return { ok: false, error: loaded.error };
-  const { gate } = loaded;
+  const { gate, plan } = loaded;
+  const admin = createAdminClient();
+  const tenantId = gate.access.tenantId;
 
-  const { error } = await createAdminClient()
+  // 되돌리기 재료 — 지우기 **전** 배정 한 줄. 못 읽어도 삭제는 한다(되돌리기만 없다).
+  const { data: raw } = await admin
     .from("class_textbook_plans")
-    .delete()
-    .eq("tenant_id", gate.access.tenantId)
-    .eq("id", planId);
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .eq("id", planId)
+    .maybeSingle();
+  const restore: PlanRestoreRow | null = raw
+    ? {
+        id: String(raw.id),
+        class_id: String(raw.class_id),
+        textbook_id: String(raw.textbook_id),
+        slot_axis: raw.slot_axis === "jj" ? "jj" : "class",
+        pace: String(raw.pace),
+        term_mode: raw.term_mode === "exam" ? "exam" : "regular",
+        start_date: String(raw.start_date).slice(0, 10),
+        start_lesson_no: Number(raw.start_lesson_no ?? 1),
+        slot_picks: Array.isArray(raw.slot_picks) ? (raw.slot_picks as unknown[]).map(String) : null,
+        is_active: raw.is_active !== false,
+        last_applied_at: raw.last_applied_at ? String(raw.last_applied_at) : null,
+        last_applied_by: raw.last_applied_by ? String(raw.last_applied_by) : null,
+        created_by: raw.created_by ? String(raw.created_by) : null,
+      }
+    : null;
+
+  // 남는 배정들 — 표식을 같이 쓰는 칸을 가르고, 같은 교재가 다른 축에 남아 있으면 줄을 안 지운다.
+  // ⚠️ 0268a 미적용 DB면 `slot_picks` 없이 다시 읽는다([[#95]]) — 그때 남는 배정은 모든 칸을 쓰는 것으로 본다.
+  const from = plan.startDate.slice(0, 10) > kstToday() ? plan.startDate.slice(0, 10) : kstToday();
+  let others: { textbook_id: unknown; slot_picks?: unknown }[] = [];
+  if (opts.withLines) {
+    const q = (cols: string) =>
+      admin
+        .from("class_textbook_plans")
+        .select(cols)
+        .eq("tenant_id", tenantId)
+        .eq("class_id", plan.classId)
+        .eq("is_active", true)
+        .neq("id", planId);
+    let res = await q("id, textbook_id, slot_picks");
+    if (res.error && isMissingSlotPicksColumn(res.error)) res = await q("id, textbook_id");
+    if (res.error) return { ok: false, error: friendlyTextbookError(res.error, "배정을 지우지 못했습니다") };
+    others = (res.data ?? []) as unknown as typeof others;
+  }
+
+  const { error } = await admin.from("class_textbook_plans").delete().eq("tenant_id", tenantId).eq("id", planId);
   if (error) return { ok: false, error: friendlyTextbookError(error, "배정을 지우지 못했습니다") };
-  await logAction({ action: "textbook_plan_delete", targetType: "class", targetLabel: gate.access.className, metadata: { id: planId } });
+
+  let cleared: { lines: number; markers: number } | undefined;
+  let warning: string | undefined;
+  let linesUndo: ShiftUndoToken | undefined;
+  if (opts.withLines) {
+    const keepLines = others.some((o) => String(o.textbook_id) === plan.textbookId);
+    try {
+      const out = await clearPlanLines({
+        admin,
+        tenantId,
+        classId: plan.classId,
+        textbookId: plan.textbookId,
+        termMode: plan.termMode,
+        picks: plan.slotPicks,
+        otherPicks: others.map((o) =>
+          Array.isArray(o.slot_picks) && o.slot_picks.length > 0 ? (o.slot_picks as unknown[]).map(String) : null,
+        ),
+        keepLines,
+        from,
+      });
+      cleared = { lines: out.removed.length, markers: out.markers.length };
+      // 되돌리기 기록 = 실제로 지운 것만(그 사이 남이 쓴 줄은 담지 않는다).
+      const token: ShiftUndoToken = {
+        classId: plan.classId,
+        date: from,
+        slot: "00:00",
+        removed: out.removed,
+        added: [],
+        changed: [],
+        markers: out.markers.map((m) => ({ key: m.key, before: m.kind, after: null })),
+      };
+      if (!isEmptyUndo(token)) linesUndo = token;
+      if (out.stopped) warning = "배정은 지웠지만 진도 줄을 지우다 멈췄습니다 — 새로고침해 남은 줄을 확인해 주세요";
+      else if (keepLines) warning = "배정은 지웠습니다 — 같은 교재가 이 반의 다른 칸(JJ/수업)에도 배정돼 있어 진도 줄은 남겼습니다";
+    } catch (e) {
+      // 읽기에서 멈췄다(아직 아무것도 안 지웠다).
+      reportError(e, { scope: "textbooks.plan-delete.lines", classId: plan.classId });
+      warning = "배정은 지웠지만 진도 줄은 지우지 못했습니다 — 새로고침해 확인해 주세요";
+    }
+  }
+
+  await logAction({
+    action: "textbook_plan_delete",
+    targetType: "class",
+    targetLabel: gate.access.className,
+    metadata: { id: planId, ...(cleared ? { linesCleared: cleared.lines, markersCleared: cleared.markers } : {}) },
+  });
   revalidatePath("/textbooks");
   // 월간계획은 배정에서 **계산**되므로 배정이 사라지면 그 반 시트의 '계획' 표식도 함께 사라져야 한다
   // (`"layout"` — 월간 화면은 `/ecs/<반>/month`라 기본값이면 정작 보는 화면이 안 바뀐다, [[#102]] 계열).
-  revalidatePath(`/ecs/${loaded.plan.classId}`, "layout");
-  return { ok: true };
+  revalidatePath(`/ecs/${plan.classId}`, "layout");
+  return {
+    ok: true,
+    cleared,
+    warning,
+    undo: restore ? { plan: restore, lines: linesUndo } : undefined,
+  };
 }
 
 // ── 미리보기 / 기입 ──────────────────────────────────────────────────────────

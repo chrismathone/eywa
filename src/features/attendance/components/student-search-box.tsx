@@ -13,6 +13,7 @@ import { useRef, useState, type ReactNode } from "react";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
 import { isSearchActive } from "../student-search";
+import { HeaderSearchSlot } from "@/components/header-search-slot";
 
 /**
  * **클라 상태 검색의 토글** — 평소엔 '검색' 글자 하나, 누르면 위 입력칸(+걸린 필터 표기)이 펼쳐진다.
@@ -52,22 +53,25 @@ export function StudentSearchToggle({
     if (!opened && !isSearchActive(v)) setOpened(true);
     onChange(v);
   };
+  // 그리는 자리 = 화면 머리 동작 줄 맨 앞(공용 SearchToggle과 같은 규약, 원장 2026-10-19). 버튼 = 학원 색 채움 + 흰 굵은 글씨.
   if (!open) {
     return (
-      <button
-        type="button"
-        onClick={() => {
-          setOpened(true);
-          requestAnimationFrame(() => inputRef.current?.focus());
-        }}
-        className={`${CONTROL_H} ${CONTROL_LABEL} text-text-dim hover:text-foreground inline-flex shrink-0 items-center px-1 font-medium whitespace-nowrap transition`}
-      >
-        {lang === "en" ? "Search" : "검색"}
-      </button>
+      <HeaderSearchSlot>
+        <button
+          type="button"
+          onClick={() => {
+            setOpened(true);
+            requestAnimationFrame(() => inputRef.current?.focus());
+          }}
+          className={`${CONTROL_H} ${CONTROL_LABEL} bg-primary text-primary-foreground hover:bg-primary/90 inline-flex shrink-0 items-center rounded-lg px-2.5 font-bold whitespace-nowrap transition`}
+        >
+          {lang === "en" ? "Search" : "검색"}
+        </button>
+      </HeaderSearchSlot>
     );
   }
   return (
-    <>
+    <HeaderSearchSlot>
       <StudentSearchBox
         value={value}
         onChange={change}
@@ -87,7 +91,7 @@ export function StudentSearchToggle({
           {lang === "en" ? "Close" : "닫기"}
         </button>
       )}
-    </>
+    </HeaderSearchSlot>
   );
 }
 

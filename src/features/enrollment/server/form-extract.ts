@@ -2,6 +2,7 @@ import "server-only";
 import { generateJSON } from "@/lib/ai/generate";
 import type { AiKeyName, AiProvider } from "@/lib/ai/models";
 import type { ExtractedConsultationForm } from "../form-fill";
+import { normalizeExtractedForm } from "../form-normalize";
 import {
   RELATION_OPTIONS,
   CONSULTATION_PATHS,
@@ -32,10 +33,12 @@ export async function extractConsultationForm(
   keyName: AiKeyName = "default",
   provider?: AiProvider,
 ): Promise<{ form: ExtractedConsultationForm; model: string }> {
-  const { data, model } = await generateJSON<ExtractedConsultationForm>({
+  const { data, model } = await generateJSON<unknown>({
     keyName,
     provider,
-    maxTokens: 4096,
+    // 16000 — Claude 5는 생각 토큰도 이 상한에 든다. 4096일 때 긴 녹음에서 답이 잘려 양식이 안 채워졌다(운영 7일 57건 중 21건 ·
+    // 비교 시험 10건 중 4건, 2026-10-19). 기본 모델은 V4.1 flash(`FEATURE_MODELS`)지만 폴백·지점 선택으로 Claude가 와도 안 잘리게.
+    maxTokens: 16000,
     meta: { feature: "enrollment_form_extract", tenantId: ctx.tenantId },
     prompt: [
       "당신은 학원 신입생 등록상담 녹음을 분석해 상담 기록 양식에 맞게 구조화하는 전문가입니다.",
@@ -82,5 +85,6 @@ export async function extractConsultationForm(
       "JSON만 출력. 마크다운 코드 블록 없이.",
     ].join("\n"),
   });
-  return { form: data, model };
+  // 저장 전 후처리 — 모델이 바뀌어도 칸 값 모양(문자열 · 선택지 표기 · 전화·날짜 형식)을 기존과 같게(2026-10-19).
+  return { form: normalizeExtractedForm(data), model };
 }

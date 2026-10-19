@@ -392,6 +392,8 @@ export const AUDIT_ACTIONS = {
   textbook_plan_create: "반 교재 배정",
   textbook_plan_update: "반 교재 배정 수정",
   textbook_plan_delete: "반 교재 배정 삭제",
+  // 되돌리기(원장 2026-10-19) — 지운 배정과 함께 지운 진도 줄·표식을 되살린다.
+  textbook_plan_delete_undo: "반 교재 배정 삭제 되돌리기",
   textbook_plan_apply: "교재 차수 배정·기입", // 2026-09-23 [기입] 제거 후엔 배정 저장이 이 키로 남는다(옛 행은 기입)
   // 가져오기(원장 2026-09-22) — 월간계획 한 칸을 **실제**로 옮긴 기록. 작성률을 움직이는 행위라 남긴다.
   textbook_plan_import: "월간계획 가져오기",
