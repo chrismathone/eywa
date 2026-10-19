@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { patchMyUiPrefs } from "@/lib/ui-prefs/patch";
 import { MENU_KEYS, type MenuKey } from "@/lib/permissions";
-import { MENU_VISITS_KEY, MENU_VISITS_NS, bumpVisit, isVisitCounted, parseVisits } from "../menu-visits";
+import { MENU_SEARCH_HIDDEN_KEY, MENU_VISITS_KEY, MENU_VISITS_NS, bumpVisit, isVisitCounted, parseVisits } from "../menu-visits";
 
 /**
  * 메뉴를 열었다는 사실 1회 기록 — 왼쪽 '자주 방문한 메뉴' 목록의 재료(원장 2026-09-07).
@@ -31,4 +31,12 @@ export async function recordMenuVisit(menuKey: string): Promise<void> {
   const nav = (prefs[MENU_VISITS_NS] ?? {}) as Record<string, unknown>;
   const next = bumpVisit(parseVisits(nav[MENU_VISITS_KEY]), menuKey as MenuKey, Date.now());
   await patchMyUiPrefs(MENU_VISITS_NS, { [MENU_VISITS_KEY]: next });
+}
+
+/**
+ * 왼쪽 '메뉴 검색' 칸 숨김/보임 — 계정 귀속(다른 PC에서도 같다). 로그인만 본다(내 화면의 표시 취향).
+ * 보임은 기본값이라 저장하지 않고 키를 지운다. 클라가 이미 바꿔 그렸으니 결과는 기다리지 않아도 된다.
+ */
+export async function saveMenuSearchHidden(hidden: boolean): Promise<void> {
+  await patchMyUiPrefs(MENU_VISITS_NS, { [MENU_SEARCH_HIDDEN_KEY]: hidden === true ? true : undefined });
 }

@@ -93,7 +93,8 @@ function collectShellServerActionImports(): Map<string, Set<string>> {
  */
 const ALLOWED: Record<string, string[]> = {
   // 메뉴를 연 기록 — 클릭 때만
-  "src/components/app-sidebar.tsx -> src/features/nav/server/visit-actions.ts": ["recordMenuVisit"],
+  // saveMenuSearchHidden — '메뉴 검색' 칸의 숨기기/보이기 버튼을 **누를 때만**(2026-10-19).
+  "src/components/app-sidebar.tsx -> src/features/nav/server/visit-actions.ts": ["recordMenuVisit", "saveMenuSearchHidden"],
   "src/components/workspace/menu-hub-grid.tsx -> src/features/nav/server/visit-actions.ts": ["recordMenuVisit"],
   // 뷰 전환 — 클릭(목록은 드롭다운을 열 때)
   "src/components/other-teacher-view.tsx -> src/features/shell/view-actions.ts": [

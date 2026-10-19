@@ -32,6 +32,7 @@ import {
 } from "../font-size";
 import { setMyMcsFontSize } from "../server/actions";
 import styles from "./learning-overview.module.css";
+import { ClassTextbookBar, StudentTextbookChip } from "./math-textbook-assign";
 import { LearningRails } from "./learning-rails";
 import { MATH_LEARNING_CADENCE, type MathLearningTrack } from "@/features/progress/learning-cadence";
 import { learningBlocks } from "../lib/learning-plan";
@@ -304,6 +305,7 @@ export function LearningOverview({
               )}
               <span className={styles.autoBadge}>월·주·일 자동 배분</span>
             </div>
+            <ClassTextbookBar />
             <div className={styles.filters}>
               <div>
                 {(
@@ -381,6 +383,7 @@ export function LearningOverview({
                           <p className={styles.meta}>
                             {s.school} {s.grade}
                           </p>
+                          <StudentTextbookChip studentId={s.studentId} studentName={s.name} />
                         </td>
                         <td>
                           <div className={styles.course}>
@@ -562,7 +565,8 @@ function StudentFocus({
         <p className={styles.meta}>
           {student.school} {student.grade}
           {goal?.textbook ? ` · ${goal.textbook}` : ""}
-        </p></> : null}
+        </p>
+        <StudentTextbookChip studentId={student.studentId} studentName={student.name} /></> : null}
         {goal && progress ? (
           <>
             <StudentLearningMap
