@@ -14,11 +14,14 @@ import { MakeeduSyncBadge } from "@/components/makeedu-sync-badge";
 import { canManageTenant, canAccessTenant } from "@/lib/auth/perm-matrix";
 import { redirect } from "next/navigation";
 import { legacyVerificationHref } from "@/features/billing/session-terms/panel-href";
+import { analyticsAccess } from "@/features/management-analytics/server/access";
+import { AnalyticsFace } from "@/features/management-analytics/components/analytics-face";
 
 type Sp = Record<string, string | undefined>;
-type BillingTab = "billing" | "textbooks" | "expenses" | "calculator" | "refunds" | "sessions" | "verify" | "payroll";
+type BillingTab = "billing" | "textbooks" | "expenses" | "calculator" | "refunds" | "sessions" | "verify" | "payroll" | "analytics";
 
 function resolveTab(sp: Sp): BillingTab {
+  if (sp.tab === "analytics") return "analytics";
   return sp.tab === "textbooks"
     ? "textbooks"
     : sp.tab === "expenses"
@@ -56,6 +59,7 @@ const PAYROLL_FACE: Face = { key: "payroll", label: "강사 정산", href: "/bil
 export async function generateMetadata({ searchParams }: { searchParams: Promise<Sp> }) {
   const sp = await searchParams;
   let tab = resolveTab(sp);
+  if (tab === "analytics") return { title: (await analyticsAccess()).ok ? "수납관리 · 경영분석 — 에이와" : "수납관리 — 에이와" };
   // 강사 정산 탭은 원장 전용 — 비-master가 URL로 와도 제목에 "강사 정산"을 노출하지 않는다(본문도 수납으로 폴백).
   if (tab === "payroll" && !(await canReadSalary())) tab = "billing";
   const suffix =
@@ -82,13 +86,15 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const tab = resolveTab(sp);
   const user = await requireAccess(tab === "payroll" ? "payroll_settings" : "billing");
   if (tab === "verify") redirect(legacyVerificationHref(sp));
+  const analytics = await analyticsAccess();
+  if (tab === "analytics" && !analytics.ok) redirect("/billing");
   // 강사 정산 탭은 원장(master)·총괄(super_admin)에게만 노출(감사 D6 — 총괄은 게이트 자동 통과). 그 밖이 URL로 오면 수납 면으로 폴백.
   const isMaster = await canReadSalary();
   const canBilling = await canAccessTenant(user.systemRole, "billing");
   // 회차 정산 모듈(회차 확정·시수 검증·강사 정산) — 꺼진 학원(새 학원 기본)은 면을 세우지 않고 주소도 수납으로 떨군다.
   // 침산은 켜져 있어 종전과 같다(2026-09-22 방향 B).
   const sessionOn = isModuleEnabled((await getTenantSettings()).modules.disabled, "session_billing");
-  const baseFaces = [...(canBilling ? FACES : []), ...(isMaster ? [PAYROLL_FACE] : [])];
+  const baseFaces = [...(canBilling ? FACES : []), ...(isMaster ? [PAYROLL_FACE] : []), ...(analytics.ok ? [{ key: "analytics", label: "경영분석", href: "/billing?tab=analytics" }] : [])];
   const faces = sessionOn ? baseFaces : baseFaces.filter((f) => !SESSION_FACE_KEYS.has(f.key));
   const effectiveTab =
     (tab === "payroll" && !isMaster) || (!sessionOn && SESSION_FACE_KEYS.has(tab)) ? "billing" : tab;
@@ -116,7 +122,9 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
           </div>
         ) : null}
       </div>
-      {effectiveTab === "textbooks" ? (
+      {effectiveTab === "analytics" && analytics.ok ? (
+        <AnalyticsFace tenantId={analytics.user.tenantId} />
+      ) : effectiveTab === "textbooks" ? (
         <TextbooksFace sp={sp} />
       ) : effectiveTab === "expenses" ? (
         <ExpensesPanel sp={sp} canImport={canImport} />

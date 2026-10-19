@@ -294,6 +294,10 @@
             {
               "slug": "payroll",
               "title": "강사 정산"
+            },
+            {
+              "slug": "analytics",
+              "title": "경영분석"
             }
           ]
         },

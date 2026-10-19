@@ -1,7 +1,9 @@
 import { render, screen, cleanup } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-const access = vi.hoisted(() => ({ require: vi.fn() }));
+const access = vi.hoisted(() => ({ require: vi.fn(), analytics: vi.fn() }));
 vi.mock("@/lib/auth/require-access", () => ({ requireAccess: access.require }));
+vi.mock("@/features/management-analytics/server/access", () => ({ analyticsAccess: access.analytics }));
+vi.mock("@/features/management-analytics/components/analytics-face", () => ({ AnalyticsFace: ({ tenantId }: { tenantId: string }) => <div data-testid="analytics-face">{tenantId}</div> }));
 vi.mock("@/features/payroll/server/salary-access", () => ({ canReadSalary: async () => false }));
 vi.mock("@/lib/auth/perm-matrix", () => ({ canAccessTenant: async () => true, canManageTenant: async () => false }));
 vi.mock("@/features/owner/server/queries", () => ({ getTenantSettings: async () => ({ modules: { disabled: [] } }) }));
@@ -16,7 +18,10 @@ vi.mock("./_components/session-terms-face", () => ({ SessionTermsFace: ({ panel,
 vi.mock("@/components/makeedu-sync-badge", () => ({ MakeeduSyncBadge: () => null }));
 vi.mock("@/components/face-tabs", () => ({ FaceTabs: ({ faces }: { faces: { label: string; href: string }[] }) => <nav>{faces.map((face) => <a key={face.href} href={face.href}>{face.label}</a>)}</nav> }));
 import BillingPage, { generateMetadata } from "./page";
-beforeEach(() => { access.require.mockResolvedValue({ systemRole: "admin" }); });
+beforeEach(() => {
+  access.require.mockResolvedValue({ systemRole: "admin" });
+  access.analytics.mockResolvedValue({ ok: false, status: 403 });
+});
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 it("authenticates old verification URLs before redirecting and preserves filters", async () => {
@@ -31,5 +36,19 @@ it("opens the comparison inside sessions without an independent verification tab
   expect(screen.getByTestId("session-face")).toHaveTextContent("verify:short");
   expect(screen.getByRole("link", { name: "회차 확정" })).toBeInTheDocument();
   expect(screen.queryByRole("link", { name: "시수 검증" })).toBeNull();
+  expect(screen.queryByRole("link", { name: "경영분석" })).toBeNull();
   expect((await generateMetadata({ searchParams: Promise.resolve({ tab: "sessions", panel: "verify" }) })).title).toContain("청구 시수 대조");
+});
+
+it("opens analytics only with the shared guard and authenticated tenant", async () => {
+  access.analytics.mockResolvedValue({ ok: true, user: { tenantId: "tenant-a" } });
+  render(await BillingPage({ searchParams: Promise.resolve({ tab: "analytics" }) }));
+  expect(access.require).toHaveBeenCalledWith("billing");
+  expect(screen.getByTestId("analytics-face")).toHaveTextContent("tenant-a");
+  expect(screen.getByRole("link", { name: "경영분석" })).toHaveAttribute("href", "/billing?tab=analytics");
+  expect((await generateMetadata({ searchParams: Promise.resolve({ tab: "analytics" }) })).title).toContain("경영분석");
+});
+it("redirects denied analytics URLs without exposing analytics metadata", async () => {
+  await expect(BillingPage({ searchParams: Promise.resolve({ tab: "analytics" }) })).rejects.toThrow("redirect:/billing");
+  expect((await generateMetadata({ searchParams: Promise.resolve({ tab: "analytics" }) })).title).not.toContain("경영분석");
 });
