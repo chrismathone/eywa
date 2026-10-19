@@ -514,8 +514,12 @@ export async function generateJSON(rawOpts: GenerateJSONOptions | GenerateDecisi
   //    🔴 지점을 모르는 호출은 **거절한다**(fail-closed) — 통과시키면 꺼진 지점의 AI가 그 틈으로 나간다(원장 "빈틈 매꿀것").
   //       타입이 `meta.tenantId: string` 필수라 정상 코드는 여기 오지 않는다 — any·빈 문자열 같은 뒷문만 막는다.
   //    막히면 폴백 사다리를 타지 않고 바로 던진다(다른 회사로 넘긴다고 풀릴 문제가 아니다).
-  //    지점 모델 선택 조회(운영 콘솔 'AI 모델')는 라이선스 조회와 서로 독립이라 함께 돈다(B4). 문서(PDF) 입력은 고정하지 않는다.
-  const [, tenantChoice] = await Promise.all([requireAiLicense(opts.meta), opts.document ? null : tenantChoiceFor(opts.meta)]);
+  //    지점 모델 선택 조회(운영 콘솔 'AI 모델')는 라이선스 조회와 서로 독립이라 먼저 띄워 함께 돈다(B4) — 이 조회는
+  //    실패를 던지지 않는다(못 읽으면 null). 라이선스 문은 두 갈래 모두 그 함수를 직접 기다리는 꼴 그대로(가드 tenant-view-wiring이 센다).
+  //    문서(PDF) 입력은 고정하지 않는다.
+  const tenantChoicePending = opts.document ? Promise.resolve(null) : tenantChoiceFor(opts.meta);
+  await requireAiLicense(opts.meta);
+  const tenantChoice = await tenantChoicePending;
   const tier = opts.tier ?? "balanced";
   const keyName = opts.keyName ?? "default";
   // 기능별 키 그룹(원장 2026-09-15) — 호출부 식별자에서 도출. 표에 없는 기능이면 null(옛 버킷·기본 키로).
