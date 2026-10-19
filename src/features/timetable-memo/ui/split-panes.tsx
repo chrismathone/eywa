@@ -25,14 +25,23 @@ export function scrollSplitTo(which: "timetable" | "sheet") {
   box.scrollTo({ left: which === "sheet" ? pane.offsetLeft : 0, behavior: "smooth" });
 }
 
-export function TimetableSplitPanes({ left, right }: { left: ReactNode; right: ReactNode }) {
+/**
+ * `top` = 시간표 툴바(주차·과목·필터) — 시간표 판 **안** 맨 위에 고정한다(원장 2026-10-19 *"메모시트 시간표 같은 위치로"*).
+ * 툴바가 두 판 위에 걸쳐 있으면 시트로 넘어가도 시간표 필터가 남아 시트를 내리누른다. 판 안에 두면 오른쪽으로 넘길 때
+ * 시간표와 함께 밀려나고, 시트 머리줄(← 시간표 · 메모 시트 · 저장됨)이 툴바가 있던 높이에 선다. 세로 스크롤은 시간표 본문만.
+ */
+export function TimetableSplitPanes({ top, left, right }: { top: ReactNode; left: ReactNode; right: ReactNode }) {
   return (
     <div
       id={SPLIT_ID}
       {...{ [SPLIT_X_ATTR]: "" }}
       className="timetable-split grid min-h-0 flex-1 auto-cols-[100%] grid-flow-col grid-rows-[100%] overflow-x-auto overflow-y-hidden"
     >
-      <div className="min-h-0 overflow-y-auto pr-3">{left}</div>
+      {/* 툴바는 판 폭을 다 쓴다(로딩 스켈레톤·다른 뷰와 같은 폭) — 경계선 앞 여백은 본문 스크롤 상자에만. */}
+      <div className="flex min-h-0 min-w-0 flex-col gap-4 compact-chrome:gap-3">
+        {top}
+        <div className="min-h-0 flex-1 overflow-y-auto pr-3">{left}</div>
+      </div>
       <div {...{ [SHEET_PANE_ATTR]: "" }} className="border-line-strong min-h-0 border-l-2 pl-3">
         {right}
       </div>

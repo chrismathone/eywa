@@ -13,6 +13,8 @@ import { HEADER_H, RESIZE_GRIP, ROW_HEAD_W } from "./grid-dims";
 export type HeaderHandlers = {
   onSelect: (axis: "row" | "col", index: number, e: PointerEvent<HTMLElement>) => void;
   onResize: (axis: "row" | "col", index: number, e: PointerEvent<HTMLElement>) => void;
+  /** 경계를 두 번 누르면 내용에 맞춘다(엑셀과 같다). */
+  onAutoFit: (axis: "row" | "col", index: number) => void;
 };
 
 const BASE = "absolute top-0 flex items-center justify-center overflow-hidden text-xs select-none border-line border-r border-b";
@@ -54,6 +56,10 @@ export function ColumnHeaders({ layout, range, full, handlers }: { layout: Layou
                 e.stopPropagation();
                 handlers.onResize("col", c, e);
               }}
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                handlers.onAutoFit("col", c);
+              }}
             />
           </div>
         );
@@ -83,6 +89,10 @@ export function RowHeaders({ layout, range, full, handlers }: { layout: Layout; 
               onPointerDown={(e) => {
                 e.stopPropagation();
                 handlers.onResize("row", r, e);
+              }}
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                handlers.onAutoFit("row", r);
               }}
             />
           </div>

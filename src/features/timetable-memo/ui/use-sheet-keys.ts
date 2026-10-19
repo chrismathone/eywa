@@ -147,13 +147,16 @@ export function useSheetKeys(opts: {
     if (!canEdit) return;
     const html = e.clipboardData.getData("text/html");
     const text = e.clipboardData.getData("text/plain");
-    const styled = html ? (blockFromAywaHtml(html) ?? blockFromHtmlTable(html)) : null;
+    const own = html ? blockFromAywaHtml(html) : null;
+    const outside = own ? null : html ? blockFromHtmlTable(html) : null;
+    const styled = own ?? outside;
     const block = styled ?? (text ? textBlock(parseTsv(text)) : null);
     if (!block) return;
     const at = actions.current();
     let pasted: Range | null = null;
     const ok = model.apply((d) => {
-      const out = pasteBlock(d, { r: at.r0, c: at.c0 }, block, styled !== null);
+      // 바깥(구글 시트·엑셀) 표의 병합은 테두리를 왼쪽 위 칸에만 싣고 온다 — 그때만 나눠 적는다(merge-borders.ts).
+      const out = pasteBlock(d, { r: at.r0, c: at.c0 }, block, styled !== null, outside !== null);
       pasted = out.range;
       return out.doc;
     });

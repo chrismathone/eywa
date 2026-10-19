@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { PageMaximizeButton } from "@/components/page-maximize/page-maximize-button";
 import { EditingBadge } from "@/features/presence/editing-badge";
 import { useEditPresence } from "@/features/presence/edit-presence";
 import { DEFAULT_COL_W, DEFAULT_ROW_H } from "../doc";
@@ -112,6 +113,10 @@ export function MemoSheet({
         <EditingBadge scope={scope} />
         <span className="ml-auto">
           <SaveStatus state={state} canEdit={canEdit} onRetry={flush} />
+        </span>
+        {/* 최대화 중의 '원래대로' — 시간표 툴바의 같은 버튼은 시간표 판과 함께 밀려나므로 여기에도 둔다(최대화 때만 보인다). */}
+        <span data-maximize-toolbar-toggle="" className="hidden shrink-0 items-center">
+          <PageMaximizeButton />
         </span>
       </div>
       {canEdit ? (

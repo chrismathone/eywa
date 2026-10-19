@@ -11,6 +11,7 @@ import {
   type Merge,
   type SheetDoc,
 } from "./doc";
+import { liftMergeBorders } from "./merge-borders";
 
 /**
  * 구글 시트 API(`spreadsheets.get` includeGridData) 한 구역 → 판. 침산 영어 시간표 오른쪽 '퇴원생 명단'을
@@ -132,7 +133,7 @@ export function docFromGoogle(grid: GoogleGrid, merges: readonly GoogleMerge[], 
     const values = grid.rowData?.[i]?.values ?? [];
     for (let j = 0; j < cols; j++) {
       const v = values[j];
-      // 병합 속 칸: 테두리만 살린다(병합 덩어리의 오른쪽·아래 변은 가장자리 칸의 선을 그린다).
+      // 병합 속 칸: 테두리만 살린다. 구글은 덩어리 테두리를 대개 왼쪽 위 칸에만 주므로 끝에서 가장자리 칸에 나눠 적는다.
       if (covered.has(cellKey(i, j))) {
         const bd = styleFromGoogle(v)?.bd;
         const cell = tidyCell({ s: bd ? { bd } : undefined });
@@ -143,5 +144,5 @@ export function docFromGoogle(grid: GoogleGrid, merges: readonly GoogleMerge[], 
       if (cell) cells[cellKey(i, j)] = cell;
     }
   }
-  return { rows, cols, colW, rowH, cells, merges: local };
+  return liftMergeBorders({ rows, cols, colW, rowH, cells, merges: local }, local);
 }

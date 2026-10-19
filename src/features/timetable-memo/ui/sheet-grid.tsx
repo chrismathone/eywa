@@ -2,12 +2,14 @@
 
 import { useRef, useState, type MouseEvent, type PointerEvent, type RefObject } from "react";
 import { cellKey, inRange, type Pos } from "../doc";
-import { cellAt, cellRange } from "../geometry";
+import { autoFitLines } from "../autofit";
+import { cellAt, cellRange, headerLinesAt } from "../geometry";
 import { resizeLines } from "../ops-struct";
+import { measureText } from "./measure-text";
 import { GridBase } from "./grid-base";
 import { HEADER_H, ROW_HEAD_W } from "./grid-dims";
 import { ColumnHeaders, HeaderCorner, RowHeaders, type HeaderHandlers } from "./grid-headers";
-import { CellEditorBox, SelectionLayer } from "./grid-overlay";
+import { CellEditorBox, ResizeGuide, SelectionLayer } from "./grid-overlay";
 import type { CellEditor } from "./use-cell-editor";
 import type { useSheetKeys } from "./use-sheet-keys";
 import type { SheetModel } from "./use-sheet-model";
@@ -62,9 +64,7 @@ export function SheetGrid({
   const onBodyMove = (e: PointerEvent<HTMLDivElement>) => {
     if (drag.current === "cells") editor.select(posAt(e), true);
   };
-  const endDrag = () => {
-    drag.current = null;
-  };
+  const endDrag = () => void (drag.current = null);
 
   const headers: HeaderHandlers = {
     onSelect(axis, index, e) {
@@ -86,19 +86,23 @@ export function SheetGrid({
       e.preventDefault();
       const sizes = axis === "col" ? doc.colW : doc.rowH;
       // 여러 줄을 통째로 고른 채 경계를 끌면 고른 줄이 모두 같은 크기가 된다(엑셀과 같다).
-      const whole = axis === "col" ? range.r0 === 0 && range.r1 === doc.rows - 1 : range.c0 === 0 && range.c1 === doc.cols - 1;
-      const [lo, hi] = axis === "col" ? [range.c0, range.c1] : [range.r0, range.r1];
-      const lines = whole && index >= lo && index <= hi ? Array.from({ length: hi - lo + 1 }, (_, i) => lo + i) : [index];
+      const lines = headerLinesAt(doc, range, axis, index);
       const start = axis === "col" ? e.clientX : e.clientY;
       setResize({ axis, index, start, orig: sizes[index]!, size: sizes[index]!, lines });
       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    },
+    onAutoFit(axis, index) {
+      if (!canEdit) return;
+      settle();
+      model.apply((d) => autoFitLines(d, axis, headerLinesAt(d, range, axis, index), measureText));
     },
   };
 
   const onFrameMove = (e: PointerEvent<HTMLDivElement>) => {
     if (resize) {
-      const now = resize.axis === "col" ? e.clientX : e.clientY;
-      setResize({ ...resize, size: Math.max(6, resize.orig + now - resize.start) });
+      const delta = (resize.axis === "col" ? e.clientX : e.clientY) - resize.start;
+      // 2px 안의 흔들림은 끌기가 아니다 — 두 번 누르기(크기 맞추기)의 첫 클릭이 크기 바꾸기로 남지 않게.
+      if (Math.abs(delta) > 2 || resize.size !== resize.orig) setResize({ ...resize, size: Math.max(6, resize.orig + delta) });
       return;
     }
     if (drag.current === "col" || drag.current === "row") {
@@ -133,11 +137,6 @@ export function SheetGrid({
   const fullCols = range.r0 === 0 && range.r1 === doc.rows - 1;
   const fullRows = range.c0 === 0 && range.c1 === doc.cols - 1;
   const editing = editor.editing;
-  const guide = resize
-    ? resize.axis === "col"
-      ? { left: layout.colX[resize.index]! + resize.size - 1, top: 0, width: 2, height: layout.height }
-      : { left: 0, top: layout.rowY[resize.index]! + resize.size - 1, width: layout.width, height: 2 }
-    : null;
 
   return (
     <div
@@ -192,7 +191,7 @@ export function SheetGrid({
               },
             }}
           />
-          {guide ? <div className="bg-primary pointer-events-none absolute z-30" style={guide} /> : null}
+          <ResizeGuide layout={layout} resize={resize} />
         </div>
       </div>
     </div>

@@ -1,4 +1,5 @@
-import { SHEET_LIMITS, DEFAULT_COL_W, DEFAULT_ROW_H, type Merge, type SheetDoc } from "./doc";
+import { SHEET_LIMITS, DEFAULT_COL_W, DEFAULT_ROW_H, cellKey, type Merge, type SheetDoc } from "./doc";
+import { writeSide } from "./merge-borders";
 
 /**
  * 행·열 넣기/빼기·크기 바꾸기 — 칸·병합·크기 배열을 한꺼번에 민다(순수 함수).
@@ -6,7 +7,7 @@ import { SHEET_LIMITS, DEFAULT_COL_W, DEFAULT_ROW_H, type Merge, type SheetDoc }
  *    *"시간표 영역이랑 우측 엑셀 영역을 구분해서 침범하지 않게"*). 구글 시트에선 같은 격자라 서로 밀렸다.
  */
 
-type Axis = "row" | "col";
+export type Axis = "row" | "col";
 
 function shiftCells(doc: SheetDoc, axis: Axis, map: (i: number) => number | null): SheetDoc["cells"] {
   const out: SheetDoc["cells"] = {};
@@ -41,6 +42,20 @@ export function insertLines(doc: SheetDoc, axis: Axis, at: number, n: number): S
     return m;
   });
   const cells = shiftCells(doc, axis, (i) => (i >= at ? i + add : i));
+  // 병합 속에 넣은 줄은 덩어리 가장자리 선을 바로 위(왼쪽) 줄에서 이어 받는다 — 안 그러면 그 줄에서 선이 끊긴다(merge-borders.ts).
+  for (const m of doc.merges) {
+    const s = startOf(m, axis);
+    if (!(s < at && s + spanOf(m, axis) > at)) continue;
+    for (let i = at; i < at + add; i++) {
+      if (axis === "row") {
+        writeSide(cells, i, m.c, "l", doc.cells[cellKey(at - 1, m.c)]?.s?.bd?.l);
+        writeSide(cells, i, m.c + m.cs - 1, "r", doc.cells[cellKey(at - 1, m.c + m.cs - 1)]?.s?.bd?.r);
+      } else {
+        writeSide(cells, m.r, i, "t", doc.cells[cellKey(m.r, at - 1)]?.s?.bd?.t);
+        writeSide(cells, m.r + m.rs - 1, i, "b", doc.cells[cellKey(m.r + m.rs - 1, at - 1)]?.s?.bd?.b);
+      }
+    }
+  }
   return axis === "row"
     ? { ...doc, rows: count + add, rowH: nextSizes, cells, merges }
     : { ...doc, cols: count + add, colW: nextSizes, cells, merges };
@@ -66,6 +81,22 @@ export function deleteLines(doc: SheetDoc, axis: Axis, at: number, n: number): S
     if (next.rs * next.cs >= 2) merges.push(next);
   }
   const cells = shiftCells(doc, axis, (i) => (i < at ? i : i >= end ? i - del : null));
+  // 병합의 끝 줄(위·아래 또는 왼쪽·오른쪽)을 지우면 그 끝 변을 남은 끝 줄로 옮긴다 — 안 그러면 덩어리의 그 변이 사라진다.
+  for (const m of doc.merges) {
+    const s = startOf(m, axis);
+    const e = s + spanOf(m, axis);
+    const lastGone = s < at && e > at && e <= end;
+    const firstGone = s >= at && s < end && e > end;
+    if (!lastGone && !firstGone) continue;
+    const [from, to] = lastGone ? [e - 1, at - 1] : [s, at];
+    const side = axis === "row" ? (lastGone ? "b" : "t") : lastGone ? "r" : "l";
+    const across = axis === "row" ? m.cs : m.rs;
+    for (let k = 0; k < across; k++) {
+      const [or, oc, nr, nc] = axis === "row" ? [from, m.c + k, to, m.c + k] : [m.r + k, from, m.r + k, to];
+      const line = doc.cells[cellKey(or, oc)]?.s?.bd?.[side];
+      if (line) writeSide(cells, nr, nc, side, line);
+    }
+  }
   return axis === "row"
     ? { ...doc, rows: count - del, rowH: nextSizes, cells, merges }
     : { ...doc, cols: count - del, colW: nextSizes, cells, merges };

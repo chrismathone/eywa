@@ -9,6 +9,7 @@ import {
   type Merge,
   type SheetDoc,
 } from "./doc";
+import { liftMergeBorders } from "./merge-borders";
 
 /**
  * DB 저장 모양(0374a `doc`) — 같은 서식을 `styles`에 **한 번만** 적고 칸은 번호로 가리킨다(침산 판 1,900칸이
@@ -43,6 +44,8 @@ const size = (max: number) => z.number().int().min(SHEET_LIMITS.minSize).max(max
 
 export const packedSheetSchema = z.object({
   v: z.literal(1),
+  /** 병합 테두리를 가장자리 칸마다 나눠 적은 판(2026-10-19~ 저장본은 늘 1) — 없으면 옛 모양이라 열 때 나눠 적는다. */
+  mb: z.literal(1).optional(),
   rows: z.number().int().min(1).max(SHEET_LIMITS.rows),
   cols: z.number().int().min(1).max(SHEET_LIMITS.cols),
   colW: z.array(size(SHEET_LIMITS.maxColW)).max(SHEET_LIMITS.cols),
@@ -91,6 +94,7 @@ export function packSheet(doc: SheetDoc): PackedSheet {
   cells.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
   return {
     v: 1,
+    mb: 1,
     rows: doc.rows,
     cols: doc.cols,
     colW: doc.colW.slice(0, doc.cols),
@@ -125,7 +129,10 @@ export function unpackSheet(packed: PackedSheet, fallbackW: number, fallbackH: n
     if (merges.some((x) => rangesIntersect(mergeRange(x), mergeRange(m)))) continue;
     merges.push(m);
   }
-  return { rows, cols, colW, rowH, cells, merges };
+  // 표식(`mb`)이 없는 저장본 = 병합 테두리를 왼쪽 위 칸에만 든 옛 모양(구글 시트에서 옮긴 침산 판) — 열 때 나눠 적는다.
+  // 표식이 있으면 이미 가장자리 칸마다 적힌 판이다 — 다시 나누면 사용자가 지운 선이 되살아난다(merge-borders.ts).
+  const doc = { rows, cols, colW, rowH, cells, merges };
+  return packed.mb === 1 ? doc : liftMergeBorders(doc);
 }
 
 /**

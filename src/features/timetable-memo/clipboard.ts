@@ -10,6 +10,7 @@ import {
   type Range,
   type SheetDoc,
 } from "./doc";
+import { liftMergeBorders, mergedTdStyle } from "./merge-borders";
 import { ensureSize } from "./ops-struct";
 import { sanitizeStyle } from "./pack";
 import { cssOfStyle } from "./style-css";
@@ -48,7 +49,13 @@ export function copyBlock(doc: SheetDoc, range: Range): Block {
  * 서식까지 붙이면 대상 칸을 **통째로 갈아끼운다**(엑셀과 같다 — 빈 칸도 대상 칸을 비운다).
  * 판이 모자라면 키운다(상한 안). 붙는 자리를 걸치는 기존 병합은 푼다.
  */
-export function pasteBlock(doc: SheetDoc, at: { r: number; c: number }, block: Block, withStyle: boolean): { doc: SheetDoc; range: Range } {
+export function pasteBlock(
+  doc: SheetDoc,
+  at: { r: number; c: number },
+  block: Block,
+  withStyle: boolean,
+  outsideMerges = false,
+): { doc: SheetDoc; range: Range } {
   const rows = Math.min(block.rows, SHEET_LIMITS.rows - at.r);
   const cols = Math.min(block.cols, SHEET_LIMITS.cols - at.c);
   if (rows <= 0 || cols <= 0) return { doc, range: { r0: at.r, c0: at.c, r1: at.r, c1: at.c } };
@@ -66,14 +73,19 @@ export function pasteBlock(doc: SheetDoc, at: { r: number; c: number }, block: B
     }
   }
   let merges = sized.merges;
+  const added: Merge[] = [];
   if (withStyle) {
     merges = merges.filter((m) => !rangesIntersect(mergeRange(m), range));
     for (const m of block.merges) {
       if (m.r + m.rs > rows || m.c + m.cs > cols) continue;
-      merges.push({ r: m.r + at.r, c: m.c + at.c, rs: m.rs, cs: m.cs });
+      added.push({ r: m.r + at.r, c: m.c + at.c, rs: m.rs, cs: m.cs });
     }
+    merges = [...merges, ...added];
   }
-  return { doc: { ...sized, cells, merges }, range };
+  // 구글 시트·엑셀에서 붙인 병합 칸은 테두리를 왼쪽 위 칸에만 싣고 온다 — 붙인 병합만 가장자리 칸에 나눠 적는다
+  // (판끼리 복사는 덮인 칸이 제 선을 들고 온다 — 다시 나누면 지웠던 선이 되살아난다).
+  const next = { ...sized, cells, merges };
+  return { doc: outsideMerges ? liftMergeBorders(next, added) : next, range };
 }
 
 const needsQuote = (t: string) => /[\t\n\r"]/.test(t);
@@ -139,7 +151,7 @@ export function blockToHtml(block: Block): string {
       if (covered.has(cellKey(i, j))) return "";
       const m = anchor.get(cellKey(i, j));
       const span = m ? `${m.rs > 1 ? ` rowspan="${m.rs}"` : ""}${m.cs > 1 ? ` colspan="${m.cs}"` : ""}` : "";
-      const css = cssOfStyle(cell?.s);
+      const css = cssOfStyle(m ? mergedTdStyle((r, c) => block.cells[r]?.[c] ?? undefined, m) : cell?.s);
       const text = esc(cell?.t ?? "").replace(/\n/g, "<br>");
       return `<td${span}${css ? ` style="${esc(css)}"` : ""}>${text}</td>`;
     });
