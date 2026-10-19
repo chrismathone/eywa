@@ -117,15 +117,23 @@ provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어�
 
 | Tier | Upstage (폴백) | Anthropic | DeepSeek | 용도 |
 |---|---|---|---|---|
-| `fast` | `solar-pro3` | **`claude-haiku-5-5`**(2026-10-16 4.5→5.5 · 1/10 값 · temperature 미전송·effort low·출력 상한 바닥 4,096(생각 토큰 몫)은 `generate.ts` `isClaude5Model`이 흡수) | `deepseek-v4-flash` | **학부모 멘트** `classnote_ment` + **학부모 글 만족도 판정** `parent_satisfaction`(강사평가 · 문구로 애매한 글만 · DeepSeek flash 먼저 — 원장 2026-10-13). 🔴 deepseek 폴백은 **v4-flash**(원장 2026-08-28 *"haiku -> 폴백 deepseek v4 flash"*) — v4-pro를 걸었더니 자동작성 한 번에 **86초**(추론 6,505토큰)라 폴백이 또 다른 장애가 됐다. flash는 7.3초. **되돌리지 말 것**(같은 날 *"flash 말고 v4 pro"*를 실측 보고 뒤집은 것). |
-| `balanced` | `solar-pro3` | `claude-sonnet-5` | **`deepseek-v4-pro`** | 경량 호출 기본값 + **전사 분석 3종 기본**(아래). |
+| `fast` | `solar-pro3` | **`claude-haiku-5-5`**(2026-10-16 4.5→5.5 · 1/10 값 · temperature 미전송·effort low·출력 상한 바닥 4,096(생각 토큰 몫)은 `generate.ts` `isClaude5Model`이 흡수) | `deepseek-flash`(V4.1 · 옛 이름 `deepseek-v4-flash`는 2026-10-19 교체 — 딥시크가 은퇴로 적음) | **학부모 멘트** `classnote_ment` + **학부모 글 만족도 판정** `parent_satisfaction`(강사평가 · 문구로 애매한 글만 · DeepSeek flash 먼저 — 원장 2026-10-13). 🔴 deepseek 폴백은 **v4-flash**(원장 2026-08-28 *"haiku -> 폴백 deepseek v4 flash"*) — v4-pro를 걸었더니 자동작성 한 번에 **86초**(추론 6,505토큰)라 폴백이 또 다른 장애가 됐다. flash는 7.3초. **되돌리지 말 것**(같은 날 *"flash 말고 v4 pro"*를 실측 보고 뒤집은 것). |
+| `balanced` | `solar-pro3` | `claude-sonnet-5` | **`deepseek-v4-pro`** | 경량 호출 기본값 + **재원생 상담 분석**·브리프·결석 문자 판별 등. 콜&상담 분석·폼 자동입력·회의록은 아래 기능별 고정(V4.1 flash). |
 | `reasoning` | — (없음) | `claude-opus-4-7` | — | **금지** (명시 요청 시만). reasoning은 Anthropic 고정. |
 
 - **폴백 사다리 = anthropic → deepseek → upstage(Solar)** ([`FALLBACK_LADDER`](src/lib/ai/models.ts), 원장 2026-08-28). 한 provider가 **인증·한도·잔액 소진**으로 막히면 다음으로 넘어간다 — 🔴 **크레딧 소진은 400이라 예전엔 사다리를 안 탔다**([[#118]]: 2026-08-27 멘트 AI가 이틀간 전건 실패). Solar가 맨 뒤인 건 품질 A/B 탈락이라 마지막 보루이기 때문. ⚠️ 새 provider 오류 모양(402·`insufficient_quota` 등)을 만나면 `isCreditExhaustedError`에 추가할 것.
 - **전역 기본 provider = Anthropic Claude Sonnet 5** (`AI_PROVIDER=anthropic`, 2026-07-13~) — 품질 A/B에서 Solar가
   상담 분석의 warnings를 통째로 놓치고 잡담(주식 등)을 섞어 전환. ⚠️ **코드 기본값(env 미설정)은 여전히 `upstage`(Solar)** —
   Vercel env가 안 걸리면 프로덕션이 Solar로 동작하니 확인. 롤백 = `AI_PROVIDER=upstage` 또는 호출부 `provider:"upstage"`.
-- **전사 분석 3종(회의록·등록상담·재원생 상담) = DeepSeek v4-pro** (2026-07-16, `AI_PROVIDER`과 무관하게 코드에서 우선) —
+- **기능별 고정 모델 + 지점별 선택**(2026-10-19 원장 *"추천 순서로 진행"* · *"지점별로 ai모델 바꿀 수 있게"*) — [`FEATURE_MODELS`](src/lib/ai/model-pins.ts):
+  **콜&상담 분석·콜&상담 폼 자동입력·회의록 분석 = DeepSeek V4.1 flash**(`deepseek-flash`). 운영 프롬프트 그대로의 블라인드 비교에서
+  폼 8승 2무(Sonnet 5는 10건 중 4건이 4,096 토큰에서 잘려 실패) · 회의록 4승 1무 · 콜&상담 분석 3:2, 값 1/4~1/8 · 속도 약 2배.
+  형식 차이는 **저장 전 후처리**가 기존 모양으로 맞춘다([`analysis-normalize`](src/features/enrollment/analysis-normalize.ts) ·
+  [회의록](src/features/meetings/analysis-normalize.ts) · [`form-normalize`](src/features/enrollment/form-normalize.ts) — 기존 v4-pro 결과엔 0곳 손댐 실측).
+  지점마다 다른 모델 = 운영 콘솔 학원 상세 **'AI 모델' 탭**(`tenant_ai_models`, 0375a) — 지점 선택 > 코드 기본 > 호출부 tier·provider
+  (`featurePin`). 고른 회사가 막히면 평소 사다리로 넘어간다(고정한 모델 이름이 없으면 같은 회사 기본 모델로 한 번 더). 계약서 스캔 OCR은 고를 수 없다(Claude 전용 승인) · 멘트(선생님이 기다리는 기능)엔 느린 v4-pro를 고를 수 없다. 🔴 시험 안 한 기능을 코드 기본에 넣지 말 것.
+- **재원생 상담 분석 = DeepSeek v4-pro**(아래 2026-07-16 근거 그대로 · 콜&상담·회의록은 위로 옮겼다) —
+  (옛 문단: 전사 분석 3종(회의록·등록상담·재원생 상담) = DeepSeek v4-pro, 2026-07-16, `AI_PROVIDER`과 무관하게 코드에서 우선) —
   실측 A/B(injaewon 실전사 5건): v4-pro가 warnings를 5/5 Sonnet급으로 생성(255·316·243·219·97자), 비용은 압도적으로 저렴.
   경량 v4-flash·레거시 chat·Solar는 warnings를 2~3/5 "확인된 위험 신호 없음"으로 붕괴(Solar 탈락과 동일 실패)라 v4-pro 채택.
   ⚠️ 트레이드오프: v4-pro는 추론형이라 Sonnet보다 ~1.2배 느림(백그라운드 분석이라 감수). **Vercel에 `DEEPSEEK_API_KEY` 설정 필요** —
@@ -285,6 +293,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 
 ### 멀티테넌트·지점·브랜드·제품 이름 → [`docs/decisions/tenant.md`](docs/decisions/tenant.md)
 - 운영 콘솔의 '원장 화면 열기' = 읽기 전용 지점 보기(0356a) · 로그인은 운영자 본인 그대로 · DB가 읽기 전용 요청에만 그 지점으로 답한다 · 살아 있는 보기가 아니면 본인 값 그대로(null 금지) · 앱은 DB에 묻고 나서 '보는 중' · 겉함수(`case`만 · 펼쳐짐) + 속함수(종전 본문) · 되돌리기는 두 단계 · 판정은 `tenantViewState()` 한 곳 · 내 보기 쿠키가 남았는데 보기가 아니면 `ended`(쓰기 차단 · 화면은 끝내기로) · 보기는 브라우저마다 하나 · 여는 것은 문서 이동 · 보기 중 강사뷰 없음 · Supabase 밖의 쓰기·발신은 따로 문을 지난다
+- 운영 콘솔 'AI 모델' = 지점·기능별 모델 선택(0375a) · 고르지 않으면 코드 기본 · 고른 회사가 막히면 평소 사다리 · 표가 없으면 기본값으로 돈다
 - 지점 기능 라이선스 = 슈퍼관리자 카드가 실제로 막는다 · 행이 없으면 허용 · 켜진 지점(침산)은 그대로
 - 학원 설정 '연동' = 켜진 연동만 내부 탭 · 슬랙 규칙 = 한 줄 목록 · 역할별 기본 세팅 5종(원장·관리자·매니저·선생님·셔틀)
 - 슬랙 연동 = 지점 스위치(기본 꺼짐) · 규칙(무엇을·어디로·어떻게·언제) · 같은 트랜잭션 인박스 + 아웃박스(created_at 커서 금지) · 이메일 일치는 후보일 뿐 · 급여·이력서 등은 발송 불가 · 잔디는 웹훅뿐이라 기각
@@ -463,7 +472,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - 발송 기한(오늘 포함 7일)이 지난 보고서도 원장이 지정한 건은 보낸다
 - ClassNote 테스트 학생 '학원이'는 aywa에서 아무에게도 배정하지 않는다 — 배정은 ClassNote 쪽에서 전 강사에게
 - AI provider 전역 기본 = Anthropic Claude Sonnet 5
-- 전사 분석 3종(회의록·등록상담·재원생 상담) = DeepSeek v4-pro
+- ~~전사 분석 3종 = DeepSeek v4-pro~~ → 콜&상담 분석·폼 자동입력·회의록 = DeepSeek V4.1 flash + 저장 전 후처리(2026-10-19 블라인드 비교) · 재원생 상담은 v4-pro 그대로 · 지점별 모델 = 운영 콘솔 'AI 모델' 탭(0375a)
 - 음성 전사 엔진 = AssemblyAI `universal-2` 유지
 - 학부모 보고서 제목 = 과목 보고서('수학 보고서' · 설정 제목이 기본값일 때 · `reportTitleText` 한 곳)
 - 수업보고서 테스트 표기 = "N문제 중 M개 맞음" 하나뿐
@@ -721,6 +730,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - **#144** Electron 안에서 `*.asar` 파일을 **쓰면** "Invalid package" — 연동 앱 PC 업데이트가 압축 해제에서 늘 실패했다(1.0.1~1.0.4 · node 테스트로는 안 보임). Electron에서 `.asar` 자체를 다룰 땐 `original-fs` · 업데이트 테스트는 포장된 실행기 안에서도(`bundled-runtime.cjs`)
 - **#145** 모델을 올리면 **예시대로 하던 것이 규칙대로**가 된다 — Haiku 4.5는 예시를 보고 "100%"를 "다 해왔습니다"로 풀고 과목명·단원 번호를 뺐는데, 5.5는 "퍼센트는 적힌 그대로"·"'~했어요'를 섞어도 됩니다"를 글자대로 따라 "100%를 해 왔습니다" · "수학 2-4-3 비례식" · 한 글에 합니다체·해요체 섞기(46%)가 나왔다. 🔑 지시를 늘리지 말고 **재료를 고칠 것**(넘기는 값을 말로 · 뗄 것은 떼고) · 허용 문구("~해도 됩니다")는 새 모델이 적극적으로 쓴다 · 모델 교체 시험은 **운영 프롬프트 그대로**(말투 지침·결 변형 포함) + 비교 기준은 운영 발송분
 - **#146** Next 16은 **같은 경로에서 쿼리만 바뀌면 페이지(폼)를 새로 그리지 않는다**(상태 키에서 쿼리를 뺀다) — 쿼리가 '다른 화면'을 가리키면 페이지가 그 값으로 폼에 `key`를 걸 것(같은 화면을 가리키는 쿼리는 키에 넣지 말 것)
+- **#147** 외부 웹훅이 **N초 안에 답을 못 받으면 다시 보낸다** — AssemblyAI(10초 · 최대 10번)에 분석을 끝내고 답하던 녹음 웹훅이 녹음 1건에 AI를 6~11번 돌렸다(30일 82~89% 중복 · 에러 0 · 결과만 덮어씀). 무거운 일은 `after()`로 응답 뒤에 · '분석 중'이 방금이면 재전송은 건너뛴다 · 🔑 진단 = `ai_usage_logs`에서 **같은 입력 토큰 수가 10~20초 간격으로 줄지어** 있는지
 - **#82** postgres.js에서 `${JSON.stringify(v)}::jsonb` = **이중 인코딩**(`"#153e75"` 9자 저장 → 검증 실패 → 설정 침묵 무시). 스칼라는 `to_jsonb(${v}::text)`·객체는 `sql.json(obj)`, 검증은 **길이까지** (⚠️ 눈으로 따옴표 구분 안 됨)
 
 ## 🎨 디자인 규칙 인덱스 (상세는 `docs/design-conventions.md`)

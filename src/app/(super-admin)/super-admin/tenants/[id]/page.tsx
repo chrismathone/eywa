@@ -21,6 +21,8 @@ import { protectedAccountIds } from "@/lib/auth/protected-accounts";
 import { TenantTabs, parseTenantTab } from "./_tabs";
 import { TodaysMathSyncStatus } from "./_todays-math-sync-status";
 import { OpenTenantViewButton } from "./_open-view-button";
+import { AiModelSection } from "./_ai-model-section";
+import { getTenantAiModels } from "@/features/super-admin/server/ai-model-queries";
 
 export const metadata = { title: "슈퍼관리자 · 학원 상세 — 에이와" };
 
@@ -35,9 +37,10 @@ export default async function TenantDetailPage({
   const { upage, tab: rawTab, view: viewNotice } = await searchParams;
   const tab = parseTenantTab(rawTab);
   // 라이선스 표는 그 탭에서만 쓴다 — 다른 탭에선 조회하지 않는다.
-  const [detail, licenses] = await Promise.all([
+  const [detail, licenses, aiModels] = await Promise.all([
     getTenantDetail(id),
     tab === "license" ? getTenantLicenses(id) : null,
+    tab === "ai" ? getTenantAiModels(id) : null,
   ]);
   if (!detail) notFound();
   // 보호 계정(슈퍼관리자 명단) — 계정 탭에서 역할·활성 조작을 세우지 않는다(원장 2026-09-30). 막는 건 서버 액션·DB.
@@ -141,6 +144,13 @@ export default async function TenantDetailPage({
             enrolledCount={detail.studentCount}
           />
           <TodaysMathSyncStatus tenantId={detail.id} />
+        </div>
+      ) : null}
+
+      {/* AI 모델 — 지점·기능별 모델 고르기(원장 2026-10-19). 이름↔드롭다운이 한 줄 양 끝이라 폭을 묶는다. */}
+      {tab === "ai" && aiModels ? (
+        <div className="lg:max-w-3xl">
+          <AiModelSection tenantId={detail.id} state={aiModels} />
         </div>
       ) : null}
 
