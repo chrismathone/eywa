@@ -4,6 +4,7 @@ import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { addDays, kstToday } from "@/lib/date-kst";
 import type { AssignedBook } from "../math-assignment";
 import { bookPosition, inferBookFromReports, type BookPosition, type CatalogBook, type ReportLine } from "../math-book-match";
+import { latestOrderedBook, type BookOrder } from "../book-window";
 import type { TextbookTableStatus } from "../types";
 
 /**
@@ -14,10 +15,13 @@ import type { TextbookTableStatus } from "../types";
 
 export type MathTextbookChoice = { id: string; title: string };
 
-/** 학생의 지금 교재 + 그 교재에서의 차수. 출처: 학생 배정 > 반 배정 > 보고서 기록에서 추정. */
+/**
+ * 학생의 지금 교재 + 그 교재에서의 차수. 출처: 학생 배정 > **교재 주문** > 반 배정 > 보고서 기록에서 추정.
+ * (원장 2026-10-19 *"교재 주문 시 해당 학생의 교재로 교재 등록"* — 주문은 그 학생만의 사실이라 반 교재보다 앞선다.)
+ */
 export type StudentBookNow = {
   book: AssignedBook;
-  source: "student" | "class" | "report";
+  source: "student" | "order" | "class" | "report";
   /** 보고서 진도가 그 교재 차수에 걸린 가장 최근 기록. 못 찾으면 null. */
   position: BookPosition | null;
 };
@@ -30,6 +34,10 @@ export type MathClassTextbooks = {
   choices: MathTextbookChoice[];
   /** 학생별 지금 교재·차수 — 배정이 없어도 보고서 기록에서 교재를 읽어 채운다(원장 2026-10-19 "매핑만 하면"). */
   now: Record<string, StudentBookNow>;
+  /**
+   * 3개월 창 계산 재료(서버 전용 — 클라에 넘기지 말 것). 창은 수업일(학습 맥락)이 있어야 해서 페이지가 마저 계산한다.
+   */
+  sources: { catalog: CatalogBook[]; orders: Map<string, BookOrder[]>; reports: Map<string, ReportLine[]> };
 };
 
 /** 교재를 읽을 보고서 기간 — 한 학기(교재 한 권을 넘기는 시간)면 충분하다. */
@@ -54,7 +62,7 @@ export async function getMathClassTextbooks(
   studentIds: string[],
 ): Promise<MathClassTextbooks> {
   const admin = createAdminClient();
-  const [assignRes, catalog, reports] = await Promise.all([
+  const [assignRes, catalog, reports, orders] = await Promise.all([
     admin
       .from("math_textbook_assignments")
       .select("student_id, textbook_id, textbooks!math_textbook_assignments_textbook_fkey(title)")
@@ -62,6 +70,7 @@ export async function getMathClassTextbooks(
       .eq("class_id", classId),
     getMathCatalogBooks(tenantId),
     getClassReportLines(tenantId, classId, studentIds),
+    getStudentBookOrders(tenantId, studentIds),
   ]);
   const choices = catalog?.map((b) => ({ id: b.id, title: b.title })) ?? [];
   const books = catalog ?? [];
@@ -83,7 +92,9 @@ export async function getMathClassTextbooks(
   const now: Record<string, StudentBookNow> = {};
   for (const sid of studentIds) {
     const lines = reports?.get(sid) ?? [];
+    const ordered = latestOrderedBook(orders?.get(sid) ?? [], books);
     const assigned = byStudent[sid] ? { book: byStudent[sid]!, source: "student" as const }
+      : ordered ? { book: { textbookId: ordered.book.id, title: ordered.book.title }, source: "order" as const }
       : classBook ? { book: classBook, source: "class" as const } : null;
     if (assigned) {
       const cat = books.find((b) => b.id === assigned.book.textbookId);
@@ -100,7 +111,10 @@ export async function getMathClassTextbooks(
       };
     }
   }
-  return { status, classBook, byStudent, choices, now };
+  return {
+    status, classBook, byStudent, choices, now,
+    sources: { catalog: books, orders: orders ?? new Map(), reports: reports ?? new Map() },
+  };
 }
 
 /** 교재목록의 수학 교재 + 차수(소단원). 실패면 null. */
@@ -129,6 +143,38 @@ async function getMathCatalogBooks(tenantId: string): Promise<CatalogBook[] | nu
       byBook.set(l.textbook_id, list);
     }
     return choices.map((c) => ({ ...c, lessons: byBook.get(c.id) ?? [] }));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 학생들의 교재 주문(교재 신청) — 날짜 = **주문 체크한 날**(KST), 아직 주문 전이면 요청일.
+ * 실패면 null(주문 갈래만 빠지고 화면은 산다).
+ */
+async function getStudentBookOrders(tenantId: string, studentIds: string[]): Promise<Map<string, BookOrder[]> | null> {
+  if (studentIds.length === 0) return new Map();
+  const admin = createAdminClient();
+  try {
+    const rows = await fetchAllPagedInChunks<{ student_id: string; book_name: string; request_date: string | null; ordered_at: string | null; created_at: string }>(
+      studentIds,
+      (chunk, from, to) =>
+        admin
+          .from("textbook_orders")
+          .select("id, student_id, book_name, request_date, ordered_at, created_at")
+          .eq("tenant_id", tenantId)
+          .in("student_id", chunk)
+          .order("id", { ascending: true })
+          .range(from, to),
+    );
+    const out = new Map<string, BookOrder[]>();
+    for (const r of rows) {
+      const date = r.ordered_at ? kstToday(new Date(r.ordered_at)) : (r.request_date ?? kstToday(new Date(r.created_at)));
+      const list = out.get(r.student_id) ?? [];
+      list.push({ bookName: r.book_name, date });
+      out.set(r.student_id, list);
+    }
+    return out;
   } catch {
     return null;
   }

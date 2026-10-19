@@ -42,7 +42,7 @@ export function StudentTextbookChip({ studentId, studentName }: { studentId: str
   const now = ctx.now[studentId] ?? null;
   const editable = ctx.canWrite && ctx.status === "ok";
   // (반) = 반 교재를 받는 중 · (기록) = 배정은 없고 보고서 교재 칸에서 읽은 교재(배정하면 그쪽이 이긴다).
-  const source = now?.source === "class" ? " (반)" : now?.source === "report" ? " (기록)" : "";
+  const source = now?.source === "class" ? " (반)" : now?.source === "report" ? " (기록)" : now?.source === "order" ? " (주문)" : "";
   const step = now?.position ? ` · ${now.position.lessonNo}/${now.position.total}차수` : now ? " · 차수 미확인" : "";
   const text = now ? `${now.book.title}${source}${step}` : "교재 미배정";
   const tip = now?.position ? `${now.position.date} 보고서 진도: ${now.position.unit}` : undefined;

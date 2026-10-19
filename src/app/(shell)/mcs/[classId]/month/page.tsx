@@ -10,6 +10,8 @@ import { canResetMathLearningGoals } from "@/features/math-sheets/server/access"
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { getMathClassTextbooks } from "@/features/textbooks/server/math-assignment-queries";
 import { MathTextbookProvider } from "@/features/math-sheets/components/math-textbook-context";
+import { bookWindow, type BookWindow } from "@/features/textbooks/book-window";
+import { learningClassDates } from "@/features/math-sheets/lib/learning-class-dates";
 
 export const metadata: Metadata = { title: "수학 강사 시트 · 월간 — 에이와" };
 
@@ -74,6 +76,22 @@ export default async function McsMonthPage({
   const classOptions = options.some((o) => o.id === classId)
     ? options
     : [{ id: classId, name: data.className }, ...options];
+  // 교재 3개월 창(원장 2026-10-19 "주문날 +7일부터 3개월") — 수업일은 목표 계획과 **같은 함수**로 센다.
+  // 재료(주문·보고서)는 서버에 남기고 결과만 내려보낸다.
+  const windows: Record<string, BookWindow> = {};
+  if (textbooks) {
+    const { catalog, orders, reports } = textbooks.sources;
+    for (const s of data.students) {
+      const w = bookWindow({
+        orders: orders.get(s.studentId) ?? [],
+        catalog,
+        reports: reports.get(s.studentId) ?? [],
+        referenceDate: learning.referenceDate,
+        classDates: (from, to) => learningClassDates(s.studentId, learning.context, from, to),
+      });
+      if (w) windows[s.studentId] = w;
+    }
+  }
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <div className="shrink-0 compact-chrome:hidden">
@@ -97,6 +115,7 @@ export default async function McsMonthPage({
             byStudent: textbooks?.byStudent ?? {},
             choices: textbooks?.choices ?? [],
             now: textbooks?.now ?? {},
+            windows,
             // 배정 쓰기 = 목표 쓰기와 같은 게이트(서버 액션이 같은 함수로 다시 본다).
             canWrite: data.canEdit,
           }}
