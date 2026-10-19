@@ -5,6 +5,8 @@ const m = vi.hoisted(() => ({ slack: vi.fn(), mathOn: vi.fn() }));
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => ({ tenantId: "t1" }) }));
 vi.mock("@/lib/license/server", () => ({ isFeatureOptedIn: m.mathOn }));
 vi.mock("./todays-math-card", () => ({ TodaysMathCard: () => <p>오늘 수학 카드</p> }));
+vi.mock("./todays-math-menus-card", () => ({ TodaysMathMenusCard: () => <p>오늘 수학 사용 메뉴</p> }));
+vi.mock("@/lib/auth/super-admin", () => ({ isCurrentUserSuperAdmin: async () => false }));
 vi.mock("@/features/slack/server/gate", () => ({ slackGate: m.slack }));
 vi.mock("./slack-card", () => ({ SlackCard: () => <p>슬랙 카드</p> }));
 vi.mock("./sheets-face", () => ({ SheetsFace: () => <p>시트 면</p> }));

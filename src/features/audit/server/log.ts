@@ -19,6 +19,8 @@ export const AUDIT_ACTIONS = {
   integration_sheet_target: "구글 시트 대상 지정",
   integration_video_drive_setting: "숙제영상 저장 폴더 지정",
   integration_video_drive_account: "숙제영상 Google 계정 연결",
+  // 오늘 수학 지점 사용 메뉴(2026-10-19) — 에이와 원장이 바꾼 것과 오늘 수학에서 바꾼 것(알림으로 받음)이 같은 키. 출처는 metadata.source.
+  todays_math_menus_update: "오늘 수학 사용 메뉴 변경",
   integration_sync_now: "makeedu 지금 동기화",
   slack_connection_token: "슬랙 봇 토큰 등록",
   slack_connection_disconnect: "슬랙 알림 연결 해제",

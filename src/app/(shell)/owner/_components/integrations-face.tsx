@@ -10,7 +10,9 @@ import { agentTabAvailable } from "@/features/sync-agent/server/availability";
 import { getMakeeduSyncWorkers } from "@/features/integrations/server/makeedu-sync";
 import { MakeeduWorkerStatus } from "./makeedu-worker-status";
 import { TodaysMathCard } from "./todays-math-card";
+import { TodaysMathMenusCard } from "./todays-math-menus-card";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { isFeatureOptedIn } from "@/lib/license/server";
 
 /**
@@ -40,8 +42,11 @@ export async function IntegrationsFace({
 }) {
   // 슬랙 탭 = 설정 게이트와 같은 판정(지점 스위치 ∧ 원장·총괄) — 위임 관리자에게 빈 슬랙 탭이 첫 탭으로 뜨지 않게.
   // 오늘 수학 탭 = 지점 라이선스(todays_math)가 켜진 학원만(2026-10-17 — 개발 중 기능의 켜기 스위치가 여기 산다).
-  const todaysMathOn = getCurrentUser().then((u) => (u ? isFeatureOptedIn(u.tenantId, "todays_math") : false));
-  const [gate,agentOn,mathOn] = await Promise.all([slackGate(false),agentTabAvailable(modulesOn.makeedu||classnoteModuleOn(settings)),todaysMathOn]);
+  const me = getCurrentUser();
+  const todaysMathOn = me.then((u) => (u ? isFeatureOptedIn(u.tenantId, "todays_math") : false));
+  const [gate,agentOn,mathOn,user] = await Promise.all([slackGate(false),agentTabAvailable(modulesOn.makeedu||classnoteModuleOn(settings)),todaysMathOn,me]);
+  // 오늘 수학 사용 메뉴 = 원장 역할만(원장 2026-10-19 "원장만" · 총괄은 새 게이트를 통과) — 저장 액션도 같은 판정.
+  const isMaster = user?.systemRole === "master" || (mathOn && (await isCurrentUserSuperAdmin()));
   const slackOn = !("error" in gate);
   const available: IntegrationSub[] = [
     ...(slackOn ? (["slack"] as const) : []),
@@ -80,6 +85,7 @@ export async function IntegrationsFace({
       ) : null}
       {active === "video" ? <VideoDriveCard /> : null}
       {active === "todaysMath" ? <TodaysMathCard report={settings.report} /> : null}
+      {active === "todaysMath" && isMaster ? <TodaysMathMenusCard /> : null}
       {active === "agent" ? <AgentCard classnoteOn={classnoteModuleOn(settings)} makeeduOn={modulesOn.makeedu}
         legacyPC={modulesOn.makeedu?<LegacyMakeeduPC />:null} /> : null}
     </div>

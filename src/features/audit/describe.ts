@@ -43,6 +43,8 @@ import { OUTCOME_PILL } from "@/features/enrollment/outcome-meta";
 
 /** 대상 유형(target_type) → 한글 — 감사로그 '대상' 열 접두. 미등록 유형은 원문 폴백. */
 export const AUDIT_TYPE_LABEL: Record<string, string> = {
+  // 오늘 수학 사용 메뉴(2026-10-19) — 에이와 · 오늘 수학 어느 쪽에서 바꿔도 같은 대상.
+  todays_math: "오늘 수학",
   // ── 2026-09-09 전수 보강 — 여기 없으면 감사로그 '대상' 열에 영문이 그대로 뜬다. ──
   expense: "지출결의서",
   refund_request: "환불 요청서",
@@ -607,6 +609,13 @@ export function auditDetail(
       const before = str(m.noteBefore);
       if (note) return before ? `메모 "${before}" → "${note}"` : `메모 "${note}"`;
       return before ? `메모 "${before}" 지움` : null;
+    }
+    case "todays_math_menus_update": {
+      // 출처 = 에이와(원장이 학원 설정에서) · 오늘 수학(지점관리) · 오늘 수학 관리자(열어 둔 메뉴를 바꿈 — 그 결과 지점 메뉴가 달라짐).
+      const from = ({ eywa: "에이와에서", todays_math: "오늘 수학에서", todays_math_admin: "오늘 수학 관리자가" } as Record<string, string>)[str(m.source) ?? ""] ?? null;
+      const on = arr(m.turnedOn).filter((v): v is string => typeof v === "string");
+      const off = arr(m.turnedOff).filter((v): v is string => typeof v === "string");
+      return join(from, on.length ? `켬: ${on.join(", ")}` : null, off.length ? `끔: ${off.join(", ")}` : null) || null;
     }
     case "owner_settings_update": {
       const s = str(m.section);

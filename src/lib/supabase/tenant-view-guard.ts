@@ -25,6 +25,8 @@ import { TENANT_VIEW_READONLY_MESSAGE } from "@/lib/auth/tenant-view-shared";
  *    그런 화면은 보기에서 닫는다(권한 캡 — perm-matrix.ts `TENANT_VIEW_CLOSED_MENUS`).
  */
 export const TENANT_VIEW_READ_RPCS: ReadonlySet<string> = new Set([
+  // 오늘 수학 성적표가 걸린 날(0373a) — cron이 admin으로 부르는 읽기지만 목록 규약상 여기 둔다.
+  "todays_math_exam_report_dates",
   "consultation_class_candidates",
   "consultation_gap_students",
   "consultation_monthly_stats",
