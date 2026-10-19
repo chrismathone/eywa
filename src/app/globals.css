@@ -1028,6 +1028,14 @@ main.embed-main:has(.edge-to-edge) {
   scrollbar-gutter: auto;
 }
 
+/* 시간표 | 메모 시트 두 칸(split-panes.tsx, 원장 2026-10-19) — 세로 스크롤을 판마다 따로 가지므로 셸 <main>은
+   세로로 넘치지 않는다. 그런데 `scrollbar-gutter:stable`이면 빈 거터가 남아 시간표 판 스크롤바 옆에 **두 번째 줄**이
+   선다(rich-grid-view의 "우측 이단 스크롤바"와 같은 모양) → 이 화면만 거터를 푼다(창·풀셸·미니셸 모두).
+   ⚠️ `:has(> …)`는 dev CSS에서 사라진다([[#127]]) — 자손 선택자 그대로. */
+main:has(.timetable-split) {
+  scrollbar-gutter: auto;
+}
+
 /* 시간표 아래 안내 한 줄(X 겹침, 원장 2026-10-14 *"하단 여백 공간에 … 안내문구 · 영어시간표와 수학시간표 하단 여백 통일"*) —
    그 줄(위 간격 + 높이)이 아래 여백 자리를 대신한다. 풀셸·창·최대화 어디서나 같은 아래 여백이 된다(exit-overlay-hint.tsx).
    ⚠️ `:has(> …)`는 dev CSS에서 사라진다([[#127]]) — 자손 선택자 그대로. */
