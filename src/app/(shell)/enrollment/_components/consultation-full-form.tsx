@@ -12,6 +12,7 @@ import { kstToday } from "@/lib/date-kst";
 import { Button } from "@/components/ui/button";
 import { useGradeLevels, useSubjectMaps } from "@/features/owner/operations-context";
 import { useFormDraft } from "@/components/forms/use-form-draft";
+import { PriorConsultsHint } from "./prior-consults-hint";
 import { DraftBanner } from "@/components/forms/draft-banner";
 import { useConcurrentEditGuard } from "@/components/workspace/use-concurrent-edit-guard";
 import { useUnsavedGuard } from "@/components/workspace/use-unsaved-guard";
@@ -541,6 +542,8 @@ export function ConsultationFullForm({
                 </select>
               </L>
             </Grid>
+            {/* 새 상담에서만 — 같은 학생의 이전 상담이 있으면 그 자리에서 알린다(판정 = 카드 'N건' 배지와 같은 한 벌). */}
+            {isCreate ? <PriorConsultsHint /> : null}
             <Grid cols={2}>
               <L label="영문 이름" icon={Languages}>
                 <input name="englishName" defaultValue={v.englishName ?? ""} className={input} />
