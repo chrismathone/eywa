@@ -2,6 +2,8 @@
 // 단위테스트가 빠르다. 티어→모델 + provider별 키 env명의 단일 소스.
 //
 // UI엔 모델 이름을 노출하지 않는다(CLAUDE.md 정책) — 여기 문자열은 내부 식별·model_version 저장용.
+// 기능별 모델 고정(코드 기본 · 운영 콘솔 선택지)은 model-pins.ts.
+import type { ModelPin } from "./model-pins";
 
 export type AiProvider = "anthropic" | "upstage" | "deepseek";
 export type AiTier = "fast" | "balanced" | "reasoning";
@@ -22,7 +24,9 @@ export type AiKeyName = "default" | "consultations";
 export const AI_MODELS: Record<AiTier, Record<AiProvider, string | null>> = {
   // Haiku 5.5(원장 2026-10-16 *"운영 모델도 5.5로 올려"*) — 4.5의 1/10 값. 5 계열 제약(temperature 400 · 생각 기본 켜짐)은
   // generate.ts `isClaude5Model`이 흡수한다. 구독으로 같은 입력 9건 비교 뒤 적용(추세 날짜·진도 단원 코드 대응 포함).
-  fast: { anthropic: "claude-haiku-5-5", upstage: "solar-pro3", deepseek: "deepseek-v4-flash" },
+  // deepseek = `deepseek-flash`(V4.1-Flash-1017) — 옛 이름 `deepseek-v4-flash`는 딥시크가 "은퇴"로 적고 같은 모델로 돌리는 중이라
+  // (공식 가격표 2026-10-19 · 우리 키 `/models`엔 새 이름만 나온다) 이름을 지우기 전에 옮겼다.
+  fast: { anthropic: "claude-haiku-5-5", upstage: "solar-pro3", deepseek: "deepseek-flash" },
   balanced: { anthropic: "claude-sonnet-5", upstage: "solar-pro3", deepseek: "deepseek-v4-pro" },
   reasoning: { anthropic: "claude-opus-4-7", upstage: null, deepseek: null },
 };
@@ -158,10 +162,14 @@ export function resolveModelChain(
   keyName: AiKeyName = "default",
   prefer?: AiProvider,
   group?: AiKeyGroup | null,
+  /** 기능 고정 모델(`featurePin`) — 그 회사를 맨 앞에 그 모델로 세우고, 나머지는 평소 사다리. reasoning 티어엔 안 건다. */
+  pin?: ModelPin | null,
 ): ResolvedModel[] {
-  return providerOrder(tier, prefer)
-    .filter((provider) => AI_MODELS[tier][provider] && resolveKey(provider, keyName, group))
-    .map((provider) => ({ provider, model: AI_MODELS[tier][provider] as string, keyName }));
+  const usePin = pin && tier !== "reasoning" ? pin : null;
+  return providerOrder(tier, usePin?.provider ?? prefer)
+    .map((provider) => ({ provider, model: usePin?.provider === provider ? usePin.model : AI_MODELS[tier][provider] }))
+    .filter((c): c is { provider: AiProvider; model: string } => Boolean(c.model) && Boolean(resolveKey(c.provider, keyName, group)))
+    .map((c) => ({ provider: c.provider, model: c.model, keyName }));
 }
 
 /**
@@ -175,9 +183,12 @@ export function resolveModel(
   keyName: AiKeyName = "default",
   prefer?: AiProvider,
   group?: AiKeyGroup | null,
+  pin?: ModelPin | null,
 ): ResolvedModel {
-  const chain = resolveModelChain(tier, keyName, prefer, group);
+  const chain = resolveModelChain(tier, keyName, prefer, group, pin);
   if (chain.length > 0) return chain[0];
+  const usePin = pin && tier !== "reasoning" ? pin : null;
+  if (usePin) return { provider: usePin.provider, model: usePin.model, keyName };
   // 키 없음 — 모델 있는 첫 candidate(이후 클라 생성에서 throw → 호출부 stub). 기존 동작 보존.
   const order = providerOrder(tier, prefer);
   const provider = order.find((p) => AI_MODELS[tier][p]) ?? "anthropic";

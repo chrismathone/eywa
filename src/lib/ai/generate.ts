@@ -5,7 +5,9 @@ import { AI_TENANT_MISSING_MESSAGE, LICENSE_BLOCKED_MESSAGE } from "@/lib/licens
 import { getAnthropic } from "./anthropic";
 import { getUpstage } from "./upstage";
 import { getDeepseek } from "./deepseek";
+import { featurePin } from "./model-pins";
 import {
+  AI_MODELS,
   keyGroupOf,
   keyLabelOf,
   resolveKeyEnv,
@@ -274,6 +276,16 @@ export function isRetryableProviderError(err: unknown): boolean {
 }
 
 /**
+ * 그 모델 이름이 없다는 오류인가 — 기능에 고정한 모델(`featurePin`)의 이름이 바뀌거나 거둬졌을 때(2026-10-19).
+ * DeepSeek = 400 "Model Not Exist" · Anthropic = 404 not_found_error "model: …" · OpenAI 호환 = 404 `model_not_found`.
+ */
+export function isModelNotFoundError(err: unknown): boolean {
+  const text = providerErrorText(err);
+  if (providerErrorStatus(err) === 404 && /model/i.test(text)) return true;
+  return /model.{0,40}(not[\s_-]*exists?|not[\s_-]*found)|model_not_found|unknown model|invalid model/i.test(text);
+}
+
+/**
  * Anthropic 최신 모델(Claude 5 계열)이 temperature 파라미터를 거부하는 400인가 —
  * "`temperature` is deprecated for this model." (2026-07-17 비서 프로덕션 실측). 이 오류는
  * 모델 문제가 아니라 파라미터 문제라, temperature만 떼고 같은 모델로 1회 재시도하면 된다.
@@ -449,6 +461,21 @@ async function requireAiLicense(meta: GenerateJSONOptions["meta"]): Promise<void
   if (!(await isFeatureLicensed(tenantId, "ai_analysis"))) throw new Error(LICENSE_BLOCKED_MESSAGE.ai_analysis);
 }
 
+/**
+ * 지점이 운영 콘솔에서 이 기능에 고른 모델(없으면 null). 서버 전용 모듈이라 **부르는 순간에** 싣는다 — generate.ts는
+ * vitest가 직접 import하는 파일이다(라이선스 조회와 같은 이유). 싣지 못하거나 조회가 실패하면 고른 것이 없는 것으로 둔다.
+ */
+async function tenantChoiceFor(meta: GenerateJSONOptions["meta"]): Promise<string | null> {
+  const tenantId = typeof meta?.tenantId === "string" ? meta.tenantId.trim() : "";
+  if (!tenantId || !meta?.feature) return null;
+  try {
+    const { tenantModelChoice } = await import("./tenant-models");
+    return await tenantModelChoice(tenantId, meta.feature);
+  } catch {
+    return null;
+  }
+}
+
 /** Decision mode uses the same license, fact guard, feature key groups and usage ledger. */
 async function generateDecision(opts: GenerateDecisionOptions): Promise<DecisionResult> {
   await requireAiLicense(opts.meta);
@@ -487,15 +514,19 @@ export async function generateJSON(rawOpts: GenerateJSONOptions | GenerateDecisi
   //    🔴 지점을 모르는 호출은 **거절한다**(fail-closed) — 통과시키면 꺼진 지점의 AI가 그 틈으로 나간다(원장 "빈틈 매꿀것").
   //       타입이 `meta.tenantId: string` 필수라 정상 코드는 여기 오지 않는다 — any·빈 문자열 같은 뒷문만 막는다.
   //    막히면 폴백 사다리를 타지 않고 바로 던진다(다른 회사로 넘긴다고 풀릴 문제가 아니다).
-  await requireAiLicense(opts.meta);
+  //    지점 모델 선택 조회(운영 콘솔 'AI 모델')는 라이선스 조회와 서로 독립이라 함께 돈다(B4). 문서(PDF) 입력은 고정하지 않는다.
+  const [, tenantChoice] = await Promise.all([requireAiLicense(opts.meta), opts.document ? null : tenantChoiceFor(opts.meta)]);
   const tier = opts.tier ?? "balanced";
   const keyName = opts.keyName ?? "default";
   // 기능별 키 그룹(원장 2026-09-15) — 호출부 식별자에서 도출. 표에 없는 기능이면 null(옛 버킷·기본 키로).
   const group = keyGroupOf(opts.meta?.feature);
   const keyLabel = (p: AiProvider) => keyLabelOf(p, resolveKeyEnv(p, keyName, group));
-  const chain = resolveModelChain(tier, keyName, opts.provider, group);
+  // 모델 고정 — 지점 선택(운영 콘솔 'AI 모델', 0374a) > 코드 기본(`FEATURE_MODELS`) > 호출부 tier·provider(원장 2026-10-19).
+  // 고정한 회사가 키·잔액으로 막히면 아래 루프가 평소 사다리로 넘어간다. 문서(PDF) 입력은 Anthropic 전용이라 고정하지 않는다.
+  const pin = opts.document ? null : featurePin(opts.meta?.feature, tenantChoice);
+  const chain = resolveModelChain(tier, keyName, opts.provider, group, pin);
   // 키가 하나도 없으면 기존 동작 보존: 모델 있는 첫 candidate로 시도(클라 생성 시 키 없음 throw → rethrowAi).
-  let candidates = chain.length > 0 ? chain : [resolveModel(tier, keyName, opts.provider, group)];
+  let candidates = chain.length > 0 ? chain : [resolveModel(tier, keyName, opts.provider, group, pin)];
   if (opts.document) {
     // 문서(PDF) 입력은 Anthropic만 받는다 — 다른 provider로 폴백하면 첨부가 조용히 사라진 채
     // "본문 없음" 응답이 나와 원인을 못 찾는다. 후보를 한정하고, 없으면 키 문제를 그대로 말한다.
@@ -524,6 +555,13 @@ export async function generateJSON(rawOpts: GenerateJSONOptions | GenerateDecisi
         ...(e instanceof AnthropicRefusalError && e.usage ? { usage: e.usage } : {}),
         error: e instanceof Error ? e.message.slice(0, 500) : String(e).slice(0, 500),
       });
+      // 고정한 모델 이름이 없으면(이름 변경·거둠) 같은 회사의 티어 모델로 한 번 더 — 고정 전의 동작으로 돌아간다.
+      const tierModel = AI_MODELS[tier][provider];
+      if (pin && model === pin.model && tierModel && tierModel !== model && isModelNotFoundError(e)) {
+        reportWarning(`AI 고정 모델 없음 → 같은 회사 기본 모델로`, { scope: "generateJSON.pin-missing", provider, model, fallback: tierModel });
+        candidates.splice(i + 1, 0, { provider, model: tierModel, keyName });
+        continue;
+      }
       // 인증/한도 오류 + 다음 후보가 있으면 다른 provider로 폴백(B1: 무효·만료 키도 자동 회복).
       // 그 외(400·5xx) 또는 마지막 후보면 즉시 한글화해 표면화.
       if (i < candidates.length - 1 && isRetryableProviderError(e)) {

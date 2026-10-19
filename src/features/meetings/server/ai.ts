@@ -2,6 +2,7 @@ import "server-only";
 import { generateJSON } from "@/lib/ai/generate";
 import type { AiProvider } from "@/lib/ai/models";
 import { trimTrailingNoise, type TrimUtterance } from "@/lib/ai/transcript-trim";
+import { normalizeMeetingAnalysis } from "../analysis-normalize";
 
 /**
  * 회의록 8섹션 분석 — 단일 소스. 웹훅(오디오 전사 후)·텍스트 재분석 액션(regenerateMeetingAnalysis)이 공유한다.
@@ -103,7 +104,9 @@ export async function analyzeMeeting(
   const { data: parsed, model } = await generateJSON<
     MeetingReport & { speakerRoles?: Record<string, string> }
   >({
-    maxTokens: 8192,
+    // 16000 = Claude 5 계열을 고르거나 폴백으로 넘어가도 생각 토큰까지 들어가게(폼 추출이 4,096에서 잘리던 것과 같은 함정, 2026-10-19).
+    // 딥시크는 generate.ts 하한(32000)이 이미 더 크다. 상한일 뿐 쓴 만큼만 과금된다.
+    maxTokens: 16000,
     meta: { feature: "meeting_analysis", tenantId: ctx.tenantId },
     provider,
     prompt: [
@@ -162,15 +165,7 @@ export async function analyzeMeeting(
     ].join("\n"),
   });
 
-  const report: MeetingReport = {
-    meetingType: parsed.meetingType ?? "",
-    summary: parsed.summary ?? "",
-    agendaDiscussion: parsed.agendaDiscussion ?? "",
-    decisions: parsed.decisions ?? "",
-    actionItems: parsed.actionItems ?? "",
-    speakerSummary: parsed.speakerSummary ?? "",
-    concerns: parsed.concerns ?? "",
-    nextSteps: parsed.nextSteps ?? "",
-  };
-  return { report, speakerRoles: parsed.speakerRoles ?? {}, model };
+  // 저장 전 후처리 — 모델이 바뀌어도 기존 저장본과 같은 모양(불릿·굵게 짝·화자 표기 '원장(A)')으로(2026-10-19).
+  const { report, speakerRoles } = normalizeMeetingAnalysis(parsed);
+  return { report, speakerRoles, model };
 }
