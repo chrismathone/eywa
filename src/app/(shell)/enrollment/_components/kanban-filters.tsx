@@ -188,6 +188,8 @@ export function KanbanFilters({
         options={VIEW_OPTIONS}
         allValue="kanban"
         allLabel="칸반"
+        // 칸반도 `view=kanban`으로 적는다 — 파라미터가 없으면 서버가 계정에 남은 보기를 연다(원장 2026-10-19).
+        explicitAll
         axisLabel="보기"
         ariaLabel="보기 전환"
         className="w-auto"

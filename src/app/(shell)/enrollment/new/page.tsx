@@ -34,7 +34,7 @@ export default async function NewEnrollmentPage({
       </header>
 
       <NewConsultationForm key={formInstanceKey(form)} recordingOwner={{ tenantId: viewer.tenantId, userId: viewer.id }} referrerReady={referrerReady}
-        instance={{ formId: typeof form === "string" ? form : undefined }} />
+        counselor={viewer.displayName} instance={{ formId: typeof form === "string" ? form : undefined }} />
     </div>
   );
 }

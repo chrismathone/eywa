@@ -72,6 +72,7 @@ const row = (over: Partial<ConsultationTableRow> = {}): ConsultationTableRow => 
   parentPhone: "010-0000-9108",
   parentRequest: "◆25.7.4\n<수학>\n-칠곡에서 공통수학 1 진행",
   consultantName: "김초롱",
+  counselorText: null,
   consultantId: "u1",
   subject: "math",
   outcome: "scheduled",
@@ -203,6 +204,20 @@ describe("시트형 목록뷰 — 값", () => {
     for (const label of ["상담 내용", "상담사", "학교·학년", "연락처", "과목"]) {
       expect(cellOf(label).childNodes.length, label).toBe(0);
     }
+  });
+
+  it("상담사 계정이 없으면 상담자 글을 대신 보인다(상세와 같은 사실 · 원장 2026-10-19) — 계정이 있으면 계정 이름", () => {
+    render(
+      <EnrollmentTable
+        rows={[
+          row({ id: "a", consultantName: null, consultantId: null, counselorText: "대표" }),
+          row({ id: "b", consultantName: "김초롱", consultantId: "u1", counselorText: "대표 예원" }),
+        ]}
+        nowMs={0}
+        canWrite={false}
+      />,
+    );
+    expect(cellsOf("상담사")).toEqual(["대표", "김초롱"]);
   });
 
   it("수정 가능이면 빈 칸에도 더블클릭 버튼이 서므로 td에 data-empty를 달아 좁은 화면 카드가 감춘다", () => {

@@ -44,6 +44,10 @@ import { IntakeQrSection } from "./_components/intake-qr-section";
 import { MakeeduPushSection } from "./_components/makeedu-push-section";
 import { MakeeduPushButton } from "./_components/makeedu-push-button";
 import { canPushToMakeedu } from "@/features/integrations/server/makeedu-push-access";
+import { readMyUiPrefs } from "@/lib/ui-prefs/read";
+import { RememberPrefs } from "@/components/remember-prefs";
+import { parseEnrollmentView, savedEnrollmentView } from "@/features/enrollment/view-pref";
+import { saveEnrollmentViewPref } from "@/features/enrollment/server/view-pref-actions";
 
 export const metadata = { title: "신규 콜&상담 — 에이와" };
 
@@ -91,8 +95,6 @@ export default async function EnrollmentPage({
   // 칸 키다 — 옛 링크(`?outcome=ai_done`)는 그 값이 속한 칸으로 넓혀 받는다(parseBoardStage).
   const selectedStage = parseBoardStage(outcome);
   const searchQuery = q?.trim() || null;
-  const view: EnrollmentView =
-    viewParam === "table" ? "table" : viewParam === "stats" ? "stats" : "kanban";
   // 통계뷰 전용 — 연도 선택. `all` = 전체 기간(원장 2026-08-05). 여기엔 "최대 1년" 상한이 없다
   // (집계라 행을 안 가져온다 — 칸반·목록의 상한은 행 로딩 때문이라 여기와 무관).
   const statsPeriod = parseStatsPeriod(yearParam, Number(kstToday().slice(0, 4)));
@@ -118,12 +120,18 @@ export default async function EnrollmentPage({
   // 엑셀로 넣기 = 학원 전체를 바꾸는 일괄 작업 → full만(`canManageTenant`, 올리기 주소도 같은 판정 — [[#77]]).
   // makeedu 보내기(원장 2026-10-01) = 전송 액션과 **같은 게이트**(`canPushToMakeedu`) — 권한이 없거나 makeedu 모듈이
   // 꺼진 지점이면 버튼 자리째 없다(잠긴 대체 화면도 안 그린다).
-  const [canWriteEnrollment, canOpenCalculator, canImportExcel, canPushMakeedu] = await Promise.all([
+  const [canWriteEnrollment, canOpenCalculator, canImportExcel, canPushMakeedu, uiPrefs] = await Promise.all([
     canWriteTenant(user.systemRole, "enrollment"),
     canAccessTenant(user.systemRole, "billing"),
     canManageTenant(user.systemRole, "enrollment"),
     canPushToMakeedu(user.systemRole),
+    readMyUiPrefs(), // 실패하면 {} → 저장값 없음(칸반)
   ]);
+  // 보기 = 주소의 `view` → 계정에 남은 마지막 보기 → 칸반(원장 2026-10-19 *"마지막으로 본 뷰로 사람에게 귀속"*, view-pref.ts).
+  // 고른 보기는 아래 RememberPrefs가 저장한다. 🔴 툴바 링크는 칸반도 `view=kanban`으로 적는다(enrollment-query.ts) —
+  //    안 적으면 저장이 끝나기 전 다음 클릭이 옛 저장값으로 돌아간다.
+  const savedView = savedEnrollmentView(uiPrefs);
+  const view: EnrollmentView = parseEnrollmentView(viewParam) ?? savedView;
   // 🔴 뷰마다 **가져오는 양이 다르다**. 목록은 한 페이지(50행)만 — 옛 시트 이관으로 2,251행이 되어
   // 전건 로드는 라운드트립 3회 + 배지 청크 20여 회로 불어난다(B2·B4). 칸반은 열별 집계가 필요해
   // 전건을 유지하되, 그래서 기간 필터 없이 열면 여전히 무겁다(별도 과제).
@@ -207,6 +215,7 @@ export default async function EnrollmentPage({
           진짜 완료 지표인 '배정 완료(수업≥1)' 건수 유지(정직). */}
       {/* QR 접수가 들어오면 새로고침 없이 목록이 갱신된다(20초 건수 폴링). 알림 줄은 도착 후에만 렌더. */}
       <NewConsultationWatcher initialCount={totalCount ?? 0} />
+      <RememberPrefs current={{ view }} saved={{ view: savedView }} save={saveEnrollmentViewPref} />
 
       <PageHeader
         eyebrow="신규 콜&상담"
