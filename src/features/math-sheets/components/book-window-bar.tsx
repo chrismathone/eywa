@@ -113,7 +113,7 @@ export function RailsWithBook({ studentId, ...rails }: { studentId: string } & C
   return (
     <LearningRails
       {...rails}
-      zoom={w && w.total > 0 ? { units: w.units, content: <BookWindowBar studentId={studentId} embedded /> } : undefined}
+      zoom={w && w.total > 0 ? { units: w.units, grade: w.grade, content: <BookWindowBar studentId={studentId} embedded /> } : undefined}
     />
   );
 }

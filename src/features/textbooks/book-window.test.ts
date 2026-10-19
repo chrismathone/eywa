@@ -26,6 +26,8 @@ describe("bookWindow", () => {
     const w = bookWindow({ orders: [{ bookName: "가우스 중2-2 3권", date: "2026-07-22" }], catalog: CATALOG, reports: [], referenceDate: "2026-07-01", classDates: noDates });
     expect(w).toMatchObject({ startDate: "2026-07-29", endDate: "2026-10-28", total: 8, planned: 0, done: null });
     expect(w!.books.map((b) => b.id)).toEqual(["b3", "b4"]);
+    expect(w!.grade).toBe("중2");
+    expect(w!.units).toContain("확률의 계산");
   });
   it("4권만 샀으면 4권만", () => {
     const w = bookWindow({ orders: [{ bookName: "가우스 중2-2 4권", date: "2026-10-08" }], catalog: CATALOG, reports: [], referenceDate: "2026-10-01", classDates: noDates });

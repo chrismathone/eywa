@@ -27,6 +27,8 @@ export type BookWindow = {
   endDate: string;
   /** 창이 다루는 소단원(권·차시 순) — 전체 목표 레일 위에 이 창이 차지하는 구간을 찾는 열쇠. */
   units: string[];
+  /** 교재 학년(`중2`) — 같은 소단원 이름이 다른 학년에도 있어(`경우의 수` = 중2·공통수학1) 레일 구간을 이 학년으로 좁힌다. */
+  grade: string;
   /** 창을 연 주문(가장 먼저 산 권). */
   orderDate: string;
   orderTitle: string;
@@ -122,6 +124,7 @@ export function bookWindow(args: {
   }
   return {
     books: books.map((b) => ({ id: b.id, title: b.title, lessons: b.lessons.length })),
+    grade: setKey.split("|")[1]!.replace(/-\d+$/, ""),
     units: books.flatMap((b) => b.lessons.flatMap((l) => (l.progress ?? "").split(" / ").map((u) => u.trim()).filter(Boolean))),
     startDate,
     endDate,

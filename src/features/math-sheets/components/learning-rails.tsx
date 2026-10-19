@@ -23,7 +23,7 @@ export function LearningRails({ progress, goal, recentBlock, recentGrade, recent
    * 이게 한눈에 잘 안 들어옴"*). 레일 위엔 그 구간을 점선 띠로, 띠의 양 끝에서 아래 칸 양 끝으로 안내선을 긋는다.
    * 소단원이 이 레일 범위 밖이면 띠·안내선 없이 칸만 그린다.
    */
-  zoom?: { units: readonly string[]; content: ReactNode };
+  zoom?: { units: readonly string[]; grade?: string; content: ReactNode };
 }) {
   const goalDescriptionId = useId();
   const topicTicks = goal ? learningTopicTicks(goal, progress) : [];
@@ -55,7 +55,9 @@ export function LearningRails({ progress, goal, recentBlock, recentGrade, recent
 
   // 확대 구간 — 교재 소단원이 레일 눈금 어디에 걸리는지(번호 머리·띄어쓰기 무시, 교재 매핑과 같은 열쇠).
   const zoomKeys = new Set(zoom?.units.map(unitKey) ?? []);
-  const zoomHits = topicTicks.filter(tick => zoomKeys.has(unitKey(tick.lesson))).map(tick => tick.position);
+  const zoomHits = topicTicks
+    .filter(tick => (!zoom?.grade || tick.grade === zoom.grade) && zoomKeys.has(unitKey(tick.lesson)))
+    .map(tick => tick.position);
   const band = total > 0 && zoomHits.length
     ? { from: position(Math.min(...zoomHits) - 1), to: position(Math.max(...zoomHits)) }
     : null;
