@@ -4,7 +4,10 @@ import { FaceTabs } from "@/components/face-tabs";
 import { PageHeader } from "@/components/page-header";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { resolveSkillAreas } from "@/features/owner/skill-areas";
-import { resolveTextbookTab, textbookFaces, type TextbookTab } from "@/features/textbooks/faces";
+import { resolveTextbookSubject, resolveTextbookTab, textbookFaces, TEXTBOOK_SUBJECTS, type TextbookTab } from "@/features/textbooks/faces";
+import { buildSubjectMaps } from "@/features/owner/subjects";
+import { getMathAssignmentList } from "@/features/textbooks/server/math-assignment-queries";
+import { MathPlansFace } from "./_components/math-plans-face";
 import { getClassTextbookPlans, getTextbooks } from "@/features/textbooks/server/queries";
 import type { TextbookTableStatus } from "@/features/textbooks/types";
 import { BooksFace } from "./_components/books-face";
@@ -39,22 +42,29 @@ export default async function TextbooksPage({ searchParams }: { searchParams: Pr
   const user = await requireAccess("textbooks");
   const sp = await searchParams;
   const tab = resolveTextbookTab(sp.tab);
+  // 과목 — 영어(기본) / 수학(원장 2026-10-19 *"기존에 교재목록은 영어만 사용했었는데 수학도 추가"*).
+  const subject = resolveTextbookSubject(sp.subject);
 
   // 서로 독립 — 함께 받는다(B4).
   // ⚠️ 배정 면이 읽기 전용이 되면서(원장 2026-09-16) 반·교재 **선택지** 조회는 여기서 사라졌다 —
   //    고르는 화면이 영어 강사 시트로 옮겨갔고, 소비처 없는 조회를 남기면 면을 열 때마다 헛돈다.
-  const [canWrite, canImport, settings, list, plans] = await Promise.all([
+  const [canWrite, canImport, settings, list, plans, mathPlans] = await Promise.all([
     canWriteTenant(user.systemRole, "textbooks"),
     // 엑셀로 넣기 = 학원 전체 일괄 작업 — 올리기 주소와 **같은 판정**(canManageTenant, full만 — #77).
     canManageTenant(user.systemRole, "textbooks"),
     getTenantSettings(),
     getTextbooks({
-      subject: "english",
+      subject,
       skillArea: sp.area ?? null,
       q: sp.q ?? null,
       page: Number(sp.page ?? 1) || 1,
     }),
-    tab === "plans" ? getClassTextbookPlans({}) : Promise.resolve({ status: "ok" as TextbookTableStatus, rows: [] }),
+    tab === "plans" && subject === "english"
+      ? getClassTextbookPlans({})
+      : Promise.resolve({ status: "ok" as TextbookTableStatus, rows: [] }),
+    // 수학 '반 배정' 면 = 반·학생 교재 배정 목록(읽기 전용 — 배정은 수학 강사 시트에서 한다).
+    // 🔴 표 없음(마이그레이션 미적용)은 그 면 안에서만 말한다 — 교재 면의 편집까지 잠그지 않는다.
+    tab === "plans" && subject === "math" ? getMathAssignmentList(user.tenantId) : Promise.resolve(null),
   ]);
 
   // 표 없음(missing-table)이 그냥 실패보다 먼저 — 원인을 말하는 문구가 뜬다.
@@ -69,14 +79,23 @@ export default async function TextbooksPage({ searchParams }: { searchParams: Pr
   const editable = canWrite && list.status === "ok";
 
   // ECS 계획 줄의 '구분'과 **같은 목록**을 쓴다(학원설정 단일 소스) — 여기서 따로 적으면 시트와 갈린다.
-  const skillAreas = resolveSkillAreas(settings.operations.subjects.find((s) => s.key === "english"));
+  // 수학엔 영역 축이 없다(설정에 skillAreas가 없으면 빈 목록 → 화면이 '구분'을 감춘다).
+  const subjectSetting = settings.operations.subjects.find((s) => s.key === subject);
+  const skillAreas = resolveSkillAreas(subjectSetting);
+  // 과목 전환 라벨은 학원설정 단일 소스(`labelOf`) — 코드에 '영어'·'수학'을 적지 않는다.
+  const { labelOf } = buildSubjectMaps(settings.operations.subjects);
+  const subjectOptions = TEXTBOOK_SUBJECTS.map((key) => ({ key, label: labelOf(key) }));
 
   return (
     <div className="flex min-h-full w-full flex-col gap-4 p-3 md:px-5 md:py-4">
       <PageHeader
         eyebrow="수업"
         title="교재목록"
-        description="교재 한 권 = 구분·페이지/시간·차수. 차수별 진도·과제를 적어 두면 영어 강사 시트의 월간계획에 차수대로 뜹니다."
+        description={
+          subject === "math"
+            ? "교재 한 권 = 페이지/시간·차수. 수학 강사 시트에서 반 교재나 학생별 교재로 배정합니다."
+            : "교재 한 권 = 구분·페이지/시간·차수. 차수별 진도·과제를 적어 두면 영어 강사 시트의 월간계획에 차수대로 뜹니다."
+        }
         embedLabel="교재 · 차수별 진도·과제 · 반 배정"
       />
       <NotReadyBanner status={status} />
@@ -84,12 +103,19 @@ export default async function TextbooksPage({ searchParams }: { searchParams: Pr
       <FaceTabs
         faces={textbookFaces({
           books: sp.q || sp.area ? null : list.total,
-          plans: plans.status === "ok" && tab === "plans" ? plans.rows.length : null,
-        })}
+          plans:
+            tab !== "plans"
+              ? null
+              : mathPlans
+                ? mathPlans.status === "ok" ? mathPlans.rows.length : null
+                : plans.status === "ok" ? plans.rows.length : null,
+        }, subject)}
         active={tab}
         ariaLabel="교재목록 면 전환"
       />
-      {tab === "plans" ? (
+      {tab === "plans" && mathPlans ? (
+        <MathPlansFace status={mathPlans.status} rows={mathPlans.rows} />
+      ) : tab === "plans" ? (
         <PlansFace rows={plans.rows} skillAreas={skillAreas} />
       ) : (
         <BooksFace
@@ -98,6 +124,8 @@ export default async function TextbooksPage({ searchParams }: { searchParams: Pr
           page={list.page}
           pageSize={list.pageSize}
           skillAreas={skillAreas}
+          subject={subject}
+          subjectOptions={subjectOptions}
           canWrite={editable}
           canImport={canImport && list.status === "ok"}
         />

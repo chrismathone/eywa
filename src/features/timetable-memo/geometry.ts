@@ -97,3 +97,10 @@ export function stepPos(doc: Pick<SheetDoc, "rows" | "cols">, index: Map<string,
   const m = index.get(cellKey(r, c));
   return m ? { r: m.r, c: m.c } : { r, c };
 }
+
+/** 머리 경계를 끌거나 두 번 누른 줄 — 줄을 통째로 여럿 고른 채 그 안의 경계면 고른 줄 전부(엑셀과 같다). */
+export function headerLinesAt(doc: Pick<SheetDoc, "rows" | "cols">, range: Range, axis: "row" | "col", index: number): number[] {
+  const whole = axis === "col" ? range.r0 === 0 && range.r1 === doc.rows - 1 : range.c0 === 0 && range.c1 === doc.cols - 1;
+  const [lo, hi] = axis === "col" ? [range.c0, range.c1] : [range.r0, range.r1];
+  return whole && index >= lo && index <= hi ? Array.from({ length: hi - lo + 1 }, (_, i) => lo + i) : [index];
+}

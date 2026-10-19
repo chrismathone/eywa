@@ -12,7 +12,8 @@ import {
   type Range,
   type SheetDoc,
 } from "./doc";
-import { expandToMerges } from "./geometry";
+import { expandToMerges, mergeIndex } from "./geometry";
+import { isInnerMergeSide, liftMergeBorders } from "./merge-borders";
 
 /**
  * 판 편집 — 전부 **새 문서를 돌려주는 순수 함수**(되돌리기 이력이 문서 스냅샷을 그대로 쌓는다).
@@ -88,8 +89,11 @@ type Side = keyof typeof OPPOSITE;
 /**
  * 테두리 — 한 변은 양쪽 칸 어느 쪽에 적어도 같은 선이라, **범위 안 칸에 적고 바깥 이웃의 마주 보는 변은 지운다**
  * (안 지우면 두 칸이 다른 색 선을 같은 자리에 들고 있어 어느 쪽이 보일지 그리는 순서가 정한다).
+ * 병합은 한 칸이다 — 범위를 덩어리 단위로 넓히고, 덩어리 **안쪽** 변은 적지 않는다(남아 있으면 지운다, merge-borders.ts).
  */
-export function applyBorders(doc: SheetDoc, range: Range, mode: BorderMode, line: BorderLine): SheetDoc {
+export function applyBorders(doc: SheetDoc, raw: Range, mode: BorderMode, line: BorderLine): SheetDoc {
+  const range = expandToMerges(raw, doc.merges);
+  const merged = mergeIndex(doc.merges);
   const cells = { ...doc.cells };
   const edit = (r: number, c: number, side: Side, value: BorderLine | undefined) => {
     if (r < 0 || c < 0 || r >= doc.rows || c >= doc.cols) return;
@@ -120,6 +124,11 @@ export function applyBorders(doc: SheetDoc, range: Range, mode: BorderMode, line
         : mode === "left" ? (side === "l" && isOuter ? true : null)
         : side === "r" && isOuter ? true : null;
       if (want === null) continue;
+      const m = merged.get(cellKey(r, c));
+      if (m && isInnerMergeSide(m, r, c, side)) {
+        edit(r, c, side, undefined);
+        continue;
+      }
       edit(r, c, side, want ? line : undefined);
       // 마주 보는 변 — 범위 안끼리는 같은 값으로 이미 덮이므로 바깥 이웃만 손본다.
       if (isOuter) {
@@ -139,7 +148,8 @@ export function mergeCells(doc: SheetDoc, raw: Range): SheetDoc {
   const range = expandToMerges(raw, doc.merges);
   if (range.r0 === range.r1 && range.c0 === range.c1) return doc;
   const merges = doc.merges.filter((m) => !rangesIntersect(mergeRange(m), range));
-  merges.push({ r: range.r0, c: range.c0, rs: range.r1 - range.r0 + 1, cs: range.c1 - range.c0 + 1 });
+  const made = { r: range.r0, c: range.c0, rs: range.r1 - range.r0 + 1, cs: range.c1 - range.c0 + 1 };
+  merges.push(made);
   const cells = { ...doc.cells };
   let keep = cells[cellKey(range.r0, range.c0)]?.t;
   forEachCell(range, (r, c) => {
@@ -151,7 +161,8 @@ export function mergeCells(doc: SheetDoc, raw: Range): SheetDoc {
   });
   const anchor = cells[cellKey(range.r0, range.c0)];
   if (keep && anchor?.t !== keep) setCell(cells, range.r0, range.c0, { ...anchor, t: keep });
-  return { ...doc, cells, merges };
+  // 왼쪽 위 칸의 테두리가 덩어리 전체의 테두리가 된다(구글 시트와 같다) — 가장자리 칸에 나눠 적는다.
+  return liftMergeBorders({ ...doc, cells, merges }, [made]);
 }
 
 export function unmergeCells(doc: SheetDoc, range: Range): SheetDoc {

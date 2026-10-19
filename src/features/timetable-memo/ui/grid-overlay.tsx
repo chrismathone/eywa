@@ -77,3 +77,13 @@ export function CellEditorBox({
     />
   );
 }
+
+/** 경계를 끄는 동안의 안내선 — 놓으면 그 자리가 새 폭·높이다. */
+export function ResizeGuide({ layout, resize }: { layout: Layout; resize: { axis: "row" | "col"; index: number; size: number } | null }) {
+  if (!resize) return null;
+  const style: CSSProperties =
+    resize.axis === "col"
+      ? { left: layout.colX[resize.index]! + resize.size - 1, top: 0, width: 2, height: layout.height }
+      : { left: 0, top: layout.rowY[resize.index]! + resize.size - 1, width: layout.width, height: 2 };
+  return <div className="bg-primary pointer-events-none absolute z-30" style={style} />;
+}

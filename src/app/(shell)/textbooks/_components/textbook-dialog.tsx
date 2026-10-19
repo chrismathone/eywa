@@ -35,7 +35,7 @@ function deleteWarning(title: string, filledLessons: number, planCount: number |
   if (filledLessons > 0) lines.push(`· 차수별 진도·과제 ${filledLessons}개가 함께 지워집니다.`);
   // ⚠️ 0이라고 "배정 없음"이라 단정하지 않는다 — 이 수는 목록을 연 시점의 값이라 그 사이에 생겼을 수 있다.
   //    셀 수 없었거나(null) 0이면 **숫자 없이** 알린다(빠뜨린 문장이 곧 거짓 안심이 된다).
-  if (planCount !== null && planCount > 0) lines.push(`· 반 배정 ${planCount}건이 함께 지워집니다.`);
+  if (planCount !== null && planCount > 0) lines.push(`· 배정 ${planCount}건이 함께 지워집니다.`);
   else lines.push("· 이 교재를 태우고 있는 반 배정이 있으면 함께 지워집니다.");
   lines.push("· 이미 시트에 적힌 교재이름·진도·과제는 그대로 남습니다.", "", "되돌릴 수 없습니다.");
   return lines.join("\n");
@@ -56,6 +56,7 @@ export function TextbookDialog({
   mode,
   textbookId,
   skillAreas,
+  subject: listSubject,
   canWrite,
   planCount,
   onClose,
@@ -63,6 +64,8 @@ export function TextbookDialog({
   mode: "create" | "edit";
   textbookId: string | null;
   skillAreas: SkillAreaSetting[];
+  /** 새로 등록할 때의 과목(목록에서 고른 과목). 수정은 그 교재의 과목을 그대로 유지한다. */
+  subject: string;
   canWrite: boolean;
   /** 이 교재를 태우고 있는 반 배정 수 — 삭제 확인 문구에만 쓴다. 셀 수 없었으면 null([[#89]]). */
   planCount: number | null;
@@ -75,7 +78,10 @@ export function TextbookDialog({
   const [error, setError] = useState<string | null>(null);
 
   const [title, setTitle] = useState("");
+  // 🔴 수정 저장이 과목을 바꾸지 않게 — 불러온 교재의 과목으로 덮는다.
+  const [subject, setSubject] = useState(listSubject);
   const [skillArea, setSkillArea] = useState<string>(skillAreas[0]?.key ?? "");
+  const hasAreas = skillAreas.length > 0;
   const [pageTime, setPageTime] = useState("");
   const [sessionCount, setSessionCount] = useState(0);
 
@@ -90,6 +96,7 @@ export function TextbookDialog({
 
   const applyDetail = useCallback((d: TextbookDetail) => {
     setTitle(d.textbook.title);
+    setSubject(d.textbook.subject);
     setSkillArea(d.textbook.skillArea ?? "");
     setPageTime(d.textbook.pageTime ?? "");
     setSessionCount(d.textbook.sessionCount);
@@ -158,7 +165,7 @@ export function TextbookDialog({
       // ① 교재 본체
       const saved = await saveTextbook({
         id,
-        subject: "english",
+        subject,
         skillArea: skillArea || null,
         title,
         pageTime: pageTime || null,
@@ -225,7 +232,11 @@ export function TextbookDialog({
   return (
     <DialogShell
       title={mode === "create" && !id ? "교재 등록" : `교재 — ${title || "(이름 없음)"}`}
-      description="구분·페이지/시간은 영어 강사 시트의 계획 줄에 그대로 들어가는 값입니다."
+      description={
+        listSubject === "math"
+          ? "수학 강사 시트에서 반 교재·학생 교재로 배정합니다."
+          : "구분·페이지/시간은 영어 강사 시트의 계획 줄에 그대로 들어가는 값입니다."
+      }
       onClose={onClose}
       size="xl"
     >
@@ -263,6 +274,7 @@ export function TextbookDialog({
                     className={FIELD}
                   />
                 </Field>
+                {hasAreas ? (
                 <Field label="구분" hint="계획 줄의 '구분'에 들어갑니다. 줄마다 바꿀 수 있습니다.">
                   <select
                     value={skillArea}
@@ -278,6 +290,7 @@ export function TextbookDialog({
                     ))}
                   </select>
                 </Field>
+                ) : null}
                 <Field label="페이지/시간" hint="예: 35분 · 104p — 시트의 같은 칸에 들어갑니다.">
                   <input
                     value={pageTime}

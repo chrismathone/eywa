@@ -1,7 +1,7 @@
 import "server-only";
 import { unstable_cache } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { resolveTenantReadUrls } from "@/lib/storage/media-storage";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { kstToday } from "@/lib/date-kst";
@@ -137,6 +137,15 @@ export async function getTextbooks(opts: {
         ).catch(() => null),
     ids.length === 0
       ? Promise.resolve([] as { textbook_id: string }[])
+      : opts.subject === "math"
+        // 수학은 ECS 배정(class_textbook_plans)이 아니라 반·학생 교재 배정을 센다(자리 수).
+        ? fetchInChunks<{ textbook_id: string }>(ids, (chunk) =>
+            admin
+              .from("math_textbook_assignments")
+              .select("textbook_id")
+              .eq("tenant_id", user.tenantId)
+              .in("textbook_id", chunk),
+          ).catch(() => null)
       : fetchAllPagedInChunks<{ textbook_id: string }>(ids, (chunk, f, t) =>
           admin
             .from("class_textbook_plans")

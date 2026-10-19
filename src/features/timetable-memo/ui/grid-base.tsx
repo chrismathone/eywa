@@ -55,12 +55,14 @@ function GridBaseImpl({ doc, layout, merges }: { doc: SheetDoc; layout: Layout; 
     g.segs.push(s);
   };
 
-  // 병합 덩어리는 색이 없어도 흰 판으로 덮는다(안쪽 격자선이 비치지 않게).
+  // 병합 덩어리는 색이 없어도 흰 판으로 덮는다(안쪽 격자선이 비치지 않게). 색 없는 덩어리는 오른쪽·아래 1px을 남겨
+  // 바깥 격자선이 보이게 한다(구글 시트와 같다 — 안 남기면 테두리 없는 병합만 오른쪽·아래 선이 비어 보인다).
   for (const m of doc.merges) {
     const x = colX[m.c]!;
     const y = rowY[m.r]!;
-    const bg = doc.cells[cellKey(m.r, m.c)]?.s?.bg ?? "#ffffff";
-    fills.push({ x, y, w: colX[m.c + m.cs]! - x, h: rowY[m.r + m.rs]! - y, c: bg });
+    const bg = doc.cells[cellKey(m.r, m.c)]?.s?.bg;
+    const edge = bg ? 0 : 1;
+    fills.push({ x, y, w: colX[m.c + m.cs]! - x - edge, h: rowY[m.r + m.rs]! - y - edge, c: bg ?? "#ffffff" });
   }
 
   for (const [key, cell] of Object.entries(doc.cells)) {
