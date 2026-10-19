@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { EnrollmentHistoryCheck } from "@/features/enrollment-history/history-check";
 import { notFound, redirect } from "next/navigation";
 import {
   AlertCircle, ClipboardCheck, ClipboardList, ExternalLink, Loader2, Mic, Pencil, Printer, Sparkles,
@@ -274,6 +275,7 @@ export default async function EnrollmentDetailPage({
           아직 안 만든 건 '상담 전' 칸에만 권유한다 — 이미 끝난 상담에 "브리프 만들기"를 띄우면 노이즈다.
           🔴 한 번 만든 브리프는 **지우지 않는다** — 끝난 상담에서는 이름·톤을 내려(pastBrief) 아래로 옮길 뿐이다. */}
       {!pastBrief ? briefNode : null}
+      {isModuleEnabled(settings.modules.disabled, "calendar") ? <EnrollmentHistoryCheck key={id} identity={{ name: consult.prospectName, phones: [consult.parentPhone ?? "", f.studentPhone ?? ""] }} /> : null}
 
       {/* 같은 학생의 다른 등록상담(반복 접수) — 학생 연결 또는 자연키(이름+학교+학년)로 묶은 다른 상담 건.
           카드의 '상담 N건' 배지와 동일 그룹. 각 건을 창으로 열어 나머지 상담을 확인·정리. 등록상담만 대상. */}

@@ -275,6 +275,10 @@ async function detectAbsence(admin: SupabaseClient, tenantId: string): Promise<n
 
 /** 상담 후속조치 기한 감지 → 담당 상담사(폴백 master) 개별 알림(콜드스타트면 시드만). */
 async function detectFollowup(admin: SupabaseClient, tenantId: string): Promise<number> {
+  // Active pilot owns this signal's notifications. Observe/off retains the existing reminder path.
+  const { runManagementAgent } = await import("@/features/management-agent/server/worker");
+  const managed = await runManagementAgent(tenantId);
+  if (managed.active) return managed.changed;
   const today = kstToday();
   // 전용 감지 쿼리 — getFollowUpConsultations의 .limit(60) 하드캡을 피하고 counselor_id를 함께 받는다.
   const { data, error } = await admin

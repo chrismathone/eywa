@@ -158,7 +158,7 @@ provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어�
 | `MENT` | classnote_ment · english_ment · ment_prompt_preview · ment_style_profile | Claude(Haiku·Sonnet) |
 | `MEETING` | meeting_analysis | DeepSeek |
 | `ENROLLMENT` | enrollment_analysis · enrollment_form_extract · enrollment_prep_brief | DeepSeek(분석·브리프) · Claude(폼) |
-| `CONSULTATIONS` | consultation_analysis · student_care | DeepSeek(분석) · Claude(케어) |
+| `CONSULTATIONS` | consultation_analysis · student_care · management_followup_advice | DeepSeek(분석) · Claude(케어·후속 대응안) |
 | `BRIEFING` | daily_briefing | Claude |
 | `ATTENDANCE` | attendance_recap · parent_attendance_intent · parent_attendance_jev_shadow · parent_satisfaction | DeepSeek · TypeSafe(비교 전용) |
 | `NOTICE` | notice_translate | DeepSeek |

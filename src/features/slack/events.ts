@@ -9,6 +9,7 @@ import type { NotificationType } from "@/features/notifications/types";
 export type ForwardEventOption = { type: NotificationType; label: string; group: string };
 
 export const FORWARD_EVENT_OPTIONS: readonly ForwardEventOption[] = [
+  { type: "management_followup", label: "상담 후속조치 처리·결과", group: "학생 관리" },
   { type: "enrollment_assigned", label: "내 반에 학생 배정", group: "수업·반" },
   { type: "enrollment_transferred_in", label: "반이동 전입", group: "수업·반" },
   { type: "teacher_handover", label: "담임 인수인계", group: "수업·반" },

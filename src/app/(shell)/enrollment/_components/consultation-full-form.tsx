@@ -1,5 +1,7 @@
 "use client";
 
+import { EnrollmentHistoryCheck } from "@/features/enrollment-history/history-check";
+
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { useLicenseOn, useModuleOn } from "@/features/owner/operations-context";
 import {
@@ -160,6 +162,7 @@ export function ConsultationFullForm({
   const inFrame = useInFrame();
   const isCreate = mode === "create";
   const shuttleOn = useModuleOn("shuttle");
+  const historyOn = useModuleOn("calendar");
   const recordingOn = useLicenseOn("meeting_recording");
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [audioRecoveryId, setAudioRecoveryId] = useState<string | null>(null);
@@ -398,6 +401,7 @@ export function ConsultationFullForm({
         이 화면이 살아 있는데, 그 사이 칸에 치면 ① 초안 자동저장이 방금 지운 초안을 pagehide에서 되살리고
         ② 미저장 가드가 다시 dirty가 되어 이동에 '떠나시겠습니까?'가 뜬다. 머무는 동안(stayHref)도 잠근 채 둔다. */}
     <form ref={formRef} onSubmit={handleSubmit} onInput={(e) => syncRecordingSubject(e.currentTarget)} className="space-y-3" inert={leaving}>
+      {historyOn ? <EnrollmentHistoryCheck formRef={formRef} /> : null}
       {mode === "edit" && v.id ? <input type="hidden" name="id" value={v.id} /> : null}
       <input type="hidden" name="subjectDetails" value={JSON.stringify(details)} />
       <input type="hidden" name="recordingDraftId" value={recordingDraftId} />

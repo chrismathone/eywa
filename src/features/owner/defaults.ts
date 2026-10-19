@@ -212,6 +212,7 @@ export const DEFAULT_SETTINGS: TenantSettings = {
     eieMonthlyPrice: DEFAULT_EIE_MONTHLY_PRICE,
   },
   notifications: {
+    managementAgent: { mode: "off", acknowledgeDays: 1, reminderDays: 3, notionAlerts: false },
     alimtalkSenderKey: "",
     kakaoChannelId: "",
     googleSheetId: "",

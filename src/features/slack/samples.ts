@@ -9,6 +9,7 @@ export type SampleNotification = { title: string; body: string; link: string };
 export const SAMPLE_RECIPIENTS = ["박지현"];
 
 export const SAMPLE_NOTIFICATIONS: Record<string, SampleNotification> = {
+  management_followup: { title: "상담 후속조치 확인 요청", body: "에이와에서 담당 업무와 처리 결과를 확인해 주세요. 사건 예시", link: "/consultations" },
   enrollment_assigned: { title: "새 학생 배정", body: "김하늘 외 1명 학생이 중2 수학 A 반에 배정되었습니다.", link: "/classes" },
   enrollment_transferred_in: { title: "반 이동 전입", body: "이서준 학생이 중3 영어 B 반에 전입되었습니다.", link: "/classes" },
   teacher_handover: { title: "강사 인수인계 예약", body: "중1 수학 C 반의 새 담임으로 예약되었습니다 (적용일 2026-10-01).", link: "/classes" },

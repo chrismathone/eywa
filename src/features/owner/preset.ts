@@ -62,6 +62,12 @@ export function prepareSectionForSave(
   parsed: unknown,
   storedSection: unknown,
 ): unknown {
+  if (section === "notifications" && isPlainObject(parsed)) {
+    if (isPlainObject(rawInput) && "managementAgent" in rawInput) return parsed;
+    const out = { ...parsed };
+    if (isPlainObject(storedSection) && "managementAgent" in storedSection) out.managementAgent = storedSection.managementAgent;
+    return out;
+  }
   if (section === "permissions" && isPlainObject(parsed)) {
     const out: Record<string, unknown> = { ...parsed };
     if (!isPlainObject(rawInput) || !("userOverrides" in rawInput)) {
