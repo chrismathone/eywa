@@ -525,7 +525,7 @@ export async function generateJSON(rawOpts: GenerateJSONOptions | GenerateDecisi
   // 기능별 키 그룹(원장 2026-09-15) — 호출부 식별자에서 도출. 표에 없는 기능이면 null(옛 버킷·기본 키로).
   const group = keyGroupOf(opts.meta?.feature);
   const keyLabel = (p: AiProvider) => keyLabelOf(p, resolveKeyEnv(p, keyName, group));
-  // 모델 고정 — 지점 선택(운영 콘솔 'AI 모델', 0374a) > 코드 기본(`FEATURE_MODELS`) > 호출부 tier·provider(원장 2026-10-19).
+  // 모델 고정 — 지점 선택(운영 콘솔 'AI 모델', 0375a) > 코드 기본(`FEATURE_MODELS`) > 호출부 tier·provider(원장 2026-10-19).
   // 고정한 회사가 키·잔액으로 막히면 아래 루프가 평소 사다리로 넘어간다. 문서(PDF) 입력은 Anthropic 전용이라 고정하지 않는다.
   const pin = opts.document ? null : featurePin(opts.meta?.feature, tenantChoice);
   const chain = resolveModelChain(tier, keyName, opts.provider, group, pin);

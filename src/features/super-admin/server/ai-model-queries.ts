@@ -5,7 +5,7 @@ import { requireSuperAdmin } from "@/lib/auth/super-admin";
 import { TENANT_MODEL_FEATURES, isTenantModelFeature, modelChoicesFor } from "@/lib/ai/model-features";
 
 export type TenantAiModelState = {
-  /** 0374a `tenant_ai_models`가 아직 없다(적용 전) — 탭은 안내만 하고 고르기를 막는다. */
+  /** 0375a `tenant_ai_models`가 아직 없다(적용 전) — 탭은 안내만 하고 고르기를 막는다. */
   tableMissing: boolean;
   /** 기능 → 고른 모델 id(목록 안의 값만). 없는 기능 = 기본값. */
   choices: Record<string, string>;

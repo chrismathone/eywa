@@ -12,7 +12,7 @@ export type ModelPin = { provider: AiProvider; model: string };
  *    값은 1/4~1/8 · 속도는 약 2배였다. 형식 차이는 각 기능의 저장 전 후처리(enrollment/analysis-normalize ·
  *    enrollment/form-normalize · meetings/analysis-normalize)가 기존 모양으로 맞춘다.
  *    재원생 상담·브리프·결석 문자 판별 등 **시험하지 않은 기능은 그대로**(v4-pro) — 넓힐 땐 같은 시험을 먼저.
- * 지점마다 다른 모델을 쓰게 하는 것은 운영 콘솔의 'AI 모델' 탭(`tenant_ai_models`, 0374a)이 이 값보다 먼저다.
+ * 지점마다 다른 모델을 쓰게 하는 것은 운영 콘솔의 'AI 모델' 탭(`tenant_ai_models`, 0375a)이 이 값보다 먼저다.
  */
 export const FEATURE_MODELS: Readonly<Record<string, ModelPin>> = {
   enrollment_form_extract: { provider: "deepseek", model: "deepseek-flash" },

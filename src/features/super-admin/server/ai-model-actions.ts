@@ -10,7 +10,7 @@ import { logSuperAdminAction } from "./audit";
 export type AiModelSaveState = { ok?: boolean; error?: string; feature?: string } | undefined;
 
 /**
- * 지점·기능별 AI 모델 고르기(운영 콘솔 'AI 모델' 탭, 0374a — 원장 2026-10-19).
+ * 지점·기능별 AI 모델 고르기(운영 콘솔 'AI 모델' 탭, 0375a — 원장 2026-10-19).
  * model 빈 값 = 기본값으로(줄 삭제). 목록 밖의 기능·모델은 거절한다(기다리는 기능의 느린 모델 포함 — 화면과 같은 목록).
  * 모든 변경은 운영 감사 로그('set_ai_model')에 남는다 — 학원 이름은 서버가 읽은 값으로 적는다.
  */
@@ -43,7 +43,7 @@ export async function setTenantAiModel(_prev: AiModelSaveState, formData: FormDa
     logDbError(error, "super-admin.ai-model", { op: model ? "upsert" : "delete", feature });
     const missing = error.code === "PGRST205" || error.code === "42P01" || /does not exist|schema cache/i.test(error.message ?? "");
     return {
-      error: missing ? "DB에 AI 모델 표가 아직 없습니다 — 0374a를 먼저 적용해 주세요." : "저장하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+      error: missing ? "DB에 AI 모델 표가 아직 없습니다 — 0375a를 먼저 적용해 주세요." : "저장하지 못했습니다. 잠시 후 다시 시도해 주세요.",
       feature,
     };
   }

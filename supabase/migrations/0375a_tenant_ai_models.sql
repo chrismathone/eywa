@@ -1,4 +1,4 @@
--- 0374a — 지점·기능별 **AI 모델 선택**(운영 콘솔 'AI 모델' 탭) (원장 2026-10-19 *"super 관리자에 AI 모델 토글 넣어서 지점별로 ai모델 바꿀 수 있게"*)
+-- 0375a — 지점·기능별 **AI 모델 선택**(운영 콘솔 'AI 모델' 탭) (원장 2026-10-19 *"super 관리자에 AI 모델 토글 넣어서 지점별로 ai모델 바꿀 수 있게"*)
 --
 -- 한 줄 = 한 지점의 한 AI 기능에 고른 모델. 줄이 없으면 코드 기본(src/lib/ai/model-pins.ts `FEATURE_MODELS` · 호출부 tier·provider).
 -- feature = generateJSON `meta.feature`(예 'classnote_ment') · model = model-pins.ts `AI_MODEL_CHOICES`의 모델 id(예 'deepseek-flash').
@@ -23,7 +23,7 @@ create table if not exists public.tenant_ai_models (
 );
 
 comment on table public.tenant_ai_models is
-  '지점·기능별 AI 모델 선택(운영 콘솔). 줄 없음 = 코드 기본. 서버 전용(정책 0개 = 의도). 0374a';
+  '지점·기능별 AI 모델 선택(운영 콘솔). 줄 없음 = 코드 기본. 서버 전용(정책 0개 = 의도). 0375a';
 
 alter table public.tenant_ai_models enable row level security;
 

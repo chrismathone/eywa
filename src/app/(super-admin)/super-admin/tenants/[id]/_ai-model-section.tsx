@@ -34,7 +34,7 @@ export function AiModelSection({ tenantId, state }: { tenantId: string; state: T
     >
       {state.tableMissing ? (
         <p className="bg-amber-soft text-amber px-4 py-3 text-sm font-bold">
-          DB에 AI 모델 표가 아직 없습니다 — 0374a를 적용하면 여기서 고를 수 있습니다. 지금은 모든 기능이 기본값으로 돕니다.
+          DB에 AI 모델 표가 아직 없습니다 — 0375a를 적용하면 여기서 고를 수 있습니다. 지금은 모든 기능이 기본값으로 돕니다.
         </p>
       ) : null}
       <ul className="divide-line divide-y">

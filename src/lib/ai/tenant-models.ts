@@ -4,7 +4,7 @@ import { modelFeatureOf } from "./model-pins";
 import { isTenantModelFeature, modelChoicesFor } from "./model-features";
 
 /**
- * 지점·기능별 AI 모델 선택 조회(운영 콘솔 'AI 모델' 탭, 0374a `tenant_ai_models`).
+ * 지점·기능별 AI 모델 선택 조회(운영 콘솔 'AI 모델' 탭, 0375a `tenant_ai_models`).
  * service_role로 읽는다 — 웹훅·cron처럼 로그인 세션이 없는 경로도 같은 함수를 쓰기 때문(라이선스 조회와 같은 이유).
  *
  * 🔴 **실패하면 선택이 없는 것으로** 본다(코드 기본 모델) — 표가 아직 없거나(마이그레이션 전, #95) 조회가 실패해도
