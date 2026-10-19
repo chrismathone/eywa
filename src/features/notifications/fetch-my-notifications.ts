@@ -1,4 +1,5 @@
 import type { NotificationItem } from "./types";
+import type { StaffTaskSummary } from "@/features/staff-tasks/kinds";
 
 /** 벨 목록 뷰 — 받은함/보관함(서버 `NotificationView`와 같은 값, 이 파일은 클라도 import해서 따로 적는다). */
 export type NotificationListView = "active" | "archived";
@@ -16,12 +17,12 @@ export const NOTIFICATIONS_ENDPOINT = "/api/notifications";
 export async function fetchMyNotificationsList(
   view: NotificationListView,
   limit: number,
-): Promise<{ unread: number; items: NotificationItem[] }> {
+): Promise<{ unread: number; items: NotificationItem[]; tasks?: StaffTaskSummary }> {
   const qs = new URLSearchParams({ view, limit: String(limit) });
   const res = await fetch(`${NOTIFICATIONS_ENDPOINT}?${qs.toString()}`, {
     cache: "no-store",
     credentials: "same-origin",
   });
   if (!res.ok) throw new Error(`notifications ${res.status}`);
-  return (await res.json()) as { unread: number; items: NotificationItem[] };
+  return (await res.json()) as { unread: number; items: NotificationItem[]; tasks?: StaffTaskSummary };
 }

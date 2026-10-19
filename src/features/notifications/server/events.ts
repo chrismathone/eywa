@@ -67,6 +67,7 @@ import {
   type UnsentReportEvent,
 } from "../events-core";
 import { classnoteSendOn } from "@/features/owner/classnote-gate";
+import { taskIdsFor } from "@/features/staff-tasks/server/link";
 
 type EventType =
   | "absence_alert"
@@ -305,12 +306,12 @@ async function detectFollowup(admin: SupabaseClient, tenantId: string): Promise<
   const fresh = (await recordNew(admin, tenantId, "followup_due", candidates, cold)) as FollowupEvent[];
   if (cold || fresh.length === 0) return 0;
 
-  const masters = await activeMasterIds(admin, tenantId);
-  const activeCounselors = await activeUserIds(
-    admin,
-    tenantId,
-    fresh.map((event) => event.counselorId).filter((id): id is string => Boolean(id)),
-  );
+  const [masters, activeCounselors, taskIds] = await Promise.all([
+    activeMasterIds(admin, tenantId),
+    activeUserIds(admin, tenantId, fresh.map((event) => event.counselorId).filter((id): id is string => Boolean(id))),
+    // 할 일(0377a) — 회차 = 후속조치 기한. 알림이 그 할 일을 가리키게 한다(벨이 처리 상태를 붙인다).
+    taskIdsFor(admin, tenantId, "followup_due", fresh.map((event) => event.subjectKey)),
+  ]);
   const items: NotifyInput[] = [];
   for (const event of fresh) {
     // 담당 상담사가 유효(활성)하면 개인에게, 아니면 master 전원 폴백.
@@ -325,6 +326,7 @@ async function detectFollowup(admin: SupabaseClient, tenantId: string): Promise<
         body: followupBody(event),
         link: "/consultations",
         actorId: null,
+        taskId: taskIds.get(`${event.subjectKey}|${event.followUpDate}`) ?? null,
       });
     }
   }

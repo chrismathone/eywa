@@ -20,7 +20,7 @@ const LISTS: readonly { key: ListKey; label: string; hint: string }[] = [
 
 /**
  * 개인별 기능 권한 — 메뉴 권한과 별개로 **사람을 지정해서** 여는 기능을 한자리에서 주고 거둔다
- * (원장 2026-10-06 *"개인 역할은 전부다 편집기"*). 급여명세서 열람 · 연차 조정 · 수업 나누기 · 직원관리 과목 범위.
+ * (원장 2026-10-06 *"개인 역할은 전부다 편집기"*). 급여명세서 열람 · 연차 조정 · 수업 나누기 · 업무 처리 현황 · 직원관리 과목 범위.
  * 코드에 계정 명단을 두지 않는다 — 여기 보이는 것이 전부다.
  *
  * 🔴 **원장 역할은 지정 대상이 아니다** — 지정 없이 전부 통과하고 과목 범위도 안 걸린다(원장 2026-10-06 *"원장이니 최상위 권한"*).
@@ -67,6 +67,15 @@ export function SpecialAccessEditor({ value, hiddenUserIds, staffOptions, nameOf
           staffOptions={pickable}
           nameOf={nameOf}
           onChange={(update) => onChange((prev) => ({ ...prev, enrollmentDateEditorIds: update(prev.enrollmentDateEditorIds ?? []) }))}
+        />
+        <SpecialAccessList
+          label="업무 처리 현황"
+          hint="모든 직원의 할 일(보고서 발송 실패 · 상담 후속조치)과 처리 여부를 볼 수 있는 사람입니다. 운영실 강사별 업무 현황과 알림 벨에서 엽니다. 할 일의 원래 내용은 그 메뉴 권한대로 열립니다."
+          ids={value.staffTaskMonitorIds ?? []}
+          hiddenUserIds={hiddenUserIds}
+          staffOptions={pickable}
+          nameOf={nameOf}
+          onChange={(update) => onChange((prev) => ({ ...prev, staffTaskMonitorIds: update(prev.staffTaskMonitorIds ?? []) }))}
         />
       </div>
     </SettingsCard>

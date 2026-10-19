@@ -16,6 +16,8 @@ export type NotifyInput = {
   body?: string | null;
   link?: string | null;
   actorId?: string | null;
+  /** 이 알림이 알리는 할 일(0377a `staff_tasks`) — 벨이 처리 상태를 붙인다. */
+  taskId?: string | null;
 };
 
 export async function notifyUsers(items: NotifyInput[]): Promise<void> {
@@ -29,6 +31,7 @@ export async function notifyUsers(items: NotifyInput[]): Promise<void> {
       body: i.body ?? null,
       link: i.link ?? null,
       actor_id: i.actorId ?? null,
+      ...(i.taskId ? { task_id: i.taskId } : {}),
     }));
   if (rows.length === 0) return;
   try {
