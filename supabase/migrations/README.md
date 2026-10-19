@@ -1,6 +1,6 @@
 # Supabase 마이그레이션 — 적용 방식·순서·현재 상태
 
-## 2026-10-19 시간표 메모 시트 (0374a · 미적용)
+## 2026-10-19 시간표 메모 시트 (0374a · ✅ 운영 적용 2026-10-19 · 침산 원본 넣음 version 1)
 
 `0374a_timetable_memo_sheets.sql`은 `timetable_memo_sheets`(지점 × 과목 한 장 · 엑셀 판 내용 · version)를 만든다. 정책 0개 = 의도(서버 키만 — 화면 문은 앱 `memoSheetAccess`). 기존 표는 건드리지 않는다. 앱 배포와 순서 무관 — 표가 없으면 영어 통합뷰 오른쪽 시트 판에 "불러오지 못했습니다" 안내만 뜨고 시간표는 그대로다. 적용 뒤 침산 원본(구글 시트 '퇴원생 명단')은 `ENV_FILE=.env.local npx tsx scripts/_oneoff/seed-chimsan-memo-sheet.mts`(미리 보기) → `--apply`로 넣는다(이미 판이 있으면 `--force` 없이는 안 덮는다).
 

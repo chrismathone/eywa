@@ -82,6 +82,11 @@ const APPROVED_INLINE_SVG = [
   // 2026-10-13 직원 포트폴리오의 **총점 원 그래프**(/100, 바탕 원 + 값 호 · aria-hidden, 점수는 버튼의 aria-label과 HTML 숫자) —
   // 차트이지 아이콘이 아니다(vk-score와 같은 성격).
   "src/app/(shell)/class-review/_components/portfolio/score-hero.tsx",
+  // 2026-10-19 영어 시간표 오른쪽 **메모 시트**(엑셀 판) — 칸 격자·채우기·테두리를 그리는 바탕 층(grid-base), 고른 범위 틀(grid-overlay),
+  // 테두리 고르기 창의 **선 모양 견본**(실선·점선·이중선 한 줄씩, border-picker). 셋 다 aria-hidden이고 표를 그리는 그림이지 아이콘이 아니다.
+  "src/features/timetable-memo/ui/border-picker.tsx",
+  "src/features/timetable-memo/ui/grid-base.tsx",
+  "src/features/timetable-memo/ui/grid-overlay.tsx",
 ] as const;
 
 // 이 파일의 검사 3개가 각각 src/ 전체를 훑는다 — 디렉터리 워크는 파일 목록이 같으므로 한 번만 한다

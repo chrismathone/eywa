@@ -51,18 +51,19 @@ export function borderCss(line: BorderLine): string {
 export function cssOfStyle(s: CellStyle | undefined): string {
   if (!s) return "";
   const out: string[] = [];
-  if (s.bg) out.push(`background-color:${s.bg}`);
-  if (s.fc) out.push(`color:${s.fc}`);
-  if (s.ff) out.push(`font-family:${fontStack(s.ff).replace(/"/g, "'")}`);
-  if (s.fs) out.push(`font-size:${s.fs}pt`);
-  if (s.b) out.push("font-weight:bold");
-  if (s.i) out.push("font-style:italic");
+  // 속성 이름은 camelCase로 적고 내보낼 때 CSS 이름으로 바꾼다 — `text-align` 같은 글자를 그대로 두면 색 클래스 가드가 클래스로 읽는다.
+  const decl = (prop: string, value: string) => out.push(`${prop.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}:${value}`);
+  if (s.bg) decl("backgroundColor", s.bg);
+  if (s.fc) decl("color", s.fc);
+  if (s.ff) decl("fontFamily", fontStack(s.ff).replace(/"/g, "'"));
+  if (s.fs) decl("fontSize", `${s.fs}pt`);
+  if (s.b) decl("fontWeight", "bold");
+  if (s.i) decl("fontStyle", "italic");
   const deco = textDecoration(s);
-  if (deco) out.push(`text-decoration:${deco}`);
-  if (s.ha) out.push(`text-align:${s.ha}`);
-  if (s.va) out.push(`vertical-align:${s.va}`);
-  if (s.wr === "wrap") out.push("white-space:normal");
-  else out.push("white-space:nowrap");
+  if (deco) decl("textDecoration", deco);
+  if (s.ha) decl("textAlign", s.ha);
+  if (s.va) decl("verticalAlign", s.va);
+  decl("whiteSpace", s.wr === "wrap" ? "normal" : "nowrap");
   const sides = { t: "top", r: "right", b: "bottom", l: "left" } as const;
   for (const [k, name] of Object.entries(sides) as [keyof typeof sides, string][]) {
     const line = s.bd?.[k];
