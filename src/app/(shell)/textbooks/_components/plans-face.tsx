@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Pill } from "@/components/atoms/pill";
 import { Toolbar } from "@/components/toolbar";
@@ -9,6 +10,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
 import { skillAreaColorOf, skillAreaLabelOf } from "@/features/owner/skill-areas";
 import { deleteClassTextbookPlan } from "@/features/textbooks/server/plan-actions";
+import { undoPlanDelete } from "@/features/textbooks/server/plan-delete-actions";
 import { groupSlotPicks } from "@/features/textbooks/lesson-schedule";
 import type { ClassTextbookPlanRow } from "@/features/textbooks/types";
 import { DialogShell, FIELD, FormError, useRun } from "./form-bits";
@@ -193,14 +195,32 @@ export function PlansFace({ rows, skillAreas }: { rows: ClassTextbookPlanRow[]; 
  */
 function DeletePlanDialog({ plan, onClose }: { plan: ClassTextbookPlanRow; onClose: () => void }) {
   const { busy, error, run } = useRun();
+  const router = useRouter();
+  // 진도 줄도 함께 지우기(원장 2026-10-19) — 기본 켬. 범위는 서버(`clearPlanLines`)가 정한다.
+  const [withLines, setWithLines] = useState(true);
   return (
     <DialogShell title={`배정 삭제 — ${plan.className} · ${plan.textbookTitle}`} onClose={onClose}>
       <div className="flex flex-col gap-3 text-sm">
         <p>
           이 배정으로 계산되던 <b>월간계획</b>이 영어 강사 시트에서 사라집니다.
-          <br />
-          이미 시트에 적은 <b>실제 진도는 그대로</b> 남습니다.
         </p>
+        <label className="flex items-start gap-2">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={withLines}
+            disabled={busy}
+            onChange={(e) => setWithLines(e.target.checked)}
+          />
+          <span>
+            <b>이 교재로 들어간 진도 줄도 함께 지우기</b>
+            <br />
+            <span className="text-text-dim">
+              오늘 이후 · 모든 요일의 이 교재 줄과 그 칸의 미룸·당김 기록. 선생님이 고쳐 쓴 줄 · 다른 교재 · 지난 수업은
+              그대로 남습니다.
+            </span>
+          </span>
+        </label>
         <FormError error={error} />
         <div className="flex items-center gap-2">
           <Button
@@ -208,9 +228,28 @@ function DeletePlanDialog({ plan, onClose }: { plan: ClassTextbookPlanRow; onClo
             variant="destructive"
             disabled={busy}
             onClick={() => {
-              void run(() => deleteClassTextbookPlan(plan.id)).then((res) => {
-                if (!res) return;
-                toast.success("배정을 삭제했습니다");
+              void run(() => deleteClassTextbookPlan(plan.id, { withLines })).then((res) => {
+                if (!res || !res.ok) return;
+                const undo = res.undo;
+                const undoAction = undo
+                  ? {
+                      duration: 10_000,
+                      action: {
+                        label: "되돌리기",
+                        onClick: () => {
+                          void undoPlanDelete({ classId: plan.classId, plan: undo.plan, lines: undo.lines }).then((u) => {
+                            if (!u.ok) return void toast.error(u.error);
+                            if (u.warning) toast.warning(u.warning);
+                            else toast.success("배정을 되돌렸습니다");
+                            router.refresh();
+                          });
+                        },
+                      },
+                    }
+                  : undefined;
+                if (res.warning) toast.warning(res.warning, undoAction);
+                else if (res.cleared) toast.success(`배정과 진도 ${res.cleared.lines}줄을 지웠습니다`, undoAction);
+                else toast.success("배정을 삭제했습니다", undoAction);
                 onClose();
               });
             }}

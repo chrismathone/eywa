@@ -19,7 +19,14 @@ type Admin = ReturnType<typeof createAdminClient>;
 
 export type ShiftSnapshot = { lines: UndoLine[]; markers: Record<string, ShiftKind> };
 
-export async function snapshotShiftState(admin: Admin, tenantId: string, classId: string, date: string): Promise<ShiftSnapshot> {
+/** @param termMode 미룸·당김은 평시만 바꾼다 — 배정 삭제는 그 배정의 시기(내신일 수 있다)를 넘긴다. */
+export async function snapshotShiftState(
+  admin: Admin,
+  tenantId: string,
+  classId: string,
+  date: string,
+  termMode: "regular" | "exam" = "regular",
+): Promise<ShiftSnapshot> {
   const [lineRows, markRows] = await Promise.all([
     fetchAllPaged<Record<string, unknown>>((f, t) =>
       admin
@@ -27,7 +34,7 @@ export async function snapshotShiftState(admin: Admin, tenantId: string, classId
         .select("id, plan_date, slot_start, term_mode, skill_area, line_no, textbook, page_range, progress, homework")
         .eq("tenant_id", tenantId)
         .eq("class_id", classId)
-        .eq("term_mode", "regular")
+        .eq("term_mode", termMode)
         .gte("plan_date", date)
         .order("id", { ascending: true })
         .range(f, t) as never,

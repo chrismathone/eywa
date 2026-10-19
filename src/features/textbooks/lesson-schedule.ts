@@ -302,3 +302,17 @@ export function buildLessonSchedule(input: {
 
   return { targets, unplaced: lessonNos.slice(cursor), skippedHolidays, lastDate };
 }
+
+/**
+ * 고른 교시를 정규화한다 — 모양이 틀린 값은 **버린다**(형식은 앱이 지킨다, 0268a CHECK는 개수만 본다).
+ * ⚠️ 정렬해 둔다: RPC가 날짜·교시 오름차순을 전제로 락을 잡고(교착 회피), 감사로그도 같은 순서로 남는다.
+ */
+export function normalizeSlotPicks(raw: readonly string[] | null | undefined): string[] {
+  const out = new Set<string>();
+  for (const v of raw ?? []) {
+    const parsed = parseSlotPick(String(v));
+    if (!parsed) continue;
+    out.add(parsed.dow ? slotPickKey(parsed.dow, parsed.start, parsed.pos ?? undefined) : parsed.start);
+  }
+  return [...out].sort();
+}

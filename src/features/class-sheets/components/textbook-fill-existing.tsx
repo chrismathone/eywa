@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 // 🔴 `server/queries.ts`를 직접 import하지 않는다([[#61]]) — 읽기도 서버 액션을 탄다.
 import { deleteClassTextbookPlan, loadClassTextbookPlans } from "@/features/textbooks/server/plan-actions";
+import { undoPlanDelete } from "@/features/textbooks/server/plan-delete-actions";
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { sheetDowLabel } from "@/features/teacher-view/i18n";
 import { groupSlotPicks } from "@/features/textbooks/lesson-schedule";
@@ -28,8 +29,9 @@ function picksLabel(picks: readonly string[], lang: ReturnType<typeof useSheetLa
 /**
  * 교재 배정 창 맨 위 — **이 반에 이미 걸린 배정**과 [배정 삭제](감사 F4).
  *
- * 잘못 건 배정의 '계획'이 월간 달력에 계속 떴는데 지울 곳이 없었다. 지우면 배정(=월간계획)만 사라지고
- * 이미 시트에 옮겨 적은 **실제 진도는 그대로** 남는다(계획은 배정에서 계산되는 파생값이라).
+ * 잘못 건 배정의 '계획'이 월간 달력에 계속 떴는데 지울 곳이 없었다. 지우면 배정(=월간계획)이 사라지고,
+ * **[진도 줄도 함께 지우기]**(기본 켬, 원장 2026-10-19)면 그 교재로 들어간 손대지 않은 진도 줄(오늘 이후)과
+ * 그 칸의 미룸·당김 표식도 함께 지운다. 지운 뒤 토스트 [되돌리기]가 배정·줄·표식을 원래대로 돌린다.
  * 🔴 게이트는 서버(`deleteClassTextbookPlan` → 그 반 ECS 쓰기)다 — 이 화면 조건은 게이트가 아니다([[#77]]).
  * ⚠️ 원어민 강사도 이 창을 연다 — 문구는 전부 사전(`fill.existing.*`)이다.
  */
@@ -43,6 +45,7 @@ export function TextbookFillExisting({ classId }: { classId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [withLines, setWithLines] = useState(true);
 
   const reload = useCallback(async () => {
     try {
@@ -83,12 +86,32 @@ export function TextbookFillExisting({ classId }: { classId: string }) {
     setBusy(true);
     setError(null);
     try {
-      const res = await deleteClassTextbookPlan(planId);
+      const res = await deleteClassTextbookPlan(planId, { withLines });
       if (!res.ok) {
         setError(feedback(res.error));
         return;
       }
-      toast.success(t("fill.existing.deleted"));
+      const undo = res.undo;
+      const undoAction = undo
+        ? {
+            duration: 10_000,
+            action: {
+              label: t("fill.existing.undo"),
+              onClick: () => {
+                void undoPlanDelete({ classId, plan: undo.plan, lines: undo.lines }).then(async (u) => {
+                  if (!u.ok) return void toast.error(feedback(u.error));
+                  if (u.warning) toast.warning(feedback(u.warning));
+                  else toast.success(t("fill.existing.undone"));
+                  await reload();
+                  router.refresh();
+                });
+              },
+            },
+          }
+        : undefined;
+      if (res.warning) toast.warning(feedback(res.warning), undoAction);
+      else if (res.cleared) toast.success(tf("fill.existing.deletedLines", { n: res.cleared.lines }), undoAction);
+      else toast.success(t("fill.existing.deleted"), undoAction);
       setConfirming(null);
       await reload();
       router.refresh();
@@ -122,10 +145,19 @@ export function TextbookFillExisting({ classId }: { classId: string }) {
               <span className="num text-text-dim">
                 {tf("fill.existing.from", { date: p.startDate.slice(5).replace("-", "/") })}
               </span>
-              <span className="ml-auto inline-flex items-center gap-1.5">
+              <span className="ml-auto inline-flex flex-wrap items-center justify-end gap-1.5">
                 {confirming === p.id ? (
                   <>
                     <span className="text-text-dim">{t("fill.existing.confirm")}</span>
+                    <label className="text-text-dim inline-flex basis-full items-center gap-1.5">
+                      <input
+                        type="checkbox"
+                        checked={withLines}
+                        disabled={busy}
+                        onChange={(e) => setWithLines(e.target.checked)}
+                      />
+                      {t("fill.existing.withLines")}
+                    </label>
                     <Button
                       type="button"
                       size="sm"
