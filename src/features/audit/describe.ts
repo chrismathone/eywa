@@ -111,6 +111,7 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   timetable_plan_slot: "시간표 계획 칸",
   // 시간표 연습실의 개인 사본 — 운영 시간표가 아니라 **연습본**임이 '대상' 칸에서 바로 읽혀야 한다.
   timetable_lab_draft: "시간표 연습본",
+  timetable_memo_sheet: "시간표 메모 시트",
   // 재고관리(0242a) — 없으면 '대상' 칸에 영문 "inventory_asset"이 그대로 뜬다.
   inventory_asset: "자산",
   inventory_loan: "자산 대여",
@@ -663,6 +664,14 @@ export function auditDetail(
     case "data_export_download":
       // 조건(쿼리스트링) 원문은 영문 키라 문장에 싣지 않는다 — 뷰어 title 툴팁(원문 JSON)으로만.
       return m.filtered === true ? "조건 걸어 받음" : "전체 받음";
+    case "timetable_memo_sheet_save": {
+      // 글자 내용은 싣지 않는다(판 크기만) — 판에 무엇을 적었는지는 시간표 화면에서 본다.
+      const parts = [
+        num(m.rows) !== null && num(m.cols) !== null ? `${num(m.rows)}행 × ${num(m.cols)}열` : null,
+        num(m.cells) !== null ? `칸 ${num(m.cells)}개` : null,
+      ].filter(Boolean);
+      return parts.join(" · ");
+    }
     case "timetable_lab_draft_save": {
       // 연습본 이름은 '대상' 칸이 보여 준다 — 여기선 규모만(운영 시간표는 안 바뀐다).
       const parts = [

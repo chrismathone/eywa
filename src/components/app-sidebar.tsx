@@ -2,7 +2,7 @@
 
 import { useNavigationSettings } from "@/features/owner/navigation-context";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import {
@@ -25,8 +25,12 @@ import {
   hubGroupOfPath,
   hubDestinationForPath,
   hubGroupsFor,
+  hubSearchEntries,
   type HubGroup,
 } from "@/lib/menu-hub";
+import { SidebarSearchBox, SidebarSearchShowButton } from "@/components/sidebar-menu-search";
+import { SidebarMenuMap } from "@/components/sidebar-menu-map";
+import { saveMenuSearchHidden } from "@/features/nav/server/visit-actions";
 import type { MenuLayout } from "@/features/owner/menu-layout";
 import type { ConnectedApp } from "@/features/connected-apps/apps";
 import { ConnectedAppRail } from "@/components/connected-app-rail";
@@ -104,7 +108,7 @@ function openWindowAtPoint(item: NavItem, clientX: number, clientY: number) {
  * 펼침(150~360px 아이콘+라벨): 그룹 헤더(번호+이름) 노출 — 아이콘만으로 판단 어려울 때.
  * 충분히 줄이면 접힘으로 스냅, 늘이면 펼침. 더블클릭=빠른 토글, ←/→ 키=조절.
  * 너비/펼침 여부는 usePrefs(localStorage "eywa-prefs")에 영속.
- * 텍스트로 메뉴를 찾고 싶으면 검색 팰릿(command-palette, 헤더 검색 클릭)을 사용.
+ * 메뉴 이름으로 찾기 = 브랜드 줄 아래 메뉴 검색칸(sidebar-menu-search, 2026-10-19). 학생·수업까지는 검색 팰릿(Shift+F).
  * UserMenu(로그아웃 포함)는 하단에 고정.
  *
  * 활성 표시(데스크톱): 메뉴 클릭이 라우트 이동이 아니라 플로팅 창을 열므로 active는 윈도우 스토어로 구동한다 —
@@ -132,6 +136,7 @@ export function AppSidebar({
   canTeacherView = false,
   canOtherTeacherView = false,
   frequentKeys,
+  menuSearchHidden = false,
   menuLayout,
   isGenericTenant = false,
   connectedApps = [],
@@ -152,6 +157,8 @@ export function AppSidebar({
   canOtherTeacherView?: boolean;
   /** 자주 방문한 메뉴(많이 → 최근 순, 권한 통과분). 비면 기본값으로 떨어진다. */
   frequentKeys?: MenuKey[];
+  /** '메뉴 검색' 칸을 숨겼나 — 계정 설정(`users.ui_prefs.nav.searchHidden`, 원장 2026-10-19). */
+  menuSearchHidden?: boolean;
   /**
    * 학원 설정 '왼쪽 탭'(보기 설정 — 권한 아님). 비면 지금과 똑같이 동작한다.
    * ⚠️ 감춘 메뉴는 '자주 방문한 메뉴' 줄에서도 빠진다 — 안 그러면 "감췄는데 맨 위에 그대로"가 된다.
@@ -249,6 +256,19 @@ export function AppSidebar({
   const supportIds = new Set(["support", "owner", ...(groupLayout.some((g) => g.id === "help" && g.order !== undefined) ? [] : ["help"])]);
   const workGroups = allGroups.filter((g) => !supportIds.has(g.id));
   const supportGroups = allGroups.filter((g) => supportIds.has(g.id));
+  // 메뉴 검색(원장 2026-10-19) — 목록은 검색 팰릿과 같은 함수. 검색 중엔 업무군 목록 자리에 결과가 선다.
+  const searchEntries = useMemo(
+    () => hubSearchEntries(gate),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- gate는 매 렌더 새 객체라 그 재료로 묶는다
+    [systemRole, permMatrix, canTeacherView, isSuperAdmin, menuLayout, groupLayout, isGenericTenant],
+  );
+  // 칸 숨김 — 누르는 순간 화면을 바꾸고 계정에 저장한다(결과는 기다리지 않는다, 실패해도 이 화면은 그대로).
+  const [searchHidden, setSearchHidden] = useState(menuSearchHidden);
+  const toggleSearchHidden = (hidden: boolean) => {
+    setSearchHidden(hidden);
+    void saveMenuSearchHidden(hidden).catch(() => {});
+  };
+  const showSearchAction = expanded && searchHidden ? <SidebarSearchShowButton onShow={() => toggleSearchHidden(false)} /> : undefined;
   const hubOpenId = useMenuHub((s) => s.groupId);
   const toggleHub = useMenuHub((s) => s.toggle);
   const closeHub = useMenuHub((s) => s.close);
@@ -360,6 +380,10 @@ export function AppSidebar({
         {/* nav — 아이콘 레일(접힘) / 아이콘+라벨(펼침). 항목은 항상 풀폭, 내부 패딩으로 아이콘 고정.
             작은 창에서 넘치면 스크롤바 없이 스크롤(scrollbar-hide) + 상/하단 페이드가 "더 있음" 힌트
             (페이드는 스크롤되지 않는 래퍼에 절대배치 — DragScrollArea와 동일 2겹 구조). */}
+        {searchHidden ? null : (
+          <SidebarSearchBox entries={searchEntries} expanded={expanded} onHide={() => toggleSearchHidden(true)} />
+        )}
+
         <div className="relative min-h-0 flex-1">
           <nav
             ref={navRef}
@@ -367,7 +391,7 @@ export function AppSidebar({
           >
           {/* 자주 방문한 메뉴 — 연 횟수로 자동 정렬(사람이 고르는 즐겨찾기가 아니다). */}
           {frequent.length > 0 ? (
-            <NavSection label="자주 방문한 메뉴" first expanded={expanded} motion={motion}>
+            <NavSection label="자주 방문한 메뉴" first expanded={expanded} motion={motion} action={showSearchAction}>
               {frequent.map((d) => {
                 const item = navItemByKey(d.menuKey);
                 return item ? (
@@ -390,7 +414,13 @@ export function AppSidebar({
           ) : null}
 
           {/* 전체 업무 — 업무군을 누르면 본문에 그 업무의 메뉴 버튼이 뜬다(운영실·캘린더는 바로 열린다). */}
-          <NavSection label="전체 업무" first={frequent.length === 0} expanded={expanded} motion={motion}>
+          <NavSection
+            label="전체 업무"
+            first={frequent.length === 0}
+            expanded={expanded}
+            motion={motion}
+            action={frequent.length === 0 ? showSearchAction : undefined}
+          >
             {workGroups.map((g) => (
               <GroupRail
                 key={g.id}
@@ -519,6 +549,8 @@ export function AppSidebar({
           ) : null}
         </div>
 
+        {/* 메뉴 지도 — 검색칸을 누르면 사이드바 오른쪽에 펼쳐진다(aside 안의 절대 배치라 z-45를 그대로 탄다). */}
+        {!searchHidden && expanded ? <SidebarMenuMap entries={searchEntries} /> : null}
       </aside>
 
     </TooltipProvider>
@@ -543,12 +575,15 @@ function NavSection({
   first = false,
   expanded,
   motion,
+  action,
   children,
 }: {
   label: string;
   first?: boolean;
   expanded: boolean;
   motion: boolean;
+  /** 머리 줄 오른쪽 끝의 작은 버튼(숨긴 '메뉴 검색'을 다시 펴는 돋보기) — 새 줄을 만들지 않고 머리 줄에 얹는다. */
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -585,6 +620,7 @@ function NavSection({
         >
           {label}
         </span>
+        {action && expanded ? <span className="absolute right-2 bottom-0">{action}</span> : null}
         {/* 접힘(아이콘 레일) — 라벨이 안 보이니 짧은 가운데 선만으로 묶음을 가른다(기존 그대로). */}
         {!first ? (
           <span

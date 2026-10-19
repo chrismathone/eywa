@@ -341,6 +341,8 @@ export const AUDIT_ACTIONS = {
   // 연습본을 운영에 나중에 적용하도록 예약 · 그 예약 취소(즉시 적용은 timetable_structure_apply로 남는다).
   timetable_lab_apply_schedule: "시간표 연습본 적용 예약",
   timetable_lab_apply_cancel: "시간표 연습본 적용 예약 취소",
+  // 시간표 오른쪽 메모 시트(엑셀 판) — 자동 저장이라 같은 사람이 10분 안에 또 저장하면 한 줄로 친다(timetable-memo/server/actions.ts).
+  timetable_memo_sheet_save: "시간표 메모 시트 저장",
 
   // 수학 강사 시트(MCS) — 학생별 월간 목표. 실제 진도는 원스크린이 쓰므로 여기 안 온다(읽기 전용 화면).
   mcs_goal_update: "수학 시트 학생 월간 목표 저장",

@@ -38,6 +38,11 @@ export type MenuVisitMap = Record<string, [count: number, lastAt: number]>;
 
 export const MENU_VISITS_NS = "nav";
 export const MENU_VISITS_KEY = "visits";
+/**
+ * 왼쪽 '메뉴 검색' 칸을 숨겼나(원장 2026-10-19 *"메뉴 검색을 숨길수도있고 지금처럼 펼쳐지게도"*) — 같은 `nav` 네임스페이스.
+ * 숨김만 저장한다(보임 = 기본값이라 키를 지운다).
+ */
+export const MENU_SEARCH_HIDDEN_KEY = "searchHidden";
 
 /** 저장된 jsonb를 안전하게 읽는다 — 모양이 다르면(옛 값·손상) 빈 값으로 떨어진다. */
 export function parseVisits(raw: unknown): MenuVisitMap {

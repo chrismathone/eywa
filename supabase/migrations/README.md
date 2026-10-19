@@ -1,5 +1,9 @@
 # Supabase 마이그레이션 — 적용 방식·순서·현재 상태
 
+## 2026-10-19 시간표 메모 시트 (0374a · ✅ 운영 적용 2026-10-19 · 침산 원본 넣음 version 1)
+
+`0374a_timetable_memo_sheets.sql`은 `timetable_memo_sheets`(지점 × 과목 한 장 · 엑셀 판 내용 · version)를 만든다. 정책 0개 = 의도(서버 키만 — 화면 문은 앱 `memoSheetAccess`). 기존 표는 건드리지 않는다. 앱 배포와 순서 무관 — 표가 없으면 영어 통합뷰 오른쪽 시트 판에 "불러오지 못했습니다" 안내만 뜨고 시간표는 그대로다. 적용 뒤 침산 원본(구글 시트 '퇴원생 명단')은 `ENV_FILE=.env.local npx tsx scripts/_oneoff/seed-chimsan-memo-sheet.mts`(미리 보기) → `--apply`로 넣는다(이미 판이 있으면 `--force` 없이는 안 덮는다).
+
 ## 2026-10-17 오늘 수학 결과 만점 칸 (0372a · 운영 적용 완료)
 
 `0372a_todays_math_result_max_score.sql`은 `todays_math_test_results.max_score`(시험지 만점 · nullable)를 더하고 반영 함수를 교체한다(0371a 본문 + 만점 · 범위 밖 만점은 null). 같은 날 운영 DB에 CLI로 적용 — 그 전에 운영 DB 트랜잭션 안에서 표본 반영 후 롤백으로 확인. 성적관리 월말평가 '채우기'가 만점이 같을 때만 쓰는 값이다.
