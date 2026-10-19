@@ -490,6 +490,43 @@ export function hubSearchKeywords(dest: HubDest, groupLabel: string): string {
   return `${dest.label} ${dest.originalLabel ?? ""} ${groupLabel} ${dest.menuKey} ${own}`.toLowerCase();
 }
 
+/** 메뉴 검색의 한 줄 — 목적지 + 업무군 이름 + 찾는 말 뭉치. */
+export type HubSearchEntry = { dest: HubDest; group: string; keywords: string };
+
+/**
+ * 메뉴 검색이 찾는 **전체 목록** — 검색 팰릿(Shift+F)과 사이드바 메뉴 검색이 함께 쓴다(원장 2026-10-19
+ * *"좌측 메뉴에서 메뉴 검색하는 검색창"*). 🔴 두 곳이 목록을 따로 만들면 한쪽에서만 찾히는 화면이 생긴다.
+ * 차례 = 업무군 순서대로 메뉴 판의 버튼 → 그 뒤에 그 화면 위 탭(`innerTabsOf`, 부모 메뉴가 보일 때만).
+ */
+export function hubSearchEntries(gate: Gate): HubSearchEntry[] {
+  return hubGroupsFor([...HUB_GROUPS, ...SUPPORT_GROUPS], gate).flatMap((group) =>
+    [...group.items, ...group.items.flatMap((item) => innerTabsOf(item.href, gate))].map((dest) => ({
+      dest,
+      group: group.label,
+      keywords: hubSearchKeywords(dest, group.label),
+    })),
+  );
+}
+
+/**
+ * 검색어로 거른다 — 부분 일치(대소문자 무시). **띄어쓰기는 무시한다**("학생 목록"으로 "학생목록"도, 그 반대도).
+ * 순서 = 라벨이 검색어로 **시작** → 라벨에 **포함** → 별칭·업무군으로만 걸림(같은 칸 안에선 원래 차례 유지).
+ */
+export function matchHubSearch(entries: readonly HubSearchEntry[], query: string): HubSearchEntry[] {
+  const compact = (v: string) => v.toLowerCase().replace(/\s+/g, "");
+  const q = compact(query);
+  if (!q) return [];
+  const rank = (e: HubSearchEntry) => {
+    const label = compact(e.dest.label);
+    return label.startsWith(q) ? 0 : label.includes(q) ? 1 : 2;
+  };
+  return entries
+    .filter((e) => e.keywords.includes(query.trim().toLowerCase()) || compact(e.keywords).includes(q))
+    .map((e, i) => ({ e, i, r: rank(e) }))
+    .sort((a, b) => a.r - b.r || a.i - b.i)
+    .map((x) => x.e);
+}
+
 /**
  * 지금 보고 있는 주소가 속한 업무군 — 사이드바의 현재 위치 표시와 '← …으로 돌아가기'에 쓴다.
  * 접두가 겹치면 **더 긴 경로**가 이긴다(`/attendance` ⊂ `/attendance/live`, 사이드바 하부탭과 같은 규약).

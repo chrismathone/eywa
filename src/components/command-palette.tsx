@@ -8,7 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Dialog } from "@base-ui/react/dialog";
 import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { EyIcon, type AywaIconName } from "@/components/icons/aywa-icons";
-import { HUB_GROUPS, SUPPORT_GROUPS, hubGroupsFor, hubSearchKeywords, innerTabsOf, type HubDest, type HubGate } from "@/lib/menu-hub";
+import { hubSearchEntries, matchHubSearch, type HubDest, type HubGate } from "@/lib/menu-hub";
 import { type AccessMatrix, type SystemRole } from "@/lib/permissions";
 import type { MenuLayout } from "@/features/owner/menu-layout";
 import { useWindowMode } from "@/components/workspace/use-window-mode";
@@ -109,26 +109,14 @@ export function CommandPalette({
       groupLayout,
       isGenericTenant,
     };
-    return hubGroupsFor([...HUB_GROUPS, ...SUPPORT_GROUPS], gate).flatMap((group) =>
-      // 메뉴 뒤에 그 화면 위 탭바의 면(수납의 환불 요청서 · 셔틀의 오늘 등하원 …)을 싣는다 — 메뉴엔 따로 안 서지만(원장 2026-10-14)
-      // 탭바의 버튼도 이름으로 찾혀야 한다. 면은 부모 메뉴가 보일 때만(`innerTabsOf`).
-      // 차례 = 메뉴 판의 버튼 전부 → 그 뒤에 화면 위 탭(수납 · 교재 · 지출 → 환불 …, 리뷰 2026-10-15).
-      [...group.items, ...group.items.flatMap((item) => innerTabsOf(item.href, gate))].map((dest) => ({
-        dest,
-        group: group.label,
-        // 라벨+업무군+영문 키+별칭 — 규칙은 [`hubSearchKeywords`](@/lib/menu-hub) 한 곳에 있다.
-        // 🔴 별칭이 붙은 이유: 라벨에 없는 말로 찾으면 **0건**이었다(원장 2026-09-09 — 라벨
-        //    "신규생 관리"를 *"신입생 관리"*로 찾아 못 찾음). 별칭은 검색에만 실리고 화면엔 안 나온다.
-        keywords: hubSearchKeywords(dest, group.label),
-      })),
-    );
+    // 메뉴 판의 버튼 전부 → 그 뒤에 화면 위 탭(수납 · 교재 · 지출 → 환불 …). 라벨+업무군+영문 키+별칭으로 찾는다.
+    // 🔴 목록·찾는 말은 [`hubSearchEntries`](@/lib/menu-hub) 한 곳 — 사이드바 메뉴 검색과 같은 목록이다(갈리면 한쪽에서만 찾힌다).
+    //    별칭이 붙은 이유: 라벨에 없는 말로 찾으면 **0건**이었다(원장 2026-09-09 "신입생 관리"). 별칭은 검색에만 실린다.
+    return hubSearchEntries(gate);
   }, [systemRole, permMatrix, canTeacherView, isSuperAdmin, menuLayout, groupLayout, isGenericTenant]);
 
   const q = query.trim().toLowerCase();
-  const menuResults = useMemo(
-    () => (q ? commands.filter((c) => c.keywords.includes(q)) : []),
-    [commands, q],
-  );
+  const menuResults = useMemo(() => matchHubSearch(commands, q), [commands, q]);
 
   // 데이터 검색 디바운스 — query 변경 180ms 후 debounced 갱신(setState는 timeout 안이라 effect 룰 OK).
   useEffect(() => {

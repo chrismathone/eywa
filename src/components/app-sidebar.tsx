@@ -2,7 +2,7 @@
 
 import { useNavigationSettings } from "@/features/owner/navigation-context";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import {
@@ -25,8 +25,10 @@ import {
   hubGroupOfPath,
   hubDestinationForPath,
   hubGroupsFor,
+  hubSearchEntries,
   type HubGroup,
 } from "@/lib/menu-hub";
+import { SidebarSearchBox, SidebarSearchResults, useSidebarSearch } from "@/components/sidebar-menu-search";
 import type { MenuLayout } from "@/features/owner/menu-layout";
 import type { ConnectedApp } from "@/features/connected-apps/apps";
 import { ConnectedAppRail } from "@/components/connected-app-rail";
@@ -104,7 +106,7 @@ function openWindowAtPoint(item: NavItem, clientX: number, clientY: number) {
  * 펼침(150~360px 아이콘+라벨): 그룹 헤더(번호+이름) 노출 — 아이콘만으로 판단 어려울 때.
  * 충분히 줄이면 접힘으로 스냅, 늘이면 펼침. 더블클릭=빠른 토글, ←/→ 키=조절.
  * 너비/펼침 여부는 usePrefs(localStorage "eywa-prefs")에 영속.
- * 텍스트로 메뉴를 찾고 싶으면 검색 팰릿(command-palette, 헤더 검색 클릭)을 사용.
+ * 메뉴 이름으로 찾기 = 브랜드 줄 아래 메뉴 검색칸(sidebar-menu-search, 2026-10-19). 학생·수업까지는 검색 팰릿(Shift+F).
  * UserMenu(로그아웃 포함)는 하단에 고정.
  *
  * 활성 표시(데스크톱): 메뉴 클릭이 라우트 이동이 아니라 플로팅 창을 열므로 active는 윈도우 스토어로 구동한다 —
@@ -249,6 +251,13 @@ export function AppSidebar({
   const supportIds = new Set(["support", "owner", ...(groupLayout.some((g) => g.id === "help" && g.order !== undefined) ? [] : ["help"])]);
   const workGroups = allGroups.filter((g) => !supportIds.has(g.id));
   const supportGroups = allGroups.filter((g) => supportIds.has(g.id));
+  // 메뉴 검색(원장 2026-10-19) — 목록은 검색 팰릿과 같은 함수. 검색 중엔 업무군 목록 자리에 결과가 선다.
+  const searchEntries = useMemo(
+    () => hubSearchEntries(gate),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- gate는 매 렌더 새 객체라 그 재료로 묶는다
+    [systemRole, permMatrix, canTeacherView, isSuperAdmin, menuLayout, groupLayout, isGenericTenant],
+  );
+  const searching = useSidebarSearch((s) => s.q.trim() !== "") && expanded;
   const hubOpenId = useMenuHub((s) => s.groupId);
   const toggleHub = useMenuHub((s) => s.toggle);
   const closeHub = useMenuHub((s) => s.close);
@@ -360,13 +369,20 @@ export function AppSidebar({
         {/* nav — 아이콘 레일(접힘) / 아이콘+라벨(펼침). 항목은 항상 풀폭, 내부 패딩으로 아이콘 고정.
             작은 창에서 넘치면 스크롤바 없이 스크롤(scrollbar-hide) + 상/하단 페이드가 "더 있음" 힌트
             (페이드는 스크롤되지 않는 래퍼에 절대배치 — DragScrollArea와 동일 2겹 구조). */}
+        <SidebarSearchBox entries={searchEntries} expanded={expanded} />
+
         <div className="relative min-h-0 flex-1">
           <nav
             ref={navRef}
             className="scrollbar-hide flex h-full flex-col gap-1 overflow-x-hidden overflow-y-auto py-2.5"
           >
+          {searching ? (
+            <NavSection label="메뉴 검색" first expanded={expanded} motion={motion}>
+              <SidebarSearchResults entries={searchEntries} />
+            </NavSection>
+          ) : null}
           {/* 자주 방문한 메뉴 — 연 횟수로 자동 정렬(사람이 고르는 즐겨찾기가 아니다). */}
-          {frequent.length > 0 ? (
+          {!searching && frequent.length > 0 ? (
             <NavSection label="자주 방문한 메뉴" first expanded={expanded} motion={motion}>
               {frequent.map((d) => {
                 const item = navItemByKey(d.menuKey);
@@ -390,6 +406,7 @@ export function AppSidebar({
           ) : null}
 
           {/* 전체 업무 — 업무군을 누르면 본문에 그 업무의 메뉴 버튼이 뜬다(운영실·캘린더는 바로 열린다). */}
+          {searching ? null : (
           <NavSection label="전체 업무" first={frequent.length === 0} expanded={expanded} motion={motion}>
             {workGroups.map((g) => (
               <GroupRail
@@ -409,9 +426,10 @@ export function AppSidebar({
               />
             ))}
           </NavSection>
+          )}
 
           {/* 연결 앱 — aywa 밖의 우리 앱 바로가기(새 탭). 켠 지점에만 선다(원장 2026-09-26). */}
-          {connectedApps.length > 0 ? (
+          {!searching && connectedApps.length > 0 ? (
             <NavSection label="연결 앱" expanded={expanded} motion={motion}>
               {connectedApps.map((a) => (
                 <ConnectedAppRail key={a.feature} app={a} expanded={expanded} motion={motion} />
@@ -420,7 +438,7 @@ export function AppSidebar({
           ) : null}
 
           {/* 지원 — 고객센터·설정(면이 많아 허브)·도움말. */}
-          {supportGroups.length > 0 ? (
+          {!searching && supportGroups.length > 0 ? (
             <NavSection label="지원" expanded={expanded} motion={motion}>
               {supportGroups.map((g) => (
                 <GroupRail
