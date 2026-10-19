@@ -5,6 +5,7 @@ import { addDays, kstToday } from "@/lib/date-kst";
 import type { AssignedBook } from "../math-assignment";
 import { bookPosition, inferBookFromReports, type BookPosition, type CatalogBook, type ReportLine } from "../math-book-match";
 import { latestOrderedBook, type BookOrder } from "../book-window";
+import { SENT_REPORT_OR } from "@/features/math-sheets/lib/sent-reports";
 import type { TextbookTableStatus } from "../types";
 
 /**
@@ -199,6 +200,9 @@ async function getClassReportLines(
           .eq("tenant_id", tenantId)
           .eq("class_id", classId)
           .in("student_id", chunk)
+          // 진도 레일과 같은 기록만 — 클래스노트로 실제 나간 보고서(초안·회수분 제외).
+          .or(SENT_REPORT_OR)
+          .is("revoked_at", null)
           .gte("report_date", since)
           .order("id", { ascending: true })
           .range(from, to),

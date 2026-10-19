@@ -85,7 +85,8 @@ export default async function McsMonthPage({
       const w = bookWindow({
         orders: orders.get(s.studentId) ?? [],
         catalog,
-        reports: reports.get(s.studentId) ?? [],
+        // 레일과 같은 기준일까지의 기록만(과거 달을 보면 그 달 끝까지).
+        reports: (reports.get(s.studentId) ?? []).filter((r) => r.date <= learning.referenceDate),
         referenceDate: learning.referenceDate,
         classDates: (from, to) => learningClassDates(s.studentId, learning.context, from, to),
       });
