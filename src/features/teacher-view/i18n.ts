@@ -1042,9 +1042,17 @@ export const SHEET_DICT = {
   "fill.existing.from": { ko: "{date}부터", en: "from {date}" },
   "fill.existing.delete": { ko: "배정 삭제", en: "Remove assignment" },
   "fill.existing.confirm": {
-    ko: "이 배정의 월간계획이 사라집니다(실제 진도는 그대로). 삭제할까요?",
-    en: "The monthly plan from this assignment will disappear (actual progress stays). Remove it?",
+    ko: "이 배정의 월간계획이 사라집니다. 삭제할까요?",
+    en: "The monthly plan from this assignment will disappear. Remove it?",
   },
+  // 진도 줄 함께 지우기(원장 2026-10-19 — 잘못 배정한 교재 줄을 칸마다 하나씩 지우고 있었다).
+  "fill.existing.withLines": {
+    ko: "이 교재로 들어간 진도 줄도 함께 지우기 — 오늘 이후, 모든 요일. 고쳐 쓴 줄·다른 교재·지난 수업은 그대로",
+    en: "Also remove this book's lesson rows — from today, every weekday. Edited rows, other books and past lessons stay",
+  },
+  "fill.existing.deletedLines": { ko: "배정과 진도 {n}줄을 지웠습니다", en: "Removed the assignment and {n} lesson rows" },
+  "fill.existing.undo": { ko: "되돌리기", en: "Restore" },
+  "fill.existing.undone": { ko: "배정을 되돌렸습니다", en: "Assignment restored" },
   "fill.existing.confirmYes": { ko: "삭제", en: "Remove" },
   "fill.existing.cancel": { ko: "취소", en: "Cancel" },
   "fill.existing.deleted": { ko: "배정을 삭제했습니다", en: "Assignment removed" },
