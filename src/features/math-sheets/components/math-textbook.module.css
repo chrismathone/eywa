@@ -41,9 +41,9 @@
   line-height: 1.5;
   color: var(--text);
   background: var(--card);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* 🔴 줄이지 않는다 — 말줄임이 정작 보여야 할 차수를 가렸다(원장 2026-10-19 캡처). 좁으면 어절로 접힌다. */
+  white-space: normal;
+  word-break: keep-all;
   text-align: left;
   cursor: pointer;
 }

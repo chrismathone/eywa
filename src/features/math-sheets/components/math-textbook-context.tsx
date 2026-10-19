@@ -4,6 +4,7 @@ import { createContext, useContext } from "react";
 import type { AssignedBook } from "@/features/textbooks/math-assignment";
 import type { TextbookTableStatus } from "@/features/textbooks/types";
 import type { StudentBookNow } from "@/features/textbooks/server/math-assignment-queries";
+import type { BookWindow } from "@/features/textbooks/book-window";
 
 /**
  * 수학 교재 배정 — MCS 화면 안 어디서든(학생 행·반 교재 줄·전체 목표 창) 같은 값을 읽는다.
@@ -18,6 +19,8 @@ export type MathTextbookState = {
   choices: { id: string; title: string }[];
   /** 학생별 지금 교재·차수(배정 > 반 배정 > 보고서 기록 추정) — 서버가 한 번 계산해 내려준다. */
   now: Record<string, StudentBookNow>;
+  /** 학생별 교재 3개월 창(주문일+7일부터, 주문한 권 ~ 그 학기 마지막 권). */
+  windows: Record<string, BookWindow>;
   /** 배정을 고칠 수 있나 — 서버 게이트(`requireMcsClassAccess(write)`)와 같은 판정값. */
   canWrite: boolean;
 };

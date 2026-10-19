@@ -33,6 +33,7 @@ import {
 import { setMyMcsFontSize } from "../server/actions";
 import styles from "./learning-overview.module.css";
 import { ClassTextbookBar, StudentTextbookChip } from "./math-textbook-assign";
+import { BookWindowBar } from "./book-window-bar";
 import { LearningRails } from "./learning-rails";
 import { MATH_LEARNING_CADENCE, type MathLearningTrack } from "@/features/progress/learning-cadence";
 import { learningBlocks } from "../lib/learning-plan";
@@ -398,6 +399,7 @@ export function LearningOverview({
                           </div>
                           <LearningRails progress={progress} goal={goal} scaleLessons={scaleLessons} recentRecord={learning.records[s.studentId]?.[0]}
                             onEditGoal={editable && !trackPending && goal?.blockCount ? goalNumber => setRevisionEditor({ studentId: s.studentId, goalNumber }) : undefined} />
+                          <BookWindowBar studentId={s.studentId} />
                         </td>
                         <td>
                           <strong className={styles.rate}>
@@ -566,7 +568,8 @@ function StudentFocus({
           {student.school} {student.grade}
           {goal?.textbook ? ` · ${goal.textbook}` : ""}
         </p>
-        <StudentTextbookChip studentId={student.studentId} studentName={student.name} /></> : null}
+        <StudentTextbookChip studentId={student.studentId} studentName={student.name} />
+        <BookWindowBar studentId={student.studentId} /></> : null}
         {goal && progress ? (
           <>
             <StudentLearningMap

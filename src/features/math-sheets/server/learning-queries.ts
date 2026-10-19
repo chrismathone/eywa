@@ -1,6 +1,7 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
+import { SENT_REPORT_OR } from "../lib/sent-reports";
 import { requireMcsClassAccess } from "./access";
 import type { MathSheetMonthData } from "./month-queries";
 import {
@@ -106,7 +107,7 @@ export async function getMathLearningData(
           // Keep the last known unit before the plan starts, including during exam preparation.
           // A student's other classes may teach different courses, so class_id stays required.
           // Synthetic demo reports are local preview facts; no parent delivery is fabricated.
-          .or("classnote_status.eq.success,classnote_sent_at.not.is.null,edutrix_share_token.not.is.null,source.eq.demo_history")
+          .or(SENT_REPORT_OR)
           .is("revoked_at", null)
           .lte("report_date", referenceDate)
           .order("report_date")
@@ -131,7 +132,7 @@ export async function getMathLearningData(
         .select("student_id, class_id, report_date, progress, textbook, homework_today, classnote_sent_at, classes!lesson_reports_class_id_fkey!inner(subject, math_learning_track)")
         .eq("tenant_id", tenantId).in("student_id", chunk).in("class_id", previousClassIds)
         .eq("classes.subject", "math").eq("classes.math_learning_track", track)
-        .or("classnote_status.eq.success,classnote_sent_at.not.is.null,edutrix_share_token.not.is.null,source.eq.demo_history")
+        .or(SENT_REPORT_OR)
         .is("revoked_at", null).lte("report_date", referenceDate)
         .order("report_date").order("classnote_sent_at", { nullsFirst: true }).order("id").range(from, to),
     ) : [];
