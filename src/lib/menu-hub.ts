@@ -491,7 +491,14 @@ export function hubSearchKeywords(dest: HubDest, groupLabel: string): string {
 }
 
 /** 메뉴 검색의 한 줄 — 목적지 + 업무군 이름 + 찾는 말 뭉치. */
-export type HubSearchEntry = { dest: HubDest; group: string; keywords: string };
+export type HubSearchEntry = {
+  dest: HubDest;
+  group: string;
+  /** 업무군 식별자·아이콘 — 사이드바 '메뉴 지도'가 업무군별로 묶어 그린다. */
+  groupId: string;
+  groupIcon: AywaIconName;
+  keywords: string;
+};
 
 /**
  * 메뉴 검색이 찾는 **전체 목록** — 검색 팰릿(Shift+F)과 사이드바 메뉴 검색이 함께 쓴다(원장 2026-10-19
@@ -503,6 +510,8 @@ export function hubSearchEntries(gate: Gate): HubSearchEntry[] {
     [...group.items, ...group.items.flatMap((item) => innerTabsOf(item.href, gate))].map((dest) => ({
       dest,
       group: group.label,
+      groupId: group.id,
+      groupIcon: group.icon,
       keywords: hubSearchKeywords(dest, group.label),
     })),
   );
@@ -525,6 +534,26 @@ export function matchHubSearch(entries: readonly HubSearchEntry[], query: string
     .map((e, i) => ({ e, i, r: rank(e) }))
     .sort((a, b) => a.r - b.r || a.i - b.i)
     .map((x) => x.e);
+}
+
+/** 메뉴 지도의 한 묶음 — 업무군 하나와 그 안의 (걸러진) 메뉴. */
+export type HubSearchGroup = { id: string; label: string; icon: AywaIconName; items: HubSearchEntry[] };
+
+/**
+ * 사이드바 **메뉴 지도**(원장 2026-10-19 *"수업) 수업목록·시간표 / 원생) 원생목록 … 지도처럼 촤라락 펼쳐지게 + 검색"*)의
+ * 묶음 — 검색어가 없으면 **전부**(업무군 순서 그대로), 있으면 `matchHubSearch`가 고른 것만.
+ * 검색 중엔 가장 잘 맞는 메뉴가 든 업무군이 앞으로 온다(업무군 안 순서도 매칭 순위). `flat` = 키보드 이동 순서(그린 순서와 같다).
+ */
+export function groupHubSearch(entries: readonly HubSearchEntry[], query: string): { groups: HubSearchGroup[]; flat: HubSearchEntry[] } {
+  const picked = query.trim() ? matchHubSearch(entries, query) : [...entries];
+  const byId = new Map<string, HubSearchGroup>();
+  for (const e of picked) {
+    let g = byId.get(e.groupId);
+    if (!g) byId.set(e.groupId, (g = { id: e.groupId, label: e.group, icon: e.groupIcon, items: [] }));
+    g.items.push(e);
+  }
+  const groups = [...byId.values()];
+  return { groups, flat: groups.flatMap((g) => g.items) };
 }
 
 /**

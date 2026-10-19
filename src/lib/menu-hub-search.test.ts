@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { HUB_GROUPS, SUPPORT_GROUPS, hubSearchEntries, matchHubSearch, type HubSearchEntry } from "./menu-hub";
+import { HUB_GROUPS, SUPPORT_GROUPS, groupHubSearch, hubSearchEntries, matchHubSearch, type HubSearchEntry } from "./menu-hub";
 
 const entry = (label: string, group: string, extra = ""): HubSearchEntry => ({
   dest: { menuKey: "students", href: `/x/${label}`, label, icon: "users" },
   group,
+  groupId: group,
+  groupIcon: "users",
   keywords: `${label} ${group} ${extra}`.toLowerCase(),
 });
 
@@ -34,5 +36,26 @@ describe("메뉴 검색 — 사이드바와 검색 팰릿이 같은 매칭", () 
       .map((d) => d.href);
     expect(entries.length).toBeGreaterThan(20);
     expect(lost).toEqual([]);
+  });
+});
+
+describe("메뉴 지도 — 업무군별 묶음", () => {
+  const list = [entry("수업목록", "수업"), entry("시간표", "수업"), entry("원생목록", "원생"), entry("출석부", "수업")];
+
+  it("검색어가 없으면 전부를 업무군 순서대로 묶는다", () => {
+    const { groups, flat } = groupHubSearch(list, "");
+    expect(groups.map((g) => [g.label, g.items.map((e) => e.dest.label)])).toEqual([
+      ["수업", ["수업목록", "시간표", "출석부"]],
+      ["원생", ["원생목록"]],
+    ]);
+    expect(flat.map((e) => e.dest.label)).toEqual(["수업목록", "시간표", "출석부", "원생목록"]);
+  });
+
+  it("검색 중엔 가장 잘 맞는 메뉴의 업무군이 앞 · 키보드 순서 = 그린 순서", () => {
+    const { groups, flat } = groupHubSearch(list, "목록");
+    // 업무군 이름 '원생'·'수업'으로는 안 걸리고 라벨로만 걸린다 — 둘 다 '포함'이라 원래 차례(수업 먼저).
+    expect(groups.map((g) => g.label)).toEqual(["수업", "원생"]);
+    expect(flat.map((e) => e.dest.label)).toEqual(["수업목록", "원생목록"]);
+    expect(groupHubSearch(list, "원생").groups[0]!.label).toBe("원생");
   });
 });

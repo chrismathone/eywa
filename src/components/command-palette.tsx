@@ -8,7 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Dialog } from "@base-ui/react/dialog";
 import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { EyIcon, type AywaIconName } from "@/components/icons/aywa-icons";
-import { hubSearchEntries, matchHubSearch, type HubDest, type HubGate } from "@/lib/menu-hub";
+import { hubSearchEntries, matchHubSearch, type HubGate, type HubSearchEntry } from "@/lib/menu-hub";
 import { type AccessMatrix, type SystemRole } from "@/lib/permissions";
 import type { MenuLayout } from "@/features/owner/menu-layout";
 import { useWindowMode } from "@/components/workspace/use-window-mode";
@@ -30,7 +30,7 @@ import {
 export const COMMAND_PALETTE_OPEN_EVENT = "eywa:open-command-palette";
 
 /** 메뉴 후보 한 줄 — 목적지(HubDest) + 업무군 이름 + 검색어 뭉치. */
-type Command = { dest: HubDest; group: string; keywords: string };
+type Command = HubSearchEntry;
 
 /** 평면 결과 항목(키보드 이동 단위) — 메뉴(클라) 또는 데이터(서버 검색). */
 type Item = { kind: "menu"; cmd: Command } | { kind: "data"; hit: PaletteHit };
