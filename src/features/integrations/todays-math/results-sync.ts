@@ -7,6 +7,8 @@ import { uuidSchema, timestampSchema } from "./sync-contract";
 import { sourceBindingForTenant, targetRequest } from "./sync-server";
 import type { BindingConfig } from "./sync-contract";
 import { attachTodaysMathExamReports, type ExamReportAttachResult } from "./exam-report-attach";
+import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
+import type { ReportSettings } from "@/features/owner/settings-types";
 
 /**
  * 오늘 수학 채점 결과 → aywa(`todays_math_test_results`, 0371a) — 역방향 2단계(2026-10-17).
@@ -19,6 +21,8 @@ import { attachTodaysMathExamReports, type ExamReportAttachResult } from "./exam
  *
  * 기간 = 오늘(KST) 45일 전 ~ 7일 뒤. 그보다 오래된 결과는 마지막으로 받은 값 그대로 남는다.
  * 한 번에 최대 15일 — 처음 켠 지점은 몇 번에 걸쳐 채워진다(최근 날짜부터).
+ * 🔴 결과를 쓰는 기능(학원 설정 → 연동 → 오늘 수학 토글 셋)이 모두 꺼진 지점은 가져오지 않는다(원장 2026-10-19 *"쓸데없이 가져오는듯"*).
+ *    다시 켜면 다음 회차가 기간 안의 날을 지문 대조로 따라잡는다.
  */
 export const RESULTS_BACK_DAYS = 45;
 export const RESULTS_AHEAD_DAYS = 7;
@@ -57,7 +61,7 @@ export function changedResultDays(
 }
 
 export type ResultsSyncTenant = {
-  tenantId: string; status: "synced" | "not_ready" | "unavailable"; days: number; rows: number;
+  tenantId: string; status: "synced" | "off" | "not_ready" | "unavailable"; days: number; rows: number;
   /** 결과 반영 뒤 월말평가 성적표 PDF 첨부(0373a) — 꺼졌으면 status "off". */
   examReports?: ExamReportAttachResult;
 };
@@ -67,8 +71,15 @@ export function resultsWindow(today = kstToday()): { from: string; to: string } 
   return { from: addDays(today, -RESULTS_BACK_DAYS), to: addDays(today, RESULTS_AHEAD_DAYS) };
 }
 
+/** 받은 결과를 쓰는 곳 = 원스크린 시험 칸 · 성적관리 월말평가(+ 성적 현황 표시) · 성적표 첨부. 셋 다 꺼지면 받을 까닭이 없다. 순수 함수. */
+export function resultsWanted(report: Pick<ReportSettings, "todaysMathTestFill" | "todaysMathMonthlyFill" | "todaysMathReportPdf">): boolean {
+  return report.todaysMathTestFill || report.todaysMathMonthlyFill || report.todaysMathReportPdf;
+}
+
 /** 결과 반영 → 성적표 첨부. 첨부가 실패해도 결과 반영 값은 그대로 돌려준다(서로 막지 않는다). cron · 신호가 함께 쓴다. */
 export async function syncTenantWithReports(config: BindingConfig): Promise<ResultsSyncTenant> {
+  const settings = await getTenantSettingsByTenantId(config.tenantId);
+  if (!resultsWanted(settings.report)) return { tenantId: config.tenantId, status: "off", days: 0, rows: 0 };
   const synced = await syncTenant(config);
   try {
     return { ...synced, examReports: await attachTodaysMathExamReports(config, resultsWindow()) };

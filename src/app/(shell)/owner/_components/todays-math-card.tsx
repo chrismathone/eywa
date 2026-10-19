@@ -35,6 +35,12 @@ export function TodaysMathCard({ report }: { report: ReportSettings }) {
         >
           <ToggleField label="월말평가 성적표 보고서 첨부" hint="끄면 붙이지 않습니다" value={pdf} onChange={setPdf} />
         </SettingsCard>
+        <SettingsCard
+          title="오늘 수학 결과 가져오기"
+          description="위 세 기능 중 하나라도 켜져 있을 때만 오늘 수학 채점 결과를 한 시간마다 가져옵니다. 모두 끄면 가져오지 않습니다."
+        >
+          <p className="text-sm text-text-dim">{fill || monthly || pdf ? "켜진 기능이 있어 가져옵니다." : "모두 꺼져 있어 가져오지 않습니다."}</p>
+        </SettingsCard>
       </div>
     </SectionForm>
   );

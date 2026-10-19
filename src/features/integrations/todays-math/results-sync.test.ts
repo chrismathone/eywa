@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ target: vi.fn(), binding: vi.fn(), rpc: vi.fn(), licenses: [] as unknown[], stored: { data: [] as unknown[], error: null as unknown } }));
+const mocks = vi.hoisted(() => ({ target: vi.fn(), binding: vi.fn(), rpc: vi.fn(), licenses: [] as unknown[], report: { todaysMathTestFill: true, todaysMathMonthlyFill: false, todaysMathReportPdf: false }, stored: { data: [] as unknown[], error: null as unknown } }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/date-kst", async (original) => ({ ...await original<object>(), kstToday: () => "2026-10-17" }));
 vi.mock("./sync-server", () => ({ sourceBindingForTenant: mocks.binding, targetRequest: mocks.target }));
 // 성적표 첨부(0373a)는 따로 시험한다(exam-report-plan.test.ts) — 여기서는 결과 반영만.
 vi.mock("./exam-report-attach", () => ({ attachTodaysMathExamReports: async () => ({ status: "off", attached: 0, notified: 0, failed: 0 }) }));
+vi.mock("@/features/owner/server/queries", () => ({ getTenantSettingsByTenantId: async () => ({ report: mocks.report }) }));
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     rpc: mocks.rpc,
@@ -16,7 +17,7 @@ vi.mock("@/lib/supabase/admin", () => ({
     },
   }),
 }));
-import { changedResultDays, syncTodaysMathResults } from "./results-sync";
+import { changedResultDays, resultsWanted, syncTodaysMathResults } from "./results-sync";
 
 const tenantId = "00000000-0000-4000-8000-000000000001";
 const bindingId = "00000000-0000-4000-8000-000000000002";
@@ -41,6 +42,7 @@ describe("results sync", () => {
     vi.resetAllMocks();
     mocks.licenses = [{ tenant_id: tenantId, is_active: true, expires_at: null }];
     mocks.stored = { data: [], error: null };
+    mocks.report = { todaysMathTestFill: true, todaysMathMonthlyFill: false, todaysMathReportPdf: false };
     mocks.binding.mockReturnValue({ tenantId, bindingId });
     mocks.rpc.mockResolvedValue({ data: 1, error: null });
     mocks.target.mockImplementation(async (_config: unknown, path: string) => path.startsWith("/api/integrations/eywa/v2/results?")
@@ -103,5 +105,22 @@ describe("results sync", () => {
     mocks.licenses = [{ tenant_id: tenantId, is_active: true, expires_at: null }];
     mocks.binding.mockReturnValue(undefined);
     expect(await syncTodaysMathResults()).toEqual([]);
+  });
+
+  it("does not fetch at all when every todays-math toggle is off", async () => {
+    mocks.binding.mockReturnValue({ tenantId, bindingId });
+    mocks.report = { todaysMathTestFill: false, todaysMathMonthlyFill: false, todaysMathReportPdf: false };
+    expect(await syncTodaysMathResults()).toMatchObject([{ tenantId, status: "off", days: 0, rows: 0 }]);
+    expect(mocks.target).not.toHaveBeenCalled();
+  });
+});
+
+describe("results wanted", () => {
+  it("is on when any one consumer toggle is on", () => {
+    const off = { todaysMathTestFill: false, todaysMathMonthlyFill: false, todaysMathReportPdf: false };
+    expect(resultsWanted(off)).toBe(false);
+    expect(resultsWanted({ ...off, todaysMathTestFill: true })).toBe(true);
+    expect(resultsWanted({ ...off, todaysMathMonthlyFill: true })).toBe(true);
+    expect(resultsWanted({ ...off, todaysMathReportPdf: true })).toBe(true);
   });
 });
