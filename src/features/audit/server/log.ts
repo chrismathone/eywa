@@ -232,6 +232,7 @@ export const AUDIT_ACTIONS = {
   student_create: "학생 등록",
   student_update: "학생 정보 수정",
   student_english_name_update: "학생 영문 이름 수정",
+  student_siblings_update: "원생 형제 지정",
   student_delete: "학생 영구 삭제",
   student_withdraw: "학생 퇴원 처리",
   student_hold: "학생 휴원 처리",

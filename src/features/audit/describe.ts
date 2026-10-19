@@ -1097,6 +1097,15 @@ export function auditDetail(
         return join(ctx.nameOf(m.studentId), "퇴원 예약 취소", str(m.cancelledWithdrawal) ? `예약일 ${str(m.cancelledWithdrawal)}` : null);
       return join(ctx.nameOf(m.studentId), str(m.memo));
     }
+    case "student_siblings_update": {
+      const names = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x !== "").join(", ") : "");
+      return join(
+        ctx.nameOf(m.studentId),
+        names(m.added) ? `형제 지정 ${names(m.added)}` : null,
+        names(m.excluded) ? `형제 아님 ${names(m.excluded)}` : null,
+        names(m.removed) ? `형제 해제 ${names(m.removed)}` : null,
+      );
+    }
     case "student_english_name_update":
       return join(ctx.nameOf(m.studentId), `영문 이름 ${str(m.before) || "없음"} → ${str(m.after) || "없음"}`);
     case "student_update": {

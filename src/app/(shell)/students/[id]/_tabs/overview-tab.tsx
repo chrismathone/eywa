@@ -25,6 +25,8 @@ import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
 import { getTeacherEnglishNames } from "@/features/teacher-view/server/teacher-names";
 import { teacherNameFor } from "@/features/teacher-view/teacher-name";
 import { classNameFor } from "@/features/teacher-view/class-name";
+import { getStudentSiblings } from "@/features/students/server/siblings";
+import { ProfileSiblings } from "../_components/profile-siblings";
 
 const won = (n: number) => n.toLocaleString();
 
@@ -42,7 +44,7 @@ const PRIORITY_LABEL: Record<CareFocus["priority"], string> = {
 
 export async function OverviewTab({ student, canSeeBilling }: { student: StudentDetail; canSeeBilling: boolean }) {
   const sid = student.id;
-  const [attendance, enrollments, grades, invoices, consultations, memos, settings, lang, teacherNames] = await Promise.all([
+  const [attendance, enrollments, grades, invoices, consultations, memos, settings, lang, teacherNames, siblings] = await Promise.all([
     getStudentAttendanceStats(sid, 30),
     getStudentEnrollments(sid),
     // 성적 탭·통합 성적관리와 같은 기록(수업보고서 일일·확인테스트 포함 — 원장 2026-09-24).
@@ -53,6 +55,7 @@ export async function OverviewTab({ student, canSeeBilling }: { student: Student
     getTenantSettings(),
     getTeacherViewLang(),
     getTeacherEnglishNames(),
+    getStudentSiblings(student),
   ]);
   const subjects = buildSubjectMaps(settings.operations.subjects, lang);
   const hasCareAi = student.aiCareSummary !== null;
@@ -126,6 +129,7 @@ export async function OverviewTab({ student, canSeeBilling }: { student: Student
               }
             />
             <Field label="연락처" value={student.parentPhone} mono />
+            <ProfileSiblings siblings={siblings.siblings} lang={lang} />
             {student.email ? <Field label="이메일" value={student.email} mono /> : null}
             {student.address ? (
               <Field

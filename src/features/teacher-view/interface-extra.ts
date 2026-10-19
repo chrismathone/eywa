@@ -68,7 +68,7 @@ export const INTERFACE_EN: Readonly<Record<string, string>> = {
   "기록된 메모가 없습니다": "No notes recorded", "프로필": "Profile", "영문명": "English name", "닉네임": "Nickname",
   "출결번호": "Attendance code", "성별": "Gender", "남": "Male", "여": "Female", "생년월일": "Date of birth",
   "졸업연도": "Graduation year", "학생 연락처": "Student contact", "집전화": "Home phone", "기타 연락처": "Other contact",
-  "학부모": "Parent", "연락처": "Contact", "등록일": "Enrollment date", "수강 중인 반": "Current classes", "수강 중인 반 없음": "No current classes",
+  "학부모": "Parent", "연락처": "Contact", "형제": "Siblings", "등록일": "Enrollment date", "수강 중인 반": "Current classes", "수강 중인 반 없음": "No current classes",
   "최근 성적": "Recent grades", "성적 기록 없음": "No grade records", "청구 내역 없음": "No invoices",
   "최근 상담": "Recent counseling", "상담 기록 없음": "No counseling records", "최근 메모": "Recent notes", "메모 없음": "No notes",
   "고정 메모": "Pinned notes", "AI 케어 인사이트": "AI care insights", "종합 요약": "Summary", "주의 영역": "Areas to watch",

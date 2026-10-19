@@ -16,7 +16,7 @@ import {
 } from "./enrollment-sync";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
-import { explainDbError } from "@/lib/supabase/db-error";
+import { explainDbError, logDbError } from "@/lib/supabase/db-error";
 import { canonicalSchoolName, type SchoolSaveAlias } from "@/features/schools/school-name";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { accessLevelTenant, canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
@@ -42,6 +42,7 @@ import { preserveMergeNote } from "../merged";
 import { resolveUniqueStudentNameFor } from "./unique-name";
 import { canViewStudentDetail } from "./read-scope";
 import { canManageStudentStatusNow } from "./status-access";
+import { saveStudentSiblings } from "./siblings";
 import { statusCreationNeedsPermission, STUDENT_STATUS_DENIED } from "../status-access";
 
 export type StudentFormState =
@@ -481,6 +482,38 @@ export async function updateStudent(
     if (enrErr) return { error: dbWhy(enrErr, "students.update.holdEnrollments", "수강을 휴원으로 바꾸지 못했습니다. 잠시 후 다시 시도해 주세요.") };
   }
 
+  // 형제 칸(0376a) — 칸이 있던 화면에서만 건드린다(옛 화면·다른 경로의 저장은 형제를 그대로 둔다).
+  let siblingNotice: string | null = null;
+  if (formData.has("siblingsField")) {
+    const ids = (key: string): string[] => {
+      try {
+        const v: unknown = JSON.parse(String(formData.get(key) ?? "[]"));
+        return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && /^[0-9a-f-]{36}$/i.test(x)).map((x) => x.toLowerCase()) : [];
+      } catch {
+        return [];
+      }
+    };
+    // 🔴 실패해도 여기서 돌아가지 않는다 — 학생 정보는 이미 저장됐다(감사로그·갱신을 건너뛰면 안 되고, 폼은 제출 뒤 열 때 값으로
+    //    리셋돼 '다시 저장'하면 방금 바꾼 정보가 되돌아간다 #83). 저장은 끝내고 형제만 못 했다고 알린다.
+    try {
+      const sib = await saveStudentSiblings(supabase, {
+        tenantId: user.tenantId, userId: user.id, studentId: id,
+        final: ids("siblings"), initial: ids("siblingsInitial"), suggested: ids("siblingsSuggested"),
+      });
+      if (sib.added.length + sib.excluded.length + sib.removed.length > 0) {
+        await logAction({
+          action: "student_siblings_update",
+          targetType: "student",
+          targetLabel: finalName,
+          metadata: { studentId: id, added: sib.added, excluded: sib.excluded, removed: sib.removed },
+        });
+      }
+    } catch (e) {
+      logDbError(e, "students.update.siblings", { studentId: id });
+      siblingNotice = "원생 정보는 저장했습니다. 형제는 저장하지 못했습니다 — 학생 수정 화면에서 다시 지정해 주세요.";
+    }
+  }
+
   await logAction({
     action: "student_update",
     targetType: "student",
@@ -505,7 +538,8 @@ export async function updateStudent(
     ok: true,
     redirectTo: `/students/${id}`,
     nonce: Date.now(),
-    notice: renamed ? `이미 '${input.name}' 학생이 있어 '${finalName}'(으)로 저장했습니다.` : undefined,
+    notice: [renamed ? `이미 '${input.name}' 학생이 있어 '${finalName}'(으)로 저장했습니다.` : null, siblingNotice]
+      .filter(Boolean).join("\n") || undefined,
   };
 }
 
