@@ -25,6 +25,8 @@ export type BookWindow = {
   /** 창의 시작 = 첫 주문일 + 7일. */
   startDate: string;
   endDate: string;
+  /** 창이 다루는 소단원(권·차시 순) — 전체 목표 레일 위에 이 창이 차지하는 구간을 찾는 열쇠. */
+  units: string[];
   /** 창을 연 주문(가장 먼저 산 권). */
   orderDate: string;
   orderTitle: string;
@@ -120,6 +122,7 @@ export function bookWindow(args: {
   }
   return {
     books: books.map((b) => ({ id: b.id, title: b.title, lessons: b.lessons.length })),
+    units: books.flatMap((b) => b.lessons.flatMap((l) => (l.progress ?? "").split(" / ").map((u) => u.trim()).filter(Boolean))),
     startDate,
     endDate,
     orderDate: opener.date,

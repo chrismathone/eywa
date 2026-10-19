@@ -1,6 +1,8 @@
 "use client";
 
+import type { ComponentProps } from "react";
 import { useMathTextbooks } from "./math-textbook-context";
+import { LearningRails } from "./learning-rails";
 import overview from "./learning-overview.module.css";
 import local from "./book-window.module.css";
 
@@ -25,7 +27,7 @@ type CellState = "done" | "late" | "todo";
  * 색은 진도 레일과 같은 두 색(`--mcs-actual` 파랑 · `--mcs-goal` 빨강)을 쓴다.
  * 계산은 서버(`bookWindow`)가 끝내고 여기는 그리기만 한다. 주문 기록이 없는 학생은 아무것도 안 그린다.
  */
-export function BookWindowBar({ studentId }: { studentId: string }) {
+export function BookWindowBar({ studentId, embedded = false }: { studentId: string; embedded?: boolean }) {
   const ctx = useMathTextbooks();
   const w = ctx?.windows[studentId];
   if (!w || w.total === 0) return null;
@@ -61,7 +63,7 @@ export function BookWindowBar({ studentId }: { studentId: string }) {
   });
 
   return (
-    <section className={local.panel} aria-label={`교재 3개월 진행 · ${name}`}>
+    <section className={local.panel} data-embedded={embedded || undefined} aria-label={`교재 3개월 진행 · ${name}`}>
       <div className={local.head}>
         <span className={local.tag}>교재 3개월</span>
         <strong className={local.name}>{name}</strong>
@@ -99,5 +101,19 @@ export function BookWindowBar({ studentId }: { studentId: string }) {
         )}
       </p>
     </section>
+  );
+}
+
+/**
+ * 전체 목표 레일 + 그 아래 교재 3개월 확대 칸. 학생 행이 레일을 그릴 때 이걸 쓴다 — 3개월 창이 없는 학생은 레일만.
+ */
+export function RailsWithBook({ studentId, ...rails }: { studentId: string } & ComponentProps<typeof LearningRails>) {
+  const ctx = useMathTextbooks();
+  const w = ctx?.windows[studentId];
+  return (
+    <LearningRails
+      {...rails}
+      zoom={w && w.total > 0 ? { units: w.units, content: <BookWindowBar studentId={studentId} embedded /> } : undefined}
+    />
   );
 }

@@ -33,8 +33,7 @@ import {
 import { setMyMcsFontSize } from "../server/actions";
 import styles from "./learning-overview.module.css";
 import { ClassTextbookBar, StudentTextbookChip } from "./math-textbook-assign";
-import { BookWindowBar } from "./book-window-bar";
-import { LearningRails } from "./learning-rails";
+import { BookWindowBar, RailsWithBook } from "./book-window-bar";
 import { MATH_LEARNING_CADENCE, type MathLearningTrack } from "@/features/progress/learning-cadence";
 import { learningBlocks } from "../lib/learning-plan";
 import { courseRangeLabel } from "../lib/learning-path";
@@ -397,9 +396,9 @@ export function LearningOverview({
                               {goal ? `전체 목표 · ${learningBlockLabel(goal.endBlock, goal.endStudyGrade ?? goal.studyGrade)}` : "전체 목표 미설정"}
                             </span>
                           </div>
-                          <LearningRails progress={progress} goal={goal} scaleLessons={scaleLessons} recentRecord={learning.records[s.studentId]?.[0]}
+                          {/* 레일 + 교재 3개월 확대 칸(레일 위 점선 띠 = 그 3개월이 다루는 구간). */}
+                          <RailsWithBook studentId={s.studentId} progress={progress} goal={goal} scaleLessons={scaleLessons} recentRecord={learning.records[s.studentId]?.[0]}
                             onEditGoal={editable && !trackPending && goal?.blockCount ? goalNumber => setRevisionEditor({ studentId: s.studentId, goalNumber }) : undefined} />
-                          <BookWindowBar studentId={s.studentId} />
                         </td>
                         <td>
                           <strong className={styles.rate}>

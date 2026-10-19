@@ -1,4 +1,5 @@
-import { useId, type CSSProperties } from "react";
+import { useId, type CSSProperties, type ReactNode } from "react";
+import { unitKey } from "@/features/textbooks/math-book-match";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { goalMilestones, type LearningGoal, type LearningProgress, type LearningRecord } from "../lib/learning-plan";
 import { LEARNING_LESSON_WIDTH, learningCurrentPosition, learningGoalTicks, learningMilestoneTicks, learningTargetPosition, learningTopicTicks } from "../lib/learning-axis";
@@ -6,7 +7,7 @@ import { learningBlockLabel } from "../lib/learning-label";
 import styles from "./learning-rails.module.css";
 
 /** Students share a responsive lesson width; goals sit on their actual lesson. */
-export function LearningRails({ progress, goal, recentBlock, recentGrade, recentRecord, scaleLessons, selectedPositions, selectedActualPositions, onSelectPosition, onEditGoal }: {
+export function LearningRails({ progress, goal, recentBlock, recentGrade, recentRecord, scaleLessons, selectedPositions, selectedActualPositions, onSelectPosition, onEditGoal, zoom }: {
   progress?: LearningProgress;
   goal?: LearningGoal;
   recentBlock?: string | null;
@@ -17,6 +18,12 @@ export function LearningRails({ progress, goal, recentBlock, recentGrade, recent
   selectedActualPositions?: readonly number[];
   onSelectPosition?: (position: number, date?: string | null, kind?: "current" | "goal" | "history") => void;
   onEditGoal?: (goalNumber: number) => void;
+  /**
+   * 확대 보기 — 이 레일의 한 구간(교재 3개월이 다루는 소단원)을 아래 칸에 크게 그린다(원장 2026-10-19 *"1년 단위 3개월 단위
+   * 이게 한눈에 잘 안 들어옴"*). 레일 위엔 그 구간을 점선 띠로, 띠의 양 끝에서 아래 칸 양 끝으로 안내선을 긋는다.
+   * 소단원이 이 레일 범위 밖이면 띠·안내선 없이 칸만 그린다.
+   */
+  zoom?: { units: readonly string[]; content: ReactNode };
 }) {
   const goalDescriptionId = useId();
   const topicTicks = goal ? learningTopicTicks(goal, progress) : [];
@@ -44,6 +51,13 @@ export function LearningRails({ progress, goal, recentBlock, recentGrade, recent
   const carried = Boolean(progress?.currentDate && latestRecord && !progress.currentIsLatest);
   const sourceText = latestRecord
     ? `최근 발송 보고서 · ${latestRecord.date} 수업 · ${latestRecord.progress ? learningBlockLabel(latestRecord.progress, goal?.studyGrade ?? recentGrade) : "진도 입력 없음"}${carried ? ` · 진도선은 ${progress!.currentDate} 마지막 확인 단원 기준` : axisCurrent == null && goal ? " · 단원 위치 확인 필요" : ""}`
+    : null;
+
+  // 확대 구간 — 교재 소단원이 레일 눈금 어디에 걸리는지(번호 머리·띄어쓰기 무시, 교재 매핑과 같은 열쇠).
+  const zoomKeys = new Set(zoom?.units.map(unitKey) ?? []);
+  const zoomHits = topicTicks.filter(tick => zoomKeys.has(unitKey(tick.lesson))).map(tick => tick.position);
+  const band = total > 0 && zoomHits.length
+    ? { from: position(Math.min(...zoomHits) - 1), to: position(Math.max(...zoomHits)) }
     : null;
 
   const guides = [...goalStops.map(stop => stop.position), ...pastStops.map(stop => stop.semesterEndPosition)]
@@ -136,6 +150,7 @@ export function LearningRails({ progress, goal, recentBlock, recentGrade, recent
             title={stop.observedDate ? `${stop.estimated ? "추정" : "수업보고서"} ${stop.observedDate}` : undefined}
             style={{ left: `${position(stop.semesterEndPosition)}%` }}><span>{stop.studyGrade}</span>{" "}<span>{stop.semester}학기</span></span>)}
         </div>
+        {band ? <span className={styles.zoomBand} style={{ left: `${band.from}%`, width: `${band.to - band.from}%` }} aria-hidden="true" /> : null}
         <div className={`${styles.annotation} ${styles.targetAnnotation}`} title={`최종 목표 · ${finalLabel}`}>
           <span className={styles.annotationTag}>{goal ? `${finalGoalNumber}차 목표` : "목표"}</span>
           <span className={styles.blockName}>{finalLabel}</span>
@@ -148,6 +163,16 @@ export function LearningRails({ progress, goal, recentBlock, recentGrade, recent
         <span className={styles.currentValue}>{currentLessons == null ? "—" : <><b>{currentLessons}</b><small>차시</small></>}</span>
         <span className={styles.targetValue}>{targetLessons == null ? "—" : <><b>{targetLessons}</b><small>차시 목표</small></>}</span>
       </div>
+      {zoom ? (
+        <div className={styles.zoom}>
+          {band ? (
+            <svg className={styles.zoomLines} viewBox="0 0 1000 24" preserveAspectRatio="none" aria-hidden="true">
+              <path d={`M${band.from * 10} 0L0 24M${band.to * 10} 0L1000 24`} vectorEffect="non-scaling-stroke" />
+            </svg>
+          ) : null}
+          {zoom.content}
+        </div>
+      ) : null}
     </div>
     </div>
   );

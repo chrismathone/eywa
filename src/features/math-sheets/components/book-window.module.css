@@ -107,3 +107,10 @@
   color: var(--text-faint);
   font-size: var(--text-xs);
 }
+
+/* 레일 아래 확대 칸 — 레일 폭에 맞춰 늘고, 테두리는 레일 위 점선 띠와 같은 점선(같은 구간이라는 표시). */
+.panel[data-embedded] {
+  margin-top: 0;
+  max-width: none;
+  border: 1.5px dashed color-mix(in srgb, var(--mcs-actual) 55%, var(--card));
+}
