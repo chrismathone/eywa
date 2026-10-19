@@ -22,7 +22,7 @@ export type PortfolioSnapshot = {
   end: string;
   settings: {
     holidays: { date: string }[];
-    subjects: { key: string; label: string }[];
+    subjects: { key: string; label: string; counselAllHomerooms?: boolean }[];
     report_subjects: string[];
     report_exempt: string[];
   };

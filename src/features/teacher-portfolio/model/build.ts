@@ -62,7 +62,7 @@ function teacherPeriod(d: PortfolioSnapshot, m: Models, user: SnapshotUser, w: P
     reportItem(duties),
     attendanceItem(duties),
     followMetric(d, user, w, cutoff),
-    counselItem({ d, roster: m.students.churnSource.rosterOf, teacherId: user.id, w, classNameOf: m.classNameOf }),
+    counselItem({ d, duty: m.students.churnSource.counselDutyOf, teacherId: user.id, w, classNameOf: m.classNameOf }),
     qualityMetric(d, user, w),
     {
       id: "students", max: METRIC_MAX.students, value: tracking.value, raw: tracking.adjustment,

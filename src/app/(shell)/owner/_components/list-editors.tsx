@@ -147,6 +147,7 @@ export function SubjectListEditor({
           <span className="w-[220px]">시간표 요일 병합</span>
           <span className="w-[104px]">처음 보이는 뷰</span>
           <span className="w-[92px]">QR 접수 노출</span>
+          <span className="w-[112px]" title="원생상담 의무 — 한 학생이 이 과목을 여러 선생님에게 들을 때 누가 상담하나">상담 의무</span>
           <span className="w-[70px]">내부 ID</span>
         </div>
       ) : null}
@@ -237,6 +238,16 @@ export function SubjectListEditor({
                 />
                 {s.hiddenFromIntake ? "숨김" : "노출"}
               </label>
+              {/* 원생상담 의무(원장 2026-10-19) — 기본 = 가장 많은 요일을 맡은 선생님만. 고르면 종전대로 학생 반의 담임 모두(직원 평가 원생상담). */}
+              <select
+                className={`${cellCls} w-[112px]`}
+                aria-label={`${s.label || "과목"} 원생상담 의무`}
+                value={s.counselAllHomerooms ? "all" : "most"}
+                onChange={(e) => set(i, { counselAllHomerooms: e.target.value === "all" ? true : undefined })}
+              >
+                <option value="most">요일 많은 선생님</option>
+                <option value="all">담임 모두</option>
+              </select>
               {/* 내부 ID — 읽기전용(데이터 보존용, 자동 확정·고정) */}
               <span
                 className="text-text-faint w-[70px] shrink-0 truncate text-xs"

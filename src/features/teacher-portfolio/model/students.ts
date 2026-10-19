@@ -32,6 +32,12 @@ export type ChurnSource = {
   exitsOf: (studentId: string, start: string, end: string) => readonly StudentExit[];
   teachersOn: (day: string) => Iterable<string>;
   enrollmentsOf: (studentId: string) => readonly SnapshotEnrollment[];
+  /**
+   * 원생상담 의무 학생(원장 2026-10-19) — 그날 그 강사에게 상담 의무가 있는 학생 → 반(이름 표시용).
+   * 과목마다: 학생이 그 과목에서 다니는 요일을 교시 담당(없으면 담임)별로 세어 **가장 많은 선생님만**(같으면 모두).
+   * `allHomerooms(subject)`가 참인 과목은 종전대로 그 학생 반의 담임 모두. 자리(JJ·LAB) 칸은 사람이 없어 세지 않는다.
+   */
+  counselDutyOf: (day: string, teacherId: string, allHomerooms: (subject: string) => boolean) => ReadonlyMap<string, ReadonlySet<string>>;
 };
 
 export function buildStudentTracking(input: {
@@ -85,6 +91,48 @@ export function buildStudentTracking(input: {
     }
     rosterCache.set(day, map);
     return map;
+  }
+
+  type DutyGroup = { subject: string; home: Map<string, Set<string>>; days: Map<string, Set<string>>; classesOf: Map<string, Set<string>> };
+  const dutyCache = new Map<string, Map<string, DutyGroup>>();
+  function dutyGroups(day: string): Map<string, DutyGroup> {
+    const cached = dutyCache.get(day);
+    if (cached) return cached;
+    const groups = new Map<string, DutyGroup>();
+    const add = <T,>(m: Map<string, Set<T>>, k: string, v: T) => (m.get(k) ?? m.set(k, new Set()).get(k)!).add(v);
+    for (const e of input.enrollments) {
+      const c = classes.get(e.class_id);
+      if (!c || !openClass(c, day) || !validAtClose(e, day)) continue;
+      const key = `${e.student_id}|${c.subject}`;
+      const g = groups.get(key) ?? groups.set(key, { subject: c.subject, home: new Map(), days: new Map(), classesOf: new Map() }).get(key)!;
+      const home = owner(c, day);
+      if (home) add(g.home, home, c.id);
+      for (const s of schedules.get(c.id) ?? []) {
+        if (s.valid_from > day || (s.valid_to && s.valid_to < day) || !enrollmentAttendsOnDay(e.attendance_days, s.day_of_week)) continue;
+        const teacher = s.teacher_id ?? home;
+        if (!teacher) continue;
+        add(g.days, teacher, s.day_of_week);
+        add(g.classesOf, teacher, c.id);
+      }
+    }
+    dutyCache.set(day, groups);
+    return groups;
+  }
+  function counselDutyOf(day: string, teacherId: string, allHomerooms: (subject: string) => boolean): Map<string, Set<string>> {
+    const out = new Map<string, Set<string>>();
+    for (const [key, g] of dutyGroups(day)) {
+      const studentId = key.slice(0, key.indexOf("|"));
+      let mine: Set<string> | undefined;
+      if (allHomerooms(g.subject) || g.days.size === 0) mine = g.home.get(teacherId);
+      else {
+        const most = Math.max(...[...g.days.values()].map((d) => d.size));
+        if ((g.days.get(teacherId)?.size ?? 0) === most) mine = new Set([...(g.classesOf.get(teacherId) ?? []), ...(g.home.get(teacherId) ?? [])]);
+      }
+      if (!mine?.size) continue;
+      const prev = out.get(studentId);
+      out.set(studentId, prev ? new Set([...prev, ...mine]) : new Set(mine));
+    }
+    return out;
   }
 
   const sameSubject = (a: SnapshotEnrollment, b: SnapshotEnrollment) => classes.get(a.class_id)?.subject === classes.get(b.class_id)?.subject;
@@ -164,6 +212,7 @@ export function buildStudentTracking(input: {
     exitsOf: (studentId, start, end) => [...(exitsByStudent.get(studentId) ?? [])]
       .filter(([day]) => day >= start && day <= end).sort(([a], [b]) => a.localeCompare(b)).map(([day, ended]) => ({ day, ended })),
     enrollmentsOf: (studentId) => enrollmentByStudent.get(studentId) ?? [],
+    counselDutyOf,
   };
   return {
     baseline,

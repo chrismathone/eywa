@@ -52,7 +52,7 @@ function metricTip(key: string, d: TeacherWork, span: (from?: string, to?: strin
     case "delivery": return "발송 확인 — 작성했는데 아직 학부모에게 안 나간 것(오류 포함 · 회수 제외)";
     case "unread": return `학부모 미확인 — ${span(d.unreadFrom, d.to) ?? "최근 30일"} 보낸 보고서 중 48시간이 지나도 안 읽은 것`;
     case "attendance": return `출결 미입력 — ${span(d.attendanceFrom, d.attendanceTo) ?? "어제까지 7일"} 수업한 반×날 중 출결을 다 못 찍은 횟수(보고서를 안 쓰는 반 포함)`;
-    case "counsel": return `원생상담 — ${counselPeriodLabel(d.counselMonth, d.to)} 담당 학생 중 상담한 비율`;
+    case "counsel": return `원생상담 — ${counselPeriodLabel(d.counselMonth, d.to)} 상담 의무 학생 중 1회 이상 상담한 비율. 한 학생이 같은 과목을 여러 선생님에게 들으면 요일을 가장 많이 맡은 선생님만 의무(같으면 모두)`;
     case "submitted": return `영상 제출 — ${span(d.videoFrom, d.to) ?? "기간"} 낸 영상 숙제 중 학생이 실제로 올린 것. 누르면 영상 제출 현황`;
     case "issued": return `영상 숙제 출제율 — ${span(d.reportFrom, d.to) ?? "최근 7일"} 쓴 보고서 중 영상 과제가 나간 비율`;
     default: return "";
@@ -111,6 +111,6 @@ export function TeacherWorkCard({ data, subjects }: { data: TeacherWork; subject
     {!data.rows.length ? <p className={s.empty}>집계할 담당 반이 없습니다.</p> : null}
     <p className={s.note}>보고서({span(data.reportFrom, data.to) ?? "최근 7일"}): 작성할 전체 건수 기준 · 결석·휴원·테스트반 제외{data.deliveryShown === true ? " · 발송 확인 = 작성했는데 아직 학부모에게 안 나간 것(오류 포함 · 회수 제외)" : ""}.</p>
     <p className={s.note}>{data.deliveryShown === true ? `학부모 미확인: ${span(data.unreadFrom, data.to) ?? "최근 30일"} 수업 보고서 중 발송 뒤 48시간이 지나도 안 읽은 것. ` : ""}출결 미입력: {span(data.attendanceFrom, data.attendanceTo) ?? "어제까지 7일"} 수업한 반×날 중 출결을 다 못 찍은 횟수(보고서를 안 쓰는 반 포함).</p>
-    <p className={s.note}>{data.counselShown === true ? `원생상담: ${counselPeriodLabel(data.counselMonth, data.to)} 담임 반 학생 중 상담한 비율${data.counselAsOf ? `(${data.counselAsOf.slice(5).replace("-", "/")} 기준)` : ""}. ` : ""}영상 제출: 낸 숙제 중 실제 업로드 기준 · 출제율: 쓴 보고서 중 영상 과제가 나간 비율 · {data.videoCheckedAt ? `영상 확인 ${kstTimeOf(data.videoCheckedAt)} 기준` : "영상 상태 확인 대기"}. 분모가 0이면 비율은 —로 표시합니다.</p>
+    <p className={s.note}>{data.counselShown === true ? `원생상담: ${counselPeriodLabel(data.counselMonth, data.to)} 상담 의무 학생 중 1회 이상 상담한 비율(같은 과목은 요일을 가장 많이 맡은 선생님 몫)${data.counselAsOf ? `(${data.counselAsOf.slice(5).replace("-", "/")} 기준)` : ""}. ` : ""}영상 제출: 낸 숙제 중 실제 업로드 기준 · 출제율: 쓴 보고서 중 영상 과제가 나간 비율 · {data.videoCheckedAt ? `영상 확인 ${kstTimeOf(data.videoCheckedAt)} 기준` : "영상 상태 확인 대기"}. 분모가 0이면 비율은 —로 표시합니다.</p>
   </div>;
 }
