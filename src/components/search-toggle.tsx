@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { SearchForm } from "./search-form";
+import { HeaderSearchSlot } from "./header-search-slot";
 import { CONTROL_H, CONTROL_LABEL } from "./ui/control-scale";
 import { useSheetText } from "@/features/teacher-view/lang-context";
 
@@ -10,6 +11,8 @@ import { useSheetText } from "@/features/teacher-view/lang-context";
  * 원장 2026-09-03 *"남은 결정사항은 지시서 그대로"*). 상시 검색창 대신 '검색' 글자 하나가 서고, 누르면 SearchForm이 펼쳐진다.
  * 검색어가 이미 있으면(`defaultValue`) 펼친 채로 시작한다 — 무엇으로 걸러졌는지 보여야 한다.
  * 학생상담·등록상담 목록이 같이 쓴다 — 새 목록 화면의 검색도 이걸로(상시 SearchForm을 새로 놓지 말 것).
+ * 🔴 그리는 자리는 화면 머리(PageHeader) 동작 줄 맨 앞이다([`HeaderSearchSlot`](./header-search-slot.tsx), 원장 2026-10-19) —
+ *    부르는 쪽은 툴바에 그대로 두면 된다. '검색' 버튼은 학원 색 채움 + 흰 굵은 글씨(같은 날 *"파란배경 흰글씨로 굵게"*).
  */
 export function SearchToggle({
   placeholder,
@@ -34,16 +37,19 @@ export function SearchToggle({
   const open = opened || Boolean(defaultValue);
   if (!open) {
     return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className={`${CONTROL_H} ${CONTROL_LABEL} text-text-dim hover:text-foreground inline-flex shrink-0 items-center px-1 font-medium whitespace-nowrap transition`}
-      >
-        {text("검색")}
-      </button>
+      <HeaderSearchSlot>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className={`${CONTROL_H} ${CONTROL_LABEL} bg-primary text-primary-foreground hover:bg-primary/90 inline-flex shrink-0 items-center rounded-lg px-2.5 font-bold whitespace-nowrap transition`}
+        >
+          {text("검색")}
+        </button>
+      </HeaderSearchSlot>
     );
   }
   return (
+    <HeaderSearchSlot>
     <span className="flex flex-wrap items-center gap-1.5">
       {extra ?? null}
       <SearchForm
@@ -64,5 +70,6 @@ export function SearchToggle({
         </button>
       ) : null}
     </span>
+    </HeaderSearchSlot>
   );
 }

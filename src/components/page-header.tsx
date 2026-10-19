@@ -91,6 +91,9 @@ export function PageHeader({
         {/* 임베드에선 shrink/wrap 허용 — actions로 들어온 툴바(문서 검색 등)의 내부 flex-wrap이
             좁은 창에서 실제로 발동하게(shrink-0 고정이면 max-content 폭이 창을 뚫음, 적대 리뷰).
             `empty:hidden` — 동작도 없고 최대화 버튼도 안 서는 셸(창·미니셸·슈퍼관리자)에선 빈 칸을 남기지 않는다. */}
+        {/* 검색 자리 — 화면의 검색 토글이 포털로 여기 선다(동작 줄 맨 앞, 원장 2026-10-19 — [`HeaderSearchSlot`](./header-search-slot.tsx)).
+            `contents`라 비어 있으면 자리도 없다. 동작 칸 **밖** 형제로 둔다 — 안에 두면 그 칸의 `empty:hidden`이 영영 안 걸린다. */}
+        <div data-page-header-search="" className="contents" />
         <div data-page-header-actions="" className="flex shrink-0 items-center gap-2 empty:hidden compact-chrome:min-w-0 compact-chrome:shrink compact-chrome:flex-wrap">
           {actions}
           <PageMaximizeButton />
