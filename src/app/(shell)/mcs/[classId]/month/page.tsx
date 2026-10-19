@@ -8,6 +8,8 @@ import { LearningOverview } from "@/features/math-sheets/components/learning-ove
 import { getMathLearningData } from "@/features/math-sheets/server/learning-queries";
 import { canResetMathLearningGoals } from "@/features/math-sheets/server/access";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { getMathClassTextbooks } from "@/features/textbooks/server/math-assignment-queries";
+import { MathTextbookProvider } from "@/features/math-sheets/components/math-textbook-context";
 
 export const metadata: Metadata = { title: "수학 강사 시트 · 월간 — 에이와" };
 
@@ -54,9 +56,15 @@ export default async function McsMonthPage({
   const { data } = res;
   // 집중 보기에서 과거 날짜로 이동해도 보고서가 최근 30건에서 잘리지 않게 한다.
   // 같은 반 학생 전환은 이미 조회한 자료를 사용한다.
-  const learning = await getMathLearningData(classId, data, { allRecords: true });
-  // 전체 목표 '초기화'(배정 취소)는 **원장 이상급**(원장 2026-09-18) — 화면과 서버가 같은 함수를 본다([[#77]]).
-  const canResetGoals = await canResetMathLearningGoals(await getCurrentUser());
+  // 셋 다 시트 조회(게이트 통과) 뒤의 독립 조회 — 함께 받는다(B4).
+  // 교재 배정은 시트 게이트(`getMathSheetMonth` 안 `requireMcsClassAccess`)를 이미 지난 반만 읽는다.
+  const user = await getCurrentUser();
+  const [learning, canResetGoals, textbooks] = await Promise.all([
+    getMathLearningData(classId, data, { allRecords: true }),
+    // 전체 목표 '초기화'(배정 취소)는 **원장 이상급**(원장 2026-09-18) — 화면과 서버가 같은 함수를 본다([[#77]]).
+    canResetMathLearningGoals(user),
+    user ? getMathClassTextbooks(user.tenantId, classId) : null,
+  ]);
   // 🔴 줄 수를 "학생 N명"이라 적지 않는다 — 행에는 이 달 중 나간 사람과 아직 안 들어온 사람이
   //    섞여 있다(카드와 **같은 함수**로 센다).
   const counts = countRosterPhases(data.students.map((s) => s.rosterPhase));
@@ -81,6 +89,17 @@ export default async function McsMonthPage({
         />
       </div>
       <div className="min-h-0 flex-1">
+        <MathTextbookProvider
+          value={{
+            classId,
+            status: textbooks?.status ?? "failed",
+            classBook: textbooks?.classBook ?? null,
+            byStudent: textbooks?.byStudent ?? {},
+            choices: textbooks?.choices ?? [],
+            // 배정 쓰기 = 목표 쓰기와 같은 게이트(서버 액션이 같은 함수로 다시 본다).
+            canWrite: data.canEdit,
+          }}
+        >
         <LearningOverview
           // 달·반이 바뀌면 클라 상태(보기·목표 편집 큐)를 새로 세운다 — 옛 달의 목표가 남으면
           // 새 달 화면에 남의 값이 잠깐 비친다.
@@ -92,6 +111,7 @@ export default async function McsMonthPage({
           classOptions={classOptions}
           canResetGoals={canResetGoals}
         />
+        </MathTextbookProvider>
       </div>
     </div>
   );
