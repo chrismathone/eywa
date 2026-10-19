@@ -42,7 +42,7 @@ import { findNavItem, teacherMenuKeysFor } from "@/lib/navigation";
 import { brandColorVars } from "@/lib/color-utils";
 import { WorkspaceCanvas } from "@/components/workspace/workspace-canvas";
 import { MenuHubPanel } from "@/components/workspace/menu-hub-panel";
-import { getMyMenuVisits } from "@/features/nav/server/visits";
+import { getMyMenuSearchHidden, getMyMenuVisits } from "@/features/nav/server/visits";
 import { topVisitedMenus } from "@/features/nav/menu-visits";
 import { MENU_KEYS } from "@/lib/permissions";
 import { WorkspaceEnabledProvider } from "@/components/workspace/workspace-enabled";
@@ -453,8 +453,13 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   const windowMode = shellMode !== "single";
   // 왼쪽 '자주 방문한 메뉴' — 계정 기록에서 많이→최근 순 4개(권한 있는 메뉴만). 기록이 없으면 빈 배열이라
   // 사이드바가 기본값으로 떨어진다. ⚠️ 실패해도 화면을 막지 않는다(조회는 fail-soft).
+  // '메뉴 검색' 칸 숨김(계정 설정)은 같은 ui_prefs 한 번을 나눠 읽는다 — 독립이라 함께 기다린다(B4).
+  const [menuVisits, menuSearchHidden] = await Promise.all([
+    getMyMenuVisits().catch(() => ({})),
+    getMyMenuSearchHidden().catch(() => false),
+  ]);
   const frequentKeys = topVisitedMenus(
-    await getMyMenuVisits().catch(() => ({})),
+    menuVisits,
     MENU_KEYS.filter((k) => canAccess(user.systemRole, k, permMatrix)),
     4,
   );
@@ -496,6 +501,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           canOtherTeacherView={canOtherTeacherView}
           isSuperAdmin={isSuperAdmin}
           frequentKeys={frequentKeys}
+          menuSearchHidden={menuSearchHidden}
           menuLayout={menuLayout}
           isGenericTenant={genericTenant}
           connectedApps={connectedApps}

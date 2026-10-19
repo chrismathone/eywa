@@ -490,6 +490,72 @@ export function hubSearchKeywords(dest: HubDest, groupLabel: string): string {
   return `${dest.label} ${dest.originalLabel ?? ""} ${groupLabel} ${dest.menuKey} ${own}`.toLowerCase();
 }
 
+/** 메뉴 검색의 한 줄 — 목적지 + 업무군 이름 + 찾는 말 뭉치. */
+export type HubSearchEntry = {
+  dest: HubDest;
+  group: string;
+  /** 업무군 식별자·아이콘 — 사이드바 '메뉴 지도'가 업무군별로 묶어 그린다. */
+  groupId: string;
+  groupIcon: AywaIconName;
+  keywords: string;
+};
+
+/**
+ * 메뉴 검색이 찾는 **전체 목록** — 검색 팰릿(Shift+F)과 사이드바 메뉴 검색이 함께 쓴다(원장 2026-10-19
+ * *"좌측 메뉴에서 메뉴 검색하는 검색창"*). 🔴 두 곳이 목록을 따로 만들면 한쪽에서만 찾히는 화면이 생긴다.
+ * 차례 = 업무군 순서대로 메뉴 판의 버튼 → 그 뒤에 그 화면 위 탭(`innerTabsOf`, 부모 메뉴가 보일 때만).
+ */
+export function hubSearchEntries(gate: Gate): HubSearchEntry[] {
+  return hubGroupsFor([...HUB_GROUPS, ...SUPPORT_GROUPS], gate).flatMap((group) =>
+    [...group.items, ...group.items.flatMap((item) => innerTabsOf(item.href, gate))].map((dest) => ({
+      dest,
+      group: group.label,
+      groupId: group.id,
+      groupIcon: group.icon,
+      keywords: hubSearchKeywords(dest, group.label),
+    })),
+  );
+}
+
+/**
+ * 검색어로 거른다 — 부분 일치(대소문자 무시). **띄어쓰기는 무시한다**("학생 목록"으로 "학생목록"도, 그 반대도).
+ * 순서 = 라벨이 검색어로 **시작** → 라벨에 **포함** → 별칭·업무군으로만 걸림(같은 칸 안에선 원래 차례 유지).
+ */
+export function matchHubSearch(entries: readonly HubSearchEntry[], query: string): HubSearchEntry[] {
+  const compact = (v: string) => v.toLowerCase().replace(/\s+/g, "");
+  const q = compact(query);
+  if (!q) return [];
+  const rank = (e: HubSearchEntry) => {
+    const label = compact(e.dest.label);
+    return label.startsWith(q) ? 0 : label.includes(q) ? 1 : 2;
+  };
+  return entries
+    .filter((e) => e.keywords.includes(query.trim().toLowerCase()) || compact(e.keywords).includes(q))
+    .map((e, i) => ({ e, i, r: rank(e) }))
+    .sort((a, b) => a.r - b.r || a.i - b.i)
+    .map((x) => x.e);
+}
+
+/** 메뉴 지도의 한 묶음 — 업무군 하나와 그 안의 (걸러진) 메뉴. */
+export type HubSearchGroup = { id: string; label: string; icon: AywaIconName; items: HubSearchEntry[] };
+
+/**
+ * 사이드바 **메뉴 지도**(원장 2026-10-19 *"수업) 수업목록·시간표 / 원생) 원생목록 … 지도처럼 촤라락 펼쳐지게 + 검색"*)의
+ * 묶음 — 검색어가 없으면 **전부**(업무군 순서 그대로), 있으면 `matchHubSearch`가 고른 것만.
+ * 검색 중엔 가장 잘 맞는 메뉴가 든 업무군이 앞으로 온다(업무군 안 순서도 매칭 순위). `flat` = 키보드 이동 순서(그린 순서와 같다).
+ */
+export function groupHubSearch(entries: readonly HubSearchEntry[], query: string): { groups: HubSearchGroup[]; flat: HubSearchEntry[] } {
+  const picked = query.trim() ? matchHubSearch(entries, query) : [...entries];
+  const byId = new Map<string, HubSearchGroup>();
+  for (const e of picked) {
+    let g = byId.get(e.groupId);
+    if (!g) byId.set(e.groupId, (g = { id: e.groupId, label: e.group, icon: e.groupIcon, items: [] }));
+    g.items.push(e);
+  }
+  const groups = [...byId.values()];
+  return { groups, flat: groups.flatMap((g) => g.items) };
+}
+
 /**
  * 지금 보고 있는 주소가 속한 업무군 — 사이드바의 현재 위치 표시와 '← …으로 돌아가기'에 쓴다.
  * 접두가 겹치면 **더 긴 경로**가 이긴다(`/attendance` ⊂ `/attendance/live`, 사이드바 하부탭과 같은 규약).

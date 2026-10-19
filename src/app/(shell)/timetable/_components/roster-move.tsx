@@ -19,6 +19,13 @@ import { Loader2 } from "@/components/icons/aywa-icon-compat";
 import { endSingleEnrollment, holdSingleEnrollment } from "@/features/students/server/actions";
 import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-change-signal";
 import { ReasonFields } from "@/features/withdrawals/reason-fields";
+import { SPLIT_X_ATTR } from "@/features/timetable-memo/ui/split-panes";
+
+/**
+ * 드래그 자동 스크롤 — 시간표 | 메모 시트 두 칸의 **바깥 가로 상자는 굴리지 않는다**(split-panes.tsx).
+ * 굴리면 오른쪽 가장자리로 학생을 끌 때 화면이 시트 쪽으로 미끄러져 놓을 반이 사라진다. 시간표 판의 세로·줄의 가로는 그대로.
+ */
+const AUTO_SCROLL = { canScroll: (el: Element) => !el.hasAttribute(SPLIT_X_ATTR) };
 import type { StudentBusyWindow } from "@/features/timetable/lib/student-busy";
 import {
   noteDragPointerDown,
@@ -233,6 +240,7 @@ export function RosterMoveArea({
       <DndContext
         sensors={sensors}
         collisionDetection={collisionDetection}
+        autoScroll={AUTO_SCROLL}
         onDragStart={(e) => {
           setTimetableDragging(true);
           const d = (e.active.data.current as RosterDragData | undefined) ?? null;
