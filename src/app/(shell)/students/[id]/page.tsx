@@ -1,4 +1,6 @@
 import { canManageStudentStatusNow } from "@/features/students/server/status-access";
+import { Suspense } from "react";
+import { CareTab } from "./_tabs/care-tab";
 
 import { SheetText } from "@/features/teacher-view/interface-label";
 import { WindowLink } from "@/components/workspace/window-link";
@@ -289,6 +291,10 @@ export default async function StudentDetailPage({
             ) : null}
             <OverviewTab student={student} canSeeBilling={canSeeBilling} />
           </>
+        ) : tab === "care" ? (
+          <Suspense key={student.id} fallback={<p role="status" className="text-text-dim p-5 text-sm">학생 관리 자료를 확인하고 있습니다…</p>}>
+            <CareTab studentId={student.id} />
+          </Suspense>
         ) : tab === "classes" ? (
           <ClassesTab
             student={student}

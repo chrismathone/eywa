@@ -12,7 +12,7 @@ export function BoardList({ rows }: { rows: RosterStudent[] }) {
     <ul className="divide-line divide-y">
       {rows.map((r) => (
         <li key={r.id} className="hover:bg-bg-soft/50 transition">
-          <WindowLink href={`/students/${r.id}`} title={r.name} className="flex items-center gap-3 px-5 py-3">
+          <WindowLink href={`/students/${r.id}?tab=care`} title={r.name} className="flex items-center gap-3 px-5 py-3">
             <div className="min-w-0 flex-1">
               <p className="text-foreground text-sm font-bold">
                 {r.name}{" "}
