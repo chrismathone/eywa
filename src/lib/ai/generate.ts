@@ -3,8 +3,8 @@ import { withFactGuard } from "./fact-guard";
 import { assertTenantViewOutboundAllowed } from "@/lib/auth/tenant-view-outbound";
 import { AI_TENANT_MISSING_MESSAGE, LICENSE_BLOCKED_MESSAGE } from "@/lib/license/rule";
 import { getAnthropic } from "./anthropic";
-import { getUpstage } from "./upstage";
 import { getDeepseek } from "./deepseek";
+import { waitsForAnswer } from "./model-features";
 import { featurePin } from "./model-pins";
 import {
   AI_MODELS,
@@ -22,15 +22,33 @@ import { reportWarning } from "@/lib/observability/report-error";
 import { callJev, JevError, JEV_MODEL, type DecisionQuestions, type DecisionResult } from "./jev";
 
 /**
- * DeepSeek(v4-pro 등 추론형) 전용 max_tokens 하한. 추론형은 reasoning_content가 max_tokens를 함께 소모해
- * 호출부 값(8192 등)이 추론에 소진되면 답변 JSON이 truncate → 파싱 실패한다. 추론+답변이 모두 들어가도록
- * 여유를 둔다. 상한일 뿐 실사용 토큰만 과금되므로 크게 잡아도 무비용(관측 실사용 ~5k~14k tok).
+ * 응답 길이 상한(max_tokens)의 **바닥** — 호출부 값이 이보다 작으면 이 값으로 올려 보낸다(원장 2026-10-19 *"응답 길이 한도도 팍팍 늘려"*).
+ * 상한은 넘지 못하는 선일 뿐 쓴 만큼만 값을 낸다. 생각(추론) 토큰도 상한에 들어가 작게 잡으면 답 전에 잘린다
+ * (Sonnet 5 폼 추출이 4,096에서 7일 57건 중 21건 잘림 · 회의록 v4-pro 30일 최대 26,893 — 옛 바닥 32,000에 닿을 뻔).
+ * 실측(2026-10-19 우리 키): Claude 5 계열 모델 상한 128,000 · DeepSeek 입력 6.5만 + 64,000 통과.
+ * - 64,000 위는 의미가 없다 — 라우트 기한(300초) 안에 그만큼 만들어 내지 못한다.
+ * - Claude는 상한이 분당 출력 한도 계산에 안 든다(공식 rate-limits 문서) — 크게 잡아도 막히지 않는다. 비스트리밍 SDK 검사는
+ *   `anthropic.ts`의 시간 제한 지정으로 건넌다.
+ * - Claude 4.x 이하(reasoning 티어 Opus 4.7)는 호출부 값 그대로(생각이 기본으로 켜지지 않는다).
  */
-const DEEPSEEK_MIN_MAX_TOKENS = 32000;
+export const OUTPUT_TOKEN_FLOOR: Readonly<Record<AiProvider, number>> = { anthropic: 64_000, deepseek: 64_000 };
+/**
+ * 사람이 화면에서 기다리는 호출(멘트·원생 AI 케어 — `waitsForAnswer`)의 바닥. 옛 Claude 4,096이 사실상 한 호출의 **시간 상한**
+ * (Haiku 20~30초) 노릇도 했다 — 64,000이면 응답이 끝없이 이어지는 드문 경우 선생님이 몇 분을 기다린다(2026-10-19 리뷰).
+ * Claude 16,000 = 옛 바닥의 4배 · 실측 최대(2,067)의 8배. DeepSeek은 옛 바닥 32,000 그대로 — **어디서도 예전보다 낮추지 않는다.**
+ */
+export const WAITING_OUTPUT_TOKEN_FLOOR: Readonly<Record<AiProvider, number>> = { anthropic: 16_000, deepseek: 32_000 };
+
+/** 실제로 보내는 max_tokens — 호출과 '잘림' 오류 문구가 같은 값을 쓴다. */
+export function sentMaxTokens(provider: AiProvider, model: string, requested: number, feature?: string | null): number {
+  if (provider === "anthropic" && !isClaude5Model(model)) return requested;
+  const floor = waitsForAnswer(feature) ? WAITING_OUTPUT_TOKEN_FLOOR : OUTPUT_TOKEN_FLOOR;
+  return Math.max(requested, floor[provider]);
+}
 
 /**
  * ```json 펜스 제거 + 첫 {…} 객체 추출 + JSON.parse. 5개 AI 호출지점에 흩어져 있던 파싱 로직을
- * 한 곳으로 통합. 순수함수(Vitest 단위테스트). JSON mode(Upstage)·평문(Anthropic)·마크다운 펜스·
+ * 한 곳으로 통합. 순수함수(Vitest 단위테스트). JSON mode(DeepSeek)·평문(Anthropic)·마크다운 펜스·
  * 앞뒤 잡설 섞인 응답 모두 견딘다.
  */
 export function parseJsonLoose<T = unknown>(text: string): T {
@@ -94,6 +112,7 @@ export type GenerateJSONOptions = {
   prompt: string;
   /** 선택적 system 지침(없으면 미전송). */
   system?: string;
+  /** 응답 길이 상한 — 바닥(`OUTPUT_TOKEN_FLOOR`)보다 작으면 바닥으로 올려 보낸다(Claude 4.x 이하만 이 값 그대로). */
   maxTokens: number;
   /** 기본 balanced(현 모든 호출). reasoning은 Anthropic 고정. */
   tier?: AiTier;
@@ -104,14 +123,14 @@ export type GenerateJSONOptions = {
   keyName?: AiKeyName;
   /**
    * provider 선호(강제 아님 — 키 없으면 평소 폴백). 녹음 분석은 구조화 추출 품질을 위해
-   * `"anthropic"`(Claude)을 우선한다. 미설정 시 tier/AI_PROVIDER 기본(보통 Upstage Solar).
+   * `"anthropic"`(Claude)을 우선한다. 미설정 시 tier/AI_PROVIDER 기본(미설정이면 Claude).
    */
   provider?: AiProvider;
   /** 생성 temperature(0~1). 미설정 시 provider 기본. 멘트=0.3(사실 서술 일관성, edutrix Solar 후보정 이식). */
   temperature?: number;
   /**
-   * Upstage(Solar) reasoning_effort. 멘트="minimal" — 안 하면 추론 과정이 본문에 섞임(edutrix 후보정).
-   * Anthropic은 Claude 5 계열에만 `output_config.effort`로 전한다(minimal → low, ANTHROPIC_EFFORT). 그 밖의 Anthropic 모델엔 무시.
+   * 생각 깊이(이름은 예전 Solar `reasoning_effort` 표기 그대로 · 멘트="minimal"). Claude 5 계열에만 `output_config.effort`로
+   * 전한다(minimal → low, ANTHROPIC_EFFORT). DeepSeek·그 밖의 Anthropic 모델엔 보내지 않는다.
    */
   reasoningEffort?: "minimal" | "low" | "medium" | "high";
   /**
@@ -182,8 +201,8 @@ export async function recordUsage(entry: {
 }
 
 /**
- * 모든 AI(JSON) 호출의 단일 진입점. `resolveModel`로 provider(기본 Solar Pro 3, env로 Claude 롤백)를
- * 고르고 → Upstage(OpenAI 호환, JSON mode) 또는 Anthropic을 호출 → 응답 텍스트를 `parseJsonLoose<T>`.
+ * 모든 AI(JSON) 호출의 단일 진입점. `resolveModelChain`으로 provider(Claude · DeepSeek)를
+ * 고르고 → DeepSeek(OpenAI 호환, JSON mode) 또는 Anthropic을 호출 → 응답 텍스트를 `parseJsonLoose<T>`.
  * 실패 시 throw — 호출부의 기존 stub/error 폴백을 그대로 유지한다.
  *
  * @returns `data`(파싱된 T) + `model`(실제 사용 모델 id — model_version 문자열 재료).
@@ -194,12 +213,7 @@ export async function recordUsage(entry: {
  * (silent provider 폴백은 의도적으로 안 함 — 키가 무효면 표면에 드러나야 한다.)
  */
 function rethrowAi(provider: AiProvider, err: unknown): never {
-  const label =
-    provider === "upstage"
-      ? "Upstage(Solar)"
-      : provider === "deepseek"
-        ? "DeepSeek"
-        : "Anthropic(Claude)";
+  const label = provider === "deepseek" ? "DeepSeek" : "Anthropic(Claude)";
   const status =
     typeof err === "object" && err !== null && "status" in err
       ? Number((err as { status?: unknown }).status)
@@ -303,14 +317,13 @@ export function isTemperatureDeprecatedError(err: unknown): boolean {
 /**
  * Claude 5 계열(Opus·Sonnet·Haiku 5·5.5, Fable, Mythos)인가 — 이 계열은 ① 기본값이 아닌 temperature가 400(Haiku 5.5는 문구도
  * 달라 위 재시도가 못 알아볼 수 있다 — 아예 안 보낸다) ② 생각(thinking)이 기본으로 켜져 그 토큰도 `max_tokens`에 든다.
- * 🔴 2026-10-16 Haiku 5.5 전환 실측(구독 비교 9건 · effort low): 출력 740~2,000토큰 — 멘트 상한 1,000이면 절반이 답 전에 잘린다.
+ * 🔴 2026-10-16 Haiku 5.5 전환 실측(구독 비교 9건 · effort low): 출력 740~2,000토큰 — 멘트 상한 1,000이면 절반이 답 전에 잘린다
+ *    (그래서 이 계열은 상한을 바닥 `OUTPUT_TOKEN_FLOOR`로 올려 보낸다).
  */
 export function isClaude5Model(model: string): boolean {
   return /^claude-(?:opus|sonnet|haiku)-5(?:-|$)|^claude-(?:fable|mythos)-/.test(model);
 }
-/** Claude 5 계열의 출력 상한 바닥 — 생각 토큰이 상한을 먹어 JSON 전에 잘리지 않게(쓴 만큼만 과금된다). */
-export const CLAUDE5_MIN_MAX_TOKENS = 4096;
-/** 호출부의 reasoningEffort(Upstage 표기) → Anthropic effort. 'minimal'은 Anthropic에 없어 low. */
+/** 호출부의 reasoningEffort(예전 Solar 표기) → Anthropic effort. 'minimal'은 Anthropic에 없어 low. */
 const ANTHROPIC_EFFORT: Record<NonNullable<GenerateJSONOptions["reasoningEffort"]>, "low" | "medium" | "high"> = {
   minimal: "low",
   low: "low",
@@ -336,31 +349,6 @@ async function callProvider(
   group: AiKeyGroup | null,
   opts: GenerateJSONOptions,
 ): Promise<ProviderCall> {
-  if (provider === "upstage") {
-    const client = getUpstage(keyName, group);
-    // 변수(리터럴 아님)로 만들어 reasoning_effort(Upstage 확장 파라미터, 표준 타입 밖)를 부착 —
-    // 리터럴 직접 전달 시 excess-property 검사에 걸리므로 base 변수로 우회. non-stream 오버로드(res.choices) 유지.
-    const base = {
-      model,
-      max_tokens: opts.maxTokens,
-      // JSON mode — 프롬프트에 "JSON" 단어가 있어야 함(현 호출부 전부 "JSON만 출력" 포함).
-      response_format: { type: "json_object" as const },
-      ...(opts.temperature != null ? { temperature: opts.temperature } : {}),
-      ...(opts.reasoningEffort ? { reasoning_effort: opts.reasoningEffort } : {}),
-      messages: [
-        ...(opts.system ? [{ role: "system" as const, content: opts.system }] : []),
-        { role: "user" as const, content: opts.prompt },
-      ],
-    };
-    const res = await client.chat.completions.create(base);
-    return {
-      text: res.choices[0]?.message?.content ?? "",
-      usage: res.usage
-        ? { inputTokens: res.usage.prompt_tokens ?? null, outputTokens: res.usage.completion_tokens ?? null }
-        : null,
-      truncated: res.choices[0]?.finish_reason === "length",
-    };
-  }
   if (provider === "deepseek") {
     const client = getDeepseek(keyName, group);
     // DeepSeek도 OpenAI 호환 — JSON mode 사용(프롬프트에 "JSON" 단어 필수, 현 호출부 충족). reasoning_effort는
@@ -368,11 +356,10 @@ async function callProvider(
     // 분리하므로 content 우선 + 비면 reasoning_content 폴백(빈 문자열이면 parseJsonLoose가 표면화).
     // ⚠️ **reasoning_content가 max_tokens를 함께 소모**한다(2026-07-16 실측: 등록상담 프롬프트에서 추론만
     // ~8k tok → 호출부 8192면 답변 JSON이 truncate돼 finish_reason=length → 파싱 실패 → 재분석 실패).
-    // 그래서 추론+답변이 모두 들어가도록 여유 floor(DEEPSEEK_MIN_MAX_TOKENS)를 준다. max_tokens는 상한일 뿐
-    // 실사용 토큰만 과금되므로(원장 지침) 넉넉히 둬도 비용 영향 없음(관측 실사용 ~5k~14k tok, v4-pro가 32000 수용).
+    // 그래서 추론+답변이 모두 들어가도록 바닥(OUTPUT_TOKEN_FLOOR)으로 올려 보낸다 — 상한일 뿐 쓴 만큼만 과금된다.
     const res = await client.chat.completions.create({
       model,
-      max_tokens: Math.max(opts.maxTokens, DEEPSEEK_MIN_MAX_TOKENS),
+      max_tokens: sentMaxTokens("deepseek", model, opts.maxTokens, opts.meta?.feature),
       response_format: { type: "json_object" as const },
       ...(opts.temperature != null ? { temperature: opts.temperature } : {}),
       messages: [
@@ -409,7 +396,7 @@ async function callProvider(
   const claude5 = isClaude5Model(model);
   const anthropicParams = (withTemperature: boolean) => ({
     model,
-    max_tokens: claude5 ? Math.max(opts.maxTokens, CLAUDE5_MIN_MAX_TOKENS) : opts.maxTokens,
+    max_tokens: sentMaxTokens("anthropic", model, opts.maxTokens, opts.meta?.feature),
     // Claude 5 계열엔 temperature를 아예 안 보낸다(400 → 재시도 왕복을 없앤다). 그 밖은 호출부 값(멘트 0.3 등) 유지.
     ...(withTemperature && !claude5 && opts.temperature != null ? { temperature: opts.temperature } : {}),
     // 생각 깊이 — 호출부가 정한 때만(멘트 'minimal' → low). 안 정하면 모델 기본(Haiku 5.5 = medium).
@@ -590,8 +577,8 @@ export async function generateJSON(rawOpts: GenerateJSONOptions | GenerateDecisi
       // 잘린 응답의 파싱 실패는 "모델이 이상한 걸 뱉었다"가 아니라 "한도가 모자랐다"이다 —
       // 원인을 라우트·화면 오류 문구까지 그대로 들고 가야 max_tokens를 올릴 생각을 한다.
       if (call.truncated) {
-        // 실제로 보낸 상한을 말한다 — Claude 5 계열은 바닥값(CLAUDE5_MIN_MAX_TOKENS)으로 올려 보낸다.
-        const sent = provider === "anthropic" && isClaude5Model(model) ? Math.max(opts.maxTokens, CLAUDE5_MIN_MAX_TOKENS) : opts.maxTokens;
+        // 실제로 보낸 상한을 말한다 — 호출부 값이 아니라 바닥으로 올린 값(sentMaxTokens).
+        const sent = sentMaxTokens(provider, model, opts.maxTokens, opts.meta?.feature);
         throw new Error(`AI 응답이 최대 길이(${sent} 토큰)에서 잘려 해석하지 못했습니다. 응답 한도를 늘리거나 요청을 줄여 주세요.`);
       }
       throw e;

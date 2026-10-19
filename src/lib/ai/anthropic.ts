@@ -16,7 +16,9 @@ export function getAnthropic(keyName: AiKeyName = "default", group: AiKeyGroup |
   }
   const cached = clients.get(envName);
   if (cached) return cached;
-  const client = new Anthropic({ apiKey: process.env[envName] as string });
+  // 시간 제한을 직접 준다 — 안 주면 SDK가 비스트리밍 요청의 상한(max_tokens)이 21,333을 넘을 때 "스트리밍 필요"로 던진다
+  // (generate.ts `OUTPUT_TOKEN_FLOOR` 64,000 · 2026-10-19 실측). 값은 SDK 기본(10분)과 같다 — 실제로는 라우트 기한(300초)이 먼저 끊는다.
+  const client = new Anthropic({ apiKey: process.env[envName] as string, timeout: 10 * 60 * 1000 });
   clients.set(envName, client);
   return client;
 }

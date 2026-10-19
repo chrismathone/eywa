@@ -90,7 +90,7 @@ aywa는 메뉴=플로팅 창=same-origin iframe이라 **창마다 셸 레이아�
 TypeSafe Jev의 제한된 선택지 판정도 `generateJSON({ mode: "decision", state, questions, meta })`를 사용한다.
 문장 생성 provider/폴백에는 넣지 않는다. `TYPESAFE_API_KEY_<그룹>` → `TYPESAFE_API_KEY` 순서이며,
 현재 `parent_attendance_jev_shadow`는 수동 비교 전용이다. 지점 allowlist가 없으면 꺼져 있고 분류 변경·발송은 하지 않는다.
-직접 `getAnthropic`/`getUpstage`를 부르지 말 것 — provider 라우팅·파싱·폴백이 한 곳에 모여 있다.
+직접 `getAnthropic`/`getDeepseek`를 부르지 말 것 — provider 라우팅·파싱·폴백이 한 곳에 모여 있다.
 
 - **⚠️ 사실 원칙은 모든 AI 호출에 예외 없이 붙는다 (원장 지시 2026-07-23, 불변)**: *"'팩트' '환각금지'
   '사실만 작성' '창작 금지' '추측 금지'도 항상 거쳐야 해."* → [`FACT_GUARD`](src/lib/ai/fact-guard.ts)가
@@ -115,39 +115,41 @@ TypeSafe Jev의 제한된 선택지 판정도 `generateJSON({ mode: "decision", 
 
 provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어×provider) + `resolveModel()`:
 
-| Tier | Upstage (폴백) | Anthropic | DeepSeek | 용도 |
-|---|---|---|---|---|
-| `fast` | `solar-pro3` | **`claude-haiku-5-5`**(2026-10-16 4.5→5.5 · 1/10 값 · temperature 미전송·effort low·출력 상한 바닥 4,096(생각 토큰 몫)은 `generate.ts` `isClaude5Model`이 흡수) | `deepseek-flash`(V4.1 · 옛 이름 `deepseek-v4-flash`는 2026-10-19 교체 — 딥시크가 은퇴로 적음) | **학부모 멘트** `classnote_ment` + **학부모 글 만족도 판정** `parent_satisfaction`(강사평가 · 문구로 애매한 글만 · DeepSeek flash 먼저 — 원장 2026-10-13). 🔴 deepseek 폴백은 **v4-flash**(원장 2026-08-28 *"haiku -> 폴백 deepseek v4 flash"*) — v4-pro를 걸었더니 자동작성 한 번에 **86초**(추론 6,505토큰)라 폴백이 또 다른 장애가 됐다. flash는 7.3초. **되돌리지 말 것**(같은 날 *"flash 말고 v4 pro"*를 실측 보고 뒤집은 것). |
-| `balanced` | `solar-pro3` | `claude-sonnet-5` | **`deepseek-v4-pro`** | 경량 호출 기본값 + **재원생 상담 분석**·브리프·결석 문자 판별 등. 콜&상담 분석·폼 자동입력·회의록은 아래 기능별 고정(V4.1 flash). |
-| `reasoning` | — (없음) | `claude-opus-4-7` | — | **금지** (명시 요청 시만). reasoning은 Anthropic 고정. |
+| Tier | Anthropic | DeepSeek | 용도 |
+|---|---|---|---|
+| `fast` | **`claude-haiku-5-5`**(2026-10-16 4.5→5.5 · 1/10 값 · temperature 미전송·effort low는 `generate.ts` `isClaude5Model`이 흡수) | `deepseek-flash`(V4.1 · 옛 이름 `deepseek-v4-flash`는 2026-10-19 교체 — 딥시크가 은퇴로 적음) | **학부모 멘트** `classnote_ment` + **학부모 글 만족도 판정** `parent_satisfaction`(강사평가 · 문구로 애매한 글만 · DeepSeek flash 먼저 — 원장 2026-10-13). 🔴 deepseek 폴백은 **v4-flash**(원장 2026-08-28 *"haiku -> 폴백 deepseek v4 flash"*) — v4-pro를 걸었더니 자동작성 한 번에 **86초**(추론 6,505토큰)라 폴백이 또 다른 장애가 됐다. flash는 7.3초. **되돌리지 말 것**(같은 날 *"flash 말고 v4 pro"*를 실측 보고 뒤집은 것). |
+| `balanced` | `claude-sonnet-5-5`(2026-10-19 5→5.5 · 같은 값) | **`deepseek-v4-pro`** | 경량 호출 기본값 + **재원생 상담 분석**·브리프·결석 문자 판별 등. 콜&상담 분석·폼 자동입력·회의록은 아래 기능별 고정(V4.1 flash). |
+| `reasoning` | `claude-opus-4-7` | — | **금지** (명시 요청 시만). reasoning은 Anthropic 고정. |
 
-- **폴백 사다리 = anthropic → deepseek → upstage(Solar)** ([`FALLBACK_LADDER`](src/lib/ai/models.ts), 원장 2026-08-28). 한 provider가 **인증·한도·잔액 소진**으로 막히면 다음으로 넘어간다 — 🔴 **크레딧 소진은 400이라 예전엔 사다리를 안 탔다**([[#118]]: 2026-08-27 멘트 AI가 이틀간 전건 실패). Solar가 맨 뒤인 건 품질 A/B 탈락이라 마지막 보루이기 때문. ⚠️ 새 provider 오류 모양(402·`insufficient_quota` 등)을 만나면 `isCreditExhaustedError`에 추가할 것.
-- **전역 기본 provider = Anthropic Claude Sonnet 5** (`AI_PROVIDER=anthropic`, 2026-07-13~) — 품질 A/B에서 Solar가
-  상담 분석의 warnings를 통째로 놓치고 잡담(주식 등)을 섞어 전환. ⚠️ **코드 기본값(env 미설정)은 여전히 `upstage`(Solar)** —
-  Vercel env가 안 걸리면 프로덕션이 Solar로 동작하니 확인. 롤백 = `AI_PROVIDER=upstage` 또는 호출부 `provider:"upstage"`.
+- **AI 회사는 둘 = Claude · DeepSeek.** 🔴 Upstage(Solar)는 뺐다(원장 2026-10-19 *"솔라는 빼버려. 두개면 충분"* — 품질 A/B 탈락으로 맨 뒤 예비였고 그날 키도 잔액 정지). 클라이언트·사다리·모델 칸 전부 지웠다 — 되살리지 말 것. 옛 기록의 `solar-pro3` 라벨만 남긴다.
+- **폴백 사다리 = anthropic → deepseek** ([`FALLBACK_LADDER`](src/lib/ai/models.ts), 원장 2026-08-28). 한 provider가 **인증·한도·잔액 소진**으로 막히면 다른 쪽으로 넘어간다 — 🔴 **크레딧 소진은 400이라 예전엔 사다리를 안 탔다**([[#118]]: 2026-08-27 멘트 AI가 이틀간 전건 실패). ⚠️ 새 provider 오류 모양(402·`insufficient_quota` 등)을 만나면 `isCreditExhaustedError`에 추가할 것.
+- **응답 길이 상한 바닥 = 64,000**(Claude 5 계열·DeepSeek) — [`OUTPUT_TOKEN_FLOOR`](src/lib/ai/generate.ts)(원장 2026-10-19 *"응답 길이 한도도 팍팍 늘려"*). 호출부 값이 작아도 이 값으로 보낸다(쓴 만큼만 과금 · Claude는 상한이 분당 출력 한도에 안 든다 · 생각 토큰도 상한에 들어 작으면 답 전에 잘린다). 사람이 화면에서 기다리는 기능(멘트·원생 AI 케어 — `waitsForAnswer`)만 Claude 16,000 · DeepSeek 32,000(`WAITING_OUTPUT_TOKEN_FLOOR` — 끝없이 이어지는 응답에 몇 분씩 기다리지 않게 · 옛 바닥보다 낮은 곳은 없다). 🔴 [`anthropic.ts`](src/lib/ai/anthropic.ts)의 `timeout`을 지우지 말 것 — 없으면 SDK가 상한 21,333 넘는 비스트리밍 요청을 "스트리밍 필요"로 던진다.
+- **전역 기본 provider = Anthropic Claude Sonnet 5.5** (`AI_PROVIDER=anthropic`, 2026-07-13~ · 2026-10-19 5→5.5) — 품질 A/B에서 Solar가
+  상담 분석의 warnings를 통째로 놓치고 잡담(주식 등)을 섞어 전환. 코드 기본값(env 미설정·옛 값 `upstage`)도 Claude다(2026-10-19 Solar 제거 뒤).
+  DeepSeek을 기본으로 = `AI_PROVIDER=deepseek`.
 - **기능별 고정 모델 + 지점별 선택**(2026-10-19 원장 *"추천 순서로 진행"* · *"지점별로 ai모델 바꿀 수 있게"*) — [`FEATURE_MODELS`](src/lib/ai/model-pins.ts):
   **콜&상담 분석·콜&상담 폼 자동입력·회의록 분석 = DeepSeek V4.1 flash**(`deepseek-flash`). 운영 프롬프트 그대로의 블라인드 비교에서
   폼 8승 2무(Sonnet 5는 10건 중 4건이 4,096 토큰에서 잘려 실패) · 회의록 4승 1무 · 콜&상담 분석 3:2, 값 1/4~1/8 · 속도 약 2배.
   형식 차이는 **저장 전 후처리**가 기존 모양으로 맞춘다([`analysis-normalize`](src/features/enrollment/analysis-normalize.ts) ·
   [회의록](src/features/meetings/analysis-normalize.ts) · [`form-normalize`](src/features/enrollment/form-normalize.ts) — 기존 v4-pro 결과엔 0곳 손댐 실측).
   지점마다 다른 모델 = 운영 콘솔 학원 상세 **'AI 모델' 탭**(`tenant_ai_models`, 0375a) — 지점 선택 > 코드 기본 > 호출부 tier·provider
-  (`featurePin`). 고른 회사가 막히면 평소 사다리로 넘어간다(고정한 모델 이름이 없으면 같은 회사 기본 모델로 한 번 더). 계약서 스캔 OCR은 고를 수 없다(Claude 전용 승인) · 멘트(선생님이 기다리는 기능)엔 느린 v4-pro를 고를 수 없다. 🔴 시험 안 한 기능을 코드 기본에 넣지 말 것.
+  (`featurePin`). 고른 회사가 막히면 평소 사다리로 넘어간다(고정한 모델 이름이 없으면 같은 회사 기본 모델로 한 번 더). 계약서 스캔 OCR은 고를 수 없다(Claude 전용 승인) · 멘트·원생 AI 케어(사람이 기다리는 기능)엔 느린 v4-pro를 고를 수 없다. 🔴 시험 안 한 기능을 코드 기본에 넣지 말 것.
 - **재원생 상담 분석 = DeepSeek v4-pro**(아래 2026-07-16 근거 그대로 · 콜&상담·회의록은 위로 옮겼다) —
   (옛 문단: 전사 분석 3종(회의록·등록상담·재원생 상담) = DeepSeek v4-pro, 2026-07-16, `AI_PROVIDER`과 무관하게 코드에서 우선) —
   실측 A/B(injaewon 실전사 5건): v4-pro가 warnings를 5/5 Sonnet급으로 생성(255·316·243·219·97자), 비용은 압도적으로 저렴.
   경량 v4-flash·레거시 chat·Solar는 warnings를 2~3/5 "확인된 위험 신호 없음"으로 붕괴(Solar 탈락과 동일 실패)라 v4-pro 채택.
   ⚠️ 트레이드오프: v4-pro는 추론형이라 Sonnet보다 ~1.2배 느림(백그라운드 분석이라 감수). **Vercel에 `DEEPSEEK_API_KEY` 설정 필요** —
-  없으면 anthropic/upstage로 **무중단 폴백**(키 추가 전까지 프로덕션은 Sonnet 유지, 롤백=키 제거). 라우팅은 호출부 `provider:"deepseek"`
+  없으면 anthropic으로 **무중단 폴백**(키 추가 전까지 프로덕션은 Sonnet 유지, 롤백=키 제거). 라우팅은 호출부 `provider:"deepseek"`
   ([analyzeMeeting](src/features/meetings/server/ai.ts)·[runConsultationAnalysis](src/features/enrollment/server/consultation-analysis.ts)·
   [analyzeStudentConsultation](src/features/consultations/server/ai.ts) 기본값 + 웹훅 인라인). form-extract·멘트(Haiku)·care는 불변.
 
 ### 녹음·회의 처리 (Solar 후보정 하네스 · 재처리 2종 · 회의 화자) → [`docs/decisions/ai-recording.md`](docs/decisions/ai-recording.md)
 - 폼 자동입력 = `buildFormPatch` 후보정 하네스(grounding·echo·잡음 가드) — 새 "AI 추출→폼/DB 자동기입"도 이 가드를 통과한 값만.
 - 회의 재처리 = 기둥 A '분석 다시 생성'(텍스트) / 기둥 B '전사부터 다시'(오디오, Supabase 서명 — Firebase 의존 0). 화자 = `ai_speaker_roles`(표시) + `speaker_staff`(직원 연결).
-- Upstage = OpenAI 호환(JSON mode, 프롬프트에 "JSON" 필수) · 키 없으면 다른 provider로 무중단 폴백.
+- DeepSeek = OpenAI 호환(JSON mode, 프롬프트에 "JSON" 필수) · 키 없으면 Claude로 무중단 폴백(Solar는 2026-10-19 뺐다).
 
 ### 키 분리 = 기능별 8그룹 (원장 2026-09-15 *"기능별로 키를 발급받아서 사용량 체크를 하려고"*)
-**env 이름 = `<회사>_API_KEY_<그룹>`**(회사 = `ANTHROPIC`·`DEEPSEEK`·`UPSTAGE`). 그룹은 호출부 식별자(`meta.feature`)에서
+**env 이름 = `<회사>_API_KEY_<그룹>`**(회사 = `ANTHROPIC`·`DEEPSEEK`). 그룹은 호출부 식별자(`meta.feature`)에서
 [`FEATURE_KEY_GROUP`](src/lib/ai/models.ts)이 도출한다 — 🔴 **새 AI 호출부를 만들면 그 표에 한 줄**을 더할 것(가드
 [`key-groups.test.ts`](src/lib/ai/key-groups.test.ts)가 빠진 것·죽은 것을 잡는다).
 
@@ -164,7 +166,7 @@ provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어�
 
 - **키 고르는 순서 = 그룹 키 → 옛 버킷 키(`_CONSULTATIONS`) → 기본 키**(`resolveKeyEnv`). 그룹 키가 아직 없어도
   기본 키로 돌아 **멈추는 기능이 없다**(키를 하나씩 넣는 동안의 안전장치).
-- 🔴🔴 **기본 키 셋(`ANTHROPIC_API_KEY`·`DEEPSEEK_API_KEY`·`UPSTAGE_API_KEY`)은 절대 지우지 말 것** — 그룹 키를
+- 🔴🔴 **기본 키 둘(`ANTHROPIC_API_KEY`·`DEEPSEEK_API_KEY`)은 절대 지우지 말 것**(`UPSTAGE_API_KEY`는 2026-10-19부터 안 쓴다) — 그룹 키를
   다 넣었어도 **표에 없는 기능·`meta`를 안 넘긴 새 호출부의 유일한 안전망**이다. 지우면 그 호출이 에러가 아니라
   **조용히 다음 회사로** 넘어가 모델과 품질이 바뀐다(환경변수를 정리할 때 "이제 그룹 키가 있으니 기본 키는 중복"으로
   읽히기 쉬운 자리라 못박는다).
@@ -471,7 +473,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - 영어 수업보고서 = 원스크린 영어 행 '템플릿 모드' · 인재원 학습 데이터 = pull API
 - 발송 기한(오늘 포함 7일)이 지난 보고서도 원장이 지정한 건은 보낸다
 - ClassNote 테스트 학생 '학원이'는 aywa에서 아무에게도 배정하지 않는다 — 배정은 ClassNote 쪽에서 전 강사에게
-- AI provider 전역 기본 = Anthropic Claude Sonnet 5
+- AI provider 전역 기본 = Anthropic Claude Sonnet 5.5(2026-10-19 5→5.5) · 응답 길이 상한 바닥 64,000 · AI 회사는 Claude·DeepSeek 둘(Solar 제거)
 - ~~전사 분석 3종 = DeepSeek v4-pro~~ → 콜&상담 분석·폼 자동입력·회의록 = DeepSeek V4.1 flash + 저장 전 후처리(2026-10-19 블라인드 비교) · 재원생 상담은 v4-pro 그대로 · 지점별 모델 = 운영 콘솔 'AI 모델' 탭(0375a)
 - 음성 전사 엔진 = AssemblyAI `universal-2` 유지
 - 학부모 보고서 제목 = 과목 보고서('수학 보고서' · 설정 제목이 기본값일 때 · `reportTitleText` 한 곳)
@@ -701,7 +703,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - **#115** 같은 사실을 **FK와 텍스트 라벨 두 벌**로 들면 한쪽이 비는 날 표시가 갈린다 — 슬롯 `classroom_id`가 빈 하루 때문에 라벨 `302`가 그대로 나와 **`본원 3층`과 별도로 `3층`**이 섰다(`roomGroupOf`는 `건물명+호수`를 읽는다). 고침 = 라벨 폴백을 **등록된 강의실 이름으로 맞춰서**(`canonicalRoomName`) 내보내기 · ⚠️ **애매하면 손대지 말 것**(`602`=바른602/본원602) · ⚠️ 행 분할이라 그 하루짜리 이력 행은 **영구히 남는다**(그날을 보면 계속 갈라짐) · 🔑 폴백 값도 **정본의 형식으로 정규화**해야 "같은 방인가" 비교까지 산다
 - **#116** 좁은 `table-fixed` 퍼센트 칸의 **`whitespace-nowrap` 라벨은 접지도 잘리지도 못해 흘러넘친다** — 풀 폭에선 패딩이 먹어 "빠듯"해 보일 뿐이라 **재현이 안 된다**(창 폭 ~650px 이하에서 표 밖으로). 고침 = 라벨만 `break-keep`+좁은 여백(🔴 `truncate` 금지 — 종이 서식에서 잘린 라벨은 넘치는 것보다 나쁘다) · 🔴🔴 공유 클래스 상수를 쪼갤 땐 **값을 하나도 빼지 말 것**(호출부가 덮어쓰는 충돌 유틸의 승자는 문자열 순서가 아니라 **생성된 CSS 순서** — `py-2`를 뺐더니 도장칸 머리 행이 34→22px로 납작해졌고 게이트는 다 통과했다)
 - **#117** 한 배열에 **모양이 셋인 결과**(게시 `{ok,…}` · 수정 `{board,reports}` · 회수 `{board,revoked}`)를 담으면 `!x.ok`가 **성공을 전건 실패로 뒤집는다** — 7명에게 정상 게시된 공지를 제자리 수정하자 화면이 "발송 완료 · 실패 7 · 사유 없음"이 됐고 발송자는 재발송 직전이었다(학부모 알림장에 같은 글 2개 = 되돌릴 수 없다). 🔑 **0144a 트리거는 2026-07-23에 이미 같은 오탐을 고쳤는데 화면만 안 고쳐졌다**(벨은 조용, 화면만 거짓말) · 고침 = `ok` 키가 **있고** true가 아닌 것만 실패([`noticeFailures`](src/features/report-admin/notice-failures.ts) 단일 소스, 저장된 행까지 즉시 교정) + 워커 `editNotice`는 `{...r}`로 보존 · ⚠️ **`revokeNotice`엔 스프레드 금지**(`reports`가 남아 회수 취소선이 죽는다) · ⚠️ jsonb라 원소가 객체가 아닐 수 있다(`"ok" in x`를 typeof로 감쌀 것)
-- **#118** **크레딧 소진은 400이라 "폴백할 오류"로 안 잡힌다** — 폴백 사다리가 멀쩡히 있는데도 멘트 AI가 이틀간 전건 실패했다(8/27 77건·8/28 32건). 🔑 판정은 상태코드+문구를 **둘 다**(Anthropic 400 `credit balance` / DeepSeek **402** `Insufficient Balance` / OpenAI 호환 429 `insufficient_quota`) · 사다리 = **anthropic → deepseek → upstage(Solar)** · ⚠️ **폴백 산출물이 원본보다 적게 말하면 그 차이가 조용한 사실 손실**(템플릿에 특이사항 칸이 없어 "내일 4시에 보강입니다"가 증발한 채 49건 발송) · ⚠️ 폴백 있는 기능은 **실패율을 따로 계측**해야 보인다([[#89]]) · ⚠️ plain object 오류는 `String(err)`=`[object Object]`라 문구 판정에 안 걸린다
+- **#118** **크레딧 소진은 400이라 "폴백할 오류"로 안 잡힌다** — 폴백 사다리가 멀쩡히 있는데도 멘트 AI가 이틀간 전건 실패했다(8/27 77건·8/28 32건). 🔑 판정은 상태코드+문구를 **둘 다**(Anthropic 400 `credit balance` / DeepSeek **402** `Insufficient Balance` / OpenAI 호환 429 `insufficient_quota`) · 사다리 = **anthropic → deepseek**(Solar는 2026-10-19 뺐다) · ⚠️ **폴백 산출물이 원본보다 적게 말하면 그 차이가 조용한 사실 손실**(템플릿에 특이사항 칸이 없어 "내일 4시에 보강입니다"가 증발한 채 49건 발송) · ⚠️ 폴백 있는 기능은 **실패율을 따로 계측**해야 보인다([[#89]]) · ⚠️ plain object 오류는 `String(err)`=`[object Object]`라 문구 판정에 안 걸린다
 - **#119** **`"use server"` 파일은 async 함수만 export할 수 있다** — 동기 헬퍼에 export를 붙이면 **빌드만** 깨진다(typecheck·lint·테스트 전부 통과). 공유 동기 헬퍼는 서버 액션 파일 **밖** 일반 모듈로 (⚠️ `import "server-only"`는 붙이지 말 것 — [[#61]]) · 가드 `server-action-exports.test.ts`
 - **#120** **유니크 인덱스에 `WHERE is_active`가 없으면 폐지된 반이 이름을 붙든다** — 개명 예약은 성사되고 **그날 cron만** 23505로 실패하는데, 실패해도 '적용함' 표식을 남겨 **재시도조차 안 한다**(실측 17건 중 2건 영구 미적용). ⚠️ 활성만 보는 시뮬레이션은 "겹침 0"이라 한다 — **제약이 걸린 쓰기는 트랜잭션 안에서 실제로 실행**해 볼 것
 - **#121** 임계값·창(window)의 **이름을 화면 문구로** 쓰면 숫자는 맞는데 사실이 틀린다(새벽 2시에 오후 2시 수업을 "2시간 뒤") — 화면엔 기준이 만들어 낸 **실제 값**(시각·날짜)을 적을 것

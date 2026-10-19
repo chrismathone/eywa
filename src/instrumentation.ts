@@ -43,8 +43,8 @@ export function register() {
       reportWarning(`[env] 권장 환경변수 미설정: ${key} (${why})`, { scope: "instrumentation.register" });
     }
   }
-  if (!process.env.UPSTAGE_API_KEY && !process.env.ANTHROPIC_API_KEY) {
-    reportWarning("[env] AI 키 없음: UPSTAGE_API_KEY/ANTHROPIC_API_KEY 둘 다 미설정 → AI 분석 비활성", {
+  if (!process.env.ANTHROPIC_API_KEY && !process.env.DEEPSEEK_API_KEY) {
+    reportWarning("[env] AI 키 없음: ANTHROPIC_API_KEY/DEEPSEEK_API_KEY 둘 다 미설정 → AI 분석 비활성", {
       scope: "instrumentation.register",
     });
   }

@@ -17,6 +17,7 @@ import type { SemanticTone } from "@/lib/design/semantic-color";
 import { isSupportStatus, SUPPORT_STATUS_META } from "@/features/support/types";
 import { isShellMode, SHELL_MODE_LABEL } from "@/lib/license/shell-mode";
 import { AI_MODEL_CHOICES } from "@/lib/ai/model-pins";
+import { modelDisplayLabel } from "@/lib/ai/model-label";
 import { TENANT_MODEL_FEATURES } from "@/lib/ai/model-features";
 
 function supportStatusLabel(v: string): string {
@@ -196,11 +197,12 @@ export function auditDetail(action: string, metadata: Record<string, unknown> | 
       return `${featureLabel(m.feature)} ${m.active === true ? "켬" : "끔"}`;
     }
     case "set_ai_model": {
-      // 원시 id 대신 화면 이름으로(원문 노출 금지). 목록 밖 값은 '기타'.
+      // 원시 id 대신 화면 이름으로(원문 노출 금지). 지금 목록에 없는 옛 모델(Sonnet 5 등)은 탭과 같은 라벨 함수로, 그래도 모르면 '기타'.
       const feature = TENANT_MODEL_FEATURES.find((f) => f.key === m.feature);
       const featureName = feature ? `${feature.area} ${feature.label}` : "AI 기능";
       const model = AI_MODEL_CHOICES.find((c) => c.model === m.model);
-      return `${featureName} → ${m.model == null ? "기본값" : model ? model.label : "기타 모델"}`;
+      const modelName = model ? model.label : (modelDisplayLabel(str(m.model)) ?? "기타 모델");
+      return `${featureName} → ${m.model == null ? "기본값" : modelName}`;
     }
     case "toggle_laboratory_menu": {
       const menu = str(m.menu) as MenuKey | null;

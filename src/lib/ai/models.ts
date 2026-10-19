@@ -5,11 +5,13 @@
 // 기능별 모델 고정(코드 기본 · 운영 콘솔 선택지)은 model-pins.ts.
 import type { ModelPin } from "./model-pins";
 
-export type AiProvider = "anthropic" | "upstage" | "deepseek";
+// 회사는 둘 — Claude(anthropic) · DeepSeek. 🔴 Upstage(Solar)는 뺐다(원장 2026-10-19 *"솔라는 빼버려. 두개면 충분"* —
+// 품질 시험 탈락으로 맨 뒤 예비였고, 그날 키도 잔액 부족으로 정지돼 있었다). 되살리지 말 것.
+export type AiProvider = "anthropic" | "deepseek";
 export type AiTier = "fast" | "balanced" | "reasoning";
 export type AiKeyName = "default" | "consultations";
 
-// 티어 → provider별 모델 id. reasoning은 Anthropic 전용(평소 금지 정책 + Solar reasoning 미사용).
+// 티어 → provider별 모델 id. reasoning은 Anthropic 전용(평소 금지 정책).
 // deepseek: v4-pro(고품질 추론, 전사 분석 기본)·v4-flash(경량). v4-pro는 balanced로 라우팅(reasoning 티어는
 // Anthropic 고정 정책 유지 — deepseek reasoning 슬롯은 null로 미사용). 실측 A/B(2026-07-16): v4-pro가
 // 등록상담 warnings를 Sonnet급으로 생성(경량 v4-flash/chat·Solar는 warnings 붕괴). 배경 = docs/changelog.
@@ -26,9 +28,11 @@ export const AI_MODELS: Record<AiTier, Record<AiProvider, string | null>> = {
   // generate.ts `isClaude5Model`이 흡수한다. 구독으로 같은 입력 9건 비교 뒤 적용(추세 날짜·진도 단원 코드 대응 포함).
   // deepseek = `deepseek-flash`(V4.1-Flash-1017) — 옛 이름 `deepseek-v4-flash`는 딥시크가 "은퇴"로 적고 같은 모델로 돌리는 중이라
   // (공식 가격표 2026-10-19 · 우리 키 `/models`엔 새 이름만 나온다) 이름을 지우기 전에 옮겼다.
-  fast: { anthropic: "claude-haiku-5-5", upstage: "solar-pro3", deepseek: "deepseek-flash" },
-  balanced: { anthropic: "claude-sonnet-5", upstage: "solar-pro3", deepseek: "deepseek-v4-pro" },
-  reasoning: { anthropic: "claude-opus-4-7", upstage: null, deepseek: null },
+  fast: { anthropic: "claude-haiku-5-5", deepseek: "deepseek-flash" },
+  // Sonnet 5.5(원장 2026-10-19 *"소넷 5 -> 소넷 5.5가 출시되었으니 폴백 모델도 버전업"*) — 5와 같은 값($2/$10)·같은 토크나이저.
+  // 바뀐 점 중 우리에게 닿는 것: 생각 끄기(`thinking: disabled`)가 400(우리는 thinking을 안 보낸다) · 생각 깊이 기본 high가 다시 맞춰졌다.
+  balanced: { anthropic: "claude-sonnet-5-5", deepseek: "deepseek-v4-pro" },
+  reasoning: { anthropic: "claude-opus-4-7", deepseek: null },
 };
 
 /**
@@ -87,7 +91,6 @@ export function keyGroupOf(feature?: string | null): AiKeyGroup | null {
 
 const PROVIDER_KEY_ENV: Record<AiProvider, string> = {
   anthropic: "ANTHROPIC_API_KEY",
-  upstage: "UPSTAGE_API_KEY",
   deepseek: "DEEPSEEK_API_KEY",
 };
 
@@ -122,26 +125,26 @@ export function keyLabelOf(provider: AiProvider, envName: string | null): string
   return envName === base ? "default" : envName.slice(base.length + 1).toLowerCase();
 }
 
-/** env AI_PROVIDER로 기본 provider 선택(미설정 시 upstage = Solar Pro 3 기본). */
+/**
+ * env AI_PROVIDER로 기본 provider 선택 — `deepseek`이면 DeepSeek, 그 밖(미설정·옛 값 `upstage` 포함)은 Claude.
+ * (2026-10-19 Solar를 빼기 전에는 미설정 = Solar였다 — env가 안 걸리면 운영이 Solar로 돌던 함정이 함께 사라졌다.)
+ */
 export function defaultProvider(): AiProvider {
-  if (process.env.AI_PROVIDER === "anthropic") return "anthropic";
-  if (process.env.AI_PROVIDER === "deepseek") return "deepseek";
-  return "upstage";
+  return process.env.AI_PROVIDER === "deepseek" ? "deepseek" : "anthropic";
 }
 
 export type ResolvedModel = { provider: AiProvider; model: string; keyName: AiKeyName };
 
 /**
- * 폴백 사다리 — **anthropic → deepseek → upstage(Solar)**(원장 2026-08-28: *"anthropic -> deepseek"*,
- * *"deepseek 소진시 solar 폴백"*). Solar가 맨 뒤인 이유는 품질 A/B 탈락(상담 분석 warnings 통째 누락)이라
- * **마지막 보루**로만 쓰기 때문이다. 이 배열 순서가 곧 사다리라, 순서를 바꾸면 폴백 대상이 바뀐다.
+ * 폴백 사다리 — **anthropic → deepseek**(원장 2026-08-28 *"anthropic -> deepseek"* · 2026-10-19 *"솔라는 빼버려. 두개면 충분"*).
+ * 이 배열 순서가 곧 사다리라, 순서를 바꾸면 폴백 대상이 바뀐다.
  */
-const FALLBACK_LADDER: readonly AiProvider[] = ["anthropic", "deepseek", "upstage"];
+const FALLBACK_LADDER: readonly AiProvider[] = ["anthropic", "deepseek"];
 
 /**
  * 후보 provider 순서(reasoning=Anthropic 고정, 그 외 AI_PROVIDER 기본을 맨 앞, 나머지는 폴백, prefer를 최우선).
  * resolveModelChain이 이 순서에서 "모델+키가 실제 있는" 후보만 남기므로, 선호/기본 provider 키가 없어도
- * 다음 provider로 무중단 폴백된다(전사 분석은 prefer:"deepseek" → 키 없으면 anthropic/upstage로).
+ * 다른 provider로 무중단 폴백된다(전사 분석은 prefer:"deepseek" → 키 없으면 anthropic으로).
  */
 function providerOrder(tier: AiTier, prefer?: AiProvider): AiProvider[] {
   const def = defaultProvider();

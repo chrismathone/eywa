@@ -1,5 +1,14 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-10-19 — AI 응답 길이 상한 바닥 64,000 · Sonnet 5 → 5.5 · Solar 제거(회사 둘)
+
+- 원장 *"응답 길이 한도도 팍팍 늘려"* → [`OUTPUT_TOKEN_FLOOR`](../src/lib/ai/generate.ts)(Claude 5 계열·DeepSeek 64,000) — 호출부 값이 작아도 이 값으로 보낸다(`sentMaxTokens` 한 곳 · '잘림' 오류 문구도 같은 값 — 예전엔 DeepSeek이 실제와 다른 숫자를 말했다). 옛 바닥 = Claude 5 4,096 · DeepSeek 32,000. 회의록 v4-pro가 30일 최대 26,893토큰을 써 옛 바닥에 닿을 뻔했다.
+- 사람이 화면에서 기다리는 기능(`waitsForAnswer` — 멘트 자동작성·미리보기·영어 코멘트 · 원생 AI 케어(재리뷰가 찾음 — 콘솔에서도 v4-pro를 못 고른다))만 Claude 16,000 · DeepSeek 32,000(`WAITING_OUTPUT_TOKEN_FLOOR`) — 옛 4,096이 사실상 한 호출의 시간 상한이었다(리뷰). 옛 바닥보다 낮아진 곳은 없다.
+- 원장 *"솔라는 빼버려. 두개면 충분"* → Upstage(Solar) 통째 제거: `upstage.ts` · 호출 경로 · `AiProvider`의 `upstage` · 모델 칸 · 사다리 칸 · 부팅 키 점검(이제 Claude·DeepSeek 키). 사다리 = Claude → DeepSeek. `AI_PROVIDER` 미설정·옛 값 `upstage` = Claude(예전엔 미설정이면 Solar였다). 옛 기록의 `solar-pro3` 라벨은 남김. 운영 감사 로그의 옛 모델 이름(Sonnet 5)도 탭과 같은 라벨 함수로.
+- Anthropic 클라이언트에 `timeout` 10분(SDK 기본과 같은 값)을 직접 준다 — 안 주면 SDK가 21,333 넘는 비스트리밍 요청을 "스트리밍 필요"로 던진다(실측).
+- 원장 *"소넷 5 -> 소넷 5.5가 출시되었으니 폴백 모델도 버전업"* → balanced 티어 Anthropic = `claude-sonnet-5-5`(같은 값 · 우리 키로 확인). 운영 콘솔 'AI 모델' 선택지도 5.5. 라벨 'Claude Sonnet 5.5'(그 전 저장분은 'Sonnet 5' 그대로). Sonnet이 1순위인 곳 = 강사별 말투 프로파일(주 1회 · 60일 41번) · 운영실 일일 브리핑(마지막 09-29) · 원생 AI 케어 · 직원 계약서 인식(둘은 60일 사용 0) · 나머지는 DeepSeek이 막힐 때의 예비.
+- (Solar 키는 그날 잔액 부족으로 정지(403) 상태였다 — 제거 근거 중 하나. Vercel의 `UPSTAGE_API_KEY`는 이제 안 쓴다.)
+
 ## 2026-10-19 — 검색 버튼 = 화면 머리 동작 줄 맨 앞 · 학원 색 채움 + 흰 굵은 글씨 (앱 전체)
 
 - 원장 직원관리 캡처 *"에이와 내 검색 창 위치이동"*(툴바 끝 '검색' → 머리 '연차 관리' 왼쪽) + 범위 "앱 전체" + *"버튼의 색상은 파란배경 흰글씨로 굵게"*.

@@ -4,9 +4,9 @@
  *
  * 🔴 새 AI 기능을 만들면 `FEATURE_KEY_GROUP`(models.ts)과 함께 **여기에도 한 줄**(가드 `model-features.test.ts`).
  * 고를 수 없는 기능은 `FIXED_MODEL_FEATURES`에 이유와 함께 둔다 — 목록에서 빠졌다는 사실이 코드에 남아야 한다.
- * `waits` = 선생님이 버튼을 누르고 화면에서 기다리는 기능 — 추론이 긴 모델(`slow`)은 고를 수 없다.
+ * `waits` = 선생님·직원이 버튼을 누르고 화면에서 기다리는 기능 — 추론이 긴 모델(`slow`)은 고를 수 없고 응답 상한도 낮다.
  */
-import { AI_MODEL_CHOICES } from "./model-pins";
+import { AI_MODEL_CHOICES, modelFeatureOf } from "./model-pins";
 
 export type TenantModelFeature = { key: string; label: string; area: string; waits?: true };
 
@@ -18,7 +18,8 @@ export const TENANT_MODEL_FEATURES: readonly TenantModelFeature[] = [
   { key: "enrollment_form_extract", label: "녹음으로 양식 채우기", area: "콜&상담" },
   { key: "enrollment_prep_brief", label: "상담 준비 브리프", area: "콜&상담" },
   { key: "consultation_analysis", label: "녹음 분석", area: "원생상담" },
-  { key: "student_care", label: "원생 AI 케어", area: "원생상담" },
+  // 직원이 버튼을 누르고 결과를 기다린다(서버 액션이 끝까지 기다림 — 2026-10-19 리뷰).
+  { key: "student_care", label: "원생 AI 케어", area: "원생상담", waits: true },
   { key: "meeting_analysis", label: "녹음 분석", area: "회의록" },
   { key: "daily_briefing", label: "일일 브리핑", area: "운영실" },
   { key: "attendance_recap", label: "출결 요약", area: "출결" },
@@ -48,4 +49,13 @@ export function isTenantModelFeature(key: unknown): key is string {
 export function modelChoicesFor(key: string) {
   const waits = TENANT_MODEL_FEATURES.find((f) => f.key === key)?.waits === true;
   return AI_MODEL_CHOICES.filter((c) => !(waits && c.slow));
+}
+
+/**
+ * 사람이 화면에서 기다리는 호출인가(멘트 미리보기는 자동작성을 따른다 — `modelFeatureOf`). 응답 길이 상한을 낮게 둔다
+ * (generate.ts `sentMaxTokens` — 응답이 끝없이 이어지는 드문 경우에 몇 분씩 기다리지 않게).
+ */
+export function waitsForAnswer(feature?: string | null): boolean {
+  const key = modelFeatureOf(feature);
+  return TENANT_MODEL_FEATURES.some((f) => f.key === key && f.waits === true);
 }

@@ -42,7 +42,7 @@ const AUDIENCE_LABEL: Record<string, string> = {
 
 /**
  * 전사/메모 텍스트 + 학생 컨텍스트로 7섹션 분석 생성. {report, model} 반환. 호출부가 try/catch.
- * `provider` 기본 = DeepSeek v4-pro(2026-07-16 전사 분석 전환). 키 없으면 무중단 폴백(anthropic/upstage).
+ * `provider` 기본 = DeepSeek v4-pro(2026-07-16 전사 분석 전환). 키 없으면 무중단 폴백(anthropic).
  * 다른 모델로 되돌리려면 호출부에서 provider 오버라이드.
  */
 export async function analyzeStudentConsultation(

@@ -76,7 +76,7 @@ export type MeetingAnalysisContext = {
 
 /**
  * 8섹션 회의록 분석(+화자→역할 추론) 생성. {report, speakerRoles, model} 반환. 호출부가 try/catch.
- * provider 미지정 = 기본(Solar). 녹음·텍스트 재분석 모두 이 함수를 거친다.
+ * provider 미지정 = 기본(AI_PROVIDER — 지금 Claude) · 코드 기본 고정 = DeepSeek V4.1 flash(model-pins.ts). 녹음·텍스트 재분석 모두 이 함수를 거친다.
  *
  * 입력은 **전사 + 메모장 결합** — 셋 중 하나: (전사만) / (메모만) / (둘 다). 둘 다면 전사(발화 그대로)와
  * 메모(작성자가 짚은 핵심)를 종합하고, 상충 시 메모의 의도를 우선하되 필요하면 둘 다 남긴다.

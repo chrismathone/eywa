@@ -22,12 +22,12 @@ export const FEATURE_MODELS: Readonly<Record<string, ModelPin>> = {
 
 /**
  * 운영 콘솔에서 지점·기능별로 **고를 수 있는 모델**(원장 2026-10-19 *"지점별로 ai모델 바꿀 수 있게"*). 이 목록 밖의 값은
- * 저장도 적용도 하지 않는다(DB에 이상한 값이 들어가도 무시 = 코드 기본). Solar는 품질 시험 탈락이라 폴백 맨 뒤에만 둔다.
+ * 저장도 적용도 하지 않는다(DB에 이상한 값이 들어가도 무시 = 코드 기본). 회사는 Claude · DeepSeek 둘(Solar는 2026-10-19 뺐다).
  * `slow` = 추론이 길어 사람이 화면에서 기다리는 기능엔 못 고른다(멘트 폴백에 v4-pro를 걸었다가 86초 — 2026-08-28 실측).
  */
 export const AI_MODEL_CHOICES = [
   { model: "claude-haiku-5-5", provider: "anthropic", label: "Claude Haiku 5.5", slow: false },
-  { model: "claude-sonnet-5", provider: "anthropic", label: "Claude Sonnet 5", slow: false },
+  { model: "claude-sonnet-5-5", provider: "anthropic", label: "Claude Sonnet 5.5", slow: false },
   { model: "deepseek-flash", provider: "deepseek", label: "DeepSeek V4.1 flash", slow: false },
   { model: "deepseek-v4-pro", provider: "deepseek", label: "DeepSeek v4-pro", slow: true },
 ] as const satisfies readonly { model: string; provider: AiProvider; label: string; slow: boolean }[];

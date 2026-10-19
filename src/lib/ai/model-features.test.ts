@@ -47,7 +47,9 @@ describe("featurePin — 지점 선택 > 코드 기본 > 없음", () => {
     expect(featurePin("meeting_analysis")).toEqual({ provider: "deepseek", model: "deepseek-flash" });
   });
   it("지점이 고르면 그게 먼저 · 이상한 값은 무시하고 코드 기본", () => {
-    expect(featurePin("meeting_analysis", "claude-sonnet-5")).toEqual({ provider: "anthropic", model: "claude-sonnet-5" });
+    expect(featurePin("meeting_analysis", "claude-sonnet-5-5")).toEqual({ provider: "anthropic", model: "claude-sonnet-5-5" });
+    // 5.5로 올리기 전 이름이 남아 있어도 목록 밖 = 코드 기본(2026-10-19)
+    expect(featurePin("meeting_analysis", "claude-sonnet-5")).toEqual({ provider: "deepseek", model: "deepseek-flash" });
     expect(featurePin("meeting_analysis", "없는모델")).toEqual({ provider: "deepseek", model: "deepseek-flash" });
     expect(featurePin("classnote_ment")).toBeNull();
     expect(featurePin("constructor")).toBeNull();
@@ -60,19 +62,19 @@ describe("featurePin — 지점 선택 > 코드 기본 > 없음", () => {
 describe("resolveModelChain — 고정 모델", () => {
   const envBackup = { ...process.env };
   const setKeys = (keys: Record<string, string | undefined>) => {
-    for (const k of ["ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY", "UPSTAGE_API_KEY", "AI_PROVIDER"]) delete process.env[k];
+    for (const k of ["ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY", "AI_PROVIDER"]) delete process.env[k];
     Object.assign(process.env, keys);
   };
   it("고정한 회사가 맨 앞에 그 모델로, 나머지는 평소 사다리", () => {
-    setKeys({ ANTHROPIC_API_KEY: "a", DEEPSEEK_API_KEY: "d", UPSTAGE_API_KEY: "u", AI_PROVIDER: "anthropic" });
+    setKeys({ ANTHROPIC_API_KEY: "a", DEEPSEEK_API_KEY: "d", AI_PROVIDER: "anthropic" });
     const chain = resolveModelChain("balanced", "default", undefined, null, { provider: "deepseek", model: "deepseek-flash" });
-    expect(chain.map((c) => `${c.provider}:${c.model}`)).toEqual(["deepseek:deepseek-flash", "anthropic:claude-sonnet-5", "upstage:solar-pro3"]);
+    expect(chain.map((c) => `${c.provider}:${c.model}`)).toEqual(["deepseek:deepseek-flash", "anthropic:claude-sonnet-5-5"]);
     process.env = { ...envBackup };
   });
   it("고정한 회사 키가 없으면 평소 사다리 그대로(기능이 멈추지 않는다)", () => {
     setKeys({ ANTHROPIC_API_KEY: "a", AI_PROVIDER: "anthropic" });
     const chain = resolveModelChain("balanced", "default", "deepseek", null, { provider: "deepseek", model: "deepseek-flash" });
-    expect(chain.map((c) => c.model)).toEqual(["claude-sonnet-5"]);
+    expect(chain.map((c) => c.model)).toEqual(["claude-sonnet-5-5"]);
     process.env = { ...envBackup };
   });
   it("reasoning 티어엔 고정을 걸지 않는다", () => {
@@ -104,6 +106,8 @@ describe("모델 라벨", () => {
     expect(modelDisplayLabel("deepseek-flash-2026-10-19")).toBe("DeepSeek V4.1 flash");
     expect(modelDisplayLabel("deepseek-v4-flash")).toBe("DeepSeek v4-flash");
     expect(modelDisplayLabel("deepseek-v4-pro-2026-07-16")).toBe("DeepSeek v4-pro");
+    expect(modelDisplayLabel("claude-sonnet-5-5-2026-10-19")).toBe("Claude Sonnet 5.5");
+    expect(modelDisplayLabel("claude-sonnet-5-2026-07-16")).toBe("Claude Sonnet 5");
   });
 });
 
