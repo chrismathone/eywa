@@ -18,6 +18,7 @@ import { SHEET_BOX_FRAME } from "../ui-box";
 import type { ClassSheetMonthData } from "../server/month-queries";
 import { compareCell } from "@/features/textbooks/plan-compare";
 import { getSlotPlanCompare } from "@/features/textbooks/server/compare-actions";
+import { canShiftCell } from "../lib/shift-visible";
 import { PlanCompareButton } from "./plan-compare-dialog";
 
 
@@ -59,7 +60,7 @@ export function MonthCalendar({
   /**
    * 회차 미루기·당기기(0282a). **없으면 버튼이 안 뜬다** — 누를 수 없는 버튼을 세우지 않는다.
    */
-  onShift?: (date: string, slotStart: string, kind: "skip" | "advance" | null) => void;
+  onShift?: (date: string, slotStart: string, kind: "skip" | "advance") => void;
 }) {
   const t = useSheetT();
   const tf = useSheetTf();
@@ -143,7 +144,7 @@ function DayCell({
   skillAreas: SkillAreaSetting[];
   onOpenDay: (date: string) => void;
   /** 회차 미루기·당기기(0282a) — 없으면 버튼이 안 뜬다. */
-  onShift?: (date: string, slotStart: string, kind: "skip" | "advance" | null) => void;
+  onShift?: (date: string, slotStart: string, kind: "skip" | "advance") => void;
 }) {
   const t = useSheetT();
   const tf = useSheetTf();
@@ -284,49 +285,6 @@ function DayCell({
                   {/* 🔴 **월간계획은 실제가 아니다**(원장 2026-09-22) — 아직 안 쓴 칸에만, 무채색으로,
                       `계획` 표식을 달아 보여 준다. 실제가 한 줄이라도 있으면 안 그린다(이미 한 수업이다).
                       강사는 월간 화면의 [월간계획 전체 가져오기]로 이걸(일정) 옮긴 뒤 고쳐 쓴다. */}
-                  {/* 🔴 **회차 미루기·당기기**(원장 2026-09-22 *"수업 회차를 한주 미루거나 당기거나 …
-                      미루면 차수 무시하고 수업내용 기입해서"*) → 2026-10-15 *"미루는 거기 복사하고 한주씩 쭉
-                      밀기"*: **실제 진도**가 한 칸씩 밀리거나 당겨진다(`setLessonShift`). 배정 교재는 배정한 요일
-                      순서대로(2026-10-16 — 화·금 교재가 꼬이던 문제), 그 밖의 줄은 같은 요일·교시끼리.
-                      🔴 **토글이 아니다** — 두 번 누르면 두 칸 밀린다. 되돌리기는 반대 버튼이다.
-                      ⚠️ **지난 날짜에도 세운다** — "지난주에 못 나갔다"를 뒤늦게 미루는 게 정상 흐름이다
-                         (원장 제보 2026-09-22에서 9/4 칸을 보고 계셨다). 바뀌는 건 앞으로의 차수 배치뿐이다. */}
-                  {onShift && data.canEdit ? (
-                    <div className="flex flex-wrap gap-1">
-                      {(["skip", "advance"] as const).map((kind) => {
-                        return (
-                          <span
-                            key={kind}
-                            role="button"
-                            tabIndex={0}
-                            title={t(kind === "skip" ? "month.shift.skip.title" : "month.shift.advance.title")}
-                            // 날짜 칸은 이미 native button이다. 중첩 button은 SSR 파서를 깨뜨려
-                            // 달력 조각이 셸 밖에 남으므로 내부 조작은 PlanCompareButton과 같은 형태로 둔다.
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onShift(date, slot.slotStart, kind);
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" || e.key === " ") {
-                                e.stopPropagation();
-                                e.preventDefault();
-                                if (!e.repeat) onShift(date, slot.slotStart, kind);
-                              }
-                            }}
-                            onKeyUp={(e) => {
-                              if (e.key === "Enter" || e.key === " ") {
-                                e.stopPropagation();
-                                e.preventDefault();
-                              }
-                            }}
-                            className="border-line text-text-faint hover:border-primary hover:text-foreground focus-visible:outline-primary cursor-pointer rounded-full border px-1.5 text-xs font-bold focus-visible:outline-2 focus-visible:outline-offset-2"
-                          >
-                            {t(kind === "skip" ? "month.shift.skip" : "month.shift.advance")}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  ) : null}
                   {planned.map((p, i) => (
                     <div key={`${p.skillArea}|${p.lessonNo}|${i}`} className="text-text-faint flex min-w-0 gap-1 text-xs">
                       <span className="border-line-strong shrink-0 rounded border border-dashed px-1 font-bold">
@@ -376,6 +334,50 @@ function DayCell({
                   );
                 })
               )}
+              {/* 🔴 **회차 미루기·당기기**(원장 2026-09-22 → 2026-10-15 *"미루는 거기 복사하고 한주씩 쭉 밀기"*):
+                  **실제 진도**가 한 칸씩 밀리거나 당겨진다(`setLessonShift`). 배정 교재는 배정한 요일 순서대로,
+                  그 밖의 줄은 같은 요일·교시끼리. 🔴 **토글이 아니다** — 두 번 누르면 두 칸 밀린다.
+                  🔴 2026-10-19 원장: *"계획만 있으면 버튼 숨겨"* + *"밀고 당기는 버튼이 밖에 노출되도록"* — 예전엔
+                     **실제가 빈 칸**(회색 `계획`만)에만 세워서, 정작 진도가 적힌 칸은 날짜 창을 열어야 버튼이 보였다.
+                     이제 **실제 줄이 있는 칸에만, 달력 칸 위에 바로**(`canShiftCell` — 주간 표와 같은 판정).
+                     누르면 확인 창 → 실행 → 토스트 [되돌리기](`month-client`).
+                  ⚠️ **지난 날짜에도 세운다** — "지난주에 못 나갔다"를 뒤늦게 미루는 게 정상 흐름이다. */}
+              {onShift && data.canEdit && canShiftCell(lines) ? (
+                <div className="flex flex-wrap gap-1">
+                  {(["skip", "advance"] as const).map((kind) => {
+                    return (
+                      <span
+                        key={kind}
+                        role="button"
+                        tabIndex={0}
+                        title={t(kind === "skip" ? "month.shift.skip.title" : "month.shift.advance.title")}
+                        // 날짜 칸은 이미 native button이다. 중첩 button은 SSR 파서를 깨뜨려
+                        // 달력 조각이 셸 밖에 남으므로 내부 조작은 PlanCompareButton과 같은 형태로 둔다.
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onShift(date, slot.slotStart, kind);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            if (!e.repeat) onShift(date, slot.slotStart, kind);
+                          }
+                        }}
+                        onKeyUp={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.stopPropagation();
+                            e.preventDefault();
+                          }
+                        }}
+                        className="border-line text-text-faint hover:border-primary hover:text-foreground focus-visible:outline-primary cursor-pointer rounded-full border px-1.5 text-xs font-bold focus-visible:outline-2 focus-visible:outline-offset-2"
+                      >
+                        {t(kind === "skip" ? "month.shift.skip" : "month.shift.advance")}
+                      </span>
+                    );
+                  })}
+                </div>
+              ) : null}
               {lines.length > 0 && !lines.some((l) => l.progress) ? (
                 <span className="border-line-strong text-text-faint self-start rounded border border-dashed px-1.5 text-xs leading-4 font-bold">
                   {t("month.bookOnly")}

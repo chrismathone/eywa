@@ -8,8 +8,8 @@
  * 🔑 **줄(chain) = 같은 반 · 같은 요일 · 같은 교시**. 그 요일 그 교시가 다음에 돌아오는 날이 "한 주 뒤"다
  *    (휴일·시간표가 없는 주는 건너뛴다 — 계획 가져오기가 휴일에 차수를 안 넣은 것과 같은 규칙).
  *    요일이 다르면 같은 시각이어도 다른 수업이다(`slotPickKey`가 요일을 붙이는 이유와 같다).
- * · **미룸**: 누른 칸은 내용을 **그대로 두고**(복사), 그 칸부터 뒤의 칸 내용이 전부 한 칸씩 뒤로 간다.
- *   → 누른 칸에서 실제로 한 수업을 고쳐 적으면 된다.
+ * · **미룸**: 누른 칸부터 뒤의 칸 내용이 전부 한 칸씩 뒤로 가고 **누른 칸은 비는다**(원장 2026-10-19
+ *   *"미루면 해당영역 날리고"* — 2026-10-15의 "누른 칸은 복사해 두기"를 뒤집었다). 실수로 눌렀으면 되돌리기.
  * · **당김**: 누른 칸 내용을 지우고, 뒤의 칸 내용이 전부 한 칸씩 앞으로 온다(미룸의 반대).
  * ⚠️ 빈 칸도 "내용"이다 — 사이에 빈 칸이 있으면 그 빈 칸도 함께 한 칸 움직인다(줄 전체가 평행 이동).
  */
@@ -17,8 +17,6 @@
 export type ShiftOp =
   /** `from` 칸의 줄을 `to`(비어 있는 칸)로 옮긴다. */
   | { op: "move"; from: string; to: string }
-  /** `from` 칸의 줄을 `to`(비어 있는 칸)로 복제한다 — 미룸의 누른 칸. */
-  | { op: "copy"; from: string; to: string }
   /** 그 칸의 줄을 지운다 — 당김의 누른 칸. */
   | { op: "clear"; at: string };
 
@@ -57,10 +55,9 @@ export function planLessonShift(input: {
     // 마지막 내용이 갈 다음 수업일이 있어야 한다 — 없으면 밀다가 내용 하나가 사라진다.
     if (last + 1 >= chain.length) return { ok: false, reason: "no-next-day" };
     // 🔑 뒤에서부터 옮긴다 — 그래야 옮겨 갈 칸이 언제나 비어 있다(위치 유니크와 안 부딪친다).
-    for (let i = last; i >= 1; i -= 1) {
+    for (let i = last; i >= 0; i -= 1) {
       if (filled.has(chain[i]!)) ops.push({ op: "move", from: chain[i]!, to: chain[i + 1]! });
     }
-    if (filled.has(chain[0]!)) ops.push({ op: "copy", from: chain[0]!, to: chain[1]! });
     return { ok: true, ops, chain: chain.slice(0, last + 2) };
   }
 
