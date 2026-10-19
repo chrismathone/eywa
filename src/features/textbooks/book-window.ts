@@ -103,10 +103,11 @@ export function bookWindow(args: {
   const dates = classDates(startDate, endDate);
   let planned: number;
   if (referenceDate < startDate) planned = 0;
-  else if (dates.length > 0) planned = Math.floor((total * dates.filter((d) => d <= referenceDate).length) / dates.length);
+  // 반올림 — 내림이면 초반 몇 주가 늘 '계획 0'이라 빠름으로만 읽힌다(실화면 2026-10-19: 8차시 · 수업 4번 지남 → 0.8 → 0).
+  else if (dates.length > 0) planned = Math.round((total * dates.filter((d) => d <= referenceDate).length) / dates.length);
   else {
     const span = daysBetween(startDate, endDate) + 1;
-    planned = Math.min(total, Math.floor((total * (daysBetween(startDate, referenceDate) + 1)) / span));
+    planned = Math.min(total, Math.round((total * (daysBetween(startDate, referenceDate) + 1)) / span));
   }
 
   // 실제 — 같은 학기 묶음 전체에서 진도가 걸린 **가장 최근** 기록(같은 날이면 뒤 권). 창 앞 권에 있으면 0.

@@ -40,7 +40,8 @@ export function BookWindowBar({ studentId, embedded = false }: { studentId: stri
   const ended = w.referenceDate > w.endDate;
   const planned = notStarted ? 0 : w.planned;
   const state = notStarted
-    ? { text: `${short(w.startDate)} 시작`, tone: undefined }
+    // 창이 열리기 전인데 이미 그 권을 나가고 있으면(책이 일찍 왔다) 그 사실을 같이 말한다 — '시작'만 적으면 5/8과 모순으로 읽힌다.
+    ? { text: done > 0 ? `${short(w.startDate)} 시작 전 · 먼저 진행 중` : `${short(w.startDate)} 시작`, tone: undefined }
     : w.done === null
       ? { text: "진도 확인 필요", tone: undefined }
       : ended
