@@ -34,6 +34,11 @@ const ALLOWED: { file: string; line: RegExp; reason: string }[] = [
     reason: "시간표 요일 그룹 사이의 경계선 — 칸과 칸 사이를 가르는 구조선",
   },
   {
+    file: "features/timetable-memo/ui/split-panes.tsx",
+    line: /className="border-line-strong min-h-0 border-l-2 pl-3"/,
+    reason: "영어 시간표 판과 오른쪽 메모 시트 판 사이의 경계선 — 두 판을 가르는 구조선(원장 2026-10-19 '구분해서 침범하지 않게')",
+  },
+  {
     file: "features/timetable-lab/editor/timetable-views.css",
     line: /\.week-teacher-heading \{.*border-left-width: 2px/,
     reason: "시간표 편집기 강사 열 머리의 경계선 — 운영 시간표와 같은, 강사와 강사 사이를 가르는 구조선",

@@ -8,6 +8,11 @@ import { Toolbar, ToolbarRow } from "@/components/toolbar";
 import { PageHeader } from "@/components/page-header";
 import { PageMaximizeToolbar } from "@/components/page-maximize/page-maximize-toolbar";
 import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF, TOOLBAR_CHIP_ON } from "@/components/toolbar-controls";
+import { Suspense } from "react";
+import { isMemoSheetSubject } from "@/features/timetable-memo/doc";
+import { memoSheetAccess } from "@/features/timetable-memo/server/access";
+import { MemoSheetPane, MemoSheetSkeleton } from "@/features/timetable-memo/ui/memo-sheet-pane";
+import { MemoSheetJumpButton, TimetableSplitPanes } from "@/features/timetable-memo/ui/split-panes";
 import { cookies } from "next/headers";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
@@ -614,10 +619,14 @@ export default async function TimetablePage({
   //    없는 날은 원반 담임 열에 세울 '보강' 박스(`strays`). 둘 다 기본뷰 격자 한 곳으로만 간다.
   // 🔑 '나눔'(수업 나누기 0351a)도 같은 자리로만 간다 — 보강 예약과 서로 독립이라 함께 읽는다(B4). 칸 순서는 둘 다 보존한다.
   const basicOnly = !makeupTab && effView === "basic";
-  const [basicReserved, basicSplit, canSplit] = await Promise.all([
+  // 메모 시트(영어 통합뷰 오른쪽 엑셀 판, 원장 2026-10-19) — 판이 설 수 있는 화면일 때만 문을 본다(보기·편집 한 번에).
+  // 강사 화면엔 없다(memoSheetAccess 주석). 시트 내용은 오른쪽 판의 Suspense 안에서 읽는다(첫 그림을 막지 않게, B7).
+  const memoSlot = isIntegrated && !groupEditing && !makeupTab && slots.length > 0 && isMemoSheetSubject(subject);
+  const [basicReserved, basicSplit, canSplit, memo] = await Promise.all([
     basicOnly ? attachReservedLines(slots, referenceDate) : null,
     basicOnly ? attachSplitLines(slots, referenceDate) : null,
     basicOnly && canEdit ? canSplitClassNow() : false,
+    memoSlot ? memoSheetAccess(user) : { canView: false, canEdit: false },
   ]);
   const reservedSlots = basicReserved?.slots ?? slots;
   const basicSlots = basicSplit
@@ -717,6 +726,23 @@ export default async function TimetablePage({
     subjectMaps.labelOf(subject),
     kind === "special" ? "특강" : null,
   ]);
+  // 통합뷰 격자 — 메모 시트가 서면 두 칸 배치의 왼쪽 판, 아니면 그대로(아래 render 분기).
+  const integratedGrid = isIntegrated ? (
+    <TimetableZoomArea scale={editorView?.scale}>
+      <RichGridView
+        slots={slots}
+        subjectMaps={subjectMaps}
+        config={periodsConfig}
+        teacherColors={teacherColors}
+        teacherNicknames={teacherNicknames}
+        compactSections={compactSections}
+        customGroups={customGroups}
+        hideStudents={hideStudents}
+        hidePeriods={editorView?.hidePeriods}
+        virtualLabs={virtualLabs}
+      />
+    </TimetableZoomArea>
+  ) : null;
 
   return (
     <TimetableEditProvider effectiveDate={effectiveDate} today={today} canEdit={canEdit} canSplit={canSplit} weekMonday={week}>
@@ -1103,6 +1129,9 @@ export default async function TimetablePage({
         {/* 시간표 편집기(연습본) — 오른쪽 도구 묶음. 교실 지도에서는 감춘다(수업 배치를 보는 화면이 아니다). */}
         {showEditorShortcut && !isRooms ? <EditorShortcut /> : null}
 
+        {/* 메모 시트로 넘어가기 — 가로 스크롤과 같은 자리(오른쪽 판). 판이 선 화면에서만. */}
+        {memo.canView ? <MemoSheetJumpButton className={`${TOOLBAR_CHIP} ${TOOLBAR_CHIP_OFF}`} /> : null}
+
         {/* 편집 컨트롤 — 기본뷰·**통합뷰** + 이번/미래 주(강사뷰=읽기전용, 과거=조회 전용).
             🔴 2026-09-09: 통합뷰에도 학생 반 이동이 생겨(원장 *"통합뷰에서도 학생 드래그 기능 추가시켜"*)
                이 줄이 함께 서야 한다 — 안 그러면 끌어다 놓아도 **'저장' 버튼이 화면에 없어** 큐에만 쌓이고
@@ -1195,22 +1224,21 @@ export default async function TimetablePage({
       ) : isIntegrated ? (
         // 통합뷰 명단 이동(대기/퇴원 드롭) — 🔴 zoom 래퍼 **바깥**에 DndContext를 둔다([[#98]]: 안쪽이면
         // fixed인 DragOverlay가 zoom 좌표계로 들어가 고스트가 커서와 어긋난다. 기본뷰와 같은 배치).
-        <RosterMoveArea canEdit={canEditRoster} today={today}>
-        <TimetableZoomArea scale={editorView?.scale}>
-          <RichGridView
-            slots={slots}
-            subjectMaps={subjectMaps}
-            config={periodsConfig}
-            teacherColors={teacherColors}
-            teacherNicknames={teacherNicknames}
-            compactSections={compactSections}
-            customGroups={customGroups}
-            hideStudents={hideStudents}
-            hidePeriods={editorView?.hidePeriods}
-            virtualLabs={virtualLabs}
+        // 메모 시트가 서는 화면 = 시간표 판 | 엑셀 판 두 칸(오른쪽으로 넘기면 시트 — split-panes.tsx). 그 밖은 종전 그대로.
+        // 🔴 명단 드래그 영역은 **시간표 판만** 감싼다 — 시트까지 감싸면 시트에서 범위를 끈 직후의 클릭·더블클릭을
+        //    '드래그 뒤 클릭'으로 삼킨다(drag-flag.ts). 시트는 그 영역 밖의 자기 판이다(침범하지 않게).
+        memo.canView ? (
+          <TimetableSplitPanes
+            left={<RosterMoveArea canEdit={canEditRoster} today={today}>{integratedGrid}</RosterMoveArea>}
+            right={
+              <Suspense fallback={<MemoSheetSkeleton />}>
+                <MemoSheetPane tenantId={user.tenantId} subject={subject} canEdit={memo.canEdit} />
+              </Suspense>
+            }
           />
-        </TimetableZoomArea>
-        </RosterMoveArea>
+        ) : (
+          <RosterMoveArea canEdit={canEditRoster} today={today}>{integratedGrid}</RosterMoveArea>
+        )
       ) : effView === "teacher" ? (
         // 강사뷰 — 시트 "강사별영어시간표" 그대로(강사=세로 블록, 그 안 월~토, 셀=반명+방). 읽기전용, 반 클릭=학생 명단.
         // 가로줄·격자 단위는 과목 설정(teacherViewLines/Step, 학원설정 과목 운영)에서.
