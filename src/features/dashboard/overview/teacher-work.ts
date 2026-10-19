@@ -7,6 +7,8 @@ export type TeacherWorkRow = {
   teacherId: string | null; teacherName: string; subject: string; classIds: string[];
   reports: number; reportTarget: number; sent: number; pending: number; failed: number; videoMissing: number;
   videoAssigned: number; videoSubmitted: number; reportSource: "lesson" | "classnote" | "none";
+  /** 영상 숙제 출제율(원장 2026-10-19) — '보고서 작성' 줄이 센 쓴 보고서(분자 = `reports`와 같은 수) 중 영상 과제가 나간 것. */
+  reportsWritten: number; videoIssuedReports: number;
   /** 오늘 작성할 보고서 중 아직 안 쓴 것(보고서 작성 행의 보조 표기 — 오늘 미작성 판정 `judgeTodayLessonReports`와 같은 의무 목록). */
   todayUnwritten: number;
   /** 보냈다가 회수한 보고서 — '안 나간 것'이 아니라 일부러 거둔 것이라 발송 확인에서 뺀다. */
@@ -39,7 +41,7 @@ export function teacherWork(classes: readonly WorkClass[], reports: readonly Wor
     let row = rows.get(key);
     if (!row) {
       row = { teacherId: cls.teacherId, teacherName: cls.teacherName, subject: cls.subject, classIds: [], reports: 0, reportTarget: 0, sent: 0, pending: 0, failed: 0,
-        videoMissing: 0, videoAssigned: 0, videoSubmitted: 0, reportSource: cls.reportSource ?? "lesson",
+        videoMissing: 0, videoAssigned: 0, videoSubmitted: 0, reportSource: cls.reportSource ?? "lesson", reportsWritten: 0, videoIssuedReports: 0,
         todayUnwritten: 0, recalled: 0, unreadJudged: 0, unread: 0, attendanceDays: 0, attendanceUnrecorded: 0, counselRate: null };
       rows.set(key, row);
     }
@@ -59,6 +61,8 @@ export function teacherWork(classes: readonly WorkClass[], reports: readonly Wor
     if (obligations) continue;
     if (rep.date < range.reportFrom) continue;
     row.reports++;
+    row.reportsWritten++;
+    if (rep.videoHomework) row.videoIssuedReports++;
     row.reportTarget++;
     if (rep.status === "success") row.sent++;
     else if (["failed", "too_old", "name_conflict", "blocked_shared", "recall_failed"].includes(rep.status ?? "")) row.failed++;
@@ -76,7 +80,8 @@ export function teacherWork(classes: readonly WorkClass[], reports: readonly Wor
     const row = byClass.get(obligation.classId);
     if (!row || obligation.date < range.reportFrom || obligation.date > range.to) continue;
     row.reportTarget++;
-    if (obligation.written) row.reports++;
+    // 출제율의 분모 = '보고서 작성' 줄의 분자(쓴 보고서)와 같은 목록 — 두 줄 숫자가 서로 맞는다.
+    if (obligation.written) { row.reports++; row.reportsWritten++; if (obligation.videoHomework) row.videoIssuedReports++; }
     else if (obligation.date === range.to) row.todayUnwritten++;
     if (obligation.status === "success") row.sent++;
     else if (["failed", "too_old", "name_conflict", "blocked_shared", "recall_failed"].includes(obligation.status ?? "")) row.failed++;

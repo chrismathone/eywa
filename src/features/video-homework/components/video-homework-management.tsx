@@ -1,9 +1,8 @@
 "use client";
 
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
-import { EyIcon } from "@/components/icons/aywa-icons";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { DEFAULT_LEDGER_FILTERS, filterLedgerRows, groupLedgerRows, keepLedgerRounds, ledgerCsv, ledgerPairKey, ledgerSummary, teacherLedgerKeep, type LedgerFilters } from "../ledger";
+import { DEFAULT_LEDGER_FILTERS, filterLedgerRows, groupLedgerRows, keepLedgerRounds, ledgerCsv, ledgerPairKey, ledgerSummary, splitTeacherQuery, teacherLedgerKeep, type LedgerFilters } from "../ledger";
 import { buildLedgerRounds } from "../rounds";
 import type { BlankFacts } from "../no-homework";
 import type { VideoArrival, VideoHomeworkLedgerRow, VideoHomeworkMark } from "../types";
@@ -61,7 +60,10 @@ export function VideoHomeworkManagement({ rows: serverRows, initialMarks, videos
   // 회차·완료 판정은 한 벌 — 표·요약·필터·CSV가 전부 이 결과를 읽는다(저장 직후에도 같은 규칙으로 다시 센다).
   // 관리자 화면에서 강사를 고르면 그 강사가 낸 칸만 — 강사뷰의 keepRounds와 같은 열쇠라 그 강사의 강사뷰와 같은 칸이 선다.
   // 🔴 선택지에 없는 강사(출제 취소·기록 저장 뒤 새로고침으로 사라짐)는 전체로 본다 — 사용자 id가 드롭다운·주소에 남지 않게.
-  const teacher = teacherOptions?.some((option) => option.value === filters.teacher) ? filters.teacher : "all";
+  // 강사·반·학교는 드롭다운이 아니라 검색창으로(원장 2026-10-19) — 강사 이름 낱말은 강사 필터, 나머지는 글자 검색(splitTeacherQuery).
+  // 옛 주소의 teacher · class · school 값은 읽지 않는다(고칠 드롭다운이 없으니 숨은 조건으로 남지 않게).
+  const parsed = useMemo(() => splitTeacherQuery(query, teacherOptions ?? []), [query, teacherOptions]);
+  const teacher = parsed.teacher;
   const byTeacher = useMemo(() => (keepRounds ? null : teacherLedgerKeep(teacherRounds, teacher)), [keepRounds, teacherRounds, teacher]);
   const keep = useMemo(() => (keepRounds ? new Set(keepRounds) : byTeacher?.keys ?? null), [keepRounds, byTeacher]);
   // 판정은 전체 회차로 먼저 하고, 보일 칸만 거른다(keepLedgerRounds — 거른 뒤 짝을 지으면 관리자 화면과 판정이 갈린다).
@@ -83,15 +85,9 @@ export function VideoHomeworkManagement({ rows: serverRows, initialMarks, videos
   // 표·툴바·주소는 전부 이 값을 읽고, 다음에 필터를 바꿀 때 이 값 위에 쓴다(`update`) — 사라진 강사·반이 상태에 남았다가
   // 나중에 저절로 다시 걸리지 않게.
   const shown = useMemo(() => {
-    const classIds = filters.classIds.filter((id) => groups.some((group) => group.classId === id));
-    return classIds.length === filters.classIds.length && teacher === filters.teacher ? filters : { ...filters, classIds, teacher };
-  }, [filters, groups, teacher]);
-  const visible = useMemo(() => filterLedgerRows(shownRows, rounds, { ...shown, query }), [shownRows, rounds, shown, query]);
-  const classCounts = useMemo(() => {
-    const byClass = new Map<string, number>();
-    for (const row of filterLedgerRows(shownRows, rounds, { ...shown, query, classIds: [] })) byClass.set(row.classId, (byClass.get(row.classId) ?? 0) + 1);
-    return byClass;
-  }, [shownRows, rounds, shown, query]);
+    return filters.classIds.length || filters.school !== "all" || filters.teacher !== "all" ? { ...filters, classIds: [], school: "all", teacher: "all" } : filters;
+  }, [filters]);
+  const visible = useMemo(() => filterLedgerRows(shownRows, rounds, { ...shown, query: parsed.text }), [shownRows, rounds, shown, parsed.text]);
   const visibleGroups = useMemo(() => {
     const byClass = new Map<string, VideoHomeworkLedgerRow[]>();
     for (const row of visible) byClass.set(row.classId, [...(byClass.get(row.classId) ?? []), row]);
@@ -99,17 +95,17 @@ export function VideoHomeworkManagement({ rows: serverRows, initialMarks, videos
   }, [groups, visible]);
   // 과목·학교·학년 선택지도 거른 줄에서 — 강사를 고르면 그 강사가 다루지 않는 과목은 안 선다.
   const options = useMemo(() => ({ subjects: unique(shownRows.map((row) => row.subject)),
-    schools: unique(shownRows.map((row) => row.school || "미등록")), grades: unique(shownRows.map((row) => row.grade || "미등록")), teachers: teacherOptions ?? [] }), [shownRows, teacherOptions]);
+    grades: unique(shownRows.map((row) => row.grade || "미등록")) }), [shownRows]);
   const summary = ledgerSummary(visible, rounds);
   const filterKey = JSON.stringify(shown);
   function update<K extends keyof LedgerFilters>(key: K, value: LedgerFilters[K]) {
-    setFilters((current) => ({ ...current, classIds: shown.classIds, teacher: shown.teacher, [key]: value }));
+    setFilters((current) => ({ ...current, classIds: [], school: "all", teacher: "all", [key]: value }));
   }
   useEffect(() => {
     // 이 화면의 필터는 계정에 저장하지 않는다 — 주소에만 남긴다(새로고침·링크 공유용).
     const timer = setTimeout(() => {
       const url = new URL(window.location.href);
-      const values = { class: shown.classIds.join(","), subject: shown.subject, school: shown.school, grade: shown.grade, q: shown.query.trim(), status: shown.status, sort: shown.sort, teacher: shown.teacher };
+      const values = { class: "", subject: shown.subject, school: "", grade: shown.grade, q: shown.query.trim(), status: shown.status, sort: shown.sort, teacher: "" };
       for (const [key, value] of Object.entries(values)) {
         if (!value || value === "all" || key === "sort" && value === "name") url.searchParams.delete(key);
         else url.searchParams.set(key, value);
@@ -126,15 +122,14 @@ export function VideoHomeworkManagement({ rows: serverRows, initialMarks, videos
   }
   return <div className={styles.ledger} aria-busy={busy}>
     <LedgerToolbar filters={shown} update={update} reset={() => setFilters({ ...DEFAULT_LEDGER_FILTERS })}
-      classes={groups.map((group) => ({ value: group.classId, label: group.className, count: classCounts.get(group.classId) ?? 0 }))}
-      options={options} fromDate={fromDate} toDate={toDate} today={today} busy={busy} onDownload={visible.length ? download : null} />
+      searchTeachers={!!teacherOptions?.length} options={options} fromDate={fromDate} toDate={toDate} today={today} busy={busy} onDownload={visible.length ? download : null} />
     <div className={styles.summary} aria-live="polite"><span>검색 결과 <strong>{visible.length}</strong>명·반 <span className={styles.dim}>/ {shownRows.length}</span></span>
       <span className={styles.green}>완료 <strong>{summary.submitted}</strong>회</span><span className={styles.red}>미수행 <strong>{summary.missing}</strong>회</span><span className={styles.amber}>미확인 <strong>{summary.unchecked}</strong>회</span>
       <div className={styles.expandActions}><button type="button" onClick={() => setCollapsed(new Set())}>모두 펼치기</button><button type="button" onClick={() => setCollapsed(new Set(visibleGroups.map((group) => group.classId)))}>모두 접기</button></div>
     </div>
-    <p className={styles.hint}>수업보고서에 영상 과제가 나간 수업과 따로 낸 숙제만 회차로 셉니다 — 1회·2회는 학생마다의 순서라 같은 회차도 날짜가 다를 수 있습니다.
-      칸 위 날짜 = 숙제가 나간 날 · <EyIcon name="check" size={12} className="inline-block align-middle" /> 뒤 날짜 = 제출일 · 날짜 없이 완료 = 제출일 미기록 · ▶ = 영상 재생 · 초록 테두리 = 영상으로 자동 완료(반이 확인된 영상만 자동으로 셉니다) · × 미수행 · 미확인 = 숙제가 나갔는데 아직 확인 전. 미확인 칸을 누르면 오늘 날짜로 완료됩니다. 칸이나 ▶를 우클릭하면 저장하지 않고 편집 창(영상 배정 변경 · 미확인 등)이 열립니다(영상 없는 따로 낸 숙제 칸은 출제 취소 메뉴).</p>
-    {byTeacher ? <p className={styles.hint}>강사를 고르면 그 강사가 낸 숙제 칸만 셉니다(그 강사의 강사뷰와 같은 칸) — 숙제를 낸 사람을 모르는 옛 기록은 &lsquo;전체 강사&rsquo;에서만 보입니다.</p> : null}
+    {/* 안내는 이 한 줄(원장 2026-10-19 *"멘트 간단히"* · 반 아래 범례 줄을 여기로 합쳤다). */}
+    <p className={styles.hint}>회차 = 영상 과제가 나간 수업·따로 낸 숙제(학생마다 순서) · 칸 위 숙제 날·아래 제출일 · ▶ 영상 · 초록 테두리 = 영상 자동 완료 · 수동 = 영상 없이 완료 · × 미수행 · 점선 = 따로 낸 숙제 · — 회차 없음 · 미확인 칸 클릭 = 오늘 완료 · 우클릭 = 편집(숙제없음 칸은 숙제 출제)</p>
+    {byTeacher ? <p className={styles.hint}>검색한 강사({teacherOptions?.find((option) => option.value === teacher)?.label})가 낸 숙제 칸만 셉니다(그 강사의 강사뷰와 같은 칸) — 숙제를 낸 사람을 모르는 옛 기록은 강사 이름 없이 검색할 때만 보입니다.</p> : null}
     {progress ? <p className={styles.saving} role="status">기록 저장 중 {progress.done} / {progress.total}건</p> : null}
     {visibleGroups.length ? visibleGroups.map((group) => <ClassLedger key={`${group.classId}:${filterKey}`} group={group} rounds={rounds} blankFacts={blankFacts} videosKnown={videosKnown} showTeacher={showTeacher} today={today} busy={busy} save={save} onEdit={setActive} onPlay={setPlaying} onAssign={(row) => setAssigning({ row })} onIssueMenu={setMenu}
       collapsed={collapsed.has(group.classId)} onToggle={() => setCollapsed((current) => { const next = new Set(current); if (next.has(group.classId)) next.delete(group.classId); else next.add(group.classId); return next; })} />)

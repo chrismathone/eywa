@@ -143,8 +143,8 @@ describe("영상 제출 현황 — 결석은 —, 숙제없음은 사유 표시(
     const cells = within(screen.getByRole("row", { name: /이서연/ })).getAllByRole("cell").slice(-3);
     expect(cells.map((td) => td.textContent)).toEqual(["—", expect.stringContaining("10.13"), "10.20숙제없음"]);
   });
-  it("안내 줄에 표시 뜻이 한 줄 들어간다", () => {
+  it("표시 뜻은 위쪽 안내 한 줄에 들어간다", () => {
     show();
-    expect(screen.getByText("▶ 영상 · 수동 · 숙제없음 · — 회차 없음", { exact: false })).toBeInTheDocument();
+    expect(screen.getByText("수동 = 영상 없이 완료", { exact: false })).toBeInTheDocument();
   });
 });

@@ -4,7 +4,6 @@
 .filters{min-width:0}
 /* 줄이 넘치면 감긴다 — 가로 스크롤 상자에 두면 반 선택 목록(떠 있는 팝업)이 상자 안에서 잘린다([[#128]]). */
 .filters .filterRow{position:relative;align-items:center;max-width:100%}
-.classPicker{flex:none;min-width:150px;max-width:240px}
 .filter,.dateFilter{display:flex;flex:none;align-items:center}
 .filter select{max-width:220px;cursor:pointer}
 .dateFilter input{width:164px;line-height:normal}

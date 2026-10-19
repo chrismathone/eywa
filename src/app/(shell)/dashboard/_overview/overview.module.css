@@ -1585,3 +1585,28 @@ a.levelTrack:focus-visible { outline: 2px solid var(--primary); outline-offset: 
   color: var(--foreground);
   white-space: nowrap;
 }
+
+/*
+ * 스크롤바 없이 넘기는 카드(원장 2026-10-19 *"반복결석학생 좌우스크롤 없어도 될 만큼 … 상하스크롤 안보이게. 페이드아웃으로 스크롤이 가능하다는것 알려줄것"*).
+ * - 가로: 이름 줄(hover 면)이 좌우 6px 음수 여백이라 칸 폭을 넘겨 가로 스크롤이 생겼다 → 본문을 그만큼 넓히고 안쪽 여백으로 되돌린다(글자 위치 그대로).
+ * - 세로: 막대는 감추고, 넘칠 때만 위·아래 가장자리를 흐리게(스크롤 위치에 따라 — 맨 위면 아래만, 맨 아래면 위만).
+ *   넘치지 않으면 스크롤 타임라인이 없어 흐림도 없다. 지원 안 하는 브라우저는 흐림 없이 휠 스크롤만.
+ */
+@property --fade-top { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --fade-bottom { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@keyframes edgeFade { from { --fade-top: 0px; --fade-bottom: 28px; } 1% { --fade-top: 20px; --fade-bottom: 28px; } 99% { --fade-top: 20px; --fade-bottom: 28px; } to { --fade-top: 20px; --fade-bottom: 0px; } }
+.panel.fadeScroll [data-overview="panel-body"] {
+  margin-inline: -6px;
+  padding-inline: 6px;
+  overflow-x: hidden;
+  scrollbar-width: none;
+}
+/* 스크롤 타임라인이 없는 브라우저에선 애니메이션이 0초로 끝나 늘 위가 흐려진다 — 지원할 때만 건다. */
+@supports (animation-timeline: scroll()) {
+  .panel.fadeScroll [data-overview="panel-body"] {
+    mask-image: linear-gradient(to bottom, transparent 0, #000 var(--fade-top), #000 calc(100% - var(--fade-bottom)), transparent 100%);
+    animation: edgeFade linear both;
+    animation-timeline: scroll(self block);
+  }
+}
+.panel.fadeScroll [data-overview="panel-body"]::-webkit-scrollbar { display: none; }

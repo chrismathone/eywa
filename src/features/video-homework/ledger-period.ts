@@ -26,7 +26,7 @@ export function ledgerInitialFilters(param: (name: string) => string, activeClas
   return { ...DEFAULT_LEDGER_FILTERS, teacher: teachers?.has(param("teacher")) ? param("teacher") : "all",
     classIds: parseMulti(param("class"), "all").filter((id) => activeClasses.has(id)), subject: param("subject") || "all",
     school: param("school") || "all", grade: param("grade") || "all", query: param("q"),
-    status: ["submitted", "missing", "unchecked"].includes(param("status")) ? param("status") as LedgerFilters["status"] : "all",
+    status: ["submitted", "missing", "unchecked", "assign"].includes(param("status")) ? param("status") as LedgerFilters["status"] : "all",
     sort: ["missing", "completion"].includes(param("sort")) ? param("sort") as LedgerFilters["sort"] : "name",
   };
 }

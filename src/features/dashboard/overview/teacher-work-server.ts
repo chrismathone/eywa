@@ -23,7 +23,8 @@ import { isLaboratoryMenuAvailable } from "@/lib/laboratory/server";
 /** RLS 반 범위에서 현재 담당 반의 업무를 집계한다. 관리자 조회도 테넌트·허용 반으로 제한한다. */
 export async function loadTeacherWork(tenantId: string, today: string, scope: TeacherScope | null, settings: TenantSettings) {
   const db = await createClient();
-  const range = { reportFrom: addDays(today, -6), videoFrom: addDays(today, -29), to: today };
+  // 영상 숙제도 보고서와 같은 최근 7일(원장 2026-10-19 *"최근 7일과 맞도록 하단 표 확인"*) — 종전 30일. 학부모 미확인만 30일(학습·학부모 보고 카드와 같은 판정).
+  const range = { reportFrom: addDays(today, -6), videoFrom: addDays(today, -6), to: today };
   // 출결 미입력 = **어제까지 7일**(오늘 진행 중인 수업은 거짓 경보다 — 운영실 '어제 출결 미입력'과 같은 축). 시간표·수강·출결 조회는 이 창까지 넓힌다.
   const attendanceFrom = addDays(today, -7);
   const attendanceTo = addDays(today, -1);
@@ -48,8 +49,8 @@ export async function loadTeacherWork(tenantId: string, today: string, scope: Te
     attendanceFrom, attendanceTo, unreadFrom, counselAsOf: null, counselMonth: null, deliveryShown, counselShown: await counselShownP });
   const admin = createAdminClient();
   const [teachers, reports, outcomes, schedules, enrollments, attendance, posts, unclassified, extraIssues, counselRows] = await Promise.all([
-    fetchInChunks<{ id: string; display_name: string }>([...new Set(visible.flatMap((c) => c.teacher_id ? [c.teacher_id] : []))], (chunk) =>
-      db.from("users").select("id,display_name").eq("tenant_id", tenantId).in("id", chunk)),
+    fetchInChunks<{ id: string; display_name: string; status: string | null }>([...new Set(visible.flatMap((c) => c.teacher_id ? [c.teacher_id] : []))], (chunk) =>
+      db.from("users").select("id,display_name,status").eq("tenant_id", tenantId).in("id", chunk)),
     fetchAllPagedInChunks<{ id: string; class_id: string; student_id: string; report_date: string; covers_date: string | null; classnote_status: string | null; video_homework: boolean;
       classnote_read_at: string | null; classnote_sent_at: string | null; edutrix_share_token: string | null; source: string | null;
       student: { grade: string | null } | { grade: string | null }[] }>(classIds, (chunk, from, to) =>
@@ -96,7 +97,10 @@ export async function loadTeacherWork(tenantId: string, today: string, scope: Te
   const names = new Map(teachers.map((t) => [t.id, t.display_name]));
   const subjects = new Map(visible.map((c) => [c.id, c.subject]));
   const programs = programSubjectsOf(Object.fromEntries(settings.operations.subjects.map((s) => [s.key, s.label])));
-  const workClasses: WorkClass[] = visible.map((c) => {
+  // 퇴사한 선생님(직원 상태 '퇴사' = inactive)은 열로 세우지 않는다(원장 2026-10-19 *"퇴사한 선생님은 노출되지 않도록"*) —
+  // 반에 담임이 아직 그 사람으로 남아 있어도 그 반은 이 카드에서 빠진다(담임을 바꾸면 새 담임 열로 선다).
+  const retired = new Set(teachers.filter((t) => t.status === "inactive").map((t) => t.id));
+  const workClasses: WorkClass[] = visible.filter((c) => !c.teacher_id || !retired.has(c.teacher_id)).map((c) => {
     const teacherName = c.teacher_id ? names.get(c.teacher_id) ?? "이름 확인 필요" : "담당 미지정";
     const english = subjectGroupOf(c.subject, programs) === "english";
     return { id: c.id, name: c.class_name, teacherId: c.teacher_id, teacherName, subject: c.subject,

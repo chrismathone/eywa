@@ -113,7 +113,7 @@ describe("영상 제출 현황 — 회차는 학생별 '숙제가 나간 날' �
     expect(within(table).getAllByRole("columnheader").map((th) => th.textContent)).toEqual(["", "학생", "학교 · 학년", "완료", "1회", "2회"]);
     expect(cell("김민준 1회 2026-09-01 미수행")).toHaveTextContent("09.01");
     expect(cell("이서연 1회 2026-09-02 미확인")).toHaveTextContent("09.02");
-    expect(screen.getByText("반이 확인된 영상만 자동으로 셉니다", { exact: false })).toBeInTheDocument();
+    expect(screen.getByText("초록 테두리 = 영상 자동 완료", { exact: false })).toBeInTheDocument();
   });
   it("🔴 미확인 칸은 한 번 누르면 오늘 날짜로 완료 — 그 학생의 그 숙제에 저장", async () => {
     show();
@@ -238,25 +238,20 @@ describe("영상 제출 현황 — 회차는 학생별 '숙제가 나간 날' �
   });
 });
 
-describe("반은 드롭다운 하나에서 여러 개를 함께 고른다(반 칩 줄 없음)", () => {
-  it("두 반을 고르면 그 반들만 · 라벨은 '반 2개' · 전체 반으로 되돌린다", () => {
+// 원장 2026-10-19 *"강사, 반, 학교 는 필터가 아닌 검색에서"* — 반·학교 드롭다운을 걷고 검색창으로 찾는다.
+describe("반·학교는 검색창에서 찾는다(드롭다운 없음)", () => {
+  it("반·학교 드롭다운이 없고, 반 이름·학교 낱말로 검색된다", () => {
     show({ rows: [...rows, row({ classId: "c", className: "수학 C", studentId: "four", studentName: "최유나", assignedDates: ["2026-09-05"] })] });
-    expect(screen.queryByLabelText("반 바로 선택")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /^반: 전체 반/ }));
-    // 목록 항목은 눌림 상태(aria-pressed)를 가진다 — 같은 이름의 반 접기 버튼과 가른다. 항목 옆 작은 글자 = 지금 걸리는 학생 수.
-    fireEvent.click(screen.getByRole("button", { name: "수학 A 2명", pressed: false }));
-    fireEvent.click(screen.getByRole("button", { name: "영어 B 1명", pressed: false }));
-    expect(screen.getByRole("button", { name: "반: 수학 A, 영어 B" })).toHaveTextContent("반 2개");
-    expect(screen.getByLabelText("수학 A 장부")).toBeInTheDocument();
-    expect(screen.getByLabelText("영어 B 장부")).toBeInTheDocument();
-    expect(screen.queryByLabelText("수학 C 장부")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "전체 반", pressed: false }));
+    expect(screen.queryByRole("button", { name: /^반:/ })).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "학교" })).toBeNull();
+    fireEvent.change(screen.getByRole("textbox", { name: /통합 검색/ }), { target: { value: "수학 C" } });
     expect(screen.getByLabelText("수학 C 장부")).toBeInTheDocument();
+    expect(screen.queryByLabelText("영어 B 장부")).not.toBeInTheDocument();
   });
   it("다른 필터와 함께 걸리고 초기화·접기·펼치기가 동작한다", () => {
     show();
     fireEvent.change(screen.getByRole("combobox", { name: "과목" }), { target: { value: "수학" } });
-    fireEvent.change(screen.getByRole("combobox", { name: "학교" }), { target: { value: "새봄중" } });
+    fireEvent.change(screen.getByRole("textbox", { name: /통합 검색/ }), { target: { value: "새봄중" } });
     expect(screen.queryByLabelText("영어 B 장부")).not.toBeInTheDocument();
     expect(screen.queryByRole("checkbox", { name: "수학 A 김민준 선택" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "필터 초기화" }));
@@ -277,36 +272,28 @@ describe("반은 드롭다운 하나에서 여러 개를 함께 고른다(반 �
   });
 });
 
-describe("관리자 화면 강사 필터 — 고른 강사가 낸 칸만(원장 2026-10-14)", () => {
+describe("관리자 화면 강사 검색 — 검색한 강사가 낸 칸만(원장 2026-10-14 · 2026-10-19 검색창으로)", () => {
   // 김민준 9/01은 이성우가, 9/03은 유형숙이 냈다. 이서연·영어 B는 유형숙만.
   const teacherRounds = { lee: ["a:one:2026-09-01"], yoo: ["a:one:2026-09-03", "a:two:2026-09-02", "a:two:2026-09-09", "b:one:2026-09-04"] };
   const teacherOptions = [{ value: "lee", label: "이성우" }, { value: "yoo", label: "유형숙" }];
-  it("강사를 고르면 그 강사가 낸 칸과 그 칸이 있는 반 × 학생만 — 회차 번호는 남은 칸끼리", () => {
+  const search = (value: string) => fireEvent.change(screen.getByRole("textbox", { name: /통합 검색/ }), { target: { value } });
+  it("강사 이름을 검색하면 그 강사가 낸 칸과 그 칸이 있는 반 × 학생만 — 회차 번호는 남은 칸끼리 · 다른 낱말과 함께", () => {
     render(<VideoHomeworkManagement rows={rows} initialMarks={[]} fromDate="2026-09-01" toDate={today} today={today}
       teacherRounds={teacherRounds} teacherOptions={teacherOptions} />);
-    fireEvent.change(screen.getByRole("combobox", { name: "강사" }), { target: { value: "lee" } });
+    expect(screen.queryByRole("combobox", { name: "강사" })).toBeNull();
+    search("이성우");
     expect(cell("김민준 1회 2026-09-01 미확인")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /김민준 2회/ })).toBeNull();
     expect(screen.queryByText("이서연")).toBeNull();
     expect(screen.queryByRole("table", { name: /영어 B/ })).toBeNull();
-    fireEvent.change(screen.getByRole("combobox", { name: "강사" }), { target: { value: "yoo" } });
-    expect(cell("김민준 1회 2026-09-03 미확인")).toBeInTheDocument();
+    search("유형숙 영어");
     expect(screen.getByRole("table", { name: /영어 B/ })).toBeInTheDocument();
+    expect(screen.queryByRole("table", { name: /수학 A/ })).toBeNull();
   });
-  it("고른 강사가 새로고침으로 선택지에서 사라지면 전체로 — 사용자 id가 드롭다운에 안 뜬다 · 과목 선택지도 거른 줄에서", () => {
-    const view = render(<VideoHomeworkManagement rows={rows} initialMarks={[]} fromDate="2026-09-01" toDate={today} today={today}
-      teacherRounds={teacherRounds} teacherOptions={teacherOptions} />);
-    fireEvent.change(screen.getByRole("combobox", { name: "강사" }), { target: { value: "lee" } });
-    expect(within(screen.getByRole("combobox", { name: "과목" })).queryByRole("option", { name: "영어" })).toBeNull();
-    view.rerender(<VideoHomeworkManagement rows={rows} initialMarks={[]} fromDate="2026-09-01" toDate={today} today={today}
-      teacherRounds={{ yoo: teacherRounds.yoo }} teacherOptions={[teacherOptions[1]!]} />);
-    expect(screen.getByRole("combobox", { name: "강사" })).toHaveValue("all");
-    expect(screen.queryByText(/조건에 없음/)).toBeNull();
-    expect(screen.getByText("이서연")).toBeInTheDocument();
-  });
-  it("강사뷰(선택지 없음)엔 강사 필터가 없다 — 이미 본인 칸뿐", () => {
+  it("강사 이름이 아닌 낱말은 글자 검색 · 강사뷰(선택지 없음)엔 강사 해석이 없다", () => {
     show();
-    expect(screen.queryByRole("combobox", { name: "강사" })).toBeNull();
+    search("이성우");
+    expect(screen.getByText("조건에 맞는 학생이 없습니다.")).toBeInTheDocument();
   });
 });
 
