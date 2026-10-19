@@ -116,6 +116,8 @@ export type ConsultationListRow = {
   parentPhone: string | null;
   parentRequest: string | null;
   consultantName: string | null;
+  /** 상담자 글(`counselor`) — 상담사 계정이 없을 때 목록·카드가 대신 보인다(`consultantLabel`, 상세와 같은 사실). */
+  counselorText: string | null;
   outcome: string;
   consultedAt: string;
   hasAiAnalysis: boolean;
@@ -162,7 +164,7 @@ export type ConsultationFilter = {
 // consultant_id(스칼라)는 목록뷰 인라인 수정(상담사 선택)의 현재값 — 임베드(display_name)와 별개로 함께 받는다.
 // 0002 마이그레이션부터 있는 컬럼이라 옛/새 스키마 분기(#95)가 필요 없다.
 const LIST_COLS = `id, prospect_name, prospect_grade, prospect_school,
-   parent_phone, parent_request, outcome, consulted_at, subject, consultant_id,
+   parent_phone, parent_request, outcome, consulted_at, subject, consultant_id, counselor,
    processing_status, audio_path, from_public_intake, sync_added_at, student_id,
    consultant:consultant_id ( display_name )`;
 
@@ -317,6 +319,7 @@ export async function getEnrollmentConsultations(
       parentPhone: c.parent_phone,
       parentRequest: c.parent_request,
       consultantName: consultant?.display_name ?? null,
+      counselorText: (c as { counselor?: string | null }).counselor?.trim() || null,
       outcome: c.outcome,
       consultedAt: c.consulted_at,
       hasAiAnalysis: hasAi.has(c.id),
@@ -427,6 +430,7 @@ export async function getEnrollmentConsultationsPage(
         parentPhone: c.parent_phone,
         parentRequest: c.parent_request,
         consultantName: consultant?.display_name ?? null,
+        counselorText: (c as { counselor?: string | null }).counselor?.trim() || null,
         outcome: c.outcome,
         consultedAt: c.consulted_at,
         hasAiAnalysis: hasAi.has(c.id),
@@ -725,6 +729,7 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
     parentRequest: c.parent_request,
     learningHistory: c.learning_history as LearningHistory | null,
     consultantName: consultant?.display_name ?? null,
+    counselorText: (c.counselor as string | null)?.trim() || null,
     outcome: c.outcome,
     consultedAt: c.consulted_at,
     hasAiAnalysis: ai !== null,

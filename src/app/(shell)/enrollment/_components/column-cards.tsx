@@ -14,6 +14,7 @@ import {
 } from "@/components/pagination";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import type { ConsultationListRow } from "@/features/enrollment/server/queries";
+import { consultantLabel } from "@/features/enrollment/consultant-label";
 import { MakeeduOriginTag } from "@/components/makeedu-origin-tag";
 import { EditingBadge } from "@/features/presence/editing-badge";
 import { RelativeTime } from "@/components/relative-time";
@@ -204,7 +205,7 @@ function ConsultationCard({
     [
       // 🔑 이름 줄은 한 줄로 잘릴 수 있다 — 전문을 여기 맨 앞에 둬야 잘린 글자가 사라지지 않는다.
       gradeLabel ? `${c.prospectName} (${gradeLabel})` : c.prospectName,
-      c.consultantName ? `상담사 ${c.consultantName}` : null,
+      consultantLabel(c) ? `상담사 ${consultantLabel(c)}` : null,
       c.assignedClassCount >= 1 ? `수업 ${c.assignedClassCount}개` : null,
       c.parentRequest?.trim() || null,
     ]

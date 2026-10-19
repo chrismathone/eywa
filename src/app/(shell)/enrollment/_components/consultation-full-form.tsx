@@ -244,7 +244,11 @@ export function ConsultationFullForm({
   const draft = useFormDraft({
     scope: draftScope,
     // 항상 기본값이 채워지는 날짜/상태 필드는 "의미 있는 입력" 판정에서 제외(빈 폼 오탐 배너 방지).
-    ignoreForBanner: ["receivedDate", "consultationDate", "registrationStatus", "parentRelation", "recordingDraftId"],
+    // 작성 화면의 상담자도 그렇다 — 추가하는 사람 이름이 기본으로 들어간다(원장 2026-10-19).
+    ignoreForBanner: [
+      "receivedDate", "consultationDate", "registrationStatus", "parentRelation", "recordingDraftId",
+      ...(isCreate ? ["counselor"] : []),
+    ],
     // 소개한 사람은 고르기 칸의 상태(이름 표시)와 숨은 칸이 짝이라 초안으로 되살리지 않는다(값만 돌아오고 이름은 옛것인 채로 저장되지 않게).
     exclude: ["referrer", "referrerName"],
     formRef,

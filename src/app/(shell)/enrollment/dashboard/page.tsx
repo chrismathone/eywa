@@ -63,7 +63,7 @@ export default async function EnrollmentDashboardPage({
 
   return (
     <div className="space-y-6">
-      <BackLink href="/enrollment" label="신규 콜&상담 칸반으로" />
+      <BackLink href="/enrollment?view=kanban" label="신규 콜&상담 칸반으로" />
 
       <header className="border-border space-y-1 border-b pb-5">
         <p className="eyebrow">신규 콜&상담 대시보드</p>
