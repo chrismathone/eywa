@@ -14,7 +14,7 @@ import { LearningMilestones } from "./learning-milestones";
 import styles from "./learning-overview.module.css";
 import local from "./math-textbook.module.css";
 import { useMathTextbooks } from "./math-textbook-context";
-import { effectiveMathBook, findSameCatalogTitle } from "@/features/textbooks/math-assignment";
+import { findSameCatalogTitle } from "@/features/textbooks/math-assignment";
 
 export function LearningGoalDialog({ data, learning, studentId, onClose, canReset = false }: {
   data: MathSheetMonthData; learning: LearningData; studentId: string | null; onClose: () => void; canReset?: boolean;
@@ -22,9 +22,8 @@ export function LearningGoalDialog({ data, learning, studentId, onClose, canRese
   const router = useRouter();
   const books = useMathTextbooks();
   const catalogTitles = books?.choices.map((b) => b.title) ?? [];
-  // 목표에 적힌 교재가 없으면 **배정된 교재**(학생 교재 → 반 교재)를 기본값으로 — 같은 사실을 두 번 적지 않게.
-  const assignedTitle = (id: string) =>
-    books ? (effectiveMathBook(books.classBook, books.byStudent[id] ?? null)?.title ?? null) : null;
+  // 목표에 적힌 교재가 없으면 **지금 교재**(학생 배정 → 반 배정 → 보고서 기록)를 기본값으로 — 같은 사실을 두 번 적지 않게.
+  const assignedTitle = (id: string) => books?.now[id]?.book.title ?? null;
   const eligible = data.students.filter((s) => s.rosterPhase !== "ended");
   const withoutGoal = eligible.filter((s) => !learning.goals[s.studentId]);
   const [scope, setScope] = useState(studentId ?? (withoutGoal.length ? "all" : eligible[0]?.studentId ?? "all"));

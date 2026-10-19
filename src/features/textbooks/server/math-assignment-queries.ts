@@ -1,7 +1,9 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fetchAllPaged } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
+import { addDays, kstToday } from "@/lib/date-kst";
 import type { AssignedBook } from "../math-assignment";
+import { bookPosition, inferBookFromReports, type BookPosition, type CatalogBook, type ReportLine } from "../math-book-match";
 import type { TextbookTableStatus } from "../types";
 
 /**
@@ -12,13 +14,26 @@ import type { TextbookTableStatus } from "../types";
 
 export type MathTextbookChoice = { id: string; title: string };
 
+/** 학생의 지금 교재 + 그 교재에서의 차수. 출처: 학생 배정 > 반 배정 > 보고서 기록에서 추정. */
+export type StudentBookNow = {
+  book: AssignedBook;
+  source: "student" | "class" | "report";
+  /** 보고서 진도가 그 교재 차수에 걸린 가장 최근 기록. 못 찾으면 null. */
+  position: BookPosition | null;
+};
+
 export type MathClassTextbooks = {
   status: TextbookTableStatus;
   classBook: AssignedBook | null;
   byStudent: Record<string, AssignedBook>;
   /** 교재목록의 수학 교재(고르는 목록 + "같은 교재" 확인의 기준). */
   choices: MathTextbookChoice[];
+  /** 학생별 지금 교재·차수 — 배정이 없어도 보고서 기록에서 교재를 읽어 채운다(원장 2026-10-19 "매핑만 하면"). */
+  now: Record<string, StudentBookNow>;
 };
+
+/** 교재를 읽을 보고서 기간 — 한 학기(교재 한 권을 넘기는 시간)면 충분하다. */
+const REPORT_LOOKBACK_DAYS = 180;
 
 /**
  * 이 표가 아직 없다(마이그레이션 미적용) — 코드(42P01/PGRST205) 또는 문구로 판정한다.
@@ -33,30 +48,125 @@ function isMissingAssignTable(error: { code?: string; message?: string } | null 
 
 type AssignmentRow = { student_id: string | null; textbook_id: string; textbooks: { title: string } | null };
 
-export async function getMathClassTextbooks(tenantId: string, classId: string): Promise<MathClassTextbooks> {
+export async function getMathClassTextbooks(
+  tenantId: string,
+  classId: string,
+  studentIds: string[],
+): Promise<MathClassTextbooks> {
   const admin = createAdminClient();
-  const [assignRes, choices] = await Promise.all([
+  const [assignRes, catalog, reports] = await Promise.all([
     admin
       .from("math_textbook_assignments")
       .select("student_id, textbook_id, textbooks!math_textbook_assignments_textbook_fkey(title)")
       .eq("tenant_id", tenantId)
       .eq("class_id", classId),
-    getMathTextbookChoices(tenantId),
+    getMathCatalogBooks(tenantId),
+    getClassReportLines(tenantId, classId, studentIds),
   ]);
-  const empty = { classBook: null, byStudent: {}, choices: choices ?? [] };
-  if (assignRes.error) {
-    return { ...empty, status: isMissingAssignTable(assignRes.error) ? "missing-table" : "failed" };
-  }
-  if (choices === null) return { ...empty, status: "failed" };
+  const choices = catalog?.map((b) => ({ id: b.id, title: b.title })) ?? [];
+  const books = catalog ?? [];
 
+  let status: TextbookTableStatus = "ok";
   let classBook: AssignedBook | null = null;
   const byStudent: Record<string, AssignedBook> = {};
-  for (const r of (assignRes.data ?? []) as unknown as AssignmentRow[]) {
-    const book = { textbookId: r.textbook_id, title: r.textbooks?.title ?? "(지워진 교재)" };
-    if (r.student_id) byStudent[r.student_id] = book;
-    else classBook = book;
+  if (assignRes.error) status = isMissingAssignTable(assignRes.error) ? "missing-table" : "failed";
+  else if (catalog === null) status = "failed";
+  else {
+    for (const r of (assignRes.data ?? []) as unknown as AssignmentRow[]) {
+      const book = { textbookId: r.textbook_id, title: r.textbooks?.title ?? "(지워진 교재)" };
+      if (r.student_id) byStudent[r.student_id] = book;
+      else classBook = book;
+    }
   }
-  return { status: "ok", classBook, byStudent, choices };
+
+  // 🔑 배정 표가 없거나(적용 전) 실패해도 **기록에서 읽은 교재·차수는 보여준다** — 그건 배정 표와 무관한 사실이다.
+  const now: Record<string, StudentBookNow> = {};
+  for (const sid of studentIds) {
+    const lines = reports?.get(sid) ?? [];
+    const assigned = byStudent[sid] ? { book: byStudent[sid]!, source: "student" as const }
+      : classBook ? { book: classBook, source: "class" as const } : null;
+    if (assigned) {
+      const cat = books.find((b) => b.id === assigned.book.textbookId);
+      now[sid] = { ...assigned, position: cat ? bookPosition(cat, lines, books) : null };
+      continue;
+    }
+    const inferred = inferBookFromReports(lines, books);
+    if (inferred) {
+      now[sid] = {
+        book: { textbookId: inferred.id, title: inferred.title },
+        source: "report",
+        // 추정한 교재면 교재 칸까지 그 교재인 기록만 센다 — 다른 책 진도가 차수로 둔갑하지 않게.
+        position: bookPosition(inferred, lines, books, true),
+      };
+    }
+  }
+  return { status, classBook, byStudent, choices, now };
+}
+
+/** 교재목록의 수학 교재 + 차수(소단원). 실패면 null. */
+async function getMathCatalogBooks(tenantId: string): Promise<CatalogBook[] | null> {
+  const choices = await getMathTextbookChoices(tenantId);
+  if (choices === null) return null;
+  if (choices.length === 0) return [];
+  const admin = createAdminClient();
+  try {
+    const lessons = await fetchAllPagedInChunks<{ textbook_id: string; lesson_no: number; progress: string | null }>(
+      choices.map((c) => c.id),
+      (chunk, from, to) =>
+        admin
+          .from("textbook_lessons")
+          .select("textbook_id, lesson_no, progress")
+          .eq("tenant_id", tenantId)
+          .in("textbook_id", chunk)
+          .order("textbook_id", { ascending: true })
+          .order("lesson_no", { ascending: true })
+          .range(from, to),
+    );
+    const byBook = new Map<string, CatalogBook["lessons"]>();
+    for (const l of lessons) {
+      const list = byBook.get(l.textbook_id) ?? [];
+      list.push({ lessonNo: l.lesson_no, progress: l.progress });
+      byBook.set(l.textbook_id, list);
+    }
+    return choices.map((c) => ({ ...c, lessons: byBook.get(c.id) ?? [] }));
+  } catch {
+    return null;
+  }
+}
+
+/** 이 반 학생들의 최근 보고서(교재·진도) — 학생별. 실패면 null(추정만 빠지고 화면은 산다). */
+async function getClassReportLines(
+  tenantId: string,
+  classId: string,
+  studentIds: string[],
+): Promise<Map<string, ReportLine[]> | null> {
+  if (studentIds.length === 0) return new Map();
+  const admin = createAdminClient();
+  const since = addDays(kstToday(), -REPORT_LOOKBACK_DAYS);
+  try {
+    const rows = await fetchAllPagedInChunks<{ student_id: string; report_date: string; textbook: string | null; progress: string | null }>(
+      studentIds,
+      (chunk, from, to) =>
+        admin
+          .from("lesson_reports")
+          .select("id, student_id, report_date, textbook, progress")
+          .eq("tenant_id", tenantId)
+          .eq("class_id", classId)
+          .in("student_id", chunk)
+          .gte("report_date", since)
+          .order("id", { ascending: true })
+          .range(from, to),
+    );
+    const out = new Map<string, ReportLine[]>();
+    for (const r of rows) {
+      const list = out.get(r.student_id) ?? [];
+      list.push({ date: r.report_date, textbook: r.textbook, progress: r.progress });
+      out.set(r.student_id, list);
+    }
+    return out;
+  } catch {
+    return null;
+  }
 }
 
 /** 교재목록의 활성 수학 교재. 실패면 null(빈 목록은 "교재가 없다"는 거짓말이다). */
