@@ -137,6 +137,15 @@
 .tSeg[data-state="now"] > i b { color: var(--primary); }
 .tSeg[data-partial]::after { content: ""; position: absolute; top: 8px; height: 10px; left: 0; right: 0; border: 1px dashed var(--line-strong, #c3c8d1); border-radius: 0 99px 99px 0; }
 .tSeg:hover > i b, .tSeg:focus-visible > i b { color: var(--primary); }
+/* 최종 목표 권 — 초록(목표·완료 축, 의미색 캐논 positive) 테두리 칸 + 꼬리표 · 끝나는 날의 깃발 선 */
+.tSeg[data-target]::after { content: ""; position: absolute; top: 6px; height: 14px; left: 0; right: 0; border: 2px solid var(--green); border-radius: 0 99px 99px 0; }
+.tSeg[data-target] > i b { color: var(--green); }
+.tSeg[data-after] { opacity: .45; }
+.goalFlag { position: absolute; top: -10px; bottom: -4px; width: 3px; margin-left: -1.5px; background: var(--green); z-index: 4; pointer-events: none; }
+.goalFlag em { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 2px; padding: 1px 7px; border-radius: 99px; background: var(--green); color: #fff; font-style: normal; font-size: var(--text-xs); font-weight: 700; white-space: nowrap; }
+.goalFlag[data-end] em { left: auto; right: 0; transform: none; }
+/* 오늘 계획 꼬리표와 가까우면 한 줄 위로 — 두 꼬리표가 겹치지 않게. */
+.goalFlag[data-near] { top: -28px; }
 .trail .plan, .trail .dot { z-index: 4; }
 .legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 0 8px 4px; font-size: var(--text-xs); color: var(--text-faint); }
 .legend em { font-style: normal; padding: 1px 8px; border-radius: 99px; background: var(--amber-soft); color: var(--amber); font-weight: 700; }

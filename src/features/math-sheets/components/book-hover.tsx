@@ -24,6 +24,8 @@ export function BookHover({ title, period, notes, lessonUnits, lessonCount, at, 
   /** 칸 상태 표식(`data-state`·`data-partial`) — 스타일이 읽는다. */
   "data-state"?: string;
   "data-partial"?: boolean;
+  "data-target"?: boolean;
+  "data-after"?: boolean;
 }) {
   return (
     <div {...data} className={`${css.hover} ${className ?? ""}`} style={style} tabIndex={0} aria-label={`${title} 차시 보기`}>

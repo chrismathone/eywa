@@ -38,6 +38,10 @@ export function RoadmapGoal({ r, studentId, studentName }: { r: RoadmapView; stu
   const posOrd = pos ? keyOrdinal(pos.key) : null;
   const state = (key: string) => (posOrd == null ? "todo" : keyOrdinal(key) < posOrd ? "done" : keyOrdinal(key) === posOrd ? "now" : "todo");
   const pc = (n: number) => `${n}%`;
+  // 최종 목표 권 — 막대에서 가장 먼저 읽혀야 하는 칸(원장 2026-10-20 *"마지막 교재라는게 가시성이 좀 떨어짐"*).
+  // 그 권이 끝나는 날에 깃발 선을 긋고, 목표 뒤 권(마감에 걸린 점선 칸)은 흐리게 한다.
+  const targetIdx = r.schedule.findIndex((b) => b.key === r.target.key);
+  const goalX = x(last.finishDate);
   return (
     <>
       <div className={css.goalHead}>
@@ -76,6 +80,8 @@ export function RoadmapGoal({ r, studentId, studentName }: { r: RoadmapView; stu
               style={{ left: pc(left), width: pc(Math.max(0.4, right - left)) }}
               data-state={state(b.key)}
               data-partial={partial || undefined}
+              data-target={b.key === r.target.key || undefined}
+              data-after={i > targetIdx || undefined}
               title={b.title}
               period={`${ymd(b.startDate)} – ${ymd(b.finishDate)} 예정${partial ? ` · ${md(r.deadline!)}까지 ${b.byDeadline}/${b.lessonCount}차시` : ""}`}
               notes={r.exams.filter((p) => p.to >= b.startDate && p.from <= b.finishDate)
@@ -92,6 +98,9 @@ export function RoadmapGoal({ r, studentId, studentName }: { r: RoadmapView; stu
         {started && r.referenceDate <= to ? (
           <span className={css.plan} style={{ left: pc(todayX) }}><em>오늘 계획 {r.planned}차시</em></span>
         ) : null}
+        <span className={css.goalFlag} data-end={goalX > 85 || undefined} data-near={(started && Math.abs(goalX - todayX) < 18) || undefined} style={{ left: pc(goalX) }}>
+          <em>최종 목표 · {ymd(last.finishDate)}</em>
+        </span>
         {doneX != null ? <span className={css.dot} style={{ left: pc(doneX) }} title={pos ? `현재 ${shortBook(pos.key, pos.title)} ${pos.lessonNo}차시 · ${pos.unit} (${md(pos.date)} 보고서)` : `실제 ${done}차시`} /> : null}
       </div>
       {/* 내신기간은 알리기만 — 날짜는 권 칸에 마우스를 올리면 그 권에 걸린 것만(원장 "기간은 교재 호버하면 거기 안에"). */}
