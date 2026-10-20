@@ -1,7 +1,8 @@
 /* 학생 계획 카드(원장 2026-10-20 카드 시안) — 면은 흰색, 구분은 테두리, 진도는 네이비, 밀린 차시는 빨간 빗금. */
 .card {
   /* 내신기간 = 주황(의미색 caution) — 빗금은 진도 막대 위에서 안 보였다(원장 "빗금말고 다른 색상으로 … 잘안보임"). */
-  --exam-tint: color-mix(in srgb, var(--amber) 55%, transparent);
+  /* 내신기간 = 보라(의미색 캐논 special — 예외·대체). 진도 네이비·밀림 빨강·목표 초록과 안 겹친다(원장 2026-10-20 A안 + "색상조합 체크해서"). */
+  --exam-color: var(--purple);
   --late-hatch: repeating-linear-gradient(135deg, color-mix(in srgb, var(--danger) 62%, var(--card)) 0 3px, color-mix(in srgb, var(--danger) 18%, var(--card)) 3px 6px);
   background: var(--card);
   border: 1px solid var(--line);
@@ -79,12 +80,12 @@
 
 /* 오늘 기준 타일 */
 .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) 120px; gap: 8px; margin-top: 12px; }
-.t { padding: 12px 14px; border-radius: 8px; border-left: 3px solid var(--line-strong, #c3c8d1); background: var(--bg-soft); min-width: 0; }
+.t { padding: 12px 14px; border-radius: 8px; border: 1px solid var(--line-faint); background: var(--bg-soft); min-width: 0; }
 .t span { font-size: var(--text-xs); color: var(--text-dim); }
 .t b { display: block; margin-top: 6px; font-size: var(--text-base); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .t small { display: block; margin-top: 2px; font-size: var(--text-xs); color: var(--text-faint); }
-.t[data-kind="real"] { border-left-color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, var(--card)); }
-.t[data-kind="next"] { border-left-color: var(--green); background: var(--green-soft); }
+.t[data-kind="real"] { border-color: color-mix(in srgb, var(--primary) 30%, var(--card)); background: color-mix(in srgb, var(--primary) 8%, var(--card)); }
+.t[data-kind="next"] { border-color: color-mix(in srgb, var(--green) 30%, var(--card)); background: var(--green-soft); }
 .open { border: 1px solid var(--line); border-radius: 8px; background: var(--card); font-size: var(--text-sm); font-weight: 600; cursor: pointer; }
 .open:hover { border-color: var(--primary); color: var(--primary); }
 
@@ -133,8 +134,9 @@
 .tFill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--primary); }
 .tLate { position: absolute; top: 0; bottom: 0; background: var(--late-hatch); }
 .tAhead { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--primary) 35%, var(--card)); }
-.tLane { position: absolute; left: 0; right: 0; top: 14px; height: 4px; }
-.tExam { position: absolute; top: 0; bottom: 0; border-radius: 2px; background: var(--amber); }
+/* 막대 바로 밑에 틈 없이 붙은 줄(A안) — 막대와 같은 눈금이라 어느 권에 걸리는지 바로 보인다. */
+.tLane { position: absolute; left: 0; right: 0; top: 10px; height: 4px; }
+.tExam { position: absolute; top: 0; bottom: 0; border-radius: 0 0 3px 3px; background: var(--exam-color); }
 .tSeg { position: absolute; top: -8px; bottom: -44px; z-index: 1; cursor: help; }
 .tSeg::before { content: ""; position: absolute; left: -1px; top: 8px; width: 2px; height: 10px; background: var(--card); z-index: 3; }
 .tTrack + .tSeg::before { display: none; }
@@ -156,11 +158,11 @@
 .goalFlag[data-near] { top: -28px; }
 .trail .plan, .trail .dot { z-index: 4; }
 .legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 0 8px 4px; font-size: var(--text-xs); color: var(--text-faint); }
-.legend em { font-style: normal; padding: 1px 8px; border-radius: 99px; background: var(--amber-soft); color: var(--amber); font-weight: 700; }
+.legend em { font-style: normal; padding: 1px 8px; border-radius: 99px; background: var(--purple-soft); color: var(--exam-color); font-weight: 700; }
 .legendEnd { margin-left: auto; }
 .pop > small[data-note] { color: var(--text-dim); }
-.pop > small[data-note]::before { content: ""; display: inline-block; width: 10px; height: 6px; margin-right: 5px; border-radius: 2px; background: var(--exam-tint); vertical-align: 1px; }
-.examKey { display: inline-block; width: 14px; height: 4px; margin-right: 4px; vertical-align: 2px; border-radius: 2px; background: var(--amber); }
+.pop > small[data-note]::before { content: ""; display: inline-block; width: 10px; height: 6px; margin-right: 5px; border-radius: 2px; background: var(--exam-color); vertical-align: 1px; }
+.examKey { display: inline-block; width: 14px; height: 4px; margin-right: 4px; vertical-align: 2px; border-radius: 2px; background: var(--exam-color); }
 /* 학교별 내신기간 창 */
 .examForm { display: grid; gap: 8px; }
 .examPick { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
