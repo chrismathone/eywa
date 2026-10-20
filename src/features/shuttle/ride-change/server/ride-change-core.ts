@@ -53,8 +53,10 @@ async function log(ctx: Ctx, action: string, metadata: Record<string, unknown>) 
 /**
  * 그날 그 방향의 **타는/내리는 곳**을 바꾼다. 평소 자리를 고르면 되돌리기와 같다.
  * 🔑 '타지 않기'가 걸려 있으면 함께 풀린다 · 결석 뒤 등원을 고치면 하원도 되살린다(`reviveAbsentOut`).
+ * 🔑 `memo` = 바꾼 사유(직원 '관리자 수정하기', 사용자 2026-10-20) — 줄 메모로 남아 학부모·직원 모두 본다. 없으면 null.
+ *    같은 자리에 사유만 달라졌으면 사유만 고친다.
  */
-export async function changeRideStopCore(ctx: Ctx, runStopId: string): Promise<ParentRideActionState> {
+export async function changeRideStopCore(ctx: Ctx, runStopId: string, memo: string | null = null): Promise<ParentRideActionState> {
   const tenantId = ctx.tenantId;
   const admin = createAdminClient();
   try {
@@ -90,9 +92,11 @@ export async function changeRideStopCore(ctx: Ctx, runStopId: string): Promise<P
       await cancelAll(admin, ctx, [state.skip, state.add]);
       message = state.skip ? "다시 타는 것으로 바꿨어요" : "평소 타는 곳으로 되돌렸어요";
     } else {
-      if (!state.skip && state.add?.run_stop_id === stop.id) return { ok: true, message: "이미 그곳으로 바뀌어 있어요" };
+      const sameStop = state.add?.run_stop_id === stop.id;
+      const memoChanged = memo !== null && memo !== state.add?.memo;
+      if (!state.skip && sameStop && !memoChanged) return { ok: true, message: "이미 그곳으로 바뀌어 있어요" };
       await cancelAll(admin, ctx, [state.skip]);
-      if (state.add?.run_stop_id !== stop.id) {
+      if (!sameStop || memoChanged) {
         const { error } = await admin.from("shuttle_ride_exceptions").upsert(
           {
             tenant_id: tenantId,
@@ -101,7 +105,7 @@ export async function changeRideStopCore(ctx: Ctx, runStopId: string): Promise<P
             kind: "add",
             io_kind: ctx.ioKind,
             run_stop_id: stop.id,
-            memo: null,
+            memo,
             ...actorColumns(ctx),
           },
           { onConflict: "tenant_id,on_date,student_id,kind,io_kind" },
@@ -112,7 +116,7 @@ export async function changeRideStopCore(ctx: Ctx, runStopId: string): Promise<P
     }
     if (await reviveAbsentOut(admin, ctx, states.out)) message += " · 하원도 평소대로 다시 타요";
 
-    await log(ctx, "shuttle_ride_exception_set", { kind: "add", ioKind: ctx.ioKind, runStopId: stop.id, before });
+    await log(ctx, "shuttle_ride_exception_set", { kind: "add", ioKind: ctx.ioKind, runStopId: stop.id, before, ...(memo ? { reason: memo } : {}) });
     refreshRideViews();
     return { ok: true, message };
   } catch (e) {

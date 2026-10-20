@@ -5,6 +5,7 @@ import { Search, X } from "@/components/icons/aywa-icon-compat";
 
 import { Input } from "@/components/ui/input";
 import type { StaffCalendarDay, StaffMonth } from "@/features/shuttle/parent/staff-month";
+import type { Season } from "@/features/shuttle/types";
 import { StaffMonthCalendar } from "./staff-month-calendar";
 import { StaffMonthTable } from "./staff-month-table";
 import { StaffMonthDayDialog, type DayDialogTarget } from "./staff-month-day-dialog";
@@ -19,11 +20,16 @@ export function StaffMonthView({
   data,
   today,
   dayHrefs,
+  season,
+  canEdit,
 }: {
   weeks: StaffCalendarDay[][];
   data: StaffMonth;
   today: string;
   dayHrefs: Record<string, string>;
+  season: Season;
+  /** 등하원을 바꿀 권한(`canRecordBoarding`) — 상세 모달의 [관리자 수정하기]. */
+  canEdit: boolean;
 }) {
   const [target, setTarget] = useState<DayDialogTarget | null>(null);
   const [query, setQuery] = useState("");
@@ -68,7 +74,8 @@ export function StaffMonthView({
           target={target}
           rows={data.rows}
           today={today}
-          dayHref={dayHrefs[target.date] ?? "#"}
+          season={season}
+          canEdit={canEdit}
           onClose={() => setTarget(null)}
         />
       ) : null}

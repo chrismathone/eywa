@@ -5,7 +5,7 @@ import type { RideLeg } from "./parent-rides";
 const leg = (over: Partial<RideLeg>): RideLeg => ({
   key: "k", studentId: "s1", direction: "in", vehicleId: "v1", runId: "r1", vehicleName: "1호차", runName: "1회차", stopName: "칠성초 정문",
   plannedTime: "14:40", skipped: false, added: false, status: null, recordedTime: null, notifyParent: true,
-  trip: "running", tripStartedTime: "14:30", tripEndedTime: null, staffMemo: null, route: [], ...over,
+  trip: "running", tripStartedTime: "14:30", tripEndedTime: null, staffMemo: null, changeNote: null, route: [], ...over,
 });
 
 const kids = [{ id: "s1", name: "김민준" }, { id: "s2", name: "김서연" }];

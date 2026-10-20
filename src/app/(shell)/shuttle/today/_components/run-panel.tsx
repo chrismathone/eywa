@@ -29,9 +29,6 @@ import { TripGpsSender } from "./trip-gps-sender";
 /** 등원 = info(파랑) · 하원 = special(보라) — 회차 머리 배지가 원래 쓰던 색 그대로. */
 const IO_TONE = { in: TONE_COLOR.info, out: TONE_COLOR.special } as const satisfies Record<Direction, unknown>;
 
-/** 등원 = info(파랑) · 하원 = special(보라) — 회차 머리 배지가 원래 쓰던 색 그대로. */
-const IO_TONE = { in: TONE_COLOR.info, out: TONE_COLOR.special } as const satisfies Record<Direction, unknown>;
-
 /**
  * 회차 한 판 — 머리(접기 + 출발/종료) + 정류장별 명단.
  *
@@ -175,7 +172,7 @@ export function RunPanel({
         />
       </div>
 
-      {/* 📡 차량 위치 보내기(0374a) — 오늘 운행 중인 회차에, 기록 권한이 있을 때만. 접혀 있어도 보인다(보내는 중인지 늘 알아야 한다). */}
+      {/* 📡 차량 위치 보내기(0381a) — 오늘 운행 중인 회차에, 기록 권한이 있을 때만. 접혀 있어도 보인다(보내는 중인지 늘 알아야 한다). */}
       {tripsReady && canWrite && date === today && tripState(trip) === "running" ? <TripGpsSender runId={run.id} date={date} /> : null}
 
       {open && (

@@ -10,7 +10,7 @@ import { DIRECTION_LABEL, runShortTitle, type ShuttleRun } from "@/features/shut
 /**
  * 직원 '실시간 위치'의 회차 노선도 — 편성 회차(`ShuttleRun`)를 공용 버스 노선도(`RouteLineDiagram`)에 맞춰 넘긴다.
  * 🔑 정류장 순서·시각은 편성 그대로(`sortOrder` · `atTime`).
- * 🚌 그 회차가 운행 중이고 기사 폰 위치(0374a)가 있으면 노선 위 자리에 차를 얹는다(학원 칸 좌표 = 학원 위치).
+ * 🚌 그 회차가 운행 중이고 기사 폰 위치(0381a)가 있으면 노선 위 자리에 차를 얹는다(학원 칸 좌표 = 학원 위치).
  */
 export function RunLineDiagram({
   run,

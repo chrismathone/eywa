@@ -170,8 +170,9 @@ async function load(
   const built = buildRideLegs({
     ymd, runs, vehicles: vehiclesRes.data ?? [], exceptions, logs, trips, tripsReady: live && !tripsRes.error,
   });
-  // 🔴 직원 메모·사유는 **여기서 지운다** — 구간이 학부모 화면의 클라이언트 컴포넌트(수정 모달)로 그대로 넘어가서,
-  //    화면에 안 그려도 브라우저로 전송된다(2026-09-29 발견). 학부모는 자기가 적은 사유도 다시 볼 일이 없다.
+  // 🔴 직원 메모(탑승 기록 메모 포함)는 **여기서 지운다** — 구간이 학부모 화면의 클라이언트 컴포넌트(수정 모달)로 그대로 넘어가서,
+  //    화면에 안 그려도 브라우저로 전송된다(2026-09-29 발견).
+  // 🔑 그날 바뀐 사유(`changeNote` — 이동·안 탐·결석 줄의 메모)는 남긴다: 학부모에게도 보인다(사용자 2026-10-20).
   const legs = new Map([...built].map(([id, list]) => [id, list.map((l) => ({ ...l, staffMemo: null }))]));
   const fleet = withVehicleRoutes ? await loadFleet(admin, tenantId, season) : [];
   const day = dayCodeOf(ymd);

@@ -12,7 +12,7 @@ import { canRecordBoarding } from "../../server/record-gate";
 import { loadRunningPositions } from "./vehicle-position-core";
 
 /**
- * 기사 폰 → 차량 위치 한 번(0374a, 사용자 2026-10-15 "GPS 기능").
+ * 기사 폰 → 차량 위치 한 번(0381a, 사용자 2026-10-15 "GPS 기능").
  * 🔒 등하원 **기록 권한**(`canRecordBoarding` — 셔틀 담당·사무실·총괄)이 있고, 그 회차가 **오늘 운행 중**(출발했고 종료 전)일 때만.
  *    출발 전·종료 뒤엔 받지 않는다 — 기사가 집에 가는 길이 학부모 지도에 찍히면 안 된다.
  * 🔑 회차마다 최신 한 줄 upsert. 값 검증은 순수 모듈(`checkReport`) — 이상한 좌표·큰 오차는 버린다.

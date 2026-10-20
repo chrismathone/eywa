@@ -130,6 +130,10 @@ export function ParentRideCard({
                     {view.detail ? (
                       <p className={`text-text-dim break-keep ${skipButtons ? "text-xs" : "text-sm"}`}>{view.detail}</p>
                     ) : null}
+                    {/* 그날만 바뀐 사유 — 학부모에게도 보인다(사용자 2026-10-20). 직원 뷰는 아래 `StaffFacts`의 메모가 같은 글을 싣는다. */}
+                    {!staff && leg.changeNote ? (
+                      <p className={`text-foreground break-keep ${skipButtons ? "text-xs" : "text-sm"}`}>사유: {leg.changeNote}</p>
+                    ) : null}
                   </div>
                   {/* '타지 않기'는 수정 모드에서만(사용자 2026-09-29) · 이미 안 타는 구간 · 지난 날짜엔 없다. */}
                   {skipButtons && editing && editable && !leg.skipped && !rode && !closed ? (

@@ -92,6 +92,11 @@ export type RideLeg = {
   /** 직원 메모(기록 메모 → 오늘만 변경 사유). 🔴 관리자 뷰 전용. */
   staffMemo: string | null;
   /**
+   * 그날만 바뀐 사유(이동·안 탐·결석 줄의 메모) — 🔑 **학부모에게도 보인다**(사용자 2026-10-20 "학부모 우리들 모두가 볼 수 있게").
+   * 기록 메모(`staffMemo`의 앞자리)와 달리 바뀐 구간(added·skipped)에만 실린다.
+   */
+  changeNote: string | null;
+  /**
    * 그 회차의 노선 전체(정류장 순서). 🔑 **다른 아이 정보는 없다** — 정류장 이름·시각뿐이고,
    * `mine`이 우리 아이가 타고 내리는 칸이다(예정 없는 추가 탑승이면 전부 false).
    */
@@ -142,6 +147,7 @@ export function buildRideLegs(input: RideLegInput): Map<string, RideLeg[]> {
         tripStartedTime: input.tripsReady ? kstTimeOf(trip?.startedAt) : null,
         tripEndedTime: kstTimeOf(trip?.endedAt),
         staffMemo: row.memo ?? row.exceptionMemo,
+        changeNote: row.dayKind === "added" || row.dayKind === "skipped" ? row.exceptionMemo : null,
         route: stops.map((s) => ({ id: s.id, kind: s.kind, name: s.stopName, time: s.atTime, mine: s.id === mineId })),
       };
       const list = out.get(leg.studentId) ?? [];

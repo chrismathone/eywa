@@ -2,6 +2,7 @@
 import { kstToday, formatKoreanDate, isValidYmd } from "@/lib/date-kst";
 import { ParentRidesDayNav } from "./_components/parent-rides-day-nav";
 import { isShuttleAdmin, requireShuttleView } from "@/features/shuttle/server/access";
+import { canRecordBoarding } from "@/features/shuttle/server/record-gate";
 import {
   getBoardingsOn,
   getRideExceptionsOn,
@@ -92,14 +93,15 @@ export default async function ShuttleParentRidesPage({
   const view: "day" | "month" = sp.v === "month" ? "month" : "day";
   const month = sp.m && /^\d{4}-(0[1-9]|1[0-2])$/.test(sp.m) ? sp.m : date.slice(0, 7);
 
-  // 📅 월별 — 학원 전체 한 달(아이 한 줄 × 평일). 날짜를 누르면 그날 일별로 간다. 일별 재료(노선·기록·변경 내역)는 안 읽는다.
+  // 📅 월별 — 학원 전체 한 달(아이 한 줄 × 평일). 날짜를 누르면 그날 상세 모달(거기서 [관리자 수정하기]). 일별 재료(노선·기록·변경 내역)는 안 읽는다.
   if (view === "month") {
-    const [monthData, showTrack, monthManager, monthAccounts, monthStudents] = await Promise.all([
+    const [monthData, showTrack, monthManager, monthAccounts, monthStudents, canEdit] = await Promise.all([
       loadStaffMonth(user.tenantId, month),
       isShuttleAdmin(),
       parentAccountsActor(),
       getParentAccounts(),
       getParentStudentOptions(),
+      canRecordBoarding(),
     ]);
     const dayHref = (d: string) => viewHref("day", { season, d: d === today ? undefined : d });
     const holidays = Object.fromEntries(monthData.days.flatMap((d) => (d.holiday ? [[d.date, d.holiday] as const] : [])));
@@ -135,6 +137,8 @@ export default async function ShuttleParentRidesPage({
           data={{ days: monthData.days, rows: monthData.rows }}
           today={today}
           dayHrefs={Object.fromEntries(monthData.days.map((d) => [d.date, dayHref(d.date)]))}
+          season={season}
+          canEdit={canEdit}
         />
       </div>
     );
