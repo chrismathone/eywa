@@ -16,7 +16,7 @@ import { catalogBookKey, matchCatalogBook, type CatalogBook, type ReportLine } f
 import { latestPosition, windowAt } from "./roadmap-position";
 import { bookSequence, keyOrdinal, seriesOfKey } from "./book-sequence";
 import { examOn, examPeriodsBetween, gradeOrdinal, middleSchoolDeadline, type SchoolExamOverride } from "./exam-periods";
-import { addMonths, placeBooks, rebaseAhead, workCalendar, type PlacedBook } from "./roadmap-calendar";
+import { addMonths, dateAtLessonsIn, daysBetween, placeBooks, rebaseAhead, workCalendar, type PlacedBook } from "./roadmap-calendar";
 
 export const ROADMAP_DAYS_AFTER_ORDER = 7;
 export const ROADMAP_WINDOW_MONTHS = 3;
@@ -96,6 +96,8 @@ export function bookRoadmap(args: {
   const planIdx = placed.findIndex((b) => b.startDate <= ref && ref <= b.finishDate);
   const posIdx = position ? placed.findIndex((b) => b.key === position.key) : -1;
   const rebased = ref >= start && planIdx >= 0 && posIdx > planIdx && doneAll != null && doneAll > 0;
+  // 얼마나 앞섰나(일) — 원래 계획이 지금 나간 차시에 닿는 날까지(재계산 전 배치로 잰다).
+  const origDoneDate = doneAll != null && doneAll > 0 ? dateAtLessonsIn(placed, cal, doneAll) : null;
   if (rebased) placed = rebaseAhead(placed, start, cal, doneAll!, ref);
 
   // 최종 목표 = **중3 11월 말에 나가고 있을 권**(원장 *"학생의 나이가 중3 11월 말일 때 기준으로"*) — 권 이름으로 막지 않는다.
@@ -151,6 +153,7 @@ export function bookRoadmap(args: {
     deadline: shownDeadline,
     deadlinePassed: deadline != null && !deadlineUsable,
     rebased,
+    aheadDays: (rebased || status === "ahead") && origDoneDate && origDoneDate > ref ? daysBetween(ref, origDoneDate) : null,
     startDate: start,
     endDate,
     orderDate: opener.date,

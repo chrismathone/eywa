@@ -39,6 +39,8 @@ export type BookRoadmap = {
   deadlinePassed: boolean;
   /** 앞서 나가 다음 권으로 넘어가서 오늘부터 일정을 다시 폈다(오늘 계획 = 실제). */
   rebased: boolean;
+  /** 계획보다 며칠 앞섰나(앞섰을 때만) — 원래 계획이 지금 나간 차시에 닿는 날 − 기준일. */
+  aheadDays: number | null;
   startDate: string;
   endDate: string;
   orderDate: string;

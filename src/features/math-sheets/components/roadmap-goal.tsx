@@ -59,7 +59,8 @@ export function RoadmapGoal({ r, studentId, studentName }: { r: RoadmapView; stu
       <div className={css.factChips}>
         {r.remainingClasses != null ? <span><small>남은 수업</small><b>{r.remainingClasses}회</b></span> : null}
         <span><small>기간</small><b>{ymd(r.startDate)} – {ymd(r.endDate)}</b></span>
-        {r.rebased ? <span className={css.rebased} title="계획보다 앞서 다음 교재로 넘어가서 오늘부터 일정을 다시 계산했습니다"><b>앞서 나가 일정 재계산</b></span> : null}
+        {/* 앞선 만큼만 날짜로(원장 "안내 나갈 필요 없음 … 얼마나 앞서는지만 일자로"). 재계산은 조용히 한다. */}
+        {r.aheadDays ? <span className={css.rebased} title={r.rebased ? "앞서 다음 교재로 넘어가 오늘부터 일정을 다시 폈습니다" : undefined}><b>{r.aheadDays}일 앞섬</b></span> : null}
         <span>
           <small>목표</small>
           <b>{r.target.auto ? (r.deadline ? "자동 · 중3 11월 말까지" : r.deadlinePassed ? "자동 · 마감 지남(지금 3개월 끝)" : "자동 · 지금 3개월 끝") : "직접 지정"}</b>
@@ -72,6 +73,9 @@ export function RoadmapGoal({ r, studentId, studentName }: { r: RoadmapView; stu
           {started && doneX != null && doneX < todayX && r.status === "behind"
             ? <span className={css.tLate} style={{ left: pc(doneX), width: pc(todayX - doneX) }} /> : null}
           {started && doneX != null && doneX > todayX && r.status === "ahead" ? <span className={css.tAhead} style={{ left: pc(todayX), width: pc(doneX - todayX) }} /> : null}
+        </div>
+        {/* 내신기간 줄 — 진도 막대와 겹치면 네이비·빨강·주황이 섞여 읽히지 않는다(원장 "난리 개판오분전"). */}
+        <div className={css.tLane} aria-hidden>
           {r.exams.map((p) => (
             <span key={p.from} className={css.tExam} style={{ left: pc(x(p.from)), width: pc(x(p.to) - x(p.from)) }} />
           ))}

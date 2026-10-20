@@ -189,3 +189,13 @@ describe("리뷰 보강 2", () => {
   });
 });
 const keyBefore = (key: string) => key < "가우스|고1-1|1" && key.startsWith("가우스|중");
+
+describe("앞선 날수", () => {
+  it("재계산된 학생은 원래 계획보다 며칠 앞섰는지", () => {
+    const C31 = book("c31", "가우스 중3-1 1권", eight("중삼일"));
+    const r = bookRoadmap({ orders: [{ bookName: "가우스 중2-2 4권", date: "2026-10-01" }], catalog: [...CATALOG, C31], today: "2026-10-20", grade: "중2",
+      reports: [{ date: "2026-10-16", textbook: "가우스 중3-1 1권", progress: "수학 중삼일 2" }], referenceDate: "2026-10-20" })!;
+    expect(r.aheadDays).toBeGreaterThan(0);
+    expect(bookRoadmap({ ...SURYEON, reports: [], referenceDate: "2026-10-20" })!.aheadDays).toBeNull();
+  });
+});

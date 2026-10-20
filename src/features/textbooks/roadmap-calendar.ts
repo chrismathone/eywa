@@ -62,6 +62,17 @@ export function placeBooks(seq: readonly SeqBook[], start: string, cal: WorkCale
   return out;
 }
 
+/** 누적 n차시를 그 배치가 끝내는 날 — 권 안에서는 작업일 비율로(계획과 같은 규칙). */
+export function dateAtLessonsIn(books: readonly PlacedBook[], cal: WorkCalendar, n: number): string {
+  if (n <= 0) return books[0]!.startDate;
+  let before = 0;
+  for (const b of books) {
+    if (n <= before + b.lessonCount) return cal.nth(b.startDate, Math.ceil(((n - before) / b.lessonCount) * cal.count(b.startDate, b.finishDate)));
+    before += b.lessonCount;
+  }
+  return books[books.length - 1]!.finishDate;
+}
+
 /**
  * 앞서 나간 학생 재계산. `done` = 나간 누적 차시(0보다 크다), `ref` = 기준일(시작 이후).
  * 작업일 번호(시작부터 1, 2, …)로 옮겨 계산한다 — 차시 n의 새 번호 = n ≤ done이면 오늘까지를 차시 비율로,
