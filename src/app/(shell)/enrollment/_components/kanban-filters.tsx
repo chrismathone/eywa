@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
+import { VisitorHistoryLink } from "./visitor-history-link";
 import { FilterSelect } from "@/components/filter-select";
 import { PeriodNav } from "@/components/period-nav";
 import { SearchToggle } from "@/components/search-toggle";
@@ -99,6 +100,7 @@ export function KanbanFilters({
         listFilters ? "py-1" : "bg-background sticky top-0 z-20 py-2"
       }`}
     >
+      <Suspense fallback={null}><VisitorHistoryLink /></Suspense>
       {listFilters ? (
         <>
       {/* 월 이동 — 앱 전역 단일 소스 [PeriodNav](@/components/period-nav)(원장 2026-09-01
