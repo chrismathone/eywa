@@ -6,7 +6,8 @@ import { CONSULTATION_PATHS, REGISTRATION_STATUSES } from "@/features/enrollment
 import { OUTCOME_PILL } from "@/features/enrollment/outcome-meta";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
-import { canonicalSchoolName } from "@/features/schools/school-name";
+import { canonicalSchoolName, fillSchoolKind } from "@/features/schools/school-name";
+import { loadSchoolKeys } from "@/features/schools/server/complete-kind";
 import { IMPORT_META } from "../kinds";
 import { duplicateKeyIssues, type ColumnSpec, type ImportPreviewRow, type SheetSpec } from "../spec";
 import { StaffIndex } from "../server/lookups";
@@ -117,11 +118,12 @@ const def: ImporterDef<Plan> = {
     const [settings, db] = await Promise.all([getTenantSettings(), createClient()]);
     const aliases = settings.operations.schoolSaveAliases;
     const subjectTable = buildSubjectMaps(settings.operations.subjects).options.map((o) => ({ label: o.label, value: o.value }));
-    const [existing, staff] = await Promise.all([
+    const [existing, staff, schoolKeys] = await Promise.all([
       fetchAllPaged<Existing>((from, to) =>
         db.from("enrollment_consultations").select(SELECT).eq("tenant_id", ctx.tenantId).order("id").range(from, to),
       ),
       StaffIndex.load(db, ctx.tenantId),
+      loadSchoolKeys(db, ctx.tenantId),
     ]);
     const byKey = new Map<string, Existing>();
     for (const e of existing) {
@@ -152,9 +154,11 @@ const def: ImporterDef<Plan> = {
         else counselorText = consultantLabel;
       }
       const payment = row.int("paymentAmount", { min: 0 });
+      // 학교급이 빠진 학교(`칠성`)는 학년으로 채운다 — 화면 저장과 같은 판정(학교알리미에 있는 학교만).
+      const grade = row.text("grade", { max: 24 });
       const fields: Row = {
-        prospect_school: canonicalSchoolName(row.text("school", { max: 40 }), aliases),
-        prospect_grade: row.text("grade", { max: 24 }),
+        prospect_school: fillSchoolKind(canonicalSchoolName(row.text("school", { max: 40 }), aliases), grade, schoolKeys, aliases),
+        prospect_grade: grade,
         english_name: row.text("englishName", { max: 60 }),
         gender: row.option("gender", GENDER_OPTIONS),
         student_phone: row.phone("studentPhone"),

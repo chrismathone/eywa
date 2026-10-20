@@ -144,6 +144,22 @@ export function schoolKindCandidate(school: string | null | undefined, grade: st
   return kind ? stripRegionPrefix(s) + kind : null;
 }
 
+/**
+ * `schoolKindCandidate`의 후보가 **알려진 학교 키**(학교알리미 `name_key`)에 있을 때만 그 후보를 저장 표기로 —
+ * 아니면 받은 값 그대로. 후보에도 저장 별칭(`일중`→`대구일중`)을 다시 건다. 키 목록을 미리 받은 쪽(엑셀 가져오기)과
+ * 한 줄만 조회하는 쪽(`completeSchoolKind`)이 이 판정을 같이 쓴다.
+ */
+export function fillSchoolKind(
+  school: string | null,
+  grade: string | null | undefined,
+  knownKeys: ReadonlySet<string>,
+  aliases: readonly SchoolSaveAlias[],
+): string | null {
+  const candidate = schoolKindCandidate(school, grade);
+  if (!candidate || !knownKeys.has(normalizeSchoolName(candidate))) return school;
+  return aliases.find((a) => a.from === candidate)?.to ?? candidate;
+}
+
 /** 정규화 키가 학교 이름 꼴인가(= 급으로 끝나고, 급만 있는 게 아닌가). */
 export function isSchoolLikeKey(key: string): boolean {
   if (!key || BARE_KIND_RE.test(key)) return false;
