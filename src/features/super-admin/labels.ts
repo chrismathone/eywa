@@ -100,6 +100,9 @@ export const TOGGLE_FEATURES = [
   // 학생 이름 등이 외부 메신저로 나가므로 기본 꺼짐. 읽는 곳 = features/slack/server/{dispatch,gate,queries}.ts + 0298a 인박스 트리거.
   { key: "slack", label: "슬랙 알림 연결", defaultOn: false },
   { key: "laboratory", label: "실험실 기능", defaultOn: false },
+  // 영상 숙제 설명 AI 참고 메모 — 켠 지점만 수학 영상을 밤 배치로 판정하고 영상 제출 현황 재생 창에 메모가 선다(원장 2026-10-20).
+  // 학생 영상 화면·목소리가 AI로 나가므로 기본 꺼짐. 읽는 곳 = features/video-review/server/{gate,queue,queries}.ts.
+  { key: "video_review", label: "영상 설명 AI 참고 메모", defaultOn: false },
 ] as const;
 
 /**

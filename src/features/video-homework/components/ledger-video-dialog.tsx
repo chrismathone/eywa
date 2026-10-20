@@ -2,6 +2,7 @@
 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { HomeworkVideoPlayer } from "@/features/students/components/homework-video-player";
+import { AiReviewPanel } from "@/features/video-review/components/ai-review-panel";
 import type { VideoArrival } from "../types";
 import type { ActiveCell } from "./round-editor";
 
@@ -18,6 +19,7 @@ export function LedgerVideoDialog({ cell, video, onClose }: { cell: ActiveCell |
       {cell ? playback ? <HomeworkVideoPlayer key={video?.id} videoId={video?.id} preview={playback.preview} thumbnail={playback.thumbnail}
         uploadedAt={playback.uploadedAt} title={title} />
         : <p role="status" className="text-text-dim p-6 text-center text-sm">아직 재생할 수 없는 영상입니다. 잠시 뒤 다시 확인해 주세요.</p> : null}
+      {cell && video?.id ? <AiReviewPanel key={video.id} videoId={video.id} /> : null}
     </DialogContent>
   </Dialog>;
 }

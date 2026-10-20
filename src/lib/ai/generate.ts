@@ -146,6 +146,12 @@ export type GenerateJSONOptions = {
    * (다른 provider의 chat API엔 PDF 입력이 없어 조용한 폴백이 불가능한 자리다).
    */
   document?: { mediaType: "application/pdf"; dataBase64: string };
+  /**
+   * 이미지 입력 — 학생 설명 영상의 화면 판정용(원장 승인 2026-10-20, `docs/decisions/reports-ai.md` '영상 설명 AI 참고 메모').
+   * **Anthropic 전용**(문서와 같은 까닭 — 다른 provider로 넘어가면 그림이 조용히 사라진다). 문서와 달리 모델 고정(`featurePin`)은
+   * 그대로 따른다(판정 = Haiku · 확인 = Sonnet을 기능 이름으로 고른다). `label`은 그림 바로 앞에 붙는 글(파일 이름 등 — 근거 위치로 쓰인다).
+   */
+  images?: { mediaType: "image/jpeg" | "image/png"; dataBase64: string; label?: string }[];
 };
 
 /** provider 응답의 토큰 usage(제공 안 하면 null). */
@@ -341,6 +347,46 @@ export class AnthropicRefusalError extends Error {
   }
 }
 
+/**
+ * Anthropic 요청 본문 — 즉시 호출(callProvider)과 밤 배치(generate-batch.ts)가 **같은 본문**을 쓴다(한 곳에서만 만든다).
+ * 문서·이미지 첨부 · Claude 5 temperature 생략 · 생각 깊이 · system · 응답 길이 바닥이 모두 여기서 정해진다.
+ */
+export function anthropicRequestParams(model: string, opts: GenerateJSONOptions, withTemperature: boolean) {
+  // document(PDF)·images가 있으면 content를 블록 배열로 — 첨부 블록 + 텍스트 지시(비전 경로).
+  const userContent = opts.images?.length
+    ? ([
+        ...opts.images.flatMap((img) => [
+          ...(img.label ? [{ type: "text" as const, text: img.label }] : []),
+          { type: "image" as const, source: { type: "base64" as const, media_type: img.mediaType, data: img.dataBase64 } },
+        ]),
+        { type: "text" as const, text: opts.prompt },
+      ] satisfies Anthropic.ContentBlockParam[])
+    : opts.document
+    ? ([
+        {
+          type: "document" as const,
+          source: {
+            type: "base64" as const,
+            media_type: opts.document.mediaType,
+            data: opts.document.dataBase64,
+          },
+        },
+        { type: "text" as const, text: opts.prompt },
+      ] satisfies Anthropic.ContentBlockParam[])
+    : opts.prompt;
+  const claude5 = isClaude5Model(model);
+  return {
+    model,
+    max_tokens: sentMaxTokens("anthropic", model, opts.maxTokens, opts.meta?.feature),
+    // Claude 5 계열엔 temperature를 아예 안 보낸다(400 → 재시도 왕복을 없앤다). 그 밖은 호출부 값(멘트 0.3 등) 유지.
+    ...(withTemperature && !claude5 && opts.temperature != null ? { temperature: opts.temperature } : {}),
+    // 생각 깊이 — 호출부가 정한 때만(멘트 'minimal' → low). 안 정하면 모델 기본(Haiku 5.5 = medium).
+    ...(claude5 && opts.reasoningEffort ? { output_config: { effort: ANTHROPIC_EFFORT[opts.reasoningEffort] } } : {}),
+    ...(opts.system ? { system: opts.system } : {}),
+    messages: [{ role: "user" as const, content: userContent }],
+  };
+}
+
 /** provider별 1회 호출 — 응답 텍스트+usage 반환(throw는 generateJSON 루프가 처리). */
 async function callProvider(
   provider: AiProvider,
@@ -379,31 +425,7 @@ async function callProvider(
     };
   }
   const client = getAnthropic(keyName, group);
-  // document(PDF)가 있으면 content를 블록 배열로 — 문서 블록 + 텍스트 지시(비전 OCR 경로).
-  const userContent = opts.document
-    ? ([
-        {
-          type: "document" as const,
-          source: {
-            type: "base64" as const,
-            media_type: opts.document.mediaType,
-            data: opts.document.dataBase64,
-          },
-        },
-        { type: "text" as const, text: opts.prompt },
-      ] satisfies Anthropic.ContentBlockParam[])
-    : opts.prompt;
-  const claude5 = isClaude5Model(model);
-  const anthropicParams = (withTemperature: boolean) => ({
-    model,
-    max_tokens: sentMaxTokens("anthropic", model, opts.maxTokens, opts.meta?.feature),
-    // Claude 5 계열엔 temperature를 아예 안 보낸다(400 → 재시도 왕복을 없앤다). 그 밖은 호출부 값(멘트 0.3 등) 유지.
-    ...(withTemperature && !claude5 && opts.temperature != null ? { temperature: opts.temperature } : {}),
-    // 생각 깊이 — 호출부가 정한 때만(멘트 'minimal' → low). 안 정하면 모델 기본(Haiku 5.5 = medium).
-    ...(claude5 && opts.reasoningEffort ? { output_config: { effort: ANTHROPIC_EFFORT[opts.reasoningEffort] } } : {}),
-    ...(opts.system ? { system: opts.system } : {}),
-    messages: [{ role: "user" as const, content: userContent }],
-  });
+  const anthropicParams = (withTemperature: boolean) => anthropicRequestParams(model, opts, withTemperature);
   // Claude 5 계열엔 처음부터 temperature를 안 보낸다(위). 그 밖의 모델이 거부하면(문구 판정) 떼고 1회 재시도(자가 회복).
   const res = await client.messages.create(anthropicParams(true)).catch((e: unknown) => {
     if (opts.temperature == null || !isTemperatureDeprecatedError(e)) throw e;
@@ -437,7 +459,7 @@ export type GenerateDecisionOptions = {
   meta: GenerateJSONOptions["meta"];
 };
 
-async function requireAiLicense(meta: GenerateJSONOptions["meta"]): Promise<void> {
+export async function requireAiLicense(meta: GenerateJSONOptions["meta"]): Promise<void> {
   // 🔴 운영 콘솔의 '지점 보기'(읽기 전용) 중에는 **어떤 AI 호출도** 내보내지 않는다 — 지점 데이터가 외부로 나가고 비용이 들며,
   //    결과를 저장할 수도 없다(보기 중 쓰기는 전부 막힌다). 데이터 접근 층의 쓰기 차단은 Supabase로 가는 요청만 보므로
   //    바깥으로 나가는 호출은 이 단일 관문에서 따로 막는다. 요청 밖(cron · 웹훅 · 워커)에서는 늘 통과한다.
@@ -452,7 +474,7 @@ async function requireAiLicense(meta: GenerateJSONOptions["meta"]): Promise<void
  * 지점이 운영 콘솔에서 이 기능에 고른 모델(없으면 null). 서버 전용 모듈이라 **부르는 순간에** 싣는다 — generate.ts는
  * vitest가 직접 import하는 파일이다(라이선스 조회와 같은 이유). 싣지 못하거나 조회가 실패하면 고른 것이 없는 것으로 둔다.
  */
-async function tenantChoiceFor(meta: GenerateJSONOptions["meta"]): Promise<string | null> {
+export async function tenantChoiceFor(meta: GenerateJSONOptions["meta"]): Promise<string | null> {
   const tenantId = typeof meta?.tenantId === "string" ? meta.tenantId.trim() : "";
   if (!tenantId || !meta?.feature) return null;
   try {
@@ -518,13 +540,13 @@ export async function generateJSON(rawOpts: GenerateJSONOptions | GenerateDecisi
   const chain = resolveModelChain(tier, keyName, opts.provider, group, pin);
   // 키가 하나도 없으면 기존 동작 보존: 모델 있는 첫 candidate로 시도(클라 생성 시 키 없음 throw → rethrowAi).
   let candidates = chain.length > 0 ? chain : [resolveModel(tier, keyName, opts.provider, group, pin)];
-  if (opts.document) {
-    // 문서(PDF) 입력은 Anthropic만 받는다 — 다른 provider로 폴백하면 첨부가 조용히 사라진 채
+  if (opts.document || opts.images?.length) {
+    // 문서(PDF)·이미지 입력은 Anthropic만 받는다 — 다른 provider로 폴백하면 첨부가 조용히 사라진 채
     // "본문 없음" 응답이 나와 원인을 못 찾는다. 후보를 한정하고, 없으면 키 문제를 그대로 말한다.
     candidates = candidates.filter((c) => c.provider === "anthropic");
     if (candidates.length === 0) {
       throw new Error(
-        `스캔 문서 인식은 Anthropic(Claude) API 키가 필요합니다 — 관리자가 ${group ? `ANTHROPIC_API_KEY_${group.toUpperCase()}(없으면 ANTHROPIC_API_KEY)` : "ANTHROPIC_API_KEY"}를 확인하세요.`,
+        `${opts.images?.length ? "화면 이미지 판정" : "스캔 문서 인식"}은 Anthropic(Claude) API 키가 필요합니다 — 관리자가 ${group ? `ANTHROPIC_API_KEY_${group.toUpperCase()}(없으면 ANTHROPIC_API_KEY)` : "ANTHROPIC_API_KEY"}를 확인하세요.`,
       );
     }
   }

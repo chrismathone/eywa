@@ -29,33 +29,59 @@ export function videoByteRange(value: string | null): string | null {
   return `bytes=${start}-${Math.min(end ?? Number.MAX_SAFE_INTEGER, start + CHUNK_BYTES - 1)}`;
 }
 
+type ViewerUser = NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>;
+type VideoRow = { student_id: string | null; status: string; drive_file_id: string | null; route: unknown };
+
+/**
+ * 학생에 연결된 숙제 영상을 이 사람이 볼 수 있는가 — 재생(아래 stream)과 영상 설명 AI 참고 메모(video-review)가 **같은 판정**을 쓴다
+ * (#77: 화면 조건이 아니라 한 게이트). 학생 미연결 영상은 여기서 판정하지 않는다(대화 스레드 경로 전용 — 호출부가 따로 다룬다).
+ */
+export async function canViewLinkedHomeworkVideo(
+  user: ViewerUser, db: ReturnType<typeof createAdminClient>, video: { id: string; student_id: string; route: unknown },
+): Promise<boolean> {
+  const videoId = video.id;
+  const studentId = video.student_id;
+  if (!(await getStudentById(studentId))) return false;
+  // A teacher who teaches this student in one subject must not gain every other subject's Drive folder access.
+  if (user.systemRole === "teacher" || (await accessLevelTenant(user.systemRole, "students")) === "scoped") {
+    const source = await homeworkVideoSource(db);
+    const [scope, linked] = await Promise.all([
+      teacherViewableClassIds(user.id),
+      db.from(source).select("route").eq("tenant_id", user.tenantId).eq("id", videoId).maybeSingle(),
+    ]);
+    if (linked.error) throw linked.error;
+    const linkedRoute = linked.data?.route as { classId?: unknown; excluded?: unknown } | null;
+    const originalRoute = video.route as { classId?: unknown } | null;
+    const classId = linkedRoute?.excluded === true ? originalRoute?.classId : linkedRoute?.classId;
+    if (typeof classId !== "string" || !scope.includes(classId)) return false;
+  }
+  return true;
+}
+
+/** 로그인·학생 아님·학생 메뉴 접근·이 지점의 업로드된 영상까지 — 재생과 AI 참고 메모의 공통 앞단. */
+export async function loadViewableVideo(videoId: string): Promise<
+  { ok: true; user: ViewerUser; db: ReturnType<typeof createAdminClient>; video: VideoRow } | { ok: false; status: number }
+> {
+  const user = await getCurrentUser();
+  if (!user || user.systemRole === "student") return { ok: false, status: 401 };
+  if (!UUID.test(videoId)) return { ok: false, status: 404 };
+  if (!(await canAccessTenant(user.systemRole, "students"))) return { ok: false, status: 403 };
+  const db = createAdminClient();
+  const { data: video, error } = await db.from("student_homework_videos").select("student_id,status,drive_file_id,route")
+    .eq("tenant_id", user.tenantId).eq("id", videoId).maybeSingle();
+  if (error) throw error;
+  if (!video || video.status !== "uploaded" || !DRIVE_ID.test(video.drive_file_id ?? "")) return { ok: false, status: 404 };
+  return { ok: true, user, db, video: video as VideoRow };
+}
+
 /** Each range rechecks the signed-in viewer and exact tenant/video before reading that file's pinned Drive account. */
 export async function streamHomeworkVideo(request: Request, videoId: string): Promise<Response> {
   try {
-    const user = await getCurrentUser();
-    if (!user || user.systemRole === "student") return unavailable(401);
-    if (!UUID.test(videoId)) return unavailable(404);
-    if (!(await canAccessTenant(user.systemRole, "students"))) return unavailable(403);
-    const db = createAdminClient();
-    const { data: video, error } = await db.from("student_homework_videos").select("student_id,status,drive_file_id,route")
-      .eq("tenant_id", user.tenantId).eq("id", videoId).maybeSingle();
-    if (error) throw error;
-    if (!video || video.status !== "uploaded" || !DRIVE_ID.test(video.drive_file_id ?? "")) return unavailable(404);
+    const loaded = await loadViewableVideo(videoId);
+    if (!loaded.ok) return unavailable(loaded.status);
+    const { user, db, video } = loaded;
     if (video.student_id) {
-      if (!(await getStudentById(video.student_id))) return unavailable(403);
-      // A teacher who teaches this student in one subject must not gain every other subject's Drive folder access.
-      if (user.systemRole === "teacher" || (await accessLevelTenant(user.systemRole, "students")) === "scoped") {
-        const source = await homeworkVideoSource(db);
-        const [scope, linked] = await Promise.all([
-          teacherViewableClassIds(user.id),
-          db.from(source).select("route").eq("tenant_id", user.tenantId).eq("id", videoId).maybeSingle(),
-        ]);
-        if (linked.error) throw linked.error;
-        const linkedRoute = linked.data?.route as { classId?: unknown; excluded?: unknown } | null;
-        const originalRoute = video.route as { classId?: unknown } | null;
-        const classId = linkedRoute?.excluded === true ? originalRoute?.classId : linkedRoute?.classId;
-        if (typeof classId !== "string" || !scope.includes(classId)) return unavailable(403);
-      }
+      if (!(await canViewLinkedHomeworkVideo(user, db, { id: videoId, student_id: video.student_id, route: video.route }))) return unavailable(403);
     } else {
       // An unmatched worker row is viewable only inside a thread that already permits this exact video.
       const messageId = new URL(request.url).searchParams.get("messageId") ?? "";

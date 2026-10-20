@@ -109,6 +109,8 @@ TypeSafe Jev의 제한된 선택지 판정도 `generateJSON({ mode: "decision", 
     텍스트는 [`maskResidentRegNo`](src/features/staff/contract-extract.ts)로 **주민번호 뒤 7자리 항상 마스킹**(글자 PDF
     경로 포함), ③ `generateJSON({ document })`는 Anthropic 한정(폴백 없음 — 다른 provider로 첨부가 새는 것 방지).
     다른 스캔/이미지 전송을 새로 열 땐 이 예외를 근거로 확장하지 말고 다시 물을 것.
+  - **승인된 예외(원장 2026-10-20)**: **학생 숙제 설명 영상의 화면(공책·교재 사진) Claude 판정** — 영상 설명 AI 참고 메모 한 기능에만
+    (`generateJSON({ images })` Anthropic 전용 · 지점 스위치 `video_review` · 화면에 나가는 것은 분석 결과뿐). 이 승인도 다른 이미지 전송의 근거가 아니다.
 - **usage 계측(0113a `ai_usage_logs`) + 지점 라이선스**: 모든 AI 호출부는 `generateJSON({ …, meta: { feature: "<호출부 식별자>", tenantId } })`를
   넘긴다 — 🔴 **`tenantId`는 필수**(2026-09-25, 타입 + 런타임 거절). 지점을 모르면 라이선스(ai_analysis)를 판정할 수 없어 꺼진 지점에서도
   AI가 새므로, 비어 있으면 `generateJSON`이 호출 전에 거절한다([`decisions/tenant.md`](docs/decisions/tenant.md) 지점 기능 라이선스). 사용량 기록 자체는 best-effort.
@@ -148,7 +150,7 @@ provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어�
 - 회의 재처리 = 기둥 A '분석 다시 생성'(텍스트) / 기둥 B '전사부터 다시'(오디오, Supabase 서명 — Firebase 의존 0). 화자 = `ai_speaker_roles`(표시) + `speaker_staff`(직원 연결).
 - DeepSeek = OpenAI 호환(JSON mode, 프롬프트에 "JSON" 필수) · 키 없으면 Claude로 무중단 폴백(Solar는 2026-10-19 뺐다).
 
-### 키 분리 = 기능별 8그룹 (원장 2026-09-15 *"기능별로 키를 발급받아서 사용량 체크를 하려고"*)
+### 키 분리 = 기능별 9그룹 (원장 2026-09-15 *"기능별로 키를 발급받아서 사용량 체크를 하려고"*)
 **env 이름 = `<회사>_API_KEY_<그룹>`**(회사 = `ANTHROPIC`·`DEEPSEEK`). 그룹은 호출부 식별자(`meta.feature`)에서
 [`FEATURE_KEY_GROUP`](src/lib/ai/models.ts)이 도출한다 — 🔴 **새 AI 호출부를 만들면 그 표에 한 줄**을 더할 것(가드
 [`key-groups.test.ts`](src/lib/ai/key-groups.test.ts)가 빠진 것·죽은 것을 잡는다).
@@ -163,6 +165,7 @@ provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어�
 | `ATTENDANCE` | attendance_recap · parent_attendance_intent · parent_attendance_jev_shadow · parent_satisfaction | DeepSeek · TypeSafe(비교 전용) |
 | `NOTICE` | notice_translate | DeepSeek |
 | `STAFF` | staff_contract_pdf · staff_contract_pdf_ocr | Claude(OCR은 **Claude 전용**) |
+| `VIDEO` | video_review_judge · video_review_verify | Claude(판정 Haiku · 확인 Sonnet · 밤 배치) |
 
 - **키 고르는 순서 = 그룹 키 → 옛 버킷 키(`_CONSULTATIONS`) → 기본 키**(`resolveKeyEnv`). 그룹 키가 아직 없어도
   기본 키로 돌아 **멈추는 기능이 없다**(키를 하나씩 넣는 동안의 안전장치).
@@ -490,6 +493,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - 오늘 과제의 쪽수는 강제가 아니라 후보정
 - 분석 화면에 AI 모델 라벨 노출
 - 업무 처리 확인(할 일, 0377a~0380a) = 알림과 따로 남는 기록 · 처리는 원래 기록의 사실로(버튼 아님) · 트리거 + 종류별 30분 맞춤 · 따로 탭 없이 벨 '내 할 일' · 강사 홈 줄 · 운영실 '열린 할 일'(공통 창 하나) · 모든 직원 = 원장 + 지정한 사람 · 아침 늦은 할 일 요약 · 종류 열 개(발송 실패·후속조치·진도 이상·결석 확인·영상 업로드·미배정 영상·미발송·결재 차례·퇴원보고서·도움말) · 묶음 알림은 연결표 · 미제출·신규생 체크리스트는 할 일 아님
+- 영상 설명 AI 참고 메모(0387a) = 수학 숙제 영상을 밤 배치로 판정(Haiku) + 오류 주장만 확인(Sonnet) · 전사는 영상당 한 번 · 화면 이미지 Claude 전송은 이 기능만 승인 · 화면에는 분석 결과만 · 재생과 같은 권한 · 지점 스위치 기본 꺼짐
 - 알림 경로는 둘이고 서로 다른 물건이다 (2026-08-07, 0188a).
 
 ### 수납·회차·정산·급여 → [`docs/decisions/billing.md`](docs/decisions/billing.md)

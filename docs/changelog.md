@@ -1,5 +1,10 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-10-20 — 영상 설명 AI 참고 메모(0387a)
+
+- 원장 *"영상을 분석하고 설명을 잘했냐 판단"* → 내부 요금제 시험 7차(수학 117개 + 기준 정답 26개)로 하네스를 굳힌 뒤 앱에 붙임. 결정 본문 = `docs/decisions/reports-ai.md`.
+- 워커 `scripts/_classnote/video-review-extract*.mjs`(소리·화면 추출 → `/api/internal/video-review/upload`) · cron `/api/cron/video-review`(10분 · 밤에만 판정 배치) · 웹훅 갈래 · `generateJSON({ images })` + `generate-batch.ts`(같은 관문의 배치) · 재생 창 'AI 참고 메모' 패널 · 키 그룹 `VIDEO` · 라이선스 `video_review`(기본 꺼짐).
+
 ## 2026-10-20 — 신규 콜&상담 목록뷰: 접수 날짜 YY.MM.DD
 
 - 원장 *"목록뷰에서 날짜를 yy.mm.dd"* → `sheetDate`가 `M/D` 대신 `26.08.27`(해가 보인다 · 0 채움). 쓰는 곳은 목록뷰 '접수' 열 하나.

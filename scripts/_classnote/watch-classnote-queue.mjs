@@ -28,6 +28,7 @@ import { createExecutionLease, workerLeaseApi } from "./worker-execution-lease.m
 import managedWorker from "../_sync-agent/managed-worker.cjs";
 import { waitForVideoIdle, videoWorkerBusy } from "./video-worker.mjs";
 import { kickLinkVideoCompress, stopLinkVideoCompress, waitForLinkCompressIdle } from "./video-link-compress.mjs";
+import { kickVideoReviewExtract, stopVideoReviewExtract, waitForReviewExtractIdle } from "./video-review-extract.mjs";
 import { waitForAttachmentIdle } from "./repair-attachment-messages.mjs";
 import { BATCH, closeClassnoteAdminSession, isClassnoteModuleEnabled, launchBrowser, processQueueOnce, resolveTenant } from "./classnote-core.mjs";
 import { processNoticesOnce } from "./classnote-notice-core.mjs";
@@ -239,9 +240,10 @@ async function assertExecutionLease(task) {
 }
 async function finishDraining(){
   stopLinkVideoCompress(); // 긴 인코딩(최대 60분)이 종료·업데이트를 붙잡지 않게 끊는다(시도로 세지 않는다)
+  stopVideoReviewExtract(); // AI 메모용 소리·화면 추출도 끊는다(시도로 세지 않는다)
   // 마무리를 기다리는 일 — 영상 올리기가 돌고 있으면 그것(연동 앱 표시).
   await managedWorker.activity(videoWorkerBusy() ? "video" : null);
-  await Promise.allSettled([waitForVideoIdle(),waitForAttachmentIdle(),waitForLinkCompressIdle()]);
+  await Promise.allSettled([waitForVideoIdle(),waitForAttachmentIdle(),waitForLinkCompressIdle(),waitForReviewExtractIdle()]);
   await dropBrowser();await dropDb();await executionLease?.release?.();
   await leaseSql?.end({timeout:1});await localLock?.release();
 }
@@ -476,6 +478,8 @@ async function main() {
       if (POST) kickVideoWorker(b, tenant, log, { setting: driveSetting });
       // `/v`로 학생이 올린 원본 영상 → 발송 PC가 압축해 같은 Drive 파일에 새 버전으로(원장 2026-10-16). 기다리지 않는다.
       if (POST) kickLinkVideoCompress(tenant, log, { setting: driveSetting, busy: videoWorkerBusy });
+      // 영상 설명 AI 참고 메모(0387a) — 서버가 만든 추출 대기 줄의 소리·화면을 뽑아 올린다(원장 2026-10-20). 기다리지 않는다.
+      if (POST) kickVideoReviewExtract(tenant, log, { setting: driveSetting, busy: videoWorkerBusy });
       // 6) 학부모 읽음 동기화(0122a, 읽기 전용 GET) → aywa lesson_reports.classnote_read_at.
       //    ⚠️ ClassNote에 아무것도 쓰지 않으므로 --post와 무관하게 돈다(읽음은 사실 데이터).
       //    30분 가드 내장. 읽음은 발송 뒤 며칠에 걸쳐 채워져 워터마크 없이 창(14일)을 매번 재조회한다.
