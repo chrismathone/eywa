@@ -116,7 +116,8 @@ describe("랜딩에서 반과 작성률 표시", () => {
   });
   it("두 종류가 있으면 모든 반이 한 번씩 나타난다", async () => {
     const html = await render([card("정규반", false), card("특강반", true)]);
-    expect(html.match(/href="\/mcs\//g)).toHaveLength(2);
+    // 반 줄만 센다 — 머리의 보기 전환(반별·선생님별) 링크는 반이 아니다.
+    expect(html.match(/href="\/mcs\/[^"]+\/month/g)).toHaveLength(2);
     expect(html).toContain(">정규<");
     expect(html).toContain(">특강<");
   });

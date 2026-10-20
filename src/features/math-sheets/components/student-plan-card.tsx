@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { MathStudentRow } from "../server/month-queries";
 import { learningStatusLabel, type LearningGoal, type LearningProgress } from "../lib/learning-plan";
 import type { LearningRailMetrics } from "../lib/learning-axis";
@@ -9,6 +9,9 @@ import { learningBlockLabel } from "../lib/learning-label";
 import { useMathTextbooks } from "./math-textbook-context";
 import { StudentTextbookChip } from "./math-textbook-assign";
 import { BookSection, SHOW_BOOK_PLAN, TodaySection } from "./plan-card-sections";
+import { RoadmapGoal } from "./roadmap-goal";
+import { OtherBookBody } from "./other-book";
+import { roadmapStatusLabel } from "../lib/roadmap-status";
 import css from "./plan-card.module.css";
 
 const pct = (n: number, total: number) => `${Math.max(0, Math.min(100, (n / Math.max(1, total)) * 100))}%`;
@@ -16,7 +19,10 @@ const pct = (n: number, total: number) => `${Math.max(0, Math.min(100, (n / Math
 /**
  * 학생 계획 카드 — 전체 목표 / 교재 3개월 / 오늘 기준 세 구역(원장 2026-10-20 *"디자인을 저런느낌으로"*, 카드 시안).
  * 🔑 계획보다 밀린 만큼은 **빨간 빗금**(원장 *"밀린 차시만큼 되는건 붉은색계열로"*) — 막대·교재 타일이 같은 표시를 쓴다.
- * 판정은 서버·순수 함수가 끝낸 값(`LearningRailMetrics`, `BookWindow`)만 읽는다.
+ * 🔑 전체 목표 = 교재 로드맵(주문일+7일부터 내신 뺀 3개월에 2권 · 중3 11월 말까지, book-roadmap.ts). 주문이 없으면
+ *    저장된 전체 목표(블록 계획)를 그대로 보인다.
+ * 🔑 교재가 여럿이면 머리 줄에 교재 이름을 나란히 두고 눌러서 바꿔 본다(원장 *"옆에 교재이름대로 나열해서 클릭해서"*).
+ * 판정은 서버·순수 함수가 끝낸 값(`LearningRailMetrics`, `BookRoadmap`)만 읽는다.
  */
 export function StudentPlanCard({ student, goal, progress, summary, onOpen }: {
   student: MathStudentRow;
@@ -25,10 +31,24 @@ export function StudentPlanCard({ student, goal, progress, summary, onOpen }: {
   summary?: LearningRailMetrics;
   onOpen: () => void;
 }) {
-  const w = useMathTextbooks()?.windows[student.studentId];
-  const tone = student.rosterPhase !== "on" ? undefined : summary?.status;
+  const plans = useMathTextbooks()?.plans[student.studentId];
+  const roadmaps = plans?.roadmaps ?? [];
+  const others = plans?.others ?? [];
+  // 주문이 없으면 저장된 전체 목표가 첫 탭 — 다른 교재 칩이 그 목표를 가리지 않게.
+  const tabs = [
+    ...(roadmaps.length === 0 && others.length ? [{ key: "", label: "전체 목표" }] : []),
+    ...roadmaps.map((r) => ({ key: `r:${r.series}`, label: `${r.series} ${r.window.books[0]!.title.replace(/^\S+\s*/, "").replace(/\s*\d+권$/, "")}` })),
+    ...others.map((o) => ({ key: `o:${o.name}`, label: o.name })),
+  ];
+  const [pick, setPick] = useState(tabs[0]?.key ?? "");
+  const r = roadmaps.find((x) => `r:${x.series}` === pick) ?? (pick.startsWith("o:") ? undefined : roadmaps[0]);
+  const other = pick.startsWith("o:") ? others.find((o) => `o:${o.name}` === pick) : undefined;
+  const w = r?.window;
+  const tone = student.rosterPhase !== "on" ? undefined : r ? r.status : summary?.status;
   const badge = student.rosterPhase === "ended" ? "수강 종료"
     : student.rosterPhase === "upcoming" ? "수강 예정"
+    : r ? `교재 목표 · ${roadmapStatusLabel(r)}`
+    : other ? "차시표 없는 교재"
     : summary ? `전체 계획 · ${learningStatusLabel(summary, "차시")}` : "전체 목표 미설정";
   return (
     <article className={css.card} data-ended={student.rosterPhase === "ended" || undefined} aria-label={`${student.name} 진도`}>
@@ -39,18 +59,34 @@ export function StudentPlanCard({ student, goal, progress, summary, onOpen }: {
           <StudentTextbookChip studentId={student.studentId} studentName={student.name} />
         </div>
         <span className={css.badge} data-tone={tone}>{badge}</span>
+        {tabs.length > 1 || others.length > 0 ? (
+          <div className={css.bookTabs} role="tablist" aria-label={`${student.name} 교재`}>
+            {tabs.map((t) => (
+              <button key={t.key} type="button" role="tab" aria-selected={(other ? `o:${other.name}` : r ? `r:${r.series}` : "") === t.key}
+                onClick={() => setPick(t.key)}>{t.label}</button>
+            ))}
+          </div>
+        ) : null}
       </header>
-      <Section title="전체 목표" hint="과정 전체에서 어디까지 갈지">
-        <GoalBody goal={goal} progress={progress} summary={summary} />
-      </Section>
-      <Section title="교재 3개월" hint="주문일 +7일부터 3개월 안에 끝낼 교재">
-        {w && w.total > 0 ? <BookSection w={w} /> : <p className={css.empty}>교재 주문 기록이 없습니다.</p>}
-      </Section>
-      {SHOW_BOOK_PLAN ? (
-        <Section title="오늘 기준" hint="오늘 위치와 다음 수업">
-          <TodaySection w={w && w.total > 0 ? w : undefined} fallbackNow={progress?.currentBlock ?? null} onOpen={onOpen} />
+      {other ? (
+        <Section title="수업 기록" hint="교재목록에 차시표가 없는 교재 — 최근 보고서">
+          <OtherBookBody book={other} />
         </Section>
-      ) : null}
+      ) : (
+        <>
+          <Section title="전체 목표" hint={r ? "중3 11월 말까지 3개월에 2권 · 내신기간 제외" : "과정 전체에서 어디까지 갈지"}>
+            {r ? <RoadmapGoal r={r} studentId={student.studentId} studentName={student.name} /> : <GoalBody goal={goal} progress={progress} summary={summary} />}
+          </Section>
+          <Section title="교재 3개월" hint="두 권씩 · 내신기간을 뺀 3개월 안에 끝낼 교재">
+            {w && w.total > 0 ? <BookSection w={w} /> : <p className={css.empty}>교재 주문 기록이 없습니다.</p>}
+          </Section>
+          {SHOW_BOOK_PLAN ? (
+            <Section title="오늘 기준" hint="오늘 위치와 다음 수업">
+              <TodaySection w={w && w.total > 0 ? w : undefined} fallbackNow={progress?.currentBlock ?? null} onOpen={onOpen} />
+            </Section>
+          ) : null}
+        </>
+      )}
     </article>
   );
 }

@@ -10,7 +10,9 @@ import { canResetMathLearningGoals } from "@/features/math-sheets/server/access"
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { getMathClassTextbooks } from "@/features/textbooks/server/math-assignment-queries";
 import { MathTextbookProvider } from "@/features/math-sheets/components/math-textbook-context";
-import { bookWindow, type BookWindow } from "@/features/textbooks/book-window";
+import type { BookWindow } from "@/features/textbooks/book-window";
+import { buildStudentBookPlans, type StudentBookPlans } from "@/features/textbooks/book-plans";
+import { getMathBookTargets, getRecentReportsAllClasses } from "@/features/textbooks/server/math-book-plan-queries";
 import { learningClassDates } from "@/features/math-sheets/lib/learning-class-dates";
 
 export const metadata: Metadata = { title: "수학 강사 시트 · 월간 — 에이와" };
@@ -61,11 +63,15 @@ export default async function McsMonthPage({
   // 셋 다 시트 조회(게이트 통과) 뒤의 독립 조회 — 함께 받는다(B4).
   // 교재 배정은 시트 게이트(`getMathSheetMonth` 안 `requireMcsClassAccess`)를 이미 지난 반만 읽는다.
   const user = await getCurrentUser();
-  const [learning, canResetGoals, textbooks] = await Promise.all([
+  const studentIds = data.students.map((s) => s.studentId);
+  const [learning, canResetGoals, textbooks, targets, allReports] = await Promise.all([
     getMathLearningData(classId, data, { allRecords: true }),
     // 전체 목표 '초기화'(배정 취소)는 **원장 이상급**(원장 2026-09-18) — 화면과 서버가 같은 함수를 본다([[#77]]).
     canResetMathLearningGoals(user),
-    user ? getMathClassTextbooks(user.tenantId, classId, data.students.map((s) => s.studentId)) : null,
+    user ? getMathClassTextbooks(user.tenantId, classId, studentIds) : null,
+    // 교재 전체 목표 — 사람이 고른 목표 권 · 다른 반(수요일 개별심화) 교재 기록. 둘 다 실패해도 화면은 산다.
+    user ? getMathBookTargets(user.tenantId, studentIds) : null,
+    user ? getRecentReportsAllClasses(user.tenantId, studentIds) : null,
   ]);
   // 🔴 줄 수를 "학생 N명"이라 적지 않는다 — 행에는 이 달 중 나간 사람과 아직 안 들어온 사람이
   //    섞여 있다(카드와 **같은 함수**로 센다).
@@ -76,21 +82,26 @@ export default async function McsMonthPage({
   const classOptions = options.some((o) => o.id === classId)
     ? options
     : [{ id: classId, name: data.className }, ...options];
-  // 교재 3개월 창(원장 2026-10-19 "주문날 +7일부터 3개월") — 수업일은 목표 계획과 **같은 함수**로 센다.
-  // 재료(주문·보고서)는 서버에 남기고 결과만 내려보낸다.
+  // 교재 전체 목표(원장 2026-10-20 "중3 11월말까지 3개월당 2권 · 내신기간 제외") + 지금 3개월 창.
+  // 수업일은 목표 계획과 **같은 함수**로 센다. 재료(주문·보고서)는 서버에 남기고 결과만 내려보낸다.
   const windows: Record<string, BookWindow> = {};
+  const plans: Record<string, StudentBookPlans> = {};
   if (textbooks) {
     const { catalog, orders, reports } = textbooks.sources;
     for (const s of data.students) {
-      const w = bookWindow({
+      const p = buildStudentBookPlans({
         orders: orders.get(s.studentId) ?? [],
         catalog,
         // 레일과 같은 기준일까지의 기록만(과거 달을 보면 그 달 끝까지).
         reports: (reports.get(s.studentId) ?? []).filter((r) => r.date <= learning.referenceDate),
+        allReports: allReports?.get(s.studentId) ?? [],
+        grade: s.grade,
+        targets: targets?.byStudent.get(s.studentId),
         referenceDate: learning.referenceDate,
         classDates: (from, to) => learningClassDates(s.studentId, learning.context, from, to),
       });
-      if (w) windows[s.studentId] = w;
+      plans[s.studentId] = p;
+      if (p.roadmaps[0]) windows[s.studentId] = p.roadmaps[0].window;
     }
   }
   return (
@@ -117,6 +128,8 @@ export default async function McsMonthPage({
             choices: textbooks?.choices ?? [],
             now: textbooks?.now ?? {},
             windows,
+            plans,
+            targetStatus: targets?.status ?? "failed",
             // 배정 쓰기 = 목표 쓰기와 같은 게이트(서버 액션이 같은 함수로 다시 본다).
             canWrite: data.canEdit,
           }}
