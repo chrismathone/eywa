@@ -12,6 +12,8 @@ export type TrendChartProps = {
   series: ChartSeries[];
   kind: "line" | "bar";
   unit?: string;
+  /** 값 글자(눈금·선 끝·막대 위·값 상자) — 없으면 `1,234명`. 돈은 `1,234만`처럼 줄여 쓴다(수납 통계). */
+  format?: (n: number) => string;
 };
 
 const HEIGHT = 300;
@@ -25,7 +27,8 @@ const fmt = (n: number) => n.toLocaleString("ko-KR");
  * 막대는 칸이 넉넉할 때(12칸 이하) 막대 위에 값. 세로축은 0부터 보기 좋은 꼭대기까지(선 끝 라벨 자리 계산과 같은 눈금).
  * 값이 null인 칸은 그리지 않는다(정확히 셀 수 없는 기간 — 선이 그 달부터 시작한다).
  */
-export function TrendChartImpl({ labels, tooltipLabels, series, kind, unit = "명" }: TrendChartProps) {
+export function TrendChartImpl({ labels, tooltipLabels, series, kind, unit = "명", format }: TrendChartProps) {
+  const show = format ?? ((n: number) => `${fmt(n)}${unit}`);
   const data = labels.map((label, i) => ({
     label,
     tip: tooltipLabels?.[i] ?? label,
@@ -34,7 +37,7 @@ export function TrendChartImpl({ labels, tooltipLabels, series, kind, unit = "�
   const top = niceTop(Math.max(0, ...series.flatMap((s) => s.values.filter((v): v is number => v !== null))));
   const ends = series.map((s) => {
     const i = lastIndexWithValue(s.values);
-    return { key: s.key, index: i, value: i >= 0 ? (s.values[i] as number) : 0, text: i >= 0 ? `${s.name} ${fmt(s.values[i] as number)}${unit}` : "" };
+    return { key: s.key, index: i, value: i >= 0 ? (s.values[i] as number) : 0, text: i >= 0 ? `${s.name} ${show(s.values[i] as number)}` : "" };
   });
   const lineMode = kind === "line";
   const right = lineMode ? Math.max(...ends.map((e) => textWidth(e.text)), 0) + 20 : 12;
@@ -70,11 +73,11 @@ export function TrendChartImpl({ labels, tooltipLabels, series, kind, unit = "�
             tick={{ fontSize: FONT, fill: "var(--color-muted-foreground)" }}
             tickLine={false}
             axisLine={false}
-            tickFormatter={(n: number) => `${fmt(n)}${unit}`}
+            tickFormatter={(n: number) => show(n)}
           />
           <Tooltip
             cursor={lineMode ? { stroke: "var(--color-border)", strokeWidth: 1 } : { fill: "var(--color-bg-soft)", opacity: 0.6 }}
-            content={<ValueBox series={series} unit={unit} />}
+            content={<ValueBox series={series} show={show} />}
           />
           {series.map((s) => {
             const end = ends.find((e) => e.key === s.key)!;
@@ -107,7 +110,7 @@ export function TrendChartImpl({ labels, tooltipLabels, series, kind, unit = "�
             ) : (
               <Bar key={s.key} dataKey={s.key} name={s.name} fill={s.color} radius={[3, 3, 0, 0]} maxBarSize={22} isAnimationActive={false}>
                 {barLabelOn(s) ? (
-                  <LabelList dataKey={s.key} position="top" fontSize={FONT} fill="var(--color-foreground)" formatter={(v: unknown) => (typeof v === "number" ? fmt(v) : "")} />
+                  <LabelList dataKey={s.key} position="top" fontSize={FONT} fill="var(--color-foreground)" formatter={(v: unknown) => (typeof v === "number" ? (format ? format(v) : fmt(v)) : "")} />
                 ) : null}
               </Bar>
             );
@@ -119,7 +122,7 @@ export function TrendChartImpl({ labels, tooltipLabels, series, kind, unit = "�
 }
 
 /** 마우스 오버 값 상자 — 머리(긴 날짜) + 선마다 색·이름·값(큰 순 · 값 없는 선은 뺀다). */
-function ValueBox({ active, payload, series, unit }: { active?: boolean; payload?: { dataKey?: unknown; value?: unknown; payload?: { tip?: string } }[]; series: ChartSeries[]; unit: string }) {
+function ValueBox({ active, payload, series, show }: { active?: boolean; payload?: { dataKey?: unknown; value?: unknown; payload?: { tip?: string } }[]; series: ChartSeries[]; show: (n: number) => string }) {
   if (!active || !payload?.length) return null;
   const tip = payload[0]?.payload?.tip ?? "";
   const rows = payload
@@ -134,10 +137,7 @@ function ValueBox({ active, payload, series, unit }: { active?: boolean; payload
           <li key={s.key} className="flex items-center gap-2">
             <i aria-hidden className="inline-block size-2.5 shrink-0 rounded-full" style={{ background: s.color }} />
             <span className="text-muted-foreground">{s.name}</span>
-            <b className="num text-foreground ml-auto pl-3">
-              {fmt(v)}
-              {unit}
-            </b>
+            <b className="num text-foreground ml-auto pl-3">{show(v)}</b>
           </li>
         ))}
       </ul>

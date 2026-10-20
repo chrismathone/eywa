@@ -74,6 +74,15 @@ export function intakeTrendHref(): string {
   return "/enrollment?view=stats&trend=day&from=dashboard#intake";
 }
 
+/**
+ * 운영실 '6개월 청구 · 수납'·'수납 현황'의 '상세' — 수납 통계(청구월별 추이 · 원장 2026-10-20 *"청구수납에 대해서도 상세 추이를 볼 수 있게.
+ * 지금 수납 상세 페이지로 이동하는데"*). 달마다 수납관리 목록으로 가는 길은 통계의 수치 표가 잇는다.
+ */
+export function billingStatsHref(subject?: string | null): string {
+  // 과목 관리자가 운영실에서 고른 과목을 싣는다 — 빠지면 통계가 첫 담당 과목으로 열려 카드와 숫자가 갈린다(리뷰 2026-10-20).
+  return `/billing/stats${subject ? `?subject=${encodeURIComponent(subject)}` : ""}#billing`;
+}
+
 /** 그날 결석 학생(출석부). */
 export function absentDayHref(date: string): string {
   return `/attendance/${date}?status=absent`;

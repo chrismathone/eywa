@@ -36,6 +36,7 @@ export function StatsPeriodBar({
   keep,
   anchor = "",
   onMode,
+  modes = ["month", "month24", "day", "range"],
 }: {
   period: StatsPeriod;
   today: string;
@@ -43,6 +44,8 @@ export function StatsPeriodBar({
   keep: Record<string, string | undefined>;
   anchor?: string;
   onMode?: (mode: PeriodMode) => void;
+  /** 고를 수 있는 방식 — 하루로 나눌 수 없는 지표(수납)는 월별만. */
+  modes?: readonly PeriodMode[];
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -71,7 +74,7 @@ export function StatsPeriodBar({
   return (
     <div className={`flex flex-wrap items-center gap-2 ${pending ? "opacity-70" : ""}`} aria-busy={pending}>
       <ToolbarSegment label="기간">
-        {(["month", "month24", "day", "range"] as const).map((m) => (
+        {modes.map((m) => (
           <ToolbarSegmentItem key={m} active={mode === m} onClick={() => mode !== m && pick(m)}>
             {MODE_LABEL[m]}
           </ToolbarSegmentItem>

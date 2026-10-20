@@ -16,7 +16,7 @@ import {
 } from "@/features/dashboard/overview/model";
 import { concurrentShare } from "@/features/students/enrollment/enrolled-composition";
 // 재원생 패널 ↗는 KPI 카드와 같은 주소 — "/students"만 적으면 계정에 저장된 필터가 끼어 숫자가 달라 보인다(F21).
-import { studentsEnrolledHref, studentsStatsHref } from "@/features/dashboard/overview/kpi-links";
+import { billingStatsHref, studentsEnrolledHref, studentsStatsHref } from "@/features/dashboard/overview/kpi-links";
 import { DASHBOARD_SUBJECT_COLORS, STAFF_SUBJECT_LEGEND, dashboardSubjectColor, dashboardCombinationColor } from "@/features/dashboard/overview/subject-colors";
 import { foldExpenseTotals } from "@/features/dashboard/overview/expense-total";
 import { paymentRateDisplay } from "@/features/billing/calc";
@@ -408,7 +408,7 @@ export function Overview({
     <Panel
       title={t("billingMonth", `${thisMonth} 수납 현황`)}
       note="이번 달 청구서 · 취소 청구 제외"
-      href={`/billing?period=${snapshot.today.slice(0, 7)}`}
+      href={billingStatsHref(view?.activeSubject)}
       sections={[v.billing]}
     >
       {bill && (
@@ -608,7 +608,7 @@ export function Overview({
     <Panel
       title={t("billing6", "6개월 청구 · 수납")}
       note="최근 6개월 · 청구월 기준 실청구액(청구 − 할인)"
-      href="/billing"
+      href={billingStatsHref(view?.activeSubject)}
       sections={[v.billing]}
       wide
       tools={kindTools("billing", "6개월 청구 · 수납")}

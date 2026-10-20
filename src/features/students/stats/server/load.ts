@@ -103,7 +103,7 @@ async function loadBounds(tenantId: string, today: string): Promise<Omit<Student
  * 묶음(`subjectGroupOf`) → `slicePredicate(묶음, sliceGroupsOf)`(server.ts `loadOverview`의 과목별 값과 같은 줄). 과목 관리자가 아니면 null.
  * 담당 과목을 못 읽으면(`degraded`) 넓히지 않고 던진다 · 담당 과목이 비면 `empty`(운영실처럼 숫자를 안 낸다).
  */
-async function subjectScopeOf(user: User, settings: Settings, requested?: string) {
+export async function subjectScopeOf(user: User, settings: Settings, requested?: string) {
   const viewer = await loadViewerBundle(user);
   if (!viewer.subjectScoped) return null;
   if (viewer.degraded) throw new Error("담당 과목을 확인하지 못했습니다");
