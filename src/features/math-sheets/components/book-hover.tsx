@@ -8,9 +8,11 @@ import css from "./plan-card.module.css";
  * 마우스 호버 올리면 소단원 별로 차시 바로바로 볼수있게"*). 차시표는 교재목록(`textbook_lessons`)이 단일 소스.
  * `align="end"`면 오른쪽 끝에 맞춘다(카드 오른쪽 밖으로 넘치지 않게).
  */
-export function BookHover({ title, period, lessonUnits, lessonCount, at, align = "start", children, className, style, ...data }: {
+export function BookHover({ title, period, notes, lessonUnits, lessonCount, at, align = "start", children, className, style, ...data }: {
   title: string;
   period?: string;
+  /** 기간 아래 한 줄씩 — 그 권에 걸린 내신기간 등. */
+  notes?: string[];
   lessonUnits: string[][];
   lessonCount: number;
   /** 지금 이 권의 몇 차시인가(있으면 그 줄을 강조). */
@@ -29,6 +31,7 @@ export function BookHover({ title, period, lessonUnits, lessonCount, at, align =
       <div className={css.pop} data-align={align} role="tooltip">
         <b>{title}</b>
         {period ? <small>{period}</small> : null}
+        {notes?.map((n) => <small key={n} data-note>{n}</small>)}
         {lessonUnits.length ? (
           <ol>
             {lessonUnits.map((units, i) => (

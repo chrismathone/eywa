@@ -6,7 +6,6 @@ import { BookHover } from "./book-hover";
 import { TargetEditor } from "./target-editor";
 import css from "./plan-card.module.css";
 
-const dot = (date: string) => date.replaceAll("-", ".");
 const md = (date: string) => date.slice(5).replace("-", ".");
 const ymd = (date: string) => `${date.slice(2, 4)}.${md(date)}`;
 const span = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
@@ -23,14 +22,14 @@ export const shortBook = (key: string, title: string) => {
  *  · 회색 빗금 = 내신기간(진도 멈춤) — 같은 막대 위에 겹친다
  *  · 검은 선 = 오늘(= 오늘 계획) · 점 = 실제 위치(나간 차시를 계획이 끝냈어야 할 날, `doneDate`)
  *  · 점이 오늘보다 앞이면 그 사이가 **밀린 만큼(빨간 빗금)**, 뒤면 앞선 만큼(옅은 네이비)
- * 남은 수업·기간은 제목 줄 옆에 둔다(원장 *"해당 기간 및 수업을 해당 위치 옆으로"*).
+ * 제목 아래 사실 칩(남은 수업·기간·목표) — 막대와 겹치는 '현재 위치/최종 목표' 블록은 뺐다(원장 *"중복되는거 빼고"*):
+ *  현재 차시는 그 권 칸 이름 옆·점 오버에, 목표 권 변경은 목표 칩 안에. 내신 날짜는 권 칸 오버에만.
  */
 export function RoadmapGoal({ r, studentId, studentName }: { r: RoadmapView; studentId: string; studentName: string }) {
   const first = r.books[0]!, last = r.books[r.books.length - 1]!;
   const done = r.done ?? 0;
   const started = r.status !== "not-started";
   const pos = r.position;
-  const now = pos ? `${shortBook(pos.key, pos.title)} ${pos.lessonNo}차시 · ${pos.unit}` : "진도 확인 필요";
   const from = r.startDate, to = r.scheduleEnd;
   const days = Math.max(1, span(from, to));
   const x = (d: string) => Math.max(0, Math.min(100, (span(from, d) / days) * 100));
@@ -41,19 +40,22 @@ export function RoadmapGoal({ r, studentId, studentName }: { r: RoadmapView; stu
   const pc = (n: number) => `${n}%`;
   return (
     <>
-      <div className={css.goalRow}>
+      <div className={css.goalHead}>
         <h4>{r.series} {shortBook(first.key, first.title)} → {shortBook(last.key, last.title)}</h4>
-        <span className={css.inlineFacts}>
-          {r.remainingClasses != null ? <>남은 수업<b>{r.remainingClasses}회</b></> : null}
-          <>기간<b>{dot(r.startDate)} – {dot(r.endDate)}</b></>
-        </span>
         <span className={css.right}>
           {r.done == null ? "진도 확인 필요" : <><b>{done}/{r.total}차시</b> · {Math.round((done / Math.max(1, r.total)) * 100)}% · {Math.max(0, r.total - done)}차시 남음</>}
         </span>
       </div>
-      {r.examNow ? (
-        <p className={css.examNow}>지금 내신기간 · {r.examNow.label} ({md(r.examNow.from)}–{md(r.examNow.to)}) — 이 기간엔 진도 계획이 늘지 않습니다</p>
-      ) : null}
+      {/* 사실은 칩으로 나눠 한 줄에 — 제목과 붙어 쭉 이어지면 어디까지가 무엇인지 안 보인다(원장 "구별이 안 가는데"). */}
+      <div className={css.factChips}>
+        {r.remainingClasses != null ? <span><small>남은 수업</small><b>{r.remainingClasses}회</b></span> : null}
+        <span><small>기간</small><b>{ymd(r.startDate)} – {ymd(r.endDate)}</b></span>
+        <span>
+          <small>목표</small>
+          <b>{r.target.auto ? (r.deadline ? "자동 · 중3 11월 말까지" : r.deadlinePassed ? "자동 · 마감 지남(지금 3개월 끝)" : "자동 · 지금 3개월 끝") : "직접 지정"}</b>
+          <TargetEditor key={r.target.key} r={r} studentId={studentId} studentName={studentName} />
+        </span>
+      </div>
       <div className={css.trail}>
         <div className={css.tTrack}>
           {doneX != null ? <span className={css.tFill} style={{ width: pc(started && r.status === "ahead" ? Math.min(doneX, todayX) : doneX) }} /> : null}
@@ -76,41 +78,28 @@ export function RoadmapGoal({ r, studentId, studentName }: { r: RoadmapView; stu
               data-partial={partial || undefined}
               title={b.title}
               period={`${ymd(b.startDate)} – ${ymd(b.finishDate)} 예정${partial ? ` · ${md(r.deadline!)}까지 ${b.byDeadline}/${b.lessonCount}차시` : ""}`}
+              notes={r.exams.filter((p) => p.to >= b.startDate && p.from <= b.finishDate)
+                .map((p) => `내신 ${p.label.replace(/^중\d\s/, "")} ${ymd(p.from)}–${md(p.to)} · 진도 멈춤`)}
               lessonUnits={b.lessonUnits}
               lessonCount={b.lessonCount}
               at={pos?.key === b.key ? pos.lessonNo : null}
               align={i >= r.schedule.length / 2 ? "end" : "start"}
             >
-              <i><b>{shortBook(b.key, b.title)}</b><small>{partial ? `${md(r.deadline!)}까지 ${b.byDeadline}/${b.lessonCount}` : `~${md(b.finishDate)}`}</small></i>
+              <i><b>{shortBook(b.key, b.title)}{pos?.key === b.key ? ` · ${pos.lessonNo}차시` : ""}</b><small>{partial ? `${md(r.deadline!)}까지 ${b.byDeadline}/${b.lessonCount}` : `~${md(b.finishDate)}`}</small></i>
             </BookHover>
           );
         })}
         {started && r.referenceDate <= to ? (
           <span className={css.plan} style={{ left: pc(todayX) }}><em>오늘 계획 {r.planned}차시</em></span>
         ) : null}
-        {doneX != null ? <span className={css.dot} style={{ left: pc(doneX) }} title={`실제 ${done}차시`} /> : null}
+        {doneX != null ? <span className={css.dot} style={{ left: pc(doneX) }} title={pos ? `현재 ${shortBook(pos.key, pos.title)} ${pos.lessonNo}차시 · ${pos.unit} (${md(pos.date)} 보고서)` : `실제 ${done}차시`} /> : null}
       </div>
-      <div className={css.examChips}>
-        <span>{ymd(from)} 시작</span>
-        {r.exams.length ? <span><i className={css.examKey} />내신기간 · 진도 멈춤</span> : null}
-        {r.exams.map((p) => (
-          <em key={p.from} data-now={(p.from <= r.referenceDate && r.referenceDate <= p.to) || undefined}>
-            {p.label.replace(/^중\d\s/, "")} {ymd(p.from)}–{md(p.to)}
-          </em>
-        ))}
-        <span className={css.chipsEnd}>{ymd(to)}{r.deadline ? " · 중3 11월 말" : ""}</span>
-      </div>
-      <div className={css.ends}>
-        <div><b>현재 위치</b>{now}{pos ? ` (${md(pos.date)})` : ""}</div>
-        <div>
-          <b>최종 목표</b>
-          {last.title} · {dot(last.finishDate)} 완료 예정
-          <span className={css.targetNote}>
-            {r.target.auto ? (r.deadline ? `자동 · 중3 11월 말(${dot(r.deadline)})까지` : r.deadlinePassed ? "자동 · 중3 11월 말 마감 지남 — 지금 3개월 창 끝" : "자동 · 지금 3개월 창 끝") : "직접 지정"}
-            <TargetEditor key={r.target.key} r={r} studentId={studentId} studentName={studentName} />
-          </span>
-        </div>
-      </div>
+      {/* 내신기간은 알리기만 — 날짜는 권 칸에 마우스를 올리면 그 권에 걸린 것만(원장 "기간은 교재 호버하면 거기 안에"). */}
+      <p className={css.legend}>
+        <span><i className={css.examKey} />내신기간 · 진도 멈춤</span>
+        {r.examNow ? <em>지금 {r.examNow.label.replace(/^중\d\s/, "")} 기간</em> : null}
+        <span className={css.legendEnd}>교재 칸에 마우스를 올리면 차시·내신 날짜</span>
+      </p>
     </>
   );
 }

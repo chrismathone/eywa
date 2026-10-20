@@ -87,13 +87,14 @@
 .open { border: 1px solid var(--line); border-radius: 8px; background: var(--card); font-size: var(--text-sm); font-weight: 600; cursor: pointer; }
 .open:hover { border-color: var(--primary); color: var(--primary); }
 
-/* 전체 목표 — 제목 줄 옆 사실(원장 "해당 기간 및 수업을 해당 위치 옆으로") */
-.goalRow { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; min-width: 0; }
-.goalRow h4 { font-size: var(--text-base); font-weight: 700; }
-.inlineFacts { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: var(--text-sm); color: var(--text-dim); }
-.inlineFacts b { margin-left: 5px; color: var(--text); font-weight: 700; }
-.goalRow .right { margin-left: auto; }
-.examNow { margin-top: 10px; padding: 6px 10px; border-radius: 8px; background: var(--amber-soft); color: var(--amber); font-size: var(--text-sm); font-weight: 600; }
+.goalHead { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+.goalHead h4 { font-size: var(--text-base); font-weight: 750; }
+.factChips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+.factChips > span { display: inline-flex; align-items: baseline; gap: 6px; padding: 3px 10px; border-radius: 6px; background: var(--bg-soft); font-size: var(--text-sm); }
+.factChips small { font-size: var(--text-xs); color: var(--text-faint); }
+.factChips b { font-weight: 700; color: var(--text); }
+.factChips .linkButton { margin-left: 4px; font-size: var(--text-xs); }
+.factChips .targetForm { margin-top: 0; }
 
 /* 권 구간 — 마우스를 올리면 차시별 소단원 */
 .hover { position: relative; outline: none; }
@@ -137,16 +138,15 @@
 .tSeg[data-partial]::after { content: ""; position: absolute; top: 8px; height: 10px; left: 0; right: 0; border: 1px dashed var(--line-strong, #c3c8d1); border-radius: 0 99px 99px 0; }
 .tSeg:hover > i b, .tSeg:focus-visible > i b { color: var(--primary); }
 .trail .plan, .trail .dot { z-index: 4; }
-.chipsEnd { margin-left: auto; }
-.examChips { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: 0 8px 14px; font-size: var(--text-xs); color: var(--text-faint); }
-.examChips > span { margin-right: 2px; }
-.examChips em { font-style: normal; padding: 1px 7px; border-radius: 99px; background: var(--bg-soft); color: var(--text-dim); }
-.examChips em[data-now] { background: var(--amber-soft); color: var(--amber); font-weight: 700; }
+.legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 0 8px 4px; font-size: var(--text-xs); color: var(--text-faint); }
+.legend em { font-style: normal; padding: 1px 8px; border-radius: 99px; background: var(--amber-soft); color: var(--amber); font-weight: 700; }
+.legendEnd { margin-left: auto; }
+.pop > small[data-note] { color: var(--text-dim); }
+.pop > small[data-note]::before { content: ""; display: inline-block; width: 10px; height: 6px; margin-right: 5px; border-radius: 2px; background: var(--exam-hatch); vertical-align: 1px; }
 .examKey { display: inline-block; width: 14px; height: 6px; margin-right: 4px; vertical-align: 1px; border-radius: 2px; background: var(--exam-hatch); }
 .examNote { font-size: var(--text-xs); color: var(--text-faint); }
 
 /* 최종 목표 권 */
-.targetNote { display: block; margin-top: 2px; font-size: var(--text-xs); color: var(--text-faint); }
 .linkButton { margin-left: 8px; color: var(--primary); font-weight: 700; cursor: pointer; }
 .linkButton:hover { text-decoration: underline; }
 .targetLock { margin-left: 8px; }
