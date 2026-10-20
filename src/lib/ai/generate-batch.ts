@@ -7,7 +7,12 @@
  * - 한 배치는 한 키 그룹만 담는다(키가 하나여야 한다). 섞어 넣으면 던진다.
  * - 결과는 24시간 안에 온다. 수거(`collectJSONBatch`)는 끝나지 않았으면 null — 다음 cron이 다시 묻는다.
  */
+import { randomUUID } from "node:crypto";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { withFactGuard } from "./fact-guard";
+import { devCliEnabled, runDevCli } from "./dev-cli";
 import { getAnthropic } from "./anthropic";
 import { featurePin } from "./model-pins";
 import { AI_MODELS, keyGroupOf, keyLabelOf, resolveKeyEnv } from "./models";
@@ -55,6 +60,7 @@ export async function submitJSONBatch(items: readonly BatchItem[]): Promise<Batc
     }
   }
   if (requests.length === 0) return rejected.length ? { batchId: "", models, rejected } : null;
+  if (devCliEnabled()) return { batchId: await runDevBatch(requests), models, rejected };
   const batch = await getAnthropic("default", group).messages.batches.create({ requests });
   return { batchId: batch.id, models, rejected };
 }
@@ -67,6 +73,7 @@ export async function collectJSONBatch(
   batchId: string,
   metas: Readonly<Record<string, GenerateJSONOptions["meta"]>>,
 ): Promise<Record<string, BatchOutcome> | null> {
+  if (batchId.startsWith(DEV_BATCH_PREFIX)) return collectDevBatch(batchId, metas);
   const anyMeta = Object.values(metas)[0];
   const group = keyGroupOf(anyMeta?.feature);
   const client = getAnthropic("default", group);
@@ -93,6 +100,54 @@ export async function collectJSONBatch(
     } catch {
       out[row.custom_id] = { ok: false, error: msg.stop_reason === "max_tokens" ? "AI 응답이 최대 길이에서 잘렸습니다" : "AI 응답을 해석하지 못했습니다" };
     }
+  }
+  return out;
+}
+
+// ── 개발 전용 배치(dev-cli.ts) — 운영에선 안 탄다. 한 건씩 바로 CLI로 돌려 결과를 임시 파일에 두고, 수거가 그 파일을 읽는다. ──
+const DEV_BATCH_PREFIX = "devcli_";
+const devBatchDir = () => join(tmpdir(), "aywa-dev-batches");
+
+type DevParams = ReturnType<typeof anthropicRequestParams>;
+function devInput(params: DevParams) {
+  const content = params.messages[0]?.content;
+  const blocks = typeof content === "string" ? [{ type: "text", text: content }] : (content as { type: string; text?: string; source?: { media_type: string; data: string } }[]);
+  const images: { mediaType: string; dataBase64: string; label?: string }[] = [];
+  let pendingLabel: string | undefined;
+  let prompt = "";
+  for (const b of blocks) {
+    if (b.type === "document") throw new Error("개발용 CLI 배치는 문서(PDF) 첨부를 지원하지 않습니다");
+    if (b.type === "image" && b.source) { images.push({ mediaType: b.source.media_type, dataBase64: b.source.data, label: pendingLabel }); pendingLabel = undefined; }
+    else if (b.type === "text") { if (pendingLabel !== undefined) prompt += `${pendingLabel}\n`; pendingLabel = b.text; }
+  }
+  if (pendingLabel !== undefined) prompt += pendingLabel;
+  return { model: params.model, prompt, system: typeof params.system === "string" ? params.system : undefined, images };
+}
+
+async function runDevBatch(requests: { custom_id: string; params: DevParams }[]): Promise<string> {
+  const id = `${DEV_BATCH_PREFIX}${randomUUID().replace(/-/g, "")}`;
+  const out: Record<string, { ok: true; text: string; model: string } | { ok: false; error: string }> = {};
+  for (const r of requests) {
+    try { out[r.custom_id] = { ok: true, text: await runDevCli(devInput(r.params)), model: r.params.model }; }
+    catch (e) { out[r.custom_id] = { ok: false, error: e instanceof Error ? e.message : String(e) }; }
+  }
+  await mkdir(devBatchDir(), { recursive: true });
+  await writeFile(join(devBatchDir(), `${id}.json`), JSON.stringify(out));
+  return id;
+}
+
+async function collectDevBatch(batchId: string, metas: Readonly<Record<string, GenerateJSONOptions["meta"]>>): Promise<Record<string, BatchOutcome> | null> {
+  if (!devCliEnabled()) throw new Error("개발 배치 번호는 개발 서버에서만 수거합니다");
+  if (!/^devcli_[a-f0-9]{32}$/.test(batchId)) throw new Error("개발 배치 번호 형식 오류");
+  const saved = JSON.parse(await readFile(join(devBatchDir(), `${batchId}.json`), "utf8")) as Record<string, { ok: boolean; text?: string; model?: string; error?: string }>;
+  const out: Record<string, BatchOutcome> = {};
+  for (const [customId, meta] of Object.entries(metas)) {
+    const r = saved[customId];
+    if (!r) continue;
+    await recordUsage({ meta, provider: "anthropic", model: r.model ?? "dev-cli", keyName: "dev-cli", ok: r.ok, error: r.error });
+    if (!r.ok || !r.text) { out[customId] = { ok: false, error: r.error ?? "개발 배치 실패" }; continue; }
+    try { out[customId] = { ok: true, data: parseJsonLoose(r.text), model: r.model ?? "dev-cli" }; }
+    catch { out[customId] = { ok: false, error: "AI 응답을 해석하지 못했습니다" }; }
   }
   return out;
 }

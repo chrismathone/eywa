@@ -20,6 +20,7 @@ import {
 } from "./models";
 import { reportWarning } from "@/lib/observability/report-error";
 import { callJev, JevError, JEV_MODEL, type DecisionQuestions, type DecisionResult } from "./jev";
+import { devCliEnabled, runDevCli } from "./dev-cli";
 
 /**
  * 응답 길이 상한(max_tokens)의 **바닥** — 호출부 값이 이보다 작으면 이 값으로 올려 보낸다(원장 2026-10-19 *"응답 길이 한도도 팍팍 늘려"*).
@@ -540,6 +541,14 @@ export async function generateJSON(rawOpts: GenerateJSONOptions | GenerateDecisi
   const chain = resolveModelChain(tier, keyName, opts.provider, group, pin);
   // 키가 하나도 없으면 기존 동작 보존: 모델 있는 첫 candidate로 시도(클라 생성 시 키 없음 throw → rethrowAi).
   let candidates = chain.length > 0 ? chain : [resolveModel(tier, keyName, opts.provider, group, pin)];
+  // 개발 전용 — 관문(사실 원칙·라이선스·모델 고정)을 다 지난 뒤 호출만 내부 요금제 CLI로(dev-cli.ts · 운영에선 꺼짐).
+  // 첫 후보가 Claude일 때만(DeepSeek 고정 기능은 평소대로) · 이미지는 Claude 전용이라 그대로 · 문서(PDF)는 평소 경로. API 키 확인보다 앞에 둔다.
+  if (devCliEnabled() && !opts.document && (opts.images?.length || candidates[0]?.provider === "anthropic")) {
+    const model = candidates.find((c) => c.provider === "anthropic")?.model ?? (pin?.provider === "anthropic" ? pin.model : null) ?? AI_MODELS[tier].anthropic ?? "claude-sonnet-5-5";
+    const text = await runDevCli({ model, prompt: opts.prompt, system: opts.system, images: opts.images });
+    await recordUsage({ meta: opts.meta, provider: "anthropic", model, keyName: "dev-cli", ok: true });
+    return { data: parseJsonLoose(text), model };
+  }
   if (opts.document || opts.images?.length) {
     // 문서(PDF)·이미지 입력은 Anthropic만 받는다 — 다른 provider로 폴백하면 첨부가 조용히 사라진 채
     // "본문 없음" 응답이 나와 원인을 못 찾는다. 후보를 한정하고, 없으면 키 문제를 그대로 말한다.
