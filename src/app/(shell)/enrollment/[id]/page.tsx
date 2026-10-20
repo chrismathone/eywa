@@ -44,6 +44,7 @@ import { detailPanelsFor } from "@/features/enrollment/detail-panels";
 import { getAssignedClasses } from "@/features/enrollment/server/assigned-classes";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { canViewClassDetail } from "@/features/classes/server/class-scope";
+import { makeeduCounselUrl } from "@/features/enrollment/makeedu-link";
 
 export const metadata = { title: "신입생 상담 상세 — 에이와" };
 
@@ -452,7 +453,7 @@ export default async function EnrollmentDetailPage({
               {/* makeedu 동기화 예비상담(makeedu_id=counselSeq) → 원본 상세 링크(클릭 시 makeedu 로그인 필요). */}
               {consult.makeeduId ? (
                 <a
-                  href={`https://school.makeedu.co.kr/counsel/counselList_detail.do?counselSeq=${consult.makeeduId}`}
+                  href={makeeduCounselUrl(consult.makeeduId)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-primary mt-3 inline-flex items-center gap-1.5 text-sm font-medium hover:underline"
