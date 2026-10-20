@@ -8,6 +8,8 @@ import { addDays, kstToday } from "@/lib/date-kst";
 import { buildStudentBookPlans } from "@/features/textbooks/book-plans";
 import { getMathCatalogBooks, getStudentBookOrders } from "@/features/textbooks/server/math-assignment-queries";
 import { getMathBookTargets } from "@/features/textbooks/server/math-book-plan-queries";
+import { getAllSchoolExamPeriods } from "@/features/textbooks/server/school-exam-queries";
+import { normalizeSchoolName } from "@/features/schools/school-name";
 import type { RoadmapStatus } from "@/features/textbooks/book-roadmap";
 import { SENT_REPORT_OR } from "../lib/sent-reports";
 import { NO_HOMEROOM_LABEL } from "../landing-tracks";
@@ -33,6 +35,8 @@ export type TeacherStudentRow = {
   window: { name: string; done: number | null; total: number } | null;
   status: RoadmapStatus | null;
   difference: number | null;
+  /** 지금 쓰는 교재(원장 2026-10-20 *"현재 사용하는 교재이름 노출"*) — 최근 진도가 걸린 권, 없으면 지금 3개월 창 첫 권. */
+  bookName: string | null;
   /** 교재 이름이 둘 이상이면(다른 시리즈) 그 수. */
   bookCount: number;
 };
@@ -75,7 +79,7 @@ export async function getMathTeacherRoster(): Promise<{ ok: true; groups: Teache
     const current = enrRows.filter((e) => (!e.start_date || e.start_date.slice(0, 10) <= today)
       && !isEnrollmentEndedOn(e.end_date?.slice(0, 10), today, e.is_transferred === true));
     const studentIds = [...new Set(current.map((e) => String(e.student_id)))];
-    const [students, orders, reports, targets] = await Promise.all([
+    const [students, orders, reports, targets, schoolExams] = await Promise.all([
       fetchInChunks<{ id: string; name: string; school: string | null; grade: string | null; withdrawn_at: string | null }>(studentIds, (chunk) =>
         admin.from("students").select("id, name, school, grade, withdrawn_at").eq("tenant_id", tenantId).in("id", chunk)),
       getStudentBookOrders(tenantId, studentIds),
@@ -84,6 +88,8 @@ export async function getMathTeacherRoster(): Promise<{ ok: true; groups: Teache
           .in("student_id", chunk).or(SENT_REPORT_OR).is("revoked_at", null)
           .gte("report_date", addDays(today, -REPORT_LOOKBACK_DAYS)).order("id").range(f, t)),
       getMathBookTargets(tenantId, studentIds),
+      // 학교별 내신기간 — 학원 전체를 받아 나란히(B4). 실패해도 기본표로 계산한다.
+      getAllSchoolExamPeriods(tenantId),
     ]);
     const studentById = new Map(students.filter((s) => !s.withdrawn_at || s.withdrawn_at.slice(0, 10) > today).map((s) => [String(s.id), s]));
     const teacherName = new Map(teachers.map((t) => [String(t.id), t.display_name]));
@@ -110,6 +116,7 @@ export async function getMathTeacherRoster(): Promise<{ ok: true; groups: Teache
         reports: reportsByKey.get(`${s.id}|${cls.id}`) ?? [],
         grade: s.grade,
         targets: targets.byStudent.get(s.id),
+        examOverrides: schoolExams.byKey.get(normalizeSchoolName(s.school)) ?? [],
         referenceDate: today,
         today,
       });
@@ -118,6 +125,7 @@ export async function getMathTeacherRoster(): Promise<{ ok: true; groups: Teache
       rows.set(s.id, {
         studentId: s.id, name: s.name, school: s.school, grade: s.grade, classId: String(cls.id), className: String(cls.class_name),
         window: w ? { name: w.books.map((b) => b.title).join(" · "), done: w.done, total: w.total } : null,
+        bookName: r?.position?.title ?? w?.books[0]?.title ?? null,
         status: r?.status ?? null,
         difference: r?.difference ?? null,
         bookCount: plans.roadmaps.length,

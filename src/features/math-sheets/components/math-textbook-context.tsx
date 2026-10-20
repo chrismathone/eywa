@@ -6,6 +6,10 @@ import type { TextbookTableStatus } from "@/features/textbooks/types";
 import type { StudentBookNow } from "@/features/textbooks/server/math-assignment-queries";
 import type { BookWindow } from "@/features/textbooks/book-window";
 import type { StudentBookPlans } from "@/features/textbooks/book-plans";
+import type { ExamTerm } from "@/features/textbooks/exam-periods";
+
+/** 학교별 내신기간 한 줄(school-exam-queries.ts와 같은 모양 — 서버 모듈을 클라에서 import하지 않으려고 여기 둔다). */
+export type SchoolExamRow = { schoolKey: string; schoolLabel: string; schoolYear: number; term: ExamTerm; from: string; to: string };
 
 /**
  * 수학 교재 배정 — MCS 화면 안 어디서든(학생 행·반 교재 줄·전체 목표 창) 같은 값을 읽는다.
@@ -26,6 +30,8 @@ export type MathTextbookState = {
   plans: Record<string, StudentBookPlans>;
   /** 목표 권 저장 표 상태 — `ok`가 아니면 목표 권 변경을 잠근다. */
   targetStatus: "ok" | "missing-table" | "failed";
+  /** 이 반 학생 학교들의 학교별 내신기간(적어 둔 것만) — `학교별 내신기간` 창이 읽고 고친다. */
+  schoolExams: { status: "ok" | "missing-table" | "failed"; rows: SchoolExamRow[] };
   /** 배정을 고칠 수 있나 — 서버 게이트(`requireMcsClassAccess(write)`)와 같은 판정값. */
   canWrite: boolean;
 };

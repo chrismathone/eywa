@@ -75,7 +75,7 @@ function Row({ s }: { s: TeacherStudentRow }) {
     <li>
       <EmbedLink href={`/mcs/${s.classId}/month?student=${s.studentId}`} className={styles.row}>
         <span className={styles.who}>
-          <strong>{s.name}</strong>
+          <strong>{s.name}{s.bookName ? <em className={styles.bookName}>{s.bookName}</em> : null}</strong>
           <small>{[s.school, s.grade].filter(Boolean).join(" ")} · {s.className}</small>
         </span>
         {w ? (

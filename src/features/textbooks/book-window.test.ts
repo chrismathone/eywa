@@ -39,15 +39,15 @@ describe("교재 순서", () => {
 });
 
 describe("전체 목표(로드맵)", () => {
-  it("김수련 — 내신 빼고 3개월에 2권 · 중3 11월 말까지 중3-2 3권", () => {
+  it("김수련 — 내신 빼고 3개월에 2권 · 목표 = 중3 11월 말에 나가고 있을 권(중3-2 4권)", () => {
     const r = bookRoadmap({ ...SURYEON, reports: [{ date: "2026-10-13", textbook: "가우스 중2-2 3권", progress: "수학 삼각형의 닮음 조건" }], referenceDate: "2026-10-20" })!;
     expect(r.startDate).toBe("2026-07-23");
     expect(r.books.map((b) => `${b.title}:${b.finishDate}`)).toEqual([
       "가우스 중2-2 3권:2026-10-27", "가우스 중2-2 4권:2027-01-21",
-      "가우스 중3-1 1권:2027-03-07", "가우스 중3-1 2권:2027-07-21", "가우스 중3-2 3권:2027-11-26",
+      "가우스 중3-1 1권:2027-03-07", "가우스 중3-1 2권:2027-07-21", "가우스 중3-2 3권:2027-11-26", "가우스 중3-2 4권:2028-01-11",
     ]);
-    expect(r.target).toMatchObject({ key: "가우스|중3-2|3", auto: true });
-    expect(r).toMatchObject({ total: 40, planned: 7, done: 7, status: "on" });
+    expect(r.target).toMatchObject({ key: "가우스|중3-2|4", auto: true });
+    expect(r).toMatchObject({ total: 48, planned: 7, done: 7, status: "on" });
   });
   it("내신기간엔 계획이 늘지 않는다", () => {
     const at = (d: string) => bookRoadmap({ ...SURYEON, reports: [], referenceDate: d })!.planned;
@@ -56,7 +56,7 @@ describe("전체 목표(로드맵)", () => {
   });
   it("목표 권을 고르면 속도는 그대로, 끝나는 날만 바뀐다", () => {
     const r = bookRoadmap({ ...SURYEON, reports: [], referenceDate: "2026-10-20", targetKey: "가우스|중3-1|2" })!;
-    expect(r.target).toMatchObject({ key: "가우스|중3-1|2", auto: false, autoKey: "가우스|중3-2|3" });
+    expect(r.target).toMatchObject({ key: "가우스|중3-1|2", auto: false, autoKey: "가우스|중3-2|4" });
     expect(r).toMatchObject({ total: 32, endDate: "2027-07-21", planned: 7 });
   });
 });
@@ -110,9 +110,9 @@ describe("리뷰 보강", () => {
     expect(r).toMatchObject({ deadline: null, deadlinePassed: true });
     expect(r.books.map((b) => b.key)).toEqual(["가우스|중2-2|4", "가우스|중3-1|1"]);
   });
-  it("초등 학생이어도 자동 목표는 중3-2를 넘지 않는다", () => {
+  it("나이 기준 — 초4면 마감(중3 11월)까지 순서 끝(고3-2)까지 간다", () => {
     const r = bookRoadmap({ orders: [{ bookName: "가우스 중1-1 1권", date: "2026-03-02" }], catalog: [B11], today: "2026-03-10", grade: "초4", reports: [], referenceDate: "2026-03-10" })!;
-    expect(r.target.key).toBe("가우스|중3-2|4");
+    expect(r.target.key).toBe("가우스|고3-2|4");
   });
 });
 
@@ -122,7 +122,7 @@ describe("교재 일정(27년 11월 말까지 쭉)", () => {
     expect(r.schedule.map((b) => b.key)).toEqual(["가우스|중2-2|3", "가우스|중2-2|4", "가우스|중3-1|1", "가우스|중3-1|2", "가우스|중3-2|3", "가우스|중3-2|4"]);
     expect(r.schedule.at(-1)).toMatchObject({ startDate: "2027-11-27", byDeadline: 1 });
     expect(r.schedule.slice(0, -1).every((b) => b.byDeadline == null)).toBe(true);
-    expect(r.scheduleEnd).toBe("2027-11-30");
+    expect(r.scheduleEnd).toBe("2028-01-11");
   });
 });
 
@@ -134,3 +134,58 @@ describe("날짜 눈금 막대", () => {
     expect(at(null)).toBeNull();
   });
 });
+
+describe("앞서 나가면 재계산", () => {
+  it("계획상 4권인데 이미 중3-1 1권이면 오늘부터 다시 편다(오늘 계획 = 실제)", () => {
+    const C31 = book("c31", "가우스 중3-1 1권", eight("중삼일"));
+    const base = { orders: [{ bookName: "가우스 중2-2 4권", date: "2026-10-01" }], catalog: [...CATALOG, C31], today: "2026-10-20", grade: "중2", referenceDate: "2026-10-20" };
+    const before = bookRoadmap({ ...base, reports: [] })!;
+    const r = bookRoadmap({ ...base, reports: [{ date: "2026-10-16", textbook: "가우스 중3-1 1권", progress: "수학 중삼일 2" }] })!;
+    expect(r).toMatchObject({ rebased: true, done: 10, planned: 10, status: "on", doneDate: "2026-10-20" });
+    const c = (x: typeof r, key: string) => x.books.find((b) => b.key === key)!.finishDate;
+    expect(c(r, "가우스|중3-1|2") < c(before, "가우스|중3-1|2")).toBe(true);
+    expect(c(r, "가우스|중2-2|4") <= "2026-10-20").toBe(true);
+  });
+  it("늦은 학생은 재계산하지 않는다", () => {
+    const r = bookRoadmap({ ...SURYEON, reports: [{ date: "2026-10-13", textbook: "가우스 중2-2 3권", progress: "수학 5-1. 이등변삼각형의 성질" }], referenceDate: "2026-10-20" })!;
+    expect(r).toMatchObject({ rebased: false, status: "behind" });
+  });
+});
+
+describe("학교별 내신기간", () => {
+  it("학교가 적은 시험만 기본표를 덮는다", () => {
+    const p = examPeriodsBetween(gradeOrdinal("중2"), "2026-10-20", "2026-08-01", "2026-12-31",
+      [{ schoolYear: 2026, term: "2-mid", from: "2026-09-21", to: "2026-10-02" }]).map((x) => `${x.from}~${x.to}`);
+    expect(p).toEqual(["2026-09-21~2026-10-02", "2026-11-01~2026-12-10"]);
+  });
+});
+
+describe("리뷰 보강 2", () => {
+  it("한참 앞선 학생 — 지금 권이 오늘을 품고, 끝난 권은 오늘 뒤로 밀리지 않는다", () => {
+    const G = book("g11", "가우스 고1-1 1권", eight("고일"));
+    const r = bookRoadmap({ orders: [{ bookName: "가우스 중2-2 3권", date: "2026-10-01" }], catalog: [...CATALOG, G], today: "2026-10-20", grade: "중2",
+      reports: [{ date: "2026-10-19", textbook: "가우스 고1-1 1권", progress: "수학 고일 3" }], referenceDate: "2026-10-20" })!;
+    expect(r.rebased).toBe(true);
+    const cur = r.books.find((b) => b.key === "가우스|고1-1|1")!;
+    expect(cur.startDate <= "2026-10-20" && cur.finishDate >= "2026-10-20").toBe(true);
+    expect(r.books.filter((b) => keyBefore(b.key)).every((b) => b.finishDate <= "2026-10-20")).toBe(true);
+    expect(currentWindow(r).books.map((b) => b.key)).toContain("가우스|고1-1|1");
+  });
+  it("마감이 없으면(고등) 일정은 목표 권까지", () => {
+    const r = bookRoadmap({ orders: [{ bookName: "가우스 중2-2 3권", date: "2026-10-01" }], catalog: CATALOG, today: "2026-10-20", grade: "고1", reports: [], referenceDate: "2026-10-20", targetKey: "가우스|중2-2|3" })!;
+    expect(r.schedule.map((b) => b.key)).toEqual(["가우스|중2-2|3"]);
+  });
+  it("중3 2학기 기말은 따로 덮는다 — 같은 학교 중2는 그대로", () => {
+    const ov = [{ schoolYear: 2026, term: "2-final-3" as const, from: "2026-10-12", to: "2026-10-23" }];
+    const g2 = examPeriodsBetween(gradeOrdinal("중2"), "2026-10-20", "2026-11-01", "2026-12-31", ov).map((x) => `${x.from}~${x.to}`);
+    const g3 = examPeriodsBetween(gradeOrdinal("중3"), "2026-10-20", "2026-10-11", "2026-12-31", ov).map((x) => `${x.from}~${x.to}`);
+    expect(g2).toEqual(["2026-11-01~2026-12-10"]);
+    expect(g3).toEqual(["2026-10-12~2026-10-23"]);
+  });
+  it("학기가 다른 시험이 겹쳐 합쳐지면 이름에 학기까지", () => {
+    const p = examPeriodsBetween(gradeOrdinal("중2"), "2026-10-20", "2026-06-01", "2026-09-30",
+      [{ schoolYear: 2026, term: "1-final", from: "2026-06-20", to: "2026-09-01" }]);
+    expect(p[0]!.label).toBe("중2 1학기 기말·2학기 중간");
+  });
+});
+const keyBefore = (key: string) => key < "가우스|고1-1|1" && key.startsWith("가우스|중");

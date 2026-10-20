@@ -13,6 +13,8 @@ import { MathTextbookProvider } from "@/features/math-sheets/components/math-tex
 import type { BookWindow } from "@/features/textbooks/book-window";
 import { buildStudentBookPlans, type StudentBookPlans } from "@/features/textbooks/book-plans";
 import { getMathBookTargets, getRecentReportsAllClasses } from "@/features/textbooks/server/math-book-plan-queries";
+import { getSchoolExamPeriods } from "@/features/textbooks/server/school-exam-queries";
+import { normalizeSchoolName } from "@/features/schools/school-name";
 import { learningClassDates } from "@/features/math-sheets/lib/learning-class-dates";
 
 export const metadata: Metadata = { title: "수학 강사 시트 · 월간 — 에이와" };
@@ -64,7 +66,7 @@ export default async function McsMonthPage({
   // 교재 배정은 시트 게이트(`getMathSheetMonth` 안 `requireMcsClassAccess`)를 이미 지난 반만 읽는다.
   const user = await getCurrentUser();
   const studentIds = data.students.map((s) => s.studentId);
-  const [learning, canResetGoals, textbooks, targets, allReports] = await Promise.all([
+  const [learning, canResetGoals, textbooks, targets, allReports, schoolExams] = await Promise.all([
     getMathLearningData(classId, data, { allRecords: true }),
     // 전체 목표 '초기화'(배정 취소)는 **원장 이상급**(원장 2026-09-18) — 화면과 서버가 같은 함수를 본다([[#77]]).
     canResetMathLearningGoals(user),
@@ -72,6 +74,8 @@ export default async function McsMonthPage({
     // 교재 전체 목표 — 사람이 고른 목표 권 · 다른 반(수요일 개별심화) 교재 기록. 둘 다 실패해도 화면은 산다.
     user ? getMathBookTargets(user.tenantId, studentIds) : null,
     user ? getRecentReportsAllClasses(user.tenantId, studentIds) : null,
+    // 학교별 내신기간(없으면 기본표) — 실패해도 기본표로 계산한다.
+    user ? getSchoolExamPeriods(user.tenantId, data.students.map((s) => s.school)) : null,
   ]);
   // 🔴 줄 수를 "학생 N명"이라 적지 않는다 — 행에는 이 달 중 나간 사람과 아직 안 들어온 사람이
   //    섞여 있다(카드와 **같은 함수**로 센다).
@@ -97,6 +101,7 @@ export default async function McsMonthPage({
         allReports: allReports?.get(s.studentId) ?? [],
         grade: s.grade,
         targets: targets?.byStudent.get(s.studentId),
+        examOverrides: schoolExams?.byKey.get(normalizeSchoolName(s.school)) ?? [],
         referenceDate: learning.referenceDate,
         classDates: (from, to) => learningClassDates(s.studentId, learning.context, from, to),
       });
@@ -130,6 +135,7 @@ export default async function McsMonthPage({
             windows,
             plans,
             targetStatus: targets?.status ?? "failed",
+            schoolExams: { status: schoolExams?.status ?? "failed", rows: schoolExams?.rows ?? [] },
             // 배정 쓰기 = 목표 쓰기와 같은 게이트(서버 액션이 같은 함수로 다시 본다).
             canWrite: data.canEdit,
           }}
