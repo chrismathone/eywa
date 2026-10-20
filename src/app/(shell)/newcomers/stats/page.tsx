@@ -1,0 +1,64 @@
+import { requireAccess } from "@/lib/auth/require-access";
+import { kstToday } from "@/lib/date-kst";
+import { readMyUiPrefs } from "@/lib/ui-prefs/read";
+import { PageHeader } from "@/components/page-header";
+import { hasPeriodParams, paramsForMode, parsePeriodMode, parseStatsPeriod, readPeriodParams } from "@/features/stats/period";
+import { NEWCOMER_KEYS } from "@/features/students/stats/ops-keys";
+import { firstRecorded, opsSeries } from "@/features/students/stats/ops-series";
+import { loadOpsHistory } from "@/features/students/stats/server/ops-history";
+import { saveNewcomerStatsMode } from "@/features/newcomers/server/stats-prefs-actions";
+import { BackToListButton } from "../../consultations/_components/back-to-list-button";
+import { StatCard } from "../../students/stats/_components/stat-card";
+import { OpsHistoryCard } from "../../students/stats/_components/ops-history-card";
+
+export const metadata = { title: "신규생 기록 — 에이와" };
+
+/**
+ * 신규생 **기록 화면**(원장 2026-10-20 *"상세 눌렀을때 추이를 볼 수 없는곳 모두 추가해보자"*) — 운영실 '신규생 단계별 관리'·'신규생 체크 진행'의
+ * '상세'가 여기로 온다. 신규생 단계·체크 지연은 **지금 상태만** 남는 값이라 과거를 되살릴 수 없어 2026-10-21부터 매일 밤 그날 값을 쌓는다
+ * (`student_daily_stats.data.ops.newcomers` — 운영실 카드와 같은 계산 `buildCareSummary`). 학원 전체 값이다(과목 관리자 카드와 다를 수 있다).
+ * 권한 = 신규생 관리와 같은 `newcomers` 게이트(기록 표는 서버 전용 — 게이트를 지난 뒤 관리 키 + 지점으로 읽는다).
+ */
+export default async function NewcomerStatsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const user = await requireAccess("newcomers");
+  const today = kstToday();
+  const [sp, prefs] = await Promise.all([searchParams, readMyUiPrefs()]);
+  const params = readPeriodParams(sp, NEWCOMER_KEYS);
+  const ns = prefs.newcomerStats;
+  const saved = parsePeriodMode(ns && typeof ns === "object" && !Array.isArray(ns) ? (ns as Record<string, unknown>).mode : undefined);
+  const period = parseStatsPeriod(hasPeriodParams(params) || !saved ? params : paramsForMode(saved, today), today);
+  const rows = await loadOpsHistory(user.tenantId, period, today).catch((error: unknown) => {
+    console.error("[newcomers/stats]", error);
+    return null;
+  });
+  const sum = (pick: "overdue" | "due") => (o: NonNullable<Parameters<Parameters<typeof opsSeries>[2]>[0]>) =>
+    !o.newcomers ? undefined : o.newcomers.checksAvailable ? o.newcomers.items.filter((i) => !i.optional).reduce((n, i) => n + i[pick], 0) : null;
+  return (
+    <div className="@container/panel space-y-4 compact-chrome:space-y-3">
+      <PageHeader title="신규생 기록" description="신규생 수 · 체크 지연을 매일 밤 쌓은 기록 (학원 전체)" embedLabel="신규생 기록" />
+      <div className="flex flex-wrap items-center gap-2 px-1">
+        <BackToListButton href="/newcomers" />
+      </div>
+      {rows ? (
+        <OpsHistoryCard
+          id="history"
+          title="신규생 기록"
+          note="운영실 '신규생 단계별 관리'·'신규생 체크 진행'의 그날 값 — 등록 후 90일 안 신규생 · 꼭 할 체크의 지연·기한"
+          firstDate={firstRecorded(rows, (o) => !!o.newcomers)}
+          period={period}
+          today={today}
+          keys={NEWCOMER_KEYS}
+          keep={{}}
+          series={[
+            { key: "total", name: "신규생", color: "var(--color-primary)", values: opsSeries(rows, period, (o) => o.newcomers?.total), strong: true },
+            { key: "overdue", name: "체크 지연", color: "var(--color-danger)", values: opsSeries(rows, period, sum("overdue")) },
+            { key: "due", name: "체크 기한", color: "var(--color-amber)", values: opsSeries(rows, period, sum("due")) },
+          ]}
+          onMode={saveNewcomerStatsMode}
+        />
+      ) : (
+        <StatCard id="history" title="신규생 기록" note="매일 기록" error />
+      )}
+    </div>
+  );
+}

@@ -63,10 +63,7 @@ import { getRecentConsultationRows, getRecentEnrollmentStats } from "@/features/
 import { summarizeRecentEnrollment } from "@/features/enrollment/recent-stats";
 import { getStudentConsultationCounts } from "@/features/consultations/server/queries";
 import { getNewcomers } from "@/features/newcomers/server/queries";
-import {
-  ONBOARDING_ITEMS,
-  shiftDate,
-} from "@/features/newcomers/onboarding-items";
+import { shiftDate } from "@/features/newcomers/onboarding-items";
 import {
   getUnreadReports,
   loadHomeworkRisk,
@@ -92,9 +89,8 @@ import {
   getAbsenceBreakdown,
 } from "@/features/dashboard/server/queries";
 import { unexplainedAbsences } from "@/features/dashboard/absence-reasons";
-import { careStatus } from "./care";
 import { schoolsByLevel, levelSubjectSplit } from "./student-composition";
-import { newcomerStages } from "./newcomer-composition";
+import { buildCareSummary } from "./newcomer-care";
 import {
   matchFirstClass,
   matchFirstClassSchedule,
@@ -467,33 +463,9 @@ async function newcomers(settingsPromise: Promise<Settings>): Promise<(pred: Sli
   const [view, settings] = await Promise.all([getNewcomers(), settingsPromise]);
   // The source page remains usable when the check table is unavailable. Do not manufacture overdue counts.
   const available = view.checksAvailable && !view.checksError;
-  const build = (rows: typeof view.rows, careRows: typeof view.rows): CareSummary => ({
-    total: rows.length,
-    stages: newcomerStages(rows, settings.operations.subjects),
-    checksAvailable: available,
-    items: available
-      ? ONBOARDING_ITEMS.map((item) => {
-          const statuses = careRows.map((r) =>
-            careStatus(item, r, view.today),
-          );
-          return {
-            label: item.shortLabel,
-            needs: careRows
-              .filter(
-                (_, i) => statuses[i] === "due" || statuses[i] === "overdue",
-              )
-              .map((r) => ({ id: r.studentId, name: r.name })),
-            optional: !!item.optional,
-            done: statuses.filter((s) => s === "done").length,
-            overdue: statuses.filter((s) => s === "overdue").length,
-            due: statuses.filter((s) => s === "due").length,
-            upcoming: statuses.filter((s) => s === "upcoming").length,
-            pending: statuses.filter((s) => s === "pending").length,
-            waived: statuses.filter((s) => s === "waived").length,
-          };
-        })
-      : [],
-  });
+  // 집계는 매일 기록(`ops-daily.ts`)과 한 벌(`buildCareSummary`) — 운영실 카드 숫자 = 그날 기록.
+  const build = (rows: typeof view.rows, careRows: typeof view.rows): CareSummary =>
+    buildCareSummary(rows, careRows, settings.operations.subjects, available, view.today);
   return (pred) => {
     if (!pred) return build(view.rows, view.rows);
     // 과목 관리자(원장 2026-10-14 2단계) — 그 과목 줄이 있거나 아직 과목이 없는(반 배정 전) 신규생. 체크 판정은 그 과목 줄로만

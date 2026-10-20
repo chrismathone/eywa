@@ -5,6 +5,8 @@ import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import type { ActiveEnrollmentRow, EnrolledStudentRow } from "@/features/students/enrollment/enrolled-composition";
 import { buildDailySnapshot } from "../daily-snapshot";
 import { recordAywaHistory } from "./history";
+import { buildOpsDaily } from "./ops-daily";
+import type { OpsDaily } from "../ops-daily";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -81,8 +83,32 @@ async function recordTenant(admin: Admin, tenantId: string, today: string): Prom
     gradeLevels: settings.operations.gradeLevels,
     today,
   });
+  // 상담 진행 · 신규생(2026-10-21) — 같은 줄에 함께 싣는다. 부분 실패는 그 칸만 빠진다(재원생 기록은 그대로 쓴다).
+  const ops: OpsDaily = await buildOpsDaily(admin, tenantId, today, settings.operations.subjects).catch((e: unknown) => {
+    console.error(JSON.stringify({ level: "error", scope: "student-daily-stats.ops", tenantId, message: e instanceof Error ? e.message : String(e) }));
+    return {};
+  });
+  // 같은 날 다시 돌 때(재시도) 이번에 실패한 칸은 앞서 쓴 그날 값을 남긴다 — 줄을 통째로 갈아끼우므로 안 그러면 지워진다.
+  const kept = ops.consult && ops.newcomers ? {} : await keptOps(admin, tenantId, today);
+  const merged: OpsDaily = { ...kept, ...ops };
+  const row = Object.keys(merged).length ? { ...data, ops: merged } : data;
   const { error } = await admin
     .from("student_daily_stats")
-    .upsert({ tenant_id: tenantId, stat_date: today, data, recorded_at: new Date().toISOString() }, { onConflict: "tenant_id,stat_date" });
+    .upsert({ tenant_id: tenantId, stat_date: today, data: row, recorded_at: new Date().toISOString() }, { onConflict: "tenant_id,stat_date" });
   if (error) throw error;
+}
+
+/**
+ * 그날 이미 쓴 운영 칸. 🔴 못 읽으면 던진다 — 빈 값으로 덮으면 앞서 쓴 칸이 지워진다(그 지점의 이번 기록만 실패하고, 있던 줄은 그대로 남는다).
+ * 하루 한 번(23:55) 도는 cron이라 두 실행이 겹치는 경우는 막지 않는다(읽고-합치고-쓰기는 원자적이지 않다).
+ */
+async function keptOps(admin: Admin, tenantId: string, today: string): Promise<OpsDaily> {
+  const { data, error } = await admin
+    .from("student_daily_stats")
+    .select("ops:data->ops")
+    .eq("tenant_id", tenantId)
+    .eq("stat_date", today)
+    .maybeSingle<{ ops: OpsDaily | null }>();
+  if (error) throw error;
+  return data?.ops ?? {};
 }

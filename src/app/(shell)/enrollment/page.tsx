@@ -35,6 +35,11 @@ import {
 import { loadSchoolStatsPrefs } from "@/features/enrollment/server/school-prefs-actions";
 import { StatsView } from "./_components/stats-view";
 import { IntakeTrendCard } from "./_components/intake-trend-card";
+import { OpsHistoryCard } from "../students/stats/_components/ops-history-card";
+import { PROGRESS_KEYS } from "@/features/students/stats/ops-keys";
+import { firstRecorded, opsSeries } from "@/features/students/stats/ops-series";
+import { loadOpsHistory } from "@/features/students/stats/server/ops-history";
+import type { ProgressCounts } from "@/features/dashboard/overview/consultation-progress";
 import { INTAKE_TREND_KEYS } from "@/features/enrollment/intake-trend";
 import { intakeGroupMeta } from "@/features/enrollment/intake-groups";
 import { loadIntakeTrend } from "@/features/enrollment/server/intake-trend";
@@ -53,10 +58,21 @@ import { MakeeduPushButton } from "./_components/makeedu-push-button";
 import { canPushToMakeedu } from "@/features/integrations/server/makeedu-push-access";
 import { readMyUiPrefs } from "@/lib/ui-prefs/read";
 import { RememberPrefs } from "@/components/remember-prefs";
-import { parseEnrollmentView, savedEnrollmentView, savedIntakeTrendMode } from "@/features/enrollment/view-pref";
-import { saveEnrollmentViewPref } from "@/features/enrollment/server/view-pref-actions";
+import { parseEnrollmentView, savedEnrollmentView, savedIntakeTrendMode, savedProgressTrendMode } from "@/features/enrollment/view-pref";
+import { saveEnrollmentViewPref, saveProgressTrendMode } from "@/features/enrollment/server/view-pref-actions";
 
 export const metadata = { title: "신규 콜&상담 — 에이와" };
+
+/** 상담 진행 단계 — 운영실 '상담 진행' 카드와 같은 이름·순서(`consult-progress.tsx` STEPS). */
+const PROGRESS_STEPS: { key: keyof ProgressCounts; label: string }[] = [
+  { key: "received", label: "접수" },
+  { key: "consulted", label: "상담" },
+  { key: "levelTest", label: "입테" },
+  { key: "enrolled", label: "등록" },
+  { key: "assigned", label: "반 배정" },
+  { key: "started", label: "수업 시작" },
+];
+const PROGRESS_COLORS = ["var(--color-primary)", "var(--color-blue)", "var(--color-amber)", "var(--color-green)", "var(--color-purple)", "var(--color-rose)"];
 
 // 전 목록 공통(표·카드) — 변경 시 학생·수납 등 다른 목록과 함께 바꿀 것.
 const PAGE_SIZE = 50;
@@ -83,6 +99,11 @@ export default async function EnrollmentPage({
     trendFrom?: string;
     trendTo?: string;
     trendSpan?: string;
+    pg?: string;
+    pgMonth?: string;
+    pgFrom?: string;
+    pgTo?: string;
+    pgSpan?: string;
     from?: string;
   }>;
 }) {
@@ -180,6 +201,20 @@ export default async function EnrollmentPage({
     hasPeriodParams(intakeParams) || !savedIntakeMode ? intakeParams : paramsForMode(savedIntakeMode, today),
     today,
   );
+  // 상담 진행 기록(2026-10-21부터 쌓는 매일 기록 — 지금 상태만 남는 지표라 과거는 없다). 기간은 주소(`pg…`) → 저장된 방식 → 12개월.
+  const progressParams = readPeriodParams(sp, PROGRESS_KEYS);
+  const savedProgressMode = savedProgressTrendMode(uiPrefs);
+  const progressPeriod = parsePeriod(
+    hasPeriodParams(progressParams) || !savedProgressMode ? progressParams : paramsForMode(savedProgressMode, today),
+    today,
+  );
+  const progressHistory =
+    view === "stats"
+      ? loadOpsHistory(user.tenantId, progressPeriod, today).catch((error: unknown) => {
+          reportWarning("상담 진행 기록 조회 실패", { scope: "enrollment.progressHistory", cause: error instanceof Error ? error.message : String(error) });
+          return null;
+        })
+      : Promise.resolve(null);
   const [stats, dist, intake] =
     view === "stats"
       ? await Promise.all([
@@ -196,6 +231,7 @@ export default async function EnrollmentPage({
           })).catch(() => null),
         ])
       : [null, null, null];
+  const progressRows = await progressHistory;
   void _unused;
 
   const items = kanbanItems ?? [];
@@ -219,7 +255,7 @@ export default async function EnrollmentPage({
   // 신규 문의 추이 기간·운영실 방문 표시(`from=dashboard`)는 연도와 따로 논다 — 연도를 바꿔도 그대로 싣는다(리뷰 2026-10-20).
   const yearHref = (v: string | number): string => {
     const q = new URLSearchParams({ view: "stats", year: String(v) });
-    for (const k of [...Object.values(INTAKE_TREND_KEYS), "from"]) {
+    for (const k of [...Object.values(INTAKE_TREND_KEYS), ...Object.values(PROGRESS_KEYS), "from"]) {
       const raw = (sp as Record<string, string | string[] | undefined>)[k];
       const val = Array.isArray(raw) ? raw[0] : raw; // 같은 칸이 둘이면 첫 값(readPeriodParams와 같은 규칙)
       if (val) q.set(k, val);
@@ -385,8 +421,31 @@ export default async function EnrollmentPage({
           period={intakePeriod}
           today={today}
           groups={intake?.groups ?? {}}
-          keep={{ view: "stats", year: yearParam, from: sp.from === "dashboard" ? "dashboard" : undefined }}
+          keep={{ view: "stats", year: yearParam, from: sp.from === "dashboard" ? "dashboard" : undefined, ...Object.fromEntries(Object.values(PROGRESS_KEYS).map((k) => [k, (sp as Record<string, string | undefined>)[k]])) }}
         />
+        {progressRows ? (
+          <OpsHistoryCard
+            id="progress"
+            title="상담 진행 기록"
+            note="운영실 '상담 진행'의 그날 값 — 최근 30일 상담이 단계마다 몇 건 닿았나 · 멈춘 상담"
+            firstDate={firstRecorded(progressRows, (o) => !!o.consult)}
+            period={progressPeriod}
+            today={today}
+            keys={PROGRESS_KEYS}
+            keep={{ view: "stats", year: yearParam, from: sp.from === "dashboard" ? "dashboard" : undefined, ...Object.fromEntries(Object.values(INTAKE_TREND_KEYS).map((k) => [k, (sp as Record<string, string | undefined>)[k]])) }}
+            series={[
+              ...PROGRESS_STEPS.map((step, i) => ({
+                key: step.key as string,
+                name: step.label,
+                color: PROGRESS_COLORS[i % PROGRESS_COLORS.length]!,
+                values: opsSeries(progressRows, progressPeriod, (o) => o.consult?.counts[step.key]),
+                strong: i === 0,
+              })),
+              { key: "stalled", name: "멈춘 상담", color: "var(--color-danger)", values: opsSeries(progressRows, progressPeriod, (o) => o.consult?.stalled) },
+            ]}
+            onMode={saveProgressTrendMode}
+          />
+        ) : null}
         <StatsView
           stats={stats}
           year={statsYear}

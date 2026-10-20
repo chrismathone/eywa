@@ -123,6 +123,18 @@ export function reportStatsHref(subject?: string | null): string {
   return `/lesson-reports/stats${subject ? `?subject=${encodeURIComponent(subject)}` : ""}#reports`;
 }
 
+/**
+ * 운영실 '상담 진행'·'신규생 단계별 관리'·'신규생 체크 진행'의 '상세' — 지금 상태만 남는 지표라 2026-10-21부터 매일 밤 쌓는 기록 화면
+ * (`student_daily_stats.data.ops`). 상담 진행 = 신규 콜&상담 통계 보기 `#progress`(이 방문은 마지막 보기를 저장하지 않는다) ·
+ * 신규생 = `/newcomers/stats`. 학원 전체 값이다(과목 관리자에게도 학원 전체로 보인다).
+ */
+export function consultProgressStatsHref(): string {
+  return "/enrollment?view=stats&from=dashboard#progress";
+}
+export function newcomerStatsHref(): string {
+  return "/newcomers/stats#history";
+}
+
 /** 그날 결석 학생(출석부). */
 export function absentDayHref(date: string): string {
   return `/attendance/${date}?status=absent`;

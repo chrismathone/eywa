@@ -10,7 +10,9 @@ import { describe, expect, it } from "vitest";
 import {
   attendanceStatsHref,
   billingStatsHref,
+  consultProgressStatsHref,
   consultationStatsHref,
+  newcomerStatsHref,
   expenseStatsHref,
   firstClassTrendHref,
   intakeTrendHref,
@@ -538,5 +540,7 @@ describe("운영실 '상세' → 통계 화면", () => {
     // 상담 통계는 과목 묶음으로 거를 수 없어 과목을 싣지 않는다(대표 키 하나로 거르면 같은 묶음의 다른 과목 상담이 빠진다).
     expect(consultationStatsHref()).toBe("/consultations/stats");
     expect(reportStatsHref("math")).toBe("/lesson-reports/stats?subject=math#reports");
+    expect(consultProgressStatsHref()).toBe("/enrollment?view=stats&from=dashboard#progress");
+    expect(newcomerStatsHref()).toBe("/newcomers/stats#history");
   });
 });

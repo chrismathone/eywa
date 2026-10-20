@@ -23,6 +23,12 @@ export function savedEnrollmentView(uiPrefs: Record<string, unknown>): Enrollmen
   return parseEnrollmentView(raw) ?? "kanban";
 }
 
+/** 저장된 '상담 진행 기록' 보기 방식(`saveProgressTrendMode`) — 없으면 null(월별 12개월). */
+export function savedProgressTrendMode(uiPrefs: Record<string, unknown>): PeriodMode | null {
+  const ns = uiPrefs[ENROLLMENT_VIEW_PREFS_NS];
+  return parsePeriodMode(ns && typeof ns === "object" && !Array.isArray(ns) ? (ns as Record<string, unknown>).progressTrend : undefined);
+}
+
 /** 저장된 '신규 문의 추이' 보기 방식(`saveIntakeTrendMode`) — 없거나 모르는 값이면 null(월별 12개월). */
 export function savedIntakeTrendMode(uiPrefs: Record<string, unknown>): PeriodMode | null {
   const ns = uiPrefs[ENROLLMENT_VIEW_PREFS_NS];

@@ -15,6 +15,13 @@ export async function saveEnrollmentViewPref(next: { view: string }): Promise<{ 
   return patchMyUiPrefs(ENROLLMENT_VIEW_PREFS_NS, { view: view === "kanban" ? undefined : view });
 }
 
+/** 통계 보기 '상담 진행 기록'의 보기 방식 — 기본(12개월)은 키를 지운다. */
+export async function saveProgressTrendMode(next: { mode: string }): Promise<{ ok: boolean; error?: string }> {
+  const mode = parsePeriodMode(next?.mode);
+  if (!mode) return { ok: false, error: "알 수 없는 보기입니다" };
+  return patchMyUiPrefs(ENROLLMENT_VIEW_PREFS_NS, { progressTrend: mode === "month" ? undefined : mode });
+}
+
 /**
  * 통계 보기 '신규 문의 추이'의 **보기 방식**(월별 12·24개월 · 일별 · 구간)을 계정에 저장 — 고른 달·구간은 남기지 않는다(`period.ts`).
  * 기본(월별 12개월)은 키를 지운다.

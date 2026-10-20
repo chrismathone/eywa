@@ -16,7 +16,7 @@ import {
 } from "@/features/dashboard/overview/model";
 import { concurrentShare } from "@/features/students/enrollment/enrolled-composition";
 // 재원생 패널 ↗는 KPI 카드와 같은 주소 — "/students"만 적으면 계정에 저장된 필터가 끼어 숫자가 달라 보인다(F21).
-import { attendanceStatsHref, billingStatsHref, consultationStatsHref, expenseStatsHref, reportStatsHref, studentsEnrolledHref, studentsStatsHref } from "@/features/dashboard/overview/kpi-links";
+import { attendanceStatsHref, billingStatsHref, consultProgressStatsHref, consultationStatsHref, newcomerStatsHref, expenseStatsHref, reportStatsHref, studentsEnrolledHref, studentsStatsHref } from "@/features/dashboard/overview/kpi-links";
 import { DASHBOARD_SUBJECT_COLORS, STAFF_SUBJECT_LEGEND, dashboardSubjectColor, dashboardCombinationColor } from "@/features/dashboard/overview/subject-colors";
 import { foldExpenseTotals } from "@/features/dashboard/overview/expense-total";
 import { paymentRateDisplay } from "@/features/billing/calc";
@@ -504,7 +504,7 @@ export function Overview({
     <Panel
       title={t("newcomerStages", "신규생 단계별 관리")}
       note="등록 후 90일 · 재원·휴원 학생"
-      href="/newcomers"
+      href={snapshot.teacherView || view?.subjectScoped ? "/newcomers" : newcomerStatsHref()}
       sections={[v.newcomers]}
     >
       {care && (
@@ -925,7 +925,7 @@ export function Overview({
           ? `상담일 기준 ${monthDayLabel(v.consultProgress.data.summary.from)}부터 · 접수 → 수업 시작`
           : "상담일 기준 최근 30일 · 접수 → 수업 시작"
       }
-      href="/enrollment"
+      href={snapshot.teacherView || view?.subjectScoped ? "/enrollment" : consultProgressStatsHref()}
       sections={[v.consultProgress]}
     >
       {v.consultProgress?.data && <ConsultProgressBody data={v.consultProgress.data} subjects={snapshot.subjects} />}
@@ -1037,7 +1037,7 @@ export function Overview({
     <Panel
       title={t("newcomerChecks", "신규생 체크 진행")}
       note="등록 후 90일 · 필수 6항목 · 2개월 콜은 선택"
-      href="/newcomers"
+      href={snapshot.teacherView || view?.subjectScoped ? "/newcomers" : newcomerStatsHref()}
       sections={[v.newcomers]}
     >
       {care?.checksAvailable ? (

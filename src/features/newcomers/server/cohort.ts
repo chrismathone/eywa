@@ -1,7 +1,7 @@
 import "server-only";
 import type { createClient } from "@/lib/supabase/server";
 import type { createAdminClient } from "@/lib/supabase/admin";
-import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import type { CheckRowInput, EnrollmentForAnchor } from "../subject-rows";
 
 /**
@@ -86,18 +86,19 @@ export async function loadCheckRows(
 ): Promise<{ ok: true; rows: CheckRowInput[]; subjectAware: boolean } | { ok: false; error: unknown }> {
   if (studentIds.length === 0) return { ok: true, rows: [], subjectAware: true };
   try {
-    const rows = await fetchInChunks<{
+    // 🔴 학생 100명 × 과목 × 항목이면 한 청크가 1,000행을 넘는다 — 청크 안에서도 페이징([[#54]]).
+    const rows = await fetchAllPagedInChunks<{
       student_id: string;
       item_key: string;
       done_on: string | null;
       subject: string | null;
-    }>([...studentIds], (chunk) =>
+    }>([...studentIds], (chunk, from, to) =>
       scope(
         supabase
           .from("student_onboarding_checks")
           .select("student_id, item_key, done_on, subject")
           .in("student_id", chunk),
-      ),
+      ).order("id").range(from, to),
     );
     return {
       ok: true,
@@ -108,12 +109,12 @@ export async function loadCheckRows(
     if (!isMissingSubjectColumn(e)) return { ok: false, error: e };
   }
   try {
-    const rows = await fetchInChunks<{ student_id: string; item_key: string; done_on: string | null }>(
+    const rows = await fetchAllPagedInChunks<{ student_id: string; item_key: string; done_on: string | null }>(
       [...studentIds],
-      (chunk) =>
+      (chunk, from, to) =>
         scope(
           supabase.from("student_onboarding_checks").select("student_id, item_key, done_on").in("student_id", chunk),
-        ),
+        ).order("id").range(from, to),
     );
     return {
       ok: true,

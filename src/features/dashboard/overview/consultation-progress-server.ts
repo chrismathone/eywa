@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import type { CalendarEvent } from "@/features/calendar/types";
 import { reportError } from "@/lib/observability/report-error";
-import { homonymFamilies, type ConsultationRow } from "./admissions-links-server";
+import { homonymFamilies, type AdminDeps, type ConsultationRow } from "./admissions-links-server";
 import { consultationBasesInTitles, matchAdmissionsConsultation } from "./admissions-consultation-link";
 import { admissionsEventKind } from "./display";
 import {
@@ -20,17 +20,18 @@ import {
  * (`end_date IS NULL OR end_date >= 오늘`)에 시작일을 더해 받는다(반 배정과 첫 수업을 가르려고).
  * id가 수십~수백이라 청크로(B3), 오류는 던진다(0으로 위장하지 않는다).
  */
-async function progressEnrollments(studentIds: readonly string[], today: string): Promise<ProgressEnrollment[]> {
+async function progressEnrollments(studentIds: readonly string[], today: string, deps?: AdminDeps): Promise<ProgressEnrollment[]> {
   if (!studentIds.length) return [];
-  const db = await createClient();
+  const db = deps?.db ?? (await createClient());
   type Row = { student_id: string; start_date: string | null; class: { subject?: string | null } | { subject?: string | null }[] | null };
-  const rows = await fetchInChunks<Row>([...studentIds], (chunk) =>
-    db
+  const rows = await fetchInChunks<Row>([...studentIds], (chunk) => {
+    const q = db
       .from("enrollments")
       .select("student_id, start_date, class:class_id ( subject )")
       .in("student_id", chunk)
-      .or(`end_date.is.null,end_date.gte.${today}`),
-  );
+      .or(`end_date.is.null,end_date.gte.${today}`);
+    return deps ? q.eq("tenant_id", deps.tenantId) : q;
+  });
   return rows.map((row) => {
     const klass = Array.isArray(row.class) ? row.class[0] : row.class;
     return { studentId: row.student_id, subject: klass?.subject ?? null, startDate: row.start_date };
@@ -46,6 +47,7 @@ async function levelTestDatesByConsultation(
   consultations: readonly ConsultationRow[],
   notNames: readonly string[],
   since: string,
+  deps?: AdminDeps,
 ): Promise<Map<string, string[]> | null> {
   const levelTests = events.filter((event) => admissionsEventKind(event) === "levelTest");
   const byConsultation = new Map<string, string[]>();
@@ -54,7 +56,7 @@ async function levelTestDatesByConsultation(
   let families: Awaited<ReturnType<typeof homonymFamilies>> = new Map();
   if (bases.length) {
     try {
-      families = await homonymFamilies(bases);
+      families = await homonymFamilies(bases, deps);
     } catch (error) {
       reportError(error, { scope: "dashboard.consult-progress-homonyms" });
       return null;
@@ -89,12 +91,14 @@ export async function consultProgressList(
   notNames: readonly string[],
   since: string,
   today: string,
+  /** cron(관리 키) 경로 — 매일 기록(`ops-daily.ts`)이 운영실과 같은 판정을 지점별로 돌린다. */
+  deps?: AdminDeps,
 ): Promise<{ list: ConsultProgress[]; levelTestKnown: boolean }> {
   const studentIds = [...new Set(consultations.flatMap((c) => (c.studentId ? [c.studentId] : [])))];
   // 수강 조회와 입테 연결은 서로 독립이라 함께(B4).
   const [enrollments, levelTests] = await Promise.all([
-    progressEnrollments(studentIds, today),
-    events ? levelTestDatesByConsultation(events, consultations, notNames, since) : Promise.resolve(null),
+    progressEnrollments(studentIds, today, deps),
+    events ? levelTestDatesByConsultation(events, consultations, notNames, since, deps) : Promise.resolve(null),
   ]);
   const list = consultations.map((c) =>
     progressOf(

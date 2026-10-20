@@ -37,6 +37,8 @@ export type DailySnapshotV1 = {
   programs: ProgramSummary;
   /** 강좌수(2026-10-20부터 — 그 전 줄엔 없다) — 운영실 '강좌수' 칸과 같은 계산(`summarizeCourses`). */
   courses?: CourseSummary;
+  /** 상담 진행 · 신규생 단계/체크(2026-10-21부터 — `ops-daily.ts`). */
+  ops?: import("./ops-daily").OpsDaily;
 };
 
 const tally = (values: readonly (string | null | undefined)[], empty = "미입력"): Record<string, number> => {
