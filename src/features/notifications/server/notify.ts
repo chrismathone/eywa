@@ -1,4 +1,5 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { reportError } from "@/lib/observability/report-error";
 import { pokeSlack } from "@/features/slack/server/poke";
@@ -18,12 +19,18 @@ export type NotifyInput = {
   actorId?: string | null;
   /** 이 알림이 알리는 할 일(0377a `staff_tasks`) — 벨이 처리 상태를 붙인다. */
   taskId?: string | null;
+  /** 묶음 알림(결석 N명 · 진도 이상 N건)이 알리는 할 일들 — 연결표(0378a `staff_task_notifications`)에 남는다. */
+  taskIds?: readonly string[];
 };
 
 export async function notifyUsers(items: NotifyInput[]): Promise<void> {
-  const rows = items
-    .filter((i) => i.recipientId && i.recipientId !== i.actorId) // 내 행동을 나에게 알리지 않음
-    .map((i) => ({
+  const kept = items.filter((i) => i.recipientId && i.recipientId !== i.actorId); // 내 행동을 나에게 알리지 않음
+  // 알림 id를 여기서 정한다 — 묶음 할 일 연결(0378a)이 넣은 뒤 돌려받는 순서에 기대지 않게. 모든 줄에 준다
+  // (여러 줄 insert는 한 줄이라도 빠진 칸을 null로 채운다).
+  const ids = kept.map(() => randomUUID());
+  const rows = kept
+    .map((i, n) => ({
+      id: ids[n],
       tenant_id: i.tenantId,
       recipient_id: i.recipientId,
       type: i.type,
@@ -38,11 +45,23 @@ export async function notifyUsers(items: NotifyInput[]): Promise<void> {
     const admin = createAdminClient();
     const { error } = await admin.from("notifications").insert(rows);
     if (error) reportError(error, { scope: "notify.insert", count: rows.length });
-    // 슬랙(0298a) — 트리거가 같은 트랜잭션에서 인박스에 넣었다. 응답 뒤 발송기를 깨운다(지점마다 한 번).
-    else for (const t of new Set(rows.map((r) => r.tenant_id))) pokeSlack(t);
+    else {
+      // 슬랙(0298a) — 트리거가 같은 트랜잭션에서 인박스에 넣었다. 응답 뒤 발송기를 깨운다(지점마다 한 번).
+      for (const t of new Set(rows.map((r) => r.tenant_id))) pokeSlack(t);
+      await linkTasks(admin, kept, ids);
+    }
   } catch (e) {
     reportError(e, { scope: "notify.insert.throw" });
   }
+}
+
+/** 묶음 알림 ↔ 할 일 연결(0378a). 실패해도 알림은 이미 나갔다 — 벨에 상태 칩만 안 붙는다. */
+async function linkTasks(admin: ReturnType<typeof createAdminClient>, items: NotifyInput[], ids: string[]) {
+  const links = items.flatMap((item, n) =>
+    [...new Set(item.taskIds ?? [])].map((taskId) => ({ notification_id: ids[n], task_id: taskId, tenant_id: item.tenantId })));
+  if (!links.length) return;
+  const { error } = await admin.from("staff_task_notifications").insert(links);
+  if (error) reportError(error, { scope: "notify.linkTasks", count: links.length });
 }
 
 /**

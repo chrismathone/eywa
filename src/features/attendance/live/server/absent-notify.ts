@@ -24,6 +24,7 @@ import { reportError } from "@/lib/observability/report-error";
 import { notifyUsers } from "@/features/notifications/server/notify";
 import { addDays, kstToday } from "@/lib/date-kst";
 import { collectStudentNames, formatAttendanceNotifyNames } from "../notify-names";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
 const EVENT_TYPE = "attendance_absent_desk";
@@ -38,11 +39,15 @@ export async function notifyDeskOfAbsences(input: {
   const { tenantId, actorId, date, cells } = input;
   try {
     if (!YMD.test(date) || cells.length === 0) return;
+    const admin = createAdminClient();
+    // 할 일(0378a '결석 확인 전화')은 알림과 따로 연다 — 벨 중복 막기(dedup)·수신자 유무·아래 '오늘·어제' 필터와 무관하게
+    // 결석 칸마다 한 건(지난 7일까지 — DB가 거른다). 맡은 사람은 DB가 같은 기준(출결 알림을 켠 계정)으로 정하고,
+    // 이미 매듭지은 칸은 안 연다. 이 훅을 안 거치는 저장(일별 폼 등)은 30분 맞춤이 출결 표에서 연다.
+    const taskByCell = await openAbsenceTasks(admin, tenantId, actorId, date, cells);
+
     // 오늘·어제 것만 알린다 — 지난 달 출결을 정정하는 건 "지금 확인해야 할 일"이 아니다(뒤늦은 벨 폭탄 방지).
     const today = kstToday();
     if (date > today || date < addDays(today, -1)) return;
-
-    const admin = createAdminClient();
 
     // 수신자 먼저 — 받을 사람이 없는데 dedup만 태우면 나중에 토글을 켠 날 그 건은 영영 안 온다.
     const { data: recipients, error: recipientError } = await admin
@@ -108,9 +113,41 @@ export async function notifyDeskOfAbsences(input: {
         body: `${date} 수업에서 ${listedLabel} 학생이 결석으로 입력됐습니다 — 학부모 확인이 필요합니다.`,
         link: date === today ? "/attendance/live?tab=desk" : `/attendance/live?tab=desk&date=${date}`,
         actorId,
+        taskIds: freshCells.flatMap((c) => taskByCell.get(`${c.studentId}|${date}|${slotKey(c.slotStart)}`) ?? []),
       })),
     );
   } catch (e) {
     reportError(e, { scope: "attendance.absentNotify", tenantId, date });
   }
+}
+
+/** 할 일 회차의 교시 칸 = "HH:MM"(초 단위가 붙어 와도 앞 다섯 글자) · 없으면 ''(그날 전체). DB(0378a)와 같은 규칙. */
+function slotKey(slot: string | null | undefined): string {
+  return (slot ?? "").slice(0, 5);
+}
+
+/** 결석 칸마다 할 일을 연다 → `학생|날짜|넘긴 교시` → 할 일 id. 실패하면 빈 표(알림은 할 일 연결 없이 나간다). */
+async function openAbsenceTasks(
+  admin: SupabaseClient,
+  tenantId: string,
+  actorId: string | null,
+  date: string,
+  cells: { studentId: string; slotStart?: string | null }[],
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  try {
+    const { data, error } = await admin.rpc("staff_task_open_absences", {
+      p_tenant: tenantId,
+      p_cells: cells.map((c) => ({ student_id: c.studentId, date, slot: slotKey(c.slotStart) })),
+      p_actor: actorId,
+    });
+    if (error) throw error;
+    // 넘긴 교시로 짝짓는다(회차의 교시는 DB가 실제 결석 줄에 맞춰 바꿀 수 있다).
+    for (const r of (data ?? []) as { student_id: string; slot: string; task_id: string }[]) {
+      out.set(`${r.student_id}|${date}|${r.slot}`, r.task_id);
+    }
+  } catch (e) {
+    reportError(e, { scope: "attendance.absentNotify.tasks", tenantId, date });
+  }
+  return out;
 }

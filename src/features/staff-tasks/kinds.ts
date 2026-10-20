@@ -23,6 +23,38 @@ export const TASK_KINDS: Record<string, StaffTaskKindInfo> = {
     label: "상담 후속조치",
     doneRule: "원생상담에서 후속조치 완료를 체크하면 처리됩니다. 기한 날이 지나면 늦음입니다.",
   },
+  progress_anomaly: {
+    label: "진도 기록 이상",
+    doneRule: "학생 상세 진도 탭에서 그 기록의 '이상 없음'을 누르면 처리됩니다(확인을 되돌리면 다시 열립니다). 생긴 다음 날까지 확인하지 않으면 늦음입니다.",
+  },
+  attendance_absent_desk: {
+    label: "결석 확인 전화",
+    doneRule: "오늘 출결의 데스크 확인에서 이 결석의 연락 결과를 '저장'하거나 '해당 없음'을 누르면 처리됩니다. 출석으로 정정되면 취소됩니다. 입력한 다음 날이 되면 늦음, 7일이 지나면 기한 지남입니다.",
+  },
+  video_upload_check: {
+    label: "영상 업로드 확인",
+    doneRule: "그 숙제 영상이 실제로 들어오면(올리기 사이트에서 끝까지 올라오거나 영상 제출 현황이 '완료') 처리됩니다. 숙제를 취소하면 취소, 숙제일부터 14일이 지나면 기한 지남입니다. 다음 날까지 안 들어오면 늦음입니다.",
+  },
+  video_unassigned: {
+    label: "미배정 영상",
+    doneRule: "영상 제출 현황에서 이 영상을 숙제에 배정하거나 제외하면 처리됩니다. 영상이 지워지면 취소, 올린 지 14일이 지나면 기한 지남입니다. 다음 날까지 배정하지 않으면 늦음입니다.",
+  },
+  unsent_report: {
+    label: "미발송 수업 보고서",
+    doneRule: "그 보고서의 발송을 요청하면 처리됩니다(실제로 나갔는지는 '보고서 발송 실패'가 따로 확인합니다). 회수·삭제하거나 보낼 수 없게 되면 취소, 발송 기한이 지나면 기한 지남입니다. 찾은 날이 끝날 때까지 안 보내면 늦음입니다.",
+  },
+  approval_turn: {
+    label: "전자결재 차례",
+    doneRule: "내 결재 차례에서 승인·반려·전결하면 처리됩니다. 후결로 넘겨진 칸은 '후결 확인'을 하면 처리됩니다. 문서가 취소되거나 내 차례가 전결로 생략되면 취소됩니다. 차례가 온 다음 날까지 결재하지 않으면 늦음입니다.",
+  },
+  withdrawal_step: {
+    label: "퇴원보고서",
+    doneRule: "작성 차례는 보고서를 제출하면, 승인 차례는 승인하면 처리됩니다. 보완 요청·취소로 차례가 없어지면 취소됩니다. 작성은 이틀, 승인은 다음 날까지 안 하면 늦음입니다.",
+  },
+  help_question: {
+    label: "도움말 질문",
+    doneRule: "질문에 답변이 달리거나 답변 완료·닫힘이 되면 처리됩니다. 질문이 지워지면 취소됩니다. 다음 날까지 답하지 않으면 늦음입니다.",
+  },
 };
 
 export function taskKindLabel(kind: string): string {
@@ -62,6 +94,25 @@ const CLOSE_REASON: Record<string, string> = {
   followup_done: "후속조치 완료 체크",
   rescheduled: "기한을 다른 날로 옮김",
   cleared: "후속조치 기한을 지움",
+  anomaly_resolved: "이상 없음으로 확인",
+  desk_settled: "데스크가 학부모 확인을 마침",
+  not_absent: "결석이 아니게 정정됨",
+  stale: "7일이 지나도록 확인하지 않음",
+  video_arrived: "영상이 들어옴",
+  homework_cancelled: "숙제를 취소함",
+  upload_window: "올릴 수 있는 기간이 지남",
+  video_removed: "영상이 지워짐",
+  video_assigned: "숙제에 배정하거나 제외함",
+  unassigned_window: "올린 지 14일이 지남",
+  send_requested: "발송을 요청함",
+  not_sendable: "보낼 수 없는 보고서가 됨",
+  approval_decided: "결재함",
+  document_canceled: "문서가 취소됨",
+  turn_skipped: "내 차례가 생략됨",
+  withdrawal_acted: "제출하거나 승인함",
+  withdrawal_canceled: "퇴원보고서가 취소됨",
+  turn_changed: "차례가 바뀜",
+  help_answered: "답변이 달림",
 };
 export function closeReasonLabel(reason: string | null): string | null {
   return reason ? (CLOSE_REASON[reason] ?? null) : null;
@@ -110,4 +161,11 @@ export type StaffTaskList = { items: StaffTaskItem[]; total: number; page: numbe
 /** 벨·강사 홈이 받는 내 할 일 요약 · 원장(지정한 사람)이면 현황을 열 수 있다. */
 export type StaffTaskSummary = { open: number; late: number; canMonitor: boolean };
 /** 벨 줄에 붙는 그 알림의 할 일 상태. */
-export type NotificationTaskBadge = { id: string; state: StaffTaskState };
+/** 알림 줄의 할 일 상태. 묶음 알림(0378a)이면 total = 내가 맡은 연결 할 일 수 · remaining = 그중 아직 열린 것. */
+export type NotificationTaskBadge = { id: string; state: StaffTaskState; total?: number; remaining?: number };
+
+/** 묶음의 대표 상태 — 열린 것이 하나라도 있으면 열림(늦은 게 있으면 늦음) · 다 닫혔으면 기한 지남 > 처리됨 > 취소 순. */
+export function groupTaskState(states: readonly StaffTaskState[]): StaffTaskState {
+  const order: StaffTaskState[] = ["late", "open", "expired", "done", "cancelled"];
+  return order.find((s) => states.includes(s)) ?? "cancelled";
+}

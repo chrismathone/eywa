@@ -91,7 +91,7 @@ export function NotificationRow({
           {relTime(item.createdAt)}
         </time>
         {/* 할 일 알림이면 지금 처리 상태(0377a — 원래 기록으로 판정된 값). */}
-        {item.task ? <span className="mr-auto ml-2"><TaskStateChip state={item.task.state} /></span> : null}
+        {item.task ? <span className="mr-auto ml-2"><TaskStateChip state={item.task.state} total={item.task.total} remaining={item.task.remaining} /></span> : null}
         <div className="flex items-center gap-1">
           {actionSlot}
           {onReply ? (

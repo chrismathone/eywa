@@ -12,6 +12,9 @@ import { taskKindLabel } from "../kinds";
  * 하루 한 번 = notification_events(지점 · 날짜)로 막는다(같은 날 cron이 두 번 돌아도 한 번).
  */
 export async function sendStaffTaskDigest(admin: SupabaseClient, tenantId: string): Promise<number> {
+  // 세기 전에 원래 기록과 맞춘다 — 밤사이 처리된 일이 '늦음'으로 요약에 실리지 않게(30분 맞춤을 기다리지 않는다).
+  const { error: syncError } = await admin.rpc("staff_tasks_sync", { p_tenant: tenantId });
+  if (syncError) throw new Error(`요약 전 맞춤: ${syncError.message}`);
   const nowIso = new Date().toISOString();
   const late = await fetchAllPaged<{ id: string; kind: string }>((from, to) => admin.from("staff_tasks").select("id, kind")
     .eq("tenant_id", tenantId).eq("status", "open").lt("due_at", nowIso).order("id").range(from, to));

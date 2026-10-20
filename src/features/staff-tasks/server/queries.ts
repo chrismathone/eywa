@@ -1,4 +1,5 @@
 import "server-only";
+import { fetchInChunks } from "@/lib/supabase/batch";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { StaffTaskEvent, StaffTaskFilter, StaffTaskItem, StaffTaskList, StaffTaskPerson, StaffTaskStatus } from "../kinds";
 
@@ -97,12 +98,13 @@ export async function taskDetail(tenantId: string, taskId: string, viewer: { use
 export async function taskBadgesFor(tenantId: string, userId: string, taskIds: readonly string[]): Promise<Map<string, { status: StaffTaskStatus; dueAt: string | null }>> {
   const ids = [...new Set(taskIds)];
   if (!ids.length) return new Map();
-  const { data, error } = await createAdminClient()
+  // 묶음 알림이 여럿이면 할 일 id가 수백 개일 수 있다 — 청크로(B3).
+  const admin = createAdminClient();
+  const rows = await fetchInChunks<{ id: string; status: StaffTaskStatus; due_at: string | null }>(ids, (chunk) => admin
     .from("staff_tasks")
     .select("id, status, due_at, staff_task_assignees!staff_task_assignees_task_id_fkey!inner(user_id)")
     .eq("tenant_id", tenantId)
     .eq("staff_task_assignees.user_id", userId)
-    .in("id", ids);
-  if (error) throw new Error(`알림 할 일 상태: ${error.message}`);
-  return new Map(((data ?? []) as unknown as { id: string; status: StaffTaskStatus; due_at: string | null }[]).map((r) => [r.id, { status: r.status, dueAt: r.due_at }]));
+    .in("id", chunk));
+  return new Map(rows.map((r) => [r.id, { status: r.status, dueAt: r.due_at }]));
 }
