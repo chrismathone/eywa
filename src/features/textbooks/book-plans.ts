@@ -11,6 +11,7 @@ import { kstToday } from "@/lib/date-kst";
 import { bookRoadmap, orderedSeries, type BookOrder, type BookRoadmap } from "./book-roadmap";
 import { currentWindow, type BookWindow } from "./book-window";
 import { matchCatalogBook, type CatalogBook } from "./math-book-match";
+import type { SchoolExamOverride } from "./exam-periods";
 
 export type PlanBook = {
   key: string;
@@ -44,6 +45,8 @@ export function buildStudentBookPlans(args: {
   targets?: Readonly<Record<string, string>>;
   referenceDate: string;
   today?: string;
+  /** 그 학생 학교가 적어 둔 내신기간(없으면 기본표). */
+  examOverrides?: readonly SchoolExamOverride[];
   classDates?: (from: string, to: string) => string[];
 }): StudentBookPlans {
   const today = args.today ?? kstToday();
@@ -52,6 +55,7 @@ export function buildStudentBookPlans(args: {
     const r = bookRoadmap({
       orders: args.orders, catalog: args.catalog, reports: args.reports, referenceDate: args.referenceDate, today,
       grade: args.grade, series, targetKey: args.targets?.[series] ?? null, classDates: args.classDates,
+      examOverrides: args.examOverrides,
     });
     if (!r) continue;
     roadmaps.push({

@@ -35,6 +35,7 @@ import styles from "./learning-overview.module.css";
 import { ClassTextbookBar, StudentTextbookChip } from "./math-textbook-assign";
 import { BookWindowBar } from "./book-window-bar";
 import { StudentPlanCard } from "./student-plan-card";
+import { SchoolExamButton } from "./school-exam-dialog";
 import { useMathTextbooks } from "./math-textbook-context";
 import { MATH_LEARNING_CADENCE, type MathLearningTrack } from "@/features/progress/learning-cadence";
 import { learningBlocks } from "../lib/learning-plan";
@@ -248,6 +249,7 @@ export function LearningOverview({
             </div>
           </div>
           {editable ? <div className={styles.headingActions}>
+            <SchoolExamButton schools={data.students.map((s) => s.school)} today={data.today} />
             <button type="button" className={styles.button} disabled={trackPending} onClick={() => { setNextTrack(track); setTrackEditor(!trackEditor); }}>수업 유형 설정</button>
             <button
               type="button"
