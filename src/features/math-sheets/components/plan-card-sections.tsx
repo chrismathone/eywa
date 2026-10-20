@@ -5,6 +5,15 @@ import { bookSlices, lessonLabelAt, nextLessonLabel, shortDay, volumeOf } from "
 import { learningBlockLabel } from "../lib/learning-label";
 import css from "./plan-card.module.css";
 
+/**
+ * 🔴 교재 3개월 **계획**(오늘 계획·밀린 차시·보완 필요)과 '오늘 기준' 구역은 **숨김**(원장 2026-10-20 BS3O 대조 후
+ * *"데이터가 이상하면 현재 숨김처리"*). 까닭 셋 — ① 계획이 주문일부터 고르게 나눈 값이라 9월 내신대비 기간을 몰라
+ * 부풀려진다(김수련: 실제 3권 7차시인데 계획 4권 8차시) ② 보고서 진도 글이 같은 주에도 반마다 앞뒤로 오가고 교재 칸과
+ * 진도 글이 어긋난다(교재 4권 · 진도 3권 단원) ③ '다음 수업'은 +1차시 추정이고 오늘 수업일을 건너뛴다.
+ * 계획 규칙을 바로잡으면 이 값만 true로. 나간 차시(발송 보고서 사실)는 그대로 보인다.
+ */
+export const SHOW_BOOK_PLAN = false;
+
 const pct = (n: number, total: number) => `${Math.max(0, Math.min(100, (n / Math.max(1, total)) * 100))}%`;
 const short = (date: string) => date.slice(5).replace("-", ".");
 
@@ -28,7 +37,7 @@ export function BookSection({ w }: { w: BookWindow }) {
   const st = windowState(w);
   const planned = st.notStarted ? 0 : w.planned;
   // 밀린 칸은 '보완 필요'와 같은 판정일 때만 칠한다(±1차시 = 계획대로 — 타일만 빨간 건 거짓 경보).
-  const slices = bookSlices(w.books, w.done ?? 0, st.behind ? planned : 0);
+  const slices = bookSlices(w.books, w.done ?? 0, SHOW_BOOK_PLAN && st.behind ? planned : 0);
   const atBook = w.position ? w.books.findIndex((b) => b.title === w.position!.title) : -1;
   return (
     <>
@@ -54,7 +63,11 @@ export function BookSection({ w }: { w: BookWindow }) {
       </div>
       <div className={css.sum}>
         3개월 목표 {w.done ?? "—"}/{w.total}차시 완료
-        <span>{st.text}{st.behind ? <> · <em>{st.behind}차시 보완 필요</em></> : null}</span>
+        {SHOW_BOOK_PLAN ? (
+          <span>{st.text}{st.behind ? <> · <em>{st.behind}차시 보완 필요</em></> : null}</span>
+        ) : (
+          <span>{st.notStarted ? st.text : `${short(w.orderDate)} 주문`}</span>
+        )}
       </div>
     </>
   );

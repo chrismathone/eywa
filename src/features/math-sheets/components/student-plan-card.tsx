@@ -8,7 +8,7 @@ import { courseRangeLabel } from "../lib/learning-path";
 import { learningBlockLabel } from "../lib/learning-label";
 import { useMathTextbooks } from "./math-textbook-context";
 import { StudentTextbookChip } from "./math-textbook-assign";
-import { BookSection, TodaySection } from "./plan-card-sections";
+import { BookSection, SHOW_BOOK_PLAN, TodaySection } from "./plan-card-sections";
 import css from "./plan-card.module.css";
 
 const pct = (n: number, total: number) => `${Math.max(0, Math.min(100, (n / Math.max(1, total)) * 100))}%`;
@@ -46,9 +46,11 @@ export function StudentPlanCard({ student, goal, progress, summary, onOpen }: {
       <Section title="교재 3개월" hint="주문일 +7일부터 3개월 안에 끝낼 교재">
         {w && w.total > 0 ? <BookSection w={w} /> : <p className={css.empty}>교재 주문 기록이 없습니다.</p>}
       </Section>
-      <Section title="오늘 기준" hint="오늘 위치와 다음 수업">
-        <TodaySection w={w && w.total > 0 ? w : undefined} fallbackNow={progress?.currentBlock ?? null} onOpen={onOpen} />
-      </Section>
+      {SHOW_BOOK_PLAN ? (
+        <Section title="오늘 기준" hint="오늘 위치와 다음 수업">
+          <TodaySection w={w && w.total > 0 ? w : undefined} fallbackNow={progress?.currentBlock ?? null} onOpen={onOpen} />
+        </Section>
+      ) : null}
     </article>
   );
 }
