@@ -10,6 +10,7 @@ import { EyIcon } from "@/components/icons/aywa-icons";
 import { WindowLink } from "@/components/workspace/window-link";
 import {
   processingSummary,
+  startedNote,
   type OverviewSnapshot,
   type Section,
 } from "@/features/dashboard/overview/model";
@@ -544,7 +545,7 @@ export function Overview({
     changes: (
     <Panel
       title={t("changes", "등록 · 퇴원 추이")}
-      note="최근 6개월 · 당월은 오늘까지"
+      note={`최근 6개월 · 당월은 오늘까지${change && startedNote(change) ? ` · ${startedNote(change)}` : ""}`}
       href={studentsStatsHref("flow")}
       sections={[v.changes]}
       wide
@@ -657,7 +658,7 @@ export function Overview({
     !(v.enrolledTrend && v.enrolledTrend.data === null && v.enrolledTrend.at !== null) ? (
       <Panel
         title={t("enrolledTrend", "재원생 추이")}
-        note="최근 12개월 · 달마다 말일 기준(이번 달은 오늘) · 휴원 제외"
+        note={`${enrolledTrend?.monthlyFrom ? `${enrolledTrend.monthlyFrom.slice(0, 4)}년 ${Number(enrolledTrend.monthlyFrom.slice(5, 7))}월부터` : "최근 12개월"} · 달마다 말일 기준(이번 달은 오늘) · 휴원 제외`}
         href={studentsStatsHref("trend")}
         sections={[v.enrolledTrend]}
         className={s.fullRow}
@@ -682,7 +683,10 @@ export function Overview({
               valueLabels="all"
               series={[{ name: "재원생", color: COLORS[0], values: enrolledTrend.monthly.map((p) => p.count) }]}
             />
-            {enrolledTrend.recordsFrom ? (
+            {/* 에이와 수강 기록이 갖춰진 달부터만 보인다(원장 2026-10-20 '2026년 4월부터' · record-coverage.ts) — 그 전은 원생 통계 '지난 기록'. */}
+            {enrolledTrend.trustFrom ? (
+              <p className={s.footnote}>에이와 수강 기록이 갖춰진 {enrolledTrend.trustFrom.slice(0, 4)}년 {Number(enrolledTrend.trustFrom.slice(5, 7))}월부터 보입니다 — 그 전 흐름은 원생 통계 &apos;지난 기록&apos;에서 봅니다.</p>
+            ) : enrolledTrend.recordsFrom ? (
               <p className={s.footnote}>퇴원 기록은 {enrolledTrend.recordsFrom.slice(0, 4)}년 {Number(enrolledTrend.recordsFrom.slice(5, 7))}월부터 있어 연도별은 그 해부터 셉니다.</p>
             ) : null}
           </>

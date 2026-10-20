@@ -45,3 +45,27 @@ export function yearlyPoints(today: string, fromYear: number): { key: string; la
   }
   return out;
 }
+
+/**
+ * 이 달(YYYY-MM)부터의 점만 — 점의 **날짜**로 판정(월 = 말일 · 주 = 일요일 · 연 = 연말/오늘). 에이와 수강 기록이 갖춰진 달(`trustFrom`,
+ * 원장 2026-10-20 '2026년 4월부터') 전 점을 빼는 데 쓴다. null이면 그대로.
+ */
+export function pointsFrom<T extends { date: string }>(points: readonly T[], from: string | null): T[] {
+  return from ? points.filter((p) => p.date >= `${from}-01`) : [...points];
+}
+
+/**
+ * 월별·연도별 점을 시작 달부터 자른다 — **뺀 점이 없으면 시작 달도 null**(창 안에 그 전 달이 없는데 '그 달부터 보입니다'라고 하면
+ * 거짓이다 · 적대 리뷰 2026-10-20). `trustFrom` = 월별·연도별 어느 쪽이든 뺐을 때(각주) · `monthlyFrom` = **월별**을 뺐을 때만(카드 머리
+ * '최근 12개월' 대신 'N월부터' — 연도별 옛 해는 해마다 빠지므로 머리가 영영 틀리지 않게, 적대 재리뷰 2026-10-20).
+ * 운영실 '재원생 추이' 카드(학원 전체 · 과목 관리자)가 쓴다.
+ */
+export function clipTrend<T extends { date: string }>(
+  monthly: readonly T[],
+  yearly: readonly T[],
+  from: string | null,
+): { monthly: T[]; yearly: T[]; trustFrom: string | null; monthlyFrom: string | null } {
+  const m = pointsFrom(monthly, from);
+  const y = pointsFrom(yearly, from);
+  return { monthly: m, yearly: y, trustFrom: m.length < monthly.length || y.length < yearly.length ? from : null, monthlyFrom: m.length < monthly.length ? from : null };
+}

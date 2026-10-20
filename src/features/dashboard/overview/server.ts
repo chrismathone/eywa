@@ -135,6 +135,7 @@ import { isCancelledEventTitle } from "@/features/calendar/cancelled";
 import { monthAheadWindow } from "./upcoming-window";
 import { consultProgressData, consultProgressList } from "./consultation-progress-server";
 import { staffComposition } from "./staff-subjects";
+import { loadRecordCoverage, type RecordCoverage } from "./record-coverage";
 import {
   distribution,
   monthlyChanges,
@@ -332,10 +333,16 @@ export async function loadMonthlyChanges(
    * 들어가면 과목 흐름이 학원 전체 퇴원과 같아진다(리뷰 2026-10-20: 2025년 퇴원 226건 전부가 '모름').
    */
   unknownToAll = true,
+  /**
+   * 기록 범위(`loadRecordCoverage`) — 있으면 등록 칸에 **수업을 시작한 등록만** 센다(원장 2026-10-20 *"신규원생이 그냥 등록상담만 했는데
+   * 등록했을 수도 있음"*): 판정 창(청구가 덮은 달) 안에 등록한 학생은 등록 뒤 수업료 청구·출석·시작한 반 수강 중 하나가 있어야 든다
+   * (`startedRegistration` — '지난 기록'과 한 벌). 그 전 등록은 가를 수 없어 그대로 센다 · 재료가 없으면(실패) 종전대로 · 퇴원 칸은 그대로.
+   */
+  coverage: Promise<RecordCoverage | null> = Promise.resolve(null),
 ): Promise<(pred: SlicePredicate | null) => MonthChange[]> {
   const db = await createClient();
   const fromDate = `${monthKeys(today, months)[0]}-01`;
-  const [enrolled, withdrawn] = await Promise.all([
+  const [enrolled, withdrawn, range] = await Promise.all([
     fetchAllPaged<{ id: string; enrolled_at: string; notes: string | null; withdrawal_metadata: unknown }>((from, to) =>
       db
         .from("students")
@@ -345,14 +352,17 @@ export async function loadMonthlyChanges(
         .range(from, to),
     ),
     withdrawalRows,
+    coverage,
   ]);
+  const started = range?.billingFrom ? new Set(range.started) : null;
+  const isStarted = (id: string, enrolledAt: string | null) => !started || !enrolledAt || enrolledAt.slice(0, 7) < range!.billingFrom! || started.has(id);
   const ids = scope ? new Set(scope.studentIds) : null;
   // 🔴 이 조회는 **status를 보지 않는다**(퇴원했다 복구된 학생의 그 달 등록을 살리려고) — 그래서 중복 병합된
   //    학생도 그대로 등록으로 세고 있었다(원장 2026-09-13). 퇴원 칸은 `withdrawalRows`가 이미 걸러 온다.
   // 수업 기록 없는 장부 정리(단체 정리)도 등록으로 세지 않는다 — 퇴원 칸이 이미 빼므로 한쪽만 남으면 증감이 기운다(원장 2026-10-15).
   const counted = enrolled.filter((r) => (!ids || ids.has(r.id)) && !isMergedStudent(r.notes));
   const bookkeeping = await bookkeepingOnlyIds(db, counted);
-  const joined = counted.filter((r) => !bookkeeping.has(r.id));
+  const joined = counted.filter((r) => !bookkeeping.has(r.id) && isStarted(r.id, r.enrolled_at));
   // 과목 관리자(원장 2026-10-14 2단계) — 등록은 그 학생이 들은(듣는) 반의 과목, 퇴원은 퇴원 무렵 끝난 과목(없으면 마지막 반).
   // 수강 기록이 없는 등록 학생(반 배정 전)은 '모름'이라 모든 과목 관리자에게 든다 · 두 과목이면 양쪽 모두.
   const subjectsOf = new Map<string, string[]>();
@@ -372,15 +382,17 @@ export async function loadMonthlyChanges(
   const inSlice = (pred: SlicePredicate, subjects: readonly (string | null | undefined)[]) =>
     unknownToAll ? inSliceAny(pred, subjects) : subjects.some((subject) => !!subject?.trim() && pred(subject));
   // 사유 없는 단체 장부 정리는 퇴원 칸에 넣지 않는다 — 퇴원일이 장부 날짜라 그 달 퇴원이 몰려 보인다(원장 2026-10-20 *"퇴원 이유를 보고
-  // 넣어야할건에 대해서만 넣을것"*). 그 학생은 재원생 추이에서 청구가 살아 있는 달까지만 센다(`billedOn`). 등록 칸은 그대로(실제로 등록했다).
+  // 넣어야할건에 대해서만 넣을것"*). 그 학생은 재원생 추이에서 청구가 살아 있는 달까지만 센다(`billedOn`). '수업을 시작한 등록만'은 등록 칸에만
+  // 건다(원장 결정 범위 — 퇴원 칸까지 걸면 퇴원관리 '월별 추이'와 숫자가 갈린다, 적대 리뷰 2026-10-20).
   const exits = withdrawn.filter((r) => !r.cleanup);
+  const startedFrom = started ? range!.billingFrom! : null;
   return (pred) =>
     monthlyChanges(
       today,
       joined.filter((r) => !pred || inSlice(pred, subjectsOf.get(r.id) ?? [])).map((r) => r.enrolled_at),
       exits.filter((r) => !pred || inSlice(pred, exitSubjects(r))).map((r) => r.withdrawnAt),
       months,
-    );
+    ).map((r) => (startedFrom && r.month >= startedFrom ? { ...r, startedOnly: true } : r));
 }
 
 async function attendanceHistory(today: string, withSubjects: boolean) {
@@ -850,7 +862,12 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
     });
   }
   addSliced("students", ["students"], async () => students(await scopePromise, settingsPromise));
-  addSliced("changes", ["students"], async () => loadMonthlyChanges(today, await scopePromise, withdrawalRows, sliceSets.length > 0));
+  addSliced("changes", ["students"], async () =>
+    loadMonthlyChanges(today, await scopePromise, withdrawalRows, sliceSets.length > 0, 6, true, loadRecordCoverage(user.tenantId, today).catch((error: unknown) => {
+      reportError(error, { scope: "dashboard.changes.record-coverage" }); // 실패하면 종전대로(등록일 그대로) 센다
+      return null;
+    })),
+  );
   // 과목 관리자 = 그 과목 반 수강이 그날 걸려 있던 재원생(원장 2026-10-14 *"재원생 추이도 마찬가지"*). 원본은 과목 값이 필요할 때만 받는다.
   addSliced("enrolledTrend", ["students"], async () => {
     if (await scopePromise) return () => null;

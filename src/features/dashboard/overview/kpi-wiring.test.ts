@@ -134,6 +134,10 @@ describe("② 퇴원&수업종료 — 1일~오늘, 퇴원관리의 과목 전체
     expect(SERVER).toMatch(/inWithdrawalWindow\(\{ withdrawnAt: row\.withdrawnAt, systemBulk: false \}, win\.from, win\.to\)/);
     // 추이의 퇴원 칸은 사유 없는 단체 장부 정리를 뺀 목록(원장 2026-10-20) — 카드(이번 달 퇴원 수)는 그대로 센다.
     expect(SERVER).toContain("const exits = withdrawn.filter((r) => !r.cleanup);");
+    // 수업을 시작한 등록만(원장 2026-10-20) — 판정 창 안 등록은 수업을 시작한 근거가 있어야 등록 칸에(퇴원 칸은 그대로) · 운영실·원생 통계 둘 다 재료를 넘긴다.
+    expect(SERVER).toContain("const joined = counted.filter((r) => !bookkeeping.has(r.id) && isStarted(r.id, r.enrolled_at));");
+    expect(SERVER).toContain("loadRecordCoverage(user.tenantId, today).catch(");
+    expect(src("src/features/students/stats/server/load.ts")).toContain("DETAIL_MONTHS, !scoped, coverage)");
     expect(SERVER).toContain("exits.filter((r) => !pred || inSlice(pred, exitSubjects(r))).map((r) => r.withdrawnAt)");
     // 운영실 과목 관리자 카드는 종전대로 '모름은 모두에게'(기본값) — 원생 통계만 모르는 기록을 뺀다(2026-10-20).
     expect(SERVER).toContain("unknownToAll = true,");

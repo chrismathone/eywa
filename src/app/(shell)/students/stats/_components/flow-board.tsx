@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
 import { saveStudentStatsPrefs } from "@/features/students/stats/server/prefs-actions";
 import { flowRowsFor, flowTotals, type ChartKind, type FlowRange, type FlowRow } from "@/features/students/stats/model";
+import { startedNote } from "@/features/dashboard/overview/model";
 import { StatCard } from "./stat-card";
 import { TrendChart } from "./trend-chart";
 import { FlowTable } from "./flow-table";
@@ -47,11 +48,12 @@ export function FlowBoard({
   const shown = flowRowsFor(rows, range, from);
   const totals = flowTotals(shown);
   const first = shown[0]?.month;
+  const started = startedNote(shown);
   return (
     <StatCard
       id="flow"
       title="월별 기록"
-      note={`${first ? `${first.slice(0, 4)}년 ${Number(first.slice(5, 7))}월부터` : "기록 없음"} · 당월은 오늘까지 · 퇴원은 실제 퇴원만${scopeLabel ? ` · ${scopeLabel} 반을 다닌 학생만(과목을 알 수 있는 기록만 — 반 배정 전 신입은 반에 들어간 뒤 셉니다)` : ""}`}
+      note={`${first ? `${first.slice(0, 4)}년 ${Number(first.slice(5, 7))}월부터` : "기록 없음"} · 당월은 오늘까지${started ? ` · ${started}` : ""} · 퇴원은 실제 퇴원만${scopeLabel ? ` · ${scopeLabel} 반을 다닌 학생만(과목을 알 수 있는 기록만 — 반 배정 전 신입은 반에 들어간 뒤 셉니다)` : ""}`}
       tools={
         <>
           <ToolbarSegment label="기간">
@@ -89,7 +91,7 @@ export function FlowBoard({
           { key: "withdrawn", name: "퇴원", color: WITHDRAWN, values: shown.map((r) => r.withdrawn) },
         ]}
       />
-      <FlowTable rows={shown} monthEnd={monthEnd} />
+      <FlowTable rows={shown} monthEnd={monthEnd} started={started} />
     </StatCard>
   );
 }

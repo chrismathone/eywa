@@ -34,6 +34,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { MergeDialog } from "../[id]/merge-dialog";
+import { makeeduSyncedUrlOf } from "@/features/enrollment/makeedu-link";
+import { MakeeduSyncedMark } from "./makeedu-synced-mark";
 
 /**
  * 한 페이지에 그릴 카드 수 — **10장**(원장 2026-09-01 *"10개 카드 크기에 딱 여백 알맞게"*).
@@ -197,6 +199,7 @@ function ConsultationCard({
   const [mergeOpen, setMergeOpen] = useState(false);
 
   const mark = cardMarkOf(c, stage);
+  const makeeduUrl = makeeduSyncedUrlOf(c);
   const gradeLabel = schoolGradeLabel(c.prospectSchool, c.prospectGrade);
   // 마우스 오버 = 감춘 줄들(상담사 · 배정 수업 수 · 학부모 요청 원문). 빈 값이면 title 자체를 안 단다.
   // ⚠️ '수업 N개'는 옛 카드의 둘째 줄에 있던 사실이다 — 줄을 없애면서 여기로 옮겼다(그냥 지우면
@@ -262,6 +265,8 @@ function ConsultationCard({
                      넘어 실브라우저에서 이름이 **`김.`** 한 글자로 잘렸다(등록 완료 칸, 오른쪽 표식이 자리를 먼저 먹는다).
                      이름이 안 읽히면 카드의 존재 이유가 없다 — 크기보다 이름이 먼저다. */}
               <p className="text-foreground flex min-w-0 flex-1 items-center gap-1 text-xl leading-none font-bold">
+                {/* 메이크에듀 동기화 완료(등록 완료 칸만) = 이름 **왼쪽**(원장 2026-10-20 — 오른쪽 층은 '반 배정 완료'가 차지한다). */}
+                {makeeduUrl ? <MakeeduSyncedMark url={makeeduUrl} /> : null}
                 <span className="shrink-0 whitespace-nowrap">{c.prospectName}</span>
                 {gradeLabel ? (
                   <span className="text-text-dim min-w-0 truncate text-sm font-medium" title={gradeLabel}>({gradeLabel})</span>

@@ -127,6 +127,8 @@ export type ConsultationListRow = {
   hasAudio: boolean;
   fromPublicIntake: boolean;
   syncAddedAt: string | null; // 지난 동기화가 새로 추가(다음 동기화 성공 시 해제) → ↻ 동기화 배지
+  /** makeedu counselSeq — 있으면 makeedu에 그 상담이 있다(들어왔거나 보냈다). 등록 완료 칸의 '동기화 완료' 표식. */
+  makeeduId: string | null;
   studentId: string | null; // 수업 배정으로 생성된 학생(연결) — null이면 아직 학생 미생성
   assignedClassCount: number; // 연결 학생의 상담 과목 미종료 수강(반) 수 → ≥1이면 "배정 완료"
   personConsultCount: number; // 같은 사람(학생/자연키)의 등록상담 총 건수 → ≥2면 "반복 접수" 힌트
@@ -167,7 +169,7 @@ export type ConsultationFilter = {
 // 0002 마이그레이션부터 있는 컬럼이라 옛/새 스키마 분기(#95)가 필요 없다.
 const LIST_COLS = `id, prospect_name, prospect_grade, prospect_school,
    parent_phone, parent_request, outcome, consulted_at, subject, consultant_id, counselor,
-   processing_status, audio_path, from_public_intake, sync_added_at, student_id,
+   processing_status, audio_path, from_public_intake, sync_added_at, student_id, makeedu_id,
    consultant:consultant_id ( display_name )`;
 
 /** 목록·칸반 공용 필터 적용. 두 경로가 갈라지면 "칸반엔 있는데 목록엔 없는 건"이 생긴다 — 한 함수로 묶는다. */
@@ -322,6 +324,7 @@ export async function getEnrollmentConsultations(
       hasAudio: !!c.audio_path,
       fromPublicIntake: !!(c as { from_public_intake?: boolean }).from_public_intake,
       syncAddedAt: (c as { sync_added_at?: string | null }).sync_added_at ?? null,
+      makeeduId: (c as { makeedu_id?: string | null }).makeedu_id ?? null,
       studentId: (c as { student_id?: string | null }).student_id ?? null,
       assignedClassCount: assignedCountFor(
         c.student_id,
@@ -433,6 +436,7 @@ export async function getEnrollmentConsultationsPage(
         hasAudio: !!c.audio_path,
         fromPublicIntake: !!c.from_public_intake,
         syncAddedAt: c.sync_added_at ?? null,
+        makeeduId: c.makeedu_id ?? null,
         studentId: c.student_id ?? null,
         assignedClassCount: assignedCountFor(c.student_id, c.subject ?? null),
         subject: c.subject ?? null,
@@ -580,8 +584,6 @@ export type ConsultationDetail = ConsultationListRow & {
   /** 생성 실패 사유(한글 요약) — status=failed일 때만. */
   prepBriefError: string | null;
   studentId: string | null;
-  /** makeedu counselSeq — 있으면 makeedu 원본 상세 페이지로 바로 가는 링크를 표시. */
-  makeeduId: string | null;
   fields: FullConsultationFields;
 };
 

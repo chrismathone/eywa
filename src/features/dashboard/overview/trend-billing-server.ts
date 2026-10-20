@@ -3,6 +3,7 @@ import type { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { isCleanupExit } from "@/features/withdrawals/system-bulk";
 import { billedTuitionMonths } from "./trend-billing";
+import { coverageStartFromCounts } from "./coverage-rules";
 
 type Admin = ReturnType<typeof createAdminClient>;
 /** 캐시에 담기는 모양(JSON) — 청구가 지점을 덮기 시작한 달 · [장부 정리 학생 id, 청구가 살아 있는 달들]. */
@@ -44,10 +45,9 @@ export async function loadCleanupBilling(db: Admin, tenantId: string, today: str
 }
 
 /**
- * 청구가 지점을 덮기 시작한 달 = **최근 36개월 안**에서 그달 청구 줄이 **창 안 가장 많은 달의 절반 이상**인 첫 달 — 옛 달의 낱장
- * 청구·오타 청구월 하나로 앞당겨지거나 꺼지지 않고, 꾸준히 커 온 지점도 첫 달을 놓치지 않게(적대 재리뷰 2026-10-20: '지금 재원생의
- * 절반'을 기준으로 두면 학생이 늘어난 지점은 몇 달 늦게 잡혔다). 창 안 가장 이른 청구 달부터 이번 달까지 달마다 건수만 센다
- * (`head` — 줄을 받지 않는다 · 한꺼번에). 청구가 없으면 null(종전대로 퇴원일로 센다).
+ * 청구가 지점을 덮기 시작한 달 = **최근 36개월 안**의 살아 있는 수업료 청구(취소·환불 제외)로 `coverageStartFromCounts`(등록 판정·'지난 기록'과
+ * **같은 함수 · 같은 입력** — 적대 재리뷰 2026-10-20: 여기만 모든 청구 줄을 세어 시작 달이 갈릴 수 있었다). 창 안 가장 이른 청구 달부터
+ * 이번 달까지 달마다 건수만 센다(`head` — 줄을 받지 않는다 · 한꺼번에). 청구가 없으면 null(종전대로 퇴원일로 센다).
  * ⚠️ 창보다 오래전부터 청구한 지점은 창의 첫 달이 시작 달이 된다 — 그보다 옛 점(연도별)은 종전 규칙으로 센다.
  */
 async function billingStartMonth(db: Admin, tenantId: string, thisMonth: string): Promise<string | null> {
@@ -55,6 +55,8 @@ async function billingStartMonth(db: Admin, tenantId: string, thisMonth: string)
     .from("invoices")
     .select("period")
     .eq("tenant_id", tenantId)
+    .eq("category", "tuition")
+    .not("status", "in", "(void,refunded)")
     .like("period", "____-__")
     .gte("period", shiftMonth(thisMonth, -(SEARCH_MONTHS - 1)))
     .lte("period", thisMonth)
@@ -67,12 +69,17 @@ async function billingStartMonth(db: Admin, tenantId: string, thisMonth: string)
   for (let m = start; m <= thisMonth && months.length < SEARCH_MONTHS; m = shiftMonth(m, 1)) months.push(m);
   const counts = await Promise.all(
     months.map(async (month) => {
-      const { count, error } = await db.from("invoices").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("period", month);
+      const { count, error } = await db
+        .from("invoices")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", tenantId)
+        .eq("category", "tuition")
+        .not("status", "in", "(void,refunded)")
+        .eq("period", month);
       if (error) throw fail("청구 건수", error);
       return count ?? 0;
     }),
   );
-  const most = Math.max(0, ...counts);
-  const at = counts.findIndex((c) => c > 0 && c * 2 >= most);
-  return at >= 0 ? months[at]! : null;
+  // 시작 달 규칙은 등록 판정·'지난 기록'과 한 벌(`coverageStartFromCounts` — 0건 달을 넘기든 빼든 결과가 같다).
+  return coverageStartFromCounts(new Map(months.map((m, i) => [m, counts[i]!])), thisMonth);
 }

@@ -9,14 +9,20 @@ import { isCleanupExit } from "@/features/withdrawals/system-bulk";
 import { MIX_KEYS, breakdownTrendOf, monthlyPoints, subjectTrendOf, trendOf, weeklyPoints, yearlyPoints, type MixKey, type TrendEnrollment, type TrendEnrollments, type TrendPoint, type TrendStudent } from "./enrolled-trend";
 import { subjectGroupOf, type ProgramSubject } from "@/features/students/enrollment/program";
 import { loadCleanupBilling, type CleanupBilling } from "./trend-billing-server";
+import { loadRecordCoverage } from "./record-coverage";
+import { clipTrend } from "./trend-points";
 
-export type EnrolledTrend = { monthly: TrendPoint[]; yearly: TrendPoint[]; recordsFrom: string | null };
+/** `trustFrom` = 에이와 수강 기록이 갖춰진 첫 달 — 그 전 점을 **실제로 뺐을 때만**(월별 = `monthlyFrom`도) 싣는다(원장 2026-10-20 '2026년 4월부터'). */
+export type EnrolledTrend = { monthly: TrendPoint[]; yearly: TrendPoint[]; recordsFrom: string | null; trustFrom?: string | null; monthlyFrom?: string | null };
 
-/** 청구 재료 실패 — 경고만 남기고 종전 규칙(퇴원일)으로 센다(재원생 추이 전체가 '못 불러옴'이 되지 않게, 적대 리뷰 2026-10-20). */
-const warnBilling = (error: unknown): null => {
-  reportWarning("재원생 추이 장부 정리 청구 조회 실패 — 이번 요청은 퇴원일 규칙으로", { scope: "dashboard.enrolledTrend.cleanupBilling", cause: error instanceof Error ? error.message : String(error) });
+/** 재료 실패 — 경고만 남기고 종전대로 센다(재원생 추이 전체가 '못 불러옴'이 되지 않게, 적대 리뷰 2026-10-20). */
+const warnFor = (scope: string, message: string) => (error: unknown): null => {
+  reportWarning(message, { scope, cause: error instanceof Error ? error.message : String(error) });
   return null;
 };
+const warnBilling = warnFor("dashboard.enrolledTrend.cleanupBilling", "재원생 추이 장부 정리 청구 조회 실패 — 이번 요청은 퇴원일 규칙으로");
+const warnCoverage = warnFor("dashboard.enrolledTrend.coverage", "재원생 추이 기록 범위 조회 실패 — 이번 요청은 시작 달로 자르지 않는다");
+
 
 /** 판정 재료(`countedOn`) — 첫 수강 · 끝난 수강 · 청구 기록(장부 정리 학생을 청구로 세는 창 · 청구 재료가 없으면 종전 규칙). */
 const inputsOf = (raw: TrendRaw, billing: CleanupBilling | null, today: string): TrendEnrollments => ({
@@ -33,16 +39,19 @@ const inputsOf = (raw: TrendRaw, billing: CleanupBilling | null, today: string):
  * 청구 재료가 실패하면 키를 바꿔(`fallback`) 1분만 캐시한다 — 정상 키를 대체값으로 더럽히지 않고, 실패가 이어져도 원본은 분당 한 번만
  *    읽으며, 청구가 돌아오면 그 즉시 정상 키(`billed`)로 돌아간다.
  * 연도별은 **퇴원 기록이 있는 첫 해**부터 — 그 전 해는 퇴원이 기록되지 않아 재원생이 부풀어 보인다(실측 첫 퇴원 2025-02).
+ * 에이와 수강 기록이 갖춰진 달(`trustFrom`) 전 점은 뺀다(원장 2026-10-20 '2026년 4월부터' — 그 전 달은 실제보다 낮게 나온다).
  */
 export async function loadEnrolledTrend(tenantId: string, today: string): Promise<EnrolledTrend> {
-  const billing = await loadBillingCached(tenantId, today).catch(warnBilling);
+  const [billing, coverage] = await Promise.all([loadBillingCached(tenantId, today).catch(warnBilling), loadRecordCoverage(tenantId, today).catch(warnCoverage)]);
+  const trustFrom = coverage?.trustFrom ?? null;
   return unstable_cache(
     async () => {
       const raw = await loadTrendRaw(tenantId, today);
       const en = inputsOf(raw, billing, today);
-      return { monthly: trendOf(raw.students, en, monthlyPoints(today)), yearly: trendOf(raw.students, en, yearlyPoints(today, raw.fromYear)), recordsFrom: raw.recordsFrom };
+      const clipped = clipTrend(trendOf(raw.students, en, monthlyPoints(today)), trendOf(raw.students, en, yearlyPoints(today, raw.fromYear)), trustFrom);
+      return { ...clipped, recordsFrom: raw.recordsFrom };
     },
-    ["dashboard-enrolled-trend-v4", tenantId, today, billing ? "billed" : "fallback"],
+    ["dashboard-enrolled-trend-v5", tenantId, today, billing ? "billed" : "fallback", trustFrom ?? "-"],
     { revalidate: billing ? 300 : 60 },
   )();
 }
@@ -70,10 +79,14 @@ const trendInputs = cache(async (tenantId: string, today: string): Promise<{ raw
  * 지점·날짜별 5분 캐시로 받고(학원 전체 추이와 같은 B6 규약), 묶음마다 `subjectTrendOf`로 센다(판정은 순수 함수 한 벌).
  */
 export async function loadEnrolledTrendSlicer(tenantId: string, today: string): Promise<(inSubject: (subject: string | null) => boolean) => EnrolledTrend> {
-  const { raw, en } = await trendInputs(tenantId, today);
+  const [{ raw, en }, coverage] = await Promise.all([trendInputs(tenantId, today), loadRecordCoverage(tenantId, today).catch(warnCoverage)]);
+  const trustFrom = coverage?.trustFrom ?? null;
   return (inSubject) => ({
-    monthly: subjectTrendOf(raw.students, en, raw.enrollments, monthlyPoints(today), inSubject, today),
-    yearly: subjectTrendOf(raw.students, en, raw.enrollments, yearlyPoints(today, raw.fromYear), inSubject, today),
+    ...clipTrend(
+      subjectTrendOf(raw.students, en, raw.enrollments, monthlyPoints(today), inSubject, today),
+      subjectTrendOf(raw.students, en, raw.enrollments, yearlyPoints(today, raw.fromYear), inSubject, today),
+      trustFrom,
+    ),
     recordsFrom: raw.recordsFrom,
   });
 }

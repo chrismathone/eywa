@@ -4,6 +4,7 @@ import { fetchAllPaged } from "@/lib/supabase/batch";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import type { ActiveEnrollmentRow, EnrolledStudentRow } from "@/features/students/enrollment/enrolled-composition";
 import { buildDailySnapshot } from "../daily-snapshot";
+import { recordAywaHistory } from "./history";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -12,12 +13,15 @@ type Admin = ReturnType<typeof createAdminClient>;
  * cron(관리 키 · 세션 없음)이라 **모든 조회에 tenant_id**를 건다([[#104]]) — 조회 모양은 운영실 재원생 카드의 조회
  * (`fetchEnrolledStudents`·`fetchActiveEnrolledEnrollments`)와 같고, 계산은 `buildDailySnapshot` 한 벌.
  * 지점 하나가 실패해도 나머지는 쓴다(실패 지점은 돌려준다).
+ * 같은 길에 '지난 기록' 에이와 쪽 월별 값(`recordAywaHistory` · 0385a)도 다시 센다 — **모든 지점의 매일 기록을 먼저** 쓰고 그 뒤에 돈다
+ * (매일 기록은 자정 직전 상태라야 해서 다른 지점 집계를 기다리지 않게 · 시간이 모자라 잘려도 매일 기록은 남게). 따로 실패한다.
  */
-export async function recordStudentDailyStats(today: string): Promise<{ tenants: number; written: number; failed: string[] }> {
+export async function recordStudentDailyStats(today: string): Promise<{ tenants: number; written: number; failed: string[]; historyFailed: string[] }> {
   const admin = createAdminClient();
   const { data: tenants, error } = await admin.from("tenants").select("id").order("id");
   if (error) throw error;
   const failed: string[] = [];
+  const historyFailed: string[] = [];
   let written = 0;
   for (const t of (tenants ?? []) as { id: string }[]) {
     try {
@@ -28,7 +32,15 @@ export async function recordStudentDailyStats(today: string): Promise<{ tenants:
       failed.push(t.id);
     }
   }
-  return { tenants: tenants?.length ?? 0, written, failed };
+  for (const t of (tenants ?? []) as { id: string }[]) {
+    try {
+      await recordAywaHistory(admin, t.id, today);
+    } catch (e) {
+      console.error(JSON.stringify({ level: "error", scope: "student-history-aywa", tenantId: t.id, message: e instanceof Error ? e.message : String(e) }));
+      historyFailed.push(t.id);
+    }
+  }
+  return { tenants: tenants?.length ?? 0, written, failed, historyFailed };
 }
 
 async function recordTenant(admin: Admin, tenantId: string, today: string): Promise<void> {
