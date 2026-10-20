@@ -92,6 +92,14 @@ export function billingStatsHref(subject?: string | null): string {
   return `/billing/stats${subject ? `?subject=${encodeURIComponent(subject)}` : ""}#billing`;
 }
 
+/**
+ * 운영실 '최근 14일 등원율'의 '상세' — 출결 통계(등원율 추이 · 원장 2026-10-20 *"상세 눌렀을때 추이를 볼 수 없는곳 모두 추가해보자"*).
+ * 과목 관리자가 운영실에서 고른 과목을 싣는다(빠지면 첫 담당 과목으로 열려 카드와 숫자가 갈린다).
+ */
+export function attendanceStatsHref(subject?: string | null): string {
+  return `/attendance/stats${subject ? `?subject=${encodeURIComponent(subject)}` : ""}#rate`;
+}
+
 /** 그날 결석 학생(출석부). */
 export function absentDayHref(date: string): string {
   return `/attendance/${date}?status=absent`;

@@ -16,7 +16,7 @@ import {
 } from "@/features/dashboard/overview/model";
 import { concurrentShare } from "@/features/students/enrollment/enrolled-composition";
 // 재원생 패널 ↗는 KPI 카드와 같은 주소 — "/students"만 적으면 계정에 저장된 필터가 끼어 숫자가 달라 보인다(F21).
-import { billingStatsHref, studentsEnrolledHref, studentsStatsHref } from "@/features/dashboard/overview/kpi-links";
+import { attendanceStatsHref, billingStatsHref, studentsEnrolledHref, studentsStatsHref } from "@/features/dashboard/overview/kpi-links";
 import { DASHBOARD_SUBJECT_COLORS, STAFF_SUBJECT_LEGEND, dashboardSubjectColor, dashboardCombinationColor } from "@/features/dashboard/overview/subject-colors";
 import { foldExpenseTotals } from "@/features/dashboard/overview/expense-total";
 import { paymentRateDisplay } from "@/features/billing/calc";
@@ -907,7 +907,7 @@ export function Overview({
     <Panel
       title={t("attendance14", "최근 14일 등원율")}
       note="오늘 포함 14일 · (출석 + 지각) / 유효 출결 칸"
-      href="/attendance"
+      href={snapshot.teacherView ? "/attendance" : attendanceStatsHref(view?.activeSubject)}
       sections={[v.attendanceTrend]}
     >
       {v.attendanceTrend?.data && (
