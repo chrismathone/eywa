@@ -18,6 +18,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
 import { explainDbError, logDbError } from "@/lib/supabase/db-error";
 import { canonicalSchoolName, type SchoolSaveAlias } from "@/features/schools/school-name";
+import { completeSchoolKind } from "@/features/schools/server/complete-kind";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { accessLevelTenant, canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { logAction } from "@/features/audit/server/log";
@@ -195,6 +196,14 @@ export async function createStudent(
   }
 
   const supabase = await createClient();
+  // 급이 빠진 학교(`칠성`)는 학년으로 급을 채운다 — 학교알리미에 있는 학교만(2026-10-20 김지유 건).
+  input.school = await completeSchoolKind(
+    supabase,
+    user.tenantId,
+    input.school,
+    input.grade,
+    (await getTenantSettings()).operations.schoolSaveAliases,
+  );
 
   // 이름 중복 방지 — 같은 이름이 이미 있으면 다음 빈 알파벳 접미사(A·B·C…) 강제(ijw/makeedu 규약).
   // 판정은 공용 진입점 하나로(상담 전환·엑셀 가져오기도 같은 함수) — 한 경로만 지키면 소용없다.
@@ -317,6 +326,14 @@ export async function updateStudent(
   if (fieldErrors) return { fieldErrors };
 
   const supabase = await createClient();
+  // 급이 빠진 학교(`칠성`)는 학년으로 급을 채운다 — 학교알리미에 있는 학교만(2026-10-20 김지유 건).
+  input.school = await completeSchoolKind(
+    supabase,
+    user.tenantId,
+    input.school,
+    input.grade,
+    (await getTenantSettings()).operations.schoolSaveAliases,
+  );
 
   // status 전환 시 withdrawal_metadata 처리 — 새로 퇴원으로 가면 기본 메타 채움,
   // 다시 재원으로 돌리면 null로 비움. 이미 퇴원 상태였으면 손대지 않음.
