@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { applyTermDict } from "./term-dict";
 import { formatMaterial, speechStats, transcriptLines } from "./transcript";
 import { buildResult, claimsFrom, fixNote, overallOf } from "./result";
-import { parseVerdict } from "./prompt-verify";
+import { parseVerdict, VERIFY_SYSTEM, verifyMaterial, verifyPrompt } from "./prompt-verify";
+import { JUDGE_SYSTEM, judgePrompt } from "./prompt-judge";
 
 describe("applyTermDict", () => {
   it("고친 곳에 원래 말을 남긴다", () => {
@@ -104,5 +105,31 @@ describe("parseVerdict", () => {
     expect(parseVerdict({ verdict: "확정" })).toBe("확정");
     expect(parseVerdict({ verdict: "maybe" })).toBe("애매");
     expect(parseVerdict(null)).toBe("애매");
+  });
+});
+
+describe("프롬프트 갈래 — 고정 글은 system, 영상 자료는 본문(프롬프트 캐시 2026-10-21)", () => {
+  const labels = ["f01_00m01s", "last_00m35s_hi"];
+  it("판정: system에 순서·금지 전부, 본문에 자료·화면·출력 형식 — 영상 자료가 system에 새지 않는다", () => {
+    const body = judgePrompt("[전사]\n[00:01] 정육면체", labels);
+    expect(JUDGE_SYSTEM).toContain("[0단계 전사 보정]");
+    expect(JUDGE_SYSTEM).toContain("[금지]");
+    expect(JUDGE_SYSTEM).not.toContain("정육면체");
+    expect(body).not.toContain("[0단계 전사 보정]");
+    expect(body).toContain("[00:01] 정육면체");
+    expect(body).toContain("[화면] 2장");
+    expect(body).toContain("last_00m35s_hi");
+    expect(body.trimEnd().endsWith("}")).toBe(true); // 출력 형식(JSON)이 맨 끝
+  });
+  it("확인: 자료(캐시 글)에는 주장이 없고, 본문은 주장 하나뿐", () => {
+    const prefix = verifyMaterial("[전사]\n[00:01] 둘레", labels);
+    const body = verifyPrompt({ where: "f01_00m01s", seen: "2x3=5", why_wrong: "곱셈" });
+    expect(VERIFY_SYSTEM).toContain("반박 담당");
+    expect(prefix).toContain("[00:01] 둘레");
+    expect(prefix).toContain("[화면] 2장");
+    expect(prefix).not.toContain("받은 주장");
+    expect(body).toContain("[받은 주장]");
+    expect(body).toContain("2x3=5");
+    expect(body).not.toContain("둘레");
   });
 });

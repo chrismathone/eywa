@@ -18,6 +18,7 @@ import { featurePin } from "./model-pins";
 import { AI_MODELS, keyGroupOf, keyLabelOf, resolveKeyEnv } from "./models";
 import {
   anthropicRequestParams,
+  anthropicUsage,
   parseJsonLoose,
   recordUsage,
   requireAiLicense,
@@ -91,8 +92,7 @@ export async function collectJSONBatch(
       continue;
     }
     const msg = row.result.message;
-    const usage = { inputTokens: msg.usage?.input_tokens ?? null, outputTokens: msg.usage?.output_tokens ?? null };
-    await recordUsage({ meta, provider: "anthropic", model: msg.model, keyName, usage, ok: true });
+    await recordUsage({ meta, provider: "anthropic", model: msg.model, keyName, usage: anthropicUsage(msg.usage), ok: true });
     if (msg.stop_reason === "refusal") { out[row.custom_id] = { ok: false, error: "AI가 이 요청을 거절했습니다" }; continue; }
     const text = msg.content.map((b) => (b.type === "text" ? b.text : "")).join("");
     try {
@@ -109,7 +109,12 @@ const DEV_BATCH_PREFIX = "devcli_";
 const devBatchDir = () => join(tmpdir(), "aywa-dev-batches");
 
 type DevParams = ReturnType<typeof anthropicRequestParams>;
-function devInput(params: DevParams) {
+/** system은 문자열 또는(캐시 지점이 있으면) 텍스트 블록 배열 — CLI엔 글만 넘긴다(캐시 표시는 CLI에 없다). */
+const systemText = (s: DevParams["system"]): string | undefined =>
+  typeof s === "string" ? s : Array.isArray(s) ? s.map((b) => (b.type === "text" ? b.text : "")).join("\n") : undefined;
+
+/** 시험용으로 연다 — 캐시 글(cachePrefix) 블록은 텍스트라 prompt 앞에 차례대로 이어진다. */
+export function devInput(params: DevParams) {
   const content = params.messages[0]?.content;
   const blocks = typeof content === "string" ? [{ type: "text", text: content }] : (content as { type: string; text?: string; source?: { media_type: string; data: string } }[]);
   const images: { mediaType: string; dataBase64: string; label?: string }[] = [];
@@ -121,7 +126,7 @@ function devInput(params: DevParams) {
     else if (b.type === "text") { if (pendingLabel !== undefined) prompt += `${pendingLabel}\n`; pendingLabel = b.text; }
   }
   if (pendingLabel !== undefined) prompt += pendingLabel;
-  return { model: params.model, prompt, system: typeof params.system === "string" ? params.system : undefined, images };
+  return { model: params.model, prompt, system: systemText(params.system), images };
 }
 
 /** 개발 CLI를 나란히 돌리는 수 — 한 건에 1분쯤이라 밀린 영상 수백 건을 하루 안에 끝내려면 몇 개는 겹쳐야 한다(원장 2026-10-21 "전부 분석해버려"). */

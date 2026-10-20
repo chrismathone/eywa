@@ -18,6 +18,8 @@ vi.mock("./anthropic", () => ({
 
 import {
   AnthropicRefusalError,
+  anthropicRequestParams,
+  anthropicUsage,
   generateJSON,
   isClaude5Model,
   isCreditExhaustedError,
@@ -490,5 +492,33 @@ describe("parseJsonLoose — 문자열 안 생 줄바꿈 복구", () => {
   });
   it("복구해도 못 읽는 응답은 여전히 throw", () => {
     expect(() => parseJsonLoose("완전히 JSON이 아님")).toThrow();
+  });
+});
+
+describe("anthropicRequestParams — 프롬프트 캐시 지점(2026-10-21)", () => {
+  const META = { tenantId: "t", feature: "video_review_judge" };
+  const IMG = { mediaType: "image/jpeg" as const, dataBase64: "AAAA", label: "f01_00m01s" };
+  it("cacheSystem: system이 캐시 표시가 붙은 텍스트 블록 배열로 간다 — 없으면 문자열 그대로", () => {
+    const cached = anthropicRequestParams("claude-haiku-5-5", { prompt: "p", system: "s", cacheSystem: true, maxTokens: 10, meta: META }, false);
+    expect(cached.system).toEqual([{ type: "text", text: "s", cache_control: { type: "ephemeral" } }]);
+    expect(cached.messages[0].content).toBe("p");
+    const plain = anthropicRequestParams("claude-haiku-5-5", { prompt: "p", system: "s", maxTokens: 10, meta: META }, false);
+    expect(plain.system).toBe("s");
+  });
+  it("cachePrefix: 첨부 뒤 · prompt 앞에 캐시 표시 블록 하나 — 첨부가 없어도 블록 배열", () => {
+    const withImg = anthropicRequestParams("claude-sonnet-5-5", { prompt: "q", cachePrefix: "자료", images: [IMG], maxTokens: 10, meta: META }, false);
+    expect(withImg.messages[0].content).toEqual([
+      { type: "text", text: "f01_00m01s" },
+      { type: "image", source: { type: "base64", media_type: "image/jpeg", data: "AAAA" } },
+      { type: "text", text: "자료", cache_control: { type: "ephemeral" } },
+      { type: "text", text: "q" },
+    ]);
+    const noImg = anthropicRequestParams("claude-sonnet-5-5", { prompt: "q", cachePrefix: "자료", maxTokens: 10, meta: META }, false);
+    expect(noImg.messages[0].content).toEqual([{ type: "text", text: "자료", cache_control: { type: "ephemeral" } }, { type: "text", text: "q" }]);
+  });
+  it("anthropicUsage: 캐시 읽기·쓰기 토큰을 따로 든다(input_tokens엔 안 들어 있다)", () => {
+    expect(anthropicUsage({ input_tokens: 100, output_tokens: 5, cache_read_input_tokens: 4000, cache_creation_input_tokens: 0 }))
+      .toEqual({ inputTokens: 100, outputTokens: 5, cacheReadTokens: 4000, cacheWriteTokens: 0 });
+    expect(anthropicUsage(null)).toBeNull();
   });
 });

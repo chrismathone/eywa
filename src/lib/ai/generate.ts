@@ -113,6 +113,16 @@ export type GenerateJSONOptions = {
   prompt: string;
   /** 선택적 system 지침(없으면 미전송). */
   system?: string;
+  /**
+   * Anthropic 프롬프트 캐시 — system 블록 끝에 캐시 지점을 둔다(같은 지침으로 여러 건을 부를 때 · 밤 배치는 최선 노력).
+   * 모델별 최소 길이(1~2천 토큰) 아래면 API가 조용히 무시한다(오류 없음). 캐시 토큰은 사용량 기록의 cache_read/write 칸에(0390a).
+   */
+  cacheSystem?: boolean;
+  /**
+   * 첨부(이미지) 뒤 · prompt 앞에 넣는 글과 그 자리까지의 캐시 지점 — 같은 첨부·자료로 여러 번 물을 때(영상 하나의 실수 주장 N개).
+   * Anthropic 전용 표시이고, 다른 회사·개발 CLI엔 prompt 앞에 그대로 이어 붙는다(`textPrompt` — 글이 사라지지 않는다).
+   */
+  cachePrefix?: string;
   /** 응답 길이 상한 — 바닥(`OUTPUT_TOKEN_FLOOR`)보다 작으면 바닥으로 올려 보낸다(Claude 4.x 이하만 이 값 그대로). */
   maxTokens: number;
   /** 기본 balanced(현 모든 호출). reasoning은 Anthropic 고정. */
@@ -155,8 +165,17 @@ export type GenerateJSONOptions = {
   images?: { mediaType: "image/jpeg" | "image/png"; dataBase64: string; label?: string }[];
 };
 
-/** provider 응답의 토큰 usage(제공 안 하면 null). */
-type ProviderUsage = { inputTokens: number | null; outputTokens: number | null } | null;
+/**
+ * provider 응답의 토큰 usage(제공 안 하면 null). Anthropic의 input_tokens는 캐시에서 읽은 토큰을 **뺀** 값이라
+ * 캐시 읽기(정가의 10%)·쓰기(125%)를 따로 든다 — 없으면 캐시를 켠 기능의 비용이 실제보다 적게 보인다.
+ */
+type ProviderUsage = { inputTokens: number | null; outputTokens: number | null; cacheReadTokens?: number | null; cacheWriteTokens?: number | null } | null;
+
+/** Anthropic usage → ProviderUsage(즉시 호출·배치 수거가 같은 변환을 쓴다). */
+export function anthropicUsage(u: { input_tokens?: number | null; output_tokens?: number | null; cache_read_input_tokens?: number | null; cache_creation_input_tokens?: number | null } | null | undefined): ProviderUsage {
+  if (!u) return null;
+  return { inputTokens: u.input_tokens ?? null, outputTokens: u.output_tokens ?? null, cacheReadTokens: u.cache_read_input_tokens ?? null, cacheWriteTokens: u.cache_creation_input_tokens ?? null };
+}
 /**
  * `truncated` = 모델이 max_tokens 한도에서 말을 끊었다. 이 경우 JSON은 거의 항상 문장 도중에 끊겨
  * 파싱이 깨지는데, 그 실패가 `Expected ',' or ']' after array element`로만 보이면 원인을 못 찾는다
@@ -194,6 +213,9 @@ export async function recordUsage(entry: {
         key_name: entry.keyName,
         input_tokens: entry.usage?.inputTokens ?? null,
         output_tokens: entry.usage?.outputTokens ?? null,
+        // 캐시 칸(0390a)은 값이 있을 때만 — 열이 아직 없는 DB에서도 캐시를 안 쓰는 호출의 기록은 그대로 산다(#95 expand/contract).
+        ...(entry.usage?.cacheReadTokens ? { cache_read_tokens: entry.usage.cacheReadTokens } : {}),
+        ...(entry.usage?.cacheWriteTokens ? { cache_write_tokens: entry.usage.cacheWriteTokens } : {}),
         ok: entry.ok,
         error: entry.error ?? null,
       });
@@ -349,17 +371,30 @@ export class AnthropicRefusalError extends Error {
 }
 
 /**
+ * 글만 받는 경로(DeepSeek · 개발 CLI 즉시 호출)의 사용자 본문 — cachePrefix는 Anthropic 캐시 표시일 뿐이라 같은 글을 prompt 앞에
+ * 그대로 잇는다(자료가 사라지지 않게 · 적대 리뷰 2026-10-21: '다시 분석'의 확인 자료 누락). 배치의 개발 경로는 블록에서 같은 차례로 푼다(devInput).
+ */
+export function textPrompt(opts: Pick<GenerateJSONOptions, "prompt" | "cachePrefix">): string {
+  return opts.cachePrefix ? `${opts.cachePrefix}\n\n${opts.prompt}` : opts.prompt;
+}
+
+/**
  * Anthropic 요청 본문 — 즉시 호출(callProvider)과 밤 배치(generate-batch.ts)가 **같은 본문**을 쓴다(한 곳에서만 만든다).
  * 문서·이미지 첨부 · Claude 5 temperature 생략 · 생각 깊이 · system · 응답 길이 바닥이 모두 여기서 정해진다.
  */
 export function anthropicRequestParams(model: string, opts: GenerateJSONOptions, withTemperature: boolean) {
-  // document(PDF)·images가 있으면 content를 블록 배열로 — 첨부 블록 + 텍스트 지시(비전 경로).
+  // 프롬프트 캐시 지점 — 첨부 뒤의 cachePrefix 글 끝(같은 첨부·자료로 여러 번 물을 때). 그 앞 전부(system·첨부·이 글)가 캐시된다.
+  const prefixBlocks = opts.cachePrefix
+    ? ([{ type: "text" as const, text: opts.cachePrefix, cache_control: { type: "ephemeral" as const } }] satisfies Anthropic.ContentBlockParam[])
+    : [];
+  // document(PDF)·images가 있으면 content를 블록 배열로 — 첨부 블록 + (캐시 글) + 텍스트 지시(비전 경로).
   const userContent = opts.images?.length
     ? ([
         ...opts.images.flatMap((img) => [
           ...(img.label ? [{ type: "text" as const, text: img.label }] : []),
           { type: "image" as const, source: { type: "base64" as const, media_type: img.mediaType, data: img.dataBase64 } },
         ]),
+        ...prefixBlocks,
         { type: "text" as const, text: opts.prompt },
       ] satisfies Anthropic.ContentBlockParam[])
     : opts.document
@@ -372,9 +407,18 @@ export function anthropicRequestParams(model: string, opts: GenerateJSONOptions,
             data: opts.document.dataBase64,
           },
         },
+        ...prefixBlocks,
         { type: "text" as const, text: opts.prompt },
       ] satisfies Anthropic.ContentBlockParam[])
+    : prefixBlocks.length
+    ? ([...prefixBlocks, { type: "text" as const, text: opts.prompt }] satisfies Anthropic.ContentBlockParam[])
     : opts.prompt;
+  // system 캐시 지점 — 같은 지침으로 여러 건을 부를 때(판정 배치 30건이 공유). 문자열 대신 블록 배열로 보낸다.
+  const system = opts.system
+    ? opts.cacheSystem
+      ? ([{ type: "text" as const, text: opts.system, cache_control: { type: "ephemeral" as const } }] satisfies Anthropic.TextBlockParam[])
+      : opts.system
+    : undefined;
   const claude5 = isClaude5Model(model);
   return {
     model,
@@ -383,7 +427,7 @@ export function anthropicRequestParams(model: string, opts: GenerateJSONOptions,
     ...(withTemperature && !claude5 && opts.temperature != null ? { temperature: opts.temperature } : {}),
     // 생각 깊이 — 호출부가 정한 때만(멘트 'minimal' → low). 안 정하면 모델 기본(Haiku 5.5 = medium).
     ...(claude5 && opts.reasoningEffort ? { output_config: { effort: ANTHROPIC_EFFORT[opts.reasoningEffort] } } : {}),
-    ...(opts.system ? { system: opts.system } : {}),
+    ...(system ? { system } : {}),
     messages: [{ role: "user" as const, content: userContent }],
   };
 }
@@ -411,7 +455,7 @@ async function callProvider(
       ...(opts.temperature != null ? { temperature: opts.temperature } : {}),
       messages: [
         ...(opts.system ? [{ role: "system" as const, content: opts.system }] : []),
-        { role: "user" as const, content: opts.prompt },
+        { role: "user" as const, content: textPrompt(opts) },
       ],
     });
     const msg = res.choices[0]?.message as
@@ -439,16 +483,13 @@ async function callProvider(
   if (res.stop_reason === "refusal") {
     const details = (res as { stop_details?: { category?: string | null } | null }).stop_details;
     // 거절도 입력 토큰은 쓴다 — 사용량 기록이 빠지지 않게 오류에 싣는다(generateJSON 루프가 기록).
-    const usage = res.usage ? { inputTokens: res.usage.input_tokens ?? null, outputTokens: res.usage.output_tokens ?? null } : null;
-    throw new AnthropicRefusalError(details?.category ?? null, usage);
+    throw new AnthropicRefusalError(details?.category ?? null, anthropicUsage(res.usage));
   }
   // content[0]만 보지 말고 모든 text 블록을 이어붙인다 — thinking 등 비-text 블록이 앞설 수 있어
   // 첫 블록만 읽으면 빈 문자열이 되는 모델(Sonnet 5 등)에서 파싱 실패("no json")가 난다.
   return {
     text: res.content.map((b) => (b.type === "text" ? b.text : "")).join(""),
-    usage: res.usage
-      ? { inputTokens: res.usage.input_tokens ?? null, outputTokens: res.usage.output_tokens ?? null }
-      : null,
+    usage: anthropicUsage(res.usage),
     truncated: res.stop_reason === "max_tokens",
   };
 }
@@ -545,7 +586,7 @@ export async function generateJSON(rawOpts: GenerateJSONOptions | GenerateDecisi
   // 첫 후보가 Claude일 때만(DeepSeek 고정 기능은 평소대로) · 이미지는 Claude 전용이라 그대로 · 문서(PDF)는 평소 경로. API 키 확인보다 앞에 둔다.
   if (devCliEnabled() && !opts.document && (opts.images?.length || candidates[0]?.provider === "anthropic")) {
     const model = candidates.find((c) => c.provider === "anthropic")?.model ?? (pin?.provider === "anthropic" ? pin.model : null) ?? AI_MODELS[tier].anthropic ?? "claude-sonnet-5-5";
-    const text = await runDevCli({ model, prompt: opts.prompt, system: opts.system, images: opts.images });
+    const text = await runDevCli({ model, prompt: textPrompt(opts), system: opts.system, images: opts.images });
     await recordUsage({ meta: opts.meta, provider: "anthropic", model, keyName: "dev-cli", ok: true });
     return { data: parseJsonLoose(text), model };
   }

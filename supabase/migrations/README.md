@@ -297,6 +297,7 @@ pnpm db:alphas
 | `0322a_shuttle_regular_ride_change` | **셔틀 매주 고정(요일) 시간 변경** — `change_shuttle_regular_ride()`가 한 트랜잭션으로 그 요일 하나만 옮기고(빼기 → 새 칸에 더하기) 이력 `shuttle_rider_history`(요일·전/후·사유·행위자, 추가만)를 남긴다. 반환 `same`·`changed`. 날짜 하루짜리 변경이 걸린 날은 그 변경이 여전히 이긴다. 0321a 필요. |
 | `0323a_shuttle_history_acks` | **변경 내역 '확인' 표식** — 관리자 '학부모 등하원' 화면에서 [확인]한 장부 줄(0321a·0322a)을 **화면에서만** 내린다(장부는 추가만이라 표식을 따로 쌓는다). 유일 `(tenant_id, history_kind, history_id)` — upsert 축이라 부분 유니크 아님([[#113]]). 학원 공용 · 누가·언제 확인했는지 남음. 없어도 앱은 산다(아무것도 안 숨김). |
 | `0387a_homework_video_reviews` | **영상 설명 AI 참고 메모** — 영상마다 분석 줄 하나(stage: extract → transcribe → judge(밤 배치) → verify → done) · 앱 사용자 정책 0개(서버 전용 · 연동 앱 워커 역할만 자기 지점 줄) · 비공개 버킷 `homework-video-review`(mp3·jpg 50MB). ⚠️ 새 DB는 이름순이라 `20261008101000_sync_agent_data_boundary` 앞에 돌아 워커 권한을 건너뛴다 — 그 뒤 이 파일을 한 번 더 실행할 것(멱등). |
+| `0390a_ai_usage_cache_tokens` | **AI 사용량에 프롬프트 캐시 토큰 두 칸**(`cache_read_tokens`·`cache_write_tokens`) — Anthropic의 `input_tokens`는 캐시에서 읽은 토큰을 뺀 값이라 캐시를 켠 기능(영상 설명 AI 참고 메모 밤 배치)의 비용이 이 칸 없이는 실제보다 적게 보인다. 앱은 값이 0보다 클 때만 쓴다(열 없는 DB에서도 다른 기록은 그대로). |
 
 새 alpha를 추가할 때: 다음 번호의 `000Na_*` 또는 `000Nb_*`로 만들고, 멱등 패턴을 지키고, **이 표에 추가**한다.
 상세 흐름은 [`../../CLAUDE.md`](../../CLAUDE.md) "마이그레이션 & 시드 흐름" 참고.

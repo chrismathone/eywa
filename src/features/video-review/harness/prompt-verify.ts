@@ -17,13 +17,20 @@ const STEPS = `너는 수학 숙제 영상 판정의 **반박 담당**이다. �
 판정: '확정'(글자가 또렷하고 분명히 틀렸으며 고치지 않음) / '고침'(틀렸다가 스스로 고침) / '반증'(사실은 맞음) / '애매'(읽기·해석이 확실하지 않음).
 JSON 하나만 출력: {"verdict":"확정|고침|반증|애매","reread":"다시 옮겨 적은 줄","why":"한두 문장"}`;
 
-export function verifyPrompt(claim: MistakeClaim, material: string, frameLabels: readonly string[]): string {
-  return [
-    STEPS,
-    `[받은 주장] ${JSON.stringify({ where: claim.where, seen: claim.seen, why_wrong: claim.why_wrong })}`,
-    material,
-    `[화면] ${frameLabels.length}장(이미지로 첨부, 각 이미지 앞에 이름): ${frameLabels.join(", ")}`,
-  ].join("\n\n");
+/** 확인 system 지침(고정 글). 짧아서 혼자서는 캐시 최소 길이에 못 미친다 — 캐시 지점은 자료 끝(verifyMaterial)에 둔다. */
+export const VERIFY_SYSTEM = STEPS;
+
+/**
+ * 확인 자료 — 같은 영상의 주장 N개(최대 4)가 그대로 공유하는 부분(전사 자료 + 화면 목록). 요청은 이 글을 cachePrefix로 보내
+ * system·화면·자료까지를 캐시한다(2026-10-21, 원장 "최소요금"). 주장은 그 뒤에 따로 온다 — 전엔 주장이 자료 앞에 있었다.
+ */
+export function verifyMaterial(material: string, frameLabels: readonly string[]): string {
+  return [material, `[화면] ${frameLabels.length}장(이미지로 첨부, 각 이미지 앞에 이름): ${frameLabels.join(", ")}`].join("\n\n");
+}
+
+/** 확인 본문 — 주장 하나(자료 뒤에 온다). */
+export function verifyPrompt(claim: MistakeClaim): string {
+  return `[받은 주장] ${JSON.stringify({ where: claim.where, seen: claim.seen, why_wrong: claim.why_wrong })}`;
 }
 
 export function parseVerdict(raw: unknown): VerifyVerdict {

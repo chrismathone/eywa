@@ -2,6 +2,8 @@
  * 판정 지침 — 2026-10-20 하네스 6차(26개 기준 정답에서 큰 오류 7/8 · 작은 실수 3/4 · 없는 오류 지적 0, 두 번 돌려 22~23/23 일치).
  * 사실 원칙(FACT_GUARD)은 generateJSON이 앞에 붙이므로 여기 다시 쓰지 않는다.
  * 🔴 특정 영상·문제를 가리키는 힌트를 넣지 말 것 — 일반 규칙만(과적합 방지, 2026-10-20 결정).
+ * 2026-10-21: 영상과 무관한 고정 글(순서·자료 설명·금지)은 system(JUDGE_SYSTEM)으로, 자료·화면 목록·출력 형식은 본문으로 갈랐다 —
+ * 글은 그대로이고 자리만 옮겼다(원장 "최소요금" → Anthropic 프롬프트 캐시: 밤 배치 30건이 system을 공유).
  */
 
 const COMMON = `[자료]
@@ -53,7 +55,10 @@ const OUTPUT = `JSON 하나만 출력(종합 판정은 쓰지 않는다 — 코�
  "unclear":["판독 불가·판단 보류"],"transcript_fixes":[{"at":"[mm:ss]","heard":"전사에 적힌 말","fixed":"고친 말","by":"근거 화면 이름"}],
  "teacher_note":"선생님 참고 2~3문장 — 잘한 점 1개 + 다음에 시켜 볼 것 1~2개","confidence":"높음|중간|낮음"}`;
 
-/** 판정 프롬프트 — 자료(formatMaterial)와 화면 목록을 받는다. 화면은 이미지 블록으로 함께 간다. */
+/** 판정 system 지침 — 영상과 무관한 고정 글. 요청은 여기에 캐시 지점을 둔다(cacheSystem). */
+export const JUDGE_SYSTEM = [STEPS, COMMON].join("\n\n");
+
+/** 판정 본문 — 자료(formatMaterial)·화면 목록·출력 형식. 화면은 이미지 블록으로 본문 앞에 간다. 지침은 JUDGE_SYSTEM. */
 export function judgePrompt(material: string, frameLabels: readonly string[]): string {
-  return [STEPS, COMMON, material, `[화면] ${frameLabels.length}장(이미지로 첨부, 각 이미지 앞에 이름): ${frameLabels.join(", ")}`, OUTPUT].join("\n\n");
+  return [material, `[화면] ${frameLabels.length}장(이미지로 첨부, 각 이미지 앞에 이름): ${frameLabels.join(", ")}`, OUTPUT].join("\n\n");
 }
