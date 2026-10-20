@@ -47,11 +47,11 @@ export const SHORTFALL_COLOR = "color-mix(in srgb, var(--color-amber) 45%, var(-
 export const fmtScore = (value: number | null): string => (value === null ? "산출불가" : value.toFixed(1));
 
 /**
- * 항목 점수 글자 — 점수가 없으면 설정으로 매긴 달은 '합계에서 뺌', 2026-10-13 전에 저장된 달(설정 사본 없음)은 그때 뜻 그대로 '산출불가'.
+ * 항목 점수 글자 — 점수가 없으면 설정으로 매긴 달은 '합계에서 제외', 2026-10-13 전에 저장된 달(설정 사본 없음)은 그때 뜻 그대로 '산출불가'.
  * 만점은 그 달을 매긴 설정의 만점이다(고정 10점·20점이 아니다).
  */
 export const scoreText = (m: Pick<Metric, "value">, p: Pick<PortfolioPeriod, "evaluation">): string =>
-  m.value === null ? (p.evaluation ? "합계에서 뺌" : "산출불가") : m.value.toFixed(1);
+  m.value === null ? (p.evaluation ? "합계에서 제외" : "산출불가") : m.value.toFixed(1);
 /** 만점 글자 — 만점 0은 학부모 만족도처럼 총점에 그대로 더하고 빼는 지표(원장 *"무제한 가감"*)라 '가감'. */
 export const maxLabel = (max: number): string => (max > 0 ? `${max}점` : "가감");
 export const pointsText = (m: Pick<Metric, "value" | "max">, p: Pick<PortfolioPeriod, "evaluation">): string =>
@@ -66,8 +66,10 @@ export function ruleText(p: Pick<PortfolioPeriod, "evaluation">, id: ItemId): st
   return s ? `${describeScoring(s.scoring, s.max, unitOf(p, id))} · 자료가 없으면 ${MISSING_LABEL[s.missing]}` : null;
 }
 /** 자료가 없어 규칙으로 매긴 항목의 꼬리표 — "자료 없음 · 0점" · "마감 대상 없음 · 만점". 옛 달은 null. */
-export function missingTag(m: Pick<Metric, "id" | "missing" | "uncounted" | "value">, p: Pick<PortfolioPeriod, "evaluation">): string | null {
-  if (m.uncounted) return m.value === null ? "계산 전 · 합계에서 뺌" : `계산 전 · ${m.value.toFixed(1)}점`;
+export function missingTag(m: Pick<Metric, "id" | "missing" | "uncounted" | "value"> & { newcomer?: boolean }, p: Pick<PortfolioPeriod, "evaluation">): string | null {
+  if (m.uncounted) return m.value === null ? "계산 전 · 합계에서 제외" : `계산 전 · ${m.value.toFixed(1)}점`;
+  // 급여 비율 — 지난달 담당 반이 없던 새 선생님은 설정 규칙과 상관없이 뺀다(evaluate.ts).
+  if (m.missing && m.newcomer) return "지난달 담당 없음 · 합계에서 제외";
   const s = m.missing && p.evaluation ? settingOf(p.evaluation, m.id) : undefined;
   if (!s) return null;
   return `${m.id === "coverage" ? "마감 대상 없음" : "자료 없음"} · ${MISSING_LABEL[s.missing]}`;
@@ -110,9 +112,10 @@ export const DELTA_CLASS = { up: "text-danger", down: "text-blue", flat: "", non
 export type StatusTone = SemanticTone;
 /** 처리 상태 → 의미색. 화면마다 따로 정하지 않는다. */
 export function statusTone(state: string): StatusTone {
-  if (["완료", "인정", "기한 전 완료", "작성", "상담함"].includes(state)) return "brand";
-  if (["미완료", "기한 초과", "미작성", "마감 후 작성", "셈", "미상담"].includes(state)) return "caution";
+  if (["완료", "인정", "기한 전 완료", "작성", "상담함", "응시"].includes(state)) return "brand";
+  if (["미완료", "기한 초과", "미작성", "마감 후 작성", "포함", "미상담", "미응시"].includes(state)) return "caution";
   if (state === "대리") return "special";
+  if (state.startsWith("확인 대기")) return "caution"; // 반영 전이라 점수에 안 든 글 — 눈에 띄게(원장 2026-10-16)
   return "inert";
 }
 /** 보고서 칸 — 작성/미작성 둘만(원장 2026-10-14). 지난 달에 남은 대리·마감 후·확인 필요도 점수에서 본인 작성이 아니었으니 미작성으로 보인다. */

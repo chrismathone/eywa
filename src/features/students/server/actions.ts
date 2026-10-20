@@ -16,13 +16,13 @@ import {
 } from "./enrollment-sync";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
-import { explainDbError } from "@/lib/supabase/db-error";
+import { explainDbError, logDbError } from "@/lib/supabase/db-error";
 import { canonicalSchoolName, type SchoolSaveAlias } from "@/features/schools/school-name";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { accessLevelTenant, canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { logAction } from "@/features/audit/server/log";
 import { kstToday } from "@/lib/date-kst";
-import { planFormWithdrawal } from "../withdrawal-plan";
+import { formWithdrawalNeedsReason, planFormWithdrawal } from "../withdrawal-plan";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import {
   DEFAULT_WITHDRAWAL_METADATA,
@@ -30,7 +30,7 @@ import {
   type WithdrawalMetadata,
   type WithdrawalReason,
 } from "@/features/withdrawals/types";
-import { checkReasonInput } from "@/features/withdrawals/reason-detail";
+import { checkReasonInput, readReasonForm } from "@/features/withdrawals/reason-detail";
 import { currentPeriod, isCommentCategory } from "../detail/grades-meta";
 import { normalizeExamSlot } from "@/features/grades/exam-slots";
 import { defaultTermOf, normalizeTerm, normalizeYear, termWindow } from "@/features/grades/term";
@@ -42,6 +42,7 @@ import { preserveMergeNote } from "../status/merged";
 import { resolveUniqueStudentNameFor } from "./unique-name";
 import { canViewStudentDetail } from "./read-scope";
 import { canManageStudentStatusNow } from "./status-access";
+import { saveStudentSiblings } from "./siblings";
 import { statusCreationNeedsPermission, STUDENT_STATUS_DENIED } from "../status-access";
 
 export type StudentFormState =
@@ -152,6 +153,16 @@ async function canManageStudentRecords(role: Parameters<typeof canManageTenant>[
 
 const STUDENT_MANAGE_DENIED = "학생 정보 변경 권한이 없습니다 — 강사 계정은 열람 전용입니다";
 
+/** 폼에서 읽은 사유 → 새 퇴원 메타데이터(상담 기록은 빈 채로 시작 — 상태 전환 창과 같은 모양). */
+function freshWithdrawalMetadata(r: { reason: WithdrawalReason; detail: string | null; memo: string | null }): WithdrawalMetadata {
+  return {
+    reason: r.reason,
+    ...(r.detail ? { detail: r.detail } : {}),
+    memo: r.memo,
+    consultation: { adminCalledParent: false, teacherCalledParent: false, talkedWithStudent: false },
+  };
+}
+
 export async function createStudent(
   _prev: StudentFormState,
   formData: FormData,
@@ -169,6 +180,14 @@ export async function createStudent(
   }
   const createPlan = planFormWithdrawal({ prevStatus: null, status: input.status, withdrawnAt: input.withdrawnAt, today: kstToday() });
   if (createPlan.error) return { fieldErrors: { withdrawnAt: createPlan.error } };
+  // 퇴원(또는 퇴원 예약)으로 등록하면 사유를 받는다 — 상태 전환 창과 같은 칸·같은 검사(원장 2026-10-15 *"기타는 모든 곳을
+  // 일치하게"*). 예전엔 사유 칸 없이 '기타'를 박았다.
+  let createMeta: WithdrawalMetadata | null = null;
+  if (formWithdrawalNeedsReason({ prevStatus: null, kind: createPlan.kind })) {
+    const picked = readReasonForm(formData);
+    if (picked.error !== undefined) return { error: picked.error };
+    createMeta = freshWithdrawalMetadata(picked);
+  }
   if (createPlan.status === "enrolled") {
     // 재원생 좌석 한도(슈퍼관리자 라이선스) — 한도가 없는 지점은 조회 한 번으로 통과.
     const seat = await seatBlockReason(user.tenantId, 1);
@@ -209,7 +228,7 @@ export async function createStudent(
       status: createPlan.status,
       enrolled_at: input.enrolledAt,
       withdrawn_at: createPlan.withdrawnAt,
-      withdrawal_metadata: createPlan.kind === "none" ? null : DEFAULT_WITHDRAWAL_METADATA,
+      withdrawal_metadata: createMeta,
       notes: input.notes,
     })
     .select("id")
@@ -223,7 +242,7 @@ export async function createStudent(
     action: "student_create",
     targetType: "student",
     targetLabel: resolvedName.name,
-    metadata: { studentId: data.id },
+    metadata: { studentId: data.id, ...(createMeta ? { reason: createMeta.reason, detail: createMeta.detail ?? null } : {}) },
   });
 
   revalidatePath("/students");
@@ -341,13 +360,24 @@ export async function updateStudent(
   if (withdrawalPlan.error) return { fieldErrors: { withdrawnAt: withdrawalPlan.error } };
   const schedulingNow = statusAccess && withdrawalPlan.kind === "schedule";
   const savedStatus = withdrawalPlan.status;
+  // 새 퇴원·퇴원 예약이면 사유를 받는다(원장 2026-10-15 *"기타는 모든 곳을 일치하게"*) — 판정은 폼이 사유 칸을 띄우는 것과 같은 함수.
+  let formReason: WithdrawalMetadata | null = null;
+  if (statusAccess && formWithdrawalNeedsReason({
+    prevStatus: prevStatus ?? null,
+    prevWithdrawnAt: (cur?.withdrawn_at as string | null) ?? null,
+    kind: withdrawalPlan.kind,
+  })) {
+    const picked = readReasonForm(formData);
+    if (picked.error !== undefined) return { error: picked.error };
+    formReason = freshWithdrawalMetadata(picked);
+  }
 
   let withdrawalMetadata: unknown = cur?.withdrawal_metadata ?? null;
   if (withdrawalPlan.kind === "withdraw" && prevStatus !== "withdrawn") {
-    // 예약돼 있던 사유는 살린다(폼엔 사유 칸이 없다) — 없으면 기본값.
-    withdrawalMetadata = scheduledPrev && cur?.withdrawal_metadata ? cur.withdrawal_metadata : DEFAULT_WITHDRAWAL_METADATA;
+    // 예약돼 있던 사유는 살린다(예약 때 골랐다) — 새 퇴원이면 방금 고른 사유. 예약인데 사유가 비어 있던 옛 줄만 기본값.
+    withdrawalMetadata = formReason ?? (scheduledPrev && cur?.withdrawal_metadata ? cur.withdrawal_metadata : DEFAULT_WITHDRAWAL_METADATA);
   } else if (schedulingNow) {
-    withdrawalMetadata = scheduledPrev && cur?.withdrawal_metadata ? cur.withdrawal_metadata : DEFAULT_WITHDRAWAL_METADATA;
+    withdrawalMetadata = formReason ?? (scheduledPrev && cur?.withdrawal_metadata ? cur.withdrawal_metadata : DEFAULT_WITHDRAWAL_METADATA);
   } else if (statusAccess && withdrawalPlan.kind === "none") {
     withdrawalMetadata = null;
   }
@@ -422,7 +452,14 @@ export async function updateStudent(
   // 상태 전환에 맞춰 활성 enrollment 정합성 유지 (changeStudentStatus와 동일 불변식).
   // 편집 폼 경로가 enrollment를 안 닫던 누수(F8) 보강 — 퇴원 시 종료, 복구/재원 시 on_hold 해제.
   if (savedStatus === "withdrawn" && prevStatus !== "withdrawn") {
-    const enrErr = await closeActiveEnrollmentsClamped(supabase, id, input.withdrawnAt ?? null);
+    // 닫는 수강에도 퇴원 사유를 적는다(상태 전환 창과 같다 — 퇴원율이 수강 사유도 읽는다).
+    const closingReason = (withdrawalMetadata as Partial<WithdrawalMetadata> | null)?.reason;
+    const enrErr = await closeActiveEnrollmentsClamped(
+      supabase,
+      id,
+      input.withdrawnAt ?? null,
+      closingReason ? { withdrawal_reason: closingReason } : {},
+    );
     if (enrErr) return { error: enrErr };
     // 수학 퇴원이면 '퇴원생 관리 차트' 시트에 적는다(원장 2026-10-07) — 응답 뒤에, 실패해도 퇴원은 그대로.
     const sheetDate = (savedWithdrawnAt ? String(savedWithdrawnAt).slice(0, 10) : null) ?? kstToday();
@@ -445,6 +482,38 @@ export async function updateStudent(
     if (enrErr) return { error: dbWhy(enrErr, "students.update.holdEnrollments", "수강을 휴원으로 바꾸지 못했습니다. 잠시 후 다시 시도해 주세요.") };
   }
 
+  // 형제 칸(0376a) — 칸이 있던 화면에서만 건드린다(옛 화면·다른 경로의 저장은 형제를 그대로 둔다).
+  let siblingNotice: string | null = null;
+  if (formData.has("siblingsField")) {
+    const ids = (key: string): string[] => {
+      try {
+        const v: unknown = JSON.parse(String(formData.get(key) ?? "[]"));
+        return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && /^[0-9a-f-]{36}$/i.test(x)).map((x) => x.toLowerCase()) : [];
+      } catch {
+        return [];
+      }
+    };
+    // 🔴 실패해도 여기서 돌아가지 않는다 — 학생 정보는 이미 저장됐다(감사로그·갱신을 건너뛰면 안 되고, 폼은 제출 뒤 열 때 값으로
+    //    리셋돼 '다시 저장'하면 방금 바꾼 정보가 되돌아간다 #83). 저장은 끝내고 형제만 못 했다고 알린다.
+    try {
+      const sib = await saveStudentSiblings(supabase, {
+        tenantId: user.tenantId, userId: user.id, studentId: id,
+        final: ids("siblings"), initial: ids("siblingsInitial"), suggested: ids("siblingsSuggested"),
+      });
+      if (sib.added.length + sib.excluded.length + sib.removed.length > 0) {
+        await logAction({
+          action: "student_siblings_update",
+          targetType: "student",
+          targetLabel: finalName,
+          metadata: { studentId: id, added: sib.added, excluded: sib.excluded, removed: sib.removed },
+        });
+      }
+    } catch (e) {
+      logDbError(e, "students.update.siblings", { studentId: id });
+      siblingNotice = "원생 정보는 저장했습니다. 형제는 저장하지 못했습니다 — 학생 수정 화면에서 다시 지정해 주세요.";
+    }
+  }
+
   await logAction({
     action: "student_update",
     targetType: "student",
@@ -458,6 +527,7 @@ export async function updateStudent(
         ? { scheduledWithdrawal: input.withdrawnAt }
         : {}),
       ...(cancelledSchedule ? { cancelledWithdrawal: cancelledSchedule } : {}),
+      ...(formReason ? { reason: formReason.reason, detail: formReason.detail ?? null } : {}),
     },
   });
 
@@ -468,7 +538,8 @@ export async function updateStudent(
     ok: true,
     redirectTo: `/students/${id}`,
     nonce: Date.now(),
-    notice: renamed ? `이미 '${input.name}' 학생이 있어 '${finalName}'(으)로 저장했습니다.` : undefined,
+    notice: [renamed ? `이미 '${input.name}' 학생이 있어 '${finalName}'(으)로 저장했습니다.` : null, siblingNotice]
+      .filter(Boolean).join("\n") || undefined,
   };
 }
 
@@ -946,15 +1017,19 @@ export async function endSingleEnrollment(
 
   const enrollmentId = String(formData.get("enrollmentId") ?? "").trim();
   const studentId = String(formData.get("studentId") ?? "").trim();
-  const reason = String(formData.get("reason") ?? "").trim() || "other";
   const date = String(formData.get("date") ?? "").trim() || kstToday();
 
   if (!enrollmentId) return { error: "수강 ID가 누락되었습니다" };
+  // 사유는 고른다 — 예전엔 칸 없이 '기타'를 박아 퇴원관리에 메모 없는 '기타'가 쌓였다(원장 2026-10-15 *"기타는 모든 곳을
+  // 일치하게"*). 반·학생 상세의 수강 종료 창과 시간표의 종료(Delete · 퇴원 칸 끌기)가 같은 칸(`ReasonFields`)을 보낸다.
+  const picked = readReasonForm(formData, "종료");
+  if (picked.error !== undefined) return { error: picked.error };
+  const reason = picked.reason;
 
   const supabase = await createClient();
   // 종료 규약(미래 시작 클램프 + withdrawal_reason)은 공용 원시함수 한 곳에 있다 — 퇴원 다이얼로그의
   // 부분 종료(endStudentEnrollments)도 같은 함수를 돈다(#77: 표면마다 다시 짜면 한쪽만 고쳐진다).
-  const res = await endEnrollmentById(supabase, enrollmentId, date, reason, undefined, studentId || undefined);
+  const res = await endEnrollmentById(supabase, enrollmentId, date, reason, { detail: picked.detail, memo: picked.memo }, studentId || undefined);
   if (res.error) return { error: res.error };
   // 이 종료로 수학을 그만뒀으면(반이동 제외 · 다른 수학 반이 남아 있으면 아님) 시트에 적는다(원장 2026-10-07).
   const sheetStudent = res.studentId || null;
@@ -974,6 +1049,8 @@ export async function endSingleEnrollment(
       classId: res.classId ?? null,
       date: res.endDate,
       reason,
+      detail: picked.detail,
+      memo: picked.memo,
     },
   });
 
@@ -1058,6 +1135,13 @@ export async function createStudentMemo(
 
   if (error) return { error: dbWhy(error, "students.memo.create", "메모를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.") };
 
+  // 🔴 메모 **본문은 담지 않는다**(학생 서술) — 분류·검색 허용 여부까지만.
+  await logAction({
+    action: "student_memo_create",
+    targetType: "student",
+    metadata: { studentId, category, searchable },
+  });
+
   revalidatePath(`/students/${studentId}`);
   // 성공을 undefined로 돌리면 useActionState 소비처가 성공을 감지할 수 없다(성공 시 reset·초안 삭제가 죽는다).
   return { ok: true };
@@ -1080,8 +1164,17 @@ export async function deleteStudentMemo(
   if (scopeErr) return { error: scopeErr };
 
   const supabase = await createClient();
-  const { error } = await supabase.from("student_memos").delete().eq("id", id);
+  const { data: gone, error } = await supabase.from("student_memos").delete().eq("id", id).select("student_id");
   if (error) return { error: dbWhy(error, "students.memo.delete", "메모를 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.", "delete") };
+
+  // 지운 행이 없으면(이미 지워졌거나 DB가 허락하지 않음) 남기지 않는다 — 없는 삭제를 기록하지 않는다.
+  if (gone?.length) {
+    await logAction({
+      action: "student_memo_delete",
+      targetType: "student",
+      metadata: { memoId: id, studentId: (gone[0].student_id as string | null) ?? (studentId || null) },
+    });
+  }
 
   if (studentId) revalidatePath(`/students/${studentId}`);
   return undefined;
@@ -1108,11 +1201,21 @@ export async function updateStudentMemo(
   if (scopeErr) return { error: scopeErr };
 
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data: saved, error } = await supabase
     .from("student_memos")
     .update({ category, content, searchable, updated_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq("id", id)
+    .select("student_id");
   if (error) return { error: dbWhy(error, "students.memo.update", "메모를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.") };
+
+  // 본문은 담지 않는다(작성과 같은 규칙). 바뀐 행이 없으면 남기지 않는다.
+  if (saved?.length) {
+    await logAction({
+      action: "student_memo_update",
+      targetType: "student",
+      metadata: { memoId: id, studentId: (saved[0].student_id as string | null) ?? (studentId || null), category, searchable },
+    });
+  }
 
   if (studentId) revalidatePath(`/students/${studentId}`);
   return { ok: true };
@@ -1136,11 +1239,20 @@ export async function toggleStudentMemoPin(
   if (scopeErr) return { error: scopeErr };
 
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data: saved, error } = await supabase
     .from("student_memos")
     .update({ pinned, updated_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq("id", id)
+    .select("student_id");
   if (error) return { error: dbWhy(error, "students.memo.pin", "메모 고정을 바꾸지 못했습니다. 잠시 후 다시 시도해 주세요.") };
+
+  if (saved?.length) {
+    await logAction({
+      action: "student_memo_pin",
+      targetType: "student",
+      metadata: { memoId: id, studentId: (saved[0].student_id as string | null) ?? (studentId || null), pinned },
+    });
+  }
 
   if (studentId) revalidatePath(`/students/${studentId}`);
   return undefined;
@@ -1203,6 +1315,13 @@ export async function createStudentGrade(
     return { error: e instanceof Error ? e.message : "성적을 저장하지 못했습니다" };
   }
 
+  // 🔴 점수·메모는 담지 않는다 — 어느 학생·과목·학기·시험 칸에 적었는지만(성적 원장 저장 `exam_scores`와 같은 축).
+  await logAction({
+    action: "student_grade_create",
+    targetType: "student",
+    metadata: { studentId, subject, year, term, slot, date: takenOn },
+  });
+
   revalidatePath(`/students/${studentId}`);
   return undefined;
 }
@@ -1225,8 +1344,22 @@ export async function deleteStudentGrade(
   if (scopeErr) return { error: scopeErr };
 
   const supabase = await createClient();
-  const { error } = await supabase.from("student_grades").delete().eq("id", id);
+  const { data: gone, error } = await supabase
+    .from("student_grades")
+    .delete()
+    .eq("id", id)
+    .select("student_id, subject, taken_on");
   if (error) return { error: dbWhy(error, "students.grade.delete", "성적을 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.", "delete") };
+
+  // 🔴 점수는 담지 않는다 — 어느 학생·과목·시험일의 성적을 지웠는지만. 지운 행이 없으면 남기지 않는다.
+  if (gone?.length) {
+    const g = gone[0] as { student_id: string | null; subject: string | null; taken_on: string | null };
+    await logAction({
+      action: "student_grade_delete",
+      targetType: "student",
+      metadata: { gradeId: id, studentId: g.student_id ?? (studentId || null), subject: g.subject, date: g.taken_on },
+    });
+  }
 
   if (studentId) revalidatePath(`/students/${studentId}`);
   return undefined;
@@ -1284,6 +1417,13 @@ export async function createStudentLevelTest(
   });
   if (error) return { error: dbWhy(error, "students.levelTest.create", "레벨테스트를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.") };
 
+  // 🔴 결과(레벨·세부점수)와 메모는 담지 않는다 — 언제·무슨 시험을 적었는지만.
+  await logAction({
+    action: "student_level_test_create",
+    targetType: "student",
+    metadata: { studentId, subject, testType, date: testedOn },
+  });
+
   revalidatePath(`/students/${studentId}`);
   return undefined;
 }
@@ -1303,8 +1443,21 @@ export async function deleteStudentLevelTest(
   if (scopeErr) return { error: scopeErr };
 
   const supabase = await createClient();
-  const { error } = await supabase.from("level_tests").delete().eq("id", id);
+  const { data: gone, error } = await supabase
+    .from("level_tests")
+    .delete()
+    .eq("id", id)
+    .select("student_id, subject, test_type, tested_on");
   if (error) return { error: dbWhy(error, "students.levelTest.delete", "레벨테스트를 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.", "delete") };
+
+  if (gone?.length) {
+    const t = gone[0] as { student_id: string | null; subject: string | null; test_type: string | null; tested_on: string | null };
+    await logAction({
+      action: "student_level_test_delete",
+      targetType: "student",
+      metadata: { levelTestId: id, studentId: t.student_id ?? (studentId || null), subject: t.subject, testType: t.test_type, date: t.tested_on },
+    });
+  }
 
   if (studentId) revalidatePath(`/students/${studentId}`);
   return undefined;
@@ -1383,6 +1536,13 @@ export async function createStudentGoal(_prev: GoalState, formData: FormData): P
     return { error: why.message };
   }
 
+  // 🔴 목표 점수·사유는 담지 않는다 — 어느 시험 칸에 목표를 두었는지만.
+  await logAction({
+    action: "student_goal_create",
+    targetType: "student",
+    metadata: { studentId, subject: axis.subject, year: axis.year, term: axis.term, slot: axis.slot, month: axis.month },
+  });
+
   revalidatePath(`/students/${studentId}`);
   revalidatePath("/exams");
   return { ok: true };
@@ -1399,8 +1559,17 @@ export async function deleteStudentGoal(_prev: GoalState, formData: FormData): P
   if (scopeErr) return { error: scopeErr };
 
   const supabase = await createClient();
-  const { error: delErr } = await supabase.from("grade_goals").delete().eq("id", id);
+  const { data: gone, error: delErr } = await supabase.from("grade_goals").delete().eq("id", id).select("student_id, subject");
   if (delErr) return { error: dbWhy(delErr, "students.goal.delete", "목표를 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.", "delete") };
+
+  if (gone?.length) {
+    const g = gone[0] as { student_id: string | null; subject: string | null };
+    await logAction({
+      action: "student_goal_delete",
+      targetType: "student",
+      metadata: { goalId: id, studentId: g.student_id ?? (studentId || null), subject: g.subject },
+    });
+  }
 
   if (studentId) revalidatePath(`/students/${studentId}`);
   revalidatePath("/exams");
@@ -1447,6 +1616,13 @@ export async function createStudentGradeComment(
   });
   if (insErr) return { error: dbWhy(insErr, "students.gradeComment.create", "코멘트를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.") };
 
+  // 🔴 코멘트 **본문은 담지 않는다** — 분류·과목·기간·학부모 공유 여부까지만.
+  await logAction({
+    action: "student_grade_comment_create",
+    targetType: "student",
+    metadata: { studentId, category: f.category, subject: f.subject, period: f.period, sharedWithParent: f.sharedWithParent },
+  });
+
   revalidatePath(`/students/${studentId}`);
   return { ok: true };
 }
@@ -1468,7 +1644,7 @@ export async function updateStudentGradeComment(
   if (scopeErr) return { error: scopeErr };
 
   const supabase = await createClient();
-  const { error: updErr } = await supabase
+  const { data: saved, error: updErr } = await supabase
     .from("grade_comments")
     .update({
       category: f.category,
@@ -1477,8 +1653,25 @@ export async function updateStudentGradeComment(
       period: f.period,
       shared_with_parent: f.sharedWithParent,
     })
-    .eq("id", id);
+    .eq("id", id)
+    .select("student_id");
   if (updErr) return { error: dbWhy(updErr, "students.gradeComment.update", "코멘트를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.") };
+
+  // 본문은 담지 않는다(작성과 같은 규칙). 바뀐 행이 없으면 남기지 않는다.
+  if (saved?.length) {
+    await logAction({
+      action: "student_grade_comment_update",
+      targetType: "student",
+      metadata: {
+        commentId: id,
+        studentId: (saved[0].student_id as string | null) ?? (studentId || null),
+        category: f.category,
+        subject: f.subject,
+        period: f.period,
+        sharedWithParent: f.sharedWithParent,
+      },
+    });
+  }
 
   if (studentId) revalidatePath(`/students/${studentId}`);
   return { ok: true };
@@ -1498,8 +1691,21 @@ export async function deleteStudentGradeComment(
   if (scopeErr) return { error: scopeErr };
 
   const supabase = await createClient();
-  const { error: delErr } = await supabase.from("grade_comments").delete().eq("id", id);
+  const { data: gone, error: delErr } = await supabase
+    .from("grade_comments")
+    .delete()
+    .eq("id", id)
+    .select("student_id, category, subject, period");
   if (delErr) return { error: dbWhy(delErr, "students.gradeComment.delete", "코멘트를 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.", "delete") };
+
+  if (gone?.length) {
+    const c = gone[0] as { student_id: string | null; category: string | null; subject: string | null; period: string | null };
+    await logAction({
+      action: "student_grade_comment_delete",
+      targetType: "student",
+      metadata: { commentId: id, studentId: c.student_id ?? (studentId || null), category: c.category, subject: c.subject, period: c.period },
+    });
+  }
 
   if (studentId) revalidatePath(`/students/${studentId}`);
   return undefined;

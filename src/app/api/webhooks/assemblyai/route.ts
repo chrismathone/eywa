@@ -1,7 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { kstToday } from "@/lib/date-kst";
-import { NextResponse } from "next/server";
-import { generateJSON } from "@/lib/ai/generate";
+import { after, NextResponse } from "next/server";
 import { getTranscript } from "@/lib/ai/assemblyai";
 import { localizeTranscriptionError } from "@/lib/ai/transcription-error";
 import {
@@ -15,6 +14,7 @@ import { CHINSAN_SCHOOL_SAVE_ALIASES } from "@/features/schools/school-name";
 import { reportError } from "@/lib/observability/report-error";
 import { analyzeStudentConsultation } from "@/features/consultations/server/ai";
 import { extractConsultationForm } from "@/features/enrollment/server/form-extract";
+import { runConsultationAnalysis } from "@/features/enrollment/server/consultation-analysis";
 import {
   buildFormPatch,
   type CurrentConsultationValues,
@@ -23,6 +23,7 @@ import {
 import { combineConsultationTranscripts } from "@/features/enrollment/transcripts";
 import { trimTrailingNoise, type TrimUtterance } from "@/lib/ai/transcript-trim";
 import { syncMirrorAfterRecordingFailure } from "@/features/enrollment/server/recording-mirror";
+import { isFresh, isInFlight } from "@/lib/ai/transcription-inflight";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /** 상수시간 문자열 비교 — 타이밍 공격 방지. 길이 다르면 즉시 false. */
@@ -57,35 +58,88 @@ export type ConversationFlowNode = {
   children?: ConversationFlowNode[];
 };
 
-// ijw-calander의 등록상담 심층분석 스키마(풀세트) — 섹션 순서 = 화면 아코디언 순서.
-type ConsultationReport13 = {
-  consultationType: string; // 상담 성격
-  summary: string; // 상담 요약
-  familyBackground: string; // 가정 배경/개인 맥락
-  parentConcerns: string; // 학부모 걱정/불안
-  parentQuestions: string; // 학부모 질문(답변 여부 포함)
-  parentRequests: string; // 학부모 요청(학부모 발의만)
-  parentSatisfaction: string; // 학부모 만족도/감정
-  studentTraits: string; // 학생 특이사항
-  teacherResponse: string; // 상담자 대응/설명 요약
-  salesPoints: string; // 상담사 세일즈 포인트(등록상담 시)
-  agreements: string; // 합의 사항
-  followUps: string; // 후속 조치
-  warnings: string; // 주의 신호
-  conversationFlow?: ConversationFlowNode[]; // 상담 흐름 수형도
-  extracted: {
-    prospectName: string | null;
-    grade: string | null;
-    school: string | null;
-    parentName: string | null;
-    parentPhone: string | null;
-  };
-};
-
 type WebhookBody = {
   transcript_id?: string;
   status?: "completed" | "error";
 };
+
+/** 사람이 다시 누를 수 있게 남기는 실패 문구(원문 영어는 로그로만). 어느 단계에서 멈췄는지 모르니 버튼 이름을 적지 않는다. */
+const BACKGROUND_CRASH_ERROR = "AI 처리가 중간에 멈췄습니다 — 화면에서 다시 실행해 주세요.";
+/**
+ * 백그라운드 일의 자체 기한 — 함수 상한(maxDuration 300초)에 끊기면 catch도 돌지 못해 행이 '분석 중'에 머문다
+ * (곧바로 답하므로 AssemblyAI 재전송도 없고, 하루 1회 cron만 걷는다). 30초를 남기고 실패로 돌린다.
+ * ⚠️ 기한 뒤에도 일이 잠시 이어질 수 있지만 끝까지 간다는 보장은 없다(after가 끝나면 실행 환경이 멈출 수 있다) —
+ *    끝까지 가면 그 일이 '완료'를 다시 쓰고, 아니면 '실패'로 남아 사람이 다시 누른다.
+ */
+const BACKGROUND_DEADLINE_MS = 270_000;
+type ProcessingTable = "meeting_minutes" | "enrollment_consultations" | "student_consultations";
+
+/** 아직 진행 중인 행만 'failed'로(완료된 행은 건드리지 않는다). */
+async function markRowFailed(admin: SupabaseClient, table: ProcessingTable, rowId: string) {
+  await admin
+    .from(table)
+    .update({ processing_status: "failed", processing_error: BACKGROUND_CRASH_ERROR })
+    .eq("id", rowId)
+    .in("processing_status", ["uploaded", "transcribing", "analyzing"]);
+}
+
+/**
+ * 알림을 받았다고 **곧바로 답하고**, 무거운 일은 응답 뒤(after)에 돌린다. 일 안에서 예상 못 한 오류가 나거나 기한을 넘기면
+ * 그 행이 '분석 중'에 머물지 않게 'failed'로 돌린다(`onCrash`가 있으면 그것으로 — 다중 녹음).
+ */
+function acceptInBackground(
+  table: ProcessingTable,
+  rowId: string,
+  work: () => Promise<unknown>,
+  onCrash?: (admin: SupabaseClient, startedAt: number) => Promise<void>,
+) {
+  after(async () => {
+    const startedAt = Date.now();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`background deadline ${BACKGROUND_DEADLINE_MS / 1000}s`)), BACKGROUND_DEADLINE_MS);
+    });
+    try {
+      await Promise.race([work(), deadline]);
+    } catch (e) {
+      reportError(e, { scope: "assemblyai.webhook.background", table, rowId });
+      try {
+        const admin = createAdminClient();
+        await (onCrash ? onCrash(admin, startedAt) : markRowFailed(admin, table, rowId));
+      } catch {
+        // 여기서도 실패하면 하루 1회 cron(reconcile-transcriptions)이 30분 넘은 행을 돌린다.
+      }
+    } finally {
+      clearTimeout(timer);
+    }
+  });
+  return NextResponse.json({ ok: true, accepted: true });
+}
+
+/**
+ * 다중 녹음의 백그라운드가 죽었을 때 — 다른 녹음이 상담을 이어 가고 있으면 상담 전체를 실패로 덮지 않는다:
+ * ① 다른 녹음이 아직 전사 중(그 녹음의 완료가 다시 분석한다 · `analyzeConsultationAndPersist`의 inFlightRemains와 같은 규칙)
+ * ② 다른 녹음이 **이 일이 시작된 뒤에** 바뀌었다(전사를 마치고 지금 그 웹훅이 더 완전한 합본으로 분석 중일 수 있다).
+ * 이 녹음 행이 멈췄으면 cron이 30분 뒤 걷는다.
+ */
+async function failConsultationUnlessOthersInFlight(
+  admin: SupabaseClient,
+  consultationId: string,
+  recordingId: string,
+  startedAt: number,
+) {
+  const { data } = await admin
+    .from("consultation_recordings")
+    .select("id, processing_status, updated_at")
+    .eq("consultation_id", consultationId);
+  const othersActive = (data ?? []).some((r) => {
+    if (r.id === recordingId) return false;
+    if (r.processing_status === "uploaded" || r.processing_status === "transcribing") return true;
+    const changed = Date.parse(String(r.updated_at ?? ""));
+    return Number.isFinite(changed) && changed >= startedAt;
+  });
+  if (!othersActive) await markRowFailed(admin, "enrollment_consultations", consultationId);
+}
 
 export async function POST(req: Request) {
   // Fail-closed: 시크릿 미설정이면 엔드포인트를 닫는다(이전 `if (expected && …)`는 미설정 시
@@ -111,9 +165,13 @@ export async function POST(req: Request) {
   const admin = createAdminClient();
 
   // Dispatch: meeting first, then consultation. Each row carries the same transcript id.
+  // 🔴 무거운 일(전사 가져오기·AI 분석·저장)은 **응답 뒤에**(after) 돈다(2026-10-19). AssemblyAI는 10초 안에 2xx가 없으면
+  //    10초 간격으로 최대 10번 다시 보내는데, 분석(1~3분)을 끝낸 뒤 답하던 때는 그 재전송마다 분석이 처음부터 다시 돌아
+  //    녹음 1건에 AI가 6~11번 불렸다(30일 중복 82~89% · 결과도 여러 번 덮어씀). 이제 이 함수는 행을 찾고 곧바로 답한다.
+  //    after 안에서 죽거나 270초 기한을 넘기면 그 행을 'failed'로 돌린다(못 돌리면 하루 1회 cron reconcile-transcriptions가 30분 넘은 행을 돌린다).
   const { data: meeting } = await admin
     .from("meeting_minutes")
-    .select("id, tenant_id, title, attendees, held_at, content, processing_status")
+    .select("id, tenant_id, title, attendees, held_at, content, processing_status, updated_at")
     .eq("assemblyai_transcript_id", transcriptId)
     .maybeSingle();
 
@@ -122,14 +180,18 @@ export async function POST(req: Request) {
     if (meeting.processing_status === "completed") {
       return NextResponse.json({ ok: true, skipped: "already completed" });
     }
-    return handleMeeting(admin, transcriptId, meeting);
+    // 이미 분석 중(방금 시작)이면 같은 알림이 한 번 더 온 것 — 두 번째 분석을 돌리지 않는다.
+    if (isInFlight(meeting.processing_status, meeting.updated_at)) {
+      return NextResponse.json({ ok: true, skipped: "already in progress" });
+    }
+    return acceptInBackground("meeting_minutes", meeting.id, () => handleMeeting(admin, transcriptId, meeting));
   }
 
   // 등록상담 녹음 행(consultation_recordings) — 신규 경로(녹음=여러 행). 레거시 단일 컬럼보다 먼저 매칭.
   const { data: recording } = await admin
     .from("consultation_recordings")
     .select(
-      "id, processing_status, created_at, consultation:consultation_id (id, tenant_id, prospect_name, prospect_grade, prospect_school, parent_name, parent_phone, processing_status)",
+      "id, processing_status, created_at, consultation:consultation_id (id, tenant_id, prospect_name, prospect_grade, prospect_school, parent_name, parent_phone, processing_status, updated_at)",
     )
     .eq("assemblyai_transcript_id", transcriptId)
     .maybeSingle();
@@ -138,21 +200,35 @@ export async function POST(req: Request) {
     // PostgREST 단일 FK 임베드는 객체를 주지만 타입은 배열 유니온이라 단언.
     const rc = recording.consultation as unknown as ConsultationContext & {
       processing_status: string;
+      updated_at: string | null;
     };
     if (recording.processing_status === "completed") {
       // 전사는 끝났는데 상담 미러가 미완이면 = 분석 단계에서 죽은 것(함수 타임아웃/크래시).
       // replay를 분석 복구로 취급 — 완료 녹음 합본으로 분석만 재실행(전사 재fetch·행 재기록 불요).
       // (적대리뷰 #2: 레거시 경로는 replay로 회복됐던 것의 회귀 방지.)
+      // 🔴 단, 방금 시작한 분석이 아직 도는 중이면(10분 안) 복구가 아니라 같은 알림의 재전송이다 — 건너뛴다(2026-10-19).
       if (rc.processing_status === "analyzing" || rc.processing_status === "transcribing") {
-        return recoverConsultationAnalysis(admin, rc);
+        if (isFresh(rc.updated_at)) return NextResponse.json({ ok: true, skipped: "already in progress" });
+        return acceptInBackground(
+          "enrollment_consultations",
+          rc.id,
+          () => recoverConsultationAnalysis(admin, rc),
+          (a, startedAt) => failConsultationUnlessOthersInFlight(a, rc.id, recording.id, startedAt),
+        );
       }
       return NextResponse.json({ ok: true, skipped: "already completed" });
     }
-    return handleConsultationRecording(
-      admin,
-      transcriptId,
-      { id: recording.id, createdAt: recording.created_at as string },
-      rc,
+    return acceptInBackground(
+      "enrollment_consultations",
+      rc.id,
+      () =>
+        handleConsultationRecording(
+          admin,
+          transcriptId,
+          { id: recording.id, createdAt: recording.created_at as string },
+          rc,
+        ),
+      (a, startedAt) => failConsultationUnlessOthersInFlight(a, rc.id, recording.id, startedAt),
     );
   }
 
@@ -160,7 +236,7 @@ export async function POST(req: Request) {
   const { data: consult } = await admin
     .from("enrollment_consultations")
     .select(
-      "id, tenant_id, prospect_name, prospect_grade, prospect_school, parent_name, parent_phone, processing_status",
+      "id, tenant_id, prospect_name, prospect_grade, prospect_school, parent_name, parent_phone, processing_status, updated_at",
     )
     .eq("assemblyai_transcript_id", transcriptId)
     .maybeSingle();
@@ -169,14 +245,17 @@ export async function POST(req: Request) {
     if (consult.processing_status === "completed") {
       return NextResponse.json({ ok: true, skipped: "already completed" });
     }
-    return handleConsultation(admin, transcriptId, consult);
+    if (isInFlight(consult.processing_status, consult.updated_at)) {
+      return NextResponse.json({ ok: true, skipped: "already in progress" });
+    }
+    return acceptInBackground("enrollment_consultations", consult.id, () => handleConsultation(admin, transcriptId, consult));
   }
 
   // 재원생 학생상담(student_consultations) — 학생 컨텍스트는 student_id 조인.
   const { data: sc } = await admin
     .from("student_consultations")
     .select(
-      "id, tenant_id, processing_status, consulted_at, audience, category, student:student_id ( name, grade, school )",
+      "id, tenant_id, processing_status, updated_at, consulted_at, audience, category, student:student_id ( name, grade, school )",
     )
     .eq("assemblyai_transcript_id", transcriptId)
     .maybeSingle();
@@ -185,7 +264,10 @@ export async function POST(req: Request) {
     if (sc.processing_status === "completed") {
       return NextResponse.json({ ok: true, skipped: "already completed" });
     }
-    return handleStudentConsultation(admin, transcriptId, sc);
+    if (isInFlight(sc.processing_status, sc.updated_at)) {
+      return NextResponse.json({ ok: true, skipped: "already in progress" });
+    }
+    return acceptInBackground("student_consultations", sc.id, () => handleStudentConsultation(admin, transcriptId, sc));
   }
 
   console.warn("[assemblyai webhook] no matching row for transcript", transcriptId);
@@ -631,93 +713,8 @@ async function analyzeConsultationAndPersist(
   // 13섹션 심층분석 + 폼 필드 추출을 병렬 실행(ijw processRegistrationRecording 패턴).
   // 분석은 필수(실패 시 failed), 폼 추출은 best-effort(실패해도 분석은 살린다).
   const [analysisRes, extractRes] = await Promise.allSettled([
-    generateJSON<ConsultationReport13 & { speakerRoles?: Record<string, string> }>({
-      maxTokens: 8192,
-      meta: { feature: "enrollment_analysis", tenantId: consult.tenant_id },
-      // 전사 분석 기본 = DeepSeek v4-pro(2026-07-16). 재분석(runConsultationAnalysis)과 동일 라우팅. 키 없으면 폴백.
-      provider: "deepseek",
-      prompt: [
-        "다음은 학원 신입생 등록상담 녹음 전사입니다. 아래 지침대로 심층 분석한 보고서를 JSON으로만 답해주세요.",
-        "음성인식(ASR) 특성상 고유명사(인명·학교명·지명)가 잘못 인식될 수 있습니다. 같은 사람을 가리키는 유사 이름이 여러 형태로 나오면 하나로 통일하고, 통일한 사실을 상담 요약에 메모하세요.",
-        "",
-        "⚠️ 분석 원칙 (최우선·반드시 준수):",
-        "- 팩트 기반: 전사에 실제로 나온 발화만 근거로 분석한다. 전사에 없는 내용은 창작·추측·환각 절대 금지(일반론·보편적 조언·있을 법한 시나리오·다른 학생에게도 통할 뻔한 문구 금지).",
-        "- 상담 외 잡담 배제: 녹음이 상담 종료 후에도 계속돼 섞인, 등록상담과 무관한 대화(잡담·일상 대화·음식/식사·다른 사람 이야기·오가는 인사말 등)는 분석 대상에서 제외하고 실제 상담 내용만 분석한다.",
-        "- 근거 없으면 비운다: 각 섹션은 전사에 근거가 있을 때만 채우고, 근거가 없으면 빈 문자열(추출 정보는 null, conversationFlow는 빈 배열). 억지로 채우지 않는다.",
-        "- 모순 금지: 한 섹션의 내용이 다른 섹션과 어긋나면 안 된다. 예) '형제자매 없음'이라 적으면 '형제 할인' 요청을 만들어내지 말 것. 전사에 형제·할인 언급이 있으면 가정 배경에 형제 존재를 반영하고, 없으면 형제 관련 항목을 아예 넣지 않는다. 작성 전 전사 근거를 대조하라.",
-        "- 행간·감정·뉘앙스까지 읽어 학부모의 진짜 의도와 감정을 파악한다.",
-        "",
-        "ASR 오류 처리: 문맥상 맞지 않는 표현·잘못 인식된 고유명사는 문맥으로 추론한 뒤 바로 뒤에 [?]를 붙여 사용자가 원본과 대조하게 한다(예: '대구일중[?]').",
-        "",
-        "출력 형식 규칙(중요 — 반드시 지킬 것):",
-        "- 각 JSON 문자열 값 안에서 항목을 구분할 때 반드시 줄바꿈(\\n)을 사용한다. 여러 항목이면 각 항목을 새 줄에 '- '로 시작한다(예: \"- 첫째 항목\\n- 둘째 항목\\n- 셋째 항목\").",
-        "- 산문형 섹션(consultationType/summary/familyBackground/parentSatisfaction)은 '- ' 불릿을 쓰지 말고 자연스러운 문장(산문)으로 쓴다. 길면 2~3문장마다 줄바꿈(\\n)으로 문단을 나눈다.",
-        "- 마크다운 볼드(**)·머리말(#)·코드블록을 쓰지 말 것. 순수 텍스트 + '- ' 불릿 + \\n 줄바꿈만 사용한다.",
-        "- speakerRoles: 전사의 화자 라벨(A,B,…)을 상담 맥락으로 추론해 '상담자'/'학부모'/'학생'/'기타' 중 하나로 매핑한다.",
-        "- ⚠️ 모든 섹션 본문에 화자 기호를 절대 쓰지 말 것 — 'A'/'B'/'C'·'(A)'·'화자 A'·'학생 C' 같은 표기 전부 금지. 사람은 이름이나 역할(상담자/학부모/학생)로만 지칭하고, 요약·가정배경 등 산문은 가능한 한 학생 이름을 주어로 자연스럽게 서술한다(예: '이태경은 …').",
-        "",
-            `학생 이름(현재 입력값): ${consult.prospect_name}`,
-            `학년: ${consult.prospect_grade ?? "미상"}`,
-            `학교: ${consult.prospect_school ?? "미상"}`,
-            `학부모(현재 입력값): ${consult.parent_name ?? "미상"} / 연락처 ${consult.parent_phone ? "입력됨" : "미상"}`,
-            "",
-            "섹션별 작성 지침:",
-            "1. consultationType: 상담 성격 한 줄 (예: '등록 상담 - 진단 결과 설명 및 등록 유도', '초기 탐색', '환불/이탈 우려'). 등록/영업 상담이면 상담사가 등록을 유도하는 구조임을 명시.",
-            "2. summary: 상담 전체 요약 5~7문장 — 학생을 주어로 한 산문(불릿·번호 금지). 학생의 현재 상황·핵심 논의·결론/합의를 자연스럽게 서술한다. '상담자와 학부모가 …를 논의한다'식 회의록 나열이 아니라 '이태경은 수학 60점대로 …, 상담 결과 주3회 등록하기로 …'처럼 학생·결과 중심으로. ASR로 이름이 혼재됐다면 통일 사실도 명시.",
-            "3. familyBackground: 가정 배경/개인 맥락 — 학부모 나이·직업·가족구성, 학생의 형제관계, 과거 학습 이력, 이전 학원·공부방 경험, 교육관 등 발화에 나온 것만. 언급 없는 항목은 생략.",
-            "4. parentConcerns: 학부모가 걱정·불안해하는 부분 — 직접 말한 것 + 말투·맥락에서 추론되는 것.",
-            "5. parentQuestions: 학부모가 질문한 사항. 각 항목을 한 줄로 쓴다 — '- 질문 요지 → 답변 요약'. 상담자가 실제로 답한 경우에만 답변을 쓰고, 상담자가 답하지 않은 질문만 답변 자리에 '(미답변)'을 쓴다. ⚠️ 답변 내용과 '(미답변)'을 함께 쓰지 말 것(답을 썼으면 '(미답변)' 금지). 질문과 답변을 서로 다른 줄로 분리하지 말 것(한 질문 = 한 항목 = 한 줄, 항목 사이만 \\n).",
-            "6. parentRequests: 학부모가 '직접 발의해' 요청한 사항만(상담사가 제안하고 학부모가 수용한 건 제외 → teacherResponse/agreements로).",
-            "7. parentSatisfaction: 전반적 만족도·감정. 긍정 반응 / 불만·우려 / 아직 안 풀린 부분을 구분.",
-            "8. studentTraits: 학생 특이사항 — 학습 태도, 성적 변화, 심리 상태(자존감·자기효능감), 의사소통 패턴(눈치·표현 어려움), 교우관계, 강·약점.",
-            "9. teacherResponse: 상담자가 제시한 해결책·설명·제안 요약(상담사가 제안하고 학부모가 수용한 것 포함).",
-            "10. salesPoints: 상담사가 등록/유지를 위해 쓴 설득 논거(성공 사례, 입시 정보, 시설·프로그램 홍보, 지역 특수성 등). 등록/영업 성격이 아니면 빈 문자열.",
-            "11. agreements: 합의된 사항 — 구체적 일정·방법·학습 로드맵(시기별 목표·진도 계획) 포함. 누가 제안했는지(학부모/상담사) 표시.",
-            "12. followUps: 후속 조치 항목(담당자·기한 가능하면 포함).",
-            "13. warnings: 주의 신호 — '특이사항 없음'으로 넘기지 말고 꼼꼼히 확인: 학생 자존감/자기효능감 저하, 가정 내 갈등·압박(부부 갈등·과도한 기대·감정적 훈육), 학생 의사소통 문제(부모에게 말 못함·눈치), 퇴원/이탈 가능성, 학부모 번아웃/좌절. 전사에 근거 있는 것만. 해당 없으면 '확인된 위험 신호 없음'.",
-            "14. conversationFlow: 상담이 다룬 주제를 시간 순 트리로. 각 노드는 { topic, summary, children }. 근거 부족하면 빈 배열.",
-            "15. extracted: 전사에서 자동 추출한 핵심 정보 (학생 이름/학년/학교/학부모/연락처). 발화에 명시되지 않으면 null.",
-            "",
-            "녹음 전사 (화자 라벨 포함):",
-            formatted,
-            "",
-            "JSON schema (모든 필드 한국어, 줄바꿈은 \\n):",
-            "{",
-            '  "speakerRoles": { "A": "상담자|학부모|학생|기타", "B": "상담자|학부모|학생|기타" },',
-            '  "consultationType": string,',
-            '  "summary": string,',
-            '  "familyBackground": string,',
-            '  "parentConcerns": string,',
-            '  "parentQuestions": string,',
-            '  "parentRequests": string,',
-            '  "parentSatisfaction": string,',
-            '  "studentTraits": string,',
-            '  "teacherResponse": string,',
-            '  "salesPoints": string,',
-            '  "agreements": string,',
-            '  "followUps": string,',
-            '  "warnings": string,',
-            '  "conversationFlow": [ { "topic": string, "summary": string, "children": [ { "topic": string, "summary": string } ] } ],',
-            '  "extracted": {',
-            '    "prospectName": string | null,',
-            '    "grade": string | null,',
-            '    "school": string | null,',
-            '    "parentName": string | null,',
-            '    "parentPhone": string | null',
-            "  }",
-            "}",
-            "",
-            "추측·창작·환각 금지 — 전사에 실제 근거가 없는 내용은 빈 문자열 또는 null(억지로 채우지 말 것). 상담과 무관한 잡담은 무시.",
-            "JSON만 출력. 마크다운 코드 블록 없이.",
-            // 다중 녹음 합본일 때만 회차 안내(단일이면 레거시와 동일 프롬프트).
-            ...(opts.multi
-              ? [
-                  "",
-                  "※ 전사가 《녹음 n》 헤더로 나뉘어 있으면 같은 학생에 대해 여러 차례 진행된 상담입니다 — 전체 회차를 종합해 분석하세요. 화자 라벨(A/B)은 녹음마다 독립이므로 speakerRoles는 가장 최근 녹음 기준으로만 추론하세요.",
-                ]
-              : []),
-      ].join("\n"),
-    }),
+    // 프롬프트·모델·저장 전 후처리는 재분석과 같은 단일 소스(2026-10-19 — 같은 프롬프트 복사본이 여기 있었다, 줄 단위 동일 확인 뒤 합침).
+    runConsultationAnalysis(consult, formatted, opts.multi, "deepseek", { tenantId: consult.tenant_id }),
     extractConsultationForm(formatted, {
       studentName: consult.prospect_name,
       grade: consult.prospect_grade,

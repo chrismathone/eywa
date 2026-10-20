@@ -16,6 +16,9 @@ import { MENU_LABEL, type MenuKey, type SystemRole } from "@/lib/permissions";
 import type { SemanticTone } from "@/lib/design/semantic-color";
 import { isSupportStatus, SUPPORT_STATUS_META } from "@/features/support/types";
 import { isShellMode, SHELL_MODE_LABEL } from "@/lib/license/shell-mode";
+import { AI_MODEL_CHOICES } from "@/lib/ai/model-pins";
+import { modelDisplayLabel } from "@/lib/ai/model-label";
+import { TENANT_MODEL_FEATURES } from "@/lib/ai/model-features";
 
 function supportStatusLabel(v: string): string {
   return isSupportStatus(v) ? SUPPORT_STATUS_META[v].label : "알 수 없는 상태";
@@ -79,7 +82,7 @@ export const SEAT_FEATURES = [{ key: "student_seats", label: "재원생 좌석" 
  * (행이 없는데 '꺼짐'으로 그리면, 실제로는 도는 기능을 꺼진 것처럼 속인다).
  * - 녹음·시트·AI = 기본 켜짐: 라이선스 카드가 생기기 전부터 쓰던 기능이라 행이 없으면 허용([`rule.ts`](src/lib/license/rule.ts)).
  * - 카카오 알림 = 기본 꺼짐: 학부모에게 실제 메시지가 나가는 기능이라 **명시로 켠 지점만** 보낸다(`resolveKakaoChannel`).
- * - 오늘의 수학 연결 = 기본 꺼짐: 외부 앱 메뉴·데이터 반출이라 **명시로 켠 지점만**(`isFeatureOptedIn`).
+ * - 오늘 수학 연결 = 기본 꺼짐: 외부 앱 메뉴·데이터 반출이라 **명시로 켠 지점만**(`isFeatureOptedIn`).
  * 🔴 여기 한 줄을 더하면 **그 키를 읽는 곳**(게이트)도 함께 만들 것 — 읽는 곳 없는 스위치는 거짓 약속이다(2026-09-25 전수 확인).
  */
 export const TOGGLE_FEATURES = [
@@ -90,9 +93,9 @@ export const TOGGLE_FEATURES = [
   // 화면 방식 — 켜짐 = PC 관리자뷰에서 메뉴마다 플로팅 창(iframe) · 꺼짐 = 일반 웹앱처럼 본문 하나(원장 2026-09-25).
   // 강사·학생 화면과 폰은 원래 창이 없어 이 스위치와 무관하다. 읽는 곳 = (shell)/layout.tsx.
   { key: "window_mode", label: "창 모드(메뉴를 플로팅 창으로)", defaultOn: true },
-  // 연결 앱 — 켠 지점만 왼쪽 '연결 앱'에 바로가기가 서고, 오늘의 수학이 당겨 가는 명단·진도 API도 이 스위치를 본다
+  // 연결 앱 — 켠 지점만 왼쪽 '연결 앱'에 바로가기가 서고, 오늘 수학이 당겨 가는 명단·진도 API도 이 스위치를 본다
   // (원장 2026-09-26). 읽는 곳 = (shell)/layout.tsx · api/integrations/todays-math/*. 목록 = features/connected-apps.
-  { key: "todays_math", label: "오늘의 수학 연결", defaultOn: false },
+  { key: "todays_math", label: "오늘 수학 연결", defaultOn: false },
   // 슬랙 알림 — 켠 지점만 학원 설정 '연동' 면에 슬랙 카드가 서고, aywa 알림을 슬랙 채널·본인 1:1로 보낸다(원장 2026-09-28).
   // 학생 이름 등이 외부 메신저로 나가므로 기본 꺼짐. 읽는 곳 = features/slack/server/{dispatch,gate,queries}.ts + 0298a 인박스 트리거.
   { key: "slack", label: "슬랙 알림 연결", defaultOn: false },
@@ -129,6 +132,7 @@ export const AUDIT_ACTIONS = {
   grant_license: { label: "좌석 설정", tone: "info" },
   toggle_license: { label: "기능 켜기·끄기", tone: "info" },
   toggle_laboratory_menu: { label: "실험실 메뉴 지정", tone: "info" },
+  set_ai_model: { label: "AI 모델 선택", tone: "info" },
   change_user_role: { label: "역할 변경", tone: "caution" },
   reset_user_password: { label: "비밀번호 재설정", tone: "critical" },
   set_user_active: { label: "계정 활성·비활성", tone: "caution" },
@@ -191,6 +195,14 @@ export function auditDetail(action: string, metadata: Record<string, unknown> | 
       // 화면 방식 변경은 셋 중 무엇으로 바꿨는지가 사실이다(켬/끔으로는 안 읽힌다).
       if (m.feature === "window_mode" && isShellMode(m.mode)) return `화면 방식 → ${SHELL_MODE_LABEL[m.mode]}`;
       return `${featureLabel(m.feature)} ${m.active === true ? "켬" : "끔"}`;
+    }
+    case "set_ai_model": {
+      // 원시 id 대신 화면 이름으로(원문 노출 금지). 지금 목록에 없는 옛 모델(Sonnet 5 등)은 탭과 같은 라벨 함수로, 그래도 모르면 '기타'.
+      const feature = TENANT_MODEL_FEATURES.find((f) => f.key === m.feature);
+      const featureName = feature ? `${feature.area} ${feature.label}` : "AI 기능";
+      const model = AI_MODEL_CHOICES.find((c) => c.model === m.model);
+      const modelName = model ? model.label : (modelDisplayLabel(str(m.model)) ?? "기타 모델");
+      return `${featureName} → ${m.model == null ? "기본값" : modelName}`;
     }
     case "toggle_laboratory_menu": {
       const menu = str(m.menu) as MenuKey | null;

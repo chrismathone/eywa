@@ -1,32 +1,37 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // SDK 클라이언트 모킹 — 실제 네트워크 없이 generateJSON 폴백 경로를 결정적으로 검증.
-const { upstageCreate, anthropicCreate } = vi.hoisted(() => ({
-  upstageCreate: vi.fn(),
+const { deepseekCreate, anthropicCreate } = vi.hoisted(() => ({
+  deepseekCreate: vi.fn(),
   anthropicCreate: vi.fn(),
 }));
 // 지점 라이선스 조회는 DB를 부른다 — 이 파일은 provider 동작만 보므로 늘 허용으로 둔다(라이선스 자체는 license.test.ts).
 vi.mock("@/lib/license/server", () => ({ isFeatureLicensed: async () => true }));
 const TEST_META = { tenantId: "tenant-test", feature: "test" };
 
-vi.mock("./upstage", () => ({
-  getUpstage: () => ({ chat: { completions: { create: upstageCreate } } }),
+vi.mock("./deepseek", () => ({
+  getDeepseek: () => ({ chat: { completions: { create: deepseekCreate } } }),
 }));
 vi.mock("./anthropic", () => ({
   getAnthropic: () => ({ messages: { create: anthropicCreate } }),
 }));
 
 import {
+  AnthropicRefusalError,
   generateJSON,
+  isClaude5Model,
   isCreditExhaustedError,
   isRetryableProviderError,
   isTemperatureDeprecatedError,
+  OUTPUT_TOKEN_FLOOR,
   parseJsonLoose,
+  sentMaxTokens,
+  WAITING_OUTPUT_TOKEN_FLOOR,
 } from "./generate";
 import { resolveModel, resolveModelChain } from "./models";
 
 // usage 포함 — generateJSON이 usage를 캡처(0113a 계측)해도 파싱·폴백이 안 깨짐을 함께 검증.
-const upstageOk = (json: string) => ({
+const deepseekOk = (json: string) => ({
   choices: [{ message: { content: json } }],
   usage: { prompt_tokens: 100, completion_tokens: 50 },
 });
@@ -63,8 +68,9 @@ describe("resolveModel", () => {
     "AI_PROVIDER",
     "ANTHROPIC_API_KEY",
     "ANTHROPIC_API_KEY_CONSULTATIONS",
+    "DEEPSEEK_API_KEY",
+    "DEEPSEEK_API_KEY_CONSULTATIONS",
     "UPSTAGE_API_KEY",
-    "UPSTAGE_API_KEY_CONSULTATIONS",
   ];
   let saved: Record<string, string | undefined>;
   beforeEach(() => {
@@ -78,29 +84,37 @@ describe("resolveModel", () => {
     });
   });
 
-  it("기본(provider 미설정) + Upstage 키 → Solar Pro 3", () => {
-    process.env.UPSTAGE_API_KEY = "up";
+  it("기본(AI_PROVIDER 미설정) + Anthropic 키 → Claude Sonnet 5.5(2026-10-19 Solar 제거 — 예전 미설정 기본은 Solar)", () => {
+    process.env.ANTHROPIC_API_KEY = "an";
     expect(resolveModel("balanced")).toEqual({
-      provider: "upstage",
-      model: "solar-pro3",
+      provider: "anthropic",
+      model: "claude-sonnet-5-5",
       keyName: "default",
     });
   });
 
-  it("AI_PROVIDER=anthropic + Anthropic 키 → Claude Sonnet", () => {
-    process.env.AI_PROVIDER = "anthropic";
-    process.env.ANTHROPIC_API_KEY = "an";
-    expect(resolveModel("balanced").provider).toBe("anthropic");
-    expect(resolveModel("balanced").model).toBe("claude-sonnet-5");
+  it("AI_PROVIDER=deepseek + DeepSeek 키 → v4-pro", () => {
+    process.env.AI_PROVIDER = "deepseek";
+    process.env.DEEPSEEK_API_KEY = "ds";
+    expect(resolveModel("balanced").provider).toBe("deepseek");
+    expect(resolveModel("balanced").model).toBe("deepseek-v4-pro");
   });
 
-  it("기본 Upstage지만 Upstage 키 없고 Anthropic만 있으면 폴백", () => {
+  it("옛 값 AI_PROVIDER=upstage는 Claude로 읽는다(Solar 키가 남아 있어도 안 쓴다)", () => {
+    process.env.AI_PROVIDER = "upstage";
+    process.env.UPSTAGE_API_KEY = "up";
     process.env.ANTHROPIC_API_KEY = "an";
     expect(resolveModel("balanced").provider).toBe("anthropic");
+  });
+
+  it("기본 Claude지만 Anthropic 키 없고 DeepSeek만 있으면 폴백", () => {
+    process.env.DEEPSEEK_API_KEY = "ds";
+    expect(resolveModel("balanced").provider).toBe("deepseek");
   });
 
   it("reasoning은 AI_PROVIDER와 무관하게 Anthropic 고정", () => {
-    process.env.UPSTAGE_API_KEY = "up";
+    process.env.AI_PROVIDER = "deepseek";
+    process.env.DEEPSEEK_API_KEY = "ds";
     expect(resolveModel("reasoning")).toEqual({
       provider: "anthropic",
       model: "claude-opus-4-7",
@@ -108,27 +122,28 @@ describe("resolveModel", () => {
     });
   });
 
-  it("consultations 키: Upstage는 전용 키 없으면 default 키로 폴백", () => {
-    process.env.UPSTAGE_API_KEY = "up";
-    expect(resolveModel("balanced", "consultations").provider).toBe("upstage");
+  it("consultations 키: DeepSeek은 전용 키 없으면 default 키로 폴백", () => {
+    process.env.DEEPSEEK_API_KEY = "ds";
+    expect(resolveModel("balanced", "consultations").provider).toBe("deepseek");
   });
 
-  it("prefer:anthropic → 기본 Upstage여도 Claude 우선(녹음 분석 라우팅)", () => {
-    process.env.UPSTAGE_API_KEY = "up";
+  it("prefer:anthropic → 기본 DeepSeek이어도 Claude 우선", () => {
+    process.env.AI_PROVIDER = "deepseek";
+    process.env.DEEPSEEK_API_KEY = "ds";
     process.env.ANTHROPIC_API_KEY = "an";
     const r = resolveModel("balanced", "default", "anthropic");
     expect(r.provider).toBe("anthropic");
-    expect(r.model).toBe("claude-sonnet-5");
+    expect(r.model).toBe("claude-sonnet-5-5");
   });
 
-  it("prefer:anthropic이라도 Anthropic 키 없으면 Upstage로 폴백(무중단)", () => {
-    process.env.UPSTAGE_API_KEY = "up";
-    expect(resolveModel("balanced", "default", "anthropic").provider).toBe("upstage");
+  it("prefer:anthropic이라도 Anthropic 키 없으면 DeepSeek으로 폴백(무중단)", () => {
+    process.env.DEEPSEEK_API_KEY = "ds";
+    expect(resolveModel("balanced", "default", "anthropic").provider).toBe("deepseek");
   });
 
   it("키가 하나도 없으면 기본 provider 모델 반환(이후 클라 생성서 throw → stub)", () => {
-    expect(resolveModel("balanced").provider).toBe("upstage");
-    expect(resolveModel("balanced").model).toBe("solar-pro3");
+    expect(resolveModel("balanced").provider).toBe("anthropic");
+    expect(resolveModel("balanced").model).toBe("claude-sonnet-5-5");
   });
 });
 
@@ -181,8 +196,8 @@ describe("isCreditExhaustedError — 2026-08-27 크레딧 소진 사고 재발 �
   });
 });
 
-describe("폴백 사다리 = anthropic → deepseek → upstage(Solar)", () => {
-  // 원장 2026-08-28: "anthropic -> deepseek", "deepseek 소진시 solar 폴백".
+describe("폴백 사다리 = anthropic → deepseek 둘뿐(2026-10-19 Solar 제거)", () => {
+  // 원장 2026-08-28 "anthropic -> deepseek" · 2026-10-19 "솔라는 빼버려. 두개면 충분".
   const KEYS = [
     "AI_PROVIDER",
     "ANTHROPIC_API_KEY",
@@ -199,27 +214,26 @@ describe("폴백 사다리 = anthropic → deepseek → upstage(Solar)", () => {
     KEYS.forEach((k) => (saved[k] === undefined ? delete process.env[k] : (process.env[k] = saved[k])));
   });
 
-  it("🔴 Anthropic이 기본이면 다음은 DeepSeek, Solar는 마지막", () => {
+  it("🔴 Anthropic이 기본이면 다음은 DeepSeek — Solar 키가 남아 있어도 서지 않는다", () => {
     process.env.AI_PROVIDER = "anthropic";
     process.env.ANTHROPIC_API_KEY = "an";
     process.env.DEEPSEEK_API_KEY = "ds";
     process.env.UPSTAGE_API_KEY = "up";
-    expect(resolveModelChain("fast").map((c) => c.provider)).toEqual(["anthropic", "deepseek", "upstage"]);
-    expect(resolveModelChain("balanced").map((c) => c.provider)).toEqual(["anthropic", "deepseek", "upstage"]);
+    expect(resolveModelChain("fast").map((c) => c.provider)).toEqual(["anthropic", "deepseek"]);
+    expect(resolveModelChain("balanced").map((c) => c.provider)).toEqual(["anthropic", "deepseek"]);
   });
 
-  it("DeepSeek 키가 없으면 Solar로 건너뛴다(무중단)", () => {
+  it("DeepSeek 키가 없으면 Claude 하나", () => {
     process.env.AI_PROVIDER = "anthropic";
     process.env.ANTHROPIC_API_KEY = "an";
-    process.env.UPSTAGE_API_KEY = "up";
-    expect(resolveModelChain("fast").map((c) => c.provider)).toEqual(["anthropic", "upstage"]);
+    expect(resolveModelChain("fast").map((c) => c.provider)).toEqual(["anthropic"]);
   });
 
-  it("기본이 Solar여도 그 다음은 Anthropic → DeepSeek 순", () => {
+  it("기본이 DeepSeek이면 그 다음이 Anthropic", () => {
+    process.env.AI_PROVIDER = "deepseek";
     process.env.ANTHROPIC_API_KEY = "an";
     process.env.DEEPSEEK_API_KEY = "ds";
-    process.env.UPSTAGE_API_KEY = "up";
-    expect(resolveModelChain("fast").map((c) => c.provider)).toEqual(["upstage", "anthropic", "deepseek"]);
+    expect(resolveModelChain("fast").map((c) => c.provider)).toEqual(["deepseek", "anthropic"]);
   });
 });
 
@@ -237,7 +251,7 @@ describe("isTemperatureDeprecatedError", () => {
 });
 
 describe("resolveModelChain", () => {
-  const KEYS = ["AI_PROVIDER", "ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY_CONSULTATIONS", "UPSTAGE_API_KEY", "UPSTAGE_API_KEY_CONSULTATIONS"];
+  const KEYS = ["AI_PROVIDER", "ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY_CONSULTATIONS", "DEEPSEEK_API_KEY", "DEEPSEEK_API_KEY_CONSULTATIONS"];
   let saved: Record<string, string | undefined>;
   beforeEach(() => {
     saved = Object.fromEntries(KEYS.map((k) => [k, process.env[k]]));
@@ -247,59 +261,59 @@ describe("resolveModelChain", () => {
     KEYS.forEach((k) => (saved[k] === undefined ? delete process.env[k] : (process.env[k] = saved[k])));
   });
 
-  it("기본(upstage) + 양쪽 키 → [upstage, anthropic] 순", () => {
-    process.env.UPSTAGE_API_KEY = "u";
+  it("기본(미설정 = anthropic) + 양쪽 키 → [anthropic, deepseek] 순", () => {
+    process.env.DEEPSEEK_API_KEY = "d";
     process.env.ANTHROPIC_API_KEY = "a";
-    expect(resolveModelChain("balanced", "default").map((c) => c.provider)).toEqual(["upstage", "anthropic"]);
+    expect(resolveModelChain("balanced", "default").map((c) => c.provider)).toEqual(["anthropic", "deepseek"]);
   });
-  it("upstage 키 없으면 키 있는 anthropic만(키 없는 후보 제외)", () => {
-    process.env.ANTHROPIC_API_KEY = "a";
-    expect(resolveModelChain("balanced", "default").map((c) => c.provider)).toEqual(["anthropic"]);
+  it("anthropic 키 없으면 키 있는 deepseek만(키 없는 후보 제외)", () => {
+    process.env.DEEPSEEK_API_KEY = "d";
+    expect(resolveModelChain("balanced", "default").map((c) => c.provider)).toEqual(["deepseek"]);
   });
   it("키가 하나도 없으면 빈 체인", () => {
     expect(resolveModelChain("balanced", "default")).toEqual([]);
   });
   it("reasoning 티어는 anthropic 고정", () => {
-    process.env.UPSTAGE_API_KEY = "u";
+    process.env.DEEPSEEK_API_KEY = "d";
     process.env.ANTHROPIC_API_KEY = "a";
     expect(resolveModelChain("reasoning", "default").map((c) => c.provider)).toEqual(["anthropic"]);
   });
 });
 
 describe("generateJSON 폴백", () => {
-  const KEYS = ["AI_PROVIDER", "ANTHROPIC_API_KEY", "UPSTAGE_API_KEY"];
+  const KEYS = ["AI_PROVIDER", "ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY"];
   let saved: Record<string, string | undefined>;
   beforeEach(() => {
-    upstageCreate.mockReset();
+    deepseekCreate.mockReset();
     anthropicCreate.mockReset();
     saved = Object.fromEntries(KEYS.map((k) => [k, process.env[k]]));
-    process.env.AI_PROVIDER = "upstage";
-    process.env.UPSTAGE_API_KEY = "u";
+    process.env.AI_PROVIDER = "deepseek";
+    process.env.DEEPSEEK_API_KEY = "d";
     process.env.ANTHROPIC_API_KEY = "a";
   });
   afterEach(() => {
     KEYS.forEach((k) => (saved[k] === undefined ? delete process.env[k] : (process.env[k] = saved[k])));
   });
 
-  it("upstage 401 → anthropic로 자동 폴백해 성공", async () => {
-    upstageCreate.mockRejectedValueOnce({ status: 401 });
+  it("deepseek 401 → anthropic로 자동 폴백해 성공", async () => {
+    deepseekCreate.mockRejectedValueOnce({ status: 401 });
     anthropicCreate.mockResolvedValueOnce(anthropicOk('{"ok":true}'));
     const { data, model } = await generateJSON<{ ok: boolean }>({ meta: TEST_META,  prompt: "JSON 주세요", maxTokens: 100 });
     expect(data).toEqual({ ok: true });
-    expect(model).toBe("claude-sonnet-5");
-    expect(upstageCreate).toHaveBeenCalledOnce();
+    expect(model).toBe("claude-sonnet-5-5");
+    expect(deepseekCreate).toHaveBeenCalledOnce();
     expect(anthropicCreate).toHaveBeenCalledOnce();
   });
 
-  it("upstage 성공 시 anthropic 호출 안 함", async () => {
-    upstageCreate.mockResolvedValueOnce(upstageOk('{"x":1}'));
+  it("deepseek 성공 시 anthropic 호출 안 함", async () => {
+    deepseekCreate.mockResolvedValueOnce(deepseekOk('{"x":1}'));
     const { data } = await generateJSON<{ x: number }>({ meta: TEST_META,  prompt: "JSON 주세요", maxTokens: 100 });
     expect(data).toEqual({ x: 1 });
     expect(anthropicCreate).not.toHaveBeenCalled();
   });
 
   it("🔴 크레딧 소진(400)도 다음 provider로 폴백한다 — 2026-08-27 사고의 정확한 재현", async () => {
-    upstageCreate.mockRejectedValueOnce(
+    deepseekCreate.mockRejectedValueOnce(
       Object.assign(
         new Error(
           '400 {"type":"error","error":{"type":"invalid_request_error","message":"Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits."}}',
@@ -314,30 +328,130 @@ describe("generateJSON 폴백", () => {
   });
 
   it("폴백 불가 오류(400)는 즉시 throw, 다음 provider 시도 안 함", async () => {
-    upstageCreate.mockRejectedValueOnce({ status: 400, message: "bad request" });
+    deepseekCreate.mockRejectedValueOnce({ status: 400, message: "bad request" });
     await expect(generateJSON({ meta: TEST_META,  prompt: "JSON 주세요", maxTokens: 100 })).rejects.toThrow();
     expect(anthropicCreate).not.toHaveBeenCalled();
   });
 
-  it("anthropic temperature deprecated 400 → temperature만 떼고 같은 모델로 1회 재시도", async () => {
-    anthropicCreate.mockRejectedValueOnce(
-      Object.assign(new Error('400 {"error":{"message":"`temperature` is deprecated for this model."}}'), {
-        status: 400,
-      }),
-    );
+  it("Claude 5 계열엔 temperature를 처음부터 안 보낸다 — 400 → 재시도 왕복 없이 한 번에(2026-10-16 Haiku 5.5 전환)", async () => {
     anthropicCreate.mockResolvedValueOnce(anthropicOk('{"ok":true}'));
-    const { data, model } = await generateJSON<{ ok: boolean }>({ meta: TEST_META, 
+    const { data, model } = await generateJSON<{ ok: boolean }>({ meta: TEST_META,
       prompt: "JSON 주세요",
       maxTokens: 100,
       provider: "anthropic",
       temperature: 0.3,
     });
     expect(data).toEqual({ ok: true });
-    expect(model).toBe("claude-sonnet-5");
+    expect(model).toBe("claude-sonnet-5-5");
+    expect(anthropicCreate).toHaveBeenCalledTimes(1);
+    expect(anthropicCreate.mock.calls[0][0]).not.toHaveProperty("temperature");
+    // 생각 토큰이 상한을 먹지 않게 바닥을 올린다(쓴 만큼만 과금).
+    expect(anthropicCreate.mock.calls[0][0].max_tokens).toBe(OUTPUT_TOKEN_FLOOR.anthropic);
+  });
+
+  it("fast tier = Haiku 5.5 · 멘트의 reasoningEffort 'minimal' → effort low", async () => {
+    anthropicCreate.mockResolvedValueOnce(anthropicOk('{"ok":true}'));
+    const { model } = await generateJSON<{ ok: boolean }>({ meta: TEST_META,
+      prompt: "JSON 주세요",
+      maxTokens: 1000,
+      provider: "anthropic",
+      tier: "fast",
+      temperature: 0.3,
+      reasoningEffort: "minimal",
+    });
+    expect(model).toBe("claude-haiku-5-5");
+    const params = anthropicCreate.mock.calls[0][0];
+    expect(params.output_config).toEqual({ effort: "low" });
+    expect(params).not.toHaveProperty("temperature");
+    expect(params.max_tokens).toBe(OUTPUT_TOKEN_FLOOR.anthropic);
+  });
+
+  it("Claude 5가 아닌 모델은 temperature를 보내고, deprecated류 400이면 떼고 같은 모델로 1회 재시도", async () => {
+    anthropicCreate.mockRejectedValueOnce(
+      Object.assign(new Error('400 {"error":{"message":"`temperature` is deprecated for this model."}}'), {
+        status: 400,
+      }),
+    );
+    anthropicCreate.mockResolvedValueOnce(anthropicOk('{"ok":true}'));
+    const { data, model } = await generateJSON<{ ok: boolean }>({ meta: TEST_META,
+      prompt: "JSON 주세요",
+      maxTokens: 100,
+      provider: "anthropic",
+      tier: "reasoning",
+      temperature: 0.3,
+    });
+    expect(data).toEqual({ ok: true });
+    expect(model).toBe("claude-opus-4-7");
     expect(anthropicCreate).toHaveBeenCalledTimes(2);
     expect(anthropicCreate.mock.calls[0][0]).toHaveProperty("temperature", 0.3);
+    expect(anthropicCreate.mock.calls[0][0].max_tokens).toBe(100);
+    expect(anthropicCreate.mock.calls[0][0]).not.toHaveProperty("output_config");
     expect(anthropicCreate.mock.calls[1][0]).not.toHaveProperty("temperature");
-    expect(upstageCreate).not.toHaveBeenCalled();
+    expect(deepseekCreate).not.toHaveBeenCalled();
+  });
+
+  it("isClaude5Model — 5 계열만(4.x·날짜 접미 없는 ID)", () => {
+    for (const m of ["claude-haiku-5-5", "claude-sonnet-5", "claude-sonnet-5-5", "claude-opus-5-5", "claude-opus-5", "claude-fable-5-1", "claude-mythos-5-1"])
+      expect(isClaude5Model(m), m).toBe(true);
+    for (const m of ["claude-haiku-4-5", "claude-opus-4-7", "claude-sonnet-4-6", "deepseek-v4-flash", "solar-pro3"])
+      expect(isClaude5Model(m), m).toBe(false);
+  });
+
+  it("응답 길이 상한 = 호출부 값과 바닥 중 큰 값 · Claude 4.x 이하만 호출부 값 그대로(원장 2026-10-19 '팍팍 늘려')", () => {
+    expect(sentMaxTokens("anthropic", "claude-sonnet-5-5", 900)).toBe(64_000);
+    expect(sentMaxTokens("anthropic", "claude-haiku-5-5", 1200)).toBe(64_000);
+    expect(sentMaxTokens("deepseek", "deepseek-flash", 16000)).toBe(64_000);
+    expect(sentMaxTokens("deepseek", "deepseek-v4-pro", 100_000)).toBe(100_000);
+    expect(sentMaxTokens("anthropic", "claude-opus-4-7", 900)).toBe(900);
+  });
+
+  it("선생님이 기다리는 멘트는 바닥을 낮게 — Claude 16,000 · DeepSeek 옛 바닥 32,000 그대로(어디서도 예전보다 안 낮춘다)", () => {
+    expect(sentMaxTokens("anthropic", "claude-haiku-5-5", 1800, "classnote_ment")).toBe(16_000);
+    expect(sentMaxTokens("anthropic", "claude-haiku-5-5", 1200, "english_ment")).toBe(16_000);
+    expect(sentMaxTokens("anthropic", "claude-haiku-5-5", 1800, "ment_prompt_preview")).toBe(16_000); // 미리보기 = 자동작성과 같게
+    expect(sentMaxTokens("deepseek", "deepseek-flash", 1800, "classnote_ment")).toBe(32_000);
+    expect(sentMaxTokens("anthropic", "claude-sonnet-5-5", 2048, "student_care")).toBe(16_000); // 직원이 버튼을 누르고 기다린다
+    expect(sentMaxTokens("anthropic", "claude-sonnet-5-5", 1200, "ment_style_profile")).toBe(64_000); // 주 1회 cron — 기다리지 않는다
+  });
+
+  it("기다리는 기능의 낮은 바닥이 실제 요청까지 간다(호출 지점이 기능 이름을 빠뜨리면 여기서 빨개진다)", async () => {
+    anthropicCreate.mockResolvedValueOnce(anthropicOk('{"ok":true}'));
+    await generateJSON({ meta: { tenantId: "tenant-test", feature: "classnote_ment" }, prompt: "JSON 주세요", maxTokens: 1800, provider: "anthropic", tier: "fast" });
+    expect(anthropicCreate.mock.calls[0][0].max_tokens).toBe(WAITING_OUTPUT_TOKEN_FLOOR.anthropic);
+    deepseekCreate.mockResolvedValueOnce(deepseekOk('{"ok":true}'));
+    await generateJSON({ meta: { tenantId: "tenant-test", feature: "english_ment" }, prompt: "JSON 주세요", maxTokens: 1200, provider: "deepseek", tier: "fast" });
+    expect(deepseekCreate.mock.calls[0][0].max_tokens).toBe(WAITING_OUTPUT_TOKEN_FLOOR.deepseek);
+  });
+
+  it("잘린 응답의 오류 문구는 실제로 보낸 상한(바닥으로 올린 값)을 말한다", async () => {
+    deepseekCreate.mockResolvedValueOnce({
+      choices: [{ message: { content: '{"a": "중간에 끊' }, finish_reason: "length" }],
+      usage: { prompt_tokens: 100, completion_tokens: 64000 },
+    });
+    await expect(generateJSON({ meta: TEST_META, prompt: "JSON 주세요", maxTokens: 100 })).rejects.toThrow("최대 길이(64000 토큰)");
+    expect(deepseekCreate.mock.calls[0][0].max_tokens).toBe(OUTPUT_TOKEN_FLOOR.deepseek);
+  });
+
+  it("Anthropic 안전 거절(refusal) → 다음 provider로 넘긴다(Haiku 5.5엔 서버 쪽 대체 모델이 없다)", async () => {
+    anthropicCreate.mockResolvedValueOnce({ content: [], stop_reason: "refusal", stop_details: { category: "cyber" }, usage: { input_tokens: 10, output_tokens: 0 } });
+    deepseekCreate.mockResolvedValueOnce(deepseekOk('{"ok":true}'));
+    const { data, model } = await generateJSON<{ ok: boolean }>({ meta: TEST_META, prompt: "JSON 주세요", maxTokens: 100, provider: "anthropic" });
+    expect(data).toEqual({ ok: true });
+    expect(model).toBe("deepseek-v4-pro");
+    expect(isRetryableProviderError(new AnthropicRefusalError(null))).toBe(true);
+  });
+
+  it("넘길 회사가 없으면(문서 경로 = Claude 전용) 거절을 한글 안내로 — 영문 원문('refusal: …')을 화면에 내지 않는다", async () => {
+    anthropicCreate.mockResolvedValueOnce({ content: [], stop_reason: "refusal", stop_details: { category: "cyber" }, usage: { input_tokens: 10, output_tokens: 0 } });
+    const run = generateJSON({
+      meta: TEST_META,
+      prompt: "JSON 주세요",
+      maxTokens: 100,
+      provider: "anthropic",
+      document: { mediaType: "application/pdf", dataBase64: "AA==" },
+    });
+    await expect(run).rejects.toThrow("AI가 이 내용으로는 글을 쓰지 않았습니다");
+    await expect(run).rejects.not.toThrow(/refusal/);
   });
 
   it("temperature 미지정이면 deprecated류 400도 재시도 없이 throw", async () => {

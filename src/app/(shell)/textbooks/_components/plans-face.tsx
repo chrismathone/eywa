@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Pill } from "@/components/atoms/pill";
 import { Toolbar } from "@/components/toolbar";
@@ -9,22 +10,30 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
 import { skillAreaColorOf, skillAreaLabelOf } from "@/features/owner/skill-areas";
 import { deleteClassTextbookPlan } from "@/features/textbooks/server/plan-actions";
+import { undoPlanDelete } from "@/features/textbooks/server/plan-delete-actions";
+import { groupSlotPicks } from "@/features/textbooks/lesson-schedule";
 import type { ClassTextbookPlanRow } from "@/features/textbooks/types";
 import { DialogShell, FIELD, FormError, useRun } from "./form-bits";
 import { PlanPreviewDialog } from "./plan-preview-dialog";
 
 /** 0268a 이전 배정 — 교시를 안 고르고 **축**으로 태웠다. `slotPicks`가 없을 때만 쓴다. */
 const AXIS_LABEL: Record<string, string> = { class: "정규 수업", jj: "JJ 자습실" };
-const PACE_LABEL: Record<string, string> = { period: "교시마다 1차수", day: "하루에 1차수", min25: "25분 수업" };
+const PACE_LABEL: Record<string, string> = { period: "교시마다 1차수", day: "하루에 1차수", min25: "25분 1차수" };
 
 /** 요일 글자 — 이 화면은 사무실만 보므로 한글 한 벌이면 된다(강사 시트는 사전을 쓴다). */
 const DOW_KO: Record<string, string> = { mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일" };
 
-/** `"mon|17:20"` → `"월 17:20"`. 요일이 없는 옛 값은 시각만 적는다. */
-function slotPickLabel(pick: string): string {
-  const bar = pick.indexOf("|");
-  if (bar < 0) return pick;
-  return `${DOW_KO[pick.slice(0, bar)] ?? pick.slice(0, bar)} ${pick.slice(bar + 1)}`;
+/**
+ * 고른 칸 → `"화 17:20 1·2차수 · 금 17:20 1차수"`. 자리(1·2차수, 원장 2026-10-16)가 없는 옛 값은 요일·시각만,
+ * 요일도 없는 더 옛 값은 시각만 적는다. 묶음은 배정 창과 같은 [`groupSlotPicks`] 한 벌이다.
+ */
+function slotPicksLabel(picks: readonly string[]): string {
+  return groupSlotPicks(picks)
+    .map((g) => {
+      const head = g.dow ? `${DOW_KO[g.dow] ?? g.dow} ${g.start}` : g.start;
+      return g.positions.length > 0 ? `${head} ${g.positions.join("·")}차수` : head;
+    })
+    .join(" · ");
 }
 
 /**
@@ -142,7 +151,7 @@ export function PlansFace({ rows, skillAreas }: { rows: ClassTextbookPlanRow[]; 
                     {/* 고른 칸이 있으면 **요일·시각**을 그대로 보여 준다 — 축(정규/JJ)은 0268a 이전 배정의 폴백이다. */}
                     <td className="py-1.5 text-center text-xs">
                       {p.slotPicks ? (
-                        <span className="num">{p.slotPicks.map(slotPickLabel).join(" · ")}</span>
+                        <span className="num">{slotPicksLabel(p.slotPicks)}</span>
                       ) : (
                         (AXIS_LABEL[p.slotAxis] ?? p.slotAxis)
                       )}
@@ -186,14 +195,32 @@ export function PlansFace({ rows, skillAreas }: { rows: ClassTextbookPlanRow[]; 
  */
 function DeletePlanDialog({ plan, onClose }: { plan: ClassTextbookPlanRow; onClose: () => void }) {
   const { busy, error, run } = useRun();
+  const router = useRouter();
+  // 진도 줄도 함께 지우기(원장 2026-10-19) — 기본 켬. 범위는 서버(`clearPlanLines`)가 정한다.
+  const [withLines, setWithLines] = useState(true);
   return (
     <DialogShell title={`배정 삭제 — ${plan.className} · ${plan.textbookTitle}`} onClose={onClose}>
       <div className="flex flex-col gap-3 text-sm">
         <p>
           이 배정으로 계산되던 <b>월간계획</b>이 영어 강사 시트에서 사라집니다.
-          <br />
-          이미 시트에 적은 <b>실제 진도는 그대로</b> 남습니다.
         </p>
+        <label className="flex items-start gap-2">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={withLines}
+            disabled={busy}
+            onChange={(e) => setWithLines(e.target.checked)}
+          />
+          <span>
+            <b>이 교재로 들어간 진도 줄도 함께 지우기</b>
+            <br />
+            <span className="text-text-dim">
+              오늘 이후 · 모든 요일의 이 교재 줄과 그 칸의 미룸·당김 기록. 선생님이 고쳐 쓴 줄 · 다른 교재 · 지난 수업은
+              그대로 남습니다.
+            </span>
+          </span>
+        </label>
         <FormError error={error} />
         <div className="flex items-center gap-2">
           <Button
@@ -201,9 +228,28 @@ function DeletePlanDialog({ plan, onClose }: { plan: ClassTextbookPlanRow; onClo
             variant="destructive"
             disabled={busy}
             onClick={() => {
-              void run(() => deleteClassTextbookPlan(plan.id)).then((res) => {
-                if (!res) return;
-                toast.success("배정을 삭제했습니다");
+              void run(() => deleteClassTextbookPlan(plan.id, { withLines })).then((res) => {
+                if (!res || !res.ok) return;
+                const undo = res.undo;
+                const undoAction = undo
+                  ? {
+                      duration: 10_000,
+                      action: {
+                        label: "되돌리기",
+                        onClick: () => {
+                          void undoPlanDelete({ classId: plan.classId, plan: undo.plan, lines: undo.lines }).then((u) => {
+                            if (!u.ok) return void toast.error(u.error);
+                            if (u.warning) toast.warning(u.warning);
+                            else toast.success("배정을 되돌렸습니다");
+                            router.refresh();
+                          });
+                        },
+                      },
+                    }
+                  : undefined;
+                if (res.warning) toast.warning(res.warning, undoAction);
+                else if (res.cleared) toast.success(`배정과 진도 ${res.cleared.lines}줄을 지웠습니다`, undoAction);
+                else toast.success("배정을 삭제했습니다", undoAction);
                 onClose();
               });
             }}

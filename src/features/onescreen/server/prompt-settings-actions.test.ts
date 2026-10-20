@@ -39,3 +39,23 @@ it("잘못된 유형·입력 자리표시자는 RPC 호출 전에 막는다",asy
   expect((await savePrompt("comment","입력 없음")).ok).toBe(false);
   expect(m.rpc).not.toHaveBeenCalled();
 });
+// 기본값과 같은 글은 사용자 지정으로 굳히지 않는다 — 굳히면 뒤에 고친 기본 프롬프트가 이 학원에 안 닿는다(원장 2026-10-16 후속).
+const activeRows = (rows: { id: string }[]) => {
+  const b = { select: () => b, eq: () => b, limit: async () => ({ data: rows, error: null }) };
+  return { from: vi.fn(() => b) };
+};
+it("기본값과 같은 저장 = 켜진 사용자 지정을 끄고(감사로그) 기본값을 쓴다", async () => {
+  const { DEFAULT_PROMPTS } = await import("../prompt-defaults");
+  const db = activeRows([{ id: "v1" }]);
+  m.client.mockResolvedValue({ rpc: m.rpc, ...db });
+  expect(await savePrompt("comment", `\r\n${DEFAULT_PROMPTS.comment.replace(/\n/g, "\r\n")}  `)).toEqual({ ok: true, usedDefault: true });
+  expect(m.rpc.mock.calls).toEqual([["save_ai_prompt_setting", { p_type: "comment", p_text: null }]]);
+  expect(m.audit).toHaveBeenCalledWith(expect.objectContaining({ action: "ai_prompt_reset", metadata: { type: "comment", reason: "same_as_default" } }));
+});
+it("기본값과 같은 저장인데 사용자 지정이 없으면 아무것도 쓰지 않는다", async () => {
+  const { DEFAULT_PROMPTS } = await import("../prompt-defaults");
+  m.client.mockResolvedValue({ rpc: m.rpc, ...activeRows([]) });
+  expect(await savePrompt("trend", DEFAULT_PROMPTS.trend)).toEqual({ ok: true, usedDefault: true });
+  expect(m.rpc).not.toHaveBeenCalled();
+  expect(m.audit).not.toHaveBeenCalled();
+});

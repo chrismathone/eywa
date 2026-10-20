@@ -66,6 +66,43 @@ export type CellCompare = {
   lines: LineCompare[];
 };
 
+/**
+ * 한 교시에 같은 교재 차수가 둘 이상일 때 진도·과제를 **한 줄로 잇는 규약**(2026-10-16~19의 가져오기 모양).
+ * 2026-10-19부터 가져오기는 **차수 하나 = 줄 하나**로 쓰지만(원장 *"차시마다 한줄씩"*), 그전에 이어 쓴 줄이
+ * 남아 있어 대조(`compareCell`)와 옛 줄 나누기(`planCellExtras`)가 이 규약을 계속 읽는다.
+ * 빈 값은 건너뛰고 같은 문구는 한 번만.
+ */
+export const LESSON_JOIN = " / ";
+export function joinLessonTexts(vals: readonly (string | null | undefined)[]): string | null {
+  const kept = vals.filter((v): v is string => !!v && v.trim() !== "");
+  const uniq = kept.filter((v, i) => kept.indexOf(v) === i);
+  return uniq.length > 0 ? uniq.join(LESSON_JOIN) : null;
+}
+
+/**
+ * 같은 칸의 원래 계획에서 **같은 구분·같은 교재** 차수가 둘 이상일 때 — 실제 줄이 차수만큼 있으면 **따로**
+ * 견주고(2026-10-19~ 차수 하나 = 줄 하나), 모자라면(옛 `A / B` 한 줄) 한 줄로 합쳐 견준다(차수 번호는 첫 차수).
+ * 합치지 않으면 옛 칸의 둘째 차수가 짝을 못 찾아 '다름'이 되고, 늘 합치면 새 칸의 둘째 줄이 남는다.
+ */
+function mergeBaseline(baseline: readonly BaselineLine[], actual: readonly ActualLine[]): BaselineLine[] {
+  const groups = new Map<string, BaselineLine[]>();
+  for (const b of baseline) {
+    const key = `${b.skillArea}|${normalizeBookName(b.title)}`;
+    groups.set(key, [...(groups.get(key) ?? []), b]);
+  }
+  return [...groups.values()].flatMap((g) => {
+    const sorted = [...g].sort((a, b) => a.lessonNo - b.lessonNo);
+    if (sorted.length === 1) return sorted;
+    const head = sorted[0]!;
+    const written = actual.filter(
+      // 쓰기(`applyCellLessons`)와 같은 판정 — 교재명이 글자까지 같은 줄만 센다(비슷한 이름의 손 줄은 안 센다).
+      (a) => a.skillArea === head.skillArea && String(a.textbook ?? "").trim().toLowerCase() === head.title.trim().toLowerCase(),
+    ).length;
+    if (written >= sorted.length) return sorted;
+    return [{ ...head, progress: joinLessonTexts(sorted.map((l) => l.progress)) }];
+  });
+}
+
 /** 진도 비교 키 — 공백을 접고 소문자로. 표시에는 쓰지 않는다. */
 export function normalizeProgress(v: string | null | undefined): string {
   return String(v ?? "")
@@ -99,6 +136,9 @@ export function lessonNoOf(index: LessonIndex, title: string, progress: string |
   for (const [book, map] of Object.entries(index)) {
     if (map[p] !== undefined && sameBookName(book, title)) return map[p]!;
   }
+  // 한 교시에 차수 둘을 이은 진도(`Unit 1 / Unit 2`) — **첫 차수**로 잰다(이은 줄의 차수 번호도 첫 차수다).
+  const head = String(progress ?? "").split(LESSON_JOIN)[0];
+  if (head !== undefined && head !== progress && head.trim()) return lessonNoOf(index, title, head);
   return null;
 }
 
@@ -115,8 +155,9 @@ export function compareCell(input: {
   /** 그 칸이 오늘보다 뒤인가. 오늘은 지난 날이다(앱 전역 `d <= today` 규약). */
   isFuture: boolean;
 }): CellCompare {
-  const { baseline, lessonIndex, isFuture } = input;
+  const { lessonIndex, isFuture } = input;
   const actual = input.actual.filter(hasContent);
+  const baseline = mergeBaseline(input.baseline, actual);
   if (baseline.length === 0) return { verdict: "noPlan", lag: 0, lines: [] };
 
   const used = new Set<number>();

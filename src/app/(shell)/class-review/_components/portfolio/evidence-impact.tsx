@@ -1,9 +1,10 @@
 "use client";
 
 import { isManualId } from "@/features/teacher-portfolio/evaluation/config";
+import { dayWeekLabel } from "@/features/teacher-portfolio/evidence-view";
 import { settingOf } from "@/features/teacher-portfolio/evaluation/preview";
 import { metricOf, type ItemId, type ManualMetricItem, type Metric, type MetricId } from "@/features/teacher-portfolio/model/types";
-import { METRIC_COLOR, SHORTFALL_COLOR, dayLabel, itemOf, pointsText, ruleText, shownReason, won } from "@/features/teacher-portfolio/view";
+import { METRIC_COLOR, SHORTFALL_COLOR, itemOf, pointsText, ruleText, shownReason, won } from "@/features/teacher-portfolio/view";
 import {
   AttendanceEvidence, EstimatedEvidence, FollowEvidence, ReportEvidence, StudentCell, type EvidenceProps,
 } from "./evidence-records";
@@ -29,7 +30,7 @@ function EmptyNote({ count, text }: { count: string; text: string }) {
 /** 학생 변동값 — 설정으로 매긴 달은 원래 수치(+1·−0.5)라 '점'을 붙이지 않는다. 옛 달은 그때 그대로 점수. */
 const signed = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${Math.abs(n).toFixed(1)}`;
 
-function StudentsEvidence({ period, nameOf }: EvidenceProps) {
+function StudentsEvidence({ period, nameOf, schoolOf }: EvidenceProps) {
   const m = metricOf(period, "students");
   const t = m.tracking;
   const change = (n: number) => (period.evaluation ? <span className="num text-xs font-bold">{signed(n)}</span> : <Delta now={n} before={0} />);
@@ -60,7 +61,7 @@ function StudentsEvidence({ period, nameOf }: EvidenceProps) {
       <DataTable headers={["학생 · 반", "날짜", "변동", period.evaluation ? "변동값" : "점수"]} empty="이번 달 담당 학생 변동이 없습니다."
         rows={m.detail.map((r, i) => ({
           key: `${r.studentId}|${r.day}|${r.type}|${i}`,
-          cells: [<StudentCell key="s" name={nameOf(r.studentId)} sub={`${r.className} · ${r.role}`} />, dayLabel(r.day), r.note ? `${r.type} · ${r.note}` : r.type, <span key="d">{change(r.points)}</span>],
+          cells: [<StudentCell key="s" name={nameOf(r.studentId)} school={schoolOf?.(r.studentId)} sub={`${r.className} · ${r.role}`} />, dayWeekLabel(r.day), r.note ? `${r.type} · ${r.note}` : r.type, <span key="d">{change(r.points)}</span>],
         }))} />
       <p className="mt-3 text-xs">
         같은 강사가 계속 맡는 이동은 가감하지 않습니다. 추가 수강·재등록·담당 변경은 별도로 표시합니다.
@@ -106,7 +107,7 @@ function RevenueEvidence({ period }: EvidenceProps) {
   );
 }
 
-function CoverageEvidence({ period, nameOf }: EvidenceProps) {
+function CoverageEvidence({ period, nameOf, schoolOf }: EvidenceProps) {
   const m = metricOf(period, "coverage");
   return (
     <>
@@ -121,7 +122,7 @@ function CoverageEvidence({ period, nameOf }: EvidenceProps) {
         empty={period.evaluation ? `이번 달 마감할 보강이 없습니다 — ${pointsText(m, period)}.` : "이번 달 마감할 보강이 없어 10점입니다."}
         rows={m.detail.map((r, i) => ({
           key: `${r.studentId}|${r.absence}|${i}`,
-          cells: [<StudentCell key="s" name={nameOf(r.studentId)} sub={r.className} />, dayLabel(r.absence), dayLabel(r.deadline), r.makeup ? dayLabel(r.makeup) : "—", <StatusChip key="c" state={r.state} />],
+          cells: [<StudentCell key="s" name={nameOf(r.studentId)} school={schoolOf?.(r.studentId)} sub={r.className} />, dayWeekLabel(r.absence), dayWeekLabel(r.deadline), r.makeup ? dayWeekLabel(r.makeup) : "—", <StatusChip key="c" state={r.state} />],
         }))} />
     </>
   );

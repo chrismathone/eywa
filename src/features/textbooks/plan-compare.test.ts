@@ -96,3 +96,70 @@ describe("집계", () => {
     expect(matchRate(t)).toBe(33);
   });
 });
+
+describe("compareCell — 한 교시에 같은 교재 차수 둘(원장 2026-10-16)", () => {
+  const index: LessonIndex = {};
+  addToLessonIndex(index, "Grammar", [
+    { lessonNo: 1, progress: "Unit 1" },
+    { lessonNo: 2, progress: "Unit 2" },
+    { lessonNo: 3, progress: "Unit 3" },
+  ]);
+  const plan = [
+    { lessonNo: 2, skillArea: "grammar", title: "Grammar", progress: "Unit 2" },
+    { lessonNo: 1, skillArea: "grammar", title: "Grammar", progress: "Unit 1" },
+  ];
+
+  it("🔴 그대로 가져온 칸(이은 한 줄)은 '일치'", () => {
+    const c = compareCell({
+      baseline: plan,
+      actual: [{ skillArea: "grammar", textbook: "Grammar", progress: "Unit 1 / Unit 2" }],
+      lessonIndex: index,
+      isFuture: false,
+    });
+    expect(c.verdict).toBe("match");
+  });
+
+  it("앞 차수를 했으면 첫 차수로 재서 '늦음'", () => {
+    const c = compareCell({
+      baseline: [
+        { lessonNo: 2, skillArea: "grammar", title: "Grammar", progress: "Unit 2" },
+        { lessonNo: 3, skillArea: "grammar", title: "Grammar", progress: "Unit 3" },
+      ],
+      actual: [{ skillArea: "grammar", textbook: "Grammar", progress: "Unit 1 / Unit 2" }],
+      lessonIndex: index,
+      isFuture: false,
+    });
+    expect(c.verdict).toBe("behind");
+    expect(c.lag).toBe(1);
+  });
+
+  it("🔴 차수마다 한 줄로 가져온 칸(2026-10-19~)도 '일치' — 둘째 줄이 남지 않는다", () => {
+    const c = compareCell({
+      baseline: plan,
+      actual: [
+        { skillArea: "grammar", textbook: "Grammar", progress: "Unit 1" },
+        { skillArea: "grammar", textbook: "Grammar", progress: "Unit 2" },
+      ],
+      lessonIndex: index,
+      isFuture: false,
+    });
+    expect(c.verdict).toBe("match");
+    expect(c.lines).toHaveLength(2);
+  });
+
+  it("두 줄 중 하나만 늦었으면 '늦음'", () => {
+    const c = compareCell({
+      baseline: [
+        { lessonNo: 2, skillArea: "grammar", title: "Grammar", progress: "Unit 2" },
+        { lessonNo: 3, skillArea: "grammar", title: "Grammar", progress: "Unit 3" },
+      ],
+      actual: [
+        { skillArea: "grammar", textbook: "Grammar", progress: "Unit 2" },
+        { skillArea: "grammar", textbook: "Grammar", progress: "Unit 2" },
+      ],
+      lessonIndex: index,
+      isFuture: false,
+    });
+    expect(c.verdict).toBe("behind");
+  });
+});

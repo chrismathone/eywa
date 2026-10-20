@@ -30,7 +30,7 @@ describe("보고서 설정 탭", () => {
     render(<ReportSection initial={structuredClone(DEFAULT_SETTINGS.report)} />);
     expect(screen.getAllByRole("tabpanel")).toHaveLength(1);
     fireEvent.click(screen.getByRole("tab", { name: "보고서 표시" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "보고서 제목" }), { target: { value: "우리 반 보고서" } });
+    fireEvent.change(screen.getByRole("textbox", { name: /^보고서 제목/ }), { target: { value: "우리 반 보고서" } });
     fireEvent.click(screen.getByRole("tab", { name: "영상 제출" }));
     fireEvent.click(screen.getByRole("button", { name: "영어 사용" }));
     fireEvent.change(screen.getByRole("searchbox", { name: "영상 제출 반 검색" }), { target: { value: "중등" } });
@@ -40,7 +40,7 @@ describe("보고서 설정 탭", () => {
     fireEvent.click(screen.getByRole("tab", { name: "영상 제출" }));
     expect(screen.getByRole("searchbox", { name: "영상 제출 반 검색" })).toHaveValue("중등");
     fireEvent.click(screen.getByRole("tab", { name: "보고서 표시" }));
-    expect(screen.getByRole("textbox", { name: "보고서 제목" })).toHaveValue("우리 반 보고서");
+    expect(screen.getByRole("textbox", { name: /^보고서 제목/ })).toHaveValue("우리 반 보고서");
     expect(save).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "저장" }));
     expect(save).toHaveBeenCalledWith(expect.objectContaining({

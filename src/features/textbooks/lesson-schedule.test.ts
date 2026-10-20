@@ -8,6 +8,8 @@ import {
   parseSlotPick,
   MAX_LOOKAHEAD_DAYS,
   normalizeLessonPace,
+  lessonsInSlot,
+  groupSlotPicks,
 } from "./lesson-schedule";
 
 // 2026-09-14(월) 주. 실제 영어 반 모양에 맞춰 월·수 2교시 + 같은 날 JJ 1교시를 둔다.
@@ -278,15 +280,15 @@ describe("buildLessonSchedule — 배치 이력(valid_from/valid_to)", () => {
 
 describe("parseSlotPick — 요일|시각", () => {
   it("요일이 붙은 값을 읽는다", () => {
-    expect(parseSlotPick("mon|17:20")).toEqual({ dow: "mon", start: "17:20" });
+    expect(parseSlotPick("mon|17:20")).toEqual({ dow: "mon", start: "17:20", pos: null });
   });
 
   it("옛 모양(시각만)은 '모든 요일'로 읽는다", () => {
-    expect(parseSlotPick("17:20")).toEqual({ dow: null, start: "17:20" });
+    expect(parseSlotPick("17:20")).toEqual({ dow: null, start: "17:20", pos: null });
   });
 
   it("모양이 틀리면 null — 앞뒤 공백은 봐준다", () => {
-    expect(parseSlotPick(" mon|17:20 ")).toEqual({ dow: "mon", start: "17:20" });
+    expect(parseSlotPick(" mon|17:20 ")).toEqual({ dow: "mon", start: "17:20", pos: null });
     expect(parseSlotPick("월|17:20")).toBeNull();
     expect(parseSlotPick("mon|25:99")).toBeNull();
     expect(parseSlotPick("")).toBeNull();
@@ -499,5 +501,95 @@ describe("buildLessonSchedule — 회차 미루기·당기기(shifts)", () => {
       lookaheadDays: 28,
     };
     expect(buildLessonSchedule({ ...base, shifts: {} })).toEqual(buildLessonSchedule(base));
+  });
+});
+
+describe("교시 안 차수 자리(1·2차수) — 원장 2026-10-16", () => {
+  it("parseSlotPick은 자리를 읽고, 범위 밖·모양 틀림은 거절한다", () => {
+    expect(parseSlotPick("tue|17:20|2")).toEqual({ dow: "tue", start: "17:20", pos: 2 });
+    expect(parseSlotPick("tue|17:20|0")).toBeNull();
+    expect(parseSlotPick("tue|17:20|5")).toBeNull();
+    expect(parseSlotPick("tue|17:20|02")).toBeNull();
+    expect(parseSlotPick("tue|17:20|1|2")).toBeNull();
+  });
+
+  it("lessonsInSlot = 고른 자리 수 · 자리 없는 옛 값은 1", () => {
+    const picks = new Set(["tue|17:20|1", "tue|17:20|2", "fri|17:20|2", "mon|18:20"]);
+    expect(lessonsInSlot(picks, "tue", "17:20")).toBe(2);
+    expect(lessonsInSlot(picks, "fri", "17:20")).toBe(1);
+    expect(lessonsInSlot(picks, "mon", "18:20")).toBe(1);
+    expect(lessonsInSlot(picks, "wed", "17:20")).toBe(0);
+  });
+
+  it("🔑 '월 1·2차수 · 수 1차수'면 한 주에 3차수 — 같은 교시에 차수 둘이 순서대로", () => {
+    const s = buildLessonSchedule({
+      startDate: "2026-09-14",
+      lessonNos: [1, 2, 3, 4, 5, 6],
+      schedules: MON_WED,
+      holidays: {},
+      axis: "class",
+      slotPicks: ["mon|18:20|1", "mon|18:20|2", "wed|18:20|1"],
+      pace: "min25",
+      lookaheadDays: 14,
+    });
+    expect(s.targets).toEqual([
+      { lessonNo: 1, date: "2026-09-14", slotStart: "18:20" },
+      { lessonNo: 2, date: "2026-09-14", slotStart: "18:20" },
+      { lessonNo: 3, date: "2026-09-16", slotStart: "18:20" },
+      { lessonNo: 4, date: "2026-09-21", slotStart: "18:20" },
+      { lessonNo: 5, date: "2026-09-21", slotStart: "18:20" },
+      { lessonNo: 6, date: "2026-09-23", slotStart: "18:20" },
+    ]);
+    expect(s.unplaced).toEqual([]);
+  });
+
+  it("휴일은 그 교시의 차수 둘 다 건너뛴다(소비 안 함)", () => {
+    const s = buildLessonSchedule({
+      startDate: "2026-09-14",
+      lessonNos: [1, 2, 3],
+      schedules: MON_WED,
+      holidays: { "2026-09-14": "테스트휴일" },
+      axis: "class",
+      slotPicks: ["mon|18:20|1", "mon|18:20|2", "wed|18:20|1"],
+      pace: "min25",
+      lookaheadDays: 14,
+    });
+    expect(s.targets.map((t) => [t.lessonNo, t.date])).toEqual([
+      [1, "2026-09-16"],
+      [2, "2026-09-21"],
+      [3, "2026-09-21"],
+    ]);
+  });
+
+  it("미루기(skip)는 그 교시 전체를 비운다 · 당기기(advance)는 차수 하나만 버린다", () => {
+    const base = {
+      startDate: "2026-09-14",
+      lessonNos: [1, 2, 3, 4],
+      schedules: MON_WED,
+      holidays: {},
+      axis: "class" as const,
+      slotPicks: ["mon|18:20|1", "mon|18:20|2"],
+      pace: "min25" as const,
+      lookaheadDays: 14,
+    };
+    const skipped = buildLessonSchedule({ ...base, shifts: { "2026-09-14|18:20": "skip" } });
+    expect(skipped.targets.map((t) => [t.lessonNo, t.date])).toEqual([
+      [1, "2026-09-21"],
+      [2, "2026-09-21"],
+    ]);
+    const advanced = buildLessonSchedule({ ...base, shifts: { "2026-09-14|18:20": "advance" } });
+    expect(advanced.targets.map((t) => [t.lessonNo, t.date])).toEqual([
+      [2, "2026-09-14"],
+      [3, "2026-09-14"],
+      [4, "2026-09-21"],
+    ]);
+  });
+
+  it("groupSlotPicks — 요일 순 · 자리 순으로 묶는다", () => {
+    expect(groupSlotPicks(["fri|17:20|1", "tue|17:20|2", "tue|17:20|1", "mon|18:20", "bad"])).toEqual([
+      { dow: "mon", start: "18:20", positions: [] },
+      { dow: "tue", start: "17:20", positions: [1, 2] },
+      { dow: "fri", start: "17:20", positions: [1] },
+    ]);
   });
 });

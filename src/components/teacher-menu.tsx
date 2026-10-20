@@ -77,7 +77,7 @@ export function TeacherMenu({
   layout?: MenuLayout;
   groups?: MenuGroupLayout;
   /**
-   * 연결 앱(오늘의 수학 등) — 레이아웃이 [`getMyConnectedApps`](@/features/connected-apps/server/visible)로 거른 목록
+   * 연결 앱(오늘 수학 등) — 레이아웃이 [`getMyConnectedApps`](@/features/connected-apps/server/visible)로 거른 목록
    * (지점 스위치 ∧ 담당 과목 — 영어 선생님에겐 비어 온다). 풀셸 사이드바 '연결 앱'과 같은 **보통 링크(새 탭)**다.
    */
   connectedApps?: readonly ConnectedApp[];

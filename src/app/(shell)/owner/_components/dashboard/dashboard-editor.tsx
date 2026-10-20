@@ -173,6 +173,12 @@ export function DashboardEditor({ initial, roleMenus, subjects, members, preview
             commit(ed.draftOf(from).map((i) => ({ ...i })));
             toast(`${BUNDLE_LABELS[from]} 배치를 가져왔습니다 · 되돌리기로 취소할 수 있습니다`);
           }}
+          onCopySubject={(from) => {
+            const items = ed.draftOfSubject(from);
+            if (!items) return;
+            commit(items.map((i) => ({ ...i })));
+            toast(`${subjects.find((s) => s.key === from)?.label ?? from} 배치를 가져왔습니다 · 되돌리기로 취소할 수 있습니다`);
+          }}
           onReset={() => {
             commit(defaultItems(role));
             toast(`${BUNDLE_LABELS[role]} 배치를 기본값으로 되돌렸습니다`);

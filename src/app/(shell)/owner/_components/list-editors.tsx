@@ -21,7 +21,7 @@ import {
 } from "@dnd-kit/sortable";
 import { GripVertical, Plus, X } from "@/components/icons/aywa-icon-compat";
 import { SUBJECT_COLORS, SUBJECT_DEFAULT_VIEW_OPTIONS, type ConsultationTemplate, type HolidaySetting, type PeriodTimeRow, type ShuttleSetting, type SubjectSetting, type TermSetting } from "@/features/owner/settings-types";
-import { SUBJECT_SOLID, KNOWN_SUBJECT_KEYS } from "@/features/owner/subjects";
+import { SUBJECT_SOLID, KNOWN_SUBJECT_KEYS, counselByClassTeacher } from "@/features/owner/subjects";
 import { SUBJECT_COLOR_LABEL } from "@/features/owner/subject-color-label";
 import { WEEKDAY_GROUPING_OPTIONS } from "@/features/timetable/lib/weekday-groups";
 import { STATE_RESERVED_COLORS } from "@/lib/design/semantic-color";
@@ -147,6 +147,7 @@ export function SubjectListEditor({
           <span className="w-[220px]">시간표 요일 병합</span>
           <span className="w-[104px]">처음 보이는 뷰</span>
           <span className="w-[92px]">QR 접수 노출</span>
+          <span className="w-[112px]" title="원생상담 의무 — 한 학생이 이 과목을 여러 선생님에게 들을 때 누가 상담하나">상담 의무</span>
           <span className="w-[70px]">내부 ID</span>
         </div>
       ) : null}
@@ -237,6 +238,16 @@ export function SubjectListEditor({
                 />
                 {s.hiddenFromIntake ? "숨김" : "노출"}
               </label>
+              {/* 원생상담 의무(원장 2026-10-19) — 요일 많은 선생님 / 수업 담당(반에 '담당'으로 세팅된 선생님). 미설정 기본은 영어만 수업 담당(counselByClassTeacher). */}
+              <select
+                className={`${cellCls} w-[112px]`}
+                aria-label={`${s.label || "과목"} 원생상담 의무`}
+                value={counselByClassTeacher(s) ? "all" : "most"}
+                onChange={(e) => set(i, { counselAllHomerooms: e.target.value === "all" })}
+              >
+                <option value="most">요일 많은 선생님</option>
+                <option value="all">수업 담당</option>
+              </select>
               {/* 내부 ID — 읽기전용(데이터 보존용, 자동 확정·고정) */}
               <span
                 className="text-text-faint w-[70px] shrink-0 truncate text-xs"

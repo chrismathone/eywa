@@ -70,7 +70,7 @@ export function SearchForm({
           className={`text-foreground placeholder:text-text-faint ${inputWidth} h-full bg-transparent text-(length:--control-label-sm) leading-normal focus:outline-none`}
         />
       </div>
-      <Button type="submit" variant="outline" disabled={pending}>
+      <Button type="submit" disabled={pending} className="font-bold">
         {text(pending ? "검색 중…" : "검색")}
       </Button>
     </form>

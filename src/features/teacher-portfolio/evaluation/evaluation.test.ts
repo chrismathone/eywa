@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { applyEvaluation, indexEntries } from "../model/evaluate";
 import type { Metric, PortfolioPeriod } from "../model/types";
 import { BUILTIN_METRICS, DEFAULT_EVALUATION_CONFIG, PORTFOLIO_V1_CONFIG, evaluationConfigSchema, issueMessage, resolveEvaluationConfig, type EvaluationConfig } from "./config";
+import { excludedKey, fullKey, previewScore } from "./preview";
 import { bandIssues, describeScoring, pointsFor, zeroMaxIssue } from "./scoring";
 
 /** 강사평가 설정(원장 2026-10-13) — 지표마다 켜고 끄기·만점·점수 규칙·자료 없을 때, 직접 만든 지표. */
@@ -100,6 +101,15 @@ describe("한 달에 설정 얹기", () => {
     applyEvaluation(q, DEFAULT_EVALUATION_CONFIG);
     expect([q.items.find((m) => m.id === "satisfaction")?.value, q.knownMax]).toEqual([3, 100]);
   });
+  it("🔴 프리랜서 근태는 설정 규칙과 상관없이 만점 — 미리보기도 같게(원장 2026-10-16)", () => {
+    const p = period();
+    p.items.push({ ...item("punctuality", 7), freelancer: true } as Metric, item("payRatio", null));
+    applyEvaluation(p, DEFAULT_EVALUATION_CONFIG);
+    const m = p.items.find((x) => x.id === "punctuality")!;
+    expect([m.value, m.max, m.missing]).toEqual([10, 10, undefined]);
+    expect(previewScore({ punctuality: 7, [fullKey("punctuality")]: 1 }, DEFAULT_EVALUATION_CONFIG).points.punctuality).toBe(10);
+    expect(previewScore({ punctuality: 7 }, DEFAULT_EVALUATION_CONFIG).points.punctuality).toBeLessThan(10);
+  });
   it("끈 지표·합계에서 뺀 지표는 총점과 만점에서 빠진다 — 만점이 100점이 아니어도 된다", () => {
     const c = v1();
     c.metrics.expansion.enabled = false;
@@ -109,6 +119,16 @@ describe("한 달에 설정 얹기", () => {
     applyEvaluation(p, c);
     expect([p.total, p.knownMax, p.knownCount]).toEqual([60, 90, 6]);
     expect(p.items.find((m) => m.id === "expansion")?.off).toBe(true);
+  });
+  it("급여 비율의 새 선생님(지난달 담당 반 없음)은 '자료가 없을 때' 규칙과 상관없이 합계에서 뺀다 — 미리보기도 같게(원장 2026-10-15)", () => {
+    const p = period();
+    p.items.push({ ...item("payRatio", null), newcomer: true } as Metric, item("churn", null));
+    applyEvaluation(p, DEFAULT_EVALUATION_CONFIG);
+    expect([p.items.find((m) => m.id === "payRatio")?.value, p.items.find((m) => m.id === "churn")?.value]).toEqual([null, 0]);
+    expect(p.items.find((m) => m.id === "payRatio")?.missing).toBe(true);
+    const raws = { payRatio: null, [excludedKey("payRatio")]: 1, churn: null };
+    expect([previewScore(raws, DEFAULT_EVALUATION_CONFIG).points.payRatio, previewScore(raws, DEFAULT_EVALUATION_CONFIG).points.churn]).toEqual([null, 0]);
+    expect(previewScore({ payRatio: null }, DEFAULT_EVALUATION_CONFIG).points.payRatio).toBe(0);
   });
   it("직접 만든 지표는 그 강사·그 달에 넣은 값으로 매기고, 입력이 없으면 '자료가 없을 때' 규칙", () => {
     const c = v1();

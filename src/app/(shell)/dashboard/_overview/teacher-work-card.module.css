@@ -1,10 +1,10 @@
 .root { min-width: 0; width: 100%; }
-.table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: var(--text-sm, 13px); font-variant-numeric: tabular-nums; }
+.table { table-layout: fixed; border-collapse: collapse; font-size: var(--text-sm, 13px); font-variant-numeric: tabular-nums; }
 .table + .table { margin-top: 24px; }
-.metricColumn { width: 126px; }
 .table th, .table td { padding: 13px 8px; border-bottom: 1px solid #e4eaf2; text-align: center; overflow-wrap: anywhere; }
 .table thead th { background: #f2f5fa; font-weight: 700; }
-.table th:first-child { text-align: left; }
+.table th:first-child { text-align: left; position: sticky; left: 0; z-index: 1; background: #fff; }
+.table thead th:first-child { background: #f2f5fa; }
 .table tbody th { color: #526277; font-weight: 500; }
 .table thead b { display: block; font-size: var(--text-base, 15px); }
 .table small { display: block; margin-top: 4px; font-weight: 400; font-size: var(--text-xs, 11px); color: #63738a; }
@@ -18,4 +18,9 @@
 .note { margin: 14px 0 0; color: #63738a; font-size: var(--text-xs, 11px); line-height: 1.6; }
 .note + .note { margin-top: 3px; }
 .empty { padding: 24px 0; color: #63738a; }
-@container dashboard (max-width: 580px) { .metricColumn { width: 102px; } .table th, .table td { padding: 11px 6px; } }
+@container dashboard (max-width: 580px) { .table th, .table td { padding: 11px 6px; } }
+.tasksLink { display: block; margin: 0 0 10px auto; padding: 4px 2px; color: #3c4b5f; font-size: var(--text-sm, 13px); font-weight: 600; }
+.tasksLink:hover { color: #121212; text-decoration: underline; text-underline-offset: 4px; }
+.tasksLink b { color: #b72f38; }
+.cellButton { font: inherit; color: inherit; }
+.cellButton:hover { text-decoration: underline; text-underline-offset: 4px; }

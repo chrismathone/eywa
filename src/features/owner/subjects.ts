@@ -125,3 +125,12 @@ export const SUBJECT_ICON_BG: Record<PillColor, string> = {
   danger: "bg-danger-soft text-danger",
   neutral: "bg-bg-soft text-text-dim",
 };
+
+/**
+ * 원생상담 의무를 반의 **수업 담당**(반에 '담당'으로 세팅된 선생님)에게 주는 과목인가(원장 2026-10-19).
+ * 저장값이 있으면 그대로, 없으면 영어(표준 키 english)만 수업 담당 — 영어는 원어민이 교시를 많이 맡아 '요일 많은 선생님' 규칙이 담당을 비켜 간다.
+ * 그 밖의 과목 기본 = 같은 과목에서 가장 많은 요일을 맡은 선생님. 설정 화면과 직원 포트폴리오가 이 한 판정을 쓴다.
+ */
+export function counselByClassTeacher(subject: { key: string; counselAllHomerooms?: boolean }): boolean {
+  return subject.counselAllHomerooms ?? subject.key === "english";
+}

@@ -8,7 +8,8 @@ import type { WorkClass, WorkReport } from "./teacher-work";
 export type WorkSchedule = { class_id: string; day_of_week: string; start_time: string; valid_from: string | null; valid_to: string | null };
 export type WorkEnrollment = { class_id: string; student_id: string; start_date: string | null; end_date: string | null; on_hold: boolean | null; is_transferred: boolean | null; attendance_days: string[] | null };
 export type WorkAttendance = EffectiveAttendanceRecord & { status: string };
-export type WorkObligation = { classId: string; studentId: string; date: string; written: boolean; status: string | null };
+export type WorkObligation = { classId: string; studentId: string; date: string; written: boolean; status: string | null;
+  /** 쓴 보고서에 영상 과제가 나갔나(영상 숙제 출제율 — 원장 2026-10-19). */ videoHomework?: boolean };
 export const isTestClass = (name: string) => /(?:^|[\s([_-])(?:테스트(?:반)?|test(?:\s*class)?|sandbox)(?=$|[\s)\]_-])/iu.test(name);
 
 export type UnclassifiedWorkReport = Omit<WorkReport, "classId"> & { subject: string | null; teacherName: string | null };
@@ -61,13 +62,13 @@ export function reportWorkObligations(input: {
       const seen = new Set<string>();
       for (const target of due) {
         const report = ownReports.find((r) => r.studentId === target.studentId && r.date === date && target.classIds.includes(r.classId));
-        out.push({ classId: report?.classId ?? target.classIds[0]!, studentId: target.studentId, date, written: !!report, status: report?.status ?? null });
+        out.push({ classId: report?.classId ?? target.classIds[0]!, studentId: target.studentId, date, written: !!report, status: report?.status ?? null, videoHomework: report?.videoHomework === true });
         seen.add(target.studentId);
       }
       // 보강 등 시간표 밖에서 실제 작성한 보고서도 분모·분자에 함께 포함한다.
       for (const report of ownReports) if (report.date === date && !seen.has(report.studentId)) {
         seen.add(report.studentId);
-        out.push({ classId: report.classId, studentId: report.studentId, date, written: true, status: report.status });
+        out.push({ classId: report.classId, studentId: report.studentId, date, written: true, status: report.status, videoHomework: report.videoHomework === true });
       }
     }
   }

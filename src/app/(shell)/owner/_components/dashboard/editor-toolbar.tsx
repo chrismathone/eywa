@@ -55,6 +55,8 @@ export function EditorActions(p: {
   onUndo: () => void;
   onRedo: () => void;
   onCopy: (from: Bundle) => void;
+  /** 과목 운영형 — 다른 과목의 배치를 지금 과목으로(원장 2026-10-19 *"타 과목 대시보드 복사하기"*). */
+  onCopySubject: (from: string) => void;
   onReset: () => void;
   onSubject: (key: string) => void;
 }) {
@@ -100,6 +102,28 @@ export function EditorActions(p: {
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+          {p.role === "subject" && p.subjects.length > 1 ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <button
+                    type="button"
+                    className={`${CONTROL_H} ${CONTROL_LABEL} text-primary hover:bg-bg-soft inline-flex items-center gap-0.5 rounded-md px-1.5 font-medium whitespace-nowrap transition`}
+                  />
+                }
+              >
+                다른 과목 배치 복사
+                <EyIcon name="chevronDown" size={18} className="opacity-60" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-52">
+                {p.subjects.filter((s) => s.key !== p.subject).map((s) => (
+                  <DropdownMenuItem key={s.key} onClick={() => p.onCopySubject(s.key)}>
+                    {s.label} 배치로 바꾸기
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
         </>
       ) : null}
       <ToolbarButton onClick={p.onReset} disabled={p.isDefault}>

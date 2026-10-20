@@ -3,25 +3,30 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { tipProps } from "@/components/hover-tip/tip";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import type { SatisfactionRow } from "@/features/teacher-portfolio/model/source-types";
 import type { StoredPeriod } from "@/features/teacher-portfolio/model/types";
 import {
   addSatisfactionClaim, cancelSatisfactionClaim, decideJudgment, loadSatisfactionBoard, refreshAfterSatisfaction, type SatisfactionBoard,
 } from "@/features/teacher-portfolio/server/satisfaction-actions";
+import { satisfactionTag } from "@/features/teacher-portfolio/satisfaction-tag";
 import { dayLabel, monthName } from "@/features/teacher-portfolio/view";
 import { kstToday } from "@/lib/date-kst";
-import { SectionTitle } from "./parts";
+import { SectionTitle, StatusChip } from "./parts";
 
 /**
  * 학부모 만족도 관리(계획서 3번 · 원장 결정 8 *"확실한 것은 즉시, 애매한 것은 확인 후"*) — 확인 대기 글 반영/무시 · 반영한 글 취소 ·
  * 클레임·칭찬 넣기/취소. 기록은 지우지 않는다(취소로 남긴다). 열 때 DB에서 다시 읽는다(포트폴리오 행은 다시 매기기 전엔 옛 값).
  * 점수는 창을 닫을 때 한 번 다시 매긴다(바꾼 게 있을 때만). 마감한 달은 서버가 막는다.
  */
-export function SatisfactionDialog({ open, onClose, period, teacherId, teacherName }: {
+export function SatisfactionDialog({ open, onClose, period, teacherId, teacherName, nameOfTeacher }: {
   open: boolean; onClose: () => void; period: StoredPeriod; teacherId: string; teacherName: string;
+  /** 같은 글을 함께 받는 선생님 이름(공동 꼬리표). */
+  nameOfTeacher: (teacherId: string) => string;
 }) {
   const router = useRouter();
   const [board, setBoard] = useState<SatisfactionBoard | null>(null);
@@ -30,9 +35,10 @@ export function SatisfactionDialog({ open, onClose, period, teacherId, teacherNa
   const [claim, setClaim] = useState({ day: "", points: "", content: "" });
   const [changed, setChanged] = useState(false);
   const metric = period.items.find((m) => m.id === "satisfaction");
-  const appliedIds = (Array.isArray(metric?.detail) ? (metric!.detail as { key: string; source: string; waiting: boolean }[]) : [])
-    .filter((r) => r.source === "글" && !r.waiting).map((r) => r.key);
-  const idsKey = appliedIds.join(",");
+  // 이 선생님 몫의 글만 — 그 달 근거 표의 글(누구 몫인지는 집계가 정한다). 확인 대기·반영은 서버가 지금 상태로 가른다(원장 2026-10-16).
+  const rows = (Array.isArray(metric?.detail) ? (metric!.detail as SatisfactionRow[]) : []).filter((r) => r.source === "글");
+  const rowOf = new Map(rows.map((r) => [r.key, r]));
+  const idsKey = rows.map((r) => r.key).join(",");
   useEffect(() => {
     if (!open) return;
     let live = true;
@@ -71,21 +77,37 @@ export function SatisfactionDialog({ open, onClose, period, teacherId, teacherNa
             : board.tableMissing ? <p role="status" className="bg-amber-soft rounded-lg px-3.5 py-2.5 text-sm">학부모 만족도 저장 표가 아직 준비되지 않았습니다(DB 반영 전).</p> : null}
           {ok && !ok.tableMissing ? (
             <>
-              <SectionTitle sub={`${ok.queueMore ? `${ok.queue.length}건 넘음` : `${ok.queue.length}건`} · 학원 전체 · 마감 안 한 달`}>확인 대기</SectionTitle>
-              <p className="mb-1 text-xs">과목을 모르는 보드의 글은 그날 담임이 한 명일 때만 그 담임에게 셉니다.</p>
+              <SectionTitle sub={`${ok.queue.length}건 · ${teacherName} 선생님 몫`}>확인 대기</SectionTitle>
+              <p className="mb-1 text-xs">{monthName(period.month)} 글 중 그날 이 선생님 반으로 간 글만 보입니다(마지막 집계 기준).</p>
               {ok.queue.length ? (
                 <ul className="divide-line-faint divide-y">
-                  {ok.queue.map((q) => (
-                    <li key={q.id} className="space-y-1.5 py-3">
-                      <p className="text-xs">{dayLabel(q.day)} · {q.student}{q.board ? ` · ${q.board}` : ""} · {q.ai ? `AI 제안 ${q.verdict === "plus" ? "가점" : q.verdict === "minus" ? "감점" : "없음"}` : "문구 판정 애매"}{q.reason ? ` (${q.reason})` : ""}</p>
-                      <p className="text-sm break-keep whitespace-pre-wrap">{q.content || "(내용 없음)"}</p>
-                      <div className="flex flex-wrap gap-2">
-                        <Button type="button" size="sm" variant="outline" disabled={pending} onClick={() => run(() => decideJudgment(q.id, "plus"))}>가점 반영</Button>
-                        <Button type="button" size="sm" variant="outline" disabled={pending} onClick={() => run(() => decideJudgment(q.id, "minus"))}>감점 반영</Button>
-                        <Button type="button" size="sm" variant="ghost" disabled={pending} onClick={() => run(() => decideJudgment(q.id, "dismiss"))}>무시</Button>
-                      </div>
-                    </li>
-                  ))}
+                  {ok.queue.map((q) => {
+                    const tag = satisfactionTag(q);
+                    const shared = (rowOf.get(q.id)?.sharedWith ?? []).map(nameOfTeacher);
+                    return (
+                      <li key={q.id} className="space-y-1.5 py-3">
+                        <p className="flex flex-wrap items-center gap-2 text-xs">
+                          <span>{[dayLabel(q.day), q.student, q.school, rowOf.get(q.id)?.className].filter(Boolean).join(" · ")}</span>
+                          <span role="note" aria-label={[tag.title, ...tag.lines].join(" ")} {...tipProps({ title: tag.title, lines: tag.lines })}>
+                            <StatusChip state={tag.label} />
+                          </span>
+                          {/* 판정 줄은 하나라 함께 받는 선생님 점수도 같이 움직인다 — 그 사실을 숨기지 않는다(적대적 리뷰 2026-10-16). */}
+                          {shared.length ? (
+                            <span role="note" aria-label={`함께 받는 선생님 ${shared.join(", ")}`}
+                              {...tipProps({ title: "함께 받는 선생님", lines: [shared.join(" · "), "반영·무시하면 함께 바뀝니다"] })}>
+                              <StatusChip state="공동" />
+                            </span>
+                          ) : null}
+                        </p>
+                        <p className="text-sm break-keep whitespace-pre-wrap">{q.content || "(내용 없음)"}</p>
+                        <div className="flex flex-wrap gap-2">
+                          <Button type="button" size="sm" variant="outline" disabled={pending || closed} onClick={() => run(() => decideJudgment(q.id, "plus", teacherId))}>가점 반영</Button>
+                          <Button type="button" size="sm" variant="outline" disabled={pending || closed} onClick={() => run(() => decideJudgment(q.id, "minus", teacherId))}>감점 반영</Button>
+                          <Button type="button" size="sm" variant="ghost" disabled={pending || closed} onClick={() => run(() => decideJudgment(q.id, "dismiss", teacherId))}>무시</Button>
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
               ) : <p className="text-sm">확인할 글이 없습니다.</p>}
               <SectionTitle sub={`${ok.applied.length}건`}>이 달 반영한 글</SectionTitle>
@@ -93,8 +115,14 @@ export function SatisfactionDialog({ open, onClose, period, teacherId, teacherNa
                 <ul className="divide-line-faint divide-y">
                   {ok.applied.map((a) => (
                     <li key={a.id} className="flex items-start justify-between gap-3 py-2.5">
-                      <span className="min-w-0 text-sm"><small className="block text-xs">{dayLabel(a.day)} · {a.student} · {a.verdict === "plus" ? "가점" : "감점"}{a.phrase ? ` · “${a.phrase}”` : ""}</small>{a.content}</span>
-                      <Button type="button" size="sm" variant="ghost" disabled={pending || closed} onClick={() => run(() => decideJudgment(a.id, "cancel"))}>반영 취소</Button>
+                      <span className="min-w-0 text-sm">
+                        <small className="block text-xs">
+                          {[dayLabel(a.day), a.student, a.school, rowOf.get(a.id)?.className, a.verdict === "plus" ? "가점" : "감점", a.phrase ? `“${a.phrase}”` : "",
+                            rowOf.get(a.id)?.sharedWith?.length ? "공동" : ""].filter(Boolean).join(" · ")}
+                        </small>
+                        {a.content}
+                      </span>
+                      <Button type="button" size="sm" variant="ghost" disabled={pending || closed} onClick={() => run(() => decideJudgment(a.id, "cancel", teacherId))}>반영 취소</Button>
                     </li>
                   ))}
                 </ul>
@@ -105,7 +133,7 @@ export function SatisfactionDialog({ open, onClose, period, teacherId, teacherNa
                   <li key={c.id} className={`flex items-start justify-between gap-3 py-2.5 ${c.cancelled ? "text-text-dim line-through" : ""}`}>
                     <span className="min-w-0 text-sm"><small className="block text-xs">{dayLabel(c.day)} · {c.points > 0 ? "+" : ""}{c.points}점</small>{c.content}</span>
                     {c.cancelled ? <small className="text-xs no-underline">취소됨</small>
-                      : <Button type="button" size="sm" variant="ghost" disabled={pending || closed} onClick={() => run(() => cancelSatisfactionClaim(c.id))}>취소</Button>}
+                      : <Button type="button" size="sm" variant="ghost" disabled={pending || closed} onClick={() => run(() => cancelSatisfactionClaim(c.id, teacherId))}>취소</Button>}
                   </li>
                 ))}
               </ul>

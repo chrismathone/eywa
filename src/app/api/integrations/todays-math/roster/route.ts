@@ -7,7 +7,7 @@ import { isAuthorized, NO_STORE_HEADERS, type RosterResponse } from "@/features/
 import { fetchRoster } from "@/features/integrations/todays-math/service";
 
 /**
- * 오늘의수학 연계 — 명단. **읽기 전용, Bearer TODAYS_MATH_API_KEY 전용.**
+ * 오늘 수학 연계 — 명단. **읽기 전용, Bearer TODAYS_MATH_API_KEY 전용.**
  *
  * 활성 수학반 재원생 전부(전 학년 — 거르는 곳은 소비자의 출제 게이트다).
  * 연락처·성적·상담·수납은 주지 않는다. `total` 은 소비자의 «다 받았나» 검증용.
@@ -34,7 +34,7 @@ export async function GET(req: Request) {
     // 내려가면 안 된다 — admin 클라이언트는 RLS 를 우회한다.
     return NextResponse.json({ error: "tenant not configured" }, { status: 503, headers: NO_STORE_HEADERS });
   }
-  // 지점 스위치(슈퍼관리자 '오늘의 수학 연결', 기본 꺼짐) — 끈 지점의 명단·진도는 나가지 않는다(원장 2026-09-26).
+  // 지점 스위치(슈퍼관리자 '오늘 수학 연결', 기본 꺼짐) — 끈 지점의 명단·진도는 나가지 않는다(원장 2026-09-26).
   // 키가 맞아도 막는다: 연결을 끊는 곳이 한 군데(스위치)여야 한다. 503 = "꺼진 것"(키 오류 401과 구분 — 위와 같은 규약).
   if (!(await isFeatureOptedIn(tenantId, "todays_math"))) {
     return NextResponse.json({ error: "disabled for tenant" }, { status: 503, headers: NO_STORE_HEADERS });

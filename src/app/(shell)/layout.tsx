@@ -42,7 +42,7 @@ import { findNavItem, teacherMenuKeysFor } from "@/lib/navigation";
 import { brandColorVars } from "@/lib/color-utils";
 import { WorkspaceCanvas } from "@/components/workspace/workspace-canvas";
 import { MenuHubPanel } from "@/components/workspace/menu-hub-panel";
-import { getMyMenuVisits } from "@/features/nav/server/visits";
+import { getMyMenuSearchHidden, getMyMenuVisits } from "@/features/nav/server/visits";
 import { topVisitedMenus } from "@/features/nav/menu-visits";
 import { MENU_KEYS } from "@/lib/permissions";
 import { WorkspaceEnabledProvider } from "@/components/workspace/workspace-enabled";
@@ -237,7 +237,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   // 겸직(관리자 계열 + 담당 반)이 '강사뷰' 쿠키를 켜면 view="teacher"라 아래 미니셸을 탄다(권한은 실 role 유지).
   const view = await getShellView();
 
-  // 연결 앱(오늘의 수학 등) — 지점 스위치 ∧ 담당 과목(영어 선생님에겐 안 보인다) 판정은 `getMyConnectedApps` 한 곳.
+  // 연결 앱(오늘 수학 등) — 지점 스위치 ∧ 담당 과목(영어 선생님에겐 안 보인다) 판정은 `getMyConnectedApps` 한 곳.
   // 풀셸은 사이드바·폰 메뉴, 강사 미니셸은 '내 메뉴' 끝에 선다. 아래 다른 조회들과 독립이라 **먼저 출발**시킨다(B4).
   // 학생 미니셸엔 자리가 없고, '다른 강사 뷰'(열람 전용)에선 세우지 않는다 — 출발 라우트는 **보는 사람 자신**으로
   // 로그인시키므로 남의 화면에 그 사람 것처럼 둘 수 없다.
@@ -443,7 +443,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   // `window_mode`를 읽는다 — 행이 없으면 켜짐(지금까지와 같다). 끄면 아래 WorkspaceEnabledProvider가 false라 캔버스가
   // 안 뜨고, 메뉴·링크가 전부 본문 이동이 된다(폰과 같은 길 · 사이드바는 그대로). 강사·학생 미니셸은 원래 창이 없다.
   // 서버에서 읽어 첫 페인트부터 정해진다(깜빡임 없음). 요청 캐시 · 창(iframe) 안은 위 embed 분기라 여기 안 온다.
-  // 연결 앱(오늘의 수학 등) — 슈퍼관리자가 **켠 지점만** 왼쪽 '연결 앱'에 바로가기가 선다(기본 꺼짐, 원장 2026-09-26).
+  // 연결 앱(오늘 수학 등) — 슈퍼관리자가 **켠 지점만** 왼쪽 '연결 앱'에 바로가기가 선다(기본 꺼짐, 원장 2026-09-26).
   // 영어 선생님(담당 과목이 영어뿐)에겐 켜도 안 선다(같은 날). 위에서 먼저 출발시킨 조회를 창 모드와 함께 기다린다(B4).
   // 방식은 셋이다(창 모드 / 단일 화면(이전 화면 유지) / 단일 화면 — 원장 2026-10-01) — `windowMode` = "창 엔진이 있나"(앞 둘).
   //   · 창 엔진이 켜진 방식(창 모드·이전 화면 유지)만 WorkspaceEnabledProvider가 true, 그 안에서 `ShellModeProvider`가 한 화면씩을 고른다.
@@ -453,8 +453,13 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   const windowMode = shellMode !== "single";
   // 왼쪽 '자주 방문한 메뉴' — 계정 기록에서 많이→최근 순 4개(권한 있는 메뉴만). 기록이 없으면 빈 배열이라
   // 사이드바가 기본값으로 떨어진다. ⚠️ 실패해도 화면을 막지 않는다(조회는 fail-soft).
+  // '메뉴 검색' 칸 숨김(계정 설정)은 같은 ui_prefs 한 번을 나눠 읽는다 — 독립이라 함께 기다린다(B4).
+  const [menuVisits, menuSearchHidden] = await Promise.all([
+    getMyMenuVisits().catch(() => ({})),
+    getMyMenuSearchHidden().catch(() => false),
+  ]);
   const frequentKeys = topVisitedMenus(
-    await getMyMenuVisits().catch(() => ({})),
+    menuVisits,
     MENU_KEYS.filter((k) => canAccess(user.systemRole, k, permMatrix)),
     4,
   );
@@ -481,7 +486,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
       {/* 셸 크롬(사이드바·모바일내비·헤더)은 iframe(플로팅 창) 안에선 숨긴다 — 드릴인으로 embed가
           떨어져도 메뉴탭이 이중으로 뜨지 않도록 사전 차단(HideInFrame). 최상위 프레임은 그대로 노출. */}
       {/* 데스크톱(≥1240 + 마우스, `desk:`) = 좌측 사이드바 / 그 외(좁은 폭·터치) = 숨김.
-          크롬 전환 조건을 useIsDesktop(폭+pointer:fine)과 일치시켜, 창 시스템이 꺼지는
+          크롬 전환 조건을 useIsDesktop(폭+any-pointer:fine — 마우스·터치패드가 하나라도)과 일치시켜, 창 시스템이 꺼지는
           와이드 터치에서 "사이드바는 떠 있는데 메뉴가 창으로 안 열리는" 회색지대를 제거. */}
       <HideInFrame>
         <AppSidebar
@@ -496,6 +501,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           canOtherTeacherView={canOtherTeacherView}
           isSuperAdmin={isSuperAdmin}
           frequentKeys={frequentKeys}
+          menuSearchHidden={menuSearchHidden}
           menuLayout={menuLayout}
           isGenericTenant={genericTenant}
           connectedApps={connectedApps}

@@ -6,6 +6,7 @@ import { humanizeDbError } from "@/lib/supabase/db-error";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import type { SystemRole } from "@/lib/permissions";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
+import { logAction } from "@/features/audit/server/log";
 
 export type SaveQuoteState = { error?: string; ok?: boolean; id?: string } | undefined;
 
@@ -80,6 +81,13 @@ export async function saveTuitionQuote(
     if (error) return { error: humanizeDbError(error.message, "저장") };
     // 그 사이 지워졌거나 남의 테넌트 id면 0행 — 조용히 사라지지 않게 알린다.
     if (!data) return { error: "저장할 견적을 찾지 못했습니다 — 목록에서 다시 열어주세요" };
+    // 🔴 금액(총액·할인·추가 항목)은 담지 않는다 — 몇 과목짜리 견적인지만.
+    await logAction({
+      action: "tuition_quote_save",
+      targetType: "tuition_quote",
+      targetLabel: studentName,
+      metadata: { quoteId: data.id, mode: "update", courseCount: courses.length },
+    });
     revalidatePath("/billing");
     return { ok: true, id: data.id };
   }
@@ -91,6 +99,12 @@ export async function saveTuitionQuote(
     .single();
   if (error) return { error: humanizeDbError(error.message, "저장") };
 
+  await logAction({
+    action: "tuition_quote_save",
+    targetType: "tuition_quote",
+    targetLabel: studentName,
+    metadata: { quoteId: data.id, mode: "create", courseCount: courses.length },
+  });
   revalidatePath("/billing");
   return { ok: true, id: data.id };
 }
@@ -107,9 +121,17 @@ export async function deleteTuitionQuote(
   if (!id) return { error: "견적 ID가 누락되었습니다" };
 
   const supabase = await createClient();
-  const { error } = await supabase.from("tuition_quotes").delete().eq("id", id);
+  const { data: removed, error } = await supabase.from("tuition_quotes").delete().eq("id", id).select("student_name");
   if (error) return { error: error.message };
 
+  if (removed?.length) {
+    await logAction({
+      action: "tuition_quote_delete",
+      targetType: "tuition_quote",
+      targetLabel: (removed[0].student_name as string | null) ?? null,
+      metadata: { quoteId: id },
+    });
+  }
   revalidatePath("/billing");
   return { ok: true };
 }

@@ -4,20 +4,21 @@
   max-width: 100%;
 }
 
-@media (max-width: 1239.98px), (pointer: coarse), (pointer: none) {
-  .viewport {
+@media (max-width: 1239.98px), not all and (any-pointer: fine) {
+  /* 마우스 움직임으로 데스크톱 셸이 된 기기(`data-desk`)는 건너뛴다(desk-detect.ts) — :where라 명시도는 그대로. 인쇄하는 동안(`data-print`)은 종전대로. */
+  :where(:root:not([data-desk]), :root[data-print]) .viewport {
     overflow-x: auto;
     overflow-y: hidden;
     overscroll-behavior-x: contain;
     scrollbar-width: none;
   }
-  .viewport::-webkit-scrollbar { display: none; }
-  .content {
+  :where(:root:not([data-desk]), :root[data-print]) .viewport::-webkit-scrollbar { display: none; }
+  :where(:root:not([data-desk]), :root[data-print]) .content {
     width: max-content;
     min-width: 100%;
   }
-  .row::before,
-  .row::after {
+  :where(:root:not([data-desk]), :root[data-print]) .row::before,
+  :where(:root:not([data-desk]), :root[data-print]) .row::after {
     content: "";
     position: absolute;
     inset-block: 0;
@@ -26,14 +27,14 @@
     pointer-events: none;
     opacity: 0;
   }
-  .row::before {
+  :where(:root:not([data-desk]), :root[data-print]) .row::before {
     left: 0;
     background: linear-gradient(to right, var(--background), transparent);
   }
-  .row::after {
+  :where(:root:not([data-desk]), :root[data-print]) .row::after {
     right: 0;
     background: linear-gradient(to left, var(--background), transparent);
   }
-  .row[data-left="true"]::before,
-  .row[data-right="true"]::after { opacity: 1; }
+  :where(:root:not([data-desk]), :root[data-print]) .row[data-left="true"]::before,
+  :where(:root:not([data-desk]), :root[data-print]) .row[data-right="true"]::after { opacity: 1; }
 }

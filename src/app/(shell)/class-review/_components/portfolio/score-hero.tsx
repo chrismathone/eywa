@@ -2,9 +2,13 @@
 
 import { useLayoutEffect, useRef } from "react";
 import { Pill } from "@/components/atoms/pill";
+import { tipProps } from "@/components/hover-tip/tip";
+import { totalBefore } from "@/features/teacher-portfolio/evidence-view";
+import { toneColor } from "@/lib/design/semantic-color";
+import { metricBar } from "@/features/teacher-portfolio/metric-bar";
 import type { ItemId, Metric, StoredPeriod } from "@/features/teacher-portfolio/model/types";
 import {
-  closingLabel, fmtScore, itemColor, itemLabel, itemOf, missingTag, pendingShown, periodMax, scoreColor, scoreScale, shortItems, shownItems,
+  closingLabel, deltaOf, fmtScore, itemColor, itemLabel, itemOf, missingTag, pendingShown, periodMax, scoreColor, scoreScale, shortItems, shownItems,
 } from "@/features/teacher-portfolio/view";
 import { Delta } from "./parts";
 
@@ -16,9 +20,11 @@ import { Delta } from "./parts";
  */
 const MOTION = "duration-700 ease-out motion-reduce:transition-none";
 const BULLET_STRIPES = "repeating-linear-gradient(135deg, var(--color-bg-soft) 0 4px, var(--color-card) 4px 8px)";
+/** 숫자 글자 — 가감 항목은 양수에 '+'를 붙인다(세는 도중에도 같은 규칙이라 '+-1.5'가 보이지 않는다). */
+const numText = (n: number, plus: boolean) => `${plus && n > 0 ? "+" : ""}${n.toFixed(1)}`;
 
 /** 값이 바뀌면 이전 숫자에서 새 숫자로 이어 센다. 움직임 줄이기 설정이면 바로 바꾼다. */
-function useCountTo(value: number | null) {
+function useCountTo(value: number | null, plus = false) {
   const ref = useRef<HTMLSpanElement>(null);
   const shown = useRef<number | null>(value);
   // 레이아웃 단계에서 시작한다 — 새 숫자가 한 프레임 먼저 보였다가 되돌아가지 않게.
@@ -28,7 +34,7 @@ function useCountTo(value: number | null) {
     const el = ref.current;
     if (!el || value === null || from === null || from === value || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const started = performance.now();
-    const at = (k: number) => (from + (value - from) * (1 - (1 - k) ** 3)).toFixed(1);
+    const at = (k: number) => numText(from + (value - from) * (1 - (1 - k) ** 3), plus);
     el.textContent = at(0);
     let frame = requestAnimationFrame(function step(now: number) {
       const k = Math.min(1, (now - started) / 650);
@@ -37,11 +43,12 @@ function useCountTo(value: number | null) {
     });
     // 글자는 건드리지 않는다 — 끊긴 뒤의 값은 React가 이미 써 두었다.
     return () => cancelAnimationFrame(frame);
-  }, [value]);
+  }, [value, plus]);
   return ref;
 }
 
-function ScoreRing({ total, max, onOpen }: { total: number | null; max: number; onOpen: () => void }) {
+/** `before` = 지난달 총점(비교할 수 있을 때만 — `totalBefore`). 지난달 대비 가감은 원 바로 아래(원장 2026-10-16 · 원 안은 폭이 모자라 색 호에 겹친다). */
+function ScoreRing({ total, max, before, onOpen }: { total: number | null; max: number; before: number | null; onOpen: () => void }) {
   // 호는 만점 대비 비율만큼 — 만점이 100점이 아니어도 같은 원을 쓴다.
   const arc = total === null || max <= 0 ? 0 : Math.min(100, Math.max(0, (total / max) * 100));
   const number = useCountTo(total);
@@ -49,7 +56,8 @@ function ScoreRing({ total, max, onOpen }: { total: number | null; max: number; 
   return (
     <div className="flex w-full flex-col items-center gap-4">
       <button type="button" onClick={onOpen} data-total={total ?? "unknown"}
-        aria-label={total === null ? "합계 산출불가. 점수 근거 보기" : `잠정 점수 ${fmtScore(total)}점, ${max}점 만점. 점수 근거 보기`}
+        aria-label={total === null ? "합계 산출불가. 점수 근거 보기"
+          : `잠정 점수 ${fmtScore(total)}점, ${max}점 만점${before === null ? "" : `, ${deltaOf(total, before).label}`}. 점수 근거 보기`}
         className="focus-visible:outline-primary relative size-56 shrink-0 rounded-full focus-visible:outline-2 focus-visible:outline-offset-4">
         <svg viewBox="0 0 240 240" aria-hidden fill="none" className="block size-full">
           <circle cx="120" cy="120" r="94" strokeWidth="34" className="stroke-bg-soft" />
@@ -65,6 +73,7 @@ function ScoreRing({ total, max, onOpen }: { total: number | null; max: number; 
           <small className="mt-2 text-xs">{total === null ? "일부 항목 확인 필요" : `${max}점 만점`}</small>
         </span>
       </button>
+      {total !== null && before !== null ? <p aria-hidden className="-mt-2 flex items-center gap-1 text-xs">지난달 대비 <Delta now={total} before={before} /></p> : null}
       <div className="w-full max-w-64">
         <div aria-hidden className="h-1.5 rounded-full" style={{ background: `linear-gradient(to right, ${scoreColor(0)}, ${scoreColor(50)}, ${scoreColor(100)})` }} />
         <div aria-hidden className="num mt-1.5 flex justify-between text-xs">
@@ -75,30 +84,50 @@ function ScoreRing({ total, max, onOpen }: { total: number | null; max: number; 
   );
 }
 
-function MetricRow({ metric, color, before, tag, legacy, onOpen }: {
-  metric: Metric; color: string; before: number | null | undefined; tag: string | null; legacy: boolean; onOpen: (id: ItemId) => void;
+function MetricRow({ metric, color, before, tag, legacy, axis, closed, onOpen }: {
+  metric: Metric; color: string; before: number | null | undefined; tag: string | null; legacy: boolean; axis: boolean; closed: boolean;
+  onOpen: (id: ItemId) => void;
 }) {
-  const number = useCountTo(metric.value);
-  const pct = metric.value === null || metric.max <= 0 ? 0 : Math.min(100, Math.max(0, (metric.value / metric.max) * 100));
+  const plus = metric.max <= 0; // 가감 항목(만점 0)
+  const number = useCountTo(metric.value, plus);
+  // 가감·음수 항목은 0을 가운데 두고 +는 오른쪽, −는 왼쪽으로 비례해 그린다(원장 2026-10-16 — 모양 계산은 `metric-bar.ts`).
+  const bar = metricBar(metric.value, metric.uncounted ? null : before, metric.max, axis);
+  const signed = bar.signed;
   const label = itemLabel(metric);
+  // 확인 대기 글은 이름 옆 칩으로 눈에 띄게(원장 2026-10-16 *"확인대기는 눈에 띄도록 라벨화"*) — 반영하기 전엔 점수에 들지 않는다.
+  const waiting = metric.id === "satisfaction" ? metric.waiting ?? 0 : 0;
+  // 프리랜서 근태 = 만점(원장 2026-10-16 *"프리랜서 라벨 붙이고 부연설명"*) — 긴 설명은 마우스를 올리면.
+  const freelancer = metric.id === "punctuality" && Boolean(metric.freelancer);
   return (
     <button type="button" onClick={() => onOpen(metric.id)} data-metric-row={metric.id}
-      aria-label={`${label} ${metric.value === null ? (legacy ? "산출불가" : "합계에서 뺌") : `${fmtScore(metric.value)}점`}${tag ? ` (${tag})` : ""}, 근거 보기`}
+      aria-label={`${label} ${metric.value === null ? (legacy ? "산출불가" : "합계에서 제외") : `${fmtScore(metric.value)}점`}${tag ? ` (${tag})` : ""}${waiting ? `, 확인 대기 ${waiting}건` : ""}${freelancer ? ", 프리랜서 만점" : ""}, 근거 보기`}
       className="border-line-faint hover:bg-primary-softer focus-visible:outline-primary flex min-h-28 w-full flex-col justify-center border-b px-5 py-3.5 text-left focus-visible:outline-2">
       <span className="mb-2 flex items-center justify-between gap-2">
-        <span className="text-sm font-bold">{label}{tag ? <small className="ml-1.5 text-xs font-medium">{tag}</small> : null}</span>
+        <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm font-bold">
+          {label}{tag ? <small className="text-xs font-medium">{tag}</small> : null}
+          {/* 마감한 달은 더 반영할 수 없다 — 주의색 대신 회색 '미확인'(누를 일이 없는데 누르라고 하지 않게). */}
+          {waiting ? <Pill color={toneColor(closed ? "inert" : "caution")} className="whitespace-nowrap">{closed ? `미확인 ${waiting}건` : `확인 대기 ${waiting}건`}</Pill> : null}
+          {freelancer ? <span {...tipProps({ title: "프리랜서", lines: ["지각·결근·조퇴를 세지 않고 근태를 만점으로 매깁니다", "프리랜서인지는 직원 정보의 계약구분으로 봅니다"] })}>
+            <Pill color={toneColor("special")} className="whitespace-nowrap">프리랜서</Pill>
+          </span> : null}
+        </span>
         <b className={`num leading-none font-bold whitespace-nowrap ${metric.value === null ? "text-base" : "text-xl"}`}>
-          <span ref={number}>{metric.value === null ? (legacy ? "산출불가" : "제외") : fmtScore(metric.value)}</span>
-          <small className="ml-1 text-xs font-medium">{metric.max > 0 ? `/ ${metric.max}점` : "가감"}</small>
+          <span ref={number}>{metric.value === null ? (legacy ? "산출불가" : "제외") : numText(metric.value, plus)}</span><small className="ml-1 text-xs font-medium">{metric.max > 0 ? `/ ${metric.max}점` : "가감"}</small>
         </b>
       </span>
-      <span className="bg-bg-soft relative block h-2 w-full rounded-full" style={metric.value === null ? { background: BULLET_STRIPES } : undefined}>
-        <span data-bar className={`block h-full rounded-full transition-[width] ${MOTION}`} style={{ width: `${pct}%`, background: color }} />
-        {/* 검은 눈금 = 전월 점수. 값은 아래 증감이 말한다. */}
-        {before !== null && before !== undefined && metric.max > 0 && !metric.uncounted ? (
-          <span aria-hidden className={`bg-foreground ring-card absolute -top-1 h-4 w-[3px] ring-1 transition-[left] ${MOTION}`}
-            style={{ left: `${Math.min(100, Math.max(0, (before / metric.max) * 100))}%` }} />
-        ) : null}
+      <span className="flex items-center gap-1.5">
+        {signed ? <span aria-hidden className="num text-xs leading-none font-bold">−</span> : null}
+        <span className="bg-bg-soft relative block h-2 w-full rounded-full" style={metric.value === null ? { background: BULLET_STRIPES } : undefined}>
+          {/* 가운데 세로선 = 0점. */}
+          {signed ? <span aria-hidden className="bg-line-strong absolute -top-1 left-1/2 h-4 w-px" /> : null}
+          <span data-bar className={`absolute inset-y-0 rounded-full transition-[left,width] ${MOTION}`}
+            style={{ left: `${bar.left}%`, width: `${bar.width}%`, background: color }} />
+          {/* 검은 눈금 = 전월 점수. 값은 아래 증감이 말한다. */}
+          {bar.before !== null ? (
+            <span aria-hidden className={`bg-foreground ring-card absolute -top-1 h-4 w-[3px] ring-1 transition-[left] ${MOTION}`} style={{ left: `${bar.before}%` }} />
+          ) : null}
+        </span>
+        {signed ? <span aria-hidden className="num text-xs leading-none font-bold">+</span> : null}
       </span>
       <span className="mt-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 text-xs">
         <span className="min-w-0">{metric.basis}</span>
@@ -109,15 +138,16 @@ function MetricRow({ metric, color, before, tag, legacy, onOpen }: {
   );
 }
 
-/** 전월 점수 — 만점이 같고 그 달에 잰 항목일 때만 견준다(설정을 바꿔 10점 → 20점이 된 항목의 '+10'은 실적이 아니라 배점 변화다 ·
- *  계산 전이던 달의 0점은 잰 값이 아니다). */
+/** 전월 점수 — 만점이 같고 그 달에 잰 항목일 때만 견준다(10점 → 20점이 된 항목의 '+10'은 배점 변화 · 계산 전이던 달의 0점은 잰 값이 아니다). */
 function beforeOf(previous: StoredPeriod | undefined, m: Metric): number | null | undefined {
   const was = previous ? itemOf(previous, m.id) : undefined;
   return was && was.max === m.max && !was.uncounted ? was.value : undefined;
 }
 
-export function ScoreHero({ period, previous, onOpenMetric, onOpenLedger }: {
+export function ScoreHero({ period, previous, signedIds, onOpenMetric, onOpenLedger }: {
   period: StoredPeriod; previous: StoredPeriod | undefined; onOpenMetric: (id: ItemId) => void; onOpenLedger: () => void;
+  /** 가운데 축(0 가운데)으로 그릴 항목 — 보이는 달 전체로 정한다(가감 · 어느 달이든 음수). */
+  signedIds: ReadonlySet<string>;
 }) {
   const items = shownItems(period);
   const max = periodMax(period);
@@ -126,6 +156,9 @@ export function ScoreHero({ period, previous, onOpenMetric, onOpenLedger }: {
   const pending = pendingShown(period).map(itemLabel);
   // 2026-10-13 전에 저장된 달 — 설정 사본이 없고, 산출불가 규칙이 그때 것이다.
   const legacy = !period.evaluation;
+  // 지난달 = 바로 앞 달(보드가 고른다) — 총점 가감은 만점이 같을 때만(`totalBefore`).
+  const before = totalBefore(period, previous);
+  const lastMonth = !previous ? "기록 없음" : previous.total === null ? "산출불가" : `${fmtScore(previous.total)} / ${periodMax(previous)}점`;
   return (
     <div className="bg-card shadow-card grid min-w-0 grid-cols-1 overflow-hidden rounded-2xl lg:grid-cols-[minmax(17rem,0.72fr)_minmax(0,1.8fr)]">
       <section className="border-line flex min-w-0 flex-col gap-4 border-b p-5 lg:border-r lg:border-b-0">
@@ -133,9 +166,9 @@ export function ScoreHero({ period, previous, onOpenMetric, onOpenLedger }: {
           <h3 className="text-base font-bold">기간 평가 점수</h3>
           <Pill color={period.closing.closedAt ? "neutral" : "blue"}>{closingLabel(period)}</Pill>
         </div>
-        <ScoreRing total={period.total} max={max} onOpen={onOpenLedger} />
+        <ScoreRing total={period.total} max={max} before={before} onOpen={onOpenLedger} />
         <dl className="grid gap-2 text-xs">
-          {([["합계에 든 항목", `${period.knownCount} / ${items.length}개`], ["항목 점수 합계", `${period.knownScore.toFixed(1)} / ${period.knownMax}점`], ["만점", `${max}점`]] as const).map(([k, v]) => (
+          {([["합계에 든 항목", `${period.knownCount} / ${items.length}개`], ["항목 점수 합계", `${period.knownScore.toFixed(1)} / ${period.knownMax}점`], ["만점", `${max}점`], ["지난달 점수", lastMonth]] as const).map(([k, v]) => (
             <div key={k} className="flex justify-between gap-2"><dt>{k}</dt><dd className="num font-bold whitespace-nowrap">{v}</dd></div>
           ))}
         </dl>
@@ -158,7 +191,7 @@ export function ScoreHero({ period, previous, onOpenMetric, onOpenLedger }: {
         <h3 className="px-5 pt-5 pb-1 text-base font-bold">항목별 점수 <span className="num text-xs font-medium">{items.length}개 · {max}점</span></h3>
         <div className="sm:[&>*]:border-line-faint grid min-w-0 grid-cols-1 sm:grid-cols-2 sm:[&>*:nth-child(odd)]:border-r">
           {items.map((m) => (
-            <MetricRow key={m.id} metric={m} color={itemColor(m, items)} before={beforeOf(previous, m)} tag={missingTag(m, period)} legacy={legacy} onOpen={onOpenMetric} />
+            <MetricRow key={m.id} metric={m} color={itemColor(m, items)} before={beforeOf(previous, m)} tag={missingTag(m, period)} legacy={legacy} axis={signedIds.has(m.id)} closed={Boolean(period.closing.closedAt)} onOpen={onOpenMetric} />
           ))}
         </div>
       </section>

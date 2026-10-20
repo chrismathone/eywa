@@ -48,7 +48,7 @@ export function PreviewCard({ saved, draft, preview }: { saved: EvaluationConfig
               })}
             </tbody>
           </table>
-          <p className="mt-2 text-xs">바꾼 설정의 만점 합계 {fmt(max)}점(켠 지표 기준 · ‘합계에서 빼기’로 빠진 지표가 있으면 강사마다 더 작다).</p>
+          <p className="mt-2 text-xs">바꾼 설정의 만점 합계 {fmt(max)}점(켠 지표 기준 · ‘합계에서 제외’로 빠진 지표가 있으면 강사마다 더 작다).</p>
         </div>
       ) : (
         <p className="text-sm">아직 미리볼 집계가 없습니다. 직원 포트폴리오를 한 번 집계하면 여기서 바로 비교할 수 있습니다.</p>

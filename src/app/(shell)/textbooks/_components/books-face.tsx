@@ -11,6 +11,7 @@ import { CoverThumb } from "./cover-thumb";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
 import { skillAreaColorOf, skillAreaLabelOf } from "@/features/owner/skill-areas";
 import type { TextbookListItem } from "@/features/textbooks/types";
+import type { TextbookSubject } from "@/features/textbooks/faces";
 
 /**
  * 교재 면 — 툴바(검색·구분 필터) + 표.
@@ -29,6 +30,8 @@ export function BooksFace({
   page,
   pageSize,
   skillAreas,
+  subject,
+  subjectOptions,
   canWrite,
   canImport = false,
 }: {
@@ -37,6 +40,10 @@ export function BooksFace({
   page: number;
   pageSize: number;
   skillAreas: SkillAreaSetting[];
+  /** 지금 보는 과목 — 등록하면 이 과목 교재가 된다. */
+  subject: TextbookSubject;
+  /** 과목 전환 — 라벨은 서버가 학원설정에서 읽어 준다. */
+  subjectOptions: { key: TextbookSubject; label: string }[];
   canWrite: boolean;
   /** 엑셀 가져오기(교재·차수) — 서버가 올리기 주소와 같은 `canManageTenant`로 정한 값. */
   canImport?: boolean;
@@ -46,6 +53,8 @@ export function BooksFace({
   const [open, setOpen] = useState<{ mode: "create" } | { mode: "edit"; id: string } | null>(null);
 
   const area = sp.get("area") ?? "";
+  // 구분(영역) 축이 없는 과목(수학)은 필터·열을 감춘다 — 전부 '미지정'인 열은 정보가 0이다.
+  const hasAreas = skillAreas.length > 0;
   const q = sp.get("q") ?? "";
 
   function go(next: Record<string, string | null>) {
@@ -84,6 +93,19 @@ export function BooksFace({
         {/* 엑셀 가져오기 — 검색과 같은 줄(원장 2026-09-29 통일 — 이름은 ExcelMenu 한 곳). */}
         {canImport ? <ExcelMenu importKind="textbooks" /> : null}
 
+        <ToolbarSegment label="과목">
+          {subjectOptions.map((o) => (
+            <ToolbarSegmentItem
+              key={o.key}
+              active={subject === o.key}
+              // 과목이 바뀌면 구분 필터는 그 과목의 것이 아니므로 함께 비운다.
+              onClick={() => go({ subject: o.key === "english" ? null : o.key, area: null })}
+            >
+              {o.label}
+            </ToolbarSegmentItem>
+          ))}
+        </ToolbarSegment>
+        {hasAreas ? (
         <ToolbarSegment label="구분" wrap>
           <ToolbarSegmentItem active={area === ""} onClick={() => go({ area: null })}>
             전체
@@ -94,6 +116,7 @@ export function BooksFace({
             </ToolbarSegmentItem>
           ))}
         </ToolbarSegment>
+        ) : null}
       </Toolbar>
       {canWrite ? (
         <ToolbarButton variant="primary" className="shrink-0" onClick={() => setOpen({ mode: "create" })}>
@@ -111,7 +134,7 @@ export function BooksFace({
           <table className="w-full border-collapse text-xs [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-l-line-faint">
             <colgroup>
               <col style={{ width: 300 }} />
-              <col style={{ width: 96 }} />
+              {hasAreas ? <col style={{ width: 96 }} /> : null}
               <col style={{ width: 96 }} />
               <col style={{ width: 72 }} />
               <col style={{ width: 96 }} />
@@ -120,7 +143,7 @@ export function BooksFace({
             <thead>
               <tr className="bg-bg-soft text-text-dim text-center text-xs">
                 <th className="rounded-l-md py-1.5 pl-2 text-left font-bold">교재</th>
-                <th className="py-1.5 font-bold">구분</th>
+                {hasAreas ? <th className="py-1.5 font-bold">구분</th> : null}
                 <th className="py-1.5 font-bold">페이지/시간</th>
                 <th className="py-1.5 font-bold">차수</th>
                 <th className="py-1.5 font-bold" title="진도·과제가 하나라도 적힌 차수 수">
@@ -147,6 +170,7 @@ export function BooksFace({
                         </span>
                       </button>
                     </td>
+                    {hasAreas ? (
                     <td className="py-1.5 text-center">
                       {r.skillArea ? (
                         <Pill color={known ? skillAreaColorOf(skillAreas, r.skillArea) : "neutral"}>{label}</Pill>
@@ -154,6 +178,7 @@ export function BooksFace({
                         <span className="text-text-faint text-xs">미지정</span>
                       )}
                     </td>
+                    ) : null}
                     <td className="num py-1.5 text-center">{r.pageTime ?? <span className="text-text-faint">—</span>}</td>
                     <td className="num py-1.5 text-center">{r.sessionCount > 0 ? r.sessionCount : <span className="text-text-faint">—</span>}</td>
                     {/* 🔴 건수를 **모르면**(조회 실패) 숫자 대신 '?' — `0/20`은 "하나도 안 적었다"는 거짓말이다. */}
@@ -176,7 +201,8 @@ export function BooksFace({
                           ?
                         </span>
                       ) : r.planCount > 0 ? (
-                        `${r.planCount}개 반`
+                        // 수학은 반 자리 + 학생 자리를 함께 센다 — '반'이라 부르면 거짓이다.
+                        subject === "math" ? `${r.planCount}곳` : `${r.planCount}개 반`
                       ) : (
                         <span className="text-text-faint">—</span>
                       )}
@@ -208,6 +234,7 @@ export function BooksFace({
           mode={open.mode}
           textbookId={open.mode === "edit" ? open.id : null}
           skillAreas={skillAreas}
+          subject={subject}
           canWrite={canWrite}
           planCount={open.mode === "edit" ? (rows.find((r) => r.id === open.id)?.planCount ?? null) : null}
           onClose={() => setOpen(null)}

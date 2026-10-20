@@ -51,6 +51,9 @@ import { BELL_ANCHOR_ATTR, ParentReplyOverlay } from "@/features/classnote-reply
 import { useReplyTargets } from "@/features/classnote-reply/components/use-reply-targets";
 import { ParentNotificationRow } from "@/features/classnote-reply/components/parent-notification-row";
 import { isParentMessageNotification } from "@/features/classnote-reply/notification-match";
+import type { StaffTaskSummary } from "@/features/staff-tasks/kinds";
+import { BellTaskRow } from "@/features/staff-tasks/components/bell-task-row";
+import { StaffTaskDialog, type StaffTaskDialogTarget } from "@/features/staff-tasks/components/staff-task-dialog";
 
 const POLL_MS = 60_000;
 
@@ -107,6 +110,9 @@ export function NotificationBell() {
   }, []);
   // 받은함/보관함(0125a) — 보관은 벨에서 치우되 나중에 볼 수 있는 안전판(삭제는 영구).
   const [view, setView] = useState<NotificationView>("active");
+  // 할 일(0377a) — 목록 응답에 실려 온다(읽음·보관 응답엔 없어서 마지막 값을 유지). 창은 벨 밖에 뜬다.
+  const [tasks, setTasks] = useState<StaffTaskSummary | null>(null);
+  const [taskTarget, setTaskTarget] = useState<StaffTaskDialogTarget | null>(null);
   const viewRef = useRef<NotificationView>("active");
   // 목록 크기 — 배지는 안 읽은 알림 전체를 세는데 목록은 잘려 있다. '더 보기'로 늘린다(F17). 뷰를 바꾸면 20으로.
   const [limit, setLimit] = useState(NOTIFICATION_LIST_LIMIT);
@@ -156,7 +162,7 @@ export function NotificationBell() {
 
   // seq를 발급하고, 응답 도착 시 그 seq가 아직 최신일 때만 반영하는 공용 러너.
   const run = useCallback(
-    (fn: () => Promise<{ unread: number; items: NotificationItem[] }>) => {
+    (fn: () => Promise<{ unread: number; items: NotificationItem[]; tasks?: StaffTaskSummary }>) => {
       const seq = ++reqRef.current;
       startTransition(async () => {
         try {
@@ -164,6 +170,7 @@ export function NotificationBell() {
           if (seq === reqRef.current) {
             setItems(res.items);
             setUnread(res.unread);
+            if (res.tasks) setTasks(res.tasks);
             // 읽음처리 응답에도 태우지만 read=true라 대상에서 걸러짐. 보관함 뷰의 목록으로는
             // 팝업을 쏘지 않는다(치워둔 알림이 다시 울리면 보관이 무의미).
             if (viewRef.current === "active") maybeAlert(res.items);
@@ -239,6 +246,11 @@ export function NotificationBell() {
     // 목록의 답글 자격 조회 전에도 즉시 창을 연다. 서버가 내 알림 → 원문·첨부·답글 권한을 확인한다.
     if (isParentMessageNotification(n.type)) {
       setReplyOpen(n.id);
+      return;
+    }
+    // 늦은 할 일 요약 → 늦은 할 일 목록(현황 권한이 있을 때 · 없으면 링크 그대로).
+    if (n.type === "staff_task_digest" && tasks?.canMonitor) {
+      setTaskTarget({ scope: "all", filter: "late" });
       return;
     }
     if (!n.link) return;
@@ -389,6 +401,7 @@ export function NotificationBell() {
           {/* 휴대폰(웹 푸시) 알림 — **셔틀 토글을 켠 계정에만** 뜬다(0188a). 위 컴퓨터 알림과 별개 경로:
             그쪽은 창이 열려 있을 때만이고, 이쪽은 브라우저를 닫아도 잠금화면에 뜬다. */}
           {view === "active" ? <MobilePushRow /> : null}
+          {view === "active" && tasks ? <BellTaskRow summary={tasks} onOpen={(target) => { setMenuOpen(false); setTaskTarget(target); }} /> : null}
           {items.length === 0 ? (
             <div className="text-text-dim px-2 py-8 text-center text-xs">
               {view === "archived"
@@ -453,6 +466,7 @@ export function NotificationBell() {
           }}
         />
       ) : null}
+      {taskTarget ? <StaffTaskDialog target={taskTarget} onClose={() => { setTaskTarget(null); refresh(); }} /> : null}
       {/* 중요 알림 화면 중앙 팝업 — 벨 드롭다운을 안 열어도 확실히 보이게(원장 2026-07-15).
         '바로 가기'도 openItem을 태워 같은 답글창으로 이어진다. */}
       <NotificationAlertDialog

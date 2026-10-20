@@ -25,6 +25,7 @@ import { emptyAdjustments } from "@/features/payroll/payslip-view";
 import { PAYSLIP_DENIED_MSG } from "@/features/payroll/payslip-access";
 import { canViewPayslipNow } from "@/features/payroll/server/payslip-gate";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { hasFreelancePart } from "@/features/staff/employment";
 
 /**
  * 급여명세서 데이터 조립 — **원장(master) 전용**.
@@ -152,8 +153,9 @@ export async function getPayslipData(teacherId: string, period: string): Promise
    * 🔴 프리랜서 = 출석부 실급여 합계(원장 2026-10-06). 판정은 출석부가 실급여 열을 세우는 것과 같은 값(`users.employment_type`)이다
    *    — 이력서의 표시용 계약 형태(`rContract.employmentType`)로 가르지 않는다(둘이 다르면 화면과 명세서가 갈린다).
    *    `computeSheetTuition`이 null이면(프리랜서 아님 · 회차 정산 꺼짐) 종전 티어 정산으로 떨어진다.
+   *    혼합(근로 + 용역, 2026-10-16)도 이 갈래다 — 용역 학년(대상 학년) 학생만 산정한다(`employment.ts`).
    */
-  const isFreelancer = (teacher.employment_type as string | null) === "프리랜서";
+  const isFreelancer = hasFreelancePart(teacher.employment_type as string | null);
   const tuitionOf = async () => {
     const sheet = isFreelancer
       ? await computeSheetTuition({ tenantId: user.tenantId, teacherId, period, penaltyPoints: penalty, contractRates: baseRates })

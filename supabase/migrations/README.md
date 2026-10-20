@@ -1,5 +1,37 @@
 # Supabase 마이그레이션 — 적용 방식·순서·현재 상태
 
+## 2026-10-20 업무 처리 확인 4~5단계 (0378a · 0379a · 0380a — 순서대로 · ✅ 운영 적용 2026-10-20 · CLI)
+
+0378a = 공통 보강(종류별 맞춤 · `open_task` 바꿈 · 연결표) + 진도 이상 · 결석 확인. 0379a = 영상 업로드 확인 · 미배정 영상 · 미발송(보고서 트리거 넓힘). 0380a = 전자결재 차례 · 퇴원보고서 · 도움말 + 알림 연결 트리거. 셋 다 다시 돌려도 같다. **앱보다 먼저**(앱이 부르는 함수 `staff_task_open_absences` · `staff_task_sync_unassigned_videos` · `staff_task_sync_unsent`와 연결표 — 없으면 앱은 오류를 남기고 할 일 연결 없이 그대로 돈다). `staff_tasks_sync`는 인자가 둘로 바뀐다(`p_kinds` 기본 전부). 되돌리기 = 각 파일 머리 주석.
+
+## 2026-10-20 업무 처리 확인 (0377a · ✅ 운영 적용 2026-10-20 · CLI)
+
+`0377a_staff_tasks.sql`은 할 일 표 셋(정책 0개 = 서버 전용)·`notifications.task_id`·보고서/상담 트리거·`staff_tasks_sync`·`staff_task_counts`를 만들고 `notify_report_send_failed`를 같은 본문 + 할 일 연결로 바꾼다(할 일이 실패해도 알림은 나간다). 다시 돌려도 같다. **앱보다 먼저** — 벨은 `task_id`를 따로 읽어 칸이 없어도 목록은 뜬다. 되돌리기 = 트리거 둘·함수·표·칸 제거 + 알림 함수를 0306a 본문으로.
+
+## 2026-10-19 원생 형제 짝 (0376a · ✅ 운영 적용 2026-10-19 · 트리거·권한 확인)
+
+`0376a_student_siblings.sql`은 `student_siblings`(짝 한 줄 `student_a < student_b` · `linked` = 사람이 형제로 지정 true / 자동 판정을 끈 짝 false)를 만든다. 자동 판정(학부모 휴대폰 같음 · 학부모 이름 같고 연락처가 부딪히지 않음)은 앱이 볼 때마다 계산해 저장하지 않는다. 정책 0개 = 의도(서버 키만 — 문은 앱의 원생 열람·관리 권한). 같은 학원 원생끼리만(트리거). 기존 표는 건드리지 않는다. 앱 배포와 순서 무관 — 표가 없으면 학생 상세 프로필엔 자동 판정 형제만 보이고 학생 수정 화면의 형제 칸이 안 뜬다(저장도 형제를 건드리지 않는다).
+
+## 2026-10-19 시간표 메모 시트 (0374a · ✅ 운영 적용 2026-10-19 · 침산 원본 넣음 version 1)
+
+`0374a_timetable_memo_sheets.sql`은 `timetable_memo_sheets`(지점 × 과목 한 장 · 엑셀 판 내용 · version)를 만든다. 정책 0개 = 의도(서버 키만 — 화면 문은 앱 `memoSheetAccess`). 기존 표는 건드리지 않는다. 앱 배포와 순서 무관 — 표가 없으면 영어 통합뷰 오른쪽 시트 판에 "불러오지 못했습니다" 안내만 뜨고 시간표는 그대로다. 적용 뒤 침산 원본(구글 시트 '퇴원생 명단')은 `ENV_FILE=.env.local npx tsx scripts/_oneoff/seed-chimsan-memo-sheet.mts`(미리 보기) → `--apply`로 넣는다(이미 판이 있으면 `--force` 없이는 안 덮는다).
+
+## 2026-10-17 오늘 수학 결과 만점 칸 (0372a · 운영 적용 완료)
+
+`0372a_todays_math_result_max_score.sql`은 `todays_math_test_results.max_score`(시험지 만점 · nullable)를 더하고 반영 함수를 교체한다(0371a 본문 + 만점 · 범위 밖 만점은 null). 같은 날 운영 DB에 CLI로 적용 — 그 전에 운영 DB 트랜잭션 안에서 표본 반영 후 롤백으로 확인. 성적관리 월말평가 '채우기'가 만점이 같을 때만 쓰는 값이다.
+
+## 2026-10-17 오늘 수학 채점 결과 보관 (0371a · 운영 적용 완료)
+
+`0371a_todays_math_test_results.sql`은 `todays_math_test_results`(오늘 수학 시험 × 학생의 마지막 채점)·`todays_math_result_days`(날짜별 반영 지문) 표와 서버 전용 함수 `todays_math_apply_result_day`(그날 행을 한 거래로 갈아끼움)를 만든다. 정책 0개 = 의도(서버 키만). 2026-10-17 운영 DB에 CLI로 적용 — 그 전에 같은 SQL을 운영 DB 트랜잭션 안에서 실행·표본 반영(결시 점수 제거 · 없는 학생 건너뜀 · 날짜 불일치 거절 · 빈 날 비우기 · service_role 실행)·롤백으로 확인했다. 앱(`/api/cron/todays-math-results`)은 표가 없으면 "준비 전"으로 건너뛴다.
+
+## 2026-10-16 자동작성 원문 보관 (0370a)
+
+`0370a_ment_ai_drafts.sql`은 `ment_ai_drafts` 표(보고서당 한 줄 · 서버 전용 · 정책 0개 = 의도)를 만든다. 선생님이 자동작성 글을 고쳐 저장하면 원스크린 저장이 응답 뒤에 그 자동작성 원문을 남기고, 주간 말투 프로파일 빌드가 원문 ↔ 최종을 견줘 '늘 고치는 것'을 지침에 싣는다. 앱 배포와 순서 무관 — 표가 없으면 기록·조회 모두 조용히 건너뛴다. 소급 없음(적용한 날부터 쌓인다).
+
+## 2026-10-15 퇴원보고서 처리 = 수강 줄에도 상세사유 메모 (0369a)
+
+`0369a_withdrawal_report_end_memo.sql`은 퇴원보고서 전이 함수 두 개(`transition_withdrawal_report`·`_v1`)가 수강 줄을 닫는 한 줄에 `withdrawal_memo`(보고서 상세사유 글)를 더한다(본문은 그대로 · 그 줄 글자만 · 바꿀 줄이 정확히 하나가 아니면 중단 · 이미 바뀌었으면 건너뜀 · 소유자·권한·security invoker 그대로). 함께 수강 보호 트리거(`student_status_private.guard_enrollment`, 20261015160100)의 '날짜 수정' 갈래에서 세부·메모 거절에 `and not student_status_private.allowed()`를 붙인다 — 종료일이 잡힌 수강을 같은 사유로 다시 종료하며 메모를 바꾸면 원장도 막혔다(원생 상태 변경 권한이 있으면 통과 · 날짜만 고칠 수 있는 사람은 그대로 막힘). 앱 배포와 순서 무관. 빈 DB 순서 의존은 아래 0367a와 같다(타임스탬프 파일들을 다 깐 뒤 다시 돌린다).
+
 ## 2026-10-15 퇴원·수강 종료 사유 2단계 (0367a)
 
 `0367a_withdrawal_reason_details.sql`은 `enrollments.withdrawal_detail`·`withdrawal_memo` 두 칸(nullable · 기본값 없음)을 더하고, 퇴원보고서 전이 함수 두 개(`transition_withdrawal_report`·`_v1`)의 사유 목록에 새 대분류 다섯을 더한다(본문은 그대로 · 목록 글자만 · 이미 바뀌었으면 건너뛰고, 바꿀 목록이 없으면 중단). **앱보다 먼저** 적용한다 — 부분 종료 저장과 수강 종료 되돌리기가 새 칸을 쓴다. 적용 뒤 앱 배포 → `node --env-file=.env.local scripts/_oneoff/withdrawal-reason-details-backfill.mjs`(미리 보기) → `--apply`.

@@ -106,7 +106,8 @@ describe("② 원스크린 저장 관문이 이 판정을 쓴다", () => {
   });
   it("🔴 마감이 고른 것과 다르게 저장된 줄은 발송하지 않는다(멘트·미리보기가 말한 마감과 카드가 갈린 채 나가지 않게)", () => {
     const send = src.slice(src.indexOf("export async function saveAndQueueClassnote("));
-    const guard = send.indexOf("if (saved.videoHomeworkDue?.fellBack || saved.videoHomeworkDue?.kept)");
+    // 장부에서 취소된 숙제를 지킨 줄도 같은 문으로 막는다(원장 2026-10-16, cancels.ts — 멘트가 영상 숙제를 말하고 있을 수 있다).
+    const guard = send.indexOf("if (saved.videoHomeworkCancelled || saved.videoHomeworkDue?.fellBack || saved.videoHomeworkDue?.kept)");
     expect(guard).toBeGreaterThan(-1);
     expect(guard).toBeLessThan(send.indexOf("classnoteSendOn(settings)"));
     // 막을 때 옛 대기분도 회수한다(옆 게이트와 같다 — 안내 직후 워커가 게시하지 않게)

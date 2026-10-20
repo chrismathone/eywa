@@ -75,9 +75,10 @@ describe("actual student actions reject status changes before side effects", () 
     q.maybeSingle = vi.fn(async () => ({ data: { start_date: "2026-01-01", student_id: "student", class_id: "class" }, error: null }));
     q.then = (done: (value: unknown) => unknown) => Promise.resolve({ error: null }).then(done);
     m.client.mockResolvedValue({ from: vi.fn(() => q) });
-    const fd = form(); fd.set("date", "2026-10-15");
+    // 사유는 고른다(원장 2026-10-15 *"기타는 모든 곳을 일치하게"*) — 세부·메모도 그 수강 줄에.
+    const fd = form(); fd.set("date", "2026-10-15"); fd.set("reason", "other"); fd.set("memo", "개인 사정");
     expect(await endSingleEnrollment(undefined, fd)).toBeUndefined();
-    expect(m.update).toHaveBeenCalledWith({ end_date: "2026-10-15", withdrawal_reason: "other" });
+    expect(m.update).toHaveBeenCalledWith({ end_date: "2026-10-15", withdrawal_reason: "other", withdrawal_detail: null, withdrawal_memo: "개인 사정" });
     expect(m.audit).toHaveBeenCalledWith(expect.objectContaining({ action: "enrollment_end", metadata: expect.objectContaining({ studentId: "student", classId: "class" }) }));
   });
   it("authorized single-end rejects a forged student id before writes or audit", async () => {
@@ -86,8 +87,16 @@ describe("actual student actions reject status changes before side effects", () 
     for (const key of ["select", "eq"]) q[key] = vi.fn(() => q);
     q.maybeSingle = vi.fn(async () => ({ data: { start_date: "2026-01-01", student_id: "actual-student", class_id: "class" }, error: null }));
     m.client.mockResolvedValue({ from: vi.fn(() => q) });
-    expect((await endSingleEnrollment(undefined, form()))?.error).toBeTruthy();
+    const fd = form(); fd.set("reason", "graduated");
+    expect((await endSingleEnrollment(undefined, fd))?.error).toBe("수강 기록을 찾을 수 없습니다");
     expect(m.update).not.toHaveBeenCalled(); expect(m.audit).not.toHaveBeenCalled();
+  });
+  it("single-end without a reason (or '기타' without a memo) is rejected before reads or writes", async () => {
+    m.allowed = true;
+    expect((await endSingleEnrollment(undefined, form()))?.error).toBe("종료 사유를 골라 주세요.");
+    const fd = form(); fd.set("reason", "other"); fd.set("memo", "  ");
+    expect((await endSingleEnrollment(undefined, fd))?.error).toBeTruthy();
+    expect(m.client).not.toHaveBeenCalled(); expect(m.update).not.toHaveBeenCalled(); expect(m.audit).not.toHaveBeenCalled();
   });
   it("merged reason detail argument and expected student binding coexist", async () => {
     const q: Record<string, unknown> = {};

@@ -117,10 +117,53 @@ export function expandPlans(input: {
   // 칸 안 순서를 고정한다 — 구분 → 교재명. 호출마다 줄 순서가 흔들리면 화면이 깜빡이고 비교가 안 된다.
   for (const key of Object.keys(byCell)) {
     byCell[key]!.sort((a, b) =>
-      a.skillArea !== b.skillArea ? a.skillArea.localeCompare(b.skillArea) : a.title.localeCompare(b.title, "ko"),
+      a.skillArea !== b.skillArea
+        ? a.skillArea.localeCompare(b.skillArea)
+        : a.title !== b.title
+          ? a.title.localeCompare(b.title, "ko")
+          : a.lessonNo - b.lessonNo, // 한 교시에 같은 교재 1·2차수 — 차수 순
     );
   }
   return byCell;
+}
+
+/** 한 칸에 들어갈 차수 하나(진도·과제) — 실제 줄 **한 줄**이 된다. */
+export type CellLesson = { progress: string | null; homework: string | null };
+/** 한 칸(날짜·교시)에 들어갈 같은 교재 차수들(차수 순). */
+export type CellLessons = { date: string; slot: string; lessons: CellLesson[] };
+
+/**
+ * 가져오기·미룸·당김의 쓰기 대상 — 한 교재의 계획 줄을 **칸별 차수 목록**으로 묶는다(차수 순).
+ *
+ * 🔑 **차수 하나 = 실제 줄 하나**(원장 2026-10-19 *"차시마다 한줄씩 들어가야지 … 수업시간 25분 이렇게
+ *    되어있어서 제대로 안들어간걸로됌"*). 2026-10-16엔 한 교시의 1·2차수를 `A / B` 한 줄로 이었는데, 그러면
+ *    `25분` 줄 하나에 차수가 둘 들어가 시간이 틀린다. 쓰기는 [`applyCellLessons`](./server/apply-cell-lessons.ts).
+ * 🔑 칸은 날짜·교시 오름차순(동시 호출도 같은 순서로 락을 잡는다 — 0266a 교착 회피 규약).
+ * @param lines 한 교재(시기·구분·교재명이 같은) 줄들.
+ */
+export function groupCellLessons(
+  lines: readonly Pick<PlannedLine, "date" | "slotStart" | "lessonNo" | "progress" | "homework">[],
+): CellLessons[] {
+  const byCell = new Map<string, Pick<PlannedLine, "date" | "slotStart" | "lessonNo" | "progress" | "homework">[]>();
+  for (const l of lines) {
+    const key = `${l.date}|${l.slotStart}`;
+    byCell.set(key, [...(byCell.get(key) ?? []), l]);
+  }
+  return [...byCell.values()]
+    .map((cell) => {
+      const sorted = [...cell].sort((a, b) => a.lessonNo - b.lessonNo);
+      return {
+        date: sorted[0]!.date,
+        slot: sorted[0]!.slotStart,
+        lessons: sorted.map((l) => ({ progress: blankToNull(l.progress), homework: blankToNull(l.homework) })),
+      };
+    })
+    .sort((a, b) => (a.date === b.date ? a.slot.localeCompare(b.slot) : a.date.localeCompare(b.date)));
+}
+
+function blankToNull(v: string | null | undefined): string | null {
+  const t = String(v ?? "").trim();
+  return t === "" ? null : t;
 }
 
 /** 배정된 교재들의 차수표 — 실제 진도 문구 → 차수를 되짚는 재료(plan-compare). */

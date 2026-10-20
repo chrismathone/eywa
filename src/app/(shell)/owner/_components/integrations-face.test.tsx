@@ -1,7 +1,12 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const m = vi.hoisted(() => ({ slack: vi.fn() }));
+const m = vi.hoisted(() => ({ slack: vi.fn(), mathOn: vi.fn() }));
+vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => ({ tenantId: "t1" }) }));
+vi.mock("@/lib/license/server", () => ({ isFeatureOptedIn: m.mathOn }));
+vi.mock("./todays-math-card", () => ({ TodaysMathCard: () => <p>오늘 수학 카드</p> }));
+vi.mock("./todays-math-menus-card", () => ({ TodaysMathMenusCard: () => <p>오늘 수학 사용 메뉴</p> }));
+vi.mock("@/lib/auth/super-admin", () => ({ isCurrentUserSuperAdmin: async () => false }));
 vi.mock("@/features/slack/server/gate", () => ({ slackGate: m.slack }));
 vi.mock("./slack-card", () => ({ SlackCard: () => <p>슬랙 카드</p> }));
 vi.mock("./sheets-face", () => ({ SheetsFace: () => <p>시트 면</p> }));
@@ -19,7 +24,10 @@ const face = (disabled: string[], sub?: string, modulesOn = { makeedu: true, she
   sub, settings: { modules: { disabled }, operations: { subjects: [] } } as unknown as TenantSettings, modulesOn, page: 1, isEmbed: false,
 });
 
-beforeEach(() => m.slack.mockResolvedValue({ error: "꺼짐" }));
+beforeEach(() => {
+  m.slack.mockResolvedValue({ error: "꺼짐" });
+  m.mathOn.mockResolvedValue(false);
+});
 
 describe("연동 면의 내부 탭 — 숙제영상 드라이브는 ClassNote 기능이 있는 지점에만", () => {
   it("ClassNote 기능이 켜져 있으면 탭이 서고, 고른 탭만 그린다", async () => {
@@ -48,5 +56,19 @@ describe("연동 면의 내부 탭 — 숙제영상 드라이브는 ClassNote �
     expect(screen.getByText("이 학원은 켜진 외부 연동이 없습니다")).toBeInTheDocument();
     // 꺼진 연동의 이름을 늘어놓지 않는다
     expect(screen.queryByText(/숙제영상/)).toBeNull();
+  });
+});
+
+describe("연동 면의 내부 탭 — 오늘 수학(개발 중 기능 스위치, 2026-10-17)", () => {
+  it("지점 라이선스가 켜진 학원에만 탭이 서고, 고르면 카드를 그린다", async () => {
+    m.mathOn.mockResolvedValue(true);
+    render(await face([], "todaysMath"));
+    expect(screen.getByRole("link", { name: "오늘 수학" })).toHaveAttribute("href", "/owner?tab=sheets&sub=todaysMath");
+    expect(screen.getByText("오늘 수학 카드")).toBeInTheDocument();
+  });
+  it("🔴 라이선스가 꺼진 학원엔 탭도 카드도 없다 — 주소로 골라도 다른 탭으로", async () => {
+    render(await face([], "todaysMath"));
+    expect(screen.queryByText("오늘 수학")).toBeNull();
+    expect(screen.queryByText("오늘 수학 카드")).toBeNull();
   });
 });

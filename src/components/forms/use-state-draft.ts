@@ -23,17 +23,24 @@ const REBASE_WINDOW_MS = 1000;
  *
  * @param snapshot   현재 직렬화 가능한 상태 스냅샷(예: { student, courses, extras, discounts }).
  * @param hasContent 빈 폼 판정 — true일 때만 저장·배너(아무것도 안 친 초기값 오탐 방지).
+ * @param autoRestore 안내 없이 되살릴 때 부르는 함수 — `restoreSince`가 시각을 줄 때만 쓴다.
+ * @param restoreSince 이 시각 뒤에 저장된 초안이면 `autoRestore`로 바로 되살린다 — 녹음이 걸린 작성 화면으로 돌아왔을 때 그
+ *   녹음을 누른 시각(recording-resume.ts `recordingSince`). 그보다 오래된 초안은 종전대로 복구 안내.
  */
 export function useStateDraft<T>({
   scope,
   snapshot,
   enabled = true,
   hasContent,
+  autoRestore,
+  restoreSince,
 }: {
   scope: string;
   snapshot: T;
   enabled?: boolean;
   hasContent: (s: T) => boolean;
+  autoRestore?: (snapshot: T) => void;
+  restoreSince?: () => number | undefined;
 }) {
   const [draftSavedAt, setDraftSavedAt] = useState<number | null>(null);
   const loadedRef = useRef<T | null>(null);
@@ -58,6 +65,14 @@ export function useStateDraft<T>({
     if (!enabled) rebaseUntilRef.current = 0;
   }, [enabled]);
 
+  // 바로 되살릴 함수는 최신 것을 쓴다(호출부가 렌더마다 새로 만든다 — 로드 effect의 의존성에 넣지 않는다).
+  const autoRestoreRef = useRef(autoRestore);
+  const restoreSinceRef = useRef(restoreSince);
+  useEffect(() => {
+    autoRestoreRef.current = autoRestore;
+    restoreSinceRef.current = restoreSince;
+  });
+
   // 마운트 시 기존 초안 로드 → 있으면 배너 노출. (저장은 hasContent일 때만 일어나므로 로드된 초안은 항상 의미 있음.)
   useEffect(() => {
     if (!enabled) return;
@@ -65,7 +80,13 @@ export function useStateDraft<T>({
     void loadDraft(scope).then((d) => {
       if (cancelled || !d?.values?.__json) return;
       try {
-        loadedRef.current = JSON.parse(d.values.__json) as T;
+        const parsed = JSON.parse(d.values.__json) as T;
+        const since = restoreSinceRef.current?.();
+        if (since !== undefined && d.savedAt >= since && autoRestoreRef.current) {
+          autoRestoreRef.current(parsed);
+          return;
+        }
+        loadedRef.current = parsed;
         setDraftSavedAt(d.savedAt);
       } catch {
         /* 손상 초안 무시 */
@@ -135,6 +156,12 @@ export function useStateDraft<T>({
     return () => {
       window.removeEventListener("pagehide", flushOnHide);
       document.removeEventListener("visibilitychange", onVisibility);
+      // 같은 문서 안에서 화면을 떠날 때(단일 화면에서 녹음하며 다른 메뉴로) 마지막 입력까지 남긴다 — 디바운스 안에 떠나면
+      // '작성 화면 열기'가 덜 된 내용을 되살렸다. 저장 성공(clear) 뒤엔 대기가 없어 안 쓴다.
+      if (pendingSinceRef.current === null) return;
+      pendingSinceRef.current = null;
+      const { json: j, has: h } = latestRef.current;
+      if (h && j !== initialJsonRef.current) void saveDraft(scope, { __json: j });
     };
   }, [scope, enabled]);
 
@@ -162,5 +189,14 @@ export function useStateDraft<T>({
     setDraftSavedAt(null);
   }, [scope]);
 
-  return { draftSavedAt, restore, discard, clear };
+  // 지금 값을 바로 남긴다 — 녹음을 시작한 순간(그 뒤 아무것도 안 쳐도 돌아온 화면이 이 값을 되살린다, restoreSince).
+  const save = useCallback(() => {
+    if (!enabled) return;
+    if (timerRef.current) clearTimeout(timerRef.current);
+    pendingSinceRef.current = null;
+    const { json: j, has: h } = latestRef.current;
+    if (h) void saveDraft(scope, { __json: j });
+  }, [scope, enabled]);
+
+  return { draftSavedAt, restore, discard, clear, save };
 }

@@ -30,6 +30,9 @@ describe("슬랙 활동 분류", () => {
       "staff_password_reset",
       "self_password_change",
       "slack_connection_token",
+      // 감사로그 빈틈 메우기(2026-10-15) — 이력서 삭제(대상 = 이력서 성명) · 강사 급여 정책.
+      "staff_resume_delete",
+      "teacher_comp_update",
     ]) {
       expect(activityGradeOf(k), k).toBe("forbid");
     }
@@ -40,6 +43,9 @@ describe("슬랙 활동 분류", () => {
     expect(activityGradeOf("session_terms_refresh")).toBe("opaque");
     expect(activityGradeOf("refund_request_create")).toBe("opaque");
     expect(activityGradeOf("leave_adjust")).toBe("opaque");
+    // 직원 휴가 · 수강료 견적(대상 = 학생 이름)도 대상 없이.
+    expect(activityGradeOf("staff_leave_request")).toBe("opaque");
+    expect(activityGradeOf("tuition_quote_save")).toBe("opaque");
     expect(activityGradeOf("student_create")).toBe("safe");
     expect(activityGradeOf("enrollment_consultation_intake")).toBe("safe");
     expect(activityGradeOf("attendance_cell")).toBe("safe");

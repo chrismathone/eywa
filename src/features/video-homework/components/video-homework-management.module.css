@@ -4,7 +4,6 @@
 .filters{min-width:0}
 /* 줄이 넘치면 감긴다 — 가로 스크롤 상자에 두면 반 선택 목록(떠 있는 팝업)이 상자 안에서 잘린다([[#128]]). */
 .filters .filterRow{position:relative;align-items:center;max-width:100%}
-.classPicker{flex:none;min-width:150px;max-width:240px}
 .filter,.dateFilter{display:flex;flex:none;align-items:center}
 .filter select{max-width:220px;cursor:pointer}
 .dateFilter input{width:164px;line-height:normal}
@@ -12,7 +11,7 @@
 .search{flex:1 0 210px;min-width:210px;max-width:320px}
 .search svg{flex:none}
 .search input{height:100%;width:100%;min-width:0;background:transparent;border:0;outline-offset:-2px;font:inherit;line-height:normal}
-.search input::placeholder{color:var(--text-dim)}
+.search input::placeholder{color:var(--text-placeholder)}
 .summary{display:flex;gap:16px;flex-wrap:wrap;align-items:center;padding:8px 0;font-size:var(--text-sm)}
 .summary strong{font-weight:700;margin-left:3px}
 .green{color:var(--green)}.red{color:var(--danger)}.amber{color:var(--amber)}.dim{color:var(--text-dim)}

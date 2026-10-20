@@ -1,4 +1,5 @@
 import "server-only";
+import { findSamePersonConsultations } from "./same-person-query";
 import { isModuleEnabled } from "@/lib/modules";
 
 import { createClient } from "@/lib/supabase/server";
@@ -154,26 +155,10 @@ export async function collectPrepFacts(
           .in("parent_phone", phoneCandidates)
           .limit(8)
       : Promise.resolve({ data: [] }),
-    // 앞서 들어온 같은 학생의 다른 접수(반복 QR 제출) — 상담에서 같은 질문을 반복하지 않게.
-    // ⚠️ 이름-only 매칭 금지(동명이인 fan-out) — getSiblingConsultations와 동일한 자연키
-    //    (이름+학교+학년, null은 is null 정확 매칭)로 좁힌다(적대 검수 2026-07-28).
-    // ⚠️ 연결된 학생이 있으면 **student_id 우선**(getSiblingConsultations와 동일 분기) — 진급·전학으로
-    //    자연키가 달라진 과거 접수를 자연키만으로는 놓친다(실측 3건: 중1→중2, 남산초→경명여중).
-    (() => {
-      let q = supabase
-        .from("enrollment_consultations")
-        .select("id, consultation_date, consulted_at, outcome, subject")
-        .eq("tenant_id", tenantId)
-        .neq("id", consultationId);
-      if (linkedStudentId) {
-        q = q.eq("student_id", linkedStudentId);
-      } else {
-        q = q.eq("prospect_name", c.prospect_name);
-        q = school ? q.eq("prospect_school", school) : q.is("prospect_school", null);
-        q = grade ? q.eq("prospect_grade", grade) : q.is("prospect_grade", null);
-      }
-      return q.order("consulted_at", { ascending: false }).limit(5);
-    })(),
+    // 앞서 들어온 같은 학생의 다른 접수(반복 QR 제출 · 재방문) — 상담에서 같은 질문을 반복하지 않게.
+    // 판정 = 카드 'N건' 배지·상세 '다른 상담'과 같은 한 벌(`same-person.ts` — 원생 연결 · 이름+학교+학년 · 이름+연락처).
+    // ⚠️ 이름-only 매칭 금지(동명이인 fan-out) · 연결된 학생이 있으면 그 연결도 열쇠(진급·전학으로 자연키가 바뀐 접수).
+    findSamePersonConsultations(supabase, c, { tenantId, limit: 5 }).then((data) => ({ data })),
   ]);
 
   // 현원 — 표시 후보가 될 반만 청크 조회(B3). 전건 enrollments fetch는 절단 위험(B2).

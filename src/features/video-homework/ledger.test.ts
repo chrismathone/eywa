@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_LEDGER_FILTERS, filterLedgerRows, groupLedgerRows, ledgerCounts, ledgerCsv, ledgerSummary, teacherLedgerKeep } from "./ledger";
+import { DEFAULT_LEDGER_FILTERS, filterLedgerRows, groupLedgerRows, ledgerCounts, ledgerCsv, ledgerSummary, teacherLedgerKeep, splitTeacherQuery } from "./ledger";
 import { ledgerInitialFilters } from "./ledger-period";
 import { keepLedgerRounds, ownRoundKey } from "./ledger";
 import { buildLedgerRounds } from "./rounds";
@@ -93,5 +93,15 @@ describe("강사 필터 재료(원장 2026-10-14)", () => {
     expect(ledgerInitialFilters(param("lee"), new Set(), new Set(["lee"])).teacher).toBe("lee");
     expect(ledgerInitialFilters(param("gone"), new Set(), new Set(["lee"])).teacher).toBe("all");
     expect(ledgerInitialFilters(param("lee"), new Set()).teacher).toBe("all");
+  });
+});
+
+describe("검색창의 강사 이름(원장 2026-10-19)", () => {
+  const teachers = [{ value: "lee", label: "이성우" }, { value: "yoo", label: "유형숙" }, { value: "k1", label: "김선생" }, { value: "k2", label: "김선생" }];
+  it("낱말이 강사 이름과 똑같을 때만 강사로 · 나머지는 글자 검색", () => {
+    expect(splitTeacherQuery("이성우 수학", teachers)).toEqual({ teacher: "lee", text: "수학" });
+    expect(splitTeacherQuery("이성", teachers)).toEqual({ teacher: "all", text: "이성" });
+    expect(splitTeacherQuery("김선생", teachers)).toEqual({ teacher: "all", text: "김선생" }); // 동명이인은 강사로 보지 않는다
+    expect(splitTeacherQuery("", [])).toEqual({ teacher: "all", text: "" });
   });
 });

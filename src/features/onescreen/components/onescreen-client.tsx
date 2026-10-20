@@ -41,6 +41,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { isTrendOptedOut, trendOptOutKey } from "../trend-optout";
 import { removeMakeupEntry } from "../server/makeup-remove-actions";
+import { logOnescreenBulkApply } from "../server/bulk-log-actions";
 import { canRemoveMakeupRow, makeupRemoveBlockReason } from "../makeup-remove-plan";
 import { makeupRowName } from "../makeup-label";
 import { isBoardBlockedStatus, isBoardWaitStatus } from "../send-class";
@@ -181,6 +182,7 @@ import {
   planBulkPrevFill,
   planPrevComments,
   planCopyFirstRow,
+  rowClassName,
   rowInClass,
   studentInClass,
   summarizeSendGaps,
@@ -279,6 +281,8 @@ function initReports(students: OneScreenStudent[]): ReportsState {
         draft: su.draft ?? "",
         trendDraft: su.trendDraft,
         autoDraft: su.autoDraft, // 자동작성 스냅샷(0214a) — 세션 복원값. 저장 시 draft와 비교해 작성 방식 판정.
+        trendAutoDraft: su.trendAutoDraft, // 자동작성 추세 스냅샷(2026-10-16) — '달라진 것 없음' 때 칸을 비울지 가른다.
+        autoDraftTemplate: su.autoDraftTemplate, // AI 원문 아님(0370a)
         sent: su.reportSent ?? false,
         shareToken: su.shareToken,
         classnoteStatus: su.classnoteStatus,
@@ -732,6 +736,9 @@ export function OneScreenClient({
               trendDraft: r?.[su.name]?.trendDraft ?? "",
               // 자동작성 스냅샷(0214a) — 초안과 함께 영속해야 재접속 후 저장이 manual로 오표기되지 않는다.
               autoDraft: r?.[su.name]?.autoDraft ?? "",
+              // 추세 스냅샷·AI 원문 아님 표시도 같은 규약(새로고침 뒤에도 낡은 AI 추세를 지우고, 템플릿·복사 글을 원문으로 싣지 않게).
+              ...(r?.[su.name]?.trendAutoDraft ? { trendAutoDraft: r[su.name]!.trendAutoDraft } : {}),
+              ...(r?.[su.name]?.autoDraftTemplate ? { autoDraftTemplate: true } : {}),
               textbook: su.textbook ?? "",
               makeup: su.makeup ?? false,
               homeworkToday: su.homeworkToday ?? "",
@@ -2730,12 +2737,22 @@ export function OneScreenClient({
         draft: text,
         // 작성 방식 스냅샷(0214a) — AI 성공분·템플릿 폴백 모두 "자동이 넣은 텍스트". 저장 시 draft와 비교.
         autoDraft: text,
-        // 추세는 생성 성공 시에만 갱신(표본 부족·실패면 기존 초안·수동 입력 보존).
-        ...(res.ok && res.trend ? { trendDraft: res.trend } : {}),
+        // 폴백 템플릿이면 표시 — 자동작성 원문(0370a)으로 싣지 않는다.
+        autoDraftTemplate: !(res.ok && res.comment),
+        // 추세는 생성 성공 시에만 갱신(표본 부족·실패면 기존 초안·수동 입력 보존). 만들었지만 검사에 걸려 버렸으면 비운다
+        // (예전 초안이 그대로 나가지 않게 — 2026-10-15). 달라진 게 없으면(trendQuiet) 칸이 지난 자동작성 글 그대로일 때만 비운다
+        // — 선생님이 손으로 쓰거나 고친 추세는 지킨다(적대적 재리뷰 2026-10-16).
+        ...(res.ok && res.trend
+          ? { trendDraft: res.trend, trendAutoDraft: res.trend }
+          : res.ok && res.trendDropped
+            ? { trendDraft: "", trendAutoDraft: "" }
+            : res.ok && res.trendQuiet && (r.trendDraft ?? "") === (r.trendAutoDraft ?? "")
+              ? { trendDraft: "", trendAutoDraft: "" }
+              : {}),
       }));
     } catch {
       const fallback = buildSubjectReport(student, idx);
-      patchReport(student.id, subjectName, (r) => ({ ...r, draft: fallback, autoDraft: fallback }));
+      patchReport(student.id, subjectName, (r) => ({ ...r, draft: fallback, autoDraft: fallback, autoDraftTemplate: true }));
       toast.message(t("os.c.aiFallback"));
     }
   }
@@ -2925,7 +2942,18 @@ export function OneScreenClient({
         }));
     }
     const done: string[] = [];
-    if (plan.length) done.push(tf("os.c.doneRows", { n: plan.length }));
+    if (plan.length) {
+      done.push(tf("os.c.doneRows", { n: plan.length }));
+      // 감사로그 한 줄 — 값 칸만(출결·영상 검사는 그 저장 액션이 따로 남긴다). 글 내용은 안 싣는다.
+      const planned = new Set(plan.map((p) => `${p.studentId}::${p.subjectName}`));
+      void logOnescreenBulkApply({
+        mode: "input",
+        date: activeDate,
+        rows: plan.length,
+        classIds: rows.filter((r) => planned.has(`${r.student.id}::${r.subject.name}`)).map((r) => r.subject.classId),
+        fields: [...new Set(plan.flatMap((p) => Object.keys(p.set)))],
+      }).catch(() => {});
+    }
 
     if (attendance) {
       // 팝오버가 미리보기에 쓴 것과 **같은 순수 계획**(같은 행·같은 규칙) — 화면 숫자와 실제가 어긋나지 않게.
@@ -3031,9 +3059,14 @@ export function OneScreenClient({
       toast.message(t("os.c.copyNoRow"));
       return;
     }
+    // 같은 반 판정의 열쇠 = 반 필터와 같은 반 이름(보강 행은 앵커 반). 반을 고른 보기에선 보이는 행이 전부 그 반이라
+    // 모르는 행도 그 반으로 본다(종전과 같다) — '전체' 보기에서만 반이 다르거나 모르는 행을 건너뛴다.
+    const classKeyOf = (r: (typeof rows)[number]) => rowClassName(r.subject) ?? activeClassFilter;
     const res = planCopyFirstRow(
       {
         subjectKey: first.subject.subjectKey ?? "math",
+        // 같은 반 행에만 복사한다(원장 2026-10-15 — '전체' 보기에서 다른 반 빈 칸까지 채우던 것).
+        classKey: classKeyOf(first),
         today: first.subject.today ?? "",
         textbook: first.subject.textbook ?? "",
         homeworkToday: first.subject.homeworkToday ?? "",
@@ -3043,6 +3076,7 @@ export function OneScreenClient({
         subjectName: r.subject.name,
         subjectIndex: r.subjectIndex,
         subjectKey: r.subject.subjectKey ?? "math",
+        classKey: classKeyOf(r),
         today: r.subject.today ?? "",
         textbook: r.subject.textbook ?? "",
         homeworkToday: r.subject.homeworkToday ?? "",
@@ -3068,6 +3102,8 @@ export function OneScreenClient({
         //    **잠김**이 셋 다 참인 유일한 이름이다.
         res.skippedSent ? tf("os.c.copyWhyLocked", { n: res.skippedSent }) : "",
         res.skippedSubject ? tf("os.c.copyWhySubject", { n: res.skippedSubject }) : "",
+        res.skippedClass ? tf("os.c.copyWhyClass", { n: res.skippedClass }) : "",
+        res.skippedNoClass ? tf("os.c.copyWhyNoClass", { n: res.skippedNoClass }) : "",
         res.skippedFilled ? tf("os.c.copyWhyFilled", { n: res.skippedFilled }) : "",
       ].filter(Boolean);
       toast.message(
@@ -3080,7 +3116,17 @@ export function OneScreenClient({
       if (p.set.textbook !== undefined) setTextbookFor(p.studentId, p.subjectName, p.set.textbook);
       if (p.set.homeworkToday !== undefined) setHomeworkTodayFor(p.studentId, p.subjectName, p.set.homeworkToday);
     }
-    const skipped = res.skippedSent + res.skippedSubject + res.skippedFilled;
+    // 감사로그 한 줄(칸 저장은 건마다 남기지 않는다 — bulk-log-actions.ts). 글 내용은 안 싣는다.
+    void logOnescreenBulkApply({
+      mode: "copy",
+      date: activeDate,
+      rows: res.plan.length,
+      // 보강 행은 반 대신 앵커 반(보강을 넣은 수업)으로 적는다.
+      classIds: [first, ...rest.filter((r) => res.plan.some((p) => p.studentId === r.student.id && p.subjectName === r.subject.name))]
+        .map((r) => r.subject.classId ?? r.subject.makeupClassId ?? null),
+      fields: [...new Set(res.plan.flatMap((p) => Object.keys(p.set)))],
+    }).catch(() => {});
+    const skipped = res.skippedSent + res.skippedSubject + res.skippedClass + res.skippedNoClass + res.skippedFilled;
     toast.success(
       tf("os.c.copyDone", { name: first.student.name, n: res.plan.length }) +
         (skipped
@@ -3089,6 +3135,8 @@ export function OneScreenClient({
               why: [
                 res.skippedSent ? tf("os.c.copySkipLocked", { n: res.skippedSent }) : "",
                 res.skippedSubject ? tf("os.c.copySkipSubject", { n: res.skippedSubject }) : "",
+                res.skippedClass ? tf("os.c.copySkipClass", { n: res.skippedClass }) : "",
+                res.skippedNoClass ? tf("os.c.copySkipNoClass", { n: res.skippedNoClass }) : "",
                 res.skippedFilled ? tf("os.c.copySkipFilled", { n: res.skippedFilled }) : "",
               ]
                 .filter(Boolean)
@@ -3209,7 +3257,8 @@ export function OneScreenClient({
     for (const p of plan) {
       const su = studentsRef.current.find(s => s.id === p.studentId)?.subjects.find(s => s.name === p.subjectName);
       if (!su || !isRowInputEditable(su, effectiveClassnoteStatus(liveClassnoteStatus(p.studentId, p.subjectName), su.classnoteStatus))) continue;
-      patchReport(p.studentId, p.subjectName, r => r.draft.trim() ? r : ({ ...r, draft: p.comment, autoDraft: p.comment }));
+      // 지난 회차 글은 AI 원문이 아니다(선생님이 직접 쓴 글일 수 있다) — 자동작성 원문(0370a)으로 싣지 않게 표시.
+      patchReport(p.studentId, p.subjectName, r => r.draft.trim() ? r : ({ ...r, draft: p.comment, autoDraft: p.comment, autoDraftTemplate: true }));
     }
     toast.success(tf("os.c.prevComments", { n: plan.length }));
   }
@@ -3277,6 +3326,9 @@ export function OneScreenClient({
     // 영어 행: 손대지 않은 자동 글이면 지금 칸 값으로 다시 조립해서 저장한다(기록과 다른 글이 나가지 않게).
     const fresh = su?.subjectKey === "english" ? freshEnglishDraft(student, subjectName) : null;
     const draft = fresh ? fresh.draft : (existing?.draft ?? "");
+    // 자동작성 스냅샷(0214a) — 작성 방식 판정과 자동작성 원문(0370a)이 같은 값을 본다.
+    const autoSnap = fresh ? fresh.autoDraft : existing?.autoDraft;
+    const mentSource = computeClientMentSource(draft, autoSnap);
     // 표시 필드(교재·진도·시험·태도·멘트…)는 **카드 미리보기와 같은 함수**로 만든다(report-fields.ts).
     // 여기서 따로 조립하면 "화면에 보이던 것"과 "학부모가 받은 것"이 조용히 갈라진다.
     // 🔴 평가값(태도·점수·과제 수행률)은 **행 단위**로 해석한다(row-fields.ts) — 보강은 정규와 따로 나가는
@@ -3318,7 +3370,8 @@ export function OneScreenClient({
         ...(videoHwSaveOk && typeof su?.videoHomework === "boolean" && su.classId && videoHwPolicy &&
         !videoHwByOther(student.id, su.classId) &&
         isVideoHomeworkEnabled(videoHwPolicy, { classId: su.classId, subjectKey: su.subjectKey ?? "math", grade: student.grade })
-          ? { videoHomework: su.videoHomework }
+          // 그 값을 DB와 맞춘 시각도 함께 — 장부에서 취소한 숙제를 모른 채 '있음'으로 되살리지 않게(서버 `cancels.ts`, 원장 2026-10-16).
+          ? { videoHomework: su.videoHomework, videoHomeworkSeenAt: videoHwStore?.seenAtOf(student.id, su.classId) ?? null }
           : {}),
         // 영상 첨부 링크 넣기(0328a) — 같은 규약: 고른 값이 있고 그 행에서 고를 수 있을 때만 싣는다(토글이 안 보이는 행·단계는
         // 싣지 않아 저장돼 있던 값을 덮지 않는다). 영상 과제가 꺼진 행은 false로 — 과제 없이 링크만 켜진 값이 남지 않게.
@@ -3334,7 +3387,11 @@ export function OneScreenClient({
           ? { videoHomeworkDue: su.videoHomeworkDue }
           : {}),
         // 멘트 작성 방식(0214a) — 이번 세션 자동작성 스냅샷과 비교(최종은 서버 resolveMentSource가 sticky 판정).
-        mentSource: computeClientMentSource(draft, fresh ? fresh.autoDraft : existing?.autoDraft),
+        mentSource,
+        // 자동작성 후 고친 멘트면 그 자동작성 원문도 싣는다(0370a) — 말투 프로파일이 선생님이 '늘 고치는 것'을 배운다(원장 2026-10-16).
+        //   영어는 템플릿 모드라 뺀다(코퍼스 밖).
+        //   AI 실패 폴백 템플릿은 AI 원문이 아니라 뺀다.
+        ...(mentSource === "auto_edited" && su?.subjectKey !== "english" && autoSnap && !existing?.autoDraftTemplate ? { mentAutoDraft: autoSnap } : {}),
         // 영어 결과지 고르기(2026-09-28) — 이 화면이 아는 값만 싣는다. 모르면(안 받음) 빼서 서버가 저장해 둔 고르기를 따르게.
         ...(su?.subjectKey === "english" && jjDayKey(student.id, activeDate) in jj.picksRef.current
           ? { jjExamPick: jj.picksRef.current[jjDayKey(student.id, activeDate)] }
@@ -3382,19 +3439,29 @@ export function OneScreenClient({
    * 서버가 '영상 과제' 값을 작성 선생님 것으로 두었다(report-owner.ts — 나머지는 저장됨) → 화면도 그 값으로 되돌린다.
    * 🔴 안 되돌리면 세션(임시저장)이 내 값을 쥐고 있어 새로 고쳐도 같은 값이 다시 실린다(적대 리뷰). patch가 세션도 고친다.
    */
-  function applyKeptVideoHomework(studentId: string, subjectName: string, res: { keptVideoHomework?: boolean | null }) {
+  function applyKeptVideoHomework(studentId: string, subjectName: string,
+    res: { ok?: boolean; keptVideoHomework?: boolean | null; videoHomeworkCancelled?: true; videoHomeworkSeenAt?: string }) {
     if (res.keptVideoHomework === undefined) return;
     const kept = res.keptVideoHomework;
-    // 화면 겹(토글 잠금)을 지나 여기 온 건 그사이 남이 먼저 쓴 경우뿐이라 드물다 — 일괄 저장이어도 행마다 알린다.
-    toast.message(t("os.c.videoHwKept"));
-    // 그 줄을 잠금에 더한다 — 열어 두면 다시 눌러 또 되돌려진다(잠긴 줄의 체크 표시는 공급자의 저장된 값).
     const keptClassId = studentsRef.current.find((s) => s.id === studentId)?.subjects.find((x) => x.name === subjectName)?.classId;
-    if (keptClassId) videoHwStore?.markKept(studentId, keptClassId, kept);
+    const cancelled = !!res.videoHomeworkCancelled;
+    if (cancelled) {
+      // 장부에서 취소된 숙제(원장 2026-10-16) — 줄은 잠그지 않는다(다시 켜면 그때부터 선생님 값이다). 그 줄의 맞춘 시각을 응답 시각으로 옮긴다.
+      if (keptClassId && res.videoHomeworkSeenAt) videoHwStore?.markSeen(studentId, keptClassId, res.videoHomeworkSeenAt);
+      // 발송 경로는 서버 문장("보내지 않았습니다")이 따로 뜬다 — 저장만 한 경로에서만 알린다.
+      if (res.ok) toast.message(t("os.c.videoHwCancelled"));
+    } else {
+      // 화면 겹(토글 잠금)을 지나 여기 온 건 그사이 남이 먼저 쓴 경우뿐이라 드물다 — 일괄 저장이어도 행마다 알린다.
+      toast.message(t("os.c.videoHwKept"));
+      // 그 줄을 잠금에 더한다 — 열어 두면 다시 눌러 또 되돌려진다(잠긴 줄의 체크 표시는 공급자의 저장된 값).
+      if (keptClassId) videoHwStore?.markKept(studentId, keptClassId, kept);
+    }
     patch(studentId, (s) => ({
       ...s,
       subjects: s.subjects.map((x) =>
-        // 모름(null)은 화면 모양대로 undefined — 세션에서도 빠져 저장된 값(모름)을 따른다.
-        x.name === subjectName ? { ...x, videoHomework: kept ?? undefined, ...(kept !== true ? { videoSubmitLink: false } : {}) } : x,
+        // 모름(null)은 화면 모양대로 undefined — 세션에서도 빠져 저장된 값(모름)을 따른다. 취소된 숙제는 마감 고르기도 비운다.
+        x.name === subjectName ? { ...x, videoHomework: kept ?? undefined, ...(kept !== true ? { videoSubmitLink: false } : {}),
+          ...(cancelled ? { videoHomeworkDue: undefined, videoHomeworkDueDate: undefined } : {}) } : x,
       ),
     }));
   }

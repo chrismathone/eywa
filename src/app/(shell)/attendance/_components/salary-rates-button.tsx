@@ -5,11 +5,16 @@ import { useRouter } from "next/navigation";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { ATTENDANCE_RATE_LEVELS, type AttendanceSalaryRates } from "@/features/attendance/salary-rates";
 import { saveAttendanceSalaryRates } from "@/features/attendance/server/salary-rates-actions";
+import { WORKDAYS } from "@/features/staff/resume/resume";
+import type { WorkDay } from "@/features/staff/employment";
 
-/** Only mounted by the authorized administrator server page. */
-export function SalaryRatesButton({ teacherId, teacherName, month, rates, classes }: {
+/**
+ * Only mounted by the authorized administrator server page.
+ * `mixed` = 계약구분 '혼합'(근로 + 용역, 원장 2026-10-16) — 대상 학년이 곧 용역 학년이라 전부 고를 수 없고, 근로 요일 칸이 선다.
+ */
+export function SalaryRatesButton({ teacherId, teacherName, month, rates, classes, mixed = false }: {
   teacherId: string; teacherName: string; month: string; rates: AttendanceSalaryRates;
-  classes: { id: string; name: string }[];
+  classes: { id: string; name: string }[]; mixed?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
@@ -31,8 +36,16 @@ export function SalaryRatesButton({ teacherId, teacherName, month, rates, classe
     // 대상 학년 — 전부 고르면 '전체'(저장하지 않는다). 하나도 안 고르면 아무도 계산되지 않으므로 받지 않는다.
     const picked = ATTENDANCE_RATE_LEVELS.filter((level) => data.get(`level:${level}`) === "on");
     if (picked.length === 0) { setError("대상 학년을 하나 이상 골라 주세요"); return; }
+    // 혼합 계약 — 전부 고르면 근로 몫이 없어진다(프리랜서와 같다).
+    if (mixed && picked.length === ATTENDANCE_RATE_LEVELS.length) { setError("혼합 계약은 용역 학년만 골라 주세요(전부 고르면 프리랜서와 같습니다)"); return; }
     if (picked.length < ATTENDANCE_RATE_LEVELS.length) next.levels = picked;
     if (data.get("includeSpecial") === "on") next.includeSpecial = true;
+    // 근로 요일 — 이 창에서 **바꿨을 때만** 보낸다(비우면 `[]` = 정하지 않음). 안 보내면 서버가 저장된 값을 그대로 둔다 — 열어 둔 다른 창
+    // (출석부 ↔ 직원 상세)에서 비율만 고쳐 저장해도 그 사이 바꾼 근로 요일이 옛 값으로 덮이지 않게(적대 리뷰 2026-10-16).
+    if (mixed) {
+      const picked = WORKDAYS.filter((d) => data.get(`workday:${d.key}`) === "on").map((d) => d.key as WorkDay);
+      if (picked.join("|") !== (rates.workDays ?? []).join("|")) next.workDays = picked;
+    }
     setError("");
     startTransition(async () => {
       try {
@@ -73,8 +86,20 @@ export function SalaryRatesButton({ teacherId, teacherName, month, rates, classe
               <input type="checkbox" name="includeSpecial" defaultChecked={rates.includeSpecial === true} />
               특강은 학년 제한 없이 포함
             </label>
-            <p className="text-text-dim mt-2 text-xs break-keep">고른 학년의 학생만 실급여와 급여명세서(출석부 별지 포함)에 들어갑니다. 특강 포함을 켜면 다른 학년의 특강도 계산합니다. 이 선생님에게만 적용하며, 단가·배분율·청구액 상한은 그대로 따릅니다.</p>
+            <p className="text-text-dim mt-2 text-xs break-keep">고른 학년의 학생만 실급여와 급여명세서(출석부 별지 포함)에 들어갑니다. 특강 포함을 켜면 다른 학년의 특강도 계산합니다. 이 선생님에게만 적용하며, 단가·배분율·청구액 상한은 그대로 따릅니다.{mixed ? " 혼합 계약이라 고른 학년이 용역(프리랜서) 몫입니다." : ""}</p>
           </div>
+          {mixed ? (
+            <div role="group" aria-label="근로 요일" className="border-line mt-3 border-t pt-3">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span className="text-sm font-bold">근로 요일</span>
+                {WORKDAYS.map((d) => <label key={d.key} className="inline-flex items-center gap-1 text-sm">
+                  <input type="checkbox" name={`workday:${d.key}`} defaultChecked={rates.workDays?.includes(d.key as WorkDay) ?? false} />
+                  {d.label}
+                </label>)}
+              </div>
+              <p className="text-text-dim mt-2 text-xs break-keep">혼합 계약의 근로 몫 요일입니다. 강사평가 근태는 이 요일만 셉니다(나머지 요일은 프리랜서처럼 세지 않습니다). 비우면 모든 요일을 셉니다. 금액에는 쓰지 않습니다.</p>
+            </div>
+          ) : null}
           <details className="border-line mt-3 border-t pt-3">
             <summary className="cursor-pointer text-sm font-bold">반별 예외 비율</summary>
             <p className="text-text-dim my-2 text-xs">입력한 반은 위 비율보다 우선합니다. 비우면 정규·특강의 학년별 비율을 따릅니다.</p>

@@ -1,0 +1,76 @@
+/* 수학 교재 배정 — 반 교재 줄 · 학생 행 교재 칩 · 배정 창 안의 "같은 교재" 확인. 색은 토큰만(팔레트 v4). */
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 16px;
+  border-top: 1px solid var(--line-faint);
+}
+.label {
+  font-size: var(--text-sm);
+  color: var(--text-dim);
+  font-weight: 600;
+}
+.title {
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+.none {
+  color: var(--text-faint);
+  font-weight: 500;
+}
+.hint {
+  font-size: var(--text-sm);
+  color: var(--text-faint);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.warn {
+  font-size: var(--text-sm);
+  color: var(--amber);
+}
+.chip {
+  display: inline-block;
+  max-width: 100%;
+  margin-top: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--card);
+  /* 🔴 줄이지 않는다 — 말줄임이 정작 보여야 할 차수를 가렸다(원장 2026-10-19 캡처). 좁으면 어절로 접힌다. */
+  white-space: normal;
+  word-break: keep-all;
+  text-align: left;
+  cursor: pointer;
+}
+.chip:hover:not([data-static]) {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+.chip[data-empty] {
+  color: var(--text-faint);
+}
+.chip[data-static] {
+  cursor: default;
+}
+.confirm {
+  border: 1px solid var(--amber);
+  background: var(--amber-soft);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  font-size: var(--text-sm);
+}
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.release {
+  margin-right: auto;
+}

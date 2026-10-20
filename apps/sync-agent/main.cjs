@@ -5,7 +5,7 @@ const {atomicWrite,secretStore,eventQueue}=require('./lib/storage.cjs');const {U
 const {UpdatePlan}=require('./lib/update-plan.cjs');
 const {createWorkerLog}=require('./lib/worker-log.cjs');
 const {inspectLegacy,disableLegacyTasks,readLegacySettings,copyLegacyState}=require('./lib/legacy.cjs');
-const {LocalSettingsInput,StoredLocalSettingsInput,DEFAULT_LOCAL_SETTINGS,EventInput,EVENT_LABELS,LOG_CODE_LABELS,UPDATE_ERROR_LABELS}=require('./lib/protocol.cjs');
+const {LocalSettingsInput,StoredLocalSettingsInput,DEFAULT_LOCAL_SETTINGS,EventInput,EVENT_LABELS,LOG_CODE_LABELS,UPDATE_ERROR_LABELS,TASK_LABELS}=require('./lib/protocol.cjs');
 const build=require('./build-config.json');
 // Resolve from the OS profile, independent of executable/version directory.
 const dataRoot=path.resolve(process.env.LOCALAPPDATA||path.join(app.getPath('home'),'AppData','Local'),'AYWA','Sync');
@@ -15,19 +15,29 @@ if(!app.requestSingleInstanceLock()){app.quit();}else{void app.whenReady().then(
 let window,tray,store,events,connection=null,local={...DEFAULT_LOCAL_SETTINGS},lease,api,supervisor,updater,updatePlan,configuration=null;
 let message='',unlockedUntil=0,looping=false,quitting=false,closing=false,applying=false,suspended=false,nextConnect=0,revoked=false;
 let notifiedUpdate=0;
+// 업데이트 적용 단계(화면 가운데 진행 표시, 1.0.7): 'drain'(진행 중인 작업 마무리) → 'switch'(새 버전으로 바꾸기). 새 버전은 justUpdated로 이어 받는다.
+let applyStep=null,justUpdated=null;
+const afterUpdateFile=path.join(dataRoot,'after-update.json');
+function dropAfterUpdate(){try{fs.rmSync(afterUpdateFile,{force:true});}catch{}}
 const uiFile=path.join(__dirname,'ui','index.html');
 function event(kind,module='app',level='info',detail={}){const row={id:randomUUID(),at:new Date().toISOString(),kind,module,level,detail};if(EventInput.safeParse(row).success){events?.add(row);try{createWorkerLog(path.join(dataRoot,...(connection?.tenantId?['tenants',connection.tenantId]:[]),'log')).append('app',`${module} · ${detail.logCode?LOG_CODE_LABELS[detail.logCode]:EVENT_LABELS[kind]??'실행 기록'}${detail.version?' · '+detail.version:''}${detail.updateError?' · '+UPDATE_ERROR_LABELS[detail.updateError]:''}`);}catch{}}}
 function snapshot(){return{version:build.version,tenantName:connection?.tenantName??'',paired:!!connection?.tenantId,revoked,online:!!lease?.held,unlocked:Date.now()<unlockedUntil,local,
   configuration,modules:{classnote:supervisor?.status('classnote')??'off',makeedu:supervisor?.status('makeedu')??'off'},update:updater?.state??'idle',message,
-  updateInfo:{ready:updater?.ready??null,plan:updatePlan?.plan??null,progress:updater?.progress??null,pending:!!updater?.pending,failure:updater?.failure?UPDATE_ERROR_LABELS[updater.failure]:null,checkedAt:updater?.checkedAt??null,draining:applying&&!closing,closing},
+  updateInfo:{ready:updater?.ready??null,plan:updatePlan?.plan??null,progress:updater?.progress??null,pending:!!updater?.pending,failure:updater?.failure?UPDATE_ERROR_LABELS[updater.failure]:null,checkedAt:updater?.checkedAt??null,draining:applying&&!closing,closing,applyStep,justUpdated},
+  activity:(supervisor?.activity()??[]).map(a=>({module:a.module,task:a.task,label:a.task&&Object.hasOwn(TASK_LABELS,a.task)?TASK_LABELS[a.task]:null,since:a.since,draining:a.draining})),
   credentials:Object.fromEntries(CREDENTIAL_KEYS.map(k=>[k,!!connection?.credentials?.[k]])),events:events?.peek().slice(-12)??[]};}
 function broadcast(){if(window&&!window.isDestroyed())window.webContents.send('state',snapshot());}
 function show(){if(!window)return;if(window.isMinimized())window.restore();window.show();window.focus();}
 function requireUnlocked(){if(Date.now()>=unlockedUntil)throw new Error('웹의 연동 PC 탭에서 관리 코드를 발급받아 입력해 주세요.');}
 function applyLoginSetting(){app.setLoginItemSettings({openAtLogin:local.autoStart,path:path.join(process.env.AYWA_INSTALL_DIR||path.dirname(process.execPath),'AywaSync.exe'),args:['--hidden']});}
-function bootApi(){api=new AgentApi(build.apiOrigin,connection);updater=new Updater({root:dataRoot,api,publicKey:build.publicKey,sequence:build.sequence,event});}
+// 지금 도는 버전의 파일 폴더 = 실행 파일이 있는 곳(versions/<순번> 또는 설치 폴더) — 같은 파일은 받지 않고 여기서 복사한다(1.0.7).
+function bootApi(){api=new AgentApi(build.apiOrigin,connection);updater=new Updater({root:dataRoot,api,publicKey:build.publicKey,sequence:build.sequence,event,currentRoot:app.isPackaged?path.dirname(process.execPath):null});}
+let loggedDelta=null;
+function appLog(text){try{createWorkerLog(path.join(dataRoot,...(connection?.tenantId?['tenants',connection.tenantId]:[]),'log')).append('app',text);}catch{}}
 async function checkUpdates(){
   const current=updater;await current?.check();if(current!==updater)return;
+  // 바뀐 파일만 받았는지·왜 전체를 받았는지 — 현장 진단용(서버로는 안 보낸다).
+  if(current?.delta&&current.delta!==loggedDelta){loggedDelta=current.delta;appLog(current.delta.fallback?`update · 바뀐 파일만 받기 실패(${current.delta.fallback}) → 전체 받기`:`update · 같은 파일 ${current.delta.reused}개 복사 · 바뀐 파일 ${current.delta.fetched}개만 받음`);}
   if(current?.ready&&notifiedUpdate!==current.ready.sequence){
     notifiedUpdate=current.ready.sequence;tray?.setToolTip(`AYWA 연동 · v${current.ready.version} 업데이트 선택 대기`);
     try{if(Notification.isSupported()){const notice=new Notification({title:'AYWA 연동 업데이트 준비 완료',body:`v${current.ready.version} · 지금 업데이트하거나 날짜·시간을 지정해 주세요.`});notice.on('click',show);notice.show();}}catch{}
@@ -41,18 +51,25 @@ async function start(){
   events=eventQueue(path.join(dataRoot,'events',connection?.deviceId??'unpaired'));
   try{local=StoredLocalSettingsInput.parse(JSON.parse(fs.readFileSync(path.join(dataRoot,'settings.json'),'utf8')));}catch{}
   updatePlan=new UpdatePlan({root:dataRoot,sequence:build.sequence});
+  // 업데이트로 다시 켜졌는가 — 직전 버전이 남긴 표식(시작 프로그램의 launch.json과 따로 둔다: 그쪽은 시작 프로그램이 다시 써 넣는다).
+  let afterUpdate=null;try{afterUpdate=JSON.parse(fs.readFileSync(afterUpdateFile,'utf8'));}catch{}
+  if(afterUpdate&&!(Date.now()-Date.parse(afterUpdate.at)<3600000)){afterUpdate=null;dropAfterUpdate();}
+  if(!process.env.AYWA_HEALTH_FILE)dropAfterUpdate();
+  if(afterUpdate?.sequence===build.sequence){justUpdated={version:build.version,at:new Date().toISOString()};message=`v${build.version}로 업데이트했습니다.`;setTimeout(()=>{justUpdated=null;broadcast();},20000);}
+  else if(afterUpdate)message='새 버전을 시작하지 못해 이전 버전으로 되돌렸습니다. 설정과 작업은 그대로입니다.';
   window=new BrowserWindow({width:840,height:850,minWidth:620,minHeight:600,show:false,backgroundColor:'#f5f7fb',title:'AYWA 연동',webPreferences:{preload:path.join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
   window.webContents.setWindowOpenHandler(()=>({action:'deny'}));window.webContents.on('will-navigate',e=>e.preventDefault());
   window.webContents.session.setPermissionRequestHandler((_wc,_permission,callback)=>callback(false));
   window.webContents.on('render-process-gone',()=>{supervisor?.kill();lease?.lose();message='화면을 다시 열고 있습니다.';void window.loadFile(uiFile);});
-  window.on('close',e=>{if(!quitting){e.preventDefault();window.hide();}});registerIpc();await window.loadFile(uiFile);
+  window.on('close',e=>{if(!quitting||applyStep==='switch'){e.preventDefault();window.hide();}});registerIpc();await window.loadFile(uiFile);
   const pixels=Buffer.alloc(24*24*4);for(let y=0;y<24;y++)for(let x=0;x<24;x++){const i=(y*24+x)*4;pixels[i]=30;pixels[i+1]=80;pixels[i+2]=160;pixels[i+3]=255;if((y>5&&y<19)&&(x===6+Math.floor((18-y)/3)||x===17-Math.floor((18-y)/3)||y===14&&x>7&&x<17))pixels.fill(255,i,i+4);}
   tray=new Tray(nativeImage.createFromBitmap(pixels,{width:24,height:24}));tray.setToolTip('AYWA 연동');tray.on('double-click',show);
   tray.setContextMenu(Menu.buildFromTemplate([{label:'연동 앱 열기',click:show},{label:'작업을 마치고 종료',click:()=>void shutdown()}]));
-  app.on('second-instance',show);app.on('activate',show);app.on('before-quit',e=>{if(!quitting){e.preventDefault();void shutdown();}});
+  app.on('second-instance',show);app.on('activate',show);app.on('before-quit',e=>{if(applyStep==='switch'){e.preventDefault();return;}if(!quitting){e.preventDefault();void shutdown();}});
   powerMonitor.on('suspend',()=>{suspended=true;interruptUpdate();lease?.lose();supervisor?.kill();});powerMonitor.on('resume',()=>{suspended=false;interruptUpdate();nextConnect=Date.now()+10000;});
   event('app_started');if(connection?.tenantId)bootApi();
-  if(!connection?.tenantId||(!local.startMinimized&&!process.argv.includes('--hidden')))show();
+  // 화면을 보던 중 업데이트했으면 숨김 시작(--hidden)이어도 창을 다시 띄운다.
+  if(!connection?.tenantId||afterUpdate?.show||(!local.startMinimized&&!process.argv.includes('--hidden')))show();
   setInterval(()=>{if(lease&&!lease.held&&!lease.lost)lease.lose();broadcast();},1000);
   setInterval(()=>void tick(),20000);void tick();
   // Successful startup means the UI, protected storage and supervisor initialized; network can be offline.
@@ -60,6 +77,7 @@ async function start(){
     const health=setInterval(()=>{
       if(process.env.AYWA_TRIAL==='1'&&connection?.tenantId&&(!lease?.held||!configuration||!supervisor?.healthy(configuration,local,connection.credentials??{})))return;
       clearInterval(health);const file=path.resolve(process.env.AYWA_HEALTH_FILE);if(path.dirname(file)===dataRoot&&path.basename(file).startsWith('health-'))atomicWrite(file,'ready');
+      dropAfterUpdate(); // 이 버전이 자리 잡았다 — 업데이트 표식은 여기서 끝
     },1000);
   },15000);
   try{const journal=JSON.parse(fs.readFileSync(path.join(dataRoot,'launch.json'),'utf8'));if(journal.rollback){event('update_rollback','update','warning');delete journal.rollback;atomicWrite(path.join(dataRoot,'launch.json'),JSON.stringify(journal));}}catch{}
@@ -77,24 +95,28 @@ async function tick(){
     const status={state:local.paused?'paused':supervisor?.busy?'working':'ready',classnote:supervisor?.status('classnote')??'off',makeedu:supervisor?.status('makeedu')??'off',update:updater?.state??'idle',busy:!!supervisor?.busy};
     configuration=await lease.renew(status);if(!configuration)return;
     const applyUpdate=!closing&&updatePlan.shouldApply({ready:updater.ready,enabled:configuration.updatesEnabled});
-    if(applying&&!closing&&!applyUpdate){applying=false;supervisor.draining=false;}
-    if(applyUpdate){applying=true;supervisor.drain();}
+    if(applying&&!closing&&!applyUpdate){applying=false;supervisor.draining=false;applyStep=null;}
+    if(applyUpdate){applying=true;applyStep='drain';supervisor.drain();}
     if(!applying)await supervisor.reconcile(configuration,local,connection.credentials??{});
     const queued=events.peek();if(queued.length){const result=await api.call('events',{events:queued});events.ack(result.accepted);}
     if(!closing&&configuration.updatesEnabled&&local.autoDownload)void checkUpdates();
     // Re-evaluate after awaited calls: a user may cancel/reschedule while events upload.
     if(!closing&&applyUpdate&&updatePlan.shouldApply({ready:updater.ready,enabled:configuration.updatesEnabled})&&!supervisor.busy){
-      try{lease.assert();updatePlan.applying();updater.activate();}catch{updatePlan.failed();applying=false;supervisor.draining=false;message='업데이트를 적용하지 못했습니다. 새 버전을 다시 확인하고 적용 방법을 선택해 주세요.';event('update_failed','update','warning');return;}
-      event('update_applied','update','info',{version:updater.ready.version});quitting=true;await lease.release().catch(()=>{});
+      try{lease.assert();updatePlan.applying();updater.activate();}catch{updatePlan.failed();applying=false;applyStep=null;supervisor.draining=false;message='업데이트를 적용하지 못했습니다. 새 버전을 다시 확인하고 적용 방법을 선택해 주세요.';event('update_failed','update','warning');return;}
+      event('update_applied','update','info',{version:updater.ready.version});quitting=true;applyStep='switch';
+      try{atomicWrite(afterUpdateFile,JSON.stringify({sequence:updater.ready.sequence,version:updater.ready.version,show:!!window?.isVisible(),at:new Date().toISOString()}));}catch{}
+      try{broadcast();}catch{}await lease.release().catch(()=>{});
+      // '새 버전으로 바꾸기' 단계를 잠깐 보여 준 뒤 끝낸다(곧바로 끝내면 화면이 말없이 사라진다).
+      await new Promise(r=>setTimeout(r,1500));
       if(!process.env.AYWA_INSTALL_DIR)app.relaunch({execPath:path.join(path.dirname(process.execPath),'AywaSync.exe'),args:['--hidden']});app.exit(42);
     }
   }catch(e){interruptUpdate();if(e.code==='unauthorized'){revoked=true;lease?.lose();supervisor?.kill();}message=e.code==='device_busy'?'같은 지점의 다른 실행이 종료되기를 기다리고 있습니다.':e.code==='unauthorized'?'PC 연결이 해제되었습니다. 웹에서 새 연결 코드를 발급해 주세요.':'서버 연결을 확인하고 있습니다. 연결되면 자동으로 다시 시작합니다.';}
   finally{looping=false;broadcast();}
 }
-function interruptUpdate(){updatePlan?.interrupt();if(!closing){applying=false;if(supervisor)supervisor.draining=false;}}
+function interruptUpdate(){updatePlan?.interrupt();if(!closing){applying=false;if(!quitting)applyStep=null;if(supervisor)supervisor.draining=false;}}
 function requireUpdateAllowed(){if(closing||quitting)throw new Error('앱이 종료 중입니다. 다시 실행한 뒤 선택해 주세요.');if(!lease?.held||!configuration?.updatesEnabled)throw new Error('서버 연결과 웹의 업데이트 허용 설정을 확인해 주세요.');}
 async function shutdown(){
-  if(quitting||closing)return;closing=true;applying=true;supervisor?.drain();message='진행 중인 작업을 마친 뒤 종료합니다.';broadcast();
+  if(quitting||closing)return;closing=true;applying=true;applyStep=null;supervisor?.drain();message='진행 중인 작업을 마친 뒤 종료합니다.';broadcast();
   const check=setInterval(async()=>{if(supervisor?.busy)return;clearInterval(check);event('app_stopped');await lease?.release().catch(()=>{});quitting=true;app.quit();},500);
 }
 function registerIpc(){
@@ -141,8 +163,8 @@ function registerIpc(){
         }
         case 'update':requireUpdateAllowed();updater.nextCheck=0;void checkUpdates();break;
         case 'update-now':requireUpdateAllowed();updatePlan.request(updater.ready,{sequence:input?.sequence});message='현재 작업을 마치고 선택한 버전을 적용합니다.';void tick();break;
-        case 'update-schedule':requireUpdateAllowed();if(typeof input?.at!=='string')throw new Error('예약 날짜와 시간을 지정해 주세요.');updatePlan.request(updater.ready,{sequence:input?.sequence,at:input.at});if(!closing){applying=false;supervisor.draining=false;}message='이 버전의 업데이트 시간을 예약했습니다.';void tick();break;
-        case 'update-cancel':if(closing||quitting)throw new Error('앱이 종료 중입니다.');updatePlan.cancel();applying=false;if(supervisor)supervisor.draining=false;message='업데이트 예약을 취소했습니다. 새 적용 방법을 선택할 때까지 기다립니다.';void tick();break;
+        case 'update-schedule':requireUpdateAllowed();if(typeof input?.at!=='string')throw new Error('예약 날짜와 시간을 지정해 주세요.');updatePlan.request(updater.ready,{sequence:input?.sequence,at:input.at});if(!closing){applying=false;applyStep=null;supervisor.draining=false;}message='이 버전의 업데이트 시간을 예약했습니다.';void tick();break;
+        case 'update-cancel':if(closing||quitting)throw new Error('앱이 종료 중입니다.');updatePlan.cancel();applying=false;applyStep=null;if(supervisor)supervisor.draining=false;message='업데이트 예약을 취소했습니다. 새 적용 방법을 선택할 때까지 기다립니다.';void tick();break;
         case 'reset':{
           if(supervisor?.busy)throw new Error('이전 실행이 종료되기를 기다려 주세요.');
           let confirmed=false;try{await api.call('configuration');}catch(e){if(e.code==='unauthorized')confirmed=true;else throw e;}

@@ -106,7 +106,7 @@ export function SectionTitle({ children, sub }: { children: ReactNode; sub?: str
   );
 }
 
-/** 점수 / 만점. 점수가 없으면 `empty`(설정으로 매긴 달 = '합계에서 뺌', 옛 달 = '산출불가')만. */
+/** 점수 / 만점. 점수가 없으면 `empty`(설정으로 매긴 달 = '합계에서 제외', 옛 달 = '산출불가')만. */
 export function ScoreValue({ value, max, empty = "산출불가", className = "" }: { value: number | null; max: number; empty?: string; className?: string }) {
   return (
     <b className={`num leading-none font-bold whitespace-nowrap ${className}`}>

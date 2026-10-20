@@ -1,4 +1,6 @@
 import "server-only";
+import { samePersonGroups } from "../same-person";
+import { findSamePersonConsultations } from "./same-person-query";
 import { auditScoped, systemAuditScope } from "@/features/audit/server/system-read";
 import { kstDateOf, kstMonth, kstMonthStartIso, kstYear, shiftMonth } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
@@ -116,6 +118,8 @@ export type ConsultationListRow = {
   parentPhone: string | null;
   parentRequest: string | null;
   consultantName: string | null;
+  /** 상담자 글(`counselor`) — 상담사 계정이 없을 때 목록·카드가 대신 보인다(`consultantLabel`, 상세와 같은 사실). */
+  counselorText: string | null;
   outcome: string;
   consultedAt: string;
   hasAiAnalysis: boolean;
@@ -162,7 +166,7 @@ export type ConsultationFilter = {
 // consultant_id(스칼라)는 목록뷰 인라인 수정(상담사 선택)의 현재값 — 임베드(display_name)와 별개로 함께 받는다.
 // 0002 마이그레이션부터 있는 컬럼이라 옛/새 스키마 분기(#95)가 필요 없다.
 const LIST_COLS = `id, prospect_name, prospect_grade, prospect_school,
-   parent_phone, parent_request, outcome, consulted_at, subject, consultant_id,
+   parent_phone, parent_request, outcome, consulted_at, subject, consultant_id, counselor,
    processing_status, audio_path, from_public_intake, sync_added_at, student_id,
    consultant:consultant_id ( display_name )`;
 
@@ -275,19 +279,12 @@ export async function getEnrollmentConsultations(
 
   const { hasAi, assignedCountFor } = await loadRowBadges(supabase, data);
 
-  // 같은 사람의 등록상담 반복 접수 힌트 — 학생 연결이 있으면 student_id, 없으면 자연키(정규화 이름+학교+학년)로
-  // 묶는다(아직 학생 아닌 순수 접수자의 재방문도 감지). 로드된 목록 기준(무필터 기본 칸반=전건이라 정확).
-  // 🔴 자연키는 **학교·학년이 있어야** 성립한다. 둘 다 없으면 키가 사실상 이름뿐이라 남남을 한 사람으로
-  // 묶는다 — 옛 시트 이관분엔 이름 칸에 "영어문의"·"예비중1"처럼 사람이 아닌 접수 표기가 들어간 행이
-  // 316건 있어, 그 6건이 한 사람의 "상담 6건"으로 뜬다(실측). 못 믿는 키는 그룹을 만들지 않는다:
-  // 안 묶여서 놓치는 건 눈에 띄지만, 잘못 묶인 건 아무도 모른다.
-  const personKey = (c: { id: string; student_id?: string | null; prospect_name?: string | null; prospect_school?: string | null; prospect_grade?: string | null }) => {
-    if (c.student_id) return `s:${c.student_id}`;
-    // 자기 자신만 담는 키 = 그룹이 안 생긴다. personKey는 행마다 두 번 불리므로 **행 id로 고정**해야
-    // 한다(카운터처럼 부를 때마다 달라지면 count 조회가 조용히 빗나간다).
-    if (!c.prospect_school && !c.prospect_grade) return `x:${c.id}`;
-    return `n:${(c.prospect_name ?? "").toLowerCase().replace(/\s+/g, "")}|${c.prospect_school ?? ""}|${c.prospect_grade ?? ""}`;
-  };
+  // 같은 학생의 반복 접수 힌트(카드 'N건' 배지) — 판정은 `same-person.ts` 한 벌(원생 연결 · 이름+학교+학년 ·
+  // 이름+보호자 연락처 중 하나라도 같으면 같은 학생, 이어진 것끼리 한 묶음 · 반대 증거가 있으면 안 잇는다). 로드된 목록(기간 안)
+  // 기준이라 상세 '다른 상담'(기간 없이 찾는다)보다 적을 수 있다.
+  // 🔴 이름만으로는 묶지 않는다 — 옛 시트 이관분 이름 칸의 "영어문의"·"예비중1" 같은 접수 표기가 한 사람으로 뜬다(실측 316건).
+  const groupOf = samePersonGroups(data);
+  const personKey = (c: { id: string }) => groupOf.get(c.id) ?? c.id;
   const personCount = new Map<string, number>();
   const personGroups = new Map<string, PersonConsultRef[]>();
   for (const c of data) {
@@ -317,6 +314,7 @@ export async function getEnrollmentConsultations(
       parentPhone: c.parent_phone,
       parentRequest: c.parent_request,
       consultantName: consultant?.display_name ?? null,
+      counselorText: (c as { counselor?: string | null }).counselor?.trim() || null,
       outcome: c.outcome,
       consultedAt: c.consulted_at,
       hasAiAnalysis: hasAi.has(c.id),
@@ -427,6 +425,7 @@ export async function getEnrollmentConsultationsPage(
         parentPhone: c.parent_phone,
         parentRequest: c.parent_request,
         consultantName: consultant?.display_name ?? null,
+        counselorText: (c as { counselor?: string | null }).counselor?.trim() || null,
         outcome: c.outcome,
         consultedAt: c.consulted_at,
         hasAiAnalysis: hasAi.has(c.id),
@@ -444,38 +443,23 @@ export async function getEnrollmentConsultationsPage(
 }
 
 /**
- * 상세 페이지용 — 이 등록상담과 **같은 사람**의 다른 등록상담 목록(자기 제외, 시간역순).
- * 같은 사람 판별은 목록 배지와 동일 원칙: 학생 연결(student_id)이 있으면 그걸로, 없으면 자연키(이름+학교+학년).
- * RLS 스코프 클라이언트라 같은 학원(tenant)만 반환 — 누수 없음. 등록상담 테이블만 대상(재원생 상담 미포함).
+ * 상세 페이지용 — 이 신규 콜&상담과 **같은 학생**의 다른 상담(자기 제외, 최신순).
+ * 판정은 카드 'N건' 배지와 같은 한 벌(`same-person.ts` — 원생 연결 · 이름+학교+학년 · 이름+보호자 연락처).
+ * RLS 스코프 클라이언트라 같은 학원(tenant)만 반환 — 누수 없음. 신규 콜&상담 표만 대상(재원생 상담 미포함).
  */
 export async function getSiblingConsultations(consultationId: string): Promise<PersonConsultRef[]> {
   const supabase = await createClient();
   const { data: self } = await supabase
     .from("enrollment_consultations")
-    .select("id, student_id, prospect_name, prospect_school, prospect_grade")
+    .select("id, student_id, prospect_name, prospect_school, prospect_grade, parent_phone")
     .eq("id", consultationId)
     .single();
   if (!self) return [];
-
-  let q = supabase
-    .from("enrollment_consultations")
-    .select("id, prospect_name, subject, outcome, consulted_at")
-    .neq("id", consultationId)
-    .order("consulted_at", { ascending: false });
-  if (self.student_id) {
-    q = q.eq("student_id", self.student_id);
-  } else {
-    // 자연키 — 이름+학교+학년 일치(학생 미연결 순수 접수자의 재방문). null은 is null로 정확 매칭.
-    q = q.eq("prospect_name", self.prospect_name);
-    q = self.prospect_school ? q.eq("prospect_school", self.prospect_school) : q.is("prospect_school", null);
-    q = self.prospect_grade ? q.eq("prospect_grade", self.prospect_grade) : q.is("prospect_grade", null);
-  }
-  const { data, error } = await q;
-  if (error) throw error; // 조용히 삼키지 않음(B3)
-  return (data ?? []).map((c) => ({
+  const rows = await findSamePersonConsultations(supabase, self);
+  return rows.map((c) => ({
     id: c.id,
-    prospectName: c.prospect_name,
-    subject: (c as { subject?: string | null }).subject ?? null,
+    prospectName: c.prospect_name ?? "",
+    subject: c.subject,
     outcome: c.outcome,
     consultedAt: c.consulted_at,
   }));
@@ -725,6 +709,7 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
     parentRequest: c.parent_request,
     learningHistory: c.learning_history as LearningHistory | null,
     consultantName: consultant?.display_name ?? null,
+    counselorText: (c.counselor as string | null)?.trim() || null,
     outcome: c.outcome,
     consultedAt: c.consulted_at,
     hasAiAnalysis: ai !== null,

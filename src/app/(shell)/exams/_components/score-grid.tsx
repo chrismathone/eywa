@@ -14,6 +14,7 @@ import { gradeSortRank } from "@/features/grades/grade-rank";
 import { nextGradeSort, type GradeSort, type GradeSortKey } from "@/features/grades/list-prefs";
 import { saveGradeScores, type GradeSaveState } from "@/features/grades/server/actions";
 import { axisValueOf } from "@/features/grades/subject-axis";
+import { monthlyFromTodaysMath, planMonthlyFill, type TodaysMathMonthly } from "@/features/grades/todays-math-monthly";
 import {
   GRADE_MARK_LABEL,
   gradeMarkKeysFor,
@@ -45,6 +46,7 @@ export function ScoreGrid({
   lockReason,
   sort: sortSeed,
   saveSort,
+  todaysMath,
 }: {
   sheet: GradeSheet;
   canWrite: boolean;
@@ -55,6 +57,8 @@ export function ScoreGrid({
   sort: GradeSort;
   /** 정렬이 바뀌면 계정에 남긴다 — 실패해도 화면은 그대로(주소는 안 바뀐다). */
   saveSort: (next: GradeSort) => Promise<{ ok: boolean }>;
+  /** 같은 달 오늘 수학 월말평가 결과(개발 중 · 학원 설정 토글). null이면 '채우기' 단추가 없다. */
+  todaysMath?: TodaysMathMonthly | null;
 }) {
   const { selection: sel, rows, marksReady, noExamReady } = sheet;
   // 메모 의존성은 **값**으로 뽑는다 — `sel.maxScore`처럼 속성을 적으면 React Compiler가 `sel` 전체로
@@ -250,6 +254,15 @@ export function ScoreGrid({
     else setReasons((prev) => ({ ...prev, [studentId]: "" }));
   };
 
+  // 오늘 수학 월말평가 채우기 — 빈 칸만 · 만점이 같을 때만(todays-math-monthly.ts). 저장은 평소처럼 아래 저장 단추.
+  const monthlyPlan = todaysMath ? planMonthlyFill(todaysMath, rows, { scores, noExam }, selMax) : null;
+  const fillFromTodaysMath = () => {
+    if (!monthlyPlan) return;
+    const n = Object.keys(monthlyPlan.fill).length;
+    setScores((prev) => ({ ...prev, ...monthlyPlan.fill }));
+    setPasteNote(`오늘 수학 결과로 ${n}칸 채웠습니다 — 확인 후 저장하세요`);
+  };
+
   const applySort = (key: GradeSortKey) => {
     const next = nextGradeSort(sort, key);
     setSort(next);
@@ -333,6 +346,32 @@ export function ScoreGrid({
         </span>
       </div>
 
+      {monthlyPlan && (Object.keys(monthlyPlan.fill).length > 0 || monthlyPlan.maxMismatch > 0) ? (
+        <div className="border-line bg-bg-soft flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border px-3 py-1.5 text-sm">
+          <span className="text-text-dim">
+            <SheetText value={"오늘 수학 월말평가 — 빈 칸 "} />
+            <span className="text-foreground num font-bold">{Object.keys(monthlyPlan.fill).length}</span>
+            <SheetText value={"칸을 채울 수 있습니다"} />
+          </span>
+          {monthlyPlan.maxMismatch > 0 ? (
+            <span className="text-text-dim">
+              · <SheetText value={"만점이 달라 못 채우는 칸 "} />
+              {monthlyPlan.maxMismatch}
+              {monthlyPlan.otherMax != null ? ` (오늘 수학 ${monthlyPlan.otherMax}점 만점)` : ""}
+            </span>
+          ) : null}
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="ml-auto"
+            disabled={locked || Object.keys(monthlyPlan.fill).length === 0}
+            onClick={fillFromTodaysMath}
+          >
+            <SheetText value={"오늘 수학 결과 채우기"} />
+          </Button>
+        </div>
+      ) : null}
       {pasteNote ? (
         <p role="status" className="text-text-dim bg-bg-soft border-line rounded-lg border px-3 py-1.5 text-sm">
           <SheetText value={"붙여넣기 — "} />{pasteNote}
@@ -477,6 +516,11 @@ export function ScoreGrid({
                                 aria-describedby={outOfRange ? `range-${r.classId}-${id}` : undefined}
                               />
                             )}
+                            {!isNoExam && monthlyFromTodaysMath(todaysMath, id, value, selMax) ? (
+                              <span className="text-primary shrink-0 text-xs font-semibold" title="오늘 수학 채점 결과로 채운 값">
+                                <SheetText value={"오늘 수학"} />
+                              </span>
+                            ) : null}
                             {/* 범위를 벗어나면 **칸 옆에 글자로** 말한다 — `title`만으로는 화면낭독기·터치에
                                 아무 말도 안 한 것과 같다(codex 리뷰 2026-09-22). */}
                             {outOfRange ? (

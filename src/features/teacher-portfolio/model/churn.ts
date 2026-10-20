@@ -7,7 +7,8 @@
  *   이 강사가 맡았던 반의 끝, 또는 이 강사가 정규 수업으로 가르친 과목을 통째로 끊은 끝(다른 선생님 반으로 옮긴 뒤라도 —
  *   main 퇴원율과 같은 셈 · 이 강사에게서 끊김 없이 이어진 수강만). 끝난 수강 **줄마다** 판정해 하나라도 남으면 센다:
  *   늘 빼는 것 = 반 이동(옮겨 간 반을 하루도 안 다녔으면 그만둔 것) · 수업이 끝남(반 폐지·종강·운영 기간 종료·폐강) · 끝난 특강 ·
- *   같은 과목의 다른 반을 계속(또는 곧 · 휴원 포함) 다님,
+ *   같은 과목의 다른 반을 계속(또는 곧 · 휴원 포함) 다님 — **어느 선생님 반이든** 반 이동처럼 뺀다(원장 2026-10-15 확인 *"다른 선생님 반으로
+ *   옮긴 학생은 퇴원율에 반이동으로 필터링되는거 맞지? 오해 안되게"* — 같은 날 '다른 선생님 반이면 센다'로 바꿨다가 되돌림),
  *   원장이 고르는 것 = 뺄 퇴원 사유(기본 졸업·이사·질병·권고퇴원) · 수강종료(학원의 다른 수업은 계속 다님)를 셀지.
  * - 사유 = 그 수강의 종료 사유 → 없거나 '퇴원에 따른 자동 종료'면 학생의 퇴원 사유(퇴원관리와 같은 곳 · 퇴원일 때만 · 그 퇴원일이
  *   그만둔 날 ±14일 안일 때만 — `exit-reason.ts`).
@@ -142,7 +143,7 @@ export function churnResult(input: ChurnInput): ChurnResult {
         if (!cancelled && (text === TRANSFER_TEXT || x.is_transferred)) note = "반 이동";
         else if ((text && CLASS_END_TEXT.includes(text)) || c?.closed_at === exit.day) note = "수업이 끝남";
         else if (isSpecialLecture({ isSpecial: c?.is_special, className: c?.class_name })) note = "끝난 특강";
-        else if (keeps(x)) note = "같은 과목 다른 반을 다님";
+        else if (keeps(x)) note = "같은 과목 다른 반을 다님(반 이동처럼 제외)";
         else if (off) note = `사유 ${REASON_LABEL[off]}`;
         return { reason, note };
       });
@@ -164,6 +165,6 @@ export function churnResult(input: ChurnInput): ChurnResult {
   return { subjects, exits, metric: {
     raw, base: base.size, need, counted: counted.size, detail: rows,
     basis: base.size ? `그만둠 ${counted.size} / 지난달 담당 ${base.size}명` : "지난달 담당 학생 없음",
-    reason: `지난달(${Number(prevEnd.slice(5, 7))}월) 이 선생님이 정규 수업으로 ${need}일 이상 맡은 학생(담임·교시 담당 모두) ${base.size}명 중 이 달에 그 선생님 반이나 가르친 과목을 그만둔(퇴원·수강종료) 학생의 비율입니다. 다른 선생님 반으로 옮긴 뒤 그만둬도 셉니다. 원장이 고른 사유·반 이동·수업이 끝남·끝난 특강·같은 과목의 다른 반을 다니는 경우는 빼고, 한 학생은 한 번만 셉니다.`,
+    reason: `지난달(${Number(prevEnd.slice(5, 7))}월) 이 선생님이 정규 수업으로 ${need}일 이상 맡은 학생(담임·교시 담당 모두) ${base.size}명 중 이 달에 그 선생님 반이나 가르친 과목을 그만둔(퇴원·수강종료) 학생의 비율입니다. 다른 반으로 옮긴 뒤 그 과목을 그만두면 셉니다. 원장이 고른 사유·반 이동·수업이 끝남·끝난 특강·같은 과목의 다른 반을 계속 다니는 경우(어느 선생님 반이든 — 반 이동처럼)는 제외하고, 한 학생은 한 번만 셉니다.`,
   } };
 }

@@ -100,7 +100,7 @@ export const timetable: HelpManual = {
       key: "tt-student-row",
       label: "원생 줄",
       zone: "row",
-      body: "**클릭**하면 [[student-detail|원생 상세]]가 열립니다. 끌어 다른 반으로 옮깁니다. 등원 요일은 **우클릭**으로 고칩니다. 신입은 빨강, 반이동은 초록입니다. Delete는 오늘 수강 종료(권한 있는 사람만).",
+      body: "**클릭**하면 [[student-detail|원생 상세]]가 열립니다. 끌어 다른 반으로 옮깁니다. 등원 요일은 **우클릭**으로 고칩니다. 신입은 빨강, 반이동은 초록입니다. Delete는 오늘 수강 종료(권한 있는 사람만 · 종료 사유를 고릅니다).",
     },
     {
       n: 14,

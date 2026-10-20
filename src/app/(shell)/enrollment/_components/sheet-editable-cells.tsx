@@ -277,6 +277,7 @@ export function EditableSelectCell({
   options,
   canEdit,
   children,
+  fallback,
 }: {
   id: string;
   field: "consultantId" | "subject";
@@ -285,6 +286,8 @@ export function EditableSelectCell({
   canEdit: boolean;
   /** 표시면(값이 있을 때). */
   children: ReactNode;
+  /** 값이 없을 때 대신 보이는 글(상담사 계정이 없을 때의 상담자 글 등) — 고르기 목록엔 안 들어간다. */
+  fallback?: string | null;
 }) {
   const cell = useCellEdit(`consultation:${id}`, value ?? "", (next) =>
     patchConsultationCells(id, field === "consultantId" ? { consultantId: next || null } : { subject: next || null }),
@@ -324,8 +327,8 @@ export function EditableSelectCell({
     cell.open();
   };
   return (
-    <CellFace canEdit={canEdit} onOpen={openFresh} empty={!cell.shown}>
-      {cell.shown ? children : null}
+    <CellFace canEdit={canEdit} onOpen={openFresh} empty={!cell.shown && !fallback}>
+      {cell.shown ? children : (fallback ?? null)}
     </CellFace>
   );
 }

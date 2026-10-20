@@ -4,7 +4,8 @@ import type { VideoHomeworkLedgerRow } from "./types";
 export type LedgerFilters = {
   /** 고른 반들 — 비어 있으면 전체 반. */
   classIds: string[]; subject: string; school: string; grade: string; query: string;
-  status: "all" | RoundStatus;
+  /** 회차 상태가 하나라도 있는 학생 · 또는 `assign` = 아직 칸에 붙이지 않은 영상이 남은 학생(원장 2026-10-19 '영상 배정 필요함'). */
+  status: "all" | RoundStatus | "assign";
   sort: "name" | "missing" | "completion";
   /** 숙제를 낸 강사(사용자 id) — 관리자 화면만(원장 2026-10-14). 강사뷰는 늘 "all"(이미 본인 칸뿐). */
   teacher: string;
@@ -31,6 +32,21 @@ export function teacherLedgerKeep(teacherRounds: Readonly<Record<string, readonl
   const keys = new Set(teacherRounds[teacher] ?? []);
   // 열쇠 = `반:학생:숙제일`(ownRoundKey) — 날짜에는 ':'가 없으니 마지막 ':' 앞이 반 × 학생이다.
   return { keys, pairs: new Set([...keys].map((key) => key.slice(0, key.lastIndexOf(":")))) };
+}
+
+/**
+ * 검색어에서 강사 이름을 떼어 낸다(원장 2026-10-19 *"강사, 반, 학교는 필터가 아닌 검색에서"*) — 강사 드롭다운을 걷고 검색창 하나로.
+ * 낱말 하나가 강사 이름과 **똑같으면** 그 강사(낸 사람) 칸만 남기는 강사 필터로 쓰고(그 강사의 강사뷰와 같은 칸 — `teacherLedgerKeep`),
+ * 나머지 낱말은 학생·반·학교·학년·과목 글자 검색에 쓴다. 이름이 같은 강사가 둘이면 강사로 보지 않는다(글자 검색으로 남긴다). 순수 함수.
+ */
+export function splitTeacherQuery(query: string, teachers: readonly { value: string; label: string }[]): { teacher: string; text: string } {
+  const norm = (s: string) => s.trim().toLocaleLowerCase("ko");
+  const words = query.trim().split(/\s+/).filter(Boolean);
+  for (const [i, word] of words.entries()) {
+    const hits = teachers.filter((t) => norm(t.label) === norm(word));
+    if (hits.length === 1) return { teacher: hits[0]!.value, text: words.filter((_, j) => j !== i).join(" ") };
+  }
+  return { teacher: "all", text: query };
 }
 
 /**
@@ -74,6 +90,7 @@ export function filterLedgerRows(rows: VideoHomeworkLedgerRow[], rounds: LedgerR
       filters.school !== "all" && (row.school || "미등록") !== filters.school || filters.grade !== "all" && (row.grade || "미등록") !== filters.grade) return false;
     const haystack = `${row.studentName} ${row.className} ${row.school ?? ""} ${row.grade ?? ""} ${row.subject}`.toLocaleLowerCase("ko");
     if (!words.every((word) => haystack.includes(word))) return false;
+    if (filters.status === "assign") return !!row.hasAssignableVideos;
     return filters.status === "all" || counts.get(ledgerPairKey(row))![filters.status] > 0;
   }).sort((a, b) => {
     const aCount = counts.get(ledgerPairKey(a))!;

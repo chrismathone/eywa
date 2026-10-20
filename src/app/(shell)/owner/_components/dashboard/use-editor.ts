@@ -88,6 +88,8 @@ export function useDashboardEditor(initial: DashboardSettings, subjects: readonl
     undo: useCallback(() => dispatch({ type: "undo" }), []),
     redo: useCallback(() => dispatch({ type: "redo" }), []),
     draftOf: (b: Bundle) => state.drafts[layoutKey(b, state.subject)].present,
+    /** 과목 운영형의 다른 과목 배치(지금 편집 중인 값 — 저장 전이어도). 없으면 null. */
+    draftOfSubject: (subject: string) => state.drafts[layoutKey("subject", subject)]?.present ?? null,
   };
 }
 

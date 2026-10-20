@@ -8,14 +8,15 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { humanizeDbError } from "@/lib/supabase/db-error";
+import { logAction } from "@/features/audit/server/log";
 import { canManageSalary } from "./salary-access";
 import { SALARY_GROUPS } from "../salary-group";
 import type { SalaryType } from "../settlement";
 
 const SALARY_TYPES: SalaryType[] = ["commission", "fixed", "hybrid"];
 
-// nonce = 성공 확정 신호(에디터가 저장 후 접히도록). ⚠️ 급여 변경은 users의 log_activity 트리거가
-// 이미 감사기록(0120a에서 salary_type/commission_rate는 redact) — 여기서 별도 audit_logs 기록 안 함(급여 PII 이중노출 방지).
+// nonce = 성공 확정 신호(에디터가 저장 후 접히도록). ⚠️ 감사로그(audit_logs)에는 **누구의 정책을 저장했는지만** 남긴다
+// (급여 방식·배분율·기본급 값은 물론 칸 목록도 안 담는다 — 급여 PII). 아래 저장부 주석 참조.
 export type SaveCompState = { error?: string; ok?: true; nonce?: number } | undefined;
 
 /**
@@ -69,13 +70,13 @@ export async function saveTeacherComp(
     return { error: "급여제는 월 기본급(0 초과)이 필요합니다" };
   }
 
-  // 원장은 종전대로 세션 클라이언트(users의 log_activity 트리거가 auth.uid()로 행위자를 남긴다 — 이 액션의 유일한
-  // 감사 기록이라 admin으로 바꾸면 행위자가 비어 버린다). 총괄(비-master)만 admin + 명시 tenant_id로 쓴다(D6).
+  // 원장은 종전대로 세션 클라이언트(users의 log_activity 트리거가 auth.uid()로 행위자를 남긴다 — admin으로 바꾸면
+  // 그 활동 기록의 행위자가 비어 버린다). 총괄(비-master)만 admin + 명시 tenant_id로 쓴다(D6).
   const supabase = user.systemRole === "master" ? await createClient() : createAdminClient();
   // 같은 테넌트 소속만 — admin이라 RLS가 막아 주지 않으므로 여기서 막는다.
   const { data: target } = await supabase
     .from("users")
-    .select("id, tenant_id")
+    .select("id, tenant_id, display_name")
     .eq("id", targetId)
     .eq("tenant_id", user.tenantId)
     .maybeSingle();
@@ -109,8 +110,16 @@ export async function saveTeacherComp(
   const { error } = await supabase.from("users").update(patch).eq("id", targetId).eq("tenant_id", user.tenantId);
   if (error) return { error: humanizeDbError(error.message) };
 
-  // 감사기록은 users의 log_activity 트리거에 위임(급여 컬럼은 0120a에서 redact = "바뀜"만 기록, 값 미노출).
-  // 여기서 별도 audit_logs를 남기지 않는다 — /owner 감사 화면이 admin/manager에도 열려 배분율 PII가 샐 수 있어서.
+  // 감사로그 — 🔴 **누구의 급여 정책을 저장했는지만**. 값은 물론 칸 목록도 담지 않는다(기본급 칸은 급여제·혼합에서만 저장돼
+  //    칸 목록만으로 급여 방식이 드러난다 — 급여 방식·배분율·기본급 = 급여 PII).
+  // users의 log_activity 트리거(0120a, 급여 컬럼 redact)는 auth.uid()로 행위자를 남기는데, 총괄 경로는 admin
+  // 클라이언트라 트리거가 행위자를 못 본다 → 누가 바꿨는지는 이 줄이 유일한 기록이다(원장 경로도 같은 모양으로 남긴다).
+  await logAction({
+    action: "teacher_comp_update",
+    targetType: "staff",
+    targetLabel: (target.display_name as string | null) ?? null,
+    metadata: { userId: targetId },
+  });
   revalidatePath("/billing");
   return { ok: true, nonce: Date.now() };
 }

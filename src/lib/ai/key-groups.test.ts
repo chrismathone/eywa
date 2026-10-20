@@ -25,13 +25,6 @@ vi.mock("./deepseek", () => ({
     return { chat: { completions: { create: vi.fn() } } };
   },
 }));
-vi.mock("./upstage", () => ({
-  getUpstage: (...args: unknown[]) => {
-    clientCalls.push(["upstage", ...args]);
-    return { chat: { completions: { create: vi.fn() } } };
-  },
-}));
-
 import { generateJSON } from "./generate";
 import { FEATURE_KEY_GROUP, keyGroupOf, keyLabelOf, resolveKeyEnv, resolveModelChain } from "./models";
 
@@ -43,7 +36,6 @@ const KEYS = [
   "ANTHROPIC_API_KEY_CONSULTATIONS",
   "DEEPSEEK_API_KEY",
   "DEEPSEEK_API_KEY_MEETING",
-  "UPSTAGE_API_KEY",
   "SUPABASE_SERVICE_ROLE_KEY",
   "NEXT_PUBLIC_SUPABASE_URL",
 ];
@@ -105,7 +97,7 @@ describe("resolveKeyEnv — 그룹 키 → 옛 버킷 → 기본 키", () => {
     expect(resolveKeyEnv("anthropic", "consultations", null)).toBe("ANTHROPIC_API_KEY_CONSULTATIONS");
   });
   it("키가 하나도 없으면 null", () => {
-    expect(resolveKeyEnv("upstage", "default", "ment")).toBeNull();
+    expect(resolveKeyEnv("deepseek", "default", "ment")).toBeNull();
   });
 });
 
@@ -124,7 +116,7 @@ describe("keyLabelOf — 사용량 표에 남는 이름", () => {
     expect(keyLabelOf("anthropic", "ANTHROPIC_API_KEY_MENT")).toBe("ment");
     expect(keyLabelOf("anthropic", "ANTHROPIC_API_KEY")).toBe("default");
     expect(keyLabelOf("deepseek", "DEEPSEEK_API_KEY_CONSULTATIONS")).toBe("consultations");
-    expect(keyLabelOf("upstage", null)).toBe("none");
+    expect(keyLabelOf("deepseek", null)).toBe("none");
   });
 });
 
@@ -155,15 +147,14 @@ describe("generateJSON 배선 — 호출부 이름이 키 그룹으로 클라이
 });
 
 describe("🔴 오늘 프로덕션 키 조합에서 라우팅이 그대로다(그룹 키 0개)", () => {
-  // Vercel Production에 있는 AI 키는 넷뿐이다(2026-09-15 실측): ANTHROPIC_API_KEY ·
-  // ANTHROPIC_API_KEY_CONSULTATIONS · DEEPSEEK_API_KEY · UPSTAGE_API_KEY.
+  // Vercel Production에 있던 AI 키는 넷이었다(2026-09-15 실측): ANTHROPIC_API_KEY ·
+  // ANTHROPIC_API_KEY_CONSULTATIONS · DEEPSEEK_API_KEY · UPSTAGE_API_KEY(2026-10-19 Solar를 빼서 이제 안 쓴다).
   // 이 상태에서 **모든 호출부가 예전과 같은 env를 골라야** 배포 순간 AI 라우팅이 안 바뀐다.
   beforeEach(() => {
     process.env.AI_PROVIDER = "anthropic";
     process.env.ANTHROPIC_API_KEY = "a";
     process.env.ANTHROPIC_API_KEY_CONSULTATIONS = "ac";
     process.env.DEEPSEEK_API_KEY = "d";
-    process.env.UPSTAGE_API_KEY = "u";
   });
 
   // 🔴 호출부 목록을 **코드에서 읽는다**(feature·keyName 둘 다) — 손으로 적은 복사본은 나중에 호출부가
@@ -188,21 +179,21 @@ describe("🔴 오늘 프로덕션 키 조합에서 라우팅이 그대로다(�
     }
   });
 
-  it("DeepSeek·Upstage는 전용 키가 없으니 전부 기본 키(예전 폴백과 동일)", () => {
+  it("DeepSeek은 전용 키가 없으니 전부 기본 키(예전 폴백과 동일)", () => {
     for (const { feature, keyName } of CASES) {
       expect(resolveKeyEnv("deepseek", keyName, keyGroupOf(feature)), feature).toBe("DEEPSEEK_API_KEY");
-      expect(resolveKeyEnv("upstage", keyName, keyGroupOf(feature)), feature).toBe("UPSTAGE_API_KEY");
     }
   });
 
-  it("체인(회사 순서)도 그대로 — 기본 anthropic → deepseek → upstage", () => {
+  it("체인(회사 순서) — anthropic → deepseek 둘뿐(2026-10-19 Solar 제거 · Solar 키가 남아 있어도 안 선다)", () => {
+    process.env.UPSTAGE_API_KEY = "u";
     for (const { feature, keyName } of CASES) {
       expect(resolveModelChain("balanced", keyName, undefined, keyGroupOf(feature)).map((c) => c.provider), feature).toEqual([
         "anthropic",
         "deepseek",
-        "upstage",
       ]);
     }
+    delete process.env.UPSTAGE_API_KEY;
   });
 
   it("그룹 키를 넣으면 그 기능만 새 키로 옮겨간다(나머지는 그대로)", () => {

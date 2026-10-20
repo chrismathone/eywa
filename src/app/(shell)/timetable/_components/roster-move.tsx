@@ -1,7 +1,7 @@
 "use client";
 
 import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   DndContext,
@@ -18,6 +18,14 @@ import {
 import { Loader2 } from "@/components/icons/aywa-icon-compat";
 import { endSingleEnrollment, holdSingleEnrollment } from "@/features/students/server/actions";
 import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-change-signal";
+import { ReasonFields } from "@/features/withdrawals/reason-fields";
+import { SPLIT_X_ATTR } from "@/features/timetable-memo/ui/split-panes";
+
+/**
+ * 드래그 자동 스크롤 — 시간표 | 메모 시트 두 칸의 **바깥 가로 상자는 굴리지 않는다**(split-panes.tsx).
+ * 굴리면 오른쪽 가장자리로 학생을 끌 때 화면이 시트 쪽으로 미끄러져 놓을 반이 사라진다. 시간표 판의 세로·줄의 가로는 그대로.
+ */
+const AUTO_SCROLL = { canScroll: (el: Element) => !el.hasAttribute(SPLIT_X_ATTR) };
 import type { StudentBusyWindow } from "@/features/timetable/lib/student-busy";
 import {
   noteDragPointerDown,
@@ -232,6 +240,7 @@ export function RosterMoveArea({
       <DndContext
         sensors={sensors}
         collisionDetection={collisionDetection}
+        autoScroll={AUTO_SCROLL}
         onDragStart={(e) => {
           setTimetableDragging(true);
           const d = (e.active.data.current as RosterDragData | undefined) ?? null;
@@ -302,12 +311,18 @@ function RosterMoveDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isWithdraw = target.kind === "withdrawn";
+  const formRef = useRef<HTMLFormElement>(null);
+  // 퇴원 칸이면 첫 칸(종료 사유)에 바로 초점 — 시간표 Delete 종료 창과 같다.
+  useEffect(() => {
+    if (isWithdraw) formRef.current?.querySelector<HTMLSelectElement>("select[name=reason]")?.focus();
+  }, [isWithdraw]);
   const futureHold = !isWithdraw && date > today;
 
-  async function submit() {
+  /** 퇴원 칸이면 창의 사유 칸(대분류 · 세부 · 메모)도 함께 — 서버가 같은 규칙으로 다시 본다(`readReasonForm`). */
+  async function submit(form: HTMLFormElement) {
     setBusy(true);
     setError(null);
-    const fd = new FormData();
+    const fd = new FormData(form);
     fd.set("enrollmentId", target.enrollmentId);
     if (target.studentId) fd.set("studentId", target.studentId);
     fd.set("date", date);
@@ -331,9 +346,14 @@ function RosterMoveDialog({
       aria-label={isWithdraw ? "마지막 수업일 확인" : "대기 전환 확인"}
       onClick={() => (busy ? null : onClose(false))}
     >
-      <div
-        className="bg-card shadow-modal w-full max-w-sm rounded-xl p-5"
+      <form
+        ref={formRef}
+        className="bg-card shadow-modal max-h-[calc(100dvh-2rem)] w-full max-w-sm overflow-y-auto rounded-xl p-5"
         onClick={(e) => e.stopPropagation()}
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!busy && date) void submit(e.currentTarget);
+        }}
       >
         {/* 🔴 퇴원 칸 드롭은 '수강 종료'라 부르지 않는다 — 퇴원관리 유형(한 과목만 끝난 재원생)과
             같은 글자라 고른 날짜가 그 유형인 것처럼 읽힌다. 여기는 그 반의 마지막 수업일이다. */}
@@ -362,6 +382,19 @@ function RosterMoveDialog({
         </label>
         {/* '퇴원 칸'에 놓았어도 실제로는 이 반 수강만 끝난다 — 무엇이 되는지(종강·과목 수강종료·퇴원)를 사실대로. */}
         {isWithdraw ? <EndScopeNote enrollmentId={target.enrollmentId} date={date} /> : null}
+        {/* 사유를 고른다(원장 2026-10-15 *"기타는 모든 곳을 일치하게"*) — 상태 전환 창과 같은 칸. 대기 칸은 사유가 없다. */}
+        {isWithdraw ? (
+          <div className="mt-3 space-y-2">
+            <ReasonFields
+              reasonLabel="종료 사유"
+              initialReason={null}
+              memoPlaceholder="배경 정보 (선택)"
+              labelClassName="text-foreground block text-sm font-medium"
+              controlClassName={`border-line bg-card text-foreground w-full rounded-lg border px-2 py-1.5 ${CONTROL_LABEL}`}
+              idPrefix="roster-end"
+            />
+          </div>
+        ) : null}
         {futureHold ? (
           <p className="text-amber mt-2 text-xs">
             대기는 시작일을 담는 칸이 없어 <b>저장하면 바로</b> 대기로 바뀝니다(고른 날짜는 기록으로 남습니다).
@@ -378,10 +411,9 @@ function RosterMoveDialog({
             취소
           </button>
           <button
-            type="button"
-            onClick={submit}
+            type="submit"
             disabled={busy || !date}
-            autoFocus
+            autoFocus={!isWithdraw}
             className={`${CONTROL_H} ${CONTROL_LABEL} inline-flex items-center gap-1.5 rounded-lg px-3 font-bold text-white disabled:opacity-60 ${
               isWithdraw ? "bg-danger" : "bg-primary"
             }`}
@@ -390,7 +422,7 @@ function RosterMoveDialog({
             {isWithdraw ? "확인" : "대기로 옮기기"}
           </button>
         </div>
-      </div>
+      </form>
     </div>
   );
 }

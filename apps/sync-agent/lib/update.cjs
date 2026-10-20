@@ -8,7 +8,11 @@ const {pipeline}=require('node:stream/promises');
 const {Transform,Readable}=require('node:stream');
 const yauzl=require('yauzl');
 const {atomicWrite}=require('./storage.cjs');
+const {stageDelta}=require('./update-delta.cjs');
 const MAX_SIZE=2*1024*1024*1024;
+// 이 프로세스에서 지금 쓰고 있는 임시 폴더 — 다른 Updater(연결 해제 뒤 새로 만든 것 등)의 정리 루프가 지우지 않게.
+const activeStages=new Set();
+async function assertComplete(stage,m){for(const f of m.files){const st=await fsp.lstat(path.join(stage,...f.path.split('/'))).catch(()=>null);if(!st?.isFile()||st.size!==f.size)throw new Error('missing_files');}}
 function safeRelative(name){
   if(typeof name!=='string'||name.length>230||/[\\:\x00-\x1f]/.test(name)||name.startsWith('/')||name.split('/').some(p=>!p||p==='.'||p==='..'||/[. ]$/.test(p)||/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(p)))throw new Error('invalid_path');
   return name;
@@ -66,7 +70,8 @@ async function extractVerified(file,target,m,{onProgress=()=>{}}={}){
   });
 }
 class Updater {
-  constructor({root,api,publicKey,sequence,event,fetchImpl=fetch}){Object.assign(this,{root,api,publicKey,sequence,event,fetchImpl});this.state='idle';this.ready=null;this.pending=false;this.nextCheck=0;this.progress=null;this.failure=null;this.checkedAt=null;}
+  // currentRoot = 지금 도는 버전의 파일 폴더(패키지 실행 때만) — 있으면 바뀐 파일만 받는다(1.0.7).
+  constructor({root,api,publicKey,sequence,event,fetchImpl=fetch,currentRoot=null}){Object.assign(this,{root,api,publicKey,sequence,event,fetchImpl,currentRoot});this.delta=null;this.state='idle';this.ready=null;this.pending=false;this.nextCheck=0;this.progress=null;this.failure=null;this.checkedAt=null;}
   async check(){
     if(this.pending||Date.now()<this.nextCheck)return;
     this.pending=true;this.nextCheck=Date.now()+6*3600000;this.failure=null;
@@ -93,16 +98,32 @@ class Updater {
       }
       const keep=new Set([this.sequence,m.sequence,journal.current,journal.previous].map(String));
       for(const name of await fsp.readdir(versions)){
+        // 지난 시도가 남긴 임시 폴더·zip(끊긴 PC 등) — 이 이름은 이 코드만 만든다.
+        if(/^\d+\.stage-[0-9a-f-]{36}(?:\.zip)?$/.test(name)){if(!activeStages.has(path.join(versions,name.replace(/\.zip$/,''))))await fsp.rm(path.join(versions,name),{recursive:true,force:true}).catch(()=>{});continue;}
         if(!/^[1-9]\d*$/.test(name)||keep.has(name))continue;
         const old=path.resolve(versions,name);if(path.dirname(old)!==versions||(await fsp.lstat(old)).isSymbolicLink())continue;
         try{const oldEnvelope=JSON.parse(await fsp.readFile(path.join(old,'release.json'),'utf8'));const prior=verifyManifest(oldEnvelope,this.publicKey,{now:0});if(String(prior.sequence)!==name)continue;}catch{continue;}
         await fsp.rm(old,{recursive:true,force:true});
       }
       this.event('update_available','update','info',{version:m.version});this.state='downloading';
-      stage=path.join(versions,`${m.sequence}.stage-${crypto.randomUUID()}`);archive=stage+'.zip';
-      const free=await fsp.statfs(versions);const required=m.size+m.files.reduce((n,f)=>n+f.size,0)+256*1024*1024;
-      if(Number(free.bavail)*Number(free.bsize)<required)throw new Error('disk_full');
-      await download(m,archive,this.fetchImpl,{onProgress:progress});await extractVerified(archive,stage,m,{onProgress:progress});progress({phase:'finalizing'});atomicWrite(path.join(stage,'release.json'),JSON.stringify(release));
+      stage=path.join(versions,`${m.sequence}.stage-${crypto.randomUUID()}`);archive=stage+'.zip';activeStages.add(stage);
+      const filesBytes=m.files.reduce((n,f)=>n+f.size,0),freeBytes=async()=>{const free=await fsp.statfs(versions);return Number(free.bavail)*Number(free.bsize);};
+      // 바뀐 파일만 — 지금 버전에서 같은 파일은 복사하고 나머지만 게시된 zip에서 범위 요청으로. 어긋나면 이 폴더를 지우고 전체 받기로.
+      let staged=false;this.delta=null;
+      if(this.currentRoot&&await freeBytes()>=filesBytes+256*1024*1024){
+        try{this.delta=await stageDelta(m,this.currentRoot,stage,this.fetchImpl,{onProgress:progress,safeRelative});staged=true;}
+        catch(error){
+          if(error.code==='ENOSPC')throw error;this.delta={fallback:String(error.message??'').slice(0,40)};
+          // 전체 받기는 새 폴더로(지우다 실패해도 섞이지 않게) · 진행률도 처음부터(바뀐 파일 수가 남지 않게).
+          await fsp.rm(stage,{recursive:true,force:true}).catch(()=>{});activeStages.delete(stage);stage=path.join(versions,`${m.sequence}.stage-${crypto.randomUUID()}`);archive=stage+'.zip';activeStages.add(stage);
+          this.progress={version,updatedAt:new Date().toISOString()};
+        }
+      }
+      if(!staged){
+        if(await freeBytes()<m.size+filesBytes+256*1024*1024)throw new Error('disk_full');
+        await download(m,archive,this.fetchImpl,{onProgress:progress});await extractVerified(archive,stage,m,{onProgress:progress});
+      }
+      progress({phase:'finalizing',completed:m.files.length,total:m.files.length,files:0});await assertComplete(stage,m);atomicWrite(path.join(stage,'release.json'),JSON.stringify(release));
       if(fs.existsSync(destination))throw new Error('version_exists');await fsp.rename(stage,destination);await fsp.unlink(archive).catch(()=>{});
       this.ready={sequence:m.sequence,version:m.version,expiresAt:m.expiresAt};this.state='ready';this.progress=null;this.event('update_downloaded','update','info',{version:m.version});
     }catch(error){
@@ -116,7 +137,7 @@ class Updater {
         phase==='checking'?'manifest_failed':phase==='downloading'?'download_failed':phase==='extracting'?'extract_failed':'prepare_failed';
       this.failure=code;this.progress=null;this.state='error';this.nextCheck=Date.now()+30*60000;this.event('update_failed','update','warning',{updateError:code,...(version?{version}:{})});
     }
-    finally{this.pending=false;}
+    finally{this.pending=false;if(stage)activeStages.delete(stage);}
   }
   activate(){
     if(!this.ready)throw new Error('not_ready');const file=path.join(this.root,'launch.json');let prior={};try{prior=JSON.parse(fs.readFileSync(file,'utf8'));}catch{}

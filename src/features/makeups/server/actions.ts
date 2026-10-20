@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { describeDbError } from "@/lib/supabase/db-error";
+import { logAction } from "@/features/audit/server/log";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { getMakeupCases, getMakeupCaseDetail, getMakeupOptions, getMakeupEvents } from "./queries";
 import { makeupCommandSchema, parseMakeupCommand } from "../schemas";
@@ -22,6 +23,9 @@ export type MakeupActionResult = { ok: true; result: Record<string, unknown> } |
  * (Next 16.2.6 / React 19.3 canary). No revalidation also means no `x-action-revalidated`, so the caller publishes
  * the mutation signal for other windows itself.
  */
+/** RPC가 감사로그를 남기지 않는 명령 — 여기 없는 명령은 makeup_private.audit이 남긴다(0346a~0350e). */
+const APP_LOGGED_COMMANDS: ReadonlySet<string> = new Set(["assign", "participation", "submit", "hold", "resume", "resolve_reconciliation"]);
+
 export async function executeMakeupCommand(input: unknown, options?: unknown): Promise<MakeupActionResult> {
   const clientRefresh = z.object({ refresh: z.literal("client") }).safeParse(options).success;
   const parsed = makeupCommandSchema.safeParse(input);
@@ -49,6 +53,21 @@ export async function executeMakeupCommand(input: unknown, options?: unknown): P
   }
   const saved = parseCommandSuccess(data);
   if (!saved.ok) return { ok: false, error: "저장 결과를 확인하지 못했습니다. 같은 요청으로 다시 시도해 주세요." };
+  // 감사로그 — RPC(makeup_private.audit, 0345a)가 접수·승인·예약·인정·종결 등은 audit_logs에 `makeup_<명령>`으로 직접 남긴다.
+  //    그 기록이 없는 명령만 여기서 한 줄(무엇을 · 어느 보강 건 · 어느 학생 — 입력 내용은 안 싣는다). 같은 요청을 다시 보낸 것(replayed)은 이미 남았다.
+  //    ⚠️ 대사 처리의 '시수 차이 승인' 갈래는 RPC도 `makeup_accept_units`를 남긴다(승인 사실 · 이 줄은 처리 사실).
+  if (!saved.value.replayed && APP_LOGGED_COMMANDS.has(parsed.data.action)) {
+    const sid = parsed.data.payload.student_id;
+    await logAction({
+      action: "makeup_case_command",
+      targetType: "makeup",
+      metadata: {
+        command: parsed.data.action,
+        caseId: saved.value.case_id,
+        studentId: typeof sid === "string" && z.string().uuid().safeParse(sid).success ? sid : null,
+      },
+    });
+  }
   if (clientRefresh) return { ok: true, result: data };
   revalidatePath("/makeups");
   const affectedCases = new Set([saved.value.case_id, ...saved.value.case_ids, parsed.data.payload.case_id]);

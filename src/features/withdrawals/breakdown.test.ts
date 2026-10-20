@@ -16,8 +16,11 @@ import {
   reasonFacetLabel,
   reasonFacetOf,
   schoolItems,
+  subjectComboItems,
   subjectItems,
   teacherFacetsIn,
+  teacherCellText,
+  teacherFilterOptions,
   teacherItems,
 } from "./breakdown";
 
@@ -92,6 +95,32 @@ describe("분석 축", () => {
     ]);
   });
 
+  it("🔴 과목을 고르면 그 과목이 든 줄만 함께 끊은 묶음으로 한 번씩 — 이름 순서는 학원설정 과목 순서(원장 2026-10-15 '수학+영어')", () => {
+    const labelOf = (k: string) => ({ math: "수학", english: "영어", science: "과학" })[k] ?? k;
+    const rows = [
+      { subjects: ["english", "math"] },
+      { subjects: ["math"] },
+      { subjects: ["math"] },
+      { subjects: ["math", "english"] },
+      { subjects: ["english"] },
+      { subjects: [] },
+    ];
+    const order = ["math", "english", "science"];
+    expect(subjectComboItems(rows, "math", order, labelOf)).toEqual([
+      { value: "math", label: "수학", count: 2 },
+      { value: "math+english", label: "수학+영어", count: 2 },
+    ]);
+    // 영어를 골라도 묶음 이름은 같은 '수학+영어' · 고른 과목만 끊은 칸이 맨 앞(더 적어도).
+    expect(subjectComboItems(rows, "english", order, labelOf)).toEqual([
+      { value: "english", label: "영어", count: 1 },
+      { value: "math+english", label: "수학+영어", count: 2 },
+    ]);
+    // 설정에 없는 과목 키는 묶음 이름의 뒤로.
+    expect(subjectComboItems([{ subjects: ["legacy", "math"] }], "math", order, labelOf)).toEqual([
+      { value: "math+legacy", label: "수학+legacy", count: 1 },
+    ]);
+  });
+
   it("학년 — 학원설정 학년 순서대로(많은 순 아님) · 설정에 없는 학년은 그 뒤 · 미기재 맨 끝", () => {
     const rows = [{ grade: "고1" }, { grade: "고1" }, { grade: "중3" }, { grade: "N수" }, { grade: null }, { grade: " " }];
     expect(gradeItems(rows, ["초6", "중1", "중2", "중3", "고1"]).map((i) => [i.label, i.count])).toEqual([
@@ -115,6 +144,23 @@ describe("분석 축", () => {
       { value: "t2", label: "이선생", count: 1 },
       { value: FACET_NONE, label: "담당 미반영", count: 2 },
     ]);
+  });
+
+  it("🔴 명단 '담당강사' 칸·담당강사 필터 = 강사 카드와 같은 값·같은 이름(원장 2026-10-15 '모든 곳에서 담당이 일치하게')", () => {
+    const nameOf = (id: string) => ({ t1: "김선생", t2: "이선생" })[id] ?? null;
+    expect(teacherCellText(["t1", "t2"], nameOf)).toBe("김선생 · 이선생");
+    expect(teacherCellText(["t1", FACET_NONE], nameOf)).toBe("김선생 · 담당 미반영");
+    expect(teacherCellText(["ghost"], nameOf)).toBe("이름 없는 계정");
+    expect(teacherCellText(null, nameOf)).toBe("—");
+    // 선택지 = 강사 카드 칸과 같은 값 · 이름 순 · 담당 미반영 맨 끝 · 고른 값은 모집단에 없어도 남긴다.
+    expect(teacherFilterOptions([["t2"], ["t1", FACET_NONE], null, ["t1"]], "t9", nameOf)).toEqual([
+      { value: "t1", label: "김선생" },
+      { value: "t9", label: "이름 없는 계정" },
+      { value: "t2", label: "이선생" },
+      { value: FACET_NONE, label: "담당 미반영" },
+    ]);
+    // 강사 카드의 칸 이름도 같은 함수(`teacherFacetLabel`).
+    expect(teacherItems(["a"], () => ["t1", FACET_NONE], nameOf).map((i) => i.label)).toEqual(["김선생", "담당 미반영"]);
   });
 
   it("강사 판정 과목 — 걸린 과목·프로그램에 드는 과목만(수학만 보는데 함께 끊은 영어 선생님이 서지 않게)", () => {

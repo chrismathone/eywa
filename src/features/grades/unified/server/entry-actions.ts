@@ -8,6 +8,8 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { kstToday } from "@/lib/date-kst";
 import type { ExamSlotKey } from "@/features/grades/exam-slots";
+import { loadTodaysMathMonthly } from "@/features/grades/server/todays-math-monthly";
+import type { TodaysMathMonthly } from "@/features/grades/todays-math-monthly";
 
 export type SchoolRosterRow = {
   studentId: string; name: string; school: string | null; grade: string | null; className: string;
@@ -20,6 +22,8 @@ export type SchoolRoster = {
   rows: SchoolRosterRow[];
   ready: boolean;
   notice: string | null;
+  /** 같은 달 오늘 수학 월말평가(수학 · 월말평가 · 학원 설정 토글 ∧ 라이선스일 때만, 아니면 null) — 창이 빈 칸에 자동으로 채운다. */
+  todaysMath: TodaysMathMonthly | null;
 };
 
 /**
@@ -49,11 +53,12 @@ export async function loadSchoolRoster(raw: {
     rows.push({ studentId: r.studentId, name: r.name, school: r.school, grade: r.grade, className: r.className, score: r.score,
       applies: r.applies, withdrawn: r.withdrawn, noExam: r.noExam, noExamReason: r.noExamReason });
   }
+  const todaysMath = await loadTodaysMathMonthly(sel, rows.map((r) => r.studentId));
   const notice = !sheet.schemaReady ? "성적 표 준비(0283a)가 적용되어야 저장할 수 있습니다."
     : sel.slot === "monthly" && !sheet.monthReady ? "월 축 준비(0288a)가 적용되어야 월말평가를 저장할 수 있습니다." : null;
   return { roster: {
     selection: { year: sel.year, term: sel.term, subject: axisValueOf(sel), classId: sel.classId ?? "", slot: sel.slot, date: sel.date, maxScore: sel.maxScore },
     classes: sheet.classes.map((c) => ({ id: c.id, name: c.className, count: c.studentCount })),
-    rows, ready: notice == null, notice,
+    rows, ready: notice == null, notice, todaysMath,
   } };
 }

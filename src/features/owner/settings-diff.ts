@@ -97,6 +97,9 @@ const FIELD_LABELS: Record<string, Record<string, string>> = {
   },
   report: {
     allowTeacherTestMax: "강사 문항수 변경 허용",
+    todaysMathTestFill: "원스크린 시험 칸 채우기(오늘 수학)",
+    todaysMathMonthlyFill: "성적관리 월말평가 채우기(오늘 수학)",
+    todaysMathReportPdf: "월말평가 성적표 보고서 첨부(오늘 수학)",
     classnoteSendWindowStart: "발송 시작 시각",
     classnoteSendWindowEnd: "발송 종료 시각",
     classnoteParentReplyMode: "학부모 글 답글·공감",
@@ -268,6 +271,7 @@ function diffPermissions(before: unknown, after: unknown): SettingsDiff {
         ["classSplitterIds", "수업 나누기"],
         ["enrollmentDateEditorIds", "수강 날짜 수정"],
         ["studentStatusManagerIds", "원생 상태 변경"],
+        ["staffTaskMonitorIds", "업무 처리 현황"],
       ] as const) {
         const ids = key === "payslipManagerIds" ? effectivePayslipManagerIds(v.specialAccess) : v.specialAccess[key];
         for (const id of Array.isArray(ids) ? ids : []) {

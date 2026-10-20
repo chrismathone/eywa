@@ -7,8 +7,8 @@
  *
  * 세 상황이 **같은 이유**로 세로를 아껴야 한다:
  *  ① 플로팅 창(임베드) — 창 타이틀바가 제목이다(`.embed-main` 마커, layout 임베드 분기가 부여).
- *  ② 모바일·터치 — 상단 바(MobileTopNav)가 제목이다. 데스크톱 판정(`min-width:1240px and pointer:fine`, 아래 `desk`)의
- *     여집합 = 좁은 폭 **또는** 거친 포인터. 와이드 터치 태블릿도 여기 포함돼야 크롬 전환과 어긋나지 않는다
+ *  ② 모바일·터치 — 상단 바(MobileTopNav)가 제목이다. 데스크톱 판정(`min-width:1240px and any-pointer:fine`, 아래 `desk`)의
+ *     여집합 = 좁은 폭 **또는** 마우스·터치패드가 하나도 없음. 와이드 터치 태블릿도 여기 포함돼야 크롬 전환과 어긋나지 않는다
  *     (사이드바/상단바 전환 조건 `desk:`과 정확히 대칭).
  *  ③ **강사·학생 미니셸**(`.compact-main` 마커, 2026-08-06 원장 지시로 추가) — 미니셸 헤더가 이미
  *     "학원 · 지점 · <메뉴명>"을 찍는다. 원래 그 헤더 자체가 *"본문 PageHeader는 접힌다"*는 전제로 만들어졌는데
@@ -20,6 +20,10 @@
  */
 /*
  * desk — **데스크톱 셸**(왼쪽 사이드바·플로팅 창) 판정: 화면 폭 1240px 이상 + 마우스.
+ * 🔴 '마우스' = `any-pointer: fine`(마우스·터치패드가 **하나라도** 있으면) — `pointer: fine`(**주** 입력 장치만)이 아니다.
+ *    터치스크린이 달린 Windows PC는 마우스를 꽂아도 Edge·Chrome이 주 입력을 터치로 보고해, 가로 2880px 모니터에서도
+ *    상단 바(모바일 셸)가 섰다(원장 2026-10-15 *"2880으로 가로너비를 해도 모바일뷰처럼 상단에 있음"*). 여집합(모바일 절)은
+ *    `not all and (any-pointer: fine)` — 다섯 곳이 같은 글자(가드 `desktop-breakpoint.test.ts`).
  * 원장 2026-09-28: *"어느정도까지 좁아지면 4x2가 되는지 확인하고 그것보다 작아지려고 할때 모바일뷰전환"* +
  * *"다른 화면도 대시보드 기준으로 전체 적용"*. 1240 = 대시보드 최소 폭 1180(ROUTE_WINDOW_SIZE.dashboard.w, KPI 8칸이
  * 한 줄에 서는 최소) + 접힌 사이드바 52 + 여유. 옛 경계 1024에선 운영실 KPI가 4×2로 꺾이거나 '창을 넓혀 주세요'가 떴다.
@@ -27,8 +31,27 @@
  *    use-is-desktop.ts `DESKTOP_MIN_WIDTH`. 바꾸면 함께(가드 `desktop-breakpoint.test.ts`).
  */
 @custom-variant desk {
-  @media (min-width: 1240px) and (pointer: fine) {
+  @media (min-width: 1240px) and (any-pointer: fine) {
     @slot;
+  }
+  /* 🔴 두 번째 갈래 = 실제 마우스 움직임으로 확인한 기기(`data-desk`, desk-detect.ts) — 브라우저가 '마우스 없음'이라 보고하는
+     터치 모니터 PC(원장 갤럭시북 2026-10-16 "화면을 아무리 축소해도 대시보드가 상단임"). 정상 기기에선 위 갈래와 같은 값이다.
+     인쇄하는 동안(`data-print`)은 이 갈래를 끈다 — 인쇄물은 종전 미디어쿼리 판정 그대로(인쇄 폭 < 1240). */
+  &:where(:root[data-desk]:not([data-print]) *) {
+    @slot;
+  }
+}
+
+/*
+ * no-mouse — 마우스·터치패드가 **하나도 없는** 기기(= `desk` 판정의 마우스 쪽 여집합). 손 기기에서 감추는 버튼은 이것으로 —
+ * `pointer-coarse:`(주 입력만 봄)를 쓰면 터치스크린 PC(갤럭시북 등)가 마우스를 쥐고도 그 버튼을 못 본다(2026-10-15).
+ */
+@custom-variant no-mouse {
+  @media not all and (any-pointer: fine) {
+    /* 마우스 움직임을 본 브라우저(`data-mouse`)는 손 기기가 아니다(desk-detect.ts). 인쇄하는 동안(`data-print`)은 종전대로. */
+    &:where(:root:not([data-mouse]) *, :root[data-print] *) {
+      @slot;
+    }
   }
 }
 
@@ -36,8 +59,11 @@
   &:where(.embed-main *, .compact-main *) {
     @slot;
   }
-  @media (max-width: 1239.98px), (pointer: coarse), (pointer: none) {
-    @slot;
+  @media (max-width: 1239.98px), not all and (any-pointer: fine) {
+    /* 마우스 움직임으로 데스크톱 셸이 된 기기(`data-desk`)는 모바일 절을 건너뛴다(desk-detect.ts). 인쇄하는 동안(`data-print`)은 종전대로. */
+    &:where(:root:not([data-desk]) *, :root[data-print] *) {
+      @slot;
+    }
   }
 }
 
@@ -128,6 +154,7 @@
   --color-ink: var(--ink);
   --color-text-dim: var(--text-dim);
   --color-text-faint: var(--text-faint);
+  --color-text-placeholder: var(--text-placeholder);
   --color-neutral-fill: var(--neutral-fill);
 
   --font-sans:
@@ -262,6 +289,7 @@
 
   /* text — **한 값으로 통일 #121212 = rgb(18,18,18)**(원장 2026-09-08: *"모든 기본 글자색을 rgb값을 18 18 18 로"*
      → *"모든 회색계열은 18 18 18 로"*, 툴바 캡처로 보조 라벨·설명문·placeholder를 지목). 흰 배경 대비 18.7:1.
+     🔴 placeholder만은 2026-10-16 원장이 뒤집었다(*"플레이스홀더는 완전히 연하게"*) → 아래 `--text-placeholder`. 되돌리지 말 것.
      🔴 3단 위계(기본 #1d1d1f / 중간 #3f3f45 / 보조 #58585e)는 **의도적으로 폐기**됐다 — 09-03 *"배경 위 연한 회색
      텍스트 삭제"*의 끝점이다. 토큰 세 개는 소비처가 수백 곳이라 **이름은 남기고 값만 같게** 둔다(일괄 치환 금지).
      회색을 되살리려면 이 세 줄만 고친다. ⚠️ 글자 얘기다 — 테두리(--line*)·배경(--bg-soft·--muted·--secondary)
@@ -270,6 +298,13 @@
   --ink: #121212;
   --text-dim: #121212;
   --text-faint: #121212;
+
+  /* 입력칸 **플레이스홀더**만 연한 회색(원장 2026-10-16 *"예시 글자가 너무 플레이스홀더에 비해 검정색이 진하니까
+     못알아봤네. 플레이스홀더는 완전히 연하게 해야지"* — 보호자 성함 칸의 예시 '김영희'를 입력된 값으로 읽었다).
+     09-08 '글자는 한 값'의 예외는 이것 하나다 — 플레이스홀더는 글이 아니라 빈칸 표시라서 값과 같은 색이면 안 된다.
+     소비처는 아래 레이어 밖 `::placeholder` 규칙 한 곳(유틸 `placeholder:text-*`를 전부 덮는다) + 글자로 그리는 placeholder
+     (`searchable-select`의 빈 값 · Base UI `select`의 `data-placeholder`)는 `text-text-placeholder` 유틸. */
+  --text-placeholder: #b3b3b8;
 
   /* 글자가 아닌 **중립 회색 면** — 차트 조각·솔리드 배지·점·링처럼 색이 "뜻 없음/기타"를 나르는 자리.
      🔴 09-08부터 글자색이 한 값(#121212)이라 --text-faint를 면에 재사용하면 그 자리가 새까매진다
@@ -959,6 +994,21 @@ main:has(.sticky-save-bar) {
 }
 
 /* ───────────────────────────────────────────────
+ * 플레이스홀더 = 연한 회색 한 값(`--text-placeholder`, 원장 2026-10-16). 입력칸 `::placeholder`와
+ * 에디터(TipTap)의 빈 첫 문단 안내가 같은 색이다.
+ * ⚠️ 레이어 밖(unlayered) — 화면마다 붙은 `placeholder:text-text-faint`·`placeholder:text-muted-foreground`
+ * (@layer utilities, 둘 다 #121212)를 손대지 않고 한 곳에서 덮는다. 새 입력칸에 placeholder 색 클래스를 달 필요 없다.
+ * 플레이스홀더는 뭘 적어야 할지 모르는 칸에만 둔다 — 라벨을 되풀이하거나 예시 이름·번호를 적지 않는다.
+ * ─────────────────────────────────────────────── */
+::placeholder {
+  color: var(--text-placeholder);
+  opacity: 1;
+}
+.is-editor-empty:first-child::before {
+  color: var(--text-placeholder);
+}
+
+/* ───────────────────────────────────────────────
  * 창 베젤 0(.edge-to-edge) — 폭·높이가 곧 정보인 화면(시간표)이 창 안에서 좌·우·아래를 끝까지 쓴다
  * (원장 2026-09-08: *"시간표 탭에서 좌우와 하단 여백이 거의 느껴지지 않도록 딱 붙여야겠어"*).
  * 셸 embed <main>의 기본 베젤(px-1.5 · pb-8/lg:pb-10 · scrollbar-gutter:stable)은 그대로 두고, 페이지 루트가
@@ -975,6 +1025,14 @@ main:has(.sticky-save-bar) {
 main.embed-main:has(.edge-to-edge) {
   padding-inline: 0;
   padding-bottom: 0;
+  scrollbar-gutter: auto;
+}
+
+/* 시간표 | 메모 시트 두 칸(split-panes.tsx, 원장 2026-10-19) — 세로 스크롤을 판마다 따로 가지므로 셸 <main>은
+   세로로 넘치지 않는다. 그런데 `scrollbar-gutter:stable`이면 빈 거터가 남아 시간표 판 스크롤바 옆에 **두 번째 줄**이
+   선다(rich-grid-view의 "우측 이단 스크롤바"와 같은 모양) → 이 화면만 거터를 푼다(창·풀셸·미니셸 모두).
+   ⚠️ `:has(> …)`는 dev CSS에서 사라진다([[#127]]) — 자손 선택자 그대로. */
+main:has(.timetable-split) {
   scrollbar-gutter: auto;
 }
 
@@ -1015,60 +1073,62 @@ main:not(.embed-main):has(.attendance-page) {
  * ⚠️ `main:not(main main)` — 셸 <main> 하나만. 화면 안에 <main>을 또 쓴 곳(영상 숙제)에 여백을 덧씌우지 않는다.
  * ⚠️ 레이어 밖(unlayered) — Tailwind 유틸(`desk:flex`·`flex`·`desk:px-6`·`hidden`)을 `!important` 없이 덮는다.
  * ─────────────────────────────────────────────── */
-@media screen and (min-width: 1240px) and (pointer: fine) {
-  [data-page-maximize="on"] [data-maximize-hide] {
+@media screen {
+  /* 데스크톱 셸에서만 = `data-desk`(미디어쿼리 + 실제 마우스 움직임, desk-detect.ts) — 2026-10-16 미디어쿼리에서 바꿈.
+     정상 기기에선 같은 값이고, 터치 모니터 PC(브라우저가 마우스를 못 알아봄)에서도 최대화가 돈다. */
+  :where([data-desk]) [data-page-maximize="on"] [data-maximize-hide] {
     display: none;
   }
-  [data-page-maximize="on"] [data-page-header-extra] {
+  :where([data-desk]) [data-page-maximize="on"] [data-page-header-extra] {
     display: none;
   }
-  [data-page-maximize="on"] [data-page-header] {
+  :where([data-desk]) [data-page-maximize="on"] [data-page-header] {
     border-bottom-width: 0;
     padding-bottom: 0;
   }
   /* 출구 줄의 버튼 = 머리글 버튼과 같은 자리: 위 = 본문 위 여백(desk:pt-5) + 제목 한 줄 안 가운데 · 오른쪽 = 본문 오른쪽 여백(desk:px-6) +
      머리글 줄 px-1 + **본문과 같은 스크롤바 거터**(숫자로 적지 않는다 — 전역 `scrollbar-width: thin`이라 브라우저마다 폭이 다르다, 실측 10px). */
-  [data-page-maximize="on"] [data-maximize-fallback] {
+  :where([data-desk]) [data-page-maximize="on"] [data-maximize-fallback] {
     display: flex;
     overflow: hidden;
     scrollbar-gutter: stable;
     padding: calc(1.25rem + (var(--text-xl) * var(--text-xl--line-height) - var(--control-h)) / 2) 1.75rem 0 0.375rem;
   }
-  [data-page-maximize="on"]:has([data-page-maximize-button]) [data-maximize-fallback] {
+  :where([data-desk]) [data-page-maximize="on"]:has([data-page-maximize-button]) [data-maximize-fallback] {
     display: none;
   }
-  [data-page-maximize="on"] main:not(.embed-main):not(main main) {
+  :where([data-desk]) [data-page-maximize="on"] main:not(.embed-main):not(main main) {
     padding-inline: 0.375rem;
   }
-  [data-page-maximize="on"] main:not(.embed-main):not(main main) [data-page-header-row] {
+  :where([data-desk]) [data-page-maximize="on"] main:not(.embed-main):not(main main) [data-page-header-row] {
     padding-right: 1.375rem;
   }
   /* 시간표: 좌우·아래 0. 거터는 stable 그대로(풀면 그 폭만큼 버튼이 움직이고, 폭은 브라우저마다 달라 상쇄를 숫자로 못 적는다). */
-  [data-page-maximize="on"] main:not(.embed-main):not(main main):has(.edge-to-edge) {
+  :where([data-desk]) [data-page-maximize="on"] main:not(.embed-main):not(main main):has(.edge-to-edge) {
     padding-inline: 0;
     padding-bottom: 0;
   }
-  [data-page-maximize="on"] main:not(.embed-main):not(main main):has(.edge-to-edge) [data-page-header-row] {
+  :where([data-desk]) [data-page-maximize="on"] main:not(.embed-main):not(main main):has(.edge-to-edge) [data-page-header-row] {
     padding-right: 1.75rem;
   }
   /* 출구 줄이 선 화면은 그 줄이 위 여백을 이미 가졌다 — 본문 위 여백을 창과 같은 0.5rem으로. */
-  [data-page-maximize="on"]:not(:has([data-page-maximize-button])) main:not(.embed-main):not(main main) {
+  :where([data-desk]) [data-page-maximize="on"]:not(:has([data-page-maximize-button])) main:not(.embed-main):not(main main) {
     padding-top: 0.5rem;
   }
   /* 머리글 오른쪽 묶음(동작 + 토글) — 관리자 풀셸(표식 `data-page-maximize`가 있는 곳)의 셸 본문에서만, 최대화와 상관없이
      (최대화 전후 같은 자리여야 하므로). 창·미니셸·슈퍼관리자·화면 안 <main>엔 안 걸린다. */
-  [data-page-maximize] main:not(.embed-main):not(main main) [data-page-header-actions] {
+  :where([data-desk]) [data-page-maximize] main:not(.embed-main):not(main main) [data-page-header-actions] {
     align-self: flex-start;
     min-height: calc(var(--text-xl) * var(--text-xl--line-height));
   }
   /* 첫 조작 행으로 통합한 화면(설정·시간표): 제목·메타 행과 위 여백을 접고, 같은 파란 토글을 조작 행 오른쪽에 둔다. */
-  [data-page-maximize="on"] [data-maximize-title-row] {
+  :where([data-desk]) [data-page-maximize="on"] [data-maximize-title-row] {
     display: none;
   }
-  [data-page-maximize="on"] [data-maximize-toolbar-toggle] {
+  :where([data-desk]) [data-page-maximize="on"] [data-maximize-toolbar-toggle] {
     display: flex;
   }
-  [data-page-maximize="on"] main:not(.embed-main):not(main main):has([data-maximize-toolbar-page]) {
+  :where([data-desk]) [data-page-maximize="on"] main:not(.embed-main):not(main main):has([data-maximize-toolbar-page]) {
     padding-top: 0.375rem;
   }
 }
@@ -1527,14 +1587,16 @@ html[data-stage="on"] main {
 
   /* ↓ 위 두 규약(.toolbar-rail · .toolbar-rail-row)의 **모바일 절** — 조건은 한 곳에만 적는다
        (use-is-desktop.ts / compact-chrome 변형의 모바일 절과 동일해야 한다). */
-  @media (max-width: 1239.98px), (pointer: coarse), (pointer: none) {
-    .toolbar-rail {
+  @media (max-width: 1239.98px), not all and (any-pointer: fine) {
+    /* 마우스 움직임으로 데스크톱 셸이 된 기기(`data-desk`)는 건너뛴다(desk-detect.ts) — 선택자마다 :where라 명시도는 그대로.
+       인쇄하는 동안(`data-print`)은 표시를 무시해 종전대로 걸린다. */
+    :where(:root:not([data-desk]), :root[data-print]) .toolbar-rail {
       flex-wrap: nowrap;
       overflow-x: auto;
       overflow-y: hidden;
     }
-    .toolbar-rail > *,
-    .toolbar-rail > .toolbar-group > * {
+    :where(:root:not([data-desk]), :root[data-print]) .toolbar-rail > *,
+    :where(:root:not([data-desk]), :root[data-print]) .toolbar-rail > .toolbar-group > * {
       /* display:contents groups promote their children to flex items. Without this,
          offscreen counts shrink and wrap, increasing the entire rail's height. */
       flex-shrink: 0;
@@ -1542,21 +1604,21 @@ html[data-stage="on"] main {
     /* 툴바 **묶음 상자**(왼쪽/오른쪽) — 좁은 화면에서만 풀어 항목 단위로 감기게 한다.
        🔴 조건을 `compact-chrome`(창=embed 포함)으로 적으면 **플로팅 창 안에서 상자가 없어진다** —
           원장이 요청한 자리가 바로 그 창이다(적대적 재리뷰 2026-09-04). 레일과 같은 절에 둔다. */
-    .toolbar-group {
+    :where(:root:not([data-desk]), :root[data-print]) .toolbar-group {
       display: contents;
     }
     /* 칩 묶음(과목·구분·뷰)도 내부에서 감기지 않게 */
-    .toolbar-rail > div {
+    :where(:root:not([data-desk]), :root[data-print]) .toolbar-rail > div {
       flex-wrap: nowrap;
     }
     /* 우측 정렬용 스페이서는 레일에서 무의미(오히려 폭을 늘린다) */
-    .toolbar-rail > .rail-spacer {
+    :where(:root:not([data-desk]), :root[data-print]) .toolbar-rail > .rail-spacer {
       display: none;
     }
     /* 줄 래퍼가 여기서만 실제 박스가 된다 — 100%라 툴바의 wrap이 줄을 갈라준다.
        ⚠️ min-width는 스크롤 컨테이너라 어차피 0으로 접히지만, 안 접히면 내용 너비만큼 부풀어
           카드를 뚫으므로 규약을 눈에 보이게 못박는다. */
-    .toolbar-rail-row {
+    :where(:root:not([data-desk]), :root[data-print]) .toolbar-rail-row {
       display: flex;
       width: 100%;
       min-width: 0;
@@ -1564,7 +1626,7 @@ html[data-stage="on"] main {
       gap: inherit;
     }
     /* 모바일에서만 이 줄을 맨 위로(데스크톱은 박스가 없어 order 자체가 무의미하다) */
-    .toolbar-rail-row.rail-row-first {
+    :where(:root:not([data-desk]), :root[data-print]) .toolbar-rail-row.rail-row-first {
       order: -1;
     }
   }
@@ -1682,7 +1744,7 @@ html[data-stage="on"] main {
 /* 에디터 placeholder — 비었을 때 첫 문단에 회색 안내(TipTap Placeholder 규약). */
 .rich-content p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
-  color: var(--text-faint);
+  color: var(--text-placeholder);
   float: left;
   height: 0;
   pointer-events: none;

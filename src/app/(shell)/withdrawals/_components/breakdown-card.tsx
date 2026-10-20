@@ -6,7 +6,7 @@ import { EmbedLink } from "@/components/embed-link";
 import { BREAKDOWN_AXES, type BreakdownAxis } from "@/features/withdrawals/breakdown";
 import { saveWithdrawalTrendPrefs } from "@/features/withdrawals/server/trend-prefs-actions";
 
-/** 막대 한 줄 — 누르면 명단이 그 값으로 걸러진다(`href` · 고른 칸은 해제 주소). 거를 수 없는 칸(과목 미상)은 `href` 없음. */
+/** 막대 한 줄 — 누르면 명단이 그 값으로 걸러진다(`href` · 고른 칸은 해제 주소). 거를 수 없는 칸(과목 미상 · 과목을 고른 뒤의 과목 묶음)은 `href` 없음. */
 export type BreakdownRow = { value: string; label: string; count: number; href: string | null; active: boolean };
 /**
  * 축 하나의 그림 — 머리 아래 설명 · 비중의 분모(그 축이 센 줄 수) · 맨 아래 안내(담당 미반영 까닭 등).

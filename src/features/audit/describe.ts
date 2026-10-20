@@ -22,6 +22,7 @@ import {
   isSeason,
 } from "@/features/shuttle/types";
 import { compactWeekdays } from "@/features/shuttle/roster";
+import { workDaysLabel } from "@/features/staff/employment";
 import {
   CONSULTATION_AUDIENCE_LABEL,
   CONSULTATION_CATEGORY_LABEL,
@@ -33,6 +34,7 @@ import {
   type TextbookFieldChange,
 } from "@/features/billing/textbook-audit";
 import { modelDisplayLabel } from "@/lib/ai/model-label";
+import { MAKEUP_ACTION } from "@/features/makeups/status";
 import { assetStatusLabel } from "@/features/inventory/status";
 import { loanStatusLabel } from "@/features/inventory/loan-status";
 import { assetCategoryLabel } from "@/features/inventory/category";
@@ -41,6 +43,8 @@ import { OUTCOME_PILL } from "@/features/enrollment/outcome-meta";
 
 /** 대상 유형(target_type) → 한글 — 감사로그 '대상' 열 접두. 미등록 유형은 원문 폴백. */
 export const AUDIT_TYPE_LABEL: Record<string, string> = {
+  // 오늘 수학 사용 메뉴(2026-10-19) — 에이와 · 오늘 수학 어느 쪽에서 바꿔도 같은 대상.
+  todays_math: "오늘 수학",
   // ── 2026-09-09 전수 보강 — 여기 없으면 감사로그 '대상' 열에 영문이 그대로 뜬다. ──
   expense: "지출결의서",
   refund_request: "환불 요청서",
@@ -84,7 +88,7 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   video_homework: "영상 과제",
   lesson_report: "수업보고서",
   approval_document: "결재 문서",
-  enrollment_consultations: "콜&상담",
+  enrollment_consultations: "신규 콜&상담",
   document: "문서",
   // 셔틀(0225a) — 없으면 감사로그 '대상' 열에 영문 "shuttle"이 그대로 뜬다(2026-08-17 원장 제보와 같은 증상).
   shuttle: "셔틀",
@@ -107,6 +111,7 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   timetable_plan_slot: "시간표 계획 칸",
   // 시간표 연습실의 개인 사본 — 운영 시간표가 아니라 **연습본**임이 '대상' 칸에서 바로 읽혀야 한다.
   timetable_lab_draft: "시간표 연습본",
+  timetable_memo_sheet: "시간표 메모 시트",
   // 재고관리(0242a) — 없으면 '대상' 칸에 영문 "inventory_asset"이 그대로 뜬다.
   inventory_asset: "자산",
   inventory_loan: "자산 대여",
@@ -118,6 +123,13 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   help_post: "도움말 질문",
   help_answer: "도움말 답변",
   support_request: "개선요청",
+  // 감사로그 빈틈 메우기(2026-10-15) — 수납 단가표·견적 · 직원 휴가.
+  textbook_catalog: "교재 단가표",
+  tuition_catalog: "수강료 단가",
+  tuition_quote: "수강료 견적",
+  staff_leave: "직원 휴가",
+  withdrawal_report_archive: "퇴원보고서 원본 기록",
+  makeup: "보강관리",
 };
 
 // 시험유형은 운영 enum이 아니라 코드 고정(CLAUDE.md) — exams 화면과 동일 라벨.
@@ -322,14 +334,23 @@ export function collectAuditNameIds(rows: Array<{ metadata: Meta | null }>): {
     const sid = str(m.studentId);
     if (sid && UUID_RE.test(sid)) students.add(sid);
     // scopeTeacherId = 출석부 강사 전체 보기의 주인(출결 저장 로그, 2026-09-11).
-    for (const key of ["userId", "newTeacherId", "delegateUserId", "scopeTeacherId"]) {
+    for (const key of ["userId", "newTeacherId", "delegateUserId", "scopeTeacherId", "teacherId"]) {
       const uid = str(m[key]);
       if (uid && UUID_RE.test(uid)) users.add(uid);
     }
     // fromClassId·toClassId = 보강 반 바꾸기(makeup_class_change, 2026-09-30)의 옛 반·새 반.
-    for (const key of ["classId", "fromClassId", "toClassId"]) {
+    for (const key of ["classId", "fromClassId", "toClassId", "absentClassId"]) {
       const cid = str(m[key]);
       if (cid && UUID_RE.test(cid)) classes.add(cid);
+    }
+    // 여러 반을 한 줄에 남기는 일괄 기록(원스크린 일괄 입력, 2026-10-15) — 배열도 이름으로 읽는다(앞 50개).
+    // ⚠️ 이름으로 쓰는 분기가 있는 배열만 모은다 — 옛 일괄 로그의 `studentIds`까지 모으면 한 쪽에 조회가 수천 건이 된다.
+    const classList = m.classIds;
+    if (Array.isArray(classList)) {
+      for (const v of classList.slice(0, 50)) {
+        const id = str(v);
+        if (id && UUID_RE.test(id)) classes.add(id);
+      }
     }
   }
   return { studentIds: [...students], userIds: [...users], classIds: [...classes] };
@@ -387,6 +408,66 @@ export function auditDetail(
 ): string | null {
   const m = metadata ?? {};
   switch (action) {
+    // 원스크린 일괄 입력(2026-10-15) — 방식 · 날짜 · 몇 행 · 어느 반 · 어떤 칸. 글 내용은 기록에 없다(bulk-log-actions.ts).
+    case "onescreen_bulk_apply": {
+      const FIELD: Record<string, string> = {
+        today: "진도", textbook: "교재", homeworkToday: "오늘 과제", attitude: "태도", homework: "과제", note: "특이사항",
+        dailyScore: "데일리 점수", dailyMax: "데일리 문항수", checkScore: "체크 점수", checkMax: "체크 문항수",
+        videoHomework: "영상 과제", videoSubmitLink: "영상 링크", videoHomeworkDue: "영상 마감",
+      };
+      const classes = Array.isArray(m.classIds) ? m.classIds.map((id) => ctx.nameOf(id)).filter((n): n is string => !!n) : [];
+      const fields = Array.isArray(m.fields) ? m.fields.map((f) => FIELD[String(f)]).filter((f): f is string => !!f) : [];
+      const rows = num(m.rows);
+      return join(
+        m.mode === "copy" ? "맨 위 행 복사" : "직접 입력",
+        str(m.date),
+        rows != null ? `${rows}행` : null,
+        classes.length ? `반 ${classes.join("·")}` : null,
+        fields.length ? `칸 ${fields.join("·")}` : null,
+      );
+    }
+    // 학생 상세의 성적·레벨테스트·목표·학습 코멘트(감사로그 빈틈 메우기 2026-10-15) — 누구 · 과목 · 날짜. 점수·본문은 기록에 없다.
+    case "student_grade_create":
+    case "student_grade_delete":
+    case "student_level_test_create":
+    case "student_level_test_delete":
+    case "student_goal_create":
+    case "student_goal_delete":
+    case "student_grade_comment_create":
+    case "student_grade_comment_update":
+    case "student_grade_comment_delete": {
+      const subject = str(m.subject);
+      return join(ctx.nameOf(m.studentId), subject ? ctx.subjectLabel(subject) : null, str(m.date));
+    }
+    // 켜고 끄는 기록(2026-10-15) — 기본 분기는 불리언을 숨겨 방향이 사라진다.
+    case "student_memo_pin":
+      return join(ctx.nameOf(m.studentId), m.pinned === true ? "고정" : m.pinned === false ? "고정 해제" : null);
+    case "progress_anomaly_resolve":
+      return join(ctx.nameOf(m.studentId), m.resolved === true ? "이상 없음으로 확인" : m.resolved === false ? "확인 되돌림" : null);
+    case "textbook_catalog_toggle":
+    case "tuition_catalog_toggle":
+      return m.active === true ? "사용으로" : m.active === false ? "중지로" : null;
+    case "shuttle_run_stop_time":
+      return str(m.atTime) ? `정류장 시각 ${str(m.atTime)}` : "정류장 시각 지움";
+    case "shuttle_run_stop_reorder":
+      return num(m.stops) != null ? `정류장 ${num(m.stops)}곳 순서` : null;
+    case "shuttle_rider_weekdays": {
+      const days = Array.isArray(m.weekdays) ? compactWeekdays(m.weekdays.map(String)) : "";
+      return join(ctx.nameOf(m.studentId), days || null);
+    }
+    case "enrollment_consultation_report_edit":
+      return join("AI 분석 한 섹션 수정", num(m.chars) != null ? `${num(m.chars)}자` : null);
+    // 보강 칸 ↔ 결석 연결 — 시수까지 고치는 연결과 메모만 붙이는 연결(memoOnly)이 같은 키다.
+    case "attendance_makeup_link":
+      return join(
+        ctx.nameOf(m.studentId),
+        str(m.absentDate) ? `결석 ${str(m.absentDate)}${ctx.nameOf(m.absentClassId) ? ` ${ctx.nameOf(m.absentClassId)}` : ""}` : null,
+        str(m.makeupDate) ? `보강 ${str(m.makeupDate)}${ctx.nameOf(m.classId) ? ` ${ctx.nameOf(m.classId)}` : ""}` : null,
+        m.memoOnly === true ? "메모만 연결" : num(m.units) != null ? `보강 칸 시수 ${num(m.units)}` : null,
+        m.alreadyLinked === true ? "이미 연결됨" : null,
+      );
+    case "makeup_case_command":
+      return join(MAKEUP_ACTION[String(m.command)] ?? null, ctx.nameOf(m.studentId));
     // 숙제 영상 제출 링크(0325a) — 어느 반 · 어디서 만든 링크 · 언제까지 / 몇 개 끊었나 / 어느 폴더에 얼마나.
     case "lesson_report_video_link_issue":
       return join(
@@ -530,6 +611,13 @@ export function auditDetail(
       if (note) return before ? `메모 "${before}" → "${note}"` : `메모 "${note}"`;
       return before ? `메모 "${before}" 지움` : null;
     }
+    case "todays_math_menus_update": {
+      // 출처 = 에이와(원장이 학원 설정에서) · 오늘 수학(지점관리) · 오늘 수학 관리자(열어 둔 메뉴를 바꿈 — 그 결과 지점 메뉴가 달라짐).
+      const from = ({ eywa: "에이와에서", todays_math: "오늘 수학에서", todays_math_admin: "오늘 수학 관리자가" } as Record<string, string>)[str(m.source) ?? ""] ?? null;
+      const on = arr(m.turnedOn).filter((v): v is string => typeof v === "string");
+      const off = arr(m.turnedOff).filter((v): v is string => typeof v === "string");
+      return join(from, on.length ? `켬: ${on.join(", ")}` : null, off.length ? `끔: ${off.join(", ")}` : null) || null;
+    }
     case "owner_settings_update": {
       const s = str(m.section);
       const label = s ? ((SECTION_LABELS as Record<string, string>)[s] ?? s) : null;
@@ -576,6 +664,14 @@ export function auditDetail(
     case "data_export_download":
       // 조건(쿼리스트링) 원문은 영문 키라 문장에 싣지 않는다 — 뷰어 title 툴팁(원문 JSON)으로만.
       return m.filtered === true ? "조건 걸어 받음" : "전체 받음";
+    case "timetable_memo_sheet_save": {
+      // 글자 내용은 싣지 않는다(판 크기만) — 판에 무엇을 적었는지는 시간표 화면에서 본다.
+      const parts = [
+        num(m.rows) !== null && num(m.cols) !== null ? `${num(m.rows)}행 × ${num(m.cols)}열` : null,
+        num(m.cells) !== null ? `칸 ${num(m.cells)}개` : null,
+      ].filter(Boolean);
+      return parts.join(" · ");
+    }
     case "timetable_lab_draft_save": {
       // 연습본 이름은 '대상' 칸이 보여 준다 — 여기선 규모만(운영 시간표는 안 바뀐다).
       const parts = [
@@ -858,8 +954,16 @@ export function auditDetail(
     case "exam_scores": {
       const saved = num(m.saved);
       const students = num(m.students);
+      const same = num(m.todaysMathSame);
       if (saved === null && students === null) return null;
-      return `학생 ${students ?? "?"}명 중 점수 ${saved ?? "?"}건 저장`;
+      return join(`학생 ${students ?? "?"}명 중 점수 ${saved ?? "?"}건 저장`, same ? `오늘 수학 결과와 같은 값 ${same}건` : null);
+    }
+    // 수업보고서 저장 — 종전처럼 기본 분기(학생 · 반 · 날짜 …)를 그대로 쓰고, 오늘 수학 출처 표시만 덧붙인다(2026-10-18).
+    // 🔴 이 case가 기본 분기를 가로채면 옛 기록까지 상세 칸이 빈다 — 표시 키만 떼어 기본 분기로 돌린다.
+    case "lesson_report_save": {
+      const { todaysMathSame, ...rest } = m;
+      const same = Array.isArray(todaysMathSame) ? todaysMathSame.map((w) => ({ daily: "일일", check: "확인" } as Record<string, string>)[String(w)]).filter(Boolean) : [];
+      return join(auditDetail("lesson_report_save:base", rest, ctx), same.length ? `${same.join("·")}테스트가 오늘 수학 결과와 같은 값` : null);
     }
     case "class_salary_update": {
       const fmt = (v: unknown): string | null => {
@@ -924,6 +1028,10 @@ export function auditDetail(
     }
     case "payroll_sheet_special_scope_set":
       return join(ctx.nameOf(m.userId), m.includeSpecial === true ? "특강은 학년 제한 없이 포함" : "특강도 대상 학년만 포함");
+    case "payroll_contract_work_days_set": {
+      const days = Array.isArray(m.workDays) ? m.workDays.filter((x): x is string => typeof x === "string") : [];
+      return join(ctx.nameOf(m.userId), days.length > 0 ? `근로 요일 ${workDaysLabel(days)}` : "근로 요일 정하지 않음(모든 요일)");
+    }
     case "payroll_mark_paid":
     case "payroll_auto_compute":
     case "payroll_upsert": {
@@ -988,6 +1096,15 @@ export function auditDetail(
       if ("cancelledWithdrawal" in m)
         return join(ctx.nameOf(m.studentId), "퇴원 예약 취소", str(m.cancelledWithdrawal) ? `예약일 ${str(m.cancelledWithdrawal)}` : null);
       return join(ctx.nameOf(m.studentId), str(m.memo));
+    }
+    case "student_siblings_update": {
+      const names = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x !== "").join(", ") : "");
+      return join(
+        ctx.nameOf(m.studentId),
+        names(m.added) ? `형제 지정 ${names(m.added)}` : null,
+        names(m.excluded) ? `형제 아님 ${names(m.excluded)}` : null,
+        names(m.removed) ? `형제 해제 ${names(m.removed)}` : null,
+      );
     }
     case "student_english_name_update":
       return join(ctx.nameOf(m.studentId), `영문 이름 ${str(m.before) || "없음"} → ${str(m.after) || "없음"}`);
@@ -2411,6 +2528,13 @@ export function auditDetail(
       // 보고서 없이 따로 낸 영상 숙제 — 어느 수업의 숙제인가(+ 낼 때는 제출 기한).
       const hw = str(m.homeworkDate);
       return join(hw ? `숙제 ${hw}` : null, str(m.deadline) ? `기한 ${str(m.deadline)}` : null);
+    }
+
+    case "lesson_report_video_homework_cancel": {
+      // 영상 숙제를 거둠 — 어느 숙제였나 · 그날 보고서의 '영상 과제 있음'을 '없음'으로 바꿨나 · 미수행이던 숙제인가.
+      const hw = str(m.homeworkDate);
+      return join(hw ? `숙제 ${hw}` : null, m.fromReport === true ? "보고서 영상 과제 → 없음" : m.keptReport === true ? "따로 낸 표시만(남의 보고서 숙제는 그대로)" : null,
+        m.status === "missing" ? "미수행이던 숙제" : null);
     }
 
     case "lesson_report_video_homework_reject": {

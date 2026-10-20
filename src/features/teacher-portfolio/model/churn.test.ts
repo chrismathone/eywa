@@ -41,7 +41,7 @@ describe("퇴원율", () => {
     expect([r.base, r.need, r.counted, r.raw]).toEqual([6, 15, 2, 33.3]);
     const note = (s: string) => r.detail.find((x) => x.studentId === s);
     expect([note("s2")?.counted, note("s3")?.note, note("s5")?.note, note("s6")?.note, note("s8")?.type])
-      .toEqual([true, "사유 이사", "반 이동", "같은 과목 다른 반을 다님", "수강종료"]);
+      .toEqual([true, "사유 이사", "반 이동", "같은 과목 다른 반을 다님(반 이동처럼 제외)", "수강종료"]);
     // 지난달 11일만 맡은 학생 · 특강만 들은 학생은 분모 밖(특강은 분자에서 늘 빠진다 — 분모에 넣으면 퇴원율이 구조적으로 낮아진다).
     expect(r.detail.some((x) => x.studentId === "s4" || x.studentId === "s7")).toBe(false);
   });
@@ -72,7 +72,7 @@ describe("퇴원율", () => {
     const cancelled = churn(classes, [enroll("s1", "A", "2026-08-01", "2026-10-10", "other"), enroll("s1", "B", "2026-10-20", "2026-10-20")]);
     expect(cancelled.detail.map((x) => [x.type, x.counted])).toEqual([["퇴원", true]]);
     const nextMonth = churn(classes, [enroll("s1", "A", "2026-08-01", "2026-10-31", "other")], DEFAULT_CHURN_OPTIONS, { futureEnrollments: [enroll("s1", "B", "2026-11-01", null)] });
-    expect(nextMonth.detail.map((x) => x.note)).toEqual(["같은 과목 다른 반을 다님"]);
+    expect(nextMonth.detail.map((x) => x.note)).toEqual(["같은 과목 다른 반을 다님(반 이동처럼 제외)"]);
   });
   it("사유 — 수강에 없으면 학생의 퇴원 사유(퇴원일 때만) · 옛 영문 코드도 한글로 · 줄마다 판정해 하나라도 남으면 센다", () => {
     const viaStudent = churn(classes, [enroll("s1", "A", "2026-08-01", "2026-10-10", "퇴원에 따른 자동 종료")], DEFAULT_CHURN_OPTIONS, { studentReasons: [{ id: "s1", reason: "relocation" }] });
@@ -116,14 +116,14 @@ describe("퇴원율", () => {
     const later = churn(classes, [enroll("s1", "A", "2026-08-01", "2026-10-10", "other"), enroll("s1", "B", "2026-12-15", null)]);
     expect(later.detail.map((x) => [x.type, x.counted])).toEqual([["퇴원", true]]);
     const rejoin = churn(classes, [enroll("s1", "A", "2026-08-01", "2026-10-10", "other"), enroll("s1", "B", "2026-10-11", null)]);
-    expect(rejoin.detail.map((x) => x.note)).toEqual(["같은 과목 다른 반을 다님"]);
+    expect(rejoin.detail.map((x) => x.note)).toEqual(["같은 과목 다른 반을 다님(반 이동처럼 제외)"]);
     const closedOther = [klass("A"), klass("B", { teacher_id: "u", closed_at: "2026-10-01" })];
     const stale = churn(closedOther, [enroll("s1", "A", "2026-08-01", "2026-10-10", "other"), enroll("s1", "B", "2026-08-01", null)]);
     expect(stale.detail.map((x) => [x.type, x.counted])).toEqual([["퇴원", true]]);
   });
   it("휴원 중인 같은 과목 반은 다니는 반이다(퇴원관리와 같다) · 두 과목을 맡은 선생님도 한 과목만 끊으면 수강종료", () => {
     const hold = churn(classes, [enroll("s1", "A", "2026-08-01", "2026-10-10", "other"), { ...enroll("s1", "B", "2026-08-01", null), on_hold: true }]);
-    expect(hold.detail.map((x) => x.note)).toEqual(["같은 과목 다른 반을 다님"]);
+    expect(hold.detail.map((x) => x.note)).toEqual(["같은 과목 다른 반을 다님(반 이동처럼 제외)"]);
     const both = [klass("A"), klass("E", { subject: "english" })];
     const one = churn(both, [enroll("s1", "A", "2026-08-01", "2026-10-09", "other"), enroll("s1", "E", "2026-08-01", null)]);
     expect(one.detail.map((x) => [x.type, x.counted])).toEqual([["수강종료", true]]);

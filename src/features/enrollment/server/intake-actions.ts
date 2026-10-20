@@ -32,7 +32,7 @@ async function requireIntakeAdmin() {
   const user = await getCurrentUser();
   if (!user) return { user: null, error: "로그인이 필요합니다" };
   const lvl = await accessLevelTenant(user.systemRole, "enrollment");
-  if (lvl !== "full" && lvl !== "scoped") return { user: null, error: "콜&상담 권한이 없습니다" };
+  if (lvl !== "full" && lvl !== "scoped") return { user: null, error: "신규 콜&상담 권한이 없습니다" };
   return { user, error: undefined as string | undefined };
 }
 

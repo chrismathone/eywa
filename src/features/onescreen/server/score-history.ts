@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { TrendHistoryRow } from "../trend-comment";
+import { keepExamOfClass, TREND_HISTORY_FETCH_DAYS, type TrendHistoryRow } from "../trend-comment";
 import type { TrendReportRow } from "../report-trend";
 
 /** 기준일 − N일(YYYY-MM-DD). 비정상 날짜면 null(호출부가 빈 결과로 처리). UTC 고정 산술 = KST 경계 무관. */
@@ -36,6 +36,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 /**
  * 정규/특강 분리 필터를 쿼리에 건다(2026-07-23 원장 지시: "정규와 특강을 분리시켜").
+ * ⚠️ 2026-10-15부터 **시험 점수는 그 보고서 반의 기록만** 쓴다(keepExamOfClass — 행을 받은 뒤 시험 칸만 비운다). 여기 쿼리는
+ *    과제 수행률 표본(같은 과목 정규 반끼리)을 그대로 두려고 정규 반끼리는 계속 함께 받는다.
  *  · 대상이 **특강 보고서**(classId가 특강 목록에 있음) → **그 반 기록만**. 정규 성적을 빌려오지 않는다
  *    (특강 첫 수업에 추세가 안 나오는 건 정상 — 다른 수업 점수로 추세를 지어내는 게 더 나쁘다).
  *  · 대상이 **정규**(또는 반 미상) → 특강 반 기록만 제외. 나머지는 그대로.
@@ -75,13 +77,15 @@ export async function fetchScoreHistory(
   // buildTrendInput(순수)이 하므로 여기서 자르면 시험 기록이 과제-only 행에 밀려 사라진다(실측 26/215명).
   limit = 30,
   // 정규/특강 분리(applyClassScope). 미지정이면 기존 동작(안 가름) — 데모·구 호출부 보존.
-  scope?: { classId?: string | null; specialClassIds?: readonly string[] },
+  // lookbackDays = 반복 방지(trendNews)가 지난번 추세가 나간 회차와 그 회차의 창까지 읽는 기간(기본 30 = 종전 · 상한 90). 사실은 buildTrendInput이 30일 창만 쓴다.
+  scope?: { classId?: string | null; specialClassIds?: readonly string[]; lookbackDays?: number },
 ): Promise<TrendHistoryRow[]> {
-  const windowStart = windowStartOf(beforeDate, TREND_TEXT_WINDOW_DAYS);
+  const windowStart = windowStartOf(beforeDate, Math.max(TREND_TEXT_WINDOW_DAYS, Math.min(scope?.lookbackDays ?? TREND_TEXT_WINDOW_DAYS, TREND_HISTORY_FETCH_DAYS)));
   if (!windowStart) return []; // 비정상 beforeDate 방어 — 추세만 조용히 생략
   let q = supabase
     .from("lesson_reports")
-    .select("report_date, exam_info, homework_score")
+    // trend_note = 반복 방지(trendNews)가 "지난번에 추세가 실제로 나갔나"를 본다(0091a — 칸은 오래전부터 있다).
+    .select("report_date, exam_info, homework_score, class_id, makeup_class_id, trend_note")
     .eq("student_id", studentId)
     .lt("report_date", beforeDate)
     .gte("report_date", windowStart)
@@ -93,13 +97,16 @@ export async function fetchScoreHistory(
   else q = q.eq("subject", subject);
   q = applyClassScope(q, scope?.classId, scope?.specialClassIds ?? []);
   const { data } = await q;
-  return (data ?? [])
-    .map((r) => ({
-      date: r.report_date as string,
-      examInfo: (r.exam_info as string | null) ?? null,
-      homeworkScore: (r.homework_score as string | null) ?? null,
-    }))
-    .sort((a, b) => a.date.localeCompare(b.date));
+  const rows: TrendHistoryRow[] = (data ?? []).map((r) => ({
+    date: r.report_date as string,
+    examInfo: (r.exam_info as string | null) ?? null,
+    homeworkScore: (r.homework_score as string | null) ?? null,
+    classId: (r.class_id as string | null) ?? null,
+    makeupClassId: (r.makeup_class_id as string | null) ?? null,
+    hadTrend: !!(r.trend_note as string | null)?.trim(),
+  }));
+  // 시험은 이 보고서 반의 기록만(원장 2026-10-15 — 수요일 반 추세가 화·금 반 시험을 인용했다).
+  return keepExamOfClass(rows, scope?.classId).sort((a, b) => a.date.localeCompare(b.date));
 }
 
 /**
@@ -160,28 +167,36 @@ export async function fetchReportTrendRows(
   } = {},
 ): Promise<TrendReportRow[]> {
   const limit = opts.limit ?? TREND_POINT_LIMIT;
+  // 시험은 그 반 기록만 남기므로(keepExamOfClass) 넉넉히 받고 **거른 뒤에** 자른다 — 다른 반 행 중 시험만 있던 행(거르면 빈 행)이
+  // 칸을 먹지 않게. ⚠️ 과제가 있는 다른 반 행은 과제 점으로 남아 칸을 쓴다(과제 수행률은 같은 과목 정규 반을 함께 보는 규칙).
   // 안전망(30일)은 "몇 달 전 점" 차단용일 뿐 — 점 개수를 정하는 건 limit(최근 7건)다.
   const windowStart = windowStartOf(reportDate, TREND_WINDOW_DAYS);
   if (!windowStart) return []; // 비정상 reportDate 방어 — throw 대신 그래프만 숨김
   let q = supabase
     .from("lesson_reports")
-    .select("id, report_date, exam_info, homework_score")
+    .select("id, report_date, exam_info, homework_score, class_id, makeup_class_id")
     .eq("student_id", studentId)
     .lte("report_date", reportDate)
     .gte("report_date", windowStart)
     .or("exam_info.not.is.null,homework_score.not.is.null")
     .order("report_date", { ascending: false })
-    .limit(limit);
+    .limit(opts.classId ? limit * 3 : limit);
   if (opts.tenantId) q = q.eq("tenant_id", opts.tenantId);
   if (!subject) q = q.is("subject", null);
   else if (subject === "math") q = q.or("subject.eq.math,subject.is.null");
   else q = q.eq("subject", subject);
   q = applyClassScope(q, opts.classId, opts.specialClassIds ?? []);
   const { data } = await q;
-  return (data ?? []).map((r) => ({
+  const rows: TrendReportRow[] = (data ?? []).map((r) => ({
     id: r.id as string,
     date: r.report_date as string,
     examInfo: (r.exam_info as string | null) ?? null,
     homeworkScore: (r.homework_score as string | null) ?? null,
+    classId: (r.class_id as string | null) ?? null,
+    makeupClassId: (r.makeup_class_id as string | null) ?? null,
   }));
+  // 그래프의 시험 점도 추세 문장과 같은 표본 — 이 보고서 반의 기록만(fetchScoreHistory와 같은 규칙). 빈 행은 빼고 최근 limit건.
+  return keepExamOfClass(rows, opts.classId)
+    .filter((r) => r.examInfo !== null || r.homeworkScore !== null)
+    .slice(0, limit);
 }

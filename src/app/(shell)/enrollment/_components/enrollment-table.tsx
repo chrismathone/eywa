@@ -8,6 +8,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { WindowLink } from "@/components/workspace/window-link";
 import { ASSIGNED_LABEL, QR_INTAKE_LABEL, cardMarkOf } from "@/features/enrollment/board-stages";
+import { consultantLabel } from "@/features/enrollment/consultant-label";
 import type { ConsultationTableRow } from "@/features/enrollment/server/queries";
 import { SHEET_LEGEND, sheetDate, subjectCellOf } from "@/features/enrollment/sheet-cells";
 import { EditingBadge } from "@/features/presence/editing-badge";
@@ -119,7 +120,7 @@ export function EnrollmentTable({
           🔴 DragScrollArea 안쪽이 h-full이라 이 바깥이 높이를 가져야 표 안 스크롤·sticky 제목이 산다. */}
       <DragScrollArea scrollY className="bg-card border-line shadow-card min-h-[14rem] flex-1 rounded-2xl border">
         <table className="w-full min-w-[1080px] table-fixed border-separate border-spacing-0 [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-l-line-faint">
-          <caption className="sr-only">콜&상담 목록</caption>
+          <caption className="sr-only">신규 콜&상담 목록</caption>
           <colgroup>
             {COLS.map((c) => (
               <col key={c.key} style={c.w ? { width: c.w } : undefined} />
@@ -199,15 +200,18 @@ export function EnrollmentTable({
                   >
                     <EditableTextCell id={c.id} field="parentPhone" value={c.parentPhone} canEdit={canWrite} />
                   </td>
-                  <td className={TD_CENTER} data-label={LABEL.counselor} data-empty={emptyAttr(c.consultantId || c.consultantName)}>
+                  <td className={TD_CENTER} data-label={LABEL.counselor} data-empty={emptyAttr(c.consultantId || consultantLabel(c))}>
+                    {/* 계정이 없으면 상담자 글(상세와 같은 사실 — 원장 2026-10-19). 고르기는 계정만 그대로. */}
                     <EditableSelectCell
                       id={c.id}
                       field="consultantId"
                       value={c.consultantId}
                       options={consultantOptions}
                       canEdit={canWrite}
+                      // 대체 글은 상담자 글만 — 인라인으로 계정을 '없음'으로 지운 직후 옛 계정 이름이 되살아나지 않게.
+                      fallback={c.counselorText}
                     >
-                      {c.consultantName}
+                      {consultantLabel(c)}
                     </EditableSelectCell>
                   </td>
                   <td className={TD_CENTER} data-label={LABEL.subject} data-empty={emptyAttr(subject)}>

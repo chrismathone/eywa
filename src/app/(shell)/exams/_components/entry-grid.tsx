@@ -3,6 +3,7 @@
 import { SheetText } from "@/features/teacher-view/interface-label";
 
 import { schoolGradeLabel } from "@/features/grades/unified/model";
+import { TodaysMathChip } from "./todays-math-chip";
 
 export type EntryGridRow = {
   studentId: string; name: string; school: string | null; grade: string | null; className?: string;
@@ -10,6 +11,8 @@ export type EntryGridRow = {
   existing?: number | null;
   /** 제도상 안 치는 시험·퇴원 등 — 칸을 잠그고 이유를 적는다. */
   lockedReason?: string | null;
+  /** 같은 만점의 오늘 수학 월말평가 점수 — 칸 값이 이것과 같을 때만 '오늘 수학' 표시(고치면 사라진다). */
+  todaysMath?: number | null;
 };
 export type EntryResult = { ok: true } | { ok: false; error: string };
 
@@ -51,6 +54,7 @@ export function EntryGrid({ rows, scores, max, results, onScore, onRemove, disab
                 aria-label={`${row.name} 점수`} placeholder={row.existing != null ? String(row.existing) : "—"}
                 className={`num w-20 rounded-md border bg-background px-2 py-1 text-center ${over ? "border-danger text-danger" : "border-line"}`} />
               <span className="text-text-dim num">/ {max}</span>
+              {row.todaysMath != null && value.trim() !== "" && Number(value) === row.todaysMath ? <TodaysMathChip /> : null}
             </span>}
           </td>
           <td className="px-2 py-1.5 text-center text-xs">

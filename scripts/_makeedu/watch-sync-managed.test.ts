@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 
 const source = fs.readFileSync(path.resolve("scripts/_makeedu/watch-sync-requests.cjs"), "utf8");
 async function cycle({ login = false, drain = false } = {}) {
-  const scripts: { name: string; forced: string | undefined }[] = [], events: string[] = [], stages: string[] = [];
+  const scripts: { name: string; forced: string | undefined }[] = [], events: string[] = [], stages: string[] = [], activities: string[] = [];
   const tenant = "fixture-tenant";
   const sql = Object.assign(async (parts: string[], ...values: unknown[]) => {
     const text = parts.join("?");
@@ -15,7 +15,8 @@ async function cycle({ login = false, drain = false } = {}) {
     return [];
   }, { end: async () => {} });
   const managed = { managed: true, state: async (phase: string) => { stages.push(phase); return { drain: drain && scripts.length > 0 }; },
-    legacyCutover: async () => { throw Error("Legacy control is not used by the app"); }, result: (task: string) => events.push(task) };
+    legacyCutover: async () => { throw Error("Legacy control is not used by the app"); }, result: (task: string) => events.push(task),
+    activity: async (task: string | null) => { activities.push(task ?? "idle"); } };
   const brokerCall = async (action: string, body: { finish?: unknown; kind?: string }) => {
     if (action === "schedule") { stages.push(body.finish ? "schedule-finish" : "schedule-claim"); return { job: body.finish ? null : { kind: login ? "login" : "sync", bucket: "2026-10-09T00:00:00Z" } }; }
     if (action === "event") { events.push(body.kind!); return { ok: true }; }
@@ -36,7 +37,7 @@ async function cycle({ login = false, drain = false } = {}) {
       __dirname: path.resolve("scripts/_makeedu"), process: { env: {}, execPath: "fixture-node",stdout:{write(){}},stderr:{write(){}} }, console: { log() {} },
       setInterval: () => ({ unref() {} }), clearInterval() {}, setTimeout: () => { throw Error("fixture cycle complete"); } }, { timeout: 1000 });
   } catch (e) { expect((e as Error).message).toBe("fixture cycle complete"); }
-  return { scripts, stages, events };
+  return { scripts, stages, events, activities };
 }
 describe("actual managed Makeedu watcher wiring without external writes", () => {
   it.each([false, true])("keeps manual sync, schedule (%s), weekly enqueue and consultation push", async login => {
@@ -44,10 +45,13 @@ describe("actual managed Makeedu watcher wiring without external writes", () => 
     expect(result.scripts).toEqual([{ name: "sync-all.cjs", forced: "true" }, { name: login ? "check-session.mjs" : "sync-all.cjs", forced: "false" }, { name: "push-consultations.cjs", forced: undefined }]);
     expect(result.stages).toEqual(["cycle", "stage", "schedule-claim", "schedule-finish", "stage", "weekly-enqueue", "stage"]);
     expect(result.events).toEqual(["syncNow", "job_started", "job_succeeded", "push"]);
+    // 지금 하는 일 — 연동 앱이 업데이트가 기다리는 작업으로 보여 준다(1.0.7). 예약 작업은 job_started 알림으로 안다.
+    expect(result.activities).toEqual(["syncNow", "push", "idle"]);
   });
   it("finishes the current request and stops before scheduled or outbound work after drain", async () => {
     const result = await cycle({ drain: true });
     expect(result.scripts).toEqual([{ name: "sync-all.cjs", forced: "true" }]);
     expect(result.stages).toEqual(["cycle", "stage", "cycle"]);
+    expect(result.activities).toEqual(["syncNow"]);
   });
 });

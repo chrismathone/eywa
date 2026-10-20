@@ -8,6 +8,7 @@ import { runResumableUpload, UploadError, wakeableSleep, xhrPut } from "@/featur
 import { createUploadReporter, flushUploadEvents } from "@/features/video-submit/upload-diagnostics-client";
 import { confirmationReason, uploadEventLabel, uploadFailureText, type UploadEvent } from "@/features/video-submit/upload-diagnostics";
 import { SITE_FREE_UPLOADS_PER_DAY, SITE_NOTE_MAX, siteNote } from "@/features/video-submit/site";
+import { InAppWarning } from "./in-app-warning";
 
 type Phase =
   | { kind: "idle" }
@@ -176,6 +177,7 @@ export function VideoSubmitForm(props: {
         {props.homeworkLabel ? <p className="text-foreground text-base font-bold break-keep">{props.homeworkLabel} 수업의 영상 숙제</p> : null}
         {props.freeUpload ? <p className="text-foreground text-base font-bold break-keep">숙제 목록에 없는 영상</p> : null}
       </header>
+      <InAppWarning />
       {recovered ? <p className="text-foreground text-sm break-keep" aria-live="polite">지난번에 올린 영상도 제출됐습니다.</p> : null}
       <section className="bg-card border-line relative space-y-4 rounded-2xl border p-5">
         <ul className="text-text-dim space-y-1 text-sm break-keep">

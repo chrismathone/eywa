@@ -21,6 +21,9 @@ import { useUnsavedGuard } from "@/components/workspace/use-unsaved-guard";
 import { FormActionBar } from "@/components/forms/form-action-bar";
 import { useFormDraft } from "@/components/forms/use-form-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
+import { WithdrawalReasonSlot } from "./withdrawal-reason-slot";
+import { SIBLING_FIELD_NAMES, SiblingsField } from "./siblings-field";
+import type { SiblingOption } from "@/features/students/siblings";
 
 type Mode = "create" | "edit";
 
@@ -100,6 +103,7 @@ export function StudentForm({
   scope,
   showClassnoteName = true,
   canManageStatus = false,
+  siblings,
 }: {
   mode: Mode;
   canManageStatus?: boolean;
@@ -112,6 +116,8 @@ export function StudentForm({
   showClassnoteName?: boolean;
   /** 동시 편집 가드 스코프(예: `student:123`). 수정 모드에서만 전달 — 다른 창 저장 시 경고. */
   scope?: string;
+  /** 수정 화면의 형제 칸(0376a) — 짝 표가 있을 때만 준다(없으면 칸이 없고 저장도 형제를 건드리지 않는다). */
+  siblings?: { initial: SiblingOption[]; review: SiblingOption[]; suggested: string[] };
 }) {
   const kioskOn = useModuleOn("kiosk");
   const action = mode === "create" ? createStudent : updateStudent;
@@ -134,6 +140,8 @@ export function StudentForm({
         : `student:${initialValue?.id ?? "edit"}`,
     formRef,
     ignoreForBanner: ["status"],
+    // 형제 칸은 화면 상태(숨은 칸)라 초안으로 되살리면 보이는 칩과 저장값이 갈린다 — 초안에서 뺀다.
+    exclude: SIBLING_FIELD_NAMES,
   });
   const clearDraft = draft.clear;
 
@@ -329,6 +337,17 @@ export function StudentForm({
               <option value="기타">기타</option>
             </select>
           </Field>
+          {mode === "edit" && initialValue?.id && siblings ? (
+            // key = 열 때 칩·자동 추천 — 손대지 않은 창이 새로고침돼 새 짝이 오면 칸을 다시 그린다(칩과 '열 때 칩'이 어긋나면
+            // 저장이 다른 화면에서 바꾼 짝을 덮는다). 미저장 창은 새로고침되지 않아 고친 칩은 날아가지 않는다.
+            <SiblingsField
+              key={`${siblings.initial.map((o) => o.value).join(",")}|${siblings.suggested.join(",")}`}
+              studentId={initialValue.id}
+              initial={siblings.initial}
+              review={siblings.review}
+              suggested={siblings.suggested}
+            />
+          ) : null}
         </div>
       </fieldset>
       <fieldset className="space-y-3 border-t border-line pt-3">
@@ -373,6 +392,15 @@ export function StudentForm({
               className={inputClass}
             />
           </Field> : <p className="text-sm text-muted-foreground">퇴원·휴원·복구와 퇴원 예약은 원생 상태 변경 담당자가 처리합니다.{v.withdrawnAt ? ` 퇴원일: ${v.withdrawnAt}` : ""}</p>}
+          {/* 새 퇴원·퇴원 예약이면 사유를 고른다(원장 2026-10-15 *"기타는 모든 곳을 일치하게"*) — 서버와 같은 판정. */}
+          <WithdrawalReasonSlot
+            formRef={formRef}
+            prevStatus={mode === "create" ? null : v.status}
+            prevWithdrawnAt={mode === "create" ? null : v.withdrawnAt}
+            initialStatus={v.status}
+            initialWithdrawnAt={v.withdrawnAt}
+            controlClassName={inputClass}
+          />
         </div>
       </fieldset>
       <details className="rounded-lg border border-line p-3">

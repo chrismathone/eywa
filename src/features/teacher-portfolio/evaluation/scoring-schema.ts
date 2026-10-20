@@ -19,7 +19,7 @@ export const scoringSchema = z.discriminatedUnion("mode", [
 export type Scoring = z.infer<typeof scoringSchema>;
 export type Band = z.infer<typeof bandSchema>;
 
-/** 자료가 없을 때 — 0점(원장 기본) · 만점 · 합계에서 빼기(만점에서도 뺀다). */
+/** 자료가 없을 때 — 0점(원장 기본) · 만점 · 합계에서 제외(만점에서도 뺀다). */
 export const missingSchema = z.enum(["zero", "full", "exclude"]);
 export type MissingRule = z.infer<typeof missingSchema>;
-export const MISSING_LABEL: Record<MissingRule, string> = { zero: "0점", full: "만점", exclude: "합계에서 빼기" };
+export const MISSING_LABEL: Record<MissingRule, string> = { zero: "0점", full: "만점", exclude: "합계에서 제외" };

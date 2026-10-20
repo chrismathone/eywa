@@ -2,7 +2,8 @@
  * 한 달의 항목에 강사평가 설정을 얹는다 — 원래 수치(`raw`) → 점수 · 만점 · 이름 · 차례 · 합계.
  * 계산 코드는 수치만 내고, 몇 점인지는 여기서 설정이 정한다(원장 2026-10-13 *"가능한 모든것을 커스터마이징"*).
  *
- * - 자료가 없으면(`raw` null) 지표의 '자료가 없을 때' 규칙: 0점(기본) · 만점 · 합계에서 빼기.
+ * - 자료가 없으면(`raw` null) 지표의 '자료가 없을 때' 규칙: 0점(기본) · 만점 · 합계에서 제외.
+ *   예외 = 급여 비율의 새로 온 선생님(지난달 담당 반 없음 · `newcomer`)은 규칙과 상관없이 합계에서 제외(원장 2026-10-15).
  * - 끈 지표는 저장은 하되(설정 미리보기가 그 수치를 쓴다) 화면·합계엔 없다.
  * - 총점 = 합계에 든 점수의 합, 만점 = 그 지표들 만점의 합 — 100점이 아니어도 된다.
  */
@@ -36,9 +37,16 @@ function scoreItem<M extends Metric>(m: M, s: MetricSetting): M {
   m.max = s.max;
   m.off = !s.enabled || undefined;
   const raw = m.raw ?? null;
+  // 프리랜서 근태 = 만점(원장 2026-10-16) — 설정의 점수 규칙과 상관없이(만점을 바꾸면 바꾼 만점).
+  if ((m as { freelancer?: boolean }).freelancer) {
+    delete m.missing;
+    delete m.gap;
+    m.value = s.max;
+    return m;
+  }
   if (raw === null) {
     m.missing = true;
-    m.value = missingPoints(s);
+    m.value = (m as { newcomer?: boolean }).newcomer ? null : missingPoints(s);
     m.gap = m.gap ?? "자료 없음";
   } else {
     delete m.missing;

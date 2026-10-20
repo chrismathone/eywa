@@ -8,6 +8,11 @@ import { Toolbar, ToolbarRow } from "@/components/toolbar";
 import { PageHeader } from "@/components/page-header";
 import { PageMaximizeToolbar } from "@/components/page-maximize/page-maximize-toolbar";
 import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF, TOOLBAR_CHIP_ON } from "@/components/toolbar-controls";
+import { Suspense } from "react";
+import { isMemoSheetSubject } from "@/features/timetable-memo/doc";
+import { memoSheetAccess } from "@/features/timetable-memo/server/access";
+import { MemoSheetPane, MemoSheetSkeleton } from "@/features/timetable-memo/ui/memo-sheet-pane";
+import { MemoSheetJumpButton, TimetableSplitPanes } from "@/features/timetable-memo/ui/split-panes";
 import { cookies } from "next/headers";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
@@ -614,10 +619,14 @@ export default async function TimetablePage({
   //    없는 날은 원반 담임 열에 세울 '보강' 박스(`strays`). 둘 다 기본뷰 격자 한 곳으로만 간다.
   // 🔑 '나눔'(수업 나누기 0351a)도 같은 자리로만 간다 — 보강 예약과 서로 독립이라 함께 읽는다(B4). 칸 순서는 둘 다 보존한다.
   const basicOnly = !makeupTab && effView === "basic";
-  const [basicReserved, basicSplit, canSplit] = await Promise.all([
+  // 메모 시트(영어 통합뷰 오른쪽 엑셀 판, 원장 2026-10-19) — 판이 설 수 있는 화면일 때만 문을 본다(보기·편집 한 번에).
+  // 강사 화면엔 없다(memoSheetAccess 주석). 시트 내용은 오른쪽 판의 Suspense 안에서 읽는다(첫 그림을 막지 않게, B7).
+  const memoSlot = isIntegrated && !groupEditing && !makeupTab && slots.length > 0 && isMemoSheetSubject(subject);
+  const [basicReserved, basicSplit, canSplit, memo] = await Promise.all([
     basicOnly ? attachReservedLines(slots, referenceDate) : null,
     basicOnly ? attachSplitLines(slots, referenceDate) : null,
     basicOnly && canEdit ? canSplitClassNow() : false,
+    memoSlot ? memoSheetAccess(user) : { canView: false, canEdit: false },
   ]);
   const reservedSlots = basicReserved?.slots ?? slots;
   const basicSlots = basicSplit
@@ -717,52 +726,30 @@ export default async function TimetablePage({
     subjectMaps.labelOf(subject),
     kind === "special" ? "특강" : null,
   ]);
-
-  return (
-    <TimetableEditProvider effectiveDate={effectiveDate} today={today} canEdit={canEdit} canSplit={canSplit} weekMonday={week}>
-      <TimetableApplyRefresh tenantId={user.tenantId} />
-      {/* 학생 검색 — 툴바 입력칸과 세 뷰(기본·통합·강사)가 같은 값을 보게 감싼다. 편집 공급자 **안쪽**이라
-          검색이 편집 모드를 읽고 스스로 물러난다(search-context.tsx 주석). */}
-      <TimetableSearchProvider index={searchIndex} scope={searchScope} enabled={searchEnabled}>
-      {/* `.edge-to-edge` — 창(임베드)에선 셸 <main>의 좌우·아래 베젤과 스크롤바 거터를 0으로(globals.css
-          `main.embed-main:has(.edge-to-edge)`, 원장 2026-09-08 *"좌우와 하단 여백이 거의 느껴지지 않도록 딱"*).
-          ⚠️ loading.tsx 루트와 **같은 className**이어야 한다(스켈레톤→본문에서 폭이 튀지 않게, 가드 window-bezel). */}
-      <div data-maximize-toolbar-page="" className="edge-to-edge flex h-full min-h-0 flex-col gap-4 compact-chrome:gap-3">
-      {/* 표시 선호('미사용 요일'·'빈 교시 접기'·'1시간 단위')를 **계정에** 기억(0146a) + 쿠키 폴백 —
-          창은 깨끗한 URL로 열려 파라미터만으론 매번 초기화된다. 셋을 한 컴포넌트로 합친 이유(동시 쓰기
-          충돌)는 prefs-sync.tsx 주석 참조. */}
-      <TimetableViewPrefsSync
-        hideEmptyDays={hideEmptyDays}
-        collapseEmptyPeriods={collapseEmptyPeriods}
+  // 통합뷰 격자 — 메모 시트가 서면 두 칸 배치의 왼쪽 판, 아니면 그대로(아래 render 분기).
+  const integratedGrid = isIntegrated ? (
+    <TimetableZoomArea scale={editorView?.scale}>
+      <RichGridView
+        slots={slots}
+        subjectMaps={subjectMaps}
+        config={periodsConfig}
+        teacherColors={teacherColors}
+        teacherNicknames={teacherNicknames}
+        compactSections={compactSections}
+        customGroups={customGroups}
         hideStudents={hideStudents}
-        subject={subject}
-        sections={compactList}
-        englishTrack={carriedTrack}
-        savedHideEmptyDays={viewPrefs.hideEmptyDays}
-        savedCollapseEmptyPeriods={viewPrefs.collapseEmptyPeriods}
-        savedHideStudents={viewPrefs.hideStudents}
-        savedSections={viewPrefs.compact1h?.[subject] ?? null}
-        savedEnglishTrack={viewPrefs.englishTrack}
+        hidePeriods={editorView?.hidePeriods}
+        virtualLabs={virtualLabs}
       />
-      {/* 계정에 저장된 셀 색 강도를 스토어에 주입(서버→클라 단방향). 계정값이 없으면 기기 설정 유지. */}
-      <TimetableColorPrefSync mode={viewPrefs.colorMode} />
-      {/* 글씨 크기(계정) → 스토어 주입. 색 강도와 같은 단방향 동기화 — 토글은 뷰 설정 팝오버에 있다. */}
-      <TimetableFontPrefSync fontSize={viewPrefs.fontSize} />
-      {/* X 겹침 — 키를 누를 때만 읽는다(첫 화면 비용 0). 교실 지도는 과목 축이 아니라 뺀다. */}
-      {showExitOverlay && !isRooms ? <TimetableExitOverlay subject={subject} /> : null}
-      {/* Editorial 문법 ① — 헤더 위계. 시간표는 세로 공간이 가장 귀한 화면이라 **창(임베드)에선 이 줄을
-          통째로 접는다**(컴팩트 1행조차 아까움 — 2026-07-20 원장 "여전히 많은 공간"). 최상위 프레임은 풀 헤더 유지.
-          (우측 학생 인원 집계는 2026-09-28 삭제 — 원장 "헷갈리니까".) */}
-      <div data-maximize-title-row="" className="shrink-0 compact-chrome:hidden">
-        <PageHeader
-          eyebrow={tt("수업 운영")}
-          title={tt("시간표")}
-          description={isRooms ? tt("교실 사용 현황 지도") : lang === "en" ? `${tt(subjectMaps.labelOf(subject))} weekly timetable` : `${subjectMaps.labelOf(subject)} 주간표`}
-          actions={
-            isRooms || !showEcsShortcut ? null : <EcsShortcut week={week} />
-          }
-        />
-      </div>
+    </TimetableZoomArea>
+  ) : null;
+
+  // 메모 시트가 서는 화면(영어 통합뷰)에선 툴바가 **시간표 판 안** 맨 위에 선다(원장 2026-10-19 *"메모시트 시간표 같은 위치로"*) —
+  // 오른쪽으로 넘기면 툴바(주차·과목·필터)는 시간표와 함께 밀려나고, 시트 머리줄이 툴바가 있던 높이에 선다.
+  // 판정은 아래 본문 갈래와 같은 조건이다(이 값이 참이면 반드시 분할 판 갈래로 간다 — 툴바가 사라지는 화면이 없게).
+  const memoSplit = memo.canView && !makeupTab && !(isRooms && roomWindows) && slots.length > 0 && isIntegrated && !groupEditing;
+  const toolbar = (
+    <>
       {/* Toolbar — 좁은 화면(compact-chrome)에선 여백·구분선을 조인다. 구분선(1px)은 그 자체보다
           양옆 gap 때문에 줄바꿈을 앞당겨, 폰에서 툴바를 한 줄 더 밀어내는 값이 컸다. */}
       <PageMaximizeToolbar>
@@ -1103,6 +1090,9 @@ export default async function TimetablePage({
         {/* 시간표 편집기(연습본) — 오른쪽 도구 묶음. 교실 지도에서는 감춘다(수업 배치를 보는 화면이 아니다). */}
         {showEditorShortcut && !isRooms ? <EditorShortcut /> : null}
 
+        {/* 메모 시트로 넘어가기 — 가로 스크롤과 같은 자리(오른쪽 판). 판이 선 화면에서만. */}
+        {memo.canView ? <MemoSheetJumpButton className={`${TOOLBAR_CHIP} ${TOOLBAR_CHIP_OFF}`} /> : null}
+
         {/* 편집 컨트롤 — 기본뷰·**통합뷰** + 이번/미래 주(강사뷰=읽기전용, 과거=조회 전용).
             🔴 2026-09-09: 통합뷰에도 학생 반 이동이 생겨(원장 *"통합뷰에서도 학생 드래그 기능 추가시켜"*)
                이 줄이 함께 서야 한다 — 안 그러면 끌어다 놓아도 **'저장' 버튼이 화면에 없어** 큐에만 쌓이고
@@ -1122,10 +1112,59 @@ export default async function TimetablePage({
         </ToolbarRow>
       </Toolbar>
       </PageMaximizeToolbar>
+    </>
+  );
+
+  return (
+    <TimetableEditProvider effectiveDate={effectiveDate} today={today} canEdit={canEdit} canSplit={canSplit} weekMonday={week}>
+      <TimetableApplyRefresh tenantId={user.tenantId} />
+      {/* 학생 검색 — 툴바 입력칸과 세 뷰(기본·통합·강사)가 같은 값을 보게 감싼다. 편집 공급자 **안쪽**이라
+          검색이 편집 모드를 읽고 스스로 물러난다(search-context.tsx 주석). */}
+      <TimetableSearchProvider index={searchIndex} scope={searchScope} enabled={searchEnabled}>
+      {/* `.edge-to-edge` — 창(임베드)에선 셸 <main>의 좌우·아래 베젤과 스크롤바 거터를 0으로(globals.css
+          `main.embed-main:has(.edge-to-edge)`, 원장 2026-09-08 *"좌우와 하단 여백이 거의 느껴지지 않도록 딱"*).
+          ⚠️ loading.tsx 루트와 **같은 className**이어야 한다(스켈레톤→본문에서 폭이 튀지 않게, 가드 window-bezel). */}
+      <div data-maximize-toolbar-page="" className="edge-to-edge flex h-full min-h-0 flex-col gap-4 compact-chrome:gap-3">
+      {/* 표시 선호('미사용 요일'·'빈 교시 접기'·'1시간 단위')를 **계정에** 기억(0146a) + 쿠키 폴백 —
+          창은 깨끗한 URL로 열려 파라미터만으론 매번 초기화된다. 셋을 한 컴포넌트로 합친 이유(동시 쓰기
+          충돌)는 prefs-sync.tsx 주석 참조. */}
+      <TimetableViewPrefsSync
+        hideEmptyDays={hideEmptyDays}
+        collapseEmptyPeriods={collapseEmptyPeriods}
+        hideStudents={hideStudents}
+        subject={subject}
+        sections={compactList}
+        englishTrack={carriedTrack}
+        savedHideEmptyDays={viewPrefs.hideEmptyDays}
+        savedCollapseEmptyPeriods={viewPrefs.collapseEmptyPeriods}
+        savedHideStudents={viewPrefs.hideStudents}
+        savedSections={viewPrefs.compact1h?.[subject] ?? null}
+        savedEnglishTrack={viewPrefs.englishTrack}
+      />
+      {/* 계정에 저장된 셀 색 강도를 스토어에 주입(서버→클라 단방향). 계정값이 없으면 기기 설정 유지. */}
+      <TimetableColorPrefSync mode={viewPrefs.colorMode} />
+      {/* 글씨 크기(계정) → 스토어 주입. 색 강도와 같은 단방향 동기화 — 토글은 뷰 설정 팝오버에 있다. */}
+      <TimetableFontPrefSync fontSize={viewPrefs.fontSize} />
+      {/* X 겹침 — 키를 누를 때만 읽는다(첫 화면 비용 0). 교실 지도는 과목 축이 아니라 뺀다. */}
+      {showExitOverlay && !isRooms ? <TimetableExitOverlay subject={subject} /> : null}
+      {/* Editorial 문법 ① — 헤더 위계. 시간표는 세로 공간이 가장 귀한 화면이라 **창(임베드)에선 이 줄을
+          통째로 접는다**(컴팩트 1행조차 아까움 — 2026-07-20 원장 "여전히 많은 공간"). 최상위 프레임은 풀 헤더 유지.
+          (우측 학생 인원 집계는 2026-09-28 삭제 — 원장 "헷갈리니까".) */}
+      <div data-maximize-title-row="" className="shrink-0 compact-chrome:hidden">
+        <PageHeader
+          eyebrow={tt("수업 운영")}
+          title={tt("시간표")}
+          description={isRooms ? tt("교실 사용 현황 지도") : lang === "en" ? `${tt(subjectMaps.labelOf(subject))} weekly timetable` : `${subjectMaps.labelOf(subject)} 주간표`}
+          actions={
+            isRooms || !showEcsShortcut ? null : <EcsShortcut week={week} />
+          }
+        />
+      </div>
+      {memoSplit ? null : toolbar}
 
       {/* 검색 결과 0건 — 빈 격자만 남기면 "시간표가 고장났다"로 읽힌다. 왜 비었는지(어느 주·어느 과목에
           없는지)를 한 줄로 말하고, 그 자리에서 지울 수 있게 한다. */}
-      <TimetableSearchEmptyNote />
+      {memoSplit ? null : <TimetableSearchEmptyNote />}
 
       {makeupTab ? (
         // 보강 탭 — 슬롯 격자 대신 예약 격자(표시 전용). 빈 주도 이 컴포넌트가 스스로 말한다.
@@ -1195,22 +1234,27 @@ export default async function TimetablePage({
       ) : isIntegrated ? (
         // 통합뷰 명단 이동(대기/퇴원 드롭) — 🔴 zoom 래퍼 **바깥**에 DndContext를 둔다([[#98]]: 안쪽이면
         // fixed인 DragOverlay가 zoom 좌표계로 들어가 고스트가 커서와 어긋난다. 기본뷰와 같은 배치).
-        <RosterMoveArea canEdit={canEditRoster} today={today}>
-        <TimetableZoomArea scale={editorView?.scale}>
-          <RichGridView
-            slots={slots}
-            subjectMaps={subjectMaps}
-            config={periodsConfig}
-            teacherColors={teacherColors}
-            teacherNicknames={teacherNicknames}
-            compactSections={compactSections}
-            customGroups={customGroups}
-            hideStudents={hideStudents}
-            hidePeriods={editorView?.hidePeriods}
-            virtualLabs={virtualLabs}
+        // 메모 시트가 서는 화면 = 시간표 판 | 엑셀 판 두 칸(오른쪽으로 넘기면 시트 — split-panes.tsx). 그 밖은 종전 그대로.
+        // 🔴 명단 드래그 영역은 **시간표 판만** 감싼다 — 시트까지 감싸면 시트에서 범위를 끈 직후의 클릭·더블클릭을
+        //    '드래그 뒤 클릭'으로 삼킨다(drag-flag.ts). 시트는 그 영역 밖의 자기 판이다(침범하지 않게).
+        memoSplit ? (
+          <TimetableSplitPanes
+            top={
+              <>
+                {toolbar}
+                <TimetableSearchEmptyNote />
+              </>
+            }
+            left={<RosterMoveArea canEdit={canEditRoster} today={today}>{integratedGrid}</RosterMoveArea>}
+            right={
+              <Suspense fallback={<MemoSheetSkeleton />}>
+                <MemoSheetPane tenantId={user.tenantId} subject={subject} canEdit={memo.canEdit} />
+              </Suspense>
+            }
           />
-        </TimetableZoomArea>
-        </RosterMoveArea>
+        ) : (
+          <RosterMoveArea canEdit={canEditRoster} today={today}>{integratedGrid}</RosterMoveArea>
+        )
       ) : effView === "teacher" ? (
         // 강사뷰 — 시트 "강사별영어시간표" 그대로(강사=세로 블록, 그 안 월~토, 셀=반명+방). 읽기전용, 반 클릭=학생 명단.
         // 가로줄·격자 단위는 과목 설정(teacherViewLines/Step, 학원설정 과목 운영)에서.

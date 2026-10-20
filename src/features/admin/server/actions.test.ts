@@ -318,9 +318,9 @@ describe("mergeStudents", () => {
       seed();
       faultOn("enrollment_consultations", "reject");
       const res = await mergeStudents(undefined, form());
-      expect(res?.error).toContain("'콜&상담 기록 옮기기' 단계에서 멈췄습니다");
+      expect(res?.error).toContain("'신규 콜&상담 기록 옮기기' 단계에서 멈췄습니다");
       expect(student(MERGEE).status).toBe("enrolled");
-      expect(lastAudit().metadata).toMatchObject({ partial: true, failedStep: "콜&상담 기록 옮기기" });
+      expect(lastAudit().metadata).toMatchObject({ partial: true, failedStep: "신규 콜&상담 기록 옮기기" });
     });
 
     it("진 쪽 퇴원 처리의 실패도 삼키지 않는다 — '이전 완료'라고 답하지 않는다", async () => {

@@ -132,9 +132,10 @@ export const SHEET_DICT = {
   "plan.feedback.makeupRemoved": { ko: "보강 명단에서 뺐습니다", en: "Removed from the makeup roster." },
   "plan.feedback.notSaved": { ko: "{error} — 저장되지 않았습니다", en: "{error} — Not saved." },
   "plan.feedback.notSavedRefresh": { ko: "{error} — 저장되지 않았습니다(새로고침하면 이전 값으로 돌아갑니다)", en: "{error} — Not saved. Refreshing restores the previous value." },
-  "plan.feedback.shiftSkip": { ko: "한 주 미뤘습니다 — 이 칸 내용은 그대로 두고, 다음 주부터 진도가 한 주씩 밀렸습니다", en: "Pushed a week — this cell stays; later lessons each moved one week later." },
-  "plan.feedback.shiftMarkOnly": { ko: "아직 가져온 진도가 없어 월간계획 일정만 한 주 옮겼습니다 — 가져오기를 하면 반영됩니다", en: "No lessons written yet — only the plan schedule moved a week; it applies when you import." },
-  "plan.feedback.shiftAdvance": { ko: "한 주 당겼습니다 — 다음 주 진도가 이 칸으로 오고, 뒤 진도가 한 주씩 당겨졌습니다", en: "Pulled a week — next week's lesson is here now; later lessons each moved one week earlier." },
+  "plan.feedback.shiftSkip": { ko: "한 칸 미뤘습니다 — 이 칸 진도는 비우고, 뒤 진도가 한 칸씩 밀렸습니다", en: "Pushed back — this cell is cleared; later lessons each moved one slot later." },
+  "plan.feedback.shiftMarkOnly": { ko: "아직 가져온 진도가 없어 월간계획 일정만 옮겼습니다 — 가져오기를 하면 반영됩니다", en: "No lessons written yet — only the plan schedule moved; it applies when you import." },
+  "plan.feedback.shiftAdvance": { ko: "한 칸 당겼습니다 — 다음 진도가 이 칸으로 오고, 뒤 진도가 한 칸씩 당겨졌습니다", en: "Pulled forward — the next lesson is here now; later lessons each moved one slot earlier." },
+  "plan.feedback.shiftOtherCells": { ko: "이 교재의 다른 날 칸도 함께 바뀌었습니다 — 그 칸은 새로고침하면 보입니다", en: "Other days of this textbook changed too — refresh to see them." },
   "plan.feedback.shiftClear": { ko: "회차 표식을 지웠습니다 — 원래 차수로 돌아갑니다", en: "Lesson adjustment removed. The original sequence is restored." },
   "plan.holidayHint": { ko: "{holiday} — 휴일이지만 수업했다면 그대로 쓰실 수 있습니다", en: "{holiday} — a holiday. You can still enter records if you taught." },
   "plan.panel.homeroom.month": { ko: "담임 월간계획", en: "Homeroom monthly plan" },
@@ -634,16 +635,29 @@ export const SHEET_DICT = {
   "plan.addRow": { ko: "+ 줄 추가", en: "+ Add row" },
   // 회차 미루기·당기기(0282a) — 🔴 **실제를 적는 표**에 둔다(원장 2026-09-22 *"밀기 당기기는 어디에있음?"*).
   //    달력 칸에만 뒀더니 정작 사람이 서 있는 자리에 없었다. 지난 날짜에도 막지 않는다(뒤늦게 미루는 게 정상).
-  "plan.shift.skip": { ko: "한 주 미룸", en: "Push a week" },
+  "plan.shift.skip": { ko: "한 칸 미룸", en: "Push back" },
   "plan.shift.skip.title": {
-    ko: "이 칸 내용을 다음 주로 복사하고, 그 뒤 진도를 전부 한 주씩 밉니다(같은 요일·교시). 이 칸은 실제 한 수업으로 고쳐 적으세요. 되돌리려면 '한 주 당김'.",
-    en: "Copies this cell to next week and pushes every later lesson one week (same weekday and period). Edit this cell to what you actually taught. To undo, press Pull a week.",
+    ko: "이 칸 진도를 비우고 뒤 진도를 한 칸씩 밉니다 — 배정 교재는 배정한 요일 순서대로(화→금→화…), 그 밖의 줄은 같은 요일·교시끼리. 누르면 확인 창이 뜨고, 실행 뒤 [되돌리기]로 원래대로 돌릴 수 있습니다.",
+    en: "Clears this cell and pushes later lessons one slot — assigned textbooks follow their assigned days in order (Tue→Fri→Tue…), other rows move within the same weekday and period. You'll be asked to confirm, and you can Undo afterwards.",
   },
-  "plan.shift.advance": { ko: "한 주 당김", en: "Pull a week" },
+  "plan.shift.advance": { ko: "한 칸 당김", en: "Pull forward" },
   "plan.shift.advance.title": {
-    ko: "다음 주 진도를 이 칸으로 당기고, 그 뒤 진도를 전부 한 주씩 당깁니다(같은 요일·교시). 이 칸에 적힌 내용은 지워집니다. 되돌리려면 '한 주 미룸'.",
-    en: "Pulls next week's lesson into this cell and every later lesson one week earlier (same weekday and period). This cell's rows are replaced. To undo, press Push a week.",
+    ko: "다음 진도를 이 칸으로 당기고 뒤 진도를 한 칸씩 당깁니다 — 배정 교재는 배정한 요일 순서대로, 그 밖의 줄은 같은 요일·교시끼리. 이 칸에 적힌 내용은 바뀝니다. 누르면 확인 창이 뜨고, 실행 뒤 [되돌리기]로 원래대로 돌릴 수 있습니다.",
+    en: "Pulls the next lesson into this cell and later lessons one slot earlier — assigned textbooks follow their assigned days in order, other rows move within the same weekday and period. This cell's rows change. You'll be asked to confirm, and you can Undo afterwards.",
   },
+  // 확인 창 + 되돌리기(원장 2026-10-19 *"미루고, 당길때 얼럿창 띄우고 덮어쓰기(되돌리기)"* → (가)안).
+  "plan.shift.confirm.skip": {
+    ko: "이 칸의 진도를 비우고, 뒤 진도를 한 칸씩 뒤로 밉니다. 이미 적힌 뒤 칸 내용도 덮어씁니다. 실행 뒤 [되돌리기]로 누르기 전 상태로 돌릴 수 있습니다.",
+    en: "This clears this cell and pushes later lessons one slot back, overwriting the cells after it. You can Undo right afterwards.",
+  },
+  "plan.shift.confirm.advance": {
+    ko: "다음 진도를 이 칸으로 당기고, 뒤 진도를 한 칸씩 앞으로 당깁니다. 이 칸과 뒤 칸 내용을 덮어씁니다. 실행 뒤 [되돌리기]로 누르기 전 상태로 돌릴 수 있습니다.",
+    en: "This pulls the next lesson into this cell and later lessons one slot earlier, overwriting this cell and the ones after it. You can Undo right afterwards.",
+  },
+  "plan.shift.confirm.ok": { ko: "덮어쓰기", en: "Overwrite" },
+  "plan.shift.confirm.cancel": { ko: "취소", en: "Cancel" },
+  "plan.shift.undo": { ko: "되돌리기", en: "Revert" },
+  "plan.shift.undo.done": { ko: "되돌렸습니다 — 누르기 전 진도로 돌아갔습니다", en: "Undone — lessons are back to how they were" },
   // 계획 비교(원장 2026-09-28) — 이 칸의 **원래 월간계획 ↔ 실제**를 모달로 견준다(읽기 전용).
   //  🔴 옛 '월간계획 가져오기'(교시 한 칸)는 없앴다 — 가져오기는 월간 화면의 전체 가져오기 하나뿐이다.
   "plan.compare": { ko: "계획 비교", en: "Compare plan" },
@@ -949,7 +963,18 @@ export const SHEET_DICT = {
     ko: "교시와 교재를 고르면 그 시각의 수업일마다 차수가 순서대로 월간계획에 섭니다. 연휴는 건너뜁니다. 실제 시트는 강사가 [월간계획 전체 가져오기]를 누를 때만 채워집니다.",
     en: "Pick periods and a book and the lessons line up on the monthly plan, class day by class day (holidays skipped). The actual sheet is filled only when a teacher presses [Import plan].",
   },
-  "fill.slots": { ko: "교시 — 고른 시각에 차수가 들어갑니다", en: "Periods — lessons go into the times you pick" },
+  "fill.slots": {
+    ko: "교시 — 선생님을 누르고, 요일과 차수 자리를 고르세요 (1차수 = 25분)",
+    en: "Periods — tap a teacher, then pick the days and lesson spots (1 lesson = 25 min)",
+  },
+  "fill.slots.days": { ko: "적용할 요일", en: "Apply on" },
+  "fill.slots.pos": { ko: "{n}차수", en: "Part {n}" },
+  "fill.slots.pos.title": {
+    ko: "한 교시 안의 25분 자리 — 1차수는 앞 25분, 2차수는 뒤 25분입니다. 둘 다 고르면 그 교시에 차수 2개가 들어갑니다.",
+    en: "25-minute spots inside one period — part 1 is the first 25 min, part 2 the second. Pick both to fit two lessons in that period.",
+  },
+  "fill.slots.pickDay": { ko: "요일을 골라 주세요.", en: "Pick at least one day." },
+  "fill.weekly": { ko: "한 주에 {n}차수", en: "{n} lessons a week" },
   "fill.slots.oneTeacher": {
     ko: "한 번에 한 선생님 교시만 담깁니다 — 다른 선생님 교시를 고르면 그쪽으로 바뀝니다(따로 배정하세요).",
     en: "One assignment covers one teacher — picking another teacher’s period switches to it (assign theirs separately).",
@@ -963,14 +988,6 @@ export const SHEET_DICT = {
     en: "Only books that have an area and a lesson count can be picked (set those in Textbooks).",
   },
   "fill.book.sessions": { ko: "{n}차수", en: "{n} lessons" },
-  "fill.pace": { ko: "차수 단위", en: "Lesson unit" },
-  "fill.pace.period": { ko: "교시마다 1차수 (1시간씩)", en: "One lesson per period (1 hour)" },
-  "fill.pace.day": { ko: "하루에 1차수 (2시간씩)", en: "One lesson per day (2 hours)" },
-  "fill.pace.min25": { ko: "25분 수업 (교시마다 1차수 · 남는 시간은 다른 교재)", en: "25-min lesson (one per period · fill the rest with another book)" },
-  "fill.pace.hint": {
-    ko: "하루에 두 교시를 골랐다면, ‘하루에 1차수’는 그 두 칸에 같은 차수가 들어갑니다.",
-    en: "If you picked two periods on the same day, “one lesson per day” puts the same lesson in both cells.",
-  },
   // ⚠️ `Start date`는 `res.f.startDate`(입사일)가 쓴다 — 뜻이 달라 같은 영어를 쓰면 안 된다.
   "fill.start": { ko: "시작일", en: "Starts on" },
   "fill.start.hint": { ko: "지난 날짜엔 넣지 않습니다.", en: "Past dates are never filled." },
@@ -1025,9 +1042,17 @@ export const SHEET_DICT = {
   "fill.existing.from": { ko: "{date}부터", en: "from {date}" },
   "fill.existing.delete": { ko: "배정 삭제", en: "Remove assignment" },
   "fill.existing.confirm": {
-    ko: "이 배정의 월간계획이 사라집니다(실제 진도는 그대로). 삭제할까요?",
-    en: "The monthly plan from this assignment will disappear (actual progress stays). Remove it?",
+    ko: "이 배정의 월간계획이 사라집니다. 삭제할까요?",
+    en: "The monthly plan from this assignment will disappear. Remove it?",
   },
+  // 진도 줄 함께 지우기(원장 2026-10-19 — 잘못 배정한 교재 줄을 칸마다 하나씩 지우고 있었다).
+  "fill.existing.withLines": {
+    ko: "이 교재로 들어간 진도 줄도 함께 지우기 — 오늘 이후, 모든 요일. 고쳐 쓴 줄·다른 교재·지난 수업은 그대로",
+    en: "Also remove this book's lesson rows — from today, every weekday. Edited rows, other books and past lessons stay",
+  },
+  "fill.existing.deletedLines": { ko: "배정과 진도 {n}줄을 지웠습니다", en: "Removed the assignment and {n} lesson rows" },
+  "fill.existing.undo": { ko: "되돌리기", en: "Restore" },
+  "fill.existing.undone": { ko: "배정을 되돌렸습니다", en: "Assignment restored" },
   "fill.existing.confirmYes": { ko: "삭제", en: "Remove" },
   "fill.existing.cancel": { ko: "취소", en: "Cancel" },
   "fill.existing.deleted": { ko: "배정을 삭제했습니다", en: "Assignment removed" },
@@ -1077,23 +1102,23 @@ export const SHEET_DICT = {
   // 월간계획(교재 배정에서 계산) — 아직 안 쓴 칸에만 무채색으로 뜨는 표식.
   // 회차 미루기·당기기(0282a, 원장 2026-09-22) — 계획 축의 결정이라 달력 칸에 단다.
   "month.shift.skip.done": {
-    ko: "한 주 미뤘습니다 — 이 칸은 그대로 두고, 뒤 진도가 한 주씩 밀렸습니다",
-    en: "Pushed a week — this cell stays; later lessons moved one week later",
+    ko: "미뤘습니다 — 이 칸 진도는 비우고, 뒤 진도가 한 칸씩 밀렸습니다",
+    en: "Pushed back — this cell is cleared; later lessons moved one slot later",
   },
   "month.shift.advance.done": {
-    ko: "한 주 당겼습니다 — 다음 주 진도가 이 칸으로 오고, 뒤 진도가 한 주씩 당겨졌습니다",
-    en: "Pulled a week — next week's lesson is here; later lessons moved one week earlier",
+    ko: "당겼습니다 — 다음 진도가 이 칸으로 오고, 뒤 진도가 한 칸씩 당겨졌습니다",
+    en: "Pulled forward — the next lesson is here; later lessons moved one slot earlier",
   },
   "month.shift.clear.done": { ko: "회차 표식을 지웠습니다 — 원래 차수로 돌아갑니다", en: "Cleared — the original lesson order is back" },
   "month.shift.skip": { ko: "미룸", en: "Push" },
   "month.shift.skip.title": {
-    ko: "이 칸 내용을 다음 주로 복사하고, 그 뒤 진도를 전부 한 주씩 밉니다(같은 요일·교시). 되돌리려면 '당김'.",
-    en: "Copies this cell to next week and pushes every later lesson one week (same weekday and period). To undo, press Pull.",
+    ko: "이 칸 진도를 비우고 뒤 진도를 한 칸씩 밉니다(배정 교재는 배정한 요일 순서대로, 그 밖의 줄은 같은 요일·교시끼리). 실행 뒤 [되돌리기]로 원래대로 돌릴 수 있습니다.",
+    en: "Clears this cell and pushes later lessons one slot (assigned textbooks follow their assigned days in order; other rows stay within the same weekday and period). You can Undo afterwards.",
   },
   "month.shift.advance": { ko: "당김", en: "Pull" },
   "month.shift.advance.title": {
-    ko: "다음 주 진도를 이 칸으로 당기고, 그 뒤 진도를 전부 한 주씩 당깁니다(같은 요일·교시). 이 칸에 적힌 내용은 지워집니다. 되돌리려면 '미룸'.",
-    en: "Pulls next week's lesson into this cell and every later lesson one week earlier (same weekday and period). This cell's rows are replaced. To undo, press Push.",
+    ko: "다음 진도를 이 칸으로 당기고 뒤 진도를 한 칸씩 당깁니다(배정 교재는 배정한 요일 순서대로, 그 밖의 줄은 같은 요일·교시끼리). 이 칸에 적힌 내용은 바뀝니다. 실행 뒤 [되돌리기]로 원래대로 돌릴 수 있습니다.",
+    en: "Pulls the next lesson into this cell and later lessons one slot earlier (assigned textbooks follow their assigned days in order; other rows stay within the same weekday and period). This cell's rows change. You can Undo afterwards.",
   },
   // 월간계획 전체 가져오기(원장 2026-09-28) — 이 기간의 일정(미루기 반영)을 실제 빈 칸에 한 번에 넣는다.
   "month.importAll": { ko: "월간계획 전체 가져오기", en: "Import whole plan" },
@@ -1848,6 +1873,11 @@ export const SHEET_DICT = {
   "att.columns.all": { ko: "모두 표시", en: "Show all columns" },
   // '합계 및 실급여 보여주기' 버튼(원장 2026-09-21 → 2026-10-07 선생님별 스위치) — 관리자가 프리랜서 강사 전체 보기를 볼 때만 선다.
   "att.actualSalary.toggle": { ko: "합계 및 실급여 보여주기", en: "Show totals & net pay" },
+  // 혼합 계약(근로 + 용역, 2026-10-16)인데 용역 학년을 안 골랐다 — 스위치 대신 까닭.
+  "att.actualSalary.needsLevels": {
+    ko: "혼합 계약 — 용역 학년을 골라야 실급여가 섭니다(비율 설정)",
+    en: "Mixed contract — choose the freelance grade levels in rate settings to show net pay",
+  },
   "att.actualSalary.saveFailed": { ko: "합계 및 실급여 보여주기 설정을 저장하지 못했습니다. 다시 눌러 주세요.", en: "Couldn't save the totals & net pay setting. Please try again." },
   "att.actualSalary.savedOn": { ko: "이제 {m}월 출석부의 실급여와 합계가 이 선생님 본인에게도 보입니다", en: "Net pay and its total for month {m} now show on this teacher's own sheet too" },
   "att.actualSalary.savedOff": { ko: "{m}월 출석부에서 실급여를 감췄습니다(이 화면과 선생님 화면 모두)", en: "Net pay for month {m} is now hidden (here and for the teacher)" },
@@ -2765,6 +2795,14 @@ export const SHEET_DICT = {
     ko: "영상 과제 기록을 읽지 못했습니다 — 새로고침하면 다시 저장할 수 있습니다",
     en: "Could not read video homework records — refresh to save again",
   },
+  "os.c.videoHwCancelledOnLoad": {
+    ko: "영상 제출 현황에서 취소한 영상 숙제 {n}건은 '없음'으로 맞췄습니다 — 다시 내려면 '영상 과제'를 켜 주세요",
+    en: "{n} video homework item(s) cancelled in the submission ledger were set to none — turn 'video homework' on again to reassign",
+  },
+  "os.c.videoHwCancelled": {
+    ko: "이 영상 숙제는 영상 제출 현황에서 취소돼 '없음'으로 되돌렸습니다(나머지는 저장했습니다)",
+    en: "This video homework was cancelled in the video submission ledger — set back to none (the rest was saved)",
+  },
   "os.c.videoHwKept": {
     ko: "영상 과제는 이 보고서를 처음 쓴 선생님만 바꿀 수 있어 그대로 두었습니다(나머지는 저장했습니다)",
     en: "Only the teacher who first wrote this report can change the video homework — kept as is (the rest was saved)",
@@ -2773,14 +2811,14 @@ export const SHEET_DICT = {
     ko: "다른 선생님이 먼저 쓴 보고서라 영상 과제는 그 선생님만 바꿀 수 있습니다",
     en: "Another teacher wrote this report first — only they can change the video homework",
   },
-  "os.row.videoDue": { ko: "마감", en: "Due" },
+  "os.row.videoDue": { ko: "기한", en: "Due" },
   "os.row.videoDueWeek": { ko: "7일", en: "7 days" },
   "os.row.videoDueNext": { ko: "다음 수업", en: "Next class" },
   "os.row.videoDueTip": {
     ko: "학생이 영상을 올릴 수 있는 마지막 날 — 7일(수업일 + 7일) 또는 다음 수업일(저장할 때 시간표로 정합니다). 올리기 사이트와 미수행 판정이 이 날을 따릅니다",
     en: "Last day students can upload the video — 7 days after the lesson, or the next class (set from the timetable when saved). The upload site and the missing check follow this date",
   },
-  "os.row.videoDueAria": { ko: "{name} {subject} 영상 숙제 마감", en: "{name} {subject} video homework due" },
+  "os.row.videoDueAria": { ko: "{name} {subject} 영상 숙제 기한", en: "{name} {subject} video homework due" },
   "os.c.videoDueFallback": {
     ko: "{name}: 14일 안에 다음 수업이 시간표에 없어 영상 숙제 마감을 7일로 정했습니다 — 멘트의 마감을 확인해 주세요",
     en: "{name}: no next class within 14 days in the timetable — the video homework due was set to 7 days. Check the due date in the message",
@@ -2924,6 +2962,8 @@ export const SHEET_DICT = {
   "os.score.maxAria": { ko: "{label} 문항수", en: "{label} number of questions" },
   "os.score.maxTitle": { ko: "문항수(만점)", en: "Number of questions (full marks)" },
   "os.score.up": { ko: "점수 올림", en: "Score up" },
+  "os.score.todaysMath": { ko: "오늘 수학", en: "Today's Math" },
+  "os.score.todaysMathTip": { ko: "오늘 수학 채점 결과로 채운 값", en: "Filled from Today's Math grading" },
   "os.score.down": { ko: "점수 내림", en: "Score down" },
   "os.score.aria": { ko: "{label} 점수", en: "{label} score" },
   "os.hw.notSubmittedTitle": {
@@ -3550,6 +3590,10 @@ export const SHEET_DICT = {
     en: "· {n} attendance cells will be recorded as '{label}' — {over} of them overwrite an existing record.\n  Attendance goes into the attendance sheet the moment it is saved and cannot be undone here.",
   },
   "os.bulk.confirmTail": { ko: "계속할까요?", en: "Continue?" },
+  "os.bulk.warnMultiClass": {
+    ko: "· 서로 다른 반 {n}개({names})에 같은 진도·교재·오늘 과제가 들어갑니다.\n  한 반만 채우려면 그 반을 골라 두고 적용하세요.",
+    en: "· The same progress, book and homework go into {n} different classes ({names}).\n  To fill one class only, pick that class first.",
+  },
   "os.bulk.warnHoliday": {
     ko: "· 이 날짜는 학원 휴원일({name})입니다. 수업하지 않은 날이면 출결 {n}건을 기록하지 마세요.",
     en: "· This date is an academy holiday ({name}). If there was no lesson, do not record these {n} attendance cells.",
@@ -3577,8 +3621,8 @@ export const SHEET_DICT = {
   "os.bulk.copyNotB": { ko: "복사되지 않습니다", en: "not copied" },
   "os.bulk.copyNotC": { ko: "(학생마다 다른 기록)", en: " (each student's own record)" },
   "os.bulk.copySkip": {
-    ko: "다른 과목 행 · 발송 완료 행은 건너뜁니다",
-    en: "Rows of another subject and rows already sent are skipped",
+    ko: "다른 과목·다른 반 행 · 발송 완료 행은 건너뜁니다",
+    en: "Rows of another subject or class and rows already sent are skipped",
   },
   "os.bulk.subjectAria": { ko: "진도를 넣을 과목", en: "Subject to put the progress in" },
   "os.bulk.subjectOpt": { ko: "{name} ({n}행)", en: "{name} ({n} rows)" },
@@ -3640,7 +3684,7 @@ export const SHEET_DICT = {
   },
   "os.bulk.videoHwOn": { ko: "있음", en: "Set" },
   "os.bulk.videoHwOff": { ko: "없음", en: "None" },
-  "os.bulk.videoDue": { ko: "마감", en: "Due" },
+  "os.bulk.videoDue": { ko: "기한", en: "Due" },
   "os.bulk.videoRows": { ko: "영상 과제를 쓰는 반의 행에만 들어갑니다", en: "Only goes into rows of classes that use video homework" },
   "os.bulk.onlyFilled": { ko: "채운 필드만 적용됩니다", en: "Only the boxes you filled are applied" },
   "os.bulk.onlyEmpty": { ko: "빈 칸만 채우기", en: "Fill empty cells only" },
@@ -3895,6 +3939,8 @@ export const SHEET_DICT = {
   "os.c.copyNoRow": { ko: "복사할 아래 행이 없습니다", en: "There is no row below to copy into" },
   "os.c.copyWhyLocked": { ko: "입력 잠김 {n}행", en: "{n} rows locked" },
   "os.c.copyWhySubject": { ko: "다른 과목 {n}행", en: "{n} of another subject" },
+  "os.c.copyWhyClass": { ko: "다른 반 {n}행", en: "{n} of another class" },
+  "os.c.copyWhyNoClass": { ko: "반을 모르는 {n}행(반을 골라 다시)", en: "{n} with no class (pick the class and retry)" },
   "os.c.copyWhyFilled": { ko: "이미 입력됨 {n}행", en: "{n} rows already filled" },
   "os.c.copyNoneWhy": { ko: "복사할 칸이 없습니다 — {why}", en: "There is no cell to copy into — {why}" },
   "os.c.copyNeedFirst": { ko: "맨 위 행에 먼저 진도를 입력하세요", en: "Enter the progress in the top row first" },
@@ -3902,6 +3948,8 @@ export const SHEET_DICT = {
   "os.c.copySkipped": { ko: " · 건너뜀 {n}행({why})", en: " · {n} skipped ({why})" },
   "os.c.copySkipLocked": { ko: "입력 잠김 {n}", en: "{n} locked" },
   "os.c.copySkipSubject": { ko: "다른 과목 {n}", en: "{n} another subject" },
+  "os.c.copySkipClass": { ko: "다른 반 {n}", en: "{n} another class" },
+  "os.c.copySkipNoClass": { ko: "반 모름 {n}", en: "{n} no class" },
   "os.c.copySkipFilled": { ko: "이미 입력 {n}", en: "{n} already filled" },
   "os.c.prevFillNone": {
     ko: "가져올 빈 칸이 없습니다 — 이미 입력됐거나 이전 회차 값이 없습니다",

@@ -14,7 +14,7 @@ import { listReferrerOptions } from "./referrer-queries";
 export async function loadReferrerOptions(): Promise<{ ok: true; options: ReferrerOption[] } | { ok: false; error: string }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { ok: false, error: "콜&상담 권한이 없습니다" };
+  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { ok: false, error: "신규 콜&상담 권한이 없습니다" };
   try {
     return { ok: true, options: await listReferrerOptions((await createClient()) as unknown as SupabaseClient, user.tenantId) };
   } catch (e) {

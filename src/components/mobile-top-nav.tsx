@@ -57,7 +57,7 @@ export function MobileTopNav({
   canTeacherView?: boolean;
   isSuperAdmin?: boolean;
   isGenericTenant?: boolean;
-  /** 켜진 연결 앱(오늘의 수학 등) — 폰엔 사이드바가 없어 메뉴 격자 끝에 바깥 링크로 둔다(새 탭). */
+  /** 켜진 연결 앱(오늘 수학 등) — 폰엔 사이드바가 없어 메뉴 격자 끝에 바깥 링크로 둔다(새 탭). */
   connectedApps?: readonly ConnectedApp[];
 }) {
   const pathname = usePathname();

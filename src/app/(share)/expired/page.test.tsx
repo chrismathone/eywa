@@ -20,7 +20,7 @@ describe("공용 '링크 만료' 페이지(/expired)", () => {
   it("보고서 — 제목 + 90일 안내", async () => {
     const html = await render("report");
     expect(html).toContain("링크가 만료되었습니다");
-    expect(html).toContain("수업보고서 링크는 보고서일로부터 90일 동안 열 수 있습니다.");
+    expect(html).toContain("보고서 링크는 보고서일로부터 90일 동안 열 수 있습니다.");
   });
 
   it("영상 제출 — 7일 안내", async () => {

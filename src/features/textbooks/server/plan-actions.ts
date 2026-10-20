@@ -30,19 +30,23 @@ import type { MonthScheduleRow } from "@/features/class-sheets/lib/month-assembl
 import { kstToday } from "@/lib/date-kst";
 import { recordImportBatch, snapshotPlanLines } from "./import-batch";
 import { reportError } from "@/lib/observability/report-error";
-import { planLineFromRow } from "@/features/class-sheets/lib/plan-line";
 import type { PlanLineDTO } from "@/features/class-sheets/server/actions";
 import { shiftActualLines } from "./shift-lines";
+import { shiftAlongPlans } from "./shift-relay";
+import { readWeekCells, snapshotShiftState, type ShiftSnapshot } from "./shift-snapshot";
+import { diffShift, isEmptyUndo, type ShiftUndoToken } from "../shift-undo";
+import { clearPlanLines } from "./plan-delete-lines";
 import {
   buildLessonSchedule,
   MAX_LOOKAHEAD_DAYS,
-  parseSlotPick,
-  slotPickKey,
+  normalizeSlotPicks,
   normalizeLessonPace,
   type LessonPace,
   type SlotAxis,
 } from "../lesson-schedule";
-import type { ApplyPreview, ApplyPreviewRow, ApplyResult, ClassSlotChoice, ClassTextbookPlanRow } from "../types";
+import { groupCellLessons } from "../plan-expand";
+import { applyCellLessons, ApplyCellLessonsError } from "./apply-cell-lessons";
+import type { ApplyPreview, ApplyPreviewRow, ApplyResult, ClassSlotChoice, ClassTextbookPlanRow, PlanRestoreRow } from "../types";
 import { friendlyTextbookError, isMissingTextbookTable, SLOTS_NOT_READY, TEXTBOOKS_NOT_READY } from "./access";
 
 export type PlanActionResult = { ok: true; id: string } | { ok: false; error: string };
@@ -74,20 +78,6 @@ const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_SLOT_PICKS = 48;
 
 /**
- * 고른 교시를 정규화한다 — 모양이 틀린 값은 **버린다**(형식은 앱이 지킨다, 0268a CHECK는 개수만 본다).
- * ⚠️ 정렬해 둔다: RPC가 날짜·교시 오름차순을 전제로 락을 잡고(교착 회피), 감사로그도 같은 순서로 남는다.
- */
-function normalizeSlotPicks(raw: readonly string[] | null | undefined): string[] {
-  const out = new Set<string>();
-  for (const v of raw ?? []) {
-    const parsed = parseSlotPick(String(v));
-    if (!parsed) continue;
-    out.add(parsed.dow ? slotPickKey(parsed.dow, parsed.start) : parsed.start);
-  }
-  return [...out].sort();
-}
-
-/**
  * `slot_picks`(0268a)가 아직 없는 DB인가.
  * 🔴 **코드만 본다** — 메시지에 `slot_picks`가 들어갔다고 "컬럼 없음"으로 보면, 그 칸의 CHECK 위반
  *    (`class_textbook_plans_slot_picks_len`, 23514)까지 같은 갈래로 삼켜져 사람이 고른 교시가
@@ -96,6 +86,15 @@ function normalizeSlotPicks(raw: readonly string[] | null | undefined): string[]
 function isMissingSlotPicksColumn(error: { code?: string; message?: string } | null | undefined): boolean {
   if (!error) return false;
   return error.code === "42703" || error.code === "PGRST204";
+}
+
+/**
+ * 단위 CHECK(`class_textbook_plans_pace_chk`)가 `min25`를 거절했나 — 0361a가 아직 손으로 적용되지 않은 DB다.
+ * 🔑 그때는 `period`로 다시 쓴다: 칸 선택(`slot_picks`)이 있으면 두 단위의 배치가 **글자 그대로 같다**
+ *    (교시마다 고른 자리 수만큼 — `buildLessonSchedule`). 거절해 버리면 SQL 하나 때문에 배정 자체가 막힌다([[#95]]).
+ */
+function isPaceRejected(error: { code?: string; message?: string } | null | undefined): boolean {
+  return !!error && error.code === "23514" && /pace_chk/.test(error.message ?? "");
 }
 
 /**
@@ -208,11 +207,10 @@ export async function saveClassTextbookPlan(input: ClassTextbookPlanInput): Prom
   const targetId = input.id ?? existing;
 
   if (targetId) {
-    let { error } = await admin
-      .from("class_textbook_plans")
-      .update(withSlots)
-      .eq("tenant_id", gate.access.tenantId)
-      .eq("id", targetId);
+    const updateWith = (row: Record<string, unknown>) =>
+      admin.from("class_textbook_plans").update(row).eq("tenant_id", gate.access.tenantId).eq("id", targetId);
+    let { error } = await updateWith(withSlots);
+    if (isPaceRejected(error) && pace === "min25") ({ error } = await updateWith({ ...withSlots, pace: "period" }));
     if (error && isMissingSlotPicksColumn(error)) {
       // 🔴 **고른 교시가 있으면 조용히 떨어뜨리지 않는다**(적대적 리뷰 P0) — 축으로 폴백하면 사람이
       //    고르지도 않은 교시에까지 차수가 깔린다(16:20만 골랐는데 16:20·17:20·18:20 전부, 3배 속도로).
@@ -236,11 +234,12 @@ export async function saveClassTextbookPlan(input: ClassTextbookPlanInput): Prom
   }
 
   const base = { tenant_id: gate.access.tenantId, created_by: gate.access.user.id };
-  let { data, error } = await admin
-    .from("class_textbook_plans")
-    .insert({ ...withSlots, ...base })
-    .select("id")
-    .single();
+  const insertWith = (row: Record<string, unknown>) =>
+    admin.from("class_textbook_plans").insert(row).select("id").single();
+  let { data, error } = await insertWith({ ...withSlots, ...base });
+  if (isPaceRejected(error) && pace === "min25") {
+    ({ data, error } = await insertWith({ ...withSlots, ...base, pace: "period" }));
+  }
   if (error && isMissingSlotPicksColumn(error)) {
     // 🔴 위와 같은 이유 — 고른 교시가 있으면 거절한다(P0).
     if (slotPicks.length > 0) return { ok: false, error: SLOTS_NOT_READY };
@@ -266,23 +265,137 @@ export async function saveClassTextbookPlan(input: ClassTextbookPlanInput): Prom
   return { ok: true, id: data.id as string };
 }
 
-export async function deleteClassTextbookPlan(planId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+export type PlanDeleteResult =
+  | {
+      ok: true;
+      /** 함께 지운 진도 줄·표식 수(`withLines`일 때만). */
+      cleared?: { lines: number; markers: number };
+      /** 되돌리기 재료 — 배정 한 줄 + (함께 지웠으면) 줄·표식 차이. 못 만들었으면 없다(되돌리기 버튼이 안 선다). */
+      undo?: { plan: PlanRestoreRow; lines?: ShiftUndoToken };
+      /** 배정은 지웠는데 진도 줄 지우기가 멈췄다 — 화면이 안내한다. */
+      warning?: string;
+    }
+  | { ok: false; error: string };
+
+/**
+ * 배정 삭제. `withLines`면 **그 교재로 들어간 진도 줄과 그 칸의 미룸·당김 표식도** 함께 지운다(원장 2026-10-19 —
+ * 잘못 배정한 교재 줄을 칸마다 하나씩 지우고 있었다). 범위·규칙은 [`clearPlanLines`](./plan-delete-lines.ts).
+ * 🔑 배정을 **먼저** 지운다 — 줄 지우기가 멈춰도 배정은 사라졌으니 계획이 실제를 다시 채우지 않는다(그때는 경고 +
+ *    그때까지의 되돌리기 기록).
+ */
+export async function deleteClassTextbookPlan(
+  planId: string,
+  opts: { withLines?: boolean } = {},
+): Promise<PlanDeleteResult> {
   const loaded = await loadPlan(planId);
   if ("error" in loaded) return { ok: false, error: loaded.error };
-  const { gate } = loaded;
+  const { gate, plan } = loaded;
+  const admin = createAdminClient();
+  const tenantId = gate.access.tenantId;
 
-  const { error } = await createAdminClient()
+  // 되돌리기 재료 — 지우기 **전** 배정 한 줄. 못 읽어도 삭제는 한다(되돌리기만 없다).
+  const { data: raw } = await admin
     .from("class_textbook_plans")
-    .delete()
-    .eq("tenant_id", gate.access.tenantId)
-    .eq("id", planId);
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .eq("id", planId)
+    .maybeSingle();
+  const restore: PlanRestoreRow | null = raw
+    ? {
+        id: String(raw.id),
+        class_id: String(raw.class_id),
+        textbook_id: String(raw.textbook_id),
+        slot_axis: raw.slot_axis === "jj" ? "jj" : "class",
+        pace: String(raw.pace),
+        term_mode: raw.term_mode === "exam" ? "exam" : "regular",
+        start_date: String(raw.start_date).slice(0, 10),
+        start_lesson_no: Number(raw.start_lesson_no ?? 1),
+        slot_picks: Array.isArray(raw.slot_picks) ? (raw.slot_picks as unknown[]).map(String) : null,
+        is_active: raw.is_active !== false,
+        last_applied_at: raw.last_applied_at ? String(raw.last_applied_at) : null,
+        last_applied_by: raw.last_applied_by ? String(raw.last_applied_by) : null,
+        created_by: raw.created_by ? String(raw.created_by) : null,
+      }
+    : null;
+
+  // 남는 배정들 — 표식을 같이 쓰는 칸을 가르고, 같은 교재가 다른 축에 남아 있으면 줄을 안 지운다.
+  // ⚠️ 0268a 미적용 DB면 `slot_picks` 없이 다시 읽는다([[#95]]) — 그때 남는 배정은 모든 칸을 쓰는 것으로 본다.
+  const from = plan.startDate.slice(0, 10) > kstToday() ? plan.startDate.slice(0, 10) : kstToday();
+  let others: { textbook_id: unknown; slot_picks?: unknown }[] = [];
+  if (opts.withLines) {
+    const q = (cols: string) =>
+      admin
+        .from("class_textbook_plans")
+        .select(cols)
+        .eq("tenant_id", tenantId)
+        .eq("class_id", plan.classId)
+        .eq("is_active", true)
+        .neq("id", planId);
+    let res = await q("id, textbook_id, slot_picks");
+    if (res.error && isMissingSlotPicksColumn(res.error)) res = await q("id, textbook_id");
+    if (res.error) return { ok: false, error: friendlyTextbookError(res.error, "배정을 지우지 못했습니다") };
+    others = (res.data ?? []) as unknown as typeof others;
+  }
+
+  const { error } = await admin.from("class_textbook_plans").delete().eq("tenant_id", tenantId).eq("id", planId);
   if (error) return { ok: false, error: friendlyTextbookError(error, "배정을 지우지 못했습니다") };
-  await logAction({ action: "textbook_plan_delete", targetType: "class", targetLabel: gate.access.className, metadata: { id: planId } });
+
+  let cleared: { lines: number; markers: number } | undefined;
+  let warning: string | undefined;
+  let linesUndo: ShiftUndoToken | undefined;
+  if (opts.withLines) {
+    const keepLines = others.some((o) => String(o.textbook_id) === plan.textbookId);
+    try {
+      const out = await clearPlanLines({
+        admin,
+        tenantId,
+        classId: plan.classId,
+        textbookId: plan.textbookId,
+        termMode: plan.termMode,
+        picks: plan.slotPicks,
+        otherPicks: others.map((o) =>
+          Array.isArray(o.slot_picks) && o.slot_picks.length > 0 ? (o.slot_picks as unknown[]).map(String) : null,
+        ),
+        keepLines,
+        from,
+      });
+      cleared = { lines: out.removed.length, markers: out.markers.length };
+      // 되돌리기 기록 = 실제로 지운 것만(그 사이 남이 쓴 줄은 담지 않는다).
+      const token: ShiftUndoToken = {
+        classId: plan.classId,
+        date: from,
+        slot: "00:00",
+        removed: out.removed,
+        added: [],
+        changed: [],
+        markers: out.markers.map((m) => ({ key: m.key, before: m.kind, after: null })),
+      };
+      if (!isEmptyUndo(token)) linesUndo = token;
+      if (out.stopped) warning = "배정은 지웠지만 진도 줄을 지우다 멈췄습니다 — 새로고침해 남은 줄을 확인해 주세요";
+      else if (keepLines) warning = "배정은 지웠습니다 — 같은 교재가 이 반의 다른 칸(JJ/수업)에도 배정돼 있어 진도 줄은 남겼습니다";
+    } catch (e) {
+      // 읽기에서 멈췄다(아직 아무것도 안 지웠다).
+      reportError(e, { scope: "textbooks.plan-delete.lines", classId: plan.classId });
+      warning = "배정은 지웠지만 진도 줄은 지우지 못했습니다 — 새로고침해 확인해 주세요";
+    }
+  }
+
+  await logAction({
+    action: "textbook_plan_delete",
+    targetType: "class",
+    targetLabel: gate.access.className,
+    metadata: { id: planId, ...(cleared ? { linesCleared: cleared.lines, markersCleared: cleared.markers } : {}) },
+  });
   revalidatePath("/textbooks");
   // 월간계획은 배정에서 **계산**되므로 배정이 사라지면 그 반 시트의 '계획' 표식도 함께 사라져야 한다
   // (`"layout"` — 월간 화면은 `/ecs/<반>/month`라 기본값이면 정작 보는 화면이 안 바뀐다, [[#102]] 계열).
-  revalidatePath(`/ecs/${loaded.plan.classId}`, "layout");
-  return { ok: true };
+  revalidatePath(`/ecs/${plan.classId}`, "layout");
+  return {
+    ok: true,
+    cleared,
+    warning,
+    undo: restore ? { plan: restore, lines: linesUndo } : undefined,
+  };
 }
 
 // ── 미리보기 / 기입 ──────────────────────────────────────────────────────────
@@ -820,8 +933,6 @@ export type ImportPlannedResult =
 
 /** 한 번에 가져올 수 있는 날 수 — 세션 한 달(최대 ~40일)을 넉넉히 덮는 상한. 락·시간 예산 가드. */
 const IMPORT_MAX_DAYS = 62;
-/** RPC 한 번에 싣는 칸 수 — RPC 상한(300, 락 예산)보다 넉넉히 작게. */
-const IMPORT_CHUNK = 100;
 
 /**
  * **[월간계획 전체 가져오기]** — 그 기간의 월간계획(**일정**, 미루기 반영)을 실제 계획 줄로 복사한다.
@@ -883,33 +994,25 @@ export async function importPlannedRange(input: {
   const total: ApplyResult = { applied: 0, filled: 0, added: 0, skipped: 0, truncated: 0 };
   for (const group of groups.values()) {
     const head = group[0]!;
-    // 날짜·교시 오름차순(동시 호출도 같은 순서로 락을 잡는다 — 0266a 교착 회피 규약).
-    const sorted = [...group].sort((a, b) =>
-      a.date === b.date ? a.slotStart.localeCompare(b.slotStart) : a.date.localeCompare(b.date),
-    );
-    for (let i = 0; i < sorted.length; i += IMPORT_CHUNK) {
-      const { data, error } = await admin.rpc("ecs_apply_textbook_lessons", {
-        p_tenant: gate.access.tenantId,
-        p_actor: gate.access.user.id,
-        p_class: input.classId,
-        p_term_mode: head.termMode,
-        p_skill_area: head.skillArea,
-        p_title: head.title,
-        p_page_time: head.pageTime,
-        p_targets: sorted.slice(i, i + IMPORT_CHUNK).map((l) => ({
-          date: l.date,
-          slot: l.slotStart,
-          progress: l.progress,
-          homework: l.homework,
-        })),
+    // 🔑 차수 하나 = 줄 하나(원장 2026-10-19) — 한 교시에 같은 교재 1·2차수면 두 줄로 쓴다(`applyCellLessons`).
+    try {
+      const out = await applyCellLessons({
+        admin,
+        tenantId: gate.access.tenantId,
+        actorId: gate.access.user.id,
+        classId: input.classId,
+        termMode: head.termMode,
+        book: { skillArea: head.skillArea, title: head.title, pageTime: head.pageTime },
+        cells: groupCellLessons(group),
       });
-      if (error) return { ok: false, error: friendlyTextbookError(error, "가져오지 못했습니다") };
-      const out = (data ?? {}) as Partial<ApplyResult>;
-      total.applied += Number(out.applied ?? 0);
-      total.filled += Number(out.filled ?? 0);
-      total.added += Number(out.added ?? 0);
-      total.skipped += Number(out.skipped ?? 0);
-      total.truncated += Number(out.truncated ?? 0);
+      total.applied += out.applied;
+      total.filled += out.filled;
+      total.added += out.added;
+      total.skipped += out.skipped;
+      total.truncated += out.truncated;
+    } catch (e) {
+      if (e instanceof ApplyCellLessonsError) return { ok: false, error: friendlyTextbookError(e.dbError, "가져오지 못했습니다") };
+      throw e;
     }
   }
 
@@ -949,8 +1052,20 @@ export type LessonShiftResult =
       moved: number;
       /** 누른 칸의 줄 전부(평시·내신) — 화면이 그 칸만 즉시 갈아 끼운다. 표식만 지운 경우엔 없다. */
       lines?: PlanLineDTO[];
+      /**
+       * 누른 칸이 있는 **그 주(월~일)** 에서 줄이 바뀐 칸 전부(누른 칸 포함) — 여러 칸을 그리는 화면(주간 시트)이
+       * 함께 갈아 끼운다. 배정 교재는 요일을 건너 다시 깔리므로(화를 누르면 그 주 금요일도 바뀐다) 누른 칸만
+       * 바꾸면 같은 화면의 금요일이 옛 진도로 남는다(2026-10-16 재점검).
+       */
+      cells?: { date: string; slotStart: string; lines: PlanLineDTO[] }[];
+      /**
+       * 되돌리기 기록(원장 2026-10-19 "덮어쓰기(되돌리기)") — 토스트의 [되돌리기]가 그대로 돌려보낸다
+       * (`undoLessonShift`). 앞 모습을 못 읽었거나 바뀐 게 없으면 없다(되돌리기 버튼이 안 선다).
+       */
+      undo?: ShiftUndoToken;
     }
-  | { ok: false; error: string };
+  /** `undo` = 옮기다 멈췄을 때 그때까지 바뀐 것을 되돌릴 기록(미룸은 누른 칸을 지우므로 멈춘 채 두면 잃는다). */
+  | { ok: false; error: string; undo?: ShiftUndoToken };
 
 /**
  * **한 주 미루기 / 당기기** — 그 (반, 날짜, 교시)부터 **실제 진도를 한 주씩 민다/당긴다**.
@@ -963,7 +1078,11 @@ export type LessonShiftResult =
  * 🔑 **표식도 함께 남긴다** — 아직 가져오지 않은 먼 칸은 표식으로 계산되는 일정에서 온다. 표식은 그 줄의
  *    **순(net) 횟수**만 맞으면 되므로, 반대 표식이 누른 칸에 있으면 지우고 아니면 비어 있는 첫 칸에 더한다.
  *    원래 월간계획(표식 없이 펼친 쪽)은 표식을 안 보므로 [계획 비교]는 밀린 만큼 'N차수 늦음'으로 잡는다.
- * 🔑 **토글이 아니다** — 두 번 누르면 두 주 밀린다. 되돌리기는 반대 버튼이다.
+ * 🔴 **배정 교재가 지나가는 칸이면 요일이 아니라 교재 순서로**(원장 2026-10-16, [`shiftAlongPlans`](./shift-relay.ts)):
+ *    화 1·2차수 + 금 1차수처럼 요일을 번갈아 나가는 교재를 같은 요일끼리 옮기면 화요일 칸만 움직여 순서가
+ *    꼬이고 월간계획과 실제가 갈렸다(중등E_중1 SKY). 그 칸은 표식을 교재 칸 순서로 두고, 표식을 반영한 일정대로
+ *    그 교재 줄을 다시 깐다. 배정 줄이 아닌 줄만 종전대로 같은 요일·교시끼리 옮긴다.
+ * 🔑 **토글이 아니다** — 두 번 누르면 두 칸 밀린다. 되돌리기는 반대 버튼이다.
  * `kind: null`은 표식만 지운다(옛 호출 호환 — 줄은 안 건드린다).
  */
 export async function setLessonShift(input: {
@@ -996,6 +1115,72 @@ export async function setLessonShift(input: {
     return { ok: true, kind: null, moved: 0 };
   }
 
+  // 되돌리기 재료 — 옮기기 **전** 모습. 못 읽으면 옮기기는 그대로 하고 되돌리기만 없다.
+  const before: ShiftSnapshot | null = await snapshotShiftState(admin, tenantId, input.classId, input.date).catch(
+    (e: unknown) => {
+      reportError(e, { scope: "textbooks.lesson-shift.snapshot", classId: input.classId });
+      return null;
+    },
+  );
+
+  // ③ 마무리 — 누른 칸(+그 주 바뀐 칸)의 줄을 다시 읽어 화면에 준다 + 되돌리기 기록 + 감사로그 + 무효화.
+  /** 지금 모습과 `before`의 차이 = 되돌리기 기록(바뀐 게 없거나 못 읽으면 없다). */
+  const undoSince = async (): Promise<ShiftUndoToken | undefined> => {
+    if (!before) return undefined;
+    const after = await snapshotShiftState(admin, tenantId, input.classId, input.date).catch((e: unknown) => {
+      reportError(e, { scope: "textbooks.lesson-shift.snapshot-after", classId: input.classId });
+      return null;
+    });
+    if (!after) return undefined;
+    const token = diffShift({
+      classId: input.classId,
+      date: input.date,
+      slot,
+      before: before.lines,
+      after: after.lines,
+      markersBefore: before.markers,
+      markersAfter: after.markers,
+    });
+    return isEmptyUndo(token) ? undefined : token;
+  };
+
+  const finishShift = async (movedCount: number, touched: readonly string[] = []): Promise<LessonShiftResult> => {
+    const undo = await undoSince();
+    const week = await readWeekCells({ admin, tenantId, classId: input.classId, date: input.date, slot, keys: touched });
+
+    await logAction({
+      action: "textbook_lesson_shift",
+      targetType: "class",
+      targetLabel: gate.access.className,
+      metadata: { date: input.date, slot, kind, moved: movedCount },
+    });
+    // 그 반의 앞으로 전부가 바뀐다([[#102]] 계열 — `"layout"` 필수).
+    revalidatePath(`/ecs/${input.classId}`, "layout");
+    return { ok: true, kind, moved: movedCount, lines: week?.lines, cells: week?.cells, undo };
+  };
+
+  // ⓪ 배정 교재가 지나가는 칸이면 교재 순서로(표식·줄을 그 경로가 함께 맞춘다).
+  const relay = await shiftAlongPlans({
+    admin,
+    tenantId,
+    classId: input.classId,
+    date: input.date,
+    slot,
+    kind,
+    userId: gate.access.user.id,
+  }).catch((e: unknown): { handled: true; ok: false; error: string } => {
+    reportError(e, { scope: "textbooks.lesson-shift-relay", classId: input.classId, date: input.date });
+    return { handled: true, ok: false, error: "진도를 불러오지 못해 옮기지 않았습니다 — 잠시 뒤 다시 시도해 주세요" };
+  });
+  if (relay.handled) {
+    if (!relay.ok) {
+      // 중간에 멈췄을 수 있다 — 화면은 다시 받게 하고, 그때까지 바뀐 게 있으면 되돌릴 수 있게 기록을 준다.
+      revalidatePath(`/ecs/${input.classId}`, "layout");
+      return { ok: false, error: relay.error, undo: await undoSince() };
+    }
+    return finishShift(relay.moved, relay.touched);
+  }
+
   // ① 실제 줄을 옮긴다. 옮길 줄이 아예 없으면(아직 가져오기 전) 표식만 남긴다.
   // ⚠️ 조회 실패는 throw로 온다(fetchAllPaged) — 잡지 않으면 화면엔 아무 안내 없이 끝난다.
   const moved = await shiftActualLines({
@@ -1010,7 +1195,10 @@ export async function setLessonShift(input: {
     reportError(e, { scope: "textbooks.lesson-shift", classId: input.classId, date: input.date });
     return { ok: false as const, error: "진도를 불러오지 못해 옮기지 않았습니다 — 잠시 뒤 다시 시도해 주세요", noContent: false, chain: [] };
   });
-  if (!moved.ok && !moved.noContent) return { ok: false, error: moved.error };
+  if (!moved.ok && !moved.noContent) {
+    // 쓰다가 멈췄으면(`stopped`) 그때까지 바뀐 것을 되돌릴 수 있게 — 처음부터 거절된 거면 바뀐 게 없다.
+    return { ok: false, error: moved.error, undo: "stopped" in moved && moved.stopped ? await undoSince() : undefined };
+  }
 
   // ② 표식 — 순 횟수를 맞춘다(위 🔑).
   const { data: marks, error: readErr } = await markerTable()
@@ -1040,30 +1228,5 @@ export async function setLessonShift(input: {
     return { ok: false, error: missing(markerError) ?? friendlyTextbookError(markerError, "회차를 바꾸지 못했습니다") };
   }
 
-  // ③ 누른 칸의 줄을 다시 읽어 화면에 준다(당김이면 바뀌었다).
-  const { data: cellRows } = await admin
-    .from("class_sheet_plan_lines")
-    .select("*")
-    .eq("tenant_id", tenantId)
-    .eq("class_id", input.classId)
-    .eq("plan_date", input.date)
-    .eq("slot_start", slot)
-    .order("term_mode")
-    .order("line_no")
-    .order("id");
-
-  await logAction({
-    action: "textbook_lesson_shift",
-    targetType: "class",
-    targetLabel: gate.access.className,
-    metadata: { date: input.date, slot, kind, moved: moved.ok ? moved.moved : 0 },
-  });
-  // 그 반의 앞으로 전부가 바뀐다([[#102]] 계열 — `"layout"` 필수).
-  revalidatePath(`/ecs/${input.classId}`, "layout");
-  return {
-    ok: true,
-    kind,
-    moved: moved.ok ? moved.moved : 0,
-    lines: cellRows ? cellRows.map((r) => planLineFromRow(r as Record<string, unknown>)) : undefined,
-  };
+  return finishShift(moved.ok ? moved.moved : 0);
 }

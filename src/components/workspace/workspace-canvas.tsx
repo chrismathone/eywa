@@ -23,7 +23,7 @@ import { useEmptyWorkspaceHome } from "./use-empty-workspace-home";
 import { useDeepLinkWindow } from "./deep-link-window";
 import { snapTarget, templateSlots } from "./window-geometry";
 
-// 콘텐츠 스테이지 상단 오프셋 — 데스크톱(캔버스가 뜨는 유일한 조건: useIsDesktop = ≥lg + pointer:fine)에선
+// 콘텐츠 스테이지 상단 오프셋 — 데스크톱(캔버스가 뜨는 유일한 조건: useIsDesktop = ≥1240 + any-pointer:fine)에선
 // 데스크톱엔 상단탭이 없다(2026-07-20 상단 헤더 폐지 → 2026-07-30 모바일 헤더도 MobileTopNav로 흡수). 따라서 0 —
 // 최대화·스냅 창이 화면 최상단까지 덮는다. (이 값이 48이던 시절엔 그 48px 띠로 운영실 배경이 비쳐, 최대화해도
 // 위가 안 덮이는 문제가 있었음.) 좌측 레일은 사이드바 실제 너비를 런타임 계산(아래 rail).
@@ -227,7 +227,9 @@ export function WorkspaceCanvas({ owner, homeHref = "/dashboard" }: { owner: str
         };
         // 창 안 Shift+클릭(`newInstance`) = 최상위 Shift+클릭과 같은 뜻 — 같은 화면을 새 창으로 한 벌 더.
         // 종전엔 open()이라 이미 떠 있는 그 창이 그 주소로 옮겨져 보던 자리를 잃었다(2026-09-11 리뷰).
+        // "새 X" 작성 폼(autoClose)은 그 메뉴의 작성 창이 전부 녹음 중이면 새 작성 창을 한 벌 더(openForm — 원장 2026-10-16).
         if (data.newInstance === true) st.openNewInstance("route", params);
+        else if (params.autoClose) st.openForm("route", params);
         else st.open("route", params);
         return;
       }

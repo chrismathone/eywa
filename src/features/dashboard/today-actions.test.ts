@@ -401,7 +401,7 @@ describe("buildTodayActions", () => {
     expect(items).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ count: 1, href: "/meetings", menuKey: "meetings", requiredAccess: "write" }),
-        expect.objectContaining({ count: 3, href: "/enrollment", menuKey: "enrollment", requiredAccess: "write" }),
+        expect.objectContaining({ count: 3, href: "/enrollment?view=kanban", menuKey: "enrollment", requiredAccess: "write" }),
         expect.objectContaining({ count: 2, href: "/consultations", menuKey: "consultations", requiredAccess: "write" }),
       ]),
     );

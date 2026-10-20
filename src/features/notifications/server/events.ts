@@ -67,6 +67,7 @@ import {
   type UnsentReportEvent,
 } from "../events-core";
 import { classnoteSendOn } from "@/features/owner/classnote-gate";
+import { taskIdsFor } from "@/features/staff-tasks/server/link";
 
 type EventType =
   | "absence_alert"
@@ -305,12 +306,12 @@ async function detectFollowup(admin: SupabaseClient, tenantId: string): Promise<
   const fresh = (await recordNew(admin, tenantId, "followup_due", candidates, cold)) as FollowupEvent[];
   if (cold || fresh.length === 0) return 0;
 
-  const masters = await activeMasterIds(admin, tenantId);
-  const activeCounselors = await activeUserIds(
-    admin,
-    tenantId,
-    fresh.map((event) => event.counselorId).filter((id): id is string => Boolean(id)),
-  );
+  const [masters, activeCounselors, taskIds] = await Promise.all([
+    activeMasterIds(admin, tenantId),
+    activeUserIds(admin, tenantId, fresh.map((event) => event.counselorId).filter((id): id is string => Boolean(id))),
+    // 할 일(0377a) — 회차 = 후속조치 기한. 알림이 그 할 일을 가리키게 한다(벨이 처리 상태를 붙인다).
+    taskIdsFor(admin, tenantId, "followup_due", fresh.map((event) => event.subjectKey)),
+  ]);
   const items: NotifyInput[] = [];
   for (const event of fresh) {
     // 담당 상담사가 유효(활성)하면 개인에게, 아니면 master 전원 폴백.
@@ -325,6 +326,7 @@ async function detectFollowup(admin: SupabaseClient, tenantId: string): Promise<
         body: followupBody(event),
         link: "/consultations",
         actorId: null,
+        taskId: taskIds.get(`${event.subjectKey}|${event.followUpDate}`) ?? null,
       });
     }
   }
@@ -447,12 +449,18 @@ async function detectProgressAnomaly(admin: SupabaseClient, tenantId: string): P
   // 이제 각 알림이 그 학생 **진도 탭**으로 직행한다. 실측 볼륨 14일 한 자릿수라 분할해도 벨 폭탄 아님.
   const byStudent = groupProgressAnomalyByStudent(fresh);
   const items: NotifyInput[] = [];
-  const masterIds = await activeMasterIds(admin, tenantId);
+  // 할 일(0378a '진도 기록 이상') = 이벤트 한 건마다 하나 — 학생별 알림이 그 학생의 이벤트 할 일들을 묶어 알린다.
+  const [masterIds, taskByEvent] = await Promise.all([
+    activeMasterIds(admin, tenantId),
+    taskIdsFor(admin, tenantId, "progress_anomaly", fresh.map(progressEventId)),
+  ]);
+  const tasksOf = (events: readonly ProgressAnomalyEvent[]) =>
+    events.flatMap((event) => taskByEvent.get(`${progressEventId(event)}|`) ?? []);
   for (const group of byStudent) {
     const body = progressAnomalyStudentBody(group.studentName, group.events);
     if (!body) continue;
     for (const recipientId of masterIds) {
-      items.push({ tenantId, recipientId, type: "progress_anomaly", title: "진도 기록 이상", body, link: progressAnomalyLink(group.studentId), actorId: null });
+      items.push({ tenantId, recipientId, type: "progress_anomaly", title: "진도 기록 이상", body, link: progressAnomalyLink(group.studentId), actorId: null, taskIds: tasksOf(group.events) });
     }
   }
   // 담당 강사 = 자기 학생의 **수학 반** 강사만(리뷰 확정 #77형: 진도 파이프라인이 math 전용이라
@@ -472,11 +480,30 @@ async function detectProgressAnomaly(admin: SupabaseClient, tenantId: string): P
     for (const group of groupProgressAnomalyByStudent(teacherEvents)) {
       const body = progressAnomalyStudentBody(group.studentName, group.events);
       if (!body) continue;
-      items.push({ tenantId, recipientId: teacherId, type: "progress_anomaly", title: "담당 학생 진도 기록 이상", body, link: progressAnomalyLink(group.studentId), actorId: null });
+      items.push({ tenantId, recipientId: teacherId, type: "progress_anomaly", title: "담당 학생 진도 기록 이상", body, link: progressAnomalyLink(group.studentId), actorId: null, taskIds: tasksOf(group.events) });
     }
   }
   await notifyUsers(items);
   return fresh.length;
+}
+
+/** 미발송 할 일을 맞추고 보고서 id → 할 일 id. 실패하면 빈 표(알림은 할 일 연결 없이 그대로). */
+async function syncUnsentTasks(
+  admin: SupabaseClient,
+  tenantId: string,
+  reportIds: string[],
+  checkedIds: string[],
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const { data, error } = await admin.rpc("staff_task_sync_unsent", { p_tenant: tenantId, p_reports: reportIds, p_checked: checkedIds });
+  if (error) reportError(error, { scope: "notifications.unsent-tasks", tenantId });
+  for (const row of (data ?? []) as { report_id: string; task_id: string }[]) out.set(row.report_id, row.task_id);
+  return out;
+}
+
+/** 진도 이상 이벤트의 progress_events.id — dedup bucket이 `pe:${id}`다(events-core). */
+function progressEventId(event: ProgressAnomalyEvent): string {
+  return event.bucket.replace(/^pe:/, "");
 }
 
 /**
@@ -608,14 +635,19 @@ async function detectUnsentReports(admin: SupabaseClient, tenantId: string): Pro
     tenantId,
     sendableRows.filter((row) => !row.makeup).map(keyOf),
   );
+  const sendable = filterUnsentSendable(sendableRows, {
+    today,
+    classnoteSubjects: settings.report.classnoteSubjects,
+    optoutClassIds,
+    absenceBlockedKeys,
+    absenceKeyOf: (row) => absenceKeyOf(keyOf(row)),
+  });
+  // 할 일(0379a '미발송 수업 보고서') — 알림 중복 막기(dedup)·콜드스타트와 따로, 지금 보낼 수 있는 미발송마다 연다.
+  // 같은 게이트(sendable) 한 벌이라 할 일과 발송 콘솔이 어긋나지 않는다. 읽었는데 빠진 건은 DB가 닫는다.
+  // 닫는 판정은 이번에 실제로 읽은 보고서만(조회 상한 500에 밀린 보고서의 할 일은 건드리지 않는다).
+  const taskByReport = await syncUnsentTasks(admin, tenantId, sendable.map((row) => row.id), rows.map((row) => row.id));
   const candidates = buildUnsentReportEvents(
-    filterUnsentSendable(sendableRows, {
-      today,
-      classnoteSubjects: settings.report.classnoteSubjects,
-      optoutClassIds,
-      absenceBlockedKeys,
-      absenceKeyOf: (row) => absenceKeyOf(keyOf(row)),
-    }).map((row) => ({
+    sendable.map((row) => ({
       reportId: row.id,
       studentId: row.studentId,
       studentName: row.studentName,
@@ -643,6 +675,7 @@ async function detectUnsentReports(admin: SupabaseClient, tenantId: string): Pro
         // 원장이 "알림엔 미발송이 많은데 들어가면 없다"고 물었다(2026-09-09 — 알림이 옳았다).
         link: `/lesson-reports?tab=list&status=${encodeURIComponent(UNSENT_FILTER)}`,
         actorId: null,
+        taskIds: fresh.flatMap((event) => taskByReport.get(event.subjectKey) ?? []),
       });
     }
   }
@@ -664,6 +697,7 @@ async function detectUnsentReports(admin: SupabaseClient, tenantId: string): Pro
       body,
       link: "/onescreen", // 강사는 lesson_reports 권한이 없다 — 원스크린에서 발송
       actorId: null,
+      taskIds: teacherEvents.flatMap((event) => taskByReport.get(event.subjectKey) ?? []),
     });
   }
   await notifyUsers(items);

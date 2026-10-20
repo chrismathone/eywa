@@ -2,7 +2,9 @@ import "server-only";
 import { loadAttendanceSalaryRates } from "@/features/attendance/server/salary-rates";
 import { loadSubstituteCells } from "@/features/attendance/server/substitute-cells";
 import { loadTeacherSheet, sheetSalaryOf } from "@/features/attendance/server/teacher-sheet";
-import { ATTENDANCE_RATE_LEVELS, salaryScopeLabel, type AttendanceRateLevel, type AttendanceSalaryRates } from "@/features/attendance/salary-rates";
+import {
+  ATTENDANCE_RATE_LEVELS, MIXED_NEEDS_LEVELS, mixedWithoutLevels, salaryScopeLabel, type AttendanceRateLevel, type AttendanceSalaryRates,
+} from "@/features/attendance/salary-rates";
 import { formatSessionUnits } from "@/features/attendance/session-units";
 import { TeacherSheetError } from "@/features/attendance/teacher-sheet-error";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -103,6 +105,8 @@ export async function computeSheetTuition(args: {
   const levels = loaded.rates.levels?.length ? loaded.rates.levels : undefined;
   const includeSpecial = loaded.rates.includeSpecial || undefined;
   if (!sheet) return { settlement: null, warnings: [assembled.unavailable ?? "출석부를 불러오지 못해 수업료를 산정하지 않았습니다."], rates: { base, applied }, levels, includeSpecial };
+  // 혼합(근로 + 용역)인데 용역 학년을 안 골랐다 — 그대로 세면 근로 몫 학생까지 프리랜서 금액이 된다. 산정하지 않고 까닭을 적는다.
+  if (mixedWithoutLevels(loaded)) return { settlement: null, warnings: [MIXED_NEEDS_LEVELS], rates: { base, applied }, levels, includeSpecial };
   if (!sheet.sessionBillingOn) return null;
   const salary = sheetSalaryOf(sheet, loaded.rates, penalty > 0 ? (rate) => applyRatePenalty(rate, penalty) : undefined);
   // 다른 반 대신 보강 칸 — 이 강사 표에 없는 반의 것만(표에 선 반의 칸은 격자가 이미 센다). 금액에는 안 들어가는 알림 재료라

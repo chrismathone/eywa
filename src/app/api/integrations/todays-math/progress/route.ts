@@ -13,7 +13,7 @@ import {
 import { fetchProgressPage } from "@/features/integrations/todays-math/service";
 
 /**
- * 오늘의수학 연계 — 진도 피드. **읽기 전용, Bearer TODAYS_MATH_API_KEY 전용.**
+ * 오늘 수학 연계 — 진도 피드. **읽기 전용, Bearer TODAYS_MATH_API_KEY 전용.**
  *
  * 증분(since)이 **일부러 없다** — 보고서의 85.6% 가 수업일 이틀 뒤 이후 작성이고
  * `updated_at` 이 없어 어떤 증분 기준도 늦게 쓴 보고서를 영영 놓친다(실측
@@ -41,7 +41,7 @@ export async function GET(req: Request) {
   if (!tenantId) {
     return NextResponse.json({ error: "tenant not configured" }, { status: 503, headers: NO_STORE_HEADERS });
   }
-  // 지점 스위치(슈퍼관리자 '오늘의 수학 연결', 기본 꺼짐) — 끈 지점의 명단·진도는 나가지 않는다(원장 2026-09-26).
+  // 지점 스위치(슈퍼관리자 '오늘 수학 연결', 기본 꺼짐) — 끈 지점의 명단·진도는 나가지 않는다(원장 2026-09-26).
   // 키가 맞아도 막는다: 연결을 끊는 곳이 한 군데(스위치)여야 한다. 503 = "꺼진 것"(키 오류 401과 구분 — 위와 같은 규약).
   if (!(await isFeatureOptedIn(tenantId, "todays_math"))) {
     return NextResponse.json({ error: "disabled for tenant" }, { status: 503, headers: NO_STORE_HEADERS });

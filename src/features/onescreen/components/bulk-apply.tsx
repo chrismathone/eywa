@@ -181,6 +181,16 @@ export function BulkApplyPopover({
         tf("os.bulk.warnAll", { n: targetCount }),
       );
     }
+    // 대상이 여러 반인데 수업 내용 칸(진도·교재·오늘 과제)을 넣으면 반 이름을 밝힌다(원장 2026-10-15 — 다른 반·다른 학년 학부모에게
+    // 엉뚱한 과제가 나갔다). 막지는 않는다 — 시험 대비처럼 여러 반에 일부러 같은 내용을 넣기도 한다.
+    const contentAll = !!(textbook.trim() || homeworkToday.trim()); // 교재·오늘 과제 = 모든 대상 행
+    const progressKey = progress.trim() ? (activeSubject?.key ?? null) : null; // 진도 = 고른 과목 행만(planBulkApply)
+    const classNames = [...new Set((fields.classRows ?? [])
+      .filter((r) => contentAll || (progressKey !== null && r.subjectKey === progressKey))
+      .map((r) => r.className))];
+    if (classNames.length > 1) {
+      warns.push(tf("os.bulk.warnMultiClass", { n: classNames.length, names: classNames.join(", ") }));
+    }
     // 휴원일에 출결을 실으면 한 번 묻는다(원장 2026-10-13 — 10/9 한글날 금요일 반 19명이 이 길로 출석이 됐다).
     // 휴원일에도 수업하는 날이 있어 막지는 않는다 — 같은 확인창에 한 줄로 모은다.
     const holidayName = attendance?.holidayName;

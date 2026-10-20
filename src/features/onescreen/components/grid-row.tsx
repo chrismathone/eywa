@@ -52,6 +52,8 @@ import { VideoSubmitLinkToggle } from "@/features/video-homework/components/vide
 import { ProgressModePills } from "./progress-mode-pills";
 import { ProgressSelector } from "./progress-selector";
 import { ScoreInput } from "./score-input";
+import { TodaysMathMark } from "./todays-math-mark";
+import { todaysMathMarked } from "../todays-math-fill-rules";
 import { MakeupClassTag } from "./makeup-class-tag";
 
 const TD_BASE = "px-2 py-1.5 align-top";
@@ -601,6 +603,7 @@ export function GridBodyRow({
               nav={nav.studentRow !== undefined ? { col: "daily", row: nav.studentRow } : undefined}
             />
           </fieldset>
+          {todaysMathMarked(subject, "daily", rowEval.tests.daily) ? <TodaysMathMark /> : null}
         </td>
       ) : null}
       {config.checkEnabled ? (
@@ -616,6 +619,7 @@ export function GridBodyRow({
               nav={nav.studentRow !== undefined ? { col: "check", row: nav.studentRow } : undefined}
             />
           </fieldset>
+          {todaysMathMarked(subject, "check", rowEval.tests.check) ? <TodaysMathMark /> : null}
         </td>
       ) : null}
       <td className={td}>

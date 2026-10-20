@@ -135,3 +135,23 @@ export type ClassSlotChoice = {
   /** 기입에 넘길 값 — 요일마다 `"mon|17:20"`(= `slotPickKey`). */
   picks: string[];
 };
+
+/**
+ * 배정 삭제 **되돌리기** 재료(원장 2026-10-19) — 지운 배정 한 줄 그대로. 서버가 돌려주고 클라가 토스트의
+ * [되돌리기]로 그대로 돌려보낸다(`undoPlanDelete`) — 서버는 다시 검사한다.
+ */
+export type PlanRestoreRow = {
+  id: string;
+  class_id: string;
+  textbook_id: string;
+  slot_axis: "class" | "jj";
+  pace: string;
+  term_mode: "regular" | "exam";
+  start_date: string;
+  start_lesson_no: number;
+  slot_picks: string[] | null;
+  is_active: boolean;
+  last_applied_at: string | null;
+  last_applied_by: string | null;
+  created_by: string | null;
+};

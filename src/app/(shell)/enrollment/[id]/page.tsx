@@ -184,11 +184,11 @@ export default async function EnrollmentDetailPage({
         initialStatus={consult.processingStatus}
       />
 
-      <BackLink href="/enrollment" label="콜&상담으로" />
+      <BackLink href="/enrollment" label="신규 콜&상담으로" />
 
       <header className="border-border flex flex-col gap-3 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1.5">
-          <p className="eyebrow">신입생 콜&상담</p>
+          <p className="eyebrow">신규 콜&상담</p>
           <div className="flex items-baseline gap-3">
             <h1 className="font-bold tracking-tight text-foreground text-3xl">{consult.prospectName}</h1>
             <span
@@ -282,7 +282,7 @@ export default async function EnrollmentDetailPage({
           <div className="flex items-center gap-2">
             <ClipboardList className="text-amber size-4" />
             <h2 className="text-foreground text-sm font-bold">
-              같은 학생의 다른 콜&상담 <span className="num">{siblings.length}</span>건
+              같은 학생의 다른 신규 콜&상담 <span className="num">{siblings.length}</span>건
             </h2>
           </div>
           <p className="text-text-dim mt-1 text-xs">
@@ -383,9 +383,12 @@ export default async function EnrollmentDetailPage({
             ["상담자", f.counselor ?? consult.consultantName],
             ["접수일", f.receivedDate, true],
             ["상담 경로", f.consultationPath],
-            ["소개한 사람", referrer.referrer
-              ? `${referrer.referrer.label}${referrer.referrer.hint ? ` · ${referrer.referrer.hint}` : ""}`
-              : referrer.referrerName ? `${referrer.referrerName}(신청서에 적은 이름 · 아직 연결 전)` : null],
+            // 못 읽었으면(ready=false) 줄째 뺀다 — '—'면 "소개 없음"으로 읽힌다.
+            ...(referrer.ready
+              ? [["소개한 사람", referrer.referrer
+                  ? `${referrer.referrer.label}${referrer.referrer.hint ? ` · ${referrer.referrer.hint}` : ""}`
+                  : referrer.referrerName ? `${referrer.referrerName}(신청서에 적은 이름 · 아직 연결 전)` : null] as InfoRow]
+              : []),
           ]}
         />
 
@@ -407,8 +410,12 @@ export default async function EnrollmentDetailPage({
               ["보호자 성함", consult.parentName],
               ["보호자 연락처", consult.parentPhone, true],
               ["학생과의 관계", f.parentRelation],
+              // 셔틀 기능이 꺼진 학원엔 줄째 없다(수정 폼과 같음 — 기능 스위치 OFF = 흔적 없이).
+              ...(isModuleEnabled(settings.modules.disabled, "shuttle")
+                ? // 칸이 not null default false라 '안 적음'이 없다 — QR에선 학부모가 고른 '미신청'이기도 하다.
+                  [["셔틀버스", f.shuttleBusRequest ? "신청" : "미신청"] as InfoRow]
+                : []),
             ]}
-            flags={[f.shuttleBusRequest && isModuleEnabled(settings.modules.disabled, "shuttle") ? "셔틀버스 신청" : null]}
           />
 
           {/* 상담 내용 — 상담일/과목 + 자유서술(학부모 QR/상담사 입력). 세로공간 전부 채움. */}
@@ -417,11 +424,14 @@ export default async function EnrollmentDetailPage({
               <span className="text-text-dim text-xs">
                 상담일 <span className="num text-foreground ml-0.5">{consultationDateLabel}</span>
               </span>
-              {subjectLabel ? (
-                <span className="text-text-dim text-xs">
-                  과목 <span className="text-foreground ml-0.5">{subjectLabel}</span>
-                </span>
-              ) : null}
+              <span className="text-text-dim text-xs">
+                과목{" "}
+                {subjectLabel ? (
+                  <span className="text-foreground ml-0.5">{subjectLabel}</span>
+                ) : (
+                  <span className="text-text-faint ml-0.5">—</span>
+                )}
+              </span>
             </div>
             <div className="flex flex-1 flex-col">
               {consult.parentRequest ? (
@@ -457,6 +467,7 @@ export default async function EnrollmentDetailPage({
         {/* 3. 학원 관리 정보 */}
         <InfoCard
           title="학원 관리 정보"
+          optional
           rows={[
             ["희망 진로", f.careerGoal],
             ["학생 구분", f.studentType],
@@ -477,6 +488,7 @@ export default async function EnrollmentDetailPage({
         {/* 4. 후속 조치 */}
         <InfoCard
           title="후속 조치"
+          optional
           rows={[
             ["후속 조치일", f.followUpDate, true],
             ["조치 내용", f.followUpContent],
@@ -492,10 +504,8 @@ export default async function EnrollmentDetailPage({
             ["결제 금액", f.paymentAmount ? `${Number(f.paymentAmount).toLocaleString()}원` : null],
             ["결제일", f.paymentDate, true],
             ["등록자", f.registrar],
-          ]}
-          flags={[
-            f.privacyAgreement ? "개인정보 동의" : null,
-            f.installmentAgreement ? "환불·학칙 동의" : null,
+            ["개인정보 동의", f.privacyAgreement ? "동의" : null],
+            ["환불·학칙 동의", f.installmentAgreement ? "동의" : null],
           ]}
         />
 
@@ -640,50 +650,34 @@ function SectionCard({ title, children, fill }: { title: string; children: React
   );
 }
 
+// 빈 값도 줄을 남기고 '—'로 보인다 — 어떤 칸이 비었는지 상세에서 바로 알 수 있게(원장 2026-10-19).
 function Row({ label, value, mono }: { label: string; value: string | null; mono?: boolean }) {
-  if (!value) return null;
   return (
     <div className="flex items-start justify-between gap-3">
       <dt className="text-text-dim shrink-0 text-xs">{label}</dt>
-      <dd className={`text-foreground text-right text-sm break-keep ${mono ? "num" : ""}`}>{value}</dd>
+      {value ? (
+        <dd className={`text-foreground text-right text-sm break-keep ${mono ? "num" : ""}`}>{value}</dd>
+      ) : (
+        <dd className="text-text-faint text-right text-sm">—</dd>
+      )}
     </div>
   );
 }
 
-// 값이 있는 행만 렌더(빈 값 숨김). 표시할 행·플래그·자식이 하나도 없으면 카드 자체를 안 그림.
-function InfoCard({
-  title,
-  rows,
-  flags,
-  children,
-}: {
-  title: string;
-  rows?: [label: string, value: string | null, mono?: boolean][];
-  flags?: (string | null)[];
-  children?: ReactNode;
-}) {
-  const visible = (rows ?? []).filter(([, v]) => v);
-  const chips = (flags ?? []).filter(Boolean) as string[];
-  if (!children && visible.length === 0 && chips.length === 0) return null;
+type InfoRow = [label: string, value: string | null, mono?: boolean];
+
+// 모든 행을 그린다(빈 값은 '—'). 체크 칸(동의·셔틀)도 행으로 — 칩이면 안 고른 것이 아예 안 보인다.
+// 단 `optional`(수정 폼의 '(선택)' 카드 — 학원 관리 정보·후속 조치)은 값이 있는 행만, 다 비면 카드째 안 그린다(원장 2026-10-19).
+function InfoCard({ title, rows, optional }: { title: string; rows: InfoRow[]; optional?: boolean }) {
+  const shown = optional ? rows.filter(([, v]) => v) : rows;
+  if (shown.length === 0) return null;
   return (
     <SectionCard title={title}>
-      {visible.length > 0 ? (
-        <dl className="space-y-1.5">
-          {visible.map(([label, value, mono]) => (
-            <Row key={label} label={label} value={value} mono={mono} />
-          ))}
-        </dl>
-      ) : null}
-      {children}
-      {chips.length > 0 ? (
-        <div className="mt-1 flex flex-wrap gap-1.5">
-          {chips.map((t) => (
-            <span key={t} className="bg-bg-soft text-text-dim rounded px-2 py-0.5 text-xs">
-              {t}
-            </span>
-          ))}
-        </div>
-      ) : null}
+      <dl className="space-y-1.5">
+        {shown.map(([label, value, mono]) => (
+          <Row key={label} label={label} value={value} mono={mono} />
+        ))}
+      </dl>
     </SectionCard>
   );
 }

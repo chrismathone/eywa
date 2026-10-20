@@ -32,7 +32,7 @@ type TranslateOutcome =
 type TranslatedJson = { title?: string; body?: string; linkLabel?: string };
 
 function buildPrompt(src: NoticeSource): string {
-  // ⚠️ Upstage(폴백)는 JSON mode에 "JSON" 낱말이 필요하다 — 아래 문구가 그 조건을 충족한다.
+  // ⚠️ DeepSeek JSON mode는 프롬프트에 "JSON" 낱말이 필요하다 — 아래 문구가 그 조건을 충족한다.
   return [
     "학원 관리 시스템의 **팝업 공지**를 한국어에서 영어로 번역한다. 읽는 사람은 이 학원의 원어민 영어 강사다.",
     "",

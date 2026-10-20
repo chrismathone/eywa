@@ -22,6 +22,7 @@ export const HELP_TERMS: readonly { pattern: string; slug: string }[] = [
   { pattern: "학생목록", slug: "students" },
   { pattern: "원생상담", slug: "consultations" },
   { pattern: "학생상담", slug: "consultations" },
+  { pattern: "신규 콜&상담", slug: "enrollment" },
   { pattern: "콜&상담", slug: "enrollment" },
   { pattern: "등록상담", slug: "enrollment" },
   { pattern: "수업목록", slug: "classes" },

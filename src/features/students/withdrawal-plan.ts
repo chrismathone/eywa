@@ -4,6 +4,22 @@
  */
 
 /**
+ * 학생 폼(등록·수정)이 **새로** 퇴원·퇴원 예약을 거는 저장인지 — 그때만 사유 칸을 띄우고(화면) 사유를 요구한다(서버). 원장 2026-10-15
+ * *"기타는 모든 곳을 일치하게"* — 예전엔 이 폼이 사유 없이 '기타'를 박았다. 이미 퇴원한 학생을 고치는 저장, 걸려 있던 예약의
+ * 날짜만 바꾸거나 그 예약을 오늘 퇴원으로 당기는 저장은 **저장된 사유를 그대로** 둔다(예약 때 이미 골랐다).
+ * `kind` = `planFormWithdrawal`의 결과. 등록은 `prevStatus = null`.
+ */
+export function formWithdrawalNeedsReason(a: {
+  prevStatus: string | null;
+  prevWithdrawnAt?: string | null;
+  kind: "withdraw" | "schedule" | "none";
+}): boolean {
+  if (a.kind === "none" || a.prevStatus === "withdrawn") return false;
+  const scheduledPrev = a.prevStatus !== null && !!a.prevWithdrawnAt;
+  return !scheduledPrev;
+}
+
+/**
  * 학생 폼(등록·수정)의 퇴원일 칸 → 저장할 상태·퇴원일. 🔑 퇴원일이 미래 = **퇴원 예약**(상태는 그대로).
  * 등록은 `prevStatus = null`.
  */

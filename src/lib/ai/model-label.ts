@@ -13,7 +13,11 @@ export function modelDisplayLabel(modelVersion: string | null | undefined): stri
   const id = modelVersion.toLowerCase();
   if (id.includes("deepseek-v4-pro")) return "DeepSeek v4-pro";
   if (id.includes("deepseek-v4-flash")) return "DeepSeek v4-flash";
+  // 새 이름(2026-10-19~) — V4.1-Flash. 옛 이름으로 저장된 분석은 위 줄이 그대로 'v4-flash'로 보인다.
+  if (id.includes("deepseek-flash")) return "DeepSeek V4.1 flash";
   if (id.includes("deepseek")) return "DeepSeek";
+  // 5.5(2026-10-19~)를 먼저 — 그 전에 저장된 분석('claude-sonnet-5-날짜')은 그대로 'Sonnet 5'로 보인다.
+  if (id.includes("sonnet-5-5")) return "Claude Sonnet 5.5";
   if (id.includes("sonnet")) return "Claude Sonnet 5";
   if (id.includes("haiku")) return "Claude Haiku";
   if (id.includes("opus")) return "Claude Opus";

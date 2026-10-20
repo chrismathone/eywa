@@ -126,16 +126,17 @@ export const HUB_GROUPS: HubGroup[] = [
       // 아이콘은 형제 한 쌍(열/행) — 나란히 서므로 같은 글리프를 쓰지 말 것.
       face("ecs", "/ecs", "영어 강사 시트", "영어 반별 주간 수업·진도"),
       { menuKey: "mcs", href: "/mcs", label: "수학 강사 시트", icon: MENU_ICON.mcs, desc: "수학 반별 월간 진도" },
-      fromMenu("attendance", "월별 출석부·오늘 출결"),
+      fromMenu("attendance", "월별 출석·정산"),
       fromMenu("makeups", "보강 일정·실시 검토·미처리 업무"),
       fromMenu("classes", "반 목록·반 정보 관리"),
       fromMenu("textbooks", "교재·차수별 진도·과제"),
-      fromMenu("lesson_reports", "수업보고서 작성·발송"),
+      fromMenu("lesson_reports", "목록·작성률·발송 관리"),
       fromMenu("class_review", "수업 참관·평가 기록"),
       fromMenu("teacher_onescreen", "담당 학생 수업 마감", { teacherOnly: true }),
-      // 출석부의 다른 면 — 자주 쓰는 자리는 위 버튼이고, 나머지는 작은 줄로.
-      face("attendance", "/attendance/live", "오늘 출결", undefined, { tool: true, icon: "clipboardList" }),
-      face("attendance", "/attendance/quick", "출결 모드", undefined, { tool: true, teacherOnly: true, icon: "listChecks" }),
+      // 출석부의 다른 면 — 자주 쓰는 자리는 위 버튼이고, 나머지는 작은 줄로. 설명도 둔다 — 탭 및 메뉴 구성에서 묶음을 바꾸면 큰 카드로 서는데
+      // 설명이 없으면 빈 줄이 남는다(점검 2026-10-19).
+      face("attendance", "/attendance/live", "오늘 출결", "오늘 등원·확인 큐", { tool: true, icon: "clipboardList" }),
+      face("attendance", "/attendance/quick", "출결 모드", "내 반 빠른 출결", { tool: true, teacherOnly: true, icon: "listChecks" }),
     ]),
   },
   {
@@ -157,12 +158,12 @@ export const HUB_GROUPS: HubGroup[] = [
     note: "상담부터 재원 관리까지의 흐름입니다.",
     items: keep([
       fromMenu("consultations", "재원생 상담 기록"),
-      fromMenu("enrollment", "신규 콜&상담 접수·배정"),
+      fromMenu("enrollment", "상담 접수·반 배정"),
       // 신규생 관리 — 등록상담(들어오기 전)과 이탈 방어(흔들릴 때) 사이의 90일을 맡는다.
       fromMenu("newcomers", "신입 90일 체크리스트"),
       fromMenu("retention", "이탈 위험 원생 관리"),
       fromMenu("withdrawals", "퇴원·수강 종료 기록"),
-      fromMenu("withdrawal_reports", "담임 작성·관리자 승인"),
+      fromMenu("withdrawal_reports", "강사 작성·순차 승인"),
     ]),
   },
   // 수납관리 = 수납 · 교재 · 지출 버튼(원장 2026-10-15 *"교재와 지출은 수납에서 따로 내부탭에서 빼서 이전처럼 만들것"* — 10-14에 내부 탭으로
@@ -186,12 +187,12 @@ export const HUB_GROUPS: HubGroup[] = [
     kind: "hub",
     note: "직원·차량·비품을 관리합니다.",
     items: keep([
-      fromMenu("staff", "직원 명부·근무 설정"),
+      fromMenu("staff", "명부·급여·연차·휴가"),
       fromMenu("shuttle", "노선 편성·등하원 기록"),
       fromMenu("inventory", "자산·대여·실사·소모품"),
       // 학부모 관리 현황 — 원장·관리자 전용. 셔틀 탭 줄에는 없고 입구는 여기 하나다(navigation.ts 주석).
       // ⚠️ 아이콘을 따로 안 준다 — 남은 스티커 중 '학부모'에 맞는 그림이 없어 셔틀 그림을 물려받는다.
-      face("shuttle", SHUTTLE_PARENTS_PATH, "학부모 관리 현황", undefined, { tool: true, adminOnly: true }),
+      face("shuttle", SHUTTLE_PARENTS_PATH, "학부모 관리 현황", "학부모 계정·연결 원생", { tool: true, adminOnly: true }),
     ]),
   },
   // 🔴 **회의록은 업무군에 넣지 않고 왼쪽 탭 한 줄로 세운다** (원장 2026-09-10:
@@ -487,6 +488,72 @@ export function hubSearchKeywords(dest: HubDest, groupLabel: string): string {
   const own = item && item.href === dest.href ? menuSearchKeywords(item, groupLabel) : "";
   // 면은 제 라벨 + 업무군 + 부모 권한키로 찾는다(부모 라벨은 own이 있을 때만 실린다).
   return `${dest.label} ${dest.originalLabel ?? ""} ${groupLabel} ${dest.menuKey} ${own}`.toLowerCase();
+}
+
+/** 메뉴 검색의 한 줄 — 목적지 + 업무군 이름 + 찾는 말 뭉치. */
+export type HubSearchEntry = {
+  dest: HubDest;
+  group: string;
+  /** 업무군 식별자·아이콘 — 사이드바 '메뉴 지도'가 업무군별로 묶어 그린다. */
+  groupId: string;
+  groupIcon: AywaIconName;
+  keywords: string;
+};
+
+/**
+ * 메뉴 검색이 찾는 **전체 목록** — 검색 팰릿(Shift+F)과 사이드바 메뉴 검색이 함께 쓴다(원장 2026-10-19
+ * *"좌측 메뉴에서 메뉴 검색하는 검색창"*). 🔴 두 곳이 목록을 따로 만들면 한쪽에서만 찾히는 화면이 생긴다.
+ * 차례 = 업무군 순서대로 메뉴 판의 버튼 → 그 뒤에 그 화면 위 탭(`innerTabsOf`, 부모 메뉴가 보일 때만).
+ */
+export function hubSearchEntries(gate: Gate): HubSearchEntry[] {
+  return hubGroupsFor([...HUB_GROUPS, ...SUPPORT_GROUPS], gate).flatMap((group) =>
+    [...group.items, ...group.items.flatMap((item) => innerTabsOf(item.href, gate))].map((dest) => ({
+      dest,
+      group: group.label,
+      groupId: group.id,
+      groupIcon: group.icon,
+      keywords: hubSearchKeywords(dest, group.label),
+    })),
+  );
+}
+
+/**
+ * 검색어로 거른다 — 부분 일치(대소문자 무시). **띄어쓰기는 무시한다**("학생 목록"으로 "학생목록"도, 그 반대도).
+ * 순서 = 라벨이 검색어로 **시작** → 라벨에 **포함** → 별칭·업무군으로만 걸림(같은 칸 안에선 원래 차례 유지).
+ */
+export function matchHubSearch(entries: readonly HubSearchEntry[], query: string): HubSearchEntry[] {
+  const compact = (v: string) => v.toLowerCase().replace(/\s+/g, "");
+  const q = compact(query);
+  if (!q) return [];
+  const rank = (e: HubSearchEntry) => {
+    const label = compact(e.dest.label);
+    return label.startsWith(q) ? 0 : label.includes(q) ? 1 : 2;
+  };
+  return entries
+    .filter((e) => e.keywords.includes(query.trim().toLowerCase()) || compact(e.keywords).includes(q))
+    .map((e, i) => ({ e, i, r: rank(e) }))
+    .sort((a, b) => a.r - b.r || a.i - b.i)
+    .map((x) => x.e);
+}
+
+/** 메뉴 지도의 한 묶음 — 업무군 하나와 그 안의 (걸러진) 메뉴. */
+export type HubSearchGroup = { id: string; label: string; icon: AywaIconName; items: HubSearchEntry[] };
+
+/**
+ * 사이드바 **메뉴 지도**(원장 2026-10-19 *"수업) 수업목록·시간표 / 원생) 원생목록 … 지도처럼 촤라락 펼쳐지게 + 검색"*)의
+ * 묶음 — 검색어가 없으면 **전부**(업무군 순서 그대로), 있으면 `matchHubSearch`가 고른 것만.
+ * 검색 중엔 가장 잘 맞는 메뉴가 든 업무군이 앞으로 온다(업무군 안 순서도 매칭 순위). `flat` = 키보드 이동 순서(그린 순서와 같다).
+ */
+export function groupHubSearch(entries: readonly HubSearchEntry[], query: string): { groups: HubSearchGroup[]; flat: HubSearchEntry[] } {
+  const picked = query.trim() ? matchHubSearch(entries, query) : [...entries];
+  const byId = new Map<string, HubSearchGroup>();
+  for (const e of picked) {
+    let g = byId.get(e.groupId);
+    if (!g) byId.set(e.groupId, (g = { id: e.groupId, label: e.group, icon: e.groupIcon, items: [] }));
+    g.items.push(e);
+  }
+  const groups = [...byId.values()];
+  return { groups, flat: groups.flatMap((g) => g.items) };
 }
 
 /**

@@ -69,6 +69,7 @@ import { useClassMoveIndex } from "./class-move-context";
 import type { MoveSubject } from "@/features/timetable/lib/class-move";
 import { moveClassSlots } from "@/features/timetable/server/move-actions";
 import { IndexBadge, ROW_CLASS } from "./student-rows";
+import { ReasonFields } from "@/features/withdrawals/reason-fields";
 
 type Queued = PendingMove & {
   fromClassName: string;
@@ -210,11 +211,12 @@ export function TimetableEditProvider({
     return () => window.removeEventListener("keydown", onKey);
   }, [canDrag]);
 
-  async function confirmEndEnrollment() {
+  /** `reason` = 확인 창의 사유 칸(대분류 · 세부 · 메모) — 서버가 같은 규칙으로 다시 본다(`readReasonForm`). */
+  async function confirmEndEnrollment(reason: FormData) {
     if (!endTarget) return;
     setEnding(true);
     setEndError(null);
-    const fd = new FormData();
+    const fd = reason;
     fd.set("enrollmentId", endTarget.enrollmentId);
     if (endTarget.studentId) fd.set("studentId", endTarget.studentId);
     fd.set("date", today); // 오늘 날짜로 종료
@@ -1055,7 +1057,10 @@ function ClassPickPopover({
   );
 }
 
-/** 편집 모드 Delete → 오늘 수강 종료 확인 팝업(파괴적 동작이라 확인 필수). Esc/바깥클릭=취소, 확인 버튼 autofocus. */
+/**
+ * 편집 모드 Delete → 오늘 수강 종료 확인 팝업(파괴적 동작이라 확인 필수). Esc/바깥클릭=취소.
+ * 사유를 고른다(원장 2026-10-15 *"기타는 모든 곳을 일치하게"*) — 상태 전환 창과 같은 칸(`ReasonFields`), 첫 칸(대분류)에 바로 초점.
+ */
 function EndEnrollmentConfirm({
   target,
   today,
@@ -1069,8 +1074,12 @@ function EndEnrollmentConfirm({
   ending: boolean;
   error: string | null;
   onCancel: () => void;
-  onConfirm: () => void;
+  onConfirm: (reason: FormData) => void;
 }) {
+  const formRef = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    formRef.current?.querySelector<HTMLSelectElement>("select[name=reason]")?.focus();
+  }, []);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !ending) onCancel();
@@ -1083,9 +1092,14 @@ function EndEnrollmentConfirm({
       className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-4"
       onClick={() => !ending && onCancel()}
     >
-      <div
-        className="bg-card border-line w-[340px] rounded-xl border p-4 shadow-xl"
+      <form
+        ref={formRef}
+        className="bg-card border-line max-h-[calc(100dvh-2rem)] w-[340px] overflow-y-auto rounded-xl border p-4 shadow-xl"
         onClick={(e) => e.stopPropagation()}
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!ending) onConfirm(new FormData(e.currentTarget));
+        }}
       >
         <p className="text-foreground text-sm font-bold">수강 종료</p>
         <p className="text-text-dim mt-2 text-sm leading-relaxed">
@@ -1095,6 +1109,16 @@ function EndEnrollmentConfirm({
         </p>
         {/* 종전 "이 반의 퇴원 목록으로 이동합니다"는 한 반만 끝나는 학생에게도 '퇴원'이라 말했다(원장 2026-09-14). */}
         <EndScopeNote enrollmentId={target.enrollmentId} date={today} />
+        <div className="mt-3 space-y-2">
+          <ReasonFields
+            reasonLabel="종료 사유"
+            initialReason={null}
+            memoPlaceholder="배경 정보 (선택)"
+            labelClassName="text-foreground block text-xs font-medium"
+            controlClassName="border-line bg-card text-foreground w-full rounded-lg border px-2 py-1.5 text-sm"
+            idPrefix="timetable-end"
+          />
+        </div>
         {error ? <p className="text-chart-4 mt-2 text-xs">{error}</p> : null}
         <div className="mt-4 flex justify-end gap-2">
           <button
@@ -1106,16 +1130,14 @@ function EndEnrollmentConfirm({
             취소
           </button>
           <button
-            type="button"
-            autoFocus
-            onClick={onConfirm}
+            type="submit"
             disabled={ending}
             className="bg-danger hover:bg-danger/90 rounded-lg px-3 py-1.5 text-xs font-medium text-white transition disabled:opacity-50"
           >
             {ending ? "처리 중…" : "수강 종료"}
           </button>
         </div>
-      </div>
+      </form>
     </div>
   );
 }

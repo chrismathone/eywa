@@ -46,19 +46,27 @@ export const defaultRunner = {
     const { stdout } = await run(bin, args, { windowsHide: true, timeout: timeoutMs, maxBuffer: 16 * 1024 * 1024 });
     return stdout;
   },
-  /** 인코딩: 발송(Playwright)이 본업이라 낮은 우선순위로 돌리고, 시간 상한을 넘기면 끊는다. */
-  encode(bin, args, { timeoutMs }) {
+  /**
+   * 인코딩: 발송(Playwright)이 본업이라 낮은 우선순위로 돌리고, 시간 상한을 넘기면 끊는다.
+   * `signal`(선택)이 끊기면(연동 앱 종료·업데이트) 바로 끊고 그 사유로 실패한다 — 압축 실패로 기록하지 않게 부르는 쪽이 가른다.
+   */
+  encode(bin, args, { timeoutMs, signal }) {
     return new Promise((resolve, reject) => {
+      if (signal?.aborted) { reject(signal.reason); return; }
       const child = spawn(bin, args, { windowsHide: true, stdio: ["ignore", "ignore", "pipe"] });
       try { os.setPriority(child.pid, os.constants.priority.PRIORITY_BELOW_NORMAL); } catch { /* 우선순위는 best-effort */ }
       let tail = "";
       let timedOut = false;
+      const stop = () => child.kill();
+      signal?.addEventListener("abort", stop, { once: true });
       child.stderr.on("data", (chunk) => { tail = (tail + chunk).slice(-400); });
       const timer = setTimeout(() => { timedOut = true; child.kill(); }, timeoutMs);
-      child.on("error", (error) => { clearTimeout(timer); reject(error); });
+      child.on("error", (error) => { clearTimeout(timer); signal?.removeEventListener("abort", stop); reject(error); });
       child.on("close", (code) => {
         clearTimeout(timer);
-        if (timedOut) reject(new Error("압축 시간 상한 초과"));
+        signal?.removeEventListener("abort", stop);
+        if (signal?.aborted) reject(signal.reason);
+        else if (timedOut) reject(new Error("압축 시간 상한 초과"));
         else if (code === 0) resolve();
         else reject(Object.assign(new Error(`ffmpeg 종료 코드 ${code}`), { tail }));
       });

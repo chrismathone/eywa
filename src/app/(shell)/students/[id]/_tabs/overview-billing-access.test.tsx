@@ -13,6 +13,7 @@ vi.mock("@/features/owner/server/queries", () => ({ getTenantSettings: async () 
 vi.mock("@/features/teacher-view/server/lang", () => ({ getTeacherViewLang: async () => "ko" }));
 vi.mock("@/features/teacher-view/server/teacher-names", () => ({ getTeacherEnglishNames: async () => ({}) }));
 vi.mock("@/features/grades/unified/server/student-records", () => ({ getStudentUnifiedRows: async () => [] }));
+vi.mock("@/features/students/server/siblings", () => ({ getStudentSiblings: async () => ({ ready: false, siblings: [], review: [], autoIds: [] }) }));
 vi.mock("../_components/tab-link", () => ({ TabLink: ({ href, children }: { href: string; children: ReactNode }) => <a href={href}>{children}</a> }));
 import { OverviewTab } from "./overview-tab";
 import type { StudentDetail } from "@/features/students/server/queries";

@@ -15,10 +15,30 @@ export type SnapshotGrade = {
   id: string; student_id: string; subject: string; class_id: string | null; day: string; entered: string | null;
   kind: GradeKind; score: number; max: number;
 };
-/** 성적 근거 한 줄 = 학생 한 명(시험 수 · 평균 점수율 · 종류별 건수 · 반). */
-export type GradeRow = { studentId: string; className: string; tests: number; average: number; kinds: string };
-/** 종류별 평균 — 비중은 그 달 설정의 값. */
-export type GradeKindStat = { kind: GradeKind; count: number; average: number; weight: number };
+/**
+ * 성적 근거 한 줄 = 학생 한 명 — `daily` = 일일테스트 제출 칸/대상 칸 · `monthly` = 월말평가 응시(대상이 아니면 없다) ·
+ * `tests`·`average`·`kinds` = 점수율로 재는 시험(확인테스트·내신·기타)의 수·평균·종류별 건수(없으면 average null).
+ * 2026-10-15 전에 저장된 달은 daily·monthly가 없고 average·kinds가 모든 시험의 값이다(화면이 둘 다 읽는다).
+ */
+export type GradeRow = {
+  studentId: string; className: string; tests: number; average: number | null; kinds: string;
+  daily?: { done: number; total: number }; monthly?: boolean;
+  /** 점수율 시험의 종류별 시험 수·평균(%) — 내역의 시험 종류 탭(원장 2026-10-16). 그 전에 저장된 달엔 없다(`kinds` 글자로 대신 센다). */
+  byKind?: Partial<Record<GradeKind, { count: number; average: number }>>;
+};
+/** 종류별 셈 — 일일테스트 = 제출률 · 월말평가 = 응시율 · 나머지 = 점수율(원장 2026-10-15). */
+export type GradeMeasure = "submit" | "take" | "score";
+/**
+ * 종류별 값(`average`, %) — 제출·응시는 `done`/`count`(칸·학생), 점수율은 `count` = 시험 수. 비중은 그 달 설정의 값.
+ * 2026-10-15 전에 저장된 달은 `measure`가 없다(전부 점수율).
+ */
+export type GradeKindStat = { kind: GradeKind; count: number; average: number; weight: number; measure?: GradeMeasure; done?: number };
+
+/**
+ * 매출 대비 급여 근거의 반 한 줄(원장 2026-10-15 — 금액 없이 비중만) — `share` = 그 달 맞춘 매출 중 이 반 몫(%, 맞춘 줄이 없으면 null) ·
+ * `rows` = 청구서가 있는 학생 줄 · `billed` = 그중 청구서 항목을 이 반에 맞춘 줄. 2026-10-15 전에 저장된 달엔 없다(빈 목록).
+ */
+export type PayClassRow = { className: string; students: number; rows: number; billed: number; share: number | null };
 
 /** 학부모 글 판정(0364a) — 반영·확인 대기만 싣는다. 본문은 싣지 않는다(근거 문구만). */
 export type SnapshotJudgment = {
@@ -30,6 +50,10 @@ export type SnapshotClaim = { id: string; teacher_id: string; student_id: string
 /** 만족도 근거 한 줄 — 학부모 글 판정 또는 클레임. 확인 대기는 점수가 없다(반영 전). */
 export type SatisfactionRow = {
   key: string; source: "글" | "클레임"; day: string; studentId: string | null; points: number | null; text: string | null; how: string; waiting: boolean;
+  /** 글이 이 선생님에게 온 반(그날 그 반 담임 — `attribution.ts`). 2026-10-16 전에 저장한 줄엔 없다. */
+  className?: string;
+  /** 같은 글을 함께 받는 다른 선생님(판정 줄은 하나라 반영·취소가 함께 움직인다). 없으면 생략. */
+  sharedWith?: string[];
 };
 
 /** 직원 출퇴근 한 줄(0365a) — 지각·결근 판정은 원본(메이크에듀) 표시 그대로. */

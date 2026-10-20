@@ -5,7 +5,7 @@ import { generateJSON } from "@/lib/ai/generate";
  * 학부모 만족도 — 문구로 가르기 애매한 학부모 글을 AI가 먼저 읽는다(계획서 3번 · 원장 2026-10-13 *"deepseek flash나 폴백시 haiku"*).
  * AI 판정은 바로 반영하지 않고 '확인 대기'에 쌓는다(원장 결정 8) — 사람이 반영/무시한다.
  *
- * - 모델 = fast 등급 DeepSeek(v4-flash) 먼저 → 막히면 사다리(Claude Haiku → Solar). 40자 남짓 글의 가점/감점/무관이라 추론형은 과하다.
+ * - 모델 = fast 등급 DeepSeek(v4-flash) 먼저 → 막히면 사다리(Claude Haiku). 40자 남짓 글의 가점/감점/무관이라 추론형은 과하다.
  * - 사실 원칙(FACT_GUARD)은 `generateJSON`이 붙인다. 근거 구절은 **원문에 그대로 있는 것만** 남긴다(없으면 비운다 — 지어낸 근거 금지).
  * - 이름·연락처는 보내지 않는다 — 글 본문만(출결 분류가 이미 같은 글을 보낸다).
  */

@@ -1,4 +1,5 @@
 import type { AywaIconName } from "@/components/icons/aywa-icons";
+import type { NotificationTaskBadge } from "@/features/staff-tasks/kinds";
 
 // 알림 공용 타입/상수 — server-only 없음(클라 벨 컴포넌트도 import). 하드코딩 라벨은 여기 한 곳.
 
@@ -14,6 +15,8 @@ export type NotificationType =
   | "video_homework_missing"
   | "video_homework_unassigned"
   | "homework_video_upload_failed"
+  // 오늘 수학 월말평가 성적표를 보고서에 못 붙임(보고서 없음 · 이미 보냄 · 첨부 가득) → 그 보고서를 쓴 선생님, 없으면 그 반 담임(0373a).
+  | "todays_math_exam_report"
   | "enrollment_assigned" // 내 반에 학생 배정
   | "enrollment_transferred_in" // 반이동으로 내 반에 전입
   | "teacher_handover" // 강사 인수인계로 내가 새 담임 지정
@@ -62,7 +65,9 @@ export type NotificationType =
   // 고객센터 개선요청(0294a) — 슈퍼관리자가 처리상태를 바꾸거나 답변을 달면 요청자에게.
   | "support_answer"
   // 슬랙 발송이 토큰 문제로 멈춤(0298a 발송기) → 원장(master). 설정 화면 밖에서도 알게(grok 2차).
-  | "slack_broken";
+  | "slack_broken"
+  // 늦은 할 일 요약(0377a 업무 처리 확인) — 매일 아침 원장 + 업무 처리 현황을 지정받은 사람에게. 누르면 늦은 할 일 목록.
+  | "staff_task_digest";
 
 export type NotificationItem = {
   id: string;
@@ -72,6 +77,8 @@ export type NotificationItem = {
   link: string | null;
   read: boolean;
   createdAt: string;
+  /** 이 알림이 알린 할 일의 지금 상태(내가 맡은 할 일만 · 0377a). 없으면 할 일이 아닌 알림. */
+  task?: NotificationTaskBadge;
 };
 
 /** 유형별 Aywa 아이콘. 미등록 유형은 벨 컴포넌트에서 기본 bell. */
@@ -110,4 +117,5 @@ export const NOTIFICATION_ICON: Record<string, AywaIconName> = {
   help_answer: "help",
   support_answer: "mail",
   slack_broken: "alert",
+  staff_task_digest: "clipboardCheck",
 };

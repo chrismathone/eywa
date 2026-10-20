@@ -155,6 +155,24 @@ export async function copyWeekFromPrevious(input: {
   });
   if (error) return { ok: false, error: `지난주 복사에 실패했습니다: ${error.message}` };
   const r = (data ?? {}) as { copied?: number; goalsCopied?: number; skippedSlots?: string[]; unmapped?: string[] };
+  // 감사로그 — admin RPC라 행에 남는 흔적이 없다. 한 번 누름 = 한 줄 요약(교시 복사 `ecs_plan_copy`와 같은 결),
+  // 실제로 채운 것이 있을 때만(아무것도 안 옮겨졌으면 변동이 아니다).
+  if ((r.copied ?? 0) > 0 || (r.goalsCopied ?? 0) > 0) {
+    await logAction({
+      action: "ecs_week_copy",
+      targetType: "class_sheet",
+      targetLabel: gate.access.className,
+      metadata: {
+        classId: input.classId,
+        fromMonday: from,
+        weekStart: to,
+        copied: r.copied ?? 0,
+        goalsCopied: r.goalsCopied ?? 0,
+        skippedSlots: r.skippedSlots?.length ?? 0,
+        unmapped: r.unmapped?.length ?? 0,
+      },
+    });
+  }
   return {
     ok: true,
     copied: r.copied ?? 0,
@@ -699,6 +717,21 @@ export async function removeMakeupAttendee(input: {
     .eq("mark_date", input.date);
   if (delMarks) return { ok: false, error: `보강을 뺐지만 태도 기록이 남았습니다: ${delMarks.message}` };
 
+  // 감사로그 — 기록을 지우는 동작이라 누가 뺐는지가 유일한 근거다(원스크린 '보강 빼기'와 같은 키 · 보고서는 안 지운다).
+  // 학생 이름은 뷰어가 metadata.studentId로 풀어 '대상' 열에 보여준다(조회 0회).
+  await logAction({
+    action: "makeup_remove",
+    targetType: "student",
+    metadata: {
+      studentId: input.studentId,
+      classId: input.classId,
+      date: input.date,
+      attendanceRemoved: true,
+      attendanceRows: count ?? 0,
+      via: "ecs",
+    },
+  });
+
   revalidatePath("/ecs");
   revalidatePath("/attendance");
   revalidatePath("/onescreen");
@@ -737,7 +770,17 @@ export async function markPresentIfAbsent(input: {
   const admin = createAdminClient();
   // 학생-반-날짜 결속 — 화면(entry.eligible)은 게이트가 아니다. 잘못 만든 행은 시수·정산에도 들어간다
   // (취소는 clearPresentAttendance로 가능해졌지만, 그건 '내가 방금 찍은 것'을 되돌리는 경로다).
-  const elig = await checkStudentEligibleOn(admin, tenantId, input.classId, input.studentId, input.date);
+  // 감사로그 판정용 count — RPC는 (지점·반·학생·날짜)에 기록이 없을 때만 넣는다. 같은 조건으로 먼저 세어 둔다(자격 확인과 함께).
+  const [elig, { count: before }] = await Promise.all([
+    checkStudentEligibleOn(admin, tenantId, input.classId, input.studentId, input.date),
+    admin
+      .from("attendance_records")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", tenantId)
+      .eq("class_id", input.classId)
+      .eq("student_id", input.studentId)
+      .eq("session_date", input.date),
+  ]);
   if (!elig.ok) return elig;
   const { data, error } = await admin.rpc("ecs_mark_present_if_absent", {
     p_tenant: tenantId,
@@ -747,7 +790,18 @@ export async function markPresentIfAbsent(input: {
     p_date: input.date,
   });
   if (error) return { ok: false, error: `출석 저장에 실패했습니다: ${error.message}` };
-  const rows = (data ?? []) as { status: string; recorded_at: string; id: string }[];
+  const rows = (data ?? []) as { status: string; recorded_at: string; id: string; recorded_by?: string | null }[];
+  // 감사로그 — DB 트리거(0084a)는 service_role 호출이라 actor가 비어 있다. "누가 찍었는지"는 여기서 남긴다.
+  // RPC는 기록이 없을 때만 넣으므로(있으면 no-op) **이번에 새로 만든 때만**: 부르기 전엔 0행 → 지금 내 것 하나.
+  //    (세지 못했으면 null — 남기지 않는다. 사이에 다른 사람이 먼저 넣었으면 그 행은 내 것이 아니라 걸러진다.)
+  const only = rows.length === 1 ? rows[0] : null;
+  if (before === 0 && only && only.recorded_by === user.id) {
+    await logAction({
+      action: "ecs_attendance_mark",
+      targetType: "attendance",
+      metadata: { classId: input.classId, studentId: input.studentId, date: input.date, status: only.status },
+    });
+  }
   // canonical = effective(최신 recorded_at, tie는 id) — RPC가 그 날짜 전 행을 돌려준다
   const eff = rows.reduce<{ status: string; recorded_at: string; id: string } | null>((acc, r) => {
     if (!acc) return r;

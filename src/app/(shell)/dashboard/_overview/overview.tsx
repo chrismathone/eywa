@@ -774,7 +774,7 @@ export function Overview({
     ),
     admissions: (
     <Panel
-      title={t("admissions", "콜&상담 전환")}
+      title={t("admissions", "신규 콜&상담 전환")}
       note="지난달 · 이번 달 · 상담일 기준"
       sections={[v.admissions]}
     >
@@ -784,6 +784,7 @@ export function Overview({
     repeatAbsence: (
     <Panel
       id="repeated-absences"
+      className={s.fadeScroll}
       title={t("repeatAbsence", "반복 결석 학생")}
       note={
         v.absences?.data?.anchor
@@ -1484,7 +1485,7 @@ export function Overview({
 
 /** 강사별 업무 현황 머리 안내 — 기능이 꺼진 지점엔 그 줄의 기간도 적지 않는다(카드의 표시 여부와 같은 값). */
 function teacherWorkNote(data: { deliveryShown?: boolean; counselShown?: boolean; to?: string; counselMonth?: string | null } | null | undefined): string {
-  return ["현재 담당 반", "보고서 최근 7일", "출결 어제까지 7일",
-    data?.deliveryShown === true ? "학부모 미확인·영상 숙제 최근 30일" : "영상 숙제 최근 30일",
+  return ["현재 담당 반", "보고서·영상 숙제 최근 7일", "출결 어제까지 7일",
+    ...(data?.deliveryShown === true ? ["학부모 미확인 최근 30일"] : []),
     ...(data?.counselShown === true ? [`원생상담 ${counselPeriodLabel(data.counselMonth, data.to ?? "")}`] : [])].join(" · ");
 }

@@ -99,11 +99,20 @@ describe("업로드 전 압축 판단", () => {
     const video = await original(); const logs = [];
     const r = runner({ encode: async (_b, args) => { await writeFile(args.at(-1), "half"); throw new Error("압축 시간 상한 초과"); } });
     expect(await prepareCompressedUpload(video, { log: (m) => logs.push(m), env: {}, runner: r })).toBeNull();
-    expect(logs.at(-1)).toContain("원본을 올립니다");
+    expect(logs.at(-1)).toContain("원본 그대로 씁니다");
     expect((await readdir(path.dirname(video.filePath))).sort()).toEqual(["classnote-12-34.aywa.json", "classnote-12-34.mp4"]);
     expect(await prepareCompressedUpload(video, { log: (m) => logs.push(m), env: {}, runner: r })).toBeNull();
     expect(r.encode).toHaveBeenCalledTimes(1);
     expect(compressionStatus().failed).toBe(1);
+  });
+  it("끝내는 신호(연동 앱 종료·업데이트)로 멈추면 던지고 실패로 기억하지 않는다 — 다음에 처음부터 다시", async () => {
+    const video = await original(); const abort = new AbortController();
+    const r = runner({ encode: async (_b, args, options) => {
+      await writeFile(args.at(-1), "half"); abort.abort(new Error("작업 종료 요청")); throw options.signal.reason;
+    } });
+    await expect(prepareCompressedUpload(video, { log: quiet, env: {}, runner: r, signal: abort.signal })).rejects.toThrow("작업 종료 요청");
+    expect(await readdir(path.dirname(video.filePath))).toEqual(["classnote-12-34.mp4"]);
+    expect(compressionStatus().failed).toBe(0);
   });
   it("원본 비트레이트가 이미 낮으면(ClassNote 1080p 약 4Mbps) 인코딩하지 않고 원본", async () => {
     const low = { ...SOURCE, streams: [{ ...SOURCE.streams[0], bit_rate: "4140138", avg_frame_rate: "30/1" }, SOURCE.streams[1]] };

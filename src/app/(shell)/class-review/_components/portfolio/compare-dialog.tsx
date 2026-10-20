@@ -86,7 +86,7 @@ export function CompareDialog({ open, onClose, periods, month: initial, initialS
                           <td key={c.id} className={`px-2 py-2 text-center ${best ? "text-primary font-bold" : ""}`}>
                             {!m ? "—" : m.value === null ? "제외" : fmt(m.value)}
                             <small className="block text-xs font-normal">
-                              {!m ? "" : m.uncounted ? "계산 전" : m.missing ? "자료 없음" : m.raw === null ? "" : `${Number.isInteger(m.raw) ? m.raw : m.raw.toFixed(1)}${c.unit}`}
+                              {!m ? "" : m.uncounted ? "계산 전" : m.freelancer ? "프리랜서" : m.missing ? "자료 없음" : m.raw === null ? "" : `${Number.isInteger(m.raw) ? m.raw : m.raw.toFixed(1)}${c.unit}`}
                             </small>
                           </td>
                         );

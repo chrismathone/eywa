@@ -10,6 +10,8 @@ import type { PlanHandlers } from "./use-plan-handlers";
 import type { SheetSaveStore } from "./use-sheet-saves";
 import { PlanRow } from "./plan-row";
 import { PlanCompareButton } from "./plan-compare-dialog";
+import { useShiftConfirm } from "./shift-confirm";
+import { canShiftCell } from "../lib/shift-visible";
 import { useSheetLang } from "@/features/teacher-view/lang-context";
 import { sheetT, sheetTf } from "@/features/teacher-view/i18n";
 
@@ -55,6 +57,8 @@ export function PlanTable({
 }) {
   const defaultArea = skillAreas[0]?.key ?? "vocab";
   const lang = useSheetLang();
+  // 미룸·당김은 확인 창을 거친다(원장 2026-10-19) — 실행·되돌리기는 핸들러(`use-plan-handlers`)가 한다.
+  const shiftConfirm = useShiftConfirm((d, s, kind) => handlers.setShift?.(d, s, kind));
   return (
     <div className="space-y-1">
       {TERMS.map((term) => {
@@ -115,8 +119,10 @@ export function PlanTable({
                   ⚠️ 지난 날짜에도 **막지 않는다** — "지난주에 못 나갔다"를 뒤늦게 미루는 게 정상 흐름이고,
                      실제 줄은 안 건드리므로 눌러도 잃을 게 없다(바뀌는 건 앞으로의 차수 배치뿐).
                   🔑 2026-10-15부터 **실제 진도를 한 주씩 민다/당긴다**(*"미루는 거기 복사하고 한주씩 쭉 밀기"*)
-                     — 토글이 아니라 누를 때마다 한 주. 되돌리기는 반대 버튼이다. */}
-              {canEdit && term.key === "regular" && handlers.setShift
+                     — 토글이 아니라 누를 때마다 한 주.
+                  🔴 2026-10-19 원장 *"계획만 있으면 버튼 숨겨"* — 이 칸에 **실제 줄이 없으면 안 세운다**(월간계획만
+                     있는 칸에서 밀면 아직 쓰지도 않은 진도를 옮기는 꼴이다). 누르면 확인 창 → 실행 → [되돌리기]. */}
+              {canEdit && term.key === "regular" && handlers.setShift && canShiftCell(rows)
                 ? (["skip", "advance"] as const).map((kind) => {
                     return (
                       <button
@@ -124,7 +130,7 @@ export function PlanTable({
                         type="button"
                         className="border-line-strong text-foreground hover:text-primary hover:border-primary cursor-pointer rounded-full border px-2 py-0.5 text-xs font-bold"
                         title={sheetT(lang, kind === "skip" ? "plan.shift.skip.title" : "plan.shift.advance.title")}
-                        onClick={() => handlers.setShift?.(date, slotStart, kind)}
+                        onClick={() => shiftConfirm.ask(date, slotStart, kind)}
                       >
                         {sheetT(lang, kind === "skip" ? "plan.shift.skip" : "plan.shift.advance")}
                       </button>
@@ -189,6 +195,7 @@ export function PlanTable({
           </div>
         );
       })}
+      {shiftConfirm.dialog}
     </div>
   );
 }

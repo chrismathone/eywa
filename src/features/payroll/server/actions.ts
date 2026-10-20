@@ -231,6 +231,13 @@ export async function requestLeave(
 
   if (error) return { error: error.message };
 
+  // 사유(자유 글)는 담지 않는다 — 누구의 어떤 휴가를 언제로 넣었는지만.
+  await logAction({
+    action: "staff_leave_request",
+    targetType: "staff_leave",
+    targetLabel: `${startsOn} ~ ${endsOn}`,
+    metadata: { userId, leaveType, startsOn, endsOn },
+  });
   revalidatePath(`/staff/${userId}/leaves`);
   return undefined;
 }
@@ -252,13 +259,29 @@ export async function approveLeave(
   if (!id) return { error: "휴가 ID가 누락되었습니다" };
 
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data: approved, error } = await supabase
     .from("staff_leaves")
     .update({ approved_by: user.id, approved_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq("id", id)
+    .select("user_id, leave_type, starts_on, ends_on"); // 감사로그 대상(폼의 userId는 클라 값이라 믿지 않는다)
 
   if (error) return { error: error.message };
 
+  const row = approved?.[0];
+  if (row) {
+    await logAction({
+      action: "staff_leave_approve",
+      targetType: "staff_leave",
+      targetLabel: `${row.starts_on} ~ ${row.ends_on}`,
+      metadata: {
+        leaveId: id,
+        userId: row.user_id,
+        leaveType: row.leave_type,
+        startsOn: row.starts_on,
+        endsOn: row.ends_on,
+      },
+    });
+  }
   if (userId) revalidatePath(`/staff/${userId}/leaves`);
   revalidatePath("/staff/leaves");
   return undefined;
@@ -281,10 +304,29 @@ export async function deleteLeave(
   if (!id) return { error: "휴가 ID가 누락되었습니다" };
 
   const supabase = await createClient();
-  const { error } = await supabase.from("staff_leaves").delete().eq("id", id);
+  const { data: removed, error } = await supabase
+    .from("staff_leaves")
+    .delete()
+    .eq("id", id)
+    .select("user_id, leave_type, starts_on, ends_on"); // 지운 뒤엔 되짚을 원본이 없다 — 누구의 언제 휴가였는지 남긴다.
 
   if (error) return { error: error.message };
 
+  const row = removed?.[0];
+  if (row) {
+    await logAction({
+      action: "staff_leave_delete",
+      targetType: "staff_leave",
+      targetLabel: `${row.starts_on} ~ ${row.ends_on}`,
+      metadata: {
+        leaveId: id,
+        userId: row.user_id,
+        leaveType: row.leave_type,
+        startsOn: row.starts_on,
+        endsOn: row.ends_on,
+      },
+    });
+  }
   if (userId) revalidatePath(`/staff/${userId}/leaves`);
   return undefined;
 }

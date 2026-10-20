@@ -14,6 +14,7 @@ import {
 } from "@/components/pagination";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import type { ConsultationListRow } from "@/features/enrollment/server/queries";
+import { consultantLabel } from "@/features/enrollment/consultant-label";
 import { MakeeduOriginTag } from "@/components/makeedu-origin-tag";
 import { EditingBadge } from "@/features/presence/editing-badge";
 import { RelativeTime } from "@/components/relative-time";
@@ -204,7 +205,7 @@ function ConsultationCard({
     [
       // 🔑 이름 줄은 한 줄로 잘릴 수 있다 — 전문을 여기 맨 앞에 둬야 잘린 글자가 사라지지 않는다.
       gradeLabel ? `${c.prospectName} (${gradeLabel})` : c.prospectName,
-      c.consultantName ? `상담사 ${c.consultantName}` : null,
+      consultantLabel(c) ? `상담사 ${consultantLabel(c)}` : null,
       c.assignedClassCount >= 1 ? `수업 ${c.assignedClassCount}개` : null,
       c.parentRequest?.trim() || null,
     ]
@@ -274,8 +275,8 @@ function ConsultationCard({
                         <span
                           role="button"
                           tabIndex={0}
-                          title={`이 학생의 콜&상담 ${c.personConsultCount}건 — 눌러서 나머지 상담 보기`}
-                          aria-label={`이 학생의 콜&상담 ${c.personConsultCount}건 보기`}
+                          title={`이 학생의 신규 콜&상담 ${c.personConsultCount}건 — 눌러서 나머지 상담 보기`}
+                          aria-label={`이 학생의 신규 콜&상담 ${c.personConsultCount}건 보기`}
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
@@ -289,7 +290,7 @@ function ConsultationCard({
                     <DropdownMenuContent align="start" className="w-64 p-1.5">
                       <div className="flex items-center justify-between gap-2 px-1 pb-1">
                         <p className="text-text-faint text-xs font-medium">
-                          이 학생의 콜&상담 {c.personConsultCount}건
+                          이 학생의 신규 콜&상담 {c.personConsultCount}건
                         </p>
                         {/* 🔴 쓰기 권한이 있을 때만 — 병합은 되돌릴 수 없다(서버도 같은 게이트를 다시 본다). */}
                         {draggable ? (
@@ -301,7 +302,7 @@ function ConsultationCard({
                               setMergeOpen(true);
                             }}
                             className="border-line text-text-dim hover:bg-bg-soft hover:text-foreground shrink-0 rounded-md border px-2 py-0.5 text-xs font-bold transition"
-                            title="이 학생의 콜&상담을 한 건으로 합칩니다"
+                            title="이 학생의 신규 콜&상담을 한 건으로 합칩니다"
                           >
                             병합
                           </button>

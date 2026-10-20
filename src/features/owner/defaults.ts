@@ -240,6 +240,9 @@ export const DEFAULT_SETTINGS: TenantSettings = {
     showTrendGraph: true, // 성적 추이 그래프(시험·과제) 기본 표시 — 데이터 2점 미만이면 자동 숨김
     showAttachments: true,
     allowTeacherTestMax: false, // 기본: 강사는 과목 설정값(문항수) 고정 사용. 켜면 원스크린에서 /N 직접 변경 가능.
+    todaysMathTestFill: false, // 오늘 수학 채점 결과로 원스크린 시험 빈칸 채우기 — 개발 중이라 기본 꺼짐.
+    todaysMathMonthlyFill: false, // 오늘 수학 월말평가로 성적관리 월말평가 빈칸 채우기 — 개발 중이라 기본 꺼짐.
+    todaysMathReportPdf: false, // 오늘 수학 월말평가 성적표 PDF를 수업보고서 첨부에 붙이기 — 개발 중이라 기본 꺼짐.
     videoHomeworkPolicy: { enabled: true, disabledSubjectKeys: [], disabledSchoolLevels: [], disabledClassIds: [] },
     writingExemptTeachers: [], // 작성률 예외 강사(빈=전원 집계) — 강사별 작성률 표에서 제외할 표시 이름.
     noticeMode: "A", // 기본: 단일 문단 멘트. B=수업내용+태도·특이사항 2문단 분리(0093a).
@@ -254,7 +257,7 @@ export const DEFAULT_SETTINGS: TenantSettings = {
   },
   // 권한 override는 sparse(빈 배열) — 진짜 기본값은 permissions.ts의 MENU_ACCESS. 매트릭스 복제 금지.
   // userOverrides = 개인 예외(특정 사용자에게만 메뉴 셀 덮어쓰기, 2026-08-01) — 역시 sparse.
-  permissions: { overrides: [], userOverrides: [], specialAccess: { payslipViewerIds: [], payslipManagerIds: [], leaveAdjusterIds: [], classSplitterIds: [], enrollmentDateEditorIds: [], studentStatusManagerIds: [], staffSubjectScopes: [] } },
+  permissions: { overrides: [], userOverrides: [], specialAccess: { payslipViewerIds: [], payslipManagerIds: [], leaveAdjusterIds: [], classSplitterIds: [], enrollmentDateEditorIds: [], studentStatusManagerIds: [], staffTaskMonitorIds: [], staffSubjectScopes: [] } },
   // 사이드바 표시도 sparse(빈 배열) — **비면 지금과 글자 그대로 같다**(전부 표시·코드 순서).
   // 기본 목록을 여기 복제하지 말 것: 복제하면 메뉴를 새로 만들 때마다 두 곳을 고쳐야 하고,
   // 한쪽을 잊으면 새 메뉴가 조용히 안 보인다(이 기능이 애초에 풀려던 문제 그 자체).

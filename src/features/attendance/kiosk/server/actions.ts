@@ -209,6 +209,17 @@ export async function assignAttendanceCodesAction(
     if (!uErr) assigned++;
   }
 
+  // 출석번호는 등원 체크인의 열쇠라 발급이 남아야 한다 — 🔴 번호 자체(전화번호에서 나온다)는 담지 않고 건수만.
+  //    발급이 0명이면(이미 다 있음 · 전부 스킵) 바뀐 학생이 없으니 남기지 않는다.
+  if (assigned > 0) {
+    await logAction({
+      action: "kiosk_attendance_code_assign",
+      targetType: "student",
+      targetLabel: `출석번호 ${assigned}명`,
+      metadata: { assigned, skipped },
+    });
+  }
+
   revalidatePath("/kiosk-settings");
   return { ok: `출석번호 ${assigned}명 발급${skipped ? `, ${skipped}명 스킵(전화번호 없음)` : ""}.` };
 }

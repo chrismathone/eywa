@@ -169,7 +169,7 @@ export async function createEnrollmentConsultation(
 
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "콜&상담 권한이 없습니다" };
+  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "신규 콜&상담 권한이 없습니다" };
 
   // 🔴 유입경로는 **신규 생성일 때만** 필수(원장 2026-08-04). 화면 `required`는 게이트가 아니라서
   // (#77) 서버에서도 막는다. 단 `createSchema`는 수정 액션과 공유하므로 스키마에 required를 넣지 않는다 —
@@ -442,7 +442,7 @@ export async function updateEnrollmentConsultation(
 ): Promise<UpdateConsultationState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "콜&상담 권한이 없습니다" };
+  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "신규 콜&상담 권한이 없습니다" };
 
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "상담 ID가 누락되었습니다" };
@@ -561,7 +561,7 @@ export async function setEnrollmentOutcome(
 ): Promise<SetOutcomeState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "콜&상담 권한이 없습니다" };
+  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "신규 콜&상담 권한이 없습니다" };
 
   const id = String(formData.get("id") ?? "").trim();
   const outcome = String(formData.get("outcome") ?? "") as Outcome;
@@ -646,7 +646,7 @@ export type PatchCellsState = { ok: true } | { error: string };
 export async function patchConsultationCells(id: string, patch: ConsultationCellPatch): Promise<PatchCellsState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "콜&상담 권한이 없습니다" };
+  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "신규 콜&상담 권한이 없습니다" };
   if (!id?.trim()) return { error: "상담 ID가 누락되었습니다" };
 
   // 객체가 아니거나 모르는 칸이 섞였으면(strict) zod 기본 영문 문구가 아니라 한글로 — 화면에 그대로 뜨는 문장이다.
@@ -742,7 +742,7 @@ export async function deleteEnrollmentConsultation(
 ): Promise<DeleteConsultationState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "콜&상담 권한이 없습니다" };
+  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "신규 콜&상담 권한이 없습니다" };
 
   const id = String(formData.get("id") ?? "").trim();
   const redirectTo = String(formData.get("redirectTo") ?? "").trim();
@@ -863,7 +863,7 @@ export async function convertConsultationToStudent(
 ): Promise<ConvertToStudentState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "콜&상담 권한이 없습니다" };
+  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "신규 콜&상담 권한이 없습니다" };
 
   const consultationId = String(formData.get("consultationId") ?? "").trim();
   if (!consultationId) return { error: "상담 ID가 누락되었습니다" };
@@ -1138,7 +1138,7 @@ export async function updateConsultationReportSection(
 ): Promise<UpdateConsultationReportState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "콜&상담 권한이 없습니다" };
+  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "신규 콜&상담 권한이 없습니다" };
 
   const analysisId = String(formData.get("analysisId") ?? "").trim();
   const consultationId = String(formData.get("consultationId") ?? "").trim();
@@ -1150,7 +1150,7 @@ export async function updateConsultationReportSection(
   const supabase = await createClient();
   const { data: row } = await supabase
     .from("consultation_ai_analysis")
-    .select("print_payload")
+    .select("print_payload, consultation_id")
     .eq("id", analysisId)
     .single();
   if (!row) return { error: "AI 분석을 찾을 수 없습니다" };
@@ -1173,6 +1173,19 @@ export async function updateConsultationReportSection(
     .eq("id", analysisId);
   if (error) return { error: dbWhy(error, "enrollment.reportSection", "분석 내용을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.") };
 
+  // 감사로그 — 회의 AI 리포트 수정(meeting_report_edit)과 같은 결: 섹션 키 + 수정 후 글자 수만(본문은 남기지 않는다).
+  // 상담 id는 폼 값이 아니라 **분석 행이 가리키는 상담**으로(폼 값은 검증되지 않은 입력이다).
+  const reportConsultationId = (row.consultation_id as string | null) ?? (consultationId || null);
+  const { data: reportConsult } = reportConsultationId
+    ? await supabase.from("enrollment_consultations").select("prospect_name").eq("id", reportConsultationId).maybeSingle()
+    : { data: null };
+  await logAction({
+    action: "enrollment_consultation_report_edit",
+    targetType: "enrollment_consultations",
+    targetLabel: (reportConsult?.prospect_name as string | null | undefined) ?? null,
+    metadata: { consultationId: reportConsultationId, analysisId, section: key, chars: content.trim().length },
+  });
+
   if (consultationId) revalidatePath(`/enrollment/${consultationId}`);
   revalidatePath("/enrollment");
   return { ok: true, editedBy: user.displayName, editedAt: now };
@@ -1189,7 +1202,7 @@ export async function regenerateConsultationAnalysis(
 ): Promise<{ ok?: boolean; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "콜&상담 권한이 없습니다" };
+  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "신규 콜&상담 권한이 없습니다" };
   if (!consultationId) return { error: "상담 ID가 누락되었습니다" };
 
   const supabase = await createClient();
@@ -1255,6 +1268,20 @@ export async function regenerateConsultationAnalysis(
   revalidatePath(`/enrollment/${consultationId}`);
   revalidatePath("/enrollment");
 
+  // 감사로그 — 재분석은 유료 AI 호출이고 사람이 고친 섹션을 덮어쓴다(회의 재분석 meeting_regenerate_analysis와 같은 결).
+  // 선점(claim)에 성공한 사람만 남긴다. 모델명은 아직 모른다(after 백그라운드가 정한다) — 입력 분량만.
+  await logAction({
+    action: "enrollment_consultation_regenerate_analysis",
+    targetType: "enrollment_consultations",
+    targetLabel: consult.prospect_name ?? null,
+    metadata: {
+      consultationId,
+      analysisId: existing.id,
+      recordings: nonEmpty.length,
+      transcriptChars: formatted.length,
+    },
+  });
+
   const ctx = {
     prospect_name: consult.prospect_name,
     prospect_grade: consult.prospect_grade,
@@ -1317,7 +1344,7 @@ export async function appendAiSummaryToConsultationContent(
 ): Promise<{ ok?: boolean; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "콜&상담 권한이 없습니다" };
+  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "신규 콜&상담 권한이 없습니다" };
   if (!consultationId) return { error: "상담 ID가 누락되었습니다" };
 
   const supabase = await createClient();
@@ -1353,11 +1380,29 @@ export async function appendAiSummaryToConsultationContent(
   }
   const next = existing ? `${existing}\n\n— AI 상담 요약 —\n${summary}` : summary;
 
-  const { error } = await supabase
+  // `.select`로 실제로 바뀐 행을 받는다 — 감사로그를 실제 갱신에만 남기고 '대상' 이름을 같은 왕복으로 얻는다.
+  const { data: appended, error } = await supabase
     .from("enrollment_consultations")
     .update({ parent_request: next, updated_at: new Date().toISOString() })
-    .eq("id", consultationId);
+    .eq("id", consultationId)
+    .select("prospect_name")
+    .maybeSingle();
   if (error) return { error: dbWhy(error, "enrollment.appendAiSummary", "상담 내용에 요약을 붙이지 못했습니다. 잠시 후 다시 시도해 주세요.") };
+
+  // 감사로그 — 상담 내용(parent_request) 수정이라 콜&상담 수정 키·요약 규칙(consultation-audit.ts)을 그대로 쓴다.
+  // 🔴 상담 내용 값은 남기지 않는다(항목 이름만 — withValues:false).
+  if (appended) {
+    await logAction({
+      action: "enrollment_consultation_update",
+      targetType: "enrollment_consultations",
+      targetLabel: (appended.prospect_name as string | null) ?? null,
+      metadata: {
+        consultationId,
+        ...summarizeConsultationChanges({ parent_request: consult.parent_request }, { parent_request: next }),
+        via: "ai_summary",
+      },
+    });
+  }
 
   revalidatePath(`/enrollment/${consultationId}`);
   revalidatePath("/enrollment");

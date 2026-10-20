@@ -88,6 +88,7 @@ export const SAMPLE_NOTIFICATIONS: Record<string, SampleNotification> = {
     link: "/owner?tab=sheets&sub=makeedu",
   },
   support_answer: { title: "개선요청에 답변이 달렸습니다", body: "출석부 인쇄 여백 조정 요청 — 처리 완료", link: "/help" },
+  staff_task_digest: { title: "늦은 할 일 3건", body: "보고서 발송 실패 2 · 상담 후속조치 1 — 김선생 2 · 이선생 1", link: "/dashboard" },
   slack_broken: { title: "슬랙 발송이 멈췄습니다", body: "슬랙이 토큰을 거절했습니다 — 학원 설정 → 연동에서 새 봇 토큰을 저장해 주세요. 그동안의 알림은 쌓아 두었다가 이어서 보냅니다.", link: "/owner?tab=sheets" },
   help_question: { title: "도움말 새 질문", body: "보강 예약은 어디서 하나요?", link: "/help" },
   help_answer: { title: "도움말 질문에 답변이 달렸습니다", body: "보강 예약은 어디서 하나요?", link: "/help" },

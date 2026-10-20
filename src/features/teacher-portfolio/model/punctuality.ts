@@ -5,8 +5,9 @@
  * - 아니면 출퇴근 기록(0365a — 연동 PC가 메이크에듀에서 시각만 가져온다)을 그날 기준(`punctuality-basis.ts`)과 견준다.
  *   메이크에듀엔 지각 표시가 없어서 aywa가 판정한다: 기준 출근 시각보다 늦게 찍으면 지각 · 기준 퇴근 시각보다 일찍 찍으면 조퇴(퇴근을 안 찍었으면 안 셈) ·
  *   기준이 있는 날 출근 기록이 없으면 결근 — 단 그날 직접 쓴 출결·보고서가 있으면 출근으로 본다.
- *   🔴 결재된 휴가(연차·반차·반반차)가 걸친 날은 '뺀 날'로 세지 않는다 — 법정 휴가로 감점하지 않는다(계획서 결정 9). 휴원일은 판정하지 않는다.
+ *   🔴 결재된 휴가(연차·반차·반반차)가 걸친 날은 '제외한 날'로 세지 않는다 — 법정 휴가로 감점하지 않는다(계획서 결정 9). 휴원일은 판정하지 않는다.
  *   다른 출처(키오스크·직접 입력)가 지각·결근·휴가를 적어 왔으면 그 표시가 이긴다.
+ * - `checkIns`·`checkOuts` = 그 달 출근·퇴근 시각이 찍힌 날 수(같은 날 여러 줄은 하루) — 근거 화면이 기록 횟수로 보인다.
  * - 수치(raw) = 지각 × 지각 가중 + 결근 × 결근 가중 + 조퇴 × 조퇴 가중(학원 설정). 그 달 그 직원의 출퇴근 기록이 하나도 없으면 자료 없음
  *   (가져오기 전 달이 결근으로 채워지지 않게).
  */
@@ -17,7 +18,8 @@ import type { PunctualityRow, SnapshotLeave, SnapshotStaffDay } from "./source-t
 import type { PeriodWindow } from "./types";
 
 export type PunctualityResult = {
-  raw: number | null; late: number; absent: number; early: number; excused: number; days: number; manual: boolean; detail: PunctualityRow[];
+  raw: number | null; late: number; absent: number; early: number; excused: number; days: number; checkIns: number; checkOuts: number;
+  manual: boolean; detail: PunctualityRow[];
 };
 
 export function punctualityOf(input: {
@@ -26,14 +28,25 @@ export function punctualityOf(input: {
   basisOn: (day: string) => DayBasis | null; evidenceOn: (day: string, basis: DayBasis) => DayEvidence;
   /** 메이크에듀 출퇴근의 가장 늦은 날짜 — 그날과 그 뒤는 아직 다 받지 않았을 수 있어 결근으로 세지 않는다(없으면 제한 없음). */
   latest?: string | null;
+  /**
+   * 근태를 세는 날인가 — 혼합 계약(근로 + 용역)은 근로 요일만(원장 2026-10-16). 아닌 날은 출퇴근 기록째 없는 날로 본다
+   * (메이크에듀가 '지각·결근'으로 적어 둔 날도 — 그날은 용역 몫이라 근무 시각에 매이지 않는다). 없으면 모든 날.
+   */
+  countsOn?: (day: string) => boolean;
 }): PunctualityResult {
   const { w, teacherId, options } = input;
   const leaveOn = (day: string) => input.leaves.some((l) => l.user_id === teacherId && l.start_date <= day && l.end_date >= day);
   // 같은 날 줄이 여럿이면(출처가 둘) 가장 이른 출근 · 가장 늦은 퇴근 · 가장 무거운 표시(결근 > 지각 > 그 밖).
   const weight = (s: SnapshotStaffDay["status"]) => (s === "absent" ? 3 : s === "late" ? 2 : s === "leave" || s === "off" ? 1 : 0);
   const byDay = new Map<string, SnapshotStaffDay>();
+  const counts = input.countsOn ?? (() => true);
+  // 🔴 '출퇴근 자료가 있는 사람인가'는 거르기 전 기록으로 본다 — 용역 요일에만 태그를 찍은 혼합 선생님이 근로 요일 결근 대신
+  //    '자료 없음'이 되지 않게(적대 리뷰 2026-10-16). 세는 날만 거르는 것은 아래 판정과 날 수다.
+  let hasRecords = false;
   for (const d of input.days) {
     if (d.user_id !== teacherId || d.work_date < w.start || d.work_date > w.end) continue;
+    hasRecords = true;
+    if (!counts(d.work_date)) continue;
     const was = byDay.get(d.work_date);
     if (!was) { byDay.set(d.work_date, d); continue; }
     const pick = <T,>(a: T | null | undefined, b: T | null | undefined, first: (x: T, y: T) => boolean) => (a == null ? b ?? null : b == null ? a : first(a, b) ? a : b);
@@ -44,9 +57,10 @@ export function punctualityOf(input: {
     });
   }
   const detail: PunctualityRow[] = [];
-  for (const day of byDay.size ? daysBetween(w.start, w.end) : []) {
+  for (const day of hasRecords ? daysBetween(w.start, w.end) : []) {
+    if (!counts(day)) continue;
     const rec = byDay.get(day);
-    // 휴원일은 나올 날이 아니다(시간표엔 수업이 서 있어도) — 판정하지 않는다. 결재된 휴가는 '뺀 날'로 남긴다(그날 수업이 있었다).
+    // 휴원일은 나올 날이 아니다(시간표엔 수업이 서 있어도) — 판정하지 않는다. 결재된 휴가는 '제외한 날'로 남긴다(그날 수업이 있었다).
     if (input.holidays.has(day) || (rec && (rec.status === "leave" || rec.status === "off"))) continue;
     const basis = input.basisOn(day);
     if (!basis && !(rec && (rec.status === "late" || rec.status === "absent"))) continue;
@@ -77,8 +91,12 @@ export function punctualityOf(input: {
   const count = (s: PunctualityRow["status"]) => detail.filter((r) => r.counted && r.status === s).length;
   const late = count("late"), absent = count("absent"), early = count("early");
   const excused = new Set(detail.filter((r) => !r.counted && r.status !== "recorded").map((r) => r.day)).size;
-  const result = { late, absent, early, excused, days: byDay.size, detail };
+  const recs = [...byDay.values()];
+  const result = {
+    late, absent, early, excused, days: byDay.size, detail,
+    checkIns: recs.filter((r) => r.check_in_at).length, checkOuts: recs.filter((r) => r.check_out_at).length,
+  };
   if (input.manual !== null) return { raw: input.manual, manual: true, ...result };
-  const raw = byDay.size ? Math.round((late * options.late + absent * options.absent + early * options.early) * 10) / 10 : null;
+  const raw = hasRecords ? Math.round((late * options.late + absent * options.absent + early * options.early) * 10) / 10 : null;
   return { raw, manual: false, ...result };
 }

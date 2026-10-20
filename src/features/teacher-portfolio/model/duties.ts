@@ -18,6 +18,12 @@ export type TeacherDuties = {
   classIds: Set<string>;
   attendance: AttendanceRow[];
   reportCells: ReportCell[];
+  /**
+   * 보고서 대상 칸의 반 id(`reportCells`와 같은 칸 · 같은 차례) — 성적 관리의 일일테스트 제출률 분모가 과목을 맞춘다. 저장하지 않는다.
+   * 작성 여부를 앱에서 못 보는 칸(`untracked` — 앱 밖 과목 · 작성 면제 강사)은 여기도 없다: 일일테스트 기록은 주로 그 강사의 보고서에서 와서
+   * 넣으면 구조적으로 0%가 된다(재리뷰 2026-10-15 · 침산 면제 강사 1명이 수학 반 담임 · 보고서 0건).
+   */
+  reportTargets: { studentId: string; day: string; classIds: string[] }[];
   /** 앱 밖에서 보고하는 과목·작성 면제 강사의 대상 — 작성 여부를 확인할 수 없다. */
   untracked: number;
   unknownAttendance: number;
@@ -82,12 +88,16 @@ export function teacherDuties(input: {
   }
 
   // 보고서 = 그 수업일·그 반의 보고서를 본인이 그날 만들었으면 작성. 나머지는 전부 미작성(대리·늦게·작성자 모름).
-  const reportCells: ReportCell[] = [...reportTargets.values()].map((t) => {
+  const targets = [...reportTargets.values()];
+  const reportCells: ReportCell[] = targets.map((t) => {
     const sameDay = records.reportsByStudentDay.get(`${t.studentId}|${t.day}`) ?? [];
     const written = sameDay.some((r) => !r.makeup && r.class_id !== null && t.classes.has(r.class_id) && r.created_by === user.id
       && (ctx.reportCreatedOn.get(r.id) ?? "9999") <= t.day);
     return { day: t.day, studentId: t.studentId, className: [...t.classNames].join(", "), state: written ? "own" : "missing" };
   });
 
-  return { classIds, attendance: [...attendanceTargets.values()], reportCells, untracked, unknownAttendance: 0 };
+  return {
+    classIds, attendance: [...attendanceTargets.values()], reportCells, untracked, unknownAttendance: 0,
+    reportTargets: targets.map((t) => ({ studentId: t.studentId, day: t.day, classIds: [...t.classes] })),
+  };
 }

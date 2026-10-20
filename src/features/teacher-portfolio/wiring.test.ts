@@ -59,6 +59,8 @@ describe("매일 집계", () => {
     expect(read("src/features/teacher-portfolio/server/refresh.ts")).toContain("buildPortfolio(snapshot, { openMonths, evaluation: { config: scoring.evaluation.config, entries: scoring.entries }, pay })");
     // 급여 비율을 일시 실패로 못 센 달은 마감을 미룬다(0점으로 굳지 않게).
     expect(read("src/features/teacher-portfolio/server/refresh.ts")).toContain("savePortfolioMonths(admin, tenantId, result, now, { withRaws, holdClose })");
+    // 학부모 만족도 확인 대기가 남은 달은 다음 달 말까지 마감을 미룬다(원장 2026-10-16 '9월을 이달 말까지 열어 두기').
+    expect(read("src/features/teacher-portfolio/server/refresh.ts")).toContain("waiting.has(`${teacherId}|${month}`)");
     expect(read("src/features/teacher-portfolio/server/refresh.ts")).toContain("loadOpenMonths(admin, tenantId, portfolioFloor(periodEnd))");
     expect(read("src/features/class-review/server/actions.ts")).toContain("firstCompletedAt(submissions[slot], scores, areas, now)");
     expect(read("src/features/teacher-portfolio/model/build.ts")).toContain("deepMathKey: deepMathKeyOf(d.settings.subjects)");

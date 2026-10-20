@@ -793,8 +793,8 @@ export async function getTodayActionSignals(
       enabled("enrollment"),
       {
         key: "enrollment-analysis",
-        label: "콜&상담 분석",
-        href: "/enrollment",
+        label: "신규 콜&상담 분석",
+        href: "/enrollment?view=kanban", // 칸반 고정 — 저장된 보기(view-pref.ts)와 무관하게 카드로
         menuKey: "enrollment",
         requiredAccess: "write",
       },
@@ -1031,7 +1031,7 @@ export async function getTodayActionSignals(
       {
         key: "intake-today",
         label: "오늘 접수",
-        href: "/enrollment",
+        href: "/enrollment?view=kanban", // 칸반 고정 — 저장된 보기(view-pref.ts)와 무관하게 카드로
         menuKey: "enrollment",
         requiredAccess: "read",
       },

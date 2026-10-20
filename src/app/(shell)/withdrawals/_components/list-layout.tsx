@@ -58,25 +58,31 @@ export function WithdrawalListLayout({ size, total, children }: {
       /**
        * 🔴 목록 **아래에 남겨 둘 높이**는 쪽 넘김 바와 바닥 여백 **둘뿐**이다 — 페이지 루트 바닥에서
        *    거꾸로 재지 말 것([`AutoPageSize`]는 그렇게 재지만 여기선 틀린다).
-       *    이 카드는 `--withdrawal-list-height`(= 옆 카드 높이) 때문에 **늘어나 있고** 행 영역이
+       *    이 카드는 `--withdrawal-list-height`(= 창에 맞춘 명단 높이 — 아래) 때문에 **늘어나 있을 수 있고** 행 영역이
        *    `flex: 1`로 그 여분을 먹는다. 그러면 "행이 이미 차지한 높이"에 늘어난 만큼이 섞여 들어가
        *    남는 자리를 과대평가하고, 실제로는 화면을 넘치는 행 수를 청하게 된다(3행쯤 초과 → 스크롤바).
        * ⚠️ 이 식은 **행 격자가 페이지의 마지막 블록**이라는 전제다. 아래에 블록이 더 생기면 그 높이도
-       *    함께 빼야 한다(오른쪽 '사유 분석'은 다른 열이라 대상이 아니다 — 그 열이 더 길면 그만큼만 스크롤된다).
+       *    함께 빼야 한다(오른쪽 '사유 분석'은 다른 열이라 대상이 아니다 — 그 열은 명단 높이에서 카드 안 스크롤로 멈춘다).
        */
       const below = footer.getBoundingClientRect().height + padBottom;
       const avail = scroller.clientHeight - topInScroller - below - 4; // 4px = 반올림 여유
       // chrome은 위 좌표에 이미 빠져 있다(행 영역에서 쟀다) → 두 번 빼지 않게 0으로 넘긴다.
       // 하한(WITHDRAWAL_PAGE_MIN)은 최소 창에서 1행 목록이 되는 것을 막는다(상수 주석 참조).
-      const fit = sideBySide
-        ? Math.max(WITHDRAWAL_PAGE_MIN, fitWithdrawalRows(avail, 0, rowHeight))
-        : WITHDRAWAL_PAGE_SIZE;
-      // 카드가 옆 카드보다 짧아 보이지 않게 최소 높이만 남긴다(행이 더 많으면 자연히 더 길어진다).
-      const asideHeight = aside.getBoundingClientRect().height;
-      const stableHeight = sideBySide
-        ? Math.max(asideHeight, chrome + rowHeight)
-        : chrome + Math.min(total, fit) * rowHeight;
-      root.style.setProperty("--withdrawal-list-height", `${stableHeight}px`);
+      const windowFit = fitWithdrawalRows(avail, 0, rowHeight);
+      const fit = sideBySide ? Math.max(WITHDRAWAL_PAGE_MIN, windowFit) : WITHDRAWAL_PAGE_SIZE;
+      // 하한에 걸린 좁은 창(기본 창 1040×720 등)에선 두 카드 높이를 걸지 않는다 — 5행 높이로 사유 카드를 자르면 막대 몇 개만 남고
+      // 페이지 안에 스크롤이 하나 더 생긴다(리뷰 2026-10-15). 그 창은 원래 페이지가 스크롤된다.
+      const cramped = sideBySide && windowFit < WITHDRAWAL_PAGE_MIN;
+      /**
+       * 두 열일 때 두 카드의 높이 = **창에 맞춘 명단 높이**(머리 + 행 × 창 행 수 + 쪽 넘김). 명단은 행이 모자라도 이 높이까지 서고,
+       * 옆 '사유 분석'은 이 높이를 넘으면 **카드 안에서 스크롤**한다(`list-layout.module.css`).
+       * 🔴 옆 카드 높이로 명단을 늘리지 말 것(원장 2026-10-15 캡처 *"페이지는 저 아래 하단에 있는데 여백이 왜 이렇게 많지?"* — 사유
+       *    2단계로 그 카드가 창보다 길어지자 7행 아래가 통째로 비었다). 그 높이로 행 수를 늘리는 것도 안 된다 — 사유 막대 수가 바뀌는
+       *    필터·대분류 클릭마다 `size`가 바뀌어 페이지를 한 번 더 불러온다(적대 리뷰 2026-10-15).
+       */
+      const stableHeight = sideBySide ? chrome + fit * rowHeight : chrome + Math.min(total, fit) * rowHeight;
+      if (cramped) root.style.removeProperty("--withdrawal-list-height");
+      else root.style.setProperty("--withdrawal-list-height", `${stableHeight}px`);
       if (fit === size) return;
       const params = new URLSearchParams(query);
       params.set("size", String(fit));
@@ -91,8 +97,8 @@ export function WithdrawalListLayout({ size, total, children }: {
       timer = setTimeout(measure, 150);
     };
     const observer = new ResizeObserver(schedule);
-    // aside는 stretch하지 않으므로 왼쪽 행 수가 오른쪽 측정 높이를 부풀리지 않는다.
-    for (const element of [root, aside, header, footer, row]) observer.observe(element);
+    // 옆 카드 높이는 재지 않는다(위 🔴) — 그 카드가 길어져도 명단 행 수·높이는 그대로다.
+    for (const element of [root, header, footer, row]) observer.observe(element);
     // 🔴 창(iframe)이 커져도 내용 높이는 그대로일 수 있어 ResizeObserver가 안 깨어난다 — 창 자체를 함께 듣는다.
     window.addEventListener("resize", schedule);
     measure();

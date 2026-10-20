@@ -7,6 +7,8 @@ import { getStudentById } from "@/features/students/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { StudentForm } from "../../_components/student-form";
 import { isModuleEnabled } from "@/lib/modules";
+import { getStudentSiblings } from "@/features/students/server/siblings";
+import { siblingHint } from "@/features/students/siblings";
 
 export const metadata = { title: "학생 수정 — 에이와" };
 
@@ -22,6 +24,9 @@ export default async function EditStudentPage({
   if ((await accessLevelTenant(user.systemRole, "students")) !== "full") redirect(`/students/${id}`);
   const [student, { operations, modules }] = await Promise.all([getStudentById(id), getTenantSettings()]);
   if (!student) notFound();
+  // 형제 칸(0376a) — 짝 표가 아직 없으면(SQL 적용 전) 칸을 안 띄운다. 자동 판정은 미리 넣는다('자동 추천').
+  const sib = await getStudentSiblings(student);
+  const option = (s: (typeof sib.siblings)[number]) => ({ value: s.id, label: s.name, hint: siblingHint(s), auto: s.basis !== "manual" });
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -38,6 +43,7 @@ export default async function EditStudentPage({
         scope={`student:${id}`}
         gradeLevels={operations.gradeLevels}
         showClassnoteName={isModuleEnabled(modules.disabled, "classnote")}
+        siblings={sib.ready ? { initial: sib.siblings.map(option), review: sib.review.map(option), suggested: sib.autoIds } : undefined}
         initialValue={{
           id: student.id,
           name: student.name,

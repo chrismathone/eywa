@@ -12,11 +12,18 @@ import type { MathSheetMonthData } from "../server/month-queries";
 import { resetMathLearningGoals, saveMathLearningGoals } from "../server/learning-actions";
 import { LearningMilestones } from "./learning-milestones";
 import styles from "./learning-overview.module.css";
+import local from "./math-textbook.module.css";
+import { useMathTextbooks } from "./math-textbook-context";
+import { findSameCatalogTitle } from "@/features/textbooks/math-assignment";
 
 export function LearningGoalDialog({ data, learning, studentId, onClose, canReset = false }: {
   data: MathSheetMonthData; learning: LearningData; studentId: string | null; onClose: () => void; canReset?: boolean;
 }) {
   const router = useRouter();
+  const books = useMathTextbooks();
+  const catalogTitles = books?.choices.map((b) => b.title) ?? [];
+  // 목표에 적힌 교재가 없으면 **지금 교재**(학생 배정 → 반 배정 → 보고서 기록)를 기본값으로 — 같은 사실을 두 번 적지 않게.
+  const assignedTitle = (id: string) => books?.now[id]?.book.title ?? null;
   const eligible = data.students.filter((s) => s.rosterPhase !== "ended");
   const withoutGoal = eligible.filter((s) => !learning.goals[s.studentId]);
   const [scope, setScope] = useState(studentId ?? (withoutGoal.length ? "all" : eligible[0]?.studentId ?? "all"));
@@ -36,7 +43,9 @@ export function LearningGoalDialog({ data, learning, studentId, onClose, canRese
       studentId: student?.studentId ?? "", studyGrade: grade, endStudyGrade: grade, startBlock: start,
       endBlock: track === "supplement" ? start : topics.filter((topic) => semesterOfLesson(grade, topic) === semester).at(-1) ?? start,
       ...standardGoalDates(data.month, track), track,
-      textbook: data.goals[student?.studentId ?? ""]?.textbook ?? null,
+      // ⚠️ '목표 없는 학생 전체'면 학생마다 교재가 다를 수 있다 — 한 학생의 교재를 전원에게 적지 않게 반 교재만.
+      textbook: data.goals[student?.studentId ?? ""]?.textbook
+        ?? (id === "all" ? (books?.classBook?.title ?? null) : assignedTitle(student?.studentId ?? "")),
     };
   };
   const [draft, setDraft] = useState<LearningGoal>(() => goalForStudent(scope));
@@ -44,6 +53,8 @@ export function LearningGoalDialog({ data, learning, studentId, onClose, canRese
   const goal = planLearningGoal(draft, previous);
   const [error, setError] = useState<string | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
+  /** 직접 적은 교재가 교재목록의 교재와 같은 책일 때 — "그 교재로 변경할까요?"(원장 2026-10-19). */
+  const [sameBook, setSameBook] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const selectedIds = scope === "all" ? withoutGoal.map((s) => s.studentId) : [scope];
   const validation = learningGoalError(goal);
@@ -51,10 +62,10 @@ export function LearningGoalDialog({ data, learning, studentId, onClose, canRese
   const total = learningBlocks(goal).length;
   const endGrade = draft.endStudyGrade ?? draft.studyGrade;
   const update = (patch: Partial<LearningGoal>) => {
-    setDraft((value) => ({ ...value, ...patch })); setError(null); setConfirmReset(false);
+    setDraft((value) => ({ ...value, ...patch })); setError(null); setConfirmReset(false); setSameBook(null);
   };
   const selectScope = (id: string) => {
-    setScope(id); setDraft(goalForStudent(id)); setError(null); setConfirmReset(false);
+    setScope(id); setDraft(goalForStudent(id)); setError(null); setConfirmReset(false); setSameBook(null);
   };
   const reset = () => startTransition(async () => {
     try {
@@ -68,9 +79,14 @@ export function LearningGoalDialog({ data, learning, studentId, onClose, canRese
     if (validation) { setError(validation); return; }
     if (!selectedIds.length) { setError("목표를 설정할 학생을 선택해 주세요."); return; }
     if (!preview.length) { setError("목표 기간에 수업이 없는 달이 있습니다. 반의 시간표와 수강 기간을 확인해 주세요."); return; }
+    const same = findSameCatalogTitle(goal.textbook, catalogTitles);
+    if (same) { setSameBook(same); return; }
+    save(goal.textbook);
+  };
+  const save = (textbook: string | null) => {
     startTransition(async () => {
       try {
-        const result = await saveMathLearningGoals({ ...goal, classId: data.classId, studentIds: selectedIds, mode: previous ? "extend" : "create" });
+        const result = await saveMathLearningGoals({ ...goal, textbook, classId: data.classId, studentIds: selectedIds, mode: previous ? "extend" : "create" });
         if (!result.ok) { setError(result.error); return; }
         router.refresh(); onClose();
       } catch { setError("목표를 저장하지 못했습니다. 입력한 내용을 유지했으니 다시 시도해 주세요."); }
@@ -116,7 +132,7 @@ export function LearningGoalDialog({ data, learning, studentId, onClose, canRese
             </section>
             {previous?.revision ? <label>완료 예정일<input aria-label="확장 목표 완료 예정일" type="date" required value={goal.endDate} onChange={event => update({ endDate: event.target.value })} /></label> : null}
             <label>교재<input aria-label="목표 교재" value={draft.textbook ?? ""} maxLength={500} onChange={(e) => update({ textbook: e.target.value || null })} placeholder="교재 이름 (선택)" list="mcs-goal-books" /></label>
-            <datalist id="mcs-goal-books">{data.bookOptions.map((book) => <option key={book} value={book} />)}</datalist>
+            <datalist id="mcs-goal-books">{[...new Set([...catalogTitles, ...data.bookOptions])].map((book) => <option key={book} value={book} />)}</datalist>
           </fieldset>
           <div className={styles.planPreview} aria-live="polite">
             <strong>{validation ? (previous ? "이전 도착점 이후의 목표를 선택해 주세요" : "시작 지점과 최종 도착점을 확인해 주세요") : `전체 ${total}블록 · ${previous?.revision ? "목표별 직접 배분" : `월 ${policy.monthlyBlocks}블록`}`}</strong>
@@ -125,6 +141,15 @@ export function LearningGoalDialog({ data, learning, studentId, onClose, canRese
             {!validation && preview.length ? <p>오늘 계획 {plannedLearningTarget(goal, preview, data.today)}블록 · 배분된 수업 {preview.length}회</p> : null}
             <p>{previous?.revision ? "수정한 기존 계획은 유지하고 새 구간을 추가합니다." : track === "regular" ? `각 학기·과정 구간을 ${policy.totalBlocks}블록·${policy.months}개월로 나누고 월 ${policy.monthlyBlocks}블록씩 배분합니다.` : "복습 심화는 월 4블록이며, 수업 기록을 날짜별로 누적합니다."} 이 반의 모든 수업 요일과 휴강일·수강 기간을 반영합니다.</p>
           </div>
+          {sameBook ? (
+            <div role="alertdialog" aria-label="같은 교재 확인" className={local.confirm}>
+              <p>교재목록에 동일한 교재({sameBook})가 있습니다. 해당 교재로 변경할까요?</p>
+              <div className={local.actions}>
+                <button type="button" className={styles.button} disabled={pending} onClick={() => setSameBook(null)}>취소</button>
+                <button type="button" className={styles.primaryButton} disabled={pending} onClick={() => { update({ textbook: sameBook }); save(sameBook); }}>변경</button>
+              </div>
+            </div>
+          ) : null}
           {error ? <p role="alert" className={styles.error}>{error}</p> : null}
           <div className={styles.formActions}>
             {canReset && scope !== "all" && learning.goals[scope] ? <button type="button" className={`${styles.button} ${styles.resetButton}`} data-danger={confirmReset || undefined} disabled={pending} onClick={() => confirmReset ? reset() : setConfirmReset(true)}>{confirmReset ? "정말 초기화할까요?" : "초기화"}</button> : null}

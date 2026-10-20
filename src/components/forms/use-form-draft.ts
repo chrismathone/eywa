@@ -21,6 +21,8 @@ import {
  * @param formRef 대상 `<form>` ref.
  * @param enabled false면 자동저장·배너 비활성(수정 모드만 켜는 등).
  * @param onRestore 복구 시 컨트롤드(React state) 필드 rehydrate용(예: 과목점수 jsonb). DOM 필드는 자동 복원.
+ * @param restoreSince 이 시각 뒤에 저장된 초안이면 안내 없이 바로 되살린다 — 녹음이 걸린 작성 화면으로 돌아왔을 때 그 녹음을
+ *   누른 시각(recording-resume.ts `recordingSince`). 그보다 오래된 초안(지난번에 쓰다 만 것)은 종전대로 복구 안내.
  */
 export function useFormDraft({
   scope,
@@ -30,6 +32,7 @@ export function useFormDraft({
   exclude,
   ignoreForBanner,
   maxAgeMs,
+  restoreSince,
 }: {
   scope: string;
   formRef: React.RefObject<HTMLFormElement | null>;
@@ -41,6 +44,7 @@ export function useFormDraft({
   ignoreForBanner?: string[];
   /** 초안 유효 시간(ms) — 지나면 복구 제안 없이 폐기. 공용 기기에서 남의 초안이 오래 남으면 안 되는 폼(QR 접수 등)에. */
   maxAgeMs?: number;
+  restoreSince?: () => number | undefined;
 }) {
   const [draftSavedAt, setDraftSavedAt] = useState<number | null>(null);
   const draftRef = useRef<Record<string, string> | null>(null);
@@ -49,9 +53,19 @@ export function useFormDraft({
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 첫 미저장 입력 시각 — 연속 타이핑 중 강제 저장(MAX_PENDING) 판정 + 언로드 플러시 필요 여부.
   const pendingSinceRef = useRef<number | null>(null);
+  // 이 화면에서 사람이 고쳤나(입력·복구) — save()는 고친 것만 남긴다. 수정 화면은 서버 값이 이미 채워져 있어, 고친 것 없이
+  // 녹음만 눌러도 그 값이 초안이 되면 다음 열기에 가짜 '작성하던 내용'이 뜨고 복구하면 남이 고친 값을 되돌린다(재리뷰 2026-10-16).
+  const touchedRef = useRef(false);
   // 옵션 배열은 렌더마다 새 참조라 effect 재실행을 막기 위해 키로 안정화.
   const excludeKey = (exclude ?? []).join(",");
   const ignoreKey = (ignoreForBanner ?? []).join(",");
+  // 바로 되살릴 때 부를 최신 onRestore(호출부가 렌더마다 새로 만든다 — 로드 effect의 의존성에 넣지 않는다).
+  const onRestoreRef = useRef(onRestore);
+  const restoreSinceRef = useRef(restoreSince);
+  useEffect(() => {
+    onRestoreRef.current = onRestore;
+    restoreSinceRef.current = restoreSince;
+  });
 
   // 마운트 시 기존 초안 확인 → 의미 있는 값이 있으면 복구 배너 노출.
   useEffect(() => {
@@ -73,6 +87,14 @@ export function useFormDraft({
         return;
       }
       if (hasMeaningfulValues(d.values, ignore)) {
+        const form = formRef.current;
+        const since = restoreSinceRef.current?.();
+        if (since !== undefined && d.savedAt >= since && form) {
+          applyFormValues(form, d.values, excl);
+          onRestoreRef.current?.(d.values);
+          touchedRef.current = true;
+          return;
+        }
         draftRef.current = d.values;
         setDraftSavedAt(d.savedAt);
       }
@@ -80,7 +102,7 @@ export function useFormDraft({
     return () => {
       cancelled = true;
     };
-  }, [scope, enabled, ignoreKey, excludeKey, maxAgeMs]);
+  }, [scope, enabled, ignoreKey, excludeKey, maxAgeMs, formRef]);
 
   // 디바운스 자동저장 — 폼 input/change에서 값 캡처 → IDB(의미 있는 값일 때만).
   // ⚠️ 디바운스만으로는 부족하다: 연속 타이핑 중엔 타이머가 계속 뒤로 밀려 **한 번도 저장이 안 될 수 있고**,
@@ -102,6 +124,7 @@ export function useFormDraft({
       if (hasMeaningfulValues(values, ignore)) void saveDraft(scope, values);
     };
     const schedule = () => {
+      touchedRef.current = true;
       if (timerRef.current) clearTimeout(timerRef.current);
       if (pendingSinceRef.current === null) pendingSinceRef.current = Date.now();
       if (Date.now() - pendingSinceRef.current >= DRAFT_MAX_PENDING_MS) {
@@ -130,6 +153,9 @@ export function useFormDraft({
       form.removeEventListener("change", schedule);
       window.removeEventListener("pagehide", flushOnHide);
       document.removeEventListener("visibilitychange", onVisibility);
+      // 같은 문서 안에서 화면을 떠날 때(단일 화면에서 녹음하며 다른 메뉴로) 마지막 입력까지 남긴다 — 디바운스(700ms)
+      // 안에 떠나면 그 입력이 사라져 '작성 화면 열기'가 덜 된 내용을 되살렸다. 저장 성공(clear) 뒤엔 대기가 없어 안 쓴다.
+      if (pendingSinceRef.current !== null) write();
     };
   }, [scope, enabled, formRef, excludeKey, ignoreKey]);
 
@@ -139,6 +165,7 @@ export function useFormDraft({
     if (form && values) {
       applyFormValues(form, values, excludeKey ? excludeKey.split(",") : []);
       onRestore?.(values);
+      touchedRef.current = true;
     }
     setDraftSavedAt(null);
   }, [formRef, onRestore, excludeKey]);
@@ -146,6 +173,7 @@ export function useFormDraft({
   const discard = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
     pendingSinceRef.current = null;
+    touchedRef.current = false;
     void clearDraft(scope);
     draftRef.current = null;
     setDraftSavedAt(null);
@@ -155,10 +183,22 @@ export function useFormDraft({
   const clear = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
     pendingSinceRef.current = null;
+    touchedRef.current = false;
     void clearDraft(scope);
     draftRef.current = null;
     setDraftSavedAt(null);
   }, [scope]);
 
-  return { draftSavedAt, restore, discard, clear };
+  // 지금 값을 바로 남긴다 — 녹음을 시작한 순간(그 뒤 아무것도 안 쳐도 돌아온 화면이 이 값을 되살린다, restoreSince).
+  // 고친 것이 없으면 남기지 않는다(touchedRef) — 돌아온 화면은 처음 연 값(주소·서버 값) 그대로 다시 열린다.
+  const save = useCallback(() => {
+    const form = formRef.current;
+    if (!enabled || !form || !touchedRef.current) return;
+    if (timerRef.current) clearTimeout(timerRef.current);
+    pendingSinceRef.current = null;
+    const values = readFormValues(form, excludeKey ? excludeKey.split(",") : []);
+    if (hasMeaningfulValues(values, ignoreKey ? ignoreKey.split(",") : [])) void saveDraft(scope, values);
+  }, [scope, enabled, formRef, excludeKey, ignoreKey]);
+
+  return { draftSavedAt, restore, discard, clear, save };
 }

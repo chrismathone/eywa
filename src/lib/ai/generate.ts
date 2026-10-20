@@ -3,9 +3,11 @@ import { withFactGuard } from "./fact-guard";
 import { assertTenantViewOutboundAllowed } from "@/lib/auth/tenant-view-outbound";
 import { AI_TENANT_MISSING_MESSAGE, LICENSE_BLOCKED_MESSAGE } from "@/lib/license/rule";
 import { getAnthropic } from "./anthropic";
-import { getUpstage } from "./upstage";
 import { getDeepseek } from "./deepseek";
+import { waitsForAnswer } from "./model-features";
+import { featurePin } from "./model-pins";
 import {
+  AI_MODELS,
   keyGroupOf,
   keyLabelOf,
   resolveKeyEnv,
@@ -20,15 +22,33 @@ import { reportWarning } from "@/lib/observability/report-error";
 import { callJev, JevError, JEV_MODEL, type DecisionQuestions, type DecisionResult } from "./jev";
 
 /**
- * DeepSeek(v4-pro 등 추론형) 전용 max_tokens 하한. 추론형은 reasoning_content가 max_tokens를 함께 소모해
- * 호출부 값(8192 등)이 추론에 소진되면 답변 JSON이 truncate → 파싱 실패한다. 추론+답변이 모두 들어가도록
- * 여유를 둔다. 상한일 뿐 실사용 토큰만 과금되므로 크게 잡아도 무비용(관측 실사용 ~5k~14k tok).
+ * 응답 길이 상한(max_tokens)의 **바닥** — 호출부 값이 이보다 작으면 이 값으로 올려 보낸다(원장 2026-10-19 *"응답 길이 한도도 팍팍 늘려"*).
+ * 상한은 넘지 못하는 선일 뿐 쓴 만큼만 값을 낸다. 생각(추론) 토큰도 상한에 들어가 작게 잡으면 답 전에 잘린다
+ * (Sonnet 5 폼 추출이 4,096에서 7일 57건 중 21건 잘림 · 회의록 v4-pro 30일 최대 26,893 — 옛 바닥 32,000에 닿을 뻔).
+ * 실측(2026-10-19 우리 키): Claude 5 계열 모델 상한 128,000 · DeepSeek 입력 6.5만 + 64,000 통과.
+ * - 64,000 위는 의미가 없다 — 라우트 기한(300초) 안에 그만큼 만들어 내지 못한다.
+ * - Claude는 상한이 분당 출력 한도 계산에 안 든다(공식 rate-limits 문서) — 크게 잡아도 막히지 않는다. 비스트리밍 SDK 검사는
+ *   `anthropic.ts`의 시간 제한 지정으로 건넌다.
+ * - Claude 4.x 이하(reasoning 티어 Opus 4.7)는 호출부 값 그대로(생각이 기본으로 켜지지 않는다).
  */
-const DEEPSEEK_MIN_MAX_TOKENS = 32000;
+export const OUTPUT_TOKEN_FLOOR: Readonly<Record<AiProvider, number>> = { anthropic: 64_000, deepseek: 64_000 };
+/**
+ * 사람이 화면에서 기다리는 호출(멘트·원생 AI 케어 — `waitsForAnswer`)의 바닥. 옛 Claude 4,096이 사실상 한 호출의 **시간 상한**
+ * (Haiku 20~30초) 노릇도 했다 — 64,000이면 응답이 끝없이 이어지는 드문 경우 선생님이 몇 분을 기다린다(2026-10-19 리뷰).
+ * Claude 16,000 = 옛 바닥의 4배 · 실측 최대(2,067)의 8배. DeepSeek은 옛 바닥 32,000 그대로 — **어디서도 예전보다 낮추지 않는다.**
+ */
+export const WAITING_OUTPUT_TOKEN_FLOOR: Readonly<Record<AiProvider, number>> = { anthropic: 16_000, deepseek: 32_000 };
+
+/** 실제로 보내는 max_tokens — 호출과 '잘림' 오류 문구가 같은 값을 쓴다. */
+export function sentMaxTokens(provider: AiProvider, model: string, requested: number, feature?: string | null): number {
+  if (provider === "anthropic" && !isClaude5Model(model)) return requested;
+  const floor = waitsForAnswer(feature) ? WAITING_OUTPUT_TOKEN_FLOOR : OUTPUT_TOKEN_FLOOR;
+  return Math.max(requested, floor[provider]);
+}
 
 /**
  * ```json 펜스 제거 + 첫 {…} 객체 추출 + JSON.parse. 5개 AI 호출지점에 흩어져 있던 파싱 로직을
- * 한 곳으로 통합. 순수함수(Vitest 단위테스트). JSON mode(Upstage)·평문(Anthropic)·마크다운 펜스·
+ * 한 곳으로 통합. 순수함수(Vitest 단위테스트). JSON mode(DeepSeek)·평문(Anthropic)·마크다운 펜스·
  * 앞뒤 잡설 섞인 응답 모두 견딘다.
  */
 export function parseJsonLoose<T = unknown>(text: string): T {
@@ -92,6 +112,7 @@ export type GenerateJSONOptions = {
   prompt: string;
   /** 선택적 system 지침(없으면 미전송). */
   system?: string;
+  /** 응답 길이 상한 — 바닥(`OUTPUT_TOKEN_FLOOR`)보다 작으면 바닥으로 올려 보낸다(Claude 4.x 이하만 이 값 그대로). */
   maxTokens: number;
   /** 기본 balanced(현 모든 호출). reasoning은 Anthropic 고정. */
   tier?: AiTier;
@@ -102,14 +123,14 @@ export type GenerateJSONOptions = {
   keyName?: AiKeyName;
   /**
    * provider 선호(강제 아님 — 키 없으면 평소 폴백). 녹음 분석은 구조화 추출 품질을 위해
-   * `"anthropic"`(Claude)을 우선한다. 미설정 시 tier/AI_PROVIDER 기본(보통 Upstage Solar).
+   * `"anthropic"`(Claude)을 우선한다. 미설정 시 tier/AI_PROVIDER 기본(미설정이면 Claude).
    */
   provider?: AiProvider;
   /** 생성 temperature(0~1). 미설정 시 provider 기본. 멘트=0.3(사실 서술 일관성, edutrix Solar 후보정 이식). */
   temperature?: number;
   /**
-   * Upstage(Solar) reasoning_effort. 멘트="minimal" — 안 하면 추론 과정이 본문에 섞임(edutrix 후보정).
-   * Anthropic엔 무시(extended thinking 미사용). 도메인별 opt-in(전역 기본 미변경).
+   * 생각 깊이(이름은 예전 Solar `reasoning_effort` 표기 그대로 · 멘트="minimal"). Claude 5 계열에만 `output_config.effort`로
+   * 전한다(minimal → low, ANTHROPIC_EFFORT). DeepSeek·그 밖의 Anthropic 모델엔 보내지 않는다.
    */
   reasoningEffort?: "minimal" | "low" | "medium" | "high";
   /**
@@ -180,8 +201,8 @@ export async function recordUsage(entry: {
 }
 
 /**
- * 모든 AI(JSON) 호출의 단일 진입점. `resolveModel`로 provider(기본 Solar Pro 3, env로 Claude 롤백)를
- * 고르고 → Upstage(OpenAI 호환, JSON mode) 또는 Anthropic을 호출 → 응답 텍스트를 `parseJsonLoose<T>`.
+ * 모든 AI(JSON) 호출의 단일 진입점. `resolveModelChain`으로 provider(Claude · DeepSeek)를
+ * 고르고 → DeepSeek(OpenAI 호환, JSON mode) 또는 Anthropic을 호출 → 응답 텍스트를 `parseJsonLoose<T>`.
  * 실패 시 throw — 호출부의 기존 stub/error 폴백을 그대로 유지한다.
  *
  * @returns `data`(파싱된 T) + `model`(실제 사용 모델 id — model_version 문자열 재료).
@@ -192,17 +213,16 @@ export async function recordUsage(entry: {
  * (silent provider 폴백은 의도적으로 안 함 — 키가 무효면 표면에 드러나야 한다.)
  */
 function rethrowAi(provider: AiProvider, err: unknown): never {
-  const label =
-    provider === "upstage"
-      ? "Upstage(Solar)"
-      : provider === "deepseek"
-        ? "DeepSeek"
-        : "Anthropic(Claude)";
+  const label = provider === "deepseek" ? "DeepSeek" : "Anthropic(Claude)";
   const status =
     typeof err === "object" && err !== null && "status" in err
       ? Number((err as { status?: unknown }).status)
       : undefined;
   const raw = err instanceof Error ? err.message : String(err);
+  // 안전 거절이 마지막 후보에서 나면 영문 원문("refusal: general_harms")이 화면에 뜨지 않게 할 일을 한글로(원문 노출 금지).
+  if (err instanceof AnthropicRefusalError) {
+    throw new Error("AI가 이 내용으로는 글을 쓰지 않았습니다. 입력한 내용을 확인해 다시 시도하거나 직접 작성해 주세요.");
+  }
   // 🔴 잔액 소진을 **가장 먼저** 판정한다 — 키 오류·429보다 구체적이고, 조치가 다르다(갱신·대기가 아니라 **충전**).
   //    여기까지 왔다는 건 폴백 사다리의 provider가 전부 막혔다는 뜻이라, 원문 영문 대신 할 일을 한글로 말한다.
   if (isCreditExhaustedError(err)) {
@@ -262,10 +282,21 @@ export function isCreditExhaustedError(err: unknown): boolean {
 
 /** 다른 provider로 폴백할 가치가 있는 오류인가 — 인증(401/403)·한도(429)·**잔액 소진**, 또는 키 무효 메시지. */
 export function isRetryableProviderError(err: unknown): boolean {
+  if (err instanceof AnthropicRefusalError) return true;
   const status = providerErrorStatus(err);
   if (status === 401 || status === 403 || status === 429) return true;
   if (isCreditExhaustedError(err)) return true;
   return /invalid.*api key|unauthorized|api key/i.test(providerErrorText(err));
+}
+
+/**
+ * 그 모델 이름이 없다는 오류인가 — 기능에 고정한 모델(`featurePin`)의 이름이 바뀌거나 거둬졌을 때(2026-10-19).
+ * DeepSeek = 400 "Model Not Exist" · Anthropic = 404 not_found_error "model: …" · OpenAI 호환 = 404 `model_not_found`.
+ */
+export function isModelNotFoundError(err: unknown): boolean {
+  const text = providerErrorText(err);
+  if (providerErrorStatus(err) === 404 && /model/i.test(text)) return true;
+  return /model.{0,40}(not[\s_-]*exists?|not[\s_-]*found)|model_not_found|unknown model|invalid model/i.test(text);
 }
 
 /**
@@ -280,7 +311,34 @@ export function isTemperatureDeprecatedError(err: unknown): boolean {
       : typeof err === "object" && err !== null && "message" in err
         ? String((err as { message?: unknown }).message ?? "")
         : String(err);
-  return /temperature[\s\S]*deprecated/i.test(raw);
+  return /temperature[\s\S]*(deprecated|not supported|must be|only)/i.test(raw);
+}
+
+/**
+ * Claude 5 계열(Opus·Sonnet·Haiku 5·5.5, Fable, Mythos)인가 — 이 계열은 ① 기본값이 아닌 temperature가 400(Haiku 5.5는 문구도
+ * 달라 위 재시도가 못 알아볼 수 있다 — 아예 안 보낸다) ② 생각(thinking)이 기본으로 켜져 그 토큰도 `max_tokens`에 든다.
+ * 🔴 2026-10-16 Haiku 5.5 전환 실측(구독 비교 9건 · effort low): 출력 740~2,000토큰 — 멘트 상한 1,000이면 절반이 답 전에 잘린다
+ *    (그래서 이 계열은 상한을 바닥 `OUTPUT_TOKEN_FLOOR`로 올려 보낸다).
+ */
+export function isClaude5Model(model: string): boolean {
+  return /^claude-(?:opus|sonnet|haiku)-5(?:-|$)|^claude-(?:fable|mythos)-/.test(model);
+}
+/** 호출부의 reasoningEffort(예전 Solar 표기) → Anthropic effort. 'minimal'은 Anthropic에 없어 low. */
+const ANTHROPIC_EFFORT: Record<NonNullable<GenerateJSONOptions["reasoningEffort"]>, "low" | "medium" | "high"> = {
+  minimal: "low",
+  low: "low",
+  medium: "medium",
+  high: "high",
+};
+
+/** Anthropic 안전 분류기 거절(`stop_reason: "refusal"`) — Haiku 5.5엔 서버 쪽 대체 모델이 없어 다음 provider로 넘긴다. */
+export class AnthropicRefusalError extends Error {
+  constructor(
+    readonly category: string | null,
+    readonly usage: { inputTokens: number | null; outputTokens: number | null } | null = null,
+  ) {
+    super(`Anthropic 안전 거절(refusal${category ? `: ${category}` : ""})`);
+  }
 }
 
 /** provider별 1회 호출 — 응답 텍스트+usage 반환(throw는 generateJSON 루프가 처리). */
@@ -291,31 +349,6 @@ async function callProvider(
   group: AiKeyGroup | null,
   opts: GenerateJSONOptions,
 ): Promise<ProviderCall> {
-  if (provider === "upstage") {
-    const client = getUpstage(keyName, group);
-    // 변수(리터럴 아님)로 만들어 reasoning_effort(Upstage 확장 파라미터, 표준 타입 밖)를 부착 —
-    // 리터럴 직접 전달 시 excess-property 검사에 걸리므로 base 변수로 우회. non-stream 오버로드(res.choices) 유지.
-    const base = {
-      model,
-      max_tokens: opts.maxTokens,
-      // JSON mode — 프롬프트에 "JSON" 단어가 있어야 함(현 호출부 전부 "JSON만 출력" 포함).
-      response_format: { type: "json_object" as const },
-      ...(opts.temperature != null ? { temperature: opts.temperature } : {}),
-      ...(opts.reasoningEffort ? { reasoning_effort: opts.reasoningEffort } : {}),
-      messages: [
-        ...(opts.system ? [{ role: "system" as const, content: opts.system }] : []),
-        { role: "user" as const, content: opts.prompt },
-      ],
-    };
-    const res = await client.chat.completions.create(base);
-    return {
-      text: res.choices[0]?.message?.content ?? "",
-      usage: res.usage
-        ? { inputTokens: res.usage.prompt_tokens ?? null, outputTokens: res.usage.completion_tokens ?? null }
-        : null,
-      truncated: res.choices[0]?.finish_reason === "length",
-    };
-  }
   if (provider === "deepseek") {
     const client = getDeepseek(keyName, group);
     // DeepSeek도 OpenAI 호환 — JSON mode 사용(프롬프트에 "JSON" 단어 필수, 현 호출부 충족). reasoning_effort는
@@ -323,11 +356,10 @@ async function callProvider(
     // 분리하므로 content 우선 + 비면 reasoning_content 폴백(빈 문자열이면 parseJsonLoose가 표면화).
     // ⚠️ **reasoning_content가 max_tokens를 함께 소모**한다(2026-07-16 실측: 등록상담 프롬프트에서 추론만
     // ~8k tok → 호출부 8192면 답변 JSON이 truncate돼 finish_reason=length → 파싱 실패 → 재분석 실패).
-    // 그래서 추론+답변이 모두 들어가도록 여유 floor(DEEPSEEK_MIN_MAX_TOKENS)를 준다. max_tokens는 상한일 뿐
-    // 실사용 토큰만 과금되므로(원장 지침) 넉넉히 둬도 비용 영향 없음(관측 실사용 ~5k~14k tok, v4-pro가 32000 수용).
+    // 그래서 추론+답변이 모두 들어가도록 바닥(OUTPUT_TOKEN_FLOOR)으로 올려 보낸다 — 상한일 뿐 쓴 만큼만 과금된다.
     const res = await client.chat.completions.create({
       model,
-      max_tokens: Math.max(opts.maxTokens, DEEPSEEK_MIN_MAX_TOKENS),
+      max_tokens: sentMaxTokens("deepseek", model, opts.maxTokens, opts.meta?.feature),
       response_format: { type: "json_object" as const },
       ...(opts.temperature != null ? { temperature: opts.temperature } : {}),
       messages: [
@@ -361,15 +393,18 @@ async function callProvider(
         { type: "text" as const, text: opts.prompt },
       ] satisfies Anthropic.ContentBlockParam[])
     : opts.prompt;
+  const claude5 = isClaude5Model(model);
   const anthropicParams = (withTemperature: boolean) => ({
     model,
-    max_tokens: opts.maxTokens,
-    ...(withTemperature && opts.temperature != null ? { temperature: opts.temperature } : {}),
+    max_tokens: sentMaxTokens("anthropic", model, opts.maxTokens, opts.meta?.feature),
+    // Claude 5 계열엔 temperature를 아예 안 보낸다(400 → 재시도 왕복을 없앤다). 그 밖은 호출부 값(멘트 0.3 등) 유지.
+    ...(withTemperature && !claude5 && opts.temperature != null ? { temperature: opts.temperature } : {}),
+    // 생각 깊이 — 호출부가 정한 때만(멘트 'minimal' → low). 안 정하면 모델 기본(Haiku 5.5 = medium).
+    ...(claude5 && opts.reasoningEffort ? { output_config: { effort: ANTHROPIC_EFFORT[opts.reasoningEffort] } } : {}),
     ...(opts.system ? { system: opts.system } : {}),
     messages: [{ role: "user" as const, content: userContent }],
   });
-  // Claude 5 계열은 temperature가 deprecated(400) — 호출부의 temperature 지정(멘트 0.3 등)은
-  // 지원 모델(Haiku 4.5 등)에선 유지하고, 거부하는 모델에서만 떼고 1회 재시도(자가 회복).
+  // Claude 5 계열엔 처음부터 temperature를 안 보낸다(위). 그 밖의 모델이 거부하면(문구 판정) 떼고 1회 재시도(자가 회복).
   const res = await client.messages.create(anthropicParams(true)).catch((e: unknown) => {
     if (opts.temperature == null || !isTemperatureDeprecatedError(e)) throw e;
     reportWarning("Anthropic temperature deprecated — 파라미터 제거 후 재시도", {
@@ -378,6 +413,12 @@ async function callProvider(
     });
     return client.messages.create(anthropicParams(false));
   });
+  if (res.stop_reason === "refusal") {
+    const details = (res as { stop_details?: { category?: string | null } | null }).stop_details;
+    // 거절도 입력 토큰은 쓴다 — 사용량 기록이 빠지지 않게 오류에 싣는다(generateJSON 루프가 기록).
+    const usage = res.usage ? { inputTokens: res.usage.input_tokens ?? null, outputTokens: res.usage.output_tokens ?? null } : null;
+    throw new AnthropicRefusalError(details?.category ?? null, usage);
+  }
   // content[0]만 보지 말고 모든 text 블록을 이어붙인다 — thinking 등 비-text 블록이 앞설 수 있어
   // 첫 블록만 읽으면 빈 문자열이 되는 모델(Sonnet 5 등)에서 파싱 실패("no json")가 난다.
   return {
@@ -405,6 +446,21 @@ async function requireAiLicense(meta: GenerateJSONOptions["meta"]): Promise<void
   if (!tenantId) throw new Error(AI_TENANT_MISSING_MESSAGE);
   const { isFeatureLicensed } = await import("@/lib/license/server");
   if (!(await isFeatureLicensed(tenantId, "ai_analysis"))) throw new Error(LICENSE_BLOCKED_MESSAGE.ai_analysis);
+}
+
+/**
+ * 지점이 운영 콘솔에서 이 기능에 고른 모델(없으면 null). 서버 전용 모듈이라 **부르는 순간에** 싣는다 — generate.ts는
+ * vitest가 직접 import하는 파일이다(라이선스 조회와 같은 이유). 싣지 못하거나 조회가 실패하면 고른 것이 없는 것으로 둔다.
+ */
+async function tenantChoiceFor(meta: GenerateJSONOptions["meta"]): Promise<string | null> {
+  const tenantId = typeof meta?.tenantId === "string" ? meta.tenantId.trim() : "";
+  if (!tenantId || !meta?.feature) return null;
+  try {
+    const { tenantModelChoice } = await import("./tenant-models");
+    return await tenantModelChoice(tenantId, meta.feature);
+  } catch {
+    return null;
+  }
 }
 
 /** Decision mode uses the same license, fact guard, feature key groups and usage ledger. */
@@ -445,15 +501,23 @@ export async function generateJSON(rawOpts: GenerateJSONOptions | GenerateDecisi
   //    🔴 지점을 모르는 호출은 **거절한다**(fail-closed) — 통과시키면 꺼진 지점의 AI가 그 틈으로 나간다(원장 "빈틈 매꿀것").
   //       타입이 `meta.tenantId: string` 필수라 정상 코드는 여기 오지 않는다 — any·빈 문자열 같은 뒷문만 막는다.
   //    막히면 폴백 사다리를 타지 않고 바로 던진다(다른 회사로 넘긴다고 풀릴 문제가 아니다).
+  //    지점 모델 선택 조회(운영 콘솔 'AI 모델')는 라이선스 조회와 서로 독립이라 먼저 띄워 함께 돈다(B4) — 이 조회는
+  //    실패를 던지지 않는다(못 읽으면 null). 라이선스 문은 두 갈래 모두 그 함수를 직접 기다리는 꼴 그대로(가드 tenant-view-wiring이 센다).
+  //    문서(PDF) 입력은 고정하지 않는다.
+  const tenantChoicePending = opts.document ? Promise.resolve(null) : tenantChoiceFor(opts.meta);
   await requireAiLicense(opts.meta);
+  const tenantChoice = await tenantChoicePending;
   const tier = opts.tier ?? "balanced";
   const keyName = opts.keyName ?? "default";
   // 기능별 키 그룹(원장 2026-09-15) — 호출부 식별자에서 도출. 표에 없는 기능이면 null(옛 버킷·기본 키로).
   const group = keyGroupOf(opts.meta?.feature);
   const keyLabel = (p: AiProvider) => keyLabelOf(p, resolveKeyEnv(p, keyName, group));
-  const chain = resolveModelChain(tier, keyName, opts.provider, group);
+  // 모델 고정 — 지점 선택(운영 콘솔 'AI 모델', 0375a) > 코드 기본(`FEATURE_MODELS`) > 호출부 tier·provider(원장 2026-10-19).
+  // 고정한 회사가 키·잔액으로 막히면 아래 루프가 평소 사다리로 넘어간다. 문서(PDF) 입력은 Anthropic 전용이라 고정하지 않는다.
+  const pin = opts.document ? null : featurePin(opts.meta?.feature, tenantChoice);
+  const chain = resolveModelChain(tier, keyName, opts.provider, group, pin);
   // 키가 하나도 없으면 기존 동작 보존: 모델 있는 첫 candidate로 시도(클라 생성 시 키 없음 throw → rethrowAi).
-  let candidates = chain.length > 0 ? chain : [resolveModel(tier, keyName, opts.provider, group)];
+  let candidates = chain.length > 0 ? chain : [resolveModel(tier, keyName, opts.provider, group, pin)];
   if (opts.document) {
     // 문서(PDF) 입력은 Anthropic만 받는다 — 다른 provider로 폴백하면 첨부가 조용히 사라진 채
     // "본문 없음" 응답이 나와 원인을 못 찾는다. 후보를 한정하고, 없으면 키 문제를 그대로 말한다.
@@ -479,8 +543,16 @@ export async function generateJSON(rawOpts: GenerateJSONOptions | GenerateDecisi
         model,
         keyName: keyLabel(provider),
         ok: false,
+        ...(e instanceof AnthropicRefusalError && e.usage ? { usage: e.usage } : {}),
         error: e instanceof Error ? e.message.slice(0, 500) : String(e).slice(0, 500),
       });
+      // 고정한 모델 이름이 없으면(이름 변경·거둠) 같은 회사의 티어 모델로 한 번 더 — 고정 전의 동작으로 돌아간다.
+      const tierModel = AI_MODELS[tier][provider];
+      if (pin && model === pin.model && tierModel && tierModel !== model && isModelNotFoundError(e)) {
+        reportWarning(`AI 고정 모델 없음 → 같은 회사 기본 모델로`, { scope: "generateJSON.pin-missing", provider, model, fallback: tierModel });
+        candidates.splice(i + 1, 0, { provider, model: tierModel, keyName });
+        continue;
+      }
       // 인증/한도 오류 + 다음 후보가 있으면 다른 provider로 폴백(B1: 무효·만료 키도 자동 회복).
       // 그 외(400·5xx) 또는 마지막 후보면 즉시 한글화해 표면화.
       if (i < candidates.length - 1 && isRetryableProviderError(e)) {
@@ -505,9 +577,9 @@ export async function generateJSON(rawOpts: GenerateJSONOptions | GenerateDecisi
       // 잘린 응답의 파싱 실패는 "모델이 이상한 걸 뱉었다"가 아니라 "한도가 모자랐다"이다 —
       // 원인을 라우트·화면 오류 문구까지 그대로 들고 가야 max_tokens를 올릴 생각을 한다.
       if (call.truncated) {
-        throw new Error(
-          `AI 응답이 최대 길이(${opts.maxTokens} 토큰)에서 잘려 해석하지 못했습니다. 응답 한도를 늘리거나 요청을 줄여 주세요.`,
-        );
+        // 실제로 보낸 상한을 말한다 — 호출부 값이 아니라 바닥으로 올린 값(sentMaxTokens).
+        const sent = sentMaxTokens(provider, model, opts.maxTokens, opts.meta?.feature);
+        throw new Error(`AI 응답이 최대 길이(${sent} 토큰)에서 잘려 해석하지 못했습니다. 응답 한도를 늘리거나 요청을 줄여 주세요.`);
       }
       throw e;
     }

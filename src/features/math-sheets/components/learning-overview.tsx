@@ -32,7 +32,9 @@ import {
 } from "../font-size";
 import { setMyMcsFontSize } from "../server/actions";
 import styles from "./learning-overview.module.css";
-import { LearningRails } from "./learning-rails";
+import { ClassTextbookBar, StudentTextbookChip } from "./math-textbook-assign";
+import { BookWindowBar } from "./book-window-bar";
+import { StudentPlanCard } from "./student-plan-card";
 import { MATH_LEARNING_CADENCE, type MathLearningTrack } from "@/features/progress/learning-cadence";
 import { learningBlocks } from "../lib/learning-plan";
 import { courseRangeLabel } from "../lib/learning-path";
@@ -132,16 +134,14 @@ export function LearningOverview({
     window.addEventListener("popstate", onBack);
     return () => window.removeEventListener("popstate", onBack);
   }, []);
-  const { summaries, scaleLessons } = useMemo(() => {
+  const { summaries } = useMemo(() => {
     const summaries: Record<string, LearningRailMetrics> = {};
-    let scaleLessons = 1;
     for (const [id, goal] of Object.entries(learning.goals)) {
       const progress = learning.progress[id];
       const topics = learningTopicTicks(goal, progress);
-      scaleLessons = Math.max(scaleLessons, topics.length);
       if (progress) summaries[id] = learningRailMetrics(goal, progress, topics);
     }
-    return { summaries, scaleLessons };
+    return { summaries };
   }, [learning.goals, learning.progress]);
   const matches = (student: MathStudentRow, kind: Filter) => {
     const progress = summaries[student.studentId];
@@ -304,6 +304,7 @@ export function LearningOverview({
               )}
               <span className={styles.autoBadge}>월·주·일 자동 배분</span>
             </div>
+            <ClassTextbookBar />
             <div className={styles.filters}>
               <div>
                 {(
@@ -341,105 +342,18 @@ export function LearningOverview({
                 />
               </label>
             </div>
-            <div className={styles.tableScroll}>
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <th>학생</th>
-                    <th>전체 학습 구간 · 기준일 계획과 비교</th>
-                    <th>전체 진도율</th>
-                    <th>계획 대비</th>
-                    <th>목표까지 남은 진도</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {shown.map((s) => {
-                    const progress = learning.progress[s.studentId],
-                      goal = learning.goals[s.studentId];
-                    const summary = summaries[s.studentId];
-                    const remainingLessons = summary?.percent == null || summary.current == null
-                      ? null
-                      : Math.max(0, summary.total - summary.current);
-                    return (
-                      <tr
-                        key={s.studentId}
-                        className={
-                          s.rosterPhase === "ended" ? styles.ended : undefined
-                        }
-                        onClick={() => selectStudent(s.studentId)}
-                      >
-                        <td>
-                          <button
-                            className={styles.studentName}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              selectStudent(s.studentId);
-                            }}
-                          >
-                            {s.name}
-                          </button>
-                          <p className={styles.meta}>
-                            {s.school} {s.grade}
-                          </p>
-                        </td>
-                        <td>
-                          <div className={styles.course}>
-                            <strong>
-                              {(goal ? courseRangeLabel(goal) : undefined) ??
-                                s.rail?.nowGrade ??
-                                "현재 수업"}
-                            </strong>
-                            <span>
-                              {goal ? `전체 목표 · ${learningBlockLabel(goal.endBlock, goal.endStudyGrade ?? goal.studyGrade)}` : "전체 목표 미설정"}
-                            </span>
-                          </div>
-                          <LearningRails progress={progress} goal={goal} scaleLessons={scaleLessons} recentRecord={learning.records[s.studentId]?.[0]}
-                            onEditGoal={editable && !trackPending && goal?.blockCount ? goalNumber => setRevisionEditor({ studentId: s.studentId, goalNumber }) : undefined} />
-                        </td>
-                        <td>
-                          <strong className={styles.rate}>
-                            {summary?.percent == null ? (
-                              "—"
-                            ) : (
-                              <>
-                                {summary.percent}
-                                <small>%</small>
-                              </>
-                            )}
-                          </strong>
-                          <p className={styles.meta}>
-                            {summary?.current == null
-                              ? goal
-                                ? "진도 확인 필요"
-                                : "전체 목표 미설정"
-                              : `${summary.current} / ${summary.total}차시`}
-                          </p>
-                        </td>
-                        <td>
-                          <Status student={s} progress={summary} />
-                          <p className={styles.meta}>
-                            {summary
-                              ? summary.targetBeforeRail ? "기준일 계획 · 첫 기록보다 앞" : `${goal.revision && (progress?.referenceDate ?? data.today) < goal.revision.effectiveDate ? "수정 전 " : ""}기준일 계획 ${summary.target}차시`
-                              : "학생을 눌러 목표 설정"}
-                          </p>
-                        </td>
-                        <td>
-                          <strong className={styles.remainingLessons}>
-                            {remainingLessons == null
-                              ? "—"
-                              : `${remainingLessons}차시`}
-                          </strong>
-                          <p className={styles.meta}>
-                            {summary
-                              ? `남은 수업 ${summary.remainingDays}회`
-                              : "전체 목표 미설정"}
-                          </p>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            {/* 학생 계획 카드(원장 2026-10-20 카드 시안) — 전체 목표 / 교재 3개월 / 오늘 기준. */}
+            <div className={styles.cardList}>
+              {shown.map((s) => (
+                <StudentPlanCard
+                  key={s.studentId}
+                  student={s}
+                  goal={learning.goals[s.studentId]}
+                  progress={learning.progress[s.studentId]}
+                  summary={summaries[s.studentId]}
+                  onOpen={() => selectStudent(s.studentId)}
+                />
+              ))}
               {shown.length === 0 ? (
                 <p className={styles.empty}>
                   표시할 학생이 없습니다. 검색어와 필터를 확인해 주세요.
@@ -562,7 +476,9 @@ function StudentFocus({
         <p className={styles.meta}>
           {student.school} {student.grade}
           {goal?.textbook ? ` · ${goal.textbook}` : ""}
-        </p></> : null}
+        </p>
+        <StudentTextbookChip studentId={student.studentId} studentName={student.name} />
+        <BookWindowBar studentId={student.studentId} /></> : null}
         {goal && progress ? (
           <>
             <StudentLearningMap

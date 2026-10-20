@@ -12,7 +12,7 @@ async function createBroker({module,lease,api,isDraining,onCycle,onEvent}) {
       const body=JSON.parse(Buffer.concat(chunks).toString('utf8'));let result;
       inflight++;
       try {
-        if(req.url==='/state'){onCycle();result={drain:isDraining()};}
+        if(req.url==='/state'){onCycle(body);result={drain:isDraining()};}
         else if(req.url==='/lease-check'){result={generation:lease.generation,remainingMs:Math.max(0,lease.deadline-lease.now())};}
         else if(req.url==='/schedule'){result=await api.call('schedule',{...body,...lease.envelope(module)});}
         else if(req.url==='/event'){onEvent(body);result={ok:true};}

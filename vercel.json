@@ -10,8 +10,16 @@
       "schedule": "*/30 * * * *"
     },
     {
+      "path": "/api/cron/staff-tasks",
+      "schedule": "*/30 * * * *"
+    },
+    {
       "path": "/api/cron/todays-math-sync",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/todays-math-results",
+      "schedule": "7 * * * *"
     },
     {
       "path": "/api/cron/demo-refresh",

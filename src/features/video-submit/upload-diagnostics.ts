@@ -1,3 +1,5 @@
+import { HOMEWORK_VIDEO_MAX_BYTES } from "@/features/students/homework-video-limits";
+
 /** Browser observations only. None of these values establish a completed submission. */
 export const UPLOAD_EVENT_KINDS = ["started", "progress", "retry", "failed", "transferred", "confirming", "confirm_retry", "confirm_failed", "confirmed", "hidden", "visible", "page_left", "offline", "online", "stalled"] as const;
 export const UPLOAD_FAILURE_REASONS = ["network", "timeout", "aborted", "session_gone", "server_rejected", "server_busy", "server_error", "no_progress", "retry_limit", "confirm_pending", "confirm_error", "confirm_unavailable", "confirm_invalid", "unknown"] as const;
@@ -38,7 +40,8 @@ export function parseUploadEvent(value: unknown): UploadEvent | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const v = value as Record<string, unknown>;
   if (!UPLOAD_EVENT_KINDS.includes(v.kind as UploadEvent["kind"]) || !integer(v.sequence, 1_000_000) || v.sequence === 0 || !integer(v.elapsedMs, 172_800_000)
-    || !integer(v.sentBytes, 1_073_741_824) || !integer(v.attempt, 100) || !(v.httpStatus === null || integer(v.httpStatus, 599))
+    // 보낸 양의 상한 = 영상 한도 그 값(2026-10-16 2GB) — 숫자를 따로 적으면 한도를 올린 구간의 실패 기록·선생님 알림이 거절된다.
+    || !integer(v.sentBytes, HOMEWORK_VIDEO_MAX_BYTES) || !integer(v.attempt, 100) || !(v.httpStatus === null || integer(v.httpStatus, 599))
     || !(v.reason === null || UPLOAD_FAILURE_REASONS.includes(v.reason as UploadFailureReason))
     || !["transfer", "confirm"].includes(String(v.phase)) || typeof v.online !== "boolean" || !["visible", "hidden"].includes(String(v.visibility))
     || !["kakaotalk", "edge", "chrome", "safari", "samsung", "other"].includes(String(v.browser))) return null;

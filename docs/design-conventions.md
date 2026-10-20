@@ -55,6 +55,11 @@ sm = 본문·목록 1차 라벨·컨트롤 / base = 강조 본문·섹션 제목
   `--muted-foreground`…)은 소비처가 수백 곳이라 **남기고 값만 같게** 뒀다 — 회색을 되살리려면 globals.css 그 줄만 고친다.
   🔴 **글자 얘기다** — 테두리(`--line*`)·배경(`--bg-soft`·`--muted`·`--secondary`)의 회색은 그대로다(같이 바꾸면 화면이
   새까매진다). 🔴 종이 서식(`(print)` 라우트)의 `text-gray-*`도 그대로 — 지면 위계라 화면 규칙 밖이다.
+- **예외 하나 = 플레이스홀더는 연한 회색 `--text-placeholder`**(원장 2026-10-16 *"플레이스홀더는 완전히 연하게"*) — 값과
+  같은 색이면 예시를 입력된 값으로 읽는다(보호자 성함 '김영희'). 색은 globals.css 레이어 밖 `::placeholder` 한 곳이 정하니
+  새 입력칸에 `placeholder:text-*` 클래스를 달 필요 없다. 글자로 그리는 placeholder(`searchable-select` 빈 값 · `select`의
+  `data-placeholder`)는 `::placeholder`가 아니니 `text-text-placeholder` 유틸을 단다. 플레이스홀더는 **뭘 적어야 할지 모르는 칸에만** 둔다 — 라벨
+  되풀이·예시 이름/번호(`김영희`·`010-0000-0000`)는 금지.
 - 라운드: `--radius-xl/2xl/3xl` 전부 **12px**(모서리는 8~12px까지 — 알약형·큰 라운드 남발 금지). `rounded-full`은
   본문 배지에만 남는다(컨트롤엔 금지 — 툴바 캐논 그대로).
 
@@ -161,9 +166,10 @@ sm = 본문·목록 1차 라벨·컨트롤 / base = 강조 본문·섹션 제목
   · ⚠️ `overflow-x: auto`(scroll이면 가짜 스크롤바 — gotcha #87) · ⚠️ 스크롤 컨테이너는 자식을 클리핑하므로
   **레일 안 팝오버·다이얼로그는 반드시 Portal**(base-ui `Popover.Portal`) · 그룹 경계는 구분선이 진다
   (레일에선 감기지 않으니 구분선을 지우지 말 것 — 라벨을 감춘 상태에서 지우면 칩이 한 덩어리로 읽힌다).
-- **판정 조건은 한 곳**: `compact-chrome`/`.toolbar-rail`의 미디어쿼리 = 데스크톱(`min-width:1024px and
-  pointer:fine`)의 여집합. 바꾸려면 [use-is-desktop.ts](../src/components/workspace/use-is-desktop.tsx)와
-  layout의 `lg:pointer-fine:`을 **함께** 고칠 것(와이드 터치 태블릿이 갈라지면 크롬만 바뀌고 헤더는 안 접힌다).
+- **판정 조건은 한 곳**: `compact-chrome`/`.toolbar-rail`의 미디어쿼리 = 데스크톱(`min-width:1240px and
+  any-pointer:fine`)의 여집합(`(max-width: 1239.98px), not all and (any-pointer: fine)` — 같은 글자를 쓰는 곳 전부는 가드 `desktop-breakpoint.test.ts`가 대조한다). 바꾸려면 [use-is-desktop.ts](../src/components/workspace/use-is-desktop.ts)와
+  layout의 `desk:`을 **함께** 고칠 것(와이드 터치 태블릿이 갈라지면 크롬만 바뀌고 헤더는 안 접힌다 · 가드 `desktop-breakpoint.test.ts`).
+  🔴 '마우스'는 **`any-pointer`**(하나라도) — 주 입력만 보는 `pointer`는 터치스크린 PC를 모바일로 보낸다. 손 기기에서 감추는 버튼은 `no-mouse:`. 브라우저가 '마우스 없음'으로 고정하는 기기는 실제 움직임으로(`data-desk` · desk-detect.ts) — **새 모바일 절을 만들면 선택자마다 `:where(:root:not([data-desk]), :root[data-print])`를 붙일 것**(인쇄 중엔 종전대로 걸리게 · 가드가 다섯 곳을 대조한다).
 - ⚠️ **JS로 마커를 붙이지 말 것** — 첫 페인트에 풀 헤더가 떴다가 접히는 CLS가 매 페이지 발생한다. 순수 CSS.
 > 한 줄 규칙: 좁은 화면에선 제목을 크롬 한 줄이 갖고 본문 헤더는 접는다. 칩 툴바는 감지 말고 `.toolbar-rail`로 눕혀라.
 

@@ -93,6 +93,9 @@ export function ComposeFace({
   // 자동작성이 본문 칸에 마지막으로 넣은 텍스트(0214a 스냅샷) — 저장 시 body와 비교해 작성 방식 판정.
   const [autoBody, setAutoBody] = useState("");
   const [trend, setTrend] = useState("");
+  // 자동작성이 추세 칸에 마지막으로 넣은 글 — '달라진 것 없음'이면 칸이 이 글 그대로일 때만 비운다(손으로 쓴 추세는 지킨다).
+  //   로컬 초안에도 실어 복원 뒤에도 가른다(재리뷰 2026-10-16).
+  const [autoTrend, setAutoTrend] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirmSend, setConfirmSend] = useState(false);
@@ -145,9 +148,9 @@ export function ComposeFace({
     () => ({
       studentId,
       studentName: ctx?.student.name ?? "",
-      reportDate, progress, textbook, makeup, dScore, dMax, cScore, cMax, attitude, homework, homeworkToday, note, body, autoBody, trend,
+      reportDate, progress, textbook, makeup, dScore, dMax, cScore, cMax, attitude, homework, homeworkToday, note, body, autoBody, trend, autoTrend,
     }),
-    [studentId, ctx, reportDate, progress, textbook, makeup, dScore, dMax, cScore, cMax, attitude, homework, homeworkToday, note, body, autoBody, trend],
+    [studentId, ctx, reportDate, progress, textbook, makeup, dScore, dMax, cScore, cMax, attitude, homework, homeworkToday, note, body, autoBody, trend, autoTrend],
   );
   const localDraft = useStateDraft({
     scope: "report-compose",
@@ -183,6 +186,7 @@ export function ComposeFace({
     setBody(d.body);
     setAutoBody(d.autoBody);
     setTrend(d.trend);
+    setAutoTrend(d.autoTrend ?? "");
   }
 
   const studentOptions: ComboOption[] = students.map((s) => ({
@@ -239,15 +243,19 @@ export function ComposeFace({
     if (!Number.isFinite(n) || !Number.isFinite(m) || !max.trim()) return `${max.trim() || "?"}문제 중 ${score.trim()}개 맞음`;
     return formatTestScore(n, m);
   }
-  function buildInput(): AdminSaveReportInput {
-    const dailyTest = testStr(dScore, dMax);
-    const checkTest = testStr(cScore, cMax);
-    const examInfo = [
+  // 저장되는 시험 칸(exam_info) 표기 — 추세 재료도 이 표기여야 한다(이력과 만점 묶음을 맞춘다, trend-comment.ts scaleKey).
+  function examInfoStr(): string {
+    return [
       dScore.trim() && dMax.trim() ? `일일 ${dScore.trim()}/${dMax.trim()}` : "",
       cScore.trim() && cMax.trim() ? `확인 ${cScore.trim()}/${cMax.trim()}` : "",
     ]
       .filter(Boolean)
       .join(", ");
+  }
+  function buildInput(): AdminSaveReportInput {
+    const dailyTest = testStr(dScore, dMax);
+    const checkTest = testStr(cScore, cMax);
+    const examInfo = examInfoStr();
     return {
       studentId,
       reportDate, // 보고서 날짜(빈값 없음 — 기본 오늘) — 서버가 미래는 오늘로 클램프
@@ -291,9 +299,12 @@ export function ComposeFace({
       {
         studentId,
         subject,
-        todayExamInfo: input.dailyTest,
+        todayExamInfo: examInfoStr(), // 저장 표기("일일 4/5") — 화면 문장 표기를 넘기면 이력과 만점 묶음이 갈린다
         todayHomework: homework,
         date: reportDate, // 보고서 날짜 — 과거 날짜면 추세를 그 날짜 기준으로(이후 채점 이력 있으면 추세 생략)
+        // 반을 모르는 화면 — 저장과 같은 규칙(보강 여부와 무관하게 resolveReportClassId)으로 서버가 반을 정해 시험은 그 반 기록만
+        // (원장 2026-10-15). 정규 수업이 없는 날이면 반을 못 정해 종전대로 둔다.
+        resolveClass: { teacherName: teacherName.trim() || null },
       },
       // 대리작성 — 다른 강사 이름으로 나가는 보고서라 호출자(사무실·겸직 관리자)의 말투 프로파일(0262a)을 붙이지 않는다.
       { teacherStyle: false },
@@ -302,7 +313,12 @@ export function ComposeFace({
     if (res.ok && res.comment) {
       setBody(res.comment);
       setAutoBody(res.comment); // 작성 방식 스냅샷(0214a)
-      if (res.trend) setTrend(res.trend);
+      if (res.trend) {
+        setTrend(res.trend);
+        setAutoTrend(res.trend);
+      } else if (res.trendDropped) setTrend(""); // 만들었지만 검사에 걸려 버렸다 — 예전 초안이 나가지 않게
+      // 달라진 게 없다 — 칸이 지난 자동작성 글 그대로일 때만 비운다(손으로 쓴 추세는 지킨다, 적대적 재리뷰 2026-10-16).
+      else if (res.trendQuiet && trend === autoTrend) setTrend("");
       toast.success("AI가 본문을 작성했습니다 — 검토 후 발송하세요");
     } else {
       // 폴백: 사실 기반 간단 문장(빈 본문 방지). 템플릿도 "자동이 넣은 텍스트"다(0214a 스냅샷 동일 취급).

@@ -24,7 +24,9 @@ export function buildEnrollmentQuery(p: EnrollmentQuery): string {
   if (p.consultant) params.set("consultant", p.consultant);
   if (p.outcome) params.set("outcome", p.outcome);
   if (p.q) params.set("q", p.q);
-  if (p.view !== "kanban") params.set("view", p.view);
+  // 🔴 칸반도 적는다 — 주소에 view가 없으면 서버가 계정에 남은 보기로 연다(view-pref.ts). 빼면 저장이 끝나기 전
+  //    월 이동 같은 다음 클릭이 옛 보기로 돌아간다.
+  params.set("view", p.view);
   // 🔴 page는 일부러 안 넣는다 — 월·필터를 바꾸면 1페이지로 돌아가야 한다(페이지네이션 표준).
   const s = params.toString();
   return s ? `?${s}` : "";

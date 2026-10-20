@@ -95,6 +95,12 @@ export type Subject = {
   note?: string;
   dailyScore?: number | null;
   dailyMax?: number;
+  /**
+   * 오늘 수학 채점 결과로 채웠거나 같은 값인 칸(2026-10-17 · `todays-math-fill-rules.ts`) — 화면의 '오늘 수학' 표식 전용.
+   * 오늘 수학이 준 값을 그대로 들고 있고, 화면은 **지금 칸 값이 이 값과 같을 때만** 표식을 단다(`todaysMathMarked`) —
+   * 선생님이 어느 길(직접 입력 · 일괄 적용 · 복사)로 고치든 표식이 저절로 풀린다. 저장(세션·보고서)엔 싣지 않는다.
+   */
+  todaysMath?: { daily?: { score: number; max: number }; check?: { score: number; max: number } };
   checkScore?: number | null;
   checkMax?: number;
 
@@ -122,6 +128,10 @@ export type Subject = {
   trendDraft?: string;
   // 자동작성이 멘트 칸에 마지막으로 넣은 텍스트(0214a 판정 스냅샷) — 세션에서만 복원(발송본엔 없음).
   autoDraft?: string;
+  /** 자동작성이 추세 칸에 마지막으로 넣은 글(세션에서만 복원) — '달라진 것 없음'이면 칸이 이 글 그대로일 때만 비운다. */
+  trendAutoDraft?: string;
+  /** autoDraft가 AI 원문이 아니다(실패 폴백 템플릿·지난 회차 복사) — 자동작성 원문(0370a)으로 싣지 않는다. */
+  autoDraftTemplate?: boolean;
   /**
    * 영어 템플릿 모드(2026-09-10) — 세션에서 복원한 값. **영어 행에서만** 쓰인다(수학 세션엔 키가 없다).
    * templateId = 고른 템플릿(없으면 기본) · nextTest = 다음 시간 테스트 안내 ·

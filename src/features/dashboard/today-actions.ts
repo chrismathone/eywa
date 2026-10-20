@@ -467,8 +467,8 @@ export function buildTodayActions(
     {
       key: "failed-analysis-enrollment",
       count: raw.failedAnalysis.enrollment,
-      label: "콜&상담 녹음 분석 실패",
-      href: "/enrollment",
+      label: "신규 콜&상담 녹음 분석 실패",
+      href: "/enrollment?view=kanban", // 일하러 가는 링크 = 칸반 고정(저장된 보기가 통계여도 카드가 보이게)
       menuKey: "enrollment",
       requiredAccess: "write",
     },

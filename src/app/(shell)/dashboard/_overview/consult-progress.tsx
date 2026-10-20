@@ -1,7 +1,6 @@
 "use client";
 
 import { createContext, useContext, type ReactNode } from "react";
-import { monthDayLabel } from "@/lib/date-kst";
 import { WindowLink } from "@/components/workspace/window-link";
 import { TONE_SOFT, type SemanticTone } from "@/lib/design/semantic-color";
 import type { BoardStageColor } from "@/features/enrollment/board-stages";
@@ -39,16 +38,13 @@ const TONE: Record<BoardStageColor, SemanticTone> = {
   green: "positive",
 };
 
-function chipText(chip: ProgressChip, shownFirstClassDate?: string): string {
-  // 일정 위에 같은 첫 수업 날짜가 있으면 단계만 표시한다. 입테 등 다른 정보는 그대로 남긴다.
-  if (shownFirstClassDate && chip.detail === `첫 수업 ${monthDayLabel(shownFirstClassDate)}`) return chip.label;
+function chipText(chip: ProgressChip): string {
   return chip.detail ? `${chip.label} · ${chip.detail}` : chip.label;
 }
 
-export function ConsultStageChip({ id, className = "", shownFirstClassDate }: {
+export function ConsultStageChip({ id, className = "" }: {
   id: string | null | undefined;
   className?: string;
-  shownFirstClassDate?: string;
 }) {
   const chips = useContext(ChipContext);
   const chip = id ? chips?.[id] : undefined;
@@ -57,7 +53,7 @@ export function ConsultStageChip({ id, className = "", shownFirstClassDate }: {
     <span
       className={`inline-flex w-fit shrink-0 items-center whitespace-nowrap rounded-full px-2 text-xs leading-5 font-bold ${TONE_SOFT[TONE[chip.color]]} ${className}`}
     >
-      {chipText(chip, shownFirstClassDate)}
+      {chipText(chip)}
     </span>
   );
 }
@@ -89,8 +85,8 @@ function StalledList({ rows, subjects }: { rows: StalledConsult[]; subjects: Rec
           {/* 🔴 WindowLink의 title = 창 제목(영속) — 이름만 싣는다. */}
           <WindowLink
             href={`/enrollment/${row.id}`}
-            title={`${row.name} 콜&상담`}
-            ariaLabel={`${row.name} 콜&상담 상세 · ${row.label}`}
+            title={`${row.name} 신규 콜&상담`}
+            ariaLabel={`${row.name} 신규 콜&상담 상세 · ${row.label}`}
             className={`${s.studentLink} font-bold whitespace-nowrap`}
           >
             {row.name}
@@ -112,9 +108,9 @@ export function ConsultProgressBody({ data, subjects }: { data: ConsultProgressD
   return (
     <div className="space-y-4">
       {counts.received === 0 ? (
-        <p className={s.empty}>최근 30일 콜&amp;상담이 없습니다.</p>
+        <p className={s.empty}>최근 30일 신규 콜&amp;상담이 없습니다.</p>
       ) : (
-        <ol className="flex flex-wrap items-center gap-x-1.5 gap-y-2" aria-label="콜&상담 단계별 인원">
+        <ol className="flex flex-wrap items-center gap-x-1.5 gap-y-2" aria-label="신규 콜&상담 단계별 인원">
           {steps.map((step, i) => (
             <li key={step.key} className="flex items-center gap-1.5">
               {i > 0 && (

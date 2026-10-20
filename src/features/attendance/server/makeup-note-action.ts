@@ -18,6 +18,7 @@
  */
 
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { logAction } from "@/features/audit/server/log";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { kstToday } from "@/lib/date-kst";
@@ -128,6 +129,24 @@ export async function noteMakeupAgainstAbsence(input: {
   const results = await Promise.all(writes);
   const failed = results.find((r) => r.error);
   if (failed?.error) return { error: failed.error.message };
+
+  // 시수까지 고치는 연결(`linkMakeupToAbsence`)과 같은 키 — 이쪽은 메모만 붙였다(`memoOnly`). 붙인 칸이 없으면 남기지 않는다.
+  if (writes.length > 0) {
+    await logAction({
+      action: "attendance_makeup_link",
+      targetType: "attendance",
+      metadata: {
+        studentId,
+        classId: makeupClassId,
+        ...(absentClassId !== makeupClassId ? { absentClassId } : {}),
+        absentDate,
+        makeupDate,
+        memoOnly: true,
+        absenceNoted: !!absentTarget,
+        ...(alreadyLinked ? { alreadyLinked: true } : {}),
+      },
+    });
+  }
 
   // 🔑 "찾았다"와 "이번에 붙였다"를 구분하지 않는다 — 이미 붙어 있던 경우도 연결된 것이 사실이라,
   //    호출부가 "결석 기록이 없다"고 말하면 그게 거짓이 된다.

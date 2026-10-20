@@ -13,7 +13,7 @@ import { OutcomeDonut } from "./_components/outcome-donut";
 import { kstMonth } from "@/lib/date-kst";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 
-export const metadata = { title: "콜&상담 대시보드 — 에이와" };
+export const metadata = { title: "신규 콜&상담 대시보드 — 에이와" };
 
 function currentMonthKey(): string {
   return kstMonth();
@@ -63,10 +63,10 @@ export default async function EnrollmentDashboardPage({
 
   return (
     <div className="space-y-6">
-      <BackLink href="/enrollment" label="콜&상담 칸반으로" />
+      <BackLink href="/enrollment?view=kanban" label="신규 콜&상담 칸반으로" />
 
       <header className="border-border space-y-1 border-b pb-5">
-        <p className="eyebrow">콜&상담 대시보드</p>
+        <p className="eyebrow">신규 콜&상담 대시보드</p>
         <h1 className="font-bold tracking-tight text-foreground text-2xl">사업 인사이트</h1>
         <p className="text-muted-foreground text-sm">월별 상태 분포 · 전환율 추세 · 상담사별 실적</p>
       </header>

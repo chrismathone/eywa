@@ -18,8 +18,11 @@ describe("자동작성이 강사 말투를 읽는다", () => {
     const body = src.slice(start, end);
     expect(body).toContain("loadTeacherMentStyle(");
     expect(body).toContain("mentStyleDirective(");
+    // 조립은 미리보기와 같은 공용 함수(ment-assembly.ts, 2026-10-16) — 운영이 말투·어조를 그 함수에 넘긴다
+    expect(body).toMatch(/mentSections\(\{[\s\S]*styleBlock,[\s\S]*toneBlock,/);
     // 호출 = 모드 A 한 곳 + 모드 B P1·P2 두 곳(정의 `= (body` 는 `withTeacherStyle(`에 안 걸린다)
-    expect(body.match(/withTeacherStyle\(/g)?.length).toBeGreaterThanOrEqual(3);
+    const assembly = read("src/features/onescreen/ment-assembly.ts");
+    expect(assembly.match(/withTeacherStyle\(/g)?.length).toBeGreaterThanOrEqual(3);
     // 프로파일 주인은 화면의 강사(겸직 강사뷰 포함) — 로그인 계정으로만 고르면 겸직이 관리자 계정 프로파일을 찾는다
     expect(body).toContain("effectiveTeacherId()");
     // 스코프가 없으면(관리자 뷰 = 사무실 대리작성) 프로파일을 읽지 않는다 — 다른 강사 이름으로 나가는 보고서에 사무실 말투가 붙지 않게
@@ -32,8 +35,56 @@ describe("자동작성이 강사 말투를 읽는다", () => {
       expect(src, f).toContain("{ teacherStyle: false }");
     }
   });
+  it("학습 추세 섹션엔 어조만 붙인다(mentStyleToneDirective) — 표현까지 붙이면 추세 금지에 걸린다(2026-10-16)", () => {
+    const start = src.indexOf("export async function generateReportComment(");
+    const end = src.indexOf("\nexport async function", start + 1);
+    const body = src.slice(start, end);
+    expect(body).toContain("mentStyleToneDirective(");
+    expect(read("src/features/onescreen/ment-assembly.ts")).toMatch(/type: "trend", field: "trend", body: a\.toneBlock \?/);
+  });
   it("지침 머리가 프롬프트에 실리는 글자 그대로다", () => {
     expect(MENT_STYLE_DIRECTIVE_HEAD).toBe("[이 선생님의 말투 — 따라 쓰기]");
+  });
+});
+
+// 2026-10-16 원장 "한계를 수정할 수 있을까" — 무엇을 고쳤는지 배우려면 자동작성 원문이 남아야 한다(0370a).
+describe("자동작성 원문(0370a) — 저장이 남기고 빌드가 읽는다", () => {
+  it("화면은 '자동작성 후 수정'일 때만 원문을 싣는다(영어 제외)", () => {
+    const src = read("src/features/onescreen/components/onescreen-client.tsx");
+    expect(src).toMatch(/mentSource === "auto_edited" && su\?\.subjectKey !== "english" && autoSnap && !existing\?\.autoDraftTemplate \? \{ mentAutoDraft: autoSnap \}/);
+    // AI 실패 폴백 템플릿은 원문이 아니다 — 표시가 붙는다
+    expect(src).toContain("autoDraftTemplate: true");
+  });
+  it("저장 액션은 최종 작성 방식이 'auto_edited'일 때 응답 뒤(after)에 기록한다 — 저장을 늦추지 않는다", () => {
+    const src = read("src/features/onescreen/server/actions.ts");
+    expect(src).toContain('import { after } from "next/server";');
+    expect(src).toMatch(/mentSourceFinal === "auto_edited" && input\.mentSource === "auto_edited" && aiDraft/);
+    expect(src).toContain("after(() => recordMentAiDraft(");
+  });
+  it("'달라진 것 없음'이라도 손으로 쓴 추세는 지우지 않는다 — 칸이 지난 자동작성 글 그대로일 때만 비운다(원스크린·사무실 작성)", () => {
+    const os = read("src/features/onescreen/components/onescreen-client.tsx");
+    expect(os).toContain('res.ok && res.trendQuiet && (r.trendDraft ?? "") === (r.trendAutoDraft ?? "")');
+    const cf = read("src/app/(shell)/lesson-reports/_components/compose-face.tsx");
+    expect(cf).toContain("res.trendQuiet && trend === autoTrend");
+    // 스냅샷은 새로고침을 넘어야 한다 — 원스크린은 세션에 싣고 로스터가 복원, 사무실 작성은 로컬 초안에(재리뷰 2026-10-16)
+    expect(os).toContain("trendAutoDraft: r[su.name]!.trendAutoDraft");
+    expect(read("src/features/onescreen/server/roster.ts")).toContain("su.trendAutoDraft = entry.trendAutoDraft");
+    expect(cf).toContain('setAutoTrend(d.autoTrend ?? "")');
+  });
+  it("AI 원문이 아닌 글(폴백 템플릿·지난 회차 복사)은 원문으로 싣지 않는다 — 표시는 세션을 넘는다", () => {
+    const os = read("src/features/onescreen/components/onescreen-client.tsx");
+    expect(os).toContain("autoDraft: p.comment, autoDraftTemplate: true");
+    expect(os).toContain("...(r?.[su.name]?.autoDraftTemplate ? { autoDraftTemplate: true } : {})");
+    expect(read("src/features/onescreen/server/roster.ts")).toContain("if (entry?.autoDraftTemplate === true) su.autoDraftTemplate = true;");
+  });
+  it("프로파일 빌드가 수정 표본의 원문을 읽는다", () => {
+    const src = read("src/features/onescreen/server/ment-style-build.ts");
+    expect(src).toContain("loadMentAiDrafts(admin, tenantId, edited.map((r) => r.id))");
+  });
+  it("표가 없으면(0370a 미적용) 기록·조회 모두 조용히 건너뛴다(#95)", () => {
+    const src = read("src/features/onescreen/server/ment-draft-db.ts");
+    expect(src).toContain("isMentDraftTableMissingError(error)");
+    expect(src).toContain("isMentDraftTableMissingError({ message })");
   });
 });
 

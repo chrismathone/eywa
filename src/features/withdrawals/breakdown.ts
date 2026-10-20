@@ -54,6 +54,34 @@ export function subjectItems(rows: readonly Pick<Row, "subjects">[], labelOf: (k
     .sort((a, b) => Number(a.value === FACET_NONE) - Number(b.value === FACET_NONE) || byCount(a, b));
 }
 
+/**
+ * **과목을 고른 뒤의 과목 칸** — 고른 과목이 든 줄만, **함께 끊은 과목 묶음**으로 한 번씩 센다(원장 2026-10-15 *"수학 카테고리인데
+ * 영어가 나오면 이상하니까 … 수학+영어 로"* + *"필터링 영향 받게 움직여야지"*). 수학을 고르면 '수학'(수학만) · '수학+영어'.
+ * 🔑 묶음 이름의 순서 = 학원설정 과목 순서(`order`) — 수학을 고르든 영어를 고르든 같은 '수학+영어'. 설정에 없는 키는 그 뒤 라벨 순.
+ * 🔑 한 줄 = 한 칸이라 칸 합 = 줄 수(비중 합 100%). 고른 과목만 끊은 칸이 맨 앞, 나머지는 많은 순.
+ * 값(`value`)은 묶음 키(`math+english`) — 이 칸으로 거르는 주소는 없다(과목 필터는 과목 키 하나만 받는다).
+ */
+export function subjectComboItems(
+  rows: readonly Pick<Row, "subjects">[],
+  picked: string,
+  order: readonly string[],
+  labelOf: (key: string) => string,
+): BreakdownItem[] {
+  const rank = new Map(order.map((k, i) => [k, i]));
+  const sortKeys = (a: string, b: string) =>
+    (rank.get(a) ?? order.length) - (rank.get(b) ?? order.length) || labelOf(a).localeCompare(labelOf(b), "ko");
+  const counts = new Map<string, BreakdownItem>();
+  for (const r of rows) {
+    if (!r.subjects.includes(picked)) continue;
+    const keys = [...new Set(r.subjects)].sort(sortKeys);
+    const value = keys.join("+");
+    const cur = counts.get(value);
+    if (cur) cur.count += 1;
+    else counts.set(value, { value, label: keys.map(labelOf).join("+"), count: 1 });
+  }
+  return [...counts.values()].sort((a, b) => Number(b.value === picked) - Number(a.value === picked) || byCount(a, b));
+}
+
 export function gradeOf(row: Pick<Row, "grade">): string {
   return clean(row.grade) ?? FACET_NONE;
 }
@@ -85,6 +113,33 @@ export function schoolItems(rows: readonly Pick<Row, "school">[]): BreakdownItem
     .sort((a, b) => Number(a.value === FACET_NONE) - Number(b.value === FACET_NONE) || byCount(a, b));
 }
 
+/** 강사 칸 값의 이름 — 강사 카드 · 명단 '담당강사' 칸 · 담당강사 필터가 같은 말을 쓴다(원장 2026-10-15 *"모든 곳에서 담당이 일치하게"*). */
+export function teacherFacetLabel(id: string, nameOf: (id: string) => string | null): string {
+  return id === FACET_NONE ? "담당 미반영" : (nameOf(id) ?? "이름 없는 계정");
+}
+
+/**
+ * 명단 한 줄의 '담당강사' 글 — 그 줄의 강사 칸 값(`teacherFacetsIn` — 강사 카드가 세는 값 그대로)을 이름으로. 판정 폭 밖이거나 걸린
+ * 과목·프로그램 밖이라 어느 칸에도 안 서는 줄(null)은 '—'.
+ */
+export function teacherCellText(facets: readonly string[] | null, nameOf: (id: string) => string | null): string {
+  return facets === null ? "—" : facets.map((id) => teacherFacetLabel(id, nameOf)).join(" · ");
+}
+
+/** 담당강사 필터의 선택지 — 강사 카드 칸과 같은 값 · 이름 순(담당 미반영은 맨 끝). 고른 값은 모집단에 없어도 남긴다(선택이 사라지지 않게). */
+export function teacherFilterOptions(
+  facets: Iterable<readonly string[] | null>,
+  picked: string | null,
+  nameOf: (id: string) => string | null,
+): { value: string; label: string }[] {
+  const ids = new Set<string>();
+  for (const f of facets) for (const id of f ?? []) ids.add(id);
+  if (picked) ids.add(picked);
+  return [...ids]
+    .map((value) => ({ value, label: teacherFacetLabel(value, nameOf) }))
+    .sort((a, b) => Number(a.value === FACET_NONE) - Number(b.value === FACET_NONE) || a.label.localeCompare(b.label, "ko"));
+}
+
 /**
  * 강사 — 줄의 강사 칸 값(`teacherFacetsIn`)마다 한 건: 그 줄을 퇴원율에 센 선생님(함께 맡은 담임·교시 담당이면 둘 다) ·
  * 아무도 안 센 과목이 있으면 '담당 미반영'(맨 끝). `facetsOf`가 null인 줄(걸린 범위 밖)은 어느 칸에도 세지 않는다.
@@ -94,7 +149,7 @@ export function teacherItems<R>(rows: readonly R[], facetsOf: (row: R) => readon
   const counts = new Map<string, number>();
   for (const r of rows) for (const id of new Set(facetsOf(r) ?? [])) counts.set(id, (counts.get(id) ?? 0) + 1);
   return [...counts]
-    .map(([value, count]) => ({ value, label: value === FACET_NONE ? "담당 미반영" : (nameOf(value) ?? "이름 없는 계정"), count }))
+    .map(([value, count]) => ({ value, label: teacherFacetLabel(value, nameOf), count }))
     .sort((a, b) => Number(a.value === FACET_NONE) - Number(b.value === FACET_NONE) || byCount(a, b));
 }
 

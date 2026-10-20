@@ -19,6 +19,8 @@ export const AUDIT_ACTIONS = {
   integration_sheet_target: "구글 시트 대상 지정",
   integration_video_drive_setting: "숙제영상 저장 폴더 지정",
   integration_video_drive_account: "숙제영상 Google 계정 연결",
+  // 오늘 수학 지점 사용 메뉴(2026-10-19) — 에이와 원장이 바꾼 것과 오늘 수학에서 바꾼 것(알림으로 받음)이 같은 키. 출처는 metadata.source.
+  todays_math_menus_update: "오늘 수학 사용 메뉴 변경",
   integration_sync_now: "makeedu 지금 동기화",
   slack_connection_token: "슬랙 봇 토큰 등록",
   slack_connection_disconnect: "슬랙 알림 연결 해제",
@@ -62,18 +64,18 @@ export const AUDIT_ACTIONS = {
   classroom_update: "강의실 수정",
   notice_popup_update: "팝업 공지 수정",
   notice_popup_toggle: "팝업 공지 노출 전환",
-  consultation_merge: "콜&상담 병합",
+  consultation_merge: "신규 콜&상담 병합",
   // 등록상담 전수(2026-09-10 원장 *"상담등록에 대해서는 감사로직이 안남나?"*) — QR 접수가 이름·학교·학년
   // 일치로 **다른 아이(동명이인)** 에 자동 연결됐는데, 접수·자동 연결·상태 변경·이름 수정 어느 것도 기록이
   // 없어 누가 무엇을 했는지 되짚을 수 없었다(김근우 건). 자동 연결은 DB 트리거가 직접 쓴다(0258a).
-  enrollment_consultation_create: "콜&상담 작성",
-  enrollment_consultation_intake: "콜&상담 QR 접수(학부모)",
-  enrollment_consultation_update: "콜&상담 수정",
-  enrollment_consultation_outcome: "콜&상담 상태 변경",
-  enrollment_consultation_delete: "콜&상담 삭제",
-  consultation_autolink: "콜&상담 학생 자동 연결",
-  consultation_link_existing: "콜&상담 → 기존 학생 재사용",
-  consultation_unlink: "콜&상담 학생 연결 해제",
+  enrollment_consultation_create: "신규 콜&상담 작성",
+  enrollment_consultation_intake: "신규 콜&상담 QR 접수(학부모)",
+  enrollment_consultation_update: "신규 콜&상담 수정",
+  enrollment_consultation_outcome: "신규 콜&상담 상태 변경",
+  enrollment_consultation_delete: "신규 콜&상담 삭제",
+  consultation_autolink: "신규 콜&상담 학생 자동 연결",
+  consultation_link_existing: "신규 콜&상담 → 기존 학생 재사용",
+  consultation_unlink: "신규 콜&상담 학생 연결 해제",
   // (ecs_plan_* 4종은 아래 '진도 줄 구조 변경' 블록 — 같은 날 자리 PIN 감사 세션이 먼저 등록했다.)
   // 세션 없는 경로가 audit_logs에 **직접 insert**하는 키 — 레지스트리 가드가 `log…(` 호출만 봐서 밖이었다.
   calendar_google_import: "구글 캘린더 가져오기",
@@ -136,6 +138,8 @@ export const AUDIT_ACTIONS = {
   // 실급여·명세서 대상 학년(원장 2026-10-07 — 고등학생에게만 프리랜서를 적용하는 선생님). 비율 숫자는 남기지 않는다.
   payroll_sheet_levels_set: "실급여·명세서 대상 학년 설정",
   payroll_sheet_special_scope_set: "실급여·명세서 특강 학년 제한 설정",
+  // 혼합 계약(근로 + 용역, 원장 2026-10-16)의 근로 요일 — 강사평가 근태가 세는 요일. 금액엔 쓰지 않는다.
+  payroll_contract_work_days_set: "혼합 계약 근로 요일 설정",
   class_salary_update: "반별 급여 설정 변경",
   session_splits_save: "강사 분배 스냅샷 저장",
   withdrawal_update: "퇴원 사유",
@@ -228,6 +232,7 @@ export const AUDIT_ACTIONS = {
   student_create: "학생 등록",
   student_update: "학생 정보 수정",
   student_english_name_update: "학생 영문 이름 수정",
+  student_siblings_update: "원생 형제 지정",
   student_delete: "학생 영구 삭제",
   student_withdraw: "학생 퇴원 처리",
   student_hold: "학생 휴원 처리",
@@ -334,6 +339,11 @@ export const AUDIT_ACTIONS = {
   // 시간표 연습실 — 작성자만 보는 개인 사본(timetable_lab_drafts)이라 운영 시간표는 안 바뀐다.
   // 라벨에 "연습본"을 반드시 남길 것(위 '계획'과 같은 이유) · 슬랙으로는 안 나간다(activity-catalog forbid).
   timetable_lab_draft_save: "시간표 연습본 저장",
+  // 연습본을 운영에 나중에 적용하도록 예약 · 그 예약 취소(즉시 적용은 timetable_structure_apply로 남는다).
+  timetable_lab_apply_schedule: "시간표 연습본 적용 예약",
+  timetable_lab_apply_cancel: "시간표 연습본 적용 예약 취소",
+  // 시간표 오른쪽 메모 시트(엑셀 판) — 자동 저장이라 같은 사람이 10분 안에 또 저장하면 한 줄로 친다(timetable-memo/server/actions.ts).
+  timetable_memo_sheet_save: "시간표 메모 시트 저장",
 
   // 수학 강사 시트(MCS) — 학생별 월간 목표. 실제 진도는 원스크린이 쓰므로 여기 안 온다(읽기 전용 화면).
   mcs_goal_update: "수학 시트 학생 월간 목표 저장",
@@ -383,13 +393,18 @@ export const AUDIT_ACTIONS = {
   textbook_plan_create: "반 교재 배정",
   textbook_plan_update: "반 교재 배정 수정",
   textbook_plan_delete: "반 교재 배정 삭제",
+  // 되돌리기(원장 2026-10-19) — 지운 배정과 함께 지운 진도 줄·표식을 되살린다.
+  textbook_plan_delete_undo: "반 교재 배정 삭제 되돌리기",
   textbook_plan_apply: "교재 차수 배정·기입", // 2026-09-23 [기입] 제거 후엔 배정 저장이 이 키로 남는다(옛 행은 기입)
   // 가져오기(원장 2026-09-22) — 월간계획 한 칸을 **실제**로 옮긴 기록. 작성률을 움직이는 행위라 남긴다.
   textbook_plan_import: "월간계획 가져오기",
   // 되돌리기(원장 2026-10-15) — 가져온 뒤 손대지 않은 칸만 원래대로. 실제 진도를 지우는 행위라 남긴다.
   textbook_plan_import_undo: "월간계획 가져오기 되돌리기",
+  math_textbook_assign: "수학 교재 배정",
   // 회차 미루기·당기기(0282a) — 그 칸의 차수를 건너뛰거나 버린다. 앞으로의 계획을 통째로 바꾸는 결정이라 남긴다.
   textbook_lesson_shift: "수업 회차 미루기·당기기",
+  // 되돌리기(원장 2026-10-19 "덮어쓰기(되돌리기)") — 누르기 전 줄을 그대로 돌려놓는다. 실제 진도를 다시 쓰는 행위라 남긴다.
+  textbook_lesson_shift_undo: "수업 회차 미루기·당기기 되돌리기",
 
   // ── 2026-09-09 전수 보강 ────────────────────────────────────────────────────
   // 원장 지시: *"기능이 추가되거나 변동되는건 모두 감사로그에 남도록 해야함."* 2026-08-18 소급 퇴원
@@ -441,6 +456,8 @@ export const AUDIT_ACTIONS = {
   // 영상 제출 현황의 '숙제없음' 칸에서 그 날짜의 영상 숙제를 뒤늦게 냄(보고서 없이) · 그 숙제를 거둠(원장 2026-10-13).
   lesson_report_video_homework_issue: "영상 숙제 따로 내기",
   lesson_report_video_homework_issue_cancel: "따로 낸 영상 숙제 취소",
+  // 영상 숙제를 거둠 — 미확인 · 미수행만 · 보고서를 보낸 숙제도(그날 보고서의 영상 과제 → 없음, 원장 2026-10-16).
+  lesson_report_video_homework_cancel: "영상 숙제 취소",
   lesson_report_video_homework_reject: "영상 숙제 영상 반려",
   share_link_revoke: "학부모 공유 링크 회수",
   share_link_reissue: "학부모 공유 링크 재발급",
@@ -568,6 +585,73 @@ export const AUDIT_ACTIONS = {
   // 수업 나누기(0351a) — 한 학생의 일부 시간을 다른 선생님 반에서. 출결 귀속이 바뀌므로 기록한다.
   class_split_create: "수업 나누기",
   class_split_end: "수업 나누기 해제",
+  // 원스크린 일괄 입력(맨 위 행 복사 · 직접 입력) — 칸 저장은 건마다 남기지 않아 일괄 동작을 한 줄로(원장 2026-10-15 감사로그 빈틈).
+  onescreen_bulk_apply: "원스크린 일괄 입력",
+  // ── 감사로그 빈틈 메우기(원장 2026-10-15 *"감사로그 빈틈 확인하고 추가할것"*) — 쓰는데 기록이 없던 서버 액션. 가드 = audit-coverage.test.ts ──
+  // 학생 상세(메모·성적·레벨테스트·목표·학습 코멘트) — 본문·점수·사유는 metadata에 안 남긴다.
+  student_memo_create: "학생 메모 작성",
+  student_memo_update: "학생 메모 수정",
+  student_memo_delete: "학생 메모 삭제",
+  student_memo_pin: "학생 메모 고정·해제",
+  student_grade_create: "학생 성적 추가",
+  student_grade_delete: "학생 성적 삭제",
+  student_level_test_create: "학생 레벨테스트 추가",
+  student_level_test_delete: "학생 레벨테스트 삭제",
+  student_goal_create: "학생 시험 목표 추가",
+  student_goal_delete: "학생 시험 목표 삭제",
+  student_grade_comment_create: "학생 학습 코멘트 작성",
+  student_grade_comment_update: "학생 학습 코멘트 수정",
+  student_grade_comment_delete: "학생 학습 코멘트 삭제",
+  student_consultation_analysis: "학생상담 AI 분석 실행",
+  kiosk_attendance_code_assign: "키오스크 출석번호 일괄 발급",
+  class_create: "반 생성",
+  // 수납 단가표·견적 — 금액은 남기지 않는다(무엇을 · 어느 항목만).
+  textbook_catalog_create: "교재 단가표 항목 추가",
+  textbook_catalog_update: "교재 단가표 항목 수정",
+  textbook_catalog_delete: "교재 단가표 항목 삭제",
+  textbook_catalog_toggle: "교재 단가표 항목 사용·중지",
+  tuition_catalog_create: "수강료 단가 항목 추가",
+  tuition_catalog_update: "수강료 단가 항목 수정",
+  tuition_catalog_delete: "수강료 단가 항목 삭제",
+  tuition_catalog_pricing_mode: "수강료 단가 종류 변경",
+  tuition_catalog_toggle: "수강료 단가 항목 사용·중지",
+  tuition_quote_save: "수강료 견적 저장",
+  tuition_quote_delete: "수강료 견적 삭제",
+  // 직원 — 급여 값·이력서 내용은 남기지 않는다(급여 정책은 누구만 — 칸 목록도 급여 방식을 드러낸다).
+  staff_leave_request: "직원 휴가 등록",
+  staff_leave_approve: "직원 휴가 승인",
+  staff_leave_delete: "직원 휴가 삭제",
+  teacher_comp_update: "강사 급여 정책 변경",
+  staff_work_schedule_update: "직원 근무 일정 변경",
+  staff_resume_delete: "직원 이력서 삭제",
+  // 강사 시트·콜&상담·진도·셔틀·퇴원보고서
+  ecs_week_copy: "강사 시트 지난주 복사",
+  ecs_attendance_mark: "출석 체크(ECS)",
+  enrollment_consultation_report_edit: "신규 콜&상담 AI 분석 수정",
+  enrollment_consultation_regenerate_analysis: "신규 콜&상담 AI 분석 다시 생성",
+  progress_anomaly_resolve: "진도 이상 확인·되돌림",
+  shuttle_run_stop_time: "셔틀 정류장 시각 수정",
+  shuttle_run_stop_reorder: "셔틀 노선 정류장 순서 변경",
+  shuttle_rider_weekdays: "셔틀 학생 탑승 요일 수정",
+  withdrawal_report_archive_map: "퇴원보고서 원본 기록 학생 연결",
+  // 보강관리 — RPC가 기록하지 않는 명령(담당 지정·참여 기록·검토 제출·보류·재개·대사 처리)만 앱이 남긴다. 명령 종류는 상세에 한글로.
+  makeup_case_command: "보강관리 처리",
+  // 보강관리 RPC가 audit_logs에 직접 쓰는 키(makeup_private.audit = 'makeup_' || 명령, 0345a) — 등록이 없어 화면에 영문이 떴다.
+  // ⚠️ `makeup_reserve`는 옛 보강 예약(0264a)과 같은 키라 위의 '보강 예약' 라벨을 함께 쓴다.
+  makeup_intake: "보강관리 접수",
+  makeup_approve: "보강관리 승인",
+  makeup_deny: "보강관리 거절",
+  makeup_cancel: "보강관리 일정 취소",
+  makeup_reschedule: "보강관리 일정 변경",
+  makeup_verify: "보강관리 검토(실시 인정)",
+  makeup_reverse: "보강관리 인정 정정",
+  makeup_waive: "보강관리 면제",
+  makeup_adjust: "보강관리 조정",
+  makeup_close: "보강관리 종결",
+  makeup_link_legacy: "보강관리 기존 보강 예약 연결",
+  makeup_accept_units: "보강관리 시수 차이 승인",
+  makeup_configure: "보강관리 설정 변경",
+  makeup_reconcile: "보강관리 대사 실행",
 } as const;
 export type AuditActionKey = keyof typeof AUDIT_ACTIONS;
 

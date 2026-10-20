@@ -25,7 +25,8 @@ export const WORKDAYS = [
   { key: "sun", label: "일", en: "Sun" },
 ] as const;
 
-export const EMPLOYMENT_TYPES = ["정규직", "아르바이트", "프리랜서"] as const;
+// '혼합' = 근로계약 + 강의용역계약(원장 2026-10-16) — 두 몫을 가르는 규칙은 `employment.ts`.
+export const EMPLOYMENT_TYPES = ["정규직", "아르바이트", "프리랜서", "혼합"] as const;
 
 /**
  * 근무형태 표시용 영어 — 🔴 **값(한국어)은 저장값이자 계약서 추출(`contract-extract`)의 매칭 키**라
@@ -35,6 +36,7 @@ export const EMPLOYMENT_TYPE_EN: Record<string, string> = {
   정규직: "Full-time",
   아르바이트: "Part-time",
   프리랜서: "Freelance",
+  혼합: "Mixed",
 };
 
 // 회사 구분 — 신규 직원명부(구글시트) '회사명' 열과 같은 선택지(2026-07-16 원장 지정 목록).

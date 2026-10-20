@@ -1,4 +1,5 @@
 import { WindowLink } from "@/components/workspace/window-link";
+import { NewConsultationLink } from "../new-consultation-link";
 import { Pill } from "@/components/atoms/pill";
 import type { GapStats } from "@/features/consultations/stats-model";
 
@@ -47,9 +48,9 @@ export function StatsGap({ gap, teacherScoped }: { gap: GapStats; teacherScoped:
                 ) : (
                   <span className="num text-muted-foreground text-xs">{s.days !== null ? `${s.days}일째` : "—"}</span>
                 )}
-                <WindowLink href={`/consultations/new?studentId=${s.id}`} title="새 상담" className="text-primary text-xs font-medium hover:underline">
+                <NewConsultationLink studentId={s.id} className="text-primary text-xs font-medium hover:underline">
                   상담 기록 +
-                </WindowLink>
+                </NewConsultationLink>
               </span>
             </li>
           ))}

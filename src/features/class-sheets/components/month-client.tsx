@@ -12,6 +12,8 @@ import { usePrintWindow } from "@/components/workspace/print-window";
 import { offGoalCountByDate } from "../lib/goal-match";
 import { setMyEcsMonthDisplay, setMyEcsMonthPeriod, setMyEcsMonthView } from "../server/actions";
 import { setLessonShift } from "@/features/textbooks/server/plan-actions";
+import { undoLessonShift } from "@/features/textbooks/server/shift-undo-actions";
+import { useShiftConfirm } from "./shift-confirm";
 import { ImportPlanButton } from "./import-plan-button";
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { sheetMonthLabel } from "@/features/teacher-view/i18n";
@@ -167,8 +169,8 @@ export function MonthClient({
   const t = useSheetT();
 
   /**
-   * 회차 미룸·당김 — 같은 요일·교시의 **실제 진도**가 한 주씩 밀리거나 당겨진다(2026-10-15, `setLessonShift`).
-   * 누를 때마다 한 주(토글 아님) · 연타는 `shiftBusy`로 막는다. 화면은 `router.refresh()`로 다시 받는다.
+   * 회차 미룸·당김 — **실제 진도**가 한 칸씩 밀리거나 당겨진다(2026-10-15, `setLessonShift`). 배정 교재는 배정한
+   * 요일 순서대로, 그 밖의 줄은 같은 요일·교시끼리(2026-10-16). 누를 때마다 한 칸(토글 아님) · 연타는 `shiftBusy`로 막는다. 화면은 `router.refresh()`로 다시 받는다.
    */
   const shiftBusy = useRef(false);
   const onShift = useCallback(
@@ -177,8 +179,28 @@ export function MonthClient({
       shiftBusy.current = true;
       void setLessonShift({ classId: data.classId, date, slotStart, kind })
         .then((r) => {
+          // [되돌리기](원장 2026-10-19 "덮어쓰기(되돌리기)") — 누르기 전 줄을 그대로 돌려놓는다.
+          // 옮기다 멈춘 경우에도 기록이 오면 단다(미룸은 누른 칸을 지우므로 멈춘 채 두면 잃는다).
+          const token = r.undo;
+          const undo = token
+            ? () => {
+                if (shiftBusy.current) return;
+                shiftBusy.current = true;
+                void undoLessonShift({ classId: data.classId, token })
+                  .then((u) => {
+                    if (!u.ok) return void toast.error(feedback(u.error));
+                    toast.success(t("plan.shift.undo.done"));
+                    router.refresh();
+                  })
+                  .finally(() => {
+                    shiftBusy.current = false;
+                  });
+              }
+            : null;
+          const undoAction = undo ? { duration: 10_000, action: { label: t("plan.shift.undo"), onClick: undo } } : undefined;
           if (!r.ok) {
-            toast.error(feedback(r.error));
+            toast.error(feedback(r.error), undoAction);
+            router.refresh();
             return;
           }
           toast.success(
@@ -189,6 +211,7 @@ export function MonthClient({
                 : kind === "skip"
                   ? t("month.shift.skip.done")
                   : t("month.shift.advance.done"),
+            undoAction,
           );
           router.refresh();
         })
@@ -198,6 +221,8 @@ export function MonthClient({
     },
     [data.classId, feedback, router, t],
   );
+  // 누르면 확인 창부터(원장 2026-10-19 — 얼럿창 → 덮어쓰기).
+  const shiftConfirm = useShiftConfirm(onShift);
   const tf = useSheetTf();
   const lang = useSheetLang();
   // 반 이름·월 라벨은 화면 언어를 따른다(상단 바·창 제목이 같은 값을 봐야 갈리지 않는다).
@@ -471,7 +496,7 @@ export function MonthClient({
             goals={warnGoals}
             display={cur}
             onOpenDay={openDayEditor}
-            onShift={onShift}
+            onShift={shiftConfirm.ask}
           />
         </>
       ) : (
@@ -510,6 +535,7 @@ export function MonthClient({
           onApplied={() => undefined}
         />
       ) : null}
+      {shiftConfirm.dialog}
     </div>
   );
 }

@@ -67,9 +67,10 @@ describe("팰릿 화면 — server-only 모듈에서 값을 읽지 않는다", (
   });
 
   it("🔴 메뉴 축은 메뉴 화면과 **같은 목록**을 읽고 **같은 방법**으로 연다", () => {
-    expect(src).toContain("HUB_GROUPS");
-    expect(src).toContain("SUPPORT_GROUPS");
-    expect(src).toContain("hubSearchKeywords");
+    // 목록·찾는 말은 `hubSearchEntries`(HUB_GROUPS+SUPPORT_GROUPS + 화면 위 탭, hubSearchKeywords) 한 곳 —
+    // 사이드바 메뉴 검색과 같은 목록이다(2026-10-19). 매칭도 같은 `matchHubSearch`.
+    expect(src).toContain("hubSearchEntries");
+    expect(src).toContain("matchHubSearch");
     expect(src).toContain("useOpenMenu");
     // NAV_GROUPS로 되돌리면 수학 강사 시트·수납/설정 면들이 다시 검색에서 사라진다.
     expect(src).not.toContain("NAV_GROUPS");

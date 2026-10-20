@@ -10,14 +10,11 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { effectiveTeacherId, readonlyTeacherViewError } from "@/lib/auth/view-mode";
 import { addDays, kstToday, resolveReportDate } from "@/lib/date-kst";
 import { generateJSON } from "@/lib/ai/generate";
-import { commentBody, commentP1Body, commentP2Body, type ReportCommentInput } from "../report-comment";
-import { buildTrendInput, findImpossibleScaleSpans, trendBody } from "../trend-comment";
-import {
-  assembleCombined,
-  commentStyleDirective,
-  MENT_AI_TUNING,
-  type PromptSection,
-} from "../prompt-defaults";
+import { type ReportCommentInput } from "../report-comment";
+import { mentMaxTokens, mentSections, readMentResponse } from "../ment-assembly";
+import { buildTrendInput, TREND_HISTORY_FETCH_DAYS, type TrendInput } from "../trend-comment";
+import { resolveReportClassId } from "@/features/report-admin/server/resolve-class";
+import { assembleCombined, MENT_AI_TUNING } from "../prompt-defaults";
 import { loadActivePrompt } from "./prompt-loader";
 import {
   fetchReportTrendRows,
@@ -45,6 +42,7 @@ import {
 import { claimMakeupAnchorChange, finishMakeupAnchor, prepareMakeupAnchor } from "./makeup-anchor-sync";
 import { ingestReport } from "@/features/progress/server/ingest";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { after } from "next/server";
 import {
   nextTrendOptOut,
   readTrendOptOut,
@@ -60,10 +58,15 @@ import {
   type OnescreenFontSize,
 } from "../font-size";
 import { LEGACY_REPORT_SUBJECT, reportSubject } from "@/features/timetable/lib/report-subject";
+import { todaysMathSameForReport } from "./todays-math-fill";
+import { attachExamReportBeforeSend } from "@/features/integrations/todays-math/exam-report-attach";
 import { resolveMentSource, type MentSource } from "../ment-source";
 import { mentSourceColumnReady } from "./ment-source-db";
+import { recordMentAiDraft } from "./ment-draft-db";
+import { MENT_STYLE_EXCLUDED_SUBJECTS } from "../ment-style";
 import { videoHomeworkColumnReady } from "@/features/video-homework/server/assignments";
 import { videoHomeworkKept } from "@/features/video-homework/report-owner";
+import { cancelledAfterSeen } from "@/features/video-homework/server/cancels";
 import { resolveNextLessonDue, videoHomeworkDueColumnReady } from "@/features/video-homework/server/report-due";
 import type { SavedVideoHomeworkDue } from "@/features/video-homework/due";
 import { decideVideoHomeworkDue } from "@/features/video-homework/due-write";
@@ -72,13 +75,15 @@ import { getVideoReceiptComment } from "@/features/video-homework/server/receipt
 import { appendVideoReceiptComment } from "@/features/video-homework/receipt-comment";
 import { videoSubmitLinkColumn } from "@/features/video-submit/server/link-choice-db";
 import { loadTeacherMentStyle } from "./ment-style-db";
-import { mentStyleDirective } from "../ment-style-prompt";
+import { mentStyleDirective, mentStyleToneDirective } from "../ment-style-prompt";
 import { prependParentAddress, splitParentAddress } from "../parent-address";
 import { logAction } from "@/features/audit/server/log";
 import { isSlotOnlyEnglishNotes, shouldCaptureJj } from "../jj-capture-plan";
 import { classRouteActive, NO_SEND_CLASS_ERROR, SEND_CLASS_SUBJECTS } from "../send-class";
 /** 영상 숙제 마감이 고른 것과 다르게 저장된 줄은 보내지 않는다(saveAndQueueClassnote — 까닭은 화면이 따로 알린다, due-write.ts). */
 const VIDEO_DUE_CHANGED_ERROR = "영상 숙제 마감이 고른 것과 달라져 보내지 않았습니다(저장은 했습니다) — 멘트의 마감을 확인한 뒤 다시 보내 주세요";
+/** 장부에서 취소된 영상 숙제를 이 화면이 모른 채 '있음'으로 보낸 줄 — '없음'을 지키고 보내지 않는다(원장 2026-10-16, cancels.ts). */
+const VIDEO_HW_CANCELLED_ERROR = "이 영상 숙제는 영상 제출 현황에서 취소돼 '없음'으로 되돌렸고, 보내지 않았습니다(저장은 했습니다) — 멘트에 영상 숙제 안내가 있으면 고친 뒤 다시 보내 주세요";
 import { classBoardLiveForStudent, explainBoardMissing, resolveMakeupSendClass } from "./send-class";
 import { captureReportJj } from "./jj-capture";
 import type { OneScreenStudent, PrevReport } from "../types";
@@ -101,6 +106,11 @@ export type SaveLessonReportInput = {
    * 서버가 조용히 뺀다(#95). 다음 수업의 '지난 수업 영상 숙제' 검사는 false일 때만 숨는다(assignment.ts).
    */
   videoHomework?: boolean;
+  /**
+   * 이 화면이 그 줄의 영상 과제 값을 DB와 맞춘 시각(ISO, 원스크린 공급자 `seenAtOf`) — 장부에서 취소한 숙제를 모른 채 보낸 '있음'을
+   * 가른다(`cancels.ts`). 없으면 모른 것으로 본다(취소 기록이 있을 때만 뜻이 있다).
+   */
+  videoHomeworkSeenAt?: string | null;
   /**
    * 영상 첨부 링크 넣기(0328a, 원장 2026-10-02) — `undefined`면 손대지 않는다. 컬럼이 아직 없으면 서버가 조용히 뺀다(#95).
    * 발송 직전 판정(`reportGetsVideoLink`)이 이 값이 true인 보고서에만 '영상첨부' 줄을 붙인다.
@@ -142,6 +152,11 @@ export type SaveLessonReportInput = {
    */
   mentSource?: MentSource;
   /**
+   * 자동작성 원문(0370a) — 화면이 `mentSource: 'auto_edited'`일 때만 싣는다(선생님이 고친 그 자동작성 글). 말투 프로파일이
+   * 원문 ↔ 최종을 견줘 '늘 고치는 것'을 배운다(원장 2026-10-16). 저장 응답 뒤에 따로 적는다 — 본 저장과 무관, 실패해도 저장은 성공.
+   */
+  mentAutoDraft?: string;
+  /**
    * 영어 결과지 고르기(2026-09-28) — 그림 칸 `[시험결과지]`에 붙일 인재원 응시 id. `undefined` = 이 보고서에 저장해 둔
    * 고르기를 따른다(일괄 발송·옛 화면처럼 고르기를 모르는 경로가 고른 것을 풀지 않게), `null` = 기본(그날 낸 시험 전부).
    * 응시가 이 학생 것인지는 서버가 다시 확인한다(ijw/server/report-snapshot.ts).
@@ -180,6 +195,9 @@ export async function saveLessonReport(
   needsAnchor?: boolean;
   /** 영상 과제 값을 작성 선생님 것으로 두었다([`report-owner.ts`]) — 화면이 이 값으로 되돌린다(나머지는 저장됨). */
   keptVideoHomework?: boolean | null;
+  /** 장부에서 취소된 숙제라 '없음'을 지켰다(`keptVideoHomework`=false와 함께) · 화면이 그 줄의 맞춘 시각으로 쓸 응답 시각. */
+  videoHomeworkCancelled?: true;
+  videoHomeworkSeenAt?: string;
   /** 저장한 영상 숙제 마감 — 고른 마감을 적었을 때만. `fellBack` = 14일 안에 다음 수업이 없어 7일로 적었다(화면이 알린다). */
   videoHomeworkDue?: SavedVideoHomeworkDue;
 }> {
@@ -196,6 +214,11 @@ export async function saveLessonReport(
   // 대상 날짜 = 고른 날짜 클램프(빈값·미래→KST 오늘). report_date 단일 소스 = 학부모 카드 표시일 = ClassNote 게시일.
   // 수강생 스코프 판정도 이 날짜 기준(과거 마감 시 그날 수강생) — roster·setAttendanceCell과 통일.
   const reportDate = resolveReportDate(input.reportDate);
+  // 감사로그의 오늘 수학 출처 대조는 저장과 **함께** 돌린다(직렬이면 저장 응답이 그만큼 늦다 · 실패해도 빈 배열 — 저장을 막지 않는다).
+  const todaysMathSamePromise = todaysMathSameForReport(user.tenantId, {
+    studentId: input.studentId, classId: input.classId || null, subject: input.subject || null, date: reportDate,
+    dailyTest: input.dailyTest, checkTest: input.checkTest,
+  });
 
   // 강사 스코프: 기본은 '내 담당 반, 대상 날짜 시점 수강생'만. 단 outOfClass(보강·수업외 수동추가)면 같은 학원 학생 전체 허용
   // (원장 승인 정책). RLS가 테넌트 격리 → 학원 밖 학생은 select null로 걸러져 거부됨.
@@ -303,11 +326,17 @@ export async function saveLessonReport(
   // 🔴 영상 과제 있음/없음은 이 줄을 처음 쓴 선생님만 바꾼다(원장 2026-10-03, [`report-owner.ts`]) — 강사뷰 '영상 제출 현황'이
   //    작성 계정으로 "내가 낸 숙제"를 가르므로, 다른 선생님이 켜면 켠 사람 장부에 안 뜬다. **거절하지 않고** 그 값만 두고
   //    나머지를 저장한다(거절하면 세션이 바꾼 값을 쥐고 있어 그 줄의 저장·발송이 계속 막힌다) — 둔 값은 화면에 돌려준다.
-  const keptVideoHw = videoHomeworkKept({
+  const ownerKept = videoHomeworkKept({
     prior: priorRow ? { createdBy: priorRow.created_by ?? null, videoHomework: priorRow.video_homework ?? null } : null,
     wanted: videoHwReady ? input.videoHomework : undefined,
     userId: user.id,
   });
+  // 🔴 장부에서 취소한 숙제(원장 2026-10-16, `cancels.ts`) — 이 화면이 그 취소를 **모른 채**(값을 맞춘 시각 < 취소 시각) '있음'을 보내면
+  //    '없음'을 지킨다(세션 초안이 쥔 옛 '있음'이 보고서에 다시 적히던 길). 같은 길로 그 값만 두고 나머지는 저장하고, 발송은 하지 않는다
+  //    (saveAndQueueClassnote — 멘트에 영상 숙제 안내가 남아 있을 수 있다). 기록은 '없음'인 줄에 '있음'을 보낼 때만 읽는다(평소 왕복 0).
+  const cancelKept = !ownerKept && videoHwReady && input.videoHomework === true && priorRow?.video_homework === false && !!input.classId
+    && await cancelledAfterSeen(createAdminClient(), user.tenantId, { classId: input.classId, studentId: input.studentId, date: reportDate }, input.videoHomeworkSeenAt);
+  const keptVideoHw = ownerKept ?? (cancelKept ? { kept: false } : null);
 
   /**
    * 🔴 보강 앵커(`makeup_class_id`) — **보고서 반 = 출석부 반 = 발송 반**의 단일 소스(원장 2026-09-30, [`makeup-anchor.ts`](../makeup-anchor.ts)).
@@ -385,6 +414,12 @@ export async function saveLessonReport(
   const videoDueWrite = videoDue.write ?? null;
   const videoDueSaved: SavedVideoHomeworkDue | null = videoDue.saved ?? null;
 
+  // 멘트 작성 방식(0214a) — 클라 판정 + 기존 라벨 sticky 합산(ment-source.ts). 컬럼 없으면 통째 생략(#95).
+  //    아래 자동작성 원문 기록(0370a)도 이 최종 값으로 판정한다.
+  const mentSourceFinal = mentReady
+    ? resolveMentSource({ client: input.mentSource, prevSource: priorRow?.ment_source, prevNotes: priorRow?.notes, nextNotes: input.notes })
+    : null;
+
   // (student, date, 반|과목) 1행 upsert — 재저장 시 같은 행 갱신(0134a `unit_key` 유니크).
   // ⚠️ onConflict 타깃은 **생성열 unit_key**(= coalesce(class_id::text, subject)) — 부분·표현식 인덱스는
   //    supabase-js upsert가 타깃으로 못 잡아서(0083a 교훈) 생성열로 평범한 컬럼처럼 만들어 둔 것이다.
@@ -427,17 +462,8 @@ export async function saveLessonReport(
         // 옛 화면(체크 전 상태)이 저장하면 추세가 다시 실린다([[#77]]). 발송(saveAndQueueClassnote)도 이 함수를 지난다.
         trend_note: trendOptedOut ? null : input.trendNote || null,
         source: "onescreen",
-        // 멘트 작성 방식(0214a) — 클라 판정 + 기존 라벨 sticky 합산(ment-source.ts). 컬럼 없으면 통째 생략(#95).
-        ...(mentReady
-          ? {
-              ment_source: resolveMentSource({
-                client: input.mentSource,
-                prevSource: priorRow?.ment_source,
-                prevNotes: priorRow?.notes,
-                nextNotes: input.notes,
-              }),
-            }
-          : {}),
+        // 멘트 작성 방식(0214a) — 위 mentSourceFinal. 컬럼 없으면 통째 생략(#95).
+        ...(mentReady ? { ment_source: mentSourceFinal } : {}),
       },
       { onConflict: "tenant_id,student_id,report_date,unit_key" },
     )
@@ -464,6 +490,16 @@ export async function saveLessonReport(
     if (priorRow && makeupAnchor && makeupAnchor !== priorAnchor)
       await claimMakeupAnchorChange({ tenantId: user.tenantId, reportId: priorRow.id, from: makeupAnchor, to: priorAnchor }).catch(() => undefined);
     return { ok: false, error: error?.message ?? "보고서 저장에 실패했습니다" };
+  }
+
+  // 선생님이 자동작성 글을 **고쳐** 저장했으면 그 자동작성 원문을 따로 남긴다(0370a) — 말투 프로파일이 '늘 고치는 것'을 배운다.
+  // 🔴 응답 뒤에(`after`) — 원스크린 저장은 전원이 매일 쓰는 길이라 늦추지 않는다. 표가 없으면 도우미가 조용히 건너뛴다(#95).
+  // 영어는 템플릿 모드라 코퍼스 밖(MENT_STYLE_EXCLUDED_SUBJECTS). 화면도 'auto_edited'라고 말한 저장만 — sticky 강등(어제 AI 글을 오늘
+  // 새 세션에서 고침)은 원문 스냅샷이 화면에 없다.
+  const aiDraft = input.mentAutoDraft?.trim();
+  if (mentSourceFinal === "auto_edited" && input.mentSource === "auto_edited" && aiDraft && !MENT_STYLE_EXCLUDED_SUBJECTS.includes(input.subject ?? "")) {
+    const draftRow = { tenantId: user.tenantId, reportId: data.id, teacherId: data.created_by ?? user.id, draft: aiDraft };
+    after(() => recordMentAiDraft(createAdminClient(), draftRow));
   }
 
   /**
@@ -591,6 +627,8 @@ export async function saveLessonReport(
    * ⚠️ 발송(`saveAndQueueClassnote`)은 이 함수를 그대로 거치므로 저장 1줄 + 발송 1줄이 남는다
    *    (같은 보고서 id로 이어 읽힌다 — 발송이 내용까지 바꿨다는 사실이 저장 줄에 남아야 한다).
    */
+  // 저장한 일일·확인 칸이 오늘 수학 결과와 같은 값이면 기록에 남긴다(출처 추적 · 채우기 토글이 꺼진 학원은 조회 없음).
+  const todaysMathSame = await todaysMathSamePromise;
   await logAction({
     action: "lesson_report_save",
     targetType: "lesson_report",
@@ -604,8 +642,10 @@ export async function saveLessonReport(
       created: !priorRow,
       ...(input.makeup ? { makeup: true } : {}),
       ...(isMakeupRow ? { makeupClassId: makeupAnchor } : {}),
-      // 작성 선생님이 아니라 영상 과제 값을 두었다(바꾸려던 값은 적지 않았다).
+      // 작성 선생님이 아니라 영상 과제 값을 두었다(바꾸려던 값은 적지 않았다) · 장부에서 취소된 숙제라 '없음'을 지켰다.
       ...(keptVideoHwFinal ? { videoHomeworkKept: true } : {}),
+      ...(cancelKept ? { videoHomeworkCancelled: true } : {}),
+      ...(todaysMathSame.length ? { todaysMathSame } : {}),
     },
   });
 
@@ -618,6 +658,8 @@ export async function saveLessonReport(
     makeupClassId: makeupAnchor,
     ...(warning ? { warning } : {}),
     ...(keptVideoHwFinal ? { keptVideoHomework: keptVideoHwFinal.kept } : {}),
+    // 장부에서 취소된 숙제라 '없음'을 지켰다 — 화면은 값을 되돌리고 그 줄의 맞춘 시각을 이 응답 시각으로 옮긴다(다시 켜면 받는다).
+    ...(cancelKept ? { videoHomeworkCancelled: true, videoHomeworkSeenAt: new Date().toISOString() } : {}),
     ...(videoDueFinal ? { videoHomeworkDue: videoDueFinal } : {}),
     ...(makeupEffect ? { makeupEffect } : {}),
   };
@@ -651,6 +693,9 @@ export async function saveAndQueueClassnote(
   warning?: string;
   /** 저장 단계에서 영상 과제 값을 작성 선생님 것으로 두었다(saveLessonReport 그대로) — 화면이 이 값으로 되돌린다. */
   keptVideoHomework?: boolean | null;
+  /** 저장 단계에서 장부 취소를 지켰다(saveLessonReport 그대로) — 이 줄은 보내지 않았다. */
+  videoHomeworkCancelled?: true;
+  videoHomeworkSeenAt?: string;
   /** 저장 단계가 적은 영상 숙제 마감(saveLessonReport 그대로) — 화면이 '다음 수업' 날짜를 싣는다. */
   videoHomeworkDue?: SavedVideoHomeworkDue;
   /** 저장 단계의 보강 기록 반영 알림(saveLessonReport `makeupEffect` 그대로) — 발송 결과와 무관하게 알린다. */
@@ -754,12 +799,14 @@ export async function saveAndQueueClassnote(
   const warn = {
     ...(saved.warning ? { warning: saved.warning } : {}),
     ...(saved.keptVideoHomework !== undefined ? { keptVideoHomework: saved.keptVideoHomework } : {}),
+    ...(saved.videoHomeworkCancelled ? { videoHomeworkCancelled: saved.videoHomeworkCancelled, videoHomeworkSeenAt: saved.videoHomeworkSeenAt } : {}),
     ...(saved.videoHomeworkDue ? { videoHomeworkDue: saved.videoHomeworkDue } : {}),
     ...(saved.makeupEffect ? { makeupEffect: saved.makeupEffect } : {}),
   };
   // 🔴 영상 숙제 마감이 고른 것과 다르게 됐다(다음 수업을 못 찾음·이미 지남·시간표를 못 읽음 → 7일 · 남이 쓴 줄이라 그대로 둠) — 멘트·미리보기가
   //    말한 마감과 학부모 카드의 마감이 갈린 채 나가지 않게 이 줄은 보내지 않는다(저장은 끝났다 — 화면이 마감을 고친 걸 보고 다시 보낸다, 적대 리뷰 M2).
-  if (saved.videoHomeworkDue?.fellBack || saved.videoHomeworkDue?.kept) {
+  // 장부에서 취소된 숙제라 '없음'을 지켰다(원장 2026-10-16) — 멘트·미리보기가 영상 숙제를 말하고 있을 수 있어 같은 길로 보내지 않는다.
+  if (saved.videoHomeworkCancelled || saved.videoHomeworkDue?.fellBack || saved.videoHomeworkDue?.kept) {
     // 대기 중(queued) 재고 회수 — 옆 게이트들과 같은 이유: 안 지우면 "보내지 않았습니다" 안내 직후 워커가 옛 대기분을 게시한다.
     if (prior?.classnote_status === "queued") {
       try {
@@ -772,7 +819,8 @@ export async function saveAndQueueClassnote(
         // best-effort — 어차피 에러 반환이라 강사 재시도가 뒤따른다(옆 게이트와 같다)
       }
     }
-    return { ok: false, id: saved.id, shareToken: saved.shareToken, ...warn, error: VIDEO_DUE_CHANGED_ERROR };
+    return { ok: false, id: saved.id, shareToken: saved.shareToken, ...warn,
+      error: saved.videoHomeworkCancelled ? VIDEO_HW_CANCELLED_ERROR : VIDEO_DUE_CHANGED_ERROR };
   }
 
   // 발송 안전 스위치 — 기본 OFF(dry-run). 원장이 승인(설정 토글)하기 전까지 **저장만** 하고 실제 큐잉(발송) 안 함.
@@ -1012,6 +1060,15 @@ export async function saveAndQueueClassnote(
     }
   }
 
+  // 오늘 수학 월말평가 성적표(0373a) — 시험일 보고서를 저장하자마자 보내도 성적표가 함께 나가게 큐에 올리기 바로 앞에서 붙인다.
+  // 토글이 꺼졌거나 그날 그 반 월말평가 결과가 없으면 색인 한 번(또는 0번)으로 끝 · 실패해도 발송은 그대로(최대 8초).
+  if (input.classId) {
+    await attachExamReportBeforeSend({
+      tenantId: user.tenantId, studentId: input.studentId, classId: input.classId, reportDate,
+      enabled: settings.report.todaysMathReportPdf,
+    });
+  }
+
   // too_old(전 달 1일 이전) 아니면 queued로 재적재(재발송). 오늘 저장은 항상 통과하나 규약상 명시.
   const allowed = isClassnoteAllowed(reportDate);
   // 🔴 **조건부 적재(compare-and-set)** — 맨 위의 processing·success 확인과 이 줄 사이에 워커가 첫 발송을 끝낼 수 있다.
@@ -1200,6 +1257,10 @@ export type SaveOnescreenSessionInput = {
        * 뒤에도 "이 멘트는 AI에서 출발했다"를 안다(안 실으면 복원 후 저장이 전부 manual로 오표기 = 코퍼스 오염).
        */
       autoDraft?: string;
+      /** 자동작성이 추세 칸에 마지막으로 넣은 글 — 새로고침 뒤에도 '달라진 것 없음'이 낡은 AI 추세를 지울 수 있게(2026-10-16). */
+      trendAutoDraft?: string;
+      /** autoDraft가 AI 원문이 아니다(실패 폴백 템플릿·지난 회차 복사) — 자동작성 원문(0370a)으로 싣지 않는다. */
+      autoDraftTemplate?: boolean;
       textbook?: string;
       makeup?: boolean;
       homeworkToday?: string;
@@ -1386,11 +1447,21 @@ export async function generateReportComment(
   input: ReportCommentInput,
   // classId = 이 행의 반. 정규/특강 분리(2026-07-23 원장 지시)에 쓴다 — 특강 보고서면 그 반 기록만,
   // 정규면 특강 기록을 제외한다. 미지정이면 기존 동작(안 가름).
-  trendCtx?: { studentId?: string; subject?: string; classId?: string | null; todayExamInfo?: string; todayHomework?: string; date?: string },
+  // resolveClass = 반을 모르는 화면(보고서 관리 > 직접 작성)이 넘긴다 — 저장과 같은 규칙(resolveReportClassId, 모호하면 null)으로
+  // 반을 정해 **시험은 그 반 기록만** 쓴다(원장 2026-10-15). 저장된 보고서엔 반이 붙는데 추세만 반을 모르면 문장과 그래프가 갈린다.
+  trendCtx?: {
+    studentId?: string;
+    subject?: string;
+    classId?: string | null;
+    todayExamInfo?: string;
+    todayHomework?: string;
+    date?: string;
+    resolveClass?: { teacherName?: string | null };
+  },
   // teacherStyle=false: 사무실 대리작성(보고서 관리 > 직접 작성)이 넘긴다 — 그 멘트는 **다른 강사 이름**으로 나가는 보고서라 호출자의
   // 말투 프로파일(0262a)을 붙이면 안 된다. 스코프 판정(effectiveTeacherId)만으론 겸직 관리자가 강사뷰 쿠키를 켠 채 그 화면을 열면 새므로(재리뷰).
   opts?: { teacherStyle?: boolean },
-): Promise<{ ok: boolean; comment?: string; trend?: string; error?: string }> {
+): Promise<{ ok: boolean; comment?: string; trend?: string; trendDropped?: boolean; trendQuiet?: boolean; error?: string }> {
   const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   // '다른 강사 뷰'(열람 전용) 차단 — DB 미변경이지만 AI 호출(비용)이라 열람에서 못 누르게 한다.
@@ -1443,96 +1514,104 @@ export async function generateReportComment(
       getVideoReceiptComment(user.tenantId, trendCtx ?? {}).catch(() => null),
     ]);
     const styleBlock = mentStyle ? mentStyleDirective(mentStyle) : "";
-    const withTeacherStyle = (body: string) => (styleBlock ? `${body}\n\n${styleBlock}` : body);
+    // 추세엔 **어조·문장 결만** — 선생님 표현·마무리("다음 시간에 ~하겠습니다")까지 붙이면 추세 금지(계획)에 걸려 버려진다(2026-10-16).
+    const toneBlock = mentStyle ? mentStyleToneDirective(mentStyle) : "";
     const mode = (meRow?.report_notice_mode as "A" | "B" | null | undefined) ?? settings.report.noticeMode ?? "A";
 
-    const sections: PromptSection[] = [];
-    // 멘트 섹션 — 모드 A=단일(사실+특이사항 종합), B=수업내용(P1)+태도·특이사항(P2). 사실 없는 문단은 생략.
-    if (mode === "B") {
-      const [p1tpl, p2tpl] = await Promise.all([
-        loadActivePrompt(supabase, user.tenantId, "comment_p1"),
-        loadActivePrompt(supabase, user.tenantId, "comment_p2"),
-      ]);
-      const p1 = commentP1Body(safeInput, p1tpl);
-      const p2 = commentP2Body(safeInput, p2tpl);
-      if (p1) sections.push({ type: "comment_p1", field: "p1", body: withTeacherStyle(p1) });
-      if (p2) sections.push({ type: "comment_p2", field: "p2", body: withTeacherStyle(p2) });
-    } else {
-      const tpl = await loadActivePrompt(supabase, user.tenantId, "comment"); // DB 활성값 > 기본
-      // 문체 변형(2026-07-30) — 같은 반 학생들이 한 낱말만 다른 복사본을 받지 않게 **어디서부터 이야기를
-      // 열지**를 학생·날짜별로 돌린다. 사실은 그대로, 순서·초점만 바뀐다(prompt-defaults 주석 참조).
-      // 시드가 결정적이라 같은 학생·같은 날 재생성해도 결이 흔들리지 않는다.
-      const styleSeed = `${input.studentName}|${trendCtx?.date ?? ""}|${input.subject}`;
-      const style = commentStyleDirective(styleSeed);
-      const body = commentBody(safeInput, tpl);
-      // 순서가 뜻이다 — 말투 지침의 마지막 줄이 바로 위 '이번 알림장의 결'을 가리킨다(첫 문장 여는 자리는 결이 이긴다).
-      sections.push({ type: "comment", field: "comment", body: withTeacherStyle(style ? `${body}
-
-${style}` : body) });
-    }
-
-    // 추세 섹션(선택) — 컨텍스트 있고 표본 충분할 때만. 대상 날짜(작업중, 미저장일 수 있음) 포함(edutrix 패리티).
+    // 추세(선택) — 컨텍스트 있고 표본 충분할 때만. 대상 날짜(작업중, 미저장일 수 있음) 포함(edutrix 패리티).
     // ⚠️ 과거 날짜 보고서: 그 뒤에 이미 채점 이력이 있으면 추세 미반영 — 뒤늦게 끼우는 과거 점이 추세 그래프/서술을 흐트러뜨림(원장 2026-07-14).
-    let hasTrend = false;
+    // 사실 줄이 있을 때만 — 추세 섹션을 만들고, 생성 뒤 대조(findTrendContradictions)에도 쓴다.
+    let trendInput: TrendInput | null = null;
+    // 지난 보고서와 달라진 게 없다(trendNews) — 이번 회차엔 추세를 쓰지 않는다. 칸은 화면이 정한다: 지난 자동작성이 넣은 글 그대로면
+    //   비우고, 선생님이 손으로 쓰거나 고친 글이면 둔다(적대적 재리뷰 2026-10-16 — 일괄 자동작성이 반 전체의 손글씨 추세를 지웠을 것).
+    let trendQuiet = false;
     if (trendCtx?.studentId) {
       const anchorDate = resolveReportDate(trendCtx.date); // 대상 날짜(빈값·미래→오늘)
       const skipTrend =
         anchorDate < kstToday() && (await hasLaterScoredReport(supabase, trendCtx.studentId, trendCtx.subject, anchorDate));
       if (!skipTrend) {
-        const specialClassIds = await fetchSpecialClassIds(supabase);
-        const history = await fetchScoreHistory(supabase, trendCtx.studentId, trendCtx.subject, anchorDate, 30, {
-          classId: trendCtx.classId,
+        const [specialClassIds, resolvedClassId] = await Promise.all([
+          fetchSpecialClassIds(supabase),
+          trendCtx.classId === undefined && trendCtx.resolveClass && trendCtx.subject
+            ? resolveReportClassId(supabase, {
+                studentId: trendCtx.studentId,
+                reportDate: anchorDate,
+                subject: trendCtx.subject,
+                teacherName: trendCtx.resolveClass.teacherName ?? null,
+              })
+            : Promise.resolve(undefined),
+        ]);
+        const trendClassId = trendCtx.classId !== undefined ? trendCtx.classId : (resolvedClassId ?? undefined);
+        // 90일을 읽는다 — 반복 방지가 최근 60일 안의 지난 추세 회차를 그 회차의 30일 창으로 다시 계산한다(사실은 30일 창만, buildTrendInput).
+        const history = await fetchScoreHistory(supabase, trendCtx.studentId, trendCtx.subject, anchorDate, 90, {
+          classId: trendClassId,
           specialClassIds,
+          lookbackDays: TREND_HISTORY_FETCH_DAYS,
         });
         history.push({
           date: anchorDate,
           examInfo: trendCtx.todayExamInfo?.trim() || null,
           homeworkScore: trendCtx.todayHomework?.trim() || null,
+          classId: trendClassId ?? null,
         });
-        const ti = buildTrendInput(history);
-        if (ti) {
-          const ttpl = await loadActivePrompt(supabase, user.tenantId, "trend");
-          sections.push({ type: "trend", field: "trend", body: trendBody(ti, ttpl) });
-          hasTrend = true;
-        }
+        const ti = buildTrendInput(history, { today: anchorDate });
+        if (ti && ti.facts.length) trendInput = ti;
+        else if (ti?.quiet) trendQuiet = true;
       }
     }
 
+    // 🔴 조립·응답 읽기·생성 뒤 검사 = AI 멘트 탭 미리보기와 **같은 함수**(ment-assembly.ts — 원장 2026-10-16 미리보기 = 실제와 같게).
+    //    활성 프롬프트(DB > 기본)는 이 모드·추세에 쓰는 것만 읽는다 — 넷은 서로 독립(B4).
+    const [tplComment, tplP1, tplP2, tplTrend] = await Promise.all([
+      mode === "B" ? null : loadActivePrompt(supabase, user.tenantId, "comment"),
+      mode === "B" ? loadActivePrompt(supabase, user.tenantId, "comment_p1") : null,
+      mode === "B" ? loadActivePrompt(supabase, user.tenantId, "comment_p2") : null,
+      trendInput ? loadActivePrompt(supabase, user.tenantId, "trend") : null,
+    ]);
+    const sections = mentSections({
+      mode,
+      input: safeInput,
+      templates: { comment: tplComment, comment_p1: tplP1, comment_p2: tplP2, trend: tplTrend },
+      // 결 변형 시드가 결정적이라 같은 학생·같은 날 재생성해도 결이 흔들리지 않는다. 날짜는 **보고서 날짜**(빈 값 = 오늘) —
+      //   원스크린은 오늘을 볼 때 date를 비워 보내 시드가 `이름||과목`이 됐고, 한 학생이 날마다 같은 결로 열렸다(2026-10-16 미리보기 후속에서 발견).
+      styleSeed: `${input.studentName}|${resolveReportDate(trendCtx?.date)}|${input.subject}`,
+      styleBlock,
+      toneBlock,
+      trend: trendInput,
+    });
     if (sections.length === 0) return { ok: false, error: "생성할 내용이 없습니다" };
 
     // 통합 1회 호출 — 멘트(·추세)를 한 번에 {comment|p1|p2, trend}로 생성. temp 0.3·reasoning minimal(Solar 후보정) 적용.
-    // 보고서 멘트·추세는 **fast tier**(Claude Haiku 4.5 / 키 죽으면 Solar 폴백) — 사실 서술형이라 Sonnet 불요, 비용 절감(원장 결정 2026-07-14).
-    // ⚠️ 이 tier 지정은 **멘트 호출에만** — 등록상담·회의록 분석은 balanced(Sonnet 5) 유지. Haiku도 Anthropic 키가 살아야 동작(아니면 Solar).
-    const { data } = await generateJSON<Record<string, string>>({
+    // 보고서 멘트·추세는 **fast tier**(Claude Haiku 5.5 — 2026-10-16 4.5에서 올림 / 키 죽으면 DeepSeek flash 폴백) — 사실 서술형이라 Sonnet 불요, 비용 절감(원장 결정 2026-07-14).
+    // ⚠️ 이 tier 지정은 **멘트 호출에만** — 다른 AI는 balanced(Sonnet 5.5 · 기능별 고정은 model-pins.ts). Haiku도 Anthropic 키가 살아야 동작(아니면 DeepSeek).
+    const { data } = await generateJSON<Record<string, unknown>>({
       prompt: assembleCombined(sections),
-      maxTokens: safeInput.specialNote || safeInput.classNotice ? 1800 : 1000,
+      maxTokens: mentMaxTokens(safeInput),
       keyName: "default",
       tier: "fast",
       meta: { feature: "classnote_ment", tenantId: user.tenantId },
       ...MENT_AI_TUNING,
     });
-    const pick = (k: string) => (data[k] ?? "").trim();
-    const aiComment = mode === "B" ? [pick("p1"), pick("p2")].filter(Boolean).join("\n\n") : pick("comment");
-    if (!aiComment) return { ok: false, error: "빈 응답" };
-    const comment = prependParentAddress(appendVideoReceiptComment(aiComment, videoReceipt), parentAddress);
-    // 🔴 추세 문장 후검증(2026-08-13) — 척도가 섞인 학생에게서 *"9~15문제 중 9~15개 선을 유지"* 같은
-    //    **사실일 수 없는 표기**가 실제로 학부모에게 나갔다. 프롬프트 주의 문구가 이미 있었는데도 뚫렸으므로
-    //    생성 뒤에도 한 번 더 본다. 걸리면 **추세를 아예 안 실는다** — 없는 것보다 거짓이 나쁘다.
-    //    (추세는 선택 항목이라 빠져도 보고서는 성립한다. 멘트는 그대로 살린다.)
-    const rawTrend = hasTrend ? pick("trend") || undefined : undefined;
-    const badSpans = rawTrend ? findImpossibleScaleSpans(rawTrend) : [];
-    if (badSpans.length)
+    const res = readMentResponse(data, mode, trendInput);
+    if (!res.comment) return { ok: false, error: "빈 응답" };
+    const comment = prependParentAddress(appendVideoReceiptComment(res.comment, videoReceipt), parentAddress);
+    if (res.dropped)
       console.warn(
         JSON.stringify({
           level: "warn",
           scope: "generateReportComment.trend",
-          reason: "impossible_scale_span",
-          spans: badSpans,
-          message: "추세 문장에 사실일 수 없는 척도 표기가 있어 저장하지 않음",
+          reason: res.badSpans.length ? "impossible_scale_span" : "banned_phrase",
+          spans: res.badSpans,
+          violations: res.violations,
+          message: "추세 문장에 기록에 없는 내용·사실일 수 없는 표기가 있어 저장하지 않음",
         }),
       );
-    const trend = badSpans.length ? undefined : rawTrend;
-    return { ok: true, comment, trend };
+    // trendDropped = 이번에 만든 추세를 버렸다 — 화면은 추세 칸을 비운다(안 비우면 예전 초안이 그대로 발송된다, 적대적 리뷰 2026-10-15).
+    //    trendQuiet = 달라진 게 없어 안 만들었다 — 화면이 자동작성 글이면 비우고 손글씨면 둔다. 표본 부족은 종전대로 기존 초안·손 입력을 둔다.
+    //    모델이 추세를 **비워 보냈다**(본문이 이미 같은 말을 했거나 오늘 값과 어긋나 쓸 말이 없다 — 2026-10-16 시험 120회 중 5회)도 같은 뜻이다.
+    //    ⚠️ 응답에 trend 키가 **아예 없는** 것(대체 provider가 계약을 빠뜨림)은 일부러 비운 게 아니다 — 지난 초안을 비우지 않는다(적대적 리뷰).
+    const quiet = trendQuiet || res.quietByModel;
+    return { ok: true, comment, trend: res.trend, ...(res.dropped ? { trendDropped: true } : {}), ...(quiet ? { trendQuiet: true } : {}) };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "AI 생성 실패" };
   }

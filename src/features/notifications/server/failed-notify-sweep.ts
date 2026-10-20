@@ -8,6 +8,7 @@ import {
   selectMissing,
   type FailedReportRow,
 } from "../failed-notify-sweep";
+import { taskIdsFor } from "@/features/staff-tasks/server/link";
 
 /** 최근 며칠의 실패만 본다 — 더 옛날 건은 지금 알려도 조치할 수 없다(too_old 7일 컷 밖). */
 const WINDOW_DAYS = 14;
@@ -110,6 +111,8 @@ export async function sweepFailedReportNotifications(
   );
   const masterIds = ((mastersRes.data ?? []) as { id: string }[]).map((m) => m.id);
 
+  // 할 일(0377a) — 메우는 알림도 그 보고서의 실패 할 일을 가리킨다(회차 없음 = '').
+  const taskIds = await taskIdsFor(admin, tenantId, "report_send_failed", missing.map((m) => m.id));
   const inserts: Record<string, unknown>[] = [];
   for (const m of missing) {
     const body = buildFailureBody(m);
@@ -126,6 +129,7 @@ export async function sweepFailedReportNotifications(
         body,
         link: "/lesson-reports",
         actor_id: null,
+        task_id: taskIds.get(`${m.id}|`) ?? null,
       });
     }
   }

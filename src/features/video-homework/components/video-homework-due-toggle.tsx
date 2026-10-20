@@ -12,13 +12,14 @@ export type DueToggleRow = {
   studentName: string; subjectName: string;
 };
 
+// 한 덩어리 세그먼트(원장 2026-10-19 *"7일 / 다음 수업 이거 좀 더 깔끔하게"*) — 두 칸이 테두리 하나를 나눠 쓰고 줄이 바뀌어도 갈라지지 않는다.
 const segment = (on: boolean, locked: boolean | undefined, size: "sm" | "pill") =>
-  `rounded-pill font-bold transition ${size === "pill" ? "px-2.5 py-1 text-xs" : "px-2 py-0.5 text-xs"} ${
-    on ? "bg-primary-soft text-primary" : "border-line text-text-dim hover:bg-bg-soft border"} ${
+  `whitespace-nowrap font-semibold transition ${size === "pill" ? "px-2.5 py-1 text-xs" : "px-1.5 py-0.5 text-xs"} ${
+    on ? "bg-primary-soft text-primary" : "text-text-dim hover:bg-bg-soft"} ${
     locked ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`;
 
 /**
- * 영상 숙제 **마감**(원장 2026-10-15 *"영상 숙제에 체크하면 토글이 나오도록"* · *"다음수업 또는 7일 둘중에 하나"* · *"기본값은 7일"*).
+ * 영상 숙제 **기한**(화면 이름 '기한' — 원장 2026-10-19 *"마감 -> 기한"* · 원장 2026-10-15 *"영상 숙제에 체크하면 토글이 나오도록"* · *"다음수업 또는 7일 둘중에 하나"* · *"기본값은 7일"*).
  * '영상 과제'를 켠 행에서만 뜬다(영상 첨부 링크 넣기와 같은 흐름). 고른 적 없으면 7일이다.
  * '다음 수업'의 날짜는 저장할 때 서버가 시간표로 정한다(due.ts · report-due.ts) — 정해지면 옆에 날짜를 보여 준다.
  * 칸이 없거나(SQL 적용 전) 그날 값을 못 읽었으면 그리지 않는다(저장에도 안 실린다 — 저장돼 있던 마감을 덮지 않게).
@@ -49,13 +50,15 @@ export function VideoHomeworkDueToggle({ shown, mode, dueDate, onChange, disable
     { value: "next", label: current === "next" && dueDate ? `${t("os.row.videoDueNext")} ${monthDayLabel(dueDate)}` : t("os.row.videoDueNext") },
   ];
   return <div role="radiogroup" aria-label={tf("os.row.videoDueAria", { name: row.studentName, subject: row.subjectName })} title={t("os.row.videoDueTip")}
-    className="flex w-fit flex-wrap items-center gap-1">
+    className="flex w-fit flex-wrap items-center gap-x-1.5 gap-y-0.5">
     <span className="text-text-dim text-xs">{t("os.row.videoDue")}</span>
-    {options.map((option) => (
-      <button key={option.value} type="button" role="radio" aria-checked={current === option.value} disabled={locked}
-        onClick={() => { if (current !== option.value) onChange(option.value); }} className={segment(current === option.value, locked, size)}>
-        {option.label}
-      </button>
-    ))}
+    <span className="border-line inline-flex overflow-hidden rounded-md border">
+      {options.map((option, i) => (
+        <button key={option.value} type="button" role="radio" aria-checked={current === option.value} disabled={locked}
+          onClick={() => { if (current !== option.value) onChange(option.value); }} className={`${segment(current === option.value, locked, size)}${i ? " border-line border-l" : ""}`}>
+          {option.label}
+        </button>
+      ))}
+    </span>
   </div>;
 }

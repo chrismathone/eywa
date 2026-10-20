@@ -201,7 +201,9 @@ describe("교재 배정 — 칸은 요일까지 고른다", () => {
 describe("교재 배정 — 한 배정엔 한 담당만", () => {
   it("창은 다른 담당을 고르면 그쪽으로 갈아탄다(섞이지 않는다)", () => {
     const dlg = read("src", "features", "class-sheets", "components", "textbook-fill-dialog.tsx");
-    expect(dlg).toContain("if (otherTeacher) return new Set([s.key]);");
+    expect(dlg).toContain("setPicked(new Set([s.key]));");
+    // 갈아탈 때 앞 담당의 자리(요일·차수)도 함께 비운다 — 남으면 두 담당이 한 배정에 섞인다.
+    expect(dlg).toContain("setSpots(new Set());");
     // 규칙을 말로도 적는다 — 칩이 흐려진 이유를 사람이 알 수 있어야 한다.
     expect(dlg).toContain("fill.slots.oneTeacher");
   });
@@ -323,6 +325,96 @@ describe("교재 배정 — 회차 미루기·당기기", () => {
     expect(io).not.toMatch(/\.update\(\{\s*plan_date/);
     // 가져오기 RPC(빈 칸만 채움)를 다시 부르지 않는다 — 그게 1차 구현이 안 움직인 이유다.
     expect(body).not.toContain("ecs_apply_textbook_lessons");
+  });
+
+  it("🔴 배정 교재가 지나가는 칸은 **교재 순서로** 다시 깐다(원장 2026-10-16 — 화·금 교재 순서 꼬임)", () => {
+    const body = plan.slice(plan.indexOf("export async function setLessonShift"));
+    // 교재 경로가 먼저 — 같은 요일 이동이 먼저 돌면 화요일 칸만 움직여 순서가 꼬인다.
+    expect(body.indexOf("shiftAlongPlans(")).toBeGreaterThan(-1);
+    expect(body.indexOf("shiftAlongPlans(")).toBeLessThan(body.indexOf("shiftActualLines("));
+    const relay = read("src", "features", "textbooks", "server", "shift-relay.ts");
+    // 표식을 반영한 일정(월간계획과 같은 함수)이 정본 — 둘이 다른 순서를 말하지 않게.
+    expect(relay).toContain("expandPlans(");
+    expect(relay).toContain("placeShiftMarker(");
+    // 배정 교재의 줄(고쳐 쓴 줄 포함)은 요일 이동에서 뺀다(두 번 움직이거나 요일 축으로 다시 꼬이면 안 된다).
+    expect(relay).toContain("excludeIds: bookLineIds");
+    expect(relay).toContain("isBookLine(l, book)");
+    // 🔴 못 읽었으면 종전 방식으로 떨어뜨리지 않는다(그게 순서를 꼬던 길이다).
+    expect(relay).toMatch(/status !== "ok"\) \{\s*return \{ handled: true, ok: false/);
+  });
+
+  it("🔴 같은 주의 다른 칸도 화면에 갈아 끼운다 — 한 칸짜리 화면엔 넘기지 않는다(2026-10-16 재점검)", () => {
+    // 화를 누르면 그 주 금요일도 바뀐다 — 주간 시트가 누른 칸만 바꾸면 금요일이 옛 진도로 남아 보인다.
+    const body = plan.slice(plan.indexOf("export async function setLessonShift"));
+    expect(body).toContain("readWeekCells(");
+    const handlers = read("src", "features", "class-sheets", "components", "use-plan-handlers.ts");
+    expect(handlers).toContain("if (multiSlot)");
+    const sheet = read("src", "features", "class-sheets", "components", "sheet-client.tsx");
+    expect(sheet).toContain("multiSlot: true");
+    // 🔴 SlotPlanBlock의 onSlotLines는 날짜·교시를 안 보고 자기 칸을 통째로 바꾼다 — 넘기면 남의 칸이 그려진다.
+    const block = read("src", "features", "class-sheets", "components", "slot-plan-block.tsx");
+    expect(block).not.toContain("multiSlot");
+    // 🔴 지우는 건 옛 일정이 그 교재를 놓았던 칸뿐(교재가 끝난 뒤 복사해 둔 같은 문구 줄을 지우지 않게).
+    const relay = read("src", "features", "textbooks", "server", "shift-relay.ts");
+    expect(relay).toContain("previous: scheduleWith(m!.shifts ?? {})");
+  });
+
+  it("🔴 차수 하나 = 줄 하나 — 가져오기·미룸·당김이 같은 쓰기를 탄다(원장 2026-10-19 \"차시마다 한줄씩\")", () => {
+    // 한 줄로 잇던 옛 함수가 되살아나면 `25분` 줄 하나에 차수가 둘 들어간다.
+    expect(plan).not.toContain("mergeSameCellLessons");
+    const body = plan.slice(plan.indexOf("export async function importPlannedRange"));
+    expect(body).toContain("applyCellLessons(");
+    expect(body).toContain("groupCellLessons(");
+    const relay = read("src", "features", "textbooks", "server", "shift-relay.ts");
+    expect(relay).toContain("applyCellLessons(");
+    expect(relay).not.toContain('rpc("ecs_apply_textbook_lessons"');
+    // 고쳐 쓴 줄도 차수 자리를 차지한다(1차수 줄을 고친 칸에서 2차수가 1번 자리로 밀려 들어가지 않게).
+    expect(relay).toContain("lines: mine, edited,");
+  });
+
+  it("🔴 되돌리기 — 같은 게이트 · 클라 기록을 그대로 믿지 않는다(원장 2026-10-19 \"덮어쓰기(되돌리기)\")", () => {
+    const undo = read("src", "features", "textbooks", "server", "shift-undo-actions.ts");
+    expect(undo).toContain("requireEcsClassAccess(input.classId, { write: true })");
+    expect(undo).toContain("validToken(input.token, input.classId)");
+    expect(undo).toContain("restoreShiftState(");
+    expect(read("src", "features", "textbooks", "server", "shift-undo-core.ts")).toContain("planShiftUndo(");
+    // 누르기 전 모습은 setLessonShift가 옮기기 **전에** 읽는다.
+    const body = plan.slice(plan.indexOf("export async function setLessonShift"));
+    expect(body.indexOf("snapshotShiftState(")).toBeLessThan(body.indexOf("shiftAlongPlans("));
+  });
+
+  it("🔴 배정 삭제 = 진도 줄·표식 함께 지우기(선택) + 되돌리기(원장 2026-10-19)", () => {
+    const body = plan.slice(plan.indexOf("export async function deleteClassTextbookPlan"));
+    expect(body).toContain("clearPlanLines(");
+    // 손대지 않은 배정 줄만(고쳐 쓴 줄·다른 교재는 남는다) · 다른 배정이 같이 쓰는 칸의 표식은 남긴다.
+    const io = read("src", "features", "textbooks", "server", "plan-delete-lines.ts");
+    expect(io).toContain("isAssignedLine(");
+    expect(io).toContain("markersToClear(");
+    // 같은 교재가 다른 축에도 배정돼 있으면 줄은 남긴다(줄엔 축 표시가 없다).
+    expect(io).toContain("!input.keepLines");
+    // 되돌리기 기록은 실제로 지운 것만(앞뒤 스냅숏 차이로 만들면 남의 입력까지 담긴다).
+    const own = body.slice(0, body.indexOf("export async function", 10));
+    expect(own).not.toContain("diffShift(");
+    // 되돌리기 = 같은 게이트 + 클라 재료 재검사.
+    const undo = read("src", "features", "textbooks", "server", "plan-delete-actions.ts");
+    expect(undo).toContain("requireEcsClassAccess(input.classId, { write: true })");
+    expect(undo).toContain("validPlan(input.plan, input.classId)");
+    expect(undo).toContain("restoreShiftState(");
+    // 두 삭제 화면이 같은 선택지를 낸다.
+    const face = read("src", "app", "(shell)", "textbooks", "_components", "plans-face.tsx");
+    const sheet = read("src", "features", "class-sheets", "components", "textbook-fill-existing.tsx");
+    expect(face).toContain("deleteClassTextbookPlan(plan.id, { withLines })");
+    expect(sheet).toContain("deleteClassTextbookPlan(planId, { withLines })");
+  });
+
+  it("🔴 버튼은 실제 줄이 있는 칸에만 · 누르면 확인 창부터(원장 2026-10-19)", () => {
+    const table = read("src", "features", "class-sheets", "components", "plan-table.tsx");
+    const cal = read("src", "features", "class-sheets", "components", "month-calendar.tsx");
+    const month = read("src", "features", "class-sheets", "components", "month-client.tsx");
+    expect(table).toContain("canShiftCell(rows)");
+    expect(table).toContain("shiftConfirm.ask(");
+    expect(cal).toContain("canShiftCell(lines)");
+    expect(month).toContain("onShift={shiftConfirm.ask}");
   });
 
   it("🔴 버튼은 **실제를 적는 표**에 있다 — 달력에만 두면 사람이 못 찾는다", () => {

@@ -147,6 +147,10 @@ export const subjectSchema = z.object({
   // 신규 상담으로 받지 않는 과목용. 미설정/false = 노출(기존 동작 유지). 내부 화면·시간표엔 영향 없음.
   // (.default(false)가 아니라 .optional() — 예외 플래그라 과목마다 적어넣게 만들지 않는다. weekdayPeriods와 동일.)
   hiddenFromIntake: z.boolean().optional(),
+  // 원생상담 의무(직원 평가 · 원장 2026-10-19) — false = 그 과목에서 학생을 **가장 많은 요일 맡은 선생님만** 의무(같으면 모두).
+  // true = 학생이 다니는 반의 **수업 담당**(반에 '담당'으로 세팅된 선생님) 모두. 미설정 = 영어(english)는 수업 담당, 그 밖은 요일 많은 선생님
+  // (원장 2026-10-19 *"영어과목은 '담당'으로 수업에서 세팅된 선생님"* — 영어는 원어민이 교시를 많이 맡는다). 판정 = `counselByClassTeacher`.
+  counselAllHomerooms: z.boolean().optional(),
   // 강사뷰(강사별시간표) 내부 가로줄 시각("HH:MM") — 큰 섹션 경계 표시. 미설정 = 영어 기본 6시각.
   teacherViewLines: z.array(z.string().regex(HHMM, "HH:MM 형식")).max(40).optional(),
   // 강사뷰 격자 단위(분). 미설정 = 10.
@@ -498,6 +502,18 @@ export const reportSchema = z.object({
   showTrendGraph: z.boolean().default(true), // 성적 추이 그래프(시험·과제 순수 SVG) — edutrix ReportPaper 그래프 이식
   showAttachments: z.boolean(), // 학생 사진 첨부(P2b) — /r·ClassNote 게시 이미지에 표시
   allowTeacherTestMax: z.boolean(), // 강사가 원스크린에서 테스트 문항수(/N)를 직접 변경 가능한지. off=과목 설정값 고정.
+  // 오늘 수학 채점 결과로 원스크린 수학 행의 일일·확인테스트 빈칸 채우기(2026-10-17 · 개발 중 — 원장 *"원장 설정에서 오늘의
+  // 수학 탭에서 토글 온 되어있어야 연동되게"*). 기본 꺼짐. 지점 라이선스(todays_math)도 켜져 있어야 동작한다.
+  // 화면 = 학원 설정 → 연동 → 오늘 수학 · 소비처 = onescreen/server/todays-math-fill.ts(로스터).
+  todaysMathTestFill: z.boolean().default(false),
+  // 오늘 수학 월말평가 결과로 성적관리 수학 월말평가 빈칸 채우기(2026-10-17 · 개발 중 — 원장 *"같은 탭에 토글로"*). 기본 꺼짐.
+  // 자동 저장이 아니다 — 성적 입력 화면에 '채우기' 단추가 서고, 저장은 선생님이 평소처럼 누른다(저장 단일 경로 writeGradeCells).
+  // 소비처 = exams/input/page.tsx → features/grades/server/todays-math-monthly.ts.
+  todaysMathMonthlyFill: z.boolean().default(false),
+  // 오늘 수학 월말평가 성적표(확정된 PDF)를 그 학생의 그날 수학 보고서 첨부에 붙이기(2026-10-18 · 개발 중 — 원장 *"오늘 수학에
+  // 완성되면 pdf 첨부하는 방향으로"*). 기본 꺼짐 · 지점 라이선스(todays_math)도 켜져 있어야 동작한다. 안 보낸 보고서에만 붙는다.
+  // 소비처 = integrations/todays-math/exam-report-attach.ts(결과 동기화 뒤 · 0373a).
+  todaysMathReportPdf: z.boolean().default(false),
   // 영상 제출 검사 대상 — 과목·학생 학교급·반 중 하나라도 꺼지면 강사 체크와 관리자 당일 명단에서 제외.
   // 기존 검사 이력은 보존한다. 옛 설정에는 키가 없으므로 전체 사용으로 폴백한다.
   videoHomeworkPolicy: z.object({
@@ -597,10 +613,13 @@ const specialAccessSchema = z.object({
   enrollmentDateEditorIds: z.array(z.string().uuid()).max(80).optional(),
   // Raw absence preserves legacy operators until the owner explicitly switches to a list.
   studentStatusManagerIds: z.array(z.string().uuid()).max(80).optional(),
+  // 업무 처리 현황(모든 직원의 할 일 · 0377a) — 원장 역할은 지정 없이 본다. 새 칸이라 옛 화면·저장값엔 없다(없음 = 빈 명단).
+  // 소비처 = `getStaffTaskViewer`(staff-tasks/server/gate.ts).
+  staffTaskMonitorIds: z.array(z.string().uuid()).max(80).optional(),
   staffSubjectScopes: z.array(staffSubjectScopeSchema).max(80).default([]),
 });
 /** 사람 id 목록인 칸(과목 범위는 줄 모양이 달라 따로 다룬다). */
-export const SPECIAL_ACCESS_ID_LISTS = ["payslipViewerIds", "payslipManagerIds", "leaveAdjusterIds", "classSplitterIds", "enrollmentDateEditorIds", "studentStatusManagerIds"] as const;
+export const SPECIAL_ACCESS_ID_LISTS = ["payslipViewerIds", "payslipManagerIds", "leaveAdjusterIds", "classSplitterIds", "enrollmentDateEditorIds", "studentStatusManagerIds", "staffTaskMonitorIds"] as const;
 export const permissionsSchema = z
   .object({
     overrides: z.array(permissionOverrideSchema).max(MENU_KEYS.length * SYSTEM_ROLES.length),

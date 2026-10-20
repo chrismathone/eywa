@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import type { ManualMetricItem, StoredPeriod } from "@/features/teacher-portfolio/model/types";
 import { loadEvaluationEntries, saveEvaluationEntries, type EntryDraft } from "@/features/teacher-portfolio/server/evaluation-actions";
 import { PAY_OVERRIDE_KEY, PUNCTUALITY_OVERRIDE_KEY } from "@/features/teacher-portfolio/evaluation/config";
+import { payDataMonth } from "@/features/teacher-portfolio/model/pay-ratio";
 import { itemLabel, monthName } from "@/features/teacher-portfolio/view";
 
 type Draft = Record<string, { value: string; note: string }>;
@@ -22,14 +23,18 @@ function rowsOf(period: StoredPeriod): EntryRow[] {
     .filter((m): m is ManualMetricItem => m.id.startsWith("manual:") && !m.off)
     .map((m) => ({ key: m.id.slice("manual:".length), label: itemLabel(m), hint: `${m.unit || "값"} · ${m.max > 0 ? `만점 ${m.max}점` : "가감"}`, reason: m.reason }));
   // 매출 대비 급여를 켠 달 — 시급·업무별 단가·혼합 계약처럼 계약서로 못 읽는 급여를 원장이 넣는다(비우면 계약서 월급 → 출석부 실급여).
+  // 2026-10부터 이 달 점수는 지난달 급여 ÷ 지난달 매출(원장 2026-10-15) — 넣는 급여도 그 달(지난달) 급여다.
   if (period.items.some((m) => m.id === "payRatio" && !m.off)) {
+    const data = payDataMonth(period.month);
+    const prev = data === period.month ? null : `${Number(data.slice(5, 7))}월`;
     rows.push({
-      key: PAY_OVERRIDE_KEY, label: "급여(세전) 직접 입력", hint: "원 · 매출 대비 급여",
-      reason: "비우면 계약서 월급 → 출석부 실급여 순으로 씁니다. 넣은 금액은 이 창에서만 보이고, 포트폴리오에는 급여 비율로만 반영됩니다(10만 원 이상).",
+      key: PAY_OVERRIDE_KEY, label: prev ? `${prev} 급여(세전) 직접 입력` : "급여(세전) 직접 입력", hint: "원 · 매출 대비 급여",
+      reason: `${prev ? `이 달 점수는 지난달(${prev}) 급여 ÷ ${prev} 매출로 매깁니다(이번 달 급여는 월말이 돼야 확정). ` : ""}비우면 ${prev ? `${prev} ` : ""}계약서 월급 → 출석부 실급여 순으로 씁니다. 넣은 금액은 이 창에서만 보이고, 포트폴리오에는 급여 비율로만 반영됩니다(10만 원 이상).`,
     });
   }
   // 강사 근태를 켠 달 — 출퇴근 기록이 틀렸거나 없는 달은 원장이 그 달 수치(지각·결근·조퇴 가중 합)를 넣는다(비우면 출퇴근 기록에서 센다).
-  if (period.items.some((m) => m.id === "punctuality" && !m.off)) {
+  // 프리랜서는 근태를 세지 않고 만점이라 넣어도 반영되지 않는다 — 칸을 세우지 않는다(리뷰 2026-10-16 · 저장만 되는 칸 금지).
+  if (period.items.some((m) => m.id === "punctuality" && !m.off && !("freelancer" in m && m.freelancer))) {
     rows.push({
       key: PUNCTUALITY_OVERRIDE_KEY, label: "강사 근태 — 지각·결근·조퇴 횟수", hint: "회 · 강사 근태",
       reason: "넣으면 메이크에듀 출퇴근 기록 대신 이 수치로 매깁니다(기록이 틀렸거나 없는 달). 학원 설정의 가중을 곱해 더한 값을 넣어 주세요(기본은 한 번에 1회). 비우면 출퇴근 기록으로 셉니다. 결재된 휴가로 쉰 날은 빼고 세 주세요.",

@@ -51,6 +51,8 @@ import {
 } from "../font-size";
 import { getTextbookOrdersForStudents } from "@/features/billing/server/textbook-queries";
 import type { OneScreenStudent } from "../types";
+import { isFeatureOptedIn } from "@/lib/license/server";
+import { applyTodaysMathFill, loadTodaysMathFill } from "./todays-math-fill";
 import { studentMarkFromRows } from "../attendance-mark";
 import { classnoteModuleOn, classnoteSendOn } from "@/features/owner/classnote-gate";
 
@@ -175,6 +177,9 @@ type OnescreenSessionRow = {
       trendDraft?: string;
       /** 자동작성이 멘트 칸에 마지막으로 넣은 텍스트(0214a 스냅샷) — 복원해야 재접속 후 저장이 manual로 오표기되지 않는다. */
       autoDraft?: string;
+      /** 자동작성이 추세 칸에 마지막으로 넣은 글(2026-10-16) · autoDraft가 AI 원문이 아님(0370a) — 같은 규약으로 복원. */
+      trendAutoDraft?: string;
+      autoDraftTemplate?: boolean;
       textbook?: string;
       makeup?: boolean;
       homeworkToday?: string;
@@ -1420,6 +1425,13 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     attByRow.set(k, { status: a.status, note: a.note ?? null, units: Number.isFinite(u) ? u : null });
   }
 
+  // 오늘 수학 채점 결과(개발 중 — 학원 설정 → 연동 → 오늘 수학 토글 ∧ 지점 라이선스). 토글이 꺼진 학원은 조회 자체가 없다.
+  // 아래 루프의 덮어쓰기(보고서 · 시트 · 세션)가 다 끝난 뒤 빈 칸만 채운다(todays-math-fill-rules.ts).
+  const todaysMathRows =
+    settings.report.todaysMathTestFill && (await isFeatureOptedIn(user.tenantId, "todays_math"))
+      ? await loadTodaysMathFill(admin, user.tenantId, targetDate, [...byStudent.keys()])
+      : [];
+
   for (const os of byStudent.values()) {
     os.reportSent = sentToday.has(os.id);
     // 행(반)별 오늘 보고서 — 반 정확매칭 우선, 반 없는 행은 과목으로 **1:1** 폴백(matchReportsToRows).
@@ -1676,6 +1688,8 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
         // 자동작성 스냅샷(0214a) — 초안과 같은 규약으로 복원. 없으면 미복원(발송본 notes 복원 행은 스냅샷을
         // 모른다 — 그 경우 저장 시 서버 sticky(resolveMentSource)가 기존 라벨로 보수 판정한다.
         if (entry?.autoDraft?.trim()) su.autoDraft = entry.autoDraft;
+        if (entry?.trendAutoDraft?.trim()) su.trendAutoDraft = entry.trendAutoDraft;
+        if (entry?.autoDraftTemplate === true) su.autoDraftTemplate = true;
         // 영어 템플릿 모드(2026-09-10) — 영어 행만 실려 있다(수학 세션엔 키 자체가 없어 아래는 전부 건너뛴다).
         if (entry?.templateId) su.templateId = entry.templateId;
         if (entry?.nextTest != null) su.nextTest = entry.nextTest;
@@ -1701,6 +1715,19 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     const prMax = parseExamMaxes(pr?.examInfo);
     if (prMax.daily != null && prMax.daily !== os.tests.daily.max) os.tests.daily.prevScore = null;
     if (prMax.check != null && prMax.check !== os.tests.check.max) os.tests.check.prevScore = null;
+    if (todaysMathRows.length) {
+      applyTodaysMathFill(os, todaysMathRows, {
+        daily: showDailyTest,
+        check: showCheckTest,
+        isMathRow: (su) => (su.subjectKey?.trim() || LEGACY_REPORT_SUBJECT) === LEGACY_REPORT_SUBJECT,
+      });
+      // 위 척도 경계 규칙을 채운 칸에도 — 오늘 수학 시험은 문항 수가 평소(과목 설정 5문항 등)와 달라, 직전 회차 점수와
+      // 그대로 빼면 허위 증감("▲15")이 학부모 글에 나간다. 직전 회차 문항 수와 다르면 그 시험의 직전 점수를 버린다.
+      for (const su of os.subjects) {
+        if (su.todaysMath?.daily && prMax.daily != null && prMax.daily !== su.todaysMath.daily.max) os.tests.daily.prevScore = null;
+        if (su.todaysMath?.check && prMax.check != null && prMax.check !== su.todaysMath.check.max) os.tests.check.prevScore = null;
+      }
+    }
     // 이 학생이 수강 중인 담당 반 전체(tags) — enrollments 기준(모호 과목 포함, 위 F4 후속 회귀 주석 참조). 비면 대표 tag 폴백.
     const classNames = [...(classNamesByStudent.get(os.id) ?? [])];
     os.tags = classNames.length ? classNames : os.tag ? [os.tag] : [];

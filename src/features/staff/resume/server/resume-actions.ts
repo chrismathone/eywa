@@ -525,9 +525,20 @@ export async function deleteStaffResume(
     .delete()
     .eq("id", id)
     .eq("form_type", RESUME_FORM_TYPE)
-    .select("id, form_data"); // ⚠️ select 없으면 0행 삭제도 성공으로 보고된다. form_data = 사진 정리용.
+    .select("id, form_data, staff_user_id"); // ⚠️ select 없으면 0행 삭제도 성공으로 보고된다. form_data = 사진 정리용.
   if (error) return { error: humanizeDbError(error.message, "삭제"), detail: error.message };
   if (!deleted?.length) return { error: "이력서를 찾을 수 없습니다 — 이미 삭제되었을 수 있습니다" };
+  // 🔴 이력서 내용(form_data)은 담지 않는다 — 대상 라벨에 성명만(이력서 → 직원 등록 감사로그와 같은 모양).
+  const resumeName = (deleted[0]?.form_data as { personal?: { name?: unknown } } | null)?.personal?.name;
+  await logAction({
+    action: "staff_resume_delete",
+    targetType: "staff_resume",
+    targetLabel: typeof resumeName === "string" && resumeName.trim() ? resumeName.trim() : null,
+    metadata: {
+      resumeId: id,
+      userId: (deleted[0] as { staff_user_id?: string | null }).staff_user_id ?? null,
+    },
+  });
   // 증명사진 스토리지 정리(best-effort) — 실패해도 삭제는 유효(고아 객체는 무해, 게이트 뒤라 노출 없음).
   const photos = (deleted[0]?.form_data as { photos?: unknown } | null)?.photos;
   if (Array.isArray(photos)) {
