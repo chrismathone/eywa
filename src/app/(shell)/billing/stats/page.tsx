@@ -7,6 +7,8 @@ import { hasPeriodParams, monthSpanOf, parseStatsPeriod, readPeriodParams } from
 import { BackToListButton } from "../../consultations/_components/back-to-list-button";
 import { StatCard } from "../../students/stats/_components/stat-card";
 import { BillingTrendCard } from "./billing-trend-card";
+import { ExpenseTrendCard } from "./expense-trend-card";
+import { EXPENSE_TREND_KEYS } from "@/features/billing/stats/expense-trend";
 
 export const metadata = { title: "수납 통계 — 에이와" };
 
@@ -22,14 +24,16 @@ export default async function BillingStatsPage({ searchParams }: { searchParams:
   await requireAccess("billing");
   const sp = await searchParams;
   const params = readPeriodParams(sp);
-  const stats = await loadBillingStats(hasPeriodParams(params) ? monthSpanOf(params.span) : null, one(sp.subject));
+  const stats = await loadBillingStats(hasPeriodParams(params) ? monthSpanOf(params.span) : null, one(sp.subject), readPeriodParams(sp, EXPENSE_TREND_KEYS));
+  // 두 카드의 기간은 서로 들고 다닌다 — 한쪽 기간을 바꿔도 다른 쪽이 기본값으로 돌아가지 않게.
+  const expenseKeep = Object.fromEntries(Object.values(EXPENSE_TREND_KEYS).map((k) => [k, one(sp[k])]));
   const period = parseStatsPeriod({ span: String(stats.months.length) }, stats.today);
   const scope = stats.scope;
   return (
     <div className="@container/panel space-y-4 compact-chrome:space-y-3">
       <PageHeader
         title="수납 통계"
-        description={scope ? `청구월별 실청구 · 수납 · 미수 · ${scope.label} 청구 항목 기준` : "청구월별 실청구 · 수납 · 미수"}
+        description={scope ? `청구월별 실청구 · 수납 · 미수(${scope.label} 청구 항목 기준) · 지출` : "청구월별 실청구 · 수납 · 미수 · 지출"}
         embedLabel="수납 통계"
       />
       <div className="flex flex-wrap items-center gap-2 px-1">
@@ -39,7 +43,9 @@ export default async function BillingStatsPage({ searchParams }: { searchParams:
             {scope.choices.map((c) => (
               <EmbedLink
                 key={c.key}
-                href={`/billing/stats?subject=${encodeURIComponent(c.key)}${one(sp.span) ? `&span=${encodeURIComponent(one(sp.span)!)}` : ""}`}
+                href={`/billing/stats?${new URLSearchParams(
+                  Object.fromEntries(Object.entries({ subject: c.key, span: one(sp.span), ...expenseKeep }).filter((e): e is [string, string] => !!e[1])),
+                ).toString()}`}
                 aria-current={c.key === scope.active ? "page" : undefined}
                 className={`${TOOLBAR_SEG_ITEM} ${c.key === scope.active ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
               >
@@ -60,9 +66,17 @@ export default async function BillingStatsPage({ searchParams }: { searchParams:
           period={period}
           today={stats.today}
           scoped={!!scope}
-          keep={{ subject: one(sp.subject) }}
+          keep={{ subject: one(sp.subject), ...expenseKeep }}
         />
       )}
+      {/* 지출 추이(학원 전체 — 운영실 지출 카드처럼 과목으로 가르지 않는다) — 운영실 '이번 달 지출 내역' 상세가 `#expenses`로 온다. */}
+      <ExpenseTrendCard
+        trend={stats.expenses}
+        period={stats.expensePeriod}
+        today={stats.today}
+        keep={{ subject: one(sp.subject), span: one(sp.span) }}
+        academyWide={!!scope}
+      />
     </div>
   );
 }

@@ -9,6 +9,7 @@ export default function BillingStatsLoading() {
         <div className="bg-bg-soft/40 h-(--control-h) w-28 animate-pulse rounded-lg" />
       </div>
       <div aria-hidden="true" className="bg-bg-soft/40 h-[34rem] animate-pulse rounded-2xl" />
+      <div aria-hidden="true" className="bg-bg-soft/40 h-[30rem] animate-pulse rounded-2xl" />
     </div>
   );
 }

@@ -132,7 +132,7 @@ describe("overview display contracts", () => {
     expect(html).toContain("보강·조퇴 1칸");
     expect(html).not.toContain("청구서 1칸");
   });
-  it("출결 현황 ↗는 오늘 출결로, 최근 14일 등원율 ↗는 월별 출석부로 간다", () => {
+  it("출결 현황 ↗는 오늘 출결로, 최근 14일 등원율 ↗는 출결 통계(강사 범위는 출석부)로 간다", () => {
     // 원장 2026-09-14: "출결 현황 바로가기를 오늘의 출결과 연결시키는게 자연스러울듯." — 카드가 오늘 칸만 세므로(09-13)
     // 목적지도 오늘 화면이다. 14일 추이는 날짜를 가로지르는 기록이라 월별 그대로 둔다.
     mocks.data = snapshot();
@@ -146,6 +146,12 @@ describe("overview display contracts", () => {
     };
     render(<Overview initial={mocks.data} />);
     expect(screen.getByRole("link", { name: "출결 현황 상세" }).getAttribute("href")).toBe("/attendance/live");
+    // 14일 추이의 상세 = 출결 통계의 등원율 추이(원장 2026-10-20 *"상세 눌렀을때 추이를 볼 수 없는곳 모두 추가해보자"*).
+    expect(screen.getByRole("link", { name: "최근 14일 등원율 상세" }).getAttribute("href")).toBe("/attendance/stats#rate");
+    cleanup();
+    // 강사 범위엔 출결 통계가 없다 — 종전처럼 출석부로.
+    mocks.data = { ...mocks.data, teacherView: true };
+    render(<Overview initial={mocks.data} />);
     expect(screen.getByRole("link", { name: "최근 14일 등원율 상세" }).getAttribute("href")).toBe("/attendance");
     cleanup();
   });

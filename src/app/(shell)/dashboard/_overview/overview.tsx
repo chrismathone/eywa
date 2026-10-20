@@ -16,7 +16,7 @@ import {
 } from "@/features/dashboard/overview/model";
 import { concurrentShare } from "@/features/students/enrollment/enrolled-composition";
 // 재원생 패널 ↗는 KPI 카드와 같은 주소 — "/students"만 적으면 계정에 저장된 필터가 끼어 숫자가 달라 보인다(F21).
-import { attendanceStatsHref, billingStatsHref, studentsEnrolledHref, studentsStatsHref } from "@/features/dashboard/overview/kpi-links";
+import { attendanceStatsHref, billingStatsHref, expenseStatsHref, studentsEnrolledHref, studentsStatsHref } from "@/features/dashboard/overview/kpi-links";
 import { DASHBOARD_SUBJECT_COLORS, STAFF_SUBJECT_LEGEND, dashboardSubjectColor, dashboardCombinationColor } from "@/features/dashboard/overview/subject-colors";
 import { foldExpenseTotals } from "@/features/dashboard/overview/expense-total";
 import { paymentRateDisplay } from "@/features/billing/calc";
@@ -1334,7 +1334,7 @@ export function Overview({
           ? `이번 달 · 지출일 기준 · ${v.expenses.data.count}건`
           : "이번 달 지출결의서 기준"
       }
-      href={`/billing?tab=expenses&period=${snapshot.today.slice(0, 7)}`}
+      href={expenseStatsHref()}
       sections={[v.expenses]}
     >
       {v.expenses?.data && (

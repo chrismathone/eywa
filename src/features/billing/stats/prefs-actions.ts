@@ -9,3 +9,10 @@ export async function saveBillingStatsMode(next: { mode: string }): Promise<{ ok
   if (mode !== "month" && mode !== "month24") return { ok: false, error: "알 수 없는 보기입니다" };
   return patchMyUiPrefs("billingStats", { mode: mode === "month" ? undefined : mode });
 }
+
+/** 지출 추이 보기 방식(12·24개월 · 일별 · 구간)을 계정에 저장 — 기본(12개월)은 키를 지운다. */
+export async function saveExpenseStatsMode(next: { mode: string }): Promise<{ ok: boolean; error?: string }> {
+  const mode = parsePeriodMode(next?.mode);
+  if (!mode) return { ok: false, error: "알 수 없는 보기입니다" };
+  return patchMyUiPrefs("billingStats", { expenseMode: mode === "month" ? undefined : mode });
+}

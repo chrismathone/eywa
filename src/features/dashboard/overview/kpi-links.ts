@@ -100,6 +100,11 @@ export function attendanceStatsHref(subject?: string | null): string {
   return `/attendance/stats${subject ? `?subject=${encodeURIComponent(subject)}` : ""}#rate`;
 }
 
+/** 운영실 '이번 달 지출 내역'의 '상세' — 수납 통계의 지출 추이(지출일 기준 · 학원 전체). 그 달 지출 목록은 통계의 수치 표가 잇는다. */
+export function expenseStatsHref(): string {
+  return "/billing/stats#expenses";
+}
+
 /** 그날 결석 학생(출석부). */
 export function absentDayHref(date: string): string {
   return `/attendance/${date}?status=absent`;
