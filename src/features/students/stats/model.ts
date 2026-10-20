@@ -35,8 +35,11 @@ export type StudentStatsPrefs = {
   /** 그래프 종류 — 재원생 추이는 꺾은선, 월별 기록은 막대가 기본(계정 귀속 · 운영실 차트 종류와 같은 결). */
   trendKind: ChartKind;
   flowKind: ChartKind;
+  /** '지난 기록' 보기 — 연도별이 기본(원장 2026-10-20 · 6년치라 달마다는 촘촘하다). */
+  historyView: HistoryView;
 };
-export const DEFAULT_STUDENT_STATS_PREFS: StudentStatsPrefs = { range: "all", view: "subject", off: [], flowRange: "all", trendKind: "line", flowKind: "bar" };
+export type HistoryView = "yearly" | "monthly";
+export const DEFAULT_STUDENT_STATS_PREFS: StudentStatsPrefs = { range: "all", view: "subject", off: [], flowRange: "all", trendKind: "line", flowKind: "bar", historyView: "yearly" };
 
 const isRange = (v: unknown): v is TrendRange => TREND_RANGES.includes(v as TrendRange);
 
@@ -51,6 +54,7 @@ export function parseStudentStatsPrefs(raw: unknown): StudentStatsPrefs {
     flowRange: o.flowRange === "m12" ? "m12" : "all",
     trendKind: o.trendKind === "bar" ? "bar" : "line",
     flowKind: o.flowKind === "line" ? "line" : "bar",
+    historyView: o.historyView === "monthly" ? "monthly" : "yearly",
   };
 }
 
@@ -170,7 +174,8 @@ export function distinctSubjectTokens(subjects: readonly { key: string; color: P
   return out;
 }
 
-export type FlowRow = { month: string; enrolled: number; withdrawn: number };
+/** `startedOnly` = 그달 등록 칸이 수업을 시작한 등록만 셌나(`MonthChange`와 같은 뜻 · 안내는 `startedNote`). */
+export type FlowRow = { month: string; enrolled: number; withdrawn: number; startedOnly?: boolean };
 
 /** 등록·퇴원 합계와 순증. */
 export function flowTotals(rows: readonly FlowRow[]): { enrolled: number; withdrawn: number; net: number } {

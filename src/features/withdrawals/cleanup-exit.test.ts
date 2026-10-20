@@ -79,7 +79,7 @@ describe("퇴원 집계 조회 배선", () => {
     expect(count(server, 'billing ? "billed" : "fallback"')).toBe(1);
     // 과목별 추이·원생 통계는 원본·청구 캐시를 따로 · 청구가 실패하면 그 요청에서만 종전 규칙.
     expect(count(server, "loadBillingCached(tenantId, today).catch(warnBilling)")).toBe(2);
-    expect(count(server, "await trendInputs(tenantId, today)")).toBe(2);
+    expect(count(server, "trendInputs(tenantId, today)")).toBe(2);
     expect(count(billing, "isCleanupExit(")).toBe(1);
     expect(count(billing, "billedTuitionMonths(")).toBe(1);
   });

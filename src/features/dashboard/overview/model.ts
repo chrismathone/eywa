@@ -24,7 +24,19 @@ export type MonthChange = {
   month: string;
   enrolled: number;
   withdrawn: number;
+  /** 그달 등록 칸이 **수업을 시작한 등록만** 셌나(원장 2026-10-20 — 청구가 덮은 달부터 · 판정 재료가 없으면 표식도 없다). */
+  startedOnly?: boolean;
 };
+
+/**
+ * 등록 칸 안내 — '수업을 시작한 등록만' 판정이 걸린 달이 있을 때만(판정 재료가 실패했거나 청구가 덮기 전 달뿐이면 말하지 않는다 —
+ * 적대 리뷰 2026-10-20: 안내가 늘 붙어 있으면 거짓이 되는 때가 있다). 보이는 달 중 일부만 걸렸으면 그 달부터라고 적는다.
+ */
+export function startedNote(rows: readonly { month: string; startedOnly?: boolean }[]): string | null {
+  const first = rows.find((r) => r.startedOnly)?.month;
+  if (!first) return null;
+  return rows[0]!.startedOnly ? "등록은 수업을 시작한 학생만" : `등록은 ${first.slice(0, 4)}년 ${Number(first.slice(5, 7))}월부터 수업을 시작한 학생만`;
+}
 export type CareSummary = {
   total: number;
   stages: import("./student-composition").SubjectDistributionRow[];

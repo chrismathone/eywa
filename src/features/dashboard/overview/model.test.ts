@@ -5,6 +5,7 @@ import {
   monthlyChanges,
   monthKeys,
   processingSummary,
+  startedNote,
   type OverviewSnapshot,
 } from "./model";
 import { overviewTables, refreshDelay } from "./realtime";
@@ -141,6 +142,13 @@ describe("overview metric boundaries", () => {
       withdrawn: 1,
     });
     expect(rows.reduce((sum, row) => sum + row.enrolled, 0)).toBe(1);
+  });
+  it("'수업을 시작한 등록만' 안내는 판정이 걸린 달이 있을 때만 · 일부 달만이면 그 달부터(원장 2026-10-20)", () => {
+    const row = (month: string, startedOnly?: boolean) => ({ month, enrolled: 1, withdrawn: 0, ...(startedOnly ? { startedOnly } : {}) });
+    expect(startedNote([row("2026-09", true), row("2026-10", true)])).toBe("등록은 수업을 시작한 학생만");
+    expect(startedNote([row("2025-12"), row("2026-01", true)])).toBe("등록은 2026년 1월부터 수업을 시작한 학생만");
+    expect(startedNote([row("2026-09"), row("2026-10")])).toBeNull(); // 판정 재료가 없었다(실패) — 말하지 않는다
+    expect(startedNote([])).toBeNull();
   });
   it("preserves unclassified students so chart totals match the KPI", () => {
     const rows = distribution(["초1", null, " ", "초1", "중3"]);

@@ -1,0 +1,117 @@
+"use client";
+
+import { useState } from "react";
+import { ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
+import { DASHBOARD_SUBJECT_COLORS } from "@/features/dashboard/overview/subject-colors";
+import { saveStudentStatsPrefs } from "@/features/students/stats/server/prefs-actions";
+import { firstMonthWith, yearlyHistory, type HistoryField, type HistoryMonth } from "@/features/students/stats/history";
+import type { HistoryView } from "@/features/students/stats/model";
+import { StatCard } from "./stat-card";
+import { TrendChart, type ChartSeries } from "./trend-chart";
+import { HistoryTable } from "./history-table";
+
+const longMonth = (m: string) => `${m.slice(0, 4)}년 ${Number(m.slice(5, 7))}월`;
+/** 시각(UTC) → KST 'M월 D일'. */
+const kstDayText = (iso: string) => {
+  const d = new Date(new Date(iso).getTime() + 9 * 3600_000).toISOString();
+  return `${Number(d.slice(5, 7))}월 ${Number(d.slice(8, 10))}일`;
+};
+const axisMonth = (m: string) => `${m.slice(2, 4)}.${m.slice(5, 7)}`;
+/**
+ * 선 — EiE 외 수업 = 학원 색 · EiE = 운영실 '재원생 구성'의 영어 색 · 메이크에듀 재원생 기록 = 참고(회색). EiE 청구가 없는 지점은
+ * EiE를 가르지 않으니 첫 선의 이름이 그냥 '수업료가 청구된 학생'이다(없는 프로그램 이름을 붙이지 않는다).
+ */
+const historyLines = (hasEie: boolean): { key: HistoryField; name: string; color: string; strong?: boolean }[] => [
+  { key: "payingGeneral", name: hasEie ? "EiE 외 수업" : "수업료가 청구된 학생", color: "var(--color-primary)", strong: true },
+  { key: "payingEie", name: "EiE", color: DASHBOARD_SUBJECT_COLORS.english },
+  { key: "enrolledRecord", name: "메이크에듀 재원생 기록", color: "var(--color-muted-foreground)" },
+];
+
+/**
+ * '지난 기록'(원장 2026-10-20) — 메이크에듀(2020~2025) + 에이와 청구(2026~)를 한 선으로 이은 '수업료가 청구된 학생'과 '실제 신규'.
+ * 재원생 추이(에이와 기록이 갖춰진 달부터)와 **뜻이 다른 숫자**라 따로 둔다 — 청구된 학생 ≠ 재원생(휴원·시작 전·장부상 원생은 빠지고,
+ * 미납도 든다). 안내 문구는 데이터에서 나온다(추정 칸 · EiE가 처음 실린 달 · 메이크에듀 재원생 기록 기간 · 에이와 청구 시작 달) — 지점마다 다르다.
+ */
+export function HistoryBoard({
+  months,
+  aywaFrom,
+  aywaAt,
+  payingHidden,
+  initialView,
+  wide,
+}: {
+  months: HistoryMonth[];
+  aywaFrom: string | null;
+  /** 에이와 쪽 값을 마지막으로 센 시각(밤 집계) — '언제 밤 기준'을 적는다. */
+  aywaAt: string | null;
+  /** 수납 권한이 없어 서버가 청구 칸을 빼고 보냈다. */
+  payingHidden: boolean;
+  initialView: HistoryView;
+  wide: boolean;
+}) {
+  const [view, setView] = useState<HistoryView>(initialView);
+  const years = yearlyHistory(months);
+  const yearly = view === "yearly";
+  const labels = yearly ? years.map((y) => y.year) : months.map((m) => axisMonth(m.month));
+  const tips = yearly ? years.map((y) => `${y.year}년${y.months < 12 ? ` (${y.months}개월)` : ""}`) : months.map((m) => longMonth(m.month));
+  const pick = (f: HistoryField) => (yearly ? years.map((y) => y[f] ?? null) : months.map((m) => m[f] ?? null));
+  const hasEie = months.some((m) => m.payingEie !== undefined);
+  const paying: ChartSeries[] = historyLines(hasEie).filter((l) => pick(l.key).some((v) => v !== null)).map((l) => ({ ...l, values: pick(l.key) }));
+  const fresh: ChartSeries[] = [{ key: "newReal", name: "실제 신규", color: "var(--color-primary)", strong: true, values: pick("newReal") }];
+  const notes = historyNotes(months, aywaFrom, aywaAt, payingHidden);
+  return (
+    <StatCard
+      id="history"
+      title={wide ? "지난 기록 (학원 전체)" : "지난 기록"}
+      note={`${months[0] ? `${longMonth(months[0].month)}부터` : "기록 없음"} · ${payingHidden ? "실제로 수업을 시작한 신규" : "수업료가 청구된 학생과 실제로 수업을 시작한 신규"} · ${yearly ? "연도별 = 학생 수는 월평균 · 신규는 합" : "달마다"}`}
+      tools={
+        <ToolbarSegment label="보기">
+          {(["yearly", "monthly"] as const).map((v) => (
+            <ToolbarSegmentItem key={v} active={view === v} onClick={() => { setView(v); void saveStudentStatsPrefs({ historyView: v }).catch(() => undefined); }}>
+              {v === "yearly" ? "연도별" : "월별"}
+            </ToolbarSegmentItem>
+          ))}
+        </ToolbarSegment>
+      }
+    >
+      {paying.length ? (
+        <>
+          <h3 className="text-foreground text-sm font-bold">{payingHidden ? "메이크에듀 재원생 기록" : "수업료가 청구된 학생"}{yearly ? " (월평균)" : ""}</h3>
+          <TrendChart labels={labels} tooltipLabels={tips} series={paying} kind="line" />
+        </>
+      ) : null}
+      <h3 className="text-foreground text-sm font-bold">실제 신규{yearly ? " (합)" : ""}</h3>
+      <TrendChart labels={labels} tooltipLabels={tips} series={fresh} kind="bar" />
+      {notes.length ? (
+        <ul className="text-muted-foreground list-disc space-y-0.5 pl-5 text-xs break-keep">
+          {notes.map((n) => (
+            <li key={n}>{n}</li>
+          ))}
+        </ul>
+      ) : null}
+      <HistoryTable years={years} hasEie={hasEie} />
+    </StatCard>
+  );
+}
+
+/** 안내 문구 — 값이 있는 것만(지점마다 다르다). */
+function historyNotes(months: readonly HistoryMonth[], aywaFrom: string | null, aywaAt: string | null, payingHidden: boolean): string[] {
+  const out: string[] = [];
+  if (payingHidden) out.push("수업료가 청구된 학생 수는 수납 권한이 있으면 보입니다.");
+  const estimated = months.filter((m) => m.estimated.includes("payingGeneral")).map((m) => longMonth(m.month));
+  if (estimated.length) out.push(`${estimated.join(" · ")}은 청구 방식이 바뀌어 그달 청구가 비어 있어, 그달 실제로 낸 수업료로 메웠습니다(추정).`);
+  const eieFrom = firstMonthWith(months, "payingEie");
+  const genFrom = firstMonthWith(months, "payingGeneral");
+  const eieLate = !!(eieFrom && genFrom && eieFrom > genFrom);
+  if (eieLate) out.push(`EiE 수업료는 ${longMonth(eieFrom!)}부터 이 기록에 있습니다 — 그 전 EiE 학생 수는 남은 자료가 없습니다.`);
+  const recFrom = firstMonthWith(months, "enrolledRecord");
+  const recTo = [...months].reverse().find((m) => m.enrolledRecord !== undefined)?.month;
+  if (recFrom && recTo) out.push(`메이크에듀 재원생 기록(${longMonth(recFrom)}~${longMonth(recTo)})은 메이크에듀가 달마다 남긴 숫자입니다 — 휴원·수업 시작 전 학생도 들어 있어 수업료가 청구된 학생 수와 다를 수 있습니다.`);
+  const evidence = aywaFrom ? " · 에이와 기록은 출석이나 7일 넘게 다닌 반 수업도" : "";
+  const eieGap = eieLate ? ` EiE 수업료가 기록에 없던 ${longMonth(eieFrom!)} 전에 EiE만 다닌 학생은 빠질 수 있습니다.` : "";
+  out.push(`실제 신규 = 그달 등록 중 실제로 수업을 시작한 학생(그 뒤 수업료 청구 — 취소·환불 제외${evidence}) — 상담만 하고 자료로 등록된 사람과, 직전 두 달에 청구가 있던(등록일만 고쳐진) 재원생은 뺍니다.${eieGap}`);
+  if (aywaFrom && genFrom && aywaFrom > genFrom) out.push(`${longMonth(aywaFrom)}부터는 에이와 청구로 셉니다(그 전은 메이크에듀 수납 기록).`);
+  // 에이와 쪽은 밤마다 다시 센다(원생 매일 기록 23:55) — 오늘 바뀐 것은 내일 반영된다(위 '월별 기록'은 지금 값).
+  if (aywaAt) out.push(`에이와 쪽 숫자는 ${kstDayText(aywaAt)} 밤 기준입니다 — 밤마다 다시 세어 오늘 바뀐 것은 다음 날 반영됩니다.`);
+  return out;
+}

@@ -32,6 +32,8 @@ const fetchAllPaged = vi.fn();
 vi.mock("@/lib/supabase/batch", () => ({ fetchAllPaged: (...args: unknown[]) => fetchAllPaged(...args), fetchAllPagedInChunks: vi.fn() }));
 const loadCleanupBilling = vi.fn();
 vi.mock("./trend-billing-server", () => ({ loadCleanupBilling: (...args: unknown[]) => loadCleanupBilling(...args) }));
+const loadRecordCoverage = vi.fn();
+vi.mock("./record-coverage", () => ({ loadRecordCoverage: (...args: unknown[]) => loadRecordCoverage(...args) }));
 const reportWarning = vi.fn();
 vi.mock("@/lib/observability/report-error", () => ({ reportWarning: (...args: unknown[]) => reportWarning(...args) }));
 
@@ -54,6 +56,8 @@ beforeEach(() => {
   // loadTrendRaw가 원생 → 수강 순으로 부른다.
   fetchAllPaged.mockResolvedValueOnce(students).mockResolvedValueOnce(enrollments);
   loadCleanupBilling.mockReset();
+  loadRecordCoverage.mockReset();
+  loadRecordCoverage.mockResolvedValue({ billingFrom: "2026-01", started: [], trustFrom: null });
   reportWarning.mockReset();
 });
 
@@ -65,8 +69,8 @@ describe("loadEnrolledTrend — 청구 재료가 있으면 정상 키 5분, 실�
   it("청구가 있으면 'billed' 키 · 5분 — 장부 정리 학생은 청구가 살아 있는 달에만 센다", async () => {
     loadCleanupBilling.mockResolvedValue({ billingFrom: "2026-01", billed: [["k", ["2026-03"]]] });
     const v = await loadEnrolledTrend("t1", "2026-10-20");
-    const card = cacheCalls.find((c) => c.key[0] === "dashboard-enrolled-trend-v4");
-    expect(card).toMatchObject({ key: ["dashboard-enrolled-trend-v4", "t1", "2026-10-20", "billed"], revalidate: 300 });
+    const card = cacheCalls.find((c) => c.key[0] === "dashboard-enrolled-trend-v5");
+    expect(card).toMatchObject({ key: ["dashboard-enrolled-trend-v5", "t1", "2026-10-20", "billed", "-"], revalidate: 300 });
     expect(point(v.monthly, "2026-03")).toBe(2); // a + k(3월 청구)
     expect(point(v.monthly, "2026-05")).toBe(1); // k는 5월 청구가 없다(퇴원일 7/3 전이어도)
     expect(reportWarning).not.toHaveBeenCalled();
@@ -79,8 +83,8 @@ describe("loadEnrolledTrend — 청구 재료가 있으면 정상 키 5분, 실�
   it("🔴 청구 재료가 실패하면 던지지 않고 'fallback' 키 · 1분 — 종전 규칙(퇴원일)으로 센다 · 경고를 남긴다", async () => {
     loadCleanupBilling.mockRejectedValue(new Error("청구 건수: boom"));
     const v = await loadEnrolledTrend("t1", "2026-10-20");
-    const card = cacheCalls.find((c) => c.key[0] === "dashboard-enrolled-trend-v4");
-    expect(card).toMatchObject({ key: ["dashboard-enrolled-trend-v4", "t1", "2026-10-20", "fallback"], revalidate: 60 });
+    const card = cacheCalls.find((c) => c.key[0] === "dashboard-enrolled-trend-v5");
+    expect(card).toMatchObject({ key: ["dashboard-enrolled-trend-v5", "t1", "2026-10-20", "fallback", "-"], revalidate: 60 });
     expect(point(v.monthly, "2026-05")).toBe(2); // 종전 규칙 — 퇴원일(7/3) 전이라 k도 센다
     expect(reportWarning).toHaveBeenCalledTimes(1);
     // 실패는 캐시에 남지 않아 청구는 다시 묻지만, 원본은 대체 키 캐시로 다시 읽지 않는다 · 중첩 없음.
@@ -88,5 +92,31 @@ describe("loadEnrolledTrend — 청구 재료가 있으면 정상 키 5분, 실�
     expect(loadCleanupBilling).toHaveBeenCalledTimes(2);
     expect(fetchAllPaged).toHaveBeenCalledTimes(2);
     expect(nested).toBe(0);
+  });
+
+  it("에이와 수강 기록이 갖춰진 달(trustFrom)부터만 — 그 전 점은 빼고 키에 싣는다 · 기록 범위가 실패하면 자르지 않는다", async () => {
+    loadCleanupBilling.mockResolvedValue({ billingFrom: "2026-01", billed: [["k", ["2026-03"]]] });
+    loadRecordCoverage.mockResolvedValue({ billingFrom: "2026-01", started: [], trustFrom: "2026-04" });
+    const v = await loadEnrolledTrend("t1", "2026-10-20");
+    expect(v.trustFrom).toBe("2026-04");
+    expect(v.monthlyFrom).toBe("2026-04");
+    expect(v.monthly[0]!.key).toBe("2026-04");
+    expect(v.yearly.map((p) => p.key)).toEqual(["2026"]);
+    expect(cacheCalls.find((c) => c.key[0] === "dashboard-enrolled-trend-v5")!.key.at(-1)).toBe("2026-04");
+    store.clear();
+    fetchAllPaged.mockResolvedValueOnce(students).mockResolvedValueOnce(enrollments);
+    loadRecordCoverage.mockRejectedValue(new Error("boom"));
+    const w = await loadEnrolledTrend("t1", "2026-10-20");
+    expect(w.trustFrom).toBeNull();
+    expect(w.monthly).toHaveLength(12);
+  });
+
+  it("시작 달이 창보다 앞이라 뺀 점이 없으면 시작 달을 싣지 않는다(카드 안내가 거짓이 되지 않게)", async () => {
+    loadCleanupBilling.mockResolvedValue({ billingFrom: "2026-01", billed: [["k", ["2026-03"]]] });
+    loadRecordCoverage.mockResolvedValue({ billingFrom: "2024-01", started: [], trustFrom: "2025-01" });
+    const v = await loadEnrolledTrend("t1", "2026-10-20");
+    expect(v.monthly).toHaveLength(12);
+    expect(v.trustFrom).toBeNull();
+    expect(v.monthlyFrom).toBeNull();
   });
 });

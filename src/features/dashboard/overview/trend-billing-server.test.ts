@@ -4,17 +4,18 @@ import { loadCleanupBilling } from "./trend-billing-server";
 
 type Row = Record<string, unknown>;
 
-/** 이 파일이 쓰는 PostgREST 꼴만 흉내 내는 가짜 클라이언트(eq · in · like · gte · lte · order · limit · range · head 건수). */
+/** 이 파일이 쓰는 PostgREST 꼴만 흉내 내는 가짜 클라이언트(eq · in · not in · like · gte · lte · order · limit · range · head 건수). */
 function fakeDb(tables: Record<string, Row[]>, failWhen: (table: string, head: boolean, limited: boolean) => boolean = () => false) {
   const calls: string[] = [];
   const db = {
     from(table: string) {
       calls.push(table);
-      const f = { eq: {} as Record<string, unknown>, in: null as [string, unknown[]] | null, gte: null as string | null, lte: null as string | null, like: false, head: false, limit: null as number | null, range: null as [number, number] | null };
+      const f = { eq: {} as Record<string, unknown>, in: null as [string, unknown[]] | null, notIn: null as [string, string[]] | null, gte: null as string | null, lte: null as string | null, like: false, head: false, limit: null as number | null, range: null as [number, number] | null };
       const q = {
         select: (_c: string, o?: { head?: boolean }) => ((f.head = !!o?.head), q),
         eq: (k: string, v: unknown) => ((f.eq[k] = v), q),
         in: (k: string, v: unknown[]) => ((f.in = [k, v]), q),
+        not: (k: string, _op: "in", v: string) => ((f.notIn = [k, v.replace(/[()]/g, "").split(",")]), q),
         like: () => ((f.like = true), q),
         gte: (_k: string, v: string) => ((f.gte = v), q),
         lte: (_k: string, v: string) => ((f.lte = v), q),
@@ -25,6 +26,7 @@ function fakeDb(tables: Record<string, Row[]>, failWhen: (table: string, head: b
           if (failWhen(table, f.head, f.limit !== null)) return resolve({ data: null, error: { message: "boom", code: "XX000" }, count: null });
           let rows = (tables[table] ?? []).filter((r) => Object.entries(f.eq).every(([k, v]) => r[k] === v));
           if (f.in) rows = rows.filter((r) => f.in![1].includes(r[f.in![0]]));
+          if (f.notIn) rows = rows.filter((r) => !f.notIn![1].includes(String(r[f.notIn![0]])));
           if (f.like) rows = rows.filter((r) => /^....-..$/.test(String(r.period)));
           if (f.gte) rows = rows.filter((r) => String(r.period) >= f.gte!);
           if (f.lte) rows = rows.filter((r) => String(r.period) <= f.lte!);
@@ -52,12 +54,13 @@ const month = (period: string, n: number): Row[] => Array.from({ length: n }, (_
 const bill = (period: string, status = "paid", tenant = T): Row => ({ tenant_id: tenant, student_id: "k", period, status, category: "tuition" });
 
 describe("loadCleanupBilling — 청구가 지점을 덮기 시작한 달 · 장부 정리 학생의 청구 달", () => {
-  it("옛 청구월 오타(10년 전)는 보지 않고, 창 안 가장 많은 달의 절반에 못 미치는 낱장 청구 달은 건너뛴다", async () => {
+  it("옛 청구월 오타(10년 전)는 보지 않고, 낱장 청구 달은 건너뛴다(그 뒤 6개월 중 가장 많은 달의 20% · 3건) · 취소·환불 청구는 시작 달 건수에도 안 든다", async () => {
     const invoices = [
       { tenant_id: T, student_id: "s0", period: "2016-03", status: "paid", category: "tuition" }, // 2026-03을 잘못 친 청구
       { tenant_id: T, student_id: "s1", period: "2024-02", status: "paid", category: "tuition" }, // 낱장 청구
       ...month("2026-01", 8),
       ...month("2026-02", 9),
+      ...month("2026-03", 9), // 청구가 석 달 이어져야 시작 달이다(낱장·시범 청구 달 거르기)
       bill("2026-01"),
       bill("2026-02", "void"),
       bill("2026-03", "refunded"),
@@ -70,9 +73,15 @@ describe("loadCleanupBilling — 청구가 지점을 덮기 시작한 달 · 장
     expect(new Map(r.billed).get("n")).toEqual([]); // 청구가 없어도 싣는다 — 실리지 않은 학생만 '모름'(종전 규칙)
   });
 
-  it("학생이 늘어 온 지점도 첫 달을 놓치지 않는다(지금 인원이 아니라 창 안 가장 많은 달의 절반이 기준)", async () => {
+  it("학생이 늘어 온 지점도 첫 달을 놓치지 않는다(지금 인원이 아니라 그 뒤 6개월 중 가장 많은 달의 20%가 기준)", async () => {
     const { db } = fakeDb({ students, invoices: [...month("2026-04", 50), ...month("2026-05", 81), ...month("2026-06", 90), bill("2026-04")] });
     expect((await loadCleanupBilling(db, T, "2026-10-20")).billingFrom).toBe("2026-04");
+  });
+
+  it("🔴 취소된 청구만 몰린 달은 시작 달이 아니다(등록 판정·'지난 기록'과 같은 입력 — 적대 재리뷰 2026-10-20)", async () => {
+    const voided = month("2025-12", 10).map((r) => ({ ...r, status: "void" }));
+    const { db } = fakeDb({ students, invoices: [...voided, ...month("2026-01", 8), ...month("2026-02", 9), ...month("2026-03", 9)] });
+    expect((await loadCleanupBilling(db, T, "2026-10-20")).billingFrom).toBe("2026-01");
   });
 
   it("장부 정리 학생이 없으면 청구는 읽지 않는다", async () => {

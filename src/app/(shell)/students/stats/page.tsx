@@ -10,6 +10,7 @@ import { BackToListButton } from "../../consultations/_components/back-to-list-b
 import { StatCard } from "./_components/stat-card";
 import { TrendBoard } from "./_components/trend-board";
 import { FlowBoard } from "./_components/flow-board";
+import { HistoryBoard } from "./_components/history-board";
 import { SubjectSwitch } from "./_components/subject-switch";
 
 export const metadata = { title: "원생 통계 — 에이와" };
@@ -43,15 +44,18 @@ export default async function StudentStatsPage({ searchParams }: { searchParams:
   const trend = stats.trend?.data ?? null;
   const flowRows = stats.flow?.data ?? null;
   // 아래 경계 — 학원 전체는 퇴원 기록 시작부터(퇴원 기록이 아직 없으면 첫 학생이 있는 달과 지점이 에이와를 시작한 달 중 늦은 쪽부터) ·
-  // 과목 관리자는 과목을 가를 수 있는 달(수강 종료 첫 기록 · 그것도 없으면 지점 시작 달)부터도.
-  const { recordsFrom, breakdownFrom, createdMonth } = stats.bounds;
-  const baseFrom = recordsFrom ?? laterMonth(trend ? firstNonZeroMonth(trend.total.monthly) : null, createdMonth);
+  // 과목 관리자는 과목을 가를 수 있는 달(수강 종료 첫 기록 · 그것도 없으면 지점 시작 달)부터도 · 모두 에이와 수강 기록이 갖춰진 달
+  // (`trustFrom` — 원장 2026-10-20 '2026년 4월부터')부터. 그 전 흐름은 아래 '지난 기록'이 맡는다.
+  const { recordsFrom, breakdownFrom, createdMonth, trustFrom } = stats.bounds;
+  const baseFrom = laterMonth(recordsFrom ?? laterMonth(trend ? firstNonZeroMonth(trend.total.monthly) : null, createdMonth), trustFrom);
   const countFrom = scope ? laterMonth(baseFrom, breakdownFrom ?? createdMonth) : baseFrom;
-  const flowBase = recordsFrom ?? laterMonth(flowRows ? firstFlowMonth(flowRows) : null, createdMonth);
+  const flowBase = laterMonth(recordsFrom ?? laterMonth(flowRows ? firstFlowMonth(flowRows) : null, createdMonth), trustFrom);
   const flowFrom = scope ? laterMonth(flowBase, breakdownFrom ?? createdMonth) : flowBase;
   const monthEnd = trend ? Object.fromEntries(trend.total.monthly.filter((p) => !flowFrom || p.key >= flowFrom).map((p) => [p.key, p.count])) : null;
   const clipNote =
-    scope && countFrom
+    trustFrom && countFrom === trustFrom
+      ? `에이와 수강 기록이 갖춰진 ${monthText(trustFrom)}부터 그립니다 — 그 전 달은 옮겨 오기 전 학생의 수강 시작일이 늦게 잡혀 실제보다 낮게 나옵니다(그 전 흐름은 아래 '지난 기록').`
+      : scope && countFrom
       ? breakdownFrom && countFrom === breakdownFrom
         ? `${scope.label} 흐름은 ${monthText(countFrom)}부터입니다 — 그 전에 그만둔 학생은 수강 기록이 남아 있지 않아 과목을 가를 수 없습니다.`
         : `${scope.label} 흐름은 ${monthText(countFrom)}부터의 기록만 보입니다.`
@@ -114,6 +118,19 @@ export default async function StudentStatsPage({ searchParams }: { searchParams:
           ) : (
             <StatCard id="flow" title="월별 기록" note="달마다 등록·퇴원" error />
           )}
+          {/* 지난 기록(메이크에듀 + 에이와 청구) — 값이 없는 지점은 카드를 세우지 않는다 · 학원 전체 값이라 과목 관리자에겐 그렇게 적는다. */}
+          {stats.history?.error ? (
+            <StatCard id="history" title="지난 기록" note="수업료가 청구된 학생 · 실제 신규" error />
+          ) : stats.history?.data?.months.length ? (
+            <HistoryBoard
+              months={stats.history.data.months}
+              aywaFrom={stats.history.data.aywaFrom}
+              aywaAt={stats.history.data.aywaAt}
+              payingHidden={stats.history.data.payingHidden}
+              initialView={stats.prefs.historyView}
+              wide={!!scope}
+            />
+          ) : null}
         </>
       )}
     </div>
