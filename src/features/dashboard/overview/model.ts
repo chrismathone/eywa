@@ -16,7 +16,7 @@ import type { StaffRow } from "./staff-subjects";
 import type { Program } from "@/features/students/program";
 import type { GradeSplit, ProgramSummary } from "@/features/students/enrolled-composition";
 import type { FirstClassStudent } from "@/features/dashboard/day-arrivals";
-import type { AbsentDay } from "@/features/dashboard/absent-students";
+import type { RecentAbsences } from "@/features/dashboard/recent-absences";
 import type { AdmissionsKind } from "./display";
 
 export type Distribution = { label: string; value: number }[];
@@ -125,10 +125,10 @@ export type OverviewData = {
    */
   makeup: import("@/features/dashboard/server/makeup-upcoming").UpcomingMakeupOverview;
   /**
-   * KPI '전일 결석' — **어제**(KST, `absentKpiDate`) 한 교시도 안 온 학생(결석·공결) + 따로 보이는 '일부 교시 결석'.
-   * `date` = 서버가 실제로 조회한 그날 — 카드 보조 줄·팝업 머리·↗가 이 값을 읽어, 화면이 다른 날을 말하는 일이 없게 한다.
+   * KPI '최근 결석' — **어제까지 7일**(KST, `recentAbsenceRange`) 결석을 학생별로(누적 많은 순) · 결석마다 그 수업 담당.
+   * `from/to` = 서버가 실제로 센 창 — 카드 보조 줄·팝업 머리가 이 값을 읽어 화면이 다른 기간을 말하지 않게 한다.
    */
-  absent: AbsentDay & { date: string };
+  absent: RecentAbsences;
   attendance: AttendanceSnapshot | null;
   processing: ClassProcessing[];
   /**
@@ -292,8 +292,10 @@ export function monthlyChanges(
   today: string,
   enrolled: string[],
   withdrawn: string[],
+  /** 몇 달 — 운영실 카드는 6, 원생 통계 화면은 더 길게(같은 판정 한 벌). */
+  count = 6,
 ): MonthChange[] {
-  return monthKeys(today).map((month) => ({
+  return monthKeys(today, count).map((month) => ({
     month,
     enrolled: enrolled.filter(
       (d) => d.slice(0, 7) === month && d.slice(0, 10) <= today,

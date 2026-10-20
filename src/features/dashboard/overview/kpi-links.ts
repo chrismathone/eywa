@@ -18,6 +18,17 @@ export function studentsEnrolledHref(program?: Program): string {
 }
 
 /**
+ * 원생 통계 화면의 한 칸(원장 2026-10-20 *"대시보드의 모든 상세를 해당 탭의 통계 페이지로"*) — 운영실 카드 머리 '상세'·KPI ↗가 연다.
+ * 카드 몸통(그림·팝업)은 그대로 두고 '상세'만 통계로 간다(원장 *"상세를 누르면 통계, 그냥 카드를 누르면 팝업"*).
+ * `view` = 재원생 추이를 무엇으로 나눠 열지(과목별 · 수강 구성) — 이번 방문만 고르고 저장하지 않는다.
+ * 학년별·학교별 카드는 옛 학년·학교 값이 저장되지 않아 정확한 흐름이 없으므로 여기로 오지 않는다(원생목록 그대로).
+ */
+export type StudentStatsSection = "trend" | "flow";
+export function studentsStatsHref(section: StudentStatsSection, view?: "subject" | "mix"): string {
+  return `/students/stats${view ? `?view=${view}` : ""}#${section}`;
+}
+
+/**
  * '재원생 구성' 막대 한 조각(원장 2026-09-28 *"다른 막대그래프들도 전부 해당기능으로 배선"*) — 학교급 × 수강 구성.
  * 원생목록이 막대와 **같은 함수**(compositionStudentIds)로 거른다 → 막대 숫자 = 목록 건수.
  * 줄 전체(막대 하나)는 `mixes`에 막대에 서는 셋(영어만·동시수강·수학만)을 모두 적는다(줄 오른쪽 숫자 = 그 셋의 합).
@@ -68,15 +79,16 @@ export function makeupWeekHref(): string {
   return "/timetable?kind=makeup";
 }
 
+/** KPI '최근 결석'의 창 길이(일). */
+export const RECENT_ABSENCE_DAYS = 7;
+
 /**
- * KPI '결석학생'의 기준일 = **어제**(KST). 원장 2026-09-12: *"대시보드 결석학생은 어제 결석으로 해야지.
- * 오늘은 수업을 안하면 볼 수가 없잖아"* — 오늘 수업이 아직 없으면 오늘 결석은 알 수 없다.
- *
- * 🔑 카드 숫자·자세히 보기·↗가 **이 한 값**을 쓴다(서버가 조회한 날을 `absent.date`로 함께 실어 보낸다).
- *    일일 브리핑 '어제 결석'도 같은 날이다(briefing.ts가 `asOf`에 어제를 넣어 같은 판정 함수를 태운다).
- * 🔴 '직전 수업일'로 바꾸지 말 것 — 원장은 '어제'라고 했다. 주말·휴일 다음 날은 0명이 맞고, 화면은 날짜와
- *    요일을 함께 적어(`formatShortKoreanDate`) 그 사실을 그대로 보인다.
+ * KPI '최근 결석'의 창 = **어제까지 7일**(KST). 원장 2026-10-20 *"전일결석 -> 최근 결석 (최근 7일 반영)"* — 옛 '전일 결석'(어제 하루,
+ * 원장 2026-09-12)을 넓혔다. 오늘은 넣지 않는다 — 수업 전·진행 중이면 결석을 아직 알 수 없다(옛 카드의 이유 그대로 · 운영실
+ * '출결 미입력'의 어제까지 7일과 같은 창).
+ * 🔑 카드 숫자·팝업 머리가 **이 한 값**을 쓴다(서버가 센 창을 `absent.from/to`로 함께 실어 보낸다).
+ * ⚠️ 일일 브리핑 '어제 결석'은 그대로 어제 하루다(briefing.ts — 별개 표면).
  */
-export function absentKpiDate(today: string): string {
-  return addDays(today, -1);
+export function recentAbsenceRange(today: string): { from: string; to: string } {
+  return { from: addDays(today, -RECENT_ABSENCE_DAYS), to: addDays(today, -1) };
 }

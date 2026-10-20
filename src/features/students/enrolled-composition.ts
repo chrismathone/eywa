@@ -16,6 +16,7 @@ import {
   type StudentLevel,
   type StudentMixFilter,
 } from "./list-filter-values";
+import { getGradeLevel, isPreschoolGrade } from "@/lib/format/school-grade";
 
 type One<T> = T | T[] | null;
 
@@ -291,4 +292,14 @@ export function compositionStudentIds(
     out.add(student.id);
   }
   return out;
+}
+
+/**
+ * 학교급 이름 — 운영실 '재원생 구성'(학교급 분포)과 매일 기록(`student_daily_stats`)이 같이 쓰는 한 벌.
+ * 미취학 → 초등·중등·고등 → 그 밖(학년은 있는데 학교급을 모름) '기타' → 학년이 비면 '미입력'.
+ */
+export function schoolLevelLabel(grade: string | null | undefined): string {
+  if (isPreschoolGrade(grade ?? null)) return "미취학";
+  const level = ({ 초: "초등", 중: "중등", 고: "고등" } as Record<string, string>)[getGradeLevel(grade ?? null)];
+  return level ?? (grade ? "기타" : "미입력");
 }
