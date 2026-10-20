@@ -45,7 +45,12 @@ export function RoadmapGoal({ r, studentId, studentName }: { r: RoadmapView; stu
   return (
     <>
       <div className={css.goalHead}>
-        <h4>{r.series} {shortBook(first.key, first.title)} → {shortBook(last.key, last.title)}</h4>
+        {/* 목표 권은 제목에서도 막대와 같은 초록 표시(원장 "마지막 교재라는게 가시성이 좀 떨어짐" — 제목 줄 지적). */}
+        <h4 className={css.goalTitle}>
+          <span>{r.series} {shortBook(first.key, first.title)}</span>
+          <span aria-hidden className={css.goalArrow}>→</span>
+          <span className={css.goalBook}><small>최종 목표</small>{shortBook(last.key, last.title)}</span>
+        </h4>
         <span className={css.right}>
           {r.done == null ? "진도 확인 필요" : <><b>{done}/{r.total}차시</b> · {Math.round((done / Math.max(1, r.total)) * 100)}% · {Math.max(0, r.total - done)}차시 남음</>}
         </span>
