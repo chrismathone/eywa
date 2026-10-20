@@ -13,8 +13,10 @@ import { kstTimeOf, kstToday } from "@/lib/date-kst";
 import {
   countEnrolledStudents,
   fetchActiveEnrolledEnrollments,
+  fetchEndingEnrolledEnrollments,
   fetchEnrolledStudents,
 } from "@/features/students/server/enrolled-programs";
+import { summarizeCourses } from "@/features/students/enrollment/course-count";
 import {
   composeEnrolled,
   notYetStartedStudentIds,
@@ -41,7 +43,7 @@ import { bookkeepingOnlyIds } from "@/features/withdrawals/server/bookkeeping";
 import { getIntakeOnDay } from "@/features/enrollment/server/intake-day";
 import { getFirstClassStudents } from "@/features/dashboard/server/day-arrivals-query";
 import { getEnrolledToday } from "@/features/dashboard/server/enrolled-today";
-import { loadEnrolledTrend, loadEnrolledTrendSlicer } from "./enrolled-trend-server";
+import { loadEnrolledTrend, loadEnrolledTrendSlicer, type EnrolledTrend } from "./enrolled-trend-server";
 import { getScopedRecentAbsences } from "@/features/dashboard/server/recent-absences";
 import { recentAbsenceRange } from "./kpi-links";
 import { loadUpcomingMakeup } from "@/features/dashboard/server/makeup-upcoming";
@@ -152,6 +154,36 @@ import {
 
 type Settings = Awaited<ReturnType<typeof getTenantSettings>>;
 
+/** 재원생 명단 + 활성 수강 — '재원생'·'강좌수' 칸이 **같은 조회 한 벌**을 나눠 쓴다(`loadOverview`가 한 번만 부른다). */
+type EnrolledRows = [Awaited<ReturnType<typeof fetchEnrolledStudents>>, Awaited<ReturnType<typeof fetchActiveEnrolledEnrollments>>];
+async function loadEnrolledRows(): Promise<EnrolledRows> {
+  const db = await createClient();
+  return Promise.all([fetchEnrolledStudents(db), fetchActiveEnrolledEnrollments(db)]);
+}
+
+/**
+ * 상단 '강좌수'(원장 2026-10-20 *"대시보드에 강좌수도 볼 수 있으면 좋을듯 … 한 학생이 여러 강좌를 들을 수도 있기 때문에 듣는 모든 강좌를
+ * 체크"*) — '재원생' 칸과 같은 조회(`enrolledRows`)·같은 줄 판정(`activeRows` — 이미 시작 · 휴원 아님 · 스코프)에 **종료일이 오늘 이후로
+ * 적힌 수강**(특강 기간 · 반이동 예약 전의 원래 반)을 더해 재원생이 오늘 듣는 반을 학생마다 모두 센다(`summarizeCourses`). 과목 관리자는 그 과목 반만(`pred`).
+ */
+async function courses(
+  scope: TeacherScope | null,
+  settingsPromise: Promise<Settings>,
+  enrolledRows: Promise<EnrolledRows>,
+): Promise<(pred: SlicePredicate | null) => OverviewData["courses"]> {
+  const today = kstToday();
+  const db = await createClient();
+  const [[, open], ending, settings] = await Promise.all([enrolledRows, fetchEndingEnrolledEnrollments(db, today), settingsPromise]);
+  const rows = [...open, ...ending];
+  const subjects = settings.operations.subjects;
+  return (pred) => summarizeCourses({ rows, scope, subjects, today, ...(pred ? { inSubject: pred } : {}) });
+}
+
+/** '강좌수 추이' 카드가 따로 읽으므로 '재원생 추이' 영역엔 강좌수를 싣지 않는다(스냅샷을 가볍게). */
+function withoutCourses(t: EnrolledTrend): EnrolledTrend {
+  return { monthly: t.monthly, yearly: t.yearly, recordsFrom: t.recordsFrom, trustFrom: t.trustFrom, monthlyFrom: t.monthlyFrom };
+}
+
 /**
  * 재원생 — KPI '재원생' 카드·팝업, 동시 수강, 학년별 재원생, 구성 패널.
  * 🔑 카드 숫자는 원생목록과 **같은 count(head)**(`countEnrolledStudents`), 과목별·프로그램·학년 분해는 원생목록과
@@ -162,14 +194,11 @@ type Settings = Awaited<ReturnType<typeof getTenantSettings>>;
 async function students(
   scope: TeacherScope | null,
   settingsPromise: Promise<Settings>,
+  enrolledRows: Promise<EnrolledRows>,
 ): Promise<(pred: SlicePredicate | null) => OverviewData["students"]> {
   const db = await createClient();
   const today = kstToday();
-  const [studentRows, rows, settings] = await Promise.all([
-    fetchEnrolledStudents(db),
-    fetchActiveEnrolledEnrollments(db),
-    settingsPromise,
-  ]);
+  const [[studentRows, rows], settings] = await Promise.all([enrolledRows, settingsPromise]);
   // '실시간 재원생'(원장 2026-09-16) — 아직 한 과목도 시작 안 한 학생은 총원·과목·학년 분해에서 함께 빠진다.
   // 🔴 `countEnrolledStudents`가 이 행들을 다시 받지 않게 **같은 rows에서** 집합을 만든다(운영실 30초 갱신은
   //    서버 액션이라 React cache가 조회를 묶지 않는다 — 여기서 한 번 받은 것을 넘긴다는 이 함수의 규약 그대로).
@@ -861,7 +890,11 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
       return compute(null);
     });
   }
-  addSliced("students", ["students"], async () => students(await scopePromise, settingsPromise));
+  // '재원생'·'강좌수' 칸은 같은 재원생 명단·활성 수강을 본다 — 둘 중 하나라도 놓였을 때 **한 번만** 읽는다(30초 갱신도 한 번).
+  let enrolledRowsOnce: Promise<EnrolledRows> | null = null;
+  const enrolledRows = () => (enrolledRowsOnce ??= loadEnrolledRows());
+  addSliced("students", ["students"], async () => students(await scopePromise, settingsPromise, enrolledRows()));
+  addSliced("courses", ["students"], async () => courses(await scopePromise, settingsPromise, enrolledRows()));
   addSliced("changes", ["students"], async () =>
     loadMonthlyChanges(today, await scopePromise, withdrawalRows, sliceSets.length > 0, 6, true, loadRecordCoverage(user.tenantId, today).catch((error: unknown) => {
       reportError(error, { scope: "dashboard.changes.record-coverage" }); // 실패하면 종전대로(등록일 그대로) 센다
@@ -869,13 +902,24 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
     })),
   );
   // 과목 관리자 = 그 과목 반 수강이 그날 걸려 있던 재원생(원장 2026-10-14 *"재원생 추이도 마찬가지"*). 원본은 과목 값이 필요할 때만 받는다.
+  // '재원생 추이'·'강좌수 추이' 카드는 **같은 계산값 캐시**(`loadEnrolledTrend` — 강좌수도 함께 센다)를 읽는다 — 한 번만 부른다.
+  let trendOnce: Promise<EnrolledTrend> | null = null;
+  let slicerOnce: ReturnType<typeof loadEnrolledTrendSlicer> | null = null;
+  const trends = () =>
+    Promise.all([
+      (trendOnce ??= loadEnrolledTrend(user.tenantId, today)),
+      sliceSets.length ? (slicerOnce ??= loadEnrolledTrendSlicer(user.tenantId, today)) : Promise.resolve(null),
+    ]);
   addSliced("enrolledTrend", ["students"], async () => {
     if (await scopePromise) return () => null;
-    const [academy, slicer] = await Promise.all([
-      loadEnrolledTrend(user.tenantId, today),
-      sliceSets.length ? loadEnrolledTrendSlicer(user.tenantId, today) : Promise.resolve(null),
-    ]);
-    return (pred) => (pred && slicer ? slicer(pred) : academy);
+    const [academy, slicer] = await trends();
+    return (pred) => withoutCourses(pred && slicer ? slicer(pred) : academy);
+  });
+  // '강좌수 추이'(원장 2026-10-20 '카드 따로') — 재원생 추이와 같은 원본·날짜·시작 달 · 과목 관리자는 그 과목 반만.
+  addSliced("courseTrend", ["students"], async () => {
+    if (await scopePromise) return () => null;
+    const [academy, slicer] = await trends();
+    return (pred) => (pred && slicer ? slicer(pred) : academy).courses ?? null;
   });
   // ── KPI 여섯 칸(원장 2026-09-11) — 카드·팝업·목적지 화면이 같은 함수를 부른다.
   add("withdrawals", ["withdrawals"], () => monthWithdrawals(withdrawalRows, today, settingsPromise));

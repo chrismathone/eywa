@@ -10,6 +10,7 @@ import {
   type ProgramSummary,
 } from "@/features/students/enrollment/enrolled-composition";
 import type { ProgramSubject } from "@/features/students/enrollment/program";
+import { summarizeCourses, type CourseSummary } from "@/features/students/enrollment/course-count";
 
 /**
  * 원생 매일 기록 한 줄(`student_daily_stats.data`, 0381a) — 그날 재원생 구성. 순수 함수(Vitest).
@@ -34,6 +35,8 @@ export type DailySnapshotV1 = {
   /** 과목 키 → 수강생(두 과목이면 양쪽). */
   subjects: Record<string, number>;
   programs: ProgramSummary;
+  /** 강좌수(2026-10-20부터 — 그 전 줄엔 없다) — 운영실 '강좌수' 칸과 같은 계산(`summarizeCourses`). */
+  courses?: CourseSummary;
 };
 
 const tally = (values: readonly (string | null | undefined)[], empty = "미입력"): Record<string, number> => {
@@ -48,6 +51,8 @@ const tally = (values: readonly (string | null | undefined)[], empty = "미입�
 export function buildDailySnapshot(input: {
   students: readonly EnrolledStudentRow[];
   rows: readonly ActiveEnrollmentRow[];
+  /** 종료일이 오늘 이후로 적힌 활성 수강 — 강좌수에만 더한다(운영실 '강좌수' 칸과 같은 규약 · 재원생 구성은 `rows`만). */
+  endingRows?: readonly ActiveEnrollmentRow[];
   onHold: number;
   subjects: readonly ProgramSubject[];
   gradeLevels: readonly string[];
@@ -69,5 +74,6 @@ export function buildDailySnapshot(input: {
       composition.programs,
       composition.active,
     ),
+    courses: summarizeCourses({ rows: [...input.rows, ...(input.endingRows ?? [])], scope: null, subjects: input.subjects, today: input.today }),
   };
 }

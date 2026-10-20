@@ -7,7 +7,7 @@
  *    영역은 조회하지 않고 `loadPlan`, 금액·전화번호는 `shapeSections`가 비운다).
  */
 
-/** 카드 한 칸의 식별자 — 운영실 패널 24개(학습·학부모 보고 / 학생 상담은 둘로 센다). */
+/** 카드 한 칸의 식별자 — 운영실 패널(학습·학부모 보고 / 학생 상담은 둘로 센다). */
 export type PanelId =
   | "studentsComp"
   | "attendance"
@@ -17,6 +17,7 @@ export type PanelId =
   | "earlyExits"
   | "billing6"
   | "enrolledTrend"
+  | "courseTrend"
   | "subjects"
   | "grades"
   | "schools"
@@ -42,6 +43,7 @@ export type PanelSlot = PanelId | "followup";
 /** KPI 띠의 칸 — 스냅샷 영역 이름과 같다(`kpi-strip.tsx`). */
 export type KpiKey =
   | "students"
+  | "courses"
   | "withdrawals"
   | "intake"
   | "calendar"
@@ -52,6 +54,7 @@ export type KpiKey =
 
 export const KPI_KEYS: readonly KpiKey[] = [
   "students",
+  "courses",
   "withdrawals",
   "intake",
   "calendar",
@@ -81,7 +84,7 @@ export const DEFAULT_LAYOUT: OverviewLayout = {
       id: "academy-overview",
       title: "학원 운영 한눈에",
       note: "재원 · 출결 · 수납 · 신규생",
-      panels: ["studentsComp", "attendance", "billingMonth", "newcomerStages", "changes", "billing6", "enrolledTrend"],
+      panels: ["studentsComp", "attendance", "billingMonth", "newcomerStages", "changes", "billing6", "enrolledTrend", "courseTrend"],
     },
     {
       id: "student-overview",

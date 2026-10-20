@@ -238,6 +238,8 @@ export function Overview({
   const student = v.students?.data;
   const change = v.changes?.data;
   const enrolledTrend = v.enrolledTrend?.data;
+  const courseTrend = v.courseTrend?.data;
+  const ym = (m: string) => `${m.slice(0, 4)}년 ${Number(m.slice(5, 7))}월`;
   const currentChange = change?.at(-1);
   const billing = v.billing?.data;
   const bill = billing?.at(-1);
@@ -688,6 +690,48 @@ export function Overview({
               <p className={s.footnote}>에이와 수강 기록이 갖춰진 {enrolledTrend.trustFrom.slice(0, 4)}년 {Number(enrolledTrend.trustFrom.slice(5, 7))}월부터 보입니다 — 그 전 흐름은 원생 통계 &apos;지난 기록&apos;에서 봅니다.</p>
             ) : enrolledTrend.recordsFrom ? (
               <p className={s.footnote}>퇴원 기록은 {enrolledTrend.recordsFrom.slice(0, 4)}년 {Number(enrolledTrend.recordsFrom.slice(5, 7))}월부터 있어 연도별은 그 해부터 셉니다.</p>
+            ) : null}
+          </>
+        )}
+      </Panel>
+    ) : null
+    ),
+    /* 강좌수 추이(원장 2026-10-20 '카드 따로') — 막대 = 달마다 말일(이번 달은 오늘) 강좌수. 판정은 '강좌수' 칸과 같은 뜻을 그날로 되감은 것
+    (course-trend.ts — 학생마다 그날 듣던 반을 모두) · 재원생 추이와 같은 원본·같은 시작 달 · 숨김 규칙도 재원생 추이와 같다. */
+    courseTrend: (
+    !(v.courseTrend && v.courseTrend.data === null && v.courseTrend.at !== null) ? (
+      <Panel
+        title={t("courseTrend", "강좌수 추이")}
+        note={`${courseTrend?.monthlyFrom ? `${ym(courseTrend.monthlyFrom)}부터` : "최근 12개월"} · 달마다 말일 기준(이번 달은 오늘) · 학생마다 듣는 반을 모두`}
+        href={studentsStatsHref("courses")}
+        sections={[v.courseTrend]}
+        className={s.fullRow}
+        tools={kindTools("courseTrend", "강좌수 추이")}
+      >
+        {courseTrend && (
+          <>
+            <div className={s.chartHeadline}>
+              <b>
+                오늘 강좌수 <strong>{number(courseTrend.monthly.at(-1)?.count ?? 0)}개</strong>
+              </b>
+              <i className={s.chartHeadlineNote}>
+                {courseTrend.yearly.map((y, i, all) => `${y.label}${i === all.length - 1 ? "(오늘)" : " 말"} ${number(y.count)}개`).join(" · ")}
+              </i>
+            </div>
+            <Columns
+              kind={kinds.courseTrend}
+              unit="개"
+              labels={courseTrend.monthly.map((p) => axisMonth(p.key))}
+              axisFormat={(n) => (Number.isInteger(n) ? `${number(n)}개` : "")}
+              valueLabels="all"
+              series={[{ name: "강좌수", color: COLORS[0], values: courseTrend.monthly.map((p) => p.count) }]}
+            />
+            {courseTrend.trustFrom ? (
+              <p className={s.footnote}>
+                {courseTrend.cutBy === "records"
+                  ? `강좌수는 ${ym(courseTrend.trustFrom)}부터 보입니다 — 그 전에 그만둔 학생은 수강 기록이 남아 있지 않아 반을 셀 수 없습니다.`
+                  : `에이와 수강 기록이 갖춰진 ${ym(courseTrend.trustFrom)}부터 보입니다 — 그 전 달은 옮겨 오기 전 학생의 수강 시작일이 늦게 잡혀 실제보다 적게 나옵니다.`}
+              </p>
             ) : null}
           </>
         )}

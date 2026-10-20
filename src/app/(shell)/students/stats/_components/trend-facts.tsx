@@ -2,20 +2,20 @@ import { axisLabel, summarize, type Point, type TrendRange } from "@/features/st
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 
-/** 첫 선(학원 전체 · 과목 관리자는 담당 과목 전체) 요약 — 기간 첫 칸 대비 증감 · 가장 많았던 때 · 가장 적었던 때. */
-export function TrendFacts({ points, range, who }: { points: readonly Point[]; range: TrendRange; who: string }) {
+/** 첫 선(학원 전체 · 과목 관리자는 담당 과목 전체) 요약 — 기간 첫 칸 대비 증감 · 가장 많았던 때 · 가장 적었던 때. `unit` = 명(재원생) · 개(강좌수). */
+export function TrendFacts({ points, range, who, unit = "명" }: { points: readonly Point[]; range: TrendRange; who: string; unit?: string }) {
   const sum = summarize(points);
   const first = sum.first ? axisLabel(sum.first, range) : "";
   return (
     <dl className="grid grid-cols-1 gap-2 @xl/panel:grid-cols-3">
       <Fact
         label={`${who} · ${first} 대비`}
-        value={sum.change === null ? "—" : `${sum.change > 0 ? "+" : ""}${fmt(sum.change)}명`}
+        value={sum.change === null ? "—" : `${sum.change > 0 ? "+" : ""}${fmt(sum.change)}${unit}`}
         sub={sum.changeRate === null ? undefined : `${sum.changeRate > 0 ? "+" : ""}${sum.changeRate}%`}
         tone={sum.change === null || sum.change === 0 ? undefined : sum.change > 0 ? "up" : "down"}
       />
-      <Fact label={`${who} · 가장 많았던 때`} value={sum.peak ? `${fmt(sum.peak.count)}명` : "—"} sub={sum.peak ? axisLabel(sum.peak, range) : undefined} />
-      <Fact label={`${who} · 가장 적었던 때`} value={sum.low ? `${fmt(sum.low.count)}명` : "—"} sub={sum.low ? axisLabel(sum.low, range) : undefined} />
+      <Fact label={`${who} · 가장 많았던 때`} value={sum.peak ? `${fmt(sum.peak.count)}${unit}` : "—"} sub={sum.peak ? axisLabel(sum.peak, range) : undefined} />
+      <Fact label={`${who} · 가장 적었던 때`} value={sum.low ? `${fmt(sum.low.count)}${unit}` : "—"} sub={sum.low ? axisLabel(sum.low, range) : undefined} />
     </dl>
   );
 }

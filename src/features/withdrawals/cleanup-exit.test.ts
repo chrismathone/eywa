@@ -52,7 +52,7 @@ describe("퇴원 집계 조회 배선", () => {
     ["src/features/dashboard/server/queries.ts", "bookkeepingOnlyIds("], // 원스크린 이번 달 증감
     ["src/features/dashboard/onescreen/server/queries.ts", "bookkeepingOnlyIds("], // 원스크린 주별 증감(등록·퇴원 양쪽)
     ["src/features/dashboard/overview/server.ts", "bookkeepingOnlyIds("], // 운영실 등록·퇴원 추이의 등록 칸
-    ["src/features/dashboard/overview/enrolled-trend-server.ts", "isCleanupExit("], // 재원생 추이(판정은 enrolled-trend.ts)
+    ["src/features/dashboard/overview/trend-inputs-server.ts", "isCleanupExit("], // 재원생·강좌수 추이 원본(판정은 enrolled-trend.ts)
     ["src/features/dashboard/overview/enrolled-trend.ts", "if (!ended.has(s.id)) return false;"],
   ];
   it.each(sources)("%s 는 %s 로 거른다", (path, needle) => {
@@ -69,16 +69,18 @@ describe("퇴원 집계 조회 배선", () => {
   });
   it("재원생 추이 원본은 장부 정리 판정과 그 학생의 청구를 함께 싣는다(학원 전체·과목별·원생 통계가 한 원본)", () => {
     const server = "src/features/dashboard/overview/enrolled-trend-server.ts";
+    const inputs = "src/features/dashboard/overview/trend-inputs-server.ts";
     const billing = "src/features/dashboard/overview/trend-billing-server.ts";
-    expect(count(server, "isCleanupExit(")).toBeGreaterThanOrEqual(1);
+    expect(count(inputs, "isCleanupExit(")).toBeGreaterThanOrEqual(1);
     // 원본엔 메모 칸 대신 병합 판정 값 — 빠지면 병합된 학생이 두 번 센다(적대 재리뷰 2026-10-20).
-    expect(count(server, "merged: isMergedStudent(s.notes)")).toBe(1);
+    expect(count(inputs, "merged: isMergedStudent(s.notes)")).toBe(1);
     // 운영실 카드 = 청구 재료는 캐시 밖에서 먼저 · 계산값 캐시 안에선 원본을 직접(캐시를 겹치면 Next가 안쪽 캐시를 건너뛴다) ·
     // 청구가 실패하면 다른 키로 1분만(정상 키를 대체값으로 더럽히지 않는다) — 동작 테스트는 enrolled-trend-server.test.ts.
     expect(count(server, "const raw = await loadTrendRaw(tenantId, today);")).toBe(1);
     expect(count(server, 'billing ? "billed" : "fallback"')).toBe(1);
     // 과목별 추이·원생 통계는 원본·청구 캐시를 따로 · 청구가 실패하면 그 요청에서만 종전 규칙.
-    expect(count(server, "loadBillingCached(tenantId, today).catch(warnBilling)")).toBe(2);
+    expect(count(server, "loadBillingCached(tenantId, today).catch(warnBilling)")).toBe(1);
+    expect(count(inputs, "loadBillingCached(tenantId, today).catch(warnBilling)")).toBe(1);
     expect(count(server, "trendInputs(tenantId, today)")).toBe(2);
     expect(count(billing, "isCleanupExit(")).toBe(1);
     expect(count(billing, "billedTuitionMonths(")).toBe(1);

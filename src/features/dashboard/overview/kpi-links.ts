@@ -23,7 +23,7 @@ export function studentsEnrolledHref(program?: Program): string {
  * `view` = 재원생 추이를 무엇으로 나눠 열지(과목별 · 수강 구성) — 이번 방문만 고르고 저장하지 않는다.
  * 학년별·학교별 카드는 옛 학년·학교 값이 저장되지 않아 정확한 흐름이 없으므로 여기로 오지 않는다(원생목록 그대로).
  */
-export type StudentStatsSection = "trend" | "flow";
+export type StudentStatsSection = "trend" | "courses" | "flow";
 export function studentsStatsHref(section: StudentStatsSection, view?: "subject" | "mix"): string {
   return `/students/stats${view ? `?view=${view}` : ""}#${section}`;
 }

@@ -6,9 +6,11 @@ import { DASHBOARD_SUBJECT_COLORS } from "@/features/dashboard/overview/subject-
 import { loadStudentStats } from "@/features/students/stats/server/load";
 import { distinctSubjectTokens, firstFlowMonth, firstNonZeroMonth, laterMonth, tokenColor, viewFromParam } from "@/features/students/stats/model";
 import type { MixKey } from "@/features/dashboard/overview/enrolled-trend";
+import { programLabel, type Program } from "@/features/students/enrollment/program";
 import { BackToListButton } from "../../consultations/_components/back-to-list-button";
 import { StatCard } from "./_components/stat-card";
 import { TrendBoard } from "./_components/trend-board";
+import { CourseBoard } from "./_components/course-board";
 import { FlowBoard } from "./_components/flow-board";
 import { HistoryBoard } from "./_components/history-board";
 import { SubjectSwitch } from "./_components/subject-switch";
@@ -22,6 +24,8 @@ const MIX_META: Record<MixKey, { label: string; color: string }> = {
   mathOnly: { label: "수학만", color: DASHBOARD_SUBJECT_COLORS.math },
   otherOnly: { label: "그 밖의 과목만", color: DASHBOARD_SUBJECT_COLORS.other },
 };
+/** 강좌수 프로그램 선 — 수학 파랑 · 인재원 영어 빨강(운영실 프로그램 색) · EiE는 영어와 갈리게 금색. */
+const PROGRAM_COLOR: Record<Program, string> = { math: DASHBOARD_SUBJECT_COLORS.math, injaewon: DASHBOARD_SUBJECT_COLORS.english, eie: tokenColor("gold") };
 const monthText = (ym: string) => `${ym.slice(0, 4)}년 ${Number(ym.slice(5, 7))}월`;
 const one = (v: string | string[] | undefined) => (typeof v === "string" ? v : undefined);
 
@@ -64,6 +68,14 @@ export default async function StudentStatsPage({ searchParams }: { searchParams:
         : countFrom
           ? `${monthText(countFrom)}부터의 기록만 보입니다 — 그 전 기간은 떠난 학생의 기록이 없어 정확히 셀 수 없습니다.`
           : null;
+  // 강좌수 추이는 수강 행에 기대므로 수강 종료가 처음 기록된 달(breakdownFrom)도 지킨다(과목 선과 같은 경계) · '지난 기록'엔 강좌수가 없어 가리키지 않는다.
+  const courseFrom = laterMonth(countFrom, breakdownFrom);
+  const courseClipNote =
+    trustFrom && courseFrom === trustFrom
+      ? `에이와 수강 기록이 갖춰진 ${monthText(trustFrom)}부터 그립니다 — 그 전 달은 옮겨 오기 전 학생의 수강 시작일이 늦게 잡혀 실제보다 적게 나옵니다.`
+      : breakdownFrom && courseFrom === breakdownFrom && courseFrom !== countFrom
+        ? `강좌수는 ${monthText(breakdownFrom)}부터 그립니다 — 그 전에 그만둔 학생은 수강 기록이 남아 있지 않아 반을 셀 수 없습니다.`
+        : clipNote;
   const description = scope ? `그동안의 재원생 흐름과 달마다 있었던 등록·퇴원 · ${scope.label} 기준` : "그동안의 재원생 흐름과 달마다 있었던 등록·퇴원";
   const boardKey = `${view}|${scope?.active ?? scope?.label ?? "all"}`;
 
@@ -105,6 +117,23 @@ export default async function StudentStatsPage({ searchParams }: { searchParams:
           ) : (
             <StatCard id="trend" title="재원생 추이" note="달마다 말일 기준" error />
           )}
+          {/* 강좌수 추이(원장 2026-10-20 '카드 따로') — 재원생 추이와 같은 아래 경계(countFrom)·같은 경계 문장. */}
+          {stats.courses?.data ? (
+            <CourseBoard
+              key={`courses|${boardKey}`}
+              total={stats.courses.data.total}
+              programs={stats.courses.data.byProgram
+                .filter((p) => stats.eieOn || p.key !== "eie")
+                .map((p) => ({ key: `program:${p.key}`, label: programLabel(p.key, settings.operations.subjects, stats.eieOn), color: PROGRAM_COLOR[p.key], set: p }))}
+              countFrom={courseFrom}
+              clipNote={courseClipNote}
+              today={stats.today}
+              scopeLabel={scope?.label ?? null}
+              initial={{ range: stats.prefs.courseRange, kind: stats.prefs.courseKind, off: stats.prefs.courseOff }}
+            />
+          ) : stats.courses?.error ? (
+            <StatCard id="courses" title="강좌수 추이" note="학생마다 듣는 반을 모두" error />
+          ) : null}
           {flowRows ? (
             <FlowBoard
               key={`flow|${boardKey}`}

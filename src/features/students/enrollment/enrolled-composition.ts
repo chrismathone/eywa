@@ -24,6 +24,11 @@ type One<T> = T | T[] | null;
 export type ActiveEnrollmentRow = {
   id: string;
   student_id: string;
+  /** 반 id — 강좌수(`course-count.ts`)가 같은 반 두 줄을 한 번으로 센다. 옛 호출부처럼 안 실으면 수강 줄마다 한 강좌. */
+  class_id?: string | null;
+  /** 종료일·반이동 — 강좌수가 **종료일이 미래로 적힌 수강**(특강 기간 · 반이동 예약 전의 원래 반)을 그날까지 셀 때만 싣는다. 재원생 구성 줄은 늘 비어 있다. */
+  end_date?: string | null;
+  is_transferred?: boolean | null;
   /**
    * 수강 시작일 — **아직 안 온 수강을 빼기 위한 재료**(원장 2026-09-16 '실시간 재원생').
    * 없으면(null) 시작한 것으로 본다: 모르는 것을 "아직 안 다닌다"로 읽으면 멀쩡한 재원생이 사라진다.
@@ -120,10 +125,10 @@ export type EnrolledComposition = {
 
 /**
  * **지금 수강 중**으로 치는 수강 줄 — 이미 시작했고(`today`) · 스코프 학생이고 · 표시 축 과목인 반.
- * 🔑 운영실 '미수강' 막대(`composeEnrolled().active`의 여집합)와 원생목록 수강 과목 = '미수강'(`activeStudentIds`)이
- *    **이 한 판정**을 지난다(원장 2026-09-28 "막대 숫자 = 열린 목록 건수").
+ * 🔑 운영실 '미수강' 막대(`composeEnrolled().active`의 여집합)와 원생목록 수강 과목 = '미수강'(`activeStudentIds`)·
+ *    상단 '강좌수'(`summarizeCourses`)가 **이 한 판정**을 지난다(원장 2026-09-28 "막대 숫자 = 열린 목록 건수").
  */
-function* activeRows(
+export function* activeRows(
   rows: readonly ActiveEnrollmentRow[],
   scope: StudentScope,
   today?: string,

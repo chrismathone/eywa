@@ -84,6 +84,13 @@ export type OverviewData = {
   changes: MonthChange[];
   /** 재원생 추이(월말·연말 재원생 수, 원장 2026-09-29) — 강사 스코프면 null(지금 담당 학생으로 과거를 셀 수 없다). */
   enrolledTrend: import("./enrolled-trend-server").EnrolledTrend | null;
+  /**
+   * 상단 '강좌수'(원장 2026-10-20 *"대시보드에 강좌수도 볼 수 있으면 좋을듯"* — 상단 칸 추가) — 재원생이 지금 듣는 반을 학생마다 모두
+   * (`summarizeCourses` · '재원생' 칸과 같은 조회·같은 줄 판정 → 오늘 값 = 원생 통계 '강좌수 추이' 오늘 점).
+   */
+  courses: import("@/features/students/enrollment/course-count").CourseSummary;
+  /** '강좌수 추이' 카드(원장 같은 날 '카드 따로') — 재원생 추이와 같은 원본·날짜·시작 달(`loadEnrolledTrend().courses`) · 강사 스코프면 null. */
+  courseTrend: import("./enrolled-trend-server").CourseTrend | null;
   /** 이번 달 퇴원 또는 과목 전체 수업종료. 과목별 종료 건수이며 반이동·특강 종료·시스템 정리 제외. */
   withdrawals: {
     month: string;

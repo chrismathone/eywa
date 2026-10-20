@@ -223,7 +223,7 @@ describe("overview display contracts", () => {
   });
 });
 
-const KPI_LABELS = ["재원생", "퇴원&수업종료", "신규문의", "금일 입테", "금일 등록", "오늘첫수업", "최근 결석", "보강예정"];
+const KPI_LABELS = ["재원생", "강좌수", "퇴원&수업종료", "신규문의", "금일 입테", "금일 등록", "오늘첫수업", "최근 결석", "보강예정"];
 const ALL_MENUS: OverviewSnapshot["allowed"] = [
   "dashboard",
   "students",
@@ -296,6 +296,21 @@ function kpiSnapshot(allowed = ALL_MENUS): OverviewSnapshot {
         ...ok,
       },
       students: { data: studentsData(), ...ok },
+      // 강좌수(원장 2026-10-20) — 학생 10명 중 반 1개 6명 · 2개 4명 = 14강좌(EiE 4 · 인재원 영어 3 · 수학 7).
+      courses: {
+        data: {
+          total: 14,
+          programs: { eie: 4, injaewon: 3, math: 7 },
+          perStudent: [{ courses: 1, students: 6 }, { courses: 2, students: 4 }, { courses: 3, students: 0 }, { courses: 4, students: 0 }],
+          combos: [
+            { bucket: 1, parts: [{ program: "eie" as const, count: 1 }], students: 4 },
+            { bucket: 1, parts: [{ program: "injaewon" as const, count: 1 }], students: 2 },
+            { bucket: 2, parts: [{ program: "math" as const, count: 2 }], students: 3 },
+            { bucket: 2, parts: [{ program: "injaewon" as const, count: 1 }, { program: "math" as const, count: 1 }], students: 1 },
+          ],
+        },
+        ...ok,
+      },
       withdrawals: {
         data: {
           month: "2026-09",
@@ -397,6 +412,24 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     expect(within(popup).getByRole("link", { name: "미수강 1명 목록 열기" }).getAttribute("href"))
       .toBe("/students?status=enrolled&subject=__none__&grade=all&teacher=all&noenr=0&from=dashboard");
     expect(popup.textContent).toContain("합계가 재원생 수보다 클 수 있습니다");
+    cleanup();
+  });
+
+  it("강좌수 칸(원장 2026-10-20) = 팝업 숫자 · 강좌 수마다 무엇으로 듣는지 · ↗ = 원생 통계 강좌수 추이", () => {
+    mocks.data = kpiSnapshot();
+    render(<Overview initial={mocks.data} />);
+    const card = screen.getByRole("button", { name: /^강좌수 14개\./ });
+    expect(card.getAttribute("aria-label")).toContain("EiE 4 · 인재원 영어 3 · 수학 7");
+    const jump = screen.getByRole("link", { name: "원생 통계에서 강좌수 추이 보기" });
+    expect(jump.getAttribute("href")).toBe("/students/stats#courses");
+    expect(jump.closest("button")).toBeNull();
+    fireEvent.click(card);
+    const popup = screen.getByRole("dialog");
+    expect(popup.textContent).toContain("강좌수 14개");
+    // 칸마다 조합 인원의 합 = 그 칸 학생 수(2개 4명 = 수학 2 · 3명 + 인재원 영어 1 + 수학 1 · 1명).
+    expect(popup.textContent).toContain("2개4명");
+    expect(popup.textContent).toContain("수학 23명");
+    expect(popup.textContent).toContain("인재원 영어 1 + 수학 11명");
     cleanup();
   });
 
@@ -596,18 +629,19 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     expect(kpiGridVars(5)).toMatchObject({ "--kpi-n": 5, "--kpi-mid": 3, "--kpi-last-mid": "span 2" });
     expect(kpiGridVars(4)).toMatchObject({ "--kpi-n": 4, "--kpi-mid": 2, "--kpi-last-mid": "auto" });
     expect(kpiGridVars(1)).toMatchObject({ "--kpi-n": 1, "--kpi-mid": 1, "--kpi-last-mid": "auto" });
-    // 여덟 칸(금일 등록 포함)은 4 × 2 — 마지막 칸이 넓어지지 않는다.
+    // 여덟 칸(금일 등록 포함)은 4 × 2 — 마지막 칸이 넓어지지 않는다. 아홉 칸(강좌수 2026-10-20)은 3 × 3.
     expect(kpiGridVars(8)).toMatchObject({ "--kpi-n": 8, "--kpi-mid": 4, "--kpi-last-mid": "auto" });
+    expect(kpiGridVars(9)).toMatchObject({ "--kpi-n": 9, "--kpi-mid": 3, "--kpi-last-mid": "auto" });
     // 운영실은 역할에 따라 칸 수가 다르다 — 출석부 권한이 없는 역할이면 최근 결석·보강예정(둘 다 출석부 영역)이 빠져
-    // 6칸(금일 등록은 콜&상담 권한이라 남는다), 콜&상담 권한까지 없으면 금일 등록도 빠진다.
+    // 7칸(강좌수는 원생 권한 · 금일 등록은 콜&상담 권한이라 남는다), 콜&상담 권한까지 없으면 금일 등록도 빠진다.
     const snap = kpiSnapshot(["dashboard", "students", "withdrawals", "enrollment", "calendar"]);
     delete snap.sections.absent;
     delete snap.sections.makeup;
     mocks.data = snap;
-    expect(renderToStaticMarkup(<Overview initial={mocks.data} />)).toContain("--kpi-n:6");
+    expect(renderToStaticMarkup(<Overview initial={mocks.data} />)).toContain("--kpi-n:7");
     delete snap.sections.enrolledToday;
     const html = renderToStaticMarkup(<Overview initial={mocks.data} />);
-    expect(html).toContain("--kpi-n:5");
+    expect(html).toContain("--kpi-n:6");
   });
 
   it("동시 수강 = 영어+수학, N명 (n%)", () => {

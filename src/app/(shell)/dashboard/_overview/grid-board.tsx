@@ -19,8 +19,9 @@ import g from "./grid-board.module.css";
 function drawable(id: string, snap: OverviewSnapshot): boolean {
   const def = cardDef(id);
   if (!def) return false;
-  if (id === "panel:enrolledTrend") {
-    const t = snap.sections.enrolledTrend;
+  // 재원생·강좌수 추이는 강사 스코프면 숨는다(조회는 됐는데 값이 null — overview.tsx 패널과 같은 판정).
+  if (id === "panel:enrolledTrend" || id === "panel:courseTrend") {
+    const t = id === "panel:enrolledTrend" ? snap.sections.enrolledTrend : snap.sections.courseTrend;
     if (t && t.data === null && t.at !== null) return false;
   }
   return def.areas.some((a) => !!snap.sections[a]);
@@ -134,6 +135,7 @@ export function GridBoard({
             data-cell={def.kind}
             data-dashboard-card={item.id}
             data-wide-cell={d.w >= 12 || undefined}
+            data-narrow-cell={d.w <= 2 || undefined}
             data-cell-empty={isEmptyCard(item.id, snapshot) || undefined}
           >
             {item.mode === "summary" && def.kind === "panel" ? (

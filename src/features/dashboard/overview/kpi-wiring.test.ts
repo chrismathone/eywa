@@ -428,8 +428,8 @@ describe("카드 구조 — ↗는 버튼 안에 들어가지 않는다", () => 
     expect(CARD.indexOf("<WindowLink")).toBeGreaterThan(CARD.indexOf("</DetailPopup>"));
   });
 
-  it("여덟 칸이 모두 같은 카드 부품을 쓰고, 열 수는 선 카드 수에서 나온다(D2)", () => {
-    expect(count(STRIP, "<KpiCard")).toBe(8);
+  it("아홉 칸(강좌수 2026-10-20)이 모두 같은 카드 부품을 쓰고, 열 수는 선 카드 수에서 나온다(D2)", () => {
+    expect(count(STRIP, "<KpiCard")).toBe(9);
     expect(STRIP).toContain("style={kpiGridVars(shown)}");
   });
 });

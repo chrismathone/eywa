@@ -1,38 +1,31 @@
 import "server-only";
-import { cache } from "react";
 import { unstable_cache } from "next/cache";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { fetchAllPaged } from "@/lib/supabase/batch";
-import { reportWarning } from "@/lib/observability/report-error";
-import { isMergedStudent } from "@/features/students/status/merged";
-import { isCleanupExit } from "@/features/withdrawals/system-bulk";
-import { MIX_KEYS, breakdownTrendOf, monthlyPoints, subjectTrendOf, trendOf, weeklyPoints, yearlyPoints, type MixKey, type TrendEnrollment, type TrendEnrollments, type TrendPoint, type TrendStudent } from "./enrolled-trend";
+import { MIX_KEYS, breakdownTrendOf, monthlyPoints, subjectTrendOf, trendOf, weeklyPoints, yearlyPoints, type MixKey, type TrendPoint } from "./enrolled-trend";
+import { courseTrendOf } from "./course-trend";
 import { subjectGroupOf, type ProgramSubject } from "@/features/students/enrollment/program";
-import { loadCleanupBilling, type CleanupBilling } from "./trend-billing-server";
 import { loadRecordCoverage } from "./record-coverage";
 import { clipTrend } from "./trend-points";
+import { breakdownFromOf, inputsOf, loadBillingCached, loadTrendRaw, trendInputs, warnBilling, warnCoverage } from "./trend-inputs-server";
 
-/** `trustFrom` = 에이와 수강 기록이 갖춰진 첫 달 — 그 전 점을 **실제로 뺐을 때만**(월별 = `monthlyFrom`도) 싣는다(원장 2026-10-20 '2026년 4월부터'). */
-export type EnrolledTrend = { monthly: TrendPoint[]; yearly: TrendPoint[]; recordsFrom: string | null; trustFrom?: string | null; monthlyFrom?: string | null };
+/** 두 달 중 늦은 쪽(하나가 없으면 다른 쪽) — 강좌수는 에이와 기록이 갖춰진 달과 수강 기록이 남은 달을 둘 다 지킨다. */
+const laterOf = (a: string | null, b: string | null) => (!a ? b : !b ? a : a > b ? a : b);
+/** 강좌수 자르기 — 실제로 자른 경계가 무엇인지(`cutBy` — 카드 각주가 이유를 맞게 말하게, 적대 재리뷰 2026-10-20). */
+function clipCourses(monthly: TrendPoint[], yearly: TrendPoint[], trustFrom: string | null, recordsFrom: string | null): CourseTrend {
+  const from = laterOf(trustFrom, recordsFrom);
+  const c = clipTrend(monthly, yearly, from);
+  return { ...c, cutBy: !c.trustFrom ? null : from === trustFrom ? "trust" : "records" };
+}
 
-/** 재료 실패 — 경고만 남기고 종전대로 센다(재원생 추이 전체가 '못 불러옴'이 되지 않게, 적대 리뷰 2026-10-20). */
-const warnFor = (scope: string, message: string) => (error: unknown): null => {
-  reportWarning(message, { scope, cause: error instanceof Error ? error.message : String(error) });
-  return null;
-};
-const warnBilling = warnFor("dashboard.enrolledTrend.cleanupBilling", "재원생 추이 장부 정리 청구 조회 실패 — 이번 요청은 퇴원일 규칙으로");
-const warnCoverage = warnFor("dashboard.enrolledTrend.coverage", "재원생 추이 기록 범위 조회 실패 — 이번 요청은 시작 달로 자르지 않는다");
-
-
-/** 판정 재료(`countedOn`) — 첫 수강 · 끝난 수강 · 청구 기록(장부 정리 학생을 청구로 세는 창 · 청구 재료가 없으면 종전 규칙). */
-const inputsOf = (raw: TrendRaw, billing: CleanupBilling | null, today: string): TrendEnrollments => ({
-  firstStart: new Map(raw.firstStart),
-  ended: new Set(raw.ended),
-  billing: billing?.billingFrom ? { from: billing.billingFrom, today, months: new Map(billing.billed) } : undefined,
-});
+/** 강좌수 추이(원장 2026-10-20 '강좌수 추이 카드 따로') — 재원생 추이와 같은 날짜·같은 시작 달 규칙(`course-trend.ts`). */
+export type CourseTrend = { monthly: TrendPoint[]; yearly: TrendPoint[]; trustFrom: string | null; monthlyFrom: string | null; cutBy?: "trust" | "records" | null };
+/**
+ * `trustFrom` = 에이와 수강 기록이 갖춰진 첫 달 — 그 전 점을 **실제로 뺐을 때만**(월별 = `monthlyFrom`도) 싣는다(원장 2026-10-20 '2026년 4월부터').
+ * `courses` = 같은 원본·같은 날짜로 센 강좌수 추이(운영실 '강좌수 추이' 카드가 읽는다 — 원본을 두 번 읽지 않게 한 캐시에서 함께 센다).
+ */
+export type EnrolledTrend = { monthly: TrendPoint[]; yearly: TrendPoint[]; recordsFrom: string | null; trustFrom?: string | null; monthlyFrom?: string | null; courses?: CourseTrend };
 
 /**
- * 재원생 추이(월별 12개월 · 연도별) — 운영실 30초 갱신마다 원본(원생·수강 전건)을 다시 읽지 않게 **센 값을 지점·날짜별 캐시**
+ * 재원생 추이(월별 12개월 · 연도별) + 강좌수 추이 — 운영실 30초 갱신마다 원본(원생·수강 전건)을 다시 읽지 않게 **센 값을 지점·날짜별 캐시**
  * (B6 — 쿠키 없는 admin client + 신뢰 tenantId 키, `tenant_id` 필터 필수 [[#104]]). 오늘 점이 카드보다 최대 5분 늦을 수 있다.
  * 🔴 캐시 함수 안에서 다른 캐시 함수를 부르지 않는다 — Next는 안쪽 캐시를 건너뛰어(isNestedUnstableCache) 매번 DB로 간다(적대 재리뷰
  *    2026-10-20). 그래서 청구 재료는 **캐시 밖에서 먼저**(자기 5분 캐시 · 실패는 남지 않는다) 받고, 계산값 캐시 안에서는 원본을 직접 읽는다.
@@ -48,47 +41,50 @@ export async function loadEnrolledTrend(tenantId: string, today: string): Promis
     async () => {
       const raw = await loadTrendRaw(tenantId, today);
       const en = inputsOf(raw, billing, today);
-      const clipped = clipTrend(trendOf(raw.students, en, monthlyPoints(today)), trendOf(raw.students, en, yearlyPoints(today, raw.fromYear)), trustFrom);
-      return { ...clipped, recordsFrom: raw.recordsFrom };
+      const months = monthlyPoints(today);
+      const years = yearlyPoints(today, raw.fromYear);
+      const clipped = clipTrend(trendOf(raw.students, en, months), trendOf(raw.students, en, years), trustFrom);
+      // 강좌수는 수강 행에 기댄다 — 수강 종료가 처음 기록된 달 전(그만둔 학생의 수강 행이 없다)도 자른다(과목 선과 같은 경계, 적대 리뷰 2026-10-20).
+      const courses = clipCourses(
+        courseTrendOf(raw.students, en, raw.enrollments, months, undefined, today),
+        courseTrendOf(raw.students, en, raw.enrollments, years, undefined, today),
+        trustFrom,
+        breakdownFromOf(raw, today),
+      );
+      return { ...clipped, recordsFrom: raw.recordsFrom, courses };
     },
-    ["dashboard-enrolled-trend-v5", tenantId, today, billing ? "billed" : "fallback", trustFrom ?? "-"],
+    ["dashboard-enrolled-trend-v7", tenantId, today, billing ? "billed" : "fallback", trustFrom ?? "-"],
     { revalidate: billing ? 300 : 60 },
   )();
 }
 
-type TrendRaw = { students: TrendStudent[]; enrollments: TrendEnrollment[]; firstStart: [string, string][]; ended: string[]; recordsFrom: string | null; fromYear: number };
-
-/** 원생·수강 원본(과목별 추이·원생 통계) — 5분 캐시(B6) + 한 렌더 안 한 번(`cache` · 서버 액션에선 안 듣는다) · 키 판 v3 = 메모 대신 병합 값. */
-const loadTrendRawCached = cache((tenantId: string, today: string) =>
-  unstable_cache(() => loadTrendRaw(tenantId, today), ["dashboard-enrolled-trend-raw-v3", tenantId, today], { revalidate: 300 })(),
-);
-
-/** 장부 정리 학생의 청구 재료 — 원본과 **따로** 5분 캐시. 실패는 캐시에 남지 않는다(`loadCleanupBilling`이 던진다). */
-const loadBillingCached = cache((tenantId: string, today: string) =>
-  unstable_cache(() => loadCleanupBilling(createAdminClient(), tenantId, today), ["dashboard-enrolled-trend-billing-v1", tenantId, today], { revalidate: 300 })(),
-);
-
-/** 과목별 추이·원생 통계의 판정 재료 한 벌 — 청구 재료가 실패하면 **그 요청에서만** 종전 규칙. 캐시 함수 안에서 부르지 말 것(위 주의). */
-const trendInputs = cache(async (tenantId: string, today: string): Promise<{ raw: TrendRaw; en: TrendEnrollments }> => {
-  const [raw, billing] = await Promise.all([loadTrendRawCached(tenantId, today), loadBillingCached(tenantId, today).catch(warnBilling)]);
-  return { raw, en: inputsOf(raw, billing, today) };
-});
-
 /**
  * 과목별 재원생 추이(원장 2026-10-14 2단계) — 과목 관리자 화면·미리보기 원본에서만 부른다. 원생·수강(반 과목 포함) 원본을
  * 지점·날짜별 5분 캐시로 받고(학원 전체 추이와 같은 B6 규약), 묶음마다 `subjectTrendOf`로 센다(판정은 순수 함수 한 벌).
+ * 강좌수 추이도 그 과목 반만 함께 센다(`courseTrendOf` — 과목 관리자 '강좌수 추이' 카드).
  */
 export async function loadEnrolledTrendSlicer(tenantId: string, today: string): Promise<(inSubject: (subject: string | null) => boolean) => EnrolledTrend> {
   const [{ raw, en }, coverage] = await Promise.all([trendInputs(tenantId, today), loadRecordCoverage(tenantId, today).catch(warnCoverage)]);
   const trustFrom = coverage?.trustFrom ?? null;
-  return (inSubject) => ({
-    ...clipTrend(
-      subjectTrendOf(raw.students, en, raw.enrollments, monthlyPoints(today), inSubject, today),
-      subjectTrendOf(raw.students, en, raw.enrollments, yearlyPoints(today, raw.fromYear), inSubject, today),
-      trustFrom,
-    ),
-    recordsFrom: raw.recordsFrom,
-  });
+  const months = monthlyPoints(today);
+  const years = yearlyPoints(today, raw.fromYear);
+  return (inSubject) => {
+    const inRow = (e: { subject: string | null }) => inSubject(e.subject);
+    return {
+      ...clipTrend(
+        subjectTrendOf(raw.students, en, raw.enrollments, months, inSubject, today),
+        subjectTrendOf(raw.students, en, raw.enrollments, years, inSubject, today),
+        trustFrom,
+      ),
+      recordsFrom: raw.recordsFrom,
+      courses: clipCourses(
+        courseTrendOf(raw.students, en, raw.enrollments, months, inRow, today),
+        courseTrendOf(raw.students, en, raw.enrollments, years, inRow, today),
+        trustFrom,
+        breakdownFromOf(raw, today),
+      ),
+    };
+  };
 }
 
 /** 원생 통계 화면의 재원생 추이 — 월별 36개월 · 주별 26주 · 연도별, 학원 전체 · 과목마다 · 수강 구성마다. */
@@ -156,45 +152,6 @@ export async function loadEnrolledTrendDetail(
     byMix: scope ? [] : MIX_KEYS.map((key) => ({ key, monthly: split.monthly.mix[key], weekly: split.weekly.mix[key], yearly: split.yearly.mix[key] })),
     unknown: { monthly: split.monthly.unknown, weekly: split.weekly.unknown, yearly: split.yearly.unknown },
     recordsFrom: raw.recordsFrom,
-    // 오늘 이후로 적힌 종료(반이동 예약 등)는 기록의 시작이 아니다.
-    breakdownFrom: raw.enrollments.reduce<string | null>((m, e) => (e.end && e.end.slice(0, 10) <= today && (!m || e.end < m) ? e.end : m), null)?.slice(0, 7) ?? null,
-  };
-}
-
-async function loadTrendRaw(tenantId: string, today: string): Promise<TrendRaw> {
-  const db = createAdminClient();
-  type One<T> = T | T[] | null;
-  const [students, enrollments] = await Promise.all([
-    fetchAllPaged<{ id: string; status: string; enrolled_at: string | null; withdrawn_at: string | null; notes: string | null; withdrawal_metadata: unknown }>((from, to) =>
-      db.from("students").select("id,status,enrolled_at,withdrawn_at,notes,withdrawal_metadata").eq("tenant_id", tenantId).order("id").range(from, to),
-    ),
-    fetchAllPaged<{ id: string; student_id: string; start_date: string | null; end_date: string | null; is_transferred: boolean | null; class: One<{ subject: string | null }> }>((from, to) =>
-      db.from("enrollments").select("id,student_id,start_date,end_date,is_transferred,class:class_id ( subject )").eq("tenant_id", tenantId).order("id").range(from, to),
-    ),
-  ]);
-  const firstStart = new Map<string, string>();
-  const ended = new Set<string>();
-  for (const e of enrollments) {
-    if (e.end_date) ended.add(e.student_id);
-    if (!e.start_date) continue;
-    const cur = firstStart.get(e.student_id);
-    if (!cur || e.start_date < cur) firstStart.set(e.student_id, e.start_date);
-  }
-  // 오늘 이후로 적힌 퇴원(퇴원 예약)은 기록의 시작이 아니다 — 새 지점의 첫 퇴원이 예약이면 미래 달이 경계가 되어 화면이 빈다(리뷰 2026-10-20).
-  const firstOut = students.reduce<string | null>((m, s) => (s.withdrawn_at && s.withdrawn_at.slice(0, 10) <= today && (!m || s.withdrawn_at < m) ? s.withdrawn_at : m), null);
-  return {
-    // 메모 칸(원본의 절반 가까이)은 싣지 않고 병합 판정 값만 싣는다 — 원본 캐시 크기(2MB 한도)·파싱 비용(적대 재리뷰 2026-10-20).
-    students: students.map((s) => ({ id: s.id, status: s.status, enrolledAt: s.enrolled_at, withdrawnAt: s.withdrawn_at, merged: isMergedStudent(s.notes), cleanup: isCleanupExit(s.withdrawal_metadata) })),
-    enrollments: enrollments.map((e) => ({
-      studentId: e.student_id,
-      subject: (Array.isArray(e.class) ? e.class[0] : e.class)?.subject ?? null,
-      start: e.start_date,
-      end: e.end_date,
-      transferred: !!e.is_transferred,
-    })),
-    firstStart: [...firstStart],
-    ended: [...ended],
-    recordsFrom: firstOut ? firstOut.slice(0, 7) : null,
-    fromYear: firstOut ? Number(firstOut.slice(0, 4)) : Number(today.slice(0, 4)),
+    breakdownFrom: breakdownFromOf(raw, today),
   };
 }

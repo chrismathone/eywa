@@ -61,6 +61,8 @@ describe("레지스트리 = 운영실 카드 전부", () => {
         changes: ok([{ month: "2026-10", enrolled: 2, withdrawn: 1 }]),
         earlyExits: ok({ month: "2026-10", months: ["2026-10"], rows: [], history: [] }),
         enrolledTrend: ok({ monthly: [{ key: "2026-10", count: 3 }], yearly: [], recordsFrom: null }),
+        courses: ok({ total: 5, programs: { eie: 0, injaewon: 0, math: 5 }, perStudent: [] }),
+        courseTrend: ok({ monthly: [{ key: "2026-10", count: 5 }], yearly: [], trustFrom: null, monthlyFrom: null }),
         withdrawals: ok({ month: "2026-10", rows: [] }),
         intake: ok([]),
         enrolledToday: ok([]),

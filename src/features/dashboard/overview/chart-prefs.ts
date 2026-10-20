@@ -3,12 +3,12 @@
  * 계정 귀속(`users.ui_prefs.dashboard`, 상시 규칙 "모든 뷰 세팅은 계정 귀속"). 기본값(막대)은 저장하지 않는다.
  * ⚠️ 일반 모듈 — 서버(초기값)와 클라(토글)가 함께 쓴다([[#61]]).
  */
-export const CHART_PANELS = ["changes", "billing", "enrolledTrend"] as const;
+export const CHART_PANELS = ["changes", "billing", "enrolledTrend", "courseTrend"] as const;
 export type ChartPanel = (typeof CHART_PANELS)[number];
 export type ChartKind = "bar" | "line";
 export type ChartKinds = Record<ChartPanel, ChartKind>;
 
-export const DEFAULT_CHART_KINDS: ChartKinds = { changes: "bar", billing: "bar", enrolledTrend: "bar" };
+export const DEFAULT_CHART_KINDS: ChartKinds = { changes: "bar", billing: "bar", enrolledTrend: "bar", courseTrend: "bar" };
 
 /** 저장 키 — 패널마다 따로(형제 키 보존은 patchMyUiPrefs가 한다). */
 export const chartPrefKey = (panel: ChartPanel) => `chart_${panel}`;
