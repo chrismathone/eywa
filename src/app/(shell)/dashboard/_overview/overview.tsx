@@ -55,6 +55,7 @@ import {
 import { DemoRosterSwitch } from "../_components/demo-roster-switch";
 import type { DemoRosterControl } from "@/features/demo-roster/types";
 import s from "./overview.module.css";
+import { SubjectBridge } from "./subject-bridge";
 import appearance from "./appearance.module.css";
 
 const clock = (at: number) =>
@@ -756,6 +757,7 @@ export function Overview({
             limit={6}
             title="과목별 수강"
           />
+          <SubjectBridge student={student} courses={v.courses?.data?.total ?? null} />
           <div className={s.separated}>
             {/* 동시 수강 = 영어(EiE·인재원 영어) + 수학(수학(심화) 포함) — 원장 2026-09-11 재정의.
                 학년별 재원생 막대의 보라 합계와 같은 판정(subjectMixOf)이라 두 수가 늘 같다. */}

@@ -227,6 +227,8 @@ async function students(
       // 동시 수강 = 영어 + 수학(원장 2026-09-11 재정의) — gradeSplit 보라 합계와 같은 subjectMixOf 판정.
       concurrent: programs.both,
       subjectCombinations: comboRows === countRows ? counts.combinations : enrolledSubjectCounts(comboRows, scope, today).combinations,
+      // 강사 화면은 담당 과목 축으로 좁혀 '반이 없는 학생'이 다른 과목 수강생과 섞인다 — 각주를 싣지 않는다.
+      ...(scope ? {} : { subjectStudents: counts.students }),
       programs,
       gradeSplit: gradeSplit(visible, composition.programs, settings.operations.gradeLevels),
       levelSplit: levelSubjectSplit(visible, composition.programs),

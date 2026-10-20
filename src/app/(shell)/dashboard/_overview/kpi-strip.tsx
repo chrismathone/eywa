@@ -7,8 +7,8 @@ import { KPI_KEYS, type KpiKey } from "@/features/dashboard/overview/layout";
 import { todayLevelTestList } from "@/features/dashboard/overview/display";
 import { monthAheadWindow, windowUntilLabel } from "@/features/dashboard/overview/upcoming-window";
 import {
+  intakeTrendHref,
   recentAbsenceRange,
-  intakeDayHref,
   makeupWeekHref,
   studentsStatsHref,
   studentsFirstClassHref,
@@ -190,7 +190,7 @@ export function kpiCards(snapshot: OverviewSnapshot, opts: KpiCardOptions = {}):
           icon={<MenuGlyph name="messages" size={20} />}
           error={v.intake.error}
           popupTitle="오늘 신규문의"
-          jump={can("enrollment") ? { href: intakeDayHref(today), label: "신규 콜&상담에서 오늘 접수 보기" } : null}
+          jump={can("enrollment") ? { href: intakeTrendHref(), label: "신규 콜&상담 통계에서 문의 추이 보기" } : null}
         >
           <IntakePopup rows={intake} canOpen={can("enrollment")} />
         </KpiCard>

@@ -71,6 +71,8 @@ export type OverviewData = {
     /** 영어(EiE·인재원 영어) + 수학 동시 수강 — `gradeSplit`의 보라 합계와 같은 판정(subjectMixOf). */
     concurrent: number;
     subjectCombinations?: { subjects: string[]; value: number }[];
+    /** 과목 막대에 선 학생(중복 없이) — 막대 합과의 차 = 두 과목 이상 듣는 학생이 더 선 몫(과목별 수강 각주 · 옛 스냅샷엔 없다). */
+    subjectStudents?: number;
     /** 프로그램별 재원생(겹침 있음) + 수강 없음 — KPI '재원생' 팝업. */
     programs: ProgramSummary;
     gradeSplit: GradeSplit;

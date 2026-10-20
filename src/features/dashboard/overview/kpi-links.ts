@@ -65,6 +65,15 @@ export function intakeDayHref(date: string): string {
   return `/enrollment?view=table&received=${date}`;
 }
 
+/**
+ * KPI '신규문의' ↗ — 신규 콜&상담 통계 보기의 **신규 문의 추이**를 이번 달 일별로(원장 2026-10-20 *"신규 문의 추이는 없네 신규 문의 상세에서
+ * 그것도 추가"*). 오늘 칸 = 카드 숫자. 오늘 접수 목록(옛 목적지 `intakeDayHref`)은 그 카드 머리 링크로 남는다.
+ * `from=dashboard` = 이 방문은 '마지막 보기'를 저장하지 않는다.
+ */
+export function intakeTrendHref(): string {
+  return "/enrollment?view=stats&trend=day&from=dashboard#intake";
+}
+
 /** 그날 결석 학생(출석부). */
 export function absentDayHref(date: string): string {
   return `/attendance/${date}?status=absent`;

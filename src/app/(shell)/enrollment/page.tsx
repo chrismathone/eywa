@@ -34,6 +34,13 @@ import {
 } from "@/features/enrollment/server/stats-queries";
 import { loadSchoolStatsPrefs } from "@/features/enrollment/server/school-prefs-actions";
 import { StatsView } from "./_components/stats-view";
+import { IntakeTrendCard } from "./_components/intake-trend-card";
+import { INTAKE_TREND_KEYS } from "@/features/enrollment/intake-trend";
+import { intakeGroupMeta } from "@/features/enrollment/intake-groups";
+import { loadIntakeTrend } from "@/features/enrollment/server/intake-trend";
+import { hasPeriodParams, paramsForMode, parseStatsPeriod as parsePeriod, readPeriodParams } from "@/features/stats/period";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { reportWarning } from "@/lib/observability/report-error";
 import type { EnrollmentView } from "./_components/enrollment-query";
 import { KanbanFilters } from "./_components/kanban-filters";
 import { NewEnrollmentTrigger } from "./_components/new-enrollment-trigger";
@@ -46,7 +53,7 @@ import { MakeeduPushButton } from "./_components/makeedu-push-button";
 import { canPushToMakeedu } from "@/features/integrations/server/makeedu-push-access";
 import { readMyUiPrefs } from "@/lib/ui-prefs/read";
 import { RememberPrefs } from "@/components/remember-prefs";
-import { parseEnrollmentView, savedEnrollmentView } from "@/features/enrollment/view-pref";
+import { parseEnrollmentView, savedEnrollmentView, savedIntakeTrendMode } from "@/features/enrollment/view-pref";
 import { saveEnrollmentViewPref } from "@/features/enrollment/server/view-pref-actions";
 
 export const metadata = { title: "신규 콜&상담 — 에이와" };
@@ -71,9 +78,16 @@ export default async function EnrollmentPage({
     range?: string;
     year?: string;
     received?: string;
+    trend?: string;
+    trendMonth?: string;
+    trendFrom?: string;
+    trendTo?: string;
+    trendSpan?: string;
+    from?: string;
   }>;
 }) {
   const user = await requireAccess("enrollment");
+  const sp = await searchParams;
   const {
     month,
     consultant,
@@ -84,7 +98,7 @@ export default async function EnrollmentPage({
     range: rangeParam,
     year: yearParam,
     received,
-  } = await searchParams;
+  } = sp;
   // 달·접수일은 **달력에 있는 값만** 필터로 쓴다 — 없는 날짜(2026-02-30)를 그대로 실으면 경계 계산이 터지거나(500)
   // PostgREST가 400을 낸다. 틀리면 필터 없음.
   const selectedMonth = isValidYm(month) ? month : null;
@@ -158,14 +172,30 @@ export default async function EnrollmentPage({
       ? { from: Math.min(...statsYears), to: Math.max(...statsYears) }
       : { from: Number(kstToday().slice(0, 4)), to: Number(kstToday().slice(0, 4)) };
   const span = periodRange(statsPeriod, available);
-  const [stats, dist] =
+  // 신규 문의 추이(원장 2026-10-20) — 기간은 주소(`trend…`) → 계정에 남긴 보기 방식 → 월별 12개월. 연도 칩과 따로 논다.
+  const today = kstToday();
+  const intakeParams = readPeriodParams(sp, INTAKE_TREND_KEYS);
+  const savedIntakeMode = savedIntakeTrendMode(uiPrefs);
+  const intakePeriod = parsePeriod(
+    hasPeriodParams(intakeParams) || !savedIntakeMode ? intakeParams : paramsForMode(savedIntakeMode, today),
+    today,
+  );
+  const [stats, dist, intake] =
     view === "stats"
       ? await Promise.all([
           getEnrollmentStats(statsYear, span),
           // 🔴 상담 분포는 **연도가 적용된다**(재원생 기준이던 때는 연도를 바꿔도 안 변해 화면이 거짓말했다).
           getConsultationDistribution(statsYear, span),
+          // 실패는 카드 안에서 '못 불러옴'으로(통계 보기 전체를 죽이지 않는다).
+          getTenantSettings().then(async (settings) => ({
+            groups: intakeGroupMeta(settings.operations.subjects),
+            trend: await loadIntakeTrend(intakePeriod, settings.operations.subjects, today).catch((error: unknown) => {
+              reportWarning("신규 문의 추이 조회 실패", { scope: "enrollment.intakeTrend", cause: error instanceof Error ? error.message : String(error) });
+              return null;
+            }),
+          })).catch(() => null),
         ])
-      : [null, null];
+      : [null, null, null];
   void _unused;
 
   const items = kanbanItems ?? [];
@@ -186,7 +216,16 @@ export default async function EnrollmentPage({
   // 필터는 보존하고 page만 갈아끼운다. p===1이면 page= 자체를 안 넣어야 필터 변경 href와 모양이 같아진다
   // (필터·검색·월이동 href는 page를 안 넣으므로 자동으로 1페이지로 리셋된다 — 페이지네이션 표준).
   // 통계뷰 연도 링크 — 목록 필터(월·기간·검색)는 통계와 무관해 싣지 않는다(섞이면 "무엇을 보고 있는지"가 흐려진다).
-  const yearHref = (v: string | number): string => `/enrollment?view=stats&year=${v}`;
+  // 신규 문의 추이 기간·운영실 방문 표시(`from=dashboard`)는 연도와 따로 논다 — 연도를 바꿔도 그대로 싣는다(리뷰 2026-10-20).
+  const yearHref = (v: string | number): string => {
+    const q = new URLSearchParams({ view: "stats", year: String(v) });
+    for (const k of [...Object.values(INTAKE_TREND_KEYS), "from"]) {
+      const raw = (sp as Record<string, string | string[] | undefined>)[k];
+      const val = Array.isArray(raw) ? raw[0] : raw; // 같은 칸이 둘이면 첫 값(readPeriodParams와 같은 규칙)
+      if (val) q.set(k, val);
+    }
+    return `/enrollment?${q.toString()}`;
+  };
 
   const pageHref = (p: number): string => {
     const params = new URLSearchParams();
@@ -215,7 +254,8 @@ export default async function EnrollmentPage({
           진짜 완료 지표인 '배정 완료(수업≥1)' 건수 유지(정직). */}
       {/* QR 접수가 들어오면 새로고침 없이 목록이 갱신된다(20초 건수 폴링). 알림 줄은 도착 후에만 렌더. */}
       <NewConsultationWatcher initialCount={totalCount ?? 0} />
-      <RememberPrefs current={{ view }} saved={{ view: savedView }} save={saveEnrollmentViewPref} />
+      {/* 운영실 ↗로 온 방문(`from=dashboard`)은 보기를 저장하지 않는다 — 카드가 연 보기가 사람이 고른 마지막 보기를 덮지 않게(원생목록과 같은 규약). */}
+      {sp.from === "dashboard" ? null : <RememberPrefs current={{ view }} saved={{ view: savedView }} save={saveEnrollmentViewPref} />}
 
       <PageHeader
         eyebrow="신규 콜&상담"
@@ -339,12 +379,21 @@ export default async function EnrollmentPage({
 
       {/* 통계뷰는 빈 상태 사진 대신 자기 안에서 "집계할 상담이 없습니다"를 말한다(연도 선택을 남겨야 하므로). */}
       {view === "stats" && stats && dist && schoolPrefs ? (
+        <>
+        <IntakeTrendCard
+          trend={intake?.trend ?? null}
+          period={intakePeriod}
+          today={today}
+          groups={intake?.groups ?? {}}
+          keep={{ view: "stats", year: yearParam, from: sp.from === "dashboard" ? "dashboard" : undefined }}
+        />
         <StatsView
           stats={stats}
           year={statsYear}
           dist={dist}
           schoolPrefs={schoolPrefs}
         />
+        </>
       ) : /* 빈 상태 판정은 rows.length이 아니라 total === 0 (2페이지가 비어 보이는 것과 진짜 0건은 다르다) */
       (view === "table" ? (headerCounts?.total ?? 0) === 0 : items.length === 0) ? (
         // 🔴 `w-full` 필수 — 목록뷰에선 바깥 틀이 세로 flex라 `mx-auto`만 두면 이 상자가 폭 0으로 접혀

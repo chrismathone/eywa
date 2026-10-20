@@ -6,6 +6,8 @@
  * - 보기는 필터가 아니다 — 10분 초기화(`filter-reset/rules.ts`) 대상이 아니다.
  * - 기본(칸반)은 저장하지 않는다(키를 지운다).
  */
+import { parsePeriodMode, type PeriodMode } from "@/features/stats/period";
+
 export type EnrollmentViewValue = "kanban" | "table" | "stats";
 
 export const ENROLLMENT_VIEW_PREFS_NS = "enrollment";
@@ -19,4 +21,10 @@ export function savedEnrollmentView(uiPrefs: Record<string, unknown>): Enrollmen
   const ns = uiPrefs[ENROLLMENT_VIEW_PREFS_NS];
   const raw = ns && typeof ns === "object" && !Array.isArray(ns) ? (ns as Record<string, unknown>).view : undefined;
   return parseEnrollmentView(raw) ?? "kanban";
+}
+
+/** 저장된 '신규 문의 추이' 보기 방식(`saveIntakeTrendMode`) — 없거나 모르는 값이면 null(월별 12개월). */
+export function savedIntakeTrendMode(uiPrefs: Record<string, unknown>): PeriodMode | null {
+  const ns = uiPrefs[ENROLLMENT_VIEW_PREFS_NS];
+  return parsePeriodMode(ns && typeof ns === "object" && !Array.isArray(ns) ? (ns as Record<string, unknown>).intakeTrend : undefined);
 }

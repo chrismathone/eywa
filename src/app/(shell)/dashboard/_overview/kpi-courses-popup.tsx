@@ -31,6 +31,10 @@ export function CoursesPopup({
   return (
     <>
       <PopupTotal label="강좌수" value={data.total} unit="개" />
+      {data.students !== undefined && data.subjectSeats !== undefined ? (
+        // 세 숫자 잇기(원장 2026-10-20) — 재원생(학생) · 과목별 수강(과목마다 학생) · 강좌수(반)의 단위 차이를 한 줄로.
+        <p className={s.footnote}>{bridgeText(data.total, data.students, data.subjectSeats, data.noSubject ?? 0)}</p>
+      ) : null}
       <CountList
         unit="개"
         rows={[
@@ -51,6 +55,14 @@ export function CoursesPopup({
       </p>
     </>
   );
+}
+
+/** 수업 듣는 학생 → 과목마다 → 반마다. 덧셈이 맞는 몫만 적는다(0인 몫은 뺀다). */
+export function bridgeText(total: number, students: number, subjectSeats: number, noSubject: number): string {
+  const multi = subjectSeats - students;
+  const same = total - subjectSeats - noSubject;
+  const extra = [same > 0 ? `같은 과목 반을 둘 이상 듣는 몫 +${number(same)}` : "", noSubject > 0 ? `과목이 없는 반 +${number(noSubject)}` : ""].filter(Boolean).join(" · ");
+  return `수업 듣는 학생 ${number(students)}명 → 과목마다 세면 ${number(subjectSeats)}${multi > 0 ? `(두 과목 이상 듣는 학생 +${number(multi)})` : ""} → 반마다 세면 ${number(total)}개${extra ? `(${extra})` : ""}`;
 }
 
 function ComboTable({ data, partLabel }: { data: NonNullable<OverviewData["courses"]>; partLabel: (p: CourseCombo["parts"][number]["program"]) => string }) {

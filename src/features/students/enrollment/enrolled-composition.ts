@@ -95,7 +95,12 @@ export function enrolledSubjectCounts(
   scope: StudentScope,
   /** 오늘(KST) — 주면 **아직 시작 안 한 수강은 세지 않는다**('실시간 재원생', notYetStartedStudentIds 주석). */
   today?: string,
-): { bySubject: Record<string, number>; combinations: { subjects: string[]; value: number }[] } {
+): {
+  bySubject: Record<string, number>;
+  combinations: { subjects: string[]; value: number }[];
+  /** 과목 막대에 하나라도 선 학생(중복 없이) — 막대 합 − students = 두 과목 이상 듣는 학생이 더 선 몫(운영실 '과목별 수강' 각주). */
+  students: number;
+} {
   const inScope = scope ? new Set(scope.studentIds) : null;
   const axis = subjectAxisOf(scope);
   const bySubject = new Map<string, Set<string>>();
@@ -108,9 +113,12 @@ export function enrolledSubjectCounts(
     set.add(row.student_id);
     bySubject.set(subject, set);
   }
+  const students = new Set<string>();
+  for (const ids of bySubject.values()) for (const id of ids) students.add(id);
   return {
     bySubject: Object.fromEntries([...bySubject].map(([key, ids]) => [key, ids.size])),
     combinations: subjectEnrollmentSummary(bySubject).combinations,
+    students: students.size,
   };
 }
 

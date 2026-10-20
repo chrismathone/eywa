@@ -33,6 +33,8 @@ describe("summarizeCourses — 상단 '강좌수'", () => {
     ];
     const v = summarizeCourses({ rows, scope: null, subjects, today: "2026-10-20" });
     expect(v.total).toBe(7);
+    // 세 숫자 잇기 — 반을 듣는 학생 2명 · 학생×과목 a(수학·심화) 2 + b(영어·수학·과학) 3 = 5 · 강좌 7(같은 과목 반 둘 = +2).
+    expect([v.students, v.subjectSeats, v.noSubject]).toEqual([2, 5, 0]);
     expect(v.programs).toEqual({ eie: 1, injaewon: 1, math: 3 });
     expect(v.perStudent).toEqual([
       { courses: 1, students: 0 },
@@ -64,6 +66,11 @@ describe("summarizeCourses — 상단 '강좌수'", () => {
     const rows = [row("1", "a", "m1", "math"), row("2", "a", "e1", "english"), row("3", "b", "m2", "math")];
     expect(summarizeCourses({ rows, scope: null, subjects, today: "2026-10-20", inSubject: (s) => s === "math" }).total).toBe(2);
     expect(summarizeCourses({ rows, scope: { studentIds: ["a"], subjects: [] }, subjects, today: "2026-10-20" }).total).toBe(2);
+  });
+
+  it("과목이 빈 반은 강좌수엔 들고 학생×과목엔 안 든다(따로 센다)", () => {
+    const v = summarizeCourses({ rows: [row("1", "a", "m1", "math"), row("2", "a", "x", "")], scope: null, subjects, today: "2026-10-20" });
+    expect([v.total, v.students, v.subjectSeats, v.noSubject]).toEqual([2, 1, 1, 1]);
   });
 
   it("반 id를 안 실은 옛 줄은 수강 줄마다 한 강좌", () => {
