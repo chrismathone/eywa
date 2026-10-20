@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { TONE_SOFT } from "@/lib/design/semantic-color";
 import { rerunVideoReview } from "../server/actions";
-import { OVERALL_LABEL, OVERALL_TONE, SCORE_LABEL, type ReviewView } from "../view";
-import { SCORE_KEYS } from "../types";
+import { OVERALL_LABEL, OVERALL_TONE, type ReviewView } from "../view";
+import { ScoreBars } from "./score-bars";
 
 type Load = { kind: "loading" } | { kind: "hidden" } | { kind: "error" } | { kind: "ready"; view: ReviewView | null };
 
@@ -57,7 +57,7 @@ export function AiReviewPanel({ videoId }: { videoId: string }) {
   }
 
   return (
-    <section aria-label="AI 참고 메모" className="border-line-faint space-y-3 rounded-xl border p-4">
+    <section aria-label="AI 참고 메모" className="border-line-faint space-y-3 rounded-xl border p-4 lg:max-h-[75vh] lg:w-[26rem] lg:shrink-0 lg:overflow-y-auto">
       <header className="flex flex-wrap items-center gap-2">
         <h3 className="text-sm font-semibold">AI 참고 메모</h3>
         {r ? <span className={`rounded-full px-2 py-0.5 text-xs ${TONE_SOFT[OVERALL_TONE[r.overall]]}`}>{OVERALL_LABEL[r.overall]}</span> : null}
@@ -77,14 +77,7 @@ function ReviewBody({ result: r }: { result: NonNullable<ReviewView["result"]> }
   return (
     <div className="space-y-3 text-sm">
       {r.topic ? <p><span className="text-text-dim">설명한 내용 </span>{r.topic}</p> : null}
-      <ul className="grid grid-cols-5 gap-2 text-center">
-        {SCORE_KEYS.map((k) => (
-          <li key={k} title={r.scores[k].evidence || undefined} className="bg-muted rounded-lg px-1 py-2">
-            <div className="text-text-dim text-xs">{SCORE_LABEL[k]}</div>
-            <div className="font-semibold">{r.scores[k].score ?? "—"}</div>
-          </li>
-        ))}
-      </ul>
+      <ScoreBars scores={r.scores} />
       {r.note ? <p className="leading-relaxed">{r.note}</p> : null}
       <Findings title="확인된 오류" tone="critical" items={r.mistakes.map((m) => `${m.where} — ${m.whyWrong}`)} />
       <Findings title="선생님 확인 필요" tone="caution" items={r.needsCheck} />

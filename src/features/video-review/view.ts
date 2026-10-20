@@ -2,14 +2,26 @@
  * 화면에 내리는 모양 — 서버(server/view.ts)가 만들고 재생 창 패널(components/ai-review-panel.tsx)이 그린다.
  * 영어 단계 이름·모델 원문은 내리지 않는다(한글 상태 + 모델 친화 라벨만, CLAUDE.md 'raw 코드 노출 금지').
  */
-import type { ReviewOverall, ReviewResult, ReviewStage, ScoreKey } from "./types";
+import { cleanTeacherList, cleanTeacherNote, cleanTeacherText } from "./harness/teacher-text";
+import { SCORE_KEYS, type ReviewOverall, type ReviewResult, type ReviewStage, type ScoreKey } from "./types";
 
 /** 화면에 내리는 결과 — 전사 보정표(원 전사 문구가 들어 있다)는 빼고 건수만(원장 "외부로 나가는 건 분석 결과만", 적대 리뷰 2026-10-20). */
 export type ReviewResultView = Omit<ReviewResult, "transcriptFixes"> & { transcriptFixCount: number };
 
 export function toResultView(r: ReviewResult): ReviewResultView {
   const { transcriptFixes, ...rest } = r;
-  return { ...rest, transcriptFixCount: transcriptFixes.length };
+  // 선생님이 읽을 말로(teacher-text.ts) — 작업 용어·화면 파일 이름·음성 인식 이야기를 걷는다. 저장값은 그대로 두고 화면에 내릴 때만.
+  return {
+    ...rest,
+    topic: cleanTeacherText(r.topic),
+    note: cleanTeacherNote(r.note),
+    scores: Object.fromEntries(SCORE_KEYS.map((k) => [k, { score: r.scores[k].score, evidence: cleanTeacherText(r.scores[k].evidence) }])) as ReviewResult["scores"],
+    // 확인 단계가 '확정'한 오류는 지우지 않는다 — 문구만 다듬는다(적대 리뷰 2026-10-21: 오류 설명에 '전사'가 들면 오류째 사라졌다).
+    mistakes: r.mistakes.map((m) => ({ where: cleanTeacherText(m.where), seen: cleanTeacherText(m.seen), whyWrong: cleanTeacherText(m.whyWrong) })),
+    needsCheck: cleanTeacherList(r.needsCheck),
+    selfFixed: cleanTeacherList(r.selfFixed),
+    transcriptFixCount: transcriptFixes.length,
+  };
 }
 
 export type ReviewViewState = "waiting" | "analyzing" | "done" | "failed" | "skipped";
