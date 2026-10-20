@@ -165,15 +165,16 @@ describe("🔴 오늘 프로덕션 키 조합에서 라우팅이 그대로다(�
   const oldEnv = (base: string, keyName: "default" | "consultations") =>
     keyName === "default" ? base : `${base}_${keyName.toUpperCase()}`;
 
-  it("호출부를 코드에서 읽었다 — 전용 버킷을 쓰는 곳은 상담 둘뿐", () => {
+  it("호출부를 코드에서 읽었다 — 상담 분석·케어·후속 대응안은 상담 버킷", () => {
     expect(CASES.length).toBeGreaterThanOrEqual(16);
     expect([...new Set(CASES.filter((s) => s.keyName === "consultations").map((s) => s.feature))].sort()).toEqual([
       "consultation_analysis",
+      "management_followup_advice",
       "student_care",
     ]);
   });
 
-  it("Anthropic 키는 상담 둘만 전용 키, 나머지는 기본 키(예전과 동일)", () => {
+  it("Anthropic 키는 상담 버킷만 전용 키, 나머지는 기본 키", () => {
     for (const { feature, keyName } of CASES) {
       expect(resolveKeyEnv("anthropic", keyName, keyGroupOf(feature)), feature).toBe(oldEnv("ANTHROPIC_API_KEY", keyName));
     }

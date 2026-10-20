@@ -1,0 +1,25 @@
+select management_agent_scan('20000000-0000-4000-8000-000000000001');
+-- Remember a foreign ID without letting authenticated users read it via RLS.
+select set_config('test.foreign_case',(select id::text from management_cases where tenant_id='20000000-0000-4000-8000-000000000001'),false);
+select set_config('test.own_case',(select id::text from management_cases where tenant_id='10000000-0000-4000-8000-000000000001'),false);
+set role authenticated;
+select set_config('request.jwt.claim.sub','10000000-0000-4000-8000-000000000011',false);
+select is((select count(*)::integer from management_cases),1,'principal cannot read other academy cases');
+select is((select count(distinct tenant_id)::integer from management_case_events),1,'event history isolated by academy');
+select throws_ok($$select management_case_command(current_setting('test.foreign_case')::uuid,1,'acknowledge')$$,'42501',null,'cross-tenant RPC rejected');
+select throws_ok($$update management_cases set status='resolved'$$,'42501',null,'direct status update denied even to principal');
+select throws_ok($$insert into management_case_events(tenant_id,case_id,event_key,kind) values(auth_tenant_id(),current_setting('test.own_case')::uuid,'forged','verified')$$,'42501',null,'forged event denied');
+select throws_ok($$select management_agent_scan(auth_tenant_id())$$,'42501',null,'user cannot invoke service scan');
+select throws_ok($$select management_notion_claim(auth_tenant_id())$$,'42501',null,'user cannot claim external deliveries');
+select set_config('request.jwt.claim.sub','10000000-0000-4000-8000-000000000013',false);
+select is((select count(*)::integer from management_cases),0,'unassigned teacher cannot read case');
+select is((select count(*)::integer from management_case_events),0,'unassigned teacher cannot read notes');
+select throws_ok($$select management_case_command(current_setting('test.own_case')::uuid,1,'acknowledge')$$,'42501',null,'unassigned teacher mutation rejected');
+select set_config('request.jwt.claim.sub','10000000-0000-4000-8000-000000000014',false);
+select throws_ok($$select management_case_command(id,version,'acknowledge') from management_cases$$,'42501',null,'readonly role cannot mutate');
+select set_config('request.jwt.claim.sub','10000000-0000-4000-8000-000000000015',false);
+select is((select count(*)::integer from management_cases),0,'student cannot read cases');
+reset role;
+set role anon;
+select throws_ok($$select * from management_cases$$,'42501',null,'anonymous case read denied');
+reset role;

@@ -11,6 +11,7 @@ export const NOTIFICATION_LIST_LIMIT = 20;
 export const NOTIFICATION_LIST_MAX = 100;
 
 export type NotificationType =
+  | "management_followup"
   | "video_homework_submitted"
   | "video_homework_missing"
   | "video_homework_unassigned"
@@ -83,6 +84,7 @@ export type NotificationItem = {
 
 /** 유형별 Aywa 아이콘. 미등록 유형은 벨 컴포넌트에서 기본 bell. */
 export const NOTIFICATION_ICON: Record<string, AywaIconName> = {
+  management_followup: "clock",
   video_homework_submitted: "check",
   video_homework_missing: "alert",
   video_homework_unassigned: "alert",

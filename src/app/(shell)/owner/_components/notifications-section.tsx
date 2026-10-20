@@ -5,6 +5,7 @@ import type { NotificationsSettings } from "@/features/owner/settings-types";
 import { SectionForm, SettingsCard } from "./section-form";
 import { TextAreaField, TextField } from "./fields";
 import { useModuleOn } from "@/features/owner/operations-context";
+import { AgentPolicyFields } from "@/features/management-agent/components/policy-fields";
 
 export function NotificationsSection({ initial }: { initial: NotificationsSettings }) {
   const [n, setN] = useState<NotificationsSettings>(initial);
@@ -15,6 +16,9 @@ export function NotificationsSection({ initial }: { initial: NotificationsSettin
   return (
     <SectionForm section="notifications" payload={n}>
       <div className="grid items-start gap-4 xl:grid-cols-2">
+      <SettingsCard title="상담 후속조치 관리" description="기존 상담의 담당자 접수부터 처리 결과 확인까지 연결합니다.">
+        <AgentPolicyFields value={n.managementAgent} onChange={(managementAgent) => set({ managementAgent })} />
+      </SettingsCard>
       {/* 폴백 소스: 전용 설정(키오스크 설정)이 비어 있으면 아래 값이 쓰인다(provider.ts).
           ⚠️ kakaoChannelId(@채널)는 발송 경로(pfId+템플릿)에서 안 쓰여 대응 DB 컬럼이 없으므로 입력 숨김(상태·저장은 보존).
           ⚠️ 구글 시트 ID는 연동 탭(?tab=sheets)으로 이전 — 여기서 편집하지 않음(연동 설정 단일 홈). */}

@@ -1,4 +1,6 @@
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
+import { ConsultationCase } from "@/features/management-agent/components/consultation-case";
 import { MessageSquare, Mic, Pencil, Pin, Sparkles } from "@/components/icons/aywa-icon-compat";
 import { requireAccess } from "@/lib/auth/require-access";
 import { BackLink } from "@/components/back-link";
@@ -154,6 +156,7 @@ export default async function ConsultationDetailPage({
       ) : null}
 
       {/* 녹음·전사·AI 분석(읽기 콘텐츠 + 명시적 'AI 분석' 버튼) */}
+      <Suspense fallback={null}><ConsultationCase consultationId={item.id} /></Suspense>
       <RecordingPanel
         id={item.id}
         processingStatus={item.processingStatus}

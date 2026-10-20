@@ -17,6 +17,7 @@ import { makeupSettingsSchema } from "@/features/makeups/config";
 import { BUNDLES, DASHBOARD_VERSION, GRID_COLS, MAX_ITEMS, MAX_ROW_SPAN, MAX_GRID_Y } from "@/features/dashboard/layout/types";
 import { CHINSAN_SCHOOL_SAVE_ALIASES } from "@/features/schools/school-name";
 import { DEFAULT_VIDEO_HOMEWORK_POLICY } from "@/features/video-homework/policy";
+import { agentPolicySchema } from "@/features/management-agent/policy";
 import { parseWeekdayPartition, weekdayPartitionKey } from "@/features/timetable/lib/weekday-partition";
 
 const HHMM = /^\d{2}:\d{2}$/;
@@ -429,6 +430,7 @@ export function accountForTarget(billing: BillingSettings, target: AccountTarget
 }
 
 export const notificationsSchema = z.object({
+  managementAgent: agentPolicySchema.optional(),
   alimtalkSenderKey: z.string().max(80),
   kakaoChannelId: z.string().max(80),
   googleSheetId: z.string().max(120),

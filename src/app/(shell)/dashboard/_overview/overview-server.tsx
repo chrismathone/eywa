@@ -4,6 +4,8 @@ import { getDemoRosterControl } from "@/features/demo-roster/server/queries";
 import { getOnboardingCard } from "@/features/onboarding/server/queries";
 import { GettingStartedCard } from "../_components/getting-started-card";
 import { Overview } from "./overview";
+import { Suspense } from "react";
+import { ManagementQueue } from "@/features/management-agent/components/management-queue";
 
 export async function OverviewDashboard({ subject }: { subject?: string } = {}) {
   // '시작하기'는 새 학원(일반판) 원장에게만 — 침산은 null이라 아래 Overview만 그려진다(이 작업 전과 같은 화면).
@@ -21,6 +23,7 @@ export async function OverviewDashboard({ subject }: { subject?: string } = {}) 
     // KPI가 4×2로 접힌다(appearance.module.css).
     <>
       {showOnboarding ? <GettingStartedCard steps={onboarding.steps} /> : null}
+      <Suspense fallback={null}><ManagementQueue compact /></Suspense>
       <Overview initial={initial} demoRoster={demoRoster} chartKinds={chartKinds} />
     </>
   );

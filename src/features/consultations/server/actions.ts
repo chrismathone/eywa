@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { syncManagementSource } from "@/features/management-agent/server/source-change";
 import { redirect } from "next/navigation";
 import { attendanceRate, attendedCount } from "@/lib/calc/attendance";
 import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
@@ -377,6 +378,7 @@ export async function createStudentConsultation(
   if (error || !data) return { error: explainDbError(error, { scope: "consultations.create", fallback: "상담을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요." }).message };
 
   await linkNewcomerChecks(user, data.id as string, input, formData);
+  await syncManagementSource(user.tenantId, data.id as string);
 
   // 🔴 요약·후속조치 **본문은 담지 않는다**(상담 내용 금지) — 분류·대상·후속조치 유무까지만.
   // 대상 열의 학생 이름은 metadata.studentId를 뷰어가 일괄 해석한다(auditTargetName).
@@ -542,6 +544,8 @@ export async function updateStudentConsultation(
   if (error) return { error: explainDbError(error, { scope: "consultations.update", fallback: "상담을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요." }).message };
   await linkNewcomerChecks(user, id, input, formData);
 
+  await syncManagementSource(user.tenantId, id);
+
   await logAction({
     action: "student_consultation_update",
     targetType: "student_consultation",
@@ -595,6 +599,8 @@ export async function toggleConsultationFollowUp(
   if (error) return { error: explainDbError(error, { scope: "consultations.followUp", fallback: "후속조치를 바꾸지 못했습니다. 잠시 후 다시 시도해 주세요." }).message };
   // 강사 범위에서 0행 = 남의 상담(또는 없는 상담) — 조용히 성공으로 보이지 않게 알린다.
   if (scopedId && !row) return { error: OUT_OF_SCOPE_CONSULTATION };
+
+  await syncManagementSource(user.tenantId, id);
 
   await logAction({
     action: "student_consultation_follow_up",
