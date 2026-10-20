@@ -129,6 +129,11 @@ export type ConsultationListRow = {
   syncAddedAt: string | null; // 지난 동기화가 새로 추가(다음 동기화 성공 시 해제) → ↻ 동기화 배지
   /** makeedu counselSeq — 있으면 makeedu에 그 상담이 있다(들어왔거나 보냈다). 등록 완료 칸의 '동기화 완료' 표식. */
   makeeduId: string | null;
+  /**
+   * 연결 학생이 makeedu **원생**인가(`students.makeedu_id` — makeedu 원생 동기화가 적는다). 상담만 넘어간 것과
+   * 원생 전환까지 된 것을 가른다(원장 2026-10-20 — 전환까지면 표식 테두리 이중).
+   */
+  studentInMakeedu: boolean;
   studentId: string | null; // 수업 배정으로 생성된 학생(연결) — null이면 아직 학생 미생성
   assignedClassCount: number; // 연결 학생의 상담 과목 미종료 수강(반) 수 → ≥1이면 "배정 완료"
   personConsultCount: number; // 같은 사람(학생/자연키)의 등록상담 총 건수 → ≥2면 "반복 접수" 힌트
@@ -219,13 +224,17 @@ type BadgeSourceRow = { id: string; student_id?: string | null };
 async function loadRowBadges(
   supabase: Awaited<ReturnType<typeof createClient>>,
   data: BadgeSourceRow[],
-): Promise<{ hasAi: Set<string>; assignedCountFor: (s: string | null, subj: string | null) => number }> {
+): Promise<{
+  hasAi: Set<string>;
+  assignedCountFor: (s: string | null, subj: string | null) => number;
+  inMakeedu: Set<string>;
+}> {
   const ids = data.map((c) => c.id);
   // id가 수백+ 가능 → 청크 분할(.in() URL 414 방지, error는 throw — 조용히 삼키지 않음, B3).
   // 연결 학생(student_id)의 미종료 수강 수 = "배정 완료" 판정 재료도 병렬로(독립 조회 = B4).
   const studentIds = [...new Set(data.map((c) => c.student_id).filter((v): v is string => !!v))];
   const today = kstToday();
-  const [ai, enr] = await Promise.all([
+  const [ai, enr, mk] = await Promise.all([
     fetchInChunks<{ consultation_id: string }>(ids, (chunk) =>
       supabase.from("consultation_ai_analysis").select("consultation_id").in("consultation_id", chunk),
     ),
@@ -242,6 +251,12 @@ async function loadRowBadges(
               .or(`end_date.is.null,end_date.gte.${today}`),
         )
       : Promise.resolve([] as { student_id: string; class: { subject?: string } | null }[]),
+    // makeedu 원생 전환 여부 = 연결 학생에 makeedu 원생 번호가 있는가(학생당 한 행이라 절단 없음).
+    studentIds.length
+      ? fetchInChunks<{ id: string }>(studentIds, (chunk) =>
+          supabase.from("students").select("id").in("id", chunk).not("makeedu_id", "is", null),
+        )
+      : Promise.resolve([] as { id: string }[]),
   ]);
   const hasAi = new Set(ai.map((a) => a.consultation_id));
   // 학생별 미종료 수강: 전체 수 + 과목별 수. "배정 완료" 판정은 상담 과목의 수강 수로(과목 없으면 전체 폴백).
@@ -255,6 +270,7 @@ async function loadRowBadges(
   }
   return {
     hasAi,
+    inMakeedu: new Set(mk.map((r) => r.id)),
     assignedCountFor: (studentId, subject) => {
       if (!studentId) return 0;
       const rec = enrByStudent.get(studentId);
@@ -279,7 +295,7 @@ export async function getEnrollmentConsultations(
   );
   if (data.length === 0) return [];
 
-  const { hasAi, assignedCountFor } = await loadRowBadges(supabase, data);
+  const { hasAi, assignedCountFor, inMakeedu } = await loadRowBadges(supabase, data);
 
   // 같은 학생의 반복 접수 힌트(카드 'N건' 배지) — 판정은 `same-person.ts` 한 벌(원생 연결 · 이름+학교+학년 ·
   // 이름+보호자 연락처 중 하나라도 같으면 같은 학생, 이어진 것끼리 한 묶음 · 반대 증거가 있으면 안 잇는다). 로드된 목록(기간 안)
@@ -325,6 +341,7 @@ export async function getEnrollmentConsultations(
       fromPublicIntake: !!(c as { from_public_intake?: boolean }).from_public_intake,
       syncAddedAt: (c as { sync_added_at?: string | null }).sync_added_at ?? null,
       makeeduId: (c as { makeedu_id?: string | null }).makeedu_id ?? null,
+      studentInMakeedu: !!c.student_id && inMakeedu.has(c.student_id),
       studentId: (c as { student_id?: string | null }).student_id ?? null,
       assignedClassCount: assignedCountFor(
         c.student_id,
@@ -412,7 +429,7 @@ export async function getEnrollmentConsultationsPage(
   const rows = data ?? [];
   if (rows.length === 0) return { rows: [], total: count ?? 0 };
 
-  const { hasAi, assignedCountFor } = await loadRowBadges(supabase, rows);
+  const { hasAi, assignedCountFor, inMakeedu } = await loadRowBadges(supabase, rows);
 
   return {
     total: count ?? rows.length,
@@ -437,6 +454,7 @@ export async function getEnrollmentConsultationsPage(
         fromPublicIntake: !!c.from_public_intake,
         syncAddedAt: c.sync_added_at ?? null,
         makeeduId: c.makeedu_id ?? null,
+        studentInMakeedu: !!c.student_id && inMakeedu.has(c.student_id),
         studentId: c.student_id ?? null,
         assignedClassCount: assignedCountFor(c.student_id, c.subject ?? null),
         subject: c.subject ?? null,
@@ -719,6 +737,7 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
     hasAudio: !!c.audio_path,
     fromPublicIntake: !!(c as { from_public_intake?: boolean }).from_public_intake,
     syncAddedAt: null, // 상세 화면은 목록 ↻ 배지가 불필요 → null(타입만 충족)
+    studentInMakeedu: false, // 상세는 목록 표식을 안 그린다(타입만 충족)
     transcription: c.transcription,
     // 비배열/null이면 null로(잘못된 jsonb가 TranscriptSection.slice 크래시 안 나게) — meetings 쿼리와 동일 방어.
     speakerLabels: Array.isArray(c.speaker_labels)

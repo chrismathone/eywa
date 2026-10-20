@@ -30,10 +30,10 @@ describe("과목 칸 — 학원설정 라벨·색(원장 2026-09-02 '수업 -> �
   });
 });
 
-describe("시트 날짜 표기 — M/D", () => {
-  it("YYYY-MM-DD를 시트의 M/D로 적는다(0을 뗀다)", () => {
-    expect(sheetDate("2026-08-05")).toBe("8/5");
-    expect(sheetDate("2025-12-31")).toBe("12/31");
+describe("목록 날짜 표기 — YY.MM.DD", () => {
+  it("YYYY-MM-DD를 YY.MM.DD로 적는다(0을 남긴다)", () => {
+    expect(sheetDate("2026-08-05")).toBe("26.08.05");
+    expect(sheetDate("2025-12-31")).toBe("25.12.31");
   });
   it("날짜 형식이 아니면 지어내지 않는다", () => {
     expect(sheetDate(null)).toBeNull();
