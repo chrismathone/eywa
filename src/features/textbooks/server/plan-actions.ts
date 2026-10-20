@@ -32,7 +32,9 @@ import { recordImportBatch, snapshotPlanLines } from "./import-batch";
 import { reportError } from "@/lib/observability/report-error";
 import type { PlanLineDTO } from "@/features/class-sheets/server/actions";
 import { shiftActualLines } from "./shift-lines";
-import { shiftAlongPlans } from "./shift-relay";
+import { shiftAlongPlans, type ShiftTarget } from "./shift-relay";
+import { withMarkerCols, writeMarker } from "./shift-markers";
+import { cellMarkerKey, markerKeyOfRow, parseMarkerKey } from "../shift-key";
 import { readWeekCells, snapshotShiftState, type ShiftSnapshot } from "./shift-snapshot";
 import { diffShift, isEmptyUndo, type ShiftUndoToken } from "../shift-undo";
 import { clearPlanLines } from "./plan-delete-lines";
@@ -70,6 +72,7 @@ export type ClassTextbookPlanInput = {
 };
 
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * 한 배정이 담을 수 있는 교시 칸 수. 요일까지 세는 값이라(`"mon|17:20"`) 시각 기준이던 옛 상한(12)보다
@@ -322,7 +325,9 @@ export async function deleteClassTextbookPlan(
   // ⚠️ 0268a 미적용 DB면 `slot_picks` 없이 다시 읽는다([[#95]]) — 그때 남는 배정은 모든 칸을 쓰는 것으로 본다.
   const from = plan.startDate.slice(0, 10) > kstToday() ? plan.startDate.slice(0, 10) : kstToday();
   let others: { textbook_id: unknown; slot_picks?: unknown }[] = [];
-  if (opts.withLines) {
+  // 평시 배정이면 줄을 안 지워도 그 교재의 줄 표식(0381a)은 지운다(`clearPlanLines` `withLines`) — 남는 배정을 알아야 한다.
+  const clearsMarkers = opts.withLines || plan.termMode === "regular";
+  if (clearsMarkers) {
     const q = (cols: string) =>
       admin
         .from("class_textbook_plans")
@@ -343,7 +348,7 @@ export async function deleteClassTextbookPlan(
   let cleared: { lines: number; markers: number } | undefined;
   let warning: string | undefined;
   let linesUndo: ShiftUndoToken | undefined;
-  if (opts.withLines) {
+  if (clearsMarkers) {
     const keepLines = others.some((o) => String(o.textbook_id) === plan.textbookId);
     try {
       const out = await clearPlanLines({
@@ -357,9 +362,10 @@ export async function deleteClassTextbookPlan(
           Array.isArray(o.slot_picks) && o.slot_picks.length > 0 ? (o.slot_picks as unknown[]).map(String) : null,
         ),
         keepLines,
+        withLines: !!opts.withLines,
         from,
       });
-      cleared = { lines: out.removed.length, markers: out.markers.length };
+      if (opts.withLines) cleared = { lines: out.removed.length, markers: out.markers.length };
       // 되돌리기 기록 = 실제로 지운 것만(그 사이 남이 쓴 줄은 담지 않는다).
       const token: ShiftUndoToken = {
         classId: plan.classId,
@@ -372,11 +378,11 @@ export async function deleteClassTextbookPlan(
       };
       if (!isEmptyUndo(token)) linesUndo = token;
       if (out.stopped) warning = "배정은 지웠지만 진도 줄을 지우다 멈췄습니다 — 새로고침해 남은 줄을 확인해 주세요";
-      else if (keepLines) warning = "배정은 지웠습니다 — 같은 교재가 이 반의 다른 칸(JJ/수업)에도 배정돼 있어 진도 줄은 남겼습니다";
+      else if (keepLines && opts.withLines) warning = "배정은 지웠습니다 — 같은 교재가 이 반의 다른 칸(JJ/수업)에도 배정돼 있어 진도 줄은 남겼습니다";
     } catch (e) {
       // 읽기에서 멈췄다(아직 아무것도 안 지웠다).
       reportError(e, { scope: "textbooks.plan-delete.lines", classId: plan.classId });
-      warning = "배정은 지웠지만 진도 줄은 지우지 못했습니다 — 새로고침해 확인해 주세요";
+      if (opts.withLines) warning = "배정은 지웠지만 진도 줄은 지우지 못했습니다 — 새로고침해 확인해 주세요";
     }
   }
 
@@ -1084,12 +1090,18 @@ export type LessonShiftResult =
  *    그 교재 줄을 다시 깐다. 배정 줄이 아닌 줄만 종전대로 같은 요일·교시끼리 옮긴다.
  * 🔑 **토글이 아니다** — 두 번 누르면 두 칸 밀린다. 되돌리기는 반대 버튼이다.
  * `kind: null`은 표식만 지운다(옛 호출 호환 — 줄은 안 건드린다).
+ * 🔑 **줄마다**(원장 2026-10-20 *"수업이 2개면 각각 미룸, 당김"*) — `lineId`를 주면 그 줄의 교재 한 차수만
+ *    움직인다(줄 표식 0381a). 같은 칸의 다른 줄은 제자리다. 없으면 옛 화면의 교시 통째.
+ * 🔑 **계획만 있는 칸의 당김**(원장 2026-10-20) — `fill: true`. 그 칸의 미룸을 걷어 뒤 수업이 올라와 채운다
+ *    (아무 차수도 버리지 않는다 — 줄 당김은 누른 줄을 지운다).
  */
 export async function setLessonShift(input: {
   classId: string;
   date: string;
   slotStart: string;
   kind: LessonShiftKind | null;
+  lineId?: string;
+  fill?: boolean;
 }): Promise<LessonShiftResult> {
   const gate = await requireEcsClassAccess(input.classId, { write: true });
   if (!gate.ok) return { ok: false, error: gate.error };
@@ -1097,19 +1109,29 @@ export async function setLessonShift(input: {
   const slot = String(input.slotStart).slice(0, 5);
   if (!/^[0-2]\d:[0-5]\d$/.test(slot)) return { ok: false, error: "교시가 올바르지 않습니다" };
   const kind = input.kind === "skip" || input.kind === "advance" ? input.kind : null;
+  const lineId = typeof input.lineId === "string" && UUID_RE.test(input.lineId) ? input.lineId : null;
+  if (input.lineId !== undefined && !lineId) return { ok: false, error: "줄이 올바르지 않습니다" };
+  const fill = input.fill === true && !lineId;
+  if (fill && kind !== "advance") return { ok: false, error: "계획만 있는 칸은 당김만 됩니다" };
+  const target: ShiftTarget = lineId ? { by: "line", lineId } : fill ? { by: "fill" } : { by: "cell" };
 
   const admin = createAdminClient();
   const tenantId = gate.access.tenantId;
   const markerTable = () => admin.from("class_lesson_shifts");
-  const markerCell = <Q extends { eq: (column: string, value: string) => Q }>(q: Q, at: string): Q =>
-    q.eq("tenant_id", tenantId).eq("class_id", input.classId).eq("plan_date", at).eq("slot_start", slot);
   const missing = (error: { code?: string; message?: string } | null) =>
     error && isMissingTextbookTable(error)
       ? "회차 미루기는 마이그레이션 0282a가 필요합니다 — 적용한 뒤 다시 시도해 주세요"
       : null;
 
   if (!kind) {
-    const { error } = await markerCell(markerTable().delete(), input.date);
+    const { error } = await writeMarker({
+      admin,
+      tenantId,
+      classId: input.classId,
+      key: cellMarkerKey(input.date, slot),
+      kind: null,
+      actor: gate.access.user.id,
+    });
     if (error) return { ok: false, error: missing(error) ?? friendlyTextbookError(error, "회차를 바꾸지 못했습니다") };
     revalidatePath(`/ecs/${input.classId}`, "layout");
     return { ok: true, kind: null, moved: 0 };
@@ -1168,6 +1190,7 @@ export async function setLessonShift(input: {
     slot,
     kind,
     userId: gate.access.user.id,
+    target,
   }).catch((e: unknown): { handled: true; ok: false; error: string } => {
     reportError(e, { scope: "textbooks.lesson-shift-relay", classId: input.classId, date: input.date });
     return { handled: true, ok: false, error: "진도를 불러오지 못해 옮기지 않았습니다 — 잠시 뒤 다시 시도해 주세요" };
@@ -1179,6 +1202,43 @@ export async function setLessonShift(input: {
       return { ok: false, error: relay.error, undo: await undoSince() };
     }
     return finishShift(relay.moved, relay.touched);
+  }
+
+  // 배정 교재가 지나가지 않는 줄 하나 — **그 줄과 같은 구분·교재명 줄만** 같은 요일·교시끼리 한 주씩(표식 없음:
+  // 표식은 배정 일정에만 쓰인다). 같은 칸의 다른 줄은 제자리다(원장 2026-10-20 "수업이 2개면 각각").
+  if (lineId) {
+    const { data: row, error: rowErr } = await admin
+      .from("class_sheet_plan_lines")
+      .select("plan_date, slot_start, term_mode, skill_area, textbook")
+      .eq("tenant_id", tenantId)
+      .eq("class_id", input.classId)
+      .eq("id", lineId)
+      .maybeSingle();
+    if (rowErr) return { ok: false, error: friendlyTextbookError(rowErr, "회차를 바꾸지 못했습니다") };
+    if (
+      !row ||
+      String(row.plan_date).slice(0, 10) !== input.date ||
+      String(row.slot_start).slice(0, 5) !== slot ||
+      row.term_mode !== "regular"
+    ) {
+      return { ok: false, error: "그 사이 이 줄이 바뀌었습니다 — 새로고침 후 다시 눌러 주세요" };
+    }
+    const norm = (v: unknown) => String(v ?? "").trim().toLowerCase();
+    const one = await shiftActualLines({
+      admin,
+      tenantId,
+      classId: input.classId,
+      date: input.date,
+      slot,
+      kind,
+      userId: gate.access.user.id,
+      only: (r) => String(r.skill_area ?? "") === String(row.skill_area ?? "") && norm(r.textbook) === norm(row.textbook),
+    }).catch((e: unknown) => {
+      reportError(e, { scope: "textbooks.lesson-shift.line", classId: input.classId, date: input.date });
+      return { ok: false as const, error: "진도를 불러오지 못해 옮기지 않았습니다 — 잠시 뒤 다시 시도해 주세요", noContent: false, chain: [] };
+    });
+    if (!one.ok) return { ok: false, error: one.error, undo: "stopped" in one && one.stopped ? await undoSince() : undefined };
+    return finishShift(one.moved);
   }
 
   // ① 실제 줄을 옮긴다. 옮길 줄이 아예 없으면(아직 가져오기 전) 표식만 남긴다.
@@ -1201,26 +1261,37 @@ export async function setLessonShift(input: {
   }
 
   // ② 표식 — 순 횟수를 맞춘다(위 🔑).
-  const { data: marks, error: readErr } = await markerTable()
-    .select("plan_date, kind")
-    .eq("tenant_id", tenantId)
-    .eq("class_id", input.classId)
-    .eq("slot_start", slot)
-    .in("plan_date", moved.chain);
-  let markerError = readErr;
+  // 칸 표식만 센다(줄 표식은 배정 일정의 것이라 이 길 — 배정이 안 지나가는 칸 — 과 무관하다).
+  let markerError: { code?: string; message?: string } | null = null;
+  let at = new Map<string, string>();
+  try {
+    const marks = await withMarkerCols(async (cols) => {
+      const { data, error } = await markerTable()
+        .select(cols)
+        .eq("tenant_id", tenantId)
+        .eq("class_id", input.classId)
+        .eq("slot_start", slot)
+        .in("plan_date", moved.chain);
+      if (error) throw error;
+      return (data ?? []) as unknown as Record<string, unknown>[];
+    });
+    at = new Map(
+      marks
+        .filter((m) => parseMarkerKey(markerKeyOfRow(m))?.lane === "")
+        .map((m) => [String(m.plan_date).slice(0, 10), String(m.kind)]),
+    );
+  } catch (e) {
+    markerError = e as { code?: string; message?: string };
+  }
   if (!markerError) {
-    const at = new Map((marks ?? []).map((m) => [String(m.plan_date).slice(0, 10), String(m.kind)]));
     const opposite = kind === "skip" ? "advance" : "skip";
+    const write = (d: string, k: LessonShiftKind | null) =>
+      writeMarker({ admin, tenantId, classId: input.classId, key: cellMarkerKey(d, slot), kind: k, actor: gate.access.user.id });
     if (at.get(input.date) === opposite) {
-      ({ error: markerError } = await markerCell(markerTable().delete(), input.date));
+      ({ error: markerError } = await write(input.date, null));
     } else {
       const free = moved.chain.find((d) => !at.has(d));
-      if (free) {
-        ({ error: markerError } = await markerTable().upsert(
-          { tenant_id: tenantId, class_id: input.classId, plan_date: free, slot_start: slot, kind, created_by: gate.access.user.id, updated_at: new Date().toISOString() },
-          { onConflict: "tenant_id,class_id,plan_date,slot_start" },
-        ));
-      }
+      if (free) ({ error: markerError } = await write(free, kind));
     }
   }
   // 줄은 이미 옮겼으니 표식 실패는 화면을 막지 않는다 — 단 줄이 없어 표식이 전부였다면 실패를 알린다.

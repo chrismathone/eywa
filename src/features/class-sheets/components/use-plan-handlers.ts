@@ -32,6 +32,7 @@ import type { CarryPatch } from "../lib/carry-marks";
 import type { PlanPatchField } from "../lib/plan-codec";
 import type { PlanLineDTO } from "../server/actions";
 import type { PlanWriteApi } from "./plan-api";
+import type { ShiftWhich } from "./shift-confirm";
 import type { SlotCompareResult } from "@/features/textbooks/server/compare-actions";
 import type { SheetSaveStore } from "./use-sheet-saves";
 
@@ -49,7 +50,7 @@ export type PlanHandlers = {
   /** 계획 비교(읽기) — 문이 그 기능을 안 내면 **없다**(표가 버튼을 안 그린다). */
   comparePlan?: (planDate: string, slotStart: string) => Promise<SlotCompareResult>;
   /** 회차 미루기·당기기(0282a) — 같은 이유로 선택. `null`이면 표식을 지운다. */
-  setShift?: (planDate: string, slotStart: string, kind: "skip" | "advance" | null) => void;
+  setShift?: (planDate: string, slotStart: string, kind: "skip" | "advance" | null, which?: ShiftWhich) => void;
   removeLine: (lineId: string, planDate: string, slotStart: string) => void;
   moveLineTerm: (
     lineId: string,
@@ -214,14 +215,14 @@ export function usePlanHandlers({
        *    다른 주는 그 주를 열 때 서버가 준다.
        */
       setShift: api.setShift
-        ? (planDate, slotStart, kind) => {
+        ? (planDate, slotStart, kind, which) => {
             const call = api.setShift;
             if (!call || shiftBusyRef.current) return; // 연타로 두 번 밀리지 않게
             shiftBusyRef.current = true;
             void Promise.all([store.flush(), flushHost?.() ?? Promise.resolve()])
               .then(([flushed]) => {
                 if (!flushed.ok && !window.confirm(t("today.copy.unsaved"))) return;
-                return call({ classId, planDate, slotStart }, kind).then((r) => {
+                return call({ classId, planDate, slotStart }, kind, which).then((r) => {
                   if (r.ok) applyCells(planDate, slotStart, r.lines, r.cells);
                   // [되돌리기](원장 2026-10-19 "덮어쓰기(되돌리기)") — 누르기 전 줄을 그대로 돌려놓는다.
                   // 옮기다 멈춘 경우에도 기록이 오면 단다(미룸은 누른 칸을 지우므로 멈춘 채 두면 잃는다).
@@ -250,11 +251,13 @@ export function usePlanHandlers({
                   toast.success(
                     kind === null
                       ? t("month.shift.clear.done")
-                      : r.moved === 0
-                        ? t("plan.feedback.shiftMarkOnly")
-                        : kind === "skip"
-                          ? t("plan.feedback.shiftSkip")
-                          : t("plan.feedback.shiftAdvance"),
+                      : which?.fill
+                        ? t("month.shift.fill.done")
+                        : r.moved === 0
+                          ? t("plan.feedback.shiftMarkOnly")
+                          : kind === "skip"
+                            ? t("plan.feedback.shiftSkip")
+                            : t("plan.feedback.shiftAdvance"),
                     undoAction,
                   );
                 });

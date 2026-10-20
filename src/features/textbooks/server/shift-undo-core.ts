@@ -13,6 +13,8 @@ import type { createAdminClient } from "@/lib/supabase/admin";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { reportError } from "@/lib/observability/report-error";
 import { planShiftUndo, slotOf, toUndoLine, type ShiftKind, type ShiftUndoToken, type UndoLine } from "../shift-undo";
+import { markerKeyOfRow, parseMarkerKey } from "../shift-key";
+import { withMarkerCols, writeMarker } from "./shift-markers";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -66,9 +68,8 @@ export function validToken(t: unknown, classId: string): t is ShiftUndoToken {
         !!m &&
         typeof m === "object" &&
         typeof m.key === "string" &&
-        YMD.test(m.key.slice(0, 10)) &&
-        m.key[10] === "|" &&
-        HHMM.test(m.key.slice(11)) &&
+        // 칸 표식(`날짜|교시`) 또는 줄 표식(`날짜|교시|교재|자리`, 0381a) — 모양은 shift-key 한 곳에서 본다.
+        parseMarkerKey(m.key) !== null &&
         validKind(m.before) &&
         validKind(m.after),
     )
@@ -112,13 +113,15 @@ export async function restoreShiftState(input: {
           .eq("class_id", classId)
           .in("plan_date", chunk) as never,
       ),
-      fetchInChunks<Record<string, unknown>>(dates, (chunk) =>
-        admin
-          .from("class_lesson_shifts")
-          .select("plan_date, slot_start, kind")
-          .eq("tenant_id", tenantId)
-          .eq("class_id", classId)
-          .in("plan_date", chunk) as never,
+      withMarkerCols((cols) =>
+        fetchInChunks<Record<string, unknown>>(dates, (chunk) =>
+          admin
+            .from("class_lesson_shifts")
+            .select(cols)
+            .eq("tenant_id", tenantId)
+            .eq("class_id", classId)
+            .in("plan_date", chunk) as never,
+        ),
       ),
     ]);
     const current = new Map(byId.map((r) => [String(r.id), toUndoLine(r)]));
@@ -138,7 +141,7 @@ export async function restoreShiftState(input: {
     for (const m of marks) {
       const kind = String(m.kind);
       if (kind === "skip" || kind === "advance") {
-        currentMarkers[`${String(m.plan_date).slice(0, 10)}|${String(m.slot_start).slice(0, 5)}`] = kind;
+        currentMarkers[markerKeyOfRow(m)] = kind;
       }
     }
 
@@ -171,14 +174,7 @@ export async function restoreShiftState(input: {
       }
     }
     for (const m of plan.markers) {
-      const [plan_date, slot_start] = m.key.split("|") as [string, string];
-      const cell = { tenant_id: tenantId, class_id: classId, plan_date, slot_start };
-      const { error } =
-        m.kind === null
-          ? await admin.from("class_lesson_shifts").delete().match(cell)
-          : await admin
-              .from("class_lesson_shifts")
-              .upsert({ ...cell, kind: m.kind, created_by: actor, updated_at: now }, { onConflict: "tenant_id,class_id,plan_date,slot_start" });
+      const { error } = await writeMarker({ admin, tenantId, classId, key: m.key, kind: m.kind, actor });
       if (error) throw error;
     }
   } catch (e) {

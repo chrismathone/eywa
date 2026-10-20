@@ -14,6 +14,8 @@ import { planLineFromRow } from "@/features/class-sheets/lib/plan-line";
 import type { PlanLineDTO } from "@/features/class-sheets/server/actions";
 import { mondayOf, shiftDays } from "@/features/timetable/lib/week";
 import { toUndoLine, type ShiftKind, type UndoLine } from "../shift-undo";
+import { markerKeyOfRow } from "../shift-key";
+import { withMarkerCols } from "./shift-markers";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -39,22 +41,24 @@ export async function snapshotShiftState(
         .order("id", { ascending: true })
         .range(f, t) as never,
     ),
-    fetchAllPaged<Record<string, unknown>>((f, t) =>
-      admin
-        .from("class_lesson_shifts")
-        .select("id, plan_date, slot_start, kind")
-        .eq("tenant_id", tenantId)
-        .eq("class_id", classId)
-        .gte("plan_date", date)
-        .order("id", { ascending: true })
-        .range(f, t) as never,
+    withMarkerCols((cols) =>
+      fetchAllPaged<Record<string, unknown>>((f, t) =>
+        admin
+          .from("class_lesson_shifts")
+          .select(cols)
+          .eq("tenant_id", tenantId)
+          .eq("class_id", classId)
+          .gte("plan_date", date)
+          .order("id", { ascending: true })
+          .range(f, t) as never,
+      ),
     ),
   ]);
   const markers: Record<string, ShiftKind> = {};
   for (const m of markRows) {
     const kind = String(m.kind);
     if (kind !== "skip" && kind !== "advance") continue;
-    markers[`${String(m.plan_date).slice(0, 10)}|${String(m.slot_start).slice(0, 5)}`] = kind;
+    markers[markerKeyOfRow(m)] = kind;
   }
   return { lines: lineRows.map(toUndoLine), markers };
 }

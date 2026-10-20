@@ -56,7 +56,16 @@ export const MAX_LOOKAHEAD_DAYS = 400;
  * 차수 하나가 앉을 자리 한 칸. 같은 `lessonNo`가 여러 칸에 앉을 수 있고(pace="day"), 한 칸에 차수가 둘
  * 앉을 수도 있다(그 교시의 1·2차수 자리를 둘 다 고른 경우 — 순서대로 붙는다).
  */
-export type LessonTarget = { lessonNo: number; date: string; slotStart: string };
+export type LessonTarget = {
+  lessonNo: number;
+  date: string;
+  slotStart: string;
+  /**
+   * 그 교시의 몇 번째 차수 자리인가(1부터) — 줄 표식(`"…|교재|자리"`)이 이 값으로 걸린다.
+   * `pace:"day"`·옛 축 방식은 언제나 1.
+   */
+  pos: number;
+};
 
 export type LessonSchedule = {
   /** 날짜·교시 순으로 정렬된 배치 결과. */
@@ -233,12 +242,21 @@ export function buildLessonSchedule(input: {
    *    화면이 둘을 같은 줄로 세면 사람이 안 한 결정을 한 것처럼 읽힌다.
    */
   shifts?: Readonly<Record<string, "skip" | "advance">> | null;
+  /**
+   * 이 배정의 교재 id — **줄 표식**(`"YYYY-MM-DD|HH:MM|<교재>|<자리>"`, 0381a)을 고르는 열쇠다(원장 2026-10-20
+   * *"수업이 2개면 각각 미룸, 당김"*). 줄 표식은 그 교재의 그 자리 **한 차수**만 움직인다:
+   *    · `skip`    = 그 자리는 비우고 차수를 안 쓴다(뒤가 한 차수 밀린다).
+   *    · `advance` = 그 자리에 올 차수를 버리고 다음 차수를 넣는다(뒤가 한 차수 당겨진다).
+   * 칸 표식(옛 모양)은 교재와 상관없이 그 교시를 통째로 — 위 `shifts` 설명 그대로다.
+   */
+  lane?: string | null;
   pace: LessonPace;
   /** 훑을 날 수(기본 = 상한). 테스트·짧은 미리보기에서 줄여 쓴다. */
   lookaheadDays?: number;
 }): LessonSchedule {
   const { startDate, lessonNos, schedules, holidays, axis, pace } = input;
   const shifts = input.shifts ?? null;
+  const lane = input.lane ? String(input.lane).toLowerCase() : null;
   const picked = input.slotPicks && input.slotPicks.length > 0 ? new Set(input.slotPicks) : null;
   const dates = lookaheadDates(startDate, input.lookaheadDays ?? MAX_LOOKAHEAD_DAYS);
   const slotsByDate = slotsByDateOf(dates, schedules);
@@ -263,16 +281,35 @@ export function buildLessonSchedule(input: {
 
     // 🔑 미루기·당기기는 **칸마다** 본다(위 `shifts`) — `pace:"day"`에서도 그 날 칸이 저마다 다를 수 있다.
     const shiftOf = (slotStart: string) => shifts?.[`${date}|${slotStart}`] ?? null;
+    const laneShiftOf = (slotStart: string, pos: number) =>
+      lane ? (shifts?.[`${date}|${slotStart}|${lane}|${pos}`] ?? null) : null;
+    /**
+     * 그 자리에 **쌓인 당김 수**(shift-key `MAX_LANE_POS` — `pos + 4k`가 같은 자리의 k+1번째 당김). 같은 줄을 두 번
+     * 당기면 그 자리 차수가 두 개 건너뛴다.
+     */
+    const laneDropsAt = (slotStart: string, pos: number) => {
+      if (!lane) return 0;
+      let n = 0;
+      for (let p = pos; p <= MAX_SLOT_POSITION * 5; p += MAX_SLOT_POSITION) {
+        if (shifts?.[`${date}|${slotStart}|${lane}|${p}`] === "advance") n += 1;
+      }
+      return n;
+    };
 
     if (pace === "day") {
       // 하루 1차수라도 **미룬 칸엔 안 넣는다** — 그 칸은 사람이 자유로 적는 자리다.
-      const live = daySlots.filter((slot) => shiftOf(slot.slotStart) !== "skip");
+      // 하루 단위라 줄 표식은 그 교시의 첫 자리(1)만 본다 — 칸 표식과 같은 뜻으로 읽는다.
+      const dayShift = (s: string) => shiftOf(s) ?? laneShiftOf(s, 1);
+      const live = daySlots.filter((slot) => dayShift(slot.slotStart) !== "skip");
       if (live.length === 0) continue; // 그 날이 통째로 미뤄졌다 — 차수를 안 쓴다.
       // 당기기가 하나라도 있으면 차수 하나를 버리고 다음 것부터(그 날 한 번만 — 단위가 '하루'다).
-      if (live.some((slot) => shiftOf(slot.slotStart) === "advance")) cursor += 1;
+      // 줄 표식은 쌓인 수만큼(같은 줄을 두 번 당기면 두 차수) — 교시가 여럿이어도 그 날 한 번만 센다.
+      const laneDrops = Math.max(0, ...live.map((slot) => (shiftOf(slot.slotStart) ? 0 : laneDropsAt(slot.slotStart, 1))));
+      if (laneDrops > 0) cursor += laneDrops;
+      else if (live.some((slot) => dayShift(slot.slotStart) === "advance")) cursor += 1;
       if (cursor >= lessonNos.length) break;
       const lessonNo = lessonNos[cursor]!;
-      for (const slot of live) targets.push({ lessonNo, date, slotStart: slot.slotStart });
+      for (const slot of live) targets.push({ lessonNo, date, slotStart: slot.slotStart, pos: 1 });
       cursor += 1;
       lastDate = date;
       continue;
@@ -292,11 +329,15 @@ export function buildLessonSchedule(input: {
       // 🔑 한 교시에 차수가 **고른 자리 수만큼** 들어간다(25분 1차수 · 1시간 교시 = 최대 2차수, 원장
       //    2026-10-16). 축 방식(옛 배정)과 자리 없는 옛 값은 1개다.
       const count = picked ? Math.max(1, lessonsInSlot(picked, dow, slot.slotStart)) : 1;
-      for (let k = 0; k < count && cursor < lessonNos.length; k += 1) {
-        targets.push({ lessonNo: lessonNos[cursor]!, date, slotStart: slot.slotStart });
+      for (let pos = 1; pos <= count && cursor < lessonNos.length; pos += 1) {
+        // 🔑 줄 표식 — 그 자리 한 차수만(위 `lane`). 미룸은 자리를 비우고, 당김은 그 자리 차수를 버린다.
+        if (laneShiftOf(slot.slotStart, pos) === "skip") continue;
+        cursor += laneDropsAt(slot.slotStart, pos);
+        if (cursor >= lessonNos.length) break;
+        targets.push({ lessonNo: lessonNos[cursor]!, date, slotStart: slot.slotStart, pos });
         cursor += 1;
+        lastDate = date;
       }
-      lastDate = date;
     }
   }
 
@@ -315,4 +356,13 @@ export function normalizeSlotPicks(raw: readonly string[] | null | undefined): s
     out.add(parsed.dow ? slotPickKey(parsed.dow, parsed.start, parsed.pos ?? undefined) : parsed.start);
   }
   return [...out].sort();
+}
+
+/**
+ * 그 칸(날짜·교시)에 그 배정이 차수를 **몇 자리** 두는가 — 고른 자리 수, 옛 축 방식·자리 없는 옛 값은 1.
+ * 줄 표식(미룸·당김)이 "다음 자리"를 찾을 때 `buildLessonSchedule`과 같은 셈을 쓰게 한 곳에 둔다.
+ */
+export function positionCountAt(slotPicks: readonly string[] | null | undefined, date: string, slotStart: string): number {
+  const picked = slotPicks && slotPicks.length > 0 ? new Set(slotPicks) : null;
+  return picked ? Math.max(1, lessonsInSlot(picked, dowKeyOf(date), slotStart)) : 1;
 }

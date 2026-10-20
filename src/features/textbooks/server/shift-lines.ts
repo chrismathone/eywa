@@ -46,6 +46,11 @@ export async function shiftActualLines(input: {
   kind: "skip" | "advance";
   userId: string;
   excludeIds?: ReadonlySet<string>;
+  /**
+   * 이 줄들만 옮긴다(나머지는 없는 셈) — **줄 하나를 눌렀을 때**(원장 2026-10-20 *"수업이 2개면 각각"*) 그 줄과
+   * 같은 구분·같은 교재명 줄만 한 주씩 민다. 같은 칸의 다른 줄은 제자리다.
+   */
+  only?: (row: { skill_area: unknown; textbook: unknown }) => boolean;
 }): Promise<ShiftLinesResult> {
   const { admin, tenantId, classId, date, slot, kind, userId } = input;
   const exclude = input.excludeIds ?? new Set<string>();
@@ -82,6 +87,7 @@ export async function shiftActualLines(input: {
   for (const r of lineRows) {
     const d = String(r.plan_date).slice(0, 10);
     if (dowKeyOf(d) !== dow || exclude.has(String(r.id))) continue;
+    if (input.only && !input.only({ skill_area: r.skill_area, textbook: r.textbook })) continue;
     rowsByDate.set(d, [...(rowsByDate.get(d) ?? []), r]);
   }
   const filledDates = [...rowsByDate.keys()];

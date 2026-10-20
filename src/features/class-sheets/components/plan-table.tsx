@@ -35,6 +35,7 @@ export function PlanTable({
   handlers,
   canEdit,
   showExamTerm,
+  shift,
 }: {
   date: string;
   slotStart: string;
@@ -44,8 +45,8 @@ export function PlanTable({
   handlers: PlanHandlers;
   canEdit: boolean;
   /**
-   * 이 칸의 회차 표식(0282a). ⚠️ 2026-10-15부터 버튼이 토글이 아니라(누를 때마다 한 주) **안 읽는다** —
-   * 넘기는 화면이 여럿이라 prop은 남겨 둔다.
+   * 이 칸의 회차 표식(0282a — 줄 표식은 칸으로 접은 요약). 미룸 표식이 있는 **빈** 칸에 [당김](채우기)을 세우는 데만
+   * 쓴다(원장 2026-10-20). 넘기지 않는 화면(주간 시트)은 그 버튼이 없다.
    */
   shift?: "skip" | "advance" | null;
   /**
@@ -58,7 +59,7 @@ export function PlanTable({
   const defaultArea = skillAreas[0]?.key ?? "vocab";
   const lang = useSheetLang();
   // 미룸·당김은 확인 창을 거친다(원장 2026-10-19) — 실행·되돌리기는 핸들러(`use-plan-handlers`)가 한다.
-  const shiftConfirm = useShiftConfirm((d, s, kind) => handlers.setShift?.(d, s, kind));
+  const shiftConfirm = useShiftConfirm((d, s, kind, which) => handlers.setShift?.(d, s, kind, which));
   return (
     <div className="space-y-1">
       {TERMS.map((term) => {
@@ -122,21 +123,40 @@ export function PlanTable({
                      — 토글이 아니라 누를 때마다 한 주.
                   🔴 2026-10-19 원장 *"계획만 있으면 버튼 숨겨"* — 이 칸에 **실제 줄이 없으면 안 세운다**(월간계획만
                      있는 칸에서 밀면 아직 쓰지도 않은 진도를 옮기는 꼴이다). 누르면 확인 창 → 실행 → [되돌리기]. */}
-              {canEdit && term.key === "regular" && handlers.setShift && canShiftCell(rows)
-                ? (["skip", "advance"] as const).map((kind) => {
-                    return (
-                      <button
-                        key={kind}
-                        type="button"
-                        className="border-line-strong text-foreground hover:text-primary hover:border-primary cursor-pointer rounded-full border px-2 py-0.5 text-xs font-bold"
-                        title={sheetT(lang, kind === "skip" ? "plan.shift.skip.title" : "plan.shift.advance.title")}
-                        onClick={() => shiftConfirm.ask(date, slotStart, kind)}
-                      >
-                        {sheetT(lang, kind === "skip" ? "plan.shift.skip" : "plan.shift.advance")}
-                      </button>
-                    );
-                  })
+              {/* 🔑 **줄마다**(원장 2026-10-20 *"수업이 2개면 각각 미룸, 당김 버튼이 활성화"*) — 누른 줄의 교재 한 차수만
+                  움직이고 같은 칸의 다른 줄은 그대로다. 줄이 하나면 지금처럼 버튼 둘, 둘 이상이면 줄 이름을 붙여
+                  줄마다 한 벌씩. 내용 없는 줄(구분만 고른 빈 줄)엔 안 세운다(`canShiftCell`). */}
+              {canEdit && term.key === "regular" && handlers.setShift
+                ? shiftTargets(rows, skillAreas).map(({ line, label }) => (
+                    <span key={line.id} className="inline-flex items-center gap-1">
+                      {label ? <span className="text-text-dim text-xs font-bold">{label}</span> : null}
+                      {(["skip", "advance"] as const).map((kind) => (
+                        <button
+                          key={kind}
+                          type="button"
+                          className="border-line-strong text-foreground hover:text-primary hover:border-primary cursor-pointer rounded-full border px-2 py-0.5 text-xs font-bold"
+                          title={sheetT(lang, kind === "skip" ? "plan.shift.skip.title" : "plan.shift.advance.title")}
+                          onClick={() => shiftConfirm.ask(date, slotStart, kind, { lineId: line.id })}
+                        >
+                          {sheetT(lang, kind === "skip" ? "plan.shift.skip" : "plan.shift.advance")}
+                        </button>
+                      ))}
+                    </span>
+                  ))
                 : null}
+              {/* 🔑 **미뤄서 비운 칸엔 [당김]만**(원장 2026-10-20 *"계획만 있을 경우 미룸버튼은 없고 당겨서"*) — 그 칸의
+                  미룸을 걷어 뒤 수업이 한 칸씩 올라와 채운다(버려지는 차수 없음). 이 표는 월간계획을 모르므로 **이 칸에
+                  미룸 표식이 있다**는 사실(`shift`)로만 세운다 — 표식을 안 넘기는 화면(주간 시트)에선 안 선다. */}
+              {canEdit && term.key === "regular" && handlers.setShift && shift === "skip" && !canShiftCell(rows) ? (
+                <button
+                  type="button"
+                  className="border-line-strong text-foreground hover:text-primary hover:border-primary cursor-pointer rounded-full border px-2 py-0.5 text-xs font-bold"
+                  title={sheetT(lang, "month.shift.fill.title")}
+                  onClick={() => shiftConfirm.ask(date, slotStart, "advance", { fill: true })}
+                >
+                  {sheetT(lang, "plan.shift.advance")}
+                </button>
+              ) : null}
             </div>
             {rows.length > 0 ? (
               // 고정 열은 요일 열 다이어트(2026-08-17, today-columns TODAY_PLAN_W 540→436)와 함께 줄였다
@@ -198,4 +218,22 @@ export function PlanTable({
       {shiftConfirm.dialog}
     </div>
   );
+}
+
+/**
+ * 미룸·당김을 세울 줄 — 내용이 적힌 평시 줄(`canShiftCell`). 줄이 둘 이상이면 어느 줄 버튼인지 이름을 붙인다
+ * (구분 라벨, 같은 구분이 둘이면 순번 — `Grammar 1`·`Grammar 2`). 하나면 이름 없이.
+ */
+function shiftTargets(rows: readonly PlanLineDTO[], skillAreas: readonly SkillAreaSetting[]): { line: PlanLineDTO; label: string | null }[] {
+  const lines = rows.filter((l) => canShiftCell([l]));
+  if (lines.length <= 1) return lines.map((line) => ({ line, label: null }));
+  const seen = new Map<string, number>();
+  const total = new Map<string, number>();
+  for (const l of lines) total.set(l.skillArea, (total.get(l.skillArea) ?? 0) + 1);
+  return lines.map((line) => {
+    const n = (seen.get(line.skillArea) ?? 0) + 1;
+    seen.set(line.skillArea, n);
+    const name = skillAreas.find((a) => a.key === line.skillArea)?.label ?? line.skillArea;
+    return { line, label: (total.get(line.skillArea) ?? 0) > 1 ? `${name} ${n}` : name };
+  });
 }
