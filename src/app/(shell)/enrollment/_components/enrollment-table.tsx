@@ -3,7 +3,7 @@
 import { Pill } from "@/components/atoms/pill";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { MakeeduOriginTag } from "@/components/makeedu-origin-tag";
-import { makeeduSyncedUrlOf } from "@/features/enrollment/makeedu-link";
+import { makeeduSyncOf } from "@/features/enrollment/makeedu-link";
 import { MakeeduSyncedMark } from "./makeedu-synced-mark";
 import { RelativeTime } from "@/components/relative-time";
 import { buttonVariants } from "@/components/ui/button";
@@ -140,7 +140,7 @@ export function EnrollmentTable({
           <tbody>
             {rows.map((c, i) => {
               const mark = cardMarkOf(c);
-              const makeeduUrl = makeeduSyncedUrlOf(c);
+              const makeeduSync = makeeduSyncOf(c);
               const received = sheetDate(kstDateOf(c.consultedAt));
               const recent = nowMs - Date.parse(c.consultedAt) < RECENT_MS;
               const audioTitle = `녹음 상담 · ${c.hasAiAnalysis || c.outcome === "ai_done" ? "AI 분석 완료" : "AI 분석 전"}`;
@@ -159,7 +159,7 @@ export function EnrollmentTable({
                   <td className={TD} data-label={LABEL.name}>
                     <div className="flex flex-wrap items-center gap-1">
                       {/* 메이크에듀 동기화 완료(등록 완료 단계만) = 이름 왼쪽 — 칸반 카드와 같은 자리·같은 판정. */}
-                      {makeeduUrl ? <MakeeduSyncedMark url={makeeduUrl} /> : null}
+                      {makeeduSync ? <MakeeduSyncedMark {...makeeduSync} /> : null}
                       <EditableTextCell
                         id={c.id}
                         field="prospectName"
@@ -242,7 +242,7 @@ export function EnrollmentTable({
                     </EditableTextCell>
                   </td>
                   <td className={`${TD_CENTER} num`} data-label={LABEL.date}>
-                    {received ? <div>{received}</div> : null}
+                    {received ? <div className="whitespace-nowrap">{received}</div> : null}
                     {/* 경과는 **7일 이내만** — relativeTimeKo는 7일이 지나면 절대 날짜를 돌려줘 접수일과 같은 날짜를
                         두 번 적는다. 판정은 서버가 준 nowMs 기준이라 첫 렌더가 서버·클라 같다(하이드레이션 안전). */}
                     {recent ? (

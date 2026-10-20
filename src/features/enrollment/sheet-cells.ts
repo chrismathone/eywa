@@ -15,11 +15,14 @@ import { BOARD_STAGES, stageOfCard } from "./board-stages";
 
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
 
-/** "YYYY-MM-DD" → "M/D" (시트의 날짜 표기). 날짜 형식이 아니면 null — 없는 날짜를 지어내지 않는다. */
+/**
+ * "YYYY-MM-DD" → "YY.MM.DD"(원장 2026-10-20 *"목록뷰에서 날짜를 yy.mm.dd"* — 옛 "M/D"는 해가 안 보여 지난해 상담과
+ * 섞였다). 날짜 형식이 아니면 null — 없는 날짜를 지어내지 않는다.
+ */
 export function sheetDate(ymd: string | null | undefined): string | null {
   if (!ymd || !YMD.test(ymd)) return null;
-  const [, m, d] = ymd.split("-").map(Number);
-  return `${m}/${d}`;
+  const [y, m, d] = ymd.split("-");
+  return `${y!.slice(2)}.${m}.${d}`;
 }
 
 /**
