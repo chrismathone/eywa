@@ -24,9 +24,9 @@ export function TargetEditor({ r, studentId, studentName }: { r: RoadmapView; st
   const [pending, start] = useTransition();
   if (!ctx?.canWrite) return null;
   if (ctx.targetStatus !== "ok") {
-    return <span className={css.targetLock}>{ctx.targetStatus === "missing-table" ? "목표 권 변경 준비 중" : "목표 권을 불러오지 못했습니다"}</span>;
+    return <span className={css.targetLock}>{ctx.targetStatus === "missing-table" ? "목표 교재 변경 준비 중" : "목표 교재를 불러오지 못했습니다"}</span>;
   }
-  if (!open) return <button type="button" className={css.linkButton} onClick={() => setOpen(true)}>목표 권 변경</button>;
+  if (!open) return <button type="button" className={css.linkButton} onClick={() => setOpen(true)}>목표 교재 변경</button>;
   const auto = r.choices.find((c) => c.key === r.target.autoKey);
   return (
     <form
@@ -42,7 +42,7 @@ export function TargetEditor({ r, studentId, studentName }: { r: RoadmapView; st
         });
       }}
     >
-      <select aria-label={`${studentName} 최종 목표 권`} value={value} disabled={pending} onChange={(e) => setValue(e.target.value)}>
+      <select aria-label={`${studentName} 최종 목표 교재`} value={value} disabled={pending} onChange={(e) => setValue(e.target.value)}>
         <option value={AUTO}>자동{auto ? ` — ${auto.title}${r.target.autoLesson != null ? ` ${r.target.autoLesson}차시` : ""} (${dot(r.target.autoLesson != null && r.deadline ? r.deadline : auto.finishDate)})` : ""}</option>
         {r.choices.map((c) => <option key={c.key} value={c.key}>{c.title} · {dot(c.finishDate)} 완료 예정</option>)}
       </select>

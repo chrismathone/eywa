@@ -22,13 +22,13 @@ const inputSchema = z.object({
   targetKey: z.string().min(1).max(80).nullable(),
 });
 
-const NOT_READY = "목표 권 저장 표가 아직 없습니다 — 마이그레이션(math_book_targets)을 적용해 주세요";
+const NOT_READY = "목표 교재 저장 표가 아직 없습니다 — 마이그레이션(math_book_targets)을 적용해 주세요";
 
 export async function saveMathBookTarget(input: z.input<typeof inputSchema>): Promise<{ ok: true } | { ok: false; error: string }> {
   const parsed = inputSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "목표 권을 다시 골라 주세요." };
+  if (!parsed.success) return { ok: false, error: "목표 교재를 다시 골라 주세요." };
   const { classId, studentId, series, targetKey } = parsed.data;
-  if (targetKey && parseKey(targetKey)?.series !== series) return { ok: false, error: "목표 권을 다시 골라 주세요." };
+  if (targetKey && parseKey(targetKey)?.series !== series) return { ok: false, error: "목표 교재를 다시 골라 주세요." };
   const gate = await requireMcsClassAccess(classId, { write: true });
   if (!gate.ok) return { ok: false, error: gate.error };
   const { tenantId, user, className } = gate.access;
@@ -47,7 +47,7 @@ export async function saveMathBookTarget(input: z.input<typeof inputSchema>): Pr
     : await admin.from("math_book_targets").delete().eq("tenant_id", tenantId).eq("student_id", studentId).eq("series", series);
   if (res.error) {
     const missing = res.error.code === "42P01" || res.error.code === "PGRST205";
-    return { ok: false, error: missing ? NOT_READY : "목표 권을 저장하지 못했습니다. 다시 시도해 주세요." };
+    return { ok: false, error: missing ? NOT_READY : "목표 교재를 저장하지 못했습니다. 다시 시도해 주세요." };
   }
 
   await logAction({
