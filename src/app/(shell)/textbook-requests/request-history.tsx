@@ -170,6 +170,12 @@ function RequestRow({
           {/* ijw 패리티 — 완료(3체크) 행은 회색 + 교재명 취소선 */}
           <span className={`text-foreground truncate font-medium ${done ? "line-through" : ""}`}>{row.bookName}</span>
           {row.bookDetail ? <span className="text-text-faint truncate text-xs">{row.bookDetail}</span> : null}
+          {/* 같은 줄이 둘일 때 어느 쪽이 학부모에게 나간 요청인지 — 없어서 발송한 쪽을 지운 9건(2026-10-20). */}
+          {row.classnoteNoticeId ? (
+            <span className="text-primary shrink-0 text-xs font-medium" title="이 요청은 학부모 알림장으로 발송했습니다">
+              발송함
+            </span>
+          ) : null}
         </div>
         <div className="text-text-dim mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
           {row.studentName ? <span>{row.studentName}</span> : null}
@@ -207,6 +213,9 @@ function RequestRow({
       {canManage ? (
         confirmDel ? (
           <span className="flex shrink-0 items-center gap-1 text-xs">
+            {row.classnoteNoticeId ? (
+              <span className="text-danger break-keep">학부모에게 보낸 요청입니다 — 지워도 알림장 글은 남아요.</span>
+            ) : null}
             <button type="button" onClick={remove} disabled={pending} className="text-danger font-bold">삭제</button>
             <button type="button" onClick={() => setConfirmDel(false)} className="text-text-faint">취소</button>
           </span>

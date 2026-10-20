@@ -13,6 +13,7 @@ import {
   getTextbookOrdersForStudents,
   getTextbookOrdersPage,
 } from "@/features/billing/server/textbook-queries";
+import { withTextbookNoticeLinks } from "@/features/billing/server/textbook-notice-links";
 import { TextbookRequestClient } from "./_client";
 import { NEUTRAL_ACADEMY_NAME } from "@/features/owner/defaults";
 
@@ -53,8 +54,11 @@ export default async function TextbookRequestsPage({
       getStudentOptionsForIds(studentIds),
     ]);
     const seen = new Set(scopedRows.map((r) => r.id));
-    rows = [...scopedRows, ...mine.filter((r) => !seen.has(r.id))].sort((a, b) =>
-      (b.requestDate ?? "").localeCompare(a.requestDate ?? ""),
+    // 강사 목록 조회는 원스크린 경로라 발송 연결을 안 읽는다 — '발송함' 표시는 이 화면에서 따로 붙인다.
+    rows = await withTextbookNoticeLinks(
+      [...scopedRows, ...mine.filter((r) => !seen.has(r.id))].sort((a, b) =>
+        (b.requestDate ?? "").localeCompare(a.requestDate ?? ""),
+      ),
     );
     students = opts;
   } else {
