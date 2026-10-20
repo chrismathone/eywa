@@ -10,6 +10,7 @@ import { explainDbError } from "@/lib/supabase/db-error";
 import { after } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { canonicalSchoolName } from "@/features/schools/school-name";
+import { completeSchoolKind } from "@/features/schools/server/complete-kind";
 import { generatePrepBriefOnIntake } from "@/features/enrollment/server/prep-generate";
 import { logAction, logActionAs } from "@/features/audit/server/log";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
@@ -279,7 +280,13 @@ export async function submitPublicIntake(
     prospect_name: prospectName,
     prospect_grade: prospectGrade,
     // 학부모가 "칠성초등학교"라 적어도 저장은 앱 표기 하나로(원장 2026-09-01).
-    prospect_school: canonicalSchoolName(prospectSchool, settings.operations.schoolSaveAliases),
+    prospect_school: await completeSchoolKind(
+      admin,
+      tok.tenant_id,
+      canonicalSchoolName(prospectSchool, settings.operations.schoolSaveAliases),
+      prospectGrade,
+      settings.operations.schoolSaveAliases,
+    ),
     gender,
     blood_type: bloodType,
     student_phone: clip(formData.get("studentPhone"), 20) || null,

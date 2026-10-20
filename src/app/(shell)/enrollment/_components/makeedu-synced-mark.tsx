@@ -4,10 +4,18 @@ import { useModuleOn } from "@/features/owner/operations-context";
 import { cn } from "@/lib/utils";
 import type { MakeeduSync } from "@/features/enrollment/makeedu-link";
 
-/** 마우스 오버 문구 — 상담만 넘어갔는지, 원생 전환까지 됐는지, 누르면 어디로 가는지. */
+/**
+ * 마우스 오버 문구 — 상담·원생 **두 사실을 각각** 적는다(원장 2026-10-20 *"마우스 오버일때도 해당 상태에 대해
+ * 정확하게"*). 한 줄 요약만 적으면 "원생 전환 완료"가 상담도 넘어갔다는 뜻인지 알 수 없다.
+ */
 export function makeeduSyncTitle({ url, converted }: MakeeduSync): string {
-  const state = converted ? "메이크에듀 원생 전환 완료" : "메이크에듀 상담 동기화 완료";
-  return url ? `${state} — 누르면 메이크에듀 상담 화면을 엽니다` : state;
+  return [
+    `메이크에듀 상담: ${url ? "동기화 완료" : "없음"}`,
+    `메이크에듀 원생: ${converted ? "전환 완료" : "전환 전"}`,
+    url ? "누르면 메이크에듀 상담 화면을 엽니다" : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 const open = (url: string) => window.open(url, "_blank", "noopener,noreferrer");

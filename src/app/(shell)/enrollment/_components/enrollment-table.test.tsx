@@ -127,7 +127,7 @@ describe("시트형 목록뷰 — 열·규약", () => {
 });
 
 describe("시트형 목록뷰 — 메이크에듀 동기화 완료 표식", () => {
-  const MARK = "메이크에듀 상담 동기화 완료 — 누르면 메이크에듀 상담 화면을 엽니다";
+  const MARK = "메이크에듀 상담: 동기화 완료\n메이크에듀 원생: 전환 전\n누르면 메이크에듀 상담 화면을 엽니다";
 
   it("등록 완료 단계 + makeedu에 있는 상담만 — 이름 **왼쪽**에 서고 누르면 그 상담 주소를 연다", () => {
     const open = vi.spyOn(window, "open").mockImplementation(() => null);
@@ -173,7 +173,7 @@ describe("시트형 목록뷰 — 메이크에듀 동기화 완료 표식", () =
     const consultOnly = screen.getByRole("link", { name: MARK });
     expect(consultOnly.className).not.toContain("border-double");
     const converted = screen.getByRole("link", {
-      name: "메이크에듀 원생 전환 완료 — 누르면 메이크에듀 상담 화면을 엽니다",
+      name: "메이크에듀 상담: 동기화 완료\n메이크에듀 원생: 전환 완료\n누르면 메이크에듀 상담 화면을 엽니다",
     });
     expect(converted.className).toContain("border-double");
   });
@@ -188,7 +188,7 @@ describe("시트형 목록뷰 — 메이크에듀 동기화 완료 표식", () =
       />,
     );
     expect(screen.queryByRole("link", { name: /메이크에듀/ })).toBeNull();
-    const mark = screen.getByRole("img", { name: "메이크에듀 원생 전환 완료" });
+    const mark = screen.getByRole("img", { name: "메이크에듀 상담: 없음\n메이크에듀 원생: 전환 완료" });
     fireEvent.click(mark);
     expect(open).not.toHaveBeenCalled();
     open.mockRestore();

@@ -14,6 +14,8 @@ import type { WithdrawalMetadata } from "@/features/withdrawals/types";
 import { CLEANUP_WITHDRAWAL_MEMO } from "@/features/withdrawals/system-bulk";
 import { explainDbError, logDbError } from "@/lib/supabase/db-error";
 import { MERGE_TABLES } from "../merge-scope";
+import { planMakeeduCarry } from "../makeedu-carry";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 /** `warning` = 병합은 끝났지만 마무리 한 가지가 남았을 때(화면이 그대로 보여 준다). */
 export type MergeStudentsState =
@@ -65,7 +67,7 @@ export async function mergeStudents(
   // ⚠️ `notes`도 함께 받는다 — 진 쪽 메모를 **덮어쓰지 않고 앞에 표식만 덧붙이기** 위해서다(아래).
   const { data: pairNames, error: pairError } = await supabase
     .from("students")
-    .select("id, name, notes")
+    .select("id, name, notes, makeedu_id")
     .in("id", [keeperId, mergeeId]);
   // 🔴 이 조회를 삼키면 안 된다 — 실패해도 아래가 그대로 진행돼 **보존하려던 바로 그 메모를 표식만으로
   //    덮어쓰고**(mergeeRow가 undefined) 감사로그 '대상' 칸도 빈다. 아직 한 줄도 안 썼으니 여기서 멈춘다.
@@ -79,6 +81,8 @@ export async function mergeStudents(
   if (!mergeeRow || !keeperRow) return { error: "병합할 학생을 찾지 못했습니다. 새로고침한 뒤 다시 시도해 주세요." };
   const mergeeName = mergeeRow.name ?? null;
   const keeperName = keeperRow.name ?? null;
+  // 메이크에듀 원생 번호 — 남는 쪽이 비어 있으면 옮긴다(2026-10-20 권민서·김지유: 병합이 번호를 버려 연결이 끊겼다).
+  const makeeduCarry = planMakeeduCarry(keeperRow.makeedu_id as string | null, mergeeRow.makeedu_id as string | null);
 
   // 옮길 건수를 **쓰기 전에** 센다(행은 받지 않는다) — 실제로 옮겨진 건수와 견줄 기준이다. 서로 독립이라 한꺼번에.
   const remaining = (table: string) =>
@@ -176,6 +180,8 @@ export async function mergeStudents(
       //    표식은 맨 앞에 붙는다(`isMergedStudent`가 접두로 판정 — 뒤에 붙이면 집계에서 안 걸러진다).
       notes: mergeNoteFor(keeperId, today, mergeeRow?.notes ?? null),
       dup_suspect: false,
+      // 번호는 지점 안에서 하나만 쥘 수 있다(부분 유니크) — 남는 쪽에 주기 전에 진 쪽에서 비운다(같은 문장이라 함께 적용된다).
+      ...(makeeduCarry.kind === "move" ? { makeedu_id: null } : {}),
     })
     .eq("id", mergeeId)
     .select("id");
@@ -187,9 +193,24 @@ export async function mergeStudents(
   //    원장이 제보한 "합칠 곳이 없음"이 병합 직후에 그대로 재현된다. 병합 = 사람이 답을 낸 것이다.
   //    이 한 줄이 실패해도(오류 · 0줄) 병합 자체는 끝났다(진 쪽은 이미 퇴원해 목록에서 사라졌다) — 되돌리거나 멈춘 것으로
   //    알리지 않고, 남은 일을 알린다.
-  const { data: cleared, error: clearError } = await supabase.from("students").update({ dup_suspect: false }).eq("id", keeperId).select("id");
+  // 의심 표식 내리기 + 메이크에듀 번호 받기를 한 문장으로 — 번호를 못 받으면 진 쪽은 이미 비웠으니 연결이 사라진다(아래에서 알린다).
+  const { data: cleared, error: clearError } = await supabase
+    .from("students")
+    .update({ dup_suspect: false, ...(makeeduCarry.kind === "move" ? { makeedu_id: makeeduCarry.makeeduId } : {}) })
+    .eq("id", keeperId)
+    .select("id");
   if (clearError) logDbError(clearError, "admin.mergeStudents.clearSuspect");
   const suspectLeft = !!clearError || (cleared ?? []).length !== 1;
+  const makeeduLost = makeeduCarry.kind === "move" && suspectLeft;
+  // 메이크에듀 지난 기록(0384a, 서버 전용 표)의 학생 연결도 따라간다 — 보조 기록이라 실패해도 병합은 멈추지 않는다.
+  if (makeeduCarry.kind === "move" && !makeeduLost) {
+    const { error: histError } = await createAdminClient()
+      .from("makeedu_history_students")
+      .update({ student_id: keeperId })
+      .eq("tenant_id", user.tenantId)
+      .eq("student_id", mergeeId);
+    if (histError && !/makeedu_history_students/.test(histError.message ?? "")) logDbError(histError, "admin.mergeStudents.makeeduHistory");
+  }
 
   await logAction({
     action: "student_merge",
@@ -197,7 +218,11 @@ export async function mergeStudents(
     // ⚠️ `audit_logs`엔 target_id 컬럼이 없다 — 되짚을 이름은 **targetLabel**이 나른다(비워 두면 감사로그
     //    목록의 '대상' 칸이 빈칸이라 어느 학생 건인지 목록에서 알 수 없다). id 두 개는 metadata에 그대로 있다.
     targetLabel: keeperName,
-    metadata: { studentId: keeperId, mergedStudentId: mergeeId, mergedName: mergeeName, mergedRows, moved },
+    metadata: {
+      studentId: keeperId, mergedStudentId: mergeeId, mergedName: mergeeName, mergedRows, moved,
+      ...(makeeduCarry.kind === "move" ? { makeeduIdMoved: makeeduCarry.makeeduId, ...(makeeduLost ? { makeeduIdLost: true } : {}) } : {}),
+      ...(makeeduCarry.kind === "conflict" ? { makeeduIdConflict: makeeduCarry.mergeeMakeeduId } : {}),
+    },
   });
 
   // 중복 병합 UI는 /owner?tab=data(데이터 정리 면)에 있다 — 그 경로를 revalidate해야 병합 후 목록이
@@ -206,9 +231,13 @@ export async function mergeStudents(
   revalidatePath("/students");
   return {
     mergedRows,
-    ...(suspectLeft
-      ? { warning: "병합은 끝났지만 보존한 학생의 '중복 의심' 표식을 내리지 못했습니다. 그 학생 상세에서 '정상 확인'을 눌러 주세요." }
-      : {}),
+    ...(makeeduLost
+      ? { warning: `병합은 끝났지만 메이크에듀 원생 번호(${makeeduCarry.kind === "move" ? makeeduCarry.makeeduId : ""})를 남긴 학생에게 옮기지 못했습니다. 다음 메이크에듀 동기화가 다시 잇습니다 — 그 전에 관리자에게 알려 주세요.` }
+      : makeeduCarry.kind === "conflict"
+        ? { warning: `병합은 끝났지만 두 학생이 메이크에듀에서도 서로 다른 원생입니다(진 쪽 번호 ${makeeduCarry.mergeeMakeeduId}). 메이크에듀에서도 한 원생으로 정리해 주세요.` }
+        : suspectLeft
+          ? { warning: "병합은 끝났지만 보존한 학생의 '중복 의심' 표식을 내리지 못했습니다. 그 학생 상세에서 '정상 확인'을 눌러 주세요." }
+          : {}),
   };
 }
 
