@@ -3,6 +3,8 @@
 import { Pill } from "@/components/atoms/pill";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { MakeeduOriginTag } from "@/components/makeedu-origin-tag";
+import { makeeduSyncedUrlOf } from "@/features/enrollment/makeedu-link";
+import { MakeeduSyncedMark } from "./makeedu-synced-mark";
 import { RelativeTime } from "@/components/relative-time";
 import { buttonVariants } from "@/components/ui/button";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
@@ -138,6 +140,7 @@ export function EnrollmentTable({
           <tbody>
             {rows.map((c, i) => {
               const mark = cardMarkOf(c);
+              const makeeduUrl = makeeduSyncedUrlOf(c);
               const received = sheetDate(kstDateOf(c.consultedAt));
               const recent = nowMs - Date.parse(c.consultedAt) < RECENT_MS;
               const audioTitle = `녹음 상담 · ${c.hasAiAnalysis || c.outcome === "ai_done" ? "AI 분석 완료" : "AI 분석 전"}`;
@@ -155,6 +158,8 @@ export function EnrollmentTable({
                   </td>
                   <td className={TD} data-label={LABEL.name}>
                     <div className="flex flex-wrap items-center gap-1">
+                      {/* 메이크에듀 동기화 완료(등록 완료 단계만) = 이름 왼쪽 — 칸반 카드와 같은 자리·같은 판정. */}
+                      {makeeduUrl ? <MakeeduSyncedMark url={makeeduUrl} /> : null}
                       <EditableTextCell
                         id={c.id}
                         field="prospectName"

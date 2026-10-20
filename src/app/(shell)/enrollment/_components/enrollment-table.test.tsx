@@ -47,6 +47,7 @@ vi.mock("@/features/owner/operations-context", () => ({
     filters: [],
   }),
   useGradeLevels: () => ["초3", "중1", "중3"],
+  useModuleOn: () => true,
 }));
 const patch = vi.fn<(id: string, p: unknown) => Promise<{ ok: true }>>(async () => ({ ok: true }));
 const setOutcome = vi.fn<(prev: unknown, fd: FormData) => Promise<{ ok?: boolean; error?: string }>>(async () => ({
@@ -82,6 +83,7 @@ const row = (over: Partial<ConsultationTableRow> = {}): ConsultationTableRow => 
   hasAudio: false,
   fromPublicIntake: false,
   syncAddedAt: null,
+  makeeduId: null,
   studentId: null,
   assignedClassCount: 0,
   ...over,
@@ -120,6 +122,40 @@ describe("시트형 목록뷰 — 열·규약", () => {
     const cells = screen.getAllByRole("cell");
     expect(cells).toHaveLength(HEADS.length);
     expect(cells.map((td) => td.getAttribute("data-label"))).toEqual(HEADS);
+  });
+});
+
+describe("시트형 목록뷰 — 메이크에듀 동기화 완료 표식", () => {
+  const MARK = "메이크에듀 동기화 완료 — 누르면 메이크에듀 상담 화면을 엽니다";
+
+  it("등록 완료 단계 + makeedu에 있는 상담만 — 이름 **왼쪽**에 서고 누르면 그 상담 주소를 연다", () => {
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    render(<EnrollmentTable rows={[row({ outcome: "enrolled", makeeduId: "5528" })]} nowMs={0} canWrite={false} />);
+    const mark = screen.getByRole("link", { name: MARK });
+    const name = within(cellOf("학생이름")).getByText("선혜주");
+    expect(mark.compareDocumentPosition(name) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(mark);
+    expect(open).toHaveBeenCalledWith(
+      "https://school.makeedu.co.kr/counsel/counselList_detail.do?counselSeq=5528",
+      "_blank",
+      "noopener,noreferrer",
+    );
+    open.mockRestore();
+  });
+
+  it("반 배정 완료(등록 완료 칸)도 단다 · 다른 단계·makeedu에 없는 상담은 안 단다", () => {
+    render(
+      <EnrollmentTable
+        rows={[
+          row({ id: "a", outcome: "consulted", assignedClassCount: 1, makeeduId: "1" }),
+          row({ id: "b", outcome: "consulted", makeeduId: "2" }),
+          row({ id: "c", outcome: "enrolled", makeeduId: null }),
+        ]}
+        nowMs={0}
+        canWrite={false}
+      />,
+    );
+    expect(screen.getAllByRole("link", { name: MARK })).toHaveLength(1);
   });
 });
 

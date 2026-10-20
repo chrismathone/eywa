@@ -20,6 +20,7 @@ import { downloadCardPng } from "@/app/(print)/textbook/[id]/print/download-card
 import { RequestHistory } from "./request-history";
 import { TextbookFormFooter } from "./_form-footer";
 import { TextbookSendDialog } from "./_send-dialog";
+import { requestFingerprint, sameSavedRequest, type SavedRequest } from "./_saved-request";
 
 // 교재 요청 — ijw TextbookRequestView 구조 그대로 이식(선생님들이 익숙한 화면):
 // 좌측 폼(기본 정보 → 교재 내용) + 우측 실시간 종이 서식 미리보기 + '이미지 저장 및 기록' 단일 버튼
@@ -89,8 +90,12 @@ export function TextbookRequestClient({
   // 학부모용 문구 — 저장된 내 멘트를 불러오고(autoLoad) 입력이 멈추면 자동 저장. 발송창으로 그대로 이어진다.
   const { ment, edit: editMent } = useMentDraft({ autoLoad: true });
   const formRef = useRef<HTMLFormElement>(null);
+  const fp = requestFingerprint({ studentIds, teacherName, requestDate, bookName, bookDetail, price, notes });
   const [sending, setSending] = useState(false); // '클래스노트 발송' 경로의 저장 진행 표시
   const [notice, setNotice] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  // 마지막으로 기록한 요청 — 같은 내용으로 다른 버튼을 눌러도 새 요청을 만들지 않는다(_saved-request.ts).
+  const [saved, setSaved] = useState<SavedRequest | null>(null);
+  const [submitFp, setSubmitFp] = useState<string | null>(null); // '이미지 저장 및 기록'을 누른 순간의 폼 지문
 
   // 바로 다운로드 — 카드 데이터를 화면 밖에 렌더 → html2canvas → PNG 저장(새 탭·창 없음).
   // 여러 명 일괄 발행을 위해 **큐**: head를 렌더 → 다운로드 완료 후 slice → 다음. k는 updater에서 파생(단조).
@@ -167,6 +172,7 @@ export function TextbookRequestClient({
     setNotes("");
     setMsgHiddenFor(state); // 직전 성공/에러 문구도 함께 치움
     setNotice(null);
+    setSaved(null); // 지우고 새로 쓰면 새 요청이다
   };
 
   /**
@@ -177,6 +183,15 @@ export function TextbookRequestClient({
   async function saveAndSend() {
     const form = formRef.current;
     if (!form || sending) return;
+    const same = sameSavedRequest(saved, fp);
+    if (same) {
+      // 방금 기록한 요청 그대로 — 새로 만들면 같은 줄이 둘 생긴다(지우다 발송한 쪽을 지운 9건).
+      setMsgHiddenFor(state);
+      setNotice({ kind: "ok", text: "방금 기록한 요청을 발송합니다 — 새로 기록하지 않았어요" });
+      setSendIds(same.created.map((c) => c.id));
+      return;
+    }
+    const sentFp = fp;
     setSending(true);
     setNotice(null);
     const res = await requestTextbook(undefined, new FormData(form));
@@ -192,6 +207,7 @@ export function TextbookRequestClient({
       });
       return;
     }
+    setSaved({ fp: sentFp, created: res.created ?? [] });
     setMsgHiddenFor(state); // 직전 저장 안내와 겹치지 않게
     setNotice({ kind: "ok", text: `${ids.length}건을 기록했습니다 — 발송창에서 학부모에게 보낼 수 있어요` });
     setSendIds(ids);
@@ -212,6 +228,7 @@ export function TextbookRequestClient({
   const createdKey = created && created.length > 0 ? created[0].id : undefined;
   if (createdKey && createdKey !== handledId) {
     setHandledId(createdKey);
+    setSaved({ fp: submitFp ?? fp, created: created! });
     // 학생별 요청서 1장씩 — 서버가 반환한 각 학생 이름으로(교재·금액·담임·날짜는 공통).
     enqueueCards(
       created!.map((c) => ({
@@ -224,6 +241,28 @@ export function TextbookRequestClient({
       })),
     );
   }
+
+  // '이미지 저장 및 기록' — 방금 기록한 요청과 같으면 기록하지 않고 요청서 이미지만 다시 받는다.
+  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    const same = sameSavedRequest(saved, fp);
+    if (!same) {
+      setSubmitFp(fp);
+      return; // 평소대로 서버 액션이 기록한다
+    }
+    e.preventDefault(); // React는 onSubmit이 막으면 form action을 부르지 않는다
+    enqueueCards(
+      same.created.map((c) => ({
+        studentName: c.studentName,
+        teacherName: teacherName.trim() || requesterName,
+        requestDate: requestDate || kstToday(),
+        bookName,
+        bookDetail: bookDetail.trim() || null,
+        price: Math.max(0, Number(price) || 0),
+      })),
+    );
+    setMsgHiddenFor(state);
+    setNotice({ kind: "ok", text: "이미 기록한 요청이라 요청서 이미지만 다시 저장합니다 — 새로 기록하지 않았어요" });
+  };
 
   const showMsg = state !== undefined && state !== msgHiddenFor;
   // 필수(학생·교재명)가 다 채워져야 저장 가능 — 서버 검증(fieldErrors)과 이중, 미충족이면 버튼 비활성화.
@@ -250,6 +289,7 @@ export function TextbookRequestClient({
         <form
           ref={formRef}
           action={formAction}
+          onSubmit={onSubmit}
           className="grid gap-6 lg:grid-cols-[minmax(320px,2fr)_minmax(0,3fr)] lg:items-start"
         >
           {/* 좌: 작성 폼 (ijw 기본 정보 → 교재 내용 섹션 구조) */}
