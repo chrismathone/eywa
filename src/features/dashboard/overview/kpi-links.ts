@@ -115,6 +115,14 @@ export function consultationStatsHref(): string {
   return "/consultations/stats";
 }
 
+/**
+ * 운영실 '학습 · 학부모 보고'의 '상세' — 보고서 통계(숙제 수행 · 학부모 확인 추이 · 0388a). 과목 관리자가 고른 과목을 싣는다
+ * (통계가 운영실과 같은 `subjectScopeOf`로 그 묶음을 푼다).
+ */
+export function reportStatsHref(subject?: string | null): string {
+  return `/lesson-reports/stats${subject ? `?subject=${encodeURIComponent(subject)}` : ""}#reports`;
+}
+
 /** 그날 결석 학생(출석부). */
 export function absentDayHref(date: string): string {
   return `/attendance/${date}?status=absent`;

@@ -14,6 +14,7 @@ import {
   expenseStatsHref,
   firstClassTrendHref,
   intakeTrendHref,
+  reportStatsHref,
   absentDayHref,
   recentAbsenceRange,
   intakeDayHref,
@@ -536,5 +537,6 @@ describe("운영실 '상세' → 통계 화면", () => {
     expect(expenseStatsHref()).toBe("/billing/stats#expenses");
     // 상담 통계는 과목 묶음으로 거를 수 없어 과목을 싣지 않는다(대표 키 하나로 거르면 같은 묶음의 다른 과목 상담이 빠진다).
     expect(consultationStatsHref()).toBe("/consultations/stats");
+    expect(reportStatsHref("math")).toBe("/lesson-reports/stats?subject=math#reports");
   });
 });
