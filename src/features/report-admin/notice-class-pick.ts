@@ -9,6 +9,8 @@
  *  · 학생 다리 = 그 학생이 오늘 다니는 수학 반 중 **이 학생의 살아 있는 반 보드**가 있는 반(연결 0302a + 원아 매칭 전부 ok) — `live`.
  *  · 선생님 다리 = 보내는 선생님이 그 반 담당(담임 · 오늘 유효한 교시 담당 · 오늘 위임) — `taught`.
  *  · 둘 다 맞는 반이 하나면 그 반. 여럿이면(같은 선생님의 정규 반 + 개별 반 등) 화면이 고른 반 → 담임인 반 → 반 이름순.
+ *    🔴 화면이 고른 반이 아니면 **JJ 반(반 이름에 `JJ` 코드)은 후순위** — 원장 2026-10-20 *"제이제이를 후순위로 두도록"*
+ *    (이강우: 같은 선생님의 `초등M 개별 JJ2K`·`초등M 초6 BS2P` 중 이름순으로 JJ2K가 골라졌다). 담임 판정보다 앞선다.
  *    어느 반으로 가도 같은 학생의 같은 원아에게 가므로 오발송이 아니다 — 고르는 규칙만 정해 둔다(매번 같은 반).
  *  · 보내는 선생님이 없는 발송(사무실)은 선생님 다리 대신 **화면이 고른 반**(그 반 명단에서 뽑은 학생)을 쓴다.
  *    그것도 없으면 학생의 반이 하나일 때만 그 반, 여럿이면 반 이름순 첫 반.
@@ -35,7 +37,19 @@ export type NoticeClassPick =
   | { ok: true; classId: string; className: string; boardName: string; via: "teacher" | "selected" | "only" | "first" }
   | { ok: false; reason: NoticeClassFail };
 
+/** JJ 반 — 반 이름의 코드가 `JJ`로 시작(`초등M 개별 JJ2K` · `중등M 중2 JJPS`). 화면이 고르지 않았으면 후순위. */
+export const isJjClassName = (name: string): boolean => /(^|[^A-Za-z])JJ/.test(name);
+
 const byName = (a: NoticeClassCandidate, b: NoticeClassCandidate) => a.className.localeCompare(b.className, "ko") || a.classId.localeCompare(b.classId);
+/** JJ 반을 뒤로, 그 안에서는 반 이름순. */
+const byPriority = (a: NoticeClassCandidate, b: NoticeClassCandidate) =>
+  Number(isJjClassName(a.className)) - Number(isJjClassName(b.className)) || byName(a, b);
+/** 담임 반 우선 — 단 JJ가 아닌 반이 있으면 JJ 담임 반보다 그 반이 먼저다. */
+const preferred = (pool: readonly NoticeClassCandidate[]) => {
+  const head = pool.filter((c) => !isJjClassName(c.className));
+  const tier = head.length ? head : pool;
+  return tier.find((c) => c.homeroom) ?? tier[0]!;
+};
 
 /** 선생님 다리를 어떻게 쓸지 — strict = 문(강사 본인 발송) · prefer = 우선순위(사무실이 주인 대신) · none = 선생님 없는 발송. */
 export type NoticeTeacherMode = "strict" | "prefer" | "none";
@@ -52,7 +66,7 @@ export function pickNoticeClass(input: {
   /** 화면이 고른 반(그 학생을 뽑은 반 — 여러 반에서 뽑혔으면 순서대로). 후보 안에 있을 때만 쓴다. */
   hints?: readonly string[];
 }): NoticeClassPick {
-  const live = [...input.live].sort(byName);
+  const live = [...input.live].sort(byPriority);
   if (!live.length) return { ok: false, reason: "no_class_board" };
   const ok = (c: NoticeClassCandidate, via: "teacher" | "selected" | "only" | "first"): NoticeClassPick => ({
     ok: true, classId: c.classId, className: c.className, boardName: c.boardName, via,
@@ -66,7 +80,7 @@ export function pickNoticeClass(input: {
   };
   if (input.teacher !== "none") {
     const mine = live.filter((c) => c.taught);
-    if (mine.length) return ok(hinted(mine) ?? mine.find((c) => c.homeroom) ?? mine[0]!, "teacher");
+    if (mine.length) return ok(hinted(mine) ?? preferred(mine), "teacher");
     if (input.teacher === "strict") return { ok: false, reason: input.teachesStudent ? "no_class_board" : "not_my_class" };
   }
   const sel = hinted(live);

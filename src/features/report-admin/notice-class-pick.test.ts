@@ -1,6 +1,6 @@
 // 원생 개별 공지·교재요청서를 어느 반 보드로 보낼지 — 삼자 일치(보내는 선생님 – 반 – 학생) 판정.
 import { describe, expect, it } from "vitest";
-import { classTargetKey, pickNoticeClass, type NoticeClassCandidate } from "./notice-class-pick";
+import { classTargetKey, isJjClassName, pickNoticeClass, type NoticeClassCandidate } from "./notice-class-pick";
 
 const cls = (over: Partial<NoticeClassCandidate> & { classId: string }): NoticeClassCandidate => ({
   className: over.classId,
@@ -54,6 +54,34 @@ describe("선생님 없는 발송(none) — 화면이 고른 반", () => {
   it("고른 반에 반 보드가 없으면 학생의 다른 반 보드로(하나면 그 반 · 여럿이면 이름순 첫 반)", () => {
     expect(pickNoticeClass({ live: [cls({ classId: "가반" })], teacher: "none", hints: ["없는반"] })).toMatchObject({ ok: true, classId: "가반", via: "only" });
     expect(pickNoticeClass({ live: [cls({ classId: "나반" }), cls({ classId: "가반" })], teacher: "none" })).toMatchObject({ ok: true, classId: "가반", via: "first" });
+  });
+});
+
+describe("JJ 반은 후순위(원장 2026-10-20)", () => {
+  const jj = cls({ classId: "jj", className: "초등M 개별 JJ2K", taught: true, homeroom: true });
+  const bs = cls({ classId: "bs", className: "초등M 초6 BS2P", taught: true, homeroom: true });
+  it("🔴 이강우 실례 — 같은 선생님 담임 반 둘(JJ2K·BS2P)이면 이름순이 아니라 BS2P", () => {
+    for (const teacher of ["strict", "prefer"] as const)
+      expect(pickNoticeClass({ live: [jj, bs], teacher })).toMatchObject({ ok: true, classId: "bs", via: "teacher" });
+  });
+  it("JJ 반만 담임이어도 JJ가 아닌 내 반이 먼저다", () => {
+    expect(pickNoticeClass({ live: [jj, { ...bs, homeroom: false }], teacher: "strict" })).toMatchObject({ classId: "bs" });
+  });
+  it("JJ 반밖에 없으면 그 반으로 보낸다(막지 않는다)", () => {
+    expect(pickNoticeClass({ live: [jj], teacher: "strict" })).toMatchObject({ ok: true, classId: "jj" });
+    expect(pickNoticeClass({ live: [jj, { ...bs, taught: false, homeroom: false }], teacher: "strict" })).toMatchObject({ classId: "jj" });
+  });
+  it("화면이 고른 반은 JJ여도 그대로", () => {
+    expect(pickNoticeClass({ live: [jj, bs], teacher: "strict", hints: ["jj"] })).toMatchObject({ classId: "jj" });
+    expect(pickNoticeClass({ live: [jj, bs], teacher: "none", hints: ["jj"] })).toMatchObject({ classId: "jj", via: "selected" });
+  });
+  it("선생님 없는 발송도 JJ가 아닌 반이 첫 반", () => {
+    const plain = [jj, bs].map((c) => ({ ...c, taught: false, homeroom: false }));
+    expect(pickNoticeClass({ live: plain, teacher: "none" })).toMatchObject({ classId: "bs", via: "first" });
+  });
+  it("JJ 판정 = 반 이름의 코드가 JJ로 시작", () => {
+    for (const n of ["초등M 개별 JJ2K", "중등M 중2 JJPS", "중등M 초6 JJ2A", "초등M 개별JJ1E"]) expect(isJjClassName(n)).toBe(true);
+    for (const n of ["초등M 초6 BS2P", "초등M 개별 EL1K", "고등M 개별 TP4E", "내신주말특강(일)"]) expect(isJjClassName(n)).toBe(false);
   });
 });
 
