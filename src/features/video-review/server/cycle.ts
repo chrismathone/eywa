@@ -1,4 +1,5 @@
 import "server-only";
+import { devCliEnabled } from "@/lib/ai/dev-cli";
 import { reportWarning } from "@/lib/observability/report-error";
 import { collectJudgeBatches, collectVerifyBatches, submitJudgeBatch, submitVerifyBatch } from "./batch";
 import { enqueueNewVideos } from "./queue";
@@ -55,7 +56,8 @@ export async function runVideoReviewCycle(tenantId: string, now: Date = new Date
   await step("judged", () => collectJudgeBatches(tenantId));
   await step("verified", () => collectVerifyBatches(tenantId));
   await step("verifySent", () => submitVerifyBatch(tenantId));
-  if (inJudgeWindow(now)) {
+  // 개발 CLI(내부 요금제)로 돌 때는 배치 할인도 밤도 의미가 없다 — 낮에도 보낸다(원장 2026-10-21 밀린 영상 전부 분석). 운영에선 devCliEnabled()가 늘 false.
+  if (inJudgeWindow(now) || devCliEnabled()) {
     await step("judgeSent", async () => {
       let total = 0;
       for (let i = 0; i < MAX_JUDGE_BATCHES; i++) { const n = await submitJudgeBatch(tenantId); total += n; if (n === 0) break; }

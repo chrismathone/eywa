@@ -124,13 +124,21 @@ function devInput(params: DevParams) {
   return { model: params.model, prompt, system: typeof params.system === "string" ? params.system : undefined, images };
 }
 
+/** 개발 CLI를 나란히 돌리는 수 — 한 건에 1분쯤이라 밀린 영상 수백 건을 하루 안에 끝내려면 몇 개는 겹쳐야 한다(원장 2026-10-21 "전부 분석해버려"). */
+const DEV_BATCH_CONCURRENCY = 3;
+
 async function runDevBatch(requests: { custom_id: string; params: DevParams }[]): Promise<string> {
   const id = `${DEV_BATCH_PREFIX}${randomUUID().replace(/-/g, "")}`;
   const out: Record<string, { ok: true; text: string; model: string } | { ok: false; error: string }> = {};
-  for (const r of requests) {
-    try { out[r.custom_id] = { ok: true, text: await runDevCli(devInput(r.params)), model: r.params.model }; }
-    catch (e) { out[r.custom_id] = { ok: false, error: e instanceof Error ? e.message : String(e) }; }
-  }
+  let next = 0;
+  const lane = async () => {
+    while (next < requests.length) {
+      const r = requests[next++];
+      try { out[r.custom_id] = { ok: true, text: await runDevCli(devInput(r.params)), model: r.params.model }; }
+      catch (e) { out[r.custom_id] = { ok: false, error: e instanceof Error ? e.message : String(e) }; }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(DEV_BATCH_CONCURRENCY, requests.length) }, lane));
   await mkdir(devBatchDir(), { recursive: true });
   await writeFile(join(devBatchDir(), `${id}.json`), JSON.stringify(out));
   return id;
