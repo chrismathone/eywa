@@ -56,6 +56,8 @@ describe("bookWindow", () => {
     });
     expect(w).toMatchObject({ planned: 5, done: 6 }); // 수업일 8일 중 5일 지남 → 8×5/8 · 3권 4 + 4권 2
     expect(w!.position).toMatchObject({ title: "가우스 중2-2 4권", lessonNo: 2 });
+    expect(w!.nextClassDate).toBe("2026-10-15");
+    expect(w!.books.map((b) => b.unit)).toEqual(["이등변삼각형의 성질", "삼각형의 무게중심"]);
   });
   it("4권 창인데 아직 3권에 있으면 0", () => {
     const w = bookWindow({

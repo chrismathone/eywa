@@ -1,0 +1,91 @@
+/* 학생 계획 카드(원장 2026-10-20 카드 시안) — 면은 흰색, 구분은 테두리, 진도는 네이비, 밀린 차시는 빨간 빗금. */
+.card {
+  --late-hatch: repeating-linear-gradient(135deg, color-mix(in srgb, var(--danger) 62%, var(--card)) 0 3px, color-mix(in srgb, var(--danger) 18%, var(--card)) 3px 6px);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.card[data-ended] { opacity: 0.55; }
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--line);
+}
+.who { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; min-width: 0; }
+.name { font-size: 19px; font-weight: 750; letter-spacing: -0.03em; cursor: pointer; }
+.name:hover { color: var(--primary); }
+.meta { font-size: var(--text-sm); color: var(--text-dim); }
+.badge {
+  margin-left: auto;
+  padding: 5px 10px;
+  border-radius: 8px;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--text-dim);
+  background: var(--bg-soft);
+}
+.badge[data-tone="behind"] { color: var(--danger); background: var(--danger-soft); }
+.badge[data-tone="on"], .badge[data-tone="done"] { color: var(--green); background: var(--green-soft); }
+.badge[data-tone="ahead"] { color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, var(--card)); }
+
+.sec { display: grid; grid-template-columns: 136px minmax(0, 1fr); border-bottom: 1px solid var(--line-faint); }
+.sec:last-child { border-bottom: 0; }
+.lab { padding: 16px; background: var(--bg-soft); border-right: 1px solid var(--line-faint); }
+.lab b { display: block; font-size: var(--text-sm); }
+.lab span { display: block; margin-top: 4px; font-size: var(--text-xs); line-height: 1.45; color: var(--text-faint); }
+.body { padding: 16px 20px; min-width: 0; }
+.row { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.row h4 { font-size: var(--text-base); font-weight: 700; }
+.row h5 { font-size: var(--text-sm); font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.right { margin-left: auto; font-size: var(--text-sm); color: var(--text-dim); white-space: nowrap; }
+.right b { color: var(--text); font-weight: 700; }
+.empty { font-size: var(--text-sm); color: var(--text-faint); }
+
+/* 전체 목표 레일 — 네이비 실제 · 빨간 빗금 = 계획보다 밀린 구간 · 검은 선 = 오늘 계획 */
+.rail { position: relative; height: 8px; margin: 32px 8px 10px; border-radius: 99px; background: var(--bg-soft); }
+.fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 99px; background: var(--primary); }
+.late { position: absolute; top: 0; bottom: 0; background: var(--late-hatch); border-radius: 0 99px 99px 0; }
+.ahead { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--primary) 35%, var(--card)); }
+.plan { position: absolute; top: -6px; bottom: -6px; width: 2px; margin-left: -1px; background: var(--text); }
+.plan em { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 3px; font-style: normal; font-size: var(--text-xs); color: var(--text-dim); white-space: nowrap; }
+.dot { position: absolute; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; background: var(--card); border: 4px solid var(--primary); }
+.ends { display: flex; justify-content: space-between; gap: 16px; font-size: var(--text-sm); color: var(--text-dim); }
+.ends b { display: block; font-size: var(--text-sm); color: var(--text); }
+.ends div:last-child { text-align: right; }
+.facts { display: flex; flex-wrap: wrap; gap: 6px 22px; margin-top: 12px; font-size: var(--text-sm); color: var(--text-dim); }
+.facts b { margin-left: 5px; color: var(--text); }
+
+/* 교재 타일 */
+.books { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-top: 12px; }
+.bk { padding: 12px 14px; border: 1px solid var(--line-faint); border-radius: 10px; background: var(--card); }
+.bar { position: relative; height: 8px; margin: 12px 0 8px; border-radius: 99px; background: var(--bg-soft); overflow: hidden; }
+.bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--primary); }
+.bar s { position: absolute; top: 0; bottom: 0; background: var(--late-hatch); }
+.bk small { display: flex; justify-content: space-between; gap: 8px; font-size: var(--text-xs); color: var(--text-faint); }
+.bk em, .sum em { font-style: normal; font-weight: 700; color: var(--danger); }
+.sum { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line-faint); font-size: var(--text-sm); font-weight: 700; }
+.sum span { margin-left: auto; font-weight: 500; color: var(--text-dim); }
+
+/* 오늘 기준 타일 */
+.tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) 120px; gap: 8px; margin-top: 12px; }
+.t { padding: 12px 14px; border-radius: 8px; border-left: 3px solid var(--line-strong, #c3c8d1); background: var(--bg-soft); min-width: 0; }
+.t span { font-size: var(--text-xs); color: var(--text-dim); }
+.t b { display: block; margin-top: 6px; font-size: var(--text-base); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t small { display: block; margin-top: 2px; font-size: var(--text-xs); color: var(--text-faint); }
+.t[data-kind="real"] { border-left-color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, var(--card)); }
+.t[data-kind="next"] { border-left-color: var(--green); background: var(--green-soft); }
+.open { border: 1px solid var(--line); border-radius: 8px; background: var(--card); font-size: var(--text-sm); font-weight: 600; cursor: pointer; }
+.open:hover { border-color: var(--primary); color: var(--primary); }
+
+@media (max-width: 760px) {
+  .sec { grid-template-columns: 1fr; }
+  .lab { border-right: 0; border-bottom: 1px solid var(--line-faint); padding: 10px 16px; }
+  .lab span { display: none; }
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .open { min-height: 44px; }
+}

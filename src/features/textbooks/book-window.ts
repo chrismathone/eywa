@@ -20,8 +20,8 @@ export const BOOK_WINDOW_MONTHS = 3;
 export type BookOrder = { bookName: string; date: string };
 
 export type BookWindow = {
-  /** 창이 묶는 권들(권 번호 순). */
-  books: { id: string; title: string; lessons: number }[];
+  /** 창이 묶는 권들(권 번호 순). `unit` = 그 권 첫 차시의 첫 소단원(카드 타일 이름). */
+  books: { id: string; title: string; lessons: number; unit: string | null }[];
   /** 창의 시작 = 첫 주문일 + 7일. */
   startDate: string;
   endDate: string;
@@ -41,6 +41,8 @@ export type BookWindow = {
   referenceDate: string;
   /** 진도를 준 기록. */
   position: (BookPosition & { title: string }) | null;
+  /** 기준일 다음 실제 수업일(60일 안). 시간표를 모르면 null. */
+  nextClassDate: string | null;
 };
 
 /** 같은 학기 묶음 열쇠 — `가우스|중2-2|3` → `가우스|중2-2`. */
@@ -124,7 +126,12 @@ export function bookWindow(args: {
     done = index < 0 ? 0 : books.slice(0, index).reduce((n, w) => n + w.lessons.length, 0) + p.lessonNo;
   }
   return {
-    books: books.map((b) => ({ id: b.id, title: b.title, lessons: b.lessons.length })),
+    books: books.map((b) => ({
+      id: b.id,
+      title: b.title,
+      lessons: b.lessons.length,
+      unit: (b.lessons[0]?.progress ?? "").split(" / ")[0]?.trim() || null,
+    })),
     grade: setKey.split("|")[1]!.replace(/-\d+$/, ""),
     units: books.flatMap((b) => b.lessons.flatMap((l) => (l.progress ?? "").split(" / ").map((u) => u.trim()).filter(Boolean))),
     startDate,
@@ -136,6 +143,7 @@ export function bookWindow(args: {
     planned,
     referenceDate,
     position,
+    nextClassDate: classDates(addDays(referenceDate, 1), addDays(referenceDate, 60))[0] ?? null,
   };
 }
 
