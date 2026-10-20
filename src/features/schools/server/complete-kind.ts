@@ -2,7 +2,9 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { normalizeSchoolName, schoolKindCandidate, type SchoolSaveAlias } from "../school-name";
+import { fetchAllPaged } from "@/lib/supabase/batch";
+
+import { fillSchoolKind, normalizeSchoolName, schoolKindCandidate, type SchoolSaveAlias } from "../school-name";
 
 /**
  * 저장할 학교 표기에 빠진 학교급을 채운다(`칠성` + 학년 `초5` → `칠성초`). 후보가 그 지점 학교알리미 목록
@@ -31,6 +33,13 @@ export async function completeSchoolKind(
     console.error("[completeSchoolKind]", error.message);
     return school;
   }
-  if (!data || data.length === 0) return school;
-  return aliases.find((a) => a.from === candidate)?.to ?? candidate;
+  return fillSchoolKind(school, grade, new Set((data ?? []).map((r) => r.name_key as string)), aliases);
+}
+
+/** 그 지점 학교알리미 학교 키 전부(여러 해가 겹쳐 있어 중복은 Set이 접는다) — 줄이 많은 엑셀 가져오기가 한 번만 읽는다. */
+export async function loadSchoolKeys(client: Pick<SupabaseClient, "from">, tenantId: string): Promise<Set<string>> {
+  const rows = await fetchAllPaged<{ name_key: string }>((from, to) =>
+    client.from("school_enrollment_stats").select("name_key").eq("tenant_id", tenantId).order("id").range(from, to),
+  );
+  return new Set(rows.map((r) => r.name_key));
 }

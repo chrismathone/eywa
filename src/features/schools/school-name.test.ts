@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canonicalSchoolName, isSchoolLikeKey, normalizeSchoolName, schoolKindCandidate } from "./school-name";
+import { canonicalSchoolName, fillSchoolKind, isSchoolLikeKey, normalizeSchoolName, schoolKindCandidate } from "./school-name";
 
 // 아래 이름은 전부 **실제 값**이다 — 왼쪽은 학교알리미 2026 공시(대구), 오른쪽은 aywa 학생 입력값.
 // 지어낸 예시로 테스트하면 실데이터에서 어떻게 깨지는지 영영 모른다.
@@ -163,5 +163,17 @@ describe("schoolKindCandidate", () => {
     expect(schoolKindCandidate("예비초1", "초1")).toBeNull();
     expect(schoolKindCandidate("자퇴(검정고시)", "고2")).toBeNull();
     expect(schoolKindCandidate("구미 해마루", "중1")).toBeNull();
+  });
+});
+
+describe("fillSchoolKind", () => {
+  const keys = new Set(["칠성초", "일중"]);
+  const aliases = [{ from: "일중", to: "대구일중" }];
+  it("알려진 학교일 때만 급을 채우고 저장 별칭을 다시 건다", () => {
+    expect(fillSchoolKind("칠성", "초5", keys, aliases)).toBe("칠성초");
+    expect(fillSchoolKind("일", "중1", keys, aliases)).toBe("대구일중");
+    expect(fillSchoolKind("아무개", "초4", keys, aliases)).toBe("아무개");
+    expect(fillSchoolKind("칠성초", "초5", keys, aliases)).toBe("칠성초");
+    expect(fillSchoolKind(null, "초5", keys, aliases)).toBeNull();
   });
 });
