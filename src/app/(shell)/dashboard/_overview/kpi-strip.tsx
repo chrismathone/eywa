@@ -7,11 +7,12 @@ import { KPI_KEYS, type KpiKey } from "@/features/dashboard/overview/layout";
 import { todayLevelTestList } from "@/features/dashboard/overview/display";
 import { monthAheadWindow, windowUntilLabel } from "@/features/dashboard/overview/upcoming-window";
 import {
+  firstClassTrendHref,
+  studentsFirstClassHref,
   intakeTrendHref,
   recentAbsenceRange,
   makeupWeekHref,
   studentsStatsHref,
-  studentsFirstClassHref,
   withdrawalsMonthHref,
 } from "@/features/dashboard/overview/kpi-links";
 import { countWithdrawalPrograms } from "@/features/withdrawals/window";
@@ -260,7 +261,12 @@ export function kpiCards(snapshot: OverviewSnapshot, opts: KpiCardOptions = {}):
           error={v.firstClass.error}
           popupTitle="오늘 첫 수업"
           jump={
-            can("students") ? { href: studentsFirstClassHref(today), label: "원생목록에서 오늘 첫 수업 보기" } : null
+            !can("students")
+              ? null
+              : snapshot.teacherView
+                ? // 강사 범위엔 원생 통계가 없다 — 종전처럼 담당 학생의 오늘 첫 수업 목록으로.
+                  { href: studentsFirstClassHref(today), label: "원생목록에서 오늘 첫 수업 보기" }
+                : { href: firstClassTrendHref(snapshot.view?.activeSubject), label: "원생 통계에서 첫 수업 추이 보기" }
           }
         >
           <FirstClassPopup rows={firsts} subjectLabels={snapshot.subjects} canOpen={can("students")} />

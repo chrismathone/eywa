@@ -47,6 +47,15 @@ export function studentsUnenrolledHref(): string {
   return studentsEnrolledHref().replace("subject=all", `subject=${NO_SUBJECT}`);
 }
 
+/**
+ * KPI '오늘첫수업' ↗ — 원생 통계의 **첫 수업 추이**를 이번 달 일별로(원장 2026-10-20 *"오늘 첫수업도 마찬가지"*). 오늘 칸 = 카드 숫자.
+ * 오늘 첫 수업 학생 목록(옛 목적지 `studentsFirstClassHref`)은 그 카드 머리 링크로 남는다.
+ */
+export function firstClassTrendHref(subject?: string | null): string {
+  // 과목 관리자가 운영실에서 고른 과목을 싣는다(빠지면 첫 담당 과목으로 열려 카드와 숫자가 갈린다 — 리뷰 2026-10-20).
+  return `/students/stats?fc=day${subject ? `&subject=${encodeURIComponent(subject)}` : ""}#first`;
+}
+
 /** 그날 첫 수업 학생(첫 등원 + 새 과목) — 상태는 전체(첫 수업 학생의 상태를 가리지 않는다). */
 export function studentsFirstClassHref(date: string): string {
   return `/students?first=${date}&status=all&${STUDENT_AXES}`;

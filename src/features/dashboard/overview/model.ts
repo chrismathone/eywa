@@ -253,6 +253,8 @@ export type OverviewSnapshot = {
    * 갱신 스냅샷에도 실려 와서 설정에서 배치를 바꾸면 다음 갱신에 화면이 따라온다(scope에 배치 판이 섞여 있다).
    */
   view?: import("@/features/dashboard/layout/view").ResolvedView;
+  /** 강사 범위(강사·강사뷰)로 센 화면 — 원생 통계처럼 강사에게 안 보이는 상세 대신 종전 목록으로 보낸다(없음 = 학원 범위). */
+  teacherView?: true;
   sections: Sections;
   /** 과목별 값 표 — **미리보기 원본(`loadOverview({ full })`)에만** 있다. 편집기가 과목 관리자 배치를 그 과목 값으로 그린다. */
   slices?: import("@/features/dashboard/layout/slices").SliceTable;

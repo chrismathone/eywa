@@ -1153,6 +1153,7 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
   return {
     scope: `${user.tenantId}:${user.id}:${user.systemRole}:${teacherId ?? "all"}:${view.rev}${options.full ? ":full" : ""}`,
     tenantId: user.tenantId,
+    ...(teacherId ? { teacherView: true as const } : {}),
     academy: settings.profile.name,
     today,
     requestedAt,

@@ -24,7 +24,7 @@ const p = (key: string, count: number): Point => ({ key, label: key, date: key, 
 
 describe("parseStudentStatsPrefs", () => {
   it("모르는 값은 기본값", () => {
-    const base = { range: "all", view: "subject", off: [], flowRange: "all", trendKind: "line", flowKind: "bar", historyView: "yearly", courseRange: "all", courseKind: "line", courseOff: [] };
+    const base = { range: "all", view: "subject", off: [], flowRange: "all", trendKind: "line", flowKind: "bar", historyView: "yearly", courseRange: "all", courseKind: "line", courseOff: [], firstMode: "month" };
     expect(parseStudentStatsPrefs(undefined)).toEqual(base);
     expect(parseStudentStatsPrefs({ range: "m36", view: 3, off: "x", flowRange: 7, trendKind: "pie", historyView: "weekly" })).toEqual(base);
   });
@@ -32,7 +32,7 @@ describe("parseStudentStatsPrefs", () => {
     expect(
       parseStudentStatsPrefs({
         range: "w26", view: "mix", off: ["total", "total", 3, "subject:math"], flowRange: "m12", trendKind: "bar", flowKind: "line", historyView: "monthly",
-        courseRange: "y", courseKind: "bar", courseOff: ["program:eie", "program:eie"],
+        courseRange: "y", courseKind: "bar", courseOff: ["program:eie", "program:eie"], firstMode: "range",
       }),
     ).toEqual({
       range: "w26",
@@ -45,6 +45,7 @@ describe("parseStudentStatsPrefs", () => {
       courseRange: "y",
       courseKind: "bar",
       courseOff: ["program:eie"],
+      firstMode: "range",
     });
   });
 });

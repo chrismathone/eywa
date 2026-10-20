@@ -1,5 +1,10 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-10-20 — 첫 수업 추이(원생 통계)
+
+- 원장 *"오늘 첫수업도 마찬가지"* → 원생 통계 '첫 수업 추이'(`first-class-trend.ts` · 카드 `first-class-board.tsx` · 주소 `fc…` · 계정 귀속 `studentStats.firstMode`). 날마다 운영실 '오늘첫수업'과 같은 판정(`resolveFirstClasses` — 첫 등원 + 새 과목 · 반 추가·반이동 제외) → 오늘 칸 = 카드 · 달 칸 = 날마다 센 수의 합. 재료 = `loadRangeEnrollmentRows`(기간 안 시작 수강 학생 → 수강 전건 · 왕복 2회). 에이와 수강 기록이 갖춰지기 전 달(`trustFrom`)은 그리지 않는다. 과목 관리자는 그 과목 첫 수업만(`subjectScopeOf`).
+- 운영실 '오늘첫수업' ↗ = `/students/stats?fc=day#first`(고른 과목을 싣는다) · 강사 범위(`snapshot.teacherView`)는 종전 원생목록 명단. 오늘 명단은 카드 머리 링크(과목 관리자 화면엔 없음 — 명단을 과목으로 좁히지 못한다). 과목 전환은 기간을 유지.
+
 ## 2026-10-20 — 수납 통계(청구·수납 추이)
 
 - 원장 *"청구수납에 대해서도 상세 추이를 볼 수 있게. 지금 수납 상세 페이지로 이동하는데"* → `/billing/stats`(청구월별 실청구 · 수납 · 미수 · 12/24개월 · 계정 귀속 `ui_prefs.billingStats.mode`). 운영실 '6개월 청구 · 수납'·'수납 현황' 상세 = 여기(`billingStatsHref` · 과목 관리자가 고른 과목을 싣는다). 수치 표의 달 → 수납관리 그 달 목록.

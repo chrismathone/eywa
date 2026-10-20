@@ -1,4 +1,5 @@
 import type { PillColor } from "@/components/atoms/pill";
+import { parsePeriodMode, type PeriodMode } from "@/features/stats/period";
 
 /**
  * 원생 통계 화면(`/students/stats`)의 순수 규칙 — 보기 범위·선 고르기·과목 색·요약 수치·보기 설정 파싱(Vitest).
@@ -38,9 +39,11 @@ export type StudentStatsPrefs = {
   historyView: HistoryView;
   /** 강좌수 추이(원장 2026-10-20) — 기간 · 그래프 종류 · 꺼 둔 선(`total` · `program:<프로그램>`). */
   courseRange: TrendRange; courseKind: ChartKind; courseOff: string[];
+  /** 첫 수업 추이(원장 2026-10-20) — 보기 방식(12·24개월 · 일별 · 구간). 고른 달·구간은 남기지 않는다(`period.ts`). */
+  firstMode: PeriodMode;
 };
 export type HistoryView = "yearly" | "monthly";
-export const DEFAULT_STUDENT_STATS_PREFS: StudentStatsPrefs = { range: "all", view: "subject", off: [], flowRange: "all", trendKind: "line", flowKind: "bar", historyView: "yearly", courseRange: "all", courseKind: "line", courseOff: [] };
+export const DEFAULT_STUDENT_STATS_PREFS: StudentStatsPrefs = { range: "all", view: "subject", off: [], flowRange: "all", trendKind: "line", flowKind: "bar", historyView: "yearly", courseRange: "all", courseKind: "line", courseOff: [], firstMode: "month" };
 
 const isRange = (v: unknown): v is TrendRange => TREND_RANGES.includes(v as TrendRange);
 
@@ -59,6 +62,7 @@ export function parseStudentStatsPrefs(raw: unknown): StudentStatsPrefs {
     courseRange: isRange(o.courseRange) ? o.courseRange : "all",
     courseKind: o.courseKind === "bar" ? "bar" : "line",
     courseOff: offOf(o.courseOff),
+    firstMode: parsePeriodMode(o.firstMode) ?? "month",
   };
 }
 

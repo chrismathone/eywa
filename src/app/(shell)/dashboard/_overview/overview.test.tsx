@@ -440,9 +440,8 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     expect(href("이번 달 퇴원·수업종료 보기")).toBe("/withdrawals?type=all&range=month&month=2026-09");
     // 신규문의 ↗ = 통계 보기의 신규 문의 추이(이번 달 일별 — 오늘 칸 = 카드 숫자 · 원장 2026-10-20).
     expect(href("신규 콜&상담 통계에서 문의 추이 보기")).toBe("/enrollment?view=stats&trend=day&from=dashboard#intake");
-    expect(href("원생목록에서 오늘 첫 수업 보기")).toBe(
-      "/students?first=2026-09-10&status=all&subject=all&grade=all&teacher=all&noenr=0&from=dashboard",
-    );
+    // 오늘첫수업 ↗ = 원생 통계의 첫 수업 추이(이번 달 일별 — 오늘 칸 = 카드 · 원장 2026-10-20). 그날 학생 목록은 그 카드 머리 링크.
+    expect(href("원생 통계에서 첫 수업 추이 보기")).toBe("/students/stats?fc=day#first");
     // 최근 결석은 ↗가 없다 — 7일을 한 번에 보이는 출결 화면이 아직 없다(하루 결석 보기로 보내면 숫자가 갈린다).
     expect(screen.queryByRole("link", { name: /결석 학생 보기/ })).toBeNull();
     cleanup();

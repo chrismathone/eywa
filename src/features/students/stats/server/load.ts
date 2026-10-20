@@ -24,6 +24,10 @@ import { parseStudentStatsPrefs, type FlowRow, type StudentStatsPrefs } from "..
 import { loadStudentHistory, type StudentHistory } from "./history";
 import { withoutPaying } from "../history";
 import { loadRecordCoverage } from "@/features/dashboard/overview/record-coverage";
+import { createClient } from "@/lib/supabase/server";
+import { loadRangeEnrollmentRows } from "@/features/dashboard/server/day-arrivals-query";
+import { hasPeriodParams, paramsForMode, parseStatsPeriod, type PeriodParams, type StatsPeriod } from "@/features/stats/period";
+import { firstClassTrend, type FirstClassTrend } from "../first-class-trend";
 
 /** 한 구역의 결과 — 실패는 0이 아니라 '못 불러옴'으로(운영실 Section과 같은 뜻). */
 export type Part<T> = { data: T; error: false } | { data: null; error: true };
@@ -63,6 +67,9 @@ export type StudentStats = {
    * '수업료가 청구된 학생' 칸은 **수납 권한이 있을 때만** 싣는다(청구는 수납 역할만 읽는 표 — 0158a · 적대 재리뷰 2026-10-20). 빼면 `payingHidden`.
    */
   history: Part<StudentHistory & { payingHidden: boolean }> | null;
+  /** 첫 수업 추이(원장 2026-10-20) — 운영실 '오늘첫수업'과 같은 판정을 날마다(`first-class-trend.ts`). `period` = 실제로 센 기간. */
+  firstClass: Part<FirstClassTrend> | null;
+  firstPeriod: StatsPeriod;
 };
 
 type User = NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>;
@@ -140,7 +147,7 @@ export async function subjectScopeOf(user: User, settings: Settings, requested?:
  * 구역마다 따로 실패한다(한 구역이 깨져도 나머지는 보인다). 독립 조회는 함께 띄운다(B4).
  * 호출부가 `requireAccess("students")`를 먼저 지난다.
  */
-export async function loadStudentStats(requestedSubject?: string): Promise<StudentStats> {
+export async function loadStudentStats(requestedSubject?: string, firstParams: PeriodParams = {}): Promise<StudentStats> {
   const today = kstToday();
   const [user, teacherId, prefsRaw, settings] = await Promise.all([getCurrentUser(), effectiveTeacherId(), readMyUiPrefs(), getTenantSettings()]);
   if (!user) throw new Error("로그인이 필요합니다");
@@ -148,7 +155,9 @@ export async function loadStudentStats(requestedSubject?: string): Promise<Stude
   const canBilling = canAccessTenant(user.systemRole, "billing").catch(() => false);
   const prefs = parseStudentStatsPrefs(prefsRaw.studentStats);
   const eieOn = isModuleEnabled(settings.modules.disabled, "eie");
-  const base = { today, prefs, eieOn, scope: null, scopeEmpty: false, bounds: { recordsFrom: null, breakdownFrom: null, createdMonth: null, trustFrom: null }, flow: null, trend: null, courses: null, history: null };
+  // 첫 수업 기간 — 주소(`fc…`)가 이기고, 없으면 계정에 남긴 보기 방식(`period.ts`).
+  const firstPeriod = parseStatsPeriod(hasPeriodParams(firstParams) ? firstParams : paramsForMode(prefs.firstMode, today), today);
+  const base = { today, prefs, eieOn, scope: null, scopeEmpty: false, bounds: { recordsFrom: null, breakdownFrom: null, createdMonth: null, trustFrom: null }, flow: null, trend: null, courses: null, history: null, firstClass: null, firstPeriod };
   if (teacherId) return { ...base, teacherScoped: true };
 
   // 기록 범위(수업을 시작한 학생 · 에이와 기록이 갖춰진 달) — 월별 기록과 경계가 같이 쓴다(한 번만 · 5분 캐시). 실패하면 종전대로.
@@ -173,7 +182,7 @@ export async function loadStudentStats(requestedSubject?: string): Promise<Stude
   const programSubjects = settings.operations.subjects.map((s) => ({ key: s.key, label: s.label }));
   // 범위(과목 관리자 · 경계)를 확인하지 못했으면 숫자 구역은 '못 불러옴'으로(넓혀서 보이지 않는다).
   const scopedPart = <T,>(name: string, load: () => Promise<T>) => part(name, () => (fail ? Promise.reject(new Error("통계 범위를 확인하지 못했습니다")) : load()));
-  const [flow, trend, courses, history] = await Promise.all([
+  const [flow, trend, courses, history, firstClass] = await Promise.all([
     scopedPart("flow", async () => {
       const compute = await loadMonthlyChanges(today, null, getWithdrawalsInWindow(fromDate, today), !!scoped, DETAIL_MONTHS, !scoped, coverage);
       return compute(scoped?.pred ?? null);
@@ -183,6 +192,12 @@ export async function loadStudentStats(requestedSubject?: string): Promise<Stude
     part("history", async () => {
       const [history, billing] = await Promise.all([loadStudentHistory(user.tenantId), canBilling]);
       return billing ? { ...history, payingHidden: false } : { ...history, months: withoutPaying(history.months), payingHidden: true };
+    }),
+    scopedPart("firstClass", async () => {
+      const from = firstPeriod.grain === "month" ? `${firstPeriod.months[0]}-01` : firstPeriod.from;
+      const to = firstPeriod.grain === "month" ? today : firstPeriod.to;
+      const [rows, range] = await Promise.all([loadRangeEnrollmentRows(await createClient(), from, to), coverage]);
+      return firstClassTrend({ rows, period: firstPeriod, today, subjects: programSubjects, trustFrom: range?.trustFrom ?? null, inScope: scoped?.pred });
     }),
   ]);
   return {
@@ -194,5 +209,6 @@ export async function loadStudentStats(requestedSubject?: string): Promise<Stude
     trend,
     courses,
     history,
+    firstClass,
   };
 }
