@@ -6,6 +6,7 @@ import { shiftMonth, kstMonth } from "@/lib/date-kst";
 import { getMathSheetLanding, type MathClassCard } from "@/features/math-sheets/server/landing";
 import { groupMathCardsByTeacher, splitLandingByTrack } from "@/features/math-sheets/landing-tracks";
 import { canPreviewProgressMap } from "@/features/math-progress-map/server/access";
+import { McsViewSwitch } from "@/features/math-sheets/components/mcs-view-switch";
 import styles from "./landing.module.css";
 
 export const metadata: Metadata = { title: "수학 강사 시트 — 에이와" };
@@ -31,7 +32,8 @@ export default async function McsLandingPage({ searchParams }: { searchParams: P
     <div className={styles.surface}>
       <header className={styles.heading}>
         <div><h2>수학 강사 시트</h2><p>반별 수업 기록과 학생 진도를 한곳에서 확인하세요.</p></div>
-        <PeriodNav label={data.monthLabel} prevHref={hrefFor(shiftMonth(data.month, -1))} nextHref={hrefFor(shiftMonth(data.month, 1))} currentHref={hrefFor(thisMonth)} relation={data.month === thisMonth ? "current" : data.month < thisMonth ? "past" : "future"} prevAriaLabel="이전 달" nextAriaLabel="다음 달" currentTitle="눌러서 이번 달로" />
+        <div className={styles.headingTools}><McsViewSwitch active="classes" />
+        <PeriodNav label={data.monthLabel} prevHref={hrefFor(shiftMonth(data.month, -1))} nextHref={hrefFor(shiftMonth(data.month, 1))} currentHref={hrefFor(thisMonth)} relation={data.month === thisMonth ? "current" : data.month < thisMonth ? "past" : "future"} prevAriaLabel="이전 달" nextAriaLabel="다음 달" currentTitle="눌러서 이번 달로" /></div>
       </header>
       <div className={styles.summary}>
         <div className={styles.summaryCount}><span>이번 달 수업</span><strong>{data.cards.length}<small>개 반</small></strong></div>

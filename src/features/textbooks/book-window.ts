@@ -1,65 +1,46 @@
 /**
- * 교재 3개월 창 — 순수 함수(원장 2026-10-19):
- *  *"교재 주문 시 해당 학생의 교재로 교재 등록되며 주문날 +7일 기준으로 학습 진도를 나가면 됨"*
- *  *"시작 기준 3개월로 — 예를 들어 2-2 1을 구매했으면 2-2 2 완료까지 3개월로 잡고 진행 현황 볼 수 있도록"*
+ * 교재 3개월 창 — 전체 목표 로드맵([`book-roadmap.ts`](./book-roadmap.ts))의 **지금 창 하나**를 카드가 읽는 모양으로 접는다.
  *
- * 🔑 창 = **주문한 권 ~ 그 학기 마지막 권**(같은 시리즈·학교급·학년-학기 묶음, 교재목록 권 번호 순).
- *    가우스 중2-2는 3·4권이라 3권을 사면 3~4권(16차시), 4권만 샀으면 4권(8차시).
- * 🔑 시작 = 주문일 + 7일(책이 오는 시간), 끝 = 시작 + 3개월 − 1일.
- *    같은 묶음을 두 번 나눠 샀으면(3권 7월 → 4권 10월) **먼저 산 날**이 창의 시작이다 — 두 권을 3개월에 끝낸다는 약속이라
- *    4권 주문으로 창을 다시 열면 늦어진 만큼이 사라진다. 단 먼저 산 날이 3개월보다 오래됐으면 새 창으로 본다.
- * 🔑 계획 = 창 안 **실제 수업일**(학생 등원 요일·휴원·수강 기간 반영, `learningClassDates`)에 차시를 고르게 나눈 값.
- * ⚠️ 주문 기록은 사실이고 이건 그 위의 **약속**이다 — DB에 아무것도 쓰지 않는다(매 조회 계산).
+ * 🔑 창 = 두 권(원장 2026-10-20 *"3개월당 교재 2권씩"* · *"4권 시작이면 바로 중3-1 교재로 자동으로 계속 넘어가게"*) —
+ *    학기 경계에서 끊지 않는다. 창 길이 = 내신기간을 뺀 3개월이라 내신이 끼면 끝나는 날이 그만큼 늦다.
+ * 🔴 계산은 로드맵이 한 번만 한다 — 여기서 날짜·계획을 다시 세지 않는다(두 숫자가 갈리지 않게).
  */
-import { addDays, shiftMonth } from "@/lib/date-kst";
-import { bookPosition, catalogBookKey, matchCatalogBook, type BookPosition, type CatalogBook, type ReportLine } from "./math-book-match";
+import { addDays } from "@/lib/date-kst";
+import { matchedOrders, type BookOrder, type BookRoadmap } from "./book-roadmap";
+import type { CatalogBook } from "./math-book-match";
 
-export const BOOK_WINDOW_DAYS_AFTER_ORDER = 7;
-export const BOOK_WINDOW_MONTHS = 3;
+export type { BookOrder } from "./book-roadmap";
 
-export type BookOrder = { bookName: string; date: string };
+export type WindowBook = {
+  id: string;
+  key: string;
+  title: string;
+  lessons: number;
+  /** 첫 차시의 첫 소단원(타일 이름). 교재목록 미등록이면 null. */
+  unit: string | null;
+  /** 교재목록에 있는가 — 없으면 차시 수는 가정값. */
+  listed: boolean;
+  /** 차시별 소단원(마우스 오버 목록). */
+  lessonUnits: string[][];
+};
 
 export type BookWindow = {
-  /** 창이 묶는 권들(권 번호 순). */
-  books: { id: string; title: string; lessons: number }[];
-  /** 창의 시작 = 첫 주문일 + 7일. */
+  books: WindowBook[];
   startDate: string;
   endDate: string;
-  /** 창이 다루는 소단원(권·차시 순) — 전체 목표 레일 위에 이 창이 차지하는 구간을 찾는 열쇠. */
-  units: string[];
-  /** 교재 학년(`중2`) — 같은 소단원 이름이 다른 학년에도 있어(`경우의 수` = 중2·공통수학1) 레일 구간을 이 학년으로 좁힌다. */
-  grade: string;
-  /** 창을 연 주문(가장 먼저 산 권). */
-  orderDate: string;
+  /** 이 창 안의 내신기간 날수(창이 그만큼 늘어났다). */
+  examDays: number;
+  /** 첫 창이면 그 창을 연 주문일, 이어진 창이면 null(주문 없이 자동으로 이어졌다). */
+  orderDate: string | null;
   orderTitle: string;
   total: number;
   /** 창 안에서 나간 차시(누적). 진도를 못 읽으면 null. 창 앞 권에 아직 있으면 0. */
   done: number | null;
-  /** 기준일까지 계획된 차시. */
   planned: number;
-  /** 계획을 잰 기준일(화면이 '시작 전'을 가를 때 같은 날을 쓰게 — 클라 시계를 보지 않는다). */
   referenceDate: string;
-  /** 진도를 준 기록. */
-  position: (BookPosition & { title: string }) | null;
+  position: { title: string; lessonNo: number; total: number; date: string; unit: string } | null;
+  nextClassDate: string | null;
 };
-
-/** 같은 학기 묶음 열쇠 — `가우스|중2-2|3` → `가우스|중2-2`. */
-function setKeyOf(title: string): string | null {
-  const key = catalogBookKey(title);
-  return key ? key.slice(0, key.lastIndexOf("|")) : null;
-}
-function volumeOf(title: string): number {
-  const key = catalogBookKey(title);
-  return key ? Number(key.slice(key.lastIndexOf("|") + 1)) : 0;
-}
-
-/** 주문 목록 → 교재목록 교재와 날짜. 못 읽는 교재명은 버린다. */
-function matchedOrders(orders: readonly BookOrder[], catalog: readonly CatalogBook[]) {
-  return orders
-    .map((o) => ({ ...o, book: matchCatalogBook(o.bookName, catalog) }))
-    .filter((o): o is BookOrder & { book: CatalogBook } => !!o.book)
-    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
-}
 
 /** 가장 최근 주문 교재 — 학생의 지금 교재(주문 = 그 학생 교재 등록). */
 export function latestOrderedBook(orders: readonly BookOrder[], catalog: readonly CatalogBook[]): { book: CatalogBook; date: string } | null {
@@ -68,85 +49,38 @@ export function latestOrderedBook(orders: readonly BookOrder[], catalog: readonl
   return last ? { book: last.book, date: last.date } : null;
 }
 
-/**
- * 학생의 교재 3개월 창. 주문이 없거나 교재목록에서 못 읽으면 null.
- * `classDates(from, to)` = 그 학생의 실제 수업일(호출부가 `learningClassDates`로 넘긴다).
- */
-export function bookWindow(args: {
-  orders: readonly BookOrder[];
-  catalog: readonly CatalogBook[];
-  reports: readonly ReportLine[];
-  referenceDate: string;
-  classDates: (from: string, to: string) => string[];
-}): BookWindow | null {
-  const { catalog, reports, referenceDate, classDates } = args;
-  const list = matchedOrders(args.orders, catalog);
-  const latest = list[list.length - 1];
-  if (!latest) return null;
-  const setKey = setKeyOf(latest.book.title);
-  if (!setKey) return null;
-  // 같은 묶음의 주문 중, 최근 주문에서 3개월 안쪽의 가장 이른 것이 창을 연다.
-  const horizon = addMonths(latest.date, -BOOK_WINDOW_MONTHS);
-  const opener = list.find((o) => setKeyOf(o.book.title) === setKey && o.date >= horizon) ?? latest;
-
-  const fromVol = volumeOf(opener.book.title);
-  const books = catalog
-    .filter((b) => setKeyOf(b.title) === setKey && volumeOf(b.title) >= fromVol)
-    .sort((a, b) => volumeOf(a.title) - volumeOf(b.title));
-  if (books.length === 0) return null;
-  const total = books.reduce((n, b) => n + b.lessons.length, 0);
-
-  const startDate = addDays(opener.date, BOOK_WINDOW_DAYS_AFTER_ORDER);
-  const endDate = addDays(addMonths(startDate, BOOK_WINDOW_MONTHS), -1);
-
-  // 계획 — 창 안 수업일에 차시를 고르게. 수업일이 없으면(시간표 미상) 달력 날짜로 나눈다.
-  const dates = classDates(startDate, endDate);
-  let planned: number;
-  if (referenceDate < startDate) planned = 0;
-  // 반올림 — 내림이면 초반 몇 주가 늘 '계획 0'이라 빠름으로만 읽힌다(실화면 2026-10-19: 8차시 · 수업 4번 지남 → 0.8 → 0).
-  else if (dates.length > 0) planned = Math.round((total * dates.filter((d) => d <= referenceDate).length) / dates.length);
-  else {
-    const span = daysBetween(startDate, endDate) + 1;
-    planned = Math.min(total, Math.round((total * (daysBetween(startDate, referenceDate) + 1)) / span));
-  }
-
-  // 실제 — 같은 학기 묶음 전체에서 진도가 걸린 **가장 최근** 기록(같은 날이면 뒤 권). 창 앞 권에 있으면 0.
-  const setBooks = catalog
-    .filter((b) => setKeyOf(b.title) === setKey)
-    .sort((a, b) => volumeOf(a.title) - volumeOf(b.title));
-  let position: BookWindow["position"] = null;
-  let done: number | null = null;
-  for (const b of setBooks) {
-    const p = bookPosition(b, reports, catalog);
-    if (!p || (position && p.date < position.date)) continue;
-    position = { ...p, title: b.title };
-    const index = books.findIndex((w) => w.id === b.id);
-    done = index < 0 ? 0 : books.slice(0, index).reduce((n, w) => n + w.lessons.length, 0) + p.lessonNo;
-  }
+/** 로드맵의 지금 창. `classDates`는 '다음 수업일'에만 쓴다. */
+export function currentWindow(r: BookRoadmap, classDates?: (from: string, to: string) => string[]): BookWindow {
+  const books = r.books.filter((b) => b.window === r.current);
+  const before = r.books.filter((b) => b.window < r.current).reduce((n, b) => n + b.lessonCount, 0);
+  const total = books.reduce((n, b) => n + b.lessonCount, 0);
+  const clip = (v: number) => Math.max(0, Math.min(total, v - before));
+  const startDate = books[0]!.startDate;
+  const endDate = books[books.length - 1]!.finishDate;
+  const examDays = r.exams.reduce((n, p) => {
+    const a = p.from > startDate ? p.from : startDate, b = p.to < endDate ? p.to : endDate;
+    return a > b ? n : n + Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000) + 1;
+  }, 0);
   return {
-    books: books.map((b) => ({ id: b.id, title: b.title, lessons: b.lessons.length })),
-    grade: setKey.split("|")[1]!.replace(/-\d+$/, ""),
-    units: books.flatMap((b) => b.lessons.flatMap((l) => (l.progress ?? "").split(" / ").map((u) => u.trim()).filter(Boolean))),
+    books: books.map((b) => ({
+      id: b.catalog?.id ?? b.key,
+      key: b.key,
+      title: b.title,
+      lessons: b.lessonCount,
+      unit: b.lessonUnits[0]?.[0] ?? null,
+      listed: b.catalog != null,
+      lessonUnits: b.lessonUnits,
+    })),
     startDate,
     endDate,
-    orderDate: opener.date,
-    orderTitle: opener.book.title,
+    examDays,
+    orderDate: r.current === 0 ? r.orderDate : null,
+    orderTitle: r.orderTitle,
     total,
-    done,
-    planned,
-    referenceDate,
-    position,
+    done: r.done == null ? null : clip(r.done),
+    planned: clip(r.planned),
+    referenceDate: r.referenceDate,
+    position: r.position,
+    nextClassDate: classDates?.(addDays(r.referenceDate, 1), addDays(r.referenceDate, 60))[0] ?? null,
   };
-}
-
-/** 날짜 + N개월 — 말일은 그 달 말일로 접는다(11-30 + 3개월 = 2-28). */
-function addMonths(date: string, n: number): string {
-  const month = shiftMonth(date.slice(0, 7), n);
-  const [y, m] = month.split("-").map(Number);
-  const last = new Date(Date.UTC(y!, m!, 0)).getUTCDate();
-  return `${month}-${String(Math.min(Number(date.slice(8, 10)), last)).padStart(2, "0")}`;
-}
-
-function daysBetween(a: string, b: string): number {
-  return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
 }

@@ -2,6 +2,7 @@
 
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
+import { isTenantViewWriteBlocked } from "@/lib/auth/tenant-view";
 import { getMyNotifications, type NotificationView } from "./queries";
 import type { NotificationItem } from "../types";
 
@@ -77,5 +78,27 @@ export async function deleteNotification(
   if (!user) return { unread: 0, items: [] };
   const supabase = await createClient();
   await supabase.from("notifications").delete().eq("id", id);
+  return getMyNotifications(view, limit);
+}
+
+/**
+ * 알림 전체 삭제 — **지금 보고 있는 뷰**(받은 알림 / 보관함) 전체를 영구 삭제한다(목록 밖 포함).
+ * RLS(delete: recipient_id=auth.uid())에 더해 recipient_id를 명시해 본인 것만 지운다(필터 없는 일괄 삭제 금지).
+ * 다른 뷰는 건드리지 않는다 — 받은 알림을 비워도 보관함은 남는다.
+ * '지점 보기' 중엔 벨이 비어 있으므로(queries.ts) 보이지 않는 운영자 본인 알림을 지우지 않게 막는다.
+ * upTo = 화면에 보이던 가장 최근 알림 시각 — 확인을 누르는 사이 새로 온 알림은 보지도 못했으니 남긴다.
+ */
+export async function deleteAllNotifications(
+  view: NotificationView = "active",
+  limit?: number,
+  upTo?: string,
+): Promise<{ unread: number; items: NotificationItem[] }> {
+  const user = await getCurrentUser();
+  if (!user) return { unread: 0, items: [] };
+  if (user.tenantView || (await isTenantViewWriteBlocked())) return getMyNotifications(view, limit);
+  const supabase = await createClient();
+  let q = supabase.from("notifications").delete().eq("recipient_id", user.id);
+  if (upTo) q = q.lte("created_at", upTo);
+  await (view === "archived" ? q.not("archived_at", "is", null) : q.is("archived_at", null));
   return getMyNotifications(view, limit);
 }

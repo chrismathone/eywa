@@ -50,6 +50,7 @@ const EXEMPT: Record<string, string> = {
   "src/features/notifications/server/actions.ts#archiveNotification": PERSONAL,
   "src/features/notifications/server/actions.ts#unarchiveNotification": PERSONAL,
   "src/features/notifications/server/actions.ts#deleteNotification": PERSONAL,
+  "src/features/notifications/server/actions.ts#deleteAllNotifications": PERSONAL,
   "src/features/notices/server/dismiss-actions.ts#dismissNoticePopup": PERSONAL,
   "src/features/notices/server/dismiss-actions.ts#undismissNoticePopup": PERSONAL,
   "src/features/documents/server/favorite-actions.ts#setDocumentFolderFavorite": PERSONAL,

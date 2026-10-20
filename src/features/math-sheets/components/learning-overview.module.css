@@ -170,6 +170,12 @@
   min-width: 0;
   font-size: var(--text-sm);
 }
+/* 학생 계획 카드 목록(원장 2026-10-20) — 카드 사이는 간격으로만 가른다. */
+.cardList {
+  display: grid;
+  gap: 14px;
+  margin: 0 16px 16px;
+}
 .tableScroll {
   overflow-x: auto;
   margin: 0 16px 16px;

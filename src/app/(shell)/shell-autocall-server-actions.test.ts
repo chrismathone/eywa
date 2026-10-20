@@ -118,6 +118,7 @@ const ALLOWED: Record<string, string[]> = {
   // 알림 벨 — 읽음·보관·삭제(클릭). 🔴 목록 조회는 여기 없다(GET 라우트).
   "src/features/notifications/components/notification-bell.tsx -> src/features/notifications/server/actions.ts": [
     "archiveNotification",
+    "deleteAllNotifications",
     "deleteNotification",
     "markNotificationsRead",
     "unarchiveNotification",

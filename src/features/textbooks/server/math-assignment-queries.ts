@@ -119,7 +119,7 @@ export async function getMathClassTextbooks(
 }
 
 /** 교재목록의 수학 교재 + 차수(소단원). 실패면 null. */
-async function getMathCatalogBooks(tenantId: string): Promise<CatalogBook[] | null> {
+export async function getMathCatalogBooks(tenantId: string): Promise<CatalogBook[] | null> {
   const choices = await getMathTextbookChoices(tenantId);
   if (choices === null) return null;
   if (choices.length === 0) return [];
@@ -153,7 +153,7 @@ async function getMathCatalogBooks(tenantId: string): Promise<CatalogBook[] | nu
  * 학생들의 교재 주문(교재 신청) — 날짜 = **주문 체크한 날**(KST), 아직 주문 전이면 요청일.
  * 실패면 null(주문 갈래만 빠지고 화면은 산다).
  */
-async function getStudentBookOrders(tenantId: string, studentIds: string[]): Promise<Map<string, BookOrder[]> | null> {
+export async function getStudentBookOrders(tenantId: string, studentIds: string[]): Promise<Map<string, BookOrder[]> | null> {
   if (studentIds.length === 0) return new Map();
   const admin = createAdminClient();
   try {
