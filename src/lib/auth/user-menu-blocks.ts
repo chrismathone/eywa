@@ -11,6 +11,9 @@ import type { AccessMatrix, MenuKey, SystemRole } from "@/lib/permissions";
  *    다른 사람에게 넓히거나 용도를 바꾸지 말고, 필요하면 원장에게 다시 물을 것.
  * 🔴 판정은 화면·서버 액션 게이트(requireAccess·canWriteTenant·사이드바·팔레트)가 함께 읽는 매트릭스에서 끝난다.
  *    DB(RLS `auth_menu_access`)는 master를 그대로 통과시킨다 — PostgREST 직결까지 막는 장치는 아니다.
+ * 🔑 '코드에 계정 명단 없음'(사람 지정은 역할·권한 면 `specialAccess`) 규칙의 예외인 까닭 — 대상이 super_admin이라
+ *    역할·권한 면에서 **안 보이는 계정**(`platformAccountIds`)이다. 설정값으로 둬도 원장이 보거나 거둘 수 없고, 보호 계정은
+ *    원래 운영자가 코드·스크립트로 다룬다(`BASELINE_PROTECTED_IDS`와 같은 결).
  * 풀 때는 이 표에서 그 줄을 지운다.
  */
 export const USER_MENU_BLOCKS: Readonly<Record<string, readonly MenuKey[]>> = {
