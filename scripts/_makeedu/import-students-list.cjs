@@ -106,11 +106,23 @@ function statusFrom(v) {
     // schoolCore가, 학년 드리프트는 전화가 흡수. 모호/미매칭 = 신규로 보고 아래에서 알파벳 접미사로 구분.
     const nkey = (x) => L.normalizeName(x.name);
     const gkey = (x) => L.gradeNorm(x.grade) || "";
-    const match = L.tieredMatcher(existing, [
+    const strict = L.tieredMatcher(existing, [
       (x) => (x.name && schoolCore(x.school) ? `${nkey(x)}|${schoolCore(x.school)}|${gkey(x)}` : null),
       (x) => { const p = phoneDigits(x.student_phone); return x.name && p ? `${nkey(x)}|s|${p}` : null; },
       (x) => { const p = phoneDigits(x.parent_phone); return x.name && p ? `${nkey(x)}|p|${p}` : null; },
     ]);
+    // 🔴 마지막 티어 = **접미사를 뗀 이름 + 전화**(2026-10-20 권민서·김지유) — 에이와 `권민서A` ↔ 메이크에듀 `권민서`처럼 두 시스템이
+    //    접미사를 따로 매기면 위 티어가 전부 놓쳐 `권민서B`를 새로 만들었다(그 뒤 병합이 번호를 버려 연결까지 끊겼다).
+    //    대상은 **아직 메이크에듀와 안 이어진 재원·휴원 학생만**(이미 다른 원생에 이어진 학생·퇴원생에 붙이지 않는다) · 전화가 같아야 한다
+    //    (이름만으론 진짜 동명이인을 합친다) · 둘 이상 걸리면 모호로 보고 붙이지 않는다(tieredMatcher).
+    const linkable = existing.filter((e) => !e.makeedu_id && e.status !== "withdrawn");
+    const bkey = (x) => L.baseNameKey(x.name);
+    const loose = L.tieredMatcher(linkable, [
+      (x) => { const p = phoneDigits(x.student_phone); return x.name && p ? `${bkey(x)}|s|${p}` : null; },
+      (x) => { const p = phoneDigits(x.parent_phone); return x.name && p ? `${bkey(x)}|p|${p}` : null; },
+    ]);
+    // 고유번호 칸이 없는 목록이어도 loose로 찾으면 '이미 있음'으로 건너뛴다(중복 학생을 만들지 않는 것이 목적이다).
+    const match = (r) => strict(r) || loose(r);
     // 이름 충돌 집합 = 전 상태(퇴원 포함) 정규화 이름. 신규 추가 때마다 확정 이름을 넣어 순차(A,B,…) 부여.
     const takenNames = new Set(existing.map((e) => L.normalizeName(e.name)));
 

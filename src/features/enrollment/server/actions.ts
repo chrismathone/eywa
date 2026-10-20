@@ -1067,10 +1067,22 @@ export async function convertConsultationToStudent(
   }
 
   // 상담에 학생 ID + outcome=enrolled 연결(재사용/신규 모두 — orphan 상담 해소).
+  // 🔴 새 학생에 동명이인 알파벳이 붙었으면 상담 이름도 그 이름으로(원장 2026-10-20 *"같은 학생인데 알파벳이 다른것도 이해안됨"*).
+  //    상담이 `권민서`로 남으면 ① 콜&상담과 원생 목록의 이름이 갈리고 ② 메이크에듀로 보내는 이름(역동기화는 상담 이름을 보낸다)이
+  //    알파벳 없이 나가 메이크에듀가 **제 알파벳을 따로** 붙인다 → 동기화가 같은 학생을 못 알아보고 `권민서B`를 새로 만들었다.
+  const renameConsult = !reusedExisting && uniqueName.name !== (c.prospect_name ?? "") ? uniqueName.name : null;
   await supabase
     .from("enrollment_consultations")
-    .update({ student_id: studentId, outcome: "enrolled" })
+    .update({ student_id: studentId, outcome: "enrolled", ...(renameConsult ? { prospect_name: renameConsult } : {}) })
     .eq("id", consultationId);
+  if (renameConsult) {
+    await logAction({
+      action: "enrollment_consultation_update",
+      targetType: "enrollment_consultations",
+      targetLabel: renameConsult,
+      metadata: { consultationId, changes: [{ field: "이름", from: c.prospect_name ?? null, to: renameConsult }], via: "convert" },
+    });
+  }
   // 상태가 '등록 완료'로 바뀐 것도 칸반 드래그와 **같은 로그**로 남긴다 — 운영실 '금일 등록'(원장 2026-09-23)이 이 로그의
   // 시각으로 "오늘 등록 완료로 옮긴 상담"을 센다(여기가 빠지면 '수업 배정'으로 등록한 학생이 카드에서 사라진다).
   if (c.outcome !== "enrolled") {

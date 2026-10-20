@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 const require_ = createRequire(import.meta.url);
 const L = require_("./lib.cjs") as {
   normalizeName: (v: unknown) => string;
+  baseNameKey: (v: unknown) => string;
   stripNameStatusSuffix: (v: unknown) => string;
   billingMonthRange: (a?: {
     anchor?: string | null;
@@ -203,5 +204,19 @@ describe("normalizeName — 상태 접미사", () => {
   it("stripNameStatusSuffix는 표시용 원형을 유지한다(공백·대소문자 보존)", () => {
     expect(L.stripNameStatusSuffix("박소선 (테스트)")).toBe("박소선 (테스트)");
     expect(L.stripNameStatusSuffix("강윤서(퇴)")).toBe("강윤서");
+  });
+});
+
+describe("baseNameKey — 동명이인 알파벳을 뗀 매칭 키(전화가 같을 때만 쓴다)", () => {
+  it("에이와 `권민서A`와 메이크에듀 `권민서`가 같은 키(2026-10-20)", () => {
+    expect(L.baseNameKey("권민서A")).toBe(L.baseNameKey("권민서"));
+    expect(L.baseNameKey("김지유AB")).toBe("김지유");
+  });
+  it("상태 표시·공백은 normalizeName과 같이 지운다", () => {
+    expect(L.baseNameKey("권 민서B(퇴원)")).toBe("권민서");
+  });
+  it("소문자는 접미사가 아니다 · 전부 대문자면 그대로", () => {
+    expect(L.baseNameKey("jane")).toBe("jane");
+    expect(L.baseNameKey("ABC")).toBe("abc");
   });
 });
