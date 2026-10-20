@@ -2,7 +2,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { assertLease, extendLease, uploadAssets } from "./video-review-extract-job.mjs";
+import { assertLease, extendLease, probeFailureText, uploadAssets } from "./video-review-extract-job.mjs";
 import {
   failureOutcome, frameName, frameTimes, lastFrameName, lastFrameTime, mmssTag, plannedFiles, REVIEW_EXTRACT_MAX_ATTEMPTS, reviewError,
 } from "./video-review-extract-rules.mjs";
@@ -116,5 +116,22 @@ describe("잠금을 잃은 실행은 더 하지 않는다", () => {
     });
     await expect(uploadAssets("t", row, "tok", await files(), { env, fetchImpl, sql: async () => [{ id: "r1" }] }, track)).rejects.toThrow("잠금");
     expect(puts).toEqual(["https://s/1"]);
+  });
+});
+
+describe("ffprobe 실패 문구 정리", () => {
+  it("실행 명령 줄과 경로·잠금 토큰을 버리고 원인만 남긴다", () => {
+    const msg = "Command failed: ffprobe -v error /Users/x/review-abc-123e4567/source.mp4\n/Users/x/review-abc-123e4567/source.mp4: No such file or directory";
+    const out = probeFailureText(msg);
+    expect(out).toBe("…: No such file or directory");
+    expect(out).not.toMatch(/review-|Users/);
+  });
+  it("공백·한글이 든 아는 경로는 통째로 가린다", () => {
+    const src = "/v/새 볼륨/학원 지점/review-a-b/source.mp4";
+    const out = probeFailureText(`Command failed: ffprobe ${src}\n${src}: Invalid argument`, [src]);
+    expect(out).toBe("…: Invalid argument");
+  });
+  it("원인 줄이 없으면 '알 수 없는 오류'", () => {
+    expect(probeFailureText("Command failed: ffprobe /a/b.mp4")).toBe("알 수 없는 오류");
   });
 });

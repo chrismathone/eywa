@@ -52,11 +52,34 @@ async function download(tenant, video, deps, track, filePath) {
   await downloadDriveVideo(request, video.drive_file_id, bytes, filePath, { signal, sleep: deps.sleep });
 }
 
+const BROKEN_REASON = "드라이브 원본 파일이 깨져 있어 열 수 없습니다(녹화가 중간에 끊긴 파일일 수 있습니다).";
+const BROKEN_MEDIA = /Invalid data found|moov atom not found|could not find codec parameters|End of file/i;
+
+/**
+ * 저장할 원인 한 줄 — 실행 명령 줄(경로·잠금 토큰이 든다)은 버리고 ffprobe가 말한 마지막 줄만, 남은 경로는 가린다(적대 리뷰 2026-10-21).
+ * 예: "Command failed: ffprobe … /x/review-<id>-<token>/source.mp4\n…: No such file or directory" → "…: No such file or directory"
+ */
+export function probeFailureText(message, knownPaths = []) {
+  // 아는 경로(공백·한글이 든 폴더 포함)는 통째로 먼저 가린다 — 정규식은 공백에서 끊겨 일부가 남는다(재검 2026-10-21).
+  let text = String(message);
+  for (const p of [...knownPaths].filter(Boolean).sort((x, y) => y.length - x.length)) text = text.split(p).join("…");
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !/^Command failed:/i.test(l));
+  const last = lines.at(-1) ?? "알 수 없는 오류";
+  return last.replace(/(?:[A-Za-z]:)?[\\/][^\s:]+/g, "…").slice(0, 160);
+}
+
 /** ffmpeg로 소리·화면을 뽑는다 → [{name, contentType, file}]. */
 async function extract(tools, runner, src, dir) {
-  const probe = await probeVideo(tools, src, runner).catch(() => null);
-  if (!probe || !(probe.duration > 0))
-    throw reviewError("드라이브 원본 파일이 깨져 있어 열 수 없습니다(녹화가 중간에 끊긴 파일일 수 있습니다).", { permanent: true });
+  // 🔴 실패를 삼키지 않는다 — ffprobe가 '잘못된 데이터·moov 없음'이라고 답한 것만 원본 깨짐(영구)이다. 그 밖(도구 실행 실패·시간 초과 등)은
+  //    원인을 남기고 다시 시도한다(2026-10-21 개발 확인: 정상 영상 둘이 깨짐으로 영구 실패 처리됐다).
+  let probe = null;
+  try { probe = await probeVideo(tools, src, runner); }
+  catch (error) {
+    const message = String(error?.message ?? error);
+    if (BROKEN_MEDIA.test(message)) throw reviewError(BROKEN_REASON, { permanent: true });
+    throw reviewError(`영상 정보를 읽지 못했습니다: ${probeFailureText(message, [src, dir])}`);
+  }
+  if (!(probe?.duration > 0)) throw reviewError(BROKEN_REASON, { permanent: true });
   if (!probe.audio) throw reviewError("소리가 없는 영상이라 판정할 수 없습니다.", { permanent: true, skip: true });
   const files = plannedFiles(probe.duration);
   for (const f of files) {
