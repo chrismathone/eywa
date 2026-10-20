@@ -24,8 +24,14 @@ export function studentsEnrolledHref(program?: Program): string {
  * 학년별·학교별 카드는 옛 학년·학교 값이 저장되지 않아 정확한 흐름이 없으므로 여기로 오지 않는다(원생목록 그대로).
  */
 export type StudentStatsSection = "trend" | "courses" | "flow";
-export function studentsStatsHref(section: StudentStatsSection, view?: "subject" | "mix"): string {
-  return `/students/stats${view ? `?view=${view}` : ""}#${section}`;
+/**
+ * `subject` = 과목 관리자가 운영실에서 고른 과목(빠지면 첫 담당 과목으로 열려 카드와 숫자가 갈린다 — 리뷰 2026-10-21) ·
+ * `teacherView` = 강사 화면은 원생 통계를 보이지 않으므로 원생목록(재원생)으로 보낸다(막다른 화면에 닿지 않게).
+ */
+export function studentsStatsHref(section: StudentStatsSection, opts: { view?: "subject" | "mix"; subject?: string | null; teacherView?: boolean } = {}): string {
+  if (opts.teacherView) return studentsEnrolledHref();
+  const q = [opts.view ? `view=${opts.view}` : "", opts.subject ? `subject=${encodeURIComponent(opts.subject)}` : ""].filter(Boolean).join("&");
+  return `/students/stats${q ? `?${q}` : ""}#${section}`;
 }
 
 /**
@@ -130,6 +136,10 @@ export function reportStatsHref(subject?: string | null): string {
  */
 export function consultProgressStatsHref(): string {
   return "/enrollment?view=stats&from=dashboard#progress";
+}
+/** 운영실 '신규 콜&상담 전환'의 '상세' — 같은 접수일 축의 월별 전환 통계(신규 콜&상담 통계 보기 맨 위 · 이 방문은 마지막 보기를 저장하지 않는다). */
+export function admissionsStatsHref(): string {
+  return "/enrollment?view=stats&from=dashboard#conversion";
 }
 export function newcomerStatsHref(): string {
   return "/newcomers/stats#history";

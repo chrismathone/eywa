@@ -23,7 +23,7 @@ const CATEGORY_OPTIONS: { value: Exclude<CategoryKey, "all">; label: string }[] 
   { value: "other", label: "기타" },
 ];
 const URGENCY_OPTIONS: { value: Exclude<UrgencyKey, "all">; label: string }[] = [
-  { value: "overdue", label: "지연" },
+  { value: "overdue", label: "기한 경과" },
   { value: "today", label: "오늘" },
   { value: "soon", label: "3일 내" },
   { value: "later", label: "예정" },

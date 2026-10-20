@@ -12,6 +12,7 @@ import {
   intakeTrendHref,
   recentAbsenceRange,
   makeupWeekHref,
+  studentsEnrolledHref,
   studentsStatsHref,
   withdrawalsMonthHref,
 } from "@/features/dashboard/overview/kpi-links";
@@ -130,7 +131,7 @@ export function kpiCards(snapshot: OverviewSnapshot, opts: KpiCardOptions = {}):
           icon={<MenuGlyph name="users" size={20} />}
           error={v.students.error}
           popupTitle="현재 재원생 프로그램별 인원"
-          jump={can("students") ? { href: studentsStatsHref("trend"), label: "원생 통계에서 재원생 추이 보기" } : null}
+          jump={can("students") ? (snapshot.teacherView ? { href: studentsEnrolledHref(), label: "원생목록에서 재원생 보기" } : { href: studentsStatsHref("trend", { subject: snapshot.view?.activeSubject }), label: "원생 통계에서 재원생 추이 보기" }) : null}
         >
           <StudentsPopup data={student} subjects={subjects} canOpen={can("students")} eieOn={eieOn} />
         </KpiCard>
@@ -147,7 +148,7 @@ export function kpiCards(snapshot: OverviewSnapshot, opts: KpiCardOptions = {}):
           icon={<MenuGlyph name="book" size={20} />}
           error={v.courses.error}
           popupTitle="현재 강좌수 · 학생당 강좌 수"
-          jump={can("students") ? { href: studentsStatsHref("courses"), label: "원생 통계에서 강좌수 추이 보기" } : null}
+          jump={can("students") ? (snapshot.teacherView ? { href: studentsEnrolledHref(), label: "원생목록에서 재원생 보기" } : { href: studentsStatsHref("courses", { subject: snapshot.view?.activeSubject }), label: "원생 통계에서 강좌수 추이 보기" }) : null}
         >
           <CoursesPopup data={course} subjects={subjects} eieOn={eieOn} />
         </KpiCard>
@@ -256,7 +257,7 @@ export function kpiCards(snapshot: OverviewSnapshot, opts: KpiCardOptions = {}):
           labelNote={noteOf("firstClass")}
           value={count(firsts?.length)}
           unit="명"
-          detail={firsts ? `첫 등원 ${firstCount} · 새 과목 ${firsts.length - firstCount}` : "수강 시작일 기준"}
+          detail={firsts ? `첫 등원 ${firstCount} · 처음 듣는 과목 ${firsts.length - firstCount}` : "수강 시작일 기준"}
           icon={<MenuGlyph name="userPlus" size={20} />}
           error={v.firstClass.error}
           popupTitle="오늘 첫 수업"

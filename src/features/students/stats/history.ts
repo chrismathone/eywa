@@ -6,7 +6,26 @@
  * 겹치는 칸은 **에이와가 이긴다**(같은 달을 에이와가 세기 시작했으면 그 값) — 메이크에듀는 2026-01부터 재원생 기록만 싣는다.
  */
 
-export const HISTORY_FIELDS = ["payingGeneral", "payingEie", "payingTotal", "newReal", "newRegistered", "enrolledRecord"] as const;
+/**
+ * 칸 — `paying*` = 그달 수업료 청구가 살아 있는 학생. 프로그램 칸(`payingMath`·`payingInjaewon`·`payingOther`·`payingUnknown`)은 청구 줄의
+ * **수업명으로** 가른 값(`lesson-program.ts` · 원장 2026-10-21 *"수학과 영어로 구분 못하나? 수업명 가지고?"*) — 두 프로그램 줄이 있는
+ * 학생은 양쪽에 든다 · `payingUnknown` = 수업명으로 못 가른 줄이 있는 학생.
+ * `stoppedPaying` = 그달을 끝으로 수업료 청구가 끊긴 학생(다음 두 달 청구 없음 · `stopped-paying.ts` — 메이크에듀 퇴원일은 2025년부터만 남아
+ * 2020년부터는 청구로 센다 · 원장 2026-10-21 *"다음 후보 계속 진행"*). 청구에서 나온 칸이라 수납 권한이 있을 때만 싣는다.
+ */
+export const HISTORY_FIELDS = [
+  "payingGeneral",
+  "payingEie",
+  "payingTotal",
+  "payingMath",
+  "payingInjaewon",
+  "payingOther",
+  "payingUnknown",
+  "stoppedPaying",
+  "newReal",
+  "newRegistered",
+  "enrolledRecord",
+] as const;
 export type HistoryField = (typeof HISTORY_FIELDS)[number];
 
 /** 한 달 — 값이 없는 칸은 비운다(0과 '모름'을 가른다). `estimated` = 추정으로 메운 칸. */
@@ -62,7 +81,7 @@ export function yearlyHistory(months: readonly HistoryMonth[]): HistoryYear[] {
       const vals = list.map((m) => m[f]).filter((v): v is number => v !== undefined);
       if (!vals.length) continue;
       const sum = vals.reduce((a, v) => a + v, 0);
-      out[f] = f === "newReal" || f === "newRegistered" ? sum : Math.round(sum / vals.length);
+      out[f] = f === "newReal" || f === "newRegistered" || f === "stoppedPaying" ? sum : Math.round(sum / vals.length);
       out.fieldMonths[f] = vals.length;
     }
     return out;
@@ -70,7 +89,7 @@ export function yearlyHistory(months: readonly HistoryMonth[]): HistoryYear[] {
 }
 
 /** 청구에서 나온 칸(수업료가 청구된 학생) — 수납 권한이 없는 사람에게는 서버가 빼고 보낸다(`load.ts` · 화면에서 가리지 않는다 #77). */
-const PAYING_FIELDS: readonly HistoryField[] = ["payingGeneral", "payingEie", "payingTotal"];
+const PAYING_FIELDS: readonly HistoryField[] = ["payingGeneral", "payingEie", "payingTotal", "payingMath", "payingInjaewon", "payingOther", "payingUnknown", "stoppedPaying"];
 export function withoutPaying(months: readonly HistoryMonth[]): HistoryMonth[] {
   return months.map((m) => {
     const out: HistoryMonth = { month: m.month, estimated: m.estimated.filter((f) => !PAYING_FIELDS.includes(f)) };

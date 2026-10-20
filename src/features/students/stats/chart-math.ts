@@ -12,10 +12,34 @@ export function niceTop(max: number): number {
   return step * mag;
 }
 
-/** 세로축 눈금 — 0부터 꼭대기까지 다섯 칸(꼭대기가 1·2·2.5·5 × 10^n이라 칸 값이 늘 정수다 · 10 → 2씩). */
-export function axisTicks(top: number): number[] {
-  const step = top / 5;
-  return Array.from({ length: 6 }, (_, i) => Math.round(step * i * 100) / 100);
+/**
+ * 세로축 눈금 — 바닥부터 꼭대기까지 다섯 칸 안팎. 칸 = 보기 좋은 수(1·2·2.5·5 × 10^n) 중 다섯 칸을 넘지 않는 가장 작은 것이고, 값이 정수인
+ * 축(사람·건·원·%)이라 **정수 칸만**(꼭대기 2면 0·1·2 — '0.4건' 같은 눈금이 서지 않게 · 리뷰 2026-10-21). 바닥은 칸의 배수로 내린다
+ * (바닥 30·꼭대기 100 → 20·40·…·100 — 44·58 같은 눈금이 서지 않게). 돌려준 `bottom`이 축의 실제 바닥이다.
+ */
+export function axisScale(top: number, bottom = 0): { bottom: number; ticks: number[] } {
+  const raw = Math.max((top - bottom) / 5, 1e-9);
+  const mag = 10 ** Math.floor(Math.log10(raw));
+  const step = Math.max(1, [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= raw && Number.isInteger(s)) ?? 10 * mag);
+  const base = Math.floor(bottom / step) * step;
+  const ticks: number[] = [];
+  for (let v = base; v <= top + 1e-9; v += step) ticks.push(Math.round(v * 100) / 100);
+  return { bottom: base, ticks };
+}
+
+/** 눈금만(`axisScale`). */
+export function axisTicks(top: number, bottom = 0): number[] {
+  return axisScale(top, bottom).ticks;
+}
+
+/**
+ * 값에 맞춘 세로축 바닥(비율 차트) — 가장 작은 값에서 꼭대기까지 폭의 1/10만큼 더 내려 10 단위로 내림 · 0 아래로는 안 간다.
+ * 예: 91.2~97.5%(꼭대기 100) → 90 · 62% → 50. 바닥이 꼭대기와 너무 가까우면(폭 10 미만) 10 아래로 연다.
+ */
+export function axisFloor(min: number, top: number): number {
+  if (!(min > 0)) return 0;
+  const floor = Math.floor((min - (top - min) / 10) / 10) * 10;
+  return Math.max(0, Math.min(floor, top - 10));
 }
 
 /**
@@ -25,6 +49,25 @@ export function axisTicks(top: number): number[] {
 export function maskBefore(points: readonly { key: string; date: string; count: number }[], fromMonth: string | null): (number | null)[] {
   if (!fromMonth) return points.map((p) => p.count);
   return points.map((p) => (p.date.slice(0, 7) >= fromMonth ? p.count : null));
+}
+
+/**
+ * 쌓은 막대의 칸별 합 — 스택 id → 칸마다 합. 그 칸의 값이 모두 null이면 null(정확히 셀 수 없는 칸 — 0으로 세우지 않는다).
+ * 세로축 꼭대기와 막대 위 합 숫자가 같은 값을 쓴다.
+ */
+export function stackTotals(series: readonly { stack?: string; values: readonly (number | null)[] }[], length: number): Map<string, (number | null)[]> {
+  const out = new Map<string, (number | null)[]>();
+  for (const s of series) {
+    if (!s.stack) continue;
+    const acc = out.get(s.stack) ?? Array.from({ length }, (): number | null => null);
+    for (let i = 0; i < length; i++) {
+      const v = s.values[i];
+      if (v === null || v === undefined) continue;
+      acc[i] = (acc[i] ?? 0) + v;
+    }
+    out.set(s.stack, acc);
+  }
+  return out;
 }
 
 /** 마지막으로 값이 있는 칸(없으면 -1). */
@@ -39,10 +82,11 @@ export function lastIndexWithValue(values: readonly (number | null)[]): number {
  */
 export function endLabelOffsets(
   lines: readonly { key: string; value: number }[],
-  scale: { top: number; plotTop: number; plotHeight: number },
+  scale: { top: number; bottom?: number; plotTop: number; plotHeight: number },
   gap = 18,
 ): Map<string, number> {
-  const y = (v: number) => scale.plotTop + (1 - v / scale.top) * scale.plotHeight;
+  const base = scale.bottom ?? 0;
+  const y = (v: number) => scale.plotTop + (1 - (v - base) / (scale.top - base)) * scale.plotHeight;
   const items = lines.map((l) => ({ key: l.key, y0: y(l.value), y: y(l.value) })).sort((a, b) => a.y0 - b.y0);
   for (let i = 1; i < items.length; i++) {
     if (items[i]!.y - items[i - 1]!.y < gap) items[i]!.y = items[i - 1]!.y + gap;

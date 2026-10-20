@@ -87,7 +87,7 @@ describe("오늘 사람 변동·접수·내일 예약 (운영실 검토 2026-09-
     expect(start?.label).toBe("오늘 첫 수업");
     // 첫 수업 = 첫 등원 + 새 과목 — 운영실 KPI '오늘첫수업'·목록(first=)과 같은 숫자.
     expect(start?.count).toBe(2);
-    expect(start?.note).toBe("첫 등원 1 · 새 과목 1");
+    expect(start?.note).toBe("첫 등원 1 · 처음 듣는 과목 1");
     // 기준일의 첫 수업 목록(운영실 KPI '오늘첫수업' ↗와 같은 목적지)
     expect(start?.href).toBe(
       "/students?first=2026-07-02&status=all&subject=all&grade=all&teacher=all&noenr=0&from=dashboard",

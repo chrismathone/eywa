@@ -18,9 +18,14 @@ export type IntakeTrend = {
   /** 칸 키 — 월별 `YYYY-MM` · 일별 `YYYY-MM-DD`(오름차순). */
   keys: string[];
   total: number[];
-  /** 과목 묶음(학원 설정 과목 · 영어 갈래는 영어로)별 — 그 기간 합이 큰 순. */
+  /** 과목 묶음(학원 설정 과목 · 영어 갈래는 영어로)별 — 그 기간 합이 큰 순. 두 과목 문의는 양쪽에 든다(선 보기). */
   groups: { group: string; values: number[] }[];
   unknown: number[];
+  /**
+   * 겹치지 않는 묶음 조합별(`english` · `math` · `english+math` …) — 문의 한 건은 한 조합에만 든다(막대를 쌓으면 합 = 전체).
+   * 그 기간 합이 큰 순. 과목을 못 읽은 문의는 `unknown`(조합에 넣지 않는다).
+   */
+  combos: { key: string; groups: string[]; values: number[] }[];
 };
 
 export function bucketIntake(rows: readonly IntakeTrendRow[], period: StatsPeriod, groupsOf: GroupsOf): IntakeTrend {
@@ -29,12 +34,20 @@ export function bucketIntake(rows: readonly IntakeTrendRow[], period: StatsPerio
   const total = keys.map(() => 0);
   const unknown = keys.map(() => 0);
   const byGroup = new Map<string, number[]>();
+  const byCombo = new Map<string, { groups: string[]; values: number[] }>();
   for (const row of rows) {
     const i = at.get(period.grain === "month" ? row.date.slice(0, 7) : row.date);
     if (i === undefined) continue;
     total[i]!++;
     const groups = groupsOf(row.subject);
     if (!groups.length) unknown[i]!++;
+    else {
+      const sorted = [...new Set(groups)].sort();
+      const key = sorted.join("+");
+      const combo = byCombo.get(key) ?? { groups: sorted, values: keys.map(() => 0) };
+      combo.values[i]!++;
+      byCombo.set(key, combo);
+    }
     for (const g of groups) {
       const values = byGroup.get(g) ?? keys.map(() => 0);
       values[i]!++;
@@ -43,5 +56,8 @@ export function bucketIntake(rows: readonly IntakeTrendRow[], period: StatsPerio
   }
   const sum = (v: number[]) => v.reduce((n, x) => n + x, 0);
   const groups = [...byGroup].map(([group, values]) => ({ group, values })).sort((a, b) => sum(b.values) - sum(a.values) || a.group.localeCompare(b.group));
-  return { keys, total, groups, unknown };
+  const combos = [...byCombo]
+    .map(([key, c]) => ({ key, groups: c.groups, values: c.values }))
+    .sort((a, b) => sum(b.values) - sum(a.values) || a.key.localeCompare(b.key));
+  return { keys, total, groups, unknown, combos };
 }

@@ -74,7 +74,7 @@ export function ConsultationClassField({
   else if (current && "error" in current) hint = current.error;
   else if (!loaded) hint = "반을 확인하는 중…";
   else if (pick === "manual") hint = strayManual ? "고른 반이 그날 이 학생의 수강 반이 아닙니다 — 저장되지 않습니다" : "직접 고름";
-  else hint = loaded.auto.classId ? `자동 · ${loaded.auto.reasonLabel}` : `자동 · ${loaded.auto.reasonLabel} → 미매핑`;
+  else hint = loaded.auto.classId ? `자동 · ${loaded.auto.reasonLabel}` : `자동 · ${loaded.auto.reasonLabel} → 반 없음`;
 
   return (
     <div className="space-y-1.5">
@@ -93,7 +93,7 @@ export function ConsultationClassField({
         }}
         className="border-input bg-background w-full rounded-md border px-3 py-2 text-sm focus:ring-1 focus:ring-ring focus:outline-none disabled:opacity-60"
       >
-        <option value="">미매핑 (—)</option>
+        <option value="">반 없음 (—)</option>
         {options.map((o) => (
           <option key={o.id} value={o.id}>
             {o.label}

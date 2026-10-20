@@ -12,6 +12,8 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { DEFAULT_CURRENCY } from "@/features/billing/currencies";
 import { expenseTrend, type ExpenseTrend } from "./expense-trend";
+import type { TuitionMonth } from "./tuition-history";
+import { loadTuitionHistory } from "./tuition-history-server";
 
 export const BILLING_STATS_PREFS_NS = "billingStats";
 
@@ -31,6 +33,12 @@ export type BillingStats = {
   /** 지출 추이(학원 전체 — 운영실 지출 카드처럼 과목으로 가르지 않는다) · 실패는 null. */
   expenses: ExpenseTrend | null;
   expensePeriod: StatsPeriod;
+  /**
+   * 지난 기록 — 수업료 수납(메이크에듀 + 에이와 · 학원 전체) · 실패는 null · 값이 없으면 빈 배열. 과목 관리자 화면엔 세우지 않으므로
+   * **과목 범위를 확인하지 못했으면**(담당 과목을 못 읽음) `undefined` — 학원 전체 값을 과목 관리자에게 보이지 않게(재리뷰 2026-10-21).
+   */
+  tuition: TuitionMonth[] | null | undefined;
+  tuitionView: "yearly" | "monthly";
 };
 
 /** 저장된 보기 방식(12·24개월) — 일별·구간은 이 화면에 없다(결제일이 대표 날짜 하나라 하루로 나누면 왜곡 — 코덱스 협의 2026-10-20). */
@@ -38,6 +46,12 @@ export function savedBillingMode(uiPrefs: Record<string, unknown>): PeriodMode |
   const ns = uiPrefs[BILLING_STATS_PREFS_NS];
   const mode = parsePeriodMode(ns && typeof ns === "object" && !Array.isArray(ns) ? (ns as Record<string, unknown>).mode : undefined);
   return mode === "month" || mode === "month24" ? mode : null;
+}
+
+/** 저장된 '지난 기록 — 수업료 수납' 보기 — 없으면 연도별(기본). */
+function savedTuitionView(uiPrefs: Record<string, unknown>): "yearly" | "monthly" {
+  const ns = uiPrefs[BILLING_STATS_PREFS_NS];
+  return ns && typeof ns === "object" && !Array.isArray(ns) && (ns as Record<string, unknown>).tuitionView === "monthly" ? "monthly" : "yearly";
 }
 
 /** 저장된 지출 추이 보기 방식(12·24개월 · 일별 · 구간 — 지출일은 실제 날짜라 일별도 정직하다). */
@@ -88,10 +102,22 @@ export async function loadBillingStats(
     console.error("[billing/stats/expenses]", error);
     return null;
   });
-  const base = { today, months, savedMode, scope: null, scopeEmpty: false, next: null, expensePeriod };
-  const done = async <T extends object>(v: T) => ({ ...v, expenses: await expensesPromise });
+  // 지난 기록 — 수업료 수납(학원 전체 · 과목으로 가를 재료가 없다 — 화면이 과목 관리자에겐 세우지 않는다). 따로 함께 띄운다(B4).
+  const tuitionPromise = loadTuitionHistory(user.tenantId).catch((error: unknown) => {
+    console.error("[billing/stats/tuition-history]", error);
+    return null;
+  });
+  const base = { today, months, savedMode, scope: null, scopeEmpty: false, next: null, expensePeriod, tuitionView: savedTuitionView(prefs) };
+  const done = async <T extends object>(v: T) => ({ ...v, expenses: await expensesPromise, tuition: await tuitionPromise });
+  // 과목 범위를 먼저 따로 판정한다 — 못 읽으면 과목 관리자일 수 있으니 학원 전체 '지난 기록'을 싣지 않는다(청구 조회 실패와 가른다).
+  let scoped: Awaited<ReturnType<typeof subjectScopeOf>>;
   try {
-    const scoped = await subjectScopeOf(user, settings, requestedSubject);
+    scoped = await subjectScopeOf(user, settings, requestedSubject);
+  } catch (error) {
+    console.error("[billing/stats/subject-scope]", error);
+    return { ...base, rows: null, expenses: await expensesPromise, tuition: undefined };
+  }
+  try {
     if (scoped?.empty) return done({ ...base, scopeEmpty: true, rows: null });
     const pred = scoped && !scoped.empty ? scoped.pred : null;
     const [compute, nextCompute] = await Promise.all([

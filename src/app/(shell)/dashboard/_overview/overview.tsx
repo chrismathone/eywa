@@ -16,7 +16,7 @@ import {
 } from "@/features/dashboard/overview/model";
 import { concurrentShare } from "@/features/students/enrollment/enrolled-composition";
 // 재원생 패널 ↗는 KPI 카드와 같은 주소 — "/students"만 적으면 계정에 저장된 필터가 끼어 숫자가 달라 보인다(F21).
-import { attendanceStatsHref, billingStatsHref, consultProgressStatsHref, consultationStatsHref, newcomerStatsHref, expenseStatsHref, reportStatsHref, studentsEnrolledHref, studentsStatsHref } from "@/features/dashboard/overview/kpi-links";
+import { admissionsStatsHref, attendanceStatsHref, billingStatsHref, consultProgressStatsHref, consultationStatsHref, newcomerStatsHref, expenseStatsHref, reportStatsHref, studentsEnrolledHref, studentsStatsHref } from "@/features/dashboard/overview/kpi-links";
 import { DASHBOARD_SUBJECT_COLORS, STAFF_SUBJECT_LEGEND, dashboardSubjectColor, dashboardCombinationColor } from "@/features/dashboard/overview/subject-colors";
 import { foldExpenseTotals } from "@/features/dashboard/overview/expense-total";
 import { paymentRateDisplay } from "@/features/billing/calc";
@@ -285,7 +285,7 @@ export function Overview({
     <Panel
       title={t("studentsComp", "재원생 구성")}
       note="현재 · 초·중·고 · 영어·동시수강·수학"
-      href={studentsStatsHref("trend", "mix")}
+      href={studentsStatsHref("trend", { view: "mix", subject: view?.activeSubject, teacherView: snapshot.teacherView })}
       sections={[v.students]}
     >
       {student && (student.levelSplit
@@ -549,7 +549,7 @@ export function Overview({
     <Panel
       title={t("changes", "등록 · 퇴원 추이")}
       note={`최근 6개월 · 당월은 오늘까지${change && startedNote(change) ? ` · ${startedNote(change)}` : ""}`}
-      href={studentsStatsHref("flow")}
+      href={studentsStatsHref("flow", { subject: view?.activeSubject, teacherView: snapshot.teacherView })}
       sections={[v.changes]}
       wide
       tools={kindTools("changes", "등록 · 퇴원 추이")}
@@ -662,7 +662,7 @@ export function Overview({
       <Panel
         title={t("enrolledTrend", "재원생 추이")}
         note={`${enrolledTrend?.monthlyFrom ? `${enrolledTrend.monthlyFrom.slice(0, 4)}년 ${Number(enrolledTrend.monthlyFrom.slice(5, 7))}월부터` : "최근 12개월"} · 달마다 말일 기준(이번 달은 오늘) · 휴원 제외`}
-        href={studentsStatsHref("trend")}
+        href={studentsStatsHref("trend", { subject: view?.activeSubject, teacherView: snapshot.teacherView })}
         sections={[v.enrolledTrend]}
         className={s.fullRow}
         tools={kindTools("enrolledTrend", "재원생 추이")}
@@ -704,7 +704,7 @@ export function Overview({
       <Panel
         title={t("courseTrend", "강좌수 추이")}
         note={`${courseTrend?.monthlyFrom ? `${ym(courseTrend.monthlyFrom)}부터` : "최근 12개월"} · 달마다 말일 기준(이번 달은 오늘) · 학생마다 듣는 반을 모두`}
-        href={studentsStatsHref("courses")}
+        href={studentsStatsHref("courses", { subject: view?.activeSubject, teacherView: snapshot.teacherView })}
         sections={[v.courseTrend]}
         className={s.fullRow}
         tools={kindTools("courseTrend", "강좌수 추이")}
@@ -743,7 +743,7 @@ export function Overview({
     <Panel
       title={t("subjects", "과목별 수강")}
       note="현재 재원생 · 과목별 수강과 동시 수강"
-      href={studentsStatsHref("trend", "subject")}
+      href={studentsStatsHref("trend", { view: "subject", subject: view?.activeSubject, teacherView: snapshot.teacherView })}
       sections={[v.students]}
     >
       {student && (
@@ -825,7 +825,8 @@ export function Overview({
     admissions: (
     <Panel
       title={t("admissions", "신규 콜&상담 전환")}
-      note="지난달 · 이번 달 · 상담일 기준"
+      note="지난달 · 이번 달 · 접수일 기준"
+      href={snapshot.teacherView || view?.subjectScoped ? undefined : admissionsStatsHref()}
       sections={[v.admissions]}
     >
       {admissions && <AdmissionsComparison stats={admissions} today={snapshot.today} />}
@@ -922,8 +923,8 @@ export function Overview({
       title={t("consultProgress", "상담 진행")}
       note={
         v.consultProgress?.data
-          ? `상담일 기준 ${monthDayLabel(v.consultProgress.data.summary.from)}부터 · 접수 → 수업 시작`
-          : "상담일 기준 최근 30일 · 접수 → 수업 시작"
+          ? `접수일 기준 ${monthDayLabel(v.consultProgress.data.summary.from)}부터 · 접수 → 수업 시작`
+          : "접수일 기준 최근 30일 · 접수 → 수업 시작"
       }
       href={snapshot.teacherView || view?.subjectScoped ? "/enrollment" : consultProgressStatsHref()}
       sections={[v.consultProgress]}

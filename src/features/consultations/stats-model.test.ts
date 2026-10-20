@@ -49,7 +49,7 @@ describe("상담 통계 모델", () => {
     expect(bucketLabel("2026-09-28", "week")).toBe("9/28");
   });
 
-  it("지표 → 추이 줄: 후속 완료율 = 완료 ÷ (완료 + 미완료), 반 미매핑 = (상담 − 연결) ÷ 상담", () => {
+  it("지표 → 추이 줄: 후속 완료율 = 완료 ÷ (완료 + 미완료), 반 없는 상담 = (상담 − 연결) ÷ 상담", () => {
     const rows = [b("2026-08-01"), b("2026-09-01", { n: 0, students: 0, done: 0, pending: 0, audio: 0, ai: 0, synced: 0, mapped: 0 })];
     expect(metricSeries(rows, "follow", "month").points.map((p) => p.v)).toEqual([75, null]);
     expect(metricSeries(rows, "class", "month").points.map((p) => p.v)).toEqual([40, null]);

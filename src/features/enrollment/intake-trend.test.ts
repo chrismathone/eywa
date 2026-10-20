@@ -33,6 +33,14 @@ describe("bucketIntake — 신규 문의 추이", () => {
       ["math", 1, 1],
     ]);
     expect(t.unknown[1]).toBe(2);
+    // 겹치지 않는 조합 — 두 과목 문의는 'english+math' 한 칸에만(쌓은 막대 합 = 전체).
+    expect(t.combos.map((c) => [c.key, c.values[0], c.values[19]])).toEqual([
+      ["english", 1, 0],
+      ["english+math", 1, 0],
+      ["math", 0, 1],
+    ]);
+    const stacked = t.keys.map((_, i) => t.combos.reduce((n, c) => n + c.values[i]!, 0) + t.unknown[i]!);
+    expect(stacked).toEqual(t.total);
   });
 
   it("월별 — 달로 묶는다 · 빈 달은 0", () => {

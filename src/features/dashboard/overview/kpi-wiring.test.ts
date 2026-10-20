@@ -544,3 +544,15 @@ describe("운영실 '상세' → 통계 화면", () => {
     expect(newcomerStatsHref()).toBe("/newcomers/stats#history");
   });
 });
+
+describe("원생 통계 상세 — 고른 과목을 싣고 강사 화면은 원생목록으로(리뷰 2026-10-21)", () => {
+  it("과목 관리자가 고른 과목 · 보기 · 강사 화면", async () => {
+    const { studentsStatsHref, studentsEnrolledHref, admissionsStatsHref } = await import("./kpi-links");
+    expect(studentsStatsHref("trend")).toBe("/students/stats#trend");
+    expect(studentsStatsHref("trend", { view: "mix" })).toBe("/students/stats?view=mix#trend");
+    expect(studentsStatsHref("courses", { subject: "english" })).toBe("/students/stats?subject=english#courses");
+    expect(studentsStatsHref("trend", { view: "subject", subject: "math" })).toBe("/students/stats?view=subject&subject=math#trend");
+    expect(studentsStatsHref("flow", { teacherView: true })).toBe(studentsEnrolledHref());
+    expect(admissionsStatsHref()).toBe("/enrollment?view=stats&from=dashboard#conversion");
+  });
+});

@@ -15,10 +15,12 @@ import { TrendChart, type ChartSeries } from "../../students/stats/_components/t
 const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
 const BILLED = "var(--color-primary)";
 const PAID = "var(--color-green)";
-const LEFT = "var(--color-danger)";
 
 /**
- * 청구 · 수납 추이 — 달마다 실청구(청구 − 할인) · 수납 · 미수. 운영실 카드와 같은 요약(`loadBillingMonths`)이라 이번 달 = 카드 값.
+ * 청구 · 수납 추이 — 달마다 **실청구 막대 하나**(운영실 '6개월 청구 · 수납' 카드와 같은 모양 · 원장 2026-09-12 *"두 개 다 있을 필요가 없다"*).
+ * 수납·수납률은 마우스 오버 상자와 위 칸·표로 — 실청구와 수납은 몇십만 원 차이라 같은 축에 두 선을 그리면 한 줄로 겹치고, 이번 달만
+ * 꺾여 '수납 하락'으로 읽힌다(리뷰 2026-10-21). 미수는 **지금 남은 금액**이라 추세로 그리면 늘 오른쪽 끝만 솟는다 — 위 칸(지금 미수 잔액)과
+ * 표(청구월마다 남은 금액)에만 둔다. 운영실 카드와 같은 요약(`loadBillingMonths`)이라 이번 달 = 카드 값.
  * 첫 청구서가 있는 달 전은 '자료 없음'(선이 그 달부터 시작한다 — 0으로 그리면 "청구가 없었다"로 읽힌다).
  * 수치 표의 달을 누르면 수납관리의 그 달 목록으로 간다.
  */
@@ -44,8 +46,9 @@ export function BillingTrendCard({
   const valueOf = (pick: (r: SubjectBillingSummary) => number) => (rows ?? []).map((r, i) => (first >= 0 && i >= first ? pick(r) : null));
   const series: ChartSeries[] = [
     { key: "billed", name: "실청구", color: BILLED, values: valueOf((r) => r.totalBilled - r.totalDiscount), strong: true },
-    { key: "paid", name: "수납", color: PAID, values: valueOf((r) => r.totalCollected) },
-    { key: "left", name: "미수", color: LEFT, values: valueOf((r) => r.outstanding) },
+    { key: "paid", name: "수납", color: PAID, values: valueOf((r) => r.totalCollected), tooltipOnly: true },
+    // 수납률 글자는 표·위 칸과 같은 규칙(`paymentRateDisplay` — 미수가 남았으면 100%로 적지 않는다).
+    { key: "rate", name: "수납률", color: PAID, values: valueOf((r) => Number(paymentRateDisplay(r.paymentRate, r.outstanding))), tooltipOnly: true, format: (n) => `${n}%` },
   ];
   const now = rows?.at(-1);
   const unknownShown = scoped && (rows ?? []).some((r) => (r.unclassified?.billed ?? 0) > 0 || (r.unclassified?.outstanding ?? 0) > 0);
@@ -54,7 +57,7 @@ export function BillingTrendCard({
     <StatCard
       id="billing"
       title="청구 · 수납 추이"
-      note={`청구월 기준 · 이번 달은 오늘까지 들어온 수납 · 미수는 지금 남은 금액${scoped ? " · 담당 과목 청구 항목만(과목을 못 가른 항목은 '과목 모름')" : ""}`}
+      note={`청구월 기준 · 막대 = 실청구(청구 − 할인) · 수납·수납률은 막대에 마우스를 올리면 · 이번 달은 오늘까지 들어온 수납${scoped ? " · 담당 과목 청구 항목만(과목을 못 가른 항목은 '과목 모름')" : ""}`}
       error={!rows}
       tools={
         period.grain === "month" ? (
@@ -79,7 +82,7 @@ export function BillingTrendCard({
               value={now ? won(now.totalCollected) : "—"}
               sub={now ? `수납률 ${paymentRateDisplay(now.paymentRate, now.outstanding)}%` : undefined}
             />
-            <Fact label="미수" value={now ? won(now.outstanding) : "—"} sub={now ? `미납 ${now.unpaidCount}건 · 부분납 ${now.partialCount}건` : undefined} />
+            <Fact label="미수 잔액" value={now ? won(now.outstanding) : "—"} sub={now ? `미납 ${now.unpaidCount}건 · 부분납 ${now.partialCount}건` : undefined} />
           </dl>
           {first < 0 ? (
             <p className="text-muted-foreground text-sm">이 기간에 청구서가 없습니다.</p>
@@ -88,7 +91,7 @@ export function BillingTrendCard({
               labels={rows.map((r) => `${r.period.slice(2, 4)}.${r.period.slice(5, 7)}`)}
               tooltipLabels={rows.map((r) => monthLabel(r.period))}
               series={series}
-              kind="line"
+              kind="bar"
               format={chartMoney}
             />
           )}
@@ -114,7 +117,7 @@ export function BillingTrendCard({
                     <th className="px-2 py-1.5 text-right font-medium">실청구</th>
                     <th className="px-2 py-1.5 text-right font-medium">할인</th>
                     <th className="px-2 py-1.5 text-right font-medium">수납</th>
-                    <th className="px-2 py-1.5 text-right font-medium">미수</th>
+                    <th className="px-2 py-1.5 text-right font-medium">미수 잔액</th>
                     <th className="px-2 py-1.5 text-right font-medium">수납률</th>
                     <th className="px-2 py-1.5 text-right font-medium">청구서</th>
                     {unknownShown ? <th className="px-2 py-1.5 text-right font-medium">과목 모름 미수</th> : null}

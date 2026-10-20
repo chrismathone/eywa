@@ -92,6 +92,26 @@ export function pointsFor(set: SeriesSet, range: TrendRange, from: string | null
   return range === "m12" ? monthly.slice(-12) : monthly;
 }
 
+/**
+ * 이 기록 길이에서 **뜻이 있는** 기간 버튼(리뷰 2026-10-21 — 침산은 2026-04부터라 '전체 기간'과 '최근 12개월'이 같은 7칸, '연도별'은 점 하나였다):
+ * 월별 칸이 12개 이하면 '최근 12개월'을 빼고(전체 기간과 같다), 해가 하나뿐이면 '연도별'을 뺀다. '전체 기간'·'주별'은 늘 있다.
+ */
+export function availableRanges(set: SeriesSet, from: string | null): TrendRange[] {
+  const months = clipToRecords(set.monthly, from).length;
+  const years = clipToRecords(set.yearly, from).length;
+  return TREND_RANGES.filter((r) => (r === "m12" ? months > 12 : r === "y" ? years > 1 : true));
+}
+
+/** 저장된 기간이 지금 없는 버튼이면 '전체 기간'으로(기록이 길어지면 저장값이 다시 산다). */
+export function rangeIn(range: TrendRange, available: readonly TrendRange[]): TrendRange {
+  return available.includes(range) ? range : "all";
+}
+
+/** 월별 기록(등록·퇴원 추이)의 기간 버튼 — 칸이 12개 이하면 '최근 12개월'은 '전체 기간'과 같아 뺀다. */
+export function availableFlowRanges(rows: readonly FlowRow[], from: string | null): FlowRange[] {
+  return flowRowsFor(rows, "all", from).length > 12 ? ["all", "m12"] : ["all"];
+}
+
 /** 두 달(YYYY-MM) 중 늦은 쪽 — 둘 다 지켜야 하는 아래 경계. 하나가 없으면 다른 쪽. */
 export function laterMonth(a: string | null, b: string | null): string | null {
   if (!a) return b;

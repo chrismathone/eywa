@@ -9,6 +9,7 @@ import { PERIOD_KEYS, readPeriodParams } from "@/features/stats/period";
 import { BackToListButton } from "../../consultations/_components/back-to-list-button";
 import { StatCard } from "../../students/stats/_components/stat-card";
 import { ReportTrendCard } from "./report-trend-card";
+import { CardNow } from "./card-now";
 
 export const metadata = { title: "보고서 통계 — 에이와" };
 
@@ -56,14 +57,18 @@ export default async function ReportStatsPage({ searchParams }: { searchParams: 
           <p className="text-muted-foreground text-sm break-keep">담당 과목이 정해지지 않아 통계를 보이지 않습니다. 원장님께 담당 과목 지정을 요청해 주세요.</p>
         </StatCard>
       ) : (
-        <ReportTrendCard
-          trend={stats.trend}
-          period={stats.period}
-          today={stats.today}
-          keep={{ subject: one(sp.subject) }}
-          subjectsLabel={subjectsLabel}
-          classnoteOn={stats.classnoteOn}
-        />
+        // `#reports`(운영실 '상세' · 기간 바꿈 뒤 자리) = '현재 확인할 항목'부터 — 추이 카드로 바로 가면 위 숫자 상자가 화면 밖으로 밀린다(리뷰 2026-10-21).
+        <div id="reports" className="scroll-mt-4 space-y-4 compact-chrome:space-y-3">
+          <CardNow homework={stats.card.homework} unread={stats.card.unread} classnoteOn={stats.classnoteOn} />
+          <ReportTrendCard
+            trend={stats.trend}
+            period={stats.period}
+            today={stats.today}
+            keep={{ subject: one(sp.subject) }}
+            subjectsLabel={subjectsLabel}
+            classnoteOn={stats.classnoteOn}
+          />
+        </div>
       )}
     </div>
   );

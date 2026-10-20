@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { firstMonthWith, mergeHistory, parseHistoryData, withoutPaying, yearlyHistory } from "./history";
-import { aywaHistoryMonths, lessonKinds, type HistoryInvoice } from "./history-aywa";
+import { aywaHistoryMonths, lessonKinds, lessonNameWeights, lessonPaid, lessonPrograms, type HistoryInvoice } from "./history-aywa";
+import { lessonProgramClassifier } from "./lesson-program";
 
 describe("지난 기록 — 두 출처 잇기(원장 2026-10-20)", () => {
   it("모양이 틀린 칸은 버리고(0으로 바꾸지 않는다) 추정 칸 이름만 남긴다", () => {
@@ -94,8 +95,8 @@ describe("지난 기록 — 에이와 쪽 월별 값", () => {
       started: new Set(["a", "d", "f", "e", "k"]),
     });
     expect(rows).toEqual([
-      { month: "2026-03", data: { payingGeneral: 2, payingEie: 0, payingTotal: 2, newRegistered: 3, newReal: 1 } },
-      { month: "2026-04", data: { payingGeneral: 1, payingEie: 1, payingTotal: 1, newRegistered: 2, newReal: 2 } },
+      { month: "2026-03", data: { payingGeneral: 2, payingEie: 0, payingTotal: 2, newRegistered: 3, newReal: 1, tuitionPaidGeneral: 200000, tuitionPaidEie: 0 } },
+      { month: "2026-04", data: { payingGeneral: 1, payingEie: 1, payingTotal: 1, newRegistered: 2, newReal: 2, tuitionPaidGeneral: 100000, tuitionPaidEie: 100000 } },
     ]);
   });
 
@@ -104,5 +105,35 @@ describe("지난 기록 — 에이와 쪽 월별 값", () => {
     const rows = aywaHistoryMonths({ months: ["2026-03"], invoices, registrations: [reg("a", "2026-03-05")], started: new Set(["a"]) });
     expect(rows[0]!.data).not.toHaveProperty("payingEie");
     expect(rows[0]!.data).toMatchObject({ payingGeneral: 1, newReal: 1 });
+  });
+
+  it("프로그램 칸 — 수업명으로 수학·인재원 영어·그 밖·모름(EiE 줄은 EiE 칸만) · 두 프로그램이면 양쪽 · 판정기가 없으면 칸을 싣지 않는다", () => {
+    const subjects = [{ key: "math", label: "수학" }, { key: "english", label: "영어" }, { key: "science", label: "과학" }];
+    const invoices = [
+      inv("a", "2026-03", [lesson("수학 A"), lesson("중등영어 정규")]),
+      inv("b", "2026-03", [lesson("[EiE] Kopi"), lesson("고등모의고사 특강")]), // EiE + 모름
+      inv("c", "2026-03", [lesson("초등 과학 탐구")]),
+      inv("d", "2026-03", [], "unpaid", 120000), // 항목 없는 청구 = 모름
+    ];
+    const classify = lessonProgramClassifier(lessonNameWeights(invoices), subjects);
+    const [row] = aywaHistoryMonths({ months: ["2026-03"], invoices, registrations: [], started: new Set(), classify });
+    expect(row!.data).toMatchObject({ payingGeneral: 4, payingEie: 1, payingMath: 1, payingInjaewon: 1, payingOther: 1, payingUnknown: 2 });
+    expect(lessonPrograms([lesson("[EiE] Kopi")], 0, classify)).toEqual(new Set());
+    const [plain] = aywaHistoryMonths({ months: ["2026-03"], invoices, registrations: [], started: new Set() });
+    expect(plain!.data).not.toHaveProperty("payingMath");
+  });
+
+  it("수업료 수납 — 수업 항목의 낸 돈에서 진행 중 환불을 뺀다(취소된 환불은 그대로) · 줄마다 낸 돈이 없으면 머리의 낸 돈을 금액 비율로 · 항목 없는 청구는 머리 전부", () => {
+    const refunded = { ...lesson("수학 A", 300000), refunds: [{ status: "active", amount: 100000 }, { status: "cancelled", amount: 50000 }] };
+    expect(lessonPaid([refunded, lesson("[EiE] Kopi", 200000), { kind: "교재", description: "교재", amount: 30000, paid: 30000 }], null)).toEqual({ general: 200000, eie: 200000 });
+    expect(lessonPaid([{ kind: "tuition", description: "수학 A", amount: 300000 }, { kind: "교재", description: "교재", amount: 100000 }], 200000)).toEqual({ general: 150000, eie: 0 });
+    expect(lessonPaid([], 120000)).toEqual({ general: 120000, eie: 0 });
+    // 합쳐진 줄 — 환불은 원본 줄마다(맨 위엔 첫 원본 것만 남거나 없다) · 원본들의 환불을 더한다(재리뷰 2026-10-21).
+    const merged = {
+      ...lesson("수학 A+B", 600000),
+      refunds: [{ status: "active", amount: 150000 }],
+      sourceItems: [{ description: "수학 A", amount: 300000, refunds: [{ status: "active", amount: 150000 }] }, { description: "수학 B", amount: 300000 }],
+    };
+    expect(lessonPaid([merged], null)).toEqual({ general: 450000, eie: 0 });
   });
 });

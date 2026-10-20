@@ -8,6 +8,8 @@ import type { StatsPeriod } from "@/features/stats/period";
  *  · 숙제: 숫자 판정은 `parseHomeworkRate` 하나(운영실 숙제 위험과 같다 — `없음`·빈칸·정도 미상은 분모에서 빠진다) · 낮음 = `LOW_HOMEWORK_RATE` 미만.
  *    운영실 카드는 최근 7일 **학생 수**, 여기는 칸마다 **기록 비율**(달마다 학생 수를 세면 달 길이·반 수에 끌려 흐름이 안 보인다).
  *  · 학부모 확인: 카드와 같은 조건(발송 성공 · 매칭 가능 · 48시간) — 칸의 `unread`를 최근 30일 더하면 카드의 미확인 건수다.
+ *    확인율 = **보낸 지 48시간이 지난** 보고서 중 48시간 안에 확인한 비율(0389a `sent_mature`·`read48_mature` — 방금 보낸 보고서를 분모에
+ *    넣으면 최근 이틀이 늘 낮게 나온다). 0389a 전 DB(칸이 없다)면 종전 값(`sent`·`read48`)으로 그린다(#95).
  * 과목: 운영실처럼 보고서를 쓰는 과목(`tracked` — 비면 좁히지 않는다)만 · 과목 관리자는 그 과목만(`inScope`).
  */
 export type ReportBucketRow = {
@@ -18,6 +20,9 @@ export type ReportBucketRow = {
   sent: number;
   read48: number;
   unread: number;
+  /** 0389a — 없으면(옛 DB) undefined. */
+  sent_mature?: number;
+  read48_mature?: number;
 };
 export type ReportTrend = {
   keys: string[];
@@ -31,6 +36,9 @@ export type ReportTrend = {
   sent: number[];
   read48: number[];
   unread: number[];
+  /** 보낸 지 48시간이 지난 발송 · 그중 48시간 안 확인 — 확인율의 분모·분자. */
+  sentMature: number[];
+  read48Mature: number[];
 };
 
 export function reportTrend(input: {
@@ -43,7 +51,20 @@ export function reportTrend(input: {
   const keys = period.grain === "month" ? period.months : period.days;
   const at = new Map(keys.map((k, i) => [k, i]));
   const zeros = () => keys.map(() => 0);
-  const out: ReportTrend = { keys, reports: zeros(), parsed: zeros(), low: zeros(), notSubmitted: zeros(), zero: zeros(), unparsed: zeros(), sent: zeros(), read48: zeros(), unread: zeros() };
+  const out: ReportTrend = {
+    keys,
+    reports: zeros(),
+    parsed: zeros(),
+    low: zeros(),
+    notSubmitted: zeros(),
+    zero: zeros(),
+    unparsed: zeros(),
+    sent: zeros(),
+    read48: zeros(),
+    unread: zeros(),
+    sentMature: zeros(),
+    read48Mature: zeros(),
+  };
   for (const row of input.rows) {
     const i = at.get(row.bucket);
     if (i === undefined) continue;
@@ -54,6 +75,8 @@ export function reportTrend(input: {
     out.sent[i]! += Number(row.sent);
     out.read48[i]! += Number(row.read48);
     out.unread[i]! += Number(row.unread);
+    out.sentMature[i]! += Number(row.sent_mature ?? row.sent);
+    out.read48Mature[i]! += Number(row.read48_mature ?? row.read48);
     const raw = (row.homework_score ?? "").trim();
     const rate = parseHomeworkRate(raw);
     if (rate === null) {

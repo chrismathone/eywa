@@ -894,7 +894,7 @@ describe("auditDetail — 2026-08-20 신규 case (실데이터 metadata 표본)"
     expect(auditDetail("student_consultation_follow_up", { consultationId: DOC, studentId: SID, done: true }, ctx())).toBe(
       "완료로 표시",
     );
-    // 반(0318a) — 판정한 저장만 반을 말한다. 바뀌면 이전 → 지금, 사람이 고른 미매핑은 '직접 고름'.
+    // 반(0318a) — 판정한 저장만 반을 말한다. 바뀌면 이전 → 지금, 사람이 비운 반은 '없음(직접 고름)'.
     expect(
       auditDetail("student_consultation_create", { ...meta, classId: CID, className: "초등M 초4 BS1J", classPick: "auto" }, ctx(names)),
     ).toBe("상담일 2026-08-25 · 학습 · 대상 학부모 · 후속조치 2026-09-01까지 · 반 초등M 초4 BS1J(자동)");
@@ -904,7 +904,7 @@ describe("auditDetail — 2026-08-20 신규 case (실데이터 metadata 표본)"
         { ...meta, classId: null, className: null, classPick: "manual", prevClassId: CID, prevClassName: null },
         ctx(names),
       ),
-    ).toBe("상담일 2026-08-25 · 학습 · 대상 학부모 · 후속조치 2026-09-01까지 · 반 초등M 초4 BS1J → 미매핑(직접 고름)");
+    ).toBe("상담일 2026-08-25 · 학습 · 대상 학부모 · 후속조치 2026-09-01까지 · 반 초등M 초4 BS1J → 없음(직접 고름)");
     expect(
       auditDetail("student_consultation_class_backfill", { count: 1902, mapped: 678, reasons: { "반 하나로 좁혀짐": 678, "상담사가 가르치는 반 없음": 990 } }, ctx()),
     ).toBe("상담 1902건 판정 · 반 연결 678건 · 반 하나로 좁혀짐 678, 상담사가 가르치는 반 없음 990");

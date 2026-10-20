@@ -1,35 +1,18 @@
+import { Suspense } from "react";
 import { requireAccess } from "@/lib/auth/require-access";
 import { PageHeader } from "@/components/page-header";
 import { getTenantSettings } from "@/features/owner/server/queries";
-import { buildSubjectMaps } from "@/features/owner/subjects";
-import { DASHBOARD_SUBJECT_COLORS } from "@/features/dashboard/overview/subject-colors";
 import { loadStudentStats } from "@/features/students/stats/server/load";
-import { distinctSubjectTokens, firstFlowMonth, firstNonZeroMonth, laterMonth, tokenColor, viewFromParam } from "@/features/students/stats/model";
-import type { MixKey } from "@/features/dashboard/overview/enrolled-trend";
-import { programLabel, type Program } from "@/features/students/enrollment/program";
+import { viewFromParam } from "@/features/students/stats/model";
 import { BackToListButton } from "../../consultations/_components/back-to-list-button";
 import { StatCard } from "./_components/stat-card";
-import { TrendBoard } from "./_components/trend-board";
-import { CourseBoard } from "./_components/course-board";
-import { FlowBoard } from "./_components/flow-board";
-import { HistoryBoard } from "./_components/history-board";
 import { SubjectSwitch } from "./_components/subject-switch";
-import { FirstClassBoard } from "./_components/first-class-board";
+import { CourseSection, FirstClassSection, FlowSection, HistorySection, SectionSkeleton, TrendSection } from "./_components/sections";
 import { FIRST_CLASS_KEYS } from "@/features/students/stats/first-class-trend";
 import { readPeriodParams } from "@/features/stats/period";
 
 export const metadata = { title: "원생 통계 — 에이와" };
 
-/** 수강 구성 선 — 운영실 '재원생 구성'·'학년별 재원생' 범례와 같은 이름·색(영어 빨강 · 동시수강 보라 · 수학 파랑). */
-const MIX_META: Record<MixKey, { label: string; color: string }> = {
-  englishOnly: { label: "영어만", color: DASHBOARD_SUBJECT_COLORS.english },
-  both: { label: "동시수강", color: DASHBOARD_SUBJECT_COLORS.both },
-  mathOnly: { label: "수학만", color: DASHBOARD_SUBJECT_COLORS.math },
-  otherOnly: { label: "그 밖의 과목만", color: DASHBOARD_SUBJECT_COLORS.other },
-};
-/** 강좌수 프로그램 선 — 수학 파랑 · 인재원 영어 빨강(운영실 프로그램 색) · EiE는 영어와 갈리게 금색. */
-const PROGRAM_COLOR: Record<Program, string> = { math: DASHBOARD_SUBJECT_COLORS.math, injaewon: DASHBOARD_SUBJECT_COLORS.english, eie: tokenColor("gold") };
-const monthText = (ym: string) => `${ym.slice(0, 4)}년 ${Number(ym.slice(5, 7))}월`;
 const one = (v: string | string[] | undefined) => (typeof v === "string" ? v : undefined);
 
 /**
@@ -39,145 +22,59 @@ const one = (v: string | string[] | undefined) => (typeof v === "string" ? v : u
  * 운영실 카드의 '상세'가 여기로 온다 — 재원생 추이 `#trend` · 재원생 구성 `?view=mix#trend` · 과목별 수강 `?view=subject#trend` ·
  * 등록·퇴원 추이 `#flow` · 오늘첫수업 `?fc=day#first`. 숫자는 운영실과 **같은 함수**를 더 긴 창으로 부른 것이라 오늘 값 = 카드 값(load.ts).
  * 권한 = 원생목록과 같은 `students` 게이트 · 과목 관리자는 자기 과목만(`?subject=` 전환 — 운영실과 같다) · 강사 범위는 보이지 않는다.
+ * 🔑 카드마다 따로 기다린다(`<Suspense>` · 리뷰 2026-10-21 속도) — 먼저 끝난 카드부터 서고, 늦는 카드 자리엔 같은 id의 빈 표면(`SectionSkeleton`)이
+ *    서 있어 '상세' 주소의 `#…`가 그 자리로 간다. 아래 경계 계산은 `bounds.ts` 한 곳.
  */
 export default async function StudentStatsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await requireAccess("students");
   const sp = await searchParams;
   const [stats, settings] = await Promise.all([loadStudentStats(one(sp.subject), readPeriodParams(sp, FIRST_CLASS_KEYS)), getTenantSettings()]);
-  const subjectMaps = buildSubjectMaps(settings.operations.subjects);
-  const tokens = distinctSubjectTokens(settings.operations.subjects.map((s) => ({ key: s.key, color: subjectMaps.colorOf(s.key) })));
   const view = viewFromParam(sp.view) ?? stats.prefs.view;
   const scope = stats.scope;
-  const trend = stats.trend?.data ?? null;
-  const flowRows = stats.flow?.data ?? null;
-  // 아래 경계 — 학원 전체는 퇴원 기록 시작부터(퇴원 기록이 아직 없으면 첫 학생이 있는 달과 지점이 에이와를 시작한 달 중 늦은 쪽부터) ·
-  // 과목 관리자는 과목을 가를 수 있는 달(수강 종료 첫 기록 · 그것도 없으면 지점 시작 달)부터도 · 모두 에이와 수강 기록이 갖춰진 달
-  // (`trustFrom` — 원장 2026-10-20 '2026년 4월부터')부터. 그 전 흐름은 아래 '지난 기록'이 맡는다.
-  const { recordsFrom, breakdownFrom, createdMonth, trustFrom } = stats.bounds;
-  const baseFrom = laterMonth(recordsFrom ?? laterMonth(trend ? firstNonZeroMonth(trend.total.monthly) : null, createdMonth), trustFrom);
-  const countFrom = scope ? laterMonth(baseFrom, breakdownFrom ?? createdMonth) : baseFrom;
-  const flowBase = laterMonth(recordsFrom ?? laterMonth(flowRows ? firstFlowMonth(flowRows) : null, createdMonth), trustFrom);
-  const flowFrom = scope ? laterMonth(flowBase, breakdownFrom ?? createdMonth) : flowBase;
-  const monthEnd = trend ? Object.fromEntries(trend.total.monthly.filter((p) => !flowFrom || p.key >= flowFrom).map((p) => [p.key, p.count])) : null;
-  const clipNote =
-    trustFrom && countFrom === trustFrom
-      ? `에이와 수강 기록이 갖춰진 ${monthText(trustFrom)}부터 그립니다 — 그 전 달은 옮겨 오기 전 학생의 수강 시작일이 늦게 잡혀 실제보다 낮게 나옵니다(그 전 흐름은 아래 '지난 기록').`
-      : scope && countFrom
-      ? breakdownFrom && countFrom === breakdownFrom
-        ? `${scope.label} 흐름은 ${monthText(countFrom)}부터입니다 — 그 전에 그만둔 학생은 수강 기록이 남아 있지 않아 과목을 가를 수 없습니다.`
-        : `${scope.label} 흐름은 ${monthText(countFrom)}부터의 기록만 보입니다.`
-      : recordsFrom
-        ? `퇴원 기록이 ${monthText(recordsFrom)}부터 있어, 그 전 기간은 정확히 셀 수 없어 보이지 않습니다.`
-        : countFrom
-          ? `${monthText(countFrom)}부터의 기록만 보입니다 — 그 전 기간은 떠난 학생의 기록이 없어 정확히 셀 수 없습니다.`
-          : null;
-  // 강좌수 추이는 수강 행에 기대므로 수강 종료가 처음 기록된 달(breakdownFrom)도 지킨다(과목 선과 같은 경계) · '지난 기록'엔 강좌수가 없어 가리키지 않는다.
-  const courseFrom = laterMonth(countFrom, breakdownFrom);
-  const courseClipNote =
-    trustFrom && courseFrom === trustFrom
-      ? `에이와 수강 기록이 갖춰진 ${monthText(trustFrom)}부터 그립니다 — 그 전 달은 옮겨 오기 전 학생의 수강 시작일이 늦게 잡혀 실제보다 적게 나옵니다.`
-      : breakdownFrom && courseFrom === breakdownFrom && courseFrom !== countFrom
-        ? `강좌수는 ${monthText(breakdownFrom)}부터 그립니다 — 그 전에 그만둔 학생은 수강 기록이 남아 있지 않아 반을 셀 수 없습니다.`
-        : clipNote;
   const description = scope ? `그동안의 재원생 흐름과 달마다 있었던 등록·퇴원 · ${scope.label} 기준` : "그동안의 재원생 흐름과 달마다 있었던 등록·퇴원";
   const boardKey = `${view}|${scope?.active ?? scope?.label ?? "all"}`;
+  const parts = stats.parts;
+  const ctx = parts ? { stats, parts, settings, scopeLabel: scope?.label ?? null } : null;
 
   return (
     <div className="@container/panel space-y-4 compact-chrome:space-y-3">
       <PageHeader title="원생 통계" description={description} embedLabel="원생 통계" />
       <div className="flex flex-wrap items-center gap-2 px-1">
         <BackToListButton href="/students" />
-        {scope?.active && scope.choices.length > 1 ? <SubjectSwitch
+        {scope?.active && scope.choices.length > 1 ? (
+          <SubjectSwitch
             choices={scope.choices}
             active={scope.active}
             view={one(sp.view)}
             keep={Object.fromEntries(Object.values(FIRST_CLASS_KEYS).map((k) => [k, one(sp[k])]))}
-          /> : null}
+          />
+        ) : null}
       </div>
       {stats.teacherScoped ? (
         <StatCard id="trend" title="원생 통계" note="강사 화면">
           <p className="text-muted-foreground text-sm break-keep">강사 화면에서는 원생 통계를 보이지 않습니다. 담당 학생 기준 통계는 아직 준비되지 않았습니다.</p>
         </StatCard>
-      ) : stats.scopeEmpty ? (
+      ) : stats.scopeEmpty || !ctx ? (
         <StatCard id="trend" title="원생 통계" note="담당 과목">
           <p className="text-muted-foreground text-sm break-keep">담당 과목이 정해지지 않아 통계를 보이지 않습니다. 원장님께 담당 과목 지정을 요청해 주세요.</p>
         </StatCard>
       ) : (
         <>
-          {trend ? (
-            <TrendBoard
-              key={`trend|${boardKey}`}
-              total={trend.total}
-              subjects={trend.bySubject.map((s) => ({
-                key: `subject:${s.key}`,
-                label: subjectMaps.labelOf(s.key),
-                color: tokenColor(tokens.get(s.key) ?? subjectMaps.colorOf(s.key)),
-                set: s,
-              }))}
-              mixes={trend.byMix.map((m) => ({ key: `mix:${m.key}`, label: MIX_META[m.key].label, color: MIX_META[m.key].color, set: m }))}
-              countFrom={countFrom}
-              breakdownFrom={breakdownFrom}
-              clipNote={clipNote}
-              today={stats.today}
-              scopeLabel={scope?.label ?? null}
-              initial={{ range: stats.prefs.range, view, off: stats.prefs.off, kind: stats.prefs.trendKind }}
-            />
-          ) : (
-            <StatCard id="trend" title="재원생 추이" note="달마다 말일 기준" error />
-          )}
-          {/* 강좌수 추이(원장 2026-10-20 '카드 따로') — 재원생 추이와 같은 아래 경계(countFrom)·같은 경계 문장. */}
-          {stats.courses?.data ? (
-            <CourseBoard
-              key={`courses|${boardKey}`}
-              total={stats.courses.data.total}
-              programs={stats.courses.data.byProgram
-                .filter((p) => stats.eieOn || p.key !== "eie")
-                .map((p) => ({ key: `program:${p.key}`, label: programLabel(p.key, settings.operations.subjects, stats.eieOn), color: PROGRAM_COLOR[p.key], set: p }))}
-              countFrom={courseFrom}
-              clipNote={courseClipNote}
-              today={stats.today}
-              scopeLabel={scope?.label ?? null}
-              initial={{ range: stats.prefs.courseRange, kind: stats.prefs.courseKind, off: stats.prefs.courseOff }}
-            />
-          ) : stats.courses?.error ? (
-            <StatCard id="courses" title="강좌수 추이" note="학생마다 듣는 반을 모두" error />
-          ) : null}
-          {/* 첫 수업 추이(원장 2026-10-20 *"오늘 첫수업도 마찬가지"*) — 운영실 '오늘첫수업' ↗가 연다(월별 · 일별 · 구간). */}
-          {stats.firstClass ? (
-            <FirstClassBoard
-              trend={stats.firstClass.data}
-              period={stats.firstPeriod}
-              today={stats.today}
-              keep={{ view: one(sp.view), subject: one(sp.subject) }}
-              scopeLabel={scope?.label ?? null}
-            />
-          ) : null}
-          {flowRows ? (
-            <FlowBoard
-              key={`flow|${boardKey}`}
-              rows={flowRows}
-              from={flowFrom}
-              monthEnd={monthEnd}
-              initialRange={stats.prefs.flowRange}
-              initialKind={stats.prefs.flowKind}
-              scopeLabel={scope?.label ?? null}
-            />
-          ) : (
-            <StatCard id="flow" title="월별 기록" note="달마다 등록·퇴원" error />
-          )}
-          {/* 지난 기록(메이크에듀 + 에이와 청구) — 값이 없는 지점은 카드를 세우지 않는다 · 학원 전체 값이라 과목 관리자에겐 그렇게 적는다. */}
-          {stats.history?.error ? (
-            <StatCard id="history" title="지난 기록" note="수업료가 청구된 학생 · 실제 신규" error />
-          ) : stats.history?.data?.months.length ? (
-            <HistoryBoard
-              months={stats.history.data.months}
-              aywaFrom={stats.history.data.aywaFrom}
-              aywaAt={stats.history.data.aywaAt}
-              payingHidden={stats.history.data.payingHidden}
-              initialView={stats.prefs.historyView}
-              wide={!!scope}
-            />
-          ) : null}
+          <Suspense fallback={<SectionSkeleton id="trend" title="재원생 추이" height="h-[28rem]" />}>
+            <TrendSection {...ctx} view={view} boardKey={boardKey} />
+          </Suspense>
+          <Suspense fallback={<SectionSkeleton id="courses" title="강좌수 추이" />}>
+            <CourseSection {...ctx} boardKey={boardKey} />
+          </Suspense>
+          <Suspense fallback={<SectionSkeleton id="first" title="첫 수업 추이" />}>
+            <FirstClassSection {...ctx} keep={{ view: one(sp.view), subject: one(sp.subject) }} />
+          </Suspense>
+          <Suspense fallback={<SectionSkeleton id="flow" title="등록 · 퇴원 추이" />}>
+            <FlowSection {...ctx} boardKey={boardKey} />
+          </Suspense>
+          <Suspense fallback={<SectionSkeleton id="history" title="지난 기록" />}>
+            <HistorySection {...ctx} />
+          </Suspense>
         </>
       )}
     </div>

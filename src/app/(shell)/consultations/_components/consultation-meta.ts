@@ -22,7 +22,7 @@ export const CATEGORY_META: Record<StudentConsultationCategory, { label: string;
 
 export const URGENCY_META: Record<FollowUpUrgency, { label: string; color: PillColor } | null> = {
   done: { label: "완료", color: "green" },
-  overdue: { label: "지연", color: "danger" },
+  overdue: { label: "기한 경과", color: "danger" },
   today: { label: "오늘", color: "danger" },
   soon: { label: "3일 내", color: "amber" },
   later: { label: "예정", color: "blue" },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { enrolledOn, monthlyPoints, subjectTrendOf, yearlyPoints, type TrendStudent } from "./enrolled-trend";
+import { breakdownTrendOf, enrolledOn, monthlyPoints, subjectTrendOf, yearlyPoints, type TrendStudent } from "./enrolled-trend";
 
 const s = (id: string, status: string, enrolledAt: string | null, withdrawnAt: string | null = null): TrendStudent => ({ id, status, enrolledAt, withdrawnAt });
 
@@ -100,5 +100,22 @@ describe("과목별 재원생 추이(원장 2026-10-14 2단계)", () => {
     const math = (x: string | null) => x === "math" || x === null;
     expect(subjectTrendOf(one, enX, rows, at, math, "2026-10-14").map((p) => p.count)).toEqual([1, 0]);
     expect(subjectTrendOf(one, enX, rows, at, math).map((p) => p.count)).toEqual([1, 1]); // 오늘을 안 주면 날짜 판정 그대로
+  });
+
+  it("🔴 오늘 점은 휴원 수강을 뺀다(운영실 칸 조회 = 종료일 없음 · 휴원 아님) — 휴원 수강만 남은 학생은 미수강 · 지난 날짜는 되감지 못해 그대로(리뷰 2026-10-21)", () => {
+    const pair = [s("h", "enrolled", "2026-01-01"), s("k", "enrolled", "2026-01-01")];
+    const enHK = { firstStart: new Map([["h", "2026-01-02"], ["k", "2026-01-02"]]), ended: new Set<string>() };
+    const rows = [
+      { studentId: "h", subject: "math", start: "2026-01-02", end: null, transferred: false },
+      { studentId: "h", subject: "english", start: "2026-01-02", end: null, transferred: false, onHold: true }, // 영어만 쉰다
+      { studentId: "k", subject: "english", start: "2026-01-02", end: null, transferred: false, onHold: true }, // 영어 하나뿐 · 쉰다
+    ];
+    const at = [{ key: "2026-09", label: "9월", date: "2026-09-30" }, { key: "2026-10", label: "10월", date: "2026-10-21" }];
+    const split = breakdownTrendOf(pair, enHK, rows, at, ["math", "english"], (x) => x, "2026-10-21");
+    expect(split.bySubject.english!.map((p) => p.count)).toEqual([2, 0]);
+    expect(split.mix.mathOnly.map((p) => p.count)).toEqual([0, 1]); // h: 오늘은 수학만
+    expect(split.unknown.map((p) => p.count)).toEqual([0, 1]); // k: 오늘은 미수강
+    const english = (x: string | null) => x === "english" || x === null;
+    expect(subjectTrendOf(pair, enHK, rows, at, english, "2026-10-21").map((p) => p.count)).toEqual([2, 1]); // 오늘: k는 모름(모두에게) · h는 수학뿐
   });
 });

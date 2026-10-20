@@ -117,7 +117,7 @@ export function WithdrawalsPopup({
   );
 }
 
-/** 오늘첫수업 팝업 — 첫 등원 / 새 과목. */
+/** 오늘첫수업 팝업 — 첫 등원 / 처음 듣는 과목(다니던 학생이 처음 듣는 과목 묶음 · 2026-10-21 '새 과목'에서 이름만 바꿈 — 원장 *"새 과목은 뭐야? 알아들을 수 없음"*). */
 export function FirstClassPopup({
   rows,
   subjectLabels,
@@ -133,7 +133,7 @@ export function FirstClassPopup({
     <>
       <PopupTotal label="오늘 첫 수업" value={rows.length} unit="명" />
       <p className={s.popupSummary}>
-        첫 등원 {first}명 · 새 과목 {rows.length - first}명
+        첫 등원 {first}명 · 처음 듣는 과목 {rows.length - first}명
       </p>
       {rows.length === 0 ? (
         <PopupEmpty>오늘 첫 수업 학생이 없습니다.</PopupEmpty>
@@ -152,7 +152,7 @@ export function FirstClassPopup({
                 {row.subjects.map((key) => subjectLabels[key] ?? "기타 과목").join(" · ")}
               </span>
               <Tag tone={row.kind === "first" ? "info" : "muted"}>
-                {row.kind === "first" ? "첫 등원" : "새 과목"}
+                {row.kind === "first" ? "첫 등원" : "처음 듣는 과목"}
               </Tag>
             </li>
           ))}

@@ -8,6 +8,7 @@ import { BackToListButton } from "../../consultations/_components/back-to-list-b
 import { StatCard } from "../../students/stats/_components/stat-card";
 import { BillingTrendCard } from "./billing-trend-card";
 import { ExpenseTrendCard } from "./expense-trend-card";
+import { TuitionHistoryCard } from "./tuition-history-card";
 import { EXPENSE_TREND_KEYS } from "@/features/billing/stats/expense-trend";
 
 export const metadata = { title: "수납 통계 — 에이와" };
@@ -69,6 +70,9 @@ export default async function BillingStatsPage({ searchParams }: { searchParams:
           keep={{ subject: one(sp.subject), ...expenseKeep }}
         />
       )}
+      {/* 지난 기록 — 수업료 수납(원장 2026-10-21 *"청구 수납도 더 이전 데이터 못찾나?"*) — 학원 전체 값이라 과목 관리자에겐 세우지 않는다. */}
+      {!scope && !stats.scopeEmpty && stats.tuition?.length ? <TuitionHistoryCard months={stats.tuition} initialView={stats.tuitionView} /> : null}
+      {!scope && !stats.scopeEmpty && stats.tuition === null ? <StatCard id="tuition-history" title="지난 기록 — 수업료 수납" note="메이크에듀 + 에이와 청구" error /> : null}
       {/* 지출 추이(학원 전체 — 운영실 지출 카드처럼 과목으로 가르지 않는다) — 운영실 '이번 달 지출 내역' 상세가 `#expenses`로 온다. */}
       <ExpenseTrendCard
         trend={stats.expenses}

@@ -98,7 +98,8 @@ export function subjectTrendOf(
     for (const s of students) {
       if (!countedOn(s, en, p.date)) continue;
       const rows = byStudent.get(s.id) ?? [];
-      const live = rows.filter((e) => (p.date === today ? !e.end : !isEnrollmentEndedOn(e.end, p.date, e.transferred)));
+      // 오늘 점 = 운영실 칸 조회와 같은 줄(종료일 없음 · **휴원 아님** — `fetchActiveEnrolledEnrollments`). 지난 날짜는 휴원 이력이 없어 되감지 못한다.
+      const live = rows.filter((e) => (p.date === today ? !e.end && !e.onHold : !isEnrollmentEndedOn(e.end, p.date, e.transferred)));
       const started = (e: TrendEnrollment) => !e.start || e.start.slice(0, 10) <= p.date;
       const billed = live.some(started) ? null : billedExitSubjects(s, rows, en, p.date); // 장부 정리를 청구로 센 날 — 퇴원 무렵 과목
       if (billed) {
@@ -158,7 +159,8 @@ export function breakdownTrendOf(
       const subjects = new Set<string>();
       const rows = byStudent.get(s.id) ?? [];
       for (const e of rows) {
-        const live = p.date === today ? !e.end : !isEnrollmentEndedOn(e.end, p.date, e.transferred);
+        // 오늘 점은 휴원 수강도 뺀다 — 운영실 '과목별 수강'·'재원생 구성'(휴원 수강만 있는 학생 = 미수강)과 같은 줄(리뷰 2026-10-21).
+        const live = p.date === today ? !e.end && !e.onHold : !isEnrollmentEndedOn(e.end, p.date, e.transferred);
         if (!live || (e.start && e.start.slice(0, 10) > p.date) || !e.subject) continue;
         subjects.add(e.subject);
       }

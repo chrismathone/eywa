@@ -25,8 +25,8 @@ const COLUMN_REM = 35.5;
 export const CONSULT_MAX_COLS = 2;
 /**
  * 오른쪽 폭 고정 열(카테고리 | 후속 | 녹음·AI | 시각)의 폭(rem) — 실측(Pretendard, 2026-09-30): 알약 두 글자 44.2 ·
- * 후속 알약 최대 56.4("3일 내") · "녹음 AI" 85.4 · "2026. 12. 31." 98.2(제목 '카테고리' 55px는 칸 52px에서 양옆 1.5px씩 간격에 걸친다).
- * 옛 3단 시절(20.25rem = 324px)보다 12px 좁다.
+ * 후속 알약 최대 71.6("기한 경과" — 2026-10-21 '지연'에서 바꾸며 3.75rem → 4.75rem) · "녹음 AI" 85.4 · "2026. 12. 31." 98.2
+ * (제목 '카테고리' 55px는 칸 52px에서 양옆 1.5px씩 간격에 걸친다). 옛 3단 시절(20.25rem = 324px)보다 4px 넓다.
  * 🔴 바깥 행 그리드의 오른쪽 트랙은 **이 합 + 안쪽 간격**으로 여기서 함께 도출한다 — 둘을 따로 적었다가 안쪽이 12px 넘쳤다
  *    (적대적 리뷰 2026-09-03). 바꿀 땐 여기 하나만.
  * 🔑 **녹음·AI 열은 행이 41rem(656px) 이상일 때만 선다** — 그보다 좁은 단에서 이 92px를 글 열(이름·과목·반)에 돌려준다
@@ -34,7 +34,7 @@ export const CONSULT_MAX_COLS = 2;
  *    열이 접힌 행에선 과목·상담사 칸의 **배지**로 선다(사라지지 않는다). 1,920px 창(옆 패널이 빠진 2026-10-01부터 풀 셸 단 ≈815px · 창 단 ≈941px — 패널 시절 실측 663·789px에 패널 폭을 더한 계산)에선 네 열이 다 선다.
  */
 const RIGHT_CAT_REM = 3.25;
-const RIGHT_FOLLOW_REM = 3.75;
+const RIGHT_FOLLOW_REM = 4.75;
 const RIGHT_MARKS_REM = 5.5;
 const RIGHT_TIME_REM = 6.25;
 const RIGHT_GAP_REM = 0.25; // = gap-1
@@ -49,8 +49,8 @@ const tracksOf = (cols: readonly number[]) => cols.map((r) => `${r}rem`).join(" 
  * 최대까지 차고 나머지가 굶는 일이 없다(`minmax(최소, Nfr)`). 과목·상담사는 거의 같은 길이("수학 · 이성우" 81px)라 최소가 곧
  * 그 폭(5.25rem = 84px)이다 — 좁은 단에선 이 칸이 먼저 84px를 갖고 이름·반이 나머지를 나눈다.
  * 넘치는 값은 말줄임 + 마우스 오버 전문(원장 *"긴 값은 말줄임 허용"*).
- * 최소 합 = 6.5 + 5.25 + 5.5 = 17.25rem → 좁은 행 최소 폭 = 17.25 + 오른쪽 13.75 + 간격 0.5×3 + 좌우 여백 0.75 = 33.25rem ≤ 한 단 35.5rem,
- * 보통 행 최소 폭 = 17.25 + 오른쪽 19.5 + 2.25 = 39rem ≤ 41rem(녹음·AI 열이 서는 폭).
+ * 최소 합 = 6.5 + 5.25 + 5.5 = 17.25rem → 좁은 행 최소 폭 = 17.25 + 오른쪽 14.75 + 간격 0.5×3 + 좌우 여백 0.75 = 34.25rem ≤ 한 단 35.5rem,
+ * 보통 행 최소 폭 = 17.25 + 오른쪽 20.5 + 2.25 = 40rem ≤ 41rem(녹음·AI 열이 서는 폭).
  */
 const NAME_MIN = "6.5rem";
 const WHO_MIN = "5.25rem";
@@ -107,7 +107,7 @@ function hoverTextOf(c: StudentConsultationRow, classOn: boolean): string | unde
     [
       `${c.studentName}${c.studentGrade ? ` (${c.studentGrade})` : ""}`,
       who || null,
-      classOn ? `반: ${c.className ?? "미매핑"}${c.classSource === "manual" ? "(직접 고름)" : ""}` : null,
+      classOn ? `반: ${c.className ?? "없음"}${c.classSource === "manual" ? "(직접 고름)" : ""}` : null,
       c.summary?.trim() || null,
       followUp,
       marks || null,
@@ -257,7 +257,7 @@ function ConsultationRow({ c, classOn }: { c: StudentConsultationRow; classOn: b
         </p>
         {/* 반 이름 — 상담사가 가르치는 반(판정 한 벌: scripts/_makeedu/consultation-class.cjs). 못 정하면 '—'(추측 금지). */}
         {classOn ? (
-          <p className={`min-w-0 truncate text-sm font-medium phone:hidden ${c.className ? "text-text-dim" : "text-muted-foreground"}`} title={c.className ?? "미매핑"}>
+          <p className={`min-w-0 truncate text-sm font-medium phone:hidden ${c.className ? "text-text-dim" : "text-muted-foreground"}`} title={c.className ?? "반 없음"}>
             {className}
           </p>
         ) : null}

@@ -47,7 +47,7 @@ export function RateTrendCard({
     <StatCard
       id="rate"
       title="등원율 추이"
-      note={`출석 + 지각 ÷ 기록 칸(보강·조퇴·공결은 출석이 아님) · 같은 칸을 고쳐 찍었으면 마지막 기록${scoped ? " · 담당 과목 반만(반 과목을 모르면 포함)" : ""}`}
+      note={`(출석 + 지각) ÷ 유효 출결 칸(운영실 등원율과 같은 판정 · 보강·조퇴·공결은 출석이 아님) · 같은 칸을 고쳐 찍었으면 마지막 기록${scoped ? " · 담당 과목 반만(반 과목을 모르면 포함)" : ""} · 세로축은 값에 맞춰 바닥을 올렸습니다`}
       error={!trend}
       tools={
         <StatsPeriodBar
@@ -66,9 +66,9 @@ export function RateTrendCard({
         ) : (
           <>
             <p className="text-sm">
-              기록 칸 <b className="num">{cells.toLocaleString("ko-KR")}칸</b> · 기록이 없는 날(휴일)은 비워 둡니다
+              유효 출결 칸 <b className="num">{cells.toLocaleString("ko-KR")}칸</b> · 출결 기록이 없는 칸(휴일이거나 에이와 출결을 쓰기 전)은 비워 둡니다
             </p>
-            <TrendChart labels={keys.map(axis)} tooltipLabels={keys.map(tip)} series={series} kind="line" format={pct} />
+            <TrendChart labels={keys.map(axis)} tooltipLabels={keys.map(tip)} series={series} kind="line" format={pct} max={100} fitFloor />
             {period.grain === "day" && period.clipped ? <p className="text-muted-foreground text-xs">구간이 길어 시작일부터 31일만 보입니다.</p> : null}
             <details>
               <summary className="text-primary cursor-pointer text-sm font-medium select-none">수치 표 보기</summary>
@@ -78,7 +78,7 @@ export function RateTrendCard({
                     <tr className="border-line text-muted-foreground border-b text-xs">
                       <th className="px-2 py-1.5 text-center font-medium">{daily ? "날짜" : "달"}</th>
                       <th className="px-2 py-1.5 text-right font-medium">등원율</th>
-                      <th className="px-2 py-1.5 text-right font-medium">기록 칸</th>
+                      <th className="px-2 py-1.5 text-right font-medium">유효 출결 칸</th>
                       {lines.map((l) => (
                         <th key={l.key} className="px-2 py-1.5 text-right font-medium">{l.label}</th>
                       ))}

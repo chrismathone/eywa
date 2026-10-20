@@ -2,7 +2,7 @@
 
 import { patchMyUiPrefs } from "@/lib/ui-prefs/patch";
 import { parsePeriodMode } from "@/features/stats/period";
-import { ENROLLMENT_VIEW_PREFS_NS, parseEnrollmentView } from "../view-pref";
+import { ENROLLMENT_VIEW_PREFS_NS, PROGRESS_LINE_KEYS, parseEnrollmentView } from "../view-pref";
 
 /**
  * 신규 콜&상담 '보기'를 **본인 계정**에 저장 — `RememberPrefs`가 부른다(다음 방문용).
@@ -15,11 +15,18 @@ export async function saveEnrollmentViewPref(next: { view: string }): Promise<{ 
   return patchMyUiPrefs(ENROLLMENT_VIEW_PREFS_NS, { view: view === "kanban" ? undefined : view });
 }
 
-/** 통계 보기 '상담 진행 기록'의 보기 방식 — 기본(12개월)은 키를 지운다. */
+/** 통계 보기 '상담 진행 기록'의 보기 방식 — 고른 방식을 그대로 남긴다(저장값이 없으면 최근 구간). */
 export async function saveProgressTrendMode(next: { mode: string }): Promise<{ ok: boolean; error?: string }> {
   const mode = parsePeriodMode(next?.mode);
   if (!mode) return { ok: false, error: "알 수 없는 보기입니다" };
-  return patchMyUiPrefs(ENROLLMENT_VIEW_PREFS_NS, { progressTrend: mode === "month" ? undefined : mode });
+  return patchMyUiPrefs(ENROLLMENT_VIEW_PREFS_NS, { progressTrend: mode });
+}
+
+/** 통계 보기 '상담 진행 기록'에서 끈 선 — 아는 선 키만 남긴다. */
+export async function saveProgressTrendOff(next: { off: string[] }): Promise<{ ok: boolean; error?: string }> {
+  const off = Array.isArray(next?.off) ? [...new Set(next.off.filter((k) => (PROGRESS_LINE_KEYS as readonly string[]).includes(k)))] : null;
+  if (!off) return { ok: false, error: "알 수 없는 값입니다" };
+  return patchMyUiPrefs(ENROLLMENT_VIEW_PREFS_NS, { progressOff: off });
 }
 
 /**

@@ -6,7 +6,12 @@ import { parseStatsPeriod } from "@/features/stats/period";
 import { SENT_STATUS_SUCCESS, UNREAD_GRACE_HOURS } from "@/features/report-admin/unread-filter";
 
 const TODAY = "2026-10-21";
-const row = (bucket: string, homework_score: string | null, reports: number, o: Partial<{ subject: string | null; sent: number; read48: number; unread: number }> = {}) => ({
+const row = (
+  bucket: string,
+  homework_score: string | null,
+  reports: number,
+  o: Partial<{ subject: string | null; sent: number; read48: number; unread: number; sent_mature: number; read48_mature: number }> = {},
+) => ({
   bucket,
   subject: "math",
   homework_score,
@@ -39,8 +44,17 @@ describe("reportTrend — 학습·학부모 보고 추이", () => {
     expect(reportTrend({ rows, period, tracked: [], inScope: (s) => s === "english" }).read48[i]).toBe(4);
   });
 
-  it("🔴 RPC(0388a)의 발송·유예 조건 = 운영실 미확인 판정(unread-filter.ts)", () => {
-    const sql = readFileSync(join(process.cwd(), "supabase/migrations/0388a_lesson_report_buckets.sql"), "utf8");
+  it("확인율 분모 = 보낸 지 48시간이 지난 발송(0389a) · 칸이 없는 옛 DB면 종전 값", () => {
+    const period = parseStatsPeriod({ grain: "day", month: "2026-10" }, TODAY);
+    const t = reportTrend({ rows: [row("2026-10-20", "100%", 5, { sent: 5, read48: 3, sent_mature: 2, read48_mature: 2 })], period, tracked: [] });
+    expect([t.sent[19], t.sentMature[19], t.read48Mature[19]]).toEqual([5, 2, 2]);
+    const old = reportTrend({ rows: [row("2026-10-20", "100%", 5, { sent: 5, read48: 3 })], period, tracked: [] });
+    expect([old.sentMature[19], old.read48Mature[19]]).toEqual([5, 3]);
+  });
+
+  it("🔴 RPC(0388a → 0389a)의 발송·유예 조건 = 운영실 미확인 판정(unread-filter.ts)", () => {
+    const sql = readFileSync(join(process.cwd(), "supabase/migrations/0389a_lesson_report_buckets_mature.sql"), "utf8");
+    expect(sql).toContain("sent_mature");
     expect(sql).toContain(`classnote_status = '${SENT_STATUS_SUCCESS}'`);
     expect(sql).toContain(`interval '${UNREAD_GRACE_HOURS} hours'`);
     expect(sql).toContain("edutrix_share_token is not null or source is null or source <> 'edutrix_import'");

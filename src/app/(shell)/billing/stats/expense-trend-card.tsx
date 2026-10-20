@@ -3,7 +3,7 @@
 import { formatKoreanDate, monthLabel } from "@/lib/date-kst";
 import { EmbedLink } from "@/components/embed-link";
 import { StatsPeriodBar } from "@/components/stats-period-bar";
-import { formatMoney } from "@/features/billing/currencies";
+import { currencyMeta, formatMoney } from "@/features/billing/currencies";
 import { periodQuery, type StatsPeriod } from "@/features/stats/period";
 import { EXPENSE_TREND_KEYS, type ExpenseTrend } from "@/features/billing/stats/expense-trend";
 import { saveExpenseStatsMode } from "@/features/billing/stats/prefs-actions";
@@ -13,10 +13,12 @@ import { TrendChart, type ChartSeries } from "../../students/stats/_components/t
 
 const TOTAL = "var(--color-primary)";
 const CATEGORY_COLORS = ["var(--color-amber)", "var(--color-green)", "var(--color-purple)", "var(--color-rose)"];
+const REST = "#9aa3ad";
 
 /**
  * 지출 추이 — 운영실 '이번 달 지출 내역'의 '상세'가 여기 `#expenses`로 온다. 지출일 기준(결재 상태 무관 — 카드와 같은 줄)이라
- * 이번 달 칸 = 카드의 주 통화 합계. 선 = 주 통화 합계 + 큰 분류 넷 · 다른 통화는 기간 합계로 따로(₩·$를 더하지 않는다).
+ * 이번 달 칸 = 카드의 주 통화 합계. 막대 = 큰 분류 넷 + 그 밖을 **쌓은** 주 통화 합계(합계 막대를 분류 옆에 또 세우면 한 분류만 쓴 날
+ * 같은 막대가 둘 선다 — 리뷰 2026-10-21) · 다른 통화는 기간 합계로 따로(₩·$를 더하지 않는다).
  * 수치 표의 달 → 그 달 일별 · 날 → 수납관리 지출 면의 그 달.
  */
 export function ExpenseTrendCard({
@@ -38,10 +40,13 @@ export function ExpenseTrendCard({
   const axis = (k: string) => (daily ? `${Number(k.slice(5, 7))}.${Number(k.slice(8))}` : `${k.slice(2, 4)}.${k.slice(5, 7)}`);
   const tip = (k: string) => (daily ? formatKoreanDate(k) : monthLabel(k));
   const money = (n: number) => (trend ? formatMoney(n, trend.currency) : String(n));
+  // 큰 분류 넷에 안 든 지출 — 쌓은 막대 높이가 합계와 같게.
+  const rest = trend ? trend.total.map((t, i) => Math.max(0, t - trend.categories.reduce((n, c) => n + (c.values[i] ?? 0), 0))) : [];
   const series: ChartSeries[] = trend
     ? [
-        { key: "_total", name: "지출", color: TOTAL, values: trend.total, strong: true },
-        ...trend.categories.map((c, i) => ({ key: `c:${c.category}`, name: c.category, color: CATEGORY_COLORS[i % CATEGORY_COLORS.length]!, values: c.values })),
+        { key: "_total", name: "지출", color: TOTAL, values: trend.total, tooltipOnly: true },
+        ...trend.categories.map((c, i) => ({ key: `c:${c.category}`, name: c.category, color: CATEGORY_COLORS[i % CATEGORY_COLORS.length]!, values: c.values, stack: "expense" })),
+        ...(rest.some((v) => v > 0) ? [{ key: "_rest", name: "그 밖의 분류", color: REST, values: rest, stack: "expense" }] : []),
       ]
     : [];
   const sum = trend ? trend.total.reduce((n, x) => n + x, 0) : 0;
@@ -52,7 +57,7 @@ export function ExpenseTrendCard({
     <StatCard
       id="expenses"
       title={academyWide ? "지출 추이 (학원 전체)" : "지출 추이"}
-      note={`지출일 기준 · 지출결의서 전건(결재 상태 무관 — 운영실 지출 카드와 같은 줄) · 선은 ${trend ? trend.currency : "주 통화"}만(통화는 섞지 않음 — 다른 통화는 표에 따로)${daily ? "" : " · 이번 달 칸은 지출일이 오늘 뒤인 결의서도 포함"}`}
+      note={`지출일 기준 · 지출결의서 전건(결재 상태 무관 — 운영실 지출 카드와 같은 줄) · 막대 = 분류를 쌓은 합계${trend?.others.length ? ` · 막대는 ${currencyMeta(trend.currency).label} 지출만(다른 통화는 더하지 않고 표에 따로)` : ""}${daily ? "" : " · 이번 달 칸은 지출일이 오늘 뒤인 결의서도 포함"}`}
       error={!trend}
       tools={
         <StatsPeriodBar
@@ -84,7 +89,8 @@ export function ExpenseTrendCard({
               labels={keys.map(axis)}
               tooltipLabels={keys.map(tip)}
               series={series}
-              kind={daily ? "bar" : "line"}
+              kind="bar"
+              legend
               format={trend.currency === "KRW" ? chartMoney : money}
             />
           )}

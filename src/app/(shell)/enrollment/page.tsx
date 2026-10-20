@@ -58,8 +58,8 @@ import { MakeeduPushButton } from "./_components/makeedu-push-button";
 import { canPushToMakeedu } from "@/features/integrations/server/makeedu-push-access";
 import { readMyUiPrefs } from "@/lib/ui-prefs/read";
 import { RememberPrefs } from "@/components/remember-prefs";
-import { parseEnrollmentView, savedEnrollmentView, savedIntakeTrendMode, savedProgressTrendMode } from "@/features/enrollment/view-pref";
-import { saveEnrollmentViewPref, saveProgressTrendMode } from "@/features/enrollment/server/view-pref-actions";
+import { PROGRESS_DEFAULT_OFF, parseEnrollmentView, savedEnrollmentView, savedIntakeTrendMode, savedProgressTrendMode, savedProgressTrendOff } from "@/features/enrollment/view-pref";
+import { saveEnrollmentViewPref, saveProgressTrendMode, saveProgressTrendOff } from "@/features/enrollment/server/view-pref-actions";
 
 export const metadata = { title: "신규 콜&상담 — 에이와" };
 
@@ -72,7 +72,8 @@ const PROGRESS_STEPS: { key: keyof ProgressCounts; label: string }[] = [
   { key: "assigned", label: "반 배정" },
   { key: "started", label: "수업 시작" },
 ];
-const PROGRESS_COLORS = ["var(--color-primary)", "var(--color-blue)", "var(--color-amber)", "var(--color-green)", "var(--color-purple)", "var(--color-rose)"];
+/** 단계 색 — 수업 시작은 초록(멈춘 상담 빨강과 갈리게 · 리뷰 2026-10-21). 순서 = `PROGRESS_STEPS`. */
+const PROGRESS_COLORS = ["var(--color-primary)", "var(--color-blue)", "var(--color-amber)", "var(--color-purple)", "#9aa3ad", "var(--color-green)"];
 
 // 전 목록 공통(표·카드) — 변경 시 학생·수납 등 다른 목록과 함께 바꿀 것.
 const PAGE_SIZE = 50;
@@ -167,6 +168,39 @@ export default async function EnrollmentPage({
   //    안 적으면 저장이 끝나기 전 다음 클릭이 옛 저장값으로 돌아간다.
   const savedView = savedEnrollmentView(uiPrefs);
   const view: EnrollmentView = parseEnrollmentView(viewParam) ?? savedView;
+  // 신규 문의 추이(원장 2026-10-20) — 기간은 주소(`trend…`) → 계정에 남긴 보기 방식 → 월별 12개월. 연도 칩과 따로 논다.
+  const today = kstToday();
+  const intakeParams = readPeriodParams(sp, INTAKE_TREND_KEYS);
+  const savedIntakeMode = savedIntakeTrendMode(uiPrefs);
+  const intakePeriod = parsePeriod(
+    hasPeriodParams(intakeParams) || !savedIntakeMode ? intakeParams : paramsForMode(savedIntakeMode, today),
+    today,
+  );
+  // 상담 진행 기록(2026-10-21부터 쌓는 매일 기록 — 지금 상태만 남는 지표라 과거는 없다). 기간은 주소(`pg…`) → 저장된 방식 → **최근 구간(일별)**
+  // (막 쌓이기 시작한 기록이라 월별은 점 하나 · '이번 달 일별'은 매달 1일에 하루 종일 빈다 — 리뷰 2026-10-21).
+  const progressParams = readPeriodParams(sp, PROGRESS_KEYS);
+  const savedProgressMode = savedProgressTrendMode(uiPrefs) ?? "range";
+  const progressPeriod = parsePeriod(hasPeriodParams(progressParams) ? progressParams : paramsForMode(savedProgressMode, today), today);
+  const progressHistory =
+    view === "stats"
+      ? loadOpsHistory(user.tenantId, progressPeriod, today).catch((error: unknown) => {
+          reportWarning("상담 진행 기록 조회 실패", { scope: "enrollment.progressHistory", cause: error instanceof Error ? error.message : String(error) });
+          return null;
+        })
+      : Promise.resolve(null);
+  // 신규 문의 추이 — 연도 범위와 무관하니 위 조회들과 함께 먼저 띄운다(B4 · 리뷰 2026-10-21). 실패는 카드 안에서 '못 불러옴'으로.
+  const intakePromise =
+    view === "stats"
+      ? getTenantSettings()
+          .then(async (settings) => ({
+            groups: intakeGroupMeta(settings.operations.subjects),
+            trend: await loadIntakeTrend(intakePeriod, settings.operations.subjects, today).catch((error: unknown) => {
+              reportWarning("신규 문의 추이 조회 실패", { scope: "enrollment.intakeTrend", cause: error instanceof Error ? error.message : String(error) });
+              return null;
+            }),
+          }))
+          .catch(() => null)
+      : Promise.resolve(null);
   // 🔴 뷰마다 **가져오는 양이 다르다**. 목록은 한 페이지(50행)만 — 옛 시트 이관으로 2,251행이 되어
   // 전건 로드는 라운드트립 3회 + 배지 청크 20여 회로 불어난다(B2·B4). 칸반은 열별 집계가 필요해
   // 전건을 유지하되, 그래서 기간 필터 없이 열면 여전히 무겁다(별도 과제).
@@ -193,42 +227,13 @@ export default async function EnrollmentPage({
       ? { from: Math.min(...statsYears), to: Math.max(...statsYears) }
       : { from: Number(kstToday().slice(0, 4)), to: Number(kstToday().slice(0, 4)) };
   const span = periodRange(statsPeriod, available);
-  // 신규 문의 추이(원장 2026-10-20) — 기간은 주소(`trend…`) → 계정에 남긴 보기 방식 → 월별 12개월. 연도 칩과 따로 논다.
-  const today = kstToday();
-  const intakeParams = readPeriodParams(sp, INTAKE_TREND_KEYS);
-  const savedIntakeMode = savedIntakeTrendMode(uiPrefs);
-  const intakePeriod = parsePeriod(
-    hasPeriodParams(intakeParams) || !savedIntakeMode ? intakeParams : paramsForMode(savedIntakeMode, today),
-    today,
-  );
-  // 상담 진행 기록(2026-10-21부터 쌓는 매일 기록 — 지금 상태만 남는 지표라 과거는 없다). 기간은 주소(`pg…`) → 저장된 방식 → 12개월.
-  const progressParams = readPeriodParams(sp, PROGRESS_KEYS);
-  const savedProgressMode = savedProgressTrendMode(uiPrefs);
-  const progressPeriod = parsePeriod(
-    hasPeriodParams(progressParams) || !savedProgressMode ? progressParams : paramsForMode(savedProgressMode, today),
-    today,
-  );
-  const progressHistory =
-    view === "stats"
-      ? loadOpsHistory(user.tenantId, progressPeriod, today).catch((error: unknown) => {
-          reportWarning("상담 진행 기록 조회 실패", { scope: "enrollment.progressHistory", cause: error instanceof Error ? error.message : String(error) });
-          return null;
-        })
-      : Promise.resolve(null);
   const [stats, dist, intake] =
     view === "stats"
       ? await Promise.all([
           getEnrollmentStats(statsYear, span),
           // 🔴 상담 분포는 **연도가 적용된다**(재원생 기준이던 때는 연도를 바꿔도 안 변해 화면이 거짓말했다).
           getConsultationDistribution(statsYear, span),
-          // 실패는 카드 안에서 '못 불러옴'으로(통계 보기 전체를 죽이지 않는다).
-          getTenantSettings().then(async (settings) => ({
-            groups: intakeGroupMeta(settings.operations.subjects),
-            trend: await loadIntakeTrend(intakePeriod, settings.operations.subjects, today).catch((error: unknown) => {
-              reportWarning("신규 문의 추이 조회 실패", { scope: "enrollment.intakeTrend", cause: error instanceof Error ? error.message : String(error) });
-              return null;
-            }),
-          })).catch(() => null),
+          intakePromise,
         ])
       : [null, null, null];
   const progressRows = await progressHistory;
@@ -427,22 +432,30 @@ export default async function EnrollmentPage({
           <OpsHistoryCard
             id="progress"
             title="상담 진행 기록"
-            note="운영실 '상담 진행'의 그날 값 — 최근 30일 상담이 단계마다 몇 건 닿았나 · 멈춘 상담"
+            note="운영실 '상담 진행'의 그날 값 — 점마다 그날까지 최근 30일 접수가 단계마다 몇 건 닿았나(접수 ⊃ 등록 ⊃ 수업 시작) · 멈춘 상담은 60일"
             firstDate={firstRecorded(progressRows, (o) => !!o.consult)}
             period={progressPeriod}
             today={today}
             keys={PROGRESS_KEYS}
             keep={{ view: "stats", year: yearParam, from: sp.from === "dashboard" ? "dashboard" : undefined, ...Object.fromEntries(Object.values(INTAKE_TREND_KEYS).map((k) => [k, (sp as Record<string, string | undefined>)[k]])) }}
-            series={[
-              ...PROGRESS_STEPS.map((step, i) => ({
-                key: step.key as string,
-                name: step.label,
-                color: PROGRESS_COLORS[i % PROGRESS_COLORS.length]!,
-                values: opsSeries(progressRows, progressPeriod, (o) => o.consult?.counts[step.key]),
-                strong: i === 0,
-              })),
-              { key: "stalled", name: "멈춘 상담", color: "var(--color-danger)", values: opsSeries(progressRows, progressPeriod, (o) => o.consult?.stalled) },
+            charts={[
+              {
+                kind: "line",
+                unit: "건",
+                series: [
+                  ...PROGRESS_STEPS.map((step, i) => ({
+                    key: step.key as string,
+                    name: step.label,
+                    color: PROGRESS_COLORS[i % PROGRESS_COLORS.length]!,
+                    values: opsSeries(progressRows, progressPeriod, (o) => o.consult?.counts[step.key]),
+                    strong: i === 0,
+                  })),
+                  { key: "stalled", name: "멈춘 상담", color: "var(--color-danger)", values: opsSeries(progressRows, progressPeriod, (o) => o.consult?.stalled) },
+                ],
+              },
             ]}
+            initialOff={savedProgressTrendOff(uiPrefs) ?? [...PROGRESS_DEFAULT_OFF]}
+            onOff={saveProgressTrendOff}
             onMode={saveProgressTrendMode}
           />
         ) : null}

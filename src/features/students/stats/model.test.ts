@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  availableFlowRanges,
+  availableRanges,
+  rangeIn,
   axisLabel,
   clipToRecords,
   distinctSubjectTokens,
@@ -221,5 +224,24 @@ describe("breakdownTrendOf", () => {
     expect(out.mix.mathOnly[0]!.count).toBe(1);
     expect(out.mix.both[0]!.count).toBe(0);
     expect(out.bySubject.korean![0]!.count).toBe(0);
+  });
+});
+
+describe("기간 버튼 — 기록 길이에 맞춰(리뷰 2026-10-21)", () => {
+  const pt = (key: string, date: string) => ({ key, label: key, date, count: 1 });
+  const months = (n: number) => Array.from({ length: n }, (_, i) => pt(`2026-${String(i + 1).padStart(2, "0")}`, `2026-${String(i + 1).padStart(2, "0")}-28`));
+  it("월별 칸 12개 이하면 '최근 12개월' 없음 · 해가 하나면 '연도별' 없음 · 저장값이 없는 버튼이면 전체 기간", () => {
+    const short = { monthly: months(7), weekly: [], yearly: [pt("2026", "2026-10-21")] };
+    expect(availableRanges(short, null)).toEqual(["all", "w26"]);
+    expect(rangeIn("m12", availableRanges(short, null))).toBe("all");
+    expect(rangeIn("w26", availableRanges(short, null))).toBe("w26");
+    const long = { monthly: [...months(12).map((p) => ({ ...p, key: p.key.replace("2026", "2025"), date: p.date.replace("2026", "2025") })), ...months(3)], weekly: [], yearly: [pt("2025", "2025-12-31"), pt("2026", "2026-10-21")] };
+    expect(availableRanges(long, null)).toEqual(["all", "m12", "w26", "y"]);
+    expect(availableRanges(long, "2026-01")).toEqual(["all", "w26"]); // 경계 뒤로 자르면 다시 짧다
+  });
+  it("월별 기록 — 12칸 이하면 전체 기간만", () => {
+    const row = (month: string) => ({ month, enrolled: 1, withdrawn: 0 }) as unknown as Parameters<typeof availableFlowRanges>[0][number];
+    expect(availableFlowRanges(["2026-04", "2026-05"].map(row), null)).toEqual(["all"]);
+    expect(availableFlowRanges(Array.from({ length: 13 }, (_, i) => row(`2025-${String((i % 12) + 1).padStart(2, "0")}`)), null)).toEqual(["all", "m12"]);
   });
 });

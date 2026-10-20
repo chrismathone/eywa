@@ -120,7 +120,7 @@ export default async function ConsultationsPage({
         <BigStat label="최근 7일" value={lastWeek} unit="건" tone="blue" icon={<CalendarClock size={16} strokeWidth={1.8} />} />
         <BigStat label="진행 중 후속" value={pendingFollowUps} unit="건" tone="gold" icon={<BellRing size={16} strokeWidth={1.8} />} />
         <BigStat
-          label="지연 후속"
+          label="기한 경과 후속"
           value={overdueFollowUps}
           unit="건"
           tone="danger"

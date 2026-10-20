@@ -63,9 +63,12 @@ describe("recordAywaHistory — '지난 기록' 에이와 쪽 밤 집계(원장 
     expect(mine).toEqual(["2023-01", ...months]);
     expect(tables.student_history_monthly!.some((r) => r.tenant_id === U && r.month === "2025-11-01")).toBe(true);
     const data = (m: string) => tables.student_history_monthly!.find((r) => r.tenant_id === T && r.month === `${m}-01`)!.data;
-    expect(data("2026-03")).toEqual({ payingGeneral: 5, payingTotal: 5, newRegistered: 2, newReal: 1 });
-    expect(data("2026-04")).toEqual({ payingGeneral: 5, payingTotal: 5, newRegistered: 2, newReal: 2 });
-    expect(data("2026-02")).toEqual({ payingGeneral: 4, payingTotal: 4, newRegistered: 0, newReal: 0 });
+    // 수업료 수납(원) = 수업 항목의 낸 돈 합 · 프로그램 칸은 재료(설정·직원)를 못 읽으면 빼고 쓴다(가짜 DB엔 그 표가 없다).
+    // 청구가 끊긴 학생 = 다음 두 달이 다 끝난 달만(오늘 10월 → 7월까지) — 모두 매달 청구가 있어 0.
+    expect(data("2026-03")).toEqual({ payingGeneral: 5, payingTotal: 5, newRegistered: 2, newReal: 1, tuitionPaidGeneral: 500000, stoppedPaying: 0 });
+    expect(data("2026-04")).toEqual({ payingGeneral: 5, payingTotal: 5, newRegistered: 2, newReal: 2, tuitionPaidGeneral: 500000, stoppedPaying: 0 });
+    expect(data("2026-02")).toEqual({ payingGeneral: 4, payingTotal: 4, newRegistered: 0, newReal: 0, tuitionPaidGeneral: 400000, stoppedPaying: 0 });
+    expect(data("2026-08")).not.toHaveProperty("stoppedPaying");
     expect(tables.record_coverage_marks).toEqual([expect.objectContaining({ tenant_id: T, billing_from: "2026-01" })]);
   });
 

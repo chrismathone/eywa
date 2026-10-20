@@ -106,7 +106,7 @@ export function StatsPanelClient({
           </ToolbarSegment>
         </div>
         <StatsTrendChart series={series} metric={metric} />
-        <p className="text-muted-foreground text-xs break-keep">추이는 기간 필터와 무관하게 {trendWindowText(buckets, prefs.unit)} — 나머지 필터는 그대로 걸린다.</p>
+        <p className="text-muted-foreground text-xs break-keep">추이 기간은 위 기간과 따로 {trendWindowText(buckets, prefs.unit)}입니다(다른 필터는 그대로 적용).</p>
       </div>
 
       <StatsBreakdown dims={dims} dim={prefs.dim} unit={prefs.unit} total={stats.totals.n} onDim={(d) => update({ dim: d })} />

@@ -138,7 +138,7 @@ export function metricSeries(buckets: readonly StatsBucket[], metric: StatsMetri
       };
     case "class":
       return {
-        lines: [{ key: "v", name: "반 미매핑 비율" }],
+        lines: [{ key: "v", name: "반 없는 상담 비율" }],
         unit: "%",
         points: buckets.map((b) => ({ ...at(b), v: pct(b.n - b.mapped, b.n) })),
       };

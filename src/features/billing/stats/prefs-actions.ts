@@ -16,3 +16,10 @@ export async function saveExpenseStatsMode(next: { mode: string }): Promise<{ ok
   if (!mode) return { ok: false, error: "알 수 없는 보기입니다" };
   return patchMyUiPrefs("billingStats", { expenseMode: mode === "month" ? undefined : mode });
 }
+
+/** 수납 통계 '지난 기록 — 수업료 수납'의 보기(연도별 · 월별) — 기본(연도별)은 키를 지운다. */
+export async function saveTuitionHistoryView(next: { view: string }): Promise<{ ok: boolean; error?: string }> {
+  const view = next?.view === "yearly" || next?.view === "monthly" ? next.view : null;
+  if (!view) return { ok: false, error: "알 수 없는 보기입니다" };
+  return patchMyUiPrefs("billingStats", { tuitionView: view === "yearly" ? undefined : view });
+}
