@@ -36,6 +36,7 @@ import {
 import { getSlotPlanCompare, type SlotCompareResult } from "@/features/textbooks/server/compare-actions";
 import { undoLessonShift, type ShiftUndoResult } from "@/features/textbooks/server/shift-undo-actions";
 import type { ShiftUndoToken } from "@/features/textbooks/shift-undo";
+import type { ShiftWhich } from "./shift-confirm";
 
 export type PlanWriteApi = {
   flushPatches: (ref: PlanSlotRef, patches: unknown) => Promise<PlanPatchesResult>;
@@ -57,7 +58,7 @@ export type PlanWriteApi = {
   /**
    * **회차 미루기·당기기**(0282a) — 그 칸에서 차수를 건너뛸지/버릴지. `comparePlan`과 같은 이유로 선택이다.
    */
-  setShift?: (ref: PlanSlotRef, kind: LessonShiftKind | null) => Promise<LessonShiftResult>;
+  setShift?: (ref: PlanSlotRef, kind: LessonShiftKind | null, which?: ShiftWhich) => Promise<LessonShiftResult>;
   /** 미루기·당기기 **되돌리기**(원장 2026-10-19) — `setShift`가 돌려준 기록을 그대로 돌려보낸다. 짝이라 함께 낸다. */
   undoShift?: (classId: string, token: ShiftUndoToken) => Promise<ShiftUndoResult>;
   /**
@@ -90,8 +91,15 @@ export const ECS_PLAN_API: PlanWriteApi = {
     }),
   comparePlan: (ref) =>
     getSlotPlanCompare({ classId: ref.classId, date: ref.planDate, slotStart: ref.slotStart }),
-  setShift: (ref, kind) =>
-    setLessonShift({ classId: ref.classId, date: ref.planDate, slotStart: ref.slotStart, kind }),
+  setShift: (ref, kind, which) =>
+    setLessonShift({
+      classId: ref.classId,
+      date: ref.planDate,
+      slotStart: ref.slotStart,
+      kind,
+      lineId: which?.lineId,
+      fill: which?.fill,
+    }),
   undoShift: (classId, token) => undoLessonShift({ classId, token }),
   commitEdits: (ref, edits) => commitSheetEdits({ classId: ref.classId, edits }),
 };

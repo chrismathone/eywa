@@ -8,7 +8,7 @@ import { courseRangeLabel } from "../lib/learning-path";
 import { learningBlockLabel } from "../lib/learning-label";
 import { useMathTextbooks } from "./math-textbook-context";
 import { StudentTextbookChip } from "./math-textbook-assign";
-import { BookSection, SHOW_BOOK_PLAN, TodaySection } from "./plan-card-sections";
+import { BookSection, SHOW_TODAY_SECTION, TodaySection } from "./plan-card-sections";
 import { RoadmapGoal } from "./roadmap-goal";
 import { OtherBookBody } from "./other-book";
 import { roadmapStatusLabel } from "../lib/roadmap-status";
@@ -80,7 +80,7 @@ export function StudentPlanCard({ student, goal, progress, summary, onOpen }: {
           <Section title="교재 3개월" hint="두 권씩 · 내신기간을 뺀 3개월 안에 끝낼 교재">
             {w && w.total > 0 ? <BookSection w={w} /> : <p className={css.empty}>교재 주문 기록이 없습니다.</p>}
           </Section>
-          {SHOW_BOOK_PLAN ? (
+          {SHOW_TODAY_SECTION ? (
             <Section title="오늘 기준" hint="오늘 위치와 다음 수업">
               <TodaySection w={w && w.total > 0 ? w : undefined} fallbackNow={progress?.currentBlock ?? null} onOpen={onOpen} />
             </Section>

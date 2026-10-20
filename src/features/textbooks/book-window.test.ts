@@ -115,3 +115,13 @@ describe("리뷰 보강", () => {
     expect(r.target.key).toBe("가우스|중3-2|4");
   });
 });
+
+describe("교재 일정(27년 11월 말까지 쭉)", () => {
+  it("마감에 걸린 권까지 넣고 마감까지 차시를 붙인다", () => {
+    const r = bookRoadmap({ ...SURYEON, reports: [], referenceDate: "2026-10-20" })!;
+    expect(r.schedule.map((b) => b.key)).toEqual(["가우스|중2-2|3", "가우스|중2-2|4", "가우스|중3-1|1", "가우스|중3-1|2", "가우스|중3-2|3", "가우스|중3-2|4"]);
+    expect(r.schedule.at(-1)).toMatchObject({ startDate: "2027-11-27", byDeadline: 1 });
+    expect(r.schedule.slice(0, -1).every((b) => b.byDeadline == null)).toBe(true);
+    expect(r.scheduleEnd).toBe("2027-11-30");
+  });
+});

@@ -19,6 +19,7 @@ import type { ClassSheetMonthData } from "../server/month-queries";
 import { compareCell } from "@/features/textbooks/plan-compare";
 import { getSlotPlanCompare } from "@/features/textbooks/server/compare-actions";
 import { canShiftCell } from "../lib/shift-visible";
+import type { ShiftWhich } from "./shift-confirm";
 import { PlanCompareButton } from "./plan-compare-dialog";
 
 
@@ -60,7 +61,7 @@ export function MonthCalendar({
   /**
    * 회차 미루기·당기기(0282a). **없으면 버튼이 안 뜬다** — 누를 수 없는 버튼을 세우지 않는다.
    */
-  onShift?: (date: string, slotStart: string, kind: "skip" | "advance") => void;
+  onShift?: (date: string, slotStart: string, kind: "skip" | "advance", which?: ShiftWhich) => void;
 }) {
   const t = useSheetT();
   const tf = useSheetTf();
@@ -144,7 +145,7 @@ function DayCell({
   skillAreas: SkillAreaSetting[];
   onOpenDay: (date: string) => void;
   /** 회차 미루기·당기기(0282a) — 없으면 버튼이 안 뜬다. */
-  onShift?: (date: string, slotStart: string, kind: "skip" | "advance") => void;
+  onShift?: (date: string, slotStart: string, kind: "skip" | "advance", which?: ShiftWhich) => void;
 }) {
   const t = useSheetT();
   const tf = useSheetTf();
@@ -329,54 +330,33 @@ function DayCell({
                             {tf("month.goalLine", { book: goals[line.skillArea]?.textbook ?? "" })}
                           </div>
                         ) : null}
+                        {/* 🔑 **줄마다** 미룸·당김(원장 2026-10-20 *"수업이 2개면 각각 미룸, 당김"*) — 그 줄의 교재
+                            한 차수만 움직이고 같은 칸의 다른 줄은 그대로다. 내용이 적힌 평시 줄에만(`canShiftCell`). */}
+                        {onShift && data.canEdit && canShiftCell([line]) ? (
+                          <ShiftChips
+                            kinds={["skip", "advance"]}
+                            onPress={(kind) => onShift(date, slot.slotStart, kind, { lineId: line.id })}
+                          />
+                        ) : null}
                       </div>
                     </div>
                   );
                 })
               )}
               {/* 🔴 **회차 미루기·당기기**(원장 2026-09-22 → 2026-10-15 *"미루는 거기 복사하고 한주씩 쭉 밀기"*):
-                  **실제 진도**가 한 칸씩 밀리거나 당겨진다(`setLessonShift`). 배정 교재는 배정한 요일 순서대로,
-                  그 밖의 줄은 같은 요일·교시끼리. 🔴 **토글이 아니다** — 두 번 누르면 두 칸 밀린다.
-                  🔴 2026-10-19 원장: *"계획만 있으면 버튼 숨겨"* + *"밀고 당기는 버튼이 밖에 노출되도록"* — 예전엔
-                     **실제가 빈 칸**(회색 `계획`만)에만 세워서, 정작 진도가 적힌 칸은 날짜 창을 열어야 버튼이 보였다.
-                     이제 **실제 줄이 있는 칸에만, 달력 칸 위에 바로**(`canShiftCell` — 주간 표와 같은 판정).
-                     누르면 확인 창 → 실행 → 토스트 [되돌리기](`month-client`).
-                  ⚠️ **지난 날짜에도 세운다** — "지난주에 못 나갔다"를 뒤늦게 미루는 게 정상 흐름이다. */}
-              {onShift && data.canEdit && canShiftCell(lines) ? (
-                <div className="flex flex-wrap gap-1">
-                  {(["skip", "advance"] as const).map((kind) => {
-                    return (
-                      <span
-                        key={kind}
-                        role="button"
-                        tabIndex={0}
-                        title={t(kind === "skip" ? "month.shift.skip.title" : "month.shift.advance.title")}
-                        // 날짜 칸은 이미 native button이다. 중첩 button은 SSR 파서를 깨뜨려
-                        // 달력 조각이 셸 밖에 남으므로 내부 조작은 PlanCompareButton과 같은 형태로 둔다.
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onShift(date, slot.slotStart, kind);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.stopPropagation();
-                            e.preventDefault();
-                            if (!e.repeat) onShift(date, slot.slotStart, kind);
-                          }
-                        }}
-                        onKeyUp={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.stopPropagation();
-                            e.preventDefault();
-                          }
-                        }}
-                        className="border-line text-text-faint hover:border-primary hover:text-foreground focus-visible:outline-primary cursor-pointer rounded-full border px-1.5 text-xs font-bold focus-visible:outline-2 focus-visible:outline-offset-2"
-                      >
-                        {t(kind === "skip" ? "month.shift.skip" : "month.shift.advance")}
-                      </span>
-                    );
-                  })}
-                </div>
+                  **실제 진도**가 밀리거나 당겨진다(`setLessonShift`). 버튼은 **줄마다**(위, 원장 2026-10-20 *"수업이
+                  2개면 각각"*) — 지난 날짜에도 세운다("지난주에 못 나갔다"를 뒤늦게 미루는 게 정상 흐름이다).
+                  🔑 **계획만 있는 칸엔 [당김]만**(원장 2026-10-20 *"계획만 있을 경우 미룸버튼은 없고 당겨서 전수업 한시간씩
+                     당겨지게"*) — 이 칸의 미룸을 걷어 뒤 수업이 한 칸씩 올라와 채운다(버려지는 차수 없음, `fill`).
+                     미룰 진도가 없는 칸이라 [미룸]은 없다. 누르면 확인 창 → 실행 → 토스트 [되돌리기](`month-client`).
+                  ⚠️ **미뤄 비운 칸에만**(`shiftBySlot` = 미룸) — 아직 안 가져온 칸·사람이 지운 칸에 세우면 걷을 미룸이
+                     없어 서버가 거절한다(적대적 리뷰 2026-10-20: 앞으로의 칸마다 누를 수 없는 버튼이 깔렸다). */}
+              {onShift && data.canEdit && planned.length > 0 && !canShiftCell(lines) && data.shiftBySlot[cellKey] === "skip" ? (
+                <ShiftChips
+                  kinds={["advance"]}
+                  titleOf={() => t("month.shift.fill.title")}
+                  onPress={() => onShift(date, slot.slotStart, "advance", { fill: true })}
+                />
               ) : null}
               {lines.length > 0 && !lines.some((l) => l.progress) ? (
                 <span className="border-line-strong text-text-faint self-start rounded border border-dashed px-1.5 text-xs leading-4 font-bold">
@@ -388,5 +368,53 @@ function DayCell({
         );
       })}
     </button>
+  );
+}
+
+/**
+ * 미룸·당김 알약 — 날짜 칸이 이미 native button이라 **중첩 button을 못 쓴다**(SSR 파서가 깨져 달력 조각이 셸 밖에
+ * 남는다) → `PlanCompareButton`과 같은 `span[role=button]` 형태. 칸 클릭(그 날 열기)으로 새지 않게 막는다.
+ */
+function ShiftChips({
+  kinds,
+  onPress,
+  titleOf,
+}: {
+  kinds: readonly ("skip" | "advance")[];
+  onPress: (kind: "skip" | "advance") => void;
+  titleOf?: (kind: "skip" | "advance") => string;
+}) {
+  const t = useSheetT();
+  return (
+    <div className="mt-0.5 flex flex-wrap gap-1">
+      {kinds.map((kind) => (
+        <span
+          key={kind}
+          role="button"
+          tabIndex={0}
+          title={titleOf ? titleOf(kind) : t(kind === "skip" ? "month.shift.skip.title" : "month.shift.advance.title")}
+          onClick={(e) => {
+            e.stopPropagation();
+            onPress(kind);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.stopPropagation();
+              e.preventDefault();
+              if (!e.repeat) onPress(kind);
+            }
+          }}
+          onKeyUp={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.stopPropagation();
+              e.preventDefault();
+            }
+          }}
+          className="border-line text-text-faint hover:border-primary hover:text-foreground focus-visible:outline-primary cursor-pointer rounded-full border px-1.5 text-xs font-bold focus-visible:outline-2 focus-visible:outline-offset-2"
+        >
+          {t(kind === "skip" ? "month.shift.skip" : "month.shift.advance")}
+        </span>
+      ))}
+    </div>
   );
 }
