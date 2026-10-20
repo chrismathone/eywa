@@ -4,6 +4,7 @@ import { EmbedLink } from "@/components/embed-link";
 import { getMathTeacherRoster, type TeacherStudentRow } from "@/features/math-sheets/server/teacher-roster";
 import { McsViewSwitch } from "@/features/math-sheets/components/mcs-view-switch";
 import { roadmapStatusLabel } from "@/features/math-sheets/lib/roadmap-status";
+import { averageProgress } from "@/features/math-sheets/lib/teacher-average";
 import styles from "./teachers.module.css";
 
 export const metadata: Metadata = { title: "수학 강사 시트 · 선생님별 — 에이와" };
@@ -29,21 +30,41 @@ export default async function McsTeachersPage() {
       ) : res.groups.length === 0 ? (
         <p className={styles.empty}>담당하는 수학 반 학생이 없습니다.</p>
       ) : (
-        <div className={styles.groups}>
-          {res.groups.map((g) => (
-            <section key={g.teacherName} className={styles.group}>
-              <header>
-                <h3>{g.teacherName}</h3>
-                <span>학생 {g.students.length}명</span>
-              </header>
-              <ul>
-                {g.students.map((s) => <Row key={s.studentId} s={s} />)}
-              </ul>
-            </section>
-          ))}
-        </div>
+        <>
+          <Average label="전체 평균" students={res.groups.flatMap((g) => g.students)} />
+          {/* 선생님이 많아 처음엔 **접어 둔다**(원장 *"접기기능으로 휠 안내려도 다른쌤 볼수있도록"*) — 머리 줄만으로
+              이름·학생 수·평균이 보이고, 누르면 학생 목록이 펼쳐진다. */}
+          <div className={styles.groups}>
+            {res.groups.map((g) => (
+              <details key={g.teacherName} className={styles.group}>
+                <summary>
+                  <h3>{g.teacherName}</h3>
+                  <span>학생 {g.students.length}명</span>
+                  <Average students={g.students} />
+                  <i aria-hidden>›</i>
+                </summary>
+                <ul>
+                  {g.students.map((s) => <Row key={s.studentId} s={s} />)}
+                </ul>
+              </details>
+            ))}
+          </div>
+        </>
       )}
     </div>
+  );
+}
+
+/** 평균 진행률(3개월 기준) — 진도를 읽은 학생만으로 낸 평균이라 몇 명 기준인지 같이 적는다. */
+function Average({ students, label }: { students: readonly TeacherStudentRow[]; label?: string }) {
+  const { pct, counted } = averageProgress(students);
+  return (
+    <span className={label ? styles.total : styles.avg} title={pct == null ? "진도를 읽은 학생이 없습니다" : `진도를 읽은 ${counted}명의 3개월 진행률 평균`}>
+      {label ? <small>{label}</small> : null}
+      <b>{pct == null ? "—" : `${pct}%`}</b>
+      {pct == null ? null : <small>{counted}명 기준</small>}
+      {pct == null ? null : <span className={styles.bar}><i style={{ width: `${pct}%` }} /></span>}
+    </span>
   );
 }
 

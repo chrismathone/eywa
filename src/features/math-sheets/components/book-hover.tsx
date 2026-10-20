@@ -8,7 +8,7 @@ import css from "./plan-card.module.css";
  * 마우스 호버 올리면 소단원 별로 차시 바로바로 볼수있게"*). 차시표는 교재목록(`textbook_lessons`)이 단일 소스.
  * `align="end"`면 오른쪽 끝에 맞춘다(카드 오른쪽 밖으로 넘치지 않게).
  */
-export function BookHover({ title, period, lessonUnits, lessonCount, at, align = "start", children, className, style }: {
+export function BookHover({ title, period, lessonUnits, lessonCount, at, align = "start", children, className, style, ...data }: {
   title: string;
   period?: string;
   lessonUnits: string[][];
@@ -19,9 +19,12 @@ export function BookHover({ title, period, lessonUnits, lessonCount, at, align =
   children: ReactNode;
   className?: string;
   style?: CSSProperties;
+  /** 칸 상태 표식(`data-state`·`data-partial`) — 스타일이 읽는다. */
+  "data-state"?: string;
+  "data-partial"?: boolean;
 }) {
   return (
-    <div className={`${css.hover} ${className ?? ""}`} style={style} tabIndex={0} aria-label={`${title} 차시 보기`}>
+    <div {...data} className={`${css.hover} ${className ?? ""}`} style={style} tabIndex={0} aria-label={`${title} 차시 보기`}>
       {children}
       <div className={css.pop} data-align={align} role="tooltip">
         <b>{title}</b>

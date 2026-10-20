@@ -125,3 +125,12 @@ describe("교재 일정(27년 11월 말까지 쭉)", () => {
     expect(r.scheduleEnd).toBe("2027-11-30");
   });
 });
+
+describe("날짜 눈금 막대", () => {
+  it("나간 차시 → 계획상 그 차시를 끝내는 날(내신 아닌 날 비율)", () => {
+    const at = (done: string | null) => bookRoadmap({ ...SURYEON, referenceDate: "2026-10-20",
+      reports: done ? [{ date: "2026-10-13", textbook: "가우스 중2-2 3권", progress: done }] : [] })!.doneDate;
+    expect(at("수학 삼각형의 닮음 조건")).toBe("2026-10-22"); // 3권 7차시 = 46일 중 41번째 내신 아닌 날
+    expect(at(null)).toBeNull();
+  });
+});

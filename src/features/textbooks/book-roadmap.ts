@@ -30,6 +30,8 @@ export type ScheduleBook = {
   window: number;
   /** 마감에 걸린 권이면 마감까지 나갈 차시(계획). */
   byDeadline: number | null;
+  /** 차시별 소단원(마우스 오버). 교재목록 미등록이면 빈 배열. */
+  lessonUnits: string[][];
 };
 export type RoadmapStatus = "not-started" | "no-data" | "behind" | "on" | "ahead" | "done";
 export type RoadPosition = { key: string; title: string; lessonNo: number; total: number; date: string; unit: string };
@@ -70,6 +72,12 @@ export type BookRoadmap = {
   remainingClasses: number | null;
   /** 기준일이 든 창(앞이면 0, 지났으면 마지막). */
   current: number;
+  /**
+   * 나간 차시(`done`)를 계획이 끝냈어야 할 **날짜** — 날짜 눈금 레일에 실제 위치를 찍는 자리(원장 2026-10-20
+   * *"교재일정이 어쨌든 전체 목표와 동일하자나 … 하나의 막대그래프에 같이"*). 오늘 계획 = 오늘 날짜라, 이 날과 오늘
+   * 사이가 곧 밀린(앞선) 만큼이다. 진도를 모르면 null.
+   */
+  doneDate: string | null;
 };
 
 /** 날짜 + N개월 — 말일은 그 달 말일로 접는다(11-30 + 3개월 = 2-28). */
@@ -175,6 +183,7 @@ export function bookRoadmap(args: {
   const lastIdx = Math.max(targetIdx, overDeadline);
   const schedule: ScheduleBook[] = planned.slice(0, lastIdx + 1).map((b) => ({
     key: b.key, title: b.title, startDate: b.startDate, finishDate: b.finishDate, lessonCount: b.lessonCount, window: b.window,
+    lessonUnits: b.lessonUnits,
     byDeadline: shownDeadline && b.finishDate > shownDeadline && b.startDate <= shownDeadline
       ? Math.round((b.lessonCount * workdays(b.startDate, shownDeadline)) / Math.max(1, workdays(b.startDate, b.finishDate)))
       : null,
@@ -197,6 +206,19 @@ export function bookRoadmap(args: {
       : keyOrdinal(position.key) < keyOrdinal(books[0]!.key) ? 0 : total;
   }
   const difference = done == null ? null : done - plan;
+  /** 누적 n차시를 계획이 끝내는 날 — 권 안에서는 내신 아닌 날 비율로(계획과 같은 규칙). */
+  const dateAtLessons = (n: number): string => {
+    if (n <= 0) return books[0]!.startDate;
+    let before = 0;
+    for (const b of books) {
+      if (n <= before + b.lessonCount) {
+        const need = Math.ceil(((n - before) / b.lessonCount) * workdays(b.startDate, b.finishDate));
+        return nthWorkday(b.startDate, Math.max(1, need));
+      }
+      before += b.lessonCount;
+    }
+    return endDate;
+  };
   const status: RoadmapStatus = ref < start ? "not-started" : done == null ? "no-data" : done >= total ? "done"
     : difference! < -1 ? "behind" : difference! > 1 ? "ahead" : "on";
 
@@ -224,6 +246,7 @@ export function bookRoadmap(args: {
     position,
     remainingClasses: args.classDates ? args.classDates(addDays(ref, 1), endDate).filter((d) => !off(d)).length : null,
     current: windowAt(books, ref),
+    doneDate: done == null ? null : dateAtLessons(done),
   };
 }
 
