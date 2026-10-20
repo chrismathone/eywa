@@ -2,7 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { isMergedStudent } from "@/features/students/merged";
-import { isBookkeepingOnlyExit, isSystemBulkWithdrawal } from "../system-bulk";
+import { isBookkeepingOnlyExit, isCleanupExit, isSystemBulkWithdrawal } from "../system-bulk";
 import { normalizeReason } from "../types";
 import { endedTogether, inWithdrawalWindow, lastEndedByStudent, pickLastEnded, withdrawalSubjects, type EndedClassRef } from "../window";
 
@@ -91,6 +91,11 @@ export type WindowWithdrawal = {
   reason: string | null;
   /** 퇴원 메모(사람이 적은 사유) — 없으면 null. */
   memo: string | null;
+  /**
+   * 사유 없는 단체 장부 정리(`isCleanupExit` — 수업 기록이 있는 쪽만 여기 남는다). 퇴원 수·명단은 그대로 세고, **추세선**(운영실·원생 통계
+   * '등록·퇴원 추이' · '3개월 내 퇴원' 달마다 줄)만 이 줄을 뺀다(원장 2026-10-20 *"단체로 장부 정리한 건에 대해서는 추세선에서 배제시킬것"*).
+   */
+  cleanup: boolean;
 };
 
 /**
@@ -172,6 +177,7 @@ export async function getWithdrawalsInWindow(from: string, to: string): Promise<
         lastClassEnglishTrack: klass.englishTrack,
         exitClasses,
         ...exitReasonOf(s.withdrawal_metadata, klass.reason),
+        cleanup: isCleanupExit(s.withdrawal_metadata),
       },
     ];
   });

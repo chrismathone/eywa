@@ -434,8 +434,11 @@ export default async function WithdrawalsPage({
   // ⚠️ **시스템 정리(날짜 미상)는 월별 추이에서 뺀다** — 퇴원일이 실제 시점이 아니라 일괄 처리된 장부 날짜라
   //    그대로 세면 그 달이 부풀어 "7월 퇴원 N명"이 사실과 달라진다(교정 전 152명이 그렇게 나왔다).
   //    목록에서는 숨기지 않는다(실제로 퇴원한 게 맞고 날짜만 모른다) — [system-bulk.ts](@/features/withdrawals/system-bulk) 참조.
+  // 🔴 사유 없는 단체 장부 정리(`cleanup` — 수업 기록이 있는 쪽)도 월별 추이에서 뺀다 — 퇴원일이 마지막 수업 종료일(07-03 일괄 종료
+  //    같은 장부 날짜)이라 그 달이 부푼다(원장 2026-10-20 *"단체로 장부 정리한 건에 대해서는 추세선에서 배제시킬것"*). 명단·이번 달은 그대로.
   const systemBulkCount = trendRows.filter((r) => r.systemBulk).length;
-  const trend = monthlyExits(trendRows.filter((r) => !r.systemBulk));
+  const cleanupTrendCount = trendRows.filter((r) => r.cleanup && !r.systemBulk).length;
+  const trend = monthlyExits(trendRows.filter((r) => !r.systemBulk && !r.cleanup));
   const reasonOptions: { value: string; label: string }[] = [
     ...(Object.entries(REASON_LABEL) as [WithdrawalReason, string][]).map(([k, label]) => ({ value: k, label })),
     { value: REASON_UNSPECIFIED, label: "미기재" },
@@ -675,8 +678,8 @@ export default async function WithdrawalsPage({
   const earlyScope = `${rangeText} · ${scopeText({ ...scopeParts, early: null })}`;
   // 월별 추이의 **학원 전체** 막대(원장 *"과목별과는 별도로 전체 추이수치가 필요"*) — 유형만 따르고 다른 필터는 안 건다.
   // 등록 후 필터가 걸리면 비교 막대도 퇴원만(수강종료 건을 섞으면 '명'과 '건'이 한 차트에 선다).
-  const typeRows = all.filter((r) => (withdrawnOnly ? r.kind === "withdrawn" : byType(r)) && !r.systemBulk);
-  const narrowed = trendRows.filter((r) => !r.systemBulk).length !== typeRows.length;
+  const typeRows = all.filter((r) => (withdrawnOnly ? r.kind === "withdrawn" : byType(r)) && !r.systemBulk && !r.cleanup);
+  const narrowed = trendRows.filter((r) => !r.systemBulk && !r.cleanup).length !== typeRows.length;
   const typeTrend = narrowed ? monthlyExits(typeRows) : null;
   const trendData: WithdrawalMonthPoint[] = typeTrend ? trend.map((p, i) => ({ ...p, total: typeTrend[i]?.count ?? 0 })) : trend;
   const sum = (xs: readonly { count: number }[]) => xs.reduce((a, x) => a + x.count, 0);
@@ -870,6 +873,7 @@ export default async function WithdrawalsPage({
                 최근 12개월 · {typeTrend ? `학원 전체 ${sum(typeTrend)}건 · ${scope} ${sum(trend)}건` : `${scope} ${sum(trend)}건`}
                 {range !== "all" ? " (기간 필터는 이 축이라 제외)" : ""}
                 {systemBulkCount > 0 ? ` (시스템 정리 ${systemBulkCount}명 제외 — 퇴원일 미상)` : ""}
+                {cleanupTrendCount > 0 ? ` (장부 정리 ${cleanupTrendCount}명 제외 — 퇴원일이 장부 날짜)` : ""}
               </span>
             </header>
             <WithdrawalTrendChart data={trendData} filterLabel={typeTrend ? scope : noun} initialPrefs={trendPrefs} unit={withdrawnOnly ? "명" : "건"} />

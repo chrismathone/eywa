@@ -290,8 +290,9 @@ async function monthEarlyExits(
       days: tenureDays(row.enrolledAt, row.withdrawnAt),
       subjects: subjectsOf(row),
     })),
+    // 달마다 줄은 '등록·퇴원 추이'의 퇴원 막대와 같은 모집단 — 사유 없는 단체 장부 정리는 뺀다(원장 2026-10-20 · 3개월 내 퇴원 ⊆ 그 달 퇴원).
     history: rows
-      .filter((row) => row.withdrawnAt < win.from && months.includes(row.withdrawnAt.slice(0, 7)))
+      .filter((row) => !row.cleanup && row.withdrawnAt < win.from && months.includes(row.withdrawnAt.slice(0, 7)))
       .map((row) => ({
         month: row.withdrawnAt.slice(0, 7),
         days: tenureDays(row.enrolledAt, row.withdrawnAt),
@@ -370,11 +371,14 @@ export async function loadMonthlyChanges(
     r.exitClasses.length ? r.exitClasses.map((c) => c.subject) : r.lastClassSubject ? [r.lastClassSubject] : [];
   const inSlice = (pred: SlicePredicate, subjects: readonly (string | null | undefined)[]) =>
     unknownToAll ? inSliceAny(pred, subjects) : subjects.some((subject) => !!subject?.trim() && pred(subject));
+  // 사유 없는 단체 장부 정리는 퇴원 칸에 넣지 않는다 — 퇴원일이 장부 날짜라 그 달 퇴원이 몰려 보인다(원장 2026-10-20 *"퇴원 이유를 보고
+  // 넣어야할건에 대해서만 넣을것"*). 그 학생은 재원생 추이에서 청구가 살아 있는 달까지만 센다(`billedOn`). 등록 칸은 그대로(실제로 등록했다).
+  const exits = withdrawn.filter((r) => !r.cleanup);
   return (pred) =>
     monthlyChanges(
       today,
       joined.filter((r) => !pred || inSlice(pred, subjectsOf.get(r.id) ?? [])).map((r) => r.enrolled_at),
-      withdrawn.filter((r) => !pred || inSlice(pred, exitSubjects(r))).map((r) => r.withdrawnAt),
+      exits.filter((r) => !pred || inSlice(pred, exitSubjects(r))).map((r) => r.withdrawnAt),
       months,
     );
 }

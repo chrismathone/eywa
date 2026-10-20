@@ -36,6 +36,8 @@ const students = {
 it("A1 — 이번 달 퇴원 = 1일~오늘: 카드(창 판정)와 추이 패널(월 칸)이 같은 행에서 같은 수, 오늘 이후 퇴원은 둘 다 제외", () => {
   const today = "2026-09-11";
   // getWithdrawalsInWindow가 돌려주는 행 모양(시스템 정리는 이미 빠져 있다) — 오늘 이후 날짜가 섞여 들어와도 막는지 본다.
+  // ⚠️ 사유 없는 단체 장부 정리는 추이에서만 빠진다(원장 2026-10-20 · `loadMonthlyChanges`의 `exits`) — 그 달에 장부 정리를 했으면
+  //    카드와 추이의 이번 달 퇴원 수가 다를 수 있다. 이 줄들엔 장부 정리가 없다.
   const rows = ["2026-08-31", "2026-09-01", "2026-09-11", "2026-09-25"].map((withdrawnAt) => ({ withdrawnAt }));
   const win = withdrawalMonthWindow(today.slice(0, 7), today);
   const card = rows.filter((row) =>

@@ -1,6 +1,8 @@
 import { isMergedStudent } from "@/features/students/merged";
 import { isSystemBulkWithdrawal } from "@/features/withdrawals/system-bulk";
 import { isEnrollmentEndedOn } from "@/features/enrollments/eligibility";
+import { billedExitSubjects, billedOn } from "./trend-billing";
+export { monthlyPoints, weeklyPoints, yearlyPoints } from "./trend-points";
 
 /**
  * 재원생 추이 — 월말(이번 달은 오늘)·연말(올해는 오늘) 시점의 재원생 수(원장 2026-09-29 *"재원생 수치: 연간, 월간 흐름을
@@ -13,6 +15,7 @@ import { isEnrollmentEndedOn } from "@/features/enrollments/eligibility";
  * ⚠️ 휴원 이력은 저장되지 않아 과거 달의 휴원생을 가를 수 없다 — 지금 휴원인 학생은 과거에도 빼고, 그때 휴원이었다가
  *    지금 재원인 학생은 과거에도 센다. 퇴원일을 모르는 시스템 정리분(`isSystemBulkWithdrawal`)은 통째로 뺀다
  *    (장부 날짜까지 재원으로 세면 3~6월이 부푼다). 수업 기록 없는 장부 정리(`isBookkeepingOnlyExit`)도 같은 이유로 통째로 뺀다.
+ *    수업 기록이 있는 장부 정리는 청구가 지점을 덮은 달부터 **청구가 살아 있는 달에만** 센다(원장 2026-10-20 — `trend-billing.ts`).
  */
 export type TrendStudent = {
   id: string;
@@ -21,30 +24,42 @@ export type TrendStudent = {
   withdrawnAt: string | null;
   /** 병합 표식을 읽는다 — 흡수된 쪽은 퇴원으로 남아 있어 세면 한 사람이 두 번 든다(퇴원관리·운영실과 같이 뺀다). */
   notes?: string | null;
+  /** 병합 판정을 미리 한 값(원본 캐시가 메모 칸을 싣지 않게 — `isMergedStudent(notes)`와 같은 뜻). */
+  merged?: boolean;
   /** 장부 정리 메모(`isCleanupExit`) — 퇴원 학생이고 끝난 수강이 없을 때만 뺀다(`isBookkeepingOnlyExit`와 같은 판정). */
   cleanup?: boolean;
 };
-/** `ended` = 끝난 수강이 있는 학생 — 시스템 정리분 판정 재료(퇴원관리 `loadEndedEnrollments`와 같은 뜻). */
-export type TrendEnrollments = { firstStart: ReadonlyMap<string, string>; ended: ReadonlySet<string> };
+/**
+ * `ended` = 끝난 수강이 있는 학생 — 시스템 정리분 판정 재료(퇴원관리 `loadEndedEnrollments`와 같은 뜻).
+ * `billing` = 청구가 지점을 덮기 시작한 달(YYYY-MM · `loadCleanupBilling`) · 오늘 · 장부 정리 학생마다 청구가 살아 있는 달 — 있으면
+ *   장부 정리 학생은 그 달부터 오늘 전까지 청구가 살아 있는 달에만 센다(원장 2026-10-20).
+ */
+export type TrendBilling = { from: string; today: string; months: ReadonlyMap<string, readonly string[]> };
+export type TrendEnrollments = { firstStart: ReadonlyMap<string, string>; ended: ReadonlySet<string>; billing?: TrendBilling };
 export type TrendPoint = { key: string; label: string; date: string; count: number };
 
 /** 한 학생이 날짜 d에 재원생으로 세어지는가(위 판정 한 벌 — `enrolledOn`·과목별 추이가 같이 쓴다). */
 export function countedOn(s: TrendStudent, en: TrendEnrollments, d: string): boolean {
   const { firstStart, ended } = en;
   if (s.status !== "enrolled" && s.status !== "withdrawn") return false;
-  if (isMergedStudent(s.notes)) return false;
+  if (s.merged || isMergedStudent(s.notes)) return false;
   // 등록일이 빈 재원생 — 카드는 등록일을 안 본다. 첫 수강 시작일로 대신하고, 그것도 없으면 언제나 센다(오늘 칸 = 카드).
   const enrolled = s.enrolledAt?.slice(0, 10) ?? firstStart.get(s.id) ?? (s.status === "enrolled" ? "0000-00-00" : null);
   if (!enrolled || enrolled > d) return false;
+  const first = firstStart.get(s.id);
+  if (first && first > d) return false;
+  if (s.status === "withdrawn" && s.cleanup) {
+    // 수업 기록 없는 장부 정리는 통째로 뺀다 — 수업 없이 장부에만 있던 학생이라 정리한 날까지 재원으로 세면 그날 퇴원이 몰려
+    // 보인다(원장 2026-10-15).
+    if (!ended.has(s.id)) return false;
+    // 수업 기록이 있으면 청구 기록이 있는 달엔 청구가 살아 있는 달에만 센다(원장 2026-10-20) — 그 밖의 날은 아래 퇴원일 규칙.
+    const billed = billedOn(s, en, d);
+    if (billed !== null) return billed;
+  }
   const out = s.withdrawnAt?.slice(0, 10);
   if (out && out <= d) return false;
   if (s.status === "withdrawn" && !out) return false; // 퇴원했는데 날짜가 없으면 언제까지 다녔는지 모른다
   if (s.status === "withdrawn" && isSystemBulkWithdrawal({ withdrawnAt: s.withdrawnAt, hasEnrollmentHistory: ended.has(s.id) })) return false;
-  // 수업 기록 없는 장부 정리도 통째로 뺀다 — 수업 없이 장부에만 있던 학생이라 정리한 날까지 재원으로 세면 그날 퇴원이 몰려
-  // 보인다(원장 2026-10-15). 수업 기록이 있으면 보통 퇴원처럼 퇴원일까지 센다.
-  if (s.status === "withdrawn" && s.cleanup && !ended.has(s.id)) return false;
-  const first = firstStart.get(s.id);
-  if (first && first > d) return false;
   return true;
 }
 
@@ -82,8 +97,15 @@ export function subjectTrendOf(
     let count = 0;
     for (const s of students) {
       if (!countedOn(s, en, p.date)) continue;
-      const live = (byStudent.get(s.id) ?? []).filter((e) => (p.date === today ? !e.end : !isEnrollmentEndedOn(e.end, p.date, e.transferred)));
-      if (!live.length || live.some((e) => inSubject(e.subject) && (!e.start || e.start.slice(0, 10) <= p.date))) count++;
+      const rows = byStudent.get(s.id) ?? [];
+      const live = rows.filter((e) => (p.date === today ? !e.end : !isEnrollmentEndedOn(e.end, p.date, e.transferred)));
+      const started = (e: TrendEnrollment) => !e.start || e.start.slice(0, 10) <= p.date;
+      const billed = live.some(started) ? null : billedExitSubjects(s, rows, en, p.date); // 장부 정리를 청구로 센 날 — 퇴원 무렵 과목
+      if (billed) {
+        if (!billed.length || billed.some((x) => inSubject(x))) count++;
+        continue;
+      }
+      if (!live.length || live.some((e) => inSubject(e.subject) && started(e))) count++;
     }
     return { ...p, count };
   });
@@ -134,11 +156,13 @@ export function breakdownTrendOf(
     for (const s of students) {
       if (!countedOn(s, en, p.date)) continue;
       const subjects = new Set<string>();
-      for (const e of byStudent.get(s.id) ?? []) {
+      const rows = byStudent.get(s.id) ?? [];
+      for (const e of rows) {
         const live = p.date === today ? !e.end : !isEnrollmentEndedOn(e.end, p.date, e.transferred);
         if (!live || (e.start && e.start.slice(0, 10) > p.date) || !e.subject) continue;
         subjects.add(e.subject);
       }
+      if (subjects.size === 0) for (const x of billedExitSubjects(s, rows, en, p.date) ?? []) subjects.add(x);
       if (subjects.size === 0) {
         unknown++;
         continue;
@@ -161,52 +185,6 @@ export function breakdownTrendOf(
     for (const k of subjectKeys) out.bySubject[k]!.push({ ...p, count: subjectCounts.get(k) ?? 0 });
     for (const k of MIX_KEYS) out.mix[k].push({ ...p, count: mixCounts[k] });
     out.unknown.push({ ...p, count: unknown });
-  }
-  return out;
-}
-
-const lastDay = (ym: string) => {
-  const [y, m] = ym.split("-").map(Number);
-  return new Date(Date.UTC(y!, m!, 0)).toISOString().slice(0, 10);
-};
-const shift = (ym: string, n: number) => {
-  const [y, m] = ym.split("-").map(Number);
-  return new Date(Date.UTC(y!, m! - 1 + n, 1)).toISOString().slice(0, 7);
-};
-
-/** 최근 12개월 — 달마다 말일(이번 달은 오늘). */
-export function monthlyPoints(today: string, count = 12): { key: string; label: string; date: string }[] {
-  const month = today.slice(0, 7);
-  return Array.from({ length: count }, (_, i) => {
-    const key = shift(month, i - count + 1);
-    const m = Number(key.slice(5));
-    return { key, label: m === 1 || i === 0 ? `${key.slice(2, 4)}.${m}월` : `${m}월`, date: key === month ? today : lastDay(key) };
-  });
-}
-
-/**
- * 최근 N주 — 주마다 일요일(이번 주는 오늘). 원생 통계 화면의 '주별' 보기. 라벨 = `M/D`(그 주 마지막 날).
- */
-export function weeklyPoints(today: string, count = 26): { key: string; label: string; date: string }[] {
-  const t = new Date(`${today}T00:00:00Z`);
-  // 이번 주 일요일(KST 날짜 문자열 기준 — 요일은 UTC 자정으로 계산해도 같다).
-  const sunday = new Date(t);
-  sunday.setUTCDate(t.getUTCDate() + ((7 - t.getUTCDay()) % 7));
-  return Array.from({ length: count }, (_, i) => {
-    const d = new Date(sunday);
-    d.setUTCDate(sunday.getUTCDate() - (count - 1 - i) * 7);
-    const iso = d.toISOString().slice(0, 10);
-    const date = iso > today ? today : iso;
-    return { key: iso, label: `${Number(iso.slice(5, 7))}/${Number(iso.slice(8, 10))}`, date };
-  });
-}
-
-/** 연도별 — `fromYear`부터 올해까지 연말(올해는 오늘). */
-export function yearlyPoints(today: string, fromYear: number): { key: string; label: string; date: string }[] {
-  const year = Number(today.slice(0, 4));
-  const out: { key: string; label: string; date: string }[] = [];
-  for (let y = Math.min(fromYear, year); y <= year; y++) {
-    out.push({ key: String(y), label: `${y}년`, date: y === year ? today : `${y}-12-31` });
   }
   return out;
 }

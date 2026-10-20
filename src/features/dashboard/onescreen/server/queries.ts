@@ -4,6 +4,7 @@ import { fetchAllPaged } from "@/lib/supabase/batch";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { isMergedStudent } from "@/features/students/merged";
 import { bookkeepingOnlyIds } from "@/features/withdrawals/server/bookkeeping";
+import { isCleanupExit } from "@/features/withdrawals/system-bulk";
 import {
   SENT_STATUS_SUCCESS,
   UNREAD_GRACE_HOURS,
@@ -53,7 +54,8 @@ export async function getWeeklyChange(weeks = 4): Promise<WeeklyChangeBucket[]> 
   return buildWeeklyChange(
     {
       enrolledOn: enrolledRows.filter((r) => !bookkeeping.has(r.id)).map((r) => ymd(r.enrolled_at)),
-      withdrawnOn: withdrawnRows.filter((r) => !bookkeeping.has(r.id)).map((r) => ymd(r.withdrawn_at)),
+      // 수업 기록이 있는 장부 정리도 퇴원 막대엔 넣지 않는다 — 추세선은 퇴원일이 장부 날짜인 줄을 세지 않는다(원장 2026-10-20 · 운영실 추이와 같은 규칙).
+      withdrawnOn: withdrawnRows.filter((r) => !bookkeeping.has(r.id) && !isCleanupExit(r.withdrawal_metadata)).map((r) => ymd(r.withdrawn_at)),
     },
     today,
     weeks,

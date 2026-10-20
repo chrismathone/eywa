@@ -132,7 +132,9 @@ describe("② 퇴원&수업종료 — 1일~오늘, 퇴원관리의 과목 전체
     expect(count(SERVER, "getWithdrawalsInWindow(")).toBe(1);
     expect(SERVER).toContain("withdrawalMonthWindow(month, today)");
     expect(SERVER).toMatch(/inWithdrawalWindow\(\{ withdrawnAt: row\.withdrawnAt, systemBulk: false \}, win\.from, win\.to\)/);
-    expect(SERVER).toContain("withdrawn.filter((r) => !pred || inSlice(pred, exitSubjects(r))).map((r) => r.withdrawnAt)");
+    // 추이의 퇴원 칸은 사유 없는 단체 장부 정리를 뺀 목록(원장 2026-10-20) — 카드(이번 달 퇴원 수)는 그대로 센다.
+    expect(SERVER).toContain("const exits = withdrawn.filter((r) => !r.cleanup);");
+    expect(SERVER).toContain("exits.filter((r) => !pred || inSlice(pred, exitSubjects(r))).map((r) => r.withdrawnAt)");
     // 운영실 과목 관리자 카드는 종전대로 '모름은 모두에게'(기본값) — 원생 통계만 모르는 기록을 뺀다(2026-10-20).
     expect(SERVER).toContain("unknownToAll = true,");
     expect(SERVER).toContain("unknownToAll ? inSliceAny(pred, subjects)");

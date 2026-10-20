@@ -6,7 +6,8 @@ const monthLabel = (m: string) => `${m.slice(0, 4)}년 ${Number(m.slice(5, 7))}�
 
 /**
  * 월별 기록 표 — 최근 달이 위. 말일 재원생과 그 증감은 재원생 추이와 같은 값(강사 범위면 칸이 없다).
- * ⚠️ '재원생 증감'은 말일 재원생의 차이라 '순증(등록 − 퇴원)'과 다를 수 있다(수업 시작 전 학생·휴원 등) — 표 아래에 적는다.
+ * ⚠️ '재원생 증감'은 말일 재원생의 차이라 '순증(등록 − 퇴원)'과 다를 수 있다(수업 시작 전 학생·휴원 · 장부 정리 — 퇴원 칸엔 없고
+ *    재원생엔 청구가 살아 있는 달에만 든다, 원장 2026-10-20) — 표 아래에 적는다.
  */
 export function FlowTable({ rows, monthEnd }: { rows: readonly FlowRow[]; monthEnd: Record<string, number> | null }) {
   const cell = "px-2 py-1.5";
@@ -49,7 +50,7 @@ export function FlowTable({ rows, monthEnd }: { rows: readonly FlowRow[]; monthE
       </div>
       {monthEnd ? (
         <p className="text-muted-foreground mt-1 text-xs break-keep">
-          재원생 증감은 말일 재원생의 차이라 순증(등록 − 퇴원)과 다를 수 있습니다 — 등록했지만 아직 수업을 시작하지 않은 학생, 휴원생은 재원생에서 빠집니다.
+          재원생 증감은 말일 재원생의 차이라 순증(등록 − 퇴원)과 다를 수 있습니다 — 등록했지만 아직 수업을 시작하지 않은 학생, 휴원생은 재원생에서 빠집니다. 사유 없이 한꺼번에 정리한 퇴원(장부 정리)은 퇴원 칸에 넣지 않고, 재원생에는 수강료 청구가 살아 있는 달에만 셉니다(청구 기록이 시작되기 전 달은 퇴원일까지).
         </p>
       ) : null}
     </details>

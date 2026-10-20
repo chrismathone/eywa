@@ -25,6 +25,8 @@ describe("재원생 추이 — 그날의 재원생(원장 2026-09-29)", () => {
     const en = { firstStart: new Map<string, string>(), ended: new Set<string>() };
     const merged = { ...s("m", "withdrawn", "2025-07-15", "2026-07-07"), notes: "중복 병합: abc와 통합됨" };
     expect(enrolledOn([merged], en, "2026-01-01")).toBe(0);
+    // 운영 원본은 메모 칸 대신 병합 판정 값을 싣는다(적대 재리뷰 2026-10-20) — 그 값만으로도 뺀다.
+    expect(enrolledOn([{ ...s("m2", "withdrawn", "2025-07-15", "2026-07-07"), merged: true }], en, "2026-01-01")).toBe(0);
     expect(enrolledOn([s("n", "enrolled", null)], en, "2026-09-29")).toBe(1);
   });
   it("🔴 수업 기록 없는 장부 정리는 정리한 날 전에도 세지 않는다 — 수업 기록이 있으면 퇴원일까지 센다(원장 2026-10-15)", () => {
