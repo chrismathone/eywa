@@ -290,7 +290,7 @@ function stopBadge(text: string, role?: "board" | "alight"): Badge {
   );
 }
 
-/** 지도 위 차 한 대(0382a 기사 폰 GPS) — 🚌 배지 + "2호차 · 방금". `stale`이면 회색 '위치 끊김'. */
+/** 지도 위 차 한 대(0383a 기사 폰 GPS) — 🚌 배지 + "2호차 · 방금". `stale`이면 회색 '위치 끊김'. */
 export type MapVehicle = { key: string; label: string; lat: number; lng: number; age: string; stale: boolean };
 
 function busBadge(v: MapVehicle): Badge {
@@ -318,7 +318,7 @@ export function ParentLiveMap({
    * `kind`: 'out' 나가는 길(남색 실선) · 'back' 돌아오는 길(주황 점선) — 같은 도로를 오가도 갈라 보이게(사용자 2026-10-14).
    */
   paths?: { path: [number, number][]; kind: "out" | "back" }[];
-  /** 운행 중 차 위치(기사 폰 GPS, 0382a) — 몇 초마다 바뀌므로 지도를 새로 만들지 않고 🚌만 옮긴다. */
+  /** 운행 중 차 위치(기사 폰 GPS, 0383a) — 몇 초마다 바뀌므로 지도를 새로 만들지 않고 🚌만 옮긴다. */
   vehicles?: MapVehicle[];
 }) {
   const boxRef = useRef<HTMLDivElement>(null);

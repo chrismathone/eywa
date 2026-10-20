@@ -14,7 +14,12 @@ import css from "./plan-card.module.css";
  * 진도 글이 어긋난다(교재 4권 · 진도 3권 단원) ③ '다음 수업'은 +1차시 추정이고 오늘 수업일을 건너뛴다.
  * 계획 규칙을 바로잡으면 이 값만 true로. 나간 차시(발송 보고서 사실)는 그대로 보인다.
  */
-export const SHOW_BOOK_PLAN = false;
+export const SHOW_TODAY_SECTION = false;
+/**
+ * 교재 3개월 **계획**(오늘 계획 · 밀린 차시 빨간 빗금 · 보완 필요)은 다시 켠다(원장 2026-10-20 *"빨간빗금 추가해줘"*) —
+ * 계획이 이제 내신기간을 빼고 세서(book-roadmap.ts) 위 ①의 부풀림이 없다. '오늘 기준' 구역은 ②③ 때문에 계속 숨김.
+ */
+export const SHOW_BOOK_PLAN = true;
 
 const pct = (n: number, total: number) => `${Math.max(0, Math.min(100, (n / Math.max(1, total)) * 100))}%`;
 const short = (date: string) => date.slice(5).replace("-", ".");

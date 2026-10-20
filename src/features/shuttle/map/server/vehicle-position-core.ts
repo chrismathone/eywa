@@ -6,12 +6,12 @@ import { doneIndexOf } from "../route-progress";
 import type { VehiclePosition } from "../vehicle-position";
 
 /**
- * 오늘 **운행 중인 회차**의 최신 차량 위치(0382a). `runIds`를 주면 그 회차만(학부모 — 우리 아이 회차).
+ * 오늘 **운행 중인 회차**의 최신 차량 위치(0383a). `runIds`를 주면 그 회차만(학부모 — 우리 아이 회차).
  *
  * 🔑 운행 중 판정은 `shuttle_trips`(0243a)가 진실 — 출발했고 아직 종료 안 된 회차만 돌려준다. 종료된 회차의 마지막
  *    위치는 남아 있어도 지도에 그리지 않는다(차는 이미 학원에 있다).
  * 🔒 권한 확인은 부르는 쪽(vehicle-position-actions.ts). 이 모듈은 server-only. admin이라 tenant 필터 필수([[#104]]).
- * ⚠️ 표(0382a)가 없거나 조회가 실패하면 빈 목록 — 지도는 차 없이 그대로 뜬다.
+ * ⚠️ 표(0383a)가 없거나 조회가 실패하면 빈 목록 — 지도는 차 없이 그대로 뜬다.
  */
 export async function loadRunningPositions(tenantId: string, ymd: string, runIds: string[] | null): Promise<VehiclePosition[]> {
   if (runIds && runIds.length === 0) return [];

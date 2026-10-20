@@ -1,14 +1,14 @@
 "use client";
 
 import type { RoadmapView } from "@/features/textbooks/book-plans";
-import { parseKey } from "@/features/textbooks/book-sequence";
+import { keyOrdinal, parseKey } from "@/features/textbooks/book-sequence";
 import { BookHover } from "./book-hover";
 import { TargetEditor } from "./target-editor";
 import css from "./plan-card.module.css";
 
-const pct = (n: number, total: number) => `${Math.max(0, Math.min(100, (n / Math.max(1, total)) * 100))}%`;
 const dot = (date: string) => date.replaceAll("-", ".");
 const md = (date: string) => date.slice(5).replace("-", ".");
+const ymd = (date: string) => `${date.slice(2, 4)}.${md(date)}`;
 const span = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
 /** `가우스|중2-2|3` → `중2-2 3권`. */
 export const shortBook = (key: string, title: string) => {
@@ -17,22 +17,28 @@ export const shortBook = (key: string, title: string) => {
 };
 
 /**
- * 전체 목표 — 교재 로드맵(원장 2026-10-20 *"중3 11월말 까지 3개월당 교재 2권씩 … 자동으로 목표"*).
- * 레일은 차시 눈금이고 **권마다 구간**을 나눠 마우스를 올리면 그 권의 차시별 소단원이 뜬다.
- * 아래 띠는 달력 눈금 — 회색 빗금이 내신기간(진도 계획이 멈추는 날)이다.
+ * 전체 목표 — 교재 로드맵 **막대 하나**(원장 2026-10-20 *"교재일정이 어쨌든 전체 목표와 동일하자나 … 하나의 막대그래프에
+ * 같이 잘 녹여낼순없는가"*). 가로축 = **날짜**(시작 ~ 중3 11월 말):
+ *  · 권마다 칸(폭 = 그 권에 걸리는 날수 — 내신이 끼면 넓다) · 칸 아래 권 이름과 끝나는 날 · 마우스 오버 = 차시별 소단원
+ *  · 회색 빗금 = 내신기간(진도 멈춤) — 같은 막대 위에 겹친다
+ *  · 검은 선 = 오늘(= 오늘 계획) · 점 = 실제 위치(나간 차시를 계획이 끝냈어야 할 날, `doneDate`)
+ *  · 점이 오늘보다 앞이면 그 사이가 **밀린 만큼(빨간 빗금)**, 뒤면 앞선 만큼(옅은 네이비)
  * 남은 수업·기간은 제목 줄 옆에 둔다(원장 *"해당 기간 및 수업을 해당 위치 옆으로"*).
  */
 export function RoadmapGoal({ r, studentId, studentName }: { r: RoadmapView; studentId: string; studentName: string }) {
   const first = r.books[0]!, last = r.books[r.books.length - 1]!;
   const done = r.done ?? 0;
   const started = r.status !== "not-started";
-  const plan = started ? r.planned : 0;
   const pos = r.position;
   const now = pos ? `${shortBook(pos.key, pos.title)} ${pos.lessonNo}차시 · ${pos.unit}` : "진도 확인 필요";
-  const days = Math.max(1, span(r.startDate, r.endDate));
-  const at = (d: string) => `${Math.max(0, Math.min(100, (span(r.startDate, d) / days) * 100))}%`;
-  // 권마다 레일 위 시작 차시(누적) — 렌더 중에 변수를 다시 쓰지 않게 미리 센다.
-  const offsets = r.books.map((_, i) => r.books.slice(0, i).reduce((n, b) => n + b.lessonCount, 0));
+  const from = r.startDate, to = r.scheduleEnd;
+  const days = Math.max(1, span(from, to));
+  const x = (d: string) => Math.max(0, Math.min(100, (span(from, d) / days) * 100));
+  const todayX = x(r.referenceDate);
+  const doneX = r.doneDate ? x(r.doneDate) : null;
+  const posOrd = pos ? keyOrdinal(pos.key) : null;
+  const state = (key: string) => (posOrd == null ? "todo" : keyOrdinal(key) < posOrd ? "done" : keyOrdinal(key) === posOrd ? "now" : "todo");
+  const pc = (n: number) => `${n}%`;
   return (
     <>
       <div className={css.goalRow}>
@@ -48,40 +54,51 @@ export function RoadmapGoal({ r, studentId, studentName }: { r: RoadmapView; stu
       {r.examNow ? (
         <p className={css.examNow}>지금 내신기간 · {r.examNow.label} ({md(r.examNow.from)}–{md(r.examNow.to)}) — 이 기간엔 진도 계획이 늘지 않습니다</p>
       ) : null}
-      <div className={css.rail}>
-        {r.books.map((b, i) => {
-          const left = offsets[i]!;
+      <div className={css.trail}>
+        <div className={css.tTrack}>
+          {doneX != null ? <span className={css.tFill} style={{ width: pc(started && r.status === "ahead" ? Math.min(doneX, todayX) : doneX) }} /> : null}
+          {started && doneX != null && doneX < todayX && r.status === "behind"
+            ? <span className={css.tLate} style={{ left: pc(doneX), width: pc(todayX - doneX) }} /> : null}
+          {started && doneX != null && doneX > todayX && r.status === "ahead" ? <span className={css.tAhead} style={{ left: pc(todayX), width: pc(doneX - todayX) }} /> : null}
+          {r.exams.map((p) => (
+            <span key={p.from} className={css.tExam} style={{ left: pc(x(p.from)), width: pc(x(p.to) - x(p.from)) }} />
+          ))}
+        </div>
+        {r.schedule.map((b, i) => {
+          const left = x(b.startDate), right = x(b.finishDate > to ? to : b.finishDate);
+          const partial = b.byDeadline != null;
           return (
             <BookHover
               key={b.key}
-              className={css.seg}
-              style={{ left: pct(left, r.total), width: pct(b.lessonCount, r.total) }}
+              className={css.tSeg}
+              style={{ left: pc(left), width: pc(Math.max(0.4, right - left)) }}
+              data-state={state(b.key)}
+              data-partial={partial || undefined}
               title={b.title}
-              period={`${dot(b.startDate)} – ${dot(b.finishDate)} 예정`}
+              period={`${ymd(b.startDate)} – ${ymd(b.finishDate)} 예정${partial ? ` · ${md(r.deadline!)}까지 ${b.byDeadline}/${b.lessonCount}차시` : ""}`}
               lessonUnits={b.lessonUnits}
               lessonCount={b.lessonCount}
               at={pos?.key === b.key ? pos.lessonNo : null}
-              align={i >= r.books.length / 2 ? "end" : "start"}
+              align={i >= r.schedule.length / 2 ? "end" : "start"}
             >
-              <i>{shortBook(b.key, b.title)}</i>
+              <i><b>{shortBook(b.key, b.title)}</b><small>{partial ? `${md(r.deadline!)}까지 ${b.byDeadline}/${b.lessonCount}` : `~${md(b.finishDate)}`}</small></i>
             </BookHover>
           );
         })}
-        <span className={css.fill} style={{ width: pct(Math.min(done, plan), r.total) }} />
-        {started && done < plan ? <span className={css.late} style={{ left: pct(done, r.total), width: pct(plan - done, r.total) }} /> : null}
-        {done > plan ? <span className={css.ahead} style={{ left: pct(plan, r.total), width: pct(done - plan, r.total) }} /> : null}
-        {started ? <span className={css.plan} style={{ left: pct(plan, r.total) }}><em>오늘 계획 {plan}</em></span> : null}
-        {r.done != null ? <span className={css.dot} style={{ left: pct(done, r.total) }} /> : null}
+        {started && r.referenceDate <= to ? (
+          <span className={css.plan} style={{ left: pc(todayX) }}><em>오늘 계획 {r.planned}차시</em></span>
+        ) : null}
+        {doneX != null ? <span className={css.dot} style={{ left: pc(doneX) }} title={`실제 ${done}차시`} /> : null}
       </div>
-      <div className={css.timeline} aria-label="기간과 내신기간">
-        {r.exams.map((p) => {
-          const a = p.from < r.startDate ? r.startDate : p.from, b = p.to > r.endDate ? r.endDate : p.to;
-          return <span key={p.from} className={css.exam} style={{ left: at(a), width: `calc(${at(b)} - ${at(a)})` }} title={`${p.label} ${md(p.from)}–${md(p.to)} · 진도 계획 멈춤`} />;
-        })}
-        {r.referenceDate >= r.startDate && r.referenceDate <= r.endDate ? <span className={css.today} style={{ left: at(r.referenceDate) }} title={`기준일 ${dot(r.referenceDate)}`} /> : null}
-        <small>{md(r.startDate)}</small>
-        <small>{r.exams.length ? <><i className={css.examKey} />내신기간 {r.exams.length}회 제외</> : "내신기간 없음"}</small>
-        <small>{dot(r.endDate)}</small>
+      <div className={css.examChips}>
+        <span>{ymd(from)} 시작</span>
+        {r.exams.length ? <span><i className={css.examKey} />내신기간 · 진도 멈춤</span> : null}
+        {r.exams.map((p) => (
+          <em key={p.from} data-now={(p.from <= r.referenceDate && r.referenceDate <= p.to) || undefined}>
+            {p.label.replace(/^중\d\s/, "")} {ymd(p.from)}–{md(p.to)}
+          </em>
+        ))}
+        <span className={css.chipsEnd}>{ymd(to)}{r.deadline ? " · 중3 11월 말" : ""}</span>
       </div>
       <div className={css.ends}>
         <div><b>현재 위치</b>{now}{pos ? ` (${md(pos.date)})` : ""}</div>

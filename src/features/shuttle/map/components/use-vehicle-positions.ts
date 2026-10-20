@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { POLL_EVERY_MS, type VehiclePosition } from "../vehicle-position";
 
 /**
- * 차량 위치를 `POLL_EVERY_MS`(10초)마다 다시 읽는다(0382a).
+ * 차량 위치를 `POLL_EVERY_MS`(10초)마다 다시 읽는다(0383a).
  * 🔑 실시간 신호(WebSocket)가 안 붙는 환경도 있다 — 다시 읽기(폴링)는 어디서나 된다.
  * 🔑 탭이 가려져 있으면 쉬고, 다시 보이면 바로 한 번 읽는다(배터리·호출 절약).
  * ⚠️ 실패하면 직전 값을 그대로 둔다 — 화면에선 "N초 전"이 늘어나다가 '위치 끊김'으로 바뀐다.

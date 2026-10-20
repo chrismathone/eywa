@@ -13,7 +13,7 @@ import { offGoalCountByDate } from "../lib/goal-match";
 import { setMyEcsMonthDisplay, setMyEcsMonthPeriod, setMyEcsMonthView } from "../server/actions";
 import { setLessonShift } from "@/features/textbooks/server/plan-actions";
 import { undoLessonShift } from "@/features/textbooks/server/shift-undo-actions";
-import { useShiftConfirm } from "./shift-confirm";
+import { useShiftConfirm, type ShiftWhich } from "./shift-confirm";
 import { ImportPlanButton } from "./import-plan-button";
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { sheetMonthLabel } from "@/features/teacher-view/i18n";
@@ -174,10 +174,10 @@ export function MonthClient({
    */
   const shiftBusy = useRef(false);
   const onShift = useCallback(
-    (date: string, slotStart: string, kind: "skip" | "advance" | null) => {
+    (date: string, slotStart: string, kind: "skip" | "advance" | null, which?: ShiftWhich) => {
       if (shiftBusy.current) return;
       shiftBusy.current = true;
-      void setLessonShift({ classId: data.classId, date, slotStart, kind })
+      void setLessonShift({ classId: data.classId, date, slotStart, kind, lineId: which?.lineId, fill: which?.fill })
         .then((r) => {
           // [되돌리기](원장 2026-10-19 "덮어쓰기(되돌리기)") — 누르기 전 줄을 그대로 돌려놓는다.
           // 옮기다 멈춘 경우에도 기록이 오면 단다(미룸은 누른 칸을 지우므로 멈춘 채 두면 잃는다).
@@ -206,11 +206,13 @@ export function MonthClient({
           toast.success(
             kind === null
               ? t("month.shift.clear.done")
-              : r.moved === 0
-                ? t("plan.feedback.shiftMarkOnly")
-                : kind === "skip"
-                  ? t("month.shift.skip.done")
-                  : t("month.shift.advance.done"),
+              : which?.fill
+                ? t("month.shift.fill.done")
+                : r.moved === 0
+                  ? t("plan.feedback.shiftMarkOnly")
+                  : kind === "skip"
+                    ? t("month.shift.skip.done")
+                    : t("month.shift.advance.done"),
             undoAction,
           );
           router.refresh();

@@ -16,6 +16,8 @@ import { reportError } from "@/lib/observability/report-error";
 import { isAssignedLine, type RelayBook } from "../lesson-relay";
 import { markersToClear } from "../plan-delete";
 import { toUndoLine, type ShiftKind, type UndoLine } from "../shift-undo";
+import { markerKeyOfRow, parseMarkerKey } from "../shift-key";
+import { withMarkerCols } from "./shift-markers";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -33,6 +35,12 @@ export async function clearPlanLines(input: {
    * 어느 배정이 쓴 줄인지 가를 수 없다(지우면 남는 배정의 줄까지 사라진다, 적대적 리뷰 2026-10-19).
    */
   keepLines: boolean;
+  /**
+   * 진도 줄·칸 표식까지 지우나(사용자가 [진도 줄도 함께 지우기]를 골랐을 때). false여도 **그 교재의 줄 표식**(0382a)은
+   * 지운다 — 배정이 없으면 아무 계산에도 안 쓰이다가, 같은 교재를 다시 배정하는 순간 옛 미룸·당김이 새 배정에
+   * 조용히 걸린다(적대적 리뷰 2026-10-20).
+   */
+  withLines?: boolean;
   from: string;
 }): Promise<{ removed: UndoLine[]; markers: { key: string; kind: ShiftKind }[]; stopped: boolean }> {
   const { admin, tenantId, classId, from } = input;
@@ -58,15 +66,17 @@ export async function clearPlanLines(input: {
         .order("id", { ascending: true })
         .range(f, t) as never,
     ),
-    fetchAllPaged<Record<string, unknown>>((f, t) =>
-      admin
-        .from("class_lesson_shifts")
-        .select("id, plan_date, slot_start, kind")
-        .eq("tenant_id", tenantId)
-        .eq("class_id", classId)
-        .gte("plan_date", from)
-        .order("id", { ascending: true })
-        .range(f, t) as never,
+    withMarkerCols((cols) =>
+      fetchAllPaged<Record<string, unknown>>((f, t) =>
+        admin
+          .from("class_lesson_shifts")
+          .select(cols)
+          .eq("tenant_id", tenantId)
+          .eq("class_id", classId)
+          .gte("plan_date", from)
+          .order("id", { ascending: true })
+          .range(f, t) as never,
+      ),
     ),
   ]);
   if (bookRes.error) throw bookRes.error;
@@ -74,7 +84,8 @@ export async function clearPlanLines(input: {
 
   // 되돌리기 기록 = **실제로 지운 것만**(앞뒤 스냅숏 차이로 만들면 그 사이 남이 쓴 줄까지 담긴다).
   const removed: UndoLine[] = [];
-  if (b?.skill_area && !input.keepLines) {
+  const withLines = input.withLines !== false;
+  if (withLines && b?.skill_area && !input.keepLines) {
     const texts = (vals: unknown[]) => new Set(vals.map((v) => String(v ?? "").trim()).filter((v) => v !== ""));
     const book: RelayBook = {
       skillArea: String(b.skill_area),
@@ -121,11 +132,22 @@ export async function clearPlanLines(input: {
   const markers: { key: string; kind: ShiftKind }[] = [];
   if (input.termMode === "regular") {
     const byKey = new Map<string, Record<string, unknown>>(
-      markRows
-        .filter((m) => m.kind === "skip" || m.kind === "advance")
-        .map((m) => [`${String(m.plan_date).slice(0, 10)}|${String(m.slot_start).slice(0, 5)}`, m]),
+      markRows.filter((m) => m.kind === "skip" || m.kind === "advance").map((m) => [markerKeyOfRow(m), m]),
     );
-    const keys = markersToClear([...byKey.keys()], input.picks, input.otherPicks);
+    // 칸 표식은 다른 배정이 같이 쓰지 않는 칸만(`markersToClear`). 줄 표식(0382a)은 **그 교재 것**이 전부 지운다
+    // — 단 같은 교재가 다른 축에 남아 있으면(`keepLines`) 그 배정도 같은 표식을 읽으므로 남긴다.
+    const keys = [
+      ...(withLines
+        ? markersToClear(
+            [...byKey.keys()].filter((k) => parseMarkerKey(k)?.lane === ""),
+            input.picks,
+            input.otherPicks,
+          )
+        : []),
+      ...(input.keepLines
+        ? []
+        : [...byKey.keys()].filter((k) => parseMarkerKey(k)?.lane === input.textbookId.toLowerCase())),
+    ];
     for (let i = 0; i < keys.length; i += 100) {
       const chunk = keys.slice(i, i + 100);
       const { error } = await admin

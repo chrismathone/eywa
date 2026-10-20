@@ -49,7 +49,7 @@ type NavigatorWithWakeLock = Navigator & { wakeLock?: { request(type: "screen"):
 type Fix = { lat: number; lng: number; accuracy: number; heading: number | null; speed: number | null; at: number };
 
 /**
- * 운행 중 회차의 **차량 위치 보내기**(0382a, 사용자 2026-10-15 "휴대폰으로 GPS") — 회차 머리 아래 한 줄.
+ * 운행 중 회차의 **차량 위치 보내기**(0383a, 사용자 2026-10-15 "휴대폰으로 GPS") — 회차 머리 아래 한 줄.
  *
  * 🔑 브라우저 `navigator.geolocation.watchPosition`으로 좌표를 받고 `SEND_EVERY_MS`(10초)마다 최신 좌표를 서버로 보낸다.
  * 🔑 **이 폰에서 [출발]을 누르면 자동으로 켜진다**(`markGpsOn`). 다른 폰에선 [📡 위치 보내기]를 눌러야 보낸다 —

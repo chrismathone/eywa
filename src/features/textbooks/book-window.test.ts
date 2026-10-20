@@ -115,3 +115,22 @@ describe("리뷰 보강", () => {
     expect(r.target.key).toBe("가우스|중3-2|4");
   });
 });
+
+describe("교재 일정(27년 11월 말까지 쭉)", () => {
+  it("마감에 걸린 권까지 넣고 마감까지 차시를 붙인다", () => {
+    const r = bookRoadmap({ ...SURYEON, reports: [], referenceDate: "2026-10-20" })!;
+    expect(r.schedule.map((b) => b.key)).toEqual(["가우스|중2-2|3", "가우스|중2-2|4", "가우스|중3-1|1", "가우스|중3-1|2", "가우스|중3-2|3", "가우스|중3-2|4"]);
+    expect(r.schedule.at(-1)).toMatchObject({ startDate: "2027-11-27", byDeadline: 1 });
+    expect(r.schedule.slice(0, -1).every((b) => b.byDeadline == null)).toBe(true);
+    expect(r.scheduleEnd).toBe("2027-11-30");
+  });
+});
+
+describe("날짜 눈금 막대", () => {
+  it("나간 차시 → 계획상 그 차시를 끝내는 날(내신 아닌 날 비율)", () => {
+    const at = (done: string | null) => bookRoadmap({ ...SURYEON, referenceDate: "2026-10-20",
+      reports: done ? [{ date: "2026-10-13", textbook: "가우스 중2-2 3권", progress: done }] : [] })!.doneDate;
+    expect(at("수학 삼각형의 닮음 조건")).toBe("2026-10-22"); // 3권 7차시 = 46일 중 41번째 내신 아닌 날
+    expect(at(null)).toBeNull();
+  });
+});

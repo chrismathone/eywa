@@ -172,7 +172,7 @@ export function RunPanel({
         />
       </div>
 
-      {/* 📡 차량 위치 보내기(0382a) — 오늘 운행 중인 회차에, 기록 권한이 있을 때만. 접혀 있어도 보인다(보내는 중인지 늘 알아야 한다). */}
+      {/* 📡 차량 위치 보내기(0383a) — 오늘 운행 중인 회차에, 기록 권한이 있을 때만. 접혀 있어도 보인다(보내는 중인지 늘 알아야 한다). */}
       {tripsReady && canWrite && date === today && tripState(trip) === "running" ? <TripGpsSender runId={run.id} date={date} /> : null}
 
       {open && (
