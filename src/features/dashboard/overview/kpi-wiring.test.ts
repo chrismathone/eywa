@@ -8,6 +8,12 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  attendanceStatsHref,
+  billingStatsHref,
+  consultationStatsHref,
+  expenseStatsHref,
+  firstClassTrendHref,
+  intakeTrendHref,
   absentDayHref,
   recentAbsenceRange,
   intakeDayHref,
@@ -517,5 +523,18 @@ describe("⑧ 레벨테스트 및 첫수업 일정 — 오늘부터 한 달, 서
       expect(text, name).not.toMatch(/오늘부터 7일|다가오는 7일/);
     }
     expect(LOADING).toContain('note: "오늘부터 한 달 · 10/15 (목)까지"');
+  });
+});
+
+// 원장 2026-10-20 "상세 눌렀을때 추이를 볼 수 없는곳 모두 추가해보자"
+describe("운영실 '상세' → 통계 화면", () => {
+  it("추이를 보는 화면으로 가고, 과목 관리자가 고른 과목을 싣는다", () => {
+    expect(intakeTrendHref()).toBe("/enrollment?view=stats&trend=day&from=dashboard#intake");
+    expect(billingStatsHref("math")).toBe("/billing/stats?subject=math#billing");
+    expect(firstClassTrendHref("english")).toBe("/students/stats?fc=day&subject=english#first");
+    expect(attendanceStatsHref(null)).toBe("/attendance/stats#rate");
+    expect(expenseStatsHref()).toBe("/billing/stats#expenses");
+    // 상담 통계는 과목 묶음으로 거를 수 없어 과목을 싣지 않는다(대표 키 하나로 거르면 같은 묶음의 다른 과목 상담이 빠진다).
+    expect(consultationStatsHref()).toBe("/consultations/stats");
   });
 });

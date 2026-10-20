@@ -105,6 +105,16 @@ export function expenseStatsHref(): string {
   return "/billing/stats#expenses";
 }
 
+/**
+ * 운영실 '학생 상담'의 '상세' — 상담 통계(월·주 추이가 이미 있다 · 원장 2026-10-20 *"상세 눌렀을때 추이를 볼 수 없는곳 모두"*).
+ * 기간은 전체(카드의 '전체 기록'과 같다) · 강사는 두 화면 모두 본인이 쓴 상담. 🔴 과목은 싣지 않는다 — 과목 관리자의 고른 과목은
+ * 과목 **묶음**의 대표 키(수학 묶음 = 수학 · 수학(심화) 중 하나)라 상담 통계의 과목 필터(그 키·라벨 하나)에 넣으면 같은 묶음의 다른
+ * 과목 상담이 빠진다(리뷰 2026-10-21). 통계는 학원 전체로 열리고, 과목은 그 화면 필터에서 고른다.
+ */
+export function consultationStatsHref(): string {
+  return "/consultations/stats";
+}
+
 /** 그날 결석 학생(출석부). */
 export function absentDayHref(date: string): string {
   return `/attendance/${date}?status=absent`;
