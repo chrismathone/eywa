@@ -6,7 +6,7 @@ const book = (id: string, title: string, units: string[]): CatalogBook => ({
   id, title, lessons: units.map((progress, i) => ({ lessonNo: i + 1, progress })),
 });
 const B1 = book("b1", "가우스 중2-1 1권", ["유리수와 소수", "지수법칙"]);
-const B3 = book("b3", "가우스 중2-2 3권", ["이등변삼각형의 성질", "삼각형의 외심", "평행사변형의 성질", "닮은 도형"]);
+const B3 = book("b3", "가우스 중2-2 3권", ["5-1. 이등변삼각형의 성질", "삼각형의 외심", "평행사변형의 성질", "닮은 도형"]);
 const B4 = book("b4", "가우스 중2-2 4권", ["삼각형의 무게중심", "피타고라스 정리", "경우의 수", "확률의 계산"]);
 const CATALOG = [B1, B3, B4];
 const noDates = () => [] as string[];
@@ -56,6 +56,8 @@ describe("bookWindow", () => {
     });
     expect(w).toMatchObject({ planned: 5, done: 6 }); // 수업일 8일 중 5일 지남 → 8×5/8 · 3권 4 + 4권 2
     expect(w!.position).toMatchObject({ title: "가우스 중2-2 4권", lessonNo: 2 });
+    expect(w!.nextClassDate).toBe("2026-10-15");
+    expect(w!.books.map((b) => b.unit)).toEqual(["이등변삼각형의 성질", "삼각형의 무게중심"]);
   });
   it("4권 창인데 아직 3권에 있으면 0", () => {
     const w = bookWindow({

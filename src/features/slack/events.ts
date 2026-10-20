@@ -23,6 +23,7 @@ export const FORWARD_EVENT_OPTIONS: readonly ForwardEventOption[] = [
   { type: "student_attendance_notice", label: "학부모 결석·지각 연락", group: "출결" },
   { type: "absence_alert", label: "반복 결석", group: "학생 관리" },
   { type: "followup_due", label: "상담 후속조치 기한", group: "학생 관리" },
+  { type: "staff_task_digest", label: "늦은 할 일 요약(매일 아침)", group: "학생 관리" },
   { type: "grade_drop", label: "성적 급락", group: "학생 관리" },
   { type: "outstanding_alert", label: "미납 누적", group: "학생 관리" },
   { type: "unsent_report", label: "미발송 수업 보고서", group: "학생 관리" },

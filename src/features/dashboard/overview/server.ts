@@ -27,6 +27,7 @@ import { getSubjectEndedStudents } from "@/features/withdrawals/server/queries";
 import { includeSubjectEnds } from "./monthly-exits";
 import { tenureDays } from "@/features/withdrawals/early-exit";
 import { loadTeacherWork } from "./teacher-work-server";
+import { withStaffTasks } from "@/features/staff-tasks/server/teacher-work";
 import { selectSubjectView } from "../layout/subject-view";
 import { AREA_MENUS } from "@/features/dashboard/layout/registry";
 import {
@@ -988,7 +989,7 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
     const view = await loadHomeworkRisk();
     return (pred, gs) => view(pred && gs ? sliceSubjectKeys(gs) : null);
   });
-  add("teacherWork", ["lesson_reports"], async () => loadTeacherWork(user.tenantId, today, await scopePromise, settingsNow));
+  add("teacherWork", ["lesson_reports"], async () => withStaffTasks(loadTeacherWork(user.tenantId, today, await scopePromise, settingsNow)));
   // 학부모 미열람 = ClassNote 읽음 기록이 소스 — ClassNote 기능이 꺼진 학원엔 이 카드가 없다(2026-09-30 "꺼지면 흔적 없이").
   // 🔑 영역 등록을 설정 대기로 막지 않는다(뒤 영역들이 늦게 출발하지 않게) — 조회 안에서 판정하고,
   //    꺼졌으면 조회 없이 빈 값을 돌린 뒤 아래 반환 직전에 영역째 뺀다.

@@ -8,6 +8,7 @@ import {
 import type { ReactNode } from "react";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { NOTIFICATION_ICON, type NotificationItem } from "../types";
+import { TaskStateChip } from "@/features/staff-tasks/components/task-state-chip";
 
 function relTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -89,6 +90,8 @@ export function NotificationRow({
         >
           {relTime(item.createdAt)}
         </time>
+        {/* 할 일 알림이면 지금 처리 상태(0377a — 원래 기록으로 판정된 값). */}
+        {item.task ? <span className="mr-auto ml-2"><TaskStateChip state={item.task.state} total={item.task.total} remaining={item.task.remaining} /></span> : null}
         <div className="flex items-center gap-1">
           {actionSlot}
           {onReply ? (

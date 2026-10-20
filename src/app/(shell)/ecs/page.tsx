@@ -13,6 +13,7 @@ import { getEcsToday, type EcsTodayResult } from "@/features/class-sheets/server
 import { getEcsSeatDay } from "@/features/class-sheets/server/seat-day";
 import { TodayBoard } from "@/features/class-sheets/components/today-board";
 import { TodayAttendanceStrip } from "@/features/attendance/live/components/today-strip";
+import { MyTasksStrip } from "@/features/staff-tasks/components/my-tasks-strip";
 import { SheetClient } from "@/features/class-sheets/components/sheet-client";
 import { EcsSeatDayFace } from "@/features/class-sheets/components/seat-day-face";
 import { effectiveTeacherId, effectiveTeacherScope, viewAsTeacher } from "@/lib/auth/view-mode";
@@ -415,6 +416,10 @@ function EcsTodayFace({
           <TodayAttendanceStrip />
         </Suspense>
       )}
+      {/* 내 할 일(0377a) — 원스크린과 같은 한 줄. 열린 할 일이 있을 때만. */}
+      <Suspense fallback={null}>
+        <MyTasksStrip />
+      </Suspense>
 
       {/* 계획 칸의 교재 제안 — `<datalist>`는 프로바이더가 한 번만 그린다(주간·월간과 같은 부품). */}
       <TextbookOptionsProvider options={textbookOptions}>

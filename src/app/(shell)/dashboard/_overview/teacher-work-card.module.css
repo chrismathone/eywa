@@ -19,3 +19,8 @@
 .note + .note { margin-top: 3px; }
 .empty { padding: 24px 0; color: #63738a; }
 @container dashboard (max-width: 580px) { .table th, .table td { padding: 11px 6px; } }
+.tasksLink { display: block; margin: 0 0 10px auto; padding: 4px 2px; color: #3c4b5f; font-size: var(--text-sm, 13px); font-weight: 600; }
+.tasksLink:hover { color: #121212; text-decoration: underline; text-underline-offset: 4px; }
+.tasksLink b { color: #b72f38; }
+.cellButton { font: inherit; color: inherit; }
+.cellButton:hover { text-decoration: underline; text-underline-offset: 4px; }

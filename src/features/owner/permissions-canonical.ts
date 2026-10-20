@@ -29,6 +29,7 @@ export function permissionsCanonical(permissions: PermissionsSettings): string {
     leave: sortedIds(permissions?.specialAccess?.leaveAdjusterIds),
     split: sortedIds(permissions?.specialAccess?.classSplitterIds),
     dates: sortedIds(permissions?.specialAccess?.enrollmentDateEditorIds),
+    tasks: sortedIds(permissions?.specialAccess?.staffTaskMonitorIds),
     studentStatus: studentStatusManagerIds(permissions?.specialAccess) === undefined ? "legacy" : sortedIds(studentStatusManagerIds(permissions?.specialAccess)),
     scopes: rowsByCell(permissions?.specialAccess?.staffSubjectScopes, ["userId"]),
   });
