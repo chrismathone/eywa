@@ -210,11 +210,11 @@ describe("시트형 목록뷰 — 값", () => {
     expect(screen.queryByText("math")).toBeNull(); // raw 키 노출 금지
   });
 
-  it("번호는 페이지를 넘어 이어진다(startIndex) · 학교·학년은 카드와 같은 압축 표기 · 접수는 KST 날짜 M/D", () => {
+  it("번호는 페이지를 넘어 이어진다(startIndex) · 학교·학년은 카드와 같은 압축 표기 · 접수는 KST 날짜 YY.MM.DD", () => {
     render(<EnrollmentTable rows={[row(), row({ id: "c2" })]} nowMs={0} startIndex={50} canWrite={false} />);
     expect(cellsOf("번호")).toEqual(["51", "52"]);
     expect(cellsOf("학교·학년")[0]).toBe("강북중3");
-    expect(cellsOf("접수")[0]).toContain("8/27");
+    expect(cellsOf("접수")[0]).toContain("26.08.27");
     expect(cellsOf("상담사")[0]).toBe("김초롱");
     expect(cellsOf("상담 내용")[0]).toContain("칠곡에서 공통수학 1 진행");
   });

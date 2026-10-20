@@ -242,7 +242,7 @@ export function EnrollmentTable({
                     </EditableTextCell>
                   </td>
                   <td className={`${TD_CENTER} num`} data-label={LABEL.date}>
-                    {received ? <div>{received}</div> : null}
+                    {received ? <div className="whitespace-nowrap">{received}</div> : null}
                     {/* 경과는 **7일 이내만** — relativeTimeKo는 7일이 지나면 절대 날짜를 돌려줘 접수일과 같은 날짜를
                         두 번 적는다. 판정은 서버가 준 nowMs 기준이라 첫 렌더가 서버·클라 같다(하이드레이션 안전). */}
                     {recent ? (
