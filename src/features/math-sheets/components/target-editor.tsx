@@ -43,7 +43,7 @@ export function TargetEditor({ r, studentId, studentName }: { r: RoadmapView; st
       }}
     >
       <select aria-label={`${studentName} 최종 목표 권`} value={value} disabled={pending} onChange={(e) => setValue(e.target.value)}>
-        <option value={AUTO}>자동{auto ? ` — ${auto.title} (${dot(auto.finishDate)})` : ""}</option>
+        <option value={AUTO}>자동{auto ? ` — ${auto.title}${r.target.autoLesson != null ? ` ${r.target.autoLesson}차시` : ""} (${dot(r.target.autoLesson != null && r.deadline ? r.deadline : auto.finishDate)})` : ""}</option>
         {r.choices.map((c) => <option key={c.key} value={c.key}>{c.title} · {dot(c.finishDate)} 완료 예정</option>)}
       </select>
       <button type="submit" disabled={pending}>{pending ? "저장 중…" : "저장"}</button>

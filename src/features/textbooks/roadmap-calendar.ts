@@ -62,6 +62,17 @@ export function placeBooks(seq: readonly SeqBook[], start: string, cal: WorkCale
   return out;
 }
 
+/** 그 배치에서 기준일까지 계획된 차시(소수) — 권마다 그 권 작업일 중 지난 비율. */
+export function plannedAt(books: readonly PlacedBook[], cal: WorkCalendar, ref: string): number {
+  let n = 0;
+  for (const b of books) {
+    if (ref < b.startDate) continue;
+    if (ref >= b.finishDate) { n += b.lessonCount; continue; }
+    n += (b.lessonCount * cal.count(b.startDate, ref)) / Math.max(1, cal.count(b.startDate, b.finishDate));
+  }
+  return n;
+}
+
 /** 누적 n차시를 그 배치가 끝내는 날 — 권 안에서는 작업일 비율로(계획과 같은 규칙). */
 export function dateAtLessonsIn(books: readonly PlacedBook[], cal: WorkCalendar, n: number): string {
   if (n <= 0) return books[0]!.startDate;

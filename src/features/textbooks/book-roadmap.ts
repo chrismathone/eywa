@@ -16,7 +16,7 @@ import { catalogBookKey, matchCatalogBook, type CatalogBook, type ReportLine } f
 import { latestPosition, windowAt } from "./roadmap-position";
 import { bookSequence, keyOrdinal, seriesOfKey } from "./book-sequence";
 import { examOn, examPeriodsBetween, gradeOrdinal, middleSchoolDeadline, type SchoolExamOverride } from "./exam-periods";
-import { addMonths, dateAtLessonsIn, daysBetween, placeBooks, rebaseAhead, workCalendar, type PlacedBook } from "./roadmap-calendar";
+import { addMonths, placeBooks, plannedAt, rebaseAhead, workCalendar, type PlacedBook } from "./roadmap-calendar";
 
 export const ROADMAP_DAYS_AFTER_ORDER = 7;
 export const ROADMAP_WINDOW_MONTHS = 3;
@@ -96,8 +96,8 @@ export function bookRoadmap(args: {
   const planIdx = placed.findIndex((b) => b.startDate <= ref && ref <= b.finishDate);
   const posIdx = position ? placed.findIndex((b) => b.key === position.key) : -1;
   const rebased = ref >= start && planIdx >= 0 && posIdx > planIdx && doneAll != null && doneAll > 0;
-  // 얼마나 앞섰나(일) — 원래 계획이 지금 나간 차시에 닿는 날까지(재계산 전 배치로 잰다).
-  const origDoneDate = doneAll != null && doneAll > 0 ? dateAtLessonsIn(placed, cal, doneAll) : null;
+  // 얼마나 앞섰나(차시) — 재계산 전 원래 계획의 오늘 차시와 비교한다(원장 "차시로 하자 일로하니까 헷갈림").
+  const origPlan = Math.round(plannedAt(placed, cal, ref));
   if (rebased) placed = rebaseAhead(placed, start, cal, doneAll!, ref);
 
   // 최종 목표 = **중3 11월 말에 나가고 있을 권**(원장 *"학생의 나이가 중3 11월 말일 때 기준으로"*) — 권 이름으로 막지 않는다.
@@ -108,11 +108,26 @@ export function bookRoadmap(args: {
     ? (atDeadline >= 0 ? atDeadline : placed.length - 1)
     : Math.max(0, placed.filter((b) => b.window <= windowAt(placed, ref)).length - 1);
   const targetIdx = overrideIdx >= 0 && overrideIdx < placed.length ? overrideIdx : autoIdx;
-  const books = placed.slice(0, targetIdx + 1);
-  const total = books.reduce((n, b) => n + b.lessonCount, 0);
-  const endDate = books[books.length - 1]!.finishDate;
   const shownDeadline = deadlineUsable ? deadline : null;
-  const schedule: ScheduleBook[] = placed.slice(0, (shownDeadline ? Math.max(targetIdx, autoIdx) : targetIdx) + 1).map((b) => ({
+  // 최종 목표는 **11.30에 닿는 권·차시**(원장 "최종목표는 늘 11.30 인데 거기까지 몇권 몇차시까지 할수있는지").
+  // 자동 목표일 때만 — 사람이 고른 권은 그 권 끝까지. 마감 권에서 0차시면 앞 권의 마지막 차시가 목표다.
+  // 자동 목표 권·차시는 사람이 고른 목표와 상관없이 먼저 정한다(선택지의 '자동'이 같은 값을 말하게).
+  let autoBook = autoIdx;
+  let autoLesson: number | null = null;
+  if (shownDeadline && atDeadline >= 0) {
+    const b = placed[atDeadline]!;
+    const n = shownDeadline >= b.finishDate ? b.lessonCount
+      : Math.round((b.lessonCount * cal.count(b.startDate, shownDeadline)) / Math.max(1, cal.count(b.startDate, b.finishDate)));
+    if (n > 0 || atDeadline === 0) autoLesson = Math.max(1, n);
+    else { autoBook = atDeadline - 1; autoLesson = placed[autoBook]!.lessonCount; }
+  }
+  const isAuto = !(overrideIdx >= 0 && overrideIdx < placed.length);
+  const tIdx = isAuto ? autoBook : targetIdx;
+  const targetLesson = isAuto ? autoLesson : null;
+  const books = placed.slice(0, tIdx + 1);
+  const total = books.slice(0, -1).reduce((n, b) => n + b.lessonCount, 0) + (targetLesson ?? books[books.length - 1]!.lessonCount);
+  const endDate = targetLesson != null && shownDeadline ? shownDeadline : books[books.length - 1]!.finishDate;
+  const schedule: ScheduleBook[] = placed.slice(0, (shownDeadline ? Math.max(tIdx, autoBook) : tIdx) + 1).map((b) => ({
     key: b.key, title: b.title, startDate: b.startDate, finishDate: b.finishDate, lessonCount: b.lessonCount, window: b.window,
     lessonUnits: b.lessonUnits,
     byDeadline: shownDeadline && b.finishDate > shownDeadline && b.startDate <= shownDeadline
@@ -122,13 +137,7 @@ export function bookRoadmap(args: {
   const scheduleEnd = shownDeadline && shownDeadline > endDate ? shownDeadline : endDate;
 
   const done = doneAll == null ? (position ? total : null) : Math.min(doneAll, total);
-  let plannedLessons = 0;
-  for (const b of books) {
-    if (ref < b.startDate) continue;
-    if (ref >= b.finishDate) { plannedLessons += b.lessonCount; continue; }
-    plannedLessons += (b.lessonCount * cal.count(b.startDate, ref)) / Math.max(1, cal.count(b.startDate, b.finishDate));
-  }
-  const plan = rebased ? done! : Math.round(plannedLessons);
+  const plan = rebased ? done! : Math.min(total, Math.round(plannedAt(books, cal, ref)));
   const difference = done == null ? null : done - plan;
   /** 누적 n차시를 계획이 끝내는 날 — 권 안에서는 작업일 비율로(계획과 같은 규칙). */
   const dateAtLessons = (n: number): string => {
@@ -149,11 +158,11 @@ export function bookRoadmap(args: {
     choices: placed.map((b) => ({ key: b.key, title: b.title, finishDate: b.finishDate })),
     schedule,
     scheduleEnd,
-    target: { key: books[books.length - 1]!.key, auto: targetIdx === autoIdx && overrideIdx < 0, autoKey: placed[autoIdx]!.key },
+    target: { key: books[books.length - 1]!.key, auto: isAuto, autoKey: placed[autoBook]!.key, lesson: targetLesson, autoLesson },
     deadline: shownDeadline,
     deadlinePassed: deadline != null && !deadlineUsable,
     rebased,
-    aheadDays: (rebased || status === "ahead") && origDoneDate && origDoneDate > ref ? daysBetween(ref, origDoneDate) : null,
+    aheadLessons: doneAll != null && ref >= start && doneAll - origPlan > 1 ? doneAll - origPlan : null,
     startDate: start,
     endDate,
     orderDate: opener.date,

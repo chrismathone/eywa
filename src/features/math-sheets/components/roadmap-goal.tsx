@@ -41,7 +41,9 @@ export function RoadmapGoal({ r, studentId, studentName }: { r: RoadmapView; stu
   // 최종 목표 권 — 막대에서 가장 먼저 읽혀야 하는 칸(원장 2026-10-20 *"마지막 교재라는게 가시성이 좀 떨어짐"*).
   // 그 권이 끝나는 날에 깃발 선을 긋고, 목표 뒤 권(마감에 걸린 점선 칸)은 흐리게 한다.
   const targetIdx = r.schedule.findIndex((b) => b.key === r.target.key);
-  const goalX = x(last.finishDate);
+  // 목표 = 11.30에 닿는 권·차시(자동이면 끝 = 마감일). 깃발·제목이 같은 값을 읽는다.
+  const goalX = x(r.endDate);
+  const goalName = `${shortBook(last.key, last.title)}${r.target.lesson != null ? ` ${r.target.lesson}차시` : ""}`;
   return (
     <>
       <div className={css.goalHead}>
@@ -49,7 +51,7 @@ export function RoadmapGoal({ r, studentId, studentName }: { r: RoadmapView; stu
         <h4 className={css.goalTitle}>
           <span>{r.series} {shortBook(first.key, first.title)}</span>
           <span aria-hidden className={css.goalArrow}>→</span>
-          <span className={css.goalBook}><small>최종 목표</small>{shortBook(last.key, last.title)}</span>
+          <span className={css.goalBook}><small>최종 목표</small>{goalName}</span>
         </h4>
         <span className={css.right}>
           {r.done == null ? "진도 확인 필요" : <><b>{done}/{r.total}차시</b> · {Math.round((done / Math.max(1, r.total)) * 100)}% · {Math.max(0, r.total - done)}차시 남음</>}
@@ -60,7 +62,7 @@ export function RoadmapGoal({ r, studentId, studentName }: { r: RoadmapView; stu
         {r.remainingClasses != null ? <span><small>남은 수업</small><b>{r.remainingClasses}회</b></span> : null}
         <span><small>기간</small><b>{ymd(r.startDate)} – {ymd(r.endDate)}</b></span>
         {/* 앞선 만큼만 날짜로(원장 "안내 나갈 필요 없음 … 얼마나 앞서는지만 일자로"). 재계산은 조용히 한다. */}
-        {r.aheadDays ? <span className={css.rebased} title={r.rebased ? "앞서 다음 교재로 넘어가 오늘부터 일정을 다시 폈습니다" : undefined}><b>{r.aheadDays}일 앞섬</b></span> : null}
+        {r.aheadLessons ? <span className={css.rebased} title={r.rebased ? "앞서 다음 교재로 넘어가 오늘부터 일정을 다시 폈습니다" : undefined}><b>{r.aheadLessons}차시 앞섬</b></span> : null}
         <span>
           <small>목표</small>
           <b>{r.target.auto ? (r.deadline ? "자동 · 중3 11월 말까지" : r.deadlinePassed ? "자동 · 마감 지남(지금 3개월 끝)" : "자동 · 지금 3개월 끝") : "직접 지정"}</b>
@@ -109,7 +111,7 @@ export function RoadmapGoal({ r, studentId, studentName }: { r: RoadmapView; stu
           <span className={css.plan} style={{ left: pc(todayX) }}><em>오늘 계획 {r.planned}차시</em></span>
         ) : null}
         <span className={css.goalFlag} data-end={goalX > 85 || undefined} data-near={(started && Math.abs(goalX - todayX) < 18) || undefined} style={{ left: pc(goalX) }}>
-          <em>최종 목표 · {ymd(last.finishDate)}</em>
+          <em>최종 목표 · {ymd(r.endDate)}</em>
         </span>
         {doneX != null ? <span className={css.dot} style={{ left: pc(doneX) }} title={pos ? `현재 ${shortBook(pos.key, pos.title)} ${pos.lessonNo}차시 · ${pos.unit} (${md(pos.date)} 보고서)` : `실제 ${done}차시`} /> : null}
       </div>

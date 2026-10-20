@@ -47,7 +47,8 @@ describe("전체 목표(로드맵)", () => {
       "가우스 중3-1 1권:2027-03-07", "가우스 중3-1 2권:2027-07-21", "가우스 중3-2 3권:2027-11-26", "가우스 중3-2 4권:2028-01-11",
     ]);
     expect(r.target).toMatchObject({ key: "가우스|중3-2|4", auto: true });
-    expect(r).toMatchObject({ total: 48, planned: 7, done: 7, status: "on" });
+    expect(r).toMatchObject({ total: 41, endDate: "2027-11-30", planned: 7, done: 7, status: "on" });
+    expect(r.target).toMatchObject({ key: "가우스|중3-2|4", lesson: 1 });
   });
   it("내신기간엔 계획이 늘지 않는다", () => {
     const at = (d: string) => bookRoadmap({ ...SURYEON, reports: [], referenceDate: d })!.planned;
@@ -122,7 +123,7 @@ describe("교재 일정(27년 11월 말까지 쭉)", () => {
     expect(r.schedule.map((b) => b.key)).toEqual(["가우스|중2-2|3", "가우스|중2-2|4", "가우스|중3-1|1", "가우스|중3-1|2", "가우스|중3-2|3", "가우스|중3-2|4"]);
     expect(r.schedule.at(-1)).toMatchObject({ startDate: "2027-11-27", byDeadline: 1 });
     expect(r.schedule.slice(0, -1).every((b) => b.byDeadline == null)).toBe(true);
-    expect(r.scheduleEnd).toBe("2028-01-11");
+    expect(r.scheduleEnd).toBe("2027-11-30");
   });
 });
 
@@ -191,11 +192,11 @@ describe("리뷰 보강 2", () => {
 const keyBefore = (key: string) => key < "가우스|고1-1|1" && key.startsWith("가우스|중");
 
 describe("앞선 날수", () => {
-  it("재계산된 학생은 원래 계획보다 며칠 앞섰는지", () => {
+  it("재계산된 학생은 원래 계획보다 몇 차시 앞섰는지(원래 계획 기준)", () => {
     const C31 = book("c31", "가우스 중3-1 1권", eight("중삼일"));
     const r = bookRoadmap({ orders: [{ bookName: "가우스 중2-2 4권", date: "2026-10-01" }], catalog: [...CATALOG, C31], today: "2026-10-20", grade: "중2",
       reports: [{ date: "2026-10-16", textbook: "가우스 중3-1 1권", progress: "수학 중삼일 2" }], referenceDate: "2026-10-20" })!;
-    expect(r.aheadDays).toBeGreaterThan(0);
-    expect(bookRoadmap({ ...SURYEON, reports: [], referenceDate: "2026-10-20" })!.aheadDays).toBeNull();
+    expect(r.aheadLessons).toBeGreaterThan(1);
+    expect(bookRoadmap({ ...SURYEON, reports: [], referenceDate: "2026-10-20" })!.aheadLessons).toBeNull();
   });
 });

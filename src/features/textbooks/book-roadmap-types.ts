@@ -32,15 +32,16 @@ export type BookRoadmap = {
   schedule: ScheduleBook[];
   /** 일정 띠의 끝 — 마감과 목표 완료일 중 늦은 날. */
   scheduleEnd: string;
-  target: { key: string; auto: boolean; autoKey: string };
+  /** `lesson` = 자동 목표일 때 11.30에 닿는 그 권의 차시(권 끝까지면 그 권 차시 수). 직접 고른 권이면 null(권 끝). */
+  target: { key: string; auto: boolean; autoKey: string; lesson: number | null; autoLesson: number | null };
   /** 중3 11월 말 — 자동 목표를 정한 마감. 고등·학년 미상·마감으로 못 정했으면 null. */
   deadline: string | null;
   /** 마감(중3 11월 말)이 있지만 이미 지나 지금 창 끝으로 정했다. */
   deadlinePassed: boolean;
   /** 앞서 나가 다음 권으로 넘어가서 오늘부터 일정을 다시 폈다(오늘 계획 = 실제). */
   rebased: boolean;
-  /** 계획보다 며칠 앞섰나(앞섰을 때만) — 원래 계획이 지금 나간 차시에 닿는 날 − 기준일. */
-  aheadDays: number | null;
+  /** 계획보다 몇 차시 앞섰나(±1차시 너그러움 밖일 때만) — 재계산 전 원래 계획의 오늘 차시와 비교. */
+  aheadLessons: number | null;
   startDate: string;
   endDate: string;
   orderDate: string;
