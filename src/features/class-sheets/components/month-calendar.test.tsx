@@ -26,6 +26,8 @@ const props = { data, goals: {}, display: { homework: true, seat: true } };
 const planOnly = {
   ...data,
   linesBySlot: {},
+  // 미뤄 비운 칸 — [당김]은 미룸이 있는 칸에만 선다.
+  shiftBySlot: { "2026-10-07|16:00": "skip" },
   plannedBySlot: {
     "2026-10-07|16:00": [{ lessonNo: 1, date: "2026-10-07", slotStart: "16:00", skillArea: "grammar", title: "SKY",
       pageTime: "25분", progress: "Unit 1", homework: null, termMode: "regular" }],
@@ -48,14 +50,42 @@ describe("월간 달력 내부 조작", () => {
     const shift = screen.getByRole("button", { name: "미룸" });
     if (key === "click") fireEvent.click(shift);
     else { fireEvent.keyDown(shift, { key }); fireEvent.keyUp(shift, { key }); }
-    expect(onShift).toHaveBeenCalledExactlyOnceWith("2026-10-07", "16:00", "skip");
+    expect(onShift).toHaveBeenCalledExactlyOnceWith("2026-10-07", "16:00", "skip", { lineId: "l1" });
     expect(onOpenDay).not.toHaveBeenCalled();
   });
 
-  it("🔴 월간계획만 있고 실제 줄이 없는 칸엔 미룸·당김이 없다(원장 2026-10-19)", () => {
-    render(<MonthCalendar {...props} data={planOnly} onOpenDay={vi.fn()} onShift={vi.fn()} />);
+  it("🔴 월간계획만 있는 칸엔 [당김]만 — 뒤 수업이 올라와 채운다(원장 2026-10-20 \"미룸버튼은 없고 당겨서\")", () => {
+    const onShift = vi.fn();
+    render(<MonthCalendar {...props} data={planOnly} onOpenDay={vi.fn()} onShift={onShift} />);
     expect(screen.queryByRole("button", { name: "미룸" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "당김" }));
+    expect(onShift).toHaveBeenCalledExactlyOnceWith("2026-10-07", "16:00", "advance", { fill: true });
+  });
+
+  it("미룸이 없는 계획만 있는 칸(아직 안 가져온 칸)엔 [당김]도 없다 — 걷을 미룸이 없다", () => {
+    render(<MonthCalendar {...props} data={{ ...planOnly, shiftBySlot: {} }} onOpenDay={vi.fn()} onShift={vi.fn()} />);
     expect(screen.queryByRole("button", { name: "당김" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "미룸" })).toBeNull();
+  });
+
+  it("🔑 수업이 2개면 줄마다 미룸·당김(원장 2026-10-20 \"각각\") — 누른 줄 id를 넘긴다", () => {
+    const two = {
+      ...data,
+      linesBySlot: {
+        "2026-10-07|16:00": [
+          ...data.linesBySlot["2026-10-07|16:00"]!,
+          { id: "l2", planDate: "2026-10-07", slotStart: "16:00", termMode: "regular", skillArea: "reading", lineNo: 2,
+            textbook: "Reading Lab", pageRange: "25분", progress: "Unit 3", homework: null, updatedAt: "" },
+        ],
+      },
+    } as unknown as ClassSheetMonthData;
+    const onShift = vi.fn();
+    render(<MonthCalendar {...props} data={two} onOpenDay={vi.fn()} onShift={onShift} />);
+    const pulls = screen.getAllByRole("button", { name: "당김" });
+    expect(pulls).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "미룸" })).toHaveLength(2);
+    fireEvent.click(pulls[1]!);
+    expect(onShift).toHaveBeenCalledExactlyOnceWith("2026-10-07", "16:00", "advance", { lineId: "l2" });
   });
 
   it("키 반복은 중복 조작을 만들지 않고 날짜 칸의 기본 동작은 유지한다", () => {

@@ -17,6 +17,8 @@ import "server-only";
  * ⚠️ 0266a/0268a 미적용이어도 **절대 throw하지 않는다**([[#95]]) — 영어 강사 전원이 매일 여는 화면이
  *    이걸 읽는다. 못 읽으면 계획이 빈 채로 시트가 그대로 돈다.
  */
+import { cellShiftSummary, markerKeyOfRow } from "../shift-key";
+import { withMarkerCols } from "./shift-markers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { buildHolidayMap } from "@/features/attendance/calendar";
@@ -148,17 +150,20 @@ export async function loadPlanMaterials(input: {
   const bookIds = [...new Set(plans.map((p) => String(p.textbook_id)))];
   const [shiftRows, bookRows, lessonRows, settings, schedRows] = await Promise.all([
     // 🔴 표가 없어도 죽지 않는다(0282a 미적용 = 표식 0개 = 종전 계산) — 그래서 catch로 빈 배열.
-    fetchAllPagedInChunks<{ class_id: string; plan_date: string; slot_start: string; kind: string }>(
-      classIds,
-      (chunk, f, t) =>
-        admin
-          .from("class_lesson_shifts")
-          .select("class_id, plan_date, slot_start, kind")
-          .eq("tenant_id", tenantId)
-          .in("class_id", chunk)
-          .lte("plan_date", to)
-          .order("id", { ascending: true })
-          .range(f, t),
+    // 0382a 전이면 `lane`·`pos` 없이 다시 읽는다(전부 칸 표식) — `withMarkerCols`.
+    withMarkerCols((cols) =>
+      fetchAllPagedInChunks<{ class_id: string; plan_date: string; slot_start: string; kind: string; lane?: string; pos?: number }>(
+        classIds,
+        (chunk, f, t) =>
+          admin
+            .from("class_lesson_shifts")
+            .select(cols)
+            .eq("tenant_id", tenantId)
+            .in("class_id", chunk)
+            .lte("plan_date", to)
+            .order("id", { ascending: true })
+            .range(f, t) as never,
+      ),
     ).catch(() => []),
     bookIds.length === 0
       ? Promise.resolve([] as Record<string, unknown>[])
@@ -198,8 +203,8 @@ export async function loadPlanMaterials(input: {
   for (const r of shiftRows) {
     const m = byClass.get(String(r.class_id));
     if (!m) continue;
-    m.shifts[`${String(r.plan_date).slice(0, 10)}|${String(r.slot_start).slice(0, 5)}`] =
-      String(r.kind) === "advance" ? "advance" : "skip";
+    // 키 = 칸 표식 `날짜|교시` 또는 줄 표식 `날짜|교시|교재|자리`(shift-key) — 계산은 키 그대로 쓴다.
+    m.shifts[markerKeyOfRow(r)] = String(r.kind) === "advance" ? "advance" : "skip";
   }
   // 시간표는 요일·시작시각 순이어야 `slotsByDateOf`가 같은 답을 낸다(페이지 순회는 id 순이라 다시 정렬).
   const sorted = [...schedRows].sort((a, b) =>
@@ -266,7 +271,8 @@ export function planCellsOf(
     byCell: m.plans.length === 0 ? {} : expandPlans({ ...common, shifts: m.shifts }),
     baselineByCell: m.plans.length === 0 ? {} : expandPlans({ ...common, shifts: null }),
     lessonIndex: lessonIndexOf(m.plans, materials.books, materials.lessonsByBook),
-    shiftByCell: m.shifts,
+    // 화면 표시는 칸 단위 — 줄 표식도 그 칸의 표식으로 접는다(계산엔 안 쓴다).
+    shiftByCell: cellShiftSummary(m.shifts),
   };
 }
 

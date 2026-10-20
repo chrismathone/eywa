@@ -24,6 +24,8 @@ import { planLineFromRow } from "../lib/plan-line";
 import { normalizeSlotTime, YMD_RE } from "../lib/week";
 import type { PlanLineDTO } from "./actions";
 import { requireEcsClassAccess } from "./access";
+import { cellShiftSummary, markerKeyOfRow } from "@/features/textbooks/shift-key";
+import { withMarkerCols } from "@/features/textbooks/server/shift-markers";
 
 export type EcsDayPlan = {
   /** 저널(IndexedDB)·presence 키의 축 — 주간 시트와 **같은 값**이어야 두 화면이 서로를 본다. */
@@ -76,17 +78,22 @@ export async function getEcsDayPlan(input: {
   }
 
   // 회차 표식 — 🔴 **삼켜도 되는 조회**다(표시용). 실패하면 강조만 없고 버튼은 그대로 동작한다.
+  //    줄 표식(0382a)도 칸으로 접는다 — 월간 달력과 **같은 요약**(`cellShiftSummary`, 칸 표식 우선)을 쓴다.
   const shiftBySlot: Record<string, "skip" | "advance"> = {};
   try {
-    const { data } = await createAdminClient()
-      .from("class_lesson_shifts")
-      .select("slot_start, kind")
-      .eq("tenant_id", access.tenantId)
-      .eq("class_id", input.classId)
-      .eq("plan_date", input.planDate);
-    for (const r of data ?? []) {
-      shiftBySlot[normalizeSlotTime(String(r.slot_start))] = String(r.kind) === "advance" ? "advance" : "skip";
-    }
+    const rows = await withMarkerCols(async (cols) => {
+      const { data, error } = await createAdminClient()
+        .from("class_lesson_shifts")
+        .select(cols)
+        .eq("tenant_id", access.tenantId)
+        .eq("class_id", input.classId)
+        .eq("plan_date", input.planDate);
+      if (error) throw error;
+      return (data ?? []) as unknown as Record<string, unknown>[];
+    });
+    const markers: Record<string, "skip" | "advance"> = {};
+    for (const r of rows) markers[markerKeyOfRow(r)] = String(r.kind) === "advance" ? "advance" : "skip";
+    for (const [key, kind] of Object.entries(cellShiftSummary(markers))) shiftBySlot[normalizeSlotTime(key.slice(11))] = kind;
   } catch {
     /* 표시용이라 조용히 넘어간다 — 위 ⚠️ */
   }

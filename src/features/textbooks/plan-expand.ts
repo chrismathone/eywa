@@ -20,6 +20,8 @@ export type PlannedLine = {
   date: string;
   /** `"HH:MM"` — 계획 줄 `slot_start`와 같은 표기. */
   slotStart: string;
+  /** 그 교시의 몇 번째 차수 자리(1부터) — 줄 표식(미룸·당김)이 이 자리에 걸린다. */
+  pos: number;
   /** 구분(vocab·writing…) — 실제 줄의 `skill_area`와 같은 값이라 가져오기가 줄을 맞춰 넣는다. */
   skillArea: string;
   title: string;
@@ -92,6 +94,8 @@ export function expandPlans(input: {
       axis: (p.slot_axis === "jj" ? "jj" : "class") as SlotAxis,
       slotPicks: picks,
       shifts,
+      // 줄 표식은 교재 단위다(원장 2026-10-20 "수업이 2개면 각각") — 이 배정의 교재 것만 이 배정을 움직인다.
+      lane: String(p.textbook_id),
       pace: normalizeLessonPace(p.pace),
       lookaheadDays: lookaheadFor(startDate, to),
     });
@@ -105,6 +109,7 @@ export function expandPlans(input: {
         lessonNo: t.lessonNo,
         date: t.date,
         slotStart: t.slotStart,
+        pos: t.pos,
         skillArea: book.skillArea,
         title: book.title,
         pageTime: book.pageTime,

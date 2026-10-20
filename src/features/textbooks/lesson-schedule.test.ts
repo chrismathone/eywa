@@ -36,6 +36,11 @@ const WITH_SEATS: MonthScheduleRow[] = [
   row("mon", "17:20:00", "18:10:00", "LAB"),
 ];
 
+
+/** 자리(`pos`)는 줄 표식(0382a) 테스트가 따로 본다 — 배치 테스트는 날짜·교시·차수만 견준다. */
+const noPos = (ts: readonly { lessonNo: number; date: string; slotStart: string; pos: number }[]) =>
+  ts.map(({ lessonNo, date, slotStart }) => ({ lessonNo, date, slotStart }));
+
 describe("slotsOfAxis", () => {
   const slots = [
     { slotStart: "17:20", slotEnd: "18:10", teacherLabel: "LAB", roomLabel: null, seat: "LAB" as const },
@@ -78,7 +83,7 @@ describe("buildLessonSchedule — 단위(pace)", () => {
       pace: "period",
       lookaheadDays: 14,
     });
-    expect(s.targets).toEqual([
+    expect(noPos(s.targets)).toEqual([
       { lessonNo: 1, date: "2026-09-14", slotStart: "18:20" },
       { lessonNo: 2, date: "2026-09-14", slotStart: "19:20" },
       { lessonNo: 3, date: "2026-09-16", slotStart: "18:20" },
@@ -98,7 +103,7 @@ describe("buildLessonSchedule — 단위(pace)", () => {
       pace: "day",
       lookaheadDays: 14,
     });
-    expect(s.targets).toEqual([
+    expect(noPos(s.targets)).toEqual([
       { lessonNo: 1, date: "2026-09-14", slotStart: "18:20" },
       { lessonNo: 1, date: "2026-09-14", slotStart: "19:20" },
       { lessonNo: 2, date: "2026-09-16", slotStart: "18:20" },
@@ -196,7 +201,7 @@ describe("buildLessonSchedule — 축(axis)", () => {
       pace: "period",
       lookaheadDays: 14,
     });
-    expect(s.targets).toEqual([
+    expect(noPos(s.targets)).toEqual([
       { lessonNo: 1, date: "2026-09-14", slotStart: "20:20" },
       { lessonNo: 2, date: "2026-09-16", slotStart: "20:20" },
     ]);
@@ -339,7 +344,7 @@ describe("buildLessonSchedule — 칸 선택(slotPicks)", () => {
       pace: "period",
       lookaheadDays: 14,
     });
-    expect(s.targets).toEqual([
+    expect(noPos(s.targets)).toEqual([
       { lessonNo: 1, date: "2026-09-14", slotStart: "18:20" },
       { lessonNo: 2, date: "2026-09-14", slotStart: "20:20" },
       { lessonNo: 3, date: "2026-09-16", slotStart: "18:20" },
@@ -359,7 +364,7 @@ describe("buildLessonSchedule — 칸 선택(slotPicks)", () => {
       lookaheadDays: 14,
     });
     // 수요일(9/16)은 건너뛰고 다음 월요일(9/21)로 간다.
-    expect(s.targets).toEqual([
+    expect(noPos(s.targets)).toEqual([
       { lessonNo: 1, date: "2026-09-14", slotStart: "18:20" },
       { lessonNo: 2, date: "2026-09-21", slotStart: "18:20" },
     ]);
@@ -376,7 +381,7 @@ describe("buildLessonSchedule — 칸 선택(slotPicks)", () => {
       pace: "period",
       lookaheadDays: 14,
     });
-    expect(s.targets).toEqual([{ lessonNo: 1, date: "2026-09-16", slotStart: "19:20" }]);
+    expect(noPos(s.targets)).toEqual([{ lessonNo: 1, date: "2026-09-16", slotStart: "19:20" }]);
   });
 
   it("day 단위면 그 날 고른 칸 전부에 같은 차수", () => {
@@ -390,7 +395,7 @@ describe("buildLessonSchedule — 칸 선택(slotPicks)", () => {
       pace: "day",
       lookaheadDays: 14,
     });
-    expect(s.targets).toEqual([
+    expect(noPos(s.targets)).toEqual([
       { lessonNo: 1, date: "2026-09-14", slotStart: "18:20" },
       { lessonNo: 1, date: "2026-09-14", slotStart: "19:20" },
     ]);
@@ -407,7 +412,7 @@ describe("buildLessonSchedule — 칸 선택(slotPicks)", () => {
       pace: "period",
       lookaheadDays: 14,
     });
-    expect(s.targets).toEqual([{ lessonNo: 1, date: "2026-09-14", slotStart: "20:20" }]);
+    expect(noPos(s.targets)).toEqual([{ lessonNo: 1, date: "2026-09-14", slotStart: "20:20" }]);
   });
 });
 
@@ -430,7 +435,7 @@ describe("buildLessonSchedule — 회차 미루기·당기기(shifts)", () => {
       pace: "period",
       lookaheadDays: 28,
     });
-    expect(s.targets).toEqual([
+    expect(noPos(s.targets)).toEqual([
       { lessonNo: 1, date: "2026-09-14", slotStart: "18:20" },
       // 9/21은 통째로 비고(자유 기입), 2차수는 9/28로 밀린다.
       { lessonNo: 2, date: "2026-09-28", slotStart: "18:20" },
@@ -450,7 +455,7 @@ describe("buildLessonSchedule — 회차 미루기·당기기(shifts)", () => {
       lookaheadDays: 14,
     });
     expect(s.skippedHolidays).toEqual([]);
-    expect(s.targets).toEqual([{ lessonNo: 1, date: "2026-09-21", slotStart: "18:20" }]);
+    expect(noPos(s.targets)).toEqual([{ lessonNo: 1, date: "2026-09-21", slotStart: "18:20" }]);
   });
 
   it("당기면 그 칸의 차수를 버리고 **다음 차수**가 온다", () => {
@@ -465,7 +470,7 @@ describe("buildLessonSchedule — 회차 미루기·당기기(shifts)", () => {
       pace: "period",
       lookaheadDays: 28,
     });
-    expect(s.targets).toEqual([
+    expect(noPos(s.targets)).toEqual([
       { lessonNo: 1, date: "2026-09-14", slotStart: "18:20" },
       { lessonNo: 3, date: "2026-09-21", slotStart: "18:20" }, // 2차수를 버렸다
     ]);
@@ -483,7 +488,7 @@ describe("buildLessonSchedule — 회차 미루기·당기기(shifts)", () => {
       pace: "day",
       lookaheadDays: 14,
     });
-    expect(s.targets).toEqual([
+    expect(noPos(s.targets)).toEqual([
       { lessonNo: 1, date: "2026-09-21", slotStart: "18:20" },
       { lessonNo: 1, date: "2026-09-21", slotStart: "19:20" },
     ]);
@@ -532,7 +537,7 @@ describe("교시 안 차수 자리(1·2차수) — 원장 2026-10-16", () => {
       pace: "min25",
       lookaheadDays: 14,
     });
-    expect(s.targets).toEqual([
+    expect(noPos(s.targets)).toEqual([
       { lessonNo: 1, date: "2026-09-14", slotStart: "18:20" },
       { lessonNo: 2, date: "2026-09-14", slotStart: "18:20" },
       { lessonNo: 3, date: "2026-09-16", slotStart: "18:20" },
@@ -583,6 +588,60 @@ describe("교시 안 차수 자리(1·2차수) — 원장 2026-10-16", () => {
       [3, "2026-09-14"],
       [4, "2026-09-21"],
     ]);
+  });
+
+  // 원장 2026-10-20 *"수업이 2개면 각각 미룸, 당김"* — 줄 표식(0382a)은 그 교재 그 자리 **한 차수만**.
+  //   옛 칸 표식은 미룸이 두 차수·당김이 한 차수라, 섞어 누르면 순서가 어긋났다(위 테스트가 그 비대칭이다).
+  describe("줄 표식(교재·자리) — 한 차수씩", () => {
+    const BOOK = "0b6f3c1e-1111-4222-8333-944455556666";
+    const OTHER = "0b6f3c1e-aaaa-4bbb-8ccc-dddddddddddd";
+    const base = {
+      startDate: "2026-09-14",
+      lessonNos: [1, 2, 3, 4, 5],
+      schedules: MON_WED,
+      holidays: {},
+      axis: "class" as const,
+      slotPicks: ["mon|18:20|1", "mon|18:20|2", "wed|18:20|1"],
+      pace: "min25" as const,
+      lookaheadDays: 14,
+      lane: BOOK,
+    };
+    const at = (sh: Record<string, "skip" | "advance">) =>
+      buildLessonSchedule({ ...base, shifts: sh }).targets.map((t) => `${t.lessonNo}@${t.date.slice(8)}#${t.pos}`);
+
+    it("표식 없음 — 월 1·2 · 수 3 · 월 4·5", () => {
+      expect(at({})).toEqual(["1@14#1", "2@14#2", "3@16#1", "4@21#1", "5@21#2"]);
+    });
+
+    it("미룸(1번 자리) = 그 자리만 비고 **한 차수** 밀린다 — 칸 통째(두 차수)가 아니다", () => {
+      expect(at({ [`2026-09-14|18:20|${BOOK}|1`]: "skip" })).toEqual(["1@14#2", "2@16#1", "3@21#1", "4@21#2", "5@23#1"]);
+    });
+
+    it("당김(2번 자리) = 그 자리 차수(2)만 버리고 다음 차수가 온다 — 1번 자리는 그대로", () => {
+      expect(at({ [`2026-09-14|18:20|${BOOK}|2`]: "advance" })).toEqual(["1@14#1", "3@14#2", "4@16#1", "5@21#1"]);
+    });
+
+    it("미룸과 당김이 **같은 크기**라 서로 지운다 — 앞에서 미루고 뒤에서 당기면 그 사이만 한 칸 늦다", () => {
+      expect(
+        at({ [`2026-09-14|18:20|${BOOK}|1`]: "skip", [`2026-09-16|18:20|${BOOK}|1`]: "advance" }),
+      ).toEqual(["1@14#2", "3@16#1", "4@21#1", "5@21#2"]);
+    });
+
+    it("🔴 같은 줄을 두 번 당기면 **그 자리** 차수가 둘 건너뛴다(쌓기 `pos+4`) — 다음 자리 차수가 빠지지 않는다", () => {
+      expect(at({ [`2026-09-14|18:20|${BOOK}|1`]: "advance", [`2026-09-14|18:20|${BOOK}|5`]: "advance" })).toEqual([
+        "3@14#1",
+        "4@14#2",
+        "5@16#1",
+      ]);
+    });
+
+    it("다른 교재의 줄 표식은 이 배정을 움직이지 않는다(같은 칸의 다른 줄은 그대로)", () => {
+      expect(at({ [`2026-09-14|18:20|${OTHER}|1`]: "skip" })).toEqual(at({}));
+    });
+
+    it("옛 칸 표식은 그대로 읽는다(0382a 전 표식 — 교시 통째)", () => {
+      expect(at({ "2026-09-14|18:20": "skip" })).toEqual(["1@16#1", "2@21#1", "3@21#2", "4@23#1"]);
+    });
   });
 
   it("groupSlotPicks — 요일 순 · 자리 순으로 묶는다", () => {
