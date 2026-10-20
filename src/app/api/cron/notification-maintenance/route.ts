@@ -7,6 +7,7 @@ import { pruneNotificationData } from "@/features/notifications/server/prune";
 import { sweepFailedReportNotifications } from "@/features/notifications/server/failed-notify-sweep";
 import { checkProtectedAccountIntegrity } from "@/features/super-admin/server/protected-integrity";
 import { reconcileVideoHomework } from "@/features/video-homework/server/reconcile-outcomes";
+import { sendStaffTaskDigest } from "@/features/staff-tasks/server/digest";
 
 /** Daily notification checks and cleanup. AI briefing generation was retired on 2026-09-30. */
 export const dynamic = "force-dynamic";
@@ -50,6 +51,7 @@ export async function GET(req: Request) {
   const events: Record<string, string> = {};
   const sweeps: Record<string, string> = {}; // 발송 실패 알림 유실 보정 결과(테넌트별)
   const videos: Record<string, string> = {};
+  const taskDigests: Record<string, string> = {}; // 늦은 할 일 아침 요약(0377a)
   for (const tenantId of tenantIds) {
     try {
       const result = await reconcileVideoHomework(tenantId, { notifyUnmatched: true, scheduled: true });
@@ -75,6 +77,14 @@ export async function GET(req: Request) {
       reportError(e, { scope: "cron.notification-maintenance.failed-notify-sweep", tenantId });
       sweeps[tenantId] = `실패: ${e instanceof Error ? e.message : String(e)}`;
     }
+    // 늦은 할 일 요약 — 위 보정이 메운 할 일까지 본 뒤(순서 의존). 실패해도 다른 단계와 무관.
+    try {
+      const late = await sendStaffTaskDigest(admin, tenantId);
+      taskDigests[tenantId] = `늦은 할 일 ${late}`;
+    } catch (e) {
+      reportError(e, { scope: "cron.notification-maintenance.staff-task-digest", tenantId });
+      taskDigests[tenantId] = `실패: ${e instanceof Error ? e.message : String(e)}`;
+    }
   }
 
   // 오래된 dedup 이벤트·읽은 알림 정리 — 전 테넌트 공통 1회.
@@ -86,5 +96,5 @@ export async function GET(req: Request) {
     pruned = `실패: ${e instanceof Error ? e.message : String(e)}`;
   }
 
-  return NextResponse.json({ ok: true, tenants: tenantIds.length, events, sweeps, videos, pruned, protectedCheck });
+  return NextResponse.json({ ok: true, tenants: tenantIds.length, events, sweeps, videos, taskDigests, pruned, protectedCheck });
 }

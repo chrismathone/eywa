@@ -1,5 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { reportError } from "@/lib/observability/report-error";
 import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { addDays, kstToday } from "@/lib/date-kst";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
@@ -61,6 +62,8 @@ export async function reconcileVideoHomework(tenantId: string, options: { studen
     if (error) throw new Error(`영상 상태 갱신 실패: ${error.message}`);
     updated += Number(data?.updated ?? 0); notifications += Number(data?.notifications ?? 0);
   }
+  // 미배정 할 일(0379a)은 미배정이 0건이어도 맞춘다 — 마지막 영상이 연결되면 그 할 일을 닫아야 한다.
+  let pending: { id: string }[] = [];
   if (options.notifyUnmatched && unmatched.length) {
     // 배정이 바뀌었는지는 RPC가 재확인한다. 수신자는 현재 담당 강사이며 지점 밖으로 보내지 않는다.
     const eligible = unmatched.filter(video => {
@@ -69,7 +72,7 @@ export async function reconcileVideoHomework(tenantId: string, options: { studen
       return student && candidates.some(cls => cls && isVideoHomeworkEnabled(settings.report.videoHomeworkPolicy,
         { classId: cls.id, subjectKey: cls.subject, grade: student.grade }));
     });
-    const pending = await fetchAllPagedInChunks<{ id: string }>(eligible.map(video => video.id), (chunk, from, to) =>
+    pending = await fetchAllPagedInChunks<{ id: string }>(eligible.map(video => video.id), (chunk, from, to) =>
       db.from("homework_video_ledger_videos").select("id").eq("tenant_id", tenantId).in("id", chunk).eq("status", "uploaded").order("id").range(from, to));
     for (let start = 0; start < pending.length; start += 100) {
       const { data, error } = await db.rpc("notify_unassigned_homework_videos", {
@@ -79,5 +82,19 @@ export async function reconcileVideoHomework(tenantId: string, options: { studen
       notifications += Number(data ?? 0);
     }
   }
+  if (options.notifyUnmatched) {
+    await syncUnassignedTasks(tenantId, videos.map(video => video.id), unmatched.map(video => video.id), pending.map(video => video.id));
+  }
   return { checked: outcomes.length, updated, notifications };
+}
+
+/**
+ * 할 일 '미배정 영상'(0379a) — 알림 대상(open)은 열고, 이번에 판정한 영상(checked) 중 미배정(unmatched)이 아니게 된 것은 닫는다.
+ * 미배정 판정은 위 `videoHomeworkOutcomes` 한 벌 — DB가 따로 판정하지 않는다. 실패해도 영상 상태·알림은 이미 끝났다(할 일만 다음 판정에).
+ */
+async function syncUnassignedTasks(tenantId: string, checked: string[], unmatched: string[], open: string[]): Promise<void> {
+  const { error } = await createAdminClient().rpc("staff_task_sync_unassigned_videos", {
+    p_tenant: tenantId, p_checked: checked, p_unmatched: unmatched, p_open: open,
+  });
+  if (error) reportError(error, { scope: "video-homework.unassigned-tasks", tenantId });
 }

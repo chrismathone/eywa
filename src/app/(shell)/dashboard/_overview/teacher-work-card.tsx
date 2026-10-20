@@ -7,6 +7,7 @@ import { WindowLink } from "@/components/workspace/window-link";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { kstTimeOf } from "@/lib/date-kst";
 import { tipProps } from "@/components/hover-tip/tip";
+import { StaffTaskDialog, type StaffTaskDialogTarget } from "@/features/staff-tasks/components/staff-task-dialog";
 import s from "./teacher-work-card.module.css";
 
 export function workRatio(value: number, total: number) {
@@ -83,6 +84,7 @@ const METRIC_COLUMN = 126;
 export function TeacherWorkCard({ data, subjects }: { data: TeacherWork; subjects: Record<string, string> }) {
   const ref = useRef<HTMLDivElement>(null);
   const [columnWidth, setColumnWidth] = useState(110);
+  const [taskTarget, setTaskTarget] = useState<StaffTaskDialogTarget | null>(null);
   useLayoutEffect(() => {
     if (!ref.current) return;
     const observer = new ResizeObserver(([entry]) => setColumnWidth(Math.max(72, ((entry?.contentRect.width ?? 1000) - METRIC_COLUMN) / VISIBLE_TEACHERS)));
@@ -92,7 +94,13 @@ export function TeacherWorkCard({ data, subjects }: { data: TeacherWork; subject
   const groups = data.rows.length ? [data.rows] : [];
   const shownMetrics = metrics.filter((m) => !m.shown || m.shown(data));
   const span = (from?: string, to?: string) => (from && to ? `${from.slice(5).replace("-", "/")}~${to.slice(5).replace("-", "/")}` : null);
+  // 열린 할 일(0377a) — 사람 단위라 같은 선생님의 과목 열이 둘이면 첫 열에만 적는다(두 번 세지 않게).
+  const firstColumn = new Set(data.rows.filter((r, i) => r.teacherId && data.rows.findIndex((x) => x.teacherId === r.teacherId) === i).map((r) => `${r.teacherId}:${r.subject}`));
+  const tasks = data.tasks;
   return <div ref={ref} className={s.root} data-auto-height data-teacher-work>
+    {tasks ? <button type="button" className={s.tasksLink} onClick={() => setTaskTarget({ scope: "all" })}>
+      업무 처리 현황 · 열린 할 일 {tasks.open.toLocaleString("ko-KR")}{tasks.late ? <b> · 늦음 {tasks.late.toLocaleString("ko-KR")}</b> : null} ›
+    </button> : null}
     {groups.length ? <DragScrollArea hideBar fadeTone="surface">{groups.map((rows, i) => <table key={i} className={s.table}
       style={{ width: METRIC_COLUMN + columnWidth * Math.max(rows.length, VISIBLE_TEACHERS) }}>
       <caption className="sr-only">강사별 업무 현황 {i + 1}</caption>
@@ -106,9 +114,21 @@ export function TeacherWorkCard({ data, subjects }: { data: TeacherWork; subject
           const cell = metric.cell(r, data);
           return <td key={`${r.teacherId}:${r.subject}`} data-tone={cell.tone}><CellBody cell={cell} /></td>;
         })}
-      </tr>)}</tbody>
+      </tr>)}
+      {tasks ? <tr data-video>
+        <th scope="row"><span {...tipProps("열린 할 일 — 지금 맡고 있는 할 일(보고서 발송 실패 · 상담 후속조치) 중 아직 처리 안 된 것. 괄호 = 그중 늦음. 처리는 원래 기록(발송 · 완료 체크)으로 저절로 확인됩니다. 누르면 그 선생님의 할 일")}>열린 할 일</span></th>
+        {rows.map((r) => {
+          const key = `${r.teacherId}:${r.subject}`;
+          const c = firstColumn.has(key) && r.teacherId ? tasks.byUser[r.teacherId] ?? { open: 0, late: 0 } : null;
+          return <td key={key} data-tone={c?.late ? "alert" : undefined}>{!c ? "—" : <button type="button" className={s.cellButton}
+            onClick={() => setTaskTarget({ scope: "all", assigneeId: r.teacherId, personName: r.teacherName })}>
+            {c.open.toLocaleString("ko-KR")}{c.late ? <small data-tone="alert">늦음 {c.late.toLocaleString("ko-KR")}</small> : null}
+          </button>}</td>;
+        })}
+      </tr> : null}</tbody>
     </table>)}</DragScrollArea> : null}
     {!data.rows.length ? <p className={s.empty}>집계할 담당 반이 없습니다.</p> : null}
+    {taskTarget ? <StaffTaskDialog target={taskTarget} onClose={() => setTaskTarget(null)} /> : null}
     <p className={s.note}>보고서({span(data.reportFrom, data.to) ?? "최근 7일"}): 작성할 전체 건수 기준 · 결석·휴원·테스트반 제외{data.deliveryShown === true ? " · 발송 확인 = 작성했는데 아직 학부모에게 안 나간 것(오류 포함 · 회수 제외)" : ""}.</p>
     <p className={s.note}>{data.deliveryShown === true ? `학부모 미확인: ${span(data.unreadFrom, data.to) ?? "최근 30일"} 수업 보고서 중 발송 뒤 48시간이 지나도 안 읽은 것. ` : ""}출결 미입력: {span(data.attendanceFrom, data.attendanceTo) ?? "어제까지 7일"} 수업한 반×날 중 출결을 다 못 찍은 횟수(보고서를 안 쓰는 반 포함).</p>
     <p className={s.note}>{data.counselShown === true ? `원생상담: ${counselPeriodLabel(data.counselMonth, data.to)} 상담 의무 학생 중 1회 이상 상담한 비율(같은 과목은 요일을 가장 많이 맡은 선생님 몫)${data.counselAsOf ? `(${data.counselAsOf.slice(5).replace("-", "/")} 기준)` : ""}. ` : ""}영상 제출: 낸 숙제 중 실제 업로드 기준 · 출제율: 쓴 보고서 중 영상 과제가 나간 비율 · {data.videoCheckedAt ? `영상 확인 ${kstTimeOf(data.videoCheckedAt)} 기준` : "영상 상태 확인 대기"}. 분모가 0이면 비율은 —로 표시합니다.</p>

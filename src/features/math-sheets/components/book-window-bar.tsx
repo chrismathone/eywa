@@ -1,8 +1,6 @@
 "use client";
 
-import type { ComponentProps } from "react";
 import { useMathTextbooks } from "./math-textbook-context";
-import { LearningRails } from "./learning-rails";
 import overview from "./learning-overview.module.css";
 import local from "./book-window.module.css";
 
@@ -102,19 +100,5 @@ export function BookWindowBar({ studentId, embedded = false }: { studentId: stri
         )}
       </p>
     </section>
-  );
-}
-
-/**
- * 전체 목표 레일 + 그 아래 교재 3개월 확대 칸. 학생 행이 레일을 그릴 때 이걸 쓴다 — 3개월 창이 없는 학생은 레일만.
- */
-export function RailsWithBook({ studentId, ...rails }: { studentId: string } & ComponentProps<typeof LearningRails>) {
-  const ctx = useMathTextbooks();
-  const w = ctx?.windows[studentId];
-  return (
-    <LearningRails
-      {...rails}
-      zoom={w && w.total > 0 ? { units: w.units, grade: w.grade, content: <BookWindowBar studentId={studentId} embedded /> } : undefined}
-    />
   );
 }

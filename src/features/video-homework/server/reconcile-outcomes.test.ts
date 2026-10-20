@@ -70,7 +70,10 @@ it("미배정 알림은 일일 작업에서만 보내고, 상태 반영 실패 �
   await reconcileVideoHomework("tenant");
   expect(m.db.rpcCalls.some(call => call.name === "notify_unassigned_homework_videos")).toBe(false);
   await reconcileVideoHomework("tenant", { notifyUnmatched: true });
-  expect(m.db.rpcCalls.at(-1)).toMatchObject({ name: "notify_unassigned_homework_videos", args: { p_tenant: "tenant", p_videos: ["v"] } });
+  expect(m.db.rpcCalls.at(-2)).toMatchObject({ name: "notify_unassigned_homework_videos", args: { p_tenant: "tenant", p_videos: ["v"] } });
+  // 할 일(0379a)은 같은 판정 한 벌로 — 판정한 영상 · 미배정 · 알림 대상을 넘긴다.
+  expect(m.db.rpcCalls.at(-1)).toMatchObject({ name: "staff_task_sync_unassigned_videos",
+    args: { p_tenant: "tenant", p_checked: ["v"], p_unmatched: ["v"], p_open: ["v"] } });
   m.db.rpcCalls.length = 0;
   m.db.defineRpc("reconcile_video_homework_outcomes", () => { throw new Error("temporary database failure"); });
   await expect(reconcileVideoHomework("tenant", { notifyUnmatched: true })).rejects.toThrow();
