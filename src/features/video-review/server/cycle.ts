@@ -50,7 +50,8 @@ export async function runVideoReviewCycle(tenantId: string, now: Date = new Date
     catch (e) { report[name] = `실패: ${errorText(e)}`.slice(0, 200); reportWarning("영상 메모 단계 실패", { scope: `video-review.${name}`, tenantId, error: errorText(e) }); }
   };
   await step("enqueued", () => enqueueNewVideos(tenantId, now));
-  await step("transcribing", () => submitTranscriptions(tenantId));
+  // 개발 CLI 경로는 한 바퀴가 길어(판정을 그 자리에서 돌린다) 전사 제출을 한 번에 더 많이 — 운영은 기본 20(cron 10분 · 함수 시간 제한 안).
+  await step("transcribing", () => submitTranscriptions(tenantId, devCliEnabled() ? 300 : undefined));
   await step("transcribed", () => reconcileTranscriptions(tenantId));
   await step("recovered", () => recoverStuck(tenantId));
   await step("judged", () => collectJudgeBatches(tenantId));
