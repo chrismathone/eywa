@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   closeMenu: vi.fn(),
   open: vi.fn(),
   mark: vi.fn(),
+  clear: vi.fn(),
   fetch: vi.fn(),
   targets: vi.fn(),
   context: vi.fn(),
@@ -65,6 +66,7 @@ vi.mock("@/features/notifications/server/actions", () => ({
   archiveNotification: vi.fn(),
   unarchiveNotification: vi.fn(),
   deleteNotification: vi.fn(),
+  deleteAllNotifications: mocks.clear,
 }));
 beforeEach(() => {
   vi.clearAllMocks();
@@ -140,4 +142,18 @@ it.each(["classnote_parent_post", "classnote_parent_comment"])("%s 본문 클릭
   fireEvent.click(screen.getByRole("button", { name: "← 알림 목록" }));
   expect(await screen.findByRole("button", { name: /학부모 알림.*알림 내용/ })).toBeTruthy();
   external.mockRestore();
+});
+
+it("전체 삭제는 확인을 한 번 거친 뒤 지금 뷰만 지운다", async () => {
+  mocks.clear.mockResolvedValue({ unread: 0, items: [] });
+  render(<NotificationBell />);
+  fireEvent.click(await screen.findByRole("button", { name: "알림 1개" }));
+  fireEvent.click(await screen.findByRole("button", { name: "전체 삭제" }));
+  expect(mocks.clear).not.toHaveBeenCalled(); // 첫 클릭은 확인 줄만
+  fireEvent.click(screen.getByRole("button", { name: "취소" }));
+  expect(mocks.clear).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "전체 삭제" }));
+  fireEvent.click(screen.getByRole("button", { name: "삭제" }));
+  expect(mocks.clear).toHaveBeenCalledWith("active", 20, "2026-09-11T00:00:00Z");
+  expect(await screen.findByText("새 알림이 없습니다")).toBeTruthy();
 });

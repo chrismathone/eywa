@@ -68,7 +68,7 @@ export function validToken(t: unknown, classId: string): t is ShiftUndoToken {
         !!m &&
         typeof m === "object" &&
         typeof m.key === "string" &&
-        // 칸 표식(`날짜|교시`) 또는 줄 표식(`날짜|교시|교재|자리`, 0381a) — 모양은 shift-key 한 곳에서 본다.
+        // 칸 표식(`날짜|교시`) 또는 줄 표식(`날짜|교시|교재|자리`, 0382a) — 모양은 shift-key 한 곳에서 본다.
         parseMarkerKey(m.key) !== null &&
         validKind(m.before) &&
         validKind(m.after),

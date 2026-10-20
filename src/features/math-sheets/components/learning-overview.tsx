@@ -35,6 +35,7 @@ import styles from "./learning-overview.module.css";
 import { ClassTextbookBar, StudentTextbookChip } from "./math-textbook-assign";
 import { BookWindowBar } from "./book-window-bar";
 import { StudentPlanCard } from "./student-plan-card";
+import { useMathTextbooks } from "./math-textbook-context";
 import { MATH_LEARNING_CADENCE, type MathLearningTrack } from "@/features/progress/learning-cadence";
 import { learningBlocks } from "../lib/learning-plan";
 import { courseRangeLabel } from "../lib/learning-path";
@@ -143,19 +144,19 @@ export function LearningOverview({
     }
     return { summaries };
   }, [learning.goals, learning.progress]);
+  // 카드 배지와 **같은 판정**으로 센다 — 교재 로드맵이 있으면 그 판정, 없으면 저장된 전체 목표(블록 계획).
+  const bookPlans = useMathTextbooks()?.plans;
+  const statusOf = (studentId: string) => bookPlans?.[studentId]?.roadmaps[0]?.status ?? summaries[studentId]?.status;
   const matches = (student: MathStudentRow, kind: Filter) => {
-    const progress = summaries[student.studentId];
+    const status = statusOf(student.studentId);
     if (kind === "all") return true;
     if (student.rosterPhase !== "on") return false;
     if (kind === "missing")
       return (
-        !progress ||
-        ["no-data", "no-schedule", "not-started"].includes(progress.status)
+        !status ||
+        ["no-data", "no-schedule", "not-started"].includes(status)
       );
-    return (
-      progress?.status === kind ||
-      (kind === "on" && progress?.status === "done")
-    );
+    return status === kind || (kind === "on" && status === "done");
   };
   const shown = data.students.filter(
     (s) =>

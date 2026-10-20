@@ -243,7 +243,7 @@ export function buildLessonSchedule(input: {
    */
   shifts?: Readonly<Record<string, "skip" | "advance">> | null;
   /**
-   * 이 배정의 교재 id — **줄 표식**(`"YYYY-MM-DD|HH:MM|<교재>|<자리>"`, 0381a)을 고르는 열쇠다(원장 2026-10-20
+   * 이 배정의 교재 id — **줄 표식**(`"YYYY-MM-DD|HH:MM|<교재>|<자리>"`, 0382a)을 고르는 열쇠다(원장 2026-10-20
    * *"수업이 2개면 각각 미룸, 당김"*). 줄 표식은 그 교재의 그 자리 **한 차수**만 움직인다:
    *    · `skip`    = 그 자리는 비우고 차수를 안 쓴다(뒤가 한 차수 밀린다).
    *    · `advance` = 그 자리에 올 차수를 버리고 다음 차수를 넣는다(뒤가 한 차수 당겨진다).

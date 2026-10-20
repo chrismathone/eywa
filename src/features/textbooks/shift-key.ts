@@ -3,10 +3,10 @@
  *
  * 원장 2026-10-20 *"미룸 당김을 수업이 2개면 각각 미룸, 당김 버튼이 활성화되어야"* — 한 교시에 25분 차수가
  * 둘이면(같은 교재 1·2차수, 또는 교재 둘) 줄마다 따로 민다. 그래서 표식이 **칸(날짜·교시)** 에서
- * **칸 · 교재 · 자리(그 교시의 몇 번째 25분)** 로 좁아졌다(0381a `lane`·`pos`).
+ * **칸 · 교재 · 자리(그 교시의 몇 번째 25분)** 로 좁아졌다(0382a `lane`·`pos`).
  *
  * · 칸 표식(옛 모양, 0282a) = `"YYYY-MM-DD|HH:MM"` — 그 교시를 **통째로** 미루거나 당긴다(교재 전부).
- *   0381a 적용 전의 표식이 전부 이 모양이고, 적용 뒤에도 그대로 읽는다(`lane = ''`, `pos = 0`).
+ *   0382a 적용 전의 표식이 전부 이 모양이고, 적용 뒤에도 그대로 읽는다(`lane = ''`, `pos = 0`).
  * · 줄 표식(새 모양) = `"YYYY-MM-DD|HH:MM|<교재 id>|<자리>"` — 그 교재의 그 자리 **한 차수만**.
  * 🔑 문자열 순서가 곧 시간 순서다(같은 교재끼리) — `placeShiftMarker`가 그 순서로 "다음 빈 자리"를 찾는다.
  */
@@ -84,7 +84,7 @@ export function parseMarkerKey(key: string): MarkerKeyParts | null {
   return { date, slot, lane: lane!.toLowerCase(), pos };
 }
 
-/** DB 행 → 키. 0381a 전 행(또는 그 전 조회)은 `lane`·`pos`가 없어 칸 표식이다. */
+/** DB 행 → 키. 0382a 전 행(또는 그 전 조회)은 `lane`·`pos`가 없어 칸 표식이다. */
 export function markerKeyOfRow(r: Readonly<Record<string, unknown>>): string {
   const date = String(r.plan_date).slice(0, 10);
   const slot = String(r.slot_start).slice(0, 5);

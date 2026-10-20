@@ -34,7 +34,7 @@ export function summaryOf(id: string, snap: OverviewSnapshot, opts: { amounts?: 
     case "firstClass":
       return v.firstClass?.data ? { value: n(v.firstClass.data.length), unit: "명", detail: "오늘 첫 수업" } : null;
     case "absent":
-      return v.absent?.data ? { value: n(v.absent.data.absent.length), unit: "명", detail: "어제 결석", danger: v.absent.data.absent.length > 0 } : null;
+      return v.absent?.data ? { value: n(v.absent.data.students.length), unit: "명", detail: "최근 7일 결석", danger: v.absent.data.students.length > 0 } : null;
     case "makeup":
       return v.makeup?.data ? { value: n(v.makeup.data.rows.length), unit: "건", detail: "한 달 보강 예정" } : null;
     case "studentsComp": {

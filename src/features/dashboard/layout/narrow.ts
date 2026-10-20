@@ -9,6 +9,7 @@
  */
 import type { Area, OverviewData, Sections } from "@/features/dashboard/overview/model";
 import type { Program } from "@/features/students/program";
+import { sortRecentAbsentStudents, withAbsences } from "@/features/dashboard/recent-absences";
 
 export type GroupOf = (key: string | null | undefined) => string | null;
 
@@ -82,22 +83,14 @@ export function narrowBySubject(sections: Sections, groups: readonly string[], g
       data: first.data.filter((r) => r.subjects.some(same)).map((r) => ({ ...r, subjects: r.subjects.filter(same) })),
     };
   }
+  // 최근 결석 — 담당 과목 반의 결석만 남기고 **다시 센다**(횟수·연락 필요 · 정렬도 같은 규칙 — recent-absences.ts 한 벌).
+  // 학생의 다른 과목 결석까지 세면 과목 관리자 화면의 누적 결석이 다른 과목 몫까지 커진다.
   const absent = live("absent");
   if (absent?.data) {
-    const mine = (a: { subject: string | null; classes: { subject: string | null }[] }) => same(a.subject) || a.classes.some((c) => same(c.subject));
-    // 학생의 다른 과목 반(과목 이름·반 이름)은 빼고 담당 과목 반만 남긴다.
-    // 🔴 상태(결석·공결)는 반별이 아니라 학생 한 벌이라 다른 과목 반을 뺐고 상태가 **둘 이상**이면 어느 상태가 남는지 모른다 —
-    //    그때만 비운다(다른 과목의 '공결'이 담당 과목 결석에 붙어 보이지 않게). 상태가 하나면 모든 칸이 그 상태라 그대로 둔다.
-    //    '전부 사전 통보'는 부분집합에도 참이라 그대로 둔다.
-    const only = (a: (typeof absent.data.absent)[number]) => {
-      const classes = a.classes.filter((c) => same(c.subject));
-      const trimmed = classes.length < a.classes.length && a.statuses.length > 1;
-      return { ...a, classes, subject: same(a.subject) ? a.subject : (classes[0]?.subject ?? null), ...(trimmed ? { statuses: [] } : {}) };
-    };
-    out.absent = {
-      ...absent,
-      data: { ...absent.data, absent: absent.data.absent.filter(mine).map(only), partial: absent.data.partial.filter(mine).map(only) },
-    };
+    const students = absent.data.students
+      .map((st) => withAbsences(st, st.absences.filter((a) => same(a.subject))))
+      .filter((st) => st.count > 0);
+    out.absent = { ...absent, data: { ...absent.data, students: sortRecentAbsentStudents(students) } };
   }
   // 퇴원 명단 — 종료된 반의 과목(없으면 마지막 수강 반의 프로그램)으로 가른다. 둘 다 모르면 모든 과목 관리자에게(결정 1).
   const wd = live("withdrawals");

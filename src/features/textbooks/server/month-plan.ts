@@ -150,7 +150,7 @@ export async function loadPlanMaterials(input: {
   const bookIds = [...new Set(plans.map((p) => String(p.textbook_id)))];
   const [shiftRows, bookRows, lessonRows, settings, schedRows] = await Promise.all([
     // 🔴 표가 없어도 죽지 않는다(0282a 미적용 = 표식 0개 = 종전 계산) — 그래서 catch로 빈 배열.
-    // 0381a 전이면 `lane`·`pos` 없이 다시 읽는다(전부 칸 표식) — `withMarkerCols`.
+    // 0382a 전이면 `lane`·`pos` 없이 다시 읽는다(전부 칸 표식) — `withMarkerCols`.
     withMarkerCols((cols) =>
       fetchAllPagedInChunks<{ class_id: string; plan_date: string; slot_start: string; kind: string; lane?: string; pos?: number }>(
         classIds,

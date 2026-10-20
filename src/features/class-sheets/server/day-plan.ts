@@ -78,7 +78,7 @@ export async function getEcsDayPlan(input: {
   }
 
   // 회차 표식 — 🔴 **삼켜도 되는 조회**다(표시용). 실패하면 강조만 없고 버튼은 그대로 동작한다.
-  //    줄 표식(0381a)도 칸으로 접는다 — 월간 달력과 **같은 요약**(`cellShiftSummary`, 칸 표식 우선)을 쓴다.
+  //    줄 표식(0382a)도 칸으로 접는다 — 월간 달력과 **같은 요약**(`cellShiftSummary`, 칸 표식 우선)을 쓴다.
   const shiftBySlot: Record<string, "skip" | "advance"> = {};
   try {
     const rows = await withMarkerCols(async (cols) => {

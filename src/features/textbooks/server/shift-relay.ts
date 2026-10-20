@@ -45,7 +45,7 @@ const STOPPED = "진도를 옮기다 멈췄습니다 — 새로고침 후 확인
 /**
  * 무엇을 눌렀나.
  * · `cell` — 교시 통째(옛 화면이 보내는 모양 — 배포 직후 열려 있던 창). 칸 표식(0282a).
- * · `line` — **줄 하나**(원장 2026-10-20 *"수업이 2개면 각각 미룸, 당김"*). 그 줄의 교재 한 차수만, 줄 표식(0381a).
+ * · `line` — **줄 하나**(원장 2026-10-20 *"수업이 2개면 각각 미룸, 당김"*). 그 줄의 교재 한 차수만, 줄 표식(0382a).
  * · `fill` — **계획만 있는 칸의 당김**(원장 2026-10-20 *"계획만 있을 경우 미룸버튼은 없고 당겨서 전수업 한시간씩
  *   당겨지게"*). 그 칸의 미룸 표식을 걷어 뒤 수업이 한 칸씩 올라와 그 칸을 채운다 — **아무 차수도 버리지 않는다**.
  */
@@ -154,15 +154,15 @@ export async function shiftAlongPlans(input: {
   const dropFirst: string[] = [];
   const writes: { key: string; kind: "skip" | "advance" | null }[] = [];
 
-  /** 교시 통째(옛 화면, 또는 0381a 전 줄 누름의 대체) — 그 칸을 지나가는 교재 칸 순서로. */
+  /** 교시 통째(옛 화면, 또는 0382a 전 줄 누름의 대체) — 그 칸을 지나가는 교재 칸 순서로. */
   const cellMark = () => {
     const sequence = [...new Set(relevant.flatMap((r) => r.cells))].filter((k) => k >= pressedKey).sort();
     return placeShiftMarker({ kind, pressedKey, sequence, shifts });
   };
   const NO_NEXT = "다음 수업일이 없어 미룰 수 없습니다 — 시간표를 확인해 주세요";
-  /** 0381a 전에 줄 표식을 못 쓸 때 **교시 통째로 대신해도 같은 뜻인가** — 이 칸에 이 교재 한 차수뿐일 때만. */
+  /** 0382a 전에 줄 표식을 못 쓸 때 **교시 통째로 대신해도 같은 뜻인가** — 이 칸에 이 교재 한 차수뿐일 때만. */
   let cellFallbackOk = false;
-  /** 줄 하나 대신 교시 통째로 쓸 표식(0381a 전, `cellFallbackOk`일 때만). */
+  /** 줄 하나 대신 교시 통째로 쓸 표식(0382a 전, `cellFallbackOk`일 때만). */
   let cellFallback: { key: string; kind: "skip" | "advance" | null } | null = null;
   /** 줄 표식을 걷어 낸 칸 표식(`fill`) 중 **교시 통째 미룸**이 있었나 — 그때만 손으로 적은 줄도 한 주 되돌린다. */
   let removedCellSkip = false;
@@ -255,7 +255,7 @@ export async function shiftAlongPlans(input: {
   for (let wi = 0; wi < writes.length; wi += 1) {
     let w = writes[wi]!;
     let { error, laneMissing } = await writeMarker({ admin, tenantId, classId, key: w.key, kind: w.kind, actor: userId });
-    // 0381a 전 — 이 칸에 이 교재 한 차수뿐이면 교시 통째 표식이 같은 뜻이다(종전 버튼 그대로 동작).
+    // 0382a 전 — 이 칸에 이 교재 한 차수뿐이면 교시 통째 표식이 같은 뜻이다(종전 버튼 그대로 동작).
     if (laneMissing && cellFallback) {
       w = cellFallback;
       writes[wi] = w;
@@ -337,7 +337,7 @@ export async function shiftAlongPlans(input: {
     }
   }
 
-  // ③ 배정 교재가 아닌 줄은 종전대로 같은 요일·교시끼리 — **교시 통째**로 눌렀을 때만(0381a 전 대체 포함).
+  // ③ 배정 교재가 아닌 줄은 종전대로 같은 요일·교시끼리 — **교시 통째**로 눌렀을 때만(0382a 전 대체 포함).
   //    · 줄 하나를 눌렀으면 그 줄의 교재만 움직인다(같은 칸의 다른 줄은 제자리 — "수업이 2개면 각각").
   //    · 계획만 있는 칸의 당김은 **교시 통째 미룸을 걷었을 때만** — 그 미룸이 손으로 적은 줄도 한 주 밀었으니
   //      되돌린다. 줄 미룸만 걷었다면 손으로 적은 줄은 움직인 적이 없다(적대적 리뷰 2026-10-20).

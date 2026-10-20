@@ -36,7 +36,7 @@ export async function clearPlanLines(input: {
    */
   keepLines: boolean;
   /**
-   * 진도 줄·칸 표식까지 지우나(사용자가 [진도 줄도 함께 지우기]를 골랐을 때). false여도 **그 교재의 줄 표식**(0381a)은
+   * 진도 줄·칸 표식까지 지우나(사용자가 [진도 줄도 함께 지우기]를 골랐을 때). false여도 **그 교재의 줄 표식**(0382a)은
    * 지운다 — 배정이 없으면 아무 계산에도 안 쓰이다가, 같은 교재를 다시 배정하는 순간 옛 미룸·당김이 새 배정에
    * 조용히 걸린다(적대적 리뷰 2026-10-20).
    */
@@ -134,7 +134,7 @@ export async function clearPlanLines(input: {
     const byKey = new Map<string, Record<string, unknown>>(
       markRows.filter((m) => m.kind === "skip" || m.kind === "advance").map((m) => [markerKeyOfRow(m), m]),
     );
-    // 칸 표식은 다른 배정이 같이 쓰지 않는 칸만(`markersToClear`). 줄 표식(0381a)은 **그 교재 것**이 전부 지운다
+    // 칸 표식은 다른 배정이 같이 쓰지 않는 칸만(`markersToClear`). 줄 표식(0382a)은 **그 교재 것**이 전부 지운다
     // — 단 같은 교재가 다른 축에 남아 있으면(`keepLines`) 그 배정도 같은 표식을 읽으므로 남긴다.
     const keys = [
       ...(withLines

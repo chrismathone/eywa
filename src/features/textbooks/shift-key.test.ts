@@ -4,7 +4,7 @@ import { placeShiftMarker } from "./lesson-relay";
 
 const BOOK = "0b6f3c1e-1111-4222-8333-944455556666";
 
-describe("미룸·당김 표식 키(0381a)", () => {
+describe("미룸·당김 표식 키(0382a)", () => {
   it("칸 표식과 줄 표식을 오간다", () => {
     expect(parseMarkerKey(cellMarkerKey("2026-12-09", "20:20"))).toEqual({ date: "2026-12-09", slot: "20:20", lane: "", pos: 0 });
     expect(parseMarkerKey(laneMarkerKey("2026-12-09", "20:20", BOOK, 2))).toEqual({ date: "2026-12-09", slot: "20:20", lane: BOOK, pos: 2 });
@@ -16,7 +16,7 @@ describe("미룸·당김 표식 키(0381a)", () => {
     }
   });
 
-  it("DB 행 — 0381a 전 행(lane·pos 없음)·칸 표식 행은 칸 키, 줄 표식 행은 줄 키", () => {
+  it("DB 행 — 0382a 전 행(lane·pos 없음)·칸 표식 행은 칸 키, 줄 표식 행은 줄 키", () => {
     expect(markerKeyOfRow({ plan_date: "2026-12-09", slot_start: "20:20:00" })).toBe("2026-12-09|20:20");
     expect(markerKeyOfRow({ plan_date: "2026-12-09", slot_start: "20:20:00", lane: "", pos: 0 })).toBe("2026-12-09|20:20");
     expect(markerKeyOfRow({ plan_date: "2026-12-09", slot_start: "20:20:00", lane: BOOK, pos: 1 })).toBe(`2026-12-09|20:20|${BOOK}|1`);

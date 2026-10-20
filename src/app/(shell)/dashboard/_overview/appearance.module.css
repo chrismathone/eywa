@@ -13,15 +13,15 @@
    떨어진 카드는 네 변이 다 있어야 한다. ⚠️ 폭만 되살리면 안 된다 — 그 규칙의 `border-right: 0`이 선 종류(none)·색까지
    지우므로 셋을 함께 적는다(폭만 1px로 두면 계산값이 그대로 0px였다, 실측). 결석 카드가 맨 끝에 설 때(보강 조회 실패)는 그 카드의 붉은 테두리색. */
 .dashboard :global([data-overview="kpi"]:last-child) { border-right: 1px solid #dce4ee; }
-.dashboard :global([data-kpi="전일 결석"]:last-child) { border-right-color: #e6c8c3; }
+.dashboard :global([data-kpi="최근 결석"]:last-child) { border-right-color: #e6c8c3; }
 .dashboard :global([data-overview="kpi"]) > button { padding: 16px 16px 14px; }
 .dashboard :global([data-overview="kpi-label"]) { font-size: var(--text-sm); gap: 8px; font-weight: 700; }
 .dashboard :global([data-overview="kpi-label"]) > span:first-child { display: inline-flex; }
 .dashboard :global([data-overview="kpi-label"]) img { width: 26px !important; height: 26px !important; }
 .dashboard :global([data-overview="kpi-value"]) { font-size: var(--text-4xl); line-height: 1.1; margin-top: 14px; margin-bottom: 12px; letter-spacing: -.04em; color: #173e76; }
 .dashboard :global([data-overview="kpi-value"]) > span { margin-left: 5px; font-size: var(--text-sm); color: #121212; }
-.dashboard :global([data-kpi="전일 결석"]) { border-color: #e6c8c3; background: #fff9f7; }
-.dashboard :global([data-kpi="전일 결석"] [data-overview="kpi-value"]) { color: #ac3333; }
+.dashboard :global([data-kpi="최근 결석"]) { border-color: #e6c8c3; background: #fff9f7; }
+.dashboard :global([data-kpi="최근 결석"] [data-overview="kpi-value"]) { color: #ac3333; }
 .dashboard :global([data-overview="grid"]) { gap: 16px; }
 .dashboard :global([data-overview="panel"]) { padding: 20px 20px 17px; border: 1px solid #dce4ee; border-radius: 12px; box-shadow: 0 2px 2px #1a3f7210; }
 .dashboard :global([data-overview="panel-header"]) { padding-bottom: 12px; margin-bottom: 16px; border-bottom: 1px solid #edf0f5; }

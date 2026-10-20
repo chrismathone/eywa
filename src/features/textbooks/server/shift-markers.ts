@@ -3,8 +3,8 @@ import "server-only";
 /**
  * 미룸·당김 **표식 읽기·쓰기** — 서버 전용 IO. 키 모양은 [`shift-key.ts`](../shift-key.ts) 한 곳.
  *
- * 0381a가 표식에 `lane`(교재)·`pos`(자리)를 더했다(원장 2026-10-20 *"수업이 2개면 각각 미룸, 당김"*).
- * 🔴 **앱은 0381a 적용 전에도 돈다**([[#95]]) — eywa는 SQL을 손으로 적용해서 배포와 적용 사이에 늘 간격이 있다.
+ * 0382a가 표식에 `lane`(교재)·`pos`(자리)를 더했다(원장 2026-10-20 *"수업이 2개면 각각 미룸, 당김"*).
+ * 🔴 **앱은 0382a 적용 전에도 돈다**([[#95]]) — eywa는 SQL을 손으로 적용해서 배포와 적용 사이에 늘 간격이 있다.
  *    · 읽기: 새 열을 못 읽으면 옛 열로 다시 읽는다(전부 칸 표식).
  *    · 쓰기: 칸 표식은 옛 방식으로 쓴다. **줄 표식은 쓸 수 없다**(`laneMissing`) — 호출부(shift-relay)가 그 칸에
  *      그 교재 한 차수뿐일 때만 교시 통째로 대신하고, 아니면 이유를 밝혀 거절한다(조용히 바꾸면 줄 하나를 민다더니
@@ -19,9 +19,9 @@ type Admin = ReturnType<typeof createAdminClient>;
 export const MARKER_COLS = "id, class_id, plan_date, slot_start, kind, lane, pos";
 export const LEGACY_MARKER_COLS = "id, class_id, plan_date, slot_start, kind";
 
-export const LANE_MIGRATION_NEEDED = "줄마다 미루고 당기려면 마이그레이션 0381a가 필요합니다 — 적용한 뒤 다시 시도해 주세요";
+export const LANE_MIGRATION_NEEDED = "줄마다 미루고 당기려면 마이그레이션 0382a가 필요합니다 — 적용한 뒤 다시 시도해 주세요";
 
-/** 0381a 전이라 `lane`·`pos` 열이 없다는 오류인가(던진 Error든 PostgREST 오류 객체든). */
+/** 0382a 전이라 `lane`·`pos` 열이 없다는 오류인가(던진 Error든 PostgREST 오류 객체든). */
 export function isMissingLaneColumn(error: unknown): boolean {
   if (!error) return false;
   const e = error as { code?: string; message?: string };
@@ -65,7 +65,7 @@ export async function writeMarker(input: {
   if (kind === null) {
     const { error } = await table().delete().match({ ...cell, lane: p.lane, pos: p.pos });
     if (!error || !isMissingLaneColumn(error)) return { error };
-    // 0381a 전 — 표가 칸 표식뿐이다. 줄 표식은 애초에 있을 수 없으니 지울 것도 없다.
+    // 0382a 전 — 표가 칸 표식뿐이다. 줄 표식은 애초에 있을 수 없으니 지울 것도 없다.
     if (p.lane !== "") return { error: null };
     return { error: (await table().delete().match(cell)).error };
   }

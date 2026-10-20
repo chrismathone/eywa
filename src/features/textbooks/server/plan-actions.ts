@@ -325,7 +325,7 @@ export async function deleteClassTextbookPlan(
   // ⚠️ 0268a 미적용 DB면 `slot_picks` 없이 다시 읽는다([[#95]]) — 그때 남는 배정은 모든 칸을 쓰는 것으로 본다.
   const from = plan.startDate.slice(0, 10) > kstToday() ? plan.startDate.slice(0, 10) : kstToday();
   let others: { textbook_id: unknown; slot_picks?: unknown }[] = [];
-  // 평시 배정이면 줄을 안 지워도 그 교재의 줄 표식(0381a)은 지운다(`clearPlanLines` `withLines`) — 남는 배정을 알아야 한다.
+  // 평시 배정이면 줄을 안 지워도 그 교재의 줄 표식(0382a)은 지운다(`clearPlanLines` `withLines`) — 남는 배정을 알아야 한다.
   const clearsMarkers = opts.withLines || plan.termMode === "regular";
   if (clearsMarkers) {
     const q = (cols: string) =>
@@ -1091,7 +1091,7 @@ export type LessonShiftResult =
  * 🔑 **토글이 아니다** — 두 번 누르면 두 칸 밀린다. 되돌리기는 반대 버튼이다.
  * `kind: null`은 표식만 지운다(옛 호출 호환 — 줄은 안 건드린다).
  * 🔑 **줄마다**(원장 2026-10-20 *"수업이 2개면 각각 미룸, 당김"*) — `lineId`를 주면 그 줄의 교재 한 차수만
- *    움직인다(줄 표식 0381a). 같은 칸의 다른 줄은 제자리다. 없으면 옛 화면의 교시 통째.
+ *    움직인다(줄 표식 0382a). 같은 칸의 다른 줄은 제자리다. 없으면 옛 화면의 교시 통째.
  * 🔑 **계획만 있는 칸의 당김**(원장 2026-10-20) — `fill: true`. 그 칸의 미룸을 걷어 뒤 수업이 올라와 채운다
  *    (아무 차수도 버리지 않는다 — 줄 당김은 누른 줄을 지운다).
  */
