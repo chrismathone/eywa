@@ -1,5 +1,6 @@
 /* 학생 계획 카드(원장 2026-10-20 카드 시안) — 면은 흰색, 구분은 테두리, 진도는 네이비, 밀린 차시는 빨간 빗금. */
 .card {
+  --exam-hatch: repeating-linear-gradient(135deg, color-mix(in srgb, var(--text-faint) 75%, var(--card)) 0 2px, transparent 2px 5px);
   --late-hatch: repeating-linear-gradient(135deg, color-mix(in srgb, var(--danger) 62%, var(--card)) 0 3px, color-mix(in srgb, var(--danger) 18%, var(--card)) 3px 6px);
   background: var(--card);
   border: 1px solid var(--line);
@@ -118,18 +119,31 @@
 .pop li[data-now] { color: var(--primary); font-weight: 700; }
 .pop em { display: block; margin-top: 8px; font-style: normal; color: var(--text-faint); }
 
-/* 기간 띠 — 회색 빗금 = 내신기간(진도 계획 멈춤), 검은 선 = 기준일 */
-.timeline {
-  --exam-hatch: repeating-linear-gradient(135deg, color-mix(in srgb, var(--text-faint) 70%, var(--card)) 0 2px, transparent 2px 5px);
-  position: relative; height: 8px; margin: 0 8px 26px; border-radius: 4px; background: var(--bg-soft);
+/* 교재 일정 — 달력 눈금 위 권마다 칸 + 아래 얇은 줄 = 내신기간(진도 멈춤). 레일과 같은 좌우 여백(8px). */
+.sched { margin: 2px 8px 16px; }
+.schedHead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-bottom: 6px; font-size: var(--text-xs); color: var(--text-faint); }
+.schedHead b { font-size: var(--text-sm); color: var(--text); font-weight: 700; }
+.schedBar { position: relative; height: 50px; }
+.schedBook {
+  position: absolute; top: 0; height: 38px; padding: 4px 6px; min-width: 0; overflow: hidden;
+  border: 1px solid var(--line); border-radius: 6px; background: var(--card); box-sizing: border-box;
+  display: flex; flex-direction: column; justify-content: center; gap: 1px; white-space: nowrap;
 }
-.exam { position: absolute; top: 0; bottom: 0; background: var(--exam-hatch); }
-.today { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--text); }
-.timeline small { position: absolute; top: 12px; font-size: var(--text-xs); color: var(--text-faint); white-space: nowrap; }
-.timeline small:nth-of-type(1) { left: 0; }
-.timeline small:nth-of-type(2) { left: 50%; transform: translateX(-50%); }
-.timeline small:nth-of-type(3) { right: 0; }
-.examKey { display: inline-block; width: 14px; height: 8px; margin-right: 4px; vertical-align: -1px; background: var(--exam-hatch); }
+.schedBook + .schedBook { margin-left: 2px; }
+.schedBook b { font-size: var(--text-xs); font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
+.schedBook small { font-size: 11px; color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; }
+.schedBook[data-state="done"] { background: color-mix(in srgb, var(--primary) 14%, var(--card)); border-color: color-mix(in srgb, var(--primary) 30%, var(--card)); }
+.schedBook[data-state="now"] { border: 2px solid var(--primary); }
+.schedBook[data-state="now"] b { color: var(--primary); }
+.schedBook[data-partial] { border-style: dashed; background: var(--bg-soft); }
+.examLane { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; border-radius: 3px; background: var(--bg-soft); }
+.examLane span { position: absolute; top: 0; bottom: 0; border-radius: 3px; background: var(--exam-hatch); }
+.schedToday { position: absolute; top: -4px; bottom: -2px; width: 2px; margin-left: -1px; background: var(--text); z-index: 2; pointer-events: none; }
+.examChips { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 6px; font-size: var(--text-xs); color: var(--text-faint); }
+.examChips > span { margin-right: 2px; }
+.examChips em { font-style: normal; padding: 1px 7px; border-radius: 99px; background: var(--bg-soft); color: var(--text-dim); }
+.examChips em[data-now] { background: var(--amber-soft); color: var(--amber); font-weight: 700; }
+.examKey { display: inline-block; width: 14px; height: 6px; margin-right: 4px; vertical-align: 1px; border-radius: 2px; background: var(--exam-hatch); }
 .examNote { font-size: var(--text-xs); color: var(--text-faint); }
 
 /* 최종 목표 권 */

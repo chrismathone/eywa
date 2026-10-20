@@ -21,6 +21,16 @@ export const BOOKS_PER_WINDOW = 2;
 
 export type BookOrder = { bookName: string; date: string };
 export type RoadBook = SeqBook & { startDate: string; finishDate: string; window: number };
+export type ScheduleBook = {
+  key: string;
+  title: string;
+  startDate: string;
+  finishDate: string;
+  lessonCount: number;
+  window: number;
+  /** 마감에 걸린 권이면 마감까지 나갈 차시(계획). */
+  byDeadline: number | null;
+};
 export type RoadmapStatus = "not-started" | "no-data" | "behind" | "on" | "ahead" | "done";
 export type RoadPosition = { key: string; title: string; lessonNo: number; total: number; date: string; unit: string };
 
@@ -30,6 +40,13 @@ export type BookRoadmap = {
   books: RoadBook[];
   /** 고를 수 있는 목표 권(시작 권부터 자동 목표 몇 권 뒤까지) — 예상 완료일과 함께. */
   choices: { key: string; title: string; finishDate: string }[];
+  /**
+   * 교재 일정 — 시작 권부터 **마감(중3 11월 말)까지 나가는 권 전부**(원장 2026-10-20 *"27년 11월 말까지 나가는 교재는
+   * 쭉 뽑아야함"*). 마감에 걸린 권도 넣고 `byDeadline`(마감까지 나갈 차시)을 붙인다. 목표를 마감 뒤로 고르면 목표까지.
+   */
+  schedule: ScheduleBook[];
+  /** 일정 띠의 끝 — 마감과 목표 완료일 중 늦은 날. */
+  scheduleEnd: string;
   target: { key: string; auto: boolean; autoKey: string };
   /** 중3 11월 말 — 자동 목표를 정한 마감. 고등·학년 미상·마감으로 못 정했으면 null. */
   deadline: string | null;
@@ -153,6 +170,16 @@ export function bookRoadmap(args: {
   const books = planned.slice(0, targetIdx + 1);
   const total = books.reduce((n, b) => n + b.lessonCount, 0);
   const endDate = books[books.length - 1]!.finishDate;
+  const shownDeadline = deadlineUsable ? deadline : null;
+  const overDeadline = shownDeadline ? planned.findIndex((b) => b.finishDate > shownDeadline) : -1;
+  const lastIdx = Math.max(targetIdx, overDeadline);
+  const schedule: ScheduleBook[] = planned.slice(0, lastIdx + 1).map((b) => ({
+    key: b.key, title: b.title, startDate: b.startDate, finishDate: b.finishDate, lessonCount: b.lessonCount, window: b.window,
+    byDeadline: shownDeadline && b.finishDate > shownDeadline && b.startDate <= shownDeadline
+      ? Math.round((b.lessonCount * workdays(b.startDate, shownDeadline)) / Math.max(1, workdays(b.startDate, b.finishDate)))
+      : null,
+  }));
+  const scheduleEnd = shownDeadline && shownDeadline > endDate ? shownDeadline : endDate;
 
   let plannedLessons = 0;
   for (const b of books) {
@@ -177,6 +204,8 @@ export function bookRoadmap(args: {
     series: seriesOfKey(opener.key)!,
     books,
     choices: planned.map((b) => ({ key: b.key, title: b.title, finishDate: b.finishDate })),
+    schedule,
+    scheduleEnd,
     target: { key: books[books.length - 1]!.key, auto: targetIdx === autoIdx && overrideIdx < 0, autoKey: planned[autoIdx]!.key },
     deadline: deadlineUsable ? deadline : null,
     deadlinePassed: deadline != null && !deadlineUsable,
@@ -184,7 +213,7 @@ export function bookRoadmap(args: {
     endDate,
     orderDate: opener.date,
     orderTitle: opener.book.title,
-    exams: exams.filter((p) => p.to >= start && p.from <= endDate),
+    exams: exams.filter((p) => p.to >= start && p.from <= scheduleEnd),
     examNow: ref >= start && ref <= endDate ? examOn(exams, ref) : null,
     total,
     done,
