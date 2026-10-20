@@ -10,7 +10,7 @@ begin
   if not found or not exists(select 1 from public.users where id=actor and tenant_id=c.tenant_id and status='active') then
     raise exception using errcode='42501', message='이 작업을 처리할 권한이 없습니다';
   end if;
-  lvl := public.auth_menu_access('consultations');
+  lvl := public.management_agent_access();
   select * into s from public.student_consultations where id=c.consultation_id and tenant_id=c.tenant_id for share;
   if coalesce(lvl,'none') not in ('full','scoped') or (lvl='scoped' and (s.id is null or s.counselor_id is distinct from actor)) then
     raise exception using errcode='42501', message='상담 처리 권한이 없습니다';

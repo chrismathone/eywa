@@ -2,7 +2,7 @@ begin;
 alter table public.management_notion_outbox add column creation_started boolean not null default false;
 grant select on public.management_notion_outbox to authenticated;
 create policy management_notion_read on public.management_notion_outbox for select to authenticated
-  using (tenant_id=public.auth_tenant_id() and (select public.auth_menu_access('consultations'))='full');
+  using (tenant_id=public.auth_tenant_id() and (select public.management_agent_access())='full');
 
 -- One external writer per academy; crashed sends are reconciled before any new creation.
 create or replace function public.management_notion_claim(p_tenant uuid)
@@ -29,7 +29,7 @@ begin
   select * into c from public.management_cases where id=p_id and tenant_id=public.auth_tenant_id() for update;
   if not found or not exists(select 1 from public.users where id=auth.uid() and tenant_id=c.tenant_id and status='active') then
     raise exception using errcode='42501',message='처리 권한이 없습니다'; end if;
-  lvl := public.auth_menu_access('consultations');
+  lvl := public.management_agent_access();
   if coalesce(lvl,'none') not in ('full','scoped') or not public.management_case_readable(c.tenant_id,c.consultation_id) then
     raise exception using errcode='42501',message='처리 권한이 없습니다'; end if;
   if not exists(select 1 from public.tenant_settings where tenant_id=c.tenant_id

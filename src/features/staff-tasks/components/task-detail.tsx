@@ -53,10 +53,10 @@ export function TaskDetail({ taskId, onBack, onNavigate }: { taskId: string; onB
               ))}
             </ol>
           </section>
-          {data.item.link && data.item.status === "open" ? (
+          {data.item.link ? (
             <WindowLink href={data.item.link} onNavigate={onNavigate}
               className="bg-primary text-primary-foreground inline-flex h-(--control-h) items-center rounded-lg px-4 text-sm font-bold">
-              처리하러 가기
+              {data.item.status === "open" ? "처리하러 가기" : "원본·처리 결과 보기"}
             </WindowLink>
           ) : null}
         </div>

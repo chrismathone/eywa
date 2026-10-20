@@ -1,5 +1,5 @@
 import "server-only";
-import { fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { StaffTaskEvent, StaffTaskFilter, StaffTaskItem, StaffTaskList, StaffTaskPerson, StaffTaskStatus } from "../kinds";
 
@@ -28,22 +28,27 @@ export async function countOpenTasks(tenantId: string, userId?: string): Promise
 
 async function names(tenantId: string, ids: readonly string[]): Promise<Map<string, string>> {
   if (!ids.length) return new Map();
-  const { data, error } = await createAdminClient().from("users").select("id, display_name").eq("tenant_id", tenantId).in("id", [...new Set(ids)]);
-  if (error) throw new Error(`직원 이름: ${error.message}`);
-  return new Map((data ?? []).map((u) => [u.id as string, ((u.display_name as string | null) ?? "").trim() || "직원"]));
+  const data = await fetchInChunks<{ id: string; display_name: string | null }>([...new Set(ids)],
+    (chunk) => createAdminClient().from("users").select("id, display_name").eq("tenant_id", tenantId).in("id", chunk));
+  return new Map(data.map((u) => [u.id, (u.display_name ?? "").trim() || "직원"]));
 }
 
 const person = (map: Map<string, string>, id: string | null): StaffTaskPerson | null => (id ? { id, name: map.get(id) ?? "퇴사한 직원" } : null);
 
 export async function listTasks(args: {
   tenantId: string; assigneeId: string | null; filter: StaffTaskFilter; kind?: string | null; page: number;
+  /** Server-derived source ids only; callers chunk to at most 100. Empty means no results. */
+  subjectIds?: readonly string[];
 }): Promise<StaffTaskList> {
-  const admin = createAdminClient();
   const page = Math.max(0, Math.floor(args.page));
+  if (args.subjectIds && !args.subjectIds.length) return { items: [], total: 0, page, pageSize: TASK_PAGE_SIZE };
+  if (args.subjectIds && (!args.kind || args.subjectIds.length > 100)) throw new Error("할 일 조회 범위를 확인해 주세요.");
+  const admin = createAdminClient();
   const embed = args.assigneeId ? ", staff_task_assignees!staff_task_assignees_task_id_fkey!inner(user_id)" : "";
   let q = admin.from("staff_tasks").select(`${COLUMNS}${embed}`, { count: "exact" }).eq("tenant_id", args.tenantId);
   if (args.assigneeId) q = q.eq("staff_task_assignees.user_id", args.assigneeId);
   if (args.kind) q = q.eq("kind", args.kind);
+  if (args.subjectIds) q = q.in("subject_id", [...args.subjectIds]);
   const nowIso = new Date().toISOString();
   if (args.filter === "open") q = q.eq("status", "open").order("due_at", { ascending: true, nullsFirst: false });
   else if (args.filter === "late") q = q.eq("status", "open").lt("due_at", nowIso).order("due_at", { ascending: true });
@@ -53,10 +58,9 @@ export async function listTasks(args: {
   if (error) throw new Error(`할 일 목록: ${error.message}`);
   const rows = (data ?? []) as unknown as Row[];
   const ids = rows.map((r) => r.id);
-  const { data: links, error: linkError } = ids.length
-    ? await admin.from("staff_task_assignees").select("task_id, user_id").eq("tenant_id", args.tenantId).in("task_id", ids)
-    : { data: [], error: null };
-  if (linkError) throw new Error(`할 일 담당: ${linkError.message}`);
+  const links = await fetchAllPagedInChunks<{ task_id: string; user_id: string }>(ids, (part, from, to) =>
+    admin.from("staff_task_assignees").select("task_id, user_id").eq("tenant_id", args.tenantId).in("task_id", part)
+      .order("task_id").order("user_id").range(from, to));
   const byTask = new Map<string, string[]>();
   for (const l of (links ?? []) as { task_id: string; user_id: string }[]) byTask.set(l.task_id, [...(byTask.get(l.task_id) ?? []), l.user_id]);
   const nameMap = await names(args.tenantId, [...[...byTask.values()].flat(), ...rows.map((r) => r.closed_by).filter((v): v is string => !!v)]);

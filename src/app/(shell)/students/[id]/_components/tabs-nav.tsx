@@ -4,6 +4,7 @@ import { FaceTabs, type Face } from "@/components/face-tabs";
 // 순서(ijw): 개요·수업·성적·진도·출결·상담·메모·수납·타임라인. (교재 탭은 미이식.)
 export const STUDENT_TABS = [
   { key: "overview", label: "개요" },
+  { key: "care", label: "관리 요약" },
   { key: "classes", label: "수업" },
   { key: "grades", label: "성적" },
   // 인재원 단어 학습·시험(원장 2026-09-21: 일반 성적과 분리) — 짝이 걸린 학생에게만 보인다(showSrs).
