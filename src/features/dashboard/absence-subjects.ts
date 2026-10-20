@@ -52,19 +52,10 @@ function isNewer(a: AbsenceSubjectRow, b: AbsenceSubjectRow): boolean {
  * 정렬은 (수업일, 반) 오름차순 — 사유 요약이 실행마다 흔들리지 않게(결정론).
  */
 export function effectiveAbsences(rows: readonly AbsenceSubjectRow[]): AbsenceSubjectRow[] {
-  // ① 유효 행 — (학생,반,수업일,교시)별 최신 1건. 교시 null은 그 자체로 하나의 그룹(RPC의 distinct on과 동일).
-  const effective = new Map<string, AbsenceSubjectRow>();
-  for (const row of rows) {
-    const key = `${row.student_id} ${row.class_id} ${row.session_date} ${row.slot_start ?? ""}`;
-    const prev = effective.get(key);
-    if (!prev || isNewer(row, prev)) effective.set(key, row);
-  }
-
   // ② 결석인 유효 행의 (반, 수업일) 쌍 하나당 한 건. 같은 날 두 반을 빠지면 2회(0221a 주석).
   const seenPairs = new Set<string>();
   const out: AbsenceSubjectRow[] = [];
-  for (const row of effective.values()) {
-    if (row.status !== "absent") continue;
+  for (const row of effectiveAbsentCells(rows)) {
     const pair = `${row.student_id} ${row.class_id} ${row.session_date}`;
     if (seenPairs.has(pair)) continue; // 교시가 여럿이어도 그 반의 그날은 1회
     seenPairs.add(pair);
@@ -73,6 +64,22 @@ export function effectiveAbsences(rows: readonly AbsenceSubjectRow[]): AbsenceSu
   return out.sort(
     (a, b) => a.session_date.localeCompare(b.session_date) || a.class_id.localeCompare(b.class_id),
   );
+}
+
+/**
+ * ① 유효 행 중 **결석인 칸 전부** — (학생,반,수업일,교시)별 최신 1건(recorded_at desc, id desc)만 보고 그중 결석인 것.
+ * 교시마다 하나라 같은 반·같은 날이 여럿일 수 있다 — 세는 단위로 접는 것은 `effectiveAbsences`(위)가 한다.
+ * 운영실 '최근 결석'이 결석 칸마다 그 교시의 담당 선생님을 붙이려고 이 단계를 따로 쓴다(세는 규칙은 그대로 한 벌).
+ */
+export function effectiveAbsentCells<T extends AbsenceSubjectRow>(rows: readonly T[]): T[] {
+  // 교시 null은 그 자체로 하나의 그룹(RPC의 distinct on과 동일).
+  const effective = new Map<string, T>();
+  for (const row of rows) {
+    const key = `${row.student_id} ${row.class_id} ${row.session_date} ${row.slot_start ?? ""}`;
+    const prev = effective.get(key);
+    if (!prev || isNewer(row, prev)) effective.set(key, row);
+  }
+  return [...effective.values()].filter((row) => row.status === "absent");
 }
 
 export function countAbsencesBySubject(rows: readonly AbsenceSubjectRow[]): AbsenceSubjectCounts {

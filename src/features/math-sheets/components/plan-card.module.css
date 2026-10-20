@@ -4,8 +4,10 @@
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 14px;
-  overflow: hidden;
+  /* 차시 목록 팝업이 카드 밖으로 나올 수 있게 — 아래 모서리는 왼쪽 라벨 칸이 직접 둥근다. */
+  overflow: visible;
 }
+.card > .sec:last-child .lab { border-bottom-left-radius: 13px; }
 .card[data-ended] { opacity: 0.55; }
 .top {
   display: flex;
@@ -47,10 +49,11 @@
 .empty { font-size: var(--text-sm); color: var(--text-faint); }
 
 /* 전체 목표 레일 — 네이비 실제 · 빨간 빗금 = 계획보다 밀린 구간 · 검은 선 = 오늘 계획 */
-.rail { position: relative; height: 8px; margin: 32px 8px 10px; border-radius: 99px; background: var(--bg-soft); }
+.rail { position: relative; height: 8px; margin: 32px 8px 34px; border-radius: 99px; background: var(--bg-soft); }
 .fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 99px; background: var(--primary); }
 .late { position: absolute; top: 0; bottom: 0; background: var(--late-hatch); border-radius: 0 99px 99px 0; }
 .ahead { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--primary) 35%, var(--card)); }
+.fill, .late, .ahead, .plan, .dot { z-index: 2; pointer-events: none; }
 .plan { position: absolute; top: -6px; bottom: -6px; width: 2px; margin-left: -1px; background: var(--text); }
 .plan em { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 3px; font-style: normal; font-size: var(--text-xs); color: var(--text-dim); white-space: nowrap; }
 .dot { position: absolute; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; background: var(--card); border: 4px solid var(--primary); }
@@ -82,6 +85,73 @@
 .t[data-kind="next"] { border-left-color: var(--green); background: var(--green-soft); }
 .open { border: 1px solid var(--line); border-radius: 8px; background: var(--card); font-size: var(--text-sm); font-weight: 600; cursor: pointer; }
 .open:hover { border-color: var(--primary); color: var(--primary); }
+
+/* 전체 목표 — 제목 줄 옆 사실(원장 "해당 기간 및 수업을 해당 위치 옆으로") */
+.goalRow { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; min-width: 0; }
+.goalRow h4 { font-size: var(--text-base); font-weight: 700; }
+.inlineFacts { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: var(--text-sm); color: var(--text-dim); }
+.inlineFacts b { margin-left: 5px; color: var(--text); font-weight: 700; }
+.goalRow .right { margin-left: auto; }
+.examNow { margin-top: 10px; padding: 6px 10px; border-radius: 8px; background: var(--amber-soft); color: var(--amber); font-size: var(--text-sm); font-weight: 600; }
+
+/* 권 구간 — 마우스를 올리면 차시별 소단원 */
+.hover { position: relative; outline: none; }
+.hover:focus-visible { box-shadow: 0 0 0 2px var(--primary); border-radius: 6px; }
+.seg { position: absolute; top: -8px; bottom: -26px; z-index: 1; cursor: help; }
+.seg::before { content: ""; position: absolute; left: -1px; top: 8px; width: 2px; height: 8px; background: var(--card); z-index: 3; }
+.seg:first-child::before { display: none; }
+.seg > i { position: absolute; left: 2px; right: 2px; bottom: 0; text-align: center; font-style: normal; font-size: var(--text-xs); color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.seg:hover > i, .seg:focus-visible > i { color: var(--primary); font-weight: 700; }
+.bk.hover { cursor: help; }
+.pop {
+  display: none; position: absolute; top: calc(100% + 6px); left: 0; z-index: 30; width: min(300px, calc(100vw - 48px)); max-height: 340px; overflow: auto;
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--card);
+  box-shadow: 0 10px 28px rgb(0 0 0 / 0.14); text-align: left; font-size: var(--text-xs); color: var(--text); white-space: normal;
+}
+.pop[data-align="end"] { left: auto; right: 0; }
+.hover:hover > .pop, .hover:focus-within > .pop { display: block; }
+.pop > b { display: block; font-size: var(--text-sm); }
+.pop > small { display: block; margin-top: 2px; color: var(--text-faint); }
+.pop ol { display: grid; gap: 4px; margin: 8px 0 0; padding: 0; list-style: none; }
+.pop li { display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 6px; line-height: 1.45; }
+.pop li span { color: var(--text-faint); font-weight: 600; }
+.pop li[data-now] { color: var(--primary); font-weight: 700; }
+.pop em { display: block; margin-top: 8px; font-style: normal; color: var(--text-faint); }
+
+/* 기간 띠 — 회색 빗금 = 내신기간(진도 계획 멈춤), 검은 선 = 기준일 */
+.timeline {
+  --exam-hatch: repeating-linear-gradient(135deg, color-mix(in srgb, var(--text-faint) 70%, var(--card)) 0 2px, transparent 2px 5px);
+  position: relative; height: 8px; margin: 0 8px 26px; border-radius: 4px; background: var(--bg-soft);
+}
+.exam { position: absolute; top: 0; bottom: 0; background: var(--exam-hatch); }
+.today { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--text); }
+.timeline small { position: absolute; top: 12px; font-size: var(--text-xs); color: var(--text-faint); white-space: nowrap; }
+.timeline small:nth-of-type(1) { left: 0; }
+.timeline small:nth-of-type(2) { left: 50%; transform: translateX(-50%); }
+.timeline small:nth-of-type(3) { right: 0; }
+.examKey { display: inline-block; width: 14px; height: 8px; margin-right: 4px; vertical-align: -1px; background: var(--exam-hatch); }
+.examNote { font-size: var(--text-xs); color: var(--text-faint); }
+
+/* 최종 목표 권 */
+.targetNote { display: block; margin-top: 2px; font-size: var(--text-xs); color: var(--text-faint); }
+.linkButton { margin-left: 8px; color: var(--primary); font-weight: 700; cursor: pointer; }
+.linkButton:hover { text-decoration: underline; }
+.targetLock { margin-left: 8px; }
+.targetForm { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px; margin-top: 6px; }
+.targetForm select { height: 32px; max-width: 100%; padding: 0 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); font-size: var(--text-sm); color: var(--text); }
+.targetForm button { height: 32px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); font-size: var(--text-sm); font-weight: 600; cursor: pointer; }
+.targetForm button[type="submit"] { border-color: var(--primary); background: var(--primary); color: #fff; }
+.targetForm [role="alert"] { flex-basis: 100%; text-align: right; color: var(--danger); }
+
+/* 교재 이름 탭(원장 "여러교재쓰면 옆에 교재이름대로 나열해서 클릭해서") */
+.bookTabs { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 6px; }
+.bookTabs button { height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); font-size: var(--text-sm); font-weight: 600; color: var(--text-dim); cursor: pointer; }
+.bookTabs button:hover { border-color: var(--primary); color: var(--primary); }
+.bookTabs button[aria-selected="true"] { border-color: var(--primary); background: var(--primary); color: #fff; }
+.records { display: grid; gap: 6px; margin: 10px 0 0; padding: 0; list-style: none; font-size: var(--text-sm); }
+.records li { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 10px; align-items: baseline; }
+.records time { color: var(--text-faint); font-weight: 600; }
+.records small { color: var(--text-faint); font-size: var(--text-xs); }
 
 @media (max-width: 760px) {
   .sec { grid-template-columns: 1fr; }

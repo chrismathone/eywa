@@ -8,7 +8,7 @@ const snap = (sections: Record<string, unknown>) => ({ today: "2026-10-01", subj
 describe("요약형 값 = 카드가 그리는 값", () => {
   it("KPI는 카드 숫자와 같은 배열을 센다", () => {
     expect(summaryOf("kpi:intake", snap({ intake: ok([{ id: "1" }, { id: "2" }]) }))).toMatchObject({ value: "2", unit: "건" });
-    expect(summaryOf("kpi:absent", snap({ absent: ok({ date: "2026-09-30", absent: [{}], partial: [] }) }))).toMatchObject({ value: "1", danger: true });
+    expect(summaryOf("kpi:absent", snap({ absent: ok({ from: "2026-09-23", to: "2026-09-29", students: [{}] }) }))).toMatchObject({ value: "1", detail: "최근 7일 결석", danger: true });
   });
 
   it("이번 달 수납 — 금액 옵션이 꺼지면 건수만, 켜면 미수 잔액", () => {

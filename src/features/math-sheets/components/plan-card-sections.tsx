@@ -3,6 +3,8 @@
 import type { BookWindow } from "@/features/textbooks/book-window";
 import { bookSlices, lessonLabelAt, nextLessonLabel, shortDay, volumeOf } from "../lib/plan-card";
 import { learningBlockLabel } from "../lib/learning-label";
+import { BookHover } from "./book-hover";
+import { shortBook } from "./roadmap-goal";
 import css from "./plan-card.module.css";
 
 /**
@@ -17,10 +19,12 @@ export const SHOW_BOOK_PLAN = false;
 const pct = (n: number, total: number) => `${Math.max(0, Math.min(100, (n / Math.max(1, total)) * 100))}%`;
 const short = (date: string) => date.slice(5).replace("-", ".");
 
-function windowName(w: BookWindow) {
-  const first = w.books[0]!.title;
-  const last = w.books[w.books.length - 1]!.title;
-  return w.books.length > 1 ? `${first.replace(/\s*\d+권$/, "")} ${volumeOf(first)}~${volumeOf(last)}권` : first;
+/** `가우스 중2-2 3~4권` · 학기를 넘으면 `가우스 중2-2 4권 → 중3-1 1권`. */
+export function windowName(w: BookWindow) {
+  const first = w.books[0]!, last = w.books[w.books.length - 1]!;
+  if (w.books.length === 1) return first.title;
+  const series = first.title.replace(/\s*\d+권$/, "");
+  return last.title.startsWith(series) ? `${series} ${volumeOf(first.title)}~${volumeOf(last.title)}권` : `${first.title} → ${shortBook(last.key, last.title)}`;
 }
 
 function windowState(w: BookWindow) {
@@ -41,15 +45,22 @@ export function BookSection({ w }: { w: BookWindow }) {
   const atBook = w.position ? w.books.findIndex((b) => b.title === w.position!.title) : -1;
   return (
     <>
-      <div className={css.row}><h4>{windowName(w)}</h4><span className={css.right}>{short(w.startDate)} – {short(w.endDate)}</span></div>
+      <div className={css.row}>
+        <h4>{windowName(w)}</h4>
+        <span className={css.right} title={w.examDays ? `내신기간 ${w.examDays}일은 진도를 나가지 않아 그만큼 늘었습니다` : undefined}>
+          {short(w.startDate)} – {short(w.endDate)}{w.examDays ? <small className={css.examNote}> · 내신 {w.examDays}일 제외</small> : null}
+        </span>
+      </div>
       <div className={css.books}>
         {w.books.map((b, i) => {
           const s = slices[i]!;
           const note = i === atBook ? `현재 ${w.position!.lessonNo}차시` : s.done >= b.lessons ? "완료" : s.done === 0 && i > Math.max(0, atBook) ? "다음 교재" : `${s.done}차시 진행`;
+          const crossTerm = !b.title.startsWith(w.books[0]!.title.replace(/\s*\d+권$/, ""));
           return (
-            <div key={b.id} className={css.bk}>
+            <BookHover key={b.id} className={css.bk} title={b.title} lessonUnits={b.lessonUnits} lessonCount={b.lessons}
+              at={i === atBook ? w.position!.lessonNo : null} align={i > 0 ? "end" : "start"}>
               <div className={css.row}>
-                <h5>{volumeOf(b.title)}권{b.unit ? ` · ${b.unit}` : ""}</h5>
+                <h5>{crossTerm ? shortBook(b.key, b.title) : `${volumeOf(b.title)}권`}{b.unit ? ` · ${b.unit}` : b.listed ? "" : " · 교재목록 미등록"}</h5>
                 <span className={css.right}><b>{s.done}</b>/{b.lessons}차시</span>
               </div>
               <div className={css.bar} title={s.late ? `밀린 차시 ${s.late}` : undefined}>
@@ -57,7 +68,7 @@ export function BookSection({ w }: { w: BookWindow }) {
                 {s.late ? <s style={{ left: pct(s.done, b.lessons), width: pct(s.late, b.lessons) }} /> : null}
               </div>
               <small><span>{note}</span><span>{s.late ? <em>{s.late}차시 밀림</em> : `${b.lessons - s.done}차시 남음`}</span></small>
-            </div>
+            </BookHover>
           );
         })}
       </div>
@@ -66,7 +77,7 @@ export function BookSection({ w }: { w: BookWindow }) {
         {SHOW_BOOK_PLAN ? (
           <span>{st.text}{st.behind ? <> · <em>{st.behind}차시 보완 필요</em></> : null}</span>
         ) : (
-          <span>{st.notStarted ? st.text : `${short(w.orderDate)} 주문`}</span>
+          <span>{st.notStarted ? st.text : w.orderDate ? `${short(w.orderDate)} 주문` : "앞 창에서 자동으로 이어짐"}</span>
         )}
       </div>
     </>

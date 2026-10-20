@@ -44,7 +44,7 @@ export const FIXTURE = {
     intake: ok([{ id: "i1", name: "박서준", time: "10:12" }]),
     enrolledToday: ok([]),
     firstClass: ok([{ studentId: "s1", name: "이하은", kind: "first", subjects: ["math"] }]),
-    absent: ok({ date: "2026-09-30", absent: [], partial: [] }),
+    absent: ok({ from: "2026-09-23", to: "2026-09-29", students: [] }),
     attendance: ok({ date: "2026-10-01", total: 120, present: 100, absent: 8, late: 6, excused: 4, rate: 88 }),
     processing: ok([]),
     attendanceTrend: ok(Array.from({ length: 14 }, (_, i) => ({ date: `2026-09-${String(18 + i).padStart(2, "0")}`, rate: 85 + (i % 5), total: 100 }))),

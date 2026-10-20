@@ -20,6 +20,7 @@ import {
   notYetStartedStudentIds,
   enrolledSubjectCounts,
   gradeSplit,
+  schoolLevelLabel,
   summarizePrograms,
 } from "@/features/students/enrollment/enrolled-composition";
 import { getWithdrawalsInWindow, type WindowWithdrawal } from "@/features/withdrawals/server/window";
@@ -41,8 +42,8 @@ import { getIntakeOnDay } from "@/features/enrollment/server/intake-day";
 import { getFirstClassStudents } from "@/features/dashboard/server/day-arrivals-query";
 import { getEnrolledToday } from "@/features/dashboard/server/enrolled-today";
 import { loadEnrolledTrend, loadEnrolledTrendSlicer } from "./enrolled-trend-server";
-import { getScopedAbsentStudents } from "@/features/dashboard/server/absent-students";
-import { absentKpiDate } from "./kpi-links";
+import { getScopedRecentAbsences } from "@/features/dashboard/server/recent-absences";
+import { recentAbsenceRange } from "./kpi-links";
 import { loadUpcomingMakeup } from "@/features/dashboard/server/makeup-upcoming";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { getRecentAnnouncements } from "@/features/dashboard/server/queries";
@@ -56,7 +57,6 @@ import {
   type EffectiveAttendanceRecord,
 } from "@/features/attendance/effective-records";
 import { attendanceOverview, attendanceWindowStart } from "./attendance-day";
-import { getGradeLevel, isPreschoolGrade } from "@/lib/format/school-grade";
 import { summarizeInvoices } from "@/features/billing/calc";
 import {
   classifyInvoice,
@@ -191,14 +191,7 @@ async function students(
       subjects: Object.entries(counts.bySubject)
         .map(([label, value]) => ({ label, value }))
         .sort((a, b) => b.value - a.value),
-      levels: distribution(
-        visible.map((r) =>
-          isPreschoolGrade(r.grade)
-            ? "미취학"
-            : ({ 초: "초등", 중: "중등", 고: "고등" }[getGradeLevel(r.grade)] ??
-              (r.grade ? "기타" : "미입력")),
-        ),
-      ),
+      levels: distribution(visible.map((r) => schoolLevelLabel(r.grade))),
       schools: distribution(visible.map((r) => r.school)),
       schoolGroups: schoolsByLevel(visible, composition.programs, composition.active),
       // 동시 수강 = 영어 + 수학(원장 2026-09-11 재정의) — gradeSplit 보라 합계와 같은 subjectMixOf 판정.
@@ -324,15 +317,23 @@ async function firstClasses(
  * 퇴원 칸은 실제 퇴원만 센다(getWithdrawalsInWindow: status=withdrawn · 시스템 정리 제외).
  * 과목 종료 후 재원 중인 학생은 인원 감소가 아니므로 추이에 더하지 않는다. 등록 칸은 강사 스코프를 건다.
  */
-async function changes(
+export async function loadMonthlyChanges(
   today: string,
   scope: TeacherScope | null,
   withdrawalRows: Promise<WindowWithdrawal[]>,
   /** 과목별 값을 만들 때만(과목 관리자·미리보기 원본) 등록 학생의 수강 과목을 함께 읽는다. */
   withSubjects: boolean,
+  /** 몇 달 — 운영실 카드 6 · 원생 통계 화면은 더 길게. `withdrawalRows`도 같은 창으로 받아 와야 한다. */
+  months = 6,
+  /**
+   * 과목을 모르는 등록·퇴원(반 배정 전 등록 · 끝난 수강이 없는 옛 퇴원)을 과목별 값에 넣나 — 운영실 과목 관리자 카드는 넣는다
+   * (모름은 모두에게, 원장 2026-10-14). 원생 통계(과거 흐름)는 **빼고** 센다 — 옛 퇴원생 대부분이 수강 행이 없어 모든 과목 퇴원으로
+   * 들어가면 과목 흐름이 학원 전체 퇴원과 같아진다(리뷰 2026-10-20: 2025년 퇴원 226건 전부가 '모름').
+   */
+  unknownToAll = true,
 ): Promise<(pred: SlicePredicate | null) => MonthChange[]> {
   const db = await createClient();
-  const fromDate = `${monthKeys(today)[0]}-01`;
+  const fromDate = `${monthKeys(today, months)[0]}-01`;
   const [enrolled, withdrawn] = await Promise.all([
     fetchAllPaged<{ id: string; enrolled_at: string; notes: string | null; withdrawal_metadata: unknown }>((from, to) =>
       db
@@ -367,11 +368,14 @@ async function changes(
   }
   const exitSubjects = (r: WindowWithdrawal) =>
     r.exitClasses.length ? r.exitClasses.map((c) => c.subject) : r.lastClassSubject ? [r.lastClassSubject] : [];
+  const inSlice = (pred: SlicePredicate, subjects: readonly (string | null | undefined)[]) =>
+    unknownToAll ? inSliceAny(pred, subjects) : subjects.some((subject) => !!subject?.trim() && pred(subject));
   return (pred) =>
     monthlyChanges(
       today,
-      joined.filter((r) => !pred || inSliceAny(pred, subjectsOf.get(r.id) ?? [])).map((r) => r.enrolled_at),
-      withdrawn.filter((r) => !pred || inSliceAny(pred, exitSubjects(r))).map((r) => r.withdrawnAt),
+      joined.filter((r) => !pred || inSlice(pred, subjectsOf.get(r.id) ?? [])).map((r) => r.enrolled_at),
+      withdrawn.filter((r) => !pred || inSlice(pred, exitSubjects(r))).map((r) => r.withdrawnAt),
+      months,
     );
 }
 
@@ -727,9 +731,9 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
     canAccess(user.systemRole, key, matrix),
   );
   const today = kstToday();
-  // 🔴 '전일 결석'만 **어제**를 본다(원장 2026-09-12) — 오늘은 수업 전이면 결석을 알 수 없다. 갱신(서버 액션)마다
-  //    다시 계산되므로 자정이 지나면 기준일도 함께 넘어간다.
-  const absentDate = absentKpiDate(today);
+  // 🔴 '최근 결석'은 **어제까지 7일**(원장 2026-10-20) — 오늘은 수업 전이면 결석을 알 수 없다. 갱신(서버 액션)마다
+  //    다시 계산되므로 자정이 지나면 창도 함께 넘어간다.
+  const absentRange = recentAbsenceRange(today);
   const settingsPromise = getTenantSettings();
   // 🔑 B1 — 강사 스코프를 **한 번만** 푼다. 서버 액션 갱신에선 React cache가 안 묶어서 영역마다 부르면
   //    getCurrentUser가 그만큼 users를 다시 읽는다. 영역엔 푼 값을 넘긴다.
@@ -842,7 +846,7 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
     });
   }
   addSliced("students", ["students"], async () => students(await scopePromise, settingsPromise));
-  addSliced("changes", ["students"], async () => changes(today, await scopePromise, withdrawalRows, sliceSets.length > 0));
+  addSliced("changes", ["students"], async () => loadMonthlyChanges(today, await scopePromise, withdrawalRows, sliceSets.length > 0));
   // 과목 관리자 = 그 과목 반 수강이 그날 걸려 있던 재원생(원장 2026-10-14 *"재원생 추이도 마찬가지"*). 원본은 과목 값이 필요할 때만 받는다.
   addSliced("enrolledTrend", ["students"], async () => {
     if (await scopePromise) return () => null;
@@ -883,12 +887,9 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
       return { ...overview, rows: overview.rows.filter((row) => mine(row.classId)), later };
     };
   });
-  // 출석부 `?status=absent`와 같은 함수·같은 강사 스코프(teacher-axis) — 겸직 강사뷰면 그 강사가 가르치는 반만.
-  // 조회한 날을 `date`로 함께 실어 보낸다 — 카드·팝업·↗가 그 값을 읽어 셋이 같은 날을 말한다.
-  add("absent", ["attendance"], async () => ({
-    date: absentDate,
-    ...(await getScopedAbsentStudents(absentDate, await teacherIdPromise)),
-  }));
+  // 최근 결석 — 학생별 누적 결석 + 결석마다 그 수업 담당(teacher-axis) · 겸직 강사뷰면 그 강사가 가르치는 반만.
+  // 센 창을 `from/to`로 함께 실어 보낸다 — 카드·팝업이 그 값을 읽어 같은 기간을 말한다.
+  add("absent", ["attendance"], async () => getScopedRecentAbsences(absentRange, await teacherIdPromise));
   // 과목 관리자 = 그 과목 반의 출결 칸 · 그 과목 반의 처리 현황(원장 2026-10-14 2단계).
   addSliced("attendance", ["attendance"], async () => {
     const overview = (await history)!;

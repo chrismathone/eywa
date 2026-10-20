@@ -89,6 +89,82 @@ export function subjectTrendOf(
   });
 }
 
+/** 수강 구성 — 영어만 · 동시수강(영어+수학) · 수학만 · 기타 과목만. 미수강은 세지 않는다. */
+export type MixKey = "englishOnly" | "both" | "mathOnly" | "otherOnly";
+export const MIX_KEYS: readonly MixKey[] = ["englishOnly", "both", "mathOnly", "otherOnly"];
+
+export type TrendBreakdown = {
+  /** 과목 키 → 그날 그 과목 반 수강이 **걸려 있고 시작한** 재원생(두 과목이면 양쪽). */
+  bySubject: Record<string, TrendPoint[]>;
+  mix: Record<MixKey, TrendPoint[]>;
+  /** 재원생으로 세어지는데 그날 걸린 수강이 하나도 없는 학생 — 어느 과목에도 넣지 않는다(화면이 신뢰 구간을 가르는 데 쓴다). */
+  unknown: TrendPoint[];
+};
+
+/**
+ * **과목별 · 수강 구성 추이**(원장 2026-10-20 원생 통계) — 날짜 d에 재원생으로 세어지는 학생(`countedOn`)을 그날 **걸려 있고 시작한**
+ * 수강으로 가른다. 수강이 걸렸는지는 `subjectTrendOf`와 같은 규약(반이동은 종료일 전날까지 · 일반 종료는 종료일 포함 ·
+ * **오늘 점**은 종료일 없는 수강만 — KPI 조회와 같은 결).
+ * 🔴 `subjectTrendOf`(운영실 과목 관리자용)와 다른 점 = 그날 걸린 수강이 없는 학생을 **모든 과목에 넣지 않는다**. 통계 화면은
+ *    과목별 흐름을 보는 자리라, 수강 기록이 옮겨지지 않은 옛 퇴원생이 모든 과목에 한꺼번에 더해지면 없던 과목에 수십 명이 선다
+ *    (실측 2026-10-20: 국어·과학이 2025-02에 165명 → 2026-01에 0명). 그런 학생 수는 `unknown`으로 따로 돌려준다.
+ * 수강 구성: 영어 묶음과 수학 묶음이 둘 다면 동시수강, 하나면 영어만·수학만, 둘 다 없고 다른 과목만 있으면 기타 과목만.
+ * `groupOf` = 과목 묶음 판정(`subjectGroupOf` — 운영실 '동시 수강'과 같은 함수를 호출부가 넘긴다).
+ */
+export function breakdownTrendOf(
+  students: readonly TrendStudent[],
+  en: TrendEnrollments,
+  enrollments: readonly TrendEnrollment[],
+  points: readonly { key: string; label: string; date: string }[],
+  subjectKeys: readonly string[],
+  groupOf: (subject: string | null) => string | null,
+  today?: string,
+): TrendBreakdown {
+  const byStudent = new Map<string, TrendEnrollment[]>();
+  for (const e of enrollments) byStudent.set(e.studentId, [...(byStudent.get(e.studentId) ?? []), e]);
+  const out: TrendBreakdown = {
+    bySubject: Object.fromEntries(subjectKeys.map((k) => [k, [] as TrendPoint[]])),
+    mix: { englishOnly: [], both: [], mathOnly: [], otherOnly: [] },
+    unknown: [],
+  };
+  for (const p of points) {
+    const subjectCounts = new Map<string, number>();
+    const mixCounts: Record<MixKey, number> = { englishOnly: 0, both: 0, mathOnly: 0, otherOnly: 0 };
+    let unknown = 0;
+    for (const s of students) {
+      if (!countedOn(s, en, p.date)) continue;
+      const subjects = new Set<string>();
+      for (const e of byStudent.get(s.id) ?? []) {
+        const live = p.date === today ? !e.end : !isEnrollmentEndedOn(e.end, p.date, e.transferred);
+        if (!live || (e.start && e.start.slice(0, 10) > p.date) || !e.subject) continue;
+        subjects.add(e.subject);
+      }
+      if (subjects.size === 0) {
+        unknown++;
+        continue;
+      }
+      let english = false;
+      let math = false;
+      let other = false;
+      for (const subject of subjects) {
+        subjectCounts.set(subject, (subjectCounts.get(subject) ?? 0) + 1);
+        const group = groupOf(subject);
+        if (group === "english") english = true;
+        else if (group === "math") math = true;
+        else if (group) other = true;
+      }
+      if (english && math) mixCounts.both++;
+      else if (english) mixCounts.englishOnly++;
+      else if (math) mixCounts.mathOnly++;
+      else if (other) mixCounts.otherOnly++;
+    }
+    for (const k of subjectKeys) out.bySubject[k]!.push({ ...p, count: subjectCounts.get(k) ?? 0 });
+    for (const k of MIX_KEYS) out.mix[k].push({ ...p, count: mixCounts[k] });
+    out.unknown.push({ ...p, count: unknown });
+  }
+  return out;
+}
+
 const lastDay = (ym: string) => {
   const [y, m] = ym.split("-").map(Number);
   return new Date(Date.UTC(y!, m!, 0)).toISOString().slice(0, 10);
@@ -105,6 +181,23 @@ export function monthlyPoints(today: string, count = 12): { key: string; label: 
     const key = shift(month, i - count + 1);
     const m = Number(key.slice(5));
     return { key, label: m === 1 || i === 0 ? `${key.slice(2, 4)}.${m}월` : `${m}월`, date: key === month ? today : lastDay(key) };
+  });
+}
+
+/**
+ * 최근 N주 — 주마다 일요일(이번 주는 오늘). 원생 통계 화면의 '주별' 보기. 라벨 = `M/D`(그 주 마지막 날).
+ */
+export function weeklyPoints(today: string, count = 26): { key: string; label: string; date: string }[] {
+  const t = new Date(`${today}T00:00:00Z`);
+  // 이번 주 일요일(KST 날짜 문자열 기준 — 요일은 UTC 자정으로 계산해도 같다).
+  const sunday = new Date(t);
+  sunday.setUTCDate(t.getUTCDate() + ((7 - t.getUTCDay()) % 7));
+  return Array.from({ length: count }, (_, i) => {
+    const d = new Date(sunday);
+    d.setUTCDate(sunday.getUTCDate() - (count - 1 - i) * 7);
+    const iso = d.toISOString().slice(0, 10);
+    const date = iso > today ? today : iso;
+    return { key: iso, label: `${Number(iso.slice(5, 7))}/${Number(iso.slice(8, 10))}`, date };
   });
 }
 

@@ -1,6 +1,8 @@
 "use client";
 
 import { useMathTextbooks } from "./math-textbook-context";
+import { windowName } from "./plan-card-sections";
+import { shortBook } from "./roadmap-goal";
 import overview from "./learning-overview.module.css";
 import local from "./book-window.module.css";
 
@@ -30,8 +32,9 @@ export function BookWindowBar({ studentId, embedded = false }: { studentId: stri
   const w = ctx?.windows[studentId];
   if (!w || w.total === 0) return null;
   const first = w.books[0]!.title;
-  const last = w.books[w.books.length - 1]!.title;
-  const name = w.books.length > 1 ? `${first.replace(/\s*\d+권$/, "")} ${volume(first)}~${volume(last)}권` : first;
+  // 이름·묶음 라벨은 카드와 같은 함수 — 창이 학기를 넘으면(중2-2 4권 + 중3-1 1권) '4~1권'이 되지 않게.
+  const name = windowName(w);
+  const series = first.replace(/\s*\d+권$/, "");
 
   const done = w.done ?? 0;
   const notStarted = w.referenceDate < w.startDate;
@@ -53,7 +56,7 @@ export function BookWindowBar({ studentId, embedded = false }: { studentId: stri
     const offset = w.books.slice(0, bi).reduce((n, x) => n + x.lessons, 0);
     return {
       id: b.id,
-      label: `${volume(b.title)}권`,
+      label: b.title.startsWith(series) ? `${volume(b.title)}권` : shortBook(b.key, b.title),
       cells: Array.from({ length: b.lessons }, (_, i): { no: number; state: CellState } => {
         const at = offset + i + 1;
         return { no: i + 1, state: at <= done ? "done" : at <= planned ? "late" : "todo" };

@@ -21,13 +21,24 @@ const sections = {
     { studentId: "b", name: "나", kind: "first", subjects: ["english"] },
   ]),
   absent: ok({
-    date: "2026-09-30",
-    absent: [
-      { studentId: "a", name: "가", subject: "english", classes: [{ subject: "english", name: "E1" }, { subject: "math", name: "M1" }], preNotified: false, statuses: ["excused", "absent"] },
-      { studentId: "c", name: "다", subject: "english", classes: [{ subject: "english", name: "E3" }, { subject: "math", name: "M3" }], preNotified: false, statuses: ["excused"] },
-      { studentId: "b", name: "나", subject: "english", classes: [{ subject: "english", name: "E2" }], preNotified: true, statuses: ["absent"] },
+    from: "2026-09-23",
+    to: "2026-09-29",
+    students: [
+      { studentId: "b", name: "나", count: 3, unnotified: 0, absences: [
+        { date: "2026-09-24", classId: "e2", className: "E2", subject: "english", preNotified: true, teachers: [] },
+        { date: "2026-09-25", classId: "e2", className: "E2", subject: "english", preNotified: true, teachers: [] },
+        { date: "2026-09-26", classId: "e2", className: "E2", subject: "english", preNotified: true, teachers: [] },
+      ] },
+      { studentId: "a", name: "가", count: 2, unnotified: 2, absences: [
+        { date: "2026-09-24", classId: "e1", className: "E1", subject: "english", preNotified: false, teachers: [] },
+        { date: "2026-09-24", classId: "m1", className: "M1", subject: "math", preNotified: false, teachers: [] },
+      ] },
+      { studentId: "c", name: "다", count: 3, unnotified: 1, absences: [
+        { date: "2026-09-24", classId: "e3", className: "E3", subject: "english", preNotified: false, teachers: [] },
+        { date: "2026-09-25", classId: "m3", className: "M3", subject: "math", preNotified: true, teachers: [] },
+        { date: "2026-09-26", classId: "m3", className: "M3", subject: "math", preNotified: true, teachers: [] },
+      ] },
     ],
-    partial: [],
   }),
   withdrawals: ok({ month: "2026-10", rows: [{ id: "w1", program: "math" }, { id: "w2", program: "eie" }, { id: "w3", program: null }] }),
   englishSheet: ok({ period: "", classes: 1, filled: 1, total: 2 }),
@@ -63,14 +74,12 @@ describe("과목 관리자 — 담당 과목으로 좁히기(서버)", () => {
     expect(wide?.academy).toEqual({ enrolled: all?.enrolled, noEnrollment: all?.programs.noEnrollment });
   });
 
-  it("오늘첫수업·전일 결석은 담당 과목 학생만, 다른 과목 반·상태는 지운다", () => {
+  it("오늘첫수업·최근 결석은 담당 과목 학생만 — 결석은 담당 과목 반 것만 남기고 다시 센다(횟수·연락 필요·정렬)", () => {
     expect(math.firstClass?.data?.map((r) => [r.studentId, r.subjects])).toEqual([["a", ["math"]]]);
-    const rows = math.absent?.data?.absent ?? [];
-    expect(rows.map((r) => r.studentId)).toEqual(["a", "c"]);
-    expect(rows[0]?.classes.map((c) => c.name)).toEqual(["M1"]);
-    expect(rows[0]?.subject).toBe("math");
-    expect(rows[0]?.statuses).toEqual([]); // 상태가 둘이면 어느 것이 수학 반 것인지 몰라 비운다(영어 반의 공결이 붙어 보이지 않게)
-    expect(rows[1]?.statuses).toEqual(["excused"]); // 상태가 하나면 모든 칸이 그 상태 — 그대로
+    const rows = math.absent?.data?.students ?? [];
+    // 수학 결석만: 다(2회 · 둘 다 사전 통보) → 가(1회 · 연락 필요). 나(영어만)는 빠진다.
+    expect(rows.map((r) => [r.studentId, r.count, r.unnotified])).toEqual([["c", 2, 0], ["a", 1, 1]]);
+    expect(rows[1]?.absences.map((a) => a.className)).toEqual(["M1"]);
   });
 
   it("퇴원 명단은 마지막 수강 프로그램으로 가르고(둘 다 모르면 모두에게), 강사 시트는 담당 과목 것만", () => {
@@ -109,12 +118,12 @@ describe("과목 관리자 — 담당 과목으로 좁히기(서버)", () => {
 
   it("과목을 모르는 결석·첫수업 학생은 모든 과목 관리자에게(원장 2026-10-14 결정 1)", () => {
     const unknown = { ...sections,
-      absent: ok({ date: "2026-09-30", absent: [{ studentId: "u", name: "모", subject: null, classes: [], preNotified: false, statuses: ["absent"] }], partial: [] }),
+      absent: ok({ from: "2026-09-23", to: "2026-09-29", students: [{ studentId: "u", name: "모", count: 1, unnotified: 1, absences: [{ date: "2026-09-24", classId: "x", className: null, subject: null, preNotified: false, teachers: [] }] }] }),
       firstClass: ok([{ studentId: "u", name: "모", kind: "first", subjects: [null] }]),
     } as unknown as Sections;
     for (const g of [["math"], ["english"]]) {
       const out = narrowBySubject(unknown, g, groupOf, false);
-      expect(out.absent?.data?.absent.map((r) => r.studentId)).toEqual(["u"]);
+      expect(out.absent?.data?.students.map((r) => r.studentId)).toEqual(["u"]);
       expect(out.firstClass?.data?.map((r) => r.studentId)).toEqual(["u"]);
     }
   });
@@ -123,6 +132,6 @@ describe("과목 관리자 — 담당 과목으로 좁히기(서버)", () => {
     const none = narrowBySubject(sections, [], groupOf, false);
     expect(none.students?.data?.enrolled).toBe(0);
     expect(none.firstClass?.data).toEqual([]);
-    expect(none.absent?.data?.absent).toEqual([]);
+    expect(none.absent?.data?.students).toEqual([]);
   });
 });

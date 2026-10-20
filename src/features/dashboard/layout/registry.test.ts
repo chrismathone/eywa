@@ -65,7 +65,7 @@ describe("레지스트리 = 운영실 카드 전부", () => {
         intake: ok([]),
         enrolledToday: ok([]),
         firstClass: ok([]),
-        absent: ok({ date: "2026-09-30", absent: [], partial: [] }),
+        absent: ok({ from: "2026-09-23", to: "2026-09-29", students: [] }),
         makeup: ok({ rows: [] }),
         attendance: ok({ total: 1, present: 1, late: 0, absent: 0, excused: 0 }),
         attendanceTrend: ok([{ date: "2026-10-01", rate: 90, total: 1 }]),

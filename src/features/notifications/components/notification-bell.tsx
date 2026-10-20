@@ -13,6 +13,7 @@ import {
 import { Archive } from "@/components/icons/aywa-icon-compat";
 import {
   archiveNotification,
+  deleteAllNotifications,
   deleteNotification,
   markNotificationsRead,
   unarchiveNotification,
@@ -110,6 +111,8 @@ export function NotificationBell() {
   }, []);
   // 받은함/보관함(0125a) — 보관은 벨에서 치우되 나중에 볼 수 있는 안전판(삭제는 영구).
   const [view, setView] = useState<NotificationView>("active");
+  // 전체 삭제 확인 — 영구 삭제라 한 번 더 묻는다(헤더 줄이 확인 줄로 바뀐다). 뷰를 바꾸거나 메뉴를 닫으면 풀린다.
+  const [confirmClear, setConfirmClear] = useState(false);
   // 할 일(0377a) — 목록 응답에 실려 온다(읽음·보관 응답엔 없어서 마지막 값을 유지). 창은 벨 밖에 뜬다.
   const [tasks, setTasks] = useState<StaffTaskSummary | null>(null);
   const [taskTarget, setTaskTarget] = useState<StaffTaskDialogTarget | null>(null);
@@ -223,6 +226,16 @@ export function NotificationBell() {
     run(() => markNotificationsRead(visibleUnreadIds, view, limit));
   }
 
+  // 전체 삭제 = **지금 뷰 전체**(목록 밖 포함) 영구 삭제. 다른 뷰(받은 알림 ↔ 보관함)는 그대로 둔다.
+  function deleteAll() {
+    // 상한 = 보이던 가장 최근 알림(서버 최신순) — 확인 사이 새로 온 알림은 남는다.
+    const upTo = items[0]?.createdAt;
+    setConfirmClear(false);
+    setItems([]);
+    if (view === "active") setUnread(0);
+    run(() => deleteAllNotifications(view, limit, upTo));
+  }
+
   // 보관/복원/삭제 — 낙관적으로 목록에서 즉시 제거하고 서버 응답(그 뷰의 최신 목록+unread)으로 동기화.
   // run이 seq를 올려 in-flight 폴링이 옛 목록을 되돌리지 못한다(읽음처리와 동일 레이스 방어).
   function removeThen(
@@ -304,6 +317,7 @@ export function NotificationBell() {
         open={menuOpen}
         onOpenChange={(open) => {
           setMenuOpen(open);
+          setConfirmClear(false);
           if (open) {
             listScrollRef.current = 0; // 새로 여는 목록은 맨 위부터(오버레이에서 돌아올 때만 읽던 자리로)
             refresh();
@@ -346,6 +360,30 @@ export function NotificationBell() {
           align="end"
           className="w-[min(400px,calc(100vw-24px))] p-0"
         >
+          {confirmClear ? (
+            <div className="bg-danger-soft flex items-center justify-between gap-2 px-3 py-2">
+              <span className="text-foreground text-xs leading-snug break-keep">
+                {view === "archived" ? "보관함" : "받은 알림"} 전체를 영구 삭제합니다
+                {hiddenUnread > 0 ? ` (목록 밖 안 읽은 ${hiddenUnread}건 포함)` : ""}. 되돌릴 수 없습니다.
+              </span>
+              <span className="flex shrink-0 items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setConfirmClear(false)}
+                  className="text-text-dim hover:text-foreground rounded-md px-2 py-1 text-xs transition"
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  onClick={deleteAll}
+                  className="bg-danger rounded-md px-2 py-1 text-xs font-bold text-white transition hover:opacity-90"
+                >
+                  삭제
+                </button>
+              </span>
+            </div>
+          ) : (
           <div className="flex items-center justify-between px-3 py-2">
             <DropdownMenuLabel className="p-0">
               {view === "archived" ? "보관함" : "알림"}
@@ -361,11 +399,21 @@ export function NotificationBell() {
                   {hiddenUnread > 0 ? "보이는 알림 읽음" : "모두 읽음"}
                 </button>
               ) : null}
+              {items.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setConfirmClear(true)}
+                  className="text-text-dim hover:text-danger text-xs transition"
+                >
+                  전체 삭제
+                </button>
+              ) : null}
               {/* 받은함 ↔ 보관함 전환 — 보관은 삭제의 안전판(복원 가능). */}
               <button
                 type="button"
                 onClick={() => {
                   setLimit(NOTIFICATION_LIST_LIMIT);
+                  setConfirmClear(false);
                   setView((v) => (v === "active" ? "archived" : "active"));
                 }}
                 className="text-text-dim hover:text-foreground inline-flex items-center gap-1 text-xs transition"
@@ -375,6 +423,7 @@ export function NotificationBell() {
               </button>
             </span>
           </div>
+          )}
           <DropdownMenuSeparator className="my-0" />
           {/* 컴퓨터(OS) 알림 권한 — 중요 알림을 브라우저 밖에서도 확실히 받게. 권한 요청은 사용자 제스처(클릭)에서만
             가능해 여기 버튼으로 노출한다. granted면 아무것도 안 보임(조용). */}

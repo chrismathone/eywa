@@ -52,7 +52,7 @@ export function RouteLineDiagram({
   /** 누르면 그 회차를 고른다. */
   onPick?: () => void;
   /**
-   * 🚌 차가 지금 노선 어디쯤인가(0381a GPS → `routeProgress`, 사용자 2026-10-15 "노선에 어디 있는지").
+   * 🚌 차가 지금 노선 어디쯤인가(0382a GPS → `routeProgress`, 사용자 2026-10-15 "노선에 어디 있는지").
    * `pos` = 칸 번호 기준 소수 위치 · `text` = 머리 아래 한 줄 설명 · `stale` = 위치 끊김(회색).
    */
   bus?: { pos: number; text: string; stale: boolean } | null;

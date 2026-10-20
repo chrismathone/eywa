@@ -59,7 +59,7 @@ export default async function AttendanceByDatePage({
   await requireAccess("attendance");
   const { date } = await params;
   const { saved, unlinked, linkError, status } = await searchParams;
-  // 결석 학생 보기(운영실 KPI '전일 결석' ↗) — 카드·팝업과 같은 함수(getScopedAbsentStudents)로 그 명단만 그린다.
+  // 결석 학생 보기(`?status=absent`) — 그날 결석 판정 단일 소스(getScopedAbsentStudents)로 그 명단만 그린다(옛 운영실 '전일 결석' ↗ 목적지 · 2026-10-20 카드는 '최근 결석'으로 바뀌었다).
   // 🔴 강사(실 강사·겸직 강사뷰·'다른 강사 뷰')는 그날 **그 강사가 가르치는 반**(teacher-axis: 담임 ∪ 교시 담당)만 — 출석부 반 목록과 같은 규칙.
   if (status === "absent" && isValidYmd(date)) {
     const teacherId = await effectiveTeacherId();

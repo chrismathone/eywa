@@ -15,7 +15,7 @@ import {
 } from "@/features/dashboard/overview/model";
 import { concurrentShare } from "@/features/students/enrollment/enrolled-composition";
 // 재원생 패널 ↗는 KPI 카드와 같은 주소 — "/students"만 적으면 계정에 저장된 필터가 끼어 숫자가 달라 보인다(F21).
-import { studentsEnrolledHref } from "@/features/dashboard/overview/kpi-links";
+import { studentsEnrolledHref, studentsStatsHref } from "@/features/dashboard/overview/kpi-links";
 import { DASHBOARD_SUBJECT_COLORS, STAFF_SUBJECT_LEGEND, dashboardSubjectColor, dashboardCombinationColor } from "@/features/dashboard/overview/subject-colors";
 import { foldExpenseTotals } from "@/features/dashboard/overview/expense-total";
 import { paymentRateDisplay } from "@/features/billing/calc";
@@ -281,7 +281,7 @@ export function Overview({
     <Panel
       title={t("studentsComp", "재원생 구성")}
       note="현재 · 초·중·고 · 영어·동시수강·수학"
-      href={studentsEnrolledHref()}
+      href={studentsStatsHref("trend", "mix")}
       sections={[v.students]}
     >
       {student && (student.levelSplit
@@ -545,7 +545,7 @@ export function Overview({
     <Panel
       title={t("changes", "등록 · 퇴원 추이")}
       note="최근 6개월 · 당월은 오늘까지"
-      href="/students"
+      href={studentsStatsHref("flow")}
       sections={[v.changes]}
       wide
       tools={kindTools("changes", "등록 · 퇴원 추이")}
@@ -658,7 +658,7 @@ export function Overview({
       <Panel
         title={t("enrolledTrend", "재원생 추이")}
         note="최근 12개월 · 달마다 말일 기준(이번 달은 오늘) · 휴원 제외"
-        href={studentsEnrolledHref()}
+        href={studentsStatsHref("trend")}
         sections={[v.enrolledTrend]}
         className={s.fullRow}
         tools={kindTools("enrolledTrend", "재원생 추이")}
@@ -694,7 +694,7 @@ export function Overview({
     <Panel
       title={t("subjects", "과목별 수강")}
       note="현재 재원생 · 과목별 수강과 동시 수강"
-      href={studentsEnrolledHref()}
+      href={studentsStatsHref("trend", "subject")}
       sections={[v.students]}
     >
       {student && (

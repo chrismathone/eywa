@@ -50,7 +50,7 @@ export function KpiCard({
   helpKey?: string;
   /**
    * 학원 설정 '대시보드 관리'에서 바꾼 이름 — 보이는 이름만 바꾼다. 칸의 정체(`data-kpi` = 원래 `label`)는 그대로라
-   * 전일 결석의 붉은 색 같은 칸 규칙이 이름을 바꿔도 따라간다.
+   * 최근 결석의 붉은 색 같은 칸 규칙이 이름을 바꿔도 따라간다.
    */
   rename?: string;
   children: ReactNode;

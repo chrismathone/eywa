@@ -137,7 +137,7 @@ const KPIS: Record<KpiKey, KpiSpec> = {
   calendar: { label: "금일 입테", subjectScope: "subject", options: ["phones"] },
   enrolledToday: { label: "금일 등록", subjectScope: "subject" },
   firstClass: { label: "오늘첫수업", subjectScope: "subject" },
-  absent: { label: "전일 결석", subjectScope: "subject" },
+  absent: { label: "최근 결석", subjectScope: "subject" },
   makeup: { label: "보강예정", subjectScope: "subject" },
 };
 

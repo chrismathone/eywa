@@ -6,13 +6,11 @@ import type { OverviewSnapshot, Sections } from "@/features/dashboard/overview/m
 import { KPI_KEYS, type KpiKey } from "@/features/dashboard/overview/layout";
 import { todayLevelTestList } from "@/features/dashboard/overview/display";
 import { monthAheadWindow, windowUntilLabel } from "@/features/dashboard/overview/upcoming-window";
-import { formatShortKoreanDate } from "@/lib/date-kst";
 import {
-  absentDayHref,
-  absentKpiDate,
+  recentAbsenceRange,
   intakeDayHref,
   makeupWeekHref,
-  studentsEnrolledHref,
+  studentsStatsHref,
   studentsFirstClassHref,
   withdrawalsMonthHref,
 } from "@/features/dashboard/overview/kpi-links";
@@ -23,7 +21,9 @@ import { number } from "./charts";
 import { KpiCard } from "./kpi-card";
 import { identifyCard } from "./card-id";
 import { FirstClassPopup, StudentsPopup, WithdrawalsPopup } from "./kpi-popups";
-import { AbsentPopup, EnrolledTodayPopup, IntakePopup, LevelTestPopup, MakeupPopup } from "./kpi-popups-day";
+import { EnrolledTodayPopup, IntakePopup, LevelTestPopup, MakeupPopup } from "./kpi-popups-day";
+import { RecentAbsentPopup } from "./recent-absent-popup";
+import { monthDay } from "./kpi-popup-parts";
 import s from "./overview.module.css";
 
 const count = (n: number | null | undefined) => (n == null ? "—" : number(n));
@@ -46,11 +46,11 @@ export function kpiGridVars(n: number): CSSProperties {
 
 /**
  * KPI 칸(원장 2026-09-11 확정 순서): 재원생 · 퇴원생 · 신규문의 · 금일입테 · **금일 등록**(2026-09-23 — 금일입테 오른쪽) ·
- * 오늘첫수업 · 전일 결석 · 보강예정.
+ * 오늘첫수업 · 최근 결석 · 보강예정.
  * 볼 권한이 없는 칸은 영역이 오지 않아 숨는다(종전 규약). ↗는 목적지 메뉴를 열 수 있을 때만 선다.
  * 🔴 금일입테는 ↗가 없다 — 캘린더 메뉴는 감춰져 있다(링크 금지 테스트가 잠근다).
  * **산정 기간**은 라벨 옆 꼬리표로(원장 2026-09-29 *"현 재원생, 이번달 퇴원 등 모두 기간 명시"* · *"날짜라기보다 이번달,
- * 이번주 같은 산정기간"*) — 라벨이 이미 기간을 말하는 칸(금일입테·금일 등록·오늘첫수업·전일 결석)은 같은 말을 덧붙이지 않는다.
+ * 이번주 같은 산정기간"*) — 라벨이 이미 기간을 말하는 칸(금일입테·금일 등록·오늘첫수업)은 같은 말을 덧붙이지 않는다.
  */
 export type KpiCardOptions = {
   /** 놓을 칸 — 없으면 영역이 온 칸 전부(지금 화면). */
@@ -99,15 +99,14 @@ export function kpiCards(snapshot: OverviewSnapshot, opts: KpiCardOptions = {}):
   const registeredAssigned = registered?.filter((row) => row.assigned).length ?? 0;
   const firsts = v.firstClass?.data;
   const firstCount = firsts?.filter((row) => row.kind === "first").length ?? 0;
-  // 전일 결석 = **어제**(원장 2026-09-12 — 오늘은 수업을 안 하면 볼 수가 없다) 한 교시도 안 온 학생만 센다.
-  // 일부 교시 결석은 팝업·목적지에서 따로 보인다.
-  const absentDay = v.absent?.data;
-  const absent = absentDay?.absent;
-  const notified = absent?.filter((row) => row.preNotified).length ?? 0;
-  const partial = absentDay?.partial.length ?? 0;
-  // 기준일은 **서버가 조회한 그날**. 영역이 실패해 값이 없을 때만 같은 규칙으로 계산한다(머리·↗가 오늘로 새지 않게).
-  const absentDate = absentDay?.date ?? absentKpiDate(today);
-  const absentWhen = `어제 ${formatShortKoreanDate(absentDate)}`;
+  // 최근 결석 = **어제까지 7일**(원장 2026-10-20 — 옛 '전일 결석'을 넓혔다) 결석한 학생 · 누적 결석 많은 순은 팝업에서.
+  const recentAbsent = v.absent?.data;
+  const absentStudents = recentAbsent?.students;
+  const absentCount = absentStudents?.reduce((sum, row) => sum + row.count, 0) ?? 0;
+  const absentContact = absentStudents?.filter((row) => row.unnotified > 0).length ?? 0;
+  // 기간은 **서버가 센 창**. 영역이 실패해 값이 없을 때만 같은 함수로 계산한다(머리가 다른 기간을 말하지 않게).
+  const absentRange = recentAbsent ? { from: recentAbsent.from, to: recentAbsent.to } : recentAbsenceRange(today);
+  const absentWhen = `${monthDay(absentRange.from)}~${monthDay(absentRange.to)}`;
   // 보강예정 = **오늘부터 한 달**(원장 2026-09-16) 예약 상태의 보강(0264a) + 지난 미이행. 오늘·지남·창 뒤는 보조 줄에서 가른다.
   // 창은 **서버가 센 그 창**(`range`) — 영역이 실패해 값이 없을 때만 같은 함수로 계산한다(머리가 다른 날짜를 말하지 않게).
   const makeup = v.makeup?.data;
@@ -127,7 +126,7 @@ export function kpiCards(snapshot: OverviewSnapshot, opts: KpiCardOptions = {}):
           icon={<MenuGlyph name="users" size={20} />}
           error={v.students.error}
           popupTitle="현재 재원생 프로그램별 인원"
-          jump={can("students") ? { href: studentsEnrolledHref(), label: "원생목록에서 재원생 보기" } : null}
+          jump={can("students") ? { href: studentsStatsHref("trend"), label: "원생 통계에서 재원생 추이 보기" } : null}
         >
           <StudentsPopup data={student} subjects={subjects} canOpen={can("students")} eieOn={eieOn} />
         </KpiCard>
@@ -250,28 +249,21 @@ export function kpiCards(snapshot: OverviewSnapshot, opts: KpiCardOptions = {}):
   if (v.absent) cards.absent = (
         <KpiCard
           helpKey="dash-absent"
-          label="전일 결석"
+          label="최근 결석"
           rename={opts.titles?.["kpi:absent"]}
-          labelNote={noteOf("absent")}
-          value={count(absent?.length)}
+          labelNote={noteOf("absent", "7일")}
+          value={count(absentStudents?.length)}
           unit="명"
-          detail={
-            absent
-              ? `연락 필요 ${absent.length - notified} · 사전 통보 ${notified}${partial > 0 ? ` · 일부 교시 ${partial}` : ""}`
-              : "출결 기준"
-          }
-          // 기준일은 `detail`이 아니라 접두로 — 갱신 실패 문구가 detail을 대체해도 '어제'가 남는다(kpi-card 주석).
+          detail={absentStudents ? `결석 ${absentCount}회 · 연락 필요 ${absentContact}명` : "출결 기준"}
+          // 기간은 `detail`이 아니라 접두로 — 갱신 실패 문구가 detail을 대체해도 기간이 남는다(kpi-card 주석).
           detailPrefix={absentWhen}
           icon={<MenuGlyph name="userX" size={20} />}
           error={v.absent.error}
-          popupTitle={`${absentWhen} 결석 학생`}
-          jump={
-            can("attendance")
-              ? { href: absentDayHref(absentDate), label: `출석부에서 ${absentWhen} 결석 학생 보기` }
-              : null
-          }
+          popupTitle={`최근 7일 결석 (${absentWhen})`}
+          // ↗ 없음 — 7일을 한 번에 보이는 출결 화면이 아직 없다(하루 결석 보기로 보내면 숫자가 갈린다). 출석부 통계 화면이 생기면 그리로.
+          jump={null}
         >
-          <AbsentPopup day={absentDay} subjectLabels={snapshot.subjects} canOpen={can("students")} />
+          <RecentAbsentPopup data={recentAbsent} subjectLabels={snapshot.subjects} canOpen={can("students")} />
         </KpiCard>
   );
   if (v.makeup) cards.makeup = (

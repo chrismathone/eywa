@@ -76,7 +76,7 @@ export async function generateMetadata() {
   return { title: `${sheetT(await getTeacherViewLang(), "stu.title")}${PAGE_TITLE_SUFFIX}` };
 }
 
-// 상태 — 디폴트(재원)는 파라미터가 없을 때다. "전체"는 명시적 status=all로만(HeaderFilter의 allValue=enrolled가 지운다).
+// 상태 — 디폴트(재원)는 파라미터가 없을 때다(검색 중이면 디폴트 = 전체, 아래 statusDefault). "전체"는 명시적 status=all로만.
 // 문구는 **사전 키**만 든다 — 화면 언어(강사 미니셸)가 영어면 그대로 따라간다.
 const STATUS_OPTION_KEYS = [
   { value: "all", key: "stu.filter.all" },
@@ -133,7 +133,11 @@ export default async function StudentsPage({
   const canManageStudent = (await accessLevelTenant(user.systemRole, "students")) === "full";
   const sp = await searchParams;
   // 상태 필터 디폴트 = 재원(운영에서 당장 중요한 건 재원생). "전체"는 명시적 status=all로만. 🔴 상태는 저장하지 않는다.
-  const status = sp.status ?? "enrolled";
+  // 🔑 **검색 중이면 디폴트 = 전체**(원장 2026-10-20 *"검색하면 디폴트를 전체원생 기준으로"*) — 퇴원·휴원생을 찾다가
+  //    "없음"으로 오인하지 않게. 명시적으로 고른 상태(`status=enrolled` 포함)는 검색 중에도 그대로 따른다.
+  const searching = (sp.q ?? "").trim() !== "";
+  const statusDefault = searching ? "all" : "enrolled";
+  const status = sp.status ?? statusDefault;
   // 보기 설정은 계정 귀속(users.ui_prefs.students, 원장 2026-08-04) — URL(명시값) → 저장값 → 기본값.
   // 표시 축(원장 2026-08-20) — 강사 스코프면 **담당 과목**으로 축을 좁힌다(관리자·담당 반 0개는 null=종전 동일).
   const [scope, prefsLoaded] = await Promise.all([effectiveTeacherScope({ includeScheduled: true }), loadStudentListPrefs()]);
@@ -220,7 +224,13 @@ export default async function StudentsPage({
     ...narrowSubjectFilters(axis, subjects.filters).filter((f) => f.value !== "all"),
     ...(status !== "withdrawn" ? [{ value: NO_SUBJECT, label: sheetT(lang, "stu.filter.subject.none") }] : []),
   ];
-  const statusOptions = STATUS_OPTION_KEYS.map((o) => ({ value: o.value, label: sheetT(lang, o.key) }));
+  // 검색 중엔 디폴트가 '전체'라 선택지를 뒤집는다 — '재원'이 명시값(status=enrolled)이 되고 '전체'가 파라미터 없음이다
+  // (안 뒤집으면 '재원'을 골라도 allValue라 파라미터가 지워져 다시 전체가 된다).
+  const statusOptions = (
+    searching
+      ? [{ value: "enrolled", key: "stu.filter.status.enrolled" as const }, ...STATUS_OPTION_KEYS.filter((o) => o.value !== "all")]
+      : STATUS_OPTION_KEYS
+  ).map((o) => ({ value: o.value, label: sheetT(lang, o.key) }));
   const hideSubjectFilter = !showSubjectFilter(axis);
   const gradeOptions = settings.operations.gradeLevels.map((g) => ({ value: g, label: sheetSchoolGrade(null, g, lang) }));
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -273,7 +283,8 @@ export default async function StudentsPage({
       if (mixes.length > 0) params.set("mix", mixes.join(","));
     }
     if (fromDashboard && !leaving) params.set("from", "dashboard");
-    if (status !== "enrolled") params.set("status", status);
+    // 상태는 **URL이 적은 값만** 잇는다 — 디폴트는 검색어 유무로 갈리므로(검색 중 전체) 디폴트를 적으면 검색을 지운 뒤에도 전체가 남는다.
+    if (sp.status !== undefined) params.set("status", sp.status);
     if (!leaving) {
       if (sp.subject !== undefined) params.set("subject", sp.subject);
       else if (subject !== DEFAULT_STUDENT_LIST_PREFS.subject) params.set("subject", subject);
@@ -516,8 +527,8 @@ export default async function StudentsPage({
                       value={status}
                       options={statusOptions}
                       axisLabel={sheetT(lang, "stu.filter.status")}
-                      allValue="enrolled"
-                      allLabel={sheetT(lang, "stu.filter.status.enrolled")}
+                      allValue={statusDefault}
+                      allLabel={sheetT(lang, searching ? "stu.filter.all" : "stu.filter.status.enrolled")}
                       showAll
                     />
                   </th>
