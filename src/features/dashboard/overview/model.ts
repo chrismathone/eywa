@@ -71,6 +71,8 @@ export type OverviewData = {
     /** 영어(EiE·인재원 영어) + 수학 동시 수강 — `gradeSplit`의 보라 합계와 같은 판정(subjectMixOf). */
     concurrent: number;
     subjectCombinations?: { subjects: string[]; value: number }[];
+    /** 과목 막대에 선 학생(중복 없이) — 막대 합과의 차 = 두 과목 이상 듣는 학생이 더 선 몫(과목별 수강 각주 · 옛 스냅샷엔 없다). */
+    subjectStudents?: number;
     /** 프로그램별 재원생(겹침 있음) + 수강 없음 — KPI '재원생' 팝업. */
     programs: ProgramSummary;
     gradeSplit: GradeSplit;
@@ -84,6 +86,13 @@ export type OverviewData = {
   changes: MonthChange[];
   /** 재원생 추이(월말·연말 재원생 수, 원장 2026-09-29) — 강사 스코프면 null(지금 담당 학생으로 과거를 셀 수 없다). */
   enrolledTrend: import("./enrolled-trend-server").EnrolledTrend | null;
+  /**
+   * 상단 '강좌수'(원장 2026-10-20 *"대시보드에 강좌수도 볼 수 있으면 좋을듯"* — 상단 칸 추가) — 재원생이 지금 듣는 반을 학생마다 모두
+   * (`summarizeCourses` · '재원생' 칸과 같은 조회·같은 줄 판정 → 오늘 값 = 원생 통계 '강좌수 추이' 오늘 점).
+   */
+  courses: import("@/features/students/enrollment/course-count").CourseSummary;
+  /** '강좌수 추이' 카드(원장 같은 날 '카드 따로') — 재원생 추이와 같은 원본·날짜·시작 달(`loadEnrolledTrend().courses`) · 강사 스코프면 null. */
+  courseTrend: import("./enrolled-trend-server").CourseTrend | null;
   /** 이번 달 퇴원 또는 과목 전체 수업종료. 과목별 종료 건수이며 반이동·특강 종료·시스템 정리 제외. */
   withdrawals: {
     month: string;
@@ -244,6 +253,8 @@ export type OverviewSnapshot = {
    * 갱신 스냅샷에도 실려 와서 설정에서 배치를 바꾸면 다음 갱신에 화면이 따라온다(scope에 배치 판이 섞여 있다).
    */
   view?: import("@/features/dashboard/layout/view").ResolvedView;
+  /** 강사 범위(강사·강사뷰)로 센 화면 — 원생 통계처럼 강사에게 안 보이는 상세 대신 종전 목록으로 보낸다(없음 = 학원 범위). */
+  teacherView?: true;
   sections: Sections;
   /** 과목별 값 표 — **미리보기 원본(`loadOverview({ full })`)에만** 있다. 편집기가 과목 관리자 배치를 그 과목 값으로 그린다. */
   slices?: import("@/features/dashboard/layout/slices").SliceTable;

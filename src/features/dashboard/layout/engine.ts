@@ -4,7 +4,7 @@
  */
 import { KPI_KEYS, type OverviewLayout, type PanelId } from "@/features/dashboard/overview/layout";
 import { cardDef, defaultPreset, HEADING_SIZE, isKnownId, nearestPreset, presetOf, type SizePreset } from "./registry";
-import { MAX_ITEMS, isHeadingId, isStructuralId, type Item } from "./types";
+import { GRID_COLS, MAX_ITEMS, isHeadingId, isStructuralId, type Item } from "./types";
 import { gridBounds, isPositioned, placeItem, resizeGridItem } from "./fixed-grid";
 
 const TITLE_MAX = 40;
@@ -145,7 +145,12 @@ export function sameItems(a: readonly Item[], b: readonly Item[]): boolean {
  * 흘리면(`pack`) 지금 화면의 CSS 격자 자리와 같다(테스트가 잠근다). '학습·학부모 보고 + 학생 상담' 묶음은 반씩 두 장.
  */
 export function classicToItems(layout: OverviewLayout): Item[] {
-  const items: Item[] = (layout.kpis ?? KPI_KEYS).map((k) => newItem(`kpi:${k}`));
+  const kpis = layout.kpis ?? KPI_KEYS;
+  // KPI 띠는 한 줄(24열)이다 — ½×1(3열)로 한 줄에 다 안 들어가면(9칸 — 강좌수, 원장 2026-10-20) 앞 칸 3열 · 뒤 칸 2열(⅓×1)로 나눠 꽉 채운다
+  // (마지막 한 칸만 다음 줄로 떨어져 그 줄이 비지 않게). 옛 CSS 격자(원장 기본)는 칸 수만큼 같은 폭으로 그린다(`kpiGridVars`).
+  const fit = kpis.length * 3 > GRID_COLS && kpis.length * 2 <= GRID_COLS;
+  const extra = GRID_COLS - kpis.length * 2;
+  const items: Item[] = kpis.map((k, i) => (fit ? { ...newItem(`kpi:${k}`), w: i < extra ? 3 : 2 } : newItem(`kpi:${k}`)));
   for (const section of layout.sections) {
     if (section.title) items.push({ id: `heading:${section.id}`, ...HEADING_SIZE, title: section.title, ...(section.note ? { note: section.note } : {}) });
     for (const slot of section.panels) {

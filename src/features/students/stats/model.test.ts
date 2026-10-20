@@ -24,12 +24,17 @@ const p = (key: string, count: number): Point => ({ key, label: key, date: key, 
 
 describe("parseStudentStatsPrefs", () => {
   it("모르는 값은 기본값", () => {
-    const base = { range: "all", view: "subject", off: [], flowRange: "all", trendKind: "line", flowKind: "bar", historyView: "yearly" };
+    const base = { range: "all", view: "subject", off: [], flowRange: "all", trendKind: "line", flowKind: "bar", historyView: "yearly", courseRange: "all", courseKind: "line", courseOff: [], firstMode: "month" };
     expect(parseStudentStatsPrefs(undefined)).toEqual(base);
     expect(parseStudentStatsPrefs({ range: "m36", view: 3, off: "x", flowRange: 7, trendKind: "pie", historyView: "weekly" })).toEqual(base);
   });
   it("저장값을 읽는다 · 꺼 둔 선은 문자열만, 중복 없이", () => {
-    expect(parseStudentStatsPrefs({ range: "w26", view: "mix", off: ["total", "total", 3, "subject:math"], flowRange: "m12", trendKind: "bar", flowKind: "line", historyView: "monthly" })).toEqual({
+    expect(
+      parseStudentStatsPrefs({
+        range: "w26", view: "mix", off: ["total", "total", 3, "subject:math"], flowRange: "m12", trendKind: "bar", flowKind: "line", historyView: "monthly",
+        courseRange: "y", courseKind: "bar", courseOff: ["program:eie", "program:eie"], firstMode: "range",
+      }),
+    ).toEqual({
       range: "w26",
       view: "mix",
       off: ["total", "subject:math"],
@@ -37,6 +42,10 @@ describe("parseStudentStatsPrefs", () => {
       trendKind: "bar",
       flowKind: "line",
       historyView: "monthly",
+      courseRange: "y",
+      courseKind: "bar",
+      courseOff: ["program:eie"],
+      firstMode: "range",
     });
   });
 });

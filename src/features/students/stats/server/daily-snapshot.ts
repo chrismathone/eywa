@@ -44,22 +44,24 @@ export async function recordStudentDailyStats(today: string): Promise<{ tenants:
 }
 
 async function recordTenant(admin: Admin, tenantId: string, today: string): Promise<void> {
-  const [settings, students, rows, onHold] = await Promise.all([
+  const enrollmentRows = (ending: boolean) =>
+    fetchAllPaged<ActiveEnrollmentRow>((from, to) => {
+      const q = admin
+        .from("enrollments")
+        .select("id, student_id, class_id, start_date, end_date, is_transferred, class:class_id!inner ( subject, english_track ), student:student_id!inner ( status )")
+        .eq("tenant_id", tenantId)
+        .eq("on_hold", false)
+        .eq("student.status", "enrolled");
+      return (ending ? q.gte("end_date", today) : q.is("end_date", null)).order("id").range(from, to);
+    });
+  const [settings, students, rows, endingRows, onHold] = await Promise.all([
     getTenantSettingsByTenantId(tenantId, { failOnReadError: true }),
     fetchAllPaged<EnrolledStudentRow>((from, to) =>
       admin.from("students").select("id, grade, school").eq("tenant_id", tenantId).eq("status", "enrolled").order("id").range(from, to),
     ),
-    fetchAllPaged<ActiveEnrollmentRow>((from, to) =>
-      admin
-        .from("enrollments")
-        .select("id, student_id, start_date, class:class_id!inner ( subject, english_track ), student:student_id!inner ( status )")
-        .eq("tenant_id", tenantId)
-        .is("end_date", null)
-        .eq("on_hold", false)
-        .eq("student.status", "enrolled")
-        .order("id")
-        .range(from, to),
-    ),
+    // 재원생 구성 = 종료일 없는 수강(운영실 카드와 같은 줄) · 강좌수는 종료일이 오늘 이후로 적힌 수강도 더한다(운영실 '강좌수' 칸과 같은 규약).
+    enrollmentRows(false),
+    enrollmentRows(true),
     admin
       .from("students")
       .select("*", { count: "exact", head: true })
@@ -73,6 +75,7 @@ async function recordTenant(admin: Admin, tenantId: string, today: string): Prom
   const data = buildDailySnapshot({
     students,
     rows,
+    endingRows,
     onHold,
     subjects: settings.operations.subjects.map((s) => ({ key: s.key, label: s.label })),
     gradeLevels: settings.operations.gradeLevels,

@@ -69,8 +69,8 @@ export function enrolledOn(students: readonly TrendStudent[], en: TrendEnrollmen
   return n;
 }
 
-/** 과목별 추이 재료 — 수강 한 줄(반 과목 · 시작·종료일 · 반이동 여부). */
-export type TrendEnrollment = { studentId: string; subject: string | null; start: string | null; end: string | null; transferred: boolean };
+/** 과목별·강좌수 추이 재료 — 수강 한 줄(반 과목 · 시작·종료일 · 반이동 여부 · 강좌수용 반 id·휴원·영어 프로그램 — `course-trend.ts`). */
+export type TrendEnrollment = { studentId: string; subject: string | null; start: string | null; end: string | null; transferred: boolean; classId?: string | null; onHold?: boolean; englishTrack?: string | null };
 
 /**
  * **과목별 재원생 추이**(원장 2026-10-14 2단계 *"재원생 추이도 마찬가지(해당 과목 관리자는 나눠서 해당 과목만)"*) —

@@ -10,6 +10,7 @@ export default function StudentStatsLoading() {
       </div>
       <div aria-hidden="true" className="bg-bg-soft/40 h-[28rem] animate-pulse rounded-2xl" />
       <div aria-hidden="true" className="bg-bg-soft/40 h-96 animate-pulse rounded-2xl" />
+      <div aria-hidden="true" className="bg-bg-soft/40 h-96 animate-pulse rounded-2xl" />
     </div>
   );
 }

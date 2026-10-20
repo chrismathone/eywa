@@ -44,6 +44,11 @@ describe("buildDailySnapshot — 그날 재원생 구성(운영실 카드와 같
     const mid2 = snap.gradeMix.find((r) => r.label === "중2");
     expect(mid2).toMatchObject({ both: 1, englishOnly: 1, mathOnly: 0 });
   });
+
+  it("강좌수(2026-10-20부터) — 운영실 '강좌수' 칸과 같은 계산 · 아직 시작 안 한 수강은 빼고 국어 반은 전체에만", () => {
+    expect(snap.courses?.total).toBe(4);
+    expect(snap.courses?.programs).toEqual({ eie: 0, injaewon: 2, math: 1 });
+  });
 });
 
 describe("schoolLevelLabel — 학교급 한 벌(운영실 '재원생 구성'과 매일 기록)", () => {

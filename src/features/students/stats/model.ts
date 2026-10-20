@@ -1,4 +1,5 @@
 import type { PillColor } from "@/components/atoms/pill";
+import { parsePeriodMode, type PeriodMode } from "@/features/stats/period";
 
 /**
  * 원생 통계 화면(`/students/stats`)의 순수 규칙 — 보기 범위·선 고르기·과목 색·요약 수치·보기 설정 파싱(Vitest).
@@ -23,7 +24,6 @@ export const TREND_VIEWS: readonly TrendView[] = ["subject", "mix"];
 
 /** 월별 기록 보기 — 최근 12개월 · 전체 기간. */
 export type FlowRange = "all" | "m12";
-
 export type ChartKind = "line" | "bar";
 
 export type StudentStatsPrefs = {
@@ -37,24 +37,32 @@ export type StudentStatsPrefs = {
   flowKind: ChartKind;
   /** '지난 기록' 보기 — 연도별이 기본(원장 2026-10-20 · 6년치라 달마다는 촘촘하다). */
   historyView: HistoryView;
+  /** 강좌수 추이(원장 2026-10-20) — 기간 · 그래프 종류 · 꺼 둔 선(`total` · `program:<프로그램>`). */
+  courseRange: TrendRange; courseKind: ChartKind; courseOff: string[];
+  /** 첫 수업 추이(원장 2026-10-20) — 보기 방식(12·24개월 · 일별 · 구간). 고른 달·구간은 남기지 않는다(`period.ts`). */
+  firstMode: PeriodMode;
 };
 export type HistoryView = "yearly" | "monthly";
-export const DEFAULT_STUDENT_STATS_PREFS: StudentStatsPrefs = { range: "all", view: "subject", off: [], flowRange: "all", trendKind: "line", flowKind: "bar", historyView: "yearly" };
+export const DEFAULT_STUDENT_STATS_PREFS: StudentStatsPrefs = { range: "all", view: "subject", off: [], flowRange: "all", trendKind: "line", flowKind: "bar", historyView: "yearly", courseRange: "all", courseKind: "line", courseOff: [], firstMode: "month" };
 
 const isRange = (v: unknown): v is TrendRange => TREND_RANGES.includes(v as TrendRange);
 
 /** `users.ui_prefs.studentStats` 원본 → 보기 설정(모르는 값은 기본값). 꺼 둔 선이 지금 학원설정에 있나는 **읽는 쪽**이 본다. */
 export function parseStudentStatsPrefs(raw: unknown): StudentStatsPrefs {
   const o = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
-  const off = Array.isArray(o.off) ? [...new Set(o.off.filter((k): k is string => typeof k === "string" && k.length <= 80))].slice(0, 30) : [];
+  const offOf = (v: unknown) => (Array.isArray(v) ? [...new Set(v.filter((k): k is string => typeof k === "string" && k.length <= 80))].slice(0, 30) : []);
   return {
     range: isRange(o.range) ? o.range : DEFAULT_STUDENT_STATS_PREFS.range,
     view: o.view === "mix" ? "mix" : "subject",
-    off,
+    off: offOf(o.off),
     flowRange: o.flowRange === "m12" ? "m12" : "all",
     trendKind: o.trendKind === "bar" ? "bar" : "line",
     flowKind: o.flowKind === "line" ? "line" : "bar",
     historyView: o.historyView === "monthly" ? "monthly" : "yearly",
+    courseRange: isRange(o.courseRange) ? o.courseRange : "all",
+    courseKind: o.courseKind === "bar" ? "bar" : "line",
+    courseOff: offOf(o.courseOff),
+    firstMode: parsePeriodMode(o.firstMode) ?? "month",
   };
 }
 

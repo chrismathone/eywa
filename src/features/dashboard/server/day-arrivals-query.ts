@@ -79,6 +79,48 @@ export async function loadDayEnrollmentRows(
 }
 
 /**
+ * 기간(`from`~`to`) 안에 **시작하는 수강이 있는 학생들의 수강 전건** — 첫 수업 추이(원생 통계)가 날마다 `resolveFirstClasses`를 돌릴 재료.
+ * 하루짜리(`loadDayEnrollmentRows`)와 같은 두 단계(후보 학생 id → 그 학생 수강 전건)를 기간으로 한 번만 — 날마다 DB를 부르지 않는다.
+ * 🔴 상한 없음(B2 `fetchAllPaged` · 청크 안 절단은 `fetchAllPagedInChunks`). RLS(사용자 클라이언트)가 지점을 가른다.
+ */
+export async function loadRangeEnrollmentRows(supabase: Supabase, from: string, to: string): Promise<DayEnrollmentRow[]> {
+  const candidates = await fetchAllPaged<{ student_id: string }>((a, b) =>
+    supabase.from("enrollments").select("student_id").gte("start_date", from).lte("start_date", to).order("id").range(a, b),
+  );
+  const studentIds = [...new Set(candidates.map((row) => row.student_id))];
+  if (studentIds.length === 0) return [];
+  const rows = await fetchAllPagedInChunks<{
+    student_id: string;
+    start_date: string;
+    end_date: string | null;
+    on_hold: boolean;
+    is_transferred: boolean;
+    is_transferred_in: boolean;
+    class: One<{ subject?: string | null }>;
+  }>(studentIds, (chunk, a, b) =>
+    supabase
+      .from("enrollments")
+      .select("student_id, start_date, end_date, on_hold, is_transferred, is_transferred_in, class:class_id ( subject )")
+      .in("student_id", chunk)
+      .order("id")
+      .range(a, b),
+  );
+  return rows.map((row) => {
+    const klass = (Array.isArray(row.class) ? row.class[0] : row.class) ?? undefined;
+    return {
+      studentId: row.student_id,
+      studentName: "",
+      startDate: row.start_date,
+      endDate: row.end_date,
+      isTransferred: !!row.is_transferred,
+      isTransferredIn: !!row.is_transferred_in,
+      onHold: !!row.on_hold,
+      subject: klass?.subject ?? null,
+    };
+  });
+}
+
+/**
  * 그날 **첫 수업 · 마지막 수업** — 한 번 받은 수강 전건(`loadDayEnrollmentRows`)으로 둘 다 판정한다(왕복 2회).
  * 🔴 `starting`이 **첫 수업의 단일 소스**다 — 운영실 '오늘첫수업' 카드·팝업, 원생목록·엑셀 `first=`(getFirstClassStudents),
  *    일일 브리핑 '오늘 첫 수업'이 **모두 이 결과 전체**(첫 등원 + 새 과목)를 쓴다. 같은 이름의 숫자는 어디서나 같다.
