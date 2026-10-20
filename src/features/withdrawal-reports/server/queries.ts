@@ -4,14 +4,14 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isFeatureOptedIn } from "@/lib/license/server";
-import { getViewerStaffScope } from "@/features/staff/server/subject-scope";
+import { getViewerStaffScope } from "@/features/staff/department/server/subject-scope";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { canRequestReport, isParticipant, missingReportSchema, snapshotMatches, type StudentSnapshot, type WithdrawalReport, type ReportListRow, type ReportEvent, type StaffOption, type StudentOption, type CourseSnapshot } from "../model";
 import { kstToday } from "@/lib/date-kst";
 import { subjectLabelRecord } from "@/features/owner/subjects";
 import { protectedAccountIds } from "@/lib/auth/protected-accounts";
 import { displayRoleFor } from "@/lib/auth/super-admin";
-import { staffSubjectScopeOf } from "@/features/staff/subject-scope";
+import { staffSubjectScopeOf } from "@/features/staff/department/subject-scope";
 
 export const reportViewer = cache(async () => {
   const user = await getCurrentUser({ teacherView: true });

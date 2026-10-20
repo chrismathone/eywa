@@ -21,15 +21,15 @@ import {
   plannedRidesOn,
   type RideException,
 } from "@/features/shuttle/roster";
-import { saveShuttleTodayPrefs } from "@/features/shuttle/server/today-prefs";
+import { saveShuttleTodayPrefs } from "@/features/shuttle/today/server/today-prefs";
 import {
   countProgress,
   filterByDirection,
   groupRunsByVehicle,
   sumProgress,
   type DirectionFilter,
-} from "@/features/shuttle/today-board";
-import { useShuttleLive } from "@/features/shuttle/use-shuttle-live";
+} from "@/features/shuttle/today/today-board";
+import { useShuttleLive } from "@/features/shuttle/live/use-shuttle-live";
 import type { BoardingLog } from "@/features/shuttle/server/queries";
 import type { AssignableStudent } from "@/features/shuttle/server/students";
 import { RideExceptionDialog } from "./ride-exception-dialog";
@@ -59,13 +59,14 @@ const DIR_FILTERS: { value: DirectionFilter; label: string }[] = [
  *    · 진행 요약(찍은 수/전체)을 호차·회차 머리에 둬서 **접힌 채로도 남은 일이 보인다**.
  *    PC는 2열 그리드 그대로 — 넓은 화면에선 한눈에 다 보이는 게 맞다.
  *
- * ⚠️ 묶음·정렬·집계는 순수 [`today-board.ts`](@/features/shuttle/today-board)가 한다(Vitest) —
+ * ⚠️ 묶음·정렬·집계는 순수 [`today-board.ts`](@/features/shuttle/today/today-board)가 한다(Vitest) —
  *    이 파일은 그리기만. 새 집계를 여기서 손으로 세지 말 것.
  *
  * 🔴 아직 안 찍은 줄은 **회색 '미기록'**이지 미탑승이 아니다 — 안 찍은 걸 미탑승으로 읽으면
  *    아침 내내 전원이 미탑승으로 보이고 그게 출결 신호로 새어나간다(roster 주석).
  */
 export function DayBoardClient({
+  showTrack = false,
   date,
   season,
   vehicles,
@@ -81,6 +82,8 @@ export function DayBoardClient({
   tripsReady,
   tenantId,
 }: {
+  /** 실시간 위치 탭을 붙일까 — 원장·관리자·총괄만(서버 `isShuttleAdmin`이 정한다). */
+  showTrack?: boolean;
   date: string;
   season: Season;
   vehicles: ShuttleVehicle[];
@@ -195,8 +198,8 @@ export function DayBoardClient({
           탭 바는 `min-w-0`으로 줄어들고 남는 폭을 날짜·시즌이 쓴다. 좁아지면 `toolbar-rail`이 눕혀 한 줄을 유지한다.
           🔴 FaceTabs는 **공용 컴포넌트라 손대지 않는다** — 수납·학생상세 등이 같이 쓴다. 여기선 감싸는 자리만 바꾼다. */}
       <div className={SHUTTLE_TOOLBAR}>
-        <span className="min-w-0 flex-1 basis-full sm:basis-auto">
-          <FaceTabs faces={shuttleFaces(season)} active={SHUTTLE_TODAY_PATH} ariaLabel="셔틀 면 전환" />
+        <span className="min-w-0 flex-1 basis-full lg:basis-auto">
+          <FaceTabs faces={shuttleFaces(season, { track: showTrack })} active={SHUTTLE_TODAY_PATH} ariaLabel="셔틀 면 전환" />
         </span>
         <ShuttleDayNav date={date} today={today} season={season} hrefFor={href} />
       </div>
@@ -300,14 +303,19 @@ export function DayBoardClient({
         />
       )}
 
+      {/* 🚌 **호차는 옆으로, 회차는 밑으로**(사용자 2026-10-16 "호차가 밑으로 나열이자나 이걸 옆으로 · 내용은 밑으로") —
+          호차마다 한 열. 몇 열이 서는지는 **이 판의 실제 폭**으로 정한다(열 하나 최소 24rem — 그보다 좁으면 종전처럼 위아래로 쌓인다, 폰 포함). */}
+      <div className="@container/board">
+       <div className="grid grid-cols-1 items-start gap-4 @3xl/board:grid-cols-[repeat(auto-fit,minmax(24rem,1fr))]">
       {groups.map((group) => (
-        <section key={group.vehicleId} className="flex flex-col gap-2">
+        <section key={group.vehicleId} className="flex min-w-0 flex-col gap-2">
           <VehicleHeader
             group={group}
             progress={progressByVehicle.get(group.vehicleId) ?? group.progress}
             dirFilter={dirFilter}
           />
-          <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+          {/* 그 호차의 회차는 위에서 아래로(시간순) — 열 안에서 내용이 밑으로 밀린다. */}
+          <div className="flex flex-col gap-3">
             {group.runs.map(({ run, rows }) => {
               const progress = countProgress(rows);
               const open = manualOpen[run.id] ?? progress.unmarked > 0;
@@ -334,6 +342,8 @@ export function DayBoardClient({
           </div>
         </section>
       ))}
+       </div>
+      </div>
     </div>
   );
 }

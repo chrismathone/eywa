@@ -1,4 +1,4 @@
-import { programSubjectsOf, subjectGroupOf } from "@/features/students/program";
+import { programSubjectsOf, subjectGroupOf } from "@/features/students/enrollment/program";
 import { subjectChoices } from "./preview";
 
 /** URL의 선택값은 권한이 아니다. 배정된 과목 묶음 중에서만 화면을 고른다. */

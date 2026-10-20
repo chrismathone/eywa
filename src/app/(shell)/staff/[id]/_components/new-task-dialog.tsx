@@ -5,7 +5,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { createStaffTask } from "@/features/staff/server/notion-actions";
+import { createStaffTask } from "@/features/staff/notion/server/notion-actions";
 
 export function NewTaskDialog({
   staffId,

@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { OperationsProvider } from "@/features/owner/operations-context";
-import { emptyResume } from "@/features/staff/resume";
-import { findIntakeTokenByToken, isTokenOpen } from "@/features/staff/server/intake-token";
+import { emptyResume } from "@/features/staff/resume/resume";
+import { findIntakeTokenByToken, isTokenOpen } from "@/features/staff/intake/server/intake-token";
 import { expiredLinkHref } from "@/features/link-expired/kinds";
 import { PublicStaffForm } from "./public-staff-form";
 

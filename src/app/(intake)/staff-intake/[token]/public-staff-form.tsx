@@ -3,8 +3,8 @@
 import { useCallback, useState } from "react";
 import { CheckCircle2 } from "@/components/icons/aywa-icon-compat";
 import { ResumeSheet } from "@/app/(shell)/staff/resumes/_components/resume-sheet";
-import { submitPublicStaffIntake } from "@/features/staff/server/public-intake-actions";
-import type { StaffResumeData } from "@/features/staff/resume";
+import { submitPublicStaffIntake } from "@/features/staff/intake/server/public-intake-actions";
+import type { StaffResumeData } from "@/features/staff/resume/resume";
 
 /**
  * 직원 등록 QR 공개 폼(원장 지시 2026-08-07) — 서식은 **직원 명부 그대로**(ResumeSheet 재사용,

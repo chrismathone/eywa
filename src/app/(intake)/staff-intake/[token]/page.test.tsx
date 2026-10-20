@@ -11,8 +11,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("next/navigation", () => ({ redirect: mocks.redirect }));
-vi.mock("@/features/staff/server/intake-token", async (orig) => ({
-  ...(await orig<typeof import("@/features/staff/server/intake-token")>()),
+vi.mock("@/features/staff/intake/server/intake-token", async (orig) => ({
+  ...(await orig<typeof import("@/features/staff/intake/server/intake-token")>()),
   findIntakeTokenByToken: async () => mocks.tok,
 }));
 vi.mock("@/features/owner/server/queries", () => ({

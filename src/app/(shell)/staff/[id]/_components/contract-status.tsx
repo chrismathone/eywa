@@ -7,8 +7,8 @@ import { toast } from "sonner";
 import { CalendarClock, Loader2, Plus, X } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/atoms/pill";
-import { extendStaffContract, type ContractActionState } from "@/features/staff/server/contract-actions";
-import type { ContractFileRow } from "@/features/staff/server/contract-queries";
+import { extendStaffContract, type ContractActionState } from "@/features/staff/contract/server/contract-actions";
+import type { ContractFileRow } from "@/features/staff/contract/server/contract-queries";
 import { ContractPdfPicker } from "./contract-pdf-picker";
 import { ContractFiles } from "./contract-files";
 import { ContractHistory } from "./contract-history";
@@ -18,7 +18,7 @@ import {
   nextContractDefault,
   periodLabel,
   type ContractRow,
-} from "@/features/staff/contract";
+} from "@/features/staff/contract/contract";
 
 const inputClass =
   "border-line bg-card text-foreground placeholder:text-text-faint focus:border-primary w-full rounded-lg border px-3 py-2 text-sm outline-none transition";

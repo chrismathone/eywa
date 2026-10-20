@@ -13,19 +13,37 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useSheetT } from "@/features/teacher-view/lang-context";
 
 export type ShiftKind = "skip" | "advance";
+/**
+ * 무엇을 미루고 당기나(원장 2026-10-20) — `lineId` = 그 줄 하나("수업이 2개면 각각"), `fill` = 계획만 있는 칸의
+ * 당김(뒤 수업이 올라와 채운다). 둘 다 없으면 옛 화면의 교시 통째.
+ */
+export type ShiftWhich = { lineId?: string; fill?: boolean };
 
-export function useShiftConfirm(run: (date: string, slotStart: string, kind: ShiftKind) => void): {
-  ask: (date: string, slotStart: string, kind: ShiftKind) => void;
+export function useShiftConfirm(run: (date: string, slotStart: string, kind: ShiftKind, which?: ShiftWhich) => void): {
+  ask: (date: string, slotStart: string, kind: ShiftKind, which?: ShiftWhich) => void;
   dialog: ReactNode;
 } {
   const t = useSheetT();
-  const [pending, setPending] = useState<{ date: string; slotStart: string; kind: ShiftKind } | null>(null);
-  const ask = useCallback((date: string, slotStart: string, kind: ShiftKind) => setPending({ date, slotStart, kind }), []);
+  const [pending, setPending] = useState<{ date: string; slotStart: string; kind: ShiftKind; which?: ShiftWhich } | null>(null);
+  const ask = useCallback(
+    (date: string, slotStart: string, kind: ShiftKind, which?: ShiftWhich) => setPending({ date, slotStart, kind, which }),
+    [],
+  );
   const dialog = (
     <ConfirmDialog
       open={pending !== null}
       title={pending ? t(pending.kind === "skip" ? "plan.shift.skip" : "plan.shift.advance") : undefined}
-      message={pending ? t(pending.kind === "skip" ? "plan.shift.confirm.skip" : "plan.shift.confirm.advance") : ""}
+      message={
+        pending
+          ? t(
+              pending.which?.fill
+                ? "plan.shift.confirm.fill"
+                : pending.kind === "skip"
+                  ? "plan.shift.confirm.skip"
+                  : "plan.shift.confirm.advance",
+            )
+          : ""
+      }
       confirmLabel={t("plan.shift.confirm.ok")}
       cancelLabel={t("plan.shift.confirm.cancel")}
       danger
@@ -33,7 +51,7 @@ export function useShiftConfirm(run: (date: string, slotStart: string, kind: Shi
       onConfirm={() => {
         const p = pending;
         setPending(null);
-        if (p) run(p.date, p.slotStart, p.kind);
+        if (p) run(p.date, p.slotStart, p.kind, p.which);
       }}
     />
   );

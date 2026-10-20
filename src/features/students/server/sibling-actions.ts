@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canManageTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
-import { isMergedStudent } from "../merged";
+import { isMergedStudent } from "../status/merged";
 import { siblingHint, type SiblingOption } from "../siblings";
 
 /**

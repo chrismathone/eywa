@@ -21,7 +21,7 @@ import {
 } from "@/features/shuttle/types";
 import { isInactiveDay, type RideRow } from "@/features/shuttle/roster";
 import { clearBoarding, clearRideException, recordBoarding } from "@/features/shuttle/server/actions";
-import { setRowChecked, useRowChecked } from "@/features/shuttle/check-store";
+import { setRowChecked, useRowChecked } from "@/features/shuttle/today/check-store";
 import { StaffRideControls } from "./staff-ride-controls";
 
 /** 그날 변경을 건 사람 표식 — 학부모(파랑 info) / 직원(앰버, 직원 수정 버튼과 같은 색)으로 갈린다(사용자 2026-10-06). */
@@ -55,7 +55,12 @@ function ExceptionByPill({ by }: { by: RideRow["exceptionBy"] }) {
  * 탑승·미탑승은 남는 폭을 크게 나눠 갖고(폰) 데스크톱에서도 최소 폭을 둔다. 전송은 작은 고정 크기.
  */
 // size-guard-ok: 폰 36px — 사용자 2026-10-06 "탑승 미탑승 버튼을 위아래로 줄여 한 화면에 아이들이 더 나오게"(폭은 꽉 차게 그대로).
-const BIG_CHIP = "h-9 flex-[3] font-bold sm:min-w-24 sm:flex-none";
+/**
+ * 탑승·미탑승·하차 칩 — 좁으면 줄 폭을 나눠 갖고, 넓으면(줄 한 칸 @lg/row) 고정 폭 버튼 칸 안에서 나눠 갖는다.
+ * 🔑 폭 판정은 **화면이 아니라 줄 자신의 폭**(컨테이너 쿼리, 사용자 2026-10-16 "전체 화면에서 깨져") — 창 크기·두 칸 배치와 상관없이 맞는다.
+ */
+// size-guard-ok: 36px 칩 — 명단 줄 안 밀도 요소(2026-10-06 "한 화면에 아이들 수")로 종전과 같은 높이다.
+const BIG_CHIP = "h-9 flex-1 font-bold";
 
 /**
  * 🔑 **찍기 ≠ 저장**(사용자 2026-10-06 "뷰 세션에만 저장해두다가 전송까지 누르면 DB에") —
@@ -272,12 +277,14 @@ export function RideRowItem({
     <li
       className={cn(
         // 📐 줄 사이를 좁힌다(사용자 2026-10-06 "한 화면에 나오는 아이들 수가 너무 적어").
-        "flex flex-col gap-1 rounded-xl border px-2 py-1.5 sm:flex-row sm:items-center sm:gap-2",
+        // 🔑 `@container/row` — 안쪽 배치는 **이 줄의 폭**으로 정한다(화면 폭 sm: 기준이면 두 칸 배치에서 이름이 한 글자씩 꺾였다).
+        "@container/row rounded-xl border px-2 py-1.5",
         tone,
         // 전송 전 초안은 점선 테두리 — "아직 저장 안 됨"이 줄 전체로 보인다.
         pending && !skipped && "border-2 border-dashed",
       )}
     >
+     <div className="flex flex-col gap-1 @lg/row:flex-row @lg/row:items-center @lg/row:gap-2">
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-0.5">
         <span
           className={cn(
@@ -328,7 +335,8 @@ export function RideRowItem({
             오늘 이후 날짜 · 0229a 적용 · 노선 칸이 있는 줄에만(예정에 없던 기록 줄은 바꿀 자리가 없다).
             🔴 이미 전송된 줄(DB에 탑승/미탑승 기록)엔 안 띄운다(사용자 2026-10-06) — 다시 바꾸려면 [취소]→[전송]으로 기록부터 지운다. */}
         {canWrite && !skipped && canEditException && row.runStopId && !row.status ? (
-          <span className="ml-auto">
+          // 좁으면 이름 줄 오른쪽 끝, 넓으면 이름 바로 뒤(가운데가 비어 등원·하원 줄의 버튼이 어긋나 보이지 않게).
+          <span className="ml-auto @lg/row:ml-1">
             <StaffRideControls
               studentId={row.studentId}
               studentName={row.studentName}
@@ -349,7 +357,7 @@ export function RideRowItem({
           대신 되돌리는 문만 남긴다(오클릭에서 빠져나올 길을 잠그지 않는다, [[#103]]). */}
       {skipped ? (
         // 되돌리기는 **줄 오른쪽 끝**(사용자 2026-10-06) — 안내 글자 바로 뒤에 붙어 있으면 자리가 애매했다.
-        <span className="flex w-full shrink-0 items-center gap-1.5 sm:w-auto">
+        <span className="flex w-full shrink-0 items-center gap-1.5 @lg/row:w-auto">
           <span className="text-text-faint min-w-0 flex-1 text-xs">
             {row.status
               ? `기록: ${BOARDING_STATUS_LABEL[row.status]}`
@@ -370,7 +378,8 @@ export function RideRowItem({
           )}
         </span>
       ) : canWrite ? (
-        <div className="flex shrink-0 items-center gap-1.5">
+        // 🔑 넓으면 **고정 폭 칸**(w-72) — 등원(탑승·미탑승·저장·전송)과 하원(하차·체크·전송)의 오른쪽 끝·[전송] 자리가 줄마다 같다.
+        <div className="flex shrink-0 items-center gap-1.5 @lg/row:w-72">
           {/* 🔑 탑승·미탑승은 **상태가 남는 토글**이라 알약 칩이다(라운드 캐논: 눌러서 상태가 남으면
               칩, 동작만 하면 버튼) — 그래서 공용 `<Button>`이 아니라 `SHUTTLE_CHIP`을 쓴다.
               색은 의미색 캐논: 탄 것 = positive(초록) · 못 탄 것 = critical(빨강). */}
@@ -495,12 +504,13 @@ export function RideRowItem({
           onChange={(e) => setDraft({ ...view, memo: e.target.value })}
           maxLength={300}
           placeholder="미탑승 사유 (선택)"
-          className={cn(SHUTTLE_INPUT, "w-full sm:w-44")}
+          className={cn(SHUTTLE_INPUT, "w-full @lg/row:w-44")}
         />
       )}
       {row.status === "missed" && !canWrite && row.memo && (
         <span className="text-danger shrink-0 text-xs">{row.memo}</span>
       )}
+     </div>
     </li>
   );
 }

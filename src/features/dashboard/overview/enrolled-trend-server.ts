@@ -4,10 +4,10 @@ import { unstable_cache } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { reportWarning } from "@/lib/observability/report-error";
-import { isMergedStudent } from "@/features/students/merged";
+import { isMergedStudent } from "@/features/students/status/merged";
 import { isCleanupExit } from "@/features/withdrawals/system-bulk";
 import { MIX_KEYS, breakdownTrendOf, monthlyPoints, subjectTrendOf, trendOf, weeklyPoints, yearlyPoints, type MixKey, type TrendEnrollment, type TrendEnrollments, type TrendPoint, type TrendStudent } from "./enrolled-trend";
-import { subjectGroupOf, type ProgramSubject } from "@/features/students/program";
+import { subjectGroupOf, type ProgramSubject } from "@/features/students/enrollment/program";
 import { loadCleanupBilling, type CleanupBilling } from "./trend-billing-server";
 
 export type EnrolledTrend = { monthly: TrendPoint[]; yearly: TrendPoint[]; recordsFrom: string | null };

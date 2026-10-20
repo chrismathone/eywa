@@ -4,7 +4,7 @@ const state = vi.hoisted(() => ({ user: { id: "actor", tenantId: "tenant", syste
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => state.user }));
 vi.mock("@/lib/auth/perm-matrix", () => ({ canAccessTenant: async () => state.access, canWriteTenant: async () => state.write }));
 vi.mock("@/lib/license/server", () => ({ isFeatureOptedIn: async () => state.lab }));
-vi.mock("@/features/staff/server/subject-scope", () => ({ getViewerStaffScope: async () => state.scope }));
+vi.mock("@/features/staff/department/server/subject-scope", () => ({ getViewerStaffScope: async () => state.scope }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: state.db }));
 vi.mock("@/features/owner/server/queries", () => ({ getTenantSettings: async () => ({ operations: { subjects: [] } }) }));
 import { reportViewer, canReadReport, listReports, requestStudents } from "./queries";

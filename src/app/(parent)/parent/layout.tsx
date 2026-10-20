@@ -2,9 +2,9 @@
 
 import { signOut } from "@/app/(auth)/login/actions";
 import { getPublicBrandingByTenantId } from "@/features/owner/server/public-branding";
-import { getParentViewer } from "@/features/shuttle/server/parent-viewer";
-import { loadParentNotices } from "@/features/shuttle/server/parent-departure";
-import { DepartureNoticeList } from "@/features/shuttle/components/departure-notice-list";
+import { getParentViewer } from "@/features/shuttle/parent/server/parent-viewer";
+import { loadParentNotices } from "@/features/shuttle/parent/server/parent-departure";
+import { DepartureNoticeList } from "@/features/shuttle/parent/components/departure-notice-list";
 import { ParentTabs } from "./_components/parent-tabs";
 
 /**

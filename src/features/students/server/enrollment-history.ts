@@ -5,7 +5,7 @@ import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supab
 import { kstToday } from "@/lib/date-kst";
 import { canViewStudentDetail } from "./read-scope";
 import type { EnrollmentActivity, EnrollmentAudit } from "../enrollment-history";
-import type { TimelineEnrollment } from "../enrollment-timeline";
+import type { TimelineEnrollment } from "../enrollment/enrollment-timeline";
 
 const ACTIVITY_FIELDS = "id, row_id, op, target_label, actor_name, changed, created_at";
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;

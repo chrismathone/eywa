@@ -3,8 +3,8 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { resolveTenantReadUrls } from "@/lib/storage/media-storage";
 import { BackLink } from "@/components/back-link";
-import { getStaffResumeById } from "@/features/staff/server/resume-queries";
-import { canViewResume } from "@/features/staff/server/resume-access";
+import { getStaffResumeById } from "@/features/staff/resume/server/resume-queries";
+import { canViewResume } from "@/features/staff/resume/server/resume-access";
 import { ResumeSheet } from "../_components/resume-sheet";
 
 export const metadata = { title: "직원 이력서 — 에이와" };

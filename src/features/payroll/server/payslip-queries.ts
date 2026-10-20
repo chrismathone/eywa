@@ -19,7 +19,7 @@ import {
 } from "@/features/payroll/payslip-metrics";
 import { DEFAULT_CHURN_OPTIONS } from "@/features/teacher-portfolio/evaluation/options";
 import { loadEvaluationConfig } from "@/features/teacher-portfolio/server/evaluation-store";
-import { currentContract } from "@/features/staff/contract";
+import { currentContract } from "@/features/staff/contract/contract";
 import type { PayslipData, PayslipAdjustments } from "@/features/payroll/payslip-view";
 import { emptyAdjustments } from "@/features/payroll/payslip-view";
 import { PAYSLIP_DENIED_MSG } from "@/features/payroll/payslip-access";

@@ -6,7 +6,7 @@ import { SECTION_LABELS } from "@/features/owner/settings-types";
 import { STEP_DECISION_LABEL, STEP_DECISIONS, type StepDecision } from "@/features/approvals/types";
 import { formatSignedDays } from "@/features/leave/balance";
 import { formatLeaveDays } from "@/features/leave/request-days";
-import { STUDENT_STATUS_LABEL } from "@/features/students/status-labels";
+import { STUDENT_STATUS_LABEL } from "@/features/students/status/status-labels";
 import { STATUS_TEXT } from "@/features/attendance/cell-display";
 import { ONBOARDING_ITEMS } from "@/features/newcomers/onboarding-items";
 import { reasonDisplay } from "@/features/withdrawals/types";

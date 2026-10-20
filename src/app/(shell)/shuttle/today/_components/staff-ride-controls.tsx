@@ -2,14 +2,14 @@
 
 import { useState, useTransition } from "react";
 import { cn } from "@/lib/utils";
-import { ReasonDialog } from "@/features/shuttle/components/reason-dialog";
-import { VehicleRouteDialog } from "@/features/shuttle/components/vehicle-route-dialog";
+import { ReasonDialog } from "@/features/shuttle/parent/components/reason-dialog";
+import { VehicleRouteDialog } from "@/features/shuttle/parent/components/vehicle-route-dialog";
 import { DIRECTION_LABEL, type Direction, type Season } from "@/features/shuttle/types";
 import {
   loadStaffRideEditor,
   staffSkipRide,
   type StaffRideEditor,
-} from "@/features/shuttle/server/staff-ride-actions";
+} from "@/features/shuttle/ride-change/server/staff-ride-actions";
 
 /**
  * 셔틀 '오늘 등하원' 줄의 **직원 수정** — [등하원 수정] · [등원 안함]/[하원 안함](사용자 2026-10-06).

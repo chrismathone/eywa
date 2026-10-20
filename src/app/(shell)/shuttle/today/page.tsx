@@ -7,8 +7,8 @@ import {
 } from "@/features/shuttle/server/queries";
 import { getAssignableStudents } from "@/features/shuttle/server/students";
 import { canRecordBoarding } from "@/features/shuttle/server/record-gate";
-import { requireShuttleView } from "@/features/shuttle/server/access";
-import { loadShuttleTodayPrefs } from "@/features/shuttle/server/today-prefs";
+import { isShuttleAdmin, requireShuttleView } from "@/features/shuttle/server/access";
+import { loadShuttleTodayPrefs } from "@/features/shuttle/today/server/today-prefs";
 import { isSeason, type Season } from "@/features/shuttle/types";
 import { DayBoardClient } from "./_components/day-board-client";
 
@@ -62,6 +62,7 @@ export default async function ShuttleTodayPage({
         </div>
       ) : (
         <DayBoardClient
+          showTrack={await isShuttleAdmin()}
           date={date}
           season={season}
           vehicles={board.vehicles}

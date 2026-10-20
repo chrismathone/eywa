@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { ATTENDANCE_RATE_LEVELS, type AttendanceSalaryRates } from "@/features/attendance/salary-rates";
 import { saveAttendanceSalaryRates } from "@/features/attendance/server/salary-rates-actions";
-import { WORKDAYS } from "@/features/staff/resume";
+import { WORKDAYS } from "@/features/staff/resume/resume";
 import type { WorkDay } from "@/features/staff/employment";
 
 /**

@@ -4,7 +4,7 @@ import { computeTierSettlement, tierRowsOwnedBy, type TierSettlementResult } fro
 import { parseGroupRates, SALARY_GROUPS, type GroupRates } from "@/features/payroll/salary-group";
 import { collectTierRows } from "@/features/payroll/server/tier-rows";
 import { applyRatePenalty } from "@/features/payroll/payslip";
-import type { ProgramSubject } from "@/features/students/program";
+import type { ProgramSubject } from "@/features/students/enrollment/program";
 
 /**
  * **강사 한 명의 그 달 수업료** — 급여명세서(`payslip-queries.ts`)와 수납 '강사 정산' 면이 **같은 함수**를 쓴다

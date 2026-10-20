@@ -10,8 +10,8 @@ import {
   deleteStaffContract,
   updateStaffContract,
   type ContractActionState,
-} from "@/features/staff/server/contract-actions";
-import { periodLabel, type ContractRow } from "@/features/staff/contract";
+} from "@/features/staff/contract/server/contract-actions";
+import { periodLabel, type ContractRow } from "@/features/staff/contract/contract";
 
 /**
  * 히스토리 정렬 — 최신이 위. 날짜가 있으면 날짜 내림차순, 날짜 없는 줄(인센티브 조항 등)은

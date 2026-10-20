@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { TONE_COLOR, TONE_SOFT, TONE_TEXT, TONE_ACCENT_BAR, toneColor } from "./semantic-color";
-import { STUDENT_STATUS_TONE, studentStatusMeta } from "@/features/students/status-labels";
+import { STUDENT_STATUS_TONE, studentStatusMeta } from "@/features/students/status/status-labels";
 import { STAFF_STATUS_TONE, staffStatusMeta, roleMeta } from "@/features/staff/status-labels";
 import { docStatusLabel } from "@/features/approvals/types";
 import {

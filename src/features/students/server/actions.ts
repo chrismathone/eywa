@@ -31,14 +31,14 @@ import {
   type WithdrawalReason,
 } from "@/features/withdrawals/types";
 import { checkReasonInput, readReasonForm } from "@/features/withdrawals/reason-detail";
-import { currentPeriod, isCommentCategory } from "../grades-meta";
+import { currentPeriod, isCommentCategory } from "../detail/grades-meta";
 import { normalizeExamSlot } from "@/features/grades/exam-slots";
 import { defaultTermOf, normalizeTerm, normalizeYear, termWindow } from "@/features/grades/term";
 // 성적 칸 저장은 **단일 경로**다 — 성적관리 격자·엑셀·이 폼이 같은 함수를 지난다(칸 키를 여러 곳이 알지 않게).
 import { gradesSchemaReady, writeGradeCells } from "@/features/grades/server/write";
 // 생성 = 공용 진입점(전 경로 공유) / 수정 = 자기 자신을 taken에서 빼야 해서 순수 함수 직접 호출.
 import { resolveUniqueStudentName } from "../name-suffix";
-import { preserveMergeNote } from "../merged";
+import { preserveMergeNote } from "../status/merged";
 import { resolveUniqueStudentNameFor } from "./unique-name";
 import { canViewStudentDetail } from "./read-scope";
 import { canManageStudentStatusNow } from "./status-access";

@@ -1,9 +1,9 @@
 import { formatKoreanDate } from "@/lib/date-kst";
-import { loadRideLegsFor } from "@/features/shuttle/server/parent-ride-data";
-import type { ParentViewer } from "@/features/shuttle/server/parent-viewer";
-import { AbsentButton } from "@/features/shuttle/components/absent-button";
-import { ParentRideCard } from "@/features/shuttle/components/parent-ride-card";
-import { RideDatesProvider } from "@/features/shuttle/components/ride-dates-context";
+import { loadRideLegsFor } from "@/features/shuttle/parent/server/parent-ride-data";
+import type { ParentViewer } from "@/features/shuttle/parent/server/parent-viewer";
+import { AbsentButton } from "@/features/shuttle/parent/components/absent-button";
+import { ParentRideCard } from "@/features/shuttle/parent/components/parent-ride-card";
+import { RideDatesProvider } from "@/features/shuttle/parent/components/ride-dates-context";
 import { pickedLabel } from "./month-marks";
 
 /**

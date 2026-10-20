@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canViewStudentDetail } from "./read-scope";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { phoneKeyOf, personName } from "@/features/enrollment/same-person";
-import { isMergedStudent } from "../merged";
+import { isMergedStudent } from "../status/merged";
 import { planSiblingSave, resolveSiblingIds, siblingBasis, siblingPair, type SiblingBasis, type SiblingPerson } from "../siblings";
 
 /**

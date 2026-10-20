@@ -15,7 +15,7 @@ vi.mock("@/lib/supabase/admin", () => {
   return { createAdminClient: () => ({ from: () => chain }) };
 });
 
-import { findIntakeTokenByToken, STAFF_INTAKE_ROLE } from "./intake-token";
+import { findIntakeTokenByToken, STAFF_INTAKE_ROLE } from "../intake/server/intake-token";
 
 const TOKEN = "a".repeat(32);
 

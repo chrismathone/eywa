@@ -21,7 +21,7 @@ import { attendanceRate, attendedCount } from "@/lib/calc/attendance";
 import type { SystemRole } from "@/lib/permissions";
 import { summarizeInvoices } from "@/features/billing/calc";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
-import { isMergedStudent } from "@/features/students/merged";
+import { isMergedStudent } from "@/features/students/status/merged";
 import { bookkeepingOnlyIds } from "@/features/withdrawals/server/bookkeeping";
 import {
   buildDashboardTrendPoints,

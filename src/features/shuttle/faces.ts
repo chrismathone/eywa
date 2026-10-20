@@ -11,7 +11,10 @@ export const SHUTTLE_WEEK_PATH = "/shuttle/week";
 export const SHUTTLE_PARENT_RIDES_PATH = "/shuttle/parent-rides";
 /** 관제(2026-09-02) — '오늘 등하원'이 찍는 화면이면 이쪽은 보는 화면이다. */
 export const SHUTTLE_LIVE_PATH = "/shuttle/live";
-/** 실시간 위치(2026-09-03) — 차량이 지도에 뜰 **자리**. 위치 송신·지도 키가 아직 둘 다 없다. */
+/**
+ * 실시간 위치(2026-09-03) — 카카오 지도 + 호차·회차별 보기(2026-10-08). 🔒 **원장·관리자·총괄 전용**(사용자 2026-10-08
+ * "관리자 계정들만") — 탭 줄엔 `shuttleFaces(season, { track: true })`일 때만 선다(SUBTABS_BY_MENU엔 창 식별 때문에 남긴다).
+ */
 export const SHUTTLE_TRACK_PATH = "/shuttle/track";
 
 /**
@@ -26,10 +29,13 @@ export const SHUTTLE_TRACK_PATH = "/shuttle/track";
  * 🔑 시즌(학기중/방학중)은 면을 넘어가도 유지한다 — 방학 편성을 보다 탭을 옮겼는데 학기중으로
  *    되돌아가면 "다른 학원 명단"처럼 보인다.
  */
-export function shuttleFaces(season: Season): Face[] {
-  return (SUBTABS_BY_MENU.shuttle ?? []).map((tab) => ({
-    key: tab.href,
-    label: tab.label,
-    href: `${tab.href}?season=${season}`,
-  }));
+export function shuttleFaces(season: Season, opts: { track?: boolean } = {}): Face[] {
+  return (SUBTABS_BY_MENU.shuttle ?? [])
+    // 🔒 실시간 위치는 관리자에게만 — 판정은 서버(`isShuttleAdmin`)가 하고 화면은 그 결과(`track`)만 받는다.
+    .filter((tab) => opts.track || tab.href !== SHUTTLE_TRACK_PATH)
+    .map((tab) => ({
+      key: tab.href,
+      label: tab.label,
+      href: `${tab.href}?season=${season}`,
+    }));
 }

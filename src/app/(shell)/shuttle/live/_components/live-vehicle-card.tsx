@@ -6,25 +6,25 @@ import { TONE_COLOR } from "@/lib/design/semantic-color";
 import { kstTimeOf } from "@/lib/date-kst";
 import { cn } from "@/lib/utils";
 import { SHUTTLE_ROW, SHUTTLE_ROW_TEXT } from "@/features/shuttle/control-size";
-import { progressLabel, type LiveRun, type LiveVehicle } from "@/features/shuttle/live-board";
+import { progressLabel, type LiveRun, type LiveVehicle } from "@/features/shuttle/live/live-board";
 import {
   RUN_ALERT_LABEL,
   RUN_ALERT_TONE,
   TRIP_STATE_LABEL,
   TRIP_TONE,
-} from "@/features/shuttle/trip-state";
+} from "@/features/shuttle/today/trip-state";
 import {
   BOARDING_STATUS_LABEL,
   DIRECTION_LABEL,
   runShortTitle,
 } from "@/features/shuttle/types";
-import { firstTime } from "@/features/shuttle/today-board";
+import { firstTime } from "@/features/shuttle/today/today-board";
 import { isInactiveDay } from "@/features/shuttle/roster";
 
 /**
  * 관제의 차 한 칸 — 차 머리 + 회차 줄. **읽기 전용**이다(찍는 버튼은 오늘 등하원 화면에 있다).
  *
- * 🔴 상태·경보 색은 [`TRIP_TONE`/`RUN_ALERT_TONE`](@/features/shuttle/trip-state)에서 온다 —
+ * 🔴 상태·경보 색은 [`TRIP_TONE`/`RUN_ALERT_TONE`](@/features/shuttle/today/trip-state)에서 온다 —
  *    여기서 상태→색 맵을 새로 만들면 오늘 화면과 다른 색으로 같은 상태를 말하게 된다(의미색 캐논).
  * ⚠️ 기사 전화는 **누르면 걸리게**(tel:) — 관제에서 이상한 차를 보면 바로 거는 자리다.
  */

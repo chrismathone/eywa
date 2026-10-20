@@ -8,7 +8,7 @@ import {
   SHUTTLE_WEEK_PATH,
   shuttleFaces,
 } from "./faces";
-import { SHUTTLE_PARENTS_PATH } from "./parent-access";
+import { SHUTTLE_PARENTS_PATH } from "./parent-accounts/parent-access";
 
 describe("셔틀 면 전환", () => {
   it("여섯 면이 사이드바 하부탭에서 파생된다 — 학부모 등하원은 오늘 등하원 바로 뒤", () => {
@@ -19,7 +19,6 @@ describe("셔틀 면 전환", () => {
       SHUTTLE_TODAY_PATH,
       SHUTTLE_PARENT_RIDES_PATH,
       SHUTTLE_LIVE_PATH,
-      SHUTTLE_TRACK_PATH,
     ]);
     expect(faces.map((f) => f.label)).toEqual([
       "노선 편성",
@@ -27,8 +26,13 @@ describe("셔틀 면 전환", () => {
       "오늘 등하원",
       "학부모 등하원",
       "운행 현황",
-      "실시간 위치",
     ]);
+  });
+
+  it("실시간 위치는 관리자에게만 — track일 때만 끝에 붙는다(2026-10-08)", () => {
+    expect(shuttleFaces("term").map((f) => f.key)).not.toContain(SHUTTLE_TRACK_PATH);
+    const admin = shuttleFaces("term", { track: true });
+    expect(admin.at(-1)).toEqual({ key: SHUTTLE_TRACK_PATH, label: "실시간 위치", href: "/shuttle/track?season=term" });
   });
 
   it("원장·관리자 전용 '학부모 관리 현황'은 공용 탭 줄에 없다", () => {
@@ -44,8 +48,8 @@ describe("셔틀 면 전환", () => {
       "/shuttle/today?season=vacation",
       "/shuttle/parent-rides?season=vacation",
       "/shuttle/live?season=vacation",
-      "/shuttle/track?season=vacation",
     ]);
+    expect(shuttleFaces("vacation", { track: true }).at(-1)?.href).toBe("/shuttle/track?season=vacation");
   });
 
   it("active로 쓰는 상수가 실제 면 키에 있다", () => {
@@ -56,6 +60,6 @@ describe("셔틀 면 전환", () => {
     expect(keys).toContain(SHUTTLE_TODAY_PATH);
     expect(keys).toContain(SHUTTLE_PARENT_RIDES_PATH);
     expect(keys).toContain(SHUTTLE_LIVE_PATH);
-    expect(keys).toContain(SHUTTLE_TRACK_PATH);
+    expect(shuttleFaces("term", { track: true }).map((f) => f.key)).toContain(SHUTTLE_TRACK_PATH);
   });
 });

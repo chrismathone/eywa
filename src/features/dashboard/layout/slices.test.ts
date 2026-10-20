@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Sections } from "@/features/dashboard/overview/model";
-import { programSubjectsOf, subjectGroupOf } from "@/features/students/program";
+import { programSubjectsOf, subjectGroupOf } from "@/features/students/enrollment/program";
 import { applySlices, inSliceAny, sliceGroupOf, sliceGroupsOf, sliceKey, slicePredicate, subjectsNamedIn } from "./slices";
 
 const subjects = programSubjectsOf({ english: "영어", math: "수학", subject_1: "수학(심화)", korean: "국어" });

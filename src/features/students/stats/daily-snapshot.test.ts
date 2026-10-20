@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildDailySnapshot } from "./daily-snapshot";
-import { schoolLevelLabel } from "@/features/students/enrolled-composition";
+import { schoolLevelLabel } from "@/features/students/enrollment/enrolled-composition";
 
 const subjects = [
   { key: "math", label: "수학" },

@@ -1,4 +1,4 @@
-import { isMergedStudent } from "@/features/students/merged";
+import { isMergedStudent } from "@/features/students/status/merged";
 import { isSystemBulkWithdrawal } from "@/features/withdrawals/system-bulk";
 import { isEnrollmentEndedOn } from "@/features/enrollments/eligibility";
 import { billedExitSubjects, billedOn } from "./trend-billing";

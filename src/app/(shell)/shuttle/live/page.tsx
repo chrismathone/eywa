@@ -5,7 +5,7 @@ import {
   getShuttleBoard,
   getTripsOn,
 } from "@/features/shuttle/server/queries";
-import { requireShuttleView } from "@/features/shuttle/server/access";
+import { isShuttleAdmin, requireShuttleView } from "@/features/shuttle/server/access";
 import { isSeason, type Season } from "@/features/shuttle/types";
 import { LiveBoardClient } from "./_components/live-board-client";
 
@@ -52,6 +52,7 @@ export default async function ShuttleLivePage({
         </div>
       ) : (
         <LiveBoardClient
+          showTrack={await isShuttleAdmin()}
           tenantId={user.tenantId}
           date={date}
           season={season}

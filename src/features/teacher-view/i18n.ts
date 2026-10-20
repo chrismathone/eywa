@@ -637,22 +637,28 @@ export const SHEET_DICT = {
   //    달력 칸에만 뒀더니 정작 사람이 서 있는 자리에 없었다. 지난 날짜에도 막지 않는다(뒤늦게 미루는 게 정상).
   "plan.shift.skip": { ko: "한 칸 미룸", en: "Push back" },
   "plan.shift.skip.title": {
-    ko: "이 칸 진도를 비우고 뒤 진도를 한 칸씩 밉니다 — 배정 교재는 배정한 요일 순서대로(화→금→화…), 그 밖의 줄은 같은 요일·교시끼리. 누르면 확인 창이 뜨고, 실행 뒤 [되돌리기]로 원래대로 돌릴 수 있습니다.",
-    en: "Clears this cell and pushes later lessons one slot — assigned textbooks follow their assigned days in order (Tue→Fri→Tue…), other rows move within the same weekday and period. You'll be asked to confirm, and you can Undo afterwards.",
+    ko: "이 줄을 비우고 이 교재의 뒤 진도를 한 차수씩 밉니다 — 배정 교재는 배정한 요일 순서대로(화→금→화…), 그 밖의 줄은 같은 요일·교시끼리. 같은 칸의 다른 줄은 그대로입니다. 누르면 확인 창이 뜨고, 실행 뒤 [되돌리기]로 원래대로 돌릴 수 있습니다.",
+    en: "Clears this row and pushes this textbook's later lessons one lesson back — assigned textbooks follow their assigned days in order (Tue→Fri→Tue…), other rows move within the same weekday and period. Other rows in the cell stay. You'll be asked to confirm, and you can Undo afterwards.",
   },
   "plan.shift.advance": { ko: "한 칸 당김", en: "Pull forward" },
   "plan.shift.advance.title": {
-    ko: "다음 진도를 이 칸으로 당기고 뒤 진도를 한 칸씩 당깁니다 — 배정 교재는 배정한 요일 순서대로, 그 밖의 줄은 같은 요일·교시끼리. 이 칸에 적힌 내용은 바뀝니다. 누르면 확인 창이 뜨고, 실행 뒤 [되돌리기]로 원래대로 돌릴 수 있습니다.",
-    en: "Pulls the next lesson into this cell and later lessons one slot earlier — assigned textbooks follow their assigned days in order, other rows move within the same weekday and period. This cell's rows change. You'll be asked to confirm, and you can Undo afterwards.",
+    ko: "이 줄 차수를 건너뛰고 다음 차수를 이 줄로 당깁니다 — 이 교재의 뒤 진도가 한 차수씩 당겨집니다. 같은 칸의 다른 줄은 그대로입니다. 누르면 확인 창이 뜨고, 실행 뒤 [되돌리기]로 원래대로 돌릴 수 있습니다.",
+    en: "Skips this row's lesson and pulls the next one here — this textbook's later lessons each move one lesson earlier. Other rows in the cell stay. You'll be asked to confirm, and you can Undo afterwards.",
   },
   // 확인 창 + 되돌리기(원장 2026-10-19 *"미루고, 당길때 얼럿창 띄우고 덮어쓰기(되돌리기)"* → (가)안).
   "plan.shift.confirm.skip": {
-    ko: "이 칸의 진도를 비우고, 뒤 진도를 한 칸씩 뒤로 밉니다. 이미 적힌 뒤 칸 내용도 덮어씁니다. 실행 뒤 [되돌리기]로 누르기 전 상태로 돌릴 수 있습니다.",
-    en: "This clears this cell and pushes later lessons one slot back, overwriting the cells after it. You can Undo right afterwards.",
+    ko: "이 줄을 비우고, 이 교재의 뒤 진도를 한 차수씩 뒤로 밉니다. 이미 적힌 뒤 칸 내용도 덮어씁니다. 실행 뒤 [되돌리기]로 누르기 전 상태로 돌릴 수 있습니다.",
+    en: "This clears this row and pushes this textbook's later lessons one lesson back, overwriting the cells after it. You can Undo right afterwards.",
   },
   "plan.shift.confirm.advance": {
-    ko: "다음 진도를 이 칸으로 당기고, 뒤 진도를 한 칸씩 앞으로 당깁니다. 이 칸과 뒤 칸 내용을 덮어씁니다. 실행 뒤 [되돌리기]로 누르기 전 상태로 돌릴 수 있습니다.",
-    en: "This pulls the next lesson into this cell and later lessons one slot earlier, overwriting this cell and the ones after it. You can Undo right afterwards.",
+    ko: "이 줄 차수를 건너뛰고 다음 차수를 이 줄로 당깁니다. 이 교재의 뒤 진도가 한 차수씩 앞으로 오며, 이 줄과 뒤 칸 내용을 덮어씁니다. 실행 뒤 [되돌리기]로 누르기 전 상태로 돌릴 수 있습니다.",
+    en: "This skips this row's lesson and pulls the next one here; this textbook's later lessons each move one earlier, overwriting this row and the cells after it. You can Undo right afterwards.",
+  },
+  // 계획만 있는 칸의 당김(원장 2026-10-20 *"계획만 있을 경우 미룸버튼은 없고 당겨서 전수업 한시간씩 당겨지게"*).
+  //  줄 당김과 달리 **아무 차수도 버리지 않는다** — 이 칸의 미룸을 걷고 뒤 수업이 한 칸씩 올라와 채운다.
+  "plan.shift.confirm.fill": {
+    ko: "뒤 수업을 한 칸씩 당겨 이 칸을 채웁니다. 버려지는 차수는 없고, 뒤 칸 내용을 덮어씁니다. 실행 뒤 [되돌리기]로 누르기 전 상태로 돌릴 수 있습니다.",
+    en: "Pulls the later lessons one slot earlier to fill this cell. No lesson is dropped; the cells after it are overwritten. You can Undo right afterwards.",
   },
   "plan.shift.confirm.ok": { ko: "덮어쓰기", en: "Overwrite" },
   "plan.shift.confirm.cancel": { ko: "취소", en: "Cancel" },
@@ -1110,15 +1116,23 @@ export const SHEET_DICT = {
     en: "Pulled forward — the next lesson is here; later lessons moved one slot earlier",
   },
   "month.shift.clear.done": { ko: "회차 표식을 지웠습니다 — 원래 차수로 돌아갑니다", en: "Cleared — the original lesson order is back" },
+  "month.shift.fill.done": {
+    ko: "당겼습니다 — 뒤 수업이 한 칸씩 올라와 이 칸을 채웠습니다",
+    en: "Pulled forward — later lessons moved up to fill this cell",
+  },
+  "month.shift.fill.title": {
+    ko: "계획만 있는 칸 — 뒤 수업을 한 칸씩 당겨 이 칸을 채웁니다(버려지는 차수 없음). 실행 뒤 [되돌리기]로 원래대로 돌릴 수 있습니다.",
+    en: "Plan-only cell — pulls later lessons one slot earlier to fill it (no lesson is dropped). You can Undo afterwards.",
+  },
   "month.shift.skip": { ko: "미룸", en: "Push" },
   "month.shift.skip.title": {
-    ko: "이 칸 진도를 비우고 뒤 진도를 한 칸씩 밉니다(배정 교재는 배정한 요일 순서대로, 그 밖의 줄은 같은 요일·교시끼리). 실행 뒤 [되돌리기]로 원래대로 돌릴 수 있습니다.",
-    en: "Clears this cell and pushes later lessons one slot (assigned textbooks follow their assigned days in order; other rows stay within the same weekday and period). You can Undo afterwards.",
+    ko: "이 줄을 비우고 이 교재의 뒤 진도를 한 차수씩 밉니다(같은 칸의 다른 줄은 그대로). 실행 뒤 [되돌리기]로 원래대로 돌릴 수 있습니다.",
+    en: "Clears this row and pushes this textbook's later lessons one lesson back (other rows in the cell stay). You can Undo afterwards.",
   },
   "month.shift.advance": { ko: "당김", en: "Pull" },
   "month.shift.advance.title": {
-    ko: "다음 진도를 이 칸으로 당기고 뒤 진도를 한 칸씩 당깁니다(배정 교재는 배정한 요일 순서대로, 그 밖의 줄은 같은 요일·교시끼리). 이 칸에 적힌 내용은 바뀝니다. 실행 뒤 [되돌리기]로 원래대로 돌릴 수 있습니다.",
-    en: "Pulls the next lesson into this cell and later lessons one slot earlier (assigned textbooks follow their assigned days in order; other rows stay within the same weekday and period). This cell's rows change. You can Undo afterwards.",
+    ko: "이 줄 차수를 건너뛰고 다음 차수를 이 줄로 당깁니다(같은 칸의 다른 줄은 그대로). 실행 뒤 [되돌리기]로 원래대로 돌릴 수 있습니다.",
+    en: "Skips this row's lesson and pulls the next one here (other rows in the cell stay). You can Undo afterwards.",
   },
   // 월간계획 전체 가져오기(원장 2026-09-28) — 이 기간의 일정(미루기 반영)을 실제 빈 칸에 한 번에 넣는다.
   "month.importAll": { ko: "월간계획 전체 가져오기", en: "Import whole plan" },

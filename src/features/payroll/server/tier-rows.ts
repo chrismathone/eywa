@@ -5,7 +5,7 @@ import { effectiveAttendanceRecords } from "@/features/attendance/effective-reco
 import { taughtByColumnReady } from "@/features/attendance/server/taught-by-db";
 import { sessionPriceOf, type SessionPriceTerm, type TierRow } from "@/features/payroll/tier-settlement";
 import { autoSalaryGroup, isSalaryGroup, type SalaryGroup } from "@/features/payroll/salary-group";
-import { programOf, type ProgramSubject } from "@/features/students/program";
+import { programOf, type ProgramSubject } from "@/features/students/enrollment/program";
 
 /**
  * 티어 정산 **입력 행 조립** — (학생 × 반 × 티어)의 그 달 시수 합.

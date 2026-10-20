@@ -1,10 +1,10 @@
 import "server-only";
-import type { NotionPage } from "@/features/staff/notion-tasks";
+import type { NotionPage } from "@/features/staff/notion/notion-tasks";
 import { assertTenantViewOutboundAllowed } from "@/lib/auth/tenant-view-outbound";
 
 // Notion REST 클라이언트(전역 토큰) — solapi.ts 캐시팩토리 패턴 미러. 토큰은 env 전용(DB/jsonb 금지).
 // SDK 없이 fetch로 최소 구현(week.ts·trend-graph '라이브러리 0' 에토스). 전건은 has_more/next_cursor 순회(B2 silent 절단 방지).
-// ⚠️ 직접 호출은 features/staff/server/notion.ts에서만. 클라가 import하는 모듈에 넣지 말 것 [[#61]].
+// ⚠️ 직접 호출은 features/staff/notion/server/notion.ts에서만. 클라가 import하는 모듈에 넣지 말 것 [[#61]].
 
 const NOTION_API = "https://api.notion.com/v1";
 const NOTION_VERSION = "2022-06-28";

@@ -72,7 +72,7 @@ const GRANTEES = [
   { name: "오은진", role: "admin" }, // 2026-08-06 원장 추가 지시
   { name: "엄소윤", role: "admin" }, // 2026-08-11 원장 추가 지시("데스크 직원이여서 필요함")
   // 2026-09-23 원장 지시 — 부원장 둘. **과목 범위**가 함께 걸려 자기 과목 선생님만 보인다
-  // (src/features/staff/subject-scope.ts — 메뉴는 여기서 열고, 무엇이 보이는지는 그 파일이 정한다).
+  // (src/features/staff/department/subject-scope.ts — 메뉴는 여기서 열고, 무엇이 보이는지는 그 파일이 정한다).
   { name: "정유진", role: "admin" }, // 영어 선생님만
   { name: "허은진", role: "admin" }, // 수학 선생님만
 ];

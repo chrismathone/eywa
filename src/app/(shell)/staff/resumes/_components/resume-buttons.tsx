@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { withEmbed } from "@/components/workspace/embed-context";
 import { useInFrame } from "@/components/workspace/use-in-frame";
 import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
-import { deleteStaffResume } from "@/features/staff/server/resume-actions";
+import { deleteStaffResume } from "@/features/staff/resume/server/resume-actions";
 
 const STAFF_HREF = "/staff";
 

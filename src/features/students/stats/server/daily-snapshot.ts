@@ -2,7 +2,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
-import type { ActiveEnrollmentRow, EnrolledStudentRow } from "@/features/students/enrolled-composition";
+import type { ActiveEnrollmentRow, EnrolledStudentRow } from "@/features/students/enrollment/enrolled-composition";
 import { buildDailySnapshot } from "../daily-snapshot";
 
 type Admin = ReturnType<typeof createAdminClient>;

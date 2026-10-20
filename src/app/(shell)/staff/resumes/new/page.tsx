@@ -3,7 +3,7 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { assignableRoles } from "@/lib/auth/role-hierarchy";
 import { BackLink } from "@/components/back-link";
-import { emptyResume } from "@/features/staff/resume";
+import { emptyResume } from "@/features/staff/resume/resume";
 import { isImportArtifactEmail } from "@/features/staff/email";
 import { getStaffById } from "@/features/staff/server/queries";
 import { ResumeSheet } from "../_components/resume-sheet";

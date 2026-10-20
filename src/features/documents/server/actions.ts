@@ -15,8 +15,8 @@ import {
 import { isTenantDocumentPath } from "@/lib/storage/legacy-audio-path";
 import { humanizeDbError, logDbError } from "@/lib/supabase/db-error";
 import type { UploadTicket } from "@/lib/storage/types";
-import { RESUME_FORM_TYPE } from "@/features/staff/resume";
-import { canViewResume, RESUME_LOCKED_MSG } from "@/features/staff/server/resume-access";
+import { RESUME_FORM_TYPE } from "@/features/staff/resume/resume";
+import { canViewResume, RESUME_LOCKED_MSG } from "@/features/staff/resume/server/resume-access";
 import { logAction } from "@/features/audit/server/log";
 import { FALLBACK_CATEGORY, normalizeLinkUrl } from "../categories";
 import { getDocumentCategories } from "./category-queries";

@@ -8,8 +8,8 @@ import {
   type EnrolledStudentRow,
   type GradeSplitRow,
   type ProgramSummary,
-} from "@/features/students/enrolled-composition";
-import type { ProgramSubject } from "@/features/students/program";
+} from "@/features/students/enrollment/enrolled-composition";
+import type { ProgramSubject } from "@/features/students/enrollment/program";
 
 /**
  * 원생 매일 기록 한 줄(`student_daily_stats.data`, 0381a) — 그날 재원생 구성. 순수 함수(Vitest).

@@ -1,6 +1,6 @@
 import { getTeacherLabelMap } from "@/features/timetable/server/queries";
 import "server-only";
-import { enrolledSubjectCounts } from "../enrolled-composition";
+import { enrolledSubjectCounts } from "../enrollment/enrolled-composition";
 import {
   countEnrolledStudents,
   getNotStartedStudentIds,
@@ -54,7 +54,7 @@ import {
 } from "@/features/attendance/effective-records";
 import { canSeeStudentEnrollment } from "./enrollment-gate";
 import { canViewStudentDetail } from "./read-scope";
-import { isMergedStudent } from "../merged";
+import { isMergedStudent } from "../status/merged";
 import { enrollmentHistoryTimeline } from "../enrollment-history";
 import { getStudentEnrollmentHistory, loadEnrollmentHistorySeed } from "./enrollment-history";
 import { OUTCOME_LABEL, type OutcomeKey } from "@/features/enrollment/server/queries";

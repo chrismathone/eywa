@@ -1,11 +1,11 @@
 import { addDays, formatKoreanDate } from "@/lib/date-kst";
 import { monthLabel, shiftMonth } from "@/lib/month-grid";
 import { PeriodNav } from "@/components/period-nav";
-import { buildParentMonth, listParentMonthChanges, summarizeParentMonth } from "@/features/shuttle/parent-month";
-import { loadParentMonth } from "@/features/shuttle/server/parent-month-data";
+import { buildParentMonth, listParentMonthChanges, summarizeParentMonth } from "@/features/shuttle/parent/parent-month";
+import { loadParentMonth } from "@/features/shuttle/parent/server/parent-month-data";
 import { loadParentClassDates } from "@/features/classes/server/parent-timetable-data";
 import { dayCodeOf } from "@/features/shuttle/roster";
-import type { ParentViewer } from "@/features/shuttle/server/parent-viewer";
+import type { ParentViewer } from "@/features/shuttle/parent/server/parent-viewer";
 import { DIRECTION_LABEL } from "@/features/shuttle/types";
 import { MonthDaySheet } from "./month-day-sheet";
 import { MonthFixedRow } from "./month-fixed-row";

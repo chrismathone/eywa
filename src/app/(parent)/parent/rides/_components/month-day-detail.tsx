@@ -2,7 +2,7 @@
 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatKoreanDate } from "@/lib/date-kst";
-import type { DirMark, MonthDay } from "@/features/shuttle/parent-month";
+import type { DirMark, MonthDay } from "@/features/shuttle/parent/parent-month";
 import { MARK } from "./month-marks";
 
 /** 칸·상세에 적는 수업 한 줄 — 과목 · 반 이름 · 시작 · 끝("HH:MM"). */

@@ -15,7 +15,7 @@
  *    같은 학생이 학원 안에서 자리를 바꾼 것이라, 맞이·환송할 사람이 아니다. 반이동 종료는 반열림
  *    (`end_date <= 그날`)이라 그날 이미 새 반에서 수업한다([[#125]]와 같은 규약).
  */
-import { subjectGroupOf, type ProgramSubject } from "@/features/students/program";
+import { subjectGroupOf, type ProgramSubject } from "@/features/students/enrollment/program";
 
 export type DayEnrollmentRow = {
   studentId: string;

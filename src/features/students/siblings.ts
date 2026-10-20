@@ -14,7 +14,7 @@
 import { personName, phoneKeyOf } from "@/features/enrollment/same-person";
 import { sheetSchoolGrade } from "@/features/teacher-view/school-grade";
 import type { SheetLang } from "@/features/teacher-view/i18n";
-import { studentStatusLabel } from "./status-labels";
+import { studentStatusLabel } from "./status/status-labels";
 
 export type SiblingPerson = {
   id: string;

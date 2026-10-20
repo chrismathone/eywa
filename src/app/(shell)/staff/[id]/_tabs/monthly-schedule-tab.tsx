@@ -1,6 +1,6 @@
 import { kstMonth } from "@/lib/date-kst";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { resolveMonthlyTasks } from "@/features/staff/server/notion";
+import { resolveMonthlyTasks } from "@/features/staff/notion/server/notion";
 import { MonthlyScheduleView } from "../_components/monthly-schedule-view";
 
 // '월간일정' 탭(근무일정 대체) — Notion 업무를 이번 달 기준으로 서버에서 초기 로드해 클라 뷰에 주입.

@@ -30,8 +30,8 @@ import { getStaffList, type StaffRow } from "@/features/staff/server/queries";
 import { getSuperAdminIds, displayRoleFor } from "@/lib/auth/super-admin";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
-import { EMPLOYMENT_TYPES } from "@/features/staff/resume";
-import { loadStaffListPrefs } from "@/features/staff/server/list-prefs";
+import { EMPLOYMENT_TYPES } from "@/features/staff/resume/resume";
+import { loadStaffListPrefs } from "@/features/staff/list/server/list-prefs";
 import {
   DEFAULT_STAFF_LIST_PREFS,
   parseStaffEmp,
@@ -49,7 +49,7 @@ import {
   STAFF_STATUS_OPTIONS,
   type StaffFilterPrefs,
   type StaffSortKey,
-} from "@/features/staff/list-prefs";
+} from "@/features/staff/list/list-prefs";
 import { NewStaffTrigger } from "./_components/new-staff-trigger";
 import { StaffTableScaleBox, StaffTableScaleControl } from "./_components/table-scale";
 import { StaffColumnPicker } from "./_components/staff-column-picker";

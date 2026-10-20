@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { Minus, Plus } from "@/components/icons/aywa-icon-compat";
 import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
-import { TABLE_SCALE_MAX, TABLE_SCALE_MIN, TABLE_SCALE_STEP } from "@/features/staff/list-prefs";
+import { TABLE_SCALE_MAX, TABLE_SCALE_MIN, TABLE_SCALE_STEP } from "@/features/staff/list/list-prefs";
 import { useStaffViewPrefs } from "./staff-view-prefs";
 
 /** 표 기본 글자 크기(px) — 배수의 기준. v5 본문(16). 안쪽 셀은 em이라 이 값만 키우면 함께 커진다(옛 13은 v5 바닥 아래). */

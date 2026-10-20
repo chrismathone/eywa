@@ -15,16 +15,16 @@ import {
 import { SHUTTLE_TOOLBAR } from "@/features/shuttle/control-size";
 import { SHUTTLE_LIVE_PATH, shuttleFaces } from "@/features/shuttle/faces";
 import { mergePlanAndLog, plannedRidesOn, type RideException } from "@/features/shuttle/roster";
-import { groupRunsByVehicle } from "@/features/shuttle/today-board";
+import { groupRunsByVehicle } from "@/features/shuttle/today/today-board";
 import {
   alertRuns,
   buildLiveBoard,
   progressLabel,
   shouldExpand,
   summarizeLive,
-} from "@/features/shuttle/live-board";
-import { RUN_ALERT_LABEL, RUN_ALERT_TONE } from "@/features/shuttle/trip-state";
-import { useShuttleLive } from "@/features/shuttle/use-shuttle-live";
+} from "@/features/shuttle/live/live-board";
+import { RUN_ALERT_LABEL, RUN_ALERT_TONE } from "@/features/shuttle/today/trip-state";
+import { useShuttleLive } from "@/features/shuttle/live/use-shuttle-live";
 import type { BoardingLog } from "@/features/shuttle/server/queries";
 import { LiveVehicleCard } from "./live-vehicle-card";
 import { ShuttleDayNav } from "../../_components/shuttle-day-nav";
@@ -44,6 +44,7 @@ import { ShuttleDayNav } from "../../_components/shuttle-day-nav";
  *    없나"를 보는 자리라 덜어내면 목적이 무너진다(숨겨진 회차가 그대로 미기록으로 끝난다).
  */
 export function LiveBoardClient({
+  showTrack = false,
   tenantId,
   date,
   season,
@@ -55,6 +56,8 @@ export function LiveBoardClient({
   tripsReady,
   today,
 }: {
+  /** 실시간 위치 탭을 붙일까 — 원장·관리자·총괄만(서버 `isShuttleAdmin`이 정한다). */
+  showTrack?: boolean;
   tenantId: string;
   date: string;
   season: Season;
@@ -125,7 +128,7 @@ export function LiveBoardClient({
              안에서 가로 스크롤한다). */}
       <div className={SHUTTLE_TOOLBAR}>
         <span className="min-w-0 flex-1 basis-full sm:basis-auto">
-          <FaceTabs faces={shuttleFaces(season)} active={SHUTTLE_LIVE_PATH} ariaLabel="셔틀 면 전환" />
+          <FaceTabs faces={shuttleFaces(season, { track: showTrack })} active={SHUTTLE_LIVE_PATH} ariaLabel="셔틀 면 전환" />
         </span>
         <ShuttleDayNav date={date} today={today} season={season} hrefFor={href} />
       </div>

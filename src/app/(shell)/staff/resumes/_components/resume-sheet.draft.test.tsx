@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render } from "@testing-library/react";
-import { emptyResume } from "@/features/staff/resume";
+import { emptyResume } from "@/features/staff/resume/resume";
 import { ResumeSheet } from "./resume-sheet";
 
 /**
@@ -20,7 +20,7 @@ vi.mock("@/lib/form-draft", async (importOriginal) => {
   };
 });
 
-vi.mock("@/features/staff/server/resume-actions", () => ({
+vi.mock("@/features/staff/resume/server/resume-actions", () => ({
   saveStaffResume: vi.fn(),
   deleteStaffResume: vi.fn(),
 }));

@@ -13,7 +13,7 @@ const m = vi.hoisted(() => ({
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
 }));
-vi.mock("@/features/staff/server/resume-actions", () => ({
+vi.mock("@/features/staff/resume/server/resume-actions", () => ({
   deleteStaffResume: (id: string) => m.deleteStaffResume(id),
 }));
 vi.mock("@/components/workspace/use-in-frame", () => ({ useInFrame: () => m.inFrame }));

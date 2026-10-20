@@ -1,5 +1,5 @@
-import type { StaffListPrefs, StaffViewPrefs } from "@/features/staff/list-prefs";
-import { saveStaffListPrefs } from "@/features/staff/server/list-prefs";
+import type { StaffListPrefs, StaffViewPrefs } from "@/features/staff/list/list-prefs";
+import { saveStaffListPrefs } from "@/features/staff/list/server/list-prefs";
 
 /**
  * 직원목록 보기 설정의 **창 안 단일 저장 큐**(적대적 리뷰 2026-09-04).

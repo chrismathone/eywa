@@ -8,7 +8,7 @@
  *    다른 사람이 쓴 것(대리)·다음 날 이후에 쓴 것·작성자를 모르는 것은 전부 미작성이다. 출결도 같다.
  */
 import { isReportTrackedSubject } from "@/features/dashboard/report-subjects";
-import { subjectGroupOf } from "@/features/students/program";
+import { subjectGroupOf } from "@/features/students/enrollment/program";
 import type { PortfolioContext, RecordsAsOf } from "./context";
 import { kstDateOf } from "./dates";
 import type { AttendanceRow, PortfolioSnapshot, ReportCell, SnapshotUser } from "./types";

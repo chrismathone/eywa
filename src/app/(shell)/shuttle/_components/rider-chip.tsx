@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useDraggable } from "@dnd-kit/core";
 import { cn } from "@/lib/utils";
-import { studentStatusLabel } from "@/features/students/status-labels";
+import { studentStatusLabel } from "@/features/students/status/status-labels";
 import { SHUTTLE_DENSE_TEXT } from "@/features/shuttle/control-size";
 import { SHUTTLE_DAYS, dayLabel, type ShuttleRider } from "@/features/shuttle/types";
 import { compactWeekdays } from "@/features/shuttle/roster";

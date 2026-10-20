@@ -35,7 +35,7 @@ const api = async (path, init) => {
   return res.status === 204 ? null : res.json();
 };
 
-/** 부서명에 이름이 들어간 과목 key — src/features/staff/department-subjects.ts 와 같은 규칙(1글자 라벨 무시). */
+/** 부서명에 이름이 들어간 과목 key — src/features/staff/department/department-subjects.ts 와 같은 규칙(1글자 라벨 무시). */
 function subjectsFromDepartment(department, options) {
   const dept = (department ?? "").trim();
   if (!dept) return [];

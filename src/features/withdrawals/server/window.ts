@@ -1,7 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
-import { isMergedStudent } from "@/features/students/merged";
+import { isMergedStudent } from "@/features/students/status/merged";
 import { isBookkeepingOnlyExit, isCleanupExit, isSystemBulkWithdrawal } from "../system-bulk";
 import { normalizeReason } from "../types";
 import { endedTogether, inWithdrawalWindow, lastEndedByStudent, pickLastEnded, withdrawalSubjects, type EndedClassRef } from "../window";

@@ -6,7 +6,7 @@
 //  · 용역 몫 = 출석부 '비율 설정'의 대상 학년 — 프리랜서처럼 출석부 실급여·프리랜서 명세서·강사 정산 면을 탄다(그 학년 학생만).
 //  · 근로 몫 = 근로 요일(같은 비율표의 `workDays`) — 강사평가 근태는 이 요일만 센다(나머지 요일은 프리랜서처럼 세지 않는다).
 //  · 강사평가 '매출 대비 급여' = 계약서 월급 + 출석부 실급여(둘 중 하나라도 모르면 비율을 내지 않는다).
-import { WORKDAYS } from "./resume";
+import { WORKDAYS } from "./resume/resume";
 
 export const MIXED_EMPLOYMENT = "혼합";
 

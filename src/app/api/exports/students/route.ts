@@ -1,7 +1,7 @@
 import { logExportDownload } from "@/features/exports/server/log-export";
 import { NextResponse } from "next/server";
 import { isValidYmd, kstToday } from "@/lib/date-kst";
-import { parseProgram } from "@/features/students/program";
+import { parseProgram } from "@/features/students/enrollment/program";
 import { restrictIdsFor } from "@/features/students/server/restrict-ids";
 import { parseLevels, parseMixes } from "@/features/students/list-filter-values";
 import { requireAccess } from "@/lib/auth/require-access";

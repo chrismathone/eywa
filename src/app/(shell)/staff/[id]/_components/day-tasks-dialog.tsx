@@ -2,7 +2,7 @@
 
 // 그날 전체 업무 목록 — 그리드 셀/"+N건 더" 클릭 시. 항목 클릭 → 업무 상세(부모가 처리).
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { tasksOnDate, type NotionTask } from "@/features/staff/notion-tasks";
+import { tasksOnDate, type NotionTask } from "@/features/staff/notion/notion-tasks";
 
 function dateLabel(iso: string): string {
   const [y, m, d] = iso.split("-").map(Number);

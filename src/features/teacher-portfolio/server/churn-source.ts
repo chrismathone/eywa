@@ -2,7 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { addDays } from "@/lib/date-kst";
 import { fetchAllPaged } from "@/lib/supabase/batch";
-import { isMergedStudent, MERGE_NOTE_PREFIX } from "@/features/students/merged";
+import { isMergedStudent, MERGE_NOTE_PREFIX } from "@/features/students/status/merged";
 import { DEFAULT_CHURN_OPTIONS } from "../evaluation/config";
 import { kstDateOf } from "../model/dates";
 import type { SnapshotClass, SnapshotEnrollment, SnapshotSchedule, SnapshotTransition } from "../model/types";

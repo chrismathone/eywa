@@ -41,9 +41,9 @@ const EXEMPT: Record<string, string> = {
   "src/features/onescreen/server/actions.ts#setMyNoticeMode": VIEW,
   "src/features/onescreen/server/actions.ts#setMyOnescreenFontSize": VIEW,
   "src/features/onescreen/server/actions.ts#setMyTrendOptOut": VIEW,
-  "src/features/shuttle/server/today-prefs.ts#saveShuttleTodayPrefs": VIEW,
-  "src/features/staff/server/list-prefs.ts#saveStaffListPrefs": VIEW,
-  "src/features/students/server/list-prefs.ts#saveStudentListPrefs": VIEW,
+  "src/features/shuttle/today/server/today-prefs.ts#saveShuttleTodayPrefs": VIEW,
+  "src/features/staff/list/server/list-prefs.ts#saveStaffListPrefs": VIEW,
+  "src/features/students/list/server/list-prefs.ts#saveStudentListPrefs": VIEW,
   "src/features/timetable/server/view-prefs-actions.ts#saveTimetableViewPrefs": VIEW,
   // 개인 상태
   "src/features/notifications/server/actions.ts#markNotificationsRead": PERSONAL,
@@ -78,7 +78,9 @@ const EXEMPT: Record<string, string> = {
   // 자체 기록
   "src/features/billing/session-terms/server/receipt-allocation-actions.ts#mergeReceiptItems": `${OWN_LOG} (edit_receipt_merge_group이 audit_logs에 쓴다)`,
   "src/features/enrollments/server/actions.ts#deleteEnrollment": `${OWN_LOG} (delete_enrollment_history가 audit_logs에 쓴다)`,
-  "src/features/shuttle/server/parent-departure-actions.ts#ackParentNotice": `${OWN_LOG} (확인 행 자체가 누가·언제)`,
+  "src/features/shuttle/parent/server/parent-departure-actions.ts#ackParentNotice": `${OWN_LOG} (확인 행 자체가 누가·언제)`,
+  // 차량 위치(0383a) — 운행 중 기사 폰이 몇 초마다 회차별 최신 한 줄을 덮어쓴다(위치 기록이지 사람이 바꾼 값이 아니다).
+  "src/features/shuttle/map/server/vehicle-position-actions.ts#reportVehiclePosition": CELL,
   // 이미 기록된 요청의 자동 마무리 — 해제 요청(sync_agent_manage로 남는다)을 임대가 끝난 뒤 대시보드를 열 때 확정한다.
   "src/features/sync-agent/server/actions.ts#getAgentDashboard": "자동 정리 — 이미 기록된 연동 PC 해제 요청을 임대가 끝난 뒤 확정한다",
   // 읽기

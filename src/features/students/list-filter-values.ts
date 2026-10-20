@@ -9,7 +9,7 @@
  * 🔴 서버·클라 양쪽이 쓴다 — `"use client"`도 `server-only`도 붙이지 말 것([[#61]]·[[#81]]).
  */
 import { getGradeLevel, isPreschoolGrade } from "@/lib/format/school-grade";
-import type { SubjectMix } from "./enrolled-composition";
+import type { SubjectMix } from "./enrollment/enrolled-composition";
 import { parseMulti } from "@/lib/multi-value";
 
 // 다중 값 풀이는 공용(열 머리 필터 FilterSelect도 쓴다) — 여기서 다시 내보낸다.

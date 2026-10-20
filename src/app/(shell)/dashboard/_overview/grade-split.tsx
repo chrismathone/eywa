@@ -1,6 +1,6 @@
 "use client";
 
-import type { GradeSplit, GradeSplitRow } from "@/features/students/enrolled-composition";
+import type { GradeSplit, GradeSplitRow } from "@/features/students/enrollment/enrolled-composition";
 import { DASHBOARD_SUBJECT_COLORS } from "@/features/dashboard/overview/subject-colors";
 import { Legend, number } from "./charts";
 import { SubjectBarPopover } from "./subject-bar-popover";

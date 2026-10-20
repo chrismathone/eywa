@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { schoolsByLevel, levelSubjectSplit } from "./student-composition";
-import { subjectEnrollmentSummary } from "@/features/students/subject-enrollment-summary";
-import type { Program } from "@/features/students/program";
+import { subjectEnrollmentSummary } from "@/features/students/enrollment/subject-enrollment-summary";
+import type { Program } from "@/features/students/enrollment/program";
 
 describe("student composition", () => {
   it("학교별 수강은 학생을 한 번씩 세고 미수강과 기타 과목을 분리한다", () => {

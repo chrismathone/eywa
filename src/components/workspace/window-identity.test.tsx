@@ -228,3 +228,10 @@ describe("옛 창(경로 id로 저장된 창) — 복원에서 깨지지 않고 
     expect(openOrder()).toEqual([legacy, windowId("route", "attendance")]);
   });
 });
+
+describe("windowIdForHref — 관리자 전용 셔틀 면", () => {
+  it("실시간 위치는 탭 줄에서 빠졌어도(2026-10-08) 셔틀 창으로 열린다", () => {
+    expect(windowIdForHref("/shuttle/track")?.id).toBe("shuttle");
+    expect(windowIdForHref("/shuttle/track?season=term")?.id).toBe("shuttle");
+  });
+});

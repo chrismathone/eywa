@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
 import { describe, expect, it } from "vitest";
-import { isMergedStudent as appIsMergedStudent, mergeNoteFor } from "../../src/features/students/merged";
+import { isMergedStudent as appIsMergedStudent, mergeNoteFor } from "../../src/features/students/status/merged";
 const require_ = createRequire(import.meta.url);
 type Student = { id: string; name: string; grade: string; makeedu_id?: string | null; notes?: string | null; status?: string };
 const { isMergedStudent, invoiceStudentMatcher } = require_("./invoice-student-matcher.cjs") as {

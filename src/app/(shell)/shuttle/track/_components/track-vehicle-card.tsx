@@ -4,13 +4,12 @@ import { useMemo } from "react";
 import { Pill } from "@/components/atoms/pill";
 import { TONE_COLOR } from "@/lib/design/semantic-color";
 import { runTitle } from "@/features/shuttle/types";
-import { firstTime } from "@/features/shuttle/today-board";
-import { progressLabel, type LiveVehicle } from "@/features/shuttle/live-board";
-import { TRIP_STATE_LABEL, TRIP_TONE } from "@/features/shuttle/trip-state";
-import { VehicleMapSlot } from "./vehicle-map-slot";
+import { firstTime } from "@/features/shuttle/today/today-board";
+import { progressLabel, type LiveVehicle } from "@/features/shuttle/live/live-board";
+import { TRIP_STATE_LABEL, TRIP_TONE } from "@/features/shuttle/today/trip-state";
 
 /**
- * 차 한 대 — 지금 상태 한 줄 + 지도가 들어올 자리.
+ * 차 한 대 — 지금 상태 한 줄 + 이 차 노선 정류장의 좌표 준비 상태(지도는 화면 위에 하나로 둔다, 2026-10-08).
  *
  * ⚠️ 정류장 수 세기는 **이미 받아 둔 값 위의 표시용 계산**이다(도메인 집계가 아니라 지도 준비 상태).
  *    진행·상태 같은 도메인 숫자는 그대로 `live-board`에서 온다.
@@ -78,7 +77,14 @@ export function TrackVehicleCard({
         </div>
       )}
 
-      <VehicleMapSlot stopsTotal={stopCount.total} stopsWithCoords={stopCount.withCoords} />
+      {/* 지도에 이 차 정류장이 몇 곳 찍히는지 — 지금 말할 수 있는 진짜 숫자다(차 위치는 아직 없다). */}
+      {stopCount.total > 0 && (
+        <p className="text-text-faint text-xs">
+          이 차 노선 정류장 <span className="num font-bold">{stopCount.total}</span>곳 중{" "}
+          <span className="num font-bold">{stopCount.withCoords}</span>곳이 지도에 표시됩니다
+          {stopCount.withCoords === 0 && " — '노선 편성 → 정류장 관리'에서 위치를 찍을 수 있습니다"}
+        </p>
+      )}
     </section>
   );
 }

@@ -8,7 +8,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Panel, fmtDate, fmtNum } from "@/components/super-admin/parts";
 import { getTenantSnapshot } from "@/features/super-admin/server/queries";
 import { logImpersonateView } from "@/features/super-admin/server/actions";
-import { studentStatusMeta } from "@/features/students/status-labels";
+import { studentStatusMeta } from "@/features/students/status/status-labels";
 import { OpenTenantViewButton } from "../_open-view-button";
 
 export const metadata = { title: "슈퍼관리자 · 지점장 보기 — 에이와" };

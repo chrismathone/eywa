@@ -28,6 +28,7 @@ import { isFeatureLicensed, isFeatureOptedIn } from "@/lib/license/server";
 import { capMakeupMode, normalizeMakeupSettings } from "@/features/makeups/config";
 import { capLaboratoryMenus } from "@/lib/laboratory/rule";
 import { getLaboratoryMenus } from "@/lib/laboratory/server";
+import { applyUserMenuBlocks } from "@/lib/auth/user-menu-blocks";
 
 async function capLaboratory(matrix: AccessMatrix, tenantId: string): Promise<AccessMatrix> {
   const menus = await getLaboratoryMenus();
@@ -143,7 +144,11 @@ export function capTenantViewReadonly(matrix: AccessMatrix, role: SystemRole): A
 export const getActorPermMatrix = cache(async (): Promise<AccessMatrix> => {
   const matrix = await resolveActorPermMatrix();
   // 보기 = 그 지점 원장의 자리(current-user.ts)라 원장 줄을 누른다. 판정은 쿠키 하나를 보는 것이라 평소 요청엔 비용이 없다.
-  return (await isTenantViewRequest()) ? capTenantViewReadonly(matrix, "master") : matrix;
+  const capped = (await isTenantViewRequest()) ? capTenantViewReadonly(matrix, "master") : matrix;
+  // 🔴 개인 메뉴 차단은 **맨 끝**에서 — 슈퍼관리자 병합(낮추는 것 무시)보다 뒤여야 산다(user-menu-blocks.ts).
+  //    지점 보기 중엔 원장 줄로 판정하므로 그 줄도 함께 누른다.
+  const user = await getCurrentUser();
+  return user ? applyUserMenuBlocks(capped, user.id, [user.systemRole, "master"]) : capped;
 });
 
 const resolveActorPermMatrix = cache(async (): Promise<AccessMatrix> => {
@@ -201,7 +206,10 @@ export const getUserPermMatrix = cache(async (): Promise<AccessMatrix> => {
     const value = targetMatrix[menu][menu === "teacher_onescreen" ? "teacher" : target.systemRole];
     const level = target.access === "readonly" && (value === "full" || value === "scoped") ? "readonly" : value;
     return [menu, { ...actor[menu], [user.systemRole]: level, [target.systemRole]: level, teacher: level }];
-  })) as AccessMatrix, user.tenantId);
+  })) as AccessMatrix, user.tenantId).then((m) =>
+    // 다른 강사 뷰는 대상 값으로 내 역할 줄을 다시 쓰므로 개인 메뉴 차단을 한 번 더 누른다(user-menu-blocks.ts).
+    applyUserMenuBlocks(m, user.id, [user.systemRole, target.systemRole, "teacher"]),
+  );
 });
 
 /**

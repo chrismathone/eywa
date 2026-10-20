@@ -2,7 +2,7 @@ import "server-only";
 import type { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
-import { isMergedStudent } from "@/features/students/merged";
+import { isMergedStudent } from "@/features/students/status/merged";
 import type { OverlayHoldInput } from "../exit-overlay-model";
 
 /** 시간표 X 겹침의 조회(`exit-overlay.ts`가 조립한다 — 담당 선생님 재료는 강사평가의 `loadChurnSource`). */

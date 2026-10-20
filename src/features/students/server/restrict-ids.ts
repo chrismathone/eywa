@@ -1,7 +1,7 @@
 import "server-only";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { getFirstClassStudents } from "@/features/dashboard/server/day-arrivals-query";
-import type { Program } from "../program";
+import type { Program } from "../enrollment/program";
 import type { StudentLevel, StudentMixFilter } from "../list-filter-values";
 import { getCompositionStudentIds, getProgramStudentIds } from "./enrolled-programs";
 

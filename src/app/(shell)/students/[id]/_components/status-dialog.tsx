@@ -7,14 +7,14 @@ import { Loader2, Save, X } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/atoms/pill";
 import { useSubjectMaps } from "@/features/owner/operations-context";
-import { describeEndSelection } from "@/features/students/withdraw-selection";
-import { describeHoldSelection } from "@/features/students/hold-selection";
+import { describeEndSelection } from "@/features/students/status/withdraw-selection";
+import { describeHoldSelection } from "@/features/students/status/hold-selection";
 import {
   groupEnrollmentsBySubject,
   idsOf,
   initialHoldSubjects,
   type SubjectGroup,
-} from "@/features/students/subject-selection";
+} from "@/features/students/status/subject-selection";
 import {
   changeStudentStatus,
   endStudentEnrollments,

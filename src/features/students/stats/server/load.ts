@@ -9,7 +9,7 @@ import { readMyUiPrefs } from "@/lib/ui-prefs/read";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { subjectLabelRecord } from "@/features/owner/subjects";
-import { programSubjectsOf, subjectGroupOf } from "@/features/students/program";
+import { programSubjectsOf, subjectGroupOf } from "@/features/students/enrollment/program";
 import { getWithdrawalsInWindow } from "@/features/withdrawals/server/window";
 import { loadMonthlyChanges } from "@/features/dashboard/overview/server";
 import { monthKeys } from "@/features/dashboard/overview/model";

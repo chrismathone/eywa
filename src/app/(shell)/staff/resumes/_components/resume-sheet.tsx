@@ -29,8 +29,8 @@ import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import { useJobTitleResolver, useSubjectMaps } from "@/features/owner/operations-context";
 import { sheetT, type SheetDictKey } from "@/features/teacher-view/i18n";
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
-import { subjectsFromDepartment } from "@/features/staff/department-subjects";
-import { autoJobTitle } from "@/features/staff/department-job-titles";
+import { subjectsFromDepartment } from "@/features/staff/department/department-subjects";
+import { autoJobTitle } from "@/features/staff/department/department-job-titles";
 import {
   CAREER_ROWS,
   DYNAMIC_ROWS_MAX,
@@ -54,12 +54,12 @@ import {
   type ResumeEducation,
   type ResumeLanguage,
   type StaffResumeData,
-} from "@/features/staff/resume";
+} from "@/features/staff/resume/resume";
 import {
   issueResumePhotoTicket,
   saveStaffResume,
   type ResumeActionState,
-} from "@/features/staff/server/resume-actions";
+} from "@/features/staff/resume/server/resume-actions";
 import { DeleteResumeButton, PrintResumeButton } from "./resume-buttons";
 
 // 종이 서식("인재원 이력서") 레이아웃을 재현한 시트 — 읽기(뷰) ↔ 인라인 편집(칸에 바로 타이핑) 한 컴포넌트.

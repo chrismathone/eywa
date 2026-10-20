@@ -4,9 +4,9 @@ import { redirect } from "next/navigation";
 import { formatKoreanDate, kstToday } from "@/lib/date-kst";
 import { loadParentTimetables } from "@/features/classes/server/parent-timetable-data";
 import type { TimetableDayRow } from "@/features/classes/parent-timetable";
-import { getParentViewer } from "@/features/shuttle/server/parent-viewer";
-import { loadAcademyHolidays, restDayName } from "@/features/shuttle/server/rest-days";
-import { weekDates } from "@/features/shuttle/parent-rides";
+import { getParentViewer } from "@/features/shuttle/parent/server/parent-viewer";
+import { loadAcademyHolidays, restDayName } from "@/features/shuttle/parent/server/rest-days";
+import { weekDates } from "@/features/shuttle/parent/parent-rides";
 import { dayLabel, type DayCode } from "@/features/shuttle/types";
 
 export const metadata = { title: "수업 시간표" };

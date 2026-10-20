@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { hasFreelancePart, isMixedEmployment, MIXED_EMPLOYMENT, parseWorkDays, workDaysLabel } from "./employment";
-import { EMPLOYMENT_TYPES } from "./resume";
+import { EMPLOYMENT_TYPES } from "./resume/resume";
 
 /**
  * 계약구분 '혼합'(근로 + 용역) — 원장 2026-10-16 이성우 선생님 *"초중은 급여 고등은 프리"* → *"반반 계약을 따로 표기하는 칸 추가"*.

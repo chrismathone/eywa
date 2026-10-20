@@ -16,7 +16,7 @@ import {
   COMMENT_CATEGORIES,
   commentCategoryMeta,
   currentPeriod,
-} from "@/features/students/grades-meta";
+} from "@/features/students/detail/grades-meta";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 
 const inputCls =

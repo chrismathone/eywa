@@ -1,6 +1,6 @@
 import type { NewcomerRow } from "@/features/newcomers/server/queries";
 import { BUCKET_LABEL, NEWCOMER_BUCKETS } from "@/features/newcomers/onboarding-items";
-import { subjectGroupOf, type ProgramSubject } from "@/features/students/program";
+import { subjectGroupOf, type ProgramSubject } from "@/features/students/enrollment/program";
 import type { StudentSubjectSplit, SubjectDistributionRow } from "./student-composition";
 
 type Row = Pick<NewcomerRow, "studentId" | "bucket" | "subject" | "subjects" | "hasCurrentEnrollment">;

@@ -5,11 +5,11 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Copy, Loader2, Power, QrCode, RefreshCw, X } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
-import type { StaffQrView } from "@/features/staff/intake-view";
+import type { StaffQrView } from "@/features/staff/intake/intake-view";
 import {
   ensureStaffIntakeToken,
   updateStaffIntakeToken,
-} from "@/features/staff/server/intake-token-actions";
+} from "@/features/staff/intake/server/intake-token-actions";
 
 /**
  * 직원 등록 QR — **입력칸 없이 QR 하나**(원장 지시 2026-08-07 재확인: "채용 이름·역할·유효일을 정해서
