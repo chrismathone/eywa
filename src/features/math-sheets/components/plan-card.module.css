@@ -3,7 +3,8 @@
   /* 내신기간 = 주황(의미색 caution) — 빗금은 진도 막대 위에서 안 보였다(원장 "빗금말고 다른 색상으로 … 잘안보임"). */
   /* 내신기간 = 보라(의미색 캐논 special — 예외·대체). 진도 네이비·밀림 빨강·목표 초록과 안 겹친다(원장 2026-10-20 A안 + "색상조합 체크해서"). */
   --exam-color: var(--purple);
-  --late-hatch: repeating-linear-gradient(135deg, color-mix(in srgb, var(--danger) 62%, var(--card)) 0 3px, color-mix(in srgb, var(--danger) 18%, var(--card)) 3px 6px);
+  /* 밀린 차시 = 빨강 칠(원장 2026-10-20 "빗금 말고 우리 색깔로") — 이름은 그대로 두고 값만 칠로. */
+  --late-hatch: color-mix(in srgb, var(--danger) 72%, var(--card));
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -129,26 +130,27 @@
 .pop em { display: block; margin-top: 8px; font-style: normal; color: var(--text-faint); }
 
 /* 전체 목표 막대(날짜 눈금) — 권마다 칸 · 회색 빗금 = 내신기간 · 검은 선 = 오늘 계획 · 점 = 실제 위치 */
-.trail { position: relative; height: 10px; margin: 34px 8px 48px; }
-.tTrack { position: absolute; inset: 0; border-radius: 99px; background: var(--bg-soft); overflow: hidden; }
+.trail { position: relative; height: 20px; margin: 38px 8px 48px; }
+.tTrack { position: absolute; inset: 0; border-radius: 6px; background: var(--bg-soft); overflow: hidden; }
 .tFill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--primary); }
 .tLate { position: absolute; top: 0; bottom: 0; background: var(--late-hatch); }
 .tAhead { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--primary) 35%, var(--card)); }
 /* 막대 바로 밑에 틈 없이 붙은 줄(A안) — 막대와 같은 눈금이라 어느 권에 걸리는지 바로 보인다. */
-.tLane { position: absolute; left: 0; right: 0; top: 10px; height: 4px; }
-.tExam { position: absolute; top: 0; bottom: 0; border-radius: 0 0 3px 3px; background: var(--exam-color); }
+.tExam { position: absolute; top: 0; bottom: 0; z-index: 2; display: flex; align-items: center; justify-content: center; overflow: hidden; white-space: nowrap; font-size: 11px; font-weight: 700; }
+.tExam[data-kind="open"] { background: color-mix(in srgb, var(--exam-color) 22%, var(--card)); color: var(--exam-color); border-left: 1px solid var(--exam-color); border-right: 1px solid var(--exam-color); box-sizing: border-box; }
+.tExam[data-kind="filled"], .tExam[data-kind="late"] { color: #fff; border-left: 1px solid #fff; border-right: 1px solid #fff; box-sizing: border-box; }
 .tSeg { position: absolute; top: -8px; bottom: -44px; z-index: 1; cursor: help; }
-.tSeg::before { content: ""; position: absolute; left: -1px; top: 8px; width: 2px; height: 10px; background: var(--card); z-index: 3; }
+.tSeg::before { content: ""; position: absolute; left: -1px; top: 8px; width: 2px; height: 20px; background: var(--card); z-index: 3; }
 .tTrack + .tSeg::before { display: none; }
 .tSeg > i { position: absolute; left: 3px; right: 3px; bottom: 0; display: flex; flex-direction: column; align-items: center; gap: 1px; font-style: normal; white-space: nowrap; overflow: hidden; }
 .tSeg > i b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; font-size: var(--text-xs); font-weight: 700; color: var(--text-dim); }
 .tSeg > i small { max-width: 100%; overflow: hidden; text-overflow: ellipsis; font-size: 11px; color: var(--text-faint); }
 .tSeg[data-state="done"] > i b { color: var(--text-faint); font-weight: 600; }
 .tSeg[data-state="now"] > i b { color: var(--primary); }
-.tSeg[data-partial]::after { content: ""; position: absolute; top: 8px; height: 10px; left: 0; right: 0; border: 1px dashed var(--line-strong, #c3c8d1); border-radius: 0 99px 99px 0; }
+.tSeg[data-partial]::after { content: ""; position: absolute; top: 8px; height: 20px; left: 0; right: 0; border: 1px dashed var(--line-strong, #c3c8d1); border-radius: 0 6px 6px 0; }
 .tSeg:hover > i b, .tSeg:focus-visible > i b { color: var(--primary); }
 /* 최종 목표 권 — 초록(목표·완료 축, 의미색 캐논 positive) 테두리 칸 + 꼬리표 · 끝나는 날의 깃발 선 */
-.tSeg[data-target]::after { content: ""; position: absolute; top: 6px; height: 14px; left: 0; right: 0; border: 2px solid var(--green); border-radius: 0 99px 99px 0; }
+.tSeg[data-target]::after { content: ""; position: absolute; top: 6px; height: 24px; left: 0; right: 0; border: 2px solid var(--green); border-radius: 0 7px 7px 0; z-index: 3; }
 .tSeg[data-target] > i b { color: var(--green); }
 .tSeg[data-after] { opacity: .45; }
 .goalFlag { position: absolute; top: -10px; bottom: -4px; width: 3px; margin-left: -1.5px; background: var(--green); z-index: 4; pointer-events: none; }
@@ -157,12 +159,24 @@
 /* 오늘 계획 꼬리표와 가까우면 한 줄 위로 — 두 꼬리표가 겹치지 않게. */
 .goalFlag[data-near] { top: -28px; }
 .trail .plan, .trail .dot { z-index: 4; }
+/* 현재 위치 핀(A안) — 흰 테두리 네이비 점 + 위 꼬리표(꼭지). 막대 위쪽 여백 안에 들어간다. */
+.pin { position: absolute; top: 50%; z-index: 6; pointer-events: auto; }
+.pinDot { position: absolute; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; background: var(--primary); border: 4px solid var(--card); box-shadow: 0 0 0 2px var(--primary), 0 2px 6px rgb(0 0 0 / 0.25); box-sizing: border-box; }
+.pinTag { position: absolute; bottom: 16px; left: 0; transform: translateX(-50%); padding: 1px 8px; border-radius: 6px; background: var(--primary); color: #fff; font-size: var(--text-xs); font-weight: 700; white-space: nowrap; }
+.pinTag::after { content: ""; position: absolute; left: 50%; top: 100%; margin-left: -4px; border: 4px solid transparent; border-top-color: var(--primary); }
+.pinTag[data-edge="start"] { transform: translateX(-12px); }
+.pinTag[data-edge="start"]::after { left: 12px; }
+.pinTag[data-edge="end"] { transform: translateX(calc(-100% + 12px)); }
+.pinTag[data-edge="end"]::after { left: auto; right: 8px; margin-left: 0; }
 .legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 0 8px 4px; font-size: var(--text-xs); color: var(--text-faint); }
 .legend em { font-style: normal; padding: 1px 8px; border-radius: 99px; background: var(--purple-soft); color: var(--exam-color); font-weight: 700; }
 .legendEnd { margin-left: auto; }
 .pop > small[data-note] { color: var(--text-dim); }
 .pop > small[data-note]::before { content: ""; display: inline-block; width: 10px; height: 6px; margin-right: 5px; border-radius: 2px; background: var(--exam-color); vertical-align: 1px; }
-.examKey { display: inline-block; width: 14px; height: 4px; margin-right: 4px; vertical-align: 2px; border-radius: 2px; background: var(--exam-color); }
+.examKey { display: inline-block; width: 16px; height: 10px; margin-right: 4px; vertical-align: -1px; border-radius: 2px; }
+.examKey[data-kind="open"] { background: color-mix(in srgb, var(--exam-color) 22%, var(--card)); border-left: 1px solid var(--exam-color); border-right: 1px solid var(--exam-color); box-sizing: border-box; }
+.examKey[data-kind="filled"] { background: var(--primary); border-left: 1px solid #fff; border-right: 1px solid #fff; box-sizing: border-box; }
+.examKey[data-kind="late"] { background: var(--late-hatch); }
 /* 학교별 내신기간 창 */
 .examForm { display: grid; gap: 8px; }
 .examPick { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
