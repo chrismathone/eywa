@@ -363,6 +363,8 @@ export default async function StudentsPage({
       {/* 핵심 수치 — 재원 총원 + 과목별 재원생 비중(전체/퇴원은 상태 필터로). 과목이 늘어도 카드 1장 고정.
           재원생 0명 과목은 숨김(미운영 과목 노이즈 방지), 인원 내림차순. */}
       <EnrolledStatCard
+        // 원생 통계 입구 — 강사(내 학생 축) 화면은 통계를 보이지 않으므로 세우지 않는다(load.ts teacherScoped).
+        statsHref={scope ? null : "/students/stats"}
         enrolled={enrolled}
         subjects={subjects.options
           .map((s) => ({
