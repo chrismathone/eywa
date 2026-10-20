@@ -61,7 +61,8 @@
 .facts b { margin-left: 5px; color: var(--text); }
 
 /* 교재 타일 */
-.books { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-top: 12px; }
+/* 늘 두 칸 — 한 권짜리도 반 폭이라 학생끼리 권 길이가 같은 눈금으로 비교된다. */
+.books { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
 .bk { padding: 12px 14px; border: 1px solid var(--line-faint); border-radius: 10px; background: var(--card); }
 .bar { position: relative; height: 8px; margin: 12px 0 8px; border-radius: 99px; background: var(--bg-soft); overflow: hidden; }
 .bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--primary); }
@@ -87,5 +88,6 @@
   .lab { border-right: 0; border-bottom: 1px solid var(--line-faint); padding: 10px 16px; }
   .lab span { display: none; }
   .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .books { grid-template-columns: 1fr; }
   .open { min-height: 44px; }
 }

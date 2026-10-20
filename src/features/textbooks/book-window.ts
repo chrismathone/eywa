@@ -130,7 +130,8 @@ export function bookWindow(args: {
       id: b.id,
       title: b.title,
       lessons: b.lessons.length,
-      unit: (b.lessons[0]?.progress ?? "").split(" / ")[0]?.trim() || null,
+      // 앞 번호(`5-1. `)는 떼고 이름만 — 타일 제목이 번호로 시작하면 권 번호와 섞여 읽힌다.
+      unit: (b.lessons[0]?.progress ?? "").split(" / ")[0]?.replace(/^[\d-]+\.\s*/, "").trim() || null,
     })),
     grade: setKey.split("|")[1]!.replace(/-\d+$/, ""),
     units: books.flatMap((b) => b.lessons.flatMap((l) => (l.progress ?? "").split(" / ").map((u) => u.trim()).filter(Boolean))),

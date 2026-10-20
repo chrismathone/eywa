@@ -6,7 +6,7 @@ const book = (id: string, title: string, units: string[]): CatalogBook => ({
   id, title, lessons: units.map((progress, i) => ({ lessonNo: i + 1, progress })),
 });
 const B1 = book("b1", "가우스 중2-1 1권", ["유리수와 소수", "지수법칙"]);
-const B3 = book("b3", "가우스 중2-2 3권", ["이등변삼각형의 성질", "삼각형의 외심", "평행사변형의 성질", "닮은 도형"]);
+const B3 = book("b3", "가우스 중2-2 3권", ["5-1. 이등변삼각형의 성질", "삼각형의 외심", "평행사변형의 성질", "닮은 도형"]);
 const B4 = book("b4", "가우스 중2-2 4권", ["삼각형의 무게중심", "피타고라스 정리", "경우의 수", "확률의 계산"]);
 const CATALOG = [B1, B3, B4];
 const noDates = () => [] as string[];
