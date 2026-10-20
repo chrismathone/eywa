@@ -29,12 +29,14 @@ export type CalendarEvent = {
 
 export function classify(title: string) {
   const compact = title.normalize("NFKC").replace(/\s+/g, "");
+  if (/신입생|첫등원|첫수업|등원|시범수업|체험수업/.test(compact)) return null;
+  if (/(?:상담|입테|테스트|레테)(?:예약)?(?:금지|불가|없음)|상담[Xx×✕]+$|상담일정조율완료/.test(compact)) return null;
   const entrance = /입학테스트|입테/.test(compact);
   const test = /테스트|레테/.test(compact);
   const consultation = /상담/.test(compact);
   if (!entrance && !test && !consultation) return null;
   const category: Category = entrance ? "entrance" : test ? "test" : "consultation";
-  const reason = /재원|학부모|진로|직원|강사|채용|면접|전화|통화|온라인|줌|zoom|재시험|재테스트|월말|단원|수행평가|시스템|문자테스트|테스트문자|회의|상담일지|상담기록/i.test(compact)
+  const reason = /재원|학부모|어머니|아버지|진로|직원|강사|채용|면접|전화|통화|온라인|줌|zoom|재시험|재테스트|월말|단원|수행평가|시스템|문자테스트|테스트문자|회의|미팅|알려줄|부재중|상담일지|상담기록/i.test(compact)
     ? "신규 방문 예약인지 확인 필요"
     : /변경|연기|이동/.test(compact) ? "일정 변경·연기 여부 확인" : null;
   return { category, reason };
@@ -67,14 +69,15 @@ export function reservation(event: CalendarEvent, source: string, calendarId: st
   const title = event.summary ?? "";
   const classification = classify(title);
   if (!classification) return null;
-  const cancelled = event.status === "cancelled" || isCancelledEventTitle(title);
+  const noShow = /노쇼|noshow/i.test(title.normalize("NFKC").replace(/\s+/g, ""));
+  const cancelled = event.status === "cancelled" || isCancelledEventTitle(title) || noShow;
   const occurrence = event.recurringEventId || event.originalStartTime
     ? eventStart(event.originalStartTime)?.occurrence ?? start.occurrence : "single";
   return {
     key: `${calendarId}:${event.id}`, occurrence: event.iCalUID ? `${event.iCalUID}:${occurrence}` : `${calendarId}:${event.id}`,
     date: start.date, time: start.time, title: displayTitle(title), source, category: classification.category,
     status: cancelled ? "cancelled" : classification.reason || event.status === "tentative" ? "review" : "active",
-    reason: cancelled ? "취소 표시" : classification.reason ?? (event.status === "tentative" ? "미확정 예약" : null),
+    reason: cancelled ? noShow ? "노쇼 표시" : "취소 표시" : classification.reason ?? (event.status === "tentative" ? "미확정 예약" : null),
     url: safeCalendarUrl(event.htmlLink), updated: Date.parse(event.updated ?? "") || 0,
   };
 }

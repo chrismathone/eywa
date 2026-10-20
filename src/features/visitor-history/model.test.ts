@@ -13,6 +13,17 @@ describe("reservation evidence", () => {
   it.each(["레벨테스트", "레테", "테스트 상담"])("classifies %s as test", title =>
     expect(classify(title)?.category).toBe("test"));
   it("excludes unrelated titles without using descriptions", () => expect(classify("직원 식사")).toBeNull());
+  it.each(["신입생 상담 후 등원", "입테 후 첫 수업", "신입생 입학테스트", "시범 수업 상담", "체험수업 테스트",
+    "대표님 상담불가타임", "상담 예약 금지", "영어 레테 금지", "수요일 상담 X", "상담XXXX", "[상담 일정 조율 완료]"])("excludes attendance and calendar blocks: %s", title => {
+    expect(reservation(event({ summary: title }), "입학 상담", "a", "2026-01")).toBeNull();
+  });
+  it.each(["[부재중] 영어입테 가상학생", "상담차트 디지털화 미팅", "가상학생 내일 입테 알려줄 것", "가상학생 어머니 상담"])("holds ambiguous notes: %s", title =>
+    expect(reservation(event({ summary: title }), "입학 상담", "a", "2026-01")?.status).toBe("review"));
+  it("keeps a prior admission consultation even after registration", () => {
+    expect(reservation(event({ summary: "가상학생 입학상담 등록완료" }), "입학 상담", "a", "2026-01")?.status).toBe("active");
+  });
+  it.each(["가상학생 상담 노쇼", "영어 입테 NO SHOW"])("preserves but does not count %s", title =>
+    expect(reservation(event({ summary: title }), "입학 상담", "a", "2026-01")).toMatchObject({ status: "cancelled", reason: "노쇼 표시" }));
   it.each(["학부모상담", "재원생 상담", "입테 일정변경", "전화상담", "테스트 문자 발송", "월말테스트"])("holds %s for review", title =>
     expect(reservation(event({ summary: title }), "입학 상담", "a", "2026-01")?.status).toBe("review"));
   it.each(["취소 입테", "테스트 취 소"])("excludes %s", title =>
