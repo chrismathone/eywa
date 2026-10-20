@@ -16,6 +16,7 @@ import {
   type TextbookAuditSnapshot,
 } from "../textbook-audit";
 import { ownsTextbookRequest } from "../textbook-ownership";
+import { handOverTextbookNoticeLink } from "./textbook-notice-handover";
 
 // 교재신청(textbook_orders) CRUD — invoices actions 골격 본뜸. 상태 전환 시 해당 타임스탬프를
 // 진입 시각으로 채운다(ijw timestamp-on-toggle). tenant_id는 RLS 강제(INSERT엔 명시).
@@ -326,16 +327,29 @@ export async function deleteTextbookRequest(_prev: TextbookState, formData: Form
   // 🔴 `.select("id")`가 핵심 — PostgREST는 **RLS에 막힌 행을 에러 없이 건너뛴다**(0행 삭제).
   //    예전엔 error만 보고 ok를 돌려줘서, 권한에 막힌 삭제가 "성공했는데 목록은 그대로"로 보였다
   //    (원장 2026-08-03 "삭제가 안 되는 것 같은데"). 지운 행 수를 직접 확인해야 진실을 말할 수 있다.
-  const { data: gone, error } = await supabase.from("textbook_orders").delete().eq("id", id).select("id");
+  // 지운 행의 공지 연결도 함께 돌려받는다 — 발송한 요청이면 같은 요청의 남은 행으로 옮긴다(textbook-notice-handover).
+  const { data: gone, error } = await supabase
+    .from("textbook_orders")
+    .delete()
+    .eq("id", id)
+    .select("id, student_id, book_name, request_date, classnote_notice_id");
   if (error) return { error: explainDbError(error, { scope: "billing.textbookRequest.delete", fallback: "교재 요청을 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.", op: "delete" }).message };
   if (!gone?.length) return { error: DELETE_BLOCKED_MSG };
+  const noticeMovedTo = await handOverTextbookNoticeLink(user.tenantId, gone[0]!);
   const deletedTarget = textbookAuditTarget(gate.before);
   await logAction({
     action: "textbook_order_delete",
     targetType: "textbook_order",
     targetLabel: deletedTarget,
-    // 지운 뒤엔 행에서 되짚을 수 없다 — 금액까지 남긴다.
-    metadata: { orderId: id, target: deletedTarget, price: Number(gate.before.price ?? 0), surface: "request" },
+    // 지운 뒤엔 행에서 되짚을 수 없다 — 금액까지 남긴다. 발송 연결을 옮겼으면 어디로 옮겼는지도.
+    metadata: {
+      orderId: id,
+      target: deletedTarget,
+      price: Number(gate.before.price ?? 0),
+      surface: "request",
+      noticeId: gone[0]!.classnote_notice_id ?? null,
+      noticeMovedTo,
+    },
   });
   revalidatePath("/textbook-requests");
   revalidatePath("/billing");
@@ -477,17 +491,29 @@ export async function deleteTextbookOrder(_prev: TextbookState, formData: FormDa
     .eq("id", id)
     .single();
   // 위와 같은 이유로 지운 행 수를 확인한다(0행 = 권한에 막힘, 에러는 안 난다).
-  const { data: gone, error } = await supabase.from("textbook_orders").delete().eq("id", id).select("id");
+  const { data: gone, error } = await supabase
+    .from("textbook_orders")
+    .delete()
+    .eq("id", id)
+    .select("id, student_id, book_name, request_date, classnote_notice_id");
   if (error) return { error: explainDbError(error, { scope: "billing.textbookOrder.delete", fallback: "교재 주문을 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.", op: "delete" }).message };
   if (!gone?.length) return { error: DELETE_BLOCKED_MSG };
 
+  const noticeMovedTo = await handOverTextbookNoticeLink(user.tenantId, gone[0]!);
   const before = snapshotOf(beforeRow as AuditRow | null);
   const deletedTarget = textbookAuditTarget(before);
   await logAction({
     action: "textbook_order_delete",
     targetType: "textbook_order",
     targetLabel: deletedTarget,
-    metadata: { orderId: id, target: deletedTarget, price: Number(before.price ?? 0), surface: "billing" },
+    metadata: {
+      orderId: id,
+      target: deletedTarget,
+      price: Number(before.price ?? 0),
+      surface: "billing",
+      noticeId: gone[0]!.classnote_notice_id ?? null,
+      noticeMovedTo,
+    },
   });
   revalidatePath("/billing");
   return { ok: true };

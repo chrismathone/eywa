@@ -77,7 +77,9 @@ export function TextbooksTable({
 
   function handleDelete(r: TextbookOrderRow) {
     setDelError(null);
-    if (!confirm(`"${r.bookName}" 교재신청을 삭제할까요? 되돌릴 수 없습니다.`)) return;
+    // 학부모에게 보낸 요청이면 그 사실을 함께 묻는다 — 같은 줄이 둘일 때 발송한 쪽을 지운 9건(2026-10-20).
+    const sentNote = r.classnoteNoticeId ? "\n학부모 알림장으로 보낸 요청입니다(지워도 알림장 글은 남습니다)." : "";
+    if (!confirm(`"${r.bookName}" 교재신청을 삭제할까요? 되돌릴 수 없습니다.${sentNote}`)) return;
     const fd = new FormData();
     fd.append("id", r.id);
     setBusy(r.id);
