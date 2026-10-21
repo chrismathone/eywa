@@ -96,6 +96,8 @@ export function RunPanel({
    * 서버(recordBoarding·clearBoarding)도 같은 판정을 다시 한다([[#77]]).
    */
   const ended = tripsReady && tripState(trip) === "done";
+  /** 지금 도는 회차 — 판을 연한 녹색으로(사용자 2026-10-21 "운행 중일 땐 좀 더 구별되게"). */
+  const running = tripsReady && tripState(trip) === "running";
   const rowsWritable = canWrite && !ended;
   /**
    * 🔒 **[출발]이 눌려야 탑승·미탑승·하차를 찍는다**(사용자 2026-10-07). 출발 전엔 하원 체크·[등원/하원 안함]·[등하원 수정]만
@@ -111,7 +113,11 @@ export function RunPanel({
     <section
       className={cn(
         "flex flex-col rounded-2xl",
-        ended ? "bg-muted border-line border" : "bg-card shadow-[var(--shadow-card)]",
+        ended
+          ? "bg-muted border-line border"
+          : running
+            ? "bg-green-soft border-green/40 border-2"
+            : "bg-card shadow-[var(--shadow-card)]",
       )}
     >
       {/* 회차 머리 = 접기 버튼 + 출발/종료. 접힌 채로도 "몇 명 중 몇 명 남았는지"가 보여야 한다.

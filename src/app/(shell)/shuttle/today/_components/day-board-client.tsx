@@ -133,6 +133,25 @@ export function DayBoardClient({
   const [jumpKey, setJumpKey] = useState<{ key: string; n: number } | null>(null);
 
   const tripByRun = useMemo(() => new Map(trips), [trips]);
+  /**
+   * [종료]를 누르면 그 회차를 **접는다**(사용자 2026-10-21 "종료를 누르면 창이 닫히게") — 손으로 한 번 열거나 닫은 회차는
+   * `manualOpen`이 기본 판정(종료 = 접힘)을 이겨서 종료 뒤에도 펼친 채 남았다. 그래서 **종료로 바뀌는 순간** 그 회차의
+   * 손 기록을 지운다. 처음 열 때 이미 끝난 회차는 건드리지 않는다(이전 값으로 시작).
+   */
+  const endedIds = useMemo(() => trips.filter(([, t]) => t?.endedAt).map(([id]) => id).sort().join(","), [trips]);
+  const prevEnded = useRef(endedIds);
+  useEffect(() => {
+    const before = new Set(prevEnded.current.split(",").filter(Boolean));
+    prevEnded.current = endedIds;
+    const newly = endedIds.split(",").filter((id) => id && !before.has(id));
+    if (newly.length === 0) return;
+    setManualOpen((m) => {
+      if (!newly.some((id) => id in m)) return m;
+      const next = { ...m };
+      for (const id of newly) delete next[id];
+      return next;
+    });
+  }, [endedIds]);
 
   /**
    * 실시간 반영 — 내가 찍으면 알리고(publish), 남이 찍으면 이 화면도 따라 갱신된다.
@@ -233,7 +252,9 @@ export function DayBoardClient({
       {allGroups.length > 0 && (
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
           <VehicleTabs groups={allGroups} progressByKey={progressByKey} value={shownKey} onPick={pickVehicle} />
-          <div className="sm:ml-auto">
+          {/* 넓은 화면(마우스)에선 아래 요약 줄의 미탑승 옆으로 간다(사용자 2026-10-21) — 여기는 폰·좁은 창·터치 자리.
+              조건은 툴바 레일 규칙(globals.css .toolbar-rail 모바일 절)의 반대다: 레일이면 겹판이 잘리므로 레일 밖에 둔다. */}
+          <div className="sm:ml-auto lg:pointer-fine:hidden">
             <RideJump groups={allGroups} onPick={jumpTo} />
           </div>
         </div>
@@ -272,6 +293,12 @@ export function DayBoardClient({
           <span className="text-text-faint whitespace-nowrap">
             미탑승 <span className="num">0</span>
           </span>
+        )}
+        {/* 학생 찾기 — 넓은 화면(마우스)에선 탑승·미탑승 바로 옆(사용자 2026-10-21). 이때는 레일이 아니라 겹판이 안 잘린다. */}
+        {allGroups.length > 0 && (
+          <div className="hidden lg:pointer-fine:block">
+            <RideJump groups={allGroups} onPick={jumpTo} />
+          </div>
         )}
         {/* 🔑 일회성 변경은 **한 자리에** 모은다 — 줄마다 '오늘 안 탐'을 붙이면 바로 옆 '미탑승'과
             섞여 찍힌다(다른 축이다). 게다가 전화를 받은 데스크는 이름으로 찾지, 회차를 스크롤하지 않는다.
@@ -324,8 +351,11 @@ export function DayBoardClient({
 
       {/* 🚌 **호차는 옆으로, 회차는 밑으로**(사용자 2026-10-16 "호차가 밑으로 나열이자나 이걸 옆으로 · 내용은 밑으로") —
           호차마다 한 열. 몇 열이 서는지는 **이 판의 실제 폭**으로 정한다(열 하나 최소 24rem — 그보다 좁으면 종전처럼 위아래로 쌓인다, 폰 포함). */}
+      {/* 📐 **폰과 같은 모양**(사용자 2026-10-21 "폰화면에서 보는 뷰랑 최대한 비슷하게 · 굳이 꽉 채우지 않아도 돼") —
+          호차 열은 **폰 폭(26rem ≈ 416px)으로 고정**하고 왼쪽부터 나란히 선다. 열이 넓으면 학생 줄이 "이름 | 버튼" 가로 배치로
+          바뀌어(@lg/row) 폰과 딴 화면이 됐다. 판이 좁으면(폰) 종전대로 한 열을 꽉 채운다. 호차 하나만 볼 때도 같은 폭. */}
       <div className="@container/board">
-       <div className="grid grid-cols-1 items-start gap-4 @3xl/board:grid-cols-[repeat(auto-fit,minmax(24rem,1fr))]">
+       <div className="grid grid-cols-1 items-start gap-4 @xl/board:grid-cols-[repeat(auto-fill,26rem)]">
       {groups.map((group) => (
         <section key={group.key} className="flex min-w-0 flex-col gap-2">
           <VehicleHeader group={group} progress={progressByKey.get(group.key) ?? group.progress} />

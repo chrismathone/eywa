@@ -37,6 +37,7 @@ import {
   reorderRunStops,
 } from "@/features/shuttle/server/actions";
 import type { AssignableStudent } from "@/features/shuttle/server/students";
+import { studentAssignments } from "@/features/shuttle/student-assignments";
 import { RunColumn } from "./run-column";
 import { StopColumn } from "./stop-column";
 import { StudentPool } from "./student-pool";
@@ -121,6 +122,8 @@ export function ShuttleBoardClient({
     for (const run of runs) for (const s of run.stops) for (const r of s.riders) set.add(r.studentId);
     return set;
   }, [runs]);
+  /** 학생 풀에서 배정된 아이를 누르면 펼칠 "어디에 배정됐나"(사용자 2026-10-21) — 보드가 실은 회차에서 접는다(추가 조회 0). */
+  const assignmentsByStudent = useMemo(() => studentAssignments(runs, vehicles), [runs, vehicles]);
 
   function run(action: () => Promise<{ error?: string; notice?: string } | undefined>) {
     setError(null);
@@ -301,7 +304,13 @@ export function ShuttleBoardClient({
         <div
           className={pane === "students" ? "flex min-h-0 flex-col lg:flex" : "hidden lg:flex lg:min-h-0 lg:flex-col"}
         >
-          <StudentPool students={students} assignedIds={assignedIds} canWrite={canWrite} />
+          <StudentPool
+            students={students}
+            assignments={assignmentsByStudent}
+            season={season}
+            canWrite={canWrite}
+            onError={setError}
+          />
         </div>
       </div>
 
