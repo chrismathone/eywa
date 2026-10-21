@@ -28,7 +28,15 @@ export type Progress = {
 
 /** 호차 한 칸 = 그 차의 회차들 + 그 차의 진행. */
 export type VehicleGroup = {
+  /** 대표 차량 id — 같은 이름으로 합친 칸이면 편성 순서가 가장 앞선 차. */
   vehicleId: string;
+  /**
+   * 칸을 가르는 키 = 정규화한 차 이름(`vehicleGroupKey`) — 호차 토글·저장값이 이 키를 쓴다.
+   * 편성에 없는 차(이름을 모름)는 `id:<vehicleId>`.
+   */
+  key: string;
+  /** 이 칸에 합쳐진 차량 id 전부(대표 포함). */
+  vehicleIds: string[];
   /** 차 이름 — 편성이 지워진 회차도 화면에서 사라지지 않게 폴백을 둔다. */
   vehicleName: string;
   driverName: string | null;
@@ -107,7 +115,22 @@ export function filterByDirection(runs: readonly RunRows[], dir: DirectionFilter
 }
 
 /**
+ * 호차 칸 키 — **이름이 같으면 같은 호차**다(사용자 2026-10-20 "같은 호차면 같은 열에 나열 · 운영 서버에서
+ * 19·20시로 해놓은 데이터가 있는데 이건 따로 열을 잡더라").
+ *
+ * 🔑 칸을 차량 **행 id**로 가르면, 저녁 회차를 같은 이름의 차량 행을 하나 더 만들어 넣은 편성에서
+ *    "2호차"가 두 열로 갈린다. 기사가 보는 단위는 행이 아니라 **차 이름**이다.
+ * ⚠️ 공백만 정규화한다(앞뒤 공백·연속 공백) — "2호차"와 "2호차(저녁)"처럼 글자가 다르면 다른 차로 둔다
+ *    (사람이 일부러 다르게 붙인 이름을 우리가 합치지 않는다).
+ */
+export function vehicleGroupKey(name: string | null | undefined, vehicleId: string): string {
+  const n = (name ?? "").replace(/\s+/g, " ").trim();
+  return n ? `name:${n}` : `id:${vehicleId}`;
+}
+
+/**
  * 회차를 **호차로 묶는다** — 차 순서는 편성(sortOrder), 차 안에서는 **시각 순**이다.
+ * 같은 이름의 차량 행은 한 칸으로 합친다(`vehicleGroupKey`).
  *
  * 🔴 시각으로 정렬하는 이유: 기사는 회차 번호가 아니라 **다음 출발 시각**으로 움직인다. 번호순이면
  *    "3회차 15:45"가 "1회차 13:46"보다 위에 오는 편성에서 폰을 위아래로 훑게 된다.
@@ -125,16 +148,24 @@ export function groupRunsByVehicle(
   const order = new Map(vehicles.map((v, i) => [v.id, i]));
   const meta = new Map(vehicles.map((v) => [v.id, v]));
 
-  const byVehicle = new Map<string, RunRows[]>();
+  const byKey = new Map<string, { ids: string[]; list: RunRows[] }>();
   for (const item of runs) {
-    const list = byVehicle.get(item.run.vehicleId) ?? [];
-    list.push(item);
-    byVehicle.set(item.run.vehicleId, list);
+    const id = item.run.vehicleId;
+    const key = vehicleGroupKey(meta.get(id)?.name, id);
+    const slot = byKey.get(key) ?? { ids: [], list: [] };
+    if (!slot.ids.includes(id)) slot.ids.push(id);
+    slot.list.push(item);
+    byKey.set(key, slot);
   }
 
   const groups: VehicleGroup[] = [];
-  for (const [vehicleId, list] of byVehicle) {
-    const v = meta.get(vehicleId);
+  for (const [key, { ids, list }] of byKey) {
+    // 대표 = 편성 순서가 가장 앞선 차(편성에 없는 차는 뒤). 기사 정보는 대표 → 다른 차 순으로 첫 값.
+    const vehicleIds = [...ids].sort((a, b) => (order.get(a) ?? Infinity) - (order.get(b) ?? Infinity));
+    const vehicleId = vehicleIds[0]!;
+    const members = vehicleIds.map((id) => meta.get(id)).filter((v): v is ShuttleVehicle => !!v);
+    const v = members[0];
+    const driver = members.find((m) => m.driverName) ?? v;
     const sorted = [...list].sort((a, b) => {
       const ta = firstTime(a.run);
       const tb = firstTime(b.run);
@@ -148,9 +179,11 @@ export function groupRunsByVehicle(
     });
     groups.push({
       vehicleId,
-      vehicleName: v?.name || "(편성 없는 차)",
-      driverName: v?.driverName ?? null,
-      driverPhone: v?.driverPhone ?? null,
+      key,
+      vehicleIds,
+      vehicleName: v?.name.replace(/\s+/g, " ").trim() || "(편성 없는 차)",
+      driverName: driver?.driverName ?? null,
+      driverPhone: driver?.driverName ? (driver.driverPhone ?? null) : (v?.driverPhone ?? null),
       runs: sorted,
       progress: countProgress(sorted.flatMap((r) => r.rows)),
     });
