@@ -1,18 +1,21 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
-import { kstTimeOf } from "@/lib/date-kst";
+import { kstDateOf, kstTimeOf } from "@/lib/date-kst";
 import { auditScoped, systemAuditScope } from "@/features/audit/server/system-read";
 import { countAssignedClasses } from "@/features/enrollment/server/assigned-classes";
 import { kstDayBounds } from "@/features/enrollment/kst-bounds";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
+import { enrolledRecentFrom } from "@/features/dashboard/overview/enrolled-recent";
 
 export type EnrolledTodayRow = {
   /** 콜&상담 id. */
   id: string;
   name: string;
   schoolGrade: string | null;
-  /** 등록 완료로 옮긴 시각(KST HH:MM) — 그날 마지막으로 옮긴 때. */
+  /** 등록 완료로 옮긴 날(KST YYYY-MM-DD) — 창 안에서 마지막으로 옮긴 날. 어제·이번 달을 이 값으로 가른다. */
+  date: string | null;
+  /** 등록 완료로 옮긴 시각(KST HH:MM) — 창 안에서 마지막으로 옮긴 때. */
   time: string | null;
   /** 칸반 '반 배정 완료'와 같은 판정(`countAssignedClasses`). */
   assigned: boolean;
@@ -23,18 +26,20 @@ export type EnrolledTodayRow = {
 type OutcomeLog = { metadata: { consultationId?: unknown; to?: unknown } | null; created_at: string };
 
 /**
- * 운영실 KPI **'금일 등록'**(원장 2026-09-23 *"콜&상담에서 등록 완료로 이동한 학생을 오늘날짜 기준으로"*) —
- * 오늘(KST) 콜&상담 상태를 '등록 완료'(outcome=enrolled)로 옮긴 상담. 카드 숫자와 팝업이 **같은 배열**이다.
+ * 운영실 KPI **'전일 / 이달 신규'**(원장 2026-09-23 '금일 등록' → 2026-10-21 *"전일 신규생 및 / 이달의 신규생 다나오는걸로"*) —
+ * **어제부터 오늘까지 · 이번 달**(`enrolledRecentFrom`) 콜&상담 상태를 '등록 완료'(outcome=enrolled)로 옮긴 상담.
+ * 카드 숫자와 팝업이 **같은 배열**이고, 어제·이번 달 가르기는 `splitEnrolledRecent` 하나다.
  *
  * 🔑 옮긴 시각은 컬럼이 없어 **상태 변경 감사로그**(`enrollment_consultation_outcome`, to=enrolled)에서 읽는다 —
  *    칸반 드래그·상세 '상태 변경'(`setEnrollmentOutcome`)과 '수업 배정'(상담→원생 전환)이 둘 다 이 로그를 남긴다.
  * 🔴 **지금도 등록 완료인 상담만** 센다(오늘 옮겼다가 '미등록'으로 되돌린 건은 빠진다).
  * 🔴 반 배정 여부는 칸반 카드 표식과 **같은 함수**(`countAssignedClasses`) — 갈리면 카드와 칸반이 다른 말을 한다.
  */
-export async function getEnrolledToday(today: string): Promise<EnrolledTodayRow[]> {
+export async function getEnrolledRecent(today: string): Promise<EnrolledTodayRow[]> {
   const scope = await systemAuditScope(["enrollment_consultation_outcome"]);
   if (!scope) return [];
-  const { startIso, endIso } = kstDayBounds(today);
+  const { startIso } = kstDayBounds(enrolledRecentFrom(today));
+  const { endIso } = kstDayBounds(today);
   const logs = await fetchAllPaged<OutcomeLog>((from, to) =>
     auditScoped(scope.admin.from("audit_logs").select("metadata, created_at"), scope)
       .eq("metadata->>to", "enrolled")
@@ -44,7 +49,7 @@ export async function getEnrolledToday(today: string): Promise<EnrolledTodayRow[
       .order("id")
       .range(from, to),
   );
-  // 상담마다 그날 **마지막으로** 등록 완료로 옮긴 시각(같은 상담을 두 번 옮겨도 한 줄).
+  // 상담마다 창 안에서 **마지막으로** 등록 완료로 옮긴 시각(같은 상담을 두 번 옮겨도 한 줄).
   const movedAt = new Map<string, string>();
   for (const log of logs) {
     const id = log.metadata?.consultationId;
@@ -79,6 +84,7 @@ export async function getEnrolledToday(today: string): Promise<EnrolledTodayRow[
       id: row.id,
       name: row.prospect_name?.trim() || "(이름 미상)",
       schoolGrade: schoolGradeLabel(row.prospect_school, row.prospect_grade) || null,
+      date: kstDateOf(movedAt.get(row.id)),
       time: kstTimeOf(movedAt.get(row.id)),
       assigned: assigned[i] > 0,
       subject: row.subject || null,

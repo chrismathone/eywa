@@ -5,7 +5,8 @@ import { WindowLink } from "@/components/workspace/window-link";
 import type { OverviewData } from "@/features/dashboard/overview/model";
 import { windowUntilLabel } from "@/features/dashboard/overview/upcoming-window";
 import { rosterOriginLabel } from "@/features/makeups/roster-merge";
-import { NameCell, PopupEmpty, PopupTotal, Tag } from "./kpi-popup-parts";
+import { monthDay, NameCell, PopupEmpty, PopupTotal, Tag } from "./kpi-popup-parts";
+import { splitEnrolledRecent } from "@/features/dashboard/overview/enrolled-recent";
 import { isCancelledAdmissionsRow, type todayLevelTestList } from "@/features/dashboard/overview/display";
 import { ConsultStageChip } from "./consult-progress";
 import { CancelledMark } from "./cancelled-mark";
@@ -50,27 +51,38 @@ export function IntakePopup({
 }
 
 /**
- * 금일 등록 팝업(원장 2026-09-23) — 오늘 콜&상담 '등록 완료'로 옮긴 상담(옮긴 시각 · 이름 · 반 배정 여부).
- * 카드와 **같은 배열**이라 숫자가 같다. 이름은 그 상담으로 간다(콜&상담 권한이 있을 때만).
+ * 전일 / 이달 신규 팝업(원장 2026-09-23 '금일 등록' → 2026-10-21 어제·이번 달) — 콜&상담 '등록 완료'로 옮긴 상담
+ * (옮긴 날·시각 · 이름 · 반 배정 여부). 카드와 **같은 배열·같은 가르기**(`splitEnrolledRecent`)라 숫자가 같다.
+ * 이번 달 명단을 최근 순으로 보이고 어제 줄엔 '전일' 표식. 1일엔 어제가 지난달이라 그 줄도 함께 보인다.
+ * 이름은 그 상담으로 간다(콜&상담 권한이 있을 때만).
  */
 export function EnrolledTodayPopup({
   rows,
+  today,
   canOpen,
 }: {
   rows: OverviewData["enrolledToday"] | null | undefined;
+  today: string;
   canOpen: boolean;
 }) {
   if (!rows) return <PopupEmpty>등록 정보를 불러오지 못했습니다.</PopupEmpty>;
+  const { yesterday, month } = splitEnrolledRecent(rows, today);
+  const ydayIds = new Set(yesterday.map((row) => row.id));
+  const shown = rows.filter((row) => ydayIds.has(row.id) || month.includes(row));
   return (
     <>
-      <PopupTotal label="오늘 등록 완료" value={rows.length} unit="명" />
-      {rows.length === 0 ? (
-        <PopupEmpty>오늘 등록 완료로 옮긴 상담이 없습니다.</PopupEmpty>
+      <PopupTotal label="전일 신규" value={yesterday.length} unit="명" />
+      <PopupTotal label={`이달(${Number(today.slice(5, 7))}월) 신규`} value={month.length} unit="명" />
+      {shown.length === 0 ? (
+        <PopupEmpty>어제와 이번 달에 등록 완료로 옮긴 상담이 없습니다.</PopupEmpty>
       ) : (
         <ul className={s.kpiList}>
-          {rows.map((row) => (
+          {shown.map((row) => (
             <li key={row.id} className={s.kpiListRow}>
-              <time className={s.kpiTime}>{row.time ?? "—"}</time>
+              <time className={s.kpiTime}>
+                {row.date ? `${monthDay(row.date)} ` : ""}
+                {row.time ?? "—"}
+              </time>
               <NameCell
                 href={canOpen ? `/enrollment/${row.id}` : null}
                 title={row.name}
@@ -79,12 +91,13 @@ export function EnrolledTodayPopup({
                 {row.name}
               </NameCell>
               {row.schoolGrade ? <span className={s.kpiListMeta}>{row.schoolGrade}</span> : null}
+              {ydayIds.has(row.id) ? <Tag tone="muted">전일</Tag> : null}
               {row.assigned ? <Tag tone="info">반 배정 완료</Tag> : <Tag tone="caution">배정 전</Tag>}
             </li>
           ))}
         </ul>
       )}
-      <p className={s.footnote}>시각 = 신규 콜&상담에서 등록 완료로 옮긴 때. 반 배정은 칸반의 ‘반 배정 완료’와 같은 기준입니다.</p>
+      <p className={s.footnote}>날짜·시각 = 신규 콜&상담에서 등록 완료로 옮긴 때. 반 배정은 칸반의 ‘반 배정 완료’와 같은 기준입니다.</p>
     </>
   );
 }

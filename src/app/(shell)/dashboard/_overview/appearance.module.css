@@ -94,3 +94,8 @@
   .dashboard :global([data-overview="kpi-value"]) { font-size: var(--text-3xl); }
   .dashboard :global([data-overview="board"] > [id]) { flex-wrap: wrap; gap: 5px; }
 }
+/* 전일 / 이달 신규(원장 2026-10-21) — 값이 숫자 둘(`12 / 34`)이라 조인 카드(~115px)에서 다른 칸 크기 그대로면 칸 밖으로 잘린다.
+   🔑 이 칸만 **카드 폭에 맞춰** 줄인다(cqi — 넓을 땐 다른 칸과 같은 크기). 칸 판정은 `data-kpi`(원래 라벨)라 대시보드 관리에서
+   이름을 바꿔도 따라간다. 🔴 파일 맨 끝 · 특이도 0,4,0 — 위 컨테이너 쿼리의 값 크기 규칙(같은 0,4,0)보다 뒤에 있어야 이긴다. */
+.dashboard :global([data-overview="kpi"][data-kpi="전일 / 이달 신규"]) { container-type: inline-size; }
+.dashboard :global([data-overview="kpi"][data-kpi="전일 / 이달 신규"] [data-overview="kpi-value"]) { font-size: min(var(--text-4xl), 19cqi); white-space: nowrap; }

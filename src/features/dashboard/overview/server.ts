@@ -40,7 +40,7 @@ import { isMergedStudent } from "@/features/students/status/merged";
 import { bookkeepingOnlyIds } from "@/features/withdrawals/server/bookkeeping";
 import { getIntakeOnDay } from "@/features/enrollment/server/intake-day";
 import { getFirstClassStudents } from "@/features/dashboard/server/day-arrivals-query";
-import { getEnrolledToday } from "@/features/dashboard/server/enrolled-today";
+import { getEnrolledRecent } from "@/features/dashboard/server/enrolled-today";
 import { loadEnrolledTrend, loadEnrolledTrendSlicer, type EnrolledTrend } from "./enrolled-trend-server";
 import { getScopedRecentAbsences } from "@/features/dashboard/server/recent-absences";
 import { recentAbsenceRange } from "./kpi-links";
@@ -784,9 +784,10 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
       time: kstTimeOf(row.createdAt),
     }));
   });
-  // '금일 등록'(원장 2026-09-23) — 오늘 콜&상담 '등록 완료'로 옮긴 상담. 카드·팝업이 같은 배열.
+  // '전일 / 이달 신규'(옛 '금일 등록', 원장 2026-10-21) — 어제·이번 달 콜&상담 '등록 완료'로 옮긴 상담. 카드·팝업이 같은 배열.
+  // 🔑 영역 키 `enrolledToday`는 그대로다 — 학원 설정에 저장된 배치가 `kpi:enrolledToday`를 가리킨다.
   addSliced("enrolledToday", ["enrollment"], async () => {
-    const rows = await getEnrolledToday(today);
+    const rows = await getEnrolledRecent(today);
     return (pred) => (pred ? rows.filter((row) => pred(row.subject)) : rows);
   });
   add("firstClass", ["students"], async () => firstClasses(today, await scopePromise, settingsPromise));

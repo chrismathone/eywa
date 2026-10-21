@@ -134,8 +134,9 @@ export type OverviewData = {
   /** KPI '신규문의' — 오늘(KST) 접수된 콜&상담. time = 접수 시각(KST HH:MM). */
   intake: { id: string; name: string; time: string | null }[];
   /**
-   * KPI '금일 등록'(원장 2026-09-23) — 오늘(KST) 콜&상담 상태를 '등록 완료'로 옮긴 상담(지금도 등록 완료인 것만).
-   * `assigned` = 칸반 '반 배정 완료'와 같은 판정. 카드 = 팝업(같은 배열) — `getEnrolledToday`.
+   * KPI '전일 / 이달 신규'(옛 '금일 등록', 원장 2026-10-21) — 어제·이번 달(KST) 콜&상담 상태를 '등록 완료'로 옮긴 상담
+   * (지금도 등록 완료인 것만). `assigned` = 칸반 '반 배정 완료'와 같은 판정. 카드 = 팝업(같은 배열) — `getEnrolledRecent`,
+   * 가르기 = `splitEnrolledRecent`. 키 이름은 저장된 배치(`kpi:enrolledToday`) 때문에 그대로다.
    */
   enrolledToday: import("@/features/dashboard/server/enrolled-today").EnrolledTodayRow[];
   /** KPI '오늘첫수업' — 첫 등원 + 새 과목 첫 수업. */
