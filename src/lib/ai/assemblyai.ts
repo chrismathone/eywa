@@ -100,20 +100,26 @@ export async function submitTranscript(args: {
   audioUrl: string;
   webhookUrl?: string;
   webhookAuthHeader?: { name: string; value: string };
+  /**
+   * 어휘 강조 — 기본은 회의 어휘(`MEETING_WORD_BOOST`). `null`이면 보내지 않는다(영상 설명 AI 참고 메모는 강조 없이 시험해
+   * 하네스를 맞췄다 — 2026-10-20, 수학 용어는 전사 뒤 코드 사전이 고친다).
+   */
+  wordBoost?: readonly string[] | null;
+  /** 화자 구분(기본 켬). 학생 혼자 말하는 영상은 끈다. */
+  speakerLabels?: boolean;
 }): Promise<AssemblySubmitResult> {
   // 운영 콘솔의 '지점 보기'(읽기 전용) 중에는 바깥으로 내보내지 않는다(tenant-view-outbound.ts) — 요청 밖(cron · 웹훅)에서는 늘 통과한다.
   await assertTenantViewOutboundAllowed();
   const body: Record<string, unknown> = {
     audio_url: args.audioUrl,
     language_code: "ko",
-    speaker_labels: true,
+    speaker_labels: args.speakerLabels ?? true,
     // AssemblyAI가 단수 `speech_model`을 폐기(400 거부) → 다중모델 배열로 보낸다.
     // 🔴 2026-08-06까지 `["universal-3-pro", "universal-2"]`를 보내며 주석엔 "pro 우선"이라
     // 적어뒀는데, pro는 한국어 미지원이라 **실제 전사 전건이 universal-2로 조용히 폴백**하고
     // 있었다(응답 `speech_model_used` 실측 확인). 착각만 남기므로 상위 모델은 빼둔다.
     speech_models: KOREAN_SPEECH_MODELS,
-    word_boost: MEETING_WORD_BOOST,
-    boost_param: "high",
+    ...(args.wordBoost === null ? {} : { word_boost: args.wordBoost ?? MEETING_WORD_BOOST, boost_param: "high" }),
   };
   if (args.webhookUrl) {
     body.webhook_url = args.webhookUrl;
@@ -149,6 +155,10 @@ export type AssemblyTranscript = {
   text: string | null;
   audio_duration: number | null;
   utterances: SpeakerUtterance[] | null;
+  /** 단어별 시각(ms) — 영상 설명 AI 참고 메모의 시각별 전사·멈춤 계산에 쓴다. */
+  words?: { start: number; text: string }[] | null;
+  /** 실제로 쓰인 모델(요청값이 아니라 응답값 — 막힌 점 #96). */
+  speech_model_used?: string | null;
   error: string | null;
 };
 

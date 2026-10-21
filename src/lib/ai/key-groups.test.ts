@@ -4,7 +4,7 @@ import ts from "typescript";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * 기능별 키 그룹 — 원장 2026-09-15 *"기능별로 키를 발급받아서 사용량 체크를 하려고"*(8그룹).
+ * 기능별 키 그룹 — 원장 2026-09-15 *"기능별로 키를 발급받아서 사용량 체크를 하려고"*(9그룹 — 2026-10-20 video 추가).
  * ① 키 해석 규칙(그룹 키 → 옛 버킷 → 기본 키) ② 호출부 이름이 클라이언트까지 가는 배선 ③ 가드.
  */
 const { anthropicCreate, clientCalls } = vi.hoisted(() => ({
@@ -314,12 +314,12 @@ describe("가드 — 모든 AI 호출부는 키 그룹이 있다", () => {
   });
 });
 
-describe("가드 — CLAUDE.md의 8그룹 표가 코드와 같다", () => {
+describe("가드 — CLAUDE.md의 9그룹 표가 코드와 같다", () => {
   // 이 리포의 다른 배선 가드와 같은 결 — 문서만 조용히 뒤처지는 것을 막는다(적대적 리뷰 2026-09-15).
   // 🔴 **그 절만** 본다 — 문서 전체에서 찾으면 다른 절에 한 번 더 나오는 이름(`classnote_ment`는 fast 티어
-  // 표에도 있다)이 8그룹 표에서 빠져도 초록이 된다.
+  // 표에도 있다)이 9그룹 표에서 빠져도 초록이 된다.
   const whole = readFileSync(join(process.cwd(), "CLAUDE.md"), "utf8");
-  const from = whole.indexOf("### 키 분리 = 기능별 8그룹");
+  const from = whole.indexOf("### 키 분리 = 기능별 9그룹");
   const doc = from < 0 ? "" : whole.slice(from, whole.indexOf("\n## ", from) + 1 || undefined);
 
   it("그 절을 찾았다(제목이 바뀌면 빈 문자열로 통과하지 않게)", () => {
@@ -327,13 +327,13 @@ describe("가드 — CLAUDE.md의 8그룹 표가 코드와 같다", () => {
     expect(doc.length).toBeGreaterThan(500);
   });
 
-  it("그룹 8개가 전부 문서에 있다", () => {
+  it("그룹 9개가 전부 문서에 있다", () => {
     // 표가 그룹 이름을 홑따옴표 코드로 적는다(`MENT`) — 그대로 찾는다. 맨 대문자로 찾으면
     // `MENT`가 `ENROLLMENT` 안에 들어 있어 빠진 그룹도 통과한다.
     const groups = [...new Set(Object.values(FEATURE_KEY_GROUP))];
     expect(groups.filter((g) => !doc.includes(`\`${g.toUpperCase()}\``))).toEqual([]);
   });
-  it("호출부 이름 16개가 전부 문서에 있다", () => {
+  it("호출부 이름 20개가 전부 문서에 있다", () => {
     expect(Object.keys(FEATURE_KEY_GROUP).filter((f) => !doc.includes(f))).toEqual([]);
   });
 });

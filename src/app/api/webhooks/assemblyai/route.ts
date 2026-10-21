@@ -24,6 +24,7 @@ import { combineConsultationTranscripts } from "@/features/enrollment/transcript
 import { trimTrailingNoise, type TrimUtterance } from "@/lib/ai/transcript-trim";
 import { syncMirrorAfterRecordingFailure } from "@/features/enrollment/server/recording-mirror";
 import { isFresh, isInFlight } from "@/lib/ai/transcription-inflight";
+import { handleReviewTranscriptWebhook } from "@/features/video-review/server/transcribe";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /** 상수시간 문자열 비교 — 타이밍 공격 방지. 길이 다르면 즉시 false. */
@@ -268,6 +269,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, skipped: "already in progress" });
     }
     return acceptInBackground("student_consultations", sc.id, () => handleStudentConsultation(admin, transcriptId, sc));
+  }
+
+  // 영상 설명 AI 참고 메모(0390a) — 전사만 받아 넣는다(판정은 밤 배치가 한다). 가벼운 일이지만 같은 규약으로 응답 뒤에.
+  const { data: review } = await admin.from("homework_video_reviews").select("id, stage").eq("transcript_id", transcriptId).maybeSingle();
+  if (review) {
+    if (review.stage !== "transcribing") return NextResponse.json({ ok: true, skipped: "already applied" });
+    after(() => handleReviewTranscriptWebhook(transcriptId).then(() => undefined).catch((e) => reportError(e, { scope: "assemblyai.video-review", transcriptId })));
+    return NextResponse.json({ ok: true, accepted: "video-review" });
   }
 
   console.warn("[assemblyai webhook] no matching row for transcript", transcriptId);

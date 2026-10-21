@@ -39,6 +39,9 @@ export const FIXED_MODEL_FEATURES: Readonly<Record<string, string>> = {
   staff_contract_pdf_ocr: "계약서 스캔 인식은 Claude 전용입니다(스캔 이미지 전송 승인 범위).",
   parent_attendance_jev_shadow: "Jev 비교는 TypeSafe 판정이라 모델을 고르지 않습니다.",
   ment_prompt_preview: "멘트 미리보기는 학부모 멘트 자동작성과 같은 모델을 씁니다.",
+  // 영상 설명 AI 참고 메모(2026-10-20) — 학생 영상 화면은 Claude에만 보내도록 승인했고, 판정 Haiku · 확인 Sonnet 조합으로 시험을 통과했다.
+  video_review_judge: "영상 설명 판정은 Claude 전용입니다(학생 영상 화면 전송 승인 범위 · 시험을 통과한 조합).",
+  video_review_verify: "영상 설명 오류 확인은 Claude 전용입니다(학생 영상 화면 전송 승인 범위 · 시험을 통과한 조합).",
 };
 
 export function isTenantModelFeature(key: unknown): key is string {
