@@ -3,13 +3,15 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
+import { EyIcon, type AywaIconName } from "@/components/icons/aywa-icons";
 import { TONE_SOFT, type SemanticTone } from "@/lib/design/semantic-color";
 import { noticeAckId, parentNoticeText, type ParentNotice } from "../departure-notices";
 import { ackParentNotice } from "../server/parent-departure-actions";
 
 const NOTICE_TONE = { depart: "info", board: "positive", missed: "critical", dropoff: "positive" } as const satisfies Record<ParentNotice["kind"], SemanticTone>;
 
-const NOTICE_ICON: Record<ParentNotice["kind"], string> = { depart: "🚌", board: "🧒", missed: "⚠️", dropoff: "🏠" };
+/** 알림 종류별 아이콘 — 이모지가 아니라 앱 아이콘 세트(아이콘 규칙). 출발=차량 · 탑승=아이 확인 · 미탑승=주의 · 하차=집. */
+const NOTICE_ICON: Record<ParentNotice["kind"], AywaIconName> = { depart: "bus", board: "userCheck", missed: "alert", dropoff: "home" };
 
 /** 푸시 대신 이 간격으로 다시 읽는다 — 셔틀 선생님이 [출발]·[전송]을 누르면 이 안에 줄이 생긴다. */
 const POLL_MS = 15_000;
@@ -66,7 +68,7 @@ export function DepartureNoticeList({ notices }: { notices: ParentNotice[] }) {
           role="status"
           className={`flex items-center gap-2 rounded-xl px-3 py-2 ${TONE_SOFT[NOTICE_TONE[n.kind]]}`}
         >
-          <span aria-hidden className="shrink-0 text-base leading-none">{NOTICE_ICON[n.kind]}</span>
+          <EyIcon name={NOTICE_ICON[n.kind]} size={18} aria-hidden className="shrink-0" />
           <p className="min-w-0 flex-1 text-sm font-bold break-keep">
             {parentNoticeText(n)}
             {n.time ? <span className="ml-1 text-xs font-medium opacity-80">{n.time}</span> : null}

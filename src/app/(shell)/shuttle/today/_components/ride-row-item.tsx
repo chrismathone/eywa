@@ -3,6 +3,7 @@
 import { useSyncExternalStore, useTransition } from "react";
 import { Pill } from "@/components/atoms/pill";
 import { Button } from "@/components/ui/button";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { cn } from "@/lib/utils";
 import { TONE_COLOR } from "@/lib/design/semantic-color";
 import {
@@ -460,9 +461,7 @@ export function RideRowItem({
               )}
             >
               {checked ? (
-                <svg viewBox="0 0 16 16" aria-hidden className="size-4" fill="none" stroke="currentColor" strokeWidth={2.5}>
-                  <path d="M3 8.5l3.2 3L13 4.5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
+                <EyIcon name="check" size={16} strokeWidth={2.5} aria-hidden />
               ) : null}
             </button>
           )}
