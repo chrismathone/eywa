@@ -128,7 +128,9 @@ export type SiteChoice = { id: string; studentLabel: string; className: string; 
   /** 언제까지 내나 — "10/22 (목)까지" · "다음 수업 10/15 (목)까지"(due.ts `homeworkDueText`). 숙제 줄에만. */
   dueLabel?: string;
   /** 숙제 없이 그 반에 올리기(메모 필수) — `homeworkLabel`은 빈 글자다. */
-  free?: true };
+  free?: true;
+  /** 수강이 끝난 반(반을 옮기기 전 반 등)에서 받은 숙제 — 화면이 '지난 반'으로 적는다. 숙제 줄에만(숙제 없이 올리기는 지금 반만). */
+  pastClass?: true };
 
 /**
  * 올리기 사이트를 쓰는 지점 한 곳(화면의 지점 선택지) — 번호와 이름만. 주소에는 지점을 넣지 않는다(멀티테넌트 C안):

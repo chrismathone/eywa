@@ -221,6 +221,14 @@ describe("업로드 시작 — 정상", () => {
     m.settings = settings();
     expect(await ask()).toMatchObject({ ok: true });
   });
+  it("🔴 반을 옮긴 학생도 지난 반에서 받은 숙제는 올린다(원장 2026-10-21) — 그 반에 숙제 없이 올리기는 안 된다", async () => {
+    Object.assign(db.tables.homework_video_links![0]!, { origin: "site", created_at: new Date().toISOString() });
+    liveClass({ end_date: TODAY, is_transferred: true }); // 오늘자 반 이동 — 이 반은 끝난 수강(반열림)
+    assignHomework(addDays(TODAY, -3));
+    expect(await req({ note: "추가 연습 영상" })).toMatchObject({ ok: false, code: "invalid" });
+    expect((await req({ homeworkDate: addDays(TODAY, -3) })).ok).toBe(true);
+    expect(db.tables.homework_video_link_uploads![0]!.route).toMatchObject({ classId: C, studentId: S, homeworkDate: addDays(TODAY, -3) });
+  });
   it("🔴 영상 과제 값을 읽을 수 없으면(0308a 전·순간 오류) '숙제를 다시 고르라'가 아니라 잠시 못 받음 — 학생을 처음 화면으로 돌려보내지 않는다", async () => {
     Object.assign(db.tables.homework_video_links![0]!, { origin: "site", created_at: new Date().toISOString() });
     db.dropTable("lesson_reports");

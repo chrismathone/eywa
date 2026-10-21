@@ -103,7 +103,8 @@ export function SiteHomeworkChoices({ choices, openingId, onOpen, onReset }: {
                 <span className="text-foreground block text-base font-bold">{choice.homeworkLabel} 수업 숙제</span>
                 {/* 언제까지 내나 — 학생이 숙제일을 내는 날로 헷갈렸다(원장 2026-10-15). 숙제일보다 눈에 띄게 둔다. */}
                 {choice.dueLabel ? <span className="text-primary block text-sm font-bold">{choice.dueLabel} 제출</span> : null}
-                <span className="text-text-dim block text-sm">{manyStudents ? `${choice.studentLabel} · ${choice.className}` : choice.className}</span>
+                {/* 반을 옮기기 전 반에서 받은 숙제 — 지금 반 이름과 달라 학생이 망설이지 않게 '지난 반'을 붙인다(원장 2026-10-21). */}
+                <span className="text-text-dim block text-sm">{manyStudents ? `${choice.studentLabel} · ${choice.className}` : choice.className}{choice.pastClass ? " · 지난 반" : ""}</span>
               </span>
               {openingId === choice.id ? <span className="text-text-dim ml-auto shrink-0 text-sm">여는 중…</span> : null}
             </Button>

@@ -2,7 +2,7 @@ import "server-only";
 import { createHash, createHmac } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchInChunks } from "@/lib/supabase/batch";
-import { formatShortKoreanDate, kstToday } from "@/lib/date-kst";
+import { addDays, formatShortKoreanDate, kstToday } from "@/lib/date-kst";
 import { logActionAs } from "@/features/audit/server/log";
 import type { TenantSettings } from "@/features/owner/settings-types";
 import { isEnrollmentEndedOn } from "@/features/enrollments/eligibility";
@@ -28,7 +28,7 @@ import {
 import { mintSubmitLink } from "./links";
 import { resolveSiteRequest, SITE_ATTEMPTS_TABLE } from "./site-branches";
 import { openHomeworkDates } from "./site-homework";
-import { homeworkDueText } from "@/features/video-homework/due";
+import { homeworkDueText, VIDEO_HOMEWORK_MAX_DUE_DAYS } from "@/features/video-homework/due";
 
 type Db = ReturnType<typeof createAdminClient>;
 
@@ -107,14 +107,18 @@ async function admit(db: Db, tenantId: string, ipHash: string, kind: "lookup" | 
   return !over;
 }
 
-type Candidate = { studentId: string; classId: string; studentName: string; className: string };
+/** `past` = 수강이 끝난 반(반 이동 전 반 등) — 그 반에서 받은 숙제 줄만 세운다(숙제 없이 올리기 줄 없음). */
+type Candidate = { studentId: string; classId: string; studentName: string; className: string; past?: true };
 type StudentRow = { id: string; name: string | null; grade: string | null; student_phone: string | null; parent_phone: string | null };
 type EnrollmentRow = { student_id: string; class_id: string; start_date: string | null; end_date: string | null; on_hold: boolean | null; is_transferred: boolean | null };
-type ClassRow = { id: string; class_name: string | null; subject: string | null };
+type ClassRow = { id: string; class_name: string | null; subject: string | null; is_active: boolean | null };
 
 /**
  * 뒷 4자리 + 이름 → 후보(학생 × 지금 다니는 반). 재원생만 · 학생 본인 번호 또는 보호자 번호가 그 4자리로 끝나고 **이름이 같은** 학생
  * (동명이인 구분 글자·공백은 무시 — `siteNameMatches`) · 그 반이 학원 설정의 영상 숙제 대상일 때만(영상 숙제를 안 쓰는 반은 올릴 곳이 아니다).
+ * **수강이 끝난 반**(`past`, 원장 2026-10-21 — 10/18 반 이동 학생이 그 주 숙제를 못 골라 새 반에 '숙제 없이' 올렸다)도 후보다: 그 반에서 받은 숙제가
+ * 아직 마감 전이면 그 숙제는 올린다. 끝난 날이 가장 먼 마감(`VIDEO_HOMEWORK_MAX_DUE_DAYS`)보다 오래면 열린 숙제가 있을 수 없어 읽지 않는다.
+ * 반이 그사이 닫혀도(비활성) 숙제는 그대로다 — 업로드 시작(`isAssignedHomeworkDate`)도 반 상태를 보지 않는다.
  * `tooMany` = 그 4자리에 학생이 너무 많다(자리 채움 번호 `0000` 등) — 번호가 확인 구실을 못 하므로 이름이 맞아도 사이트에서는 안내하지 않는다.
  * `matched` = 번호·이름이 맞는 학생이 있는가(반·숙제와 무관) — "찾지 못했다"와 "올릴 숙제가 없다"를 가르는 값.
  */
@@ -139,19 +143,30 @@ async function findCandidates(
   const enrollments = await fetchInChunks<EnrollmentRow>([...byId.keys()], (chunk) => db.from("enrollments")
     .select("student_id,class_id,start_date,end_date,on_hold,is_transferred")
     .eq("tenant_id", tenantId).in("student_id", chunk));
-  const live = enrollments.filter((e) => e.class_id && !e.on_hold && (!e.start_date || e.start_date <= day) && !isEnrollmentEndedOn(e.end_date, day, e.is_transferred === true));
-  if (!live.length) return { tooMany: false, matched: true, list: [] };
-  const classes = await fetchInChunks<ClassRow>([...new Set(live.map((e) => e.class_id))], (chunk) => db.from("classes")
-    .select("id,class_name,subject").eq("tenant_id", tenantId).eq("is_active", true).in("id", chunk));
+  const started = (e: EnrollmentRow) => !!e.class_id && (!e.start_date || e.start_date <= day);
+  const ended = (e: EnrollmentRow) => isEnrollmentEndedOn(e.end_date, day, e.is_transferred === true);
+  const live = enrollments.filter((e) => started(e) && !e.on_hold && !ended(e));
+  // 지금(휴원 포함) 그 반 수강이 있으면 끝난 수강으로 지난 반을 세우지 않는다 — 옮겼다 돌아와 그 반만 휴원한 학생(적대적 리뷰 2026-10-21).
+  const current = new Set(enrollments.filter((e) => started(e) && !ended(e)).map((e) => `${e.student_id}:${e.class_id}`));
+  const since = addDays(day, -VIDEO_HOMEWORK_MAX_DUE_DAYS);
+  const past = enrollments.filter((e) => started(e) && !e.on_hold && !!e.end_date && e.end_date >= since && ended(e) && !current.has(`${e.student_id}:${e.class_id}`));
+  if (!live.length && !past.length) return { tooMany: false, matched: true, list: [] };
+  const classes = await fetchInChunks<ClassRow>([...new Set([...live, ...past].map((e) => e.class_id))], (chunk) => db.from("classes")
+    .select("id,class_name,subject,is_active").eq("tenant_id", tenantId).in("id", chunk));
   const classById = new Map(classes.map((c) => [c.id, c]));
   const policy = settings.report.videoHomeworkPolicy;
   const out = new Map<string, Candidate>();
-  for (const e of live) {
-    const student = byId.get(e.student_id);
-    const klass = classById.get(e.class_id);
-    if (!student || !klass?.subject) continue;
-    if (!isVideoHomeworkEnabled(policy, { classId: klass.id, subjectKey: klass.subject, grade: student.grade })) continue;
-    out.set(`${student.id}:${klass.id}`, { studentId: student.id, classId: klass.id, studentName: student.name?.trim() || "학생", className: klass.class_name?.trim() || "수업" });
+  // 지금 다니는 반이 먼저 — 같은 반을 다시 다니면(끝난 수강 + 지금 수강) 지금 반으로 선다(숙제 없이 올리기 줄까지).
+  // 지금 수강인데 반이 닫혔으면(반 폐지 당일 — 종료일이 오늘이라 아직 수강 중) 끝난 반처럼 받은 숙제만(적대적 리뷰 2026-10-21).
+  for (const [rows, isPast] of [[live, false], [past, true]] as const) {
+    for (const e of rows) {
+      const student = byId.get(e.student_id);
+      const klass = classById.get(e.class_id);
+      if (!student || !klass?.subject || out.has(`${student.id}:${klass.id}`)) continue;
+      if (!isVideoHomeworkEnabled(policy, { classId: klass.id, subjectKey: klass.subject, grade: student.grade })) continue;
+      out.set(`${student.id}:${klass.id}`, { studentId: student.id, classId: klass.id, studentName: student.name?.trim() || "학생",
+        className: klass.class_name?.trim() || "수업", ...(isPast || !klass.is_active ? { past: true as const } : {}) });
+    }
   }
   const list = [...out.values()].sort((a, b) => a.studentName.localeCompare(b.studentName, "ko") || a.className.localeCompare(b.className, "ko"));
   return { tooMany: false, matched: true, list };
@@ -163,13 +178,14 @@ type HomeworkChoice = Candidate & { homeworkDate: string; due: string; next: boo
 type PickChoice = Candidate & { homeworkDate: string | null; due?: string; next?: boolean };
 
 /**
- * 숙제 줄 + **숙제 없이 올리기** 줄(학생 × 반마다 하나, 원장 2026-10-13) — 숙제가 먼저, 그 아래 반 줄. 둘 다 같은 후보(번호·이름·지금 다니는 반·
- * 영상 숙제 대상)에서만 나온다. `null` = 영상 과제 값을 읽을 수 없다(잠시 못 받음).
+ * 숙제 줄 + **숙제 없이 올리기** 줄(학생 × 반마다 하나, 원장 2026-10-13) — 숙제가 먼저, 그 아래 반 줄. 둘 다 같은 후보(번호·이름·
+ * 영상 숙제 대상)에서만 나온다. 🔴 숙제 없이 올리기 줄은 **지금 다니는 반만**(끝난 반은 받은 숙제만 — 업로드 시작도 끝난 반의 숙제 없는 영상을 거절한다).
+ * `null` = 영상 과제 값을 읽을 수 없다(잠시 못 받음).
  */
 async function pickChoices(db: Db, tenantId: string, list: Candidate[], day: string): Promise<PickChoice[] | null> {
   const homework = await homeworkChoices(db, tenantId, list, day);
   if (!homework) return null;
-  return [...homework, ...list.slice(0, SITE_MAX_CHOICES).map((c) => ({ ...c, homeworkDate: null }))];
+  return [...homework, ...list.filter((c) => !c.past).slice(0, SITE_MAX_CHOICES).map((c) => ({ ...c, homeworkDate: null }))];
 }
 
 /**
@@ -217,6 +233,7 @@ export async function lookupSite(input: { last4: unknown; name: unknown; ip: str
         // 언제까지 내나(원장 2026-10-15 — 학생이 숙제일을 내는 날로 헷갈려 숙제 없이 올렸다). 마감은 날짜까지 정해져 있어 그대로 적는다.
         ...(c.homeworkDate && c.due ? { dueLabel: homeworkDueText(c.homeworkDate, c.next ? c.due : null, c.next) } : {}),
         ...(c.homeworkDate ? {} : { free: true as const }),
+        ...(c.past ? { pastClass: true as const } : {}),
       })),
     };
   } catch (error) {
