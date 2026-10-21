@@ -15,8 +15,14 @@
 
 import { skipStatusOf } from "./progress-status";
 
-/** 시범 대상 학생 id — 학생 '테스트'(injaewon). */
-export const MATH_REPORT_PILOT_STUDENT_IDS: readonly string[] = ["67a53999-fb62-4753-a938-9a5ce4af9e61"];
+/**
+ * 시범 대상 학생 id — 학생 '테스트' + '학원이'(injaewon). 학원이는 원장이 원일 계정·'학원이(테스트)' 반에서 바로 확인하려고 더했다
+ * (2026-10-21 — '테스트'는 퇴원·수강 0건이라 화면에 안 뜬다).
+ */
+export const MATH_REPORT_PILOT_STUDENT_IDS: readonly string[] = [
+  "67a53999-fb62-4753-a938-9a5ce4af9e61", // 테스트
+  "6219e442-aa57-455f-a5bc-834b222d9e1c", // 학원이
+];
 
 /** 이 학생·과목 행이 시범 대상인가. 과목키가 없는 행(데모)은 수학으로 본다(원스크린 관례). */
 export function isMathReportPilot(studentId: string | null | undefined, subjectKey: string | null | undefined): boolean {

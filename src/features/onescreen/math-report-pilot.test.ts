@@ -27,8 +27,8 @@ describe("시범 대상 판정", () => {
     expect(isMathReportPilot("someone-else", "math")).toBe(false);
     expect(isMathReportPilot(null, "math")).toBe(false);
   });
-  it("명단은 학생 '테스트' 한 명", () => {
-    expect(MATH_REPORT_PILOT_STUDENT_IDS).toEqual(["67a53999-fb62-4753-a938-9a5ce4af9e61"]);
+  it("명단은 학생 '테스트'·'학원이' 둘", () => {
+    expect(MATH_REPORT_PILOT_STUDENT_IDS).toEqual(["67a53999-fb62-4753-a938-9a5ce4af9e61", "6219e442-aa57-455f-a5bc-834b222d9e1c"]);
   });
 });
 
