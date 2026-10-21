@@ -1,5 +1,8 @@
 "use client";
 
+import { ReferenceLine, usePlotArea } from "recharts";
+import { textWidth } from "@/features/students/stats/chart-math";
+import type { BasisMarker } from "@/features/students/stats/joined";
 import type { ChartSeries } from "./trend-chart-impl";
 
 /**
@@ -62,5 +65,48 @@ export function ChartLegend({ series, note }: { series: ChartSeries[]; note?: st
       ))}
       {note ? <li>{note}</li> : null}
     </ul>
+  );
+}
+
+/**
+ * 기준 경계 세로 점선 + 앞뒤 기준 이름. 경계마다 두 줄을 확보해 마지막 칸의 이름을 왼쪽에 놓아도 겹치지 않게 한다.
+ * 막대는 칸 시작(막대 사이), 꺾은선은 점 위. 좁은 원생 통계 화면은 StatsWidthGate에서 막는다.
+ * recharts 자식은 그 자리 요소여야 해서 컴포넌트가 아니라 요소 배열을 돌려준다.
+ */
+export function basisMarkerLines(markers: readonly BasisMarker[], keyOf: (i: number) => string, lineMode: boolean, font: number) {
+  return markers.map((m, k) => (
+    <ReferenceLine
+      key={`basis-${m.index}`}
+      x={keyOf(m.index)}
+      position={lineMode ? "middle" : "start"}
+      stroke="var(--color-muted-foreground)"
+      strokeDasharray="4 4"
+      ifOverflow="extendDomain"
+      label={(props: { viewBox?: { x?: number; y?: number } }) => {
+        const x = props.viewBox?.x;
+        const y = props.viewBox?.y;
+        if (x === undefined || y === undefined) return <g />;
+        return <BasisLabel x={x} y={y - markers.length * (font + 6) * 2} marker={m} row={k} font={font} />;
+      }}
+    />
+  ));
+}
+
+function BasisLabel({ x, y, marker, row, font }: { x: number; y: number; marker: BasisMarker; row: number; font: number }) {
+  const plot = usePlotArea();
+  if (!plot) return null;
+  const before = `← ${marker.before}`;
+  const after = `${marker.after} →`;
+  const ty = y + font + row * (font + 6) * 2;
+  const beforeX = Math.max(plot.x, x - 6 - textWidth(before));
+  const afterX = Math.max(plot.x, Math.min(x + 6, plot.x + plot.width - textWidth(after)));
+  const secondRow = afterX < x + 6 || (row === 0 && beforeX + textWidth(before) + 6 > afterX);
+  const halo = { stroke: "var(--color-background)", strokeWidth: 4, paintOrder: "stroke" as const };
+  return (
+    <g fontSize={font} fill="var(--color-muted-foreground)">
+      <line x1={x} x2={x} y1={ty + 6} y2={plot.y} stroke="var(--color-muted-foreground)" strokeDasharray="4 4" />
+      {row === 0 ? <text x={beforeX} y={ty} {...halo}>{before}</text> : null}
+      <text x={afterX} y={ty + (secondRow ? font + 6 : 0)} fontWeight={700} {...halo}>{after}</text>
+    </g>
   );
 }
