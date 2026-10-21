@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { reportError } from "@/lib/observability/report-error";
+import { normalizePhone } from "@/features/students/lib/student-import";
 import { canRecordBoarding } from "./record-gate";
 
 /** 한 학생의 연락처 — 줄 위에 "학생 · 학부모" 번호를 띄운다. 없으면 null·빈 배열(화면은 빈칸). */
@@ -24,6 +25,8 @@ export type RiderContact = {
  *    그래서 계정을 연결하기 전엔 빈칸이다.
  * ⚠️ admin 클라이언트 — 학부모 표(0290a)는 원장·관리자만 읽게 잠겨 있어 셔틀 담당(viewer)은 세션으로 0행을 받는다([[#104]]).
  *    그래서 **`tenant_id` 필터를 반드시** 건다.
+ * 🔑 번호는 **형식을 맞춰** 낸다(`normalizePhone` — 학생 가져오기와 같은 규칙: 숫자만 → 010-1234-5678). 원생 기록·학부모 계정엔
+ *    하이픈 없는 번호·띄어쓰기 섞인 번호가 섞여 있어 그대로 내면 화면에서 깨져 보였다(사용자 2026-10-21).
  * ⚠️ 실패해도 화면은 산다 — 번호가 빈칸으로 보일 뿐이다(셔틀 기록이 멈추면 안 된다).
  */
 export async function getRiderContacts(studentIds: readonly string[]): Promise<Record<string, RiderContact>> {
@@ -50,10 +53,10 @@ export async function getRiderContacts(studentIds: readonly string[]): Promise<R
     const accounts = await fetchInChunks<{ id: string; phone: string | null; status: string }>(accountIds, (chunk) =>
       admin.from("parent_accounts").select("id, phone, status").eq("tenant_id", tenantId).in("id", chunk),
     );
-    const phoneOf = new Map(accounts.filter((a) => a.status === "active").map((a) => [a.id, a.phone?.trim() || null]));
+    const phoneOf = new Map(accounts.filter((a) => a.status === "active").map((a) => [a.id, normalizePhone(a.phone)]));
 
     const out: Record<string, RiderContact> = {};
-    for (const s of students) out[s.id] = { student: s.student_phone?.trim() || null, parents: [] };
+    for (const s of students) out[s.id] = { student: normalizePhone(s.student_phone), parents: [] };
     // 대표 보호자 먼저.
     const sorted = [...links].sort((a, b) => Number(!!b.is_primary) - Number(!!a.is_primary));
     for (const l of sorted) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { cn } from "@/lib/utils";
 import { SHUTTLE_INPUT, SHUTTLE_ROW } from "@/features/shuttle/control-size";
@@ -17,6 +17,7 @@ import type { VehicleGroup } from "@/features/shuttle/today/today-board";
  * ⚠️ 결과 목록은 툴바 레일 **밖**에 둔다 — 폰의 `.toolbar-rail`은 overflow가 잘려 겹판이 안 보인다([[#128]] 계열).
  */
 export function RideJump({ groups, onPick }: { groups: readonly VehicleGroup[]; onPick: (hit: RideHit) => void }) {
+  const listId = useId();
   const [q, setQ] = useState("");
   const [active, setActive] = useState(0);
   const hits = useMemo(() => searchRides(groups, q), [groups, q]);
@@ -57,14 +58,14 @@ export function RideJump({ groups, onPick }: { groups: readonly VehicleGroup[]; 
           placeholder="학생 이름으로 찾기"
           aria-label="학생 찾기"
           aria-expanded={hits.length > 0}
-          aria-controls="ride-jump-list"
+          aria-controls={listId}
           role="combobox"
           className={cn(SHUTTLE_INPUT, "w-full pl-8")}
         />
       </label>
       {q.trim() && (
         <ul
-          id="ride-jump-list"
+          id={listId}
           role="listbox"
           className="bg-card border-line absolute top-full right-0 left-0 z-30 mt-1 max-h-80 overflow-y-auto rounded-xl border p-1 shadow-lg"
         >

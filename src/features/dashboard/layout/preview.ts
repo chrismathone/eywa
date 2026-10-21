@@ -44,16 +44,23 @@ export function previewSnapshot(
   };
 }
 
-/** 과목 관리자 미리보기의 과목 선택지 — 운영실이 쓰는 묶음(영어 = EiE·인재원 영어, 수학 = 수학(심화) 포함)마다 하나. */
+/**
+ * 과목 관리자 미리보기의 과목 선택지 — 운영실이 쓰는 묶음(영어 = EiE·인재원 영어, 수학 = 수학(심화) 포함)마다 하나.
+ * 🔴 묶음의 대표 키 = 묶음 이름과 같은 키(`math`·`english`)가 있으면 그것 — 순서로 고르면 옛 라벨이 앞에 붙은 표(`subjectLabelRecord`)에서
+ *    수학 묶음이 `highmath`로 잡혀, 편집기가 `math`로 저장한 수학 배치를 운영실이 못 찾고 공통 배치로 떨어졌다(원장 제보 2026-10-21).
+ */
 export function subjectChoices(subjects: Readonly<Record<string, string>>): { key: string; label: string }[] {
   const programSubjects = programSubjectsOf(subjects);
-  const seen = new Set<string>();
+  const at = new Map<string, number>();
   const out: { key: string; label: string }[] = [];
   for (const { key, label } of programSubjects) {
     const group = subjectGroupOf(key, programSubjects);
-    if (!group || seen.has(group)) continue;
-    seen.add(group);
-    out.push({ key, label });
+    if (!group) continue;
+    const i = at.get(group);
+    if (i === undefined) {
+      at.set(group, out.length);
+      out.push({ key, label });
+    } else if (key === group && out[i]!.key !== group) out[i] = { key, label };
   }
   return out;
 }

@@ -8,7 +8,7 @@ import { useEmbed, withEmbed } from "@/components/workspace/embed-context";
 import { paramsForMode, periodQuery, type StatsPeriod } from "@/features/stats/period";
 import { saveStudentStatsPrefs } from "@/features/students/stats/server/prefs-actions";
 import { maskBefore } from "@/features/students/stats/chart-math";
-import { splitBySource } from "@/features/students/stats/joined";
+import { basisMarkers, splitBySource, trendBasisName } from "@/features/students/stats/joined";
 import {
   TOTAL_TOKEN,
   TREND_KEYS,
@@ -243,8 +243,9 @@ export function TrendBoard({
         <TrendChart
           kind={kind}
           labels={totalPoints.map((p) => axisLabel(p, labelRange))}
-          tooltipLabels={totalPoints.map((p) => longLabel(p, labelRange, today))}
+          tooltipLabels={totalPoints.map((p) => (p.source === "history" ? `${longLabel(p, labelRange, today)} · ${trendBasisName(p)}` : longLabel(p, labelRange, today)))}
           series={series}
+          markers={hasHistory && totalShown ? basisMarkers(totalPoints.map(trendBasisName)) : []}
         />
       )}
       {/* 요약은 이은 축 전체 — 지난 기록 구간이 들면 뜻이 섞인 비교라 그 사실을 라벨에 적는다(리뷰 2026-10-21). */}

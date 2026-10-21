@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
 import { saveStudentStatsPrefs } from "@/features/students/stats/server/prefs-actions";
+import { basisMarkers } from "@/features/students/stats/joined";
 import { availableFlowRanges, flowRowsFor, flowTotals, type ChartKind, type FlowRange, type FlowRow } from "@/features/students/stats/model";
 import type { ChartSeries } from "./trend-chart";
 import { startedNote } from "@/features/dashboard/overview/model";
@@ -20,6 +21,8 @@ const WITHDRAWN = "var(--color-danger)";
 /** 지난 기록(0385a)으로 메운 달의 색 — 같은 계열을 옅게(뜻이 조금 다른 값: 등록은 같은 판정 · 퇴원 칸은 청구가 끊긴 학생). */
 const ENROLLED_HISTORY = "color-mix(in srgb, var(--color-primary) 45%, var(--color-background))";
 const WITHDRAWN_HISTORY = "color-mix(in srgb, var(--color-danger) 45%, var(--color-background))";
+// 지난 기록 달의 기준 이름 — 등록은 메이크에듀 등록(같은 판정)이지만 퇴원 칸은 청구가 끊긴 학생이라 '추정'을 붙인다.
+const FLOW_HISTORY_NAME = "지난 기록 · 퇴원은 청구 기준 추정";
 const RANGE_LABELS: Record<FlowRange, string> = { all: "전체 기간", m12: "최근 12개월" };
 
 /**
@@ -64,6 +67,7 @@ export function FlowBoard({
   const aywaFrom = shown.find((r) => r.source !== "history")?.month;
   // 지난 기록의 퇴원 칸(청구가 끊긴 학생)은 수납 권한이 없으면 실리지 않는다 — 그때는 그 범례·선·안내를 세우지 않는다.
   const historyWithdrawnKnown = shown.some((r) => r.source === "history" && r.withdrawn !== null);
+  const historyBasis = historyWithdrawnKnown ? FLOW_HISTORY_NAME : "지난 등록 기록";
   const series = flowSeries(shown, kind, historyWithdrawnKnown);
   return (
     <StatCard
@@ -112,7 +116,13 @@ export function FlowBoard({
           </>
         ) : null}
       </div>
-      <TrendChart kind={kind} labels={shown.map((r) => axisMonth(r.month))} tooltipLabels={shown.map((r) => longMonth(r.month))} series={series} />
+      <TrendChart
+        kind={kind}
+        labels={shown.map((r) => axisMonth(r.month))}
+        tooltipLabels={shown.map((r) => (r.source === "history" ? `${longMonth(r.month)} · ${historyBasis}` : longMonth(r.month)))}
+        series={series}
+        markers={hasHistory ? basisMarkers(shown.map((r) => (r.source === "history" ? historyBasis : "에이와 기록"))) : []}
+      />
       {hasHistory && historyFrom ? (
         <p className="text-muted-foreground text-xs break-keep">
           {aywaFrom ? `${longMonth(aywaFrom)}부터 에이와 기록으로 세고, ${longMonth(historyFrom)}부터 그 전은 지난 기록으로 이었습니다` : `${longMonth(historyFrom)}부터 지난 기록입니다`} — 지난 기록의 등록은 같은 판정(수업을

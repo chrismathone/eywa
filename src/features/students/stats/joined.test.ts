@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { HistoryMonth } from "./history";
-import { historyCount, historyFlowRows, historyTrendPoints, joinFlowRows, joinNote, splitBySource } from "./joined";
+import { mergeHistory, withoutPaying, type HistoryMonth } from "./history";
+import { basisMarkers, historyCount, historyFlowRows, historyTrendPoints, joinFlowRows, joinNote, splitBySource, trendBasisName } from "./joined";
 import { availableRanges, flowTotals, joinPoints, pointsFor, withDeltas, type Point, type SeriesSet } from "./model";
 
 const h = (month: string, data: Partial<Omit<HistoryMonth, "month" | "estimated">>): HistoryMonth => ({ month, estimated: [], ...data });
@@ -20,6 +20,22 @@ describe("지난 기록 잇기(원장 2026-10-21 전체 추이)", () => {
     expect(historyCount(h("2025-03", { payingTotal: 390, enrolledRecord: 420 }))).toBe(420);
     expect(historyCount(h("2025-01", { payingTotal: 380 }))).toBe(380);
     expect(historyCount(h("2025-01", { newReal: 3 }))).toBeNull();
+  });
+
+  it("실제 옛 메이크에듀 집계(payingGeneral만 있음)도 잇되 EiE·중복 과목 수는 더하지 않고 권한 필터를 지킨다", () => {
+    const old = mergeHistory([
+      { month: "2020-01", source: "makeedu", data: { payingGeneral: 329, payingMath: 225, payingInjaewon: 180 } },
+      { month: "2025-02", source: "makeedu", data: { payingGeneral: 253 } },
+      { month: "2025-03", source: "makeedu", data: { payingGeneral: 306, enrolledRecord: 465 } },
+    ]);
+    const hp = historyTrendPoints(old, "2026-04");
+    expect(hp.monthly.map((x) => [x.key, x.count, x.basis])).toEqual([
+      ["2020-01", 329, "paying"], ["2025-02", 253, "paying"], ["2025-03", 465, "record"],
+    ]);
+    expect(basisMarkers(hp.monthly.map(trendBasisName))).toEqual([{ index: 2, before: "청구 기준 추정", after: "메이크에듀 재원생 기록" }]);
+    expect(historyTrendPoints(withoutPaying(old), "2026-04").monthly.map((x) => x.key)).toEqual(["2025-03"]);
+    expect(joinNote(hp.monthly, old, "2026-04")).toContain("전체 청구 집계가 없는 달은 EiE 제외");
+    expect(historyCount(h("2025-01", { payingTotal: 0, payingGeneral: 329 }))).toBe(0);
   });
 
   it("월별 점은 경계 달 앞만 · 말일 날짜 · source=history · 연도별은 해마다 마지막 기록 달 값, 에이와가 세는 해는 뺀다", () => {
@@ -97,5 +113,21 @@ describe("지난 기록 잇기(원장 2026-10-21 전체 추이)", () => {
     expect(note).toContain("2025년 3월~2026년 3월은 메이크에듀 재원생 기록");
     expect(note).toContain("2025년 1월~2025년 2월은 수업료가 청구된 학생 수");
     expect(joinNote([], months, "2026-04")).toBeNull();
+  });
+});
+
+describe("basisMarkers · trendBasisName", () => {
+  it("기준 이름: 청구 기준 추정 → 메이크에듀 재원생 기록 → 에이와 기록", () => {
+    expect(trendBasisName({ source: "history", basis: "paying" })).toBe("청구 기준 추정");
+    expect(trendBasisName({ source: "history", basis: "record" })).toBe("메이크에듀 재원생 기록");
+    expect(trendBasisName({})).toBe("에이와 기록");
+  });
+  it("이름이 바뀌는 칸마다 하나 · 값 없는 칸은 건너뛰고 앞뒤로 판정", () => {
+    expect(basisMarkers(["A", "A", null, "B", "B", "C"])).toEqual([
+      { index: 3, before: "A", after: "B" },
+      { index: 5, before: "B", after: "C" },
+    ]);
+    expect(basisMarkers(["A", null, "A"])).toEqual([]);
+    expect(basisMarkers([])).toEqual([]);
   });
 });
