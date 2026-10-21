@@ -39,9 +39,19 @@ describe("이름 + 조사", () => {
     expect(topicName("김지수")).toBe("지수는");
     expect(topicName("홍길동 (테스트)")).toBe("길동이는");
   });
-  it("두 글자·네 글자는 그대로(성을 추측하지 않는다)", () => {
-    expect(topicName("이산")).toBe("이산이는");
+  it("동명이인 구분 글자는 뗀다", () => {
+    expect(topicName("김라윤A")).toBe("라윤이는");
+    expect(topicName("김준영D")).toBe("준영이는");
+    expect(topicName("이해율A")).toBe("해율이는");
+  });
+  it("외자는 성을 떼고, 네 글자는 그대로(복성을 추측하지 않는다)", () => {
+    expect(topicName("이윤")).toBe("윤이는");
+    expect(topicName("전설")).toBe("설이는");
     expect(topicName("남궁민수")).toBe("남궁민수는");
+  });
+  it("받침 없는 이름은 '는'", () => {
+    expect(topicName("박하나")).toBe("하나는");
+    expect(topicName("학원이")).toBe("원이는");
   });
 });
 

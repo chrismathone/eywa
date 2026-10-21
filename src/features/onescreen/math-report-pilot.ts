@@ -40,11 +40,12 @@ function hasBatchim(ch: string | undefined): boolean {
 
 /**
  * 학부모 글에서 부르는 이름 + 주제 조사 — "이승엽" → "승엽이는", "김지수" → "지수는".
- * 괄호·공백 뒤 꼬리("홍길동 (테스트)")는 뗀다. 한글 세 글자면 성을 뗀다(두 글자·네 글자 이상은 그대로 — 복성·외자를 추측하지 않는다).
+ * 괄호·공백 뒤 꼬리("홍길동 (테스트)")와 동명이인 구분 글자("김라윤A" — 실측 재원생 497명 중 37명)는 뗀다.
+ * 한글 세 글자·두 글자(외자 "이윤" → "윤이는")면 성을 뗀다. 네 글자 이상은 그대로(복성을 추측하지 않는다 — 실측 0명).
  */
 export function topicName(fullName: string): string {
-  const base = fullName.replace(/[([].*$/, "").trim().split(/\s+/)[0] ?? "";
-  const given = /^[가-힣]{3}$/.test(base) ? base.slice(1) : base;
+  const base = (fullName.replace(/[([].*$/, "").trim().split(/\s+/)[0] ?? "").replace(/[A-Za-z0-9]+$/, "");
+  const given = /^[가-힣]{2,3}$/.test(base) ? base.slice(1) : base;
   if (!given) return "";
   return hasBatchim(given.slice(-1)) ? `${given}이는` : `${given}는`;
 }
