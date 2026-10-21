@@ -31,7 +31,7 @@ function Cell({ day, name, onOpen }: { day: MonthDay; name: string; onOpen: () =
         type="button"
         onClick={onOpen}
         title={`${name} ${day.date} 상세 보기`}
-        className="hover:bg-primary/10 flex h-full min-h-10 w-full flex-col items-center justify-center px-0.5 py-0.5"
+        className="hover:bg-primary/10 flex h-full min-h-11 w-full flex-col items-center justify-center px-0.5 py-0.5"
       >
         {day.absent ? (
           <span className={cn("font-bold", TONE_TEXT.caution)}>결석</span>

@@ -6,6 +6,7 @@ import { Search, X } from "@/components/icons/aywa-icon-compat";
 
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { SHUTTLE_CHIP } from "@/features/shuttle/control-size";
 import { ridePairConflict, type RideLeg, type VehicleFleet } from "@/features/shuttle/parent/parent-rides";
 import { FocusedRun, RunHeader } from "@/features/shuttle/parent/components/vehicle-route-parts";
 import { DIRECTION_LABEL, type Direction, type Season } from "@/features/shuttle/types";
@@ -315,7 +316,7 @@ export function StaffRideEdit({
                   type="button"
                   aria-pressed={dir === d}
                   onClick={() => changeDir(d)}
-                  className={cn("h-9 rounded-full px-3 text-sm font-bold", dir === d ? "bg-foreground text-background" : "bg-bg-soft")}
+                  className={cn(SHUTTLE_CHIP, dir === d ? "bg-foreground text-background" : "bg-bg-soft")}
                 >
                   {DIRECTION_LABEL[d]}
                 </button>
@@ -330,7 +331,7 @@ export function StaffRideEdit({
                     aria-pressed={v.id === vehicleId}
                     onClick={() => setVehicleId(v.id)}
                     className={cn(
-                      "h-9 rounded-full px-3 text-sm font-bold",
+                      SHUTTLE_CHIP,
                       v.id === vehicleId ? "bg-primary text-primary-foreground" : "bg-bg-soft text-foreground",
                     )}
                   >

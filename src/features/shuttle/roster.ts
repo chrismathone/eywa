@@ -215,6 +215,8 @@ export type RideRow = {
   runStopId: string | null;
   studentId: string;
   studentName: string;
+  /** "경명여중1" 압축 표기(schoolGradeLabel) — 이름 옆에 적는다(사용자 2026-10-21). 모르면 빈 문자열. */
+  schoolGrade?: string;
   stopName: string;
   atTime: string | null;
   ioKind: Direction;
@@ -267,6 +269,7 @@ export function mergePlanAndLog(
     runStopId: p.runStopId,
     studentId: p.rider.studentId,
     studentName: p.rider.studentName,
+    schoolGrade: p.rider.schoolGrade,
     stopName: p.stopName,
     atTime: p.atTime,
     ioKind: p.rider.ioKind,

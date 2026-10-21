@@ -6,6 +6,7 @@ import {
   getTripsOn,
 } from "@/features/shuttle/server/queries";
 import { getAssignableStudents } from "@/features/shuttle/server/students";
+import { getRiderContacts } from "@/features/shuttle/server/rider-contacts";
 import { canRecordBoarding } from "@/features/shuttle/server/record-gate";
 import { isShuttleAdmin, requireShuttleView } from "@/features/shuttle/server/access";
 import { loadShuttleTodayPrefs } from "@/features/shuttle/today/server/today-prefs";
@@ -47,11 +48,20 @@ export default async function ShuttleTodayPage({
     await Promise.all([
       getShuttleBoard(season),
       getBoardingsOn(date),
-      loadShuttleTodayPrefs(), // 등하원 보기 = 계정 귀속(다른 기기에서도 같은 상태)
+      loadShuttleTodayPrefs(), // 호차 보기 = 계정 귀속(다른 기기에서도 같은 상태)
       getRideExceptionsOn(date), // 일회성 개입(0229a) — 표가 없으면 ready:false로 조용히 접힌다([[#95]])
       canWrite ? getAssignableStudents() : Promise.resolve([]),
       getTripsOn(date), // 운행 단위(0243a) — 표가 없으면 ready:false로 상태를 아예 안 그린다
     ]);
+
+  // 📞 학생·학부모 전화번호 — 기록 권한이 있을 때만(사용자 2026-10-21). 그날 명단에 설 수 있는 학생 전부(편성 · 오늘만 승하차 · 기록).
+  const contacts = canWrite
+    ? await getRiderContacts([
+        ...board.runs.flatMap((r) => r.stops.flatMap((s) => s.riders.map((x) => x.studentId))),
+        ...exceptionsRes.exceptions.map((e) => e.studentId),
+        ...logs.map((l) => l.studentId),
+      ])
+    : {};
 
   return (
     <div className="flex min-h-full w-full flex-col gap-3 p-3 md:px-5 md:py-4">
@@ -69,7 +79,7 @@ export default async function ShuttleTodayPage({
           runs={board.runs}
           logs={logs}
           canWrite={canWrite}
-          initialDirection={prefs.direction}
+          initialVehicle={prefs.vehicle}
           exceptions={exceptionsRes.exceptions}
           // 🔴 0229a 미적용이면 false — 화면이 "오늘만 탑승" 버튼을 **아예 안 그린다**.
           //    없는 기능을 버튼으로 약속하면 눌렀을 때 한글 에러만 나온다(거짓 약속 금지).
@@ -82,6 +92,7 @@ export default async function ShuttleTodayPage({
           tripsReady={tripsRes.ready}
           // 실시간 반영 채널(테넌트 × 날짜) — 남이 찍은 것이 이 화면에도 바로 들어온다.
           tenantId={user.tenantId}
+          contacts={contacts}
         />
       )}
     </div>

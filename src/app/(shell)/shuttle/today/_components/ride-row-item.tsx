@@ -22,6 +22,7 @@ import {
 import { isInactiveDay, type RideRow } from "@/features/shuttle/roster";
 import { clearBoarding, clearRideException, recordBoarding } from "@/features/shuttle/server/actions";
 import { setRowChecked, useRowChecked } from "@/features/shuttle/today/check-store";
+import { RiderContactLine } from "./rider-contacts";
 import { StaffRideControls } from "./staff-ride-controls";
 
 /** 그날 변경을 건 사람 표식 — 학부모(파랑 info) / 직원(앰버, 직원 수정 버튼과 같은 색)으로 갈린다(사용자 2026-10-06). */
@@ -275,6 +276,8 @@ export function RideRowItem({
 
   return (
     <li
+      // 학생 찾아가기(ride-jump)가 이 표식으로 줄을 찾아 스크롤한다.
+      data-ride-key={row.key}
       className={cn(
         // 📐 줄 사이를 좁힌다(사용자 2026-10-06 "한 화면에 나오는 아이들 수가 너무 적어").
         // 🔑 `@container/row` — 안쪽 배치는 **이 줄의 폭**으로 정한다(화면 폭 sm: 기준이면 두 칸 배치에서 이름이 한 글자씩 꺾였다).
@@ -295,6 +298,10 @@ export function RideRowItem({
         >
           {row.studentName || "(추가 탑승)"}
         </span>
+        {/* 학교·학년(사용자 2026-10-21 "아이들 옆에 무슨학교 몇학년인지") — `schoolGradeLabel` 압축 표기("침산초4"). */}
+        {row.schoolGrade && (
+          <span className={cn("text-text-dim text-xs whitespace-nowrap", skipped && "line-through")}>{row.schoolGrade}</span>
+        )}
         {ioBadge && (
           <Pill color={row.ioKind === "in" ? TONE_COLOR.info : TONE_COLOR.special}>{DIRECTION_LABEL[row.ioKind]}</Pill>
         )}
@@ -379,7 +386,10 @@ export function RideRowItem({
         </span>
       ) : canWrite ? (
         // 🔑 넓으면 **고정 폭 칸**(w-72) — 등원(탑승·미탑승·저장·전송)과 하원(하차·체크·전송)의 오른쪽 끝·[전송] 자리가 줄마다 같다.
-        <div className="flex shrink-0 items-center gap-1.5 @lg/row:w-72">
+        // 📞 버튼 위 한 줄 = 학생·학부모 전화번호(사용자 2026-10-21) — 기록 권한이 있을 때만 이 칸이 선다.
+        <div className="flex shrink-0 flex-col gap-1 @lg/row:w-72">
+        <RiderContactLine studentId={row.studentId} />
+        <div className="flex items-center gap-1.5">
           {/* 🔑 탑승·미탑승은 **상태가 남는 토글**이라 알약 칩이다(라운드 캐논: 눌러서 상태가 남으면
               칩, 동작만 하면 버튼) — 그래서 공용 `<Button>`이 아니라 `SHUTTLE_CHIP`을 쓴다.
               색은 의미색 캐논: 탄 것 = positive(초록) · 못 탄 것 = critical(빨강). */}
@@ -489,6 +499,7 @@ export function RideRowItem({
               취소
             </Button>
           )}
+        </div>
         </div>
       ) : (
         <span className="text-text-dim shrink-0 text-xs">
