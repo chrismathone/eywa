@@ -360,26 +360,28 @@ export async function loadMonthlyChanges(
 ): Promise<(pred: SlicePredicate | null) => MonthChange[]> {
   const db = await createClient();
   const fromDate = `${monthKeys(today, months)[0]}-01`;
-  const [enrolled, withdrawn, range] = await Promise.all([
-    fetchAllPaged<{ id: string; enrolled_at: string; notes: string | null; withdrawal_metadata: unknown }>((from, to) =>
-      db
-        .from("students")
-        .select("id,enrolled_at,notes,withdrawal_metadata")
-        .gte("enrolled_at", fromDate)
-        .order("id")
-        .range(from, to),
-    ),
+  const ids = scope ? new Set(scope.studentIds) : null;
+  // 🔴 이 조회는 **status를 보지 않는다**(퇴원했다 복구된 학생의 그 달 등록을 살리려고) — 그래서 중복 병합된
+  //    학생도 그대로 등록으로 세고 있었다(원장 2026-09-13). 퇴원 칸은 `withdrawalRows`가 이미 걸러 온다.
+  // 수업 기록 없는 장부 정리(단체 정리)도 등록으로 세지 않는다 — 퇴원 칸이 이미 빼므로 한쪽만 남으면 증감이 기운다(원장 2026-10-15).
+  // 장부 정리 확인은 등록 행만 있으면 되므로 퇴원·기록 범위를 기다리지 않고 바로 이어 띄운다(B4 · 2026-10-21 실측 — 퇴원 체인 뒤에
+  // 줄 서 있던 40~90ms를 겹친다).
+  const countedP = fetchAllPaged<{ id: string; enrolled_at: string; notes: string | null; withdrawal_metadata: unknown }>((from, to) =>
+    db
+      .from("students")
+      .select("id,enrolled_at,notes,withdrawal_metadata")
+      .gte("enrolled_at", fromDate)
+      .order("id")
+      .range(from, to),
+  ).then((enrolled) => enrolled.filter((r) => (!ids || ids.has(r.id)) && !isMergedStudent(r.notes)));
+  const [counted, bookkeeping, withdrawn, range] = await Promise.all([
+    countedP,
+    countedP.then((rows) => bookkeepingOnlyIds(db, rows)),
     withdrawalRows,
     coverage,
   ]);
   const started = range?.billingFrom ? new Set(range.started) : null;
   const isStarted = (id: string, enrolledAt: string | null) => !started || !enrolledAt || enrolledAt.slice(0, 7) < range!.billingFrom! || started.has(id);
-  const ids = scope ? new Set(scope.studentIds) : null;
-  // 🔴 이 조회는 **status를 보지 않는다**(퇴원했다 복구된 학생의 그 달 등록을 살리려고) — 그래서 중복 병합된
-  //    학생도 그대로 등록으로 세고 있었다(원장 2026-09-13). 퇴원 칸은 `withdrawalRows`가 이미 걸러 온다.
-  // 수업 기록 없는 장부 정리(단체 정리)도 등록으로 세지 않는다 — 퇴원 칸이 이미 빼므로 한쪽만 남으면 증감이 기운다(원장 2026-10-15).
-  const counted = enrolled.filter((r) => (!ids || ids.has(r.id)) && !isMergedStudent(r.notes));
-  const bookkeeping = await bookkeepingOnlyIds(db, counted);
   const joined = counted.filter((r) => !bookkeeping.has(r.id) && isStarted(r.id, r.enrolled_at));
   // 과목 관리자(원장 2026-10-14 2단계) — 등록은 그 학생이 들은(듣는) 반의 과목, 퇴원은 퇴원 무렵 끝난 과목(없으면 마지막 반).
   // 수강 기록이 없는 등록 학생(반 배정 전)은 '모름'이라 모든 과목 관리자에게 든다 · 두 과목이면 양쪽 모두.
