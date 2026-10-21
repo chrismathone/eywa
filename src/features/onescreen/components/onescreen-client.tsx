@@ -74,6 +74,7 @@ import {
   EMPTY_UNDERSTANDING,
   isMathReportPilot,
   understandingRows,
+  understandingSig,
   type UnderstandingState,
 } from "../math-report-pilot";
 import { ReportCard, type SubjectReport } from "./report-card";
@@ -2779,6 +2780,8 @@ export function OneScreenClient({
         draft: text,
         // 작성 방식 스냅샷(0214a) — AI 성공분·템플릿 폴백 모두 "자동이 넣은 텍스트". 저장 시 draft와 비교.
         autoDraft: text,
+        // 수학 보고서 시범 — 이번 글을 만든 이해도 서명(점수가 글에 숫자로 없어 발송 게이트가 이걸로 대조한다).
+        ...(pilot ? { pilotUnderstandingSig: understandingSig(commentInput.understanding) } : {}),
         // 폴백 템플릿이면 표시 — 자동작성 원문(0370a)으로 싣지 않는다.
         autoDraftTemplate: !(res.ok && res.comment),
         // 추세는 생성 성공 시에만 갱신(표본 부족·실패면 기존 초안·수동 입력 보존). 만들었지만 검사에 걸려 버렸으면 비운다

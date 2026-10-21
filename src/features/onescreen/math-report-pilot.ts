@@ -136,18 +136,21 @@ export function activeUnderstanding(
     .map((r) => ({ title: r.title, score: r.score! }));
 }
 
-/** 학부모 글에 들어가는 이해도 블록 — 비면 "". */
-export function understandingBlock(items: readonly { title: string; score: number }[]): string {
-  if (items.length === 0) return "";
-  return [`[소단원별 이해도 · ${UNDERSTANDING_MAX}점 만점]`, ...items.map((i) => `· ${i.title} ${i.score}점`)].join("\n");
+/**
+ * 이해도 서명 — 자동작성할 때 쓴 이해도와 지금 칸 값이 같은지 대조한다(발송 게이트).
+ * 🔴 점수는 학부모 글에 **숫자로 싣지 않는다**(원장 2026-10-21 *"점수로 하지 말고 … 말로 풀어서"*) — 글만 봐서는
+ *    점수가 바뀌었는지 알 수 없어서, 자동작성 시점의 서명을 화면이 들고 있다가 비교한다.
+ */
+export function understandingSig(items: readonly { title: string; score: number }[] | undefined): string {
+  return (items ?? []).map((i) => `${i.title}=${i.score}`).join("|");
 }
 
 /**
- * 시범 대상 자동작성 글 조립 — 진도 첫 문장 → 이해도 → 본문 → 특이사항(맨 아래, 강사가 쓴 그대로).
+ * 시범 대상 자동작성 글 조립 — 진도 첫 문장 → 본문(이해도는 AI가 말로 풀어 씀) → 특이사항(맨 아래, 강사가 쓴 그대로).
  * 원장 지시 *"특이사항 멘트는 수학보고서 밑에 추가 되게"* — 특이사항은 AI에 주지 않고 원문을 붙인다.
  */
-export function composePilotMent(parts: { lead: string; understanding: string; body: string; note: string }): string {
-  return [parts.lead, parts.understanding, parts.body, parts.note]
+export function composePilotMent(parts: { lead: string; body: string; note: string }): string {
+  return [parts.lead, parts.body, parts.note]
     .map((p) => p.trim())
     .filter(Boolean)
     .join("\n\n");
@@ -160,13 +163,15 @@ export function isPilotAutoWritten(draft: string | null | undefined, autoDraft: 
 }
 
 /**
- * AI 본문 지시 — 첫 문장·이해도 블록·특이사항은 코드가 붙이므로 본문이 같은 말을 되풀이하지 않게 한다.
+ * AI 본문 지시 — 첫 문장·특이사항은 코드가 붙이므로 본문이 같은 말을 되풀이하지 않게 하고, 이해도 점수는 **말로** 풀게 한다.
+ * 원장 2026-10-21: *"점수로 하지 말고 점수에 따라 강점, 낮으면 낮은 만큼 응원 또는 격려와 같은 식으로 말로 풀어서"*.
  * 프롬프트 본문(원장 편집 가능) 밖, 섹션 끝에 코드로 붙는다.
  */
 export const PILOT_AI_DIRECTIVE = [
   "[이번 알림장 추가 규칙]",
-  "- 알림장 맨 앞에 '오늘 ○○ 진도를 나갔습니다' 문장과 소단원별 이해도 점수가 따로 붙습니다. 본문에서 진도 단원명을 다시 나열하거나 학생 이름으로 첫 문장을 시작하지 마세요.",
-  "- '소단원별 이해도'가 있으면 각 소단원의 이해 정도를 점수 수준에 맞게 서술하세요(8~10점 잘 이해함, 5~7점 대체로 이해했으나 보완 필요, 4점 이하 다음 수업에서 다시 짚음). 점수 숫자는 다시 쓰지 마세요.",
+  "- 알림장 맨 앞에 '오늘 ○○ 진도를 나갔습니다' 문장이 따로 붙습니다. 본문에서 진도 단원명을 다시 나열하거나 학생 이름으로 첫 문장을 시작하지 마세요.",
+  "- '소단원별 이해도'가 있으면 소단원마다 한두 문장으로 말로 풀어 쓰세요. 점수가 높을수록(8~10점) 그 소단원을 아이의 강점으로 구체적으로 칭찬하고, 중간(5~7점)이면 잘한 점을 먼저 짚고 조금 더 다지면 좋을 부분을 응원하는 말로, 낮을수록(4점 이하) 부담을 주지 않는 따뜻한 격려와 함께 다음 수업에서 다시 짚어 주겠다고 적으세요.",
+  "- 점수 숫자·'10점 만점'·'이해도 N점' 같은 표현은 절대 쓰지 마세요. 소단원 이름은 그대로 써도 됩니다.",
   "- 특이사항은 알림장 맨 끝에 선생님 글 그대로 붙습니다. 본문에서 다루지 마세요.",
 ].join("\n");
 
@@ -176,18 +181,24 @@ export const PILOT_AUTOWRITE_REQUIRED_ERROR =
 
 /**
  * 자동작성 글이 **지금 칸 값과 맞나** — 자동작성 뒤에 진도·이해도·특이사항을 바꾸면 글은 옛 값 그대로라 다시 눌러야 한다.
- * 코드가 붙인 부분(첫 문장·이해도 블록·맨 끝 특이사항)만 대조한다 — AI 본문은 대조할 기준이 없다.
+ * 첫 문장·맨 끝 특이사항은 글에서 대조하고, 이해도는 자동작성 때 남긴 서명(`writtenSig`)과 대조한다(숫자가 글에 없다).
  * ⚠️ 특이사항을 **지운** 경우는 못 잡는다(옛 글 끝에 남은 문장이 옛 특이사항인지 본문인지 가를 수 없다).
+ * ⚠️ 서명은 화면 상태라 새로고침하면 없다 — 없으면 이해도 대조를 건너뛴다(막지 않는다).
  */
 export function isPilotDraftCurrent(
   draft: string | null | undefined,
-  now: { studentName: string; today: string | null | undefined; note: string | null | undefined; understanding: readonly { title: string; score: number }[] },
+  now: {
+    studentName: string;
+    today: string | null | undefined;
+    note: string | null | undefined;
+    understanding: readonly { title: string; score: number }[];
+    writtenSig?: string;
+  },
 ): boolean {
   const d = (draft ?? "").trim();
   const lead = progressLead(now.studentName, pilotLessons(now.today), skipStatusOf(now.today));
   if (lead && !d.startsWith(lead)) return false;
-  const block = understandingBlock(now.understanding);
-  if (block ? !d.includes(block) : d.includes("[소단원별 이해도")) return false;
+  if (now.writtenSig !== undefined && now.writtenSig !== understandingSig(now.understanding)) return false;
   const note = (now.note ?? "").trim();
   if (note && !d.endsWith(note)) return false;
   return true;

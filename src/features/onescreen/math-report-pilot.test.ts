@@ -11,7 +11,8 @@ import {
   progressLead,
   readUnderstanding,
   topicName,
-  understandingBlock,
+  understandingSig,
+  PILOT_AI_DIRECTIVE,
   understandingRows,
 } from "./math-report-pilot";
 import { evaluateSendGate } from "./send-gate";
@@ -91,10 +92,6 @@ describe("소단원별 이해도", () => {
     expect(readUnderstanding(null)).toEqual({ scores: {}, off: [] });
     expect(readUnderstanding({ scores: { a: 5, b: "x", c: 99 }, off: ["a", 3] })).toEqual({ scores: { a: 5, c: 10 }, off: ["a"] });
   });
-  it("블록 표기", () => {
-    expect(understandingBlock([])).toBe("");
-    expect(understandingBlock([{ title: "소인수분해", score: 7 }])).toBe("[소단원별 이해도 · 10점 만점]\n· 소인수분해 7점");
-  });
   it("AI 사실 줄에 들어간다", () => {
     const input = { studentName: "a", subject: "수학", progress: "x", dailyTest: "", checkTest: "", attitude: "", homework: "", homeworkToday: "", textbook: "", specialNote: "", understanding: [{ title: "소인수분해", score: 7 }] } satisfies ReportCommentInput;
     expect(buildFactBlock(input)).toContain("소단원별 이해도: 소인수분해 10점 만점에 7점");
@@ -102,9 +99,14 @@ describe("소단원별 이해도", () => {
 });
 
 describe("글 조립", () => {
-  it("진도 → 이해도 → 본문 → 특이사항(맨 아래)", () => {
-    expect(composePilotMent({ lead: "L", understanding: "U", body: "B", note: " 격려 " })).toBe("L\n\nU\n\nB\n\n격려");
-    expect(composePilotMent({ lead: "L", understanding: "", body: "B", note: "" })).toBe("L\n\nB");
+  it("진도 → 본문 → 특이사항(맨 아래) · 이해도 점수는 글에 숫자로 안 붙는다", () => {
+    expect(composePilotMent({ lead: "L", body: "B", note: " 격려 " })).toBe("L\n\nB\n\n격려");
+    expect(composePilotMent({ lead: "L", body: "B", note: "" })).toBe("L\n\nB");
+  });
+  it("AI 지시가 점수를 말로 풀게 한다(강점·응원·격려, 숫자 금지)", () => {
+    expect(PILOT_AI_DIRECTIVE).toMatch(/강점/);
+    expect(PILOT_AI_DIRECTIVE).toMatch(/격려/);
+    expect(PILOT_AI_DIRECTIVE).toMatch(/점수 숫자.*쓰지 마세요/);
   });
 });
 
@@ -130,19 +132,18 @@ describe("발송 게이트", () => {
 });
 
 describe("자동작성 뒤에 칸을 바꾸면 다시 눌러야 한다", () => {
-  const now = { studentName: "이승엽", today: "소인수분해", note: "잘했어요", understanding: [{ title: "소인수분해", score: 7 }] };
-  const draft = composePilotMent({
-    lead: progressLead("이승엽", ["소인수분해"]),
-    understanding: understandingBlock(now.understanding),
-    body: "본문",
-    note: "잘했어요",
-  });
+  const und = [{ title: "소인수분해", score: 7 }];
+  const now = { studentName: "이승엽", today: "소인수분해", note: "잘했어요", understanding: und, writtenSig: understandingSig(und) };
+  const draft = composePilotMent({ lead: progressLead("이승엽", ["소인수분해"]), body: "본문", note: "잘했어요" });
   it("그대로면 통과", () => expect(isPilotDraftCurrent(draft, now)).toBe(true));
   it("진도·이해도·특이사항이 바뀌면 막는다", () => {
     expect(isPilotDraftCurrent(draft, { ...now, today: "최대공약수" })).toBe(false);
     expect(isPilotDraftCurrent(draft, { ...now, understanding: [{ title: "소인수분해", score: 9 }] })).toBe(false);
     expect(isPilotDraftCurrent(draft, { ...now, understanding: [] })).toBe(false);
     expect(isPilotDraftCurrent(draft, { ...now, note: "더 잘했어요!" })).toBe(false);
+  });
+  it("서명이 없으면(새로고침 뒤) 이해도 대조는 건너뛴다", () => {
+    expect(isPilotDraftCurrent(draft, { ...now, writtenSig: undefined, understanding: [] })).toBe(true);
   });
 });
 
@@ -153,8 +154,15 @@ describe("배선", () => {
     expect(src).toMatch(/isMathReportPilot\(input\.studentId, input\.subject\) && saved\.mentSource !== "auto"/);
     expect(src).toMatch(/mentSource: mentSourceFinal,/);
   });
-  it("카드·표 멘트 칸이 시범 대상에서 잠긴다", () => {
-    expect(read("./components/report-card.tsx")).toMatch(/readOnly=\{pilot\}/);
-    expect(read("./components/grid-row.tsx")).toMatch(/readOnly=\{rowLocked \|\| pilot\}/);
+  it("자동작성 글에 이해도 점수 블록을 붙이지 않는다(말로 풀어 쓴다)", () => {
+    expect(read("./server/actions.ts")).not.toMatch(/understandingBlock/);
+  });
+  it("카드·표 멘트 칸이 시범 대상에서 잠기고 이해도 서명으로 대조한다", () => {
+    const card = read("./components/report-card.tsx");
+    const grid = read("./components/grid-row.tsx");
+    expect(card).toMatch(/readOnly=\{pilot\}/);
+    expect(grid).toMatch(/readOnly=\{rowLocked \|\| pilot\}/);
+    expect(card).toMatch(/writtenSig: rep\?\.pilotUnderstandingSig/);
+    expect(grid).toMatch(/writtenSig: rep\?\.pilotUnderstandingSig/);
   });
 });

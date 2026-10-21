@@ -85,7 +85,6 @@ import {
   pilotLessons,
   PILOT_AI_DIRECTIVE,
   progressLead,
-  understandingBlock,
 } from "../math-report-pilot";
 import { skipStatusOf } from "../progress-status";
 import { logAction } from "@/features/audit/server/log";
@@ -1641,11 +1640,10 @@ export async function generateReportComment(
     const res = readMentResponse(data, mode, trendInput);
     if (!res.comment) return { ok: false, error: "빈 응답" };
     const body = prependParentAddress(appendVideoReceiptComment(res.comment, videoReceipt), parentAddress);
-    // 시범 대상 — '{이름}는 오늘 … 진도를 나갔습니다' → 소단원별 이해도 → 본문 → 특이사항(원문 그대로, 맨 아래).
+    // 시범 대상 — '{이름}는 오늘 … 진도를 나갔습니다' → 본문(이해도는 AI가 말로 풀어 씀) → 특이사항(원문 그대로, 맨 아래).
     const comment = pilot
       ? composePilotMent({
           lead: progressLead(input.studentName, pilotLessons(input.progress), skipStatusOf(input.progress)),
-          understanding: understandingBlock(safeInput.understanding ?? []),
           body,
           note: pilotNote,
         })

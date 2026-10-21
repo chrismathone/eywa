@@ -3175,8 +3175,8 @@ export const SHEET_DICT = {
     en: "A word of encouragement · e.g. Great job not giving up on the hard ones!",
   },
   "os.card.mentPhPilot": {
-    ko: "이 학생의 수학 보고서는 '자동작성'으로만 만듭니다(직접 고칠 수 없습니다). 진도 → 소단원별 이해도 → 본문 → 특이사항 순서로 채워집니다.",
-    en: "This student's math report is written by Auto-write only (it cannot be edited by hand). It fills in as progress → understanding per lesson → body → notes.",
+    ko: "이 학생의 수학 보고서는 '자동작성'으로만 만듭니다(직접 고칠 수 없습니다). 진도 → 본문(소단원별 이해도를 강점·응원·격려의 말로) → 특이사항 순서로 채워집니다.",
+    en: "This student's math report is written by Auto-write only (it cannot be edited by hand). It fills in as progress → body (understanding per lesson put into words of praise or encouragement) → notes.",
   },
   "os.card.understanding": { ko: "소단원별 이해도 (10점 만점)", en: "Understanding per lesson (out of 10)" },
   "os.card.understandingEmpty": {
