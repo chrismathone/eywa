@@ -701,7 +701,7 @@ export function ConsultationFullForm({
             <L label="남매 관계" icon={Users}>
               <select name="siblings" defaultValue={v.siblings ?? ""} className={input}>
                 <option value="">선택</option>
-                {SIBLINGS_OPTIONS.map((s) => (
+                {[...new Set([...(v.siblings ? [v.siblings] : []), ...SIBLINGS_OPTIONS])].map((s) => (
                   <option key={s} value={s}>{s}</option>
                 ))}
               </select>
@@ -1055,7 +1055,7 @@ function Collapsible({
         <span className="text-foreground text-sm font-bold">{title}</span>
         <span className="text-text-dim text-xs">{subtitle}</span>
       </button>
-      {open ? <div className="space-y-2 px-3 pb-3 pt-1">{children}</div> : null}
+      <div hidden={!open} style={!open ? { display: "none" } : undefined} className="space-y-2 px-3 pb-3 pt-1">{children}</div>
     </div>
   );
 }

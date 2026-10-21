@@ -2111,6 +2111,7 @@ export function auditDetail(
         ...detailed.map((c) => `${str(c.field)} ${str(c.from) ?? "(빈 값)"} → ${str(c.to) ?? "(빈 값)"}`),
         rest.length ? rest.join(", ") : null,
         outcomeTo ? `상태 → ${outcomeTo}` : null,
+        str(m.counselorAutofill) ? `상담자 자동 입력: ${str(m.counselorAutofill)}` : null,
       );
     }
     case "enrollment_consultation_outcome": {

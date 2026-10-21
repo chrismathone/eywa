@@ -32,6 +32,8 @@ import { syncMirrorAfterRecordingFailure } from "@/features/enrollment/server/re
 import { notifyClassAssignment } from "@/features/notifications/server/notify";
 import { logAction } from "@/features/audit/server/log";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { createSchema, buildConsultationRow, type FullForm } from "@/features/enrollment/consultation-form-row";
+import { counselorAutofill } from "@/features/enrollment/consultation-edit";
 import { summarizeConsultationChanges } from "@/features/enrollment/consultation-audit";
 import { referrerChanged, referrerColumns, type ReferrerColumns } from "@/features/enrollment/referrer";
 import { readReferrerBefore, referrerLabelOf } from "@/features/enrollment/server/referrer-queries";
@@ -41,60 +43,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 function dbWhy(error: unknown, scope: string, fallback: string, op?: "write" | "delete"): string {
   return explainDbError(error, { scope, fallback, op }).message;
 }
-
-const opt = z.string().optional().nullable();
-const createSchema = z.object({
-  prospectName: z.string().min(1, "학생 이름을 입력해주세요"),
-  prospectGrade: opt,
-  prospectSchool: opt,
-  parentName: opt,
-  parentPhone: opt,
-  parentRequest: opt, // 상담 내용
-  prevAcademy: opt,
-  lastScore: opt,
-  // 등록 상담 폼 전체(0046a)
-  englishName: opt,
-  gender: opt,
-  bloodType: opt,
-  birthDate: opt,
-  studentPhone: opt,
-  homePhone: opt,
-  parentRelation: opt,
-  address: opt,
-  zipCode: opt,
-  addressDetail: opt,
-  consultationPath: opt,
-  subject: opt,
-  careerGoal: opt,
-  siblings: opt,
-  safetyNotes: opt,
-  registrationStatus: opt,
-  paymentAmount: opt,
-  paymentDate: opt,
-  registrar: opt,
-  followUpDate: opt,
-  followUpContent: opt,
-  nonRegistrationReason: opt,
-  shuttleBusRequest: opt,
-  privacyAgreement: opt,
-  installmentAgreement: opt,
-  subjectDetails: opt, // 과목 탭 JSON 문자열
-  // 완전 이식(0064a) — ijw ConsultationForm 잔여 필드.
-  counselor: opt,
-  receivedDate: opt,
-  studentType: opt,
-  siblingsDetails: opt,
-  consultationDate: opt, // 상담일 → consultation_date(전용 date 컬럼)
-});
-
-type FullForm = z.infer<typeof createSchema>;
-
-const asBool = (v?: string | null) => v === "true" || v === "on";
-const asNum = (v?: string | null) => {
-  if (!v) return null;
-  const n = Number(String(v).replace(/[^\d.]/g, ""));
-  return Number.isFinite(n) ? n : null;
-};
 
 /** 폼 → DB 컬럼(공통). learning_history·tenant_id·consultant_id·outcome는 호출부에서 별도 처리. */
 /** 학교명 저장 별칭(학원설정) — 침산 = 일중→대구일중, 새 학원 = 없음. 요청 캐시라 한 요청에 여러 번 불러도 조회 1회. */
@@ -110,60 +58,6 @@ async function withSchoolKind<T extends { prospect_school: string | null; prospe
 ): Promise<T> {
   const aliases = await schoolAliases();
   return { ...row, prospect_school: await completeSchoolKind(client, tenantId, row.prospect_school, row.prospect_grade, aliases) };
-}
-
-function buildConsultationRow(d: FullForm, aliases: readonly SchoolSaveAlias[]) {
-  let subjectDetails: unknown = null;
-  if (d.subjectDetails) {
-    try {
-      subjectDetails = JSON.parse(d.subjectDetails);
-    } catch {
-      subjectDetails = null;
-    }
-  }
-  return {
-    prospect_name: d.prospectName,
-    prospect_grade: d.prospectGrade || null,
-    // 🔴 학교 표기는 **저장 시 강제 정규화**(원장 2026-09-01) — "옥산초등학교"·"일 중"이 그대로
-    // 들어오면 같은 학교가 두 표기로 갈린다. 정본 = features/schools/school-name.ts.
-    prospect_school: canonicalSchoolName(d.prospectSchool, aliases),
-    english_name: d.englishName || null,
-    gender: d.gender || null,
-    blood_type: d.bloodType || null,
-    birth_date: d.birthDate || null,
-    student_phone: d.studentPhone || null,
-    home_phone: d.homePhone || null,
-    parent_name: d.parentName || null,
-    parent_phone: d.parentPhone || null,
-    parent_relation: d.parentRelation || null,
-    address: d.address || null,
-    zip_code: d.zipCode || null,
-    address_detail: d.addressDetail || null,
-    consultation_path: d.consultationPath || null,
-    subject: d.subject || null,
-    career_goal: d.careerGoal || null,
-    siblings: d.siblings || null,
-    safety_notes: d.safetyNotes || null,
-    registration_status: d.registrationStatus || null,
-    payment_amount: asNum(d.paymentAmount),
-    payment_date: d.paymentDate || null,
-    registrar: d.registrar || null,
-    follow_up_date: d.followUpDate || null,
-    follow_up_content: d.followUpContent || null,
-    non_registration_reason: d.nonRegistrationReason || null,
-    parent_request: d.parentRequest || null,
-    shuttle_bus_request: asBool(d.shuttleBusRequest),
-    privacy_agreement: asBool(d.privacyAgreement),
-    installment_agreement: asBool(d.installmentAgreement),
-    subject_details: subjectDetails,
-    counselor: d.counselor || null,
-    received_date: d.receivedDate || null,
-    student_type: d.studentType || null,
-    siblings_details: d.siblingsDetails || null,
-    // 상담일 = 전용 date 컬럼. consulted_at(timestamptz, 정렬용)은 폼에서 절대 건드리지 않는다
-    // — timestamptz에 date 문자열을 쓰면 KST↔UTC 하루밀림·시각 소실이 생김(적대리뷰 확정).
-    consultation_date: d.consultationDate || null,
-  };
 }
 
 export type CreateConsultationState = { error?: string; id?: string } | undefined;
@@ -468,15 +362,16 @@ export async function updateEnrollmentConsultation(
 
   const supabase = await createClient();
   // 기존 learning_history를 읽어 prevAcademy/lastScore만 갱신(AI 파생 weakSubjects 등 보존).
-  const { data: existing } = await supabase
+  const { data: existing, error: readError } = await supabase
     .from("enrollment_consultations")
     // 뒤의 이름·학교…상담 내용 칸 = 감사로그 "무엇이 바뀌었나"의 저장 전 값
     // (consultation-audit.ts CONSULTATION_AUDIT_FIELDS와 같은 목록 — 가드 테스트가 잠근다).
     .select(
-      "learning_history, outcome, from_public_intake, prospect_name, prospect_school, prospect_grade, parent_name, parent_phone, student_phone, subject, consultant_id, parent_request",
+      "prospect_name, prospect_grade, prospect_school, english_name, gender, blood_type, birth_date, student_phone, home_phone, parent_name, parent_phone, parent_relation, address, zip_code, address_detail, consultation_path, subject, career_goal, siblings, safety_notes, registration_status, payment_amount, payment_date, registrar, follow_up_date, follow_up_content, non_registration_reason, parent_request, shuttle_bus_request, privacy_agreement, installment_agreement, subject_details, received_date, student_type, siblings_details, consultation_date, learning_history, consultant_id, counselor, from_public_intake, outcome, updated_at",
     )
     .eq("id", id)
     .single();
+  if (readError || !existing) return { error: "상담을 불러오지 못했습니다. 다시 시도해 주세요." };
   const lh: Record<string, unknown> = { ...((existing?.learning_history as Record<string, unknown>) ?? {}) };
   if (parsed.data.prevAcademy) lh.prevAcademy = parsed.data.prevAcademy;
   else delete lh.prevAcademy;
@@ -497,7 +392,9 @@ export async function updateEnrollmentConsultation(
     ...(await withSchoolKind(supabase, user.tenantId, buildConsultationRow(parsed.data, await schoolAliases()))),
     ...referrer.cols,
   };
-  const { error } = await supabase
+  const autofilled = counselorAutofill({ ...existing, ...referrerBefore }, { ...row, learning_history: lh }, user.displayName, promoteToConsulted);
+  if (autofilled) row.counselor = autofilled;
+  const { data: saved, error } = await supabase
     .from("enrollment_consultations")
     .update({
       ...row,
@@ -505,8 +402,9 @@ export async function updateEnrollmentConsultation(
       ...(promoteToConsulted ? { outcome: "consulted" } : {}),
       updated_at: new Date().toISOString(),
     })
-    .eq("id", id);
+    .eq("id", id).eq("updated_at", existing.updated_at).select("id").maybeSingle();
 
+  if (!error && !saved) return { error: "다른 저장이 먼저 반영되었습니다. 화면을 다시 열어 확인해주세요." };
   if (error) return { error: dbWhy(error, "enrollment.update", "상담을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.") };
 
   // 감사로그(2026-09-10 김근우 건) — 이름·학교·학년·보호자는 자동 연결의 키라 전후 값까지, 연락처·상담 내용은
@@ -519,7 +417,7 @@ export async function updateEnrollmentConsultation(
     summary.changed.push("소개한 사람");
     summary.changes.push({ field: "소개한 사람", from, to });
   }
-  if (summary.changed.length > 0 || promoteToConsulted) {
+  if (summary.changed.length > 0 || promoteToConsulted || autofilled) {
     await logAction({
       action: "enrollment_consultation_update",
       targetType: "enrollment_consultations",
@@ -527,6 +425,7 @@ export async function updateEnrollmentConsultation(
       metadata: {
         consultationId: id,
         ...summary,
+        ...(autofilled ? { counselorAutofill: autofilled } : {}),
         ...(promoteToConsulted ? { outcomeTo: "consulted" } : {}),
       },
     });
@@ -680,7 +579,7 @@ export async function patchConsultationCells(id: string, patch: ConsultationCell
   const beforeRead = supabase
     .from("enrollment_consultations")
     .select(
-      "prospect_name, prospect_school, prospect_grade, parent_name, parent_phone, student_phone, subject, consultant_id, parent_request",
+      "prospect_name, prospect_school, prospect_grade, parent_name, parent_phone, student_phone, subject, consultant_id, parent_request, counselor, from_public_intake, updated_at",
     )
     .eq("id", id)
     .maybeSingle()
@@ -725,24 +624,27 @@ export async function patchConsultationCells(id: string, patch: ConsultationCell
   }
 
   const before = await beforeRead;
+  if (!before) return { error: "상담을 불러오지 못했습니다. 다시 시도해 주세요." };
+  const autofilled = counselorAutofill(before, row, user.displayName);
+  if (autofilled) row.counselor = autofilled;
 
   // RLS 밖(다른 학원)·삭제된 id면 0행 갱신인데 에러가 없다 — select로 실제로 바뀐 행을 확인한다.
   const { data: updated, error } = await supabase
     .from("enrollment_consultations")
     .update({ ...row, updated_at: new Date().toISOString() })
-    .eq("id", id)
+    .eq("id", id).eq("updated_at", before.updated_at)
     .select("id")
     .maybeSingle();
   if (error) return { error: dbWhy(error, "enrollment.patchCells", "상담 칸을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.") };
   if (!updated) return { error: "상담을 찾을 수 없습니다" };
 
   const summary = summarizeConsultationChanges(before, row);
-  if (summary.changed.length > 0) {
+  if (summary.changed.length > 0 || autofilled) {
     await logAction({
       action: "enrollment_consultation_update",
       targetType: "enrollment_consultations",
       targetLabel: (typeof row.prospect_name === "string" ? row.prospect_name : null) ?? before?.prospect_name ?? null,
-      metadata: { consultationId: id, ...summary, via: "list" },
+      metadata: { consultationId: id, ...summary, via: "list", ...(autofilled ? { counselorAutofill: autofilled } : {}) },
     });
   }
 
