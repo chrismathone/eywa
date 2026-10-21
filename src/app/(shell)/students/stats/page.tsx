@@ -3,7 +3,7 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { PageHeader } from "@/components/page-header";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { loadStudentStats } from "@/features/students/stats/server/load";
-import { viewFromParam } from "@/features/students/stats/model";
+import { TREND_KEYS, viewFromParam } from "@/features/students/stats/model";
 import { BackToListButton } from "../../consultations/_components/back-to-list-button";
 import { StatCard } from "./_components/stat-card";
 import { SubjectSwitch } from "./_components/subject-switch";
@@ -28,13 +28,16 @@ const one = (v: string | string[] | undefined) => (typeof v === "string" ? v : u
 export default async function StudentStatsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await requireAccess("students");
   const sp = await searchParams;
-  const [stats, settings] = await Promise.all([loadStudentStats(one(sp.subject), readPeriodParams(sp, FIRST_CLASS_KEYS)), getTenantSettings()]);
+  const [stats, settings] = await Promise.all([loadStudentStats(one(sp.subject), readPeriodParams(sp, FIRST_CLASS_KEYS), readPeriodParams(sp, TREND_KEYS)), getTenantSettings()]);
   const view = viewFromParam(sp.view) ?? stats.prefs.view;
   const scope = stats.scope;
   const description = scope ? `그동안의 재원생 흐름과 달마다 있었던 등록·퇴원 · ${scope.label} 기준` : "그동안의 재원생 흐름과 달마다 있었던 등록·퇴원";
   const boardKey = `${view}|${scope?.active ?? scope?.label ?? "all"}`;
   const parts = stats.parts;
   const ctx = parts ? { stats, parts, settings, scopeLabel: scope?.label ?? null } : null;
+  // 기간 칸 두 벌(첫 수업 `fc…` · 재원생 추이 `tr…`)은 서로의 주소를 그대로 둔다(한쪽 기간을 바꿔도 다른 카드의 일별 보기가 닫히지 않게).
+  const periodKeys = [...Object.values(FIRST_CLASS_KEYS), ...Object.values(TREND_KEYS)];
+  const keepAll = Object.fromEntries([...periodKeys, "view", "subject"].map((k) => [k, one(sp[k])]));
 
   return (
     <div className="@container/panel space-y-4 compact-chrome:space-y-3">
@@ -46,7 +49,7 @@ export default async function StudentStatsPage({ searchParams }: { searchParams:
             choices={scope.choices}
             active={scope.active}
             view={one(sp.view)}
-            keep={Object.fromEntries(Object.values(FIRST_CLASS_KEYS).map((k) => [k, one(sp[k])]))}
+            keep={Object.fromEntries(periodKeys.map((k) => [k, one(sp[k])]))}
           />
         ) : null}
       </div>
@@ -61,13 +64,13 @@ export default async function StudentStatsPage({ searchParams }: { searchParams:
       ) : (
         <>
           <Suspense fallback={<SectionSkeleton id="trend" title="재원생 추이" height="h-[28rem]" />}>
-            <TrendSection {...ctx} view={view} boardKey={boardKey} />
+            <TrendSection {...ctx} view={view} boardKey={boardKey} keep={keepAll} />
           </Suspense>
           <Suspense fallback={<SectionSkeleton id="courses" title="강좌수 추이" />}>
             <CourseSection {...ctx} boardKey={boardKey} />
           </Suspense>
           <Suspense fallback={<SectionSkeleton id="first" title="첫 수업 추이" />}>
-            <FirstClassSection {...ctx} keep={{ view: one(sp.view), subject: one(sp.subject) }} />
+            <FirstClassSection {...ctx} keep={keepAll} />
           </Suspense>
           <Suspense fallback={<SectionSkeleton id="flow" title="등록 · 퇴원 추이" />}>
             <FlowSection {...ctx} boardKey={boardKey} />

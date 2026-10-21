@@ -7,12 +7,14 @@ import { VehicleRouteDialog } from "@/features/shuttle/parent/components/vehicle
 import { DIRECTION_LABEL, type Direction, type Season } from "@/features/shuttle/types";
 import {
   loadStaffRideEditor,
+  staffAbsentRide,
   staffSkipRide,
   type StaffRideEditor,
 } from "@/features/shuttle/ride-change/server/staff-ride-actions";
 
 /**
- * 셔틀 '오늘 등하원' 줄의 **직원 수정** — [등하원 수정] · [등원 안함]/[하원 안함](사용자 2026-10-06).
+ * 셔틀 '오늘 등하원' 줄의 **직원 수정** — [등하원 수정] · [등원 안함]/[하원 안함](사용자 2026-10-06) · [결석](2026-10-21).
+ * 🔑 [결석] = 그날 **등원·하원 둘 다 안 탐** + 사유(월별 '관리자 수정하기'의 결석과 같은 `staffAbsentRide` — 출석부는 건드리지 않는다).
  * 🔑 학부모 '수정하기'·'타지 않기'와 **같은 창·같은 규칙**이고 저장만 직원 액션으로 간다(`staff-ride-actions.ts`).
  * 🔑 학부모 수정과 **명확히 구별** — 버튼은 이름 줄 오른쪽(수정 무채색 · 안함 빨강), 창 머리에 '직원 수정', 줄에는 "관리자 · 이름"/"셔틀 선생님 · 이름"이 남는다.
  * ⚡ 노선 전체는 [수정]을 누를 때만 읽는다(줄마다 미리 싣지 않는다 — 오늘 등하원은 매일 여는 화면).
@@ -74,6 +76,21 @@ export function StaffRideControls({
           placeholder="예: 어머니 전화 — 오늘은 직접 데려가요"
           onSubmit={async (reason) => {
             const res = await staffSkipRide({ studentId, onDate: date, ioKind, reason });
+            if (!("error" in res)) onDone();
+            return res;
+          }}
+        />
+      ) : null}
+      {showSkip ? (
+        <ReasonDialog
+          triggerClassName={cn(SKIP_BTN)}
+          trigger={<>결석</>}
+          title={`직원 수정 · ${studentName} 결석`}
+          description="오늘 등원·하원 둘 다 안 타는 것으로 바꿔요. 이유를 짧게 남겨 주세요 — 변경 내역에 직원으로 남고 학부모 화면에도 바로 보여요. 출석부는 바뀌지 않아요."
+          confirmLabel="결석으로 저장"
+          placeholder="예: 감기로 결석 — 어머니 전화"
+          onSubmit={async (reason) => {
+            const res = await staffAbsentRide({ studentId, onDate: date, reason });
             if (!("error" in res)) onDone();
             return res;
           }}

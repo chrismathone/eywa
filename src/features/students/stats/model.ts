@@ -1,5 +1,5 @@
 import type { PillColor } from "@/components/atoms/pill";
-import { parsePeriodMode, type PeriodMode } from "@/features/stats/period";
+import { parsePeriodMode, type PeriodKeys, type PeriodMode } from "@/features/stats/period";
 
 /**
  * 원생 통계 화면(`/students/stats`)의 순수 규칙 — 보기 범위·선 고르기·과목 색·요약 수치·보기 설정 파싱(Vitest).
@@ -41,9 +41,16 @@ export type StudentStatsPrefs = {
   courseRange: TrendRange; courseKind: ChartKind; courseOff: string[];
   /** 첫 수업 추이(원장 2026-10-20) — 보기 방식(12·24개월 · 일별 · 구간). 고른 달·구간은 남기지 않는다(`period.ts`). */
   firstMode: PeriodMode;
+  /** 첫 수업 추이 그래프 종류 — 막대가 기본(쌓은 막대) · 꺾은선도 고를 수 있다(원장 2026-10-21 *"꺾은선 그래프도 되게"*). */
+  firstKind: ChartKind;
+  /**
+   * 재원생 추이의 일별 보기(원장 2026-10-21 *"재원생추이 등 일별로 … 특정 기간. 최대 두달"*) — `month` = 월별·주별·연도별(기간 버튼) ·
+   * `day` = 한 달 일별 · `range` = 구간 일별. 고른 달·구간 자체는 남기지 않는다(첫 수업 추이와 같은 규칙 · `period.ts`).
+   */
+  trendMode: PeriodMode;
 };
 export type HistoryView = "yearly" | "monthly";
-export const DEFAULT_STUDENT_STATS_PREFS: StudentStatsPrefs = { range: "all", view: "subject", off: [], flowRange: "all", trendKind: "line", flowKind: "bar", historyView: "yearly", courseRange: "all", courseKind: "line", courseOff: [], firstMode: "month" };
+export const DEFAULT_STUDENT_STATS_PREFS: StudentStatsPrefs = { range: "all", view: "subject", off: [], flowRange: "all", trendKind: "line", flowKind: "bar", historyView: "yearly", courseRange: "all", courseKind: "line", courseOff: [], firstMode: "month", firstKind: "bar", trendMode: "month" };
 
 const isRange = (v: unknown): v is TrendRange => TREND_RANGES.includes(v as TrendRange);
 
@@ -63,6 +70,9 @@ export function parseStudentStatsPrefs(raw: unknown): StudentStatsPrefs {
     courseKind: o.courseKind === "bar" ? "bar" : "line",
     courseOff: offOf(o.courseOff),
     firstMode: parsePeriodMode(o.firstMode) ?? "month",
+    firstKind: o.firstKind === "line" ? "line" : "bar",
+    // 24개월은 일별 보기의 뜻이 아니다 — 월별 기간 버튼이 따로 있으니 월별로 돌린다.
+    trendMode: (() => { const m = parsePeriodMode(o.trendMode); return m === "day" || m === "range" ? m : "month"; })(),
   };
 }
 
@@ -71,8 +81,18 @@ export function viewFromParam(v: string | string[] | undefined): TrendView | nul
   return v === "mix" || v === "subject" ? v : null;
 }
 
-export type Point = { key: string; label: string; date: string; count: number };
-export type SeriesSet = { monthly: Point[]; weekly: Point[]; yearly: Point[] };
+/**
+ * `source` = 'history'면 **지난 기록**(0385a — 메이크에듀 재원생 기록·수업료가 청구된 학생)으로 메운 점(원장 2026-10-21 *"이어질 수 있는
+ * 데이터는 다 이어서 추이그래프"*) — 에이와가 정확히 셀 수 있는 달 전을 잇는다. 없으면 에이와 기록으로 센 점.
+ */
+export type Point = { key: string; label: string; date: string; count: number; source?: "history"; basis?: "record" | "paying" };
+/** 축 라벨의 단위 — 기간 버튼(월·주·연) 또는 일별(`"d"` · 주별 점도 날짜 키라 키 모양으로는 못 가른다 — 호출부가 말한다). */
+export type LabelRange = TrendRange | "d";
+/** `daily` = 고른 기간의 일별 점(최대 두 달) — 일별 보기를 열었을 때만 서버가 함께 센다. */
+export type SeriesSet = { monthly: Point[]; weekly: Point[]; yearly: Point[]; daily?: Point[] };
+
+/** 재원생 추이 일별 기간의 주소 이름 — 첫 수업(`fc…`)·다른 칸과 겹치지 않게 `tr…`(서버 페이지·카드가 함께 읽어 일반 모듈에 — [[#81]]). */
+export const TREND_KEYS: PeriodKeys = { grain: "tr", month: "trMonth", from: "trFrom", to: "trTo", span: "trSpan" };
 
 /**
  * 정확히 셀 수 있는 달(`from`, YYYY-MM) 전의 점은 뺀다 — 퇴원 기록 전(재원생·순증을 셀 수 없다) · 과목 관리자는 수강 종료 기록 전
@@ -84,21 +104,34 @@ export function clipToRecords<T extends { date: string }>(points: readonly T[], 
   return points.filter((p) => p.date.slice(0, 7) >= from);
 }
 
-/** 범위에 맞는 점들 — 월별은 뒤에서 N개(이번 달이 마지막) · 셀 수 있는 달 전은 뺀다. */
-export function pointsFor(set: SeriesSet, range: TrendRange, from: string | null): Point[] {
-  if (range === "y") return clipToRecords(set.yearly, from);
+/** 지난 기록으로 메운 점(월별·연도별) — 에이와 점 **앞**에 잇는다(`joined.ts`가 만든다 · 주별·일별엔 없다). */
+export type HistoryPoints = { monthly: Point[]; yearly: Point[] };
+
+/**
+ * 범위에 맞는 점들 — 월별은 뒤에서 N개(이번 달이 마지막) · 셀 수 있는 달 전은 뺀다. `history`가 있으면 그 점을 **에이와 첫 점 앞에**
+ * 잇는다(에이와 점과 같은 달은 에이와가 이긴다 — 원장 2026-10-21 전체 추이).
+ */
+export function pointsFor(set: SeriesSet, range: TrendRange, from: string | null, history?: HistoryPoints | null): Point[] {
   if (range === "w26") return clipToRecords(set.weekly, from);
-  const monthly = clipToRecords(set.monthly, from);
+  if (range === "y") return joinPoints(history?.yearly ?? [], clipToRecords(set.yearly, from));
+  const monthly = joinPoints(history?.monthly ?? [], clipToRecords(set.monthly, from));
   return range === "m12" ? monthly.slice(-12) : monthly;
+}
+
+/** 지난 기록 점 + 에이와 점 — 에이와 첫 점보다 앞선 지난 기록 점만 앞에 붙인다(겹치는 키는 에이와가 이긴다). 에이와 점이 없으면 지난 기록 전부. */
+export function joinPoints(history: readonly Point[], aywa: readonly Point[]): Point[] {
+  const first = aywa[0]?.key;
+  const before = first ? history.filter((p) => p.key < first) : [...history];
+  return [...before, ...aywa];
 }
 
 /**
  * 이 기록 길이에서 **뜻이 있는** 기간 버튼(리뷰 2026-10-21 — 침산은 2026-04부터라 '전체 기간'과 '최근 12개월'이 같은 7칸, '연도별'은 점 하나였다):
  * 월별 칸이 12개 이하면 '최근 12개월'을 빼고(전체 기간과 같다), 해가 하나뿐이면 '연도별'을 뺀다. '전체 기간'·'주별'은 늘 있다.
  */
-export function availableRanges(set: SeriesSet, from: string | null): TrendRange[] {
-  const months = clipToRecords(set.monthly, from).length;
-  const years = clipToRecords(set.yearly, from).length;
+export function availableRanges(set: SeriesSet, from: string | null, history?: HistoryPoints | null): TrendRange[] {
+  const months = joinPoints(history?.monthly ?? [], clipToRecords(set.monthly, from)).length;
+  const years = joinPoints(history?.yearly ?? [], clipToRecords(set.yearly, from)).length;
   return TREND_RANGES.filter((r) => (r === "m12" ? months > 12 : r === "y" ? years > 1 : true));
 }
 
@@ -125,15 +158,17 @@ export function firstNonZeroMonth(points: readonly { key: string; count: number 
 }
 
 /** 값 상자 머리 — 월 `2026년 3월 말` · 주 `9/28 주` · 연 `2026년 말`, 오늘 칸은 `(오늘)`. */
-export function longLabel(p: Point, range: TrendRange, today: string): string {
+export function longLabel(p: Point, range: LabelRange, today: string): string {
   const now = p.date === today ? " (오늘)" : "";
+  if (range === "d") return `${Number(p.key.slice(0, 4))}년 ${Number(p.key.slice(5, 7))}월 ${Number(p.key.slice(8, 10))}일${now}`;
   if (range === "w26") return `${p.label} 주${now}`;
   if (range === "y") return `${p.key}년${now ? now : " 말"}`;
   return `${p.key.slice(0, 4)}년 ${Number(p.key.slice(5, 7))}월${now ? now : " 말"}`;
 }
 
 /** 가로축 라벨 — 월 `26.09` · 주 `9/28` · 연 `2026`. */
-export function axisLabel(p: Point, range: TrendRange): string {
+export function axisLabel(p: Point, range: LabelRange): string {
+  if (range === "d") return `${Number(p.key.slice(5, 7))}.${Number(p.key.slice(8, 10))}`;
   if (range === "w26") return p.label;
   if (range === "y") return p.key;
   return `${p.key.slice(2, 4)}.${p.key.slice(5, 7)}`;
@@ -165,8 +200,9 @@ export function summarize(points: readonly Point[]): TrendSummary {
 }
 
 /** 점마다 직전 점 대비 증감(첫 점은 null). */
+/** 점마다 직전 점 대비 증감(첫 점은 null) — 출처가 바뀌는 칸(지난 기록 ↔ 에이와)은 뜻이 다른 값의 차이라 null(리뷰 2026-10-21). */
 export function withDeltas(points: readonly Point[]): (Point & { delta: number | null })[] {
-  return points.map((p, i) => ({ ...p, delta: i === 0 ? null : p.count - points[i - 1]!.count }));
+  return points.map((p, i) => ({ ...p, delta: i === 0 || points[i - 1]!.source !== p.source || points[i - 1]!.basis !== p.basis ? null : p.count - points[i - 1]!.count }));
 }
 
 /** 선 하나를 끄고 켠다 — 마지막 남은 선은 끄지 않는다(빈 그래프 방지). */
@@ -202,14 +238,23 @@ export function distinctSubjectTokens(subjects: readonly { key: string; color: P
   return out;
 }
 
-/** `startedOnly` = 그달 등록 칸이 수업을 시작한 등록만 셌나(`MonthChange`와 같은 뜻 · 안내는 `startedNote`). */
-export type FlowRow = { month: string; enrolled: number; withdrawn: number; startedOnly?: boolean };
+/**
+ * `startedOnly` = 그달 등록 칸이 수업을 시작한 등록만 셌나(`MonthChange`와 같은 뜻 · 안내는 `startedNote`).
+ * `source` = 'history'면 지난 기록(0385a)으로 메운 달(원장 2026-10-21 전체 추이) — 등록 = 수업을 시작한 등록(`newReal`) · 퇴원 칸 =
+ * **청구가 끊긴 학생**(`stoppedPaying` — 다음 두 달 청구 없음 · 퇴원일이 아니다). `withdrawn`이 null이면 그 달은 아직 가를 수 없다.
+ */
+export type FlowRow = { month: string; enrolled: number; withdrawn: number | null; startedOnly?: boolean; source?: "history" };
 
-/** 등록·퇴원 합계와 순증. */
-export function flowTotals(rows: readonly FlowRow[]): { enrolled: number; withdrawn: number; net: number } {
+/**
+ * 등록·퇴원 합계와 순증 — 퇴원을 모르는 달(null)은 퇴원에서 빼고, **순증은 퇴원을 아는 달의 등록 − 퇴원만** 더한다(모르는 달의 등록까지 순증에
+ * 넣으면 수납 권한 없는 계정에서 2020년부터의 등록이 전부 순증으로 부푼다 — 리뷰 2026-10-21). `unknownMonths` = 퇴원을 모르는 달 수.
+ */
+export function flowTotals(rows: readonly FlowRow[]): { enrolled: number; withdrawn: number; net: number; unknownMonths: number } {
   const enrolled = rows.reduce((s, r) => s + r.enrolled, 0);
-  const withdrawn = rows.reduce((s, r) => s + r.withdrawn, 0);
-  return { enrolled, withdrawn, net: enrolled - withdrawn };
+  const known = rows.filter((r) => r.withdrawn !== null);
+  const withdrawn = known.reduce((s, r) => s + (r.withdrawn ?? 0), 0);
+  const net = known.reduce((s, r) => s + r.enrolled - (r.withdrawn ?? 0), 0);
+  return { enrolled, withdrawn, net, unknownMonths: rows.length - known.length };
 }
 
 /** 월별 기록 범위 — 셀 수 있는 달 전은 빼고, 최근 12개월이면 뒤에서 12개. */
@@ -220,5 +265,5 @@ export function flowRowsFor(rows: readonly FlowRow[], range: FlowRange, from: st
 
 /** 등록이나 퇴원이 처음 있는 달 — 퇴원 기록이 아직 없는 새 지점의 월별 기록 아래 경계. */
 export function firstFlowMonth(rows: readonly FlowRow[]): string | null {
-  return rows.find((r) => r.enrolled > 0 || r.withdrawn > 0)?.month ?? null;
+  return rows.find((r) => r.enrolled > 0 || (r.withdrawn ?? 0) > 0)?.month ?? null;
 }

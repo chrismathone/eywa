@@ -3,7 +3,7 @@
 import { formatKoreanDate, monthLabel } from "@/lib/date-kst";
 import { EmbedLink } from "@/components/embed-link";
 import { StatsPeriodBar } from "@/components/stats-period-bar";
-import { periodQuery, type StatsPeriod } from "@/features/stats/period";
+import { periodQuery, type StatsPeriod, MAX_DAY_SPAN } from "@/features/stats/period";
 import type { RateTrend } from "@/features/attendance/stats/rate-trend";
 import { saveAttendanceStatsMode } from "@/features/attendance/stats/prefs-actions";
 import { StatCard } from "../../students/stats/_components/stat-card";
@@ -69,7 +69,7 @@ export function RateTrendCard({
               유효 출결 칸 <b className="num">{cells.toLocaleString("ko-KR")}칸</b> · 출결 기록이 없는 칸(휴일이거나 에이와 출결을 쓰기 전)은 비워 둡니다
             </p>
             <TrendChart labels={keys.map(axis)} tooltipLabels={keys.map(tip)} series={series} kind="line" format={pct} max={100} fitFloor />
-            {period.grain === "day" && period.clipped ? <p className="text-muted-foreground text-xs">구간이 길어 시작일부터 31일만 보입니다.</p> : null}
+            {period.grain === "day" && period.clipped ? <p className="text-muted-foreground text-xs">구간이 길어 시작일부터 두 달({MAX_DAY_SPAN}일)만 보입니다.</p> : null}
             <details>
               <summary className="text-primary cursor-pointer text-sm font-medium select-none">수치 표 보기</summary>
               <div className="mt-2 overflow-x-auto px-1">

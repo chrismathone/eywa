@@ -1,4 +1,4 @@
-import { axisLabel, withDeltas, type Point, type TrendRange } from "@/features/students/stats/model";
+import { axisLabel, withDeltas, type LabelRange, type Point } from "@/features/students/stats/model";
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 const signed = (n: number | null) => (n === null ? "—" : `${n > 0 ? "+" : ""}${fmt(n)}`);
@@ -13,7 +13,7 @@ export function TrendTable({
   lines,
   totalLabel,
 }: {
-  range: TrendRange;
+  range: LabelRange;
   total: readonly Point[];
   lines: { label: string; values: readonly (number | null)[] }[];
   totalLabel: string;
@@ -29,7 +29,7 @@ export function TrendTable({
         <table className="w-full min-w-[320px] border-collapse text-sm [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-line-faint">
           <thead>
             <tr className="border-line text-muted-foreground border-b text-xs">
-              <th className={`${cell} text-center font-medium`}>{range === "w26" ? "주" : range === "y" ? "연도" : "달"}</th>
+              <th className={`${cell} text-center font-medium`}>{range === "d" ? "날짜" : range === "w26" ? "주" : range === "y" ? "연도" : "달"}</th>
               <th className={`${cell} text-right font-medium`}>{totalLabel}</th>
               <th className={`${cell} text-right font-medium`}>직전 대비</th>
               {lines.map((l) => (
@@ -40,7 +40,10 @@ export function TrendTable({
           <tbody className="num">
             {rows.map(({ p, i }) => (
               <tr key={p.key} className="border-line-faint border-b">
-                <td className={`${cell} text-center`}>{axisLabel(p, range)}</td>
+                <td className={`${cell} text-center whitespace-nowrap`}>
+                  {axisLabel(p, range)}
+                  {p.source === "history" ? <span className="text-muted-foreground ml-1 text-xs">지난 기록</span> : null}
+                </td>
                 <td className={`${cell} text-right font-bold`}>{fmt(p.count)}</td>
                 <td className={`${cell} text-right ${p.delta !== null && p.delta < 0 ? "text-danger" : ""}`}>{signed(p.delta)}</td>
                 {lines.map((l) => {

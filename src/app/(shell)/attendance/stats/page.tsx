@@ -14,7 +14,7 @@ const one = (v: string | string[] | undefined) => (typeof v === "string" ? v : u
 
 /**
  * 출결 **통계 화면**(원장 2026-10-20 *"상세 눌렀을때 추이를 볼 수 없는곳 모두 추가해보자"*) — 운영실 '최근 14일 등원율'의 '상세'가 여기로 온다.
- * 등원율(출석 + 지각 ÷ 기록 칸)을 월별 12·24개월 · 일별(한 달) · 구간(최대 31일)으로. 오늘 칸 = 카드의 오늘 점(같은 판정 · RPC 0387a).
+ * 등원율(출석 + 지각 ÷ 기록 칸)을 월별 12·24개월 · 일별(한 달) · 구간(최대 두 달)으로. 오늘 칸 = 카드의 오늘 점(같은 판정 · RPC 0387a).
  * 권한 = 출석부와 같은 `attendance` 게이트 · 과목 관리자는 반 과목으로(운영실과 같은 판정 · `?subject=` 전환) · 강사 화면엔 없다.
  */
 export default async function AttendanceStatsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {

@@ -125,7 +125,7 @@ export default async function ShuttleParentRidesPage({
         <div className={INTRO_ROW}>
           <p className={INTRO_TEXT}>
             {monthLabel(month)} · 셔틀 {monthData.rows.length}명 — 달력 칸은 그날 학원 전체(탄 아이 수 + 챙길 아이 이름), 아래 표는 학부모 [월별] 달력을 아이마다 한 줄로 모은 것입니다. 달력 날짜·표 칸을 누르면 그날 상세가 뜹니다.
-            {monthData.ok ? null : " ⚠️ 이 달 기록을 불러오지 못했습니다 — 잠시 후 다시 열어 주세요."}
+            {monthData.ok ? null : <span className="text-danger font-bold"> 이 달 기록을 불러오지 못했습니다 — 잠시 후 다시 열어 주세요.</span>}
           </p>
           <span className="flex shrink-0 flex-wrap items-center gap-2">
             <ViewToggle view="month" season={season} date={date} month={month} />

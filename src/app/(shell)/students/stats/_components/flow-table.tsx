@@ -29,17 +29,21 @@ export function FlowTable({ rows, monthEnd, started }: { rows: readonly FlowRow[
           </thead>
           <tbody className="num">
             {ordered.map((r, i) => {
-              const net = r.enrolled - r.withdrawn;
+              const net = r.withdrawn === null ? null : r.enrolled - r.withdrawn;
               const end = monthEnd?.[r.month];
-              const prevMonth = ordered[i + 1]?.month;
-              const prev = prevMonth ? monthEnd?.[prevMonth] : undefined;
-              const change = end !== undefined && prev !== undefined ? end - prev : null;
+              const prevRow = ordered[i + 1];
+              const prev = prevRow ? monthEnd?.[prevRow.month] : undefined;
+              // 출처가 바뀌는 달(지난 기록 ↔ 에이와)은 뜻이 다른 값의 차이라 비운다(리뷰 2026-10-21).
+              const change = end !== undefined && prev !== undefined && prevRow?.source === r.source ? end - prev : null;
               return (
                 <tr key={r.month} className="border-line-faint border-b">
-                  <td className={`${cell} text-center whitespace-nowrap`}>{monthLabel(r.month)}</td>
+                  <td className={`${cell} text-center whitespace-nowrap`}>
+                    {monthLabel(r.month)}
+                    {r.source === "history" ? <span className="text-muted-foreground ml-1 text-xs">지난 기록</span> : null}
+                  </td>
                   <td className={`${cell} text-right`}>{fmt(r.enrolled)}</td>
-                  <td className={`${cell} text-right`}>{fmt(r.withdrawn)}</td>
-                  <td className={`${cell} text-right font-bold ${net < 0 ? "text-danger" : ""}`}>{signed(net)}</td>
+                  <td className={`${cell} text-right`} title={r.source === "history" ? "청구가 끊긴 학생(다음 두 달 청구 없음)" : undefined}>{r.withdrawn === null ? "—" : fmt(r.withdrawn)}</td>
+                  <td className={`${cell} text-right font-bold ${net !== null && net < 0 ? "text-danger" : ""}`}>{net === null ? "—" : signed(net)}</td>
                   {monthEnd ? <td className={`${cell} text-right`}>{end === undefined ? "—" : fmt(end)}</td> : null}
                   {monthEnd ? <td className={`${cell} text-right ${change !== null && change < 0 ? "text-danger" : ""}`}>{change === null ? "—" : signed(change)}</td> : null}
                 </tr>

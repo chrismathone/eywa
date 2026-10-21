@@ -4,7 +4,7 @@ import { formatKoreanDate, monthLabel } from "@/lib/date-kst";
 import { EmbedLink } from "@/components/embed-link";
 import { StatsPeriodBar } from "@/components/stats-period-bar";
 import { currencyMeta, formatMoney } from "@/features/billing/currencies";
-import { periodQuery, type StatsPeriod } from "@/features/stats/period";
+import { periodQuery, type StatsPeriod, MAX_DAY_SPAN } from "@/features/stats/period";
 import { EXPENSE_TREND_KEYS, type ExpenseTrend } from "@/features/billing/stats/expense-trend";
 import { saveExpenseStatsMode } from "@/features/billing/stats/prefs-actions";
 import { chartMoney } from "../../dashboard/_overview/charts";
@@ -94,7 +94,7 @@ export function ExpenseTrendCard({
               format={trend.currency === "KRW" ? chartMoney : money}
             />
           )}
-          {period.grain === "day" && period.clipped ? <p className="text-muted-foreground text-xs">구간이 길어 시작일부터 31일만 보입니다.</p> : null}
+          {period.grain === "day" && period.clipped ? <p className="text-muted-foreground text-xs">구간이 길어 시작일부터 두 달({MAX_DAY_SPAN}일)만 보입니다.</p> : null}
           <details>
             <summary className="text-primary cursor-pointer text-sm font-medium select-none">수치 표 보기</summary>
             <div className="mt-2 overflow-x-auto px-1">

@@ -43,6 +43,8 @@ const row = (status: RideRow["status"], over: Partial<RideRow> = {}): RideRow =>
 /** today-board가 만들어 넘기는 모양 — 진행은 rows에서 다시 센다. */
 const group = (over: Partial<VehicleGroup> = {}): VehicleGroup => ({
   vehicleId: "v1",
+  key: "name:1호차",
+  vehicleIds: ["v1"],
   vehicleName: "1호차",
   driverName: "곽기사",
   driverPhone: "010-0000-0000",

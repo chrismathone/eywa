@@ -1,8 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { formatKoreanDate, monthLabel } from "@/lib/date-kst";
 import { EmbedLink } from "@/components/embed-link";
 import { StatsPeriodBar } from "@/components/stats-period-bar";
+import { ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
+import type { ChartKind } from "@/features/students/stats/model";
 import { periodQuery, type StatsPeriod } from "@/features/stats/period";
 import { FIRST_CLASS_KEYS, type FirstClassTrend } from "@/features/students/stats/first-class-trend";
 import { saveStudentStatsPrefs } from "@/features/students/stats/server/prefs-actions";
@@ -18,6 +21,7 @@ const NEW_SUBJECT = "var(--color-green)";
  * 첫 수업 추이(원장 2026-10-20 *"오늘 첫수업도 마찬가지"*) — 운영실 '오늘첫수업' ↗가 연다. 날마다 같은 판정(첫 등원 + 처음 듣는 과목)을 돌린 수.
  * 월별 칸 = 그 달 날마다 센 수의 합 · 수치 표의 달을 누르면 그 달 일별 · 날을 누르면 원생목록의 그날 첫 수업 학생.
  * 에이와 수강 기록이 갖춰지기 전 달은 그리지 않는다(옮겨 온 학생의 시작일이 옮긴 날로 잡혀 솟는다).
+ * 그래프 = 쌓은 막대(기본) 또는 꺾은선(원장 2026-10-21 *"꺾은선 그래프도 되게"*) — 꺾은선에선 합계도 선으로(굵게) 그린다. 종류는 계정에 남긴다.
  */
 export function FirstClassBoard({
   trend,
@@ -25,13 +29,16 @@ export function FirstClassBoard({
   today,
   keep,
   scopeLabel,
+  initialKind,
 }: {
   trend: FirstClassTrend | null;
   period: StatsPeriod;
   today: string;
   keep: Record<string, string | undefined>;
   scopeLabel: string | null;
+  initialKind: ChartKind;
 }) {
+  const [kind, setKind] = useState<ChartKind>(initialKind);
   const daily = period.grain === "day";
   const keys = trend?.keys ?? [];
   const axis = (k: string) => (daily ? `${Number(k.slice(5, 7))}.${Number(k.slice(8))}` : `${k.slice(2, 4)}.${k.slice(5, 7)}`);
@@ -41,8 +48,9 @@ export function FirstClassBoard({
     ? [
         // 첫 수업 = 첫 등원 + 처음 듣는 과목 — 둘을 쌓고 합계는 값 상자에만(나란히 세우면 처음 듣는 과목이 0인 날 두 막대가 똑같이
         // 서서 "차이가 있나?"가 된다 — 원장 2026-10-21).
-        { key: "total", name: "첫 수업", color: FIRST, values: total, tooltipOnly: true },
-        { key: "first", name: "첫 등원", color: FIRST, values: trend.first, stack: "first" },
+        // 꺾은선에선 쌓지 않으니 합계를 굵은 선으로 함께(두 선만 그리면 합이 안 보인다) · 첫 등원은 합계와 색이 같아 꺾은선에선 보조색으로.
+        { key: "total", name: "첫 수업", color: FIRST, values: total, ...(kind === "bar" ? { tooltipOnly: true } : { strong: true }) },
+        { key: "first", name: "첫 등원", color: kind === "bar" ? FIRST : "var(--color-blue)", values: trend.first, stack: "first" },
         { key: "newSubject", name: "처음 듣는 과목", color: NEW_SUBJECT, values: trend.newSubject, stack: "first" },
       ]
     : [];
@@ -67,6 +75,13 @@ export function FirstClassBoard({
             anchor="#first"
             onMode={(mode) => void saveStudentStatsPrefs({ firstMode: mode })}
           />
+          <ToolbarSegment label="그래프">
+            {(["bar", "line"] as const).map((k) => (
+              <ToolbarSegmentItem key={k} active={kind === k} onClick={() => { setKind(k); void saveStudentStatsPrefs({ firstKind: k }).catch(() => undefined); }}>
+                {k === "bar" ? "막대" : "꺾은선"}
+              </ToolbarSegmentItem>
+            ))}
+          </ToolbarSegment>
           {/* 원생목록 첫 수업 명단은 과목으로 좁히지 못한다 — 과목 관리자 화면엔 세우지 않는다(표 숫자와 명단이 갈린다 · 리뷰 2026-10-20). */}
           {scopeLabel ? null : (
             <EmbedLink href={studentsFirstClassHref(today)} className="text-primary text-sm font-medium whitespace-nowrap">
@@ -85,7 +100,7 @@ export function FirstClassBoard({
               기간 합계 <b className="num">{fmt(sum)}명</b>
               {clipped ? <span className="text-muted-foreground"> · 에이와 수강 기록이 갖춰진 달부터 셉니다</span> : null}
             </p>
-            <TrendChart labels={keys.map(axis)} tooltipLabels={keys.map(tip)} series={series} kind="bar" unit="명" legend />
+            <TrendChart labels={keys.map(axis)} tooltipLabels={keys.map(tip)} series={series} kind={kind} unit="명" legend />
             <details>
               <summary className="text-primary cursor-pointer text-sm font-medium select-none">수치 표 보기</summary>
               <div className="mt-2 overflow-x-auto px-1">
