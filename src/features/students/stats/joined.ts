@@ -7,7 +7,7 @@ import type { FlowRow, HistoryPoints, Point } from "./model";
  * `student_history_monthly` — 메이크에듀 2020-01~ · 에이와 청구 2026-01~)으로 메운다. 순수 함수(Vitest).
  *
  * 🔑 메우는 값의 뜻은 에이와 점과 **다르다**(화면이 '지난 기록'으로 가려 보인다 · 점에 `source: "history"`):
- *   · 재원생 = 메이크에듀 **재원생 기록**(`enrolledRecord` · 2025-03~2026-03 · 휴원·시작 전 포함) → 없는 달은 **수업료가 청구된 학생**
+ *   · 재원생 = 메이크에듀 **재원생 기록**(`enrolledRecord` · 2025-03~ · 휴원·시작 전 포함) → 없는 달은 **수업료가 청구된 학생**
  *     (`payingTotal` · 2020-01~ · 미납 포함 · 휴원·시작 전 제외 · 수납 권한이 없으면 실리지 않는다 — `withoutPaying`).
  *   · 등록 = 수업을 시작한 등록(`newReal` — 에이와 등록 칸과 같은 판정) · 퇴원 칸 = **청구가 끊긴 학생**(`stoppedPaying` — 다음 두 달 청구
  *     없음 · 퇴원일이 아니다 · 아직 두 달이 안 지난 달은 null).

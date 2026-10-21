@@ -5449,6 +5449,26 @@
       "tenant"
     ]
   },
+  "96835e160dcdb9e51e6c312473c1af8ac75cafa01ceb51f9e12ee01decca86b2": {
+    "parts": [
+      "\n    select to_char(month, 'YYYY-MM') as month, (data->>'enrolledRecord')::int as enrolled,\n      to_char(computed_at at time zone 'Asia/Seoul', 'YYYY-MM') as written_in\n    from student_history_monthly\n    where tenant_id = ",
+      " and source = 'makeedu' and data->>'enrolledRecord' is not null"
+    ],
+    "modules": [
+      "makeedu"
+    ],
+    "sources": [
+      "scripts/_makeedu/import-monthly-enrolled.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenantId"
+    ]
+  },
   "96fc4f5703436f723a32e98ed942ba90f26d835f6145a484c1f87bcf21244ff4": {
     "parts": [
       "delete from classnote_board_sync_runs where tenant_id = ",
@@ -7084,6 +7104,36 @@
     "expressions": [
       "`발송 준비 실패(${preflightFails}회) — ClassNote 확인 불가라 안전상 보류: ${msg.slice(0, 120)}`",
       "sql(ids)"
+    ]
+  },
+  "be17234f0372a2cdd5ecc006b6c792fd7bd4800e8423974da684916837ac7ca4": {
+    "parts": [
+      "\n        insert into student_history_monthly (tenant_id, month, source, data, computed_at)\n        values (",
+      ", ",
+      "::date, 'makeedu', jsonb_build_object('enrolledRecord', ",
+      "::int), now())\n        on conflict (tenant_id, month, source) do update\n          set data = student_history_monthly.data || excluded.data, computed_at = now()"
+    ],
+    "modules": [
+      "makeedu"
+    ],
+    "sources": [
+      "scripts/_makeedu/import-monthly-enrolled.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenantId",
+      "`${r.month}-01`",
+      "r.value"
     ]
   },
   "be7eb75fbe7db36f9f32e3b415054ef728ffc973ab06cc056435530c89c18e93": {

@@ -20,7 +20,8 @@
       "import-enrollments.cjs",
       "import-consultations-excel.cjs",
       "sync-prospects.cjs",
-      "reconcile-invoices.cjs"
+      "reconcile-invoices.cjs",
+      "import-monthly-enrolled.mjs"
     ]
   },
   "sources": [
@@ -140,6 +141,7 @@
     "scripts/_makeedu/import-consultations-excel.cjs",
     "scripts/_makeedu/import-enrollments.cjs",
     "scripts/_makeedu/import-invoices.cjs",
+    "scripts/_makeedu/import-monthly-enrolled.mjs",
     "scripts/_makeedu/import-prospects.cjs",
     "scripts/_makeedu/import-staff-attendance.cjs",
     "scripts/_makeedu/import-students-list.cjs",
@@ -147,6 +149,7 @@
     "scripts/_makeedu/invoice-student-matcher.cjs",
     "scripts/_makeedu/lib.cjs",
     "scripts/_makeedu/mirror-textbook-checks.cjs",
+    "scripts/_makeedu/monthly-enrolled.cjs",
     "scripts/_makeedu/push-consultations.cjs",
     "scripts/_makeedu/reconcile-invoices.cjs",
     "scripts/_makeedu/reconcile-plan.cjs",
@@ -171,6 +174,7 @@
     "node:crypto",
     "node:fs",
     "node:fs/promises",
+    "node:module",
     "node:net",
     "node:os",
     "node:path",
@@ -232,6 +236,7 @@
     "staff_attendance_days",
     "stu",
     "student_consultations",
+    "student_history_monthly",
     "student_homework_videos",
     "students",
     "sync_agent_settings",
