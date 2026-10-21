@@ -12,8 +12,8 @@ export function cellMarkOf(status: OnboardingItemStatus, daysLeft: number | null
 }
 export const STATUS_STYLE: Record<OnboardingItemStatus, { box: string; label: string }> = {
   done: { box: styles.done, label: "완료" },
-  overdue: { box: styles.overdue, label: "지연" },
-  due: { box: styles.due, label: "오늘·임박" },
+  overdue: { box: styles.overdue, label: "기한 경과" },
+  due: { box: styles.due, label: "3일 내 기한" },
   upcoming: { box: styles.neutral, label: "예정" },
   pending: { box: styles.neutral, label: "날짜 미정" },
   waived: { box: styles.waived, label: "기준일 이전 · 관리 제외" },

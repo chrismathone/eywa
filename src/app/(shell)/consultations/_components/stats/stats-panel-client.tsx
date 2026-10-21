@@ -89,7 +89,7 @@ export function StatsPanelClient({
         ))}
       </ul>
 
-      {/* 3칸 폭에선 두 칸을 차지한다(지표 1 + 추이 2). 같은 줄의 지표 카드가 더 길면 그래프가 남는 높이를 채운다(stats-trend-chart.tsx). */}
+      {/* 3칸 폭에선 두 칸을 차지한다(지표 1 + 추이 2). 그래프는 공용 차트 높이(300px)로 선다. */}
       <div className="border-line flex flex-col gap-2 rounded-2xl border p-3 @5xl/panel:col-span-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-foreground min-w-0 text-sm font-bold break-keep">
@@ -105,8 +105,8 @@ export function StatsPanelClient({
             </ToolbarSegmentItem>
           </ToolbarSegment>
         </div>
-        <StatsTrendChart series={series} metric={metric} />
-        <p className="text-muted-foreground text-xs break-keep">추이 기간은 위 기간과 따로 {trendWindowText(buckets, prefs.unit)}입니다(다른 필터는 그대로 적용).</p>
+        <StatsTrendChart series={series} metric={metric} unit={prefs.unit} />
+        <p className="text-muted-foreground text-xs break-keep">합계·분해는 위 기간 기준입니다. 추이는 {trendWindowText(buckets, prefs.unit)}이며, 나머지 필터는 똑같이 적용됩니다.</p>
       </div>
 
       <StatsBreakdown dims={dims} dim={prefs.dim} unit={prefs.unit} total={stats.totals.n} onDim={(d) => update({ dim: d })} />

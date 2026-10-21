@@ -184,7 +184,7 @@ export function CareCells({ cells }: { cells: CareCellCount[] }) {
           title={
             c.kind === "noFirstClass"
               ? "첫 수업일이 없어 사전 콜·안내 기한이 아직 안 잡힌 등록생"
-              : `${c.label} — 지연 ${c.overdue} · 오늘·임박 ${c.count - c.overdue}`
+              : `${c.label} — 기한 경과 ${c.overdue} · 3일 내 기한 ${c.count - c.overdue}`
           }
         />
       ))}

@@ -415,7 +415,7 @@ export function buildTodayActions(
     items.push({
       key: "newcomer-overdue",
       severity: "amber",
-      label: "신규생 관리 지연",
+      label: "신규생 관리 기한 경과",
       count: raw.newcomerOverdue.count,
       unit: "명",
       detail: nameList(raw.newcomerOverdue.names, 3, raw.newcomerOverdue.count),

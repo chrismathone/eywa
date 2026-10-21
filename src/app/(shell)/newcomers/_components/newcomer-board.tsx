@@ -18,11 +18,11 @@ import { NewcomerTable, TaskBadge } from "./newcomer-table";
 import styles from "./newcomer-board.module.css";
 
 const STATUS_TABS: { key: BoardStatus; label: string }[] = [
-  { key: "all", label: "전체" }, { key: "overdue", label: "지연" }, { key: "due", label: "오늘·임박" }, { key: "open", label: "미완료" },
+  { key: "all", label: "전체" }, { key: "overdue", label: "기한 경과" }, { key: "due", label: "3일 내" }, { key: "open", label: "미완료" },
 ];
 type Selection = { rowKey: string; itemKey: string };
 type SaveFailure = { rowKey: string; itemKey: string; done: boolean; message: string };
-const RATE_HELP = "기존 필수 업무 완료율: 완료 기록 ÷ (완료 + 지연 + 오늘부터 3일 이내 예정 업무). 선택 업무·날짜 미정·기준일 이전 미기록은 제외합니다. 집계 대상 업무가 없으면 100%입니다.";
+const RATE_HELP = "기존 필수 업무 완료율: 완료 기록 ÷ (완료 + 기한 경과 + 오늘부터 3일 뒤까지 기한인 업무). 선택 업무·날짜 미정·기준일 이전 미기록은 제외합니다. 집계 대상 업무가 없으면 100%입니다.";
 
 export function NewcomerBoard({ view, canWrite, initialFilters = EMPTY_FILTERS }: {
   view: NewcomersView; canWrite: boolean; initialFilters?: BoardFilters;
@@ -153,9 +153,9 @@ export function NewcomerBoard({ view, canWrite, initialFilters = EMPTY_FILTERS }
 
     <section aria-label="전체 관리 대상 현황" className={styles.metrics}>
       <Metric icon="users" label="전체 관리 대상" value={stats.students.toLocaleString("ko-KR")} unit="명" note={`${stats.rows}개 학생·과목 행 · 최근 90일 등록`} tone="navy" />
-      <Metric icon="clipboardList" label="미완료 학생" value={stat(stats.openStudents)} unit="명" note="지연·오늘·임박 업무가 있는 학생" active={filters.status === "open"} disabled={!known} onClick={() => changeFilters({ ...filters, status: filters.status === "open" ? "all" : "open" })} />
-      <Metric icon="alert" label="지연 업무" value={stat(stats.overdue)} unit="건" note="기한이 지난 필수 업무" tone="danger" active={filters.status === "overdue"} disabled={!known} onClick={() => changeFilters({ ...filters, status: filters.status === "overdue" ? "all" : "overdue" })} />
-      <Metric icon="clock" label="오늘·임박 업무" value={stat(stats.dueSoon)} unit="건" note="오늘부터 3일 이내 필수 업무" tone="warning" active={filters.status === "due"} disabled={!known} onClick={() => changeFilters({ ...filters, status: filters.status === "due" ? "all" : "due" })} />
+      <Metric icon="clipboardList" label="미완료 학생" value={stat(stats.openStudents)} unit="명" note="기한 경과 · 3일 내 기한 업무가 있는 학생" active={filters.status === "open"} disabled={!known} onClick={() => changeFilters({ ...filters, status: filters.status === "open" ? "all" : "open" })} />
+      <Metric icon="alert" label="기한 경과 업무" value={stat(stats.overdue)} unit="건" note="기한이 지난 필수 업무" tone="danger" active={filters.status === "overdue"} disabled={!known} onClick={() => changeFilters({ ...filters, status: filters.status === "overdue" ? "all" : "overdue" })} />
+      <Metric icon="clock" label="3일 내 기한 업무" value={stat(stats.dueSoon)} unit="건" note="오늘부터 3일 뒤까지 기한인 필수 업무" tone="warning" active={filters.status === "due"} disabled={!known} onClick={() => changeFilters({ ...filters, status: filters.status === "due" ? "all" : "due" })} />
       <Metric icon="clipboardCheck" label="필수 업무 완료율" value={stat(stats.rate)} unit="%" note={known ? `${stats.doneCount} / ${stats.dueTotal}건 완료${stats.dueTotal === 0 ? " · 대상 업무 없음" : ""}` : "체크 기록 확인 필요"} tone="success" help={RATE_HELP} />
     </section>
 
@@ -169,7 +169,7 @@ export function NewcomerBoard({ view, canWrite, initialFilters = EMPTY_FILTERS }
         {tasks.slice(0, 3).map(task => <button type="button" key={task.key} className={styles.priorityTask} onClick={() => openDetails(task.row, task.item)} title={`${task.row.name} · ${task.row.subject ? labelOf(task.row.subject) : "과목 미정"} · ${task.item.label} · 예정일 ${task.due}`}>
           <TaskBadge row={task.row} item={task.item} today={view.today} /><strong>{task.row.name}</strong><span>{task.row.subject ? labelOf(task.row.subject) : "과목 미정"}</span><span>{task.item.shortLabel}</span>
         </button>)}
-        {tasks.length === 0 && <span className={styles.muted}>{known ? "지금 처리할 지연·임박 업무가 없습니다." : "체크 기록을 다시 불러오면 우선 업무를 확인할 수 있습니다."}</span>}
+        {tasks.length === 0 && <span className={styles.muted}>{known ? "지금 처리할 기한 경과 · 3일 내 기한 업무가 없습니다." : "체크 기록을 다시 불러오면 우선 업무를 확인할 수 있습니다."}</span>}
       </div>}
       {known && tasks.length > 0 && <button type="button" className={styles.textButton} onClick={() => changeFilters({ ...EMPTY_FILTERS, status: "open", sort: "priority" })}>전체 보기<EyIcon name="arrowRight" size={14} /></button>}
     </section>
@@ -195,7 +195,7 @@ export function NewcomerBoard({ view, canWrite, initialFilters = EMPTY_FILTERS }
         </Toolbar>
       </div>
       <div className={styles.tableMeta}>
-        <span>집계·구간 숫자는 전체 대상 기준{known && stats.waived > 0 && <> · <span title={`${NEWCOMER_BASELINE_DATE} 이전에 기한이 지난 필수 업무는 지연·완료율 집계에서 제외`}>기준일 이전 {stats.waived}건 제외</span></>}</span>
+        <span>집계·구간 숫자는 전체 대상 기준{known && stats.waived > 0 && <> · <span title={`${NEWCOMER_BASELINE_DATE} 이전에 기한이 지난 필수 업무는 기한 경과·완료율 집계에서 제외`}>기준일 이전 {stats.waived}건 제외</span></>}</span>
         <span className={styles.activeFilters}>{filters.item && <button type="button" onClick={() => changeFilters({ ...filters, item: null })}>{parseCareCellParam(filters.item)?.label} <EyIcon name="close" size={12} /></button>}{filterActive && <button type="button" onClick={() => changeFilters({ ...EMPTY_FILTERS })}>필터 초기화</button>}</span>
       </div>
       <div ref={scroller} className={styles.tableScroll} tabIndex={0} role="region" aria-label="학생 관리 표 · 가로와 세로 스크롤">
@@ -211,8 +211,8 @@ export function NewcomerBoard({ view, canWrite, initialFilters = EMPTY_FILTERS }
           <div className={styles.detailBody}>
             <label className={styles.detailLabel}>관리 업무<select aria-label="상세 관리 업무" value={selectedItem.key} onChange={event => setSelection({ rowKey: selectedRow.rowKey, itemKey: event.target.value })}>{ONBOARDING_ITEMS.map(item => <option key={item.key} value={item.key}>{item.shortLabel}{item.optional ? " (선택)" : ""}</option>)}</select></label>
             <div className={styles.taskDetail}><h2>{selectedItem.label}</h2>{known ? <TaskBadge row={selectedRow} item={selectedItem} today={view.today} /> : <span>기록 확인 불가</span>}
-              <dl><dt>예정일</dt><dd>{dueDateOf(selectedItem, selectedRow) ?? "날짜 미정"}</dd><dt>계산 기준</dt><dd>{selectedItem.anchor === "enrolled" ? "등록일" : "첫 수업일"} {selectedItem.offsetDays < 0 ? `${Math.abs(selectedItem.offsetDays)}일 전` : `${selectedItem.offsetDays}일 후`}</dd><dt>현재 상태</dt><dd>{known ? STATUS_STYLE[statusOf(selectedItem, selectedRow, selectedRow.checks[selectedItem.key], view.today)].label : "확인 불가"}{known && statusOf(selectedItem, selectedRow, selectedRow.checks[selectedItem.key], view.today) === "overdue" && ` · ${Math.abs(daysLeftOf(selectedItem, selectedRow, view.today) ?? 0)}일 지연`}</dd><dt>완료일</dt><dd>{known ? selectedRow.checks[selectedItem.key] ?? "완료 기록 없음" : "확인 불가"}</dd></dl>
-              {selectedItem.optional && <p className={styles.muted}>선택 업무입니다. 지연·오늘·임박 및 필수 완료율 집계에 포함하지 않습니다.</p>}
+              <dl><dt>예정일</dt><dd>{dueDateOf(selectedItem, selectedRow) ?? "날짜 미정"}</dd><dt>계산 기준</dt><dd>{selectedItem.anchor === "enrolled" ? "등록일" : "첫 수업일"} {selectedItem.offsetDays < 0 ? `${Math.abs(selectedItem.offsetDays)}일 전` : `${selectedItem.offsetDays}일 후`}</dd><dt>현재 상태</dt><dd>{known ? STATUS_STYLE[statusOf(selectedItem, selectedRow, selectedRow.checks[selectedItem.key], view.today)].label : "확인 불가"}{known && statusOf(selectedItem, selectedRow, selectedRow.checks[selectedItem.key], view.today) === "overdue" && ` · ${Math.abs(daysLeftOf(selectedItem, selectedRow, view.today) ?? 0)}일 지남`}</dd><dt>완료일</dt><dd>{known ? selectedRow.checks[selectedItem.key] ?? "완료 기록 없음" : "확인 불가"}</dd></dl>
+              {selectedItem.optional && <p className={styles.muted}>선택 업무입니다. 기한 경과 · 3일 내 기한 및 필수 완료율 집계에 포함하지 않습니다.</p>}
               <button type="button" className={styles.primaryButton} disabled={!writable || busy.has(`${selectedRow.rowKey}|${selectedItem.key}`)} onClick={() => { void saveCheck(selectedRow, selectedItem); }}>{busy.has(`${selectedRow.rowKey}|${selectedItem.key}`) ? "저장 중…" : selectedRow.checks[selectedItem.key] ? "완료 취소" : "완료로 기록"}</button>
               {!writable && <p className={styles.muted}>현재 권한 또는 기록 조회 상태로는 변경할 수 없습니다.</p>}
               {failure?.rowKey === selectedRow.rowKey && <div className={styles.failure} role="alert"><span>{failure.message} 변경 사항을 되돌렸습니다.</span><button type="button" onClick={retry}>다시 시도</button></div>}

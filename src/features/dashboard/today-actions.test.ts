@@ -593,7 +593,7 @@ describe("수업보고서 작성 대상", () => {
   });
 });
 
-describe("신규생 관리 지연", () => {
+describe("신규생 관리 기한 경과", () => {
   it("지연이 있으면 항목이 서고 이름 미리보기·기준 note가 붙는다", () => {
     const items = buildTodayActions({
       ...EMPTY,

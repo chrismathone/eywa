@@ -1,25 +1,51 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import type { MetricSeries, StatsMetric } from "@/features/consultations/stats-model";
-
-// recharts(~수백KB)는 그래프가 보일 때만 클라에서 로드(B5 · ssr:false는 클라 래퍼에서만 — Next 16).
-const Impl = dynamic(() => import("./stats-trend-chart-impl").then((m) => m.StatsTrendChartImpl), {
-  ssr: false,
-  loading: () => <div className="bg-bg-soft/40 h-full animate-pulse rounded-lg" />,
-});
+import { TrendChart, type ChartSeries } from "../../../students/stats/_components/trend-chart";
 
 /**
- * 그래프 자리 = 카드 안 **남는 높이 전부**(최소 180px) — 통계 격자에서 옆 카드(지표 줄)가 더 길면 카드가 그 높이로 늘어나는데,
- * 그래프가 180px에 멈추면 아래가 통째로 빈다(design-conventions '늘어나는 카드 안의 바닥 요소'). 늘어난 높이는 flex가 정하므로
- * 퍼센트 높이로는 못 받는다 — 바깥 상자(`relative flex-1`)가 높이를 갖고 그래프는 `absolute inset-0`으로 그 상자를 채운다.
+ * 지표별 색 = 의미색 캐논(design-conventions) — 상담 건수는 상담(rose), 후속 완료는 완료(green), 동기화는 정보(blue),
+ * AI는 AI 라벨(gold), 반 없는 상담은 '미상'(neutral). 두 줄 지표(녹음·AI)는 줄마다.
  */
-export function StatsTrendChart(props: { series: MetricSeries; metric: StatsMetric }) {
+const COLOR: Record<StatsMetric, string[]> = {
+  count: ["var(--color-rose)"],
+  perStudent: ["var(--color-rose)"],
+  follow: ["var(--color-green)"],
+  media: ["var(--color-blue)", "var(--color-gold)"],
+  sync: ["var(--color-blue)"],
+  class: ["var(--color-neutral-fill)"],
+};
+
+/** 값 상자 머리 — 월별 `2026년 3월` · 주별 `3월 2일 주`(가로축은 짧게 `3월`·`3/2`). */
+const tipOf = (b: string, unit: "month" | "week") =>
+  unit === "week" ? `${Number(b.slice(5, 7))}월 ${Number(b.slice(8, 10))}일 주` : `${b.slice(0, 4)}년 ${Number(b.slice(5, 7))}월`;
+
+/**
+ * 상담 추이 — 다른 통계 화면과 **같은 공용 차트**(값 상자 · 선 끝 라벨 · 정수 눈금 · recharts 지연 로드 B5)로 그린다(Codex 협의 2026-10-21 B안 —
+ * 월별·주별과 위 기간과 따로인 추이 창은 그대로). 건수는 막대, 비율은 0~100% 꺾은선.
+ */
+export function StatsTrendChart({ series, metric, unit }: { series: MetricSeries; metric: StatsMetric; unit: "month" | "week" }) {
+  const percent = series.unit === "%";
+  const colors = COLOR[metric];
+  const lines: ChartSeries[] = series.lines.map((l, i) => ({
+    key: l.key,
+    name: l.name,
+    color: colors[i] ?? colors[0]!,
+    values: series.points.map((p) => {
+      const v = (p as Record<string, unknown>)[l.key];
+      return typeof v === "number" ? v : null;
+    }),
+    strong: true,
+  }));
   return (
-    <div className="relative min-h-[180px] flex-1">
-      <div className="absolute inset-0">
-        <Impl {...props} />
-      </div>
-    </div>
+    <TrendChart
+      labels={series.points.map((p) => p.label)}
+      tooltipLabels={series.points.map((p) => tipOf(p.b, unit))}
+      series={lines}
+      kind={percent ? "line" : "bar"}
+      unit={series.unit}
+      {...(percent ? { max: 100 } : {})}
+      legend={lines.length > 1}
+    />
   );
 }

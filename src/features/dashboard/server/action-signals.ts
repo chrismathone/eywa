@@ -1047,7 +1047,7 @@ export async function getTodayActionSignals(
       enabled("newcomers"),
       {
         key: "newcomer-overdue",
-        label: "신규생 관리 지연",
+        label: "신규생 관리 기한 경과",
         href: "/newcomers",
         menuKey: "newcomers",
         requiredAccess: "read",
