@@ -63,7 +63,7 @@ export function RoundEditor({ cell, today, busy, save, onClose, onAssign }: {
         *"수동 영상들 다 학생들이 업로드해서 배정하고 싶은데 배정이 불가능함"*). 숙제일 없는 옛 기록(c:)은 붙일 숙제가 없고, 검사 대상 밖 줄은
         영상을 세지 않아 붙여도 보이지 않는다(rounds.ts ③ — tracked). */}
     {row.canAssignVideos && row.tracked && round.homeworkDate && onAssign ?<button type="button" className="text-primary w-fit text-sm underline" disabled={busy} onClick={onAssign}>
-      {round.videoId ? "영상 배정 변경" : "이 숙제에 영상 배정"}</button> : null}
+      {round.videoId ? "이 숙제에 영상 더 붙이기 · 배정 변경" : "이 숙제에 영상 배정"}</button> : null}
     {rejecting ? <RejectVideosButton classId={row.classId} studentId={row.studentId} homeworkDate={round.homeworkDate!} due={round.due} today={today}
       disabled={busy || !row.editable} onDone={onClose} /> : null}
     <p className={styles.dim}>{rejecting ? "다른 숙제에 올라간 영상이면 반려하지 말고 영상 배정 변경에서 옮겨 주세요."

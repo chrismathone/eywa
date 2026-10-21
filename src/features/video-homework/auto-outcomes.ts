@@ -39,6 +39,8 @@ export function videoHomeworkOutcomes(assignments: AssignedHomework[], videos: V
   const used = new Set<string>();
   for (const row of rows.values()) for (const round of rounds.get(roundPairKey(row)) ?? []) {
     if (round.videoId) used.add(round.videoId);
+    // 같은 숙제에 더 낸 영상도 그 칸의 영상이다(한 숙제에 여러 개 — 원장 2026-10-21) — 미배정 알림에 세우지 않는다(옮겨 남긴 숙제 칸 포함).
+    for (const id of round.videoIds) used.add(id);
     if (!round.homeworkDate || !round.assigned) continue;
     // 마감 당일 끝까지 받는다(due.ts — 기본 숙제일 + 7일: 10/1 숙제는 10/8까지, 10/9부터 미제출 · '다음 수업'이면 그 수업일까지).
     outcomes.push({

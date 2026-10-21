@@ -7,6 +7,8 @@ import { BLANK_LABEL, type BlankCell } from "../no-homework";
 import type { LedgerRound } from "../rounds";
 import type { VideoHomeworkLedgerRow } from "../types";
 import { roundDateText } from "./round-editor";
+import { useReviewPoints } from "./review-points-context";
+import { averagePoints, pointsTier, POINTS_TIER_COLOR } from "@/features/video-review/score";
 import styles from "./video-homework-management.module.css";
 
 const shortDate = (date: string) => date.slice(5).replace("-", ".");
@@ -25,10 +27,14 @@ function SourceMark({ row, round, videosKnown, onPlay, onEditor }: { row: VideoH
   // 🔴 영상 도착 기록을 못 읽었으면 영상 유무를 모른다 — 그때 '수동'은 거짓일 수 있어 띄우지 않는다.
   if (source === "manual") return videosKnown ? <span className={styles.manualTag} title="영상 없이 직접 찍은 완료(이 반으로 분류된 영상이 짝지어지지 않음)">수동</span> : null;
   if (source !== "video" || !round.videoId) return null;
+  // 한 숙제에 낸 영상이 여럿이면(여러 단원 — 원장 2026-10-21) ▶ 옆에 개수 — 누르면 재생 창에서 하나씩 고른다.
+  const count = round.videoIds.length;
   return <span className={styles.videoLink}>
-    <button type="button" title={`${row.studentName} 숙제 영상 재생${round.auto ? " · 영상으로 자동 완료" : ""}`} aria-label="숙제 영상 보기"
+    <button type="button" title={`${row.studentName} 숙제 영상 ${count > 1 ? `${count}개 ` : ""}재생${round.auto ? " · 영상으로 자동 완료" : ""}`}
+      aria-label={count > 1 ? `숙제 영상 ${count}개 보기` : "숙제 영상 보기"}
       onClick={(event) => { event.stopPropagation(); onPlay(); }} onContextMenu={onEditor}>
       <EyIcon name="play" size={17} aria-hidden />
+      {count > 1 ? <span className={styles.videoCount}>{count}</span> : null}
     </button>
   </span>;
 }
@@ -82,5 +88,19 @@ export function RoundCell({ row, round, blank, number, busy, videosKnown = true,
         : round.status === "missing" ? "× 미수행" : "미확인"}</span>
     </button>
     <SourceMark row={row} round={round} videosKnown={videosKnown} onPlay={() => onPlay(round)} onEditor={openEditor} />
-  </div></td>;
+  </div><ReviewPointsLine round={round} /></td>;
+}
+
+/**
+ * 칸 아래 AI 참고 평점 "2.8/5"(원장 2026-10-21 "칸 아래 공간을 조금 · 정수 부분에 따라 색 그라데이션 · 고득점 빨강, 저득점 파랑") — 분석이 끝난
+ * 영상이 붙은 칸만. 영상이 여럿이면(한 숙제에 여러 단원) 평점 있는 영상들의 평균. 색 = 정수 부분 단계(`data-tier` 1~5 · `POINTS_TIER_COLOR`, video-review/score.ts).
+ */
+function ReviewPointsLine({ round }: { round: LedgerRound }) {
+  const known = useReviewPoints();
+  if (!known.size || !round.videoIds.length) return null;
+  const points = averagePoints(round.videoIds.map((id) => known.get(id)));
+  if (points === null) return null;
+  const tier = pointsTier(points);
+  return <span className={styles.reviewPoints} data-tier={tier} style={{ color: POINTS_TIER_COLOR[tier] }} title={`AI 참고 평점 ${points.toFixed(1)}점(5점 만점) · 선생님 참고용 · 틀릴 수 있어요`}>
+    {points.toFixed(1)}<small>/5</small></span>;
 }

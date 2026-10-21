@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { isSiteName, SITE_NAME_MAX, type SiteBranch, type SiteChoice } from "@/features/video-submit/site";
+import { isSiteName, SITE_MAX_VIDEOS_PER_HOMEWORK, SITE_NAME_MAX, type SiteBranch, type SiteChoice } from "@/features/video-submit/site";
 
 /**
  * 숙제 영상 올리기 사이트(`/v`)의 화면 조각 — 상태 없이 받은 값만 그린다(판단·요청은 `video-site-form.tsx`).
@@ -103,6 +103,8 @@ export function SiteHomeworkChoices({ choices, openingId, onOpen, onReset }: {
                 <span className="text-foreground block text-base font-bold">{choice.homeworkLabel} 수업 숙제</span>
                 {/* 언제까지 내나 — 학생이 숙제일을 내는 날로 헷갈렸다(원장 2026-10-15). 숙제일보다 눈에 띄게 둔다. */}
                 {choice.dueLabel ? <span className="text-primary block text-sm font-bold">{choice.dueLabel} 제출</span> : null}
+                {/* 이미 낸 숙제도 마감까지 더 올린다(여러 단원 — 원장 2026-10-21). */}
+                {choice.sent ? <span className="text-foreground block text-sm">영상 {choice.sent}개 냄 · 더 올릴 수 있어요</span> : null}
                 {/* 반을 옮기기 전 반에서 받은 숙제 — 지금 반 이름과 달라 학생이 망설이지 않게 '지난 반'을 붙인다(원장 2026-10-21). */}
                 <span className="text-text-dim block text-sm">{manyStudents ? `${choice.studentLabel} · ${choice.className}` : choice.className}{choice.pastClass ? " · 지난 반" : ""}</span>
               </span>
@@ -111,7 +113,7 @@ export function SiteHomeworkChoices({ choices, openingId, onOpen, onReset }: {
           </li>
         ))}
       </ul> : null}
-      {homework.length ? <p className="text-text-dim text-sm break-keep">이미 낸 숙제와 제출 마감이 지난 숙제는 나오지 않습니다.</p> : null}
+      {homework.length ? <p className="text-text-dim text-sm break-keep">제출 마감이 지난 숙제는 나오지 않습니다. 여러 단원이면 같은 숙제에 영상을 {SITE_MAX_VIDEOS_PER_HOMEWORK}개까지 올릴 수 있습니다.</p> : null}
       {free.length ? <>
         <p className="text-foreground pt-1 text-base font-bold break-keep">{homework.length ? "숙제 목록에 없는 영상이면 반을 골라 주세요" : "올릴 반을 골라 주세요"}</p>
         <ul className="space-y-2">

@@ -29,3 +29,19 @@ it("기록 서버 장애가 있어도 실제 영상 제출은 성공한다", asy
   m.run.mockImplementation(async input => input.onProgress(5)); show(); pick();
   expect(await screen.findByText("제출했습니다. 감사합니다.")).toBeInTheDocument();
 });
+// 원장 2026-10-21 — 한 숙제에 여러 단원 영상: 숙제를 골라 낸 뒤에도 같은 숙제에 더 올린다 · 5개째를 내면 숙제 없이 올리기로 안내.
+it("숙제를 골라 낸 뒤 '이 숙제에 영상 더 올리기'로 같은 숙제에 또 올린다 · 다 냈으면 숙제 없이 올리기로 안내", async () => {
+  m.run.mockImplementation(async input => input.onProgress(5));
+  const { unmount } = render(<VideoSubmitForm token={"t".repeat(43)} academyName="가상학원" studentLabel="가*생" className={classLabel} lastDayLabel="10/9"
+    maxLabel="1GB" homeworkDate="2026-10-15" homeworkLabel="10/15 (목)" sent={1} />);
+  expect(screen.getByText(/지금까지 1개 냈습니다/)).toBeInTheDocument();
+  pick();
+  fireEvent.click(await screen.findByRole("button", { name: "이 숙제에 영상 더 올리기" }));
+  expect(screen.getByText(/지금까지 2개 냈습니다/)).toBeInTheDocument();
+  unmount();
+  render(<VideoSubmitForm token={"t".repeat(43)} academyName="가상학원" studentLabel="가*생" className={classLabel} lastDayLabel="10/9"
+    maxLabel="1GB" homeworkDate="2026-10-15" homeworkLabel="10/15 (목)" sent={4} />);
+  pick();
+  expect(await screen.findByText(/이 숙제에는 영상을 5개까지 올릴 수 있습니다\. 더 올릴 영상이 있으면/)).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "이 숙제에 영상 더 올리기" })).toBeNull();
+});

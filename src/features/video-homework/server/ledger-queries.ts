@@ -12,6 +12,8 @@ import type { BlankFacts } from "../no-homework";
 import { homeworkVideoLinks } from "@/features/students/homework-videos";
 import { homeworkVideoSource } from "./video-source";
 import { loadVideoAssignmentCandidates, unassignedVideoPairs } from "./assignment-availability";
+import { loadReviewPoints } from "@/features/video-review/server/points";
+import { videoReviewEnabled } from "@/features/video-review/server/rows";
 
 type DbMark = { class_id: string; student_id: string; check_date: string; homework_date: string | null;
   submitted_date: string | null; status: string; updated_at: string | null };
@@ -25,6 +27,8 @@ export type VideoHomeworkLedgerBaseRow = VideoHomeworkRosterRow & {
   extraDates: string[];
   /** 반려한 숙제(숙제일 → 반려 시각, rejections.ts) — 칸을 짜는 쪽(화면)이 같은 칸을 세우게. */
   rejected?: Record<string, string>;
+  /** AI 참고 메모 대상 줄(지점 스위치 켜짐 · 수학 반) — 재생 창이 메모 칸을 처음부터 세운다. */
+  aiReview?: true;
 };
 
 /**
@@ -153,7 +157,7 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
   for (const { classId, studentId, homeworkDate } of marks) if (inRange(homeworkDate)) markDates.set(`${classId}:${studentId}`, [...(markDates.get(`${classId}:${studentId}`) ?? []), homeworkDate]);
   const assignmentRows = pairs.map(pair => ({ ...pair, assignedDates: [...new Set([
     ...(assignedByPair.get(`${pair.classId}:${pair.studentId}`) ?? []).filter(inRange), ...(markDates.get(`${pair.classId}:${pair.studentId}`) ?? [])])] }));
-  const [students, videos, blankFacts, assignmentCandidates] = await Promise.all([
+  const [students, videos, blankFacts, assignmentCandidates, reviewOn] = await Promise.all([
     fetchAllPagedInChunks<{ id: string; name: string; school: string | null; grade: string | null }>(studentIds,
       (chunk, from, to) => db.from("students").select("id,name,school,grade").eq("tenant_id", tenantId)
         .in("id", chunk).order("id").range(from, to)),
@@ -162,6 +166,8 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
     loadClassVideos(tenantId, homeworkStudents, wideFrom, addDays(wideTo, VIDEO_MATCH_WINDOW_DAYS)),
     loadBlankFacts(tenantId, { classDates, ownDates: new Map([...ownDates].filter(([pair]) => shownPairs.has(pair))), enrollments }),
     loadVideoAssignmentCandidates(tenantId, assignmentRows),
+    // 영상 설명 AI 참고 메모 스위치(지점) — 꺼졌으면 평점도, 재생 창의 메모 칸 자리도 없다(기능 스위치 = 흔적 없이).
+    videoReviewEnabled(tenantId).catch(() => false),
   ]);
   // 화면에 보이지 않는 다른 반·기간의 숙제까지 같은 규칙으로 짝지어야, 이미 쓰인 영상을 미배정으로 오인하지 않는다.
   // 원본 영상·숙제·기록은 이미 넓혀 읽었다. 학생마다 추가 조회하지 않고 그 재료를 그대로 쓴다.
@@ -198,6 +204,8 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
     const cls = byClass.get(pair.classId);
     const student = byStudent.get(pair.studentId);
     return cls && student ? [{ classId: pair.classId, studentId: pair.studentId, className: cls.class_name, subject: cls.subject,
+      // AI 참고 메모 대상 줄(스위치 켜짐 · 수학 반 — 분석은 수학 영상만) — 재생 창이 메모를 불러오는 동안에도 칸을 세워 둔다(ledger-video-dialog).
+      ...(reviewOn && cls.subject === "math" ? { aiReview: true as const } : {}),
       teacherName: cls.teacher?.tenant_id === tenantId ? cls.teacher.display_name.trim() || null : null,
       studentName: student.name, school: student.school, grade: student.grade,
       hasAssignableVideos: assignablePairs?.has(`${pair.classId}:${pair.studentId}`) ?? false,
@@ -209,7 +217,11 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
   });
   // 화면으로는 명단에 선 (반 × 학생)의 기록만 — 넓혀 읽은 지점 전체 기록을 내려보내지 않는다.
   const shown = new Set(rows.map((row) => `${row.classId}:${row.studentId}`));
+  const shownVideos = (videos ?? []).filter((video) => video.classId && shown.has(`${video.classId}:${video.studentId}`));
+  // 분석이 끝난 영상의 AI 참고 평점 — 칸 아래 "2.8/5"(원장 2026-10-21). 스위치가 꺼졌으면 빈 결과(video-review/server/points.ts).
+  const points = reviewOn ? await loadReviewPoints(tenantId, shownVideos.map((video) => video.id), { enabled: true }) : new Map<string, number>();
   return { rows, marks: marks.filter((mark) => shown.has(`${mark.classId}:${mark.studentId}`)),
-    videos: (videos ?? []).filter((video) => video.classId && shown.has(`${video.classId}:${video.studentId}`)), blankFacts: blankFacts ?? {},
+    videos: points.size ? shownVideos.map((video) => points.has(video.id) ? { ...video, reviewPoints: points.get(video.id)! } : video) : shownVideos,
+    blankFacts: blankFacts ?? {},
     assignedKnown: assigned !== null, videosKnown: videos !== null, assignmentVideosKnown: assignablePairs !== null };
 }

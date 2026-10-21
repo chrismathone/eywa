@@ -78,6 +78,8 @@ const withEnglishOff = () => ({ ...settings(), report: { videoHomeworkPolicy: { 
 const look = (name: unknown = "류태경", last4: unknown = "5678", ip = "1.1.1.1") => lookupSite({ last4, name, ip });
 // 숙제 줄만(숙제 없이 올리기 줄은 반마다 늘 하나씩 붙는다 — 아래 '숙제 없이 올리기' 묶음이 따로 본다).
 const dates = (r: Awaited<ReturnType<typeof lookupSite>>) => (r.ok ? r.choices.filter((c) => !c.free).map((c) => `${c.homeworkLabel}|${c.className}`) : r);
+// 숙제 줄 + 이미 낸 영상 수 — 영상을 낸 숙제도 마감까지 남는다(원장 2026-10-21 — 한 숙제에 여러 단원 영상).
+const sentList = (r: Awaited<ReturnType<typeof lookupSite>>) => (r.ok ? r.choices.filter((c) => !c.free).map((c) => `${c.homeworkLabel}|${c.sent ?? 0}`) : r);
 const freeClasses = (r: Awaited<ReturnType<typeof lookupSite>>) => (r.ok ? r.choices.filter((c) => c.free).map((c) => c.className) : r);
 const label = formatShortKoreanDate;
 
@@ -204,52 +206,63 @@ describe("뒷 4자리 + 이름 조회 — 선생님이 낸 영상 숙제 중 아
     Object.assign(db.tables.enrollments![0]!, { on_hold: false, start_date: "2026-10-05" });
     expect(await look("류태경")).toMatchObject({ ok: false, code: "no_homework" });
   });
-  it("수동 완료만으로는 업로드를 막지 않고 실제 영상이 연결된 숙제만 목록에서 뺀다", async () => {
-    // 선생님이 10/1 숙제를 완료로 찍었다
+  it("🔴 영상을 낸 숙제도 마감까지 남고 낸 수를 센다(여러 단원 — 원장 2026-10-21) · 수동 완료는 낸 영상으로 세지 않는다", async () => {
+    // 선생님이 10/1 숙제를 완료로 찍었다 — 영상은 0개
     db.tables.video_homework_marks = [{ id: "m1", tenant_id: T, class_id: C, student_id: S, check_date: "2026-10-02", homework_date: "2026-10-01", submitted_date: "2026-10-02", status: "submitted", updated_at: "2026-10-02T10:00:00+09:00" }];
-    expect(dates(await look())).toEqual([`${label("2026-10-01")}|LT4`, `${label("2026-09-29")}|LT4`]);
-    // 학생이 9/29 숙제를 골라 올렸다 → 실제 영상이 없는 10/1 숙제는 계속 올릴 수 있다
+    expect(sentList(await look())).toEqual([`${label("2026-10-01")}|0`, `${label("2026-09-29")}|0`]);
+    // 학생이 9/29 숙제를 골라 올렸다 → 9/29도 목록에 남고 1개를 냈다
     db.tables.student_homework_videos = [{ status: "uploaded", drive_file_id: "syntheticDriveFile123", id: "v1", tenant_id: T, student_id: S, posted_at: "2026-10-02T09:00:00+09:00", route: { classId: C, homeworkDate: "2026-09-29" } }];
-    expect(dates(await look())).toEqual([`${label("2026-10-01")}|LT4`]);
+    expect(sentList(await look())).toEqual([`${label("2026-10-01")}|0`, `${label("2026-09-29")}|1`]);
     db.tables.student_homework_videos.push({ status: "uploaded", drive_file_id: "syntheticDriveFile123", id: "v-done", tenant_id: T, student_id: S, posted_at: "2026-10-02T11:00:00+09:00", route: { classId: C, homeworkDate: "2026-10-01" } });
-    expect(dates(await look())).toEqual([]);
-    // 고르지 않고 올라온 영상(ClassNote·옛 링크)은 가장 오래된 미확인 숙제(9/29)부터 채운다 → 10/1이 남는다
+    expect(sentList(await look())).toEqual([`${label("2026-10-01")}|1`, `${label("2026-09-29")}|1`]);
+    // 고르지 않고 올라온 영상(ClassNote·옛 링크)은 가장 오래된 미확인 숙제(9/29)부터 채운다 → 10/1은 0개
     db.tables.video_homework_marks = [];
     db.tables.student_homework_videos = [{ status: "uploaded", drive_file_id: "syntheticDriveFile123", id: "v2", tenant_id: T, student_id: S, posted_at: "2026-10-01T21:00:00+09:00", route: { classId: C } }];
-    expect(dates(await look())).toEqual([`${label("2026-10-01")}|LT4`]);
+    expect(sentList(await look())).toEqual([`${label("2026-10-01")}|0`, `${label("2026-09-29")}|1`]);
     // 다른 반으로 분류된 영상·다른 지점의 영상은 이 반 숙제를 채우지 않는다
     db.tables.student_homework_videos = [
       { status: "uploaded", drive_file_id: "syntheticDriveFile123", id: "v3", tenant_id: T, student_id: S, posted_at: "2026-10-01T21:00:00+09:00", route: { classId: C3 } },
       { status: "uploaded", drive_file_id: "syntheticDriveFile123", id: "v4", tenant_id: OTHER_T, student_id: S, posted_at: "2026-10-01T21:00:00+09:00", route: { classId: C, homeworkDate: "2026-10-01" } },
     ];
-    expect(dates(await look())).toHaveLength(2);
+    expect(sentList(await look())).toEqual([`${label("2026-10-01")}|0`, `${label("2026-09-29")}|0`]);
+  });
+  it("🔴 한 숙제에 5개를 다 내면 그 숙제는 목록에서 빠진다(더 올릴 영상은 숙제 없이 올리기) · 낸 수는 같은 파일을 한 번만, 상한은 사본까지 센다 · 안 낸 숙제가 먼저", async () => {
+    const sent = (i: number, md5?: string) => ({ status: "uploaded", drive_file_id: `syntheticDriveFile${i}`, id: `v${i}`, tenant_id: T, student_id: S,
+      posted_at: `2026-10-02T0${i}:00:00+09:00`, ...(md5 ? { md5, bytes: 1000 } : {}), route: { classId: C, homeworkDate: "2026-10-01" } });
+    const same = "0123456789abcdef0123456789abcdef";
+    db.tables.student_homework_videos = [sent(1), sent(2), sent(3), sent(4, same)];
+    // 안 낸 9/29가 먼저(12줄 상한에서 이미 낸 숙제가 자리를 먹지 않게)
+    expect(sentList(await look())).toEqual([`${label("2026-09-29")}|0`, `${label("2026-10-01")}|4`]);
+    // 같은 파일을 한 번 더 — 화면의 낸 수는 4 그대로지만 상한(5)에는 센다 → 같은 파일을 되풀이해 올려 상한을 풀지 못한다
+    db.tables.student_homework_videos.push(sent(5, same));
+    expect(sentList(await look())).toEqual([`${label("2026-09-29")}|0`]);
   });
   it("미수행(✕)으로 찍힌 숙제도 목록에 남는다(늦게라도 올릴 수 있다)", async () => {
     db.tables.video_homework_marks = [{ id: "m1", tenant_id: T, class_id: C, student_id: S, check_date: "2026-10-02", homework_date: "2026-10-01", submitted_date: null, status: "missing", updated_at: "2026-10-02T10:00:00+09:00" }];
     expect(dates(await look())).toEqual([`${label("2026-10-01")}|LT4`, `${label("2026-09-29")}|LT4`]);
-    // 실제 영상이 올라오면 수동 ✕와 무관하게 목록에서 빠진다. 저장된 상태는 자동 판정 작업이 갱신한다.
+    // 실제 영상이 올라와도 마감까지 남는다(낸 수 1). 저장된 상태는 자동 판정 작업이 갱신한다.
     db.tables.student_homework_videos = [{ status: "uploaded", drive_file_id: "syntheticDriveFile123", id: "v1", tenant_id: T, student_id: S, posted_at: "2026-10-02T09:00:00+09:00", route: { classId: C, homeworkDate: "2026-10-01" } }];
-    expect(dates(await look())).toEqual([`${label("2026-09-29")}|LT4`]);
+    expect(sentList(await look())).toEqual([`${label("2026-09-29")}|0`, `${label("2026-10-01")}|1`]);
   });
-  it("🔴 먼저 들어온 ClassNote 영상은 늦게 마무리된 사이트 업로드 때문에 빠지지 않는다(들어온 시각이 영상에 실린다 — 숙제가 목록에 되살아나지 않게)", async () => {
+  it("🔴 먼저 들어온 ClassNote 영상은 늦게 마무리된 사이트 업로드 때문에 빠지지 않는다(들어온 시각이 영상에 실린다 — 9/29가 0개로 되돌아가지 않게)", async () => {
     db.tables.student_homework_videos = [
       // 학부모가 09:00에 ClassNote로 올린 영상(09:03 수집) → 가장 오래된 미확인(9/29)
       { status: "uploaded", drive_file_id: "syntheticDriveFile123", id: "v1", tenant_id: T, student_id: S, post_id: 11, posted_at: "2026-10-02T09:00:00+09:00", created_at: "2026-10-02T09:03:00+09:00", route: { classId: C } },
       // 08:00에 시작해 10:00에야 마무리된 사이트 업로드(10/1 숙제) — 게시 시각은 시작 시각이다
       { status: "uploaded", drive_file_id: "syntheticDriveFile123", id: "v2", tenant_id: T, student_id: S, posted_at: "2026-10-02T08:00:00+09:00", created_at: "2026-10-02T10:00:00+09:00", uploaded_at: "2026-10-02T10:00:00+09:00", route: { classId: C, homeworkDate: "2026-10-01" } },
     ];
-    expect(dates(await look())).toEqual([]);
+    expect(sentList(await look())).toEqual([`${label("2026-10-01")}|1`, `${label("2026-09-29")}|1`]);
   });
-  it("🔴 같은 파일을 ClassNote에 먼저, 사이트에도 올렸으면 ClassNote 사본이 채웠던 숙제가 목록에 다시 선다(지문이 영상에 실린다)", async () => {
+  it("🔴 같은 파일을 ClassNote에 먼저, 사이트에도 올렸으면 ClassNote 사본이 채웠던 숙제가 0개로 돌아간다(지문이 영상에 실린다)", async () => {
     const md5 = "0123456789abcdef0123456789abcdef";
     db.tables.student_homework_videos = [
       { status: "uploaded", drive_file_id: "syntheticDriveFile123", id: "v1", tenant_id: T, student_id: S, post_id: 11, posted_at: "2026-10-02T09:00:00+09:00", created_at: "2026-10-02T09:03:00+09:00", md5, bytes: 34795724, route: { classId: C } },
       { status: "uploaded", drive_file_id: "syntheticDriveFile123", id: "v2", tenant_id: T, student_id: S, posted_at: "2026-10-02T15:00:00+09:00", created_at: "2026-10-02T15:02:00+09:00", md5, bytes: 34795724, route: { classId: C, homeworkDate: "2026-10-01" } },
     ];
-    expect(dates(await look())).toEqual([`${label("2026-09-29")}|LT4`]);
+    expect(sentList(await look())).toEqual([`${label("2026-09-29")}|0`, `${label("2026-10-01")}|1`]);
     // 파일이 다르면 ClassNote 영상이 9/29를 그대로 채운다
     db.tables.student_homework_videos[0]!.md5 = "fedcba9876543210fedcba9876543210";
-    expect(dates(await look())).toEqual([]);
+    expect(sentList(await look())).toEqual([`${label("2026-10-01")}|1`, `${label("2026-09-29")}|1`]);
   });
   it("🔴 다른 지점의 검사 기록은 이 지점 숙제를 '낸 것'으로 만들지 않는다", async () => {
     db.tables.video_homework_marks = [{ id: "m9", tenant_id: OTHER_T, class_id: C, student_id: S, check_date: "2026-10-02", homework_date: "2026-10-01", submitted_date: "2026-10-02", status: "submitted", updated_at: "2026-10-02T10:00:00+09:00" }];
@@ -271,7 +284,7 @@ describe("뒷 4자리 + 이름 조회 — 선생님이 낸 영상 숙제 중 아
   it("담임이 고친 반·숙제 배정을 사용해 다른 반 영상으로 오인하지 않는다", async () => {
     db.tables.student_homework_videos = [{ status: "uploaded", drive_file_id: "syntheticDriveFile123", id: "v", tenant_id: T, student_id: S, posted_at: "2026-10-02T09:00:00+09:00", route: { classId: C3 } }];
     db.tables.homework_video_ledger_videos = [{ ...db.tables.student_homework_videos[0], route: { classId: C, homeworkDate: "2026-10-01", manualAssignment: true } }];
-    expect(dates(await look())).toEqual([`${label("2026-09-29")}|LT4`]);
+    expect(sentList(await look())).toEqual([`${label("2026-09-29")}|0`, `${label("2026-10-01")}|1`]);
   });
   it("🔴 한 조회가 행 상한(500)을 넘으면 조용히 잘라 판정하지 않는다 — 숙제 목록 대신 '다시 시도' 안내", async () => {
     db.tables.video_homework_marks = Array.from({ length: 501 }, (_, i) => ({ id: `m${i}`, tenant_id: T, class_id: C, student_id: S,
@@ -459,14 +472,16 @@ describe("링크 열기 — 고른 숙제", () => {
     expect(db.tables.homework_video_links).toHaveLength(0);
     expect(m.audit).not.toHaveBeenCalled();
   });
-  it("🔴 조회한 뒤 그 숙제가 없어졌으면(선생님이 '없음'으로 바꿈·그사이 냄) 열지 않는다", async () => {
+  it("🔴 조회한 뒤 그 숙제가 없어졌으면(선생님이 '없음'으로 바꿈·그사이 5개를 다 냄) 열지 않는다 · 1개만 냈으면 연다", async () => {
     const choice = await pick("2026-10-01");
     Object.assign(db.tables.lesson_reports![0]!, { video_homework: false });
     expect(await open(choice)).toMatchObject({ ok: false, code: "invalid" });
     Object.assign(db.tables.lesson_reports![0]!, { video_homework: true });
-    db.tables.student_homework_videos = [{ status: "uploaded", drive_file_id: "syntheticDriveFile123", id: "v1", tenant_id: T, student_id: S, posted_at: "2026-10-02T09:00:00+09:00", route: { classId: C, homeworkDate: "2026-10-01" } }];
+    db.tables.student_homework_videos = [1, 2, 3, 4, 5].map((i) => ({ status: "uploaded", drive_file_id: `syntheticDriveFile${i}`, id: `v${i}`, tenant_id: T, student_id: S, posted_at: "2026-10-02T09:00:00+09:00", route: { classId: C, homeworkDate: "2026-10-01" } }));
     expect(await open(choice)).toMatchObject({ ok: false, code: "invalid" });
     expect(db.tables.homework_video_links).toHaveLength(0);
+    db.tables.student_homework_videos = db.tables.student_homework_videos.slice(0, 1);
+    expect(await open(choice)).toMatchObject({ ok: true });
   });
   it("한 학생 × 반이 하루에 만들 수 있는 링크 수를 넘으면 막는다(새 링크로 업로드 횟수 제한을 우회하지 못하게) — 숙제를 바꿔 골라도 같은 상한", async () => {
     const a = await pick("2026-10-01");

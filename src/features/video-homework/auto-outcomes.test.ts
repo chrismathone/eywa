@@ -72,3 +72,10 @@ it("마감을 고른 숙제는 그 날까지 미확인, 다음 날부터 미제�
   expect(at("2026-10-20")).toEqual(["missing", "unchecked"]);
   expect(at("2026-10-21")).toEqual(["missing", "missing"]);
 });
+it("🔴 옮겨 남긴 숙제에 둘째 영상을 골라 내도 미배정 알림에 서지 않는다(한 숙제에 여러 개 — 적대적 리뷰 2026-10-21)", () => {
+  const kept = { classId: "math", studentId: "s1", date: "2026-09-24", kept: true as const };
+  const result = videoHomeworkOutcomes([kept, ...assignments], [
+    video("k1", "2026-09-25", { homeworkDate: "2026-09-24" }), video("k2", "2026-09-26", { homeworkDate: "2026-09-24" }),
+  ], "2026-10-05", "2026-09-01");
+  expect(result.unmatched.map(v => v.id)).toEqual([]);
+});

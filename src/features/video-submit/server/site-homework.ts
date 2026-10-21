@@ -10,11 +10,17 @@ import { videoHomeworkDueColumnReady } from "@/features/video-homework/server/re
 import { homeworkVideoSource } from "@/features/video-homework/server/video-source";
 import { findExtraIssue, listExtraIssuesFor } from "@/features/video-homework/server/extra-issues";
 import { listRejections, rejectionsByPair } from "@/features/video-homework/server/rejections";
+import { SITE_MAX_VIDEOS_PER_HOMEWORK } from "../site";
 
 type Db = ReturnType<typeof createAdminClient>;
 export type HomeworkPair = { studentId: string; classId: string };
-/** 아직 올릴 수 있는 숙제 — 숙제일 · 그 숙제의 마감(그날 포함, due.ts) · 선생님이 '다음 수업'으로 고른 마감인가(학생 화면 문구). */
-export type OpenHomework = { date: string; due: string; next: boolean };
+/**
+ * 아직 올릴 수 있는 숙제 — 숙제일 · 그 숙제의 마감(그날 포함, due.ts) · 선생님이 '다음 수업'으로 고른 마감인가(학생 화면 문구) ·
+ * 이미 낸 영상 수(`sent` — 장부 칸의 `videoIds`와 같은 수. 0이면 아직 안 냄).
+ */
+export type OpenHomework = { date: string; due: string; next: boolean; sent: number;
+  /** 상한(`SITE_MAX_VIDEOS_PER_HOMEWORK`)에 세는 수 — `sent` + 그 숙제를 골라 낸 같은 파일 사본(같은 파일을 되풀이해 올려 상한을 풀지 못하게). */
+  used: number };
 
 /**
  * 한 조회가 받는 행의 상한 — 학생 몇 명의 70여 일치라 닿을 일이 없다. 닿으면 조용히 자르지 않고 던진다(B2).
@@ -23,18 +29,20 @@ export type OpenHomework = { date: string; due: string; next: boolean };
 const ROW_LIMIT = 500;
 
 /**
- * 그 학생 × 반에 선생님이 낸 **영상 숙제 중 아직 안 낸 것**(숙제일, 최신순) — 원장 2026-10-03 *"사전에 선생님이 숙제로 낸 리스트가
+ * 그 학생 × 반에 선생님이 낸 **영상 숙제 중 아직 올릴 수 있는 것**(숙제일, 최신순) — 원장 2026-10-03 *"사전에 선생님이 숙제로 낸 리스트가
  * 있어야 업로드 링크 보이도록 하고, 숙제 리스트에서 고르도록"*.
  *
  * 🔑 판정은 영상 제출 현황과 **같은 함수**(`buildLedgerRounds`)다 — 숙제 = 보고서의 '영상 과제 있음'(`video_homework = true`),
- *    낸 것 = 짝지어진 영상. 직접 찍은 완료만으로는 학생의 업로드를 막지 않는다. 재료도 같은 범위(`videoMatchRange`)로 읽어야 "가장 오래된 미확인 숙제부터"의
- *    짝이 장부와 같게 나온다(범위가 다르면 사이트는 안 냈다는데 장부는 냈다고 한다).
+ *    낸 영상 = 그 칸에 보이는 영상(`videoIds`). 재료도 같은 범위(`videoMatchRange`)로 읽어야 "가장 오래된 미확인 숙제부터"의
+ *    짝이 장부와 같게 나온다(범위가 다르면 사이트와 장부가 낸 영상 수를 다르게 센다).
  *  · 올릴 수 있는 숙제 = 오늘이 그 숙제의 **마감** 이하(due.ts — 기본 숙제일 + 7일(원장 2026-10-03 *"숙제날짜 기준 7일"*) · 선생님이 '다음 수업'을
  *    고르면 그 수업일, 원장 2026-10-15). 마감은 장부가 영상을 그 숙제로 세는 창(`VIDEO_MATCH_WINDOW_DAYS`, 2주)을 넘지 않아 사이트로 올린 영상은
  *    늘 그 숙제 칸에 닿는다.
+ *  · **영상을 낸 숙제도 마감까지 남는다**(원장 2026-10-21 *"한번에 여러 단원의 영상을 업로드해야할 수도"* — 10/13의 "이미 낸 숙제엔 다시 안 올린다"를
+ *    뒤집었다). 칸은 첫 영상에 바로 완료가 되고, 같은 숙제에 낸 영상은 그 칸에 더해진다(rounds.ts ③). 한 숙제에 낸 영상이
+ *    `SITE_MAX_VIDEOS_PER_HOMEWORK`개면 뺀다(더 올릴 영상은 숙제 없이 올리기). 화면의 낸 수(`sent`)는 같은 파일을 한 번만 세지만(장부와 같다)
+ *    상한(`used`)은 그 숙제를 골라 낸 사본까지 센다 — 같은 파일을 되풀이해 올려 상한을 풀지 못하게(적대적 리뷰 2026-10-21).
  *  · 미수행(✕)으로 찍힌 숙제도 목록에 선다(늦게라도 올릴 수 있다 — 칸의 표시는 선생님이 찍은 기록이 그대로 이긴다).
- *    🔴 다만 **그 숙제를 골라 올린 영상이 이미 있으면 뺀다** — ✕ 칸은 영상을 받아도 완료로 바뀌지 않아(직접 찍은 기록이 이긴다),
- *    빼지 않으면 올린 숙제가 기한 내내 목록에 남아 학생이 같은 영상을 되풀이해 올린다(화면은 "이미 낸 숙제는 나오지 않는다"고 말한다).
  * 🔴 로그인 없는 화면이 부른다 — 전부 그 지점·그 학생·그 반으로 좁힌다(admin은 RLS를 우회한다, [[#104]]).
  * `null` = 보고서의 영상 과제 칸을 읽을 수 없다(0308a 전, [[#95]]) — 호출부는 "지금은 받을 수 없다"로 닫는다(숙제 없음으로 읽지 않는다).
  * 영상 표를 못 읽으면 영상 없이 판정한다(장부와 같다 — 이미 낸 숙제가 목록에 남을 수 있을 뿐이다).
@@ -46,11 +54,19 @@ export async function openHomeworkDates(db: Db, tenantId: string, pairs: readonl
   const materials = await loadPairRoundMaterials(db, tenantId, pairs, today);
   if (!materials) return null;
   const rounds = pairRounds(materials);
+  // `반:학생:숙제일` → 그 숙제를 골라(또는 손으로 배정해) 낸 영상 — 같은 파일 사본까지.
+  const pickedTo = new Map<string, Set<string>>();
+  for (const v of materials.videos) if (v.classId && v.homeworkDate) {
+    const k = `${roundPairKey({ classId: v.classId, studentId: v.studentId })}:${v.homeworkDate}`;
+    (pickedTo.get(k) ?? pickedTo.set(k, new Set()).get(k)!).add(v.id);
+  }
   for (const p of pairs) {
     const key = roundPairKey(p);
     const dates = (rounds.get(key) ?? [])
-      .filter((round) => (round.assigned || round.kept) && !!round.homeworkDate && !round.videoId && homeworkOpen(round.homeworkDate, today, round.due))
-      .map((round) => ({ date: round.homeworkDate!, due: homeworkDue(round.homeworkDate!, round.due), next: isCustomDue(round.homeworkDate!, round.due) }))
+      .filter((round) => (round.assigned || round.kept) && !!round.homeworkDate && homeworkOpen(round.homeworkDate, today, round.due))
+      .map((round) => ({ date: round.homeworkDate!, due: homeworkDue(round.homeworkDate!, round.due), next: isCustomDue(round.homeworkDate!, round.due),
+        sent: round.videoIds.length, used: new Set([...round.videoIds, ...(pickedTo.get(`${key}:${round.homeworkDate}`) ?? [])]).size }))
+      .filter((homework) => homework.used < SITE_MAX_VIDEOS_PER_HOMEWORK)
       .sort((a, b) => b.date.localeCompare(a.date));
     if (dates.length) out.set(key, dates);
   }
@@ -159,8 +175,8 @@ export async function loadPairRoundMaterials(db: Db, tenantId: string, pairs: re
 
 /**
  * 그날이 그 학생 × 반에 **실제로 나간 영상 숙제**이고 아직 그 숙제의 마감(due.ts — 기본 숙제일 + 7일) 안인가 — 업로드 시작·제출 화면이 주소의 숙제일을
- * 그대로 믿지 않고 여기서 다시 확인한다. 이미 낸 숙제여도 참이다 — 이미 영상을 받았는지는 따로 본다(`openHomeworkDates` — 업로드 시작·제출 화면이
- * 이미 낸 숙제엔 다시 올리지 않고 숙제 없이 올리기로 보낸다, 원장 2026-10-13).
+ * 그대로 믿지 않고 여기서 다시 확인한다. 이미 낸 숙제여도 참이다 — 한 숙제에 낸 영상 수의 상한은 따로 본다(`openHomeworkDates` — 업로드 시작·제출
+ * 화면이 상한에 닿은 숙제엔 더 올리지 않고 숙제 없이 올리기로 보낸다, 원장 2026-10-21).
  * 🔴 영상 과제 칸을 읽을 수 없으면(0308a 전·순간 오류) **던진다** — "숙제가 아니다"로 읽으면 올리기 사이트 링크가 "숙제를 다시 고르라"며
  *    학생을 돌려보낸다(조회 쪽은 같은 상황을 "지금은 받을 수 없다"로 닫는다 — 같은 원칙).
  */

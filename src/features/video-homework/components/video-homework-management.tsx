@@ -12,6 +12,7 @@ import { ClassLedger } from "./class-ledger";
 import { LedgerToolbar } from "./ledger-toolbar";
 import { RoundEditor, type ActiveCell } from "./round-editor";
 import { LedgerVideoDialog } from "./ledger-video-dialog";
+import { ReviewPointsContext } from "./review-points-context";
 import { VideoAssignmentDialog } from "./video-assignment-dialog";
 import { IssueMenu, type IssueMenuTarget } from "./issue-menu";
 import styles from "./video-homework-management.module.css";
@@ -68,6 +69,8 @@ export function VideoHomeworkManagement({ rows: serverRows, initialMarks, videos
   const keep = useMemo(() => (keepRounds ? new Set(keepRounds) : byTeacher?.keys ?? null), [keepRounds, byTeacher]);
   // 판정은 전체 회차로 먼저 하고, 보일 칸만 거른다(keepLedgerRounds — 거른 뒤 짝을 지으면 관리자 화면과 판정이 갈린다).
   const allRounds = useMemo(() => buildLedgerRounds({ rows, marks: marks.values(), videos, fromDate, toDate }), [rows, marks, videos, fromDate, toDate]);
+  // 분석이 끝난 영상의 AI 참고 평점 — 칸 아래 "2.8/5"(원장 2026-10-21 · review-points-context).
+  const reviewPoints = useMemo(() => new Map(videos.flatMap((video) => typeof video.reviewPoints === "number" ? [[video.id, video.reviewPoints] as const] : [])), [videos]);
   const rounds = useMemo(() => (keep ? keepLedgerRounds(allRounds, keep) : allRounds), [allRounds, keep]);
   // 배정 창의 '자동 연결됨' — 거르기 전 칸으로(강사뷰에서 동료가 낸 숙제에 붙은 영상도) · 기간 밖 숙제까지(장부는 기간 앞뒤를 넓혀 읽어 짝을
   // 짓고 화면에만 기간 안 칸을 세운다 — 기간 안 칸만 보면 9/29 숙제에 붙은 10/2 영상이 '연결 안 됨'으로 보인다, 2026-10-15). 같은 재료 · 기간만 풀어서.
@@ -128,21 +131,25 @@ export function VideoHomeworkManagement({ rows: serverRows, initialMarks, videos
       <div className={styles.expandActions}><button type="button" onClick={() => setCollapsed(new Set())}>모두 펼치기</button><button type="button" onClick={() => setCollapsed(new Set(visibleGroups.map((group) => group.classId)))}>모두 접기</button></div>
     </div>
     {/* 안내는 이 한 줄(원장 2026-10-19 *"멘트 간단히"* · 반 아래 범례 줄을 여기로 합쳤다). */}
-    <p className={styles.hint}>회차 = 영상 과제가 나간 수업·따로 낸 숙제(학생마다 순서) · 칸 위 숙제 날·아래 제출일 · ▶ 영상 · 초록 테두리 = 영상 자동 완료 · 수동 = 영상 없이 완료 · × 미수행 · 점선 = 따로 낸 숙제 · — 회차 없음 · 미확인 칸 클릭 = 오늘 완료 · 우클릭 = 편집(숙제없음 칸은 숙제 출제)</p>
+    <p className={styles.hint}>회차 = 영상 과제가 나간 수업·따로 낸 숙제(학생마다 순서) · 칸 위 숙제 날·아래 제출일 · ▶ 영상{reviewPoints.size ? " · 칸 아래 숫자 = AI 참고 평점(5점 만점 · 파랑 낮음 → 빨강 높음)" : ""} · 초록 테두리 = 영상 자동 완료 · 수동 = 영상 없이 완료 · × 미수행 · 점선 = 따로 낸 숙제 · — 회차 없음 · 미확인 칸 클릭 = 오늘 완료 · 우클릭 = 편집(숙제없음 칸은 숙제 출제)</p>
     {byTeacher ? <p className={styles.hint}>검색한 강사({teacherOptions?.find((option) => option.value === teacher)?.label})가 낸 숙제 칸만 셉니다(그 강사의 강사뷰와 같은 칸) — 숙제를 낸 사람을 모르는 옛 기록은 강사 이름 없이 검색할 때만 보입니다.</p> : null}
     {progress ? <p className={styles.saving} role="status">기록 저장 중 {progress.done} / {progress.total}건</p> : null}
+    <ReviewPointsContext.Provider value={reviewPoints}>
     {visibleGroups.length ? visibleGroups.map((group) => <ClassLedger key={`${group.classId}:${filterKey}`} group={group} rounds={rounds} blankFacts={blankFacts} videosKnown={videosKnown} showTeacher={showTeacher} today={today} busy={busy} save={save} onEdit={setActive} onPlay={setPlaying} onAssign={(row) => setAssigning({ row })} onIssueMenu={setMenu}
       collapsed={collapsed.has(group.classId)} onToggle={() => setCollapsed((current) => { const next = new Set(current); if (next.has(group.classId)) next.delete(group.classId); else next.add(group.classId); return next; })} />)
       : <div className={styles.empty}><strong>{shownRows.length ? "조건에 맞는 학생이 없습니다." : "조회 기간에 영상 과제가 나간 수업이 없습니다."}</strong><p>{shownRows.length ? "검색어와 필터를 조정해 주세요." : "원스크린에서 '영상 과제'를 켜고 저장한 수업부터 회차가 생깁니다."}</p></div>}
+    </ReviewPointsContext.Provider>
     <Dialog open={active !== null} onOpenChange={(open) => { if (!open && !busy) setActive(null); }}>
       <DialogContent showCloseButton={!busy}>
         {active ? <RoundEditor key={`${ledgerPairKey(active.row)}:${active.round.key}`} cell={active} today={today} busy={busy} save={save} onClose={() => setActive(null)}
-          // 영상이 없는 칸에서 열면 그 숙제를 골라 둔다(그 칸에 붙이려고 연 것이다). 영상이 붙은 칸의 '배정 변경'은 옮길 곳을 고르는 것이라 종전대로.
-          onAssign={() => { setAssigning({ row: active.row, date: active.round.videoId ? undefined : active.round.homeworkDate ?? undefined }); setActive(null); }} /> : null}
+          // 그 칸의 숙제를 골라 둔다 — 영상이 없는 칸은 붙이려고, 영상이 붙은 칸은 같은 숙제에 영상을 더 붙이려고 연다(한 숙제에 여러 단원 —
+          // 원장 2026-10-21). 붙은 영상을 다른 숙제로 옮길 때는 창에서 숙제를 바꾼다.
+          onAssign={() => { setAssigning({ row: active.row, date: active.round.homeworkDate ?? undefined }); setActive(null); }} /> : null}
       </DialogContent>
     </Dialog>
-    <LedgerVideoDialog cell={playing} video={playing ? videos.find((video) => video.id === playing.round.videoId
-      && video.studentId === playing.row.studentId && video.classId === playing.row.classId) ?? null : null} onClose={() => setPlaying(null)} />
+    <LedgerVideoDialog key={playing ? `${ledgerPairKey(playing.row)}:${playing.round.key}` : "none"} cell={playing}
+      videos={playing ? playing.round.videoIds.flatMap((id) => videos.find((video) => video.id === id
+        && video.studentId === playing.row.studentId && video.classId === playing.row.classId) ?? []) : []} onClose={() => setPlaying(null)} />
     {menu ? <IssueMenu key={`${ledgerPairKey(menu.row)}:${menu.kind}:${menu.date}`} target={menu} onClose={() => setMenu(null)} /> : null}
     {assigning ? <VideoAssignmentDialog key={`${ledgerPairKey(assigning.row)}:${assigning.date ?? ""}`} row={assigning.row} initialDate={assigning.date}
       fromDate={fromDate} toDate={toDate} onClose={() => setAssigning(null)} linked={linked} /> : null}

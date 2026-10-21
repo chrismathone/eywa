@@ -7,7 +7,7 @@ import { checkVideoFile } from "@/features/video-submit/rules";
 import { runResumableUpload, UploadError, wakeableSleep, xhrPut } from "@/features/video-submit/upload-client";
 import { createUploadReporter, flushUploadEvents } from "@/features/video-submit/upload-diagnostics-client";
 import { confirmationReason, uploadEventLabel, uploadFailureText, type UploadEvent } from "@/features/video-submit/upload-diagnostics";
-import { SITE_FREE_UPLOADS_PER_DAY, SITE_NOTE_MAX, siteNote } from "@/features/video-submit/site";
+import { SITE_FREE_UPLOADS_PER_DAY, SITE_MAX_VIDEOS_PER_HOMEWORK, SITE_NOTE_MAX, siteNote } from "@/features/video-submit/site";
 import { InAppWarning } from "./in-app-warning";
 
 type Phase =
@@ -62,6 +62,8 @@ export function VideoSubmitForm(props: {
   homeworkDate?: string | null;
   /** 그 숙제가 나간 수업일 표기("10/1 (목)"). */
   homeworkLabel?: string | null;
+  /** 그 숙제에 이미 낸 영상 수(서버가 장부와 같은 판정으로 센 값) — 한 숙제에 여러 단원 영상을 낸다(원장 2026-10-21). */
+  sent?: number;
   /** 같은 반의 다른 안 낸 영상 숙제(올리기 사이트 링크만) — 같은 링크에 숙제일만 바꿔 바로 간다. */
   otherHomework?: { date: string; label: string }[];
   /** 숙제 없이 올리기(올리기 사이트 · 2026-10-13) — 무슨 영상인지 메모를 받아 업로드 시작 때 함께 보낸다(서버가 다시 확인한다). */
@@ -69,6 +71,9 @@ export function VideoSubmitForm(props: {
 }) {
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   const [note, setNote] = useState("");
+  // 이 화면에서 그 숙제에 더 낸 수 — 상한 안내용(정확한 수와 상한은 업로드 시작이 다시 센다).
+  const [sentHere, setSentHere] = useState(0);
+  const sentTotal = (props.sent ?? 0) + sentHere;
   // 숙제 없이 올릴 때는 메모가 있어야 올린다(서버와 같은 다듬기 — 2글자 이상).
   const noteMissing = !!props.freeUpload && !siteNote(note);
   const [recovered, setRecovered] = useState(false);
@@ -153,7 +158,7 @@ export function VideoSubmitForm(props: {
     for (let attempt = 0; attempt < 5; attempt++) {
       const done = await postJson("/api/video-submit/complete", { token: props.token, uploadId: started.uploadId });
       if (settled(done)) writePending(props.token, readPending(props.token).filter((id) => id !== started.uploadId));
-      if (done?.ok) { trace.event("confirmed"); trace.dispose(); return setPhase({ kind: "done" }); }
+      if (done?.ok) { trace.event("confirmed"); trace.dispose(); if (props.homeworkDate) setSentHere((n) => n + 1); return setPhase({ kind: "done" }); }
       const reason = done ? confirmationReason(done.code) : "network";
       if (done && settled(done)) {
         trace.event("confirm_failed", { reason, attempt: attempt + 1 }); trace.dispose();
@@ -186,6 +191,8 @@ export function VideoSubmitForm(props: {
           <li>{props.homeworkLabel ? `${props.lastDayLabel}까지 올릴 수 있습니다.` : `${props.lastDayLabel}까지 쓸 수 있는 링크입니다.`}</li>
           <li>올린 영상은 담당 선생님만 봅니다.</li>
           {props.freeUpload ? <li>숙제 없이 올리는 영상은 하루 {SITE_FREE_UPLOADS_PER_DAY}개까지 올릴 수 있습니다.</li> : null}
+          {/* 여러 단원이면 같은 숙제에 여러 개(원장 2026-10-21). */}
+          {props.homeworkDate ? <li>여러 단원이면 이 숙제에 영상을 {SITE_MAX_VIDEOS_PER_HOMEWORK}개까지 올릴 수 있습니다.{sentTotal ? ` 지금까지 ${sentTotal}개 냈습니다.` : ""}</li> : null}
         </ul>
         {props.freeUpload ? (
           <label className="block space-y-2">
@@ -224,10 +231,11 @@ export function VideoSubmitForm(props: {
           <div className="space-y-3" aria-live="polite">
             <p className="text-foreground text-base font-bold">제출했습니다. 감사합니다.</p>
             <p className="text-text-dim text-sm break-keep">담당 선생님이 확인할 수 있습니다.</p>
-            {/* 숙제를 골라 낸 영상이면 같은 숙제에 또 올리지 않는다 — 더 올릴 영상은 숙제 없이 올리기로(원장 2026-10-13). */}
-            {props.homeworkDate
-              ? <p className="text-text-dim text-sm break-keep">더 올릴 영상이 있으면 <Link href="/v" prefetch={false} className="text-foreground underline underline-offset-2">처음 화면</Link>에서 &lsquo;숙제 없이 올리기&rsquo;로 올려 주세요.</p>
-              : <Button type="button" variant="outline" className="w-full" onClick={() => { setNote(""); setPhase({ kind: "idle" }); }}>다른 영상 올리기</Button>}
+            {/* 숙제를 골라 낸 영상이면 같은 숙제에 마감까지 더 낸다(여러 단원 — 원장 2026-10-21) · 상한에 닿으면 숙제 없이 올리기로. */}
+            {props.homeworkDate && sentTotal >= SITE_MAX_VIDEOS_PER_HOMEWORK
+              ? <p className="text-text-dim text-sm break-keep">이 숙제에는 영상을 {SITE_MAX_VIDEOS_PER_HOMEWORK}개까지 올릴 수 있습니다. 더 올릴 영상이 있으면 <Link href="/v" prefetch={false} className="text-foreground underline underline-offset-2">처음 화면</Link>에서 &lsquo;숙제 없이 올리기&rsquo;로 올려 주세요.</p>
+              : <Button type="button" variant="outline" className="w-full" onClick={() => { setNote(""); setPhase({ kind: "idle" }); }}>
+                {props.homeworkDate ? "이 숙제에 영상 더 올리기" : "다른 영상 올리기"}</Button>}
           </div>
         ) : null}
         {!busy && props.otherHomework?.length ? (
