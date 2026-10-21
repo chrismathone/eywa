@@ -27,7 +27,7 @@ const p = (key: string, count: number): Point => ({ key, label: key, date: key, 
 
 describe("parseStudentStatsPrefs", () => {
   it("모르는 값은 기본값", () => {
-    const base = { range: "all", view: "subject", off: [], flowRange: "all", trendKind: "line", flowKind: "bar", historyView: "yearly", courseRange: "all", courseKind: "line", courseOff: [], firstMode: "month" };
+    const base = { range: "all", view: "subject", off: [], flowRange: "all", trendKind: "line", flowKind: "bar", historyView: "yearly", courseRange: "all", courseKind: "line", courseOff: [], firstMode: "month", firstKind: "bar", trendMode: "month" };
     expect(parseStudentStatsPrefs(undefined)).toEqual(base);
     expect(parseStudentStatsPrefs({ range: "m36", view: 3, off: "x", flowRange: 7, trendKind: "pie", historyView: "weekly" })).toEqual(base);
   });
@@ -35,7 +35,7 @@ describe("parseStudentStatsPrefs", () => {
     expect(
       parseStudentStatsPrefs({
         range: "w26", view: "mix", off: ["total", "total", 3, "subject:math"], flowRange: "m12", trendKind: "bar", flowKind: "line", historyView: "monthly",
-        courseRange: "y", courseKind: "bar", courseOff: ["program:eie", "program:eie"], firstMode: "range",
+        courseRange: "y", courseKind: "bar", courseOff: ["program:eie", "program:eie"], firstMode: "range", firstKind: "bar", trendMode: "month",
       }),
     ).toEqual({
       range: "w26",
@@ -48,7 +48,7 @@ describe("parseStudentStatsPrefs", () => {
       courseRange: "y",
       courseKind: "bar",
       courseOff: ["program:eie"],
-      firstMode: "range",
+      firstMode: "range", firstKind: "bar", trendMode: "month",
     });
   });
 });
@@ -155,7 +155,7 @@ describe("flowTotals · flowRowsFor", () => {
     { month: "2025-02", enrolled: 5, withdrawn: 2 },
     { month: "2025-03", enrolled: 1, withdrawn: 4 },
   ];
-  it("합계와 순증", () => expect(flowTotals(rows.slice(1))).toEqual({ enrolled: 6, withdrawn: 6, net: 0 }));
+  it("합계와 순증", () => expect(flowTotals(rows.slice(1))).toEqual({ enrolled: 6, withdrawn: 6, net: 0, unknownMonths: 0 }));
   it("기록 시작 전 달은 뺀다", () => expect(flowRowsFor(rows, "all", "2025-02").map((r) => r.month)).toEqual(["2025-02", "2025-03"]));
   it("최근 12개월", () => expect(flowRowsFor(rows, "m12", null)).toHaveLength(3));
   it("등록·퇴원이 처음 있는 달", () => {

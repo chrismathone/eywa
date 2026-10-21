@@ -21,10 +21,10 @@ describe("parseStatsPeriod — 통계 기간 축", () => {
     expect(parseStatsPeriod({ grain: "day", month: "2026-13" }, TODAY).grain === "day").toBe(true);
   });
 
-  it("일별 구간 — 뒤집힌 순서는 바로잡고 · 오늘에서 멈추고 · 31일을 넘으면 시작일부터 자른다", () => {
+  it("일별 구간 — 뒤집힌 순서는 바로잡고 · 오늘에서 멈추고 · 두 달(62일)을 넘으면 시작일부터 자른다", () => {
     const r = parseStatsPeriod({ grain: "day", from: "2026-10-14", to: "2026-09-15" }, TODAY);
     expect(r.grain === "day" && [r.from, r.to, r.days.length, r.month, r.clipped]).toEqual(["2026-09-15", "2026-10-14", 30, null, false]);
-    const long = parseStatsPeriod({ grain: "day", from: "2026-08-01", to: "2026-10-30" }, TODAY);
+    const long = parseStatsPeriod({ grain: "day", from: "2026-07-01", to: "2026-10-30" }, TODAY);
     expect(long.grain === "day" && [long.to, long.days.length, long.clipped]).toEqual(["2026-08-31", MAX_DAY_SPAN, true]);
     const fut = parseStatsPeriod({ grain: "day", from: "2026-10-10", to: "2026-11-30" }, TODAY);
     expect(fut.grain === "day" && fut.to).toBe(TODAY);

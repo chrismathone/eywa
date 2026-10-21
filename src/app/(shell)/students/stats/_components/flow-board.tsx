@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
 import { saveStudentStatsPrefs } from "@/features/students/stats/server/prefs-actions";
 import { availableFlowRanges, flowRowsFor, flowTotals, type ChartKind, type FlowRange, type FlowRow } from "@/features/students/stats/model";
+import type { ChartSeries } from "./trend-chart";
 import { startedNote } from "@/features/dashboard/overview/model";
 import { StatCard } from "./stat-card";
 import { TrendChart } from "./trend-chart";
@@ -16,6 +17,9 @@ const signed = (n: number) => `${n > 0 ? "+" : ""}${number(n)}`;
 /** 등록 = 학원 색 · 퇴원 = 위험색(재원생 추이의 과목 색과 겹치지 않게 학원 팔레트 안에서). */
 const ENROLLED = "var(--color-primary)";
 const WITHDRAWN = "var(--color-danger)";
+/** 지난 기록(0385a)으로 메운 달의 색 — 같은 계열을 옅게(뜻이 조금 다른 값: 등록은 같은 판정 · 퇴원 칸은 청구가 끊긴 학생). */
+const ENROLLED_HISTORY = "color-mix(in srgb, var(--color-primary) 45%, var(--color-background))";
+const WITHDRAWN_HISTORY = "color-mix(in srgb, var(--color-danger) 45%, var(--color-background))";
 const RANGE_LABELS: Record<FlowRange, string> = { all: "전체 기간", m12: "최근 12개월" };
 
 /**
@@ -24,6 +28,8 @@ const RANGE_LABELS: Record<FlowRange, string> = { all: "전체 기간", m12: "�
  * 퇴원 = 실제 퇴원만(시스템 정리·수업 기록 없는 장부 정리 제외) · 과목만 끝난 재원생은 인원 감소가 아니라 세지 않는다.
  * 과목 관리자는 그 과목 반을 다닌(다니는) 학생만 · 과목을 알 수 없는 등록·퇴원은 빼고 센다(load.ts) — 반 배정 전 신입은 반에 들어간 뒤
  * 세므로 운영실 과목 관리자 '등록·퇴원 추이'(모름은 모두에게)와 한두 명 다를 수 있다(재리뷰 2026-10-20 · 정확성을 택했다).
+ * 셀 수 있는 달 **앞은 지난 기록**(`source: "history"` — 원장 2026-10-21 전체 추이 · `joined.ts`)으로 이어져 온다: 등록은 같은 판정(수업을 시작한
+ * 등록), 퇴원 칸은 **청구가 끊긴 학생**이라 옅은 색으로 가른다. 꺾은선은 경계 달을 양쪽 선이 함께 지나 끊기지 않는다.
  */
 export function FlowBoard({
   rows,
@@ -51,12 +57,19 @@ export function FlowBoard({
   const shown = flowRowsFor(rows, range, from);
   const totals = flowTotals(shown);
   const first = shown[0]?.month;
-  const started = startedNote(shown);
+  // 등록 안내는 에이와 줄로만 판정한다 — 지난 기록 줄은 늘 '수업을 시작한 등록'이라 맨 앞에 서면 에이와 줄의 사정을 가린다(리뷰 2026-10-21).
+  const started = startedNote(shown.filter((r) => r.source !== "history"));
+  const hasHistory = shown.some((r) => r.source === "history");
+  const historyFrom = shown.find((r) => r.source === "history")?.month;
+  const aywaFrom = shown.find((r) => r.source !== "history")?.month;
+  // 지난 기록의 퇴원 칸(청구가 끊긴 학생)은 수납 권한이 없으면 실리지 않는다 — 그때는 그 범례·선·안내를 세우지 않는다.
+  const historyWithdrawnKnown = shown.some((r) => r.source === "history" && r.withdrawn !== null);
+  const series = flowSeries(shown, kind, historyWithdrawnKnown);
   return (
     <StatCard
       id="flow"
       title="등록 · 퇴원 추이"
-      note={`${first ? `${first.slice(0, 4)}년 ${Number(first.slice(5, 7))}월부터` : "기록 없음"} · 당월은 오늘까지${started ? ` · ${started}` : ""} · 퇴원은 실제 퇴원만${scopeLabel ? ` · ${scopeLabel} 반을 다닌 학생만(과목을 알 수 있는 기록만 — 반 배정 전 신입은 반에 들어간 뒤 셉니다)` : ""}`}
+      note={`${first ? `${first.slice(0, 4)}년 ${Number(first.slice(5, 7))}월부터` : "기록 없음"} · 당월은 오늘까지${started ? ` · ${started}` : ""} · 퇴원은 실제 퇴원만${hasHistory && historyWithdrawnKnown ? "(지난 기록 구간은 청구가 끊긴 학생)" : ""}${scopeLabel ? ` · ${scopeLabel} 반을 다닌 학생만(과목을 알 수 있는 기록만 — 반 배정 전 신입은 반에 들어간 뒤 셉니다)` : ""}`}
       tools={
         <>
           {ranges.length > 1 ? (
@@ -80,22 +93,40 @@ export function FlowBoard({
     >
       <dl className="grid grid-cols-3 gap-2">
         <Total label="등록" value={`${number(totals.enrolled)}명`} />
-        <Total label="퇴원" value={`${number(totals.withdrawn)}명`} />
-        <Total label="순증(등록 − 퇴원)" value={`${signed(totals.net)}명`} tone={totals.net < 0 ? "text-danger" : totals.net > 0 ? "text-green" : undefined} />
+        <Total label={hasHistory && historyWithdrawnKnown ? "퇴원(지난 기록은 청구 끊김)" : "퇴원"} value={`${number(totals.withdrawn)}명`} />
+        <Total
+          label={totals.unknownMonths ? `순증(퇴원을 아는 ${number(shown.length - totals.unknownMonths)}개월만)` : "순증(등록 − 퇴원)"}
+          value={`${signed(totals.net)}명`}
+          tone={totals.net < 0 ? "text-danger" : totals.net > 0 ? "text-green" : undefined}
+        />
       </dl>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
         <span className="inline-flex items-center gap-1.5"><i aria-hidden className="inline-block size-2.5 rounded-sm" style={{ background: ENROLLED }} />등록</span>
         <span className="inline-flex items-center gap-1.5"><i aria-hidden className="inline-block size-2.5 rounded-sm" style={{ background: WITHDRAWN }} />퇴원</span>
+        {hasHistory ? (
+          <>
+            <span className="inline-flex items-center gap-1.5"><i aria-hidden className="inline-block size-2.5 rounded-sm" style={{ background: ENROLLED_HISTORY }} />등록(지난 기록)</span>
+            {historyWithdrawnKnown ? (
+              <span className="inline-flex items-center gap-1.5"><i aria-hidden className="inline-block size-2.5 rounded-sm" style={{ background: WITHDRAWN_HISTORY }} />청구가 끊긴 학생(지난 기록)</span>
+            ) : null}
+          </>
+        ) : null}
       </div>
-      <TrendChart
-        kind={kind}
-        labels={shown.map((r) => axisMonth(r.month))}
-        tooltipLabels={shown.map((r) => longMonth(r.month))}
-        series={[
-          { key: "enrolled", name: "등록", color: ENROLLED, values: shown.map((r) => r.enrolled) },
-          { key: "withdrawn", name: "퇴원", color: WITHDRAWN, values: shown.map((r) => r.withdrawn) },
-        ]}
-      />
+      <TrendChart kind={kind} labels={shown.map((r) => axisMonth(r.month))} tooltipLabels={shown.map((r) => longMonth(r.month))} series={series} />
+      {hasHistory && historyFrom ? (
+        <p className="text-muted-foreground text-xs break-keep">
+          {aywaFrom ? `${longMonth(aywaFrom)}부터 에이와 기록으로 세고, ${longMonth(historyFrom)}부터 그 전은 지난 기록으로 이었습니다` : `${longMonth(historyFrom)}부터 지난 기록입니다`} — 지난 기록의 등록은 같은 판정(수업을
+          시작한 등록)입니다.{" "}
+          {historyWithdrawnKnown ? (
+            <>
+              퇴원 칸은 퇴원일이 아니라 <b className="text-foreground font-medium">청구가 끊긴 학생</b>(그달을 끝으로 다음 두 달 수업료 청구가 없는 학생 · 휴원 뒤 돌아온 학생도 든다)입니다. 2025년 이후 끊긴 학생의
+              9할에 메이크에듀 퇴원 기록이 있어 퇴원과 거의 같습니다. 출처가 바뀌는 달의 증감은 비우고, 순증은 퇴원을 아는 달만 더합니다.
+            </>
+          ) : (
+            "지난 기록의 퇴원 칸(청구가 끊긴 학생)은 수납 권한이 있을 때만 보입니다 — 그 달들은 퇴원·순증에서 빠집니다."
+          )}
+        </p>
+      ) : null}
       <FlowTable rows={shown} monthEnd={monthEnd} started={started} />
     </StatCard>
   );
@@ -108,4 +139,31 @@ function Total({ label, value, tone }: { label: string; value: string; tone?: st
       <dd className={`num text-lg font-bold ${tone ?? "text-foreground"}`}>{value}</dd>
     </div>
   );
+}
+
+/**
+ * 등록·퇴원 선 — 지난 기록 달이 섞이면 **같은 계열을 둘로**(에이와 · 지난 기록) 가른다. 막대는 같은 스택(한 달엔 한쪽만 값이 있어 한 막대) ·
+ * 꺾은선은 경계 달(에이와 첫 달)을 지난 기록 선도 지나 끊기지 않는다. 퇴원을 모르는 달(null)은 비운다.
+ */
+function flowSeries(rows: readonly FlowRow[], kind: ChartKind, historyWithdrawnKnown: boolean): ChartSeries[] {
+  const hasHistory = rows.some((r) => r.source === "history");
+  if (!hasHistory) {
+    return [
+      { key: "enrolled", name: "등록", color: ENROLLED, values: rows.map((r) => r.enrolled) },
+      { key: "withdrawn", name: "퇴원", color: WITHDRAWN, values: rows.map((r) => r.withdrawn) },
+    ];
+  }
+  const firstAywa = rows.findIndex((r) => r.source !== "history");
+  const bridge = kind === "line";
+  const pick = (r: FlowRow, i: number, history: boolean, value: number | null) =>
+    (r.source === "history") === history || (history && bridge && i === firstAywa && firstAywa > 0) ? value : null;
+  const stack = (id: string) => (kind === "bar" ? { stack: id } : {});
+  return [
+    { key: "enrolled", name: "등록", color: ENROLLED, values: rows.map((r, i) => pick(r, i, false, r.enrolled)), ...stack("e") },
+    { key: "enrolledHistory", name: "등록(지난 기록)", color: ENROLLED_HISTORY, values: rows.map((r, i) => pick(r, i, true, r.enrolled)), dashed: true, endLabel: false, ...stack("e") },
+    { key: "withdrawn", name: "퇴원", color: WITHDRAWN, values: rows.map((r, i) => pick(r, i, false, r.withdrawn)), ...stack("w") },
+    ...(historyWithdrawnKnown
+      ? [{ key: "withdrawnHistory", name: "청구가 끊긴 학생(지난 기록)", color: WITHDRAWN_HISTORY, values: rows.map((r, i) => pick(r, i, true, r.withdrawn)), dashed: true, endLabel: false as const, ...stack("w") }]
+      : []),
+  ];
 }

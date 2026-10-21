@@ -5,11 +5,11 @@ import { addDays, isValidYm, isValidYmd, monthRange, shiftMonth } from "@/lib/da
  * 혹은 구간을 잡아서 한달치정도를 일자별로"*) — 신규 콜&상담·수납·원생 통계가 같은 주소 규약과 같은 자르기 규칙을 쓴다.
  *
  * 주소: 월별 = `?grain=month`(기본 · 이번 달까지 `months`개월) · 일별 한 달 = `?grain=day&month=2026-09` ·
- * 일별 구간 = `?grain=day&from=2026-09-15&to=2026-10-14`(최대 `MAX_DAY_SPAN`일 — 넘치면 시작일부터 자른다).
+ * 일별 구간 = `?grain=day&from=2026-09-15&to=2026-10-14`(최대 `MAX_DAY_SPAN`일 = 두 달 — 넘치면 시작일부터 자른다 · 원장 2026-10-21 *"특정 기간. 최대 두달"*).
  * 🔑 미래는 그리지 않는다 — 끝은 오늘에서 멈춘다(오늘 칸 = 운영실 카드의 오늘 값). 잘못된 값은 오류 대신 기본값(이번 달)으로.
  * 순수 함수(Vitest).
  */
-export const MAX_DAY_SPAN = 31;
+export const MAX_DAY_SPAN = 62;
 export const MONTH_SPANS = [12, 24] as const;
 export type MonthSpan = (typeof MONTH_SPANS)[number];
 

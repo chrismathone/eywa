@@ -62,6 +62,8 @@ export type StudentStats = {
   /** EiE 구분을 쓰는 학원인가 — 프로그램 이름(운영실 '재원생'·'강좌수' 칸과 같은 규약). */
   eieOn: boolean;
   firstPeriod: StatsPeriod;
+  /** 재원생 추이의 일별 기간(원장 2026-10-21 '일별 · 최대 두 달') — 주소(`tr…`)가 이기고, 없으면 계정에 남긴 보기 방식 · 월별이면 null. */
+  trendPeriod: (StatsPeriod & { grain: "day" }) | null;
   /**
    * 구역 — **각자 따로 기다린다**(화면이 카드마다 `<Suspense>`로 — 먼저 끝난 카드부터 보이고, 첫 수업 기간을 바꿔도 그 카드가 늦는 동안
    * 나머지가 먼저 선다 · 리뷰 2026-10-21 속도). 실패는 그 구역만 '못 불러옴'. 강사 범위·담당 과목 없음이면 null.
@@ -158,7 +160,7 @@ export async function subjectScopeOf(user: User, settings: Settings, requested?:
  * 구역마다 따로 실패한다(한 구역이 깨져도 나머지는 보인다). 독립 조회는 함께 띄운다(B4).
  * 호출부가 `requireAccess("students")`를 먼저 지난다.
  */
-export async function loadStudentStats(requestedSubject?: string, firstParams: PeriodParams = {}): Promise<StudentStats> {
+export async function loadStudentStats(requestedSubject?: string, firstParams: PeriodParams = {}, trendParams: PeriodParams = {}): Promise<StudentStats> {
   const today = kstToday();
   const [user, teacherId, prefsRaw, settings] = await Promise.all([getCurrentUser(), effectiveTeacherId(), readMyUiPrefs(), getTenantSettings()]);
   if (!user) throw new Error("로그인이 필요합니다");
@@ -168,6 +170,10 @@ export async function loadStudentStats(requestedSubject?: string, firstParams: P
   const eieOn = isModuleEnabled(settings.modules.disabled, "eie");
   // 첫 수업 기간 — 주소(`fc…`)가 이기고, 없으면 계정에 남긴 보기 방식(`period.ts`).
   const firstPeriod = parseStatsPeriod(hasPeriodParams(firstParams) ? firstParams : paramsForMode(prefs.firstMode, today), today);
+  // 재원생 추이 일별 — 주소가 있으면 주소, 없으면 저장된 방식(일별·구간일 때만) · 월별 주소(`tr=month`)는 '월별로 돌아가기'라 null.
+  const trendRaw = hasPeriodParams(trendParams) ? trendParams : prefs.trendMode === "month" ? null : paramsForMode(prefs.trendMode, today);
+  const trendParsed = trendRaw ? parseStatsPeriod(trendRaw, today) : null;
+  const trendPeriod = trendParsed?.grain === "day" ? trendParsed : null;
   const base = {
     today,
     prefs,
@@ -178,6 +184,7 @@ export async function loadStudentStats(requestedSubject?: string, firstParams: P
     trustFrom: Promise.resolve(null),
     parts: null,
     firstPeriod,
+    trendPeriod,
   };
   if (teacherId) return { ...base, teacherScoped: true };
 
@@ -209,7 +216,7 @@ export async function loadStudentStats(requestedSubject?: string, firstParams: P
       const compute = await loadMonthlyChanges(today, null, getWithdrawalsInWindow(fromDate, today), !!scoped, DETAIL_MONTHS, !scoped, coverage);
       return compute(scoped?.pred ?? null);
     }),
-    trend: scopedPart("trend", () => loadEnrolledTrendDetail(user.tenantId, today, programSubjects, scoped?.pred)),
+    trend: scopedPart("trend", () => loadEnrolledTrendDetail(user.tenantId, today, programSubjects, scoped?.pred, trendPeriod?.days ?? null)),
     courses: scopedPart("courses", () => loadCourseTrendDetail(user.tenantId, today, programSubjects, scoped?.pred)),
     history: part("history", async () => {
       const [history, billing] = await Promise.all([loadStudentHistory(user.tenantId), canBilling]);

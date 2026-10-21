@@ -87,8 +87,11 @@ export async function loadEnrolledTrendSlicer(tenantId: string, today: string): 
   };
 }
 
-/** 원생 통계 화면의 재원생 추이 — 월별 36개월 · 주별 26주 · 연도별, 학원 전체 · 과목마다 · 수강 구성마다. */
-export type TrendSeriesSet = { monthly: TrendPoint[]; weekly: TrendPoint[]; yearly: TrendPoint[] };
+/**
+ * 원생 통계 화면의 재원생 추이 — 월별 36개월 · 주별 26주 · 연도별(+ 고른 기간의 **일별** · 최대 두 달 — 원장 2026-10-21), 학원 전체 ·
+ * 과목마다 · 수강 구성마다. `daily`는 일별 기간을 넘겼을 때만(날마다 그날 기준 — 오늘 뒤 날은 세지 않는다).
+ */
+export type TrendSeriesSet = { monthly: TrendPoint[]; weekly: TrendPoint[]; yearly: TrendPoint[]; daily?: TrendPoint[] };
 export type EnrolledTrendDetail = {
   total: TrendSeriesSet;
   bySubject: ({ key: string } & TrendSeriesSet)[];
@@ -108,6 +111,11 @@ export type EnrolledTrendDetail = {
 export const DETAIL_MONTHS = 36;
 export const DETAIL_WEEKS = 26;
 
+/** 일별 점 — 날마다 그날 기준(`date = key`) · 라벨 `M.D` · 오늘 뒤 날은 뺀다(미래는 그리지 않는다 — `period.ts`와 같은 규칙). */
+export function dailyPoints(days: readonly string[], today: string): { key: string; label: string; date: string }[] {
+  return days.filter((d) => d <= today).map((d) => ({ key: d, label: `${Number(d.slice(5, 7))}.${Number(d.slice(8, 10))}`, date: d }));
+}
+
 /**
  * 원생 통계 화면(`/students/stats`) — 운영실 '재원생 추이'와 **같은 원본·같은 판정**(`trendOf`)을 더 긴 창으로, 과목별·수강 구성은
  * `breakdownTrendOf`(그날 걸린 수강으로만 가른다 — 수강 기록 없는 학생을 모든 과목에 넣지 않는다)로 그날로 되감아 센다.
@@ -123,34 +131,27 @@ export async function loadEnrolledTrendDetail(
    * **담당 과목 전체**(`subjectTrendOf` — 운영실 과목 관리자 '재원생 추이'와 같은 값) · 과목 선은 담당 과목만 · 수강 구성은 비운다.
    */
   scope?: (subject: string | null) => boolean,
+  /** 일별로 볼 날들(`YYYY-MM-DD` · 최대 두 달 · 원장 2026-10-21) — 있으면 `daily`를 함께 센다. 오늘 뒤 날은 뺀다. */
+  dailyDays?: readonly string[] | null,
 ): Promise<EnrolledTrendDetail> {
   const { raw, en } = await trendInputs(tenantId, today);
   const points = { monthly: monthlyPoints(today, DETAIL_MONTHS), weekly: weeklyPoints(today, DETAIL_WEEKS), yearly: yearlyPoints(today, raw.fromYear) };
+  const daily = dailyDays ? dailyPoints(dailyDays, today) : null;
   const keys = subjects.map((s) => s.key);
   const groupOf = (subject: string | null) => subjectGroupOf(subject, subjects);
-  const split = {
-    monthly: breakdownTrendOf(raw.students, en, raw.enrollments, points.monthly, keys, groupOf, today),
-    weekly: breakdownTrendOf(raw.students, en, raw.enrollments, points.weekly, keys, groupOf, today),
-    yearly: breakdownTrendOf(raw.students, en, raw.enrollments, points.yearly, keys, groupOf, today),
-  };
-  const total = scope
-    ? {
-        monthly: subjectTrendOf(raw.students, en, raw.enrollments, points.monthly, scope, today),
-        weekly: subjectTrendOf(raw.students, en, raw.enrollments, points.weekly, scope, today),
-        yearly: subjectTrendOf(raw.students, en, raw.enrollments, points.yearly, scope, today),
-      }
-    : {
-        monthly: trendOf(raw.students, en, points.monthly),
-        weekly: trendOf(raw.students, en, points.weekly),
-        yearly: trendOf(raw.students, en, points.yearly),
-      };
+  const breakdown = (pts: readonly { key: string; label: string; date: string }[]) => breakdownTrendOf(raw.students, en, raw.enrollments, pts, keys, groupOf, today);
+  const split = { monthly: breakdown(points.monthly), weekly: breakdown(points.weekly), yearly: breakdown(points.yearly), daily: daily ? breakdown(daily) : null };
+  const totalOf = (pts: readonly { key: string; label: string; date: string }[]) =>
+    scope ? subjectTrendOf(raw.students, en, raw.enrollments, pts, scope, today) : trendOf(raw.students, en, pts);
+  const total: TrendSeriesSet = { monthly: totalOf(points.monthly), weekly: totalOf(points.weekly), yearly: totalOf(points.yearly), ...(daily ? { daily: totalOf(daily) } : {}) };
+  const withDaily = <T,>(base: T, pick: (d: NonNullable<typeof split.daily>) => TrendPoint[]) => (split.daily ? { ...base, daily: pick(split.daily) } : base);
   return {
     total,
     bySubject: keys
       .filter((key) => !scope || scope(key))
-      .map((key) => ({ key, monthly: split.monthly.bySubject[key]!, weekly: split.weekly.bySubject[key]!, yearly: split.yearly.bySubject[key]! })),
-    byMix: scope ? [] : MIX_KEYS.map((key) => ({ key, monthly: split.monthly.mix[key], weekly: split.weekly.mix[key], yearly: split.yearly.mix[key] })),
-    unknown: { monthly: split.monthly.unknown, weekly: split.weekly.unknown, yearly: split.yearly.unknown },
+      .map((key) => withDaily({ key, monthly: split.monthly.bySubject[key]!, weekly: split.weekly.bySubject[key]!, yearly: split.yearly.bySubject[key]! }, (d) => d.bySubject[key]!)),
+    byMix: scope ? [] : MIX_KEYS.map((key) => withDaily({ key, monthly: split.monthly.mix[key], weekly: split.weekly.mix[key], yearly: split.yearly.mix[key] }, (d) => d.mix[key])),
+    unknown: withDaily({ monthly: split.monthly.unknown, weekly: split.weekly.unknown, yearly: split.yearly.unknown }, (d) => d.unknown),
     recordsFrom: raw.recordsFrom,
     breakdownFrom: breakdownFromOf(raw, today),
   };

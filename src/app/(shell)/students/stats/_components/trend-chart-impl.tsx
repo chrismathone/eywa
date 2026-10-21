@@ -21,6 +21,10 @@ export type ChartSeries = {
   unit?: string;
   /** 이 선만 다른 값 글자(값 상자의 수납률 '99.7%'처럼) — 없으면 차트 `format`/단위. */
   format?: (n: number) => string;
+  /** 점선 — 뜻이 조금 다른 구간(지난 기록으로 메운 점 · 원장 2026-10-21 전체 추이). 막대 보기에선 색이 가른다(점선 없음). */
+  dashed?: boolean;
+  /** 선 끝 이름을 적지 않는다 — 다른 선에 이어 붙인 앞 구간(지난 기록)은 끝이 그래프 한가운데라 이름이 본선 위에 찍힌다(리뷰 2026-10-21). */
+  endLabel?: false;
 };
 export type TrendChartProps = {
   /** 가로축 라벨(짧게 — `26.03`). */
@@ -77,7 +81,7 @@ export function TrendChartImpl({ labels, tooltipLabels, series, kind, unit = "�
   const mixed = new Set(drawn.map((s) => s.unit ?? unit)).size > 1;
   const tick = format ?? ((n: number) => (mixed ? fmt(n) : `${fmt(n)}${drawn[0]?.unit ?? unit}`));
   const ends = drawn.map((s) => {
-    const i = lastIndexWithValue(s.values);
+    const i = s.endLabel === false ? -1 : lastIndexWithValue(s.values);
     return { key: s.key, index: i, value: i >= 0 ? (s.values[i] as number) : 0, text: i >= 0 ? `${s.name} ${showOf(s)(s.values[i] as number)}` : "" };
   });
   const right = lineMode ? Math.max(...ends.map((e) => textWidth(e.text)), 0) + 20 : 12;
@@ -137,6 +141,7 @@ export function TrendChartImpl({ labels, tooltipLabels, series, kind, unit = "�
                     name={s.name}
                     stroke={s.color}
                     strokeWidth={s.strong ? 3 : 2.25}
+                    strokeDasharray={s.dashed ? "6 5" : undefined}
                     // 점은 칸이 넉넉할 때(24칸 이하)만 — 앞뒤가 비어 혼자 선 값은 늘 찍는다(선이 없어 점이 아니면 안 보인다 · 매일 기록 첫날).
                     dot={(p: { cx?: number; cy?: number; index?: number }) => {
                       const i = p.index ?? -1;

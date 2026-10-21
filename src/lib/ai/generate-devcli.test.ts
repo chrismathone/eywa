@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
+import type { DevCliInput } from "./dev-cli";
 
 // 개발 CLI 즉시 경로 — 이 파일만 dev-cli를 '켜짐'으로 모킹한다(generate.test.ts는 평소 경로를 본다).
-const { runDevCli } = vi.hoisted(() => ({ runDevCli: vi.fn(async () => '{"ok":true}') }));
+const { runDevCli } = vi.hoisted(() => ({ runDevCli: vi.fn<(input: DevCliInput) => Promise<string>>(async () => '{"ok":true}') }));
 vi.mock("@/lib/license/server", () => ({ isFeatureLicensed: async () => true }));
 vi.mock("./dev-cli", () => ({ devCliEnabled: () => true, runDevCli }));
 vi.mock("./anthropic", () => ({ getAnthropic: () => ({ messages: { create: vi.fn() } }) }));

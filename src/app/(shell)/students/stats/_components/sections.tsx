@@ -5,6 +5,9 @@ import { programLabel, type Program } from "@/features/students/enrollment/progr
 import { distinctSubjectTokens, tokenColor, type TrendView } from "@/features/students/stats/model";
 import type { MixKey } from "@/features/dashboard/overview/enrolled-trend";
 import { courseBounds, flowBounds, trendBounds } from "@/features/students/stats/bounds";
+import { firstFlowMonth, firstNonZeroMonth } from "@/features/students/stats/model";
+import { historyFlowRows, historyTrendPoints, joinFlowRows, joinNote } from "@/features/students/stats/joined";
+import type { HistoryMonth } from "@/features/students/stats/history";
 import type { StudentStats, StudentStatsParts } from "@/features/students/stats/server/load";
 import { StatCard } from "./stat-card";
 import { TrendBoard } from "./trend-board";
@@ -44,10 +47,25 @@ async function trendContext({ stats, parts, scopeLabel }: Ctx) {
   return { trend, bounds, ...trendBounds(bounds, trend.data?.total.monthly ?? null, scopeLabel) };
 }
 
-export async function TrendSection(props: Ctx & { view: TrendView; boardKey: string }) {
-  const { stats, settings, scopeLabel, view, boardKey } = props;
-  const { trend, bounds, countFrom, clipNote } = await trendContext(props);
+/**
+ * 전체 추이에 이을 '지난 기록'(원장 2026-10-21 *"이어질 수 있는 데이터는 다 이어서"*) — 학원 전체 값이라 **과목 관리자 화면엔 잇지 않는다**
+ * (담당 과목 전체 선에 학원 전체 수를 붙이면 거짓이다). 지난 기록을 못 읽으면 종전대로(이은 점 없음 · 카드는 그대로 선다).
+ */
+async function historyMonths({ parts, scopeLabel }: Ctx): Promise<HistoryMonth[]> {
+  if (scopeLabel) return [];
+  const history = await parts.history;
+  return history.data?.months ?? [];
+}
+
+export async function TrendSection(props: Ctx & { view: TrendView; boardKey: string; keep: Record<string, string | undefined> }) {
+  const { stats, settings, scopeLabel, view, boardKey, keep } = props;
+  const [{ trend, bounds, countFrom, clipNote }, months] = await Promise.all([trendContext(props), historyMonths(props)]);
   if (!trend.data) return <StatCard id="trend" title="재원생 추이" note="달마다 말일 기준" error />;
+  // 에이와로 셀 수 있는 첫 달 앞을 지난 기록으로(경계가 없으면 에이와 월별 첫 점 앞을) — 겹치는 달은 에이와(joinPoints).
+  // 경계가 없으면(퇴원 기록이 처음부터 다 있는 지점) 에이와 첫 학생이 있는 달 — 창 앞쪽의 0인 달이 지난 기록을 덮지 않게(리뷰 2026-10-21).
+  const aywaFirst = countFrom ?? firstNonZeroMonth(trend.data.total.monthly) ?? trend.data.total.monthly[0]?.key ?? null;
+  const history = historyTrendPoints(months, aywaFirst);
+  const historyNote = joinNote(history.monthly, months, aywaFirst);
   const subjectMaps = buildSubjectMaps(settings.operations.subjects);
   const tokens = distinctSubjectTokens(settings.operations.subjects.map((s) => ({ key: s.key, color: subjectMaps.colorOf(s.key) })));
   const data = trend.data;
@@ -69,6 +87,10 @@ export async function TrendSection(props: Ctx & { view: TrendView; boardKey: str
       countFrom={countFrom}
       breakdownFrom={bounds.breakdownFrom}
       clipNote={clipNote}
+      history={history.monthly.length ? history : null}
+      historyNote={historyNote}
+      period={stats.trendPeriod}
+      keep={keep}
       today={stats.today}
       scopeLabel={scopeLabel}
       initial={{ range: stats.prefs.range, view, off: stats.prefs.off, kind: stats.prefs.trendKind }}
@@ -101,20 +123,25 @@ export async function CourseSection(props: Ctx & { boardKey: string }) {
 /** 첫 수업 추이(원장 2026-10-20 *"오늘 첫수업도 마찬가지"*) — 운영실 '오늘첫수업' ↗가 연다(월별 · 일별 · 구간). */
 export async function FirstClassSection({ stats, parts, scopeLabel, keep }: Ctx & { keep: Record<string, string | undefined> }) {
   const firstClass = await parts.firstClass;
-  return <FirstClassBoard trend={firstClass.data} period={stats.firstPeriod} today={stats.today} keep={keep} scopeLabel={scopeLabel} />;
+  return <FirstClassBoard trend={firstClass.data} period={stats.firstPeriod} today={stats.today} keep={keep} scopeLabel={scopeLabel} initialKind={stats.prefs.firstKind} />;
 }
 
 export async function FlowSection(props: Ctx & { boardKey: string }) {
   const { stats, parts, scopeLabel, boardKey } = props;
-  const [flow, ctx] = await Promise.all([parts.flow, trendContext(props)]);
+  const [flow, ctx, months] = await Promise.all([parts.flow, trendContext(props), historyMonths(props)]);
   if (!flow.data) return <StatCard id="flow" title="등록 · 퇴원 추이" note="달마다 등록·퇴원" error />;
   const { flowFrom, monthEnd } = flowBounds(ctx.bounds, flow.data, ctx.trend.data?.total.monthly ?? null, scopeLabel);
+  // 셀 수 있는 첫 달 앞을 지난 기록으로 잇는다(등록 = 수업을 시작한 등록 · 퇴원 칸 = 청구가 끊긴 학생) — 말일 재원생도 같은 지난 기록 값으로.
+  const aywaRows = flowFrom ? flow.data.filter((r) => r.month >= flowFrom) : flow.data;
+  const aywaFirst = flowFrom ?? firstFlowMonth(aywaRows) ?? aywaRows[0]?.month ?? null;
+  const rows = joinFlowRows(historyFlowRows(months, aywaFirst), aywaRows);
+  const historyEnd = Object.fromEntries(historyTrendPoints(months, aywaFirst).monthly.map((p) => [p.key, p.count]));
   return (
     <FlowBoard
       key={`flow|${boardKey}`}
-      rows={flow.data}
-      from={flowFrom}
-      monthEnd={monthEnd}
+      rows={rows}
+      from={null}
+      monthEnd={monthEnd ? { ...historyEnd, ...monthEnd } : Object.keys(historyEnd).length ? historyEnd : null}
       initialRange={stats.prefs.flowRange}
       initialKind={stats.prefs.flowKind}
       scopeLabel={scopeLabel}
