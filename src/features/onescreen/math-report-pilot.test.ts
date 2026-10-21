@@ -57,18 +57,18 @@ describe("이름 + 조사", () => {
 
 describe("진도 첫 문장", () => {
   it("하나 / 둘 / 셋 이상", () => {
-    expect(progressLead("이승엽", ["소수와 거듭제곱"])).toBe("승엽이는 오늘 소수와 거듭제곱 진도를 나갔습니다.");
-    expect(progressLead("이승엽", ["소인수분해", "최대공약수"])).toBe("승엽이는 오늘 소인수분해와 최대공약수 진도를 나갔습니다.");
-    expect(progressLead("이승엽", ["최대공약수", "최소공배수"])).toBe("승엽이는 오늘 최대공약수와 최소공배수 진도를 나갔습니다.");
+    expect(progressLead("이승엽", ["소수와 거듭제곱"])).toBe("우리 승엽이는 오늘 소수와 거듭제곱 진도를 나갔습니다.");
+    expect(progressLead("이승엽", ["소인수분해", "최대공약수"])).toBe("우리 승엽이는 오늘 소인수분해와 최대공약수 진도를 나갔습니다.");
+    expect(progressLead("이승엽", ["최대공약수", "최소공배수"])).toBe("우리 승엽이는 오늘 최대공약수와 최소공배수 진도를 나갔습니다.");
     expect(progressLead("이승엽", ["소수의 뜻", "거듭제곱", "소인수분해"])).toBe(
-      "승엽이는 오늘 소수의 뜻부터 소인수분해까지 진도를 나갔습니다.",
+      "우리 승엽이는 오늘 소수의 뜻부터 소인수분해까지 진도를 나갔습니다.",
     );
   });
   it("초등 차시 번호는 뗀다", () => {
-    expect(progressLead("김지수", ["1-1-1 1부터 5까지의 수 알아보기"])).toBe("지수는 오늘 1부터 5까지의 수 알아보기 진도를 나갔습니다.");
+    expect(progressLead("김지수", ["1-1-1 1부터 5까지의 수 알아보기"])).toBe("우리 지수는 오늘 1부터 5까지의 수 알아보기 진도를 나갔습니다.");
   });
   it("진도 중단일은 그날 한 일을 적는다 · 진도 없으면 빈 문장", () => {
-    expect(progressLead("이승엽", [], "월말평가")).toBe("승엽이는 오늘 월말평가 수업을 했습니다.");
+    expect(progressLead("이승엽", [], "월말평가")).toBe("우리 승엽이는 오늘 월말평가 수업을 했습니다.");
     expect(progressLead("이승엽", [])).toBe("");
   });
 });
@@ -117,6 +117,8 @@ describe("글 조립", () => {
     expect(PILOT_AI_DIRECTIVE).toMatch(/강점/);
     expect(PILOT_AI_DIRECTIVE).toMatch(/격려/);
     expect(PILOT_AI_DIRECTIVE).toMatch(/점수 숫자.*쓰지 마세요/);
+    expect(PILOT_AI_DIRECTIVE).toMatch(/이름 앞에 .우리./);
+    expect(PILOT_AI_DIRECTIVE).toMatch(/학원에서 꼼꼼히 챙기겠습니다/);
   });
 });
 
