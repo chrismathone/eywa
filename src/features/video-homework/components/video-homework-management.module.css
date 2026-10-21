@@ -37,7 +37,9 @@
 .batch .primary,.editor .primary{color:var(--primary-foreground);background:var(--primary);border-color:var(--primary);font-weight:600}
 .roundPager{display:flex;align-items:center;gap:8px;white-space:nowrap;font-size:var(--text-sm);margin-left:auto}
 .roundPager small{font-size:var(--text-xs)}
-.tableScroll{overflow:auto;max-height:550px;isolation:isolate}
+/* 세로 상한 = 화면 높이에서 반 머리·도구 줄·바닥 줄을 뺀 만큼(최소 550px) — 화면에 다 들어가는 반엔 세로 스크롤이 안 생기고(평점 줄로 행이 높아진 뒤
+   9명 반에도 군더더기 스크롤이 섰다 — 원장 2026-10-21), 화면보다 긴 반만 표 안에서 스크롤해 머리 행이 붙어 있다. */
+.tableScroll{overflow:auto;max-height:max(550px,calc(100dvh - 140px));isolation:isolate}
 .table{table-layout:fixed;border-spacing:0;border-collapse:separate;font-size:var(--text-sm)}
 .table th,.table td{border-right:1px solid var(--line);border-bottom:1px solid var(--line);text-align:center;white-space:nowrap;padding:3px 4px;height:48px;background:var(--card);font-weight:400}
 .table thead th{position:sticky;top:0;z-index:3;background:var(--bg-soft);padding:5px 4px;font-weight:600}
