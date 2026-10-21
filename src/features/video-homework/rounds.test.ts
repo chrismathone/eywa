@@ -533,3 +533,34 @@ describe("검사 기록만으로 선 숙제 칸 = 뒷순위로 영상을 받는�
     expect(rounds.get("A:s1")!.map((r) => [r.date, r.videoDate])).toEqual([["2026-09-01", null], ["2026-09-20", null]]);
   });
 });
+
+describe("한 숙제에 영상 여러 개(원장 2026-10-21 — 여러 단원)", () => {
+  it("🔴 같은 숙제를 골라 낸 영상은 둘째부터도 그 칸에 더한다 — 대표(▶)·완료일은 먼저 올린 영상 · 다른 숙제 칸을 채우지 않는다", () => {
+    const first = video("s1", "2026-10-03", { homeworkDate: "2026-10-02", time: "19:00" });
+    const second = video("s1", "2026-10-04", { homeworkDate: "2026-10-02", time: "19:05" });
+    const rounds = build({ rows: [row("s1", ["2026-10-02", "2026-10-05"])], videos: [second, first] }).get("A:s1")!;
+    expect(rounds[0]).toMatchObject({ status: "submitted", videoId: first.id, videoIds: [first.id, second.id], submittedDate: "2026-10-03" });
+    expect(rounds[1]).toMatchObject({ status: "unchecked", videoId: null, videoIds: [] });
+  });
+  it("손으로 같은 숙제에 붙인 영상도 더한다 · 같은 파일을 두 번 낸 것은 한 번만 보인다", () => {
+    const a = video("s1", "2026-10-03", { homeworkDate: "2026-10-02", fingerprint: "f1:10" });
+    const copy = { ...video("s1", "2026-10-03", { homeworkDate: "2026-10-02", fingerprint: "f1:10", time: "21:00" }) };
+    const manual = { ...video("s1", "2026-10-06", { homeworkDate: "2026-10-02", time: "08:00" }), manuallyAssigned: true };
+    const round = build({ rows: [row("s1", ["2026-10-02"])], videos: [a, copy, manual] }).get("A:s1")![0];
+    expect(round.videoIds).toEqual([a.id, manual.id]);
+  });
+  it("숙제를 고르지 않은 같은 날 ClassNote 영상은 대표 하나만 보인다(다른 숙제 것일 수 있다 — 10/13 그대로)", () => {
+    const round = build({ rows: [row("s1", ["2026-10-02"])], videos: [video("s1", "2026-10-03", { time: "19:00" }), video("s1", "2026-10-03", { time: "19:30" })] }).get("A:s1")![0];
+    expect(round.videoIds).toEqual(["v-s1-2026-10-03-19:00"]);
+  });
+});
+describe("한 숙제에 영상 여러 개 — 같은 날 접힘(적대적 리뷰 2026-10-21)", () => {
+  it("🔴 둘째 영상을 낸 날 그 뒤에 들어온 다른 숙제의 ClassNote 영상은 그 숙제로 간다(같은 날 접힘은 칸의 첫 영상만)", () => {
+    const a1 = video("s1", "2026-10-01", { homeworkDate: "2026-10-01", time: "19:00" });
+    const a2 = video("s1", "2026-10-03", { homeworkDate: "2026-10-01", time: "10:00" });
+    const cn = video("s1", "2026-10-03", { time: "11:00" });
+    const rounds = build({ rows: [row("s1", ["2026-10-01", "2026-10-02"])], videos: [a1, a2, cn] }).get("A:s1")!;
+    expect(rounds[0]).toMatchObject({ videoId: a1.id, videoIds: [a1.id, a2.id] });
+    expect(rounds[1]).toMatchObject({ status: "submitted", videoId: cn.id });
+  });
+});

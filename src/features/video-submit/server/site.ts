@@ -173,9 +173,9 @@ async function findCandidates(
 }
 
 /** 숙제 줄 — `due` = 그 숙제의 마감(그날 포함) · `next` = 선생님이 '다음 수업'으로 고른 마감(due.ts). */
-type HomeworkChoice = Candidate & { homeworkDate: string; due: string; next: boolean };
+type HomeworkChoice = Candidate & { homeworkDate: string; due: string; next: boolean; sent: number };
 /** 고를 수 있는 줄 — 숙제(`homeworkDate`) 또는 숙제 없이 그 반에 올리기(`homeworkDate = null`). */
-type PickChoice = Candidate & { homeworkDate: string | null; due?: string; next?: boolean };
+type PickChoice = Candidate & { homeworkDate: string | null; due?: string; next?: boolean; sent?: number };
 
 /**
  * 숙제 줄 + **숙제 없이 올리기** 줄(학생 × 반마다 하나, 원장 2026-10-13) — 숙제가 먼저, 그 아래 반 줄. 둘 다 같은 후보(번호·이름·
@@ -189,7 +189,8 @@ async function pickChoices(db: Db, tenantId: string, list: Candidate[], day: str
 }
 
 /**
- * 후보(학생 × 반)마다 **아직 안 낸 영상 숙제**를 붙인다 — 최신 숙제부터, 상한까지. `null` = 영상 과제 값을 읽을 수 없다(잠시 못 받음).
+ * 후보(학생 × 반)마다 **아직 올릴 수 있는 영상 숙제**를 붙인다 — 안 낸 숙제가 먼저(이미 낸 숙제가 상한 자리를 먹어 안 낸 숙제가 잘리지 않게 —
+ * 한 숙제에 여러 개, 원장 2026-10-21), 그 안에서 최신 숙제부터, 상한까지. `null` = 영상 과제 값을 읽을 수 없다(잠시 못 받음).
  * 숙제가 하나도 없으면 빈 목록 — 올릴 길이 없다(원장 2026-10-03 *"사전에 선생님이 숙제로 낸 리스트가 있어야 업로드 링크 보이도록"*).
  */
 async function homeworkChoices(db: Db, tenantId: string, list: Candidate[], day: string): Promise<HomeworkChoice[] | null> {
@@ -197,8 +198,9 @@ async function homeworkChoices(db: Db, tenantId: string, list: Candidate[], day:
   const open = await openHomeworkDates(db, tenantId, list.map((c) => ({ studentId: c.studentId, classId: c.classId })), day);
   if (!open) return null;
   return list
-    .flatMap((c) => (open.get(`${c.classId}:${c.studentId}`) ?? []).map((homework) => ({ ...c, homeworkDate: homework.date, due: homework.due, next: homework.next })))
-    .sort((a, b) => b.homeworkDate.localeCompare(a.homeworkDate) || a.className.localeCompare(b.className, "ko") || a.studentName.localeCompare(b.studentName, "ko"))
+    .flatMap((c) => (open.get(`${c.classId}:${c.studentId}`) ?? []).map((homework) => ({ ...c, homeworkDate: homework.date, due: homework.due, next: homework.next, sent: homework.sent })))
+    .sort((a, b) => Number(a.sent > 0) - Number(b.sent > 0) || b.homeworkDate.localeCompare(a.homeworkDate)
+      || a.className.localeCompare(b.className, "ko") || a.studentName.localeCompare(b.studentName, "ko"))
     .slice(0, SITE_MAX_CHOICES);
 }
 
@@ -234,6 +236,7 @@ export async function lookupSite(input: { last4: unknown; name: unknown; ip: str
         ...(c.homeworkDate && c.due ? { dueLabel: homeworkDueText(c.homeworkDate, c.next ? c.due : null, c.next) } : {}),
         ...(c.homeworkDate ? {} : { free: true as const }),
         ...(c.past ? { pastClass: true as const } : {}),
+        ...(c.homeworkDate && c.sent ? { sent: c.sent } : {}),
       })),
     };
   } catch (error) {

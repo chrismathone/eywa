@@ -82,6 +82,10 @@
 .videoLink{display:flex;align-self:stretch}
 .videoLink button{display:inline-flex;align-items:center;justify-content:center;width:100%;min-height:40px;border:1px solid var(--green);border-radius:var(--radius-sm);color:var(--green);background:var(--green-soft);cursor:pointer}
 .videoLink button svg{fill:currentColor}
+.videoCount{margin-left:2px;font-size:var(--text-xs);font-weight:700;line-height:1}
+/* 칸 아래 AI 참고 평점 "2.8/5" — 색은 정수 부분 단계(파랑 낮음 → 빨강 높음, video-review/score.ts POINTS_TIER_COLOR)를 인라인으로(원장 2026-10-21). */
+.reviewPoints{display:block;margin-top:2px;text-align:center;font-size:var(--text-xs);font-weight:700;line-height:1.2;font-variant-numeric:tabular-nums;color:var(--blue)}
+.reviewPoints small{font-size:inherit;font-weight:400;opacity:.7}
 .videoLink button:hover{color:var(--card);background:var(--green)}
 .videoLink button:focus-visible{outline:2px solid var(--primary);outline-offset:1px}
 .cellWrap[data-source=manual] .markDate{align-self:flex-start}

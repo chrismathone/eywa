@@ -6,7 +6,7 @@ import { NEUTRAL_ACADEMY_NAME } from "@/features/owner/defaults";
 import { formatShortKoreanDate, kstToday } from "@/lib/date-kst";
 import { HOMEWORK_VIDEO_MAX_LABEL } from "@/features/students/homework-video-limits";
 import { maskStudentName } from "@/features/video-submit/rules";
-import { uploadLastDay, VIDEO_UPLOAD_OTHER_WAYS } from "@/features/video-submit/site";
+import { SITE_MAX_VIDEOS_PER_HOMEWORK, uploadLastDay, VIDEO_UPLOAD_OTHER_WAYS } from "@/features/video-submit/site";
 import { expiredLinkHref } from "@/features/link-expired/kinds";
 import { videoSubmitAvailability } from "@/features/video-submit/server/availability";
 import { resolveSubmitToken } from "@/features/video-submit/server/links";
@@ -121,12 +121,13 @@ export default async function VideoSubmitPage({ params, searchParams }: { params
       otherHomework = [];
     }
   }
-  // 이미 영상을 낸 숙제(예전 숙제 주소·새로고침) — 같은 숙제에 또 올리지 않고 숙제 없이 올리기로 보낸다(원장 2026-10-13). 선생님이 미확인으로
-  // 되돌리면(영상 반려) 다시 열린다. 못 읽었으면(null) 막지 않는다 — 업로드 시작이 한 번 더 본다.
+  // 한 숙제에 낼 수 있는 영상을 다 냈다 — 더 올릴 영상은 숙제 없이 올리기로(원장 2026-10-21 — 마감까지 같은 숙제에 여러 개를 낸다,
+  // `openHomeworkDates`). 선생님이 반려하면 다시 열린다. 못 읽었으면(null) 막지 않는다 — 업로드 시작이 한 번 더 본다.
   if (homeworkDate && openDates && !openDates.some((homework) => homework.date === homeworkDate)) {
-    return <Closed title="이미 영상을 낸 숙제입니다" toSite
-      message="더 올릴 영상이 있으면 처음 화면에서 '숙제 없이 올리기'로 올려 주세요. 선생님이 다시 올리라고 하면 이 숙제에 다시 올릴 수 있습니다." />;
+    return <Closed title="이 숙제에는 더 올릴 수 없습니다" toSite
+      message={`한 숙제에는 영상을 ${SITE_MAX_VIDEOS_PER_HOMEWORK}개까지 올릴 수 있습니다. 더 올릴 영상이 있으면 처음 화면에서 '숙제 없이 올리기'로 올려 주세요.`} />;
   }
+  const sent = homeworkDate ? openDates?.find((homework) => homework.date === homeworkDate)?.sent ?? 0 : 0;
   return (
     <VideoSubmitForm
       token={token}
@@ -135,6 +136,7 @@ export default async function VideoSubmitPage({ params, searchParams }: { params
       className={(classRes.data.class_name as string | null)?.trim() || "수업"}
       homeworkDate={homeworkDate}
       homeworkLabel={homeworkDate ? formatShortKoreanDate(homeworkDate) : null}
+      sent={sent}
       freeUpload={freeUpload}
       otherHomework={otherHomework}
       // 마지막으로 쓸 수 있는 날 — 서버에서 글자로 만들어 넘긴다(하이드레이션 차이 없음, [[#108]]). 고른 숙제가 있으면 그 숙제의 마감

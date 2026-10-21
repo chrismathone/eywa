@@ -6,6 +6,15 @@
 - 스크립트 [`import-monthly-enrolled.mjs`](../scripts/_makeedu/import-monthly-enrolled.mjs)(판정 = [`monthly-enrolled.cjs`](../scripts/_makeedu/monthly-enrolled.cjs) · 테스트) — 기본 지난달 ~ 이번 달 · 드라이런 기본 · `--apply` · 넣을 달 앞 확정 값 대조(3달 이상)가 하나라도 다르면 멈춘다 · 그 달이 끝나기 전에 쓴 '진행 중 값'(`computed_at` 달 ≤ 그 달)은 대조에서 빼고 확정값으로 고친다(한 달을 건너뛰어도 기본 시작 달이 그 달로 당겨진다) · 지난달·이번 달도 바뀌면 고치고 그 밖은 알리기만(`--overwrite`) · 인자·DB 확인이 끝난 뒤에만 메이크에듀에 접속 · ID/PW 로그인 1회 성공 시 세션 저장 · `enrolledRecord` 키만 더한다 · `--html`(오르카 내장 브라우저 등에서 받은 화면으로 — 이 맥은 세션 쿠키를 못 꺼내 이번 적용은 이 경로 — 실제 브라우저 경로(세션·POST)는 아직 한 번도 안 돌렸다: 연동 PC에서 드라이런으로 먼저 확인할 것).
 - 연동 앱 실행 파일 목록(`runtime-manifest.json`)·쿼리 허용 목록(`query-catalog.json`)에 넣었다(`build-query-catalog.cjs` 재생성). 🔴 **매달 자동으로 돌리려면 남은 일 셋**: ① 연동 앱 역할 `eywa_sync_agent`에 `student_history_monthly` 읽기·쓰기 + 지점 경계 정책(0366a 모양 · makeedu 줄만) ② `watch-sync-requests.cjs` 예약 작업에서 부르기(하루 1회 — 지난달·이번 달을 다시 덮는다 · `sync-all.cjs` 끝이나 브로커 schedule 새 종류) ③ 연동 앱 1.0.9 게시(Windows 빌드 PC · 원장 결정). 그 전까지는 매달 운영자가 `--html`로 넣는다.
 
+## 2026-10-21 — 영상 AI 참고 메모: 창은 영상 크기로 · 처음부터 좌우 · 장부 칸 아래 평점
+
+- 재생 창 = 영상 칸 폭 고정(70rem · 화면 높이 · 메모 칸 뺀 폭 중 최소) · 메모 칸은 영상 높이에 맞춰 스크롤 · 수학 반은 불러오는 동안에도 메모 칸 · 평점 = 항목 1점 × 칸 0.2점(5점 만점 · `video-review/score.ts`) · 장부 칸 아래 `2.8/5` + 메모 머리 · 저득점 파랑 → 고득점 빨강. 결정 본문 = [`decisions/reports-ai.md`](decisions/reports-ai.md) '영상 설명 AI 참고 메모'.
+
+## 2026-10-21 — 숙제 영상: 한 숙제에 영상 여러 개(여러 단원)
+
+- **`/v`** — 영상을 낸 숙제도 마감까지 목록에 남는다("영상 N개 냄") · 숙제당 5개(`SITE_MAX_VIDEOS_PER_HOMEWORK`) · 올린 뒤 '이 숙제에 영상 더 올리기' · 다 내면 숙제 없이 올리기로 안내(업로드 시작·제출 화면). 10/13 "이미 낸 숙제엔 다시 안 올린다"를 뒤집었다.
+- **장부** — 칸에 그 숙제를 골라·손으로 낸 영상 전부(`LedgerRound.videoIds` · ▶ 옆 개수 · 재생 창에서 골라 본다) · 칸 편집 창 '이 숙제에 영상 더 붙이기 · 배정 변경'(그 숙제를 골라 둔 채). 같은 날 ClassNote 둘째 영상은 대표만(10/13 그대로). 계기: 이준혁A 10/15 숙제 영상 둘 중 하나가 "배정하고 사라짐". 결정 본문 = [`decisions/reports-ai.md`](decisions/reports-ai.md).
+
 ## 2026-10-21 — 숙제 영상 올리기 사이트: 반을 옮긴 학생도 지난 반 숙제를 고른다
 
 - **`/v` 후보 = 지금 반 + 수강이 끝난 반(14일 안)** — 끝난 반은 받은 숙제(마감 전·안 낸 것) 줄만 '지난 반'으로 선다 · 숙제 없이 올리기는 지금 반만(`findCandidates`·`pickChoices`). 계기: 10/18(일)자 BS2C → BS2D 반 이동 학생 넷이 10/15 숙제(마감 10/22)를 못 골라 새 반에 '숙제 없이' 올렸다(담임 퇴사로 손 배정도 관리자만 가능). 업로드 시작·댓글 경로는 원래 수강을 안 봐 고칠 것 없음. 결정 본문 = [`decisions/reports-ai.md`](decisions/reports-ai.md).

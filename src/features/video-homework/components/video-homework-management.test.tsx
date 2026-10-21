@@ -37,7 +37,7 @@ describe("영상 제출 현황 — 회차는 학생별 '숙제가 나간 날' �
       videos: [{ id: "v", classId: "a", studentId: "one", postedAt: "2026-09-02T12:00:00+09:00" }] });
     expect(screen.queryByRole("button", { name: "수학 A 김민준 영상 배정" })).toBeNull();
     fireEvent.click(cell("김민준 1회 2026-09-01 완료(영상)"));
-    expect(await screen.findByRole("button", { name: "영상 배정 변경" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "이 숙제에 영상 더 붙이기 · 배정 변경" })).toBeInTheDocument();
     expect(screen.getByText(/미확인은 수동 검사 기록만 지웁니다/)).toBeInTheDocument();
   });
   // 원장 2026-10-14 *"수동 영상들 다 학생들이 업로드해서 배정하고 싶은데 배정이 불가능함"* — 영상 없이 손으로 찍은 완료 칸도 영상을 받는 자리다.
@@ -46,7 +46,7 @@ describe("영상 제출 현황 — 회차는 학생별 '숙제가 나간 날' �
       marks: [{ ...marks[0], status: "submitted", submittedDate: "2026-09-02" }] });
     fireEvent.click(cell("김민준 1회 2026-09-01 완료"));
     expect(await screen.findByRole("button", { name: "이 숙제에 영상 배정" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "영상 배정 변경" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "이 숙제에 영상 더 붙이기 · 배정 변경" })).toBeNull();
   });
   it("검사 대상 밖 줄에는 '이 숙제에 영상 배정'이 없다 — 붙여도 영상을 세지 않는다", async () => {
     show({ rows: [row({ assignedDates: ["2026-09-01"], canAssignVideos: true, tracked: false, editable: false })],
@@ -136,14 +136,14 @@ describe("영상 제출 현황 — 회차는 학생별 '숙제가 나간 날' �
     show({ rows: [row({ assignedDates: ["2026-09-01"], canAssignVideos: true, hasAssignableVideos: false })], marks: [],
       videos: [{ id: "v", classId: "a", studentId: "one", postedAt: "2026-09-02T12:00:00+09:00" }] });
     fireEvent.contextMenu(cell("김민준 1회 2026-09-01 완료(영상)"));
-    expect(await screen.findByRole("button", { name: "영상 배정 변경" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "이 숙제에 영상 더 붙이기 · 배정 변경" })).toBeInTheDocument();
   });
   it("▶ 재생 버튼을 우클릭해도 같은 편집 창 — 재생 창이 아니다", async () => {
     show({ rows: [row({ assignedDates: ["2026-09-01"], canAssignVideos: true, hasAssignableVideos: false })], marks: [],
       videos: [{ id: "v", classId: "a", studentId: "one", postedAt: "2026-09-02T12:00:00+09:00",
         playback: { preview: "https://drive.google.com/p", thumbnail: "https://drive.google.com/t", uploadedAt: null } }] });
     fireEvent.contextMenu(screen.getByRole("button", { name: "숙제 영상 보기" }));
-    expect(await screen.findByRole("button", { name: "영상 배정 변경" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "이 숙제에 영상 더 붙이기 · 배정 변경" })).toBeInTheDocument();
   });
   it("완료를 다시 누르면 날짜 수정 — 숙제일보다 빠른 날·미래는 막는다", async () => {
     show({ marks: [{ ...marks[0], status: "submitted", submittedDate: "2026-09-02" }] });
@@ -332,5 +332,24 @@ describe("영상 제출 현황 — 숙제 취소", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "숙제 취소 확정" }));
     await waitFor(() => expect(mocks.error).toHaveBeenCalledWith("학생이 지금 이 숙제에 영상을 올리는 중입니다."));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+});
+
+describe("칸 아래 AI 참고 평점(원장 2026-10-21)", () => {
+  it("분석이 끝난 영상이 붙은 칸 아래 '2.8/5' · 정수 부분 단계 색(저득점 파랑 → 고득점 빨강) · 평점 없는 칸·영상 없는 칸엔 없다", () => {
+    show({ rows: [row({ assignedDates: ["2026-09-01", "2026-09-03"] })], marks: [], videos: [
+      { id: "v1", classId: "a", studentId: "one", postedAt: "2026-09-02T12:00:00+09:00", reviewPoints: 2.8 },
+      { id: "v2", classId: "a", studentId: "one", postedAt: "2026-09-04T12:00:00+09:00" },
+    ] });
+    const score = screen.getByTitle(/AI 참고 평점 2\.8점/);
+    expect(score).toHaveTextContent("2.8/5");
+    expect(score).toHaveAttribute("data-tier", "2");
+    expect(screen.getAllByTitle(/AI 참고 평점/)).toHaveLength(1);
+    expect(screen.getByText(/칸 아래 숫자 = AI 참고 평점/)).toBeInTheDocument();
+  });
+  it("평점이 하나도 없으면(스위치 꺼짐·분석 전) 안내 문구도 없다", () => {
+    show({ rows: [row({ assignedDates: ["2026-09-01"] })], marks: [], videos: [{ id: "v1", classId: "a", studentId: "one", postedAt: "2026-09-02T12:00:00+09:00" }] });
+    expect(screen.queryByTitle(/AI 참고 평점/)).toBeNull();
+    expect(screen.queryByText(/칸 아래 숫자 = AI 참고 평점/)).toBeNull();
   });
 });

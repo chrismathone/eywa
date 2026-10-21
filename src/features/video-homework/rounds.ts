@@ -28,8 +28,9 @@
  *  ③ 숙제가 정해진 영상(`homeworkDate`) — 학생이 올리기 사이트에서 **숙제를 골라** 올린 영상(원장 2026-10-03 *"숙제 리스트에서 고르도록 해서
  *     숙제 링크 배선"*)과 **그 숙제를 낸 보고서 글에 댓글로 올린 ClassNote 영상**(원장 2026-10-06 *"해당 숙제 보고서 고유의 링크 주소가 있는
  *     보고서에 영상을 업로드하면 무조건 체킹가능하지"* — 연동 PC가 글의 보고서를 확인해 싣는다, `scripts/_classnote/video-report-link.mjs`)은
- *     ②의 순서를 타지 않고 **그 숙제 칸으로만** 간다 — 다른 칸을 채우지 않는다(그 칸이 이미 영상을 받았으면 대표 영상을 추가로 세지 않는다).
- *     고른 영상을 먼저 붙이고, 남은 영상(ClassNote·옛 링크)이 ②로 나머지 칸을 채운다. 단 고른 영상이 칸에 붙은 날, **그 영상보다 늦게 들어온**
+ *     ②의 순서를 타지 않고 **그 숙제 칸으로만** 간다 — 다른 칸을 채우지 않는다. 그 칸이 이미 영상을 받았으면 대표(▶·완료일)는 그대로 두고
+ *     칸의 영상 목록(`videoIds`)에 더한다(한 숙제에 여러 단원 영상 — 원장 2026-10-21).
+ *     고른 영상을 먼저 붙이고, 남은 영상(ClassNote·옛 링크)이 ②로 나머지 칸을 채운다. 단 칸의 **첫** 고른 영상이 붙은 날, **그 영상보다 늦게 들어온**
  *     같은 반 × 학생의 안 고른 영상은 세지 않는다(①과 같은 뜻 — 사이트에 올린 영상을 ClassNote에도 올려도 한 번이다).
  *     🔴 **먼저 들어와 있던** 안 고른 영상은 종전대로 센다 — 나중에 올린 영상이 이미 완료(영상)로 보이던 칸을 되돌리지 않는다.
  *     앞뒤는 게시 시각이 아니라 **들어온 시각**(`arrivedAt`, `videoArrivedAt`)으로 가른다.
@@ -86,6 +87,12 @@ export type LedgerRound = {
    * 영상이 짝지어진 칸은 **직접 찍은 '완료'여도 영상 쪽이 이긴다**(▶ 표시): 영상은 그 칸이 받은 증거이고(②), 손 기록은 영상 없이 찍은 칸만 '수동'이다.
    */
   videoId: string | null;
+  /**
+   * 이 칸에 보이는 영상 전부(게시 순 — 맨 앞이 `videoId`). 한 숙제에 영상을 여러 개 낼 수 있다(원장 2026-10-21 *"한번에 여러 단원의 영상을
+   * 업로드해야할 수도"*) — 그 숙제를 골라(또는 손으로 배정해) 낸 영상은 둘째부터도 이 칸에 더한다(같은 파일 사본은 한 번만).
+   * ②로 함께 가져간 같은 날 ClassNote 영상은 넣지 않는다(다른 숙제 것일 수 있어 대표만 — 10/13 그대로, ledger-queries '붙은 영상').
+   */
+  videoIds: string[];
   /** 반려한 시각(ISO) — 이 시각 전에 올라온 영상은 ②로 이 칸에 붙지 않는다(고른 영상 · 손 배정은 붙는다). */
   rejectedAt?: string;
   /**
@@ -135,7 +142,7 @@ function videoDays(videos: VideoArrival[]): Map<string, VideoDay[]> {
 }
 
 const fresh = (key: string, date: string, homeworkDate: string | null, assigned: boolean): LedgerRound =>
-  ({ key, date, homeworkDate, assigned, mark: null, status: "unchecked", submittedDate: null, auto: false, videoDate: null, videoId: null });
+  ({ key, date, homeworkDate, assigned, mark: null, status: "unchecked", submittedDate: null, auto: false, videoDate: null, videoId: null, videoIds: [] });
 function attach(round: LedgerRound, mark: VideoHomeworkMark) {
   round.mark = round.mark ? newerMark(mark, round.mark) : mark;
   round.status = round.mark.status;
@@ -261,16 +268,25 @@ export function buildLedgerRounds(input: {
   //    서로 다른 고른 영상을 보게 돼 같은 칸 판정이 화면마다 갈린다.
   const pickedFiles = new Map<string, { round: LedgerRound; date: string }[]>();
   const push = <T,>(map: Map<string, T[]>, key: string, value: T) => (map.get(key) ?? map.set(key, []).get(key)!).push(value);
+  // 칸마다 이미 보이는 파일의 지문 — 같은 파일을 같은 숙제에 두 번 낸 것은 한 번만 보인다(둘째도 그 칸이 센다 — 반려가 함께 거둔다).
+  const shownFiles = new Map<LedgerRound, Set<string>>();
   for (const video of picked) {
     const pair = roundPairKey({ classId: video.classId!, studentId: video.studentId });
     const day = kstDateOf(video.postedAt);
     const round = tracked.has(pair) ? all.get(pair)?.get(`h:${video.homeworkDate}`) : undefined;
-    if (!round || !day || round.videoDate || (!video.manuallyAssigned && (day < round.date || day > addDays(round.date, VIDEO_MATCH_WINDOW_DAYS)))) continue;
+    if (!round || !day || (!video.manuallyAssigned && (day < round.date || day > addDays(round.date, VIDEO_MATCH_WINDOW_DAYS)))) continue;
+    own(video.id, round);
+    if (video.fingerprint) push(pickedFiles, `${pair}:${video.fingerprint}`, { round, date: round.date });
+    const files = shownFiles.get(round) ?? shownFiles.set(round, new Set()).get(round)!;
+    if (!video.fingerprint || !files.has(video.fingerprint)) round.videoIds.push(video.id);
+    if (video.fingerprint) files.add(video.fingerprint);
+    // 둘째 영상부터는 더하기만 한다 — 칸의 대표(▶)·완료일은 먼저 올린 영상(게시 순).
+    // 🔴 같은 날 접힘(`pickedAt`)도 첫 영상만 — 둘째 영상의 날까지 넣으면 그날 늦게 들어온 다른 숙제의 ClassNote 영상이 이 칸으로 접혀
+    //    그 숙제가 미제출이 되고, 이 칸을 반려하면 그 영상까지 휴지통으로 간다(적대적 리뷰 2026-10-21). 같은 파일 사본은 위 지문으로 접힌다.
+    if (round.videoDate) continue;
+    push(pickedAt, `${pair}:${day}`, { round, at: arrived(video) });
     round.videoDate = day;
     round.videoId = video.id;
-    own(video.id, round);
-    push(pickedAt, `${pair}:${day}`, { round, at: arrived(video) });
-    if (video.fingerprint) push(pickedFiles, `${pair}:${video.fingerprint}`, { round, date: round.date });
     // 검사 기록 칸 · 옮겨 남긴 숙제의 손 '미수행'은 영상이 이긴다(②의 뒷순위와 같다) — 자동 판정이 이 칸을 고치지 않으므로 여기서 완료로
     // 보이지 않으면 손으로 붙인 영상이 ▶ 없이 '× 미수행'으로 숨는다(적대적 리뷰 2026-10-14). 정식 숙제 칸은 자동 판정이 기록을 고친다.
     if (!round.mark || (!round.assigned && round.mark.status === "missing")) Object.assign(round, { auto: true, status: "submitted", submittedDate: day });
@@ -311,6 +327,7 @@ export function buildLedgerRounds(input: {
         if (!round || !id) break;
         round.videoDate = group.day;
         round.videoId = id;
+        round.videoIds = [id];
         // 뒷순위 칸의 손 기록 '미수행'은 영상이 이긴다 — 자동 판정이 이 칸을 모르므로(auto-outcomes.ts) 여기서 완료로 보이지 않으면
         // 붙은 영상이 ▶ 없이 숨는다(미배정 목록에서도 빠진다 — 적대적 리뷰 2026-10-13). 정식 숙제 칸은 자동 판정이 기록을 고친다.
         if (!round.mark || (late && round.mark.status === "missing")) Object.assign(round, { auto: true, status: "submitted", submittedDate: group.day });
