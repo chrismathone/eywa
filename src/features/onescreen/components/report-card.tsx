@@ -47,6 +47,7 @@ import type { OneScreenStudent } from "../types";
 import { classnoteBadge, type ClassnoteBadge } from "../classnote-badge";
 import { attendanceMarkBadgeClass, attendanceMarkLabel } from "../attendance-mark";
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+import { activeUnderstanding, isMathReportPilot, pilotNeedsAutoWrite } from "../math-report-pilot";
 import type { SheetLang } from "@/features/teacher-view/i18n";
 
 // shareToken: 저장 시 발급되는 학부모 공개 링크(/r/[token]) 토큰. 세션 내 저장 후에만 존재.
@@ -292,8 +293,18 @@ export function ReportCard({
   // 2026-08-07 확대: 예전엔 왼쪽 기록 열이 `alreadySent`만 봐서, 결석을 눌러도 진도·태도가 그대로 열려 있었다.
   // 열람 전용(다른 강사 뷰)이면 무조건 잠금 — 3개 fieldset(입력 열·멘트 열·첨부)이 이 값 하나를 본다.
   const locked = readonlyView || !isRowInputEditable(subject, liveStatus);
+  // 수학 보고서 시범(테스트 학생 한정, math-report-pilot.ts) — 멘트·추세는 보기만, 자동작성 글 그대로여야 발송.
+  const pilot = isMathReportPilot(student.id, subject.subjectKey);
   const sendGate = evaluateSendGate({
     lang, // 🔴 판정이 아니라 **글자**만 갈린다(canSend·reasons 불변, send-gate.ts)
+    needsAutoWrite:
+      pilot &&
+      pilotNeedsAutoWrite(rep.draft, rep.autoDraft, {
+        studentName: student.name,
+        today: subject.today,
+        note: cardEval.note,
+        understanding: activeUnderstanding(subject.today, subject.understanding),
+      }),
     readonlyView, // 열람 전용 — 사유 라벨까지 게이트가 만든다(표뷰와 동일)
     recallPending: isRecallInFlight(liveStatus ?? null),
     // 발송 대기·게시 중 — 워커 결과 전까지 다시 못 누른다(표뷰와 같은 판정, 원장 2026-09-29).
@@ -330,7 +341,8 @@ export function ReportCard({
   const unreadBadge = classnoteOn && hasMathSubject ? parentUnreadBadge(student.parentRead) : null;
   // 멘트 모드 B = 초안을 2문단(수업 내용 / 태도·특이사항)으로 나눠 편집. 값은 단일 문자열 그대로 저장.
   // 영어 템플릿 글은 문단이 여럿이라 2칸으로 쪼개면 템플릿이 망가진다 → 영어 행은 늘 한 칸.
-  const para = noticeMode === "B" && !isEnglishRow;
+  // 시범 대상은 단일 문단 고정(서버도 A로 쓴다 — math-report-pilot.ts).
+  const para = noticeMode === "B" && !isEnglishRow && !pilot;
   const paras = splitComment(rep.draft);
 
   return (
@@ -646,7 +658,7 @@ export function ReportCard({
             rows={3}
             value={cardEval.note}
             onChange={(e) => onNote(e.target.value)}
-            placeholder={t("os.card.notePh")}
+            placeholder={pilot ? t("os.card.notePhPilot") : t("os.card.notePh")}
             className={`${TEXTAREA_AUTOSIZE} border-line focus:border-primary min-h-20 rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none`}
           />
         </div>
@@ -730,13 +742,19 @@ export function ReportCard({
               id={isEnglishRow ? ENGLISH_DRAFT_TEXTAREA_ID : undefined}
               value={rep.draft}
               onChange={(e) => onSubjectDraft(subjectName, e.target.value)}
+              // 시범 대상 = 보기만(원장 2026-10-21 *"수정하지 못하도록 막고 보이게만"*) — 자동작성만 이 칸을 채운다.
+              readOnly={pilot}
               placeholder={
-                isEnglishRow ? t("os.card.mentPhTemplate") : tf("os.card.mentPh", { subject: subjectName })
+                pilot
+                  ? t("os.card.mentPhPilot")
+                  : isEnglishRow
+                    ? t("os.card.mentPhTemplate")
+                    : tf("os.card.mentPh", { subject: subjectName })
               }
               // 영어 템플릿 글은 20줄 안팎이라 기본 높이로는 절반도 안 보인다 — 영어 행만 키운다.
               className={`border-line focus:border-primary scrollbar-thin ${
                 isEnglishRow ? "min-h-[280px]" : "min-h-[110px]"
-              } flex-1 resize-none rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none`}
+              } flex-1 resize-none rounded-lg border ${pilot ? "bg-bg-soft" : "bg-background"} px-3 py-2 text-sm leading-relaxed outline-none`}
             />
           )}
         </div>
@@ -766,6 +784,7 @@ export function ReportCard({
             <textarea
               value={rep.trendDraft ?? ""}
               onChange={(e) => onSubjectTrend(subjectName, e.target.value)}
+              readOnly={pilot}
               placeholder={t("os.card.trendPh")}
               title={trendOptOut?.hidden(subjectName) ? t("os.row.trendOptOutOn") : undefined}
               className={`border-line focus:border-primary scrollbar-thin min-h-[64px] resize-none rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none ${

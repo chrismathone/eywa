@@ -68,6 +68,14 @@ import type { TodayClass } from "../server/roster";
 import { ProgressCard } from "./progress-card";
 import { SheetSourceCard } from "./sheet-source-card";
 import { TestCard } from "./test-card";
+import { UnderstandingPanel } from "./understanding-panel";
+import {
+  activeUnderstanding,
+  EMPTY_UNDERSTANDING,
+  isMathReportPilot,
+  understandingRows,
+  type UnderstandingState,
+} from "../math-report-pilot";
 import { ReportCard, type SubjectReport } from "./report-card";
 // 영어 템플릿 모드(2026-09-10) — 영어 행은 멘트 대신 템플릿 글(수학 경로 불변).
 import { EnglishTemplatePanel } from "./english-template-panel";
@@ -763,6 +771,8 @@ export function OneScreenClient({
                 : {}),
               // 행 단위 평가값(태도·점수·과제 수행률·특이사항) — 지정된 행만 싣는다(row-fields.ts).
               // 미지정 행은 옛 세션과 같은 모양으로 남아 로스터가 학생 값으로 폴백한다(하위호환).
+              // 소단원별 이해도(수학 보고서 시범) — 쓴 행만 싣는다(나머지 세션 모양 불변).
+              ...(su.understanding ? { understanding: su.understanding } : {}),
               ...(hasRowOverrides(su)
                 ? {
                     attitude: su.attitude,
@@ -2044,6 +2054,27 @@ export function OneScreenClient({
   function setHomeworkValue(studentId: string, subjectName: string, h: string) {
     patchRowEval(studentId, subjectName, (su) => ({ ...su, homework: h }));
   }
+  // 소단원별 이해도(수학 보고서 시범, math-report-pilot.ts) — 행별. 자동저장(세션)에 실린다.
+  function patchUnderstandingFor(studentId: string, subjectName: string, up: (st: UnderstandingState) => UnderstandingState) {
+    patch(studentId, (s) => ({
+      ...s,
+      subjects: s.subjects.map((su) => (su.name === subjectName ? { ...su, understanding: up(su.understanding ?? EMPTY_UNDERSTANDING) } : su)),
+    }));
+  }
+  function setUnderstandingScoreFor(studentId: string, subjectName: string, lesson: string, score: number | null) {
+    patchUnderstandingFor(studentId, subjectName, (st) => {
+      const scores = { ...st.scores };
+      if (score == null) delete scores[lesson];
+      else scores[lesson] = score;
+      return { ...st, scores };
+    });
+  }
+  function toggleUnderstandingFor(studentId: string, subjectName: string, lesson: string, off: boolean) {
+    patchUnderstandingFor(studentId, subjectName, (st) => ({
+      ...st,
+      off: off ? [...st.off.filter((l) => l !== lesson), lesson] : st.off.filter((l) => l !== lesson),
+    }));
+  }
   // 특이사항(강사 메모) — AI 멘트 입력(공지 모드 A/B). **행별**(보강은 다른 수업이라 메모도 다르다).
   function setNoteFor(studentId: string, subjectName: string, text: string) {
     patchRowEval(studentId, subjectName, (su) => ({ ...su, note: text }));
@@ -2716,9 +2747,15 @@ export function OneScreenClient({
         st.subjects.map((row) => ({ classId: row.classId, note: resolveRowFields(st, row).note })),
       ),
     );
+    // 수학 보고서 시범(테스트 학생 한정) — 이해도를 싣고, 특이사항은 반 공지로 가르지 않는다(맨 아래에 그대로 붙는다).
+    const pilot = isMathReportPilot(student.id, su?.subjectKey);
+    const baseInput = buildReportCommentInput(student, idx, pilot ? undefined : classNotices, activeDate);
+    const commentInput = pilot
+      ? { ...baseInput, understanding: activeUnderstanding(su?.today, su?.understanding) }
+      : baseInput;
     try {
       // 통합 1회 호출 — 멘트 + 추세를 한 번에 생성(비용·지연↓).
-      const res = await generateReportComment({ ...buildReportCommentInput(student, idx, classNotices, activeDate), classContext }, {
+      const res = await generateReportComment({ ...commentInput, classContext }, {
         studentId: student.id,
         subject: subjectKey,
         classId: su?.classId ?? null, // 정규/특강 추세 분리(2026-07-23) — 이 행의 반.
@@ -2730,6 +2767,11 @@ export function OneScreenClient({
         todayHomework: rowEval.homework,
         date: date || undefined, // 보는 날짜 — 과거 날짜면 추세를 그 날짜 기준으로(이후 채점 이력 있으면 추세 생략)
       });
+      // 시범 대상은 기본 문구로 대신 채우지 않는다 — 진도·이해도·특이사항 구조가 없는 글이 '자동작성'으로 잡혀 발송 게이트를 지난다.
+      if (pilot && !(res.ok && res.comment)) {
+        toast.error(t("os.c.pilotGenFailed"));
+        return;
+      }
       const text = res.ok && res.comment ? res.comment : buildSubjectReport(student, idx);
       if (!res.ok) toast.message(t("os.c.aiFallback"));
       patchReport(student.id, subjectName, (r) => ({
@@ -2751,6 +2793,10 @@ export function OneScreenClient({
               : {}),
       }));
     } catch {
+      if (pilot) {
+        toast.error(t("os.c.pilotGenFailed"));
+        return;
+      }
       const fallback = buildSubjectReport(student, idx);
       patchReport(student.id, subjectName, (r) => ({ ...r, draft: fallback, autoDraft: fallback, autoDraftTemplate: true }));
       toast.message(t("os.c.aiFallback"));
@@ -3257,6 +3303,8 @@ export function OneScreenClient({
     for (const p of plan) {
       const su = studentsRef.current.find(s => s.id === p.studentId)?.subjects.find(s => s.name === p.subjectName);
       if (!su || !isRowInputEditable(su, effectiveClassnoteStatus(liveClassnoteStatus(p.studentId, p.subjectName), su.classnoteStatus))) continue;
+      // 수학 보고서 시범 — 지난 글을 옮겨 넣으면 '자동작성 글'로 잡혀 발송 게이트를 지난다. 시범 대상은 자동작성만.
+      if (isMathReportPilot(p.studentId, su.subjectKey)) continue;
       // 지난 회차 글은 AI 원문이 아니다(선생님이 직접 쓴 글일 수 있다) — 자동작성 원문(0370a)으로 싣지 않게 표시.
       patchReport(p.studentId, p.subjectName, r => r.draft.trim() ? r : ({ ...r, draft: p.comment, autoDraft: p.comment, autoDraftTemplate: true }));
     }
@@ -4575,6 +4623,15 @@ selected ? (
                       dailyEnabled={showDailyTest}
                       checkEnabled={showCheckTest}
                     />
+                    {/* 소단원별 이해도(수학 보고서 시범, 테스트 학생 한정) — 자동작성 재료. */}
+                    {previewSubject && isMathReportPilot(selected.id, previewSubject.subjectKey) ? (
+                      <UnderstandingPanel
+                        rows={understandingRows(previewSubject.today, previewSubject.understanding)}
+                        disabled={readonlyView || !isRowInputEditable(previewSubject, effectiveClassnoteStatus(previewReport?.classnoteStatus, previewSubject.classnoteStatus))}
+                        onScore={(lesson, score) => setUnderstandingScoreFor(selected.id, previewSubject.name, lesson, score)}
+                        onToggle={(lesson, off) => toggleUnderstandingFor(selected.id, previewSubject.name, lesson, off)}
+                      />
+                    ) : null}
                   </>
                 }
                 // 영어 행 — 학부모 링크 복사도 발송·복사와 같은 확인을 거친다(링크는 저장된 글을 그대로 보여 준다).

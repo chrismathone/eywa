@@ -3097,6 +3097,7 @@ export const SHEET_DICT = {
   "os.gate.need.attendance": { ko: "출결", en: "Attendance" },
   "os.gate.need.progress": { ko: "진도", en: "Progress" },
   "os.gate.need.ment": { ko: "멘트", en: "Message" },
+  "os.gate.need.autowrite": { ko: "자동작성", en: "Auto-write" },
   "os.gate.needLabel": { ko: "{list} 입력 필요", en: "{list} still needed" },
   "os.gate.hint.attendance": {
     ko: "출결이 아직 체크되지 않았습니다 — 출결 알약에서 출석/지각 등을 먼저 기록하세요(미체크 행은 발송되지 않습니다)",
@@ -3105,6 +3106,10 @@ export const SHEET_DICT = {
   "os.gate.hint.progress": {
     ko: "오늘 진도를 입력해야 발송할 수 있습니다(보고서 본문의 뼈대)",
     en: "You must enter today's progress before sending (it is the backbone of the report)",
+  },
+  "os.gate.hint.autowrite": {
+    ko: "이 학생의 수학 보고서는 '자동작성'으로 만든 글만 보낼 수 있습니다 — 자동작성을 눌러 주세요(특이사항을 바꿨다면 다시 누르세요)",
+    en: "This student's math report can only be sent as written by Auto-write — press Auto-write (press it again if you changed the notes)",
   },
   "os.gate.hint.ment": {
     ko: "학부모 전달 멘트가 비어 있습니다 — '자동작성'을 누르거나 직접 입력하세요(빈 보고서는 발송되지 않습니다)",
@@ -3161,6 +3166,31 @@ export const SHEET_DICT = {
     ko: "예: 조퇴함 / 개념이 어려워 연습문제 한 번 더 · 자동작성 시 학부모 문장으로 풀어 씁니다",
     en: "e.g. left early / found the concept hard, so one more practice set · auto-write turns this into a sentence for parents",
   },
+  "os.card.notePhPilot": {
+    ko: "예: 오늘 어려운 문제도 끝까지 포기하지 않고 풀어낸 모습이 멋졌어요. 지금처럼만 하면 다음 단원도 충분히 잘할 거예요! · 보고서 맨 아래에 그대로 붙습니다",
+    en: "e.g. You kept going on the hard problems today and solved them — great work. Keep this up and the next unit will go well too! · Added as is at the very end of the report",
+  },
+  "os.row.notePhPilot": {
+    ko: "격려 한마디 · 예: 끝까지 포기하지 않고 풀어낸 모습이 멋졌어요!",
+    en: "A word of encouragement · e.g. Great job not giving up on the hard ones!",
+  },
+  "os.card.mentPhPilot": {
+    ko: "이 학생의 수학 보고서는 '자동작성'으로만 만듭니다(직접 고칠 수 없습니다). 진도 → 소단원별 이해도 → 본문 → 특이사항 순서로 채워집니다.",
+    en: "This student's math report is written by Auto-write only (it cannot be edited by hand). It fills in as progress → understanding per lesson → body → notes.",
+  },
+  "os.card.understanding": { ko: "소단원별 이해도 (10점 만점)", en: "Understanding per lesson (out of 10)" },
+  "os.card.understandingEmpty": {
+    ko: "오늘 진도를 고르면 소단원이 여기에 나옵니다",
+    en: "Pick today's progress and the lessons show up here",
+  },
+  "os.card.understandingHint": {
+    ko: "점수를 매긴 소단원만 자동작성에 들어갑니다 · ✕로 빼면 반영하지 않습니다",
+    en: "Only scored lessons go into Auto-write · remove one with ✕ to leave it out",
+  },
+  "os.card.understandingRemove": { ko: "{lesson} 빼기", en: "Remove {lesson}" },
+  "os.card.understandingRestore": { ko: "되살리기", en: "Put back in the report" },
+  "os.card.understandingRemoved": { ko: "뺀 소단원", en: "Removed" },
+  "os.card.understandingScoreAria": { ko: "{lesson} 이해도", en: "{lesson} understanding" },
   "os.card.reportOf": { ko: "{subject} 보고서", en: "{subject} report" },
   "os.card.modeBTitle": {
     ko: "2문단 B — 수업 내용과 태도·특이사항을 나눠 작성합니다. 상단 토글에서 바꿀 수 있습니다.",
@@ -3931,6 +3961,10 @@ export const SHEET_DICT = {
     en: " · {n} cells were left alone (already recorded, or not your class or an enrolled student — refresh to see the latest)",
   },
   "os.c.presentFail": { ko: "일괄 출석 저장에 실패했습니다 — 네트워크를 확인해 주세요", en: "The bulk present could not be saved — check the network" },
+  "os.c.pilotGenFailed": {
+    ko: "자동작성에 실패했습니다 — 이 학생의 수학 보고서는 자동작성 글만 보낼 수 있어 다시 눌러 주세요",
+    en: "Auto-write failed — this student's math report can only be sent as written by Auto-write, so please press it again",
+  },
   "os.c.aiFallback": { ko: "AI 자동작성이 어려워 기본 문구로 작성했습니다", en: "The AI could not write it, so a default message was used" },
   "os.c.genNonePreserved": {
     ko: "자동작성할 새 행이 없습니다 — 멘트 있는 {n}건은 보존(개별 '자동작성'으로 재생성)",

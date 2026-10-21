@@ -18,6 +18,7 @@ import {
   type GridRow,
 } from "../grid";
 import { evaluateSendGate } from "../send-gate";
+import { activeUnderstanding, isMathReportPilot, pilotNeedsAutoWrite } from "../math-report-pilot";
 import { hasTextBesidesMarkers } from "@/features/report-templates/image-slots";
 import { rowLockNotice } from "../split-rows";
 import { reportOptoutNotice } from "@/features/classes/report-optout";
@@ -291,8 +292,18 @@ export function GridBodyRow({
   // 발송 게이트 = **단일 소스**(send-gate.ts) — 버튼 disabled·title·아래 라벨이 같은 판정을 쓴다.
   // ⚠️ 멘트 미작성도 여기서 막는다: 빈 멘트 절대 가드(2026-07-28)가 어차피 sendRow에서 거절하므로,
   //    버튼만 살려 두면 눌러 보고서야 이유를 아는 거짓 어포던스다(원장 2026-07-30 제보의 핵심).
+  // 수학 보고서 시범(테스트 학생 한정, math-report-pilot.ts) — 멘트·추세는 보기만, 자동작성 글 그대로여야 발송(카드와 같은 판정).
+  const pilot = isMathReportPilot(student.id, subject.subjectKey);
   const sendGate = evaluateSendGate({
     lang,
+    needsAutoWrite:
+      pilot &&
+      pilotNeedsAutoWrite(rep?.draft, rep?.autoDraft, {
+        studentName: student.name,
+        today: subject.today,
+        note: rowEval.note,
+        understanding: activeUnderstanding(subject.today, subject.understanding),
+      }),
     readonlyView: gen.readonlyView, // 열람 전용 — 사유 라벨("열람 전용")까지 게이트가 만든다
     // 발송 대기·게시 중 — 워커 결과 전까지 다시 못 누른다(카드뷰와 같은 판정, 원장 2026-09-29).
     sendInFlight: liveStatus === "queued" || liveStatus === "processing",
@@ -763,13 +774,13 @@ export function GridBodyRow({
             value={rowEval.note}
             onChange={(e) => fields.onNote(student.id, subject.name, e.target.value)}
             readOnly={rowLocked}
-            placeholder={rowPlaceholder ?? t("os.row.notePh")}
+            placeholder={rowPlaceholder ?? (pilot ? t("os.row.notePhPilot") : t("os.row.notePh"))}
             aria-label={tf("os.row.noteAria", { name: student.name })}
             className={`border-amber/40 focus:border-primary scrollbar-thin min-h-[40px] w-full rounded-sm border px-2 py-1 text-xs leading-snug outline-none ${AUTOSIZE} ${
               lockedTone || "bg-amber-soft/30"
             }`}
           />
-          {config.noticeMode === "B" && !isEnglishRow ? (
+          {config.noticeMode === "B" && !isEnglishRow && !pilot ? (
             // 모드 B — 카드 모드와 동일 계약: 화면만 2칸, 값은 joinComment이 빈 줄로 합친 **단일 문자열**
             // (저장·발송 경로 무변경). 표는 폭이 좁아 칸 제목을 placeholder로 겸한다.
             <>
@@ -794,7 +805,8 @@ export function GridBodyRow({
             <textarea
               value={rep?.draft ?? ""}
               onChange={(e) => fields.onDraft(student.id, subject.name, e.target.value)}
-              readOnly={rowLocked}
+              // 시범 대상 = 보기만 — 자동작성만 이 칸을 채운다(카드와 같은 규약).
+              readOnly={rowLocked || pilot}
               // 말투 반영 안내(0262a)는 프로파일을 읽는 행(영어 밖)에만 — 영어 행은 템플릿 모드라 그 문장이 거짓이 된다.
               placeholder={mentPlaceholder ?? (genRowBusy ? t("os.gen.busy") : isEnglishRow ? t("os.row.mentPh") : t("os.row.mentPhVoice"))}
               aria-label={tf("os.row.mentAria", { name: student.name, subject: subject.name })}
@@ -834,7 +846,7 @@ export function GridBodyRow({
               <textarea
                 value={rep?.trendDraft ?? ""}
                 onChange={(e) => fields.onTrend(student.id, subject.name, e.target.value)}
-                readOnly={rowLocked}
+                readOnly={rowLocked || pilot}
                 placeholder={mentPlaceholder ?? t("os.row.trendPh")}
                 aria-label={tf("os.row.trendAria", { name: student.name, subject: subject.name })}
                 title={trendHidden ? t("os.row.trendOptOutOn") : undefined}

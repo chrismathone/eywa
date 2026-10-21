@@ -33,6 +33,8 @@ export type SendBlockReason =
   | "attendance"
   | "progress"
   | "ment"
+  /** 수학 보고서 시범(math-report-pilot.ts) — '자동작성' 글 그대로가 아니다. */
+  | "autowrite"
   | "recall_pending"
   /** 발송 대기·게시 중(queued/processing) — 워커 결과가 나올 때까지 다시 못 누른다(원장 2026-09-29). */
   | "in_flight"
@@ -41,10 +43,12 @@ export type SendBlockReason =
   | "report_optout";
 
 /** 입력이 필요한 사유의 짧은 이름 — 라벨에서 "출결 · 진도 · 멘트 입력 필요"로 이어 붙인다. */
-const NEED_KEY: Record<"attendance" | "progress" | "ment", SheetDictKey> = {
+type NeedReason = "attendance" | "progress" | "ment" | "autowrite";
+const NEED_KEY: Record<NeedReason, SheetDictKey> = {
   attendance: "os.gate.need.attendance",
   progress: "os.gate.need.progress",
   ment: "os.gate.need.ment",
+  autowrite: "os.gate.need.autowrite",
 };
 
 export type SendGate = {
@@ -98,6 +102,11 @@ export function evaluateSendGate(args: {
    * 옵셔널인 이유: 원스크린 열람 화면 전용 상태라 다른 소비처는 몰라도 된다(빼먹어도 기존 판정 그대로).
    */
   readonlyView?: boolean;
+  /**
+   * 수학 보고서 시범(테스트 학생 한정, math-report-pilot.ts) — 멘트가 '자동작성' 글 그대로가 아니다(안 눌렀거나 달라졌다).
+   * 서버(`saveAndQueueClassnote`)도 같은 이유로 거절한다. 옵셔널 = 시범 밖 행은 종전 판정 그대로.
+   */
+  needsAutoWrite?: boolean;
   /**
    * 화면 언어 — 없으면 한국어(기존 호출부는 한 글자도 안 바뀐다).
    * 🔴 **판정에는 안 쓴다**: `canSend`·`reasons`는 언어와 무관하고 글자만 갈린다.
@@ -156,11 +165,13 @@ export function evaluateSendGate(args: {
       hint: t("os.gate.absentHint"),
     };
   }
-  const needs: ("attendance" | "progress" | "ment")[] = [];
+  const needs: NeedReason[] = [];
   // 출결이 행에서 제일 앞 칸이라 사유도 맨 앞 — 체크하는 순서대로 읽힌다.
   if (args.attendanceUnchecked) needs.push("attendance");
   if (!args.hasProgress) needs.push("progress");
-  if (!args.hasDraft) needs.push("ment");
+  // 시범 대상은 '멘트를 쓰라'가 아니라 '자동작성을 누르라'다(칸이 잠겨 있어 직접 쓸 수 없다).
+  if (args.needsAutoWrite) needs.push("autowrite");
+  else if (!args.hasDraft) needs.push("ment");
   if (needs.length === 0) return { canSend: true, reasons: [], label: null, hint: null };
   return {
     canSend: false,
@@ -172,6 +183,7 @@ export function evaluateSendGate(args: {
       needs.includes("attendance") ? t("os.gate.hint.attendance") : "",
       needs.includes("progress") ? t("os.gate.hint.progress") : "",
       needs.includes("ment") ? t("os.gate.hint.ment") : "",
+      needs.includes("autowrite") ? t("os.gate.hint.autowrite") : "",
     ]
       .filter(Boolean)
       .join(" / "),

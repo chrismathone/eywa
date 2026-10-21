@@ -93,6 +93,11 @@ export type Subject = {
   homework?: string;
   /** 특이사항(강사 메모, AI 멘트 입력) — 행 단위. 미지정=학생 값. */
   note?: string;
+  /**
+   * 소단원별 이해도(10점 만점) — 수학 보고서 시범(테스트 학생 한정, math-report-pilot.ts) 행에서만 쓴다.
+   * 세션 `subject_progress`에 실려 새로고침 뒤에도 남는다(보고서 행에는 저장하지 않는다 — 자동작성 재료다).
+   */
+  understanding?: import("./math-report-pilot").UnderstandingState;
   dailyScore?: number | null;
   dailyMax?: number;
   /**

@@ -69,6 +69,8 @@ export type ReportCommentInput = {
    *    모델이 그걸 개인 사실로 한 번 더 쓴다 — 중복이 곧 AI 티다(2026-08-13 실측: 한 반 6명 멘트가 거의 동일).
    */
   classNotice?: string;
+  /** 소단원별 이해도(10점 만점) — 수학 보고서 시범(math-report-pilot.ts)에서만 채운다. 뺀 소단원·점수 없는 소단원은 이미 빠져 있다. */
+  understanding?: { title: string; score: number }[];
 };
 
 /** 값을 라벨 **한 줄 안에** 가두는 정규화 — 내부 개행을 ", "로 접는다.
@@ -189,6 +191,9 @@ export function buildFactBlock(input: ReportCommentInput): string {
   if (input.homeworkToday) facts.push(`오늘 과제: ${flatten(input.homeworkToday)}`); // 마무리 문장 재료(0096a)
   if (input.videoHomework === true) facts.push(`오늘 영상 과제: 있음${dueClause(input)}. 오늘 과제 안내에 짧게 포함하되 이미 영상 과제를 언급했다면 반복하지 마세요. 지난 숙제의 제출 여부를 뜻하지 않습니다.`);
   if (input.specialNote) facts.push(`특이사항: ${flatten(input.specialNote)}`);
+  // 소단원별 이해도(수학 보고서 시범) — 값은 '10점 만점에 N점'으로 풀어 쓴다(괄호 설명은 모델이 베낀다, 위 ⚠️).
+  if (input.understanding?.length)
+    facts.push(`소단원별 이해도: ${input.understanding.map((u) => `${flatten(u.title)} 10점 만점에 ${u.score}점`).join(", ")}`);
   // 반 전체 안내 — 라벨에 **취급법까지** 적는다(프롬프트 본문은 원장이 편집 가능해 사라질 수 있다).
   if (input.classNotice)
     facts.push(

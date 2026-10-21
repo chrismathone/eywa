@@ -77,6 +77,17 @@ import { videoSubmitLinkColumn } from "@/features/video-submit/server/link-choic
 import { loadTeacherMentStyle } from "./ment-style-db";
 import { mentStyleDirective, mentStyleToneDirective } from "../ment-style-prompt";
 import { prependParentAddress, splitParentAddress } from "../parent-address";
+import {
+  clampUnderstanding,
+  composePilotMent,
+  isMathReportPilot,
+  PILOT_AUTOWRITE_REQUIRED_ERROR,
+  pilotLessons,
+  PILOT_AI_DIRECTIVE,
+  progressLead,
+  understandingBlock,
+} from "../math-report-pilot";
+import { skipStatusOf } from "../progress-status";
 import { logAction } from "@/features/audit/server/log";
 import { isSlotOnlyEnglishNotes, shouldCaptureJj } from "../jj-capture-plan";
 import { classRouteActive, NO_SEND_CLASS_ERROR, SEND_CLASS_SUBJECTS } from "../send-class";
@@ -200,6 +211,8 @@ export async function saveLessonReport(
   videoHomeworkSeenAt?: string;
   /** 저장한 영상 숙제 마감 — 고른 마감을 적었을 때만. `fellBack` = 14일 안에 다음 수업이 없어 7일로 적었다(화면이 알린다). */
   videoHomeworkDue?: SavedVideoHomeworkDue;
+  /** 저장된 멘트 작성 방식(0214a) — 컬럼이 없으면 null. 수학 보고서 시범의 발송 게이트가 읽는다. */
+  mentSource?: string | null;
 }> {
   const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
@@ -662,6 +675,7 @@ export async function saveLessonReport(
     ...(cancelKept ? { videoHomeworkCancelled: true, videoHomeworkSeenAt: new Date().toISOString() } : {}),
     ...(videoDueFinal ? { videoHomeworkDue: videoDueFinal } : {}),
     ...(makeupEffect ? { makeupEffect } : {}),
+    mentSource: mentSourceFinal,
   };
 }
 
@@ -821,6 +835,24 @@ export async function saveAndQueueClassnote(
     }
     return { ok: false, id: saved.id, shareToken: saved.shareToken, ...warn,
       error: saved.videoHomeworkCancelled ? VIDEO_HW_CANCELLED_ERROR : VIDEO_DUE_CHANGED_ERROR };
+  }
+
+  // 🔴 수학 보고서 시범(테스트 학생 한정, math-report-pilot.ts) — '자동작성' 글 그대로가 아니면 보내지 않는다(저장은 끝났다).
+  //    화면은 멘트 칸을 잠그고 발송 버튼도 막지만 그건 한 겹이다(#77) — 서버는 저장된 작성 방식(0214a, sticky 판정)으로 다시 본다.
+  //    작성 방식을 모르면(컬럼 없음) 보내지 않는다 — 시범 한 명이라 막는 쪽이 싸다.
+  if (isMathReportPilot(input.studentId, input.subject) && saved.mentSource !== "auto") {
+    if (prior?.classnote_status === "queued") {
+      try {
+        await supabase
+          .from("lesson_reports")
+          .update({ classnote_status: null, classnote_queued_at: null })
+          .eq("id", saved.id)
+          .eq("classnote_status", "queued");
+      } catch {
+        // best-effort — 어차피 에러 반환이라 강사 재시도가 뒤따른다(옆 게이트와 같다)
+      }
+    }
+    return { ok: false, id: saved.id, shareToken: saved.shareToken, ...warn, error: PILOT_AUTOWRITE_REQUIRED_ERROR };
   }
 
   // 발송 안전 스위치 — 기본 OFF(dry-run). 원장이 승인(설정 토글)하기 전까지 **저장만** 하고 실제 큐잉(발송) 안 함.
@@ -1295,6 +1327,8 @@ export type SaveOnescreenSessionInput = {
       dailyMax?: number;
       checkScore?: number | null;
       checkMax?: number;
+      /** 소단원별 이해도(수학 보고서 시범, math-report-pilot.ts) — 시범 행만 싣는다. 로스터가 같은 키로 복원한다. */
+      understanding?: { scores: Record<string, number>; off: string[] };
     }
   >;
   dailyScore?: number | null;
@@ -1470,7 +1504,10 @@ export async function generateReportComment(
 
   // 학부모께 직접 드리는 사과·양해 문장(특이사항·반 전체 안내)은 AI에 주지 않고 멘트 맨 앞에 그대로 붙인다
   // (2026-09-22 강사 제보 — '인사말·날짜 금지'에 걸려 모델이 때때로 뺐다, parent-address.ts 주석).
-  const noteSplit = splitParentAddress(input.specialNote);
+  // 수학 보고서 시범(테스트 학생 한정, math-report-pilot.ts) — 특이사항은 AI에 주지 않고 **맨 아래에 그대로** 붙인다.
+  const pilot = isMathReportPilot(trendCtx?.studentId, trendCtx?.subject);
+  const pilotNote = pilot ? (input.specialNote ?? "").trim() : "";
+  const noteSplit = pilot ? { address: [] as string[], rest: "" } : splitParentAddress(input.specialNote);
   const noticeSplit = splitParentAddress(input.classNotice);
   const parentAddress = [...noteSplit.address, ...noticeSplit.address];
   // 방지로직 — 진도/태도/테스트/과제 등 최소 사실이 하나도 없으면 생성 거부(빈 껍데기 멘트 방지).
@@ -1497,6 +1534,13 @@ export async function generateReportComment(
     specialNote: noteSplit.rest,
     classNotice: noticeSplit.rest,
     classContext: input.classContext?.replace(/\s*\n+\s*/g, " ").trim().slice(0, 300) || "",
+    // 이해도는 시범 대상에만 — 다른 학생 입력에 실려 와도 프롬프트에 안 넣는다(클라 값을 믿지 않는다).
+    understanding: pilot
+      ? (input.understanding ?? [])
+          .map((u) => ({ title: String(u.title ?? "").trim().slice(0, 80), score: clampUnderstanding(u.score) }))
+          .filter((u): u is { title: string; score: number } => !!u.title && u.score != null)
+          .slice(0, 20)
+      : undefined,
   };
   try {
     const supabase = await createClient();
@@ -1516,7 +1560,8 @@ export async function generateReportComment(
     const styleBlock = mentStyle ? mentStyleDirective(mentStyle) : "";
     // 추세엔 **어조·문장 결만** — 선생님 표현·마무리("다음 시간에 ~하겠습니다")까지 붙이면 추세 금지(계획)에 걸려 버려진다(2026-10-16).
     const toneBlock = mentStyle ? mentStyleToneDirective(mentStyle) : "";
-    const mode = (meRow?.report_notice_mode as "A" | "B" | null | undefined) ?? settings.report.noticeMode ?? "A";
+    // 시범 대상은 단일 문단(A) 고정 — 첫 문장·이해도·특이사항을 코드가 앞뒤에 붙이는 구조라 2문단(B)과 섞이지 않는다.
+    const mode = pilot ? "A" : ((meRow?.report_notice_mode as "A" | "B" | null | undefined) ?? settings.report.noticeMode ?? "A");
 
     // 추세(선택) — 컨텍스트 있고 표본 충분할 때만. 대상 날짜(작업중, 미저장일 수 있음) 포함(edutrix 패리티).
     // ⚠️ 과거 날짜 보고서: 그 뒤에 이미 채점 이력이 있으면 추세 미반영 — 뒤늦게 끼우는 과거 점이 추세 그래프/서술을 흐트러뜨림(원장 2026-07-14).
@@ -1578,6 +1623,7 @@ export async function generateReportComment(
       styleBlock,
       toneBlock,
       trend: trendInput,
+      ...(pilot ? { extraDirective: PILOT_AI_DIRECTIVE } : {}),
     });
     if (sections.length === 0) return { ok: false, error: "생성할 내용이 없습니다" };
 
@@ -1594,7 +1640,16 @@ export async function generateReportComment(
     });
     const res = readMentResponse(data, mode, trendInput);
     if (!res.comment) return { ok: false, error: "빈 응답" };
-    const comment = prependParentAddress(appendVideoReceiptComment(res.comment, videoReceipt), parentAddress);
+    const body = prependParentAddress(appendVideoReceiptComment(res.comment, videoReceipt), parentAddress);
+    // 시범 대상 — '{이름}는 오늘 … 진도를 나갔습니다' → 소단원별 이해도 → 본문 → 특이사항(원문 그대로, 맨 아래).
+    const comment = pilot
+      ? composePilotMent({
+          lead: progressLead(input.studentName, pilotLessons(input.progress), skipStatusOf(input.progress)),
+          understanding: understandingBlock(safeInput.understanding ?? []),
+          body,
+          note: pilotNote,
+        })
+      : body;
     if (res.dropped)
       console.warn(
         JSON.stringify({

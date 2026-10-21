@@ -23,6 +23,8 @@ export type MentAssembly = {
   toneBlock: string;
   /** 사실 줄이 있는 추세 입력 — 없으면 추세 섹션을 만들지 않는다. */
   trend: TrendInput | null;
+  /** 멘트 섹션 끝에 붙일 코드 지시(수학 보고서 시범 `PILOT_AI_DIRECTIVE`) — 없으면 종전 그대로. 모드 A에서만 쓴다. */
+  extraDirective?: string;
 };
 
 /** 멘트(모드 A 단일 · B 두 문단) + 추세 섹션. 사실 없는 문단은 뺀다. */
@@ -39,7 +41,8 @@ export function mentSections(a: MentAssembly): PromptSection[] {
     // 순서가 뜻이다 — 말투 지침의 마지막 줄이 바로 위 '이번 알림장의 결'을 가리킨다(첫 문장 여는 자리는 결이 이긴다).
     const style = commentStyleDirective(a.styleSeed);
     const body = commentBody(a.input, a.templates.comment);
-    sections.push({ type: "comment", field: "comment", body: withTeacherStyle(style ? `${body}\n\n${style}` : body) });
+    const styled = withTeacherStyle(style ? `${body}\n\n${style}` : body);
+    sections.push({ type: "comment", field: "comment", body: a.extraDirective ? `${styled}\n\n${a.extraDirective}` : styled });
   }
   if (a.trend && a.trend.facts.length) {
     // 추세엔 **어조·문장 결만** — 선생님 표현·마무리까지 붙이면 추세 금지(계획)에 걸려 버려진다(2026-10-16).
