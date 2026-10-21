@@ -120,6 +120,7 @@ describe("글 조립", () => {
     expect(PILOT_AI_DIRECTIVE).toMatch(/이름 앞에 .우리./);
     // 낮은 이해도 = 순화한 상태 설명 → 그 이유로 학원이 챙긴다(원장 2026-10-21 — "뜬금없이 챙기겠다"만 나왔다).
     expect(PILOT_AI_DIRECTIVE).toMatch(/두 단계/);
+    expect(PILOT_AI_DIRECTIVE).toMatch(/개념을 조금 힘들어했습니다/);
     expect(PILOT_AI_DIRECTIVE).toMatch(/그래서 다음 시간에 한 번 더 짚어/);
     expect(PILOT_AI_DIRECTIVE).toMatch(/직접적인 표현은 쓰지 마세요/);
   });
