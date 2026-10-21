@@ -37,6 +37,8 @@ export type VideoHomeworkLedgerRow = VideoHomeworkRosterRow & {
   canAssignVideos?: boolean;
   /** 숙제 당일~14일 뒤의 업로드 완료 영상 중 수동·자동 배정되지 않은 영상이 남아 있는가. */
   hasAssignableVideos?: boolean;
+  /** AI 참고 메모 대상 줄(지점 스위치 켜짐 · 수학 반, 서버가 정한다) — 재생 창이 메모를 불러오는 동안에도 메모 칸을 세운다. */
+  aiReview?: true;
   /** 보고서 없이 따로 낸 숙제의 날짜(원장 2026-10-13) — 그 칸에 '따로 낸 숙제' 표시와 취소 메뉴를 단다. */
   extraDates?: string[];
   /**
@@ -80,6 +82,8 @@ export type VideoArrival = {
   createdAt?: string | null;
   /** 숙제 없이 올린 영상(`route.free`, 올리기 사이트) — 게시일순 자동 짝(②)에 들지 않는다. 손 배정하면 정해진 숙제 영상(③)이 된다. */
   free?: boolean;
+  /** 분석이 끝난 영상의 AI 참고 평점(5점 만점, video-review/score.ts) — 장부 칸 아래 "2.8/5". 스위치가 꺼졌거나 분석 전이면 없다. */
+  reviewPoints?: number;
 };
 
 export function isVideoHomeworkDate(value: string): boolean {

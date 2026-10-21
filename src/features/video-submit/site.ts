@@ -57,7 +57,7 @@ export const SITE_MAX_STUDENTS_PER_LAST4 = 4;
 export const SITE_LOOKUPS_PER_HOUR_TENANT = 600;
 /** 한 학생 × 반이 하루에 사이트로 만들 수 있는 링크 수 — 링크마다 업로드 횟수 제한이 따로 있어, 링크를 계속 새로 만들어 우회하지 못하게. */
 export const SITE_LINKS_PER_PAIR_PER_DAY = 6;
-/** 한 번에 보여 주는 숙제 수 상한(그 학생의 반 × 아직 안 낸 영상 숙제). */
+/** 한 번에 보여 주는 숙제 수 상한(그 학생의 반 × 아직 올릴 수 있는 영상 숙제 — 안 낸 숙제가 먼저). */
 export const SITE_MAX_CHOICES = 12;
 
 /**
@@ -68,6 +68,12 @@ export const SITE_MAX_CHOICES = 12;
  *  · 메모는 필수 — 선생님이 무엇의 영상인지 알 수 있어야 한다. 학생이 쓴 글이라 화면에는 글자로만 보여 준다.
  */
 export const SITE_FREE_UPLOADS_PER_DAY = 5;
+/**
+ * 한 숙제에 사이트로 낼 수 있는 영상 수(원장 2026-10-21 *"한번에 여러 단원의 영상을 업로드해야할 수도"*) — 장부 칸에 보이는 영상 수(같은 파일 사본은
+ * 한 번)가 이만큼이면 그 숙제는 목록에서 빠지고 업로드 시작이 거절한다(더 올릴 영상은 숙제 없이 올리기). 올리기를 끝낸 영상으로 센다 —
+ * 동시에 여러 개를 시작하면 조금 넘을 수 있다(시간·하루 업로드 상한이 따로 막는다).
+ */
+export const SITE_MAX_VIDEOS_PER_HOMEWORK = 5;
 export const SITE_NOTE_MIN = 2;
 export const SITE_NOTE_MAX = 100;
 /** 메모 다듬기 — 줄바꿈·연속 공백을 한 칸으로, 앞뒤 공백을 뗀다. 모양이 틀리면(짧음·김·글자 아님) null. */
@@ -130,7 +136,9 @@ export type SiteChoice = { id: string; studentLabel: string; className: string; 
   /** 숙제 없이 그 반에 올리기(메모 필수) — `homeworkLabel`은 빈 글자다. */
   free?: true;
   /** 수강이 끝난 반(반을 옮기기 전 반 등)에서 받은 숙제 — 화면이 '지난 반'으로 적는다. 숙제 줄에만(숙제 없이 올리기는 지금 반만). */
-  pastClass?: true };
+  pastClass?: true;
+  /** 그 숙제에 이미 낸 영상 수(1 이상일 때만) — 마감까지 더 낼 수 있다(여러 단원, 원장 2026-10-21). 화면이 "영상 N개 냄"으로 적는다. */
+  sent?: number };
 
 /**
  * 올리기 사이트를 쓰는 지점 한 곳(화면의 지점 선택지) — 번호와 이름만. 주소에는 지점을 넣지 않는다(멀티테넌트 C안):

@@ -106,7 +106,7 @@ describe("배선 가드", () => {
     expect(page).toContain(".filter((homework) => homework.date !== homeworkDate)");
     // 올리기 사이트 링크에서만(학생 상세에서 복사한 링크는 숙제를 고르지 않는다)
     expect(page).toContain('otherHomework = link.origin === "site"');
-    // 이미 영상을 낸 숙제는 다시 올리지 않고 숙제 없이 올리기로(원장 2026-10-13)
+    // 한 숙제에 낼 수 있는 영상을 다 낸 숙제는 더 올리지 않고 숙제 없이 올리기로(원장 2026-10-21 — 그 전엔 영상 1개면 닫았다)
     expect(page).toContain('if (homeworkDate && openDates && !openDates.some((homework) => homework.date === homeworkDate))');
     const form = read("src", "app", "(share)", "v", "[token]", "video-submit-form.tsx");
     expect(form).toContain("href={`/v/${props.token}?h=${hw.date}`}");

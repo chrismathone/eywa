@@ -186,18 +186,26 @@ describe("업로드 시작 — 정상", () => {
     fresh();
     expect((await req({ homeworkDate: TODAY })).ok).toBe(true);
   });
-  it("이미 영상이 붙은 숙제엔 또 올리지 않는다 — 숙제 없이 올리기로 안내 · 선생님이 반려(집계 제외)하면 다시 열린다", async () => {
+  it("🔴 한 숙제에 영상을 여러 개 낸다(여러 단원 — 원장 2026-10-21) · 5개를 다 내면 숙제 없이 올리기로 안내 · 반려(집계 제외)하면 다시 열린다", async () => {
     Object.assign(db.tables.homework_video_links![0]!, { origin: "site", created_at: new Date().toISOString() });
     assignHomework(TODAY);
-    const submitted = { id: "v-done", tenant_id: T, student_id: S, status: "uploaded", drive_file_id: "submittedDriveFile1",
-      posted_at: new Date().toISOString(), created_at: new Date().toISOString(), route: { classId: C, homeworkDate: TODAY } };
-    db.tables.student_homework_videos!.push(submitted);
-    const r = await req({ homeworkDate: TODAY });
-    expect(r).toMatchObject({ ok: false, code: "invalid" });
-    expect(!r.ok && r.error).toContain("숙제 없이 올리기");
+    const now = new Date().toISOString();
+    const sent = (i: number) => ({ id: `v-done-${i}`, tenant_id: T, student_id: S, status: "uploaded", drive_file_id: `submittedDriveFile${i}`,
+      posted_at: now, created_at: now, route: { classId: C, homeworkDate: TODAY } as Record<string, unknown> });
+    // 이미 1개를 냈어도 같은 숙제에 또 낸다
+    db.tables.student_homework_videos!.push(sent(1));
+    expect((await req({ homeworkDate: TODAY })).ok).toBe(true);
+    db.tables.homework_video_link_uploads!.at(-1)!.drive_file_id = "u1"; // 가짜 Drive는 파일 번호가 하나다 — 다음 시작과 겹치지 않게
+    drive = fakeDrive(); vi.stubGlobal("fetch", vi.fn(drive.impl));
+    // 5개(상한)를 다 냈다
+    db.tables.student_homework_videos!.push(sent(2), sent(3), sent(4), sent(5));
+    const full = await req({ homeworkDate: TODAY });
+    expect(full).toMatchObject({ ok: false, code: "invalid" });
+    expect(!full.ok && full.error).toContain("5개까지");
+    expect(!full.ok && full.error).toContain("숙제 없이 올리기");
     expect(drive.calls.filter((c) => c.url.includes("uploadType=resumable"))).toHaveLength(0);
-    // 반려(집계 제외)된 영상만 있으면 다시 올릴 수 있다
-    submitted.route = { ...submitted.route, excluded: true } as typeof submitted.route;
+    // 하나를 반려(집계 제외)하면 다시 올릴 수 있다
+    db.tables.student_homework_videos![0]!.route = { classId: C, homeworkDate: TODAY, excluded: true };
     expect((await req({ homeworkDate: TODAY })).ok).toBe(true);
   });
   it("숙제 없이 올리기는 지금 그 반을 다닐 때만 — 끝난 수강·휴원·퇴원·영상 숙제 대상 밖이면 Drive를 열지 않는다", async () => {

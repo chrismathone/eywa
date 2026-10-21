@@ -65,7 +65,7 @@ describe("반별 장부 — 회차는 학생마다", () => {
 describe("강사뷰 — 보일 회차만 남긴다(keepLedgerRounds, 원장 2026-10-03 \"각 강사뷰에서는 내가 출제한것만\")", () => {
   const round = (homeworkDate: string | null, status: "submitted" | "missing" | "unchecked" = "unchecked") =>
     ({ key: homeworkDate ? `h:${homeworkDate}` : "c:2026-09-01", date: homeworkDate ?? "2026-09-01", homeworkDate, assigned: !!homeworkDate,
-      mark: null, status, submittedDate: null, auto: false, videoDate: null, videoId: null });
+      mark: null, status, submittedDate: null, auto: false, videoDate: null, videoId: null, videoIds: [] });
   it("판정이 끝난 회차에서 내가 낸 숙제 칸만 남긴다 · 숙제일 없는 옛 기록·남이 낸 숙제·다른 반은 빠진다", () => {
     const all = new Map([
       ["A:s1", [round("2026-10-01", "submitted"), round("2026-10-06"), round(null, "missing")]],
