@@ -17,6 +17,8 @@ export const AREA_MENUS: Record<Area, readonly MenuKey[]> = {
   students: ["students"],
   changes: ["students"],
   enrolledTrend: ["students"],
+  courses: ["students"],
+  courseTrend: ["students"],
   withdrawals: ["withdrawals"],
   earlyExits: ["withdrawals"],
   intake: ["enrollment"],
@@ -64,6 +66,8 @@ const Z = {
   full: { key: "4x1", label: "4×1", hint: "한 줄 전체", w: 24, h: 1 },
 } satisfies Record<string, SizePreset>;
 const KPI_SIZES: readonly SizePreset[] = [
+  // ⅓×1 = 9칸 이상의 KPI 띠를 한 줄에 맞출 때(`classicToItems` · 강좌수가 더해진 2026-10-20부터).
+  { key: "k-third", label: "⅓×1", hint: "좁게", w: 2, h: 1 },
   { key: "k-half", label: "½×1", hint: "기본", w: 3, h: 1 },
   { key: "k-one", label: "1×1", hint: "넓게", w: 6, h: 1 },
 ];
@@ -110,6 +114,8 @@ const PANELS: Record<PanelId, PanelSpec> = {
   earlyExits: { label: "등록 후 3개월 내 퇴원", subjectScope: "subject", group: "학생·재원", thumb: "list", areas: ["earlyExits"], sizes: LIST_S },
   billing6: { label: "6개월 청구 · 수납", subjectScope: "subject", group: "수납·지출", thumb: "columns", areas: ["billing"], size: { w: 12, h: 1 }, sizes: TREND_S },
   enrolledTrend: { label: "재원생 추이", subjectScope: "subject", group: "학생·재원", thumb: "columns", areas: ["enrolledTrend"], size: { w: 24, h: 1 }, sizes: TREND_S },
+  // 원장 2026-10-20 '강좌수 추이 카드 따로' — 재원생 추이와 같은 원본·날짜로 센 강좌수(`course-trend.ts`).
+  courseTrend: { label: "강좌수 추이", subjectScope: "subject", group: "학생·재원", thumb: "columns", areas: ["courseTrend"], size: { w: 24, h: 1 }, sizes: TREND_S },
   subjects: { label: "과목별 수강", group: "학생·재원", thumb: "bars", areas: ["students"], subjectScope: "subject", sizes: LIST_S },
   grades: { label: "학년별 재원생", subjectScope: "subject", group: "학생·재원", thumb: "bars", areas: ["students"], sizes: LIST },
   schools: { label: "학교별 학생", subjectScope: "subject", group: "학생·재원", thumb: "list", areas: ["students"], size: { w: 6, h: 2 }, sizes: LIST_S },
@@ -132,6 +138,7 @@ const PANELS: Record<PanelId, PanelSpec> = {
 type KpiSpec = Pick<CardDef, "label"> & Partial<Pick<CardDef, "subjectScope" | "options">>;
 const KPIS: Record<KpiKey, KpiSpec> = {
   students: { label: "재원생", subjectScope: "subject" },
+  courses: { label: "강좌수", subjectScope: "subject" },
   withdrawals: { label: "퇴원&수업종료", subjectScope: "subject" },
   intake: { label: "신규문의", subjectScope: "subject" },
   calendar: { label: "금일 입테", subjectScope: "subject", options: ["phones"] },
@@ -141,7 +148,7 @@ const KPIS: Record<KpiKey, KpiSpec> = {
   makeup: { label: "보강예정", subjectScope: "subject" },
 };
 
-/** 편집기 갤러리 순서 = KPI 8칸(운영실 순서) → 패널(배열 순서). */
+/** 편집기 갤러리 순서 = KPI 9칸(운영실 순서) → 패널(배열 순서). */
 export const CARDS: readonly CardDef[] = [
   ...KPI_KEYS.map(
     (k): CardDef => ({

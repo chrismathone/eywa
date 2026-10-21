@@ -367,7 +367,7 @@ export function buildTodayActions(
       count: raw.dayArrivals.starting.length,
       unit: "명",
       detail: nameList(raw.dayArrivals.starting.map((s) => s.name)),
-      note: newSubject > 0 ? `첫 등원 ${raw.dayArrivals.starting.length - newSubject} · 새 과목 ${newSubject}` : null,
+      note: newSubject > 0 ? `첫 등원 ${raw.dayArrivals.starting.length - newSubject} · 처음 듣는 과목 ${newSubject}` : null,
       bySubject: [], // 학생 단위 판정이라 과목 축이 없다(한 학생이 여러 과목으로 시작할 수 있다).
       // 그날 첫 수업 목록(원생목록 first=) — 항목 숫자 = 카드 숫자 = 목록 인원(같은 함수).
       href: studentsFirstClassHref(raw.date),
@@ -415,7 +415,7 @@ export function buildTodayActions(
     items.push({
       key: "newcomer-overdue",
       severity: "amber",
-      label: "신규생 관리 지연",
+      label: "신규생 관리 기한 경과",
       count: raw.newcomerOverdue.count,
       unit: "명",
       detail: nameList(raw.newcomerOverdue.names, 3, raw.newcomerOverdue.count),

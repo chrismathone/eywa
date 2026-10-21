@@ -263,7 +263,7 @@ const def: ImporterDef<Plan> = {
           }
         }
         if (plan.inserts.length > 0) {
-          notes.push(`반: 새 상담 ${plan.inserts.length}건 중 ${mapped}건을 반에 연결합니다(상담사가 가르치는 그날 수강 반이 하나일 때만 — 나머지는 미매핑).`);
+          notes.push(`반: 새 상담 ${plan.inserts.length}건 중 ${mapped}건을 반에 연결합니다(상담사가 가르치는 그날 수강 반이 하나일 때만 — 나머지는 '반 없음').`);
         }
       }
     }

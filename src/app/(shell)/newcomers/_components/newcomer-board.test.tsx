@@ -36,7 +36,7 @@ describe("실제 신규생 보드 상호작용", () => {
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "별빛 초5" } });
     fireEvent.change(screen.getByRole("combobox", { name: "과목 필터" }), { target: { value: "math" } });
     fireEvent.change(screen.getByRole("combobox", { name: "등록 경과 구간" }), { target: { value: "d30" } });
-    fireEvent.click(within(screen.getByRole("group", { name: "상태 필터" })).getByRole("button", { name: /^지연/ }));
+    fireEvent.click(within(screen.getByRole("group", { name: "상태 필터" })).getByRole("button", { name: /^기한 경과/ }));
     expect(rowKeys()).toEqual(["student-b|math"]);
     expect(metric("전체 관리 대상")).toHaveTextContent("3명");
     expect(window.location.search).toContain("embed=1");
@@ -63,7 +63,7 @@ describe("실제 신규생 보드 상호작용", () => {
     expect(task()).toBeDisabled();
     expect(task()).toHaveAttribute("aria-pressed", "true");
     expect(task("student-a|english|pre_call")).toHaveAttribute("aria-pressed", "false");
-    expect(metric("지연 업무")).toHaveTextContent(`${before.overdue - 1}건`);
+    expect(metric("기한 경과 업무")).toHaveTextContent(`${before.overdue - 1}건`);
     expect(screen.getByRole("button", { name: /우선 처리/ })).toHaveTextContent(`${before.overdue + before.dueSoon - 1}건`);
     await act(async () => { resolve({ ok: true }); });
     expect(mocks.refresh).toHaveBeenCalledTimes(1);
@@ -99,7 +99,7 @@ describe("실제 신규생 보드 상호작용", () => {
     fireEvent.click(task());
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("변경 사항을 되돌렸습니다"));
     expect(task()).toHaveAttribute("aria-pressed", "false");
-    expect(metric("지연 업무")).toHaveTextContent(`${before.overdue}건`);
+    expect(metric("기한 경과 업무")).toHaveTextContent(`${before.overdue}건`);
     expect(mocks.refresh).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "다시 시도" }));
     await waitFor(() => expect(task()).not.toBeDisabled());
@@ -121,7 +121,7 @@ describe("실제 신규생 보드 상호작용", () => {
   });
   it("체크 조회 실패를 0건이나 미완료로 표시하지 않고 변경을 막는다", () => {
     render(<NewcomerBoard view={{ ...testView(), checksAvailable: false, checksError: { summary: "기록을 불러오지 못했습니다", raw: "test" } }} canWrite />);
-    expect(metric("지연 업무")).toHaveTextContent("—");
+    expect(metric("기한 경과 업무")).toHaveTextContent("—");
     expect(task()).toHaveTextContent("확인 불가");
     expect(task()).toBeDisabled();
     expect(screen.getByRole("button", { name: "다시 불러오기" })).toBeInTheDocument();

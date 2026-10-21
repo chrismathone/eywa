@@ -1,5 +1,6 @@
 import type { PillColor } from "@/components/atoms/pill";
 import { SUBJECT_SOLID } from "@/features/owner/subjects";
+import { EmbedLink } from "@/components/embed-link";
 
 export type SubjectStat = { key: string; label: string; color: PillColor; count: number };
 
@@ -11,9 +12,12 @@ export type SubjectStat = { key: string; label: string; color: PillColor; count:
 export function EnrolledStatCard({
   enrolled,
   subjects,
+  statsHref,
 }: {
   enrolled: number;
   subjects: SubjectStat[]; // count>0만, 정렬은 호출부(내림차순)
+  /** 원생 통계 입구(재원생 추이 · 강좌수 · 월별 기록 · 지난 기록) — 강사 화면처럼 통계를 못 보는 경우 null. */
+  statsHref?: string | null;
 }) {
   return (
     <section className="border-y border-line px-2 py-3">
@@ -28,6 +32,11 @@ export function EnrolledStatCard({
               </span>
               <span className="text-text-dim text-xs">명</span>
             </p>
+            {statsHref ? (
+              <EmbedLink href={statsHref} className="text-primary mt-1.5 inline-block text-xs font-medium hover:underline">
+                통계 보기
+              </EmbedLink>
+            ) : null}
           </div>
         </div>
 

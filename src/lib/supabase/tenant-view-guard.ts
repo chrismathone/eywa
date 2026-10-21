@@ -29,6 +29,10 @@ export const TENANT_VIEW_READ_RPCS: ReadonlySet<string> = new Set([
   "todays_math_exam_report_dates",
   // 사람별 열린 할 일(0377a) — 서버가 관리 키로 부르는 읽기(보기 중엔 할 일 화면이 비어 부르지 않는다). 목록 규약상 여기 둔다.
   "staff_task_counts",
+  // 출결 통계 등원율 추이(0387a) — 읽기 전용 group-by.
+  "attendance_rate_buckets",
+  // 보고서 통계 숙제·학부모 확인 추이(0388a) — 읽기 전용 group-by.
+  "lesson_report_buckets",
   "consultation_class_candidates",
   "consultation_gap_students",
   "consultation_monthly_stats",

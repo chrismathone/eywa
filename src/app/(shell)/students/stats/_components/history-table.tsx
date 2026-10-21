@@ -1,4 +1,5 @@
 import type { HistoryField, HistoryYear } from "@/features/students/stats/history";
+import type { HistoryPrograms } from "./history-board";
 
 const fmt = (n: number | undefined) => (n === undefined ? "—" : n.toLocaleString("ko-KR"));
 
@@ -8,14 +9,32 @@ const fmt = (n: number | undefined) => (n === undefined ? "—" : n.toLocaleStri
  * (2026년 메이크에듀 기록은 1~3월뿐). 값이 한 해도 없는 열(EiE가 없는 지점 · 메이크에듀를 쓰지 않은 지점 · 수납 권한이 없어 청구 칸을
  * 받지 않은 사람)은 세우지 않는다.
  */
-export function HistoryTable({ years, hasEie }: { years: readonly HistoryYear[]; hasEie: boolean }) {
+export function HistoryTable({
+  years,
+  hasEie,
+  split,
+  programs,
+  shown,
+}: {
+  years: readonly HistoryYear[];
+  hasEie: boolean;
+  split: boolean;
+  programs: HistoryPrograms;
+  /** 차트에 선 칸 — 프로그램 열은 차트와 같은 기준으로 세운다(값이 늘 0인 프로그램은 열도 없다). */
+  shown: ReadonlySet<HistoryField>;
+}) {
   const cell = "px-2 py-1.5";
   const ordered = [...years].reverse();
   const has = (f: HistoryField) => years.some((y) => y[f] !== undefined);
   const columns: { key: HistoryField; label: string; bold?: boolean }[] = [
+    ...(split && shown.has("payingMath") ? [{ key: "payingMath" as const, label: `${programs.math.label}(월평균)` }] : []),
+    ...(split && shown.has("payingInjaewon") ? [{ key: "payingInjaewon" as const, label: `${programs.injaewon.label}(월평균)` }] : []),
+    ...(split && shown.has("payingOther") ? [{ key: "payingOther" as const, label: "그 밖의 과목(월평균)" }] : []),
+    ...(split && shown.has("payingUnknown") ? [{ key: "payingUnknown" as const, label: "과목 모름(월평균)" }] : []),
     ...(has("payingGeneral") ? [{ key: "payingGeneral" as const, label: hasEie ? "EiE 외 수업(월평균)" : "수업료가 청구된 학생(월평균)" }] : []),
-    ...(hasEie ? [{ key: "payingEie" as const, label: "EiE(월평균)" }] : []),
+    ...(hasEie ? [{ key: "payingEie" as const, label: `${programs.eie.label}(월평균)` }] : []),
     { key: "newReal", label: "실제 신규", bold: true },
+    ...(has("stoppedPaying") ? [{ key: "stoppedPaying" as const, label: "청구가 끊긴 학생" }] : []),
     ...(has("enrolledRecord") ? [{ key: "enrolledRecord" as const, label: "메이크에듀 재원생 기록(월평균)" }] : []),
   ];
   return (

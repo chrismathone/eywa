@@ -23,6 +23,8 @@ export function summaryOf(id: string, snap: OverviewSnapshot, opts: { amounts?: 
   switch (def.key) {
     case "students":
       return v.students?.data ? { value: n(v.students.data.enrolled), unit: "명", detail: "현재 재원" } : null;
+    case "courses":
+      return v.courses?.data ? { value: n(v.courses.data.total), unit: "개", detail: "지금 듣는 반" } : null;
     case "withdrawals":
       return v.withdrawals?.data ? { value: n(v.withdrawals.data.rows.length), unit: "명", detail: "이번 달 퇴원" } : null;
     case "intake":
@@ -81,6 +83,10 @@ export function summaryOf(id: string, snap: OverviewSnapshot, opts: { amounts?: 
     case "enrolledTrend": {
       const t = v.enrolledTrend?.data;
       return t ? { value: n(t.monthly.at(-1)?.count ?? 0), unit: "명", detail: "오늘 재원생" } : null;
+    }
+    case "courseTrend": {
+      const t = v.courseTrend?.data;
+      return t ? { value: n(t.monthly.at(-1)?.count ?? 0), unit: "개", detail: "오늘 강좌수" } : null;
     }
     case "subjects":
       return v.students?.data ? { value: n(v.students.data.concurrent), unit: "명", detail: top(v.students.data.subjects, snap.subjects) || "과목별 수강" } : null;

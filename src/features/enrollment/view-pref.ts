@@ -6,6 +6,8 @@
  * - 보기는 필터가 아니다 — 10분 초기화(`filter-reset/rules.ts`) 대상이 아니다.
  * - 기본(칸반)은 저장하지 않는다(키를 지운다).
  */
+import { parsePeriodMode, type PeriodMode } from "@/features/stats/period";
+
 export type EnrollmentViewValue = "kanban" | "table" | "stats";
 
 export const ENROLLMENT_VIEW_PREFS_NS = "enrollment";
@@ -19,4 +21,28 @@ export function savedEnrollmentView(uiPrefs: Record<string, unknown>): Enrollmen
   const ns = uiPrefs[ENROLLMENT_VIEW_PREFS_NS];
   const raw = ns && typeof ns === "object" && !Array.isArray(ns) ? (ns as Record<string, unknown>).view : undefined;
   return parseEnrollmentView(raw) ?? "kanban";
+}
+
+/** 저장된 '상담 진행 기록' 보기 방식(`saveProgressTrendMode`) — 없으면 null(화면이 최근 구간으로 연다 — 매일 기록이 막 쌓이기 시작한 카드라 월별은 점 하나다). */
+export function savedProgressTrendMode(uiPrefs: Record<string, unknown>): PeriodMode | null {
+  const ns = uiPrefs[ENROLLMENT_VIEW_PREFS_NS];
+  return parsePeriodMode(ns && typeof ns === "object" && !Array.isArray(ns) ? (ns as Record<string, unknown>).progressTrend : undefined);
+}
+
+/** 저장된 '신규 문의 추이' 보기 방식(`saveIntakeTrendMode`) — 없거나 모르는 값이면 null(월별 12개월). */
+export function savedIntakeTrendMode(uiPrefs: Record<string, unknown>): PeriodMode | null {
+  const ns = uiPrefs[ENROLLMENT_VIEW_PREFS_NS];
+  return parsePeriodMode(ns && typeof ns === "object" && !Array.isArray(ns) ? (ns as Record<string, unknown>).intakeTrend : undefined);
+}
+
+/** '상담 진행 기록'의 선 키 — 끈 선 저장값을 이 목록으로만 거른다(`saveProgressTrendOff`). */
+export const PROGRESS_LINE_KEYS = ["received", "consulted", "levelTest", "enrolled", "assigned", "started", "stalled"] as const;
+/** 처음 볼 때 끈 선 — 접수·등록·수업 시작·멈춘 상담만 그린다(선 일곱은 한 그래프에 너무 많다 · 리뷰 2026-10-21). */
+export const PROGRESS_DEFAULT_OFF: readonly string[] = ["consulted", "levelTest", "assigned"];
+
+/** 저장된 '상담 진행 기록'의 끈 선 — 저장값이 없으면 null(기본 `PROGRESS_DEFAULT_OFF`). 모르는 키는 버린다. */
+export function savedProgressTrendOff(uiPrefs: Record<string, unknown>): string[] | null {
+  const ns = uiPrefs[ENROLLMENT_VIEW_PREFS_NS];
+  const raw = ns && typeof ns === "object" && !Array.isArray(ns) ? (ns as Record<string, unknown>).progressOff : undefined;
+  return Array.isArray(raw) ? raw.filter((k): k is string => typeof k === "string" && (PROGRESS_LINE_KEYS as readonly string[]).includes(k)) : null;
 }

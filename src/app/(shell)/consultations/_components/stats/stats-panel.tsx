@@ -37,7 +37,7 @@ const DIM_LABEL: Record<StatsDimKey, string> = {
  * 🔴 수치 옆에 **기간과 범위**를 늘 적는다(퇴원관리 결정과 같은 규약) — 필터가 걸렸는데 '전체'처럼 보이면 화면이 거짓말을 한다.
  *    문구는 목록 위 요약 띠와 같은 함수(`statsScopeText`)다.
  * 🔴 목록과 같은 조건(stats.ts 주석). 강사는 본인 상담만(목록과 같은 스코프 — 옛 통계 화면이 한 번 어긋났던 자리, queries.ts 주석).
- * 분해 줄을 누르면 **이 화면이** 그 값으로 걸러진다(통계 안에서 파고들기), 지표 옆 '지연 N건'·'완료 보기'는 **목록**을 그 값으로 연다(할 일 목록).
+ * 분해 줄을 누르면 **이 화면이** 그 값으로 걸러진다(통계 안에서 파고들기), 지표 옆 '기한 경과 N건'·'완료 보기'는 **목록**을 그 값으로 연다(할 일 목록).
  * 성능: 집계 RPC 두 번 + 설정 두 번을 병렬로(B4). 부모가 Suspense로 감싸 화면 틀(툴바)이 먼저 선다(B7).
  */
 export async function ConsultationStatsPanel({
@@ -99,8 +99,8 @@ export async function ConsultationStatsPanel({
         return { label: key ? subjects.labelOf(key) : (k ?? "과목 없음"), href: key ? statsHref({ subject: key }) : null, active: !!key && listParams.subject === key };
       }
       case "class":
-        // 아직 판정 안 한 옛 기록(백필 전)은 저장된 반이 비어 '미매핑' 칸에 들어간다 — 그 사실을 라벨에 밝힌다.
-        return { label: it.label ?? (k ? "이름 없는 반" : unjudgedAny ? "미매핑(판정 전 포함)" : "미매핑"), href: null, active: false };
+        // 반을 아직 찾아보지 않은 옛 기록(백필 전)은 저장된 반이 비어 '반 없음' 칸에 들어간다 — 그 사실을 라벨에 밝힌다.
+        return { label: it.label ?? (k ? "이름 없는 반" : unjudgedAny ? "반 없음(아직 안 찾아본 옛 기록 포함)" : "반 없음"), href: null, active: false };
       case "category":
         return {
           label: (k && CONSULTATION_CATEGORY_LABEL[k]) || "분류 없음",

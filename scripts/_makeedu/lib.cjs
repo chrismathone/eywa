@@ -71,6 +71,16 @@ function normalizeName(v) {
   return s.replace(/\s+/g, "").toLowerCase();
 }
 
+// 동명이인 알파벳 접미사(A·B·…·AA)를 뗀 매칭 키 — `권민서A`·`권민서` → `권민서`. 앱 `stripAutoSuffix`와 같은 규칙(대문자만).
+// 🔴 2026-10-20 권민서·김지유: 에이와는 퇴원생까지 세어 `권민서A`로, 메이크에듀는 `권민서`로 같은 학생을 적었다 → 이름이 글자까지
+//    같아야 하는 매칭이 놓쳐 동기화가 `권민서B`를 새로 만들었다. 이 키는 **전화가 같을 때만** 쓴다(이름만으로는 진짜 동명이인을 합친다).
+function baseNameKey(v) {
+  const n = normalizeName(v);
+  const raw = stripNameStatusSuffix(v).replace(/\s+/g, "");
+  const stripped = raw.replace(/[A-Z]+$/, "");
+  return stripped ? stripped.toLowerCase() : n;
+}
+
 // 숫자 추출(금액): "270,000" / "23,500원" → 270000
 function parseAmount(v) {
   const s = txt(v);
@@ -297,6 +307,7 @@ module.exports = {
   normPhone,
   gender,
   normalizeName,
+  baseNameKey,
   stripNameStatusSuffix,
   parseAmount,
   gradeNorm,

@@ -41,13 +41,17 @@ describe("pack — CSS 격자 자동 배치(sparse)와 같은 자리", () => {
 
   it("지금 운영실(원장 기본)을 흘리면 옛 CSS 격자 자리와 같다", () => {
     const out = pack(classicToItems(DEFAULT_LAYOUT));
-    // KPI 8칸이 한 줄
-    expect(out.filter((p) => p.id.startsWith("kpi:")).every((p) => p.y === 0 && p.w === 3)).toBe(true);
-    // 첫 구역: 4장 → 등록·퇴원/6개월 반씩 → 재원생 추이 한 줄
+    // KPI 9칸(강좌수 2026-10-20)이 한 줄 — 24열을 3열 6칸 + 2열 3칸으로 꽉 채운다(마지막 칸이 다음 줄로 떨어지지 않게).
+    const kpis = out.filter((p) => p.id.startsWith("kpi:"));
+    expect(kpis).toHaveLength(9);
+    expect(kpis.every((p) => p.y === 0)).toBe(true);
+    expect(kpis.reduce((n, p) => n + p.w, 0)).toBe(24);
+    // 첫 구역: 4장 → 등록·퇴원/6개월 반씩 → 재원생 추이 한 줄 → 강좌수 추이 한 줄
     expect(at(out, "heading:academy-overview")).toMatchObject({ y: 1, w: 24 });
     expect(at(out, "panel:changes")).toMatchObject({ x: 0, y: 3, w: 12 });
     expect(at(out, "panel:billing6")).toMatchObject({ x: 12, y: 3, w: 12 });
     expect(at(out, "panel:enrolledTrend")).toMatchObject({ x: 0, y: 4, w: 24 });
+    expect(at(out, "panel:courseTrend")).toMatchObject({ x: 0, y: 5, w: 24 });
     // 둘째 구역: 학교별 학생이 2줄, 학습·학부모 보고 / 학생 상담이 반씩
     expect(at(out, "panel:schools")).toMatchObject({ x: 12, h: 2 });
     expect(at(out, "panel:reports").w).toBe(12);

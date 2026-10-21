@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import type { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { effectiveTeacherScope } from "@/lib/auth/view-mode";
 import { kstDateOf } from "@/lib/date-kst";
@@ -11,6 +12,10 @@ import {
   type FirstClassSchedule,
 } from "./admissions-class-link";
 import type { AdmissionsConsultationCandidate } from "./admissions-consultation-link";
+
+
+/** cron(관리 키 · 세션 없음)으로 부를 때의 재료 — 관리 키는 RLS를 건너뛰므로 모든 조회에 지점(tenant_id)을 건다. */
+export type AdminDeps = { db: ReturnType<typeof createAdminClient>; tenantId: string };
 
 /**
  * 일정 연결 후보 + 진행 판정 재료(outcome·과목) — 운영실 일정 카드와 '상담 진행' 카드가 **같은 한 번의 조회**를 나눠 쓴다
@@ -29,19 +34,21 @@ export type ConsultationRow = AdmissionsConsultationCandidate & {
  */
 export async function homonymFamilies(
   bases: readonly string[],
+  /** cron(관리 키) 경로 — 관리 키는 RLS를 건너뛰므로 `tenantId` 필수([[#104]]). 없으면 로그인 사용자(RLS). */
+  deps?: AdminDeps,
 ): Promise<Map<string, { studentId: string; key: string }[]>> {
   const safe = [...new Set(bases)].filter((base) => /^[가-힣]{2,4}$/.test(base));
   if (!safe.length) return new Map();
-  const db = await createClient();
-  const rows = await fetchAllPaged<{ id: string; name: string; school: string | null; grade: string | null }>((from, to) =>
-    db
+  const db = deps?.db ?? (await createClient());
+  const rows = await fetchAllPaged<{ id: string; name: string; school: string | null; grade: string | null }>((from, to) => {
+    let q = db
       .from("students")
       .select("id,name,school,grade")
       .neq("status", "withdrawn")
-      .or(safe.map((base) => `name.like.${base}*`).join(","))
-      .order("id")
-      .range(from, to),
-  );
+      .or(safe.map((base) => `name.like.${base}*`).join(","));
+    if (deps) q = q.eq("tenant_id", deps.tenantId);
+    return q.order("id").range(from, to);
+  });
   const families = new Map<string, { studentId: string; key: string }[]>();
   for (const row of rows) {
     const base = baseNameOf(row.name.trim());
@@ -58,8 +65,10 @@ export async function homonymFamilies(
  */
 export async function admissionsConsultationCandidates(
   sinceDate: string,
+  /** cron(관리 키) 경로 — `tenantId` 필수([[#104]]). */
+  deps?: AdminDeps,
 ): Promise<ConsultationRow[]> {
-  const db = await createClient();
+  const db = deps?.db ?? (await createClient());
   const { startIso } = kstDayBounds(sinceDate);
   type Student = { name: string };
   type Row = {
@@ -74,16 +83,16 @@ export async function admissionsConsultationCandidates(
     subject: string | null;
     student: Student | Student[] | null;
   };
-  const rows = await fetchAllPaged<Row>((from, to) =>
-    db
+  const rows = await fetchAllPaged<Row>((from, to) => {
+    let q = db
       .from("enrollment_consultations")
       .select(
         "id,prospect_name,prospect_school,prospect_grade,parent_phone,student_id,consulted_at,outcome,subject,student:students!enrollment_consultations_student_id_students_id_fk(name)",
       )
-      .gte("consulted_at", startIso)
-      .order("id")
-      .range(from, to),
-  );
+      .gte("consulted_at", startIso);
+    if (deps) q = q.eq("tenant_id", deps.tenantId);
+    return q.order("id").range(from, to);
+  });
   return rows.flatMap((row) => {
     const name = row.prospect_name?.trim();
     const consultedOn = kstDateOf(row.consulted_at);

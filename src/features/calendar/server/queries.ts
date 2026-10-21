@@ -144,9 +144,10 @@ function mapManual(r: ManualEventRow): CalendarEvent {
 async function fetchManualEvents(
   first: string,
   last: string,
-  opts: { titleContains?: string } = {},
+  opts: { titleContains?: string; deps?: { db: ReturnType<typeof createAdminClient>; tenantId: string } } = {},
 ): Promise<{ ready: boolean; events: CalendarEvent[] }> {
-  const supabase = await createClient();
+  // cron(관리 키) 경로면 지점으로 좁힌다(관리 키는 RLS를 건너뛴다 — [[#104]]).
+  const supabase = opts.deps?.db ?? (await createClient());
   // 제목 검색(N9) — `%`·`_`·`\`는 ilike 와일드카드라 글자 그대로 찾게 이스케이프한다.
   const titlePattern = opts.titleContains
     ? `%${opts.titleContains.replace(/[\\%_]/g, (c) => `\\${c}`)}%`
@@ -162,6 +163,7 @@ async function fetchManualEvents(
             .lte("start_date", last)
             .gte("end_date", first);
           if (titlePattern) q = q.ilike("title", titlePattern);
+          if (opts.deps) q = q.eq("tenant_id", opts.deps.tenantId);
           return q
             .order("start_date", { ascending: true })
             .order("id", { ascending: true }) // OFFSET 페이지 흔들림 방지 tie-break
@@ -228,9 +230,14 @@ const DATE_RE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
  * 수기 일정·휴가 오버레이를 두 번씩 읽는데, 휴가는 입학 일정 분류에서 어차피 전부 버려진다(30초 갱신마다 도는 자리).
  * ⚠️ 날짜가 아니거나 거꾸로면 빈 결과.
  */
-export async function getDateRangeEvents(first: string, last: string): Promise<CalendarMonth> {
+export async function getDateRangeEvents(
+  first: string,
+  last: string,
+  /** cron(관리 키) 경로 — 매일 기록이 지점별로 부른다(`tenantId` 필수). */
+  deps?: { db: ReturnType<typeof createAdminClient>; tenantId: string },
+): Promise<CalendarMonth> {
   if (!DATE_RE.test(first) || !DATE_RE.test(last) || first > last) return { ready: true, events: [] };
-  return fetchManualEvents(first, last);
+  return fetchManualEvents(first, last, deps ? { deps } : {});
 }
 
 /**

@@ -6,7 +6,7 @@ import s from "./_overview/overview.module.css";
 // ⚠️ **실제 화면의 뼈대를 그대로 따른다** — 스켈레톤이 더 크거나 작으면 로드가 끝나는 순간 화면이 튄다.
 // 🔑 격자·줄 높이를 손으로 다시 짓지 않는다: 실제 CSS 모듈 클래스(.header·.identity·.kpis·.kpiBody·.grid·.panel…)에
 //    **같은 길이의 글자를 투명하게** 넣어 줄 높이를 그대로 얻는다(창 폭에 따른 열 수도 컨테이너 쿼리 한 벌로 같아진다).
-// 구조: 머리 → KPI 여덟 칸 → '학원 운영 한눈에'(패널 넷 + 넓은 패널 둘) → '학생 · 학습 · 상담'(일곱,
+// 구조: 머리 → KPI 아홉 칸 → '학원 운영 한눈에'(패널 넷 + 넓은 패널 둘 + 한 줄 추이 둘) → '학생 · 학습 · 상담'(일곱,
 // 셋째는 두 줄 + 학습·보고와 학생 상담 한 쌍) → '수업과 학원 운영'(여덟) → 꼬리. 패널 속 높이는 흔한 내용 높이의 근삿값이다.
 import type { CSSProperties } from "react";
 
@@ -14,12 +14,14 @@ const T = "text-transparent bg-bg-soft animate-pulse rounded";
 
 const KPI = [
   ["재원생", "000", "명", "EiE 000 · 인재원 영어 000 · 수학 000"],
+  // 강좌수(원장 2026-10-20 — 재원생 오른쪽) — 실제 띠와 칸 수·순서가 같아야 로드 끝에 화면이 안 튄다.
+  ["강좌수", "000", "개", "EiE 00 · 인재원 영어 000 · 수학 000"],
   ["퇴원&수업종료", "0", "명", "EiE 0 · 인재원 영어 0 · 수학 0"],
   ["신규문의", "0", "건", "마지막 접수 00:00"],
   ["금일 입테", "0", "건", "첫 일정 00:00"],
   // 금일 등록(원장 2026-09-23 — 금일입테 오른쪽).
   ["금일 등록", "0", "명", "반 배정 0 · 배정 전 0"],
-  ["오늘첫수업", "0", "명", "첫 등원 0 · 새 과목 0"],
+  ["오늘첫수업", "0", "명", "첫 등원 0 · 처음 듣는 과목 0"],
   // 최근 결석(원장 2026-10-20 — 옛 '전일 결석'을 어제까지 7일로) — 보조 줄 = 기간 + 결석 횟수 + 연락 필요. 날짜는 보통 폭.
   ["최근 결석", "0", "명", "10/13~10/19 · 결석 0회 · 연락 필요 0명"],
   // 보강예정(원장 2026-09-14 "가장 끝으로") — 실제 마지막 칸과 순서·수가 같아야 로드 끝에 화면이 안 튄다.
@@ -40,6 +42,9 @@ const SECTIONS: { title: string; note: string; panels: PanelShape[]; followups?:
       { title: "신규생 단계별 관리", note: "등록 후 90일 · 재원·대기 학생", body: 180 },
       { title: "등록 · 퇴원 추이", note: "최근 6개월 · 당월은 오늘까지", body: 245, wide: true },
       { title: "6개월 청구 · 수납", note: "최근 6개월 · 청구월 기준 실청구액(청구 − 할인)", body: 245, wide: true },
+      // 한 줄 전체 추이 둘(실제 화면의 재원생 추이 · 강좌수 추이 — `s.fullRow`).
+      { title: "재원생 추이", note: "최근 12개월 · 달마다 말일 기준(이번 달은 오늘) · 휴원 제외", body: 245, className: s.fullRow },
+      { title: "강좌수 추이", note: "최근 12개월 · 달마다 말일 기준(이번 달은 오늘) · 학생마다 듣는 반을 모두", body: 245, className: s.fullRow },
     ],
   },
   {
@@ -49,10 +54,10 @@ const SECTIONS: { title: string; note: string; panels: PanelShape[]; followups?:
       { title: "과목별 수강", note: "현재 재원생 · 과목별 수강과 동시 수강", body: 300 },
       { title: "학년별 재원생", note: "현재 재원생 · 학원설정 학년 순 · 영어·수학 수강 구성", body: 300 },
       { title: "학교별 학생", note: "현재 재원생 · 초등·중등·고등", body: 520, className: s.schoolPanel },
-      { title: "신규 콜&상담 전환", note: "지난달 · 이번 달 · 상담일 기준", body: 170 },
+      { title: "신규 콜&상담 전환", note: "지난달 · 이번 달 · 접수일 기준", body: 170 },
       { title: "반복 결석 학생", note: "최근 14일 · 사전 통보 제외", body: 180 },
       { title: "최근 14일 등원율", note: "오늘 포함 14일 · (출석 + 지각) / 유효 출결 칸", body: 200 },
-      { title: "상담 진행", note: "상담일 기준 최근 30일 · 접수 → 수업 시작", body: 230 },
+      { title: "상담 진행", note: "접수일 기준 최근 30일 · 접수 → 수업 시작", body: 230 },
     ],
     followups: [
       { title: "학습 · 학부모 보고", note: "수업보고서 기준", body: 200 },
@@ -120,7 +125,7 @@ export default function DashboardLoading() {
           </div>
         </header>
         {/* 열 수 = 칸 수(실제 띠의 `kpiGridVars`와 같은 변수) — 없으면 기본 6열이라 일곱째 칸이 줄을 바꿔 로드 끝에 화면이 튄다. */}
-        <div className={s.kpis} style={{ "--kpi-n": KPI.length, "--kpi-mid": 4 } as CSSProperties} data-kpi-n={KPI.length}>
+        <div className={s.kpis} style={{ "--kpi-n": KPI.length, "--kpi-mid": 3, "--kpi-last-mid": "auto" } as CSSProperties} data-kpi-n={KPI.length}>
           {KPI.map(([label, value, unit, detail]) => (
             <div key={label} className={s.kpi}>
               <div className={s.kpiBody}>

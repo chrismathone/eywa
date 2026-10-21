@@ -23,9 +23,15 @@ export function studentsEnrolledHref(program?: Program): string {
  * `view` = 재원생 추이를 무엇으로 나눠 열지(과목별 · 수강 구성) — 이번 방문만 고르고 저장하지 않는다.
  * 학년별·학교별 카드는 옛 학년·학교 값이 저장되지 않아 정확한 흐름이 없으므로 여기로 오지 않는다(원생목록 그대로).
  */
-export type StudentStatsSection = "trend" | "flow";
-export function studentsStatsHref(section: StudentStatsSection, view?: "subject" | "mix"): string {
-  return `/students/stats${view ? `?view=${view}` : ""}#${section}`;
+export type StudentStatsSection = "trend" | "courses" | "flow";
+/**
+ * `subject` = 과목 관리자가 운영실에서 고른 과목(빠지면 첫 담당 과목으로 열려 카드와 숫자가 갈린다 — 리뷰 2026-10-21) ·
+ * `teacherView` = 강사 화면은 원생 통계를 보이지 않으므로 원생목록(재원생)으로 보낸다(막다른 화면에 닿지 않게).
+ */
+export function studentsStatsHref(section: StudentStatsSection, opts: { view?: "subject" | "mix"; subject?: string | null; teacherView?: boolean } = {}): string {
+  if (opts.teacherView) return studentsEnrolledHref();
+  const q = [opts.view ? `view=${opts.view}` : "", opts.subject ? `subject=${encodeURIComponent(opts.subject)}` : ""].filter(Boolean).join("&");
+  return `/students/stats${q ? `?${q}` : ""}#${section}`;
 }
 
 /**
@@ -47,6 +53,15 @@ export function studentsUnenrolledHref(): string {
   return studentsEnrolledHref().replace("subject=all", `subject=${NO_SUBJECT}`);
 }
 
+/**
+ * KPI '오늘첫수업' ↗ — 원생 통계의 **첫 수업 추이**를 이번 달 일별로(원장 2026-10-20 *"오늘 첫수업도 마찬가지"*). 오늘 칸 = 카드 숫자.
+ * 오늘 첫 수업 학생 목록(옛 목적지 `studentsFirstClassHref`)은 그 카드 머리 링크로 남는다.
+ */
+export function firstClassTrendHref(subject?: string | null): string {
+  // 과목 관리자가 운영실에서 고른 과목을 싣는다(빠지면 첫 담당 과목으로 열려 카드와 숫자가 갈린다 — 리뷰 2026-10-20).
+  return `/students/stats?fc=day${subject ? `&subject=${encodeURIComponent(subject)}` : ""}#first`;
+}
+
 /** 그날 첫 수업 학생(첫 등원 + 새 과목) — 상태는 전체(첫 수업 학생의 상태를 가리지 않는다). */
 export function studentsFirstClassHref(date: string): string {
   return `/students?first=${date}&status=all&${STUDENT_AXES}`;
@@ -63,6 +78,71 @@ export function withdrawalsMonthHref(month: string, program?: Program): string {
 /** 그날 접수된 콜&상담(목록 보기). */
 export function intakeDayHref(date: string): string {
   return `/enrollment?view=table&received=${date}`;
+}
+
+/**
+ * KPI '신규문의' ↗ — 신규 콜&상담 통계 보기의 **신규 문의 추이**를 이번 달 일별로(원장 2026-10-20 *"신규 문의 추이는 없네 신규 문의 상세에서
+ * 그것도 추가"*). 오늘 칸 = 카드 숫자. 오늘 접수 목록(옛 목적지 `intakeDayHref`)은 그 카드 머리 링크로 남는다.
+ * `from=dashboard` = 이 방문은 '마지막 보기'를 저장하지 않는다.
+ */
+export function intakeTrendHref(): string {
+  return "/enrollment?view=stats&trend=day&from=dashboard#intake";
+}
+
+/**
+ * 운영실 '6개월 청구 · 수납'·'수납 현황'의 '상세' — 수납 통계(청구월별 추이 · 원장 2026-10-20 *"청구수납에 대해서도 상세 추이를 볼 수 있게.
+ * 지금 수납 상세 페이지로 이동하는데"*). 달마다 수납관리 목록으로 가는 길은 통계의 수치 표가 잇는다.
+ */
+export function billingStatsHref(subject?: string | null): string {
+  // 과목 관리자가 운영실에서 고른 과목을 싣는다 — 빠지면 통계가 첫 담당 과목으로 열려 카드와 숫자가 갈린다(리뷰 2026-10-20).
+  return `/billing/stats${subject ? `?subject=${encodeURIComponent(subject)}` : ""}#billing`;
+}
+
+/**
+ * 운영실 '최근 14일 등원율'의 '상세' — 출결 통계(등원율 추이 · 원장 2026-10-20 *"상세 눌렀을때 추이를 볼 수 없는곳 모두 추가해보자"*).
+ * 과목 관리자가 운영실에서 고른 과목을 싣는다(빠지면 첫 담당 과목으로 열려 카드와 숫자가 갈린다).
+ */
+export function attendanceStatsHref(subject?: string | null): string {
+  return `/attendance/stats${subject ? `?subject=${encodeURIComponent(subject)}` : ""}#rate`;
+}
+
+/** 운영실 '이번 달 지출 내역'의 '상세' — 수납 통계의 지출 추이(지출일 기준 · 학원 전체). 그 달 지출 목록은 통계의 수치 표가 잇는다. */
+export function expenseStatsHref(): string {
+  return "/billing/stats#expenses";
+}
+
+/**
+ * 운영실 '학생 상담'의 '상세' — 상담 통계(월·주 추이가 이미 있다 · 원장 2026-10-20 *"상세 눌렀을때 추이를 볼 수 없는곳 모두"*).
+ * 기간은 전체(카드의 '전체 기록'과 같다) · 강사는 두 화면 모두 본인이 쓴 상담. 🔴 과목은 싣지 않는다 — 과목 관리자의 고른 과목은
+ * 과목 **묶음**의 대표 키(수학 묶음 = 수학 · 수학(심화) 중 하나)라 상담 통계의 과목 필터(그 키·라벨 하나)에 넣으면 같은 묶음의 다른
+ * 과목 상담이 빠진다(리뷰 2026-10-21). 통계는 학원 전체로 열리고, 과목은 그 화면 필터에서 고른다.
+ */
+export function consultationStatsHref(): string {
+  return "/consultations/stats";
+}
+
+/**
+ * 운영실 '학습 · 학부모 보고'의 '상세' — 보고서 통계(숙제 수행 · 학부모 확인 추이 · 0388a). 과목 관리자가 고른 과목을 싣는다
+ * (통계가 운영실과 같은 `subjectScopeOf`로 그 묶음을 푼다).
+ */
+export function reportStatsHref(subject?: string | null): string {
+  return `/lesson-reports/stats${subject ? `?subject=${encodeURIComponent(subject)}` : ""}#reports`;
+}
+
+/**
+ * 운영실 '상담 진행'·'신규생 단계별 관리'·'신규생 체크 진행'의 '상세' — 지금 상태만 남는 지표라 2026-10-21부터 매일 밤 쌓는 기록 화면
+ * (`student_daily_stats.data.ops`). 상담 진행 = 신규 콜&상담 통계 보기 `#progress`(이 방문은 마지막 보기를 저장하지 않는다) ·
+ * 신규생 = `/newcomers/stats`. 학원 전체 값이다(과목 관리자에게도 학원 전체로 보인다).
+ */
+export function consultProgressStatsHref(): string {
+  return "/enrollment?view=stats&from=dashboard#progress";
+}
+/** 운영실 '신규 콜&상담 전환'의 '상세' — 같은 접수일 축의 월별 전환 통계(신규 콜&상담 통계 보기 맨 위 · 이 방문은 마지막 보기를 저장하지 않는다). */
+export function admissionsStatsHref(): string {
+  return "/enrollment?view=stats&from=dashboard#conversion";
+}
+export function newcomerStatsHref(): string {
+  return "/newcomers/stats#history";
 }
 
 /** 그날 결석 학생(출석부). */

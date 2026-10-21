@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
 import { saveStudentStatsPrefs } from "@/features/students/stats/server/prefs-actions";
-import { flowRowsFor, flowTotals, type ChartKind, type FlowRange, type FlowRow } from "@/features/students/stats/model";
+import { availableFlowRanges, flowRowsFor, flowTotals, type ChartKind, type FlowRange, type FlowRow } from "@/features/students/stats/model";
 import { startedNote } from "@/features/dashboard/overview/model";
 import { StatCard } from "./stat-card";
 import { TrendChart } from "./trend-chart";
@@ -43,7 +43,10 @@ export function FlowBoard({
   /** 과목 관리자의 담당 과목 — 있으면 그 과목 반을 다닌(다니는) 학생의 등록·퇴원만. */
   scopeLabel: string | null;
 }) {
-  const [range, setRange] = useState<FlowRange>(initialRange);
+  const [chosenRange, setRange] = useState<FlowRange>(initialRange);
+  // 칸이 12개 이하면 '최근 12개월'은 '전체 기간'과 같다 — 기간 버튼째 세우지 않는다(리뷰 2026-10-21).
+  const ranges = availableFlowRanges(rows, from);
+  const range: FlowRange = ranges.includes(chosenRange) ? chosenRange : "all";
   const [kind, setKind] = useState<ChartKind>(initialKind);
   const shown = flowRowsFor(rows, range, from);
   const totals = flowTotals(shown);
@@ -52,17 +55,19 @@ export function FlowBoard({
   return (
     <StatCard
       id="flow"
-      title="월별 기록"
+      title="등록 · 퇴원 추이"
       note={`${first ? `${first.slice(0, 4)}년 ${Number(first.slice(5, 7))}월부터` : "기록 없음"} · 당월은 오늘까지${started ? ` · ${started}` : ""} · 퇴원은 실제 퇴원만${scopeLabel ? ` · ${scopeLabel} 반을 다닌 학생만(과목을 알 수 있는 기록만 — 반 배정 전 신입은 반에 들어간 뒤 셉니다)` : ""}`}
       tools={
         <>
-          <ToolbarSegment label="기간">
-            {(["all", "m12"] as const).map((r) => (
-              <ToolbarSegmentItem key={r} active={range === r} onClick={() => { setRange(r); void saveStudentStatsPrefs({ flowRange: r }).catch(() => undefined); }}>
-                {RANGE_LABELS[r]}
-              </ToolbarSegmentItem>
-            ))}
-          </ToolbarSegment>
+          {ranges.length > 1 ? (
+            <ToolbarSegment label="기간">
+              {ranges.map((r) => (
+                <ToolbarSegmentItem key={r} active={range === r} onClick={() => { setRange(r); void saveStudentStatsPrefs({ flowRange: r }).catch(() => undefined); }}>
+                  {RANGE_LABELS[r]}
+                </ToolbarSegmentItem>
+              ))}
+            </ToolbarSegment>
+          ) : null}
           <ToolbarSegment label="그래프">
             {(["bar", "line"] as const).map((k) => (
               <ToolbarSegmentItem key={k} active={kind === k} onClick={() => { setKind(k); void saveStudentStatsPrefs({ flowKind: k }).catch(() => undefined); }}>

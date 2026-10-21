@@ -5,7 +5,9 @@ import { isMergedStudent } from "@/features/students/status/merged";
 import { isBookkeepingOnlyExit } from "@/features/withdrawals/system-bulk";
 import { shiftMonth } from "@/features/dashboard/overview/coverage-rules";
 import { COVERAGE_WINDOW_MONTHS, computeRecordCoverage, saveCoverageMark } from "@/features/dashboard/overview/record-coverage";
-import { aywaHistoryMonths, isLiveTuition, type HistoryInvoice } from "../history-aywa";
+import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
+import { aywaHistoryMonths, isLiveTuition, lessonNameWeights, type HistoryInvoice } from "../history-aywa";
+import { lessonProgramClassifier, type LessonStaff } from "../lesson-program";
 import { mergeHistory, type HistoryMonth } from "../history";
 
 type Admin = ReturnType<typeof createAdminClient>;
@@ -23,10 +25,10 @@ const fail = (scope: string, error: { message?: string }) => new Error(`${scope}
 export async function recordAywaHistory(admin: Admin, tenantId: string, today: string): Promise<number> {
   const thisMonth = today.slice(0, 7);
   const windowStart = shiftMonth(thisMonth, -(COVERAGE_WINDOW_MONTHS - 1));
-  const [coverage, invoices, students, ended] = await Promise.all([
+  const [coverage, invoices, students, ended, programInput] = await Promise.all([
     computeRecordCoverage(admin, tenantId, today),
     fetchAllPaged<HistoryInvoice>((a, b) =>
-      admin.from("invoices").select("student_id,period,status,category,line_items,amount_total").eq("tenant_id", tenantId).gte("period", windowStart).lte("period", thisMonth).order("id").range(a, b),
+      admin.from("invoices").select("student_id,period,status,category,line_items,amount_total,amount_paid").eq("tenant_id", tenantId).gte("period", windowStart).lte("period", thisMonth).order("id").range(a, b),
     ),
     fetchAllPaged<{ id: string; enrolled_at: string | null; notes: string | null; withdrawal_metadata: unknown }>((a, b) =>
       admin.from("students").select("id,enrolled_at,notes,withdrawal_metadata").eq("tenant_id", tenantId).gte("enrolled_at", `${windowStart}-01`).lte("enrolled_at", today).order("id").range(a, b),
@@ -34,6 +36,11 @@ export async function recordAywaHistory(admin: Admin, tenantId: string, today: s
     fetchAllPaged<{ student_id: string }>((a, b) =>
       admin.from("enrollments").select("student_id").eq("tenant_id", tenantId).not("end_date", "is", null).order("id").range(a, b),
     ),
+    // 프로그램 칸(수업명으로 가름)의 재료 — 학원 설정 과목 + 직원의 이름·담당 과목. 못 읽으면 그 칸만 빼고 센다(나머지 기록은 그대로 쓴다).
+    loadProgramInput(admin, tenantId).catch((e: unknown) => {
+      console.error(JSON.stringify({ level: "error", scope: "student-history-aywa.programs", tenantId, message: e instanceof Error ? e.message : String(e) }));
+      return null;
+    }),
   ]);
   // 확정값 쓰기는 '지난 기록' 쓰기를 막지 않는다(실패는 남기고 다음 밤에 다시 적는다 — 적대 재리뷰 2026-10-20).
   await saveCoverageMark(admin, tenantId, coverage).catch((e: unknown) =>
@@ -56,7 +63,9 @@ export async function recordAywaHistory(admin: Admin, tenantId: string, today: s
     }));
   const months: string[] = [];
   for (let m = from; m <= thisMonth; m = shiftMonth(m, 1)) months.push(m);
-  const rows = aywaHistoryMonths({ months, invoices: invoices.filter(isLiveTuition), registrations, started: new Set(coverage.started) });
+  const live = invoices.filter(isLiveTuition);
+  const classify = programInput ? lessonProgramClassifier(lessonNameWeights(live), programInput.subjects, programInput.staff) : undefined;
+  const rows = aywaHistoryMonths({ months, invoices: live, registrations, started: new Set(coverage.started), classify });
   const now = new Date().toISOString();
   const { error } = await admin
     .from("student_history_monthly")
@@ -64,6 +73,20 @@ export async function recordAywaHistory(admin: Admin, tenantId: string, today: s
   if (error) throw fail("지난 기록 쓰기", error);
   await deleteStale(admin, tenantId, windowStart, from);
   return rows.length;
+}
+
+/** 수업명 판정기의 설정 재료 — 설정 과목(키·이름)과 담당 과목이 있는 직원(표시 이름·영문 이름). 관리 키라 tenant_id([[#104]]). */
+async function loadProgramInput(admin: Admin, tenantId: string): Promise<{ subjects: { key: string; label: string }[]; staff: LessonStaff[] }> {
+  const [settings, users] = await Promise.all([
+    getTenantSettingsByTenantId(tenantId, { failOnReadError: true }),
+    fetchAllPaged<{ display_name: string | null; english_name: string | null; subjects: string[] | null }>((a, b) =>
+      admin.from("users").select("display_name,english_name,subjects").eq("tenant_id", tenantId).not("subjects", "is", null).order("id").range(a, b),
+    ),
+  ]);
+  return {
+    subjects: settings.operations.subjects.map((s) => ({ key: s.key, label: s.label })),
+    staff: users.filter((u) => u.subjects?.length).map((u) => ({ names: [u.display_name, u.english_name], subjects: u.subjects ?? [] })),
+  };
 }
 
 /** 창 안(`windowStart` 이후)의 옛 에이와 줄 — `from` 앞만(없으면 창 안 전부). 창 밖 달은 그대로 둔다(위 주의). */

@@ -20,20 +20,21 @@ describe("상담 지표 줄(buildKpiLines)", () => {
     expect(buildKpiLines(full, { syncOn: false, classOn: true }).map((l) => l.metric)).not.toContain("sync");
   });
 
-  it("값 — 1인당·후속 완료율·미매핑(판정 전 수 함께)", () => {
+  it("값 — 1인당·후속 완료율·반 없는 상담(아직 반을 찾아보지 않은 옛 기록 수 함께)", () => {
     const lines = buildKpiLines(full, { syncOn: true, classOn: true });
     const v = (m: string) => lines.find((l) => l.metric === m);
     expect(v("count")?.value).toBe("20건");
     expect(v("perStudent")?.value).toBe("2.5건");
     expect(v("follow")?.value).toBe("75%");
     expect(v("class")?.value).toBe("10%");
-    expect(v("class")?.sub).toContain("아직 판정 안 한 기록 1건");
+    expect(v("class")?.label).toBe("반 없는 상담");
+    expect(v("class")?.sub).toContain("반을 아직 찾아보지 않은 옛 기록 1건");
   });
 
-  it("링크 주소를 안 주면(요약 띠) 링크가 없다 · 주면 지연이 먼저", () => {
+  it("링크 주소를 안 주면(요약 띠) 링크가 없다 · 주면 기한 경과가 먼저(운영실 카드와 같은 이름)", () => {
     expect(buildKpiLines(full, { syncOn: true, classOn: true }).every((l) => !l.link)).toBe(true);
     const follow = buildKpiLines(full, { syncOn: true, classOn: true, overdueHref: "/o", doneHref: "/d" }).find((l) => l.metric === "follow");
-    expect(follow?.link).toEqual({ href: "/o", text: "지연 1건" });
+    expect(follow?.link).toEqual({ href: "/o", text: "기한 경과 1건" });
   });
 
   it("0318a 전(헤드 카운트) = 원생 수·반 칸이 없어 그 줄은 빠진다", () => {
@@ -54,7 +55,7 @@ describe("기간·범위 문구(statsScopeText)", () => {
   it("걸린 필터를 다 적고, 검색어는 범위 문구가 아니라 따로 표시한다(말줄임에 먹히지 않게)", () => {
     const r = statsScopeText(full, { ...params, range: "7d", cat: "academic", urg: "overdue", who: "u1", subject: "math", q: "김" }, o);
     expect(r.rangeText).toBe("최근 7일");
-    expect(r.scope).toBe("카테고리 학습 · 후속 지연 · 상담사 김선생 · 과목 수학");
+    expect(r.scope).toBe("카테고리 학습 · 후속 기한 경과 · 상담사 김선생 · 과목 수학");
     expect(r.searchExcluded).toBe(true);
   });
 

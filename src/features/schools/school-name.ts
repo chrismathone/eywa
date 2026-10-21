@@ -122,6 +122,44 @@ export function canonicalSchoolName(
   return aliases.find((a) => a.from === compressed)?.to ?? compressed;
 }
 
+/**
+ * 학교급이 빠진 표기(`칠성`·`경명여`·`침산`)에 **학년의 급**을 붙인 후보(2026-10-20 김지유 건 — 상담에 `칠성`으로
+ * 적힌 것이 원생 전환까지 그대로 내려가 `칠성초`(128명)와 따로 섰다). `canonicalSchoolName`은 긴 접미를 줄이기만
+ * 해서 급이 없는 값은 통과시킨다.
+ *
+ * 🔴 후보일 뿐이다 — 저장 쪽(`completeSchoolKind`)이 그 지점 **학교알리미 목록에 실제로 있는 학교**일 때만 쓴다
+ *    (`아무개`+초 → `아무개초`처럼 없는 학교를 만들지 않는다 · 추측 금지 원칙은 위 ALIASES와 같다).
+ * ⚠️ 한글만으로 된 값만 — 숫자·공백·괄호가 섞인 값(`예비초1`·`달산초6, 예비일중`)은 메모라 손대지 않는다.
+ * ⚠️ 학년이 `초5`·`중2`·`고1`처럼 급으로 시작할 때만(`1`·`7세`는 급을 모른다).
+ */
+export function schoolKindCandidate(school: string | null | undefined, grade: string | null | undefined): string | null {
+  const s = String(school ?? "").trim();
+  if (!/^[가-힣]+$/.test(s)) return null;
+  // 지역 이름만 적은 값(`대구`)은 학교가 아니다 — 급을 붙이면 실재하는 `대구초`가 되어 버린다.
+  if (/^대구(광역시)?$/.test(s)) return null;
+  if (isSchoolLikeKey(normalizeSchoolName(s))) return null;
+  const kind = /^(초|중|고)/.exec(String(grade ?? "").trim())?.[1];
+  // 지역 접두는 뗀다(`대구칠성` → `칠성초`) — 같은 학교가 이미 `칠성초`로 저장돼 있다. `대구일중`처럼 접두를 지키는
+  // 학교는 저장 별칭이 되돌린다(`completeSchoolKind`).
+  return kind ? stripRegionPrefix(s) + kind : null;
+}
+
+/**
+ * `schoolKindCandidate`의 후보가 **알려진 학교 키**(학교알리미 `name_key`)에 있을 때만 그 후보를 저장 표기로 —
+ * 아니면 받은 값 그대로. 후보에도 저장 별칭(`일중`→`대구일중`)을 다시 건다. 키 목록을 미리 받은 쪽(엑셀 가져오기)과
+ * 한 줄만 조회하는 쪽(`completeSchoolKind`)이 이 판정을 같이 쓴다.
+ */
+export function fillSchoolKind(
+  school: string | null,
+  grade: string | null | undefined,
+  knownKeys: ReadonlySet<string>,
+  aliases: readonly SchoolSaveAlias[],
+): string | null {
+  const candidate = schoolKindCandidate(school, grade);
+  if (!candidate || !knownKeys.has(normalizeSchoolName(candidate))) return school;
+  return aliases.find((a) => a.from === candidate)?.to ?? candidate;
+}
+
 /** 정규화 키가 학교 이름 꼴인가(= 급으로 끝나고, 급만 있는 게 아닌가). */
 export function isSchoolLikeKey(key: string): boolean {
   if (!key || BARE_KIND_RE.test(key)) return false;

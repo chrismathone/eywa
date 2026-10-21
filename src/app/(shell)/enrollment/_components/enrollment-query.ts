@@ -41,6 +41,17 @@ export function formatMonthLabel(key: string): string {
   return `${y}년 ${Number(m)}월`;
 }
 
+/**
+ * 기간 프리셋(최근 N개월)을 보는 중일 때 월 이동 칸에 적을 라벨 — `2026년 8~10월` · 해를 넘으면 `2025년 11월~2026년 1월`.
+ * 🔴 원장 2026-10-20 *"최근 3개월인데 10월로 표시 — 행과 내용이 일치하지 않는데"*: 목록은 3개월치인데 칸엔 이번 달만 적혀 있었다.
+ */
+export function formatRangeLabel(startKey: string, endKey: string): string {
+  if (startKey === endKey) return formatMonthLabel(endKey);
+  const [sy, sm] = startKey.split("-");
+  const [ey, em] = endKey.split("-");
+  return sy === ey ? `${sy}년 ${Number(sm)}~${Number(em)}월` : `${sy}년 ${Number(sm)}월~${ey}년 ${Number(em)}월`;
+}
+
 export function shiftMonth(key: string | null, delta: number, todayKey: string): string {
   const base = key ?? todayKey;
   const y = Number(base.slice(0, 4));

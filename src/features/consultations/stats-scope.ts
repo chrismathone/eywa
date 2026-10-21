@@ -7,7 +7,8 @@ import { dateSpanText, type ConsultationStats } from "./stats-model";
 import type { ConsultationListParams } from "./list-href";
 
 const RANGE_TEXT: Record<string, string> = { "7d": "최근 7일", "30d": "최근 30일" };
-const URG_TEXT: Record<string, string> = { overdue: "지연", today: "오늘", soon: "3일 내", later: "예정", done: "완료" };
+// 이름은 운영실 '학생 상담' 카드와 같게 — 기한이 지난 후속 = '기한 경과'(리뷰 2026-10-21).
+const URG_TEXT: Record<string, string> = { overdue: "기한 경과", today: "오늘", soon: "3일 내", later: "예정", done: "완료" };
 
 export type StatsScopeText = {
   /** 기간 + 실제로 잡힌 첫·마지막 상담일 — `전체 기간(1/5~9/30)`. 통계 화면 머리·띠 툴팁. */

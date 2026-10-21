@@ -218,15 +218,16 @@ const consultAudienceKo = (v: unknown): string | null => {
 };
 /**
  * 학생상담 저장의 반(0318a) — `classId` 키가 metadata에 **있을 때만** 말한다(없으면 그 저장은 반을 다루지 않았다).
- * 바뀌었으면 `반 A → B`, 사람이 고른 미매핑은 `반 미매핑(직접 고름)`. 이름은 저장 시점 이름(`className`)을 먼저 쓴다.
+ * 바뀌었으면 `반 A → B`, 사람이 반을 비우면 `반 없음(직접 고름)`(상담 화면과 같은 말 — '미매핑' 같은 내부 말을 쓰지 않는다, 2026-10-21).
+ * 이름은 저장 시점 이름(`className`)을 먼저 쓴다.
  */
 const consultClassKo = (m: Meta, nameOf: AuditNameOf): string | null => {
   if (!("classId" in m)) return null;
   const name = (id: unknown, label: unknown) => str(label) ?? (str(id) ? nameOf(id) : null);
-  const now = name(m.classId, m.className) ?? "미매핑";
+  const now = name(m.classId, m.className) ?? "없음";
   const how = m.classPick === "manual" ? "직접 고름" : m.classPick === "auto" ? "자동" : null;
   const tail = how ? `(${how})` : "";
-  if ("prevClassId" in m) return `반 ${name(m.prevClassId, m.prevClassName) ?? "미매핑"} → ${now}${tail}`;
+  if ("prevClassId" in m) return `반 ${name(m.prevClassId, m.prevClassName) ?? "없음"} → ${now}${tail}`;
   return `반 ${now}${tail}`;
 };
 

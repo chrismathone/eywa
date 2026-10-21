@@ -61,6 +61,8 @@ describe("composeEnrolled · enrolledSubjectCounts — 한 번 받은 행으로 
   it("과목별은 distinct 학생 — 같은 과목 두 반도 한 명", () => {
     const counts = enrolledSubjectCounts([...rows, enr("a", "math")], null);
     expect(counts.bySubject).toEqual({ english: 2, math: 2, subject_1: 1, science: 1 });
+    // 막대 합 6 − 막대에 선 학생 4(a·b·c·d) = 두 과목 듣는 a·c가 더 선 2(운영실 '과목별 수강' 각주).
+    expect(counts.students).toBe(4);
     expect(counts.combinations.reduce((sum, g) => sum + g.value, 0)).toBe(4);
   });
 });

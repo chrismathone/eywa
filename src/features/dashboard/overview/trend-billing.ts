@@ -1,4 +1,4 @@
-import { withdrawalSubjects } from "@/features/withdrawals/window";
+import { WITHDRAW_SUBJECT_SPAN_DAYS } from "@/features/withdrawals/window";
 import type { TrendEnrollment, TrendEnrollments, TrendStudent } from "./enrolled-trend";
 
 /*
@@ -35,12 +35,37 @@ export function billedTuitionMonths(rows: readonly { period: string | null; stat
 }
 
 /**
- * 장부 정리 학생이 청구로 세어진 날 **시작한 수강이 하나도 걸려 있지 않으면**(수강은 끝났는데 그달 청구가 살아 있다) 퇴원 무렵 끝난
- * 과목으로 가른다 — `withdrawalSubjects`(마지막 종료일에서 14일 안 · 퇴원관리·KPI의 퇴원 과목과 같은 판정, 적대 리뷰 2026-10-20).
- * '모름'으로 모든 과목에 들거나(`subjectTrendOf`) 과목 선에서 빠지지(`breakdownTrendOf`) 않게(원장 2026-10-20).
- * 청구로 세어진 날이 아니면 null(종전 판정 그대로) · 끝난 수강이 그날까지 없으면 빈 목록('모름').
+ * 장부 정리 학생이 청구로 세어진 날 **시작한 수강이 하나도 걸려 있지 않으면**(수강은 끝났는데 그달 청구가 살아 있다) 퇴원 무렵 함께 끝난
+ * 수강 — 그날까지 끝난 수강 중 마지막 종료일에서 14일 안(`WITHDRAW_SUBJECT_SPAN_DAYS` · 퇴원관리·KPI의 퇴원 과목 `withdrawalSubjects`와
+ * 같은 폭, 적대 리뷰 2026-10-20). 청구로 세어진 날이 아니면 null(종전 판정 그대로) · 끝난 수강이 그날까지 없으면 빈 목록('모름').
+ */
+function exitWindowRows(s: TrendStudent, rows: readonly TrendEnrollment[], en: TrendEnrollments, d: string): TrendEnrollment[] | null {
+  if (s.status !== "withdrawn" || !s.cleanup || billedOn(s, en, d) !== true) return null;
+  const ended = rows.filter((e) => !!e.end && e.end.slice(0, 10) <= d);
+  const last = ended.reduce<string | null>((m, e) => (!m || e.end! > m ? e.end! : m), null);
+  if (!last) return [];
+  const floor = new Date(Date.parse(`${last.slice(0, 10)}T00:00:00Z`) - WITHDRAW_SUBJECT_SPAN_DAYS * 86_400_000).toISOString().slice(0, 10);
+  return ended.filter((e) => e.end!.slice(0, 10) >= floor);
+}
+
+/**
+ * 위 수강을 **반으로** 셀 때(강좌수 추이 `course-trend.ts`) — 반이동으로 닫힌 줄은 뺀다(옮겨 갔을 뿐 · 옮겨 간 반이 같은 폭 안에 따로 있다 ·
+ * 시간표 X `endedTogether`와 같은 규칙, 적대 리뷰 2026-10-20: X→Y 반이동 뒤 Y로 끝난 학생이 두 강좌로 셌다). 마지막으로 끝난 줄은 그대로.
+ */
+export function billedExitRows(s: TrendStudent, rows: readonly TrendEnrollment[], en: TrendEnrollments, d: string): TrendEnrollment[] | null {
+  const exit = exitWindowRows(s, rows, en, d);
+  if (!exit) return null;
+  // 반이동이 아닌 줄이 있으면 반이동 줄은 모두 뺀다(종료일이 같아도 두 번 세지 않게) — 전부 반이동이면 마지막 줄 하나만.
+  if (exit.some((e) => !e.transferred)) return exit.filter((e) => !e.transferred);
+  const last = exit.reduce<TrendEnrollment | null>((m, e) => (!m || e.end! > m.end! ? e : m), null);
+  return last ? [last] : [];
+}
+
+/**
+ * 위 수강의 과목 — '모름'으로 모든 과목에 들거나(`subjectTrendOf`) 과목 선에서 빠지지(`breakdownTrendOf`) 않게(원장 2026-10-20).
+ * 퇴원 과목 판정(`withdrawalSubjects`)과 같은 줄을 본다(반이동 줄 포함). 청구로 세어진 날이 아니면 null · 끝난 수강이 없으면 빈 목록.
  */
 export function billedExitSubjects(s: TrendStudent, rows: readonly TrendEnrollment[], en: TrendEnrollments, d: string): string[] | null {
-  if (s.status !== "withdrawn" || !s.cleanup || billedOn(s, en, d) !== true) return null;
-  return withdrawalSubjects(rows.filter((e) => !!e.end && e.end.slice(0, 10) <= d).map((e) => ({ endDate: e.end, subject: e.subject })));
+  const exit = exitWindowRows(s, rows, en, d);
+  return exit && [...new Set(exit.flatMap((e) => (e.subject ? [e.subject] : [])))].sort();
 }

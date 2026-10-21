@@ -5,16 +5,16 @@ import { getUserPermMatrix } from "@/lib/auth/perm-matrix";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { getTeacherScope, type TeacherScope } from "@/lib/auth/teacher-scope";
 import { canAccess, MENU_KEYS, type MenuKey } from "@/lib/permissions";
-import { unstable_cache } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { kstTimeOf, kstToday } from "@/lib/date-kst";
 import {
   countEnrolledStudents,
   fetchActiveEnrolledEnrollments,
+  fetchEndingEnrolledEnrollments,
   fetchEnrolledStudents,
 } from "@/features/students/server/enrolled-programs";
+import { summarizeCourses } from "@/features/students/enrollment/course-count";
 import {
   composeEnrolled,
   notYetStartedStudentIds,
@@ -41,7 +41,7 @@ import { bookkeepingOnlyIds } from "@/features/withdrawals/server/bookkeeping";
 import { getIntakeOnDay } from "@/features/enrollment/server/intake-day";
 import { getFirstClassStudents } from "@/features/dashboard/server/day-arrivals-query";
 import { getEnrolledToday } from "@/features/dashboard/server/enrolled-today";
-import { loadEnrolledTrend, loadEnrolledTrendSlicer } from "./enrolled-trend-server";
+import { loadEnrolledTrend, loadEnrolledTrendSlicer, type EnrolledTrend } from "./enrolled-trend-server";
 import { getScopedRecentAbsences } from "@/features/dashboard/server/recent-absences";
 import { recentAbsenceRange } from "./kpi-links";
 import { loadUpcomingMakeup } from "@/features/dashboard/server/makeup-upcoming";
@@ -57,23 +57,13 @@ import {
   type EffectiveAttendanceRecord,
 } from "@/features/attendance/effective-records";
 import { attendanceOverview, attendanceWindowStart } from "./attendance-day";
-import { summarizeInvoices } from "@/features/billing/calc";
-import {
-  classifyInvoice,
-  enrollmentInMonth,
-  summarizeSubjectBilling,
-  type ClassifiedInvoice,
-  type InvoiceForSubject,
-  type SubjectBillingSummary,
-} from "./billing-subject";
+import { loadBillingMonths } from "./billing-months-server";
+import type { SubjectBillingSummary } from "./billing-subject";
 import { getRecentConsultationRows, getRecentEnrollmentStats } from "@/features/enrollment/server/stats-queries";
 import { summarizeRecentEnrollment } from "@/features/enrollment/recent-stats";
 import { getStudentConsultationCounts } from "@/features/consultations/server/queries";
 import { getNewcomers } from "@/features/newcomers/server/queries";
-import {
-  ONBOARDING_ITEMS,
-  shiftDate,
-} from "@/features/newcomers/onboarding-items";
+import { shiftDate } from "@/features/newcomers/onboarding-items";
 import {
   getUnreadReports,
   loadHomeworkRisk,
@@ -99,9 +89,8 @@ import {
   getAbsenceBreakdown,
 } from "@/features/dashboard/server/queries";
 import { unexplainedAbsences } from "@/features/dashboard/absence-reasons";
-import { careStatus } from "./care";
 import { schoolsByLevel, levelSubjectSplit } from "./student-composition";
-import { newcomerStages } from "./newcomer-composition";
+import { buildCareSummary } from "./newcomer-care";
 import {
   matchFirstClass,
   matchFirstClassSchedule,
@@ -152,6 +141,36 @@ import {
 
 type Settings = Awaited<ReturnType<typeof getTenantSettings>>;
 
+/** 재원생 명단 + 활성 수강 — '재원생'·'강좌수' 칸이 **같은 조회 한 벌**을 나눠 쓴다(`loadOverview`가 한 번만 부른다). */
+type EnrolledRows = [Awaited<ReturnType<typeof fetchEnrolledStudents>>, Awaited<ReturnType<typeof fetchActiveEnrolledEnrollments>>];
+async function loadEnrolledRows(): Promise<EnrolledRows> {
+  const db = await createClient();
+  return Promise.all([fetchEnrolledStudents(db), fetchActiveEnrolledEnrollments(db)]);
+}
+
+/**
+ * 상단 '강좌수'(원장 2026-10-20 *"대시보드에 강좌수도 볼 수 있으면 좋을듯 … 한 학생이 여러 강좌를 들을 수도 있기 때문에 듣는 모든 강좌를
+ * 체크"*) — '재원생' 칸과 같은 조회(`enrolledRows`)·같은 줄 판정(`activeRows` — 이미 시작 · 휴원 아님 · 스코프)에 **종료일이 오늘 이후로
+ * 적힌 수강**(특강 기간 · 반이동 예약 전의 원래 반)을 더해 재원생이 오늘 듣는 반을 학생마다 모두 센다(`summarizeCourses`). 과목 관리자는 그 과목 반만(`pred`).
+ */
+async function courses(
+  scope: TeacherScope | null,
+  settingsPromise: Promise<Settings>,
+  enrolledRows: Promise<EnrolledRows>,
+): Promise<(pred: SlicePredicate | null) => OverviewData["courses"]> {
+  const today = kstToday();
+  const db = await createClient();
+  const [[, open], ending, settings] = await Promise.all([enrolledRows, fetchEndingEnrolledEnrollments(db, today), settingsPromise]);
+  const rows = [...open, ...ending];
+  const subjects = settings.operations.subjects;
+  return (pred) => summarizeCourses({ rows, scope, subjects, today, ...(pred ? { inSubject: pred } : {}) });
+}
+
+/** '강좌수 추이' 카드가 따로 읽으므로 '재원생 추이' 영역엔 강좌수를 싣지 않는다(스냅샷을 가볍게). */
+function withoutCourses(t: EnrolledTrend): EnrolledTrend {
+  return { monthly: t.monthly, yearly: t.yearly, recordsFrom: t.recordsFrom, trustFrom: t.trustFrom, monthlyFrom: t.monthlyFrom };
+}
+
 /**
  * 재원생 — KPI '재원생' 카드·팝업, 동시 수강, 학년별 재원생, 구성 패널.
  * 🔑 카드 숫자는 원생목록과 **같은 count(head)**(`countEnrolledStudents`), 과목별·프로그램·학년 분해는 원생목록과
@@ -162,14 +181,11 @@ type Settings = Awaited<ReturnType<typeof getTenantSettings>>;
 async function students(
   scope: TeacherScope | null,
   settingsPromise: Promise<Settings>,
+  enrolledRows: Promise<EnrolledRows>,
 ): Promise<(pred: SlicePredicate | null) => OverviewData["students"]> {
   const db = await createClient();
   const today = kstToday();
-  const [studentRows, rows, settings] = await Promise.all([
-    fetchEnrolledStudents(db),
-    fetchActiveEnrolledEnrollments(db),
-    settingsPromise,
-  ]);
+  const [[studentRows, rows], settings] = await Promise.all([enrolledRows, settingsPromise]);
   // '실시간 재원생'(원장 2026-09-16) — 아직 한 과목도 시작 안 한 학생은 총원·과목·학년 분해에서 함께 빠진다.
   // 🔴 `countEnrolledStudents`가 이 행들을 다시 받지 않게 **같은 rows에서** 집합을 만든다(운영실 30초 갱신은
   //    서버 액션이라 React cache가 조회를 묶지 않는다 — 여기서 한 번 받은 것을 넘긴다는 이 함수의 규약 그대로).
@@ -198,6 +214,8 @@ async function students(
       // 동시 수강 = 영어 + 수학(원장 2026-09-11 재정의) — gradeSplit 보라 합계와 같은 subjectMixOf 판정.
       concurrent: programs.both,
       subjectCombinations: comboRows === countRows ? counts.combinations : enrolledSubjectCounts(comboRows, scope, today).combinations,
+      // 강사 화면은 담당 과목 축으로 좁혀 '반이 없는 학생'이 다른 과목 수강생과 섞인다 — 각주를 싣지 않는다.
+      ...(scope ? {} : { subjectStudents: counts.students }),
       programs,
       gradeSplit: gradeSplit(visible, composition.programs, settings.operations.gradeLevels),
       levelSplit: levelSubjectSplit(visible, composition.programs),
@@ -342,26 +360,28 @@ export async function loadMonthlyChanges(
 ): Promise<(pred: SlicePredicate | null) => MonthChange[]> {
   const db = await createClient();
   const fromDate = `${monthKeys(today, months)[0]}-01`;
-  const [enrolled, withdrawn, range] = await Promise.all([
-    fetchAllPaged<{ id: string; enrolled_at: string; notes: string | null; withdrawal_metadata: unknown }>((from, to) =>
-      db
-        .from("students")
-        .select("id,enrolled_at,notes,withdrawal_metadata")
-        .gte("enrolled_at", fromDate)
-        .order("id")
-        .range(from, to),
-    ),
+  const ids = scope ? new Set(scope.studentIds) : null;
+  // 🔴 이 조회는 **status를 보지 않는다**(퇴원했다 복구된 학생의 그 달 등록을 살리려고) — 그래서 중복 병합된
+  //    학생도 그대로 등록으로 세고 있었다(원장 2026-09-13). 퇴원 칸은 `withdrawalRows`가 이미 걸러 온다.
+  // 수업 기록 없는 장부 정리(단체 정리)도 등록으로 세지 않는다 — 퇴원 칸이 이미 빼므로 한쪽만 남으면 증감이 기운다(원장 2026-10-15).
+  // 장부 정리 확인은 등록 행만 있으면 되므로 퇴원·기록 범위를 기다리지 않고 바로 이어 띄운다(B4 · 2026-10-21 실측 — 퇴원 체인 뒤에
+  // 줄 서 있던 40~90ms를 겹친다).
+  const countedP = fetchAllPaged<{ id: string; enrolled_at: string; notes: string | null; withdrawal_metadata: unknown }>((from, to) =>
+    db
+      .from("students")
+      .select("id,enrolled_at,notes,withdrawal_metadata")
+      .gte("enrolled_at", fromDate)
+      .order("id")
+      .range(from, to),
+  ).then((enrolled) => enrolled.filter((r) => (!ids || ids.has(r.id)) && !isMergedStudent(r.notes)));
+  const [counted, bookkeeping, withdrawn, range] = await Promise.all([
+    countedP,
+    countedP.then((rows) => bookkeepingOnlyIds(db, rows)),
     withdrawalRows,
     coverage,
   ]);
   const started = range?.billingFrom ? new Set(range.started) : null;
   const isStarted = (id: string, enrolledAt: string | null) => !started || !enrolledAt || enrolledAt.slice(0, 7) < range!.billingFrom! || started.has(id);
-  const ids = scope ? new Set(scope.studentIds) : null;
-  // 🔴 이 조회는 **status를 보지 않는다**(퇴원했다 복구된 학생의 그 달 등록을 살리려고) — 그래서 중복 병합된
-  //    학생도 그대로 등록으로 세고 있었다(원장 2026-09-13). 퇴원 칸은 `withdrawalRows`가 이미 걸러 온다.
-  // 수업 기록 없는 장부 정리(단체 정리)도 등록으로 세지 않는다 — 퇴원 칸이 이미 빼므로 한쪽만 남으면 증감이 기운다(원장 2026-10-15).
-  const counted = enrolled.filter((r) => (!ids || ids.has(r.id)) && !isMergedStudent(r.notes));
-  const bookkeeping = await bookkeepingOnlyIds(db, counted);
   const joined = counted.filter((r) => !bookkeeping.has(r.id) && isStarted(r.id, r.enrolled_at));
   // 과목 관리자(원장 2026-10-14 2단계) — 등록은 그 학생이 들은(듣는) 반의 과목, 퇴원은 퇴원 무렵 끝난 과목(없으면 마지막 반).
   // 수강 기록이 없는 등록 학생(반 배정 전)은 '모름'이라 모든 과목 관리자에게 든다 · 두 과목이면 양쪽 모두.
@@ -435,160 +455,19 @@ async function attendanceHistory(today: string, withSubjects: boolean) {
   };
 }
 
-type InvoiceTrendRow = {
-  period: string;
-  amount_total: number;
-  amount_paid: number;
-  amount_discount: number | null;
-  status: string;
-};
-
-function summarizeInvoiceMonths(rows: InvoiceTrendRow[], months: string[]) {
-  return months.map((month) =>
-    summarizeInvoices(
-      rows
-        .filter((r) => r.period === month)
-        .map((r) => ({
-          amountTotal: Number(r.amount_total),
-          amountPaid: Number(r.amount_paid),
-          amountDiscount: Number(r.amount_discount ?? 0),
-          status: r.status,
-        })),
-      month,
-    ),
-  );
+/** 최근 6개월(원장 2026-09-13 "청구 6개월로 바꾸자. 다시 돌려" — 12개월로 넓혔더니 청구서가 2026-01부터라 앞 석 달이 빈 칸이었다). 계산은 수납 통계와 한 벌(`billing-months-server.ts`). */
+function billing(today: string, tenantId: string, withSubjects: boolean): Promise<(pred: SlicePredicate | null) => SubjectBillingSummary[]> {
+  return loadBillingMonths(tenantId, monthKeys(today), withSubjects);
 }
 
-const invoiceTrendSelect = "period,amount_total,amount_paid,amount_discount,status";
-
-/**
- * 지난 달들의 청구 요약 — tenantId별 `unstable_cache`(5분). 여러 달 청구서(실측 2026-09: 월 340~430행)를 30초 갱신마다 전건
- * 다시 받으면 B2 위반이라, 바뀌지 않는 지난 달은 캐시하고 **이번 달만** 요청마다 새로 읽는다(수납 현황 카드가 같은 값을 쓴다).
- * 캐시 안엔 쿠키가 없어 admin client + 신뢰된 tenantId 키(`loadTenantSettingsRaw`와 같은 패턴, `.eq(tenant_id)` 격리).
- * ⚠️ 지난 달 미수가 5분 뒤에 반영되는 것은 감수(추이 차트) — 이번 달 숫자는 즉시.
- */
-const loadPastInvoiceMonths = (tenantId: string, months: string[]) =>
-  unstable_cache(
-    async () => {
-      const admin = createAdminClient();
-      const rows = await fetchAllPaged<InvoiceTrendRow>((from, to) =>
-        admin
-          .from("invoices")
-          .select(invoiceTrendSelect)
-          .eq("tenant_id", tenantId)
-          .in("period", months)
-          .neq("status", "void")
-          .order("id")
-          .range(from, to),
-      );
-      return summarizeInvoiceMonths(rows, months);
-    },
-    ["dashboard-invoice-trend-v2", tenantId, months.join(",")],
-    { tags: [`dashboard-invoice-trend:${tenantId}`], revalidate: 300 },
-  )();
-
-async function billing(today: string, tenantId: string, withSubjects: boolean): Promise<(pred: SlicePredicate | null) => SubjectBillingSummary[]> {
-  const db = await createClient();
-  // 최근 6개월(원장 2026-09-13 "청구 6개월로 바꾸자. 다시 돌려" — 12개월로 넓혔더니 청구서가 2026-01부터라 앞 석 달이 빈 칸이었다).
-  const months = monthKeys(today);
-  const current = months[months.length - 1];
-  const [past, currentRows, classified] = await Promise.all([
-    loadPastInvoiceMonths(tenantId, months.slice(0, -1)),
-    fetchAllPaged<InvoiceTrendRow>((from, to) =>
-      db
-        .from("invoices")
-        .select(invoiceTrendSelect)
-        .eq("period", current)
-        .neq("status", "void")
-        .order("id")
-        .range(from, to),
-    ),
-    // 과목 관리자 값(원장 2026-10-14 2단계 — 청구 항목별)은 그 값이 필요할 때만 줄 항목·수강을 읽는다.
-    withSubjects
-      ? Promise.all([loadPastClassifiedInvoices(tenantId, months.slice(0, -1)), classifiedInvoices(db, [current])]).then(([a, b]) => [...a, ...b])
-      : Promise.resolve([] as ClassifiedInvoice[]),
-  ]);
-  const academy = [...past, ...summarizeInvoiceMonths(currentRows, [current])];
-  return (pred) => (pred ? summarizeSubjectBilling(classified, months, (subject) => pred(subject)) : academy);
-}
-
-type Db = Awaited<ReturnType<typeof createClient>> | ReturnType<typeof createAdminClient>;
-
-/**
- * 그 달들의 청구서 줄마다 과목을 정한다(`billing-subject.ts`). 학생의 반 = 그 달에 수강이 걸린 반(종료된 수강 포함 — 지난 달 청구서).
- * 청구서는 달마다 수백 장이라 페이지로(B2), 수강은 학생 id 청크 × 페이지로(B3 · 청크 안 1,000행 절단 방지).
- * `tenantId`는 admin(캐시 안) 경로에서만 — RLS를 우회하므로 지점 필터가 필수다([[#104]]).
- */
-async function classifiedInvoices(client: Db, months: string[], tenantId?: string): Promise<ClassifiedInvoice[]> {
-  if (!months.length) return [];
-  type Inv = InvoiceForSubject & { student_id: string | null };
-  const invoices = await fetchAllPaged<Inv>((from, to) => {
-    let q = client.from("invoices").select("student_id,period,status,amount_total,amount_paid,amount_discount,line_items").in("period", months).neq("status", "void");
-    if (tenantId) q = q.eq("tenant_id", tenantId);
-    return q.order("id").range(from, to);
-  });
-  type One<T> = T | T[] | null;
-  const studentIds = [...new Set(invoices.map((i) => i.student_id).filter((id): id is string => !!id))];
-  const enrollments = await fetchAllPagedInChunks<{ student_id: string; class_id: string; start_date: string | null; end_date: string | null; class: One<{ class_name: string | null; subject: string | null }> }>(
-    studentIds,
-    (chunk, from, to) => {
-      let q = client.from("enrollments").select("student_id,class_id,start_date,end_date,class:class_id ( class_name, subject )").in("student_id", chunk);
-      if (tenantId) q = q.eq("tenant_id", tenantId);
-      return q.order("id").range(from, to);
-    },
-  );
-  const byStudent = new Map<string, typeof enrollments>();
-  for (const e of enrollments) byStudent.set(e.student_id, [...(byStudent.get(e.student_id) ?? []), e]);
-  return invoices.map((inv) => {
-    const classes = (inv.student_id ? byStudent.get(inv.student_id) ?? [] : [])
-      .filter((e) => enrollmentInMonth({ start: e.start_date, end: e.end_date }, inv.period))
-      .map((e) => {
-        const klass = Array.isArray(e.class) ? e.class[0] : e.class;
-        return { classId: e.class_id, className: klass?.class_name ?? null, subject: klass?.subject ?? null };
-      });
-    return classifyInvoice(inv, classes);
-  });
-}
-
-/** 지난 달들의 과목 판정 결과 — 지난 달 요약(`loadPastInvoiceMonths`)과 같은 5분 캐시(지점·달 키, admin + 지점 필터). */
-const loadPastClassifiedInvoices = (tenantId: string, months: string[]) =>
-  unstable_cache(
-    () => classifiedInvoices(createAdminClient(), months, tenantId),
-    ["dashboard-invoice-subjects-v1", tenantId, months.join(",")],
-    { tags: [`dashboard-invoice-trend:${tenantId}`], revalidate: 300 },
-  )();
 
 async function newcomers(settingsPromise: Promise<Settings>): Promise<(pred: SlicePredicate | null) => CareSummary> {
   const [view, settings] = await Promise.all([getNewcomers(), settingsPromise]);
   // The source page remains usable when the check table is unavailable. Do not manufacture overdue counts.
   const available = view.checksAvailable && !view.checksError;
-  const build = (rows: typeof view.rows, careRows: typeof view.rows): CareSummary => ({
-    total: rows.length,
-    stages: newcomerStages(rows, settings.operations.subjects),
-    checksAvailable: available,
-    items: available
-      ? ONBOARDING_ITEMS.map((item) => {
-          const statuses = careRows.map((r) =>
-            careStatus(item, r, view.today),
-          );
-          return {
-            label: item.shortLabel,
-            needs: careRows
-              .filter(
-                (_, i) => statuses[i] === "due" || statuses[i] === "overdue",
-              )
-              .map((r) => ({ id: r.studentId, name: r.name })),
-            optional: !!item.optional,
-            done: statuses.filter((s) => s === "done").length,
-            overdue: statuses.filter((s) => s === "overdue").length,
-            due: statuses.filter((s) => s === "due").length,
-            upcoming: statuses.filter((s) => s === "upcoming").length,
-            pending: statuses.filter((s) => s === "pending").length,
-            waived: statuses.filter((s) => s === "waived").length,
-          };
-        })
-      : [],
-  });
+  // 집계는 매일 기록(`ops-daily.ts`)과 한 벌(`buildCareSummary`) — 운영실 카드 숫자 = 그날 기록.
+  const build = (rows: typeof view.rows, careRows: typeof view.rows): CareSummary =>
+    buildCareSummary(rows, careRows, settings.operations.subjects, available, view.today);
   return (pred) => {
     if (!pred) return build(view.rows, view.rows);
     // 과목 관리자(원장 2026-10-14 2단계) — 그 과목 줄이 있거나 아직 과목이 없는(반 배정 전) 신규생. 체크 판정은 그 과목 줄로만
@@ -861,7 +740,11 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
       return compute(null);
     });
   }
-  addSliced("students", ["students"], async () => students(await scopePromise, settingsPromise));
+  // '재원생'·'강좌수' 칸은 같은 재원생 명단·활성 수강을 본다 — 둘 중 하나라도 놓였을 때 **한 번만** 읽는다(30초 갱신도 한 번).
+  let enrolledRowsOnce: Promise<EnrolledRows> | null = null;
+  const enrolledRows = () => (enrolledRowsOnce ??= loadEnrolledRows());
+  addSliced("students", ["students"], async () => students(await scopePromise, settingsPromise, enrolledRows()));
+  addSliced("courses", ["students"], async () => courses(await scopePromise, settingsPromise, enrolledRows()));
   addSliced("changes", ["students"], async () =>
     loadMonthlyChanges(today, await scopePromise, withdrawalRows, sliceSets.length > 0, 6, true, loadRecordCoverage(user.tenantId, today).catch((error: unknown) => {
       reportError(error, { scope: "dashboard.changes.record-coverage" }); // 실패하면 종전대로(등록일 그대로) 센다
@@ -869,13 +752,24 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
     })),
   );
   // 과목 관리자 = 그 과목 반 수강이 그날 걸려 있던 재원생(원장 2026-10-14 *"재원생 추이도 마찬가지"*). 원본은 과목 값이 필요할 때만 받는다.
+  // '재원생 추이'·'강좌수 추이' 카드는 **같은 계산값 캐시**(`loadEnrolledTrend` — 강좌수도 함께 센다)를 읽는다 — 한 번만 부른다.
+  let trendOnce: Promise<EnrolledTrend> | null = null;
+  let slicerOnce: ReturnType<typeof loadEnrolledTrendSlicer> | null = null;
+  const trends = () =>
+    Promise.all([
+      (trendOnce ??= loadEnrolledTrend(user.tenantId, today)),
+      sliceSets.length ? (slicerOnce ??= loadEnrolledTrendSlicer(user.tenantId, today)) : Promise.resolve(null),
+    ]);
   addSliced("enrolledTrend", ["students"], async () => {
     if (await scopePromise) return () => null;
-    const [academy, slicer] = await Promise.all([
-      loadEnrolledTrend(user.tenantId, today),
-      sliceSets.length ? loadEnrolledTrendSlicer(user.tenantId, today) : Promise.resolve(null),
-    ]);
-    return (pred) => (pred && slicer ? slicer(pred) : academy);
+    const [academy, slicer] = await trends();
+    return (pred) => withoutCourses(pred && slicer ? slicer(pred) : academy);
+  });
+  // '강좌수 추이'(원장 2026-10-20 '카드 따로') — 재원생 추이와 같은 원본·날짜·시작 달 · 과목 관리자는 그 과목 반만.
+  addSliced("courseTrend", ["students"], async () => {
+    if (await scopePromise) return () => null;
+    const [academy, slicer] = await trends();
+    return (pred) => (pred && slicer ? slicer(pred) : academy).courses ?? null;
   });
   // ── KPI 여섯 칸(원장 2026-09-11) — 카드·팝업·목적지 화면이 같은 함수를 부른다.
   add("withdrawals", ["withdrawals"], () => monthWithdrawals(withdrawalRows, today, settingsPromise));
@@ -1233,6 +1127,7 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
   return {
     scope: `${user.tenantId}:${user.id}:${user.systemRole}:${teacherId ?? "all"}:${view.rev}${options.full ? ":full" : ""}`,
     tenantId: user.tenantId,
+    ...(teacherId ? { teacherView: true as const } : {}),
     academy: settings.profile.name,
     today,
     requestedAt,

@@ -4,7 +4,8 @@ import { seatBlockReason } from "@/lib/license/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { createClient } from "@/lib/supabase/server";
 import { getTenantSettings } from "@/features/owner/server/queries";
-import { canonicalSchoolName } from "@/features/schools/school-name";
+import { canonicalSchoolName, fillSchoolKind } from "@/features/schools/school-name";
+import { loadSchoolKeys } from "@/features/schools/server/complete-kind";
 import { naturalKey } from "@/features/students/lib/student-import";
 import { resolveUniqueStudentName } from "@/features/students/name-suffix";
 import { STUDENT_STATUS_LABEL } from "@/features/students/status/status-labels";
@@ -140,9 +141,12 @@ const def: ImporterDef<Plan> = {
     const sheet = sheets[SHEET];
     const [settings, db] = await Promise.all([getTenantSettings(), createClient()]);
     const aliases = settings.operations.schoolSaveAliases;
-    const existing = await fetchAllPaged<Existing>((from, to) =>
-      db.from("students").select(SELECT).eq("tenant_id", ctx.tenantId).order("id").range(from, to),
-    );
+    const [existing, schoolKeys] = await Promise.all([
+      fetchAllPaged<Existing>((from, to) =>
+        db.from("students").select(SELECT).eq("tenant_id", ctx.tenantId).order("id").range(from, to),
+      ),
+      loadSchoolKeys(db, ctx.tenantId),
+    ]);
     const byCode = new Map(existing.filter((s) => s.student_code).map((s) => [s.student_code!.trim(), s]));
     const byNatural = new Map(existing.filter((s) => s.status !== "withdrawn").map((s) => [naturalKey(s.name, s.school, s.grade), s]));
     // 퇴원생 — 상태 칸이 '퇴원'인 줄(원생목록을 퇴원 필터로 내보낸 파일)만 이쪽에서 찾는다(적대 리뷰 2026-09-29).
@@ -163,8 +167,9 @@ const def: ImporterDef<Plan> = {
     for (const row of sheet?.rows ?? []) {
       const name = row.text("name", { required: true, max: 40 });
       const code = row.text("code", { max: 40 });
-      const school = canonicalSchoolName(row.text("school", { max: 40 }), aliases);
       const grade = row.text("grade", { max: 24 });
+      // 학교급이 빠진 학교(`칠성`)는 학년으로 채운다 — 화면 저장과 같은 판정(학교알리미에 있는 학교만).
+      const school = fillSchoolKind(canonicalSchoolName(row.text("school", { max: 40 }), aliases), grade, schoolKeys, aliases);
       const status = row.option("status", STATUS_OPTIONS) ?? "enrolled";
       const fields: Fields = {
         englishName: row.text("englishName", { max: 60 }),

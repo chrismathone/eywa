@@ -4,6 +4,7 @@ import type { RoadmapView } from "@/features/textbooks/book-plans";
 import { keyOrdinal, parseKey } from "@/features/textbooks/book-sequence";
 import { BookHover } from "./book-hover";
 import { TargetEditor } from "./target-editor";
+import { examBarParts } from "../lib/exam-bar";
 import css from "./plan-card.module.css";
 
 const md = (date: string) => date.slice(5).replace("-", ".");
@@ -38,6 +39,7 @@ export function RoadmapGoal({ r, studentId, studentName }: { r: RoadmapView; stu
   const posOrd = pos ? keyOrdinal(pos.key) : null;
   const state = (key: string) => (posOrd == null ? "todo" : keyOrdinal(key) < posOrd ? "done" : keyOrdinal(key) === posOrd ? "now" : "todo");
   const pc = (n: number) => `${n}%`;
+  const pinNear = doneX != null && Math.abs(doneX - todayX) < 14;
   // 최종 목표 권 — 막대에서 가장 먼저 읽혀야 하는 칸(원장 2026-10-20 *"마지막 교재라는게 가시성이 좀 떨어짐"*).
   // 그 권이 끝나는 날에 깃발 선을 긋고, 목표 뒤 권(마감에 걸린 점선 칸)은 흐리게 한다.
   const targetIdx = r.schedule.findIndex((b) => b.key === r.target.key);
@@ -75,11 +77,9 @@ export function RoadmapGoal({ r, studentId, studentName }: { r: RoadmapView; stu
           {started && doneX != null && doneX < todayX && r.status === "behind"
             ? <span className={css.tLate} style={{ left: pc(doneX), width: pc(todayX - doneX) }} /> : null}
           {started && doneX != null && doneX > todayX && r.status === "ahead" ? <span className={css.tAhead} style={{ left: pc(todayX), width: pc(doneX - todayX) }} /> : null}
-        </div>
-        {/* 내신기간 줄 — 진도 막대와 겹치면 네이비·빨강·주황이 섞여 읽히지 않는다(원장 "난리 개판오분전"). */}
-        <div className={css.tLane} aria-hidden>
-          {r.exams.map((p) => (
-            <span key={p.from} className={css.tExam} style={{ left: pc(x(p.from)), width: pc(x(p.to) - x(p.from)) }} />
+          {/* 내신기간은 막대 안에(A안) — 진도·밀림 위는 흰 | 내신기간 |, 앞으로 올 곳은 연보라 칸. */}
+          {examBarParts(r.exams, x, doneX, started && r.status === "behind" ? todayX : null).map((p) => (
+            <span key={`${p.left}-${p.kind}`} className={css.tExam} data-kind={p.kind} style={{ left: pc(p.left), width: pc(p.width) }}>{p.label}</span>
           ))}
         </div>
         {r.schedule.map((b, i) => {
@@ -108,16 +108,27 @@ export function RoadmapGoal({ r, studentId, studentName }: { r: RoadmapView; stu
           );
         })}
         {started && r.referenceDate <= to ? (
-          <span className={css.plan} style={{ left: pc(todayX) }}><em>오늘 계획 {r.planned}차시</em></span>
+          <span className={css.plan} style={{ left: pc(todayX) }}>
+            {/* 현재 핀 꼬리표와 가까우면 글자만 감춘다(선은 남는다) — 둘이 겹쳐 둘 다 안 읽히는 것보다 낫다. */}
+            {pinNear ? null : <em>오늘 계획 {r.planned}차시</em>}
+          </span>
         ) : null}
         <span className={css.goalFlag} data-end={goalX > 85 || undefined} data-near={(started && Math.abs(goalX - todayX) < 18) || undefined} style={{ left: pc(goalX) }}>
           <em>최종 목표 · {ymd(r.endDate)}</em>
         </span>
-        {doneX != null ? <span className={css.dot} style={{ left: pc(doneX) }} title={pos ? `현재 ${shortBook(pos.key, pos.title)} ${pos.lessonNo}차시 · ${pos.unit} (${md(pos.date)} 보고서)` : `실제 ${done}차시`} /> : null}
+        {/* 현재 위치 = 핀(A안, 원장 2026-10-20 "동그라미 A안으로") — 네이비 꼬리표 + 흰 테두리 점. 막대 색(네이비·빨강) 경계에 묻히지 않게. */}
+        {doneX != null ? (
+          <span className={css.pin} style={{ left: pc(doneX) }} title={pos ? `${shortBook(pos.key, pos.title)} ${pos.lessonNo}차시 · ${pos.unit} (${md(pos.date)} 보고서)` : undefined}>
+            <span className={css.pinDot} />
+            <span className={css.pinTag} data-edge={doneX > 88 ? "end" : doneX < 8 ? "start" : undefined}>현재 · {pos ? `${shortBook(pos.key, pos.title)} ${pos.lessonNo}차시` : `${done}차시`}</span>
+          </span>
+        ) : null}
       </div>
       {/* 내신기간은 알리기만 — 날짜는 권 칸에 마우스를 올리면 그 권에 걸린 것만(원장 "기간은 교재 호버하면 거기 안에"). */}
       <p className={css.legend}>
-        <span><i className={css.examKey} />내신기간 · 진도 멈춤</span>
+        <span><i className={css.examKey} data-kind="open" />내신기간 · 진도 멈춤</span>
+        <span><i className={css.examKey} data-kind="filled" />지난 진도 위 내신</span>
+        <span><i className={css.examKey} data-kind="late" />밀린 구간</span>
         {r.examNow ? <em>지금 {r.examNow.label.replace(/^중\d\s/, "")} 기간</em> : null}
         <span className={css.legendEnd}>교재 칸에 마우스를 올리면 차시·내신 날짜</span>
       </p>

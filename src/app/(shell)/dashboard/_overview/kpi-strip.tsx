@@ -7,11 +7,13 @@ import { KPI_KEYS, type KpiKey } from "@/features/dashboard/overview/layout";
 import { todayLevelTestList } from "@/features/dashboard/overview/display";
 import { monthAheadWindow, windowUntilLabel } from "@/features/dashboard/overview/upcoming-window";
 import {
-  recentAbsenceRange,
-  intakeDayHref,
-  makeupWeekHref,
-  studentsStatsHref,
+  firstClassTrendHref,
   studentsFirstClassHref,
+  intakeTrendHref,
+  recentAbsenceRange,
+  makeupWeekHref,
+  studentsEnrolledHref,
+  studentsStatsHref,
   withdrawalsMonthHref,
 } from "@/features/dashboard/overview/kpi-links";
 import { countWithdrawalPrograms } from "@/features/withdrawals/window";
@@ -21,6 +23,7 @@ import { number } from "./charts";
 import { KpiCard } from "./kpi-card";
 import { identifyCard } from "./card-id";
 import { FirstClassPopup, StudentsPopup, WithdrawalsPopup } from "./kpi-popups";
+import { CoursesPopup } from "./kpi-courses-popup";
 import { EnrolledTodayPopup, IntakePopup, LevelTestPopup, MakeupPopup } from "./kpi-popups-day";
 import { RecentAbsentPopup } from "./recent-absent-popup";
 import { monthDay } from "./kpi-popup-parts";
@@ -34,7 +37,7 @@ const count = (n: number | null | undefined) => (n == null ? "—" : number(n));
  * 좁을 때 2열(홀수 번째 마지막 카드는 CSS가 두 칸으로).
  */
 export function kpiGridVars(n: number): CSSProperties {
-  // 8칸(금일 등록 포함)은 4 × 2 — 3열이면 3·3·2로 마지막 줄만 넓어진다.
+  // 8칸(금일 등록 포함)은 4 × 2 — 3열이면 3·3·2로 마지막 줄만 넓어진다. 9칸(강좌수, 원장 2026-10-20)은 3 × 3.
   const mid = n === 4 ? 2 : n === 8 ? 4 : Math.max(1, Math.min(n, 3));
   const rest = n % mid;
   return {
@@ -45,8 +48,8 @@ export function kpiGridVars(n: number): CSSProperties {
 }
 
 /**
- * KPI 칸(원장 2026-09-11 확정 순서): 재원생 · 퇴원생 · 신규문의 · 금일입테 · **금일 등록**(2026-09-23 — 금일입테 오른쪽) ·
- * 오늘첫수업 · 최근 결석 · 보강예정.
+ * KPI 칸(원장 2026-09-11 확정 순서): 재원생 · **강좌수**(2026-10-20 — 재원생 오른쪽) · 퇴원생 · 신규문의 · 금일입테 ·
+ * **금일 등록**(2026-09-23 — 금일입테 오른쪽) · 오늘첫수업 · 최근 결석 · 보강예정.
  * 볼 권한이 없는 칸은 영역이 오지 않아 숨는다(종전 규약). ↗는 목적지 메뉴를 열 수 있을 때만 선다.
  * 🔴 금일입테는 ↗가 없다 — 캘린더 메뉴는 감춰져 있다(링크 금지 테스트가 잠근다).
  * **산정 기간**은 라벨 옆 꼬리표로(원장 2026-09-29 *"현 재원생, 이번달 퇴원 등 모두 기간 명시"* · *"날짜라기보다 이번달,
@@ -88,6 +91,8 @@ export function kpiCards(snapshot: OverviewSnapshot, opts: KpiCardOptions = {}):
     visiblePrograms(eieOn).map((program) => `${programLabel(program, subjects, eieOn)} ${number(counts[program])}`).join(" · ");
 
   const student = v.students?.data;
+  // 강좌수 = 재원생이 지금 듣는 반을 학생마다 모두(원장 2026-10-20) — 재원생 칸과 같은 조회·같은 줄 판정(`summarizeCourses`).
+  const course = v.courses?.data;
   const withdrawals = v.withdrawals?.data;
   const wd = withdrawals ? countWithdrawalPrograms(withdrawals.rows) : null;
   const month = withdrawals?.month ?? today.slice(0, 7);
@@ -126,9 +131,26 @@ export function kpiCards(snapshot: OverviewSnapshot, opts: KpiCardOptions = {}):
           icon={<MenuGlyph name="users" size={20} />}
           error={v.students.error}
           popupTitle="현재 재원생 프로그램별 인원"
-          jump={can("students") ? { href: studentsStatsHref("trend"), label: "원생 통계에서 재원생 추이 보기" } : null}
+          jump={can("students") ? (snapshot.teacherView ? { href: studentsEnrolledHref(), label: "원생목록에서 재원생 보기" } : { href: studentsStatsHref("trend", { subject: snapshot.view?.activeSubject }), label: "원생 통계에서 재원생 추이 보기" }) : null}
         >
           <StudentsPopup data={student} subjects={subjects} canOpen={can("students")} eieOn={eieOn} />
+        </KpiCard>
+  );
+  if (v.courses) cards.courses = (
+        <KpiCard
+          helpKey="dash-courses"
+          label="강좌수"
+          rename={opts.titles?.["kpi:courses"]}
+          labelNote={noteOf("courses", "현재")}
+          value={count(course?.total)}
+          unit="개"
+          detail={course ? programLine(course.programs) : "지금 듣는 반 기준"}
+          icon={<MenuGlyph name="book" size={20} />}
+          error={v.courses.error}
+          popupTitle="현재 강좌수 · 학생당 강좌 수"
+          jump={can("students") ? (snapshot.teacherView ? { href: studentsEnrolledHref(), label: "원생목록에서 재원생 보기" } : { href: studentsStatsHref("courses", { subject: snapshot.view?.activeSubject }), label: "원생 통계에서 강좌수 추이 보기" }) : null}
+        >
+          <CoursesPopup data={course} subjects={subjects} eieOn={eieOn} />
         </KpiCard>
   );
   if (v.withdrawals) cards.withdrawals = (
@@ -170,7 +192,7 @@ export function kpiCards(snapshot: OverviewSnapshot, opts: KpiCardOptions = {}):
           icon={<MenuGlyph name="messages" size={20} />}
           error={v.intake.error}
           popupTitle="오늘 신규문의"
-          jump={can("enrollment") ? { href: intakeDayHref(today), label: "신규 콜&상담에서 오늘 접수 보기" } : null}
+          jump={can("enrollment") ? { href: intakeTrendHref(), label: "신규 콜&상담 통계에서 문의 추이 보기" } : null}
         >
           <IntakePopup rows={intake} canOpen={can("enrollment")} />
         </KpiCard>
@@ -235,12 +257,17 @@ export function kpiCards(snapshot: OverviewSnapshot, opts: KpiCardOptions = {}):
           labelNote={noteOf("firstClass")}
           value={count(firsts?.length)}
           unit="명"
-          detail={firsts ? `첫 등원 ${firstCount} · 새 과목 ${firsts.length - firstCount}` : "수강 시작일 기준"}
+          detail={firsts ? `첫 등원 ${firstCount} · 처음 듣는 과목 ${firsts.length - firstCount}` : "수강 시작일 기준"}
           icon={<MenuGlyph name="userPlus" size={20} />}
           error={v.firstClass.error}
           popupTitle="오늘 첫 수업"
           jump={
-            can("students") ? { href: studentsFirstClassHref(today), label: "원생목록에서 오늘 첫 수업 보기" } : null
+            !can("students")
+              ? null
+              : snapshot.teacherView
+                ? // 강사 범위엔 원생 통계가 없다 — 종전처럼 담당 학생의 오늘 첫 수업 목록으로.
+                  { href: studentsFirstClassHref(today), label: "원생목록에서 오늘 첫 수업 보기" }
+                : { href: firstClassTrendHref(snapshot.view?.activeSubject), label: "원생 통계에서 첫 수업 추이 보기" }
           }
         >
           <FirstClassPopup rows={firsts} subjectLabels={snapshot.subjects} canOpen={can("students")} />

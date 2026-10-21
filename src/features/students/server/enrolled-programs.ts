@@ -40,13 +40,31 @@ export function fetchActiveEnrolledEnrollments(
       // **않는다**: 아직 안 시작한 수강만 가진 학생이 누구인지 알려면 그 행도 받아야 한다
       // (`notYetStartedStudentIds`). 거르는 것은 순수 함수 쪽 한 곳이다.
       .select(
-        "id, student_id, start_date, class:class_id!inner ( subject, english_track ), student:student_id!inner ( status )",
+        "id, student_id, class_id, start_date, class:class_id!inner ( subject, english_track ), student:student_id!inner ( status )",
       )
       .is("end_date", null)
       .eq("on_hold", false);
     if (enrolledOnly) q = q.eq("student.status", "enrolled");
     return q.order("id").range(from, to);
   });
+}
+
+/**
+ * 재원생의 **종료일이 오늘 이후로 적힌** 활성 수강(특강 기간 · 반이동 예약 전의 원래 반 · 오늘 끝나는 수강 — 휴원 아님 · 학생 status=enrolled).
+ * 위 `fetchActiveEnrolledEnrollments`(종료일 없는 줄)에 더해 **강좌수**(`summarizeCourses` — 오늘 듣는 반)만 쓴다(적대 리뷰 2026-10-20:
+ * 진행 중인 특강이 '지금 듣는 반'에서 빠졌다). 재원생 구성·원생목록은 종전대로 종료일 없는 줄만 본다.
+ */
+export function fetchEndingEnrolledEnrollments(supabase: Supabase, today: string): Promise<ActiveEnrollmentRow[]> {
+  return fetchAllPaged<ActiveEnrollmentRow>((from, to) =>
+    supabase
+      .from("enrollments")
+      .select("id, student_id, class_id, start_date, end_date, is_transferred, class:class_id!inner ( subject, english_track ), student:student_id!inner ( status )")
+      .gte("end_date", today)
+      .eq("on_hold", false)
+      .eq("student.status", "enrolled")
+      .order("id")
+      .range(from, to),
+  );
 }
 
 /** 요청당 1회(RSC) — 원생목록 상단 카드(getEnrolledStatCounts)와 program= 필터(getEnrolledComposition)가 같은 행을 본다. */

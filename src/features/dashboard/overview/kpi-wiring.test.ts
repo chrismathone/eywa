@@ -8,6 +8,15 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  attendanceStatsHref,
+  billingStatsHref,
+  consultProgressStatsHref,
+  consultationStatsHref,
+  newcomerStatsHref,
+  expenseStatsHref,
+  firstClassTrendHref,
+  intakeTrendHref,
+  reportStatsHref,
   absentDayHref,
   recentAbsenceRange,
   intakeDayHref,
@@ -428,8 +437,8 @@ describe("카드 구조 — ↗는 버튼 안에 들어가지 않는다", () => 
     expect(CARD.indexOf("<WindowLink")).toBeGreaterThan(CARD.indexOf("</DetailPopup>"));
   });
 
-  it("여덟 칸이 모두 같은 카드 부품을 쓰고, 열 수는 선 카드 수에서 나온다(D2)", () => {
-    expect(count(STRIP, "<KpiCard")).toBe(8);
+  it("아홉 칸(강좌수 2026-10-20)이 모두 같은 카드 부품을 쓰고, 열 수는 선 카드 수에서 나온다(D2)", () => {
+    expect(count(STRIP, "<KpiCard")).toBe(9);
     expect(STRIP).toContain("style={kpiGridVars(shown)}");
   });
 });
@@ -517,5 +526,33 @@ describe("⑧ 레벨테스트 및 첫수업 일정 — 오늘부터 한 달, 서
       expect(text, name).not.toMatch(/오늘부터 7일|다가오는 7일/);
     }
     expect(LOADING).toContain('note: "오늘부터 한 달 · 10/15 (목)까지"');
+  });
+});
+
+// 원장 2026-10-20 "상세 눌렀을때 추이를 볼 수 없는곳 모두 추가해보자"
+describe("운영실 '상세' → 통계 화면", () => {
+  it("추이를 보는 화면으로 가고, 과목 관리자가 고른 과목을 싣는다", () => {
+    expect(intakeTrendHref()).toBe("/enrollment?view=stats&trend=day&from=dashboard#intake");
+    expect(billingStatsHref("math")).toBe("/billing/stats?subject=math#billing");
+    expect(firstClassTrendHref("english")).toBe("/students/stats?fc=day&subject=english#first");
+    expect(attendanceStatsHref(null)).toBe("/attendance/stats#rate");
+    expect(expenseStatsHref()).toBe("/billing/stats#expenses");
+    // 상담 통계는 과목 묶음으로 거를 수 없어 과목을 싣지 않는다(대표 키 하나로 거르면 같은 묶음의 다른 과목 상담이 빠진다).
+    expect(consultationStatsHref()).toBe("/consultations/stats");
+    expect(reportStatsHref("math")).toBe("/lesson-reports/stats?subject=math#reports");
+    expect(consultProgressStatsHref()).toBe("/enrollment?view=stats&from=dashboard#progress");
+    expect(newcomerStatsHref()).toBe("/newcomers/stats#history");
+  });
+});
+
+describe("원생 통계 상세 — 고른 과목을 싣고 강사 화면은 원생목록으로(리뷰 2026-10-21)", () => {
+  it("과목 관리자가 고른 과목 · 보기 · 강사 화면", async () => {
+    const { studentsStatsHref, studentsEnrolledHref, admissionsStatsHref } = await import("./kpi-links");
+    expect(studentsStatsHref("trend")).toBe("/students/stats#trend");
+    expect(studentsStatsHref("trend", { view: "mix" })).toBe("/students/stats?view=mix#trend");
+    expect(studentsStatsHref("courses", { subject: "english" })).toBe("/students/stats?subject=english#courses");
+    expect(studentsStatsHref("trend", { view: "subject", subject: "math" })).toBe("/students/stats?view=subject&subject=math#trend");
+    expect(studentsStatsHref("flow", { teacherView: true })).toBe(studentsEnrolledHref());
+    expect(admissionsStatsHref()).toBe("/enrollment?view=stats&from=dashboard#conversion");
   });
 });

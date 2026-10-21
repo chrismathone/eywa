@@ -31,7 +31,7 @@ export function NewcomerTable({ rows, today, canWrite, checksKnown, busy, select
       <th scope="col" className={styles.stickySchool}>학교·학년</th>
       <th scope="col" className={styles.stickySubject}>과목</th>
       <th scope="col">등록일</th><th scope="col" className={styles.divider}>첫 수업</th>
-      {ONBOARDING_ITEMS.map(item => <th scope="col" key={item.key} title={item.optional ? "선택 업무 · 필수 완료율과 지연·임박 집계에서 제외" : `${item.anchor === "enrolled" ? "등록일" : "첫 수업일"} 기준 ${item.offsetDays >= 0 ? "+" : ""}${item.offsetDays}일`}>
+      {ONBOARDING_ITEMS.map(item => <th scope="col" key={item.key} title={item.optional ? "선택 업무 · 필수 완료율과 기한 경과 · 3일 내 기한 집계에서 제외" : `${item.anchor === "enrolled" ? "등록일" : "첫 수업일"} 기준 ${item.offsetDays >= 0 ? "+" : ""}${item.offsetDays}일`}>
         {item.shortLabel}{item.optional && <small className={styles.optional}>선택</small>}
       </th>)}
     </tr></thead>

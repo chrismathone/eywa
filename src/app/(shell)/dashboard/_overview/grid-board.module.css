@@ -39,6 +39,13 @@
 .grid :global([data-overview="kpi"]) > button {
   padding: var(--dash-pad);
 }
+/* 좁은 KPI 칸(⅓×1 = 2열 — 9칸 띠를 한 줄에 맞출 때, 강좌수 2026-10-20) — 아이콘·기간 꼬리표를 숨기고 여백·숫자를 줄여 값이 잘리지 않게
+   (1180px 보드에서도 칸 ≈84px). 옛 띠의 9칸 '조인 카드'(appearance.module.css)와 같은 결. */
+.cell[data-narrow-cell] :global([data-overview="kpi"]) > button { padding: 10px 8px; }
+.cell[data-narrow-cell] :global([data-overview="kpi-label"]) { gap: 4px; padding-right: 22px; font-size: var(--text-xs); }
+.cell[data-narrow-cell] :global([data-overview="kpi-label"]) > span:first-child,
+.cell[data-narrow-cell] :global([data-overview="kpi-label"]) small { display: none; }
+.cell[data-narrow-cell] :global([data-overview="kpi-value"]) { font-size: var(--text-2xl); margin-top: 6px; margin-bottom: 4px; }
 /* 넓은 '현재 수업 현황' — 과목이 여럿이면 과목별 열로, 하나면 카드 폭을 다 쓴다(9d49c5f7c 시안 규칙). */
 .cell[data-wide-cell] :global([data-overview="schedule-grid"]) {
   grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr));

@@ -1,7 +1,9 @@
 /**
  * 원생상담 통계 **지표 줄** — 목록 위 요약 띠와 통계 화면의 지표 카드가 **같은 함수**로 만든다(순수 · 서버/클라 공용, [[#61]]).
  * 두 표면이 숫자를 따로 계산하면 같은 필터에서 값이 갈린다(원장 2026-10-01 — 요약 띠 ↔ 통계 화면 불일치 방지).
- * 0318a 전(헤드 카운트뿐, `full: false`)엔 원생 수·반 칸이 없어 '1인당 상담'·'반 미매핑' 줄이 빠진다 — 있는 지표만.
+ * 0318a 전(헤드 카운트뿐, `full: false`)엔 원생 수·반 칸이 없어 '1인당 상담'·'반 없는 상담' 줄이 빠진다 — 있는 지표만.
+ * 이름은 운영실 '학생 상담' 카드와 같게(원장이 두 화면을 오가며 같은 숫자를 다른 이름으로 읽지 않게 · 리뷰 2026-10-21):
+ * 기한이 지난 후속 = '기한 경과' · 반을 찾지 못한 상담 = '반 없음'('미매핑'·'판정' 같은 내부 용어를 쓰지 않는다).
  */
 import { pct, type ConsultationStats, type StatsMetric } from "./stats-model";
 
@@ -35,7 +37,7 @@ export function buildKpiLines(
       sub: `완료 ${fmt(t.done)} / 기한 있는 후속 ${fmt(followTotal)}`,
       link:
         t.overdue > 0 && opts.overdueHref
-          ? { href: opts.overdueHref, text: `지연 ${fmt(t.overdue)}건` }
+          ? { href: opts.overdueHref, text: `기한 경과 ${fmt(t.overdue)}건` }
           : t.overdue === 0 && t.done > 0 && opts.doneHref
             ? { href: opts.doneHref, text: "완료 보기" }
             : undefined,
@@ -55,10 +57,10 @@ export function buildKpiLines(
     const unjudged = t.n - full.judged;
     lines.push({
       metric: "class",
-      label: "반 미매핑",
+      label: "반 없는 상담",
       value: pctText(pct(unmapped, t.n)),
-      // 아직 판정 안 한 기록(백필 전 옛 기록 · 녹음 상담처럼 저장 때 판정하지 않는 경로)은 저장값이 비어 미매핑으로 센다 — 그 수를 함께 밝힌다.
-      sub: `미매핑 ${fmt(unmapped)}건${unjudged > 0 ? ` · 그중 아직 판정 안 한 기록 ${fmt(unjudged)}건` : ""}`,
+      // 반을 아직 찾아보지 않은 기록(백필 전 옛 기록 · 녹음 상담처럼 저장 때 반을 찾지 않는 경로)은 저장값이 비어 '반 없음'으로 센다 — 그 수를 함께 밝힌다.
+      sub: `반 없음 ${fmt(unmapped)}건${unjudged > 0 ? ` · 그중 반을 아직 찾아보지 않은 옛 기록 ${fmt(unjudged)}건` : ""}`,
     });
   }
   return lines;

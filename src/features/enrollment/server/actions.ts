@@ -18,6 +18,7 @@ import { after } from "next/server";
 import { ENROLLED_REVERT_BLOCKED } from "@/features/enrollment/board-stages";
 import { normalizeAssignStartDate } from "@/features/enrollment/assign-start-date";
 import { canonicalSchoolName, type SchoolSaveAlias } from "@/features/schools/school-name";
+import { completeSchoolKind } from "@/features/schools/server/complete-kind";
 import { combineConsultationTranscripts, type SpeakerUtterance } from "@/features/enrollment/transcripts";
 import { runConsultationAnalysis } from "@/features/enrollment/server/consultation-analysis";
 import { isTenantAudioPath } from "@/lib/storage/audio-path";
@@ -99,6 +100,16 @@ const asNum = (v?: string | null) => {
 /** 학교명 저장 별칭(학원설정) — 침산 = 일중→대구일중, 새 학원 = 없음. 요청 캐시라 한 요청에 여러 번 불러도 조회 1회. */
 async function schoolAliases(): Promise<readonly SchoolSaveAlias[]> {
   return (await getTenantSettings()).operations.schoolSaveAliases;
+}
+
+/** 폼 행의 학교에 빠진 학교급을 채운다(`칠성` + `초5` → `칠성초` · 학교알리미에 있는 학교만 — `completeSchoolKind`). */
+async function withSchoolKind<T extends { prospect_school: string | null; prospect_grade: string | null }>(
+  client: Parameters<typeof completeSchoolKind>[0],
+  tenantId: string,
+  row: T,
+): Promise<T> {
+  const aliases = await schoolAliases();
+  return { ...row, prospect_school: await completeSchoolKind(client, tenantId, row.prospect_school, row.prospect_grade, aliases) };
 }
 
 function buildConsultationRow(d: FullForm, aliases: readonly SchoolSaveAlias[]) {
@@ -203,7 +214,7 @@ export async function createEnrollmentConsultation(
     .from("enrollment_consultations")
     .insert({
       tenant_id: user.tenantId,
-      ...buildConsultationRow(parsed.data, await schoolAliases()),
+      ...(await withSchoolKind(supabase, user.tenantId, buildConsultationRow(parsed.data, await schoolAliases()))),
       ...referrer.cols,
       learning_history: Object.keys(learningHistory).length > 0 ? learningHistory : null,
       consultant_id: user.id,
@@ -263,7 +274,7 @@ async function createConsultationWithAudio(
     .from("enrollment_consultations")
     .insert({
       tenant_id: user.tenantId,
-      ...buildConsultationRow(data, await schoolAliases()),
+      ...(await withSchoolKind(admin, user.tenantId, buildConsultationRow(data, await schoolAliases()))),
       ...referrer,
       learning_history: Object.keys(learningHistory).length > 0 ? learningHistory : null,
       consultant_id: user.id,
@@ -482,7 +493,10 @@ export async function updateEnrollmentConsultation(
   if ("error" in referrer) return { error: referrer.error };
   // 소개한 사람의 저장 전 값 — 따로·실패해도 되게 읽는다(위 선조회에 넣으면 칸이 없는 DB에서 학습 이력 보존 조회까지 함께 실패한다, #95).
   const referrerBefore = "referrer_student_id" in referrer.cols ? await readReferrerBefore(supabase as unknown as SupabaseClient, id) : null;
-  const row = { ...buildConsultationRow(parsed.data, await schoolAliases()), ...referrer.cols };
+  const row = {
+    ...(await withSchoolKind(supabase, user.tenantId, buildConsultationRow(parsed.data, await schoolAliases()))),
+    ...referrer.cols,
+  };
   const { error } = await supabase
     .from("enrollment_consultations")
     .update({
@@ -676,7 +690,17 @@ export async function patchConsultationCells(id: string, patch: ConsultationCell
     );
   const row: Record<string, unknown> = {};
   if (d.prospectName !== undefined) row.prospect_name = d.prospectName;
-  if (d.prospectSchool !== undefined) row.prospect_school = canonicalSchoolName(d.prospectSchool, await schoolAliases());
+  if (d.prospectSchool !== undefined) {
+    // 학년 칸을 같이 안 보냈으면 저장된 학년으로 급을 채운다(셀 하나만 고치는 경로).
+    const grade = d.prospectGrade !== undefined ? d.prospectGrade : ((await beforeRead)?.prospect_grade ?? null);
+    row.prospect_school = await completeSchoolKind(
+      supabase,
+      user.tenantId,
+      canonicalSchoolName(d.prospectSchool, await schoolAliases()),
+      grade,
+      await schoolAliases(),
+    );
+  }
   if (d.prospectGrade !== undefined) row.prospect_grade = d.prospectGrade || null;
   if (d.parentPhone !== undefined) row.parent_phone = d.parentPhone || null;
   if (d.parentRequest !== undefined) row.parent_request = d.parentRequest?.trim() ? d.parentRequest : null;
@@ -931,6 +955,8 @@ export async function convertConsultationToStudent(
   const studentSchool = overrideSchool ?? c.prospect_school;
   const studentGrade = overrideGrade ?? c.prospect_grade;
   const aliases = await schoolAliases();
+  // 저장할 학교 표기 — 상담에 급 없이 적힌 학교(`칠성`)도 학년으로 급을 채운다(2026-10-20 김지유 건).
+  const savedSchool = await completeSchoolKind(supabase, c.tenant_id, canonicalSchoolName(studentSchool, aliases), studentGrade, aliases);
 
   // 퇴원했다 돌아온 학생(감사 F13, 원장 2026-09-23) — 같은 이름·학교·학년의 **퇴원생**이 있으면 새 학생
   // '이름A'를 조용히 만들지 않고 멈춰서 알린다(만들면 출결·수납·상담 이력이 두 학생으로 갈라진다).
@@ -940,7 +966,7 @@ export async function convertConsultationToStudent(
     const withdrawn = await findWithdrawnNaturalKeyMatch(supabase, {
       tenantId: c.tenant_id,
       name: studentName ?? "",
-      school: canonicalSchoolName(studentSchool, aliases),
+      school: savedSchool,
       grade: studentGrade,
       aliases,
     });
@@ -967,7 +993,7 @@ export async function convertConsultationToStudent(
       tenant_id: c.tenant_id,
       name: uniqueName.name,
       grade: studentGrade,
-      school: canonicalSchoolName(studentSchool, aliases),
+      school: savedSchool,
       parent_name: overrideParentName ?? c.parent_name,
       parent_phone: overrideParentPhone ?? c.parent_phone,
       status: "enrolled",
@@ -1067,10 +1093,22 @@ export async function convertConsultationToStudent(
   }
 
   // 상담에 학생 ID + outcome=enrolled 연결(재사용/신규 모두 — orphan 상담 해소).
+  // 🔴 새 학생에 동명이인 알파벳이 붙었으면 상담 이름도 그 이름으로(원장 2026-10-20 *"같은 학생인데 알파벳이 다른것도 이해안됨"*).
+  //    상담이 `권민서`로 남으면 ① 콜&상담과 원생 목록의 이름이 갈리고 ② 메이크에듀로 보내는 이름(역동기화는 상담 이름을 보낸다)이
+  //    알파벳 없이 나가 메이크에듀가 **제 알파벳을 따로** 붙인다 → 동기화가 같은 학생을 못 알아보고 `권민서B`를 새로 만들었다.
+  const renameConsult = !reusedExisting && uniqueName.name !== (c.prospect_name ?? "") ? uniqueName.name : null;
   await supabase
     .from("enrollment_consultations")
-    .update({ student_id: studentId, outcome: "enrolled" })
+    .update({ student_id: studentId, outcome: "enrolled", ...(renameConsult ? { prospect_name: renameConsult } : {}) })
     .eq("id", consultationId);
+  if (renameConsult) {
+    await logAction({
+      action: "enrollment_consultation_update",
+      targetType: "enrollment_consultations",
+      targetLabel: renameConsult,
+      metadata: { consultationId, changes: [{ field: "이름", from: c.prospect_name ?? null, to: renameConsult }], via: "convert" },
+    });
+  }
   // 상태가 '등록 완료'로 바뀐 것도 칸반 드래그와 **같은 로그**로 남긴다 — 운영실 '금일 등록'(원장 2026-09-23)이 이 로그의
   // 시각으로 "오늘 등록 완료로 옮긴 상담"을 센다(여기가 빠지면 '수업 배정'으로 등록한 학생이 카드에서 사라진다).
   if (c.outcome !== "enrolled") {

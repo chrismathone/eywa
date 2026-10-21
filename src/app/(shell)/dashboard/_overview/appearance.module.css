@@ -60,6 +60,20 @@
   .dashboard :global([data-overview="kpis"][data-kpi-n="8"] [data-overview="kpi-label"]) > span:first-child { display: none; }
   .dashboard :global([data-overview="kpis"][data-kpi-n="8"] [data-overview="kpi-value"]) { font-size: var(--text-3xl); margin-top: 10px; margin-bottom: 8px; }
 }
+/* 아홉 칸(강좌수, 원장 2026-10-20 '상단에 강좌수 칸 추가') — 여덟 칸과 같은 '조인 카드'로 한 줄을 지킨다. 기본 카드(~170px) 아홉 장 + 틈은
+   ~1610px라 1700px까지 조인다(조인 카드 ~115px × 9 ≈ 1100px — 1100 아래는 --kpi-mid(3) 규칙이 3×3으로 접는다). 특이도는 위와 같은 0,3,0(+자손). */
+@container dashboard (width > 1100px) and (width <= 1700px) {
+  .dashboard :global([data-overview="kpis"][data-kpi-n="9"]) { gap: 8px; }
+  .dashboard :global([data-overview="kpis"][data-kpi-n="9"] [data-overview="kpi"]) > button { padding: 14px 12px 12px; }
+  .dashboard :global([data-overview="kpis"][data-kpi-n="9"] [data-overview="kpi-label"]) {
+    font-size: var(--text-xs);
+    gap: 6px;
+    padding-right: 26px;
+    white-space: nowrap;
+  }
+  .dashboard :global([data-overview="kpis"][data-kpi-n="9"] [data-overview="kpi-label"]) > span:first-child { display: none; }
+  .dashboard :global([data-overview="kpis"][data-kpi-n="9"] [data-overview="kpi-value"]) { font-size: var(--text-3xl); margin-top: 10px; margin-bottom: 8px; }
+}
 @container dashboard (max-width: 1100px) {
   .dashboard :global([data-overview="kpis"]) { grid-template-columns: repeat(var(--kpi-mid, 3), minmax(0, 1fr)); }
   .dashboard :global([data-overview="kpi"]:last-child) { grid-column: var(--kpi-last-mid, auto); }

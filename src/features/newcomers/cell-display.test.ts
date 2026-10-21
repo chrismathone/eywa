@@ -19,7 +19,7 @@ describe("업무 상태 표시", () => {
       if (mark.kind === "text") expect(mark.text).not.toBe("D-0");
     }
   });
-  it("모든 상태에 설명이 있고 오늘·임박·지연·완료는 구분된다", () => {
+  it("모든 상태에 설명이 있고 3일 내 기한·기한 경과·완료는 구분된다", () => {
     for (const status of ALL) expect(STATUS_STYLE[status].label).toBeTruthy();
     expect(new Set([cellBoxClass("overdue", false), cellBoxClass("due", false, 0), cellBoxClass("due", false, 3), cellBoxClass("done", false)]).size).toBe(4);
     expect(cellBoxClass("waived", false)).not.toBe(cellBoxClass("overdue", false));

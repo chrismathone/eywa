@@ -29,7 +29,7 @@ export function TrendTable({
         <table className="w-full min-w-[320px] border-collapse text-sm [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-line-faint">
           <thead>
             <tr className="border-line text-muted-foreground border-b text-xs">
-              <th className={`${cell} text-center font-medium`}>기준</th>
+              <th className={`${cell} text-center font-medium`}>{range === "w26" ? "주" : range === "y" ? "연도" : "달"}</th>
               <th className={`${cell} text-right font-medium`}>{totalLabel}</th>
               <th className={`${cell} text-right font-medium`}>직전 대비</th>
               {lines.map((l) => (

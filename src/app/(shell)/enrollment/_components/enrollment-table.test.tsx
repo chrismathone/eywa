@@ -84,6 +84,7 @@ const row = (over: Partial<ConsultationTableRow> = {}): ConsultationTableRow => 
   fromPublicIntake: false,
   syncAddedAt: null,
   makeeduId: null,
+  studentInMakeedu: false,
   studentId: null,
   assignedClassCount: 0,
   ...over,
@@ -126,7 +127,7 @@ describe("시트형 목록뷰 — 열·규약", () => {
 });
 
 describe("시트형 목록뷰 — 메이크에듀 동기화 완료 표식", () => {
-  const MARK = "메이크에듀 동기화 완료 — 누르면 메이크에듀 상담 화면을 엽니다";
+  const MARK = "메이크에듀 상담: 동기화 완료\n메이크에듀 원생: 전환 전\n누르면 메이크에듀 상담 화면을 엽니다";
 
   it("등록 완료 단계 + makeedu에 있는 상담만 — 이름 **왼쪽**에 서고 누르면 그 상담 주소를 연다", () => {
     const open = vi.spyOn(window, "open").mockImplementation(() => null);
@@ -156,6 +157,53 @@ describe("시트형 목록뷰 — 메이크에듀 동기화 완료 표식", () =
       />,
     );
     expect(screen.getAllByRole("link", { name: MARK })).toHaveLength(1);
+  });
+
+  it("원생 전환까지 됐으면 이중 테두리 · 상담만이면 테두리 없음 — 마우스 오버 문구도 가른다", () => {
+    render(
+      <EnrollmentTable
+        rows={[
+          row({ id: "a", outcome: "enrolled", makeeduId: "1" }),
+          row({ id: "b", outcome: "enrolled", makeeduId: "2", studentId: "s2", studentInMakeedu: true }),
+        ]}
+        nowMs={0}
+        canWrite={false}
+      />,
+    );
+    const consultOnly = screen.getByRole("link", { name: MARK });
+    expect(consultOnly.className).not.toContain("border-double");
+    const converted = screen.getByRole("link", {
+      name: "메이크에듀 상담: 동기화 완료\n메이크에듀 원생: 전환 완료\n누르면 메이크에듀 상담 화면을 엽니다",
+    });
+    expect(converted.className).toContain("border-double");
+  });
+
+  it("상담은 makeedu에 없고 원생만 있으면 — 표식은 달되 누를 곳이 없다(링크 아님)", () => {
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    render(
+      <EnrollmentTable
+        rows={[row({ outcome: "enrolled", studentId: "s1", studentInMakeedu: true })]}
+        nowMs={0}
+        canWrite={false}
+      />,
+    );
+    expect(screen.queryByRole("link", { name: /메이크에듀/ })).toBeNull();
+    const mark = screen.getByRole("img", { name: "메이크에듀 상담: 없음\n메이크에듀 원생: 전환 완료" });
+    fireEvent.click(mark);
+    expect(open).not.toHaveBeenCalled();
+    open.mockRestore();
+  });
+
+  it("원생이어도 등록 완료 단계가 아니면 안 단다", () => {
+    render(
+      <EnrollmentTable
+        rows={[row({ outcome: "consulted", studentId: "s1", studentInMakeedu: true, makeeduId: "9" })]}
+        nowMs={0}
+        canWrite={false}
+      />,
+    );
+    expect(screen.queryByRole("link", { name: /메이크에듀/ })).toBeNull();
+    expect(screen.queryByRole("img", { name: /메이크에듀/ })).toBeNull();
   });
 });
 

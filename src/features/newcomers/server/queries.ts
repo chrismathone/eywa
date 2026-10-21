@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 
 import { createClient } from "@/lib/supabase/server";
+import type { createAdminClient } from "@/lib/supabase/admin";
 import { kstToday } from "@/lib/date-kst";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import {
@@ -14,7 +15,7 @@ import {
   type NewcomerProgress,
 } from "../onboarding-items";
 import { buildSubjectAnchors, collapseChecks, effectiveChecks, indexChecks } from "../subject-rows";
-import { loadCheckRows, loadEnrollmentSubjects } from "./cohort";
+import { loadCheckRows, loadEnrollmentSubjects, type ScopeFn } from "./cohort";
 
 export { NEWCOMER_WINDOW_DAYS };
 
@@ -98,10 +99,19 @@ function daysBetween(from: string, to: string): number {
   return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
 }
 
-export const getNewcomers = cache(async (): Promise<NewcomersView> => {
-  const supabase = await createClient();
-  const today = kstToday();
+export const getNewcomers = cache(async (): Promise<NewcomersView> => loadNewcomers(await createClient(), kstToday()));
+
+/**
+ * 신규생 목록 본문 — 화면(`getNewcomers`, 로그인 사용자 · RLS)과 매일 기록(cron · 관리 키)이 같은 함수를 쓴다.
+ * `tenantId`를 주면(관리 키) 모든 조회를 그 지점으로 좁힌다 — 관리 키는 RLS를 건너뛴다([[#104]]).
+ */
+export async function loadNewcomers(
+  supabase: Awaited<ReturnType<typeof createClient>> | ReturnType<typeof createAdminClient>,
+  today: string,
+  tenantId?: string,
+): Promise<NewcomersView> {
   const since = newcomerWindowStart(today);
+  const scope: ScopeFn = tenantId ? <T,>(q: T): T => (q as unknown as { eq(c: string, v: string): T }).eq("tenant_id", tenantId) : (q) => q;
 
   // 대상 = 등록일이 창 안인 재원생. ⚠️ 휴원(on_hold)도 남긴다 — 신입이 초반에 흔들려 쉬는 경우가 정확히
   //    이 탭이 봐야 하는 상황이다. 퇴원은 뺀다(관리 대상이 아니라 결과다).
@@ -112,11 +122,13 @@ export const getNewcomers = cache(async (): Promise<NewcomersView> => {
     grade: string | null;
     enrolled_at: string | null;
   }>((from, to) =>
-    supabase
-      .from("students")
-      .select("id, name, school, grade, enrolled_at")
-      .in("status", ["enrolled", "on_hold"])
-      .gte("enrolled_at", since)
+    scope(
+      supabase
+        .from("students")
+        .select("id, name, school, grade, enrolled_at")
+        .in("status", ["enrolled", "on_hold"])
+        .gte("enrolled_at", since),
+    )
       .order("enrolled_at", { ascending: false })
       .order("id", { ascending: true })
       .range(from, to),
@@ -130,8 +142,8 @@ export const getNewcomers = cache(async (): Promise<NewcomersView> => {
   // 🔴 조회는 운영실 신호(`newcomerOverdueSignal`)와 **같은 함수**다([`cohort.ts`](./cohort.ts)) — 한쪽만 과목을
   //    알면 같은 학생을 두 화면이 다르게 말한다.
   const [enrollments, checksResult] = await Promise.all([
-    loadEnrollmentSubjects(supabase, ids),
-    loadCheckRows(supabase, ids),
+    loadEnrollmentSubjects(supabase, ids, scope),
+    loadCheckRows(supabase, ids, scope),
   ]);
   // 🔴 `today`를 넘긴다 — 끝난 과목(그만둔 과목)은 줄을 세우지 않는다(아래 순수 함수 주석).
   const { bySubject, earliest } = buildSubjectAnchors(enrollments, today);
@@ -208,4 +220,4 @@ export const getNewcomers = cache(async (): Promise<NewcomersView> => {
   }
 
   return { today, rows, subjectRows, checksAvailable, checksError, subjectChecks };
-});
+}

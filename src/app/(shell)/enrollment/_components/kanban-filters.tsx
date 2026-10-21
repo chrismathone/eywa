@@ -7,8 +7,8 @@ import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { BOARD_STAGE_OPTIONS, type BoardStageKey } from "@/features/enrollment/board-stages";
 import { MonthPicker } from "./month-picker";
-import { enrollmentHref, formatMonthLabel, shiftMonth, type EnrollmentView } from "./enrollment-query";
-import { RANGE_LABEL, RANGE_PRESETS, type RangePreset } from "@/features/enrollment/range";
+import { enrollmentHref, formatMonthLabel, formatRangeLabel, shiftMonth, type EnrollmentView } from "./enrollment-query";
+import { RANGE_LABEL, RANGE_MONTHS, RANGE_PRESETS, type RangePreset } from "@/features/enrollment/range";
 
 type Props = {
   selectedMonth: string | null;
@@ -79,6 +79,11 @@ export function KanbanFilters({
     view,
     range: selectedRange,
   };
+  // 특정 달을 고르지 않았으면 목록은 기간 프리셋(최근 N개월)이다 — 월 이동 칸도 그 구간을 적는다(이번 달만 적으면 목록과 어긋난다).
+  //    서버 쿼리와 같은 산식(`rangeStartIso` = 이번 달에서 N-1달 앞 1일)이다. 화살표·라벨 누르기는 종전대로 한 달 보기로 간다.
+  const navLabel = selectedMonth
+    ? formatMonthLabel(displayMonth)
+    : formatRangeLabel(shiftMonth(todayMonth, -(RANGE_MONTHS[selectedRange] - 1), todayMonth), todayMonth);
   const prevMonth = shiftMonth(displayMonth, -1, todayMonth);
   const nextMonth = shiftMonth(displayMonth, 1, todayMonth);
 
@@ -110,7 +115,7 @@ export function KanbanFilters({
              40번 넘게 눌러야 한다(ECS 오늘 면의 날짜 선택과 같은 배치). */}
       <div className="flex max-w-full flex-wrap items-center gap-1.5">
         <PeriodNav
-          label={formatMonthLabel(displayMonth)}
+          label={navLabel}
           prevHref={enrollmentHref({ ...base, month: prevMonth })}
           nextHref={enrollmentHref({ ...base, month: nextMonth })}
           currentHref={enrollmentHref({ ...base, month: todayMonth })}
@@ -121,7 +126,8 @@ export function KanbanFilters({
           nextAriaLabel="다음 달"
           currentTitle="눌러서 이번 달로"
           // "2026년 12월"까지 안 넘치는 고정 폭 — ECS 월간 뷰와 같은 값(같은 라벨 모양이라 같이 선다).
-          labelWidth={116}
+          // 기간 라벨(`2025년 11월~2026년 10월`)은 더 길다 — 그때만 넓힌다.
+          labelWidth={selectedMonth ? 116 : 190}
         />
         <MonthPicker
           displayMonth={displayMonth}

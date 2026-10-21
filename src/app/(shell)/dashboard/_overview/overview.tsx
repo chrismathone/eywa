@@ -16,7 +16,7 @@ import {
 } from "@/features/dashboard/overview/model";
 import { concurrentShare } from "@/features/students/enrollment/enrolled-composition";
 // 재원생 패널 ↗는 KPI 카드와 같은 주소 — "/students"만 적으면 계정에 저장된 필터가 끼어 숫자가 달라 보인다(F21).
-import { studentsEnrolledHref, studentsStatsHref } from "@/features/dashboard/overview/kpi-links";
+import { admissionsStatsHref, attendanceStatsHref, billingStatsHref, consultProgressStatsHref, consultationStatsHref, newcomerStatsHref, expenseStatsHref, reportStatsHref, studentsEnrolledHref, studentsStatsHref } from "@/features/dashboard/overview/kpi-links";
 import { DASHBOARD_SUBJECT_COLORS, STAFF_SUBJECT_LEGEND, dashboardSubjectColor, dashboardCombinationColor } from "@/features/dashboard/overview/subject-colors";
 import { foldExpenseTotals } from "@/features/dashboard/overview/expense-total";
 import { paymentRateDisplay } from "@/features/billing/calc";
@@ -55,6 +55,7 @@ import {
 import { DemoRosterSwitch } from "../_components/demo-roster-switch";
 import type { DemoRosterControl } from "@/features/demo-roster/types";
 import s from "./overview.module.css";
+import { SubjectBridge } from "./subject-bridge";
 import appearance from "./appearance.module.css";
 
 const clock = (at: number) =>
@@ -238,6 +239,8 @@ export function Overview({
   const student = v.students?.data;
   const change = v.changes?.data;
   const enrolledTrend = v.enrolledTrend?.data;
+  const courseTrend = v.courseTrend?.data;
+  const ym = (m: string) => `${m.slice(0, 4)}년 ${Number(m.slice(5, 7))}월`;
   const currentChange = change?.at(-1);
   const billing = v.billing?.data;
   const bill = billing?.at(-1);
@@ -282,7 +285,7 @@ export function Overview({
     <Panel
       title={t("studentsComp", "재원생 구성")}
       note="현재 · 초·중·고 · 영어·동시수강·수학"
-      href={studentsStatsHref("trend", "mix")}
+      href={studentsStatsHref("trend", { view: "mix", subject: view?.activeSubject, teacherView: snapshot.teacherView })}
       sections={[v.students]}
     >
       {student && (student.levelSplit
@@ -405,7 +408,7 @@ export function Overview({
     <Panel
       title={t("billingMonth", `${thisMonth} 수납 현황`)}
       note="이번 달 청구서 · 취소 청구 제외"
-      href={`/billing?period=${snapshot.today.slice(0, 7)}`}
+      href={billingStatsHref(view?.activeSubject)}
       sections={[v.billing]}
     >
       {bill && (
@@ -501,7 +504,7 @@ export function Overview({
     <Panel
       title={t("newcomerStages", "신규생 단계별 관리")}
       note="등록 후 90일 · 재원·휴원 학생"
-      href="/newcomers"
+      href={snapshot.teacherView || view?.subjectScoped ? "/newcomers" : newcomerStatsHref()}
       sections={[v.newcomers]}
     >
       {care && (
@@ -546,7 +549,7 @@ export function Overview({
     <Panel
       title={t("changes", "등록 · 퇴원 추이")}
       note={`최근 6개월 · 당월은 오늘까지${change && startedNote(change) ? ` · ${startedNote(change)}` : ""}`}
-      href={studentsStatsHref("flow")}
+      href={studentsStatsHref("flow", { subject: view?.activeSubject, teacherView: snapshot.teacherView })}
       sections={[v.changes]}
       wide
       tools={kindTools("changes", "등록 · 퇴원 추이")}
@@ -605,7 +608,7 @@ export function Overview({
     <Panel
       title={t("billing6", "6개월 청구 · 수납")}
       note="최근 6개월 · 청구월 기준 실청구액(청구 − 할인)"
-      href="/billing"
+      href={billingStatsHref(view?.activeSubject)}
       sections={[v.billing]}
       wide
       tools={kindTools("billing", "6개월 청구 · 수납")}
@@ -659,7 +662,7 @@ export function Overview({
       <Panel
         title={t("enrolledTrend", "재원생 추이")}
         note={`${enrolledTrend?.monthlyFrom ? `${enrolledTrend.monthlyFrom.slice(0, 4)}년 ${Number(enrolledTrend.monthlyFrom.slice(5, 7))}월부터` : "최근 12개월"} · 달마다 말일 기준(이번 달은 오늘) · 휴원 제외`}
-        href={studentsStatsHref("trend")}
+        href={studentsStatsHref("trend", { subject: view?.activeSubject, teacherView: snapshot.teacherView })}
         sections={[v.enrolledTrend]}
         className={s.fullRow}
         tools={kindTools("enrolledTrend", "재원생 추이")}
@@ -694,11 +697,53 @@ export function Overview({
       </Panel>
     ) : null
     ),
+    /* 강좌수 추이(원장 2026-10-20 '카드 따로') — 막대 = 달마다 말일(이번 달은 오늘) 강좌수. 판정은 '강좌수' 칸과 같은 뜻을 그날로 되감은 것
+    (course-trend.ts — 학생마다 그날 듣던 반을 모두) · 재원생 추이와 같은 원본·같은 시작 달 · 숨김 규칙도 재원생 추이와 같다. */
+    courseTrend: (
+    !(v.courseTrend && v.courseTrend.data === null && v.courseTrend.at !== null) ? (
+      <Panel
+        title={t("courseTrend", "강좌수 추이")}
+        note={`${courseTrend?.monthlyFrom ? `${ym(courseTrend.monthlyFrom)}부터` : "최근 12개월"} · 달마다 말일 기준(이번 달은 오늘) · 학생마다 듣는 반을 모두`}
+        href={studentsStatsHref("courses", { subject: view?.activeSubject, teacherView: snapshot.teacherView })}
+        sections={[v.courseTrend]}
+        className={s.fullRow}
+        tools={kindTools("courseTrend", "강좌수 추이")}
+      >
+        {courseTrend && (
+          <>
+            <div className={s.chartHeadline}>
+              <b>
+                오늘 강좌수 <strong>{number(courseTrend.monthly.at(-1)?.count ?? 0)}개</strong>
+              </b>
+              <i className={s.chartHeadlineNote}>
+                {courseTrend.yearly.map((y, i, all) => `${y.label}${i === all.length - 1 ? "(오늘)" : " 말"} ${number(y.count)}개`).join(" · ")}
+              </i>
+            </div>
+            <Columns
+              kind={kinds.courseTrend}
+              unit="개"
+              labels={courseTrend.monthly.map((p) => axisMonth(p.key))}
+              axisFormat={(n) => (Number.isInteger(n) ? `${number(n)}개` : "")}
+              valueLabels="all"
+              series={[{ name: "강좌수", color: COLORS[0], values: courseTrend.monthly.map((p) => p.count) }]}
+            />
+            {courseTrend.trustFrom ? (
+              <p className={s.footnote}>
+                {courseTrend.cutBy === "records"
+                  ? `강좌수는 ${ym(courseTrend.trustFrom)}부터 보입니다 — 그 전에 그만둔 학생은 수강 기록이 남아 있지 않아 반을 셀 수 없습니다.`
+                  : `에이와 수강 기록이 갖춰진 ${ym(courseTrend.trustFrom)}부터 보입니다 — 그 전 달은 옮겨 오기 전 학생의 수강 시작일이 늦게 잡혀 실제보다 적게 나옵니다.`}
+              </p>
+            ) : null}
+          </>
+        )}
+      </Panel>
+    ) : null
+    ),
     subjects: (
     <Panel
       title={t("subjects", "과목별 수강")}
       note="현재 재원생 · 과목별 수강과 동시 수강"
-      href={studentsStatsHref("trend", "subject")}
+      href={studentsStatsHref("trend", { view: "subject", subject: view?.activeSubject, teacherView: snapshot.teacherView })}
       sections={[v.students]}
     >
       {student && (
@@ -712,6 +757,7 @@ export function Overview({
             limit={6}
             title="과목별 수강"
           />
+          <SubjectBridge student={student} courses={v.courses?.data?.total ?? null} />
           <div className={s.separated}>
             {/* 동시 수강 = 영어(EiE·인재원 영어) + 수학(수학(심화) 포함) — 원장 2026-09-11 재정의.
                 학년별 재원생 막대의 보라 합계와 같은 판정(subjectMixOf)이라 두 수가 늘 같다. */}
@@ -779,7 +825,8 @@ export function Overview({
     admissions: (
     <Panel
       title={t("admissions", "신규 콜&상담 전환")}
-      note="지난달 · 이번 달 · 상담일 기준"
+      note="지난달 · 이번 달 · 접수일 기준"
+      href={snapshot.teacherView || view?.subjectScoped ? undefined : admissionsStatsHref()}
       sections={[v.admissions]}
     >
       {admissions && <AdmissionsComparison stats={admissions} today={snapshot.today} />}
@@ -861,7 +908,7 @@ export function Overview({
     <Panel
       title={t("attendance14", "최근 14일 등원율")}
       note="오늘 포함 14일 · (출석 + 지각) / 유효 출결 칸"
-      href="/attendance"
+      href={snapshot.teacherView ? "/attendance" : attendanceStatsHref(view?.activeSubject)}
       sections={[v.attendanceTrend]}
     >
       {v.attendanceTrend?.data && (
@@ -876,10 +923,10 @@ export function Overview({
       title={t("consultProgress", "상담 진행")}
       note={
         v.consultProgress?.data
-          ? `상담일 기준 ${monthDayLabel(v.consultProgress.data.summary.from)}부터 · 접수 → 수업 시작`
-          : "상담일 기준 최근 30일 · 접수 → 수업 시작"
+          ? `접수일 기준 ${monthDayLabel(v.consultProgress.data.summary.from)}부터 · 접수 → 수업 시작`
+          : "접수일 기준 최근 30일 · 접수 → 수업 시작"
       }
-      href="/enrollment"
+      href={snapshot.teacherView || view?.subjectScoped ? "/enrollment" : consultProgressStatsHref()}
       sections={[v.consultProgress]}
     >
       {v.consultProgress?.data && <ConsultProgressBody data={v.consultProgress.data} subjects={snapshot.subjects} />}
@@ -893,7 +940,7 @@ export function Overview({
           ? `최근 ${homework.windowDays}일 숙제 · ${subjects(homework.subjects)}`
           : "수업보고서 기준"
       }
-      href="/lesson-reports?tab=list"
+      href={snapshot.teacherView ? "/lesson-reports?tab=list" : reportStatsHref(view?.activeSubject)}
       sections={[v.homework, v.unread]}
     >
       {homework && (
@@ -946,7 +993,7 @@ export function Overview({
     <Panel
       title={t("studentConsult", "학생 상담")}
       note="최근 7일 · 전체 기록 · 후속조치"
-      href="/consultations"
+      href={consultationStatsHref()}
       sections={[v.consultations]}
     >
       {consultations && (
@@ -991,7 +1038,7 @@ export function Overview({
     <Panel
       title={t("newcomerChecks", "신규생 체크 진행")}
       note="등록 후 90일 · 필수 6항목 · 2개월 콜은 선택"
-      href="/newcomers"
+      href={snapshot.teacherView || view?.subjectScoped ? "/newcomers" : newcomerStatsHref()}
       sections={[v.newcomers]}
     >
       {care?.checksAvailable ? (
@@ -1288,7 +1335,7 @@ export function Overview({
           ? `이번 달 · 지출일 기준 · ${v.expenses.data.count}건`
           : "이번 달 지출결의서 기준"
       }
-      href={`/billing?tab=expenses&period=${snapshot.today.slice(0, 7)}`}
+      href={expenseStatsHref()}
       sections={[v.expenses]}
     >
       {v.expenses?.data && (
