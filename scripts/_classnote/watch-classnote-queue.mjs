@@ -478,7 +478,7 @@ async function main() {
       if (POST) kickVideoWorker(b, tenant, log, { setting: driveSetting });
       // `/v`로 학생이 올린 원본 영상 → 발송 PC가 압축해 같은 Drive 파일에 새 버전으로(원장 2026-10-16). 기다리지 않는다.
       if (POST) kickLinkVideoCompress(tenant, log, { setting: driveSetting, busy: videoWorkerBusy });
-      // 영상 설명 AI 참고 메모(0387a) — 서버가 만든 추출 대기 줄의 소리·화면을 뽑아 올린다(원장 2026-10-20). 기다리지 않는다.
+      // 영상 설명 AI 참고 메모(0390a) — 서버가 만든 추출 대기 줄의 소리·화면을 뽑아 올린다(원장 2026-10-20). 기다리지 않는다.
       if (POST) kickVideoReviewExtract(tenant, log, { setting: driveSetting, busy: videoWorkerBusy });
       // 6) 학부모 읽음 동기화(0122a, 읽기 전용 GET) → aywa lesson_reports.classnote_read_at.
       //    ⚠️ ClassNote에 아무것도 쓰지 않으므로 --post와 무관하게 돈다(읽음은 사실 데이터).

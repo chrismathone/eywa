@@ -5,7 +5,7 @@ import { isFeatureOptedIn } from "@/lib/license/server";
 import { isReviewAssetPath, REVIEW_BUCKET, reviewAssetPath } from "@/features/video-review/storage-paths";
 
 /**
- * 발송 PC 워커 전용 — 영상 설명 AI 참고 메모(0387a)의 소리·화면을 올릴 **서명된 올리기 주소**를 내준다(원장 2026-10-20).
+ * 발송 PC 워커 전용 — 영상 설명 AI 참고 메모(0390a)의 소리·화면을 올릴 **서명된 올리기 주소**를 내준다(원장 2026-10-20).
  * ⚠️ 게이트: `x-eywa-internal`(video-drive-token과 같은 `authorizeInternalWorker`) + 그 지점의 기능 스위치(`video_review`, 기본 꺼짐).
  *
  * 요청 `{tenantId, reviewId, videoId, lockToken, names[]}` — 그 줄이 이 지점·이 영상의 **추출 대기**(`stage='extract'`)이고 **지금 이 워커가

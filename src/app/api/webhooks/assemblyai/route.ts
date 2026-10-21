@@ -271,7 +271,7 @@ export async function POST(req: Request) {
     return acceptInBackground("student_consultations", sc.id, () => handleStudentConsultation(admin, transcriptId, sc));
   }
 
-  // 영상 설명 AI 참고 메모(0387a) — 전사만 받아 넣는다(판정은 밤 배치가 한다). 가벼운 일이지만 같은 규약으로 응답 뒤에.
+  // 영상 설명 AI 참고 메모(0390a) — 전사만 받아 넣는다(판정은 밤 배치가 한다). 가벼운 일이지만 같은 규약으로 응답 뒤에.
   const { data: review } = await admin.from("homework_video_reviews").select("id, stage").eq("transcript_id", transcriptId).maybeSingle();
   if (review) {
     if (review.stage !== "transcribing") return NextResponse.json({ ok: true, skipped: "already applied" });

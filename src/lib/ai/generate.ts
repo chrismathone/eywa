@@ -115,7 +115,7 @@ export type GenerateJSONOptions = {
   system?: string;
   /**
    * Anthropic 프롬프트 캐시 — system 블록 끝에 캐시 지점을 둔다(같은 지침으로 여러 건을 부를 때 · 밤 배치는 최선 노력).
-   * 모델별 최소 길이(1~2천 토큰) 아래면 API가 조용히 무시한다(오류 없음). 캐시 토큰은 사용량 기록의 cache_read/write 칸에(0390a).
+   * 모델별 최소 길이(1~2천 토큰) 아래면 API가 조용히 무시한다(오류 없음). 캐시 토큰은 사용량 기록의 cache_read/write 칸에(0391a).
    */
   cacheSystem?: boolean;
   /**
@@ -213,7 +213,7 @@ export async function recordUsage(entry: {
         key_name: entry.keyName,
         input_tokens: entry.usage?.inputTokens ?? null,
         output_tokens: entry.usage?.outputTokens ?? null,
-        // 캐시 칸(0390a)은 값이 있을 때만 — 열이 아직 없는 DB에서도 캐시를 안 쓰는 호출의 기록은 그대로 산다(#95 expand/contract).
+        // 캐시 칸(0391a)은 값이 있을 때만 — 열이 아직 없는 DB에서도 캐시를 안 쓰는 호출의 기록은 그대로 산다(#95 expand/contract).
         ...(entry.usage?.cacheReadTokens ? { cache_read_tokens: entry.usage.cacheReadTokens } : {}),
         ...(entry.usage?.cacheWriteTokens ? { cache_write_tokens: entry.usage.cacheWriteTokens } : {}),
         ok: entry.ok,

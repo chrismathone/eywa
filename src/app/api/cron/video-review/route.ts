@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 /**
- * 영상 설명 AI 참고 메모(0387a) — 10분마다: 대기열 · 전사 맡기기·받기 · 배치 수거 · 확인 배치 · (밤에만) 판정 배치.
+ * 영상 설명 AI 참고 메모(0390a) — 10분마다: 대기열 · 전사 맡기기·받기 · 배치 수거 · 확인 배치 · (밤에만) 판정 배치.
  * 지점 스위치(`video_review`)가 꺼진 지점은 runVideoReviewCycle이 바로 돌아선다.
  */
 export async function GET(req: Request) {

@@ -1,5 +1,5 @@
 /**
- * 영상 설명 AI 참고 메모(0387a `homework_video_reviews`) — 모듈 사이의 약속.
+ * 영상 설명 AI 참고 메모(0390a `homework_video_reviews`) — 모듈 사이의 약속.
  * 화면에 나가는 것은 `ReviewResult`뿐이다(전사·판정 원문은 DB에만 — 원장 2026-10-20 "외부로 나가는 건 분석 결과만").
  */
 

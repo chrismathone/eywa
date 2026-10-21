@@ -1,4 +1,4 @@
-// scripts/_classnote/video-review-extract-rules.mjs — 영상 설명 AI 참고 메모(0387a)의 추출 규칙(순수 함수). 배경은 video-review-extract.mjs.
+// scripts/_classnote/video-review-extract-rules.mjs — 영상 설명 AI 참고 메모(0390a)의 추출 규칙(순수 함수). 배경은 video-review-extract.mjs.
 //
 // 화면 이름은 서버 `src/features/video-review/storage-paths.ts`의 규칙과 같아야 한다 — 이름(확장자 뺀 것)이 판정의 근거 위치로 쓰인다.
 //   `f01_00m05s.jpg`(그 시각의 화면, 긴 변 1280) · `last_02m05s_hi.jpg`(마지막 장면, 긴 변 1920) · `audio.mp3`(모노 16kHz 48k)

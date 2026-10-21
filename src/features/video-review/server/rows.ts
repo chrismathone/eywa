@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isFeatureOptedIn } from "@/lib/license/server";
 import type { ReviewAssets, ReviewResult, ReviewStage, ReviewTranscript } from "../types";
 
-/** 0387a `homework_video_reviews` 한 줄(서버 전용 — 전사·판정 원문을 담는다, 화면으로 내보내지 않는다). */
+/** 0390a `homework_video_reviews` 한 줄(서버 전용 — 전사·판정 원문을 담는다, 화면으로 내보내지 않는다). */
 export type ReviewRow = {
   id: string;
   tenant_id: string;

@@ -1,4 +1,4 @@
-// scripts/_classnote/video-review-extract.mjs — 영상 설명 AI 참고 메모(0387a `homework_video_reviews`, 원장 2026-10-20)의 **추출 단계**.
+// scripts/_classnote/video-review-extract.mjs — 영상 설명 AI 참고 메모(0390a `homework_video_reviews`, 원장 2026-10-20)의 **추출 단계**.
 //
 // 서버 cron이 새 수학 영상마다 `stage='extract'` 줄을 만든다. 발송 PC가 그 줄을 집어 드라이브에서 원본을 받고, ffmpeg로
 // 소리(mp3)와 화면(jpg 13장)을 뽑아 비공개 버킷(homework-video-review)에 올린 뒤 `stage='transcribe'`로 넘긴다. 이후 전사·판정은 서버 몫.

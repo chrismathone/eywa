@@ -1,5 +1,5 @@
 /**
- * 소리·화면 보관 경로(버킷 homework-video-review, 0387a) — 워커(scripts/_classnote/video-review-extract.mjs)와 서버가 같은 규칙을 쓴다.
+ * 소리·화면 보관 경로(버킷 homework-video-review, 0390a) — 워커(scripts/_classnote/video-review-extract.mjs)와 서버가 같은 규칙을 쓴다.
  * `{tenantId}/{videoId}/audio.mp3` · `{tenantId}/{videoId}/f01_00m05s.jpg` · `{tenantId}/{videoId}/last_02m05s_hi.jpg`
  * 화면 이름(확장자 뺀 것)이 판정의 근거 위치로 쓰인다 — 바꾸면 하네스 지침(`f번호_분m초s`·`last_…_hi`)도 함께.
  */

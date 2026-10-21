@@ -1,4 +1,4 @@
--- 0387a 영상 숙제 설명 AI 참고 메모(원장 2026-10-20) — 학생 설명 영상을 소리(전사)·화면으로 판정해 담당 선생님 참고 메모를 남긴다.
+-- 0390a 영상 숙제 설명 AI 참고 메모(원장 2026-10-20) — 학생 설명 영상을 소리(전사)·화면으로 판정해 담당 선생님 참고 메모를 남긴다.
 -- 결정 본문 = docs/decisions/reports-ai.md '영상 설명 AI 참고 메모'.
 --
 -- 흐름(영상 1개 = 행 1개, stage가 단계):
@@ -70,7 +70,7 @@ begin
       with check (tenant_id=nullif(current_setting('eywa.agent_tenant',true),'')::uuid
         and public.sync_agent_foreign_keys('public.homework_video_reviews'::regclass,to_jsonb(homework_video_reviews)))$p$;
   else
-    raise notice '0387a: eywa_sync_agent 역할 또는 sync_agent_foreign_keys가 아직 없어 워커 권한을 건너뜀';
+    raise notice '0390a: eywa_sync_agent 역할 또는 sync_agent_foreign_keys가 아직 없어 워커 권한을 건너뜀';
   end if;
 end $$;
 
