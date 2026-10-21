@@ -5,10 +5,8 @@ import { useRouter } from "next/navigation";
 import { FaceTabs } from "@/components/face-tabs";
 import { Pill } from "@/components/atoms/pill";
 import { Button } from "@/components/ui/button";
-import { HrefSelect } from "@/components/href-select";
 import { TONE_COLOR } from "@/lib/design/semantic-color";
 import {
-  DIRECTION_LABEL,
   type Season,
   type ShuttleRun,
   type ShuttleTrip,
@@ -22,27 +20,20 @@ import {
   type RideException,
 } from "@/features/shuttle/roster";
 import { saveShuttleTodayPrefs } from "@/features/shuttle/today/server/today-prefs";
-import {
-  countProgress,
-  filterByDirection,
-  groupRunsByVehicle,
-  sumProgress,
-  type DirectionFilter,
-} from "@/features/shuttle/today/today-board";
+import { countProgress, groupRunsByVehicle, sumProgress } from "@/features/shuttle/today/today-board";
+import { tripState } from "@/features/shuttle/today/trip-state";
+import type { RideHit } from "@/features/shuttle/today/ride-search";
 import { useShuttleLive } from "@/features/shuttle/live/use-shuttle-live";
 import type { BoardingLog } from "@/features/shuttle/server/queries";
 import type { AssignableStudent } from "@/features/shuttle/server/students";
 import { RideExceptionDialog } from "./ride-exception-dialog";
+import { RideJump } from "./ride-jump";
+import { RiderContactsProvider } from "./rider-contacts";
+import type { RiderContact } from "@/features/shuttle/server/rider-contacts";
 import { RunPanel } from "./run-panel";
 import { ShuttleDayNav } from "../../_components/shuttle-day-nav";
 import { VehicleHeader } from "./vehicle-header";
-
-/** 등하원 보기 드롭다운 항목 — 아침엔 등원만, 저녁엔 하원만 본다(폰에서 목록이 절반이 된다). */
-const DIR_FILTERS: { value: DirectionFilter; label: string }[] = [
-  { value: "all", label: "전체" },
-  { value: "in", label: DIRECTION_LABEL.in },
-  { value: "out", label: DIRECTION_LABEL.out },
-];
+import { VehicleTabs } from "./vehicle-tabs";
 
 /**
  * 오늘 등하원 — 회차마다 그날 예정 명단을 펼치고 한 줄씩 탑승/미탑승을 찍는다.
@@ -53,7 +44,8 @@ const DIR_FILTERS: { value: DirectionFilter; label: string }[] = [
  *    · **호차로 묶는다** — 차가 여럿이면 평평한 회차 목록에서 "지금 몇 호차를 보는지"가 사라져
  *      남의 차 회차를 자기 차로 착각한다. 호차 머리는 스크롤 중에도 붙어 있다(sticky).
  *    · **시각이 먼저다** — 기사는 회차 번호가 아니라 다음 출발 시각으로 움직인다(정렬도 시각 순).
- *    · **등원/하원 칩**으로 반을 덜어낸다 — 아침엔 등원만 보면 된다.
+ *    · **호차 토글**로 내 차만 본다(사용자 2026-10-20 — 옛 등원/하원 드롭다운 대체, 고른 호차는 계정에 남는다).
+ *    · **학생 찾아가기** — 이름을 고르면 그 호차·회차로 가서 그 줄을 비춘다(목록은 거르지 않는다).
  *    · 회차는 **접힌 채로 시작**하고 아직 안 찍은 회차만 펼친다 — 폰에서 7회차를 다 펼치면
  *      다 끝난 회차를 지나 스크롤해야 오늘 할 일이 나온다.
  *    · 진행 요약(찍은 수/전체)을 호차·회차 머리에 둬서 **접힌 채로도 남은 일이 보인다**.
@@ -73,7 +65,7 @@ export function DayBoardClient({
   runs,
   logs,
   canWrite,
-  initialDirection,
+  initialVehicle,
   exceptions,
   exceptionsReady,
   students,
@@ -81,6 +73,7 @@ export function DayBoardClient({
   trips,
   tripsReady,
   tenantId,
+  contacts = {},
 }: {
   /** 실시간 위치 탭을 붙일까 — 원장·관리자·총괄만(서버 `isShuttleAdmin`이 정한다). */
   showTrack?: boolean;
@@ -90,8 +83,8 @@ export function DayBoardClient({
   runs: ShuttleRun[];
   logs: BoardingLog[];
   canWrite: boolean;
-  /** 계정에 저장된 등하원 보기(`users.ui_prefs.shuttleToday`) — 저녁마다 다시 누르지 않게. */
-  initialDirection: DirectionFilter;
+  /** 계정에 저장된 호차 보기(`users.ui_prefs.shuttleToday.vehicle`, null = 전체) — 열 때마다 다시 누르지 않게. */
+  initialVehicle: string | null;
   /** 그날만의 예정 변경(0229a) — 오늘만 탐 / 오늘만 안 탐. */
   exceptions: RideException[];
   /** 0229a 적용 여부. false면 **버튼 자체를 안 그린다**(없는 기능을 약속하지 않는다, [[#95]]). */
@@ -109,6 +102,8 @@ export function DayBoardClient({
   tripsReady: boolean;
   /** 실시간 채널 키. 빈 문자열이면 채널을 안 연다(비로그인·조회 실패). */
   tenantId: string;
+  /** 학생·학부모 전화번호(studentId → 번호) — 기록 권한이 있을 때만 페이지가 싣는다. 없으면 빈칸. */
+  contacts?: Record<string, RiderContact>;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -124,16 +119,18 @@ export function DayBoardClient({
   const [manualOpen, setManualOpen] = useState<Record<string, boolean>>({});
   const [exceptionOpen, setExceptionOpen] = useState(false);
   /**
-   * 등하원 보기 — 화면은 즉시 바꾸고 **계정 저장은 뒤따른다**(반응속도 1순위).
+   * 호차 보기 — 화면은 즉시 바꾸고 **계정 저장은 뒤따른다**(반응속도 1순위).
    * ⚠️ 주소에 안 싣는 이유는 서버 왕복(스켈레톤 깜빡임)을 피하기 위해서지만, 그렇다고 휘발시키면
-   *    저녁마다 하원을 다시 눌러야 한다 → 보기 설정은 **계정 귀속**이 규칙이다(`users.ui_prefs`).
+   *    열 때마다 내 차를 다시 눌러야 한다 → 보기 설정은 **계정 귀속**이 규칙이다(`users.ui_prefs`).
    */
-  const [dirFilter, setDirFilter] = useState<DirectionFilter>(initialDirection);
-  function pickDirection(next: DirectionFilter) {
-    setDirFilter(next);
+  const [vehicleKey, setVehicleKey] = useState<string | null>(initialVehicle);
+  function pickVehicle(next: string | null) {
+    setVehicleKey(next);
     // 저장 실패는 조용히 넘긴다 — 지금 화면은 이미 바뀌었고, 다음 방문에 옛 값으로 열릴 뿐이다.
-    void saveShuttleTodayPrefs({ direction: next });
+    void saveShuttleTodayPrefs({ vehicle: next });
   }
+  /** 찾아간 줄 — 그려진 뒤 그 줄로 스크롤하고 잠깐 비춘다. */
+  const [jumpKey, setJumpKey] = useState<{ key: string; n: number } | null>(null);
 
   const tripByRun = useMemo(() => new Map(trips), [trips]);
 
@@ -166,22 +163,48 @@ export function DayBoardClient({
       .filter(({ rows }) => rows.length > 0);
   }, [runs, logs, date, exceptions]);
 
-  /** 화면에 실제로 그릴 것 — 등하원 필터를 먹인 뒤 호차로 묶는다(정렬·집계는 순수 모듈). */
-  const groups = useMemo(
-    () => groupRunsByVehicle(filterByDirection(byRun, dirFilter), vehicles),
-    [byRun, dirFilter, vehicles],
-  );
   /**
-   * 숫자(요약 줄 · 호차 머리의 "N명 남음")는 **보기 필터와 무관하게 그날 DB 전체**(편성 × 기록)로 센다
-   * (사용자 2026-10-06 "보이는 기준말고 확실하게 디비에 남은 기준으로"). 필터는 **그리는 회차만** 좁힌다 —
-   * 숫자까지 따라 줄면 등원만 보는 중에 하원 미기록이 화면에서 사라진다.
+   * 숫자(요약 줄 · 호차 머리·토글의 "N명 남음")는 **보기 필터와 무관하게 그날 DB 전체**(편성 × 기록)로 센다
+   * (사용자 2026-10-06 "보이는 기준말고 확실하게 디비에 남은 기준으로"). 호차 토글은 **그리는 호차만** 좁힌다.
    */
   const allGroups = useMemo(() => groupRunsByVehicle(byRun, vehicles), [byRun, vehicles]);
   const totals = useMemo(() => sumProgress(allGroups), [allGroups]);
-  const progressByVehicle = useMemo(
-    () => new Map(allGroups.map((g) => [g.vehicleId, g.progress])),
-    [allGroups],
+  const progressByKey = useMemo(() => new Map(allGroups.map((g) => [g.key, g.progress])), [allGroups]);
+  /**
+   * 고른 호차가 그날 없으면(그 차가 오늘 안 돈다 · 차 이름이 바뀌었다) **전체**를 보인다 — 빈 화면으로 열면
+   * "오늘 아무도 안 탄다"로 읽힌다. 저장값은 그대로 둔다(내일 그 차가 돌면 다시 그 차로 열린다).
+   */
+  const shownKey = vehicleKey && allGroups.some((g) => g.key === vehicleKey) ? vehicleKey : null;
+  const groups = useMemo(
+    () => (shownKey ? allGroups.filter((g) => g.key === shownKey) : allGroups),
+    [allGroups, shownKey],
   );
+
+  /** 학생 찾아가기 — 다른 호차를 보는 중이면 그 차로 옮기고, 그 회차를 펼친 뒤 그 줄을 비춘다. */
+  function jumpTo(hit: RideHit) {
+    if (shownKey && shownKey !== hit.vehicleKey) pickVehicle(hit.vehicleKey);
+    setManualOpen((m) => ({ ...m, [hit.runId]: true }));
+    setJumpKey((j) => ({ key: hit.rowKey, n: (j?.n ?? 0) + 1 }));
+  }
+  useEffect(() => {
+    if (!jumpKey) return;
+    // 그려진 뒤(펼침·호차 전환이 반영된 다음 프레임)에 찾는다.
+    const raf = requestAnimationFrame(() => {
+      const el = document.querySelector<HTMLElement>(`[data-ride-key="${CSS.escape(jumpKey.key)}"]`);
+      if (!el) return;
+      el.scrollIntoView({ block: "center", behavior: "smooth" });
+      // 🔑 클래스를 붙이지 않고 Web Animations로 비춘다 — React가 다시 그려도 지워지지 않고, 끝나면 흔적이 없다.
+      el.animate(
+        [
+          { boxShadow: "0 0 0 3px var(--primary)" },
+          { boxShadow: "0 0 0 3px var(--primary)", offset: 0.6 },
+          { boxShadow: "0 0 0 0 transparent" },
+        ],
+        { duration: 1800, easing: "ease-out" },
+      );
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [jumpKey]);
 
   const href = (d: string, s: Season = season) => `/shuttle/today?d=${d}&season=${s}`;
 
@@ -192,6 +215,7 @@ export function DayBoardClient({
   const canEditException = canWrite && exceptionsReady && date >= today;
 
   return (
+    <RiderContactsProvider value={contacts}>
     <div className="flex min-h-0 flex-col gap-3">
       {/* 📐 **면 전환 + 날짜 + 시즌을 한 줄로**(2026-09-03, 원장 *"한 페이지에 정보가 너무 많다"*). 날짜 이동은 앱
           전역 PeriodNav + 시즌 드롭다운(공용 ShuttleDayNav — 옛 outline 아이콘 버튼 둘 + 알약 칩 둘, 디자인 v5 17단계).
@@ -204,23 +228,20 @@ export function DayBoardClient({
         <ShuttleDayNav date={date} today={today} season={season} hrefFor={href} />
       </div>
 
-      {/* 등하원 + 요약을 **한 레일**로 — 폰에서 상단 크롬이 세 줄이 되면 첫 호차까지 스크롤이 필요하다
+      {/* 🚌 호차 토글 + 학생 찾아가기(사용자 2026-10-20) — 옛 `등하원: 전체` 드롭다운 자리.
+          ⚠️ 툴바 레일 **밖**의 한 줄이다: 찾기 결과 겹판이 폰 `.toolbar-rail`(overflow 잘림) 안에선 안 보인다. */}
+      {allGroups.length > 0 && (
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+          <VehicleTabs groups={allGroups} progressByKey={progressByKey} value={shownKey} onPick={pickVehicle} />
+          <div className="sm:ml-auto">
+            <RideJump groups={allGroups} onPick={jumpTo} />
+          </div>
+        </div>
+      )}
+
+      {/* 요약을 **한 레일**로 — 폰에서 상단 크롬이 세 줄이 되면 첫 호차까지 스크롤이 필요하다
           ("모바일 상단 크롬 = 한 줄" 규약 · 제보의 "아주 필요한 기능만"). */}
       <div className={`${SHUTTLE_TOOLBAR} text-sm`}>
-        {/* 등하원 보기 = `등하원: 전체` 드롭다운(§10 — 옛 알약 칩 셋). 계정 귀속 상태(URL 아님)라 `HrefSelect`의 **값 모드**
-            (`onSelect`) — 목록이 Portal이라 폰의 `.toolbar-rail`(overflow-y hidden) 안에서도 열리고 검색 입력이 없다
-            (`SearchableSelect`는 인라인 목록이라 잘려서 안 열렸다 — 셔틀 리뷰 🔴 2026-09-04). 항목 옆 남은 수 hint는
-            뺐다 — 남은 명수는 호차 머리 하나만 말한다(사용자 2026-10-06). */}
-        <HrefSelect
-          axisLabel="등하원"
-          ariaLabel="등하원 보기"
-          value={dirFilter}
-          onSelect={(v) => pickDirection(v as DirectionFilter)}
-          options={DIR_FILTERS.map((f) => ({
-            value: f.value,
-            label: f.label,
-          }))}
-        />
         {/* 📐 **0인 숫자를 색 알약으로 강조하지 않는다**(2026-09-03). 아침엔 탑승·미탑승이 둘 다 0이라
             초록·빨강 알약 두 개가 아무 뜻 없이 눈을 끌었고, 정작 할 일인 '미기록'이 그 사이에 묻혔다.
             🔴 **'미기록 N'은 닫힌 상태에서도 보여야 한다** — 옛 칩이 방향별 남은 수를 상시 보였는데 드롭다운으로 접으며
@@ -279,10 +300,8 @@ export function DayBoardClient({
 
       {groups.length === 0 && (
         <div className="border-line bg-card text-text-dim rounded-2xl border border-dashed p-8 text-center text-sm">
-          {/* 🔴 "없다"의 뜻을 가른다 — 필터 때문에 빈 것을 그날 아무도 안 탄 것처럼 말하지 않는다. */}
-          {byRun.length === 0 || dirFilter === "all"
-            ? "이 날짜에 타기로 되어 있는 학생이 없습니다."
-            : `${DIRECTION_LABEL[dirFilter]}으로 타는 학생이 없습니다 — '전체'를 누르면 다 보입니다.`}
+          {/* 호차 토글은 그날 도는 차만 세우고, 고른 차가 없으면 전체로 접힌다 — 여기 오면 그날 정말 아무도 안 탄다. */}
+          이 날짜에 타기로 되어 있는 학생이 없습니다.
         </div>
       )}
 
@@ -308,17 +327,17 @@ export function DayBoardClient({
       <div className="@container/board">
        <div className="grid grid-cols-1 items-start gap-4 @3xl/board:grid-cols-[repeat(auto-fit,minmax(24rem,1fr))]">
       {groups.map((group) => (
-        <section key={group.vehicleId} className="flex min-w-0 flex-col gap-2">
-          <VehicleHeader
-            group={group}
-            progress={progressByVehicle.get(group.vehicleId) ?? group.progress}
-            dirFilter={dirFilter}
-          />
+        <section key={group.key} className="flex min-w-0 flex-col gap-2">
+          <VehicleHeader group={group} progress={progressByKey.get(group.key) ?? group.progress} />
           {/* 그 호차의 회차는 위에서 아래로(시간순) — 열 안에서 내용이 밑으로 밀린다. */}
           <div className="flex flex-col gap-3">
             {group.runs.map(({ run, rows }) => {
               const progress = countProgress(rows);
-              const open = manualOpen[run.id] ?? progress.unmarked > 0;
+              // 🔑 오늘은 **[종료]를 누르기 전까지 펼친 채**(사용자 2026-10-21 "마지막 학생까지 누르면 바로 좁혀지더라 — 종료까지 누른 뒤로").
+              //    지난 날짜·운행 기록 표가 없는 DB는 종전대로 "안 찍은 줄이 남았나"로 연다(종료 기록이 없는 옛 회차가 전부 펼쳐지지 않게).
+              const trip = tripByRun.get(run.id) ?? null;
+              const autoOpen = tripsReady && date === today ? tripState(trip) !== "done" : progress.unmarked > 0;
+              const open = manualOpen[run.id] ?? autoOpen;
               return (
                 <RunPanel
                   key={run.id}
@@ -333,7 +352,7 @@ export function DayBoardClient({
                   onError={setError}
                   onDone={done("boarding")}
                   onTripDone={done("trip")}
-                  trip={tripByRun.get(run.id) ?? null}
+                  trip={trip}
                   tripsReady={tripsReady}
                   today={today}
                 />
@@ -345,5 +364,6 @@ export function DayBoardClient({
        </div>
       </div>
     </div>
+    </RiderContactsProvider>
   );
 }

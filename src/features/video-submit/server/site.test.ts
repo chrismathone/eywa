@@ -195,9 +195,9 @@ describe("뒷 4자리 + 이름 조회 — 선생님이 낸 영상 숙제 중 아
     const none = await look("류태경");
     expect(dates(none)).toEqual([]);
     expect(freeClasses(none)).toEqual(["LT4"]);
-    // ③ 끝난 수강·휴원·아직 시작 전 — 지금 다니는 반이 없다
+    // ③ 끝난 수강(2주 넘게 지나 열린 숙제가 있을 수 없다)·휴원·아직 시작 전 — 올릴 반이 없다
     setup();
-    Object.assign(db.tables.enrollments![0]!, { end_date: "2026-10-01" });
+    Object.assign(db.tables.enrollments![0]!, { end_date: "2026-09-17" });
     expect(await look("류태경")).toMatchObject({ ok: false, code: "no_homework" });
     Object.assign(db.tables.enrollments![0]!, { end_date: null, on_hold: true });
     expect(await look("류태경")).toMatchObject({ ok: false, code: "no_homework" });
@@ -344,6 +344,71 @@ describe("뒷 4자리 + 이름 조회 — 선생님이 낸 영상 숙제 중 아
     m.settings = { ...withEnglishOff(), modules: { disabled: ["classnote"] } };
     expect(await look()).toMatchObject({ ok: false, code: "unavailable" });
     expect(db.tables.homework_video_site_attempts).toHaveLength(0);
+  });
+});
+
+describe("반을 옮긴 학생 — 지난 반에서 받은 숙제(원장 2026-10-21)", () => {
+  // 10/2(오늘)자로 LT4 → PS2 반 이동(반열림 — 10/2부터 LT4는 끝난 수강). LT4의 10/1·9/29 숙제는 아직 마감 전이다.
+  const transfer = () => {
+    Object.assign(db.tables.enrollments![0]!, { end_date: "2026-10-02", is_transferred: true });
+    db.tables.enrollments!.push({ tenant_id: T, student_id: S, class_id: C3, start_date: "2026-10-02", end_date: null, on_hold: false, is_transferred: false });
+  };
+  it("🔴 옮기기 전 반의 숙제가 마감까지 선다('지난 반') — 숙제 없이 올리기 줄은 지금 반만", async () => {
+    transfer();
+    const r = await look();
+    expect(dates(r)).toEqual([`${label("2026-10-01")}|LT4`, `${label("2026-09-29")}|LT4`]);
+    expect(r.ok && r.choices.filter((c) => !c.free).every((c) => c.pastClass === true)).toBe(true);
+    expect(freeClasses(r)).toEqual(["PS2"]);
+    expect(r.ok && r.choices.some((c) => c.free && c.pastClass)).toBe(false);
+  });
+  it("지난 반에 열린 숙제가 없으면 아무것도 서지 않는다 · 끝난 지 2주가 넘은 반은 보지 않는다", async () => {
+    transfer();
+    db.tables.lesson_reports = db.tables.lesson_reports!.filter((row) => !(row.student_id === S && row.class_id === C));
+    const r = await look();
+    expect(dates(r)).toEqual([]);
+    expect(freeClasses(r)).toEqual(["PS2"]);
+    setup();
+    Object.assign(db.tables.enrollments![0]!, { end_date: "2026-09-17" });
+    expect(await look()).toMatchObject({ ok: false, code: "no_homework" });
+  });
+  it("지난 반이 그사이 닫혀도(비활성) 받은 숙제는 선다 · 반 폐지 당일(종료일 = 오늘이라 아직 수강 중)도 받은 숙제만 선다", async () => {
+    transfer();
+    Object.assign(db.tables.classes!.find((c) => c.id === C)!, { is_active: false });
+    expect(dates(await look())).toEqual([`${label("2026-10-01")}|LT4`, `${label("2026-09-29")}|LT4`]);
+    // 10/2(오늘) LT4 폐지 — 수강 종료일 = 오늘(일반 종료라 오늘까지 수강 중) · 반은 비활성. 숙제 없이 올리기 줄은 없다.
+    setup();
+    Object.assign(db.tables.enrollments![0]!, { end_date: "2026-10-02" });
+    Object.assign(db.tables.classes!.find((c) => c.id === C)!, { is_active: false });
+    const closing = await look();
+    expect(dates(closing)).toEqual([`${label("2026-10-01")}|LT4`, `${label("2026-09-29")}|LT4`]);
+    expect(closing.ok && closing.choices.every((c) => !c.free && c.pastClass)).toBe(true);
+    // 닫힌 반에 열린 숙제가 없으면 올릴 반이 없다
+    db.tables.lesson_reports = db.tables.lesson_reports!.filter((row) => !(row.student_id === S && row.class_id === C));
+    expect(await look()).toMatchObject({ ok: false, code: "no_homework" });
+  });
+  it("같은 반을 지금 휴원 중이면 그 반의 끝난 수강으로 '지난 반'을 세우지 않는다(휴원 = 종전대로 올릴 반 아님)", async () => {
+    Object.assign(db.tables.enrollments![0]!, { on_hold: true });
+    db.tables.enrollments!.push({ tenant_id: T, student_id: S, class_id: C, start_date: "2026-08-01", end_date: "2026-09-25", on_hold: false, is_transferred: true });
+    expect(await look()).toMatchObject({ ok: false, code: "no_homework" });
+  });
+  it("같은 반을 다시 다니면(끝난 수강 + 지금 수강) 지금 반으로 선다 · 영상 숙제 대상 밖인 지난 반은 서지 않는다", async () => {
+    db.tables.enrollments!.push({ tenant_id: T, student_id: S, class_id: C, start_date: "2026-08-01", end_date: "2026-09-25", on_hold: false, is_transferred: false });
+    const again = await look();
+    expect(again.ok && again.choices.some((c) => c.pastClass)).toBe(false);
+    expect(freeClasses(again)).toEqual(["LT4"]);
+    // 김민수 — 영어 반(학원 설정이 끈 과목)을 그만뒀다: 그 반 숙제는 지난 반이어도 서지 않는다
+    Object.assign(db.tables.enrollments!.find((e) => e.student_id === S2 && e.class_id === C2)!, { end_date: "2026-10-01" });
+    expect(dates(await look("김민수"))).toEqual([`${label("2026-10-01")}|LT4`]);
+  });
+  it("🔴 지난 반의 숙제도 같은 길로 연다 — 링크는 그 지난 반 · 주소에 숙제일 · 그 반 숙제 없이 올리기 지문은 없다", async () => {
+    transfer();
+    const r = await look();
+    const choice = r.ok ? r.choices.find((c) => c.homeworkLabel === label("2026-10-01"))!.id : "";
+    const opened = await openSiteLink({ last4: "5678", name: "류태경", choice, ip: "1.1.1.1" });
+    expect(opened.ok && opened.url).toMatch(/\?h=2026-10-01$/);
+    expect(db.tables.homework_video_links![0]).toMatchObject({ class_id: C, origin: "site", expires_at: "2026-10-09T00:00:00+09:00" });
+    // 지금 반(PS2)의 숙제 없이 올리기 줄만 있다 — 지난 반 몫의 그런 줄은 응답에 없다
+    expect(r.ok && r.choices.filter((c) => c.free)).toHaveLength(1);
   });
 });
 

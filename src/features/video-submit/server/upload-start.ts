@@ -55,7 +55,8 @@ async function freeUploadsToday(db: ReturnType<typeof createAdminClient>, link: 
 }
 
 /**
- * 숙제 없이 올리기 전에 반을 다시 본다 — 조회 화면(`findCandidates`)과 같은 조건: 지금 그 반 수강 중(휴원·종료 아님) · 반이 살아 있음 · 학원 설정의 영상 숙제 대상.
+ * 숙제 없이 올리기 전에 반을 다시 본다 — 조회 화면의 '숙제 없이 올리기' 줄과 같은 조건: 지금 그 반 수강 중(휴원·종료 아님) · 반이 살아 있음 · 학원 설정의 영상 숙제 대상.
+ * (수강이 끝난 반은 조회 화면에 받은 숙제 줄만 선다 — 숙제를 고른 업로드는 이 검사를 타지 않고 `isAssignedHomeworkDate`가 숙제를 본다.)
  */
 async function freeUploadClassLive(db: ReturnType<typeof createAdminClient>, link: { tenant_id: string; student_id: string; class_id: string },
   settings: TenantSettings, day: string): Promise<boolean> {

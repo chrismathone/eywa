@@ -1,28 +1,23 @@
 "use client";
 
-import { DIRECTION_LABEL } from "@/features/shuttle/types";
-import { progressState, type DirectionFilter, type Progress, type VehicleGroup } from "@/features/shuttle/today/today-board";
+import { progressState, type Progress, type VehicleGroup } from "@/features/shuttle/today/today-board";
 
 /**
  * 호차 머리 — 폰에서 **스크롤 중에도 붙어 있다**(sticky). 차가 여럿일 때 "지금 몇 호차를 보는지"를
  * 놓치면 남의 차 회차를 자기 차로 착각한다(원장 2026-08-19 "호차 구분").
  *
- * 🔴 **필터가 켜져 있으면 그 사실을 여기서 말한다** — 등하원 칩 줄은 스크롤하면 사라지는데 이 머리는
- *    붙어 있다. 안 밝히면 아침에 '등원'을 눌러 둔 채 저녁에 폰을 열었을 때 화면이 "완료"만 늘어놓고,
- *    하원 회차가 통째로 숨겨진 사실은 어디에도 안 보인다(그대로 미기록으로 끝난다).
- * 🔑 숫자(N명 남음 · 찍은/예정)는 **보기 필터와 무관한 그 차의 그날 전체**(`progress`, 사용자 2026-10-06) —
- *    필터는 아래 회차만 좁히고, 걸려 있으면 그 사실을 따로 밝힌다.
+ * 🔑 숫자(N명 남음 · 찍은/예정)는 **그 차의 그날 전체**(`progress`, 사용자 2026-10-06).
+ *    옛 등하원 필터(회차를 숨기던 것)는 2026-10-20 호차 토글로 바뀌어 이 머리가 밝힐 숨김이 없다 —
+ *    호차 토글은 차를 통째로 고를 뿐 그 차의 회차를 빼지 않는다.
  * ⚠️ 기사 전화는 **누르면 걸리게**(tel:) — 차 안에서 번호를 옮겨 적을 수 없다.
  */
 export function VehicleHeader({
   group,
   progress,
-  dirFilter,
 }: {
   group: VehicleGroup;
-  /** 그 차의 그날 전체 진행(필터 전). */
+  /** 그 차의 그날 전체 진행. */
   progress: Progress;
-  dirFilter: DirectionFilter;
 }) {
   const state = progressState(progress);
   return (
@@ -43,9 +38,6 @@ export function VehicleHeader({
       <span className="ml-auto text-xs font-bold">
         {/* 🔴 전원이 '오늘 안 탐'이면 "완료"가 아니라 "오늘 탑승 없음"이다 — 회차 머리와 같은 판정
             (`progressState`)을 쓴다. 두 머리가 다른 말을 하면 어느 쪽이 맞는지 알 수 없다. */}
-        {dirFilter !== "all" && (
-          <span className="text-text-faint mr-1.5 font-normal">{DIRECTION_LABEL[dirFilter]}만 보는 중 ·</span>
-        )}
         {state === "remaining" ? (
           <span className="text-amber">
             <span className="num">{progress.unmarked}</span>명 남음

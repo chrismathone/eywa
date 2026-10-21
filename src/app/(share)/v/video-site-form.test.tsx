@@ -142,3 +142,17 @@ describe("올리기 사이트 — 지점", () => {
     expect(bodies().map((body) => body.tenant)).toEqual([undefined, A]);
   });
 });
+
+describe("올리기 사이트 — 지난 반 숙제(원장 2026-10-21)", () => {
+  it("반을 옮기기 전 반에서 받은 숙제 줄에는 '지난 반'을 붙인다 · 지금 반 줄에는 없다", async () => {
+    replies = [{ ok: true, choices: [
+      { ...CHOICE, className: "BS2C", pastClass: true },
+      { id: "d".repeat(40), studentLabel: "류*경", className: "BS2D", homeworkLabel: "", free: true },
+    ] }];
+    render(<VideoSiteForm academyName="인재원" branches={[BRANCHES[0]!]} maxLabel="1GB" />);
+    fill();
+    await screen.findByText("올릴 숙제를 골라 주세요");
+    expect(screen.getByText("BS2C · 지난 반")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /BS2D/ })).not.toHaveTextContent("지난 반");
+  });
+});

@@ -149,6 +149,33 @@ describe("groupRunsByVehicle — 호차 구분", () => {
     expect(out[0]!.vehicleName).toBe("(편성 없는 차)");
   });
 
+  it("🔴 이름이 같은 차량 행은 **한 칸** — 저녁 회차를 다른 행으로 넣어도 같은 호차 열에 선다", () => {
+    // 쿼리가 정렬해 내려준 순서 그대로(순위 = 배열 순서).
+    const vs = [vehicle("v1", "1호차", 0), vehicle("v2", "2호차", 1), vehicle("v2b", " 2호차 ", 5)];
+    const runs: RunRows[] = [
+      { run: run("eve", "v2b", 3, ["19:00"]), rows: [row("a", null)] },
+      { run: run("day", "v2", 1, ["15:10"]), rows: [row("b", "boarded")] },
+      { run: run("one", "v1", 1, ["14:30"]), rows: [] },
+    ];
+    const out = groupRunsByVehicle(runs, vs);
+    expect(out.map((g) => g.vehicleName)).toEqual(["1호차", "2호차"]);
+    const two = out[1]!;
+    expect(two.key).toBe("name:2호차");
+    expect(two.vehicleId).toBe("v2"); // 편성 순서가 앞선 행이 대표
+    expect(two.vehicleIds).toEqual(["v2", "v2b"]);
+    expect(two.runs.map((r) => r.run.id)).toEqual(["day", "eve"]); // 합친 뒤에도 시각 순
+    expect(two.progress.planned).toBe(2);
+  });
+
+  it("글자가 다른 이름은 합치지 않는다(사람이 일부러 다르게 붙인 이름)", () => {
+    const vs = [vehicle("v2", "2호차", 1), vehicle("v3", "2호차(저녁)", 2)];
+    const runs: RunRows[] = [
+      { run: run("a", "v2", 1, ["15:00"]), rows: [] },
+      { run: run("b", "v3", 1, ["19:00"]), rows: [] },
+    ];
+    expect(groupRunsByVehicle(runs, vs).map((g) => g.vehicleName)).toEqual(["2호차", "2호차(저녁)"]);
+  });
+
   it("편성에 없는 차는 맨 뒤로 (있는 차가 먼저)", () => {
     const runs: RunRows[] = [
       { run: run("orphan", "gone", 1, ["13:00"]), rows: [] },

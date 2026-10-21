@@ -120,7 +120,13 @@ export function App({ store, onDirtyChange, loginHref = '/login', applyControls,
       <button className={`check-toggle ${checks.issues.length || checks.incomplete.length ? 'warning' : ''}`} aria-expanded={panel === 'inspect' && !selected.length} onClick={() => { if (panel === 'inspect' && !selected.length) setPanel(null); else { select([]); setPanel('inspect'); } }}>배치 확인 {checks.issues.length ? `· 겹침 ${checks.issues.length}` : ''}{checks.incomplete.length ? ` · 미확정 ${checks.incomplete.length}` : ''}</button>
     </div>
     {focus && <TrailBar store={store} student={focus} actions={actions} />}
-    <div className="lab-workarea">
+    {/* 격자가 짧으면 그 아래 흰 곳은 상자 밖이다 — 거기를 눌러도 시간표에 초점을 둬 키보드(Delete·화살표·Esc·붙여넣기)가 그대로 듣게 한다.
+        preventDefault를 먼저 — 안 그러면 뒤따르는 mousedown 기본 동작이 초점을 body로 되가져간다(재리뷰 실측). 바깥 누름으로 닫히는 메뉴·툴팁은 pointerdown을 들어 그대로 닫힌다. */}
+    <div className="lab-workarea" onPointerDown={e => {
+      if (e.target !== e.currentTarget) return;
+      const box = e.currentTarget.querySelector<HTMLElement>('.schedule-scroll');
+      if (box) { e.preventDefault(); box.focus({ preventScroll: true }); }
+    }}>
       {started ? view === 'teacher' ? <ScheduleCanvas store={store} selected={selected} select={select} details={actions.details} announce={announce} zoom={zoom} search={search} actions={actions} focus={focus} />
         : <IntegratedView store={store} selected={selected} select={select} details={actions.details} zoom={zoom} search={search} announce={announce} actions={actions} focus={focus} /> : <section className="lab-empty">
         <div className="empty-schedule" aria-hidden="true"><i /><i /><i /></div><h2>지금 쓰는 시간표를 펼쳐 보세요</h2><p>수업을 옮겨 보고, 겹치는 이유를 확인하며<br />다음 시간표를 연습할 수 있습니다.</p>

@@ -35,6 +35,10 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .check-toggle.warning { border-color: #dba17c; color: #9a471c; background: #fff4e9; }
 .lab-workarea { flex: 1; min-height: 0; display: flex; position: relative; }
 .schedule-scroll { flex: 1; min-width: 0; overflow: auto; outline: 0; overscroll-behavior: contain; touch-action: pan-x pan-y; }
+/* 작업 영역(가로 flex)의 상자는 격자 높이만큼만 선다 — 격자가 화면보다 짧으면 가로 막대가 격자 바로 아래 붙는다(원장 2026-10-21 "하 여백 왜 있는지" —
+   화면 끝까지 늘면 22:00 줄과 막대 사이가 비었다). 길면 작업 영역 높이에서 멈추고 종전처럼 세로로 스크롤한다. 오른쪽 상세·통계 패널은 그대로 전체 높이.
+   🔴 작업 영역 안에만 — 연습본 비교 창의 칸(세로 flex)에서는 같은 값이 폭에 걸려 가로 스크롤이 사라진다(적대적 리뷰). */
+.lab-workarea > .schedule-scroll { align-self: flex-start; max-height: 100%; }
 .schedule-grid { display: grid; min-width: 100%; width: max-content; isolation: isolate; }
 .teacher-heading { position: sticky; top: 0; z-index: 6; height: 45px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 12px; background: #eef3f9; border-right: 1px solid #d8e1eb; border-bottom: 1px solid #bccddd; font-weight: 700; }
 .teacher-heading small { font-weight: 400; font-size: 14px; color: #73879c; }
