@@ -70,7 +70,7 @@ export function KpiCard({
           <>
             <span className={s.kpiLabel} data-overview="kpi-label">
               <span className={s.kpiIcon}>{icon}</span>
-              <span>{name}</span>
+              <span className={s.kpiName}>{name}</span>
               {labelNote && <small className={s.kpiPeriod}>{labelNote}</small>}
               {error && <span className={s.textDanger} title={body} aria-hidden>!</span>}
             </span>

@@ -28,6 +28,7 @@ import { shiftActualLines } from "./shift-lines";
 import { advanceStackAt, cellMarkerKey, isMarkerAtCell, laneMarkerKey, nextAdvanceStackKey, parseMarkerKey } from "../shift-key";
 import { LANE_MIGRATION_NEEDED, writeMarker } from "./shift-markers";
 import { applyCellLessons } from "./apply-cell-lessons";
+import { ownsCell, planLane } from "../plan-siblings";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -131,8 +132,19 @@ export async function shiftAlongPlans(input: {
       homeworkTexts: texts(lessons.map((l) => l.homework)),
     };
   };
+  // 🔑 다시 까는 단위는 **배정**이다(2026-10-21 같은 교재 배정 여럿 — "각 차시가 각각 돌도록"). 표식 키(`lane`)도
+  //    배정 id다(`planLane`). 같은 교재 배정끼리는 교시가 안 겹치므로(`placeSameBookPlan`) 한 칸의 그 교재 줄은
+  //    언제나 한 배정의 것이고, 형제가 있으면 줄의 주인을 고른 교시로 가른다(`ownsCell`).
   const byBook = new Map<string, PlanRow[]>();
-  for (const r of relevant) byBook.set(String(r.plan.textbook_id), [...(byBook.get(String(r.plan.textbook_id)) ?? []), r.plan]);
+  for (const r of relevant) byBook.set(planLane(r.plan), [...(byBook.get(planLane(r.plan)) ?? []), r.plan]);
+  const bookIdOfLane = new Map(relevant.map((r) => [planLane(r.plan), String(r.plan.textbook_id)]));
+  const laneBook = (lane: string) => bookOf(bookIdOfLane.get(lane) ?? "");
+  const sameBookCount = new Map<string, number>();
+  for (const p of regular) sameBookCount.set(String(p.textbook_id), (sameBookCount.get(String(p.textbook_id)) ?? 0) + 1);
+  const ownsLine = (p: PlanRow, l: Pick<RelayLine, "date" | "slot">) => {
+    const picks = picksOf(p);
+    return ownsCell({ slotPicks: picks && picks.length > 0 ? picks : null }, (sameBookCount.get(String(p.textbook_id)) ?? 0) > 1, l.date, l.slot);
+  };
 
   const shifts = { ...(m!.shifts ?? {}) };
   const scheduleOf = (plans: readonly PlanRow[], s: Record<string, "skip" | "advance">, to: string) =>
@@ -173,12 +185,12 @@ export async function shiftAlongPlans(input: {
       return { handled: true, ok: false, error: "그 사이 이 줄이 바뀌었습니다 — 새로고침 후 다시 눌러 주세요" };
     }
     const lane = books.find((id) => {
-      const b = bookOf(id);
-      return b !== null && isBookLine(pressed, b);
+      const b = laneBook(id);
+      return b !== null && isBookLine(pressed, b) && byBook.get(id)!.every((p) => ownsLine(p, pressed));
     });
     // 배정 교재 줄이 아니다(손으로 적은 다른 교재) — 호출부가 그 줄만 같은 요일·교시끼리 옮긴다.
     if (!lane) return { handled: false };
-    const book = bookOf(lane)!;
+    const book = laneBook(lane)!;
     const plansT = byBook.get(lane)!;
     // 🔑 옛 칸 표식으로 통째 미뤄 둔 칸 — 이 교재 자리가 없다. 그 칸 안의 줄은 교시 통째로 다룬다(종전 그대로).
     if (shifts[pressedKey] === "skip") {
@@ -216,7 +228,7 @@ export async function shiftAlongPlans(input: {
       } else {
         // 그 교재가 지나가는 자리 순서 — 칸 순 → 자리 순. 칸째 미룬 칸(옛 칸 표식)은 자리가 없다.
         const sequence: string[] = [];
-        for (const cell of [...new Set(relevant.filter((r) => String(r.plan.textbook_id) === lane).flatMap((r) => r.cells))].sort()) {
+        for (const cell of [...new Set(relevant.filter((r) => planLane(r.plan) === lane).flatMap((r) => r.cells))].sort()) {
           if (cell < pressedKey || shifts[cell] === "skip") continue;
           const [d, sl] = cell.split("|") as [string, string];
           for (let k = 1; k <= slotsAt(d, sl); k += 1) sequence.push(laneMarkerKey(d, sl, lane, k));
@@ -300,12 +312,14 @@ export async function shiftAlongPlans(input: {
   const lineCell = new Map(lines.map((l) => [l.id, cellMarkerKey(l.date, l.slot)]));
   const cellOfOp = (op: RelayOp) => (op.op === "insert" ? cellMarkerKey(op.date, op.slot) : (lineCell.get(op.id) ?? ""));
   const ops: { book: Book; op: RelayOp }[] = [];
-  for (const textbookId of books) {
-    const plans = byBook.get(textbookId)!;
-    const book = bookOf(textbookId);
+  for (const lane of books) {
+    const plans = byBook.get(lane)!;
+    const book = laneBook(lane);
     if (!book) continue;
-    const mine = lines.filter((l) => isAssignedLine(l, book));
-    const edited = lines.filter((l) => isBookLine(l, book) && !isAssignedLine(l, book));
+    // 같은 교재의 **다른 배정** 줄은 빼고(그 배정의 차수는 따로 돈다) — 형제가 없으면 그 교재 줄 전부(종전 그대로).
+    const owned = (l: RelayLine) => plans.every((p) => ownsLine(p, l));
+    const mine = lines.filter((l) => isAssignedLine(l, book) && owned(l));
+    const edited = lines.filter((l) => isBookLine(l, book) && !isAssignedLine(l, book) && owned(l));
     const end = mine.map((l) => l.date).sort().at(-1);
     if (!end) continue; // 아직 가져오기 전 — 표식만으로 월간계획이 맞춰진다.
     // 범위는 planRelay가 자른다 — 미룸은 마지막 줄 다음 칸까지 쓰므로 그 칸이 보이게 넉넉히 펼친다.

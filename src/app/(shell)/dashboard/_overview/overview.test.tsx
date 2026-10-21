@@ -229,7 +229,7 @@ describe("overview display contracts", () => {
   });
 });
 
-const KPI_LABELS = ["재원생", "강좌수", "퇴원&수업종료", "신규문의", "금일 입테", "금일 등록", "오늘첫수업", "최근 결석", "보강예정"];
+const KPI_LABELS = ["재원생", "강좌수", "퇴원&수업종료", "신규문의", "금일 입테", "전일 / 이달 신규", "오늘첫수업", "최근 결석", "보강예정"];
 const ALL_MENUS: OverviewSnapshot["allowed"] = [
   "dashboard",
   "students",
@@ -328,11 +328,12 @@ function kpiSnapshot(allowed = ALL_MENUS): OverviewSnapshot {
         ...ok,
       },
       intake: { data: [{ id: "i1", name: "문의가", time: "14:32" }], ...ok },
-      // 금일 등록(원장 2026-09-23) — 오늘 콜&상담 '등록 완료'로 옮긴 상담 둘(반 배정 하나 · 배정 전 하나).
+      // 전일 / 이달 신규(원장 2026-10-21) — 오늘 하나(반 배정) · 어제 하나(배정 전) · 지난달 말 하나(창 밖이라 안 센다).
       enrolledToday: {
         data: [
-          { id: "r1", name: "등록가", schoolGrade: "침산중1", time: "15:10", assigned: true, subject: null },
-          { id: "r2", name: "등록나", schoolGrade: null, time: "11:02", assigned: false, subject: null },
+          { id: "r1", name: "등록가", schoolGrade: "침산중1", date: "2026-09-10", time: "15:10", assigned: true, subject: null },
+          { id: "r2", name: "등록나", schoolGrade: null, date: "2026-09-09", time: "11:02", assigned: false, subject: null },
+          { id: "r3", name: "등록다", schoolGrade: null, date: "2026-08-31", time: "10:00", assigned: false, subject: null },
         ],
         ...ok,
       },
@@ -491,13 +492,18 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     cleanup();
   });
 
-  it("금일 등록 = 오늘 등록 완료로 옮긴 상담, 보조 줄은 반 배정 / 배정 전, 이름은 상담 상세로(↗ 없음)", () => {
+  it("전일 / 이달 신규 = 어제 / 이번 달 등록 완료로 옮긴 상담, 이름은 상담 상세로(↗ 없음)", () => {
     mocks.data = kpiSnapshot();
     render(<Overview initial={mocks.data} />);
-    const card = screen.getByRole("button", { name: /^금일 등록 2명\./ });
-    expect(card.getAttribute("aria-label")).toContain("반 배정 1 · 배정 전 1");
+    const card = screen.getByRole("button", { name: /^전일 \/ 이달 신규 1 \/ 2명\./ });
+    expect(card.getAttribute("aria-label")).toContain("전일 1 · 이달 2 · 이달 반 배정 1 · 배정 전 1");
     fireEvent.click(card);
     const popup = screen.getByRole("dialog");
+    expect(popup.textContent).toContain("전일 신규 1명");
+    expect(popup.textContent).toContain("이달(9월) 신규 2명");
+    expect(popup.textContent).toContain("9/9 11:02");
+    expect(popup.textContent).toContain("전일");
+    expect(popup.textContent).not.toContain("등록다");
     expect(popup.textContent).toContain("반 배정 완료");
     expect(popup.textContent).toContain("배정 전");
     expect(within(popup).getByRole("link", { name: "등록가 상담 상세" }).getAttribute("href")).toContain("/enrollment/r1");

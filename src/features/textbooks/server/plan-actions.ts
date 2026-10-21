@@ -49,6 +49,7 @@ import {
 import { groupCellLessons } from "../plan-expand";
 import { applyCellLessons, ApplyCellLessonsError } from "./apply-cell-lessons";
 import type { ApplyPreview, ApplyPreviewRow, ApplyResult, ClassSlotChoice, ClassTextbookPlanRow, PlanRestoreRow } from "../types";
+import { placeSameBookPlan } from "../plan-siblings";
 import { friendlyTextbookError, isMissingTextbookTable, SLOTS_NOT_READY, TEXTBOOKS_NOT_READY } from "./access";
 
 export type PlanActionResult = { ok: true; id: string } | { ok: false; error: string };
@@ -72,6 +73,10 @@ export type ClassTextbookPlanInput = {
 };
 
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** 옛 유니크(0266a `class_textbook_plans_pos_uniq`)가 남은 DB — 같은 교재 두 번째 배정이 막힌다([[#95]]). */
+const SAME_BOOK_NOT_READY =
+  "같은 교재를 한 반에 여러 개 거는 기능은 DB 업데이트(20261021120000) 뒤에 열립니다 — 지금은 한 반에 한 개만 걸 수 있습니다";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
@@ -186,28 +191,37 @@ export async function saveClassTextbookPlan(input: ClassTextbookPlanInput): Prom
   /** 0268a가 적용됐을 때만 실린다 — 아래에서 42703이면 이 칸을 빼고 다시 쓴다([[#95]]). */
   const withSlots = slotPicks.length > 0 ? { ...payload, slot_picks: slotPicks } : payload;
 
-  /** 같은 (반, 교재) 배정이 이미 있으면 **갈아 끼운다** — 교시만 바꿔 다시 거는 게 정상 흐름이다. */
-  // 🔴 **축까지 같은 행**만 갈아 끼운다 — 유니크가 `(tenant, class, textbook, slot_axis)`라 축이 다른
-  //    형제 행이 있을 수 있고(0266a가 JJ를 별도 축으로 둔다), 축을 무시하고 잡으면 그 행의 축을 바꿔
-  //    형제와 23505로 부딪히거나 **둘 중 아무거나** 덮어쓴다(적대적 리뷰 P2).
-  // ⚠️ 정렬을 준다 — 없으면 어느 행이 잡히는지가 호출마다 달라진다.
-  let existing: string | null = null;
-  if (!input.id) {
-    const found = await admin
+  /**
+   * 같은 (반, 교재) 배정이 있을 때 — **여럿을 허용한다**(원장 2026-10-21 *"동일한 교재로 최대3개까지 … 각 차시가 각각
+   * 돌도록"*). 고른 교시가 기존 배정 하나와 겹치면 그걸 갈아 끼우고(종전 흐름 "교시만 바꿔 다시 건다"), 안 겹치면
+   * 새로 건다(3개까지). 규칙은 [`placeSameBookPlan`](../plan-siblings.ts) 한 곳이다.
+   * ⚠️ 정렬을 준다 — 없으면 어느 행이 잡히는지가 호출마다 달라진다.
+   */
+  const siblingsQuery = (cols: string) =>
+    admin
       .from("class_textbook_plans")
-      .select("id")
+      .select(cols)
       .eq("tenant_id", gate.access.tenantId)
       .eq("class_id", input.classId)
       .eq("textbook_id", input.textbookId)
-      .eq("slot_axis", axis)
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
-    // 조회 실패를 삼키지 않는다 — 삼키면 insert로 떨어져 23505가 나거나 중복 행이 생긴다.
-    if (found.error) return { ok: false, error: friendlyTextbookError(found.error, "배정을 확인하지 못했습니다") };
-    existing = (found.data?.id as string | undefined) ?? null;
-  }
-  const targetId = input.id ?? existing;
+      .eq("is_active", true)
+      .order("created_at", { ascending: true });
+  let found = await siblingsQuery("id, slot_picks");
+  if (found.error && isMissingSlotPicksColumn(found.error)) found = await siblingsQuery("id");
+  // 조회 실패를 삼키지 않는다 — 삼키면 insert로 떨어져 같은 교시에 같은 교재가 두 번 걸린다.
+  if (found.error) return { ok: false, error: friendlyTextbookError(found.error, "배정을 확인하지 못했습니다") };
+  const siblings = ((found.data ?? []) as unknown as { id: string; slot_picks?: unknown }[]).map((r) => ({
+    id: String(r.id),
+    slotPicks: Array.isArray(r.slot_picks) && r.slot_picks.length > 0 ? (r.slot_picks as unknown[]).map(String) : null,
+  }));
+  const placement = placeSameBookPlan({
+    picks: slotPicks.length > 0 ? slotPicks : null,
+    siblings,
+    selfId: input.id ?? null,
+  });
+  if (placement.kind === "error") return { ok: false, error: placement.error };
+  const existing = placement.kind === "update" ? placement.id : null;
+  const targetId = existing;
 
   if (targetId) {
     const updateWith = (row: Record<string, unknown>) =>
@@ -255,7 +269,8 @@ export async function saveClassTextbookPlan(input: ClassTextbookPlanInput): Prom
   if (error || !data) {
     return {
       ok: false,
-      error: friendlyTextbookError(error ?? {}, "배정을 만들지 못했습니다", "이 반에 같은 교재가 이미 배정돼 있습니다"),
+      // 23505 = 옛 유니크(반·교재·축)가 아직 있다 — 같은 교재 두 번째 배정은 SQL(20261021120000) 뒤에 열린다.
+      error: friendlyTextbookError(error ?? {}, "배정을 만들지 못했습니다", SAME_BOOK_NOT_READY),
     };
   }
   await logAction({
@@ -349,12 +364,20 @@ export async function deleteClassTextbookPlan(
   let warning: string | undefined;
   let linesUndo: ShiftUndoToken | undefined;
   if (clearsMarkers) {
-    const keepLines = others.some((o) => String(o.textbook_id) === plan.textbookId);
+    // 같은 교재 배정이 남아 있으면(2026-10-21 여럿 허용) — 교시가 안 겹치니 **이 배정 교시의 줄만** 지운다.
+    // 어느 쪽이든 고른 교시가 없는 옛 축 배정이면 칸으로 주인을 못 가르니 줄을 남긴다(종전 규칙).
+    const sameBook = others.filter((o) => String(o.textbook_id) === plan.textbookId);
+    const picksOrNull = (v: unknown) => (Array.isArray(v) && v.length > 0 ? (v as unknown[]).map(String) : null);
+    const splitByPicks =
+      sameBook.length > 0 && (plan.slotPicks?.length ?? 0) > 0 && sameBook.every((o) => picksOrNull(o.slot_picks) !== null);
+    const keepLines = sameBook.length > 0 && !splitByPicks;
     try {
       const out = await clearPlanLines({
         admin,
         tenantId,
         classId: plan.classId,
+        planId,
+        onlyPicks: splitByPicks ? plan.slotPicks : null,
         textbookId: plan.textbookId,
         termMode: plan.termMode,
         picks: plan.slotPicks,

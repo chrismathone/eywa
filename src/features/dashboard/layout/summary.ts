@@ -5,6 +5,7 @@
  */
 import type { OverviewSnapshot } from "@/features/dashboard/overview/model";
 import { todayLevelTestList } from "@/features/dashboard/overview/display";
+import { splitEnrolledRecent } from "@/features/dashboard/overview/enrolled-recent";
 import { earlyCounts } from "@/features/withdrawals/early-exit";
 import { cardDef } from "./registry";
 
@@ -31,8 +32,12 @@ export function summaryOf(id: string, snap: OverviewSnapshot, opts: { amounts?: 
       return v.intake?.data ? { value: n(v.intake.data.length), unit: "건", detail: "오늘 접수" } : null;
     case "calendar":
       return v.calendar?.data ? { value: n(todayLevelTestList(v.calendar.data, snap.today).active.length), unit: "건", detail: "오늘 레벨테스트" } : null;
-    case "enrolledToday":
-      return v.enrolledToday?.data ? { value: n(v.enrolledToday.data.length), unit: "명", detail: "오늘 등록 완료" } : null;
+    case "enrolledToday": {
+      // 전일 / 이달 신규(원장 2026-10-21) — 카드와 같은 가르기. 요약형은 숫자 한 칸이라 이번 달을 숫자로, 어제는 보조 줄로.
+      if (!v.enrolledToday?.data) return null;
+      const recent = splitEnrolledRecent(v.enrolledToday.data, snap.today);
+      return { value: n(recent.month.length), unit: "명", detail: `이달 신규 · 전일 ${n(recent.yesterday.length)}명` };
+    }
     case "firstClass":
       return v.firstClass?.data ? { value: n(v.firstClass.data.length), unit: "명", detail: "오늘 첫 수업" } : null;
     case "absent":

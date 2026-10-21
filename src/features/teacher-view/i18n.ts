@@ -990,8 +990,8 @@ export const SHEET_DICT = {
   "fill.book": { ko: "교재", en: "Textbook" },
   "fill.book.none": { ko: "배정할 교재가 없습니다", en: "No book available" },
   "fill.book.hint": {
-    ko: "구분과 차수가 정해진 교재만 고를 수 있습니다(교재목록에서 정합니다).",
-    en: "Only books that have an area and a lesson count can be picked (set those in Textbooks).",
+    ko: "구분과 차수가 정해진 교재만 고를 수 있습니다(교재목록에서 정합니다). 같은 교재는 교시를 달리해 3개까지 걸 수 있고, 배정마다 차수가 따로 돕니다(같은 교시를 고르면 그 배정을 바꿉니다).",
+    en: "Only books that have an area and a lesson count can be picked (set those in Textbooks). The same book can be assigned up to 3 times on different periods, each running its own lessons (picking the same period replaces that assignment).",
   },
   "fill.book.sessions": { ko: "{n}차수", en: "{n} lessons" },
   // ⚠️ `Start date`는 `res.f.startDate`(입사일)가 쓴다 — 뜻이 달라 같은 영어를 쓰면 안 된다.
