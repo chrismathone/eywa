@@ -967,6 +967,36 @@
       "tenant"
     ]
   },
+  "1cb050f8987a2cc23ee66c27887dd76135f4365166d7b5d2067587bb10610743": {
+    "parts": [
+      "update homework_video_reviews set lock_token = null, locked_at = null, attempts = greatest(attempts - 1, 0)\n        where id = ",
+      " and tenant_id = ",
+      " and lock_token = ",
+      ""
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/video-review-extract-job.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "row.id",
+      "tenant",
+      "token"
+    ]
+  },
   "1cc666371127b5376df733bce719adcfbc016f625566b24f1fbedbdfc7597a22": {
     "parts": [
       "\n    update classnote_parent_reactions r set status = 'processing',\n      processing_action = case r.status when 'remove_requested' then 'remove' else 'add' end,\n      processing_at = now(), worker_host = ",
@@ -1966,6 +1996,31 @@
     "expressions": [
       "sql(dupIds)",
       "tenantId"
+    ]
+  },
+  "395326015209cf2ddde547ff9426a96e28afd7a8f29b0548741627e813cfff14": {
+    "parts": [
+      "update homework_video_reviews r set lock_token = ",
+      ", locked_at = now(), attempts = r.attempts + 1\n    where r.id = (\n      select id from homework_video_reviews\n      where tenant_id = ",
+      " and stage = 'extract' and available_at <= now()\n        and (lock_token is null or locked_at < now() - interval '10 minutes')\n      order by created_at, id limit 1 for update skip locked)\n    returning r.id, r.video_id, r.attempts"
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/video-review-extract.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "token",
+      "tenant"
     ]
   },
   "3a4423fc349d4ceb8e038f2a42bc021b45a552adf83cf285948c3e5b0a10f2eb": {
@@ -3629,6 +3684,41 @@
       "classId"
     ]
   },
+  "70fbd820d724167efb372e2f21791cdfb1f222b69a26d48e613523b38807a8ec": {
+    "parts": [
+      "update homework_video_reviews set stage = 'transcribe', assets = ",
+      ", error = null,\n        lock_token = null, locked_at = null, available_at = now()\n      where id = ",
+      " and tenant_id = ",
+      " and lock_token = ",
+      " and stage = 'extract' returning id"
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/video-review-extract-job.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "sql.json(assets)",
+      "row.id",
+      "tenant",
+      "token"
+    ]
+  },
   "7208f4dde992537eea2e68c6de21045033481055b2e6c955b775c0d0b926561f": {
     "parts": [
       "\n        update makeedu_sync_runs\n        set status = ",
@@ -4007,6 +4097,36 @@
       "(k.name || \"\").trim()",
       "birthYearOf(k.date_birth)",
       "startedAt"
+    ]
+  },
+  "7a50780ea71566436d4bd71ca79d2bbc941d30f248241157d0daf3a2a97dbf41": {
+    "parts": [
+      "update homework_video_reviews set locked_at = now()\n      where id = ",
+      " and tenant_id = ",
+      " and lock_token = ",
+      " returning id"
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/video-review-extract-job.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "reviewId",
+      "tenant",
+      "token"
     ]
   },
   "7b16cb97918a24c0996c220c94797bc05ba3d6327d9862ae4a7364f590d3a4ee": {
@@ -5760,6 +5880,31 @@
     "expressions": [
       "token",
       "row.id",
+      "tenant"
+    ]
+  },
+  "a26aa490bfcab25a877fed7f0cd7e07282ae63b00488dffdd69fd878152d6d4e": {
+    "parts": [
+      "select id, drive_file_id, bytes, route from student_homework_videos\n      where id = ",
+      " and tenant_id = ",
+      " and drive_file_id is not null"
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/video-review-extract-job.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "row.video_id",
       "tenant"
     ]
   },
@@ -8050,7 +8195,7 @@
     "expressions": [
       "setRegistered ? sql`coalesce(registered_at, now())` : sql`registered_at`",
       "setPaid ? sql`coalesce(paid_at, now())` : sql`paid_at`",
-      "setPaid\r\n            ? sql`'paid'`\r\n            : sql`case when paid_at is not null then 'paid'\r\n                       when ordered_at is not null then 'ordered'\r\n                       else 'requested' end`",
+      "setPaid\n            ? sql`'paid'`\n            : sql`case when paid_at is not null then 'paid'\n                       when ordered_at is not null then 'ordered'\n                       else 'requested' end`",
       "\"자동화\"",
       "o.id",
       "tenantId",
@@ -8975,6 +9120,51 @@
       "sql.json(metadata)"
     ]
   },
+  "f5ba84f6f04c6590913fcbcd0afb218885b5204a7f12ca2b983ba744bfae5394": {
+    "parts": [
+      "update homework_video_reviews set stage = ",
+      ", error = ",
+      ",\n        available_at = coalesce(",
+      "::timestamptz, available_at), lock_token = null, locked_at = null\n      where id = ",
+      " and tenant_id = ",
+      " and lock_token = ",
+      ""
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/video-review-extract-job.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "outcome.stage",
+      "outcome.reason",
+      "outcome.availableAt",
+      "row.id",
+      "tenant",
+      "token"
+    ]
+  },
   "f5c6b48bdf603aed97b086943ead0e28b0762c34fbbd0bd5e3fb5a5c0592597a": {
     "parts": [
       "update lesson_reports set\n        classnote_retry_count = classnote_retry_count + 1,\n        classnote_status = case when classnote_retry_count + 1 >= 3 then 'failed' else 'queued' end,\n        classnote_error = ",
@@ -9141,7 +9331,7 @@
       }
     ],
     "expressions": [
-      "sql(\r\n        toQueue.map((cid) => ({ tenant_id: tenantId, consultation_id: cid })),\r\n        \"tenant_id\",\r\n        \"consultation_id\",\r\n      )"
+      "sql(\n        toQueue.map((cid) => ({ tenant_id: tenantId, consultation_id: cid })),\n        \"tenant_id\",\n        \"consultation_id\",\n      )"
     ]
   },
   "fd2c6e4e9168569cb3b03557f4128e6267851c7ea97c334b7e721db54b367c77": {

@@ -59,6 +59,11 @@ const REPORT_ATTACHMENT_SIZE_LIMIT = 20 * 1024 * 1024; // 20 MB — 스캔 PDF �
 const TEXTBOOK_COVER_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const TEXTBOOK_COVER_SIZE_LIMIT = 5 * 1024 * 1024; // 5 MB — 표지 한 장
 
+// 영상 설명 AI 참고 메모(0390a) — 발송 PC가 뽑은 소리(mp3)·화면(jpg). 학생 목소리·얼굴이라 비공개 + signed URL.
+// 경로·이름 규칙 = src/features/video-review/storage-paths.ts · 0390a 마이그레이션의 버킷 값과 같게.
+const VIDEO_REVIEW_MIME_TYPES = ["audio/mpeg", "image/jpeg"];
+const VIDEO_REVIEW_SIZE_LIMIT = 50 * 1024 * 1024; // 50 MB — 긴 영상의 소리 한 개
+
 const BUCKETS = [
   {
     id: "meeting-recordings",
@@ -89,6 +94,11 @@ const BUCKETS = [
     public: false,
     file_size_limit: TEXTBOOK_COVER_SIZE_LIMIT,
     allowed_mime_types: TEXTBOOK_COVER_MIME_TYPES,
+  },  {
+    id: "homework-video-review",
+    public: false,
+    file_size_limit: VIDEO_REVIEW_SIZE_LIMIT,
+    allowed_mime_types: VIDEO_REVIEW_MIME_TYPES,
   },
 ];
 

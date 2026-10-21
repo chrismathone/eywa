@@ -36,7 +36,7 @@ export const AI_MODELS: Record<AiTier, Record<AiProvider, string | null>> = {
 };
 
 /**
- * 기능별 키 그룹 — 원장 2026-09-15 *"기능별로 키를 발급받아서 사용량 체크를 하려고"*(8그룹 선택).
+ * 기능별 키 그룹 — 원장 2026-09-15 *"기능별로 키를 발급받아서 사용량 체크를 하려고"*(8그룹 선택 · 2026-10-20 video 추가로 9그룹).
  * env 이름 = `<회사>_API_KEY_<그룹 대문자>`(예 `ANTHROPIC_API_KEY_MENT` · `DEEPSEEK_API_KEY_MEETING`).
  * 옛 `consultations` 버킷과 env 이름이 같게 두어(`ANTHROPIC_API_KEY_CONSULTATIONS`) 이미 있는 키를 그대로 쓴다.
  */
@@ -48,7 +48,8 @@ export type AiKeyGroup =
   | "briefing"
   | "attendance"
   | "notice"
-  | "staff";
+  | "staff"
+  | "video";
 
 /**
  * 호출부 식별자(generateJSON `meta.feature`) → 키 그룹. 🔴 **새 AI 기능을 만들면 여기 한 줄**을 더한다 —
@@ -81,6 +82,9 @@ export const FEATURE_KEY_GROUP: Readonly<Record<string, AiKeyGroup>> = {
   // 직원 계약서 — 글자 PDF 추출 · 스캔 OCR(Claude 전용)
   staff_contract_pdf: "staff",
   staff_contract_pdf_ocr: "staff",
+  // 영상 숙제 설명 AI 참고 메모 — 판정(Haiku) · 실수 확인(Sonnet). 밤 배치 + '다시 분석' 즉시 호출(원장 2026-10-20)
+  video_review_judge: "video",
+  video_review_verify: "video",
 };
 
 /** 기능 이름 → 키 그룹(표에 없으면 null — 옛 버킷·기본 키로). 원형 속성 이름(`constructor` 등)은 거른다. */

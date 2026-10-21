@@ -18,6 +18,10 @@ export const FEATURE_MODELS: Readonly<Record<string, ModelPin>> = {
   enrollment_form_extract: { provider: "deepseek", model: "deepseek-flash" },
   enrollment_analysis: { provider: "deepseek", model: "deepseek-flash" },
   meeting_analysis: { provider: "deepseek", model: "deepseek-flash" },
+  // 영상 설명 AI 참고 메모(2026-10-20 하네스 6차) — 판정 = Haiku 5.5 · 실수 확인 = Sonnet 5.5.
+  // Haiku 확인자는 진짜 오류를 '애매'로 떨어뜨리고 도형 오탐을 '확정'해 확인만 Sonnet으로 둔다(26개 기준 정답 실측).
+  video_review_judge: { provider: "anthropic", model: "claude-haiku-5-5" },
+  video_review_verify: { provider: "anthropic", model: "claude-sonnet-5-5" },
 };
 
 /**
