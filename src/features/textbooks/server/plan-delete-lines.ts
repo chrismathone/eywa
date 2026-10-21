@@ -14,7 +14,7 @@ import type { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { reportError } from "@/lib/observability/report-error";
 import { isAssignedLine, type RelayBook } from "../lesson-relay";
-import { markersToClear } from "../plan-delete";
+import { markersToClear, picksCover } from "../plan-delete";
 import { toUndoLine, type ShiftKind, type UndoLine } from "../shift-undo";
 import { markerKeyOfRow, parseMarkerKey } from "../shift-key";
 import { withMarkerCols } from "./shift-markers";
@@ -25,6 +25,8 @@ export async function clearPlanLines(input: {
   admin: Admin;
   tenantId: string;
   classId: string;
+  /** 지우는 배정 id — 줄 표식(0382a `lane`)의 키다(`planLane`, 2026-10-21). */
+  planId: string;
   textbookId: string;
   termMode: "regular" | "exam";
   picks: readonly string[] | null;
@@ -35,6 +37,11 @@ export async function clearPlanLines(input: {
    * 어느 배정이 쓴 줄인지 가를 수 없다(지우면 남는 배정의 줄까지 사라진다, 적대적 리뷰 2026-10-19).
    */
   keepLines: boolean;
+  /**
+   * 같은 교재의 **다른 배정**이 남아 있으면 그 배정 줄은 남기고 **이 배정 교시의 줄만** 지운다(2026-10-21 같은 교재
+   * 배정 여럿 — 교시가 안 겹치니 칸으로 주인이 갈린다, `ownsCell`). null이면 그 교재 줄 전부(형제 없음).
+   */
+  onlyPicks?: readonly string[] | null;
   /**
    * 진도 줄·칸 표식까지 지우나(사용자가 [진도 줄도 함께 지우기]를 골랐을 때). false여도 **그 교재의 줄 표식**(0382a)은
    * 지운다 — 배정이 없으면 아무 계산에도 안 쓰이다가, 같은 교재를 다시 배정하는 순간 옛 미룸·당김이 새 배정에
@@ -94,6 +101,7 @@ export async function clearPlanLines(input: {
       homeworkTexts: texts(lessons.map((l) => l.homework)),
     };
     const rows = lineRows.filter((r) =>
+      (!input.onlyPicks || picksCover(input.onlyPicks, String(r.plan_date).slice(0, 10), String(r.slot_start).slice(0, 5))) &&
       isAssignedLine(
         {
           id: String(r.id),
@@ -134,8 +142,9 @@ export async function clearPlanLines(input: {
     const byKey = new Map<string, Record<string, unknown>>(
       markRows.filter((m) => m.kind === "skip" || m.kind === "advance").map((m) => [markerKeyOfRow(m), m]),
     );
-    // 칸 표식은 다른 배정이 같이 쓰지 않는 칸만(`markersToClear`). 줄 표식(0382a)은 **그 교재 것**이 전부 지운다
-    // — 단 같은 교재가 다른 축에 남아 있으면(`keepLines`) 그 배정도 같은 표식을 읽으므로 남긴다.
+    // 칸 표식은 다른 배정이 같이 쓰지 않는 칸만(`markersToClear`). 줄 표식(0382a)은 **그 배정 것**(`lane` = 배정 id)을
+    // 전부 지운다 — 다른 배정은 제 id로 읽으니 남는 배정에 안 닿는다. 옛 앱이 교재 id로 쓴 표식은 같은 교재가
+    // 남아 있지 않을 때만(남아 있으면 그 배정 것일 수 있다).
     const keys = [
       ...(withLines
         ? markersToClear(
@@ -144,9 +153,10 @@ export async function clearPlanLines(input: {
             input.otherPicks,
           )
         : []),
-      ...(input.keepLines
-        ? []
-        : [...byKey.keys()].filter((k) => parseMarkerKey(k)?.lane === input.textbookId.toLowerCase())),
+      ...[...byKey.keys()].filter((k) => {
+        const lane = parseMarkerKey(k)?.lane;
+        return lane === input.planId.toLowerCase() || (!input.keepLines && !input.onlyPicks && lane === input.textbookId.toLowerCase());
+      }),
     ];
     for (let i = 0; i < keys.length; i += 100) {
       const chunk = keys.slice(i, i + 100);

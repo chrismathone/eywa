@@ -12,6 +12,7 @@ import type { HolidayMap } from "@/features/class-sheets/lib/holiday";
 import type { MonthScheduleRow } from "@/features/class-sheets/lib/month-assemble";
 import { buildLessonSchedule, MAX_LOOKAHEAD_DAYS, normalizeLessonPace, type SlotAxis } from "./lesson-schedule";
 import { addToLessonIndex, type LessonIndex } from "./plan-compare";
+import { planLane } from "./plan-siblings";
 
 /** 계획 한 줄 — 그 날 그 교시에 **오기로 되어 있는** 차수. 실제 줄(`class_sheet_plan_lines`)이 아니다. */
 export type PlannedLine = {
@@ -33,6 +34,8 @@ export type PlannedLine = {
 
 /** `class_textbook_plans` 한 줄이 계산에 필요로 하는 것만. */
 export type PlanRow = {
+  /** 배정 id — 줄 미룸·당김 표식의 키(`planLane`). 같은 교재 배정이 여럿이면 이걸로 갈린다(2026-10-21). */
+  id?: string;
   textbook_id: string;
   slot_axis: string;
   pace: string;
@@ -94,8 +97,9 @@ export function expandPlans(input: {
       axis: (p.slot_axis === "jj" ? "jj" : "class") as SlotAxis,
       slotPicks: picks,
       shifts,
-      // 줄 표식은 교재 단위다(원장 2026-10-20 "수업이 2개면 각각") — 이 배정의 교재 것만 이 배정을 움직인다.
-      lane: String(p.textbook_id),
+      // 줄 표식은 **배정** 단위다(원장 2026-10-20 "수업이 2개면 각각" · 2026-10-21 같은 교재 배정 여럿 "각각 돌도록")
+      // — 이 배정 것만 이 배정을 움직인다. 교재 id로 잡으면 같은 교재 배정 둘이 서로를 민다.
+      lane: planLane(p),
       pace: normalizeLessonPace(p.pace),
       lookaheadDays: lookaheadFor(startDate, to),
     });

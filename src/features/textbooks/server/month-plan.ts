@@ -59,7 +59,7 @@ const emptyResult = (
   shiftByCell: Record<string, "skip" | "advance"> = {},
 ): MonthPlanResult => ({ status, byCell: {}, baselineByCell: {}, lessonIndex: {}, shiftByCell });
 
-const BASE_COLS = "class_id, textbook_id, slot_axis, pace, term_mode, start_date, start_lesson_no";
+const BASE_COLS = "id, class_id, textbook_id, slot_axis, pace, term_mode, start_date, start_lesson_no";
 
 /** 반 하나가 계산에 쓰는 재료 — 여러 반 현황(plan-gap)도 같은 모양을 받는다. */
 export type ClassPlanMaterials = {
