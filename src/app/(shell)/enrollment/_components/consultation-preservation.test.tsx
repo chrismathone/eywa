@@ -82,7 +82,14 @@ afterEach(() => {
 
 
 describe("접힌 입력 보존", () => {
- it("기본 접힘과 다른 탭에서도 모든 확장 칸과 자유 형제 문구를 FormData로 보낸다", async () => {
+ it("선택지에 없는 옛 값(상담 경로·과목·등록 상태)도 그대로 보낸다", () => {
+  const values = { consultationPath: "설명회신청", subject: "EiE, 수학", registrationStatus: "등록-수학" };
+  const { container } = render(<ConsultationFullForm mode="edit" recordingOwner={{ tenantId: "t1", userId: "u1" }} initial={{ id: "c1", prospectName: "학생", ...values }} />);
+  const form = container.querySelector("form")!;
+  for (const [key, value] of Object.entries(values)) expect(new FormData(form).get(key), key).toBe(value);
+});
+
+it("기본 접힘과 다른 탭에서도 모든 확장 칸과 자유 형제 문구를 FormData로 보낸다", async () => {
   const values = { safetyNotes: "알레르기", careerGoal: "의사", studentType: "예비", siblings: "첫째 있음, 상담 학생은 둘째", siblingsDetails: "재원", prevAcademy: "이전 학원", lastScore: "90", followUpDate: "2026-11-01", followUpContent: "전화", nonRegistrationReason: "시간" };
   const { container } = render(<ConsultationFullForm mode="edit" recordingOwner={{ tenantId: "t1", userId: "u1" }} initial={{ id: "c1", prospectName: "학생", ...values }} />);
   const form = container.querySelector("form")!;
