@@ -10,6 +10,7 @@ import { SubjectSwitch } from "./_components/subject-switch";
 import { CourseSection, FirstClassSection, FlowSection, HistorySection, SectionSkeleton, TrendSection } from "./_components/sections";
 import { FIRST_CLASS_KEYS } from "@/features/students/stats/first-class-trend";
 import { readPeriodParams } from "@/features/stats/period";
+import { StatsWidthGate } from "./_components/stats-width-gate";
 
 export const metadata = { title: "원생 통계 — 에이와" };
 
@@ -62,7 +63,7 @@ export default async function StudentStatsPage({ searchParams }: { searchParams:
           <p className="text-muted-foreground text-sm break-keep">담당 과목이 정해지지 않아 통계를 보이지 않습니다. 원장님께 담당 과목 지정을 요청해 주세요.</p>
         </StatCard>
       ) : (
-        <>
+        <StatsWidthGate>
           <Suspense fallback={<SectionSkeleton id="trend" title="재원생 추이" height="h-[28rem]" />}>
             <TrendSection {...ctx} view={view} boardKey={boardKey} keep={keepAll} />
           </Suspense>
@@ -78,7 +79,7 @@ export default async function StudentStatsPage({ searchParams }: { searchParams:
           <Suspense fallback={<SectionSkeleton id="history" title="지난 기록" />}>
             <HistorySection {...ctx} />
           </Suspense>
-        </>
+        </StatsWidthGate>
       )}
     </div>
   );

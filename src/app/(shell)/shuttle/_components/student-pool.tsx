@@ -5,6 +5,9 @@ import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { SHUTTLE_INPUT, SHUTTLE_ROW_TEXT } from "@/features/shuttle/control-size";
 import { cn } from "@/lib/utils";
 import type { AssignableStudent } from "@/features/shuttle/server/students";
+import type { StudentAssignment } from "@/features/shuttle/student-assignments";
+import type { Season } from "@/features/shuttle/types";
+import { AssignedEditor } from "./assigned-editor";
 
 /**
  * 우열 — 배정 가능한 학생 풀(재원생). 여기서 정류장으로 끌어다 놓으면 배정되고,
@@ -14,6 +17,7 @@ import type { AssignableStudent } from "@/features/shuttle/server/students";
  *    재원생 전원(실측 336명)을 늘 세워두면 셔틀 타는 71명을 찾는 데 방해만 되고, 항목 하나하나가
  *    dnd-kit `useDraggable` 노드라 폰에서 드래그마다 그 수만큼 측정이 돈다(좁은 화면에서 이 열이
  *    `hidden`이어도 **React는 계속 렌더**한다).
+ * 🔑 **배정된 아이를 누르면** 어디에 배정됐는지 펼쳐 그 자리에서 고친다(사용자 2026-10-21) — 끄는 것은 종전대로 배정.
  * ⚠️ 건수 표시는 **참값**을 유지한다 — 잘린 배열 길이를 건수로 쓰지 말 것([[#89]]).
  */
 /** 검색 결과가 넓을 때 한 번에 그리는 최대 인원. 건수 표시는 이 상한과 무관하다. */
@@ -21,14 +25,20 @@ const POOL_RENDER_CAP = 80;
 
 export function StudentPool({
   students,
-  assignedIds,
+  assignments,
+  season,
   canWrite,
+  onError,
 }: {
   students: AssignableStudent[];
-  assignedIds: Set<string>;
+  /** 학생 id → 이 시즌 배정 목록(보드 회차에서 접은 것). 있으면 배정됨. */
+  assignments: ReadonlyMap<string, StudentAssignment[]>;
+  season: Season;
   canWrite: boolean;
+  onError: (msg: string | null) => void;
 }) {
   const [q, setQ] = useState("");
+  const [openId, setOpenId] = useState<string | null>(null);
   const { setNodeRef, isOver } = useDroppable({ id: "pool", data: { type: "pool" } });
 
   const key = q.replace(/\s+/g, "").toLowerCase();
@@ -78,7 +88,16 @@ export function StudentPool({
 
       <ul className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
         {shown.map((s) => (
-          <PoolItem key={s.id} student={s} assigned={assignedIds.has(s.id)} canWrite={canWrite} />
+          <PoolItem
+            key={s.id}
+            student={s}
+            assignments={assignments.get(s.id) ?? []}
+            open={openId === s.id}
+            onToggle={() => setOpenId((id) => (id === s.id ? null : s.id))}
+            season={season}
+            canWrite={canWrite}
+            onError={onError}
+          />
         ))}
         {!searching && (
           // 목록이 비어 보이는 이유를 적어 둔다 — 빈 칸만 있으면 "학생이 안 나온다"로 읽힌다.
@@ -110,13 +129,22 @@ export function StudentPool({
 
 function PoolItem({
   student,
-  assigned,
+  assignments,
+  open,
+  onToggle,
+  season,
   canWrite,
+  onError,
 }: {
   student: AssignableStudent;
-  assigned: boolean;
+  assignments: StudentAssignment[];
+  open: boolean;
+  onToggle: () => void;
+  season: Season;
   canWrite: boolean;
+  onError: (msg: string | null) => void;
 }) {
+  const assigned = assignments.length > 0;
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `student:${student.id}`,
     data: { type: "student", studentId: student.id, label: student.name },
@@ -124,28 +152,37 @@ function PoolItem({
   });
 
   return (
-    <li
-      ref={setNodeRef}
-      {...listeners}
-      {...attributes}
-      className={cn(
-        "hover:bg-muted flex min-h-11 cursor-grab touch-manipulation items-center gap-1.5 rounded-lg px-2 py-1.5 active:cursor-grabbing sm:min-h-0 sm:items-baseline sm:py-1",
-        SHUTTLE_ROW_TEXT,
-        isDragging && "opacity-50",
-        assigned && "opacity-55",
+    <li className="flex flex-col">
+      <div
+        ref={setNodeRef}
+        {...listeners}
+        {...attributes}
+        // 🔑 누르면(끌지 않고) 배정된 아이는 배정 목록을 편다 — 센서가 5px 넘게 끌어야 드래그라 클릭과 안 섞인다.
+        onClick={assigned ? onToggle : undefined}
+        aria-expanded={assigned ? open : undefined}
+        className={cn(
+          "hover:bg-muted flex min-h-11 cursor-grab touch-manipulation items-center gap-1.5 rounded-lg px-2 py-1.5 active:cursor-grabbing sm:min-h-0 sm:items-baseline sm:py-1",
+          SHUTTLE_ROW_TEXT,
+          isDragging && "opacity-50",
+          assigned && !open && "opacity-55",
+          open && "bg-muted",
+        )}
+        title={assigned ? "눌러서 배정된 곳 보기·수정 (끌면 다른 회차에 또 태울 수 있습니다)" : undefined}
+      >
+        {/* 🔑 라벨 자리 고정 — 이름 길이에 따라 학교·학년이 들쭉날쭉하면 눈이 매번 다시 찾는다
+            (원장 2026-08-19). 학교·학년은 오른쪽 정렬, 배정됨 칸은 **비어 있어도 폭을 차지**해
+            같은 x에 선다. */}
+        <span className="text-foreground min-w-0 overflow-hidden font-medium text-ellipsis whitespace-nowrap">
+          {student.name}
+        </span>
+        <span className="text-text-faint ml-auto shrink-0 text-xs">{student.schoolGrade}</span>
+        <span className={cn("w-[2.9rem] shrink-0 text-right text-xs", assigned ? "text-primary font-bold underline decoration-dotted underline-offset-2" : "text-text-faint")}>
+          {assigned ? `배정 ${assignments.length}` : ""}
+        </span>
+      </div>
+      {open && assigned && (
+        <AssignedEditor assignments={assignments} season={season} canWrite={canWrite} onError={onError} />
       )}
-      title={assigned ? "이 시즌에 이미 배정된 학생 (다른 회차에 또 태울 수 있습니다)" : undefined}
-    >
-      {/* 🔑 라벨 자리 고정 — 이름 길이에 따라 학교·학년이 들쭉날쭉하면 눈이 매번 다시 찾는다
-          (원장 2026-08-19). 학교·학년은 오른쪽 정렬, '배정됨' 칸은 **비어 있어도 폭을 차지**해
-          같은 x에 선다. */}
-      <span className="text-foreground min-w-0 overflow-hidden font-medium text-ellipsis whitespace-nowrap">
-        {student.name}
-      </span>
-      <span className="text-text-faint ml-auto shrink-0 text-xs">{student.schoolGrade}</span>
-      <span className="text-text-faint w-[2.9rem] shrink-0 text-right text-xs">
-        {assigned ? "배정됨" : ""}
-      </span>
     </li>
   );
 }

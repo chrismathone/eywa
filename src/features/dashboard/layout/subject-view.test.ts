@@ -5,6 +5,7 @@ import { defaultItems } from "./defaults";
 import { resolveView } from "./view";
 import { MENU_KEYS } from "@/lib/permissions";
 import { dashboardSchema } from "@/features/owner/settings-types";
+import { subjectLabelRecord } from "@/features/owner/subjects";
 
 const math = [{ id: "panel:teacherWork", w: 24, h: 1 }];
 const english = [{ id: "panel:notices", w: 6, h: 1 }];
@@ -22,6 +23,19 @@ describe("관리자 과목별 배치", () => {
     const saved = normalizeDashboard({ version: 1, layouts: [{ role: "subject", items: english }, { role: "subject", subject: "math", items: defaultItems("subject") }] }, { dropDefaults: true });
     expect(roleItems(saved, "subject", "math")).toEqual(defaultItems("subject"));
     expect(saved.layouts).toHaveLength(2);
+  });
+  it("옛 라벨이 앞에 붙은 운영실 표에서도 수학 묶음은 math 배치를 쓴다(2026-10-21 허주연 관리자 — highmath로 잡혀 공통 배치로 떨어졌다)", () => {
+    const labels = subjectLabelRecord([
+      { key: "math", label: "수학" }, { key: "english", label: "영어" }, { key: "science", label: "과학" },
+    ] as Parameters<typeof subjectLabelRecord>[0]);
+    expect(Object.keys(labels).indexOf("highmath")).toBeLessThan(Object.keys(labels).indexOf("math"));
+    const picked = selectSubjectView(labels, ["math"]);
+    expect(picked.active?.key).toBe("math");
+    expect(picked.subjects).toEqual(["math"]);
+    const saved = normalizeDashboard({ version: 1, layouts: [{ role: "subject", items: english }, { role: "subject", subject: "math", items: math }] }, { dropDefaults: true });
+    expect(resolveView({ stored: saved, bundle: "subject", subject: picked.active?.key, subjectLabels: ["수학"], menus: new Set(MENU_KEYS) }).items).toEqual(math);
+    // 옛 키만 담당으로 가진 계정도 같은 수학 배치를 본다.
+    expect(selectSubjectView(labels, ["highmath"]).active?.key).toBe("math");
   });
   it("URL로 담당 밖 과목을 요구해도 허용된 과목만 선택한다", () => {
     const labels = { math: "수학", advanced: "수학 심화", english: "영어", science: "과학" };

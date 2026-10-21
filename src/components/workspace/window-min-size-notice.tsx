@@ -47,7 +47,8 @@ export function WindowMinSizeNotice() {
   const size = useSyncExternalStore(subscribe, getSize, getServerSize);
   // 숨긴 시점의 폭 — 그보다 더 좁아지면 다시 띄운다(모자란 양이 달라졌으니 새 사실이다).
   const [hiddenAt, setHiddenAt] = useState<number | null>(null);
-  if (!inFrame || !size) return null;
+  // 원생 통계는 페이지가 차트를 숨기고 최대화 안내를 낸다(StatsWidthGate). 가로 스크롤 안내를 중복하지 않는다.
+  if (!inFrame || !size || pathname === "/students/stats") return null;
   const win = windowIdForHref(pathname);
   if (!win) return null;
   // 🔴 이 화면(주소) 기준 — 경로형 면은 부모 창 id를 쓰므로 id로만 재면 출결 모드가 출석부(1280) 기준이 됐다

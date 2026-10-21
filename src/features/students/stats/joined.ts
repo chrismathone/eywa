@@ -7,8 +7,8 @@ import type { FlowRow, HistoryPoints, Point } from "./model";
  * `student_history_monthly` — 메이크에듀 2020-01~ · 에이와 청구 2026-01~)으로 메운다. 순수 함수(Vitest).
  *
  * 🔑 메우는 값의 뜻은 에이와 점과 **다르다**(화면이 '지난 기록'으로 가려 보인다 · 점에 `source: "history"`):
- *   · 재원생 = 메이크에듀 **재원생 기록**(`enrolledRecord` · 2025-03~2026-03 · 휴원·시작 전 포함) → 없는 달은 **수업료가 청구된 학생**
- *     (`payingTotal` · 2020-01~ · 미납 포함 · 휴원·시작 전 제외 · 수납 권한이 없으면 실리지 않는다 — `withoutPaying`).
+ *   · 재원생 = 메이크에듀 **재원생 기록**(`enrolledRecord` · 2025-03~ · 휴원·시작 전 포함) → 없는 달은 **수업료가 청구된 학생**
+ *     (`payingTotal` → 옛 집계는 `payingGeneral`(EiE 제외) · 2020-01~ · 미납 포함 · 수납 권한이 없으면 실리지 않는다 — `withoutPaying`).
  *   · 등록 = 수업을 시작한 등록(`newReal` — 에이와 등록 칸과 같은 판정) · 퇴원 칸 = **청구가 끊긴 학생**(`stoppedPaying` — 다음 두 달 청구
  *     없음 · 퇴원일이 아니다 · 아직 두 달이 안 지난 달은 null).
  * 겹치는 달은 에이와가 이긴다(`joinPoints`). 2026-10-20에 '그 전은 지난 기록 카드가 맡는다'로 잘랐던 것을 원장이 같은 날 저녁 뒤집었다 —
@@ -25,9 +25,12 @@ const monthLabel = (ym: string) => {
   return m === 1 ? `${ym.slice(2, 4)}.1월` : `${m}월`;
 };
 
-/** 그달의 재원생으로 쓸 지난 기록 값 — 메이크에듀 재원생 기록이 먼저, 없으면 수업료가 청구된 학생. 둘 다 없으면 null(점을 세우지 않는다). */
+/** 메이크에듀 옛 집계는 payingTotal 없이 payingGeneral만 있다(EiE 제외). 프로그램별 수는 중복 학생이 있어 더하지 않는다. */
+const payingCount = (m: HistoryMonth): number | null => m.payingTotal ?? m.payingGeneral ?? null;
+
+/** 그달의 재원생으로 쓸 지난 기록 값 — 재원생 기록 → 청구 학생(옛 집계는 EiE 제외 추정) → null. */
 export function historyCount(m: HistoryMonth): number | null {
-  return m.enrolledRecord ?? m.payingTotal ?? null;
+  return m.enrolledRecord ?? payingCount(m);
 }
 
 /**
@@ -98,10 +101,35 @@ export function joinNote(history: readonly Point[], months: readonly HistoryMont
   if (!history.length) return null;
   const used = new Set(history.map((p) => p.key));
   const rec = months.filter((m) => used.has(m.month) && m.enrolledRecord !== undefined).map((m) => m.month);
-  const pay = months.filter((m) => used.has(m.month) && m.enrolledRecord === undefined && m.payingTotal !== undefined).map((m) => m.month);
+  const paying = months.filter((m) => used.has(m.month) && m.enrolledRecord === undefined && payingCount(m) !== null);
+  const pay = paying.map((m) => m.month);
   const parts: string[] = [];
   if (rec.length) parts.push(`${monthText(rec[0]!)}~${monthText(rec.at(-1)!)}은 메이크에듀 재원생 기록(휴원·수업 시작 전 포함)`);
-  if (pay.length) parts.push(`${monthText(pay[0]!)}~${monthText(pay.at(-1)!)}은 수업료가 청구된 학생 수(미납 포함 · 휴원·시작 전 제외)`);
+  if (pay.length) parts.push(`${monthText(pay[0]!)}~${monthText(pay.at(-1)!)}은 수업료가 청구된 학생 수로 추정(미납 포함 · 휴원·시작 전 제외${paying.some((m) => m.payingTotal === undefined) ? " · 전체 청구 집계가 없는 달은 EiE 제외" : ""})`);
   const head = aywaFrom ? `${monthText(aywaFrom)}부터 에이와 기록으로 세고, 그 전은 지난 기록으로 이었습니다 — ` : "지난 기록으로 이었습니다 — ";
   return `${head}${parts.join(" · ")}. 점선 구간은 뜻이 조금 달라 에이와 구간과 몇 명 차이가 날 수 있습니다.`;
+}
+
+/** 구간 경계 표식 — `index` 칸부터 `after` 기준(그 앞은 `before`). 차트가 세로 점선 + 양쪽 짧은 이름으로 그린다. */
+export type BasisMarker = { index: number; before: string; after: string };
+
+/** 재원생 점의 기준 이름 — 청구 기준 추정(수업료가 청구된 학생) · 메이크에듀 재원생 기록 · 에이와 기록. */
+export function trendBasisName(p: Pick<Point, "source" | "basis">): string {
+  if (p.source !== "history") return "에이와 기록";
+  return p.basis === "paying" ? "청구 기준 추정" : "메이크에듀 재원생 기록";
+}
+
+/**
+ * 기준 이름 줄 → 경계 표식(원장 2026-10-21 *"차트에서도 세로선을 그어서 그걸 알려주는 … 보조선 같은? 추측?"*) — 이름이 바뀌는 칸마다 하나.
+ * 이름이 없는 칸(null — 값 없음)은 건너뛰고 앞뒤 이름으로 판정한다.
+ */
+export function basisMarkers(names: readonly (string | null)[]): BasisMarker[] {
+  const out: BasisMarker[] = [];
+  let prev: string | null = null;
+  names.forEach((name, index) => {
+    if (name === null) return;
+    if (prev !== null && name !== prev) out.push({ index, before: prev, after: name });
+    prev = name;
+  });
+  return out;
 }

@@ -117,7 +117,9 @@ export function TripControl({
 
   return (
     <span className="flex shrink-0 items-center gap-1.5">
-      {showBadge && <Pill color={TONE_COLOR[TRIP_TONE[state]]}>{TRIP_STATE_LABEL[state]}</Pill>}
+      {/* 🟢 오늘 등하원에선 **운행 중 = 녹색**(사용자 2026-10-21) — 판도 연한 녹색이라 배지와 짝이 맞는다. 종료된 회차는 판 전체가
+          회색이라 녹색 종료 배지와 헷갈리지 않는다. ⚠️ 운행 현황·실시간 위치는 TRIP_TONE 그대로(거기선 종료가 녹색이다). */}
+      {showBadge && <Pill color={state === "running" ? TONE_COLOR.positive : TONE_COLOR[TRIP_TONE[state]]}>{TRIP_STATE_LABEL[state]}</Pill>}
       {state !== "ready" && startedAt && (
         <span
           className="text-text-faint hidden text-xs sm:inline"

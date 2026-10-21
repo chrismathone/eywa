@@ -496,7 +496,7 @@ export function ConsultationFullForm({
                 className={input}
               >
                 <option value="">선택</option>
-                {CONSULTATION_PATHS.map((p) => (
+                {withCurrent(CONSULTATION_PATHS, v.consultationPath).map((p) => (
                   <option key={p} value={p}>{p}</option>
                 ))}
               </select>
@@ -618,7 +618,7 @@ export function ConsultationFullForm({
               <L label="과목" icon={BookOpen}>
                 <select name="subject" defaultValue={v.subject ?? ""} className={input}>
                   <option value="">선택</option>
-                  {subjects.options.map((s) => (
+                  {[...subjects.options, ...(v.subject?.trim() && !subjects.options.some((s) => s.value === v.subject) ? [{ value: v.subject, label: v.subject }] : [])].map((s) => (
                     <option key={s.value} value={s.value}>{s.label}</option>
                   ))}
                 </select>
@@ -701,7 +701,7 @@ export function ConsultationFullForm({
             <L label="남매 관계" icon={Users}>
               <select name="siblings" defaultValue={v.siblings ?? ""} className={input}>
                 <option value="">선택</option>
-                {SIBLINGS_OPTIONS.map((s) => (
+                {withCurrent(SIBLINGS_OPTIONS, v.siblings).map((s) => (
                   <option key={s} value={s}>{s}</option>
                 ))}
               </select>
@@ -747,7 +747,7 @@ export function ConsultationFullForm({
           <L label="등록 상태" icon={CheckCircle}>
             <select name="registrationStatus" defaultValue={v.registrationStatus ?? ""} className={input}>
               <option value="">선택</option>
-              {REGISTRATION_STATUSES.map((s) => (
+              {withCurrent(REGISTRATION_STATUSES, v.registrationStatus).map((s) => (
                 <option key={s} value={s}>{s}</option>
               ))}
             </select>
@@ -1026,6 +1026,12 @@ function L({
   );
 }
 
+/** 저장된 값이 선택지에 없으면(옛 시트·메이크에듀에서 옮긴 '등록-수학' 같은 글) 선택지 끝에 더한다 — 없으면 그냥 저장만 해도 select가 ""로 떨어져 값이 지워진다(학년 칸과 같은 방식, 2026-10-21). */
+function withCurrent(options: readonly string[], current: string | null | undefined): string[] {
+  const value = current?.trim();
+  return value && !options.includes(value) ? [...options, value] : [...options];
+}
+
 function Collapsible({
   icon: Icon,
   title,
@@ -1055,7 +1061,7 @@ function Collapsible({
         <span className="text-foreground text-sm font-bold">{title}</span>
         <span className="text-text-dim text-xs">{subtitle}</span>
       </button>
-      {open ? <div className="space-y-2 px-3 pb-3 pt-1">{children}</div> : null}
+      <div hidden={!open} style={!open ? { display: "none" } : undefined} className="space-y-2 px-3 pb-3 pt-1">{children}</div>
     </div>
   );
 }
