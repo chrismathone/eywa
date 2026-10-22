@@ -7,12 +7,13 @@ import { windowUntilLabel } from "@/features/dashboard/overview/upcoming-window"
 import { rosterOriginLabel } from "@/features/makeups/roster-merge";
 import { monthDay, NameCell, PopupEmpty, PopupTotal, Tag } from "./kpi-popup-parts";
 import { splitEnrolledRecent } from "@/features/dashboard/overview/enrolled-recent";
-import { isCancelledAdmissionsRow, type levelTestListOn } from "@/features/dashboard/overview/display";
+import { isCancelledAdmissionsRow, type levelTestListIn } from "@/features/dashboard/overview/display";
+import { previousDayRange, previousDayText, type DayRange } from "@/features/dashboard/overview/previous-day";
 import { ConsultStageChip } from "./consult-progress";
 import { CancelledMark } from "./cancelled-mark";
 import s from "./overview.module.css";
 
-type LevelTestList = ReturnType<typeof levelTestListOn<OverviewData["calendar"][number]>>;
+type LevelTestList = ReturnType<typeof levelTestListIn<OverviewData["calendar"][number]>>;
 
 /** 신규문의 팝업 — 오늘 접수(시각 · 이름). */
 export function IntakePopup({
@@ -67,14 +68,16 @@ export function EnrolledTodayPopup({
 }) {
   if (!rows) return <PopupEmpty>등록 정보를 불러오지 못했습니다.</PopupEmpty>;
   const { yesterday, month } = splitEnrolledRecent(rows, today);
+  // 전일 = 어제 · 월요일엔 토·일 주말 전체(원장 2026-10-22) — 그날만 기간을 적는다.
+  const prev = previousDayRange(today);
   const ydayIds = new Set(yesterday.map((row) => row.id));
   const shown = rows.filter((row) => ydayIds.has(row.id) || month.includes(row));
   return (
     <>
-      <PopupTotal label="전일 신규" value={yesterday.length} unit="명" />
+      <PopupTotal label={prev.from === prev.to ? "전일 신규" : `전일(${previousDayText(prev)}) 신규`} value={yesterday.length} unit="명" />
       <PopupTotal label={`이달(${Number(today.slice(5, 7))}월) 신규`} value={month.length} unit="명" />
       {shown.length === 0 ? (
-        <PopupEmpty>어제와 이번 달에 등록 완료로 옮긴 상담이 없습니다.</PopupEmpty>
+        <PopupEmpty>전일과 이번 달에 등록 완료로 옮긴 상담이 없습니다.</PopupEmpty>
       ) : (
         <ul className={s.kpiList}>
           {shown.map((row) => (
@@ -179,7 +182,7 @@ const originalTitleNote = (event: OverviewData["calendar"][number]) =>
  * 전일 입테 팝업 — 어제 레벨테스트(시각 · 제목 · 그 상담의 지금 단계 — 입테 뒤 등록했는지, 원장 2026-10-22 금일 → 전일). 캘린더 메뉴가 숨김이라 일정 자체로 가는 링크는 없고, 그 일정의 콜&상담이
  * 한 건으로 확정된 줄만 상담 상세로 간다(서버가 콜&상담 권한이 있을 때만 싣는다). 제목은 운영실 일정 카드와 같은 표시용.
  */
-export function LevelTestPopup({ list, day }: { list: LevelTestList | null; day: string }) {
+export function LevelTestPopup({ list, range }: { list: LevelTestList | null; range: DayRange }) {
   if (!list) return <PopupEmpty>일정을 불러오지 못했습니다.</PopupEmpty>;
   const events = list.rows;
   return (
@@ -187,12 +190,16 @@ export function LevelTestPopup({ list, day }: { list: LevelTestList | null; day:
       {/* 합계 = 살아 있는 입테만(카드 숫자와 같다). 취소된 일정은 목록에 시간 순서 그대로 줄을 그어 남긴다(원장 2026-09-30). */}
       <PopupTotal label="전일 레벨테스트" value={list.active.length} unit="건" />
       {events.length === 0 ? (
-        <PopupEmpty>전일({monthDay(day)}) 레벨테스트 일정이 없었습니다.</PopupEmpty>
+        <PopupEmpty>전일({previousDayText(range)}) 레벨테스트 일정이 없었습니다.</PopupEmpty>
       ) : (
         <ul className={s.kpiList}>
           {events.map((event) => (
             <li key={event.id} className={s.kpiListRow}>
-              <time className={s.kpiTime}>{event.startTime?.slice(0, 5) ?? "종일"}</time>
+              {/* 주말(월요일)이면 이틀이라 날짜도 붙인다. */}
+              <time className={s.kpiTime}>
+                {range.from !== range.to ? `${monthDay(event.startDate)} ` : ""}
+                {event.startTime?.slice(0, 5) ?? "종일"}
+              </time>
               {isCancelledAdmissionsRow(event) ? (
                 <>
                   <span className={`${s.kpiListMeta} ${s.eventCancelled}`}>{event.title}</span>

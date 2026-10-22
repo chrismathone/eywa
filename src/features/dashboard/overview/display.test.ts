@@ -7,8 +7,8 @@ import {
   dashboardDate,
   isCancelledAdmissionsRow,
   staffDisplayRole,
-  levelTestListOn,
-  levelTestsOn,
+  levelTestListIn,
+  levelTestsIn,
   upcomingAdmissionsRows,
   upcomingAdmissionsEvents,
 } from "./display";
@@ -132,7 +132,9 @@ describe("대시보드 표시 기준", () => {
       { id: "d", kind: "levelTest" as const, startDate: "2026-09-10", endDate: "2026-09-11" },
       { id: "e", kind: null, startDate: "2026-09-11", endDate: "2026-09-11" },
     ];
-    expect(levelTestsOn(rows, "2026-09-11").map((r) => r.id)).toEqual(["a", "d"]);
+    expect(levelTestsIn(rows, { from: "2026-09-11", to: "2026-09-11" }).map((r) => r.id)).toEqual(["a", "d"]);
+    // 월요일 전일 = 토·일 주말 전체 — 기간과 겹치는 입테를 모두 센다.
+    expect(levelTestsIn(rows, { from: "2026-09-11", to: "2026-09-12" }).map((r) => r.id)).toEqual(["a", "c", "d"]);
   });
   it("일정 패널 줄 = 오늘부터 — '전일 입테'용 어제 줄은 빠지고 어제부터 이어지는 일정은 남는다", () => {
     const rows = [
@@ -166,12 +168,12 @@ describe("대시보드 표시 기준", () => {
       { id: "y", kind: null, cancelledKind: "firstClass" as const, startDate: "2026-09-30", endDate: "2026-09-30" },
       { id: "z", kind: null, cancelledKind: "levelTest" as const, startDate: "2026-10-01", endDate: "2026-10-01" },
     ];
-    const list = levelTestListOn(rows, "2026-09-30");
+    const list = levelTestListIn(rows, { from: "2026-09-30", to: "2026-09-30" });
     expect(list.active.map((r) => r.id)).toEqual(["a", "b"]);
     expect(list.rows.map((r) => r.id)).toEqual(["a", "x", "b"]);
     expect(list.cancelled).toBe(1);
     // 그날 입테가 전부 취소 — 숫자 0, 목록엔 취소 줄 하나.
-    const onlyCancelled = levelTestListOn([rows[1]], "2026-09-30");
+    const onlyCancelled = levelTestListIn([rows[1]], { from: "2026-09-30", to: "2026-09-30" });
     expect(onlyCancelled.active).toHaveLength(0);
     expect(onlyCancelled.rows).toHaveLength(1);
     expect(onlyCancelled.cancelled).toBe(1);

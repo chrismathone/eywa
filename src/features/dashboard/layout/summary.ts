@@ -4,8 +4,8 @@
  * 🔴 금액은 스냅샷에 실린 값만 읽는다 — 가린 역할의 스냅샷은 서버가 이미 0으로 비웠으므로(`shape.ts`) 여기서 금액을 그리지 않는다(`amounts`).
  */
 import type { OverviewSnapshot } from "@/features/dashboard/overview/model";
-import { levelTestListOn, upcomingAdmissionsRows } from "@/features/dashboard/overview/display";
-import { addDays } from "@/lib/date-kst";
+import { levelTestListIn, upcomingAdmissionsRows } from "@/features/dashboard/overview/display";
+import { previousDayRange } from "@/features/dashboard/overview/previous-day";
 import { splitEnrolledRecent } from "@/features/dashboard/overview/enrolled-recent";
 import { earlyCounts } from "@/features/withdrawals/early-exit";
 import { cardDef } from "./registry";
@@ -32,7 +32,7 @@ export function summaryOf(id: string, snap: OverviewSnapshot, opts: { amounts?: 
     case "intake":
       return v.intake?.data ? { value: n(v.intake.data.length), unit: "건", detail: "오늘 접수" } : null;
     case "calendar":
-      return v.calendar?.data ? { value: n(levelTestListOn(v.calendar.data, addDays(snap.today, -1)).active.length), unit: "건", detail: "전일 레벨테스트" } : null;
+      return v.calendar?.data ? { value: n(levelTestListIn(v.calendar.data, previousDayRange(snap.today)).active.length), unit: "건", detail: "전일 레벨테스트" } : null;
     case "enrolledToday": {
       // 전일 / 이달 신규(원장 2026-10-21) — 카드와 같은 가르기. 요약형은 숫자 한 칸이라 이번 달을 숫자로, 어제는 보조 줄로.
       if (!v.enrolledToday?.data) return null;
