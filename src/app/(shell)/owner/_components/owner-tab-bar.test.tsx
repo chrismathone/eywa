@@ -65,7 +65,8 @@ describe("두 줄", () => {
     );
     expect(names(screen.getByRole("navigation", { name: CATEGORY_NAV }))).toEqual(["학원 정보", "수업·운영", "청구·안내", "권한·화면", "관리"]);
     // 면 줄은 종전 그대로 — 설정의 면은 개명 대상이 아니다.
-    expect(names(screen.getByRole("navigation", { name: FACE_NAV }))).toEqual(["운영 체계", "과목 운영", "보강 운영", "강사평가"]);
+    // 2026-10-22 원생 기여도 면(contribution, 운영 체계 범주 · 시범 지점만)이 더해졌다 — 고정값 CHINSAN은 OWNER_FACES 전부라 함께 선다.
+    expect(names(screen.getByRole("navigation", { name: FACE_NAV }))).toEqual(["운영 체계", "과목 운영", "보강 운영", "강사평가", "원생 기여도"]);
   });
 
   it("원장 위에게만 서는 면(보강 운영)은 위임 계정의 면 줄에 없다", () => {
@@ -101,7 +102,8 @@ describe("한 줄", () => {
 describe("배선", () => {
   it("설정 화면은 권한으로 거른 면을 이 탭 바에 넘긴다(면 목록을 따로 세우지 않는다)", () => {
     const page = readFileSync(join(process.cwd(), "src", "app", "(shell)", "owner", "page.tsx"), "utf8");
-    expect(page).toContain("<OwnerTabBar faces={facesFor(canReadAudit, isGenericTenant(settings), showMakeups, showEvaluation).filter((face) => allowedTabs.get(face.key))} active={tab} />");
+    // 2026-10-22 원생 기여도 면 스위치(showContribution)가 더해졌다 — 면 목록은 여전히 facesFor 한 곳.
+    expect(page).toContain("<OwnerTabBar faces={facesFor(canReadAudit, isGenericTenant(settings), showMakeups, showEvaluation, showContribution).filter((face) => allowedTabs.get(face.key))} active={tab} />");
     expect(page).not.toMatch(/<FaceTabs\b/);
   });
 });

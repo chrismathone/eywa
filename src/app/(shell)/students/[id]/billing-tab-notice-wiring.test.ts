@@ -23,7 +23,8 @@ describe("수납 탭 권한 안내", () => {
   });
 
   it("권한이 없으면 강제 주소도 개요로 떨어진다(기존 게이트 그대로)", () => {
-    expect(code).toMatch(/requestedTab === "billing" && !canSeeBilling\s*\?\s*"overview"/);
+    // 2026-10-22 원생 기여도 탭 조건과 한 줄로 묶이며 괄호가 붙었다 — `(…) || (requestedTab === "billing" && !canSeeBilling) ? "overview"`.
+    expect(code).toMatch(/requestedTab === "billing" && !canSeeBilling\)?\s*\?\s*"overview"/);
   });
 
   it("🔴 안내는 '수납 탭 + 권한 없음'일 때만 선다 — 조건이 그 한 줄뿐이다", () => {

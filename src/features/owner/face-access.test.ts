@@ -161,10 +161,11 @@ describe("배선 — 설정 화면", () => {
   });
 
   it("🔴 자체 판정을 하는 면(데이터 정리 · 데이터 가져오기 · 감사로그 · 강사평가)은 학원 설정 fieldset 밖에 선다", () => {
-    expect(code).toContain('const SELF_GATED_TABS: ReadonlySet<OwnerTab | "modules"> = new Set(["data", "import", "audit", "evaluation"]);');
+    // 2026-10-22 원생 기여도 설정 면(contribution)이 같은 자리(자체 판정 · fieldset 밖)로 더해졌다.
+    expect(code).toContain('const SELF_GATED_TABS: ReadonlySet<OwnerTab | "modules"> = new Set(["data", "import", "audit", "evaluation", "contribution"]);');
     const fieldsetEnd = code.indexOf("</fieldset>");
     expect(fieldsetEnd).toBeGreaterThan(-1);
-    for (const tag of ["<DataFace ", "<DuplicatesFace ", "<ImportHubFace ", "<AuditFace ", "<EvaluationFace "]) {
+    for (const tag of ["<DataFace ", "<DuplicatesFace ", "<ImportHubFace ", "<AuditFace ", "<EvaluationFace ", "<ContributionSettingsFace "]) {
       expect(code.indexOf(tag), tag).toBeGreaterThan(fieldsetEnd);
     }
     // 설정 '읽기 전용' 안내도 이 면들에는 서지 않는다.
