@@ -102,16 +102,32 @@ export type StartEvidence = {
  *    6월 등록으로 다시 적힘). 오래 쉬었다 돌아온 학생(직전 두 달 청구 없음)은 다시 등록한 것이다.
  */
 export function startedRegistration(reg: { id: string; enrolledAt: string }, ev: StartEvidence, today: string): boolean {
-  const month = reg.enrolledAt.slice(0, 7);
-  if (billedBeforeRegistration(reg, ev.billMonths)) return false;
-  if ((ev.billMonths.get(reg.id) ?? []).some((m) => m >= month)) return true;
-  if ((ev.attendedOn.get(reg.id) ?? []).some((d) => d >= reg.enrolledAt)) return true;
-  return (ev.classSpans.get(reg.id) ?? []).some((c) => {
-    if (c.start < reg.enrolledAt) return false;
-    const until = c.end && c.end < today ? c.end : today;
-    return shiftDays(c.start, CLASS_STARTED_DAYS) <= until;
-  });
+  return registrationStartedOn(reg, ev, today) !== null;
 }
+
+/**
+ * 수업 시작을 확인할 수 있는 첫날. 청구는 월 해상도라 등록일보다 앞선 날짜를 만들지 않는다.
+ * D7의 추가 과목·재등록은 과목별 근거를 전달하고 allowExisting=true로 판정한다.
+ * 기존 신규 등록 지표의 직전 두 달 제외 규칙은 기본값으로 보존한다.
+ */
+export function registrationStartedOn(reg: { id: string; enrolledAt: string }, ev: StartEvidence, today: string,
+  allowExisting = false): string | null {
+  if (reg.enrolledAt > today || (!allowExisting && billedBeforeRegistration(reg, ev.billMonths))) return null;
+  const month = reg.enrolledAt.slice(0, 7);
+  const dates: string[] = [];
+  for (const m of ev.billMonths.get(reg.id) ?? []) {
+    if (m >= month && m <= today.slice(0, 7)) dates.push(m === month ? reg.enrolledAt : `${m}-01`);
+  }
+  for (const day of ev.attendedOn.get(reg.id) ?? []) if (day >= reg.enrolledAt && day <= today) dates.push(day);
+  for (const c of ev.classSpans.get(reg.id) ?? []) {
+    if (c.start < reg.enrolledAt) continue;
+    const confirmed = shiftDays(c.start, CLASS_STARTED_DAYS);
+    const until = c.end && c.end < today ? c.end : today;
+    if (confirmed <= until) dates.push(confirmed);
+  }
+  return dates.sort()[0] ?? null;
+}
+
 
 /** 학생마다 값을 모은다(근거 표 만들기). */
 export function groupBy<T, V = string>(rows: readonly T[], key: (r: T) => string, value: (r: T) => V): Map<string, V[]> {
