@@ -9,13 +9,14 @@ import { getAssemblyaiWebhookUrl } from "@/lib/config/app-url";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
+import { countAssignedClasses } from "./assigned-classes";
 import { licenseBlockReason } from "@/lib/license/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { explainDbError, logDbError } from "@/lib/supabase/db-error";
 import { resolveUniqueStudentNameFor } from "@/features/students/server/unique-name";
 import { after } from "next/server";
-import { ENROLLED_REVERT_BLOCKED } from "@/features/enrollment/board-stages";
+import { ASSIGNED_DRAG_BLOCKED, ENROLLED_REVERT_BLOCKED, stageOfOutcome } from "@/features/enrollment/board-stages";
 import { normalizeAssignStartDate } from "@/features/enrollment/assign-start-date";
 import { canonicalSchoolName, type SchoolSaveAlias } from "@/features/schools/school-name";
 import { completeSchoolKind } from "@/features/schools/server/complete-kind";
@@ -34,6 +35,7 @@ import { logAction } from "@/features/audit/server/log";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { createSchema, buildConsultationRow, type FullForm } from "@/features/enrollment/consultation-form-row";
 import { counselorAutofill } from "@/features/enrollment/consultation-edit";
+import { parseFollowUpResult, resolveFollowUp, type FollowUpResult } from "@/features/enrollment/follow-up";
 import { summarizeConsultationChanges } from "@/features/enrollment/consultation-audit";
 import { referrerChanged, referrerColumns, type ReferrerColumns } from "@/features/enrollment/referrer";
 import { readReferrerBefore, referrerLabelOf } from "@/features/enrollment/server/referrer-queries";
@@ -81,6 +83,17 @@ export async function createEnrollmentConsultation(
   // 넣으면 경로가 비어 있는 옛 상담(2023~2025, 기재율 31%)을 **수정할 때마다** 모르는 값을 고르게 되고,
   // 지어낸 경로는 미기재보다 나쁘다(틀린 값은 아무도 못 알아본다).
   if (!parsed.data.consultationPath) return { error: "상담 경로를 선택해주세요" };
+  // 후속 조치(원장 2026-10-22 *"후속 조치를 선택이 아닌 필수로 … 자동적으로 등록, 미등록으로 처리"*) — 직원이 쓰는 상담은 상담을 한 뒤라
+  // 반드시 고른다(등록 · 미등록 · 다음 상담). 고른 값이 상태를 정한다(follow-up.ts — 화면도 같은 함수로 미리 막는다, #77).
+  const followUpResult = parseFollowUpResult(formData.get("followUpResult"));
+  const followUp = resolveFollowUp({
+    current: "consulted",
+    result: followUpResult,
+    followUpDate: parsed.data.followUpDate || null,
+    storedDate: null,
+    today: kstToday(),
+  });
+  if ("error" in followUp) return { error: followUp.error };
   // 소개한 사람(0362a) — 폼에 칸이 있을 때만 쓴다. 같은 학원 사람인지는 DB 트리거가 막는다.
   const referrer = referrerColumns(formData);
   if ("error" in referrer) return { error: referrer.error };
@@ -100,6 +113,7 @@ export async function createEnrollmentConsultation(
       audioPath,
       Number(formData.get("audioSizeBytes") ?? 0),
       referrer.cols,
+      { ...followUp, result: followUpResult },
     );
   }
 
@@ -112,7 +126,7 @@ export async function createEnrollmentConsultation(
       ...referrer.cols,
       learning_history: Object.keys(learningHistory).length > 0 ? learningHistory : null,
       consultant_id: user.id,
-      outcome: "consulted",
+      outcome: followUp.outcome,
     })
     .select("id")
     .single();
@@ -125,7 +139,7 @@ export async function createEnrollmentConsultation(
     targetType: "enrollment_consultations",
     targetLabel: parsed.data.prospectName,
     metadata: {
-      consultationId: data.id, subject: parsed.data.subject || null,
+      consultationId: data.id, subject: parsed.data.subject || null, followUp: followUpResult, outcome: followUp.outcome,
       // 소개한 사람 — 강사평가 원생 소개 점수에 바로 들어가는 값이라 누구로 이었는지 남긴다.
       ...(referrer.cols.referrer_student_id || referrer.cols.referrer_staff_id
         ? { referrer: await referrerLabelOf(supabase as unknown as SupabaseClient, referrer.cols) } : {}),
@@ -149,6 +163,7 @@ async function createConsultationWithAudio(
   audioPath: string,
   audioSizeBytes: number,
   referrer: Partial<ReferrerColumns>,
+  followUp: { outcome: string; result: FollowUpResult | null },
 ): Promise<CreateConsultationState> {
   const admin = createAdminClient();
   if (!isTenantAudioPath(audioPath, user.tenantId)) return { error: "파일 경로가 잘못되었습니다" };
@@ -172,7 +187,8 @@ async function createConsultationWithAudio(
       ...referrer,
       learning_history: Object.keys(learningHistory).length > 0 ? learningHistory : null,
       consultant_id: user.id,
-      outcome: "consulted",
+      // 후속 조치로 고른 상태(등록·미등록이면 녹음 분석이 끝나도 그대로 — 웹훅은 끝난 상태를 지킨다).
+      outcome: followUp.outcome,
       // 단일 오디오 컬럼 = "최신 녹음 미러"(목록 🎙️ 배지·StatusWatcher 레거시 소비처용).
       audio_path: audioPath,
       audio_size_bytes: verifiedSize,
@@ -188,7 +204,7 @@ async function createConsultationWithAudio(
     targetType: "enrollment_consultations",
     targetLabel: data.prospectName,
     metadata: {
-      consultationId: consult.id, subject: data.subject || null, withAudio: true,
+      consultationId: consult.id, subject: data.subject || null, withAudio: true, followUp: followUp.result, outcome: followUp.outcome,
       ...(referrer.referrer_student_id || referrer.referrer_staff_id ? { referrer: await referrerLabelOf(admin as unknown as SupabaseClient, referrer) } : {}),
     },
   });
@@ -367,7 +383,7 @@ export async function updateEnrollmentConsultation(
     // 뒤의 이름·학교…상담 내용 칸 = 감사로그 "무엇이 바뀌었나"의 저장 전 값
     // (consultation-audit.ts CONSULTATION_AUDIT_FIELDS와 같은 목록 — 가드 테스트가 잠근다).
     .select(
-      "prospect_name, prospect_grade, prospect_school, english_name, gender, blood_type, birth_date, student_phone, home_phone, parent_name, parent_phone, parent_relation, address, zip_code, address_detail, consultation_path, subject, career_goal, siblings, safety_notes, registration_status, payment_amount, payment_date, registrar, follow_up_date, follow_up_content, non_registration_reason, parent_request, shuttle_bus_request, privacy_agreement, installment_agreement, subject_details, received_date, student_type, siblings_details, consultation_date, learning_history, consultant_id, counselor, from_public_intake, outcome, updated_at",
+      "student_id, prospect_name, prospect_grade, prospect_school, english_name, gender, blood_type, birth_date, student_phone, home_phone, parent_name, parent_phone, parent_relation, address, zip_code, address_detail, consultation_path, subject, career_goal, siblings, safety_notes, follow_up_date, follow_up_content, non_registration_reason, parent_request, shuttle_bus_request, privacy_agreement, installment_agreement, subject_details, received_date, student_type, siblings_details, consultation_date, learning_history, consultant_id, counselor, from_public_intake, outcome, updated_at",
     )
     .eq("id", id)
     .single();
@@ -384,6 +400,19 @@ export async function updateEnrollmentConsultation(
     !!existing?.from_public_intake &&
     ["pending", "scheduled"].includes(String(existing?.outcome ?? ""));
 
+  // 후속 조치(원장 2026-10-22) — 저장 뒤 '상담 완료' 칸에 남는 상담이면 반드시 고른다(QR 접수를 '상담 완료로 저장'할 때 포함).
+  // 고른 값이 칸반 상태를 정한다. 이관 registration_status·결제 기록은 수정하지 않는다.
+  const followUp = resolveFollowUp({
+    current: promoteToConsulted ? "consulted" : String(existing.outcome),
+    assignedClassCount: await countAssignedClasses(supabase, existing.student_id, existing.subject),
+    result: parseFollowUpResult(formData.get("followUpResult")),
+    followUpDate: parsed.data.followUpDate || null,
+    storedDate: (existing.follow_up_date as string | null) ?? null,
+    today: kstToday(),
+  });
+  if ("error" in followUp) return { error: followUp.error };
+  const outcomeTo = followUp.outcome !== existing.outcome ? followUp.outcome : null;
+
   const referrer = referrerColumns(formData);
   if ("error" in referrer) return { error: referrer.error };
   // 소개한 사람의 저장 전 값 — 따로·실패해도 되게 읽는다(위 선조회에 넣으면 칸이 없는 DB에서 학습 이력 보존 조회까지 함께 실패한다, #95).
@@ -392,14 +421,15 @@ export async function updateEnrollmentConsultation(
     ...(await withSchoolKind(supabase, user.tenantId, buildConsultationRow(parsed.data, await schoolAliases()))),
     ...referrer.cols,
   };
-  const autofilled = counselorAutofill({ ...existing, ...referrerBefore }, { ...row, learning_history: lh }, user.displayName, promoteToConsulted);
+  // 후속 조치로 상태가 바뀐 것도 '실제 수정'이다(완료 전환과 같은 결) — 다른 칸을 안 고치고 등록·미등록만 골라도 빈 상담자를 채운다.
+  const autofilled = counselorAutofill({ ...existing, ...referrerBefore }, { ...row, learning_history: lh }, user.displayName, promoteToConsulted || !!outcomeTo);
   if (autofilled) row.counselor = autofilled;
   const { data: saved, error } = await supabase
     .from("enrollment_consultations")
     .update({
       ...row,
       learning_history: Object.keys(lh).length > 0 ? lh : null,
-      ...(promoteToConsulted ? { outcome: "consulted" } : {}),
+      ...(outcomeTo ? { outcome: outcomeTo } : {}),
       updated_at: new Date().toISOString(),
     })
     .eq("id", id).eq("updated_at", existing.updated_at).select("id").maybeSingle();
@@ -417,7 +447,7 @@ export async function updateEnrollmentConsultation(
     summary.changed.push("소개한 사람");
     summary.changes.push({ field: "소개한 사람", from, to });
   }
-  if (summary.changed.length > 0 || promoteToConsulted || autofilled) {
+  if (summary.changed.length > 0 || outcomeTo || autofilled) {
     await logAction({
       action: "enrollment_consultation_update",
       targetType: "enrollment_consultations",
@@ -426,7 +456,7 @@ export async function updateEnrollmentConsultation(
         consultationId: id,
         ...summary,
         ...(autofilled ? { counselorAutofill: autofilled } : {}),
-        ...(promoteToConsulted ? { outcomeTo: "consulted" } : {}),
+        ...(outcomeTo ? { outcomeTo } : {}),
       },
     });
   }
@@ -489,10 +519,12 @@ export async function setEnrollmentOutcome(
   // 따라서 전환 판정은 outcome==='enrolled'만(연결 여부로 상태 이동을 막지 않음).
   const { data: cur } = await supabase
     .from("enrollment_consultations")
-    .select("outcome, prospect_name")
+    .select("outcome, prospect_name, student_id, subject")
     .eq("id", id)
     .single();
   if (!cur) return { error: "상담을 찾을 수 없습니다" };
+  const assignedClassCount = await countAssignedClasses(supabase, cur.student_id, cur.subject);
+  if (assignedClassCount > 0 && stageOfOutcome(outcome) !== "enrolled") return { error: ASSIGNED_DRAG_BLOCKED };
   const isConverted = cur.outcome === "enrolled";
   if (isConverted && outcome !== "enrolled" && outcome !== "declined") {
     // ⚠️ 클라 안내문(consultation-manage.tsx)과 **같은 문장**을 유지할 것 — 한쪽만 고치면 갈린다.

@@ -11,7 +11,7 @@
  */
 import type { PillColor } from "@/components/atoms/pill";
 import type { SubjectMaps } from "@/features/owner/subjects";
-import { BOARD_STAGES, stageOfCard } from "./board-stages";
+import { BOARD_STAGES, boardStatusOf } from "./board-stages";
 
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -44,8 +44,7 @@ export function statusCellOf(row: { outcome: string; assignedClassCount: number 
   label: string;
   color: PillColor;
 } {
-  const key = stageOfCard(row);
-  const stage = BOARD_STAGES.find((s) => s.key === key) ?? BOARD_STAGES[0]!;
+  const stage = boardStatusOf(row);
   return { label: stage.label, color: stage.color };
 }
 

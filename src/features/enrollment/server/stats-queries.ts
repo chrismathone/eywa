@@ -1,10 +1,14 @@
 import "server-only";
-import { kstYear, shiftMonth, kstMonthStartIso as monthStartIso } from "@/lib/date-kst";
+import { kstDateOf, kstToday, kstYear, shiftMonth, kstMonthStartIso as monthStartIso } from "@/lib/date-kst";
+import { kstDayBounds } from "../kst-bounds";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { normalizeSchoolName } from "@/features/schools/school-name";
 import { bucketizePathStats, type BucketStat, type PathStatRow } from "../path-bucket";
 import { recentConsultMonths, type RecentConsultRow } from "../recent-stats";
+import { buildManagementSheet, type ExitCohortRow, type ManagementSheet } from "../management-sheet";
+import { intakeGroupMeta, intakeGroupsOf } from "../intake-groups";
+import { getTenantSettings } from "@/features/owner/server/queries";
 import {
   buildSchoolBars,
   gradeLabel,
@@ -36,6 +40,11 @@ export type EnrollmentStats = {
   months: MonthStat[];
   /** 같은 길이의 **직전 해** 같은 달들 — 전년 동월 비교용. 데이터가 없으면 빈 배열. */
   prevYearMonths: MonthStat[];
+  /**
+   * 올해를 볼 때 **작년 같은 기간**(1월 1일 ~ 작년 오늘) 합계 — 헤드라인 증감의 비교 대상. 올해는 오늘까지만 있는데
+   * 작년 1~12월 전체와 견주면 "상담 −45%"처럼 거짓 감소가 선다(검수 2026-10-22). 지난해를 볼 땐 null(1~12월끼리 견준다).
+   */
+  prevSamePeriod?: { total: number; enrolled: number; to: string } | null;
   paths: BucketStat[];
   /** 구간 합계. months에서 도출하지 않고 같은 원천으로 계산(둘이 갈리면 헤더와 차트가 다른 말을 한다). */
   total: number;
@@ -118,22 +127,40 @@ export async function getEnrollmentStats(
   // 전체 기간엔 '전년 동월' 비교가 성립하지 않는다(비교 대상이 구간 안에 들어 있다) → 빈 배열로 둔다.
   const prevStart = kstMonthStartIso(fromY - 1, startM0);
   const prevEnd = kstMonthStartIso(fromY - 1, startM0 + months);
+  // 올해면 작년 같은 날까지만 따로 센다(2월 29일은 작년 2월 28일까지).
+  const today = kstToday();
+  const thisMonth = today.slice(0, 7);
+  const sameDayLastYear = (() => {
+    const [y, m, d] = today.split("-").map(Number) as [number, number, number];
+    const last = new Date(Date.UTC(y - 1, m, 0)).getUTCDate();
+    return `${y - 1}-${String(m).padStart(2, "0")}-${String(Math.min(d, last)).padStart(2, "0")}`;
+  })();
+  const ytd = !isAll && year === Number(today.slice(0, 4));
 
-  // 독립 조회 3개 = 병렬(B4). 전년치는 비교용이라 없으면 빈 배열로 떨어져도 화면이 산다.
-  const [cur, prev, paths] = await Promise.all([
+  // 독립 조회 = 병렬(B4). 전년치는 비교용이라 없으면 빈 배열로 떨어져도 화면이 산다.
+  const [cur, prev, paths, prevYtd] = await Promise.all([
     supabase.rpc("consultation_monthly_stats", { p_start: start, p_end: end }),
     isAll
       ? Promise.resolve({ data: [], error: null })
       : supabase.rpc("consultation_monthly_stats", { p_start: prevStart, p_end: prevEnd }),
     supabase.rpc("consultation_path_stats", { p_start: start, p_end: end }),
+    ytd
+      ? supabase.rpc("consultation_monthly_stats", { p_start: prevStart, p_end: kstDayBounds(sameDayLastYear).endIso })
+      : Promise.resolve({ data: null, error: null }),
   ]);
   // 조회 실패를 '0건'으로 위장하지 않는다 — 빈 통계와 장애는 화면에서 구분돼야 한다.
   if (cur.error) throw cur.error;
   if (paths.error) throw paths.error;
 
-  const curMonths = fillMonths((cur.data ?? []).map(toMonthStat), fromY, startM0, months);
+  // 아직 오지 않은 **빈** 달은 빼 둔다 — 0으로 채워 넘기면 차트 툴팁이 '11월 상담 0건'이라 말한다(trend-series는 빈 달을 비워 두게 돼 있다).
+  // 미래 날짜로 넣은 상담이 있는 달은 남긴다(빼면 헤드라인 합계가 같은 기간을 세는 유입경로·분포와 갈린다).
+  const curMonths = fillMonths((cur.data ?? []).map(toMonthStat), fromY, startM0, months).filter((m) => m.month <= thisMonth || m.total > 0);
   const prevYearMonths =
     isAll || prev.error ? [] : fillMonths((prev.data ?? []).map(toMonthStat), fromY - 1, startM0, months);
+  const prevYtdRows = !ytd || prevYtd.error || !prevYtd.data ? null : (prevYtd.data as Parameters<typeof toMonthStat>[0][]).map(toMonthStat);
+  const prevSamePeriod = prevYtdRows
+    ? { total: prevYtdRows.reduce((a, m) => a + m.total, 0), enrolled: prevYtdRows.reduce((a, m) => a + m.enrolled, 0), to: sameDayLastYear }
+    : null;
 
   const total = curMonths.reduce((a, m) => a + m.total, 0);
   const enrolled = curMonths.reduce((a, m) => a + m.enrolled, 0);
@@ -141,6 +168,7 @@ export async function getEnrollmentStats(
   return {
     months: curMonths,
     prevYearMonths,
+    prevSamePeriod,
     paths: bucketizePathStats(
       (paths.data ?? []).map(
         (r: {
@@ -180,7 +208,7 @@ export async function getRecentEnrollmentStats(today: string): Promise<Enrollmen
   const total = months.reduce((sum, row) => sum + row.total, 0);
   const enrolled = months.reduce((sum, row) => sum + row.enrolled, 0);
   return {
-    months, prevYearMonths: [], paths: [], total, enrolled,
+    months, prevYearMonths: [], prevSamePeriod: null, paths: [], total, enrolled,
     rate: total > 0 ? Math.round(enrolled / total * 100) : null,
     paidSum: months.reduce((sum, row) => sum + row.paidSum, 0),
   };
@@ -218,6 +246,12 @@ export type ConsultationDistribution = {
   hasTotals: boolean;
   /** 우리가 가진 공시 연도(예 2026). 화면이 "왜 비율이 없는지" 설명할 때 쓴다. */
   totalsYear: number | null;
+  /** 관리현황(달마다 상담·등록·완료율 · 과목 묶음마다) — 같은 상담 행으로 센다(management-sheet.ts). */
+  sheet: ManagementSheet;
+  /** 과목 묶음 → 이름·색(학원 설정 — 화면에 키를 내보내지 않는다). */
+  sheetGroups: Record<string, { label: string; color: string }>;
+  /** 등록한 상담에 이어진 원생(달 · 학생 · 상담일) — 관리현황 '등록 후 퇴원'의 재료(퇴원 목록과 맞춰 보는 것은 화면 쪽 — 권한이 있을 때만). */
+  cohorts: ExitCohortRow[];
 };
 
 /**
@@ -240,14 +274,16 @@ export async function getConsultationDistribution(
   const start = kstMonthStartIso(fromY, 0);
   const end = kstMonthStartIso(toY + 1, 0);
 
-  const [rows, schoolStats] = await Promise.all([
-    fetchAllPaged<{ prospect_school: string | null; prospect_grade: string | null; outcome: string }>(
+  const [rows, schoolStats, settings] = await Promise.all([
+    fetchAllPaged<{ prospect_school: string | null; prospect_grade: string | null; outcome: string; consulted_at: string; subject: string | null; student_id: string | null }>(
       (from, to) =>
         supabase
           .from("enrollment_consultations")
-          .select("prospect_school, prospect_grade, outcome")
+          .select("prospect_school, prospect_grade, outcome, consulted_at, subject, student_id")
           .gte("consulted_at", start)
           .lt("consulted_at", end)
+          // 🔴 페이지로 나눠 받으면 정렬이 있어야 한다 — 없으면 3개년(1,500건+)에서 페이지 경계의 행이 겹치거나 빠진다(검수 2026-10-22).
+          .order("id")
           .range(from, to),
     ),
     fetchAllPaged<{ name: string; name_key: string; kind: string; total_students: number; region: string | null; year: number }>(
@@ -265,6 +301,7 @@ export async function getConsultationDistribution(
           .order("name_key", { ascending: true })
           .range(from, to),
     ),
+    getTenantSettings(),
   ]);
 
   // 그 해 공시가 있으면 비율을 낸다. 없으면(예: 아직 안 받은 연도) 건수·전환율만 보여준다.
@@ -314,7 +351,23 @@ export async function getConsultationDistribution(
     total: consults.length,
     hasTotals,
     totalsYear,
+    sheet: buildManagementSheet(
+      rows.map((r) => ({ month: kstMonthOf(r.consulted_at), subject: r.subject, outcome: r.outcome })),
+      intakeGroupsOf(settings.operations.subjects),
+    ),
+    sheetGroups: intakeGroupMeta(settings.operations.subjects),
+    cohorts: rows.flatMap((r) => {
+      const consultedOn = kstDateOf(r.consulted_at);
+      return r.outcome === "enrolled" && r.student_id && consultedOn
+        ? [{ month: kstMonthOf(r.consulted_at), studentId: r.student_id, consultedOn }]
+        : [];
+    }),
   };
+}
+
+/** 상담일(timestamptz) → KST 달 `YYYY-MM` — DB 함수가 달을 자르는 것과 같은 경계(`at time zone 'Asia/Seoul'`). */
+function kstMonthOf(iso: string): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit" }).format(new Date(iso)).slice(0, 7);
 }
 
 /** 통계 연도 선택지 — 데이터가 있는 연도만(없는 해를 고르면 빈 화면으로 걸어 들어간다). */

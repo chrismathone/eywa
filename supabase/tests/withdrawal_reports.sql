@@ -118,7 +118,9 @@ insert into test_report_ids values('recovery',(public.transition_withdrawal_repo
 select is(pg_temp.act('recovery','20000000-0000-4000-8000-000000000902','submit',jsonb_build_object('body',pg_temp.body())),'manager_pending','recovery report submitted');
 update public.users set status='inactive' where id in ('20000000-0000-4000-8000-000000000901','20000000-0000-4000-8000-000000000903');
 select throws_ok($q$select pg_temp.act('recovery','20000000-0000-4000-8000-000000000906','approve')$q$,'P0001',null,'replacement principal cannot approve assigned reviewer turn');
-select is(pg_temp.act('recovery','20000000-0000-4000-8000-000000000906','cancel'),'canceled','replacement principal cancels stuck request');
+select throws_ok($q$select pg_temp.act('recovery','20000000-0000-4000-8000-000000000906','cancel')$q$,'P0001',null,'replacement principal cannot cancel another sender request');
+update public.users set status='active' where id='20000000-0000-4000-8000-000000000901';
+select is(pg_temp.act('recovery','20000000-0000-4000-8000-000000000901','cancel'),'canceled','original requester can cancel');
 select is((select status::text from public.students where id='40000000-0000-4000-8000-000000000904'),'enrolled','recovery cancellation preserves student');
 select is((select end_date from public.enrollments where id='50000000-0000-4000-8000-000000000905'),null::date,'recovery cancellation preserves enrollment');
 select * from finish();

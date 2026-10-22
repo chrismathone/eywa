@@ -81,7 +81,8 @@ update public.withdrawal_report_groups set effective_date=(now() at time zone 'A
 update public.enrollments set on_hold=true where student_id='40000000-0000-4000-8000-000000000904';
 select is(pg_temp.act('changed',2,null,'apply'),'blocked','changed target safely blocks');
 select is((select count(*)::int from public.enrollments where student_id='40000000-0000-4000-8000-000000000904' and end_date is null),2,'blocked group closes nothing');
-select is(pg_temp.act('changed',2,6,'cancel'),'canceled','replacement principal can recover stuck group');
+select throws_ok($q$select pg_temp.act('changed',2,6,'cancel')$q$,'P0001',null,'replacement principal cannot cancel another sender group');
+select is(pg_temp.act('changed',2,1,'cancel'),'canceled','original requester can cancel group');
 select ok(not has_table_privilege('authenticated','public.withdrawal_report_archives','select'),'archive client reads denied');
 select ok(not has_function_privilege('authenticated','public.map_withdrawal_report_archive(uuid,uuid,uuid,uuid,integer)','execute'),'archive actor cannot be forged');
 insert into public.withdrawal_report_archives(id,tenant_id,spreadsheet_id,source_key,sheet_id,sheet_title,source_range,student_name,school_grade,class_name,subject,raw_exit_date,teacher_name,fields,signatures,raw_grid) values('60000000-0000-4000-8000-000000000901','10000000-0000-4000-8000-000000000901','fixture','one',1,'Fixture','A1:N23','Student','','','math','','','{}','[]','[]');
@@ -104,5 +105,10 @@ select pg_temp.act('review-assignment',2,2,'submit',jsonb_build_object('body',pg
 update public.classes set teacher_id='20000000-0000-4000-8000-000000000904' where id='30000000-0000-4000-8000-000000000901';
 select throws_ok($q$select pg_temp.act('review-assignment',2,1,'approve')$q$,'P0001',null,'ownership changes block even the first reviewer');
 select ok((select manager_decisions='{}'::jsonb from public.withdrawal_reports where group_id=(select id from gids where k='review-assignment')),'failed approval retains no misleading decision');
+update public.users set display_name='김담임(Sam)',english_name='Sam' where id='20000000-0000-4000-8000-000000000902';
+select is(public.match_withdrawal_archive_teacher('10000000-0000-4000-8000-000000000901',E'sam\n김담임'),'20000000-0000-4000-8000-000000000902'::uuid,'Korean and English aliases resolve to one account');
+select is(public.match_withdrawal_archive_teacher('10000000-0000-4000-8000-000000000902','Sam'),null::uuid,'teacher matching never crosses tenants');
+update public.users set english_name='Sam',status='inactive' where id='20000000-0000-4000-8000-000000000904';
+select is(public.match_withdrawal_archive_teacher('10000000-0000-4000-8000-000000000901','Sam'),null::uuid,'ambiguous alias including retired staff remains unmapped');
 select * from finish();
 rollback;

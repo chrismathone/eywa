@@ -32,7 +32,7 @@ export function StatCard({
       </header>
       {error ? (
         <p className="text-danger text-sm" role="status">
-          불러오지 못했습니다 · 0명을 뜻하지 않습니다. 새로고침하면 다시 조회합니다.
+          불러오지 못했습니다 · 0이라는 뜻이 아닙니다. 새로고침하면 다시 조회합니다.
         </p>
       ) : (
         children

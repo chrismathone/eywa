@@ -5,12 +5,12 @@ import { toast } from "sonner";
 import type { MenuKey } from "@/lib/permissions";
 import type { OverviewSnapshot } from "@/features/dashboard/overview/model";
 import { defaultItems } from "@/features/dashboard/layout/defaults";
-import { newItem } from "@/features/dashboard/layout/engine";
+import { newItem, sameItems } from "@/features/dashboard/layout/engine";
 import { CARDS, cardDef, type SizePreset } from "@/features/dashboard/layout/registry";
 import { previewSnapshot } from "@/features/dashboard/layout/preview";
-import { BUNDLE_LABELS, BUNDLE_RULES, MAX_ITEMS, type Bundle, type DashboardSettings, type Item } from "@/features/dashboard/layout/types";
+import { BUNDLE_LABELS, BUNDLE_RULES, MAX_ITEMS, isKpiId, type Bundle, type DashboardSettings, type Item } from "@/features/dashboard/layout/types";
 import { SectionForm } from "../section-form";
-import { addRow, appendItem, positionItems } from "@/features/dashboard/layout/fixed-grid";
+import { addRow, appendItem, positionItems, uniformKpiItems, type KpiWidth } from "@/features/dashboard/layout/fixed-grid";
 import { Button } from "@/components/ui/button";
 import { CardInspector } from "./card-inspector";
 import { EditBoard } from "./edit-board";
@@ -134,6 +134,12 @@ export function DashboardEditor({ initial, roleMenus, subjects, members, preview
     if (next.length === itemsRef.current.length) return toast.info("더 이상 행을 추가할 수 없습니다");
     commit(next);
   }, [commit]);
+  const uniformKpis = useCallback((width: KpiWidth) => {
+    const next = uniformKpiItems(itemsRef.current, width);
+    if (sameItems(next, itemsRef.current)) return void toast.info("이미 같은 크기로 정렬되어 있거나 정렬할 공간이 부족합니다");
+    commit(next);
+    toast("KPI 크기를 통일했습니다 · 되돌리기로 취소할 수 있습니다");
+  }, [commit]);
 
   useEditorShortcuts(editing, undo, redo);
 
@@ -167,6 +173,8 @@ export function DashboardEditor({ initial, roleMenus, subjects, members, preview
           onEditing={ed.setEditing}
           onGallery={() => setGalleryOpen(true)}
           onHeading={addHeading}
+          hasKpis={items.some((i) => isKpiId(i.id))}
+          onUniformKpis={uniformKpis}
           onUndo={undo}
           onRedo={redo}
           onCopy={(from) => {

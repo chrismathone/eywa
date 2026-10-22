@@ -22,6 +22,7 @@ import { skipStatusOf } from "./progress-status";
 export const MATH_REPORT_PILOT_STUDENT_IDS: readonly string[] = [
   "67a53999-fb62-4753-a938-9a5ce4af9e61", // 테스트
   "6219e442-aa57-455f-a5bc-834b222d9e1c", // 학원이
+  "5de5c803-6cf6-4ad9-85f0-d184334c679e", // 학원삼 — 원일 계정 테스트용(2026-10-22, 학원이 반 담임이 박소선으로 바뀌어 따로 만듦)
 ];
 
 /** 이 학생·과목 행이 시범 대상인가. 과목키가 없는 행(데모)은 수학으로 본다(원스크린 관례). */
@@ -149,14 +150,80 @@ export function understandingSig(items: readonly { title: string; score: number 
 }
 
 /**
- * 시범 대상 자동작성 글 조립 — 진도 첫 문장 → 본문(이해도는 AI가 말로 풀어 씀) → 특이사항(맨 아래, 강사가 쓴 그대로).
- * 원장 지시 *"특이사항 멘트는 수학보고서 밑에 추가 되게"* — 특이사항은 AI에 주지 않고 원문을 붙인다.
+ * 항목 제목 — 학부모 글을 **항목별로 나눠** 무엇에 대한 답인지 보이게 한다(원장 2026-10-22 *"텍스트로 우르르 들어가는 게 아닌
+ * 섹션을 나눠서 어떤 것에 어떤 답인지 볼 수 있게"*). ClassNote 본문은 평문이라 기호 한 글자로 머리를 단다.
+ */
+export const PILOT_SECTION_TITLES = {
+  progress: "진도",
+  daily: "일일 테스트",
+  check: "확인 테스트",
+  levels: "수업 평가",
+  attitude: "수업 태도",
+  homework: "과제 수행률",
+  understanding: "이해도",
+  homeworkToday: "오늘 과제",
+  note: "선생님 한마디",
+} as const;
+
+/** 항목 하나 — 내용이 비면 항목째 뺀다(없는 것을 '없음'으로 지어 쓰지 않는다). */
+export function pilotSection(title: string, body: string | null | undefined): string {
+  const b = (body ?? "").trim();
+  return b ? `■ ${title}\n${b}` : "";
+}
+
+/** 맨 끝 '선생님 한마디' 항목 — 강사 한줄 멘트 원문 그대로. */
+export function noteBlock(note: string | null | undefined): string {
+  return pilotSection(PILOT_SECTION_TITLES.note, note);
+}
+
+/**
+ * 시범 대상 자동작성 글 조립 — `lead`(진도 항목) → `body`(이미 항목으로 나눈 글, math-report-pilot-sections.ts) →
+ * 선생님 한마디(맨 아래, 강사 한줄 멘트 원문 그대로 — AI에 주지 않는다).
  */
 export function composePilotMent(parts: { lead: string; body: string; note: string }): string {
-  return [parts.lead, parts.body, parts.note]
+  return [parts.lead, parts.body, noteBlock(parts.note)]
     .map((p) => p.trim())
     .filter(Boolean)
     .join("\n\n");
+}
+
+/**
+ * 강사 한줄 멘트를 고치면 자동작성 글 맨 끝을 **그 자리에서** 바꿔 끼운다(원장 2026-10-22 *"AI 자동 작성 후 치면 실시간으로
+ * 우측에 반영해서 강사 한줄 멘트 쓰고 볼 수 있게"*). 한줄 멘트는 AI에 주지 않고 원문을 맨 끝에 붙이므로(composePilotMent)
+ * 다시 자동작성할 필요가 없다 — 끝의 옛 멘트만 떼고 새 멘트를 붙인다.
+ * 자동작성 글 그대로가 아니거나 끝이 옛 멘트로 끝나지 않으면 null(손대지 않는다 — 발송 게이트가 다시 자동작성을 요구한다).
+ */
+export function pilotRecomposeNote(
+  draft: string | null | undefined,
+  autoDraft: string | null | undefined,
+  prevNote: string | null | undefined,
+  nextNote: string | null | undefined,
+): string | null {
+  if (!isPilotAutoWritten(draft, autoDraft)) return null;
+  const d = (draft ?? "").trim();
+  const p = (prevNote ?? "").trim();
+  const tail = noteBlock(p);
+  let base: string;
+  if (!tail) base = d;
+  else if (d === tail) base = "";
+  else if (d.endsWith(`\n\n${tail}`)) base = d.slice(0, d.length - tail.length - 2);
+  else return null;
+  return composePilotMent({ lead: base, body: "", note: nextNote ?? "" });
+}
+
+/** 강사 한줄 멘트가 적혀 있나 — 시범 대상은 필수(원장 2026-10-22 *"한줄멘트 … 없으면 발송 안 되게"*). */
+export function hasPilotOneLine(note: string | null | undefined): boolean {
+  return (note ?? "").trim() !== "";
+}
+
+/** 서버 발송 게이트 거절 문구 — 강사 한줄 멘트가 없거나 보고서 끝에 붙어 있지 않다. */
+export const PILOT_ONELINE_REQUIRED_ERROR =
+  "이 학생의 수학 보고서는 '강사 한줄 멘트'를 적어야 보낼 수 있습니다(저장은 됐습니다) — 한줄 멘트를 적은 뒤 다시 보내 주세요";
+
+/** 서버 판정 — 한줄 멘트가 있고 보낼 글 맨 끝에 그대로 붙어 있나. */
+export function pilotOneLineAttached(notes: string | null | undefined, oneLine: string | null | undefined): boolean {
+  const o = (oneLine ?? "").trim();
+  return o !== "" && (notes ?? "").trim().endsWith(o);
 }
 
 /** 자동작성 글이 그대로 칸에 있나(발송 게이트). 자동작성을 안 했거나 글이 달라졌으면 false. */
@@ -174,13 +241,13 @@ export function isPilotAutoWritten(draft: string | null | undefined, autoDraft: 
  */
 export const PILOT_AI_DIRECTIVE = [
   "[이번 알림장 추가 규칙]",
-  "- 알림장 맨 앞에 '우리 ○○이는 오늘 ○○ 진도를 나갔습니다' 문장이 따로 붙습니다. 본문에서 진도 단원명을 다시 나열하거나 학생 이름으로 첫 문장을 시작하지 마세요.",
+  "- 이 알림장은 항목별로 나뉩니다(진도·일일 테스트·수업 평가·수업 태도·과제 수행률·이해도·오늘 과제·선생님 한마디). 진도·테스트·태도·과제·선생님 한마디는 따로 붙으니, comment에는 '이해도' 항목에 들어갈 문장만 쓰세요 — 인사, 진도 나열, 테스트 점수, 수업 태도, 과제 이야기는 쓰지 마세요.",
+  "- comment는 학생 이름으로 시작하지 말고, 첫 소단원 이야기부터 바로 시작하세요.",
   "- 본문에서 학생을 부를 때는 이름 앞에 '우리'를 붙여 친근하게 부르세요(예: 우리 승엽이가, 우리 지수가). 성은 빼고 부르세요.",
   "- '소단원별 이해도'가 있으면 소단원마다 한두 문장으로 말로 풀어 쓰세요. 점수가 높을수록(8~10점) 그 소단원을 아이의 강점으로 구체적으로 칭찬하세요.",
   "- 중간(5~7점)·낮은(4점 이하) 소단원은 반드시 두 단계로 쓰세요. ① 먼저 그 소단원을 아이가 힘들어했다는 사실만 부드럽게 말합니다 — 대상은 소단원 이름(또는 그 소단원의 개념)까지만입니다(중간 예: '연립방정식의 풀이는 대체로 잘 따라왔지만 아직 조금 어려워했습니다' / 낮음 예: '해가 특수한 연립방정식 개념을 조금 힘들어했습니다'). 소단원 안의 어느 부분이 어려웠는지(응용 문제·식 세우기·계산·풀이 정리·문장제 등)는 입력에 없는 정보이므로 절대 추측해서 쓰지 마세요 — 선생님이 점수만 매겼을 뿐, 무엇이 어려웠는지는 알려 주지 않았습니다. '이해도가 낮다'·'못한다'·'부족하다' 같은 직접적인 표현은 쓰지 마세요. ② 그다음 '그래서'·'그만큼' 같은 말로 이어, 바로 그 이유 때문에 학원에서 챙기겠다고 아이를 향한 응원·격려와 함께 마무리합니다(예: '그래서 다음 시간에 한 번 더 짚어 확실히 챙기겠습니다', '충분히 해낼 수 있는 부분이라 그만큼 수업 중에 꼼꼼히 살펴보겠습니다'). 상태 설명 없이 '챙기겠습니다'만 쓰면 학부모가 왜 챙기는지 알 수 없으니 절대 그렇게 쓰지 마세요.",
   "- 아이가 잘 못한 부분·과제를 못 해 온 부분도 아이나 가정에 책임을 돌리지 말고, 학원이 책임지고 챙긴다는 어투로 마무리하세요. 가정에 숙제·복습을 부탁하는 말로 끝내지 마세요.",
   "- 점수 숫자·'10점 만점'·'이해도 N점' 같은 표현은 절대 쓰지 마세요. 소단원 이름은 그대로 써도 됩니다.",
-  "- 특이사항은 알림장 맨 끝에 선생님 글 그대로 붙습니다. 본문에서 다루지 마세요.",
 ].join("\n");
 
 /** 서버 발송 게이트 거절 문구 — 자동작성 글이 아니거나 고쳐졌다. */
@@ -188,10 +255,10 @@ export const PILOT_AUTOWRITE_REQUIRED_ERROR =
   "이 학생의 수학 보고서는 '자동작성'으로 만든 글만 보낼 수 있습니다(저장은 됐습니다) — 자동작성을 누른 뒤 다시 보내 주세요";
 
 /**
- * 자동작성 글이 **지금 칸 값과 맞나** — 자동작성 뒤에 진도·이해도·특이사항을 바꾸면 글은 옛 값 그대로라 다시 눌러야 한다.
- * 첫 문장·맨 끝 특이사항은 글에서 대조하고, 이해도는 자동작성 때 남긴 서명(`writtenSig`)과 대조한다(숫자가 글에 없다).
- * ⚠️ 특이사항을 **지운** 경우는 못 잡는다(옛 글 끝에 남은 문장이 옛 특이사항인지 본문인지 가를 수 없다).
- * ⚠️ 서명은 화면 상태라 새로고침하면 없다 — 없으면 이해도 대조를 건너뛴다(막지 않는다).
+ * 자동작성 글이 **지금 칸 값과 맞나** — 자동작성 뒤에 진도·테스트·태도·과제·이해도를 바꾸면 글은 옛 값 그대로라 다시 눌러야 한다
+ * (한줄 멘트는 그 자리에서 바뀌므로 예외 — pilotRecomposeNote). 진도 항목·맨 끝 한마디는 글에서 대조하고, 나머지는 자동작성 때
+ * 남긴 사실 서명(`writtenSig`)과 대조한다(이해도 점수처럼 글에 숫자로 없는 값이 있다).
+ * ⚠️ 서명은 화면 상태라 새로고침하면 없다 — 없으면 서명 대조를 건너뛴다(막지 않는다).
  */
 export function isPilotDraftCurrent(
   draft: string | null | undefined,
@@ -199,14 +266,15 @@ export function isPilotDraftCurrent(
     studentName: string;
     today: string | null | undefined;
     note: string | null | undefined;
-    understanding: readonly { title: string; score: number }[];
+    /** 지금 칸 값의 사실 서명(math-report-pilot-sections.ts `pilotFactsSig`) — 자동작성 때 남긴 `writtenSig`와 대조한다. */
+    factsSig: string;
     writtenSig?: string;
   },
 ): boolean {
   const d = (draft ?? "").trim();
   const lead = progressLead(now.studentName, pilotLessons(now.today), skipStatusOf(now.today));
-  if (lead && !d.startsWith(lead)) return false;
-  if (now.writtenSig !== undefined && now.writtenSig !== understandingSig(now.understanding)) return false;
+  if (lead && !d.startsWith(pilotSection(PILOT_SECTION_TITLES.progress, lead))) return false;
+  if (now.writtenSig !== undefined && now.writtenSig !== now.factsSig) return false;
   const note = (now.note ?? "").trim();
   if (note && !d.endsWith(note)) return false;
   return true;

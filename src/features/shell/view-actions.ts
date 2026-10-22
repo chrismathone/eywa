@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { roleHome } from "@/lib/permissions";
 import { getActorPermMatrix } from "@/lib/auth/perm-matrix";
-import { canUseTeacherView, isFullShellRole, VIEW_MODE_COOKIE } from "@/lib/auth/view-mode";
+import { canUseTeacherView, getShellView, isFullShellRole, VIEW_MODE_COOKIE } from "@/lib/auth/view-mode";
 import { canUseOtherTeacherView, loadViewAsTarget, VIEW_AS_COOKIE } from "@/lib/auth/view-as";
 import { teacherHomeForSubjects } from "@/lib/auth/teacher-home";
 import { ENGLISH_TEACHER_HOME, teacherHomeFromAssistantClasses } from "@/lib/auth/teacher-home-rule";
@@ -97,7 +97,7 @@ export async function switchToAdminView(): Promise<string> {
  */
 export async function switchToOtherTeacherView(targetId: string): Promise<string | null> {
   const user = await getCurrentUser();
-  if (!user || user.systemRole === "student") return null;
+  if (!user || !isFullShellRole(user.systemRole) || await getShellView() !== "admin") return null;
   if (!(await canUseOtherTeacherView())) return null;
   if (targetId === user.id) return switchToTeacherView(); // 자기 자신 = 본인 강사뷰(쓰기 가능한 그 뷰)
 
@@ -132,7 +132,7 @@ export type TeacherViewTarget = { id: string; name: string };
  */
 export async function listTeacherViewTargets(): Promise<TeacherViewTarget[]> {
   const user = await getCurrentUser();
-  if (!user || !(await canUseOtherTeacherView())) return [];
+  if (!user || !isFullShellRole(user.systemRole) || await getShellView() !== "admin" || !(await canUseOtherTeacherView())) return [];
   const supabase = await createClient();
   // 전건 fetch지만 둘 다 whitelist 용도라 fetchAllPaged(B2 — 1000행 silent 절단 방지).
   const [staff, classRows] = await Promise.all([

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { BOARD_STAGES } from "@/features/enrollment/board-stages";
 
 /**
  * 콜&상담 수정 저장 뒤 — 서버 액션 직후라 풀 문서 이동(#102)이고, 이동 대기 중엔 폼 전체를 잠근다(inert).
@@ -16,6 +17,7 @@ const m = vi.hoisted(() => ({
   upload: vi.fn(),
   recorderScope: vi.fn(),
   saveDraftOnHide: vi.fn(),
+  loadDraft: vi.fn(),
   // 🔴 인자 타입은 **제네릭**으로 적는다 — `vi.fn(async () => {})`는 타입이 0인자로 굳어 아래 `m.clearDraft(scope)`가
   //    tsc에서 걸리고(TS2554), 쓰지 않는 인자를 구현에 적으면 lint가 경고한다(저장소 관례 = enrollment-table.test).
   clearDraft: vi.fn<(scope: string) => Promise<void>>(async () => {}),
@@ -34,7 +36,7 @@ vi.mock("@/lib/form-draft", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/form-draft")>()),
   saveDraft: async () => {},
   saveDraftOnHide: (...a: unknown[]) => m.saveDraftOnHide(...a),
-  loadDraft: async () => null,
+  loadDraft: (...a: unknown[]) => m.loadDraft(...a),
   clearDraft: (scope: string) => m.clearDraft(scope),
 }));
 vi.mock("@/features/presence/edit-presence", () => ({ useEditPresence: vi.fn() }));
@@ -74,6 +76,8 @@ beforeEach(() => {
   m.upload.mockReset();
   m.upload.mockResolvedValue(undefined);
   m.saveDraftOnHide.mockReset();
+  m.loadDraft.mockReset();
+  m.loadDraft.mockResolvedValue(null);
   m.clearDraft.mockClear();
   assign = vi.spyOn(window.location, "assign").mockImplementation(() => {});
 });
@@ -85,6 +89,8 @@ afterEach(() => {
 async function saveEdit() {
   const { container } = render(<ConsultationFullForm mode="edit" recordingOwner={{ tenantId: "t1", userId: "u1" }} initial={{ id: "c1", prospectName: "홍길동" }} />);
   const form = container.querySelector("form")!;
+  // 상담 끝난 건은 후속 조치가 필수(원장 2026-10-22) — 저장 경로 시험이라 '등록'을 고르고 저장한다.
+  fireEvent.click(screen.getByRole("radio", { name: "등록 완료" }));
   await act(async () => {
     fireEvent.submit(form);
     for (let i = 0; i < 10; i++) await Promise.resolve();
@@ -133,11 +139,90 @@ describe("콜&상담 수정 저장 뒤 이동(#102)", () => {
 async function saveRecording(mode: "create" | "edit") {
   const { container } = render(<ConsultationFullForm mode={mode} recordingOwner={{ tenantId: "t1", userId: "u1" }} initial={{ id: mode === "edit" ? "c1" : undefined, prospectName: "A" }} />);
   fireEvent.click(screen.getByRole("button", { name: "테스트 녹음 선택" }));
+  fireEvent.click(screen.getByRole("radio", { name: "등록 완료" }));
   await act(async () => {
     fireEvent.submit(container.querySelector("form")!);
     for (let i = 0; i < 30; i++) await Promise.resolve();
   });
 }
+
+describe("후속 조치 필수(원장 2026-10-22)", () => {
+  it("후속 조치 버튼은 칸반과 이름·순서·값이 같다", () => {
+    render(<ConsultationFullForm mode="create" recordingOwner={{ tenantId: "t1", userId: "u1" }} />);
+    const group = screen.getByRole("radiogroup", { name: "후속 조치" });
+    const buttons = within(group).getAllByRole("radio") as HTMLInputElement[];
+    expect(buttons.map((button) => button.value)).toEqual(BOARD_STAGES.map((stage) => stage.key));
+    BOARD_STAGES.forEach((stage, index) => expect(buttons[index]).toHaveAccessibleName(stage.label));
+    expect(within(group).queryByText("다음 상담")).toBeNull();
+  });
+  it.each(["상담 전", "상담 완료"])("%s 선택은 다음 상담일을 정하지 않아도 저장할 수 있다", async (label) => {
+    m.updateEnrollmentConsultation.mockResolvedValue({ ok: true });
+    const { container } = render(<ConsultationFullForm mode="edit" recordingOwner={{ tenantId: "t1", userId: "u1" }} initial={{ id: "c1", prospectName: "A", outcome: "consulted" }} />);
+    fireEvent.click(screen.getByRole("radio", { name: label }));
+    await act(async () => { fireEvent.submit(container.querySelector("form")!); for (let i = 0; i < 10; i++) await Promise.resolve(); });
+    const fd = m.updateEnrollmentConsultation.mock.calls[0]![1] as FormData;
+    expect(fd.get("followUpDate")).toBe("");
+    expect(fd.get("followUpResult")).toBe(label === "상담 전" ? "before" : "consulted");
+  });
+  it("후속 조치 초안을 복원하면 상태 표시도 같은 칸으로 바뀐다", async () => {
+    m.loadDraft.mockResolvedValue({ savedAt: Date.now(), values: { prospectName: "A", followUpResult: "declined" } });
+    render(<ConsultationFullForm mode="edit" recordingOwner={{ tenantId: "t1", userId: "u1" }} initial={{ id: "c1", outcome: "consulted" }} />);
+    fireEvent.click(await screen.findByRole("button", { name: "이어서 작성" }));
+    expect(screen.getByRole("radio", { name: "미등록" })).toBeChecked();
+    expect(screen.getByLabelText("상담 상태")).toHaveTextContent("미등록");
+  });
+  it.each([
+    ["pending", "상담 전"], ["scheduled", "상담 전"], ["consulted", "상담 완료"],
+    ["ai_done", "상담 완료"], ["declined", "미등록"], ["no_show", "미등록"], ["enrolled", "등록 완료"],
+  ])("폼 상태 %s는 칸반의 %s로 표시한다", (outcome, label) => {
+    const { container } = render(<ConsultationFullForm mode="edit" recordingOwner={{ tenantId: "t1", userId: "u1" }} initial={{ outcome }} />);
+    expect(screen.getByLabelText("상담 상태")).toHaveTextContent(label);
+    for (const name of ["registrationStatus", "paymentAmount", "paymentDate", "registrar"]) {
+      expect(container.querySelector(`[name="${name}"]`)).toBeNull();
+    }
+  });
+  it("신규 폼에 과거 결제 입력칸이 없다", () => {
+    const { container } = render(<ConsultationFullForm mode="create" recordingOwner={{ tenantId: "t1", userId: "u1" }} />);
+    for (const name of ["registrationStatus", "paymentAmount", "paymentDate", "registrar"]) {
+      expect(container.querySelector(`[name="${name}"]`)).toBeNull();
+    }
+    expect(screen.getByLabelText("개인정보 활용 동의")).toBeInTheDocument();
+  });
+  it("반 배정 상태도 칸반과 일치하고 변경 불가한 후속 조치를 비활성화한다", () => {
+    render(<ConsultationFullForm mode="edit" recordingOwner={{ tenantId: "t1", userId: "u1" }} initial={{ outcome: "consulted", assignedClassCount: 1 }} />);
+    expect(screen.getByLabelText("상담 상태")).toHaveTextContent("등록 완료");
+    expect(screen.getByRole("radio", { name: "등록 완료" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "미등록" })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: "상담 완료" })).toBeDisabled();
+  });
+  it("상담 끝난 건을 고르지 않고 저장하면 서버를 부르지 않고 이유를 보인다", async () => {
+    const { container } = render(<ConsultationFullForm mode="edit" recordingOwner={{ tenantId: "t1", userId: "u1" }} initial={{ id: "c1", prospectName: "A", outcome: "consulted" }} />);
+    await act(async () => { fireEvent.submit(container.querySelector("form")!); });
+    expect(m.updateEnrollmentConsultation).not.toHaveBeenCalled();
+    expect(screen.getByText(/후속 조치를 골라 주세요/)).toBeInTheDocument();
+  });
+  it("다음 상담은 날짜와 함께 보내고 현재 상태도 칸반과 함께 바뀐다", async () => {
+    m.updateEnrollmentConsultation.mockResolvedValue({ ok: true });
+    const { container } = render(<ConsultationFullForm mode="edit" recordingOwner={{ tenantId: "t1", userId: "u1" }} initial={{ id: "c1", prospectName: "A", outcome: "ai_done" }} />);
+    const form = container.querySelector("form")!;
+    fireEvent.click(screen.getByRole("radio", { name: "미등록" }));
+    expect(screen.getByLabelText("상담 상태")).toHaveTextContent("미등록");
+    expect(form.querySelector('[name="registrationStatus"]')).toBeNull();
+    fireEvent.click(screen.getByRole("radio", { name: "상담 완료" }));
+    expect(screen.getByLabelText("상담 상태")).toHaveTextContent("상담 완료");
+    fireEvent.change(form.querySelector('[name="followUpDate"]')!, { target: { value: "2099-01-01" } });
+    await act(async () => { fireEvent.submit(form); for (let i = 0; i < 10; i++) await Promise.resolve(); });
+    const sent = m.updateEnrollmentConsultation.mock.calls[0]![1] as FormData;
+    expect(sent.get("followUpResult")).toBe("consulted");
+    expect(sent.get("followUpDate")).toBe("2099-01-01");
+  });
+  it("이미 등록 완료된 상담은 상담 전·상담 완료를 고를 수 없다", () => {
+    render(<ConsultationFullForm mode="edit" recordingOwner={{ tenantId: "t1", userId: "u1" }} initial={{ id: "c1", prospectName: "A", outcome: "enrolled" }} />);
+    expect(screen.getByRole("radio", { name: "상담 완료" })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: "상담 전" })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: "등록 완료" })).toBeChecked();
+  });
+});
 describe("콜앤상담 녹음 저장과 대상 구분", () => {
   it("successful edit clears exactly the submitted backup", async () => {
     m.updateEnrollmentConsultation.mockResolvedValue({ ok: true });

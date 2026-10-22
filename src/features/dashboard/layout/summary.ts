@@ -4,7 +4,8 @@
  * 🔴 금액은 스냅샷에 실린 값만 읽는다 — 가린 역할의 스냅샷은 서버가 이미 0으로 비웠으므로(`shape.ts`) 여기서 금액을 그리지 않는다(`amounts`).
  */
 import type { OverviewSnapshot } from "@/features/dashboard/overview/model";
-import { todayLevelTestList } from "@/features/dashboard/overview/display";
+import { levelTestListOn, upcomingAdmissionsRows } from "@/features/dashboard/overview/display";
+import { addDays } from "@/lib/date-kst";
 import { splitEnrolledRecent } from "@/features/dashboard/overview/enrolled-recent";
 import { earlyCounts } from "@/features/withdrawals/early-exit";
 import { cardDef } from "./registry";
@@ -31,7 +32,7 @@ export function summaryOf(id: string, snap: OverviewSnapshot, opts: { amounts?: 
     case "intake":
       return v.intake?.data ? { value: n(v.intake.data.length), unit: "건", detail: "오늘 접수" } : null;
     case "calendar":
-      return v.calendar?.data ? { value: n(todayLevelTestList(v.calendar.data, snap.today).active.length), unit: "건", detail: "오늘 레벨테스트" } : null;
+      return v.calendar?.data ? { value: n(levelTestListOn(v.calendar.data, addDays(snap.today, -1)).active.length), unit: "건", detail: "전일 레벨테스트" } : null;
     case "enrolledToday": {
       // 전일 / 이달 신규(원장 2026-10-21) — 카드와 같은 가르기. 요약형은 숫자 한 칸이라 이번 달을 숫자로, 어제는 보조 줄로.
       if (!v.enrolledToday?.data) return null;
@@ -139,7 +140,8 @@ export function summaryOf(id: string, snap: OverviewSnapshot, opts: { amounts?: 
       return s ? { value: n(s.filter((x) => x.status === "ongoing").length), unit: "개", detail: `진행 중 · 오늘 ${n(s.length)}개` } : null;
     }
     case "admissionsSchedule": {
-      const list = v.calendar?.data;
+      // 오늘부터(일정 배열엔 '전일 입테'용 어제 레벨테스트도 실린다).
+      const list = v.calendar?.data ? upcomingAdmissionsRows(v.calendar.data, snap.today) : null;
       if (!list) return null;
       // 숫자 = 살아 있는 일정만(취소는 kind가 null — 카드 열 머리와 같은 축).
       const live = list.filter((e) => e.kind !== null);
@@ -175,7 +177,7 @@ export function isEmptyCard(id: string, snap: OverviewSnapshot): boolean {
     case "panel:operations":
       return v.operations?.data?.length === 0;
     case "panel:admissionsSchedule":
-      return v.calendar?.data?.length === 0;
+      return v.calendar?.data ? upcomingAdmissionsRows(v.calendar.data, snap.today).length === 0 : false;
     case "panel:nowClasses":
       return v.schedule?.data?.length === 0;
     case "panel:repeatAbsence":

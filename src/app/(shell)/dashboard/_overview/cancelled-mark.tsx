@@ -1,7 +1,7 @@
 import { tipProps } from "@/components/hover-tip/tip";
 import s from "./overview.module.css";
 
-/** 취소 표식의 설명 카드 — 운영실 일정 카드·금일입테 팝업이 같은 문장을 쓴다. */
+/** 취소 표식의 설명 카드 — 운영실 일정 카드·전일 입테 팝업이 같은 문장을 쓴다. */
 export const CANCELLED_EVENT_TIP = "취소된 일정입니다. 건수에서 빠지고 반·신규 콜&상담 연결도 붙지 않습니다.";
 
 /**

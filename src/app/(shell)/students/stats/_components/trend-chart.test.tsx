@@ -36,6 +36,19 @@ it("막대 경계는 해당 칸의 시작에 서고, 표식 없는 공용 차트
   expect([...container.querySelectorAll(".recharts-xAxis-tick-labels .recharts-cartesian-axis-tick-value")].map((x) => x.textContent)).toEqual(labels);
 });
 
+it("꺾은선 이름은 기본이 선 끝, labelsBelow면 선 끝 대신 그래프 아래 범례", () => {
+  const two = [series[0]!, { key: "due", name: "청구액", color: "red", values: [5, 6, 7, 8], dashed: true }];
+  const { container, rerender } = render(<TrendChartImpl labels={labels} series={two} kind="line" legend />);
+  expect(screen.getByText("수납액 40명")).toBeInTheDocument();
+  expect(container.querySelector("ul")).toBeNull();
+  rerender(<TrendChartImpl labels={labels} series={two} kind="line" legend labelsBelow />);
+  expect(screen.queryByText("수납액 40명")).toBeNull();
+  expect([...container.querySelectorAll("ul > li")].map((li) => li.textContent)).toEqual(["수납액", "청구액"]);
+  // 칩이 범례인 카드(legend 꺼짐)는 아래 범례를 따로 세우지 않는다.
+  rerender(<TrendChartImpl labels={labels} series={two} kind="line" labelsBelow />);
+  expect(container.querySelector("ul")).toBeNull();
+});
+
 it("툴팁은 칸 번호 대신 긴 날짜와 기존 값 형식을 표시한다", () => {
   render(<ValueBox active payload={[{ dataKey: "paid", value: 30, payload: { key: "2", tip: "2026년 3월" } }]} series={series} showOf={() => (n) => `${n}만원`} />);
   expect(screen.getByText("2026년 3월")).toBeInTheDocument();

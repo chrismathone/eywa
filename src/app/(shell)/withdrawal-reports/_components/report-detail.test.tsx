@@ -15,6 +15,35 @@ const r: WithdrawalReport = { id: "10000000-0000-4000-8000-000000000001", tenant
   body: EMPTY_BODY, status: "requested", revision: 3, manager_approved_at: null, director_approved_at: null, applied_at: null, last_comment: null, created_at: "2026-10-13T01:00:00Z", updated_at: "2026-10-13T01:00:00Z" };
 const props = { report: r, staff: [], labels: { math: "수학" }, userId: teacher, writable: true, events: [] };
 describe("report submission and review", () => {
+  it("saves an internal subreason and a selected student consultation, clearing stale subreasons on category change", async () => {
+    const consultation = { id: "10000000-0000-4000-8000-000000000007", consultedAt: "2026-10-01T01:00:00Z", audience: "parent" as const, summary: "학부모 상담 내용" };
+    render(<ReportDetail {...props} consultations={[consultation]} />);
+    fireEvent.change(screen.getByLabelText("퇴원사유"), { target: { value: "grades" } });
+    fireEvent.change(screen.getByLabelText("세부 퇴원사유"), { target: { value: "school_grades" } });
+    fireEvent.click(screen.getByText("등록된 상담 연결"));
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "임시 저장" }));
+    await waitFor(() => expect(mocks.change).toHaveBeenCalledWith(r.id, "save", r.revision, expect.objectContaining({ reasonDetail: "school_grades", consultationIds: [consultation.id] })));
+    fireEvent.change(screen.getByLabelText("퇴원사유"), { target: { value: "dissatisfaction" } });
+    expect(screen.getByLabelText("세부 퇴원사유")).toHaveValue("");
+  });
+  it("only the requester sees cancellation, including when the author has an administrator role", () => {
+    const { rerender } = render(<ReportDetail {...props} />);
+    expect(screen.queryByRole("button", { name: "요청 취소" })).not.toBeInTheDocument();
+    rerender(<ReportDetail {...props} userId={manager} />);
+    expect(screen.getByRole("button", { name: "요청 취소" })).toBeInTheDocument();
+  });
+  it("shows the original table with automatic fields and saves the user's corrections", async () => {
+    render(<ReportDetail {...props} prefill={{ attendance: "최근 출석 5회", tuition: "청구 300,000원", arrears: "no", arrearsNote: "수납 확인" }} />);
+    expect(screen.getByRole("table", { name: "결재란" })).toHaveTextContent("담임팀장원장");
+    expect(screen.getByRole("table", { name: "퇴원 보고 내용" })).toHaveTextContent("테스트 학생");
+    expect(screen.getByLabelText("출결·현황")).toHaveValue("최근 출석 5회");
+    expect(screen.getByText("청구 300,000원")).toBeInTheDocument();
+    expect(screen.getByText("미납 없음")).toBeInTheDocument();
+    expect(screen.queryByLabelText("미납 여부")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "임시 저장" }));
+    await waitFor(() => expect(mocks.change).toHaveBeenCalledWith(r.id, "save", r.revision, expect.objectContaining({ tuition: "청구 300,000원", attendance: "최근 출석 5회", arrears: "no", arrearsNote: "수납 확인" })));
+  });
   it("a grouped report shows only its own homeroom classes even when another teacher teaches the same subject", () => {
     const course = { id: "course", classId: "class", className: "내 담당반", subject: "math", teacherId: teacher, teacherName: "담임", startDate: "2026-01-01", endDate: null, onHold: false };
     render(<ReportDetail {...props} report={{ ...r, group_id: "group", snapshot: { ...r.snapshot, courses: [course, { ...course, id: "other", classId: "other", className: "다른 강사반", teacherId: "someone_else" }] } }} />);

@@ -71,6 +71,8 @@ export type ReportCommentInput = {
   classNotice?: string;
   /** 소단원별 이해도(10점 만점) — 수학 보고서 시범(math-report-pilot.ts)에서만 채운다. 뺀 소단원·점수 없는 소단원은 이미 빠져 있다. */
   understanding?: { title: string; score: number }[];
+  /** 일일 테스트 '없음' 사유 — 수학 보고서 시범에서만(math-report-pilot-sections.ts). 있으면 점수 대신 사유 문장이 나간다. */
+  dailyTestSkip?: import("./math-report-pilot-sections").DailyTestSkip | null;
 };
 
 /** 값을 라벨 **한 줄 안에** 가두는 정규화 — 내부 개행을 ", "로 접는다.

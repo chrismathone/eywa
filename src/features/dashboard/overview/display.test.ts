@@ -7,8 +7,9 @@ import {
   dashboardDate,
   isCancelledAdmissionsRow,
   staffDisplayRole,
-  todayLevelTestList,
-  todayLevelTests,
+  levelTestListOn,
+  levelTestsOn,
+  upcomingAdmissionsRows,
   upcomingAdmissionsEvents,
 } from "./display";
 
@@ -123,7 +124,7 @@ describe("대시보드 표시 기준", () => {
       expect(admissionsEventKind(e)).toBeNull();
     }
   });
-  it("금일입테 = 오늘을 덮는 레벨테스트만(첫 수업·다른 날 제외) — 카드와 팝업이 같은 함수", () => {
+  it("전일 입테 = 그날(어제)을 덮는 레벨테스트만(첫 수업·다른 날 제외) — 카드와 팝업이 같은 함수", () => {
     const rows = [
       { id: "a", kind: "levelTest" as const, startDate: "2026-09-11", endDate: "2026-09-11" },
       { id: "b", kind: "firstClass" as const, startDate: "2026-09-11", endDate: "2026-09-11" },
@@ -131,7 +132,16 @@ describe("대시보드 표시 기준", () => {
       { id: "d", kind: "levelTest" as const, startDate: "2026-09-10", endDate: "2026-09-11" },
       { id: "e", kind: null, startDate: "2026-09-11", endDate: "2026-09-11" },
     ];
-    expect(todayLevelTests(rows, "2026-09-11").map((r) => r.id)).toEqual(["a", "d"]);
+    expect(levelTestsOn(rows, "2026-09-11").map((r) => r.id)).toEqual(["a", "d"]);
+  });
+  it("일정 패널 줄 = 오늘부터 — '전일 입테'용 어제 줄은 빠지고 어제부터 이어지는 일정은 남는다", () => {
+    const rows = [
+      { id: "y", endDate: "2026-09-10" },
+      { id: "span", endDate: "2026-09-11" },
+      { id: "t", endDate: "2026-09-11" },
+      { id: "n", endDate: "2026-09-20" },
+    ];
+    expect(upcomingAdmissionsRows(rows, "2026-09-11").map((r) => r.id)).toEqual(["span", "t", "n"]);
   });
   it("취소된 일정 — 건수용 분류기는 null, 목록용 분류기는 원래 종류(차단·운영 일정은 둘 다 null)", () => {
     expect(admissionsEventKind(event("[취소] 레벨테스트 김하늘"))).toBeNull();
@@ -148,7 +158,7 @@ describe("대시보드 표시 기준", () => {
     expect(isCancelledAdmissionsRow({ kind: "levelTest" })).toBe(false);
     expect(isCancelledAdmissionsRow({ kind: null })).toBe(false);
   });
-  it("금일입테 목록 — 숫자는 살아 있는 것만, 목록은 취소도 시간 순서 그대로, 취소 건수 따로", () => {
+  it("전일 입테 목록 — 숫자는 살아 있는 것만, 목록은 취소도 시간 순서 그대로, 취소 건수 따로", () => {
     const rows = [
       { id: "a", kind: "levelTest" as const, startDate: "2026-09-30", endDate: "2026-09-30" },
       { id: "x", kind: null, cancelledKind: "levelTest" as const, startDate: "2026-09-30", endDate: "2026-09-30" },
@@ -156,12 +166,12 @@ describe("대시보드 표시 기준", () => {
       { id: "y", kind: null, cancelledKind: "firstClass" as const, startDate: "2026-09-30", endDate: "2026-09-30" },
       { id: "z", kind: null, cancelledKind: "levelTest" as const, startDate: "2026-10-01", endDate: "2026-10-01" },
     ];
-    const list = todayLevelTestList(rows, "2026-09-30");
+    const list = levelTestListOn(rows, "2026-09-30");
     expect(list.active.map((r) => r.id)).toEqual(["a", "b"]);
     expect(list.rows.map((r) => r.id)).toEqual(["a", "x", "b"]);
     expect(list.cancelled).toBe(1);
-    // 오늘 입테가 전부 취소 — 숫자 0, 목록엔 취소 줄 하나.
-    const onlyCancelled = todayLevelTestList([rows[1]], "2026-09-30");
+    // 그날 입테가 전부 취소 — 숫자 0, 목록엔 취소 줄 하나.
+    const onlyCancelled = levelTestListOn([rows[1]], "2026-09-30");
     expect(onlyCancelled.active).toHaveLength(0);
     expect(onlyCancelled.rows).toHaveLength(1);
     expect(onlyCancelled.cancelled).toBe(1);

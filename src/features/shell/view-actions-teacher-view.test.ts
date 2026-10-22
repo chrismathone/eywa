@@ -13,7 +13,7 @@ const h = vi.hoisted(() => ({
   subjects: [] as string[],
   delegated: false,
   assistant: [] as string[],
-  jar: { set: vi.fn(), delete: vi.fn(), get: vi.fn((): undefined => undefined) },
+  jar: { set: vi.fn(), delete: vi.fn(), get: vi.fn<(key: string) => { value: string } | undefined>() },
 }));
 
 vi.mock("next/headers", () => ({ cookies: async () => h.jar }));
@@ -53,9 +53,18 @@ beforeEach(() => {
   h.assistant = [];
   h.jar.set.mockClear();
   h.jar.delete.mockClear();
+  h.jar.get.mockReset().mockReturnValue(undefined);
 });
 
 describe("'강사뷰로 전환' — 노출과 진입이 같은 판정", () => {
+  it("강사뷰에서는 다른 강사 목록과 전환 액션을 모두 닫는다", async () => {
+    h.ownClassIds = ["c1"];
+    h.jar.get.mockImplementation(key => key === "eywa-view" ? { value: "teacher" } : undefined);
+    const { switchToOtherTeacherView, listTeacherViewTargets } = await load();
+    expect(await switchToOtherTeacherView("someone-else")).toBeNull();
+    expect(await listTeacherViewTargets()).toEqual([]);
+    expect(h.jar.set).not.toHaveBeenCalled();
+  });
   it("🔴 위임만 받은 관리자 — 버튼이 서고, 누르면 강사뷰 쿠키가 걸리며 착지 경로가 온다", async () => {
     h.delegated = true;
     const { canUseTeacherView, switchToTeacherView, VIEW_MODE_COOKIE } = await load();

@@ -1,11 +1,14 @@
 "use client";
 
+import { useState } from "react";
 import { formatKoreanDate, monthLabel } from "@/lib/date-kst";
+import { ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
 import { EmbedLink } from "@/components/embed-link";
 import { StatsPeriodBar } from "@/components/stats-period-bar";
 import { periodQuery, type StatsPeriod, MAX_DAY_SPAN } from "@/features/stats/period";
 import { INTAKE_TREND_KEYS, type IntakeTrend } from "@/features/enrollment/intake-trend";
-import { saveIntakeTrendMode } from "@/features/enrollment/server/view-pref-actions";
+import { saveIntakeChartKind, saveIntakeTrendMode } from "@/features/enrollment/server/view-pref-actions";
+import type { IntakeChartKind } from "@/features/enrollment/view-pref";
 import { StatCard } from "../../students/stats/_components/stat-card";
 import { TrendChart, type ChartSeries } from "../../students/stats/_components/trend-chart";
 import { DASHBOARD_SUBJECT_COLORS } from "@/features/dashboard/overview/subject-colors";
@@ -29,6 +32,7 @@ export function IntakeTrendCard({
   today,
   groups,
   keep,
+  chartKind,
 }: {
   trend: IntakeTrend | null;
   period: StatsPeriod;
@@ -36,8 +40,18 @@ export function IntakeTrendCard({
   /** 과목 묶음 → 이름·색(학원 설정 — 서버가 푼다). */
   groups: Record<string, { label: string; color: string }>;
   keep: Record<string, string | undefined>;
+  /** 일별·구간 그래프 모양(계정에 남긴 값) — 월별은 늘 꺾은선. */
+  chartKind: IntakeChartKind;
 }) {
   const daily = period.grain === "day";
+  // 일별·구간 = 막대(과목 조합을 쌓은 전체) ↔ 꺾은선(전체 + 과목 선) — 원장 2026-10-22. 고르는 순간 계정에 남긴다(#90).
+  const [kind, setKind] = useState<IntakeChartKind>(chartKind);
+  const barView = daily && kind === "bar";
+  const pickKind = (next: IntakeChartKind) => {
+    if (next === kind) return;
+    setKind(next);
+    void saveIntakeChartKind({ kind: next }).catch(() => undefined);
+  };
   const keys = trend?.keys ?? [];
   const axis = (k: string) => (daily ? `${Number(k.slice(5, 7))}.${Number(k.slice(8))}` : `${k.slice(2, 4)}.${k.slice(5, 7)}`);
   const tip = (k: string) => (daily ? formatKoreanDate(k) : monthLabel(k));
@@ -64,7 +78,7 @@ export function IntakeTrendCard({
       ]
     : [];
   const series: ChartSeries[] = trend
-    ? daily
+    ? barView
       ? stacks
       : [{ key: "_total", name: "전체", color: TOTAL_COLOR, values: trend.total, strong: true }, ...lines.map((l) => ({ key: l.key, name: l.label, color: l.color, values: l.values }))]
     : [];
@@ -77,10 +91,20 @@ export function IntakeTrendCard({
     <StatCard
       id="intake"
       title="신규 문의 추이"
-      note={`${rangeText}${keys.at(-1)?.startsWith(today.slice(0, 7)) ? " · 이번 달은 오늘까지" : ""} · 접수일 기준(옮겨 온 옛 상담은 시트의 상담일)${daily ? " · 막대 = 과목 조합을 쌓은 전체" : " · 두 과목 문의는 양쪽 선에"}`}
+      note={`${rangeText}${keys.at(-1)?.startsWith(today.slice(0, 7)) ? " · 이번 달은 오늘까지" : ""} · 접수일 기준(옮겨 온 옛 상담은 시트의 상담일)${barView ? " · 막대 = 과목 조합을 쌓은 전체" : " · 두 과목 문의는 양쪽 선에"}`}
       error={!trend}
       tools={
         <>
+          {daily ? (
+            <ToolbarSegment label="그래프">
+              <ToolbarSegmentItem active={kind === "bar"} onClick={() => pickKind("bar")}>
+                막대
+              </ToolbarSegmentItem>
+              <ToolbarSegmentItem active={kind === "line"} onClick={() => pickKind("line")}>
+                꺾은선
+              </ToolbarSegmentItem>
+            </ToolbarSegment>
+          ) : null}
           <StatsPeriodBar key={period.grain === "day" ? `${period.from}~${period.to}` : `m${period.months.length}`} period={period} today={today} keys={INTAKE_TREND_KEYS} keep={keep} anchor="#intake" onMode={(mode) => void saveIntakeTrendMode({ mode })} />
           <EmbedLink href={`/enrollment?view=table&received=${today}`} className="text-primary text-sm font-medium whitespace-nowrap">
             오늘 접수 목록
@@ -95,7 +119,7 @@ export function IntakeTrendCard({
             <Fact label={`${unit} 평균`} value={`${keys.length ? (sum / keys.length).toFixed(1) : "0"}건`} />
             <Fact label="가장 많았던 때" value={peak >= 0 && sum > 0 ? `${fmt(trend.total[peak]!)}건` : "—"} sub={peak >= 0 && sum > 0 ? tip(keys[peak]!) : undefined} />
           </dl>
-          <TrendChart labels={keys.map(axis)} tooltipLabels={keys.map(tip)} series={series} kind={daily ? "bar" : "line"} unit="건" legend />
+          <TrendChart labels={keys.map(axis)} tooltipLabels={keys.map(tip)} series={series} kind={barView ? "bar" : "line"} unit="건" legend labelsBelow />
           {period.grain === "day" && period.clipped ? <p className="text-muted-foreground text-xs">구간이 길어 시작일부터 두 달({MAX_DAY_SPAN}일)만 보입니다.</p> : null}
           <details>
             <summary className="text-primary cursor-pointer text-sm font-medium select-none">수치 표 보기</summary>
