@@ -10,6 +10,7 @@ import { PageMaximizeToolbar } from "@/components/page-maximize/page-maximize-to
 import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF, TOOLBAR_CHIP_ON } from "@/components/toolbar-controls";
 import { Suspense } from "react";
 import { isMemoSheetSubject } from "@/features/timetable-memo/doc";
+import { isCellMemoSubject } from "@/features/timetable-cell-memo/rules";
 import { memoSheetAccess } from "@/features/timetable-memo/server/access";
 import { MemoSheetPane, MemoSheetSkeleton } from "@/features/timetable-memo/ui/memo-sheet-pane";
 import { MemoSheetJumpButton, TimetableSplitPanes } from "@/features/timetable-memo/ui/split-panes";
@@ -622,11 +623,15 @@ export default async function TimetablePage({
   // 메모 시트(영어 통합뷰 오른쪽 엑셀 판, 원장 2026-10-19) — 판이 설 수 있는 화면일 때만 문을 본다(보기·편집 한 번에).
   // 강사 화면엔 없다(memoSheetAccess 주석). 시트 내용은 오른쪽 판의 Suspense 안에서 읽는다(첫 그림을 막지 않게, B7).
   const memoSlot = isIntegrated && !groupEditing && !makeupTab && slots.length > 0 && isMemoSheetSubject(subject);
-  const [basicReserved, basicSplit, canSplit, memo] = await Promise.all([
+  // 칸 메모(영어 강사뷰, 원장 2026-10-22 *"각 셀마다 우클릭해서 엑셀처럼 메모"*) — 메모 시트와 **같은 문**(memoSheetAccess:
+  // 보기 = 시간표 열람 · 편집 = 시간표 '전체' · 강사 화면 없음). 메모 내용은 표가 뜬 뒤 레이어가 그 주 것만 따로 읽는다(B7).
+  const cellMemoSlot = effView === "teacher" && !makeupTab && slots.length > 0 && isCellMemoSubject(subject);
+  const [basicReserved, basicSplit, canSplit, memo, cellMemoAccess] = await Promise.all([
     basicOnly ? attachReservedLines(slots, referenceDate) : null,
     basicOnly ? attachSplitLines(slots, referenceDate) : null,
     basicOnly && canEdit ? canSplitClassNow() : false,
     memoSlot ? memoSheetAccess(user) : { canView: false, canEdit: false },
+    cellMemoSlot ? memoSheetAccess(user) : { canView: false, canEdit: false },
   ]);
   const reservedSlots = basicReserved?.slots ?? slots;
   const basicSlots = basicSplit
@@ -1276,6 +1281,7 @@ export default async function TimetablePage({
               showUnusedDays={!hideEmptyDays}
               hideSaturday={editorView?.hideSaturday}
               showSunday={editorView?.showSunday}
+              cellMemo={cellMemoAccess.canView ? { tenantId: user.tenantId, canEdit: cellMemoAccess.canEdit } : undefined}
             />
           </div>
         </TimetableZoomArea>

@@ -11,6 +11,7 @@ import type { ClassDetailQuick } from "./class-cell";
 
 export type TeacherCellColor = { bg: string; text: string };
 import { ClassInfoCard, HoverCard } from "./hover-cards";
+import { cellMemoAside } from "@/features/timetable-cell-memo/ui/aside-registry";
 import { useClassVisible, useSearchTone } from "./search-context";
 import { SEAT_PIN_MARK_CLASS } from "@/features/timetable/lib/seat-pin-mark";
 import {
@@ -94,8 +95,10 @@ export function TeacherChip({
           />
         </span>
       ) : null}
+      {/* 칸 메모(영어 강사뷰)가 있으면 카드 오른쪽에 2열로 붙는다(원장 2026-10-22) — 메모 레이어가 없으면 카드만. */}
       <HoverCard
         width={230}
+        aside={cellMemoAside}
         card={
           <ClassInfoCard
             className={slot.className}
@@ -111,6 +114,7 @@ export function TeacherChip({
       >
         <button
           type="button"
+          data-memo-chip=""
           onClick={() => setOpen((o) => !o)}
           title={open ? "반명으로" : "학생 명단"}
           className={`block w-full cursor-pointer px-1.5 py-1 text-left transition hover:brightness-95 ${teacherColor || slot.classBgColor ? "" : color} ${

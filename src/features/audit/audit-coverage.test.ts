@@ -45,6 +45,8 @@ const EXEMPT: Record<string, string> = {
   "src/features/staff/list/server/list-prefs.ts#saveStaffListPrefs": VIEW,
   "src/features/students/list/server/list-prefs.ts#saveStudentListPrefs": VIEW,
   "src/features/timetable/server/view-prefs-actions.ts#saveTimetableViewPrefs": VIEW,
+  // 시간표 칸 메모 상자 크기 — 내용 수정이 아니라 보는 크기(version·수정자·시각도 안 바꾼다). 내용 추가·수정·삭제는 따로 남긴다.
+  "src/features/timetable-cell-memo/server/actions.ts#resizeCellMemo": VIEW,
   // 개인 상태
   "src/features/notifications/server/actions.ts#markNotificationsRead": PERSONAL,
   "src/features/notifications/server/actions.ts#archiveNotification": PERSONAL,

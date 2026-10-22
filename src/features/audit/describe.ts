@@ -112,6 +112,7 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   // 시간표 연습실의 개인 사본 — 운영 시간표가 아니라 **연습본**임이 '대상' 칸에서 바로 읽혀야 한다.
   timetable_lab_draft: "시간표 연습본",
   timetable_memo_sheet: "시간표 메모 시트",
+  timetable_cell_memo: "시간표 칸 메모",
   // 재고관리(0242a) — 없으면 '대상' 칸에 영문 "inventory_asset"이 그대로 뜬다.
   inventory_asset: "자산",
   inventory_loan: "자산 대여",
@@ -672,6 +673,15 @@ export function auditDetail(
         num(m.cells) !== null ? `칸 ${num(m.cells)}개` : null,
       ].filter(Boolean);
       return parts.join(" · ");
+    }
+    case "timetable_cell_memo_add":
+      return "새 메모";
+    case "timetable_cell_memo_update":
+    case "timetable_cell_memo_delete": {
+      // 칸 자리는 '대상' 칸이 보여 준다 — 여기선 바뀌기 전 글 앞부분만(전문은 원문 툴팁).
+      const before = str(m.before);
+      const head = before && before.length > 40 ? `${before.slice(0, 40)}…` : before;
+      return head ? `이전 내용 "${head}"` : "";
     }
     case "timetable_lab_draft_save": {
       // 연습본 이름은 '대상' 칸이 보여 준다 — 여기선 규모만(운영 시간표는 안 바뀐다).

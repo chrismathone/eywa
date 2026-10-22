@@ -344,6 +344,10 @@ export const AUDIT_ACTIONS = {
   timetable_lab_apply_cancel: "시간표 연습본 적용 예약 취소",
   // 시간표 오른쪽 메모 시트(엑셀 판) — 자동 저장이라 같은 사람이 10분 안에 또 저장하면 한 줄로 친다(timetable-memo/server/actions.ts).
   timetable_memo_sheet_save: "시간표 메모 시트 저장",
+  // 영어 강사뷰 칸 메모(0394a) — 수정·삭제는 이전 내용(metadata.before)을 남긴다. 같은 사람이 이어 고치는 자동 저장은 10분에 한 줄.
+  timetable_cell_memo_add: "시간표 칸 메모 추가",
+  timetable_cell_memo_update: "시간표 칸 메모 수정",
+  timetable_cell_memo_delete: "시간표 칸 메모 삭제",
 
   // 수학 강사 시트(MCS) — 학생별 월간 목표. 실제 진도는 원스크린이 쓰므로 여기 안 온다(읽기 전용 화면).
   mcs_goal_update: "수학 시트 학생 월간 목표 저장",
