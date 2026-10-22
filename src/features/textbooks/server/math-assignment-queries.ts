@@ -7,6 +7,7 @@ import { bookPosition, inferBookFromReports, type BookPosition, type CatalogBook
 import { latestOrderedBook, type BookOrder } from "../book-window";
 import { SENT_REPORT_OR } from "@/features/math-sheets/lib/sent-reports";
 import type { TextbookTableStatus } from "../types";
+import { isMissingGradeTermColumn } from "./access";
 
 /**
  * 수학 교재 배정 조회 — **admin + `tenant_id` 명시 필터**(교재목록 조회와 같은 경로).
@@ -14,7 +15,8 @@ import type { TextbookTableStatus } from "../types";
  * ⚠️ 표가 아직 없으면(마이그레이션 미적용) `missing-table`로 돌려준다 — 화면은 살고 배정 칸만 잠긴다([[#95]]).
  */
 
-export type MathTextbookChoice = { id: string; title: string };
+/** `gradeTerm` = 학년·학기(`고1-1`) — 진도 카드 줄 세우기 재료. SQL 적용 전이면 null. */
+export type MathTextbookChoice = { id: string; title: string; gradeTerm?: string | null };
 
 /**
  * 학생의 지금 교재 + 그 교재에서의 차수. 출처: 학생 배정 > **교재 주문** > 반 배정 > 보고서 기록에서 추정.
@@ -222,19 +224,27 @@ async function getClassReportLines(
 /** 교재목록의 활성 수학 교재. 실패면 null(빈 목록은 "교재가 없다"는 거짓말이다). */
 export async function getMathTextbookChoices(tenantId: string): Promise<MathTextbookChoice[] | null> {
   const admin = createAdminClient();
-  try {
-    const rows = await fetchAllPaged<{ id: string; title: string }>((from, to) =>
+  type Row = { id: string; title: string; grade_term?: string | null };
+  const read = (cols: string) =>
+    fetchAllPaged<Row>((from, to) =>
       admin
         .from("textbooks")
-        .select("id, title")
+        .select(cols)
         .eq("tenant_id", tenantId)
         .eq("subject", "math")
         .eq("is_active", true)
         .order("title", { ascending: true })
         .order("id", { ascending: true })
-        .range(from, to),
+        .range(from, to)
+        .returns<Row[]>(),
     );
-    return rows.map((r) => ({ id: r.id, title: r.title }));
+  try {
+    // 🔑 강사가 매일 여는 수학 시트 경로다 — `grade_term`(20261022120000) 적용 전이면 그 칸만 빼고 다시 읽는다([[#95]]).
+    const rows = await read("id, title, grade_term").catch((e: unknown) => {
+      if (isMissingGradeTermColumn(e as { code?: string; message?: string })) return read("id, title");
+      throw e;
+    });
+    return rows.map((r) => ({ id: r.id, title: r.title, gradeTerm: r.grade_term ?? null }));
   } catch {
     return null;
   }

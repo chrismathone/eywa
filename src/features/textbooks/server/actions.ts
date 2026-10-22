@@ -13,7 +13,8 @@ import { MEDIA_KIND, removeObject } from "@/lib/storage/media-storage";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant } from "@/lib/auth/perm-matrix";
 import { logAction } from "@/features/audit/server/log";
-import { friendlyTextbookError, requireTextbookWrite } from "./access";
+import { friendlyTextbookError, GRADE_TERM_NOT_READY, isMissingGradeTermColumn, requireTextbookWrite } from "./access";
+import { validGradeTerm } from "../grade-term";
 import { getTextbookDetail, textbookOptionsTag } from "./queries";
 import type { TextbookDetail, TextbookTableStatus } from "../types";
 
@@ -38,6 +39,8 @@ export type TextbookInput = {
   title: string;
   pageTime: string | null;
   sessionCount: number;
+  /** 학년·학기(`고1-1`) — 수학만 받는다(다른 과목이면 버린다). 빈 값 = 미지정. */
+  gradeTerm?: string | null;
 };
 
 export async function saveTextbook(input: TextbookInput): Promise<TextbookActionResult> {
@@ -55,8 +58,12 @@ export async function saveTextbook(input: TextbookInput): Promise<TextbookAction
     ? Math.max(0, Math.min(MAX_SESSION_COUNT, Math.trunc(input.sessionCount)))
     : 0;
 
+  const rawGrade = subject === "math" ? norm(input.gradeTerm, 8) : null;
+  const gradeTerm = validGradeTerm(rawGrade);
+  if (rawGrade !== null && gradeTerm === null) return { ok: false, error: "학년·학기 값이 올바르지 않습니다" };
+
   const admin = createAdminClient();
-  const payload = {
+  const base = {
     subject,
     skill_area: skillArea,
     title,
@@ -64,24 +71,34 @@ export async function saveTextbook(input: TextbookInput): Promise<TextbookAction
     session_count: sessionCount,
     updated_by: ctx.userId,
   };
+  const payload = { ...base, grade_term: gradeTerm };
+  // 🔑 SQL 적용 전([[#95]]) — 학년을 안 적었으면 그 칸만 빼고 다시 쓴다. 적었으면 **조용히 버리지 않고** 알린다
+  //    (저장됐다고 보였는데 학년이 사라지면 거짓 약속이다).
+  const missingGrade = (e: { code?: string; message?: string } | null) => isMissingGradeTermColumn(e) && !friendlyMissingTable(e);
 
   if (input.id) {
-    const { error } = await admin
+    let { error } = await admin
       .from("textbooks")
       .update(payload)
       .eq("tenant_id", ctx.tenantId)
       .eq("id", input.id);
+    if (missingGrade(error)) {
+      if (gradeTerm !== null) return { ok: false, error: GRADE_TERM_NOT_READY };
+      ({ error } = await admin.from("textbooks").update(base).eq("tenant_id", ctx.tenantId).eq("id", input.id));
+    }
     if (error) return { ok: false, error: friendlyTextbookError(error, "교재를 수정하지 못했습니다") };
     await logAction({ action: "textbook_update", targetType: "textbook", targetLabel: title, metadata: { id: input.id } });
     await afterWrite(ctx.tenantId);
     return { ok: true, id: input.id };
   }
 
-  const { data, error } = await admin
-    .from("textbooks")
-    .insert({ ...payload, tenant_id: ctx.tenantId, created_by: ctx.userId })
-    .select("id")
-    .single();
+  const insert = (row: Record<string, unknown>) =>
+    admin.from("textbooks").insert({ ...row, tenant_id: ctx.tenantId, created_by: ctx.userId }).select("id").single();
+  let { data, error } = await insert(payload);
+  if (missingGrade(error)) {
+    if (gradeTerm !== null) return { ok: false, error: GRADE_TERM_NOT_READY };
+    ({ data, error } = await insert(base));
+  }
   if (error || !data) {
     return {
       ok: false,
@@ -212,6 +229,11 @@ export async function saveTextbookLessons(
   });
   revalidatePath("/textbooks");
   return { ok: true };
+}
+
+/** 표 자체가 없는 경우(0266a 미적용)는 칸 부재가 아니다 — 그쪽은 `friendlyTextbookError`가 알린다. */
+function friendlyMissingTable(e: { code?: string; message?: string } | null): boolean {
+  return !!e && (e.code === "42P01" || e.code === "PGRST205");
 }
 
 /** 목록·제안 캐시 무효화 — 저장 직후 화면과 ECS 제안이 같은 값을 보게(read-your-writes). */

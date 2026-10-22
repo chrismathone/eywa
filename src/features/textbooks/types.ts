@@ -18,6 +18,8 @@ export type TextbookRow = {
   /** 페이지/시간 — ECS 계획 줄의 `page_range`와 같은 칸에 들어간다. */
   pageTime: string | null;
   sessionCount: number;
+  /** 학년·학기(`고1-1`) — 수학만. 진도 카드가 교재를 줄 세우는 열쇠(math-book-match `bookKey`). */
+  gradeTerm: string | null;
   coverPath: string | null;
   updatedAt: string;
 };

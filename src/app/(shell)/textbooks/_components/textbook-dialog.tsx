@@ -22,6 +22,7 @@ import type { TextbookDetail } from "@/features/textbooks/types";
 import { DialogShell, Field, FIELD, FormError, SELECT } from "./form-bits";
 import { CoverField } from "./cover-field";
 import { LessonsEditor, type LessonValue } from "./lessons-editor";
+import { GradeTermField } from "./grade-term-field";
 
 const MAX_SESSIONS = 200;
 
@@ -84,6 +85,7 @@ export function TextbookDialog({
   const hasAreas = skillAreas.length > 0;
   const [pageTime, setPageTime] = useState("");
   const [sessionCount, setSessionCount] = useState(0);
+  const [gradeTerm, setGradeTerm] = useState("");
 
   /** 아직 안 올린 표지 / '지우기' 예약 / 이미 저장된 표지 주소. */
   const [coverFile, setCoverFile] = useState<File | null>(null);
@@ -100,6 +102,7 @@ export function TextbookDialog({
     setSkillArea(d.textbook.skillArea ?? "");
     setPageTime(d.textbook.pageTime ?? "");
     setSessionCount(d.textbook.sessionCount);
+    setGradeTerm(d.textbook.gradeTerm ?? "");
     setCoverUrl(d.coverUrl);
     setCoverFile(null);
     setCoverCleared(false);
@@ -170,6 +173,7 @@ export function TextbookDialog({
         title,
         pageTime: pageTime || null,
         sessionCount,
+        gradeTerm: subject === "math" ? gradeTerm || null : null,
       });
       if (!saved.ok) {
         setError(saved.error);
@@ -290,6 +294,9 @@ export function TextbookDialog({
                     ))}
                   </select>
                 </Field>
+                ) : null}
+                {subject === "math" ? (
+                  <GradeTermField value={gradeTerm} onChange={setGradeTerm} disabled={!canWrite} />
                 ) : null}
                 <Field label="페이지/시간" hint="예: 35분 · 104p — 시트의 같은 칸에 들어갑니다.">
                   <input

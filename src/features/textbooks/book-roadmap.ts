@@ -12,7 +12,7 @@
  * ⚠️ 주문 기록은 사실이고 이건 그 위의 **약속**이다 — DB에 쓰지 않는다(매 조회 계산). 목표 권 선택만 저장된다.
  */
 import { addDays } from "@/lib/date-kst";
-import { catalogBookKey, matchCatalogBook, type CatalogBook, type ReportLine } from "./math-book-match";
+import { bookKey, matchCatalogBook, type CatalogBook, type ReportLine } from "./math-book-match";
 import { latestPosition, windowAt } from "./roadmap-position";
 import { bookSequence, keyOrdinal, seriesOfKey } from "./book-sequence";
 import { examOn, examPeriodsBetween, gradeOrdinal, middleSchoolDeadline, type SchoolExamOverride } from "./exam-periods";
@@ -32,7 +32,7 @@ export function matchedOrders(orders: readonly BookOrder[], catalog: readonly Ca
   return orders
     .map((o) => {
       const book = matchCatalogBook(o.bookName, catalog);
-      const key = book ? catalogBookKey(book.title) : null;
+      const key = book ? bookKey(book) : null;
       return book && key ? { ...o, book, key } : null;
     })
     .filter((o): o is BookOrder & { book: CatalogBook; key: string } => !!o)

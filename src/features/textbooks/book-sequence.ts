@@ -7,7 +7,7 @@
  *    (목표 계산이 교재 등록을 기다리지 않게. 화면은 '교재목록 미등록'이라 적는다).
  * 🔴 교재목록 열쇠(`catalogBookKey`) 하나로 맞춘다 — 제목 글자로 비교하지 않는다(표기 흔들림, math-book-match.ts).
  */
-import { catalogBookKey, type CatalogBook } from "./math-book-match";
+import { bookKey, type CatalogBook } from "./math-book-match";
 
 export const ASSUMED_LESSONS = 8;
 
@@ -49,9 +49,12 @@ export function bookSequence(fromKey: string, catalog: readonly CatalogBook[], m
   if (!start) return [];
   const byKey = new Map<string, CatalogBook>();
   for (const b of catalog) {
-    const k = catalogBookKey(b.title);
+    const k = bookKey(b);
     if (k && seriesOfKey(k) === start.series && !byKey.has(k)) byKey.set(k, b);
   }
+  const levels = new Set([...byKey.keys()].map((k) => parseKey(k)?.level));
+  const hasMiddle = levels.has("중");
+  const hasHigh = levels.has("고");
   const out: SeqBook[] = [];
   let term: { level: string; grade: number; sem: number } | null = start;
   while (term && out.length < max) {
@@ -59,7 +62,14 @@ export function bookSequence(fromKey: string, catalog: readonly CatalogBook[], m
     const prefix = `${start.series}|${name}|`;
     const listed = [...byKey.keys()].filter((k) => k.startsWith(prefix)).map((k) => Number(k.slice(prefix.length)));
     // 교재목록 권 ∪ 관례 권 — 한 권만 등록돼 있어도 등록 안 된 다른 권이 순서에서 빠지지 않게.
-    const volumes = [...new Set([...listed, ...(term.sem === 1 ? [1, 2] : [3, 4])])].sort((a, b) => a - b);
+    // ⚠️ 관례(1학기 1·2권 · 2학기 3·4권)는 **중등 가우스**의 것이다(원장 2026-10-22 학년·학기 도입 때 좁힘):
+    //    · 중등 교재가 하나도 없는 시리즈(초등 `발전`)엔 얹지 않는다 — 없는 `발전 중1-1 1권`이 선다.
+    //    · 고등은 그 시리즈에 **실제 고등 교재가 있으면** 교재목록 권만(단원 묶음 권이라 관례가 안 맞는다).
+    //      없으면 종전처럼 자리표시 권을 세운다(마감이 먼 학생의 목표가 중3에서 끊기지 않게).
+    const convention = term.level === "중" && hasMiddle ? (term.sem === 1 ? [1, 2] : [3, 4])
+      : term.level === "고" && hasMiddle && !hasHigh ? (term.sem === 1 ? [1, 2] : [3, 4])
+      : [];
+    const volumes = [...new Set([...listed, ...convention])].sort((a, b) => a - b);
     for (const volume of volumes) {
       if (out.length === 0 && volume < start.volume) continue;
       if (out.length >= max) break;

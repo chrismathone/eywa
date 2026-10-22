@@ -6,7 +6,7 @@ import { resolveTenantReadUrls } from "@/lib/storage/media-storage";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { kstToday } from "@/lib/date-kst";
 import { specialSlotLabel } from "@/features/timetable/lib/teacher-label";
-import { isMissingTextbookTable } from "./access";
+import { isMissingGradeTermColumn, isMissingTextbookTable } from "./access";
 import type {
   ClassSlotChoice,
   ClassTextbookPlanRow,
@@ -48,6 +48,7 @@ type TextbookDbRow = {
   title: string;
   page_time: string | null;
   session_count: number;
+  grade_term?: string | null;
   cover_path: string | null;
   updated_at: string;
 };
@@ -60,6 +61,7 @@ function toRow(r: TextbookDbRow): TextbookRow {
     title: r.title,
     pageTime: r.page_time,
     sessionCount: Number(r.session_count ?? 0),
+    gradeTerm: r.grade_term ?? null,
     coverPath: r.cover_path,
     updatedAt: r.updated_at,
   };
@@ -67,7 +69,9 @@ function toRow(r: TextbookDbRow): TextbookRow {
 
 // ⚠️ `is_active`는 읽지 않는다 — 폐지를 삭제로 바꿔(원장 2026-09-16) 아무도 false로 만들지 않는다.
 //    컬럼은 0266a에 그대로 남기고(이미 적용된 표라 건드릴 이유가 없다) 화면은 그 칸을 보지 않는다.
-const LIST_COLS = "id, subject, skill_area, title, page_time, session_count, cover_path, updated_at";
+const LIST_COLS = "id, subject, skill_area, title, page_time, session_count, grade_term, cover_path, updated_at";
+/** `grade_term` 적용 전 — 이 칸만 빼고 다시 읽는다([[#95]]). */
+const LIST_COLS_LEGACY = "id, subject, skill_area, title, page_time, session_count, cover_path, updated_at";
 
 export async function getTextbooks(opts: {
   subject?: string | null;
@@ -81,30 +85,32 @@ export async function getTextbooks(opts: {
   if (!user) return empty;
 
   const admin = createAdminClient();
-  let query = admin
-    .from("textbooks")
-    .select(LIST_COLS, { count: "exact" })
-    .eq("tenant_id", user.tenantId);
-  if (opts.subject) query = query.eq("subject", opts.subject);
-  if (opts.skillArea) query = query.eq("skill_area", opts.skillArea);
-  // ⚠️ `is_active`로 거르지 않는다 — 폐지(감추기)는 폐기된 개념이라(원장 2026-09-16 "폐지말고 삭제로")
-  //    거르면 그렇게 남은 옛 행이 **영영 안 보이고 지울 수도 없다**(게다가 이름을 계속 점유한다).
   const term = (opts.q ?? "").trim();
   // ⚠️ 콤마·괄호는 PostgREST 필터 문법에서 구분자라 떼어낸다(`PL (NTA)` 같은 실제 교재명 대응).
   //    `%`·`_`는 LIKE 와일드카드라 그대로 두면 `100%`가 아무거나 잡는다 — 문자로 escape한다.
-  if (term) {
-    const safe = term
-      .replace(/[,()]/g, " ")
-      .replace(/[%_\\]/g, (c) => `\\${c}`)
-      .trim();
-    if (safe) query = query.ilike("title", `%${safe}%`);
-  }
-
+  const safe = term
+    .replace(/[,()]/g, " ")
+    .replace(/[%_\\]/g, (c) => `\\${c}`)
+    .trim();
   const from = (page - 1) * PAGE_SIZE;
-  const { data, error, count } = await query
-    .order("skill_area", { ascending: true, nullsFirst: false })
-    .order("title", { ascending: true })
-    .range(from, from + PAGE_SIZE - 1);
+  const run = (cols: string) => {
+    let query = admin
+      .from("textbooks")
+      .select(cols, { count: "exact" })
+      .eq("tenant_id", user.tenantId);
+    if (opts.subject) query = query.eq("subject", opts.subject);
+    if (opts.skillArea) query = query.eq("skill_area", opts.skillArea);
+    // ⚠️ `is_active`로 거르지 않는다 — 폐지(감추기)는 폐기된 개념이라(원장 2026-09-16 "폐지말고 삭제로")
+    //    거르면 그렇게 남은 옛 행이 **영영 안 보이고 지울 수도 없다**(게다가 이름을 계속 점유한다).
+    if (safe) query = query.ilike("title", `%${safe}%`);
+    return query
+      .order("skill_area", { ascending: true, nullsFirst: false })
+      .order("title", { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+  };
+  let res = await run(LIST_COLS);
+  if (isMissingGradeTermColumn(res.error)) res = await run(LIST_COLS_LEGACY);
+  const { data, error, count } = res;
 
   // ⚠️ 오래된 즐겨찾기(`?page=3`)로 범위 밖을 요청하면 PostgREST가 `PGRST103`을 준다 — 그건 **실패가
   //    아니라 빈 페이지**다. 실패로 보면 붉은 배너가 뜨고 등록·배정 버튼까지 잠긴다.
@@ -192,12 +198,11 @@ export async function getTextbookDetail(
   if (!user) return { status: "ok", detail: null };
   const admin = createAdminClient();
 
-  const { data, error } = await admin
-    .from("textbooks")
-    .select(LIST_COLS)
-    .eq("tenant_id", user.tenantId)
-    .eq("id", id)
-    .maybeSingle();
+  const one = (cols: string) =>
+    admin.from("textbooks").select(cols).eq("tenant_id", user.tenantId).eq("id", id).maybeSingle();
+  let res = await one(LIST_COLS);
+  if (isMissingGradeTermColumn(res.error)) res = await one(LIST_COLS_LEGACY);
+  const { data, error } = res;
   const status = classify(error);
   if (status !== "ok") return { status, detail: null };
   if (!data) return { status: "ok", detail: null };

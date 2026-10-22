@@ -13,8 +13,13 @@
  *    엉뚱한 교재가 붙는 것보다 "교재 미확인"이 낫다.
  */
 
+import { courseOf, gradeTermKey, seriesFromTitle, validGradeTerm } from "./grade-term";
+
+export { validGradeTerm };
+
 export type BookLesson = { lessonNo: number; progress: string | null };
-export type CatalogBook = { id: string; title: string; lessons: BookLesson[] };
+/** `gradeTerm` = 교재목록 학년·학기(`고1-1`). 있으면 제목 대신 이 값으로 줄을 세운다(고등 제목엔 학년이 없다). */
+export type CatalogBook = { id: string; title: string; gradeTerm?: string | null; lessons: BookLesson[] };
 export type ReportLine = { date: string; textbook: string | null; progress: string | null };
 
 const LEVELS = "초중고";
@@ -41,20 +46,75 @@ export function catalogBookKey(title: string): string | null {
 }
 
 /**
- * 보고서 교재 칸 → 교재목록 교재. 한 칸에 여러 책이 적힌 경우(`가우스 중2-1-2권, 쎈 연산`)는 조각마다 본다.
- * 두 권 이상이 걸리면(조각마다 다른 교재) **고르지 않는다**(null).
+ * 교재 → 줄 세우는 열쇠. 🔑 **학년·학기가 적혀 있으면 그 값이 이긴다**(사람이 정한 사실 — 원장 2026-10-22
+ * "교재 등록 시 수학은 학년도"), 없으면 제목에서 읽는다(종전 그대로).
  */
-export function matchCatalogBook<T extends { title: string }>(text: string | null | undefined, catalog: readonly T[]): T | null {
-  if (!text) return null;
+export function bookKey(book: { title: string; gradeTerm?: string | null }): string | null {
+  return gradeTermKey(book) ?? catalogBookKey(book.title);
+}
+
+const looseTitle = (s: string) => s.replace(/\s+/g, "").toLowerCase();
+
+/**
+ * 교재 칸이 가리킬 수 있는 교재들:
+ *  ① 제목 글자 그대로(띄어쓰기·대소문자 무시) — makeedu 주문명은 교재목록 이름과 같다.
+ *  ② 열쇠(시리즈·학교급·학년-학기·권) — `가우스 중2-1-2권` 같은 흔들린 표기.
+ *  ③ 과목 이름(`가우스 공통수학1`) — 단원 묶음 권이 여럿이면 **여럿이 걸린다**(어느 권인지는 진도로 가른다).
+ * 🔑 ①·②는 **합쳐서** 본다 — 한 칸에 두 책이 적혔는데 하나는 제목 그대로·하나는 흔들린 표기면 둘 다 걸려야
+ *    "두 권이면 고르지 않는다"가 산다. ③은 ①·②가 하나도 없을 때만(약한 근거라 강한 근거를 흐리지 않게).
+ */
+export function catalogCandidates<T extends { title: string; gradeTerm?: string | null }>(
+  text: string | null | undefined,
+  catalog: readonly T[],
+): T[] {
+  if (!text) return [];
   const segments = text.split(/[\n\r,/·]+/).map((x) => x.trim()).filter(Boolean);
-  const hits = new Set<T>();
+  const loose = segments.map(looseTitle);
+  const strong = new Set<T>();
+  const course = new Set<T>();
   for (const book of catalog) {
-    const key = catalogBookKey(book.title);
-    const series = seriesOf(book.title);
-    if (!key || !series) continue;
-    if (segments.some((seg) => keyOf(seg, series) === key)) hits.add(book);
+    if (loose.includes(looseTitle(book.title))) {
+      strong.add(book);
+      continue;
+    }
+    const series = seriesOf(book.title) ?? (validGradeTerm(book.gradeTerm) ? seriesFromTitle(book.title) : null);
+    const key = catalogBookKey(book.title) ?? gradeTermKey(book);
+    if (series && key && segments.some((seg) => keyOf(seg, series) === key)) {
+      strong.add(book);
+      continue;
+    }
+    const c = courseOf(book);
+    if (c && loose.includes(looseTitle(c))) course.add(book);
   }
-  return hits.size === 1 ? [...hits][0]! : null;
+  return [...(strong.size > 0 ? strong : course)];
+}
+
+/**
+ * 보고서 교재 칸 → 교재목록 교재. 한 칸에 여러 책이 적힌 경우(`가우스 중2-1-2권, 쎈 연산`)는 조각마다 본다.
+ * 두 권 이상이 걸리면(조각마다 다른 교재 · 과목 이름만 적혀 권을 모름) **고르지 않는다**(null).
+ */
+export function matchCatalogBook<T extends { title: string; gradeTerm?: string | null }>(
+  text: string | null | undefined,
+  catalog: readonly T[],
+): T | null {
+  const hits = catalogCandidates(text, catalog);
+  return hits.length === 1 ? hits[0]! : null;
+}
+
+/** 같은 과목의 권들인가 — 열쇠에서 권만 뗀 값이 모두 같다(`가우스|고1-1|1`·`…|2`). */
+function sameCourse(books: readonly { title: string; gradeTerm?: string | null }[]): boolean {
+  const heads = new Set(books.map((b) => bookKey(b)?.replace(/\|\d+$/, "") ?? null));
+  return heads.size === 1 && !heads.has(null);
+}
+
+/**
+ * 교재 칸이 이 교재를 가리키는가 — 하나로 정해지면 그 교재, 과목 이름만 적혀 **같은 과목의 권들**이 걸리면
+ * 그중 하나로도 본다(어느 권인지는 진도로 가른다). 다른 과목·다른 책이 섞이면 아니다.
+ */
+function textPointsTo(book: CatalogBook, text: string | null | undefined, catalog: readonly CatalogBook[]): boolean {
+  const hits = catalogCandidates(text, catalog);
+  if (hits.length === 1) return hits[0]!.id === book.id;
+  return hits.some((h) => h.id === book.id) && sameCourse(hits);
 }
 
 /**
@@ -114,7 +174,7 @@ export function bookPosition(
 ): BookPosition | null {
   const sorted = [...reports].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   for (const r of sorted) {
-    if (requireBookText && matchCatalogBook(r.textbook, catalog)?.id !== book.id) continue;
+    if (requireBookText && !textPointsTo(book, r.textbook, catalog)) continue;
     const hit = matchLesson(r.progress, book.lessons);
     // 표시하는 소단원 = 그 차수를 준 줄(마지막 줄이 아니다 — 여러 줄이면 앞 줄이 더 뒤 차수일 수 있다).
     if (hit) return { lessonNo: hit.no, total: book.lessons.length, date: r.date, unit: hit.line.replace(/^수학\s+/, "") };
@@ -126,8 +186,13 @@ export function bookPosition(
 export function inferBookFromReports(reports: readonly ReportLine[], catalog: readonly CatalogBook[]): CatalogBook | null {
   const sorted = [...reports].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   for (const r of sorted) {
-    const hit = matchCatalogBook(r.textbook, catalog);
-    if (hit) return hit;
+    const hits = catalogCandidates(r.textbook, catalog);
+    if (hits.length === 1) return hits[0]!;
+    // 과목 이름만 적힌 칸(`가우스 공통수학1`) — 그날 진도가 걸리는 권이 하나면 그 권.
+    if (hits.length > 1 && sameCourse(hits)) {
+      const byProgress = hits.filter((b) => lessonNoOf(r.progress, b.lessons) != null);
+      if (byProgress.length === 1) return byProgress[0]!;
+    }
   }
   return null;
 }

@@ -42,6 +42,17 @@ export function isMissingTextbookTable(error: { code?: string; message?: string 
 }
 
 /**
+ * `textbooks.grade_term`(20261022120000)이 아직 없을 때 — 42703 = undefined_column / PGRST204 = 스키마 캐시에 없음.
+ * 조회는 이 칸을 빼고 다시 읽는다([[#95]] — 교재목록·수학 시트가 SQL 적용 전에도 산다).
+ */
+export function isMissingGradeTermColumn(error: { code?: string; message?: string } | null | undefined): boolean {
+  if (!error) return false;
+  return error.code === "42703" || error.code === "PGRST204" || /grade_term/.test(error.message ?? "");
+}
+
+export const GRADE_TERM_NOT_READY = "학년·학기 칸이 아직 준비되지 않았습니다(SQL 적용 필요) — 학년 없이 저장하거나 잠시 후 다시 시도하세요";
+
+/**
  * 0268a(고른 교시 칸)가 없을 때 — 🔴 **조용히 옛 축으로 떨어뜨리지 않는다**(적대적 리뷰 P0):
  * 16:20만 골랐는데 16:20·17:20·18:20 전부에 3배 속도로 깔리고, 되돌리는 길은 줄을 하나씩 지우는 것뿐이다.
  * ⚠️ 이 상수가 여기 있는 이유 = `plan-actions.ts`는 `"use server"`라 **async 함수만** export할 수 있다([[#119]]).

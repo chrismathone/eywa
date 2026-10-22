@@ -1,5 +1,5 @@
 /** 로드맵 보조 — 기준일이 든 창 · 시리즈의 최근 진도 위치(순수 함수, book-roadmap.ts가 쓴다). */
-import { bookPosition, catalogBookKey, type CatalogBook, type ReportLine } from "./math-book-match";
+import { bookKey, bookPosition, type CatalogBook, type ReportLine } from "./math-book-match";
 import { keyOrdinal, seriesOfKey } from "./book-sequence";
 import type { PlacedBook } from "./roadmap-calendar";
 import type { RoadPosition } from "./book-roadmap-types";
@@ -15,7 +15,7 @@ export function windowAt(books: readonly PlacedBook[], ref: string): number {
 export function latestPosition(series: string, catalog: readonly CatalogBook[], reports: readonly ReportLine[]): RoadPosition | null {
   let best: RoadPosition | null = null;
   for (const b of catalog) {
-    const key = catalogBookKey(b.title);
+    const key = bookKey(b);
     if (!key || seriesOfKey(key) !== series) continue;
     const p = bookPosition(b, reports, catalog);
     if (!p) continue;
