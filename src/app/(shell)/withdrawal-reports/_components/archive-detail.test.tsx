@@ -44,7 +44,7 @@ describe("기존 퇴원보고서 원본 양식", () => {
 
   it("opens the populated form within the app and retains expandable student linking", () => {
     render(<EmbedProvider embed><ArchiveDetailView canManage archive={archive} students={[]} /></EmbedProvider>);
-    expect(screen.getByRole("heading", { name: "퇴원 처리서" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "퇴원 보고서" })).toBeVisible();
     expect(screen.getByRole("table", { name: "퇴원 보고 내용" })).toHaveTextContent("김학생");
     expect(screen.getAllByRole("link").every(link => link.getAttribute("href")?.startsWith("/withdrawal-reports"))).toBe(true);
     expect(screen.queryByText("원본 셀 전체 보기")).not.toBeInTheDocument();

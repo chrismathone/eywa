@@ -22,6 +22,7 @@ import { skipStatusOf } from "./progress-status";
 export const MATH_REPORT_PILOT_STUDENT_IDS: readonly string[] = [
   "67a53999-fb62-4753-a938-9a5ce4af9e61", // 테스트
   "6219e442-aa57-455f-a5bc-834b222d9e1c", // 학원이
+  "5de5c803-6cf6-4ad9-85f0-d184334c679e", // 학원삼 — 원일 계정 테스트용(2026-10-22, 학원이 반 담임이 박소선으로 바뀌어 따로 만듦)
 ];
 
 /** 이 학생·과목 행이 시범 대상인가. 과목키가 없는 행(데모)은 수학으로 본다(원스크린 관례). */
