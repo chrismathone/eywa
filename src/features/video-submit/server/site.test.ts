@@ -713,6 +713,21 @@ describe("지점이 여럿일 때 — 주소는 하나(/v), 지점은 화면에�
   });
 });
 
+describe("이미 낸 영상 — 올린 시각 · 학생 메모(원장 2026-10-22)", () => {
+  it("숙제 줄에 낸 영상마다 'M/D (요) HH:MM'과 메모(없으면 생략)를 싣는다 — 파일·주소는 안 싣는다", async () => {
+    db.tables.student_homework_videos = [
+      { status: "uploaded", drive_file_id: "syntheticDriveFile123", id: "v1", tenant_id: T, student_id: S, posted_at: "2026-10-02T09:19:00+09:00", route: { classId: C, homeworkDate: "2026-10-01", note: "3단원" } },
+      { status: "uploaded", drive_file_id: "syntheticDriveFile123", id: "v2", tenant_id: T, student_id: S, posted_at: "2026-10-02T09:29:00+09:00", route: { classId: C, homeworkDate: "2026-10-01" } },
+    ];
+    const r = await look();
+    if (!r.ok) throw new Error(JSON.stringify(r));
+    const oct1 = r.choices.find((c) => c.homeworkLabel === label("2026-10-01"));
+    expect(oct1?.sentVideos).toEqual([{ label: `${label("2026-10-02")} 09:19`, note: "3단원" }, { label: `${label("2026-10-02")} 09:29` }]);
+    expect(JSON.stringify(r)).not.toContain("syntheticDriveFile123");
+    expect(r.choices.find((c) => c.homeworkLabel === label("2026-09-29"))?.sentVideos).toBeUndefined();
+  });
+});
+
 describe("선생님 → 반 → 숙제(원장 2026-10-22)", () => {
   it("선생님 이름 = 담임의 수업보고서 발송 이름(없으면 원래 이름) + (과목) · 학생의 반 담임만 · 사람 번호 대신 묶음 열쇠", async () => {
     db.tables.classes = db.tables.classes!.map((c) => (c.id === C ? { ...c, teacher_id: "t-heo" } : c.id === C2 ? { ...c, teacher_id: "t-nam" } : { ...c, teacher_id: "t-other" }));

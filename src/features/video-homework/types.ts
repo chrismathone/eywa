@@ -84,6 +84,8 @@ export type VideoArrival = {
   free?: boolean;
   /** 분석이 끝난 영상의 AI 참고 평점(5점 만점, video-review/score.ts) — 장부 칸 아래 "2.8/5". 스위치가 꺼졌거나 분석 전이면 없다. */
   reviewPoints?: number;
+  /** 학생이 올리며 적은 메모(`route.note`, 올리기 사이트) — `/v`가 "낸 영상"을 보일 때 쓴다(원장 2026-10-22). 싣는 로더만 있다. */
+  note?: string | null;
 };
 
 export function isVideoHomeworkDate(value: string): boolean {

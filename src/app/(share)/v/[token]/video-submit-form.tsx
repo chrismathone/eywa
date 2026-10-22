@@ -124,7 +124,8 @@ export function VideoSubmitForm(props: {
     setPhase({ kind: "uploading", file, sent: 0 });
     const started = await postJson("/api/video-submit/start", {
       token: props.token, name: file.name, size: file.size, type: file.type, ...(props.homeworkDate ? { homeworkDate: props.homeworkDate } : {}),
-      ...(props.freeUpload ? { note } : {}),
+      // 숙제 없이 올리기는 메모 필수, 숙제 영상은 적었을 때만(선택 — 원장 2026-10-22).
+      ...(props.freeUpload || siteNote(note) ? { note } : {}),
     });
     if (!started?.ok || typeof started.sessionUrl !== "string" || typeof started.uploadId !== "string") {
       const message = typeof started?.error === "string" ? started.error : "연결을 확인하고 다시 시도해 주세요.";
@@ -205,6 +206,15 @@ export function VideoSubmitForm(props: {
               placeholder="예: 10월 6일 수업 숙제 3번 풀이" onChange={(event) => setNote(event.target.value)}
               className="border-line bg-background focus:border-primary w-full rounded-lg border px-3 py-2 text-base outline-none" />
             <span className="text-text-dim block text-sm break-keep">선생님이 이 메모를 보고 숙제에 연결합니다.</span>
+          </label>
+        ) : props.homeworkDate ? (
+          // 숙제 영상 메모(선택) — 여러 단원을 나눠 낼 때 무엇을 냈는지 학생이 처음 화면에서 다시 본다(원장 2026-10-22).
+          <label className="block space-y-2">
+            <span className="text-foreground block text-base font-bold break-keep">무슨 영상인가요? (선택)</span>
+            <textarea value={note} maxLength={SITE_NOTE_MAX} rows={2} disabled={busy} aria-label="무슨 영상인지 메모(선택)"
+              placeholder="예: 3단원 비례식" onChange={(event) => setNote(event.target.value)}
+              className="border-line bg-background focus:border-primary w-full rounded-lg border px-3 py-2 text-base outline-none" />
+            <span className="text-text-dim block text-sm break-keep">적어 두면 처음 화면에서 낸 영상과 함께 보입니다.</span>
           </label>
         ) : null}
         <input ref={input} type="file" accept="video/*" className="sr-only" aria-label="영상 고르기"

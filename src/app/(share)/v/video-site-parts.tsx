@@ -127,6 +127,7 @@ export function SiteHomeworkChoices({ choices, allChoices, teacherLabel = null, 
                 {choice.dueLabel ? <span className="text-primary block text-sm font-bold">{choice.dueLabel} 제출</span> : null}
                 {/* 이미 낸 숙제도 마감까지 더 올린다(여러 단원 — 원장 2026-10-21). */}
                 {choice.sent ? <span className="text-foreground block text-sm">영상 {choice.sent}개 냄 · 더 올릴 수 있어요</span> : null}
+                <SentVideoLines videos={choice.sentVideos} />
                 {/* 반을 옮기기 전 반에서 받은 숙제 — 지금 반 이름과 달라 학생이 망설이지 않게 '지난 반'을 붙인다(원장 2026-10-21). */}
                 <span className="text-text-dim block text-sm">{manyStudents ? `${choice.studentLabel} · ${choice.className}` : choice.className}{choice.pastClass ? " · 지난 반" : ""}</span>
               </span>
@@ -166,6 +167,20 @@ export function SiteHomeworkChoices({ choices, allChoices, teacherLabel = null, 
         처음으로
       </Button>
     </div>
+  );
+}
+
+/** 이미 낸 영상 줄 — "10/22 (수) 09:19 · 3단원"(메모가 없으면 시각만). 학생이 무엇을 냈는지 다시 본다(원장 2026-10-22). */
+function SentVideoLines({ videos }: { videos?: SiteChoice["sentVideos"] }) {
+  if (!videos?.length) return null;
+  return (
+    <span className="text-text-dim block space-y-0.5 text-sm">
+      {videos.map((v, i) => (
+        <span key={i} className="block break-keep">
+          <span className="num">{v.label}</span>{v.note ? <> · <span className="text-foreground">{v.note}</span></> : " · 메모 없음"}
+        </span>
+      ))}
+    </span>
   );
 }
 
@@ -240,6 +255,7 @@ function SentHomeworkAsk({ choice, unsent, manyStudents, opening, onConfirm, onC
   return (
     <div className="border-primary bg-primary/5 mt-2 space-y-2 rounded-lg border p-3" role="status" aria-live="polite">
       <p className="text-foreground text-base font-bold break-keep">이 숙제에는 이미 영상 {choice.sent}개를 냈어요</p>
+      <SentVideoLines videos={choice.sentVideos} />
       {unsent.length ? (
         <div className="text-foreground space-y-1 text-sm break-keep">
           <p>아직 영상을 안 낸 숙제가 있어요. 그 숙제 영상이면 아래에서 그 숙제를 눌러 주세요.</p>

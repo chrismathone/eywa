@@ -145,7 +145,9 @@ export type SiteChoice = { id: string; studentLabel: string; className: string; 
    */
   teacherKey?: string; teacherLabel?: string;
   /** 반 묶음(학생 × 반 — "c1"). 같은 반의 숙제 줄과 '숙제 없이 올리기' 줄이 같은 열쇠다. */
-  classKey?: string };
+  classKey?: string;
+  /** 이 숙제에 이미 낸 영상 — "10/22 (수) 09:19" · 학생이 적은 메모(원장 2026-10-22). 파일·주소는 없다. */
+  sentVideos?: { label: string; note?: string }[] };
 
 /**
  * 올리기 사이트를 쓰는 지점 한 곳(화면의 지점 선택지) — 번호와 이름만. 주소에는 지점을 넣지 않는다(멀티테넌트 C안):

@@ -2,7 +2,7 @@ import "server-only";
 import { createHash, createHmac } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchInChunks } from "@/lib/supabase/batch";
-import { addDays, formatShortKoreanDate, kstToday } from "@/lib/date-kst";
+import { addDays, formatShortKoreanDate, kstDateOf, kstTimeOf, kstToday } from "@/lib/date-kst";
 import { logActionAs } from "@/features/audit/server/log";
 import type { TenantSettings } from "@/features/owner/settings-types";
 import { buildSubjectMaps } from "@/features/owner/subjects";
@@ -178,9 +178,9 @@ async function findCandidates(
 }
 
 /** 숙제 줄 — `due` = 그 숙제의 마감(그날 포함) · `next` = 선생님이 '다음 수업'으로 고른 마감(due.ts). */
-type HomeworkChoice = Candidate & { homeworkDate: string; due: string; next: boolean; sent: number };
+type HomeworkChoice = Candidate & { homeworkDate: string; due: string; next: boolean; sent: number; videos: { postedAt: string; note: string | null }[] };
 /** 고를 수 있는 줄 — 숙제(`homeworkDate`) 또는 숙제 없이 그 반에 올리기(`homeworkDate = null`). */
-type PickChoice = Candidate & { homeworkDate: string | null; due?: string; next?: boolean; sent?: number };
+type PickChoice = Candidate & { homeworkDate: string | null; due?: string; next?: boolean; sent?: number; videos?: { postedAt: string; note: string | null }[] };
 
 /**
  * 숙제 줄 + **숙제 없이 올리기** 줄(학생 × 반마다 하나, 원장 2026-10-13) — 숙제가 먼저, 그 아래 반 줄. 둘 다 같은 후보(번호·이름·
@@ -203,7 +203,7 @@ async function homeworkChoices(db: Db, tenantId: string, list: Candidate[], day:
   const open = await openHomeworkDates(db, tenantId, list.map((c) => ({ studentId: c.studentId, classId: c.classId })), day);
   if (!open) return null;
   return list
-    .flatMap((c) => (open.get(`${c.classId}:${c.studentId}`) ?? []).map((homework) => ({ ...c, homeworkDate: homework.date, due: homework.due, next: homework.next, sent: homework.sent })))
+    .flatMap((c) => (open.get(`${c.classId}:${c.studentId}`) ?? []).map((homework) => ({ ...c, homeworkDate: homework.date, due: homework.due, next: homework.next, sent: homework.sent, videos: homework.videos })))
     .sort((a, b) => Number(a.sent > 0) - Number(b.sent > 0) || b.homeworkDate.localeCompare(a.homeworkDate)
       || a.className.localeCompare(b.className, "ko") || a.studentName.localeCompare(b.studentName, "ko"))
     .slice(0, SITE_MAX_CHOICES);
@@ -253,6 +253,9 @@ export async function lookupSite(input: { last4: unknown; name: unknown; ip: str
         ...(c.homeworkDate ? {} : { free: true as const }),
         ...(c.past ? { pastClass: true as const } : {}),
         ...(c.homeworkDate && c.sent ? { sent: c.sent } : {}),
+        // 이미 낸 영상(원장 2026-10-22 *"어떤 영상이 이미 배정된 적이 있는지 … 본인이 입력한 멘트를 볼 수 있게"*) — 올린 시각 · 학생 메모만(파일·주소는 안 보낸다).
+        ...(c.homeworkDate && c.videos?.length ? { sentVideos: c.videos.map((v) => ({
+          label: `${formatShortKoreanDate(kstDateOf(v.postedAt) ?? v.postedAt.slice(0, 10))} ${kstTimeOf(v.postedAt)}`, ...(v.note ? { note: v.note } : {}) })) } : {}),
       })),
     };
   } catch (error) {
