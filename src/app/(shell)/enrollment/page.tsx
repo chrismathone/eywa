@@ -479,6 +479,7 @@ export default async function EnrollmentPage({
             initialOff={savedProgressTrendOff(uiPrefs) ?? [...PROGRESS_DEFAULT_OFF]}
             onOff={saveProgressTrendOff}
             onMode={saveProgressTrendMode}
+            labelsBelow
           />
         ) : null}
         <StatsView

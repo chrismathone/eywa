@@ -46,6 +46,11 @@ export type TrendChartProps = {
   fitFloor?: boolean;
   /** 막대 보기 아래 범례 — 카드에 따로 범례(선 고르기 칩 등)가 없을 때만 켠다. */
   legend?: boolean;
+  /**
+   * 꺾은선의 이름을 선 끝이 아니라 **그래프 아래**에(원장 2026-10-22 콜&상담 통계 *"라벨류는 밑에 넣어줘"* — 같은 탭의 '월별 상담'
+   * 범례처럼). 선 끝 자리를 비우니 그래프가 오른쪽까지 넓어진다. 아래 범례는 `legend`가 켜졌을 때만(칩이 범례인 카드는 칩이 대신).
+   */
+  labelsBelow?: boolean;
   /** 구간 경계 세로선 — 기준이 바뀌는 칸(지난 기록 청구 기준 추정 → 메이크에듀 기록 → 에이와 · `basisMarkers`). */
   markers?: readonly BasisMarker[];
 };
@@ -61,9 +66,10 @@ const fmt = (n: number) => n.toLocaleString("ko-KR");
  * 막대는 칸이 넉넉할 때(12칸 이하) 막대 위에 값(쌓은 막대는 합) + 아래 범례. 세로축은 0부터 보기 좋은 꼭대기까지(선 끝 라벨 자리 계산과
  * 같은 눈금 · `max`면 고정). 값이 null인 칸은 그리지 않는다(정확히 셀 수 없는 기간 — 선이 그 달부터 시작한다).
  */
-export function TrendChartImpl({ labels, tooltipLabels, series, kind, unit = "명", format, max, fitFloor, legend, markers = [] }: TrendChartProps) {
+export function TrendChartImpl({ labels, tooltipLabels, series, kind, unit = "명", format, max, fitFloor, legend, labelsBelow, markers = [] }: TrendChartProps) {
   const showOf = (s?: ChartSeries) => s?.format ?? format ?? ((n: number) => `${fmt(n)}${s?.unit ?? unit}`);
   const lineMode = kind === "line";
+  const endLabels = lineMode && !labelsBelow;
   const markerSpace = markers.length * (FONT + 6) * 2;
   const plotTop = MARGIN.top + markerSpace; // 기준 문구는 데이터 위 별도 공간.
   const drawn = series.filter((s) => !s.tooltipOnly);
@@ -92,7 +98,7 @@ export function TrendChartImpl({ labels, tooltipLabels, series, kind, unit = "�
     const i = s.endLabel === false ? -1 : lastIndexWithValue(s.values);
     return { key: s.key, index: i, value: i >= 0 ? (s.values[i] as number) : 0, text: i >= 0 ? `${s.name} ${showOf(s)(s.values[i] as number)}` : "" };
   });
-  const right = lineMode ? Math.max(...ends.map((e) => textWidth(e.text)), 0) + 20 : 12;
+  const right = endLabels ? Math.max(...ends.map((e) => textWidth(e.text)), 0) + 20 : 12;
   const plotHeight = HEIGHT - MARGIN.top - MARGIN.bottom - X_AXIS_H;
   const offsets = endLabelOffsets(
     ends.filter((e) => e.index >= 0).map((e) => ({ key: e.key, value: e.value })),
@@ -161,18 +167,20 @@ export function TrendChartImpl({ labels, tooltipLabels, series, kind, unit = "�
                     connectNulls={false}
                     isAnimationActive={false}
                   >
-                    <LabelList
-                      dataKey={s.key}
-                      content={(props) => {
-                        const { x, y, index } = props as { x?: number; y?: number; index?: number };
-                        if (index !== end.index || x === undefined || y === undefined) return null;
-                        return (
-                          <text x={Number(x) + 9} y={Number(y) + (offsets.get(s.key) ?? 0)} dominantBaseline="middle" fontSize={FONT} fontWeight={700} fill={s.color}>
-                            {end.text}
-                          </text>
-                        );
-                      }}
-                    />
+                    {endLabels ? (
+                      <LabelList
+                        dataKey={s.key}
+                        content={(props) => {
+                          const { x, y, index } = props as { x?: number; y?: number; index?: number };
+                          if (index !== end.index || x === undefined || y === undefined) return null;
+                          return (
+                            <text x={Number(x) + 9} y={Number(y) + (offsets.get(s.key) ?? 0)} dominantBaseline="middle" fontSize={FONT} fontWeight={700} fill={s.color}>
+                              {end.text}
+                            </text>
+                          );
+                        }}
+                      />
+                    ) : null}
                   </Line>
                 );
               }
@@ -194,7 +202,9 @@ export function TrendChartImpl({ labels, tooltipLabels, series, kind, unit = "�
           </ComposedChart>
         </ResponsiveContainer>
       </div>
-      {legend && !lineMode && drawn.length > 1 ? <ChartLegend series={drawn} note={stacked.length ? "막대 높이 = 합계" : undefined} /> : null}
+      {legend && (lineMode ? labelsBelow : drawn.length > 1) ? (
+        <ChartLegend series={drawn} line={lineMode} note={stacked.length ? "막대 높이 = 합계" : undefined} />
+      ) : null}
     </div>
   );
 }

@@ -53,13 +53,22 @@ export function ValueBox({
   );
 }
 
-/** 막대 보기의 범례 — 선 보기는 선 끝 이름이 범례라 막대에만 쓴다(막대가 많으면 막대 위 숫자도 없어 색만으로는 뜻을 모른다). */
-export function ChartLegend({ series, note }: { series: ChartSeries[]; note?: string }) {
+/**
+ * 그래프 아래 범례 — 막대 보기(막대가 많으면 막대 위 숫자도 없어 색만으로는 뜻을 모른다) · 이름을 아래에 두는 꺾은선(`labelsBelow`).
+ * 꺾은선은 표식도 선 모양(점선 계열은 점선)이라 막대 범례와 헷갈리지 않는다.
+ */
+export function ChartLegend({ series, note, line }: { series: ChartSeries[]; note?: string; line?: boolean }) {
   return (
     <ul className="text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-sm">
       {series.map((s) => (
         <li key={s.key} className="flex items-center gap-1.5">
-          <i aria-hidden className="inline-block size-2.5 shrink-0 rounded-sm" style={{ background: s.color }} />
+          {!line ? (
+            <i aria-hidden className="inline-block size-2.5 shrink-0 rounded-sm" style={{ background: s.color }} />
+          ) : s.dashed ? (
+            <i aria-hidden className="inline-block w-4 shrink-0 border-t-[3px] border-dashed" style={{ borderColor: s.color }} />
+          ) : (
+            <i aria-hidden className="inline-block h-[3px] w-4 shrink-0 rounded-full" style={{ background: s.color }} />
+          )}
           {s.name}
         </li>
       ))}
