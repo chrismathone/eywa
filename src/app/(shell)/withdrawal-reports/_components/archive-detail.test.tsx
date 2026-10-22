@@ -27,7 +27,7 @@ afterEach(cleanup);
 
 describe("기존 퇴원보고서 원본 양식", () => {
   it("keeps source wording, dates, line breaks and additional fields without filling blank fields or signatures", () => {
-    render(<ArchiveDetailView archive={archive} students={[]} />);
+    render(<ArchiveDetailView canManage archive={archive} students={[]} />);
     const body = screen.getByRole("table", { name: "퇴원 보고 내용" });
     for (const value of Object.values(archive.fields).filter(Boolean)) {
       expect(body.textContent).toContain(value);
@@ -43,7 +43,7 @@ describe("기존 퇴원보고서 원본 양식", () => {
   });
 
   it("opens the populated form within the app and retains expandable student linking", () => {
-    render(<EmbedProvider embed><ArchiveDetailView archive={archive} students={[]} /></EmbedProvider>);
+    render(<EmbedProvider embed><ArchiveDetailView canManage archive={archive} students={[]} /></EmbedProvider>);
     expect(screen.getByRole("heading", { name: "퇴원 처리서" })).toBeVisible();
     expect(screen.getByRole("table", { name: "퇴원 보고 내용" })).toHaveTextContent("김학생");
     expect(screen.getAllByRole("link").every(link => link.getAttribute("href")?.startsWith("/withdrawal-reports"))).toBe(true);

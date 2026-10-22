@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import type { SystemRole } from "@/lib/permissions";
+import type { ReportConsultation } from "@/features/withdrawal-reports/consultation";
 import { ReportForm } from "./report-form";
 import { fillEmptyReportFields } from "@/features/withdrawal-reports/prefill";
 import { changeWithdrawalReport } from "@/features/withdrawal-reports/server/actions";
@@ -12,8 +12,8 @@ import { EMPTY_BODY, REPORT_STATUS, REPORT_ACTION_LABEL, directorIds, reportCapa
 
 const control = "w-full min-w-0 rounded-md border bg-background px-3 py-2 text-sm disabled:bg-muted/20 disabled:text-foreground";
 const dateTime = (v: string) => new Date(v).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "short", timeStyle: "short" });
-export function ReportDetail({ report: r, events, staff, labels, userId, writable, role, assignmentChanged = false, prefill = {}, prefillWarning }: {
-  report: WithdrawalReport; events: ReportEvent[]; staff: StaffOption[]; labels: Record<string, string>; userId: string; writable: boolean; role?: SystemRole; assignmentChanged?: boolean; prefill?: Partial<ReportBody>; prefillWarning?: string;
+export function ReportDetail({ report: r, events, staff, labels, userId, writable, consultations = [], assignmentChanged = false, prefill = {}, prefillWarning }: {
+  report: WithdrawalReport; events: ReportEvent[]; staff: StaffOption[]; labels: Record<string, string>; userId: string; writable: boolean; consultations?: ReportConsultation[]; assignmentChanged?: boolean; prefill?: Partial<ReportBody>; prefillWarning?: string;
 }) {
   const router = useRouter();
   const [body, setBody] = useState<ReportBody>(() => fillEmptyReportFields({ ...EMPTY_BODY, ...r.body }, prefill));
@@ -21,7 +21,7 @@ export function ReportDetail({ report: r, events, staff, labels, userId, writabl
   const [decision, setDecision] = useState<ReportAction | null>(null);
   const [comment, setComment] = useState("");
   const [pending, startTransition] = useTransition();
-  const capabilities = reportCapabilities(r, userId, writable, role);
+  const capabilities = reportCapabilities(r, userId, writable);
   const nameOf = (id: string | null) => id ? staff.find(s => s.id === id)?.name ?? r.snapshot.courses.find(c => c.teacherId === id)?.teacherName ?? "이전 담당자" : "자동 처리";
   const update = <K extends keyof ReportBody>(key: K, value: ReportBody[K]) => setBody(b => ({ ...b, [key]: value }));
   function change(action: ReportAction) {
@@ -41,9 +41,9 @@ export function ReportDetail({ report: r, events, staff, labels, userId, writabl
     {r.last_comment && <p className="whitespace-pre-wrap rounded-lg border border-att-late-ink/20 bg-att-late p-4 text-sm text-att-late-ink">{r.last_comment}</p>}
     {r.status === "scheduled" && <p className="rounded-lg border bg-muted/20 p-4 text-sm">승인이 완료되었습니다. {r.effective_date}에 처리하며, 그 전까지는 기존 수강 상태를 유지합니다.</p>}
     {r.status === "approved" && <p className="rounded-lg border bg-muted/20 p-4 text-sm">이 보고서는 승인이 완료되었습니다. 함께 요청한 다른 강사의 보고서 승인까지 모두 끝나면 처리합니다.</p>}
-    {assignmentChanged && <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive">요청 이후 학생·수강·담당 강사가 변경되었습니다. 아래 내용은 요청 당시 기록이며, 제출·승인을 진행할 수 없습니다. 관리자가 요청을 취소하고 현재 담당 기준으로 다시 요청해 주세요.</p>}
+    {assignmentChanged && <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive">요청 이후 학생·수강·담당 강사가 변경되었습니다. 아래 내용은 요청 당시 기록이며, 제출·승인을 진행할 수 없습니다. 요청한 사람이 요청을 취소하고 현재 담당 기준으로 다시 요청해 주세요.</p>}
     {prefillWarning && <p role="alert" className="rounded-lg border p-4 text-sm">{prefillWarning}</p>}
-    <ReportForm report={r} body={body} events={events} labels={labels} nameOf={nameOf} editable={capabilities.edit} pending={pending} onChange={update} />
+    <ReportForm consultations={consultations} report={r} body={body} events={events} labels={labels} nameOf={nameOf} editable={capabilities.edit} pending={pending} onChange={update} />
     {error && <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
     <div className="flex flex-wrap gap-2">
       {capabilities.edit && <><Button disabled={pending} variant="outline" onClick={() => change("save")}>임시 저장</Button><Button disabled={pending || assignmentChanged} onClick={() => setDecision("submit")}>관리자에게 제출</Button></>}

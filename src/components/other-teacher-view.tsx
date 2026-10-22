@@ -18,8 +18,7 @@ import {
   type TeacherViewTarget,
 } from "@/features/shell/view-actions";
 import { TONE_SOFT } from "@/lib/design/semantic-color";
-import { sheetT, type SheetLang } from "@/features/teacher-view/i18n";
-import { useSheetLang } from "@/features/teacher-view/lang-context";
+import { type SheetLang } from "@/features/teacher-view/i18n";
 import { useTimetableDisplay } from "@/features/teacher-view/use-timetable-display";
 import { VIEW_RESET_PATH } from "@/lib/auth/view-preference";
 
@@ -151,44 +150,15 @@ export function TeacherViewSwitcher({
   );
 }
 
-/**
- * '다른 강사 뷰' 열람 중 배지 — 강사 미니셸 헤더에서 **누구의 화면인지**를 항상 보여주고, 누르면 **바로** 관리자뷰로
- * 돌아간다(원장 2026-09-29 *"강사뷰 열람 종료로 변경. 전환 없애고 그냥 버튼 누르면 바로 관리자뷰로"* — 예전엔 드롭다운에서
- * 다른 강사로 갈아타기 + 열람 종료를 골랐다. 갈아타기는 관리자뷰 사이드바 '강사뷰 전환'에서 한다).
- * '내 메뉴'의 '관리자뷰로 전환'도 열람 중엔 세우지 않는다 — 나가는 문은 이 버튼 하나(원장 같은 날).
- * 대상 강사 화면엔 아무것도 안 뜬다(presence track 차단 — 열람 사실은 감사로그에만 남는다).
- */
-export function TeacherPeerViewSwitcher() {
-  const lang = useSheetLang();
-  const { targets, loading, load } = useTeacherTargets();
-  return <DropdownMenu modal={false} onOpenChange={(open) => { if (open) load(); }}>
-    <DropdownMenuTrigger render={<button type="button" className="border-line rounded-lg border px-2 py-1 text-xs" />}>
-      {lang === "en" ? "Teacher view" : "강사뷰 전환"}
-    </DropdownMenuTrigger>
-    <DropdownMenuContent align="end" className="max-h-72 w-56 overflow-y-auto">
-      <TargetItems targets={targets} loading={loading} />
-    </DropdownMenuContent>
-  </DropdownMenu>;
-}
-
-export function ViewAsChip({ name, lang, readonly = true }: { name: string; lang: SheetLang; readonly?: boolean }) {
-  return (
-    <a
-      href={VIEW_RESET_PATH}
-      target="_top"
-      title={sheetT(lang, "chrome.viewAs.returnTitle")}
-      className={`${TONE_SOFT.special} flex h-7 cursor-pointer items-center gap-1 rounded-full px-2.5 text-xs font-semibold disabled:opacity-60`}
-    >
-      <EyIcon name="users" size={13} strokeWidth={2} />
-      {/* 임포트 계정 등 이름이 빈 강사 — 빈 칩("강사뷰"만)이 되지 않게 폴백.
-          폰에선 이름 칸을 좁힌다 — 이 칩이 유일한 출구라 '열람 종료'는 숨기지 않고, 헤더 오른쪽 묶음은 줄어들 여지가 없다. */}
-      <span className="max-w-[4.5rem] truncate sm:max-w-[9rem]">
-        {name || sheetT(lang, "chrome.viewAs.noName")}
-        {sheetT(lang, "chrome.viewAs.suffix").startsWith("'") ? "" : " "}
-        {sheetT(lang, "chrome.viewAs.suffix")}
-      </span>
-      <span className="shrink-0 font-medium opacity-80">· {sheetT(lang, readonly ? "chrome.viewAs.end" : "chrome.viewAs.editEnd")}</span>
-      <EyIcon name="logOut" size={12} strokeWidth={2.2} className="shrink-0" />
-    </a>
-  );
+/** 본인·다른 강사뷰의 출구를 한 버튼으로 통일한다. 관리자뷰에서만 다시 대상을 고른다. */
+export function TeacherViewExit({ name, lang }: { name?: string; lang: SheetLang }) {
+  return <a href={VIEW_RESET_PATH} target="_top"
+    title={lang === "en" ? "Return to admin view" : "관리자뷰로 복귀"}
+    className={
+      TONE_SOFT.special + " flex h-7 items-center gap-1 rounded-full px-2.5 text-xs font-semibold"
+    }>
+    {name && <span className="max-w-[4.5rem] truncate sm:max-w-[9rem]">{name} · </span>}
+    <span className="shrink-0">{lang === "en" ? "Exit teacher view" : "강사뷰 종료"}</span>
+    <EyIcon name="logOut" size={12} strokeWidth={2.2} className="shrink-0" />
+  </a>;
 }

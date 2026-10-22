@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { EMPTY_BODY, type WithdrawalReport } from "../model";
-const state = vi.hoisted(() => ({ user: { id: "actor", tenantId: "tenant", systemRole: "teacher" }, access: true, write: true, lab: true, scope: null as string[] | null, db: vi.fn(), prefill: vi.fn() }));
+const state = vi.hoisted(() => ({ user: { id: "actor", tenantId: "tenant", systemRole: "teacher" }, teacherId: null as string | null, access: true, write: true, lab: true, scope: null as string[] | null, db: vi.fn(), prefill: vi.fn() }));
+vi.mock("@/lib/auth/view-mode", () => ({ effectiveTeacherId: async () => state.teacherId ?? (state.user.systemRole === "teacher" ? state.user.id : null) }));
+vi.mock("./consultations", () => ({ reportConsultations: async () => [] }));
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => state.user }));
 vi.mock("@/lib/auth/perm-matrix", () => ({ canAccessTenant: async () => state.access, canWriteTenant: async () => state.write }));
 vi.mock("@/lib/license/server", () => ({ isFeatureOptedIn: async () => state.lab }));
@@ -11,7 +13,7 @@ vi.mock("./prefill", () => ({ loadReportPrefill: state.prefill }));
 import { reportViewer, canReadReport, listReports, requestStudents, getReport } from "./queries";
 const report = { requested_by: "requester", teacher_id: "actor", manager_id: "manager", director_id: "director", subjects: ["math"] } as WithdrawalReport;
 describe("report read boundaries", () => {
-  beforeEach(() => { state.user = { id: "actor", tenantId: "tenant", systemRole: "teacher" }; state.access = true; state.write = true; state.lab = true; state.scope = null; state.db.mockReset(); });
+  beforeEach(() => { state.user = { id: "actor", tenantId: "tenant", systemRole: "teacher" }; state.access = true; state.write = true; state.lab = true; state.scope = null; state.teacherId = null; state.db.mockReset(); });
   it("does not read storage when the laboratory is disabled", async () => {
     state.lab = false;
     expect(await reportViewer()).toBeNull();
@@ -52,6 +54,14 @@ describe("report read boundaries", () => {
     state.user.systemRole = "master";
     expect(canReadReport({ ...report, teacher_id: "someone_else" }, (await reportViewer())!)).toBe(true);
   });
+  it("a principal in teacher view sees only their authored reports and cannot request new reports", async () => {
+    state.user.systemRole = "master"; state.teacherId = "actor";
+    const viewer = (await reportViewer())!;
+    expect(viewer.request).toBe(false);
+    expect(viewer.manage).toBe(false);
+    expect(canReadReport({ ...report, requested_by: "actor", teacher_id: "someone_else" }, viewer)).toBe(false);
+    expect(canReadReport(report, viewer)).toBe(true);
+  });
 });
 
 describe("automatic report fields stay within a fresh authorized draft", () => {
@@ -78,8 +88,13 @@ describe("automatic report fields stay within a fresh authorized draft", () => {
     expect((await getReport("report"))?.prefill).toEqual({ attendance: "자동 출결" });
     expect(state.prefill).toHaveBeenCalledWith(draft, "teacher");
   });
-  it.each(["save", "submit"])("keeps a previously %s document unchanged", async action => {
-    storage(draft, [action]);
+  it("refreshes automatic billing for previously saved drafts", async () => {
+    storage(draft, ["save"]);
+    await getReport("report");
+    expect(state.prefill).toHaveBeenCalledWith(draft, "teacher");
+  });
+  it("keeps a submitted document unchanged", async () => {
+    storage({ ...draft, status: "manager_pending" }, ["submit"]);
     expect((await getReport("report"))?.prefill).toBeUndefined();
     expect(state.prefill).not.toHaveBeenCalled();
   });

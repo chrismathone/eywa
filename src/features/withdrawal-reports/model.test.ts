@@ -7,6 +7,11 @@ const director = "10000000-0000-4000-8000-000000000004";
 const request = { studentId: id, teacherId: teacher, managerId: manager, directorId: director, exitKind: "subject_end", subjects: ["math"], effectiveDate: "2026-10-13", note: "" };
 const report = { teacher_id: teacher, manager_id: manager, director_id: director, requested_by: manager, status: "requested" } as WithdrawalReport;
 describe("withdrawal reports", () => {
+  it("accepts only an internal subreason belonging to the selected category", () => {
+    expect(bodySchema.safeParse({ ...EMPTY_BODY, reason: "grades", reasonDetail: "school_grades" }).success).toBe(true);
+    expect(bodySchema.safeParse({ ...EMPTY_BODY, reason: "grades", reasonDetail: "teacher_left" }).success).toBe(false);
+    expect(bodySchema.safeParse({ ...EMPTY_BODY, reasonDetail: "invented" }).success).toBe(false);
+  });
   it("allows manager-only final approval and multiple authors without role overlap", () => {
     const batch = { studentId: id, teacherIds: [teacher], managerIds: [manager], directorIds: [], subjects: ["math"], effectiveDate: "2026-10-14", note: "" };
     expect(batchRequestSchema.safeParse(batch).success).toBe(true);
@@ -68,13 +73,14 @@ describe("withdrawal reports", () => {
   });
   it("does not allow cancellation of an applied report", () => {
     expect(reportCapabilities({ ...report, status: "completed" }, manager, true).cancel).toBe(false);
-    expect(reportCapabilities({ ...report, status: "scheduled" }, director, true).cancel).toBe(true);
+    expect(reportCapabilities({ ...report, status: "scheduled" }, director, true).cancel).toBe(false);
   });
-  it("a replacement principal can cancel a stuck request without approving it", () => {
-    const capabilities = reportCapabilities({ ...report, status: "director_pending" }, "replacement", true, "master");
-    expect(capabilities.cancel).toBe(true);
+  it("only the sender can cancel, regardless of principal status", () => {
+    const capabilities = reportCapabilities({ ...report, status: "director_pending" }, "replacement", true);
+    expect(capabilities.cancel).toBe(false);
+    expect(reportCapabilities(report, manager, true).cancel).toBe(true);
     expect(capabilities.approve).toBe(false);
-    expect(reportCapabilities({ ...report, status: "completed" }, "replacement", true, "master").cancel).toBe(false);
+    expect(reportCapabilities({ ...report, status: "completed" }, "replacement", true).cancel).toBe(false);
   });
   it("only management requests reports", () => {
     for (const role of ["master", "admin", "manager"] as const) expect(canRequestReport(role)).toBe(true);

@@ -141,6 +141,7 @@ describe("강사 '내 메뉴' — 누르면 튕기는 항목이 없다", () => {
       "/consultations",
       "/textbook-requests",
       "/expense-requests",
+      "/withdrawal-reports",
       "/documents",
     ]);
   });

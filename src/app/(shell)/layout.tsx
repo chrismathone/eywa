@@ -32,7 +32,7 @@ import { TeacherNamesProvider } from "@/features/teacher-view/teacher-names-cont
 import { EditPresenceProvider } from "@/features/presence/edit-presence";
 import { getUserPermMatrix } from "@/lib/auth/perm-matrix";
 import { getShellView, canUseTeacherView, canUseOtherTeacherView, isFullShellRole, effectiveTeacherScope, viewAsTeacher } from "@/lib/auth/view-mode";
-import { ViewAsChip, TeacherPeerViewSwitcher } from "@/components/other-teacher-view";
+import { TeacherViewExit } from "@/components/other-teacher-view";
 import { teacherViewHome } from "@/lib/auth/teacher-home";
 import { accessFallbackPath } from "@/lib/auth/view-preference";
 import { ecsAssistantClassIds } from "@/features/class-sheets/server/access";
@@ -373,15 +373,11 @@ export default async function ShellLayout({ children }: { children: ReactNode })
             </div>
           </div>
           <div className="flex items-center gap-1.5">
-            {/* 겸직이면 '내 메뉴' 드롭다운 하단에 '관리자뷰로 전환'을 넣는다(헤더 별도 버튼 X). 실 강사는 미노출. */}
-            {/* '다른 강사 뷰' 배지 — 누구의 화면인지 상시 표시 + 누르면 바로 관리자뷰(열람 종료, 원장 2026-09-29). */}
-            {viewAs ? <ViewAsChip name={viewAs.displayName} lang={teacherLang} readonly={viewAs.access === "readonly"} /> : null}
-            {view === "teacher" && !viewAs && await canUseOtherTeacherView() ? <TeacherPeerViewSwitcher /> : null}
+            {/* 본인·다른 강사뷰 모두 같은 출구. 다른 강사 선택은 관리자뷰에서만 한다. */}
+            {view === "teacher" && (viewAs || isFullShellRole(user.systemRole)) ? <TeacherViewExit name={viewAs?.displayName} lang={teacherLang} /> : null}
             {view === "teacher" ? (
               <TeacherMenu
                 menus={teacherMenus}
-                // 열람 중엔 나가는 문이 배지('열람 종료') 하나 — 내 메뉴의 '관리자뷰로 전환'은 세우지 않는다(원장 2026-09-29).
-                canReturnToAdmin={isFullShellRole(user.systemRole) && !viewAs}
                 showEcs={ecsForTeacher}
                 showMcs={mcsForTeacher}
                 home={teacherHome}

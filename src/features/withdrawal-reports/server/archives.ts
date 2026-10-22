@@ -5,11 +5,12 @@ import type { ArchiveDetail, ArchiveRow, ArchiveStudent } from "../archive-model
 
 export async function listArchives() {
   const viewer = await reportViewer();
-  if (!viewer?.request) return [] as ArchiveRow[];
+  if (!viewer || (!viewer.teacherId && !viewer.manage)) return [] as ArchiveRow[];
   const rows: ArchiveRow[] = [];
   for (let offset = 0; ; offset += 400) {
-    let q = createAdminClient().from("withdrawal_report_archives").select("id,spreadsheet_id,sheet_id,sheet_title,source_range,student_name,school_grade,class_name,subject,exit_date,raw_exit_date,teacher_name,mapped_student_id,mapping_kind,revision,reason_raw:fields->>퇴원사유,detail_raw:fields->>상세사유").eq("tenant_id", viewer.user.tenantId);
-    if (viewer.scope) q = q.or(`subject.is.null,subject.in.(${viewer.scope.join(",")})`);
+    let q = createAdminClient().from("withdrawal_report_archives").select("id,spreadsheet_id,sheet_id,sheet_title,source_range,student_name,school_grade,class_name,subject,exit_date,raw_exit_date,teacher_name,mapped_teacher_id,mapped_student_id,mapping_kind,revision,reason_raw:fields->>퇴원사유,detail_raw:fields->>상세사유").eq("tenant_id", viewer.user.tenantId);
+    if (viewer.teacherId) q = q.eq("mapped_teacher_id", viewer.teacherId);
+    else if (viewer.scope) q = q.or(`subject.is.null,subject.in.(${viewer.scope.join(",")})`);
     const { data, error } = await q.order("exit_date", { ascending: false, nullsFirst: false }).order("id").range(offset, offset + 399);
     if (error) throw new Error("기존 퇴원보고서를 불러오지 못했습니다.");
     // supabase 타입 해석기가 한글 JSON 키(`fields->>퇴원사유`)를 못 읽어 unknown을 거친다(실제 조회는 된다).
@@ -20,9 +21,10 @@ export async function listArchives() {
 }
 export async function getArchive(id: string) {
   const viewer = await reportViewer();
-  if (!viewer?.request) return null;
+  if (!viewer || (!viewer.teacherId && !viewer.manage)) return null;
   const { data, error } = await createAdminClient().from("withdrawal_report_archives").select("*").eq("tenant_id", viewer.user.tenantId).eq("id", id).maybeSingle();
-  if (error || !data || (viewer.scope && data.subject && !viewer.scope.includes(data.subject))) return null;
+  if (error || !data) return null;
+  if (viewer.teacherId ? data.mapped_teacher_id !== viewer.teacherId : viewer.scope && data.subject && !viewer.scope.includes(data.subject)) return null;
   return data as ArchiveDetail;
 }
 export async function archiveStudents() {

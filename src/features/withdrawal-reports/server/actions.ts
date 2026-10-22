@@ -9,6 +9,7 @@ import { recordMathWithdrawalToSheet } from "@/features/withdrawals/server/withd
 import { bodySchema, batchRequestSchema, submissionError, missingReportSchema, REPORT_ACTION_LABEL, type ReportAction, type WithdrawalReport } from "../model";
 import { reportViewer, getReport } from "./queries";
 import { completedEnrollmentIds } from "./completed-target";
+import { loadReportBilling } from "./billing";
 
 export type ReportResult = { ok: true; id: string } | { error: string };
 function refresh() {
@@ -42,13 +43,18 @@ export async function changeWithdrawalReport(id: string, action: ReportAction, r
   const viewer = await reportViewer();
   if (!viewer?.writable) return { error: "이 화면에서는 보고서를 수정할 수 없습니다." };
   if (!/^[0-9a-f-]{36}$/i.test(id) || !["save", "submit", "approve", "reject", "cancel"].includes(action) || !Number.isSafeInteger(revision)) return { error: "요청 내용을 확인해 주세요." };
-  if (!(await getReport(id))) return { error: "보고서에 접근할 수 없습니다." };
+  const record = await getReport(id);
+  if (!record) return { error: "보고서에 접근할 수 없습니다." };
+  if (action === "cancel" && record.report.requested_by !== viewer.user.id) return { error: "작성 요청을 보낸 사람만 취소할 수 있습니다." };
   const payload: { revision: number; body?: unknown; comment?: string } = { revision };
   if (action === "save" || action === "submit") {
     const parsed = bodySchema.safeParse(input);
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "보고서 내용을 확인해 주세요." };
     if (action === "submit") { const error = submissionError(parsed.data); if (error) return { error }; }
-    payload.body = parsed.data;
+    const existing = record.report.body.consultationIds ?? [];
+    if (parsed.data.consultationIds?.some(id => !existing.includes(id) && !record.consultations.some(c => c.id === id))) return { error: "연결할 수 없는 상담기록이 포함되어 있습니다." };
+    try { payload.body = { ...parsed.data, ...await loadReportBilling(record.report) }; }
+    catch { return { error: "수납 정보를 확인하지 못했습니다. 잠시 후 다시 저장해 주세요." }; }
   }
   if (action === "reject") {
     if (typeof input !== "string" || !input.trim() || input.trim().length > 1000) return { error: "반려 사유를 1~1,000자로 작성해 주세요." };

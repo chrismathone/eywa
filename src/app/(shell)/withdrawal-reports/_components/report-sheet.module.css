@@ -19,11 +19,12 @@
 .sheet .signature { height: 48px; }
 .sheet .processingLabel { padding: 4px; font-size: 11px; }
 .body { width: 100%; }
-.writing { min-height: 144px; }
-.consultation { min-height: 168px; }
+.sheet .body > tbody > tr:nth-child(-n+3) > th, .sheet .body > tbody > tr:nth-child(-n+3) > td { font-weight: 700; }
+.writing { min-height: 32px; }
+.consultation { min-height: 32px; }
 .requirement { display: block; color: #c00; font-size: 11px; }
 .sheet input, .sheet textarea, .sheet select { display: block; width: 100%; min-width: 0; border: 0; border-radius: 0; padding: 4px; color: black; background: transparent; font: inherit; }
-.sheet textarea { resize: vertical; line-height: 1.6; }
+.sheet textarea { resize: none; overflow: hidden; line-height: 1.6; }
 .sheet textarea:focus, .sheet input:focus, .sheet select:focus { outline: 2px solid var(--primary); outline-offset: -2px; }
 .sheet select { border-radius: 6px; background: #e8eaed; }
 .sheet textarea:disabled, .sheet input:disabled { opacity: 0.7; }
@@ -39,6 +40,5 @@
   .sheet .body th, .sheet .body td { border: 0; text-align: left; padding: 6px 10px; }
   .sheet .body th { background: #f6f6f6; }
   .body th br { display: none; }
-  .writing, .consultation { min-height: 120px; }
   .sheet input, .sheet textarea, .sheet select { font-size: 16px; }
 }

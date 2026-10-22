@@ -8,10 +8,12 @@ export type InvoicePrefillRow = InvoiceSummaryInput & { period: string; category
 
 export function attendancePrefill(rows: AttendancePrefillRow[], courses: CourseSnapshot[], from: string, to: string): string {
   const effective = effectiveAttendanceRecords(rows.filter(row => row.session_date >= from && row.session_date <= to && courses.some(c => c.classId === row.class_id && c.startDate <= row.session_date && (!c.endDate || c.endDate >= row.session_date))));
-  const period = `${from} ~ ${to}`;
-  if (!effective.length) return `${period}\n등록된 출결 기록 없음`;
-  const counts = ["present", "late", "absent", "excused", "makeup", "early_leave"].map(key => `${attendanceStatusLabel(key)} ${effective.filter(r => r.status === key).length}회`);
-  return `${period}\n${counts.join(" · ")}`;
+  if (!effective.length) return "등록된 출결 기록 없음";
+  const counts = ["present", "late", "absent", "excused", "makeup", "early_leave"].flatMap((key, i) => {
+    const count = effective.filter(r => r.status === key).length;
+    return i < 3 || count ? [`${attendanceStatusLabel(key)} ${count}회`] : [];
+  });
+  return `전체 ${effective.length}회 / ${counts.join(" / ")}`;
 }
 
 export function billingPrefill(rows: InvoicePrefillRow[], month: string, checkedOn: string): Partial<ReportBody> {
@@ -27,12 +29,12 @@ export function billingPrefill(rows: InvoicePrefillRow[], month: string, checked
   };
 }
 
-/** 자동 입력은 비어 있는 칸에만 적용한다. 사용자가 적은 값은 언제나 우선한다. */
+/** 수납은 장부 조회 결과를 사용하고, 작성한 상담·사유는 보존한다. */
 export function fillEmptyReportFields(body: ReportBody, prefill: Partial<ReportBody>): ReportBody {
   return { ...body,
     attendance: body.attendance || prefill.attendance || "",
-    tuition: body.tuition || prefill.tuition || "",
-    arrears: body.arrears === "unknown" ? prefill.arrears ?? "unknown" : body.arrears,
-    arrearsNote: body.arrearsNote || prefill.arrearsNote || "",
+    tuition: prefill.tuition ?? body.tuition,
+    arrears: prefill.arrears ?? body.arrears,
+    arrearsNote: prefill.arrearsNote ?? body.arrearsNote,
   };
 }

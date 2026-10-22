@@ -5,9 +5,9 @@ type Signature = { role: string; date: ReactNode; name: ReactNode };
 export type ReportSheetFields = Record<"name" | "grade" | "className" | "exitDate" | "period" | "teacher" | "attendance" | "reason" | "detail" | "studentConsultation" | "parentConsultation" | "teacherOpinion" | "tuition" | "arrears" | "processing", ReactNode>;
 
 /** 신규 작성·조회와 기존 보고서에 동일한 원본 표 구조를 사용한다. */
-export function ReportSheet({ fields: f, subject, signatures, archive = false, consultationNote, extraFields = [] }: {
+export function ReportSheet({ fields: f, subject, signatures, archive = false, consultationNote, consultationLinks, extraFields = [] }: {
   fields: ReportSheetFields; subject: ReactNode; signatures: Signature[]; archive?: boolean;
-  consultationNote?: ReactNode; extraFields?: [string, ReactNode][];
+  consultationNote?: ReactNode; consultationLinks?: ReactNode; extraFields?: [string, ReactNode][];
 }) {
   const fullRow = (label: ReactNode, value: ReactNode, tall = false) => <tr>
     <th scope="row" colSpan={2}>{label}</th>
@@ -34,6 +34,7 @@ export function ReportSheet({ fields: f, subject, signatures, archive = false, c
           {fullRow(<>퇴원 상세 사유<span className={styles.requirement}>(10pt, 200자 이상)</span></>, f.detail, true)}
           <tr><th scope="rowgroup" rowSpan={2} colSpan={2}>상담결과{consultationNote && <div>{consultationNote}</div>}</th><th scope="row" colSpan={2}>학생 상담</th><td colSpan={8}><div className={styles.consultation}>{f.studentConsultation}</div></td></tr>
           <tr><th scope="row" colSpan={2}>학부모상담</th><td colSpan={8}><div className={styles.consultation}>{f.parentConsultation}</div></td></tr>
+          {consultationLinks && fullRow("연결 상담", consultationLinks)}
           {fullRow("담임의견", f.teacherOpinion, true)}
           {fullRow("원비", f.tuition)}
           {fullRow("미납여부", f.arrears)}

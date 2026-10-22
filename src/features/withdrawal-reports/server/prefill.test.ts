@@ -17,10 +17,12 @@ function query(error: { message: string } | null = null) {
 }
 beforeEach(() => { state.access.mockReset().mockResolvedValue(true); state.from.mockReset(); });
 describe("report prefill reads", () => {
-  it("does not query attendance or billing without their read permissions", async () => {
+  it("returns only the authorized report billing summary when the attendance menu is unavailable", async () => {
     state.access.mockResolvedValue(false);
-    expect((await loadReportPrefill(report, "teacher")).prefill).toEqual({});
-    expect(state.from).not.toHaveBeenCalled();
+    state.from.mockReturnValue(query());
+    expect((await loadReportPrefill(report, "teacher")).prefill).toMatchObject({ arrears: "unknown" });
+    expect(state.from).toHaveBeenCalledWith("invoices");
+    expect(state.from).not.toHaveBeenCalledWith("attendance_records");
   });
   it("scopes both sources to the report tenant/student and attendance to the assigned classes", async () => {
     const attendance = query(), invoices = query();
@@ -31,6 +33,7 @@ describe("report prefill reads", () => {
       expect(q.eq).toHaveBeenCalledWith("student_id", "student");
       expect(q.range).toHaveBeenCalledWith(0, 999);
     }
+    expect(attendance.gte).toHaveBeenCalledWith("session_date", "2026-10-01");
     expect(attendance.in).toHaveBeenCalledWith("class_id", ["own-class"]);
     expect(attendance.select).toHaveBeenCalledWith(expect.stringContaining("slot_start"));
     expect(result.prefill.arrears).toBe("unknown");

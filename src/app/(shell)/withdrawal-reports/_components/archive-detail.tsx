@@ -8,7 +8,7 @@ import { mapArchive } from "@/features/withdrawal-reports/server/archive-actions
 import type { ArchiveDetail, ArchiveStudent } from "@/features/withdrawal-reports/archive-model";
 import { ArchiveReportForm } from "./archive-report-form";
 
-export function ArchiveDetailView({ archive: a, students }: { archive: ArchiveDetail; students: ArchiveStudent[] }) {
+export function ArchiveDetailView({ archive: a, students, canManage = false }: { archive: ArchiveDetail; students: ArchiveStudent[]; canManage?: boolean }) {
   const router = useRouter();
   const [studentId, setStudentId] = useState(a.mapped_student_id ?? "");
   const [error, setError] = useState("");
@@ -26,12 +26,12 @@ export function ArchiveDetailView({ archive: a, students }: { archive: ArchiveDe
     <div className="flex flex-wrap items-center justify-between gap-3">
       <span className="flex flex-wrap items-center gap-3 text-sm">
         <EmbedLink className="text-primary hover:underline" href="/withdrawal-reports">← 퇴원보고서 목록</EmbedLink>
-        <EmbedLink className="text-primary hover:underline" href="/withdrawal-reports?link=unmapped">학생 미연결 목록</EmbedLink>
+        {canManage && <EmbedLink className="text-primary hover:underline" href="/withdrawal-reports?link=unmapped">학생 미연결 목록</EmbedLink>}
       </span>
     </div>
     <h1 className="text-xl font-semibold">{a.student_name || "이름 미기재"} · 기존 퇴원보고서</h1>
     <ArchiveReportForm archive={a} />
-    <details className="rounded-xl border bg-muted/20 p-4">
+    {canManage && <details className="rounded-xl border bg-muted/20 p-4">
       <summary className="cursor-pointer text-sm font-medium">학생 연결 관리 · {a.mapped_student_id ? "연결됨" : "학생 연결 필요"}</summary>
       <div className="mt-4 space-y-3">
         <div className="flex flex-wrap items-end gap-3">
@@ -44,6 +44,6 @@ export function ArchiveDetailView({ archive: a, students }: { archive: ArchiveDe
         <p className="text-xs text-muted-foreground">학생 연결은 기록의 귀속만 정합니다. 현재 재원·수강 상태와 승인 절차는 바뀌지 않습니다.</p>
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       </div>
-    </details>
+    </details>}
   </>;
 }
