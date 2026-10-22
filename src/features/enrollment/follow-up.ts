@@ -1,4 +1,4 @@
-import { ENROLLED_REVERT_BLOCKED, outcomeForDrop, stageOfOutcome, type BoardStageKey } from "./board-stages";
+import { ASSIGNED_DRAG_BLOCKED, ENROLLED_REVERT_BLOCKED, outcomeForDrop, stageOfOutcome, type BoardStageKey } from "./board-stages";
 
 /**
  * 신규 콜&상담 **후속 조치**(원장 2026-10-22 *"후속 조치를 선택이 아닌 필수로 처리를 해서 자동적으로 이동처리 · 자동적으로 등록,
@@ -32,7 +32,8 @@ export function followUpRequired(outcomeAfterSave: string): boolean {
 }
 
 /** 화면이 처음 고른 채로 보여 줄 값 — 지금 칸에서 읽는다. 상담 완료 칸은 후속 조치일이 있을 때만 '다음 상담'(없으면 비워 고르게 한다). */
-export function initialFollowUpResult(outcome: string | null | undefined, followUpDate: string | null | undefined): FollowUpResult | null {
+export function initialFollowUpResult(outcome: string | null | undefined, followUpDate: string | null | undefined, assignedClassCount = 0): FollowUpResult | null {
+  if (assignedClassCount > 0) return "enrolled";
   if (!outcome) return null;
   const stage = stageOfOutcome(outcome);
   if (stage === "enrolled") return "enrolled";
@@ -45,7 +46,7 @@ export function initialFollowUpResult(outcome: string | null | undefined, follow
  * 저장할 상태 정하기.
  * @param current 저장 전 상태(새 상담은 `consulted` — 직원이 쓰는 상담은 상담을 한 뒤다 · QR 접수를 '상담 완료로 저장'하면 `consulted`)
  * @param storedDate 저장돼 있던 후속 조치일(그대로 두면 지난 날짜라도 받는다 — 기한 지남 알림이 그 건을 말한다)
- * @returns 저장할 상태와 '등록 상태' 칸 값(등록·미등록을 고르면 같이 맞춘다 · 다음 상담은 손대지 않는다), 또는 막는 이유
+ * @returns 칸반과 폼이 함께 사용하는 상태, 또는 막는 이유. 옛 registration_status는 쓰지 않는다.
  */
 export function resolveFollowUp(input: {
   current: string;
@@ -53,9 +54,14 @@ export function resolveFollowUp(input: {
   followUpDate: string | null;
   storedDate: string | null;
   today: string;
-}): { outcome: string; registrationStatus: string | null } | { error: string } {
+  assignedClassCount?: number;
+}): { outcome: string } | { error: string } {
   const { current, result, followUpDate, storedDate, today } = input;
-  if (!result) return followUpRequired(current) ? { error: FOLLOW_UP_REQUIRED_ERROR } : { outcome: current, registrationStatus: null };
+  if ((input.assignedClassCount ?? 0) > 0) {
+    if (result && result !== "enrolled") return { error: ASSIGNED_DRAG_BLOCKED };
+    return { outcome: "enrolled" };
+  }
+  if (!result) return followUpRequired(current) ? { error: FOLLOW_UP_REQUIRED_ERROR } : { outcome: current };
   const target = FOLLOW_UP_RESULTS.find((r) => r.value === result)!.stage;
   if (current === "enrolled" && target !== "enrolled" && target !== "unregistered") return { error: ENROLLED_REVERT_BLOCKED };
   if (result === "next") {
@@ -64,7 +70,6 @@ export function resolveFollowUp(input: {
   }
   return {
     outcome: outcomeForDrop(target, current),
-    registrationStatus: result === "enrolled" ? "등록완료" : result === "declined" ? "미등록" : null,
   };
 }
 

@@ -43,7 +43,7 @@ describe("buildFormPatch — enum 검증", () => {
   it("상담경로·등록상태는 설정 목록만 통과", () => {
     expect(buildFormPatch({ consultationPath: "지인 소개" }, {}).consultation_path).toBe("지인 소개");
     expect(buildFormPatch({ consultationPath: "유튜브" }, {}).consultation_path).toBeUndefined();
-    expect(buildFormPatch({ registrationStatus: "미등록" }, {}).registration_status).toBe("미등록");
+    expect(buildFormPatch({ registrationStatus: "미등록" }, {}).registration_status).toBeUndefined();
   });
   it("주요 과목은 라벨·키 모두 키로 매핑", () => {
     expect(buildFormPatch({ subject: "수학" }, {}).subject).toBe("math");
@@ -139,9 +139,9 @@ describe("buildFormPatch — 후보정 하네스(약한 모델 오류 차단)", 
     ).toBe("70%");
   });
 
-  it("등록완료(확정)는 자동입력 금지, 그 외 상태는 통과", () => {
+  it("상태는 후속 조치에서만 정한다 — 옛 AI 응답도 등록 상태를 쓰지 않는다", () => {
     expect(buildFormPatch({ registrationStatus: "등록완료" }, {}).registration_status).toBeUndefined();
-    expect(buildFormPatch({ registrationStatus: "미등록" }, {}).registration_status).toBe("미등록");
+    expect(buildFormPatch({ registrationStatus: "미등록" }, {}).registration_status).toBeUndefined();
   });
 
   it("전화번호 형태(9~11자리)가 아니면 거부", () => {

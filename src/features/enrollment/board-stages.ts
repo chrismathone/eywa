@@ -93,6 +93,11 @@ export function stageOfCard(card: StageInput): BoardStageKey {
   return stageOfOutcome(card.outcome);
 }
 
+/** 칸반·상세·입력 폼의 현재 상태. 이관된 registration_status는 현재 상태로 사용하지 않는다. */
+export function boardStatusOf(card: StageInput): BoardStage {
+  return BOARD_STAGES.find((stage) => stage.key === stageOfCard(card))!;
+}
+
 /**
  * 드롭 대표값 — 그 칸으로 옮길 때 저장할 outcome.
  * 원래 값이 이미 그 칸 소속이면 **유지**(예약·AI 완료·노쇼가 드래그로 지워지지 않게), 아니면 대표값.
@@ -145,7 +150,7 @@ export const ENROLLED_REVERT_BLOCKED =
 
 /** '반 배정 완료' 카드를 드래그로 못 옮기는 이유(화면에 그대로 띄운다 — 무반응은 고장으로 읽힌다). */
 export const ASSIGNED_DRAG_BLOCKED =
-  "'반 배정 완료'는 상담 상태가 아니라 학생의 수강(반) 기록에서 나옵니다 — 드래그로 상태만 바꾸면 카드가 이 칸으로 되돌아옵니다. 상세 화면의 '상태 변경'이나 수강 종료로 처리하세요.";
+  "수강 중인 반이 있어 '등록 완료'로 표시됩니다. 다른 상태로 변경하려면 먼저 해당 과목의 수강을 종료해 주세요.";
 
 /**
  * 이 카드를 그 칸으로 **드롭할 수 없는 이유**(null이면 가능). 화면 조건은 게이트가 아니므로

@@ -5,7 +5,6 @@ import { canonicalSchoolName, type SchoolSaveAlias } from "@/features/schools/sc
 import {
   RELATION_OPTIONS,
   CONSULTATION_PATHS,
-  REGISTRATION_STATUSES,
   GENDER_OPTIONS,
   SUBJECT_TABS,
 } from "./form-config";
@@ -172,11 +171,7 @@ export function buildFormPatch(
   fill("career_goal", cur.careerGoal, notUncertain(meaningful(clean(ex.careerGoal))));
   fill("siblings", cur.siblings, notUncertain(notEcho(meaningful(clean(ex.siblings)))));
   fill("safety_notes", cur.safetyNotes, clean(ex.safetyNotes));
-  // 등록완료(확정)는 AI 자동입력 금지 — 상담사 확인 영역(약한 모델이 오판 시 학생을 잘못 '등록완료'로 표기).
-  {
-    const reg = pickEnum(clean(ex.registrationStatus), REGISTRATION_STATUSES);
-    fill("registration_status", cur.registrationStatus, reg === "등록완료" ? undefined : reg);
-  }
+  // 상태는 후속 조치·칸반에서 정한다. 옛 AI 응답의 registrationStatus도 저장하지 않는다.
   fill("subject", cur.subject, subjectKey(clean(ex.subject)));
   fill("parent_request", cur.parentRequest, clean(ex.parentRequest));
   fill("follow_up_content", cur.followUpContent, clean(ex.followUpContent));
