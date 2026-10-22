@@ -69,14 +69,14 @@ export const admissionsListKind = (event: KindFields): AdmissionsKind | null =>
   event.kind ?? event.cancelledKind ?? null;
 
 /**
- * 그날(을 덮는) 레벨테스트 — KPI '전일 입테'의 카드 숫자(원장 2026-10-22 *"금일 입테 -> 전일 입테로 바꿔. 측정하는것도 전일 입테로"* —
- * 그날 = 어제). **취소된 일정은 없다**(`kind`가 null).
+ * 기간(과 겹치는) 레벨테스트 — KPI '전일 입테'의 카드 숫자(원장 2026-10-22 *"금일 입테 -> 전일 입테로 바꿔. 측정하는것도 전일 입테로"* ·
+ * *"월요일의 전일은 주말 모두 포함"* — 기간 = `previousDayRange`). **취소된 일정은 없다**(`kind`가 null).
  */
-export function levelTestsOn<T extends { kind: AdmissionsKind | null; startDate: string; endDate: string }>(
+export function levelTestsIn<T extends { kind: AdmissionsKind | null; startDate: string; endDate: string }>(
   events: readonly T[],
-  day: string,
+  range: { from: string; to: string },
 ): T[] {
-  return events.filter((event) => event.kind === "levelTest" && event.startDate <= day && event.endDate >= day);
+  return events.filter((event) => event.kind === "levelTest" && event.startDate <= range.to && event.endDate >= range.from);
 }
 
 /**
@@ -92,13 +92,13 @@ export function upcomingAdmissionsRows<T extends { endDate: string }>(rows: read
  * (취소된 것도 **시간 순서 그대로** 끼워 취소선으로 보인다), 카드 보조 줄은 `cancelled`("취소 1").
  * 카드와 팝업이 이 함수 한 번의 결과를 같이 쓴다.
  */
-export function levelTestListOn<T extends KindFields & { startDate: string; endDate: string }>(
+export function levelTestListIn<T extends KindFields & { startDate: string; endDate: string }>(
   events: readonly T[],
-  day: string,
+  range: { from: string; to: string },
 ): { active: T[]; rows: T[]; cancelled: number } {
-  const active = levelTestsOn(events, day);
+  const active = levelTestsIn(events, range);
   const rows = events.filter(
-    (event) => admissionsListKind(event) === "levelTest" && event.startDate <= day && event.endDate >= day,
+    (event) => admissionsListKind(event) === "levelTest" && event.startDate <= range.to && event.endDate >= range.from,
   );
   return { active, rows, cancelled: rows.length - active.length };
 }

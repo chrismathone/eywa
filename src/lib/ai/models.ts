@@ -36,7 +36,7 @@ export const AI_MODELS: Record<AiTier, Record<AiProvider, string | null>> = {
 };
 
 /**
- * 기능별 키 그룹 — 원장 2026-09-15 *"기능별로 키를 발급받아서 사용량 체크를 하려고"*(8그룹 선택 · 2026-10-20 video 추가로 9그룹).
+ * 기능별 키 그룹 — 원장 2026-09-15 *"기능별로 키를 발급받아서 사용량 체크를 하려고"*(video · student_ontology 포함 10그룹).
  * env 이름 = `<회사>_API_KEY_<그룹 대문자>`(예 `ANTHROPIC_API_KEY_MENT` · `DEEPSEEK_API_KEY_MEETING`).
  * 옛 `consultations` 버킷과 env 이름이 같게 두어(`ANTHROPIC_API_KEY_CONSULTATIONS`) 이미 있는 키를 그대로 쓴다.
  */
@@ -49,7 +49,8 @@ export type AiKeyGroup =
   | "attendance"
   | "notice"
   | "staff"
-  | "video";
+  | "video"
+  | "student_ontology";
 
 /**
  * 호출부 식별자(generateJSON `meta.feature`) → 키 그룹. 🔴 **새 AI 기능을 만들면 여기 한 줄**을 더한다 —
@@ -77,6 +78,8 @@ export const FEATURE_KEY_GROUP: Readonly<Record<string, AiKeyGroup>> = {
   parent_attendance_intent: "attendance",
   parent_attendance_jev_shadow: "attendance",
   parent_satisfaction: "attendance",
+  // 원생 온톨로지 — 원장 전용 키 배정(2026-10-22). 현재 소비처는 긍정 신호 밤 판정.
+  student_positive_signal: "student_ontology",
   // 공지 번역
   notice_translate: "notice",
   // 직원 계약서 — 글자 PDF 추출 · 스캔 OCR(Claude 전용)

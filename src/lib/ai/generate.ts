@@ -137,6 +137,10 @@ export type GenerateJSONOptions = {
    * `"anthropic"`(Claude)을 우선한다. 미설정 시 tier/AI_PROVIDER 기본(미설정이면 Claude).
    */
   provider?: AiProvider;
+  /** 지정한 회사 안에서만 호출·폴백한다. 미지정인 기존 기능은 공통 폴백을 그대로 사용한다. */
+  allowedProviders?: readonly AiProvider[];
+  /** 배치 기한 안에 실제 HTTP 호출도 중단할 수 있게 SDK까지 전달한다. */
+  signal?: AbortSignal;
   /** 생성 temperature(0~1). 미설정 시 provider 기본. 멘트=0.3(사실 서술 일관성, edutrix Solar 후보정 이식). */
   temperature?: number;
   /**
@@ -440,6 +444,7 @@ async function callProvider(
   group: AiKeyGroup | null,
   opts: GenerateJSONOptions,
 ): Promise<ProviderCall> {
+  const callOptions: [] | [{ signal: AbortSignal }] = opts.signal ? [{ signal: opts.signal }] : [];
   if (provider === "deepseek") {
     const client = getDeepseek(keyName, group);
     // DeepSeek도 OpenAI 호환 — JSON mode 사용(프롬프트에 "JSON" 단어 필수, 현 호출부 충족). reasoning_effort는
@@ -457,7 +462,7 @@ async function callProvider(
         ...(opts.system ? [{ role: "system" as const, content: opts.system }] : []),
         { role: "user" as const, content: textPrompt(opts) },
       ],
-    });
+    }, ...callOptions);
     const msg = res.choices[0]?.message as
       | { content?: string | null; reasoning_content?: string | null }
       | undefined;
@@ -472,13 +477,13 @@ async function callProvider(
   const client = getAnthropic(keyName, group);
   const anthropicParams = (withTemperature: boolean) => anthropicRequestParams(model, opts, withTemperature);
   // Claude 5 계열엔 처음부터 temperature를 안 보낸다(위). 그 밖의 모델이 거부하면(문구 판정) 떼고 1회 재시도(자가 회복).
-  const res = await client.messages.create(anthropicParams(true)).catch((e: unknown) => {
+  const res = await client.messages.create(anthropicParams(true), ...callOptions).catch((e: unknown) => {
     if (opts.temperature == null || !isTemperatureDeprecatedError(e)) throw e;
     reportWarning("Anthropic temperature deprecated — 파라미터 제거 후 재시도", {
       scope: "generateJSON.temperature",
       model,
     });
-    return client.messages.create(anthropicParams(false));
+    return client.messages.create(anthropicParams(false), ...callOptions);
   });
   if (res.stop_reason === "refusal") {
     const details = (res as { stop_details?: { category?: string | null } | null }).stop_details;
@@ -582,6 +587,10 @@ export async function generateJSON(rawOpts: GenerateJSONOptions | GenerateDecisi
   const chain = resolveModelChain(tier, keyName, opts.provider, group, pin);
   // 키가 하나도 없으면 기존 동작 보존: 모델 있는 첫 candidate로 시도(클라 생성 시 키 없음 throw → rethrowAi).
   let candidates = chain.length > 0 ? chain : [resolveModel(tier, keyName, opts.provider, group, pin)];
+  if (opts.allowedProviders) {
+    candidates = candidates.filter((c) => opts.allowedProviders!.includes(c.provider));
+    if (!candidates.length) throw new Error("지정한 AI 제공자의 API 키를 확인해 주세요.");
+  }
   // 개발 전용 — 관문(사실 원칙·라이선스·모델 고정)을 다 지난 뒤 호출만 내부 요금제 CLI로(dev-cli.ts · 운영에선 꺼짐).
   // 첫 후보가 Claude일 때만(DeepSeek 고정 기능은 평소대로) · 이미지는 Claude 전용이라 그대로 · 문서(PDF)는 평소 경로. API 키 확인보다 앞에 둔다.
   if (devCliEnabled() && !opts.document && (opts.images?.length || candidates[0]?.provider === "anthropic")) {

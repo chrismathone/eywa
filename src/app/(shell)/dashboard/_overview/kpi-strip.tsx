@@ -4,8 +4,8 @@ import { Fragment, type CSSProperties, type ReactNode } from "react";
 import { MenuGlyph } from "@/components/icons/menu-glyph";
 import type { OverviewSnapshot, Sections } from "@/features/dashboard/overview/model";
 import { KPI_KEYS, type KpiKey } from "@/features/dashboard/overview/layout";
-import { levelTestListOn } from "@/features/dashboard/overview/display";
-import { addDays } from "@/lib/date-kst";
+import { levelTestListIn } from "@/features/dashboard/overview/display";
+import { previousDayRange, previousDayText } from "@/features/dashboard/overview/previous-day";
 import { splitEnrolledRecent } from "@/features/dashboard/overview/enrolled-recent";
 import { monthAheadWindow, windowUntilLabel } from "@/features/dashboard/overview/upcoming-window";
 import {
@@ -99,10 +99,11 @@ export function kpiCards(snapshot: OverviewSnapshot, opts: KpiCardOptions = {}):
   const wd = withdrawals ? countWithdrawalPrograms(withdrawals.rows) : null;
   const month = withdrawals?.month ?? today.slice(0, 7);
   const intake = v.intake?.data;
-  // 전일 입테 = **어제** 레벨테스트(원장 2026-10-22 '금일 입테' → 전일 · 전일 / 이달 신규와 같은 '어제').
+  // 전일 입테 = **전일** 레벨테스트(원장 2026-10-22 '금일 입테' → 전일 · 월요일엔 토·일 주말 전체 — 전일 / 이달 신규와 같은 기간).
   // 숫자 = 살아 있는 입테만, 팝업 = 취소된 것도 취소선으로(원장 2026-09-30) — 한 번 계산해 카드·팝업이 같이 쓴다.
-  const yday = addDays(today, -1);
-  const levelTests = v.calendar?.data ? levelTestListOn(v.calendar.data, yday) : null;
+  const prev = previousDayRange(today);
+  const prevText = previousDayText(prev);
+  const levelTests = v.calendar?.data ? levelTestListIn(v.calendar.data, prev) : null;
   // 전일 / 이달 신규 = 콜&상담 '등록 완료'로 옮긴 상담(원장 2026-09-23 '금일 등록' → 2026-10-21 어제·이번 달 두 숫자).
   // 숫자 = `전일 / 이달`, 보조 줄은 이번 달의 반 배정 완료 / 배정 전. 가르기는 팝업과 같은 함수.
   const registered = v.enrolledToday?.data;
@@ -214,11 +215,14 @@ export function kpiCards(snapshot: OverviewSnapshot, opts: KpiCardOptions = {}):
           detail={
             levelTests
               ? [
+                  // 하루면 첫 일정 시각, 주말(월요일)이면 기간만 — 이틀에 걸친 '첫 일정'은 뜻이 흐리다.
                   levelTests.active.length
-                    ? `${monthDay(yday)} · 첫 일정 ${levelTests.active[0]?.startTime?.slice(0, 5) ?? "종일"}`
+                    ? prev.from === prev.to
+                      ? `${prevText} · 첫 일정 ${levelTests.active[0]?.startTime?.slice(0, 5) ?? "종일"}`
+                      : prevText
                     : levelTests.cancelled
-                      ? monthDay(yday)
-                      : `${monthDay(yday)} 일정 없음`,
+                      ? prevText
+                      : `${prevText} 일정 없음`,
                   // 0건이 수수께끼가 되지 않게 — 취소된 입테가 있으면 "취소 N"을 보조 줄에(원장 2026-09-30).
                   levelTests.cancelled ? `취소 ${number(levelTests.cancelled)}` : null,
                 ]
@@ -228,10 +232,10 @@ export function kpiCards(snapshot: OverviewSnapshot, opts: KpiCardOptions = {}):
           }
           icon={<MenuGlyph name="exam" size={20} />}
           error={v.calendar.error}
-          popupTitle={`전일(${monthDay(yday)}) 레벨테스트`}
+          popupTitle={`전일(${prevText}) 레벨테스트`}
           jump={null}
         >
-          <LevelTestPopup list={levelTests} day={yday} />
+          <LevelTestPopup list={levelTests} range={prev} />
         </KpiCard>
   );
   if (v.enrolledToday) cards.enrolledToday = (

@@ -105,6 +105,7 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   ai_prompt: "AI 프롬프트",
   ment_style: "강사 말투",
   teacher_portfolio: "직원 포트폴리오",
+  student_contribution: "원생 기여도",
   kiosk_device: "키오스크 기기",
   // 시간표(개발중) 월별 계획(0232a) — 본 시간표가 아니라 **계획**임이 '대상' 칸에서 바로 읽혀야 한다.
   timetable_plan: "시간표 계획",
@@ -796,6 +797,16 @@ export function auditDetail(
         closed.length ? `마감 ${closed.join(", ")}` : null,
       );
     }
+    case "student_contribution_refresh":
+      return join(m.trigger === "cron" ? "매일 자동 집계" : "지금 집계", `원생 ${num(m.students) ?? 0}명`, `저장 ${num(m.written) ?? 0}건`, `마감 ${num(m.closed) ?? 0}건`);
+    case "student_contribution_settings_save":
+      return join("지난 실적까지 현재 배점 적용", `지점 합계 ${num(m.beforeTotal) ?? 0} → ${num(m.afterTotal) ?? 0}`);
+    case "student_contribution_signal_cancel":
+    case "student_contribution_signal_rejudge":
+      return typeof m.reason === "string" ? m.reason : null;
+    case "student_contribution_referral_backfill":
+    case "student_contribution_referral_link":
+      return join(m.source === "backfill" ? "지난 소개 자동 연결" : "소개자 직접 확인", typeof m.evidence === "string" ? m.evidence : null);
     case "teacher_evaluation_satisfaction": {
       const kind = { apply: "글 반영", dismiss: "글 무시", cancel: "글 반영 취소", claim_add: "클레임·칭찬 넣기", claim_cancel: "클레임·칭찬 취소" }[String(m.kind)] ?? null;
       const points = num(m.points);

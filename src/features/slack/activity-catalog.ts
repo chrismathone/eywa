@@ -123,6 +123,8 @@ const RULES: readonly [string, string][] = [
 const FORBID_CATEGORIES = new Set(["payroll"]);
 const FORBID_PREFIXES = ["resume_", "staff_resume_", "staff_contract_", "staff_create_from_resume", "staff_link_from_resume", "slack_connection_token"];
 const FORBID_KEYS = new Set([
+  "student_contribution_refresh", "student_contribution_settings_save", "student_contribution_signal_cancel",
+  "student_contribution_signal_rejudge", "student_contribution_referral_backfill", "student_contribution_referral_link",
   "staff_password_reset",
   "self_password_change",
   "self_email_change",

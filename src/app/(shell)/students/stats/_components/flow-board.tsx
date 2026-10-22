@@ -104,6 +104,15 @@ export function FlowBoard({
           tone={totals.net < 0 ? "text-danger" : totals.net > 0 ? "text-green" : undefined}
         />
       </dl>
+      <TrendChart
+        kind={kind}
+        labels={shown.map((r) => axisMonth(r.month))}
+        tooltipLabels={shown.map((r) => (r.source === "history" ? `${longMonth(r.month)} · ${historyBasis}` : longMonth(r.month)))}
+        series={series}
+        markers={hasHistory ? basisMarkers(shown.map((r) => (r.source === "history" ? historyBasis : "에이와 기록"))) : []}
+        legend={false}
+      />
+      {/* 범례 = 그래프 아래(원장 2026-10-22 *"다른 화면의 꺾은선도 전부 일치화"*) — 지난 기록 막대가 같은 쌓기라 차트 범례 대신 이 범례. */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
         <span className="inline-flex items-center gap-1.5"><i aria-hidden className="inline-block size-2.5 rounded-sm" style={{ background: ENROLLED }} />등록</span>
         <span className="inline-flex items-center gap-1.5"><i aria-hidden className="inline-block size-2.5 rounded-sm" style={{ background: WITHDRAWN }} />퇴원</span>
@@ -116,13 +125,6 @@ export function FlowBoard({
           </>
         ) : null}
       </div>
-      <TrendChart
-        kind={kind}
-        labels={shown.map((r) => axisMonth(r.month))}
-        tooltipLabels={shown.map((r) => (r.source === "history" ? `${longMonth(r.month)} · ${historyBasis}` : longMonth(r.month)))}
-        series={series}
-        markers={hasHistory ? basisMarkers(shown.map((r) => (r.source === "history" ? historyBasis : "에이와 기록"))) : []}
-      />
       {hasHistory && historyFrom ? (
         <p className="text-muted-foreground text-xs break-keep">
           {aywaFrom ? `${longMonth(aywaFrom)}부터 에이와 기록으로 세고, ${longMonth(historyFrom)}부터 그 전은 지난 기록으로 이었습니다` : `${longMonth(historyFrom)}부터 지난 기록입니다`} — 지난 기록의 등록은 같은 판정(수업을
@@ -170,10 +172,10 @@ function flowSeries(rows: readonly FlowRow[], kind: ChartKind, historyWithdrawnK
   const stack = (id: string) => (kind === "bar" ? { stack: id } : {});
   return [
     { key: "enrolled", name: "등록", color: ENROLLED, values: rows.map((r, i) => pick(r, i, false, r.enrolled)), ...stack("e") },
-    { key: "enrolledHistory", name: "등록(지난 기록)", color: ENROLLED_HISTORY, values: rows.map((r, i) => pick(r, i, true, r.enrolled)), dashed: true, endLabel: false, ...stack("e") },
+    { key: "enrolledHistory", name: "등록(지난 기록)", color: ENROLLED_HISTORY, values: rows.map((r, i) => pick(r, i, true, r.enrolled)), dashed: true, hideInLegend: true, ...stack("e") },
     { key: "withdrawn", name: "퇴원", color: WITHDRAWN, values: rows.map((r, i) => pick(r, i, false, r.withdrawn)), ...stack("w") },
     ...(historyWithdrawnKnown
-      ? [{ key: "withdrawnHistory", name: "청구가 끊긴 학생(지난 기록)", color: WITHDRAWN_HISTORY, values: rows.map((r, i) => pick(r, i, true, r.withdrawn)), dashed: true, endLabel: false as const, ...stack("w") }]
+      ? [{ key: "withdrawnHistory", name: "청구가 끊긴 학생(지난 기록)", color: WITHDRAWN_HISTORY, values: rows.map((r, i) => pick(r, i, true, r.withdrawn)), dashed: true, hideInLegend: true as const, ...stack("w") }]
       : []),
   ];
 }

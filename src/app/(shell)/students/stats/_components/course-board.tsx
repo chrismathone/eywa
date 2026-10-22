@@ -111,7 +111,6 @@ export function CourseBoard({
         </>
       }
     >
-      <SeriesChips series={drawnLines.filter((l) => !stacked || l.key !== "total").map((l) => ({ key: l.key, label: l.label, color: l.color }))} off={offNow} onToggle={toggle} />
       <TrendChart
         kind={kind}
         unit="개"
@@ -125,7 +124,10 @@ export function CourseBoard({
           strong: l.strong,
           ...(stacked ? (l.key === "total" ? { tooltipOnly: true } : { stack: "courses" }) : {}),
         }))}
+        legend={false}
       />
+      {/* 선 고르기 칩 = 범례 — 그래프 아래(원장 2026-10-22 *"다른 화면의 꺾은선도 전부 일치화"*). */}
+      <SeriesChips series={drawnLines.filter((l) => !stacked || l.key !== "total").map((l) => ({ key: l.key, label: l.label, color: l.color }))} off={offNow} onToggle={toggle} />
       <TrendFacts points={totalPoints} range={range} who={totalLabel} unit="개" />
       <p className="text-muted-foreground text-xs break-keep">
         강좌수 = 그날 재원생이 듣던 반을 학생마다 모두 센 수(같은 과목 반이 둘이면 2개 · 오늘 칸은 휴원 중인 수강을 뺍니다) · 프로그램 선에
