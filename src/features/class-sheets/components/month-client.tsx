@@ -14,7 +14,7 @@ import { setMyEcsMonthDisplay, setMyEcsMonthPeriod, setMyEcsMonthView } from "..
 import { setLessonShift } from "@/features/textbooks/server/plan-actions";
 import { undoLessonShift } from "@/features/textbooks/server/shift-undo-actions";
 import { useShiftConfirm, type ShiftWhich } from "./shift-confirm";
-import { ImportPlanButton } from "./import-plan-button";
+import { ImportUndoButton } from "./import-undo-button";
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { sheetMonthLabel } from "@/features/teacher-view/i18n";
 import { classNameFor } from "@/features/teacher-view/class-name";
@@ -383,18 +383,11 @@ export function MonthClient({
               {t("fill.open")}
             </button>
           ) : null}
-          {/* 월간계획 전체 가져오기(원장 2026-09-28 *"선생님이 월간계획 전체가져오기 기능 추가"*) — 이 화면이
-              그린 기간(달력월 또는 세션)의 **일정**(미루기 반영)을 실제 빈 칸에 한 번에 넣는다.
-              🔴 교시 한 칸 가져오기는 없앴다 — 계획이 실제에 들어가는 길은 이 버튼 하나다.
-              되돌리기(2026-10-15)는 알림의 [실행 취소] + 버튼 옆 ▾ 메뉴 — `ImportPlanButton`. */}
+          {/* 되돌리기(원장 2026-10-22 *"월간계획 전체가져오기 없어도될듯 대신 되돌리기"*) — 계획은 교재 배정이
+              곧바로 실제에 넣으므로 [월간계획 전체 가져오기]는 없앴고, 그 자리엔 마지막 반영을 되돌리는 문만 선다
+              (되돌릴 기록이 있을 때만). `ImportUndoButton`. */}
           {data.canEdit && textbooksOn ? (
-            <ImportPlanButton
-              classId={data.classId}
-              from={data.period.start}
-              to={data.period.end}
-              lastImport={data.lastImport ?? null}
-              flushEdits={flushEdits}
-            />
+            <ImportUndoButton classId={data.classId} lastImport={data.lastImport ?? null} flushEdits={flushEdits} />
           ) : null}
           {view === "mp" ? (
             <>

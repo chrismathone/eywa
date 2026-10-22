@@ -4,7 +4,7 @@ import "server-only";
  * 교재 차수 → 실제 계획 줄 쓰기 — **차수 하나 = 줄 하나**(원장 2026-10-19). 서버 전용 IO.
  * 규칙은 [`planCellExtras`](../cell-lessons.ts)(순수) 한 곳이다.
  *
- * 가져오기(`importPlannedRange`)와 미룸·당김(`shiftAlongPlans`)이 **같은 함수**로 쓴다 — 둘이 따로 쓰면
+ * 교재 배정(`writePlannedCells`)과 미룸·당김(`shiftAlongPlans`)이 **같은 함수**로 쓴다 — 둘이 따로 쓰면
  * 같은 칸이 가져오면 두 줄, 밀면 한 줄이 된다.
  *
  * ① 각 칸의 **첫 차수**는 종전 RPC(`ecs_apply_textbook_lessons`)로 — 같은 교재 줄 → 같은 구분의 빈 줄 → 새 줄,

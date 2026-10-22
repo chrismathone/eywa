@@ -118,7 +118,7 @@ function isPaceRejected(error: { code?: string; message?: string } | null | unde
  * 🔴 **교재목록 모듈을 끈 학원에선 배정 액션이 돌지 않는다**(감사 S7) — 서버 액션은 공개 엔드포인트라
  *    화면에서 [교재 배정] 입구를 감춘 것만으로는 게이트가 아니다([[#77]]). 판정 실패는 켜진 것으로 본다
  *    (`isModuleOnForTenant` fail-open — 침산은 꺼진 모듈이 없다).
- * ⚠️ [월간계획 전체 가져오기](`importPlannedRange`)·회차 미루기는 시트의 **실제** 쪽 문이라 여기 걸지 않는다.
+ * ⚠️ 실제에 넣기(`writePlannedCells`)·회차 미루기는 시트의 **실제** 쪽 문이라 여기 걸지 않는다.
  */
 const TEXTBOOKS_MODULE_OFF = "이 학원은 교재목록 기능이 꺼져 있습니다";
 async function textbooksModuleOff(tenantId: string): Promise<boolean> {
@@ -942,7 +942,7 @@ export async function applyTextbookFill(
   if (!saved.ok) return { ok: false, error: saved.error };
 
   // 실제로 넣기 — 오늘(또는 시작일) 이후 그 배정의 차수 전부. 배정은 이미 저장됐으니 여기서 실패해도
-  // 계획은 남는다 → 그 사실을 그대로 알리고, 남은 칸은 월간 화면의 [월간계획 전체 가져오기]로 넣을 수 있다.
+  // 계획은 남는다 → 그 사실을 그대로 알리고, 다시 배정하면 빈 칸만 채운다.
   const importFrom = input.startDate > today ? input.startDate : today;
   const { getClassImportLines } = await import("./month-plan");
   const planned = await getClassImportLines({
@@ -998,88 +998,11 @@ export async function applyTextbookFill(
   };
 }
 
-// ── 가져오기 — 월간계획(일정)을 한 달치 **실제**로 옮긴다 ────────────────────────
-
-export type ImportPlannedResult =
-  | {
-      ok: true;
-      result: ApplyResult;
-      cells: number;
-      /** 되돌리기 기록 id — 바뀐 칸이 없거나 기록을 못 남겼으면(표 미적용 등) null. 알림의 [실행 취소]가 쓴다. */
-      undoBatchId: string | null;
-    }
-  | { ok: false; error: string };
-
-/** 한 번에 가져올 수 있는 날 수 — 세션 한 달(최대 ~40일)을 넉넉히 덮는 상한. 락·시간 예산 가드. */
-const IMPORT_MAX_DAYS = 62;
+// ── 실제에 넣기 — 교재 배정이 부른다 ────────────────────────
 
 /**
- * **[월간계획 전체 가져오기]** — 그 기간의 월간계획(**일정**, 미루기 반영)을 실제 계획 줄로 복사한다.
- *
- * 🔑 **이 기간에 걸린 배정은 끝 차수까지**(원장 2026-10-22 *"그달이 넘어가서 배정되어있어도 그달까지만
- *    들어가던데 오류"*) — `from~to`는 "어느 배정을 가져올지"를 고르는 창이고, 고른 배정은 다음 달 칸까지 채운다.
- *    `to` 뒤에 시작하는 배정은 안 가져온다(그 달 화면에서). 규칙 = [`expandPlansThrough`](../plan-expand.ts).
- * 🔴 원장 2026-09-28: *"선생님이 월간계획 전체가져오기 기능 추가, 한주씩 가져오는건 필요없음"* — 옛
- *    교시 한 칸 가져오기(`importPlannedSlot`)는 없앴다. 계획이 실제에 들어가는 길은 **이 버튼 하나**다.
- * 🔑 가져오는 건 **일정**이다(원장 2026-09-28 *"계획 놔두고 일정만 밀리게"*) — 미룬 칸은 비워 두고 뒤로
- *    밀린 차수가 들어간다. 비교의 기준인 원래 계획(`baselineByCell`)은 여기서 안 쓴다.
- * 🔑 **빈 칸만 채운다** — 밑바닥은 기입과 같은 RPC(`ecs_apply_textbook_lessons`)라, 이미 적은 칸이나
- *    가져온 뒤 고쳐 쓴 값은 다시 눌러도 덮어쓰지 않는다(여러 번 눌러도 안전하다).
- * 🔴 게이트는 그 반의 ECS 쓰기 권한 — 서버 액션은 공개 엔드포인트다([[#77]]).
- */
-export async function importPlannedRange(input: {
-  classId: string;
-  /** `"YYYY-MM-DD"` — 화면이 그린 기간(달력월 또는 세션). */
-  from: string;
-  to: string;
-}): Promise<ImportPlannedResult> {
-  const gate = await requireEcsClassAccess(input.classId, { write: true });
-  if (!gate.ok) return { ok: false, error: gate.error };
-  if (!YMD_RE.test(input.from) || !YMD_RE.test(input.to) || input.from > input.to) {
-    return { ok: false, error: "기간이 올바르지 않습니다" };
-  }
-  const days = (Date.parse(`${input.to}T00:00:00Z`) - Date.parse(`${input.from}T00:00:00Z`)) / 86_400_000;
-  if (!(days < IMPORT_MAX_DAYS)) return { ok: false, error: "한 번에 가져올 수 있는 기간을 넘었습니다" };
-
-  const { getClassImportLines } = await import("./month-plan");
-  const planned = await getClassImportLines({
-    tenantId: gate.access.tenantId,
-    classId: input.classId,
-    from: input.from,
-    to: input.to,
-  });
-  if (planned.status === "missing-table") return { ok: false, error: TEXTBOOKS_NOT_READY };
-  if (planned.status !== "ok") return { ok: false, error: "월간계획을 읽지 못했습니다 — 잠시 뒤 다시 시도해 주세요" };
-  // 🔑 이 기간에 걸린 배정은 **끝 차수까지** 가져온다(원장 2026-10-22) — 그래서 쓰는 범위의 끝은 화면의 `to`가
-  //    아니라 실제로 닿은 마지막 날이다. 되돌리기 기록도 이 범위를 덮어야 다음 달 칸까지 되돌린다.
-  const rangeTo = planned.lastDate;
-
-  if (Object.keys(planned.byCell).length === 0) return { ok: false, error: "이 기간엔 가져올 월간계획이 없습니다" };
-
-  const written = await writePlannedCells({
-    access: gate.access,
-    classId: input.classId,
-    from: input.from,
-    to: rangeTo,
-    byCell: planned.byCell,
-  });
-  if (!written.ok) return written;
-
-  await logAction({
-    action: "textbook_plan_import",
-    targetType: "class",
-    targetLabel: gate.access.className,
-    metadata: { from: input.from, to: input.to, through: rangeTo, cells: written.cells, ...written.result },
-  });
-  // 실제 줄이 바뀌었다 — 그 반의 시트·월간을 통째로 무효화한다([[#102]] 계열 — `"layout"` 필수).
-  revalidatePath(`/ecs/${input.classId}`, "layout");
-  revalidatePath("/ecs");
-  return { ok: true, result: written.result, cells: written.cells, undoBatchId: written.undoBatchId };
-}
-
-/**
- * 계획 줄(일정) → **실제** 빈 칸에 쓴다 + 되돌리기 기록. [월간계획 전체 가져오기]와 교재 배정(원장 2026-10-22
- * *"교재배정하면 계획과 가져오기가 한큐에"*)이 **같은 함수**를 탄다 — 두 벌이면 같은 칸이 길마다 다르게 들어간다.
+ * 계획 줄(일정) → **실제** 빈 칸에 쓴다 + 되돌리기 기록. 교재 배정(원장 2026-10-22 *"교재배정하면 계획과
+ * 가져오기가 한큐에"*)이 부른다 — [월간계획 전체 가져오기] 버튼은 같은 날 없앴다(*"없어도될듯 대신 되돌리기"*).
  * 🔴 게이트는 호출부가 이미 걸었다(그 반 ECS 쓰기). 감사로그·revalidate도 호출부 몫.
  */
 async function writePlannedCells(input: {
