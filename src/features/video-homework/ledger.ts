@@ -1,5 +1,5 @@
 import { roundCounts, roundPairKey, type LedgerRound, type RoundStatus } from "./rounds";
-import type { VideoHomeworkLedgerRow } from "./types";
+import type { VideoHomeworkLedgerRow, VideoHomeworkRosterRow } from "./types";
 
 export type LedgerFilters = {
   /** 고른 반들 — 비어 있으면 전체 반. */
@@ -67,14 +67,22 @@ export const roundStatusLabel = (round: Pick<LedgerRound, "status" | "auto">) =>
   round.status === "submitted" ? (round.auto ? "완료(영상)" : "완료") : round.status === "missing" ? "미수행" : "미확인";
 
 export function groupLedgerRows(rows: VideoHomeworkLedgerRow[], rounds: LedgerRounds) {
-  const groups = new Map<string, { classId: string; className: string; subject: string; teacherName?: string | null; rows: VideoHomeworkLedgerRow[]; roundCount: number; homeworkDates: string[] }>();
+  const groups = new Map<string, { classId: string; className: string; subject: string; teacherName?: string | null; rows: VideoHomeworkLedgerRow[]; roundCount: number; homeworkDates: string[];
+    /** 숙제 0건 반(①)의 열 수 = 그 학생들의 숙제없음 수업일 수 중 가장 많은 것(회차가 아니다 — 열 머리도 'N회'가 아니다). 그 밖의 반은 0. */
+    blankColumns: number; idle: boolean }>();
   for (const row of rows) {
-    const group = groups.get(row.classId) ?? { classId: row.classId, className: row.className, subject: row.subject, teacherName: row.teacherName, rows: [], roundCount: 0, homeworkDates: [] };
+    const group = groups.get(row.classId) ?? { classId: row.classId, className: row.className, subject: row.subject, teacherName: row.teacherName, rows: [], roundCount: 0, homeworkDates: [], blankColumns: 0, idle: false };
     group.rows.push(row);
     // 열 수 = 그 반에서 회차가 가장 많은 학생. 검색으로 학생이 가려져도 열은 그대로다.
     group.roundCount = Math.max(group.roundCount, roundsOf(rounds, row).length);
     // 반에 숙제가 나간 날 = 그 반 학생들의 숙제 날짜 합 — 빈 칸에 결석·숙제없음을 채우는 기준(no-homework.ts).
     for (const round of roundsOf(rounds, row)) if (round.homeworkDate && !group.homeworkDates.includes(round.homeworkDate)) group.homeworkDates.push(round.homeworkDate);
+    // 숙제 0건 반의 줄(①, 원장 2026-10-22)은 숙제가 나간 날이 없으니 그 학생의 숙제없음 수업일을 기준으로 깐다(그 반엔 이 줄들만 선다).
+    if (row.lessonDates) {
+      group.idle = true;
+      for (const date of row.lessonDates) if (!group.homeworkDates.includes(date)) group.homeworkDates.push(date);
+      group.blankColumns = Math.max(group.blankColumns, row.lessonDates.length);
+    }
     groups.set(row.classId, group);
   }
   for (const group of groups.values()) group.homeworkDates.sort();
@@ -82,13 +90,17 @@ export function groupLedgerRows(rows: VideoHomeworkLedgerRow[], rounds: LedgerRo
 }
 export type LedgerGroup = ReturnType<typeof groupLedgerRows>[number];
 
+const searchWords = (query: string) => query.trim().toLocaleLowerCase("ko").split(/\s+/).filter(Boolean);
+/** 글자 검색이 보는 글 — 줄과 숙제 0건 반의 검색 명단(`matchIdleRoster`)이 같은 규칙을 쓴다. */
+const ledgerHaystack = (row: VideoHomeworkRosterRow) => `${row.studentName} ${row.className} ${row.school ?? ""} ${row.grade ?? ""} ${row.subject}`.toLocaleLowerCase("ko");
+
 export function filterLedgerRows(rows: VideoHomeworkLedgerRow[], rounds: LedgerRounds, filters: LedgerFilters) {
-  const words = filters.query.trim().toLocaleLowerCase("ko").split(/\s+/).filter(Boolean);
+  const words = searchWords(filters.query);
   const counts = new Map(rows.map((row) => [ledgerPairKey(row), ledgerCounts(row, rounds)]));
   return rows.filter((row) => {
     if (filters.classIds.length && !filters.classIds.includes(row.classId) || filters.subject !== "all" && row.subject !== filters.subject ||
       filters.school !== "all" && (row.school || "미등록") !== filters.school || filters.grade !== "all" && (row.grade || "미등록") !== filters.grade) return false;
-    const haystack = `${row.studentName} ${row.className} ${row.school ?? ""} ${row.grade ?? ""} ${row.subject}`.toLocaleLowerCase("ko");
+    const haystack = ledgerHaystack(row);
     if (!words.every((word) => haystack.includes(word))) return false;
     if (filters.status === "assign") return !!row.hasAssignableVideos;
     return filters.status === "all" || counts.get(ledgerPairKey(row))![filters.status] > 0;
@@ -102,6 +114,21 @@ export function filterLedgerRows(rows: VideoHomeworkLedgerRow[], rounds: LedgerR
     }
     return a.studentName.localeCompare(b.studentName, "ko") || a.studentId.localeCompare(b.studentId);
   });
+}
+
+/**
+ * ② 검색 — 숙제가 0건이라 장부에 반째 빠진 반의 수강생 중 검색어와 맞는 학생(원장 2026-10-22 *"그래도 검색은 되어야하는거 아냐?"*).
+ * 글자 검색이 있을 때만(검색어 없이 반 명단이 쏟아지지 않게 — 회차 없는 반은 세우지 않는다, 2026-10-01) · 이미 줄로 선 (반 × 학생)은 빼고 ·
+ * 과목·학년 필터와 글자 검색은 줄과 같은 규칙. 🔴 줄이 아니다 — 회차·반 인원·완료 n/m·CSV·정렬에 들지 않는다(화면이 따로 알린다).
+ */
+export function matchIdleRoster<T extends VideoHomeworkRosterRow>(entries: readonly T[], shown: ReadonlySet<string>,
+  filters: Pick<LedgerFilters, "subject" | "grade">, text: string): T[] {
+  const words = searchWords(text);
+  if (!words.length) return [];
+  return entries.filter((entry) => !shown.has(ledgerPairKey(entry))
+    && (filters.subject === "all" || entry.subject === filters.subject) && (filters.grade === "all" || (entry.grade || "미등록") === filters.grade)
+    && words.every((word) => ledgerHaystack(entry).includes(word)))
+    .sort((a, b) => a.studentName.localeCompare(b.studentName, "ko") || a.className.localeCompare(b.className, "ko"));
 }
 
 export function ledgerSummary(rows: VideoHomeworkLedgerRow[], rounds: LedgerRounds) {

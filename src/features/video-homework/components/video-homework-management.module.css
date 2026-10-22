@@ -19,6 +19,10 @@
 .expandActions button{height:var(--control-h-sm);font-size:var(--control-label-sm);cursor:pointer}
 .expandActions button:hover{text-decoration:underline;text-underline-offset:3px}
 .hint{color:var(--text-dim);font-size:var(--text-xs);margin:0 0 12px;line-height:1.5}
+/* 검색에 맞은 숙제 0건 반의 학생(줄이 아니다 — video-homework-management.tsx) */
+.idle{border:1px solid var(--line);border-radius:var(--radius-xl);background:var(--bg-soft);padding:8px 12px;margin-bottom:12px;font-size:var(--text-sm);line-height:1.5;word-break:keep-all}
+.idle ul{display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:4px}
+.idle .dim{font-size:var(--text-xs)}
 .group{border:1px solid var(--line);border-radius:var(--radius-xl);overflow:hidden;margin-bottom:12px;background:var(--card)}
 .groupHeading{display:flex;align-items:center;flex-wrap:wrap;gap:8px;width:100%;text-align:left;background:var(--bg-soft);padding:8px 12px;cursor:pointer}
 .groupHeading:hover{background:var(--muted)}

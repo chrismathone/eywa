@@ -36,16 +36,18 @@ export function ClassLedger({ group, rounds, blankFacts, videosKnown = true, sho
   const pages = Math.max(1, Math.ceil(group.rows.length / PAGE_SIZE));
   const currentPage = Math.min(page, pages - 1);
   const paged = group.rows.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
-  const roundPages = Math.max(1, Math.ceil(group.roundCount / ROUND_SIZE));
+  // 열 = 회차 · 숙제 0건 반(①)은 회차가 없어 그 학생들의 숙제없음 수업일 칸(열 머리 '수업' — 회차가 아니다).
+  const columns = Math.max(group.roundCount, group.blankColumns);
+  const roundPages = Math.max(1, Math.ceil(columns / ROUND_SIZE));
   const currentRoundPage = Math.min(roundPage, roundPages - 1);
   const roundOffset = currentRoundPage * ROUND_SIZE;
-  const numbers = Array.from({ length: Math.min(ROUND_SIZE, group.roundCount - roundOffset) }, (_, i) => roundOffset + i + 1);
+  const numbers = Array.from({ length: Math.min(ROUND_SIZE, columns - roundOffset) }, (_, i) => roundOffset + i + 1);
   const editable = paged.filter((row) => row.editable);
   const selectedRows = paged.filter((row) => row.editable && selected.has(row.studentId));
   // 줄의 칸 차례 = 회차와 빈 칸(결석 · 숙제없음)을 날짜순으로(ledgerRowCells) — 빈 칸은 반에 숙제가 나간 날 중 이 학생에게 없는 날이다(회차 수에는 안 든다).
   const cellsOf = (row: VideoHomeworkLedgerRow) => {
     const own = roundsOf(rounds, row);
-    return ledgerRowCells(own, blankCells({ classDates: group.homeworkDates, own, facts: blankFacts[ledgerPairKey(row)], slots: group.roundCount - own.length }));
+    return ledgerRowCells(own, blankCells({ classDates: group.homeworkDates, own, facts: blankFacts[ledgerPairKey(row)], slots: columns - own.length }));
   };
   // 같은 N회라도 학생마다 숙제일이 다르다 — 화면의 N번째 칸에 적는다(빈 칸이면 그 학생은 뺀다).
   const batchChanges = selectedRows.flatMap((row): LedgerChange[] => {
@@ -93,10 +95,13 @@ export function ClassLedger({ group, rounds, blankFacts, videosKnown = true, sho
             value={submittedDate} min="2000-01-01" max={today} disabled={busy} onChange={(event) => setSubmittedDate(event.target.value)} /></label> : null}
           <button type="button" className={styles.primary} disabled={busy || !batchChanges.length || !validSubmission} onClick={() => void saveBatch()}>선택 {batchChanges.length}명 적용</button>
           {selectedRows.length > batchChanges.length ? <span className={styles.dim}>적용할 수 없는 {selectedRows.length - batchChanges.length}명 제외(그 회차가 없거나 제출일이 숙제일보다 빠름)</span> : null}
-        </div> : <span className={styles.dim}>{group.roundCount ? "읽기 전용" : "이 기간에 영상 과제가 나간 학생이 없습니다"}</span>}
+        </div> : <span className={styles.dim}>{group.roundCount ? "읽기 전용"
+          : group.idle ? "이 기간에 이 반에 나간 영상 숙제가 없습니다 · 올라온 영상은 '영상 배정'에서 수업일에 붙입니다" : "이 기간에 영상 과제가 나간 학생이 없습니다"}</span>}
         <div className={styles.roundPager}>
           <button type="button" disabled={currentRoundPage === 0 || busy} onClick={() => setRoundPage(currentRoundPage - 1)} aria-label={`${group.className} 이전 회차`}>‹</button>
-          <span>{group.roundCount ? `${roundOffset + 1}–${roundOffset + numbers.length}회` : "0회"} <small>/ {group.roundCount}회</small></span>
+          {/* 숙제 0건 반은 회차가 아니라 수업일 칸이다 — '0회'로 적지 않고 수업일 수를 적는다. */}
+          <span>{group.roundCount || !numbers.length ? <>{group.roundCount ? `${roundOffset + 1}–${roundOffset + numbers.length}회` : "0회"} <small>/ {group.roundCount}회</small></>
+            : <>수업일 {roundOffset + 1}–{roundOffset + numbers.length} <small>/ {columns}일</small></>}</span>
           <button type="button" disabled={currentRoundPage >= roundPages - 1 || busy} onClick={() => setRoundPage(currentRoundPage + 1)} aria-label={`${group.className} 다음 회차`}>›</button>
         </div>
       </div>
@@ -110,7 +115,7 @@ export function ClassLedger({ group, rounds, blankFacts, videosKnown = true, sho
               ref={(node) => { if (node) node.indeterminate = selectedRows.length > 0 && !allSelected; }}
               onChange={() => setSelected(allSelected ? new Set() : new Set(editable.map((row) => row.studentId)))} /></th>
             <th scope="col" className={styles.studentCell}>학생</th><th scope="col">학교 · 학년</th><th scope="col">완료</th>
-            {numbers.map((n) => <th scope="col" key={n}><strong>{n}회</strong></th>)}
+            {numbers.map((n) => <th scope="col" key={n}><strong>{n <= group.roundCount ? `${n}회` : "수업"}</strong></th>)}
           </tr></thead>
           <tbody>{paged.map((row) => {
             const counts = ledgerCounts(row, rounds);

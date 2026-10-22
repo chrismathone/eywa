@@ -2,10 +2,11 @@
 
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { DEFAULT_LEDGER_FILTERS, filterLedgerRows, groupLedgerRows, keepLedgerRounds, ledgerCsv, ledgerPairKey, ledgerSummary, splitTeacherQuery, teacherLedgerKeep, type LedgerFilters } from "../ledger";
+import { DEFAULT_LEDGER_FILTERS, filterLedgerRows, groupLedgerRows, keepLedgerRounds, ledgerCsv, ledgerPairKey, ledgerSummary, matchIdleRoster, splitTeacherQuery, teacherLedgerKeep, type LedgerFilters } from "../ledger";
 import { buildLedgerRounds } from "../rounds";
 import type { BlankFacts } from "../no-homework";
-import type { VideoArrival, VideoHomeworkLedgerRow, VideoHomeworkMark } from "../types";
+import type { VideoArrival, VideoHomeworkLedgerRow, VideoHomeworkMark, VideoHomeworkRosterRow } from "../types";
+import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { useLedgerMarks } from "./use-ledger-marks";
 import { useLedgerRefresh } from "./ledger-refresh";
 import { ClassLedger } from "./class-ledger";
@@ -19,6 +20,9 @@ import styles from "./video-homework-management.module.css";
 
 const NO_VIDEOS: VideoArrival[] = [];
 const NO_FACTS: BlankFacts = {};
+const NO_IDLE: VideoHomeworkRosterRow[] = [];
+/** 검색에 맞은 숙제 0건 반의 학생 — 이만큼만 이름을 보이고 나머지는 수로(검색어를 좁히면 된다). */
+const IDLE_SHOWN = 20;
 const unique = (values: string[]) => [...new Set(values)].sort((a, b) => a.localeCompare(b, "ko", { numeric: true })).map((value) => ({ value, label: value }));
 
 /** 미확인으로 지웠지만 숙제로 남은 칸(`반:학생:숙제일`, use-ledger-marks.ts)을 그 줄의 옮겨 남긴 숙제로 더한다 — 서버 값을 다시 받기 전에도 칸이 선다. */
@@ -35,7 +39,7 @@ function withKept(rows: VideoHomeworkLedgerRow[], kept: ReadonlySet<string>): Vi
   });
 }
 
-export function VideoHomeworkManagement({ rows: serverRows, initialMarks, videos = NO_VIDEOS, blankFacts = NO_FACTS, videosKnown = true, showTeacher = false, fromDate, toDate, today, initialFilters = DEFAULT_LEDGER_FILTERS, keepRounds, teacherRounds, teacherOptions }: {
+export function VideoHomeworkManagement({ rows: serverRows, initialMarks, videos = NO_VIDEOS, blankFacts = NO_FACTS, videosKnown = true, showTeacher = false, fromDate, toDate, today, initialFilters = DEFAULT_LEDGER_FILTERS, keepRounds, teacherRounds, teacherOptions, idleRoster = NO_IDLE }: {
   rows: VideoHomeworkLedgerRow[]; initialMarks: VideoHomeworkMark[]; videos?: VideoArrival[]; blankFacts?: BlankFacts; videosKnown?: boolean;
   showTeacher?: boolean;
   fromDate: string; toDate: string; today: string; initialFilters?: LedgerFilters;
@@ -44,6 +48,8 @@ export function VideoHomeworkManagement({ rows: serverRows, initialMarks, videos
   /** 관리자 화면 강사 필터 — 강사 id → 그 강사가 낸 칸(`ownRoundKey`). 선택지가 없으면(강사뷰) 필터도 없다. */
   teacherRounds?: Readonly<Record<string, readonly string[]>>;
   teacherOptions?: { value: string; label: string }[];
+  /** 숙제가 0건이라 장부에 반째 빠진 반의 수강생(원장 2026-10-22 ②) — 검색어와 맞을 때만 "숙제가 없는 반"으로 알린다(줄이 아니다). */
+  idleRoster?: VideoHomeworkRosterRow[];
 }) {
   const [filters, setFilters] = useState(initialFilters);
   const query = useDeferredValue(filters.query);
@@ -100,6 +106,9 @@ export function VideoHomeworkManagement({ rows: serverRows, initialMarks, videos
   const options = useMemo(() => ({ subjects: unique(shownRows.map((row) => row.subject)),
     grades: unique(shownRows.map((row) => row.grade || "미등록")) }), [shownRows]);
   const summary = ledgerSummary(visible, rounds);
+  // ② 검색에 맞은 숙제 0건 반의 학생 — 줄로 선 (반 × 학생)은 빼고, 요약·CSV·정렬에는 넣지 않는다.
+  const idleMatches = useMemo(() => matchIdleRoster(idleRoster, new Set(rows.map((row) => ledgerPairKey(row))), shown, parsed.text),
+    [idleRoster, rows, shown, parsed.text]);
   const filterKey = JSON.stringify(shown);
   function update<K extends keyof LedgerFilters>(key: K, value: LedgerFilters[K]) {
     setFilters((current) => ({ ...current, classIds: [], school: "all", teacher: "all", [key]: value }));
@@ -131,12 +140,20 @@ export function VideoHomeworkManagement({ rows: serverRows, initialMarks, videos
       <div className={styles.expandActions}><button type="button" onClick={() => setCollapsed(new Set())}>모두 펼치기</button><button type="button" onClick={() => setCollapsed(new Set(visibleGroups.map((group) => group.classId)))}>모두 접기</button></div>
     </div>
     {/* 안내는 이 한 줄(원장 2026-10-19 *"멘트 간단히"* · 반 아래 범례 줄을 여기로 합쳤다). */}
-    <p className={styles.hint}>회차 = 영상 과제가 나간 수업·따로 낸 숙제(학생마다 순서) · 칸 위 숙제 날·아래 제출일 · ▶ 영상{reviewPoints.size ? " · 칸 아래 숫자 = AI 참고 평점(5점 만점 · 파랑 낮음 → 빨강 높음)" : ""} · 초록 테두리 = 영상 자동 완료 · 수동 = 영상 없이 완료 · × 미수행 · 점선 = 따로 낸 숙제 · — 회차 없음 · 미확인 칸 클릭 = 오늘 완료 · 우클릭 = 편집(숙제없음 칸은 숙제 출제)</p>
+    <p className={styles.hint}>회차 = 영상 과제가 나간 수업·따로 낸 숙제(학생마다 순서) · 칸 위 숙제 날·아래 제출일 · ▶ 영상{reviewPoints.size ? " · 칸 아래 숫자 = AI 참고 평점(5점 만점 · 파랑 낮음 → 빨강 높음)" : ""} · 초록 테두리 = 영상 자동 완료 · 수동 = 영상 없이 완료 · × 미수행 · 점선 = 따로 낸 숙제 · — 회차 없음 · 미확인 칸 클릭 = 오늘 완료 · 우클릭 = 편집(숙제없음 칸은 숙제 출제 · 영상 배정)</p>
     {byTeacher ? <p className={styles.hint}>검색한 강사({teacherOptions?.find((option) => option.value === teacher)?.label})가 낸 숙제 칸만 셉니다(그 강사의 강사뷰와 같은 칸) — 숙제를 낸 사람을 모르는 옛 기록은 강사 이름 없이 검색할 때만 보입니다.</p> : null}
     {progress ? <p className={styles.saving} role="status">기록 저장 중 {progress.done} / {progress.total}건</p> : null}
+    {idleMatches.length ? <div className={styles.idle} role="note" aria-label="영상 숙제가 없는 반의 학생">
+      <p><strong>영상 숙제가 없는 반</strong> · 이 기간에 이 반에 나간 영상 숙제가 없어 장부에 줄이 없습니다.</p>
+      <ul>{idleMatches.slice(0, IDLE_SHOWN).map((entry) => <li key={ledgerPairKey(entry)}>
+        {entry.studentName} <span className={styles.dim}>{schoolGradeLabel(entry.school, entry.grade)} · {entry.className}</span></li>)}</ul>
+      {idleMatches.length > IDLE_SHOWN ? <p className={styles.dim}>외 {idleMatches.length - IDLE_SHOWN}명 — 검색어를 더 좁혀 주세요.</p> : null}
+    </div> : null}
     <ReviewPointsContext.Provider value={reviewPoints}>
     {visibleGroups.length ? visibleGroups.map((group) => <ClassLedger key={`${group.classId}:${filterKey}`} group={group} rounds={rounds} blankFacts={blankFacts} videosKnown={videosKnown} showTeacher={showTeacher} today={today} busy={busy} save={save} onEdit={setActive} onPlay={setPlaying} onAssign={(row) => setAssigning({ row })} onIssueMenu={setMenu}
       collapsed={collapsed.has(group.classId)} onToggle={() => setCollapsed((current) => { const next = new Set(current); if (next.has(group.classId)) next.delete(group.classId); else next.add(group.classId); return next; })} />)
+      // 검색이 숙제 0건 반의 학생만 찾았으면 위 알림이 답이다 — '맞는 학생이 없습니다'를 겹쳐 띄우지 않는다.
+      : idleMatches.length ? null
       : <div className={styles.empty}><strong>{shownRows.length ? "조건에 맞는 학생이 없습니다." : "조회 기간에 영상 과제가 나간 수업이 없습니다."}</strong><p>{shownRows.length ? "검색어와 필터를 조정해 주세요." : "원스크린에서 '영상 과제'를 켜고 저장한 수업부터 회차가 생깁니다."}</p></div>}
     </ReviewPointsContext.Provider>
     <Dialog open={active !== null} onOpenChange={(open) => { if (!open && !busy) setActive(null); }}>
@@ -150,7 +167,9 @@ export function VideoHomeworkManagement({ rows: serverRows, initialMarks, videos
     <LedgerVideoDialog key={playing ? `${ledgerPairKey(playing.row)}:${playing.round.key}` : "none"} cell={playing}
       videos={playing ? playing.round.videoIds.flatMap((id) => videos.find((video) => video.id === id
         && video.studentId === playing.row.studentId && video.classId === playing.row.classId) ?? []) : []} onClose={() => setPlaying(null)} />
-    {menu ? <IssueMenu key={`${ledgerPairKey(menu.row)}:${menu.kind}:${menu.date}`} target={menu} onClose={() => setMenu(null)} /> : null}
+    {/* 숙제없음 칸 메뉴 — 붙지 않은 영상이 있는 줄이면 '이 수업에 영상 배정'(그 날짜를 골라 둔 배정 창 · 원장 2026-10-22). */}
+    {menu ? <IssueMenu key={`${ledgerPairKey(menu.row)}:${menu.kind}:${menu.date}`} target={menu} onClose={() => setMenu(null)}
+      onAssign={menu.row.canAssignVideos && menu.row.tracked && menu.row.hasAssignableVideos ? () => setAssigning({ row: menu.row, date: menu.date }) : undefined} /> : null}
     {assigning ? <VideoAssignmentDialog key={`${ledgerPairKey(assigning.row)}:${assigning.date ?? ""}`} row={assigning.row} initialDate={assigning.date}
       fromDate={fromDate} toDate={toDate} onClose={() => setAssigning(null)} linked={linked} /> : null}
   </div>;
