@@ -47,7 +47,8 @@ import type { OneScreenStudent } from "../types";
 import { classnoteBadge, type ClassnoteBadge } from "../classnote-badge";
 import { attendanceMarkBadgeClass, attendanceMarkLabel } from "../attendance-mark";
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
-import { activeUnderstanding, hasPilotOneLine, isMathReportPilot, pilotNeedsAutoWrite } from "../math-report-pilot";
+import { hasPilotOneLine, isMathReportPilot, pilotNeedsAutoWrite } from "../math-report-pilot";
+import { pilotRowSig, testSkipComplete } from "../math-report-pilot-sections";
 import type { SheetLang } from "@/features/teacher-view/i18n";
 import { ReservedMakeupTag } from "./reserved-makeup-tag";
 import { MakeupSwitchButton } from "./makeup-switch-button";
@@ -62,8 +63,8 @@ export type SubjectReport = {
   autoDraft?: string;
   /** autoDraft가 AI 원문이 아니다(실패 폴백 템플릿·지난 회차 복사) — 자동작성 원문(0370a)으로 싣지 않는다(말투 학습이 엉뚱한 차이를 배우지 않게). */
   autoDraftTemplate?: boolean;
-  /** 수학 보고서 시범 — 자동작성할 때 쓴 이해도 서명(`understandingSig`). 점수가 글에 숫자로 없어 화면이 들고 있다가 발송 게이트에서 대조한다. */
-  pilotUnderstandingSig?: string;
+  /** 수학 보고서 시범 — 자동작성할 때 쓴 사실 서명(`pilotRowSig`). 이해도 점수처럼 글에 없는 값이 있어 화면이 들고 있다가 발송 게이트에서 대조한다. */
+  pilotFactsSig?: string;
   /** 자동작성이 추세 칸에 마지막으로 넣은 글 — '달라진 것 없음'(trendQuiet)이면 칸이 이 글 그대로일 때만 비운다(손글씨는 지킨다). */
   trendAutoDraft?: string;
   sent: boolean;
@@ -312,10 +313,11 @@ export function ReportCard({
         studentName: student.name,
         today: subject.today,
         note: cardEval.note,
-        understanding: activeUnderstanding(subject.today, subject.understanding),
-        writtenSig: rep?.pilotUnderstandingSig,
+        factsSig: pilotRowSig(student, subject.name),
+        writtenSig: rep?.pilotFactsSig,
       }),
     needsOneLine: pilot && !hasPilotOneLine(cardEval.note), // 강사 한줄 멘트 필수(원장 2026-10-22)
+    needsTestReason: pilot && !testSkipComplete(subject.dailyTestSkip), // 일일 테스트 '없음'이면 사유 필수(원장 2026-10-22)
     readonlyView, // 열람 전용 — 사유 라벨까지 게이트가 만든다(표뷰와 동일)
     recallPending: isRecallInFlight(liveStatus ?? null),
     // 발송 대기·게시 중 — 워커 결과 전까지 다시 못 누른다(표뷰와 같은 판정, 원장 2026-09-29).

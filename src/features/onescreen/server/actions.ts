@@ -86,8 +86,11 @@ import {
   pilotOneLineAttached,
   pilotLessons,
   PILOT_AI_DIRECTIVE,
+  PILOT_SECTION_TITLES,
+  pilotSection,
   progressLead,
 } from "../math-report-pilot";
+import { pilotBody, readTestSkip, type DailyTestSkip } from "../math-report-pilot-sections";
 import { skipStatusOf } from "../progress-status";
 import { logAction } from "@/features/audit/server/log";
 import { isSlotOnlyEnglishNotes, shouldCaptureJj } from "../jj-capture-plan";
@@ -1341,6 +1344,8 @@ export type SaveOnescreenSessionInput = {
       checkMax?: number;
       /** 소단원별 이해도(수학 보고서 시범, math-report-pilot.ts) — 시범 행만 싣는다. 로스터가 같은 키로 복원한다. */
       understanding?: { scores: Record<string, number>; off: string[] };
+      /** 일일 테스트 '없음' 사유(수학 보고서 시범) — 시범 행만 싣는다. 로스터가 readTestSkip으로 복원한다. null = 시험 있음. */
+      dailyTestSkip?: { reason: string | null; detail: string } | null;
     }
   >;
   dailyScore?: number | null;
@@ -1554,6 +1559,39 @@ export async function generateReportComment(
           .slice(0, 20)
       : undefined,
   };
+  // 수학 보고서 시범 — 항목별 글(math-report-pilot-sections.ts). 테스트·태도·과제는 고른 값을 코드가 옮기고 AI는 '이해도' 항목만 쓴다.
+  const pilotSkip: DailyTestSkip | null = pilot ? readTestSkip(input.dailyTestSkip) : null;
+  const composePilot = (understandingText: string, videoReceipt: string | null) =>
+    composePilotMent({
+      lead: pilotSection(
+        PILOT_SECTION_TITLES.progress,
+        progressLead(input.studentName, pilotLessons(input.progress), skipStatusOf(input.progress)),
+      ),
+      body: pilotBody({ ...safeInput, dailyTestSkip: pilotSkip }, { understandingText, videoReceipt }),
+      note: pilotNote,
+    });
+  // 이해도를 하나도 안 매겼으면 AI가 쓸 항목이 없다 — 부르지 않는다(재료 없이 부르면 이해도를 지어낸다). 추세도 이번엔 안 만든다.
+  if (pilot && !safeInput.understanding?.length) {
+    const videoReceipt = await getVideoReceiptComment(user.tenantId, trendCtx ?? {}).catch(() => null);
+    return { ok: true, comment: composePilot("", videoReceipt) };
+  }
+  // AI에는 진도·이해도만 준다 — 다른 사실을 주면 모델이 그 항목을 '이해도' 글에 다시 쓴다(항목이 겹친다).
+  const aiInput: ReportCommentInput = pilot
+    ? {
+        ...safeInput,
+        dailyTest: "",
+        checkTest: "",
+        attitude: "",
+        homework: "",
+        homeworkToday: "",
+        videoHomework: undefined,
+        videoHomeworkDue: undefined,
+        specialNote: "",
+        classNotice: "",
+        classContext: "",
+        dailyTestSkip: undefined,
+      }
+    : safeInput;
   try {
     const supabase = await createClient();
     // 말투 프로파일(0262a)의 주인 = **이 화면의 강사 스코프**(실 강사·겸직 강사뷰 = `effectiveTeacherId`). 관리자 뷰(사무실 대리작성)는
@@ -1627,7 +1665,7 @@ export async function generateReportComment(
     ]);
     const sections = mentSections({
       mode,
-      input: safeInput,
+      input: aiInput,
       templates: { comment: tplComment, comment_p1: tplP1, comment_p2: tplP2, trend: tplTrend },
       // 결 변형 시드가 결정적이라 같은 학생·같은 날 재생성해도 결이 흔들리지 않는다. 날짜는 **보고서 날짜**(빈 값 = 오늘) —
       //   원스크린은 오늘을 볼 때 date를 비워 보내 시드가 `이름||과목`이 됐고, 한 학생이 날마다 같은 결로 열렸다(2026-10-16 미리보기 후속에서 발견).
@@ -1653,14 +1691,8 @@ export async function generateReportComment(
     const res = readMentResponse(data, mode, trendInput);
     if (!res.comment) return { ok: false, error: "빈 응답" };
     const body = prependParentAddress(appendVideoReceiptComment(res.comment, videoReceipt), parentAddress);
-    // 시범 대상 — '{이름}는 오늘 … 진도를 나갔습니다' → 본문(이해도는 AI가 말로 풀어 씀) → 특이사항(원문 그대로, 맨 아래).
-    const comment = pilot
-      ? composePilotMent({
-          lead: progressLead(input.studentName, pilotLessons(input.progress), skipStatusOf(input.progress)),
-          body,
-          note: pilotNote,
-        })
-      : body;
+    // 시범 대상 — 항목별 글(진도 → 테스트 → 태도 → 과제 → 이해도(AI) → 오늘 과제 → 선생님 한마디).
+    const comment = pilot ? composePilot(res.comment, videoReceipt) : body;
     if (res.dropped)
       console.warn(
         JSON.stringify({
