@@ -6,9 +6,10 @@ import { Loader2, Tag, Trash2, X } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import {
   BOARD_STAGE_OPTIONS,
+  ASSIGNED_DRAG_BLOCKED,
   ENROLLED_REVERT_BLOCKED,
   outcomeForDrop,
-  stageOfOutcome,
+  stageOfCard,
   type BoardStageKey,
 } from "@/features/enrollment/board-stages";
 import {
@@ -24,7 +25,7 @@ import {
 // (2026-09-01: 정본이 outcome 7종 → 칸 4단계로 바뀌었다 — board-stages.BOARD_STAGE_OPTIONS.)
 
 // 상세 상단 '상태 변경' 버튼. (수정은 전체 편집 페이지 /enrollment/[id]/edit 하나로 통일 — 모달 quick-edit 제거.)
-export type ConsultValues = { id: string; outcome: string };
+export type ConsultValues = { id: string; outcome: string; assignedClassCount?: number };
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return (
@@ -66,15 +67,15 @@ function SubmitBtn({ label }: { label: string }) {
  * ⚠️ 그래서 **'예약'·'노쇼'를 새로 지정하는 길은 없다**(있던 값만 보존). 필요해지면 칸을 늘리는 게
  *    아니라 이 화면에 원값 선택을 되살릴 것 — 칸반과 라벨이 갈리지 않게.
  */
-function OutcomeDialog({ id, current, onClose }: { id: string; current: string; onClose: () => void }) {
-  const [selected, setSelected] = useState<BoardStageKey>(() => stageOfOutcome(current));
+function OutcomeDialog({ id, current, assignedClassCount, onClose }: { id: string; current: string; assignedClassCount: number; onClose: () => void }) {
+  const [selected, setSelected] = useState<BoardStageKey>(() => stageOfCard({ outcome: current, assignedClassCount }));
   const [state, action] = useActionState<SetOutcomeState, FormData>(setEnrollmentOutcome, undefined);
   if (state?.ok) queueMicrotask(onClose);
   // '등록 완료'로 처리된 상담은 이전 단계로 되돌릴 수 없다 — 유지 또는 '미등록'만 허용(서버도 이중 방어).
   // ⚠️ 문구에 "반 배정 완료"를 쓰지 말 것 — 판정은 outcome='enrolled'인데 화면의 "반 배정 완료"는
   //    수강 여부라는 **다른 기준**이라, 반 배정이 없는 건에도 거짓 안내가 뜬다.
   const isConverted = current === "enrolled";
-  const allowed = (v: BoardStageKey) => !isConverted || v === "enrolled" || v === "unregistered";
+  const allowed = (v: BoardStageKey) => assignedClassCount > 0 ? v === "enrolled" : !isConverted || v === "enrolled" || v === "unregistered";
   return (
     <Modal title="상태 변경" onClose={onClose}>
       <form action={action} className="space-y-3">
@@ -90,7 +91,7 @@ function OutcomeDialog({ id, current, onClose }: { id: string; current: string; 
                 type="button"
                 disabled={disabled}
                 onClick={() => setSelected(o.value)}
-                title={disabled ? "‘등록 완료’로 처리된 상담은 이전 단계로 되돌릴 수 없습니다" : undefined}
+                title={disabled ? (assignedClassCount > 0 ? ASSIGNED_DRAG_BLOCKED : ENROLLED_REVERT_BLOCKED) : undefined}
                 className={`rounded-full border px-2.5 py-1 text-xs transition ${
                   disabled
                     ? "border-line text-text-faint cursor-not-allowed opacity-40"
@@ -104,7 +105,7 @@ function OutcomeDialog({ id, current, onClose }: { id: string; current: string; 
             );
           })}
         </div>
-        {isConverted ? (
+        {assignedClassCount > 0 ? <p className="text-text-dim text-xs">{ASSIGNED_DRAG_BLOCKED}</p> : isConverted ? (
           // 🔴 서버가 던지는 문장과 **같은 상수** — 한쪽만 고치면 안내가 갈린다.
           <p className="text-text-dim text-xs">{ENROLLED_REVERT_BLOCKED}</p>
         ) : null}
@@ -131,7 +132,7 @@ export function ConsultationManageButtons({ values }: { values: ConsultValues })
         <Tag className="size-4" />
         상태 변경
       </Button>
-      {open ? <OutcomeDialog id={values.id} current={values.outcome} onClose={() => setOpen(false)} /> : null}
+      {open ? <OutcomeDialog id={values.id} current={values.outcome} assignedClassCount={values.assignedClassCount ?? 0} onClose={() => setOpen(false)} /> : null}
     </>
   );
 }

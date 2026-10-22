@@ -26,10 +26,6 @@ export const createSchema = z.object({
   careerGoal: opt,
   siblings: opt,
   safetyNotes: opt,
-  registrationStatus: opt,
-  paymentAmount: opt,
-  paymentDate: opt,
-  registrar: opt,
   followUpDate: opt,
   followUpContent: opt,
   nonRegistrationReason: opt,
@@ -48,11 +44,6 @@ export const createSchema = z.object({
 export type FullForm = z.infer<typeof createSchema>;
 
 const asBool = (v?: string | null) => v === "true" || v === "on";
-const asNum = (v?: string | null) => {
-  if (!v) return null;
-  const n = Number(String(v).replace(/[^\d.]/g, ""));
-  return Number.isFinite(n) ? n : null;
-};
 
 export function buildConsultationRow(d: FullForm, aliases: readonly SchoolSaveAlias[]) {
   let subjectDetails: unknown = null;
@@ -86,10 +77,7 @@ export function buildConsultationRow(d: FullForm, aliases: readonly SchoolSaveAl
     career_goal: d.careerGoal || null,
     siblings: d.siblings || null,
     safety_notes: d.safetyNotes || null,
-    registration_status: d.registrationStatus || null,
-    payment_amount: asNum(d.paymentAmount),
-    payment_date: d.paymentDate || null,
-    registrar: d.registrar || null,
+    // 옛 등록 상태·결제는 이관 기록이다. 폼 저장에서 제외해 기존 값도 보존한다.
     follow_up_date: d.followUpDate || null,
     follow_up_content: d.followUpContent || null,
     non_registration_reason: d.nonRegistrationReason || null,

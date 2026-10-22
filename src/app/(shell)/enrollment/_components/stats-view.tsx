@@ -111,7 +111,7 @@ export function StatsView({
               ),
           },
           {
-            label: "등록 결제액",
+            label: "과거 기재 결제액",
             value: stats.paidSum > 0 ? won(stats.paidSum) : "—",
             delta:
               paidCount === null || stats.enrolled === 0 ? null : (
@@ -191,7 +191,7 @@ export function StatsView({
                       건당 평균의 분모도 등록 건수가 아니라 '금액이 적힌 등록 건수'다. */}
                   {b.paidSum > 0 ? (
                     <div className="text-text-dim num mt-0.5 text-xs">
-                      매출 <b className="text-foreground">{won(b.paidSum)}</b>
+                      과거 기재 결제액 <b className="text-foreground">{won(b.paidSum)}</b>
                       {b.avgPaid !== null && b.paidCount ? (
                         <>
                           {" · "}건당 {won(b.avgPaid)}

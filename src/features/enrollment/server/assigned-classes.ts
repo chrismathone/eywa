@@ -90,10 +90,11 @@ export async function countAssignedClasses(
   subject: string | null,
 ): Promise<number> {
   if (!studentId) return 0;
-  const { count } = await assignedQuery(supabase, studentId, subject, "*, class:class_id!inner ( subject )", {
+  const { count, error } = await assignedQuery(supabase, studentId, subject, "*, class:class_id!inner ( subject )", {
     count: "exact",
     head: true,
   });
+  if (error) throw new Error("수강 정보를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.");
   return count ?? 0;
 }
 
