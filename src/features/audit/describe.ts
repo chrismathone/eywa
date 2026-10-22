@@ -412,6 +412,15 @@ export function auditDetail(
   const m = metadata ?? {};
   switch (action) {
     // 원스크린 일괄 입력(2026-10-15) — 방식 · 날짜 · 몇 행 · 어느 반 · 어떤 칸. 글 내용은 기록에 없다(bulk-log-actions.ts).
+    case "onescreen_trend_optout": {
+      const cleared = num(m.cleared);
+      return join(
+        ctx.nameOf(m.studentId),
+        ctx.nameOf(m.classId),
+        m.on === true ? "미발송 켬" : m.on === false ? "미발송 끔" : null,
+        cleared && cleared > 0 ? `안 나간 보고서 ${cleared}건 추세 비움` : null,
+      );
+    }
     case "onescreen_bulk_apply": {
       const FIELD: Record<string, string> = {
         today: "진도", textbook: "교재", homeworkToday: "오늘 과제", attitude: "태도", homework: "과제", note: "특이사항",

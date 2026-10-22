@@ -1418,3 +1418,12 @@ describe("auditDetail — 퇴원보고서 처리 결과(2026-10-23)", () => {
     expect(auditDetail("withdrawal_report_update", { operation: "보고서 제출", date: "2026-10-23" }, ctx())).toBe("보고서 제출 · 처리일 2026-10-23");
   });
 });
+
+describe("auditDetail — 학습 추세 미발송 설정(2026-10-23)", () => {
+  const C1 = "c1111111-2222-3333-4444-555555555555";
+  it("학생 · 반 · 켬/끔 · 비운 보고서 수", () => {
+    const names = ctx({ [SID]: "김학생", [C1]: "M1A" });
+    expect(auditDetail("onescreen_trend_optout", { studentId: SID, classId: C1, on: true, cleared: 2 }, names)).toBe("김학생 · M1A · 미발송 켬 · 안 나간 보고서 2건 추세 비움");
+    expect(auditDetail("onescreen_trend_optout", { studentId: SID, classId: C1, on: false, cleared: 0 }, names)).toBe("김학생 · M1A · 미발송 끔");
+  });
+});

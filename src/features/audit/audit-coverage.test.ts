@@ -40,7 +40,6 @@ const EXEMPT: Record<string, string> = {
   "src/features/onboarding/server/prefs.ts#setOnboardingDismissed": VIEW,
   "src/features/onescreen/server/actions.ts#setMyNoticeMode": VIEW,
   "src/features/onescreen/server/actions.ts#setMyOnescreenFontSize": VIEW,
-  "src/features/onescreen/server/actions.ts#setMyTrendOptOut": VIEW,
   "src/features/shuttle/today/server/today-prefs.ts#saveShuttleTodayPrefs": VIEW,
   "src/features/staff/list/server/list-prefs.ts#saveStaffListPrefs": VIEW,
   "src/features/students/list/server/list-prefs.ts#saveStudentListPrefs": VIEW,
