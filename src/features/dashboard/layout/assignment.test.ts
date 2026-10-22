@@ -38,6 +38,20 @@ describe("역할·담당 범위·배치는 독립", () => {
     expect(dashboardAssignmentOf({ ...user, isSuperAdmin: true }, assignment)).toMatchObject({ bundle: "super", scope: "all" });
     expect(dashboardAssignmentOf({ ...user, systemRole: "master" }, assignment)).toMatchObject({ bundle: "owner", scope: "all" });
   });
+  it("별도 자격이 있는 원장도 저장된 원장 배치와 이후 변경을 그대로 따른다", () => {
+    const account = { ...user, systemRole: "master" as const, isSuperAdmin: true };
+    const view = dashboardAssignmentOf(account, assignment);
+    expect(view).toMatchObject({ bundle: "owner", scope: "all", subjectScoped: false, subjects: [] });
+    for (const w of [3, 6]) {
+      const items = [{ id: "kpi:students", x: 0, y: 0, w, h: 2, title: "재원생 현황" }];
+      const stored = { ...EMPTY_DASHBOARD, layouts: [{ role: "owner" as const, items }] };
+      const actual = resolveView({ stored, bundle: view.bundle, menus: new Set(MENU_KEYS) });
+      expect(actual.items).toEqual(items);
+      expect(actual.rev).toBe(resolveView({ stored, bundle: "owner", menus: new Set(MENU_KEYS) }).rev);
+    }
+    const member: MemberRow = { id, display_name: "원장", system_role: "master", subjects: [], status: "active" };
+    expect(dashboardMembers([member], new Set([id]), DEFAULT_SETTINGS)[0]).toMatchObject({ bundle: "owner", scopeLabel: "전 과목", canOpen: true });
+  });
 });
 
 describe("기존 설정 호환·실제 배정 직원", () => {

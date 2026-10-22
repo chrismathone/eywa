@@ -9,8 +9,9 @@ import type { SystemRole } from "@/lib/permissions";
 import type { Bundle, DashboardAssignment } from "./types";
 
 export function dashboardBundleOf(input: { systemRole: SystemRole; isSuperAdmin: boolean; subjects: readonly string[]; assignment?: DashboardAssignment }): Bundle {
-  if (input.isSuperAdmin) return "super";
+  // 지점 원장은 원장 탭에서 저장한 배치를 함께 쓴다. 별도 자격은 권한 판정에서 유지하며 화면 배치를 갈라 놓지 않는다.
   if (input.systemRole === "master") return "owner";
+  if (input.isSuperAdmin) return "super";
   if (input.systemRole === "admin") return input.assignment?.adminLayout ?? (input.subjects.length > 0 ? "subject" : "desk");
   return input.systemRole;
 }
