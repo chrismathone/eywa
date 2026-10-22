@@ -228,16 +228,17 @@ describe("⑦ 툴바 캐논 · 감사로그 등록", () => {
     const canon = read("src", "components", "toolbar-canon.test.ts");
     expect(canon).toContain("src/app/(shell)/inventory/_components/assets-face.tsx");
   });
-  it("감사로그 액션 16종이 레지스트리·상세 한글화에 있다", () => {
+  it("감사로그 액션 19종이 레지스트리·상세 한글화에 있다", () => {
     const log = read("src", "features", "audit", "server", "log.ts");
     const describeSrc = read("src", "features", "audit", "describe.ts");
     for (const k of ["inventory_asset_create", "inventory_asset_update", "inventory_asset_status", "inventory_loan_out", "inventory_loan_return", "inventory_audit", "inventory_supply_update", "inventory_excel_import",
     "inventory_asset_holder", "inventory_asset_delete", "inventory_loan_update", "inventory_loan_delete",
-    "inventory_audit_update", "inventory_audit_delete", "inventory_supply_delete", "inventory_supply_create"]) {
+    "inventory_audit_update", "inventory_audit_delete", "inventory_supply_delete", "inventory_supply_create",
+    "inventory_vendor_create", "inventory_vendor_update", "inventory_vendor_delete"]) {
       expect(log).toMatch(new RegExp(`^\\s{2}${k}:`, "m"));
       expect(describeSrc).toContain(`case "${k}"`);
     }
-    for (const t of ["inventory_asset", "inventory_loan", "inventory_audit", "inventory_supply"]) {
+    for (const t of ["inventory_asset", "inventory_loan", "inventory_audit", "inventory_supply", "inventory_vendor"]) {
       expect(describeSrc).toMatch(new RegExp(`\\b${t}: "[가-힣 ]+"`));
     }
   });

@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { reportError } from "@/lib/observability/report-error";
 import type { InventoryTab } from "../faces";
-import type { InventoryAsset, InventoryAudit, InventoryLoan, InventorySupply } from "../types";
+import type { InventoryAsset, InventoryAudit, InventoryLoan, InventorySupply, InventoryVendor } from "../types";
 import { isMissingInventoryTable } from "./access";
 
 /**
@@ -24,22 +24,23 @@ function classify(error: { code?: string; message?: string } | null): TableStatu
   return isMissingInventoryTable(error) ? "missing-table" : "failed";
 }
 
-/** 탭 라벨 옆 건수 4개 — 행을 안 받는다(head). 실패는 null(0을 적으면 "하나도 없다"는 거짓말). */
+/** 탭 라벨 옆 건수(면마다 하나) — 행을 안 받는다(head). 실패는 null(0을 적으면 "하나도 없다"는 거짓말). */
 export async function getInventoryCounts(): Promise<Record<InventoryTab, number | null>> {
   const user = await getCurrentUser();
-  if (!user) return { assets: null, loans: null, audits: null, supplies: null };
+  if (!user) return { assets: null, loans: null, audits: null, supplies: null, vendors: null };
   const supabase = await createClient();
   const head = (table: string) =>
     supabase.from(table).select("id", { count: "exact", head: true }).eq("tenant_id", user.tenantId);
   // 서로 독립 — 함께 받는다(B4).
-  const [a, l, d, s] = await Promise.all([
+  const [a, l, d, s, v] = await Promise.all([
     head("inventory_assets"),
     head("inventory_loans"),
     head("inventory_audits"),
     head("inventory_supplies"),
+    head("inventory_vendors"),
   ]);
   const n = (r: { count: number | null; error: { message: string } | null }) => (r.error ? null : (r.count ?? 0));
-  return { assets: n(a), loans: n(l), audits: n(d), supplies: n(s) };
+  return { assets: n(a), loans: n(l), audits: n(d), supplies: n(s), vendors: n(v) };
 }
 
 type Embedded = { asset_code: string; model: string | null } | { asset_code: string; model: string | null }[] | null;
@@ -182,6 +183,34 @@ export async function getSupplies(): Promise<FaceData<InventorySupply>> {
     rows: res.rows.map((r) => ({
       id: r.id, itemCode: r.item_code, name: r.name, makerModel: r.maker_model, qty: r.qty, location: r.location,
       checkedOn: r.checked_on, checkerName: r.checker_name, note: r.note, sortOrder: r.sort_order,
+    })),
+  };
+}
+
+type VendorRow = {
+  id: string; name: string; category: string | null; phone: string | null; contact_name: string | null;
+  contact_phone: string | null; email: string | null; address: string | null; biz_no: string | null; note: string | null;
+};
+
+/** 업체리스트 전건(업체명 가나다). 표가 없으면(20261022140000 미적용) `missing-table` — 이 면만 배너. */
+export async function getVendors(): Promise<FaceData<InventoryVendor>> {
+  const user = await getCurrentUser();
+  if (!user) return { status: "failed", rows: [] };
+  const supabase = await createClient();
+  const res = await loadAll<VendorRow>("inventory.vendors", (from, to) =>
+    supabase
+      .from("inventory_vendors")
+      .select("id, name, category, phone, contact_name, contact_phone, email, address, biz_no, note")
+      .eq("tenant_id", user.tenantId)
+      .order("name", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  return {
+    status: res.status,
+    rows: res.rows.map((r) => ({
+      id: r.id, name: r.name, category: r.category, phone: r.phone, contactName: r.contact_name,
+      contactPhone: r.contact_phone, email: r.email, address: r.address, bizNo: r.biz_no, note: r.note,
     })),
   };
 }
