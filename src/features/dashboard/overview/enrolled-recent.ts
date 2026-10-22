@@ -29,3 +29,23 @@ export function splitEnrolledRecent<T extends { date?: string | null }>(
     month: rows.filter((row) => dateOf(row).slice(0, 7) === month && dateOf(row) <= today),
   };
 }
+
+/**
+ * **반 배정으로 '등록 완료' 칸에 선 때**(원장 2026-10-22 *"KPI 일치하지 않는건에 대해 KPI 일치시킬것"*) — 칸반은 상태가 아니라
+ * 반 배정으로도 카드를 '등록 완료'에 세운다(`stageOfCard`: 연결 학생에게 그 과목 미종료 수강이 있으면). QR 자동 연결은 상태를
+ * 바꾸지 않으므로(결정 — `outcome` 강제 안 함) 이런 상담엔 '등록 완료로 옮긴' 상태 로그가 없다 → 운영실이 못 셌다(장윤건 10/16).
+ * 그 때 = 그 과목 반에 **처음** 배정된 때(끝난 수강 포함 — 반 이동으로 새 수강이 생겨도 신규로 다시 세지 않게) · 상담 접수보다
+ * 앞이면 접수 때(이미 다니던 학생의 새 상담은 들어오자마자 그 칸이다). 지금 배정이 없으면 null(칸반도 그 칸이 아니다).
+ * 과목 판정은 칸반 배지와 같다(`assignedQuery` — 상담 과목이 있으면 그 과목 반만 · 없으면 전 과목).
+ */
+export function assignedEntryAt(input: {
+  consultCreatedAt: string;
+  subject: string | null;
+  enrollments: readonly { subject: string | null; createdAt: string; endDate: string | null }[];
+  today: string;
+}): string | null {
+  const mine = input.enrollments.filter((e) => !input.subject || e.subject === input.subject);
+  if (!mine.some((e) => !e.endDate || e.endDate >= input.today)) return null;
+  const first = mine.map((e) => e.createdAt).sort()[0]!;
+  return Date.parse(first) > Date.parse(input.consultCreatedAt) ? first : input.consultCreatedAt;
+}

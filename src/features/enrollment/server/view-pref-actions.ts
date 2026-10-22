@@ -2,7 +2,7 @@
 
 import { patchMyUiPrefs } from "@/lib/ui-prefs/patch";
 import { parsePeriodMode } from "@/features/stats/period";
-import { ENROLLMENT_VIEW_PREFS_NS, PROGRESS_LINE_KEYS, parseEnrollmentView, parseStatsSpan } from "../view-pref";
+import { ENROLLMENT_VIEW_PREFS_NS, PROGRESS_LINE_KEYS, parseEnrollmentView, parseIntakeChartKind, parseStatsSpan } from "../view-pref";
 
 /**
  * 신규 콜&상담 '보기'를 **본인 계정**에 저장 — `RememberPrefs`가 부른다(다음 방문용).
@@ -40,4 +40,11 @@ export async function saveIntakeTrendMode(next: { mode: string }): Promise<{ ok:
   const mode = parsePeriodMode(next?.mode);
   if (!mode) return { ok: false, error: "알 수 없는 보기입니다" };
   return patchMyUiPrefs(ENROLLMENT_VIEW_PREFS_NS, { intakeTrend: mode === "month" ? undefined : mode });
+}
+
+/** 통계 보기 '신규 문의 추이' 일별·구간 그래프 모양(막대 · 꺾은선) — 기본(막대)은 키를 지운다. */
+export async function saveIntakeChartKind(next: { kind: string }): Promise<{ ok: boolean; error?: string }> {
+  const kind = parseIntakeChartKind(next?.kind);
+  if (!kind) return { ok: false, error: "알 수 없는 보기입니다" };
+  return patchMyUiPrefs(ENROLLMENT_VIEW_PREFS_NS, { intakeChart: kind === "bar" ? undefined : kind });
 }

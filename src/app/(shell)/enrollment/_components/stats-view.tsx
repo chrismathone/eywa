@@ -48,6 +48,7 @@ export function StatsView({
   stats,
   year,
   periodText,
+  yearChips,
   exits,
   dist,
   schoolPrefs,
@@ -57,6 +58,8 @@ export function StatsView({
   year: number | null;
   /** 연도 칩이 정한 기간('2026년' · '2024~2026년') — 카드 안 기간을 따로 고르는 위 두 카드와 갈리게 밝힌다. */
   periodText: string;
+  /** 연도 칩(머리글 툴바에서 옮겨 왔다 — 원장 2026-10-22). 이 구역 안에서 스크롤을 따라온다. */
+  yearChips: React.ReactNode;
   /** 관리현황 '등록 후 퇴원'(퇴원관리를 열 수 있는 사람만 · 못 불러오면 null = 칸 없음). */
   exits: ManagementExits | null;
   dist: ConsultationDistribution;
@@ -83,12 +86,17 @@ export function StatsView({
   return (
     // `#conversion` = 운영실 '신규 콜&상담 전환'의 상세가 닿는 자리(`admissionsStatsHref`).
     <div id="conversion" className="scroll-mt-4 space-y-4">
-      {/* 이 아래는 머리글 '연도' 칩의 기간이다 — 위 '신규 문의 추이'(기본 12개월)와 합계가 다른 까닭을 한 줄로 밝힌다(검수 2026-10-22). */}
+      {/* 연도 칩 = 이 아래 카드들의 기간(원장 2026-10-22 *"너무 위쪽에 있어서 아래쪽과 작동하는게 헷갈림. 해당 위치로 이동할것"* —
+          머리글 툴바에서 옮겼다). 이 구역 안에선 스크롤을 따라온다(원장 2026-08-05 *연도를 눌러가며 아래 숫자가 바뀌는 걸 보려면*).
+          위 '신규 문의 추이'·'상담 진행 기록'은 카드 안 기간을 따로 쓴다. */}
+      <div className="bg-background sticky top-0 z-20 -mx-1 flex flex-wrap items-center gap-x-3 gap-y-1.5 px-1 py-2">
+        {yearChips}
+        <p className="text-text-dim text-xs break-keep">
+          아래 카드 기간 · {periodText}
+          {same ? ` · 증감은 작년 같은 기간(1월 1일 ~ ${Number(same.to.slice(5, 7))}월 ${Number(same.to.slice(8, 10))}일)과 견줍니다` : ""}
+        </p>
+      </div>
       <div className="space-y-1.5">
-      <p className="text-text-dim text-xs">
-        아래 카드는 위 &apos;연도&apos;에서 고른 기간 · {periodText}
-        {same ? ` · 증감은 작년 같은 기간(1월 1일 ~ ${Number(same.to.slice(5, 7))}월 ${Number(same.to.slice(8, 10))}일)과 견줍니다` : ""}
-      </p>
       {/* 헤드라인 — 페이지 rows가 아니라 집계 원천에서 온 수치(#89) */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[
