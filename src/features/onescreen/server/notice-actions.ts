@@ -8,8 +8,7 @@
 // ⚠️ 안전(적대검증 반영):
 // - 학원 **전체** 동명이인 가드(hasClassnoteNameCollision) — resolveNoticeTargets의 배치-로컬 동명이인 검사만으론
 //   배치 밖 동명이인(다른 반 김민수)을 못 잡아 엉뚱한 보드로 갈 수 있음. 보고서 발송 경로와 동일 강도로 재검.
-// - 개인화 태그는 **연동 PC 워커가 per-target 본문을 지원한 뒤에만** — 지원 전엔 구 워커가 '{{이름}}'을 리터럴로
-//   게시하므로 태그가 있으면 발송 차단(rollout 가드). Phase 2에서 워커 지원 확인 후 해제.
+// - 개인화 태그는 서버에서 학생별로 치환해 targets[].body에 넣는다. 대상 매칭에는 원본 이름·학생 ID를 유지한다.
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
@@ -40,8 +39,9 @@ import { humanizeDbError } from "@/lib/supabase/db-error";
 import { classnoteModuleOn, classnoteSendOn } from "@/features/owner/classnote-gate";
 // 수학 개별 공지의 반 보드 경로(삼자 일치) — 세 발송 표면이 같이 쓰는 한 벌.
 import { routeNoticeCandidates, type RoutedCandidate } from "@/features/report-admin/server/notice-class-route";
+import { fillNoticeTemplate, hasNoticeTemplateTags, noticeTemplateError, NOTICE_BODY_MAX } from "../notice-template";
 
-const BODY_MAX = 4000;
+const BODY_MAX = NOTICE_BODY_MAX;
 // 학원이(테스트 학생) 고정 타깃 — 실 학부모에게 안 가는 검증 경로(반 공지 TEST_TARGET과 동일 관례).
 const TEST_TARGET = { studentName: "학원이", board: "(수학)학원이" };
 
@@ -107,6 +107,8 @@ export async function sendOnescreenNotice(input: OnescreenNoticeInput): Promise<
   const body = (input.body ?? "").trim(); // 공통 내용
   if (!body) return { ok: false, error: "공통 내용을 입력하세요" };
   if (body.length > BODY_MAX) return { ok: false, error: `공지가 너무 깁니다(최대 ${BODY_MAX}자)` };
+  const templateError = noticeTemplateError(body);
+  if (templateError) return { ok: false, error: templateError };
 
   const supabase = await createClient();
   const settings = await getTenantSettings();
@@ -123,9 +125,11 @@ export async function sendOnescreenNotice(input: OnescreenNoticeInput): Promise<
   // ── 1. 대상 (학생,과목) 후보 해석 + 강사 스코프 ──
   let targets: NoticeTarget[] = [];
   let skipped: NoticeSkip[] = [];
+  const studentNames = new Map<string, string>();
   if (input.test) {
     // 탈원 테스트 학생이라 반 경로로 안 뽑힘 → 고정 타깃(보드 실존·실 학부모 없음). 동명이인 가드 불필요.
     targets = [{ studentId: "", studentName: TEST_TARGET.studentName, board: TEST_TARGET.board }];
+    studentNames.set("", TEST_TARGET.studentName);
   } else {
     const students = (input.students ?? []).filter((s) => s.studentId);
     if (!students.length) return { ok: false, error: "대상 학생을 선택하세요" };
@@ -161,6 +165,7 @@ export async function sendOnescreenNotice(input: OnescreenNoticeInput): Promise<
       supabase.from("students").select("id, name, classnote_name, status").in("id", chunk),
     );
     const byId = new Map(rows.map((r) => [r.id, r]));
+    for (const row of rows) studentNames.set(row.id, row.name);
     const candidates: RoutedCandidate[] = [];
     for (const s of students) {
       if (!allowedIds.has(s.studentId)) continue;
@@ -242,6 +247,19 @@ export async function sendOnescreenNotice(input: OnescreenNoticeInput): Promise<
       });
     }
   }
+
+  // 이름은 서버에서 읽은 학생 ID로 찾는다. ClassNote 보드명·동명이인 접미사는 발송 대상 판정용으로 그대로 둔다.
+  const renderedTargets: NoticeTarget[] = [];
+  for (const target of targets) {
+    const source = target.body ?? body;
+    const rendered = fillNoticeTemplate(source, {
+      studentName: studentNames.get(target.studentId) ?? "",
+      authorName: user.displayName,
+    });
+    if (!rendered.ok) return { ...rendered, skipped };
+    renderedTargets.push(hasNoticeTemplateTags(source) ? { ...target, body: rendered.body } : target);
+  }
+  targets = renderedTargets;
 
   // 공통 첨부 — 0건이면 컬럼 자체를 안 건드린다(기존 호출부 무영향). 상한 판정은 아래 overflow 가드가 단독으로.
   const commonAttachments = sanitizeNoticeAttachments(
@@ -446,7 +464,7 @@ export async function listMyOnescreenNotices(): Promise<{ ok: boolean; rows?: On
         processedAt: r.processed_at as string | null,
         reportLinks: links,
         canRevoke,
-        canEdit,
+        canEdit: canEdit && !hasNoticeTemplateTags(r.body as string),
       };
     }),
   };
@@ -534,6 +552,9 @@ export async function editPostedNotice(noticeId: string, newBody: string): Promi
   const body = (newBody ?? "").trim();
   if (!body) return { ok: false, error: "내용을 입력하세요" };
   if (body.length > BODY_MAX) return { ok: false, error: `공지가 너무 깁니다(최대 ${BODY_MAX}자)` };
+  // 게시본 PATCH는 공통 본문 한 벌을 쓴다. 학생별 태그가 원문 그대로 게시되지 않도록 이 경로에서는 막는다.
+  if (hasNoticeTemplateTags(body))
+    return { ok: false, error: "태그를 사용하는 게시 공지는 게시취소한 뒤 다시 보내 주세요" };
   const supabase = await createClient();
   const { data: row } = await supabase
     .from("classnote_notices")
@@ -618,6 +639,8 @@ export async function editQueuedNotice(noticeId: string, newBody: string): Promi
   const body = (newBody ?? "").trim();
   if (!body) return { ok: false, error: "공통 내용을 입력하세요" };
   if (body.length > BODY_MAX) return { ok: false, error: `공지가 너무 깁니다(최대 ${BODY_MAX}자)` };
+  const templateError = noticeTemplateError(body);
+  if (templateError) return { ok: false, error: templateError };
 
   const supabase = await createClient();
   // 개별 내용 스트립 — 수정된 공통을 전원에게 적용(개별을 남기면 옛 공통이 붙은 채 남아 오해). status='queued'라 아직 미게시.
@@ -628,6 +651,7 @@ export async function editQueuedNotice(noticeId: string, newBody: string): Promi
     .eq("created_by", user.id)
     .eq("status", "queued")
     .maybeSingle();
+  if (!cur) return explainZeroRows(supabase, noticeId, user.id);
   // 게시본 수정과 같은 이유 — 개별 첨부가 있으면 본문만 갈아끼울 수 없다(그림만 남은 글 방지).
   if (hasNoticeTargetAttachments(cur?.targets))
     return {
@@ -641,6 +665,24 @@ export async function editQueuedNotice(noticeId: string, newBody: string): Promi
         return rest;
       })
     : undefined;
+  if (hasNoticeTemplateTags(body)) {
+    if (!strippedTargets?.length) return { ok: false, error: "공지의 대상 학생을 확인하지 못했습니다" };
+    const ids = [...new Set(strippedTargets.flatMap(t => typeof t.studentId === "string" && t.studentId ? [t.studentId] : []))];
+    const students = await fetchInChunks<{ id: string; name: string }>(ids, chunk =>
+      supabase.from("students").select("id, name").in("id", chunk),
+    );
+    const names = new Map(students.map(student => [student.id, student.name]));
+    for (const target of strippedTargets) {
+      const rendered = fillNoticeTemplate(body, {
+        studentName: typeof target.studentId === "string" && target.studentId
+          ? names.get(target.studentId) ?? ""
+          : target.board === TEST_TARGET.board ? TEST_TARGET.studentName : "",
+        authorName: user.displayName,
+      });
+      if (!rendered.ok) return rendered;
+      target.body = rendered.body;
+    }
+  }
   const { data } = await supabase
     .from("classnote_notices")
     .update(strippedTargets ? { body, targets: strippedTargets } : { body })

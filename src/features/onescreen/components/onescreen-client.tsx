@@ -4934,7 +4934,7 @@ selected ? (
     //    ⚠️ `min-h-0`이 없으면 flex 아이템의 최소 크기가 콘텐츠라 열이 창을 넘겨 밀어낸다.
     <DisplayOptionsProvider value={displaySettings}>
     <ClassnoteOnProvider value={classnoteOn}>
-    <div className="flex h-full min-h-0 flex-col gap-4 pb-3">
+    <div className={view === "notice" ? "flex min-h-0 flex-col gap-3" : "flex h-full min-h-0 flex-col gap-4 pb-3"}>
       {sendClassAsk ? <SendClassDialog ask={sendClassAsk} onClose={() => setSendClassAsk(null)} /> : null}
       <OneScreenTopBar
         readonlyView={readonlyView}
@@ -5054,7 +5054,7 @@ selected ? (
       {/* 글씨 크기 — 목록·표 영역만 감싼다(상단 바는 그대로: 크기를 고르는 컨트롤 자체가 같이 커지면 어지럽다).
           ⚠️ `font-size`가 아니라 `zoom`인 이유는 font-size.ts 주석 참조(칸마다 px 글자가 박힌 조밀한 표).
           기본('작음')은 배율 1이라 **스타일 자체를 붙이지 않는다** — 손대지 않은 강사의 렌더는 완전 무변경. */}
-      <div className={view === "card" ? "flex min-w-0 flex-col lg:min-h-0 lg:flex-1" : "pb-3"} style={fontZoom === 1 ? undefined : { zoom: fontZoom }}>
+      <div className={view === "card" ? "flex min-w-0 flex-col lg:min-h-0 lg:flex-1" : view === "notice" ? "min-w-0" : "pb-3"} style={fontZoom === 1 ? undefined : { zoom: fontZoom }}>
       {view === "grid" ? (
         reportGrid
       ) : view === "status" ? (

@@ -6,6 +6,7 @@
  */
 import type { TemplateTokenKey } from "./defaults";
 import { imageSlotMarker, type ImageSlotKey } from "./image-slots";
+import { parentStudentName } from "./student-name";
 
 export type EnglishTemplateSource = {
   studentName: string;
@@ -43,7 +44,7 @@ export function englishTemplateValues(src: EnglishTemplateSource): Record<Templa
   const teacher = src.teacherName.trim();
   const tests = englishTestText(src.tests);
   return {
-    학생: src.studentName.trim(),
+    학생: parentStudentName(src.studentName),
     작성자: teacher ? `${teacher} 선생님` : "",
     인사말: src.aiIntro.trim(),
     진도: src.progress.trim(),

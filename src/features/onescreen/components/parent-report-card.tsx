@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { ReportSettings } from "@/features/owner/settings-types";
 import type { JjReportSnapshot } from "@/features/ijw/snapshot";
+import { parentStudentName } from "@/features/report-templates/student-name";
 import { hasTrend, type TrendPoint } from "../report-trend";
 import { isImageAttachment, pickInlineAttachments } from "../attachment-utils";
 import { isSkipStatusProgress } from "../progress-status";
@@ -110,6 +111,7 @@ export function ParentReportCard({
   // "2026년 07월 10일" — 제목에 합쳐 쓰므로 0패딩 고정 포맷(원장 요청 표기). YYYY-MM-DD 문자열 분해라 TZ 무관.
   const [ry, rm, rd] = (report.reportDate ?? "").split("-");
   const reportDate = ry && rm && rd ? `${ry}년 ${rm}월 ${rd}일` : "";
+  const parentStudent = student ? { ...student, name: parentStudentName(student.name ?? "") } : null;
   const schoolGrade = fmtSchoolGrade(student?.school, student?.grade);
   const videoDue = videoHomeworkDueLabel(report.reportDate, report.videoHomework, report.videoHomeworkDue, report.videoHomeworkNext);
   // 성적 추이 그래프 표시 여부 — 토글 ON + 시험 또는 과제 중 하나라도 유효점 2개 이상(빈 카드 방지).
@@ -158,7 +160,7 @@ export function ParentReportCard({
       </header>
 
       <Section title="학생 정보">
-        <Field label="이름" value={student?.name || "-"} />
+        <Field label="이름" value={parentStudent?.name || "-"} />
         <Field label="학교 · 학년" value={schoolGrade} />
         <Field label="담임" value={report.teacherName || "-"} />
       </Section>
@@ -167,7 +169,7 @@ export function ParentReportCard({
           학습 추세는 **전부 건너뛴다**: 같이 그리면 같은 진도·숙제가 글 안과 칸에 두 번 나간다.
           🔴 'showParentNote' 토글을 보지 않는다 — 수학에선 여러 칸 중 하나지만 여기선 글이 곧 보고서라,
              끄면 학생 정보만 남은 빈 카드가 학부모에게 나간다. 머리·학생 정보·첨부·바닥글은 수학과 같다. */}
-      {templateMode ? <TemplateBody text={report.notes} jj={jj} inline={inline} student={student} /> : null}
+      {templateMode ? <TemplateBody text={report.notes} jj={jj} inline={inline} student={parentStudent} /> : null}
       {templateMode && videoDue ? <section className="bg-card border-line rounded-2xl border px-5"><Field label="영상 숙제" value={videoDue} /></section> : null}
 
       {!templateMode && showToday ? (

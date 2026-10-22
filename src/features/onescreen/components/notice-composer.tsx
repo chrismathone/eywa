@@ -2,7 +2,7 @@
 
 // 원스크린 학부모 공지 컴포저 — 선택 학생(카드=1명 seed) 또는 표에서 넘어온 학생들에게 ClassNote 개별 보드로
 // **독립 공지**를 발송(classnote_notices). 보고서와 별개 글이라 누적·공존. 게시는 연동 PC 워커가 순차 처리.
-// Phase 1 = 일반 공지만(개인화 {{태그}}는 워커 per-target 지원 후 해제). 대기(미게시) 공지는 여기서 수정/삭제.
+// 공통·개별 내용의 이름 태그는 서버에서 학생별로 치환한다. 대기(미게시) 공지는 여기서 수정/삭제.
 //
 // 🔴 공지 방식은 둘이다(원장 2026-10-02 *"반인지 개별인지를 선택하는 토글"*):
 //    · 원생 개별 공지 = 학생마다 1:1 알림장(이 파일 — 수학은 반 보드의 그 학생 원아에게, 그 밖은 1인 보드).
@@ -27,6 +27,8 @@ import {
 } from "../server/notice-actions";
 import { NoticeHistory, NoticeHistoryItem } from "./notice-history";
 import { NoticeAttachmentPicker } from "./notice-attachment-picker";
+import { NoticeTemplateHelp } from "./notice-template-help";
+import { hasNoticeTemplateTags } from "../notice-template";
 import { NoticeClassComposer, type ClassNoticeTarget } from "./notice-class-composer";
 import { loadMyClassWideNotice } from "@/features/report-admin/server/class-notice-actions";
 import type { ClassNoticeRow } from "@/features/report-admin/class-notice";
@@ -45,7 +47,7 @@ import type { OneScreenStudent } from "../types";
 import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import type { SheetDictKey } from "@/features/teacher-view/i18n";
 
-const BODY = "border-line bg-card text-foreground rounded-lg border px-3 py-2 text-sm w-full resize-y";
+const BODY = "border-line bg-card text-foreground block rounded-lg border px-3 py-2 text-sm w-full resize-y";
 
 /** 대상 후보 — '오늘 수업'(로스터)과 '내 담당 전체'(서버 조회)를 한 모양으로 다룬다. */
 type Candidate = NoticeStudent;
@@ -403,8 +405,8 @@ export function NoticeComposer({
       </div>
 
       {/* 작성 + 이력 */}
-      <div className="min-w-0 space-y-4">
-        <section className="bg-card border-line shadow-card space-y-3 rounded-2xl border px-4 py-3">
+      <div className="min-w-0 space-y-3">
+        <section className="bg-card border-line shadow-card space-y-2 rounded-2xl border px-4 py-3">
           <div>
             <h2 className="text-foreground text-base font-bold">{t("os.n.heading")}</h2>
             <p className="text-text-faint text-xs">
@@ -425,7 +427,7 @@ export function NoticeComposer({
             <textarea
               value={body}
               onChange={(e) => setBody(e.target.value)}
-              rows={5}
+              rows={3}
               placeholder={t("os.n.bodyPh")}
               className={BODY}
             />
@@ -483,6 +485,7 @@ export function NoticeComposer({
             uploading={uploading}
             onUploadingChange={setUploading}
           />
+          <NoticeTemplateHelp />
 
           {lastSkipped.length ? (
             <div className="border-line rounded-md border px-3 py-2" role="status">
@@ -556,6 +559,9 @@ export function NoticeComposer({
                         )}
                         {/* 공지 단위 사유(교차 확인 이상·전 대상 실패·회수 실패 등) — 워커가 한글로 적는다. 상태 색과 무관하게 항상 보인다. */}
                         {r.error ? <p className="text-danger mt-0.5 text-xs break-keep">{r.error}</p> : null}
+                        {r.canRevoke && hasNoticeTemplateTags(r.body) ? (
+                          <p className="text-text-faint mt-1 text-xs">{t("os.n.tagPostedEdit")}</p>
+                        ) : null}
                         {/* 게시된 리포트 — **학생 이름**으로 링크(원장 요청: #1 #2로는 누구 글인지 알 수 없음).
                             많으면 앞 8명만 이름으로, 나머지는 수만 표시. */}
                         {r.reportLinks.length ? (
