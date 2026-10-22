@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { useLicenseOn, useModuleOn } from "@/features/owner/operations-context";
 import {
-  AlertCircle, AlertTriangle, ArrowRight, Banknote, BookOpen, Bus, Cake, Calendar,
+  AlertCircle, AlertTriangle, ArrowRight, BookOpen, Bus, Cake, Calendar,
   CheckCircle, ChevronDown, ChevronRight, Globe, GraduationCap, Hash, Home, Languages,
   MapPin, MessageSquare, Mic, Save, School, Sparkles, Tag, Target, Users, User, UserCheck, XCircle,
   Droplet, type LucideIcon,
@@ -22,7 +22,7 @@ import { FormActionBar } from "@/components/forms/form-action-bar";
 import { EditingBanner } from "@/features/presence/editing-badge";
 import type { IntakeChecklist } from "@/features/enrollment/intake-checklist";
 import { sanitizeScoreInput } from "@/features/enrollment/score-input";
-import { BOARD_STAGES, stageOfOutcome } from "@/features/enrollment/board-stages";
+import { ASSIGNED_DRAG_BLOCKED, ENROLLED_REVERT_BLOCKED, boardStatusOf, outcomeForDrop } from "@/features/enrollment/board-stages";
 import {
   FOLLOW_UP_RESULTS,
   followUpRequired,
@@ -53,7 +53,6 @@ import {
   ENGLISH_GROUPS,
   ENGLISH_TEST_TYPES,
   GENDER_OPTIONS,
-  REGISTRATION_STATUSES,
   RELATION_OPTIONS,
   SIBLINGS_OPTIONS,
   SUBJECT_TABS,
@@ -102,10 +101,7 @@ export type ConsultationFormInitial = {
   careerGoal?: string | null;
   siblings?: string | null;
   safetyNotes?: string | null;
-  registrationStatus?: string | null;
-  paymentAmount?: string | null;
-  paymentDate?: string | null;
-  registrar?: string | null;
+  assignedClassCount?: number;
   followUpDate?: string | null;
   followUpContent?: string | null;
   nonRegistrationReason?: string | null;
@@ -227,16 +223,17 @@ export function ConsultationFullForm({
   const [showAcademy, setShowAcademy] = useState(false);
   // 후속 조치(원장 2026-10-22 *"선택이 아닌 필수로 … 자동적으로 등록, 미등록으로 처리"*) — 상담 끝난 건은 반드시 고르고, 고르면 칸반 칸이
   // 따라 움직인다(follow-up.ts · 서버가 같은 함수로 다시 판정). 고른 값은 라디오(name=followUpResult)가 실어 보낸다.
-  const [followUpResult, setFollowUpResult] = useState<FollowUpResult | null>(() => initialFollowUpResult(v.outcome, v.followUpDate));
+  const assignedClassCount = v.assignedClassCount ?? 0;
+  const [followUpResult, setFollowUpResult] = useState<FollowUpResult | null>(() => initialFollowUpResult(v.outcome, v.followUpDate, assignedClassCount));
   const followUpRef = useRef<HTMLDivElement>(null);
-  const registrationStatusRef = useRef<HTMLSelectElement>(null);
-  const followUpMust = isCreate || followUpRequired(v.outcome ?? "consulted");
-  const stageLabel = v.outcome ? BOARD_STAGES.find((s) => s.key === stageOfOutcome(v.outcome!))?.label : null;
+  const followUpMust = assignedClassCount === 0 && (isCreate || followUpRequired(v.outcome ?? "consulted"));
+  const selectedStage = FOLLOW_UP_RESULTS.find((r) => r.value === followUpResult)?.stage;
+  const stageLabel = boardStatusOf({
+    outcome: selectedStage ? outcomeForDrop(selectedStage, v.outcome ?? "consulted") : (v.outcome ?? "consulted"),
+    assignedClassCount,
+  }).label;
   function pickFollowUp(value: FollowUpResult) {
     setFollowUpResult(value);
-    // '등록 상태' 칸도 같이 맞춘다(서버도 같은 값으로 덮는다) — 한 화면에 '등록'과 '미등록'이 함께 보이지 않게.
-    const sel = registrationStatusRef.current;
-    if (sel && value !== "next") sel.value = value === "enrolled" ? "등록완료" : "미등록";
   }
 
   // 과목 점수/상담 detail — 클라 상태, 제출 시 hidden input(JSON)으로 직렬화.
@@ -270,7 +267,7 @@ export function ConsultationFullForm({
     // 항상 기본값이 채워지는 날짜/상태 필드는 "의미 있는 입력" 판정에서 제외(빈 폼 오탐 배너 방지).
     // 작성 화면의 상담자도 그렇다 — 추가하는 사람 이름이 기본으로 들어간다(원장 2026-10-19).
     ignoreForBanner: [
-      "receivedDate", "consultationDate", "registrationStatus", "parentRelation", "recordingDraftId",
+      "receivedDate", "consultationDate", "parentRelation", "recordingDraftId",
       ...(isCreate ? ["counselor"] : []),
     ],
     // 소개한 사람은 고르기 칸의 상태(이름 표시)와 숨은 칸이 짝이라 초안으로 되살리지 않는다(값만 돌아오고 이름은 옛것인 채로 저장되지 않게).
@@ -279,6 +276,8 @@ export function ConsultationFullForm({
     // 이 화면에 걸린 녹음으로 돌아왔으면 그 녹음 뒤의 입력을 안내 없이 바로 — 이름·연락처가 되살아나 녹음이 다시 붙는다.
     restoreSince: () => recordingSince(instance?.formId),
     onRestore: (vals) => {
+      const restoredFollowUp = parseFollowUpResult(vals.followUpResult);
+      setFollowUpResult(assignedClassCount > 0 ? "enrolled" : (restoredFollowUp === "before" || restoredFollowUp === "consulted") && v.outcome === "enrolled" ? "enrolled" : restoredFollowUp);
       if (formRef.current) syncRecordingSubject(formRef.current);
       setRecordingDraftId(vals.recordingDraftId || crypto.randomUUID());
       if (vals.subjectDetails) {
@@ -331,6 +330,7 @@ export function ConsultationFullForm({
       followUpDate: String(fd.get("followUpDate") ?? "") || null,
       storedDate: v.followUpDate ?? null,
       today: kstToday(),
+      assignedClassCount,
     });
     if ("error" in r) {
       setSubmitError(r.error);
@@ -763,7 +763,7 @@ export function ConsultationFullForm({
         </Collapsible>
 
         {/* 4. 후속 조치 — 상담 끝난 건은 필수(원장 2026-10-22, 종전 '선택 · 접이식'). 고르면 칸반 칸이 따라 움직인다:
-            등록 → 등록 완료 · 미등록 → 미등록 · 다음 상담 → 상담 완료 + 날짜(하루 전·당일·지나면 상담자에게 알림). */}
+            칸반과 같은 네 상태 · 다음 상담 날짜는 별도로 선택. */}
         <div ref={followUpRef} className="border-purple/30 bg-purple/5 space-y-2 rounded-2xl border px-3 py-2.5">
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
             <span className="text-foreground inline-flex items-center gap-1 text-sm font-bold">
@@ -772,20 +772,20 @@ export function ConsultationFullForm({
               {followUpMust ? <span className="text-danger">*</span> : null}
             </span>
             <span className="text-text-dim text-xs break-keep">
-              {followUpMust
-                ? "상담을 마쳤으면 반드시 고릅니다 · 고르면 칸반 칸이 함께 옮겨집니다"
-                : `지금 칸: ${stageLabel ?? "상담 전"} · 고르면 그 칸으로 옮겨집니다`}
+              {assignedClassCount > 0 ? ASSIGNED_DRAG_BLOCKED : followUpMust
+                ? "상담을 마쳤으면 상태를 고릅니다 · 저장하면 해당 칸으로 이동합니다"
+                : `현재 상태: ${stageLabel} · 저장하면 선택한 상태로 이동합니다`}
             </span>
           </div>
           <div role="radiogroup" aria-label="후속 조치" className="flex flex-wrap gap-1.5">
             {FOLLOW_UP_RESULTS.map((r) => {
               // 등록 완료를 '상담 완료'로 되돌리지 않는다(상태 변경·칸반과 같은 규칙) — 고를 수 없게 미리 막는다.
-              const blocked = r.value === "next" && v.outcome === "enrolled";
+              const blocked = assignedClassCount > 0 ? r.value !== "enrolled" : (r.value === "before" || r.value === "consulted") && v.outcome === "enrolled";
               const on = followUpResult === r.value;
               return (
                 <label
                   key={r.value}
-                  title={blocked ? "이미 등록 완료된 상담은 다음 상담으로 되돌릴 수 없습니다" : undefined}
+                  title={blocked ? (assignedClassCount > 0 ? ASSIGNED_DRAG_BLOCKED : ENROLLED_REVERT_BLOCKED) : undefined}
                   className={`relative inline-flex items-center rounded-full border px-3 py-1 text-sm transition has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary/40 ${
                     blocked
                       ? "border-line text-text-faint cursor-not-allowed"
@@ -798,7 +798,7 @@ export function ConsultationFullForm({
                     type="radio"
                     name="followUpResult"
                     value={r.value}
-                    defaultChecked={on}
+                    checked={on}
                     disabled={blocked}
                     onChange={() => pickFollowUp(r.value)}
                     className="sr-only"
@@ -809,7 +809,7 @@ export function ConsultationFullForm({
             })}
           </div>
           <Grid cols={2}>
-            <L label={followUpResult === "next" ? "다음 상담일" : "후속 조치일"} icon={Calendar} required={followUpResult === "next"}>
+            <L label="다음 상담일 (선택)" icon={Calendar}>
               <input name="followUpDate" type="date" defaultValue={v.followUpDate ?? ""} className={`${input} num`} />
             </L>
             <L label="조치 내용" icon={MessageSquare}>
@@ -819,32 +819,15 @@ export function ConsultationFullForm({
           <L label="미등록 사유" icon={XCircle}>
             <input name="nonRegistrationReason" defaultValue={v.nonRegistrationReason ?? ""} className={input} />
           </L>
-          {followUpResult === "next" ? (
-            <p className="text-text-dim text-xs break-keep">다음 상담일 하루 전 · 당일 · 지나면 상담자에게 알림이 갑니다(할 일에도 남습니다).</p>
+          {followUpResult === "before" || followUpResult === "consulted" ? (
+            <p className="text-text-dim text-xs break-keep">다음 상담일을 정하면 하루 전 · 당일 · 기한이 지난 뒤 상담자에게 알립니다.</p>
           ) : null}
         </div>
 
-        {/* 5. 등록 / 결제 */}
-        <Card title="등록 / 결제">
-          <L label="등록 상태" icon={CheckCircle}>
-            <select ref={registrationStatusRef} name="registrationStatus" defaultValue={v.registrationStatus ?? ""} className={input}>
-              <option value="">선택</option>
-              {withCurrent(REGISTRATION_STATUSES, v.registrationStatus).map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
+        <Card title="상담 상태 / 동의">
+          <L label="상담 상태" icon={CheckCircle}>
+            <span aria-label="상담 상태" className="text-sm font-semibold">{stageLabel}</span>
           </L>
-          <Grid cols={3}>
-            <L label="결제 금액" icon={Banknote}>
-              <input name="paymentAmount" defaultValue={v.paymentAmount ?? ""} placeholder="예: 150000" className={input} />
-            </L>
-            <L label="결제일" icon={Calendar}>
-              <input name="paymentDate" type="date" defaultValue={v.paymentDate ?? ""} className={`${input} num`} />
-            </L>
-            <L label="등록자" icon={UserCheck}>
-              <input name="registrar" defaultValue={v.registrar ?? ""} className={input} />
-            </L>
-          </Grid>
           <div className="flex flex-wrap gap-4 pt-1">
             <Check name="installmentAgreement" label="환불·학칙 동의" defaultChecked={v.installmentAgreement} />
             <Check name="privacyAgreement" label="개인정보 활용 동의" defaultChecked={v.privacyAgreement} />

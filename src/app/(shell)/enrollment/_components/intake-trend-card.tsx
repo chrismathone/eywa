@@ -119,7 +119,7 @@ export function IntakeTrendCard({
             <Fact label={`${unit} 평균`} value={`${keys.length ? (sum / keys.length).toFixed(1) : "0"}건`} />
             <Fact label="가장 많았던 때" value={peak >= 0 && sum > 0 ? `${fmt(trend.total[peak]!)}건` : "—"} sub={peak >= 0 && sum > 0 ? tip(keys[peak]!) : undefined} />
           </dl>
-          <TrendChart labels={keys.map(axis)} tooltipLabels={keys.map(tip)} series={series} kind={barView ? "bar" : "line"} unit="건" legend />
+          <TrendChart labels={keys.map(axis)} tooltipLabels={keys.map(tip)} series={series} kind={barView ? "bar" : "line"} unit="건" legend labelsBelow />
           {period.grain === "day" && period.clipped ? <p className="text-muted-foreground text-xs">구간이 길어 시작일부터 두 달({MAX_DAY_SPAN}일)만 보입니다.</p> : null}
           <details>
             <summary className="text-primary cursor-pointer text-sm font-medium select-none">수치 표 보기</summary>

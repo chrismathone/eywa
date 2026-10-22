@@ -6,7 +6,6 @@ import { normalizeExtractedForm } from "../form-normalize";
 import {
   RELATION_OPTIONS,
   CONSULTATION_PATHS,
-  REGISTRATION_STATUSES,
 } from "../form-config";
 
 export type ExtractContext = {
@@ -66,7 +65,6 @@ export async function extractConsultationForm(
       '  "siblings": "형제관계 (예: 외동, 형 1명 등)",',
       '  "safetyNotes": "안전/주의사항 (알레르기·건강 등)",',
       '  "shuttleBusRequest": "셔틀 신청 여부 (true/false)",',
-      `  "registrationStatus": "등록 상태 (${REGISTRATION_STATUSES.join("/")} 중 하나)",`,
       '  "subject": "주요 상담 과목 (수학/영어/국어/과학/기타 중 하나)",',
       '  "parentRequest": "학부모 요구사항 (학부모가 직접 요청한 것만 2~4문장 요약)",',
       '  "prevAcademy": "이전 다니던 학원",',
