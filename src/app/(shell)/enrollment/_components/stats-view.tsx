@@ -1,6 +1,7 @@
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { PATH_BUCKET_COLOR } from "@/features/enrollment/path-bucket";
 import type { ConsultationDistribution, EnrollmentStats } from "@/features/enrollment/server/stats-queries";
+import type { ManagementExits } from "@/features/enrollment/management-sheet";
 import { StatsTrend } from "./stats-trend";
 import { ConsultDistPanel } from "./consult-dist-panel";
 import { GRADE_UNKNOWN } from "@/features/enrollment/consultation-dist";
@@ -47,6 +48,7 @@ export function StatsView({
   stats,
   year,
   periodText,
+  exits,
   dist,
   schoolPrefs,
 }: {
@@ -55,6 +57,8 @@ export function StatsView({
   year: number | null;
   /** 연도 칩이 정한 기간('2026년' · '2024~2026년') — 카드 안 기간을 따로 고르는 위 두 카드와 갈리게 밝힌다. */
   periodText: string;
+  /** 관리현황 '등록 후 퇴원'(퇴원관리를 열 수 있는 사람만 · 못 불러오면 null = 칸 없음). */
+  exits: ManagementExits | null;
   dist: ConsultationDistribution;
   schoolPrefs: SchoolStatsPrefs;
 }) {
@@ -121,7 +125,7 @@ export function StatsView({
       </div>
 
       {/* 관리현황 — 시트처럼 달마다 한 줄(원장 2026-10-22 *"시트처럼 한눈에 · 상담대비 완료율 · 과목별"*). 헤드라인과 같은 기간·같은 축. */}
-      <ManagementSheetCard sheet={dist.sheet} groups={dist.sheetGroups} periodText={periodText} />
+      <ManagementSheetCard sheet={dist.sheet} groups={dist.sheetGroups} periodText={periodText} exits={exits} />
 
       <div className="grid items-stretch gap-4 lg:grid-cols-2 xl:grid-cols-3">
       <Card

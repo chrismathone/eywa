@@ -57,3 +57,33 @@ export function buildManagementSheet(rows: readonly SheetRow[], groupsOf: Groups
   const months = [...byMonth.values()].sort((a, b) => b.month.localeCompare(a.month));
   return { months, groups, total };
 }
+
+/**
+ * 관리현황 **등록 후 퇴원**(원장 2026-10-22 메모 *"퇴원일자 통일 · 퇴원보고서 연동 · 콜앤상담 연동"* → 해석 승인 *"그렇게해"*) —
+ * 그 달 상담으로 **등록한** 학생(상담에 이어진 원생) 중 상담일 뒤에 퇴원한 학생. 퇴원 판정·퇴원일은 퇴원관리·운영실과 같은 목록
+ * (`getWithdrawalsInWindow` — 병합·수업 기록 없는 장부 정리·퇴원 예약 제외)에서만 가져온다(같은 데이터는 같은 원본).
+ * 한 학생이 두 과목을 따로 상담해 둘 다 등록했으면 그 달엔 한 명(학생 단위) · 합계도 학생 단위.
+ */
+export type ExitCohortRow = { month: string; studentId: string; consultedOn: string };
+export type ExitStudent = { id: string; name: string; withdrawnAt: string };
+/** `linked` = 원생이 이어진 등록 상담 수 — 이것만 퇴원을 따라갈 수 있다(실측 2024년 60/318 · 2026년 127/164 — 화면이 기준을 밝힌다). */
+export type ManagementExits = { byMonth: Record<string, ExitStudent[]>; total: ExitStudent[]; linked: number };
+
+export function buildManagementExits(
+  cohorts: readonly ExitCohortRow[],
+  withdrawals: readonly { id: string; name: string; withdrawnAt: string }[],
+): ManagementExits {
+  const exitOf = new Map(withdrawals.map((w) => [w.id, w]));
+  const byMonth: Record<string, Map<string, ExitStudent>> = {};
+  const total = new Map<string, ExitStudent>();
+  for (const c of cohorts) {
+    const w = exitOf.get(c.studentId);
+    // 상담 전에 퇴원한 기록(옛 퇴원 뒤 다시 상담)은 이 상담의 결과가 아니다.
+    if (!w || w.withdrawnAt.slice(0, 10) < c.consultedOn) continue;
+    const s = { id: w.id, name: w.name, withdrawnAt: w.withdrawnAt.slice(0, 10) };
+    (byMonth[c.month] ??= new Map()).set(s.id, s);
+    total.set(s.id, s);
+  }
+  const sorted = (m: Map<string, ExitStudent>) => [...m.values()].sort((a, b) => b.withdrawnAt.localeCompare(a.withdrawnAt) || a.name.localeCompare(b.name, "ko"));
+  return { byMonth: Object.fromEntries(Object.entries(byMonth).map(([k, v]) => [k, sorted(v)])), total: sorted(total), linked: cohorts.length };
+}

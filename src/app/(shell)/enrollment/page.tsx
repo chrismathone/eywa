@@ -34,6 +34,8 @@ import {
 } from "@/features/enrollment/server/stats-queries";
 import { loadSchoolStatsPrefs } from "@/features/enrollment/server/school-prefs-actions";
 import { StatsView } from "./_components/stats-view";
+import { getWithdrawalsInWindow } from "@/features/withdrawals/server/window";
+import { buildManagementExits } from "@/features/enrollment/management-sheet";
 import { IntakeTrendCard } from "./_components/intake-trend-card";
 import { OpsHistoryCard } from "../students/stats/_components/ops-history-card";
 import { PROGRESS_KEYS } from "@/features/students/stats/ops-keys";
@@ -151,12 +153,14 @@ export default async function EnrollmentPage({
   // 엑셀로 넣기 = 학원 전체를 바꾸는 일괄 작업 → full만(`canManageTenant`, 올리기 주소도 같은 판정 — [[#77]]).
   // makeedu 보내기(원장 2026-10-01) = 전송 액션과 **같은 게이트**(`canPushToMakeedu`) — 권한이 없거나 makeedu 모듈이
   // 꺼진 지점이면 버튼 자리째 없다(잠긴 대체 화면도 안 그린다).
-  const [canWriteEnrollment, canOpenCalculator, canImportExcel, canPushMakeedu, uiPrefs] = await Promise.all([
+  // 관리현황 '등록 후 퇴원'(원장 2026-10-22) = 퇴원 명단을 보여 주므로 퇴원관리를 열 수 있는 사람에게만(같은 게이트 — 못 열면 칸째 없다).
+  const [canWriteEnrollment, canOpenCalculator, canImportExcel, canPushMakeedu, uiPrefs, canSeeExits] = await Promise.all([
     canWriteTenant(user.systemRole, "enrollment"),
     canAccessTenant(user.systemRole, "billing"),
     canManageTenant(user.systemRole, "enrollment"),
     canPushToMakeedu(user.systemRole),
     readMyUiPrefs(), // 실패하면 {} → 저장값 없음(칸반)
+    canAccessTenant(user.systemRole, "withdrawals"),
   ]);
   // 보기 = 주소의 `view` → 계정에 남은 마지막 보기 → 칸반(원장 2026-10-19 *"마지막으로 본 뷰로 사람에게 귀속"*, view-pref.ts).
   // 고른 보기는 아래 RememberPrefs가 저장한다. 🔴 툴바 링크는 칸반도 `view=kanban`으로 적는다(enrollment-query.ts) —
@@ -231,15 +235,23 @@ export default async function EnrollmentPage({
       ? { from: Math.min(...statsYears), to: Math.max(...statsYears) }
       : { from: Number(kstToday().slice(0, 4)), to: Number(kstToday().slice(0, 4)) };
   const span = periodRange(statsPeriod, available);
-  const [stats, dist, intake] =
+  const [stats, dist, intake, withdrawals] =
     view === "stats"
       ? await Promise.all([
           getEnrollmentStats(statsYear, span),
           // 🔴 상담 분포는 **연도가 적용된다**(재원생 기준이던 때는 연도를 바꿔도 안 변해 화면이 거짓말했다).
           getConsultationDistribution(statsYear, span),
           intakePromise,
+          // 관리현황 '등록 후 퇴원' — 퇴원관리·운영실과 같은 퇴원 목록(같은 원본). 기간 첫날부터 오늘까지(보는 해 뒤에 퇴원해도 센다).
+          canSeeExits
+            ? getWithdrawalsInWindow(`${span.from}-01-01`, today).catch((error: unknown) => {
+                reportWarning("관리현황 퇴원 조회 실패", { scope: "enrollment.managementExits", cause: error instanceof Error ? error.message : String(error) });
+                return null;
+              })
+            : Promise.resolve(null),
         ])
-      : [null, null, null];
+      : [null, null, null, null];
+  const managementExits = dist && withdrawals ? buildManagementExits(dist.cohorts, withdrawals) : null;
   const progressRows = await progressHistory;
   void _unused;
 
@@ -468,6 +480,7 @@ export default async function EnrollmentPage({
           stats={stats}
           year={statsYear}
           periodText={span.from === span.to ? `${span.from}년` : `${span.from}~${span.to}년`}
+          exits={managementExits}
           dist={dist}
           schoolPrefs={schoolPrefs}
         />

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildManagementSheet, completionRate } from "./management-sheet";
+import { buildManagementExits, buildManagementSheet, completionRate } from "./management-sheet";
 
 const groupsOf = (s: string | null | undefined) => {
   const t = (s ?? "").toLowerCase();
@@ -37,5 +37,27 @@ describe("관리현황 — 달마다 상담·등록·완료율, 과목 묶음마
   it("완료율 = 등록 ÷ 상담 · 상담 0이면 null", () => {
     expect(completionRate(sheet.total.all)).toBe(40);
     expect(completionRate({ total: 0, enrolled: 0, declined: 0, open: 0 })).toBeNull();
+  });
+});
+
+describe("관리현황 — 등록 후 퇴원(퇴원관리와 같은 목록에서)", () => {
+  it("상담 뒤 퇴원만 · 그 달은 학생 단위 · 합계도 학생 단위", () => {
+    const exits = buildManagementExits(
+      [
+        { month: "2026-03", studentId: "s1", consultedOn: "2026-03-05" },
+        { month: "2026-03", studentId: "s1", consultedOn: "2026-03-20" }, // 같은 학생 두 과목
+        { month: "2026-04", studentId: "s1", consultedOn: "2026-04-02" },
+        { month: "2026-04", studentId: "s2", consultedOn: "2026-04-10" }, // 상담 전에 퇴원한 기록
+        { month: "2026-04", studentId: "s3", consultedOn: "2026-04-11" }, // 퇴원 안 함
+      ],
+      [
+        { id: "s1", name: "가", withdrawnAt: "2026-08-31" },
+        { id: "s2", name: "나", withdrawnAt: "2026-01-15" },
+      ],
+    );
+    expect(exits.byMonth["2026-03"]).toEqual([{ id: "s1", name: "가", withdrawnAt: "2026-08-31" }]);
+    expect(exits.byMonth["2026-04"]?.map((s) => s.id)).toEqual(["s1"]);
+    expect(exits.total.map((s) => s.id)).toEqual(["s1"]);
+    expect(exits.linked).toBe(5);
   });
 });

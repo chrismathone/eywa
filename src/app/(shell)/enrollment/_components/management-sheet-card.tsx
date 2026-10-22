@@ -1,6 +1,7 @@
 import { EmbedLink } from "@/components/embed-link";
 import { monthLabel } from "@/lib/date-kst";
-import { completionRate, type ManagementSheet, type SheetCell } from "@/features/enrollment/management-sheet";
+import { completionRate, type ManagementExits, type ManagementSheet, type SheetCell } from "@/features/enrollment/management-sheet";
+import { ExitCohortCell } from "./exit-cohort-cell";
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 const pct = (c: SheetCell) => {
@@ -20,10 +21,13 @@ export function ManagementSheetCard({
   sheet,
   groups,
   periodText,
+  exits,
 }: {
   sheet: ManagementSheet;
   groups: Record<string, { label: string; color: string }>;
   periodText: string;
+  /** '등록 후 퇴원' — 퇴원관리를 열 수 있는 사람만(없으면 칸째 없다). */
+  exits: ManagementExits | null;
 }) {
   const labelOf = (g: string) => groups[g]?.label ?? "그 밖의 과목";
   const showUnknown = sheet.total.unknown > 0;
@@ -33,6 +37,9 @@ export function ManagementSheetCard({
         <h2 className="text-foreground text-sm font-bold">관리현황</h2>
         <p className="text-text-dim mt-0.5 text-xs break-keep">
           {periodText} · 달마다 상담 · 등록 · 완료율(등록 ÷ 상담) · 과목별 — 두 과목 문의는 양쪽 과목에 셉니다 · 달을 누르면 그 달 목록
+          {exits
+            ? ` · 등록 후 퇴원 = 그 달 상담으로 등록한 학생 중 지금까지 퇴원한 학생(퇴원관리와 같은 퇴원일 · 누르면 명단) — 원생이 이어진 등록 ${fmt(exits.linked)}/${fmt(sheet.total.all.enrolled)}건만 셀 수 있습니다`
+            : ""}
         </p>
       </header>
       {sheet.months.length === 0 ? (
@@ -43,7 +50,7 @@ export function ManagementSheetCard({
             <thead className="bg-card sticky top-0 z-10">
               <tr className="border-line border-b">
                 <th rowSpan={2} className="text-muted-foreground px-2 py-1.5 text-center text-xs font-medium">달</th>
-                <th colSpan={5} className="text-foreground px-2 py-1 text-center text-xs font-bold">전체</th>
+                <th colSpan={exits ? 6 : 5} className="text-foreground px-2 py-1 text-center text-xs font-bold">전체</th>
                 {sheet.groups.map((g) => (
                   <th key={g} colSpan={3} className="text-foreground px-2 py-1 text-center text-xs font-bold whitespace-nowrap">
                     <span className="mr-1 inline-block size-2 rounded-full align-middle" style={{ background: groups[g]?.color ?? "var(--color-neutral-fill)" }} />
@@ -59,6 +66,7 @@ export function ManagementSheetCard({
                 <th className={TH}>미등록</th>
                 <th className={TH}>진행 중</th>
                 <th className={TH}>완료율</th>
+                {exits ? <th className={TH}>등록 후 퇴원</th> : null}
                 {sheet.groups.map((g) => [
                   <th key={`${g}-t`} className={TH}>상담</th>,
                   <th key={`${g}-e`} className={TH}>등록</th>,
@@ -70,6 +78,11 @@ export function ManagementSheetCard({
               <tr className="border-line bg-bg-soft/50 border-b font-bold">
                 <td className="px-2 py-1.5 text-center whitespace-nowrap">합계</td>
                 <Cells cell={sheet.total.all} wide />
+                {exits ? (
+                  <td className={TD}>
+                    <ExitCohortCell students={exits.total} title={`${periodText} 상담으로 등록한 뒤 퇴원한 학생`} />
+                  </td>
+                ) : null}
                 {sheet.groups.map((g) => (
                   <Cells key={g} cell={sheet.total.groups[g]!} />
                 ))}
@@ -83,6 +96,11 @@ export function ManagementSheetCard({
                     </EmbedLink>
                   </td>
                   <Cells cell={m.all} wide />
+                  {exits ? (
+                    <td className={TD}>
+                      <ExitCohortCell students={exits.byMonth[m.month] ?? []} title={`${monthLabel(m.month)} 상담으로 등록한 뒤 퇴원한 학생`} />
+                    </td>
+                  ) : null}
                   {sheet.groups.map((g) => (
                     <Cells key={g} cell={m.groups[g] ?? { total: 0, enrolled: 0, declined: 0, open: 0 }} />
                   ))}

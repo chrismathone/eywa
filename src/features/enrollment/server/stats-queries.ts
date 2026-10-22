@@ -1,12 +1,12 @@
 import "server-only";
-import { kstToday, kstYear, shiftMonth, kstMonthStartIso as monthStartIso } from "@/lib/date-kst";
+import { kstDateOf, kstToday, kstYear, shiftMonth, kstMonthStartIso as monthStartIso } from "@/lib/date-kst";
 import { kstDayBounds } from "../kst-bounds";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { normalizeSchoolName } from "@/features/schools/school-name";
 import { bucketizePathStats, type BucketStat, type PathStatRow } from "../path-bucket";
 import { recentConsultMonths, type RecentConsultRow } from "../recent-stats";
-import { buildManagementSheet, type ManagementSheet } from "../management-sheet";
+import { buildManagementSheet, type ExitCohortRow, type ManagementSheet } from "../management-sheet";
 import { intakeGroupMeta, intakeGroupsOf } from "../intake-groups";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import {
@@ -250,6 +250,8 @@ export type ConsultationDistribution = {
   sheet: ManagementSheet;
   /** 과목 묶음 → 이름·색(학원 설정 — 화면에 키를 내보내지 않는다). */
   sheetGroups: Record<string, { label: string; color: string }>;
+  /** 등록한 상담에 이어진 원생(달 · 학생 · 상담일) — 관리현황 '등록 후 퇴원'의 재료(퇴원 목록과 맞춰 보는 것은 화면 쪽 — 권한이 있을 때만). */
+  cohorts: ExitCohortRow[];
 };
 
 /**
@@ -273,11 +275,11 @@ export async function getConsultationDistribution(
   const end = kstMonthStartIso(toY + 1, 0);
 
   const [rows, schoolStats, settings] = await Promise.all([
-    fetchAllPaged<{ prospect_school: string | null; prospect_grade: string | null; outcome: string; consulted_at: string; subject: string | null }>(
+    fetchAllPaged<{ prospect_school: string | null; prospect_grade: string | null; outcome: string; consulted_at: string; subject: string | null; student_id: string | null }>(
       (from, to) =>
         supabase
           .from("enrollment_consultations")
-          .select("prospect_school, prospect_grade, outcome, consulted_at, subject")
+          .select("prospect_school, prospect_grade, outcome, consulted_at, subject, student_id")
           .gte("consulted_at", start)
           .lt("consulted_at", end)
           // 🔴 페이지로 나눠 받으면 정렬이 있어야 한다 — 없으면 3개년(1,500건+)에서 페이지 경계의 행이 겹치거나 빠진다(검수 2026-10-22).
@@ -354,6 +356,12 @@ export async function getConsultationDistribution(
       intakeGroupsOf(settings.operations.subjects),
     ),
     sheetGroups: intakeGroupMeta(settings.operations.subjects),
+    cohorts: rows.flatMap((r) => {
+      const consultedOn = kstDateOf(r.consulted_at);
+      return r.outcome === "enrolled" && r.student_id && consultedOn
+        ? [{ month: kstMonthOf(r.consulted_at), studentId: r.student_id, consultedOn }]
+        : [];
+    }),
   };
 }
 
