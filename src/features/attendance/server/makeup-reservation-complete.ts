@@ -34,6 +34,7 @@ import { DOW_KEYS } from "../calendar";
 import { weekdayIndexOf } from "@/lib/date-kst";
 import { toAutoUnitsSchedule, unitsFromMinutes } from "../auto-units";
 import {
+  absenceClassOf,
   markAbsenceMemoDone,
   markAbsenceMemoPlanned,
   pickFulfillingRow,
@@ -46,7 +47,7 @@ import {
 } from "../makeup-reservation";
 import { effectiveAttendanceRecords } from "../effective-records";
 import { round1 } from "../session-units";
-import { isMissingReservationTable, toReservation } from "./makeup-reservation-queries";
+import { isMissingColumn, isMissingReservationTable, toReservation } from "./makeup-reservation-queries";
 import { classifyLegacyReservations } from "@/features/makeups/server/adapters/completion";
 import { effectGapsOf, noteEffectGap, type EffectGap } from "@/features/makeups/server/adapters/effects";
 import { handleMappedAbsence, handleMappedFulfill } from "@/features/makeups/server/adapters/mapped-save";
@@ -266,19 +267,23 @@ export async function completeMakeupReservations(
   for (const g of byClassDate.values()) {
     const ids = [...g.cells.keys()];
     // 학생 수십 명이라 한 번에(100 넘는 반은 없다 — 넘으면 앞 100명만 보고 나머지는 다음 저장이 잇는다).
-    const { data, error } = await admin
-      .from("makeup_reservations")
-      .select("id, student_id, class_id, absence_date, makeup_date, slot_start, slot_end, period_label, note, status, created_by")
-      .eq("tenant_id", ctx.tenantId)
-      .eq("class_id", g.classId)
-      .eq("makeup_date", g.date)
-      .in("status", ["reserved", "done"])
-      .in("student_id", ids.slice(0, 100));
+    // 결석난 반(20261022170000)까지 — 결석일 칸 메모('예정' → '완료')를 그 반에 쓴다. 칸이 없으면(적용 전) 칸 없이 다시 읽는다.
+    const readReservations = (extra: string) =>
+      admin
+        .from("makeup_reservations")
+        .select(`id, student_id, class_id, absence_date, makeup_date, slot_start, slot_end, period_label, note, status, created_by${extra}`)
+        .eq("tenant_id", ctx.tenantId)
+        .eq("class_id", g.classId)
+        .eq("makeup_date", g.date)
+        .in("status", ["reserved", "done"])
+        .in("student_id", ids.slice(0, 100));
+    let { data, error } = await readReservations(", absence_class_id");
+    if (error && isMissingColumn(error, "absence_class_id")) ({ data, error } = await readReservations(""));
     if (error) {
       if (!isMissingReservationTable(error)) console.error("[makeup-reservation] 이행 조회 실패", error.message);
       continue;
     }
-    const list = ((data ?? []) as Parameters<typeof toReservation>[0][]).map(toReservation);
+    const list = ((data ?? []) as unknown as Parameters<typeof toReservation>[0][]).map(toReservation);
     if (list.length === 0) continue;
     // 시수 자동값 재료(과목)·감사로그 '대상'(학생 · 반) — 반 하나에 한 번.
     const [{ data: cls }, { data: stus }] = await Promise.all([
@@ -493,7 +498,7 @@ async function fulfil(
     if (!patchErr && "session_units" in patch) unitsChanged = patch.session_units as number | null;
   }
   // ④ 결석 칸 메모 "예정" → "완료" — 그 줄이 있는 유효 행만.
-  const absDay = await loadDay(admin, tenantId, r, r.absenceDate);
+  const absDay = await loadDay(admin, tenantId, { ...r, classId: absenceClassOf(r) }, r.absenceDate);
   const plannedLine = reservationAbsenceMemo(r);
   for (const a of absDay ?? []) {
     if (!hasMemoLine(a.note, plannedLine)) continue;
@@ -547,7 +552,7 @@ async function revert(
     if (!hasMemoLine(x.note, makeupLine)) continue;
     await admin.from("attendance_records").update({ note: removeMemoLine(x.note, makeupLine) }).eq("tenant_id", tenantId).eq("id", x.id);
   }
-  const absDay = await loadDay(admin, tenantId, r, r.absenceDate);
+  const absDay = await loadDay(admin, tenantId, { ...r, classId: absenceClassOf(r) }, r.absenceDate);
   // "M/D 보강 완료" 줄 = 이행이 적은 줄(`markAbsenceMemoDone` = `reservationAbsenceDoneMemo`) — 그 줄이 있는 유효 행만 되돌린다.
   const doneLine = reservationAbsenceDoneMemo(r);
   for (const a of absDay ?? []) {

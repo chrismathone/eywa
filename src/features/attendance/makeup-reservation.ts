@@ -62,7 +62,29 @@ export type MakeupReservation = {
   createdBy: string | null;
   /** 보고서 발송 방식(20261022150000) — 칸이 없거나 묻지 않은 예약은 null/없음. */
   reportMode?: MakeupReportMode | null;
+  /**
+   * 결석난 반(20261022170000) — `classId`는 **기록할 반**(보강이 서는 반)이다. 비면 같은 반. 결석일 칸을 다루는 곳은
+   * 반드시 `absenceClassOf`로 읽는다(원장 2026-10-22 — 예약에도 기록할 반 고르기).
+   */
+  absenceClassId?: string | null;
 };
+
+/** 보강 예약을 **기록할 반** 후보 한 줄(서버 `reservationHostChoices`가 만든다 — 학생이 그날 다니는 열린 같은 과목 반). */
+export type ReservationHost = { classId: string; className: string; absenceClass: boolean };
+
+/**
+ * 기록할 반 판정 — 고른 반이 후보면 그 반 · 아니면 결석난 반(후보일 때) · 후보가 하나면 그 반 · 그 밖엔 null(추측하지 않는다 —
+ * '+ 보강 학생 추가'의 `defaultHostClassId`와 같은 결).
+ */
+export function pickReservationHost(choices: readonly ReservationHost[], picked: string | null): string | null {
+  if (picked && choices.some((c) => c.classId === picked)) return picked;
+  const absence = choices.find((c) => c.absenceClass);
+  if (absence) return absence.classId;
+  return choices.length === 1 ? choices[0]!.classId : null;
+}
+
+/** 결석일 칸의 반 — 기록할 반과 다르게 잡은 예약만 따로 적혀 있다. */
+export const absenceClassOf = (r: Pick<MakeupReservation, "classId" | "absenceClassId">): string => r.absenceClassId ?? r.classId;
 
 /**
  * 출석부 칸에 적는 네 글자 — **사분면마다 하나씩**(원장). 칸이 30px라 한 줄에 못 들어가서 2×2로 나눈다.

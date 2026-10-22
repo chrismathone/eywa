@@ -18,11 +18,13 @@ import {
   getMakeupPeriodOptions,
   reserveMakeup,
 } from "@/features/attendance/server/makeup-reservation-actions";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   contiguousPeriodRange,
   togglePeriodSelection,
   validateReservationDates,
   type MakeupReportMode,
+  type ReservationHost,
   type ReservationPeriodOption,
 } from "@/features/attendance/makeup-reservation";
 import { formatSessionUnits } from "@/features/attendance/session-units";
@@ -68,6 +70,12 @@ export function MakeupReserveDialog({
    */
   const [regularDay, setRegularDay] = useState<boolean | null | undefined>(undefined);
   const [reportMode, setReportMode] = useState<MakeupReportMode>("merge");
+  /**
+   * **기록할 반**(원장 2026-10-22 *"보강 예약에도 기록할 반 고르기를 넣자"*) — '+ 보강 학생 추가'와 같은 후보(서버 판정): 보강일에 학생이 다니는
+   * 열린 같은 과목 반. null 목록 = 아직 날짜 전. 고른 반이 결석난 반과 다르면 결석 칸은 결석난 반에, 예약은 고른 반에 선다.
+   */
+  const [hosts, setHosts] = useState<ReservationHost[] | null>(null);
+  const [hostClassId, setHostClassId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -80,6 +88,7 @@ export function MakeupReserveDialog({
     setOptions([]);
     setOptionNote(null);
     setRegularDay(undefined);
+    setHosts(null);
     setError(null);
     const check = validateReservationDates({ absenceDate, makeupDate: value, today });
     if (!check.ok) {
@@ -89,7 +98,7 @@ export function MakeupReserveDialog({
     }
     const mine = ++seq.current;
     setLoading(true);
-    void getMakeupPeriodOptions(classId, value, studentId)
+    void getMakeupPeriodOptions(classId, value, studentId, hostClassId)
       .then((r) => {
         if (mine !== seq.current) return;
         if ("error" in r) {
@@ -99,6 +108,8 @@ export function MakeupReserveDialog({
         setOptions(r.options);
         setAutoUnitsSubject(r.autoUnits);
         setRegularDay(r.regularDay);
+        setHosts(r.hostChoices ?? null);
+        setHostClassId(r.hostClassId ?? null);
         if (r.options.length === 0) setOptionNote("이 날짜에 쓸 교시표가 비어 있습니다 — 학원설정의 교시를 확인하세요");
         else setOptionNote(`${r.weekend ? "주말" : "평일"} 교시표 · ${r.subjectLabel} · 이어진 교시는 여러 개 고를 수 있습니다`);
       })
@@ -111,10 +122,39 @@ export function MakeupReserveDialog({
       });
   }
 
+  /** 기록할 반을 바꾼다 — 그 반의 정규 수업일인지(합침/분리를 물을지)만 다시 묻는다(교시표는 같은 과목이라 그대로). */
+  function changeHost(value: string) {
+    setHostClassId(value);
+    setRegularDay(undefined);
+    setError(null);
+    if (!makeupDate) return;
+    const mine = ++seq.current;
+    setLoading(true);
+    void getMakeupPeriodOptions(classId, makeupDate, studentId, value)
+      .then((r) => {
+        if (mine !== seq.current) return;
+        if ("error" in r) {
+          setError(r.error);
+          return;
+        }
+        setRegularDay(r.regularDay);
+      })
+      .catch(() => {
+        if (mine === seq.current) setError("반을 확인하지 못했습니다 — 잠시 후 다시 시도해 주세요");
+      })
+      .finally(() => {
+        if (mine === seq.current) setLoading(false);
+      });
+  }
+  const host = hosts?.find((h) => h.classId === hostClassId) ?? null;
+  // 후보를 받은 뒤에는 반을 골라야 저장된다(후보가 없으면 예약할 반이 없다). 후보를 못 받은 화면은 종전대로 결석난 반.
+  const hostMissing = hosts !== null && !host;
+  const hostName = host?.className ?? className;
+
   // 선택 구간(순수부와 같은 판정) — 없으면 저장 잠금. 시수 예고는 수학 자동 시수와 같은 식(교시 하나 0.5).
   const range = contiguousPeriodRange(options, periodIds, makeupDate);
   const previewUnits = range && autoUnitsSubject ? (unitsFromMinutes(range.minutes) ?? 1) : null;
-  const blocked = !makeupDate || !range || saving || loading || !!error;
+  const blocked = !makeupDate || !range || saving || loading || !!error || hostMissing;
   // 합침/분리를 묻는 날 = 정규 수업일(또는 확인 못 함). 정규 수업이 없는 날은 합칠 보고서가 없다(보강 보고서 따로).
   const asksReport = !!makeupDate && regularDay !== undefined && regularDay !== false;
 
@@ -131,6 +171,7 @@ export function MakeupReserveDialog({
       note,
       scopeTeacherId: scopeTeacherId ?? null,
       ...(asksReport ? { reportMode } : {}),
+      ...(host ? { hostClassId: host.classId } : {}),
     });
     setSaving(false);
     if ("error" in res) {
@@ -193,6 +234,39 @@ export function MakeupReserveDialog({
           />
         </div>
 
+        {/* ①-2 기록할 반 — '+ 보강 학생 추가'의 수업 선택과 같은 후보 · 드롭다운 하나(원장 2026-09-21 *"드랍다운으로 처리해 나열하지말고"*) ·
+            하나뿐이면 값만 적는다. */}
+        {makeupDate && hosts !== null ? (
+          <div className="mt-3">
+            <p className="text-text-dim text-xs font-bold">기록할 반</p>
+            {hosts.length === 0 ? (
+              <p className="text-danger mt-1 text-xs leading-relaxed break-keep">
+                그날 이 학생이 다니는 같은 과목 반이 없어 예약할 수 없습니다 — 보강일을 바꾸거나, 반 배정을 먼저 확인해 주세요.
+              </p>
+            ) : hosts.length === 1 ? (
+              <p className="text-foreground mt-1 text-sm font-bold">{hosts[0]!.className}</p>
+            ) : (
+              <div className="mt-1">
+                <SearchableSelect
+                  options={hosts.map((h) => ({ value: h.classId, label: h.className, ...(h.absenceClass ? { hint: "결석난 반" } : {}) }))}
+                  value={hostClassId ?? ""}
+                  onValueChange={changeHost}
+                  ariaLabel="기록할 반"
+                  placeholder="반을 고르세요"
+                  searchPlaceholder="반 이름 검색"
+                  triggerClassName="border-line bg-bg-soft text-foreground h-9 w-full rounded-lg border px-2 text-sm"
+                />
+              </div>
+            )}
+            {host && !host.absenceClass ? (
+              <p className="text-text-dim mt-1.5 text-xs leading-relaxed break-keep">
+                결석은 {className} <span className="num">{absenceDate.slice(5).replace("-", "/")}</span> 칸에 남고, 보강은{" "}
+                <span className="text-foreground font-bold">{host.className}</span> 출석부·원스크린에 섭니다.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
         {/* ② 교시 — 설정 교시표에서만 */}
         <div className="mt-3">
           <p className="text-text-dim text-xs font-bold">
@@ -242,7 +316,7 @@ export function MakeupReserveDialog({
             발송할지 코드를 맞출것"*). 정규 수업일에만 묻는다. */}
         {makeupDate && regularDay === false ? (
           <p className="text-text-dim mt-3 text-xs leading-relaxed break-keep">
-            그날은 이 학생의 {className} 정규 수업이 없어 보강 보고서가 따로 나갑니다.
+            그날은 이 학생의 {hostName} 정규 수업이 없어 보강 보고서가 따로 나갑니다.
           </p>
         ) : null}
         {asksReport ? (

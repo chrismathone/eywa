@@ -47,6 +47,8 @@ type Row = {
   created_by: string | null;
   /** 20261022150000 — 이 칸을 읽는 조회(`getRosterReservationsOn`)에서만 실린다. */
   report_mode?: string | null;
+  /** 20261022170000 결석난 반 — 결석일 칸을 다루는 조회(예약 단건·이행)에서만 실린다. */
+  absence_class_id?: string | null;
 };
 
 type ClassRef = { class_name?: string | null };
@@ -74,6 +76,7 @@ export function toReservation(r: Row): MakeupReservation {
     status: r.status === "done" ? "done" : "reserved",
     createdBy: r.created_by ?? null,
     ...(r.report_mode !== undefined ? { reportMode: isMakeupReportMode(r.report_mode) ? r.report_mode : null } : {}),
+    ...(r.absence_class_id !== undefined ? { absenceClassId: r.absence_class_id ?? null } : {}),
   };
 }
 
@@ -137,10 +140,11 @@ export const getReservationsOn = cache(async function getReservationsOn(
  * `report_mode` 칸이 아직 없을 때의 오류(20261022150000 미적용) — 42703 "column … does not exist" / 스키마 캐시.
  * ⚠️ `fetchInChunks`는 코드를 버리고 문구만 넘기므로 문구로 판정한다.
  */
-function isMissingReportMode(e: { message?: string } | null | undefined): boolean {
+export function isMissingColumn(e: { message?: string } | null | undefined, column: string): boolean {
   const msg = e?.message ?? "";
-  return /report_mode/.test(msg) && /does not exist|not find|schema cache/i.test(msg);
+  return msg.includes(column) && /does not exist|not find|schema cache/i.test(msg);
 }
+const isMissingReportMode = (e: { message?: string } | null | undefined) => isMissingColumn(e, "report_mode");
 
 /**
  * 원스크린 명단용 **한 날짜 예약 — 예약·이행 둘 다 + 보고서 발송 방식**(원장 2026-10-22 전주율 건).
@@ -376,14 +380,13 @@ export async function reservedCellKeys(
 export async function loadReservationById(tenantId: string, id: string): Promise<MakeupReservation | null> {
   try {
     const admin = createAdminClient();
-    const { data, error } = await admin
-      .from("makeup_reservations")
-      .select(SELECT)
-      .eq("tenant_id", tenantId)
-      .eq("id", id)
-      .maybeSingle();
+    // 결석난 반(20261022170000)까지 — 취소가 결석일 칸을 되돌린다. 칸이 없으면(적용 전) 칸 없이 다시 읽는다(= 기록할 반과 같은 반).
+    const read = (select: string) =>
+      admin.from("makeup_reservations").select(select).eq("tenant_id", tenantId).eq("id", id).maybeSingle<Row>();
+    let { data, error } = await read(`${SELECT}, absence_class_id`);
+    if (error && isMissingColumn(error, "absence_class_id")) ({ data, error } = await read(SELECT));
     if (error || !data) return null;
-    return toReservation(data as Row);
+    return toReservation(data);
   } catch {
     return null;
   }

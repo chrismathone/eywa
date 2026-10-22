@@ -1,5 +1,9 @@
 # Supabase 마이그레이션 — 적용 방식·순서·현재 상태
 
+## 2026-10-22 보강 예약 결석난 반 (✅ 운영 적용 2026-10-22 · CLI)
+
+`20261022170000_makeup_reservation_absence_class.sql`은 `makeup_reservations.absence_class_id`(→ classes, on delete cascade, 빈 값 허용)를 더한다 — 예약이 기록할 반을 고르면 `class_id` = 기록할 반, 이 칸 = 결석난 반(다를 때만). 빈 값 = 같은 반이라 기존 10행·지금 앱은 그대로다(**앱보다 먼저** — 예약 단건·이행 조회는 칸이 없어도 칸 없이 다시 읽는다 · 시간표 마스터 보호 연결 SQL은 이 칸을 읽는다). 적용 뒤 확인: 칸·외래키 존재 · 기존 행 값 없음.
+
 ## 2026-10-22 보강 예약 보고서 발송 방식 (✅ 운영 적용 2026-10-22 · CLI)
 
 `20261022150000_makeup_reservation_report_mode.sql`은 `makeup_reservations.report_mode`(merge·separate·null, 제약 `makeup_reservations_report_mode_chk`)를 더한다 — 보강 예약 창이 '+ 보강 학생 추가'와 같은 합침/분리를 남긴다. 빈 값 허용 칸만 더해 기존 행·지금 앱은 그대로다(**앱보다 먼저** — 원스크린 조회는 칸이 없어도 칸 없이 다시 읽는다). 적용 뒤 확인: 칸·제약 존재 · 잘못된 값 23514(되돌리는 거래) · 기존 10행 값 없음.

@@ -33,7 +33,9 @@ export async function loadAttendanceLinks(
     from lesson_reports cross join lateral (values(class_id),(makeup_class_id),(classnote_class_id)) classes(c)
     where tenant_id=${tenant} and report_date>=${date}::date and c is not null
     union all
-    select class_id,student_id,d::text,'reservation' from makeup_reservations cross join lateral (values(absence_date),(makeup_date)) dates(d)
+    select c,student_id,d::text,'reservation' from makeup_reservations
+      -- 결석일은 결석난 반(다른 반에 기록한 예약 — 20261022170000), 보강일은 기록할 반(class_id)과 짝짓는다
+      cross join lateral (values(coalesce(absence_class_id,class_id),absence_date),(class_id,makeup_date)) dates(c,d)
     where tenant_id=${tenant} and d>=${date}::date
     union all
     select a.class_id,a.student_id,a.session_date::text,'reservation' from makeup_reservations r
