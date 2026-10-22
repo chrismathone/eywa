@@ -332,7 +332,7 @@ export function NoticeComposer({
         <NoticeClassComposer classes={classWide.classes} initialRows={classWide.rows} sendEnabled={sendEnabled} />
       </div>
     ) : null}
-    <div className="grid items-stretch gap-4 lg:grid-cols-[300px_1fr]" hidden={mode === "class" && !!classWide}>
+    <div className="grid items-stretch gap-4 lg:grid-cols-[300px_minmax(0,1fr)]" hidden={mode === "class" && !!classWide}>
       {/* 대상 선택 — 데스크톱에선 우측(작성+이력)이 길어지면 함께 늘어 목록 내부 스크롤(높이 균형), 모바일은 520px 캡. */}
       <div className="lg:relative lg:min-h-[320px]">
         <div className="bg-card border-line shadow-card flex max-h-[520px] flex-col rounded-2xl border lg:absolute lg:inset-0 lg:max-h-none">
@@ -403,7 +403,7 @@ export function NoticeComposer({
       </div>
 
       {/* 작성 + 이력 */}
-      <div className="space-y-4">
+      <div className="min-w-0 space-y-4">
         <section className="bg-card border-line shadow-card space-y-3 rounded-2xl border px-4 py-3">
           <div>
             <h2 className="text-foreground text-base font-bold">{t("os.n.heading")}</h2>
