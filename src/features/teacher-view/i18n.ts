@@ -3151,6 +3151,7 @@ export const SHEET_DICT = {
   "os.gate.need.progress": { ko: "진도", en: "Progress" },
   "os.gate.need.ment": { ko: "멘트", en: "Message" },
   "os.gate.need.autowrite": { ko: "자동작성", en: "Auto-write" },
+  "os.gate.need.oneline": { ko: "강사 한줄 멘트", en: "Teacher's one-line note" },
   "os.gate.needLabel": { ko: "{list} 입력 필요", en: "{list} still needed" },
   "os.gate.hint.attendance": {
     ko: "출결이 아직 체크되지 않았습니다 — 출결 알약에서 출석/지각 등을 먼저 기록하세요(미체크 행은 발송되지 않습니다)",
@@ -3161,8 +3162,12 @@ export const SHEET_DICT = {
     en: "You must enter today's progress before sending (it is the backbone of the report)",
   },
   "os.gate.hint.autowrite": {
-    ko: "이 학생의 수학 보고서는 '자동작성'으로 만든 글만 보낼 수 있습니다 — 자동작성을 눌러 주세요(특이사항을 바꿨다면 다시 누르세요)",
-    en: "This student's math report can only be sent as written by Auto-write — press Auto-write (press it again if you changed the notes)",
+    ko: "이 학생의 수학 보고서는 '자동작성'으로 만든 글만 보낼 수 있습니다 — 자동작성을 눌러 주세요(진도·이해도를 바꿨다면 다시 누르세요)",
+    en: "This student's math report can only be sent as written by Auto-write — press Auto-write (press it again if you changed the progress or understanding)",
+  },
+  "os.gate.hint.oneline": {
+    ko: "강사 한줄 멘트는 필수입니다 — 적으면 보고서 맨 아래에 바로 붙습니다",
+    en: "The teacher's one-line note is required — what you type is added straight to the end of the report",
   },
   "os.gate.hint.ment": {
     ko: "학부모 전달 멘트가 비어 있습니다 — '자동작성'을 누르거나 직접 입력하세요(빈 보고서는 발송되지 않습니다)",
@@ -3215,21 +3220,22 @@ export const SHEET_DICT = {
   },
   "os.card.hwTodayAria": { ko: "{subject} 오늘 과제", en: "{subject} today's homework" },
   "os.card.note": { ko: "특이사항 (메모)", en: "Notes (memo)" },
+  "os.card.notePilot": { ko: "강사 한줄 멘트 (필수)", en: "Teacher's one-line note (required)" },
   "os.card.notePh": {
     ko: "예: 조퇴함 / 개념이 어려워 연습문제 한 번 더 · 자동작성 시 학부모 문장으로 풀어 씁니다",
     en: "e.g. left early / found the concept hard, so one more practice set · auto-write turns this into a sentence for parents",
   },
   "os.card.notePhPilot": {
-    ko: "예: 오늘 어려운 문제도 끝까지 포기하지 않고 풀어낸 모습이 멋졌어요. 지금처럼만 하면 다음 단원도 충분히 잘할 거예요! · 보고서 맨 아래에 그대로 붙습니다",
-    en: "e.g. You kept going on the hard problems today and solved them — great work. Keep this up and the next unit will go well too! · Added as is at the very end of the report",
+    ko: "예: 오늘 어려운 문제도 끝까지 포기하지 않고 풀어낸 모습이 멋졌어요. 지금처럼만 하면 다음 단원도 충분히 잘할 거예요! · 자동작성 뒤에 적으면 오른쪽 보고서 맨 아래에 바로 반영됩니다",
+    en: "e.g. You kept going on the hard problems today and solved them — great work. Keep this up and the next unit will go well too! · After Auto-write, what you type shows up right away at the end of the report",
   },
   "os.row.notePhPilot": {
-    ko: "격려 한마디 · 예: 끝까지 포기하지 않고 풀어낸 모습이 멋졌어요!",
-    en: "A word of encouragement · e.g. Great job not giving up on the hard ones!",
+    ko: "강사 한줄 멘트(필수) · 예: 끝까지 포기하지 않고 풀어낸 모습이 멋졌어요!",
+    en: "Teacher's one-line note (required) · e.g. Great job not giving up on the hard ones!",
   },
   "os.card.mentPhPilot": {
-    ko: "이 학생의 수학 보고서는 '자동작성'으로만 만듭니다(직접 고칠 수 없습니다). 진도 → 본문(소단원별 이해도를 강점·응원·격려의 말로) → 특이사항 순서로 채워집니다.",
-    en: "This student's math report is written by Auto-write only (it cannot be edited by hand). It fills in as progress → body (understanding per lesson put into words of praise or encouragement) → notes.",
+    ko: "이 학생의 수학 보고서는 '자동작성'으로만 만듭니다(직접 고칠 수 없습니다). 진도 → 본문(소단원별 이해도를 강점·응원·격려의 말로) → 강사 한줄 멘트 순서로 채워집니다. 한줄 멘트는 적는 대로 맨 아래에 바로 반영됩니다.",
+    en: "This student's math report is written by Auto-write only (it cannot be edited by hand). It fills in as progress → body (understanding per lesson put into words of praise or encouragement) → the teacher's one-line note, which updates live as you type.",
   },
   "os.card.understanding": { ko: "소단원별 이해도 (10점 만점)", en: "Understanding per lesson (out of 10)" },
   "os.card.understandingEmpty": {
@@ -4335,7 +4341,7 @@ export const SHEET_DICT = {
   "os.c.showAllFilter": { ko: "전체 보기", en: "Show all" },
   "os.c.narrativeSaved": { ko: "{name} 반 서술 저장 — 이후 자동작성부터 학생별 멘트에 반영됩니다", en: "Class notes saved for {name} — from the next auto-write on they shape each student's message" },
   "os.c.narrativeCleared": { ko: "{name} 반 서술을 지웠습니다", en: "Class notes cleared for {name}" },
-  "os.c.reportHeading": { ko: "보고서", en: "Report" },
+  "os.c.reportHeading": { ko: "수업보고서", en: "Class reports" },
   "os.c.parentNoticeTitle": { ko: "이 학생 학부모에게 공지(진도·평가 없이 안내글만) 발송", en: "Send a notice to this student's parents (just the message, no progress or scores)" },
   "os.c.parentNotice": { ko: "학부모 공지", en: "Parent notice" },
   "os.c.pickStudent": { ko: "학생을 선택하세요", en: "Pick a student" },

@@ -47,7 +47,7 @@ import type { OneScreenStudent } from "../types";
 import { classnoteBadge, type ClassnoteBadge } from "../classnote-badge";
 import { attendanceMarkBadgeClass, attendanceMarkLabel } from "../attendance-mark";
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
-import { activeUnderstanding, isMathReportPilot, pilotNeedsAutoWrite } from "../math-report-pilot";
+import { activeUnderstanding, hasPilotOneLine, isMathReportPilot, pilotNeedsAutoWrite } from "../math-report-pilot";
 import type { SheetLang } from "@/features/teacher-view/i18n";
 import { ReservedMakeupTag } from "./reserved-makeup-tag";
 import { MakeupSwitchButton } from "./makeup-switch-button";
@@ -315,6 +315,7 @@ export function ReportCard({
         understanding: activeUnderstanding(subject.today, subject.understanding),
         writtenSig: rep?.pilotUnderstandingSig,
       }),
+    needsOneLine: pilot && !hasPilotOneLine(cardEval.note), // 강사 한줄 멘트 필수(원장 2026-10-22)
     readonlyView, // 열람 전용 — 사유 라벨까지 게이트가 만든다(표뷰와 동일)
     recallPending: isRecallInFlight(liveStatus ?? null),
     // 발송 대기·게시 중 — 워커 결과 전까지 다시 못 누른다(표뷰와 같은 판정, 원장 2026-09-29).
@@ -677,7 +678,7 @@ export function ReportCard({
           className="contents [&_input:disabled]:opacity-50 [&_textarea:disabled]:opacity-50 [&_select:disabled]:opacity-50 [&_button:disabled]:opacity-50 [&:disabled_*]:cursor-not-allowed"
         >
         <div className="flex flex-col gap-1.5">
-          <label htmlFor={`teacher-note-${student.id}`} className="micro text-text-faint">{t("os.card.note")}</label>
+          <label htmlFor={`teacher-note-${student.id}`} className="micro text-text-faint">{pilot ? t("os.card.notePilot") : t("os.card.note")}</label>
           <textarea
             id={`teacher-note-${student.id}`}
             rows={3}

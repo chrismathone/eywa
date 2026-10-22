@@ -82,6 +82,8 @@ import {
   composePilotMent,
   isMathReportPilot,
   PILOT_AUTOWRITE_REQUIRED_ERROR,
+  PILOT_ONELINE_REQUIRED_ERROR,
+  pilotOneLineAttached,
   pilotLessons,
   PILOT_AI_DIRECTIVE,
   progressLead,
@@ -161,6 +163,8 @@ export type SaveLessonReportInput = {
    * 미지정(구 클라·직접 호출)이어도 저장은 그대로 — 라벨만 보수적으로(null 또는 auto_edited) 남는다.
    */
   mentSource?: MentSource;
+  /** 수학 보고서 시범 — 강사 한줄 멘트(필수, 원장 2026-10-22). 보낼 글 맨 끝에 그대로 붙어 있어야 발송한다. */
+  pilotOneLine?: string;
   /**
    * 자동작성 원문(0370a) — 화면이 `mentSource: 'auto_edited'`일 때만 싣는다(선생님이 고친 그 자동작성 글). 말투 프로파일이
    * 원문 ↔ 최종을 견줘 '늘 고치는 것'을 배운다(원장 2026-10-16). 저장 응답 뒤에 따로 적는다 — 본 저장과 무관, 실패해도 저장은 성공.
@@ -839,7 +843,16 @@ export async function saveAndQueueClassnote(
   // 🔴 수학 보고서 시범(테스트 학생 한정, math-report-pilot.ts) — '자동작성' 글 그대로가 아니면 보내지 않는다(저장은 끝났다).
   //    화면은 멘트 칸을 잠그고 발송 버튼도 막지만 그건 한 겹이다(#77) — 서버는 저장된 작성 방식(0214a, sticky 판정)으로 다시 본다.
   //    작성 방식을 모르면(컬럼 없음) 보내지 않는다 — 시범 한 명이라 막는 쪽이 싸다.
-  if (isMathReportPilot(input.studentId, input.subject) && saved.mentSource !== "auto") {
+  // 강사 한줄 멘트(필수, 원장 2026-10-22) — 비었거나 글 끝에 안 붙었으면 같은 길로 거절한다(안 싣는 옛 경로도 막힌다).
+  const pilotRow = isMathReportPilot(input.studentId, input.subject);
+  const pilotBlock = !pilotRow
+    ? null
+    : saved.mentSource !== "auto"
+      ? PILOT_AUTOWRITE_REQUIRED_ERROR
+      : !pilotOneLineAttached(input.notes, input.pilotOneLine)
+        ? PILOT_ONELINE_REQUIRED_ERROR
+        : null;
+  if (pilotBlock) {
     if (prior?.classnote_status === "queued") {
       try {
         await supabase
@@ -851,7 +864,7 @@ export async function saveAndQueueClassnote(
         // best-effort — 어차피 에러 반환이라 강사 재시도가 뒤따른다(옆 게이트와 같다)
       }
     }
-    return { ok: false, id: saved.id, shareToken: saved.shareToken, ...warn, error: PILOT_AUTOWRITE_REQUIRED_ERROR };
+    return { ok: false, id: saved.id, shareToken: saved.shareToken, ...warn, error: pilotBlock };
   }
 
   // 발송 안전 스위치 — 기본 OFF(dry-run). 원장이 승인(설정 토글)하기 전까지 **저장만** 하고 실제 큐잉(발송) 안 함.
