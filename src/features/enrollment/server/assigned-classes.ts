@@ -111,7 +111,7 @@ export async function listAssignedClassNames(
   if (!studentId) return [];
   type Klass = { class_name: string; subject: string | null };
   const { data, error } = await assignedQuery(supabase, studentId, subject, "id, class:class_id!inner ( class_name, subject )");
-  if (error) throw new Error(`배정 반 조회 실패: ${error.message}`);
+  if (error) throw new Error("배정 반을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.");
   const seen = new Map<string, { name: string; subject: string | null }>();
   for (const row of (data ?? []) as unknown as { class: Klass | Klass[] | null }[]) {
     const klass = Array.isArray(row.class) ? row.class[0] : row.class;
