@@ -19,6 +19,8 @@ export type HomeworkPair = { studentId: string; classId: string };
  * 이미 낸 영상 수(`sent` — 장부 칸의 `videoIds`와 같은 수. 0이면 아직 안 냄).
  */
 export type OpenHomework = { date: string; due: string; next: boolean; sent: number;
+  /** 이 숙제 칸에 붙은 영상(장부 칸의 `videoIds` 순서) — 게시 시각 · 학생 메모. `/v`가 "낸 영상"으로 보인다(원장 2026-10-22). */
+  videos: { postedAt: string; note: string | null }[];
   /** 상한(`SITE_MAX_VIDEOS_PER_HOMEWORK`)에 세는 수 — `sent` + 그 숙제를 골라 낸 같은 파일 사본(같은 파일을 되풀이해 올려 상한을 풀지 못하게). */
   used: number };
 
@@ -54,6 +56,7 @@ export async function openHomeworkDates(db: Db, tenantId: string, pairs: readonl
   const materials = await loadPairRoundMaterials(db, tenantId, pairs, today);
   if (!materials) return null;
   const rounds = pairRounds(materials);
+  const videoById = new Map(materials.videos.map((v) => [v.id, v]));
   // `반:학생:숙제일` → 그 숙제를 골라(또는 손으로 배정해) 낸 영상 — 같은 파일 사본까지.
   const pickedTo = new Map<string, Set<string>>();
   for (const v of materials.videos) if (v.classId && v.homeworkDate) {
@@ -65,7 +68,8 @@ export async function openHomeworkDates(db: Db, tenantId: string, pairs: readonl
     const dates = (rounds.get(key) ?? [])
       .filter((round) => (round.assigned || round.kept) && !!round.homeworkDate && homeworkOpen(round.homeworkDate, today, round.due))
       .map((round) => ({ date: round.homeworkDate!, due: homeworkDue(round.homeworkDate!, round.due), next: isCustomDue(round.homeworkDate!, round.due),
-        sent: round.videoIds.length, used: new Set([...round.videoIds, ...(pickedTo.get(`${key}:${round.homeworkDate}`) ?? [])]).size }))
+        sent: round.videoIds.length, used: new Set([...round.videoIds, ...(pickedTo.get(`${key}:${round.homeworkDate}`) ?? [])]).size,
+        videos: round.videoIds.flatMap((id) => { const v = videoById.get(id); return v ? [{ postedAt: v.postedAt, note: v.note ?? null }] : []; }) }))
       .filter((homework) => homework.used < SITE_MAX_VIDEOS_PER_HOMEWORK)
       .sort((a, b) => b.date.localeCompare(a.date));
     if (dates.length) out.set(key, dates);
@@ -163,7 +167,8 @@ export async function loadPairRoundMaterials(db: Db, tenantId: string, pairs: re
     return classId ? [{ id: row.id, studentId: row.student_id, classId, postedAt: row.posted_at, arrivedAt, createdAt: row.created_at ?? null, homeworkDate: picked,
       playback: { ...links, uploadedAt: row.uploaded_at ?? null },
       manuallyAssigned: route.manualAssignment === true, free: route.free === true,
-      fingerprint: videoFingerprint(row.md5, row.bytes) }] : [];
+      fingerprint: videoFingerprint(row.md5, row.bytes),
+      note: typeof route.note === "string" && route.note.trim() ? route.note : null }] : [];
   });
   return {
     pairs, from, today, assigned, kept, dues, videos: videoArrivals,

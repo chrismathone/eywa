@@ -1,9 +1,9 @@
 
-import { SheetText } from "@/features/teacher-view/interface-label";
+import { SheetTeacherName, SheetText } from "@/features/teacher-view/interface-label";
 import { Sparkles } from "@/components/icons/aywa-icon-compat";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { formatCreatedAt } from "@/lib/utils";
-import { kstToday } from "@/lib/date-kst";
+import { kstShortStamp, kstToday } from "@/lib/date-kst";
 import { isEnrollmentOnRosterOn } from "@/features/enrollments/eligibility";
 import {
   getStudentAttendanceStats,
@@ -71,13 +71,13 @@ export async function OverviewTab({ student, canSeeBilling }: { student: Student
   // 미납 = unpaid/partial만(refunded/void 제외) + 행 레벨 clamp — calc.ts 단일 공식(수납관리 KPI와 일치).
   const unpaid = invoices.filter((i) => i.status === "unpaid" || i.status === "partial");
   const unpaidTotal = unpaid.reduce((s, i) => s + invoiceOutstanding(i), 0);
-  const pinnedMemos = [...memos].sort((a, b) => Number(b.pinned) - Number(a.pinned));
+  const recentMemos = [...memos].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const base = `/students/${sid}`;
 
   return (
     <div className="space-y-4">
       {/* 최근 30일 출결 — 전체 폭 KPI */}
-      <section className="bg-card border-border rounded-2xl border p-5">
+      <section className="bg-card border-border rounded-2xl border p-4">
         <header className="mb-4 flex items-baseline justify-between">
           <h2 className="text-sm font-bold tracking-tight"><SheetText value={"최근 30일 출결"} /></h2>
           <p className="text-muted-foreground num text-xs"><SheetText value={"총 "} />{attendance.total}<SheetText value={"건"} /></p>
@@ -94,13 +94,14 @@ export async function OverviewTab({ student, canSeeBilling }: { student: Student
         </div>
       </section>
 
-      {/* 프로필 + 다이제스트 — CSS columns 마조너리(창 폭 따라 1/2/3열 자동 패킹, 빈칸 최소화) */}
-      <div className="gap-4 sm:columns-2 xl:columns-3 [&>section]:mb-4 [&>section]:break-inside-avoid">
-        <section className="bg-card border-border space-y-3 rounded-2xl border p-5">
+      {/* 같은 행의 카드 높이를 맞추고, 좁은 창에서는 2열·1열로 순서대로 읽는다. */}
+      <div className="grid grid-cols-1 items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <section className="bg-card border-border min-w-0 space-y-3 rounded-2xl border p-4">
           <h2 className="text-sm font-bold tracking-tight"><SheetText value={"프로필"} /></h2>
           <dl className="space-y-3 text-sm">
             {student.englishName ? <Field label="영문명" value={student.englishName} /> : null}
             {student.nickname ? <Field label="닉네임" value={student.nickname} /> : null}
+            {student.studentCode ? <Field label="원생번호" value={student.studentCode} mono /> : null}
             {student.attendanceCode ? (
               <Field label="출결번호" value={student.attendanceCode} mono />
             ) : null}
@@ -118,20 +119,12 @@ export async function OverviewTab({ student, canSeeBilling }: { student: Student
             {student.otherPhone ? (
               <Field label="기타 연락처" value={student.otherPhone} mono />
             ) : null}
-            <Field
-              label="학부모"
-              value={
-                student.parentName
-                  ? student.parentRelation
-                    ? `${student.parentName} (${student.parentRelation})`
-                    : student.parentName
-                  : null
-              }
-            />
-            <Field label="연락처" value={student.parentPhone} mono />
+            <Field label="학부모 이름" value={student.parentName} />
+            {student.parentRelation ? <Field label="보호자 관계" value={student.parentRelation} /> : null}
+            <Field label="학부모 연락처" value={student.parentPhone} mono />
             <ProfileSiblings siblings={siblings.siblings} lang={lang} />
             {student.email ? <Field label="이메일" value={student.email} mono /> : null}
-            {student.address ? (
+            {student.address || student.addressDetail || student.zipCode ? (
               <Field
                 label="주소"
                 value={
@@ -148,7 +141,43 @@ export async function OverviewTab({ student, canSeeBilling }: { student: Student
           </dl>
         </section>
 
-        <DigestCard title="수강 중인 반" more={<TabLink href={`${base}?tab=classes`}><SheetText value={"수업"} /></TabLink>}>
+        <DigestCard title="최근 성적" count={grades.length} more={<TabLink href={`${base}?tab=grades`}><SheetText value={"성적"} /></TabLink>}>
+          {grades.length === 0 ? (
+            <Empty><SheetText value={"성적 기록 없음"} /></Empty>
+          ) : (
+            grades.slice(0, 4).map((g) => (
+              <DigestRow
+                key={g.key}
+                left={`${subjects.labelOf(g.subject)} ${KIND_LABEL[g.kind]}`}
+                right={g.noExam ? "시험없음" : g.score == null ? g.rawScore || "—" : `${g.score}${g.maxScore == null ? "" : ` / ${g.maxScore}`}${scoreUnit(g)}`}
+                detail={[
+                  g.date,
+                  ...g.classes.map((c) => classNameFor(c.name, lang)),
+                ].filter(Boolean).join(" · ")}
+                mono
+              />
+            ))
+          )}
+        </DigestCard>
+
+        <DigestCard title="최근 상담" count={consultations.length} more={<TabLink href={`${base}?tab=consultations`}><SheetText value={"상담"} /></TabLink>}>
+          {consultations.length === 0 ? (
+            <Empty><SheetText value={"상담 기록 없음"} /></Empty>
+          ) : (
+            consultations.slice(0, 3).map((c) => (
+              <RecordPreview
+                key={c.id}
+                date={c.consultedAt}
+                author={c.counselorName}
+                authorLabel="상담자"
+                content={c.summary}
+                category={c.subject ? subjects.labelOf(c.subject) : undefined}
+              />
+            ))
+          )}
+        </DigestCard>
+
+        <DigestCard title="수강 중인 반" count={activeClasses.length} more={<TabLink href={`${base}?tab=classes`}><SheetText value={"수업"} /></TabLink>}>
           {activeClasses.length === 0 ? (
             <Empty><SheetText value={"수강 중인 반 없음"} /></Empty>
           ) : (
@@ -157,21 +186,6 @@ export async function OverviewTab({ student, canSeeBilling }: { student: Student
                 key={e.id}
                 left={classNameFor(e.className, lang)}
                 right={[subjects.labelOf(e.subject), teacherNameFor(e.teacherName, teacherNames, lang)].filter(Boolean).join(" · ")}
-              />
-            ))
-          )}
-        </DigestCard>
-
-        <DigestCard title="최근 성적" more={<TabLink href={`${base}?tab=grades`}><SheetText value={"성적"} /></TabLink>}>
-          {grades.length === 0 ? (
-            <Empty><SheetText value={"성적 기록 없음"} /></Empty>
-          ) : (
-            grades.slice(0, 4).map((g) => (
-              <DigestRow
-                key={g.key}
-                left={`${subjects.labelOf(g.subject)} ${KIND_LABEL[g.kind]}`}
-                right={g.score == null || g.maxScore == null ? g.rawScore || "—" : `${g.score} / ${g.maxScore}${scoreUnit(g)}`}
-                mono
               />
             ))
           )}
@@ -193,28 +207,18 @@ export async function OverviewTab({ student, canSeeBilling }: { student: Student
           )}
         </DigestCard> : null}
 
-        <DigestCard title="최근 상담" more={<TabLink href={`${base}?tab=consultations`}><SheetText value={"상담"} /></TabLink>}>
-          {consultations.length === 0 ? (
-            <Empty><SheetText value={"상담 기록 없음"} /></Empty>
+        <DigestCard title="최근 특이사항" count={memos.length} more={<TabLink href={`${base}?tab=memos`}><SheetText value={"특이사항"} /></TabLink>}>
+          {recentMemos.length === 0 ? (
+            <Empty><SheetText value={"특이사항 없음"} /></Empty>
           ) : (
-            consultations.slice(0, 3).map((c) => (
-              <DigestRow key={c.id} left={String(c.consultedAt).slice(0, 10)} right={c.summary} truncate mono />
-            ))
-          )}
-        </DigestCard>
-
-        <DigestCard title="최근 메모" more={<TabLink href={`${base}?tab=memos`}><SheetText value={"메모"} /></TabLink>}>
-          {pinnedMemos.length === 0 ? (
-            <Empty><SheetText value={"메모 없음"} /></Empty>
-          ) : (
-            pinnedMemos.slice(0, 3).map((m) => (
-              <DigestRow
+            recentMemos.slice(0, 3).map((m) => (
+              <RecordPreview
                 key={m.id}
-                // 🔴 저장값(`general`)을 그대로 적지 않는다 — 분류 라벨은 단일 소스에서
-                //    (원장 제보 2026-09-08 *"실제 출력이 영문으로 출력됨"*).
-                left={m.pinned ? <EyIcon name="pin" size={13} aria-label="고정 메모" /> : memoCategoryLabel(m.category)}
-                right={m.content}
-                truncate
+                date={m.createdAt}
+                author={m.createdByName}
+                content={m.content}
+                category={memoCategoryLabel(m.category)}
+                pinned={m.pinned}
               />
             ))
           )}
@@ -275,24 +279,29 @@ function Field({ label, value, mono }: { label: string; value: string | null; mo
   return (
     <div className="flex items-start justify-between gap-3">
       <dt className="text-muted-foreground shrink-0 text-xs"><SheetText value={label} /></dt>
-      <dd className={`text-foreground text-sm ${mono ? "num" : ""}`}>{value ?? "—"}</dd>
+      <dd className={`text-foreground min-w-0 text-right text-sm break-words ${mono ? "num" : ""}`}>{value || "—"}</dd>
     </div>
   );
 }
 
 function DigestCard({
   title,
+  count,
   more,
   children,
 }: {
   title: string;
+  count?: number;
   more?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
-    <section className="bg-card border-border flex flex-col rounded-2xl border p-4">
-      <header className="mb-2 flex items-center justify-between">
-        <h3 className="text-foreground text-sm font-bold"><SheetText value={title} /></h3>
+    <section className="bg-card border-border flex min-w-0 flex-col rounded-2xl border p-4">
+      <header className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-foreground text-sm font-bold">
+          <SheetText value={title} />
+          {count != null && count > 0 ? <span className="num ml-2 text-xs font-normal">{count}<SheetText value="건" /></span> : null}
+        </h2>
         {more}
       </header>
       <div className="divide-border/60 flex-1 divide-y">{children}</div>
@@ -304,24 +313,53 @@ function DigestRow({
   left,
   right,
   mono,
-  truncate,
+  detail,
   highlight,
 }: {
   left: React.ReactNode;
   right: string;
   mono?: boolean;
-  truncate?: boolean;
+  detail?: string;
   highlight?: string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 py-1.5 text-xs">
-      <span className="text-text-dim shrink-0">{left}</span>
-      <span
-        className={`text-foreground ${truncate ? "min-w-0 truncate text-right" : "shrink-0"} ${mono ? "num" : ""} ${highlight ?? ""}`}
-      >
-        {right}
-      </span>
+    <div className="space-y-1 py-2 text-xs">
+      <div className="flex items-start justify-between gap-3">
+        <span className="text-text-dim min-w-0 flex-1 break-words">{left}</span>
+        <span className={`text-foreground max-w-[55%] text-right break-words ${mono ? "num" : ""} ${highlight ?? ""}`}>
+          {right}
+        </span>
+      </div>
+      {detail ? <p className="text-text-dim leading-relaxed break-words">{detail}</p> : null}
     </div>
+  );
+}
+
+function RecordPreview({
+  date,
+  author,
+  authorLabel = "작성자",
+  content,
+  category,
+  pinned,
+}: {
+  date: string;
+  author: string | null;
+  authorLabel?: string;
+  content: string;
+  category?: string;
+  pinned?: boolean;
+}) {
+  return (
+    <article className="space-y-1.5 py-2.5">
+      <div className="text-text-dim flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs leading-relaxed break-words">
+        {pinned ? <EyIcon name="pin" size={13} aria-label="고정 특이사항" /> : null}
+        {category ? <span className="text-foreground font-medium">{category}</span> : null}
+        <time dateTime={date} className="num">{date.length === 10 ? date : kstShortStamp(date) ?? "일자 정보 없음"}</time>
+        <span className="min-w-0"><SheetText value={authorLabel} /> {author ? <SheetTeacherName value={author} /> : <SheetText value="정보 없음" />}</span>
+      </div>
+      <p className="text-foreground line-clamp-3 text-sm leading-relaxed whitespace-pre-wrap break-words">{content}</p>
+    </article>
   );
 }
 

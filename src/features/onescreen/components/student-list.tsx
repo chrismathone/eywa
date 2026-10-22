@@ -1,6 +1,8 @@
 "use client";
 
 import { MakeupClassTag } from "./makeup-class-tag";
+import { ReservedMakeupTag } from "./reserved-makeup-tag";
+import { studentReservations } from "../reserved-makeup";
 import { useState } from "react";
 import { ChevronDown } from "@/components/icons/aywa-icon-compat";
 import { BulkPresentButton, type BulkPresentProps } from "./bulk-present-button";
@@ -99,6 +101,8 @@ function StudentRow({
           {st.subjects.filter((su) => su.makeup && !su.classId).slice(0, 1).map((su) => (
             <MakeupClassTag key={su.name} subject={su} />
           ))}
+          {/* 그날 보강 예약(0264a) — 정규 수업일 예약은 정규 줄에 합쳐져 따로 줄이 안 서므로 목록에서 바로 보이게(원장 2026-10-22). */}
+          <ReservedMakeupTag list={studentReservations(st)} />
           <span className="flex shrink-0 items-center gap-0.5">
             {st.subjects.map((su, i) => (
               <span

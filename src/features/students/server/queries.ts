@@ -1876,7 +1876,7 @@ export async function getStudentTimeline(studentId: string): Promise<TimelineEve
     events.push({
       date: String(m.created_at).slice(0, 10),
       kind: "memo",
-      title: p.title ?? (m.category ? `메모 — ${m.category}` : "메모"),
+      title: p.title ?? (m.category ? `특이사항 — ${m.category}` : "특이사항"),
       description: p.body,
       registrant: p.registrant,
     });

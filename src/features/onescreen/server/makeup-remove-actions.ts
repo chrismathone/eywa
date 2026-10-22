@@ -58,7 +58,8 @@ export type RemoveMakeupResult =
       /** 화면에 그대로 띄우는 한글 요약. */
       message: string;
     }
-  | { ok: false; error: string };
+  /** `code: "not_found"` = 지울 보강 기록(보고서·명단·출결)이 없다 — 보강 예약에서 막 선 줄을 합칠 때는 오류가 아니다(원장 2026-10-22 합치기). */
+  | { ok: false; error: string; code?: "not_found" };
 
 /**
  * 보강 한 줄을 명단에서 뺀다.
@@ -219,7 +220,7 @@ export async function removeMakeupEntry(input: {
     rosterRemoved = true;
   }
   if (!attendanceRemoved && deleted === 0 && !rosterRemoved) {
-    return { ok: false, error: "뺄 보강 기록을 찾지 못했습니다 — 다른 사람이 만든 보강일 수 있습니다" };
+    return { ok: false, error: "뺄 보강 기록을 찾지 못했습니다 — 다른 사람이 만든 보강일 수 있습니다", code: "not_found" };
   }
 
   // 학생 레코드를 바꾸는 경로는 감사로그 필수(2026-08-18 규칙) — 누가 지웠는지 역검수가 되게.

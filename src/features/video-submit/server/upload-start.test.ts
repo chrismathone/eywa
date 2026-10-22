@@ -156,6 +156,16 @@ describe("업로드 시작 — 정상", () => {
     expect((await req({ homeworkDate: TODAY })).ok).toBe(true);
     // 확인된 숙제일이 업로드 경로에 실린다 — 영상 줄로 그대로 넘어가 영상 제출 현황이 그 숙제 칸에 붙인다
     expect(db.tables.homework_video_link_uploads![0]!.route).toMatchObject({ classId: C, studentId: S, homeworkDate: TODAY });
+    // 메모를 안 적었으면 싣지 않는다(숙제 영상 메모는 선택)
+    expect(db.tables.homework_video_link_uploads![0]!.route).not.toHaveProperty("note");
+  });
+  it("숙제를 고른 영상에도 메모를 남길 수 있다(선택 — 원장 2026-10-22) · 다듬어 싣고, 숙제 없이 올리기로 바뀌지 않는다", async () => {
+    Object.assign(db.tables.homework_video_links![0]!, { origin: "site", created_at: new Date().toISOString() });
+    assignHomework(TODAY);
+    expect((await req({ homeworkDate: TODAY, note: "  3단원\n 비례식 " })).ok).toBe(true);
+    const route = db.tables.homework_video_link_uploads![0]!.route as Record<string, unknown>;
+    expect(route).toMatchObject({ homeworkDate: TODAY, note: "3단원 비례식" });
+    expect(route).not.toHaveProperty("free");
   });
   it("숙제 없이 올리기(사이트 링크 · 메모 필수 · 하루 5개) — 메모는 다듬어 업로드 경로에 실린다 · 숙제일은 싣지 않는다", async () => {
     Object.assign(db.tables.homework_video_links![0]!, { origin: "site", created_at: new Date().toISOString() });

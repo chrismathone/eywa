@@ -1,8 +1,10 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useId, useMemo, useState, useTransition } from "react";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import type { SchoolBar } from "@/features/enrollment/consultation-dist";
+import { SMALL_SCHOOLS_KEY, summarizeSchoolBars } from "@/features/enrollment/consultation-dist";
+import { CompactStatsList } from "./compact-stats-list";
 import {
   SCHOOL_KINDS,
   SORT_KEYS,
@@ -51,7 +53,10 @@ export function ConsultDistPanel({
   totalsYear: number | null;
 }) {
   const [prefs, setPrefs] = useState<SchoolStatsPrefs>(initial);
+  const [showSmallSchools, setShowSmallSchools] = useState(false);
+  const smallSchoolsId = useId();
   const [, startTransition] = useTransition();
+  const sortBy = hasTotals ? prefs.sortBy : "count";
 
   const update = (patch: Partial<SchoolStatsPrefs>) => {
     const next = { ...prefs, ...patch };
@@ -61,12 +66,15 @@ export function ConsultDistPanel({
     });
   };
 
-  const view = useMemo(() => {
+  const { view, smallSchools, schoolCount } = useMemo(() => {
     const kinds = prefs.kinds;
     const filtered = rows.filter((r) => !kinds || (r.kind && kinds.includes(r.kind)));
+    const grouped = summarizeSchoolBars(filtered);
     const dir = prefs.sortDir === "asc" ? 1 : -1;
-    return [...filtered].sort((a, b) => {
-      if (prefs.sortBy === "pct") {
+    const view = grouped.rows.sort((a, b) => {
+      if (a.key === SMALL_SCHOOLS_KEY) return 1;
+      if (b.key === SMALL_SCHOOLS_KEY) return -1;
+      if (sortBy === "pct") {
         // 전교생 미상은 방향과 무관하게 끝 — 0으로 취급하면 "비율 0%"로 읽힌다.
         if (a.rate === null && b.rate === null) return (a.n - b.n) * dir;
         if (a.rate === null) return 1;
@@ -76,9 +84,10 @@ export function ConsultDistPanel({
       if (a.n !== b.n) return (a.n - b.n) * dir;
       return a.label.localeCompare(b.label, "ko");
     });
-  }, [rows, prefs]);
+    return { view, smallSchools: grouped.smallSchools, schoolCount: filtered.length };
+  }, [rows, prefs, sortBy]);
 
-  const max = Math.max(1, ...view.map((r) => (prefs.sortBy === "pct" ? (r.rate ?? 0) : r.n)));
+  const max = Math.max(1, ...view.map((r) => (sortBy === "pct" ? (r.rate ?? 0) : r.n)));
   const totalN = view.reduce((a, r) => a + r.n, 0);
   const totalE = view.reduce((a, r) => a + r.enrolled, 0);
 
@@ -92,16 +101,16 @@ export function ConsultDistPanel({
   const sortKeys = hasTotals ? SORT_KEYS : (["count"] as const);
 
   return (
-    <section className="bg-card shadow-card rounded-2xl p-4">
+    <section className="bg-card shadow-card flex min-w-0 flex-col rounded-2xl p-4">
       <header className="mb-3">
         <h2 className="text-foreground text-sm font-bold">학교별 상담</h2>
         <p className="text-text-dim mt-0.5 text-xs">
-          {year === null ? "전체 기간" : `${year}년`} 상담 {totalN}건 · 등록 {totalE}건 · {view.length}개 학교
+          {year === null ? "전체 기간" : `${year}년`} 상담 {totalN}건 · 등록 {totalE}건 · {schoolCount}개 학교·분류
           {hasTotals
             ? ` · 전교생 대비 비율은 ${totalsYear}년 공시 기준`
             : year === null
-              ? " · 전체 기간에는 어느 해 전교생으로 나눌지 정할 수 없어 비율을 내지 않습니다"
-              : ` · ${year}년 전교생 공시가 없어 비율은 내지 않습니다`}
+              ? " · 전체 기간은 전교생 대비 비율 미제공"
+              : ` · ${year}년 전교생 자료 없음`}
         </p>
       </header>
 
@@ -133,7 +142,7 @@ export function ConsultDistPanel({
                 key={s}
                 type="button"
                 onClick={() => update({ sortBy: s })}
-                className={chip(prefs.sortBy === s)}
+                className={chip(sortBy === s)}
               >
                 {s === "pct" ? "전교생 대비" : "상담 건수"}
               </button>
@@ -154,21 +163,26 @@ export function ConsultDistPanel({
       {view.length === 0 ? (
         <p className="text-text-dim py-6 text-center text-sm">이 조건에 해당하는 학교가 없습니다</p>
       ) : (
-        <ul className="space-y-2">
+        <CompactStatsList label="학교별 상담 분포" keepLast={smallSchools.length > 0}>
           {view.map((s) => {
-            const v = prefs.sortBy === "pct" ? (s.rate ?? 0) : s.n;
+            const v = sortBy === "pct" ? (s.rate ?? 0) : s.n;
             const conv = s.n > 0 ? Math.round((s.enrolled / s.n) * 100) : null;
             return (
               <li key={s.key}>
-                <div className="flex items-baseline justify-between gap-3 text-sm">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-sm">
                   {/* 라벨은 짧은 표기 하나로 통일(병행표기 금지) — 공시 정식명은 툴팁으로만 남긴다. */}
-                  <span className="text-foreground font-medium break-keep" title={s.officialName ?? undefined}>
-                    {s.label}
+                  <span className="text-foreground min-w-0 font-medium break-words" title={s.officialName ?? undefined}>
+                    {s.key === SMALL_SCHOOLS_KEY ? (
+                      <button type="button" className="text-primary inline-flex items-center gap-1 text-left hover:underline" aria-expanded={showSmallSchools} aria-controls={smallSchoolsId} onClick={() => setShowSmallSchools((value) => !value)}>
+                        {s.label} · {smallSchools.length}곳
+                        <EyIcon name="chevronDown" size={12} />
+                      </button>
+                    ) : s.label}
                     {s.kind && !nameSaysKind(s.label, s.kind) ? (
                       <span className="text-text-faint ml-1.5 text-xs">{s.kind}</span>
                     ) : null}
                   </span>
-                  <span className="text-text-dim num shrink-0 text-xs">
+                  <span className="text-text-dim num min-w-0 text-xs">
                     {s.n}건 · 등록 {s.enrolled}
                     {conv !== null ? <b className="text-foreground ml-1.5 text-sm">{conv}%</b> : null}
                     {s.rate !== null ? (
@@ -185,15 +199,26 @@ export function ConsultDistPanel({
                     }}
                   />
                 </div>
+                {s.key === SMALL_SCHOOLS_KEY && showSmallSchools ? (
+                  <ul id={smallSchoolsId} className="border-line mt-2 space-y-1 border-l pl-3 text-xs" aria-label="2건 이하 학교 내역">
+                    {smallSchools.map((school) => (
+                      <li key={school.key} className="flex flex-wrap justify-between gap-x-3 gap-y-1">
+                        <span>{school.label}</span>
+                        <span className="num">{school.n}건 · 등록 {school.enrolled}건</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
               </li>
             );
           })}
-        </ul>
+        </CompactStatsList>
       )}
       <p className="text-text-faint mt-2 text-xs">
         굵은 %는 그 학교에서 온 상담의 등록 전환율입니다 · 막대는{" "}
-        {prefs.sortBy === "pct" ? "전교생 대비 비율" : "상담 건수"} 기준
+        {sortBy === "pct" ? "전교생 대비 비율" : "상담 건수"} 기준
       </p>
+      {smallSchools.length > 0 ? <p className="text-text-faint mt-1 text-xs">상담 2건 이하 학교는 기타로 합산했습니다. 기타를 누르면 학교별 내역을 볼 수 있습니다.</p> : null}
     </section>
   );
 }

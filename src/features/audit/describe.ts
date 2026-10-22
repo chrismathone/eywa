@@ -1516,6 +1516,11 @@ export function auditDetail(
       const label = status && status in STATUS_TEXT ? STATUS_TEXT[status as keyof typeof STATUS_TEXT] : null;
       return join(core, label ? `보강일 출결 ${label}` : null);
     }
+    case "makeup_reserve_report_mode": {
+      // 원스크린 합치기 ↔ 나누기가 예약의 보고서 발송 방식을 바꿨다(원장 2026-10-22). '대상'이 비어 있어 날짜까지 적는다.
+      const mode = m.mode === "merge" ? "정규 보고서에 합침(정규+보강)" : m.mode === "separate" ? "보강 보고서 따로" : null;
+      return join(str(m.date) ? `${str(m.date)} 보강` : null, mode);
+    }
     case "attendance_cell":
     case "attendance_bulk":
     case "attendance_range": {

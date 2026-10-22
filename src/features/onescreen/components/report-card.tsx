@@ -49,6 +49,8 @@ import { attendanceMarkBadgeClass, attendanceMarkLabel } from "../attendance-mar
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { activeUnderstanding, isMathReportPilot, pilotNeedsAutoWrite } from "../math-report-pilot";
 import type { SheetLang } from "@/features/teacher-view/i18n";
+import { ReservedMakeupTag } from "./reserved-makeup-tag";
+import { MakeupSwitchButton } from "./makeup-switch-button";
 
 // shareToken: 저장 시 발급되는 학부모 공개 링크(/r/[token]) 토큰. 세션 내 저장 후에만 존재.
 // classnoteStatus: ClassNote 발송 큐 상태(queued/processing/success/failed/too_old) — 발송 후에만.
@@ -149,6 +151,8 @@ export function ReportCard({
   onVideoSubmitLink,
   onVideoHomeworkDue,
   onRemoveMakeup,
+  onJoinMakeup,
+  onSplitMakeup,
   canRemoveMakeup,
   onPickMakeupClass,
   onSubjectDraft,
@@ -192,6 +196,9 @@ export function ReportCard({
   onVideoHomeworkDue?: (subjectName: string, mode: "week" | "next") => void;
   /** 보강 빼기(2026-08-18) — 출결·저장된 보강 보고서를 지운다. 없으면 배지가 표시로만 남는다. */
   onRemoveMakeup?: (subjectName: string) => void;
+  /** 보강 보고서 합치기 · 나누기(원장 2026-10-22 — 판정 makeup-switch.ts). 없으면 버튼이 없다. */
+  onJoinMakeup?: (subjectName: string) => void;
+  onSplitMakeup?: (subjectName: string) => void;
   /** 이 행을 뺄 수 있나 — 발송·처리 중이면 false(발송된 보강은 취소 불가, 원장 2026-08-18). */
   canRemoveMakeup?: (subjectName: string) => boolean;
   /** 보강 반 고르기(원장 2026-09-30) — 없으면 반 표시만. */
@@ -388,6 +395,11 @@ export function ReportCard({
                   {t("os.card.makeup")}
                 </span>
               ) : null}
+              {/* 합치기(원장 2026-10-22) — 오늘 같은 과목 정규 줄이 있는 '(보강)' 줄만. 같은 반이 아니면 누를 때 이유를 알린다. */}
+              {onJoinMakeup && subject.makeup && !subject.classId &&
+              student.subjects.some((x) => !x.makeup && !!x.classId && (x.subjectKey ?? "") === (subject.subjectKey ?? "")) ? (
+                <MakeupSwitchButton kind="join" onClick={() => onJoinMakeup(subject.name)} />
+              ) : null}
               {/* 로스터 신호(G2·G3) — 표뷰와 동일 판정(roster-signals.ts). 카드는 학생 단위라 진도 배지는
                   수학 과목 보유 시(진도 파이프라인=math 전용). 카피 "미확인"(단정 금지). */}
               {unreadBadge ? (
@@ -406,6 +418,8 @@ export function ReportCard({
                   {t("os.row.jump")}
                 </span>
               ) : null}
+              {/* 보강 예약(0264a) — 이 줄에 걸린 그날 보강(원장 2026-10-22). */}
+              <ReservedMakeupTag list={subject.makeupReserved} size="md" />
               {/* 수업 나누기(0351a) — 이 행이 왜 여기 있는지 / 그 시간이 어디로 가는지를 **글자로**(hover는 모바일에서 없다). */}
               {subject.splitIn || subject.splitOut ? (
                 <span className="bg-blue-soft text-blue rounded-pill px-1.5 py-px text-xs font-bold">
@@ -548,9 +562,13 @@ export function ReportCard({
             />
             {/* 🔴 옛 '보강' 켜고 끄기 알약은 없앴다(원장 2026-09-30 — 표 모드 체크박스와 같은 이유: 손으로 켜면 타임 없는
                 '(정규+보강)'이 생겼다). 보강은 '보강 추가'에서 정해지고, 여기엔 **합침 취소**만 남긴다. */}
-            {subject.makeup && subject.classId && locked ? (
+            {subject.makeup && subject.classId && (locked || subject.makeupByReservation) ? (
               // 잠긴 행(결석·발송 완료·열람)은 합침 취소도 못 한다 — 표 모드와 같게 표시 배지만.
-              <span className="bg-amber-soft text-amber shrink-0 rounded-pill px-2.5 py-1 text-xs font-bold">
+              // 보강 예약(합침)이 만든 '정규+보강'도 표시만 — 여기서 풀어도 새로고침이 예약대로 다시 합친다(예약을 '분리'로 다시 잡는다).
+              <span
+                className="bg-amber-soft text-amber shrink-0 rounded-pill px-2.5 py-1 text-xs font-bold"
+                title={subject.makeupByReservation ? t("os.reserved.mergeLocked") : undefined}
+              >
                 {makeupBadgeLabel({ makeup: true, hasClass: true }, lang)}
               </span>
             ) : subject.makeup && subject.classId ? (
@@ -567,6 +585,10 @@ export function ReportCard({
                 {makeupBadgeLabel({ makeup: true, hasClass: true }, lang)}
                 <EyIcon name="close" size={10} />
               </button>
+            ) : null}
+            {/* 나누기(원장 2026-10-22) — '정규+보강' 줄이 잠기지 않았을 때만(예약 합침 줄도 — 예약 방식을 함께 바꾼다). */}
+            {onSplitMakeup && subject.makeup && subject.classId && !locked ? (
+              <MakeupSwitchButton kind="split" size="md" onClick={() => onSplitMakeup(subjectName)} />
             ) : null}
             <VideoHomeworkToggle
               size="pill"

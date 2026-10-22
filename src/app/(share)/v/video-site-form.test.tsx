@@ -151,8 +151,77 @@ describe("올리기 사이트 — 지난 반 숙제(원장 2026-10-21)", () => {
     ] }];
     render(<VideoSiteForm academyName="인재원" branches={[BRANCHES[0]!]} maxLabel="1GB" />);
     fill();
-    await screen.findByText("올릴 숙제를 골라 주세요");
+    // 반이 둘이라 반부터 고른다(선생님 → 반 → 숙제 · 원장 2026-10-22) — 반 줄에 '지난 반'
+    await screen.findByText("반을 골라 주세요");
     expect(screen.getByText("BS2C · 지난 반")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /BS2D/ })).not.toHaveTextContent("지난 반");
+  });
+});
+
+describe("올리기 사이트 — 이미 낸 숙제를 다시 누르면 묻는다(원장 2026-10-22)", () => {
+  // 김채현 건 — 남정화(BS1D)·허주연(BS1K) 두 선생님. 선생님 → 반 → 숙제.
+  const SENT = { ...CHOICE, className: "BS1K", homeworkLabel: "10/20 (화)", sent: 1, teacherKey: "t2", teacherLabel: "허주연 (수학)", classKey: "c2" };
+  const UNSENT = { ...CHOICE, id: "e".repeat(40), className: "BS1D", homeworkLabel: "10/19 (월)", teacherKey: "t1", teacherLabel: "남정화 (수학)", classKey: "c1" };
+  const toHeo = async () => {
+    await screen.findByText("숙제를 낸 선생님을 골라 주세요");
+    fireEvent.click(screen.getByRole("button", { name: /허주연 \(수학\)/ }));
+    await screen.findByText("올릴 숙제를 골라 주세요");
+  };
+  it("바로 열지 않고 '이미 냈어요 · 아직 안 낸 숙제(다른 선생님 숙제까지)'를 보인다 — '다른 숙제 고르기'는 상자만 닫는다", async () => {
+    replies = [{ ok: true, choices: [UNSENT, SENT] }];
+    render(<VideoSiteForm academyName="인재원" branches={[BRANCHES[0]!]} maxLabel="1GB" />);
+    fill();
+    await toHeo();
+    fireEvent.click(screen.getByRole("button", { name: /10\/20 \(화\) 수업 숙제/ }));
+    expect(screen.getByText("이 숙제에는 이미 영상 1개를 냈어요")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "10/19 (월) 수업 숙제 · 남정화 (수학) · BS1D" })).toBeInTheDocument();
+    expect(bodies().map((b) => b.op)).toEqual(["lookup"]);
+    // 같은 줄을 또 눌러도 열리지 않는다(두 번 빠르게 누르면 상자를 읽기 전에 열리던 구멍)
+    fireEvent.click(screen.getByRole("button", { name: /10\/20 \(화\) 수업 숙제/ }));
+    expect(bodies().map((b) => b.op)).toEqual(["lookup"]);
+    fireEvent.click(screen.getByRole("button", { name: "다른 숙제 고르기" }));
+    expect(screen.queryByText("이 숙제에는 이미 영상 1개를 냈어요")).toBeNull();
+    expect(bodies().map((b) => b.op)).toEqual(["lookup"]);
+  });
+  it("'이 숙제에 더 올리기'를 누르면 그 숙제를 연다(같은 숙제의 다른 단원 — 막지 않는다)", async () => {
+    replies = [{ ok: true, choices: [UNSENT, SENT] }, { ok: false, code: "limit", error: "잠시 동안 너무 많이 시도했습니다." }];
+    render(<VideoSiteForm academyName="인재원" branches={[BRANCHES[0]!]} maxLabel="1GB" />);
+    fill();
+    await toHeo();
+    fireEvent.click(screen.getByRole("button", { name: /10\/20 \(화\) 수업 숙제/ }));
+    fireEvent.click(screen.getByRole("button", { name: "이 숙제에 더 올리기" }));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("너무 많이 시도"));
+    expect(bodies()[1]).toMatchObject({ op: "open", choice: SENT.id });
+    // 실패 뒤에도 같은 선생님·반 화면에 남는다(처음 단계로 튀지 않는다)
+    expect(screen.getByText("올릴 숙제를 골라 주세요")).toBeInTheDocument();
+  });
+  it("확인 상자의 안 낸 숙제 줄을 누르면 그 숙제(다른 선생님 숙제)를 바로 연다", async () => {
+    replies = [{ ok: true, choices: [UNSENT, SENT] }, { ok: false, code: "limit", error: "잠시 동안 너무 많이 시도했습니다." }];
+    render(<VideoSiteForm academyName="인재원" branches={[BRANCHES[0]!]} maxLabel="1GB" />);
+    fill();
+    await toHeo();
+    fireEvent.click(screen.getByRole("button", { name: /10\/20 \(화\) 수업 숙제/ }));
+    fireEvent.click(screen.getByRole("button", { name: "10/19 (월) 수업 숙제 · 남정화 (수학) · BS1D" }));
+    await waitFor(() => expect(bodies()[1]).toMatchObject({ op: "open", choice: UNSENT.id }));
+  });
+  it("선생님 단계 = 이름을 크게 + 반 · 안 낸 숙제 수 · '다른 선생님 고르기'로 돌아온다", async () => {
+    replies = [{ ok: true, choices: [UNSENT, SENT] }];
+    render(<VideoSiteForm academyName="인재원" branches={[BRANCHES[0]!]} maxLabel="1GB" />);
+    fill();
+    await screen.findByText("숙제를 낸 선생님을 골라 주세요");
+    expect(screen.getByRole("button", { name: /남정화 \(수학\)/ })).toHaveTextContent("아직 안 낸 숙제 1개");
+    expect(screen.getByRole("button", { name: /허주연 \(수학\)/ })).toHaveTextContent("모두 영상을 냈어요");
+    fireEvent.click(screen.getByRole("button", { name: /허주연 \(수학\)/ }));
+    await screen.findByText("올릴 숙제를 골라 주세요");
+    fireEvent.click(screen.getByRole("button", { name: "다른 선생님 고르기" }));
+    expect(screen.getByText("숙제를 낸 선생님을 골라 주세요")).toBeInTheDocument();
+  });
+  it("안 낸 숙제는 묻지 않고 바로 연다 · 안 낸 숙제가 없으면 '같은 숙제의 다른 단원' 안내만", async () => {
+    replies = [{ ok: true, choices: [SENT] }];
+    render(<VideoSiteForm academyName="인재원" branches={[BRANCHES[0]!]} maxLabel="1GB" />);
+    fill();
+    await screen.findByText("올릴 숙제를 골라 주세요");
+    fireEvent.click(screen.getByRole("button", { name: /10\/20 \(화\) 수업 숙제/ }));
+    expect(screen.getByText("같은 숙제의 다른 단원 영상이면 더 올려 주세요.")).toBeInTheDocument();
   });
 });

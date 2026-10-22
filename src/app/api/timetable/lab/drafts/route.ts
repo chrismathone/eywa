@@ -10,7 +10,7 @@ export async function GET(request: Request) {
   if (!/^\d+$/.test(offsetText) || !/^\d+$/.test(limitText) || !Number.isSafeInteger(offset) || offset > 100000 || limit < 1 || limit > 50) {
     return draftError('불러올 목록 범위를 확인해 주세요.', 400);
   }
-  try { return Response.json(await listDrafts(auth.user.tenantId, auth.user.id, offset, limit), { headers: draftHeaders }); }
+  try { return Response.json(await listDrafts(auth.user.tenantId, offset, limit), { headers: draftHeaders }); }
   catch (error) { logDbError(error, 'timetable-lab-draft-list'); return draftError('저장된 연습본 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.', 503); }
 }
 export async function POST(request: Request) {

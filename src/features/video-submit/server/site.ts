@@ -2,9 +2,11 @@ import "server-only";
 import { createHash, createHmac } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchInChunks } from "@/lib/supabase/batch";
-import { addDays, formatShortKoreanDate, kstToday } from "@/lib/date-kst";
+import { addDays, formatShortKoreanDate, kstDateOf, kstTimeOf, kstToday } from "@/lib/date-kst";
 import { logActionAs } from "@/features/audit/server/log";
 import type { TenantSettings } from "@/features/owner/settings-types";
+import { buildSubjectMaps } from "@/features/owner/subjects";
+import { DEFAULT_SETTINGS } from "@/features/owner/defaults";
 import { isEnrollmentEndedOn } from "@/features/enrollments/eligibility";
 import { isVideoHomeworkEnabled } from "@/features/video-homework/policy";
 import { shareExpiryDate } from "@/features/onescreen/share-expiry";
@@ -108,10 +110,12 @@ async function admit(db: Db, tenantId: string, ipHash: string, kind: "lookup" | 
 }
 
 /** `past` = 수강이 끝난 반(반 이동 전 반 등) — 그 반에서 받은 숙제 줄만 세운다(숙제 없이 올리기 줄 없음). */
-type Candidate = { studentId: string; classId: string; studentName: string; className: string; past?: true };
+type Candidate = { studentId: string; classId: string; studentName: string; className: string; past?: true;
+  /** 그 반 담임(`classes.teacher_id`) — 화면의 '선생님 → 반 → 숙제' 첫 단계(원장 2026-10-22). 학생의 담당만 나온다(후보 반의 담임). */
+  teacherId: string | null; subject: string };
 type StudentRow = { id: string; name: string | null; grade: string | null; student_phone: string | null; parent_phone: string | null };
 type EnrollmentRow = { student_id: string; class_id: string; start_date: string | null; end_date: string | null; on_hold: boolean | null; is_transferred: boolean | null };
-type ClassRow = { id: string; class_name: string | null; subject: string | null; is_active: boolean | null };
+type ClassRow = { id: string; class_name: string | null; subject: string | null; is_active: boolean | null; teacher_id: string | null };
 
 /**
  * 뒷 4자리 + 이름 → 후보(학생 × 지금 다니는 반). 재원생만 · 학생 본인 번호 또는 보호자 번호가 그 4자리로 끝나고 **이름이 같은** 학생
@@ -152,7 +156,7 @@ async function findCandidates(
   const past = enrollments.filter((e) => started(e) && !e.on_hold && !!e.end_date && e.end_date >= since && ended(e) && !current.has(`${e.student_id}:${e.class_id}`));
   if (!live.length && !past.length) return { tooMany: false, matched: true, list: [] };
   const classes = await fetchInChunks<ClassRow>([...new Set([...live, ...past].map((e) => e.class_id))], (chunk) => db.from("classes")
-    .select("id,class_name,subject,is_active").eq("tenant_id", tenantId).in("id", chunk));
+    .select("id,class_name,subject,is_active,teacher_id").eq("tenant_id", tenantId).in("id", chunk));
   const classById = new Map(classes.map((c) => [c.id, c]));
   const policy = settings.report.videoHomeworkPolicy;
   const out = new Map<string, Candidate>();
@@ -165,7 +169,8 @@ async function findCandidates(
       if (!student || !klass?.subject || out.has(`${student.id}:${klass.id}`)) continue;
       if (!isVideoHomeworkEnabled(policy, { classId: klass.id, subjectKey: klass.subject, grade: student.grade })) continue;
       out.set(`${student.id}:${klass.id}`, { studentId: student.id, classId: klass.id, studentName: student.name?.trim() || "학생",
-        className: klass.class_name?.trim() || "수업", ...(isPast || !klass.is_active ? { past: true as const } : {}) });
+        className: klass.class_name?.trim() || "수업", ...(isPast || !klass.is_active ? { past: true as const } : {}),
+        teacherId: klass.teacher_id ?? null, subject: klass.subject });
     }
   }
   const list = [...out.values()].sort((a, b) => a.studentName.localeCompare(b.studentName, "ko") || a.className.localeCompare(b.className, "ko"));
@@ -173,9 +178,9 @@ async function findCandidates(
 }
 
 /** 숙제 줄 — `due` = 그 숙제의 마감(그날 포함) · `next` = 선생님이 '다음 수업'으로 고른 마감(due.ts). */
-type HomeworkChoice = Candidate & { homeworkDate: string; due: string; next: boolean; sent: number };
+type HomeworkChoice = Candidate & { homeworkDate: string; due: string; next: boolean; sent: number; videos: { postedAt: string; note: string | null }[] };
 /** 고를 수 있는 줄 — 숙제(`homeworkDate`) 또는 숙제 없이 그 반에 올리기(`homeworkDate = null`). */
-type PickChoice = Candidate & { homeworkDate: string | null; due?: string; next?: boolean; sent?: number };
+type PickChoice = Candidate & { homeworkDate: string | null; due?: string; next?: boolean; sent?: number; videos?: { postedAt: string; note: string | null }[] };
 
 /**
  * 숙제 줄 + **숙제 없이 올리기** 줄(학생 × 반마다 하나, 원장 2026-10-13) — 숙제가 먼저, 그 아래 반 줄. 둘 다 같은 후보(번호·이름·
@@ -198,7 +203,7 @@ async function homeworkChoices(db: Db, tenantId: string, list: Candidate[], day:
   const open = await openHomeworkDates(db, tenantId, list.map((c) => ({ studentId: c.studentId, classId: c.classId })), day);
   if (!open) return null;
   return list
-    .flatMap((c) => (open.get(`${c.classId}:${c.studentId}`) ?? []).map((homework) => ({ ...c, homeworkDate: homework.date, due: homework.due, next: homework.next, sent: homework.sent })))
+    .flatMap((c) => (open.get(`${c.classId}:${c.studentId}`) ?? []).map((homework) => ({ ...c, homeworkDate: homework.date, due: homework.due, next: homework.next, sent: homework.sent, videos: homework.videos })))
     .sort((a, b) => Number(a.sent > 0) - Number(b.sent > 0) || b.homeworkDate.localeCompare(a.homeworkDate)
       || a.className.localeCompare(b.className, "ko") || a.studentName.localeCompare(b.studentName, "ko"))
     .slice(0, SITE_MAX_CHOICES);
@@ -226,23 +231,73 @@ export async function lookupSite(input: { last4: unknown; name: unknown; ip: str
     const choices = await pickChoices(db, site.tenantId, found.list, day);
     if (!choices) return { ok: false, code: "unavailable", error: UNAVAILABLE };
     if (!choices.length) return { ok: false, code: "no_homework", error: NO_HOMEWORK };
+    // 선생님 → 반 → 숙제(원장 2026-10-22 *"반이름도 반이름이지만 '선생님' 이름을 좀 잘보이게"* · *"선생님 선택 -> 반 선택 -> 숙제 선택"*).
+    // 이름 = '내 정보'의 수업보고서 발송 이름(없으면 원래 이름 — 발송과 같은 규칙) + (과목). 화면엔 번호 대신 묶음 열쇠만 내려간다.
+    const teacherNames = await siteTeacherNames(db, site.tenantId, [...new Set(found.list.flatMap((c) => (c.teacherId ? [c.teacherId] : [])))]);
+    // 과목 라벨 한 줄 때문에 조회가 죽지 않게 — 설정이 비면 기본 설정의 과목표.
+    const subjects = buildSubjectMaps(site.settings.operations?.subjects ?? DEFAULT_SETTINGS.operations.subjects);
+    const teacherKeys = new Map<string, string>();
+    const classKeys = new Map<string, string>();
+    const keyOf = (map: Map<string, string>, raw: string, prefix: string) => map.get(raw) ?? map.set(raw, `${prefix}${map.size + 1}`).get(raw)!;
     return {
       ok: true,
       choices: choices.map((c) => ({
         id: choiceId(site.tenantId, c.studentId, c.classId, c.homeworkDate ?? FREE, day),
         studentLabel: maskStudentName(c.studentName), className: c.className,
+        teacherKey: keyOf(teacherKeys, `${c.teacherId ?? "-"}:${c.subject}`, "t"),
+        teacherLabel: siteTeacherLabel(c.teacherId ? teacherNames.get(c.teacherId) ?? null : null, subjectLabelOrNull(subjects.labelOf(c.subject), c.subject)),
+        classKey: keyOf(classKeys, `${c.studentId}:${c.classId}`, "c"),
         homeworkLabel: c.homeworkDate ? formatShortKoreanDate(c.homeworkDate) : "",
         // 언제까지 내나(원장 2026-10-15 — 학생이 숙제일을 내는 날로 헷갈려 숙제 없이 올렸다). 마감은 날짜까지 정해져 있어 그대로 적는다.
         ...(c.homeworkDate && c.due ? { dueLabel: homeworkDueText(c.homeworkDate, c.next ? c.due : null, c.next) } : {}),
         ...(c.homeworkDate ? {} : { free: true as const }),
         ...(c.past ? { pastClass: true as const } : {}),
         ...(c.homeworkDate && c.sent ? { sent: c.sent } : {}),
+        // 이미 낸 영상(원장 2026-10-22 *"어떤 영상이 이미 배정된 적이 있는지 … 본인이 입력한 멘트를 볼 수 있게"*) — 올린 시각 · 학생 메모만(파일·주소는 안 보낸다).
+        ...(c.homeworkDate && c.videos?.length ? { sentVideos: c.videos.map((v) => ({
+          label: `${formatShortKoreanDate(kstDateOf(v.postedAt) ?? v.postedAt.slice(0, 10))} ${kstTimeOf(v.postedAt)}`, ...(v.note ? { note: v.note } : {}) })) } : {}),
       })),
     };
   } catch (error) {
     console.error(JSON.stringify({ level: "error", scope: "videoSite.lookup", message: error instanceof Error ? error.message : "unknown" }));
     return { ok: false, code: "error", error: FAILED };
   }
+}
+
+/**
+ * 담임 선생님의 **수업보고서 발송 이름**(`users.report_display_name`, '내 정보' — 원장 2026-10-22 *"수업 보고서 발송 이름과 동일시"*) — 비면 원래 이름.
+ * 후보 반의 담임만 읽는다(학생의 담당이 아닌 선생님 이름은 나가지 않는다). 칸이 없으면(0217a 전) 원래 이름 · 실패는 빈 맵(이름 없이 과목만).
+ */
+async function siteTeacherNames(db: Db, tenantId: string, ids: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (!ids.length) return out;
+  type Row = { id: string; display_name: string | null; report_display_name?: string | null };
+  // 동적 select 문자열이라 행 모양을 추론하지 못한다 — 실은 모양을 적는다.
+  const read = (select: string) => fetchInChunks<Row>(ids, (chunk) =>
+    db.from("users").select(select).eq("tenant_id", tenantId).in("id", chunk) as unknown as PromiseLike<{ data: Row[] | null; error: { message: string } | null }>);
+  let rows: Row[];
+  try {
+    rows = await read("id,display_name,report_display_name");
+  } catch (e) {
+    if (!/report_display_name/.test(e instanceof Error ? e.message : "")) return out;
+    try { rows = await read("id,display_name"); } catch { return out; }
+  }
+  for (const r of rows) {
+    const name = r.report_display_name?.trim() || r.display_name?.trim();
+    if (name) out.set(r.id, name);
+  }
+  return out;
+}
+
+/** "허주연 (수학)" — 이름을 모르면 과목만("수학 선생님") · 과목도 모르면 "선생님"/이름만. */
+function siteTeacherLabel(name: string | null, subjectLabel: string | null): string {
+  if (name) return subjectLabel ? `${name} (${subjectLabel})` : name;
+  return subjectLabel ? `${subjectLabel} 선생님` : "선생님";
+}
+
+/** 라벨을 못 찾아 내부 키(`math`·`subject_3`)가 그대로 돌아오면 쓰지 않는다 — 화면에 원문 키 노출 금지. */
+function subjectLabelOrNull(label: string, key: string): string | null {
+  return label && label !== key ? label : null;
 }
 
 /**

@@ -98,9 +98,15 @@ export function RoundCell({ row, round, blank, number, busy, videosKnown = true,
 function ReviewPointsLine({ round }: { round: LedgerRound }) {
   const known = useReviewPoints();
   if (!known.size || !round.videoIds.length) return null;
-  const points = averagePoints(round.videoIds.map((id) => known.get(id)));
+  const each = round.videoIds.map((id) => known.get(id));
+  const points = averagePoints(each);
   if (points === null) return null;
   const tier = pointsTier(points);
-  return <span className={styles.reviewPoints} data-tier={tier} style={{ color: POINTS_TIER_COLOR[tier] }} title={`AI 참고 평점 ${points.toFixed(1)}점(5점 만점) · 선생님 참고용 · 틀릴 수 있어요`}>
+  // 영상이 여럿이면 평균인 것을 밝힌다(원장 2026-10-22 *"두 영상의 평균점수를"* — 이미 평균이었지만 화면만으론 알 수 없었다).
+  const scored = each.filter((p): p is number => typeof p === "number");
+  const basis = round.videoIds.length > 1
+    ? ` · 영상 ${round.videoIds.length}개 중 ${scored.length}개 평균(${scored.map((p) => p.toFixed(1)).join(" · ")})${scored.length < round.videoIds.length ? " · 나머지는 분석 중" : ""}`
+    : "";
+  return <span className={styles.reviewPoints} data-tier={tier} style={{ color: POINTS_TIER_COLOR[tier] }} title={`AI 참고 평점 ${points.toFixed(1)}점(5점 만점)${basis} · 선생님 참고용 · 틀릴 수 있어요`}>
     {points.toFixed(1)}<small>/5</small></span>;
 }

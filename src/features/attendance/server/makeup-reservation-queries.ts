@@ -16,7 +16,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { weekBoundsOf } from "@/features/timetable/lib/week";
-import type { MakeupReservation } from "../makeup-reservation";
+import { isMakeupReportMode, type MakeupReservation } from "../makeup-reservation";
 import { loadNativeParticipants } from "@/features/makeups/server/adapters/participants";
 
 type Sb = Awaited<ReturnType<typeof createClient>>;
@@ -45,6 +45,10 @@ type Row = {
   note: string | null;
   status: string;
   created_by: string | null;
+  /** 20261022150000 — 이 칸을 읽는 조회(`getRosterReservationsOn`)에서만 실린다. */
+  report_mode?: string | null;
+  /** 20261022170000 결석난 반 — 결석일 칸을 다루는 조회(예약 단건·이행)에서만 실린다. */
+  absence_class_id?: string | null;
 };
 
 type ClassRef = { class_name?: string | null };
@@ -71,6 +75,8 @@ export function toReservation(r: Row): MakeupReservation {
     note: r.note ?? null,
     status: r.status === "done" ? "done" : "reserved",
     createdBy: r.created_by ?? null,
+    ...(r.report_mode !== undefined ? { reportMode: isMakeupReportMode(r.report_mode) ? r.report_mode : null } : {}),
+    ...(r.absence_class_id !== undefined ? { absenceClassId: r.absence_class_id ?? null } : {}),
   };
 }
 
@@ -127,6 +133,52 @@ export const getReservationsOn = cache(async function getReservationsOn(
     return rows.map(toReservation);
   } catch (e) {
     return soft("날짜", e as { code?: string; message?: string });
+  }
+});
+
+/**
+ * `report_mode` 칸이 아직 없을 때의 오류(20261022150000 미적용) — 42703 "column … does not exist" / 스키마 캐시.
+ * ⚠️ `fetchInChunks`는 코드를 버리고 문구만 넘기므로 문구로 판정한다.
+ */
+export function isMissingColumn(e: { message?: string } | null | undefined, column: string): boolean {
+  const msg = e?.message ?? "";
+  return msg.includes(column) && /does not exist|not find|schema cache/i.test(msg);
+}
+const isMissingReportMode = (e: { message?: string } | null | undefined) => isMissingColumn(e, "report_mode");
+
+/**
+ * 원스크린 명단용 **한 날짜 예약 — 예약·이행 둘 다 + 보고서 발송 방식**(원장 2026-10-22 전주율 건).
+ * 이행(`done`)까지 읽는 까닭: 출석을 찍는 순간 예약이 `done`이 되는데, 그때 '정규+보강' 표시와 따로 낸 '(보강)' 줄이 새로고침에
+ * 사라지면 보고서가 정규로만 저장된다. 표식은 `done`이면 '보강 완료'로 바뀐다.
+ * 🔴 fail-soft([[#95]]) — 표가 없으면 빈 목록, `report_mode` 칸이 없으면 그 칸 없이 다시 읽는다(방식 = null).
+ */
+export const getRosterReservationsOn = cache(async function getRosterReservationsOn(
+  date: string,
+  classIds: readonly string[],
+): Promise<MakeupReservation[]> {
+  if (classIds.length === 0) return [];
+  const supabase = await createClient();
+  const read = (select: string) =>
+    fetchInChunks<Row>([...classIds], (chunk) =>
+      supabase
+        .from("makeup_reservations")
+        .select(select)
+        .eq("makeup_date", date)
+        .in("status", ["reserved", "done"])
+        .in("class_id", chunk)
+        .order("slot_start")
+        // 동적 select 문자열이라 행 모양을 추론하지 못한다 — 실은 모양을 적는다.
+        .returns<Row[]>(),
+    );
+  try {
+    return (await read(`${SELECT}, report_mode`)).map(toReservation);
+  } catch (e) {
+    if (!isMissingReportMode(e as { code?: string; message?: string })) return soft("원스크린 날짜", e as { code?: string; message?: string });
+  }
+  try {
+    return (await read(SELECT)).map(toReservation);
+  } catch (e) {
+    return soft("원스크린 날짜", e as { code?: string; message?: string });
   }
 });
 
@@ -328,14 +380,13 @@ export async function reservedCellKeys(
 export async function loadReservationById(tenantId: string, id: string): Promise<MakeupReservation | null> {
   try {
     const admin = createAdminClient();
-    const { data, error } = await admin
-      .from("makeup_reservations")
-      .select(SELECT)
-      .eq("tenant_id", tenantId)
-      .eq("id", id)
-      .maybeSingle();
+    // 결석난 반(20261022170000)까지 — 취소가 결석일 칸을 되돌린다. 칸이 없으면(적용 전) 칸 없이 다시 읽는다(= 기록할 반과 같은 반).
+    const read = (select: string) =>
+      admin.from("makeup_reservations").select(select).eq("tenant_id", tenantId).eq("id", id).maybeSingle<Row>();
+    let { data, error } = await read(`${SELECT}, absence_class_id`);
+    if (error && isMissingColumn(error, "absence_class_id")) ({ data, error } = await read(SELECT));
     if (error || !data) return null;
-    return toReservation(data as Row);
+    return toReservation(data);
   } catch {
     return null;
   }

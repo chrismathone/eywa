@@ -41,6 +41,8 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { isTrendOptedOut, trendOptOutKey } from "../trend-optout";
 import { removeMakeupEntry } from "../server/makeup-remove-actions";
+import { setReservationReportMode } from "@/features/attendance/server/makeup-reservation-actions";
+import { joinMakeupContent, joinText, planJoinMakeup, planSplitMakeup, type MakeupSwitchBlock } from "../makeup-switch";
 import { logOnescreenBulkApply } from "../server/bulk-log-actions";
 import { canRemoveMakeupRow, makeupRemoveBlockReason } from "../makeup-remove-plan";
 import { makeupRowName } from "../makeup-label";
@@ -277,6 +279,17 @@ function candidateAnchorClassId(candidates: readonly MergeCandidate[]): string |
 }
 
 type ReportsState = Record<string, Record<string, SubjectReport>>; // studentId → 과목명 → {draft, sent}
+
+/** 보강 보고서 합치기 ↔ 나누기가 막힌 이유 → 문구(makeup-switch.ts). */
+const SWITCH_BLOCK_KEY = {
+  sent: "os.switch.blockSent",
+  noRegular: "os.switch.blockNoRegular",
+  attendance: "os.switch.blockAttendance",
+  alreadyMerged: "os.switch.blockAlreadyMerged",
+  optout: "os.switch.blockOptout",
+  hasSeparate: "os.switch.blockHasSeparate",
+  gone: "os.switch.blockGone",
+} as const satisfies Record<MakeupSwitchBlock, string>;
 
 function initReports(students: OneScreenStudent[]): ReportsState {
   const out: ReportsState = {};
@@ -2200,6 +2213,146 @@ export function OneScreenClient({
   function toggleMakeup(subjectName: string) {
     if (!selected) return;
     toggleMakeupFor(selected.id, subjectName);
+  }
+  /** 그 줄 보고서를 보냈거나 보내는 중인가 — '보강 빼기'와 같은 판정(canRemoveMakeupRow) + 발송 표시. */
+  const reportLockedOf = (studentId: string) => (rowName: string) => {
+    const rep = reports[studentId]?.[rowName];
+    return !!rep?.sent || !canRemoveMakeupRow(rep?.classnoteStatus ?? null);
+  };
+  function switchBlockText(reason: MakeupSwitchBlock, cls: string): string {
+    return reason === "noRegular" ? tf(SWITCH_BLOCK_KEY.noRegular, { cls }) : t(SWITCH_BLOCK_KEY[reason]);
+  }
+  /**
+   * 분리 → 합침(원장 2026-10-22 *"보강으로 분리되어있는 보고서도 … 같이 보내고 싶을 수"*) — 보강 줄을 **같은 반** 정규 줄에 합친다(makeup-switch.ts).
+   * 🔴 하루 정규 2회여도 추측하지 않는다(앵커 반의 정규 줄 하나) · 시수는 그대로(같은 반 칸에 이미 있다 — 출결은 지우지 않는다).
+   * 🔴 예약에서 온 보강이면 예약을 먼저 '합침'으로 바꾼다 — 안 바꾸면 새로고침이 예약대로 '(보강)' 줄을 다시 세운다. 뒤가 실패하면 되돌린다.
+   */
+  async function joinMakeupRow(student: OneScreenStudent, subjectName: string) {
+    if (readonlyBlocked() || makeupSaving) return;
+    const card = studentsRef.current.find((s) => s.id === student.id);
+    if (!card) return;
+    const src0 = card.subjects.find((x) => x.name === subjectName);
+    const anchorName = src0?.makeupClassName ?? todayClasses.find((c) => c.id === src0?.makeupClassId)?.name ?? t("os.switch.otherClass");
+    const plan = planJoinMakeup(card, subjectName, reportLockedOf(card.id));
+    if (!plan.ok) {
+      toast.error(switchBlockText(plan.reason, anchorName));
+      return;
+    }
+    const { source, target } = plan;
+    const cls = target.className ?? todayClasses.find((c) => c.id === target.classId)?.name ?? target.name;
+    if (!window.confirm(tf("os.switch.confirmJoin", { name: card.name, cls }))) return;
+    setMakeupSaving(true);
+    try {
+      const reserved = !!source.makeupReserved?.length;
+      if (reserved) {
+        const r = await setReservationReportMode({ studentId: card.id, classId: target.classId!, date: activeDate, mode: "merge" });
+        if ("error" in r) {
+          toast.error(r.error);
+          return;
+        }
+      }
+      // 보강 줄의 명단·미발송 보고서만 지운다 — 출결은 그대로(classId null). 예약에서 막 선 줄은 지울 기록이 없을 수 있다(not_found = 정상).
+      const res = await removeMakeupEntry({ studentId: card.id, date: activeDate, classId: null, subject: source.subjectKey ?? null });
+      if (!res.ok && !(reserved && res.code === "not_found")) {
+        if (reserved) await setReservationReportMode({ studentId: card.id, classId: target.classId!, date: activeDate, mode: "separate" }).catch(() => null);
+        toast.error(res.error);
+        return;
+      }
+      const joined = joinMakeupContent(target, source, card.note ?? "");
+      const reservedList = (target.makeupReserved ?? source.makeupReserved)?.map((r) => ({ ...r, mode: "merge" as const }));
+      patch(card.id, (s) => ({
+        ...s,
+        subjects: s.subjects
+          .filter((x) => x.name !== source.name)
+          .map((x) => (x.name === target.name
+            ? { ...x, ...joined, makeup: true, ...(reserved ? { makeupByReservation: true as const, ...(reservedList ? { makeupReserved: reservedList } : {}) } : {}) }
+            : x)),
+      }));
+      // 멘트 초안도 잇는다(보고서 칸은 줄 이름으로 묶인다) — 보강 줄 칸은 지운다.
+      setReports((prev) => {
+        const mine = { ...(prev[card.id] ?? {}) };
+        const into = mine[target.name];
+        const from = mine[source.name];
+        if (into) mine[target.name] = { ...into, draft: joinText(into.draft, from?.draft, "\n\n") };
+        delete mine[source.name];
+        return { ...prev, [card.id]: mine };
+      });
+      setSelId(card.id);
+      toast.success(tf("os.switch.joined", { name: card.name, cls }));
+    } catch {
+      toast.error(t("os.c.makeupSaveFail"));
+    } finally {
+      setMakeupSaving(false);
+    }
+  }
+  /**
+   * 합침 → 분리(원장 2026-10-22) — '정규+보강' 줄을 정규로 되돌리고 같은 반에 앵커를 둔 빈 '(보강)' 줄을 세운다.
+   * 🔴 출결 칸은 세우지 않는다(`recordCell: false` — 같은 반 칸에 시수가 이미 있다). 합친 보고서의 글은 나누지 못한다(새 보강 줄은 비어 있다 — 확인창이 알린다).
+   */
+  async function splitMakeupRow(student: OneScreenStudent, subjectName: string) {
+    if (readonlyBlocked() || makeupSaving) return;
+    const card = studentsRef.current.find((s) => s.id === student.id);
+    if (!card) return;
+    const plan = planSplitMakeup(card, subjectName, reportLockedOf(card.id));
+    if (!plan.ok) {
+      toast.error(switchBlockText(plan.reason, ""));
+      return;
+    }
+    const { row } = plan;
+    const cls = row.className ?? todayClasses.find((c) => c.id === row.classId)?.name ?? row.name;
+    if (!window.confirm(tf("os.switch.confirmSplit", { name: card.name, cls }))) return;
+    setMakeupSaving(true);
+    try {
+      const reserved = !!row.makeupReserved?.length;
+      if (reserved) {
+        const r = await setReservationReportMode({ studentId: card.id, classId: row.classId!, date: activeDate, mode: "separate" });
+        if ("error" in r) {
+          toast.error(r.error);
+          return;
+        }
+      }
+      const result = await registerMakeupEntries({
+        studentId: card.id, date: activeDate,
+        entries: [{ subject: row.subjectKey || row.name, makeupClassId: row.classId, recordCell: false }],
+      });
+      if (!result.ok) {
+        if (reserved) await setReservationReportMode({ studentId: card.id, classId: row.classId!, date: activeDate, mode: "merge" }).catch(() => null);
+        toast.error(result.error);
+        return;
+      }
+      if ((card.sessionUpdatedAt ?? null) === result.previousUpdatedAt) applySessionSaveResult(card.id, result);
+      const used = new Set(card.subjects.map((x) => x.name));
+      const base = row.subjectLabel ?? row.name;
+      let name = makeupRowName(base);
+      for (let n = 2; used.has(name); n++) name = makeupRowName(base, n);
+      const reservedList = row.makeupReserved?.map((r) => ({ ...r, mode: "separate" as const }));
+      const added: Subject = {
+        name, subjectLabel: base, subjectKey: row.subjectKey, classId: null, makeup: true,
+        makeupClassId: row.classId, makeupClassName: cls,
+        ...(reservedList ? { makeupReserved: reservedList } : {}),
+        prev: "", today: "", textbook: "", homeworkToday: "",
+      };
+      patch(card.id, (s) => ({
+        ...s,
+        subjects: [
+          ...s.subjects.map((x) => {
+            if (x.name !== row.name) return x;
+            const { makeupByReservation: _drop, ...rest } = x;
+            void _drop;
+            return { ...rest, makeup: false, ...(reservedList ? { makeupReserved: reservedList } : {}) };
+          }),
+          added,
+        ],
+      }));
+      const slots = initReports([{ ...card, subjects: [added] }])[card.id] ?? {};
+      setReports((prev) => ({ ...prev, [card.id]: { ...(prev[card.id] ?? {}), ...slots } }));
+      setSelId(card.id);
+      toast.success(tf("os.switch.splitDone", { name: card.name }));
+    } catch {
+      toast.error(t("os.c.makeupSaveFail"));
+    } finally {
+      setMakeupSaving(false);
+    }
   }
   // 오늘 영상 과제 있음/없음(0308a) — 과목(행)별. 자동저장에 실린다(보강 토글과 같은 길).
   function toggleVideoHomeworkFor(studentId: string, subjectName: string) {
@@ -4470,6 +4623,9 @@ export function OneScreenClient({
             onOpenAttachments: (student, subjectName) => void ensureAttachmentUrls(student, subjectName),
             // 발송분은 버튼을 아예 열지 않는다(서버도 막지만 화면에서 먼저 알린다).
             onRemoveMakeup: (student, subjectName) => void removeMakeupRow(student, subjectName),
+            // 보강 보고서 합치기 ↔ 나누기(원장 2026-10-22) — 판정 makeup-switch.ts.
+            onJoinMakeup: (student, subjectName) => void joinMakeupRow(student, subjectName),
+            onSplitMakeup: (student, subjectName) => void splitMakeupRow(student, subjectName),
             onPickMakeupClass: (student, subjectName) => void pickMakeupClass(student, subjectName),
             canRemoveMakeup: (studentId, subjectName) =>
               canRemoveMakeupRow(reports[studentId]?.[subjectName]?.classnoteStatus ?? null),
@@ -4551,6 +4707,8 @@ selected ? (
                 onVideoSubmitLink={toggleVideoSubmitLink}
                 onVideoHomeworkDue={setVideoHomeworkDue}
                 onRemoveMakeup={(subjectName) => void removeMakeupRow(selected, subjectName)}
+                onJoinMakeup={(subjectName) => void joinMakeupRow(selected, subjectName)}
+                onSplitMakeup={(subjectName) => void splitMakeupRow(selected, subjectName)}
                 onPickMakeupClass={(subjectName) => void pickMakeupClass(selected, subjectName)}
                 canRemoveMakeup={(subjectName) =>
                   canRemoveMakeupRow(reports[selected.id]?.[subjectName]?.classnoteStatus ?? null)

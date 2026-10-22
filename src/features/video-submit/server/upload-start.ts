@@ -169,7 +169,10 @@ export async function startLinkUpload(input: {
     if (free && (await freeUploadsToday(db, link)) >= SITE_FREE_UPLOADS_PER_DAY) return fail("limit", FREE_LIMITED);
     // 숙제 없이 올리는 영상은 지금 그 반을 다니고 영상 숙제 대상일 때만(숙제용 링크가 퇴원 뒤에도 며칠 살아 있다).
     if (free && !(await freeUploadClassLive(db, link, settings, kstToday()))) return fail("invalid", "지금 이 반에는 영상을 올릴 수 없습니다. 처음 화면에서 다시 골라 주세요.");
-    const route = homeworkOk ? { ...baseRoute, homeworkDate: input.homeworkDate as string } : free && note ? { ...baseRoute, note, free: true as const } : baseRoute;
+    // 숙제를 고른 영상에도 메모를 남길 수 있다(선택 — 원장 2026-10-22: `/v`에서 무엇을 냈는지 학생이 다시 본다). 올리기 사이트만.
+    const homeworkNote = link.origin === "site" && homeworkOk ? siteNote(input.note) : null;
+    const route = homeworkOk ? { ...baseRoute, homeworkDate: input.homeworkDate as string, ...(homeworkNote ? { note: homeworkNote } : {}) }
+      : free && note ? { ...baseRoute, note, free: true as const } : baseRoute;
     const folder = await ensureLinkTeacherFolder({
       request, registry: linkFolderRegistry(db, link.tenant_id, drive.rootId), rootId: drive.rootId,
       key: teacherFolderKey(route, centerId), folderName: route.folderName,
