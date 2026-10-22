@@ -1204,7 +1204,7 @@ describe("🔴 원스크린 화면 껍데기·공지 작성도 사전만 본다 
     expect(sheetT("ko", "os.c.bulkBusy")).toBe("일괄 작업이 진행 중입니다 — 완료 후 다시 시도하세요");
     expect(sheetT("ko", "os.c.needProgress")).toBe("오늘 진도를 먼저 입력하세요");
     expect(sheetT("ko", "os.c.pickStudent")).toBe("학생을 선택하세요");
-    expect(sheetT("ko", "os.c.reportHeading")).toBe("보고서");
+    expect(sheetT("ko", "os.c.reportHeading")).toBe("수업보고서");
     expect(sheetTf("ko", "os.c.makeupAdded", { name: "김민수" })).toBe("김민수 보강 추가됨");
     expect(sheetTf("ko", "os.c.saveDone", { n: 4 })).toBe("4건 저장 완료");
     expect(sheetTf("ko", "os.c.sentBannerTitle", { n: 2 })).toBe(

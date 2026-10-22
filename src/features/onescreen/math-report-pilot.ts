@@ -159,6 +159,44 @@ export function composePilotMent(parts: { lead: string; body: string; note: stri
     .join("\n\n");
 }
 
+/**
+ * 강사 한줄 멘트를 고치면 자동작성 글 맨 끝을 **그 자리에서** 바꿔 끼운다(원장 2026-10-22 *"AI 자동 작성 후 치면 실시간으로
+ * 우측에 반영해서 강사 한줄 멘트 쓰고 볼 수 있게"*). 한줄 멘트는 AI에 주지 않고 원문을 맨 끝에 붙이므로(composePilotMent)
+ * 다시 자동작성할 필요가 없다 — 끝의 옛 멘트만 떼고 새 멘트를 붙인다.
+ * 자동작성 글 그대로가 아니거나 끝이 옛 멘트로 끝나지 않으면 null(손대지 않는다 — 발송 게이트가 다시 자동작성을 요구한다).
+ */
+export function pilotRecomposeNote(
+  draft: string | null | undefined,
+  autoDraft: string | null | undefined,
+  prevNote: string | null | undefined,
+  nextNote: string | null | undefined,
+): string | null {
+  if (!isPilotAutoWritten(draft, autoDraft)) return null;
+  const d = (draft ?? "").trim();
+  const p = (prevNote ?? "").trim();
+  let base: string;
+  if (!p) base = d;
+  else if (d === p) base = "";
+  else if (d.endsWith(`\n\n${p}`)) base = d.slice(0, d.length - p.length - 2);
+  else return null;
+  return composePilotMent({ lead: base, body: "", note: nextNote ?? "" });
+}
+
+/** 강사 한줄 멘트가 적혀 있나 — 시범 대상은 필수(원장 2026-10-22 *"한줄멘트 … 없으면 발송 안 되게"*). */
+export function hasPilotOneLine(note: string | null | undefined): boolean {
+  return (note ?? "").trim() !== "";
+}
+
+/** 서버 발송 게이트 거절 문구 — 강사 한줄 멘트가 없거나 보고서 끝에 붙어 있지 않다. */
+export const PILOT_ONELINE_REQUIRED_ERROR =
+  "이 학생의 수학 보고서는 '강사 한줄 멘트'를 적어야 보낼 수 있습니다(저장은 됐습니다) — 한줄 멘트를 적은 뒤 다시 보내 주세요";
+
+/** 서버 판정 — 한줄 멘트가 있고 보낼 글 맨 끝에 그대로 붙어 있나. */
+export function pilotOneLineAttached(notes: string | null | undefined, oneLine: string | null | undefined): boolean {
+  const o = (oneLine ?? "").trim();
+  return o !== "" && (notes ?? "").trim().endsWith(o);
+}
+
 /** 자동작성 글이 그대로 칸에 있나(발송 게이트). 자동작성을 안 했거나 글이 달라졌으면 false. */
 export function isPilotAutoWritten(draft: string | null | undefined, autoDraft: string | null | undefined): boolean {
   const a = (autoDraft ?? "").trim();
@@ -180,7 +218,7 @@ export const PILOT_AI_DIRECTIVE = [
   "- 중간(5~7점)·낮은(4점 이하) 소단원은 반드시 두 단계로 쓰세요. ① 먼저 그 소단원을 아이가 힘들어했다는 사실만 부드럽게 말합니다 — 대상은 소단원 이름(또는 그 소단원의 개념)까지만입니다(중간 예: '연립방정식의 풀이는 대체로 잘 따라왔지만 아직 조금 어려워했습니다' / 낮음 예: '해가 특수한 연립방정식 개념을 조금 힘들어했습니다'). 소단원 안의 어느 부분이 어려웠는지(응용 문제·식 세우기·계산·풀이 정리·문장제 등)는 입력에 없는 정보이므로 절대 추측해서 쓰지 마세요 — 선생님이 점수만 매겼을 뿐, 무엇이 어려웠는지는 알려 주지 않았습니다. '이해도가 낮다'·'못한다'·'부족하다' 같은 직접적인 표현은 쓰지 마세요. ② 그다음 '그래서'·'그만큼' 같은 말로 이어, 바로 그 이유 때문에 학원에서 챙기겠다고 아이를 향한 응원·격려와 함께 마무리합니다(예: '그래서 다음 시간에 한 번 더 짚어 확실히 챙기겠습니다', '충분히 해낼 수 있는 부분이라 그만큼 수업 중에 꼼꼼히 살펴보겠습니다'). 상태 설명 없이 '챙기겠습니다'만 쓰면 학부모가 왜 챙기는지 알 수 없으니 절대 그렇게 쓰지 마세요.",
   "- 아이가 잘 못한 부분·과제를 못 해 온 부분도 아이나 가정에 책임을 돌리지 말고, 학원이 책임지고 챙긴다는 어투로 마무리하세요. 가정에 숙제·복습을 부탁하는 말로 끝내지 마세요.",
   "- 점수 숫자·'10점 만점'·'이해도 N점' 같은 표현은 절대 쓰지 마세요. 소단원 이름은 그대로 써도 됩니다.",
-  "- 특이사항은 알림장 맨 끝에 선생님 글 그대로 붙습니다. 본문에서 다루지 마세요.",
+  "- 선생님의 한줄 멘트는 알림장 맨 끝에 선생님 글 그대로 붙습니다. 본문에서 다루지 마세요.",
 ].join("\n");
 
 /** 서버 발송 게이트 거절 문구 — 자동작성 글이 아니거나 고쳐졌다. */

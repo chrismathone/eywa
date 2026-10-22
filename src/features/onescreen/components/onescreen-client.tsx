@@ -75,6 +75,7 @@ import {
   activeUnderstanding,
   EMPTY_UNDERSTANDING,
   isMathReportPilot,
+  pilotRecomposeNote,
   understandingRows,
   understandingSig,
   type UnderstandingState,
@@ -2091,7 +2092,21 @@ export function OneScreenClient({
   }
   // 특이사항(강사 메모) — AI 멘트 입력(공지 모드 A/B). **행별**(보강은 다른 수업이라 메모도 다르다).
   function setNoteFor(studentId: string, subjectName: string, text: string) {
+    // 수학 보고서 시범 — 칸 이름이 '강사 한줄 멘트(필수)'다. 자동작성 글 맨 끝의 옛 멘트를 그 자리에서 새 멘트로
+    // 바꿔 끼운다(원장 2026-10-22 *"자동 작성 후 치면 실시간으로 우측에 반영"*). 바꾸기 전 값을 먼저 읽어 둔다.
+    const st = studentsRef.current.find((x) => x.id === studentId);
+    const row = st?.subjects.find((su) => su.name === subjectName);
+    const pilotPrevNote = st && row && isMathReportPilot(studentId, row.subjectKey) ? resolveRowFields(st, row).note : null;
     patchRowEval(studentId, subjectName, (su) => ({ ...su, note: text }));
+    if (pilotPrevNote === null) return;
+    const rep = reportsRef.current[studentId]?.[subjectName];
+    if (!rep || pilotRecomposeNote(rep.draft, rep.autoDraft, pilotPrevNote, text) === null) return;
+    // 자동작성 글 그대로일 때만 — 둘 다 같은 값으로 두어 작성 방식은 계속 '자동'이다(한줄 멘트는 AI가 아니라 강사 원문).
+    // 실제 글은 갱신 함수 안에서 **최신 값**으로 다시 만든다(ref는 한 렌더 늦을 수 있다 — 방금 도착한 자동작성 글을 덮지 않게).
+    patchReport(studentId, subjectName, (r) => {
+      const next = pilotRecomposeNote(r.draft, r.autoDraft, pilotPrevNote, text);
+      return next === null || next === r.draft ? r : { ...r, draft: next, autoDraft: next };
+    });
   }
   /** 카드 뷰가 지금 보고 있는 행 — 카드엔 과목 선택 탭이 있어 대상이 명확하다(표와 같은 행 단위 규약). */
   const cardRowName = () => previewSubject?.name ?? null;
@@ -3592,6 +3607,8 @@ export function OneScreenClient({
           : {}),
         // 멘트 작성 방식(0214a) — 이번 세션 자동작성 스냅샷과 비교(최종은 서버 resolveMentSource가 sticky 판정).
         mentSource,
+        // 수학 보고서 시범 — 강사 한줄 멘트(필수). 서버가 비었거나 글 끝에 안 붙었으면 거절한다.
+        ...(isMathReportPilot(student.id, su?.subjectKey) ? { pilotOneLine: rowEval.note } : {}),
         // 자동작성 후 고친 멘트면 그 자동작성 원문도 싣는다(0370a) — 말투 프로파일이 선생님이 '늘 고치는 것'을 배운다(원장 2026-10-16).
         //   영어는 템플릿 모드라 뺀다(코퍼스 밖).
         //   AI 실패 폴백 템플릿은 AI 원문이 아니라 뺀다.

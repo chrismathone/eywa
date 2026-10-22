@@ -7,6 +7,9 @@ import {
   isMathReportPilot,
   isPilotAutoWritten,
   isPilotDraftCurrent,
+  hasPilotOneLine,
+  pilotOneLineAttached,
+  pilotRecomposeNote,
   MATH_REPORT_PILOT_STUDENT_IDS,
   progressLead,
   readUnderstanding,
@@ -170,7 +173,8 @@ describe("배선", () => {
   const read = (p: string) => readFileSync(new URL(p, import.meta.url), "utf8");
   it("서버 발송 경로가 저장된 작성 방식으로 다시 막는다", () => {
     const src = read("./server/actions.ts");
-    expect(src).toMatch(/isMathReportPilot\(input\.studentId, input\.subject\) && saved\.mentSource !== "auto"/);
+    expect(src).toMatch(/saved\.mentSource !== "auto"\s*\?\s*PILOT_AUTOWRITE_REQUIRED_ERROR/);
+    expect(src).toMatch(/!pilotOneLineAttached\(input\.notes, input\.pilotOneLine\)/);
     expect(src).toMatch(/mentSource: mentSourceFinal,/);
   });
   it("자동작성 글에 이해도 점수 블록을 붙이지 않는다(말로 풀어 쓴다)", () => {
@@ -183,5 +187,51 @@ describe("배선", () => {
     expect(grid).toMatch(/readOnly=\{rowLocked \|\| pilot\}/);
     expect(card).toMatch(/writtenSig: rep\?\.pilotUnderstandingSig/);
     expect(grid).toMatch(/writtenSig: rep\?\.pilotUnderstandingSig/);
+  });
+  it("한줄 멘트를 바꾸면 그 자리에서 글 끝을 바꾸고, 발송 경로가 한줄 멘트를 싣는다", () => {
+    const client = read("./components/onescreen-client.tsx");
+    expect(client).toMatch(/pilotRecomposeNote\(r\.draft, r\.autoDraft, pilotPrevNote, text\)/);
+    expect(client).toMatch(/pilotOneLine: rowEval\.note/);
+    expect(read("./components/report-card.tsx")).toMatch(/needsOneLine: pilot && !hasPilotOneLine\(cardEval\.note\)/);
+    expect(read("./components/grid-row.tsx")).toMatch(/needsOneLine: pilot && !hasPilotOneLine\(rowEval\.note\)/);
+  });
+});
+
+describe("강사 한줄 멘트(필수, 실시간 반영)", () => {
+  const auto = "우리 원이는 오늘 A 진도를 나갔습니다.\n\n본문입니다.";
+  it("자동작성 뒤 처음 적으면 맨 끝에 붙는다", () => {
+    expect(pilotRecomposeNote(auto, auto, "", "멋졌어요")).toBe(auto + "\n\n멋졌어요");
+  });
+  it("고치면 끝의 옛 멘트만 바뀌고, 지우면 떨어진다", () => {
+    const withA = auto + "\n\n멋졌어요";
+    expect(pilotRecomposeNote(withA, withA, "멋졌어요", "멋졌어요!")).toBe(auto + "\n\n멋졌어요!");
+    expect(pilotRecomposeNote(withA, withA, "멋졌어요", "")).toBe(auto);
+    expect(pilotRecomposeNote(withA, withA, " 멋졌어요 ", "좋아요 ")).toBe(auto + "\n\n좋아요");
+  });
+  it("자동작성 글이 아니거나 끝이 옛 멘트가 아니면 손대지 않는다", () => {
+    expect(pilotRecomposeNote(auto, "", "", "x")).toBeNull();
+    expect(pilotRecomposeNote(auto, auto, "다른 멘트", "x")).toBeNull();
+    // 본문 끝 글자와 우연히 같은 짧은 멘트를 본문으로 오인하지 않는다(문단 경계까지 맞아야 한다)
+    expect(pilotRecomposeNote(auto, auto, "다.", "x")).toBeNull();
+  });
+  it("필수 판정 · 서버는 글 끝에 붙었는지까지 본다", () => {
+    expect(hasPilotOneLine("  ")).toBe(false);
+    expect(hasPilotOneLine("좋아요")).toBe(true);
+    expect(pilotOneLineAttached(auto + "\n\n좋아요", "좋아요")).toBe(true);
+    expect(pilotOneLineAttached(auto, "좋아요")).toBe(false);
+    expect(pilotOneLineAttached(auto, undefined)).toBe(false);
+  });
+  it("한줄 멘트가 없으면 '강사 한줄 멘트 입력 필요'로 막는다", () => {
+    const g = evaluateSendGate({
+      needsOneLine: true,
+      alreadySent: false,
+      isAbsent: false,
+      hasProgress: true,
+      hasDraft: true,
+      attendanceUnchecked: false,
+    } as Parameters<typeof evaluateSendGate>[0]);
+    expect(g.canSend).toBe(false);
+    expect(g.reasons).toEqual(["oneline"]);
+    expect(g.label).toBe("강사 한줄 멘트 입력 필요");
   });
 });

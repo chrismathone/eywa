@@ -18,7 +18,7 @@ import {
   type GridRow,
 } from "../grid";
 import { evaluateSendGate } from "../send-gate";
-import { activeUnderstanding, isMathReportPilot, pilotNeedsAutoWrite } from "../math-report-pilot";
+import { activeUnderstanding, hasPilotOneLine, isMathReportPilot, pilotNeedsAutoWrite } from "../math-report-pilot";
 import { hasTextBesidesMarkers } from "@/features/report-templates/image-slots";
 import { rowLockNotice } from "../split-rows";
 import { reportOptoutNotice } from "@/features/classes/report-optout";
@@ -310,6 +310,7 @@ export function GridBodyRow({
         understanding: activeUnderstanding(subject.today, subject.understanding),
         writtenSig: rep?.pilotUnderstandingSig,
       }),
+    needsOneLine: pilot && !hasPilotOneLine(rowEval.note), // 강사 한줄 멘트 필수(원장 2026-10-22)
     readonlyView: gen.readonlyView, // 열람 전용 — 사유 라벨("열람 전용")까지 게이트가 만든다
     // 발송 대기·게시 중 — 워커 결과 전까지 다시 못 누른다(카드뷰와 같은 판정, 원장 2026-09-29).
     sendInFlight: liveStatus === "queued" || liveStatus === "processing",
