@@ -537,14 +537,19 @@ export function StudentForm({
           </div>
         </div>
       </details>
-      <Field label="메모 / 특이사항" htmlFor="notes">
+      <Field
+        label={mode === "edit" ? "학생 정보 수정용 특이사항" : "메모 / 특이사항"}
+        htmlFor="notes"
+        inlineHint={mode === "edit" ? "학생정보 수정용 특이사항만 기록합니다. (수강료 발행 또는 문자발행 등)" : undefined}
+      >
         <textarea
           id="notes"
           name="notes"
+          aria-describedby={mode === "edit" ? "notes-inline-hint" : undefined}
           defaultValue={v.notes ?? ""}
           rows={4}
           className={`${inputClass} resize-y`}
-          placeholder="자유 메모"
+          placeholder={mode === "edit" ? "학생 정보 수정용 특이사항을 입력하세요" : "자유 메모"}
         />
       </Field>
 
@@ -570,22 +575,31 @@ function Field({
   htmlFor,
   error,
   hint,
+  inlineHint,
   children,
 }: {
   label: string;
   htmlFor: string;
   error?: string;
   hint?: string;
+  inlineHint?: string;
   children: React.ReactNode;
 }) {
   return (
     <div className="space-y-1.5">
-      <label
-        htmlFor={htmlFor}
-        className="text-foreground block text-sm font-medium"
-      >
-        {label}
-      </label>
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <label
+          htmlFor={htmlFor}
+          className="text-foreground block text-sm font-medium"
+        >
+          {label}
+        </label>
+        {inlineHint ? (
+          <p id={`${htmlFor}-inline-hint`} className="text-foreground/60 text-xs leading-relaxed">
+            {inlineHint}
+          </p>
+        ) : null}
+      </div>
       {children}
       {hint ? <p className="text-text-faint text-xs">{hint}</p> : null}
       {error ? <p className="text-chart-4 text-xs">{error}</p> : null}

@@ -15,7 +15,7 @@ export const STUDENT_TABS = [
   { key: "homework-videos", label: "숙제 영상" },
   { key: "attendance", label: "출결" },
   { key: "consultations", label: "상담" },
-  { key: "memos", label: "메모" },
+  { key: "memos", label: "특이사항" },
   { key: "billing", label: "수납" },
   { key: "timeline", label: "타임라인" },
 ] as const;

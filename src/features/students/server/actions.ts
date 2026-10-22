@@ -444,7 +444,7 @@ export async function updateStudent(
       parent_relation: input.parentRelation,
       ...(statusAccess ? { status: savedStatus, withdrawn_at: savedWithdrawnAt, withdrawal_metadata: withdrawalMetadata } : {}),
       enrolled_at: input.enrolledAt,
-      // 🔴 병합 표식은 사람이 지울 수 없다 — 이 칸('메모 / 특이사항')이 곧 `students.notes`라, 표식이
+      // 🔴 병합 표식은 사람이 지울 수 없다 — 이 칸('학생 정보 수정용 특이사항')이 곧 `students.notes`라, 표식이
       //    사람 메모와 **같은 칸**에 들어 있다. 그냥 저장하면 표식이 날아가고 그 학생이 집계에서
       //    **퇴원으로 조용히 되살아난다**(에러도 경고도 없다). 병합된 학생이 아니면 입력값 그대로다.
       //    ⚠️ 단 **퇴원에서 되돌리는 저장이면 놓아 준다** — 잘못 병합한 건을 푸는 유일한 손잡이다.
@@ -1136,7 +1136,7 @@ export async function createStudentMemo(
   const searchable = formData.get("searchable") !== null;
 
   if (!studentId) return { error: "학생 ID가 누락되었습니다" };
-  if (!content) return { error: "메모 내용을 입력해주세요" };
+  if (!content) return { error: "특이사항 내용을 입력해주세요" };
   const scopeErr = await studentScopeError(user.systemRole, studentId);
   if (scopeErr) return { error: scopeErr };
 
@@ -1150,7 +1150,7 @@ export async function createStudentMemo(
     created_by: user.id,
   });
 
-  if (error) return { error: dbWhy(error, "students.memo.create", "메모를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.") };
+  if (error) return { error: dbWhy(error, "students.memo.create", "특이사항을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.") };
 
   // 🔴 메모 **본문은 담지 않는다**(학생 서술) — 분류·검색 허용 여부까지만.
   await logAction({
@@ -1176,13 +1176,13 @@ export async function deleteStudentMemo(
 
   const id = String(formData.get("id") ?? "").trim();
   const studentId = String(formData.get("studentId") ?? "").trim();
-  if (!id) return { error: "메모 ID가 누락되었습니다" };
+  if (!id) return { error: "특이사항 ID가 누락되었습니다" };
   const scopeErr = await rowScopeError(user.systemRole, "student_memos", id);
   if (scopeErr) return { error: scopeErr };
 
   const supabase = await createClient();
   const { data: gone, error } = await supabase.from("student_memos").delete().eq("id", id).select("student_id");
-  if (error) return { error: dbWhy(error, "students.memo.delete", "메모를 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.", "delete") };
+  if (error) return { error: dbWhy(error, "students.memo.delete", "특이사항을 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.", "delete") };
 
   // 지운 행이 없으면(이미 지워졌거나 DB가 허락하지 않음) 남기지 않는다 — 없는 삭제를 기록하지 않는다.
   if (gone?.length) {
@@ -1212,8 +1212,8 @@ export async function updateStudentMemo(
   const category = String(formData.get("category") ?? "").trim() || "general";
   const content = String(formData.get("content") ?? "").trim();
   const searchable = formData.get("searchable") !== null;
-  if (!id) return { error: "메모 ID가 누락되었습니다" };
-  if (!content) return { error: "메모 내용을 입력해주세요" };
+  if (!id) return { error: "특이사항 ID가 누락되었습니다" };
+  if (!content) return { error: "특이사항 내용을 입력해주세요" };
   const scopeErr = await rowScopeError(user.systemRole, "student_memos", id);
   if (scopeErr) return { error: scopeErr };
 
@@ -1223,7 +1223,7 @@ export async function updateStudentMemo(
     .update({ category, content, searchable, updated_at: new Date().toISOString() })
     .eq("id", id)
     .select("student_id");
-  if (error) return { error: dbWhy(error, "students.memo.update", "메모를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.") };
+  if (error) return { error: dbWhy(error, "students.memo.update", "특이사항을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.") };
 
   // 본문은 담지 않는다(작성과 같은 규칙). 바뀐 행이 없으면 남기지 않는다.
   if (saved?.length) {
@@ -1251,7 +1251,7 @@ export async function toggleStudentMemoPin(
   const id = String(formData.get("id") ?? "").trim();
   const studentId = String(formData.get("studentId") ?? "").trim();
   const pinned = String(formData.get("pinned") ?? "false") === "true";
-  if (!id) return { error: "메모 ID가 누락되었습니다" };
+  if (!id) return { error: "특이사항 ID가 누락되었습니다" };
   const scopeErr = await rowScopeError(user.systemRole, "student_memos", id);
   if (scopeErr) return { error: scopeErr };
 
@@ -1261,7 +1261,7 @@ export async function toggleStudentMemoPin(
     .update({ pinned, updated_at: new Date().toISOString() })
     .eq("id", id)
     .select("student_id");
-  if (error) return { error: dbWhy(error, "students.memo.pin", "메모 고정을 바꾸지 못했습니다. 잠시 후 다시 시도해 주세요.") };
+  if (error) return { error: dbWhy(error, "students.memo.pin", "특이사항 고정을 바꾸지 못했습니다. 잠시 후 다시 시도해 주세요.") };
 
   if (saved?.length) {
     await logAction({

@@ -5,12 +5,13 @@ import { StatsTrend } from "./stats-trend";
 import { ConsultDistPanel } from "./consult-dist-panel";
 import { GRADE_UNKNOWN } from "@/features/enrollment/consultation-dist";
 import type { SchoolStatsPrefs } from "@/features/enrollment/school-view-prefs";
+import { CompactStatsList } from "./compact-stats-list";
 
 const won = (n: number) => `${Math.round(n).toLocaleString("ko-KR")}원`;
 
-function Card({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
+function Card({ title, sub, children, className = "" }: { title: string; sub?: string; children: React.ReactNode; className?: string }) {
   return (
-    <section className="bg-card shadow-card rounded-2xl p-4">
+    <section className={`bg-card shadow-card flex min-w-0 flex-col rounded-2xl p-4 ${className}`}>
       <header className="mb-3">
         <h2 className="text-foreground text-sm font-bold">{title}</h2>
         {sub ? <p className="text-text-dim mt-0.5 text-xs">{sub}</p> : null}
@@ -92,7 +93,9 @@ export function StatsView({
         ))}
       </div>
 
+      <div className="grid items-stretch gap-4 lg:grid-cols-2 xl:grid-cols-3">
       <Card
+        className="lg:col-span-2"
         title={year === null ? "월별 상담·등록 (연도 비교)" : `${year}년 월별 상담·등록`}
         // 가로축이 1월~12월 12칸이고 연도는 색이라, 무엇이 색으로 갈리는지 한 줄로 밝힌다.
         sub={
@@ -124,13 +127,13 @@ export function StatsView({
         {stats.paths.length === 0 ? (
           <p className="text-text-dim py-6 text-center text-sm">집계할 상담이 없습니다</p>
         ) : (
-          <ul className="space-y-2">
+          <CompactStatsList label="유입경로별 성과" limit={4}>
             {stats.paths.map((b) => {
               const share = pathTotal > 0 ? (b.total / pathTotal) * 100 : 0;
               const isUnknown = b.bucket === "미기재";
               return (
                 <li key={b.bucket} className={isUnknown ? "border-line border-t pt-2 opacity-70" : ""}>
-                  <div className="flex items-baseline justify-between gap-3 text-sm">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-sm">
                     <span className="text-foreground font-medium">{b.bucket}</span>
                     <span className="text-text-dim num shrink-0 text-xs">
                       {b.total}건 · 등록 {b.enrolled}
@@ -177,14 +180,14 @@ export function StatsView({
                 </li>
               );
             })}
-          </ul>
+          </CompactStatsList>
         )}
       </Card>
 
       {/* 등록상담 분포 — 학년·지역. 🔴 재원생/퇴원생이 아니라 **상담**이다(원장 2026-08-05).
           그래야 위의 연도 선택이 여기에도 적용된다(재원생 기준이던 때는 연도를 바꿔도 안 변했다). */}
       {dist.total > 0 ? (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <>
           <Card
             title="학년별 상담"
             sub={(() => {
@@ -194,7 +197,7 @@ export function StatsView({
               }`;
             })()}
           >
-            <ul className="space-y-1.5">
+            <CompactStatsList label="학년별 상담 분포" className="space-y-1.5" limit={10}>
               {dist.grades.map((g) => (
                 <li
                   key={g.label}
@@ -216,11 +219,11 @@ export function StatsView({
                   </span>
                 </li>
               ))}
-            </ul>
+            </CompactStatsList>
           </Card>
 
           <Card title="지역별 상담" sub="상담에 주소가 거의 없어 학교 소재지로 셉니다">
-            <ul className="space-y-1.5">
+            <CompactStatsList label="지역별 상담 분포" className="space-y-1.5" limit={10}>
               {dist.regions.map((r) => (
                 <li key={r.label} className="flex items-center gap-2">
                   <span className="text-text-dim w-12 shrink-0 text-xs">{r.label}</span>
@@ -239,11 +242,10 @@ export function StatsView({
                   </span>
                 </li>
               ))}
-            </ul>
+            </CompactStatsList>
           </Card>
-        </div>
+        </>
       ) : null}
-
       {dist.schools.length > 0 ? (
         <ConsultDistPanel
           rows={dist.schools}
@@ -253,6 +255,7 @@ export function StatsView({
           totalsYear={dist.totalsYear}
         />
       ) : null}
+      </div>
     </div>
   );
 }

@@ -2,7 +2,7 @@
 begin;
 create extension if not exists pgtap;
 select set_config('request.jwt.claims','{}',true);
-select plan(33);
+select plan(34);
 select has_table('public','timetable_lab_drafts','draft table exists');
 select col_not_null('public','timetable_lab_drafts','tenant_id','tenant is required');
 select ok((select relrowsecurity from pg_class where oid='public.timetable_lab_drafts'::regclass),'RLS enabled');
@@ -38,7 +38,9 @@ select throws_ok($q$delete from public.timetable_lab_drafts$q$,'42501',null,'del
 reset role;
 select set_config('request.jwt.claims','{"sub":"20000000-0000-4000-8000-000000000072"}',true);
 set local role authenticated;
-select is((select count(*)::int from public.timetable_lab_drafts),0,'same-tenant colleague cannot read owner draft');
+select is((select count(*)::int from public.timetable_lab_drafts),1,'same-tenant colleague can read shared draft');
+select is((select u.display_name from public.timetable_lab_drafts d join public.users u on u.id=d.created_by where d.name='First'),
+  'Owner','shared reader can resolve the saved author');
 reset role;
 select set_config('request.jwt.claims','{"sub":"20000000-0000-4000-8000-000000000073"}',true);
 set local role authenticated;
@@ -112,7 +114,7 @@ update public.tenant_settings set data=jsonb_set(data,'{permissions,overrides,1,
 select set_config('request.jwt.claims','{"sub":"20000000-0000-4000-8000-000000000072"}',true);
 set local role authenticated;
 select ok(public.auth_can_use_timetable_lab(),'super admin keeps default full access after a branch override');
-select is((select count(*)::int from public.timetable_lab_drafts),0,'super admin still cannot read another creator draft');
+select is((select count(*)::int from public.timetable_lab_drafts),2,'permitted account sees branch drafts from both creators');
 reset role;
 select ok(not has_function_privilege('anon','public.auth_can_use_timetable_lab()','execute'),'anonymous cannot invoke private permission check');
 select * from finish();
