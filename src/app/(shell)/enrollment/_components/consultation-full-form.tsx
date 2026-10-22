@@ -22,7 +22,7 @@ import { FormActionBar } from "@/components/forms/form-action-bar";
 import { EditingBanner } from "@/features/presence/editing-badge";
 import type { IntakeChecklist } from "@/features/enrollment/intake-checklist";
 import { sanitizeScoreInput } from "@/features/enrollment/score-input";
-import { ASSIGNED_DRAG_BLOCKED, boardStatusOf, outcomeForDrop } from "@/features/enrollment/board-stages";
+import { ASSIGNED_DRAG_BLOCKED, ENROLLED_REVERT_BLOCKED, boardStatusOf, outcomeForDrop } from "@/features/enrollment/board-stages";
 import {
   FOLLOW_UP_RESULTS,
   followUpRequired,
@@ -277,7 +277,7 @@ export function ConsultationFullForm({
     restoreSince: () => recordingSince(instance?.formId),
     onRestore: (vals) => {
       const restoredFollowUp = parseFollowUpResult(vals.followUpResult);
-      setFollowUpResult(assignedClassCount > 0 ? "enrolled" : restoredFollowUp === "next" && v.outcome === "enrolled" ? "enrolled" : restoredFollowUp);
+      setFollowUpResult(assignedClassCount > 0 ? "enrolled" : (restoredFollowUp === "before" || restoredFollowUp === "consulted") && v.outcome === "enrolled" ? "enrolled" : restoredFollowUp);
       if (formRef.current) syncRecordingSubject(formRef.current);
       setRecordingDraftId(vals.recordingDraftId || crypto.randomUUID());
       if (vals.subjectDetails) {
@@ -763,7 +763,7 @@ export function ConsultationFullForm({
         </Collapsible>
 
         {/* 4. 후속 조치 — 상담 끝난 건은 필수(원장 2026-10-22, 종전 '선택 · 접이식'). 고르면 칸반 칸이 따라 움직인다:
-            등록 → 등록 완료 · 미등록 → 미등록 · 다음 상담 → 상담 완료 + 날짜(하루 전·당일·지나면 상담자에게 알림). */}
+            칸반과 같은 네 상태 · 다음 상담 날짜는 별도로 선택. */}
         <div ref={followUpRef} className="border-purple/30 bg-purple/5 space-y-2 rounded-2xl border px-3 py-2.5">
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
             <span className="text-foreground inline-flex items-center gap-1 text-sm font-bold">
@@ -773,19 +773,19 @@ export function ConsultationFullForm({
             </span>
             <span className="text-text-dim text-xs break-keep">
               {assignedClassCount > 0 ? ASSIGNED_DRAG_BLOCKED : followUpMust
-                ? "상담을 마쳤으면 반드시 고릅니다 · 고르면 칸반 칸이 함께 옮겨집니다"
-                : `지금 칸: ${stageLabel ?? "상담 전"} · 고르면 그 칸으로 옮겨집니다`}
+                ? "상담을 마쳤으면 상태를 고릅니다 · 저장하면 해당 칸으로 이동합니다"
+                : `현재 상태: ${stageLabel} · 저장하면 선택한 상태로 이동합니다`}
             </span>
           </div>
           <div role="radiogroup" aria-label="후속 조치" className="flex flex-wrap gap-1.5">
             {FOLLOW_UP_RESULTS.map((r) => {
               // 등록 완료를 '상담 완료'로 되돌리지 않는다(상태 변경·칸반과 같은 규칙) — 고를 수 없게 미리 막는다.
-              const blocked = assignedClassCount > 0 ? r.value !== "enrolled" : r.value === "next" && v.outcome === "enrolled";
+              const blocked = assignedClassCount > 0 ? r.value !== "enrolled" : (r.value === "before" || r.value === "consulted") && v.outcome === "enrolled";
               const on = followUpResult === r.value;
               return (
                 <label
                   key={r.value}
-                  title={blocked ? (assignedClassCount > 0 ? ASSIGNED_DRAG_BLOCKED : "이미 등록 완료된 상담은 다음 상담으로 되돌릴 수 없습니다") : undefined}
+                  title={blocked ? (assignedClassCount > 0 ? ASSIGNED_DRAG_BLOCKED : ENROLLED_REVERT_BLOCKED) : undefined}
                   className={`relative inline-flex items-center rounded-full border px-3 py-1 text-sm transition has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary/40 ${
                     blocked
                       ? "border-line text-text-faint cursor-not-allowed"
@@ -809,7 +809,7 @@ export function ConsultationFullForm({
             })}
           </div>
           <Grid cols={2}>
-            <L label={followUpResult === "next" ? "다음 상담일" : "후속 조치일"} icon={Calendar} required={followUpResult === "next"}>
+            <L label="다음 상담일 (선택)" icon={Calendar}>
               <input name="followUpDate" type="date" defaultValue={v.followUpDate ?? ""} className={`${input} num`} />
             </L>
             <L label="조치 내용" icon={MessageSquare}>
@@ -819,8 +819,8 @@ export function ConsultationFullForm({
           <L label="미등록 사유" icon={XCircle}>
             <input name="nonRegistrationReason" defaultValue={v.nonRegistrationReason ?? ""} className={input} />
           </L>
-          {followUpResult === "next" ? (
-            <p className="text-text-dim text-xs break-keep">다음 상담일 하루 전 · 당일 · 지나면 상담자에게 알림이 갑니다(할 일에도 남습니다).</p>
+          {followUpResult === "before" || followUpResult === "consulted" ? (
+            <p className="text-text-dim text-xs break-keep">다음 상담일을 정하면 하루 전 · 당일 · 기한이 지난 뒤 상담자에게 알립니다.</p>
           ) : null}
         </div>
 

@@ -1,29 +1,28 @@
-import { ASSIGNED_DRAG_BLOCKED, ENROLLED_REVERT_BLOCKED, outcomeForDrop, stageOfOutcome, type BoardStageKey } from "./board-stages";
+import { ASSIGNED_DRAG_BLOCKED, BOARD_STAGES, ENROLLED_REVERT_BLOCKED, outcomeForDrop, stageOfOutcome, type BoardStageKey } from "./board-stages";
 
 /**
  * 신규 콜&상담 **후속 조치**(원장 2026-10-22 *"후속 조치를 선택이 아닌 필수로 처리를 해서 자동적으로 이동처리 · 자동적으로 등록,
  * 미등록으로 처리 하기 · 선택 : 등록, 미등록 · 날짜 : 선택. 다음상담 진행 여부 등"* — 필수 시점 = *"상담 끝난 건을 저장할 때"*).
  *
- * 고르는 값 셋 = 등록 · 미등록 · 다음 상담(날짜). 고르면 칸반 칸이 따라 움직인다 — 상태(outcome)를 따로 고칠 일이 없다.
- * 🔑 새 DB 칸이 없다: 등록·미등록은 상태 그 자체이고, '다음 상담'은 '상담 완료' 칸 + 후속 조치일(`follow_up_date`)이다.
+ * 선택지·순서·이름은 칸반의 네 상태 그대로다. 다음 상담일은 상태와 별개로 선택한다.
+ * 🔑 새 DB 칸이 없다: 상태는 outcome, 다음 상담일은 follow_up_date에 저장한다.
  * 🔑 칸 안의 원래 값은 지킨다(`outcomeForDrop` — 칸반 드롭과 같은 규칙: 노쇼를 '미등록'으로 고쳐 저장해도 노쇼 그대로).
  * 🔴 '등록 완료'를 '상담 완료'로 되돌리지 않는다 — 상태 변경(`setEnrollmentOutcome`)·칸반 드롭과 같은 문장(`ENROLLED_REVERT_BLOCKED`).
  * 순수 함수 — 화면(미리 막기)과 서버(게이트, #77)가 같이 부른다.
  */
-export type FollowUpResult = "enrolled" | "declined" | "next";
+export type FollowUpResult = BoardStageKey;
 
-export const FOLLOW_UP_RESULTS: readonly { value: FollowUpResult; label: string; stage: BoardStageKey }[] = [
-  { value: "enrolled", label: "등록", stage: "enrolled" },
-  { value: "declined", label: "미등록", stage: "unregistered" },
-  { value: "next", label: "다음 상담", stage: "consulted" },
-];
+export const FOLLOW_UP_RESULTS: readonly { value: FollowUpResult; label: string; stage: BoardStageKey }[] =
+  BOARD_STAGES.map(({ key, label }) => ({ value: key, label, stage: key }));
 
-export const FOLLOW_UP_REQUIRED_ERROR = "후속 조치를 골라 주세요 — 등록 · 미등록 · 다음 상담(날짜) 중 하나";
-export const FOLLOW_UP_DATE_REQUIRED = "다음 상담 날짜를 넣어 주세요";
+export const FOLLOW_UP_REQUIRED_ERROR = `후속 조치를 골라 주세요 — ${BOARD_STAGES.map((stage) => stage.label).join(" · ")} 중 하나`;
 export const FOLLOW_UP_DATE_PAST = "다음 상담 날짜가 이미 지났습니다 — 오늘 이후로 넣어 주세요";
 
 export function parseFollowUpResult(v: unknown): FollowUpResult | null {
-  return v === "enrolled" || v === "declined" || v === "next" ? v : null;
+  // 배포 전 열린 폼과 로컬 초안도 같은 상태로 받는다.
+  if (v === "declined") return "unregistered";
+  if (v === "next") return "consulted";
+  return FOLLOW_UP_RESULTS.find((r) => r.value === v)?.value ?? null;
 }
 
 /** 저장 뒤 '상담 완료' 칸에 놓이는 상담이면 후속 조치를 반드시 고른다(상담 전 접수 · 이미 등록·미등록으로 끝난 상담은 면제). */
@@ -31,14 +30,14 @@ export function followUpRequired(outcomeAfterSave: string): boolean {
   return stageOfOutcome(outcomeAfterSave) === "consulted";
 }
 
-/** 화면이 처음 고른 채로 보여 줄 값 — 지금 칸에서 읽는다. 상담 완료 칸은 후속 조치일이 있을 때만 '다음 상담'(없으면 비워 고르게 한다). */
+/** 이미 결정했거나 다음 상담일을 정한 건은 현재 칸을 선택한다. 나머지 상담 완료 건은 명시적으로 고르게 한다. */
 export function initialFollowUpResult(outcome: string | null | undefined, followUpDate: string | null | undefined, assignedClassCount = 0): FollowUpResult | null {
   if (assignedClassCount > 0) return "enrolled";
   if (!outcome) return null;
   const stage = stageOfOutcome(outcome);
   if (stage === "enrolled") return "enrolled";
-  if (stage === "unregistered") return "declined";
-  if (stage === "consulted" && followUpDate) return "next";
+  if (stage === "unregistered") return "unregistered";
+  if (stage === "consulted" && followUpDate) return "consulted";
   return null;
 }
 
@@ -64,8 +63,7 @@ export function resolveFollowUp(input: {
   if (!result) return followUpRequired(current) ? { error: FOLLOW_UP_REQUIRED_ERROR } : { outcome: current };
   const target = FOLLOW_UP_RESULTS.find((r) => r.value === result)!.stage;
   if (current === "enrolled" && target !== "enrolled" && target !== "unregistered") return { error: ENROLLED_REVERT_BLOCKED };
-  if (result === "next") {
-    if (!followUpDate) return { error: FOLLOW_UP_DATE_REQUIRED };
+  if ((target === "before" || target === "consulted") && followUpDate) {
     if (followUpDate < today && followUpDate !== storedDate) return { error: FOLLOW_UP_DATE_PAST };
   }
   return {
