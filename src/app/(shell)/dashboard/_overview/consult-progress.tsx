@@ -15,7 +15,7 @@ import { number } from "./charts";
 import s from "./overview.module.css";
 
 /**
- * 콜&상담 진행 칩 — 상담 id → 지금 단계. 신규문의·금일입테 팝업과 입학 일정 줄이 **prop 배선 없이** 같은 표를 읽는다
+ * 콜&상담 진행 칩 — 상담 id → 지금 단계. 신규문의·전일 입테 팝업과 입학 일정 줄이 **prop 배선 없이** 같은 표를 읽는다
  * (팝업은 포털이지만 React 문맥은 포털을 넘는다). 표가 없으면(권한 없음·조회 실패) 칩만 안 선다 — 줄은 종전 그대로.
  */
 const ChipContext = createContext<Record<string, ProgressChip> | null>(null);

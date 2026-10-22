@@ -22,9 +22,22 @@ describe("요약형 값 = 카드가 그리는 값", () => {
     expect(summaryOf("panel:attendance", snap({ attendance: ok(null) }))?.value).toBe("—");
   });
 
-  it("레벨테스트 일정 — 취소된 일정(kind null)은 숫자에 안 든다", () => {
-    const s = snap({ calendar: ok([{ kind: "levelTest" }, { kind: "firstClass" }, { kind: null, cancelledKind: "levelTest" }]) });
+  it("레벨테스트 일정 — 취소된 일정(kind null)은 숫자에 안 든다 · 어제 줄('전일 입테'용)은 일정 카드에 안 든다", () => {
+    const day = { startDate: "2026-10-01", endDate: "2026-10-01" };
+    const yday = { startDate: "2026-09-30", endDate: "2026-09-30" };
+    const s = snap({
+      calendar: ok([
+        { kind: "levelTest", ...yday },
+        { kind: "levelTest", ...day },
+        { kind: "firstClass", ...day },
+        { kind: null, cancelledKind: "levelTest", ...day },
+      ]),
+    });
     expect(summaryOf("panel:admissionsSchedule", s)).toMatchObject({ value: "2", detail: "한 달 · 입테 1 · 첫수업 1" });
+    // KPI '전일 입테' = 어제 입테만.
+    expect(summaryOf("kpi:calendar", s)).toMatchObject({ value: "1", detail: "전일 레벨테스트" });
+    // 어제 줄만 있으면 일정 카드는 비어 있다(얇게).
+    expect(isEmptyCard("panel:admissionsSchedule", snap({ calendar: ok([{ kind: "levelTest", ...yday }]) }))).toBe(true);
   });
 
   it("빈 카드 판정(얇게 그린다)", () => {

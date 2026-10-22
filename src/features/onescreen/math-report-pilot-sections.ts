@@ -10,6 +10,7 @@
  */
 
 import { attitudeClause } from "./attitude";
+import { parseHomeworkRate } from "./homework-rate";
 import { activeUnderstanding, PILOT_SECTION_TITLES as T, pilotSection, understandingSig } from "./math-report-pilot";
 import { buildReportCommentInput } from "./report-comment";
 import type { OneScreenStudent } from "./types";
@@ -87,10 +88,75 @@ export type PilotFacts = {
   homeworkToday: string;
   videoHomework?: boolean;
   videoHomeworkDue?: string;
+  /** 소단원별 이해도(뺀 것 제외) — 평가표 '이해도' 줄의 재료. */
+  understanding?: readonly { title: string; score: number }[];
 };
 
 /**
- * 진도 항목과 선생님 한마디 사이의 항목들 — 일일 테스트 → 확인 테스트 → 수업 태도 → 과제 수행률 → 이해도 → 오늘 과제.
+ * 평가표 눈금 — 원장 2026-10-22 *"수업태도 과제 수행률, 이해도 상 중 하 해서 표로"*(보내 준 시트 표 = 하·중하·중·중상·상 5칸).
+ * 낮은 쪽부터(표의 왼쪽부터).
+ */
+export const LEVELS = ["하", "중하", "중", "중상", "상"] as const;
+export type Level = (typeof LEVELS)[number];
+
+/** 수업 태도 5단 → 눈금. 선택지 그대로 한 칸씩 옮긴다. 옛 값·자유입력은 정도를 몰라 null(줄을 뺀다). */
+const ATTITUDE_LEVEL: Record<string, Level> = {
+  "매우 좋음": "상",
+  좋음: "중상",
+  보통: "중",
+  안좋음: "중하",
+  "매우 안좋음": "하",
+};
+
+/**
+ * 0~100 → 눈금. 이해도(10점 만점 ×10)·과제 수행률(%)이 같은 경계를 쓴다.
+ * 경계는 AI 이해도 지시(8~10 강점 · 5~7 중간 · 4 이하 낮음)와 어긋나지 않게 잡았다 — 글은 '힘들어했다'인데 표가 '중상'이면 모순이다.
+ */
+export function levelOfPercent(n: number): Level {
+  if (n >= 90) return "상";
+  if (n >= 75) return "중상";
+  if (n >= 50) return "중";
+  if (n >= 30) return "중하";
+  return "하";
+}
+
+export function attitudeLevel(raw: string): Level | null {
+  return ATTITUDE_LEVEL[raw.trim()] ?? null;
+}
+
+/** 과제 수행률 → 눈금. '미제출'=하, '없음'·빈칸·정도 미상은 null(과제가 없던 날을 '하'로 적지 않는다). */
+export function homeworkLevel(raw: string): Level | null {
+  const n = parseHomeworkRate(raw);
+  return n == null ? null : levelOfPercent(n);
+}
+
+/** 이해도 → 눈금. 매긴 소단원 점수의 평균(10점 만점). 없으면 null. */
+export function understandingLevel(items: readonly { score: number }[] | undefined): Level | null {
+  if (!items?.length) return null;
+  const avg = items.reduce((a, i) => a + i.score, 0) / items.length;
+  return levelOfPercent(avg * 10);
+}
+
+/** 한 줄 — `수업 태도  ○○○○●  상`. ClassNote 본문은 평문이라 칸 대신 눈금 기호로 위치를 보인다(글꼴과 무관하게 읽힌다). */
+function levelRow(label: string, level: Level): string {
+  const idx = LEVELS.indexOf(level);
+  return `${label}  ${LEVELS.map((_, i) => (i === idx ? "●" : "○")).join("")}  ${level}`;
+}
+
+/** 평가표 본문 — 값이 있는 줄만. 하나도 없으면 "" (항목째 빠진다). */
+export function levelTableText(f: Pick<PilotFacts, "attitude" | "homework" | "understanding">): string {
+  const rows: [string, Level | null][] = [
+    [T.attitude, attitudeLevel(f.attitude)],
+    [T.homework, homeworkLevel(f.homework)],
+    [T.understanding, understandingLevel(f.understanding)],
+  ];
+  const lines = rows.filter((r): r is [string, Level] => r[1] != null).map(([l, v]) => levelRow(l, v));
+  if (!lines.length) return "";
+  return [`(왼쪽부터 ${LEVELS.join(" · ")})`, ...lines].join("\n");
+}
+
+/**
+ * 진도 항목과 선생님 한마디 사이의 항목들 — 일일 테스트 → 확인 테스트 → 수업 평가(표) → 수업 태도 → 과제 수행률 → 이해도 → 오늘 과제.
  * 값이 없는 항목은 통째로 뺀다. `understandingText`는 AI가 쓴 이해도 글, `videoReceipt`는 지난 영상 숙제 확인 문장.
  */
 export function pilotBody(f: PilotFacts, extra: { understandingText?: string; videoReceipt?: string | null }): string {
@@ -101,6 +167,7 @@ export function pilotBody(f: PilotFacts, extra: { understandingText?: string; vi
   return [
     pilotSection(T.daily, daily),
     pilotSection(T.check, scoreOnly(f.checkTest)),
+    pilotSection(T.levels, levelTableText(f)),
     pilotSection(T.attitude, f.attitude.trim() ? `${attitudeClause(f.attitude)}.` : ""),
     pilotSection(T.homework, hw),
     pilotSection(T.understanding, extra.understandingText),
