@@ -12,7 +12,8 @@ type Asked = { last4: string; name: string; tenant: string | undefined };
 type Phase =
   | { kind: "ask" }
   | { kind: "looking" }
-  | { kind: "choose"; asked: Asked; choices: SiteChoice[] }
+  /** `asking` = 이미 영상을 낸 숙제를 눌러 확인을 받는 중인 줄(원장 2026-10-22 — 아래 `pick`). */
+  | { kind: "choose"; asked: Asked; choices: SiteChoice[]; asking?: string }
   | { kind: "opening"; asked: Asked; choices: SiteChoice[]; picked: string };
 
 const NETWORK = "연결이 끊겼습니다. 잠시 후 다시 해 주세요.";
@@ -150,6 +151,22 @@ export function VideoSiteForm({ academyName, branches = [], mustChoose = false, 
     window.location.assign(res.url);
   }
 
+  /**
+   * 숙제 줄 누르기 — **이미 영상을 낸 숙제**면 바로 열지 않고 한 번 묻는다(원장 2026-10-22 *"이미 업로드된 숙제가 있는 숙제를 다시 누를 때
+   * 알림을 주면"*). 김채현 건: 안 낸 숙제(BS1D 10/19)를 두고 이미 낸 숙제(BS1K 10/20)를 또 골라 올릴 수 있는 화면이었다(10/21부터 한 숙제에
+   * 여러 개를 받는다). 같은 숙제의 다른 단원이면 '이 숙제에 더 올리기'로 그대로 간다 — 막지 않는다.
+   */
+  function pick(asked: Asked, choices: SiteChoice[], id: string) {
+    const choice = choices.find((c) => c.id === id);
+    // 🔴 같은 줄을 또 눌러도 열지 않는다 — 두 번 빠르게 누르면 상자를 읽기 전에 열린다. 여는 길은 '이 숙제에 더 올리기' 하나.
+    if (choice?.sent) {
+      setError(null);
+      setPhase({ kind: "choose", asked, choices, asking: id });
+      return;
+    }
+    void open(asked, choices, id);
+  }
+
   const clear = () => { setError(null); setNotice(null); };
 
   return (
@@ -174,7 +191,10 @@ export function VideoSiteForm({ academyName, branches = [], mustChoose = false, 
         ) : (
           <SiteHomeworkChoices
             choices={phase.choices} openingId={phase.kind === "opening" ? phase.picked : null}
-            onOpen={(id) => void open(phase.asked, phase.choices, id)}
+            askingId={phase.kind === "choose" ? phase.asking ?? null : null}
+            onOpen={(id) => pick(phase.asked, phase.choices, id)}
+            onConfirm={(id) => void open(phase.asked, phase.choices, id)}
+            onCancelAsk={() => setPhase({ kind: "choose", asked: phase.asked, choices: phase.choices })}
             onReset={() => { setPhase({ kind: "ask" }); clear(); }}
           />
         )}

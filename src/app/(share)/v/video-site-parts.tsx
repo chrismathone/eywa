@@ -83,9 +83,16 @@ export function SiteAskFields(props: {
 /**
  * 올릴 숙제 고르기 — `openingId` = 지금 여는 중인 줄(있으면 전부 잠근다).
  * 숙제 줄이 먼저, 그 아래 **숙제 없이 올리기**(반마다 한 줄 — 메모와 함께, 2026-10-13).
+ * `askingId` = 이미 영상을 낸 숙제를 눌러 확인받는 줄 — 그 줄 아래에 '이미 냈어요 · 아직 안 낸 숙제'를 보이고, 더 올릴지 다른 숙제를 고를지 묻는다
+ * (원장 2026-10-22, 판단은 `video-site-form.tsx` `pick`).
  */
-export function SiteHomeworkChoices({ choices, openingId, onOpen, onReset }: {
-  choices: SiteChoice[]; openingId: string | null; onOpen: (id: string) => void; onReset: () => void;
+export function SiteHomeworkChoices({ choices, openingId, askingId = null, onOpen, onConfirm, onCancelAsk, onReset }: {
+  choices: SiteChoice[]; openingId: string | null; askingId?: string | null; onOpen: (id: string) => void;
+  /** 확인 상자의 '이 숙제에 더 올리기' — 다시 묻지 않고 연다. */
+  onConfirm?: (id: string) => void;
+  /** 확인 상자의 '다른 숙제 고르기' — 상자만 닫는다. */
+  onCancelAsk?: () => void;
+  onReset: () => void;
 }) {
   // 이름을 가린 표기가 여럿이면(구분 글자만 다른 동명이인) 줄마다 이름도 보여 준다 — 하나뿐이면 반·숙제만으로 충분하다.
   const manyStudents = new Set(choices.map((c) => c.studentLabel)).size > 1;
@@ -110,6 +117,10 @@ export function SiteHomeworkChoices({ choices, openingId, onOpen, onReset }: {
               </span>
               {openingId === choice.id ? <span className="text-text-dim ml-auto shrink-0 text-sm">여는 중…</span> : null}
             </Button>
+            {askingId === choice.id && choice.sent ? (
+              <SentHomeworkAsk choice={choice} unsent={homework.filter((c) => !c.sent && c.id !== choice.id)} manyStudents={manyStudents}
+                opening={opening} onConfirm={() => onConfirm?.(choice.id)} onCancel={() => onCancelAsk?.()} />
+            ) : null}
           </li>
         ))}
       </ul> : null}
@@ -133,6 +144,35 @@ export function SiteHomeworkChoices({ choices, openingId, onOpen, onReset }: {
       <Button type="button" variant="ghost" className="w-full" disabled={opening} onClick={onReset}>
         처음으로
       </Button>
+    </div>
+  );
+}
+
+/**
+ * 이미 영상을 낸 숙제를 눌렀을 때의 확인 — 아직 안 낸 숙제가 있으면 이름을 적어 그쪽을 먼저 떠올리게 한다(학생이 같은 숙제를 또 고르는 실수).
+ * 같은 숙제의 다른 단원이면 그대로 더 올린다(한 숙제에 여러 개 — 원장 2026-10-21).
+ */
+function SentHomeworkAsk({ choice, unsent, manyStudents, opening, onConfirm, onCancel }: {
+  choice: SiteChoice; unsent: SiteChoice[]; manyStudents: boolean; opening: boolean; onConfirm: () => void; onCancel: () => void;
+}) {
+  const label = (c: SiteChoice) => `${c.homeworkLabel} 수업 숙제 · ${manyStudents ? `${c.studentLabel} · ${c.className}` : c.className}`;
+  return (
+    <div className="border-primary bg-primary/5 mt-2 space-y-2 rounded-lg border p-3" role="status" aria-live="polite">
+      <p className="text-foreground text-base font-bold break-keep">이 숙제에는 이미 영상 {choice.sent}개를 냈어요</p>
+      {unsent.length ? (
+        <div className="text-foreground space-y-1 text-sm break-keep">
+          <p>아직 영상을 안 낸 숙제가 있어요. 그 숙제 영상이면 &lsquo;다른 숙제 고르기&rsquo;를 누르고 그 숙제를 골라 주세요.</p>
+          <ul className="list-disc space-y-0.5 pl-5 font-bold">
+            {unsent.slice(0, 3).map((c) => <li key={c.id}>{label(c)}</li>)}
+          </ul>
+        </div>
+      ) : (
+        <p className="text-foreground text-sm break-keep">같은 숙제의 다른 단원 영상이면 더 올려 주세요.</p>
+      )}
+      <div className="grid grid-cols-2 gap-2">
+        <Button type="button" variant="outline" disabled={opening} onClick={onCancel}>다른 숙제 고르기</Button>
+        <Button type="button" disabled={opening} onClick={onConfirm}>이 숙제에 더 올리기</Button>
+      </div>
     </div>
   );
 }
