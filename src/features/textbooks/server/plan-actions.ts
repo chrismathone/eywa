@@ -966,6 +966,9 @@ const IMPORT_MAX_DAYS = 62;
 /**
  * **[월간계획 전체 가져오기]** — 그 기간의 월간계획(**일정**, 미루기 반영)을 실제 계획 줄로 복사한다.
  *
+ * 🔑 **이 기간에 걸린 배정은 끝 차수까지**(원장 2026-10-22 *"그달이 넘어가서 배정되어있어도 그달까지만
+ *    들어가던데 오류"*) — `from~to`는 "어느 배정을 가져올지"를 고르는 창이고, 고른 배정은 다음 달 칸까지 채운다.
+ *    `to` 뒤에 시작하는 배정은 안 가져온다(그 달 화면에서). 규칙 = [`expandPlansThrough`](../plan-expand.ts).
  * 🔴 원장 2026-09-28: *"선생님이 월간계획 전체가져오기 기능 추가, 한주씩 가져오는건 필요없음"* — 옛
  *    교시 한 칸 가져오기(`importPlannedSlot`)는 없앴다. 계획이 실제에 들어가는 길은 **이 버튼 하나**다.
  * 🔑 가져오는 건 **일정**이다(원장 2026-09-28 *"계획 놔두고 일정만 밀리게"*) — 미룬 칸은 비워 두고 뒤로
@@ -988,16 +991,18 @@ export async function importPlannedRange(input: {
   const days = (Date.parse(`${input.to}T00:00:00Z`) - Date.parse(`${input.from}T00:00:00Z`)) / 86_400_000;
   if (!(days < IMPORT_MAX_DAYS)) return { ok: false, error: "한 번에 가져올 수 있는 기간을 넘었습니다" };
 
-  const { getClassPlannedLines } = await import("./month-plan");
-  const planned = await getClassPlannedLines({
+  const { getClassImportLines } = await import("./month-plan");
+  const planned = await getClassImportLines({
     tenantId: gate.access.tenantId,
-    subject: gate.access.subject,
     classId: input.classId,
     from: input.from,
     to: input.to,
   });
   if (planned.status === "missing-table") return { ok: false, error: TEXTBOOKS_NOT_READY };
   if (planned.status !== "ok") return { ok: false, error: "월간계획을 읽지 못했습니다 — 잠시 뒤 다시 시도해 주세요" };
+  // 🔑 이 기간에 걸린 배정은 **끝 차수까지** 가져온다(원장 2026-10-22) — 그래서 쓰는 범위의 끝은 화면의 `to`가
+  //    아니라 실제로 닿은 마지막 날이다. 되돌리기 기록도 이 범위를 덮어야 다음 달 칸까지 되돌린다.
+  const rangeTo = planned.lastDate;
 
   const cells = Object.keys(planned.byCell).sort();
   const lines = cells.flatMap((k) => planned.byCell[k]!);
@@ -1013,7 +1018,7 @@ export async function importPlannedRange(input: {
   }
 
   // 되돌리기 기록용 — 가져오기 **전** 모습. 못 읽으면 가져오기는 그대로 하고 되돌리기만 없다.
-  const before = await snapshotPlanLines(admin, gate.access.tenantId, input.classId, input.from, input.to).catch(
+  const before = await snapshotPlanLines(admin, gate.access.tenantId, input.classId, input.from, rangeTo).catch(
     (e: unknown) => {
       reportError(e, { scope: "textbooks.import-batch.snapshot", classId: input.classId });
       return null;
@@ -1052,7 +1057,7 @@ export async function importPlannedRange(input: {
           tenantId: gate.access.tenantId,
           classId: input.classId,
           from: input.from,
-          to: input.to,
+          to: rangeTo,
           actorId: gate.access.user.id,
           before,
         })
@@ -1062,7 +1067,7 @@ export async function importPlannedRange(input: {
     action: "textbook_plan_import",
     targetType: "class",
     targetLabel: gate.access.className,
-    metadata: { from: input.from, to: input.to, cells: cells.length, ...total },
+    metadata: { from: input.from, to: input.to, through: rangeTo, cells: cells.length, ...total },
   });
   // 실제 줄이 바뀌었다 — 그 반의 시트·월간을 통째로 무효화한다([[#102]] 계열 — `"layout"` 필수).
   revalidatePath(`/ecs/${input.classId}`, "layout");

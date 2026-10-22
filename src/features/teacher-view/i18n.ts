@@ -1137,8 +1137,8 @@ export const SHEET_DICT = {
   // 월간계획 전체 가져오기(원장 2026-09-28) — 이 기간의 일정(미루기 반영)을 실제 빈 칸에 한 번에 넣는다.
   "month.importAll": { ko: "월간계획 전체 가져오기", en: "Import whole plan" },
   "month.importAll.title": {
-    ko: "이 기간의 월간계획(미루기·당기기 반영)을 실제 칸에 한 번에 넣습니다 — 빈 칸만 채우고 이미 적은 칸은 덮어쓰지 않습니다",
-    en: "Imports this period's monthly plan (with pushes/pulls) into the actual cells at once — empty cells only; written cells are never overwritten",
+    ko: "이 기간의 월간계획(미루기·당기기 반영)을 실제 칸에 한 번에 넣습니다 — 다음 달로 이어지는 교재는 끝 차수까지 넣고, 빈 칸만 채우며 이미 적은 칸은 덮어쓰지 않습니다",
+    en: "Imports this period's monthly plan (with pushes/pulls) into the actual cells at once — books that run into next month go in through their last lesson; empty cells only, written cells are never overwritten",
   },
   "month.importAll.busy": { ko: "가져오는 중…", en: "Importing…" },
   "month.importAll.done": { ko: "월간계획에서 {n}칸을 채웠습니다 — 실제와 다르면 고쳐 주세요", en: "Filled {n} cells from the plan — edit them if lessons went differently" },

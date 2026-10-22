@@ -136,6 +136,31 @@ export function expandPlans(input: {
   return byCell;
 }
 
+/**
+ * **[월간계획 전체 가져오기]의 범위** — 이 구간에 차수가 하나라도 앉는 배정은 **끝 차수까지** 펼친다.
+ *
+ * 🔴 원장 2026-10-22: *"해당 달에만 들어가고 차시가 그달이 넘어가서 배정되어있어도 그달까지만 들어가던데 오류"*
+ *    — 전엔 화면의 달(`from~to`)에서 잘라서, 10월에 시작한 교재의 11월 차수는 11월 화면에서 한 번 더 눌러야 했다.
+ * 🔑 **이 구간에 걸리는 배정만** 넓힌다 — 구간 뒤에 시작하는 배정(다음 달 교재)은 여전히 안 가져온다
+ *    (그 달 화면에서 가져온다). 앞쪽은 `from`에서 자른다(지난 달은 이미 지나간 실제다).
+ * @param horizon 펼칠 끝(상한) — 스케줄러 앞보기 상한(`MAX_LOOKAHEAD_DAYS`)을 덮게 호출부가 잡는다.
+ * @returns 칸별 줄 + 실제로 닿은 마지막 날(`to`보다 앞이 아니다 — 되돌리기 기록 범위로 쓴다).
+ */
+export function expandPlansThrough(
+  input: Parameters<typeof expandPlans>[0] & { horizon: string },
+): { byCell: Record<string, PlannedLine[]>; lastDate: string } {
+  const { horizon, ...base } = input;
+  const touching = base.plans.filter((p) => Object.keys(expandPlans({ ...base, plans: [p] })).length > 0);
+  if (touching.length === 0) return { byCell: {}, lastDate: base.to };
+  const byCell = expandPlans({ ...base, plans: touching, to: horizon > base.to ? horizon : base.to });
+  let lastDate = base.to;
+  for (const key of Object.keys(byCell)) {
+    const date = key.slice(0, 10);
+    if (date > lastDate) lastDate = date;
+  }
+  return { byCell, lastDate };
+}
+
 /** 한 칸에 들어갈 차수 하나(진도·과제) — 실제 줄 **한 줄**이 된다. */
 export type CellLesson = { progress: string | null; homework: string | null };
 /** 한 칸(날짜·교시)에 들어갈 같은 교재 차수들(차수 순). */
