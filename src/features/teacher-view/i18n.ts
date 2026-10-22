@@ -2882,6 +2882,21 @@ export const SHEET_DICT = {
     en: "Undo regular+makeup merge — back to a regular report",
   },
   "os.row.makeupUnmergeAria": { ko: "{name} {subject} 정규+보강 합침 취소", en: "Undo {name} {subject} regular+makeup merge" },
+  // 보강 예약(0264a) 표식 — 원스크린 왼쪽 목록·카드·표 모드(원장 2026-10-22 *"보강 예약이 잘 되었나 확인할 방법이 없네"*).
+  "os.reserved.tag": { ko: "보강 예약 {time}", en: "Makeup booked {time}" },
+  "os.reserved.done": { ko: "보강 완료 {time}", en: "Makeup done {time}" },
+  "os.reserved.merge": {
+    ko: "{date} 결석분 보강 · 정규 보고서에 합쳐 보냅니다(정규+보강). 출석을 찍으면 보강 시수가 이 칸에 함께 들어갑니다.",
+    en: "Makeup for the {date} absence · sent in the regular report (regular + makeup). Marking attendance adds the makeup units to this cell.",
+  },
+  "os.reserved.separate": {
+    ko: "{date} 결석분 보강 · 보강 보고서를 따로 보냅니다. 출석을 찍으면 보강 시수가 이 반 칸에 함께 들어갑니다.",
+    en: "Makeup for the {date} absence · sent as a separate makeup report. Marking attendance adds the makeup units to this class cell.",
+  },
+  "os.reserved.mergeLocked": {
+    ko: "보강 예약으로 합쳐진 보고서입니다 — 따로 보내려면 출석부에서 그 예약을 '분리'로 다시 잡아 주세요",
+    en: "Merged by a makeup booking — to send it separately, rebook it as 'separate' in the attendance sheet",
+  },
   "os.row.makeupUnmergeConfirm": {
     ko: "{name} {subject}의 정규+보강 합침을 취소할까요? 합칠 때 올린 수업타임은 그대로이니 필요하면 타임 칸에서 고쳐 주세요.",
     en: "Undo the regular+makeup merge for {name} {subject}? The lesson time added when merging stays — fix it in the Time cell if needed.",

@@ -115,9 +115,16 @@ describe("③ 명단 표면이 예약 조회 한 벌을 읽는다", () => {
   });
   it("원스크린 = 별도 조회(fail-soft) + 보강 행으로(반은 activeIds에 안 넣는다)", () => {
     const q = strip(read("features/onescreen/server/roster.ts"));
-    expect(q).toContain("getReservationsOn(targetDate, allIds)");
-    expect(q).toContain("for (const r of reservedToday)");
+    // 원장 2026-10-22: 이행분·발송 방식까지 읽는 원스크린 전용 조회(표가 없으면 빈 목록 · report_mode 칸이 없으면 칸 없이 다시).
+    expect(q).toContain("getRosterReservationsOn(targetDate, allIds)");
+    // 미리 세우기·"보강만 있는 날" 판정은 종전대로 아직 안 한 예약만(이행분은 출결·보고서가 줄을 되살린다).
+    expect(q).toContain('const reservedToday = reservationsToday.filter((r) => r.status === "reserved")');
+    expect(q).toContain("for (const r of reservationsToday)");
+    expect(q).toContain('if (r.status !== "reserved" && !splitOff) continue;');
     expect(q).toContain("reservedToday.length === 0");
+    // 정규 수업일 예약 = 합침('정규+보강')/분리('(보강)' 줄) — 표식·합침은 세션 복원 뒤(reserved-makeup.ts).
+    expect(q).toContain("planReservedMakeup(reservationsToday, enrolledKey)");
+    expect(q.indexOf("applyReservedMakeup(os, reservedPlan)")).toBeGreaterThan(q.indexOf("const sess = sessionById.get(os.id)"));
   });
   it("시간표 기본뷰 반 칸 = '보강' 줄(대기·퇴원 아래) — 기본뷰 격자에만 얹고 명단·엑셀·이동 판정엔 안 실린다", () => {
     const page = strip(read("app/(shell)/timetable/page.tsx"));

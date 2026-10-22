@@ -14,7 +14,7 @@ vi.mock("@/features/classes/server/delegation", async () => ({ getTeachingClasse
 vi.mock("@/lib/auth/perm-matrix", () => ({ canWriteTenant: async () => true }));
 vi.mock("@/features/owner/server/lesson-profile", () => ({ getLessonProfile: async () => ({ autoUnits: false }) }));
 vi.mock("@/features/billing/server/textbook-queries", () => ({ getTextbookOrdersForStudents: async () => [] }));
-vi.mock("@/features/attendance/server/makeup-reservation-queries", () => ({ getReservationsOn: async () => [] }));
+vi.mock("@/features/attendance/server/makeup-reservation-queries", () => ({ getReservationsOn: async () => [], getRosterReservationsOn: async () => [] }));
 
 const { getTeacherRoster } = await import("./roster");
 const NOTICE = "보강 배정을 확인하지 못했습니다. 새로고침해 다시 확인해 주세요.";

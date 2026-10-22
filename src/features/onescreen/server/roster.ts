@@ -36,7 +36,9 @@ import { ownsMakeupReport } from "../makeup-owner";
 import { makeupSessionEntries } from "../makeup-session";
 import { makeupStudentIds } from "@/features/attendance/input-roster";
 // 보강 예약(0264a) — 그날 내 반에 예약된 학생을 보강 행으로 미리 세운다. 별도 함수·fail-soft(hot path 보호, #95).
-import { getReservationsOn } from "@/features/attendance/server/makeup-reservation-queries";
+// 이행분까지 + 보고서 발송 방식(합침/분리)을 읽는다 — 정규 줄 표식·'정규+보강'·분리 '(보강)' 줄(reserved-makeup.ts, 원장 2026-10-22).
+import { getRosterReservationsOn } from "@/features/attendance/server/makeup-reservation-queries";
+import { applyReservedMakeup, planReservedMakeup } from "../reserved-makeup";
 import { holidayNameOrNull } from "@/features/attendance/server/holiday";
 import { getSplitsOnDate } from "@/features/class-splits/server/queries";
 import { planSplitRows } from "../split-rows";
@@ -483,7 +485,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   const nativePromise = loadNativeParticipants({ session_date: targetDate, limit: 500 }, { sharedRead: true }).catch(
     (): ReadOutcome<ParticipantRead> => ({ status: "failed", error: MAKEUP_UNREAD_NOTICE }),
   );
-  const [scheds, makeupReports, makeupAttRows, reservedToday, splitsToday] = await Promise.all([
+  const [scheds, makeupReports, makeupAttRows, reservationsToday, splitsToday] = await Promise.all([
     // end_time·자리 라벨·유효구간·요일은 **수학 자동 시수**(수업 길이, auto-units.ts) 재료 — 같은 행이라 왕복 0.
     fetchInChunks<{
       class_id: string;
@@ -520,11 +522,13 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     // 🔴 그날 **내 반에 예약된 보강**(0264a) — 아직 출결도 보고서도 없지만 오기로 한 학생이라 미리 선다(원장 2026-09-14
     //    *"보강 추가 할 필요없이 미리 학생이 추가되어있어야"*). 조회는 **별도 함수 + fail-soft**(표가 없어도 빈 목록) —
     //    이 로스터는 강사 전원의 hot path라 새 컬럼·표를 본문 select에 섞지 않는다([[#95]]).
-    getReservationsOn(targetDate, allIds),
+    getRosterReservationsOn(targetDate, allIds),
     // 🔴 그날 내 반이 **보내거나 받는 수업 나누기**(0351a) — 받는 반엔 그 학생이 미리 서고(출결은 이 반 몫), 원래 반 행엔
     //    표식이 붙는다. 조회는 별도 함수 + fail-soft(표가 없어도 빈 결과 — 이 로스터는 강사 전원의 hot path, [[#95]]).
     getSplitsOnDate(targetDate, allIds),
   ]);
+  // 아직 안 한 예약 — 미리 세우기·"보강만 있는 날" 판정은 종전대로 이것만 본다(이행분은 출결·보고서가 줄을 되살린다).
+  const reservedToday = reservationsToday.filter((r) => r.status === "reserved");
   /**
    * **내가 맡은 보강 회차의 학생**(보강관리 배정) — 원반 담임·위임이 아니어도, 담당 반이 하나도 없어도 이 화면에 서야 한다.
    * 예전엔 아래 두 '빈 명단' 반환이 이 조회를 보기도 전에 끝났다(배정은 됐는데 기록 화면에 학생이 없다).
@@ -673,9 +677,15 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
    */
   const alreadyMakeup = new Set(attMakeup.map((m) => `${m.studentId}|${m.classId}`));
   const enrolledKey = new Set(enrollments.map((e) => `${e.student_id}|${e.class_id}`));
-  for (const r of reservedToday) {
+  // 정규 수업일 예약 = '+ 보강 학생 추가'의 합침/분리(원장 2026-10-22). 합침은 정규 줄 하나(아래 세션 복원 뒤 표식·'정규+보강'),
+  // 분리는 정규 줄과 따로 '(보강)' 줄 — 이행(출석을 찍음) 뒤에도 보고서를 쓸 때까지 서 있어야 해서 이행분까지 본다.
+  const reservedPlan = planReservedMakeup(reservationsToday, enrolledKey);
+  const separateRegular = new Set(reservedPlan.separate.map((s) => `${s.studentId}|${s.classId}`));
+  for (const r of reservationsToday) {
     const key = `${r.studentId}|${r.classId}`;
-    if (alreadyMakeup.has(key) || enrolledKey.has(key)) continue;
+    const splitOff = separateRegular.has(key);
+    if (r.status !== "reserved" && !splitOff) continue;
+    if (alreadyMakeup.has(key) || (enrolledKey.has(key) && !splitOff)) continue;
     if (makeupReports.some((m) => m.student_id === r.studentId)) continue;
     alreadyMakeup.add(key);
     attMakeup.push({ studentId: r.studentId, classId: r.classId });
@@ -1714,6 +1724,8 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
         if (entry?.understanding !== undefined) su.understanding = readUnderstanding(entry.understanding);
       }
     }
+    // 보강 예약 표식 + 합침('정규+보강') — 🔴 세션 복원 **뒤**(세션은 줄마다 makeup:false를 늘 저장해 앞서 켠 값을 덮는다).
+    applyReservedMakeup(os, reservedPlan);
     // ⚠️ 척도 경계에서 prevScore 폐기: 직전 회차의 문항수(exam_info 분모)가 오늘의 문항수와 다르면
     //    (5문항 ↔ 20문항) prevScore를 그대로 빼면 "▲15" 같은 허위 증감이 학부모에게 나간다.
     //    같을 때만 유지(같은 문항수의 직전 회차가 쌓이면 다음 회차부터 정상 복원).

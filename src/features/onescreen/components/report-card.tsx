@@ -49,6 +49,7 @@ import { attendanceMarkBadgeClass, attendanceMarkLabel } from "../attendance-mar
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { activeUnderstanding, isMathReportPilot, pilotNeedsAutoWrite } from "../math-report-pilot";
 import type { SheetLang } from "@/features/teacher-view/i18n";
+import { ReservedMakeupTag } from "./reserved-makeup-tag";
 
 // shareToken: 저장 시 발급되는 학부모 공개 링크(/r/[token]) 토큰. 세션 내 저장 후에만 존재.
 // classnoteStatus: ClassNote 발송 큐 상태(queued/processing/success/failed/too_old) — 발송 후에만.
@@ -406,6 +407,8 @@ export function ReportCard({
                   {t("os.row.jump")}
                 </span>
               ) : null}
+              {/* 보강 예약(0264a) — 이 줄에 걸린 그날 보강(원장 2026-10-22). */}
+              <ReservedMakeupTag list={subject.makeupReserved} size="md" />
               {/* 수업 나누기(0351a) — 이 행이 왜 여기 있는지 / 그 시간이 어디로 가는지를 **글자로**(hover는 모바일에서 없다). */}
               {subject.splitIn || subject.splitOut ? (
                 <span className="bg-blue-soft text-blue rounded-pill px-1.5 py-px text-xs font-bold">
@@ -548,9 +551,13 @@ export function ReportCard({
             />
             {/* 🔴 옛 '보강' 켜고 끄기 알약은 없앴다(원장 2026-09-30 — 표 모드 체크박스와 같은 이유: 손으로 켜면 타임 없는
                 '(정규+보강)'이 생겼다). 보강은 '보강 추가'에서 정해지고, 여기엔 **합침 취소**만 남긴다. */}
-            {subject.makeup && subject.classId && locked ? (
+            {subject.makeup && subject.classId && (locked || subject.makeupByReservation) ? (
               // 잠긴 행(결석·발송 완료·열람)은 합침 취소도 못 한다 — 표 모드와 같게 표시 배지만.
-              <span className="bg-amber-soft text-amber shrink-0 rounded-pill px-2.5 py-1 text-xs font-bold">
+              // 보강 예약(합침)이 만든 '정규+보강'도 표시만 — 여기서 풀어도 새로고침이 예약대로 다시 합친다(예약을 '분리'로 다시 잡는다).
+              <span
+                className="bg-amber-soft text-amber shrink-0 rounded-pill px-2.5 py-1 text-xs font-bold"
+                title={subject.makeupByReservation ? t("os.reserved.mergeLocked") : undefined}
+              >
                 {makeupBadgeLabel({ makeup: true, hasClass: true }, lang)}
               </span>
             ) : subject.makeup && subject.classId ? (

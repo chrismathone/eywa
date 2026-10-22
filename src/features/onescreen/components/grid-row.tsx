@@ -56,6 +56,7 @@ import { ScoreInput } from "./score-input";
 import { TodaysMathMark } from "./todays-math-mark";
 import { todaysMathMarked } from "../todays-math-fill-rules";
 import { MakeupClassTag } from "./makeup-class-tag";
+import { ReservedMakeupTag } from "./reserved-makeup-tag";
 
 const TD_BASE = "px-2 py-1.5 align-top";
 // 학생 묶음 구분선 — 묶음 첫 행(참고행이 꺼져 있을 때는 이 행)의 위쪽만 굵고 진한 회색.
@@ -504,7 +505,7 @@ export function GridBodyRow({
                 {makeupBadgeLabel({ makeup: true, hasClass: false }, lang)}
                 <EyIcon name="close" size={8} />
               </button>
-            ) : subject.classId && !rowLocked ? (
+            ) : subject.classId && !rowLocked && !subject.makeupByReservation ? (
               // 합침 취소(정규+보강 → 정규) — 옛 '보강' 체크박스의 유일한 정당한 쓰임(잘못 합친 것 되돌리기)을 여기로 옮겼다.
               // 올려 둔 타임(보강 시수)은 건드리지 않는다(얼마를 올렸는지 모른다) — 확인창이 그 사실을 알린다.
               <button
@@ -525,7 +526,9 @@ export function GridBodyRow({
                 className="bg-amber-soft text-amber shrink-0 rounded-pill px-1 py-px text-xs font-bold"
                 title={
                   subject.classId
-                    ? undefined
+                    ? subject.makeupByReservation
+                      ? t("os.reserved.mergeLocked")
+                      : undefined
                     : (makeupRemoveBlockReason(liveStatus, lang) ?? undefined)
                 }
               >
@@ -536,6 +539,8 @@ export function GridBodyRow({
           {showClass && subject.className ? (
             <span className="text-text-faint text-xs">{subject.className}</span>
           ) : null}
+          {/* 보강 예약(0264a) — 이 줄에 걸린 그날 보강(원장 2026-10-22 *"표 모드도 동일하게"*). */}
+          <ReservedMakeupTag list={subject.makeupReserved} />
           {/* 수업 나누기(0351a) — 받는 반 행이면 "← 원래 선생님", 원래 반 행이면 "→ 받는 선생님"(그 시간만). */}
           {subject.splitIn || subject.splitOut ? (
             <span className="bg-blue-soft text-blue rounded-pill px-1 py-px text-xs font-bold">{subject.splitIn ?? subject.splitOut}</span>

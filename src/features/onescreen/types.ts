@@ -181,6 +181,13 @@ export type Subject = {
   splitIn?: string;
   /** **원래 반** 행인데 그날 일부 시간이 다른 반으로 나눠짐 — 표식 문구(`17:20~18:20 → 유형숙(중1 개별)`). 표시 전용. */
   splitOut?: string;
+  /**
+   * 이 줄에 걸린 **그날 보강 예약**(0264a — 출석부에서 미리 잡은 보강) — 표식 전용(`reserved-makeup.ts`).
+   * 정규 수업일 예약은 정규 줄에 합쳐져 따로 줄이 안 서서, 예전엔 원스크린 어디에도 보강이 보이지 않았다(원장 2026-10-22 전주율 건).
+   */
+  makeupReserved?: ReservedMakeup[];
+  /** 정규 줄의 '정규+보강'이 **보강 예약(합침)** 에서 왔다 — 합침 취소 대신 예약을 바꾸게 한다(새로고침이 다시 합친다). */
+  makeupByReservation?: true;
   // 이 반의 대상 날짜 raw status(present/late/absent/early_leave/excused/makeup). null=기록 없음.
   // ⚠️ 표시 축약(toMark)과 별개로 raw를 보존 — 조퇴·공결·보강을 pill이 축약값으로 되쓰는 사고 방지.
   attendanceRaw?: string | null;
@@ -236,6 +243,18 @@ export type Tests = {
 
 /** 학생 배지(축약) — 모으는 규칙·우선순위는 [attendance-mark.ts](./attendance-mark.ts) `studentMarkOf`. */
 export type AttendanceMark = "출석" | "지각" | "조퇴" | "결석";
+
+/** 원스크린 줄의 보강 예약 한 건(표식 재료). 시각은 "HH:MM". */
+export type ReservedMakeup = {
+  start: string;
+  end: string;
+  /** 결석분 날짜(YYYY-MM-DD). */
+  absenceDate: string;
+  /** 보고서 발송 방식 — 정규 수업일이 아닌 예약은 늘 separate(합칠 정규 보고서가 없다). */
+  mode: "merge" | "separate";
+  /** 출결이 찍혀 이행됐다(표식 '보강 완료'). */
+  done: boolean;
+};
 
 export type OneScreenStudent = {
   id: string;

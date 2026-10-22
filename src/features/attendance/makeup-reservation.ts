@@ -37,6 +37,16 @@ import { COUNTABLE_STATUSES } from "./session-units";
 
 export type MakeupReservationStatus = "reserved" | "done";
 
+/**
+ * 보고서 발송 방식(원장 2026-10-22 — '+ 보강 학생 추가'의 합침/분리와 같은 질문). 정규 수업일 예약만 묻는다.
+ * merge = 정규 보고서에 합침("(정규+보강)" 1건) · separate = 보강 보고서 따로. null = 묻지 않음(정규 수업일이면 merge로 읽는다 —
+ * `effectiveReportMode`).
+ */
+export type MakeupReportMode = "merge" | "separate";
+export const isMakeupReportMode = (v: unknown): v is MakeupReportMode => v === "merge" || v === "separate";
+/** 정규 수업일 예약의 실제 발송 방식 — 묻지 않은 옛 예약(null)은 합침(그 예약들이 실제로 정규 칸에 합쳐져 돌았다). */
+export const effectiveReportMode = (mode: MakeupReportMode | null | undefined): MakeupReportMode => mode ?? "merge";
+
 /** 앱이 다루는 예약 한 줄(0264a 행의 camel 표기). 시각은 "HH:MM". */
 export type MakeupReservation = {
   id: string;
@@ -50,6 +60,8 @@ export type MakeupReservation = {
   note: string | null;
   status: MakeupReservationStatus;
   createdBy: string | null;
+  /** 보고서 발송 방식(20261022150000) — 칸이 없거나 묻지 않은 예약은 null/없음. */
+  reportMode?: MakeupReportMode | null;
 };
 
 /**

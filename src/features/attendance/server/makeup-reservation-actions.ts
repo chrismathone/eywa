@@ -37,14 +37,17 @@ import {
   contiguousPeriodRange,
   removeMemoLine,
   reservationAbsenceMemo,
+  isMakeupReportMode,
   reservationPeriodOptions,
   validateReservationDates,
+  type MakeupReportMode,
   type ReservationPeriodOption,
 } from "../makeup-reservation";
 import { statusTextOf, type AttendanceMark } from "../cell-display";
 import { setAttendanceCell } from "./actions";
 import { pickAbsenceNoteTarget } from "./absence-cell";
 import { isMissingReservationTable, loadReservationById } from "./makeup-reservation-queries";
+import { isRegularLessonDay } from "./makeup-reservation-complete";
 
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
 const NOT_APPLIED = "보강 예약 표(0264a)가 아직 적용되지 않았습니다 — 관리자에게 SQL 적용을 요청하세요";
@@ -57,6 +60,11 @@ export type MakeupPeriodOptionsResult =
       weekend: boolean;
       /** 이 반 과목이 시수 자동값 대상인가(수학 = 교시 하나 0.5) — 확인창이 시수 예고를 적는다. */
       autoUnits: boolean;
+      /**
+       * 보강일이 그 학생의 이 반 **정규 수업일**인가(학생을 넘겼을 때만) — true·null(모름)이면 창이 '함께/따로 발송'을 묻는다
+       * ('+ 보강 학생 추가'의 합침/분리와 같은 질문, 원장 2026-10-22). false면 정규 보고서가 없어 묻지 않는다(보강 보고서 따로).
+       */
+      regularDay?: boolean | null;
     }
   | { error: string };
 
@@ -64,7 +72,7 @@ export type MakeupPeriodOptionsResult =
  * 그 반·그 날짜에 고를 수 있는 교시 — 확인창이 날짜를 고를 때마다 부른다(서버가 단일 소스, 클라는 목록을 못 만든다).
  * 읽기 권한(출결 쓰기)만 본다 — 담당 반 판정은 예약 저장에서 한다(선택지 조회는 남의 정보가 아니다).
  */
-export async function getMakeupPeriodOptions(classId: string, date: string): Promise<MakeupPeriodOptionsResult> {
+export async function getMakeupPeriodOptions(classId: string, date: string, studentId?: string): Promise<MakeupPeriodOptionsResult> {
   const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "attendance"))) return { error: "출석 관리 권한이 없습니다" };
@@ -79,12 +87,17 @@ export async function getMakeupPeriodOptions(classId: string, date: string): Pro
   const config = settingsToPeriodsConfig(settings.operations);
   const options = reservationPeriodOptions(subject, date, config);
   const subjectLabel = buildSubjectMaps(settings.operations.subjects).labelOf(subject);
+  const [autoUnitsOn, regularDay] = await Promise.all([
+    getLessonProfile().then((p) => p.autoUnits),
+    studentId ? isRegularLessonDay(user.tenantId, { studentId, classId, date }) : Promise.resolve(undefined),
+  ]);
   return {
     ok: true,
     options,
     subjectLabel,
     weekend: options.length > 0 && isWeekend(date),
-    autoUnits: isAutoUnitsSubject(subject) && (await getLessonProfile()).autoUnits,
+    autoUnits: isAutoUnitsSubject(subject) && autoUnitsOn,
+    ...(regularDay !== undefined ? { regularDay } : {}),
   };
 }
 
@@ -165,6 +178,11 @@ export async function reserveMakeup(input: {
   note?: string | null;
   /** 강사 전체 보기의 주인 — 결석 칸 쓰기에 그대로 실린다(`setAttendanceCell` 규약). */
   scopeTeacherId?: string | null;
+  /**
+   * 보고서 발송 방식 — 보강일이 그 학생의 정규 수업일이면 **필수**('+ 보강 학생 추가'의 합침/분리, 원장 2026-10-22).
+   * 정규 수업일이 아니면 버린다(합칠 정규 보고서가 없다 — 보강 보고서가 따로 나간다).
+   */
+  reportMode?: MakeupReportMode | null;
 }): Promise<ReserveMakeupResult> {
   const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
@@ -206,6 +224,13 @@ export async function reserveMakeup(input: {
   const option = { startTime: range.startTime, endTime: range.endTime };
   const periodLabel = range.label;
 
+  // 보고서 발송 방식 — 정규 수업일이면 반드시 고른다(보강 추가 확인창과 같은 질문). 모르면(조회 실패) 고른 값을 그대로 둔다.
+  const regularDay = await isRegularLessonDay(user.tenantId, { studentId, classId, date: makeupDate });
+  const reportMode = regularDay === false ? null : isMakeupReportMode(input.reportMode) ? input.reportMode : null;
+  if (regularDay === true && !reportMode) {
+    return { error: "그날은 이 학생의 정규 수업일입니다 — 보고서를 정규와 합칠지(합침) 따로 보낼지(분리) 고르세요" };
+  }
+
   // 결석일 칸의 현재 사실 — 온 날(출석·지각·조퇴·보강)이면 예약이 거짓이 된다.
   let day: AttRow[];
   try {
@@ -243,6 +268,8 @@ export async function reserveMakeup(input: {
       note,
       status: "reserved",
       created_by: user.id,
+      // 칸(20261022150000)이 없는 지점에서도 묻지 않은 예약은 그대로 저장되게 — 값이 있을 때만 싣는다.
+      ...(reportMode ? { report_mode: reportMode } : {}),
     })
     .select("id")
     .single();
@@ -305,6 +332,7 @@ export async function reserveMakeup(input: {
       periodLabel,
       periodCount: range.count,
       absence,
+      ...(reportMode ? { reportMode } : {}),
       ...(note ? { hasNote: true } : {}),
     },
   });

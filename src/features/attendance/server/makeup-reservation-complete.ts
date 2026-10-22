@@ -138,6 +138,22 @@ async function classDayMinutes(admin: Admin, tenantId: string, classId: string, 
   return total;
 }
 
+/**
+ * 보강일이 그 학생의 **정규 수업일**인가 — 이행이 시수를 "정규 + 보강"으로 합치는 조건과 같은 두 판정(수강 유효 + 등원 요일 ·
+ * 그날 반이 실제로 돈다). 예약 창이 '함께/따로 발송'을 물을지 정한다(원장 2026-10-22). null = 모름(조회 실패).
+ */
+export async function isRegularLessonDay(
+  tenantId: string,
+  at: { studentId: string; classId: string; date: string },
+): Promise<boolean | null> {
+  const admin = createAdminClient();
+  // isRegularAttendee는 학생·반·보강일만 읽는다.
+  const attendee = await isRegularAttendee(admin, tenantId, { studentId: at.studentId, classId: at.classId, makeupDate: at.date } as MakeupReservation);
+  if (attendee !== true) return attendee;
+  const minutes = await classDayMinutes(admin, tenantId, at.classId, at.date);
+  return minutes === null ? null : minutes > 0;
+}
+
 const SCHEDULE_SELECT = "day_of_week, start_time, end_time, valid_from, valid_to, slot_teacher_label";
 
 /** 연결 시수의 수업 길이. 페이지가 하나라도 실패하면 null(없는 수업으로 보지 않는다). */

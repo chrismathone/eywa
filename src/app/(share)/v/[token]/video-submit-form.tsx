@@ -9,6 +9,7 @@ import { createUploadReporter, flushUploadEvents } from "@/features/video-submit
 import { confirmationReason, uploadEventLabel, uploadFailureText, type UploadEvent } from "@/features/video-submit/upload-diagnostics";
 import { SITE_FREE_UPLOADS_PER_DAY, SITE_MAX_VIDEOS_PER_HOMEWORK, SITE_NOTE_MAX, siteNote } from "@/features/video-submit/site";
 import { InAppWarning } from "./in-app-warning";
+import { useScreenWakeLock } from "@/features/video-submit/use-screen-wake-lock";
 
 type Phase =
   | { kind: "idle" }
@@ -100,6 +101,8 @@ export function VideoSubmitForm(props: {
     return () => { alive = false; reporter.current?.dispose(); window.removeEventListener("online", flush); };
   }, [props.token]);
   const busy = phase.kind === "uploading" || phase.kind === "finishing";
+  // 올리는 동안 화면이 저절로 꺼지지 않게(자동 잠금에 사파리가 숨으면 전송이 멈춘다 — use-screen-wake-lock.ts).
+  useScreenWakeLock(busy);
 
   // 올리는 중에 창을 닫으려 하면 한 번 붙잡는다(폰은 무시할 수 있다 — 그래서 화면에도 적는다).
   useEffect(() => {
@@ -223,7 +226,7 @@ export function VideoSubmitForm(props: {
               <div className="bg-primary h-full transition-[width]" style={{ width: `${percent}%` }} />
             </div>
             <p className="text-foreground text-sm">올리는 중 {percent}% ({mb(phase.sent)} / {mb(phase.file.size)})</p>
-            <p className="text-text-dim text-sm break-keep">끝날 때까지 이 화면을 닫지 말아 주세요. 잠깐 끊기면 이어서 올립니다.</p>
+            <p className="text-text-dim text-sm break-keep">끝날 때까지 이 화면을 켜 둔 채 기다려 주세요. 화면을 끄거나 다른 앱으로 넘어가면 전송이 멈추고, 이 화면으로 돌아오면 이어서 올립니다.</p>
           </div>
         ) : null}
         {phase.kind === "finishing" ? <p className="text-foreground text-sm" aria-live="polite">거의 다 됐습니다. 확인하는 중…</p> : null}
