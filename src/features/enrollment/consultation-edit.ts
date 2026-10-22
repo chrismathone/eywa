@@ -3,7 +3,7 @@ export const CONSULTATION_EDIT_FIELDS = [
   "prospect_name", "prospect_grade", "prospect_school", "english_name", "gender", "blood_type",
   "birth_date", "student_phone", "home_phone", "parent_name", "parent_phone", "parent_relation",
   "address", "zip_code", "address_detail", "consultation_path", "subject", "career_goal", "siblings",
-  "safety_notes", "registration_status", "payment_amount", "payment_date", "registrar",
+  "safety_notes",
   "follow_up_date", "follow_up_content", "non_registration_reason", "parent_request",
   "shuttle_bus_request", "privacy_agreement", "installment_agreement", "subject_details", "counselor",
   "received_date", "student_type", "siblings_details", "consultation_date", "learning_history",
