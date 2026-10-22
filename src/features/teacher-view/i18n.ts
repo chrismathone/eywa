@@ -966,8 +966,8 @@ export const SHEET_DICT = {
   },
   "fill.title": { ko: "교재 배정 — {class}", en: "Assign a textbook — {class}" },
   "fill.desc": {
-    ko: "교시와 교재를 고르면 그 시각의 수업일마다 차수가 순서대로 월간계획에 섭니다. 연휴는 건너뜁니다. 실제 시트는 강사가 [월간계획 전체 가져오기]를 누를 때만 채워집니다.",
-    en: "Pick periods and a book and the lessons line up on the monthly plan, class day by class day (holidays skipped). The actual sheet is filled only when a teacher presses [Import plan].",
+    ko: "교시와 교재를 고르면 그 시각의 수업일마다 차수가 순서대로 월간계획에 서고, 오늘부터의 실제 시트 빈 칸에도 함께 들어갑니다. 연휴는 건너뛰고 이미 적은 칸은 덮어쓰지 않습니다.",
+    en: "Pick periods and a book and the lessons line up on the monthly plan, class day by class day — and go into the empty cells of the actual sheet from today on. Holidays are skipped; written cells are never overwritten.",
   },
   "fill.slots": {
     ko: "교시 — 선생님을 누르고, 요일과 차수 자리를 고르세요 (1차수 = 25분)",
@@ -1036,8 +1036,16 @@ export const SHEET_DICT = {
   "fill.out.past.title": { ko: "이미 지난 수업엔 소급해 넣지 않습니다", en: "Past lessons are never back-filled" },
   "fill.done.none": { ko: "배정할 칸이 없었습니다", en: "Nothing to assign" },
   "fill.done": {
-    ko: "월간계획에 {n}칸 배정했습니다 — 실제엔 월간 화면의 [월간계획 전체 가져오기]로 넣습니다",
-    en: "Assigned {n} cells to the monthly plan — bring them in with [Import whole plan] on the month view",
+    ko: "교재를 배정하고 실제 시트에 {n}칸을 넣었습니다 — 실제와 다르면 고쳐 주세요",
+    en: "Assigned the book and filled {n} cells of the actual sheet — edit them if lessons went differently",
+  },
+  "fill.done.planOnly": {
+    ko: "월간계획에 {n}칸 배정했습니다 — 실제 시트엔 채울 빈 칸이 없었습니다",
+    en: "Assigned {n} cells to the monthly plan — no empty cells to fill on the actual sheet",
+  },
+  "fill.done.importFailed": {
+    ko: "월간계획엔 배정했지만 실제 시트에 넣지 못했습니다 — 월간 화면의 [월간계획 전체 가져오기]로 다시 넣어 주세요",
+    en: "Assigned to the monthly plan, but couldn't fill the actual sheet — use [Import whole plan] on the month view",
   },
   "fill.done.skipped": { ko: "이미 적혀 있어 그대로 둠 {n}칸", en: "{n} already written" },
   "fill.done.truncated": { ko: "줄 상한(20)으로 못 넣음 {n}칸", en: "{n} skipped (20-row cap)" },

@@ -13,7 +13,8 @@ import "server-only";
  *    미반영)은 달력·비교·현황의 **기준**이고, `byCell`(일정, 미루기 반영)은 [가져오기]가 옮기는 값이다.
  *    미루기가 원래 계획을 고쳐 쓰면 "얼마나 밀렸나"를 잴 기준이 사라진다.
  * 🔴 **실제와 섞지 않는다** — 실제는 `class_sheet_plan_lines` 하나뿐이고, 계획이 거기 들어가는 길은
- *    사람이 누르는 [월간계획 전체 가져오기]뿐이다(`importPlannedRange`).
+ *    교재 배정(`applyTextbookFill`, 2026-10-22 배정 = 계획 + 가져오기)과 [월간계획 전체 가져오기]
+ *    (`importPlannedRange`)뿐이고 둘 다 같은 writer(`writePlannedCells`)를 탄다.
  * ⚠️ 0266a/0268a 미적용이어도 **절대 throw하지 않는다**([[#95]]) — 영어 강사 전원이 매일 여는 화면이
  *    이걸 읽는다. 못 읽으면 계획이 빈 채로 시트가 그대로 돈다.
  */
@@ -303,13 +304,15 @@ export async function getClassPlannedLines(input: {
 /**
  * [월간계획 전체 가져오기]가 옮길 **일정**(미루기 반영) — `[from, to]`에 걸린 배정은 끝 차수까지
  * ([`expandPlansThrough`](../plan-expand.ts), 원장 2026-10-22). `lastDate` = 실제로 닿은 마지막 날.
- * 🔴 게이트는 호출부(`importPlannedRange`)가 이미 걸었다.
+ * `planId`를 주면 **그 배정 하나만** `from`부터 끝 차수까지(교재 배정 = 계획 + 가져오기 한 번에, 원장 2026-10-22).
+ * 🔴 게이트는 호출부(`importPlannedRange`·`applyTextbookFill`)가 이미 걸었다.
  */
 export async function getClassImportLines(input: {
   tenantId: string;
   classId: string;
   from: string;
   to: string;
+  planId?: string;
 }): Promise<{ status: TextbookTableStatus; byCell: Record<string, PlannedLine[]>; lastDate: string }> {
   const { tenantId, classId, from, to } = input;
   if (!from || !to || from > to) return { status: "ok", byCell: {}, lastDate: to };
@@ -319,9 +322,25 @@ export async function getClassImportLines(input: {
   const materials = await loadPlanMaterials({ tenantId, classIds: [classId], to: horizon });
   if (materials.status !== "ok") return { status: materials.status, byCell: {}, lastDate: to };
   const m = materials.byClass.get(classId);
-  if (!m || m.plans.length === 0) return { status: "ok", byCell: {}, lastDate: to };
+  const plans = input.planId ? m?.plans.filter((p) => String(p.id) === input.planId) : m?.plans;
+  if (!m || !plans || plans.length === 0) return { status: "ok", byCell: {}, lastDate: to };
+  if (input.planId) {
+    // 이 배정 하나 — 창으로 고르지 않고 `from`부터 끝까지 펼친다.
+    const byCell = expandPlans({
+      plans,
+      books: materials.books,
+      lessonsByBook: materials.lessonsByBook,
+      schedules: m.schedules,
+      holidays: materials.holidays,
+      shifts: m.shifts,
+      from,
+      to: horizon,
+    });
+    const lastDate = Object.keys(byCell).reduce((max, k) => (k.slice(0, 10) > max ? k.slice(0, 10) : max), to);
+    return { status: "ok", byCell, lastDate };
+  }
   const out = expandPlansThrough({
-    plans: m.plans,
+    plans,
     books: materials.books,
     lessonsByBook: materials.lessonsByBook,
     schedules: m.schedules,

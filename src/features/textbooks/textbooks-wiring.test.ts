@@ -226,13 +226,19 @@ describe("교재 배정 — 계획과 실제를 가른다", () => {
   const plan = read("src", "features", "textbooks", "server", "plan-actions.ts");
   const monthPlan = read("src", "features", "textbooks", "server", "month-plan.ts");
 
-  it("🔴 배정은 실제 칸에 한 줄도 쓰지 않는다 — 기입 RPC를 부르지 않는다", () => {
+  it("🔴 배정 = 계획 + 가져오기 한 번에(원장 2026-10-22) — 실제 쓰기는 가져오기와 **같은 함수**만", () => {
     const body = plan.slice(plan.indexOf("export async function applyTextbookFill"), plan.indexOf("// ── 가져오기"));
-    // ⚠️ **호출만** 본다 — 왜 그런가를 적은 주석에도 그 이름이 나온다(가드가 설명을 결과로 오인하면 안 된다).
+    // 배정을 저장한다(그게 곧 월간계획이다) → 그 배정만 골라 가져오기와 같은 writer로 실제에 넣는다.
+    expect(body).toContain("saveClassTextbookPlan");
+    expect(body).toContain("planId: saved.id");
+    expect(body).toContain("await writePlannedCells(");
+    // ⚠️ 직접 RPC·옛 기입 경로로 따로 쓰지 않는다(두 벌이면 같은 칸이 길마다 다르게 들어간다).
     expect(body).not.toContain("await applyLoaded(");
     expect(body).not.toContain(`rpc("ecs_apply_textbook_lessons"`);
-    // 대신 배정을 저장한다(그게 곧 월간계획이다).
-    expect(body).toContain("saveClassTextbookPlan");
+    // 🔴 지난 날짜엔 안 넣는다(미리보기의 '지난 날짜' 약속).
+    expect(body).toMatch(/importFrom = input\.startDate > today \? input\.startDate : today/);
+    const importFn = plan.slice(plan.indexOf("export async function importPlannedRange"));
+    expect(importFn).toContain("await writePlannedCells(");
   });
 
   it("🔴 월간계획은 **저장하지 않는다** — 배정에서 계산하는 읽기 전용이다", () => {
@@ -258,7 +264,7 @@ describe("교재 배정 — 계획과 실제를 가른다", () => {
     expect(importFn).not.toContain("baselineByCell");
   });
 
-  it("계획이 실제로 들어가는 길은 [월간계획 전체 가져오기] 하나뿐이다 — 교시 한 칸 가져오기는 없앴다", () => {
+  it("계획이 실제로 들어가는 길은 배정과 [월간계획 전체 가져오기]뿐이다 — 교시 한 칸 가져오기는 없앴다", () => {
     expect(plan).toContain("export async function importPlannedRange");
     expect(plan).not.toContain("export async function importPlannedSlot");
     const api = read("src", "features", "class-sheets", "components", "plan-api.ts");
