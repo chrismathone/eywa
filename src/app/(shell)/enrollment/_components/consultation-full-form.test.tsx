@@ -85,6 +85,8 @@ afterEach(() => {
 async function saveEdit() {
   const { container } = render(<ConsultationFullForm mode="edit" recordingOwner={{ tenantId: "t1", userId: "u1" }} initial={{ id: "c1", prospectName: "홍길동" }} />);
   const form = container.querySelector("form")!;
+  // 상담 끝난 건은 후속 조치가 필수(원장 2026-10-22) — 저장 경로 시험이라 '등록'을 고르고 저장한다.
+  fireEvent.click(screen.getByRole("radio", { name: "등록" }));
   await act(async () => {
     fireEvent.submit(form);
     for (let i = 0; i < 10; i++) await Promise.resolve();
@@ -133,11 +135,42 @@ describe("콜&상담 수정 저장 뒤 이동(#102)", () => {
 async function saveRecording(mode: "create" | "edit") {
   const { container } = render(<ConsultationFullForm mode={mode} recordingOwner={{ tenantId: "t1", userId: "u1" }} initial={{ id: mode === "edit" ? "c1" : undefined, prospectName: "A" }} />);
   fireEvent.click(screen.getByRole("button", { name: "테스트 녹음 선택" }));
+  fireEvent.click(screen.getByRole("radio", { name: "등록" }));
   await act(async () => {
     fireEvent.submit(container.querySelector("form")!);
     for (let i = 0; i < 30; i++) await Promise.resolve();
   });
 }
+
+describe("후속 조치 필수(원장 2026-10-22)", () => {
+  it("상담 끝난 건을 고르지 않고 저장하면 서버를 부르지 않고 이유를 보인다", async () => {
+    const { container } = render(<ConsultationFullForm mode="edit" recordingOwner={{ tenantId: "t1", userId: "u1" }} initial={{ id: "c1", prospectName: "A", outcome: "consulted" }} />);
+    await act(async () => { fireEvent.submit(container.querySelector("form")!); });
+    expect(m.updateEnrollmentConsultation).not.toHaveBeenCalled();
+    expect(screen.getByText(/후속 조치를 골라 주세요/)).toBeInTheDocument();
+  });
+  it("다음 상담은 날짜와 함께 보내고, 등록·미등록은 '등록 상태' 칸도 맞춘다", async () => {
+    m.updateEnrollmentConsultation.mockResolvedValue({ ok: true });
+    const { container } = render(<ConsultationFullForm mode="edit" recordingOwner={{ tenantId: "t1", userId: "u1" }} initial={{ id: "c1", prospectName: "A", outcome: "ai_done" }} />);
+    const form = container.querySelector("form")!;
+    fireEvent.click(screen.getByRole("radio", { name: "미등록" }));
+    expect((form.querySelector('[name="registrationStatus"]') as HTMLSelectElement).value).toBe("미등록");
+    fireEvent.click(screen.getByRole("radio", { name: "다음 상담" }));
+    await act(async () => { fireEvent.submit(form); });
+    expect(m.updateEnrollmentConsultation).not.toHaveBeenCalled();
+    expect(screen.getByText(/다음 상담 날짜를 넣어 주세요/)).toBeInTheDocument();
+    fireEvent.change(form.querySelector('[name="followUpDate"]')!, { target: { value: "2099-01-01" } });
+    await act(async () => { fireEvent.submit(form); for (let i = 0; i < 10; i++) await Promise.resolve(); });
+    const sent = m.updateEnrollmentConsultation.mock.calls[0]![1] as FormData;
+    expect(sent.get("followUpResult")).toBe("next");
+    expect(sent.get("followUpDate")).toBe("2099-01-01");
+  });
+  it("이미 등록 완료된 상담은 다음 상담을 고를 수 없다", () => {
+    render(<ConsultationFullForm mode="edit" recordingOwner={{ tenantId: "t1", userId: "u1" }} initial={{ id: "c1", prospectName: "A", outcome: "enrolled" }} />);
+    expect(screen.getByRole("radio", { name: "다음 상담" })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: "등록" })).toBeChecked();
+  });
+});
 describe("콜앤상담 녹음 저장과 대상 구분", () => {
   it("successful edit clears exactly the submitted backup", async () => {
     m.updateEnrollmentConsultation.mockResolvedValue({ ok: true });

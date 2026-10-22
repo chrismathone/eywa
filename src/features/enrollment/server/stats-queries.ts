@@ -6,6 +6,9 @@ import { fetchAllPaged } from "@/lib/supabase/batch";
 import { normalizeSchoolName } from "@/features/schools/school-name";
 import { bucketizePathStats, type BucketStat, type PathStatRow } from "../path-bucket";
 import { recentConsultMonths, type RecentConsultRow } from "../recent-stats";
+import { buildManagementSheet, type ManagementSheet } from "../management-sheet";
+import { intakeGroupMeta, intakeGroupsOf } from "../intake-groups";
+import { getTenantSettings } from "@/features/owner/server/queries";
 import {
   buildSchoolBars,
   gradeLabel,
@@ -243,6 +246,10 @@ export type ConsultationDistribution = {
   hasTotals: boolean;
   /** 우리가 가진 공시 연도(예 2026). 화면이 "왜 비율이 없는지" 설명할 때 쓴다. */
   totalsYear: number | null;
+  /** 관리현황(달마다 상담·등록·완료율 · 과목 묶음마다) — 같은 상담 행으로 센다(management-sheet.ts). */
+  sheet: ManagementSheet;
+  /** 과목 묶음 → 이름·색(학원 설정 — 화면에 키를 내보내지 않는다). */
+  sheetGroups: Record<string, { label: string; color: string }>;
 };
 
 /**
@@ -265,14 +272,16 @@ export async function getConsultationDistribution(
   const start = kstMonthStartIso(fromY, 0);
   const end = kstMonthStartIso(toY + 1, 0);
 
-  const [rows, schoolStats] = await Promise.all([
-    fetchAllPaged<{ prospect_school: string | null; prospect_grade: string | null; outcome: string }>(
+  const [rows, schoolStats, settings] = await Promise.all([
+    fetchAllPaged<{ prospect_school: string | null; prospect_grade: string | null; outcome: string; consulted_at: string; subject: string | null }>(
       (from, to) =>
         supabase
           .from("enrollment_consultations")
-          .select("prospect_school, prospect_grade, outcome")
+          .select("prospect_school, prospect_grade, outcome, consulted_at, subject")
           .gte("consulted_at", start)
           .lt("consulted_at", end)
+          // 🔴 페이지로 나눠 받으면 정렬이 있어야 한다 — 없으면 3개년(1,500건+)에서 페이지 경계의 행이 겹치거나 빠진다(검수 2026-10-22).
+          .order("id")
           .range(from, to),
     ),
     fetchAllPaged<{ name: string; name_key: string; kind: string; total_students: number; region: string | null; year: number }>(
@@ -290,6 +299,7 @@ export async function getConsultationDistribution(
           .order("name_key", { ascending: true })
           .range(from, to),
     ),
+    getTenantSettings(),
   ]);
 
   // 그 해 공시가 있으면 비율을 낸다. 없으면(예: 아직 안 받은 연도) 건수·전환율만 보여준다.
@@ -339,7 +349,17 @@ export async function getConsultationDistribution(
     total: consults.length,
     hasTotals,
     totalsYear,
+    sheet: buildManagementSheet(
+      rows.map((r) => ({ month: kstMonthOf(r.consulted_at), subject: r.subject, outcome: r.outcome })),
+      intakeGroupsOf(settings.operations.subjects),
+    ),
+    sheetGroups: intakeGroupMeta(settings.operations.subjects),
   };
+}
+
+/** 상담일(timestamptz) → KST 달 `YYYY-MM` — DB 함수가 달을 자르는 것과 같은 경계(`at time zone 'Asia/Seoul'`). */
+function kstMonthOf(iso: string): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit" }).format(new Date(iso)).slice(0, 7);
 }
 
 /** 통계 연도 선택지 — 데이터가 있는 연도만(없는 해를 고르면 빈 화면으로 걸어 들어간다). */

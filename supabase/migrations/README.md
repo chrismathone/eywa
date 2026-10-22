@@ -1,5 +1,9 @@
 # Supabase 마이그레이션 — 적용 방식·순서·현재 상태
 
+## 2026-10-22 콜&상담 후속 조치 할 일 (⏳ 운영 미적용)
+
+`20261022190000_enrollment_followup_tasks.sql`은 할 일 종류 `enrollment_followup`을 더한다 — 신규 콜&상담에서 '다음 상담'으로 잡은 날이 되면 상담자(재직 중이 아니면 원장 전원)에게 열고, 등록·미등록으로 정하면 처리됨 · 날짜를 옮기거나 지우면 취소 · 상담 삭제는 취소. 열기·닫기 = `enrollment_consultations` 트리거(상태·후속 조치일·상담자) + 30분 맞춤 `staff_tasks_sync`에 한 종류(0380a 본문 + 이 종류). 도입일(2026-10-22) 이후 날짜만. 앱보다 먼저든 나중이든 된다(앱은 새 칸을 읽지 않는다 — 적용 전엔 알림만 가고 할 일 연결이 빈다). 적용 뒤 확인: `select public.staff_tasks_sync('<지점>', array['enrollment_followup'])`가 오류 없이 `{opened, closed}`를 돌려준다 · 트리거 존재.
+
 ## 2026-10-22 보강 예약 결석난 반 (✅ 운영 적용 2026-10-22 · CLI)
 
 `20261022170000_makeup_reservation_absence_class.sql`은 `makeup_reservations.absence_class_id`(→ classes, on delete cascade, 빈 값 허용)를 더한다 — 예약이 기록할 반을 고르면 `class_id` = 기록할 반, 이 칸 = 결석난 반(다를 때만). 빈 값 = 같은 반이라 기존 10행·지금 앱은 그대로다(**앱보다 먼저** — 예약 단건·이행 조회는 칸이 없어도 칸 없이 다시 읽는다 · 시간표 마스터 보호 연결 SQL은 이 칸을 읽는다). 적용 뒤 확인: 칸·외래키 존재 · 기존 행 값 없음.
