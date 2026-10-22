@@ -2893,9 +2893,47 @@ export const SHEET_DICT = {
     ko: "{date} 결석분 보강 · 보강 보고서를 따로 보냅니다. 출석을 찍으면 보강 시수가 이 반 칸에 함께 들어갑니다.",
     en: "Makeup for the {date} absence · sent as a separate makeup report. Marking attendance adds the makeup units to this class cell.",
   },
+  // 보강 보고서 합치기 ↔ 나누기(원장 2026-10-22) — 판정 makeup-switch.ts.
+  "os.switch.join": { ko: "정규에 합치기", en: "Merge into regular" },
+  "os.switch.joinTitle": {
+    ko: "이 보강 보고서를 같은 반 정규 보고서에 합칩니다(정규+보강 한 건)",
+    en: "Merge this makeup report into the same class's regular report (one regular + makeup report)",
+  },
+  "os.switch.split": { ko: "따로 보내기", en: "Send separately" },
+  "os.switch.splitTitle": {
+    ko: "보강 보고서를 따로 만듭니다(정규 1건 + 보강 1건)",
+    en: "Make a separate makeup report (one regular + one makeup report)",
+  },
+  "os.switch.confirmJoin": {
+    ko: "{name} 보강 보고서를 {cls} 정규 보고서에 합칠까요?\n\n· 보고서는 한 건(정규+보강)으로 나갑니다.\n· 보강 줄에 적은 오늘 과제·특이사항·멘트는 정규 줄 뒤에 이어 붙습니다. 진도·테스트 점수는 정규 줄 값을 따릅니다(정규 줄 진도가 비어 있으면 보강 줄 진도를 씁니다).\n· 출석부 시수는 그대로입니다.",
+    en: "Merge {name}'s makeup report into the {cls} regular report?\n\n· One regular + makeup report is sent.\n· Today's homework, notes and comment written on the makeup row are appended to the regular row. Progress and test scores follow the regular row (the makeup row's progress is used if the regular row has none).\n· Attendance units stay the same.",
+  },
+  "os.switch.confirmSplit": {
+    ko: "{name} {cls} 보강을 따로 보낼까요?\n\n· 정규 보고서와 보강 보고서 두 건이 나갑니다.\n· 새 보강 줄은 비어 있습니다 — 보강 내용은 그 줄에 옮겨 적어 주세요.\n· 출석부 시수는 그대로입니다.",
+    en: "Send {name}'s {cls} makeup separately?\n\n· Two reports are sent: regular and makeup.\n· The new makeup row starts empty — move the makeup notes there.\n· Attendance units stay the same.",
+  },
+  "os.switch.joined": { ko: "{name} 보강을 {cls} 정규 보고서에 합쳤습니다", en: "Merged {name}'s makeup into the {cls} regular report" },
+  "os.switch.splitDone": { ko: "{name} 보강 줄을 따로 만들었습니다 — 보강 내용을 적어 주세요", en: "Made a separate makeup row for {name} — write the makeup notes there" },
+  "os.switch.blockSent": {
+    ko: "이미 보냈거나 보내는 중인 보고서는 합치거나 나눌 수 없습니다",
+    en: "A report that has been sent or is being sent can't be merged or split",
+  },
+  "os.switch.blockNoRegular": {
+    ko: "이 보강은 {cls}에 기록돼 있어, 오늘 같은 반 정규 수업이 있어야 합칠 수 있습니다",
+    en: "This makeup is recorded in {cls}; it can only be merged into a regular lesson of the same class today",
+  },
+  "os.switch.blockAttendance": {
+    ko: "정규 줄 출결이 결석·공결·보강이라 합칠 수 없습니다 — 출결을 먼저 고쳐 주세요",
+    en: "The regular row is marked absent, excused or makeup — fix the attendance first",
+  },
+  "os.switch.blockAlreadyMerged": { ko: "그 반 정규 줄은 이미 정규+보강입니다", en: "That class's regular row is already regular + makeup" },
+  "os.switch.blockOptout": { ko: "보고서를 보내지 않는 줄이라 합칠 수 없습니다", en: "This row doesn't send reports, so it can't be merged" },
+  "os.switch.blockHasSeparate": { ko: "같은 과목 보강 줄이 이미 있습니다", en: "A makeup row for this subject already exists" },
+  "os.switch.blockGone": { ko: "화면이 바뀌었습니다 — 새로고침 뒤 다시 해 주세요", en: "The screen changed — refresh and try again" },
+  "os.switch.otherClass": { ko: "다른 반", en: "another class" },
   "os.reserved.mergeLocked": {
-    ko: "보강 예약으로 합쳐진 보고서입니다 — 따로 보내려면 출석부에서 그 예약을 '분리'로 다시 잡아 주세요",
-    en: "Merged by a makeup booking — to send it separately, rebook it as 'separate' in the attendance sheet",
+    ko: "보강 예약으로 합쳐진 보고서입니다 — 따로 보내려면 옆의 '따로 보내기'를 누르세요",
+    en: "Merged by a makeup booking — to send it separately, press 'Send separately' next to it",
   },
   "os.row.makeupUnmergeConfirm": {
     ko: "{name} {subject}의 정규+보강 합침을 취소할까요? 합칠 때 올린 수업타임은 그대로이니 필요하면 타임 칸에서 고쳐 주세요.",

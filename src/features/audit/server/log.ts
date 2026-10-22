@@ -427,6 +427,8 @@ export const AUDIT_ACTIONS = {
   makeup_reserve_cancel: "보강 예약 취소",
   makeup_reserve_done: "보강 예약 이행",
   makeup_reserve_revert: "보강 예약 되돌림",
+  // 원스크린 보강 보고서 합치기 ↔ 나누기(원장 2026-10-22) — 예약 줄의 발송 방식을 함께 바꾼다.
+  makeup_reserve_report_mode: "보강 예약 보고서 방식 변경",
   attendance_makeup_link: "보강–결석분 연결",
   // 수학 자동 시수(원장 2026-09-11 "9월분만 보정") — scripts/_oneoff/backfill-math-auto-units.mjs가 --apply 때 한 줄 남긴다.
   attendance_units_backfill: "수학 출석 시수 자동값 소급 보정",

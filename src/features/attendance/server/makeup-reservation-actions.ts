@@ -606,6 +606,58 @@ export async function cancelMakeupReservation(input: { id: string }): Promise<Ca
 }
 
 /** 예약이 보이는 화면 — 출석부(월별·일별·오늘)·시간표(보강 탭)·원스크린·ECS. */
+/**
+ * 보강 예약의 **보고서 발송 방식**을 바꾼다 — 원스크린의 보강 보고서 합치기 ↔ 나누기(원장 2026-10-22). 예약 줄이면 새로고침이 예약대로
+ * 다시 세우므로(reserved-makeup.ts) 화면에서 바꾼 방식을 예약에도 적어야 유지된다. 그 학생 · 그 반 · 그날의 예약(예약·이행 둘 다).
+ * 게이트 = 출결 쓰기 + 강사는 그날 그 반 담당(예약 저장과 같은 문, #77). 감사로그 `makeup_reserve_report_mode`.
+ */
+export async function setReservationReportMode(input: {
+  studentId: string;
+  classId: string;
+  date: string;
+  mode: MakeupReportMode;
+}): Promise<{ ok: true; updated: number } | { error: string }> {
+  const user = await getCurrentUser({ teacherView: true });
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "attendance"))) return { error: "출석 관리 권한이 없습니다" };
+  if (!input?.studentId || !input.classId || !YMD.test(input.date) || !isMakeupReportMode(input.mode)) return { error: "잘못된 요청입니다" };
+  const supabase = await createClient();
+  if ((await accessLevelTenant(user.systemRole, "attendance")) === "scoped") {
+    const teaching = await userTaughtClassSet(supabase, user.id, input.date);
+    if (!teaching.has(input.classId)) return { error: "담당 반이 아닙니다" };
+  }
+  let admin: ReturnType<typeof createAdminClient>;
+  try {
+    admin = createAdminClient();
+  } catch {
+    return { error: "서버 설정 오류 — 관리자에게 알려 주세요" };
+  }
+  const { data, error } = await admin
+    .from("makeup_reservations")
+    .update({ report_mode: input.mode, updated_at: new Date().toISOString() })
+    .eq("tenant_id", user.tenantId)
+    .eq("student_id", input.studentId)
+    .eq("class_id", input.classId)
+    .eq("makeup_date", input.date)
+    .in("status", ["reserved", "done"])
+    .select("id");
+  if (error) {
+    if (isMissingReservationTable(error) || isMissingColumn(error, "report_mode")) return { error: NOT_APPLIED };
+    console.error("[makeup-reservation] 발송 방식 저장 실패", error.message);
+    return { error: "보강 예약의 발송 방식을 바꾸지 못했습니다 — 잠시 후 다시 시도하세요" };
+  }
+  const ids = (data ?? []).map((r) => r.id as string);
+  if (ids.length) {
+    await logAction({
+      action: "makeup_reserve_report_mode",
+      targetType: "attendance",
+      metadata: { studentId: input.studentId, classId: input.classId, date: input.date, mode: input.mode, reservationIds: ids },
+    });
+    revalidateSurfaces();
+  }
+  return { ok: true, updated: ids.length };
+}
+
 function revalidateSurfaces() {
   revalidatePath("/attendance");
   revalidatePath("/timetable");

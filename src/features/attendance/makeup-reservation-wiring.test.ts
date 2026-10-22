@@ -319,7 +319,7 @@ describe("⑤ 감사로그 키가 등록돼 있다(뷰어에 영문 키 원문�
   it("makeup_reserve · makeup_reserve_cancel · makeup_reserve_done · makeup_reserve_revert", () => {
     const log = read("features/audit/server/log.ts");
     const describe_ = read("features/audit/describe.ts");
-    for (const key of ["makeup_reserve", "makeup_reserve_cancel", "makeup_reserve_done", "makeup_reserve_revert"]) {
+    for (const key of ["makeup_reserve", "makeup_reserve_cancel", "makeup_reserve_done", "makeup_reserve_revert", "makeup_reserve_report_mode"]) {
       expect(log).toContain(`  ${key}:`);
       expect(describe_).toContain(`case "${key}":`);
     }

@@ -57,6 +57,7 @@ import { TodaysMathMark } from "./todays-math-mark";
 import { todaysMathMarked } from "../todays-math-fill-rules";
 import { MakeupClassTag } from "./makeup-class-tag";
 import { ReservedMakeupTag } from "./reserved-makeup-tag";
+import { MakeupSwitchButton } from "./makeup-switch-button";
 
 const TD_BASE = "px-2 py-1.5 align-top";
 // 학생 묶음 구분선 — 묶음 첫 행(참고행이 꺼져 있을 때는 이 행)의 위쪽만 굵고 진한 회색.
@@ -124,6 +125,9 @@ export type GridRowActions = {
   onRemoveMakeup?: (student: OneScreenStudent, subjectName: string) => void;
   /** 이 행을 뺄 수 있나 — 발송·처리 중이면 false라 버튼을 열지 않는다(서버도 같은 판정으로 막는다). */
   canRemoveMakeup?: (studentId: string, subjectName: string) => boolean;
+  /** 보강 보고서 합치기('(보강)' 줄 → 같은 반 정규 줄) · 나누기('정규+보강' 줄 → 보강 따로) — 원장 2026-10-22, 판정 makeup-switch.ts. */
+  onJoinMakeup?: (student: OneScreenStudent, subjectName: string) => void;
+  onSplitMakeup?: (student: OneScreenStudent, subjectName: string) => void;
   /** 보강 반 고르기(원장 2026-09-30 — 보고서 반 = 출석부 반) — 없으면 반 표시만. */
   onPickMakeupClass?: (student: OneScreenStudent, subjectName: string) => void;
   /** 영어 행 경고 셋(칸 바뀜·AI 코멘트 옛 값·이름 없음) — 카드 칸·발송 확인과 같은 판정(english-draft.ts). */
@@ -535,6 +539,14 @@ export function GridBodyRow({
                 {makeupBadgeLabel({ makeup: true, hasClass: !!subject.classId }, lang)}
               </span>
             )
+          ) : null}
+          {/* 합치기 ↔ 나누기(원장 2026-10-22) — '(보강)' 줄은 오늘 같은 과목 정규 줄이 있을 때만, '정규+보강' 줄은 잠기지 않았을 때만. 막히면 이유를 알린다. */}
+          {actions.onJoinMakeup && subject.makeup && !subject.classId &&
+          student.subjects.some((x) => !x.makeup && !!x.classId && (x.subjectKey ?? "") === (subject.subjectKey ?? "")) ? (
+            <MakeupSwitchButton kind="join" onClick={() => actions.onJoinMakeup?.(student, subject.name)} />
+          ) : null}
+          {actions.onSplitMakeup && subject.makeup && subject.classId && !rowLocked ? (
+            <MakeupSwitchButton kind="split" onClick={() => actions.onSplitMakeup?.(student, subject.name)} />
           ) : null}
           {showClass && subject.className ? (
             <span className="text-text-faint text-xs">{subject.className}</span>

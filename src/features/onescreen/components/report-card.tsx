@@ -50,6 +50,7 @@ import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lan
 import { activeUnderstanding, isMathReportPilot, pilotNeedsAutoWrite } from "../math-report-pilot";
 import type { SheetLang } from "@/features/teacher-view/i18n";
 import { ReservedMakeupTag } from "./reserved-makeup-tag";
+import { MakeupSwitchButton } from "./makeup-switch-button";
 
 // shareToken: 저장 시 발급되는 학부모 공개 링크(/r/[token]) 토큰. 세션 내 저장 후에만 존재.
 // classnoteStatus: ClassNote 발송 큐 상태(queued/processing/success/failed/too_old) — 발송 후에만.
@@ -150,6 +151,8 @@ export function ReportCard({
   onVideoSubmitLink,
   onVideoHomeworkDue,
   onRemoveMakeup,
+  onJoinMakeup,
+  onSplitMakeup,
   canRemoveMakeup,
   onPickMakeupClass,
   onSubjectDraft,
@@ -193,6 +196,9 @@ export function ReportCard({
   onVideoHomeworkDue?: (subjectName: string, mode: "week" | "next") => void;
   /** 보강 빼기(2026-08-18) — 출결·저장된 보강 보고서를 지운다. 없으면 배지가 표시로만 남는다. */
   onRemoveMakeup?: (subjectName: string) => void;
+  /** 보강 보고서 합치기 · 나누기(원장 2026-10-22 — 판정 makeup-switch.ts). 없으면 버튼이 없다. */
+  onJoinMakeup?: (subjectName: string) => void;
+  onSplitMakeup?: (subjectName: string) => void;
   /** 이 행을 뺄 수 있나 — 발송·처리 중이면 false(발송된 보강은 취소 불가, 원장 2026-08-18). */
   canRemoveMakeup?: (subjectName: string) => boolean;
   /** 보강 반 고르기(원장 2026-09-30) — 없으면 반 표시만. */
@@ -389,6 +395,11 @@ export function ReportCard({
                   {t("os.card.makeup")}
                 </span>
               ) : null}
+              {/* 합치기(원장 2026-10-22) — 오늘 같은 과목 정규 줄이 있는 '(보강)' 줄만. 같은 반이 아니면 누를 때 이유를 알린다. */}
+              {onJoinMakeup && subject.makeup && !subject.classId &&
+              student.subjects.some((x) => !x.makeup && !!x.classId && (x.subjectKey ?? "") === (subject.subjectKey ?? "")) ? (
+                <MakeupSwitchButton kind="join" onClick={() => onJoinMakeup(subject.name)} />
+              ) : null}
               {/* 로스터 신호(G2·G3) — 표뷰와 동일 판정(roster-signals.ts). 카드는 학생 단위라 진도 배지는
                   수학 과목 보유 시(진도 파이프라인=math 전용). 카피 "미확인"(단정 금지). */}
               {unreadBadge ? (
@@ -574,6 +585,10 @@ export function ReportCard({
                 {makeupBadgeLabel({ makeup: true, hasClass: true }, lang)}
                 <EyIcon name="close" size={10} />
               </button>
+            ) : null}
+            {/* 나누기(원장 2026-10-22) — '정규+보강' 줄이 잠기지 않았을 때만(예약 합침 줄도 — 예약 방식을 함께 바꾼다). */}
+            {onSplitMakeup && subject.makeup && subject.classId && !locked ? (
+              <MakeupSwitchButton kind="split" size="md" onClick={() => onSplitMakeup(subjectName)} />
             ) : null}
             <VideoHomeworkToggle
               size="pill"
