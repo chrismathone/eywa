@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildEnrollmentFollowupEvents,
+  enrollmentFollowupBody,
+  enrollmentFollowupTitle,
   absenceDigestBody,
   absenceTier,
   buildAbsenceEvents,
@@ -393,5 +396,25 @@ describe("buildProgressAnomalyEvents / 학생별 진도 이상 알림 (G2)", () 
   });
   it("링크 = 학생 상세 진도 탭(이상 감지가 실제로 보이는 화면)", () => {
     expect(progressAnomalyLink("s1")).toBe("/students/s1?tab=progress");
+  });
+});
+
+describe("신규 콜&상담 후속 조치 알림(원장 2026-10-22)", () => {
+  const row = (followUpDate: string) => ({ consultationId: "c1", prospectName: "김가나", followUpDate, consultantId: "u1", content: null });
+  it("하루 전 · 당일 · 지나면(주 단위 재촉) — 그 뒤 날짜는 아직", () => {
+    const today = "2026-10-22";
+    const events = buildEnrollmentFollowupEvents([row("2026-10-23"), row("2026-10-22"), row("2026-10-20"), row("2026-10-24")], today, "2026-10-19");
+    expect(events.map((e) => [e.stage, e.bucket])).toEqual([
+      ["soon", "2026-10-23:soon"],
+      ["due", "2026-10-22:due"],
+      ["overdue", "2026-10-20:overdue:2026-10-19"],
+    ]);
+  });
+  it("본문은 날짜를 'M월 D일'로 · 메모는 앞 40자", () => {
+    const [soon] = buildEnrollmentFollowupEvents([{ ...row("2026-10-23"), content: "가".repeat(45) }], "2026-10-22", "2026-10-19");
+    expect(enrollmentFollowupTitle("soon")).toBe("내일 콜&상담 후속 조치");
+    expect(enrollmentFollowupBody(soon!)).toBe(`김가나 다음 상담이 내일(10월 23일)입니다 · 메모: ${"가".repeat(40)}…`);
+    const [late] = buildEnrollmentFollowupEvents([row("2026-10-01")], "2026-10-22", "2026-10-19");
+    expect(enrollmentFollowupBody(late!)).toContain("지났습니다");
   });
 });

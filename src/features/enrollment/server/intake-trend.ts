@@ -2,13 +2,11 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { kstDateOf, monthRange } from "@/lib/date-kst";
-import { sliceGroupsOf } from "@/features/dashboard/layout/slices";
-import { programSubjectsOf, subjectGroupOf } from "@/features/students/enrollment/program";
-import { subjectLabelRecord } from "@/features/owner/subjects";
 import type { SubjectSetting } from "@/features/owner/settings-types";
 import type { StatsPeriod } from "@/features/stats/period";
 import { kstDayBounds } from "../kst-bounds";
 import { bucketIntake, type IntakeTrend } from "../intake-trend";
+import { intakeGroupsOf } from "../intake-groups";
 
 /**
  * 신규 문의 추이 조회 — 기간 안 콜&상담의 **상담일·과목 두 칸만** 받는다(B2: 전건 페이징 `fetchAllPaged` · 1,000행 절단 없음).
@@ -30,11 +28,7 @@ export async function loadIntakeTrend(period: StatsPeriod, subjects: readonly Su
       .order("id")
       .range(a, b),
   );
-  const programSubjects = programSubjectsOf(subjectLabelRecord([...subjects]));
-  const groupsOf = sliceGroupsOf(
-    subjects.map((s) => ({ key: s.key, label: s.label })),
-    (key) => subjectGroupOf(key, programSubjects),
-  );
+  const groupsOf = intakeGroupsOf(subjects);
   return bucketIntake(
     rows.flatMap((r) => {
       const date = kstDateOf(r.consulted_at);

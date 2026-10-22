@@ -6,6 +6,7 @@ import { ConsultDistPanel } from "./consult-dist-panel";
 import { GRADE_UNKNOWN } from "@/features/enrollment/consultation-dist";
 import type { SchoolStatsPrefs } from "@/features/enrollment/school-view-prefs";
 import { CompactStatsList } from "./compact-stats-list";
+import { ManagementSheetCard } from "./management-sheet-card";
 
 const won = (n: number) => `${Math.round(n).toLocaleString("ko-KR")}원`;
 
@@ -118,6 +119,9 @@ export function StatsView({
         ))}
       </div>
       </div>
+
+      {/* 관리현황 — 시트처럼 달마다 한 줄(원장 2026-10-22 *"시트처럼 한눈에 · 상담대비 완료율 · 과목별"*). 헤드라인과 같은 기간·같은 축. */}
+      <ManagementSheetCard sheet={dist.sheet} groups={dist.sheetGroups} periodText={periodText} />
 
       <div className="grid items-stretch gap-4 lg:grid-cols-2 xl:grid-cols-3">
       <Card

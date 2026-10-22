@@ -4,6 +4,10 @@
 
 `0392a_lesson_report_send_events.sql`은 발송 이력 표 `lesson_report_send_events`(추가만 · 정책 0개 = 서버 전용 · 앱 역할 권한 0 · service_role 읽기만)와 `lesson_reports` 트리거 셋(발송 상태·발송 시각이 바뀔 때와 대기 중 재요청 · 처음부터 발송 상태로 들어온 줄 · 발송 흔적이 있는 보고서 삭제)을 `create or replace trigger`로 단다(읽기를 막지 않는 잠금 · lock_timeout 5초). 이력 줄의 수정·삭제는 행 보호 트리거가 거절한다(지점째 지울 때의 외래키 연쇄만 통과). 기록이 실패해도 발송 상태 저장은 막지 않는다(사본 없이 한 줄 → 그것도 안 되면 DB 경고). 앱과 무관 — 앱은 이 표를 읽지도 쓰지도 않는다. 다시 돌려도 같다. 적용 뒤 `scripts/_oneoff/lesson-report-send-events-backfill-dry-run.sql`(읽기 전용) → `0392b_lesson_report_send_events_backfill.sql`(보고서 행에 남은 발송 · 2026-09-10부터의 발송 요청 감사로그 · 지움 기록만 남은 옛 발송, 멱등 — 빠진 기록을 메우려고 다시 돌려도 된다). 되돌리기 = `scripts/_oneoff/revert-0392a-lesson-report-send-events.sql`(기록만 멈춘다 · 표는 남긴다). 시험 = `supabase/tests/lesson_report_send_events.sql`.
 
+## 2026-10-22 콜&상담 후속 조치 할 일 (✅ 운영 적용 2026-10-22 · CLI)
+
+`20261022190000_enrollment_followup_tasks.sql`은 할 일 종류 `enrollment_followup`을 더한다 — 신규 콜&상담에서 '다음 상담'으로 잡은 날이 되면 상담자(재직 중이 아니면 원장 전원)에게 열고, 등록·미등록으로 정하면 처리됨 · 날짜를 옮기거나 지우면 취소 · 상담 삭제는 취소. 열기·닫기 = `enrollment_consultations` 트리거(상태·후속 조치일·상담자) + 30분 맞춤 `staff_tasks_sync`에 한 종류(0380a 본문 + 이 종류). 도입일(2026-10-22) 이후 날짜만. 앱보다 먼저든 나중이든 된다(앱은 새 칸을 읽지 않는다 — 적용 전엔 알림만 가고 할 일 연결이 빈다). 적용 뒤 확인: `select public.staff_tasks_sync('<지점>', array['enrollment_followup'])`가 오류 없이 `{opened, closed}`를 돌려준다 · 트리거 존재.
+
 ## 2026-10-22 보강 예약 결석난 반 (✅ 운영 적용 2026-10-22 · CLI)
 
 `20261022170000_makeup_reservation_absence_class.sql`은 `makeup_reservations.absence_class_id`(→ classes, on delete cascade, 빈 값 허용)를 더한다 — 예약이 기록할 반을 고르면 `class_id` = 기록할 반, 이 칸 = 결석난 반(다를 때만). 빈 값 = 같은 반이라 기존 10행·지금 앱은 그대로다(**앱보다 먼저** — 예약 단건·이행 조회는 칸이 없어도 칸 없이 다시 읽는다 · 시간표 마스터 보호 연결 SQL은 이 칸을 읽는다). 적용 뒤 확인: 칸·외래키 존재 · 기존 행 값 없음.

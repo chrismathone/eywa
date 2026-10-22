@@ -47,6 +47,10 @@ import {
   buildUnsentReportEvents,
   followupBody,
   weekKey,
+  buildEnrollmentFollowupEvents,
+  enrollmentFollowupBody,
+  enrollmentFollowupTitle,
+  type EnrollmentFollowupEvent,
   gradeDropDigestBody,
   groupEventsByTeacher,
   outstandingDigestBody,
@@ -68,10 +72,12 @@ import {
 } from "../events-core";
 import { classnoteSendOn } from "@/features/owner/classnote-gate";
 import { taskIdsFor } from "@/features/staff-tasks/server/link";
+import { FOLLOW_UP_ALERT_START, FOLLOW_UP_OPEN_OUTCOMES } from "@/features/enrollment/follow-up";
 
 type EventType =
   | "absence_alert"
   | "followup_due"
+  | "enrollment_followup"
   | "grade_drop"
   | "outstanding_alert"
   | "unsent_report"
@@ -325,6 +331,68 @@ async function detectFollowup(admin: SupabaseClient, tenantId: string): Promise<
         title: event.stage === "due" ? "오늘 마감 상담 후속조치" : "기한 지난 상담 후속조치",
         body: followupBody(event),
         link: "/consultations",
+        actorId: null,
+        taskId: taskIds.get(`${event.subjectKey}|${event.followUpDate}`) ?? null,
+      });
+    }
+  }
+  await notifyUsers(items);
+  return fresh.length;
+}
+
+/**
+ * 신규 콜&상담 후속 조치 감지(원장 2026-10-22 *"후속조치일 다와가면 알람 기능"*) → 상담자(재직 중이 아니면 원장 전원) 개별 알림.
+ * 하루 전 · 당일 · 지나면(주 1회). 아직 정하지 않은 상담(상담 전·상담 완료)만 · 도입일 이후 날짜만(follow-up.ts — DB 할 일과 같은 목록).
+ * 당일·지남 알림은 할 일(20261022190000 `enrollment_followup`)을 가리킨다 — 하루 전엔 아직 할 일이 없다. 콜드스타트면 시드만.
+ */
+async function detectEnrollmentFollowup(admin: SupabaseClient, tenantId: string): Promise<number> {
+  const today = kstToday();
+  const tomorrow = new Date(Date.parse(`${today}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+  const rows = await fetchAllPaged<{ id: string; prospect_name: string | null; follow_up_date: string; consultant_id: string | null; follow_up_content: string | null }>(
+    (from, to) =>
+      admin
+        .from("enrollment_consultations")
+        .select("id, prospect_name, follow_up_date, consultant_id, follow_up_content")
+        .eq("tenant_id", tenantId)
+        .in("outcome", [...FOLLOW_UP_OPEN_OUTCOMES])
+        .not("follow_up_date", "is", null)
+        .gte("follow_up_date", FOLLOW_UP_ALERT_START)
+        .lte("follow_up_date", tomorrow)
+        .order("id")
+        .range(from, to),
+  );
+  const candidates = buildEnrollmentFollowupEvents(
+    rows.map((row) => ({
+      consultationId: row.id,
+      prospectName: row.prospect_name?.trim() || "(이름 없음)",
+      followUpDate: row.follow_up_date.slice(0, 10),
+      consultantId: row.consultant_id,
+      content: row.follow_up_content,
+    })),
+    today,
+    weekKey(today),
+  );
+  const cold = await isColdStart(admin, tenantId, "enrollment_followup");
+  const fresh = (await recordNew(admin, tenantId, "enrollment_followup", candidates, cold)) as EnrollmentFollowupEvent[];
+  if (cold || fresh.length === 0) return 0;
+
+  const [masters, activeConsultants, taskIds] = await Promise.all([
+    activeMasterIds(admin, tenantId),
+    activeUserIds(admin, tenantId, fresh.map((event) => event.consultantId).filter((id): id is string => Boolean(id))),
+    taskIdsFor(admin, tenantId, "enrollment_followup", fresh.map((event) => event.subjectKey)),
+  ]);
+  const items: NotifyInput[] = [];
+  for (const event of fresh) {
+    const recipients =
+      event.consultantId && activeConsultants.has(event.consultantId) ? [event.consultantId] : masters;
+    for (const recipientId of recipients) {
+      items.push({
+        tenantId,
+        recipientId,
+        type: "enrollment_followup",
+        title: enrollmentFollowupTitle(event.stage),
+        body: enrollmentFollowupBody(event),
+        link: `/enrollment/${event.subjectKey}`,
         actorId: null,
         taskId: taskIds.get(`${event.subjectKey}|${event.followUpDate}`) ?? null,
       });
@@ -832,6 +900,7 @@ export async function detectAndNotifyEvents(
 ): Promise<{
   absence: number;
   followup: number;
+  enrollmentFollowup: number;
   gradeDrop: number;
   outstanding: number;
   unsentReport: number;
@@ -841,6 +910,7 @@ export async function detectAndNotifyEvents(
   const admin = createAdminClient();
   let absence = 0;
   let followup = 0;
+  let enrollmentFollowup = 0;
   let gradeDrop = 0;
   let outstanding = 0;
   let unsentReport = 0;
@@ -855,6 +925,11 @@ export async function detectAndNotifyEvents(
     followup = await detectFollowup(admin, tenantId);
   } catch (e) {
     reportError(e, { scope: "events.followup", tenantId });
+  }
+  try {
+    enrollmentFollowup = await detectEnrollmentFollowup(admin, tenantId);
+  } catch (e) {
+    reportError(e, { scope: "events.enrollmentFollowup", tenantId });
   }
   try {
     gradeDrop = await detectGradeDrop(admin, tenantId);
@@ -881,5 +956,5 @@ export async function detectAndNotifyEvents(
   } catch (e) {
     reportError(e, { scope: "events.sendDeadline", tenantId });
   }
-  return { absence, followup, gradeDrop, outstanding, unsentReport, progressAnomaly, sendDeadline };
+  return { absence, followup, enrollmentFollowup, gradeDrop, outstanding, unsentReport, progressAnomaly, sendDeadline };
 }
