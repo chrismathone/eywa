@@ -53,6 +53,11 @@ export type VideoHomeworkLedgerRow = VideoHomeworkRosterRow & {
   kept?: readonly string[];
   /** 숙제일 → 보고서에 고른 마감('다음 수업', due.ts). 없는 날은 숙제일 + 7일이다. */
   dues?: Readonly<Record<string, string>>;
+  /**
+   * **숙제 0건 반의 줄**(원장 2026-10-22 ① — 붙지 않은 영상 때문에 선 줄)만 — 그 학생의 숙제없음 수업일(조회 기간 안 · issue-window
+   * `blankLessonDates`). 이 줄은 회차가 없고, 그 반엔 숙제가 나간 날이 없으니 이 날짜들이 '숙제없음' 칸으로 선다(idle-rows.ts).
+   */
+  lessonDates?: readonly string[];
 };
 
 /** 숙제 영상 한 건 — 반·시각·id와 재생 가능한 경우의 미리보기만 내려온다. 원본 다운로드 주소는 내리지 않는다. */

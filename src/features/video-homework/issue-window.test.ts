@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classMeetsOn, extraIssueLessonError, extraIssueWindow, nextLessonDate } from "./issue-window";
+import { blankLessonDates, blankLessonDayError, classMeetsOn, extraIssueLessonError, extraIssueWindow, nextLessonDate } from "./issue-window";
 
 // 2026-10-06 = 화요일 · 10-09 = 금요일 · 10-13 = 화요일. 반은 화·금 수업.
 const schedules = [{ day_of_week: "tue", valid_from: "2026-03-01", valid_to: null }, { day_of_week: "fri", valid_from: "2026-03-01", valid_to: null }];
@@ -70,5 +70,44 @@ describe("영상 숙제 마감 — 다음 수업일", () => {
     expect(nextLessonDate({ ...base, homeworkDate: "2026-10-06", isHoliday: (d) => d <= "2026-10-20" })).toBeNull();
     // 14일째(10/20 화)는 들어간다
     expect(nextLessonDate({ ...base, homeworkDate: "2026-10-06", isHoliday: (d) => d < "2026-10-20" })).toBe("2026-10-20");
+  });
+});
+
+// 원장 2026-10-22 '숙제없음 칸에 바로 배정' — 이미 올라온 영상을 그 학생이 실제로 들은 수업에 붙인다. 출제 기한(다음 수업 전)은 보지 않는다.
+describe("숙제없음 수업일 — 영상을 붙일 수 있는 날", () => {
+  const row = (session_date: string, status: string, recorded_at = `${session_date}T10:00:00Z`) =>
+    ({ id: `${session_date}:${status}:${recorded_at}`, student_id: "s", class_id: "c", session_date, slot_start: "16:00", status, recorded_at });
+  const base = { schedules, enrollments: [enrollment], isHoliday: none };
+  it("들은 수업일만 날짜순으로 — 결석 · 수업 없는 요일 · 수강 전은 빠진다", () => {
+    expect(blankLessonDates({ ...base, fromDate: "2026-10-05", toDate: "2026-10-13", records: [row("2026-10-09", "absent")] }))
+      .toEqual(["2026-10-06", "2026-10-13"]);
+    expect(blankLessonDates({ ...base, enrollments: [{ ...enrollment, start_date: "2026-10-10" }], fromDate: "2026-10-05", toDate: "2026-10-13", records: [] }))
+      .toEqual(["2026-10-13"]);
+  });
+  it("🔑 다음 수업이 지났어도 붙일 수 있다(따로 내는 숙제의 기한과 다르다) · 이미 숙제가 있는 날은 숙제 칸으로 고르므로 뺀다", () => {
+    const records = [row("2026-10-06", "present"), row("2026-10-09", "present"), row("2026-10-13", "present")];
+    expect(blankLessonDates({ ...base, fromDate: "2026-10-06", toDate: "2026-10-13", records, exclude: new Set(["2026-10-09"]) }))
+      .toEqual(["2026-10-06", "2026-10-13"]);
+  });
+  it("출결 없는 학원 휴원일은 빠지고, 그날 출석이 찍혔으면(보충 수업) 붙일 수 있다", () => {
+    const isHoliday = (d: string) => d === "2026-10-09";
+    expect(blankLessonDates({ ...base, isHoliday, fromDate: "2026-10-09", toDate: "2026-10-09", records: [] })).toEqual([]);
+    expect(blankLessonDates({ ...base, isHoliday, fromDate: "2026-10-09", toDate: "2026-10-09", records: [row("2026-10-09", "present")] })).toEqual(["2026-10-09"]);
+  });
+  it("결석을 출석으로 정정했으면 최신본을 따른다 · 결석 교시에 보강 기록이 함께 있어도 결석이다(숙제없음 칸과 같은 판정)", () => {
+    expect(blankLessonDates({ ...base, fromDate: "2026-10-06", toDate: "2026-10-06",
+      records: [row("2026-10-06", "absent", "2026-10-06T10:00:00Z"), row("2026-10-06", "present", "2026-10-06T11:00:00Z")] })).toEqual(["2026-10-06"]);
+    expect(blankLessonDates({ ...base, fromDate: "2026-10-06", toDate: "2026-10-06",
+      records: [row("2026-10-06", "absent"), { ...row("2026-10-06", "makeup"), slot_start: "18:00" }] })).toEqual([]);
+  });
+  it("종강 뒤 날은 출결이 없으면 수업일이 아니다", () => {
+    expect(blankLessonDates({ ...base, closedOn: "2026-10-09", fromDate: "2026-10-06", toDate: "2026-10-13", records: [] })).toEqual(["2026-10-06", "2026-10-09"]);
+    expect(blankLessonDayError({ ...base, closedOn: "2026-10-09", date: "2026-10-13", records: [] })).toMatch("수업이 없었습니다");
+  });
+  it("하루 판정은 까닭을 말한다 — 저장 검증이 쓴다", () => {
+    expect(blankLessonDayError({ ...base, date: "2026-10-06", records: [row("2026-10-06", "absent")] })).toMatch("결석");
+    expect(blankLessonDayError({ ...base, date: "2026-10-07", records: [] })).toMatch("수업이 없었습니다");
+    expect(blankLessonDayError({ ...base, date: "2026-10-06", records: [], isHoliday: (d) => d === "2026-10-06" })).toMatch("휴원일");
+    expect(blankLessonDayError({ ...base, date: "2026-10-06", records: [] })).toBeNull();
   });
 });

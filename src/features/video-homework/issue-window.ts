@@ -12,9 +12,10 @@
  * 🔴 화면은 이 판정을 미리 하지 않는다(재료가 서버에만 있다) — 메뉴는 늘 뜨고, 서버가 거절하면 까닭을 말한다.
  */
 import { addDays } from "@/lib/date-kst";
+import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
 import { rosterIncludesEnrollment } from "@/features/onescreen/roster-filter";
 import type { LedgerEnrollment, LedgerSchedule } from "./ledger-roster";
-import { blankReasonOn, type DaySlot } from "./no-homework";
+import { blankReasonOn, type BlankAttendanceRow, type DaySlot } from "./no-homework";
 import { VIDEO_HOMEWORK_MAX_DUE_DAYS } from "./due";
 
 /** 이보다 오래된 수업에는 따로 숙제를 내지 않는다(자동 판정이 보는 기간과 같다). */
@@ -31,15 +32,80 @@ export function classMeetsOn(schedules: readonly Schedule[], date: string): bool
   return schedules.some((row) => row.day_of_week === day && (!row.valid_from || date >= row.valid_from) && (!row.valid_to || date <= row.valid_to));
 }
 
-/** 그날이 이 학생이 이 반에서 **수업을 들은 날**인가 — 결석·수강 밖이면 까닭을 돌려준다. */
-export function extraIssueLessonError(input: {
-  date: string; schedules: readonly Schedule[]; enrollments: readonly Enrollment[]; slots: readonly DaySlot[];
-}): string | null {
+type LessonDay = { date: string; schedules: readonly Schedule[]; enrollments: readonly Enrollment[]; slots: readonly DaySlot[] };
+type LessonProblem = "absent" | "outside" | "no_lesson" | "holiday";
+
+/** 그날 이 학생이 이 반 수업을 들었나 — 못 들었으면 까닭(따로 내는 숙제 · 숙제없음 수업일 배정이 함께 쓴다). */
+function lessonProblem(input: LessonDay): LessonProblem | null {
   const reason = blankReasonOn(input.date, input.enrollments, input.slots);
-  if (reason === "absent") return "결석한 날에는 영상 숙제를 낼 수 없습니다.";
-  if (reason !== "none") return "그날 이 반의 수강생이 아니어서 영상 숙제를 낼 수 없습니다.";
+  if (reason === "absent") return "absent";
+  if (reason !== "none") return "outside";
   // 출결 기록이 없으면 시간표로 본다 — 수업이 없는 요일에 숙제를 세우지 않는다.
-  return input.slots.length || classMeetsOn(input.schedules, input.date) ? null : "그날은 이 반 수업이 없었습니다.";
+  return input.slots.length || classMeetsOn(input.schedules, input.date) ? null : "no_lesson";
+}
+
+const ISSUE_MESSAGE: Record<Exclude<LessonProblem, "holiday">, string> = {
+  absent: "결석한 날에는 영상 숙제를 낼 수 없습니다.",
+  outside: "그날 이 반의 수강생이 아니어서 영상 숙제를 낼 수 없습니다.",
+  no_lesson: "그날은 이 반 수업이 없었습니다.",
+};
+
+/** 그날이 이 학생이 이 반에서 **수업을 들은 날**인가 — 결석·수강 밖이면 까닭을 돌려준다. */
+export function extraIssueLessonError(input: LessonDay): string | null {
+  const problem = lessonProblem(input);
+  return problem && problem !== "holiday" ? ISSUE_MESSAGE[problem] : null;
+}
+
+const BLANK_MESSAGE: Record<LessonProblem, string> = {
+  absent: "결석한 날에는 영상을 붙일 수 없습니다.",
+  outside: "그날 이 반의 수강생이 아니어서 영상을 붙일 수 없습니다.",
+  no_lesson: "그날은 이 반 수업이 없었습니다.",
+  holiday: "그날은 학원 휴원일이었습니다.",
+};
+
+/**
+ * 이미 올라온 영상을 붙일 수 있는 **숙제없음 수업일**인가(원장 2026-10-22 '숙제없음 칸에 바로 배정') — 그 학생이 그 반 수업을 실제로 들은 날.
+ * 판정은 따로 내는 숙제와 같다(`lessonProblem` — 결석 · 수강 밖 · 수업 없는 요일은 안 된다) + 출결 기록이 없는 학원 휴원일 · 종강 뒤 날은 뺀다
+ * (숙제 0건 반의 줄은 시간표로 수업일을 깔아서, 빼지 않으면 쉬는 날 · 종강 뒤에 '숙제없음' 칸이 선다 — 명단의 종강 판정과 같게).
+ * 🔑 출제 기한(`extraIssueWindow` — 다음 수업 전까지)은 보지 않는다 — 새 숙제를 내는 것이 아니라 이미 올라온 영상을 그 수업의 숙제로 기록하는 일이다.
+ */
+export function blankLessonError(input: LessonDay & { isHoliday: (date: string) => boolean; closedOn?: string | null }): string | null {
+  const unrecorded = !input.slots.length;
+  const problem = lessonProblem(input)
+    ?? (unrecorded && input.closedOn && input.date > input.closedOn.slice(0, 10) ? "no_lesson" : null)
+    ?? (unrecorded && input.isHoliday(input.date) ? "holiday" : null);
+  return problem ? BLANK_MESSAGE[problem] : null;
+}
+
+type BlankLessonInput = { schedules: readonly Schedule[]; enrollments: readonly Enrollment[]; records: readonly BlankAttendanceRow[]; isHoliday: (date: string) => boolean;
+  /** 반의 종강일(`classes.closed_at`) — 그 뒤 날은 출결이 없으면 수업일이 아니다. */
+  closedOn?: string | null };
+/** 출결 줄 → 날짜별 수업 상태(교시마다 최신 정정본 — 숙제없음 칸과 같다). */
+function slotsByDate(records: readonly BlankAttendanceRow[]): Map<string, DaySlot[]> {
+  const slots = new Map<string, DaySlot[]>();
+  for (const row of effectiveAttendanceRecords(records)) slots.set(row.session_date, [...(slots.get(row.session_date) ?? []), { status: row.status }]);
+  return slots;
+}
+
+/**
+ * 기간 안의 숙제없음 수업일 전부(날짜순) — 장부의 숙제 0건 반 줄(칸) · 배정 창의 날짜 목록이 쓰고, 배정 저장은 같은 판정(`blankLessonDayError`)으로 다시 본다.
+ * `records` = 그 반 × 학생의 출결(정정 전 줄 포함 — 여기서 최신본만 본다) · `exclude` = 이미 숙제가 있는 날(숙제 칸으로 고른다).
+ */
+export function blankLessonDates(input: BlankLessonInput & { fromDate: string; toDate: string; exclude?: ReadonlySet<string> }): string[] {
+  const slots = slotsByDate(input.records);
+  const dates: string[] = [];
+  for (let date = input.fromDate; date <= input.toDate; date = addDays(date, 1)) {
+    if (input.exclude?.has(date)) continue;
+    if (!blankLessonError({ date, schedules: input.schedules, enrollments: input.enrollments, slots: slots.get(date) ?? [],
+      isHoliday: input.isHoliday, closedOn: input.closedOn })) dates.push(date);
+  }
+  return dates;
+}
+
+/** 하루만 — 배정 저장의 검증(화면이 보낸 날짜를 믿지 않는다). 붙일 수 없으면 까닭. */
+export function blankLessonDayError(input: BlankLessonInput & { date: string }): string | null {
+  return blankLessonError({ date: input.date, schedules: input.schedules, enrollments: input.enrollments,
+    slots: slotsByDate(input.records).get(input.date) ?? [], isHoliday: input.isHoliday, closedOn: input.closedOn });
 }
 
 /**

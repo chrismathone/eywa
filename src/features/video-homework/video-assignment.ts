@@ -27,7 +27,12 @@ export type AssignableVideo = {
   postId: number | null; revision: number; excluded: boolean;
   playback: { preview: string; thumbnail: string; uploadedAt: string | null } | null;
 };
-export type VideoAssignmentOptions = { ok: true; videos: AssignableVideo[]; dates: string[] } | { ok: false; error: string };
+export type VideoAssignmentOptions = { ok: true; videos: AssignableVideo[]; dates: string[];
+  /**
+   * 숙제없음 수업일(원장 2026-10-22 '숙제없음 칸에 바로 배정') — 그 학생이 그 반 수업을 실제로 들었는데 영상 숙제가 없던 날(조회 기간 안 · issue-window
+   * `blankLessonDates`). 고르면 그날을 옮겨 남긴 숙제로 세우고 영상을 붙인다(출제 기한과 상관없다). 옛 응답엔 없다.
+   */
+  blankDates?: string[] } | { ok: false; error: string };
 
 /**
  * 확실히 **다른 과목** 영상인가(원장 2026-10-13 *"확실한 타과목 영상은 리스트에 팝업되지 않게"*) — 영상의 반이 정해져 있으면 그 반의 과목,

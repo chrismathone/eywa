@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_LEDGER_FILTERS, filterLedgerRows, groupLedgerRows, ledgerCounts, ledgerCsv, ledgerSummary, teacherLedgerKeep, splitTeacherQuery } from "./ledger";
+import { DEFAULT_LEDGER_FILTERS, filterLedgerRows, groupLedgerRows, ledgerCounts, ledgerCsv, ledgerSummary, matchIdleRoster, teacherLedgerKeep, splitTeacherQuery } from "./ledger";
 import { ledgerInitialFilters } from "./ledger-period";
 import { keepLedgerRounds, ownRoundKey } from "./ledger";
 import { buildLedgerRounds } from "./rounds";
@@ -103,5 +103,42 @@ describe("검색창의 강사 이름(원장 2026-10-19)", () => {
     expect(splitTeacherQuery("이성", teachers)).toEqual({ teacher: "all", text: "이성" });
     expect(splitTeacherQuery("김선생", teachers)).toEqual({ teacher: "all", text: "김선생" }); // 동명이인은 강사로 보지 않는다
     expect(splitTeacherQuery("", [])).toEqual({ teacher: "all", text: "" });
+  });
+});
+
+// 원장 2026-10-22 *"그래도 검색은 되어야하는거 아냐? 한건도 없으면 검색조차 되지 않는건가"* → *"그래야 배정할 수 있으니까"*.
+describe("숙제 0건 반 — 줄(①)은 회차 없이 · 검색 명단(②)은 줄이 아니다", () => {
+  const free: VideoHomeworkLedgerRow = { classId: "z", className: "중등M 개별 BS3G", subject: "수학", studentId: "lee", studentName: "이희재",
+    school: "성광중", grade: "중2", assignedDates: [], tracked: true, editable: true, hasAssignableVideos: true, lessonDates: ["2026-09-15", "2026-09-19", "2026-09-22"] };
+  const all = [...rows, free];
+  const freeRounds = buildLedgerRounds({ rows: all, marks: records, videos, fromDate: "2026-09-01", toDate: "2026-09-30" });
+  it("그 반의 열은 그 학생의 숙제없음 수업일 수 — 회차 수 · 완료 n/m · 요약은 0으로 섞이지 않는다", () => {
+    const group = groupLedgerRows(all, freeRounds).find((g) => g.classId === "z")!;
+    expect([group.roundCount, group.blankColumns, group.idle, group.homeworkDates]).toEqual([0, 3, true, ["2026-09-15", "2026-09-19", "2026-09-22"]]);
+    expect(ledgerCounts(free, freeRounds)).toEqual({ submitted: 0, missing: 0, unchecked: 0, total: 0 });
+    expect(ledgerSummary(all, freeRounds)).toEqual(ledgerSummary(rows, rounds));
+    // 다른 반은 그대로
+    expect(groupLedgerRows(all, freeRounds).find((g) => g.classId === "a")).toMatchObject({ roundCount: 3, blankColumns: 0, idle: false });
+  });
+  it("'영상 배정 필요함' 필터에 걸린다 · CSV에는 회차 칸 없이 0회로", () => {
+    expect(filterLedgerRows(all, freeRounds, { ...DEFAULT_LEDGER_FILTERS, status: "assign" })).toEqual([free]);
+    const group = groupLedgerRows([free], freeRounds)[0]!;
+    expect(ledgerCsv([group], freeRounds)).toContain('"중등M 개별 BS3G","수학","이희재","성광중","중2","0","0","0"');
+    expect(ledgerCsv([group], freeRounds)).not.toContain("1회");
+  });
+  it("검색 명단은 글자 검색이 있을 때만 · 줄로 선 학생은 빼고 · 과목·학년 필터를 따른다", () => {
+    const idle = [
+      { classId: "z", className: "중등M 개별 BS3G", subject: "수학", studentId: "friend", studentName: "박친구", school: "성광중", grade: "중2" },
+      { classId: "j", className: "중등M 개별 JJ3I", subject: "수학", studentId: "lee", studentName: "이희재", school: "성광중", grade: "중2" },
+      { classId: "z", className: "중등M 개별 BS3G", subject: "수학", studentId: "lee", studentName: "이희재", school: "성광중", grade: "중2" },
+    ];
+    const shown = new Set(all.map((row) => `${row.classId}:${row.studentId}`));
+    const filters = { subject: "all", grade: "all" };
+    expect(matchIdleRoster(idle, shown, filters, "")).toEqual([]);
+    expect(matchIdleRoster(idle, shown, filters, "  ")).toEqual([]);
+    expect(matchIdleRoster(idle, shown, filters, "이희재").map((e) => e.className)).toEqual(["중등M 개별 JJ3I"]);
+    expect(matchIdleRoster(idle, shown, filters, "bs3g").map((e) => e.studentName)).toEqual(["박친구"]);
+    expect(matchIdleRoster(idle, shown, { subject: "영어", grade: "all" }, "성광")).toEqual([]);
+    expect(matchIdleRoster(idle, shown, { subject: "all", grade: "중1" }, "성광")).toEqual([]);
   });
 });
