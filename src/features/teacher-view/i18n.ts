@@ -3152,6 +3152,11 @@ export const SHEET_DICT = {
   "os.gate.need.ment": { ko: "멘트", en: "Message" },
   "os.gate.need.autowrite": { ko: "자동작성", en: "Auto-write" },
   "os.gate.need.oneline": { ko: "강사 한줄 멘트", en: "Teacher's one-line note" },
+  "os.gate.need.testreason": { ko: "일일 테스트 사유", en: "Reason for no daily test" },
+  "os.gate.hint.testreason": {
+    ko: "일일 테스트를 '시험 없음'으로 두었습니다 — 안 친 사유를 골라 주세요('기타'는 사유를 적어야 합니다)",
+    en: "The daily test is set to 'No test' — pick the reason it was not taken ('Other' needs the reason written in)",
+  },
   "os.gate.needLabel": { ko: "{list} 입력 필요", en: "{list} still needed" },
   "os.gate.hint.attendance": {
     ko: "출결이 아직 체크되지 않았습니다 — 출결 알약에서 출석/지각 등을 먼저 기록하세요(미체크 행은 발송되지 않습니다)",
@@ -3162,8 +3167,8 @@ export const SHEET_DICT = {
     en: "You must enter today's progress before sending (it is the backbone of the report)",
   },
   "os.gate.hint.autowrite": {
-    ko: "이 학생의 수학 보고서는 '자동작성'으로 만든 글만 보낼 수 있습니다 — 자동작성을 눌러 주세요(진도·이해도를 바꿨다면 다시 누르세요)",
-    en: "This student's math report can only be sent as written by Auto-write — press Auto-write (press it again if you changed the progress or understanding)",
+    ko: "이 학생의 수학 보고서는 '자동작성'으로 만든 글만 보낼 수 있습니다 — 자동작성을 눌러 주세요(진도·테스트·태도·과제·이해도를 바꿨다면 다시 누르세요)",
+    en: "This student's math report can only be sent as written by Auto-write — press Auto-write (press it again if you changed the progress, test, attitude, homework or understanding)",
   },
   "os.gate.hint.oneline": {
     ko: "강사 한줄 멘트는 필수입니다 — 적으면 보고서 맨 아래에 바로 붙습니다",
@@ -3234,8 +3239,27 @@ export const SHEET_DICT = {
     en: "Teacher's one-line note (required) · e.g. Great job not giving up on the hard ones!",
   },
   "os.card.mentPhPilot": {
-    ko: "이 학생의 수학 보고서는 '자동작성'으로만 만듭니다(직접 고칠 수 없습니다). 진도 → 본문(소단원별 이해도를 강점·응원·격려의 말로) → 강사 한줄 멘트 순서로 채워집니다. 한줄 멘트는 적는 대로 맨 아래에 바로 반영됩니다.",
-    en: "This student's math report is written by Auto-write only (it cannot be edited by hand). It fills in as progress → body (understanding per lesson put into words of praise or encouragement) → the teacher's one-line note, which updates live as you type.",
+    ko: "이 학생의 수학 보고서는 '자동작성'으로만 만듭니다(직접 고칠 수 없습니다). 진도 · 일일 테스트 · 수업 태도 · 과제 수행률 · 이해도(강점·응원·격려의 말로) · 오늘 과제 · 선생님 한마디 항목으로 나뉘어 채워집니다. 한줄 멘트는 적는 대로 맨 아래에 바로 반영됩니다.",
+    en: "This student's math report is written by Auto-write only (it cannot be edited by hand). It is split into sections — progress, daily test, attitude, homework, understanding (in words of praise or encouragement), today's homework and the teacher's note, which updates live as you type.",
+  },
+  "os.card.testSkip.title": { ko: "일일 테스트", en: "Daily test taken?" },
+  "os.card.testSkip.yes": { ko: "시험 있음", en: "Test taken" },
+  "os.card.testSkip.no": { ko: "시험 없음", en: "No test" },
+  "os.card.testSkip.reasonLabel": { ko: "안 친 사유", en: "Why it was not taken" },
+  "os.card.testSkip.sick": { ko: "몸이 아픔", en: "Unwell" },
+  "os.card.testSkip.slow": { ko: "이해도가 느림", en: "Still learning the concept" },
+  "os.card.testSkip.parent": { ko: "어머님 요청", en: "Parent's request" },
+  "os.card.testSkip.teacher": { ko: "선생님 판단(시험 칠 상태 아님)", en: "Teacher's call (not ready for the test)" },
+  "os.card.testSkip.other": { ko: "기타", en: "Something else" },
+  "os.card.testSkip.detailPh": {
+    ko: "덧붙일 말(선택) · 보고서 사유 문장 뒤에 그대로 붙습니다",
+    en: "Anything to add (optional) · added as is after the reason in the report",
+  },
+  "os.card.testSkip.detailPhOther": { ko: "사유를 적어 주세요(필수)", en: "Write the reason (required)" },
+  "os.card.testSkip.detailAria": { ko: "일일 테스트를 안 친 사유 덧붙이기", en: "More about why the daily test was not taken" },
+  "os.card.testSkip.makeupHint": {
+    ko: "보고서에 '다음 시간에 보충해서 시험을 칠 수 있도록 하겠습니다'가 함께 들어갑니다",
+    en: "The report will also say the test will be made up next lesson",
   },
   "os.card.understanding": { ko: "소단원별 이해도 (10점 만점)", en: "Understanding per lesson (out of 10)" },
   "os.card.understandingEmpty": {

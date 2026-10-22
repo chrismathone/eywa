@@ -14,7 +14,7 @@ import {
   progressLead,
   readUnderstanding,
   topicName,
-  understandingSig,
+  pilotSection,
   PILOT_AI_DIRECTIVE,
   understandingRows,
 } from "./math-report-pilot";
@@ -112,8 +112,8 @@ describe("소단원별 이해도", () => {
 });
 
 describe("글 조립", () => {
-  it("진도 → 본문 → 특이사항(맨 아래) · 이해도 점수는 글에 숫자로 안 붙는다", () => {
-    expect(composePilotMent({ lead: "L", body: "B", note: " 격려 " })).toBe("L\n\nB\n\n격려");
+  it("진도 → 본문 → 선생님 한마디(맨 아래, 항목 제목과 함께)", () => {
+    expect(composePilotMent({ lead: "L", body: "B", note: " 격려 " })).toBe("L\n\nB\n\n■ 선생님 한마디\n격려");
     expect(composePilotMent({ lead: "L", body: "B", note: "" })).toBe("L\n\nB");
   });
   it("AI 지시가 점수를 말로 풀게 한다(강점·응원·격려, 숫자 금지)", () => {
@@ -154,18 +154,16 @@ describe("발송 게이트", () => {
 });
 
 describe("자동작성 뒤에 칸을 바꾸면 다시 눌러야 한다", () => {
-  const und = [{ title: "소인수분해", score: 7 }];
-  const now = { studentName: "이승엽", today: "소인수분해", note: "잘했어요", understanding: und, writtenSig: understandingSig(und) };
-  const draft = composePilotMent({ lead: progressLead("이승엽", ["소인수분해"]), body: "본문", note: "잘했어요" });
+  const now = { studentName: "이승엽", today: "소인수분해", note: "잘했어요", factsSig: "A", writtenSig: "A" };
+  const draft = composePilotMent({ lead: pilotSection("진도", progressLead("이승엽", ["소인수분해"])), body: "본문", note: "잘했어요" });
   it("그대로면 통과", () => expect(isPilotDraftCurrent(draft, now)).toBe(true));
-  it("진도·이해도·특이사항이 바뀌면 막는다", () => {
+  it("진도·사실 서명·한마디가 바뀌면 막는다", () => {
     expect(isPilotDraftCurrent(draft, { ...now, today: "최대공약수" })).toBe(false);
-    expect(isPilotDraftCurrent(draft, { ...now, understanding: [{ title: "소인수분해", score: 9 }] })).toBe(false);
-    expect(isPilotDraftCurrent(draft, { ...now, understanding: [] })).toBe(false);
+    expect(isPilotDraftCurrent(draft, { ...now, factsSig: "B" })).toBe(false);
     expect(isPilotDraftCurrent(draft, { ...now, note: "더 잘했어요!" })).toBe(false);
   });
-  it("서명이 없으면(새로고침 뒤) 이해도 대조는 건너뛴다", () => {
-    expect(isPilotDraftCurrent(draft, { ...now, writtenSig: undefined, understanding: [] })).toBe(true);
+  it("서명이 없으면(새로고침 뒤) 서명 대조는 건너뛴다", () => {
+    expect(isPilotDraftCurrent(draft, { ...now, writtenSig: undefined, factsSig: "B" })).toBe(true);
   });
 });
 
@@ -185,8 +183,13 @@ describe("배선", () => {
     const grid = read("./components/grid-row.tsx");
     expect(card).toMatch(/readOnly=\{pilot\}/);
     expect(grid).toMatch(/readOnly=\{rowLocked \|\| pilot\}/);
-    expect(card).toMatch(/writtenSig: rep\?\.pilotUnderstandingSig/);
-    expect(grid).toMatch(/writtenSig: rep\?\.pilotUnderstandingSig/);
+    // 사실 서명은 카드·표·자동작성이 같은 함수(pilotRowSig)로 만든다 — 갈리면 값이 그대로인데도 게이트가 안 풀린다.
+    for (const src of [card, grid]) {
+      expect(src).toMatch(/factsSig: pilotRowSig\(student, subject\.name\)/);
+      expect(src).toMatch(/writtenSig: rep\?\.pilotFactsSig/);
+      expect(src).toMatch(/needsTestReason: pilot && !testSkipComplete\(subject\.dailyTestSkip\)/);
+    }
+    expect(read("./components/onescreen-client.tsx")).toMatch(/pilotRowSig\(student, subjectName\)/);
   });
   it("한줄 멘트를 바꾸면 그 자리에서 글 끝을 바꾸고, 발송 경로가 한줄 멘트를 싣는다", () => {
     const client = read("./components/onescreen-client.tsx");
@@ -200,13 +203,13 @@ describe("배선", () => {
 describe("강사 한줄 멘트(필수, 실시간 반영)", () => {
   const auto = "우리 원이는 오늘 A 진도를 나갔습니다.\n\n본문입니다.";
   it("자동작성 뒤 처음 적으면 맨 끝에 붙는다", () => {
-    expect(pilotRecomposeNote(auto, auto, "", "멋졌어요")).toBe(auto + "\n\n멋졌어요");
+    expect(pilotRecomposeNote(auto, auto, "", "멋졌어요")).toBe(auto + "\n\n■ 선생님 한마디\n멋졌어요");
   });
   it("고치면 끝의 옛 멘트만 바뀌고, 지우면 떨어진다", () => {
-    const withA = auto + "\n\n멋졌어요";
-    expect(pilotRecomposeNote(withA, withA, "멋졌어요", "멋졌어요!")).toBe(auto + "\n\n멋졌어요!");
+    const withA = auto + "\n\n■ 선생님 한마디\n멋졌어요";
+    expect(pilotRecomposeNote(withA, withA, "멋졌어요", "멋졌어요!")).toBe(auto + "\n\n■ 선생님 한마디\n멋졌어요!");
     expect(pilotRecomposeNote(withA, withA, "멋졌어요", "")).toBe(auto);
-    expect(pilotRecomposeNote(withA, withA, " 멋졌어요 ", "좋아요 ")).toBe(auto + "\n\n좋아요");
+    expect(pilotRecomposeNote(withA, withA, " 멋졌어요 ", "좋아요 ")).toBe(auto + "\n\n■ 선생님 한마디\n좋아요");
   });
   it("자동작성 글이 아니거나 끝이 옛 멘트가 아니면 손대지 않는다", () => {
     expect(pilotRecomposeNote(auto, "", "", "x")).toBeNull();
