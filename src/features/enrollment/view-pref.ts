@@ -23,6 +23,21 @@ export function savedEnrollmentView(uiPrefs: Record<string, unknown>): Enrollmen
   return parseEnrollmentView(raw) ?? "kanban";
 }
 
+/**
+ * 통계 보기 머리글 '연도'의 **여러 해 묶음**(2·3개년) — 계정에 남긴다(검수 2026-10-22: 아래 두 추이 카드는 방식을 기억하는데 연도만
+ * 매번 올해로 돌아갔다). 한 해(2026 · 2025 …)를 고르면 저장하지 않는다 — 다음에 열면 올해다(추이 카드가 고른 달은 남기지 않고
+ * 방식만 남기는 것과 같은 결 · 지난 한 해에 갇히지 않게).
+ */
+export type StatsSpanValue = "2y" | "3y";
+export function parseStatsSpan(v: unknown): StatsSpanValue | null {
+  return v === "2y" || v === "3y" ? v : null;
+}
+/** 저장된 연도 묶음 — 없거나 모르는 값이면 null(올해). */
+export function savedStatsSpan(uiPrefs: Record<string, unknown>): StatsSpanValue | null {
+  const ns = uiPrefs[ENROLLMENT_VIEW_PREFS_NS];
+  return parseStatsSpan(ns && typeof ns === "object" && !Array.isArray(ns) ? (ns as Record<string, unknown>).statsSpan : undefined);
+}
+
 /** 저장된 '상담 진행 기록' 보기 방식(`saveProgressTrendMode`) — 없으면 null(화면이 최근 구간으로 연다 — 매일 기록이 막 쌓이기 시작한 카드라 월별은 점 하나다). */
 export function savedProgressTrendMode(uiPrefs: Record<string, unknown>): PeriodMode | null {
   const ns = uiPrefs[ENROLLMENT_VIEW_PREFS_NS];
