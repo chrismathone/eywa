@@ -8,5 +8,5 @@ export default async function ArchivePage({ params }: { params: Promise<{ id: st
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const [archive, students] = await Promise.all([getArchive(id), archiveStudents()]);
   if (!archive) notFound();
-  return <div className="space-y-5 p-4 md:p-6"><ArchiveDetailView key={`${archive.id}:${archive.revision}`} archive={archive} students={students} /></div>;
+  return <div className="min-w-0 space-y-5 p-4 md:p-6"><ArchiveDetailView key={`${archive.id}:${archive.revision}`} archive={archive} students={students} /></div>;
 }
