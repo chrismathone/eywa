@@ -1190,8 +1190,11 @@ export function auditDetail(
         detailText(m.detail),
       );
     }
-    case "withdrawal_report_update":
-      return join(str(m.operation), str(m.date) ? `처리일 ${str(m.date)}` : null);
+    // 처리 결과(2026-10-23) = 이 동작으로 학생 퇴원·수강 종료가 끝났는지 · 처리 예약인지 + 끝난 수업(요청 때 반 이름). 옛 기록은 결과 칸이 없다.
+    case "withdrawal_report_update": {
+      const ended = Array.isArray(m.endedClasses) ? m.endedClasses.flatMap((v) => str(v) ?? []) : [];
+      return join(str(m.operation), str(m.result), str(m.date) ? `처리일 ${str(m.date)}` : null, ended.length ? `끝난 수업 ${ended.join("·")}` : null);
+    }
     // 잘못 만든 수업 이력 **삭제**(원장·super_admin) — 행이 사라지므로 이 로그가 유일한 흔적이다.
     // metadata.snapshot에 삭제된 행 전체가 들어 있다(뷰어 title 툴팁의 원문 JSON으로 확인).
     case "enrollment_delete": {

@@ -1409,3 +1409,12 @@ describe("auditDetail — 숙제 영상 올리기 사이트에서 연 링크(202
     expect(manual).not.toContain("수업 숙제");
   });
 });
+
+describe("auditDetail — 퇴원보고서 처리 결과(2026-10-23)", () => {
+  it("마지막 승인으로 끝났으면 결과 · 처리일 · 끝난 수업 — 옛 기록(결과 칸 없음)은 종전 그대로", () => {
+    expect(auditDetail("withdrawal_report_update", { operation: "승인", result: "학생 퇴원", date: "2026-10-23", endedClasses: ["M1A", "E2B"] }, ctx()))
+      .toBe("승인 · 학생 퇴원 · 처리일 2026-10-23 · 끝난 수업 M1A·E2B");
+    expect(auditDetail("withdrawal_report_update", { operation: "승인", result: "처리 예약", date: "2026-11-01" }, ctx())).toBe("승인 · 처리 예약 · 처리일 2026-11-01");
+    expect(auditDetail("withdrawal_report_update", { operation: "보고서 제출", date: "2026-10-23" }, ctx())).toBe("보고서 제출 · 처리일 2026-10-23");
+  });
+});
