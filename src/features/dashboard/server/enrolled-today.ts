@@ -3,7 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { kstDateOf, kstTimeOf, kstToday } from "@/lib/date-kst";
 import { auditScoped, systemAuditScope } from "@/features/audit/server/system-read";
-import { countAssignedClasses } from "@/features/enrollment/server/assigned-classes";
+import { listAssignedClassNames } from "@/features/enrollment/server/assigned-classes";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
 import { kstDayBounds } from "@/features/enrollment/kst-bounds";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { assignedEntryAt, enrolledRecentFrom } from "@/features/dashboard/overview/enrolled-recent";
@@ -17,8 +19,13 @@ export type EnrolledTodayRow = {
   date: string | null;
   /** 등록 완료로 옮긴 시각(KST HH:MM) — 창 안에서 마지막으로 옮긴 때. */
   time: string | null;
-  /** 칸반 '반 배정 완료'와 같은 판정(`countAssignedClasses`). */
+  /** 칸반 '반 배정 완료'와 같은 판정(`assignedQuery` — 아래 `classes`와 같은 필터). */
   assigned: boolean;
+  /**
+   * 배정된 반 — 이름 · 과목 이름(학원 설정 라벨, 원장 2026-10-22 *"반배정된 반이름과 과목 보이게"*). 지금 다니는 상담 과목의 반
+   * (칸반 '반 배정 완료'와 같은 필터 · 같은 반은 한 번). 이 칸이 생기기 전 운영실 스냅샷엔 없다.
+   */
+  classes?: { name: string; subject: string | null }[];
   /** 상담 과목 키(안 골랐으면 null) — 과목 관리자 카드가 담당 과목으로 거른다. */
   subject: string | null;
 };
@@ -33,7 +40,7 @@ type OutcomeLog = { metadata: { consultationId?: unknown; to?: unknown } | null;
  * 🔑 옮긴 시각은 컬럼이 없어 **상태 변경 감사로그**(`enrollment_consultation_outcome`, to=enrolled)에서 읽는다 —
  *    칸반 드래그·상세 '상태 변경'(`setEnrollmentOutcome`)과 '수업 배정'(상담→원생 전환)이 둘 다 이 로그를 남긴다.
  * 🔴 **지금도 등록 완료인 상담만** 센다(오늘 옮겼다가 '미등록'으로 되돌린 건은 빠진다).
- * 🔴 반 배정 여부는 칸반 카드 표식과 **같은 함수**(`countAssignedClasses`) — 갈리면 카드와 칸반이 다른 말을 한다.
+ * 🔴 반 배정 여부·배정 반은 칸반 카드 표식과 **같은 필터**(`assignedQuery` → `listAssignedClassNames`) — 갈리면 카드와 칸반이 다른 말을 한다.
  * 🔴 **반 배정으로 '등록 완료' 칸에 선 상담도 센다**(원장 2026-10-22 *"KPI 일치하지 않는건에 대해 KPI 일치시킬것"* — 칸반 10월 등록 완료 3 ·
  *    카드 2: 장윤건은 QR 자동 연결 뒤 반이 배정돼 칸반엔 섰는데 상태 로그가 없어 빠졌다). 그 때 = 그 과목 반에 처음 배정된 때
  *    (`assignedEntryAt` — 칸반 `stageOfCard`와 같은 판정 · 반 이동으로 새 수강이 생겨도 다시 세지 않는다).
@@ -81,12 +88,24 @@ export async function getEnrolledRecent(today: string): Promise<EnrolledTodayRow
         ),
     assignedEntries(db, startIso, endIso),
   ]);
-  const current = rows.filter((row) => row.outcome === "enrolled");
-  const assigned = await Promise.all(current.map((row) => countAssignedClasses(db, row.student_id, row.subject || null)));
-  return listRows([
-    ...current.map((row, i) => ({ row, at: movedAt.get(row.id) ?? "", assigned: assigned[i]! > 0 })),
-    ...viaAssignment.map(({ row, at }) => ({ row, at, assigned: true })),
+  const items = [
+    ...rows.filter((row) => row.outcome === "enrolled").map((row) => ({ row, at: movedAt.get(row.id) ?? "", viaAssignment: false })),
+    ...viaAssignment.map(({ row, at }) => ({ row, at, viaAssignment: true })),
+  ];
+  // 줄마다 배정 반(이름·과목) — 반 배정 여부도 이 목록으로 판정한다(같은 필터). 과목 이름은 학원 설정(요청 안 캐시).
+  const [classes, settings] = await Promise.all([
+    Promise.all(items.map(({ row }) => listAssignedClassNames(db, row.student_id, row.subject || null))),
+    getTenantSettings(),
   ]);
+  const { labelOf } = buildSubjectMaps(settings.operations.subjects);
+  return listRows(
+    items.map(({ row, at, viaAssignment }, i) => ({
+      row,
+      at,
+      assigned: viaAssignment || classes[i]!.length > 0,
+      classes: classes[i]!.map((c) => ({ name: c.name, subject: c.subject ? labelOf(c.subject) : null })),
+    })),
+  );
 }
 
 type ConsultRow = {
@@ -100,16 +119,19 @@ type ConsultRow = {
 };
 
 /** 화면 줄 — 최근에 등록 완료가 된 것부터(신규문의 팝업과 같은 방향). */
-function listRows(items: readonly { row: ConsultRow; at: string; assigned: boolean }[]): EnrolledTodayRow[] {
+function listRows(
+  items: readonly { row: ConsultRow; at: string; assigned: boolean; classes: { name: string; subject: string | null }[] }[],
+): EnrolledTodayRow[] {
   return [...items]
     .sort((a, b) => b.at.localeCompare(a.at) || a.row.id.localeCompare(b.row.id))
-    .map(({ row, at, assigned }) => ({
+    .map(({ row, at, assigned, classes }) => ({
       id: row.id,
       name: row.prospect_name?.trim() || "(이름 미상)",
       schoolGrade: schoolGradeLabel(row.prospect_school, row.prospect_grade) || null,
       date: kstDateOf(at),
       time: kstTimeOf(at),
       assigned,
+      classes,
       subject: row.subject || null,
     }));
 }

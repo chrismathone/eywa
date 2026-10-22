@@ -208,7 +208,7 @@ export type OverviewData = {
     endDate: string;
     startTime: string | null;
     source: string;
-    /** 입학 일정 종류(단일 분류기 `admissionsEventKind`) — KPI '금일입테'는 levelTest만. */
+    /** 입학 일정 종류(단일 분류기 `admissionsEventKind`) — KPI '전일 입테'는 levelTest만. */
     kind: AdmissionsKind | null;
     /**
      * 취소된 일정(제목에 '취소', `isCancelledEventTitle`)의 원래 종류 — 이 값이 있으면 `kind`는 null이다.

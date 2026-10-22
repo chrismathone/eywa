@@ -184,8 +184,8 @@ describe("overview display contracts", () => {
     expect(html).toContain("레벨테스트 및 첫수업 일정");
     expect(html).toContain("레벨테스트");
     expect(html).not.toContain('href="/calendar"');
-    // 금일입테 카드는 서지만 ↗(목적지 링크)가 없다.
-    expect(html).toContain('aria-label="금일 입테 0건.');
+    // 전일 입테 카드는 서지만 ↗(목적지 링크)가 없다.
+    expect(html).toContain('aria-label="전일 입테 0건.');
   });
   it("반복 결석 전체 목록은 별도 팝업에서 회 단위로 표시하고 학생 출결 상세로 연결한다", async () => {
     mocks.data = snapshot();
@@ -229,7 +229,7 @@ describe("overview display contracts", () => {
   });
 });
 
-const KPI_LABELS = ["재원생", "강좌수", "퇴원&수업종료", "신규문의", "금일 입테", "전일 / 이달 신규", "오늘첫수업", "최근 결석", "보강예정"];
+const KPI_LABELS = ["재원생", "강좌수", "퇴원&수업종료", "신규문의", "전일 입테", "전일 / 이달 신규", "오늘첫수업", "최근 결석", "보강예정"];
 const ALL_MENUS: OverviewSnapshot["allowed"] = [
   "dashboard",
   "students",
@@ -331,7 +331,7 @@ function kpiSnapshot(allowed = ALL_MENUS): OverviewSnapshot {
       // 전일 / 이달 신규(원장 2026-10-21) — 오늘 하나(반 배정) · 어제 하나(배정 전) · 지난달 말 하나(창 밖이라 안 센다).
       enrolledToday: {
         data: [
-          { id: "r1", name: "등록가", schoolGrade: "침산중1", date: "2026-09-10", time: "15:10", assigned: true, subject: null },
+          { id: "r1", name: "등록가", schoolGrade: "침산중1", date: "2026-09-10", time: "15:10", assigned: true, classes: [{ name: "M1A", subject: "수학" }], subject: null },
           { id: "r2", name: "등록나", schoolGrade: null, date: "2026-09-09", time: "11:02", assigned: false, subject: null },
           { id: "r3", name: "등록다", schoolGrade: null, date: "2026-08-31", time: "10:00", assigned: false, subject: null },
         ],
@@ -339,6 +339,8 @@ function kpiSnapshot(allowed = ALL_MENUS): OverviewSnapshot {
       },
       calendar: {
         data: [
+          // 어제 입테(KPI '전일 입테') — 일정 패널엔 안 선다(오늘부터).
+          { id: "e0", title: "어제 레테", startDate: "2026-09-09", endDate: "2026-09-09", startTime: "16:00", source: "manual", kind: "levelTest" },
           { id: "e1", title: "영어 레테", startDate: "2026-09-10", endDate: "2026-09-10", startTime: "15:00", source: "manual", kind: "levelTest" },
           { id: "e2", title: "수학 첫수업", startDate: "2026-09-10", endDate: "2026-09-10", startTime: "17:00", source: "manual", kind: "firstClass" },
           { id: "e3", title: "내일 입테", startDate: "2026-09-11", endDate: "2026-09-11", startTime: "15:00", source: "manual", kind: "levelTest" },
@@ -504,21 +506,23 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     expect(popup.textContent).toContain("9/9 11:02");
     expect(popup.textContent).toContain("전일");
     expect(popup.textContent).not.toContain("등록다");
-    expect(popup.textContent).toContain("반 배정 완료");
+    // 배정 반 = 과목 · 반 이름(원장 2026-10-22).
+    expect(popup.textContent).toContain("수학 · M1A");
     expect(popup.textContent).toContain("배정 전");
     expect(within(popup).getByRole("link", { name: "등록가 상담 상세" }).getAttribute("href")).toContain("/enrollment/r1");
     cleanup();
   });
 
-  it("금일입테 = 오늘 레벨테스트만(첫 수업·내일 제외), ↗ 없음", () => {
+  it("전일 입테 = 어제 레벨테스트만(오늘·첫 수업·내일 제외), ↗ 없음", () => {
     mocks.data = kpiSnapshot();
     const html = renderToStaticMarkup(<Overview initial={mocks.data} />);
-    expect(html).toContain('aria-label="금일 입테 1건.');
+    expect(html).toContain('aria-label="전일 입테 1건.');
     expect(html).not.toContain('href="/calendar');
     render(<Overview initial={mocks.data} />);
-    fireEvent.click(screen.getByRole("button", { name: /^금일 입테 1건\./ }));
+    fireEvent.click(screen.getByRole("button", { name: /^전일 입테 1건\./ }));
     const popup = screen.getByRole("dialog");
-    expect(popup.textContent).toContain("영어 레테");
+    expect(popup.textContent).toContain("어제 레테");
+    expect(popup.textContent).not.toContain("영어 레테");
     expect(popup.textContent).not.toContain("수학 첫수업");
     expect(popup.textContent).not.toContain("내일 입테");
     expect(within(popup).queryByRole("link")).toBeNull();

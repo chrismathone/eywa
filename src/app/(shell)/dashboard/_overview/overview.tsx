@@ -22,7 +22,7 @@ import { foldExpenseTotals } from "@/features/dashboard/overview/expense-total";
 import { paymentRateDisplay } from "@/features/billing/calc";
 import { monthDayLabel } from "@/lib/date-kst";
 import { monthAheadNote, monthAheadWindow, windowUntilLabel } from "@/features/dashboard/overview/upcoming-window";
-import { admissionsListKind, isCancelledAdmissionsRow } from "@/features/dashboard/overview/display";
+import { admissionsListKind, isCancelledAdmissionsRow, upcomingAdmissionsRows } from "@/features/dashboard/overview/display";
 import { cancelledSuffix } from "@/features/calendar/cancelled";
 import { useOverview } from "./use-overview";
 import { DetailPopup } from "./detail-popup";
@@ -276,6 +276,8 @@ export function Overview({
   const thisMonth = monthLabel(snapshot.today.slice(0, 7));
   // '레벨테스트 및 첫수업 일정' 창 — 서버 조회(`add("calendar")`)와 **같은 함수·같은 오늘**(원장 2026-09-16 "오늘 기준으로 1달 이내").
   const admissionsRange = monthAheadWindow(snapshot.today);
+  // '레벨테스트 및 첫수업 일정' = 오늘부터 — 일정 배열엔 KPI '전일 입테'용 어제 레벨테스트도 실린다(원장 2026-10-22).
+  const admissionsRows = v.calendar?.data ? upcomingAdmissionsRows(v.calendar.data, snapshot.today) : null;
   const delta = currentChange
     ? currentChange.enrolled - currentChange.withdrawn
     : null;
@@ -1236,19 +1238,19 @@ export function Overview({
       note={monthAheadNote(admissionsRange)}
       sections={[v.calendar]}
     >
-      <AdmissionsSchedule events={v.calendar?.data ?? []} limit={3} />
-      {v.calendar?.data?.length === 0 && (
+      <AdmissionsSchedule events={admissionsRows ?? []} limit={3} />
+      {admissionsRows?.length === 0 && (
         <p className={s.empty}>
           오늘부터 {windowUntilLabel(admissionsRange)} 레벨테스트·첫 수업 일정이 없습니다.
         </p>
       )}
-      {(["levelTest", "firstClass"] as const).some((kind) => (v.calendar?.data?.filter((event) => admissionsListKind(event) === kind).length ?? 0) > 3) && (
+      {(["levelTest", "firstClass"] as const).some((kind) => (admissionsRows?.filter((event) => admissionsListKind(event) === kind).length ?? 0) > 3) && (
         <DetailPopup
           title="레벨테스트 및 첫수업 일정"
-          // 열 머리·금일입테와 같은 축 — 숫자는 살아 있는 일정만, 취소는 " · 취소 N"으로 따로(원장 2026-09-30).
-          label={`전체 ${v.calendar!.data!.filter((event) => !isCancelledAdmissionsRow(event)).length}개 일정 보기${cancelledSuffix(v.calendar!.data!.filter(isCancelledAdmissionsRow).length)}`}
+          // 열 머리·전일 입테와 같은 축 — 숫자는 살아 있는 일정만, 취소는 " · 취소 N"으로 따로(원장 2026-09-30).
+          label={`전체 ${admissionsRows!.filter((event) => !isCancelledAdmissionsRow(event)).length}개 일정 보기${cancelledSuffix(admissionsRows!.filter(isCancelledAdmissionsRow).length)}`}
         >
-          <AdmissionsSchedule events={v.calendar!.data!} />
+          <AdmissionsSchedule events={admissionsRows!} />
         </DetailPopup>
       )}
     </Panel>
@@ -1429,7 +1431,7 @@ export function Overview({
     ) : null;
 
   return (
-    // 콜&상담 진행 칩(원장 2026-09-22) — 신규문의·금일입테 팝업과 입학 일정 줄이 상담 id로 같은 표를 읽는다.
+    // 콜&상담 진행 칩(원장 2026-09-22) — 신규문의·전일 입테 팝업과 입학 일정 줄이 상담 id로 같은 표를 읽는다.
     <ConsultChipsProvider chips={v.consultProgress?.data?.chips ?? null}>
     <div className={appearance.dashboard}>
     <div className={s.root} data-overview="root">

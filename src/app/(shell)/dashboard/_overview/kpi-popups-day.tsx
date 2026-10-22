@@ -7,12 +7,12 @@ import { windowUntilLabel } from "@/features/dashboard/overview/upcoming-window"
 import { rosterOriginLabel } from "@/features/makeups/roster-merge";
 import { monthDay, NameCell, PopupEmpty, PopupTotal, Tag } from "./kpi-popup-parts";
 import { splitEnrolledRecent } from "@/features/dashboard/overview/enrolled-recent";
-import { isCancelledAdmissionsRow, type todayLevelTestList } from "@/features/dashboard/overview/display";
+import { isCancelledAdmissionsRow, type levelTestListOn } from "@/features/dashboard/overview/display";
 import { ConsultStageChip } from "./consult-progress";
 import { CancelledMark } from "./cancelled-mark";
 import s from "./overview.module.css";
 
-type LevelTestList = ReturnType<typeof todayLevelTestList<OverviewData["calendar"][number]>>;
+type LevelTestList = ReturnType<typeof levelTestListOn<OverviewData["calendar"][number]>>;
 
 /** 신규문의 팝업 — 오늘 접수(시각 · 이름). */
 export function IntakePopup({
@@ -52,7 +52,7 @@ export function IntakePopup({
 
 /**
  * 전일 / 이달 신규 팝업(원장 2026-09-23 '금일 등록' → 2026-10-21 어제·이번 달) — 콜&상담 '등록 완료'로 옮긴 상담
- * (옮긴 날·시각 · 이름 · 반 배정 여부). 카드와 **같은 배열·같은 가르기**(`splitEnrolledRecent`)라 숫자가 같다.
+ * (옮긴 날·시각 · 이름 · 배정된 반의 과목·이름 — 아직이면 '배정 전'). 카드와 **같은 배열·같은 가르기**(`splitEnrolledRecent`)라 숫자가 같다.
  * 이번 달 명단을 최근 순으로 보이고 어제 줄엔 '전일' 표식. 1일엔 어제가 지난달이라 그 줄도 함께 보인다.
  * 이름은 그 상담으로 간다(콜&상담 권한이 있을 때만).
  */
@@ -92,12 +92,26 @@ export function EnrolledTodayPopup({
               </NameCell>
               {row.schoolGrade ? <span className={s.kpiListMeta}>{row.schoolGrade}</span> : null}
               {ydayIds.has(row.id) ? <Tag tone="muted">전일</Tag> : null}
-              {row.assigned ? <Tag tone="info">반 배정 완료</Tag> : <Tag tone="caution">배정 전</Tag>}
+              {/* 배정 반 = 과목 · 반 이름(원장 2026-10-22 *"반배정된 반이름과 과목 보이게"*). 옛 스냅샷(반 목록 없음)은 종전 표식. */}
+              {/* 반이 둘 이상이면(수학 정규 + 개별) 줄이 넘치지 않게 태그 묶음만 다음 줄로 접는다. */}
+              {row.classes?.length
+                ? (
+                    <span className="flex min-w-0 flex-wrap justify-end gap-1">
+                      {row.classes.map((c) => (
+                        <Tag key={`${c.subject ?? ""}|${c.name}`} tone="info">
+                          {c.subject ? `${c.subject} · ${c.name}` : c.name}
+                        </Tag>
+                      ))}
+                    </span>
+                  )
+                : row.assigned
+                  ? <Tag tone="info">반 배정 완료</Tag>
+                  : <Tag tone="caution">배정 전</Tag>}
             </li>
           ))}
         </ul>
       )}
-      <p className={s.footnote}>날짜·시각 = 신규 콜&상담에서 등록 완료로 옮긴 때(상태는 그대로인데 반이 배정돼 칸반 ‘등록 완료’에 선 상담은 그 과목 반에 처음 배정된 때). 반 배정은 칸반의 ‘반 배정 완료’와 같은 기준입니다.</p>
+      <p className={s.footnote}>날짜·시각 = 신규 콜&상담에서 등록 완료로 옮긴 때(상태는 그대로인데 반이 배정돼 칸반 ‘등록 완료’에 선 상담은 그 과목 반에 처음 배정된 때). 배정 반(과목 · 반 이름)은 칸반의 ‘반 배정 완료’와 같은 기준 — 지금 다니는 그 상담 과목의 반입니다.</p>
     </>
   );
 }
@@ -162,18 +176,18 @@ const originalTitleNote = (event: OverviewData["calendar"][number]) =>
   event.displayTitle && event.displayTitle !== event.title ? `원래 제목: ${event.title}` : undefined;
 
 /**
- * 금일입테 팝업 — 오늘 레벨테스트(시각 · 제목). 캘린더 메뉴가 숨김이라 일정 자체로 가는 링크는 없고, 그 일정의 콜&상담이
+ * 전일 입테 팝업 — 어제 레벨테스트(시각 · 제목 · 그 상담의 지금 단계 — 입테 뒤 등록했는지, 원장 2026-10-22 금일 → 전일). 캘린더 메뉴가 숨김이라 일정 자체로 가는 링크는 없고, 그 일정의 콜&상담이
  * 한 건으로 확정된 줄만 상담 상세로 간다(서버가 콜&상담 권한이 있을 때만 싣는다). 제목은 운영실 일정 카드와 같은 표시용.
  */
-export function LevelTestPopup({ list }: { list: LevelTestList | null }) {
+export function LevelTestPopup({ list, day }: { list: LevelTestList | null; day: string }) {
   if (!list) return <PopupEmpty>일정을 불러오지 못했습니다.</PopupEmpty>;
   const events = list.rows;
   return (
     <>
       {/* 합계 = 살아 있는 입테만(카드 숫자와 같다). 취소된 일정은 목록에 시간 순서 그대로 줄을 그어 남긴다(원장 2026-09-30). */}
-      <PopupTotal label="오늘 레벨테스트" value={list.active.length} unit="건" />
+      <PopupTotal label="전일 레벨테스트" value={list.active.length} unit="건" />
       {events.length === 0 ? (
-        <PopupEmpty>오늘 레벨테스트 일정이 없습니다.</PopupEmpty>
+        <PopupEmpty>전일({monthDay(day)}) 레벨테스트 일정이 없었습니다.</PopupEmpty>
       ) : (
         <ul className={s.kpiList}>
           {events.map((event) => (
