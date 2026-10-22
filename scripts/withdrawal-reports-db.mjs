@@ -15,25 +15,25 @@ try {
  if(mode==='--apply') {
   if(state.report_table) throw new Error('Report table already exists; inspect before applying again.');
   if(!state.laboratory_table || !state.account_function) throw new Error('Required schema is missing.');
-  await sql.unsafe(readFileSync('supabase/migrations/20261013203000_withdrawal_reports.sql','utf8'));
+  await sql.unsafe(readFileSync('supabase/migrations/0415a_withdrawal_reports.sql','utf8'));
   await sql`notify pgrst, 'reload schema'`;
   console.log('Applied withdrawal report migration.');
  }
  if(mode==='--upgrade') {
   if(!state.report_table) throw new Error('Apply the report migration first.');
-  await sql.unsafe(readFileSync('supabase/migrations/20261013210000_withdrawal_report_reasons.sql','utf8'));
-  await sql.unsafe(readFileSync('supabase/migrations/20261013215000_withdrawal_report_request_recovery.sql','utf8'));
+  await sql.unsafe(readFileSync('supabase/migrations/0416a_withdrawal_report_reasons.sql','utf8'));
+  await sql.unsafe(readFileSync('supabase/migrations/0417a_withdrawal_report_request_recovery.sql','utf8'));
   await sql`notify pgrst, 'reload schema'`;
   console.log('Updated report reason choices and stuck-request cancellation.');
  }
  if(mode==='--groups') {
   if(await sql`select 1 from pg_class where oid=to_regclass('public.withdrawal_report_groups')`.then(r=>r.length)) throw new Error('Group schema already exists.');
-  for(const path of ['20261014151000_withdrawal_report_groups.sql','20261014152000_withdrawal_report_group_transitions.sql','20261014153000_withdrawal_report_archives.sql','20261014154000_withdrawal_report_assignment_check.sql','20261014155000_withdrawal_report_review_assignment_check.sql']) await sql.unsafe(readFileSync(`supabase/migrations/${path}`,'utf8'));
+  for(const path of ['0420a_withdrawal_report_groups.sql','0421a_withdrawal_report_group_transitions.sql','0422a_withdrawal_report_archives.sql','0423a_withdrawal_report_assignment_check.sql','0424a_withdrawal_report_review_assignment_check.sql']) await sql.unsafe(readFileSync(`supabase/migrations/${path}`,'utf8'));
   await sql`notify pgrst, 'reload schema'`;
   console.log('Applied report groups, optional principals, archive storage.');
  }
  if(mode==='--alignment') {
-  await sql.unsafe(readFileSync('supabase/migrations/20261014155000_withdrawal_report_review_assignment_check.sql','utf8'));
+  await sql.unsafe(readFileSync('supabase/migrations/0424a_withdrawal_report_review_assignment_check.sql','utf8'));
   await sql`notify pgrst, 'reload schema'`;
   console.log('Added live assignment verification on submission.');
  }

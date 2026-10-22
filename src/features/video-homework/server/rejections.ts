@@ -7,7 +7,7 @@ import { addDays } from "@/lib/date-kst";
 type Db = ReturnType<typeof createAdminClient>;
 
 /**
- * **영상 숙제 반려 표시**(20261013160000 `video_homework_rejections`, 원장 2026-10-13) — 숙제 칸마다 반려한 시각.
+ * **영상 숙제 반려 표시**(0414a `video_homework_rejections`, 원장 2026-10-13) — 숙제 칸마다 반려한 시각.
  * 그 시각 전에 올라온 영상은 그 칸에 자동으로 붙지 않는다(`rounds.ts` ② — 반려한 칸을 다른 숙제의 영상이 다시 채우지 않게).
  * 🔑 숙제 칸을 짜는 곳(장부 · 올리기 사이트 · 자동 판정)은 전부 이 표시를 함께 넘긴다 — 안 넘기면 화면마다 칸이 달라진다.
  * 🔴 admin 클라이언트는 RLS를 우회한다 — 늘 지점으로 좁힌다([[#104]]). 표가 아직 없으면(SQL 적용 전) '반려 없음'으로 돈다.

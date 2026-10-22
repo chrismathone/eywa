@@ -417,7 +417,7 @@ export async function saveLessonReport(
    * 🔴 영상 숙제 마감(원장 2026-10-15, video-homework/due.ts) — 영상 과제 값과 같은 주인이다: 그 숙제를 낸 선생님(이 줄을 처음 쓴 사람)만 바꾼다
    * (report-owner.ts — 다른 선생님이 고치면 학부모에게 나간 마감이 바뀐다. 화면 겹은 토글 잠금).
    *  · 판정 전부 = `decideVideoHomeworkDue`(video-homework/due-write.ts — 과제를 끄면 지움 · 7일 · 다음 수업은 시간표로 찾아 날짜로 고정 ·
-   *    이미 정한 날짜는 그대로 · 못 찾음/이미 지남/못 읽음은 7일로 알림 · 남이 쓴 줄은 저장값을 돌려줌). DB 트리거(20261015090000)가 남의 갱신을 한 번 더 막는다.
+   *    이미 정한 날짜는 그대로 · 못 찾음/이미 지남/못 읽음은 7일로 알림 · 남이 쓴 줄은 저장값을 돌려줌). DB 트리거(0425a)가 남의 갱신을 한 번 더 막는다.
    */
   const videoDue = await decideVideoHomeworkDue({
     ready: videoDueReady && videoHwReady, videoHomework: input.videoHomework, mode: input.videoHomeworkDue,
@@ -490,7 +490,7 @@ export async function saveLessonReport(
     // **저장된 그 값**을 되받는다(갱신 시 DB가 원 작성자를 보존하는 경로가 있어 화면 값과 갈릴 수 있다).
     // created_by도 되받는다 — 보강 출석부 칸의 **귀속 강사**(아래 훅)는 저장자가 아니라 이 소유 계정이다.
     // 영상 과제 값도 되받는다(칸이 확인됐을 때만) — 동시 첫 저장에서 DB 트리거(0336a)가 남의 값을 지켰는지 본다(아래 raceKept).
-    // 마감도 같다(트리거 20261015090000 — 아래 raceDue).
+    // 마감도 같다(트리거 0425a — 아래 raceDue).
     .select(videoHwReady
       ? (videoDueReady ? "id, share_token, teacher_name, created_by, video_homework, video_homework_due" : "id, share_token, teacher_name, created_by, video_homework")
       : "id, share_token, teacher_name, created_by")

@@ -17,7 +17,7 @@
 
 ## SQL 적용
 
-새 마이그레이션: `supabase/migrations/20261007171329_mcs_atomic_goal_reset.sql`.
+새 마이그레이션: `supabase/migrations/0396a_mcs_atomic_goal_reset.sql`.
 
 - 함수는 `SECURITY INVOKER`, 빈 `search_path`, 일반 로그인·비로그인 역할 실행 권한 없음, `service_role`만 실행 가능하다.
 - 두 목표 테이블 삭제를 한 호출의 트랜잭션으로 처리한다. 실제 오류를 삼키는 삭제 폴백은 없다.

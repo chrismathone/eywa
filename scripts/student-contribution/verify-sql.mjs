@@ -13,7 +13,7 @@ try {
   await db.exec("create role anon; create role authenticated; create role service_role bypassrls; create table tenants(id uuid primary key); create table users(id uuid primary key); create table students(id uuid primary key,tenant_id uuid references tenants(id));");
   await db.query("insert into tenants values ($1),($2)", [tenant, other]);
   await db.query("insert into students values ($1,$2),($3,$4)", [student, tenant, outsider, other]);
-  for (const file of ["20261022200000_student_contribution.sql", "20261022201000_student_contribution_functions.sql"])
+  for (const file of ["0442a_student_contribution.sql", "0443a_student_contribution_functions.sql"])
     await db.exec(await readFile(new URL(`../../supabase/migrations/${file}`, import.meta.url), "utf8"));
   const tables = ["student_contribution_settings", "student_contribution_months", "student_positive_signals"];
   const security = await db.query("select relname,relrowsecurity from pg_class where relname = any($1)", [tables]);

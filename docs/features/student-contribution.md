@@ -12,7 +12,7 @@
 | 목록·학생 상세·소개 확인·다섯 관점 조회 | `/student-contribution`, `/student-contribution/[id]`, `/student-contribution/referrals`, `/student-contribution/ontology` |
 | 기존 화면 연결 | 학생 상세 `기여도` 탭, 학원 설정 `원생 기여도` 면 |
 | 매일 집계 | `/api/cron/student-contribution` · UTC 15:40 = 한국 00:40 |
-| 스키마 | `20261022200000_student_contribution.sql`, `20261022201000_student_contribution_functions.sql` |
+| 스키마 | `0442a_student_contribution.sql`, `0443a_student_contribution_functions.sql` |
 
 설정·월 원래 수치·긍정 신호의 세 표는 RLS를 켜고 정책을 두지 않는다. 브라우저 DB 역할로는 조회·변경할 수 없다. 서버 게이트는 새 메뉴와 수납 권한, 시범 지점, 실험실 동의를 확인한다. 설정·재집계·연결·판정 변경은 원장 권한과 쓰기 가능 여부를 다시 확인한다. 학생 원본 기록에는 기존 담당 범위도 적용한다.
 

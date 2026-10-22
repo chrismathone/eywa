@@ -7,8 +7,8 @@ const connection=new URL(process.env.DATABASE_URL??'missing:');
 const ref=new URL(process.env.NEXT_PUBLIC_SUPABASE_URL??'missing:').hostname.split('.')[0];
 if(!ref || !(connection.hostname===`db.${ref}.supabase.co` || decodeURIComponent(connection.username).endsWith(`.${ref}`))) throw new Error('Project mismatch');
 const db=postgres(connection.toString(),{ssl:'require',prepare:false,max:1,connect_timeout:15,onnotice:()=>{}});
-const migrations=['20261015160000_student_status_authority.sql','20261015160100_student_status_guards.sql',
- '20261015160200_enrollment_lifecycle_executor.sql','20261015160300_enrollment_history_delete.sql'];
+const migrations=['0426a_student_status_authority.sql','0427a_student_status_guards.sql',
+ '0428a_enrollment_lifecycle_executor.sql','0429a_enrollment_history_delete.sql'];
 try {
  const [before]=await db`select md5(coalesce(jsonb_agg(jsonb_build_array(tenant_id,data->'permissions'->'specialAccess'->'studentStatusManagerIds') order by tenant_id)::text,'')) as assignments from public.tenant_settings`;
  if(mode!=='--check') {

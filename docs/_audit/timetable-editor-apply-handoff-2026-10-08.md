@@ -48,7 +48,7 @@
 
 Vercel 앱/CLI의 연결 계정은 운영 팀 `bigshols-projects`에 접근하지 못한다. 프로젝트를 재연결하지 않고 기존 main Git 자동 배포 경로를 이용한다. GitHub의 실제 Production 배포 SHA와 성공 상태를 별도로 확인한다.
 
-`20261008040000_timetable_lab_apply_jobs.sql`을 운영 프로젝트 `ylqviwxedsdikuslmwxf`에 Supabase CLI `db query`로 한 트랜잭션 적용했다. RLS 켜짐, 일반/비로그인 쓰기 금지, 서버 쓰기 허용, 본인 조회 정책, pending 중복 방지 인덱스를 확인했다. 적용 직후 예약 0건이며 운영 수업·수강 시험 변경은 하지 않았다. CLI 직접 SQL 적용이라 별도 마이그레이션 이력 등록은 하지 않았다.
+`0398a_timetable_lab_apply_jobs.sql`을 운영 프로젝트 `ylqviwxedsdikuslmwxf`에 Supabase CLI `db query`로 한 트랜잭션 적용했다. RLS 켜짐, 일반/비로그인 쓰기 금지, 서버 쓰기 허용, 본인 조회 정책, pending 중복 방지 인덱스를 확인했다. 적용 직후 예약 0건이며 운영 수업·수강 시험 변경은 하지 않았다. CLI 직접 SQL 적용이라 별도 마이그레이션 이력 등록은 하지 않았다.
 
 ## 검증 기록
 

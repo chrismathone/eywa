@@ -7,7 +7,7 @@ import { addDays } from "@/lib/date-kst";
 type Db = ReturnType<typeof createAdminClient>;
 
 /**
- * **보고서 없이 따로 낸 영상 숙제**(20261013140000 `video_homework_extra_issues`) — 원장 2026-10-13
+ * **보고서 없이 따로 낸 영상 숙제**(0411a `video_homework_extra_issues`) — 원장 2026-10-13
  * *"숙제 없음을 우클릭해서 숙제 출제"* · *"해당날짜에. 기한은 7일. 따로 보고서 안감"*.
  *
  * 🔑 영상 숙제 = 보고서의 '영상 과제 있음' ∪ 이 표. 숙제를 읽는 곳은 전부 둘을 합친다 — 장부·자동 판정(`getAssignedVideoHomework`) ·
@@ -18,7 +18,7 @@ type Db = ReturnType<typeof createAdminClient>;
  */
 const TABLE = "video_homework_extra_issues";
 /**
- * `kept` = 검사 기록 칸에서 **옮겨 남긴 숙제**(20261013220000 · keep-round.ts) — 선생님이 낸 숙제가 아니라, 보고서 표시 없이 검사 기록으로만
+ * `kept` = 검사 기록 칸에서 **옮겨 남긴 숙제**(0418a · keep-round.ts) — 선생님이 낸 숙제가 아니라, 보고서 표시 없이 검사 기록으로만
  * 서 있던 칸을 미확인·반려 뒤에도 남기려고 둔 줄이다. 칸·손 배정·올리기 사이트에는 숙제로 서지만 장부 ②는 뒷순위로만 영상을 주고,
  * 자동 판정·미제출 알림·운영실 집계·'따로 낸 숙제' 표시에서는 뺀다(정식 숙제로 치면 더 오래된 빈 칸이 다른 칸의 영상을
  * 가져가 그 칸이 미수행이 되고 알림이 나간다 — 적대적 리뷰 2026-10-13). 강사뷰 · 관리자 강사 필터에서는 검사 기록 칸처럼 **그날 보고서를
@@ -27,7 +27,7 @@ const TABLE = "video_homework_extra_issues";
  */
 export type ExtraIssue = { classId: string; studentId: string; date: string; teacherId: string | null; kept: boolean };
 type Row = { class_id: string; student_id: string; homework_date: string; teacher_id: string | null; kept?: boolean | null };
-/** 🔴 `kept`(20261013220000)는 운영 DB에 적용한 뒤에 이 코드를 배포했다([[#95]]) — 열이 없는 DB에서는 이 표 조회가 실패한다. */
+/** 🔴 `kept`(0418a)는 운영 DB에 적용한 뒤에 이 코드를 배포했다([[#95]]) — 열이 없는 DB에서는 이 표 조회가 실패한다. */
 const COLUMNS = "class_id,student_id,homework_date,teacher_id,kept";
 const toIssue = (row: Row): ExtraIssue => ({ classId: row.class_id, studentId: row.student_id, date: row.homework_date, teacherId: row.teacher_id, kept: row.kept === true });
 

@@ -10,7 +10,7 @@ import { nextLessonDate } from "../issue-window";
 import type { LedgerEnrollment, LedgerSchedule } from "../ledger-roster";
 
 /**
- * 영상 숙제 마감(`lesson_reports.video_homework_due`, 20261015090000 — 규칙은 due.ts)의 서버 쪽 읽기·계산.
+ * 영상 숙제 마감(`lesson_reports.video_homework_due`, 0425a — 규칙은 due.ts)의 서버 쪽 읽기·계산.
  *
  * 🔴 #95: SQL은 원장이 손으로 적용해 push와 적용 사이에 간격이 있다 — 칸이 없으면 마감은 전부 7일이다(토글이 안 보이고, 저장에
  *    싣지 않고, 읽는 곳은 7일로 읽는다). 원스크린 로스터(전원 핫패스) select에는 넣지 않고 따로 읽는다. 캐시는 양성만(칸은 생기기만 한다).

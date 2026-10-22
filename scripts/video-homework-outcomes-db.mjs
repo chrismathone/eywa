@@ -12,8 +12,8 @@ const ref = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'missing:').hostname
 if (!ref || !(connection.hostname === `db.${ref}.supabase.co` || decodeURIComponent(connection.username).endsWith(`.${ref}`)))
   throw new Error('Database and app project do not match.');
 const sql = postgres(connection.toString(), { ssl: 'require', prepare: false, max: 1, connect_timeout: 15, onnotice: () => {} });
-const migration = readFileSync('supabase/migrations/20261012090000_video_homework_outcomes.sql', 'utf8');
-const hardening = readFileSync('supabase/migrations/20261012110000_video_homework_manual_transition_alert.sql', 'utf8');
+const migration = readFileSync('supabase/migrations/0409a_video_homework_outcomes.sql', 'utf8');
+const hardening = readFileSync('supabase/migrations/0410a_video_homework_manual_transition_alert.sql', 'utf8');
 const rollback = new Error('ROLLBACK_FIXTURES');
 let assertions = 0;
 const equal = (actual, expected) => { assert.deepEqual(actual, expected); assertions++; };

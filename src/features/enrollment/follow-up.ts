@@ -73,7 +73,7 @@ export function resolveFollowUp(input: {
 
 /**
  * 후속 조치가 아직 남은 상태 = 상담 전(대기·예약) · 상담 완료(상담·AI 완료) — 알림·할 일은 이 상태의 상담만 본다.
- * 🔴 DB 함수 `staff_tasks_private.enrollment_followup_active`(20261022190000)와 같은 목록 — 한쪽만 바꾸면 알림과 할 일이 갈린다.
+ * 🔴 DB 함수 `staff_tasks_private.enrollment_followup_active`(0441a)와 같은 목록 — 한쪽만 바꾸면 알림과 할 일이 갈린다.
  */
 export const FOLLOW_UP_OPEN_OUTCOMES = ["pending", "scheduled", "consulted", "ai_done"] as const;
 /** 알림·할 일 도입일 — 이 날 이후의 후속 조치일만(옛 상담의 지난 날짜는 울리지 않는다 · DB `enrollment_followup_start`와 같은 값). */
