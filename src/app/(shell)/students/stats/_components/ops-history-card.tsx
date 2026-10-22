@@ -19,7 +19,7 @@ export type OpsChart = { title?: string; kind: "line" | "bar"; unit: string; ser
  * '신규생 기록'이 같이 쓴다. 값은 서버가 매일 기록(`student_daily_stats.data.ops`)에서 칸으로 접어 넘긴다(`opsSeries`).
  * 기록이 없는 칸은 비운다 — 기록 시작 전을 지어내지 않는다. 일별 = 그날 23:55 상태 · 월별 = 그 달 마지막 기록일 상태.
  * `onOff`를 주면 선 고르기 칩이 선다(끈 선은 계정에 저장 — 선이 많은 카드만).
- * `labelsBelow`면 선 이름을 선 끝이 아니라 그래프 아래에(칩도 아래로 — 콜&상담 통계, 원장 2026-10-22 *"라벨류는 밑에 넣어줘"*).
+ * 선 이름은 그래프 아래(칩도 아래 — 원장 2026-10-22 *"라벨류는 밑에 넣어줘"* · *"다른 화면의 꺾은선도 전부 일치화"*).
  */
 export function OpsHistoryCard({
   id,
@@ -34,7 +34,6 @@ export function OpsHistoryCard({
   initialOff = [],
   onOff,
   onMode,
-  labelsBelow,
 }: {
   id: string;
   title: string;
@@ -50,8 +49,6 @@ export function OpsHistoryCard({
   onOff?: (next: { off: string[] }) => Promise<unknown>;
   /** 보기 방식 저장(서버 액션 — 화면마다 제 칸에 저장한다). */
   onMode: (next: { mode: string }) => Promise<unknown>;
-  /** 선 이름을 그래프 아래에(선 끝 이름 대신) — 선 고르기 칩도 그래프 아래에 선다. */
-  labelsBelow?: boolean;
 }) {
   const [off, setOff] = useState<string[]>(initialOff);
   const daily = period.grain === "day";
@@ -102,7 +99,6 @@ export function OpsHistoryCard({
         </p>
       ) : (
         <>
-          {labelsBelow ? null : chips}
           {single ? (
             <p className="text-muted-foreground text-xs break-keep">
               {firstDate ? `${formatKoreanDate(firstDate)}부터 기록해 ` : ""}이 기간엔 {tip(rows[0]!.k)} 한 칸뿐입니다 — 칸이 둘 이상 쌓이면 선으로 이어집니다
@@ -119,11 +115,10 @@ export function OpsHistoryCard({
                 kind={single ? "bar" : c.kind}
                 unit={c.unit}
                 legend={!onOff}
-                labelsBelow={labelsBelow}
               />
             </div>
           ))}
-          {labelsBelow ? chips : null}
+          {chips}
           <details>
             <summary className="text-primary cursor-pointer text-sm font-medium select-none">수치 표 보기</summary>
             <div className="mt-2 overflow-x-auto px-1">
