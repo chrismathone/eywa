@@ -2,7 +2,8 @@
 
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { Toolbar, ToolbarButton, ToolbarDivider, ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import type { KpiWidth } from "@/features/dashboard/layout/fixed-grid";
 import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
 import { BUNDLE_LABELS, BUNDLES, type Bundle } from "@/features/dashboard/layout/types";
 import { DASHBOARD_ROLES, DASHBOARD_ROLE_LABELS, ROLE_BUNDLE, roleOfBundle } from "@/features/dashboard/layout/roles";
@@ -52,6 +53,8 @@ export function EditorActions(p: {
   onEditing: (on: boolean) => void;
   onGallery: () => void;
   onHeading: () => void;
+  hasKpis: boolean;
+  onUniformKpis: (width: KpiWidth) => void;
   onUndo: () => void;
   onRedo: () => void;
   onCopy: (from: Bundle) => void;
@@ -73,6 +76,18 @@ export function EditorActions(p: {
             위젯 추가
           </ToolbarButton>
           <ToolbarButton onClick={p.onHeading}>구역 제목 넣기</ToolbarButton>
+          <DropdownMenu>
+            <DropdownMenuTrigger disabled={!p.hasKpis} render={<button type="button" className={`${CONTROL_H} ${CONTROL_LABEL} text-primary hover:bg-bg-soft inline-flex items-center gap-0.5 rounded-md px-1.5 font-medium whitespace-nowrap transition disabled:opacity-50`} />}>
+              KPI 크기 통일
+              <EyIcon name="chevronDown" size={18} className="opacity-60" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-64">
+              <DropdownMenuLabel>모든 KPI를 같은 폭·높이로 정렬</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => p.onUniformKpis(2)}>작게 · 한 줄 최대 12개</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => p.onUniformKpis(3)}>보통 · 한 줄 최대 8개</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => p.onUniformKpis(6)}>크게 · 한 줄 최대 4개</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <ToolbarDivider />
           <ToolbarButton onClick={p.onUndo} disabled={!p.canUndo} aria-keyshortcuts="Control+Z">
             <EyIcon name="undo" aria-hidden />

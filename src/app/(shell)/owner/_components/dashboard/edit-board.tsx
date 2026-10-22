@@ -131,7 +131,7 @@ export function EditBoard({ items, unused, onAddRow, selected, onSelect, onCommi
       </div>
       <div className="flex flex-wrap items-center gap-3">
         <Button type="button" variant="outline" onClick={onAddRow}>+ 하단에 행 추가</Button>
-        <span className="text-muted-foreground text-sm">원하는 높이에서 우클릭하면 그 자리에 행을 넣을 수 있습니다.</span>
+        <span className="text-muted-foreground text-sm">카드 사이에 끼우면 오른쪽으로 밀리고, 줄이 꽉 차면 다음 줄로 이어집니다. 우클릭으로 행을 추가할 수 있습니다.</span>
       </div>
       {hidden.length ? <details className={live.hiddenCards}>
         <summary>현재 화면에 표시되지 않는 카드 {hidden.length}개</summary>
