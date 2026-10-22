@@ -38,7 +38,8 @@ describe("QR 상담자 저장 배선", () => {
   expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ metadata: expect.objectContaining({ consultationId: "c1", counselorAutofill: "직원" }) }));
  });
  it("완료 전환만 골라도 채운다", async () => {
-  const fd = form(); fd.set("markConsulted", "1");
+  // 상담 완료로 옮기면 후속 조치가 필수(원장 2026-10-22) — 다음 상담 날짜를 골라 그대로 '상담 완료'.
+  const fd = form(); fd.set("markConsulted", "1"); fd.set("followUpResult", "next"); fd.set("followUpDate", "2099-01-01");
   await updateEnrollmentConsultation(undefined, fd);
   expect(m.written).toMatchObject({ outcome: "consulted", counselor: "직원" });
  });

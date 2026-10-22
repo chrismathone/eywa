@@ -1,10 +1,8 @@
 "use client";
 
-import { assignTop } from "@/lib/nav/assign-top";
 import Link from "next/link";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { Button } from "@/components/ui/button";
-import { switchToAdminView } from "@/features/shell/view-actions";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,7 +32,6 @@ import type { ConnectedApp } from "@/features/connected-apps/apps";
 
 export function TeacherMenu({
   menus,
-  canReturnToAdmin = false,
   showEcs = true,
   showMcs = true,
   home = null,
@@ -47,8 +44,6 @@ export function TeacherMenu({
    * (강사 행 ∧ 보는 사람의 실제 역할 ∧ 입구 정책). 페이지 게이트와 같은 판정이라 **보이면 열린다**.
    */
   menus: readonly MenuKey[];
-  /** 겸직(관리자 계열)이 강사뷰에 있을 때 → 드롭다운 하단에 '관리자뷰로 전환'. 실 강사는 false. */
-  canReturnToAdmin?: boolean;
   /**
    * English Class Sheet는 **영어 반 담당·부담임일 때만** 보인다(원장 지시 2026-07-29, 부담임 확장 승인).
    * 권한(ecs=scoped)은 전 강사가 갖고 있어 그것만으론 못 거른다 — 담당·부담임 여부는 서버에서만 알 수
@@ -131,24 +126,6 @@ export function TeacherMenu({
                라벨이 그 자리에서 바뀐다(누른 결과가 눈앞에서 보인다). */}
         <DropdownMenuSeparator />
         <TeacherLangSwitch />
-        {/* 겸직(관리자 계열)만 — 맨 하단 구분선 아래 '관리자뷰로 전환'(쿠키만 지우고 관리자 홈 복귀, 권한 불변).
-            액션이 착지경로를 반환 → window.location으로 확정 네비게이션(드롭다운 안에선 서버액션 redirect의
-            클라 네비게이션이 유실되기 때문). closeOnClick=false로 액션 완료 전 메뉴가 닫히는 것을 방지. */}
-        {canReturnToAdmin ? (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              closeOnClick={false}
-              className="cursor-pointer"
-              onClick={async () => {
-                const dest = await switchToAdminView();
-                assignTop(dest);
-              }}
-            >
-              <EyIcon name="building" size={16} strokeWidth={1.8} /> {t("menu.toAdmin")}
-            </DropdownMenuItem>
-          </>
-        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   );

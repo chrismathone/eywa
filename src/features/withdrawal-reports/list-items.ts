@@ -57,7 +57,7 @@ export function buildListItems(input: {
   };
   const web = input.reports.map((r): ListItem => {
     const teacher = staffName(r.teacher_id);
-    const reason = webReportReason(r.status, r.body_reason, r.body_detail);
+    const reason = webReportReason(r.status, r.body_reason, r.body_detail, r.body_reason_detail);
     return {
       key: `r:${r.id}`,
       href: `${LIST_PATH}/${r.id}`,
@@ -90,7 +90,7 @@ export function buildListItems(input: {
       detail: [a.school_grade, className, a.subject ? labelOf(a.subject) : "과목 미기재"].filter(Boolean).join(" · "),
       date: a.exit_date,
       dateText: a.exit_date || a.raw_exit_date || "미기재",
-      teacher: a.teacher_name.trim() || NO_TEACHER,
+      teacher: staff.find(s => s.id === a.mapped_teacher_id)?.name || a.teacher_name.trim() || NO_TEACHER,
       reason,
       subjects: a.subject ? [a.subject] : [],
       status: "archive",
@@ -99,7 +99,7 @@ export function buildListItems(input: {
       approval: [{ text: `원본 · ${a.sheet_title}`, muted: true }],
       link: a.mapped_student_id ? (a.mapping_kind === "manual" ? "manual" : "auto") : "unmapped",
       myTurn: false,
-      search: [a.student_name, a.school_grade, a.class_name, a.teacher_name, a.sheet_title, reason.text, reason.note ?? "", a.reason_raw ?? ""].join(" "),
+      search: [a.student_name, a.school_grade, a.class_name, a.teacher_name, a.mapped_teacher_id ? staffName(a.mapped_teacher_id) : "", a.sheet_title, reason.text, reason.note ?? "", a.reason_raw ?? ""].join(" "),
     };
   });
   // 🔑 진행 중(처리할 일)이 먼저 — 기본 보기가 '전체'라 지난 날짜로 요청된 진행 중 보고서가 기존 기록 사이로 묻히지 않게.

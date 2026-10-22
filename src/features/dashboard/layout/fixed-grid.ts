@@ -42,27 +42,62 @@ export function positionItems(items: readonly Item[]): GridItem[] {
   return items.map((i, idx) => gridBounds({ ...i, x: old[idx].x, y: top(old[idx].y), h: gridHeight(i) }));
 }
 
-/** 직접 이동·확장한 카드만 우선 배치하고, 겹친 카드만 같은 열에서 아래로 이동한다. */
-export function placeItem(items: readonly Item[], item: Item, x: number, y: number): Item[] {
-  const base = positionItems(items);
-  if (!base.some((i) => i.id === item.id) && base.length >= MAX_ITEMS) return [...items];
-  const moving = gridBounds({ ...item, x, y, h: isPositioned(item) ? item.h : gridHeight(item) });
-  const rest = base.filter((i) => i.id !== item.id && !(isSpaceId(i.id) && overlaps(i, moving)));
-  const settled: GridItem[] = [moving];
+/** 우선 배치 뒤 겹친 카드만 이동한다. 이동은 오른쪽 우선, 크기 변경은 같은 열 아래쪽 우선이다. */
+function settleItems(base: readonly GridItem[], fixed: readonly GridItem[], direction: "right" | "down"): Item[] | null {
+  const fixedIds = new Set(fixed.map((i) => i.id));
+  const rest = base.filter((i) => !fixedIds.has(i.id));
+  const settled = [...fixed];
   for (const i of [...rest].sort((a, b) => a.y - b.y || a.x - b.x)) {
     let next = { ...i };
+    if (isSpaceId(i.id) && settled.some((p) => overlaps(p, next))) continue;
     for (;;) {
       const collisions = settled.filter((p) => overlaps(p, next));
       if (!collisions.length) break;
-      next = { ...next, y: Math.max(...collisions.map((p) => p.y + p.h)) };
+      const right = Math.max(...collisions.map((p) => p.x + p.w));
+      if (direction === "right" && right + next.w <= GRID_COLS) {
+        next = { ...next, x: right };
+      } else if (direction === "right") {
+        // 한 줄에 더 들어가지 않을 때만 줄을 넘긴다. 새 줄은 왼쪽부터 이어 놓는다.
+        const row = settled.filter((p) => p.y < next.y + next.h && p.y + p.h > next.y);
+        next = { ...next, x: 0, y: Math.max(...row.map((p) => p.y + p.h)) };
+      } else {
+        next = { ...next, y: Math.max(...collisions.map((p) => p.y + p.h)) };
+      }
       // 경계에 닿으면 전체 조작을 취소한다. 겹친 상태를 저장하지 않는다.
-      if (next.y + next.h > MAX_GRID_Y) return [...items];
+      if (next.y + next.h > MAX_GRID_Y) return null;
     }
     settled.push(next);
   }
   const byId = new Map(settled.map((i) => [i.id, i]));
-  const order = base.some((i) => i.id === item.id) ? base : [...base, moving];
+  const order = [...base, ...fixed.filter((i) => !base.some((b) => b.id === i.id))];
   return order.flatMap((i) => byId.has(i.id) ? [byId.get(i.id)!] : []);
+}
+
+/** 카드를 끼워 넣으면 기존 카드는 오른쪽으로 밀리고, 줄이 꽉 차면 다음 줄로 이어진다. */
+export function placeItem(items: readonly Item[], item: Item, x: number, y: number, direction: "right" | "down" = "right"): Item[] {
+  const base = positionItems(items);
+  if (!base.some((i) => i.id === item.id) && base.length >= MAX_ITEMS) return [...items];
+  const moving = gridBounds({ ...item, x, y, h: isPositioned(item) ? item.h : gridHeight(item) });
+  return settleItems(base, [moving], direction) ?? [...items];
+}
+
+export type KpiWidth = 2 | 3 | 6;
+
+/** KPI를 읽기 순서대로 같은 폭·높이로 정렬한다. 아래 구역의 간격·크기·옵션은 보존한다. */
+export function uniformKpiItems(items: readonly Item[], width: KpiWidth): Item[] {
+  const base = positionItems(items);
+  const kpis = base.filter((i) => isKpiId(i.id)).sort((a, b) => a.y - b.y || a.x - b.x);
+  if (!kpis.length) return [...items];
+  const top = kpis[0].y;
+  const oldEnd = rowsOf(kpis);
+  const perRow = GRID_COLS / width;
+  const end = top + Math.ceil(kpis.length / perRow) * 2;
+  if (end > MAX_GRID_Y) return [...items];
+  const fixed = kpis.map((i, n) => ({ ...i, x: (n % perRow) * width, y: top + Math.floor(n / perRow) * 2, w: width, h: 2 }));
+  const separate = base.every((i) => isKpiId(i.id) || isSpaceId(i.id) || i.y + i.h <= top || i.y >= oldEnd);
+  const shifted = base.map((i) => separate && !isKpiId(i.id) && i.y >= oldEnd ? { ...i, y: i.y + end - oldEnd } : i);
+  if (shifted.some((i) => i.y + i.h > MAX_GRID_Y)) return [...items];
+  return settleItems(shifted, fixed, "down") ?? [...items];
 }
 
 export function appendItem(items: readonly Item[], item: Item): Item[] {
@@ -82,5 +117,5 @@ export function resizeGridItem(items: readonly Item[], id: string, size: Pick<It
   const item = base.find((i) => i.id === id);
   if (!item) return [...items];
   // 오른쪽 경계를 넘는 확장은 왼쪽 위치를 바꾸지 않고 가능한 폭까지만 허용한다.
-  return placeItem(base, { ...item, ...size, w: Math.min(size.w, GRID_COLS - item.x), h: Math.min(size.h, MAX_GRID_Y - item.y) }, item.x, item.y);
+  return placeItem(base, { ...item, ...size, w: Math.min(size.w, GRID_COLS - item.x), h: Math.min(size.h, MAX_GRID_Y - item.y) }, item.x, item.y, "down");
 }

@@ -85,6 +85,14 @@ const FULL: ParentReportCardProps = {
   ),
 };
 
+it.each([false, true])("학부모 보고서 이름에는 구분용 알파벳을 표시하지 않는다(templateMode=%s)", templateMode => {
+  const student = { ...FULL.student!, name: "김민서G" };
+  const html = renderToStaticMarkup(<ParentReportCard {...FULL} student={student} templateMode={templateMode} />);
+  expect(html).toContain("김민서");
+  expect(html).not.toContain("김민서G");
+  expect(student.name).toBe("김민서G");
+});
+
 it("영상 과제가 있는 보고서만 오늘 과제 아래에 실제 제출 날짜를 표시한다", () => {
   const html = renderToStaticMarkup(<ParentReportCard {...FULL} report={{ ...FULL.report, reportDate: "2026-10-02", videoHomework: true }} />);
   // 언제까지 내나 — 올리기 사이트·멘트와 같은 문구(video-homework/due.ts, 원장 2026-10-15).

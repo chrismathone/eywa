@@ -1,5 +1,6 @@
 import "server-only";
 import { cache } from "react";
+import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -12,19 +13,22 @@ import { subjectLabelRecord } from "@/features/owner/subjects";
 import { protectedAccountIds } from "@/lib/auth/protected-accounts";
 import { displayRoleFor } from "@/lib/auth/super-admin";
 import { staffSubjectScopeOf } from "@/features/staff/department/subject-scope";
+import { loadReportPrefill } from "./prefill";
+import { reportConsultations } from "./consultations";
 
 export const reportViewer = cache(async () => {
   const user = await getCurrentUser({ teacherView: true });
   if (!user || !(await canAccessTenant(user.systemRole, "withdrawal_reports")) || !(await isFeatureOptedIn(user.tenantId, "laboratory"))) return null;
-  const [writable, scope] = await Promise.all([canWriteTenant(user.systemRole, "withdrawal_reports"), getViewerStaffScope(user)]);
-  return { user, writable, scope, request: canRequestReport(user.systemRole) && writable };
+  const [writable, scope, teacherId] = await Promise.all([canWriteTenant(user.systemRole, "withdrawal_reports"), getViewerStaffScope(user), effectiveTeacherId()]);
+  const manage = !teacherId && canRequestReport(user.systemRole);
+  return { user, writable, scope, teacherId, manage, request: manage && writable };
 });
 
 export function canReadReport(r: ReportListRow, viewer: NonNullable<Awaited<ReturnType<typeof reportViewer>>>) {
-  return viewer.user.systemRole === "master" || isParticipant(r, viewer.user.id);
+  return viewer.teacherId ? r.teacher_id === viewer.teacherId : viewer.user.systemRole === "master" || isParticipant(r, viewer.user.id);
 }
 const REPORT_COLUMNS = "id,tenant_id,student_id,requested_by,teacher_id,manager_id,director_id,exit_kind,subjects,effective_date,request_note,snapshot,body,status,revision,manager_approved_at,director_approved_at,applied_at,last_comment,created_at,updated_at,group_id,group_leader,manager_ids,director_ids,manager_decisions,director_decisions";
-const REPORT_LIST_COLUMNS = "id,tenant_id,student_id,requested_by,teacher_id,manager_id,director_id,exit_kind,subjects,effective_date,request_note,snapshot,status,revision,manager_approved_at,director_approved_at,applied_at,last_comment,created_at,updated_at,group_id,group_leader,manager_ids,director_ids,manager_decisions,director_decisions,body_reason:body->>reason,body_detail:body->>detail";
+const REPORT_LIST_COLUMNS = "id,tenant_id,student_id,requested_by,teacher_id,manager_id,director_id,exit_kind,subjects,effective_date,request_note,snapshot,status,revision,manager_approved_at,director_approved_at,applied_at,last_comment,created_at,updated_at,group_id,group_leader,manager_ids,director_ids,manager_decisions,director_decisions,body_reason:body->>reason,body_detail:body->>detail,body_reason_detail:body->>reasonDetail";
 const COURSE_COLUMNS = "id,start_date,end_date,on_hold,is_transferred,classes!inner(id,class_name,subject,teacher_id,teacher:teacher_id(display_name))";
 type JoinedCourse = { id: string; start_date: string; end_date: string | null; on_hold: boolean; is_transferred: boolean; classes: { id: string; class_name: string; subject: string; teacher_id: string | null; teacher: { display_name: string } | null } };
 function currentCourses(rows: JoinedCourse[]): CourseSnapshot[] {
@@ -45,7 +49,8 @@ export async function listReports() {
   if (!viewer) return { rows: [] as ReportListRow[], available: false, completedLimited: false };
   const base = () => {
     let q = createAdminClient().from("withdrawal_reports").select(REPORT_LIST_COLUMNS).eq("tenant_id", viewer.user.tenantId);
-    if (viewer.user.systemRole !== "master") q = q.or([...(["requested_by", "teacher_id", "manager_id", "director_id"].map(k => `${k}.eq.${viewer.user.id}`)), `manager_ids.cs.{${viewer.user.id}}`, `director_ids.cs.{${viewer.user.id}}`].join(","));
+    if (viewer.teacherId) q = q.eq("teacher_id", viewer.teacherId);
+    else if (viewer.user.systemRole !== "master") q = q.or([...(["requested_by", "teacher_id", "manager_id", "director_id"].map(k => `${k}.eq.${viewer.user.id}`)), `manager_ids.cs.{${viewer.user.id}}`, `director_ids.cs.{${viewer.user.id}}`].join(","));
     return q;
   };
   const rows: ReportListRow[] = [];
@@ -68,12 +73,18 @@ export async function getReport(id: string) {
   const { data, error } = await db.from("withdrawal_reports").select(REPORT_COLUMNS).eq("tenant_id", viewer.user.tenantId).eq("id", id).maybeSingle();
   if (error || !data || !canReadReport(data as WithdrawalReport, viewer)) return null;
   const [{ data: events, error: eventError }, current] = await Promise.all([
-    db.from("withdrawal_report_events").select("id,actor_id,action,from_status,to_status,comment,created_at").eq("tenant_id", viewer.user.tenantId).eq("report_id", id).order("created_at").limit(300),
+    db.from("withdrawal_report_events").select("id,actor_id,action,from_status,to_status,comment,created_at").eq("tenant_id", viewer.user.tenantId).eq("report_id", id).order("created_at", { ascending: false }).order("id", { ascending: false }).limit(300),
     ["completed", "canceled"].includes(data.status) ? Promise.resolve(null) : currentSnapshot(viewer.user.tenantId, data.student_id),
   ]);
   if (eventError) throw new Error("보고서 처리 이력을 불러오지 못했습니다.");
   const assignmentChanged = !["completed", "canceled"].includes(data.status) && (!current || !snapshotMatches(data.snapshot as StudentSnapshot, current));
-  return { report: data as WithdrawalReport, events: (events ?? []) as ReportEvent[], assignmentChanged };
+  // 작성 중 수납은 최신 장부를 사용하고, 제출한 보고서는 제출 당시 값을 보존한다.
+  const draft = ["requested", "revision"].includes(data.status) && !assignmentChanged;
+  const [prefill, consultations] = await Promise.all([
+    draft ? loadReportPrefill(data as WithdrawalReport, viewer.user.systemRole) : Promise.resolve({ prefill: undefined, prefillWarning: undefined }),
+    reportConsultations(data as WithdrawalReport, viewer),
+  ]);
+  return { report: data as WithdrawalReport, events: [...(events ?? [])].reverse() as ReportEvent[], assignmentChanged, consultations, ...prefill };
 }
 export async function reportStaff() {
   const viewer = await reportViewer();

@@ -1,16 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { WithdrawalReport } from "../model";
-const state = vi.hoisted(() => ({ user: { id: "actor", tenantId: "tenant", systemRole: "teacher" }, access: true, write: true, lab: true, scope: null as string[] | null, db: vi.fn() }));
+import { EMPTY_BODY, type WithdrawalReport } from "../model";
+const state = vi.hoisted(() => ({ user: { id: "actor", tenantId: "tenant", systemRole: "teacher" }, teacherId: null as string | null, access: true, write: true, lab: true, scope: null as string[] | null, db: vi.fn(), prefill: vi.fn() }));
+vi.mock("@/lib/auth/view-mode", () => ({ effectiveTeacherId: async () => state.teacherId ?? (state.user.systemRole === "teacher" ? state.user.id : null) }));
+vi.mock("./consultations", () => ({ reportConsultations: async () => [] }));
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => state.user }));
 vi.mock("@/lib/auth/perm-matrix", () => ({ canAccessTenant: async () => state.access, canWriteTenant: async () => state.write }));
 vi.mock("@/lib/license/server", () => ({ isFeatureOptedIn: async () => state.lab }));
 vi.mock("@/features/staff/department/server/subject-scope", () => ({ getViewerStaffScope: async () => state.scope }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: state.db }));
 vi.mock("@/features/owner/server/queries", () => ({ getTenantSettings: async () => ({ operations: { subjects: [] } }) }));
-import { reportViewer, canReadReport, listReports, requestStudents } from "./queries";
+vi.mock("./prefill", () => ({ loadReportPrefill: state.prefill }));
+import { reportViewer, canReadReport, listReports, requestStudents, getReport } from "./queries";
 const report = { requested_by: "requester", teacher_id: "actor", manager_id: "manager", director_id: "director", subjects: ["math"] } as WithdrawalReport;
 describe("report read boundaries", () => {
-  beforeEach(() => { state.user = { id: "actor", tenantId: "tenant", systemRole: "teacher" }; state.access = true; state.write = true; state.lab = true; state.scope = null; state.db.mockReset(); });
+  beforeEach(() => { state.user = { id: "actor", tenantId: "tenant", systemRole: "teacher" }; state.access = true; state.write = true; state.lab = true; state.scope = null; state.teacherId = null; state.db.mockReset(); });
   it("does not read storage when the laboratory is disabled", async () => {
     state.lab = false;
     expect(await reportViewer()).toBeNull();
@@ -50,5 +53,60 @@ describe("report read boundaries", () => {
   it("principal reads reports in their tenant query", async () => {
     state.user.systemRole = "master";
     expect(canReadReport({ ...report, teacher_id: "someone_else" }, (await reportViewer())!)).toBe(true);
+  });
+  it("a principal in teacher view sees only their authored reports and cannot request new reports", async () => {
+    state.user.systemRole = "master"; state.teacherId = "actor";
+    const viewer = (await reportViewer())!;
+    expect(viewer.request).toBe(false);
+    expect(viewer.manage).toBe(false);
+    expect(canReadReport({ ...report, requested_by: "actor", teacher_id: "someone_else" }, viewer)).toBe(false);
+    expect(canReadReport(report, viewer)).toBe(true);
+  });
+});
+
+describe("automatic report fields stay within a fresh authorized draft", () => {
+  const snapshot = { name: "테스트", school: null, grade: null, enrolledAt: null, status: "enrolled", withdrawnAt: null, courses: [] };
+  const draft = { ...report, id: "report", tenant_id: "tenant", student_id: "student", status: "requested", snapshot, body: EMPTY_BODY } as WithdrawalReport;
+  function storage(r: WithdrawalReport, actions: string[] = []) {
+    const from = vi.fn((table: string) => {
+      const result = table === "withdrawal_reports" ? r : table === "withdrawal_report_events" ? actions.map(action => ({ action })) : { ...snapshot, enrolled_at: null, withdrawn_at: null, enrollments: [] };
+      const q = { select: vi.fn(), eq: vi.fn(), maybeSingle: vi.fn(), order: vi.fn(), limit: vi.fn() };
+      for (const fn of Object.values(q)) fn.mockReturnValue(q);
+      q.maybeSingle.mockResolvedValue({ data: result, error: null });
+      q.limit.mockResolvedValue({ data: result, error: null });
+      return q;
+    });
+    state.db.mockReturnValue({ from });
+    return from;
+  }
+  beforeEach(() => {
+    state.user = { id: "actor", tenantId: "tenant", systemRole: "teacher" }; state.access = true; state.lab = true;
+    state.db.mockReset(); state.prefill.mockReset().mockResolvedValue({ prefill: { attendance: "자동 출결" } });
+  });
+  it("fills a fresh draft after report and live student validation", async () => {
+    storage(draft);
+    expect((await getReport("report"))?.prefill).toEqual({ attendance: "자동 출결" });
+    expect(state.prefill).toHaveBeenCalledWith(draft, "teacher");
+  });
+  it("refreshes automatic billing for previously saved drafts", async () => {
+    storage(draft, ["save"]);
+    await getReport("report");
+    expect(state.prefill).toHaveBeenCalledWith(draft, "teacher");
+  });
+  it("keeps a submitted document unchanged", async () => {
+    storage({ ...draft, status: "manager_pending" }, ["submit"]);
+    expect((await getReport("report"))?.prefill).toBeUndefined();
+    expect(state.prefill).not.toHaveBeenCalled();
+  });
+  it("does not read auxiliary sources for a nonparticipant", async () => {
+    const from = storage({ ...draft, teacher_id: "someone-else" });
+    expect(await getReport("report")).toBeNull();
+    expect(from).toHaveBeenCalledTimes(1);
+    expect(state.prefill).not.toHaveBeenCalled();
+  });
+  it("does not change a completed report", async () => {
+    storage({ ...draft, status: "completed" });
+    expect((await getReport("report"))?.prefill).toBeUndefined();
+    expect(state.prefill).not.toHaveBeenCalled();
   });
 });

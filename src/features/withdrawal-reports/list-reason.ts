@@ -81,10 +81,10 @@ export function archiveReason(rawReason: string | null | undefined, rawDetail: s
 }
 
 /** 웹 보고서 — 고른 사유 · 상세 사유 → 목록 칸. 작성 요청만 받고 아직 아무것도 안 적은 보고서는 '작성 전'. */
-export function webReportReason(status: string, reason: string | null | undefined, detail: string | null | undefined): ListReason {
+export function webReportReason(status: string, reason: string | null | undefined, detail: string | null | undefined, reasonDetail?: string | null): ListReason {
   const key = normalizeReason(reason);
   const note = firstLine(detail);
   if (status === "requested" && (!key || key === "other") && !note) return { text: "작성 전", note: null, muted: true };
   if (!key) return { text: "미기재", note: null, muted: true };
-  return key === "other" ? other(note) : { text: text(key), note: null };
+  return key === "other" ? other(note) : { text: text(key, reasonDetail), note: null };
 }

@@ -34,6 +34,8 @@ import {
 } from "@/features/enrollment/server/stats-queries";
 import { loadSchoolStatsPrefs } from "@/features/enrollment/server/school-prefs-actions";
 import { StatsView } from "./_components/stats-view";
+import { getWithdrawalsInWindow } from "@/features/withdrawals/server/window";
+import { buildManagementExits } from "@/features/enrollment/management-sheet";
 import { IntakeTrendCard } from "./_components/intake-trend-card";
 import { OpsHistoryCard } from "../students/stats/_components/ops-history-card";
 import { PROGRESS_KEYS } from "@/features/students/stats/ops-keys";
@@ -58,7 +60,7 @@ import { MakeeduPushButton } from "./_components/makeedu-push-button";
 import { canPushToMakeedu } from "@/features/integrations/server/makeedu-push-access";
 import { readMyUiPrefs } from "@/lib/ui-prefs/read";
 import { RememberPrefs } from "@/components/remember-prefs";
-import { PROGRESS_DEFAULT_OFF, parseEnrollmentView, savedEnrollmentView, savedIntakeTrendMode, savedProgressTrendMode, savedProgressTrendOff } from "@/features/enrollment/view-pref";
+import { PROGRESS_DEFAULT_OFF, parseEnrollmentView, parseStatsSpan, savedEnrollmentView, savedIntakeChartKind, savedIntakeTrendMode, savedProgressTrendMode, savedProgressTrendOff, savedStatsSpan, type StatsSpanValue } from "@/features/enrollment/view-pref";
 import { saveEnrollmentViewPref, saveProgressTrendMode, saveProgressTrendOff } from "@/features/enrollment/server/view-pref-actions";
 
 export const metadata = { title: "신규 콜&상담 — 에이와" };
@@ -131,11 +133,6 @@ export default async function EnrollmentPage({
   // 칸 키다 — 옛 링크(`?outcome=ai_done`)는 그 값이 속한 칸으로 넓혀 받는다(parseBoardStage).
   const selectedStage = parseBoardStage(outcome);
   const searchQuery = q?.trim() || null;
-  // 통계뷰 전용 — 연도 선택. `all` = 전체 기간(원장 2026-08-05). 여기엔 "최대 1년" 상한이 없다
-  // (집계라 행을 안 가져온다 — 칸반·목록의 상한은 행 로딩 때문이라 여기와 무관).
-  const statsPeriod = parseStatsPeriod(yearParam, Number(kstToday().slice(0, 4)));
-  // 단일 연도면 그 해, 기간 프리셋이면 null(라벨·비율 판정에 쓴다).
-  const statsYear: number | null = statsPeriod.kind === "year" ? statsPeriod.year : null;
   const page = Math.max(1, Number(pageParam) || 1);
   // 🔴 기본 = 최근 3개월. '전체'는 고를 수 없고 구간은 최대 1년(원장 2026-08-04) — 이관으로 3년치가
   // 쌓여 전건을 열면 칸반이 카드 2,197장이 된다. 알 수 없는 값이 와도 parseRange가 3개월로 되돌린다.
@@ -156,18 +153,29 @@ export default async function EnrollmentPage({
   // 엑셀로 넣기 = 학원 전체를 바꾸는 일괄 작업 → full만(`canManageTenant`, 올리기 주소도 같은 판정 — [[#77]]).
   // makeedu 보내기(원장 2026-10-01) = 전송 액션과 **같은 게이트**(`canPushToMakeedu`) — 권한이 없거나 makeedu 모듈이
   // 꺼진 지점이면 버튼 자리째 없다(잠긴 대체 화면도 안 그린다).
-  const [canWriteEnrollment, canOpenCalculator, canImportExcel, canPushMakeedu, uiPrefs] = await Promise.all([
+  // 관리현황 '등록 후 퇴원'(원장 2026-10-22) = 퇴원 명단을 보여 주므로 퇴원관리를 열 수 있는 사람에게만(같은 게이트 — 못 열면 칸째 없다).
+  const [canWriteEnrollment, canOpenCalculator, canImportExcel, canPushMakeedu, uiPrefs, canSeeExits] = await Promise.all([
     canWriteTenant(user.systemRole, "enrollment"),
     canAccessTenant(user.systemRole, "billing"),
     canManageTenant(user.systemRole, "enrollment"),
     canPushToMakeedu(user.systemRole),
     readMyUiPrefs(), // 실패하면 {} → 저장값 없음(칸반)
+    canAccessTenant(user.systemRole, "withdrawals"),
   ]);
   // 보기 = 주소의 `view` → 계정에 남은 마지막 보기 → 칸반(원장 2026-10-19 *"마지막으로 본 뷰로 사람에게 귀속"*, view-pref.ts).
   // 고른 보기는 아래 RememberPrefs가 저장한다. 🔴 툴바 링크는 칸반도 `view=kanban`으로 적는다(enrollment-query.ts) —
   //    안 적으면 저장이 끝나기 전 다음 클릭이 옛 저장값으로 돌아간다.
   const savedView = savedEnrollmentView(uiPrefs);
   const view: EnrollmentView = parseEnrollmentView(viewParam) ?? savedView;
+  // 통계 연도 = 주소의 `year` → 계정에 남은 여러 해 묶음(2·3개년) → 올해(검수 2026-10-22 — 아래 추이 카드처럼 기억한다).
+  // 여기엔 "최대 1년" 상한이 없다(집계라 행을 안 가져온다 — 칸반·목록의 상한은 행 로딩 때문이라 여기와 무관).
+  const savedSpan = savedStatsSpan(uiPrefs);
+  const statsPeriod = parseStatsPeriod(yearParam ?? savedSpan ?? undefined, Number(kstToday().slice(0, 4)));
+  // 단일 연도면 그 해, 기간 프리셋이면 null(라벨·비율 판정에 쓴다).
+  const statsYear: number | null = statsPeriod.kind === "year" ? statsPeriod.year : null;
+  // 저장할 묶음 — 통계 보기에서 주소로 연도를 고른 때만 바뀐다(다른 보기로 오가는 것은 저장값을 건드리지 않는다).
+  const currentSpan: StatsSpanValue | null =
+    view === "stats" && yearParam ? (statsPeriod.kind === "span" ? parseStatsSpan(`${statsPeriod.years}y`) : null) : savedSpan;
   // 신규 문의 추이(원장 2026-10-20) — 기간은 주소(`trend…`) → 계정에 남긴 보기 방식 → 월별 12개월. 연도 칩과 따로 논다.
   const today = kstToday();
   const intakeParams = readPeriodParams(sp, INTAKE_TREND_KEYS);
@@ -227,15 +235,23 @@ export default async function EnrollmentPage({
       ? { from: Math.min(...statsYears), to: Math.max(...statsYears) }
       : { from: Number(kstToday().slice(0, 4)), to: Number(kstToday().slice(0, 4)) };
   const span = periodRange(statsPeriod, available);
-  const [stats, dist, intake] =
+  const [stats, dist, intake, withdrawals] =
     view === "stats"
       ? await Promise.all([
           getEnrollmentStats(statsYear, span),
           // 🔴 상담 분포는 **연도가 적용된다**(재원생 기준이던 때는 연도를 바꿔도 안 변해 화면이 거짓말했다).
           getConsultationDistribution(statsYear, span),
           intakePromise,
+          // 관리현황 '등록 후 퇴원' — 퇴원관리·운영실과 같은 퇴원 목록(같은 원본). 기간 첫날부터 오늘까지(보는 해 뒤에 퇴원해도 센다).
+          canSeeExits
+            ? getWithdrawalsInWindow(`${span.from}-01-01`, today).catch((error: unknown) => {
+                reportWarning("관리현황 퇴원 조회 실패", { scope: "enrollment.managementExits", cause: error instanceof Error ? error.message : String(error) });
+                return null;
+              })
+            : Promise.resolve(null),
         ])
-      : [null, null, null];
+      : [null, null, null, null];
+  const managementExits = dist && withdrawals ? buildManagementExits(dist.cohorts, withdrawals) : null;
   const progressRows = await progressHistory;
   void _unused;
 
@@ -283,6 +299,42 @@ export default async function EnrollmentPage({
     return `/enrollment?${params.toString()}`;
   };
 
+  // 연도 칩(원장 2026-10-22 *"너무 위쪽에 있어서 아래쪽과 작동하는게 헷갈림. 해당 위치로 이동할것"*) — 머리글 툴바에서 빼서 이 칩이 바꾸는
+  // 카드들(헤드라인·관리현황·월별…) 바로 위에 둔다(StatsView). 위 두 추이 카드는 카드 안 기간을 따로 쓴다.
+  const statsYearChips =
+    view === "stats" && statsYears.length > 0 ? (
+      <div className="flex items-center gap-1.5">
+        <span className="micro shrink-0">연도</span>
+        <div className={TOOLBAR_SEG_BOX}>
+          {/* 기간 프리셋 — 최대 3개년(원장 2026-08-05). '전체'는 없앴다: 해가 갈수록 구간이
+              무한히 길어져 화면이 계속 빽빽해진다. 상한을 두면 눈금 압축(월→분기)과 맞물려
+              몇 년이 지나도 같은 밀도로 읽힌다. */}
+          {[2, 3].map((n) => (
+            <Link
+              scroll={false}
+              key={`${n}y`}
+              href={yearHref(`${n}y`)}
+              className={`${TOOLBAR_SEG_ITEM} ${
+                statsPeriod.kind === "span" && statsPeriod.years === n ? TOOLBAR_SEG_ON : TOOLBAR_SEG_OFF
+              }`}
+            >
+              {n}개년
+            </Link>
+          ))}
+          {statsYears.map((y) => (
+            <Link
+              scroll={false}
+              key={y}
+              href={yearHref(y)}
+              className={`${TOOLBAR_SEG_ITEM} num ${y === statsYear ? TOOLBAR_SEG_ON : TOOLBAR_SEG_OFF}`}
+            >
+              {y}
+            </Link>
+          ))}
+        </div>
+      </div>
+    ) : null;
+
   return (
     // 세로 간격 4(=16px) — 🔴 5(20px)였는데 원장이 *"창을 가장 크게 해도 하단에 스크롤"*을 지적했다.
     // 여백은 세 곳(이 간격 · 칸 머리 py · 카드 py)에서 함께 줄여야 한 칸이 창 안에 들어온다.
@@ -296,7 +348,7 @@ export default async function EnrollmentPage({
       {/* QR 접수가 들어오면 새로고침 없이 목록이 갱신된다(20초 건수 폴링). 알림 줄은 도착 후에만 렌더. */}
       <NewConsultationWatcher initialCount={totalCount ?? 0} />
       {/* 운영실 ↗로 온 방문(`from=dashboard`)은 보기를 저장하지 않는다 — 카드가 연 보기가 사람이 고른 마지막 보기를 덮지 않게(원생목록과 같은 규약). */}
-      {sp.from === "dashboard" ? null : <RememberPrefs current={{ view }} saved={{ view: savedView }} save={saveEnrollmentViewPref} />}
+      {sp.from === "dashboard" ? null : <RememberPrefs current={{ view, statsSpan: currentSpan }} saved={{ view: savedView, statsSpan: savedSpan }} save={saveEnrollmentViewPref} />}
 
       <PageHeader
         eyebrow="신규 콜&상담"
@@ -370,38 +422,6 @@ export default async function EnrollmentPage({
             </div>
           )
         }
-        yearChips={
-          view === "stats" && statsYears.length > 0 ? (
-            <div className="flex items-center gap-1.5">
-              <span className="micro shrink-0">연도</span>
-              <div className={TOOLBAR_SEG_BOX}>
-                {/* 기간 프리셋 — 최대 3개년(원장 2026-08-05). '전체'는 없앴다: 해가 갈수록 구간이
-                    무한히 길어져 화면이 계속 빽빽해진다. 상한을 두면 눈금 압축(월→분기)과 맞물려
-                    몇 년이 지나도 같은 밀도로 읽힌다. */}
-                {[2, 3].map((n) => (
-                  <Link
-                    key={`${n}y`}
-                    href={yearHref(`${n}y`)}
-                    className={`${TOOLBAR_SEG_ITEM} ${
-                      statsPeriod.kind === "span" && statsPeriod.years === n ? TOOLBAR_SEG_ON : TOOLBAR_SEG_OFF
-                    }`}
-                  >
-                    {n}개년
-                  </Link>
-                ))}
-                {statsYears.map((y) => (
-                  <Link
-                    key={y}
-                    href={yearHref(y)}
-                    className={`${TOOLBAR_SEG_ITEM} num ${y === statsYear ? TOOLBAR_SEG_ON : TOOLBAR_SEG_OFF}`}
-                  >
-                    {y}
-                  </Link>
-                ))}
-              </div>
-            </div>
-          ) : null
-        }
         selectedMonth={selectedMonth}
         selectedConsultant={selectedConsultant}
         selectedStage={selectedStage}
@@ -426,13 +446,15 @@ export default async function EnrollmentPage({
           period={intakePeriod}
           today={today}
           groups={intake?.groups ?? {}}
+          chartKind={savedIntakeChartKind(uiPrefs)}
           keep={{ view: "stats", year: yearParam, from: sp.from === "dashboard" ? "dashboard" : undefined, ...Object.fromEntries(Object.values(PROGRESS_KEYS).map((k) => [k, (sp as Record<string, string | undefined>)[k]])) }}
         />
         {progressRows ? (
           <OpsHistoryCard
             id="progress"
             title="상담 진행 기록"
-            note="운영실 '상담 진행'의 그날 값 — 점마다 그날까지 최근 30일 접수가 단계마다 몇 건 닿았나(접수 ⊃ 등록 ⊃ 수업 시작) · 멈춘 상담은 60일"
+            // 기호(⊃) 대신 말로 · 멈춘 상담은 창이 60일이라 접수(30일)보다 클 수 있다는 것을 적는다(검수 2026-10-22 — 화면에 '멈춘 21 > 접수 20').
+            note="운영실 '상담 진행' 카드의 그날 값 · 접수~수업 시작 = 그날까지 최근 30일 접수 중 그 단계까지 간 건수 · 멈춘 상담 = 최근 60일 접수 중 결정 없이 멈춘 건수(기간이 달라 접수보다 많을 수 있습니다)"
             firstDate={firstRecorded(progressRows, (o) => !!o.consult)}
             period={progressPeriod}
             today={today}
@@ -462,6 +484,9 @@ export default async function EnrollmentPage({
         <StatsView
           stats={stats}
           year={statsYear}
+          periodText={span.from === span.to ? `${span.from}년` : `${span.from}~${span.to}년`}
+          yearChips={statsYearChips}
+          exits={managementExits}
           dist={dist}
           schoolPrefs={schoolPrefs}
         />

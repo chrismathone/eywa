@@ -30,7 +30,7 @@ const flat = (sp: SearchParams) =>
 
 /**
  * 퇴원보고서 — 웹 보고서와 기존 스프레드시트 기록을 한 목록에(원장 2026-10-14). 필터·쪽은 주소에 싣고 서버가 거른다
- * (퇴원관리와 같은 방식). 기존 기록은 작성 요청 권한이 있는 사람만 본다(`listArchives`가 같은 판정으로 비운다).
+ * (퇴원관리와 같은 방식). 강사뷰는 본인에게 매핑된 기록만, 관리자뷰는 관리 범위의 기록을 본다.
  */
 export default async function WithdrawalReportsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   await requireAccess("withdrawal_reports");
@@ -73,7 +73,7 @@ export default async function WithdrawalReportsPage({ searchParams }: { searchPa
   }
 
   const subjectMaps = buildSubjectMaps(settings.operations.subjects);
-  const canSeeArchive = viewer.request;
+  const canSeeArchive = !!viewer.teacherId || viewer.manage;
   const items = buildListItems({ reports: list.rows, archives: archives ?? [], staff, labelOf: subjectMaps.labelOf, userId: viewer.user.id });
   const filters = parseListFilters(sp, canSeeArchive);
   const rangeWindow = listWindow(filters, kstToday());
@@ -98,7 +98,7 @@ export default async function WithdrawalReportsPage({ searchParams }: { searchPa
         teachers={teacherOptions(items)}
         // 미연결 칩 — 켜면 상태 필터는 걷는다(미연결은 기존 기록에만 있다), 다시 누르면 끈다.
         unmapped={
-          canSeeArchive
+          viewer.manage
             ? { href: listHref(sp, filters.unmapped ? { link: null } : { link: "unmapped", status: null }), count: unmappedCount }
             : null
         }

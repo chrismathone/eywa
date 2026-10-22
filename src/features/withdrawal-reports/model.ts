@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { SystemRole } from "@/lib/permissions";
+import { reasonDetailOf } from "@/features/withdrawals/reason-detail";
 import { REASON_LABEL } from "@/features/withdrawals/types";
 
 export const REPORT_STATUS = {
@@ -14,10 +15,12 @@ export const REPORT_ACTION_LABEL = { request: "작성 요청", save: "임시 저
 const text = z.string().trim().max(5000, "항목별 5,000자 이내로 입력해 주세요.");
 export const bodySchema = z.object({
   reason: z.enum(Object.keys(REASON_LABEL) as [keyof typeof REASON_LABEL, ...Array<keyof typeof REASON_LABEL>]),
+  reasonDetail: z.string().max(80).optional(),
+  consultationIds: z.array(z.uuid()).max(20).optional(),
   detail: text, studentConsultation: text, parentConsultation: text,
   teacherOpinion: text, attendance: text, tuition: z.string().trim().max(200),
   arrears: z.enum(["unknown", "no", "yes"]), arrearsNote: z.string().trim().max(1000),
-});
+}).refine(b => !b.reasonDetail || reasonDetailOf(b.reasonDetail)?.reason === b.reason, { message: "퇴원사유에 맞는 세부 사유를 선택해 주세요.", path: ["reasonDetail"] });
 export type ReportBody = z.infer<typeof bodySchema>;
 export const EMPTY_BODY: ReportBody = { reason: "other", detail: "", studentConsultation: "", parentConsultation: "", teacherOpinion: "", attendance: "", tuition: "", arrears: "unknown", arrearsNote: "" };
 export const requestSchema = z.object({
@@ -54,7 +57,7 @@ export type WithdrawalReport = {
 export type ReportEvent = { id: string; actor_id: string | null; action: keyof typeof REPORT_ACTION_LABEL; from_status: ReportStatus | null; to_status: ReportStatus; comment: string | null; created_at: string };
 export type ReportListRow = Omit<WithdrawalReport, "body"> & {
   /** 목록 조회만 싣는 본문의 사유·상세 사유(본문 전체는 상세 화면에서만 읽는다). */
-  body_reason?: string | null; body_detail?: string | null;
+  body_reason?: string | null; body_detail?: string | null; body_reason_detail?: string | null;
 };
 export type StaffOption = { id: string; name: string; role: SystemRole; subjects: string[]; approvalSubjects?: string[] };
 export type StudentOption = { id: string; name: string; school: string | null; grade: string | null; courses: CourseSnapshot[] };
@@ -69,12 +72,12 @@ export function directorIds(r: Pick<WithdrawalReport, "director_id" | "director_
 export function isParticipant(r: Pick<WithdrawalReport, "requested_by" | "teacher_id" | "manager_id" | "director_id" | "manager_ids" | "director_ids">, userId: string) {
   return [r.requested_by, r.teacher_id, ...managerIds(r), ...directorIds(r)].includes(userId);
 }
-export function reportCapabilities(r: WithdrawalReport, userId: string, writable: boolean, role?: SystemRole) {
+export function reportCapabilities(r: WithdrawalReport, userId: string, writable: boolean) {
   const draft = r.status === "requested" || r.status === "revision";
   return {
     edit: writable && draft && r.teacher_id === userId,
     approve: writable && ((r.status === "manager_pending" && managerIds(r).includes(userId) && !r.manager_decisions?.[userId]) || (r.status === "director_pending" && directorIds(r).includes(userId) && !r.director_decisions?.[userId])),
-    cancel: writable && (role === "master" || [r.requested_by, ...directorIds(r)].includes(userId)) && !["completed", "canceled"].includes(r.status),
+    cancel: writable && r.requested_by === userId && !["completed", "canceled"].includes(r.status),
   };
 }
 export function submissionError(body: ReportBody): string | null {
