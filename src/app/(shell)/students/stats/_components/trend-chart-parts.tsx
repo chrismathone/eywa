@@ -54,8 +54,8 @@ export function ValueBox({
 }
 
 /**
- * 그래프 아래 범례 — 막대 보기(막대가 많으면 막대 위 숫자도 없어 색만으로는 뜻을 모른다) · 이름을 아래에 두는 꺾은선(`labelsBelow`).
- * 꺾은선은 표식도 선 모양(점선 계열은 점선)이라 막대 범례와 헷갈리지 않는다.
+ * 그래프 아래 범례 — 꺾은선(선 이름은 늘 여기 — 원장 2026-10-22 *"다른 화면의 꺾은선도 전부 일치화"*) · 막대(막대가 많으면 막대 위
+ * 숫자도 없어 색만으로는 뜻을 모른다). 꺾은선은 표식도 선 모양(점선 계열은 점선)이라 막대 범례와 헷갈리지 않는다.
  */
 export function ChartLegend({ series, note, line }: { series: ChartSeries[]; note?: string; line?: boolean }) {
   return (

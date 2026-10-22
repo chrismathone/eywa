@@ -34,19 +34,21 @@ export const requestSchema = z.object({
 export type ReportRequest = z.infer<typeof requestSchema>;
 export const batchRequestSchema = z.object({
   studentId: z.uuid(), teacherIds: z.array(z.uuid()).min(1).max(20), managerIds: z.array(z.uuid()).min(1).max(20),
+  enrollmentIds: z.array(z.uuid()).min(1, "종료할 반을 선택해 주세요.").max(100).optional(),
   directorIds: z.array(z.uuid()).max(20), subjects: z.array(z.string().min(1).max(80)).min(1).max(20),
   effectiveDate: z.iso.date(), note: z.string().trim().max(1000),
 }).superRefine((r, ctx) => {
   if (r.teacherIds.some(id => [...r.managerIds, ...r.directorIds].includes(id)) || r.managerIds.some(id => r.directorIds.includes(id)))
     ctx.addIssue({ code: "custom", message: "작성자·관리자·원장을 서로 다르게 지정해 주세요." });
 });
-export function automaticExitKind(courses: { subject: string }[], subjects: readonly string[]) {
-  return courses.length > 0 && courses.every(c => subjects.includes(c.subject)) ? "withdrawal" as const : "subject_end" as const;
+export function automaticExitKind(courses: { id: string }[], enrollmentIds: readonly string[]) {
+  return courses.length > 0 && courses.every(c => enrollmentIds.includes(c.id)) ? "withdrawal" as const : "subject_end" as const;
 }
 export type CourseSnapshot = { id: string; classId: string; className: string; subject: string; teacherId: string | null; teacherName: string | null; startDate: string; endDate: string | null; onHold: boolean };
 export type StudentSnapshot = { name: string; school: string | null; grade: string | null; enrolledAt: string | null; status: string; withdrawnAt: string | null; courses: CourseSnapshot[] };
 export type WithdrawalReport = {
   id: string; tenant_id: string; student_id: string; requested_by: string; teacher_id: string; manager_id: string; director_id: string | null;
+  enrollment_ids?: string[] | null;
   group_id?: string | null; group_leader?: boolean; manager_ids?: string[] | null; director_ids?: string[] | null;
   manager_decisions?: Record<string, string>; director_decisions?: Record<string, string>;
   exit_kind: "withdrawal" | "subject_end"; subjects: string[]; effective_date: string; request_note: string;

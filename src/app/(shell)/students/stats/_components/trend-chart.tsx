@@ -11,7 +11,7 @@ const Impl = dynamic(() => import("./trend-chart-impl").then((m) => m.TrendChart
 
 export type { ChartSeries, TrendChartProps } from "./trend-chart-impl";
 
-/** 원생 통계 그래프 — 꺾은선·막대 · 선 끝 라벨 · 마우스 오버 값 상자(일반 차트처럼). */
+/** 원생 통계 그래프 — 꺾은선·막대 · 이름은 그래프 아래 범례 · 마우스 오버 값 상자(일반 차트처럼). */
 export function TrendChart(props: TrendChartProps) {
   return <Impl {...props} />;
 }

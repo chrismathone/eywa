@@ -70,39 +70,7 @@ export function stackTotals(series: readonly { stack?: string; values: readonly 
   return out;
 }
 
-/** 마지막으로 값이 있는 칸(없으면 -1). */
-export function lastIndexWithValue(values: readonly (number | null)[]): number {
-  for (let i = values.length - 1; i >= 0; i--) if (values[i] !== null && values[i] !== undefined) return i;
-  return -1;
-}
-
-/**
- * 선 끝 라벨의 세로 위치 조정 — 선마다 마지막 값의 화면 높이(y)를 구해, 가까운 라벨끼리 `gap`px 이상 벌린다.
- * 위에서부터 차례로 내려 밀고, 바닥을 넘으면 위로 되민다. 돌려주는 값 = 원래 점 위치에서 더할 dy(px).
- */
-export function endLabelOffsets(
-  lines: readonly { key: string; value: number }[],
-  scale: { top: number; bottom?: number; plotTop: number; plotHeight: number },
-  gap = 18,
-): Map<string, number> {
-  const base = scale.bottom ?? 0;
-  const y = (v: number) => scale.plotTop + (1 - (v - base) / (scale.top - base)) * scale.plotHeight;
-  const items = lines.map((l) => ({ key: l.key, y0: y(l.value), y: y(l.value) })).sort((a, b) => a.y0 - b.y0);
-  for (let i = 1; i < items.length; i++) {
-    if (items[i]!.y - items[i - 1]!.y < gap) items[i]!.y = items[i - 1]!.y + gap;
-  }
-  const bottom = scale.plotTop + scale.plotHeight;
-  const last = items.at(-1);
-  if (last && last.y > bottom) {
-    last.y = bottom;
-    for (let i = items.length - 2; i >= 0; i--) {
-      if (items[i + 1]!.y - items[i]!.y < gap) items[i]!.y = items[i + 1]!.y - gap;
-    }
-  }
-  return new Map(items.map((it) => [it.key, it.y - it.y0]));
-}
-
-/** 글자 폭 어림(14px 글꼴) — 한글 14 · 숫자·영문 8 · 공백 4. 선 끝 라벨 자리(오른쪽 여백)를 잡는 데 쓴다. */
+/** 글자 폭 어림(14px 글꼴) — 한글 14 · 숫자·영문 8 · 공백 4. 기준 경계 문구 자리를 잡는 데 쓴다. */
 export function textWidth(text: string): number {
   let w = 0;
   for (const ch of text) w += /[가-힣]/.test(ch) ? 14 : ch === " " ? 4 : 8;

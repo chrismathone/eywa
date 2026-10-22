@@ -247,10 +247,11 @@ describe("③ 신규문의 — 같은 KST 하루 경계", () => {
 describe("④ 전일 입테 — 분류기 한 벌, ↗ 없음", () => {
   it("서버가 단일 분류기로 종류를 싣고, 카드·팝업은 levelTestListOn(어제) 한 번의 결과를 같이 쓴다", () => {
     expect(SERVER).toContain("kind: admissionsEventKind(event)");
-    expect(count(STRIP, "levelTestListOn(")).toBe(1);
-    expect(STRIP).toContain("levelTestListOn(v.calendar.data, yday)");
-    expect(STRIP).not.toContain("levelTestsOn(");
-    expect(STRIP).toContain("<LevelTestPopup list={levelTests} day={yday} />");
+    expect(count(STRIP, "levelTestListIn(")).toBe(1);
+    expect(STRIP).toContain("levelTestListIn(v.calendar.data, prev)");
+    expect(STRIP).toContain("const prev = previousDayRange(today);");
+    expect(STRIP).not.toContain("levelTestsIn(");
+    expect(STRIP).toContain("<LevelTestPopup list={levelTests} range={prev} />");
     expect(STRIP).not.toContain("/calendar");
   });
 
@@ -264,7 +265,11 @@ describe("④ 전일 입테 — 분류기 한 벌, ↗ 없음", () => {
 
   // 원장 2026-10-22 *"금일 입테 -> 전일 입테로 … 측정하는것도 전일 입테로"* — 일정은 어제부터 읽고, 어제 줄은 입테만 · 패널은 오늘부터.
   it("서버는 어제부터 읽어 어제 줄은 레벨테스트만 싣고, 일정 패널·요약은 오늘부터만 센다", () => {
-    expect(SERVER).toContain("getDateRangeEvents(yesterday, end)");
+    // 전일 첫날(월요일엔 토요일 — 원장 2026-10-22 *"월요일의 전일은 주말 모두 포함"*)부터 — 기간은 previousDayRange 한 곳.
+    expect(SERVER).toContain("const prevFrom = previousDayRange(today).from;");
+    expect(SERVER).toContain("getDateRangeEvents(prevFrom, end)");
+    expect(src("src/features/dashboard/layout/summary.ts")).toContain("levelTestListIn(v.calendar.data, previousDayRange(snap.today))");
+    expect(src("src/features/dashboard/overview/enrolled-recent.ts")).toContain("const prev = previousDayRange(today);");
     expect(SERVER).toContain('(event) => event.endDate >= today || admissionsEventBaseKind(event) === "levelTest"');
     const OVERVIEW_SRC = src("src/app/(shell)/dashboard/_overview/overview.tsx");
     expect(OVERVIEW_SRC).toContain("upcomingAdmissionsRows(v.calendar.data, snapshot.today)");
@@ -531,9 +536,9 @@ describe("⑧ 레벨테스트 및 첫수업 일정 — 오늘부터 한 달, 서
     expect(SERVER).toContain("const { end } = monthAheadWindow(today);");
     // 구간 한 번 — 달 단위(getMonthEvents)로 받으면 창이 두 달에 걸치는 날마다 조회가 두 벌이다.
     // 시작은 어제(KPI '전일 입테' — 원장 2026-10-22) · 어제 줄은 입테만, 패널은 `upcomingAdmissionsRows`로 오늘부터.
-    expect(SERVER).toContain("const result = await getDateRangeEvents(yesterday, end);");
+    expect(SERVER).toContain("const result = await getDateRangeEvents(prevFrom, end);");
     expect(SERVER).not.toContain("getMonthEvents");
-    expect(SERVER).toContain("upcomingAdmissionsEvents(result.events, yesterday, end)");
+    expect(SERVER).toContain("upcomingAdmissionsEvents(result.events, prevFrom, end)");
     expect(SERVER).toContain("firstClassCandidates(today, end)");
     expect(SERVER).toContain("firstClassScheduleCandidates(today, end)");
     expect(SERVER).not.toContain("shiftDate(today, 6)");

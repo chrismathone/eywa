@@ -27,10 +27,10 @@ export const reportViewer = cache(async () => {
 export function canReadReport(r: ReportListRow, viewer: NonNullable<Awaited<ReturnType<typeof reportViewer>>>) {
   return viewer.teacherId ? r.teacher_id === viewer.teacherId : viewer.user.systemRole === "master" || isParticipant(r, viewer.user.id);
 }
-const REPORT_COLUMNS = "id,tenant_id,student_id,requested_by,teacher_id,manager_id,director_id,exit_kind,subjects,effective_date,request_note,snapshot,body,status,revision,manager_approved_at,director_approved_at,applied_at,last_comment,created_at,updated_at,group_id,group_leader,manager_ids,director_ids,manager_decisions,director_decisions";
+const REPORT_COLUMNS = "id,enrollment_ids,tenant_id,student_id,requested_by,teacher_id,manager_id,director_id,exit_kind,subjects,effective_date,request_note,snapshot,body,status,revision,manager_approved_at,director_approved_at,applied_at,last_comment,created_at,updated_at,group_id,group_leader,manager_ids,director_ids,manager_decisions,director_decisions";
 const REPORT_LIST_COLUMNS = "id,tenant_id,student_id,requested_by,teacher_id,manager_id,director_id,exit_kind,subjects,effective_date,request_note,snapshot,status,revision,manager_approved_at,director_approved_at,applied_at,last_comment,created_at,updated_at,group_id,group_leader,manager_ids,director_ids,manager_decisions,director_decisions,body_reason:body->>reason,body_detail:body->>detail,body_reason_detail:body->>reasonDetail";
-const COURSE_COLUMNS = "id,start_date,end_date,on_hold,is_transferred,classes!inner(id,class_name,subject,teacher_id,teacher:teacher_id(display_name))";
-type JoinedCourse = { id: string; start_date: string; end_date: string | null; on_hold: boolean; is_transferred: boolean; classes: { id: string; class_name: string; subject: string; teacher_id: string | null; teacher: { display_name: string } | null } };
+const COURSE_COLUMNS = "id,start_date,end_date,on_hold,is_transferred,classes!inner(id,class_name,subject,is_active,closed_at,teacher_id,teacher:teacher_id(display_name))";
+type JoinedCourse = { id: string; start_date: string; end_date: string | null; on_hold: boolean; is_transferred: boolean; classes: { id: string; class_name: string; subject: string; is_active: boolean; closed_at: string | null; teacher_id: string | null; teacher: { display_name: string } | null } };
 function currentCourses(rows: JoinedCourse[]): CourseSnapshot[] {
   return rows.flatMap(e => {
     const c = e.classes;
@@ -110,7 +110,7 @@ export async function requestStudents() {
       .order("id").range(offset, offset + 399);
     if (error) throw new Error("학생의 수강 정보를 불러오지 못했습니다.");
     for (const student of data ?? []) {
-      const courses = currentCourses(student.enrollments as unknown as JoinedCourse[]);
+      const courses = currentCourses((student.enrollments as unknown as JoinedCourse[]).filter(e => e.classes?.is_active && !e.classes.closed_at));
       if (courses.length && (!viewer.scope || courses.some(c => viewer.scope!.includes(c.subject)))) result.push({ id: student.id, name: student.name, school: student.school, grade: student.grade, courses });
     }
     if (!data || data.length < 400) break;
