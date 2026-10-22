@@ -12,6 +12,7 @@ import { subjectLabelRecord } from "@/features/owner/subjects";
 import { protectedAccountIds } from "@/lib/auth/protected-accounts";
 import { displayRoleFor } from "@/lib/auth/super-admin";
 import { staffSubjectScopeOf } from "@/features/staff/department/subject-scope";
+import { loadReportPrefill } from "./prefill";
 
 export const reportViewer = cache(async () => {
   const user = await getCurrentUser({ teacherView: true });
@@ -68,12 +69,15 @@ export async function getReport(id: string) {
   const { data, error } = await db.from("withdrawal_reports").select(REPORT_COLUMNS).eq("tenant_id", viewer.user.tenantId).eq("id", id).maybeSingle();
   if (error || !data || !canReadReport(data as WithdrawalReport, viewer)) return null;
   const [{ data: events, error: eventError }, current] = await Promise.all([
-    db.from("withdrawal_report_events").select("id,actor_id,action,from_status,to_status,comment,created_at").eq("tenant_id", viewer.user.tenantId).eq("report_id", id).order("created_at").limit(300),
+    db.from("withdrawal_report_events").select("id,actor_id,action,from_status,to_status,comment,created_at").eq("tenant_id", viewer.user.tenantId).eq("report_id", id).order("created_at", { ascending: false }).order("id", { ascending: false }).limit(300),
     ["completed", "canceled"].includes(data.status) ? Promise.resolve(null) : currentSnapshot(viewer.user.tenantId, data.student_id),
   ]);
   if (eventError) throw new Error("보고서 처리 이력을 불러오지 못했습니다.");
   const assignmentChanged = !["completed", "canceled"].includes(data.status) && (!current || !snapshotMatches(data.snapshot as StudentSnapshot, current));
-  return { report: data as WithdrawalReport, events: (events ?? []) as ReportEvent[], assignmentChanged };
+  // 저장·제출한 문서는 자동 조회 값으로 덮어쓰지 않는다. 기존 보고서의 역사도 그대로 유지한다.
+  const untouched = data.status === "requested" && !assignmentChanged && !(events ?? []).some(e => e.action === "save" || e.action === "submit");
+  const prefill = untouched ? await loadReportPrefill(data as WithdrawalReport, viewer.user.systemRole) : { prefill: undefined, prefillWarning: undefined };
+  return { report: data as WithdrawalReport, events: [...(events ?? [])].reverse() as ReportEvent[], assignmentChanged, ...prefill };
 }
 export async function reportStaff() {
   const viewer = await reportViewer();
