@@ -24,6 +24,12 @@ describe("englishTemplateValues", () => {
     expect(englishTemplateValues({ ...BASE, teacherName: " " }).작성자).toBe("");
   });
 
+  it("학부모 보고서의 학생 태그에는 동명이인 구분용 알파벳을 넣지 않는다", () => {
+    const values = englishTemplateValues({ ...BASE, studentName: "김민서G" });
+    expect(fillReportTemplate("{학생}이는 잘 참여했어요.", values).text).toBe("김민서는 잘 참여했어요.");
+    expect(englishTemplateValues({ ...BASE, studentName: "AJ" }).학생).toBe("AJ");
+  });
+
   it("테스트는 있는 것만 라벨을 붙여 잇는다", () => {
     expect(englishTemplateValues(BASE).테스트).toBe("일일 20문제 중 18개 맞음");
     expect(

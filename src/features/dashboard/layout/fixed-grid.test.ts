@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { addRow, appendItem, overlaps, placeItem, positionItems, resizeGridItem } from "./fixed-grid";
+import { addRow, appendItem, overlaps, placeItem, positionItems, resizeGridItem, uniformKpiItems } from "./fixed-grid";
 import { newItem, removeItem, sameItems, sanitizeItems } from "./engine";
 import { dashboardItemSchema } from "@/features/owner/settings-types";
-import type { Item } from "./types";
+import { MAX_GRID_Y, type Item } from "./types";
 
 const initial = () => positionItems([
   ...["students", "withdrawals", "firstClass", "absent"].map((k) => ({ id: `kpi:${k}`, w: 6, h: 1 })),
@@ -42,6 +42,48 @@ describe("고정 행·열 배치", () => {
     expect(next[3]).toEqual(items[3]);
     noOverlap(next);
   });
+  it("카드 사이에 끼우면 오른쪽의 카드들이 같은 줄에서 밀린다", () => {
+    const items = initial().slice(0, 3);
+    const next = placeItem(items, { id: "kpi:makeup", w: 6, h: 1 }, 6, 0);
+    expect(next.map((i) => [i.id, i.x, i.y])).toEqual([
+      [items[0].id, 0, 0], [items[1].id, 12, 0], [items[2].id, 18, 0], ["kpi:makeup", 6, 0],
+    ]);
+    noOverlap(next);
+  });
+  it("한 줄이 꽉 찼을 때만 맨 끝 카드를 다음 줄 왼쪽으로 넘긴다", () => {
+    const items = initial().slice(0, 4);
+    const next = placeItem(items, { id: "kpi:makeup", w: 6, h: 1 }, 6, 0);
+    expect(next[0]).toEqual(items[0]);
+    expect(next[1]).toMatchObject({ x: 12, y: 0 });
+    expect(next[2]).toMatchObject({ x: 18, y: 0 });
+    expect(next[3]).toMatchObject({ x: 0, y: 2 });
+    noOverlap(next);
+  });
+  it("기존 카드를 앞으로 끼워도 중복 없이 오른쪽으로 순서를 바꾼다", () => {
+    const items = initial();
+    const next = placeItem(items, items[3], 6, 0);
+    expect(next[1]).toMatchObject({ x: 12, y: 0 });
+    expect(next[2]).toMatchObject({ x: 18, y: 0 });
+    expect(next[3]).toMatchObject({ x: 6, y: 0 });
+    expect(next.slice(4)).toEqual(items.slice(4));
+    expect(new Set(next.map((i) => i.id)).size).toBe(items.length);
+    noOverlap(next);
+  });
+  it("다음 줄이 차 있으면 그 줄도 오른쪽으로 이어 밀고 빈 예약 칸은 소비한다", () => {
+    const items = [
+      ...initial().slice(0, 4),
+      { id: "kpi:makeup", x: 0, y: 2, w: 6, h: 2 },
+      { id: "space:empty", x: 6, y: 2, w: 18, h: 2 },
+    ];
+    const next = placeItem(items, { id: "kpi:intake", w: 6, h: 1 }, 6, 0);
+    expect(next.find((i) => i.id === "kpi:makeup")).toMatchObject({ x: 6, y: 2 });
+    expect(next.some((i) => i.id === "space:empty")).toBe(false);
+    noOverlap(next);
+  });
+  it("아래 경계를 넘는 끼워 넣기는 전체를 취소한다", () => {
+    const items = initial().slice(0, 4).map((i) => ({ ...i, y: MAX_GRID_Y - 2 }));
+    expect(placeItem(items, { id: "kpi:makeup", w: 6, h: 1 }, 6, MAX_GRID_Y - 2)).toEqual(items);
+  });
   it("빈 행은 저장·재조회 후 남고 그곳에 카드를 놓을 수 있다", () => {
     const items = addRow(initial(), "test");
     const saved = sanitizeItems(JSON.parse(JSON.stringify(items)));
@@ -75,5 +117,34 @@ describe("고정 행·열 배치", () => {
       noOverlap(items);
       for (const i of positionItems(items)) expect(i.x + i.w).toBeLessThanOrEqual(24);
     }
+  });
+});
+
+describe("KPI 크기 통일", () => {
+  const mixed = () => [
+    ...["students", "courses", "withdrawals", "enrolledToday", "intake", "calendar", "firstClass", "absent", "makeup"].map((k, n) => ({ id: `kpi:${k}`, w: n < 6 ? 3 : 2, h: 2, x: n < 6 ? n * 3 : 18 + (n - 6) * 2, y: 0 })),
+    { id: "heading:next", title: "다음 구역", x: 0, y: 3, w: 24, h: 1 },
+    { id: "panel:billingMonth", title: "이번 달 수납", x: 6, y: 5, w: 12, h: 4, amounts: false },
+  ];
+  it.each([2, 3, 6] as const)("폭 %i로 9개 KPI를 통일하고 아래 구역의 간격과 옵션을 보존한다", (width) => {
+    const items = mixed();
+    const next = uniformKpiItems(items, width);
+    const perRow = 24 / width;
+    next.slice(0, 9).forEach((i, n) => expect(i).toMatchObject({ w: width, h: 2, x: n % perRow * width, y: Math.floor(n / perRow) * 2 }));
+    const delta = Math.ceil(9 / perRow) * 2 - 2;
+    expect(next.slice(9)).toEqual(items.slice(9).map((i) => ({ ...i, y: i.y + delta })));
+    expect(sanitizeItems(JSON.parse(JSON.stringify(next)))).toEqual(next);
+    next.forEach((i) => expect(dashboardItemSchema.safeParse(i).success).toBe(true));
+    noOverlap(next);
+  });
+  it("목록 순서가 달라도 화면에서 읽는 순서를 따르고 좁히면 아래 구역을 당긴다", () => {
+    const wide = uniformKpiItems(mixed(), 6).reverse();
+    expect(uniformKpiItems(wide, 2).reverse()).toEqual(uniformKpiItems(mixed(), 2));
+  });
+  it("KPI가 없거나 아래 구역이 경계를 넘으면 기존 배치를 유지한다", () => {
+    expect(uniformKpiItems(initial().slice(4), 3)).toEqual(initial().slice(4));
+    const items = mixed();
+    items[10].y = MAX_GRID_Y - items[10].h;
+    expect(uniformKpiItems(items, 6)).toEqual(items);
   });
 });

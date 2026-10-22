@@ -57,6 +57,11 @@ export function OpsHistoryCard({
   const all = charts.flatMap((c) => c.series);
   const filled = labels.map((_, i) => all.some((s) => s.values[i] !== null));
   const rows = labels.map((k, i) => ({ k, i })).filter(({ i }) => filled[i]);
+  // 기록 시작 전 칸은 그리지 않는다 — 앞쪽 빈 칸을 잘라 그래프가 첫 기록부터 선다(검수 2026-10-22 원장 *"그래프가 없는데"*:
+  // 24개월 보기에 점 하나가 오른쪽 끝에만 찍혀 그래프가 없는 것처럼 보였다). 점이 하나뿐이면 선을 이을 수 없어 막대로 그린다.
+  const start = Math.max(0, filled.indexOf(true));
+  const shown = labels.slice(start);
+  const single = rows.length === 1;
   const pickable = onOff ? all.filter((s) => !s.tooltipOnly) : [];
   const pickKeys = pickable.map((s) => s.key);
   const offNow = pickKeys.some((k) => !off.includes(k)) ? off : [];
@@ -92,14 +97,20 @@ export function OpsHistoryCard({
       ) : (
         <>
           {pickable.length > 1 ? <SeriesChips series={pickable.map((s) => ({ key: s.key, label: s.name, color: s.color }))} off={offNow} onToggle={toggle} /> : null}
+          {single ? (
+            <p className="text-muted-foreground text-xs break-keep">
+              {firstDate ? `${formatKoreanDate(firstDate)}부터 기록해 ` : ""}이 기간엔 {tip(rows[0]!.k)} 한 칸뿐입니다 — 칸이 둘 이상 쌓이면 선으로 이어집니다
+              {daily ? "" : " · 기간에서 '일별'이나 '구간'을 고르면 날마다 볼 수 있습니다"}
+            </p>
+          ) : null}
           {charts.map((c, n) => (
             <div key={c.title ?? n} className="space-y-1">
               {c.title ? <h3 className="text-foreground text-sm font-bold">{c.title}</h3> : null}
               <TrendChart
-                labels={labels.map(axis)}
-                tooltipLabels={labels.map(tip)}
-                series={c.series.filter((s) => !offNow.includes(s.key))}
-                kind={c.kind}
+                labels={shown.map(axis)}
+                tooltipLabels={shown.map(tip)}
+                series={c.series.filter((s) => !offNow.includes(s.key)).map((s) => ({ ...s, values: s.values.slice(start) }))}
+                kind={single ? "bar" : c.kind}
                 unit={c.unit}
                 legend={!onOff}
               />

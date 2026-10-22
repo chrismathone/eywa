@@ -1,10 +1,24 @@
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { defaultItems } from "@/features/dashboard/layout/defaults";
+import { uniformKpiItems } from "@/features/dashboard/layout/fixed-grid";
 import { EMPTY_DASHBOARD } from "@/features/dashboard/layout/types";
 import { useDashboardEditor } from "./use-editor";
 
 describe("역할별 대시보드 편집", () => {
+  it("KPI 일괄 정렬을 한 번에 되돌리고 저장할 배치에도 반영한다", () => {
+    const { result } = renderHook(() => useDashboardEditor(EMPTY_DASHBOARD));
+    const before = result.current.items;
+    const next = uniformKpiItems(before, 6);
+    act(() => result.current.commit(next));
+    expect(result.current.payload.layouts.find((l) => l.role === "owner")?.items).toEqual(next);
+    expect(result.current.touched).toEqual(["owner"]);
+    act(() => result.current.undo());
+    expect(result.current.items).toEqual(before);
+    expect(result.current.canUndo).toBe(false);
+    act(() => result.current.redo());
+    expect(result.current.items).toEqual(next);
+  });
   it("과목 전환·이력·지연된 삭제 복구가 다른 과목에 섞이지 않는다", () => {
     const { result } = renderHook(() => useDashboardEditor(EMPTY_DASHBOARD, ["math", "english"]));
     act(() => result.current.setRole("subject"));

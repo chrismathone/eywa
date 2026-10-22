@@ -46,10 +46,10 @@ const TOKEN = "\\{([^{}\\n]{1,20})\\}";
 const TOKEN_JOSA_RE = new RegExp(`${TOKEN}(?:(${JOSA_ALTERNATION})(?![가-힣]))?`, "g");
 /**
  * `{학생}` + 호칭 '이' + 조사(`{학생}이는`·`{학생}이가`) — 받침 없는 이름이면 '이'를 뺀다(규칙 1).
- * 🔴 **학생 칸에만** 건다 — 다른 칸(`{숙제}이만큼`)의 '이'는 호칭이 아니다. 이름이 비면 조사까지 함께 지운다
+ * 🔴 **학생·학생이름 칸에만** 건다 — 다른 칸(`{숙제}이만큼`)의 '이'는 호칭이 아니다. 이름이 비면 조사까지 함께 지운다
  *    (안 지우면 "는 Unit 3을 했어요"가 남는다, 적대 재리뷰 2026-09-10).
  */
-const TOKEN_VOCATIVE_RE = /\{\s*학생\s*\}이(는|가|를|의|도|랑|와|에게|한테|만|께)/g;
+const TOKEN_VOCATIVE_RE = /\{\s*(학\s*생(?:\s*이\s*름)?)\s*\}이(는|가|를|의|도|랑|와|에게|한테|만|께)/g;
 const TOKEN_ONLY_RE = new RegExp(TOKEN, "g");
 
 /**
@@ -113,8 +113,8 @@ export function fillReportTemplate(
       if (content.length && content.every((t) => valueOf(t) === "")) continue;
       if (content.some((t) => valueOf(t) !== "")) keptContentLine = true;
       const filled = line
-        .replace(TOKEN_VOCATIVE_RE, (_m, particle: string) => {
-          const value = valueOf("학생");
+        .replace(TOKEN_VOCATIVE_RE, (_m, name: string, particle: string) => {
+          const value = valueOf(name);
           if (!value) return EMPTY_MARK;
           return `${value}${hasBatchim(value) === false ? "" : "이"}${particle}`;
         })

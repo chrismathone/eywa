@@ -32,8 +32,6 @@ type Props = {
    * 쓰던 것을 툴바로 접어 화면 높이를 벌었다.
    */
   stats?: ReactNode;
-  /** 통계뷰 연도 칩 — 이 바에 얹어 sticky로 따라오게 한다(연도를 눌러가며 아래 변화를 보려면 늘 보여야 한다). */
-  yearChips?: ReactNode;
   /**
    * 접수일 필터(`received=YYYY-MM-DD`, 운영실 KPI '신규문의' ↗) — 걸려 있으면 칩 하나로 보이고 눌러 푼다.
    * 이 필터는 월·기간보다 우선이라, 기간을 고르거나 월을 옮기면 함께 풀린다(clearParams·enrollmentHref).
@@ -66,7 +64,6 @@ export function KanbanFilters({
   todayMonth,
   minYear,
   syncBadge,
-  yearChips,
   stats,
   receivedDay,
   excel,
@@ -92,18 +89,12 @@ export function KanbanFilters({
   const listFilters = view !== "stats";
 
   return (
-    // 통계뷰는 남는 컨트롤이 뷰 토글뿐이라 여백을 줄이고, **상단에 고정**한다 —
-    // 연도를 눌러가며 아래 숫자가 바뀌는 걸 보려면 칩이 스크롤을 따라와야 한다(원장 2026-08-05).
-    // ⚠️ sticky는 창(iframe) 안에서도 동작한다(스크롤 컨테이너가 문서라서). 배경이 비치지 않게 불투명 카드.
+    // 통계뷰의 연도 칩은 2026-10-22에 이 바에서 빠져 그 칩이 바꾸는 카드들 바로 위로 갔다(StatsView — 원장 *"너무 위쪽에 있어서
+    // 아래쪽과 작동하는게 헷갈림"*). 그래서 이 바는 이제 어느 보기에서도 고정하지 않는다(칩이 거기서 스크롤을 따라온다).
     // 🔴 툴바를 감싸던 카드 테두리를 뺐다(원장 2026-09-01 *"헤더 감싸고 있는 테두리 제거"*) —
     // 아래 칸반 네 칸이 각자 테두리를 갖게 되면서 선이 이중으로 겹쳐 보였다. 컨트롤 자체가 이미
     // 테두리를 갖고 있어 줄은 그대로 읽힌다.
-    // ⚠️ 통계뷰에선 이 바가 sticky다 — 배경이 없으면 스크롤 내용이 비치므로 그때만 불투명 배경.
-    <div
-      className={`flex flex-wrap items-center gap-2.5 px-1 ${
-        listFilters ? "py-1" : "bg-background sticky top-0 z-20 py-2"
-      }`}
-    >
+    <div className="flex flex-wrap items-center gap-2.5 px-1 py-1">
       {listFilters ? (
         <>
       {/* 월 이동 — 앱 전역 단일 소스 [PeriodNav](@/components/period-nav)(원장 2026-09-01
@@ -183,8 +174,6 @@ export function KanbanFilters({
       ) : null}
         </>
       ) : null}
-
-      {yearChips}
 
       {/* 보기 전환(칸반 · 목록 · 통계) — 지시서 §9 "보기 전환은 2차": 아이콘 칩 3개 대신 라벨 하나. 기본(칸반)은
           파라미터가 없다(allValue). ⚠️ 통계는 집계 화면이라 월·기간·상담사 필터를 안 물려받는다 — 남은 파라미터는 무시된다. */}

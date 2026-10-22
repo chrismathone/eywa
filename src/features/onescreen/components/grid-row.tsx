@@ -18,7 +18,8 @@ import {
   type GridRow,
 } from "../grid";
 import { evaluateSendGate } from "../send-gate";
-import { activeUnderstanding, isMathReportPilot, pilotNeedsAutoWrite } from "../math-report-pilot";
+import { hasPilotOneLine, isMathReportPilot, pilotNeedsAutoWrite } from "../math-report-pilot";
+import { pilotRowSig, testSkipComplete } from "../math-report-pilot-sections";
 import { hasTextBesidesMarkers } from "@/features/report-templates/image-slots";
 import { rowLockNotice } from "../split-rows";
 import { reportOptoutNotice } from "@/features/classes/report-optout";
@@ -307,9 +308,11 @@ export function GridBodyRow({
         studentName: student.name,
         today: subject.today,
         note: rowEval.note,
-        understanding: activeUnderstanding(subject.today, subject.understanding),
-        writtenSig: rep?.pilotUnderstandingSig,
+        factsSig: pilotRowSig(student, subject.name),
+        writtenSig: rep?.pilotFactsSig,
       }),
+    needsOneLine: pilot && !hasPilotOneLine(rowEval.note), // 강사 한줄 멘트 필수(원장 2026-10-22)
+    needsTestReason: pilot && !testSkipComplete(subject.dailyTestSkip), // 일일 테스트 '없음'이면 사유 필수(원장 2026-10-22)
     readonlyView: gen.readonlyView, // 열람 전용 — 사유 라벨("열람 전용")까지 게이트가 만든다
     // 발송 대기·게시 중 — 워커 결과 전까지 다시 못 누른다(카드뷰와 같은 판정, 원장 2026-09-29).
     sendInFlight: liveStatus === "queued" || liveStatus === "processing",
@@ -621,6 +624,10 @@ export function GridBodyRow({
           ⚠️ `contents`라 레이아웃은 그대로(칸 정렬·폭 불변). */}
       {config.dailyEnabled ? (
         <td className={`${td} text-center`}>
+          {/* 수학 보고서 시범 — 카드에서 '시험 없음'을 고른 행은 점수 칸 대신 그 사실을 적는다(점수를 넣어도 읽지 않는다, row-fields.ts). */}
+          {pilot && subject.dailyTestSkip ? (
+            <span className="text-text-dim text-xs font-bold">{t("os.card.testSkip.no")}</span>
+          ) : (
           <fieldset disabled={rowLocked} className={LOCK_FS}>
             <ScoreInput
               value={rowEval.tests.daily.score}
@@ -632,6 +639,7 @@ export function GridBodyRow({
               nav={nav.studentRow !== undefined ? { col: "daily", row: nav.studentRow } : undefined}
             />
           </fieldset>
+          )}
           {todaysMathMarked(subject, "daily", rowEval.tests.daily) ? <TodaysMathMark /> : null}
         </td>
       ) : null}

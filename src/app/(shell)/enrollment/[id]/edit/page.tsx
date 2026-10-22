@@ -69,6 +69,7 @@ export default async function EditEnrollmentPage({
           paymentDate: f.paymentDate,
           registrar: f.registrar,
           followUpDate: f.followUpDate,
+          outcome: c.outcome,
           followUpContent: f.followUpContent,
           nonRegistrationReason: f.nonRegistrationReason,
           shuttleBusRequest: f.shuttleBusRequest,

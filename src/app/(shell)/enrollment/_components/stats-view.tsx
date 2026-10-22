@@ -1,11 +1,13 @@
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { PATH_BUCKET_COLOR } from "@/features/enrollment/path-bucket";
 import type { ConsultationDistribution, EnrollmentStats } from "@/features/enrollment/server/stats-queries";
+import type { ManagementExits } from "@/features/enrollment/management-sheet";
 import { StatsTrend } from "./stats-trend";
 import { ConsultDistPanel } from "./consult-dist-panel";
 import { GRADE_UNKNOWN } from "@/features/enrollment/consultation-dist";
 import type { SchoolStatsPrefs } from "@/features/enrollment/school-view-prefs";
 import { CompactStatsList } from "./compact-stats-list";
+import { ManagementSheetCard } from "./management-sheet-card";
 
 const won = (n: number) => `${Math.round(n).toLocaleString("ko-KR")}원`;
 
@@ -45,29 +47,56 @@ const KIND_COLOR: Record<string, string> = {
 export function StatsView({
   stats,
   year,
+  periodText,
+  yearChips,
+  exits,
   dist,
   schoolPrefs,
 }: {
   stats: EnrollmentStats;
   /** null = 전체 기간. 라벨로만 쓴다. */
   year: number | null;
+  /** 연도 칩이 정한 기간('2026년' · '2024~2026년') — 카드 안 기간을 따로 고르는 위 두 카드와 갈리게 밝힌다. */
+  periodText: string;
+  /** 연도 칩(머리글 툴바에서 옮겨 왔다 — 원장 2026-10-22). 이 구역 안에서 스크롤을 따라온다. */
+  yearChips: React.ReactNode;
+  /** 관리현황 '등록 후 퇴원'(퇴원관리를 열 수 있는 사람만 · 못 불러오면 null = 칸 없음). */
+  exits: ManagementExits | null;
   dist: ConsultationDistribution;
   schoolPrefs: SchoolStatsPrefs;
 }) {
   // 막대는 그 분포 안의 최대값을 가득 참으로 본다(전체 대비로 그리면 전부 납작해 비교가 안 된다).
   const maxGrade = Math.max(1, ...dist.grades.map((g) => g.n));
   const maxRegion = Math.max(1, ...dist.regions.map((r) => r.n));
-  const prevTotal = stats.prevYearMonths.reduce((a, m) => a + m.total, 0);
-  const prevEnrolled = stats.prevYearMonths.reduce((a, m) => a + m.enrolled, 0);
+  // 증감의 비교 대상 — 올해면 작년 **같은 기간**(1월 1일 ~ 작년 오늘), 지난해면 그 전해 1~12월(검수 2026-10-22).
+  //    올해(오늘까지)를 작년 1~12월 전체와 견주면 '상담 −45%' 같은 거짓 감소가 선다.
+  const same = stats.prevSamePeriod ?? null;
+  const prevTotal = same ? same.total : stats.prevYearMonths.reduce((a, m) => a + m.total, 0);
+  const prevEnrolled = same ? same.enrolled : stats.prevYearMonths.reduce((a, m) => a + m.enrolled, 0);
   const prevRate = prevTotal > 0 ? Math.round((prevEnrolled / prevTotal) * 100) : null;
+  const prevLabel = same ? "작년 같은 기간" : "작년";
 
   const pathTotal = stats.paths.reduce((a, b) => a + b.total, 0);
   const unknown = stats.paths.find((b) => b.bucket === "미기재");
   const known = pathTotal - (unknown?.total ?? 0);
+  // 결제액은 금액이 적힌 등록만 더한다 — 실측 2025-07 이후 등록 대부분이 금액 칸이 비어 있어(2026-10-22), 합계만 두면 매출이 준 것처럼 읽힌다.
+  // 분모는 유입경로 집계의 '금액이 적힌 등록'(0179a paid_cnt — 같은 기간·같은 표). 옛 함수라 칸이 없으면 안 적는다.
+  const paidCount = stats.paths.some((b) => b.paidCount !== null) ? stats.paths.reduce((a, b) => a + (b.paidCount ?? 0), 0) : null;
 
   return (
     // `#conversion` = 운영실 '신규 콜&상담 전환'의 상세가 닿는 자리(`admissionsStatsHref`).
     <div id="conversion" className="scroll-mt-4 space-y-4">
+      {/* 연도 칩 = 이 아래 카드들의 기간(원장 2026-10-22 *"너무 위쪽에 있어서 아래쪽과 작동하는게 헷갈림. 해당 위치로 이동할것"* —
+          머리글 툴바에서 옮겼다). 이 구역 안에선 스크롤을 따라온다(원장 2026-08-05 *연도를 눌러가며 아래 숫자가 바뀌는 걸 보려면*).
+          위 '신규 문의 추이'·'상담 진행 기록'은 카드 안 기간을 따로 쓴다. */}
+      <div className="bg-background sticky top-0 z-20 -mx-1 flex flex-wrap items-center gap-x-3 gap-y-1.5 px-1 py-2">
+        {yearChips}
+        <p className="text-text-dim text-xs break-keep">
+          아래 카드 기간 · {periodText}
+          {same ? ` · 증감은 작년 같은 기간(1월 1일 ~ ${Number(same.to.slice(5, 7))}월 ${Number(same.to.slice(8, 10))}일)과 견줍니다` : ""}
+        </p>
+      </div>
+      <div className="space-y-1.5">
       {/* 헤드라인 — 페이지 rows가 아니라 집계 원천에서 온 수치(#89) */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[
@@ -78,10 +107,19 @@ export function StatsView({
             value: stats.rate === null ? "—" : `${stats.rate}%`,
             delta:
               prevRate === null ? null : (
-                <span className="text-text-faint ml-1 text-xs">작년 {prevRate}%</span>
+                <span className="text-text-faint ml-1 text-xs">{prevLabel} {prevRate}%</span>
               ),
           },
-          { label: "등록 결제액", value: stats.paidSum > 0 ? won(stats.paidSum) : "—", delta: null },
+          {
+            label: "등록 결제액",
+            value: stats.paidSum > 0 ? won(stats.paidSum) : "—",
+            delta:
+              paidCount === null || stats.enrolled === 0 ? null : (
+                <span className="text-text-faint ml-1 text-xs whitespace-nowrap">
+                  등록 {stats.enrolled}건 중 {paidCount}건 금액 기재
+                </span>
+              ),
+          },
         ].map((s) => (
           <div key={s.label} className="bg-card shadow-card rounded-2xl p-4">
             <div className="text-text-dim text-xs">{s.label}</div>
@@ -92,15 +130,20 @@ export function StatsView({
           </div>
         ))}
       </div>
+      </div>
+
+      {/* 관리현황 — 시트처럼 달마다 한 줄(원장 2026-10-22 *"시트처럼 한눈에 · 상담대비 완료율 · 과목별"*). 헤드라인과 같은 기간·같은 축. */}
+      <ManagementSheetCard sheet={dist.sheet} groups={dist.sheetGroups} periodText={periodText} exits={exits} />
 
       <div className="grid items-stretch gap-4 lg:grid-cols-2 xl:grid-cols-3">
       <Card
         className="lg:col-span-2"
-        title={year === null ? "월별 상담·등록 (연도 비교)" : `${year}년 월별 상담·등록`}
+        // 여러 해를 견줄 땐 막대가 상담 건수뿐이다(등록은 '전환율 추세선'으로 본다) — 제목에 '등록'을 적지 않는다(검수 2026-10-22).
+        title={year === null ? "월별 상담 (연도 비교)" : `${year}년 월별 상담·등록`}
         // 가로축이 1월~12월 12칸이고 연도는 색이라, 무엇이 색으로 갈리는지 한 줄로 밝힌다.
         sub={
           year === null
-            ? "막대 = 월별 상담 건수 · 색이 연도입니다(범례는 축 아래) — 같은 달끼리 해마다 견줍니다"
+            ? "막대 = 월별 상담 건수 · 색이 연도입니다(범례는 축 아래) — 같은 달끼리 해마다 견줍니다 · 등록 비율은 '전환율 추세선'"
             : stats.prevYearMonths.some((m) => m.total > 0)
               ? `같은 달 칸에 ${year - 1}년 상담(회색) · ${year}년 상담 · ${year}년 등록이 나란히 섭니다`
               : `${year - 1}년 데이터가 없어 전년 막대는 표시하지 않습니다`
@@ -127,7 +170,8 @@ export function StatsView({
         {stats.paths.length === 0 ? (
           <p className="text-text-dim py-6 text-center text-sm">집계할 상담이 없습니다</p>
         ) : (
-          <CompactStatsList label="유입경로별 성과" limit={4}>
+          // '미기재'는 늘 맨 끝이다 — 접힌 상태에서도 그 줄을 남긴다(제목 옆 설명이 "맨 끝에 따로 셉니다"라고 말한다).
+          <CompactStatsList label="유입경로별 성과" limit={4} keepLast={!!unknown}>
             {stats.paths.map((b) => {
               const share = pathTotal > 0 ? (b.total / pathTotal) * 100 : 0;
               const isUnknown = b.bucket === "미기재";
@@ -192,12 +236,12 @@ export function StatsView({
             title="학년별 상담"
             sub={(() => {
               const bad = dist.grades.find((g) => g.label === GRADE_UNKNOWN)?.n ?? 0;
-              return `${year === null ? "전체 기간" : `${year}년`} 상담 ${dist.total}건 · 괄호는 등록 건수${
+              return `${periodText} 상담 ${dist.total}건 · 괄호는 등록 건수${
                 bad ? ` · 학년이나 학교급을 확정할 수 없는 ${bad}건은 '분류 불가'로 뺐습니다` : ""
               }`;
             })()}
           >
-            <CompactStatsList label="학년별 상담 분포" className="space-y-1.5" limit={10}>
+            <CompactStatsList label="학년별 상담 분포" className="space-y-1.5" limit={10} keepLast={dist.grades.at(-1)?.label === GRADE_UNKNOWN}>
               {dist.grades.map((g) => (
                 <li
                   key={g.label}
@@ -223,7 +267,7 @@ export function StatsView({
           </Card>
 
           <Card title="지역별 상담" sub="상담에 주소가 거의 없어 학교 소재지로 셉니다">
-            <CompactStatsList label="지역별 상담 분포" className="space-y-1.5" limit={10}>
+            <CompactStatsList label="지역별 상담 분포" className="space-y-1.5" limit={10} keepLast={dist.regions.at(-1)?.label === "미상"}>
               {dist.regions.map((r) => (
                 <li key={r.label} className="flex items-center gap-2">
                   <span className="text-text-dim w-12 shrink-0 text-xs">{r.label}</span>
@@ -251,6 +295,7 @@ export function StatsView({
           rows={dist.schools}
           initial={schoolPrefs}
           year={year}
+          periodText={periodText}
           hasTotals={dist.hasTotals}
           totalsYear={dist.totalsYear}
         />

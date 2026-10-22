@@ -40,9 +40,10 @@ export function mapAttendanceStatus(s?: string): string {
 // ijw consultations.status(한글) → aywa consultation_outcome
 export function mapConsultationOutcome(s?: string): string {
   const t = s ?? "";
+  // 🔴 '미등록'을 먼저 — `endsWith("등록")`이 '미등록'도 잡아 2026-07-01 이관 108건이 '등록'으로 들어갔다(검수 2026-10-22).
+  if (t.startsWith("미등록")) return "declined";
   if (t.includes("등록완료") || t.endsWith("등록")) return "enrolled"; // 영수등록/수학등록/…/등록완료
   if (t.includes("등록예정")) return "scheduled";
-  if (t === "미등록") return "declined";
   if (t === "상담전") return "pending";
   return "consulted";
 }

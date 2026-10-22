@@ -1,0 +1,44 @@
+.sheet {
+  width: 100%;
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 24px 32px 32px;
+  background: white;
+  color: black;
+  font-family: Arial, "Malgun Gothic", sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.sheet h2 { margin: 0 0 36px; text-align: center; font-size: 40px; font-weight: 700; line-height: 1.2; }
+.sheet table { border-collapse: collapse; table-layout: fixed; }
+.sheet th, .sheet td { border: 1px solid black; padding: 5px 8px; vertical-align: middle; white-space: pre-wrap; overflow-wrap: anywhere; }
+.sheet th { text-align: center; font-weight: 400; }
+.approval { width: 66.6667%; margin: 0 0 64px auto; text-align: center; }
+.sheet .approval th, .sheet .approval td { padding: 3px 5px; }
+.sheet .dates { font-size: 11px; min-height: 20px; }
+.sheet .signature { height: 48px; }
+.sheet .processingLabel { padding: 4px; font-size: 11px; }
+.body { width: 100%; }
+.sheet .body > tbody > tr:nth-child(-n+3) > th, .sheet .body > tbody > tr:nth-child(-n+3) > td { font-weight: 700; }
+.writing { min-height: 32px; }
+.consultation { min-height: 32px; }
+.requirement { display: block; color: #c00; font-size: 11px; }
+.sheet input, .sheet textarea, .sheet select { display: block; width: 100%; min-width: 0; border: 0; border-radius: 0; padding: 4px; color: black; background: transparent; font: inherit; }
+.sheet textarea { resize: none; overflow: hidden; line-height: 1.6; }
+.sheet textarea:focus, .sheet input:focus, .sheet select:focus { outline: 2px solid var(--primary); outline-offset: -2px; }
+.sheet select { border-radius: 6px; background: #e8eaed; }
+.sheet textarea:disabled, .sheet input:disabled { opacity: 0.7; }
+.sheet small { display: block; font-size: 11px; text-align: right; }
+@media screen and (max-width: 639px) {
+  .sheet { padding: 20px 12px; font-size: 14px; }
+  .sheet h2 { font-size: 30px; margin-bottom: 24px; }
+  .approval { width: 100%; margin-bottom: 28px; }
+  .sheet .approval th, .sheet .approval td { padding: 4px 2px; }
+  .body, .body tbody, .body tr, .body th, .body td { display: block; width: auto !important; }
+  .body colgroup { display: none; }
+  .body tr { border: 1px solid black; margin-top: -1px; }
+  .sheet .body th, .sheet .body td { border: 0; text-align: left; padding: 6px 10px; }
+  .sheet .body th { background: #f6f6f6; }
+  .body th br { display: none; }
+  .sheet input, .sheet textarea, .sheet select { font-size: 16px; }
+}

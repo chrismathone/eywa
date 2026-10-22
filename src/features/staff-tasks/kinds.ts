@@ -23,6 +23,10 @@ export const TASK_KINDS: Record<string, StaffTaskKindInfo> = {
     label: "상담 후속조치",
     doneRule: "원생상담에서 후속조치 완료를 체크하면 처리됩니다. 기한 날이 지나면 늦음입니다.",
   },
+  enrollment_followup: {
+    label: "콜&상담 후속 조치",
+    doneRule: "그 상담을 등록 또는 미등록으로 정하면 처리됩니다. 다음 상담 날짜를 옮기면 이 회차는 취소되고 새 날짜에 다시 열립니다. 그 날이 지나면 늦음입니다.",
+  },
   progress_anomaly: {
     label: "진도 기록 이상",
     doneRule: "학생 상세 진도 탭에서 그 기록의 '이상 없음'을 누르면 처리됩니다(확인을 되돌리면 다시 열립니다). 생긴 다음 날까지 확인하지 않으면 늦음입니다.",

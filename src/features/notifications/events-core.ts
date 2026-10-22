@@ -167,6 +167,64 @@ export function followupBody(event: FollowupEvent): string {
     : `${event.studentName} 학생 상담 후속조치가 기한(${event.followUpDate})을 지났습니다.`;
 }
 
+// ─────────── 신규 콜&상담 후속 조치(원장 2026-10-22 *"후속조치일 다와가면 알람 기능"*) ───────────
+// '다음 상담'으로 잡은 날 — 하루 전 · 당일 · 지나면(주 1회 재촉). 등록·미등록으로 정하거나 날짜를 옮기면 감지 쿼리에서 빠져 멈춘다.
+export type EnrollmentFollowupStage = "soon" | "due" | "overdue";
+export type EnrollmentFollowupInput = {
+  consultationId: string;
+  prospectName: string;
+  followUpDate: string; // YYYY-MM-DD
+  consultantId: string | null;
+  content: string | null;
+};
+export type EnrollmentFollowupEvent = {
+  subjectKey: string; // consultationId
+  bucket: string; // soon=`${date}:soon` · due=`${date}:due` · overdue=`${date}:overdue:${weekKey}`
+  prospectName: string;
+  followUpDate: string;
+  stage: EnrollmentFollowupStage;
+  consultantId: string | null;
+  content: string | null;
+};
+
+/** 후속 조치일 목록 → 알림 후보(내일 = soon · 오늘 = due · 지남 = overdue · 그 뒤는 아직). 날짜를 옮기면 bucket이 바뀌어 새로 울린다. */
+export function buildEnrollmentFollowupEvents(
+  rows: readonly EnrollmentFollowupInput[],
+  todayKst: string,
+  overdueWeekKey: string,
+): EnrollmentFollowupEvent[] {
+  const tomorrow = new Date(Date.parse(`${todayKst}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+  const events: EnrollmentFollowupEvent[] = [];
+  for (const row of rows) {
+    const date = row.followUpDate;
+    const stage: EnrollmentFollowupStage | null =
+      date === tomorrow ? "soon" : date === todayKst ? "due" : date < todayKst ? "overdue" : null;
+    if (stage === null) continue;
+    events.push({
+      subjectKey: row.consultationId,
+      bucket: stage === "overdue" ? `${date}:overdue:${overdueWeekKey}` : `${date}:${stage}`,
+      prospectName: row.prospectName,
+      followUpDate: date,
+      stage,
+      consultantId: row.consultantId,
+      content: row.content,
+    });
+  }
+  return events;
+}
+
+export function enrollmentFollowupTitle(stage: EnrollmentFollowupStage): string {
+  return stage === "soon" ? "내일 콜&상담 후속 조치" : stage === "due" ? "오늘 콜&상담 후속 조치" : "기한 지난 콜&상담 후속 조치";
+}
+
+/** 본문 — 날짜는 '10월 25일'(원문 YYYY-MM-DD를 그대로 내보내지 않는다) · 메모는 앞 40자. */
+export function enrollmentFollowupBody(event: EnrollmentFollowupEvent): string {
+  const md = `${Number(event.followUpDate.slice(5, 7))}월 ${Number(event.followUpDate.slice(8, 10))}일`;
+  const memo = event.content?.trim() ? ` · 메모: ${event.content.trim().slice(0, 40)}${event.content.trim().length > 40 ? "…" : ""}` : "";
+  if (event.stage === "overdue") return `${event.prospectName} 다음 상담일(${md})이 지났습니다 — 등록·미등록을 정하거나 날짜를 옮겨 주세요${memo}`;
+  return `${event.prospectName} 다음 상담이 ${event.stage === "soon" ? "내일" : "오늘"}(${md})입니다${memo}`;
+}
+
 // ─────────── 성적 급락 이벤트 ───────────
 // retention risk.ts와 동일 임계(≥15점 하락 = 심각). **같은 과목 내** 최신 vs 직전 점수(%) 비교.
 // (retention roster는 과목을 섞어 비교하는 한계가 있으나, 이벤트는 과목별로 정확히 판정한다.)

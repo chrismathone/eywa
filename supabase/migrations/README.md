@@ -1,5 +1,13 @@
 # Supabase 마이그레이션 — 적용 방식·순서·현재 상태
 
+## 2026-10-22 수업보고서 발송 이력 (0392a → 드라이런 → 0392b · ✅ 운영 적용 2026-10-22 · CLI)
+
+`0392a_lesson_report_send_events.sql`은 발송 이력 표 `lesson_report_send_events`(추가만 · 정책 0개 = 서버 전용 · 앱 역할 권한 0 · service_role 읽기만)와 `lesson_reports` 트리거 셋(발송 상태·발송 시각이 바뀔 때와 대기 중 재요청 · 처음부터 발송 상태로 들어온 줄 · 발송 흔적이 있는 보고서 삭제)을 `create or replace trigger`로 단다(읽기를 막지 않는 잠금 · lock_timeout 5초). 이력 줄의 수정·삭제는 행 보호 트리거가 거절한다(지점째 지울 때의 외래키 연쇄만 통과). 기록이 실패해도 발송 상태 저장은 막지 않는다(사본 없이 한 줄 → 그것도 안 되면 DB 경고). 앱과 무관 — 앱은 이 표를 읽지도 쓰지도 않는다. 다시 돌려도 같다. 적용 뒤 `scripts/_oneoff/lesson-report-send-events-backfill-dry-run.sql`(읽기 전용) → `0392b_lesson_report_send_events_backfill.sql`(보고서 행에 남은 발송 · 2026-09-10부터의 발송 요청 감사로그 · 지움 기록만 남은 옛 발송, 멱등 — 빠진 기록을 메우려고 다시 돌려도 된다). 되돌리기 = `scripts/_oneoff/revert-0392a-lesson-report-send-events.sql`(기록만 멈춘다 · 표는 남긴다). 시험 = `supabase/tests/lesson_report_send_events.sql`. 적용 결과: 트리거 4 · 정책 0 · 공개 키 42501 · 백필 발송 17,701(사본 전부) · 요청 2,193 · 다시 돌린 드라이런 0줄.
+
+## 2026-10-22 콜&상담 후속 조치 할 일 (✅ 운영 적용 2026-10-22 · CLI)
+
+`20261022190000_enrollment_followup_tasks.sql`은 할 일 종류 `enrollment_followup`을 더한다 — 신규 콜&상담에서 '다음 상담'으로 잡은 날이 되면 상담자(재직 중이 아니면 원장 전원)에게 열고, 등록·미등록으로 정하면 처리됨 · 날짜를 옮기거나 지우면 취소 · 상담 삭제는 취소. 열기·닫기 = `enrollment_consultations` 트리거(상태·후속 조치일·상담자) + 30분 맞춤 `staff_tasks_sync`에 한 종류(0380a 본문 + 이 종류). 도입일(2026-10-22) 이후 날짜만. 앱보다 먼저든 나중이든 된다(앱은 새 칸을 읽지 않는다 — 적용 전엔 알림만 가고 할 일 연결이 빈다). 적용 뒤 확인: `select public.staff_tasks_sync('<지점>', array['enrollment_followup'])`가 오류 없이 `{opened, closed}`를 돌려준다 · 트리거 존재.
+
 ## 2026-10-22 보강 예약 결석난 반 (✅ 운영 적용 2026-10-22 · CLI)
 
 `20261022170000_makeup_reservation_absence_class.sql`은 `makeup_reservations.absence_class_id`(→ classes, on delete cascade, 빈 값 허용)를 더한다 — 예약이 기록할 반을 고르면 `class_id` = 기록할 반, 이 칸 = 결석난 반(다를 때만). 빈 값 = 같은 반이라 기존 10행·지금 앱은 그대로다(**앱보다 먼저** — 예약 단건·이행 조회는 칸이 없어도 칸 없이 다시 읽는다 · 시간표 마스터 보호 연결 SQL은 이 칸을 읽는다). 적용 뒤 확인: 칸·외래키 존재 · 기존 행 값 없음.
@@ -310,6 +318,8 @@ pnpm db:alphas
 | `0323a_shuttle_history_acks` | **변경 내역 '확인' 표식** — 관리자 '학부모 등하원' 화면에서 [확인]한 장부 줄(0321a·0322a)을 **화면에서만** 내린다(장부는 추가만이라 표식을 따로 쌓는다). 유일 `(tenant_id, history_kind, history_id)` — upsert 축이라 부분 유니크 아님([[#113]]). 학원 공용 · 누가·언제 확인했는지 남음. 없어도 앱은 산다(아무것도 안 숨김). |
 | `0390a_homework_video_reviews` | **영상 설명 AI 참고 메모** — 영상마다 분석 줄 하나(stage: extract → transcribe → judge(밤 배치) → verify → done) · 앱 사용자 정책 0개(서버 전용 · 연동 앱 워커 역할만 자기 지점 줄) · 비공개 버킷 `homework-video-review`(mp3·jpg 50MB). ⚠️ 새 DB는 이름순이라 `20261008101000_sync_agent_data_boundary` 앞에 돌아 워커 권한을 건너뛴다 — 그 뒤 이 파일을 한 번 더 실행할 것(멱등). |
 | `0391a_ai_usage_cache_tokens` | **AI 사용량에 프롬프트 캐시 토큰 두 칸**(`cache_read_tokens`·`cache_write_tokens`) — Anthropic의 `input_tokens`는 캐시에서 읽은 토큰을 뺀 값이라 캐시를 켠 기능(영상 설명 AI 참고 메모 밤 배치)의 비용이 이 칸 없이는 실제보다 적게 보인다. 앱은 값이 0보다 클 때만 쓴다(열 없는 DB에서도 다른 기록은 그대로). |
+| `0392a_lesson_report_send_events` | **수업보고서 발송 이력** — 발송 상태가 바뀔 때마다 트리거가 `lesson_report_send_events`에 한 줄(요청·집음·재시도·발송·실패·보류·회수·표시 지움·삭제 + 학부모 카드 칸 사본). 추가만 · 서버 전용 · 보고서가 지워져도 남는다(외래키 없음). 앱 배포와 독립. |
+| `0392b_lesson_report_send_events_backfill` | **발송 이력 백필**(0392a 다음, 드라이런 먼저) — 보고서 행의 마지막 발송 시각 · 발송 요청 감사로그 · 지움 기록만 남은 옛 발송. 멱등. |
 
 새 alpha를 추가할 때: 다음 번호의 `000Na_*` 또는 `000Nb_*`로 만들고, 멱등 패턴을 지키고, **이 표에 추가**한다.
 상세 흐름은 [`../../CLAUDE.md`](../../CLAUDE.md) "마이그레이션 & 시드 흐름" 참고.

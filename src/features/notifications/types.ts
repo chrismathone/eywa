@@ -26,6 +26,8 @@ export type NotificationType =
   | "daily_briefing" // 과거 저장 데이터 호환용. 생성 중단, 벨 목록·미확인 수에서 제외.
   | "absence_alert" // 학생이 반복 결석 마일스톤(14일 3/5/10회) 도달 → master(Phase 3, cron)
   | "followup_due" // 상담 후속조치 기한 당일/지남 → 담당 상담사 폴백 master(Phase 3, cron)
+  // 신규 콜&상담 '다음 상담' 날 하루 전 · 당일 · 지남 → 상담자 폴백 master(원장 2026-10-22, 아침 cron · 할 일 enrollment_followup)
+  | "enrollment_followup"
   | "grade_drop" // 같은 과목 성적 15점+ 급락 → master + 담당 강사(Phase 3, cron)
   | "outstanding_alert" // 학생 총 미수 금액 tier 도달 → master + 회계(Phase 3, cron)
   | "unsent_report" // 저장만 하고 발송 안 한 수업 보고서(발송 콘솔과 동일 게이트) → master + 담당 강사(Phase 3, cron)

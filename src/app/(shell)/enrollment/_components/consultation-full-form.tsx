@@ -22,6 +22,15 @@ import { FormActionBar } from "@/components/forms/form-action-bar";
 import { EditingBanner } from "@/features/presence/editing-badge";
 import type { IntakeChecklist } from "@/features/enrollment/intake-checklist";
 import { sanitizeScoreInput } from "@/features/enrollment/score-input";
+import { BOARD_STAGES, stageOfOutcome } from "@/features/enrollment/board-stages";
+import {
+  FOLLOW_UP_RESULTS,
+  followUpRequired,
+  initialFollowUpResult,
+  parseFollowUpResult,
+  resolveFollowUp,
+  type FollowUpResult,
+} from "@/features/enrollment/follow-up";
 import { ChecklistView } from "./checklist-view";
 import { ReferrerField } from "./referrer-field";
 import type { ReferrerOption } from "@/features/enrollment/referrer";
@@ -100,6 +109,8 @@ export type ConsultationFormInitial = {
   followUpDate?: string | null;
   followUpContent?: string | null;
   nonRegistrationReason?: string | null;
+  /** 지금 상태(outcome · 수정 화면) — 후속 조치를 반드시 고를지 · 처음 고른 채로 보일 값을 정한다(follow-up.ts). 새 상담은 없음. */
+  outcome?: string | null;
   parentRequest?: string | null;
   shuttleBusRequest?: boolean;
   privacyAgreement?: boolean;
@@ -214,7 +225,19 @@ export function ConsultationFullForm({
 
   // 접을 수 있는 확장 섹션(기본 접힘) — ijw와 동일.
   const [showAcademy, setShowAcademy] = useState(false);
-  const [showFollowUp, setShowFollowUp] = useState(false);
+  // 후속 조치(원장 2026-10-22 *"선택이 아닌 필수로 … 자동적으로 등록, 미등록으로 처리"*) — 상담 끝난 건은 반드시 고르고, 고르면 칸반 칸이
+  // 따라 움직인다(follow-up.ts · 서버가 같은 함수로 다시 판정). 고른 값은 라디오(name=followUpResult)가 실어 보낸다.
+  const [followUpResult, setFollowUpResult] = useState<FollowUpResult | null>(() => initialFollowUpResult(v.outcome, v.followUpDate));
+  const followUpRef = useRef<HTMLDivElement>(null);
+  const registrationStatusRef = useRef<HTMLSelectElement>(null);
+  const followUpMust = isCreate || followUpRequired(v.outcome ?? "consulted");
+  const stageLabel = v.outcome ? BOARD_STAGES.find((s) => s.key === stageOfOutcome(v.outcome!))?.label : null;
+  function pickFollowUp(value: FollowUpResult) {
+    setFollowUpResult(value);
+    // '등록 상태' 칸도 같이 맞춘다(서버도 같은 값으로 덮는다) — 한 화면에 '등록'과 '미등록'이 함께 보이지 않게.
+    const sel = registrationStatusRef.current;
+    if (sel && value !== "next") sel.value = value === "enrolled" ? "등록완료" : "미등록";
+  }
 
   // 과목 점수/상담 detail — 클라 상태, 제출 시 hidden input(JSON)으로 직렬화.
   const [details, setDetails] = useState<SubjectDetails>(() => v.subjectDetails ?? {});
@@ -296,7 +319,25 @@ export function ConsultationFullForm({
     pendingFdRef.current = null;
     if (mark === null || !fd) return; // 취소 — 저장 자체를 중단(폼으로 복귀)
     if (mark) fd.set("markConsulted", "1");
+    if (!checkFollowUp(fd, mark)) return;
     void submitForm(fd);
+  }
+
+  /** 후속 조치 미리 확인 — 서버(`resolveFollowUp`)와 같은 함수 · 막히면 그 구역으로 데려간다. */
+  function checkFollowUp(fd: FormData, markConsulted: boolean): boolean {
+    const r = resolveFollowUp({
+      current: isCreate || markConsulted ? "consulted" : (v.outcome ?? "consulted"),
+      result: parseFollowUpResult(fd.get("followUpResult")),
+      followUpDate: String(fd.get("followUpDate") ?? "") || null,
+      storedDate: v.followUpDate ?? null,
+      today: kstToday(),
+    });
+    if ("error" in r) {
+      setSubmitError(r.error);
+      followUpRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+      return false;
+    }
+    return true;
   }
 
   // 생성·수정 통합 제출 — 녹음이 있으면 클라에서 티켓 발급→업로드 후 audioPath를 실어 액션 호출(생성/수정 공통).
@@ -310,12 +351,13 @@ export function ConsultationFullForm({
     }
     const fd = new FormData(e.currentTarget);
     fd.set("subjectDetails", JSON.stringify(details));
-    // QR 접수 대기·예약 건 — 저장 전에 상담 완료 전환 여부를 묻고, 선택에 따라 이어서 제출.
-    if (confirmConsultedOnSave && !isCreate) {
+    // QR 접수 대기·예약 건 — 후속 조치를 안 골랐을 때만 상담 완료 전환 여부를 묻는다(고르면 그 값이 상태를 정한다).
+    if (confirmConsultedOnSave && !isCreate && !parseFollowUpResult(fd.get("followUpResult"))) {
       pendingFdRef.current = fd;
       consultedDialogRef.current?.showModal();
       return;
     }
+    if (!checkFollowUp(fd, false)) return;
     await submitForm(fd);
   }
 
@@ -720,17 +762,54 @@ export function ConsultationFullForm({
           </Grid>
         </Collapsible>
 
-        {/* 4. 후속 조치 (선택, 접이식) */}
-        <Collapsible
-          icon={Calendar}
-          tone="purple"
-          title="후속 조치 (선택)"
-          subtitle="후속 조치일, 미등록 사유 등"
-          open={showFollowUp}
-          onToggle={() => setShowFollowUp((s) => !s)}
-        >
+        {/* 4. 후속 조치 — 상담 끝난 건은 필수(원장 2026-10-22, 종전 '선택 · 접이식'). 고르면 칸반 칸이 따라 움직인다:
+            등록 → 등록 완료 · 미등록 → 미등록 · 다음 상담 → 상담 완료 + 날짜(하루 전·당일·지나면 상담자에게 알림). */}
+        <div ref={followUpRef} className="border-purple/30 bg-purple/5 space-y-2 rounded-2xl border px-3 py-2.5">
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            <span className="text-foreground inline-flex items-center gap-1 text-sm font-bold">
+              <Calendar className="text-purple size-3.5 shrink-0" />
+              후속 조치
+              {followUpMust ? <span className="text-danger">*</span> : null}
+            </span>
+            <span className="text-text-dim text-xs break-keep">
+              {followUpMust
+                ? "상담을 마쳤으면 반드시 고릅니다 · 고르면 칸반 칸이 함께 옮겨집니다"
+                : `지금 칸: ${stageLabel ?? "상담 전"} · 고르면 그 칸으로 옮겨집니다`}
+            </span>
+          </div>
+          <div role="radiogroup" aria-label="후속 조치" className="flex flex-wrap gap-1.5">
+            {FOLLOW_UP_RESULTS.map((r) => {
+              // 등록 완료를 '상담 완료'로 되돌리지 않는다(상태 변경·칸반과 같은 규칙) — 고를 수 없게 미리 막는다.
+              const blocked = r.value === "next" && v.outcome === "enrolled";
+              const on = followUpResult === r.value;
+              return (
+                <label
+                  key={r.value}
+                  title={blocked ? "이미 등록 완료된 상담은 다음 상담으로 되돌릴 수 없습니다" : undefined}
+                  className={`relative inline-flex items-center rounded-full border px-3 py-1 text-sm transition has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary/40 ${
+                    blocked
+                      ? "border-line text-text-faint cursor-not-allowed"
+                      : on
+                        ? "border-primary bg-primary text-primary-foreground cursor-pointer font-medium"
+                        : "border-line text-foreground hover:bg-bg-soft cursor-pointer"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="followUpResult"
+                    value={r.value}
+                    defaultChecked={on}
+                    disabled={blocked}
+                    onChange={() => pickFollowUp(r.value)}
+                    className="sr-only"
+                  />
+                  {r.label}
+                </label>
+              );
+            })}
+          </div>
           <Grid cols={2}>
-            <L label="후속 조치일" icon={Calendar}>
+            <L label={followUpResult === "next" ? "다음 상담일" : "후속 조치일"} icon={Calendar} required={followUpResult === "next"}>
               <input name="followUpDate" type="date" defaultValue={v.followUpDate ?? ""} className={`${input} num`} />
             </L>
             <L label="조치 내용" icon={MessageSquare}>
@@ -740,12 +819,15 @@ export function ConsultationFullForm({
           <L label="미등록 사유" icon={XCircle}>
             <input name="nonRegistrationReason" defaultValue={v.nonRegistrationReason ?? ""} className={input} />
           </L>
-        </Collapsible>
+          {followUpResult === "next" ? (
+            <p className="text-text-dim text-xs break-keep">다음 상담일 하루 전 · 당일 · 지나면 상담자에게 알림이 갑니다(할 일에도 남습니다).</p>
+          ) : null}
+        </div>
 
         {/* 5. 등록 / 결제 */}
         <Card title="등록 / 결제">
           <L label="등록 상태" icon={CheckCircle}>
-            <select name="registrationStatus" defaultValue={v.registrationStatus ?? ""} className={input}>
+            <select ref={registrationStatusRef} name="registrationStatus" defaultValue={v.registrationStatus ?? ""} className={input}>
               <option value="">선택</option>
               {withCurrent(REGISTRATION_STATUSES, v.registrationStatus).map((s) => (
                 <option key={s} value={s}>{s}</option>
