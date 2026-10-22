@@ -49,6 +49,12 @@ export const AUDIT_ACTIONS = {
   ment_style_rebuild: "강사 말투 프로파일 갱신",
   // 직원 포트폴리오(0357a) — [지금 집계]와, 매일 cron이 달을 마감했을 때 남긴다(매일의 재집계는 남기지 않는다).
   teacher_portfolio_refresh: "직원 포트폴리오 집계",
+  student_contribution_refresh: "원생 기여도 집계·마감",
+  student_contribution_settings_save: "원생 기여도 배점 저장",
+  student_contribution_signal_cancel: "원생 긍정 신호 판정 취소",
+  student_contribution_signal_rejudge: "원생 긍정 신호 재판정 요청",
+  student_contribution_referral_backfill: "지난 원생 소개 연결",
+  student_contribution_referral_link: "원생 소개 확인·연결",
   // 마감한 달에 바뀐 규칙을 얹음(원장 지시 때만 · 운영 스크립트) — 2026-10-14 강사 탓이 아닌 사유(배정·유지 감점 빼기).
   teacher_portfolio_rule_patch: "직원 포트폴리오 마감 달 규칙 반영",
   // 지난달을 지금 구성으로 처음부터 다시 집계(원장 지시 때만 · 운영 스크립트) — 2026-10-14 "이전 월들도 전부 10월 기준으로".

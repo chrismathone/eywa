@@ -19,8 +19,8 @@ type Admin = SupabaseClient;
 const missing = (e: unknown, table: string) => e instanceof Error
   && new RegExp(`Could not find the table '[^']*${table}'|relation "[^"]*${table}" does not exist`).test(e.message);
 const isKind = (k: string): k is GradeKind => (GRADE_KINDS as readonly string[]).includes(k);
-type RawGrade = { id: string; student_id: string; exam_name: string; exam_slot: string | null; subject: string; class_id: string | null; score: string | null; max_score: string | null; taken_on: string; no_exam: boolean | null; created_at: string };
-type RawReport = { id: string; student_id: string; class_id: string | null; subject: string | null; report_date: string; created_at: string | null; daily_test: string | null; check_test: string | null; exam_info: string | null };
+export type RawGrade = { id: string; student_id: string; exam_name: string; exam_slot: string | null; subject: string; class_id: string | null; score: string | null; max_score: string | null; taken_on: string; no_exam: boolean | null; created_at: string };
+export type RawReport = { id: string; student_id: string; class_id: string | null; subject: string | null; report_date: string; created_at: string | null; daily_test: string | null; check_test: string | null; exam_info: string | null };
 
 export type SourceRows = Awaited<ReturnType<typeof fetchEvaluationSourceRows>>;
 
@@ -57,9 +57,9 @@ export async function fetchEvaluationSourceRows(admin: Admin, tenantId: string, 
   return { grades, reports, judgments, claims, days, leaves, latest };
 }
 
-export function toEvaluationSources({ grades, reports, judgments, claims, days, leaves, latest }: SourceRows, input: {
+export function normalizeEvaluationGrades({ grades, reports }: Pick<SourceRows, "grades" | "reports">, input: {
   isTest: (studentId: string) => boolean; subjectOfClass: (classId: string) => string | null;
-}): EvaluationSources {
+}): SnapshotGrade[] {
   const out: SnapshotGrade[] = [];
   for (const g of grades) {
     const score = numberOrNull(g.score), max = numberOrNull(g.max_score);
@@ -79,6 +79,14 @@ export function toEvaluationSources({ grades, reports, judgments, claims, days, 
       });
     }
   }
+  return out;
+}
+
+export function toEvaluationSources(rows: SourceRows, input: {
+  isTest: (studentId: string) => boolean; subjectOfClass: (classId: string) => string | null;
+}): EvaluationSources {
+  const { judgments, claims, days, leaves, latest } = rows;
+  const out = normalizeEvaluationGrades(rows, input);
   const real = <T extends { student_id: string | null }>(rows: T[]) => rows.filter((r) => !(r.student_id && input.isTest(r.student_id)));
   return {
     grades: out,

@@ -46,4 +46,12 @@ describe("report prefill reads", () => {
     expect(result.prefillWarning).toContain("수납 정보를 자동으로 불러오지 못했습니다");
     log.mockRestore();
   });
+  it("excludes an unselected class taught by the same teacher from attendance and period", async () => {
+    const attendance = query();
+    state.from.mockImplementation(table => table === "invoices" ? query() : attendance);
+    const selected = { ...report.snapshot.courses[0], id: "selected" };
+    await loadReportPrefill({ ...report, enrollment_ids: ["selected"], snapshot: { ...report.snapshot, courses: [selected, { ...selected, id: "other", classId: "other-class", startDate: "2020-01-01" }] } }, "teacher");
+    expect(attendance.in).toHaveBeenCalledWith("class_id", ["own-class"]);
+    expect(attendance.gte).toHaveBeenCalledWith("session_date", "2026-10-01");
+  });
 });

@@ -41,7 +41,7 @@ describe("compact request overlay and optional principal", () => {
     mocks.request.mockResolvedValue({ ok: true, id: "new-report" });
     render(<RequestDialog {...props} />); await fill();
     expect(screen.queryByLabelText("처리 구분")).not.toBeInTheDocument();
-    expect(screen.getByText(/전체 퇴원 · 강사별 1건/)).toBeInTheDocument();
+    expect(screen.getByText(/전체 퇴원 · 1개 반 · 보고서 1건/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "강사에게 작성 요청" }));
     await waitFor(() => expect(mocks.request).toHaveBeenCalledWith(expect.objectContaining({ studentId: "student", teacherIds: ["teacher"], managerIds: ["manager"], directorIds: [], subjects: ["math"] })));
     await waitFor(() => expect(assign).toHaveBeenCalledWith("/withdrawal-reports?embed=1"));
@@ -52,6 +52,16 @@ describe("compact request overlay and optional principal", () => {
     fireEvent.click(screen.getByRole("button", { name: "강사에게 작성 요청" }));
     await waitFor(() => expect(assign).toHaveBeenCalledWith("/withdrawal-reports"));
   });
+  it.each(["teacher", "second-teacher"])("selects one of two math classes without closing the other (%s)", async secondTeacher => {
+    mocks.request.mockResolvedValue({ ok: true, id: "new-report" });
+    const extra = { ...students[0].courses[0], id: "second-course", classId: "second-class", className: "수학 보충반", teacherId: secondTeacher };
+    render(<RequestDialog {...props} staff={[...staff, { ...staff[0], id: "second-teacher", name: "다른 강사" }]} students={[{ ...students[0], courses: [...students[0].courses, extra] }]} />);
+    await fill();
+    fireEvent.click(screen.getByRole("checkbox", { name: "수학 보충반 · 수학 · 담당 강사" }));
+    expect(screen.getByText("반 수강종료 · 1개 반 · 보고서 1건")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "강사에게 작성 요청" }));
+    await waitFor(() => expect(mocks.request).toHaveBeenCalledWith(expect.objectContaining({ enrollmentIds: ["course"], subjects: ["math"], teacherIds: ["teacher"] })));
+  });
   it("keeps entered data when the server refuses a duplicate", async () => {
     mocks.request.mockResolvedValue({ error: "진행 중인 보고서가 있습니다." });
     render(<RequestDialog {...props} />); await fill();
@@ -59,6 +69,16 @@ describe("compact request overlay and optional principal", () => {
     expect((await screen.findByRole("alert")).textContent).toContain("진행 중");
     expect(assign).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "대상 학생: 학생" })).toBeInTheDocument();
+  });
+  it("sends all selected classes to one author after omitting another homeroom teacher", async () => {
+    mocks.request.mockResolvedValue({ ok: true, id: "new-report" });
+    render(<RequestDialog {...multiProps} />); await fill();
+    fireEvent.click(screen.getByRole("button", { name: /^작성 강사:/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "영어 강사 영어" }));
+    await closeOptions();
+    expect(screen.getByText("전체 퇴원 · 2개 반 · 보고서 1건")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "강사에게 작성 요청" }));
+    await waitFor(() => expect(mocks.request).toHaveBeenCalledWith(expect.objectContaining({ teacherIds: ["teacher"], enrollmentIds: ["course", "english-course"], subjects: ["math", "english"] })));
   });
   it("shows managers only for selected authors' target subjects and respects personal approval scopes", async () => {
     render(<RequestDialog {...multiProps} />);
@@ -69,7 +89,7 @@ describe("compact request overlay and optional principal", () => {
     await closeOptions();
     fireEvent.click(screen.getByRole("button", { name: /^대상 학생:/ }));
     fireEvent.click(await screen.findByRole("button", { name: "학생 학교 중1" }));
-    fireEvent.click(screen.getByRole("checkbox", { name: "영어" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "영어반 · 영어 · 영어 강사" }));
     fireEvent.click(screen.getByRole("button", { name: /^관리자 승인:/ }));
     expect(await screen.findByRole("button", { name: "수학 관리자 수학" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "수학 관리자2 수학" })).toBeInTheDocument();
@@ -85,11 +105,11 @@ describe("compact request overlay and optional principal", () => {
     fireEvent.click(screen.getByRole("button", { name: /^작성 강사:/ }));
     fireEvent.click(await screen.findByRole("button", { name: "영어 강사 영어" }));
     await closeOptions();
-    expect(screen.getByRole("button", { name: "강사에게 작성 요청" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "관리자 승인: 수학 관리자" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "강사에게 작성 요청" })).toBeEnabled();
+    expect(screen.getByText(/모든 선택 반을 묶어 보고서 한 건/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /^관리자 승인:/ }));
     expect(await screen.findByRole("button", { name: "수학 관리자2 수학" })).toHaveAttribute("aria-pressed", "false");
-    expect(screen.queryByRole("button", { name: "영어 관리자 영어" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "영어 관리자 영어" })).toBeInTheDocument();
     await closeOptions();
     fireEvent.click(screen.getByRole("button", { name: /^작성 강사:/ }));
     fireEvent.click(await screen.findByRole("button", { name: "영어 강사 영어" }));

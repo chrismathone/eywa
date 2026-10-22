@@ -29,7 +29,7 @@ select ok(not has_function_privilege('authenticated','public.request_withdrawal_
 select ok(not has_table_privilege('authenticated','public.withdrawal_report_groups','select'),'client cannot read batches');
 select throws_ok($q$select public.request_withdrawal_report_group('10000000-0000-4000-8000-000000000901','20000000-0000-4000-8000-000000000902',pg_temp.payload(1))$q$,'P0001',null,'author cannot request');
 select throws_ok($q$select public.request_withdrawal_report_group('10000000-0000-4000-8000-000000000901','20000000-0000-4000-8000-000000000905',pg_temp.payload(1))$q$,'P0001',null,'foreign requester denied');
-select throws_ok($q$select public.request_withdrawal_report_group('10000000-0000-4000-8000-000000000901','20000000-0000-4000-8000-000000000901',pg_temp.payload(1)||'{"teacherIds":["20000000-0000-4000-8000-000000000902"]}')$q$,'P0001',null,'cannot omit targeted teacher');
+select throws_ok($q$select public.request_withdrawal_report_group('10000000-0000-4000-8000-000000000901','20000000-0000-4000-8000-000000000901',pg_temp.payload(1)||'{"teacherIds":["20000000-0000-4000-8000-000000000907"]}')$q$,'P0001',null,'unrelated staff cannot author selected classes');
 select throws_ok($q$select public.request_withdrawal_report_group('10000000-0000-4000-8000-000000000901','20000000-0000-4000-8000-000000000901',pg_temp.payload(1)||'{"managerIds":["20000000-0000-4000-8000-000000000902"]}')$q$,'P0001',null,'author cannot review own report');
 insert into gids values('full',public.request_withdrawal_report_group('10000000-0000-4000-8000-000000000901','20000000-0000-4000-8000-000000000901',pg_temp.payload(1)));
 select is((select count(*)::int from public.withdrawal_reports where group_id=(select id from gids where k='full')),2,'one independent report per teacher');
@@ -110,5 +110,53 @@ select is(public.match_withdrawal_archive_teacher('10000000-0000-4000-8000-00000
 select is(public.match_withdrawal_archive_teacher('10000000-0000-4000-8000-000000000902','Sam'),null::uuid,'teacher matching never crosses tenants');
 update public.users set english_name='Sam',status='inactive' where id='20000000-0000-4000-8000-000000000904';
 select is(public.match_withdrawal_archive_teacher('10000000-0000-4000-8000-000000000901','Sam'),null::uuid,'ambiguous alias including retired staff remains unmapped');
+-- 같은 과목·같은 담임의 두 반도 수강 ID로 구분한다.
+update public.classes set teacher_id='20000000-0000-4000-8000-000000000902' where id='30000000-0000-4000-8000-000000000901';
+insert into public.classes(id,tenant_id,class_name,subject,teacher_id) values
+ ('30000000-0000-4000-8000-000000000903','10000000-0000-4000-8000-000000000901','Math extra','math','20000000-0000-4000-8000-000000000902'),
+ ('30000000-0000-4000-8000-000000000904','10000000-0000-4000-8000-000000000901','Math other teacher','math','20000000-0000-4000-8000-000000000904');
+update public.users set status='active' where id='20000000-0000-4000-8000-000000000904';
+insert into public.students(id,tenant_id,name,status,enrolled_at) select ('40000000-0000-4000-8000-00000000090'||n)::uuid,'10000000-0000-4000-8000-000000000901','Class Student '||n,'enrolled','2020-01-01' from generate_series(5,8) n;
+insert into public.enrollments(tenant_id,student_id,class_id,start_date)
+ select '10000000-0000-4000-8000-000000000901',s.id,c.id,'2020-01-01' from public.students s cross join public.classes c
+ where s.id in ('40000000-0000-4000-8000-000000000905','40000000-0000-4000-8000-000000000906','40000000-0000-4000-8000-000000000907','40000000-0000-4000-8000-000000000908')
+ and c.id in ('30000000-0000-4000-8000-000000000901','30000000-0000-4000-8000-000000000903');
+update public.enrollments set class_id='30000000-0000-4000-8000-000000000904' where student_id='40000000-0000-4000-8000-000000000908' and class_id='30000000-0000-4000-8000-000000000903';
+create function pg_temp.class_payload(n int,all_classes boolean default false,days int default 0) returns jsonb language sql as $$
+ select pg_temp.payload(n,'["math"]','[]',days)||jsonb_build_object('enrollmentIds',(
+  select jsonb_agg(e.id order by e.id) from public.enrollments e where e.student_id=('40000000-0000-4000-8000-00000000090'||n)::uuid
+  and (all_classes or e.class_id='30000000-0000-4000-8000-000000000901')))
+$$;
+select throws_ok($q$select public.request_withdrawal_report_group('10000000-0000-4000-8000-000000000901','20000000-0000-4000-8000-000000000901',pg_temp.class_payload(5)||jsonb_build_object('enrollmentIds',pg_temp.class_payload(6)->'enrollmentIds'))$q$,'P0001',null,'another student enrollment cannot become a target');
+select throws_ok($q$select public.request_withdrawal_report_group('10000000-0000-4000-8000-000000000901','20000000-0000-4000-8000-000000000901',pg_temp.class_payload(5)||'{"enrollmentIds":[]}')$q$,'P0001',null,'empty explicit targets never fall back to subject scope');
+select throws_ok($q$select public.request_withdrawal_report_group('10000000-0000-4000-8000-000000000901','20000000-0000-4000-8000-000000000901',pg_temp.class_payload(5)||'{"enrollmentIds":null}')$q$,'P0001',null,'null explicit targets are rejected');
+insert into gids values('one-class',public.request_withdrawal_report_group('10000000-0000-4000-8000-000000000901','20000000-0000-4000-8000-000000000901',pg_temp.class_payload(5)||'{"subjects":["english"]}'));
+select is((select subjects from public.withdrawal_report_groups where id=(select id from gids where k='one-class')),array['math'],'subjects are derived from actual target classes');
+select is((select exit_kind from public.withdrawal_report_groups where id=(select id from gids where k='one-class')),'subject_end','one of two same-subject classes is only course termination');
+select is((select cardinality(enrollment_ids) from public.withdrawal_reports where group_id=(select id from gids where k='one-class')),1,'report stores only its chosen enrollment');
+select pg_temp.act('one-class',2,2,'submit',jsonb_build_object('body',pg_temp.body())); select pg_temp.act('one-class',2,1,'approve');
+select is(pg_temp.act('one-class',2,7,'approve'),'completed','final approval closes the chosen class');
+select is((select status::text from public.students where id='40000000-0000-4000-8000-000000000905'),'enrolled','same-subject remaining class keeps student enrolled');
+select is((select end_date from public.enrollments where student_id='40000000-0000-4000-8000-000000000905' and class_id='30000000-0000-4000-8000-000000000901'),(now() at time zone 'Asia/Seoul')::date,'chosen enrollment ends on report date');
+select is((select end_date from public.enrollments where student_id='40000000-0000-4000-8000-000000000905' and class_id='30000000-0000-4000-8000-000000000903'),null::date,'unselected same-teacher same-subject class stays open');
+select is((select withdrawal_reason from public.enrollments where student_id='40000000-0000-4000-8000-000000000905' and class_id='30000000-0000-4000-8000-000000000903'),null::text,'unselected class gets no withdrawal reason');
+insert into gids values('all-classes',public.request_withdrawal_report_group('10000000-0000-4000-8000-000000000901','20000000-0000-4000-8000-000000000901',pg_temp.class_payload(6,true)));
+select is((select exit_kind from public.withdrawal_report_groups where id=(select id from gids where k='all-classes')),'withdrawal','all same-subject classes mean full withdrawal');
+select pg_temp.act('all-classes',2,2,'submit',jsonb_build_object('body',pg_temp.body())); select pg_temp.act('all-classes',2,1,'approve');
+select is(pg_temp.act('all-classes',2,7,'approve'),'completed','full class selection applies');
+select is((select status::text from public.students where id='40000000-0000-4000-8000-000000000906'),'withdrawn','all selected classes change student to withdrawn');
+select is((select count(*)::int from public.enrollments where student_id='40000000-0000-4000-8000-000000000906' and end_date is null),0,'all selected enrollments close');
+insert into gids values('future-class',public.request_withdrawal_report_group('10000000-0000-4000-8000-000000000901','20000000-0000-4000-8000-000000000901',pg_temp.class_payload(7,false,10)));
+select pg_temp.act('future-class',2,2,'submit',jsonb_build_object('body',pg_temp.body())); select pg_temp.act('future-class',2,1,'approve');
+select is(pg_temp.act('future-class',2,7,'approve'),'scheduled','future class selection waits until its date');
+update public.withdrawal_report_groups set effective_date=(now() at time zone 'Asia/Seoul')::date where id=(select id from gids where k='future-class');
+update public.withdrawal_reports set effective_date=(now() at time zone 'Asia/Seoul')::date where group_id=(select id from gids where k='future-class');
+select is(pg_temp.act('future-class',2,null,'apply'),'completed','scheduled application uses fixed enrollment IDs');
+select is((select end_date from public.enrollments where student_id='40000000-0000-4000-8000-000000000907' and class_id='30000000-0000-4000-8000-000000000903'),null::date,'scheduled application preserves another same-subject class');
+insert into gids values('other-teacher',public.request_withdrawal_report_group('10000000-0000-4000-8000-000000000901','20000000-0000-4000-8000-000000000901',pg_temp.class_payload(8)));
+select is((select count(*)::int from public.withdrawal_reports where group_id=(select id from gids where k='other-teacher')),1,'unselected class teacher is not assigned a report');
+select pg_temp.act('other-teacher',2,2,'submit',jsonb_build_object('body',pg_temp.body())); select pg_temp.act('other-teacher',2,1,'approve');
+select is(pg_temp.act('other-teacher',2,7,'approve'),'completed','chosen teacher class can complete independently');
+select is((select end_date from public.enrollments where student_id='40000000-0000-4000-8000-000000000908' and class_id='30000000-0000-4000-8000-000000000904'),null::date,'another teacher same-subject class remains open');
 select * from finish();
 rollback;

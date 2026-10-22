@@ -7,6 +7,7 @@ import type { SystemRole } from "@/lib/permissions";
 import type { ReportBody, WithdrawalReport } from "../model";
 import { attendancePrefill, type AttendancePrefillRow } from "../prefill";
 import { loadReportBilling } from "./billing";
+import { reportCourses } from "../target-courses";
 
 /** getReport의 지점·작성자/참여자 검증을 통과한 작성 중 보고서에만 호출한다. */
 export async function loadReportPrefill(report: WithdrawalReport, role: SystemRole) {
@@ -14,7 +15,7 @@ export async function loadReportPrefill(report: WithdrawalReport, role: SystemRo
   const db = createAdminClient();
   const today = kstToday();
   const until = report.effective_date < today ? report.effective_date : today;
-  const courses = report.snapshot.courses.filter(c => report.subjects.includes(c.subject) && (!report.group_id || c.teacherId === report.teacher_id));
+  const courses = reportCourses(report);
   const from = courses.map(c => c.startDate).sort()[0] ?? until;
   const classIds = [...new Set(courses.map(c => c.classId))];
   const results = await Promise.allSettled([

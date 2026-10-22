@@ -13,6 +13,7 @@ import { OWNER_FACES, type OwnerFaceDef, type OwnerFaceKey } from "./tabs";
 
 /** 면의 접근 권한 키 — 설정별 권한이 있는 면은 그 키, 나머지(역할·권한 · 데이터 정리 · 감사로그 · 기능 등)는 학원 설정(owner). */
 export function ownerFaceMenu(key: OwnerFaceKey): MenuKey {
+  if (key === "contribution") return "student_contribution";
   return key in OWNER_TAB_MENU ? OWNER_TAB_MENU[key as keyof typeof OWNER_TAB_MENU] : "owner";
 }
 

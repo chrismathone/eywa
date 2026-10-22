@@ -147,6 +147,7 @@ export const HUB_GROUPS: HubGroup[] = [
     note: "원생 기록을 보고 성적을 관리합니다.",
     items: keep([
       fromMenu("students", "원생 명단·상세 기록"),
+      fromMenu("student_contribution", "학생별 운영 기여·학습 참여·연결 기록"),
       fromMenu("exams", "시험 성적 입력·분석"),
     ]),
   },
@@ -273,6 +274,7 @@ const OWNER_FACE_ICON: Record<OwnerFaceKey, { icon: AywaIconName }> = {
   subjects: { icon: "tag" },
   makeups: { icon: MENU_ICON.makeups },
   evaluation: { icon: "gauge" },
+  contribution: { icon: "clipboardList" },
   billing: { icon: MENU_ICON.billing_settings },
   notifications: { icon: MENU_ICON.notification_settings },
   consultations: { icon: MENU_ICON.consultation_settings },
