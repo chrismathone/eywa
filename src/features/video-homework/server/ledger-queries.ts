@@ -161,9 +161,10 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
   }
   const shownPairs = new Set(pairs.map((pair) => `${pair.classId}:${pair.studentId}`));
   const studentIds = [...new Set(pairs.map((row) => row.studentId))];
-  // 영상은 명단의 학생 전부 + 숙제 0건 반의 학생 — 숙제 칸이 없어도 숙제 없이 올린 영상이 남아 있으면 배정할 길을 열어야 한다
-  // (원장 2026-10-22 ①·③ — 반에 숙제가 있고 본인은 0건인 학생 포함). 숙제 칸이 있는 학생만 읽던 것은 지점 영상이 75일에 수백 건 규모라 넓혔다.
-  // 검사 기록만으로 선 숙제 칸도 ②의 뒷순위로 영상을 받는다(안 읽으면 장부만 자동 판정·미배정 알림과 다른 말을 한다 — 재리뷰 2026-10-13).
+  // 영상(과 이름)은 명단의 학생 전부 + 숙제 0건 반의 학생 + (강사뷰) 담임 반 명단 — 숙제 칸이 없어도 숙제 없이 올린 영상이 남아 있으면 배정할
+  // 길을 열어야 한다(원장 2026-10-22 ①·③·④ — 반에 숙제가 있고 본인은 0건인 학생 포함). 숙제 칸이 있는 학생만 읽던 것은 지점 영상이 75일에
+  // 수백 건 규모라 넓혔다. 검사 기록만으로 선 숙제 칸도 ②의 뒷순위로 영상을 받는다(안 읽으면 장부만 자동 판정·미배정 알림과 다른 말을 한다 — 재리뷰 2026-10-13).
+  const videoStudents = [...new Set([...studentIds, ...idleStudents, ...ownedRoster.map((pair) => pair.studentId)])];
   // 빈 칸 사유 재료 — 반별 숙제 날짜(기간 안) · 학생별 이미 있는 회차 날짜. 출결은 반·기간 범위로 한 번에(blank-facts.ts).
   const classDates = new Map<string, Set<string>>();
   const ownDates = new Map<string, Set<string>>();
@@ -182,12 +183,12 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
   const assignmentRows = pairs.map(pair => ({ ...pair, assignedDates: [...new Set([
     ...(assignedByPair.get(`${pair.classId}:${pair.studentId}`) ?? []).filter(inRange), ...(markDates.get(`${pair.classId}:${pair.studentId}`) ?? [])])] }));
   const [students, videos, blankFacts, assignmentCandidates, reviewOn] = await Promise.all([
-    fetchAllPagedInChunks<{ id: string; name: string; school: string | null; grade: string | null }>([...new Set([...studentIds, ...idleStudents, ...ownedRoster.map((pair) => pair.studentId)])],
+    fetchAllPagedInChunks<{ id: string; name: string; school: string | null; grade: string | null }>(videoStudents,
       (chunk, from, to) => db.from("students").select("id,name,school,grade").eq("tenant_id", tenantId)
         .in("id", chunk).order("id").range(from, to)),
     // 영상은 짝 범위 끝 + 2주까지 읽는다 — 범위 끝 무렵 숙제를 골라 그 뒤에 올린 영상이 있어야, 지난 기간을 볼 때도 같은 파일의 사본을
     // 지금 보기와 똑같이 뺀다. 더 늦은 영상은 화면 칸에 닿지 못한다(칸은 숙제일 + 2주까지만 영상을 받는다).
-    loadClassVideos(tenantId, [...new Set([...studentIds, ...idleStudents, ...ownedRoster.map((pair) => pair.studentId)])], wideFrom, addDays(wideTo, VIDEO_MATCH_WINDOW_DAYS)),
+    loadClassVideos(tenantId, videoStudents, wideFrom, addDays(wideTo, VIDEO_MATCH_WINDOW_DAYS)),
     loadBlankFacts(tenantId, { classDates, ownDates: new Map([...ownDates].filter(([pair]) => shownPairs.has(pair))), enrollments }),
     loadVideoAssignmentCandidates(tenantId, assignmentRows),
     // 영상 설명 AI 참고 메모 스위치(지점) — 꺼졌으면 평점도, 재생 창의 메모 칸 자리도 없다(기능 스위치 = 흔적 없이).
