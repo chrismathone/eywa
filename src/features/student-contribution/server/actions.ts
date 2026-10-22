@@ -1,5 +1,5 @@
 "use server";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logAction } from "@/features/audit/server/log";
@@ -9,6 +9,7 @@ import { requireContributionWrite } from "./access";
 import { getContributionList } from "./queries";
 import { contributionReady, loadContributionSettings, SETTINGS_TABLE, SIGNALS_TABLE } from "./store";
 import { refreshStudentContribution } from "./refresh";
+import { contributionSnapshotTag } from "./snapshot-cache";
 
 function invalidate() { revalidatePath("/student-contribution"); revalidatePath("/students", "layout"); revalidatePath("/owner"); }
 const message = (error: unknown) => error instanceof Error ? error.message : "작업을 완료하지 못했습니다";
@@ -36,7 +37,9 @@ export async function saveContributionSettings(value: unknown, revision: number)
 export async function refreshContribution() {
   try {
     const gate = await requireContributionWrite();
-    const summary = await refreshStudentContribution(createAdminClient(), gate.tenantId, { deadline: Date.now() + 85_000 });
+    let summary;
+    try { summary = await refreshStudentContribution(createAdminClient(), gate.tenantId, { deadline: Date.now() + 85_000 }); }
+    finally { updateTag(contributionSnapshotTag(gate.tenantId)); }
     await logAction({ action: "student_contribution_refresh", targetType: "student_contribution", targetLabel: "원생 기여도", metadata: { ...summary, trigger: "manual" } });
     invalidate();
     return { ok: true, message: summary.unavailable ? "기여도 저장 준비가 필요합니다" : summary.busy ? "다른 집계가 진행 중입니다" : summary.complete

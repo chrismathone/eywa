@@ -1,5 +1,5 @@
 import { EmbedLink as Link } from "@/components/embed-link";
-import { getContributionStudent } from "../server/queries";
+import { getContributionStudent } from "../server/student-query";
 import { sumRaws, scoreRaws } from "../model/calc";
 import { shiftMonth } from "@/lib/date-kst";
 import { EyIcon } from "@/components/icons/aywa-icons";
@@ -14,7 +14,7 @@ import { CorrectionDetails } from "./correction-details";
 import { metricLabels, numberText, monthText, rawText, sourceLabels } from "./presentation";
 
 export async function ContributionStudentPanel({ studentId, month }: { studentId: string; month?: string }) {
-  const data = await getContributionStudent(studentId);
+  const data = await getContributionStudent(studentId, month);
   if (!data) return <p>기여도 기록을 열람할 수 없습니다.</p>;
   if (!data.ready || !data.months.length) return <div className="w-full space-y-5"><ContributionHeader title={`${data.student.name}의 기여도`} description="학생의 기록을 바탕으로 기여도를 확인합니다." active="students" />
     <div className="rounded-xl border border-line p-12 text-center"><p className="font-semibold">아직 집계된 기록이 없습니다.</p><p className="mt-2 text-sm">첫 집계가 끝나면 점수와 계산 근거가 표시됩니다.</p><Link href="/student-contribution" className="mt-5 inline-block text-sm text-primary underline">원생 기여도 목록으로</Link></div></div>;

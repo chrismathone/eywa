@@ -1,10 +1,14 @@
 import { redirect } from "next/navigation";
-import { getContributionList, getContributionReview } from "@/features/student-contribution/server/queries";
+import { getContributionReview } from "@/features/student-contribution/server/queries";
+import { getContributionDirectory } from "@/features/student-contribution/server/directory";
+import { getContributionGate } from "@/features/student-contribution/server/access";
 import { ReferralReview } from "@/features/student-contribution/components/referral-review";
 import { ContributionHeader } from "@/features/student-contribution/components/contribution-shell";
 export const metadata = { title: "지난 소개 확인 — 에이와" };
 export default async function ReferralReviewPage() {
-  const [data, list] = await Promise.all([getContributionReview(), getContributionList()]);
+  const gate = await getContributionGate();
+  if (!gate?.canConfigure) redirect("/student-contribution");
+  const [data, list] = await Promise.all([getContributionReview(), getContributionDirectory()]);
   if (!list?.gate.canConfigure) redirect("/student-contribution");
   return <div className="w-full min-w-0 space-y-5 pb-6">
     <ContributionHeader title="지난 소개 확인" description="과거 상담에 남은 소개자 정보를 확인합니다. 후보와 상담 원본을 대조한 뒤 학생에게 연결할 수 있습니다." active="referrals" canConfigure />
