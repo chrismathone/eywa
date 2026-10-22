@@ -5,16 +5,21 @@ import {
   isLast4, isSiteName, SITE_BRANCH_STORAGE_KEY,
   type SiteBranch, type SiteBranchNeeded, type SiteChoice, type SiteLookupResult, type SiteOpenResult,
 } from "@/features/video-submit/site";
-import { SiteAskFields, SiteBranchChooser, SiteHomeworkChoices } from "./video-site-parts";
+import { groupSiteChoices, siteStep } from "@/features/video-submit/site-groups";
+import { SiteAskFields, SiteBranchChooser, SiteClassChoices, SiteHomeworkChoices, SiteTeacherChoices } from "./video-site-parts";
 
 /** `tenant` = 조회할 때의 지점(하나뿐이면 그 지점에 고정된 값) — 열기는 조회와 **같은 지점**으로 보낸다. */
 type Asked = { last4: string; name: string; tenant: string | undefined };
 type Phase =
   | { kind: "ask" }
   | { kind: "looking" }
-  /** `asking` = 이미 영상을 낸 숙제를 눌러 확인을 받는 중인 줄(원장 2026-10-22 — 아래 `pick`). */
-  | { kind: "choose"; asked: Asked; choices: SiteChoice[]; asking?: string }
-  | { kind: "opening"; asked: Asked; choices: SiteChoice[]; picked: string };
+  /**
+   * `asking` = 이미 영상을 낸 숙제를 눌러 확인을 받는 중인 줄(원장 2026-10-22 — 아래 `pick`).
+   * `teacher`·`klass` = 고른 선생님·반 묶음(**선생님 → 반 → 숙제**, 원장 2026-10-22 · 판정 site-groups.ts `siteStep`).
+   */
+  | ({ kind: "choose"; asked: Asked; choices: SiteChoice[]; asking?: string } & Picks)
+  | ({ kind: "opening"; asked: Asked; choices: SiteChoice[]; picked: string } & Picks);
+type Picks = { teacher?: string; klass?: string };
 
 const NETWORK = "연결이 끊겼습니다. 잠시 후 다시 해 주세요.";
 
@@ -136,15 +141,15 @@ export function VideoSiteForm({ academyName, branches = [], mustChoose = false, 
     setPhase({ kind: "choose", asked: { last4: digits, name, tenant }, choices: res.choices });
   }
 
-  async function open(asked: Asked, choices: SiteChoice[], id: string) {
+  async function open(asked: Asked, choices: SiteChoice[], id: string, picks: Picks = {}) {
     setError(null);
-    setPhase({ kind: "opening", asked, choices, picked: id });
+    setPhase({ kind: "opening", asked, choices, picked: id, ...picks });
     const res = await post<SiteOpenResult>({ op: "open", last4: asked.last4, name: asked.name, choice: id, tenant: asked.tenant });
     if (!res || !res.ok) {
       if (res?.code === "branch") return branchNeeded(res);
       setError(res ? res.error : NETWORK);
       // 숙제가 더는 맞지 않는다(날짜가 바뀌었거나 그사이 냈거나 명단이 달라짐) — 낡은 목록을 다시 누르게 두지 않고 처음으로 돌린다.
-      setPhase(res && res.code === "invalid" ? { kind: "ask" } : { kind: "choose", asked, choices });
+      setPhase(res && res.code === "invalid" ? { kind: "ask" } : { kind: "choose", asked, choices, ...picks });
       return;
     }
     // 제출 화면으로 — 문서 이동(뒤로 가기로 이 화면에 돌아오면 처음부터 다시 한다).
@@ -156,15 +161,15 @@ export function VideoSiteForm({ academyName, branches = [], mustChoose = false, 
    * 알림을 주면"*). 김채현 건: 안 낸 숙제(BS1D 10/19)를 두고 이미 낸 숙제(BS1K 10/20)를 또 골라 올릴 수 있는 화면이었다(10/21부터 한 숙제에
    * 여러 개를 받는다). 같은 숙제의 다른 단원이면 '이 숙제에 더 올리기'로 그대로 간다 — 막지 않는다.
    */
-  function pick(asked: Asked, choices: SiteChoice[], id: string) {
+  function pick(asked: Asked, choices: SiteChoice[], id: string, picks: Picks) {
     const choice = choices.find((c) => c.id === id);
     // 🔴 같은 줄을 또 눌러도 열지 않는다 — 두 번 빠르게 누르면 상자를 읽기 전에 열린다. 여는 길은 '이 숙제에 더 올리기' 하나.
     if (choice?.sent) {
       setError(null);
-      setPhase({ kind: "choose", asked, choices, asking: id });
+      setPhase({ kind: "choose", asked, choices, asking: id, ...picks });
       return;
     }
-    void open(asked, choices, id);
+    void open(asked, choices, id, picks);
   }
 
   const clear = () => { setError(null); setNotice(null); };
@@ -188,16 +193,34 @@ export function VideoSiteForm({ academyName, branches = [], mustChoose = false, 
               onChangeBranch={changeBranch}
             />
           </form>
-        ) : (
-          <SiteHomeworkChoices
-            choices={phase.choices} openingId={phase.kind === "opening" ? phase.picked : null}
-            askingId={phase.kind === "choose" ? phase.asking ?? null : null}
-            onOpen={(id) => pick(phase.asked, phase.choices, id)}
-            onConfirm={(id) => void open(phase.asked, phase.choices, id)}
-            onCancelAsk={() => setPhase({ kind: "choose", asked: phase.asked, choices: phase.choices })}
-            onReset={() => { setPhase({ kind: "ask" }); clear(); }}
-          />
-        )}
+        ) : (() => {
+          // 선생님 → 반 → 숙제(원장 2026-10-22) — 하나뿐인 단계는 저절로 지나간다(site-groups.ts `siteStep`).
+          const { asked, choices } = phase;
+          const groups = groupSiteChoices(choices);
+          const picks: Picks = { teacher: phase.teacher, klass: phase.klass };
+          const at = siteStep(groups, picks);
+          const reset = () => { setPhase({ kind: "ask" }); clear(); };
+          const go = (next: Picks) => { setError(null); setPhase({ kind: "choose", asked, choices, ...next }); };
+          if (at.step === "teacher") return <SiteTeacherChoices groups={groups} onPick={(key) => go({ teacher: key })} onReset={reset} />;
+          if (at.step === "class") {
+            return <SiteClassChoices teacher={at.teacher} onPick={(key) => go({ teacher: at.teacher.key, klass: key })}
+              onBack={groups.length > 1 ? () => go({}) : null} onReset={reset} />;
+          }
+          const here = { teacher: at.teacher.key, klass: at.klass.key };
+          return (
+            <SiteHomeworkChoices
+              choices={at.klass.choices} allChoices={choices} teacherLabel={at.teacher.label} className={at.klass.className}
+              openingId={phase.kind === "opening" ? phase.picked : null}
+              askingId={phase.kind === "choose" ? phase.asking ?? null : null}
+              onOpen={(id) => pick(asked, choices, id, here)}
+              onConfirm={(id) => void open(asked, choices, id, here)}
+              onCancelAsk={() => go(here)}
+              onBackClass={at.teacher.classes.length > 1 ? () => go({ teacher: at.teacher.key }) : null}
+              onBackTeacher={groups.length > 1 ? () => go({}) : null}
+              onReset={reset}
+            />
+          );
+        })()}
         {notice ? <p className="bg-muted text-foreground rounded-lg px-3 py-2 text-sm break-keep" role="status">{notice}</p> : null}
         {error ? <p className="text-danger text-sm font-bold break-keep" role="alert">{error}</p> : null}
       </section>

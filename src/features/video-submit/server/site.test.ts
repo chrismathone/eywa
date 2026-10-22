@@ -712,3 +712,31 @@ describe("지점이 여럿일 때 — 주소는 하나(/v), 지점은 화면에�
     expect(await siteAvailability()).toEqual({ ok: false, reason: "choose" });
   });
 });
+
+describe("선생님 → 반 → 숙제(원장 2026-10-22)", () => {
+  it("선생님 이름 = 담임의 수업보고서 발송 이름(없으면 원래 이름) + (과목) · 학생의 반 담임만 · 사람 번호 대신 묶음 열쇠", async () => {
+    db.tables.classes = db.tables.classes!.map((c) => (c.id === C ? { ...c, teacher_id: "t-heo" } : c.id === C2 ? { ...c, teacher_id: "t-nam" } : { ...c, teacher_id: "t-other" }));
+    db.tables.users = [
+      { id: "t-heo", tenant_id: T, display_name: "허주연", report_display_name: "Jane 허주연", system_role: "teacher" },
+      { id: "t-nam", tenant_id: T, display_name: "남정화", report_display_name: null, system_role: "teacher" },
+      { id: "t-other", tenant_id: T, display_name: "다른선생", report_display_name: null, system_role: "teacher" },
+    ];
+    m.settings = settings(); // 영어 반도 켠다(김민수 = 수학 LT4 + 영어 A)
+    const r = await look("김민수");
+    if (!r.ok) throw new Error(JSON.stringify(r));
+    const byClass = new Map(r.choices.map((c) => [c.className, c]));
+    expect(byClass.get("LT4")?.teacherLabel).toBe("Jane 허주연 (수학)");
+    expect(byClass.get("영어 A")?.teacherLabel).toBe("남정화 (영어)");
+    // 학생이 다니지 않는 반(PS2)의 담임 이름은 나가지 않는다
+    expect(JSON.stringify(r)).not.toContain("다른선생");
+    // 열쇠는 묶음 번호 — 선생님·반 번호가 내려가지 않는다
+    expect(JSON.stringify(r)).not.toContain("t-heo");
+    expect(new Set(r.choices.map((c) => c.teacherKey)).size).toBe(2);
+    expect(r.choices.filter((c) => c.className === "LT4").every((c) => c.classKey === byClass.get("LT4")?.classKey)).toBe(true);
+  });
+  it("담임이 없는 반은 과목만('수학 선생님')", async () => {
+    const r = await look();
+    if (!r.ok) throw new Error(JSON.stringify(r));
+    expect(r.choices[0]?.teacherLabel).toBe("수학 선생님");
+  });
+});

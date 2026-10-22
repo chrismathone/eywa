@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { isSiteName, SITE_MAX_VIDEOS_PER_HOMEWORK, SITE_NAME_MAX, type SiteBranch, type SiteChoice } from "@/features/video-submit/site";
+import type { SiteClassGroup, SiteTeacherGroup } from "@/features/video-submit/site-groups";
 
 /**
  * 숙제 영상 올리기 사이트(`/v`)의 화면 조각 — 상태 없이 받은 값만 그린다(판단·요청은 `video-site-form.tsx`).
@@ -86,12 +87,20 @@ export function SiteAskFields(props: {
  * `askingId` = 이미 영상을 낸 숙제를 눌러 확인받는 줄 — 그 줄 아래에 '이미 냈어요 · 아직 안 낸 숙제'를 보이고, 더 올릴지 다른 숙제를 고를지 묻는다
  * (원장 2026-10-22, 판단은 `video-site-form.tsx` `pick`).
  */
-export function SiteHomeworkChoices({ choices, openingId, askingId = null, onOpen, onConfirm, onCancelAsk, onReset }: {
-  choices: SiteChoice[]; openingId: string | null; askingId?: string | null; onOpen: (id: string) => void;
-  /** 확인 상자의 '이 숙제에 더 올리기' — 다시 묻지 않고 연다. */
+export function SiteHomeworkChoices({ choices, allChoices, teacherLabel = null, className = null, openingId, askingId = null, onOpen, onConfirm,
+  onCancelAsk, onBackClass = null, onBackTeacher = null, onReset }: {
+  choices: SiteChoice[];
+  /** 모든 선생님·반의 줄 — 확인 상자가 '아직 안 낸 숙제'를 다른 선생님 숙제까지 보인다(학생이 선생님을 잘못 고른 경우). 없으면 `choices`. */
+  allChoices?: SiteChoice[];
+  /** 고른 선생님·반(머리에 크게 — 원장 2026-10-22 *"'선생님' 이름을 좀 잘보이게"*). */
+  teacherLabel?: string | null; className?: string | null;
+  openingId: string | null; askingId?: string | null; onOpen: (id: string) => void;
+  /** 확인 상자의 '이 숙제에 더 올리기'·안 낸 숙제 줄 — 다시 묻지 않고 연다. */
   onConfirm?: (id: string) => void;
   /** 확인 상자의 '다른 숙제 고르기' — 상자만 닫는다. */
   onCancelAsk?: () => void;
+  /** '다른 반 고르기'·'다른 선생님 고르기' — 고를 것이 하나뿐이면 null(버튼 없음). */
+  onBackClass?: (() => void) | null; onBackTeacher?: (() => void) | null;
   onReset: () => void;
 }) {
   // 이름을 가린 표기가 여럿이면(구분 글자만 다른 동명이인) 줄마다 이름도 보여 준다 — 하나뿐이면 반·숙제만으로 충분하다.
@@ -101,6 +110,12 @@ export function SiteHomeworkChoices({ choices, openingId, askingId = null, onOpe
   const free = choices.filter((c) => c.free);
   return (
     <div className="space-y-3">
+      {teacherLabel || className ? (
+        <div className="bg-muted space-y-0.5 rounded-lg px-3 py-2">
+          {teacherLabel ? <p className="text-foreground text-xl font-bold break-keep">{teacherLabel}</p> : null}
+          {className ? <p className="text-foreground text-base break-keep">{className}</p> : null}
+        </div>
+      ) : null}
       {homework.length ? <p className="text-foreground text-base font-bold break-keep">올릴 숙제를 골라 주세요</p> : null}
       {homework.length ? <ul className="space-y-2">
         {homework.map((choice) => (
@@ -118,8 +133,8 @@ export function SiteHomeworkChoices({ choices, openingId, askingId = null, onOpe
               {openingId === choice.id ? <span className="text-text-dim ml-auto shrink-0 text-sm">여는 중…</span> : null}
             </Button>
             {askingId === choice.id && choice.sent ? (
-              <SentHomeworkAsk choice={choice} unsent={homework.filter((c) => !c.sent && c.id !== choice.id)} manyStudents={manyStudents}
-                opening={opening} onConfirm={() => onConfirm?.(choice.id)} onCancel={() => onCancelAsk?.()} />
+              <SentHomeworkAsk choice={choice} unsent={(allChoices ?? choices).filter((c) => !c.free && !c.sent && c.id !== choice.id)} manyStudents={manyStudents}
+                opening={opening} onConfirm={(id) => onConfirm?.(id)} onCancel={() => onCancelAsk?.()} />
             ) : null}
           </li>
         ))}
@@ -141,9 +156,73 @@ export function SiteHomeworkChoices({ choices, openingId, askingId = null, onOpe
           ))}
         </ul>
       </> : null}
+      {onBackClass || onBackTeacher ? (
+        <div className="grid grid-cols-2 gap-2">
+          {onBackClass ? <Button type="button" variant="outline" disabled={opening} onClick={onBackClass}>다른 반 고르기</Button> : null}
+          {onBackTeacher ? <Button type="button" variant="outline" disabled={opening} onClick={onBackTeacher} className={onBackClass ? "" : "col-span-2"}>다른 선생님 고르기</Button> : null}
+        </div>
+      ) : null}
       <Button type="button" variant="ghost" className="w-full" disabled={opening} onClick={onReset}>
         처음으로
       </Button>
+    </div>
+  );
+}
+
+/** 숙제 수 한 줄 — "숙제 2개 · 안 낸 숙제 1개" / 숙제가 없으면 "숙제 없이 올리기". */
+function homeworkCountText(g: { homework: number; unsent: number }): string {
+  if (!g.homework) return "숙제 없이 올리기";
+  return g.unsent ? `숙제 ${g.homework}개 · 아직 안 낸 숙제 ${g.unsent}개` : `숙제 ${g.homework}개 · 모두 영상을 냈어요`;
+}
+
+/** ① 선생님 고르기 — "허주연 (수학)"을 크게(원장 2026-10-22). 학생의 반 담임만 선다(서버). */
+export function SiteTeacherChoices({ groups, onPick, onReset }: { groups: SiteTeacherGroup[]; onPick: (key: string) => void; onReset: () => void }) {
+  return (
+    <div className="space-y-3">
+      <p className="text-foreground text-base font-bold break-keep">숙제를 낸 선생님을 골라 주세요</p>
+      <ul className="space-y-2" aria-label="선생님 선택">
+        {groups.map((g) => (
+          <li key={g.key}>
+            <Button type="button" variant="outline" size="lg" className="h-auto w-full justify-start py-3 text-left" onClick={() => onPick(g.key)}>
+              <span className="min-w-0 break-keep">
+                <span className="text-foreground block text-xl font-bold">{g.label ?? "선생님"}</span>
+                <span className="text-text-dim block text-sm">{g.classes.map((k) => k.className).join(" · ")}</span>
+                <span className={`block text-sm ${g.unsent ? "text-primary font-bold" : "text-text-dim"}`}>{homeworkCountText(g)}</span>
+              </span>
+            </Button>
+          </li>
+        ))}
+      </ul>
+      <Button type="button" variant="ghost" className="w-full" onClick={onReset}>처음으로</Button>
+    </div>
+  );
+}
+
+/** ② 반 고르기 — 고른 선생님의 반(학생이 다니는 반 · 지난 반). */
+export function SiteClassChoices({ teacher, onPick, onBack, onReset }: {
+  teacher: SiteTeacherGroup; onPick: (key: string) => void; onBack: (() => void) | null; onReset: () => void;
+}) {
+  const manyStudents = new Set(teacher.classes.map((k) => k.studentLabel)).size > 1;
+  return (
+    <div className="space-y-3">
+      <div className="bg-muted rounded-lg px-3 py-2">
+        <p className="text-foreground text-xl font-bold break-keep">{teacher.label ?? "선생님"}</p>
+      </div>
+      <p className="text-foreground text-base font-bold break-keep">반을 골라 주세요</p>
+      <ul className="space-y-2" aria-label="반 선택">
+        {teacher.classes.map((k: SiteClassGroup) => (
+          <li key={k.key}>
+            <Button type="button" variant="outline" size="lg" className="h-auto w-full justify-start py-3 text-left" onClick={() => onPick(k.key)}>
+              <span className="min-w-0 break-keep">
+                <span className="text-foreground block text-base font-bold">{manyStudents ? `${k.studentLabel} · ${k.className}` : k.className}{k.pastClass ? " · 지난 반" : ""}</span>
+                <span className={`block text-sm ${k.unsent ? "text-primary font-bold" : "text-text-dim"}`}>{homeworkCountText(k)}</span>
+              </span>
+            </Button>
+          </li>
+        ))}
+      </ul>
+      {onBack ? <Button type="button" variant="outline" className="w-full" onClick={onBack}>다른 선생님 고르기</Button> : null}
+      <Button type="button" variant="ghost" className="w-full" onClick={onReset}>처음으로</Button>
     </div>
   );
 }
@@ -153,17 +232,25 @@ export function SiteHomeworkChoices({ choices, openingId, askingId = null, onOpe
  * 같은 숙제의 다른 단원이면 그대로 더 올린다(한 숙제에 여러 개 — 원장 2026-10-21).
  */
 function SentHomeworkAsk({ choice, unsent, manyStudents, opening, onConfirm, onCancel }: {
-  choice: SiteChoice; unsent: SiteChoice[]; manyStudents: boolean; opening: boolean; onConfirm: () => void; onCancel: () => void;
+  choice: SiteChoice; unsent: SiteChoice[]; manyStudents: boolean; opening: boolean;
+  /** 이 숙제(또는 누른 안 낸 숙제)를 연다. */
+  onConfirm: (id: string) => void; onCancel: () => void;
 }) {
-  const label = (c: SiteChoice) => `${c.homeworkLabel} 수업 숙제 · ${manyStudents ? `${c.studentLabel} · ${c.className}` : c.className}`;
+  const label = (c: SiteChoice) => `${c.homeworkLabel} 수업 숙제 · ${c.teacherLabel ? `${c.teacherLabel} · ` : ""}${manyStudents ? `${c.studentLabel} · ${c.className}` : c.className}`;
   return (
     <div className="border-primary bg-primary/5 mt-2 space-y-2 rounded-lg border p-3" role="status" aria-live="polite">
       <p className="text-foreground text-base font-bold break-keep">이 숙제에는 이미 영상 {choice.sent}개를 냈어요</p>
       {unsent.length ? (
         <div className="text-foreground space-y-1 text-sm break-keep">
-          <p>아직 영상을 안 낸 숙제가 있어요. 그 숙제 영상이면 &lsquo;다른 숙제 고르기&rsquo;를 누르고 그 숙제를 골라 주세요.</p>
-          <ul className="list-disc space-y-0.5 pl-5 font-bold">
-            {unsent.slice(0, 3).map((c) => <li key={c.id}>{label(c)}</li>)}
+          <p>아직 영상을 안 낸 숙제가 있어요. 그 숙제 영상이면 아래에서 그 숙제를 눌러 주세요.</p>
+          <ul className="space-y-1">
+            {unsent.slice(0, 3).map((c) => (
+              <li key={c.id}>
+                <Button type="button" variant="outline" className="h-auto w-full justify-start py-2 text-left font-bold break-keep" disabled={opening} onClick={() => onConfirm(c.id)}>
+                  {label(c)}
+                </Button>
+              </li>
+            ))}
           </ul>
         </div>
       ) : (
@@ -171,7 +258,7 @@ function SentHomeworkAsk({ choice, unsent, manyStudents, opening, onConfirm, onC
       )}
       <div className="grid grid-cols-2 gap-2">
         <Button type="button" variant="outline" disabled={opening} onClick={onCancel}>다른 숙제 고르기</Button>
-        <Button type="button" disabled={opening} onClick={onConfirm}>이 숙제에 더 올리기</Button>
+        <Button type="button" disabled={opening} onClick={() => onConfirm(choice.id)}>이 숙제에 더 올리기</Button>
       </div>
     </div>
   );
