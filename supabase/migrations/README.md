@@ -1,8 +1,8 @@
 # Supabase 마이그레이션 — 적용 방식·순서·현재 상태
 
-## 2026-10-22 시간표 칸 메모 (0394a · ⏳ 미적용)
+## 2026-10-22 시간표 칸 메모 (0395a · ✅ 운영 적용 2026-10-22 — 처음엔 0394a로 적었다가 퇴원보고서 0394a와 겹쳐 개명)
 
-`0394a_timetable_cell_memos.sql`은 `timetable_cell_memos`(지점 × 과목 × 날짜 × 강사 열쇠 × 칸 시작 분 한 줄 · 본문 · 상자 크기 · version · 만든/고친 사람·시각, 일반 유니크 `timetable_cell_memos_cell_key`)를 만든다. 정책 0개 = 의도(서버 키만 — 화면 문은 앱 `memoSheetAccess`). 기존 표는 건드리지 않는다. 앱 배포와 순서 무관 — 표가 없으면 영어 강사뷰에 메모 표식·우클릭 메뉴가 안 뜨고 시간표는 그대로다(GET `/api/timetable/cell-memos`가 `unavailable`). 적용 뒤 확인: 표·유니크·RLS 켜짐·정책 0개 · 공개 키로 읽으면 42501. 되돌리기 = `scripts/_oneoff/revert-0394a-timetable-cell-memos.sql`(표째 지운다 — 메모가 사라진다).
+`0395a_timetable_cell_memos.sql`은 `timetable_cell_memos`(지점 × 과목 × 날짜 × 강사 열쇠 × 칸 시작 분 한 줄 · 본문 · 상자 크기 · version · 만든/고친 사람·시각, 일반 유니크 `timetable_cell_memos_cell_key`)를 만든다. 정책 0개 = 의도(서버 키만 — 화면 문은 앱 `memoSheetAccess`). 기존 표는 건드리지 않는다. 앱 배포와 순서 무관 — 표가 없으면 영어 강사뷰에 메모 표식·우클릭 메뉴가 안 뜨고 시간표는 그대로다(GET `/api/timetable/cell-memos`가 `unavailable`). 적용 뒤 확인: 표·유니크·RLS 켜짐·정책 0개 · 공개 키로 읽으면 42501. 되돌리기 = `scripts/_oneoff/revert-0395a-timetable-cell-memos.sql`(표째 지운다 — 메모가 사라진다).
 
 ## 2026-10-22 수업보고서 발송 이력 (0392a → 드라이런 → 0392b · ✅ 운영 적용 2026-10-22 · CLI)
 

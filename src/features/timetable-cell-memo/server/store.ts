@@ -7,7 +7,7 @@ import { weekRange, type CellMemo } from "../rules";
 import { teacherKeyResolver, type TeacherKeyResolver } from "../teacher-key";
 
 /**
- * 칸 메모 조회(0394a `timetable_cell_memos`).
+ * 칸 메모 조회(0395a `timetable_cell_memos`).
  * 🔴 admin 전용(정책 0개) → **모든 조회에 tenant_id 명시**. 게이트는 호출부가 `memoSheetAccess`로 먼저 본다.
  * 🔴 fail-soft([[#95]]): 표가 아직 없으면 `unavailable` — 강사뷰는 메모 없이 그대로 열린다.
  * 조회 범위는 언제나 **그 주 7일**(B2 — 지점 전체 무기한 조회 금지) · `fetchAllPaged`(1000행 침묵 절단 방지).

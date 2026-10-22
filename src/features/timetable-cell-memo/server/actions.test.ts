@@ -110,7 +110,7 @@ describe("🔴 동시 저장 — 늦게 저장한 쪽이 덮지 않는다", () =
     await resizeCellMemo({ id: MEMO, width: 9999, height: 10 });
     expect(writes()[0]!.payload).toEqual({ box_w: 640, box_h: 80 });
   });
-  it("표가 아직 없으면(0394a 전) 한글 안내 — 원문 오류를 내보내지 않는다", async () => {
+  it("표가 아직 없으면(0395a 전) 한글 안내 — 원문 오류를 내보내지 않는다", async () => {
     m.respond = (c) =>
       c.table === "users"
         ? { data: users, error: null }

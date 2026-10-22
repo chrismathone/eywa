@@ -15,12 +15,12 @@ export function isCellMemoSubject(s: string): boolean {
   return (CELL_MEMO_SUBJECTS as readonly string[]).includes(s);
 }
 
-/** 글자 상한 — DB 검사(0394a)와 같은 값. */
+/** 글자 상한 — DB 검사(0395a)와 같은 값. */
 export const MEMO_BODY_MAX = 2000;
 /** 강사 열 라벨 상한 — DB 검사와 같은 값. */
 export const MEMO_LABEL_MAX = 100;
 
-/** 메모 상자 크기(px, 확대 배율 1 기준) — 기본·최소·최대. DB 검사(0394a)와 같은 범위. */
+/** 메모 상자 크기(px, 확대 배율 1 기준) — 기본·최소·최대. DB 검사(0395a)와 같은 범위. */
 export const MEMO_BOX = { defaultW: 240, defaultH: 140, minW: 160, minH: 80, maxW: 640, maxH: 480 } as const;
 
 export type CellMemo = {

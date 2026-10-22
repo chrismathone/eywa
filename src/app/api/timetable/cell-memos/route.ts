@@ -11,7 +11,7 @@ import { reportError } from "@/lib/observability/report-error";
  *
  * 🔴 서버 액션이 아니라 라우트인 이유: 저절로 도는 조회를 서버 액션으로 부르면 라우터 작업 큐와 엉킨다(gotchas #137).
  * 🔴 문 = 화면·저장과 같은 `memoSheetAccess`(#77) — 보기 = 시간표 열람 · 강사 화면 없음. 지점은 세션의 지점만(남의 지점 메모가 나올 길 없음).
- * 🔴 표가 아직 없으면(0394a 미적용) `unavailable` — 화면은 메모 없이 그대로다([[#95]]).
+ * 🔴 표가 아직 없으면(0395a 미적용) `unavailable` — 화면은 메모 없이 그대로다([[#95]]).
  * 응답은 사람·시점마다 다르므로 캐시 금지(`no-store`).
  */
 export const dynamic = "force-dynamic";

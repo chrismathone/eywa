@@ -109,7 +109,7 @@ describe("우클릭 메뉴 — 고칠 수 있는 사람에게만", () => {
     expect(fireEvent.contextMenu(screen.getByTestId("kim-1600"))).toBe(true);
     expect(screen.queryByRole("menu")).toBeNull();
   });
-  it("표가 없으면(0394a 전 — unavailable) 메뉴도 안 뜬다", async () => {
+  it("표가 없으면(0395a 전 — unavailable) 메뉴도 안 뜬다", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ status: "unavailable" }) })));
     render(<Grid />);
     await waitFor(() => expect(fetch).toHaveBeenCalled());

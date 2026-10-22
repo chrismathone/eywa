@@ -155,7 +155,7 @@ export function TeacherGridView({
   hideSaturday?: boolean;
   showSunday?: boolean;
   /**
-   * 칸 메모(영어 강사뷰, 0394a) — 볼 수 있는 사람에게만 page가 넘긴다. 없으면 표는 종전 그대로(속성·레이어 0).
+   * 칸 메모(영어 강사뷰, 0395a) — 볼 수 있는 사람에게만 page가 넘긴다. 없으면 표는 종전 그대로(속성·레이어 0).
    * 🔴 메모는 표 **옆** 레이어가 그 주 것만 따로 읽는다 — 이 표의 쿼리·칸은 그대로다([[#95]] · B7).
    */
   cellMemo?: { tenantId: string; canEdit: boolean };
