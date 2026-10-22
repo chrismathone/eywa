@@ -50,6 +50,19 @@ export function savedIntakeTrendMode(uiPrefs: Record<string, unknown>): PeriodMo
   return parsePeriodMode(ns && typeof ns === "object" && !Array.isArray(ns) ? (ns as Record<string, unknown>).intakeTrend : undefined);
 }
 
+/**
+ * '신규 문의 추이' 일별·구간 그래프 모양(원장 2026-10-22 *"일별과 구간에서도 꺾은선 그래프 / 막대 그래프 전환가능하게"*) —
+ * 막대(과목 조합을 쌓은 전체 · 기본) · 꺾은선(전체 + 과목 선 — 월별과 같은 모양). 월별은 늘 꺾은선. 기본(막대)은 저장하지 않는다.
+ */
+export type IntakeChartKind = "bar" | "line";
+export function parseIntakeChartKind(v: unknown): IntakeChartKind | null {
+  return v === "bar" || v === "line" ? v : null;
+}
+export function savedIntakeChartKind(uiPrefs: Record<string, unknown>): IntakeChartKind {
+  const ns = uiPrefs[ENROLLMENT_VIEW_PREFS_NS];
+  return parseIntakeChartKind(ns && typeof ns === "object" && !Array.isArray(ns) ? (ns as Record<string, unknown>).intakeChart : undefined) ?? "bar";
+}
+
 /** '상담 진행 기록'의 선 키 — 끈 선 저장값을 이 목록으로만 거른다(`saveProgressTrendOff`). */
 export const PROGRESS_LINE_KEYS = ["received", "consulted", "levelTest", "enrolled", "assigned", "started", "stalled"] as const;
 /** 처음 볼 때 끈 선 — 접수·등록·수업 시작·멈춘 상담만 그린다(선 일곱은 한 그래프에 너무 많다 · 리뷰 2026-10-21). */

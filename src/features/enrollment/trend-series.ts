@@ -21,7 +21,9 @@ export type TrendSeries = { key: string; color: string; kind: "count" | "rate" }
  * 연도별 색. **최신이 가장 진하다** — 지난해가 눈에 먼저 들어오면 "올해 어떤가"를 읽는 데 방해가 된다.
  * 3개년까지만 쓰므로(MAX_STATS_YEARS) 색 세 개면 충분하다.
  */
-const YEAR_COLORS = ["var(--color-neutral-fill)", "var(--color-blue)", "var(--color-primary)"];
+// 연도마다 **색 계열이 다르게**(원장 2026-10-22 *"연도별로 색상을 확실하게 구분되는 다른색으로"*) — 옛 회색 · 파랑 · 남색은 파랑과 남색이
+// 거의 같아 보였다. 주황 · 초록 · 남색(최신 = 학원색).
+const YEAR_COLORS = ["var(--color-chart-3)", "var(--color-chart-2)", "var(--color-primary)"];
 
 export function yearColor(index: number, count: number): string {
   // 뒤에서부터 채운다 — 2개년이면 [faint, primary], 3개년이면 [faint, blue, primary].

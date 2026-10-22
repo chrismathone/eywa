@@ -113,8 +113,9 @@ export function StatsTrendImpl({
                   type="monotone"
                   dataKey={s.key}
                   stroke={s.color}
-                  strokeWidth={2}
-                  dot={{ r: 2 }}
+                  // 굵게(원장 2026-10-22 *"굵기도 조금 더"*) — 2 → 3, 점도 함께.
+                  strokeWidth={3}
+                  dot={{ r: 3 }}
                   connectNulls={false}
                 />
               ))

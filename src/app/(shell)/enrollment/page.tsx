@@ -60,7 +60,7 @@ import { MakeeduPushButton } from "./_components/makeedu-push-button";
 import { canPushToMakeedu } from "@/features/integrations/server/makeedu-push-access";
 import { readMyUiPrefs } from "@/lib/ui-prefs/read";
 import { RememberPrefs } from "@/components/remember-prefs";
-import { PROGRESS_DEFAULT_OFF, parseEnrollmentView, parseStatsSpan, savedEnrollmentView, savedIntakeTrendMode, savedProgressTrendMode, savedProgressTrendOff, savedStatsSpan, type StatsSpanValue } from "@/features/enrollment/view-pref";
+import { PROGRESS_DEFAULT_OFF, parseEnrollmentView, parseStatsSpan, savedEnrollmentView, savedIntakeChartKind, savedIntakeTrendMode, savedProgressTrendMode, savedProgressTrendOff, savedStatsSpan, type StatsSpanValue } from "@/features/enrollment/view-pref";
 import { saveEnrollmentViewPref, saveProgressTrendMode, saveProgressTrendOff } from "@/features/enrollment/server/view-pref-actions";
 
 export const metadata = { title: "신규 콜&상담 — 에이와" };
@@ -299,6 +299,42 @@ export default async function EnrollmentPage({
     return `/enrollment?${params.toString()}`;
   };
 
+  // 연도 칩(원장 2026-10-22 *"너무 위쪽에 있어서 아래쪽과 작동하는게 헷갈림. 해당 위치로 이동할것"*) — 머리글 툴바에서 빼서 이 칩이 바꾸는
+  // 카드들(헤드라인·관리현황·월별…) 바로 위에 둔다(StatsView). 위 두 추이 카드는 카드 안 기간을 따로 쓴다.
+  const statsYearChips =
+    view === "stats" && statsYears.length > 0 ? (
+      <div className="flex items-center gap-1.5">
+        <span className="micro shrink-0">연도</span>
+        <div className={TOOLBAR_SEG_BOX}>
+          {/* 기간 프리셋 — 최대 3개년(원장 2026-08-05). '전체'는 없앴다: 해가 갈수록 구간이
+              무한히 길어져 화면이 계속 빽빽해진다. 상한을 두면 눈금 압축(월→분기)과 맞물려
+              몇 년이 지나도 같은 밀도로 읽힌다. */}
+          {[2, 3].map((n) => (
+            <Link
+              scroll={false}
+              key={`${n}y`}
+              href={yearHref(`${n}y`)}
+              className={`${TOOLBAR_SEG_ITEM} ${
+                statsPeriod.kind === "span" && statsPeriod.years === n ? TOOLBAR_SEG_ON : TOOLBAR_SEG_OFF
+              }`}
+            >
+              {n}개년
+            </Link>
+          ))}
+          {statsYears.map((y) => (
+            <Link
+              scroll={false}
+              key={y}
+              href={yearHref(y)}
+              className={`${TOOLBAR_SEG_ITEM} num ${y === statsYear ? TOOLBAR_SEG_ON : TOOLBAR_SEG_OFF}`}
+            >
+              {y}
+            </Link>
+          ))}
+        </div>
+      </div>
+    ) : null;
+
   return (
     // 세로 간격 4(=16px) — 🔴 5(20px)였는데 원장이 *"창을 가장 크게 해도 하단에 스크롤"*을 지적했다.
     // 여백은 세 곳(이 간격 · 칸 머리 py · 카드 py)에서 함께 줄여야 한 칸이 창 안에 들어온다.
@@ -386,38 +422,6 @@ export default async function EnrollmentPage({
             </div>
           )
         }
-        yearChips={
-          view === "stats" && statsYears.length > 0 ? (
-            <div className="flex items-center gap-1.5">
-              <span className="micro shrink-0">연도</span>
-              <div className={TOOLBAR_SEG_BOX}>
-                {/* 기간 프리셋 — 최대 3개년(원장 2026-08-05). '전체'는 없앴다: 해가 갈수록 구간이
-                    무한히 길어져 화면이 계속 빽빽해진다. 상한을 두면 눈금 압축(월→분기)과 맞물려
-                    몇 년이 지나도 같은 밀도로 읽힌다. */}
-                {[2, 3].map((n) => (
-                  <Link
-                    key={`${n}y`}
-                    href={yearHref(`${n}y`)}
-                    className={`${TOOLBAR_SEG_ITEM} ${
-                      statsPeriod.kind === "span" && statsPeriod.years === n ? TOOLBAR_SEG_ON : TOOLBAR_SEG_OFF
-                    }`}
-                  >
-                    {n}개년
-                  </Link>
-                ))}
-                {statsYears.map((y) => (
-                  <Link
-                    key={y}
-                    href={yearHref(y)}
-                    className={`${TOOLBAR_SEG_ITEM} num ${y === statsYear ? TOOLBAR_SEG_ON : TOOLBAR_SEG_OFF}`}
-                  >
-                    {y}
-                  </Link>
-                ))}
-              </div>
-            </div>
-          ) : null
-        }
         selectedMonth={selectedMonth}
         selectedConsultant={selectedConsultant}
         selectedStage={selectedStage}
@@ -442,6 +446,7 @@ export default async function EnrollmentPage({
           period={intakePeriod}
           today={today}
           groups={intake?.groups ?? {}}
+          chartKind={savedIntakeChartKind(uiPrefs)}
           keep={{ view: "stats", year: yearParam, from: sp.from === "dashboard" ? "dashboard" : undefined, ...Object.fromEntries(Object.values(PROGRESS_KEYS).map((k) => [k, (sp as Record<string, string | undefined>)[k]])) }}
         />
         {progressRows ? (
@@ -480,6 +485,7 @@ export default async function EnrollmentPage({
           stats={stats}
           year={statsYear}
           periodText={span.from === span.to ? `${span.from}년` : `${span.from}~${span.to}년`}
+          yearChips={statsYearChips}
           exits={managementExits}
           dist={dist}
           schoolPrefs={schoolPrefs}
