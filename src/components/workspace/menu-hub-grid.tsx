@@ -98,7 +98,7 @@ export function HubGrid({
             {d.desc ? <span className="text-text-dim mt-0.5 block truncate text-sm">{d.desc}</span> : null}
           </span>
           <EyIcon name="arrowRight" size={20} className="text-text-faint shrink-0" />
-          {laboratoryMenus.includes(d.menuKey) && <span className="absolute top-2 right-2 flex size-5 items-center justify-center rounded-full bg-primary-soft text-primary" title="실험실 기능"><svg role="img" aria-label="실험실 기능" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 3h6M10 3v6l-6 10a1.4 1.4 0 0 0 1.2 2h13.6a1.4 1.4 0 0 0 1.2-2L14 9V3M7 15h10" /></svg></span>}
+          {laboratoryMenus.includes(d.menuKey) && <span className="absolute top-2 right-2 flex size-5 items-center justify-center rounded-full bg-primary-soft text-primary" title="실험실 기능"><EyIcon name="flask" size={14} aria-label="실험실 기능" /></span>}
         </button>
       ))}
     </div>

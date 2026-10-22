@@ -59,6 +59,11 @@ const ALLOWED: { file: string; line: RegExp; reason: string }[] = [
     reason: "드래그로 강사 열을 옮길 때 '여기에 끼워진다'는 삽입 위치 표시 — 끄는 동안에만 선다",
   },
   {
+    file: "features/timetable-lab/editor/editor-tools.css",
+    line: /^\.integrated-class\[data-class-drop=(before|after)\] \.class-name-row \{ box-shadow: inset -?4px 0 /,
+    reason: "시간표 편집기 통합뷰에서 반을 끌어 순서를 바꿀 때 '이 반의 앞/뒤에 놓인다'는 삽입 위치 표시 — 끄는 동안에만 선다(teacher-head-cell과 같은 성격)",
+  },
+  {
     file: "components/ui/sidebar.tsx",
     line: /after:w-\[2px\] hover:after:bg-sidebar-border/,
     reason: "shadcn 사이드바 크기 조절 손잡이 — 마우스를 올릴 때만 2px 선이 뜬다(이 부품은 앱에서 안 쓰인다)",

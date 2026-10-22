@@ -27,7 +27,7 @@ import {
 } from "../server/notice-actions";
 import { NoticeHistory, NoticeHistoryItem } from "./notice-history";
 import { NoticeAttachmentPicker } from "./notice-attachment-picker";
-import { NoticeTemplateHelp } from "./notice-template-help";
+import { NOTICE_TAG_PARAMS, NoticeTemplateHelp } from "./notice-template-help";
 import { hasNoticeTemplateTags } from "../notice-template";
 import { NoticeClassComposer, type ClassNoticeTarget } from "./notice-class-composer";
 import { loadMyClassWideNotice } from "@/features/report-admin/server/class-notice-actions";
@@ -428,7 +428,7 @@ export function NoticeComposer({
               value={body}
               onChange={(e) => setBody(e.target.value)}
               rows={3}
-              placeholder={t("os.n.bodyPh")}
+              placeholder={tf("os.n.bodyPh", NOTICE_TAG_PARAMS)}
               className={BODY}
             />
           </div>

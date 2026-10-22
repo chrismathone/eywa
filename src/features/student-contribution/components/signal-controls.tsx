@@ -25,7 +25,7 @@ export function SignalControls({ signals, canWrite }: { signals: SignalRow[]; ca
       <div className="grid grid-cols-[8rem_minmax(0,1fr)_auto] items-start gap-4 phone:grid-cols-1">
         <p className="tabular-nums">{s.occurred_on}<span className="mt-1 block text-xs">{s.source === "parent" ? "학부모 글" : "선생님 답글"}</span></p>
         <div className="space-y-2"><p className="font-semibold">{s.author_label ?? (s.source === "parent" ? "학부모" : "선생님")} <span className="ml-2 rounded bg-secondary px-2 py-1 text-xs font-normal">{labels[s.classification]}{s.cancelled_at ? " · 취소됨" : ""}</span></p>
-          {s.evidence && <blockquote className="border-l-2 border-primary/30 pl-3 leading-relaxed">{s.evidence}</blockquote>}
+          {s.evidence && <blockquote className="bg-bg-soft/60 rounded-md px-3 py-2 leading-relaxed">{s.evidence}</blockquote>}
           <p className="text-xs">{s.model_label ? "AI 판정" : "규칙 판정"} · {new Date(s.judged_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}{s.cancel_reason ? ` · 취소 사유: ${s.cancel_reason}` : ""}{s.rejudge_requested_at ? " · 재판정 대기" : ""}</p></div>
         {canWrite && <Button size="sm" variant="outline" disabled={busy} aria-expanded={selected === s.id} onClick={() => { setSelected(selected === s.id ? null : s.id); setReason(""); }}>판정 검토</Button>}
       </div>

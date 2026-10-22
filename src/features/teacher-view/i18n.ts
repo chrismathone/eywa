@@ -4463,30 +4463,33 @@ export const SHEET_DICT = {
   "os.n.offE": { ko: "을 켜세요.", en: " in the director's settings." },
   "os.n.bodyLabel": { ko: "공통 내용 (선택 학생 모두에게)", en: "Shared message (goes to every student picked)" },
   "os.n.bodyPh": {
-    ko: "예: {학생} 학부모님, {작성자}입니다.\n{학생이름}이는 내일 만나요!",
-    en: "e.g. Hello, {학생}'s family. This is {작성자}.\nSee you tomorrow, {학생이름}!",
+    // 태그는 화면 말과 상관없이 한글 그대로 입력한다 — 두 문구 모두 자리만 두고 화면이 `NOTICE_TAG_PARAMS`로 채운다
+    // (영어 문구엔 한글을 둘 수 없고, 자리는 양쪽에 같이 있어야 한다 — i18n.test · lang-wiring.test).
+    ko: "예: {tagStudent} 학부모님, {tagAuthor}입니다.\n{tagGiven}이는 내일 만나요!",
+    en: "e.g. Hello, {tagStudent}'s family. This is {tagAuthor}.\nSee you tomorrow, {tagGiven}!",
   },
   "os.n.tagHeading": { ko: "태그 사용 안내", en: "Using name tags" },
   "os.n.tagStudent": { ko: "성 포함 이름", en: "Full student name" },
   "os.n.tagGivenName": { ko: "성 제외 이름", en: "Student's given name" },
-  "os.n.tagAuthor": { ko: "작성자 이름 + 선생님", en: "Sender's name + 선생님" },
+  "os.n.tagAuthor": { ko: "작성자 이름 + 선생님", en: "Sender's name + \"seonsaengnim\" (teacher)" },
   "os.n.tagHint": {
     ko: "공통·개별 내용에서 학생마다 자동으로 바뀝니다. 이름 뒤 구분용 알파벳은 발송하지 않습니다.",
     en: "Tags work in shared and individual messages. Student names are filled for each recipient without the identifying letter suffix.",
   },
   "os.n.tagExamples": { ko: "입력 → 실제 발송 예시", en: "Examples: what you type → what parents receive" },
-  "os.n.tagExampleStudent": { ko: "김민서G 학생에게 이수진 선생님이 보내는 예시", en: "Example: teacher 이수진 sends to student 김민서G" },
+  // 예시도 자리만 둔다 — 태그(`{tagStudent}` 등)와 실제로 채워지는 한글 이름(`{student}` 등)은 화면(notice-template-help)이 채운다.
+  "os.n.tagExampleStudent": { ko: "{student} 학생에게 {teacher} 선생님이 보내는 예시", en: "Example: teacher {teacher} sends to student {student}" },
   "os.n.tagExampleFull": {
-    ko: "{학생} 학부모님, 안녕하세요. → 김민서 학부모님, 안녕하세요.",
-    en: "{학생} 학부모님, 안녕하세요. → 김민서 학부모님, 안녕하세요.",
+    ko: "{tagStudent} 학부모님, 안녕하세요. → {full} 학부모님, 안녕하세요.",
+    en: "Hello, {tagStudent}'s family. → Hello, {full}'s family.",
   },
   "os.n.tagExampleGiven": {
-    ko: "{학생이름}이는 오늘 열심히 참여했어요. → 민서는 오늘 열심히 참여했어요. (이/가·은/는 자동 보정)",
-    en: "{학생이름}이는 오늘 열심히 참여했어요. → 민서는 오늘 열심히 참여했어요. (Korean particles adjust automatically.)",
+    ko: "{tagGiven}이는 오늘 열심히 참여했어요. → {given}는 오늘 열심히 참여했어요. (이/가·은/는 자동 보정)",
+    en: "{tagGiven} took part eagerly today. → {given} took part eagerly today. (In Korean text, the particle after the name adjusts automatically.)",
   },
   "os.n.tagExampleAuthor": {
-    ko: "안녕하세요, {작성자}입니다. → 안녕하세요, 이수진 선생님입니다.",
-    en: "안녕하세요, {작성자}입니다. → 안녕하세요, 이수진 선생님입니다.",
+    ko: "안녕하세요, {tagAuthor}입니다. → 안녕하세요, {author}입니다.",
+    en: "Hello, this is {tagAuthor}. → Hello, this is {author}.",
   },
   "os.n.tagNameFallback": {
     ko: "이름이 짧거나 성을 구분하기 어려운 이름·영문 이름은 전체 이름을 유지합니다. 태그가 없는 문장은 그대로 발송됩니다.",

@@ -98,8 +98,18 @@ describe("보이지 않는 '보강' 반", () => {
   it("🔴 라이브 훅은 **저장자가 아니라 보고서 소유자**에게 귀속한다(사무실 대리 저장 예방, 2026-09-02)", () => {
     const os = read("features", "onescreen", "server", "actions.ts");
     // 저장된 행의 소유 컬럼을 되받아 규칙(resolveMakeupOwner → pickMakeupOwner)에 넘긴다.
-    // (2026-10-03: 영상 과제 값도 함께 되받게 되어 select가 두 리터럴 중 하나다 — 둘 다 소유 컬럼을 담는다.)
-    expect(os).toMatch(/\.select\(videoHwReady \? "id, share_token, teacher_name, created_by, video_homework" : "id, share_token, teacher_name, created_by"\)/);
+    // (2026-10-03: 영상 과제 값도 함께 되받게 되어 select가 리터럴 여럿 중 하나다 — 전부 소유 컬럼을 담는다.)
+    // (2026-10-22: 영상 숙제 마감(video_homework_due)이 더해져 리터럴이 셋이 됐다 — 문자열 통째가 아니라
+    //  **모든 갈래가 소유 컬럼 둘을 되받는다**는 성질만 본다. 칸이 늘 때마다 가드가 빨개지지 않게.)
+    const selAt = os.indexOf(".select(videoHwReady");
+    expect(selAt).toBeGreaterThan(-1);
+    const selExpr = os.slice(selAt, os.indexOf(".single()", selAt));
+    const literals = [...selExpr.matchAll(/"([^"]*)"/g)].map((m) => m[1]);
+    expect(literals.length).toBeGreaterThanOrEqual(2); // 영상 과제 칸이 없는 갈래 + 있는 갈래
+    for (const cols of literals) {
+      expect(cols).toContain("teacher_name");
+      expect(cols).toContain("created_by");
+    }
     expect(os).toContain("resolveMakeupOwner(");
     const hook = os.slice(os.indexOf("await ensureMakeupAttendanceForReport({"));
     const call = hook.slice(0, hook.indexOf("});"));

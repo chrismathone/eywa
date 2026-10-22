@@ -11,6 +11,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchInChunks } from "@/lib/supabase/batch";
+import { kstToday } from "@/lib/date-kst";
 import { logAction } from "@/features/audit/server/log";
 import { requireMcsClassAccess } from "@/features/math-sheets/server/access";
 import { normalizeSchoolName } from "@/features/schools/school-name";
@@ -48,7 +49,8 @@ export async function saveSchoolExamPeriods(input: z.input<typeof inputSchema>):
 
   // 그 반 학생의 학교인지 — 수강 학생들의 학교 매칭 키 안에 있어야 한다.
   // 지금 수강 중인 학생만(끝난 수강의 학교로는 못 고친다).
-  const today = new Date().toISOString().slice(0, 10);
+  // 오늘 = KST 날짜(서버는 UTC라 한국 새벽엔 하루 전이 된다 — 어제 끝난 수강이 '수강 중'으로 남는다).
+  const today = kstToday();
   const enr = await admin.from("enrollments").select("student_id").eq("tenant_id", tenantId).eq("class_id", classId)
     .or(`end_date.is.null,end_date.gte.${today}`).limit(500);
   if (enr.error) return { ok: false, error: "수강 정보를 확인하지 못했습니다. 다시 시도해 주세요." };

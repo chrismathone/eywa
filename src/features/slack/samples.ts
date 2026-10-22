@@ -57,6 +57,11 @@ export const SAMPLE_NOTIFICATIONS: Record<string, SampleNotification> = {
     body: "이서준 학생 상담 후속조치가 오늘(2026-09-28) 마감 예정입니다.",
     link: "/consultations",
   },
+  enrollment_followup: {
+    title: "오늘 콜&상담 후속 조치",
+    body: "최유나 다음 상담이 오늘(9월 28일)입니다 · 메모: 겨울방학 특강 시간표 안내",
+    link: "/enrollment",
+  },
   grade_drop: { title: "성적 급락", body: "박지우 학생 수학 성적이 18점 하락했습니다(현재 62점).", link: "/retention" },
   outstanding_alert: { title: "미수금 주의 학생", body: "김하늘 학생의 미수금이 60만원에 이릅니다.", link: "/billing?overdue=1" },
   unsent_report: {
@@ -80,6 +85,31 @@ export const SAMPLE_NOTIFICATIONS: Record<string, SampleNotification> = {
   classnote_parent_post: { title: "학부모 새 글 — 이서준", body: "이번 주 숙제 범위를 다시 알려주실 수 있을까요?", link: "/onescreen" },
   classnote_parent_comment: { title: "학부모 댓글 — 박지우", body: "알림장 확인했습니다. 감사합니다!", link: "/onescreen" },
   homework_video_link: { title: "박지우 학생 숙제 영상이 제출 링크로 올라왔습니다", body: "중등M 중2 A", link: "/students" },
+  video_homework_submitted: {
+    title: "김하늘 학생의 영상 숙제가 제출됐습니다",
+    body: "중등M 중2 A · 2026-09-26 숙제 · 2026-09-28 제출",
+    link: "/onescreen/video-homework",
+  },
+  video_homework_missing: {
+    title: "영상 숙제 미제출 2건",
+    body: "제출 마감이 지난 영상 숙제입니다. 영상 제출 현황에서 확인해 주세요.",
+    link: "/onescreen/video-homework?status=missing",
+  },
+  video_homework_unassigned: {
+    title: "미배정 영상 1건이 있습니다",
+    body: "영상 제출 현황에서 숙제를 연결해 주세요.",
+    link: "/onescreen/video-homework",
+  },
+  homework_video_upload_failed: {
+    title: "이서준 학생 영상 업로드 확인 필요",
+    body: "중등M 중2 A · 제출 완료 전에 화면을 떠난 기록이 있습니다. · 확인번호 3f9a1c2e",
+    link: "/students",
+  },
+  todays_math_exam_report: {
+    title: "월말평가 성적표",
+    body: "박지우 학생의 9/30 월말평가 성적표를 붙일 그날 수학 보고서가 없습니다. 보고서를 보내면 성적표가 함께 붙어 나갑니다.",
+    link: "/onescreen",
+  },
   report_send_failed: { title: "수업 보고서 발송 실패", body: "김하늘 · 09-26 — 학부모 보드를 찾지 못했습니다", link: "/lesson-reports" },
   notice_send_failed: { title: "학부모 공지 게시 실패", body: "10월 휴원 안내 — 3명에게 게시하지 못했습니다", link: "/lesson-reports" },
   makeedu_login_failed: {

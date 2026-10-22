@@ -114,7 +114,7 @@ describe("파생 — 세 표면이 같은 목록을 쓴다", () => {
     for (const row of rows) expect(row, row.trim()).toMatch(/^\s+\w+: \{ icon: (?:"\w+"|MENU_ICON\.\w+) \},$/);
     // 문자열로 직접 적은 그림은 그림 가드의 추출식에 걸린다.
     const literal = [...table.matchAll(/icon:\s*"(\w+)"/g)].map((m) => m[1]);
-    expect(literal).toEqual(["tag", "gauge", "clipboardList", "key", "sparkle", "eraser", "sync", "history", "sync"]);
+    expect(literal).toEqual(["tag", "gauge", "key", "sparkle", "eraser", "sync", "history", "sync"]);
   });
 
   it("🔴 메뉴 판에 면을 다시 적지 않는다 — 설정 묶음 안에 `/owner` 주소를 손으로 적은 줄이 없다", () => {

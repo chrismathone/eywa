@@ -80,6 +80,10 @@ const RULES: readonly [string, string][] = [
   ["mcs_", "sheets"],
   ["progress_", "sheets"],
   ["textbook_", "sheets"],
+  // 수학 강사 시트(MCS) — 학생별 교재 배정 · 목표 교재 · 학교별 내신기간(대상 = 반 이름).
+  ["math_textbook_assign", "sheets"],
+  ["math_book_target", "sheets"],
+  ["school_exam_periods", "sheets"],
   ["exam_", "sheets"],
   ["staff_", "staff"],
   ["approval_", "staff"],
@@ -103,6 +107,8 @@ const RULES: readonly [string, string][] = [
   ["inventory_", "ops"],
   ["owner_", "settings"],
   ["integration_", "settings"],
+  // 오늘 수학 지점 사용 메뉴(연결 앱) — 에이와에서 바꾼 것과 오늘 수학에서 알려 온 것이 같은 키.
+  ["todays_math_", "settings"],
   ["slack_", "settings"],
   ["kiosk_", "settings"],
   ["kakao_", "settings"],

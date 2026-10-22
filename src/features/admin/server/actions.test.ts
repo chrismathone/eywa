@@ -28,6 +28,8 @@ type Fault = "reject" | "lost-response" | "no-count";
 const m = vi.hoisted(() => ({
   actor: { id: "actor", tenantId: "tenant-a", systemRole: "master" } as { id: string; tenantId: string; systemRole: string } | null,
   allowed: true,
+  /** 원생 상태 변경 권한(학원 설정 개인별 기능 권한, 2026-10-15) — 관리 도구 권한과 별개의 문. */
+  statusAllowed: true,
   tables: {} as Record<string, Record<string, unknown>[]>,
   /** 이 계정이 **바꿀 수 없는** 표(RLS) — 쓰기가 오류 없이 0건으로 끝난다. */
   denyUpdate: new Set<string>(),
@@ -43,6 +45,10 @@ const m = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => m.actor }));
 vi.mock("@/lib/auth/perm-matrix", () => ({ canWriteTenant: async () => m.allowed }));
+// 병합·수강 정리는 원생 상태를 바꾸므로 상태 변경 권한도 지난다(39cee2bd3). 실물은 쿠키(강사뷰)·설정을 읽어 요청 밖에선 못 돈다.
+vi.mock("@/features/students/server/status-access", () => ({
+  canManageAdministrativeStudentStatusNow: async () => m.statusAllowed,
+}));
 vi.mock("@/features/audit/server/log", () => ({ logAction: m.audit }));
 vi.mock("next/cache", () => ({ revalidatePath: m.paths }));
 vi.mock("@/lib/observability/report-error", () => ({ reportError: vi.fn(), reportWarning: vi.fn() }));
@@ -127,6 +133,7 @@ function execute(op: Op): Res {
 }
 
 import { closeOrphanEnrollments, mergeStudents } from "./actions";
+import { STUDENT_STATUS_DENIED } from "@/features/students/status-access";
 
 const KEEPER = "11111111-1111-4111-8111-111111111111";
 const MERGEE = "22222222-2222-4222-8222-222222222222";
@@ -157,6 +164,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   m.actor = { id: "actor", tenantId: "tenant-a", systemRole: "master" };
   m.allowed = true;
+  m.statusAllowed = true;
   m.ops = [];
   m.denyUpdate = new Set();
   m.failRead = new Set();
@@ -185,6 +193,13 @@ describe("mergeStudents", () => {
     seed();
     m.allowed = false;
     expect((await mergeStudents(undefined, form()))?.error).toContain("권한");
+    expect(ops()).toHaveLength(0);
+  });
+
+  it("원생 상태 변경 권한이 없으면 관리 도구 권한이 있어도 조회하지 않는다", async () => {
+    seed();
+    m.statusAllowed = false;
+    expect((await mergeStudents(undefined, form()))?.error).toBe(STUDENT_STATUS_DENIED);
     expect(ops()).toHaveLength(0);
   });
 
@@ -504,6 +519,13 @@ describe("closeOrphanEnrollments", () => {
     seed();
     m.allowed = false;
     expect((await closeOrphanEnrollments(undefined, new FormData()))?.error).toContain("권한");
+    expect(ops()).toHaveLength(0);
+  });
+
+  it("원생 상태 변경 권한이 없으면 관리 도구 권한이 있어도 조회하지 않는다", async () => {
+    seed();
+    m.statusAllowed = false;
+    expect((await closeOrphanEnrollments(undefined, new FormData()))?.error).toBe(STUDENT_STATUS_DENIED);
     expect(ops()).toHaveLength(0);
   });
 
