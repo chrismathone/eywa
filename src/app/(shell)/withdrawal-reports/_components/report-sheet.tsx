@@ -13,9 +13,9 @@ export function ReportSheet({ fields: f, subject, signatures, archive = false, c
     <th scope="row" colSpan={2}>{label}</th>
     <td colSpan={10}><div className={tall ? styles.writing : undefined}>{value}</div></td>
   </tr>;
-  return <section aria-label={archive ? "기존 양식 퇴원 처리서" : "퇴원 처리서"} className="min-w-0">
+  return <section aria-label={archive ? "기존 양식 퇴원 보고서" : "퇴원 보고서"} className="min-w-0">
     <article className={`${styles.sheet} paper-scale`}>
-      <h2>퇴원 처리서</h2>
+      <h2>퇴원 보고서</h2>
       <table aria-label={archive ? "원본 결재란" : "결재란"} className={styles.approval}>
         <colgroup><col style={{ width: "12.5%" }} /><col style={{ width: "12.5%" }} /><col /><col /><col /></colgroup>
         <tbody>
