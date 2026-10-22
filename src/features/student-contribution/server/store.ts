@@ -48,7 +48,7 @@ export async function loadContributionMonths(db: SupabaseClient, tenant: string,
 }
 export async function loadContributionTotals(db: SupabaseClient, tenant: string, ids: string[], since: string): Promise<ContributionTotal[]> {
   const rows = await fetchInChunks<{ student_id: string; raws: Raws; recent: Raws; computed_at: string; unavailable: Metric[] }>(ids,
-    (chunk) => db.rpc("student_contribution_totals", { p_tenant: tenant, p_students: chunk, p_since: since }));
+    (chunk) => db.rpc("student_contribution_totals", { p_tenant: tenant, p_students: chunk, p_since: since }, { get: true }));
   return rows.map((r) => {
     assertRaws(r.raws); assertRaws(r.recent);
     return { studentId: r.student_id, raws: r.raws, recent: r.recent, computedAt: r.computed_at, unavailable: r.unavailable };

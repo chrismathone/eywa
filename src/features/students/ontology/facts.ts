@@ -13,14 +13,18 @@ function stable(value: unknown): string {
  * 도메인별 열람 권한을 통과한 자료만 입력해야 한다. 지점 경계는 여기서도 확인한다.
  */
 export function uniqueStudentFacts<T extends StudentFact>(tenantId: string, groups: readonly (readonly T[])[]): T[] {
-  const facts = new Map<string, { row: T; signature: string }>();
+  const facts = new Map<string, { row: T; signature?: string }>();
   for (const group of groups) for (const row of group) {
     if (row.tenantId !== tenantId) throw new Error("다른 학원의 원생 기록을 합칠 수 없습니다");
     if (!row.id || !row.studentId || !row.evidence.length) throw new Error("원생 기록의 식별자와 근거를 확인해 주세요");
-    const signature = stable(row);
     const previous = facts.get(row.id);
-    if (previous && previous.signature !== signature) throw new Error("같은 원생 기록의 내용이 다릅니다. 자료를 다시 확인해 주세요");
-    if (!previous) facts.set(row.id, { row, signature });
+    // 같은 ID가 다시 나타날 때만 본문을 직렬화한다. 이미 중복 제거한 관점별 집계에서
+    // 모든 근거·값을 다시 문자열로 만들면 원본 수 × 연결 관점 수만큼 비용이 반복된다.
+    if (!previous) facts.set(row.id, { row });
+    else {
+      previous.signature ??= stable(previous.row);
+      if (previous.signature !== stable(row)) throw new Error("같은 원생 기록의 내용이 다릅니다. 자료를 다시 확인해 주세요");
+    }
   }
   return [...facts.values()].map(({ row }) => row);
 }

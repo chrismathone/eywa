@@ -1,5 +1,6 @@
 import { EmbedLink as Link } from "@/components/embed-link";
 import type { ReactNode } from "react";
+import { ContributionNavigationHint } from "./navigation-hint";
 const tabs = [
   { key: "students", label: "원생 기여도", href: "/student-contribution" },
   { key: "ontology", label: "학생 기록 연결", href: "/student-contribution/ontology" },
@@ -17,7 +18,7 @@ export function ContributionHeader({ title, description, active, canConfigure, a
     <nav aria-label="원생 기여도 메뉴" className="flex gap-5 overflow-x-auto border-b border-line">
       {tabs.filter((tab) => canConfigure || tab.key === "students" || tab.key === "ontology").map((tab) => <Link key={tab.key} href={tab.href}
         aria-current={active === tab.key ? "page" : undefined}
-        className={`shrink-0 border-b-2 px-1 pb-3 text-sm transition-colors focus-visible:outline-primary ${active === tab.key ? "border-primary font-bold text-primary" : "border-transparent hover:border-line-strong"}`}>{tab.label}</Link>)}
+        className={`shrink-0 border-b-2 px-1 pb-3 text-sm transition-colors focus-visible:outline-primary ${active === tab.key ? "border-primary font-bold text-primary" : "border-transparent hover:border-line-strong"}`}><ContributionNavigationHint label={tab.label} /></Link>)}
     </nav>
   </header>;
 }

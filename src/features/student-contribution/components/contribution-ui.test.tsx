@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { DEFAULT_CONFIG, emptyRaws } from "../model/config";
+import { sumRaws } from "../model/calc";
 import { EmbedProvider } from "@/components/workspace/embed-context";
 const m = vi.hoisted(() => ({ refresh: vi.fn(), save: vi.fn(), recalc: vi.fn(), search: vi.fn(), link: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: m.refresh }) }));
@@ -18,6 +19,10 @@ function fixture(): Data {
     refreshedAt: "2026-10-22T00:00:00Z", revision: 0, config: structuredClone(DEFAULT_CONFIG), subjects: [{ key: "math", label: "수학" }], grades: ["초5"],
     rows: [row("오래다닌학생", "enrolled", 1000000, 100000), row("최근기여학생", "enrolled", 500000, 500000), row("퇴원학생", "withdrawn", 2000000, 0)] };
 }
+function settingsFixture(data = fixture()): Parameters<typeof ContributionSettings>[0]["data"] {
+  return { gate: data.gate, ready: data.ready, config: data.config, revision: data.revision, historyReady: data.historyReady,
+    studentCount: data.rows.length, raws: sumRaws(data.rows.flatMap((row) => row.total ? [row.total.raws] : [])) };
+}
 beforeEach(() => { vi.resetAllMocks(); m.save.mockResolvedValue({ ok: true, message: "저장 완료" }); m.link.mockResolvedValue({ ok: true, message: "연결 완료" }); });
 afterEach(cleanup);
 it("재원생 기본 목록과 최근 증가분 정렬·퇴원 포함 필터", () => {
@@ -30,7 +35,7 @@ it("재원생 기본 목록과 최근 증가분 정렬·퇴원 포함 필터", (
   fireEvent.change(screen.getByLabelText("학생 이름·학교 검색"), { target: { value: "퇴원" } }); expect(names()).toEqual(["퇴원학생"]);
 });
 it("원래 수치를 재호출하지 않아도 배점 변경 미리보기에 과거 실적 반영", async () => {
-  render(<ContributionSettings data={fixture()} />);
+  render(<ContributionSettings data={settingsFixture()} />);
   expect(screen.getByText("운영 35점 · 학습·참여 0점")).toBeTruthy();
   fireEvent.change(screen.getByLabelText("수업료 기여 배점"), { target: { value: "2" } });
   expect(screen.getByText("운영 70점 · 학습·참여 0점")).toBeTruthy();
@@ -57,7 +62,7 @@ it("읽기 전용이면 집계 버튼이 없고 설정 입력도 잠긴다", () 
   const data = fixture(); data.gate.canWrite = false;
   const view = render(<ContributionList data={data} />);
   expect(screen.queryByRole("button", { name: "지금 집계" })).toBeNull(); view.unmount();
-  render(<ContributionSettings data={data} />); expect(screen.getByLabelText("수업료 기여 배점").closest("fieldset")?.disabled).toBe(true);
+  render(<ContributionSettings data={settingsFixture(data)} />); expect(screen.getByLabelText("수업료 기여 배점").closest("fieldset")?.disabled).toBe(true);
 });
 it("창 안의 탭과 학생 상세 링크가 창 모드를 유지한다", () => {
   render(<EmbedProvider embed><ContributionList data={fixture()} /></EmbedProvider>);

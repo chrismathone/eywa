@@ -1,19 +1,19 @@
 "use client";
-import { useMemo, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { METRICS, METRIC_LABELS } from "../model/config";
-import { scoreRaws, sumRaws } from "../model/calc";
-import type { getContributionList } from "../server/queries";
+import { scoreRaws } from "../model/calc";
+import type { getContributionSettingsPreview } from "../server/queries";
 import { saveContributionSettings } from "../server/actions";
 import { ContributionHeader } from "./contribution-shell";
 import { ScoreBreakdown } from "./score-breakdown";
 import { fieldClass, metricLabels, numberText, rateUnit } from "./presentation";
 
-export function ContributionSettings({ data }: { data: NonNullable<Awaited<ReturnType<typeof getContributionList>>> }) {
+export function ContributionSettings({ data }: { data: NonNullable<Awaited<ReturnType<typeof getContributionSettingsPreview>>> }) {
   const [config, setConfig] = useState(data.config), [message, setMessage] = useState(""), [busy, start] = useTransition();
   const router = useRouter();
-  const raws = useMemo(() => sumRaws(data.rows.flatMap((r) => r.total ? [r.total.raws] : [])), [data.rows]);
+  const raws = data.raws;
   const preview = scoreRaws(raws, config), before = scoreRaws(raws, data.config), delta = preview.total - before.total;
   const changed = JSON.stringify(config) !== JSON.stringify(data.config);
   const rulesChanged = JSON.stringify(config.referrals) !== JSON.stringify(data.config.referrals) || config.attendance.allowLate !== data.config.attendance.allowLate;
@@ -39,7 +39,7 @@ export function ContributionSettings({ data }: { data: NonNullable<Awaited<Retur
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-card p-4"><p className="text-sm">{changed ? "저장하지 않은 변경 사항이 있습니다." : "현재 저장된 배점입니다."}</p><div className="flex gap-2"><Button type="button" variant="outline" disabled={!changed || busy} onClick={() => { setConfig(data.config); setMessage(""); }}>변경 취소</Button><Button type="submit" disabled={busy || !changed}>{busy ? "저장 중…" : "배점 저장"}</Button></div></div>
       </fieldset>
       <aside className="min-w-0 space-y-4">
-        <section className="rounded-xl border border-primary/30 bg-primary-softer p-5" aria-label="배점 미리보기"><h2 className="font-semibold">저장 전 미리보기</h2><p className="mt-1 text-xs">전체 학생 {data.rows.length}명 · 목록 필터와 무관한 누적 실적</p>
+        <section className="rounded-xl border border-primary/30 bg-primary-softer p-5" aria-label="배점 미리보기"><h2 className="font-semibold">저장 전 미리보기</h2><p className="mt-1 text-xs">전체 학생 {data.studentCount}명 · 목록 필터와 무관한 누적 실적</p>
           <div className="mt-5 grid grid-cols-2 gap-3"><div><p className="text-xs">현재 배점</p><p className="mt-1 text-lg font-semibold tabular-nums">{numberText(before.total)}점</p></div><div><p className="text-xs">입력한 배점</p><p className="mt-1 text-lg font-bold text-primary tabular-nums">{numberText(preview.total)}점</p></div></div>
           <p className="mt-4 border-t border-line pt-3 text-sm">변화 <strong className="ml-2 tabular-nums">{delta > 0 ? "+" : ""}{numberText(delta)}점</strong></p>
           <p className="mt-2 text-xs">운영 {numberText(preview.operations)}점 · 학습·참여 {numberText(preview.participation)}점</p>
