@@ -3,11 +3,52 @@ import {
   GRADE_PRESCHOOL,
   GRADE_UNKNOWN,
   SCHOOL_OTHER,
+  SMALL_SCHOOLS_KEY,
   buildSchoolBars,
   gradeLabel,
   schoolBucket,
   sortGradeBars,
+  summarizeSchoolBars,
+  type SchoolBar,
 } from "./consultation-dist";
+
+describe("학교별 상담 소수 학교 요약", () => {
+  const school = (key: string, n: number, enrolled: number): SchoolBar => ({
+    key, label: key, officialName: null, kind: "초", n, enrolled, total: 100, rate: n,
+  });
+
+  it("2건까지 기타로 묶고 상담·등록 합계와 원본별 세부 내역을 보존한다", () => {
+    const rows = [school("학교A초", 1, 1), school("학교B초", 2, 1), school("학교C초", 3, 2)];
+    const original = structuredClone(rows);
+    const result = summarizeSchoolBars(rows);
+    expect(result.rows.map(row => row.key)).toEqual(["학교C초", SMALL_SCHOOLS_KEY]);
+    expect(result.rows[1]).toMatchObject({ n: 3, enrolled: 2, total: null, rate: null });
+    expect(result.smallSchools.map(row => row.key)).toEqual(["학교A초", "학교B초"]);
+    expect(result.rows.reduce((sum, row) => sum + row.n, 0)).toBe(6);
+    expect(result.rows.reduce((sum, row) => sum + row.enrolled, 0)).toBe(4);
+    expect(rows).toEqual(original);
+  });
+
+  it("학교 미상·미취학·예비 분류를 실제 소수 학교와 합치지 않는다", () => {
+    const rows = [school(SCHOOL_OTHER, 1, 0), school(GRADE_PRESCHOOL, 2, 1), school("예비 초", 1, 0), school("학교A초", 2, 2)];
+    const result = summarizeSchoolBars(rows);
+    expect(result.rows.map(row => row.key)).toEqual([SCHOOL_OTHER, GRADE_PRESCHOOL, "예비 초", SMALL_SCHOOLS_KEY]);
+    expect(result.smallSchools).toHaveLength(1);
+    expect(result.rows.at(-1)?.n).toBe(2);
+  });
+
+  it("학교명을 먼저 정규화해 합친 뒤 2건 기준을 적용한다", () => {
+    const rows = buildSchoolBars([
+      { school: "침산초", grade: null, enrolled: true },
+      { school: "침산초등학교", grade: null, enrolled: false },
+      { school: "대구침산초등학교", grade: null, enrolled: true },
+    ], null);
+    const result = summarizeSchoolBars(rows);
+    expect(result.smallSchools).toEqual([]);
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0]).toMatchObject({ key: "침산초", n: 3, enrolled: 2 });
+  });
+});
 
 // 값은 전부 프로덕션 실제 표기(2026 상담 251건에서 발췌).
 describe("gradeLabel — 확실할 때만 분류한다", () => {

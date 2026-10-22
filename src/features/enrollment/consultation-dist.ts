@@ -147,6 +147,28 @@ export type SchoolBar = {
   rate: number | null;
 };
 
+export const SMALL_SCHOOLS_KEY = "small-school-other";
+
+/** 1~2건인 실제 학교만 묶는다. 미상·미취학·예비 분류는 원래 의미를 유지한다. */
+export function summarizeSchoolBars(rows: SchoolBar[]): { rows: SchoolBar[]; smallSchools: SchoolBar[] } {
+  const smallSchools = rows.filter((row) => row.n <= 2 && !SCHOOL_BUCKETS.has(row.key));
+  if (!smallSchools.length) return { rows: [...rows], smallSchools };
+  const keys = new Set(smallSchools.map((row) => row.key));
+  return {
+    rows: [
+      ...rows.filter((row) => !keys.has(row.key)),
+      {
+        key: SMALL_SCHOOLS_KEY, label: "기타 (2건 이하 학교)", officialName: null, kind: null,
+        n: smallSchools.reduce((sum, row) => sum + row.n, 0),
+        enrolled: smallSchools.reduce((sum, row) => sum + row.enrolled, 0),
+        // 여러 학교를 합친 행에 한 학교의 전교생 대비 비율을 붙이지 않는다.
+        total: null, rate: null,
+      },
+    ],
+    smallSchools,
+  };
+}
+
 /**
  * 상담 → 학교별 막대.
  *

@@ -20,7 +20,7 @@ beforeEach(() => {
   mocks.manage.mockResolvedValue(true); mocks.list.mockResolvedValue({ items: [], nextOffset: null });
   mocks.create.mockResolvedValue({ item: { id: draftId, name: '11월 첫 연습본', lessonCount: 2, classCount: 1, studentCount: 3, referenceDate: null } }); mocks.read.mockResolvedValue({ version: 1, snapshot: snapshot() });
 });
-describe('private timetable draft API', () => {
+describe('branch-shared timetable draft API', () => {
   it.each(['list', 'create', 'read'])('requires login for %s before queries', async action => {
     mocks.user.mockResolvedValue(null);
     const response = action === 'list' ? await GET(new Request(url)) : action === 'create' ? await POST(post()) : await read(new Request(url), { params: Promise.resolve({ id: draftId }) });
@@ -34,7 +34,7 @@ describe('private timetable draft API', () => {
   });
   it('bounds pagination and takes ownership only from the session', async () => {
     const response = await GET(new Request(`${url}?offset=20&limit=10&tenantId=other&createdBy=other`));
-    expect(mocks.list).toHaveBeenCalledWith(tenantId, userId, 20, 10); expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(mocks.list).toHaveBeenCalledWith(tenantId, 20, 10); expect(response.headers.get('Cache-Control')).toBe('private, no-store');
     for (const query of ['offset=-1', 'offset=100001', 'offset=1.1', 'offset=Infinity', 'limit=51', 'limit=0', 'limit=abc']) {
       expect((await GET(new Request(`${url}?${query}`))).status).toBe(400);
     }
@@ -58,9 +58,9 @@ describe('private timetable draft API', () => {
     expect((await POST(post(input(), { 'Content-Type': 'text/plain' }))).status).toBe(415);
     expect((await POST(post(input(), { 'Sec-Fetch-Site': 'cross-site' }))).status).toBe(403); expect(mocks.create).not.toHaveBeenCalled(); expect(mocks.audit).not.toHaveBeenCalled();
   });
-  it('loads only an owned UUID and hides missing/foreign snapshots behind 404', async () => {
+  it('loads a saved UUID from the current branch and hides missing/foreign snapshots behind 404', async () => {
     expect((await read(new Request(url), { params: Promise.resolve({ id: draftId }) })).status).toBe(200);
-    expect(mocks.read).toHaveBeenCalledWith(tenantId, userId, draftId);
+    expect(mocks.read).toHaveBeenCalledWith(tenantId, draftId);
     expect((await read(new Request(url), { params: Promise.resolve({ id: 'invalid' }) })).status).toBe(400);
     mocks.read.mockResolvedValue(null); expect((await read(new Request(url), { params: Promise.resolve({ id: draftId }) })).status).toBe(404);
   });

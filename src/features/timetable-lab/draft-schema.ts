@@ -63,6 +63,7 @@ export const saveDraftSchema = z.strictObject({ version: z.literal(1), name: z.s
 export type SavedDraftSnapshot = z.infer<typeof draftSnapshotSchema>;
 export type SaveDraftInput = z.infer<typeof saveDraftSchema>;
 export type DraftSummary = { id: string; name: string; subject: 'english'; createdAt: string;
+  createdBy: string; createdByName: string | null;
   lessonCount: number; classCount: number; studentCount: number; referenceDate: string | null };
 
 /** Reject pathological nested formatting before recursive schema validation. */

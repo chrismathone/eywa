@@ -15,7 +15,7 @@ function Submit() {
   return (
     <Button type="submit" disabled={pending}>
       {pending ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-      메모 추가
+      특이사항 추가
     </Button>
   );
 }
@@ -77,7 +77,7 @@ export function MemoForm({ studentId }: { studentId: string }) {
         name="content"
         required
         rows={3}
-        placeholder="메모를 입력하세요..."
+        placeholder="특이사항을 입력하세요..."
         className="border-border bg-card text-foreground w-full rounded-lg border px-2 py-2 text-sm"
       />
       {state?.error ? <p className="text-chart-4 text-xs">{state.error}</p> : null}
