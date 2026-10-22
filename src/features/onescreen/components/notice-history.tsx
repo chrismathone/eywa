@@ -39,7 +39,7 @@ export function NoticeHistoryItem({ title, status, children }: { title: string; 
   return <details className="group py-2">
     <summary className="flex cursor-pointer list-none items-center gap-2 rounded-sm py-1 text-xs [&::-webkit-details-marker]:hidden">
       <span aria-hidden className="shrink-0 transition-transform group-open:rotate-90">›</span>
-      <span className="min-w-0 flex-1 truncate text-foreground">{title}</span>
+      <span className="text-foreground line-clamp-2 min-w-0 flex-1 wrap-anywhere">{title}</span>
       <span className="shrink-0">{status}</span>
       <span className="text-text-faint shrink-0 group-open:hidden">{t("os.n.historyDetails")}</span>
       <span className="text-text-faint hidden shrink-0 group-open:inline">{t("os.n.historyClose")}</span>
