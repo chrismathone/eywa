@@ -43,7 +43,9 @@ export function resolveRowFields(student: OneScreenStudent, subject: Subject | u
     note: has(subject?.note) ? subject.note : (student.note ?? ""),
     tests: {
       daily: {
-        score: has(subject?.dailyScore) ? subject.dailyScore : t.daily.score,
+        // 일일 테스트 '시험 없음'(수학 보고서 시범) — 어느 길로 점수가 들어와도(일괄 적용·이전 회차) 읽지 않는다.
+        //   안 막으면 학부모 카드엔 점수가, 멘트엔 '보지 않았습니다'가 함께 나간다(저장·추세·멘트가 전부 이 값을 읽는다).
+        score: subject?.dailyTestSkip ? null : has(subject?.dailyScore) ? subject.dailyScore : t.daily.score,
         max: has(subject?.dailyMax) ? subject.dailyMax : t.daily.max,
         prevScore: t.daily.prevScore,
       },

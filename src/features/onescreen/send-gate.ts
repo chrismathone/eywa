@@ -35,6 +35,10 @@ export type SendBlockReason =
   | "ment"
   /** 수학 보고서 시범(math-report-pilot.ts) — '자동작성' 글 그대로가 아니다. */
   | "autowrite"
+  /** 수학 보고서 시범 — 강사 한줄 멘트(필수)가 비었다(원장 2026-10-22). */
+  | "oneline"
+  /** 수학 보고서 시범 — 일일 테스트 '없음'인데 사유를 안 적었다(원장 2026-10-22). */
+  | "testreason"
   | "recall_pending"
   /** 발송 대기·게시 중(queued/processing) — 워커 결과가 나올 때까지 다시 못 누른다(원장 2026-09-29). */
   | "in_flight"
@@ -43,12 +47,14 @@ export type SendBlockReason =
   | "report_optout";
 
 /** 입력이 필요한 사유의 짧은 이름 — 라벨에서 "출결 · 진도 · 멘트 입력 필요"로 이어 붙인다. */
-type NeedReason = "attendance" | "progress" | "ment" | "autowrite";
+type NeedReason = "attendance" | "progress" | "testreason" | "ment" | "autowrite" | "oneline";
 const NEED_KEY: Record<NeedReason, SheetDictKey> = {
   attendance: "os.gate.need.attendance",
   progress: "os.gate.need.progress",
   ment: "os.gate.need.ment",
   autowrite: "os.gate.need.autowrite",
+  oneline: "os.gate.need.oneline",
+  testreason: "os.gate.need.testreason",
 };
 
 export type SendGate = {
@@ -107,6 +113,10 @@ export function evaluateSendGate(args: {
    * 서버(`saveAndQueueClassnote`)도 같은 이유로 거절한다. 옵셔널 = 시범 밖 행은 종전 판정 그대로.
    */
   needsAutoWrite?: boolean;
+  /** 수학 보고서 시범 — 강사 한줄 멘트가 비었다(필수, 원장 2026-10-22). 서버도 같은 이유로 거절한다. */
+  needsOneLine?: boolean;
+  /** 수학 보고서 시범 — 일일 테스트 '없음'인데 사유가 비었다(원장 2026-10-22). */
+  needsTestReason?: boolean;
   /**
    * 화면 언어 — 없으면 한국어(기존 호출부는 한 글자도 안 바뀐다).
    * 🔴 **판정에는 안 쓴다**: `canSend`·`reasons`는 언어와 무관하고 글자만 갈린다.
@@ -169,9 +179,11 @@ export function evaluateSendGate(args: {
   // 출결이 행에서 제일 앞 칸이라 사유도 맨 앞 — 체크하는 순서대로 읽힌다.
   if (args.attendanceUnchecked) needs.push("attendance");
   if (!args.hasProgress) needs.push("progress");
+  if (args.needsTestReason) needs.push("testreason");
   // 시범 대상은 '멘트를 쓰라'가 아니라 '자동작성을 누르라'다(칸이 잠겨 있어 직접 쓸 수 없다).
   if (args.needsAutoWrite) needs.push("autowrite");
   else if (!args.hasDraft) needs.push("ment");
+  if (args.needsOneLine) needs.push("oneline");
   if (needs.length === 0) return { canSend: true, reasons: [], label: null, hint: null };
   return {
     canSend: false,
@@ -182,8 +194,10 @@ export function evaluateSendGate(args: {
     hint: [
       needs.includes("attendance") ? t("os.gate.hint.attendance") : "",
       needs.includes("progress") ? t("os.gate.hint.progress") : "",
+      needs.includes("testreason") ? t("os.gate.hint.testreason") : "",
       needs.includes("ment") ? t("os.gate.hint.ment") : "",
       needs.includes("autowrite") ? t("os.gate.hint.autowrite") : "",
+      needs.includes("oneline") ? t("os.gate.hint.oneline") : "",
     ]
       .filter(Boolean)
       .join(" / "),

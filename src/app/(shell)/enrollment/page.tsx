@@ -58,7 +58,7 @@ import { MakeeduPushButton } from "./_components/makeedu-push-button";
 import { canPushToMakeedu } from "@/features/integrations/server/makeedu-push-access";
 import { readMyUiPrefs } from "@/lib/ui-prefs/read";
 import { RememberPrefs } from "@/components/remember-prefs";
-import { PROGRESS_DEFAULT_OFF, parseEnrollmentView, savedEnrollmentView, savedIntakeTrendMode, savedProgressTrendMode, savedProgressTrendOff } from "@/features/enrollment/view-pref";
+import { PROGRESS_DEFAULT_OFF, parseEnrollmentView, parseStatsSpan, savedEnrollmentView, savedIntakeTrendMode, savedProgressTrendMode, savedProgressTrendOff, savedStatsSpan, type StatsSpanValue } from "@/features/enrollment/view-pref";
 import { saveEnrollmentViewPref, saveProgressTrendMode, saveProgressTrendOff } from "@/features/enrollment/server/view-pref-actions";
 
 export const metadata = { title: "신규 콜&상담 — 에이와" };
@@ -131,11 +131,6 @@ export default async function EnrollmentPage({
   // 칸 키다 — 옛 링크(`?outcome=ai_done`)는 그 값이 속한 칸으로 넓혀 받는다(parseBoardStage).
   const selectedStage = parseBoardStage(outcome);
   const searchQuery = q?.trim() || null;
-  // 통계뷰 전용 — 연도 선택. `all` = 전체 기간(원장 2026-08-05). 여기엔 "최대 1년" 상한이 없다
-  // (집계라 행을 안 가져온다 — 칸반·목록의 상한은 행 로딩 때문이라 여기와 무관).
-  const statsPeriod = parseStatsPeriod(yearParam, Number(kstToday().slice(0, 4)));
-  // 단일 연도면 그 해, 기간 프리셋이면 null(라벨·비율 판정에 쓴다).
-  const statsYear: number | null = statsPeriod.kind === "year" ? statsPeriod.year : null;
   const page = Math.max(1, Number(pageParam) || 1);
   // 🔴 기본 = 최근 3개월. '전체'는 고를 수 없고 구간은 최대 1년(원장 2026-08-04) — 이관으로 3년치가
   // 쌓여 전건을 열면 칸반이 카드 2,197장이 된다. 알 수 없는 값이 와도 parseRange가 3개월로 되돌린다.
@@ -168,6 +163,15 @@ export default async function EnrollmentPage({
   //    안 적으면 저장이 끝나기 전 다음 클릭이 옛 저장값으로 돌아간다.
   const savedView = savedEnrollmentView(uiPrefs);
   const view: EnrollmentView = parseEnrollmentView(viewParam) ?? savedView;
+  // 통계 연도 = 주소의 `year` → 계정에 남은 여러 해 묶음(2·3개년) → 올해(검수 2026-10-22 — 아래 추이 카드처럼 기억한다).
+  // 여기엔 "최대 1년" 상한이 없다(집계라 행을 안 가져온다 — 칸반·목록의 상한은 행 로딩 때문이라 여기와 무관).
+  const savedSpan = savedStatsSpan(uiPrefs);
+  const statsPeriod = parseStatsPeriod(yearParam ?? savedSpan ?? undefined, Number(kstToday().slice(0, 4)));
+  // 단일 연도면 그 해, 기간 프리셋이면 null(라벨·비율 판정에 쓴다).
+  const statsYear: number | null = statsPeriod.kind === "year" ? statsPeriod.year : null;
+  // 저장할 묶음 — 통계 보기에서 주소로 연도를 고른 때만 바뀐다(다른 보기로 오가는 것은 저장값을 건드리지 않는다).
+  const currentSpan: StatsSpanValue | null =
+    view === "stats" && yearParam ? (statsPeriod.kind === "span" ? parseStatsSpan(`${statsPeriod.years}y`) : null) : savedSpan;
   // 신규 문의 추이(원장 2026-10-20) — 기간은 주소(`trend…`) → 계정에 남긴 보기 방식 → 월별 12개월. 연도 칩과 따로 논다.
   const today = kstToday();
   const intakeParams = readPeriodParams(sp, INTAKE_TREND_KEYS);
@@ -296,7 +300,7 @@ export default async function EnrollmentPage({
       {/* QR 접수가 들어오면 새로고침 없이 목록이 갱신된다(20초 건수 폴링). 알림 줄은 도착 후에만 렌더. */}
       <NewConsultationWatcher initialCount={totalCount ?? 0} />
       {/* 운영실 ↗로 온 방문(`from=dashboard`)은 보기를 저장하지 않는다 — 카드가 연 보기가 사람이 고른 마지막 보기를 덮지 않게(원생목록과 같은 규약). */}
-      {sp.from === "dashboard" ? null : <RememberPrefs current={{ view }} saved={{ view: savedView }} save={saveEnrollmentViewPref} />}
+      {sp.from === "dashboard" ? null : <RememberPrefs current={{ view, statsSpan: currentSpan }} saved={{ view: savedView, statsSpan: savedSpan }} save={saveEnrollmentViewPref} />}
 
       <PageHeader
         eyebrow="신규 콜&상담"
@@ -432,7 +436,8 @@ export default async function EnrollmentPage({
           <OpsHistoryCard
             id="progress"
             title="상담 진행 기록"
-            note="운영실 '상담 진행'의 그날 값 — 점마다 그날까지 최근 30일 접수가 단계마다 몇 건 닿았나(접수 ⊃ 등록 ⊃ 수업 시작) · 멈춘 상담은 60일"
+            // 기호(⊃) 대신 말로 · 멈춘 상담은 창이 60일이라 접수(30일)보다 클 수 있다는 것을 적는다(검수 2026-10-22 — 화면에 '멈춘 21 > 접수 20').
+            note="운영실 '상담 진행' 카드의 그날 값 · 접수~수업 시작 = 그날까지 최근 30일 접수 중 그 단계까지 간 건수 · 멈춘 상담 = 최근 60일 접수 중 결정 없이 멈춘 건수(기간이 달라 접수보다 많을 수 있습니다)"
             firstDate={firstRecorded(progressRows, (o) => !!o.consult)}
             period={progressPeriod}
             today={today}
@@ -462,6 +467,7 @@ export default async function EnrollmentPage({
         <StatsView
           stats={stats}
           year={statsYear}
+          periodText={span.from === span.to ? `${span.from}년` : `${span.from}~${span.to}년`}
           dist={dist}
           schoolPrefs={schoolPrefs}
         />

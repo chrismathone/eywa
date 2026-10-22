@@ -75,10 +75,12 @@ import {
   activeUnderstanding,
   EMPTY_UNDERSTANDING,
   isMathReportPilot,
+  pilotRecomposeNote,
   understandingRows,
-  understandingSig,
   type UnderstandingState,
 } from "../math-report-pilot";
+import { pilotRowSig, type DailyTestSkip } from "../math-report-pilot-sections";
+import { DailyTestSkipPanel } from "./daily-test-skip-panel";
 import { ReportCard, type SubjectReport } from "./report-card";
 // 영어 템플릿 모드(2026-09-10) — 영어 행은 멘트 대신 템플릿 글(수학 경로 불변).
 import { EnglishTemplatePanel } from "./english-template-panel";
@@ -787,6 +789,8 @@ export function OneScreenClient({
               // 미지정 행은 옛 세션과 같은 모양으로 남아 로스터가 학생 값으로 폴백한다(하위호환).
               // 소단원별 이해도(수학 보고서 시범) — 쓴 행만 싣는다(나머지 세션 모양 불변).
               ...(su.understanding ? { understanding: su.understanding } : {}),
+              // 일일 테스트 '없음' 사유(수학 보고서 시범) — 고른 적 있는 행만(null = 다시 '있음'으로 돌린 것).
+              ...(su.dailyTestSkip !== undefined ? { dailyTestSkip: su.dailyTestSkip } : {}),
               ...(hasRowOverrides(su)
                 ? {
                     attitude: su.attitude,
@@ -2083,6 +2087,10 @@ export function OneScreenClient({
       return { ...st, scores };
     });
   }
+  // 일일 테스트 있음/없음 + 사유(수학 보고서 시범). '없음'으로 바꾸면 점수를 비운다 — 안 비우면 치지 않은 시험 점수가 저장·추세로 나간다.
+  function setTestSkipFor(studentId: string, subjectName: string, skip: DailyTestSkip | null) {
+    patchRowEval(studentId, subjectName, (su) => ({ ...su, dailyTestSkip: skip, ...(skip ? { dailyScore: null } : {}) }));
+  }
   function toggleUnderstandingFor(studentId: string, subjectName: string, lesson: string, off: boolean) {
     patchUnderstandingFor(studentId, subjectName, (st) => ({
       ...st,
@@ -2091,7 +2099,21 @@ export function OneScreenClient({
   }
   // 특이사항(강사 메모) — AI 멘트 입력(공지 모드 A/B). **행별**(보강은 다른 수업이라 메모도 다르다).
   function setNoteFor(studentId: string, subjectName: string, text: string) {
+    // 수학 보고서 시범 — 칸 이름이 '강사 한줄 멘트(필수)'다. 자동작성 글 맨 끝의 옛 멘트를 그 자리에서 새 멘트로
+    // 바꿔 끼운다(원장 2026-10-22 *"자동 작성 후 치면 실시간으로 우측에 반영"*). 바꾸기 전 값을 먼저 읽어 둔다.
+    const st = studentsRef.current.find((x) => x.id === studentId);
+    const row = st?.subjects.find((su) => su.name === subjectName);
+    const pilotPrevNote = st && row && isMathReportPilot(studentId, row.subjectKey) ? resolveRowFields(st, row).note : null;
     patchRowEval(studentId, subjectName, (su) => ({ ...su, note: text }));
+    if (pilotPrevNote === null) return;
+    const rep = reportsRef.current[studentId]?.[subjectName];
+    if (!rep || pilotRecomposeNote(rep.draft, rep.autoDraft, pilotPrevNote, text) === null) return;
+    // 자동작성 글 그대로일 때만 — 둘 다 같은 값으로 두어 작성 방식은 계속 '자동'이다(한줄 멘트는 AI가 아니라 강사 원문).
+    // 실제 글은 갱신 함수 안에서 **최신 값**으로 다시 만든다(ref는 한 렌더 늦을 수 있다 — 방금 도착한 자동작성 글을 덮지 않게).
+    patchReport(studentId, subjectName, (r) => {
+      const next = pilotRecomposeNote(r.draft, r.autoDraft, pilotPrevNote, text);
+      return next === null || next === r.draft ? r : { ...r, draft: next, autoDraft: next };
+    });
   }
   /** 카드 뷰가 지금 보고 있는 행 — 카드엔 과목 선택 탭이 있어 대상이 명확하다(표와 같은 행 단위 규약). */
   const cardRowName = () => previewSubject?.name ?? null;
@@ -2905,8 +2927,15 @@ export function OneScreenClient({
     const pilot = isMathReportPilot(student.id, su?.subjectKey);
     const baseInput = buildReportCommentInput(student, idx, pilot ? undefined : classNotices, activeDate);
     const commentInput = pilot
-      ? { ...baseInput, understanding: activeUnderstanding(su?.today, su?.understanding) }
+      ? {
+          ...baseInput,
+          understanding: activeUnderstanding(su?.today, su?.understanding),
+          // 일일 테스트 '없음'이면 점수 대신 사유가 나간다(math-report-pilot-sections.ts).
+          ...(su?.dailyTestSkip ? { dailyTestSkip: su.dailyTestSkip, dailyTest: "" } : {}),
+        }
       : baseInput;
+    // 이번 글을 만든 값의 서명 — 발송 게이트(카드·표)가 같은 함수로 지금 값과 대조한다.
+    const writtenFactsSig = pilot ? pilotRowSig(student, subjectName) : undefined;
     try {
       // 통합 1회 호출 — 멘트 + 추세를 한 번에 생성(비용·지연↓).
       const res = await generateReportComment({ ...commentInput, classContext }, {
@@ -2934,7 +2963,7 @@ export function OneScreenClient({
         // 작성 방식 스냅샷(0214a) — AI 성공분·템플릿 폴백 모두 "자동이 넣은 텍스트". 저장 시 draft와 비교.
         autoDraft: text,
         // 수학 보고서 시범 — 이번 글을 만든 이해도 서명(점수가 글에 숫자로 없어 발송 게이트가 이걸로 대조한다).
-        ...(pilot ? { pilotUnderstandingSig: understandingSig(commentInput.understanding) } : {}),
+        ...(pilot ? { pilotFactsSig: writtenFactsSig } : {}),
         // 폴백 템플릿이면 표시 — 자동작성 원문(0370a)으로 싣지 않는다.
         autoDraftTemplate: !(res.ok && res.comment),
         // 추세는 생성 성공 시에만 갱신(표본 부족·실패면 기존 초안·수동 입력 보존). 만들었지만 검사에 걸려 버렸으면 비운다
@@ -3592,6 +3621,8 @@ export function OneScreenClient({
           : {}),
         // 멘트 작성 방식(0214a) — 이번 세션 자동작성 스냅샷과 비교(최종은 서버 resolveMentSource가 sticky 판정).
         mentSource,
+        // 수학 보고서 시범 — 강사 한줄 멘트(필수). 서버가 비었거나 글 끝에 안 붙었으면 거절한다.
+        ...(isMathReportPilot(student.id, su?.subjectKey) ? { pilotOneLine: rowEval.note } : {}),
         // 자동작성 후 고친 멘트면 그 자동작성 원문도 싣는다(0370a) — 말투 프로파일이 선생님이 '늘 고치는 것'을 배운다(원장 2026-10-16).
         //   영어는 템플릿 모드라 뺀다(코퍼스 밖).
         //   AI 실패 폴백 템플릿은 AI 원문이 아니라 뺀다.
@@ -4773,6 +4804,13 @@ selected ? (
                           : undefined
                       }
                     />
+                    {previewSubject && isMathReportPilot(selected.id, previewSubject.subjectKey) && showDailyTest ? (
+                      <DailyTestSkipPanel
+                        skip={previewSubject.dailyTestSkip ?? null}
+                        disabled={readonlyView || !isRowInputEditable(previewSubject, effectiveClassnoteStatus(previewReport?.classnoteStatus, previewSubject.classnoteStatus))}
+                        onChange={(skip) => setTestSkipFor(selected.id, previewSubject.name, skip)}
+                      />
+                    ) : null}
                     <TestCard
                       embedded
                       student={{ ...selected, subjects: previewSubject ? [previewSubject] : [] }}
@@ -4781,7 +4819,8 @@ selected ? (
                       onScore={setScore}
                       allowMax={allowTeacherTestMax}
                       onMax={setMax}
-                      dailyEnabled={showDailyTest}
+                      // 수학 보고서 시범에서 '시험 없음'을 고르면 점수 칸을 감춘다(사유 칸이 그 자리를 대신한다).
+                      dailyEnabled={showDailyTest && !(previewSubject && isMathReportPilot(selected.id, previewSubject.subjectKey) && previewSubject.dailyTestSkip)}
                       checkEnabled={showCheckTest}
                     />
                     {/* 소단원별 이해도(수학 보고서 시범, 테스트 학생 한정) — 자동작성 재료. */}

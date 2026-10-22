@@ -1,5 +1,6 @@
 import "server-only";
-import { kstYear, shiftMonth, kstMonthStartIso as monthStartIso } from "@/lib/date-kst";
+import { kstToday, kstYear, shiftMonth, kstMonthStartIso as monthStartIso } from "@/lib/date-kst";
+import { kstDayBounds } from "../kst-bounds";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { normalizeSchoolName } from "@/features/schools/school-name";
@@ -36,6 +37,11 @@ export type EnrollmentStats = {
   months: MonthStat[];
   /** 같은 길이의 **직전 해** 같은 달들 — 전년 동월 비교용. 데이터가 없으면 빈 배열. */
   prevYearMonths: MonthStat[];
+  /**
+   * 올해를 볼 때 **작년 같은 기간**(1월 1일 ~ 작년 오늘) 합계 — 헤드라인 증감의 비교 대상. 올해는 오늘까지만 있는데
+   * 작년 1~12월 전체와 견주면 "상담 −45%"처럼 거짓 감소가 선다(검수 2026-10-22). 지난해를 볼 땐 null(1~12월끼리 견준다).
+   */
+  prevSamePeriod?: { total: number; enrolled: number; to: string } | null;
   paths: BucketStat[];
   /** 구간 합계. months에서 도출하지 않고 같은 원천으로 계산(둘이 갈리면 헤더와 차트가 다른 말을 한다). */
   total: number;
@@ -118,22 +124,40 @@ export async function getEnrollmentStats(
   // 전체 기간엔 '전년 동월' 비교가 성립하지 않는다(비교 대상이 구간 안에 들어 있다) → 빈 배열로 둔다.
   const prevStart = kstMonthStartIso(fromY - 1, startM0);
   const prevEnd = kstMonthStartIso(fromY - 1, startM0 + months);
+  // 올해면 작년 같은 날까지만 따로 센다(2월 29일은 작년 2월 28일까지).
+  const today = kstToday();
+  const thisMonth = today.slice(0, 7);
+  const sameDayLastYear = (() => {
+    const [y, m, d] = today.split("-").map(Number) as [number, number, number];
+    const last = new Date(Date.UTC(y - 1, m, 0)).getUTCDate();
+    return `${y - 1}-${String(m).padStart(2, "0")}-${String(Math.min(d, last)).padStart(2, "0")}`;
+  })();
+  const ytd = !isAll && year === Number(today.slice(0, 4));
 
-  // 독립 조회 3개 = 병렬(B4). 전년치는 비교용이라 없으면 빈 배열로 떨어져도 화면이 산다.
-  const [cur, prev, paths] = await Promise.all([
+  // 독립 조회 = 병렬(B4). 전년치는 비교용이라 없으면 빈 배열로 떨어져도 화면이 산다.
+  const [cur, prev, paths, prevYtd] = await Promise.all([
     supabase.rpc("consultation_monthly_stats", { p_start: start, p_end: end }),
     isAll
       ? Promise.resolve({ data: [], error: null })
       : supabase.rpc("consultation_monthly_stats", { p_start: prevStart, p_end: prevEnd }),
     supabase.rpc("consultation_path_stats", { p_start: start, p_end: end }),
+    ytd
+      ? supabase.rpc("consultation_monthly_stats", { p_start: prevStart, p_end: kstDayBounds(sameDayLastYear).endIso })
+      : Promise.resolve({ data: null, error: null }),
   ]);
   // 조회 실패를 '0건'으로 위장하지 않는다 — 빈 통계와 장애는 화면에서 구분돼야 한다.
   if (cur.error) throw cur.error;
   if (paths.error) throw paths.error;
 
-  const curMonths = fillMonths((cur.data ?? []).map(toMonthStat), fromY, startM0, months);
+  // 아직 오지 않은 **빈** 달은 빼 둔다 — 0으로 채워 넘기면 차트 툴팁이 '11월 상담 0건'이라 말한다(trend-series는 빈 달을 비워 두게 돼 있다).
+  // 미래 날짜로 넣은 상담이 있는 달은 남긴다(빼면 헤드라인 합계가 같은 기간을 세는 유입경로·분포와 갈린다).
+  const curMonths = fillMonths((cur.data ?? []).map(toMonthStat), fromY, startM0, months).filter((m) => m.month <= thisMonth || m.total > 0);
   const prevYearMonths =
     isAll || prev.error ? [] : fillMonths((prev.data ?? []).map(toMonthStat), fromY - 1, startM0, months);
+  const prevYtdRows = !ytd || prevYtd.error || !prevYtd.data ? null : (prevYtd.data as Parameters<typeof toMonthStat>[0][]).map(toMonthStat);
+  const prevSamePeriod = prevYtdRows
+    ? { total: prevYtdRows.reduce((a, m) => a + m.total, 0), enrolled: prevYtdRows.reduce((a, m) => a + m.enrolled, 0), to: sameDayLastYear }
+    : null;
 
   const total = curMonths.reduce((a, m) => a + m.total, 0);
   const enrolled = curMonths.reduce((a, m) => a + m.enrolled, 0);
@@ -141,6 +165,7 @@ export async function getEnrollmentStats(
   return {
     months: curMonths,
     prevYearMonths,
+    prevSamePeriod,
     paths: bucketizePathStats(
       (paths.data ?? []).map(
         (r: {
@@ -180,7 +205,7 @@ export async function getRecentEnrollmentStats(today: string): Promise<Enrollmen
   const total = months.reduce((sum, row) => sum + row.total, 0);
   const enrolled = months.reduce((sum, row) => sum + row.enrolled, 0);
   return {
-    months, prevYearMonths: [], paths: [], total, enrolled,
+    months, prevYearMonths: [], prevSamePeriod: null, paths: [], total, enrolled,
     rate: total > 0 ? Math.round(enrolled / total * 100) : null,
     paidSum: months.reduce((sum, row) => sum + row.paidSum, 0),
   };

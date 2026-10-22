@@ -43,12 +43,15 @@ export function ConsultDistPanel({
   rows,
   initial,
   year,
+  periodText,
   hasTotals,
   totalsYear,
 }: {
   rows: SchoolBar[];
   initial: SchoolStatsPrefs;
   year: number | null;
+  /** 연도 칩의 기간('2026년' · '2024~2026년'). 옛 '전체 기간' 문구는 그 칩이 없어진 뒤로 틀린 말이었다(검수 2026-10-22). */
+  periodText: string;
   hasTotals: boolean;
   totalsYear: number | null;
 }) {
@@ -92,7 +95,12 @@ export function ConsultDistPanel({
   const totalE = view.reduce((a, r) => a + r.enrolled, 0);
 
   const toggleKind = (k: SchoolKind) => {
-    const cur = prefs.kinds ?? [...SCHOOL_KINDS];
+    // '전체'인 채로 '초'를 누르면 초만 보인다 — 종전엔 전체(초·중·고)에서 초를 **빼** 중·고가 남았다(검수 2026-10-22).
+    if (prefs.kinds === null) {
+      update({ kinds: [k] });
+      return;
+    }
+    const cur = prefs.kinds;
     const next = cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k];
     update({ kinds: next.length === 0 || next.length === SCHOOL_KINDS.length ? null : next });
   };
@@ -105,11 +113,11 @@ export function ConsultDistPanel({
       <header className="mb-3">
         <h2 className="text-foreground text-sm font-bold">학교별 상담</h2>
         <p className="text-text-dim mt-0.5 text-xs">
-          {year === null ? "전체 기간" : `${year}년`} 상담 {totalN}건 · 등록 {totalE}건 · {schoolCount}개 학교·분류
+          {periodText} 상담 {totalN}건 · 등록 {totalE}건 · {schoolCount}개 학교·분류
           {hasTotals
             ? ` · 전교생 대비 비율은 ${totalsYear}년 공시 기준`
             : year === null
-              ? " · 전체 기간은 전교생 대비 비율 미제공"
+              ? " · 여러 해를 묶으면 전교생 대비 비율을 내지 않습니다(해마다 전교생 수가 달라서)"
               : ` · ${year}년 전교생 자료 없음`}
         </p>
       </header>

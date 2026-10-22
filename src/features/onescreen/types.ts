@@ -98,6 +98,11 @@ export type Subject = {
    * 세션 `subject_progress`에 실려 새로고침 뒤에도 남는다(보고서 행에는 저장하지 않는다 — 자동작성 재료다).
    */
   understanding?: import("./math-report-pilot").UnderstandingState;
+  /**
+   * 일일 테스트 '없음'과 그 사유(수학 보고서 시범, math-report-pilot-sections.ts) — 시범 행에서만 쓴다. `null`·없음 = 시험 있음.
+   * 세션 `subject_progress`에 실려 새로고침 뒤에도 남는다(보고서 행에는 저장하지 않는다 — 자동작성 재료다).
+   */
+  dailyTestSkip?: import("./math-report-pilot-sections").DailyTestSkip | null;
   dailyScore?: number | null;
   dailyMax?: number;
   /**
