@@ -29,10 +29,15 @@ export type TipCard = {
   rows?: readonly (TipRow | null | undefined | false)[];
   /** 라벨 없는 문장들(메모 원문·안내). */
   lines?: readonly (string | null | undefined | false)[];
+  /**
+   * 넓은 카드 — 근거 줄이 여러 개라 기본 폭(240px)에선 잘리는 카드(수업보고서 평점 근거)만 켠다.
+   * 폭·최대 높이는 [card-style](./card-style.ts)의 `HOVER_CARD_WIDE_*`(화면이 더 작으면 화면에 맞춘다).
+   */
+  wide?: boolean;
 };
 
 /** 직렬화 모양 — 속성 문자열이 칸 수천 개에 실리므로 키를 한 글자로 줄인다. */
-type Encoded = { t?: string; m?: string; r?: [string, string][]; l?: string[] };
+type Encoded = { t?: string; m?: string; r?: [string, string][]; l?: string[]; w?: 1 };
 
 const clean = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
 
@@ -56,6 +61,7 @@ export function encodeTip(tip: string | TipCard | null | undefined): string | un
   if (lines.length > 0) out.l = lines;
   // 🔴 이름·날짜만 있는 카드는 안 띄운다 — 화면에 이미 보이는 것을 한 번 더 말할 뿐이다.
   if (!out.r && !out.l) return undefined;
+  if (card.wide) out.w = 1;
   return JSON.stringify(out);
 }
 
@@ -72,7 +78,14 @@ export function tipProps(tip: string | TipCard | null | undefined): { "data-tip"
  * 해석이 끝난 카드 — 만들 때(`TipCard`)는 빈 값·`false`를 섞어도 되지만, **읽을 때는 정리된 모양**이다
  * (그래야 그리는 쪽·테스트가 `row[0]`을 그냥 읽는다).
  */
-export type ResolvedTip = { title: string | null; meta: string | null; rows: TipRow[]; lines: string[] };
+export type ResolvedTip = {
+  title: string | null;
+  meta: string | null;
+  rows: TipRow[];
+  lines: string[];
+  /** 넓은 카드일 때만 `true`(그 밖엔 키가 없다 — 기존 카드의 모양은 그대로). */
+  wide?: true;
+};
 
 /**
  * 속성 문자열 → 카드. 형식이 아니면 `null`(지어내지 않는다 — 카드를 안 띄운다).
@@ -100,6 +113,7 @@ export function decodeTip(raw: string | null | undefined): ResolvedTip | null {
     meta: typeof e.m === "string" ? e.m : null,
     rows,
     lines,
+    ...(e.w === 1 ? { wide: true as const } : {}),
   };
 }
 

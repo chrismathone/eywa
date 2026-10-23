@@ -19,6 +19,8 @@ import { STUCK_MINUTES } from "../classnote-queue";
 import { IMPORT_FILTER, UNSENT_FILTER, reportOrderSpecs, type ReportListFilters, type ReportListRow } from "../report-filters";
 import { hasTextBesidesMarkers } from "@/features/report-templates/image-slots";
 import { getClassnoteQueue, type ClassnoteQueueView } from "./queries";
+import { loadReportRatings } from "./report-ratings";
+import type { ReportRating } from "../report-rating";
 import { isSendClassRouteRow, sendClassRow } from "@/features/onescreen/send-class";
 import { blockedForNoSendClass } from "@/features/onescreen/server/send-class";
 import { classnoteSendOn } from "@/features/owner/classnote-gate";
@@ -501,7 +503,12 @@ export async function listReports(
   const supabase = await createClient();
   const page = Math.max(0, filters.page ?? 0);
   // ment_source(0214a) 적용 여부 — 미적용이면 select·필터에서 빼서 목록이 죽지 않게(#95, probe 캐시 왕복 0).
-  const mentReady = await mentSourceColumnReady(supabase);
+  // 평점(0450a)은 선생님 보고서를 평가한 참고 값이라 **쓰기(발송) 권한자에게만** 싣는다 — 화면의 canSend와 같은
+  // 판정을 서버가 다시 한다(#77). 권한이 없으면 표를 읽지도 않고 행에 평점 칸 자체가 없다.
+  const [mentReady, canSeeRatings] = await Promise.all([
+    mentSourceColumnReady(supabase),
+    canWriteTenant(user.systemRole, "lesson_reports"),
+  ]);
 
   let q = supabase
     .from("lesson_reports")
@@ -609,9 +616,15 @@ export async function listReports(
   };
   const list = (data ?? []) as unknown as DbRow[];
   const ids = [...new Set(list.map((r) => r.student_id as string))];
-  const nameRows = await fetchInChunks<{ id: string; name: string }>(ids, (chunk) =>
-    supabase.from("students").select("id, name").in("id", chunk),
-  );
+  // 학생 이름과 평점은 서로 독립 — 함께 받는다(B4). 평점 조회는 실패해도 빈 값이라 목록을 막지 않는다.
+  const [nameRows, ratingById] = await Promise.all([
+    fetchInChunks<{ id: string; name: string }>(ids, (chunk) =>
+      supabase.from("students").select("id, name").in("id", chunk),
+    ),
+    canSeeRatings
+      ? loadReportRatings(user.tenantId, list.map((r) => r.id))
+      : Promise.resolve(new Map<string, ReportRating>()),
+  ]);
   const nameById = new Map(nameRows.map((s) => [s.id, s.name]));
   // to-one 임베드는 객체로 온다(실측). 관계 추론이 배열로 잡히는 경우까지 견디게 both를 받는다.
   const embeddedClassName = (v: unknown): string | null => {
@@ -633,6 +646,7 @@ export async function listReports(
     readAt: r.classnote_read_at as string | null,
     // 0214a 미적용이면 select에 없어 undefined — 열 표시는 mentSourceReady(옵션)가 따로 게이트한다.
     mentSource: (r as { ment_source?: string | null }).ment_source ?? null,
+    ...(canSeeRatings ? { rating: ratingById.get(r.id) ?? null } : {}),
   }));
   return { ok: true, rows, total: count ?? rows.length, page, pageSize: REPORT_PAGE_SIZE };
 }

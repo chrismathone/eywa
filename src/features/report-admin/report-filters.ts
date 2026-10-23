@@ -3,6 +3,7 @@
  * export할 수 없어(런타임 상수 IMPORT_FILTER) 여기로 분리. 5단계-2 Part C.
  */
 import type { MentSource } from "@/features/onescreen/ment-source";
+import type { ReportRating } from "./report-rating";
 
 export type ReportListRow = {
   id: string;
@@ -33,6 +34,11 @@ export type ReportListRow = {
    * 빠져 undefined(목록은 그대로 동작 — 열 자체를 mentSourceReady로 숨긴다). 라벨은 ment-source.ts 단일 소스.
    */
   mentSource?: string | null;
+  /**
+   * 평점(참고용, 0450a) — 2026-10-22 오프라인 배치가 한 번 매긴 값(앱은 AI를 부르지 않는다). null = 평점 없음(새 보고서).
+   * 🔴 **수업보고서 쓰기 권한자에게만** 서버가 싣는다 — 권한이 없으면 키 자체가 없다(listReports, #77).
+   */
+  rating?: ReportRating | null;
 };
 
 export type ReportListFilters = {

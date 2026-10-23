@@ -21,3 +21,11 @@ export const HOVER_CARD_MAX_H = 320;
 
 /** 카드 기본 폭(px) — 시간표 학생 카드와 같은 값. */
 export const HOVER_CARD_WIDTH = 240;
+
+/**
+ * 넓은 카드(`TipCard.wide`) 폭·최대 높이(px) — 근거 줄이 여러 개인 카드(수업보고서 평점 근거, 중간값 약 220자)용.
+ * 기본 카드(240×320)에선 절반 넘게 잘리고, 카드는 포인터를 통과시켜 안에서 스크롤할 수도 없다.
+ * ⚠️ 창(iframe)이 이보다 작으면 레이어가 화면 크기에 맞춰 줄인다.
+ */
+export const HOVER_CARD_WIDE_WIDTH = 400;
+export const HOVER_CARD_WIDE_MAX_H = 520;
