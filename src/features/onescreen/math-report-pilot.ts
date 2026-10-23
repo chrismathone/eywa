@@ -3,8 +3,8 @@
  *
  * 원장 지시: *"해당 작업은 수학과 테스트 학생이한테만 반영해서 테스트 먼저 진행해보기 위함"* — 범위는 학생 '테스트' 한 명
  * (질문 답 "학생 '테스트' 기준"). 시범 대상 수학 행에서만 아래 다섯 가지가 바뀐다.
- *   1. 수학 보고서(멘트·추세) 칸은 **보기만** — 손으로 못 고친다(readOnly).
- *   2. '자동작성'으로 만든 글 그대로가 아니면 ClassNote 발송을 막는다(화면 게이트 + 서버 `saveAndQueueClassnote` 이중).
+ *   1. 수학 보고서(멘트·추세) 칸은 **자동작성 전엔 보기만**, 자동작성 뒤엔 고칠 수 있다(원장 2026-10-23 — 종전 '항상 보기만'을 뒤집음, `pilotCanEdit`).
+ *   2. 자동작성을 한 번도 안 한 글은 ClassNote 발송을 막는다(화면 게이트 + 서버 `saveAndQueueClassnote` 이중 — 작성 방식 auto·auto_edited만 통과).
  *   3. 특이사항 자리표시 = 격려 멘트 예시.
  *   4. 소단원(오늘 진도의 차시)별 **이해도 10점 만점** 칸 — 일부를 빼고 남은 것만 자동작성에 쓴다.
  *   5. 자동작성 글 = `{이름}는 오늘 … 진도를 나갔습니다` + 이해도 + AI 본문 + 특이사항(맨 아래 그대로).
@@ -194,7 +194,8 @@ export function composePilotMent(parts: { lead: string; body: string; note: stri
  * 강사 한줄 멘트를 고치면 자동작성 글 맨 끝을 **그 자리에서** 바꿔 끼운다(원장 2026-10-22 *"AI 자동 작성 후 치면 실시간으로
  * 우측에 반영해서 강사 한줄 멘트 쓰고 볼 수 있게"*). 한줄 멘트는 AI에 주지 않고 원문을 맨 끝에 붙이므로(composePilotMent)
  * 다시 자동작성할 필요가 없다 — 끝의 옛 멘트만 떼고 새 멘트를 붙인다.
- * 자동작성 글 그대로가 아니거나 끝이 옛 멘트로 끝나지 않으면 null(손대지 않는다 — 발송 게이트가 다시 자동작성을 요구한다).
+ * 자동작성을 한 번도 안 했거나 끝이 옛 멘트로 끝나지 않으면 null(손대지 않는다).
+ * 자동작성 뒤 강사가 고친 글도 끝만 바꾼다(원장 2026-10-23 *"자동작성하고나면 수정은 할수있게"*).
  */
 export function pilotRecomposeNote(
   draft: string | null | undefined,
@@ -202,7 +203,7 @@ export function pilotRecomposeNote(
   prevNote: string | null | undefined,
   nextNote: string | null | undefined,
 ): string | null {
-  if (!isPilotAutoWritten(draft, autoDraft)) return null;
+  if (!(autoDraft ?? "").trim()) return null;
   const d = (draft ?? "").trim();
   const p = (prevNote ?? "").trim();
   const tail = noteBlock(p);
@@ -307,7 +308,7 @@ export function cleanPilotUnderstanding(text: string, items: readonly { title: s
 
 /** 서버 발송 게이트 거절 문구 — 자동작성 글이 아니거나 고쳐졌다. */
 export const PILOT_AUTOWRITE_REQUIRED_ERROR =
-  "이 학생의 수학 보고서는 '자동작성'으로 만든 글만 보낼 수 있습니다(저장은 됐습니다) — 자동작성을 누른 뒤 다시 보내 주세요";
+  "이 학생의 수학 보고서는 '자동작성'을 먼저 해야 보낼 수 있습니다(저장은 됐습니다) — 자동작성을 누른 뒤 다시 보내 주세요";
 
 /**
  * 자동작성 글이 **지금 칸 값과 맞나** — 자동작성 뒤에 진도·테스트·태도·과제·이해도를 바꾸면 글은 옛 값 그대로라 다시 눌러야 한다
@@ -337,11 +338,28 @@ export function isPilotDraftCurrent(
   return true;
 }
 
-/** 발송 게이트용 — 자동작성 글 그대로이고 지금 칸 값과도 맞아야 보낼 수 있다(카드·표 공용). */
+/**
+ * 자동작성을 한 번이라도 했나 — 시범 대상 멘트 칸은 그 전엔 잠기고, 그 뒤엔 고칠 수 있다
+ * (원장 2026-10-23 *"자동작성하고나면 수정은 할수있게 열어줘"*, 종전 2026-10-21 *"수정하지 못하도록 막고 보이게만"*을 뒤집음).
+ */
+export function pilotCanEdit(autoDraft: string | null | undefined): boolean {
+  return (autoDraft ?? "").trim() !== "";
+}
+
+/**
+ * 발송 게이트용(카드·표 공용) — 자동작성을 한 번은 해야 하고, 그 뒤 칸 값(진도·테스트·태도·과제·이해도)이 바뀌었으면 다시 눌러야 한다.
+ * · 자동작성 글 그대로 = 종전 대조 전부(진도 첫 문장 · 사실 서명 · 끝의 한마디).
+ * · 강사가 고친 글 = 글 대조(진도 첫 문장)는 못 한다 — 사실 서명과 끝의 한마디만 본다(고친 글을 '다시 자동작성'으로 지우게 하지 않는다).
+ */
 export function pilotNeedsAutoWrite(
   draft: string | null | undefined,
   autoDraft: string | null | undefined,
   now: Parameters<typeof isPilotDraftCurrent>[1],
 ): boolean {
-  return !isPilotAutoWritten(draft, autoDraft) || !isPilotDraftCurrent(draft, now);
+  const d = (draft ?? "").trim();
+  if (!pilotCanEdit(autoDraft) || !d) return true;
+  if (isPilotAutoWritten(draft, autoDraft)) return !isPilotDraftCurrent(draft, now);
+  if (now.writtenSig !== undefined && now.writtenSig !== now.factsSig) return true;
+  const note = (now.note ?? "").trim();
+  return note !== "" && !d.endsWith(note);
 }

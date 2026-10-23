@@ -35,8 +35,8 @@ it("opens the student directory without selecting its first student, then suppor
   expect(screen.queryByRole("heading", { name: "선택한 대상" })).toBeNull();
   expect(screen.queryByRole("textbox", { name: "현재 연결된 학생 검색" })).toBeNull();
   fireEvent.change(screen.getByRole("textbox", { name: "학생 목록 검색" }), { target: { value: "달산" } });
-  expect(screen.queryByRole("button", { name: "안도현 연결 보기" })).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "이학생 연결 보기" }));
+  expect(screen.queryByRole("button", { name: /^안도현 .*연결 보기$/ })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "이학생 · 달산초5 연결 보기" }));
   expect(m.push.mock.lastCall?.[0]).toBe("/student-contribution/ontology?view=current&kind=student&entity=second&embed=1");
   rerender(<CurrentScopeExplorer embed view={{ ...view, request: { ...directoryRequest, id: "second" } }} />);
   expect(screen.queryByRole("region", { name: "학생 목록" })).toBeNull();
