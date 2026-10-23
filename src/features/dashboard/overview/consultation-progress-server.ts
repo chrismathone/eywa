@@ -6,6 +6,8 @@ import { reportError } from "@/lib/observability/report-error";
 import { homonymFamilies, type AdminDeps, type ConsultationRow } from "./admissions-links-server";
 import { consultationBasesInTitles, matchAdmissionsConsultation } from "./admissions-consultation-link";
 import { admissionsEventKind } from "./display";
+import { getTenantSettings, getTenantSettingsByTenantId } from "@/features/owner/server/queries";
+import { consultClassKeysOf } from "@/features/enrollment/consult-subject";
 import {
   chipOf,
   progressOf,
@@ -17,7 +19,7 @@ import {
 
 /**
  * 연결 원생들의 **미종료** 수강(시작일 · 반 과목) — 콜&상담 칸반의 배정 판정(`loadRowBadges`)과 같은 조건
- * (`end_date IS NULL OR end_date >= 오늘`)에 시작일을 더해 받는다(반 배정과 첫 수업을 가르려고).
+ * (`end_date IS NULL OR end_date >= 오늘` · 반 조인 `!inner`)에 시작일을 더해 받는다(반 배정과 첫 수업을 가르려고).
  * id가 수십~수백이라 청크로(B3), 오류는 던진다(0으로 위장하지 않는다).
  */
 async function progressEnrollments(studentIds: readonly string[], today: string, deps?: AdminDeps): Promise<ProgressEnrollment[]> {
@@ -27,7 +29,7 @@ async function progressEnrollments(studentIds: readonly string[], today: string,
   const rows = await fetchInChunks<Row>([...studentIds], (chunk) => {
     const q = db
       .from("enrollments")
-      .select("student_id, start_date, class:class_id ( subject )")
+      .select("student_id, start_date, class:class_id!inner ( subject )")
       .in("student_id", chunk)
       .or(`end_date.is.null,end_date.gte.${today}`);
     return deps ? q.eq("tenant_id", deps.tenantId) : q;
@@ -95,14 +97,25 @@ export async function consultProgressList(
   deps?: AdminDeps,
 ): Promise<{ list: ConsultProgress[]; levelTestKnown: boolean }> {
   const studentIds = [...new Set(consultations.flatMap((c) => (c.studentId ? [c.studentId] : [])))];
-  // 수강 조회와 입테 연결은 서로 독립이라 함께(B4).
-  const [enrollments, levelTests] = await Promise.all([
+  // 수강 조회·입테 연결·학원 설정은 서로 독립이라 함께(B4). cron(관리 키)은 지점 id로 설정을 읽는다(세션이 없다).
+  const [enrollments, levelTests, settings] = await Promise.all([
     progressEnrollments(studentIds, today, deps),
     events ? levelTestDatesByConsultation(events, consultations, notNames, since, deps) : Promise.resolve(null),
+    deps ? getTenantSettingsByTenantId(deps.tenantId) : getTenantSettings(),
   ]);
+  // 상담 과목 글자 → 볼 반 과목 키 — 칸반 배지·상세 '배정된 반'과 같은 판정(`consultClassKeys`).
+  const classKeysOf = consultClassKeysOf(settings.operations.subjects);
   const list = consultations.map((c) =>
     progressOf(
-      { id: c.id, name: c.name, outcome: c.outcome, consultedOn: c.consultedOn, subject: c.subject, studentId: c.studentId },
+      {
+        id: c.id,
+        name: c.name,
+        outcome: c.outcome,
+        consultedOn: c.consultedOn,
+        subject: c.subject,
+        classKeys: classKeysOf(c.subject),
+        studentId: c.studentId,
+      },
       enrollments,
       levelTests ? (levelTests.get(c.id) ?? []) : null,
       today,

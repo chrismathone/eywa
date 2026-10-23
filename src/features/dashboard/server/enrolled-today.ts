@@ -9,6 +9,7 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { kstDayBounds } from "@/features/enrollment/kst-bounds";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { assignedEntryAt, enrolledRecentFrom } from "@/features/dashboard/overview/enrolled-recent";
+import { consultClassKeysOf } from "@/features/enrollment/consult-subject";
 
 export type EnrolledTodayRow = {
   /** 콜&상담 id. */
@@ -148,7 +149,7 @@ async function assignedEntries(
 ): Promise<{ row: ConsultRow; at: string }[]> {
   const cols = "id, prospect_name, prospect_school, prospect_grade, subject, student_id, outcome, created_at";
   type Candidate = ConsultRow & { created_at: string };
-  const [assignedInWindow, consultsInWindow] = await Promise.all([
+  const [assignedInWindow, consultsInWindow, settings] = await Promise.all([
     fetchAllPaged<{ student_id: string }>((from, to) =>
       db.from("enrollments").select("student_id").gte("created_at", startIso).lt("created_at", endIso).order("id").range(from, to),
     ),
@@ -163,7 +164,10 @@ async function assignedEntries(
         .order("id")
         .range(from, to),
     ),
+    getTenantSettings(),
   ]);
+  // 상담 과목 글자 → 볼 반 과목 키 — 칸반 배지·아래 `listAssignedClassNames`와 같은 판정(`consultClassKeys`).
+  const classKeysOf = consultClassKeysOf(settings.operations.subjects);
   const ofStudents = await fetchInChunks<Candidate>([...new Set(assignedInWindow.map((e) => e.student_id))], (chunk) =>
     db.from("enrollment_consultations").select(cols).neq("outcome", "enrolled").in("student_id", chunk),
   );
@@ -192,7 +196,7 @@ async function assignedEntries(
   const lo = Date.parse(startIso);
   const hi = Date.parse(endIso);
   return [...consults.values()].flatMap((c) => {
-    const at = assignedEntryAt({ consultCreatedAt: c.created_at, subject: c.subject || null, enrollments: byStudent.get(c.student_id!) ?? [], today });
+    const at = assignedEntryAt({ consultCreatedAt: c.created_at, classKeys: classKeysOf(c.subject), enrollments: byStudent.get(c.student_id!) ?? [], today });
     if (!at) return [];
     const t = Date.parse(at);
     return t >= lo && t < hi ? [{ row: c, at }] : [];

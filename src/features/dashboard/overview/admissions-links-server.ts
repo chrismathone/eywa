@@ -24,7 +24,7 @@ export type AdminDeps = { db: ReturnType<typeof createAdminClient>; tenantId: st
 export type ConsultationRow = AdmissionsConsultationCandidate & {
   /** outcome 원값 — 화면에 그대로 내보내지 않는다(칸반 단계 판정 재료). */
   outcome: string;
-  /** 상담 과목 키(학원설정) 또는 옛 자유 텍스트 — 배정 판정에서 반 과목과 글자 그대로 비교(칸반과 같다). */
+  /** 상담 과목 키(학원설정) 또는 옛 자유 텍스트 — 배정 판정은 칸반과 같은 `consultClassKeys`로 반 과목 키 목록을 만들어 견준다. */
   subject: string | null;
 };
 

@@ -9,6 +9,7 @@ import { recentConsultMonths, type RecentConsultRow } from "../recent-stats";
 import { buildManagementSheet, type ExitCohortRow, type ManagementSheet } from "../management-sheet";
 import { intakeGroupMeta, intakeGroupsOf } from "../intake-groups";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { loadAttendingCounter } from "./management-attending";
 import {
   buildSchoolBars,
   gradeLabel,
@@ -274,12 +275,23 @@ export async function getConsultationDistribution(
   const start = kstMonthStartIso(fromY, 0);
   const end = kstMonthStartIso(toY + 1, 0);
 
-  const [rows, schoolStats, settings] = await Promise.all([
-    fetchAllPaged<{ prospect_school: string | null; prospect_grade: string | null; outcome: string; consulted_at: string; subject: string | null; student_id: string | null }>(
+  const today = kstToday();
+  const settingsPromise = getTenantSettings();
+  const [rows, schoolStats, settings, attending] = await Promise.all([
+    fetchAllPaged<{
+      prospect_school: string | null;
+      prospect_grade: string | null;
+      outcome: string;
+      consulted_at: string;
+      subject: string | null;
+      student_id: string | null;
+      follow_up_date: string | null;
+    }>(
       (from, to) =>
         supabase
           .from("enrollment_consultations")
-          .select("prospect_school, prospect_grade, outcome, consulted_at, subject, student_id")
+          // follow_up_date — 관리현황 '장기 미결'(오늘 이후 다음 상담일이 잡히면 진행 중)의 재료.
+          .select("prospect_school, prospect_grade, outcome, consulted_at, subject, student_id, follow_up_date")
           .gte("consulted_at", start)
           .lt("consulted_at", end)
           // 🔴 페이지로 나눠 받으면 정렬이 있어야 한다 — 없으면 3개년(1,500건+)에서 페이지 경계의 행이 겹치거나 빠진다(검수 2026-10-22).
@@ -301,7 +313,9 @@ export async function getConsultationDistribution(
           .order("name_key", { ascending: true })
           .range(from, to),
     ),
-    getTenantSettings(),
+    settingsPromise,
+    // 관리현황 '지금 재원' — 원생목록과 같은 재원 판정(조회는 상담 행과 독립이라 함께 — B4 · 실패하면 null).
+    settingsPromise.then((s) => loadAttendingCounter(s.operations.subjects, today)),
   ]);
 
   // 그 해 공시가 있으면 비율을 낸다. 없으면(예: 아직 안 받은 연도) 건수·전환율만 보여준다.
@@ -352,8 +366,16 @@ export async function getConsultationDistribution(
     hasTotals,
     totalsYear,
     sheet: buildManagementSheet(
-      rows.map((r) => ({ month: kstMonthOf(r.consulted_at), subject: r.subject, outcome: r.outcome })),
+      rows.map((r) => ({
+        month: kstMonthOf(r.consulted_at),
+        subject: r.subject,
+        outcome: r.outcome,
+        consultedOn: kstDateOf(r.consulted_at) ?? `${kstMonthOf(r.consulted_at)}-01`,
+        followUpDate: r.follow_up_date,
+        studentId: r.student_id,
+      })),
       intakeGroupsOf(settings.operations.subjects),
+      { today, attending },
     ),
     sheetGroups: intakeGroupMeta(settings.operations.subjects),
     cohorts: rows.flatMap((r) => {

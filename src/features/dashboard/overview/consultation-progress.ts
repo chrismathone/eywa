@@ -11,6 +11,7 @@
  */
 import { stageOfCard, type BoardStageColor, type BoardStageKey } from "@/features/enrollment/board-stages";
 import { daysBetween, shiftDate } from "@/features/newcomers/onboarding-items";
+import { inConsultClasses, type ConsultClassKeys } from "@/features/enrollment/consult-subject";
 
 /** 카드 단계별 인원을 세는 창 — 상담일 기준 최근 30일(오늘 포함). */
 export const PROGRESS_WINDOW_DAYS = 30;
@@ -28,8 +29,13 @@ export type ProgressConsultation = {
   outcome: string;
   /** 상담 날짜 KST(`consulted_at`). */
   consultedOn: string;
-  /** 상담 과목 키(없으면 null — 그때는 칸반처럼 전체 수강으로 판정). */
+  /** 상담 과목(키 또는 옛 자유 글자) — 화면 구분용. 배정 판정은 아래 `classKeys`로만 한다. */
   subject: string | null;
+  /**
+   * 이 상담이 볼 반 과목 키 — 칸반과 같은 판정(`consultClassKeys`): `null` = 과목 모름(전체 수강) · `[]` = 못 읽음(배정 없음).
+   * 🔴 `subject`를 반 과목과 글자 그대로 견주지 말 것 — 옛 이관 상담('수학'·'EIE')이 배정을 못 찾는다.
+   */
+  classKeys: ConsultClassKeys;
   studentId: string | null;
 };
 
@@ -66,7 +72,7 @@ export function progressOf(
   today: string,
 ): ConsultProgress {
   const mine = c.studentId
-    ? enrollments.filter((e) => e.studentId === c.studentId && (!c.subject || e.subject === c.subject))
+    ? enrollments.filter((e) => e.studentId === c.studentId && inConsultClasses(c.classKeys, e.subject))
     : [];
   const stage = stageOfCard({ outcome: c.outcome, assignedClassCount: mine.length });
   const started = mine.some((e) => !e.startDate || e.startDate <= today);

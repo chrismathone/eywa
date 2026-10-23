@@ -19,6 +19,7 @@ const base: ProgressConsultation = {
   outcome: "consulted",
   consultedOn: "2026-09-20",
   subject: "english",
+  classKeys: ["english"],
   studentId: null,
 };
 const enr = (subject: string | null, startDate: string | null, studentId = "s1"): ProgressEnrollment => ({
@@ -45,7 +46,19 @@ describe("progressOf — 칸반과 같은 단계", () => {
 
   it("다른 과목 수강은 이 상담의 배정이 아니다 · 과목이 없으면 전체 수강으로(칸반 폴백)", () => {
     expect(progressOf({ ...base, studentId: "s1" }, [enr("math", "2026-09-01")], [], TODAY).assigned).toBe(false);
-    expect(progressOf({ ...base, studentId: "s1", subject: null }, [enr("math", "2026-09-01")], [], TODAY).assigned).toBe(true);
+    expect(progressOf({ ...base, studentId: "s1", subject: null, classKeys: null }, [enr("math", "2026-09-01")], [], TODAY).assigned).toBe(true);
+  });
+
+  it("옛 이관 글자도 칸반과 같은 반 과목 키로 판정 — 'EIE' 상담은 영어 반 · 못 읽는 글자는 배정 없음", () => {
+    expect(progressOf({ ...base, studentId: "s1", subject: "EIE", classKeys: ["english"] }, [enr("english", "2026-09-01")], [], TODAY).stage).toBe("enrolled");
+    expect(progressOf({ ...base, studentId: "s1", subject: "영수", classKeys: [] }, [enr("math", "2026-09-01")], [], TODAY).assigned).toBe(false);
+  });
+
+  it("서버가 칸반과 같은 판정(consultClassKeys)으로 반 과목 키를 만든다 — 운영실·매일 기록(ops-daily) 공용", () => {
+    const server = readFileSync("src/features/dashboard/overview/consultation-progress-server.ts", "utf8");
+    expect(server).toContain("classKeys: classKeysOf(c.subject)");
+    expect(server).toContain("deps ? getTenantSettingsByTenantId(deps.tenantId) : getTenantSettings()");
+    expect(server).toContain("class:class_id!inner ( subject )");
   });
 
   it("시작일이 오늘 이전·오늘·모름이면 수업 시작", () => {

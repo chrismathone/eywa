@@ -329,7 +329,10 @@ describe("④-2 전일 / 이달 신규 — 등록 완료로 옮긴 로그 한 �
     // 배정 반 목록도 개수와 같은 필터를 지난다(원장 2026-10-22 *"반배정된 반이름과 과목 보이게"*).
     const ASSIGNED = src("src/features/enrollment/server/assigned-classes.ts");
     const names = ASSIGNED.slice(ASSIGNED.indexOf("export async function listAssignedClassNames("));
-    expect(names.slice(0, 800)).toContain("assignedQuery(supabase, studentId, subject,");
+    expect(names.slice(0, 800)).toContain("assignedQuery(supabase, studentId, classKeys,");
+    // 상담 과목 글자 → 반 과목 키는 칸반 배지·상세와 같은 판정(2026-10-23 — 옛 이관 '수학'·'EIE'도 그 반을 찾는다).
+    expect(names.slice(0, 800)).toContain("await classKeysFor(subject)");
+    expect(QUERY).toContain("classKeys: classKeysOf(c.subject)");
   });
 });
 

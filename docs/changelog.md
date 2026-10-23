@@ -11,6 +11,18 @@
 - **숙제 미제출 사유(필수)**: 숙제 완성도가 미제출·0%면 그 칸 바로 아래 '미제출 사유' 입력이 뜨고(`HomeworkMissReasonInput`, 세션 `subject_progress.homeworkMissReason`), 비어 있으면 발송 게이트 `hwreason`이 막는다. 적은 말은 '숙제 완성도' 문장 두 개 사이에 원문 그대로(마침표만 보탠다) — AI에는 안 준다. 사실 서명에 들어가 사유를 고치면 다시 자동작성.
 - 옛 제목으로 저장된 글(`PILOT_LEGACY_TITLES`)도 카드가 같은 모양으로 그리고, 끝의 '선생님 한마디'도 한마디를 고치면 새 제목으로 바꿔 끼운다.
 
+## 2026-10-23 — 신규 콜&상담: 반 배정 과목 판정 한 벌 · 관리현황 '재원'·'장기 미결'·완료율 카드 · '상담 완료'는 다음 상담일 필수 · 후속 조치 첫 알림
+
+- 원장 *"콜&상담 관리현황을 한 눈에 보기 쉽게 … 상담대비 완료율이 표시되지 않는다 · 수학, 영어 과목별 재원생수가 제대로 체크되지 않는다"* + *"후속 조치를 선택이 아닌 필수로 … 후속조치일 다와가면 알람"* → *"골 프롬프트로 점검하고 바로 구현"*(Codex 검토 반영). 결정 본문 = [`docs/decisions/students.md`](decisions/students.md) 2026-10-23 절.
+- **과목 판정 한 벌** `consult-subject.ts`(`consultClassKeys` · 빈칸 = 전 과목 · 못 읽음 = 배정 없음) — 칸반·목록 배지(`loadRowBadges`, 반 조인 `!inner`) · 상세 '배정된 반'·상태 변경·상세 저장(`assignedQuery` → `.in("class.subject", keys)`, 저장은 새 과목으로 검사) · 운영실 '상담 진행'(`progressOf` — 운영실·ops-daily, `!inner`) · '전일 / 이달 신규'(`assignedEntryAt`). 실측: 상세 빈칸 '등록' 195건 채워짐 · 칸반 '등록 완료' +10(옛 미등록) · 빠짐 0.
+- **관리현황** — 재원 칸(원생목록 `loadActiveEnrolledEnrollments` + `enrolledSubjectCounts` · 사람 단위 · `management-attending.ts`) · 진행 중/장기 미결(상담일 60일 `STALL_WINDOW_DAYS` · 오늘 이후 다음 상담일이면 진행 중) · 완료율 칸 마우스 오버 = 내역 카드(`completionTipCard`) · 머리말 기준 줄 · '등록 후 퇴원' = 지금 퇴원 상태인 학생. 조회 select에 `follow_up_date`.
+- **후속 조치** — '상담 완료' = 다음 상담일 필수(`FOLLOW_UP_DATE_REQUIRED`) · 상담 마친 건은 '상담 전' 불가(`FOLLOW_UP_BEFORE_BLOCKED` · 폼 비활성 + 이유) · 폼 라벨 '다음 상담일' + * · 옛 초안의 '상담 전'은 비운다. 서버 세 경로가 같은 `resolveFollowUp`.
+- **후속 조치 첫 알림** — `seedsOnColdStart`(events-core): `enrollment_followup`만 콜드스타트 시드를 하지 않는다(침산 알림 기록 0건 — 첫 실제 다음 상담 알림이 시드로 삼켜질 자리였다). 다른 알림 종류는 그대로.
+- **장기 미결 상담 정리(운영 DB 데이터 · 원장 *"1044건 정리"* · *"기억해놓고 혹시나 되돌릴 수 있도록"*)** — 침산 · 상담 완료(consulted·ai_done) · 오늘 이후 다음 상담일 없음 · 상담일 60일 넘음 = **1,028건**(60일 안 30건은 진행 중이라 그대로).
+  근거가 있을 때만 등록 — A 37(이어진 원생이 상담일 −30일 이후 그 과목 묶음 반 수강 시작) · B 51(원생 미연결 · 끝 알파벳 뗀 이름+학교가 같은 원생 딱 1명이 상담 −30~+120일에 등록) · 나머지 C 940 = 미등록.
+  감사로그 1,028줄(actor '자료 정리(장기 미결 상담 · 2026-10-23)' · metadata에 분류·근거·사유) · 슬랙 0. 연도별 완료율 2023 39% · 2024 48% · 2025 54% · 2026 58%.
+  스크립트 [`cleanup-stale-enrollment-consultations.cjs`](../scripts/_oneoff/cleanup-stale-enrollment-consultations.cjs) · 되돌리기 [`revert-cleanup-stale-enrollment-consultations.cjs`](../scripts/_oneoff/revert-cleanup-stale-enrollment-consultations.cjs)(드라이런 기본 · 그사이 사람이 고친 줄은 건너뜀). 옛 상태 원본은 학생 이름이 들어 있어 저장소 밖(`D:\tmp\enrollment-stale-cleanup-2026-10-23\backup.json`).
+
 ## 2026-10-23 — 시간표(개발중) 계획 칸 표 지움(0451a)
 
 - 원장 *"필요없음 계획 칸 표도 지워"* → `timetable_plan_slots`(0232a) 삭제 마이그레이션 0451a · 운영 적용. 지우기 전 운영 DB 확인: 1,112행 = 08-31 '현재 시간표 복사' + '달 복사' 한 번씩(8·9월 556행씩) · 만든 뒤 고친 행 0 · 이 표를 가리키는 연결(FK)·뷰·함수·트리거·정책 0 · main 코드 참조 0(화면은 같은 날 ac1236af4로 제거). `CASCADE` 없이 지운다. 백업 `D:\tmp\timetable-plan-slots-backup-2026-10-23\rows.json`(md5 대조 일치) · 되돌리기 `scripts/_oneoff/revert-0451a-drop-timetable-plan-slots.sql` + 백업 폴더 `restore.cjs`. 감사 라벨 `timetable_plan_*`은 옛 기록 2건 때문에 그대로.

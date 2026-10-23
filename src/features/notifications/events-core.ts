@@ -169,6 +169,17 @@ export function followupBody(event: FollowupEvent): string {
 
 // ─────────── 신규 콜&상담 후속 조치(원장 2026-10-22 *"후속조치일 다와가면 알람 기능"*) ───────────
 // '다음 상담'으로 잡은 날 — 하루 전 · 당일 · 지나면(주 1회 재촉). 등록·미등록으로 정하거나 날짜를 옮기면 감지 쿼리에서 빠져 멈춘다.
+
+/**
+ * 콜드스타트(그 지점에 이 종류 알림 기록이 0건 — 첫 실행)에 첫 감지분을 **보내지 않고 시드로만 남기는가**(벨 폭탄 방지, 0108a).
+ * 🔴 신규 콜&상담 후속 조치는 아니다(2026-10-23 Codex 검토): 빈 실행은 기록을 안 남겨 콜드스타트가 **첫 후보까지** 이어지므로,
+ *    그 지점의 **첫 실제 다음 상담 알림이 조용히 빠진다**. 이 종류는 감지 범위가 이미 좁아(도입일 `FOLLOW_UP_ALERT_START` 이후 ·
+ *    내일까지 · 아직 정하지 않은 상담) 첫 실행에도 옛 건이 쏟아지지 않는다. 다른 종류는 종전 그대로 시드한다.
+ */
+export function seedsOnColdStart(eventType: string): boolean {
+  return eventType !== "enrollment_followup";
+}
+
 export type EnrollmentFollowupStage = "soon" | "due" | "overdue";
 export type EnrollmentFollowupInput = {
   consultationId: string;

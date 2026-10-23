@@ -402,9 +402,11 @@ export async function updateEnrollmentConsultation(
 
   // 후속 조치(원장 2026-10-22) — 저장 뒤 '상담 완료' 칸에 남는 상담이면 반드시 고른다(QR 접수를 '상담 완료로 저장'할 때 포함).
   // 고른 값이 칸반 상태를 정한다. 이관 registration_status·결제 기록은 수정하지 않는다.
+  // 🔑 배정 검사는 **저장될 과목**으로 한다(2026-10-23) — 과목 칸은 이 저장이 폼 값으로 덮으므로(`buildConsultationRow`), 고치기 전 과목으로
+  //    보면 '영어'를 '수학'으로 바로잡으며 고른 후속 조치가 옛 과목의 배정에 막히거나 저장 뒤 칸반 칸과 어긋난다.
   const followUp = resolveFollowUp({
     current: promoteToConsulted ? "consulted" : String(existing.outcome),
-    assignedClassCount: await countAssignedClasses(supabase, existing.student_id, existing.subject),
+    assignedClassCount: await countAssignedClasses(supabase, existing.student_id, parsed.data.subject || null),
     result: parseFollowUpResult(formData.get("followUpResult")),
     followUpDate: parsed.data.followUpDate || null,
     storedDate: (existing.follow_up_date as string | null) ?? null,

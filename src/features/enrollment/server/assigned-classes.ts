@@ -27,6 +27,7 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { settingsToPeriodsConfig, enumDayToKo, type DayOfWeek } from "@/features/timetable/lib/periods";
 import { groupSchedule, type ScheduleGroup } from "@/features/classes/schedule-periods";
 import { slotPhase } from "@/features/classes/schedule-summary";
+import { consultClassKeys, type ConsultClassKeys } from "../consult-subject";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -60,7 +61,9 @@ export type AssignedClasses = { ok: true; rows: AssignedClassRow[] } | { ok: fal
  *  · 연결 학생의 수강일 것
  *  · 아직 안 끝났을 것(종료일 없음 또는 오늘 이후)
  *  · 상담 과목이 적혀 있으면 **그 과목 반만**(교차과목 오매몰 차단 — 영어 상담이 수학 수강 때문에
- *    '배정 완료'로 묻히지 않게. 상담 과목이 비어 있으면 전 과목 폴백)
+ *    '배정 완료'로 묻히지 않게. 상담 과목이 비어 있으면 전 과목 폴백). 과목 글자 → 반 과목 키는
+ *    [`consultClassKeys`](../consult-subject.ts) 한 벌(2026-10-23 — 옛 이관 상담의 '수학'·'EIE'·'영어, 수학'도 그 반을 찾는다 ·
+ *    못 읽는 글자('영수'·'고등특강')는 **배정 없음** — 조회 없이 0건)
  *
  * 🔴 반 임베드는 과목 필터가 없어도 `!inner`로 **항상** 건다 — 세는 쿼리와 펴는 쿼리가 같은 집합을
  *    보게 하려는 것이다(한쪽만 조인하면 반 행이 안 읽히는 순간 두 값이 갈린다).
@@ -71,7 +74,7 @@ export type AssignedClasses = { ok: true; rows: AssignedClassRow[] } | { ok: fal
 function assignedQuery(
   supabase: SupabaseClient,
   studentId: string,
-  subject: string | null,
+  classKeys: ConsultClassKeys,
   select: string,
   options?: { count: "exact"; head: boolean },
 ) {
@@ -80,7 +83,17 @@ function assignedQuery(
     .select(select, options)
     .eq("student_id", studentId)
     .or(`end_date.is.null,end_date.gte.${kstToday()}`);
-  return subject ? q.eq("class.subject", subject) : q;
+  return classKeys ? q.in("class.subject", [...classKeys]) : q;
+}
+
+/**
+ * 상담 과목 글자 → 볼 반 과목 키(`null` = 과목 모름 → 전 과목 · `[]` = 못 읽음 → 배정 없음). 설정은 요청 캐시라 왕복이 더 안 든다.
+ * 🔴 세는 쪽·펴는 쪽·이름 목록이 전부 여기를 지난다 — 한쪽만 글자 비교로 남으면 배지와 카드가 갈린다.
+ */
+async function classKeysFor(subject: string | null): Promise<ConsultClassKeys> {
+  if (!subject?.trim()) return null;
+  const settings = await getTenantSettings();
+  return consultClassKeys(subject, settings.operations.subjects);
 }
 
 /** 상담 과목 기준 배정 반 **개수**(행을 안 받는 count — B2). */
@@ -90,7 +103,9 @@ export async function countAssignedClasses(
   subject: string | null,
 ): Promise<number> {
   if (!studentId) return 0;
-  const { count, error } = await assignedQuery(supabase, studentId, subject, "*, class:class_id!inner ( subject )", {
+  const classKeys = await classKeysFor(subject);
+  if (classKeys?.length === 0) return 0;
+  const { count, error } = await assignedQuery(supabase, studentId, classKeys, "*, class:class_id!inner ( subject )", {
     count: "exact",
     head: true,
   });
@@ -109,8 +124,10 @@ export async function listAssignedClassNames(
   subject: string | null,
 ): Promise<{ name: string; subject: string | null }[]> {
   if (!studentId) return [];
+  const classKeys = await classKeysFor(subject);
+  if (classKeys?.length === 0) return [];
   type Klass = { class_name: string; subject: string | null };
-  const { data, error } = await assignedQuery(supabase, studentId, subject, "id, class:class_id!inner ( class_name, subject )");
+  const { data, error } = await assignedQuery(supabase, studentId, classKeys, "id, class:class_id!inner ( class_name, subject )");
   if (error) throw new Error("배정 반을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.");
   const seen = new Map<string, { name: string; subject: string | null }>();
   for (const row of (data ?? []) as unknown as { class: Klass | Klass[] | null }[]) {
@@ -149,12 +166,14 @@ export async function getAssignedClasses(
   subject: string | null,
 ): Promise<AssignedClasses> {
   if (!studentId) return { ok: true, rows: [] };
+  const classKeys = await classKeysFor(subject);
+  if (classKeys?.length === 0) return { ok: true, rows: [] };
   const supabase = await createClient();
 
   const { data, error } = await assignedQuery(
     supabase,
     studentId,
-    subject,
+    classKeys,
     // [[#94]] — 임베드는 FK를 명시(`class_id`·`teacher_id`)한다. 안 적으면 남이 FK를 하나 더 다는 날
     //          PGRST201로 이 카드가 통째로 죽는다.
     `id, on_hold, attendance_days,

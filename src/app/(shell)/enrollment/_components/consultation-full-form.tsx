@@ -24,6 +24,7 @@ import type { IntakeChecklist } from "@/features/enrollment/intake-checklist";
 import { sanitizeScoreInput } from "@/features/enrollment/score-input";
 import { ASSIGNED_DRAG_BLOCKED, ENROLLED_REVERT_BLOCKED, boardStatusOf, outcomeForDrop } from "@/features/enrollment/board-stages";
 import {
+  FOLLOW_UP_BEFORE_BLOCKED,
   FOLLOW_UP_RESULTS,
   followUpRequired,
   initialFollowUpResult,
@@ -227,6 +228,8 @@ export function ConsultationFullForm({
   const [followUpResult, setFollowUpResult] = useState<FollowUpResult | null>(() => initialFollowUpResult(v.outcome, v.followUpDate, assignedClassCount));
   const followUpRef = useRef<HTMLDivElement>(null);
   const followUpMust = assignedClassCount === 0 && (isCreate || followUpRequired(v.outcome ?? "consulted"));
+  // '상담 완료' = 다음 상담 → 날짜 필수(원장 2026-10-23 · follow-up.ts와 같은 규칙 — 서버가 다시 판정한다).
+  const followUpDateMust = assignedClassCount === 0 && followUpResult === "consulted";
   const selectedStage = FOLLOW_UP_RESULTS.find((r) => r.value === followUpResult)?.stage;
   const stageLabel = boardStatusOf({
     outcome: selectedStage ? outcomeForDrop(selectedStage, v.outcome ?? "consulted") : (v.outcome ?? "consulted"),
@@ -277,7 +280,16 @@ export function ConsultationFullForm({
     restoreSince: () => recordingSince(instance?.formId),
     onRestore: (vals) => {
       const restoredFollowUp = parseFollowUpResult(vals.followUpResult);
-      setFollowUpResult(assignedClassCount > 0 ? "enrolled" : (restoredFollowUp === "before" || restoredFollowUp === "consulted") && v.outcome === "enrolled" ? "enrolled" : restoredFollowUp);
+      // 옛 초안의 '상담 전'은 상담을 마친 건에선 고를 수 없는 값이라 비운다(다시 고르게) — 비활성 단추가 눌린 채 남지 않게.
+      setFollowUpResult(
+        assignedClassCount > 0
+          ? "enrolled"
+          : (restoredFollowUp === "before" || restoredFollowUp === "consulted") && v.outcome === "enrolled"
+            ? "enrolled"
+            : restoredFollowUp === "before" && followUpMust
+              ? null
+              : restoredFollowUp,
+      );
       if (formRef.current) syncRecordingSubject(formRef.current);
       setRecordingDraftId(vals.recordingDraftId || crypto.randomUUID());
       if (vals.subjectDetails) {
@@ -773,19 +785,22 @@ export function ConsultationFullForm({
             </span>
             <span className="text-text-dim text-xs break-keep">
               {assignedClassCount > 0 ? ASSIGNED_DRAG_BLOCKED : followUpMust
-                ? "상담을 마쳤으면 상태를 고릅니다 · 저장하면 해당 칸으로 이동합니다"
+                ? "상담을 마쳤으면 등록 완료 · 미등록 · 상담 완료(다음 상담일) 중 하나를 고릅니다 · 저장하면 해당 칸으로 이동합니다"
                 : `현재 상태: ${stageLabel} · 저장하면 선택한 상태로 이동합니다`}
             </span>
           </div>
           <div role="radiogroup" aria-label="후속 조치" className="flex flex-wrap gap-1.5">
             {FOLLOW_UP_RESULTS.map((r) => {
               // 등록 완료를 '상담 완료'로 되돌리지 않는다(상태 변경·칸반과 같은 규칙) — 고를 수 없게 미리 막는다.
-              const blocked = assignedClassCount > 0 ? r.value !== "enrolled" : (r.value === "before" || r.value === "consulted") && v.outcome === "enrolled";
+              // 상담을 마친 건은 '상담 전'을 고를 수 없다(필수 조치를 피하는 문 — follow-up.ts `FOLLOW_UP_BEFORE_BLOCKED`).
+              const reverting = (r.value === "before" || r.value === "consulted") && v.outcome === "enrolled";
+              const skipping = r.value === "before" && followUpMust;
+              const blocked = assignedClassCount > 0 ? r.value !== "enrolled" : reverting || skipping;
               const on = followUpResult === r.value;
               return (
                 <label
                   key={r.value}
-                  title={blocked ? (assignedClassCount > 0 ? ASSIGNED_DRAG_BLOCKED : ENROLLED_REVERT_BLOCKED) : undefined}
+                  title={blocked ? (assignedClassCount > 0 ? ASSIGNED_DRAG_BLOCKED : reverting ? ENROLLED_REVERT_BLOCKED : FOLLOW_UP_BEFORE_BLOCKED) : undefined}
                   className={`relative inline-flex items-center rounded-full border px-3 py-1 text-sm transition has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary/40 ${
                     blocked
                       ? "border-line text-text-faint cursor-not-allowed"
@@ -809,7 +824,7 @@ export function ConsultationFullForm({
             })}
           </div>
           <Grid cols={2}>
-            <L label="다음 상담일 (선택)" icon={Calendar}>
+            <L label={followUpDateMust ? "다음 상담일" : "다음 상담일 (선택)"} icon={Calendar} required={followUpDateMust}>
               <input name="followUpDate" type="date" defaultValue={v.followUpDate ?? ""} className={`${input} num`} />
             </L>
             <L label="조치 내용" icon={MessageSquare}>

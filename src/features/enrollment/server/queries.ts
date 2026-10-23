@@ -13,6 +13,8 @@ import { DEFAULT_RANGE, RANGE_MONTHS, type RangePreset } from "../range";
 import { boardStatusOf, outcomesOfStage, type BoardStageKey } from "../board-stages";
 import { kstDayBounds, kstMonthBounds } from "../kst-bounds";
 import { countAssignedClasses } from "./assigned-classes";
+import { consultClassKeysOf } from "../consult-subject";
+import { getTenantSettings } from "@/features/owner/server/queries";
 
 /** prep_brief jsonb 방어 — 형태가 맞을 때만 통과(옛 스냅샷·수기 편집으로 깨진 값이 렌더를 죽이지 않게). */
 function isPrepBriefRecord(v: unknown): v is PrepBriefRecord {
@@ -234,7 +236,7 @@ async function loadRowBadges(
   // 연결 학생(student_id)의 미종료 수강 수 = "배정 완료" 판정 재료도 병렬로(독립 조회 = B4).
   const studentIds = [...new Set(data.map((c) => c.student_id).filter((v): v is string => !!v))];
   const today = kstToday();
-  const [ai, enr, mk] = await Promise.all([
+  const [ai, enr, mk, settings] = await Promise.all([
     fetchInChunks<{ consultation_id: string }>(ids, (chunk) =>
       supabase.from("consultation_ai_analysis").select("consultation_id").in("consultation_id", chunk),
     ),
@@ -244,9 +246,10 @@ async function loadRowBadges(
           (chunk) =>
             // 미종료 수강 = end_date IS NULL(진행) 또는 end_date >= 오늘(미래 종료 예정). 학생당 소수라 절단 없음.
             // "배정 완료"는 상담 과목의 실제 수강으로 판정하므로 class subject까지 함께 조회(교차과목 오매몰 차단).
+            // 🔴 반 조인은 상세(`assignedQuery`)와 같은 `!inner` — 한쪽만 조인하면 반 행이 안 읽히는 수강이 과목 빈 상담에서 개수를 가른다.
             supabase
               .from("enrollments")
-              .select("student_id, class:class_id ( subject )")
+              .select("student_id, class:class_id!inner ( subject )")
               .in("student_id", chunk)
               .or(`end_date.is.null,end_date.gte.${today}`),
         )
@@ -257,8 +260,11 @@ async function loadRowBadges(
           supabase.from("students").select("id").in("id", chunk).not("makeedu_id", "is", null),
         )
       : Promise.resolve([] as { id: string }[]),
+    getTenantSettings(),
   ]);
   const hasAi = new Set(ai.map((a) => a.consultation_id));
+  // 상담 과목 글자 → 볼 반 과목 키(상세 '배정된 반'과 같은 `consultClassKeys` — 옛 이관 '수학'·'EIE'도 그 반을 찾는다).
+  const classKeysOf = consultClassKeysOf(settings.operations.subjects);
   // 학생별 미종료 수강: 전체 수 + 과목별 수. "배정 완료" 판정은 상담 과목의 수강 수로(과목 없으면 전체 폴백).
   const enrByStudent = new Map<string, { total: number; bySubject: Map<string, number> }>();
   for (const row of enr) {
@@ -275,8 +281,11 @@ async function loadRowBadges(
       if (!studentId) return 0;
       const rec = enrByStudent.get(studentId);
       if (!rec) return 0;
-      // 상담 과목이 있으면 그 과목의 수강만 = "이 상담이 실제 배정됐는가". 과목 미상이면 전체 수강 폴백(기존 동작).
-      return subject ? (rec.bySubject.get(subject) ?? 0) : rec.total;
+      // 상담 과목이 있으면 그 과목 반의 수강만 = "이 상담이 실제 배정됐는가". 과목 미상이면 전체 수강 폴백(기존 동작) ·
+      // 못 읽는 글자면 0(배정 없음).
+      const keys = classKeysOf(subject);
+      if (keys === null) return rec.total;
+      return keys.reduce((n, key) => n + (rec.bySubject.get(key) ?? 0), 0);
     },
   };
 }
