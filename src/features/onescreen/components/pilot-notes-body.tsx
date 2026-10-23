@@ -95,8 +95,8 @@ export function PilotNoteBox({ text }: { text: string }) {
   return <p className="bg-primary-softer text-foreground rounded-lg px-4 py-3 text-base leading-relaxed font-semibold whitespace-pre-wrap">{text}</p>;
 }
 
-/** 항목 본문 — 표 / 점수 줄 / 숙제 상자 / 한마디 상자 / 그 외 글. */
-function SectionBody({ s }: { s: PilotNoteSection }) {
+/** 항목 본문 — 표 / 점수 줄 / 숙제 상자 / 한마디 상자 / 그 외 글. 데일리 학습알림 표(pilot-report-sheet.tsx)도 띠 아래 본문으로 쓴다. */
+export function SectionBody({ s }: { s: PilotNoteSection }) {
   if (isPilotTitle(s.title, "levels")) {
     const rows = parseLevelRows(s.body);
     if (rows) return <LevelTable rows={rows} />;

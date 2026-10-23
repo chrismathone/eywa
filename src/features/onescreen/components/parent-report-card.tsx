@@ -6,11 +6,13 @@ import { hasTrend, type TrendPoint } from "../report-trend";
 import { isImageAttachment, pickInlineAttachments } from "../attachment-utils";
 import { isSkipStatusProgress } from "../progress-status";
 import { collapseProgressRanges } from "../progress-range";
-import { reportTitleText } from "../report-title";
+import { reportTitleText, SPECIAL_TITLE_PREFIX } from "../report-title";
+import { makeupTitleSuffix } from "../makeup-label";
 import { videoHomeworkDueLabel } from "../video-homework-label";
 import { isPilotReportSections, parsePilotNotes, splitPilotNote } from "../pilot-notes";
 import { PilotNoteBox, PilotNotesBody } from "./pilot-notes-body";
 import { ReportTrendGraph } from "./report-trend-graph";
+import { PilotReportSheet } from "./pilot-report-sheet";
 import { EMPTY_NOTES, FileLink, TemplateBody, type CardAttachment } from "./report-template-body";
 
 // 학부모 수업 보고서 카드 — 공유 서버 컴포넌트(순수 프레젠테이션, 데이터는 props로만).
@@ -79,6 +81,8 @@ export type ParentReportCardProps = {
     special?: boolean;
     /** 과목 이름 — 제목 "수학 보고서"(원장 2026-10-16 · `subjectReportLabel`로 학원 설정에서 푼 값). 없으면 기본 제목. */
     subjectLabel?: string | null;
+    /** 반 이름 — 수학 시범 카드(데일리 학습알림 표) 머리의 '반' 칸. 없으면 "-". */
+    className?: string | null;
   };
   student: { name: string | null; school: string | null; grade: string | null } | null;
   academyName: string;
@@ -153,6 +157,39 @@ export function ParentReportCard({
     templateMode && rpt.showAttachments ? pickInlineAttachments(report.notes, attachments) : new Map();
   const inlinePaths = new Set([...inline.values()].map((a) => a.path));
   const restAttachments = inlinePaths.size ? attachments.filter((a) => !inlinePaths.has(a.path)) : attachments;
+
+  // 수학 보고서 시범 = 데일리 학습알림 표(원장 2026-10-23 참고 시안). 시범 글이 확실할 때만(pilotOwns) — 나머지 학생은 아래 카드 그대로.
+  // 학생 정보·제목 머리는 표 머리가 대신한다. 학습 추이·추세·첨부는 같은 재료를 띠로 넘기고, 사랑의 한마디는 맨 아래 그대로.
+  if (pilotOwns && pilotSplit) {
+    const middle: { title: string; body: ReactNode }[] = [];
+    if (showTrendGraph) middle.push({ title: "학습 추이", body: <ReportTrendGraph points={trend!} /> });
+    if (rpt.showTrendNote && report.trendNote) {
+      middle.push({ title: "학습 추세", body: <p className="text-foreground text-base leading-relaxed whitespace-pre-wrap">{report.trendNote}</p> });
+    }
+    if (rpt.showAttachments && restAttachments.length) middle.push({ title: "첨부", body: <AttachmentsBody items={restAttachments} /> });
+    return (
+      // ⚠️ report-capture = ClassNote 워커 스크린샷 대상(아래 기본 카드와 같은 클래스·폭 — 바꾸면 워커 선택자도).
+      <div className="report-capture flex w-full max-w-lg flex-col">
+        <PilotReportSheet
+          logoSrc={rpt.showLogo ? logoSrc : null}
+          academyName={academyName}
+          subjectLabel={report.subjectLabel ?? null}
+          studentName={parentStudent?.name || "-"}
+          schoolGrade={schoolGrade === "-" ? "" : schoolGrade}
+          // 제목 = '데일리 학습알림'(참고 시안) — 특강·보강 표시는 기본 카드와 같은 규칙으로 앞뒤에 붙인다(report-title.ts·makeup-label.ts).
+          title={`${report.special ? SPECIAL_TITLE_PREFIX : ""}데일리 학습알림${makeupTitleSuffix(report)}`}
+          date={report.reportDate}
+          className={report.className ?? null}
+          teacherName={report.teacherName}
+          sections={pilotSplit.main}
+          note={pilotSplit.note}
+          textbook={rpt.showTextbook ? report.textbook : null}
+          middle={middle}
+          footer={rpt.showFooter ? rpt.footerNote || academyName : null}
+        />
+      </div>
+    );
+  }
 
   return (
     // ⚠️ report-capture = ClassNote 워커 스크린샷 대상 클래스(classnote-core.mjs가 이 선택자로 캡처).
@@ -251,27 +288,7 @@ export function ParentReportCard({
           영어 글 속 자리에 이미 그린 첨부는 여기서 뺀다(위 restAttachments). */}
       {rpt.showAttachments && restAttachments.length ? (
         <Section title="첨부">
-          {restAttachments.some((a) => isImageAttachment(a.name || a.path)) ? (
-            // 이미지는 1열로 **크게** 세로 쌓기 — 스샷 1장에 보고서 본문 → 교재가 세로로 완결되게(2026-07-22 원장 방향).
-            // ClassNote가 attached_images를 가로로 나열해 세로가 안 되는 문제를 스샷 내 세로 배치로 우회.
-            <div className="mb-2 space-y-2">
-              {restAttachments
-                .filter((a) => isImageAttachment(a.name || a.path))
-                .map((a) => (
-                  // eslint-disable-next-line @next/next/no-img-element -- 공개/인쇄 페이지 첨부(signed URL, 최적화 불필요)
-                  <img key={a.path} src={a.url} alt={a.name} className="w-full rounded-md object-contain" />
-                ))}
-            </div>
-          ) : null}
-          {restAttachments.some((a) => !isImageAttachment(a.name || a.path)) ? (
-            <div className="space-y-1.5">
-              {restAttachments
-                .filter((a) => !isImageAttachment(a.name || a.path))
-                .map((a) => (
-                  <FileLink key={a.path} att={a} />
-                ))}
-            </div>
-          ) : null}
+          <AttachmentsBody items={restAttachments} />
         </Section>
       ) : null}
 
@@ -288,5 +305,34 @@ export function ParentReportCard({
         </footer>
       ) : null}
     </div>
+  );
+}
+
+/** 첨부 본문 — 이미지는 1열로 크게, 문서·오디오는 링크. 기존 카드와 데일리 학습알림 표가 같이 쓴다. */
+function AttachmentsBody({ items: restAttachments }: { items: CardAttachment[] }) {
+  return (
+    <>
+      {restAttachments.some((a) => isImageAttachment(a.name || a.path)) ? (
+        // 이미지는 1열로 **크게** 세로 쌓기 — 스샷 1장에 보고서 본문 → 교재가 세로로 완결되게(2026-07-22 원장 방향).
+        // ClassNote가 attached_images를 가로로 나열해 세로가 안 되는 문제를 스샷 내 세로 배치로 우회.
+        <div className="mb-2 space-y-2">
+          {restAttachments
+            .filter((a) => isImageAttachment(a.name || a.path))
+            .map((a) => (
+              // eslint-disable-next-line @next/next/no-img-element -- 공개/인쇄 페이지 첨부(signed URL, 최적화 불필요)
+              <img key={a.path} src={a.url} alt={a.name} className="w-full rounded-md object-contain" />
+            ))}
+        </div>
+      ) : null}
+      {restAttachments.some((a) => !isImageAttachment(a.name || a.path)) ? (
+        <div className="space-y-1.5">
+          {restAttachments
+            .filter((a) => !isImageAttachment(a.name || a.path))
+            .map((a) => (
+              <FileLink key={a.path} att={a} />
+            ))}
+        </div>
+      ) : null}
+    </>
   );
 }
