@@ -18,7 +18,7 @@ import {
   type GridRow,
 } from "../grid";
 import { evaluateSendGate } from "../send-gate";
-import { hasPilotOneLine, isMathReportPilot, pilotNeedsAutoWrite } from "../math-report-pilot";
+import { hasPilotOneLine, isMathReportPilot, pilotCanEdit, pilotNeedsAutoWrite } from "../math-report-pilot";
 import { pilotRowSig, testSkipComplete } from "../math-report-pilot-sections";
 import { hasTextBesidesMarkers } from "@/features/report-templates/image-slots";
 import { rowLockNotice } from "../split-rows";
@@ -300,6 +300,7 @@ export function GridBodyRow({
   //    버튼만 살려 두면 눌러 보고서야 이유를 아는 거짓 어포던스다(원장 2026-07-30 제보의 핵심).
   // 수학 보고서 시범(테스트 학생 한정, math-report-pilot.ts) — 멘트·추세는 보기만, 자동작성 글 그대로여야 발송(카드와 같은 판정).
   const pilot = isMathReportPilot(student.id, subject.subjectKey);
+  const pilotLocked = pilot && !pilotCanEdit(rep?.autoDraft); // 자동작성 전엔 잠금(2026-10-23)
   const sendGate = evaluateSendGate({
     lang,
     needsAutoWrite:
@@ -831,8 +832,8 @@ export function GridBodyRow({
             <textarea
               value={rep?.draft ?? ""}
               onChange={(e) => fields.onDraft(student.id, subject.name, e.target.value)}
-              // 시범 대상 = 보기만 — 자동작성만 이 칸을 채운다(카드와 같은 규약).
-              readOnly={rowLocked || pilot}
+              // 시범 대상 = 자동작성 전엔 보기만, 뒤엔 고칠 수 있다(카드와 같은 규약, 2026-10-23).
+              readOnly={rowLocked || pilotLocked}
               // 말투 반영 안내(0262a)는 프로파일을 읽는 행(영어 밖)에만 — 영어 행은 템플릿 모드라 그 문장이 거짓이 된다.
               placeholder={mentPlaceholder ?? (genRowBusy ? t("os.gen.busy") : isEnglishRow ? t("os.row.mentPh") : t("os.row.mentPhVoice"))}
               aria-label={tf("os.row.mentAria", { name: student.name, subject: subject.name })}
@@ -872,7 +873,7 @@ export function GridBodyRow({
               <textarea
                 value={rep?.trendDraft ?? ""}
                 onChange={(e) => fields.onTrend(student.id, subject.name, e.target.value)}
-                readOnly={rowLocked || pilot}
+                readOnly={rowLocked || pilotLocked}
                 placeholder={mentPlaceholder ?? t("os.row.trendPh")}
                 aria-label={tf("os.row.trendAria", { name: student.name, subject: subject.name })}
                 title={trendHidden ? t("os.row.trendOptOutOn") : undefined}
