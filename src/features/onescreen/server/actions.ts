@@ -85,7 +85,8 @@ import {
   PILOT_ONELINE_REQUIRED_ERROR,
   pilotOneLineAttached,
   pilotLessons,
-  PILOT_AI_DIRECTIVE,
+  cleanPilotUnderstanding,
+  pilotAiDirective,
   PILOT_SECTION_TITLES,
   pilotSection,
   progressLead,
@@ -1679,7 +1680,7 @@ export async function generateReportComment(
       styleBlock,
       toneBlock,
       trend: trendInput,
-      ...(pilot ? { extraDirective: PILOT_AI_DIRECTIVE } : {}),
+      ...(pilot ? { extraDirective: pilotAiDirective(input.studentName) } : {}),
     });
     if (sections.length === 0) return { ok: false, error: "생성할 내용이 없습니다" };
 
@@ -1698,7 +1699,10 @@ export async function generateReportComment(
     if (!res.comment) return { ok: false, error: "빈 응답" };
     const body = prependParentAddress(appendVideoReceiptComment(res.comment, videoReceipt), parentAddress);
     // 시범 대상 — 항목별 글(진도 → 테스트 → 태도 → 과제 → 이해도(AI) → 오늘 과제 → 선생님 한마디).
-    const comment = pilot ? composePilot(res.comment, videoReceipt) : body;
+    // 이해도 글은 후보정을 거친다 — 점수 숫자·규칙 혼잣말이 든 문장은 빼고, 다 빠지면 정해진 문장으로(2026-10-23 실측 누출).
+    const comment = pilot
+      ? composePilot(cleanPilotUnderstanding(res.comment, safeInput.understanding ?? []), videoReceipt)
+      : body;
     if (res.dropped)
       console.warn(
         JSON.stringify({
