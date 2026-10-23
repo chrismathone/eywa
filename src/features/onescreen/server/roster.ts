@@ -58,7 +58,7 @@ import { applyTodaysMathFill, loadTodaysMathFill } from "./todays-math-fill";
 import { studentMarkFromRows } from "../attendance-mark";
 import { classnoteModuleOn, classnoteSendOn } from "@/features/owner/classnote-gate";
 import { readUnderstanding } from "../math-report-pilot";
-import { readTestSkip } from "../math-report-pilot-sections";
+import { readHomeworkMissReason, readTestSkip } from "../math-report-pilot-sections";
 
 /**
  * 선생님 원스크린 — 실데이터 로더(데모 스냅샷 대체).
@@ -216,6 +216,8 @@ type OnescreenSessionRow = {
       understanding?: unknown;
       /** 일일 테스트 '없음' 사유(수학 보고서 시범) — 모양은 readTestSkip이 다시 본다. */
       dailyTestSkip?: unknown;
+      /** 숙제 미제출 사유(수학 보고서 시범) — 모양은 readHomeworkMissReason이 다시 본다. */
+      homeworkMissReason?: unknown;
     }
   > | null;
   daily_score: number | null;
@@ -1726,6 +1728,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
         // 소단원별 이해도(수학 보고서 시범, math-report-pilot.ts) — 시범 행만 실려 있다.
         if (entry?.understanding !== undefined) su.understanding = readUnderstanding(entry.understanding);
         if (entry?.dailyTestSkip !== undefined) su.dailyTestSkip = readTestSkip(entry.dailyTestSkip);
+        if (entry?.homeworkMissReason !== undefined) su.homeworkMissReason = readHomeworkMissReason(entry.homeworkMissReason);
       }
     }
     // 보강 예약 표식 + 합침('정규+보강') — 🔴 세션 복원 **뒤**(세션은 줄마다 makeup:false를 늘 저장해 앞서 켠 값을 덮는다).

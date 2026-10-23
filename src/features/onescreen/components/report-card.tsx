@@ -48,7 +48,7 @@ import { classnoteBadge, type ClassnoteBadge } from "../classnote-badge";
 import { attendanceMarkBadgeClass, attendanceMarkLabel } from "../attendance-mark";
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { hasPilotOneLine, isMathReportPilot, pilotCanEdit, pilotNeedsAutoWrite } from "../math-report-pilot";
-import { pilotRowSig, testSkipComplete } from "../math-report-pilot-sections";
+import { needsHomeworkMissReason, pilotRowSig, testSkipComplete } from "../math-report-pilot-sections";
 import type { SheetLang } from "@/features/teacher-view/i18n";
 import { ReservedMakeupTag } from "./reserved-makeup-tag";
 import { MakeupSwitchButton } from "./makeup-switch-button";
@@ -176,6 +176,7 @@ export function ReportCard({
   subjectIndex,
   onSubjectIndex,
   todayInputs,
+  homeworkExtra,
   templatePanel,
   shareCopyWarning = null,
   readonlyView = false,
@@ -241,6 +242,8 @@ export function ReportCard({
    * 배선은 원래 있던 자리(onescreen-client)에 그대로 두고, 이 카드는 **자리만** 내준다.
    */
   todayInputs?: ReactNode;
+  /** 숙제 완성도 칸 바로 아래 자리(수학 보고서 시범의 '미제출 사유', 2026-10-23) — todayInputs와 같은 슬롯 규약. */
+  homeworkExtra?: ReactNode;
   /**
    * 영어 행의 **템플릿 칸**(2026-09-10) — todayInputs와 같은 슬롯 규약(배선은 onescreen-client, 카드는 자리만).
    * 영어 행일 때만 그린다. 수학 행은 이 값을 넘겨도 무시한다.
@@ -317,8 +320,9 @@ export function ReportCard({
         factsSig: pilotRowSig(student, subject.name),
         writtenSig: rep?.pilotFactsSig,
       }),
-    needsOneLine: pilot && !hasPilotOneLine(cardEval.note), // 강사 한줄 멘트 필수(원장 2026-10-22)
+    needsOneLine: pilot && !hasPilotOneLine(cardEval.note), // 사랑의 한마디(옛 강사 한줄 멘트) 필수(원장 2026-10-22)
     needsTestReason: pilot && !testSkipComplete(subject.dailyTestSkip), // 일일 테스트 '없음'이면 사유 필수(원장 2026-10-22)
+    needsHomeworkReason: pilot && needsHomeworkMissReason(cardEval.homework, subject.homeworkMissReason), // 숙제 미제출이면 사유 필수(원장 2026-10-23)
     readonlyView, // 열람 전용 — 사유 라벨까지 게이트가 만든다(표뷰와 동일)
     recallPending: isRecallInFlight(liveStatus ?? null),
     // 발송 대기·게시 중 — 워커 결과 전까지 다시 못 누른다(표뷰와 같은 판정, 원장 2026-09-29).
@@ -651,6 +655,7 @@ export function ReportCard({
             label={tf("os.row.hwLabel", { name: student.name })}
             size="lg"
           />
+          {homeworkExtra}
           {/* 오늘 과제(숙제 내용) — 0096a(edutrix 패리티, 사용률 90%). 위 칩은 '지난 과제 수행', 이건 '오늘 내줄 숙제'.
               AI 멘트 마무리("오늘 과제는 ~입니다") 재료 + 학부모 카드 표시(설정 토글). */}
           {/* 진도 입력과 같은 이유로 여러 줄을 보여 준다 — ECS 시트 초안은 교시마다 과제가 따로 있다

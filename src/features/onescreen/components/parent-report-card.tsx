@@ -8,8 +8,8 @@ import { isSkipStatusProgress } from "../progress-status";
 import { collapseProgressRanges } from "../progress-range";
 import { reportTitleText } from "../report-title";
 import { videoHomeworkDueLabel } from "../video-homework-label";
-import { parsePilotNotes } from "../pilot-notes";
-import { PilotNotesBody } from "./pilot-notes-body";
+import { isPilotReportSections, parsePilotNotes, splitPilotNote } from "../pilot-notes";
+import { PilotNoteBox, PilotNotesBody } from "./pilot-notes-body";
 import { ReportTrendGraph } from "./report-trend-graph";
 import { EMPTY_NOTES, FileLink, TemplateBody, type CardAttachment } from "./report-template-body";
 
@@ -125,25 +125,34 @@ export function ParentReportCard({
   // 꺼지면 원스크린 입력칸이 사라져 값이 안 생기므로 자연히 미표시 → 결과적으로 "새 보고서만 숨김".
   // 레거시(edutrix 임포트): 일일/확인 분리값 없이 exam_info 합본만 있으면 "시험점수" 한 줄로 폴백.
   const legacyTest = !report.dailyTest && !report.checkTest ? report.examInfo : null;
+  // 항목별 글(`■ 제목` — 수학 보고서 시범)이면 표·항목 블록으로 그린다(원장 2026-10-23 시안 B). 아니면 예전처럼 글 그대로.
+  // 🔑 그 글이 진도·테스트·태도·숙제·오늘의 숙제를 **원장이 정한 순서대로** 이미 다 싣는다(원장 2026-10-23 *"진도 → 일일테스트 →
+  //    수업태도 → 숙제완성도 → 오늘의 수업 → 오늘의 숙제 → 사랑의 한마디"*). 그래서 위쪽 '오늘 수업'(진도·오늘 과제)·'평가' 칸은
+  //    그리지 않는다 — 그리면 같은 값이 순서를 어기며 두 번 나간다. 교재는 글에 없으니 남긴다.
+  const pilotSections = templateMode || !rpt.showParentNote ? null : parsePilotNotes(report.notes);
+  const pilotSplit = pilotSections ? splitPilotNote(pilotSections) : null;
+  // 위 칸을 감추는 건 **시범 보고서 글이 확실할 때만**(아는 항목 제목이 있을 때) — 손으로 "■"로 시작한 글이 진도 칸을 지우지 않게.
+  const pilotOwns = !!pilotSections && isPilotReportSections(pilotSections);
   // 섹션 2분할(2026-07-10 원장): '오늘 수업'=교재·진도·오늘 과제 / '평가'=시험점수·지난 과제·수업 태도.
-  const showToday =
-    (rpt.showTextbook && report.textbook) ||
-    (rpt.showProgress && report.progress) ||
-    (rpt.showHomeworkToday && report.homeworkToday) || videoDue;
+  const showToday = pilotOwns
+    ? rpt.showTextbook && report.textbook
+    : (rpt.showTextbook && report.textbook) ||
+      (rpt.showProgress && report.progress) ||
+      (rpt.showHomeworkToday && report.homeworkToday) ||
+      videoDue;
   const showEval =
-    report.dailyTest ||
+    !pilotOwns &&
+    (report.dailyTest ||
     report.checkTest ||
     legacyTest ||
     (rpt.showHomework && report.homeworkScore) ||
-    (rpt.showAttitude && report.attitude);
+    (rpt.showAttitude && report.attitude));
   // 영어 글 속 첨부 자리(`[첨부: 이름]`) — 그 자리에 그린 첨부는 아래 '첨부' 칸에서 뺀다(같은 사진이 두 번 나가지 않게).
   // 🔑 학원설정이 첨부 표시를 끄면 글 속 자리도 비운다(아래 칸과 같은 토글 — 미리보기가 발송물과 갈리지 않게).
   const inline: ReadonlyMap<string, CardAttachment> =
     templateMode && rpt.showAttachments ? pickInlineAttachments(report.notes, attachments) : new Map();
   const inlinePaths = new Set([...inline.values()].map((a) => a.path));
   const restAttachments = inlinePaths.size ? attachments.filter((a) => !inlinePaths.has(a.path)) : attachments;
-  // 항목별 글(`■ 제목` — 수학 보고서 시범)이면 표·항목 블록으로 그린다(원장 2026-10-23 시안 B). 아니면 예전처럼 글 그대로.
-  const pilotSections = templateMode ? null : parsePilotNotes(report.notes);
 
   return (
     // ⚠️ report-capture = ClassNote 워커 스크린샷 대상 클래스(classnote-core.mjs가 이 선택자로 캡처).
@@ -182,16 +191,16 @@ export function ParentReportCard({
           {/* 진도가 중단된 날(시험 등)은 나간 차시가 없다 — '진도' 라벨로 내보내면 학부모에게 거짓이라 라벨만 바꾼다.
               다중 차시는 **같은 중단원 안에서 연속인 것만** 물결 범위로 접어 보여준다(원장 2026-08-05 — 9차시를
               나간 날 카드가 9줄로 부풀었다). 접기는 표시 전용 = 저장값은 차시 그대로다(progress-range.ts). */}
-          {rpt.showProgress && report.progress ? (
+          {!pilotOwns && rpt.showProgress && report.progress ? (
             <Field
               label={isSkipStatusProgress(report.progress) ? "수업" : "진도"}
               value={collapseProgressRanges(report.progress)}
             />
           ) : null}
-          {rpt.showHomeworkToday && report.homeworkToday ? (
+          {!pilotOwns && rpt.showHomeworkToday && report.homeworkToday ? (
             <Field label="오늘 과제" value={report.homeworkToday} />
           ) : null}
-          {videoDue ? <Field label="영상 숙제" value={videoDue} /> : null}
+          {!pilotOwns && videoDue ? <Field label="영상 숙제" value={videoDue} /> : null}
         </Section>
       ) : null}
 
@@ -220,8 +229,8 @@ export function ParentReportCard({
 
       {!templateMode && rpt.showParentNote ? (
         <Section title="학부모 전달 내용">
-          {pilotSections ? (
-            <PilotNotesBody sections={pilotSections} />
+          {pilotSplit ? (
+            <PilotNotesBody sections={pilotSplit.main} />
           ) : (
             <p className="text-foreground text-base leading-relaxed whitespace-pre-wrap">
               {report.notes || EMPTY_NOTES}
@@ -263,6 +272,13 @@ export function ParentReportCard({
                 ))}
             </div>
           ) : null}
+        </Section>
+      ) : null}
+
+      {/* 사랑의 한마디 — 카드 맨 아래(학습 추세·첨부 뒤, 원장 2026-10-23 *"사랑의 한마디 맨아래로 위치 변경"*). */}
+      {pilotSplit?.note?.body ? (
+        <Section title={pilotSplit.note.title}>
+          <PilotNoteBox text={pilotSplit.note.body} />
         </Section>
       ) : null}
 

@@ -3,6 +3,9 @@ import { readFileSync } from "node:fs";
 import {
   homeworkLevel,
   homeworkSentence,
+  isHomeworkMissed,
+  needsHomeworkMissReason,
+  readHomeworkMissReason,
   levelTableText,
   pilotLevelsSection,
   scoreRemark,
@@ -34,16 +37,41 @@ describe("항목별 글(원장 2026-10-22 — 섹션을 나눠 어떤 것에 어
       [
         "■ 일일 테스트\n5문제 중 4개 맞음\n대부분 잘 맞혔습니다. 틀린 문제는 다음 시간에 다시 짚고 넘어가겠습니다.",
         "■ 수업 태도\n오늘 수업 태도가 매우 좋았습니다. 처음부터 끝까지 집중해서 성실하게 참여했습니다.",
-        "■ 과제 수행률\n지난 시간 과제를 90% 해 왔습니다. 거의 다 해 왔고, 남은 부분은 수업 시간에 함께 확인하겠습니다.",
+        "■ 숙제 완성도\n지난 시간 과제를 90% 해 왔습니다. 거의 다 해 왔고, 남은 부분은 수업 시간에 함께 확인하겠습니다.",
         "■ 오늘의 수업\n연립방정식을 잘 소화했습니다.",
-        "■ 오늘 과제\n오늘 내준 과제는 아래와 같습니다.\n5p 풀기\n다음 시간에 잘 해 왔는지 함께 확인하겠습니다.",
+        "■ 오늘의 숙제\n5p 풀기",
       ].join("\n\n"),
     );
   });
-  it("이해도를 안 매겼으면 이해도 항목이 없다 · 영상 숙제는 오늘 과제에", () => {
+  it("이해도를 안 매겼으면 이해도 항목이 없다 · 영상 숙제는 오늘의 숙제에", () => {
     const out = pilotBody({ ...facts, videoHomework: true, videoHomeworkDue: "10/29 (목)까지" }, {});
     expect(out).not.toContain("■ 오늘의 수업");
-    expect(out).toContain("■ 오늘 과제\n오늘 내준 과제는 아래와 같습니다.\n5p 풀기\n영상 숙제가 있습니다(10/29 (목)까지 제출).");
+    expect(out).toContain("■ 오늘의 숙제\n5p 풀기\n영상 숙제가 있습니다(10/29 (목)까지 제출).");
+    expect(out).not.toContain("아래와 같습니다");
+    expect(out).not.toContain("잘 해 왔는지");
+  });
+  it("숙제 미제출이면 강사가 적은 사유가 두 문장 사이에 들어간다(원장 2026-10-23)", () => {
+    expect(homeworkSentence("미제출", "감기로 몸이 좋지 않았다고 합니다")).toBe(
+      "지난 시간 과제를 아직 해 오지 못했습니다. 감기로 몸이 좋지 않았다고 합니다. 다음 시간에 함께 확인하고 꼭 마무리하도록 하겠습니다.",
+    );
+    expect(homeworkSentence("0%", "학교 행사가 있었습니다.")).toContain("못했습니다. 학교 행사가 있었습니다. 다음 시간에");
+    // 미제출이 아니면 사유를 안 싣는다(옛 값이 남아 있어도)
+    expect(homeworkSentence("80%", "감기")).not.toContain("감기");
+    expect(pilotBody({ ...facts, homework: "미제출", homeworkMissReason: "감기" }, {})).toContain("■ 숙제 완성도\n지난 시간 과제를 아직 해 오지 못했습니다. 감기. 다음 시간에");
+  });
+  it("미제출 판정 · 사유 필수(발송 게이트) · 세션 값 복원", () => {
+    expect(isHomeworkMissed("미제출")).toBe(true);
+    expect(isHomeworkMissed("0%")).toBe(true);
+    expect(isHomeworkMissed("50%")).toBe(false);
+    expect(isHomeworkMissed("없음")).toBe(false);
+    expect(isHomeworkMissed("")).toBe(false);
+    expect(needsHomeworkMissReason("미제출", "")).toBe(true);
+    expect(needsHomeworkMissReason("미제출", "  ")).toBe(true);
+    expect(needsHomeworkMissReason("미제출", "감기")).toBe(false);
+    expect(needsHomeworkMissReason("80%", "")).toBe(false);
+    expect(readHomeworkMissReason("a\nb")).toBe("a b");
+    expect(readHomeworkMissReason(3)).toBe("");
+    expect(readHomeworkMissReason("x".repeat(300))).toHaveLength(200);
   });
   it("지난 과제 수행률을 문장으로 — 고른 값만 옮긴다", () => {
     expect(homeworkSentence("100%")).toContain("빠짐없이 모두 해 왔습니다");
@@ -79,7 +107,7 @@ describe("수업 평가 표(원장 2026-10-22 — 하·중하·중·중상·상)
     const t = levelTableText({ attitude: "매우 좋음", homework: "80%", understanding: [{ title: "a", score: 7 }] }).split("\n");
     expect(t[0]).toBe("구분\u3000\u3000\u3000\u3000\u3000하\u3000\u3000중하\u3000중\u3000\u3000중상\u3000상");
     expect(t[1]).toBe("수업\u3000태도\u3000\u3000○\u3000\u3000○\u3000\u3000○\u3000\u3000○\u3000\u3000●\u3000상");
-    expect(t[2]).toBe("과제\u3000수행률\u3000○\u3000\u3000○\u3000\u3000○\u3000\u3000●\u3000\u3000○\u3000중상");
+    expect(t[2]).toBe("숙제\u3000완성도\u3000○\u3000\u3000○\u3000\u3000○\u3000\u3000●\u3000\u3000○\u3000중상");
     expect(t[3]).toBe("이해도\u3000\u3000\u3000\u3000○\u3000\u3000○\u3000\u3000●\u3000\u3000○\u3000\u3000○\u3000중");
     expect(t.every((l) => !l.includes(" "))).toBe(true);
     expect(pilotLevelsSection({ attitude: "좋음", homework: "" })).toMatch(/^■ 수업 평가\n구분/);
@@ -104,7 +132,7 @@ describe("점수 뒤 덧붙이는 말", () => {
   it("사람이 안 쓰는 말투를 쓰지 않는다(원장 2026-10-23)", () => {
     const all = [
       ...[0, 2, 5, 8, 10].map((k) => scoreRemark(`10문제 중 ${k}개 맞음`)),
-      ...["0%", "40%", "60%", "95%", "100%", "미제출"].map(homeworkSentence),
+      ...["0%", "40%", "60%", "95%", "100%", "미제출"].map((v) => homeworkSentence(v)),
     ];
     for (const t of all) expect(t).not.toMatch(/칭찬해 주고 싶|대견|응원하겠|챙겨 주었/);
   });

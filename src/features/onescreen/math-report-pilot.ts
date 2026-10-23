@@ -162,8 +162,18 @@ export const PILOT_SECTION_TITLES = {
   check: "확인 테스트",
   levels: "수업 평가",
   attitude: "수업 태도",
-  homework: "과제 수행률",
+  homework: "숙제 완성도", // 원장 2026-10-23 *"과제 → 숙제완성도로 이름 변경"* — 라벨만(값은 그대로 지난 과제 수행률)
   understanding: "오늘의 수업", // 원장 2026-10-23 *"이해도가 아니라 오늘수업의 이해도로"* → *"오늘의 수업으로 명칭 변경"* — 라벨만(표의 줄 이름은 짧게 '이해도')
+  homeworkToday: "오늘의 숙제", // 원장 2026-10-23(옛 '오늘 과제')
+  note: "사랑의 한마디", // 원장 2026-10-23 *"강사 한줄멘트 → 사랑의 한마디"*(옛 '선생님 한마디')
+} as const;
+
+/**
+ * 이름을 바꾸기 전 제목 — 이미 저장된 글을 학부모 카드가 같은 모양으로 그리고, 옛 글 끝의 한마디도 그 자리에서 바꿔 끼우려고 남긴다.
+ * 새 글에는 쓰지 않는다.
+ */
+export const PILOT_LEGACY_TITLES = {
+  homework: "과제 수행률",
   homeworkToday: "오늘 과제",
   note: "선생님 한마디",
 } as const;
@@ -174,14 +184,14 @@ export function pilotSection(title: string, body: string | null | undefined): st
   return b ? `■ ${title}\n${b}` : "";
 }
 
-/** 맨 끝 '선생님 한마디' 항목 — 강사 한줄 멘트 원문 그대로. */
+/** 맨 끝 '사랑의 한마디' 항목 — 강사가 적은 원문 그대로. */
 export function noteBlock(note: string | null | undefined): string {
   return pilotSection(PILOT_SECTION_TITLES.note, note);
 }
 
 /**
- * 시범 대상 자동작성 글 조립 — `lead`(진도 항목) → `body`(이미 항목으로 나눈 글, math-report-pilot-sections.ts) →
- * 선생님 한마디(맨 아래, 강사 한줄 멘트 원문 그대로 — AI에 주지 않는다).
+ * 시범 대상 자동작성 글 조립 — `lead`(수업 평가 표 · 진도 항목) → `body`(이미 항목으로 나눈 글, math-report-pilot-sections.ts) →
+ * 사랑의 한마디(맨 아래, 강사가 적은 원문 그대로 — AI에 주지 않는다).
  */
 export function composePilotMent(parts: { lead: string; body: string; note: string }): string {
   return [parts.lead, parts.body, noteBlock(parts.note)]
@@ -206,12 +216,16 @@ export function pilotRecomposeNote(
   if (!(autoDraft ?? "").trim()) return null;
   const d = (draft ?? "").trim();
   const p = (prevNote ?? "").trim();
-  const tail = noteBlock(p);
-  let base: string;
-  if (!tail) base = d;
-  else if (d === tail) base = "";
-  else if (d.endsWith(`\n\n${tail}`)) base = d.slice(0, d.length - tail.length - 2);
-  else return null;
+  // 옛 제목('선생님 한마디')으로 끝난 글도 끝만 바꾼다 — 바꿔 끼우면 새 제목이 된다.
+  const tails = p ? [noteBlock(p), pilotSection(PILOT_LEGACY_TITLES.note, p)] : [""];
+  let base: string | null = null;
+  for (const tail of tails) {
+    if (!tail) base = d;
+    else if (d === tail) base = "";
+    else if (d.endsWith(`\n\n${tail}`)) base = d.slice(0, d.length - tail.length - 2);
+    if (base !== null) break;
+  }
+  if (base === null) return null;
   return composePilotMent({ lead: base, body: "", note: nextNote ?? "" });
 }
 
@@ -222,7 +236,7 @@ export function hasPilotOneLine(note: string | null | undefined): boolean {
 
 /** 서버 발송 게이트 거절 문구 — 강사 한줄 멘트가 없거나 보고서 끝에 붙어 있지 않다. */
 export const PILOT_ONELINE_REQUIRED_ERROR =
-  "이 학생의 수학 보고서는 '강사 한줄 멘트'를 적어야 보낼 수 있습니다(저장은 됐습니다) — 한줄 멘트를 적은 뒤 다시 보내 주세요";
+  "이 학생의 수학 보고서는 '사랑의 한마디'를 적어야 보낼 수 있습니다(저장은 됐습니다) — 사랑의 한마디를 적은 뒤 다시 보내 주세요";
 
 /** 서버 판정 — 한줄 멘트가 있고 보낼 글 맨 끝에 그대로 붙어 있나. */
 export function pilotOneLineAttached(notes: string | null | undefined, oneLine: string | null | undefined): boolean {
@@ -245,7 +259,7 @@ export function isPilotAutoWritten(draft: string | null | undefined, autoDraft: 
  */
 export const PILOT_AI_DIRECTIVE = [
   "[이번 알림장 추가 규칙]",
-  "- 이 알림장은 항목별로 나뉩니다(수업 평가·진도·일일 테스트·수업 태도·과제 수행률·오늘의 수업·오늘 과제·선생님 한마디). 진도·테스트·태도·과제·선생님 한마디는 따로 붙으니, comment에는 '오늘의 수업' 항목에 들어갈 문장만 쓰세요 — 인사, 진도 나열, 테스트 점수, 수업 태도, 과제 이야기는 쓰지 마세요.",
+  "- 이 알림장은 항목별로 나뉩니다(수업 평가·진도·일일 테스트·수업 태도·숙제 완성도·오늘의 수업·오늘의 숙제·사랑의 한마디). 진도·테스트·태도·숙제·사랑의 한마디는 따로 붙으니, comment에는 '오늘의 수업' 항목에 들어갈 문장만 쓰세요 — 인사, 진도 나열, 테스트 점수, 수업 태도, 과제 이야기는 쓰지 마세요.",
   "- comment는 학생 이름으로 시작하지 말고, 첫 소단원 이야기부터 바로 시작하세요.",
   "- 본문에서 학생을 부를 때는 이름 앞에 '우리'를 붙여 친근하게 부르세요. 부를 이름은 맨 아래 [부르는 이름]에 있습니다 — 그 이름 말고 다른 이름은 절대 쓰지 마세요.",
   "- '소단원별 이해도'가 있으면 소단원마다 한두 문장으로 말로 풀어 쓰세요. '잘 이해함'인 소단원은 아이의 강점으로 구체적으로 칭찬하세요.",

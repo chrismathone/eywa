@@ -103,6 +103,11 @@ export type Subject = {
    * 세션 `subject_progress`에 실려 새로고침 뒤에도 남는다(보고서 행에는 저장하지 않는다 — 자동작성 재료다).
    */
   dailyTestSkip?: import("./math-report-pilot-sections").DailyTestSkip | null;
+  /**
+   * 숙제 미제출 사유(수학 보고서 시범) — 숙제 완성도가 미제출·0%일 때 강사가 적는다(원장 2026-10-23). 시범 행에서만 쓴다.
+   * 세션 `subject_progress`에 실려 새로고침 뒤에도 남는다(자동작성 재료).
+   */
+  homeworkMissReason?: string;
   dailyScore?: number | null;
   dailyMax?: number;
   /**

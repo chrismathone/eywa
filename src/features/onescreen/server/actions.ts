@@ -91,7 +91,7 @@ import {
   pilotSection,
   progressLead,
 } from "../math-report-pilot";
-import { pilotBody, pilotLevelsSection, readTestSkip, type DailyTestSkip } from "../math-report-pilot-sections";
+import { pilotBody, pilotLevelsSection, readHomeworkMissReason, readTestSkip, type DailyTestSkip } from "../math-report-pilot-sections";
 import { skipStatusOf } from "../progress-status";
 import { logAction } from "@/features/audit/server/log";
 import { isSlotOnlyEnglishNotes, shouldCaptureJj } from "../jj-capture-plan";
@@ -1347,6 +1347,8 @@ export type SaveOnescreenSessionInput = {
       understanding?: { scores: Record<string, number>; off: string[] };
       /** 일일 테스트 '없음' 사유(수학 보고서 시범) — 시범 행만 싣는다. 로스터가 readTestSkip으로 복원한다. null = 시험 있음. */
       dailyTestSkip?: { reason: string | null; detail: string } | null;
+      /** 숙제 미제출 사유(수학 보고서 시범) — 시범 행만 싣는다. 로스터가 readHomeworkMissReason으로 복원한다. */
+      homeworkMissReason?: string;
     }
   >;
   dailyScore?: number | null;
@@ -1574,7 +1576,10 @@ export async function generateReportComment(
       ]
         .filter(Boolean)
         .join("\n\n"),
-      body: pilotBody({ ...safeInput, dailyTestSkip: pilotSkip }, { understandingText, videoReceipt }),
+      body: pilotBody(
+        { ...safeInput, dailyTestSkip: pilotSkip, homeworkMissReason: readHomeworkMissReason(input.homeworkMissReason) },
+        { understandingText, videoReceipt },
+      ),
       note: pilotNote,
     });
   // 이해도를 하나도 안 매겼으면 AI가 쓸 항목이 없다 — 부르지 않는다(재료 없이 부르면 이해도를 지어낸다). 추세도 이번엔 안 만든다.
@@ -1597,6 +1602,7 @@ export async function generateReportComment(
         classNotice: "",
         classContext: "",
         dailyTestSkip: undefined,
+        homeworkMissReason: undefined,
       }
     : safeInput;
   try {

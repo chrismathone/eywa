@@ -80,8 +80,9 @@ import {
   understandingRows,
   type UnderstandingState,
 } from "../math-report-pilot";
-import { pilotRowSig, type DailyTestSkip } from "../math-report-pilot-sections";
+import { isHomeworkMissed, pilotRowSig, type DailyTestSkip } from "../math-report-pilot-sections";
 import { DailyTestSkipPanel } from "./daily-test-skip-panel";
+import { HomeworkMissReasonInput } from "./homework-miss-reason";
 import { ReportCard, type SubjectReport } from "./report-card";
 // 영어 템플릿 모드(2026-09-10) — 영어 행은 멘트 대신 템플릿 글(수학 경로 불변).
 import { EnglishTemplatePanel } from "./english-template-panel";
@@ -792,6 +793,8 @@ export function OneScreenClient({
               ...(su.understanding ? { understanding: su.understanding } : {}),
               // 일일 테스트 '없음' 사유(수학 보고서 시범) — 고른 적 있는 행만(null = 다시 '있음'으로 돌린 것).
               ...(su.dailyTestSkip !== undefined ? { dailyTestSkip: su.dailyTestSkip } : {}),
+              // 숙제 미제출 사유(수학 보고서 시범) — 적은 적 있는 행만.
+              ...(su.homeworkMissReason !== undefined ? { homeworkMissReason: su.homeworkMissReason } : {}),
               ...(hasRowOverrides(su)
                 ? {
                     attitude: su.attitude,
@@ -2092,6 +2095,10 @@ export function OneScreenClient({
   function setTestSkipFor(studentId: string, subjectName: string, skip: DailyTestSkip | null) {
     patchRowEval(studentId, subjectName, (su) => ({ ...su, dailyTestSkip: skip, ...(skip ? { dailyScore: null } : {}) }));
   }
+  // 숙제 미제출 사유(수학 보고서 시범, 원장 2026-10-23 *"미제출일경우 사유작성"*) — 숙제 완성도 항목에 그대로 들어간다.
+  function setHomeworkMissReasonFor(studentId: string, subjectName: string, reason: string) {
+    patchRowEval(studentId, subjectName, (su) => ({ ...su, homeworkMissReason: reason }));
+  }
   function toggleUnderstandingFor(studentId: string, subjectName: string, lesson: string, off: boolean) {
     patchUnderstandingFor(studentId, subjectName, (st) => ({
       ...st,
@@ -2937,6 +2944,7 @@ export function OneScreenClient({
           understanding: activeUnderstanding(su?.today, su?.understanding),
           // 일일 테스트 '없음'이면 점수 대신 사유가 나간다(math-report-pilot-sections.ts).
           ...(su?.dailyTestSkip ? { dailyTestSkip: su.dailyTestSkip, dailyTest: "" } : {}),
+          homeworkMissReason: su?.homeworkMissReason ?? "",
         }
       : baseInput;
     // 이번 글을 만든 값의 서명 — 발송 게이트(카드·표)가 같은 함수로 지금 값과 대조한다.
@@ -4731,6 +4739,18 @@ selected ? (
               <ReportCard
                 key={selected.id}
                 readonlyView={readonlyView}
+                // 숙제 미제출 사유(수학 보고서 시범) — 숙제 완성도가 미제출·0%일 때만, 그 칸 바로 아래에.
+                homeworkExtra={
+                  previewSubject &&
+                  isMathReportPilot(selected.id, previewSubject.subjectKey) &&
+                  isHomeworkMissed(resolveRowFields(selected, previewSubject).homework) ? (
+                    <HomeworkMissReasonInput
+                      value={previewSubject.homeworkMissReason ?? ""}
+                      disabled={readonlyView || !isRowInputEditable(previewSubject, effectiveClassnoteStatus(previewReport?.classnoteStatus, previewSubject.classnoteStatus))}
+                      onChange={(r) => setHomeworkMissReasonFor(selected.id, previewSubject.name, r)}
+                    />
+                  ) : null
+                }
                 student={selected}
                 reports={reports[selected.id] ?? {}}
                 attitudes={ATTITUDE}
