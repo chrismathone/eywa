@@ -851,7 +851,7 @@ export async function saveAndQueueClassnote(
   const pilotRow = isMathReportPilot(input.studentId, input.subject);
   const pilotBlock = !pilotRow
     ? null
-    : saved.mentSource !== "auto"
+    : saved.mentSource !== "auto" && saved.mentSource !== "auto_edited" // 자동작성 뒤 고친 글도 보낸다(2026-10-23)
       ? PILOT_AUTOWRITE_REQUIRED_ERROR
       : !pilotOneLineAttached(input.notes, input.pilotOneLine)
         ? PILOT_ONELINE_REQUIRED_ERROR

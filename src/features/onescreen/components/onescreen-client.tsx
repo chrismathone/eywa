@@ -75,6 +75,7 @@ import {
   activeUnderstanding,
   EMPTY_UNDERSTANDING,
   isMathReportPilot,
+  isPilotAutoWritten,
   pilotRecomposeNote,
   understandingRows,
   type UnderstandingState,
@@ -2108,11 +2109,15 @@ export function OneScreenClient({
     if (pilotPrevNote === null) return;
     const rep = reportsRef.current[studentId]?.[subjectName];
     if (!rep || pilotRecomposeNote(rep.draft, rep.autoDraft, pilotPrevNote, text) === null) return;
-    // 자동작성 글 그대로일 때만 — 둘 다 같은 값으로 두어 작성 방식은 계속 '자동'이다(한줄 멘트는 AI가 아니라 강사 원문).
+    // 자동작성 글 그대로면 둘 다 같은 값으로 두어 작성 방식은 계속 '자동'이다(한줄 멘트는 AI가 아니라 강사 원문).
+    // 강사가 고친 글이면 자동작성 원문(autoDraft)도 끝만 따로 바꿔 '자동작성 후 수정' 관계를 그대로 둔다(2026-10-23 수정 허용).
     // 실제 글은 갱신 함수 안에서 **최신 값**으로 다시 만든다(ref는 한 렌더 늦을 수 있다 — 방금 도착한 자동작성 글을 덮지 않게).
     patchReport(studentId, subjectName, (r) => {
       const next = pilotRecomposeNote(r.draft, r.autoDraft, pilotPrevNote, text);
-      return next === null || next === r.draft ? r : { ...r, draft: next, autoDraft: next };
+      if (next === null || next === r.draft) return r;
+      const edited = !isPilotAutoWritten(r.draft, r.autoDraft);
+      const nextAuto = edited ? (pilotRecomposeNote(r.autoDraft, r.autoDraft, pilotPrevNote, text) ?? r.autoDraft) : next;
+      return { ...r, draft: next, autoDraft: nextAuto };
     });
   }
   /** 카드 뷰가 지금 보고 있는 행 — 카드엔 과목 선택 탭이 있어 대상이 명확하다(표와 같은 행 단위 규약). */
