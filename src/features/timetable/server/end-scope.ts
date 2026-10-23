@@ -1,8 +1,8 @@
 import "server-only";
 
-import { clipToWithdrawal, endScopeOf, type OtherSpan } from "@/features/attendance/enrollment-span";
-import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { createClient } from "@/lib/supabase/server";
+import { endScopeFor, lastCourseGateApplies } from "@/features/withdrawals/via-report";
+import { loadEndRows } from "@/features/withdrawals/server/via-report";
 import type { EndScopeResult } from "../lib/end-scope-text";
 
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -10,13 +10,15 @@ const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 /**
  * 수강 한 건을 그 날짜로 끝내면 **무엇이 되는지**(이 반만 종강 / 그 과목 수강종료 / 퇴원) — 시간표 확인 팝업용.
  *
- * 그 학생의 **다른 수강 전부**(과목 불문)를 읽어 [`endScopeOf`](@/features/attendance/enrollment-span)에 넘긴다.
+ * 그 학생의 **다른 수강 전부**(과목 불문)를 읽어 [`endScopeFor`](@/features/withdrawals/via-report)에 넘긴다.
  * 화면이 가진 데이터로는 못 정한다 — 시간표는 **보고 있는 과목·그 주 배치**만 들고 있어서, 다른 과목 반이나 그 주에
  * 배치가 없는 같은 과목 반을 모른다(모르는 채 '퇴원'이라 말하면 그게 이번에 고치는 거짓이다).
+ * 🔑 마지막 반 종료를 막는 서버 게이트([`lastCourseViaReport`](@/features/withdrawals/server/via-report))와 **같은 조회·같은 판정**이다
+ * (원장 2026-10-23 퇴원은 퇴원보고서로만) — 팝업이 "마지막 반"이라 말한 것만 서버가 막는다.
  *
  * 🔴 **모르면 null**(팝업은 중립 문구) — 반 하나라도 과목을 못 읽으면 판정하지 않는다(빠진 반 때문에 '퇴원'이라
  *    말하는 것이 문구가 없는 것보다 나쁘다).
- * ⚠️ 세션 클라이언트(RLS) — 호출부(라우트)가 학생 기록 권한(students full)을 먼저 본다.
+ * ⚠️ 세션 클라이언트(RLS) — 호출부(라우트)가 원생 상태 변경 권한을 먼저 본다.
  */
 export async function loadEndScope(input: {
   enrollmentId: string;
@@ -28,7 +30,7 @@ export async function loadEndScope(input: {
     const supabase = await createClient();
     const { data: row, error } = await supabase
       .from("enrollments")
-      .select("id, student_id, class_id, start_date")
+      .select("id, student_id")
       .eq("id", enrollmentId)
       .maybeSingle();
     if (error) {
@@ -36,59 +38,12 @@ export async function loadEndScope(input: {
       return null;
     }
     if (!row) return null;
-    const studentId = row.student_id as string;
-
-    const [rows, studentRes] = await Promise.all([
-      fetchAllPaged<{
-        class_id: string;
-        start_date: string;
-        end_date: string | null;
-        is_transferred: boolean | null;
-      }>((from, to) =>
-        supabase
-          .from("enrollments")
-          .select("id, class_id, start_date, end_date, is_transferred")
-          .eq("student_id", studentId)
-          .neq("id", enrollmentId)
-          // 같은 반의 다른 수강 행(재등록)은 '다른 반'이 아니다 — 뱃지·ECS와 같은 축.
-          .neq("class_id", row.class_id as string)
-          .order("id")
-          .range(from, to),
-      ),
-      supabase.from("students").select("withdrawn_at").eq("id", studentId).maybeSingle(),
-    ]);
-    if (studentRes.error) {
-      console.error("[timetable] 수강 종료 범위 — 학생 조회 실패", studentRes.error);
-      return null;
-    }
-
-    const classIds = [...new Set([row.class_id as string, ...rows.map((r) => r.class_id)])];
-    const classes = await fetchInChunks<{ id: string; class_name: string; subject: string | null }>(
-      classIds,
-      (chunk) => supabase.from("classes").select("id, class_name, subject").in("id", chunk),
-    );
-    const byId = new Map(classes.map((c) => [c.id, c]));
-    if (classIds.some((id) => !byId.has(id))) return null;
-
-    const withdrawnAt = (studentRes.data?.withdrawn_at as string | null) ?? null;
-    const others: OtherSpan[] = rows.map((r) => {
-      const c = byId.get(r.class_id)!;
-      return clipToWithdrawal(
-        {
-          start: r.start_date,
-          end: r.end_date,
-          isTransferred: r.is_transferred ?? undefined,
-          classId: c.id,
-          className: c.class_name,
-          subject: c.subject,
-        },
-        withdrawnAt,
-      );
-    });
-    // 저장은 미래 시작 수강의 종료일을 시작일로 당긴다(`endEnrollmentById`) — 판정 날짜도 같게 맞춘다.
-    const start = row.start_date as string;
-    const leftOn = start > date ? start : date;
-    const res = endScopeOf(leftOn, byId.get(row.class_id as string)!.subject, others);
+    const { status, withdrawnAt, rows } = await loadEndRows(supabase, row.student_id as string);
+    const target = rows.find((r) => r.id === enrollmentId);
+    if (!target) return null;
+    const res = endScopeFor(rows, target, new Set([enrollmentId]), date, withdrawnAt);
+    // 서버가 막지 않는 학생(이미 퇴원·예비·상담 · 예전 퇴원 예약)에게 '퇴원보고서로' 문구를 띄우지 않는다 — 중립 문구로.
+    if (res.scope === "student" && !lastCourseGateApplies(status, withdrawnAt)) return null;
     return { scope: res.scope, otherClassName: res.other?.className ?? null, transfer: res.transfer };
   } catch (e) {
     console.error("[timetable] 수강 종료 범위 판정 실패", e);

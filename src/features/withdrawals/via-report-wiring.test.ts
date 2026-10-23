@@ -1,0 +1,144 @@
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join, relative, sep } from "node:path";
+import { describe, expect, it } from "vitest";
+import { WITHDRAWAL_REASONS } from "./types";
+
+/**
+ * **퇴원은 퇴원보고서로만** 배선 가드 — 원장 2026-10-23 *"퇴원한 학생의 퇴원보고서를 새로 써야하는 경우는 앞으로 없도록. 퇴원 보고서를 써야
+ * 퇴원처리가 가능하도록."* 직원이 학생을 퇴원시키는 길은 퇴원보고서(강사 작성 요청 → 승인, 또는 관리자 바로 처리)의 DB 처리 함수 하나다.
+ *
+ * 🔴 아래 '그대로 두는 길' 밖에서 학생 상태를 퇴원으로 쓰거나(`status: "withdrawn"`) 퇴원일을 값으로 쓰는(`withdrawn_at: 값` — 퇴원·퇴원 예약)
+ *    코드가 생기면 실패한다. 이 목록을 늘리려면 그 길이 왜 보고서를 안 지나도 되는지 [`via-report.ts`](./via-report.ts) 머리 주석과
+ *    `docs/decisions/withdrawal-reports.md`에 먼저 적을 것. 같은 파일 안에서 하나 더 늘어도 실패한다(건수를 잠근다).
+ * ⚠️ 한계(알고 둔다): 변수로 상태를 쓰는 저장(학생 등록·수정 폼 — 그 두 곳은 판정 함수를 부르는지 따로 본다) · 따옴표 키(`"withdrawn_at": x`) ·
+ *    SQL 템플릿 안의 쓰기 · RPC · 수강 `end_date` 쓰기
+ *    (반 폐지·종강·시트/엑셀 가져오기 등 시스템 종료는 학생을 퇴원시키지 않는다 — 수업 없는 재원생은 퇴원보고서로만 퇴원한다)는 글자로 못 잡는다.
+ *    DB 트리거로 강제하지 않았다(워커·동기화·cron이 조용히 깨질 위험 #95 — 브리프 결정). 운영자 스크립트(`scripts/`)는 대상이 아니다.
+ */
+const ROOT = process.cwd();
+const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
+function sources(dir: string, out: string[] = []): string[] {
+  for (const name of readdirSync(dir)) {
+    const p = join(dir, name);
+    if (statSync(p).isDirectory()) sources(p, out);
+    else if (/\.(ts|tsx)$/.test(name) && !/\.test\.(ts|tsx)$/.test(name)) out.push(relative(ROOT, p).split(sep).join("/"));
+  }
+  return out;
+}
+const STATUS_WITHDRAWN = /status:\s*["']withdrawn["']/g;
+/** 퇴원일을 null이 아닌 값으로 쓰는 객체 칸 — 변수·함수 호출(`kstToday()`)·`??`·글자 날짜까지. 타입 표기(`withdrawn_at: string`)는 뺀다. */
+const WITHDRAWN_AT_VALUE = /withdrawn_at:\s*(?!null\b|string\b)[^\s,}|;)]/g;
+
+/** 그대로 두는 길 — 파일 → [상태 퇴원 쓰기 건수, 퇴원일 값 쓰기 건수, 이유]. */
+const ALLOWED: Record<string, [number, number, string]> = {
+  "src/app/api/cron/apply-due-withdrawals/route.ts": [1, 0, "이번 변경 전에 걸린 퇴원 예약의 당일 처리(새 예약 입구는 막혔다)"],
+  "src/features/admin/server/actions.ts": [1, 1, "학생 병합(진 쪽 정리) — 장부 정리는 바로 처리 보고서(DB 함수)로 옮겼다"],
+  "src/features/audit/activity.ts": [0, 1, "감사로그 칸 이름표(`withdrawn_at: \"퇴원일\"` — 쓰기가 아니다)"],
+  "src/features/demo-roster/dashboard-apply.ts": [1, 0, "데모 데이터"],
+  "src/features/excel-import/importers/students.ts": [0, 1, "옛 기록 가져오기(새 원생 · 지난 퇴원만 — 예약은 거절)"],
+  "src/features/students/server/actions.ts": [0, 2, "새 원생을 지난 퇴원으로 등록(옛 기록) · 학생 수정(이미 퇴원·걸린 예약 그대로 — 판정 formWithdrawalViaReport)"],
+};
+
+describe("퇴원은 퇴원보고서로만", () => {
+  it("🔴 학생을 퇴원시키는 쓰기는 '그대로 두는 길'에만 있다(건수까지)", () => {
+    const found: Record<string, [number, number]> = {};
+    for (const file of sources(join(ROOT, "src"))) {
+      const text = read(file);
+      const a = text.match(STATUS_WITHDRAWN)?.length ?? 0;
+      const b = text.match(WITHDRAWN_AT_VALUE)?.length ?? 0;
+      if (a || b) found[file] = [a, b];
+    }
+    const expected = Object.fromEntries(Object.entries(ALLOWED).map(([f, [a, b]]) => [f, [a, b]]));
+    expect(found).toEqual(expected);
+  });
+
+  it("상태 전환 창은 퇴원을 같은 문구로 거절하고, 퇴원 갈래(상태 퇴원 · 수강 닫기 · 예약 걸기)가 없다", () => {
+    const src = read("src/features/students/server/actions.ts");
+    const fn = src.slice(src.indexOf("export async function changeStudentStatus"), src.indexOf("export async function cancelScheduledWithdrawal"));
+    expect(fn).toContain('if (target === "withdrawn") return { error: WITHDRAWAL_VIA_REPORT };');
+    expect(fn).not.toContain("closeActiveEnrollmentsClamped");
+    expect(fn).not.toMatch(/withdrawn_at:\s*date/);
+  });
+
+  it("학생 폼(등록·수정)과 엑셀 가져오기는 같은 판정으로 새 퇴원·새 예약을 거절한다", () => {
+    const src = read("src/features/students/server/actions.ts");
+    const create = src.slice(src.indexOf("export async function createStudent"), src.indexOf("export async function deleteStudent"));
+    const update = src.slice(src.indexOf("export async function updateStudent"), src.indexOf("export type ChangeStatusState"));
+    expect(create).toContain("formWithdrawalViaReport({ prevStatus: null, kind: createPlan.kind");
+    expect(update).toContain("const viaReport = formWithdrawalViaReport(");
+    expect(update.indexOf("const viaReport")).toBeLessThan(update.indexOf("let update = supabase"));
+    const imp = read("src/features/excel-import/importers/students.ts");
+    expect(imp).toContain("formWithdrawalViaReport({ prevStatus: null, kind: w.kind");
+    expect(imp).toContain("if (plan.inserts.some((r) => r.scheduled)) return { error: SCHEDULE_VIA_REPORT };");
+  });
+
+  it("마지막 반 종료는 두 수강 종료 액션이 같은 게이트로 거절한다 — 시간표 확인 문구와 같은 판정", () => {
+    const src = read("src/features/students/server/actions.ts");
+    const partial = src.slice(src.indexOf("export async function endStudentEnrollments"), src.indexOf("export async function setStudentEnrollmentHolds"));
+    const single = src.slice(src.indexOf("export async function endSingleEnrollment"), src.indexOf("// ────────────────────── 메모 + 성적"));
+    for (const fn of [partial, single]) {
+      expect(fn).toContain("await lastCourseViaReport(supabase,");
+      expect(fn.indexOf("lastCourseViaReport")).toBeLessThan(fn.indexOf("endEnrollmentById("));
+    }
+    expect(read("src/features/timetable/server/end-scope.ts")).toContain("endScopeFor(rows, target");
+    expect(read("src/features/withdrawals/server/via-report.ts")).toContain("endsLastCourse(rows, input.enrollmentIds");
+  });
+
+  it("장부 정리(수강 없는 재원생 일괄 퇴원)도 학생마다 바로 처리 보고서를 남긴다 — 학생을 직접 쓰지 않는다", () => {
+    const src = read("src/features/admin/server/actions.ts");
+    const fn = src.slice(src.indexOf("export async function bulkWithdrawStudents"), src.indexOf("export async function bulkDeleteStudents"));
+    expect(fn).toContain("const ids = picked.filter((id) => !attending.has(id));");
+    expect(fn).toContain(".or(`end_date.is.null,end_date.gte.${today}`)");
+    expect(fn).toContain('admin.rpc("direct_withdrawal_report"');
+    expect(fn).toContain("enrollmentIds: [], effectiveDate: today, reason: \"other\"");
+    expect(fn).not.toMatch(/from\("students"\)\s*\.update\(/);
+    expect(fn).not.toMatch(/from\("enrollments"\)\s*\.update\(/);
+  });
+
+  it("수강 종료일 수정이 다니는 마지막 반을 닫으면 같은 게이트로 거절한다", () => {
+    const src = read("src/features/enrollments/server/actions.ts");
+    const fn = src.slice(src.indexOf("export async function updateEnrollmentDates"));
+    expect(fn).toContain("await lastCourseViaReport(dateWriter");
+    expect(fn.indexOf("lastCourseViaReport")).toBeLessThan(fn.indexOf('dateWriter.from("enrollments").update(patch)'));
+  });
+
+  it("바로 처리는 원생 상태 변경 자격까지 본다(승인을 건너뛰므로) — 앱·DB 둘 다", () => {
+    const action = read("src/features/withdrawal-reports/server/actions.ts");
+    const direct = action.slice(action.indexOf("export async function processWithdrawalDirectly"), action.indexOf("export async function changeWithdrawalReport"));
+    expect(direct).toContain("if (!(await canManageStudentStatusNow()))");
+    expect(read("supabase/migrations/0453a_withdrawal_report_direct.sql")).toContain("special ? 'studentStatusManagerIds'");
+  });
+
+  it("관리자 바로 처리는 보고서 기록을 남기고 승인된 보고서와 같은 처리 함수를 지난다(0453a)", () => {
+    const sql = read("supabase/migrations/0453a_withdrawal_report_direct.sql");
+    expect(sql).toContain("insert into public.withdrawal_reports(");
+    expect(sql).toContain("perform public.transition_withdrawal_report(p_tenant, p_actor, rid, 'apply', '{}'::jsonb)");
+    // 직접 학생을 퇴원으로 쓰지 않는다 — 학생·수강을 바꾸는 것은 처리 함수뿐.
+    expect(sql).not.toMatch(/update\s+public\.students/i);
+    expect(sql).not.toMatch(/update\s+public\.enrollments/i);
+    // 사유 목록 = 앱 사유 목록(전이 함수와 같다 — reason-detail.test.ts가 0367a 목록을 잠근다).
+    const list = sql.match(/reason not in \(([^)]*)\)/)?.[1] ?? "";
+    const keys = [...list.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
+    expect([...keys].sort()).toEqual([...WITHDRAWAL_REASONS].sort());
+    const action = read("src/features/withdrawal-reports/server/actions.ts");
+    const direct = action.slice(action.indexOf("export async function processWithdrawalDirectly"), action.indexOf("export async function changeWithdrawalReport"));
+    expect(direct).toContain("if (!viewer?.request)");
+    expect(direct).toContain('db.rpc("direct_withdrawal_report"');
+    expect(direct).toContain('await finish(report as WithdrawalReport, "direct");');
+  });
+
+  it("앞으로의 마이그레이션도 학생을 직접 퇴원으로 쓰지 않는다(0453a 이후)", () => {
+    const dir = join(ROOT, "supabase/migrations");
+    const later = readdirSync(dir).filter((f) => /^\d{4}[a-z]_.*\.sql$/.test(f) && f >= "0453a");
+    for (const f of later) {
+      const sql = readFileSync(join(dir, f), "utf8");
+      expect(sql, f).not.toMatch(/update\s+public\.students\s+set\s+status\s*=\s*'withdrawn'/i);
+    }
+  });
+
+  it("원생 화면의 '퇴원' 자리는 퇴원보고서 입구다 — 상태 메뉴에 '퇴원 처리'가 없다", () => {
+    expect(read("src/app/(shell)/students/[id]/_components/status-action.tsx")).not.toContain('label: "퇴원 처리"');
+    expect(read("src/app/(shell)/students/[id]/page.tsx")).toContain("<WithdrawalReportEntry entry={reportEntry} />");
+    expect(read("src/app/(shell)/students/[id]/page.tsx")).toContain("`/withdrawal-reports?request=${student.id}`");
+  });
+});

@@ -25,6 +25,8 @@ import { kstToday } from "@/lib/date-kst";
 import { isInternalPath } from "@/lib/navigation";
 import { StatusAction } from "./_components/status-action";
 import { CancelScheduledWithdrawal } from "./_components/scheduled-withdrawal";
+import { WithdrawalReportEntry, type ReportEntry } from "./_components/withdrawal-report-entry";
+import { studentReportEntry } from "@/features/withdrawal-reports/server/queries";
 import { DeleteStudentButton } from "./_components/delete-student-button";
 import { OverviewTab } from "./_tabs/overview-tab";
 import { ClassesTab } from "./_tabs/classes-tab";
@@ -184,13 +186,29 @@ export default async function StudentDetailPage({
   // 앞으로 잡힌 **보강 예약**(0264a)도 같은 배너에 선다(원장 2026-09-14: *"여기서도 보강 정보 알 수 있으면
   // 더 좋을듯? 바로가기로 오는것이니까"*). 🔴 읽기 전용 — 수정·취소 버튼은 붙이지 않는다(고치는 자리는
   // 출석부 칸이다). 조회는 fail-soft라 0264a 미적용·실패면 줄이 없을 뿐 화면은 그대로다([[#95]]).
-  const [scheduled, canManageScheduled, upcomingMakeups, canSeeWithdrawals] = await Promise.all([
+  // 퇴원은 퇴원보고서로만(원장 2026-10-23) — 재원·휴원(퇴원 예약 없음) 학생에게 '퇴원보고서' 입구를 세운다. 조회 실패는 입구만 접는다
+  // (실제 거절은 서버 액션이 한다 — 입구는 길 안내다).
+  const reportable = (student.status === "enrolled" || student.status === "on_hold") && !student.withdrawnAt;
+  const [scheduled, canManageScheduled, upcomingMakeups, canSeeWithdrawals, reportInfo] = await Promise.all([
     getScheduledForStudent(student.id),
     canManageTenant(user.systemRole, "classes"),
     getStudentUpcomingReservations(student.id, kstToday()),
     // 퇴원생이면 퇴원 기록(사유·사후 상담)으로 바로 가는 링크(감사 N6) — 퇴원관리를 못 여는 사람에겐 안 선다.
     student.status === "withdrawn" ? canAccessTenant(user.systemRole, "withdrawals") : Promise.resolve(false),
+    reportable ? studentReportEntry(student.id).catch(() => null) : Promise.resolve(null),
   ]);
+  // 진행 중인 보고서를 열 수 없는 사람에게는 '진행 중' 글을 원생 상태를 다루는 사람에게만 보인다(참여자가 아닌 강사에게 새지 않게).
+  const reportEntry: ReportEntry | null = reportInfo?.pending
+    ? reportInfo.pending.readable
+      ? { kind: "pending", href: `/withdrawal-reports/${reportInfo.pending.id}` }
+      : canManageStatus
+        ? { kind: "pending", href: null }
+        : null
+    : reportInfo?.canRequest
+      ? { kind: "request", href: `/withdrawal-reports?request=${student.id}` }
+      : reportable && canManageStatus
+        ? { kind: "note" }
+        : null;
 
   const scheduledWithdrawal =
     student.status !== "withdrawn" && student.withdrawnAt ? String(student.withdrawnAt).slice(0, 10) : null;
@@ -234,12 +252,16 @@ export default async function StudentDetailPage({
             {canManageStatus && scheduledWithdrawal ? (
               <CancelScheduledWithdrawal studentId={student.id} date={scheduledWithdrawal} />
             ) : null}
+            {/* 예전 '퇴원 처리' 자리 — 퇴원은 퇴원보고서로만(강사 작성 요청 또는 강사 작성 없이 바로 처리). */}
+            {reportEntry && reportEntry.kind !== "note" ? <WithdrawalReportEntry entry={reportEntry} /> : null}
             {canManageStatus ? (
               <StatusAction
                 studentId={student.id}
                 studentName={student.name}
                 currentStatus={student.status}
                 openEnrollments={openEnrollments}
+                reportEntry={reportEntry}
+                scheduledWithdrawal={scheduledWithdrawal}
               />
             ) : null}
             {/* ⚠️ "수정" 단독 금지 — 상담 탭을 열면 상담 카드마다 '수정'(그 상담 기록)이 함께 보인다.

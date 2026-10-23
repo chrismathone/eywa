@@ -10,14 +10,12 @@ import { describe, expect, it } from "vitest";
 const read = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
 
 describe("퇴원 예약", () => {
-  it("상태 변경 창 — 미래 퇴원일이면 상태·수강을 건드리지 않고 돌아간다", () => {
+  it("🔴 새 예약은 걸지 않는다 — 상태 변경 창의 퇴원(미래 날짜 포함)은 퇴원보고서로(원장 2026-10-23). 걸린 예약은 cron이 그대로 처리한다", () => {
     const src = read("src/features/students/server/actions.ts");
-    const i = src.indexOf("if (date > kstToday()) {");
-    expect(i).toBeGreaterThan(-1);
-    const branch = src.slice(i, src.indexOf("return { ok: true };", i));
-    expect(branch).not.toContain('status: "withdrawn"');
-    expect(branch).not.toContain("closeActiveEnrollmentsClamped");
-    expect(branch).toContain("withdrawn_at: date");
+    expect(src).not.toContain("if (date > kstToday()) {");
+    expect(src).toContain('if (target === "withdrawn") return { error: WITHDRAWAL_VIA_REPORT };');
+    // 미래 날짜 퇴원은 퇴원보고서가 그날 처리한다(같은 cron이 보고서 처리 함수를 부른다).
+    expect(read("src/app/api/cron/apply-due-withdrawals/route.ts")).toContain("applyDueWithdrawalReports()");
   });
 
   it("학생 폼(등록·수정) — 퇴원일 칸이 예약을 정한다(한 판정 함수)", () => {

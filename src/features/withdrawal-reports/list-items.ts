@@ -2,7 +2,7 @@ import { inRange, resolveRange, type RangeKey, type RangeWindow } from "@/featur
 import { monthRange } from "@/lib/date-kst";
 import type { ArchiveRow } from "./archive-model";
 import { archiveReason, webReportReason, type ListReason } from "./list-reason";
-import { REPORT_STATUS, directorIds, managerIds, type ReportListRow, type StaffOption } from "./model";
+import { REPORT_STATUS, directorIds, isDirectReport, managerIds, type ReportListRow, type StaffOption } from "./model";
 
 /**
  * 퇴원보고서 목록 한 벌 — 웹에서 작성·승인하는 보고서와 기존 스프레드시트 보고서(원문 보관)를 **한 목록**에 세운다.
@@ -58,11 +58,13 @@ export function buildListItems(input: {
   const web = input.reports.map((r): ListItem => {
     const teacher = staffName(r.teacher_id);
     const reason = webReportReason(r.status, r.body_reason, r.body_detail, r.body_reason_detail);
+    // 관리자 바로 처리(강사 작성 없이, 원장 2026-10-23) — 작성자 칸은 처리한 관리자, 승인 칸 대신 '관리자 바로 처리'.
+    const direct = isDirectReport(r);
     return {
       key: `r:${r.id}`,
       href: `${LIST_PATH}/${r.id}`,
       name: r.snapshot.name,
-      detail: `${r.exit_kind === "withdrawal" ? "전체 퇴원" : "수강종료"} · ${r.subjects.map(labelOf).join("·")}`,
+      detail: `${r.exit_kind === "withdrawal" ? "전체 퇴원" : "수강종료"} · ${r.subjects.length ? r.subjects.map(labelOf).join("·") : "다니는 반 없음"}`,
       date: r.effective_date,
       dateText: r.effective_date,
       teacher,
@@ -71,13 +73,15 @@ export function buildListItems(input: {
       status: r.status === "completed" ? "completed" : r.status === "canceled" ? "canceled" : "pending",
       statusLabel: REPORT_STATUS[r.status],
       tone: r.status === "completed" ? "done" : r.status === "revision" || r.status === "blocked" ? "alert" : "muted",
-      approval: [
-        { text: `관리자 ${reviewers(r, "manager")}` },
-        directorIds(r).length ? { text: `원장 ${reviewers(r, "director")}` } : { text: "관리자가 최종 승인", muted: true },
-      ],
+      approval: direct
+        ? [{ text: `관리자 바로 처리 · ${staffName(r.requested_by)}` }, { text: "강사 작성 없음", muted: true }]
+        : [
+            { text: `관리자 ${reviewers(r, "manager")}` },
+            directorIds(r).length ? { text: `원장 ${reviewers(r, "director")}` } : { text: "관리자가 최종 승인", muted: true },
+          ],
       link: null,
       myTurn: ["requested", "revision"].includes(r.status) && r.teacher_id === userId,
-      search: [r.snapshot.name, r.snapshot.school, r.snapshot.grade, ...r.snapshot.courses.map((c) => c.className), teacher, reason.text, reason.note ?? ""].join(" "),
+      search: [r.snapshot.name, r.snapshot.school, r.snapshot.grade, ...r.snapshot.courses.map((c) => c.className), teacher, reason.text, reason.note ?? "", direct ? "관리자 바로 처리" : ""].join(" "),
     };
   });
   const archived = input.archives.map((a): ListItem => {
@@ -171,10 +175,13 @@ export function teacherOptions(items: readonly ListItem[]): { value: string; lab
   return [...names].sort((a, b) => a.localeCompare(b, "ko")).map((n) => ({ value: n, label: n }));
 }
 
-/** 지금 주소의 값(embed 포함)을 지키며 몇 개만 바꾼 목록 주소 — 값을 바꾸면 쪽은 처음으로. */
+/**
+ * 지금 주소의 값(embed 포함)을 지키며 몇 개만 바꾼 목록 주소 — 값을 바꾸면 쪽은 처음으로.
+ * `request`(원생 화면에서 연 요청 창)는 싣지 않는다 — 필터를 바꿀 때마다 창이 다시 열리지 않게.
+ */
 export function listHref(sp: Record<string, string | undefined>, patch: Record<string, string | null>): string {
   const params = new URLSearchParams();
-  for (const [k, v] of Object.entries(sp)) if (v !== undefined && k !== "page") params.set(k, v);
+  for (const [k, v] of Object.entries(sp)) if (v !== undefined && k !== "page" && k !== "request") params.set(k, v);
   for (const [k, v] of Object.entries(patch)) {
     if (v === null) params.delete(k);
     else params.set(k, v);

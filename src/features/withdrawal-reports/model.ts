@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { SystemRole } from "@/lib/permissions";
 import { reasonDetailOf } from "@/features/withdrawals/reason-detail";
 import { REASON_LABEL } from "@/features/withdrawals/types";
+import { CLEANUP_WITHDRAWAL_MEMO } from "@/features/withdrawals/system-bulk";
 
 export const REPORT_STATUS = {
   requested: "작성 요청", revision: "반려 · 수정 요청", manager_pending: "관리자 승인 대기",
@@ -11,7 +12,7 @@ export const REPORT_STATUS = {
 } as const;
 export type ReportStatus = keyof typeof REPORT_STATUS;
 export type ReportAction = "save" | "submit" | "approve" | "reject" | "cancel";
-export const REPORT_ACTION_LABEL = { request: "작성 요청", save: "임시 저장", submit: "보고서 제출", approve: "승인", reject: "반려", cancel: "요청 취소", apply: "퇴원·수강종료 처리" } as const;
+export const REPORT_ACTION_LABEL = { request: "작성 요청", save: "임시 저장", submit: "보고서 제출", approve: "승인", reject: "반려", cancel: "요청 취소", apply: "퇴원·수강종료 처리", direct: "관리자 바로 처리" } as const;
 const text = z.string().trim().max(5000, "항목별 5,000자 이내로 입력해 주세요.");
 export const bodySchema = z.object({
   reason: z.enum(Object.keys(REASON_LABEL) as [keyof typeof REASON_LABEL, ...Array<keyof typeof REASON_LABEL>]),
@@ -41,6 +42,36 @@ export const batchRequestSchema = z.object({
   if (r.teacherIds.some(id => [...r.managerIds, ...r.directorIds].includes(id)) || r.managerIds.some(id => r.directorIds.includes(id)))
     ctx.addIssue({ code: "custom", message: "작성자·관리자·원장을 서로 다르게 지정해 주세요." });
 });
+/**
+ * 관리자 바로 처리(강사 작성 없이) 입력 — 원장 2026-10-23 *"관리자가 어느 학생에 대해 퇴원보고서 카드에서 '강사 작성 없이 바로 퇴원(수강종료)'
+ * 가능하게"*. 사유는 다른 곳과 같은 세 칸(대분류 · 세부 · 메모 — `ReasonFields`, 서버는 `checkReasonInput`)이다.
+ * 종료할 반은 0개일 수 있다(지금 다니는 반이 없는 학생 = 퇴원만). 처리는 DB `direct_withdrawal_report`(0453a)가 보고서 기록을 남기고
+ * 승인된 보고서와 **같은 처리 함수**(`transition_withdrawal_report` apply)로 한다.
+ */
+export const directSchema = z.object({
+  studentId: z.uuid(),
+  enrollmentIds: z.array(z.uuid()).max(100),
+  effectiveDate: z.iso.date(),
+  reason: z.enum(Object.keys(REASON_LABEL) as [keyof typeof REASON_LABEL, ...Array<keyof typeof REASON_LABEL>], { error: "퇴원 사유를 골라 주세요." }),
+  reasonDetail: z.string().max(80).optional(),
+  memo: z.string().trim().max(5000, "메모는 5,000자 이내로 입력해 주세요."),
+});
+export type DirectRequest = z.infer<typeof directSchema>;
+/**
+ * 관리자 바로 처리 보고서인가 — DB가 `direct` 칸과 **작성자 = 승인 관리자 = 요청자**를 한 묶음으로 잠근다(0453a CHECK).
+ * 일반 요청은 작성자와 관리자가 늘 다르다(요청 함수 · 옛 CHECK). 화면은 이 모양으로 읽는다 — 칸을 따로 읽지 않아 옛 스키마에서도 안 죽는다(#95).
+ */
+export function isDirectReport(r: Pick<WithdrawalReport, "teacher_id" | "manager_id" | "requested_by">) {
+  return r.teacher_id === r.manager_id && r.manager_id === r.requested_by;
+}
+/**
+ * 관리 도구 장부 정리(수강 없는 재원생 일괄 퇴원)가 남긴 바로 처리 보고서인가 — 바로 처리 · 사유 '기타' · 메모 = 장부 정리 메모.
+ * 퇴원보고서 목록에서는 조용히 뺀다(원장 2026-10-15 *"장부 정리는 그냥 미출력되게"* — 퇴원관리와 같은 결 · 학생 기록·퇴원 상세엔 남는다).
+ * 정상 보고서의 상세사유는 200자 이상이라 이 짧은 메모와 겹치지 않는다.
+ */
+export function isBookkeepingReport(r: Pick<ReportListRow, "teacher_id" | "manager_id" | "requested_by" | "body_reason" | "body_detail">) {
+  return isDirectReport(r) && r.body_reason === "other" && (r.body_detail ?? "").trim() === CLEANUP_WITHDRAWAL_MEMO;
+}
 export function automaticExitKind(courses: { id: string }[], enrollmentIds: readonly string[]) {
   return courses.length > 0 && courses.every(c => enrollmentIds.includes(c.id)) ? "withdrawal" as const : "subject_end" as const;
 }

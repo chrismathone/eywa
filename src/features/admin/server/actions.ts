@@ -6,12 +6,12 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
-import { fetchAllPaged } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
 import { logAction } from "@/features/audit/server/log";
 import { mergeNoteFor } from "@/features/students/status/merged";
-import type { WithdrawalMetadata } from "@/features/withdrawals/types";
 import { CLEANUP_WITHDRAWAL_MEMO } from "@/features/withdrawals/system-bulk";
+import { canRequestReport, missingReportSchema } from "@/features/withdrawal-reports/model";
 import { explainDbError, logDbError } from "@/lib/supabase/db-error";
 import { MERGE_TABLES } from "../merge-scope";
 import { planMakeeduCarry } from "../makeedu-carry";
@@ -397,8 +397,11 @@ function parseSelectedIds(formData: FormData): string[] {
 }
 
 /**
- * 선택한 학생들을 일괄 퇴원 처리(상태=withdrawn + withdrawn_at + 활성 enrollment 종료).
- * "수강 없는 재원생" 정리용 — 가역적(학생 상세에서 재원 복구 가능). 관리 도구(admin) 쓰기 권한(기본 master, 위임 시 admin/manager).
+ * 선택한 학생들을 일괄 퇴원 처리(상태=withdrawn + withdrawn_at) — "수강 없는 재원생" 장부 정리용.
+ * 가역적(학생 상세에서 재원 복구 가능). 관리 도구(admin) 쓰기 권한(기본 master, 위임 시 admin/manager).
+ * 🔴 **지금 다니는 수강이 없는 재원생만** 받는다(서버가 다시 본다 — 화면 후보 목록은 게이트가 아니다, #77). 퇴원은 퇴원보고서로만
+ *    (원장 2026-10-23 *"퇴원 보고서를 써야 퇴원처리가 가능하도록"*) — 이 정리가 다니는 학생을 보고서 없이 퇴원시키는 뒷문이 되지 않게.
+ *    예전엔 남은 수강까지 함께 닫았다(어떤 학생이든 퇴원시킬 수 있었다). 수강 중·퇴원 예약이 걸린 학생은 건너뛰고 알린다.
  */
 export async function bulkWithdrawStudents(
   _prev: BulkStudentState,
@@ -410,57 +413,87 @@ export async function bulkWithdrawStudents(
   // 관리 도구(admin 메뉴) 쓰기 — 기본 matrix는 master만이나, 원장이 역할·권한에서 위임(override)하면 열림(#58).
   if (!(await canWriteTenant(user.systemRole, "admin"))) return { error: "관리 도구 권한이 없습니다" };
 
-  const ids = parseSelectedIds(formData);
-  if (ids.length === 0) return { error: "학생을 선택해주세요" };
+  const picked = parseSelectedIds(formData);
+  if (picked.length === 0) return { error: "학생을 선택해주세요" };
+  // 퇴원은 퇴원보고서(바로 처리)로 남긴다 — 바로 처리는 관리자·원장 역할만 된다(작성 요청과 같은 역할). 위임받은 다른 역할엔 먼저 알린다.
+  if (!canRequestReport(user.systemRole)) return { error: "수강 없는 재원생 정리(퇴원)는 원장·관리자·매니저 계정이 할 수 있습니다." };
 
   const supabase = await createClient();
   const today = kstToday();
-  const metadata: WithdrawalMetadata = {
-    reason: "other",
-    memo: CLEANUP_WITHDRAWAL_MEMO,
-    consultation: { adminCalledParent: false, teacherCalledParent: false, talkedWithStudent: false },
-  };
-
-  // 일괄 퇴원도 감사로그에 남긴다 — 2026-08-17 배치(31명)가 "누가 했는지" 추적 불가였던 것 재발 방지.
-  // 🔴 청크 중간 실패 시에도 **이미 퇴원된 만큼은** 기록한다(무기록 창 방지, 적대 리뷰 F6) — 그래서
-  //    로그 id는 요청값이 아니라 update가 실제 갱신한 행(select 반환, F10 count·ids 불일치 해소).
-  const done: string[] = [];
-  const writeBulkLog = () =>
-    done.length === 0
-      ? Promise.resolve()
-      : logAction({
-          action: "student_bulk_withdraw",
-          targetType: "student",
-          metadata: { count: done.length, studentIds: done },
-        });
-  for (const part of chunkIds(ids)) {
-    const { data: updated, error } = await supabase
-      .from("students")
-      .update({ status: "withdrawn", withdrawn_at: today, withdrawal_metadata: metadata })
-      .in("id", part)
-      .select("id");
-    if (error) {
-      await writeBulkLog();
-      return { error: error.message };
-    }
-    done.push(...(updated ?? []).map((r) => r.id as string));
-    // 남아있는 활성 enrollment가 있으면 함께 종료(있는 경우만 — 보통 0건)
-    const { error: enrErr } = await supabase
-      .from("enrollments")
-      .update({ end_date: today, withdrawal_reason: "other" })
-      .in("student_id", part)
-      .is("end_date", null);
-    if (enrErr) {
-      await writeBulkLog();
-      return { error: enrErr.message };
-    }
+  // 지금 다니는 수강(종료일 없음 · 오늘 이후 종료)이 있는 학생은 뺀다 — 그 학생의 퇴원은 퇴원보고서 몫이다.
+  let attending: Set<string>;
+  try {
+    const rows = await fetchAllPagedInChunks<{ student_id: string }>(picked, (chunk, from, to) =>
+      supabase
+        .from("enrollments")
+        .select("student_id")
+        .in("student_id", chunk)
+        .or(`end_date.is.null,end_date.gte.${today}`)
+        .order("id")
+        .range(from, to),
+    );
+    attending = new Set(rows.map((r) => r.student_id));
+  } catch (error) {
+    logDbError(error, "admin.bulkWithdraw.attending");
+    return { error: "수강 정보를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요." };
   }
-  await writeBulkLog();
+  const ids = picked.filter((id) => !attending.has(id));
+  if (ids.length === 0) return { error: "고른 학생이 모두 수업을 듣고 있습니다. 퇴원은 원생 화면의 '퇴원보고서'에서 진행해 주세요." };
+  // 🔴 퇴원은 퇴원보고서로만(원장 2026-10-23) — 장부 정리도 학생마다 **관리자 바로 처리 보고서**(0453a `direct_withdrawal_report`, 반 0개)로
+  //    남긴다. 학생을 직접 퇴원으로 쓰지 않는다(예전엔 이 자리에서 상태를 바꿨다). 사유·메모는 예전과 같다 — 처리 함수가 학생 퇴원 메모로 옮겨
+  //    `isCleanupExit`(장부 정리 판정)가 그대로 알아본다. 처리일 = 오늘 · 처리 함수가 학생·수강 정보를 다시 대조한다.
+  const admin = createAdminClient();
+  // 일괄 퇴원도 감사로그에 남긴다 — 2026-08-17 배치(31명)가 "누가 했는지" 추적 불가였던 것 재발 방지.
+  // 🔴 중간에 멈춰도 **이미 퇴원된 만큼은** 기록한다(무기록 창 방지, 적대 리뷰 F6) — 로그 id는 실제로 처리된 학생.
+  const done: string[] = [];
+  const reportIds: string[] = [];
+  let failed = 0;
+  let firstFailure: string | null = null;
+  let notReady = false;
+  for (const id of ids) {
+    const { data, error } = await admin.rpc("direct_withdrawal_report", {
+      p_tenant: user.tenantId,
+      p_actor: user.id,
+      p_payload: { studentId: id, enrollmentIds: [], effectiveDate: today, reason: "other", reasonDetail: "", memo: CLEANUP_WITHDRAWAL_MEMO },
+    });
+    if (error) {
+      if (missingReportSchema(error)) {
+        notReady = true;
+        break;
+      }
+      failed++;
+      // 첫 실패의 이유를 화면에 그대로 — 담당 범위·등록일·진행 중 보고서 등 DB가 말한 한글 사유(#138).
+      const why = explainDbError(error, { scope: "admin.bulkWithdraw.direct", fallback: "처리하지 못한 학생이 있습니다.", context: { studentId: id } });
+      firstFailure ??= why.message;
+      continue;
+    }
+    done.push(id);
+    reportIds.push(String(data));
+  }
+  if (done.length > 0) {
+    await logAction({
+      action: "student_bulk_withdraw",
+      targetType: "student",
+      metadata: { count: done.length, studentIds: done, reportIds, ...(failed > 0 ? { failed } : {}) },
+    });
+  }
+  if (done.length === 0) {
+    return {
+      error: notReady
+        ? "퇴원보고서 바로 처리를 준비 중이라 정리하지 못했습니다. 잠시 후 다시 시도해 주세요."
+        : (firstFailure ?? "고른 학생을 정리하지 못했습니다. 재원 상태·퇴원 예약·진행 중인 퇴원보고서를 확인해 주세요."),
+    };
+  }
 
   revalidatePath("/owner");
   revalidatePath("/students");
   revalidatePath("/withdrawals");
-  return { ok: true, message: `${done.length}명 퇴원 처리 완료` };
+  revalidatePath("/withdrawal-reports");
+  const skipped = picked.length - done.length;
+  return {
+    ok: true,
+    message: `${done.length}명 퇴원 처리 완료(퇴원보고서 기록을 남겼습니다)${skipped > 0 ? ` · ${skipped}명은 수업을 듣고 있거나 처리할 수 없어 건너뜀(퇴원은 '퇴원보고서'로)` : ""}${firstFailure ? ` — ${firstFailure}` : ""}`,
+  };
 }
 
 /**

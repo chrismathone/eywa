@@ -8,10 +8,16 @@ import { describe, expect, it } from "vitest";
  */
 const read = (...p: string[]) => readFileSync(join(process.cwd(), "src", ...p), "utf-8");
 
-describe("수학 퇴원 시트 기입 — 문 다섯 곳", () => {
-  it("학생 상태 퇴원 · 수정 폼 퇴원 · 수강 종료(고른 것 · 한 건)", () => {
+describe("수학 퇴원 시트 기입 — 퇴원·수강 종료가 일어나는 문마다", () => {
+  it("수강 종료(고른 것 · 한 건) — 학생 퇴원은 퇴원보고서 처리 몫이다(원장 2026-10-23 · 상태 전환 창·수정 폼의 퇴원 갈래는 걷었다)", () => {
     const src = read("features", "students", "server", "actions.ts");
-    expect((src.match(/after\(\(\) =>\s*recordMathWithdrawalToSheet\(/g) ?? []).length).toBe(4);
+    expect((src.match(/after\(\(\) =>\s*recordMathWithdrawalToSheet\(/g) ?? []).length).toBe(2);
+  });
+  it("퇴원보고서 처리 — 승인 · 관리자 바로 처리(같은 마무리 함수) · 처리일 cron", () => {
+    const actions = read("features", "withdrawal-reports", "server", "actions.ts");
+    expect(actions).toContain("await recordMathWithdrawalToSheet(");
+    expect(actions).toContain('await finish(report as WithdrawalReport, "direct");');
+    expect(read("features", "withdrawal-reports", "server", "scheduled.ts")).toContain("await recordMathWithdrawalToSheet(");
   });
   it("예약 퇴원 cron", () => {
     expect(read("app", "api", "cron", "apply-due-withdrawals", "route.ts")).toContain("await recordMathWithdrawalToSheet(");

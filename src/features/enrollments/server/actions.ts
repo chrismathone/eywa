@@ -48,6 +48,7 @@ import {
   normalizeAttendanceDays,
 } from "./assign-helpers";
 import { logDbError } from "@/lib/supabase/db-error";
+import { lastCourseViaReport } from "@/features/withdrawals/server/via-report";
 
 /**
  * 학생을 반에 배정.
@@ -508,6 +509,18 @@ export async function updateEnrollmentDates(
   // 이번 편집이 새로 기간 밖으로 밀어내는 출결은 저장 전에 확인한다. 넓히는 편집은 조회하지 않는다.
   // 출결 메뉴가 없는 지정 직원도 실제 기록을 빠짐없이 확인한다. 읽기는 현재 지점으로 제한한다.
   const dateWriter = createAdminClient();
+  // 🔴 지금 다니는 수강에 더 이른 종료일을 넣는 것은 수강 종료다 — 학생이 다니는 마지막 반이면 사실상 퇴원이라 퇴원보고서로
+  //    (원장 2026-10-23 · 수강 종료 창·시간표와 같은 게이트 `lastCourseViaReport`). 이미 끝난 수강의 날짜 정정·종료일 늦추기·비우기는 그대로.
+  //    학생·수강은 위에서 이 지점으로 확인했다 — 담당 범위의 선생님도 다른 반까지 읽어야 판정하므로 관리 클라이언트로 읽는다.
+  const currentEnd = (current.end_date as string | null) ?? null;
+  if (field === "end" && value && (currentEnd === null || (currentEnd >= kstToday() && value < currentEnd))) {
+    const lastCourse = await lastCourseViaReport(dateWriter as unknown as Awaited<ReturnType<typeof createClient>>, {
+      studentId: current.student_id as string,
+      enrollmentIds: [enrollmentId],
+      date: value,
+    });
+    if (lastCourse) return { error: lastCourse };
+  }
   let shrink: AttendanceShrink | null;
   try {
     shrink = await countAttendanceOutside(dateWriter, {

@@ -9,11 +9,13 @@ import { goalExamLabel, parseGoalAxis } from "@/features/grades/goals";
 import { goalAxisReady } from "@/features/grades/server/goals";
 import {
   clearOnHoldForActiveEnrollments,
-  closeActiveEnrollmentsClamped,
   endEnrollmentById,
   listOpenEnrollments,
   reopenEnrollmentsClosedByWithdrawal,
 } from "./enrollment-sync";
+// 퇴원은 퇴원보고서로만(원장 2026-10-23) — 직접 퇴원·새 퇴원 예약·마지막 반 종료를 같은 판정으로 거절한다(#77).
+import { formWithdrawalViaReport, WITHDRAWAL_VIA_REPORT } from "@/features/withdrawals/via-report";
+import { lastCourseViaReport } from "@/features/withdrawals/server/via-report";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
 import { explainDbError, logDbError } from "@/lib/supabase/db-error";
@@ -181,6 +183,9 @@ export async function createStudent(
   }
   const createPlan = planFormWithdrawal({ prevStatus: null, status: input.status, withdrawnAt: input.withdrawnAt, today: kstToday() });
   if (createPlan.error) return { fieldErrors: { withdrawnAt: createPlan.error } };
+  // 새 원생에 퇴원 예약은 걸지 않는다(퇴원보고서로 — 원장 2026-10-23). 지난 날짜의 퇴원 상태로 등록하는 것(옛 기록)은 그대로.
+  const createViaReport = formWithdrawalViaReport({ prevStatus: null, kind: createPlan.kind, withdrawnAt: createPlan.withdrawnAt });
+  if (createViaReport) return { fieldErrors: { withdrawnAt: createViaReport } };
   // 퇴원(또는 퇴원 예약)으로 등록하면 사유를 받는다 — 상태 전환 창과 같은 칸·같은 검사(원장 2026-10-15 *"기타는 모든 곳을
   // 일치하게"*). 예전엔 사유 칸 없이 '기타'를 박았다.
   let createMeta: WithdrawalMetadata | null = null;
@@ -291,7 +296,7 @@ export async function deleteStudent(_prev: DeleteStudentState, formData: FormDat
     .select("*", { count: "exact", head: true })
     .eq("student_id", id);
   if ((count ?? 0) > 0) {
-    return { error: "청구(수납) 기록이 있어 영구 삭제할 수 없습니다. 퇴원 처리를 이용하세요." };
+    return { error: "청구(수납) 기록이 있어 영구 삭제할 수 없습니다. 그만둔 학생이면 '퇴원보고서'로 퇴원을 처리해 주세요." };
   }
 
   const { error, count: deleted } = await supabase.from("students").delete({ count: "exact" }).eq("id", id);
@@ -375,26 +380,23 @@ export async function updateStudent(
   }) : { status: cur.status as StudentStatus, withdrawnAt: cur.withdrawn_at ? String(cur.withdrawn_at).slice(0, 10) : null,
     kind: scheduledPrev ? "schedule" as const : cur.status === "withdrawn" ? "withdraw" as const : "none" as const, error: undefined };
   if (withdrawalPlan.error) return { fieldErrors: { withdrawnAt: withdrawalPlan.error } };
-  const schedulingNow = statusAccess && withdrawalPlan.kind === "schedule";
-  const savedStatus = withdrawalPlan.status;
-  // 새 퇴원·퇴원 예약이면 사유를 받는다(원장 2026-10-15 *"기타는 모든 곳을 일치하게"*) — 판정은 폼이 사유 칸을 띄우는 것과 같은 함수.
-  let formReason: WithdrawalMetadata | null = null;
-  if (statusAccess && formWithdrawalNeedsReason({
+  // 🔴 퇴원은 퇴원보고서로만(원장 2026-10-23 *"퇴원 보고서를 써야 퇴원처리가 가능하도록"*) — 이 폼으로는 새로 퇴원시키거나(예약을
+  //    오늘로 당기는 것 포함) 새 예약을 걸거나 예약 날짜를 바꾸지 못한다. 이미 퇴원한 학생 고치기 · 걸린 예약 그대로 저장 · 예약 취소는 그대로.
+  //    그래서 아래에는 '새 퇴원'·'새 예약'의 사유 받기·수강 닫기 갈래가 없다(예전 갈래는 이 판정 뒤로 닿지 않아 걷었다).
+  const viaReport = formWithdrawalViaReport({
     prevStatus: prevStatus ?? null,
     prevWithdrawnAt: (cur?.withdrawn_at as string | null) ?? null,
     kind: withdrawalPlan.kind,
-  })) {
-    const picked = readReasonForm(formData);
-    if (picked.error !== undefined) return { error: picked.error };
-    formReason = freshWithdrawalMetadata(picked);
-  }
+    withdrawnAt: withdrawalPlan.withdrawnAt,
+  });
+  if (viaReport) return { error: viaReport };
+  const schedulingNow = statusAccess && withdrawalPlan.kind === "schedule";
+  const savedStatus = withdrawalPlan.status;
 
   let withdrawalMetadata: unknown = cur?.withdrawal_metadata ?? null;
-  if (withdrawalPlan.kind === "withdraw" && prevStatus !== "withdrawn") {
-    // 예약돼 있던 사유는 살린다(예약 때 골랐다) — 새 퇴원이면 방금 고른 사유. 예약인데 사유가 비어 있던 옛 줄만 기본값.
-    withdrawalMetadata = formReason ?? (scheduledPrev && cur?.withdrawal_metadata ? cur.withdrawal_metadata : DEFAULT_WITHDRAWAL_METADATA);
-  } else if (schedulingNow) {
-    withdrawalMetadata = formReason ?? (scheduledPrev && cur?.withdrawal_metadata ? cur.withdrawal_metadata : DEFAULT_WITHDRAWAL_METADATA);
+  if (schedulingNow) {
+    // 걸려 있던 예약을 그대로 다시 저장 — 예약 때 고른 사유를 살린다(사유가 비어 있던 옛 예약만 기본값).
+    withdrawalMetadata = cur?.withdrawal_metadata ?? DEFAULT_WITHDRAWAL_METADATA;
   } else if (statusAccess && withdrawalPlan.kind === "none") {
     withdrawalMetadata = null;
   }
@@ -466,23 +468,9 @@ export async function updateStudent(
     after(() => pushIjwProfiles(ijwTenant, { studentIds: [id] }));
   }
 
-  // 상태 전환에 맞춰 활성 enrollment 정합성 유지 (changeStudentStatus와 동일 불변식).
-  // 편집 폼 경로가 enrollment를 안 닫던 누수(F8) 보강 — 퇴원 시 종료, 복구/재원 시 on_hold 해제.
-  if (savedStatus === "withdrawn" && prevStatus !== "withdrawn") {
-    // 닫는 수강에도 퇴원 사유를 적는다(상태 전환 창과 같다 — 퇴원율이 수강 사유도 읽는다).
-    const closingReason = (withdrawalMetadata as Partial<WithdrawalMetadata> | null)?.reason;
-    const enrErr = await closeActiveEnrollmentsClamped(
-      supabase,
-      id,
-      input.withdrawnAt ?? null,
-      closingReason ? { withdrawal_reason: closingReason } : {},
-    );
-    if (enrErr) return { error: enrErr };
-    // 수학 퇴원이면 '퇴원생 관리 차트' 시트에 적는다(원장 2026-10-07) — 응답 뒤에, 실패해도 퇴원은 그대로.
-    const sheetDate = (savedWithdrawnAt ? String(savedWithdrawnAt).slice(0, 10) : null) ?? kstToday();
-    const sheetTenant = user.tenantId;
-    after(() => recordMathWithdrawalToSheet({ tenantId: sheetTenant, studentId: id, date: sheetDate }));
-  } else if (savedStatus === "enrolled" && prevStatus !== "enrolled") {
+  // 상태 전환에 맞춰 활성 enrollment 정합성 유지 (changeStudentStatus와 동일 불변식) — 복구/재원 시 on_hold 해제.
+  // (새 퇴원은 위 퇴원보고서 판정이 막는다 — 수강을 닫는 것은 퇴원보고서의 처리 함수 몫이다.)
+  if (savedStatus === "enrolled" && prevStatus !== "enrolled") {
     // 퇴원이 닫은 enrollment(end_date=퇴원일)를 다시 연다 — 안 하면 재원인데 시간표 '퇴원'에 남음.
     // 🔴 퇴원에서 돌아올 때만 — 휴원·예비의 withdrawn_at은 **퇴원 예약**이라 그 날짜로 끝나는 다른 수강을 잘못 연다.
     const withdrawnDate = prevStatus === "withdrawn" && cur?.withdrawn_at ? String(cur.withdrawn_at).slice(0, 10) : null;
@@ -539,12 +527,8 @@ export async function updateStudent(
       studentId: id,
       statusFrom: prevStatus ?? null,
       statusTo: savedStatus,
-      // 날짜를 새로 걸거나 바꾼 저장만 적는다(예약일 그대로 다시 저장한 것은 사건이 아니다).
-      ...(schedulingNow && input.withdrawnAt !== (cur?.withdrawn_at ? String(cur.withdrawn_at).slice(0, 10) : null)
-        ? { scheduledWithdrawal: input.withdrawnAt }
-        : {}),
+      // 예약을 새로 걸거나 날짜를 바꾸는 저장은 위에서 막힌다 — 남는 사건은 예약 취소뿐이다.
       ...(cancelledSchedule ? { cancelledWithdrawal: cancelledSchedule } : {}),
-      ...(formReason ? { reason: formReason.reason, detail: formReason.detail ?? null } : {}),
     },
   });
 
@@ -570,10 +554,12 @@ export async function updateStudent(
 export type ChangeStatusState = { error?: string; ok?: true } | undefined;
 
 /**
- * 학생 상태 전환 (퇴원/휴원/복구). 학생 상세에서 호출.
- * - withdrawn: 학생 status='withdrawn' + 모든 활성 enrollment의 end_date 설정 + withdrawal_metadata 채움
+ * 학생 상태 전환 (휴원/복구). 학생 상세에서 호출.
  * - on_hold: 학생 status='on_hold' + 활성 enrollment에 on_hold=true
  * - enrolled (복구): 학생 status='enrolled' + withdrawn_at/metadata null + on_hold 해제
+ * - withdrawn: 🔴 **거절** — 퇴원은 퇴원보고서로만(원장 2026-10-23 *"퇴원 보고서를 써야 퇴원처리가 가능하도록"*). 퇴원(오늘·지난 날짜)도
+ *   퇴원 예약(미래 날짜)도 퇴원보고서의 처리 함수가 한다(강사 작성 요청 → 승인, 또는 관리자 바로 처리 — `withdrawal-reports`).
+ *   예전 갈래(상태를 퇴원으로 + 수강 닫기 / 미래 날짜면 예약만)는 걷었다 — 되살리지 말 것(가드 `via-report-wiring.test.ts`).
  */
 export async function changeStudentStatus(
   _prev: ChangeStatusState,
@@ -581,20 +567,19 @@ export async function changeStudentStatus(
 ): Promise<ChangeStatusState> {
   const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
-  // 🔴 퇴원·휴원·복구 = full만(강사 차단, 원장 지시 2026-08-18) — canManageStudentRecords 주석 참조.
+  // 🔴 휴원·복구 = full만(강사 차단, 원장 지시 2026-08-18) — canManageStudentRecords 주석 참조.
   if (!(await canManageStudentStatusNow())) return { error: STUDENT_STATUS_DENIED };
 
   const id = String(formData.get("id") ?? "").trim();
   const target = String(formData.get("target") ?? "").trim();
-  const reasonStr = String(formData.get("reason") ?? "").trim();
-  const detailStr = String(formData.get("detail") ?? "").trim() || null;
   const memo = String(formData.get("memo") ?? "").trim() || null;
-  const date = String(formData.get("date") ?? "").trim() || null;
 
   if (!id) return { error: "학생 ID가 누락되었습니다" };
   if (!["withdrawn", "on_hold", "enrolled"].includes(target)) {
     return { error: "유효하지 않은 상태 전환입니다" };
   }
+  // 옛 화면·직접 호출이 보내도 같은 문구로 거절한다(화면에서 버튼을 걷은 것은 게이트가 아니다 — #77).
+  if (target === "withdrawn") return { error: WITHDRAWAL_VIA_REPORT };
   if (target === "enrolled") {
     // 복구(퇴원·휴원 → 재원)도 자리를 하나 차지한다 — 이미 재원이면 본인을 빼고 세서 0이 된다.
     const seat = await seatBlockReason(user.tenantId, 1, [id]);
@@ -603,102 +588,20 @@ export async function changeStudentStatus(
 
   const supabase = await createClient();
 
-  // 퇴원/휴원/복구는 전부 감사로그에 actor를 남긴다 — "누가 퇴원시켰는지 역검수 불가" 사고(2026-08-18) 재발 방지.
+  // 휴원/복구는 전부 감사로그에 actor를 남긴다 — "누가 상태를 바꿨는지 역검수 불가" 사고(2026-08-18) 재발 방지.
   // 🔴 로그는 students.update **성공 직후**에 남긴다 — 뒤의 enrollment 정합 단계가 실패해도 상태는 이미
   //    바뀌었으므로, 끝에서 몰아 남기면 "상태는 바뀌었는데 기록이 없는" 무기록 창이 생긴다(적대 리뷰 F6).
-  const writeStatusLog = (closing?: { enrollmentIds: string[]; classIds: (string | null)[] } | { scheduled: true }) =>
+  const writeStatusLog = () =>
     logAction({
-      action:
-        target === "withdrawn" ? "student_withdraw" : target === "on_hold" ? "student_hold" : "student_restore",
+      action: target === "on_hold" ? "student_hold" : "student_restore",
       targetType: "student",
       metadata:
-        target === "withdrawn"
-          ? {
-              studentId: id,
-              date,
-              reason: reasonStr,
-              detail: detailStr,
-              memo,
-              // 🔴 "어느 수강을 닫았는지"를 남긴다(원장 2026-08-18 역검수) — 부분 종료(enrollment_end)와
-              //    전체 퇴원(student_withdraw)이 로그에서 구분되고, 전체 퇴원은 닫힌 반까지 보인다.
-              ...(closing ?? {}),
-            }
-          : // 🔴 휴원 메모는 담을 컬럼이 없어 종전엔 폼에서 받고 **버려졌다**(거짓 약속).
-            //    students엔 휴원용 칸이 없으니 감사로그가 유일한 자리다 — 적었으면 남는다.
-            target === "on_hold"
-            ? { studentId: id, memo }
-            : { studentId: id },
+        // 🔴 휴원 메모는 담을 컬럼이 없어 종전엔 폼에서 받고 **버려졌다**(거짓 약속).
+        //    students엔 휴원용 칸이 없으니 감사로그가 유일한 자리다 — 적었으면 남는다.
+        target === "on_hold" ? { studentId: id, memo } : { studentId: id },
     });
 
-  if (target === "withdrawn") {
-    if (!WITHDRAWAL_REASONS.includes(reasonStr as WithdrawalReason)) {
-      return { error: "퇴원 사유를 선택해주세요" };
-    }
-    if (!date) return { error: "퇴원일을 입력해주세요" };
-    // 세부 사유(선택)는 그 대분류의 것만 · '기타'는 메모 필수(원장 2026-10-15 사유 2단계 — `reason-detail.ts`).
-    const checked = checkReasonInput({ reason: reasonStr as WithdrawalReason, detail: detailStr, memo });
-    if (checked.error !== undefined) return { error: checked.error };
-
-    const metadata: WithdrawalMetadata = {
-      reason: reasonStr as WithdrawalReason,
-      ...(checked.detail ? { detail: checked.detail } : {}),
-      memo,
-      consultation: {
-        adminCalledParent: false,
-        teacherCalledParent: false,
-        talkedWithStudent: false,
-      },
-    };
-
-    // 🔴 **퇴원일이 미래면 예약만 한다**(원장 2026-09-28 *"퇴원이 미래인학생은 퇴원당일전까지 '재원'임"*) — 상태·수강은
-    //    그대로 두고 퇴원일·사유만 적는다. 그날 00:05 cron(`/api/cron/apply-due-withdrawals`)이 **아래와 같은 함수**
-    //    (`closeActiveEnrollmentsClamped`)로 상태를 퇴원으로 바꾸고 수강을 닫는다. 예전엔 저장 즉시 status='withdrawn'이라
-    //    운영실 재원·퇴원 어디에도 안 잡혔고(퇴원은 '오늘까지'만 센다), 수강 종료일을 미리 박아 과목별 재원·재원생 구성에서도
-    //    먼저 빠졌다(운영 기간 종료 cron과 같은 이유 — "종료일 비었음 = 수강 중"인 곳이 많다).
-    //    '퇴원 예약' 표식 = status가 퇴원이 아닌데 withdrawn_at이 있다(복구·예약 취소는 둘 다 비운다).
-    if (date > kstToday()) {
-      const { data: schRows, error: schErr } = await supabase
-        .from("students")
-        .update({ withdrawn_at: date, withdrawal_metadata: metadata })
-        .eq("id", id)
-        // 예약은 **재원·휴원**만(학생 폼과 같은 규칙 — withdrawal-plan.ts) · 이미 퇴원이면 0행.
-        .in("status", ["enrolled", "on_hold"])
-        .select("id");
-      if (schErr) return { error: dbWhy(schErr, "students.status.scheduleWithdrawal", "퇴원 예약을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.") };
-      if (!schRows || schRows.length === 0)
-        return { error: "재원·휴원 학생만 퇴원 예약을 걸 수 있습니다. 화면을 새로고침해 주세요." };
-      await writeStatusLog({ scheduled: true });
-      revalidatePath(`/students/${id}`);
-      revalidatePath("/students");
-      revalidatePath("/withdrawals");
-      return { ok: true };
-    }
-
-    // 닫힐 수강을 **닫기 전에** 읽어 둔다 — 감사로그에 어느 반이 종료 대상이었는지 싣기 위해서다.
-    // (조회 실패는 퇴원을 막지 않는다: 기록이 조금 얇아질 뿐, 상태 전환이 더 중요하다.)
-    const { rows: closingRows } = await listOpenEnrollments(supabase, id);
-
-    const { error: stuErr } = await supabase
-      .from("students")
-      .update({
-        status: "withdrawn",
-        withdrawn_at: date,
-        withdrawal_metadata: metadata,
-      })
-      .eq("id", id);
-    if (stuErr) return { error: dbWhy(stuErr, "students.status.withdraw", "퇴원 처리를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.") };
-    await writeStatusLog({
-      enrollmentIds: closingRows.map((r) => r.id),
-      classIds: closingRows.map((r) => r.classId),
-    });
-
-    // 활성 enrollment 종료 (미래 시작 수강은 end_date=start_date로 클램프 — daterange 에러 방지).
-    const enrErr = await closeActiveEnrollmentsClamped(supabase, id, date, { withdrawal_reason: reasonStr });
-    if (enrErr) return { error: enrErr };
-    // 수학 퇴원이면 '퇴원생 관리 차트' 시트에 적는다(원장 2026-10-07) — 응답 뒤에, 실패해도 퇴원은 그대로.
-    const sheetTenant = user.tenantId;
-    after(() => recordMathWithdrawalToSheet({ tenantId: sheetTenant, studentId: id, date }));
-  } else if (target === "on_hold") {
+  if (target === "on_hold") {
     const { error: stuErr } = await supabase
       .from("students")
       .update({ status: "on_hold" })
@@ -757,7 +660,8 @@ export async function changeStudentStatus(
 
 /**
  * **퇴원 예약 취소** — 미래 퇴원일로 저장해 둔 예약(상태는 재원·휴원, `withdrawn_at`만 있음)을 지운다.
- * 원장 2026-09-28 *"퇴원이 미래인학생은 퇴원당일전까지 '재원'"* — 예약은 상태 변경 창의 퇴원(미래 날짜)으로 걸고, 여기서만 푼다.
+ * 원장 2026-09-28 *"퇴원이 미래인학생은 퇴원당일전까지 '재원'"* — 예전엔 상태 변경 창의 퇴원(미래 날짜)으로 걸었고, 여기서만 푼다.
+ * 2026-10-23부터 새 예약은 걸 수 없다(퇴원은 퇴원보고서로만 — 미래 날짜 퇴원은 보고서가 그날 처리한다). 이미 걸린 예약을 푸는 문은 남긴다.
  * 🔴 이미 퇴원 처리된 학생(status='withdrawn')은 대상이 아니다 — 그건 '재원으로 복구'(수강 재개까지 함께)다.
  */
 export async function cancelScheduledWithdrawal(
@@ -846,6 +750,9 @@ export async function endStudentEnrollments(
   if (targets.length === 0) {
     return { error: "종료할 수 있는 수강이 없습니다. 화면을 새로고침한 뒤 다시 시도해 주세요." };
   }
+  // 🔴 고른 수강을 끝내면 이어지는 반이 하나도 없으면 사실상 퇴원이다 — 퇴원보고서로(원장 2026-10-23). 시간표 확인 문구와 같은 판정.
+  const lastCourse = await lastCourseViaReport(supabase, { studentId, enrollmentIds: targets.map((t) => t.id), date });
+  if (lastCourse) return { error: lastCourse };
 
   for (const t of targets) {
     // 세부·메모는 수강 행에 함께 남긴다(0367a `withdrawal_detail`·`withdrawal_memo` — 퇴원관리 명단·사유 카드가 읽는다).
@@ -1044,6 +951,10 @@ export async function endSingleEnrollment(
   const reason = picked.reason;
 
   const supabase = await createClient();
+  // 🔴 학생이 다니는 마지막 반이면 끝내지 않는다 — 끝내면 사실상 퇴원이라 퇴원보고서로(원장 2026-10-23). 반·학생 상세의 수강 종료 창과
+  //    시간표(Delete · 퇴원 칸 끌기)가 모두 이 액션을 지난다. 판정은 시간표 확인 문구와 같다(`endScopeFor`).
+  const lastCourse = await lastCourseViaReport(supabase, { studentId: studentId || null, enrollmentIds: [enrollmentId], date });
+  if (lastCourse) return { error: lastCourse };
   // 종료 규약(미래 시작 클램프 + withdrawal_reason)은 공용 원시함수 한 곳에 있다 — 퇴원 다이얼로그의
   // 부분 종료(endStudentEnrollments)도 같은 함수를 돈다(#77: 표면마다 다시 짜면 한쪽만 고쳐진다).
   const res = await endEnrollmentById(supabase, enrollmentId, date, reason, { detail: picked.detail, memo: picked.memo }, studentId || undefined);

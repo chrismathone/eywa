@@ -361,8 +361,10 @@ export function StudentForm({
               defaultValue={v.status}
               className={inputClass}
             >
+              {/* 🔴 지금 다니는 학생을 이 폼으로 퇴원시키지 않는다 — 퇴원은 퇴원보고서로만(원장 2026-10-23). 퇴원 학생 고치기·새 원생을
+                  지난 퇴원 상태로 등록(옛 기록)은 그대로. 서버가 같은 판정으로 다시 거절한다(`formWithdrawalViaReport`). */}
               {Object.entries(STATUS_LABEL).map(([k, label]) => (
-                canManageStatus || !["on_hold", "withdrawn"].includes(k) ?
+                (canManageStatus || !["on_hold", "withdrawn"].includes(k)) && (k !== "withdrawn" || mode === "create" || v.status === "withdrawn") ?
                 <option key={k} value={k}>
                   {label}
                 </option> : null
@@ -379,7 +381,9 @@ export function StudentForm({
               className={inputClass}
             />
           </Field>
-          {canManageStatus ? <Field
+          {/* 퇴원일 칸은 새 원생 등록(지난 퇴원 기록)과 이미 퇴원한 학생에게만 — 재원·휴원 학생의 퇴원·퇴원 예약은 퇴원보고서로
+              (원장 2026-10-23). 칸을 안 보내면 서버가 저장된 값(걸려 있던 예약 포함)을 그대로 둔다. */}
+          {canManageStatus && (mode === "create" || v.status === "withdrawn") ? <Field
             label="퇴원일"
             htmlFor="withdrawnAt"
             error={errors.withdrawnAt}
@@ -391,7 +395,7 @@ export function StudentForm({
               defaultValue={v.withdrawnAt ?? ""}
               className={inputClass}
             />
-          </Field> : <p className="text-sm text-muted-foreground">퇴원·휴원·복구와 퇴원 예약은 원생 상태 변경 담당자가 처리합니다.{v.withdrawnAt ? ` 퇴원일: ${v.withdrawnAt}` : ""}</p>}
+          </Field> : canManageStatus ? <p className="text-sm text-muted-foreground">퇴원은 원생 화면의 &lsquo;퇴원보고서&rsquo;에서 처리합니다.{v.withdrawnAt ? ` 퇴원 예정일: ${v.withdrawnAt}(예약 취소는 원생 화면에서)` : ""}</p> : <p className="text-sm text-muted-foreground">휴원·복구는 원생 상태 변경 담당자가, 퇴원은 &lsquo;퇴원보고서&rsquo;로 처리합니다.{v.withdrawnAt ? ` 퇴원일: ${v.withdrawnAt}` : ""}</p>}
           {/* 새 퇴원·퇴원 예약이면 사유를 고른다(원장 2026-10-15 *"기타는 모든 곳을 일치하게"*) — 서버와 같은 판정. */}
           <WithdrawalReasonSlot
             formRef={formRef}

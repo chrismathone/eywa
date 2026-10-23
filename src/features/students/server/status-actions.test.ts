@@ -10,6 +10,9 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: m.client }));
 vi.mock("@/features/audit/server/log", () => ({ logAction: m.audit }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/server", () => ({ after: vi.fn() }));
+const gate = vi.hoisted(() => ({ lastCourse: vi.fn(async (): Promise<string | null> => null) }));
+vi.mock("@/features/withdrawals/server/via-report", () => ({ lastCourseViaReport: gate.lastCourse }));
+import { SCHEDULE_VIA_REPORT, WITHDRAWAL_VIA_REPORT } from "@/features/withdrawals/via-report";
 import { createStudent, updateStudent, changeStudentStatus, cancelScheduledWithdrawal, endStudentEnrollments,
   setStudentEnrollmentHolds, holdSingleEnrollment, endSingleEnrollment } from "./actions";
 import { reactivateStudent } from "@/features/withdrawals/server/actions";
@@ -106,5 +109,38 @@ describe("actual student actions reject status changes before side effects", () 
     q.then = (done: (value: unknown) => unknown) => Promise.resolve({ error: null }).then(done);
     expect((await endEnrollmentById({ from: () => q } as never, "enrollment", "2026-10-15", "grades", { detail: "detail", memo: "memo" }, "student")).error).toBeNull();
     expect(m.update).toHaveBeenCalledWith({ end_date: "2026-10-15", withdrawal_reason: "grades", withdrawal_detail: "detail", withdrawal_memo: "memo" });
+  });
+});
+
+/** 원장 2026-10-23 *"퇴원 보고서를 써야 퇴원처리가 가능하도록"* — 상태 변경 담당자도 직접 퇴원·새 예약·마지막 반 종료를 못 한다. */
+describe("퇴원은 퇴원보고서로만 — 서버가 거절한다(#77)", () => {
+  beforeEach(() => { m.allowed = true; gate.lastCourse.mockReset(); gate.lastCourse.mockResolvedValue(null); });
+  it("상태 전환 창의 퇴원(오늘·미래)은 DB를 건드리기 전에 거절", async () => {
+    for (const date of ["2026-10-01", "2099-01-01"]) {
+      const fd = form(); fd.set("target", "withdrawn"); fd.set("reason", "relocation"); fd.set("date", date);
+      expect((await changeStudentStatus(undefined, fd))?.error).toBe(WITHDRAWAL_VIA_REPORT);
+    }
+    expect(m.client).not.toHaveBeenCalled(); expect(m.audit).not.toHaveBeenCalled();
+  });
+  it("학생 수정 폼 — 퇴원으로 바꾸기 · 예약 날짜 바꾸기는 거절, 걸린 예약 그대로 · 예약 취소는 저장", async () => {
+    expect((await updateStudent(undefined, form("withdrawn", "2026-01-01")))?.error).toBe(WITHDRAWAL_VIA_REPORT);
+    expect((await updateStudent(undefined, form("enrolled", "2099-04-01")))?.error).toBe(SCHEDULE_VIA_REPORT);
+    expect(m.update).not.toHaveBeenCalled(); expect(m.audit).not.toHaveBeenCalled();
+    expect((await updateStudent(undefined, form("enrolled", "2099-03-01")))?.ok).toBe(true);
+    expect(m.update.mock.calls.at(-1)?.[0]).toMatchObject({ status: "enrolled", withdrawn_at: "2099-03-01" });
+    expect((await updateStudent(undefined, form("enrolled", "")))?.ok).toBe(true);
+    expect(m.update.mock.calls.at(-1)?.[0]).toMatchObject({ status: "enrolled", withdrawn_at: null, withdrawal_metadata: null });
+    expect(m.audit.mock.calls.at(-1)?.[0].metadata).toMatchObject({ cancelledWithdrawal: "2099-03-01" });
+  });
+  it("새 원생에 퇴원 예약은 거절(지난 퇴원 기록 등록은 사유를 받고 통과)", async () => {
+    expect((await createStudent(undefined, form("enrolled", "2099-05-01")))?.fieldErrors?.withdrawnAt).toBe(SCHEDULE_VIA_REPORT);
+    expect(m.client).not.toHaveBeenCalled();
+  });
+  it("마지막 반 수강 종료는 게이트 문구 그대로 거절 — 쓰기·감사로그 전에", async () => {
+    gate.lastCourse.mockResolvedValue("마지막 반");
+    const fd = form(); fd.set("reason", "graduated");
+    expect((await endSingleEnrollment(undefined, fd))?.error).toBe("마지막 반");
+    expect(gate.lastCourse).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ studentId: "student", enrollmentIds: ["enrollment"] }));
+    expect(m.update).not.toHaveBeenCalled(); expect(m.audit).not.toHaveBeenCalled();
   });
 });
