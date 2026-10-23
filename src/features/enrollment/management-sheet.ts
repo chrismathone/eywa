@@ -1,16 +1,36 @@
 import type { GroupsOf } from "@/features/dashboard/layout/slices";
+import { STALL_WINDOW_DAYS } from "@/features/dashboard/overview/consultation-progress";
+import { daysBetween } from "@/features/newcomers/onboarding-items";
+import type { TipCard } from "@/components/hover-tip/tip";
 
 /**
  * 통계 보기 **관리현황**(원장 2026-10-22 *"콜&상담 관리현황을 한 눈에 보기 쉽게 … 상담대비 완료율이 표시되지 않는다 · 수학, 영어 과목별
- * 재원생수가 제대로 체크되지 않는다 · 시트처럼 한눈에"* → *"통계뷰를 의미함"*) — 달마다 상담·등록·미등록·진행 중 · 완료율(등록 ÷ 상담),
- * 과목 묶음마다 상담·등록·완료율을 한 장에.
+ * 재원생수가 제대로 체크되지 않는다 · 시트처럼 한눈에"* → *"통계뷰를 의미함"*) — 달마다 상담·등록·재원·미등록·진행 중·장기 미결 ·
+ * 완료율(등록 ÷ 상담), 과목 묶음마다 상담·등록·재원·완료율을 한 장에.
  *
- * 🔑 달 = 상담일(`consulted_at` KST) · 상태 = 칸반과 같은 묶음(등록 = enrolled · 미등록 = declined·no_show · 그 밖 = 진행 중) —
- *    위 헤드라인·'월별 상담·등록'(DB 함수 `consultation_monthly_stats`)과 같은 축이라 달 합계가 같다.
+ * 🔑 달 = 상담일(`consulted_at` KST) · 상태 = 칸반과 같은 묶음(등록 = enrolled · 미등록 = declined·no_show · 그 밖 = 미결) —
+ *    위 헤드라인·'월별 상담·등록'(DB 함수 `consultation_monthly_stats`)과 같은 축이라 달 합계가 같다. 🔴 '등록'은 상태(outcome)로만 센다
+ *    (반 배정으로 칸반 '등록 완료'에 선 상담을 더하면 헤드라인과 갈린다).
+ * 🔑 미결 = **진행 중**(상담일 60일 이내) · **장기 미결**(상담일 기준 60일 넘게 결정 없음 — 오늘 이후 다음 상담일이 잡혔으면 진행 중).
+ *    60 = 운영실 '상담 진행'의 멈춤 창(`STALL_WINDOW_DAYS`). 🔴 운영실 '멈춘 상담'(7일·입테 3일)과 기준이 달라 그 이름을 쓰지 않는다(2026-10-23).
+ *    장기 미결도 완료율 분모에 남는다.
+ * 🔑 재원 = 그 칸의 **등록 상담에 이어진 학생** 중 오늘 그 묶음 반에 다니는 **사람 수** — 판정은 원생목록과 같은 재원 판정
+ *    (`loadActiveEnrolledEnrollments` + `enrolledSubjectCounts`: 재원 상태 · 휴원 제외 · 종료일 없음 · 시작일 도래)을 호출부가 넘긴다.
+ *    같은 학생의 반복 상담·여러 반은 한 명 · 기간 합계도 달별 인원을 더하지 않고 다시 센다. 전체 칸은 어느 묶음 반이든.
  * 🔑 과목 = 신규 문의 추이와 같은 판정(`intakeGroupsOf`) — 두 과목 문의는 양쪽 묶음에 든다(그래서 묶음 합 ≥ 전체) · 못 읽으면 '과목 모름'.
  * 순수 함수(Vitest).
  */
-export type SheetCell = { total: number; enrolled: number; declined: number; open: number };
+export type SheetCell = {
+  total: number;
+  enrolled: number;
+  declined: number;
+  /** 진행 중 — 결정 없음 · 상담일 60일 이내(또는 오늘 이후 다음 상담일이 잡힘). */
+  open: number;
+  /** 장기 미결 — 결정 없음 · 상담일 기준 60일 넘음 · 오늘 이후 다음 상담일 없음. */
+  longOpen: number;
+  /** 지금 재원(사람 수) — 이 칸 등록 상담에 이어진 학생 중 오늘 그 묶음 반에 다니는 학생. 재원을 못 읽었으면 null. */
+  attending: number | null;
+};
 export type SheetMonth = { month: string; all: SheetCell; groups: Record<string, SheetCell>; unknown: number };
 export type ManagementSheet = {
   /** 최신 달이 위(시트처럼 내려 읽는다) — 상담이 있는 달만. */
@@ -18,15 +38,46 @@ export type ManagementSheet = {
   /** 기간 합 상담이 많은 순. */
   groups: string[];
   total: { all: SheetCell; groups: Record<string, SheetCell>; unknown: number };
+  /** 원생이 이어진 등록 상담 수 — 재원은 이것만 따라갈 수 있다(화면이 'L/R건'으로 밝힌다). */
+  linked: number;
+  /** 재원 기준일(오늘 KST). */
+  asOf: string;
 };
-export type SheetRow = { month: string; subject: string | null; outcome: string };
+export type SheetRow = {
+  month: string;
+  subject: string | null;
+  outcome: string;
+  /** 상담일 KST(`consulted_at`). */
+  consultedOn: string;
+  /** 다음 상담일(`follow_up_date`) — 오늘 이후면 장기 미결이 아니다. */
+  followUpDate: string | null;
+  studentId: string | null;
+};
+/** 이 학생들 중 오늘 재원인 사람 수 — `group`이 있으면 그 묶음 반, null이면 어느 반이든(원생목록 재원 판정, 호출부가 만든다). */
+export type AttendingCounter = (studentIds: readonly string[], group: string | null) => number;
 
-const empty = (): SheetCell => ({ total: 0, enrolled: 0, declined: 0, open: 0 });
+const isDecided = (outcome: string) => outcome === "enrolled" || outcome === "declined" || outcome === "no_show";
 
-function add(cell: SheetCell, outcome: string): void {
+/** 장기 미결 — 결정 없음 · 상담일 기준 `STALL_WINDOW_DAYS`(60일) 넘게 지남 · 오늘 이후 다음 상담일 없음. */
+export function isLongOpen(row: Pick<SheetRow, "outcome" | "consultedOn" | "followUpDate">, today: string): boolean {
+  if (isDecided(row.outcome)) return false;
+  const next = row.followUpDate?.slice(0, 10);
+  if (next && next >= today) return false;
+  return daysBetween(row.consultedOn, today) > STALL_WINDOW_DAYS;
+}
+
+type Acc = { cell: SheetCell; students: Set<string> };
+const empty = (): SheetCell => ({ total: 0, enrolled: 0, declined: 0, open: 0, longOpen: 0, attending: null });
+const acc = (): Acc => ({ cell: empty(), students: new Set() });
+
+function add(a: Acc, row: SheetRow, longOpen: boolean): void {
+  const cell = a.cell;
   cell.total += 1;
-  if (outcome === "enrolled") cell.enrolled += 1;
-  else if (outcome === "declined" || outcome === "no_show") cell.declined += 1;
+  if (row.outcome === "enrolled") {
+    cell.enrolled += 1;
+    if (row.studentId) a.students.add(row.studentId);
+  } else if (row.outcome === "declined" || row.outcome === "no_show") cell.declined += 1;
+  else if (longOpen) cell.longOpen += 1;
   else cell.open += 1;
 }
 
@@ -35,33 +86,76 @@ export function completionRate(cell: SheetCell): number | null {
   return cell.total > 0 ? Math.round((cell.enrolled / cell.total) * 100) : null;
 }
 
-export function buildManagementSheet(rows: readonly SheetRow[], groupsOf: GroupsOf): ManagementSheet {
-  const byMonth = new Map<string, SheetMonth>();
-  const total = { all: empty(), groups: {} as Record<string, SheetCell>, unknown: 0 };
+/**
+ * 완료율 칸 마우스 오버 카드 — **내역만**(2026-10-23 Codex 검토: '결정된 상담 중 등록 %'를 나란히 두면 미결이 많은 달에 100%가 먼저 읽힌다).
+ * 상담이 없으면 카드 없음.
+ */
+export function completionTipCard(cell: SheetCell, scope: string): TipCard | null {
+  if (cell.total === 0) return null;
+  const n = (v: number) => `${v.toLocaleString("ko-KR")}건`;
+  return {
+    title: `${scope} 완료율`,
+    rows: [
+      ["상담", n(cell.total)],
+      ["등록", n(cell.enrolled)],
+      ["미등록", n(cell.declined)],
+      ["진행 중", n(cell.open)],
+      ["장기 미결", n(cell.longOpen)],
+    ],
+    lines: ["등록 ÷ 상담 — 위 '등록 전환율'과 같은 산식"],
+  };
+}
+
+export function buildManagementSheet(
+  rows: readonly SheetRow[],
+  groupsOf: GroupsOf,
+  opts: { today: string; attending: AttendingCounter | null },
+): ManagementSheet {
+  type MonthAcc = { month: string; all: Acc; groups: Record<string, Acc>; unknown: number };
+  const byMonth = new Map<string, MonthAcc>();
+  const total = { all: acc(), groups: {} as Record<string, Acc>, unknown: 0 };
+  let linked = 0;
   for (const row of rows) {
-    const m = byMonth.get(row.month) ?? { month: row.month, all: empty(), groups: {}, unknown: 0 };
+    const m = byMonth.get(row.month) ?? { month: row.month, all: acc(), groups: {}, unknown: 0 };
     byMonth.set(row.month, m);
-    add(m.all, row.outcome);
-    add(total.all, row.outcome);
+    const longOpen = isLongOpen(row, opts.today);
+    if (row.outcome === "enrolled" && row.studentId) linked += 1;
+    add(m.all, row, longOpen);
+    add(total.all, row, longOpen);
     const groups = [...new Set(groupsOf(row.subject))];
     if (groups.length === 0) {
       m.unknown += 1;
       total.unknown += 1;
     }
     for (const g of groups) {
-      add((m.groups[g] ??= empty()), row.outcome);
-      add((total.groups[g] ??= empty()), row.outcome);
+      add((m.groups[g] ??= acc()), row, longOpen);
+      add((total.groups[g] ??= acc()), row, longOpen);
     }
   }
-  const groups = Object.keys(total.groups).sort((a, b) => total.groups[b]!.total - total.groups[a]!.total || a.localeCompare(b));
-  const months = [...byMonth.values()].sort((a, b) => b.month.localeCompare(a.month));
-  return { months, groups, total };
+  // 재원 = 그 칸의 학생 집합을 오늘 기준으로 센다(사람 단위 — 합계도 달별 수를 더하지 않고 합집합을 다시 센다).
+  const finish = (a: Acc, group: string | null): SheetCell => ({
+    ...a.cell,
+    attending: opts.attending ? (a.students.size ? opts.attending([...a.students], group) : 0) : null,
+  });
+  const finishGroups = (gs: Record<string, Acc>) => Object.fromEntries(Object.entries(gs).map(([g, a]) => [g, finish(a, g)]));
+  const groups = Object.keys(total.groups).sort((a, b) => total.groups[b]!.cell.total - total.groups[a]!.cell.total || a.localeCompare(b));
+  const months = [...byMonth.values()]
+    .sort((a, b) => b.month.localeCompare(a.month))
+    .map((m) => ({ month: m.month, all: finish(m.all, null), groups: finishGroups(m.groups), unknown: m.unknown }));
+  return {
+    months,
+    groups,
+    total: { all: finish(total.all, null), groups: finishGroups(total.groups), unknown: total.unknown },
+    linked,
+    asOf: opts.today,
+  };
 }
 
 /**
  * 관리현황 **등록 후 퇴원**(원장 2026-10-22 메모 *"퇴원일자 통일 · 퇴원보고서 연동 · 콜앤상담 연동"* → 해석 승인 *"그렇게해"*) —
- * 그 달 상담으로 **등록한** 학생(상담에 이어진 원생) 중 상담일 뒤에 퇴원한 학생. 퇴원 판정·퇴원일은 퇴원관리·운영실과 같은 목록
+ * 그 달 상담으로 **등록한** 학생(상담에 이어진 원생) 중 **지금 퇴원 상태인** 학생(상담일 뒤 퇴원). 퇴원 판정·퇴원일은 퇴원관리·운영실과 같은 목록
  * (`getWithdrawalsInWindow` — 병합·수업 기록 없는 장부 정리·퇴원 예약 제외)에서만 가져온다(같은 데이터는 같은 원본).
+ * ⚠️ 그 목록은 **지금 퇴원 상태인 학생만** 읽는다 — 퇴원했다가 다시 등록한 학생의 지난 퇴원은 안 센다(누적 퇴원 이력이 아니다 · 화면 문구가 밝힌다).
  * 한 학생이 두 과목을 따로 상담해 둘 다 등록했으면 그 달엔 한 명(학생 단위) · 합계도 학생 단위.
  */
 export type ExitCohortRow = { month: string; studentId: string; consultedOn: string };
