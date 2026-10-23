@@ -2,7 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { CLASS_COLUMNS, ENROLLMENT_COLUMNS, SCHEDULE_COLUMNS, paged, toTransitions, transitionRows } from "@/features/teacher-portfolio/server/churn-source";
-import type { SnapshotClass, SnapshotEnrollment, SnapshotSchedule, SnapshotUser } from "@/features/teacher-portfolio/model/types";
+import type { SnapshotClass, SnapshotEnrollment, SnapshotSchedule } from "@/features/teacher-portfolio/model/types";
 import type { ContributionInvoice } from "../model/billing";
 import type { ContributionStudent, ContributionConsultation, CoreSources, HistoryLink, RawHistoryBill } from "./source-types";
 
@@ -14,7 +14,7 @@ export async function loadCoreSources(db: SupabaseClient, tenant: string): Promi
     paged<SnapshotClass>((a, b) => table("classes", CLASS_COLUMNS).order("id").range(a, b)),
     paged<SnapshotEnrollment>((a, b) => table("enrollments", ENROLLMENT_COLUMNS).order("id").range(a, b)),
     paged<SnapshotSchedule>((a, b) => table("class_schedules", SCHEDULE_COLUMNS).order("id").range(a, b)),
-    paged<SnapshotUser>((a, b) => table("users", "id, display_name, status, subjects").order("id").range(a, b)),
+    paged<CoreSources["users"][number]>((a, b) => table("users", "id, display_name, english_name, status, subjects").order("id").range(a, b)),
     paged<ContributionInvoice>((a, b) => table("invoices", "id, student_id, period, status, category, line_items, amount_total, amount_paid").gte("period", "2026-01").order("id").range(a, b)),
     paged<ContributionConsultation>((a, b) => table("enrollment_consultations", "id, student_id, prospect_name, prospect_school, prospect_grade, parent_phone, referrer_student_id, referrer_staff_id, referrer_name, consultation_date, received_date, created_at, subject, consultation_path, parent_request, safety_notes, follow_up_content").order("id").range(a, b)),
     paged<HistoryLink>((a, b) => table("makeedu_history_students", "makeedu_no, student_id").order("makeedu_no").range(a, b)),

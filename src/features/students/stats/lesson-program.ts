@@ -23,6 +23,7 @@
  */
 import { ENGLISH_TRACK_LABEL } from "@/features/classes/english-track";
 import { subjectGroupOf, type ProgramSubject } from "@/features/students/enrollment/program";
+import { subjectNameText } from "./lesson-subject-name";
 
 /** 'eie' · 'injaewon' · 'math' 또는 그 밖의 과목 키(설정 키 그대로). */
 export type LessonProgram = string;
@@ -32,15 +33,13 @@ export type LessonStaff = { names: readonly (string | null | undefined)[]; subje
 
 const LEVEL = "(?:초중등|초등|중등|고등|중고|예비중등|예비고등|예비고|예비중|고[1-3]|중[1-3]|초[1-6])";
 const LETTER = new RegExp(`${LEVEL}\\s*\\d?\\s*([EM])(?![A-Za-z])`);
-/** 과목 이름을 품었지만 과목이 아닌 낱말 — '중국어'의 '국어', '과학고'의 '과학'. */
-const NOT_SUBJECT = ["중국어", "외국어", "한국어", "과학고", "수학여행"];
 const WEEKDAYS = "월화수목금토일";
 /** 한국 성(흔한 것) — 'OOO반'·'(OOO)'를 사람 이름으로 볼 때만('정규반'·'(월목)'·'의치대반'은 강사가 아니다). */
 const SURNAMES = "김이박최정강조윤장임한오서신권황안송류유전홍고문양손배백허남심노하곽성차주우구민진나지엄채원천방공현함변염여추도석선설마길연위표명기반왕금옥육인맹제모탁국어은편용예봉경사부가복태판소라승동피감음빈호상범좌팽";
 /** 한 과목에서만 쓰는 수업 낱말 → 묶음(설정에 그 묶음이 있을 때만) — 과목 이름이 안 적힌 옛 수업명('초5Bridge-TOP'·'[특강] 중1도형특강'). */
 const SUBJECT_WORDS: readonly [RegExp, string][] = [
-  [/phonics|bridge|브릿지|reading|리딩|영문법|영특/i, "english"],
-  [/수\((?:상|하)\)|미적분?|확통|기하|도형|대수/, "math"],
+  [/phonics|bridge|브릿지|reading|리딩|영문법|영특|영작|어법|shadowing/i, "english"],
+  [/수\((?:상|하|II?|Ⅰ|Ⅱ)\)|(?:공수|고등수|수학)\s*[12]|(?<![가-힣A-Za-z])수\s*(?:[12]|II?|Ⅰ|Ⅱ)(?![A-Za-z0-9])|미적분?|확통|기하|도형|대수|함수|고등\s*하(?=\s|$)|(?<![A-Za-z])KUT(?![A-Za-z])/i, "math"],
 ];
 const PURITY = 0.9;
 const MIN_ROWS = 10;
@@ -48,7 +47,7 @@ const MIN_NAMES = 2;
 const MIN_WORD_NAMES = 3;
 const AMBIGUOUS = Symbol("ambiguous");
 type Group = string | typeof AMBIGUOUS | null;
-type NameTable = { hangul: [string, string][]; latin: [RegExp, string][] };
+type NameTable = { hangul: [string, string][]; latin: [RegExp, string][]; labels: string[] };
 type Tokens = { teacher: Map<string, string>; word: Map<string, string> };
 
 function nameTable(subjects: readonly ProgramSubject[]): NameTable {
@@ -56,7 +55,7 @@ function nameTable(subjects: readonly ProgramSubject[]): NameTable {
   for (const s of subjects) {
     const g = subjectGroupOf(s.key, subjects);
     if (!g) continue;
-    if (s.label.trim()) raw.push([s.label.trim().toLowerCase(), g]);
+    if (s.label.trim()) raw.push([s.label.normalize("NFKC").trim().toLowerCase(), g]);
     // 내부 키('subject_1')는 이름에 안 적힌다 · 짧은 영문 키는 낱말 조각과 헷갈린다.
     if (!s.key.includes("_") && s.key.length >= 4) raw.push([s.key.toLowerCase(), g]);
   }
@@ -65,6 +64,7 @@ function nameTable(subjects: readonly ProgramSubject[]): NameTable {
   const isLatin = (t: string) => /^[a-z0-9 ]+$/.test(t);
   const escape = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return {
+    labels: raw.map(([label]) => label),
     hangul: raw.filter(([t]) => !isLatin(t)),
     // 영문은 낱말로만 — 앞뒤에 영문자가 붙으면 다른 낱말이다('Mathew' ≠ math).
     latin: raw.filter(([t]) => isLatin(t)).map(([t, g]) => [new RegExp(`(?<![a-z])${escape(t)}(?![a-z])`), g]),
@@ -73,8 +73,7 @@ function nameTable(subjects: readonly ProgramSubject[]): NameTable {
 
 /** ②·③ — 이름 하나로 정해지는 묶음(설정 묶음 키). 두 과목이 적혔으면 `AMBIGUOUS`, 못 정하면 null. */
 function explicitGroup(name: string, table: NameTable, groups: ReadonlySet<string>): Group {
-  let text = name.toLowerCase();
-  for (const word of NOT_SUBJECT) text = text.split(word).join(" ");
+  let text = subjectNameText(name, table.labels);
   const found = new Set<string>();
   for (const [label, g] of table.hangul) {
     if (!text.includes(label)) continue;

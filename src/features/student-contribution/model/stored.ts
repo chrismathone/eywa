@@ -1,8 +1,9 @@
 import type { StudentFact, StudentRelation, SourceCoverage } from "@/features/students/ontology/types";
 import type { BuiltMonth } from "./build";
-import type { BillingSeed } from "./billing";
+import type { BillingSeed, SubjectResolution } from "./billing";
 import type { Metric, Raws } from "./config";
 import type { CorrectionDetail } from "./corrections";
+import type { PendingDetail } from "./pending-details";
 
 export type ContributionPayload = {
   evidenceIds: string[];
@@ -13,6 +14,8 @@ export type ContributionPayload = {
   correctionReasons: { metric: Metric; delta: number; reason: string }[];
   corrections?: CorrectionDetail[];
   subjects: string[];
+  unavailableDetails?: PendingDetail[];
+  subjectResolutions?: SubjectResolution[];
 };
 export type StoredContributionMonth = BuiltMonth & {
   studentId: string; computedAt: string; historical: BillingSeed[]; unavailable: Metric[]; payload: ContributionPayload;

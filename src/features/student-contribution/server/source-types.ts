@@ -10,5 +10,6 @@ export type HistoryLink = { makeedu_no: string; student_id: string | null };
 export type RawHistoryBill = { makeedu_no: string; bill_month: string; seq: number; item_kind: string; item_name: string | null;
   billed: number | string; paid: number | string; refunded: boolean };
 export type CoreSources = { students: ContributionStudent[]; classes: SnapshotClass[]; enrollments: SnapshotEnrollment[];
-  schedules: SnapshotSchedule[]; transitions: SnapshotTransition[]; users: SnapshotUser[];
-  invoices: ContributionInvoice[]; consultations: ContributionConsultation[]; historyLinks: HistoryLink[] };
+  schedules: SnapshotSchedule[]; transitions: SnapshotTransition[]; users: (SnapshotUser & { english_name?: string | null })[];
+  invoices: ContributionInvoice[]; consultations: ContributionConsultation[]; historyLinks: HistoryLink[];
+  lessonTeachers?: import("../model/subject-evidence").LessonTeacher[] };

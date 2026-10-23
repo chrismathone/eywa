@@ -5,6 +5,7 @@ import { DEFAULT_CONFIG } from "./config";
 import { sumRaws } from "./calc";
 import type { CoreSources, ContributionStudent } from "../server/source-types";
 import type { ActivitySources } from "../server/activity-sources";
+import { CONTRIBUTION_PILOT_TENANT } from "./access";
 
 const student = (id: string): ContributionStudent => ({ id, name: id, school: null, grade: "초5", status: "enrolled", is_test: false, notes: null,
   parent_phone: null, makeedu_id: null, withdrawal_metadata: null });
@@ -48,7 +49,9 @@ it("첫 집계가 중간에 끊겨도 이미 마감한 달은 유지하고 남�
 it("지난달 AI 대기가 남아 있어도 현재 목록은 계산 완료로 표시하지 않는다", () => {
   const input = fixture(); input.activity.pendingSignals.push({ id: "p", studentId: "s", source: "parent", day: "2026-09-01", text: "노력", author: null, hash: "hash" });
   const current = assembleContribution(input).rows.find((r) => r.month === "2026-10")!;
-  expect(current.unavailable).toEqual(expect.arrayContaining(["parentPositiveMonths", "teacherPositiveMonths"]));
+  expect(current.unavailable).toContain("parentPositiveMonths");
+  expect(current.unavailable).not.toContain("teacherPositiveMonths");
+  expect(current.payload.unavailableDetails).toContainEqual(expect.objectContaining({ metric: "parentPositiveMonths", count: 1, months: ["2026-09"] }));
 });
 it("점수가 없는 상담도 학생의 원래 발생 달에 남는다", () => {
   const input = fixture(); input.core.consultations.push({ id: "consult", student_id: "s", referrer_student_id: null, referrer_staff_id: null,
@@ -82,4 +85,42 @@ it("당시 시간표 근거가 없는 옛 수강에는 현재 강사를 소급 �
   const fact = assembleContribution(input).rows.find((r) => r.month === "2025-03")!.payload.facts.find((f) => f.kind === "enrolled")!;
   expect(fact.related).toContainEqual({ kind: "class", id: "c" });
   expect(fact.related.some((r) => r.kind === "teacher")).toBe(false);
+});
+it("검수 출처는 저장 결과에 남고 마감 뒤 새로 확인한 출처도 이번 달에 보존한다", () => {
+  const input = fixture(); input.tenant = CONTRIBUTION_PILOT_TENANT;
+  input.settings.operations.subjects.push({ ...input.settings.operations.subjects[0]!, key: "english", label: "영어" });
+  input.core.historyLinks.push({ makeedu_no: "10903", student_id: "s" });
+  const bill = { makeedu_no: "10903", bill_month: "2022-08-01", seq: 1, item_kind: "lesson", item_name: "(재원생여름특강)", billed: 20000, paid: 20000, refunded: false };
+  const beforeReview = assembleContribution({ ...input, tenant: "other-campus", history: [bill] });
+  const first = assembleContribution({ ...input, history: [bill] });
+  const expected = expect.objectContaining({ billId: "10903:2022-08-01:1", month: "2022-08", subject: "english", basis: "reviewed_source",
+    reference: expect.stringContaining("1sf6lEWVGmOssGiKwtW0o8CSjbssZTcweTDJsAO25WvQ") });
+  expect(first.rows.find(r => r.month === "2022-08")!.historical[0]!.subjectResolutions).toContainEqual(expected);
+  const corrected = assembleContribution({ ...input, history: [bill], stored: beforeReview.rows, historyReady: true });
+  expect(corrected.rows.find(r => r.month === "2022-08")).toEqual(beforeReview.rows.find(r => r.month === "2022-08"));
+  expect(corrected.rows.find(r => r.month === "2026-10")!.payload.subjectResolutions).toContainEqual(expected);
+  expect(corrected.rows.find(r => r.month === "2026-10")!.correction.subjectMonths).toBe(1);
+});
+it("정확한 청구를 대조한 검수 결과를 현재 반 이름에 의한 추정보다 우선한다", () => {
+  const input = fixture(); input.tenant = CONTRIBUTION_PILOT_TENANT;
+  input.settings.operations.subjects.push({ ...input.settings.operations.subjects[0]!, key: "english", label: "영어" });
+  input.core.historyLinks.push({ makeedu_no: "10903", student_id: "s" });
+  input.core.classes.push({ id: "c", class_name: "(재원생여름특강)", subject: "math", english_track: null, teacher_id: null,
+    is_active: true, closed_at: null, report_optout: false, is_makeup_pool: false });
+  const history = [{ makeedu_no: "10903", bill_month: "2022-08-01", seq: 1, item_kind: "lesson", item_name: "(재원생여름특강)", billed: 20000, paid: 20000, refunded: false }];
+  const row = assembleContribution({ ...input, history }).rows.find(r => r.month === "2022-08")!;
+  expect(row.historical[0]!.subjects).toEqual(["english"]);
+});
+it("원장 확인으로 해소한 과목은 확인 전 표시를 지우고 확인 근거를 현재 달에 남긴다", () => {
+  const input = fixture(); input.tenant = CONTRIBUTION_PILOT_TENANT;
+  input.core.historyLinks.push({ makeedu_no: "09417", student_id: "s" });
+  const history = [{ makeedu_no: "09417", bill_month: "2024-02-01", seq: 5, item_kind: "lesson", item_name: "중등3T 월수목", billed: 278000, paid: 278000, refunded: false }];
+  const before = assembleContribution({ ...input, tenant: "other-campus", history });
+  expect(before.rows.find(r => r.month === "2026-10")!.unavailable).toContain("subjectMonths");
+  const after = assembleContribution({ ...input, history, historyReady: true, stored: before.rows });
+  expect(after.rows.find(r => r.month === "2024-02")).toEqual(before.rows.find(r => r.month === "2024-02"));
+  const current = after.rows.find(r => r.month === "2026-10")!;
+  expect(current.unavailable).not.toContain("subjectMonths");
+  expect(current.correction.subjectMonths).toBe(1);
+  expect(current.payload.subjectResolutions).toContainEqual(expect.objectContaining({ subject: "math", basis: "owner_confirmed", reference: expect.stringContaining("원장 확인") }));
 });

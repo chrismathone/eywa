@@ -12,6 +12,7 @@ import { ContributionHeader } from "./contribution-shell";
 import { ListPager } from "./list-pager";
 import { ScoreBreakdown } from "./score-breakdown";
 import { fieldClass, numberText } from "./presentation";
+import { PendingBadge } from "./pending-badge";
 type Data = NonNullable<Awaited<ReturnType<typeof getContributionList>>>;
 export const pointsText = numberText;
 export function ContributionList({ data }: { data: Data }) {
@@ -56,7 +57,7 @@ export function ContributionList({ data }: { data: Data }) {
         {["학생", "학교·학년", "누적 기여도", "운영 기여", "학습·참여", "최근 12개월"].map((label, index) => <th key={label} className={`whitespace-nowrap px-5 py-3 font-medium ${index > 1 ? "text-right" : ""}`}>{label}</th>)}
       </tr></thead><tbody>{shown.map((r) => <tr key={r.id} className="border-b border-line-faint transition-colors last:border-0 hover:bg-primary-softer">
         <td className="px-5 py-3"><div className="flex flex-wrap items-center gap-2"><Link className="font-semibold text-primary underline-offset-4 hover:underline" href={`/student-contribution/${r.id}`}>{r.name}</Link>
-          {!!r.total?.unavailable.length && <span className="rounded bg-secondary px-1.5 py-0.5 text-xs" title="일부 자료를 확인하지 못해 현재 확인된 실적만 반영했습니다.">일부 확인 전</span>}</div></td><td className="px-5 py-3">{schoolGradeLabel(r.school, r.grade) || "—"}</td>
+          {!!r.total?.unavailable.length && <PendingBadge key={`${r.id}:${r.total.computedAt}`} studentId={r.id} name={r.name} metrics={r.total.unavailable} />}</div></td><td className="px-5 py-3">{schoolGradeLabel(r.school, r.grade) || "—"}</td>
         <td className="px-5 py-3 text-right font-bold text-primary tabular-nums">{r.score ? numberText(r.score.total) : "집계 전"}</td>
         <td className="px-5 py-3 text-right tabular-nums">{r.score ? numberText(r.score.operations) : "—"}</td>
         <td className="px-5 py-3 text-right tabular-nums">{r.score ? numberText(r.score.participation) : "—"}</td>
