@@ -14,13 +14,13 @@ export function NotReadyBanner({
 }: {
   status: TableStatus;
   categoryStatus?: TableStatus;
-  /** 업체리스트 면일 때만 — 표(20261022140000)가 따로라 자산 표와 원인을 섞지 않는다. */
+  /** 업체리스트 면일 때만 — 표(0448a)가 따로라 자산 표와 원인을 섞지 않는다. */
   vendorStatus?: TableStatus;
 }) {
   if (vendorStatus === "missing-table") {
     return (
       <p className="bg-amber-soft/40 text-amber rounded-lg px-3 py-2 text-xs">
-        업체리스트 표가 아직 만들어지지 않았습니다 — 마이그레이션 <span className="num">20261022140000</span>을 적용해 주세요.
+        업체리스트 표가 아직 만들어지지 않았습니다 — 마이그레이션 <span className="num">0448a</span>를 적용해 주세요.
         적용 전엔 목록이 비어 있고 등록이 잠깁니다(다른 면은 그대로).
       </p>
     );

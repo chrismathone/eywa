@@ -105,7 +105,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
   ]);
 
   // 표 없음(missing-table)이 그냥 실패보다 먼저 — 원인을 말하는 문구가 뜬다.
-  // 🔑 업체리스트는 **다른 마이그레이션**(20261022140000)의 표라 따로 센다 — 섞으면 "0242a를 적용하라"는 거짓 배너가 뜬다.
+  // 🔑 업체리스트는 **다른 마이그레이션**(0448a)의 표라 따로 센다 — 섞으면 "0242a를 적용하라"는 거짓 배너가 뜬다.
   const faceStatus: TableStatus = face.kind === "vendors" ? "ok" : face.status;
   const status: TableStatus =
     assets.status === "missing-table" || faceStatus === "missing-table"

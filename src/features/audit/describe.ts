@@ -1954,7 +1954,7 @@ export function auditDetail(
         qty !== null ? `수량 ${qty}` : null,
       );
     }
-    // 업체리스트(20261022140000) — 업체명은 대상 칸에 이미 있다. 수정은 바뀐 칸 이름만(값은 싣지 않는다).
+    // 업체리스트(0448a) — 업체명은 대상 칸에 이미 있다. 수정은 바뀐 칸 이름만(값은 싣지 않는다).
     case "inventory_vendor_create":
       return str(m.category);
     case "inventory_vendor_update": {

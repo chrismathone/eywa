@@ -20,9 +20,9 @@ async function requireVendorWrite() {
 
 /**
  * 업체리스트(거래처 연락처) 등록·수정·삭제 — 게이트는 재고관리와 같은 `requireInventoryWrite`([[#77]]).
- * 길이 상한은 20261022140000 제약과 같다. 번호는 숫자만 적었으면 하이픈을 넣어 저장한다(`formatPhone`).
+ * 길이 상한은 0448a 제약과 같다. 번호는 숫자만 적었으면 하이픈을 넣어 저장한다(`formatPhone`).
  */
-const NOT_READY = "업체리스트 표가 아직 만들어지지 않았습니다 — 마이그레이션 20261022140000을 적용해 주세요";
+const NOT_READY = "업체리스트 표가 아직 만들어지지 않았습니다 — 마이그레이션 0448a를 적용해 주세요";
 
 const fail = (error: { code?: string; message?: string }, fallback: string) =>
   isMissingInventoryTable(error) ? NOT_READY : friendlyInventoryError(error, fallback);

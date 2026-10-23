@@ -2270,6 +2270,7 @@ iframe `load`에서 덮개를 걷었는데, `load`는 HTML 스트림 끝 + 이�
 - 🔴 이름을 바꿀 때 그 파일을 **경로로 읽는 곳**을 저장소 전체에서 찾는다. `src`·`docs`·`scripts`만 보면 `tests/integration/*.test.ts`를 놓친다(실제로 놓쳤다가 푸시 전에 잡았다).
 - ⚠️ 번호가 뒤로 가도 되는지는 **같은 객체를 다시 정의하는 파일이 그 사이에 있는지**로 판단한다(있으면 "마지막 정의" 판정이 뒤집힌다).
 - 📌 **2026-10-22 일괄 개명**: 10-07~10-22 여러 세션이 Supabase CLI로 넣은 타임스탬프 이름 **48개**(`20261007171329_mcs_atomic_goal_reset.sql` ~ `20261022201000_student_contribution_functions.sql`)를 **`0396a`~`0443a`로 개명**했다(원장 *"얼마 안 걸리면 지금해"*). 타임스탬프 이름이 원래 모든 `NNNNa_` 뒤로 정렬됐으므로 **이름 순서 그대로 번호를 매겨 정렬 순서(= `pnpm db:alphas` 적용 순서)는 개명 전과 같다**. 저장소 안 참조(경로·숫자만 적은 표기 58파일)도 함께 바꿨다. 운영 DB는 alpha 파일 이름을 남기지 않아 다시 적용할 일이 없다 — 예외로 `supabase_migrations.schema_migrations`에 `20261011170545`(laboratory_menus → `0408a`) 한 줄이 남아 있는데, 이 저장소는 `supabase db push`를 쓰지 않으므로 무해하다. 가드(`session-consumption-wiring.test.ts`)는 다시 "규약 밖 파일 0개"로 엄격하다 — **새 파일도 `NNNNa_`**(CLI로 만들었으면 다음 빈 번호로 바꿔서 커밋). 이 개명 전에 갈라진 브랜치가 옛 이름 파일을 고치면 git이 대개 개명을 따라가지만, 그 브랜치가 **새로 만든 타임스탬프 파일**은 가드에 걸린다.
+- 📌 10-23에 또 2개(업체리스트)가 들어와 0448a·0449a로 개명(`20261022140000_inventory_vendors.sql` → `0448a_inventory_vendors.sql` · `20261023120000_inventory_vendors_private.sql` → `0449a_inventory_vendors_private.sql`).
 
 ## #140 `all: revert`는 **`hidden` 속성의 숨김까지 지운다** — 감춰 둔 요소가 화면에 나타난다 (2026-10-03)
 

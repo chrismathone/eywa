@@ -199,13 +199,13 @@ type VendorRow = {
   contact_phone: string | null; email: string | null; address: string | null; biz_no: string | null; note: string | null;
 };
 
-/** 업체리스트 전건(업체명 가나다). 표가 없으면(20261022140000 미적용) `missing-table` — 이 면만 배너. */
+/** 업체리스트 전건(업체명 가나다). 표가 없으면(0448a 미적용) `missing-table` — 이 면만 배너. */
 export async function getVendors(): Promise<FaceData<InventoryVendor>> {
   const user = await getCurrentUser();
   if (!user) return { status: "failed", rows: [] };
   // 🔴 지정한 사람만(원장 2026-10-23 "이승엽만") — 호출부가 탭을 감춰도 여기서 한 번 더 닫는다([[#77]]).
   if (!(await canViewVendorsNow())) return { status: "ok", rows: [] };
-  // 표의 RLS 읽기 정책은 닫았다(20261023120000) — 세션 클라이언트는 0행이라 admin + tenant_id 필터로 읽는다([[#104]]).
+  // 표의 RLS 읽기 정책은 닫았다(0449a) — 세션 클라이언트는 0행이라 admin + tenant_id 필터로 읽는다([[#104]]).
   const supabase = createAdminClient();
   const res = await loadAll<VendorRow>("inventory.vendors", (from, to) =>
     supabase
