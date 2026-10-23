@@ -9,6 +9,7 @@ import { contributionReady, loadContributionMonths, loadContributionSettings, sa
 import { loadCoreSources, loadHistoricalBills } from "./core-sources";
 import { loadActivities } from "./activity-sources";
 import { judgeStudentPositiveSignals } from "./positive-job";
+import { loadContributionLessonTeachers } from "./subject-evidence";
 
 export async function refreshStudentContribution(db: SupabaseClient, tenant: string, options: { nightly?: boolean; now?: Date; deadline?: number } = {}) {
   const result = { written: 0, closed: 0, students: 0, complete: false, unavailable: false, busy: false, judged: 0 };
@@ -26,6 +27,7 @@ export async function refreshStudentContribution(db: SupabaseClient, tenant: str
       getTenantSettingsByTenantId(tenant, { failOnReadError: true }), loadCoreSources(db, tenant), loadContributionMonths(db, tenant)]);
     const now = options.now ?? new Date(), today = kstToday(now);
     const [activity, history] = await Promise.all([loadActivities(db, tenant, today, core), loadHistoricalBills(db, tenant, core.historyLinks)]);
+    core.lessonTeachers = await loadContributionLessonTeachers(db, tenant, core, history, settings.operations.subjects);
     const built = assembleContribution({ tenant, today, capturedAt: now.toISOString(), core, activity, settings, config: config.config, stored, history, historyReady: config.historyReady });
     const frozen = new Set(stored.filter((r) => r.closedAt).map((r) => `${r.studentId}:${r.month}`));
     const changed = built.rows.filter((r) => !frozen.has(`${r.studentId}:${r.month}`));

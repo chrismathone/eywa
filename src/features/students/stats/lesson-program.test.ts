@@ -10,6 +10,19 @@ const SUBJECTS = [
 const names = (...rows: [string, number][]) => rows.map(([name, weight]) => ({ name, weight }));
 
 describe("lessonProgramClassifier — 수업명 → 프로그램(지난 기록)", () => {
+  it("실제 설정된 중국어와 전각 괄호 과목 라벨을 보존한다", () => {
+    const classify = lessonProgramClassifier([], [...SUBJECTS, { key: "chinese", label: "중국어" }, { key: "advanced_korean", label: "국어（심화）" }]);
+    expect(classify("중국어 A")).toBe("chinese");
+    expect(classify("중국어 및 국어 합반")).toBeNull();
+    expect(classify("국어(심화) A")).toBe("advanced_korean");
+    expect(classify("외국어 A")).toBeNull();
+  });
+  it("과거 수납명의 수학 과정 약칭과 영어 학습 명칭을 구별한다", () => {
+    const classify = lessonProgramClassifier([], SUBJECTS);
+    for (const name of ["중1 함수", "김선생 수I", "고등수1 월", "공수2 화금", "(겨울특강)수(Ⅱ)완성", "2026년 상반기 KUT", "여름방학특강고등하 2T(3H)"]) expect(classify(name)).toBe("math");
+    for (const name of ["고등어법특강", "Inside Out Shadowing", "수행평가 영작 미리보기"]) expect(classify(name)).toBe("injaewon");
+    for (const name of ["수요일 특강", "수능 대비", "서술형 특강", "국어 수학 통합", "고등학교 하교 지도"]) expect(classify(name)).toBeNull();
+  });
   it("① EiE 표시 · ② 과목 이름 · ③ 학년 머리글(M·E)과 과목 낱말", () => {
     const cls = lessonProgramClassifier([], SUBJECTS);
     expect(cls("[EiE] ROOKIES&LEADERS 44,000")).toBe("eie");

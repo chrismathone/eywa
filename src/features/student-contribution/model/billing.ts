@@ -1,12 +1,14 @@
 import { isLiveTuition, lessonKinds, lessonPaid, type HistoryInvoice } from "@/features/students/stats/history-aywa";
 import { emptyRaws, type Raws } from "./config";
 import { isMonth } from "./dates";
+import { isOtherContributionItem } from "./other-items";
 
 export type ContributionInvoice = HistoryInvoice & { id: string };
-export type HistoricalBill = { id: string; studentId: string; month: string; lesson: boolean; billed: number;
-  paid: number; refunded: boolean; subject: string | null };
+export type SubjectResolution = { billId: string; month: string; name: string; subject: string; basis: string; reference: string };
+export type HistoricalBill = { id: string; studentId: string; month: string; lesson: boolean; billed: number; name?: string;
+  paid: number; refunded: boolean; subject: string | null; subjectResolutions?: SubjectResolution[] };
 export type BillingSeed = { id: string; studentId: string; month: string; tuitionWon: number; subjects: string[];
-  active: boolean; evidenceIds: string[]; unknownSubjects: number };
+  active: boolean; evidenceIds: string[]; unknownSubjects: number; unknownNames?: string[]; subjectResolutions?: SubjectResolution[] };
 export type BillingMonth = { studentId: string; month: string; raws: Raws; evidenceIds: string[]; unknownSubjects: number; seed: BillingSeed };
 type Item = Record<string, unknown>;
 const isLesson = (x: Item) => x.kind == null || x.kind === "" || x.kind === "수업" || x.kind === "tuition";
@@ -19,10 +21,10 @@ export function billingMonths(input: {
   cachedHistory?: readonly BillingSeed[];
 }) {
   if (!isMonth(input.through) || !isMonth(input.aywaFrom)) throw new RangeError("Invalid billing month");
-  const rows = new Map<string, Omit<BillingMonth, "seed"> & { active: boolean; subjects: Set<string> }>();
+  const rows = new Map<string, Omit<BillingMonth, "seed"> & { active: boolean; subjects: Set<string>; unknownNames: Set<string>; subjectResolutions: SubjectResolution[] }>();
   const get = (studentId: string, month: string) => {
     const key = `${studentId}\0${month}`;
-    if (!rows.has(key)) rows.set(key, { studentId, month, raws: emptyRaws(), evidenceIds: [], unknownSubjects: 0, active: false, subjects: new Set() });
+    if (!rows.has(key)) rows.set(key, { studentId, month, raws: emptyRaws(), evidenceIds: [], unknownSubjects: 0, active: false, subjects: new Set(), unknownNames: new Set(), subjectResolutions: [] });
     return rows.get(key)!;
   };
   const seen = new Set<string>();
@@ -36,15 +38,19 @@ export function billingMonths(input: {
     seed.subjects.forEach((s) => row.subjects.add(s));
     row.evidenceIds.push(...seed.evidenceIds);
     row.unknownSubjects += seed.unknownSubjects;
+    seed.unknownNames?.forEach(name => row.unknownNames.add(name));
+    row.subjectResolutions.push(...(seed.subjectResolutions ?? []));
   }
   const historicalBalances = new Map<string, Map<string | null, number>>();
   for (const bill of input.history) {
-    if (!bill.lesson || !isMonth(bill.month) || bill.month >= input.aywaFrom || bill.month > input.through || seen.has(`h:${bill.id}`)) continue;
+    if (!bill.lesson || isOtherContributionItem(bill.name ?? "") || !isMonth(bill.month) || bill.month >= input.aywaFrom || bill.month > input.through || seen.has(`h:${bill.id}`)) continue;
     seen.add(`h:${bill.id}`);
     const row = get(bill.studentId, bill.month);
     // 메이크에듀 환불 줄의 paid는 양수로 수집된다. 환불 줄 자체를 양의 수납으로 세지 않는다.
     row.raws.tuitionWon += bill.refunded ? -Math.abs(bill.paid) : bill.paid;
     row.evidenceIds.push(`history:${bill.id}`);
+    row.subjectResolutions.push(...(bill.subjectResolutions ?? []));
+    if (!bill.subject && bill.name) row.unknownNames.add(bill.name);
     const key = `${bill.studentId}\0${bill.month}`;
     const balance = historicalBalances.get(key) ?? new Map<string | null, number>();
     const amount = bill.refunded ? -Math.abs(bill.paid) : bill.paid < 0 ? bill.paid : Math.max(bill.billed, bill.paid);
@@ -60,7 +66,10 @@ export function billingMonths(input: {
       if (subject) row.subjects.add(subject); else row.unknownSubjects++;
     }
   }
-  for (const invoice of input.invoices) {
+  for (const source of input.invoices) {
+    const invoice = { ...source, line_items: Array.isArray(source.line_items) ? source.line_items.map(item =>
+      item && typeof item === "object" && isOtherContributionItem(String((item as Item).description ?? (item as Item).label ?? (item as Item).name ?? ""))
+        ? { ...item, kind: "other" } : item) : source.line_items };
     const month = invoice.period;
     if (!month || !isMonth(month) || month < input.aywaFrom || month > input.through || seen.has(`a:${invoice.id}`)) continue;
     seen.add(`a:${invoice.id}`);
@@ -76,7 +85,7 @@ export function billingMonths(input: {
     for (const item of items) {
       if (!isLesson(item) || (Number(item.amount ?? 0) <= 0 && Number(item.paid ?? 0) <= 0)) continue;
       const subject = input.subjectOf(item);
-      if (subject) row.subjects.add(subject); else row.unknownSubjects++;
+      if (subject) row.subjects.add(subject); else { row.unknownSubjects++; row.unknownNames.add(String(item.description ?? item.label ?? item.name ?? "수업명 없음")); }
     }
   }
   const tenure = new Map<string, number>();
@@ -89,7 +98,8 @@ export function billingMonths(input: {
     }
     const seed: BillingSeed = { id: `${row.studentId}:${row.month}`, studentId: row.studentId, month: row.month,
       tuitionWon: row.raws.tuitionWon, subjects: [...row.subjects].sort(), active: row.active,
-      evidenceIds: [...new Set(row.evidenceIds)], unknownSubjects: row.unknownSubjects };
+      evidenceIds: [...new Set(row.evidenceIds)], unknownSubjects: row.unknownSubjects, unknownNames: row.unknownSubjects ? [...row.unknownNames].sort() : [],
+      ...(row.subjectResolutions.length ? { subjectResolutions: row.subjectResolutions } : {}) };
     return { studentId: row.studentId, month: row.month, raws: row.raws, evidenceIds: seed.evidenceIds, unknownSubjects: row.unknownSubjects, seed };
   });
 }

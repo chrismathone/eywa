@@ -14,7 +14,7 @@ export type ParticipationInput = {
   targets: readonly AttendanceTarget[]; attendance: readonly ContributionAttendance[];
   assignments: readonly AssignedHomework[]; videos: readonly VideoArrival[]; marks: readonly VideoHomeworkMark[];
   grades: readonly { id: string; studentId: string; day: string; kind: string; subject: string }[];
-  signals: readonly PositiveSignal[]; ready: { attendance: boolean; video: boolean; grades: boolean; positive: boolean };
+  signals: readonly PositiveSignal[]; ready: { attendance: boolean; video: boolean; grades: boolean; positive: boolean | { parent: boolean; teacher: boolean } };
 };
 const keyOf = (r: AttendanceTarget) => `${r.student_id}\0${r.class_id}\0${r.session_date}\0${r.slot_start ?? ""}`;
 
@@ -58,7 +58,9 @@ export function monthlyParticipation(input: ParticipationInput): { raws: Raws; u
     const took = input.grades.filter((g) => g.studentId === input.studentId && g.kind === "monthly" && inMonth(g.day));
     if (took.length) { raws.examMonths = 1; evidenceIds.push(...took.map((g) => `grade:${g.id}`)); }
   }
-  if (!input.ready.positive) unavailable.push("parentPositiveMonths", "teacherPositiveMonths");
+  const positive = typeof input.ready.positive === "boolean" ? { parent: input.ready.positive, teacher: input.ready.positive } : input.ready.positive;
+  if (!positive.parent) unavailable.push("parentPositiveMonths");
+  if (!positive.teacher) unavailable.push("teacherPositiveMonths");
   for (const signal of input.signals) {
     if (signal.studentId !== input.studentId || !inMonth(signal.day) || !signal.observed || signal.cancelled || !signal.sourceCurrent) continue;
     raws[signal.source === "parent" ? "parentPositiveMonths" : "teacherPositiveMonths"] = 1;

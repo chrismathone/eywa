@@ -1,4 +1,3 @@
-import { lessonNameWeights } from "@/features/students/stats/history-aywa";
 import { groupBy } from "@/features/teacher-portfolio/model/dates";
 import { shiftMonth } from "@/lib/date-kst";
 import type { SourceCoverage } from "@/features/students/ontology/types";
@@ -19,6 +18,9 @@ import { emptyPayload, type StoredContributionMonth } from "./stored";
 import { studentOntology } from "./ontology-facts";
 import { buildBackfillReport } from "./backfill-report";
 import { correctionDetails } from "./corrections";
+import { pendingDetails } from "./pending-details";
+import { contributionLessonNames, contributionSubjectEvidence, lessonKey } from "./subject-evidence";
+import { reviewedHistoricalSubject } from "./reviewed-subjects";
 
 export function assembleContribution(input: { tenant: string; today: string; capturedAt: string; core: CoreSources; activity: ActivitySources;
   settings: Awaited<ReturnType<typeof getTenantSettingsByTenantId>>; config: ContributionConfig; stored: StoredContributionMonth[];
@@ -28,14 +30,24 @@ export function assembleContribution(input: { tenant: string; today: string; cap
   const known = new Set(core.students.map((s) => s.id));
   const test = new Set(core.students.filter((s) => s.is_test).map((s) => s.id));
   const eligible = (id: string) => known.has(id) && !test.has(id) && !test.has(canonical(id));
-  const names = [...lessonNameWeights(core.invoices), ...(input.history ?? []).map((h) => ({ name: h.item_name ?? "", weight: Math.abs(Number(h.paid)) }))];
+  const names = contributionLessonNames(core.invoices, input.history ?? []);
+  const staff = core.users.map(u => ({ names: [u.display_name, u.english_name], subjects: u.subjects ?? [] }));
+  const evidence = contributionSubjectEvidence({ names, subjects: input.settings.operations.subjects, staff, classes: core.classes, teachers: core.lessonTeachers ?? [] });
   const subjectOf = contributionSubjectOf({ subjects: input.settings.operations.subjects, classes: core.classes, names,
-    staff: core.users.map((u) => ({ names: [u.display_name], subjects: u.subjects ?? [] })) });
+    staff, evidence });
   const link = new Map(core.historyLinks.filter((h) => h.student_id).map((h) => [h.makeedu_no, h.student_id!]));
+  const subjectKeys = new Set(input.settings.operations.subjects.map(s => s.key));
+  const evidenceByName = groupBy(evidence, e => lessonKey(e.name));
   const rawHistory: HistoricalBill[] = (input.history ?? []).flatMap((h) => {
     const id = link.get(h.makeedu_no);
-    return id && eligible(id) ? [{ id: `${h.makeedu_no}:${h.bill_month}:${h.seq}`, studentId: id, month: h.bill_month.slice(0, 7), lesson: h.item_kind === "lesson",
-      billed: Number(h.billed), paid: Number(h.paid), refunded: h.refunded, subject: subjectOf({ name: h.item_name }) }] : [];
+    const reviewed = reviewedHistoricalSubject(tenant, h), reviewedSubject = reviewed && subjectKeys.has(reviewed.subject) ? reviewed.subject : null;
+    const subject = reviewedSubject ?? subjectOf({ name: h.item_name }), billId = `${h.makeedu_no}:${h.bill_month}:${h.seq}`;
+    const sources = reviewedSubject ? [{ subject: reviewedSubject, basis: reviewed!.basis, reference: reviewed!.reference }]
+      : (evidenceByName.get(lessonKey(h.item_name ?? "")) ?? []).filter(e => e.subject === subject);
+    return id && eligible(id) ? [{ id: billId, studentId: id, month: h.bill_month.slice(0, 7), lesson: h.item_kind === "lesson",
+      billed: Number(h.billed), paid: Number(h.paid), refunded: h.refunded, name: h.item_name ?? "수업명 없음",
+      subject, subjectResolutions: [...new Map(sources.map(e => [e.reference, { billId, month: h.bill_month.slice(0, 7), name: h.item_name ?? "수업명 없음",
+        subject: e.subject, basis: e.basis, reference: e.reference }])).values()] }] : [];
   });
   const cached = [...new Map(input.stored.flatMap((r) => r.historical).map((s) => [s.id, s])).values()].filter((s) => eligible(s.studentId));
   const originals = billingMonths({ invoices: core.invoices.filter((r) => eligible(r.student_id)), history: rawHistory,
@@ -55,14 +67,17 @@ export function assembleContribution(input: { tenant: string; today: string; cap
   const assigned = groupBy(remap(activity.assignments), (r) => r.studentId), videos = groupBy(remap(activity.videos), (r) => r.studentId);
   const marks = groupBy(remap(activity.marks), (r) => r.studentId), signals = groupBy(remap(activity.signals), (r) => r.studentId);
   const grades = groupBy(remap(activity.grades.map((g) => ({ ...g, studentId: g.student_id }))), (r) => r.studentId);
-  const pending = new Set(remap(activity.pendingSignals).map((s) => `${s.studentId}:${s.day.slice(0, 7)}`));
+  const pendingSignals = remap(activity.pendingSignals);
+  const pending = new Set(pendingSignals.map((s) => `${s.studentId}:${s.day.slice(0, 7)}:${s.source}`));
   const participation = roster.flatMap((student) => {
     const id = student.id, out = [];
     for (let m = "2026-01"; m <= month; m = shiftMonth(m, 1)) {
       const result = monthlyParticipation({ studentId: id, month: m, today, allowLate: config.attendance.allowLate,
         targets: targets.get(id) ?? [], attendance: attendance.get(id) ?? [], assignments: assigned.get(id) ?? [], videos: videos.get(id) ?? [],
         marks: marks.get(id) ?? [], grades: grades.get(id) ?? [], signals: signals.get(id) ?? [],
-        ready: { attendance: true, video: true, grades: true, positive: activity.aiLicensed && !pending.has(`${id}:${m}`) } });
+        ready: { attendance: true, video: true, grades: true, positive: {
+          parent: activity.aiLicensed && !pending.has(`${id}:${m}:parent`), teacher: activity.aiLicensed && !pending.has(`${id}:${m}:teacher`),
+        } } });
       if (METRICS.some((key) => result.raws[key]) || m === month || (targets.get(id) ?? []).some((t) => t.session_date.startsWith(m)))
         out.push({ studentId: id, month: m, ...result });
     }
@@ -101,12 +116,30 @@ export function assembleContribution(input: { tenant: string; today: string; cap
       const corrections = METRICS.filter((key) => r.correction[key] !== 0);
       const inMonth = facts.filter((f) => f.occurred.value.startsWith(r.month));
       const incomplete: Metric[] = [...(unavailable.get(`${student.id}:${r.month}`) ?? [])];
-      if (r.month === month && [...pending].some((key) => key.startsWith(`${student.id}:`))) incomplete.push("parentPositiveMonths", "teacherPositiveMonths");
-      if (billing.some((b) => b.studentId === student.id && b.unknownSubjects > 0)) incomplete.push("subjectMonths");
+      const ownPending = pendingSignals.filter(s => s.studentId === student.id && (r.month === month || s.day.startsWith(r.month)));
+      if (ownPending.some(s => s.source === "parent")) incomplete.push("parentPositiveMonths");
+      if (ownPending.some(s => s.source === "teacher")) incomplete.push("teacherPositiveMonths");
+      const unknownBills = billing.filter(b => b.studentId === student.id && b.unknownSubjects > 0 && (r.month === month || b.month === r.month));
+      if (unknownBills.length) incomplete.push("subjectMonths");
+      const details = pendingDetails(incomplete).map(d => {
+        if (d.metric === "subjectMonths") return { ...d, months: [...new Set(unknownBills.map(b => b.month))].sort(), lessons: [...new Set(unknownBills.flatMap(b => b.seed.unknownNames ?? []))].sort() };
+        if (d.metric === "parentPositiveMonths" || d.metric === "teacherPositiveMonths") {
+          const items = ownPending.filter(s => s.source === (d.metric === "parentPositiveMonths" ? "parent" : "teacher"));
+          return { ...d, count: items.length, months: [...new Set(items.map(s => s.day.slice(0, 7)))].sort(),
+            reason: activity.aiLicensed ? d.reason : "긍정 신호 판정 기능이 꺼져 있어 아직 판정하지 않은 자료를 확인할 수 없습니다." };
+        }
+        return d;
+      });
       const relationRows = ontology.relations.filter((rel) => (rel.from.kind === "student" && rel.from.id === student.id)
         && (!rel.validFrom || rel.validFrom.slice(0, 7) <= r.month) && (!rel.validTo || rel.validTo.slice(0, 7) >= r.month));
+      const ownCoverage = coverage.map(entry => {
+        const source = entry.source === "classnote_parent_messages" ? "parent" : entry.source === "classnote_parent_replies" ? "teacher" : null;
+        return source ? { ...entry, state: !activity.aiLicensed || ownPending.some(s => s.source === source) ? "pending" as const : "ready" as const } : entry;
+      });
+      // A frozen month cannot be rewritten: preserve newly verified historical sources on the open month's payload.
+      const subjectResolutions = (seedsByStudent.get(student.id) ?? []).filter(s => r.month === month || s.month === r.month).flatMap(s => s.subjectResolutions ?? []);
       return { ...r, studentId: student.id, computedAt: capturedAt, historical: (seedsByStudent.get(student.id) ?? []).filter((s) => s.month === r.month), unavailable: [...new Set(incomplete)],
-        payload: { ...emptyPayload(), evidenceIds: r.evidenceIds, facts: inMonth, relations: relationRows, coverage,
+        payload: { ...emptyPayload(), evidenceIds: r.evidenceIds, facts: inMonth, relations: relationRows, coverage: ownCoverage, unavailableDetails: details, subjectResolutions,
           corrections: correctionDetails(r, built.filter((b) => !!b.closedAt), points),
           subjects: [...new Set(inMonth.flatMap((f) => f.related.filter((e) => e.kind === "subject").map((e) => e.id)))],
           correctionReasons: corrections.map((metric) => ({ metric, delta: r.correction[metric], reason: `${METRIC_LABELS[metric]}: 오늘 원본의 누적 수치와 마감한 달의 합계 차이(환불·연결 변경·병합·판정 변경 포함)` })) } };
