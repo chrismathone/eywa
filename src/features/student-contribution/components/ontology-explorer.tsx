@@ -7,8 +7,10 @@ import type { StudentFact } from "@/features/students/ontology/types";
 import type { getContributionOntology } from "../server/ontology-query";
 import { ContributionHeader } from "./contribution-shell";
 import { ContributionMonthPicker } from "./month-picker";
-import { OntologyConnections, entityLabels } from "./ontology-connections";
+import { OntologyConnections } from "./ontology-connections";
+import { entityLabels } from "./ontology-labels";
 import { ListPager } from "./list-pager";
+import { OntologyViewMode } from "./ontology-view-mode";
 import { factLabels, fieldClass, monthText, numberText } from "./presentation";
 type Data = NonNullable<Awaited<ReturnType<typeof getContributionOntology>>>;
 const EMPTY = { students: [] as string[], counts: {}, factCount: 0, tuitionWon: 0, unallocatedTuitionFacts: 0, related: [], studentCounts: {}, basis: { recorded: 0, rule: 0, ai: 0 }, recordedAt: "" };
@@ -27,6 +29,7 @@ export function OntologyExplorer({ data }: { data: Data }) {
   const largest = Math.max(1, ...counts.map(([, n]) => n));
   return <div className="w-full min-w-0 space-y-5 pb-6">
     <ContributionHeader title="학생 기록 연결" description="학생의 기록이 반·강사·과목·학원에 어떻게 연결되는지 살펴봅니다. 관점을 바꾸거나 연결된 대상을 선택해 근거를 따라갈 수 있습니다." active="ontology" canConfigure={data.canConfigure} actions={<ContributionMonthPicker month={data.month} />} />
+    <OntologyViewMode current={false} month={data.month} />
     <section className="rounded-xl border border-line">
       <div className="flex flex-wrap items-center gap-4 border-b border-line p-4">
         <div className="flex flex-wrap gap-1 rounded-lg bg-secondary p-1" aria-label="연결 관점">{Object.entries(entityLabels).map(([key, label]) => <button key={key} type="button" aria-pressed={kind === key}
@@ -44,6 +47,8 @@ export function OntologyExplorer({ data }: { data: Data }) {
       </div>
     </section>
     {!data.historyReady && <p className="rounded-lg bg-primary-softer px-4 py-3 text-sm">첫 집계가 완료되기 전에는 일부 기록만 표시됩니다.</p>}
+    {!!data.identityIssues && <p role="status" className="rounded-lg bg-primary-softer px-4 py-3 text-sm">학생 병합 연결을 확인할 기록이 있어 일부 자료를 제외했습니다. 현재 합계는 확인된 연결만 포함합니다.</p>}
+    {kind === "teacher" && <p className="text-xs">시간표 기준 · 마감 당시 판정입니다. 실제 수업 담당 기록과 다를 수 있습니다.</p>}
     <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(22rem,1fr)]">
       <div className="min-w-0 space-y-5">
         <section className="rounded-xl border border-line p-5"><div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-semibold">어떤 기록이 연결되어 있나요?</h2><span className="text-xs">종류를 누르면 해당 기록이 있는 학생만 표시</span></div>

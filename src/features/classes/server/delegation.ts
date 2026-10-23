@@ -95,6 +95,7 @@ async function fetchActiveDelegations(supabase: ServerClient, date: string, stri
 
 /** 알림 수신자용 위임 한 건 — 반 id·대체 강사·기간. 날짜 판정은 `isDelegationActiveOn`(delegation-window.ts). */
 export type ClassDelegationWindow = {
+  id?: string;
   classId: string;
   delegateUserId: string;
   fromDate: string; // 포함
@@ -122,10 +123,10 @@ export async function getActiveDelegationsForClasses(
 ): Promise<ClassDelegationWindow[]> {
   const ids = [...new Set(classIds)].filter(Boolean);
   if (ids.length === 0) return [];
-  const rows = await fetchAllPagedInChunks<DelegationRow>(ids, (chunk, from, to) =>
+  const rows = await fetchAllPagedInChunks<DelegationRow & { id: string }>(ids, (chunk, from, to) =>
     admin
       .from("class_delegations")
-      .select("class_id, delegate_user_id, from_date, to_date, revoked_at")
+      .select("id, class_id, delegate_user_id, from_date, to_date, revoked_at")
       .eq("tenant_id", tenantId)
       .in("class_id", chunk)
       .is("revoked_at", null)
@@ -136,6 +137,7 @@ export async function getActiveDelegationsForClasses(
   );
   return rows
     .map((r) => ({
+      id: r.id,
       classId: r.class_id,
       delegateUserId: r.delegate_user_id,
       fromDate: r.from_date,
@@ -353,9 +355,10 @@ export async function getDelegatedClassIdsInRange(
   userId: string,
   from: string,
   to: string,
+  strict = false,
 ): Promise<string[]> {
   const supabase = await createServerClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("class_delegations")
     .select("class_id, delegate_user_id, from_date, to_date, revoked_at")
     .eq("delegate_user_id", userId)
@@ -363,6 +366,8 @@ export async function getDelegatedClassIdsInRange(
     .lte("from_date", to)
     .gte("to_date", from)
     .limit(200);
+  if (strict && error) throw error;
+  if (strict && data?.length === 200) throw new Error("담당 범위 조회 한도를 확인해 주세요");
   return [
     ...new Set(
       ((data ?? []) as DelegationRow[])

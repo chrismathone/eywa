@@ -1,7 +1,7 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { fetchAllPaged } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { kstDateOf } from "@/lib/date-kst";
 import type { PositiveSignal } from "../model/participation";
 import type { PositiveJudgment } from "../model/positive";
@@ -15,14 +15,18 @@ export const signalKey = (row: { source: string; id: string }) => `${row.source}
 export function signalHash(source: Omit<SignalSource, "hash">) {
   return createHash("sha256").update(JSON.stringify([source.source, source.id, source.studentId, source.day, source.text, source.author])).digest("hex");
 }
-export async function loadSignalSources(db: SupabaseClient, tenant: string): Promise<SignalSource[]> {
+export async function loadSignalSources(db: SupabaseClient, tenant: string, studentIds?: string[]): Promise<SignalSource[]> {
   type Message = { id: string; student_id: string; content: string | null; posted_at: string | null; created_at: string };
   type Reply = { id: string; student_id: string; body: string | null; posted_at: string | null; created_at: string; author_label: string | null };
+  const messagesQuery = () => db.from("classnote_parent_messages").select("id, student_id, content, posted_at, created_at")
+    .eq("tenant_id", tenant).not("student_id", "is", null).eq("category", "none").not("classified_at", "is", null);
+  const repliesQuery = () => db.from("classnote_parent_replies").select("id, student_id, body, posted_at, created_at, author_label")
+    .eq("tenant_id", tenant).not("student_id", "is", null).eq("status", "success");
   const [messages, replies] = await Promise.all([
-    fetchAllPaged<Message>((a, b) => db.from("classnote_parent_messages").select("id, student_id, content, posted_at, created_at")
-      .eq("tenant_id", tenant).not("student_id", "is", null).eq("category", "none").not("classified_at", "is", null).order("id").range(a, b)),
-    fetchAllPaged<Reply>((a, b) => db.from("classnote_parent_replies").select("id, student_id, body, posted_at, created_at, author_label")
-      .eq("tenant_id", tenant).not("student_id", "is", null).eq("status", "success").order("id").range(a, b)),
+    studentIds ? fetchAllPagedInChunks<Message>(studentIds, (ids, a, b) => messagesQuery().in("student_id", ids).order("id").range(a, b))
+      : fetchAllPaged<Message>((a, b) => messagesQuery().order("id").range(a, b)),
+    studentIds ? fetchAllPagedInChunks<Reply>(studentIds, (ids, a, b) => repliesQuery().in("student_id", ids).order("id").range(a, b))
+      : fetchAllPaged<Reply>((a, b) => repliesQuery().order("id").range(a, b)),
   ]);
   const sources: Omit<SignalSource, "hash">[] = [
     ...messages.map((m) => ({ id: m.id, source: "parent" as const, studentId: m.student_id, day: kstDateOf(m.posted_at ?? m.created_at) ?? "", text: m.content ?? "", author: "학부모" })),

@@ -1,13 +1,11 @@
 import { EmbedLink as Link } from "@/components/embed-link";
 import { getContributionStudent } from "../server/student-query";
 import { sumRaws, scoreRaws } from "../model/calc";
-import { shiftMonth } from "@/lib/date-kst";
-import { EyIcon } from "@/components/icons/aywa-icons";
+import { contributionTrend } from "../model/score-trend";
 import { FactsTable } from "./facts-table";
 import { SignalControls } from "./signal-controls";
-import { ContributionHeader } from "./contribution-shell";
 import { ContributionMonthPicker } from "./month-picker";
-import { ScoreTrend, type TrendPoint } from "./score-trend";
+import { ScoreTrend } from "./score-trend";
 import { ScoreBreakdown } from "./score-breakdown";
 import { MonthMetrics } from "./month-metrics";
 import { CorrectionDetails } from "./correction-details";
@@ -16,21 +14,17 @@ import { metricLabels, numberText, monthText, rawText, sourceLabels } from "./pr
 export async function ContributionStudentPanel({ studentId, month }: { studentId: string; month?: string }) {
   const data = await getContributionStudent(studentId, month);
   if (!data) return <p>기여도 기록을 열람할 수 없습니다.</p>;
-  if (!data.ready || !data.months.length) return <div className="w-full space-y-5"><ContributionHeader title={`${data.student.name}의 기여도`} description="학생의 기록을 바탕으로 기여도를 확인합니다." active="students" />
+  if (!data.ready || !data.months.length) return <div className="w-full space-y-5">
     <div className="rounded-xl border border-line p-12 text-center"><p className="font-semibold">아직 집계된 기록이 없습니다.</p><p className="mt-2 text-sm">첫 집계가 끝나면 점수와 계산 근거가 표시됩니다.</p><Link href="/student-contribution" className="mt-5 inline-block text-sm text-primary underline">원생 기여도 목록으로</Link></div></div>;
   const total = sumRaws(data.months.flatMap((m) => [m.raws, m.correction])), config = data.settings.config, scored = scoreRaws(total, config);
   const selected = data.months.find((m) => m.month === month) ?? data.months.at(-1)!;
   const monthlyScore = scoreRaws(sumRaws([selected.raws, selected.correction]), config).total;
-  const byMonth = new Map(data.months.map((m) => [m.month, scoreRaws(sumRaws([m.raws, m.correction]), config).total]));
-  const trend: TrendPoint[] = []; let cumulative = 0;
-  for (let m = data.months[0]!.month; m <= data.months.at(-1)!.month; m = shiftMonth(m, 1)) {
-    const change = byMonth.get(m) ?? 0; cumulative += change; trend.push({ month: m, total: cumulative, change, corrected: !!data.months.find((row) => row.month === m)?.payload.correctionReasons.length });
-  }
+  const trend = contributionTrend(data.months, config);
   const latest = data.months.at(-1)!;
   const pending = latest.unavailable.length;
   return <div className="w-full min-w-0 space-y-5 pb-6">
-    <ContributionHeader title={`${data.student.name}의 기여도`} description="얼마나 쌓였는지, 어떤 기록에서 나온 점수인지 함께 확인하세요." active="students" canConfigure={data.gate.canConfigure}
-      actions={<Link href="/student-contribution" className="inline-flex items-center gap-1 rounded-lg border border-line px-3 py-2 text-sm hover:bg-muted"><EyIcon name="chevronLeft" size={16} />원생 목록</Link>} />
+    <h2 className="text-lg font-semibold">월별 기여도</h2>
+    {(data.withheld > 0 || data.identityIssues > 0) && <p role="status" className="rounded-lg bg-primary-softer px-4 py-3 text-sm">현재 원문이나 학생 연결을 확인할 수 없는 근거는 표시하지 않습니다. 마감한 실적과 점수는 그대로 보존됩니다.</p>}
     <section className="grid grid-cols-[1.2fr_1fr_1fr] overflow-hidden rounded-xl border border-line phone:grid-cols-1" aria-label="누적 기여도 요약">
       <div className="bg-primary px-6 py-5 text-primary-foreground"><h2 className="text-sm font-medium">누적 기여도</h2><p className="mt-2 text-4xl font-bold tracking-tight tabular-nums">{numberText(scored.total)}<span className="ml-2 text-base font-normal">점</span></p><p className="mt-3 text-xs">현재 배점 기준 · 점수 상한 없음</p></div>
       {[["운영 기여", scored.operations, "소개 · 수업료 · 수강 기간"], ["학습·참여", scored.participation, "출결 · 영상 숙제 · 평가 · 긍정 신호"]].map(([label, value, note]) => <div key={label} className="border-l border-line px-6 py-5 phone:border-l-0 phone:border-t"><h2 className="text-sm font-medium">{label}</h2><p className="mt-3 text-2xl font-bold tabular-nums">{numberText(Number(value))}<span className="ml-1 text-sm font-normal">점</span></p><p className="mt-3 text-xs">{note}</p></div>)}

@@ -432,6 +432,7 @@ describe("generateJSON 폴백", () => {
     expect(sentMaxTokens("anthropic", "claude-haiku-5-5", 1800, "ment_prompt_preview")).toBe(16_000); // 미리보기 = 자동작성과 같게
     expect(sentMaxTokens("deepseek", "deepseek-flash", 1800, "classnote_ment")).toBe(32_000);
     expect(sentMaxTokens("anthropic", "claude-sonnet-5-5", 2048, "student_care")).toBe(16_000); // 직원이 버튼을 누르고 기다린다
+    expect(sentMaxTokens("anthropic", "claude-haiku-5-5", 2048, "student_ontology_summary")).toBe(16_000);
     expect(sentMaxTokens("anthropic", "claude-sonnet-5-5", 1200, "ment_style_profile")).toBe(64_000); // 주 1회 cron — 기다리지 않는다
   });
 

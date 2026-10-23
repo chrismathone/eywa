@@ -35,7 +35,7 @@ export const getContributionDirectory = cache(async () => {
     fetchAllPaged<{ student_id: string; class_id: string }>((a, b) => db.from("enrollments").select("student_id, class_id")
       .eq("tenant_id", tenant).order("id").range(a, b)),
     fetchAllPaged<{ id: string; subject: string; class_name: string }>((a, b) => db.from("classes").select("id, subject, class_name")
-      .eq("tenant_id", tenant).order("id").range(a, b)),
+      .eq("tenant_id", tenant).eq("is_makeup_pool", false).order("id").range(a, b)),
     getTenantSettingsByTenantId(tenant, { failOnReadError: true }),
   ]);
   const byClass = new Map(classes.map((c) => [c.id, c.subject]));

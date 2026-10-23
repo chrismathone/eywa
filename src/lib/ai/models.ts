@@ -80,6 +80,7 @@ export const FEATURE_KEY_GROUP: Readonly<Record<string, AiKeyGroup>> = {
   parent_satisfaction: "attendance",
   // 원생 온톨로지 — 원장 전용 키 배정(2026-10-22). 현재 소비처는 긍정 신호 밤 판정.
   student_positive_signal: "student_ontology",
+  student_ontology_summary: "student_ontology",
   // 공지 번역
   notice_translate: "notice",
   // 직원 계약서 — 글자 PDF 추출 · 스캔 OCR(Claude 전용)

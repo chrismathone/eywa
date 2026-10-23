@@ -163,7 +163,7 @@ provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어�
 | `CONSULTATIONS` | consultation_analysis · student_care | DeepSeek(분석) · Claude(케어) |
 | `BRIEFING` | daily_briefing | Claude |
 | `ATTENDANCE` | attendance_recap · parent_attendance_intent · parent_attendance_jev_shadow · parent_satisfaction | DeepSeek · TypeSafe(비교 전용) |
-| `STUDENT_ONTOLOGY` | student_positive_signal | 원생 긍정 신호 밤 판정 · Claude 전용 키 · fast/low · 다른 회사 폴백 없음 |
+| `STUDENT_ONTOLOGY` | student_positive_signal · student_ontology_summary | 긍정 신호 밤 판정 / 명시 버튼의 최근 기록 발췌 요약 · Claude 전용 키 · fast/low · 다른 회사 폴백 없음 |
 | `NOTICE` | notice_translate | DeepSeek |
 | `STAFF` | staff_contract_pdf · staff_contract_pdf_ocr | Claude(OCR은 **Claude 전용**) |
 | `VIDEO` | video_review_judge · video_review_verify | Claude(판정 Haiku · 확인 Sonnet · 밤 배치) |

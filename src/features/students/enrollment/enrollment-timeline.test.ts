@@ -11,8 +11,8 @@ const transfers = (rows: TimelineEnrollment[]) => enrollmentTimeline(rows).filte
 describe("수강 타임라인의 반이동", () => {
   it("종료 다음 날 같은 과목의 새 반을 시작하면 새 반 시작일 한 건으로 합친다", () => {
     expect(enrollmentTimeline([top, regular])).toEqual([
-      { date: "2026-07-09", kind: "enrollment_transfer", title: "중등E_중1 TOP → 중등E_중1 정규 A", description: null },
-      { date: "2026-04-07", kind: "enrollment_start", title: "중등E_중1 TOP 수강 시작" },
+      { sourceIds: ["top", "regular"], date: "2026-07-09", kind: "enrollment_transfer", title: "중등E_중1 TOP → 중등E_중1 정규 A", description: null },
+      { sourceIds: ["top"], date: "2026-04-07", kind: "enrollment_start", title: "중등E_중1 TOP 수강 시작" },
     ]);
   });
   it("이동이 이어져도 첫 시작·두 번의 이동·최종 종료가 각각 남는다", () => {
@@ -26,7 +26,7 @@ describe("수강 타임라인의 반이동", () => {
     expect(transfers([{...top, endDate: regular.startDate}, regular])).toHaveLength(0);
   });
   it("새 반 수강을 삭제해 짝이 없어진 전출도 마지막 수강일은 이동 전날이다", () => {
-    expect(enrollmentTimeline([{ ...top, endDate: "2026-10-06", isTransferred: true }])).toContainEqual({ date: "2026-10-05", kind: "enrollment_end", title: "중등E_중1 TOP 수강 종료", description: null });
+    expect(enrollmentTimeline([{ ...top, endDate: "2026-10-06", isTransferred: true }])).toContainEqual({ sourceIds: ["top"], date: "2026-10-05", kind: "enrollment_end", title: "중등E_중1 TOP 수강 종료", description: null });
   });
   it.each([
     ["다른 과목", {...regular, subject: "math"}],

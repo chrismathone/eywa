@@ -37,7 +37,7 @@ it("소개 검토 15건 페이지, 상태 필터와 펼침을 적용하며 읽�
 it("긍정 신호는 8건씩 보이고 읽기 전용에는 판정 변경 입력이 없다", () => {
   const signals = Array.from({ length: 9 }, (_, i) => ({ id: `signal:${i}`, source: "parent" as const, source_id: `p${i}`, student_id: "s", source_hash: "hash",
     occurred_on: "2026-10-01", author_label: `학부모${i}`, classification: "observed" as const, evidence: `관찰 내용 ${i}`, model_label: "Claude", judged_at: "2026-10-02",
-    cancelled_at: null, cancel_reason: null, rejudge_requested_at: null }));
+    cancelled_at: null, cancel_reason: null, rejudge_requested_at: null, evidenceStatus: "current" as const }));
   render(<SignalControls signals={signals} canWrite={false} />);
   expect(screen.queryByText("관찰 내용 8")).toBeNull();
   expect(screen.queryByRole("button", { name: "판정 검토" })).toBeNull();

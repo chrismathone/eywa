@@ -3,11 +3,11 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { changePositiveSignal } from "../server/actions";
-import type { SignalRow } from "../server/signals";
+import type { DisplaySignal } from "../server/signal-display";
 import { ListPager } from "./list-pager";
 import { fieldClass } from "./presentation";
 const labels = { observed: "관찰된 긍정 신호", unsupported_praise: "구체적 관찰 없는 칭찬", thanks: "감사 표현", other: "그 외 내용" };
-export function SignalControls({ signals, canWrite }: { signals: SignalRow[]; canWrite: boolean }) {
+export function SignalControls({ signals, canWrite }: { signals: DisplaySignal[]; canWrite: boolean }) {
   const [filter, setFilter] = useState("all"), [page, setPage] = useState(1), [selected, setSelected] = useState<string | null>(null);
   const [reason, setReason] = useState(""), [message, setMessage] = useState(""), [busy, start] = useTransition();
   const router = useRouter();
@@ -26,6 +26,7 @@ export function SignalControls({ signals, canWrite }: { signals: SignalRow[]; ca
         <p className="tabular-nums">{s.occurred_on}<span className="mt-1 block text-xs">{s.source === "parent" ? "학부모 글" : "선생님 답글"}</span></p>
         <div className="space-y-2"><p className="font-semibold">{s.author_label ?? (s.source === "parent" ? "학부모" : "선생님")} <span className="ml-2 rounded bg-secondary px-2 py-1 text-xs font-normal">{labels[s.classification]}{s.cancelled_at ? " · 취소됨" : ""}</span></p>
           {s.evidence && <blockquote className="bg-bg-soft/60 rounded-md px-3 py-2 leading-relaxed">{s.evidence}</blockquote>}
+          {s.evidenceStatus !== "current" && <p className="text-xs">{s.evidenceStatus === "changed" ? "원문이 바뀌어 이전 인용문을 표시하지 않습니다." : "현재 원문을 확인할 수 없어 인용문을 표시하지 않습니다."}</p>}
           <p className="text-xs">{s.model_label ? "AI 판정" : "규칙 판정"} · {new Date(s.judged_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}{s.cancel_reason ? ` · 취소 사유: ${s.cancel_reason}` : ""}{s.rejudge_requested_at ? " · 재판정 대기" : ""}</p></div>
         {canWrite && <Button size="sm" variant="outline" disabled={busy} aria-expanded={selected === s.id} onClick={() => { setSelected(selected === s.id ? null : s.id); setReason(""); }}>판정 검토</Button>}
       </div>

@@ -10,19 +10,20 @@ import { caseListSchema, caseDetailSchema, optionPageSchema, candidatePageSchema
 
 async function readRpc<T>(name: string, args: Record<string, unknown>, schema: z.ZodType<T>): Promise<ReadResult<T>> {
   const actor = await getCurrentUser({ teacherView: true });
-  if (!actor || !(await canAccessTenant(actor.systemRole, "makeups"))) return { error: "보강관리 조회 권한이 없습니다" };
-  if ((await getTenantSettings()).makeups.mode === "off") return { error: "보강관리 운영이 중지되어 있습니다" };
+  if (!actor || !(await canAccessTenant(actor.systemRole, "makeups"))) return { error: "보강관리 조회 권한이 없습니다", reason: "forbidden" };
+  if ((await getTenantSettings()).makeups.mode === "off") return { error: "보강관리 운영이 중지되어 있습니다", reason: "off" };
   const db = await createClient();
   const { data, error } = await db.rpc(name, args);
   if (error) {
     const info = describeDbError(error, { fallback: "보강 기록을 불러오지 못했습니다. 다시 시도해 주세요." });
     console.error(`[makeups] ${name} 조회 실패`, error.code);
-    return { error: info.kind === "schema" ? "보강관리 DB 설정을 적용한 뒤 사용할 수 있습니다" : info.message };
+    return { error: info.kind === "schema" ? "보강관리 DB 설정을 적용한 뒤 사용할 수 있습니다" : info.message,
+      reason: info.kind === "schema" ? "schema_missing" : error.code === "42501" ? "forbidden" : "failed" };
   }
   const parsed = schema.safeParse(data);
   if (!parsed.success) {
     console.error(`[makeups] ${name} 응답 형식 오류`, parsed.error.issues.map(issue => issue.path));
-    return { error: "보강 기록의 형식을 확인하지 못했습니다. 새로고침한 뒤 다시 시도해 주세요." };
+    return { error: "보강 기록의 형식을 확인하지 못했습니다. 새로고침한 뒤 다시 시도해 주세요.", reason: "failed" };
   }
   return { data: parsed.data };
 }

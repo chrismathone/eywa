@@ -1,7 +1,8 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchAllPagedInChunks } from "@/lib/supabase/batch";
-import { visibleStudentFacts } from "@/features/students/ontology/visible-facts";
+import { latestStudentSourceFacts, visibleStudentFacts } from "@/features/students/ontology/visible-facts";
+import { canReadFactSource, canResolveFactSource } from "@/features/students/ontology/read-policy";
 import { assertRaws } from "../model/calc";
 import { emptyRaws, type Metric, type Raws } from "../model/config";
 import { emptyPayload, type ContributionPayload, type StoredContributionMonth } from "../model/stored";
@@ -9,14 +10,15 @@ import { MONTHS_TABLE } from "./store";
 
 type Summary = { student_id: string; month: string; raws: Raws; correction: Raws; unavailable: Metric[];
   closed_at: string | null; reconstructed: boolean; computed_at: string; correction_reasons: ContributionPayload["correctionReasons"] | null };
+export type DisplayContributionMonth = StoredContributionMonth & { withheldFacts?: number };
 
 /** 추이에는 월별 수치만, 원본 근거에는 선택한 달만 읽는다. 집계 엔진의 마감 원본 로더와 분리한다. */
 export async function loadStudentDisplayMonths(db: SupabaseClient, tenant: string, studentId: string, sourceIds: string[],
-  requestedMonth: string | undefined, canonical: (id: string) => string, canSeeFacts: boolean): Promise<StoredContributionMonth[]> {
+  requestedMonth: string | undefined, canonical: (id: string) => string, readable: ReadonlySet<string> | null): Promise<DisplayContributionMonth[]> {
   const rows = await fetchAllPagedInChunks<Summary>(sourceIds, (chunk, a, b) => db.from(MONTHS_TABLE)
     .select("student_id, month, raws, correction, unavailable, closed_at, reconstructed, computed_at, correction_reasons:payload->correctionReasons")
     .eq("tenant_id", tenant).in("student_id", chunk).order("student_id").order("month").range(a, b).returns<Summary[]>());
-  const months = new Map<string, StoredContributionMonth>();
+  const months = new Map<string, DisplayContributionMonth>();
   for (const r of rows.filter((row) => row.student_id === studentId)) {
     assertRaws(r.raws); assertRaws(r.correction);
     months.set(r.month, { studentId, month: r.month, raws: r.raws, correction: r.correction,
@@ -41,9 +43,15 @@ export async function loadStudentDisplayMonths(db: SupabaseClient, tenant: strin
     Object.assign(selected, { raws: own.raws, correction: own.correction, unavailable: own.unavailable ?? [],
       closedAt: own.closed_at, reconstructed: own.reconstructed, computedAt: own.computed_at });
   } else if (selected.computedAt) throw new Error("월 기록이 바뀌었습니다. 다시 불러와 주세요");
-  selected.payload = { ...emptyPayload(), ...own?.payload, facts: visibleStudentFacts(tenant,
-    snapshots.map((r) => ({ computedAt: r.computed_at, facts: r.payload.facts ?? [] })), canonical)
-    .filter((f) => canSeeFacts || f.access !== "student") };
+  const latest = latestStudentSourceFacts(tenant, snapshots.map((r) => ({ computedAt: r.computed_at, facts: r.payload.facts ?? [] })));
+  const safe = latest.filter((f) => canReadFactSource(f, readable) && canResolveFactSource(f, canonical));
+  const facts = visibleStudentFacts(tenant, [{ computedAt: "", facts: safe }], canonical);
+  selected.withheldFacts = latest.length - safe.length;
+  // Never spread private frozen payload fields into a display response.
+  selected.payload = { ...emptyPayload(), facts, coverage: own?.payload.coverage ?? [],
+    subjects: own?.payload.subjects ?? [], correctionReasons: own?.payload.correctionReasons ?? [],
+    corrections: readable === null || sourceIds.every((id) => readable.has(id)) ? own?.payload.corrections : [],
+    evidenceIds: [...new Set(facts.flatMap((f) => f.evidence.map((e) => `${e.source}:${e.id}`)))] };
   selected.evidenceIds = selected.payload.evidenceIds;
   return all;
 }

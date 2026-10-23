@@ -3,7 +3,7 @@ import { useState } from "react";
 import type { ExplorerKind, ExplorerLink } from "@/features/students/ontology/explorer";
 import { ListPager } from "./list-pager";
 import { fieldClass, numberText } from "./presentation";
-export const entityLabels: Record<ExplorerKind, string> = { student: "학생", class: "반", teacher: "강사", subject: "과목", academy: "학원" };
+import { entityLabels } from "./ontology-labels";
 type Names = Record<ExplorerKind, { id: string; label: string }[]>;
 
 export function OntologyConnections({ links, labels, selected, currentKind, onSelect }: {
