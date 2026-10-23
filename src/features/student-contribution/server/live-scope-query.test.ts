@@ -72,3 +72,11 @@ it("does not reveal identity problems outside the reader's original scope", asyn
   m.identity.mockResolvedValue({ resolve: (id: string) => id, issues: [{ studentId: "a" }] });
   expect(await getCurrentOntologyScope({})).toMatchObject({ state: "partial" });
 });
+it("enriches only allowed picker students with school and grade without selecting one for an empty entity", async () => {
+  m.directory.mockResolvedValue({ rows: [{ id: "a", school: "침산초", grade: "초4" }, { id: "b", school: "비공개초", grade: "초3" }], subjects: [] });
+  m.rpc.mockResolvedValue({ data: { ...result, options: [{ kind: "student", id: "a", label: "안도현", students: 1 }] }, error: null });
+  const view = await getCurrentOntologyScope({ kind: "student", entity: "" });
+  expect(view).toMatchObject({ request: { kind: "student", id: "" }, data: { options: [{ id: "a", detail: "침산초4" }] } });
+  expect(m.rpc.mock.lastCall?.[1]).toMatchObject({ p_students: ["a"], p_entity: "" });
+  expect(JSON.stringify(view)).not.toContain("비공개초");
+});

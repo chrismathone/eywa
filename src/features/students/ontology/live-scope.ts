@@ -6,7 +6,7 @@ export type LiveScopeRequest = { kind: ExplorerKind; id: string; search: string;
 export function liveScopeRequest(raw: { kind?: string; entity?: string; q?: string; page?: string }, tenant: string): LiveScopeRequest {
   const kind = EXPLORER_KINDS.includes(raw.kind as ExplorerKind) ? raw.kind as ExplorerKind : "academy";
   const requested = Number(raw.page);
-  return { kind, id: kind === "academy" ? tenant : (raw.entity ?? "").slice(0, 100), search: (raw.q ?? "").trim().slice(0, 100),
+  return { kind, id: kind === "academy" ? tenant : (raw.entity ?? "").slice(0, 100), search: kind === "student" ? "" : (raw.q ?? "").trim().slice(0, 100),
     page: Number.isSafeInteger(requested) && requested > 0 ? Math.min(requested, 100_000) : 1 };
 }
 export function liveScopeHref(request: LiveScopeRequest, embed = false) {
