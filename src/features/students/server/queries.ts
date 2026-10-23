@@ -48,6 +48,7 @@ import { reportSubject } from "@/features/timetable/lib/report-subject";
 import { visibleConsultationSummary } from "@/features/consultations/internal-link";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
+import { describeDbError, logDbError } from "@/lib/supabase/db-error";
 import {
   effectiveAttendanceRecords,
   type EffectiveAttendanceRecord,
@@ -1574,20 +1575,30 @@ export type StudentEnrollmentConsultRow = {
  * 학생에 연결된 **등록상담(입학 상담)** — 학생 상세 상담 탭 상단에 [입학 상담] 라벨로 고정 노출.
  * 학생당 1~3건. RLS로 테넌트 자동 격리 + 호출부(page)가 enrollment 접근권한으로 게이트(민감정보).
  * ⚠️ 이건 enrollment_consultations(입학상담) — student_consultations(재원생 상담)와 별개 테이블.
+ * 🔴 조회 실패를 빈 목록으로 삼키지 않는다(2026-10-23 Codex 검토) — 실제 0건 · 준비 안 됨(컬럼·표 없음) · 조회 실패를
+ *    모양으로 가르고, 화면(원생 상세 상담 탭 · 퇴원 상세 '콜&상담' 카드)이 셋을 다른 문장으로 적는다.
  */
+export type StudentEnrollmentConsults =
+  | { status: "ok"; rows: StudentEnrollmentConsultRow[] }
+  | { status: "not_ready" }
+  | { status: "error" };
+
 export async function getStudentEnrollmentConsultations(
   studentId: string,
-): Promise<StudentEnrollmentConsultRow[]> {
+): Promise<StudentEnrollmentConsults> {
   const supabase = await createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("enrollment_consultations")
     .select(
       "id, consulted_at, consultation_date, created_at, subject, outcome, parent_request, career_goal, follow_up_content",
     )
     .eq("student_id", studentId)
     .order("created_at", { ascending: false });
-  if (!data) return [];
-  return data.map((r) => ({
+  if (error) {
+    logDbError(error, "students.enrollment-consultations", { studentId });
+    return { status: describeDbError(error, { fallback: "" }).kind === "schema" ? "not_ready" : "error" };
+  }
+  return { status: "ok", rows: (data ?? []).map((r) => ({
     id: r.id,
     date: r.consulted_at ?? r.consultation_date ?? r.created_at ?? null,
     subject: r.subject,
@@ -1595,7 +1606,7 @@ export async function getStudentEnrollmentConsultations(
     request: r.parent_request,
     careerGoal: r.career_goal,
     followUp: r.follow_up_content,
-  }));
+  })) };
 }
 
 export type StudentAttendanceDay = {

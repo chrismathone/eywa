@@ -42,6 +42,7 @@ const CARD_SURFACES: [string, string][] = [
   ["app/(shell)/dashboard/_onescreen/panels.tsx", "tip={tipProps("],
   ["app/(shell)/withdrawal-reports/_components/report-list.tsx", "tipProps(r.reason.note)"],
   ["app/(shell)/lesson-reports/_components/rating-cell.tsx", "tipProps(ratingTipCard(rating))"],
+  ["app/(shell)/withdrawals/_components/report-date-badge.tsx", 'title: "퇴원보고서 날짜"'],
 ];
 
 /**

@@ -1,5 +1,11 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-10-23 — 퇴원 상세에 퇴원보고서·콜&상담 잇기 · 퇴원일 옆 보고서 날짜 · 어긋남 목록(W2)
+
+- 원장 메모 *"퇴원일자 통일 · 퇴원보고서 연동 / 생성? · 콜앤상담 연동"* + Codex 검토. 퇴원 상세에 '퇴원보고서'(새 보고서 요청 묶음째 + 기존 원본, [`student-records.ts`](../src/features/withdrawal-reports/server/student-records.ts)) · '콜&상담'(이어진 상담 전부 · 칸반 상태, [`linked-consultations.ts`](../src/features/withdrawals/server/linked-consultations.ts)) 카드 — 카드마다 목적지 메뉴 권한 · 학생 id로 좁혀 읽기 · 실패는 카드만. 원본 열람 판정을 `canReadArchive`로 꺼내 원본 상세와 같이 쓴다. `getStudentEnrollmentConsultations`가 조회 실패를 빈 목록으로 삼키던 것 → 정상·준비 안 됨·실패로 갈라 돌려주고 원생 상세 상담 탭이 실패를 한 줄로 알린다.
+- 퇴원일은 그대로 두고, 같은 퇴원 사건 후보인 보고서의 날짜가 다르면 퇴원일 옆에 '퇴원보고서 종료일'(카드 툴팁에 근거) — 판정 [`report-date-link.ts`](../src/features/withdrawals/report-date-link.ts)(같은 사건 후보 · 부분(과목) 종료 · 재등록 뒤 다시 퇴원 · 재등록 뒤 재원 중 · 관계 미확인). 보고서·원본 상세 → '퇴원 상세' 링크(지금 퇴원 + 퇴원관리 권한). 작성 입구는 두지 않았다(퇴원한 학생은 작성 후보·DB가 거절).
+- 어긋남 목록(읽기 전용): `D:/tmp/withdrawal-date-mismatch-2026-10-23/withdrawal-date-mismatch-2026-10-23.csv` — 운영 연결 376건(같은 사건 후보 81 · 부분 종료 47 · 재등록 뒤 다시 퇴원 18 · 재등록 뒤 재원 중 10 · 관계 미확인 220 — 수강 기록 없음 166 · 보고서 날짜 없음 27 · 과목 미기재 18 · 지금 퇴원 아님 9). 퇴원 상세에 보고서 날짜가 보일 학생 63명. 칸마다 '근거'. 스크립트 `build-csv.mjs`(같은 폴더 · 앱과 같은 판정 함수를 불러 쓴다).
+
 ## 2026-10-23 — 실험실 마크·잠금 = 운영 콘솔 배정 그대로(0452a)
 
 - 원장 *"실험실을 껐는데도 여전히 실험실마크가 있는것도 체크"* — 원인: `getLaboratoryMenus`가 퇴원보고서·원생 기여도를 코드에서 늘 실험실로 끼워 넣었다(운영 표엔 보강관리·수업 평가·키오스크·재등록 캠페인 4개뿐 · 퇴원보고서는 원장이 18:46에 끔). 끼워 넣기 제거 → 배정 표 하나가 원본. 퇴원보고서 `reportViewer`의 배정 무관 실험실 검사(`isFeatureOptedIn(…,"laboratory")`)도 `isLaboratoryMenuAvailable`로(안 고치면 일반 메뉴로 돌려도 실험실 안 켠 지점에선 화면이 닫힌다 — Codex 검토). 퇴원보고서 두 화면 머리글의 손으로 적은 '실험실' 삭제(사이드바 그룹 자동). 원생 기여도는 0452a로 배정 행을 넣어 그대로 실험실(🔴 0452a 먼저 적용 → 앱 배포). 되돌리기 `scripts/_oneoff/revert-0452a-lab-menu-student-contribution.sql`.

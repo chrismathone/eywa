@@ -1,7 +1,6 @@
 import { canManageStudentStatusNow } from "@/features/students/server/status-access";
 import { notFound } from "next/navigation";
 import { BookOpen, MessagesSquare, ScrollText } from "@/components/icons/aywa-icon-compat";
-import type { ReactNode } from "react";
 import { requireAccess } from "@/lib/auth/require-access";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { getEnrollmentDateAccess } from "@/features/enrollments/server/date-access";
@@ -16,10 +15,16 @@ import {
   reasonDisplay,
 } from "@/features/withdrawals/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
-import { buildSubjectMaps } from "@/features/owner/subjects";
+import { buildSubjectMaps, subjectLabelRecord } from "@/features/owner/subjects";
+import { loadStudentReportRecords } from "@/features/withdrawal-reports/server/student-records";
+import { loadLinkedConsultations } from "@/features/withdrawals/server/linked-consultations";
 import { ConsultationTracker } from "../_components/consultation-tracker";
+import { DetailCard as Card } from "../_components/detail-card";
+import { LinkedConsultationsCard } from "../_components/linked-consultations-card";
+import { LinkedReportsCard } from "../_components/linked-reports-card";
 import { ReactivateButton } from "../_components/reactivate-button";
 import { WithdrawalReasonCard } from "../_components/reason-card";
+import { ReportDateBadge } from "../_components/report-date-badge";
 
 export const metadata = { title: "퇴원 상세 — 에이와" };
 
@@ -30,12 +35,17 @@ export default async function WithdrawalDetailPage({
 }) {
   const user = await requireAccess("withdrawals");
   const { studentId } = await params;
-  const [detail, settings] = await Promise.all([
+  if (!/^[0-9a-f-]{36}$/i.test(studentId)) notFound();
+  // 퇴원보고서·콜&상담 카드는 각자 목적지 메뉴 권한으로 가리고, 실패해도 카드만 안내한다(throw 없음) — 독립 조회라 한 번에(B4).
+  const [detail, settings, reportRecords, consults] = await Promise.all([
     getWithdrawalDetail(studentId),
     getTenantSettings(),
+    loadStudentReportRecords(studentId),
+    loadLinkedConsultations(studentId, user.systemRole),
   ]);
   if (!detail) notFound();
   const subjects = buildSubjectMaps(settings.operations.subjects);
+  const reportLabels = subjectLabelRecord(settings.operations.subjects); // 퇴원보고서 과목 = 보고서 화면과 같은 라벨표
   // 날짜 정정 자격은 개인별 기능 지정이며, 다른 화면과 같은 판정이다.
   // 권한 판정 셋은 서로 독립 → 병렬(B4).
   const [dateAccess, canWrite, canManageStudents, studentsLvl] = await Promise.all([
@@ -88,6 +98,12 @@ export default async function WithdrawalDetailPage({
             <span className="num">{detail.enrolledAt ?? "—"}</span>
             <span>~</span>
             <span className="num">{detail.withdrawnAt ?? "—"}</span>
+            <ReportDateBadge
+              withdrawnAt={detail.studentStatus === "withdrawn" ? detail.withdrawnAt : null}
+              enrollments={detail.enrollmentHistory.map((e) => ({ subject: e.subject === "?" ? null : e.subject, startDate: e.startDate, endDate: e.endDate }))}
+              records={reportRecords}
+              labels={reportLabels}
+            />
             <span>·</span>
             <span>총 등록 기간 {duration}</span>
           </p>
@@ -129,6 +145,11 @@ export default async function WithdrawalDetailPage({
             체크하면 즉시 저장됩니다. 재등록 가능성 평가용 기록.
           </p>
         </Card>
+
+        {reportRecords.status !== "hidden" ? (
+          <LinkedReportsCard records={reportRecords} studentName={detail.name} labels={reportLabels} />
+        ) : null}
+        {consults.status !== "hidden" ? <LinkedConsultationsCard consults={consults} labelOf={subjects.labelOf} /> : null}
       </div>
 
       {/* 수강 이력 — 그룹 제목(아이콘+라벨+건수) + 리스트 카드. 내부 헤더바 제거해 다른 섹션과 스타일 통일. */}
@@ -180,25 +201,5 @@ export default async function WithdrawalDetailPage({
         카테고리: {Object.values(REASON_LABEL).join(" · ")}
       </p>
     </div>
-  );
-}
-
-function Card({
-  title,
-  icon,
-  children,
-}: {
-  title: string;
-  icon?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <section className="bg-card border-border space-y-3 rounded-2xl border p-5">
-      <h3 className="eyebrow inline-flex items-center gap-1.5">
-        {icon}
-        {title}
-      </h3>
-      {children}
-    </section>
   );
 }
