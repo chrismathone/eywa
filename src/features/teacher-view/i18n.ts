@@ -3157,7 +3157,12 @@ export const SHEET_DICT = {
   "os.gate.need.progress": { ko: "진도", en: "Progress" },
   "os.gate.need.ment": { ko: "멘트", en: "Message" },
   "os.gate.need.autowrite": { ko: "자동작성", en: "Auto-write" },
-  "os.gate.need.oneline": { ko: "강사 한줄 멘트", en: "Teacher's one-line note" },
+  "os.gate.need.oneline": { ko: "사랑의 한마디", en: "A loving word" },
+  "os.gate.need.hwreason": { ko: "숙제 미제출 사유", en: "Reason homework was not done" },
+  "os.gate.hint.hwreason": {
+    ko: "숙제 완성도가 미제출입니다 — 학생 상세의 숙제 완성도 아래 '미제출 사유'를 적어 주세요(보고서에 그대로 들어갑니다)",
+    en: "Homework is marked as not done — write the reason under homework in the student details (it goes into the report as written)",
+  },
   "os.gate.need.testreason": { ko: "일일 테스트 사유", en: "Reason for no daily test" },
   "os.gate.hint.testreason": {
     ko: "일일 테스트를 '시험 없음'으로 두었습니다 — 안 친 사유를 골라 주세요('기타'는 사유를 적어야 합니다)",
@@ -3177,8 +3182,8 @@ export const SHEET_DICT = {
     en: "This student's math report can only be sent as written by Auto-write — press Auto-write (press it again if you changed the progress, test, attitude, homework or understanding)",
   },
   "os.gate.hint.oneline": {
-    ko: "강사 한줄 멘트는 필수입니다 — 적으면 보고서 맨 아래에 바로 붙습니다",
-    en: "The teacher's one-line note is required — what you type is added straight to the end of the report",
+    ko: "사랑의 한마디는 필수입니다 — 적으면 보고서 맨 아래에 바로 붙습니다",
+    en: "A loving word is required — what you type is added straight to the end of the report",
   },
   "os.gate.hint.ment": {
     ko: "학부모 전달 멘트가 비어 있습니다 — '자동작성'을 누르거나 직접 입력하세요(빈 보고서는 발송되지 않습니다)",
@@ -3231,7 +3236,12 @@ export const SHEET_DICT = {
   },
   "os.card.hwTodayAria": { ko: "{subject} 오늘 과제", en: "{subject} today's homework" },
   "os.card.note": { ko: "특이사항 (메모)", en: "Notes (memo)" },
-  "os.card.notePilot": { ko: "강사 한줄 멘트 (필수)", en: "Teacher's one-line note (required)" },
+  "os.card.notePilot": { ko: "사랑의 한마디 (필수)", en: "A loving word (required)" },
+  "os.card.hwMiss.label": { ko: "미제출 사유 (필수)", en: "Why it was not done (required)" },
+  "os.card.hwMiss.ph": {
+    ko: "예: 감기로 몸이 좋지 않았다고 합니다 · 보고서 숙제 완성도에 그대로 들어갑니다",
+    en: "e.g. was unwell with a cold · added as is to the homework part of the report",
+  },
   "os.card.notePh": {
     ko: "예: 조퇴함 / 개념이 어려워 연습문제 한 번 더 · 자동작성 시 학부모 문장으로 풀어 씁니다",
     en: "e.g. left early / found the concept hard, so one more practice set · auto-write turns this into a sentence for parents",
@@ -3241,12 +3251,12 @@ export const SHEET_DICT = {
     en: "e.g. You kept going on the hard problems today and solved them — great work. Keep this up and the next unit will go well too! · After Auto-write, what you type shows up right away at the end of the report",
   },
   "os.row.notePhPilot": {
-    ko: "강사 한줄 멘트(필수) · 예: 끝까지 포기하지 않고 풀어낸 모습이 멋졌어요!",
-    en: "Teacher's one-line note (required) · e.g. Great job not giving up on the hard ones!",
+    ko: "사랑의 한마디(필수) · 예: 끝까지 포기하지 않고 풀어낸 모습이 멋졌어요!",
+    en: "A loving word (required) · e.g. Great job not giving up on the hard ones!",
   },
   "os.card.mentPhPilot": {
-    ko: "이 학생의 수학 보고서는 '자동작성'을 먼저 눌러 만듭니다(그 뒤엔 직접 고칠 수 있습니다). 수업 평가 · 진도 · 일일 테스트 · 수업 태도 · 과제 수행률 · 이해도(강점·응원·격려의 말로) · 오늘 과제 · 선생님 한마디 항목으로 나뉘어 채워집니다. 한줄 멘트는 적는 대로 맨 아래에 바로 반영됩니다.",
-    en: "This student's math report starts from Auto-write (you can edit it afterwards). It is split into sections — progress, daily test, attitude, homework, understanding (in words of praise or encouragement), today's homework and the teacher's note, which updates live as you type.",
+    ko: "이 학생의 수학 보고서는 '자동작성'을 먼저 눌러 만듭니다(그 뒤엔 직접 고칠 수 있습니다). 수업 평가 · 진도 · 일일 테스트 · 수업 태도 · 숙제 완성도 · 오늘의 수업(강점·응원·격려의 말로) · 오늘의 숙제 · 사랑의 한마디 항목으로 나뉘어 채워집니다. 사랑의 한마디는 적는 대로 맨 아래에 바로 반영됩니다.",
+    en: "This student's math report starts from Auto-write (you can edit it afterwards). It is split into sections — progress, daily test, attitude, homework completion, today's lesson (in words of praise or encouragement), today's homework and a loving word, which updates live as you type.",
   },
   "os.card.testSkip.title": { ko: "일일 테스트", en: "Daily test taken?" },
   "os.card.testSkip.yes": { ko: "시험 있음", en: "Test taken" },

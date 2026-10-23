@@ -74,6 +74,8 @@ export type ReportCommentInput = {
   understanding?: { title: string; score: number }[];
   /** 일일 테스트 '없음' 사유 — 수학 보고서 시범에서만(math-report-pilot-sections.ts). 있으면 점수 대신 사유 문장이 나간다. */
   dailyTestSkip?: import("./math-report-pilot-sections").DailyTestSkip | null;
+  /** 숙제 미제출 사유 — 수학 보고서 시범에서만. 숙제가 미제출일 때 '숙제 완성도' 항목에 원문 그대로 들어간다(AI에는 안 준다). */
+  homeworkMissReason?: string;
 };
 
 /** 값을 라벨 **한 줄 안에** 가두는 정규화 — 내부 개행을 ", "로 접는다.

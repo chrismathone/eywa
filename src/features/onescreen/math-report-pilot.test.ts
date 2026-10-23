@@ -151,8 +151,8 @@ describe("이해도 AI — 이름·숫자·혼잣말(원장 2026-10-23 제보)",
 });
 
 describe("글 조립", () => {
-  it("진도 → 본문 → 선생님 한마디(맨 아래, 항목 제목과 함께)", () => {
-    expect(composePilotMent({ lead: "L", body: "B", note: " 격려 " })).toBe("L\n\nB\n\n■ 선생님 한마디\n격려");
+  it("진도 → 본문 → 사랑의 한마디(맨 아래, 항목 제목과 함께)", () => {
+    expect(composePilotMent({ lead: "L", body: "B", note: " 격려 " })).toBe("L\n\nB\n\n■ 사랑의 한마디\n격려");
     expect(composePilotMent({ lead: "L", body: "B", note: "" })).toBe("L\n\nB");
   });
   it("AI 지시가 점수를 말로 풀게 한다(강점·응원·격려, 숫자 금지)", () => {
@@ -272,16 +272,20 @@ describe("자동작성 뒤 수정 허용(원장 2026-10-23)", () => {
   });
 });
 
-describe("강사 한줄 멘트(필수, 실시간 반영)", () => {
+describe("사랑의 한마디(옛 강사 한줄 멘트 — 필수, 실시간 반영)", () => {
   const auto = "우리 원이는 오늘 A 진도를 나갔습니다.\n\n본문입니다.";
   it("자동작성 뒤 처음 적으면 맨 끝에 붙는다", () => {
-    expect(pilotRecomposeNote(auto, auto, "", "멋졌어요")).toBe(auto + "\n\n■ 선생님 한마디\n멋졌어요");
+    expect(pilotRecomposeNote(auto, auto, "", "멋졌어요")).toBe(auto + "\n\n■ 사랑의 한마디\n멋졌어요");
+  });
+  it("옛 제목('선생님 한마디')으로 끝난 글도 끝만 바꾼다 — 바꾼 끝은 새 제목", () => {
+    const old = auto + "\n\n■ 선생님 한마디\n멋졌어요";
+    expect(pilotRecomposeNote(old, old, "멋졌어요", "최고")).toBe(auto + "\n\n■ 사랑의 한마디\n최고");
   });
   it("고치면 끝의 옛 멘트만 바뀌고, 지우면 떨어진다", () => {
-    const withA = auto + "\n\n■ 선생님 한마디\n멋졌어요";
-    expect(pilotRecomposeNote(withA, withA, "멋졌어요", "멋졌어요!")).toBe(auto + "\n\n■ 선생님 한마디\n멋졌어요!");
+    const withA = auto + "\n\n■ 사랑의 한마디\n멋졌어요";
+    expect(pilotRecomposeNote(withA, withA, "멋졌어요", "멋졌어요!")).toBe(auto + "\n\n■ 사랑의 한마디\n멋졌어요!");
     expect(pilotRecomposeNote(withA, withA, "멋졌어요", "")).toBe(auto);
-    expect(pilotRecomposeNote(withA, withA, " 멋졌어요 ", "좋아요 ")).toBe(auto + "\n\n■ 선생님 한마디\n좋아요");
+    expect(pilotRecomposeNote(withA, withA, " 멋졌어요 ", "좋아요 ")).toBe(auto + "\n\n■ 사랑의 한마디\n좋아요");
   });
   it("자동작성 글이 아니거나 끝이 옛 멘트가 아니면 손대지 않는다", () => {
     expect(pilotRecomposeNote(auto, "", "", "x")).toBeNull();
@@ -296,7 +300,7 @@ describe("강사 한줄 멘트(필수, 실시간 반영)", () => {
     expect(pilotOneLineAttached(auto, "좋아요")).toBe(false);
     expect(pilotOneLineAttached(auto, undefined)).toBe(false);
   });
-  it("한줄 멘트가 없으면 '강사 한줄 멘트 입력 필요'로 막는다", () => {
+  it("사랑의 한마디가 없으면 '사랑의 한마디 입력 필요'로 막는다", () => {
     const g = evaluateSendGate({
       needsOneLine: true,
       alreadySent: false,
@@ -307,6 +311,6 @@ describe("강사 한줄 멘트(필수, 실시간 반영)", () => {
     } as Parameters<typeof evaluateSendGate>[0]);
     expect(g.canSend).toBe(false);
     expect(g.reasons).toEqual(["oneline"]);
-    expect(g.label).toBe("강사 한줄 멘트 입력 필요");
+    expect(g.label).toBe("사랑의 한마디 입력 필요");
   });
 });

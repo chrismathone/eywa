@@ -107,13 +107,44 @@ export function attitudeText(raw: string): string {
   return ATTITUDE_TEXT[s] ?? `오늘 수업 태도는 ${attitudeClause(s)}.`;
 }
 
-/** 지난 과제 수행률 → 문단. 고른 값을 옮기고, 덜 해 온 몫은 아이를 탓하지 않고 학원이 챙긴다는 말로 맺는다. */
-export function homeworkSentence(v: string): string {
+/** 숙제를 안 해 왔나 — '미제출' 또는 0%(같은 문장을 쓴다). 이때 사유를 적어야 보낸다(원장 2026-10-23 *"미제출일경우 사유작성"*). */
+export function isHomeworkMissed(v: string | null | undefined): boolean {
+  const s = (v ?? "").trim();
+  return s === "미제출" || parseHomeworkRate(s) === 0;
+}
+
+const MISS_REASON_MAX = 200;
+
+/** 세션에서 읽은 미제출 사유(모양을 믿지 않는다) — 한 줄로 접고 길이를 자른다. 문자열이 아니면 "". */
+export function readHomeworkMissReason(raw: unknown): string {
+  return typeof raw === "string" ? raw.replace(/\s*\n+\s*/g, " ").slice(0, MISS_REASON_MAX) : "";
+}
+
+/** 미제출인데 사유가 비었나(발송 게이트). 미제출이 아니면 false. */
+export function needsHomeworkMissReason(homework: string | null | undefined, reason: string | null | undefined): boolean {
+  return isHomeworkMissed(homework) && (reason ?? "").trim() === "";
+}
+
+/** 사유 원문을 문장으로 — 끝에 마침표가 없으면 붙인다(강사가 '감기' 처럼 짧게 적어도 문장 사이에 끼워진다). */
+function asSentence(text: string): string {
+  const t = text.trim();
+  return !t || /[.!?。]$/.test(t) ? t : `${t}.`;
+}
+
+/**
+ * 숙제 완성도(지난 과제 수행률) → 문단. 고른 값을 옮기고, 덜 해 온 몫은 아이를 탓하지 않고 학원이 챙긴다는 말로 맺는다.
+ * 미제출이면 강사가 적은 사유(`missReason`)를 두 문장 사이에 그대로 넣는다.
+ */
+export function homeworkSentence(v: string, missReason?: string | null): string {
   const s = v.trim();
   if (!s || s === "—") return "";
   if (s === "없음") return "지난 시간에 내준 과제는 없었습니다.";
   // 0%는 미제출과 같은 문장 — "0% 해 왔습니다"는 어색하다.
-  if (s === "미제출" || parseHomeworkRate(s) === 0) return "지난 시간 과제를 아직 해 오지 못했습니다. 다음 시간에 함께 확인하고 꼭 마무리하도록 하겠습니다.";
+  if (isHomeworkMissed(s))
+    // typeof — `.map(homeworkSentence)`처럼 두 번째 인자에 숫자가 들어와도 깨지지 않게.
+    return ["지난 시간 과제를 아직 해 오지 못했습니다.", asSentence(typeof missReason === "string" ? missReason : ""), "다음 시간에 함께 확인하고 꼭 마무리하도록 하겠습니다."]
+      .filter(Boolean)
+      .join(" ");
   const n = parseHomeworkRate(s);
   if (n == null) return s;
   if (n >= 100) return "지난 시간 과제를 빠짐없이 모두 해 왔습니다. 성실하게 잘 해 왔습니다.";
@@ -123,10 +154,6 @@ export function homeworkSentence(v: string): string {
   return `${head} 남은 부분은 다음 시간에 수업에서 함께 확인하며 꼭 마무리하겠습니다.`;
 }
 
-/** 오늘 과제 항목의 앞·뒤 문장 — 학부모 카드(pilot-notes-body.tsx)가 이 둘 사이를 과제 상자로 세운다. */
-export const HOMEWORK_TODAY_INTRO = "오늘 내준 과제는 아래와 같습니다.";
-export const HOMEWORK_TODAY_CLOSE = "다음 시간에 잘 해 왔는지 함께 확인하겠습니다.";
-
 /** 항목 글의 재료 — 원스크린이 AI에 주는 값(ReportCommentInput)과 같은 모양. */
 export type PilotFacts = {
   progress?: string;
@@ -135,6 +162,8 @@ export type PilotFacts = {
   checkTest: string;
   attitude: string;
   homework: string;
+  /** 숙제 미제출 사유(시범 행, 강사 원문) — 미제출일 때만 글에 들어간다. */
+  homeworkMissReason?: string;
   homeworkToday: string;
   videoHomework?: boolean;
   videoHomeworkDue?: string;
@@ -220,20 +249,16 @@ export function pilotLevelsSection(f: Pick<PilotFacts, "attitude" | "homework" |
 }
 
 /**
- * 진도 항목과 선생님 한마디 사이의 항목들 — 일일 테스트 → 확인 테스트 → 수업 태도 → 과제 수행률 → 이해도 → 오늘 과제.
- * (수업 평가 표는 맨 위 — `pilotLevelsSection`.)
+ * 진도 항목과 사랑의 한마디 사이의 항목들 — 원장 2026-10-23 순서 *"진도 → 일일테스트 → 수업태도 → 숙제완성도 → 오늘의 수업 →
+ * 오늘의 숙제 → 사랑의 한마디"*. 확인 테스트는 일일 테스트 바로 뒤(값이 있을 때만). (수업 평가 표는 맨 위 — `pilotLevelsSection`.)
  * 값이 없는 항목은 통째로 뺀다. `understandingText`는 AI가 쓴 이해도 글, `videoReceipt`는 지난 영상 숙제 확인 문장.
+ * 오늘의 숙제는 숙제 내용만 적는다 — 원장 2026-10-23 *"오늘 내준 과제 및 다음 시간에 잘 해 왔는지 등 멘트 삭제"*.
  */
 export function pilotBody(f: PilotFacts, extra: { understandingText?: string; videoReceipt?: string | null }): string {
   const daily = f.dailyTestSkip ? testSkipText(f.dailyTestSkip) : scoreText(f.dailyTest);
-  const hw = [homeworkSentence(f.homework), extra.videoReceipt?.trim() ?? ""].filter(Boolean).join(" ");
+  const hw = [homeworkSentence(f.homework, f.homeworkMissReason), extra.videoReceipt?.trim() ?? ""].filter(Boolean).join(" ");
   const video = f.videoHomework === true ? `영상 숙제가 있습니다${f.videoHomeworkDue ? `(${f.videoHomeworkDue} 제출)` : ""}.` : "";
-  const todayHw = f.homeworkToday.trim();
-  const today = todayHw || video
-    ? [todayHw ? `${HOMEWORK_TODAY_INTRO}\n${todayHw}` : "", video, HOMEWORK_TODAY_CLOSE]
-        .filter(Boolean)
-        .join("\n")
-    : "";
+  const today = [f.homeworkToday.trim(), video].filter(Boolean).join("\n");
   return [
     pilotSection(T.daily, daily),
     pilotSection(T.check, scoreText(f.checkTest)),
@@ -258,6 +283,7 @@ export function pilotFactsSig(f: PilotFacts, understanding: readonly { title: st
     scoreOnly(f.checkTest),
     f.attitude.trim(),
     f.homework.trim(),
+    isHomeworkMissed(f.homework) ? (f.homeworkMissReason ?? "").trim() : "",
     f.homeworkToday.trim(),
     f.videoHomework === true,
     understandingSig(understanding),
@@ -273,7 +299,7 @@ export function pilotRowSig(student: OneScreenStudent, subjectName: string): str
   const su = student.subjects[idx];
   if (!su) return "";
   return pilotFactsSig(
-    { ...buildReportCommentInput(student, idx), dailyTestSkip: su.dailyTestSkip ?? null },
+    { ...buildReportCommentInput(student, idx), dailyTestSkip: su.dailyTestSkip ?? null, homeworkMissReason: su.homeworkMissReason ?? "" },
     activeUnderstanding(su.today, su.understanding),
   );
 }

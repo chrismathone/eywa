@@ -6,6 +6,7 @@
  * 이 조각으로 진짜 표와 항목 블록을 그린다. 그래서 형식이 안 맞으면 null — 카드는 예전처럼 글을 그대로 보인다.
  */
 
+import { PILOT_LEGACY_TITLES, PILOT_SECTION_TITLES } from "./math-report-pilot";
 import { LEVELS, type Level } from "./math-report-pilot-sections";
 
 export type PilotNoteSection = { title: string; body: string };
@@ -22,6 +23,29 @@ export function parsePilotNotes(notes: string | null | undefined): PilotNoteSect
     out.push({ title, body: rest.join("\n").trim() });
   }
   return out;
+}
+
+/** 이 항목이 그 제목인가 — 이름을 바꾸기 전에 저장된 글(옛 제목)도 같은 항목으로 본다. */
+export function isPilotTitle(title: string, key: keyof typeof PILOT_SECTION_TITLES): boolean {
+  if (title === PILOT_SECTION_TITLES[key]) return true;
+  const legacy = (PILOT_LEGACY_TITLES as Partial<Record<string, string>>)[key];
+  return legacy !== undefined && title === legacy;
+}
+
+/** 시범 자동작성 글인가 — 아는 항목 제목이 하나라도 있으면. 손으로 '■'로 시작한 글을 시범 글로 오인하지 않게. */
+export function isPilotReportSections(sections: PilotNoteSection[]): boolean {
+  const keys = Object.keys(PILOT_SECTION_TITLES) as (keyof typeof PILOT_SECTION_TITLES)[];
+  return sections.some((s) => keys.some((k) => isPilotTitle(s.title, k)));
+}
+
+/**
+ * 맨 끝 '사랑의 한마디'를 떼어 낸다 — 학부모 카드가 그 항목을 **카드 맨 아래**(학습 추세·첨부 뒤)에 따로 세운다
+ * (원장 2026-10-23 *"사랑의 한마디 맨아래로 위치 변경"*). 마지막 항목이 한마디가 아니면 note = null.
+ */
+export function splitPilotNote(sections: PilotNoteSection[]): { main: PilotNoteSection[]; note: PilotNoteSection | null } {
+  const last = sections[sections.length - 1];
+  if (last && isPilotTitle(last.title, "note")) return { main: sections.slice(0, -1), note: last };
+  return { main: sections, note: null };
 }
 
 export type LevelRow = { label: string; level: Level };
