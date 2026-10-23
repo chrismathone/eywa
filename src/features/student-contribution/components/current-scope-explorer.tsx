@@ -22,7 +22,7 @@ export function CurrentScopeExplorer({ view, embed }: { view: View; embed: boole
       <p className="text-sm">{view.state === "schema_missing" ? "조회 설정이 준비되면 이곳에서 현재 수강 관계를 확인할 수 있습니다. 월별 기여도 근거는 계속 볼 수 있습니다." : "원본 기록은 그대로입니다. 열람 범위를 확인하거나 잠시 후 다시 시도해 주세요."}</p>
       <CurrentScopeRefresh />
     </div> : <>
-      <section className="space-y-4 rounded-xl border border-line p-4">
+      <section className={browsing ? "flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line p-3" : "space-y-4 rounded-xl border border-line p-4"}>
         <CurrentScopeControls key={`${request.kind}:${request.id}:${request.search}`} request={request} options={data.options} />
         <div className="flex flex-wrap items-end justify-between gap-2">{!browsing && <h2 className="text-lg font-semibold">{selected}</h2>}<span className="text-xs tabular-nums">{data.asOf} 현재 수강 기준 · 휴원 포함</span></div>
         {!browsing && <>
