@@ -16,7 +16,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: () =>
 } }) }));
 import { cachedOntologyViews } from "./ontology-cache";
 beforeEach(() => { state.cache.clear(); state.reads = 0; state.tenant = "t"; });
-const load = (readable: string[] | null) => cachedOntologyViews("t", "2026-10", ["s"], [["s", "s"]], readable, "v1");
+const load = async (readable: string[] | null) => (await cachedOntologyViews("t", "2026-10", ["s"], [["s", "s"]], readable, "v1")).views;
 it("같은 범위는 재사용하되 전체·열람 불가·담당 학생 범위를 섞지 않는다", async () => {
   expect((await load(null))["academy:t"]!.factCount).toBe(2);
   expect((await load([]))["academy:t"]!.factCount).toBe(1);
@@ -28,15 +28,13 @@ it("학원·월·집계 버전·병합·대상 변경이 이전 캐시를 사용
   await load(null);
   await cachedOntologyViews("t", "2026-09", ["s"], [["s", "s"]], null, "v1");
   await cachedOntologyViews("t", "2026-10", ["s"], [["s", "s"]], null, "v2");
-  expect(await cachedOntologyViews("t", "2026-10", [], [["s", "s"]], null, "v1")).toEqual({});
+  expect((await cachedOntologyViews("t", "2026-10", [], [["s", "s"]], null, "v1")).views).toEqual({});
   const merged = await cachedOntologyViews("t", "2026-10", ["merged"], [["s", "merged"]], null, "v1");
-  expect(merged["academy:t"]!.students).toEqual(["merged"]);
+  expect(merged.views["academy:t"]!.students).toEqual(["merged"]);
   state.tenant = "other";
-  expect((await cachedOntologyViews("other", "2026-10", ["s"], [["s", "s"]], null, "v1"))["academy:other"]!.factCount).toBe(2);
+  expect((await cachedOntologyViews("other", "2026-10", ["s"], [["s", "s"]], null, "v1")).views["academy:other"]!.factCount).toBe(2);
   expect(state.reads).toBe(6);
 });
-it("알 수 없는 병합 연결은 실패하고 실패 결과를 캐시하지 않는다", async () => {
-  await expect(cachedOntologyViews("t", "2026-10", ["s"], [], null, "v1")).rejects.toThrow();
-  await expect(cachedOntologyViews("t", "2026-10", ["s"], [], null, "v1")).rejects.toThrow();
-  expect(state.reads).toBe(2);
+it("사라진 학생 연결은 격리하고 불완전성을 반환한다", async () => {
+  expect(await cachedOntologyViews("t", "2026-10", ["s"], [], null, "v1")).toEqual({ views: {}, unresolved: 1 });
 });

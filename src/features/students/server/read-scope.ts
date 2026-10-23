@@ -61,15 +61,15 @@ export type TeacherClassScope = {
  * 엄격판 — 담임·교시 담당 조회가 실패하면 **던진다**(JJ실용, ijw/server/viewer.ts). 조용히 빈 갈래로 떨어지면 강사에게
  * "담당 학생 없음"이 사실처럼 보인다(적대 재리뷰 2026-09-10). 갈래는 위 `teacherViewableClassIds`와 **같다** — 한쪽을
  * 바꾸면 여기도 함께 바꿀 것(가드: ijw/tenant-guard.test.ts). 학생 상세의 기본판 동작(실패 = 그 갈래만 빈 채)은 그대로다.
- * ⚠️ 위임 갈래는 getDelegatedClassIdsInRange가 오류를 안에서 삼켜(빈 배열) 여기서도 감지하지 못한다.
+ * 위임 실패도 구분해야 하는 소비처는 strictDelegation=true로 호출한다. 기본값은 기존 호출부 동작을 유지한다.
  */
-export const teacherClassScopeStrict = cache(async (userId: string): Promise<TeacherClassScope> => {
+export const teacherClassScopeStrict = cache(async (userId: string, strictDelegation = false): Promise<TeacherClassScope> => {
   const supabase = await createClient();
   const today = kstToday();
   const [own, slots, delegated] = await Promise.all([
     supabase.from("classes").select("id").eq("teacher_id", userId),
     supabase.from("class_schedules").select("class_id, valid_from, valid_to").eq("teacher_id", userId),
-    getDelegatedClassIdsInRange(userId, addDays(today, -7), addDays(today, 7)),
+    getDelegatedClassIdsInRange(userId, addDays(today, -7), addDays(today, 7), strictDelegation),
   ]);
   if (own.error) throw new Error(`teacher scope (homeroom): ${own.error.message}`);
   if (slots.error) throw new Error(`teacher scope (slots): ${slots.error.message}`);

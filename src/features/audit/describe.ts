@@ -810,6 +810,11 @@ export function auditDetail(
       return join(m.trigger === "cron" ? "매일 자동 집계" : "지금 집계", `원생 ${num(m.students) ?? 0}명`, `저장 ${num(m.written) ?? 0}건`, `마감 ${num(m.closed) ?? 0}건`);
     case "student_contribution_settings_save":
       return join("지난 실적까지 현재 배점 적용", `지점 합계 ${num(m.beforeTotal) ?? 0} → ${num(m.afterTotal) ?? 0}`);
+    case "student_contribution_summary_generate": {
+      const outcome = ({ saved: "저장 완료", failed: "생성 실패", quota: "일일 한도 도달", busy: "중복 요청 중단",
+        unavailable: "요약 조건 미충족", input_limit: "입력량 제한", source_changed: "원본 변경으로 저장 중단" } as Record<string, string>)[str(m.outcome) ?? ""] ?? "결과 확인 필요";
+      return join(outcome, m.providerRequested === true ? "AI 요청함" : "AI 요청 전", num(m.itemCount) === null ? null : `발췌 ${num(m.itemCount)}건`, str(m.model) || null);
+    }
     case "student_contribution_signal_cancel":
     case "student_contribution_signal_rejudge":
       return typeof m.reason === "string" ? m.reason : null;

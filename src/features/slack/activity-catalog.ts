@@ -131,6 +131,7 @@ const FORBID_PREFIXES = ["resume_", "staff_resume_", "staff_contract_", "staff_c
 const FORBID_KEYS = new Set([
   "student_contribution_refresh", "student_contribution_settings_save", "student_contribution_signal_cancel",
   "student_contribution_signal_rejudge", "student_contribution_referral_backfill", "student_contribution_referral_link",
+  "student_contribution_summary_generate",
   "staff_password_reset",
   "self_password_change",
   "self_email_change",

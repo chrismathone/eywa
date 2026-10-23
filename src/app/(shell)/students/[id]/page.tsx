@@ -42,7 +42,7 @@ import { ConsultationsTab } from "./_tabs/consultations-tab";
 import { MemosTab } from "./_tabs/memos-tab";
 import { TimelineTab } from "./_tabs/timeline-tab";
 import { getContributionGate } from "@/features/student-contribution/server/access";
-import { ContributionStudentPanel } from "@/features/student-contribution/components/student-panel";
+import { StudentOntologyPanel } from "@/features/student-contribution/components/student-ontology-panel";
 import { HomeworkVideosTab } from "./_tabs/homework-videos-tab";
 import { HomeworkVideoLinks } from "./_tabs/homework-video-links";
 import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
@@ -337,7 +337,7 @@ export default async function StudentDetailPage({
         ) : tab === "billing" ? (
           <BillingTab studentId={student.id} />
         ) : tab === "contribution" && showContribution ? (
-          <ContributionStudentPanel studentId={student.id} />
+          <StudentOntologyPanel studentId={student.id} />
         ) : tab === "timeline" ? (
           <TimelineTab studentId={student.id} />
         ) : null}
