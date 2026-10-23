@@ -9,7 +9,7 @@ import { parseLevelRows, parseScoreLine, type LevelRow, type PilotNoteSection } 
 /** 시안 B — 고른 등급까지 칸을 채우고 끝 칸에 등급 글자. 열 폭은 colgroup 고정(등급 글자 길이로 표가 안 밀린다). */
 function LevelTable({ rows }: { rows: LevelRow[] }) {
   return (
-    <table className="border-line w-full table-fixed border-collapse border text-[15px]">
+    <table className="border-line w-full table-fixed border-collapse border text-sm">
       <colgroup>
         <col className="w-[30%]" />
         {LEVELS.map((lv) => (
