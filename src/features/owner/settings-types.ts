@@ -616,10 +616,13 @@ const specialAccessSchema = z.object({
   // 업무 처리 현황(모든 직원의 할 일 · 0377a) — 원장 역할은 지정 없이 본다. 새 칸이라 옛 화면·저장값엔 없다(없음 = 빈 명단).
   // 소비처 = `getStaffTaskViewer`(staff-tasks/server/gate.ts).
   staffTaskMonitorIds: z.array(z.string().uuid()).max(80).optional(),
+  // 업체리스트(재고관리 거래처 연락처) — 🔴 원장 역할도 지정해야 본다(원장 2026-10-23 "이승엽만"). 없음 = 아무도 못 본다.
+  // 소비처 = `canViewVendorsNow`(inventory/server/vendor-gate.ts).
+  vendorViewerIds: z.array(z.string().uuid()).max(80).optional(),
   staffSubjectScopes: z.array(staffSubjectScopeSchema).max(80).default([]),
 });
 /** 사람 id 목록인 칸(과목 범위는 줄 모양이 달라 따로 다룬다). */
-export const SPECIAL_ACCESS_ID_LISTS = ["payslipViewerIds", "payslipManagerIds", "leaveAdjusterIds", "classSplitterIds", "enrollmentDateEditorIds", "studentStatusManagerIds", "staffTaskMonitorIds"] as const;
+export const SPECIAL_ACCESS_ID_LISTS = ["payslipViewerIds", "payslipManagerIds", "leaveAdjusterIds", "classSplitterIds", "enrollmentDateEditorIds", "studentStatusManagerIds", "staffTaskMonitorIds", "vendorViewerIds"] as const;
 export const permissionsSchema = z
   .object({
     overrides: z.array(permissionOverrideSchema).max(MENU_KEYS.length * SYSTEM_ROLES.length),

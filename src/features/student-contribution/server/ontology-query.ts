@@ -30,6 +30,8 @@ export async function getContributionOntology(month: string) {
   return { tenant, month, historyReady: snapshot.historyReady, canConfigure: gate.canConfigure, views: projected, identityIssues: identity.issues.length + projection.unresolved,
     labels: { student: directory.rows.map((s) => ({ id: s.id, label: s.name, detail: schoolGradeLabel(s.school, s.grade) })),
       class: directory.classes.map((c) => ({ id: c.id, label: c.class_name })),
-      teacher: users.map((u) => ({ id: u.id, label: u.display_name })), subject: directory.subjects.map((s) => ({ id: s.key, label: s.label })),
+      // A monthly teacher is evidenced by that month's records, including former staff who taught then.
+      teacher: users.filter((u) => projected[`teacher:${u.id}`]?.factCount > 0).map((u) => ({ id: u.id, label: u.display_name })),
+      subject: directory.subjects.map((s) => ({ id: s.key, label: s.label })),
       academy: [{ id: tenant, label: "학원 전체" }] } };
 }

@@ -3,7 +3,7 @@ import type { Face } from "@/components/face-tabs";
 /** 재고관리의 라우트 — 면은 `?tab=`으로 가른다(수납관리와 같은 메커니즘). */
 export const INVENTORY_PATH = "/inventory";
 
-export const INVENTORY_TABS = ["assets", "loans", "audits", "supplies"] as const;
+export const INVENTORY_TABS = ["assets", "loans", "audits", "supplies", "vendors"] as const;
 export type InventoryTab = (typeof INVENTORY_TABS)[number];
 
 /**
@@ -18,6 +18,8 @@ export const INVENTORY_FACE_DEFS: ReadonlyArray<{ key: InventoryTab; label: stri
   { key: "loans", label: "대여", href: `${INVENTORY_PATH}?tab=loans` },
   { key: "audits", label: "실사", href: `${INVENTORY_PATH}?tab=audits` },
   { key: "supplies", label: "소모품", href: `${INVENTORY_PATH}?tab=supplies` },
+  // 거래처 연락처(원장 2026-10-22 *"재고관리에 전화번호부? 업체리스트?"*) — 서점·출판사·정수기·인테리어 등.
+  { key: "vendors", label: "업체리스트", href: `${INVENTORY_PATH}?tab=vendors` },
 ];
 
 export function isInventoryTab(v: unknown): v is InventoryTab {
@@ -36,11 +38,12 @@ export function tabOfHref(href: string): InventoryTab {
 }
 
 /**
- * 면 전환 탭 — 자산 · 대여 · 실사 · 소모품. 탭 라벨 옆 건수(시안 `자산마스터 96 / 대여이력 7 / …`)는 라벨 뒤에
+ * 면 전환 탭 — 자산 · 대여 · 실사 · 소모품 · 업체리스트. 탭 라벨 옆 건수(시안 `자산마스터 96 / 대여이력 7 / …`)는 라벨 뒤에
  * 붙인다. 건수를 모르면(조회 실패·표 없음) 숫자를 **안 붙인다** — 0을 적으면 "하나도 없다"는 거짓말이 된다.
  */
-export function inventoryFaces(counts?: Partial<Record<InventoryTab, number | null>>): Face[] {
-  return INVENTORY_FACE_DEFS.map((f) => {
+export function inventoryFaces(counts?: Partial<Record<InventoryTab, number | null>>, opts?: { showVendors?: boolean }): Face[] {
+  // 업체리스트는 지정한 사람만(원장 2026-10-23) — 안 보이는 사람에겐 탭 자체가 없다. 기본은 감춤(닫힌 쪽).
+  return INVENTORY_FACE_DEFS.filter((f) => f.key !== "vendors" || opts?.showVendors === true).map((f) => {
     const n = counts?.[f.key];
     return { key: f.key, label: typeof n === "number" ? `${f.label} ${n}` : f.label, href: f.href };
   });

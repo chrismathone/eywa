@@ -7,7 +7,31 @@ import type { TableStatus } from "@/features/inventory/server/queries";
  *    잠기는 범위가 다르다(전자는 화면 전체, 후자는 엑셀의 새 분류 자동 추가만).
  * 편집 잠금은 page.tsx가 `editable`로 정한다 — 여기는 알리기만.
  */
-export function NotReadyBanner({ status, categoryStatus }: { status: TableStatus; categoryStatus?: TableStatus }) {
+export function NotReadyBanner({
+  status,
+  categoryStatus,
+  vendorStatus,
+}: {
+  status: TableStatus;
+  categoryStatus?: TableStatus;
+  /** 업체리스트 면일 때만 — 표(20261022140000)가 따로라 자산 표와 원인을 섞지 않는다. */
+  vendorStatus?: TableStatus;
+}) {
+  if (vendorStatus === "missing-table") {
+    return (
+      <p className="bg-amber-soft/40 text-amber rounded-lg px-3 py-2 text-xs">
+        업체리스트 표가 아직 만들어지지 않았습니다 — 마이그레이션 <span className="num">20261022140000</span>을 적용해 주세요.
+        적용 전엔 목록이 비어 있고 등록이 잠깁니다(다른 면은 그대로).
+      </p>
+    );
+  }
+  if (vendorStatus === "failed") {
+    return (
+      <p className="bg-danger-soft/40 text-danger rounded-lg px-3 py-2 text-xs">
+        업체 목록을 불러오지 못했습니다. 잠시 뒤 새로고침해 주세요 — 그동안 편집은 잠깁니다.
+      </p>
+    );
+  }
   if (status === "missing-table") {
     return (
       <p className="bg-amber-soft/40 text-amber rounded-lg px-3 py-2 text-xs">

@@ -10,13 +10,15 @@ import {
   getInventoryCounts,
   getLoans,
   getSupplies,
+  getVendors,
   type FaceData,
   type TableStatus,
 } from "@/features/inventory/server/queries";
 import { getInventoryCategories } from "@/features/inventory/server/category-queries";
+import { canViewVendorsNow } from "@/features/inventory/server/vendor-gate";
 import { loadInventoryPrefs } from "@/features/inventory/server/prefs";
 import { actionNeededAssets, computeAssetStats } from "@/features/inventory/stats";
-import type { AssetOption, InventoryAudit, InventoryLoan, InventorySupply } from "@/features/inventory/types";
+import type { AssetOption, InventoryAudit, InventoryLoan, InventorySupply, InventoryVendor } from "@/features/inventory/types";
 import { ActionNeeded } from "./_components/action-needed";
 import { AssetsFace } from "./_components/assets-face";
 import { AuditsFace } from "./_components/audits-face";
@@ -25,15 +27,18 @@ import { LoansFace } from "./_components/loans-face";
 import { NotReadyBanner } from "./_components/not-ready-banner";
 import { StatsRow } from "./_components/stats-row";
 import { SuppliesFace } from "./_components/supplies-face";
+import { VendorsFace } from "./_components/vendors-face";
 
 type Sp = Record<string, string | undefined>;
 
-const TITLE_SUFFIX: Record<InventoryTab, string> = { assets: "", loans: " · 대여", audits: " · 실사", supplies: " · 소모품" };
+const TITLE_SUFFIX: Record<InventoryTab, string> = { assets: "", loans: " · 대여", audits: " · 실사", supplies: " · 소모품", vendors: " · 업체리스트" };
 
 // 면마다 문서 제목을 달리해 창 타이틀바가 "재고관리 · 대여"로 라이브 갱신된다(route-window 관찰).
 // ⚠️ 접두 "재고관리"는 사이드바 라벨(navigation.ts)과 같아야 한다.
 export async function generateMetadata({ searchParams }: { searchParams: Promise<Sp> }) {
-  const tab = resolveInventoryTab((await searchParams).tab);
+  const asked = resolveInventoryTab((await searchParams).tab);
+  // 업체리스트를 못 보는 사람에겐 창 제목에도 안 적는다(본문은 자산 면으로 떨어진다).
+  const tab = asked === "vendors" && !(await canViewVendorsNow()) ? "assets" : asked;
   return { title: `재고관리${TITLE_SUFFIX[tab]} — 에이와` };
 }
 
@@ -48,7 +53,8 @@ type FaceLoad =
   | { kind: "assets"; status: TableStatus; loans: InventoryLoan[] | null }
   | ({ kind: "loans" } & FaceData<InventoryLoan>)
   | ({ kind: "audits" } & FaceData<InventoryAudit>)
-  | ({ kind: "supplies" } & FaceData<InventorySupply>);
+  | ({ kind: "supplies" } & FaceData<InventorySupply>)
+  | ({ kind: "vendors" } & FaceData<InventoryVendor>);
 
 function loadFace(tab: InventoryTab): Promise<FaceLoad> {
   switch (tab) {
@@ -58,6 +64,8 @@ function loadFace(tab: InventoryTab): Promise<FaceLoad> {
       return getAudits().then((r) => ({ kind: "audits", ...r }));
     case "supplies":
       return getSupplies().then((r) => ({ kind: "supplies", ...r }));
+    case "vendors":
+      return getVendors().then((r) => ({ kind: "vendors", ...r }));
     default:
       return getLoans().then((r) => ({
         kind: "assets" as const,
@@ -79,7 +87,10 @@ function loadFace(tab: InventoryTab): Promise<FaceLoad> {
  */
 export default async function InventoryPage({ searchParams }: { searchParams: Promise<Sp> }) {
   const user = await requireAccess("inventory");
-  const tab = resolveInventoryTab((await searchParams).tab);
+  // 업체리스트는 지정한 사람만(원장 2026-10-23) — 아니면 `?tab=vendors`로 와도 자산 면으로 떨어진다(주소 우회 차단, [[#77]]).
+  const showVendors = await canViewVendorsNow();
+  const asked = resolveInventoryTab((await searchParams).tab);
+  const tab: InventoryTab = asked === "vendors" && !showVendors ? "assets" : asked;
 
   // 서로 독립 — 함께 받는다(B4).
   const [canWrite, counts, assets, face, prefs, categories] = await Promise.all([
@@ -94,10 +105,12 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
   ]);
 
   // 표 없음(missing-table)이 그냥 실패보다 먼저 — 원인을 말하는 문구가 뜬다.
+  // 🔑 업체리스트는 **다른 마이그레이션**(20261022140000)의 표라 따로 센다 — 섞으면 "0242a를 적용하라"는 거짓 배너가 뜬다.
+  const faceStatus: TableStatus = face.kind === "vendors" ? "ok" : face.status;
   const status: TableStatus =
-    assets.status === "missing-table" || face.status === "missing-table"
+    assets.status === "missing-table" || faceStatus === "missing-table"
       ? "missing-table"
-      : assets.status === "failed" || face.status === "failed"
+      : assets.status === "failed" || faceStatus === "failed"
         ? "failed"
         : "ok";
   // 🔴 분류 조회 **실패**도 편집을 잠근다 — 그 상태의 드롭다운은 내장 7종 폴백이라 학원이 추가한 분류를 못 고르고,
@@ -119,9 +132,9 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         embedLabel="전자기기 자산관리대장 — 자산 · 대여 · 실사 · 소모품"
         stats={<StatsRow stats={stats} />}
       />
-      <NotReadyBanner status={status} categoryStatus={categories.status} />
+      <NotReadyBanner status={status} categoryStatus={categories.status} vendorStatus={face.kind === "vendors" ? face.status : undefined} />
       {action.length > 0 ? <ActionNeeded assets={action} categories={categories.rows} /> : null}
-      <FaceTabs faces={inventoryFaces(counts)} active={tab} ariaLabel="재고관리 면 전환" />
+      <FaceTabs faces={inventoryFaces(counts, { showVendors })} active={tab} ariaLabel="재고관리 면 전환" />
       {/* 분류는 클라 컴포넌트 여럿(표·툴바·다이얼로그 4개)이 읽으므로 prop 배선 대신 프로바이더 하나로 준다. */}
       <InventoryCategoriesProvider categories={categories.rows}>
         {face.kind === "assets" ? (
@@ -135,6 +148,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         ) : null}
         {face.kind === "loans" ? <LoansFace loans={face.rows} assets={assetOptions} canWrite={editable} today={today} /> : null}
         {face.kind === "audits" ? <AuditsFace audits={face.rows} assets={assetOptions} canWrite={editable} today={today} /> : null}
+        {face.kind === "vendors" ? <VendorsFace vendors={face.rows} canWrite={canWrite && face.status === "ok"} /> : null}
         {face.kind === "supplies" ? (
           <SuppliesFace supplies={face.rows} canWrite={editable} today={today} userName={user.displayName} />
         ) : null}

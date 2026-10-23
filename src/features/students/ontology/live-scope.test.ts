@@ -5,6 +5,10 @@ it("bounds requests and pins the academy scope to the authorized tenant", () => 
     .toEqual({ kind: "academy", id: "tenant", page: 1, search: "a" });
   expect(liveScopeRequest({ kind: "payroll", page: "Infinity" }, "tenant").kind).toBe("academy");
 });
+it("ignores a stale student search in a direct individual-student link", () => {
+  expect(liveScopeRequest({ kind: "student", entity: "s", q: "다른 학생" }, "tenant"))
+    .toEqual({ kind: "student", id: "s", page: 1, search: "" });
+});
 it("preserves the selected scope, search, page and embed mode in navigation", () => {
   const href = liveScopeHref({ kind: "subject", id: "math", search: "김 A&B", page: 3 }, true);
   const params = new URL(href, "https://local.test").searchParams;

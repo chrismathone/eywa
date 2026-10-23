@@ -257,6 +257,7 @@ const CANON_SURFACES = [
   // 재고관리(2026-09-02, 새 화면) — 만들 때부터 부품으로.
   "src/app/(shell)/inventory/_components/assets-face.tsx",
   "src/app/(shell)/inventory/_components/list-toolbar.tsx",
+  "src/app/(shell)/inventory/_components/vendors-face.tsx",
   // 연차 관리(2026-09-08, 새 화면) — 만들 때부터 부품으로. 자리는 직원관리(원장 2026-09-09).
   "src/app/(shell)/staff/annual-leave/_adjust-table.tsx",
   // 직원관리(2026-09-09) — 필터 줄·결과 줄이 손으로 적은 flex였다(좁아지면 검색만 둘째 줄 오른쪽에 떨어짐).

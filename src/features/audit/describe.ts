@@ -119,6 +119,7 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   inventory_loan: "자산 대여",
   inventory_audit: "자산 실사",
   inventory_supply: "소모품",
+  inventory_vendor: "업체",
   inventory_category: "자산 분류",
   // 교재목록(0266a) — 없으면 '대상' 칸에 영문 "textbook"이 그대로 뜬다.
   textbook: "교재",
@@ -1953,6 +1954,15 @@ export function auditDetail(
         qty !== null ? `수량 ${qty}` : null,
       );
     }
+    // 업체리스트(20261022140000) — 업체명은 대상 칸에 이미 있다. 수정은 바뀐 칸 이름만(값은 싣지 않는다).
+    case "inventory_vendor_create":
+      return str(m.category);
+    case "inventory_vendor_update": {
+      const fields = Array.isArray(m.fields) ? (m.fields as unknown[]).map(str).filter(Boolean).join(" · ") : null;
+      return fields ? `${fields} 변경` : null;
+    }
+    case "inventory_vendor_delete":
+      return join(str(m.category), "삭제");
     // 운행 단위(0243a) — 날짜만 있으면 그날 어느 운행인지가 목록에서 바로 읽힌다.
     case "shuttle_trip_start":
     case "shuttle_trip_end":

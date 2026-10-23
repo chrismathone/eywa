@@ -1,6 +1,6 @@
 import { PILOT_SECTION_TITLES as T } from "../math-report-pilot";
 import { HOMEWORK_TODAY_CLOSE, HOMEWORK_TODAY_INTRO, LEVELS } from "../math-report-pilot-sections";
-import { isScoreLine, parseLevelRows, type LevelRow, type PilotNoteSection } from "../pilot-notes";
+import { parseLevelRows, parseScoreLine, type LevelRow, type PilotNoteSection } from "../pilot-notes";
 
 // 항목별 보고서 글을 학부모 카드(/r·인쇄 = ClassNote 게시 사진)에 그린다 — 원장 2026-10-23 시안 B(막대형 표) 확정
 // + *"표에맞게 밑에도 어느정도 디자인 맞춰서"*. 색은 학원 색(primary) 한 가지뿐 — 상·하를 다른 색으로 가르면 '하'가 경고처럼 읽힌다.
@@ -52,6 +52,36 @@ function LevelTable({ rows }: { rows: LevelRow[] }) {
 
 const TEXT = "text-foreground text-base leading-relaxed whitespace-pre-wrap";
 
+/**
+ * 테스트 점수 블록 — 원장 2026-10-23 *"5문제 중 5개 맞음 이거 말고 다른 디자인으로 깔끔하게 몇개중 몇개 맞췄다"*.
+ * 왼쪽 큰 숫자(맞힌 수 / 전체) + 그 아래 정식 표기 한 줄(결정 로그 2026-08-11 "N문제 중 M개 맞음"), 오른쪽은 문제마다 점 하나.
+ * 문제가 많으면(20개 초과) 점 대신 막대 — 점이 줄을 넘겨 블록이 부푼다.
+ */
+function ScoreBlock({ right, total, line }: { right: number; total: number; line: string }) {
+  return (
+    <div className="border-line flex items-center justify-between gap-4 rounded-xl border px-4 py-3">
+      <div className="flex shrink-0 flex-col">
+        <p className="flex items-baseline gap-1 tabular-nums">
+          <span className="text-primary text-4xl leading-none font-extrabold">{right}</span>
+          <span className="text-text-dim text-xl font-bold">/ {total}</span>
+        </p>
+        <p className="text-text-faint mt-1.5 text-sm font-semibold">{line}</p>
+      </div>
+      {total <= 20 ? (
+        <div className="flex max-w-[60%] flex-wrap justify-end gap-1.5" aria-hidden>
+          {Array.from({ length: total }, (_, i) => (
+            <span key={i} className={`size-3.5 rounded-full ${i < right ? "bg-primary" : "bg-line"}`} />
+          ))}
+        </div>
+      ) : (
+        <div className="bg-line h-2.5 w-2/5 overflow-hidden rounded-full" aria-hidden>
+          <div className="bg-primary h-full rounded-full" style={{ width: `${(right / total) * 100}%` }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** 항목 본문 — 표 / 점수 줄 / 과제 상자 / 한마디 상자 / 그 외 글. */
 function SectionBody({ s }: { s: PilotNoteSection }) {
   if (s.title === T.levels) {
@@ -59,11 +89,12 @@ function SectionBody({ s }: { s: PilotNoteSection }) {
     if (rows) return <LevelTable rows={rows} />;
   }
   const lines = s.body.split("\n");
-  if ((s.title === T.daily || s.title === T.check) && isScoreLine(lines[0] ?? "")) {
+  const score = s.title === T.daily || s.title === T.check ? parseScoreLine(lines[0] ?? "") : null;
+  if (score) {
     const rest = lines.slice(1).join("\n").trim();
     return (
-      <div className="flex flex-col gap-1">
-        <p className="text-foreground text-lg font-extrabold">{lines[0]}</p>
+      <div className="flex flex-col gap-2.5">
+        <ScoreBlock right={score.right} total={score.total} line={(lines[0] ?? "").trim()} />
         {rest ? <p className={TEXT}>{rest}</p> : null}
       </div>
     );

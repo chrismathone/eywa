@@ -21,7 +21,29 @@ it("searches within the selected scope, resets its page and preserves embed mode
   const params = new URL(m.push.mock.calls[0][0], "http://local.test").searchParams;
   expect(Object.fromEntries(params)).toEqual({ view: "current", kind: "class", entity: "c", q: "학생 A&B", embed: "1" });
   fireEvent.click(screen.getByRole("button", { name: "강사" }));
-  expect(m.push.mock.calls[1][0]).toBe("/student-contribution/ontology?view=current&kind=teacher&entity=t&embed=1");
+  expect(m.push.mock.calls[1][0]).toBe("/student-contribution/ontology?view=current&kind=teacher&entity=&embed=1");
+});
+it("opens the student directory without selecting its first student, then supports selection and return", () => {
+  const options = [
+    { kind: "student" as const, id: "first", label: "안도현", students: 1, detail: "침산초4" },
+    { kind: "student" as const, id: "second", label: "이학생", students: 1, detail: "달산초5" },
+  ];
+  const directoryRequest: LiveScopeRequest = { kind: "student", id: "", search: "", page: 1 };
+  const view = { data: { ...data, options }, request: directoryRequest, state: "ready" as const, canConfigure: false };
+  const { rerender } = render(<CurrentScopeExplorer embed view={view} />);
+  expect(screen.getByRole("region", { name: "학생 목록" })).toBeTruthy();
+  expect(screen.queryByRole("heading", { name: "선택한 대상" })).toBeNull();
+  expect(screen.queryByRole("textbox", { name: "현재 연결된 학생 검색" })).toBeNull();
+  fireEvent.change(screen.getByRole("textbox", { name: "학생 목록 검색" }), { target: { value: "달산" } });
+  expect(screen.queryByRole("button", { name: "안도현 연결 보기" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "이학생 연결 보기" }));
+  expect(m.push.mock.lastCall?.[0]).toBe("/student-contribution/ontology?view=current&kind=student&entity=second&embed=1");
+  rerender(<CurrentScopeExplorer embed view={{ ...view, request: { ...directoryRequest, id: "second" } }} />);
+  expect(screen.queryByRole("region", { name: "학생 목록" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "학생 목록으로" }));
+  expect(m.push.mock.lastCall?.[0]).toBe("/student-contribution/ontology?view=current&kind=student&entity=&embed=1");
+  rerender(<CurrentScopeExplorer embed view={view} />);
+  expect((screen.getByRole("textbox", { name: "학생 목록 검색" }) as HTMLInputElement).value).toBe("달산");
 });
 it("preserves selected scope and search in server pagination", () => {
   render(<CurrentScopeExplorer embed view={{ request, data, state: "ready", canConfigure: false }} />);
