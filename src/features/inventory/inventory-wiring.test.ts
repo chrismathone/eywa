@@ -207,7 +207,10 @@ describe("⑤ 쓰기 서버 액션은 canWriteTenant(\"inventory\")를 지난다
     expect(src.startsWith('"use server"')).toBe(true);
     expect(src).not.toMatch(/\bcanAccess(Tenant)?\(/);
     const exported = src.match(/export async function \w+\(/g) ?? [];
-    const gated = src.match(/await requireInventoryWrite\(\)/g) ?? [];
+    // 업체리스트는 재고관리 쓰기 + 지정한 사람(원장 2026-10-23 "이승엽만") — 두 문을 함께 지나는 requireVendorWrite로 센다.
+    const vendor = f === "vendor-actions.ts";
+    if (vendor) expect(src).toMatch(/async function requireVendorWrite\(\)[\s\S]*?await requireInventoryWrite\(\)[\s\S]*?await canViewVendorsNow\(\)/);
+    const gated = src.match(vendor ? /await requireVendorWrite\(\)/g : /await requireInventoryWrite\(\)/g) ?? [];
     expect(exported.length).toBeGreaterThan(0);
     expect(gated.length).toBe(exported.length);
     // 🔴 "use server" 파일은 async만 export([[#119]]) — 동기 export가 있으면 빌드만 깨진다.

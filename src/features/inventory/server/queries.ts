@@ -1,11 +1,13 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { reportError } from "@/lib/observability/report-error";
 import type { InventoryTab } from "../faces";
 import type { InventoryAsset, InventoryAudit, InventoryLoan, InventorySupply, InventoryVendor } from "../types";
 import { isMissingInventoryTable } from "./access";
+import { canViewVendorsNow } from "./vendor-gate";
 
 /**
  * 재고관리 조회 — 읽기는 세션 클라이언트 + RLS(테넌트 전원 select, 0242a). 쓰기는 서버 액션(`*-actions.ts`).
@@ -31,15 +33,20 @@ export async function getInventoryCounts(): Promise<Record<InventoryTab, number 
   const supabase = await createClient();
   const head = (table: string) =>
     supabase.from(table).select("id", { count: "exact", head: true }).eq("tenant_id", user.tenantId);
+  // 업체리스트는 지정한 사람만(vendor-gate) — 표는 RLS 읽기를 닫아 두어 admin으로 센다(tenant_id 필터 필수).
+  const vendorHead = async () =>
+    (await canViewVendorsNow())
+      ? createAdminClient().from("inventory_vendors").select("id", { count: "exact", head: true }).eq("tenant_id", user.tenantId)
+      : null;
   // 서로 독립 — 함께 받는다(B4).
   const [a, l, d, s, v] = await Promise.all([
     head("inventory_assets"),
     head("inventory_loans"),
     head("inventory_audits"),
     head("inventory_supplies"),
-    head("inventory_vendors"),
+    vendorHead(),
   ]);
-  const n = (r: { count: number | null; error: { message: string } | null }) => (r.error ? null : (r.count ?? 0));
+  const n = (r: { count: number | null; error: { message: string } | null } | null) => (!r || r.error ? null : (r.count ?? 0));
   return { assets: n(a), loans: n(l), audits: n(d), supplies: n(s), vendors: n(v) };
 }
 
@@ -196,7 +203,10 @@ type VendorRow = {
 export async function getVendors(): Promise<FaceData<InventoryVendor>> {
   const user = await getCurrentUser();
   if (!user) return { status: "failed", rows: [] };
-  const supabase = await createClient();
+  // 🔴 지정한 사람만(원장 2026-10-23 "이승엽만") — 호출부가 탭을 감춰도 여기서 한 번 더 닫는다([[#77]]).
+  if (!(await canViewVendorsNow())) return { status: "ok", rows: [] };
+  // 표의 RLS 읽기 정책은 닫았다(20261023120000) — 세션 클라이언트는 0행이라 admin + tenant_id 필터로 읽는다([[#104]]).
+  const supabase = createAdminClient();
   const res = await loadAll<VendorRow>("inventory.vendors", (from, to) =>
     supabase
       .from("inventory_vendors")

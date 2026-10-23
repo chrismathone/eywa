@@ -7,6 +7,16 @@ import { idField, textField } from "../form";
 import { formatBizNo, formatPhone } from "../vendor";
 import { friendlyInventoryError, isMissingInventoryTable, requireInventoryWrite } from "./access";
 import type { InventoryActionState } from "./asset-actions";
+import { VENDOR_DENIED_MSG } from "../vendor-access";
+import { canViewVendorsNow } from "./vendor-gate";
+
+/** 쓰기 = 재고관리 쓰기 게이트 **그리고** 업체리스트 지정(vendor-gate) — 둘 중 하나라도 아니면 거절. */
+async function requireVendorWrite() {
+  const ctx = await requireInventoryWrite();
+  if ("error" in ctx) return ctx;
+  if (!(await canViewVendorsNow())) return { error: VENDOR_DENIED_MSG };
+  return ctx;
+}
 
 /**
  * 업체리스트(거래처 연락처) 등록·수정·삭제 — 게이트는 재고관리와 같은 `requireInventoryWrite`([[#77]]).
@@ -65,7 +75,7 @@ function readVendor(fd: FormData): VendorFields | { error: string } {
 }
 
 export async function createVendor(fd: FormData): Promise<InventoryActionState> {
-  const ctx = await requireInventoryWrite();
+  const ctx = await requireVendorWrite();
   if ("error" in ctx) return ctx;
   const v = readVendor(fd);
   if ("error" in v) return v;
@@ -94,7 +104,7 @@ const LABEL_OF: Record<keyof VendorFields, string> = {
 };
 
 export async function updateVendor(fd: FormData): Promise<InventoryActionState> {
-  const ctx = await requireInventoryWrite();
+  const ctx = await requireVendorWrite();
   if ("error" in ctx) return ctx;
   const id = idField(fd);
   if (!id) return { error: "업체를 찾지 못했습니다" };
@@ -130,7 +140,7 @@ export async function updateVendor(fd: FormData): Promise<InventoryActionState> 
 
 /** 삭제 — 딸린 표가 없다. 되짚을 근거가 로그뿐이라 내용을 스냅샷으로 남긴다. */
 export async function deleteVendor(fd: FormData): Promise<InventoryActionState> {
-  const ctx = await requireInventoryWrite();
+  const ctx = await requireVendorWrite();
   if ("error" in ctx) return ctx;
   const id = idField(fd);
   if (!id) return { error: "업체를 찾지 못했습니다" };

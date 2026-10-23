@@ -15,6 +15,7 @@ import {
   type TableStatus,
 } from "@/features/inventory/server/queries";
 import { getInventoryCategories } from "@/features/inventory/server/category-queries";
+import { canViewVendorsNow } from "@/features/inventory/server/vendor-gate";
 import { loadInventoryPrefs } from "@/features/inventory/server/prefs";
 import { actionNeededAssets, computeAssetStats } from "@/features/inventory/stats";
 import type { AssetOption, InventoryAudit, InventoryLoan, InventorySupply, InventoryVendor } from "@/features/inventory/types";
@@ -35,7 +36,9 @@ const TITLE_SUFFIX: Record<InventoryTab, string> = { assets: "", loans: " · 대
 // 면마다 문서 제목을 달리해 창 타이틀바가 "재고관리 · 대여"로 라이브 갱신된다(route-window 관찰).
 // ⚠️ 접두 "재고관리"는 사이드바 라벨(navigation.ts)과 같아야 한다.
 export async function generateMetadata({ searchParams }: { searchParams: Promise<Sp> }) {
-  const tab = resolveInventoryTab((await searchParams).tab);
+  const asked = resolveInventoryTab((await searchParams).tab);
+  // 업체리스트를 못 보는 사람에겐 창 제목에도 안 적는다(본문은 자산 면으로 떨어진다).
+  const tab = asked === "vendors" && !(await canViewVendorsNow()) ? "assets" : asked;
   return { title: `재고관리${TITLE_SUFFIX[tab]} — 에이와` };
 }
 
@@ -84,7 +87,10 @@ function loadFace(tab: InventoryTab): Promise<FaceLoad> {
  */
 export default async function InventoryPage({ searchParams }: { searchParams: Promise<Sp> }) {
   const user = await requireAccess("inventory");
-  const tab = resolveInventoryTab((await searchParams).tab);
+  // 업체리스트는 지정한 사람만(원장 2026-10-23) — 아니면 `?tab=vendors`로 와도 자산 면으로 떨어진다(주소 우회 차단, [[#77]]).
+  const showVendors = await canViewVendorsNow();
+  const asked = resolveInventoryTab((await searchParams).tab);
+  const tab: InventoryTab = asked === "vendors" && !showVendors ? "assets" : asked;
 
   // 서로 독립 — 함께 받는다(B4).
   const [canWrite, counts, assets, face, prefs, categories] = await Promise.all([
@@ -128,7 +134,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
       />
       <NotReadyBanner status={status} categoryStatus={categories.status} vendorStatus={face.kind === "vendors" ? face.status : undefined} />
       {action.length > 0 ? <ActionNeeded assets={action} categories={categories.rows} /> : null}
-      <FaceTabs faces={inventoryFaces(counts)} active={tab} ariaLabel="재고관리 면 전환" />
+      <FaceTabs faces={inventoryFaces(counts, { showVendors })} active={tab} ariaLabel="재고관리 면 전환" />
       {/* 분류는 클라 컴포넌트 여럿(표·툴바·다이얼로그 4개)이 읽으므로 prop 배선 대신 프로바이더 하나로 준다. */}
       <InventoryCategoriesProvider categories={categories.rows}>
         {face.kind === "assets" ? (
