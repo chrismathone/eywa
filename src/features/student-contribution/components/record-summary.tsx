@@ -34,7 +34,7 @@ export function RecordSummary({ studentId, data }: { studentId: string; data: No
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 md:block"><p className="text-sm font-semibold">{item.title}</p>{item.date && <p className="text-xs tabular-nums md:mt-1">{kstDateOf(item.date) ?? item.date}</p>}</div>
         <div className="min-w-0"><p className="max-w-4xl whitespace-pre-wrap break-words text-base leading-relaxed">{item.summary ?? item.excerpt}</p>
           {item.summary ? <details className="mt-2 text-xs"><summary className="cursor-pointer font-medium text-primary">근거 확인</summary>
-            <blockquote className="mt-2 max-w-4xl border-l-2 border-primary/30 pl-3 text-sm leading-relaxed">{item.excerpt}</blockquote><Link href={item.href} className="mt-2 inline-block text-primary underline underline-offset-4">{item.title} 원본 보기</Link></details>
+            <blockquote className="mt-2 max-w-4xl rounded-md bg-bg-soft/60 px-3 py-2 text-sm leading-relaxed">{item.excerpt}</blockquote><Link href={item.href} className="mt-2 inline-block text-primary underline underline-offset-4">{item.title} 원본 보기</Link></details>
             : <Link href={item.href} className="mt-2 inline-block text-xs text-primary underline underline-offset-4">{item.title} 원본 보기</Link>}
         </div>
       </li>)}</ul><p className="border-t border-line-faint pt-3 text-xs">{data.generatedAt ? new Date(data.generatedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) : ""} 저장 · {data.model ?? "Claude"}{data.partial ? " · 일부 자료는 확인하지 못했습니다." : ""}</p></>
