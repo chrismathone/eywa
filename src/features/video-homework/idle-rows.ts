@@ -5,7 +5,7 @@
  * 🔴 예외는 둘뿐이다 — 붙지 않은 영상이 있는 학생의 줄(①)과 검색 결과(②). 반 명단을 통째로 세우지 않는다.
  */
 import { kstDateOf } from "@/lib/date-kst";
-import { unmatchedVideos } from "./auto-outcomes";
+import { fillableCells, unmatchedVideos, type ClassSubjectOf } from "./auto-outcomes";
 import { blankLessonDates } from "./issue-window";
 import type { LedgerEnrollment, LedgerSchedule } from "./ledger-roster";
 import type { BlankAttendanceRow, BlankFacts } from "./no-homework";
@@ -28,6 +28,22 @@ export function pendingVideoPairs(input: {
     return video.classId && (!input.freeOnly || video.free) && day && day >= input.fromDate && day <= input.toDate
       ? [roundPairKey({ classId: video.classId, studentId: video.studentId })] : [];
   }));
+}
+
+/**
+ * '영상 배정 필요함'(장부 상태 필터) — 기간 안에 올라온 미배정 영상에 **붙일 빈 숙제**가 있을 때 그 빈 칸의 줄(`반:학생`). 판정은 미배정 알림 ·
+ * '미배정 영상' 할 일과 같다(`fillableCells` — 원장 2026-10-23 *"숙제가 없는데도 미배정 영상이 남아있으면 그건 알림 오류"* → 필터도 같게).
+ * '영상 배정' 버튼(붙일 수 있는가)은 이보다 넓다 — 숙제가 다 찬 줄의 숙제 없이 올린 영상 · 숙제 0건 반의 영상도 붙일 수는 있다.
+ * 반을 모르는 영상도 넘길 것(알림이 그 영상도 본다).
+ */
+export function fillablePairs(input: {
+  videos: readonly VideoArrival[]; rounds: ReadonlyMap<string, readonly LedgerRound[]>; fromDate: string; toDate: string; subjectOf?: ClassSubjectOf;
+}): Set<string> {
+  const recent = unmatchedVideos(input.videos, input.rounds).filter((video) => {
+    const day = kstDateOf(video.postedAt);
+    return !!day && day >= input.fromDate && day <= input.toDate;
+  });
+  return new Set([...fillableCells(recent, input.rounds, input.subjectOf).values()].flat());
 }
 
 /** `free` = 붙지 않은 영상이 있는 학생(`pendingVideoPairs`) → 줄로 선다(①). `rest` = 나머지 → 검색 명단(②)으로만(이름·학교·학년·반 — 출결은 읽지 않는다). */

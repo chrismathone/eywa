@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { idleLessonDates, pendingVideoPairs, splitIdlePairs } from "./idle-rows";
+import { fillablePairs, idleLessonDates, pendingVideoPairs, splitIdlePairs } from "./idle-rows";
 import { buildLedgerRounds } from "./rounds";
 import type { VideoArrival } from "./types";
 
@@ -62,5 +62,23 @@ describe("숙제 0건 반 줄의 숙제없음 칸 = 그 학생이 들은 수업�
     const result = idleLessonDates({ pairs: [{ classId: "bs3g", studentId: "lee" }], schedules, enrollments: [], records: [], fromDate: "2026-10-12", toDate: "2026-10-22", isHoliday: () => false });
     expect(result.dates.get("bs3g:lee")).toEqual([]);
     expect(result.facts).toEqual({});
+  });
+});
+
+// 원장 2026-10-23 *"숙제가 없는데도 미배정 영상이 남아있으면 그건 알림 오류"* — 장부 '영상 배정 필요함'도 미배정 알림과 같은 판정.
+describe("'영상 배정 필요함' = 붙일 빈 숙제가 있는 미배정 영상의 그 칸 줄", () => {
+  const rounds = (rows: { classId: string; studentId: string; assignedDates: string[] }[], videos: VideoArrival[]) =>
+    buildLedgerRounds({ rows: rows.map((row) => ({ ...row, tracked: true })), marks: [], videos, fromDate: "2026-09-01", toDate: "2026-11-05" });
+  const at = (rows: { classId: string; studentId: string; assignedDates: string[] }[], videos: VideoArrival[]) =>
+    fillablePairs({ videos, rounds: rounds(rows, videos), fromDate: "2026-10-01", toDate: "2026-10-22" });
+  it("숙제 0건 반 · 숙제가 다 영상으로 찬 줄의 남은 영상은 걸리지 않는다", () => {
+    expect(at([], [video("free", "2026-10-20")])).toEqual(new Set());
+    const filled = [video("a", "2026-10-14", { free: false, homeworkDate: "2026-10-13" }), video("free", "2026-10-15")];
+    expect(at([{ classId: "bs3g", studentId: "lee", assignedDates: ["2026-10-13"] }], filled)).toEqual(new Set());
+  });
+  it("영상이 안 붙은 숙제가 있으면 그 숙제의 줄이 걸린다 — 반을 모르는 영상도", () => {
+    const rows = [{ classId: "bs3g", studentId: "lee", assignedDates: ["2026-10-13"] }];
+    expect(at(rows, [video("free", "2026-10-15")])).toEqual(new Set(["bs3g:lee"]));
+    expect(at(rows, [video("cn", "2026-10-15", { free: false, classId: null })])).toEqual(new Set(["bs3g:lee"]));
   });
 });

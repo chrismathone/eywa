@@ -359,6 +359,11 @@ export function outstandingDigestBody(events: readonly OutstandingEvent[]): stri
 // dedup 이벤트·읽은 알림의 보존 기간. 순수 컷오프 계산(Vitest) — 실 삭제는 server/prune.ts.
 export const NOTIFICATION_EVENTS_RETENTION_DAYS = 180;
 export const READ_NOTIFICATIONS_RETENTION_DAYS = 90;
+/**
+ * 안 읽은 채 이 일수를 넘긴 알림은 보관함으로(지우지 않는다 — 0447a `archive_stale_notifications`, 원장 2026-10-23 *"고쳐"*: 안 읽은 알림이 영구
+ * 보존이라 85%가 안 읽은 채 쌓여 벨 숫자가 수천이었다). 열린 할 일이 붙은 알림은 그대로. 보관함에서 다시 꺼낼 수 있다.
+ */
+export const UNREAD_NOTIFICATIONS_ARCHIVE_DAYS = 30;
 
 /** now(ms) → 삭제 컷오프 ISO 2종. 이 시각보다 오래된 행을 삭제한다. */
 export function pruneCutoffs(nowMs: number): { eventsBefore: string; readNotificationsBefore: string } {

@@ -37,13 +37,20 @@ export function VideoAssignmentDialog({ row, initialDate, fromDate, toDate, onCl
   // 영상이 들어갈 수 있는 수업일만 늘어놓는다(칸에서 연 날은 늘) — 수업일을 다 늘어놓으면 숙제 목록이 묻힌다. 서버가 같은 판정으로 다시 본다.
   const blankChoices = options?.ok ? (options.blankDates ?? []).filter(d => d === initialDate || fits(d, true)) : [];
   const listed = !!initialDate && options?.ok === true && (options.dates.includes(initialDate) || blankChoices.includes(initialDate));
-  // 고르기 전 = 칸에서 연 날 → 영상이 들어갈 첫 숙제 → 첫 숙제없음 수업일.
-  const date = picked || (!options?.ok ? "" : listed ? initialDate! : options.dates.find(d => fits(d)) ?? blankChoices.find(d => fits(d, true))
+  // 이 줄에서 이미 영상이 붙은 숙제(자동 연결 · 고른 숙제) — 아직 안 붙은 영상을 받을 빈 숙제를 먼저 고르는 데 쓴다.
+  const filled = new Set([...(linked?.values() ?? []), ...(options?.ok
+    ? options.videos.flatMap(video => video.homeworkDate && video.classId === row.classId ? [video.homeworkDate] : []) : [])]);
+  // 고르기 전 = 칸에서 연 날 → 아직 안 붙은 영상이 들어갈 빈 숙제 → 그 영상이 들어갈 숙제 → 그 영상이 들어갈 숙제없음 수업일 → 영상이 들어갈 첫 숙제.
+  // 안 붙은 영상부터 — 최근 숙제를 먼저 고르면 이미 붙은 영상만 보여 "다 배정됐다"로 읽혔다(원장 2026-10-23 이영준 10/15 '숙제 없이 올린' 영상).
+  const date = picked || (!options?.ok ? "" : listed ? initialDate! : options.dates.find(d => !filled.has(d) && fits(d, true))
+    ?? options.dates.find(d => fits(d, true)) ?? blankChoices.find(d => fits(d, true)) ?? options.dates.find(d => fits(d))
     ?? options.dates[0] ?? blankChoices[0] ?? "");
   const blank = blankChoices.includes(date);
+  // 아직 안 붙은 영상을 목록 위로(같은 무리 안은 최신순 그대로).
   const videos = options?.ok ? options.videos.filter(video => date === "exclude"
     ? [...options.dates, ...blankChoices].some(d => isVideoAssignableToDate(video.postedAt, d))
-    : isVideoAssignableToDate(video.postedAt, date) && (!blank || unlinked(video))).slice(0, 100) : [];
+    : isVideoAssignableToDate(video.postedAt, date) && (!blank || unlinked(video)))
+    .sort((a, b) => Number(unlinked(b)) - Number(unlinked(a))).slice(0, 100) : [];
   const selected = videos.find(v => v.id === videoId);
   // 옮겨 남긴 숙제 칸(보고서에 영상 과제 표시가 없던 수업)에 붙은 영상(고른 숙제 · 자동 연결)을 옮기면 그 칸에서 영상이 빠진다 — 거두는 길을 미리 알린다.
   const attachedTo = selected ? selected.homeworkDate ?? linked?.get(selected.id) ?? null : null;

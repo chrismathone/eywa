@@ -102,7 +102,7 @@ export function filterLedgerRows(rows: VideoHomeworkLedgerRow[], rounds: LedgerR
       filters.school !== "all" && (row.school || "미등록") !== filters.school || filters.grade !== "all" && (row.grade || "미등록") !== filters.grade) return false;
     const haystack = ledgerHaystack(row);
     if (!words.every((word) => haystack.includes(word))) return false;
-    if (filters.status === "assign") return !!row.hasAssignableVideos;
+    if (filters.status === "assign") return !!(row.needsVideoAssignment ?? row.hasAssignableVideos);
     return filters.status === "all" || counts.get(ledgerPairKey(row))![filters.status] > 0;
   }).sort((a, b) => {
     const aCount = counts.get(ledgerPairKey(a))!;
