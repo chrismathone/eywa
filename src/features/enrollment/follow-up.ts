@@ -4,8 +4,13 @@ import { ASSIGNED_DRAG_BLOCKED, BOARD_STAGES, ENROLLED_REVERT_BLOCKED, outcomeFo
  * 신규 콜&상담 **후속 조치**(원장 2026-10-22 *"후속 조치를 선택이 아닌 필수로 처리를 해서 자동적으로 이동처리 · 자동적으로 등록,
  * 미등록으로 처리 하기 · 선택 : 등록, 미등록 · 날짜 : 선택. 다음상담 진행 여부 등"* — 필수 시점 = *"상담 끝난 건을 저장할 때"*).
  *
- * 선택지·순서·이름은 칸반의 네 상태 그대로다. 다음 상담일은 상태와 별개로 선택한다.
- * 🔑 새 DB 칸이 없다: 상태는 outcome, 다음 상담일은 follow_up_date에 저장한다.
+ * 선택지·순서·이름은 칸반의 네 상태 그대로다(6b4fc88ab). 뜻은 결정 문서의 **등록 · 미등록 · 다음 상담(날짜 필수)** 셋이다(2026-10-23
+ * 원장 *"골 프롬프트로 점검하고 바로 구현"* — Codex 검토 반영):
+ *  · '상담 완료' = 다음 상담 → **다음 상담일 필수**(그날 알림·할 일이 그 날짜로 선다 — 날짜 없이 저장하면 아무것도 안 울린다)
+ *  · 상담을 마친 건(저장 뒤 '상담 완료' 칸)은 '상담 전'을 고를 수 없다(필수 조치를 피하는 문이 된다)
+ *  · 상담 전 접수(QR 등)를 그대로 저장하는 것·반 배정된 상담·등록·미등록은 날짜가 필요 없다.
+ * ⚠️ 칸반 끌기·상세 '상태 변경'은 이 판정을 안 지난다(원장이 고른 필수 시점 = 저장) — 그래서 모든 미결에 날짜가 있는 것은 아니다.
+ * 🔑 새 DB 칸이 없다: 상태는 outcome, 다음 상담일은 follow_up_date에 저장한다(저장은 폼 값으로 덮는다 — 칸을 비우면 날짜도 지워진다).
  * 🔑 칸 안의 원래 값은 지킨다(`outcomeForDrop` — 칸반 드롭과 같은 규칙: 노쇼를 '미등록'으로 고쳐 저장해도 노쇼 그대로).
  * 🔴 '등록 완료'를 '상담 완료'로 되돌리지 않는다 — 상태 변경(`setEnrollmentOutcome`)·칸반 드롭과 같은 문장(`ENROLLED_REVERT_BLOCKED`).
  * 순수 함수 — 화면(미리 막기)과 서버(게이트, #77)가 같이 부른다.
@@ -15,8 +20,14 @@ export type FollowUpResult = BoardStageKey;
 export const FOLLOW_UP_RESULTS: readonly { value: FollowUpResult; label: string; stage: BoardStageKey }[] =
   BOARD_STAGES.map(({ key, label }) => ({ value: key, label, stage: key }));
 
-export const FOLLOW_UP_REQUIRED_ERROR = `후속 조치를 골라 주세요 — ${BOARD_STAGES.map((stage) => stage.label).join(" · ")} 중 하나`;
+const stageLabel = (key: BoardStageKey) => BOARD_STAGES.find((stage) => stage.key === key)!.label;
+
+export const FOLLOW_UP_REQUIRED_ERROR = `후속 조치를 골라 주세요 — ${stageLabel("consulted")}(다음 상담일) · ${stageLabel("unregistered")} · ${stageLabel("enrolled")} 중 하나`;
 export const FOLLOW_UP_DATE_PAST = "다음 상담 날짜가 이미 지났습니다 — 오늘 이후로 넣어 주세요";
+/** '상담 완료'(= 다음 상담)인데 날짜가 없다. */
+export const FOLLOW_UP_DATE_REQUIRED = "다음 상담일을 넣어 주세요 — 그날 알림이 갑니다";
+/** 상담을 마친 건을 '상담 전'으로 돌리려 했다(필수 조치를 피하는 문). */
+export const FOLLOW_UP_BEFORE_BLOCKED = `상담을 마친 상담은 '${stageLabel("before")}'으로 돌릴 수 없습니다 — ${stageLabel("consulted")}(다음 상담일) · ${stageLabel("unregistered")} · ${stageLabel("enrolled")} 중에서 고르세요`;
 
 export function parseFollowUpResult(v: unknown): FollowUpResult | null {
   // 배포 전 열린 폼과 로컬 초안도 같은 상태로 받는다.
@@ -63,6 +74,9 @@ export function resolveFollowUp(input: {
   if (!result) return followUpRequired(current) ? { error: FOLLOW_UP_REQUIRED_ERROR } : { outcome: current };
   const target = FOLLOW_UP_RESULTS.find((r) => r.value === result)!.stage;
   if (current === "enrolled" && target !== "enrolled" && target !== "unregistered") return { error: ENROLLED_REVERT_BLOCKED };
+  if (target === "before" && followUpRequired(current)) return { error: FOLLOW_UP_BEFORE_BLOCKED };
+  // 저장은 폼의 날짜로 덮으므로 판정도 폼의 날짜로 한다 — 저장돼 있던 날짜를 지우고 '상담 완료'로 저장하면 날짜가 사라진다.
+  if (target === "consulted" && !followUpDate) return { error: FOLLOW_UP_DATE_REQUIRED };
   if ((target === "before" || target === "consulted") && followUpDate) {
     if (followUpDate < today && followUpDate !== storedDate) return { error: FOLLOW_UP_DATE_PAST };
   }

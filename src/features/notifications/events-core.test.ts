@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import {
+  seedsOnColdStart,
   buildEnrollmentFollowupEvents,
   enrollmentFollowupBody,
   enrollmentFollowupTitle,
@@ -416,5 +418,22 @@ describe("신규 콜&상담 후속 조치 알림(원장 2026-10-22)", () => {
     expect(enrollmentFollowupBody(soon!)).toBe(`김가나 다음 상담이 내일(10월 23일)입니다 · 메모: ${"가".repeat(40)}…`);
     const [late] = buildEnrollmentFollowupEvents([row("2026-10-01")], "2026-10-22", "2026-10-19");
     expect(enrollmentFollowupBody(late!)).toContain("지났습니다");
+  });
+});
+
+describe("콜드스타트 시드 — 신규 콜&상담 후속 조치만 첫 알림도 보낸다(2026-10-23)", () => {
+  it("다른 알림 종류는 종전대로 첫 실행을 시드로만 남긴다", () => {
+    for (const type of ["absence_alert", "followup_due", "grade_drop", "outstanding_alert", "unsent_report", "progress_anomaly", "send_deadline"]) {
+      expect(seedsOnColdStart(type)).toBe(true);
+    }
+  });
+  it("신규 콜&상담 후속 조치는 시드하지 않는다 — 빈 실행이 기록을 안 남겨 첫 실제 다음 상담 알림이 빠지던 구멍", () => {
+    expect(seedsOnColdStart("enrollment_followup")).toBe(false);
+  });
+  it("감지 쪽이 이 정책을 지난다 — 콜드스타트 판정 한 곳(isColdStart)이 먼저 묻는다", () => {
+    const src = readFileSync("src/features/notifications/server/events.ts", "utf8");
+    const body = src.slice(src.indexOf("async function isColdStart("));
+    expect(body.slice(0, 300)).toContain("if (!seedsOnColdStart(eventType)) return false;");
+    expect(src).toContain('const cold = await isColdStart(admin, tenantId, "enrollment_followup");');
   });
 });

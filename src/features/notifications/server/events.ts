@@ -48,6 +48,7 @@ import {
   followupBody,
   weekKey,
   buildEnrollmentFollowupEvents,
+  seedsOnColdStart,
   enrollmentFollowupBody,
   enrollmentFollowupTitle,
   type EnrollmentFollowupEvent,
@@ -88,8 +89,12 @@ type EventRow = { tenant_id: string; event_type: EventType; subject_key: string;
 /** admin client(RLS 우회)를 쿠키-클라 시그니처 db 주입에 넘길 때의 캐스트 별칭(briefing.ts 선례). */
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
 
-/** (tenant, event_type)에 기록된 이벤트가 하나도 없으면 콜드스타트(첫 실행). */
+/**
+ * (tenant, event_type)에 기록된 이벤트가 하나도 없으면 콜드스타트(첫 실행).
+ * 시드를 하지 않는 종류(`seedsOnColdStart` — 신규 콜&상담 후속 조치)는 늘 false — 첫 실제 알림이 시드로 삼켜지지 않게.
+ */
 async function isColdStart(admin: SupabaseClient, tenantId: string, eventType: EventType): Promise<boolean> {
+  if (!seedsOnColdStart(eventType)) return false;
   const { count, error } = await admin
     .from("notification_events")
     .select("*", { count: "exact", head: true })
@@ -343,7 +348,8 @@ async function detectFollowup(admin: SupabaseClient, tenantId: string): Promise<
 /**
  * 신규 콜&상담 후속 조치 감지(원장 2026-10-22 *"후속조치일 다와가면 알람 기능"*) → 상담자(재직 중이 아니면 원장 전원) 개별 알림.
  * 하루 전 · 당일 · 지나면(주 1회). 아직 정하지 않은 상담(상담 전·상담 완료)만 · 도입일 이후 날짜만(follow-up.ts — DB 할 일과 같은 목록).
- * 당일·지남 알림은 할 일(0441a `enrollment_followup`)을 가리킨다 — 하루 전엔 아직 할 일이 없다. 콜드스타트면 시드만.
+ * 당일·지남 알림은 할 일(0441a `enrollment_followup`)을 가리킨다 — 하루 전엔 아직 할 일이 없다.
+ * 콜드스타트 시드는 하지 않는다(`seedsOnColdStart` — 첫 실행의 첫 알림도 보낸다, 2026-10-23).
  */
 async function detectEnrollmentFollowup(admin: SupabaseClient, tenantId: string): Promise<number> {
   const today = kstToday();

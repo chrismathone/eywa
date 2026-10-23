@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { BOARD_STAGES } from "@/features/enrollment/board-stages";
 
 /**
@@ -155,14 +155,45 @@ describe("후속 조치 필수(원장 2026-10-22)", () => {
     BOARD_STAGES.forEach((stage, index) => expect(buttons[index]).toHaveAccessibleName(stage.label));
     expect(within(group).queryByText("다음 상담")).toBeNull();
   });
-  it.each(["상담 전", "상담 완료"])("%s 선택은 다음 상담일을 정하지 않아도 저장할 수 있다", async (label) => {
-    m.updateEnrollmentConsultation.mockResolvedValue({ ok: true });
+  it("상담을 마친 건은 '상담 전'을 고를 수 없다(필수 조치를 피하는 문) — 새 상담도 같다", () => {
+    render(<ConsultationFullForm mode="edit" recordingOwner={{ tenantId: "t1", userId: "u1" }} initial={{ id: "c1", prospectName: "A", outcome: "consulted" }} />);
+    expect(screen.getByRole("radio", { name: "상담 전" })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: "상담 완료" })).toBeEnabled();
+    cleanup();
+    render(<ConsultationFullForm mode="create" recordingOwner={{ tenantId: "t1", userId: "u1" }} />);
+    expect(screen.getByRole("radio", { name: "상담 전" })).toBeDisabled();
+  });
+  it("'상담 완료'(다음 상담)는 날짜 없이 저장하면 서버를 부르지 않고 이유를 보인다 · 라벨이 '(선택)'에서 필수로 바뀐다", async () => {
     const { container } = render(<ConsultationFullForm mode="edit" recordingOwner={{ tenantId: "t1", userId: "u1" }} initial={{ id: "c1", prospectName: "A", outcome: "consulted" }} />);
-    fireEvent.click(screen.getByRole("radio", { name: label }));
+    expect(screen.getByText("다음 상담일 (선택)")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: "상담 완료" }));
+    expect(screen.queryByText("다음 상담일 (선택)")).toBeNull();
+    expect(screen.getByText("다음 상담일").parentElement).toHaveTextContent("다음 상담일*");
+    await act(async () => { fireEvent.submit(container.querySelector("form")!); });
+    expect(m.updateEnrollmentConsultation).not.toHaveBeenCalled();
+    expect(screen.getByText(/다음 상담일을 넣어 주세요/)).toBeInTheDocument();
+  });
+  it("상담 전 접수(QR 등)는 '상담 전' 그대로 날짜 없이 저장할 수 있다", async () => {
+    m.updateEnrollmentConsultation.mockResolvedValue({ ok: true });
+    const { container } = render(<ConsultationFullForm mode="edit" recordingOwner={{ tenantId: "t1", userId: "u1" }} initial={{ id: "c1", prospectName: "A", outcome: "pending" }} />);
+    fireEvent.click(screen.getByRole("radio", { name: "상담 전" }));
     await act(async () => { fireEvent.submit(container.querySelector("form")!); for (let i = 0; i < 10; i++) await Promise.resolve(); });
     const fd = m.updateEnrollmentConsultation.mock.calls[0]![1] as FormData;
     expect(fd.get("followUpDate")).toBe("");
-    expect(fd.get("followUpResult")).toBe(label === "상담 전" ? "before" : "consulted");
+    expect(fd.get("followUpResult")).toBe("before");
+  });
+  it("옛 초안의 '상담 전'은 상담을 마친 건에서 비운다 — 다시 고르게(옛 값 'next'는 상담 완료로)", async () => {
+    m.loadDraft.mockResolvedValue({ savedAt: Date.now(), values: { prospectName: "A", followUpResult: "before" } });
+    render(<ConsultationFullForm mode="edit" recordingOwner={{ tenantId: "t1", userId: "u1" }} initial={{ id: "c1", outcome: "consulted" }} />);
+    fireEvent.click(await screen.findByRole("button", { name: "이어서 작성" }));
+    expect(screen.getByRole("radio", { name: "상담 전" })).not.toBeChecked();
+    expect(screen.getByLabelText("상담 상태")).toHaveTextContent("상담 완료");
+    cleanup();
+    m.loadDraft.mockResolvedValue({ savedAt: Date.now(), values: { prospectName: "A", followUpResult: "next" } });
+    render(<ConsultationFullForm mode="edit" recordingOwner={{ tenantId: "t1", userId: "u1" }} initial={{ id: "c1", outcome: "consulted" }} />);
+    fireEvent.click(await screen.findByRole("button", { name: "이어서 작성" }));
+    expect(screen.getByRole("radio", { name: "상담 완료" })).toBeChecked();
+    expect(screen.getByText("다음 상담일").parentElement).toHaveTextContent("다음 상담일*");
   });
   it("후속 조치 초안을 복원하면 상태 표시도 같은 칸으로 바뀐다", async () => {
     m.loadDraft.mockResolvedValue({ savedAt: Date.now(), values: { prospectName: "A", followUpResult: "declined" } });
