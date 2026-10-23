@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { classnoteBadge } from "@/features/onescreen/components/report-card";
 import { RecallButton } from "@/features/report-admin/components/recall-button";
 import { useSubjectMaps } from "@/features/owner/operations-context";
-import { listReports, retryClassnote, sendClassnoteForUnsent, setReportCoversDate } from "@/features/report-admin/server/actions";
+import { listReports, retryClassnote, sendClassnoteForUnsent } from "@/features/report-admin/server/actions";
 import { classnoteRetryDeadline } from "@/features/onescreen/classnote-guard";
 import {
   isAdminSendable,
@@ -119,7 +119,7 @@ export function ReportList({
   classnoteOn?: boolean;
 }) {
   const router = useRouter();
-  // 발송 열(체크박스·선택 발송·재발송)은 권한 **그리고** ClassNote 기능. 수업일 지정(CoversDateControl)은 발송과 무관 → canSend 그대로.
+  // 발송 열(체크박스·선택 발송·재발송)은 권한 **그리고** ClassNote 기능. 회수(RecallButton)는 발송과 무관 → canSend 그대로.
   const sendOn = canSend && classnoteOn;
   const subjects = useSubjectMaps(); // 과목 표시는 한글 라벨(raw 키 노출 금지)
   const [filters, setFilters] = useState<ReportListFilters>(() => defaultReportFilters(todayYmd, initialStatus));
@@ -370,15 +370,6 @@ export function ReportList({
                   ) : null}
                   <td className="text-text-dim px-3 py-2 whitespace-nowrap">
                     {r.reportDate}
-                    {/* 실제 수업일이 따로 지정된 건(선발송·연속수업) — 그 날짜가 작성률 분모에서 면제된다. */}
-                    {r.coversDate ? (
-                      <span
-                        className="bg-bg-soft text-text-dim ml-1.5 rounded-full px-1.5 py-0.5 text-xs font-bold"
-                        title={coversTitle(r)}
-                      >
-                        수업 {r.coversDate.slice(5)}
-                      </span>
-                    ) : null}
                     {/* 발송분은 실제 발송 시각(classnote_sent_at), 미발송분은 작성/등록 시각 폴백 */}
                     {r.sentAt || r.createdAt ? (
                       <span
@@ -409,7 +400,6 @@ export function ReportList({
                   ) : null}
                   <td className="px-3 py-2 text-right">
                     <div className="flex items-center justify-end gap-1.5">
-                      <CoversDateControl row={r} canEdit={canSend} onSaved={() => run(filters)} />
                       {sendOn &&
                       r.classnoteStatus &&
                       RETRY_STATUSES.has(r.classnoteStatus) &&
@@ -464,105 +454,5 @@ export function ReportList({
         </div>
       ) : null}
     </section>
-  );
-}
-
-/** 지정 사유 프리셋 — 원장이 정의한 두 경우(0139a 감사 기록). */
-const COVERS_REASONS = ["선발송(미리 수업)", "연속수업(몰아서)"] as const;
-
-/** 배지 툴팁 — 면제 근거를 화면에서 바로 읽히게(누가·언제·왜). */
-function coversTitle(r: ReportListRow): string {
-  const who = r.coversBy ? ` · ${r.coversBy}` : "";
-  const when = r.coversAt ? ` ${hhmmKst(r.coversAt)}` : "";
-  const why = r.coversNote ? ` · ${r.coversNote}` : "";
-  return `실제 수업일 ${r.coversDate} · 그날 작성률 대상에서 제외${why}${who}${when} 지정(내부 표시)`;
-}
-
-/**
- * 실제 수업일(covers_date) 지정 — 미리 하거나 앞 수업에 몰아서 한 수업분(0136a).
- *
- * 왜 필요한가(원장 2026-07-22): 시험대비처럼 수업을 미리 하거나(선발송), 7/19분을 7/3에
- * 2타임으로 몰아서 하면(연속수업) 원래 수업일에 보고서가 없어 **강사가 미작성으로 찍힌다**.
- * 날짜를 지정하면 그 (학생, 날짜)가 작성률 대상에서 면제된다 — 집계를 옮기는 게 아니다.
- * ⚠️ 내부 메타데이터 — 학부모에게는 보이지 않는다.
- */
-function CoversDateControl({
-  row,
-  canEdit,
-  onSaved,
-}: {
-  row: ReportListRow;
-  canEdit: boolean;
-  onSaved: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [value, setValue] = useState(row.coversDate ?? "");
-  const [note, setNote] = useState(row.coversNote ?? COVERS_REASONS[0]);
-  const [saving, setSaving] = useState(false);
-  if (!canEdit) return null;
-
-  async function save(next: string | null) {
-    setSaving(true);
-    const res = await setReportCoversDate(row.id, next, next ? note : null);
-    setSaving(false);
-    if (!res.ok) {
-      toast.error(res.error ?? "저장하지 못했습니다");
-      return;
-    }
-    toast.success(next ? `실제 수업일 ${next}로 지정했습니다` : "실제 수업일 지정을 해제했습니다");
-    setOpen(false);
-    onSaved();
-  }
-
-  if (!open) {
-    return (
-      <Button
-        size="sm"
-        variant="ghost"
-        onClick={() => {
-          setValue(row.coversDate ?? "");
-          setNote(row.coversNote ?? COVERS_REASONS[0]!);
-          setOpen(true);
-        }}
-        title="미리 했거나 앞 수업에 몰아서 한 수업이면 실제 수업일을 지정하세요(내부 표시)"
-      >
-        수업일
-      </Button>
-    );
-  }
-  return (
-    <span className="flex items-center gap-1">
-      <input
-        type="date"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        className="border-line rounded-lg border px-1.5 py-1 text-xs"
-        aria-label="실제 수업일"
-      />
-      {/* 사유 — 나중에 "왜 이 날이 빠졌나"를 알 수 있어야 감사가 의미 있다(원장이 정의한 두 경우). */}
-      <select
-        value={note}
-        onChange={(e) => setNote(e.target.value)}
-        className="border-line rounded-lg border px-1.5 py-1 text-xs"
-        aria-label="지정 사유"
-      >
-        {COVERS_REASONS.map((o) => (
-          <option key={o} value={o}>
-            {o}
-          </option>
-        ))}
-      </select>
-      <Button size="sm" variant="outline" disabled={saving || !value} onClick={() => save(value)}>
-        저장
-      </Button>
-      {row.coversDate ? (
-        <Button size="sm" variant="ghost" disabled={saving} onClick={() => save(null)}>
-          해제
-        </Button>
-      ) : null}
-      <Button size="sm" variant="ghost" disabled={saving} onClick={() => setOpen(false)}>
-        취소
-      </Button>
-    </span>
   );
 }
