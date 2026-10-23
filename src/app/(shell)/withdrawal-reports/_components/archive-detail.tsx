@@ -4,11 +4,13 @@ import { useRouter } from "next/navigation";
 import { EmbedLink } from "@/components/embed-link";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { WindowLink } from "@/components/workspace/window-link";
 import { mapArchive } from "@/features/withdrawal-reports/server/archive-actions";
 import type { ArchiveDetail, ArchiveStudent } from "@/features/withdrawal-reports/archive-model";
 import { ArchiveReportForm } from "./archive-report-form";
 
-export function ArchiveDetailView({ archive: a, students, canManage = false }: { archive: ArchiveDetail; students: ArchiveStudent[]; canManage?: boolean }) {
+/** `withdrawalHref` = 연결된 학생이 지금 퇴원 상태이고 퇴원관리를 열 수 있을 때만 서버가 넣는 '퇴원 상세' 주소. */
+export function ArchiveDetailView({ archive: a, students, canManage = false, withdrawalHref }: { archive: ArchiveDetail; students: ArchiveStudent[]; canManage?: boolean; withdrawalHref?: string | null }) {
   const router = useRouter();
   const [studentId, setStudentId] = useState(a.mapped_student_id ?? "");
   const [error, setError] = useState("");
@@ -27,6 +29,7 @@ export function ArchiveDetailView({ archive: a, students, canManage = false }: {
       <span className="flex flex-wrap items-center gap-3 text-sm">
         <EmbedLink className="text-primary hover:underline" href="/withdrawal-reports">← 퇴원보고서 목록</EmbedLink>
         {canManage && <EmbedLink className="text-primary hover:underline" href="/withdrawal-reports?link=unmapped">학생 미연결 목록</EmbedLink>}
+        {withdrawalHref && <WindowLink className="text-primary hover:underline" href={withdrawalHref}>퇴원 상세</WindowLink>}
       </span>
     </div>
     <h1 className="text-xl font-semibold">{a.student_name || "이름 미기재"} · 기존 퇴원보고서</h1>

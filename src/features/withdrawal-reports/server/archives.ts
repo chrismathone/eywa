@@ -3,6 +3,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { reportViewer } from "./queries";
 import type { ArchiveDetail, ArchiveRow, ArchiveStudent } from "../archive-model";
 
+type Viewer = NonNullable<Awaited<ReturnType<typeof reportViewer>>>;
+/** 원본 한 건을 볼 수 있는가 — 상세(`getArchive`)와 퇴원 상세의 학생별 카드가 같은 판정을 쓴다(목록 쿼리 필터와 같은 규칙). */
+export function canReadArchive(row: Pick<ArchiveRow, "mapped_teacher_id" | "subject">, viewer: Viewer) {
+  if (!viewer.teacherId && !viewer.manage) return false;
+  if (viewer.teacherId) return row.mapped_teacher_id === viewer.teacherId;
+  return !viewer.scope || !row.subject || viewer.scope.includes(row.subject);
+}
+
 export async function listArchives() {
   const viewer = await reportViewer();
   if (!viewer || (!viewer.teacherId && !viewer.manage)) return [] as ArchiveRow[];
@@ -24,7 +32,7 @@ export async function getArchive(id: string) {
   if (!viewer || (!viewer.teacherId && !viewer.manage)) return null;
   const { data, error } = await createAdminClient().from("withdrawal_report_archives").select("*").eq("tenant_id", viewer.user.tenantId).eq("id", id).maybeSingle();
   if (error || !data) return null;
-  if (viewer.teacherId ? data.mapped_teacher_id !== viewer.teacherId : viewer.scope && data.subject && !viewer.scope.includes(data.subject)) return null;
+  if (!canReadArchive(data, viewer)) return null;
   return data as ArchiveDetail;
 }
 export async function archiveStudents() {

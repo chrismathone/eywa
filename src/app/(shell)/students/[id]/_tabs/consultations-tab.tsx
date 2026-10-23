@@ -60,11 +60,14 @@ export async function ConsultationsTab({
   canOpenEnrollmentDetail?: boolean;
 }) {
   // 학생상담 이력 + (권한 있으면) 등록상담 + 과목 라벨용 설정을 병렬로.
-  const [consults, enrollConsults, settings] = await Promise.all([
+  const [consults, enrollResult, settings] = await Promise.all([
     getStudentConsultationHistory(studentId),
-    canSeeEnrollment ? getStudentEnrollmentConsultations(studentId) : Promise.resolve([]),
+    canSeeEnrollment ? getStudentEnrollmentConsultations(studentId) : Promise.resolve(null),
     canSeeEnrollment ? getTenantSettings() : Promise.resolve(null),
   ]);
+  // 조회 실패를 '입학 상담 없음'으로 위장하지 않는다 — 실패면 한 줄로 알린다(2026-10-23).
+  const enrollConsults = enrollResult?.status === "ok" ? enrollResult.rows : [];
+  const enrollFailed = !!enrollResult && enrollResult.status !== "ok";
   const subjects = settings ? buildSubjectMaps(settings.operations.subjects) : null;
   const visible = consults.slice(0, CAP);
   const rest = consults.slice(CAP);
@@ -99,9 +102,14 @@ export async function ConsultationsTab({
           </ul>
         </div>
       ) : null}
+      {enrollFailed ? (
+        <p role="alert" className="text-muted-foreground text-xs">
+          <SheetText value={"입학 상담을 불러오지 못했습니다 — 새로고침해 주세요"} />
+        </p>
+      ) : null}
 
       {consults.length === 0 ? (
-        enrollConsults.length === 0 ? (
+        enrollConsults.length === 0 && !enrollFailed ? (
           <p className="text-muted-foreground py-8 text-center text-sm"><SheetText value={"상담 기록이 없습니다"} /></p>
         ) : null
       ) : (

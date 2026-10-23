@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { WindowLink } from "@/components/workspace/window-link";
 import type { ReportConsultation } from "@/features/withdrawal-reports/consultation";
 import { ReportForm } from "./report-form";
 import { fillEmptyReportFields } from "@/features/withdrawal-reports/prefill";
@@ -12,8 +13,10 @@ import { EMPTY_BODY, REPORT_STATUS, REPORT_ACTION_LABEL, directorIds, reportCapa
 
 const control = "w-full min-w-0 rounded-md border bg-background px-3 py-2 text-sm disabled:bg-muted/20 disabled:text-foreground";
 const dateTime = (v: string) => new Date(v).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "short", timeStyle: "short" });
-export function ReportDetail({ report: r, events, staff, labels, userId, writable, consultations = [], assignmentChanged = false, prefill = {}, prefillWarning }: {
+export function ReportDetail({ report: r, events, staff, labels, userId, writable, consultations = [], assignmentChanged = false, prefill = {}, prefillWarning, withdrawalHref }: {
   report: WithdrawalReport; events: ReportEvent[]; staff: StaffOption[]; labels: Record<string, string>; userId: string; writable: boolean; consultations?: ReportConsultation[]; assignmentChanged?: boolean; prefill?: Partial<ReportBody>; prefillWarning?: string;
+  /** 학생이 지금 퇴원 상태이고 퇴원관리를 열 수 있을 때만 서버가 넣는다(`withdrawalDetailHref`). */
+  withdrawalHref?: string | null;
 }) {
   const router = useRouter();
   const [body, setBody] = useState<ReportBody>(() => fillEmptyReportFields({ ...EMPTY_BODY, ...r.body }, prefill));
@@ -35,7 +38,7 @@ export function ReportDetail({ report: r, events, staff, labels, userId, writabl
     });
   }
   return <>
-    <div className="flex flex-wrap items-center justify-between gap-3"><Link className="text-sm text-primary hover:underline" href="/withdrawal-reports">← 보고서 목록</Link><span className="rounded-full bg-muted px-3 py-1.5 text-sm">{REPORT_STATUS[r.status]}</span></div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><span className="flex flex-wrap items-center gap-3 text-sm"><Link className="text-primary hover:underline" href="/withdrawal-reports">← 보고서 목록</Link>{withdrawalHref && <WindowLink href={withdrawalHref} className="text-primary hover:underline">퇴원 상세</WindowLink>}</span><span className="rounded-full bg-muted px-3 py-1.5 text-sm">{REPORT_STATUS[r.status]}</span></div>
     <p className="text-sm">{r.exit_kind === "withdrawal" ? "전체 퇴원" : "반 수강종료"} · {r.subjects.map(s => labels[s] ?? "기타 과목").join(" · ")}</p>
     {r.request_note && <div className="rounded-lg border bg-muted/20 p-4 text-sm"><div className="mb-2 font-medium">작성 요청 · {nameOf(r.requested_by)}</div><p className="whitespace-pre-wrap">{r.request_note}</p></div>}
     {r.last_comment && <p className="whitespace-pre-wrap rounded-lg border border-att-late-ink/20 bg-att-late p-4 text-sm text-att-late-ink">{r.last_comment}</p>}
