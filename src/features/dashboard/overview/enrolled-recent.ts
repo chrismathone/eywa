@@ -7,6 +7,7 @@
  * 🔑 카드 숫자·팝업·요약형이 **이 함수 하나**로 센다 — 갈리면 같은 칸이 화면마다 다른 수를 말한다.
  */
 import { inPreviousDays, previousDayRange } from "./previous-day";
+import { inConsultClasses, type ConsultClassKeys } from "@/features/enrollment/consult-subject";
 
 /** 조회 시작일 — 전일 첫날(월요일엔 토요일)과 이번 달 1일 중 이른 날. */
 export function enrolledRecentFrom(today: string): string {
@@ -38,15 +39,17 @@ export function splitEnrolledRecent<T extends { date?: string | null }>(
  * 바꾸지 않으므로(결정 — `outcome` 강제 안 함) 이런 상담엔 '등록 완료로 옮긴' 상태 로그가 없다 → 운영실이 못 셌다(장윤건 10/16).
  * 그 때 = 그 과목 반에 **처음** 배정된 때(끝난 수강 포함 — 반 이동으로 새 수강이 생겨도 신규로 다시 세지 않게) · 상담 접수보다
  * 앞이면 접수 때(이미 다니던 학생의 새 상담은 들어오자마자 그 칸이다). 지금 배정이 없으면 null(칸반도 그 칸이 아니다).
- * 과목 판정은 칸반 배지와 같다(`assignedQuery` — 상담 과목이 있으면 그 과목 반만 · 없으면 전 과목).
+ * 과목 판정은 칸반 배지와 같다(`assignedQuery` — 상담 과목 글자 → 반 과목 키 `consultClassKeys`: 과목이 없으면(null) 전 과목 ·
+ * 못 읽는 글자([])는 배정 없음 · 옛 이관 '수학'·'EIE'도 그 반).
  */
 export function assignedEntryAt(input: {
   consultCreatedAt: string;
-  subject: string | null;
+  /** 상담이 볼 반 과목 키 — `consultClassKeys`(호출부가 학원 설정으로 만든다). */
+  classKeys: ConsultClassKeys;
   enrollments: readonly { subject: string | null; createdAt: string; endDate: string | null }[];
   today: string;
 }): string | null {
-  const mine = input.enrollments.filter((e) => !input.subject || e.subject === input.subject);
+  const mine = input.enrollments.filter((e) => inConsultClasses(input.classKeys, e.subject));
   if (!mine.some((e) => !e.endDate || e.endDate >= input.today)) return null;
   const first = mine.map((e) => e.createdAt).sort()[0]!;
   return Date.parse(first) > Date.parse(input.consultCreatedAt) ? first : input.consultCreatedAt;
