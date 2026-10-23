@@ -1,6 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { SUMMARY_VERSION, type RecentSummary } from "@/features/students/ontology/summary";
+import { SUMMARY_VERSION, type GroundedSummary } from "@/features/students/ontology/summary";
 
 const TABLE = "student_ontology_summaries";
 /** Atomic tenant/day reservation; failed provider calls also consume the conservative pilot allowance. */
@@ -38,7 +38,7 @@ export async function claimSummary(scope: SummaryScope, token: string) {
   return !!claimed.data?.length;
 }
 
-export async function finishSummary(scope: SummaryScope, token: string, hash: string, result: RecentSummary, model: string) {
+export async function finishSummary(scope: SummaryScope, token: string, hash: string, result: GroundedSummary, model: string) {
   const { data, error } = await createAdminClient().from(TABLE).update({ input_hash: hash, result, model_label: model,
     contract_version: SUMMARY_VERSION, generated_at: new Date().toISOString(), request_token: null, requested_at: null })
     .match(key(scope)).eq("request_token", token).select("generated_at");

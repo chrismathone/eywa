@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { summarySources, validateRecentSummary, type SummarySource } from "./summary";
+import { summarySources, validateRecentSummary, validateGroundedSummary, type SummarySource } from "./summary";
 import { sectionResult, type LiveConnections } from "./live-contract";
 
 const source: SummarySource = { itemId: "consultations:1", section: "상담", title: "상담자", text: "영어 수업을 계속하고 싶다고 학생이 말했다.", date: "2026-10-23",
@@ -35,4 +35,9 @@ it("rejects invented extra fields and repeated citations", () => {
 });
 it("does not accept a source-injected action as a structured response", () => {
   expect(() => validateRecentSummary({ action: "delete_students", items: [] }, [source])).toThrow();
+});
+it("rejects a valid-shaped Korean response that exceeds the saved JSON byte budget", () => {
+  const sources = Array.from({length:6},(_,i)=>({...source,itemId:`consultations:${i}`,text:"가".repeat(800)}));
+  const items = sources.map(s=>({itemId:s.itemId,summary:"나".repeat(180),excerpt:s.text}));
+  expect(()=>validateGroundedSummary({items},sources)).toThrow("저장 길이");
 });
