@@ -204,7 +204,7 @@ export function levelTableText(f: Pick<PilotFacts, "attitude" | "homework" | "un
   const rows: [string, Level | null][] = [
     [T.attitude, attitudeLevel(f.attitude)],
     [T.homework, homeworkLevel(f.homework)],
-    [T.understanding, understandingLevel(f.understanding)],
+    ["이해도", understandingLevel(f.understanding)], // 표의 줄 이름은 짧게 — 항목 제목은 '오늘의 수업'
   ];
   const filled = rows.filter((r): r is [string, Level] => r[1] != null);
   if (!filled.length) return "";

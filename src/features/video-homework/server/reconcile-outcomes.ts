@@ -53,7 +53,7 @@ export async function reconcileVideoHomework(tenantId: string, options: { studen
   if (videos === null) throw new Error("영상 조회 실패 — 상태 변경 중단");
   const marks = markRows.map((row) => ({ classId: row.class_id, studentId: row.student_id, checkDate: row.check_date, homeworkDate: row.homework_date,
     status: row.status as VideoHomeworkStatus }));
-  const { outcomes, unmatched } = videoHomeworkOutcomes(targets, videos, today, range.from, marks);
+  const { outcomes, unmatched, fillable } = videoHomeworkOutcomes(targets, videos, today, range.from, marks, (classId) => byClass.get(classId)?.subject);
   let updated = 0, notifications = 0;
   for (let start = 0; start < outcomes.length; start += 100) {
     const { data, error } = await db.rpc("reconcile_video_homework_outcomes", {
@@ -63,10 +63,15 @@ export async function reconcileVideoHomework(tenantId: string, options: { studen
     updated += Number(data?.updated ?? 0); notifications += Number(data?.notifications ?? 0);
   }
   // 미배정 할 일(0379a)은 미배정이 0건이어도 맞춘다 — 마지막 영상이 연결되면 그 할 일을 닫아야 한다.
+  // 알림·할 일은 붙일 빈 숙제가 있는 영상만(`fillable` — 원장 2026-10-23). 빈 숙제가 없어진 영상(`moot`)의 열린 할 일은 '취소'로 닫는다.
+  const moot = unmatched.filter(video => !fillable.includes(video)).map(video => video.id);
+  const sync = (open: string[]) => syncUnassignedTasks(tenantId, videos.map(video => video.id), unmatched.map(video => video.id), open, moot);
+  // 알림 건수(DB)가 닫힌 할 일의 영상을 빼고 세므로 먼저 닫는다 — 열기는 알림 뒤(새 할 일을 방금 만든 묶음 알림에 잇는다).
+  if (options.notifyUnmatched) await sync([]);
   let pending: { id: string }[] = [];
-  if (options.notifyUnmatched && unmatched.length) {
+  if (options.notifyUnmatched && fillable.length) {
     // 배정이 바뀌었는지는 RPC가 재확인한다. 수신자는 현재 담당 강사이며 지점 밖으로 보내지 않는다.
-    const eligible = unmatched.filter(video => {
+    const eligible = fillable.filter(video => {
       const student = byStudent.get(video.studentId);
       const candidates = video.classId ? [byClass.get(video.classId)].filter(Boolean) : classes;
       return student && candidates.some(cls => cls && isVideoHomeworkEnabled(settings.report.videoHomeworkPolicy,
@@ -82,19 +87,18 @@ export async function reconcileVideoHomework(tenantId: string, options: { studen
       notifications += Number(data ?? 0);
     }
   }
-  if (options.notifyUnmatched) {
-    await syncUnassignedTasks(tenantId, videos.map(video => video.id), unmatched.map(video => video.id), pending.map(video => video.id));
-  }
+  if (options.notifyUnmatched) await sync(pending.map(video => video.id));
   return { checked: outcomes.length, updated, notifications };
 }
 
 /**
- * 할 일 '미배정 영상'(0379a) — 알림 대상(open)은 열고, 이번에 판정한 영상(checked) 중 미배정(unmatched)이 아니게 된 것은 닫는다.
- * 미배정 판정은 위 `videoHomeworkOutcomes` 한 벌 — DB가 따로 판정하지 않는다. 실패해도 영상 상태·알림은 이미 끝났다(할 일만 다음 판정에).
+ * 할 일 '미배정 영상'(0379a · 0447a) — 알림 대상(open)은 열고, 이번에 판정한 영상(checked) 중 미배정(unmatched)이 아니게 된 것은 닫고,
+ * 미배정이지만 붙일 빈 숙제가 없는 영상(moot)은 '취소'로 닫는다. 판정은 위 `videoHomeworkOutcomes` 한 벌 — DB가 따로 판정하지 않는다.
+ * 실패해도 영상 상태·알림은 이미 끝났다(할 일만 다음 판정에).
  */
-async function syncUnassignedTasks(tenantId: string, checked: string[], unmatched: string[], open: string[]): Promise<void> {
+async function syncUnassignedTasks(tenantId: string, checked: string[], unmatched: string[], open: string[], moot: string[]): Promise<void> {
   const { error } = await createAdminClient().rpc("staff_task_sync_unassigned_videos", {
-    p_tenant: tenantId, p_checked: checked, p_unmatched: unmatched, p_open: open,
+    p_tenant: tenantId, p_checked: checked, p_unmatched: unmatched, p_open: open, p_moot: moot,
   });
   if (error) reportError(error, { scope: "video-homework.unassigned-tasks", tenantId });
 }

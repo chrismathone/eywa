@@ -3239,8 +3239,8 @@ export const SHEET_DICT = {
     en: "Teacher's one-line note (required) · e.g. Great job not giving up on the hard ones!",
   },
   "os.card.mentPhPilot": {
-    ko: "이 학생의 수학 보고서는 '자동작성'으로만 만듭니다(직접 고칠 수 없습니다). 진도 · 일일 테스트 · 수업 태도 · 과제 수행률 · 이해도(강점·응원·격려의 말로) · 오늘 과제 · 선생님 한마디 항목으로 나뉘어 채워집니다. 한줄 멘트는 적는 대로 맨 아래에 바로 반영됩니다.",
-    en: "This student's math report is written by Auto-write only (it cannot be edited by hand). It is split into sections — progress, daily test, attitude, homework, understanding (in words of praise or encouragement), today's homework and the teacher's note, which updates live as you type.",
+    ko: "이 학생의 수학 보고서는 '자동작성'을 먼저 눌러 만듭니다(그 뒤엔 직접 고칠 수 있습니다). 수업 평가 · 진도 · 일일 테스트 · 수업 태도 · 과제 수행률 · 이해도(강점·응원·격려의 말로) · 오늘 과제 · 선생님 한마디 항목으로 나뉘어 채워집니다. 한줄 멘트는 적는 대로 맨 아래에 바로 반영됩니다.",
+    en: "This student's math report starts from Auto-write (you can edit it afterwards). It is split into sections — progress, daily test, attitude, homework, understanding (in words of praise or encouragement), today's homework and the teacher's note, which updates live as you type.",
   },
   "os.card.testSkip.title": { ko: "일일 테스트", en: "Daily test taken?" },
   "os.card.testSkip.yes": { ko: "시험 있음", en: "Test taken" },

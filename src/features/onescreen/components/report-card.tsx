@@ -47,7 +47,7 @@ import type { OneScreenStudent } from "../types";
 import { classnoteBadge, type ClassnoteBadge } from "../classnote-badge";
 import { attendanceMarkBadgeClass, attendanceMarkLabel } from "../attendance-mark";
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
-import { hasPilotOneLine, isMathReportPilot, pilotNeedsAutoWrite } from "../math-report-pilot";
+import { hasPilotOneLine, isMathReportPilot, pilotCanEdit, pilotNeedsAutoWrite } from "../math-report-pilot";
 import { pilotRowSig, testSkipComplete } from "../math-report-pilot-sections";
 import type { SheetLang } from "@/features/teacher-view/i18n";
 import { ReservedMakeupTag } from "./reserved-makeup-tag";
@@ -305,6 +305,7 @@ export function ReportCard({
   const locked = readonlyView || !isRowInputEditable(subject, liveStatus);
   // 수학 보고서 시범(테스트 학생 한정, math-report-pilot.ts) — 멘트·추세는 보기만, 자동작성 글 그대로여야 발송.
   const pilot = isMathReportPilot(student.id, subject.subjectKey);
+  const pilotLocked = pilot && !pilotCanEdit(rep.autoDraft); // 자동작성 전엔 잠금(2026-10-23)
   const sendGate = evaluateSendGate({
     lang, // 🔴 판정이 아니라 **글자**만 갈린다(canSend·reasons 불변, send-gate.ts)
     needsAutoWrite:
@@ -770,8 +771,8 @@ export function ReportCard({
               id={isEnglishRow ? ENGLISH_DRAFT_TEXTAREA_ID : undefined}
               value={rep.draft}
               onChange={(e) => onSubjectDraft(subjectName, e.target.value)}
-              // 시범 대상 = 보기만(원장 2026-10-21 *"수정하지 못하도록 막고 보이게만"*) — 자동작성만 이 칸을 채운다.
-              readOnly={pilot}
+              // 시범 대상 = 자동작성 전엔 보기만, 자동작성 뒤엔 고칠 수 있다(원장 2026-10-23 *"자동작성하고나면 수정은 할수있게"*).
+              readOnly={pilotLocked}
               placeholder={
                 pilot
                   ? t("os.card.mentPhPilot")
@@ -782,7 +783,7 @@ export function ReportCard({
               // 영어 템플릿 글은 20줄 안팎이라 기본 높이로는 절반도 안 보인다 — 영어 행만 키운다.
               className={`border-line focus:border-primary scrollbar-thin ${
                 isEnglishRow ? "min-h-[280px]" : "min-h-[110px]"
-              } flex-1 resize-none rounded-lg border ${pilot ? "bg-bg-soft" : "bg-background"} px-3 py-2 text-sm leading-relaxed outline-none`}
+              } flex-1 resize-none rounded-lg border ${pilotLocked ? "bg-bg-soft" : "bg-background"} px-3 py-2 text-sm leading-relaxed outline-none`}
             />
           )}
         </div>
@@ -812,7 +813,7 @@ export function ReportCard({
             <textarea
               value={rep.trendDraft ?? ""}
               onChange={(e) => onSubjectTrend(subjectName, e.target.value)}
-              readOnly={pilot}
+              readOnly={pilotLocked}
               placeholder={t("os.card.trendPh")}
               title={trendOptOut?.hidden(subjectName) ? t("os.row.trendOptOutOn") : undefined}
               className={`border-line focus:border-primary scrollbar-thin min-h-[64px] resize-none rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none ${

@@ -10,6 +10,8 @@ import {
   hasPilotOneLine,
   pilotOneLineAttached,
   pilotRecomposeNote,
+  pilotCanEdit,
+  pilotNeedsAutoWrite,
   MATH_REPORT_PILOT_STUDENT_IDS,
   progressLead,
   readUnderstanding,
@@ -212,18 +214,21 @@ describe("배선", () => {
   const read = (p: string) => readFileSync(new URL(p, import.meta.url), "utf8");
   it("서버 발송 경로가 저장된 작성 방식으로 다시 막는다", () => {
     const src = read("./server/actions.ts");
-    expect(src).toMatch(/saved\.mentSource !== "auto"\s*\?\s*PILOT_AUTOWRITE_REQUIRED_ERROR/);
+    expect(src).toMatch(/saved\.mentSource !== "auto" && saved\.mentSource !== "auto_edited"[^\n]*\n\s*\?\s*PILOT_AUTOWRITE_REQUIRED_ERROR/);
     expect(src).toMatch(/!pilotOneLineAttached\(input\.notes, input\.pilotOneLine\)/);
     expect(src).toMatch(/mentSource: mentSourceFinal,/);
   });
   it("자동작성 글에 이해도 점수 블록을 붙이지 않는다(말로 풀어 쓴다)", () => {
     expect(read("./server/actions.ts")).not.toMatch(/understandingBlock/);
   });
-  it("카드·표 멘트 칸이 시범 대상에서 잠기고 이해도 서명으로 대조한다", () => {
+  it("카드·표 멘트 칸이 자동작성 전에만 잠기고 이해도 서명으로 대조한다", () => {
     const card = read("./components/report-card.tsx");
     const grid = read("./components/grid-row.tsx");
-    expect(card).toMatch(/readOnly=\{pilot\}/);
-    expect(grid).toMatch(/readOnly=\{rowLocked \|\| pilot\}/);
+    expect(card).toMatch(/const pilotLocked = pilot && !pilotCanEdit\(rep\.autoDraft\)/);
+    expect(card).toMatch(/readOnly=\{pilotLocked\}/);
+    expect(grid).toMatch(/const pilotLocked = pilot && !pilotCanEdit\(rep\?\.autoDraft\)/);
+    expect(grid).toMatch(/readOnly=\{rowLocked \|\| pilotLocked\}/);
+    expect(card).not.toMatch(/readOnly=\{pilot\}/);
     // 사실 서명은 카드·표·자동작성이 같은 함수(pilotRowSig)로 만든다 — 갈리면 값이 그대로인데도 게이트가 안 풀린다.
     for (const src of [card, grid]) {
       expect(src).toMatch(/factsSig: pilotRowSig\(student, subject\.name\)/);
@@ -238,6 +243,32 @@ describe("배선", () => {
     expect(client).toMatch(/pilotOneLine: rowEval\.note/);
     expect(read("./components/report-card.tsx")).toMatch(/needsOneLine: pilot && !hasPilotOneLine\(cardEval\.note\)/);
     expect(read("./components/grid-row.tsx")).toMatch(/needsOneLine: pilot && !hasPilotOneLine\(rowEval\.note\)/);
+  });
+});
+
+describe("자동작성 뒤 수정 허용(원장 2026-10-23)", () => {
+  const now = { studentName: "이승엽", today: "소인수분해", note: "잘했어요", factsSig: "A", writtenSig: "A" };
+  const auto = composePilotMent({ lead: pilotSection("진도", progressLead("이승엽", ["소인수분해"])), body: "본문", note: "잘했어요" });
+  const edited = auto.replace("본문", "고친 본문");
+  it("자동작성 전엔 잠금 · 뒤엔 열림", () => {
+    expect(pilotCanEdit(undefined)).toBe(false);
+    expect(pilotCanEdit("  ")).toBe(false);
+    expect(pilotCanEdit(auto)).toBe(true);
+  });
+  it("고친 글도 보낼 수 있다", () => {
+    expect(pilotNeedsAutoWrite(edited, auto, now)).toBe(false);
+    expect(pilotNeedsAutoWrite(auto, auto, now)).toBe(false);
+  });
+  it("자동작성을 안 했거나 글이 비면 막는다", () => {
+    expect(pilotNeedsAutoWrite(edited, undefined, now)).toBe(true);
+    expect(pilotNeedsAutoWrite("", auto, now)).toBe(true);
+  });
+  it("고친 글이어도 칸 값이 바뀌었거나 한마디가 끝에 없으면 막는다", () => {
+    expect(pilotNeedsAutoWrite(edited, auto, { ...now, factsSig: "B" })).toBe(true);
+    expect(pilotNeedsAutoWrite(edited, auto, { ...now, note: "다른 말" })).toBe(true);
+  });
+  it("고친 글에서도 한마디를 바꾸면 끝만 바뀐다", () => {
+    expect(pilotRecomposeNote(edited, auto, "잘했어요", "최고예요")).toBe(edited.replace(/잘했어요$/, "최고예요"));
   });
 });
 

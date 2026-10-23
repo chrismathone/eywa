@@ -87,8 +87,8 @@ export async function GET(req: Request) {
     }
   }
 
-  // 오래된 dedup 이벤트·읽은 알림 정리 — 전 테넌트 공통 1회.
-  let pruned: { events: number; notifications: number } | string;
+  // 오래된 dedup 이벤트·읽은 알림 정리 · 30일 넘게 안 읽은 알림 보관 — 전 테넌트 공통 1회.
+  let pruned: { events: number; notifications: number; archived: number } | string;
   try {
     pruned = await pruneNotificationData();
   } catch (e) {
