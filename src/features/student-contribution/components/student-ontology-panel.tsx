@@ -1,0 +1,33 @@
+import { Suspense } from "react";
+import { EmbedLink as Link } from "@/components/embed-link";
+import { getContributionStudents } from "../server/directory";
+import { getContributionGate } from "../server/access";
+import { ContributionHeader } from "./contribution-shell";
+import { ContributionStudentPanel } from "./student-panel";
+import { CurrentConnections, ConnectionSkeleton } from "./current-connections";
+import { StoredSummary } from "./stored-summary";
+import { EyIcon } from "@/components/icons/aywa-icons";
+
+async function Heading({ studentId }: { studentId: string }) {
+  const [students, gate] = await Promise.all([getContributionStudents(), getContributionGate()]);
+  const student = students.find((s) => s.id === studentId && !s.is_test);
+  if (!student) return null;
+  return <ContributionHeader title={`${student.name}의 기여도와 기록`} description="월별 점수와 계산 근거를 확인하세요." active="students" canConfigure={gate?.canConfigure}
+    actions={<Link href="/student-contribution" className="rounded-lg border border-line px-3 py-2 text-sm hover:bg-muted">원생 목록</Link>} />;
+}
+export function StudentOntologyPanel({ studentId, month }: { studentId: string; month?: string }) {
+  return <div className="w-full min-w-0 space-y-5 pb-6">
+    <Suspense fallback={<ConnectionSkeleton label="학생 기록" />}><Heading studentId={studentId} /></Suspense>
+    <Suspense fallback={<ConnectionSkeleton label="월별 기여도" />}><ContributionStudentPanel studentId={studentId} month={month} /></Suspense>
+    <details key={studentId} className="group rounded-xl border border-line" aria-label="현재 연결">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 focus-visible:outline-primary [&::-webkit-details-marker]:hidden">
+        <span><span className="block font-semibold">현재 연결</span><span className="mt-1 block text-xs">현재 수강·담당자, 상담·메모와 최근 기록 요약</span></span>
+        <span className="flex shrink-0 items-center gap-2 text-sm text-primary"><span className="group-open:hidden">펼치기</span><span className="hidden group-open:inline">접기</span><span className="group-open:rotate-180"><EyIcon name="chevronDown" size={16} /></span></span>
+      </summary>
+      <div className="space-y-4 border-t border-line p-4">
+        <Suspense fallback={<ConnectionSkeleton />}><CurrentConnections studentId={studentId} /></Suspense>
+        <Suspense fallback={null}><StoredSummary studentId={studentId} /></Suspense>
+      </div>
+    </details>
+  </div>;
+}

@@ -253,6 +253,9 @@ describe("🔴 자동 병합 없음 — 후보 판정은 아무것도 쓰지 않
     expect(src).toContain("export async function mergeStudents");
     expect(src).toContain('action: "student_merge"');
     // 살아남은 쪽 표식 해제 — 병합 직후 배너가 다시 빈 화면을 가리키지 않게(원장 제보 재현 방지).
-    expect(src).toContain('.update({ dup_suspect: false }).eq("id", keeperId)');
+    // 2026-10-22 코드 변경에 맞춤: 2186c9ac4가 메이크에듀 번호 받기를 같은 문장에 얹어(`...(makeeduCarry…)`) 한 줄 모양이
+    // 바뀌었다. 지키는 뜻은 그대로 — `dup_suspect: false`가 **조건 없이 맨 앞 키**이고 그 문장이 남길 쪽(keeperId)을 고른다.
+    // (진 쪽 퇴원 문장도 dup_suspect: false를 갖지만 맨 앞 키가 status라 여기 걸리지 않는다.) 동작은 actions.test.ts가 확인한다.
+    expect(src).toMatch(/\.update\(\{ dup_suspect: false[,\s][^;]*?\}\)\s*\.eq\("id", keeperId\)/);
   });
 });

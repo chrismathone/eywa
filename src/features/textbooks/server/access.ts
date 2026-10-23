@@ -42,7 +42,7 @@ export function isMissingTextbookTable(error: { code?: string; message?: string 
 }
 
 /**
- * `textbooks.grade_term`(20261022120000)이 아직 없을 때 — 42703 = undefined_column / PGRST204 = 스키마 캐시에 없음.
+ * `textbooks.grade_term`(0437a)이 아직 없을 때 — 42703 = undefined_column / PGRST204 = 스키마 캐시에 없음.
  * 조회는 이 칸을 빼고 다시 읽는다([[#95]] — 교재목록·수학 시트가 SQL 적용 전에도 산다).
  */
 export function isMissingGradeTermColumn(error: { code?: string; message?: string } | null | undefined): boolean {

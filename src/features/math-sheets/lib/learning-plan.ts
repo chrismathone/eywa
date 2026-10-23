@@ -8,6 +8,8 @@ import { learningTopics, learningTopicIndex, learningTimelineTopics, learningTim
 
 /** A goal is stored once; monthly, weekly and daily targets are derived, never copied into reports. */
 export type LearningGoal = {
+  /** Read-side provenance; optional for drafts and pre-existing consumers. */
+  source?: { table: "math_learning_goals" | "math_learning_track_goals"; id: string };
   studentId: string;
   studyGrade: string;
   endStudyGrade?: string;
@@ -32,6 +34,7 @@ export type LearningPlanRevision = {
   pastDays: { date: string; topic: LearningPlanTopic | null }[];
 };
 export type LearningRecord = {
+  sourceId?: string;
   date: string;
   progress: string | null;
   textbook: string | null;

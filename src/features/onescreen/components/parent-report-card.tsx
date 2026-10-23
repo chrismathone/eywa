@@ -8,6 +8,8 @@ import { isSkipStatusProgress } from "../progress-status";
 import { collapseProgressRanges } from "../progress-range";
 import { reportTitleText } from "../report-title";
 import { videoHomeworkDueLabel } from "../video-homework-label";
+import { parsePilotNotes } from "../pilot-notes";
+import { PilotNotesBody } from "./pilot-notes-body";
 import { ReportTrendGraph } from "./report-trend-graph";
 import { EMPTY_NOTES, FileLink, TemplateBody, type CardAttachment } from "./report-template-body";
 
@@ -140,6 +142,8 @@ export function ParentReportCard({
     templateMode && rpt.showAttachments ? pickInlineAttachments(report.notes, attachments) : new Map();
   const inlinePaths = new Set([...inline.values()].map((a) => a.path));
   const restAttachments = inlinePaths.size ? attachments.filter((a) => !inlinePaths.has(a.path)) : attachments;
+  // 항목별 글(`■ 제목` — 수학 보고서 시범)이면 표·항목 블록으로 그린다(원장 2026-10-23 시안 B). 아니면 예전처럼 글 그대로.
+  const pilotSections = templateMode ? null : parsePilotNotes(report.notes);
 
   return (
     // ⚠️ report-capture = ClassNote 워커 스크린샷 대상 클래스(classnote-core.mjs가 이 선택자로 캡처).
@@ -216,9 +220,13 @@ export function ParentReportCard({
 
       {!templateMode && rpt.showParentNote ? (
         <Section title="학부모 전달 내용">
-          <p className="text-foreground text-base leading-relaxed whitespace-pre-wrap">
-            {report.notes || EMPTY_NOTES}
-          </p>
+          {pilotSections ? (
+            <PilotNotesBody sections={pilotSections} />
+          ) : (
+            <p className="text-foreground text-base leading-relaxed whitespace-pre-wrap">
+              {report.notes || EMPTY_NOTES}
+            </p>
+          )}
         </Section>
       ) : null}
 

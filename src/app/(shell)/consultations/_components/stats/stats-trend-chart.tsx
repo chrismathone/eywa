@@ -45,7 +45,7 @@ export function StatsTrendChart({ series, metric, unit }: { series: MetricSeries
       kind={percent ? "line" : "bar"}
       unit={series.unit}
       {...(percent ? { max: 100 } : {})}
-      legend={lines.length > 1}
+      legend
     />
   );
 }

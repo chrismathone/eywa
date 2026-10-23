@@ -111,7 +111,7 @@ export function StatsView({
               ),
           },
           {
-            label: "등록 결제액",
+            label: "과거 기재 결제액",
             value: stats.paidSum > 0 ? won(stats.paidSum) : "—",
             delta:
               paidCount === null || stats.enrolled === 0 ? null : (
@@ -138,15 +138,15 @@ export function StatsView({
       <div className="grid items-stretch gap-4 lg:grid-cols-2 xl:grid-cols-3">
       <Card
         className="lg:col-span-2"
-        // 여러 해를 견줄 땐 막대가 상담 건수뿐이다(등록은 '전환율 추세선'으로 본다) — 제목에 '등록'을 적지 않는다(검수 2026-10-22).
+        // 여러 해를 견줄 땐 그래프가 상담 건수뿐이다(등록은 '전환율'로 본다) — 제목에 '등록'을 적지 않는다(검수 2026-10-22).
         title={year === null ? "월별 상담 (연도 비교)" : `${year}년 월별 상담·등록`}
         // 가로축이 1월~12월 12칸이고 연도는 색이라, 무엇이 색으로 갈리는지 한 줄로 밝힌다.
         sub={
           year === null
-            ? "막대 = 월별 상담 건수 · 색이 연도입니다(범례는 축 아래) — 같은 달끼리 해마다 견줍니다 · 등록 비율은 '전환율 추세선'"
+            ? "월별 상담 건수 · 색이 연도입니다(범례는 그래프 아래) — 같은 달끼리 해마다 견줍니다 · 등록 비율은 '전환율'을 켜서 봅니다"
             : stats.prevYearMonths.some((m) => m.total > 0)
-              ? `같은 달 칸에 ${year - 1}년 상담(회색) · ${year}년 상담 · ${year}년 등록이 나란히 섭니다`
-              : `${year - 1}년 데이터가 없어 전년 막대는 표시하지 않습니다`
+              ? `달마다 ${year - 1}년 상담(회색) · ${year}년 상담 · ${year}년 등록을 견줍니다`
+              : `${year - 1}년 데이터가 없어 전년 상담은 표시하지 않습니다`
         }
       >
         <StatsTrend
@@ -191,7 +191,7 @@ export function StatsView({
                       건당 평균의 분모도 등록 건수가 아니라 '금액이 적힌 등록 건수'다. */}
                   {b.paidSum > 0 ? (
                     <div className="text-text-dim num mt-0.5 text-xs">
-                      매출 <b className="text-foreground">{won(b.paidSum)}</b>
+                      과거 기재 결제액 <b className="text-foreground">{won(b.paidSum)}</b>
                       {b.avgPaid !== null && b.paidCount ? (
                         <>
                           {" · "}건당 {won(b.avgPaid)}

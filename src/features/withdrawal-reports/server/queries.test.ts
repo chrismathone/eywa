@@ -37,6 +37,20 @@ describe("report read boundaries", () => {
     expect((await reportViewer())?.request).toBe(false);
     expect(await requestStudents()).toEqual([]);
   });
+  it("offers only current enrollments in operating classes", async () => {
+    state.user.systemRole = "master";
+    const course = { id: "open", start_date: "2020-01-01", end_date: null, on_hold: false, is_transferred: false, classes: { id: "open", class_name: "운영 반", subject: "math", teacher_id: "teacher", teacher: { display_name: "담임" }, is_active: true, closed_at: null } };
+    const enrollments = [course,
+      { ...course, id: "ended", classes: { ...course.classes, closed_at: "2020-01-01" } },
+      { ...course, id: "inactive", classes: { ...course.classes, is_active: false } },
+      { ...course, id: "past-enrollment", end_date: "2020-01-02" },
+    ];
+    const q = { select: vi.fn(), eq: vi.fn(), in: vi.fn(), is: vi.fn(), order: vi.fn(), range: vi.fn() };
+    for (const fn of Object.values(q)) fn.mockReturnValue(q);
+    q.range.mockResolvedValue({ data: [{ id: "student", name: "학생", school: "학교", grade: "중1", enrollments }], error: null });
+    state.db.mockReturnValue({ from: () => q });
+    expect((await requestStudents())[0].courses.map(c => c.id)).toEqual(["open"]);
+  });
   it("teacher reads only their own participation", async () => {
     const viewer = (await reportViewer())!;
     expect(canReadReport(report, viewer)).toBe(true);

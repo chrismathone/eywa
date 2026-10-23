@@ -1,0 +1,79 @@
+"use client";
+import { useMemo, useState, useTransition } from "react";
+import { EmbedLink as Link } from "@/components/embed-link";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { EyIcon } from "@/components/icons/aywa-icons";
+import { schoolGradeLabel } from "@/lib/format/school-grade";
+import { scoreRaws, sumRaws } from "../model/calc";
+import type { getContributionList } from "../server/queries";
+import { refreshContribution } from "../server/actions";
+import { ContributionHeader } from "./contribution-shell";
+import { ListPager } from "./list-pager";
+import { ScoreBreakdown } from "./score-breakdown";
+import { fieldClass, numberText } from "./presentation";
+type Data = NonNullable<Awaited<ReturnType<typeof getContributionList>>>;
+export const pointsText = numberText;
+export function ContributionList({ data }: { data: Data }) {
+  const [filters, setFilters] = useState({ search: "", status: "enrolled", grade: "", subject: "", sort: "total" });
+  const [page, setPage] = useState(1), [message, setMessage] = useState(""), [busy, start] = useTransition();
+  const [pageSize, setPageSize] = useState(10);
+  const router = useRouter();
+  const filter = (patch: Partial<typeof filters>) => { setFilters({ ...filters, ...patch }); setPage(1); };
+  const rows = useMemo(() => data.rows.filter((r) => (!filters.search || `${r.name} ${r.school ?? ""}`.includes(filters.search.trim()))
+    && (filters.status === "all" || r.status === filters.status) && (!filters.grade || r.grade === filters.grade) && (!filters.subject || r.subjects.includes(filters.subject)))
+    .map((r) => ({ ...r, score: r.total ? scoreRaws(r.total.raws, data.config) : null, recent: r.total ? scoreRaws(r.total.recent, data.config).total : null }))
+    .sort((a, b) => (filters.sort === "recent" ? (b.recent ?? -Infinity) - (a.recent ?? -Infinity) : (b.score?.total ?? -Infinity) - (a.score?.total ?? -Infinity)) || a.name.localeCompare(b.name)), [data, filters]);
+  const current = Math.min(page, Math.max(1, Math.ceil(rows.length / pageSize)));
+  const shown = rows.slice((current - 1) * pageSize, current * pageSize);
+  const raws = sumRaws(rows.flatMap((r) => r.total ? [r.total.raws] : []));
+  const totals = rows.reduce((out, r) => ({ operations: out.operations + (r.score?.operations ?? 0), participation: out.participation + (r.score?.participation ?? 0) }), { operations: 0, participation: 0 });
+  const reset = () => { setFilters({ search: "", status: "enrolled", grade: "", subject: "", sort: "total" }); setPage(1); };
+  return <div className="w-full min-w-0 space-y-5 pb-6">
+    <ContributionHeader title="원생 기여도" description="학생의 운영 기여와 학습·참여 기록을 모아 봅니다. 학생을 선택하면 점수의 계산 근거를 확인할 수 있습니다."
+      active="students" canConfigure={data.gate.canConfigure} actions={data.gate.canWrite && <Button disabled={busy || !data.ready} onClick={() => start(async () => {
+        const result = await refreshContribution(); setMessage(result.error ?? result.message ?? ""); router.refresh();
+      })}><EyIcon name="sync" size={16} />{busy ? "집계 중…" : "지금 집계"}</Button>} />
+    <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-line px-5 py-4">
+      <div className="flex flex-wrap gap-x-8 gap-y-3 text-sm"><p>조회 학생 <strong className="ml-2 text-lg tabular-nums">{rows.length}명</strong></p>
+        <p>운영 기여 <strong className="ml-2 tabular-nums">{numberText(totals.operations)}점</strong></p><p>학습·참여 <strong className="ml-2 tabular-nums">{numberText(totals.participation)}점</strong></p></div>
+      <p className="text-xs">최근 집계 {data.refreshedAt ? new Date(data.refreshedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) : "집계 전"}</p>
+    </div>
+    {(!data.ready || !data.historyReady) && <p className="rounded-lg bg-primary-softer px-4 py-3 text-sm">{!data.ready ? "기여도 기록 저장이 아직 준비되지 않았습니다." : "첫 집계를 준비 중입니다. 완료 전에는 일부 기록만 표시될 수 있습니다."}</p>}
+    {message && <p role="status" className="rounded-lg border border-line p-3 text-sm">{message}</p>}
+    <div className="grid grid-cols-1 items-start gap-5 2xl:grid-cols-[minmax(0,1fr)_22rem]">
+    <section className="min-w-0 overflow-hidden rounded-xl border border-line bg-card" aria-label="원생 기여도 목록">
+      <div className="flex flex-wrap items-center gap-3 border-b border-line p-4">
+        <label className="relative min-w-52 flex-1"><span className="pointer-events-none absolute inset-y-0 left-3 flex items-center"><EyIcon name="search" size={16} /></span>
+          <input aria-label="학생 이름·학교 검색" placeholder="이름 또는 학교로 찾기" value={filters.search} onChange={(e) => filter({ search: e.target.value })} className={`${fieldClass} w-full pl-9`} /></label>
+        <select aria-label="재원 상태" value={filters.status} onChange={(e) => filter({ status: e.target.value })} className={fieldClass}><option value="all">모든 상태</option><option value="enrolled">재원생</option><option value="on_hold">휴원생</option><option value="withdrawn">퇴원생</option></select>
+        <select aria-label="학년" value={filters.grade} onChange={(e) => filter({ grade: e.target.value })} className={fieldClass}><option value="">모든 학년</option>{data.grades.map((g) => <option key={g} value={g}>{g}</option>)}</select>
+        <select aria-label="과목" value={filters.subject} onChange={(e) => filter({ subject: e.target.value })} className={fieldClass}><option value="">모든 수강 과목</option>{data.subjects.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}</select>
+        <select aria-label="정렬" value={filters.sort} onChange={(e) => filter({ sort: e.target.value })} className={fieldClass}><option value="total">누적 기여도 순</option><option value="recent">최근 12개월 증가분 순</option></select>
+        <Button variant="ghost" size="sm" onClick={reset}>초기화</Button>
+      </div>
+      <div className="overflow-x-auto"><table className="w-full min-w-180 table-fixed text-left text-sm"><colgroup><col className="w-[20%]" /><col className="w-[20%]" /><col className="w-[16%]" /><col className="w-[15%]" /><col className="w-[14%]" /><col className="w-[15%]" /></colgroup><thead className="bg-secondary"><tr>
+        {["학생", "학교·학년", "누적 기여도", "운영 기여", "학습·참여", "최근 12개월"].map((label, index) => <th key={label} className={`whitespace-nowrap px-5 py-3 font-medium ${index > 1 ? "text-right" : ""}`}>{label}</th>)}
+      </tr></thead><tbody>{shown.map((r) => <tr key={r.id} className="border-b border-line-faint transition-colors last:border-0 hover:bg-primary-softer">
+        <td className="px-5 py-3"><div className="flex flex-wrap items-center gap-2"><Link className="font-semibold text-primary underline-offset-4 hover:underline" href={`/student-contribution/${r.id}`}>{r.name}</Link>
+          {!!r.total?.unavailable.length && <span className="rounded bg-secondary px-1.5 py-0.5 text-xs" title="일부 자료를 확인하지 못해 현재 확인된 실적만 반영했습니다.">일부 확인 전</span>}</div></td><td className="px-5 py-3">{schoolGradeLabel(r.school, r.grade) || "—"}</td>
+        <td className="px-5 py-3 text-right font-bold text-primary tabular-nums">{r.score ? numberText(r.score.total) : "집계 전"}</td>
+        <td className="px-5 py-3 text-right tabular-nums">{r.score ? numberText(r.score.operations) : "—"}</td>
+        <td className="px-5 py-3 text-right tabular-nums">{r.score ? numberText(r.score.participation) : "—"}</td>
+        <td className="px-5 py-3 text-right tabular-nums">{r.recent === null ? "—" : `${r.recent > 0 ? "+" : ""}${numberText(r.recent)}`}</td>
+      </tr>)}</tbody></table>
+        {!rows.length && <div className="space-y-3 py-20 text-center"><p>조건에 맞는 학생이 없습니다.</p><Button variant="outline" size="sm" onClick={reset}>검색 조건 초기화</Button></div>}
+      </div>
+      <div className="flex flex-wrap items-center justify-between border-t border-line px-4 py-2 text-xs"><span>점수 단위: 점 · 현재 배점 기준</span><label className="flex items-center gap-2">한 페이지<select aria-label="학생 목록 표시 수" value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }} className="rounded border border-line bg-card px-2 py-1">{[10, 20, 50].map((n) => <option key={n} value={n}>{n}명</option>)}</select></label></div>
+      <ListPager page={current} total={rows.length} pageSize={pageSize} onChange={setPage} label="학생 목록" unit="명" />
+    </section>
+    <aside className="space-y-4"><div className="flex items-center justify-between text-sm"><h2 className="font-semibold">조회한 학생의 점수 구성</h2><span>{rows.length}명</span></div><ScoreBreakdown raws={raws} config={data.config} /><p className="px-1 text-xs leading-relaxed">검색과 필터에 해당하는 학생 전체의 누적 실적입니다. 페이지를 넘겨도 구성은 같습니다.</p></aside>
+    </div>
+    <details className="rounded-xl border border-line p-4 text-xs leading-relaxed"><summary className="cursor-pointer text-sm font-medium">점수와 자료 범위 안내</summary><div className="mt-3 space-y-2">
+      <p>모든 점수는 현재 배점으로 계산하며 만점과 상한이 없습니다. 최근 12개월 증가분에는 정정도 포함됩니다.</p>
+      <p>수업료·수강 기간: 메이크에듀 2020년부터, 에이와 2026년부터. EiE는 2025년 5월부터입니다. 재원 기간은 유효한 수업료 청구가 있는 달 수로 계산합니다.</p>
+      <p>출결은 2026년부터, 영상 숙제는 기능 도입 후 실제 제출 기록을 확인합니다. 학부모 글은 수집한 기록, 선생님 답글은 2026년 9월 30일 이후 에이와 발송분을 사용합니다.</p>
+      <p>소개자가 연결되지 않은 상담은 점수에 포함되지 않습니다. 과목 필터는 수강 이력이 있는 학생을 찾습니다.</p>
+    </div></details>
+  </div>;
+}

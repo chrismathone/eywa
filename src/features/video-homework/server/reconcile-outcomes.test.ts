@@ -73,7 +73,19 @@ it("미배정 알림은 일일 작업에서만 보내고, 상태 반영 실패 �
   expect(m.db.rpcCalls.at(-2)).toMatchObject({ name: "notify_unassigned_homework_videos", args: { p_tenant: "tenant", p_videos: ["v"] } });
   // 할 일(0379a)은 같은 판정 한 벌로 — 판정한 영상 · 미배정 · 알림 대상을 넘긴다.
   expect(m.db.rpcCalls.at(-1)).toMatchObject({ name: "staff_task_sync_unassigned_videos",
-    args: { p_tenant: "tenant", p_checked: ["v"], p_unmatched: ["v"], p_open: ["v"] } });
+    args: { p_tenant: "tenant", p_checked: ["v"], p_unmatched: ["v"], p_open: ["v"], p_moot: [] } });
+  // 알림 건수가 닫힌 할 일을 빼고 세므로 알림 전에 한 번 맞춘다(열기는 알림 뒤).
+  expect(m.db.rpcCalls.at(-3)).toMatchObject({ name: "staff_task_sync_unassigned_videos", args: { p_open: [], p_moot: [] } });
+  m.db.rpcCalls.length = 0;
+  // 원장 2026-10-23 — 숙제가 영상으로 다 찼으면 남은 영상은 알리지 않고, 열린 할 일은 '취소'(moot)로 닫는다.
+  const playback = { preview: "p", thumbnail: "t", uploadedAt: null };
+  m.videos = [{ id: "hw", studentId: "s", classId: "c", postedAt: "2026-10-02T03:00:00Z", homeworkDate: "2026-10-01", playback },
+    { id: "free", studentId: "s", classId: "c", postedAt: "2026-10-11T03:00:00Z", free: true, playback }];
+  m.db.tables.homework_video_ledger_videos = [{ id: "hw", tenant_id: "tenant", status: "uploaded" }, { id: "free", tenant_id: "tenant", status: "uploaded" }];
+  await reconcileVideoHomework("tenant", { notifyUnmatched: true });
+  expect(m.db.rpcCalls.some(call => call.name === "notify_unassigned_homework_videos")).toBe(false);
+  expect(m.db.rpcCalls.filter(call => call.name === "staff_task_sync_unassigned_videos").map(call => call.args)).toEqual([0, 1].map(() =>
+    ({ p_tenant: "tenant", p_checked: ["hw", "free"], p_unmatched: ["free"], p_open: [], p_moot: ["free"] })));
   m.db.rpcCalls.length = 0;
   m.db.defineRpc("reconcile_video_homework_outcomes", () => { throw new Error("temporary database failure"); });
   await expect(reconcileVideoHomework("tenant", { notifyUnmatched: true })).rejects.toThrow();

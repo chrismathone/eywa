@@ -25,7 +25,7 @@ const LEVEL_TEST = /레벨테스트|입학테스트|입테|레테/;
 const FIRST_CLASS = /첫수업/;
 
 /**
- * 캘린더 일정 하나의 입학 일정 종류 — **단일 분류기**. '레벨테스트 및 첫수업 일정' 패널과 KPI '금일입테'가
+ * 캘린더 일정 하나의 입학 일정 종류 — **단일 분류기**. '레벨테스트 및 첫수업 일정' 패널과 KPI '전일 입테'가
  * 같은 판정을 쓴다. 취소·예약 차단·운영팀 중요일정·휴가 오버레이는 null.
  * 🔑 제목에 레벨테스트와 첫 수업이 함께 있으면 **레벨테스트**다(그날 입테가 먼저 있다).
  * ⚠️ 메모는 안내문에도 첫 수업 등의 단어가 들어가므로 분류 근거로 쓰지 않는다.
@@ -68,26 +68,37 @@ export const isCancelledAdmissionsRow = (event: KindFields) => event.kind === nu
 export const admissionsListKind = (event: KindFields): AdmissionsKind | null =>
   event.kind ?? event.cancelledKind ?? null;
 
-/** 오늘(그날을 덮는) 레벨테스트 — KPI '금일입테'의 카드 숫자. **취소된 일정은 없다**(`kind`가 null). */
-export function todayLevelTests<T extends { kind: AdmissionsKind | null; startDate: string; endDate: string }>(
+/**
+ * 기간(과 겹치는) 레벨테스트 — KPI '전일 입테'의 카드 숫자(원장 2026-10-22 *"금일 입테 -> 전일 입테로 바꿔. 측정하는것도 전일 입테로"* ·
+ * *"월요일의 전일은 주말 모두 포함"* — 기간 = `previousDayRange`). **취소된 일정은 없다**(`kind`가 null).
+ */
+export function levelTestsIn<T extends { kind: AdmissionsKind | null; startDate: string; endDate: string }>(
   events: readonly T[],
-  today: string,
+  range: { from: string; to: string },
 ): T[] {
-  return events.filter((event) => event.kind === "levelTest" && event.startDate <= today && event.endDate >= today);
+  return events.filter((event) => event.kind === "levelTest" && event.startDate <= range.to && event.endDate >= range.from);
 }
 
 /**
- * KPI '금일입테'의 카드·팝업 재료(원장 2026-09-30) — 숫자는 `active`(살아 있는 것만), 팝업 목록은 `rows`
+ * 운영실 '레벨테스트 및 첫수업 일정' 줄 = **오늘부터**. 일정 배열엔 KPI '전일 입테'를 위해 어제 레벨테스트도 실린다(2026-10-22) —
+ * 패널 목록·건수·빈 판정은 이 함수를 지난다(어제 줄이 '예정' 목록에 끼지 않게).
+ */
+export function upcomingAdmissionsRows<T extends { endDate: string }>(rows: readonly T[], today: string): T[] {
+  return rows.filter((row) => row.endDate >= today);
+}
+
+/**
+ * KPI '전일 입테'의 카드·팝업 재료(원장 2026-09-30 · 2026-10-22 금일 → 전일) — 숫자는 `active`(살아 있는 것만), 팝업 목록은 `rows`
  * (취소된 것도 **시간 순서 그대로** 끼워 취소선으로 보인다), 카드 보조 줄은 `cancelled`("취소 1").
  * 카드와 팝업이 이 함수 한 번의 결과를 같이 쓴다.
  */
-export function todayLevelTestList<T extends KindFields & { startDate: string; endDate: string }>(
+export function levelTestListIn<T extends KindFields & { startDate: string; endDate: string }>(
   events: readonly T[],
-  today: string,
+  range: { from: string; to: string },
 ): { active: T[]; rows: T[]; cancelled: number } {
-  const active = todayLevelTests(events, today);
+  const active = levelTestsIn(events, range);
   const rows = events.filter(
-    (event) => admissionsListKind(event) === "levelTest" && event.startDate <= today && event.endDate >= today,
+    (event) => admissionsListKind(event) === "levelTest" && event.startDate <= range.to && event.endDate >= range.from,
   );
   return { active, rows, cancelled: rows.length - active.length };
 }

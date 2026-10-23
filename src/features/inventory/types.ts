@@ -74,5 +74,19 @@ export type InventorySupply = {
   sortOrder: number;
 };
 
+/** 업체리스트(거래처 연락처) 한 줄 — 분류는 자유 텍스트(코드 enum 아님). */
+export type InventoryVendor = {
+  id: string;
+  name: string;
+  category: string | null;
+  phone: string | null;
+  contactName: string | null;
+  contactPhone: string | null;
+  email: string | null;
+  address: string | null;
+  bizNo: string | null;
+  note: string | null;
+};
+
 /** 활성 면의 대여 다이얼로그 등이 고를 자산 요약 — 목록 전체를 폼에 실을 필요는 없다. */
 export type AssetOption = Pick<InventoryAsset, "id" | "assetCode" | "category" | "model" | "status" | "location">;

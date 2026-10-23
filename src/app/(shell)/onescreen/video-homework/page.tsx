@@ -11,11 +11,12 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { getVideoHomeworkLedger } from "@/features/video-homework/server/ledger-queries";
 import { getOwnVideoHomework } from "@/features/video-homework/server/own-homework";
 import { VideoHomeworkManagement } from "@/features/video-homework/components/video-homework-management";
-import { isVideoHomeworkEnabled } from "@/features/video-homework/policy";
+import { isVideoHomeworkClassEnabled, isVideoHomeworkEnabled } from "@/features/video-homework/policy";
 import { keepLedgerRounds, ledgerPairKey, ownRoundKey } from "@/features/video-homework/ledger";
 import { ledgerInitialFilters, ledgerPeriod } from "@/features/video-homework/ledger-period";
 import { buildLedgerRounds } from "@/features/video-homework/rounds";
 import { ADMIN_VIDEO_LEDGER_PATH } from "@/features/notifications/presentation";
+import { buildHolidayMap } from "@/features/attendance/calendar";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "영상 제출 현황 · 에이와" };
@@ -55,30 +56,48 @@ export default async function TeacherVideoHomeworkPage({ searchParams }: {
   const { fromDate, toDate, rangeTooLong } = ledgerPeriod(param, today);
   const [owner, viewAs] = await Promise.all([effectiveTeacherId(), viewAsTeacher()]);
   // 내가 낸 숙제를 먼저 읽는다 — 장부는 그 반 × 학생만 명단·영상·출결을 읽는다(지점 전체를 강사 폰으로 읽지 않게, B7).
-  const own = await getOwnVideoHomework(createAdminClient(), user.tenantId, owner ?? user.id, fromDate, toDate).catch((e: unknown) => {
-    console.warn(JSON.stringify({ level: "warn", scope: "videoHomework.teacherLedger", message: e instanceof Error ? e.message : "unknown" }));
-    return null;
-  });
+  // 내가 담임인 반도 함께 — 숙제 0건 반의 줄·검색(원장 2026-10-22)은 '내가 낸 숙제'가 없으니 담임 반으로 고른다(영상 배정 권한과 같은 결).
+  const [own, ownedClasses] = await Promise.all([
+    getOwnVideoHomework(createAdminClient(), user.tenantId, owner ?? user.id, fromDate, toDate).catch((e: unknown) => {
+      console.warn(JSON.stringify({ level: "warn", scope: "videoHomework.teacherLedger", message: e instanceof Error ? e.message : "unknown" }));
+      return null;
+    }),
+    createAdminClient().from("classes").select("id").eq("tenant_id", user.tenantId).eq("teacher_id", owner ?? user.id),
+  ]);
   const ownPairs = new Set((own ?? []).map((row) => ledgerPairKey(row)));
+  const owned = new Set((ownedClasses.data ?? []).map((cls) => String(cls.id)));
   const keepRounds = (own ?? []).map((row) => ownRoundKey(row, row.date));
-  const [ledger, canTeacherWrite, lessonReportsLevel, settings, ownedClasses] = await Promise.all([
-    getVideoHomeworkLedger(user.tenantId, fromDate, toDate, { pairs: ownPairs }),
+  const [ledger, canTeacherWrite, lessonReportsLevel, settings] = await Promise.all([
+    // 숙제 0건 반 — 휴원일은 수업일에서 빼고(배정 창과 같은 판정) 검사 대상 밖 반은 읽지 않는다. 설정은 지점 캐시다.
+    getTenantSettings().then((s) => {
+      const holidays = buildHolidayMap(s.operations.holidays);
+      return getVideoHomeworkLedger(user.tenantId, fromDate, toDate, { pairs: ownPairs, classes: owned }, { isHoliday: (date) => date in holidays,
+        classTracked: (classId, subjectKey) => isVideoHomeworkClassEnabled(s.report.videoHomeworkPolicy, { classId, subjectKey }) });
+    }),
     canWriteTenant(user.systemRole, "teacher_onescreen"),
     accessLevelTenant(user.systemRole, "lesson_reports"),
     getTenantSettings(),
-    createAdminClient().from("classes").select("id").eq("tenant_id", user.tenantId).eq("teacher_id", owner ?? user.id),
   ]);
   // 체크 = 서버 판정과 같은 조건(강사 쓰기 또는 수업보고서 전체 권한 — 겸직) · '다른 강사 뷰'는 열람 전용.
   const canEdit = viewAs?.access !== "readonly" && (canTeacherWrite || lessonReportsLevel === "full");
   const subjectLabels = buildSubjectMaps(settings.operations.subjects);
+  const policy = settings.report.videoHomeworkPolicy;
   // 줄 = 내가 낸 숙제가 있는 반 × 학생 — 그 줄의 숙제일은 **남이 낸 것까지 전부** 둔다(영상 짝을 관리자 화면과 같게 짓기 위해).
-  const candidates = ledger.rows.filter((row) => ownPairs.has(ledgerPairKey(row))).map((row) => {
-    const tracked = isVideoHomeworkEnabled(settings.report.videoHomeworkPolicy, { classId: row.classId, subjectKey: row.subject, grade: row.grade });
+  // + 내 담임 반에서 붙지 않은 영상 때문에 선 줄(①: 숙제 0건 반 · 회차가 있는 반은 숙제 없이 올린 영상 — 서버가 내 반으로 좁혔다).
+  //   '미배정 영상' 할 일이 담임에게 가고 링크가 이 화면이다(⑤). 검사 대상만 — 대상 밖이면 알림도 없는 영상이다.
+  const candidates = ledger.rows.filter((row) => ownPairs.has(ledgerPairKey(row))
+    || (owned.has(row.classId) && (!!row.lessonDates || !!row.hasAssignableVideos))).map((row) => {
+    const tracked = isVideoHomeworkEnabled(policy, { classId: row.classId, subjectKey: row.subject, grade: row.grade });
     return { ...row, subject: subjectLabels.labelOf(row.subject), tracked, editable: tracked && canEdit,
-      canAssignVideos: canEdit && (lessonReportsLevel === "full" || !!ownedClasses.data?.some(cls => cls.id === row.classId)) };
-  });
-  const marks = ledger.marks.filter((mark) => ownPairs.has(ledgerPairKey(mark)));
-  const videos = ledger.videos.filter((video) => !!video.classId && ownPairs.has(ledgerPairKey({ classId: video.classId, studentId: video.studentId })));
+      canAssignVideos: canEdit && (lessonReportsLevel === "full" || owned.has(row.classId)) };
+  }).filter((row) => row.tracked || ownPairs.has(ledgerPairKey(row)));
+  const pairKeys = new Set(candidates.map((row) => ledgerPairKey(row)));
+  const marks = ledger.marks.filter((mark) => pairKeys.has(ledgerPairKey(mark)));
+  const videos = ledger.videos.filter((video) => !!video.classId && pairKeys.has(ledgerPairKey({ classId: video.classId, studentId: video.studentId })));
+  // ② 검색 전용 — 내 담임 반 중 숙제 0건 반의 수강생(검사 대상만, 서버가 이미 내 반으로 좁혔다).
+  const idleRoster = ledger.idleRoster.filter((entry) => owned.has(entry.classId)
+    && isVideoHomeworkEnabled(policy, { classId: entry.classId, subjectKey: entry.subject, grade: entry.grade }))
+    .map((entry) => ({ ...entry, subject: subjectLabels.labelOf(entry.subject) }));
   // 대상 외 학생은 이 기간에 내 칸 기록이 있을 때만 줄로 선다 — 관리자 화면과 같은 규칙(영상은 회차를 만들지 않으니 빼고 센다).
   const draft = keepLedgerRounds(buildLedgerRounds({ rows: candidates, marks, videos: [], fromDate, toDate }), new Set(keepRounds));
   const rows = candidates.filter((row) => row.tracked || draft.get(ledgerPairKey(row))?.length);
@@ -99,6 +118,7 @@ export default async function TeacherVideoHomeworkPage({ searchParams }: {
     {rangeTooLong ? <p role="status" className="text-text-dim text-xs">한 번에 최대 366일을 조회할 수 있어 종료일이 속한 달을 표시했습니다.</p> : null}
     <VideoHomeworkManagement key={`${fromDate}:${toDate}`} rows={rows} initialMarks={marks.filter((mark) => shown.has(ledgerPairKey(mark)))}
       videos={videos.filter((video) => shown.has(ledgerPairKey({ classId: video.classId!, studentId: video.studentId })))} blankFacts={blankFacts}
-      videosKnown={ledger.videosKnown} fromDate={fromDate} toDate={toDate} today={today} initialFilters={initialFilters} keepRounds={keepRounds} />
+      videosKnown={ledger.videosKnown} fromDate={fromDate} toDate={toDate} today={today} initialFilters={initialFilters} keepRounds={keepRounds}
+      idleRoster={idleRoster} />
   </main>;
 }

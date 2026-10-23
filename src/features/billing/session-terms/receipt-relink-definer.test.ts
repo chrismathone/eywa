@@ -1,5 +1,5 @@
 /**
- * 청구서 배분 따라 고치기 트리거(`relink_session_receipt_allocations`)는 **정의자 권한**이어야 한다(20261013151000).
+ * 청구서 배분 따라 고치기 트리거(`relink_session_receipt_allocations`)는 **정의자 권한**이어야 한다(0413a).
  *
  * 2026-10-10부터 메이크에듀 수납 동기화가 매번 42501로 실패했다 — 연동 PC 계정(`eywa_sync_agent`)이 청구서를 고치면 이 트리거가
  * 배분 표(`invoice_session_terms`)를 고치는데, 호출자 권한(0354a의 `security invoker`)이라 그 계정에 없는 권한으로 막혔다.

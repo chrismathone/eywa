@@ -47,5 +47,5 @@ create policy sync_agent_allow on public.${n} for all to eywa_sync_agent using (
 create policy sync_agent_tenant_boundary on public.${n} as restrictive for all to eywa_sync_agent
   using (${where}) with check (${where} and public.sync_agent_foreign_keys('public.${n}'::regclass,to_jsonb(${n})));`;
 }).join('\n\n');
-fs.writeFileSync('supabase/migrations/20261008101000_sync_agent_data_boundary.sql',header+'\n'+policies+'\n');
+fs.writeFileSync('supabase/migrations/0401a_sync_agent_data_boundary.sql',header+'\n'+policies+'\n');
 console.log(`Generated restrictive policies for ${tables.length} tables.`);

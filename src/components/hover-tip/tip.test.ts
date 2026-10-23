@@ -62,3 +62,15 @@ describe("tipText — 카드를 한 줄로(접근성·테스트)", () => {
     expect(tipText(null)).toBe("");
   });
 });
+
+describe("넓은 카드(wide) — 근거 줄이 많은 카드만", () => {
+  it("켜면 왕복해도 남고, 안 켠 카드엔 키가 없다(기존 카드 모양 그대로)", () => {
+    expect(decodeTip(encodeTip({ rows: [["따뜻함 4", "다정함"]], wide: true }))?.wide).toBe(true);
+    const plain = decodeTip(encodeTip({ rows: [["보강", "9/17(목)"]] }));
+    expect(plain && "wide" in plain).toBe(false);
+  });
+
+  it("넓다는 표시만으로는 카드가 뜨지 않는다", () => {
+    expect(encodeTip({ title: "평점 3.3", wide: true })).toBeUndefined();
+  });
+});

@@ -267,7 +267,7 @@ export async function completeMakeupReservations(
   for (const g of byClassDate.values()) {
     const ids = [...g.cells.keys()];
     // 학생 수십 명이라 한 번에(100 넘는 반은 없다 — 넘으면 앞 100명만 보고 나머지는 다음 저장이 잇는다).
-    // 결석난 반(20261022170000)까지 — 결석일 칸 메모('예정' → '완료')를 그 반에 쓴다. 칸이 없으면(적용 전) 칸 없이 다시 읽는다.
+    // 결석난 반(0440a)까지 — 결석일 칸 메모('예정' → '완료')를 그 반에 쓴다. 칸이 없으면(적용 전) 칸 없이 다시 읽는다.
     const readReservations = (extra: string) =>
       admin
         .from("makeup_reservations")

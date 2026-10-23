@@ -17,6 +17,18 @@ describe("전일 / 이달 신규 — 창과 가르기", () => {
     expect(first.month.map((r) => r.date)).toEqual(["2026-10-01"]);
   });
 
+  // 원장 2026-10-22 *"월요일의 전일은 주말 모두 포함"* — 2026-10-26(월)의 전일 = 10/24(토)~10/25(일).
+  it("월요일 전일 = 토·일 주말 전체 · 창도 토요일부터(1일이 월요일이면 지난달 토요일부터)", () => {
+    const rows = [{ date: "2026-10-23" }, { date: "2026-10-24" }, { date: "2026-10-25" }, { date: "2026-10-26" }];
+    const mon = splitEnrolledRecent(rows, "2026-10-26");
+    expect(mon.yesterday.map((r) => r.date)).toEqual(["2026-10-24", "2026-10-25"]);
+    expect(mon.month).toHaveLength(4);
+    // 화요일은 월요일 하루.
+    expect(splitEnrolledRecent([...rows, { date: "2026-10-26" }], "2026-10-27").yesterday.map((r) => r.date)).toEqual(["2026-10-26", "2026-10-26"]);
+    // 2027-02-01은 월요일 — 전일 = 1/30~1/31, 창은 1/30부터.
+    expect(enrolledRecentFrom("2027-02-01")).toBe("2027-01-30");
+  });
+
   it("날짜 없는 옛 줄은 오늘로", () => {
     const out = splitEnrolledRecent([{ date: null }], "2026-10-21");
     expect(out.yesterday).toHaveLength(0);

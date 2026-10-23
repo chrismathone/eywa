@@ -124,7 +124,9 @@ describe("배선 가드", () => {
     expect(columns).toEqual(expect.arrayContaining(["id", "student_id", "post_id", "posted_at", "created_at", "uploaded_at", "md5", "bytes", "status", "drive_file_id", "class_id:route->>classId", "homework_date:route->>homeworkDate"]));
     expect(ledger).toContain("fingerprint: videoFingerprint(row.md5, row.bytes)");
     // 지난 기간을 봐도 지금 보기와 같은 판정 — 고른 영상을 짝 범위 끝 + 2주까지 읽는다
-    expect(ledger).toContain("loadClassVideos(tenantId, homeworkStudents, wideFrom, addDays(wideTo, VIDEO_MATCH_WINDOW_DAYS))");
+    // (읽는 학생은 2026-10-22 숙제 0건 반·명단 전체로 넓힘(원장 지시) — homeworkStudents → videoStudents. 잠그는 것은 범위다.)
+    // (2026-10-23 반 미정 영상도 읽는다 — '영상 배정 필요함'이 미배정 알림과 같은 판정을 쓰게. 회차·화면에는 반이 정해진 영상만.)
+    expect(ledger).toContain("loadClassVideos(tenantId, videoStudents, wideFrom, addDays(wideTo, VIDEO_MATCH_WINDOW_DAYS), true)");
     const site = read("src", "features", "video-submit", "server", "site-homework.ts");
     expect(site).toContain('select("id,student_id,post_id,posted_at,created_at,uploaded_at,md5,bytes,route,drive_file_id")');
     expect(site).toContain("fingerprint: videoFingerprint(row.md5, row.bytes)");

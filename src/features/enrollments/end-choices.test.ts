@@ -53,27 +53,52 @@ describe("endChoices — '오늘까지 / 어제까지' 두 갈래", () => {
 
 describe("배선 — 수강 종료 표면 둘이 같은 한 벌을 쓴다", () => {
   const read = (rel: string) => readFileSync(join(process.cwd(), "src", rel), "utf8");
+  /**
+   * 반 상세의 학생별 버튼은 2026-10-15(원생 상태 변경 개인별 권한 분리, 39cee2bd3)에 페이지에서
+   * `ClassStudentActions` 컴포넌트로 나갔다 — 가드가 읽는 파일을 그쪽으로 옮겼다(2026-10-22).
+   * 페이지는 그 컴포넌트를 부르고 권한 셋(basic·status·schedule)을 넘기는지만 본다.
+   */
+  const CLASS_PAGE = "app/(shell)/classes/[id]/page.tsx";
+  const CLASS_ACTIONS = "app/(shell)/classes/[id]/_components/class-student-actions.tsx";
 
   it("🔴 반 상세·학생 상세 모두 EndEnrollmentAction (표면마다 다시 짜면 한쪽만 고쳐진다)", () => {
-    for (const rel of [
-      "app/(shell)/classes/[id]/page.tsx",
-      "app/(shell)/students/[id]/_tabs/classes-tab.tsx",
-    ]) {
+    for (const rel of [CLASS_ACTIONS, "app/(shell)/students/[id]/_tabs/classes-tab.tsx"]) {
       expect(read(rel)).toContain("EndEnrollmentAction");
     }
+    expect(read(CLASS_PAGE)).toContain("<ClassStudentActions");
   });
 
-  it("🔴 반 상세 버튼은 학생 쓰기(full)만 — 서버 게이트와 같은 모양(#77)", () => {
-    const src = read("app/(shell)/classes/[id]/page.tsx");
-    expect(src).toContain('canManageTenant(user.systemRole, "students")');
-    expect(src).toContain("{canManageStudents ? (");
+  it("🔴 반 상세 버튼은 서버 게이트와 같은 모양(#77) — 종료 = 원생 상태 권한 · 배정 취소 = 학생 쓰기(full)", () => {
+    /**
+     * 2026-10-15부터 두 버튼의 게이트가 갈렸다(개인별 '원생 상태 변경' 권한):
+     *  · 수강 종료 → `canManageStudentStatusNow()` = 서버 `endSingleEnrollment`의 게이트
+     *  · 배정 취소·예약 이동 → `canManageTenant(…, "students")` = 서버 `deleteEnrollment`의 게이트
+     */
+    const page = read(CLASS_PAGE);
+    expect(page).toContain('const canManageStudents = await canManageTenant(user.systemRole, "students")');
+    expect(page).toContain("const canManageStatus = await canManageStudentStatusNow()");
+    expect(page).toMatch(/permissions=\{\{\s*basic: canManageStudents,\s*status: canManageStatus\b/);
+    const src = read(CLASS_ACTIONS);
+    expect(src).toContain("if (!permissions.basic) return null;");
+    expect(src).toContain("permissions.status ? <EndEnrollmentAction");
+    // 화면 게이트와 서버 게이트가 같은 함수인지 — 서버 쪽을 바꾸면 여기서 함께 드러난다.
+    const server = read("features/students/server/actions.ts");
+    const endFn = server.slice(server.indexOf("export async function endSingleEnrollment"));
+    expect(endFn.slice(0, endFn.indexOf("formData.get("))).toContain("canManageStudentStatusNow()");
+    const enr = read("features/enrollments/server/actions.ts");
+    const delFn = enr.slice(enr.indexOf("export async function deleteEnrollment"));
+    expect(delFn.slice(0, delFn.indexOf("formData.get("))).toContain('canManageTenant(user.systemRole, "students")');
   });
 
   it("🔴 다니는 학생=수강 종료 / 예정 학생=배정 취소로 갈라진다(원장 2026-09-01)", () => {
-    const src = read("app/(shell)/classes/[id]/page.tsx");
-    expect(src).toContain('s.phase === "upcoming" ? (');
-    expect(src).toContain("<CancelAssignmentButton");
-    expect(src).toContain("<EndEnrollmentAction");
+    const src = read(CLASS_ACTIONS);
+    const upcomingAt = src.indexOf('if (s.phase === "upcoming") {');
+    const cancelAt = src.indexOf("<CancelAssignmentButton");
+    const endAt = src.indexOf("<EndEnrollmentAction");
+    expect(upcomingAt).toBeGreaterThan(-1);
+    // 배정 취소는 예정 갈래 안, 수강 종료는 그 갈래를 나온 뒤(= 다니는 학생)에만.
+    expect(cancelAt).toBeGreaterThan(upcomingAt);
+    expect(endAt).toBeGreaterThan(cancelAt);
   });
 
   it("🔴 배정 취소는 서버 단일 진입점(deleteEnrollment)만 부른다", () => {

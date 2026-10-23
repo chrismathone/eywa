@@ -8,7 +8,7 @@ import { VideoHomeworkManagement } from "@/features/video-homework/components/vi
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { kstToday } from "@/lib/date-kst";
-import { isVideoHomeworkEnabled } from "@/features/video-homework/policy";
+import { isVideoHomeworkClassEnabled, isVideoHomeworkEnabled } from "@/features/video-homework/policy";
 import { lessonReportFaces } from "@/features/report-admin/lesson-report-faces";
 import { Suspense } from "react";
 import { isModuleEnabled } from "@/lib/modules";
@@ -20,6 +20,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { ledgerInitialFilters, ledgerPeriod } from "@/features/video-homework/ledger-period";
 import { buildLedgerRounds } from "@/features/video-homework/rounds";
+import { buildHolidayMap } from "@/features/attendance/calendar";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "영상숙제 확인 · 에이와" };
@@ -50,8 +51,14 @@ export default async function VideoHomeworkPage({ searchParams }: {
   const param = (name: string) => typeof params[name] === "string" ? params[name] as string : "";
   const today = kstToday();
   const { fromDate, toDate, rangeTooLong } = ledgerPeriod(param, today);
+  // 숙제 0건 반 — 휴원일은 수업일에서 빼고(배정 창과 같은 판정) 검사 대상 밖 반은 읽지 않는다. 설정은 지점 캐시라 장부 조회 안에서 읽는다.
+  const ledgerRead = getTenantSettings().then((s) => {
+    const holidays = buildHolidayMap(s.operations.holidays);
+    return getVideoHomeworkLedger(user.tenantId, fromDate, toDate, undefined, { isHoliday: (date) => date in holidays,
+      classTracked: (classId, subjectKey) => isVideoHomeworkClassEnabled(s.report.videoHomeworkPolicy, { classId, subjectKey }) });
+  });
   const [ledger, canSend, lessonReportsLevel, canReportSettings, canAiMent, aiOn, settings, issuers] = await Promise.all([
-    getVideoHomeworkLedger(user.tenantId, fromDate, toDate),
+    ledgerRead,
     canWriteTenant(user.systemRole, "lesson_reports"),
     accessLevelTenant(user.systemRole, "lesson_reports"),
     canAccessTenant(user.systemRole, "report_settings"),
@@ -63,19 +70,25 @@ export default async function VideoHomeworkPage({ searchParams }: {
   // 칸 편집 = 수업보고서 전체 권한(서버 ledgerRoundWriteError와 같다 — 담당 권한은 강사뷰에서 자기가 낸 숙제만 찍는다).
   const canEdit = lessonReportsLevel === "full";
   const subjectLabels = buildSubjectMaps(settings.operations.subjects);
+  const policy = settings.report.videoHomeworkPolicy;
+  // 숙제 0건 반의 줄(①)은 검사 대상만 — 대상 밖이면 알림도 없는 영상이다('검사 대상에서 제외' 안내 수에도 넣지 않는다).
   const candidates = ledger.rows.map((row) => {
-    const tracked = isVideoHomeworkEnabled(settings.report.videoHomeworkPolicy, {
+    const tracked = isVideoHomeworkEnabled(policy, {
       classId: row.classId, subjectKey: row.subject, grade: row.grade,
     });
     return { ...row, subject: subjectLabels.labelOf(row.subject), tracked, editable: tracked && canEdit, canAssignVideos: canEdit };
-  });
+  }).filter((row) => row.tracked || !row.lessonDates);
   // 회차 = 숙제가 나간 날·기록(영상은 회차를 만들지 않으니 여기선 빼고 센다). 대상에서 제외된 학생은 기록만 회차다(rounds.ts).
   const rounds = buildLedgerRounds({ rows: candidates, marks: ledger.marks, videos: [], fromDate, toDate });
   // 대상 외 학생은 이 기간에 기록이 있을 때만 줄로 선다 — 새 미확인을 만들지 않는다.
   const displayRows = candidates.filter((row) => row.tracked || rounds.get(ledgerPairKey(row))?.length);
   // 기간 안에 회차가 하나도 없는 반은 세우지 않는다(숙제가 나간 날만 회차 — 원장 2026-10-01). 그 반 명단은 회차가 있는 반만.
+  // 예외 = 숙제 0건 반에서 붙지 않은 영상이 있는 학생의 줄(①, 원장 2026-10-22) — 그 학생만 선다(반 명단은 아니다).
   const activeClasses = new Set(displayRows.filter((row) => rounds.get(ledgerPairKey(row))?.length).map((row) => row.classId));
-  const ledgerRows = displayRows.filter((row) => activeClasses.has(row.classId));
+  const ledgerRows = displayRows.filter((row) => activeClasses.has(row.classId) || !!row.lessonDates);
+  // ② 검색 전용 — 숙제 0건 반의 수강생(검사 대상만). 줄이 아니라 화면이 검색어와 맞을 때만 "숙제가 없는 반"으로 알린다.
+  const idleRoster = ledger.idleRoster.filter((entry) => isVideoHomeworkEnabled(policy, { classId: entry.classId, subjectKey: entry.subject, grade: entry.grade }))
+    .map((entry) => ({ ...entry, subject: subjectLabels.labelOf(entry.subject) }));
   // 강사 필터(원장 2026-10-14 *"숙제 제출 현황에서 강사 필터링 가능하게 … 관리자뷰에서"*) — 강사 → 그 강사가 낸 칸.
   // 보이는 줄의 칸만, 이름을 아는 강사만 싣는다(선택지에 못 서는 id는 화면으로 내려보내지 않는다). 고르면 그 강사의 강사뷰와
   // 같은 칸이 선다(열쇠가 같다).
@@ -98,8 +111,8 @@ export default async function VideoHomeworkPage({ searchParams }: {
     {isModuleEnabled(settings.modules.disabled, "classnote") ? <Suspense fallback={null}><ManualDriveReviewNote tenantId={user.tenantId} /></Suspense> : null}
     {!settings.report.videoHomeworkPolicy.enabled ? <p className={NOTE}>
       영상 제출 검사가 꺼져 있습니다. 지난 기록은 장부에서 읽기 전용으로 확인할 수 있습니다.
-    </p> : ledger.rows.length > displayRows.length ? <p className={NOTE}>
-      현재 설정으로 {ledger.rows.length - displayRows.length}명·반이 검사 대상에서 제외되었습니다. 기존 기록은 장부에 남습니다.
+    </p> : candidates.length > displayRows.length ? <p className={NOTE}>
+      현재 설정으로 {candidates.length - displayRows.length}명·반이 검사 대상에서 제외되었습니다. 기존 기록은 장부에 남습니다.
     </p> : null}
     {!ledger.assignedKnown ? <p role="status" className={NOTE}>수업보고서의 영상 과제 표시를 읽지 못해 이미 찍은 기록만 보여 줍니다. 잠시 뒤 다시 열어 주세요.</p> : null}
     {!ledger.videosKnown ? <p role="status" className={NOTE}>학부모 영상 도착 기록을 읽지 못해 이번 화면에서는 영상 자동 집계를 뺐습니다.</p> : null}
@@ -107,6 +120,6 @@ export default async function VideoHomeworkPage({ searchParams }: {
     {rangeTooLong ? <p role="status" className="text-text-dim text-xs">한 번에 최대 366일을 조회할 수 있어 종료일이 속한 달을 표시했습니다.</p> : null}
     <VideoHomeworkManagement key={`${fromDate}:${toDate}`} rows={ledgerRows} initialMarks={ledger.marks} videos={ledger.videos} blankFacts={ledger.blankFacts} videosKnown={ledger.videosKnown}
       fromDate={fromDate} toDate={toDate} today={today} initialFilters={initialFilters} showTeacher
-      teacherRounds={teacherRounds} teacherOptions={teacherOptions} />
+      teacherRounds={teacherRounds} teacherOptions={teacherOptions} idleRoster={idleRoster} />
   </main>;
 }

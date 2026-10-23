@@ -244,12 +244,14 @@ describe("③ 신규문의 — 같은 KST 하루 경계", () => {
   });
 });
 
-describe("④ 금일입테 — 분류기 한 벌, ↗ 없음", () => {
-  it("서버가 단일 분류기로 종류를 싣고, 카드·팝업은 todayLevelTestList 한 번의 결과를 같이 쓴다", () => {
+describe("④ 전일 입테 — 분류기 한 벌, ↗ 없음", () => {
+  it("서버가 단일 분류기로 종류를 싣고, 카드·팝업은 levelTestListOn(어제) 한 번의 결과를 같이 쓴다", () => {
     expect(SERVER).toContain("kind: admissionsEventKind(event)");
-    expect(count(STRIP, "todayLevelTestList(")).toBe(1);
-    expect(STRIP).not.toContain("todayLevelTests(");
-    expect(STRIP).toContain("<LevelTestPopup list={levelTests} />");
+    expect(count(STRIP, "levelTestListIn(")).toBe(1);
+    expect(STRIP).toContain("levelTestListIn(v.calendar.data, prev)");
+    expect(STRIP).toContain("const prev = previousDayRange(today);");
+    expect(STRIP).not.toContain("levelTestsIn(");
+    expect(STRIP).toContain("<LevelTestPopup list={levelTests} range={prev} />");
     expect(STRIP).not.toContain("/calendar");
   });
 
@@ -258,7 +260,22 @@ describe("④ 금일입테 — 분류기 한 벌, ↗ 없음", () => {
     expect(STRIP).toContain("value={count(levelTests?.active.length)}");
     expect(STRIP).toContain("`취소 ${number(levelTests.cancelled)}`");
     const POPUPS_DAY = src("src/app/(shell)/dashboard/_overview/kpi-popups-day.tsx");
-    expect(POPUPS_DAY).toContain('<PopupTotal label="오늘 레벨테스트" value={list.active.length} unit="건" />');
+    expect(POPUPS_DAY).toContain('<PopupTotal label="전일 레벨테스트" value={list.active.length} unit="건" />');
+  });
+
+  // 원장 2026-10-22 *"금일 입테 -> 전일 입테로 … 측정하는것도 전일 입테로"* — 일정은 어제부터 읽고, 어제 줄은 입테만 · 패널은 오늘부터.
+  it("서버는 어제부터 읽어 어제 줄은 레벨테스트만 싣고, 일정 패널·요약은 오늘부터만 센다", () => {
+    // 전일 첫날(월요일엔 토요일 — 원장 2026-10-22 *"월요일의 전일은 주말 모두 포함"*)부터 — 기간은 previousDayRange 한 곳.
+    expect(SERVER).toContain("const prevFrom = previousDayRange(today).from;");
+    expect(SERVER).toContain("getDateRangeEvents(prevFrom, end)");
+    expect(src("src/features/dashboard/layout/summary.ts")).toContain("levelTestListIn(v.calendar.data, previousDayRange(snap.today))");
+    expect(src("src/features/dashboard/overview/enrolled-recent.ts")).toContain("const prev = previousDayRange(today);");
+    expect(SERVER).toContain('(event) => event.endDate >= today || admissionsEventBaseKind(event) === "levelTest"');
+    const OVERVIEW_SRC = src("src/app/(shell)/dashboard/_overview/overview.tsx");
+    expect(OVERVIEW_SRC).toContain("upcomingAdmissionsRows(v.calendar.data, snapshot.today)");
+    expect(OVERVIEW_SRC).not.toContain("<AdmissionsSchedule events={v.calendar");
+    const SUMMARY = src("src/features/dashboard/layout/summary.ts");
+    expect(count(SUMMARY, "upcomingAdmissionsRows(v.calendar.data, snap.today)")).toBe(2);
   });
 
   it("취소된 일정은 서버가 kind=null + cancelledKind로 싣고 반·콜&상담 연결을 붙이지 않는다", () => {
@@ -272,7 +289,7 @@ describe("④ 금일입테 — 분류기 한 벌, ↗ 없음", () => {
 
   it("'전체 N개 일정 보기'도 같은 축 — 살아 있는 일정만 세고 취소는 ' · 취소 N'으로 따로", () => {
     const OVERVIEW_SRC = src("src/app/(shell)/dashboard/_overview/overview.tsx");
-    expect(OVERVIEW_SRC).toContain("filter((event) => !isCancelledAdmissionsRow(event)).length}개 일정 보기${cancelledSuffix(");
+    expect(OVERVIEW_SRC).toContain("admissionsRows!.filter((event) => !isCancelledAdmissionsRow(event)).length}개 일정 보기${cancelledSuffix(");
     expect(OVERVIEW_SRC).not.toContain("전체 ${v.calendar!.data!.length}개 일정 보기");
   });
 });
@@ -284,7 +301,7 @@ describe("④ 금일입테 — 분류기 한 벌, ↗ 없음", () => {
 describe("④-2 전일 / 이달 신규 — 등록 완료로 옮긴 로그 한 벌, 반 배정은 칸반과 같은 함수", () => {
   const QUERY = src("src/features/dashboard/server/enrolled-today.ts");
   const ACTIONS = src("src/features/enrollment/server/actions.ts");
-  it("카드·팝업이 같은 서버 배열, 자리는 금일입테 오른쪽", () => {
+  it("카드·팝업이 같은 서버 배열, 자리는 전일 입테 오른쪽", () => {
     expect(SERVER).toContain('addSliced("enrolledToday", ["enrollment"], async () => {');
     expect(SERVER).toContain("const rows = await getEnrolledRecent(today);");
     expect(STRIP).toContain("<EnrolledTodayPopup rows={registered}");
@@ -292,7 +309,7 @@ describe("④-2 전일 / 이달 신규 — 등록 완료로 옮긴 로그 한 �
     expect(STRIP).toContain("splitEnrolledRecent(registered, today)");
     expect(src("src/app/(shell)/dashboard/_overview/kpi-popups-day.tsx")).toContain("splitEnrolledRecent(rows, today)");
     expect(src("src/features/dashboard/layout/summary.ts")).toContain("splitEnrolledRecent(v.enrolledToday.data, snap.today)");
-    expect(STRIP.indexOf('label="전일 / 이달 신규"')).toBeGreaterThan(STRIP.indexOf('label="금일 입테"'));
+    expect(STRIP.indexOf('label="전일 / 이달 신규"')).toBeGreaterThan(STRIP.indexOf('label="전일 입테"'));
     expect(STRIP.indexOf('label="전일 / 이달 신규"')).toBeLessThan(STRIP.indexOf('label="오늘첫수업"'));
   });
   it("등록 완료로 옮기는 두 경로(상태 변경·수업 배정)가 같은 로그를 남긴다", () => {
@@ -301,9 +318,13 @@ describe("④-2 전일 / 이달 신규 — 등록 완료로 옮긴 로그 한 �
     expect(QUERY).toContain('systemAuditScope(["enrollment_consultation_outcome"])');
     expect(QUERY).toContain('.eq("metadata->>to", "enrolled")');
   });
-  it("반 배정 판정은 칸반 카드 표식과 같은 countAssignedClasses · 지금도 등록 완료인 상담만", () => {
-    expect(QUERY).toContain("countAssignedClasses(db, row.student_id");
+  it("반 배정 판정·배정 반은 칸반 카드 표식과 같은 필터(assignedQuery) · 지금도 등록 완료인 상담만", () => {
+    expect(QUERY).toContain("listAssignedClassNames(db, row.student_id");
     expect(QUERY).toContain('row.outcome === "enrolled"');
+    // 배정 반 목록도 개수와 같은 필터를 지난다(원장 2026-10-22 *"반배정된 반이름과 과목 보이게"*).
+    const ASSIGNED = src("src/features/enrollment/server/assigned-classes.ts");
+    const names = ASSIGNED.slice(ASSIGNED.indexOf("export async function listAssignedClassNames("));
+    expect(names.slice(0, 800)).toContain("assignedQuery(supabase, studentId, subject,");
   });
 });
 
@@ -514,9 +535,10 @@ describe("⑧ 레벨테스트 및 첫수업 일정 — 오늘부터 한 달, 서
   it("서버: 일정 조회 구간·필터·첫 수업 후보가 모두 한 달 창의 끝을 쓴다", () => {
     expect(SERVER).toContain("const { end } = monthAheadWindow(today);");
     // 구간 한 번 — 달 단위(getMonthEvents)로 받으면 창이 두 달에 걸치는 날마다 조회가 두 벌이다.
-    expect(SERVER).toContain("const result = await getDateRangeEvents(today, end);");
+    // 시작은 어제(KPI '전일 입테' — 원장 2026-10-22) · 어제 줄은 입테만, 패널은 `upcomingAdmissionsRows`로 오늘부터.
+    expect(SERVER).toContain("const result = await getDateRangeEvents(prevFrom, end);");
     expect(SERVER).not.toContain("getMonthEvents");
-    expect(SERVER).toContain("upcomingAdmissionsEvents(result.events, today, end)");
+    expect(SERVER).toContain("upcomingAdmissionsEvents(result.events, prevFrom, end)");
     expect(SERVER).toContain("firstClassCandidates(today, end)");
     expect(SERVER).toContain("firstClassScheduleCandidates(today, end)");
     expect(SERVER).not.toContain("shiftDate(today, 6)");

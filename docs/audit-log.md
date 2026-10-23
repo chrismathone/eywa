@@ -89,4 +89,5 @@ attendance_notifications(3) · SUBJECT_TABS(등록상담 과목탭, 4) · class 
   두 단계 아래에서 기록하는 것(ECS·JJ 계획 = `logPlanChange` · 마스터 시트·연습본 반영 = 트랜잭션 SQL로 `audit_logs`) ·
   자체 기록(셔틀 정규 탑승 변경 = `shuttle_rider_history` · 지점 보기 끝내기 = 보기 기록 행) · 칸 저장(원스크린 영상 숙제 단건 — 일괄은 기록) ·
   이름이 겹친 읽기. **진짜 빈틈은 `createStudentGrade` 하나**(→ `student_grade_create`).
-- DB 트리거 활동 기록(`activity_log`, 32개 표)은 직원 상세 '활동 기록' 탭·수강 이력에만 보이고 감사로그 화면에는 안 보인다 — 그래서 트리거가 걸린 표에 쓰는 액션도 `logAction`을 따로 남겼다.
+- DB 트리거 활동 기록(`activity_log`, 32개 표)은 직원 상세 '활동 기록' 탭·수강 이력·직원 포트폴리오(출결 당일·본인 판정)에만 쓰이고 감사로그 화면에는 안 보인다 — 그래서 트리거가 걸린 표에 쓰는 액션도 `logAction`을 따로 남겼다.
+- 활동 기록은 계정 보기 설정(`users.ui_prefs`)을 남기지 않는다(0444a, 2026-10-23 — 그 전엔 활동 기록 바이트의 13%). 🔴 `ui_prefs`에 **보기 설정이 아닌 값**(학부모 글·권한·돈을 바꾸는 값)을 새로 담으면 흔적이 어디에도 안 남는다 — 그런 값은 `ui_prefs` 밖에 두거나 그 액션에 `logAction`을 남길 것(실례: 학습 추세 미발송 `onescreen_trend_optout`).

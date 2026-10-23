@@ -56,6 +56,19 @@ describe("report submission and review", () => {
     expect(screen.getByRole("button", { name: "관리자에게 제출" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "임시 저장" })).toBeEnabled();
   });
+  it("shows only the selected enrollment even when its teacher has another class in the same subject", () => {
+    const course = { id: "course", classId: "class", className: "종료할 반", subject: "math", teacherId: teacher, teacherName: "담임", startDate: "2026-10-01", endDate: null, onHold: false };
+    render(<ReportDetail {...props} report={{ ...r, group_id: "group", enrollment_ids: ["course"], snapshot: { ...r.snapshot, courses: [course, { ...course, id: "other", classId: "other", className: "계속 다닐 반", startDate: "2025-01-01" }] } }} />);
+    expect(screen.getAllByText(/종료할 반/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/계속 다닐 반/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/2025-01-01/)).not.toBeInTheDocument();
+  });
+  it("a single representative author sees both selected homeroom and assistant classes in the merged report", () => {
+    const course = { id: "main", classId: "main", className: "담임 수업", subject: "math", teacherId: teacher, teacherName: "담임", startDate: "2026-10-01", endDate: null, onHold: false };
+    render(<ReportDetail {...props} report={{ ...r, group_id: "group", enrollment_ids: ["main", "assistant"], snapshot: { ...r.snapshot, courses: [course, { ...course, id: "assistant", classId: "assistant", className: "부담임 수업", teacherId: "another-teacher" }] } }} />);
+    expect(screen.getAllByText(/담임 수업/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/부담임 수업/).length).toBeGreaterThan(0);
+  });
   beforeEach(() => { cleanup(); vi.clearAllMocks(); mocks.change.mockResolvedValue({ ok: true, id: r.id }); });
   it("submits the entered report only after explicit confirmation", async () => {
     render(<ReportDetail {...props} />);

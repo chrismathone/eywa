@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { axisFloor, axisScale, axisTicks, endLabelOffsets, lastIndexWithValue, maskBefore, niceTop, stackTotals, textWidth } from "./chart-math";
+import { axisFloor, axisScale, axisTicks, maskBefore, niceTop, stackTotals, textWidth } from "./chart-math";
 
 describe("niceTop", () => {
   it("최댓값보다 조금 위의 보기 좋은 수", () => {
@@ -32,34 +32,6 @@ describe("maskBefore", () => {
   it("경계 달 전 값은 비운다", () => expect(maskBefore(pts, "2026-01")).toEqual([null, 6, 7]));
   it("경계가 없으면 그대로", () => expect(maskBefore(pts, null)).toEqual([5, 6, 7]));
   it("연도별은 연말 날짜로", () => expect(maskBefore([{ key: "2025", date: "2025-12-31", count: 1 }, { key: "2026", date: "2026-10-20", count: 2 }], "2026-01")).toEqual([null, 2]));
-});
-
-describe("lastIndexWithValue", () => {
-  it("마지막 값 칸", () => {
-    expect(lastIndexWithValue([1, 2, null])).toBe(1);
-    expect(lastIndexWithValue([null, null])).toBe(-1);
-  });
-});
-
-describe("endLabelOffsets", () => {
-  const scale = { top: 500, plotTop: 10, plotHeight: 200 };
-  it("멀리 떨어진 라벨은 그대로", () => {
-    const m = endLabelOffsets([{ key: "a", value: 400 }, { key: "b", value: 100 }], scale);
-    expect(m.get("a")).toBe(0);
-    expect(m.get("b")).toBe(0);
-  });
-  it("가까운 라벨은 gap만큼 벌린다", () => {
-    const m = endLabelOffsets([{ key: "a", value: 231 }, { key: "b", value: 228 }], scale, 18);
-    const ya = 10 + (1 - 231 / 500) * 200 + m.get("a")!;
-    const yb = 10 + (1 - 228 / 500) * 200 + m.get("b")!;
-    expect(Math.abs(yb - ya)).toBeGreaterThanOrEqual(18);
-  });
-  it("바닥을 넘으면 위로 되민다", () => {
-    const m = endLabelOffsets([{ key: "a", value: 0 }, { key: "b", value: 0 }], scale, 18);
-    const ys = ["a", "b"].map((k) => 210 + m.get(k)!);
-    expect(Math.max(...ys)).toBeLessThanOrEqual(210);
-    expect(Math.abs(ys[0]! - ys[1]!)).toBeGreaterThanOrEqual(18);
-  });
 });
 
 describe("textWidth", () => {

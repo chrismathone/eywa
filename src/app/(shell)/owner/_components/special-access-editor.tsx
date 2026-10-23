@@ -77,6 +77,16 @@ export function SpecialAccessEditor({ value, hiddenUserIds, staffOptions, nameOf
           nameOf={nameOf}
           onChange={(update) => onChange((prev) => ({ ...prev, staffTaskMonitorIds: update(prev.staffTaskMonitorIds ?? []) }))}
         />
+        {/* 🔴 이 칸만 원장 역할도 고를 수 있다 — 원장도 지정해야 본다(원장 2026-10-23 "이승엽만"). */}
+        <SpecialAccessList
+          label="업체리스트"
+          hint="재고관리의 업체리스트(거래처 연락처)를 볼 수 있는 사람입니다. 이 칸은 원장 역할도 지정해야 보입니다. 등록·수정은 재고관리 쓰기 권한도 있어야 합니다."
+          ids={value.vendorViewerIds ?? []}
+          hiddenUserIds={hiddenUserIds}
+          staffOptions={staffOptions.filter((s) => !hidden.has(s.id))}
+          nameOf={nameOf}
+          onChange={(update) => onChange((prev) => ({ ...prev, vendorViewerIds: update(prev.vendorViewerIds ?? []) }))}
+        />
       </div>
     </SettingsCard>
   );

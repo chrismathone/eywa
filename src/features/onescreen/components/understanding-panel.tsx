@@ -1,11 +1,12 @@
 "use client";
 
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { clampUnderstanding, UNDERSTANDING_MAX, type UnderstandingRow } from "../math-report-pilot";
 
 /**
  * 소단원별 이해도(10점 만점) — 수학 보고서 시범(테스트 학생 한정, math-report-pilot.ts) 행에서만 그린다.
- * 오늘 진도의 차시마다 한 줄. ✕로 빼면 자동작성에 안 들어가고 아래 '뺀 소단원'에서 되살린다.
+ * 오늘 진도의 차시마다 한 줄. 닫기(×) 아이콘 버튼으로 빼면 자동작성에 안 들어가고 아래 '뺀 소단원'에서 되살린다.
  * 점수를 비운 소단원도 자동작성에 안 들어간다(모르는 점수를 지어내지 않는다).
  */
 export function UnderstandingPanel({
@@ -58,9 +59,9 @@ export function UnderstandingPanel({
                 onClick={() => onToggle(r.lesson, true)}
                 aria-label={tf("os.card.understandingRemove", { lesson: r.title })}
                 title={tf("os.card.understandingRemove", { lesson: r.title })}
-                className="text-text-faint hover:text-danger size-8 shrink-0 rounded-lg text-sm disabled:opacity-50"
+                className="text-text-faint hover:text-danger inline-flex size-8 shrink-0 items-center justify-center rounded-lg disabled:opacity-50"
               >
-                ✕
+                <EyIcon name="close" size={14} />
               </button>
             </li>
           ))}

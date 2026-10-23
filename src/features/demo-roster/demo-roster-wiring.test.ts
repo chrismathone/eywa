@@ -49,7 +49,12 @@ describe("데모 재원 드롭다운", () => {
     expect(read("src/features/demo-roster/dashboard-apply.ts")).toContain('id !== "newcomers"');
     expect(read("src/features/demo-roster/server/actions.ts")).toContain("updateTag(tenantSettingsTag(user.tenantId))");
     expect(read("src/features/demo-roster/server/actions.ts")).toContain("updateTag(`dashboard-invoice-trend:${user.tenantId}`)");
-    expect(read("src/features/dashboard/overview/server.ts")).toContain("dashboard-invoice-trend-v2");
+    // 청구 추이 캐시는 수납 통계와 한 벌로 `billing-months-server.ts`에 옮겨 갔다(2026-10-22 가드 갱신) —
+    // 위 updateTag가 비우는 태그를 그 캐시가 실제로 달고 있는지까지 본다(키만 있고 태그가 다르면 데모 교체 뒤 옛 청구가 남는다).
+    const billingMonths = read("src/features/dashboard/overview/billing-months-server.ts");
+    expect(billingMonths).toContain("dashboard-invoice-trend-v2");
+    expect(billingMonths).toContain("tags: [`dashboard-invoice-trend:${tenantId}`]");
+    expect(read("src/features/dashboard/overview/server.ts")).toContain('from "./billing-months-server"');
     expect(read("src/features/demo-roster/apply.ts")).toContain("ensureDemoStaff");
     expect(read("src/features/demo-roster/dashboard-apply.ts")).toContain("'{profile}'");
     expect(read("src/features/demo-roster/dashboard-apply.ts")).toContain("writeDemoWeekdayGrouping");

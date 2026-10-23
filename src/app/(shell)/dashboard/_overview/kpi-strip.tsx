@@ -4,7 +4,8 @@ import { Fragment, type CSSProperties, type ReactNode } from "react";
 import { MenuGlyph } from "@/components/icons/menu-glyph";
 import type { OverviewSnapshot, Sections } from "@/features/dashboard/overview/model";
 import { KPI_KEYS, type KpiKey } from "@/features/dashboard/overview/layout";
-import { todayLevelTestList } from "@/features/dashboard/overview/display";
+import { levelTestListIn } from "@/features/dashboard/overview/display";
+import { previousDayRange, previousDayText } from "@/features/dashboard/overview/previous-day";
 import { splitEnrolledRecent } from "@/features/dashboard/overview/enrolled-recent";
 import { monthAheadWindow, windowUntilLabel } from "@/features/dashboard/overview/upcoming-window";
 import {
@@ -49,12 +50,12 @@ export function kpiGridVars(n: number): CSSProperties {
 }
 
 /**
- * KPI 칸(원장 2026-09-11 확정 순서): 재원생 · **강좌수**(2026-10-20 — 재원생 오른쪽) · 퇴원생 · 신규문의 · 금일입테 ·
- * **전일 / 이달 신규**(2026-09-23 '금일 등록'으로 금일입테 오른쪽 → 2026-10-21 어제·이번 달 두 숫자로) · 오늘첫수업 · 최근 결석 · 보강예정.
+ * KPI 칸(원장 2026-09-11 확정 순서): 재원생 · **강좌수**(2026-10-20 — 재원생 오른쪽) · 퇴원생 · 신규문의 · 전일 입테 ·
+ * **전일 / 이달 신규**(2026-09-23 '금일 등록'으로 전일 입테 오른쪽 → 2026-10-21 어제·이번 달 두 숫자로) · 오늘첫수업 · 최근 결석 · 보강예정.
  * 볼 권한이 없는 칸은 영역이 오지 않아 숨는다(종전 규약). ↗는 목적지 메뉴를 열 수 있을 때만 선다.
- * 🔴 금일입테는 ↗가 없다 — 캘린더 메뉴는 감춰져 있다(링크 금지 테스트가 잠근다).
+ * 🔴 전일 입테는 ↗가 없다 — 캘린더 메뉴는 감춰져 있다(링크 금지 테스트가 잠근다).
  * **산정 기간**은 라벨 옆 꼬리표로(원장 2026-09-29 *"현 재원생, 이번달 퇴원 등 모두 기간 명시"* · *"날짜라기보다 이번달,
- * 이번주 같은 산정기간"*) — 라벨이 이미 기간을 말하는 칸(금일입테·전일 / 이달 신규·오늘첫수업)은 같은 말을 덧붙이지 않는다.
+ * 이번주 같은 산정기간"*) — 라벨이 이미 기간을 말하는 칸(전일 입테·전일 / 이달 신규·오늘첫수업)은 같은 말을 덧붙이지 않는다.
  */
 export type KpiCardOptions = {
   /** 놓을 칸 — 없으면 영역이 온 칸 전부(지금 화면). */
@@ -98,8 +99,11 @@ export function kpiCards(snapshot: OverviewSnapshot, opts: KpiCardOptions = {}):
   const wd = withdrawals ? countWithdrawalPrograms(withdrawals.rows) : null;
   const month = withdrawals?.month ?? today.slice(0, 7);
   const intake = v.intake?.data;
+  // 전일 입테 = **전일** 레벨테스트(원장 2026-10-22 '금일 입테' → 전일 · 월요일엔 토·일 주말 전체 — 전일 / 이달 신규와 같은 기간).
   // 숫자 = 살아 있는 입테만, 팝업 = 취소된 것도 취소선으로(원장 2026-09-30) — 한 번 계산해 카드·팝업이 같이 쓴다.
-  const levelTests = v.calendar?.data ? todayLevelTestList(v.calendar.data, today) : null;
+  const prev = previousDayRange(today);
+  const prevText = previousDayText(prev);
+  const levelTests = v.calendar?.data ? levelTestListIn(v.calendar.data, prev) : null;
   // 전일 / 이달 신규 = 콜&상담 '등록 완료'로 옮긴 상담(원장 2026-09-23 '금일 등록' → 2026-10-21 어제·이번 달 두 숫자).
   // 숫자 = `전일 / 이달`, 보조 줄은 이번 달의 반 배정 완료 / 배정 전. 가르기는 팝업과 같은 함수.
   const registered = v.enrolledToday?.data;
@@ -203,7 +207,7 @@ export function kpiCards(snapshot: OverviewSnapshot, opts: KpiCardOptions = {}):
   if (v.calendar) cards.calendar = (
         <KpiCard
           helpKey="dash-leveltest"
-          label="금일 입테"
+          label="전일 입테"
           rename={opts.titles?.["kpi:calendar"]}
           labelNote={noteOf("calendar")}
           value={count(levelTests?.active.length)}
@@ -211,11 +215,14 @@ export function kpiCards(snapshot: OverviewSnapshot, opts: KpiCardOptions = {}):
           detail={
             levelTests
               ? [
+                  // 하루면 첫 일정 시각, 주말(월요일)이면 기간만 — 이틀에 걸친 '첫 일정'은 뜻이 흐리다.
                   levelTests.active.length
-                    ? `첫 일정 ${levelTests.active[0]?.startTime?.slice(0, 5) ?? "종일"}`
+                    ? prev.from === prev.to
+                      ? `${prevText} · 첫 일정 ${levelTests.active[0]?.startTime?.slice(0, 5) ?? "종일"}`
+                      : prevText
                     : levelTests.cancelled
-                      ? null
-                      : "오늘 일정 없음",
+                      ? prevText
+                      : `${prevText} 일정 없음`,
                   // 0건이 수수께끼가 되지 않게 — 취소된 입테가 있으면 "취소 N"을 보조 줄에(원장 2026-09-30).
                   levelTests.cancelled ? `취소 ${number(levelTests.cancelled)}` : null,
                 ]
@@ -225,10 +232,10 @@ export function kpiCards(snapshot: OverviewSnapshot, opts: KpiCardOptions = {}):
           }
           icon={<MenuGlyph name="exam" size={20} />}
           error={v.calendar.error}
-          popupTitle="오늘 레벨테스트"
+          popupTitle={`전일(${prevText}) 레벨테스트`}
           jump={null}
         >
-          <LevelTestPopup list={levelTests} />
+          <LevelTestPopup list={levelTests} range={prev} />
         </KpiCard>
   );
   if (v.enrolledToday) cards.enrolledToday = (

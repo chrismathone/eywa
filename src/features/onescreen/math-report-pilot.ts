@@ -3,8 +3,8 @@
  *
  * 원장 지시: *"해당 작업은 수학과 테스트 학생이한테만 반영해서 테스트 먼저 진행해보기 위함"* — 범위는 학생 '테스트' 한 명
  * (질문 답 "학생 '테스트' 기준"). 시범 대상 수학 행에서만 아래 다섯 가지가 바뀐다.
- *   1. 수학 보고서(멘트·추세) 칸은 **보기만** — 손으로 못 고친다(readOnly).
- *   2. '자동작성'으로 만든 글 그대로가 아니면 ClassNote 발송을 막는다(화면 게이트 + 서버 `saveAndQueueClassnote` 이중).
+ *   1. 수학 보고서(멘트·추세) 칸은 **자동작성 전엔 보기만**, 자동작성 뒤엔 고칠 수 있다(원장 2026-10-23 — 종전 '항상 보기만'을 뒤집음, `pilotCanEdit`).
+ *   2. 자동작성을 한 번도 안 한 글은 ClassNote 발송을 막는다(화면 게이트 + 서버 `saveAndQueueClassnote` 이중 — 작성 방식 auto·auto_edited만 통과).
  *   3. 특이사항 자리표시 = 격려 멘트 예시.
  *   4. 소단원(오늘 진도의 차시)별 **이해도 10점 만점** 칸 — 일부를 빼고 남은 것만 자동작성에 쓴다.
  *   5. 자동작성 글 = `{이름}는 오늘 … 진도를 나갔습니다` + 이해도 + AI 본문 + 특이사항(맨 아래 그대로).
@@ -22,6 +22,7 @@ import { skipStatusOf } from "./progress-status";
 export const MATH_REPORT_PILOT_STUDENT_IDS: readonly string[] = [
   "67a53999-fb62-4753-a938-9a5ce4af9e61", // 테스트
   "6219e442-aa57-455f-a5bc-834b222d9e1c", // 학원이
+  "5de5c803-6cf6-4ad9-85f0-d184334c679e", // 학원삼 — 원일 계정 테스트용(2026-10-22, 학원이 반 담임이 박소선으로 바뀌어 따로 만듦)
 ];
 
 /** 이 학생·과목 행이 시범 대상인가. 과목키가 없는 행(데모)은 수학으로 본다(원스크린 관례). */
@@ -79,12 +80,15 @@ export function progressLead(fullName: string, lessons: readonly string[], stopL
   if (stopLabel) return `${who} 오늘 ${stopLabel} 수업을 했습니다.`;
   const titles = lessons.map(lessonTitle).filter(Boolean);
   if (titles.length === 0) return "";
-  if (titles.length === 1) return `${who} 오늘 ${titles[0]} 진도를 나갔습니다.`;
+  // 소단원 이름은 따옴표로 묶는다 — 이름 안의 '의'·'와'가 문장 조사와 섞여 읽기 어렵다(원장 2026-10-23 *"너무 짧고 이상함"*).
+  const q = (t: string) => `'${t}'`;
+  const close = " 오늘 배운 내용이 잘 자리 잡을 수 있도록 다음 시간에도 이어서 꼼꼼히 다지겠습니다.";
+  if (titles.length === 1) return `${who} 오늘 ${q(titles[0]!)} 진도를 나갔습니다.${close}`;
   if (titles.length === 2) {
     const [a, b] = titles;
-    return `${who} 오늘 ${a}${hasBatchim(a!.slice(-1)) ? "과" : "와"} ${b} 진도를 나갔습니다.`;
+    return `${who} 오늘 ${q(a!)}${hasBatchim(a!.slice(-1)) ? "과" : "와"} ${q(b!)}, 두 소단원 진도를 나갔습니다.${close}`;
   }
-  return `${who} 오늘 ${titles[0]}부터 ${titles[titles.length - 1]}까지 진도를 나갔습니다.`;
+  return `${who} 오늘 ${q(titles[0]!)}부터 ${q(titles[titles.length - 1]!)}까지 모두 ${titles.length}개 소단원 진도를 나갔습니다.${close}`;
 }
 
 /** 소단원별 이해도 상태 — 점수(차시 원문 키 → 0~10) + 뺀 차시. 세션 `subject_progress`에 실린다. */
@@ -156,9 +160,10 @@ export const PILOT_SECTION_TITLES = {
   progress: "진도",
   daily: "일일 테스트",
   check: "확인 테스트",
+  levels: "수업 평가",
   attitude: "수업 태도",
   homework: "과제 수행률",
-  understanding: "이해도",
+  understanding: "오늘의 수업", // 원장 2026-10-23 *"이해도가 아니라 오늘수업의 이해도로"* → *"오늘의 수업으로 명칭 변경"* — 라벨만(표의 줄 이름은 짧게 '이해도')
   homeworkToday: "오늘 과제",
   note: "선생님 한마디",
 } as const;
@@ -189,7 +194,8 @@ export function composePilotMent(parts: { lead: string; body: string; note: stri
  * 강사 한줄 멘트를 고치면 자동작성 글 맨 끝을 **그 자리에서** 바꿔 끼운다(원장 2026-10-22 *"AI 자동 작성 후 치면 실시간으로
  * 우측에 반영해서 강사 한줄 멘트 쓰고 볼 수 있게"*). 한줄 멘트는 AI에 주지 않고 원문을 맨 끝에 붙이므로(composePilotMent)
  * 다시 자동작성할 필요가 없다 — 끝의 옛 멘트만 떼고 새 멘트를 붙인다.
- * 자동작성 글 그대로가 아니거나 끝이 옛 멘트로 끝나지 않으면 null(손대지 않는다 — 발송 게이트가 다시 자동작성을 요구한다).
+ * 자동작성을 한 번도 안 했거나 끝이 옛 멘트로 끝나지 않으면 null(손대지 않는다).
+ * 자동작성 뒤 강사가 고친 글도 끝만 바꾼다(원장 2026-10-23 *"자동작성하고나면 수정은 할수있게"*).
  */
 export function pilotRecomposeNote(
   draft: string | null | undefined,
@@ -197,7 +203,7 @@ export function pilotRecomposeNote(
   prevNote: string | null | undefined,
   nextNote: string | null | undefined,
 ): string | null {
-  if (!isPilotAutoWritten(draft, autoDraft)) return null;
+  if (!(autoDraft ?? "").trim()) return null;
   const d = (draft ?? "").trim();
   const p = (prevNote ?? "").trim();
   const tail = noteBlock(p);
@@ -239,18 +245,70 @@ export function isPilotAutoWritten(draft: string | null | undefined, autoDraft: 
  */
 export const PILOT_AI_DIRECTIVE = [
   "[이번 알림장 추가 규칙]",
-  "- 이 알림장은 항목별로 나뉩니다(진도·일일 테스트·수업 태도·과제 수행률·이해도·오늘 과제·선생님 한마디). 진도·테스트·태도·과제·선생님 한마디는 따로 붙으니, comment에는 '이해도' 항목에 들어갈 문장만 쓰세요 — 인사, 진도 나열, 테스트 점수, 수업 태도, 과제 이야기는 쓰지 마세요.",
+  "- 이 알림장은 항목별로 나뉩니다(수업 평가·진도·일일 테스트·수업 태도·과제 수행률·오늘의 수업·오늘 과제·선생님 한마디). 진도·테스트·태도·과제·선생님 한마디는 따로 붙으니, comment에는 '오늘의 수업' 항목에 들어갈 문장만 쓰세요 — 인사, 진도 나열, 테스트 점수, 수업 태도, 과제 이야기는 쓰지 마세요.",
   "- comment는 학생 이름으로 시작하지 말고, 첫 소단원 이야기부터 바로 시작하세요.",
-  "- 본문에서 학생을 부를 때는 이름 앞에 '우리'를 붙여 친근하게 부르세요(예: 우리 승엽이가, 우리 지수가). 성은 빼고 부르세요.",
-  "- '소단원별 이해도'가 있으면 소단원마다 한두 문장으로 말로 풀어 쓰세요. 점수가 높을수록(8~10점) 그 소단원을 아이의 강점으로 구체적으로 칭찬하세요.",
-  "- 중간(5~7점)·낮은(4점 이하) 소단원은 반드시 두 단계로 쓰세요. ① 먼저 그 소단원을 아이가 힘들어했다는 사실만 부드럽게 말합니다 — 대상은 소단원 이름(또는 그 소단원의 개념)까지만입니다(중간 예: '연립방정식의 풀이는 대체로 잘 따라왔지만 아직 조금 어려워했습니다' / 낮음 예: '해가 특수한 연립방정식 개념을 조금 힘들어했습니다'). 소단원 안의 어느 부분이 어려웠는지(응용 문제·식 세우기·계산·풀이 정리·문장제 등)는 입력에 없는 정보이므로 절대 추측해서 쓰지 마세요 — 선생님이 점수만 매겼을 뿐, 무엇이 어려웠는지는 알려 주지 않았습니다. '이해도가 낮다'·'못한다'·'부족하다' 같은 직접적인 표현은 쓰지 마세요. ② 그다음 '그래서'·'그만큼' 같은 말로 이어, 바로 그 이유 때문에 학원에서 챙기겠다고 아이를 향한 응원·격려와 함께 마무리합니다(예: '그래서 다음 시간에 한 번 더 짚어 확실히 챙기겠습니다', '충분히 해낼 수 있는 부분이라 그만큼 수업 중에 꼼꼼히 살펴보겠습니다'). 상태 설명 없이 '챙기겠습니다'만 쓰면 학부모가 왜 챙기는지 알 수 없으니 절대 그렇게 쓰지 마세요.",
+  "- 본문에서 학생을 부를 때는 이름 앞에 '우리'를 붙여 친근하게 부르세요. 부를 이름은 맨 아래 [부르는 이름]에 있습니다 — 그 이름 말고 다른 이름은 절대 쓰지 마세요.",
+  "- '소단원별 이해도'가 있으면 소단원마다 한두 문장으로 말로 풀어 쓰세요. '잘 이해함'인 소단원은 아이의 강점으로 구체적으로 칭찬하세요.",
+  "- '대체로 따라왔으나 아직 조금 어려워함'·'어려워함'인 소단원은 반드시 두 단계로 쓰세요. ① 먼저 그 소단원을 아이가 힘들어했다는 사실만 부드럽게 말합니다 — 대상은 소단원 이름(또는 그 소단원의 개념)까지만입니다(중간 예: '연립방정식의 풀이는 대체로 잘 따라왔지만 아직 조금 어려워했습니다' / 낮음 예: '해가 특수한 연립방정식 개념을 조금 힘들어했습니다'). 소단원 안의 어느 부분이 어려웠는지(응용 문제·식 세우기·계산·풀이 정리·문장제 등)는 입력에 없는 정보이므로 절대 추측해서 쓰지 마세요 — 선생님이 점수만 매겼을 뿐, 무엇이 어려웠는지는 알려 주지 않았습니다. '이해도가 낮다'·'못한다'·'부족하다' 같은 직접적인 표현은 쓰지 마세요. ② 그다음 '그래서'·'그만큼' 같은 말로 이어, 바로 그 이유 때문에 학원에서 챙기겠다고 아이를 향한 응원·격려와 함께 마무리합니다(예: '그래서 다음 시간에 한 번 더 짚어 확실히 챙기겠습니다', '충분히 해낼 수 있는 부분이라 그만큼 수업 중에 꼼꼼히 살펴보겠습니다'). 상태 설명 없이 '챙기겠습니다'만 쓰면 학부모가 왜 챙기는지 알 수 없으니 절대 그렇게 쓰지 마세요.",
   "- 아이가 잘 못한 부분·과제를 못 해 온 부분도 아이나 가정에 책임을 돌리지 말고, 학원이 책임지고 챙긴다는 어투로 마무리하세요. 가정에 숙제·복습을 부탁하는 말로 끝내지 마세요.",
   "- 점수 숫자·'10점 만점'·'이해도 N점' 같은 표현은 절대 쓰지 마세요. 소단원 이름은 그대로 써도 됩니다.",
+  "- comment에는 학부모님께 보낼 문장만 쓰세요. 규칙을 지켰는지에 대한 설명이나 고쳐 쓰겠다는 말은 절대 넣지 마세요.",
 ].join("\n");
+
+/** 부르는 이름 — "학원삼" → "원삼이", "김지수" → "지수"(`topicName`에서 조사 '는'만 뗀 것). 모르면 "". */
+export function callName(fullName: string): string {
+  return topicName(fullName).replace(/는$/, "");
+}
+
+/**
+ * 이 학생의 AI 지시 — 공통 규칙 + 부르는 이름. 원장 2026-10-23 *"왜 로그인 한 사람의 이름으로 뜨는거지?"* — 사실 입력엔 학생 이름이
+ * 없었고, 지시의 예시 이름('우리 승엽이가')을 모델이 그대로 베꼈다. 그래서 예시 이름을 없애고 이 학생의 실제 이름을 준다.
+ */
+export function pilotAiDirective(fullName: string): string {
+  const call = callName(fullName);
+  return [PILOT_AI_DIRECTIVE, call ? `[부르는 이름] 우리 ${call}` : "[부르는 이름] 없음 — 이름을 부르지 말고 '아이'라고 쓰세요."].join("\n");
+}
+
+/** 이해도 점수 → AI에 줄 말. 숫자를 주면 금지해도 '10점 만점에 N점'을 베꼈다(2026-10-23 실측). 경계는 수업 평가 표와 같은 쪽(8↑ · 5~7 · 4↓). */
+export function understandingBandText(score: number): string {
+  if (score >= 8) return "잘 이해함";
+  if (score >= 5) return "대체로 따라왔으나 아직 조금 어려워함";
+  return "어려워함";
+}
+
+/** 모델이 규칙을 어기고 남긴 문장 — 점수 숫자 · 규칙에 대한 혼잣말("금지 표현이니 제외하고 다시 쓰겠습니다"). */
+const LEAK = /\d+\s*점|만점|점수|금지 표현|다시 쓰|제외하고|규칙을|지침을|지침에/;
+
+/** 모델이 아무것도 못 남겼을 때의 이해도 글 — 소단원마다 한 문장, 아직 어려워하면 학원이 챙긴다는 말. */
+export function fallbackUnderstanding(items: readonly { title: string; score: number }[]): string {
+  return items
+    .map(({ title, score }) => {
+      const t = `'${title}'${hasBatchim(title.slice(-1)) ? "은" : "는"}`;
+      if (score >= 8) return `${t} 잘 이해하고 있습니다.`;
+      if (score >= 5) return `${t} 대체로 잘 따라왔지만 아직 조금 어려워했습니다. 그래서 다음 시간에 한 번 더 짚어 확실히 챙기겠습니다.`;
+      return `${t} 조금 힘들어했습니다. 그래서 다음 시간에 한 번 더 짚어 확실히 챙기겠습니다.`;
+    })
+    .join(" ");
+}
+
+/**
+ * AI 이해도 글 후보정 — 점수 숫자·규칙 혼잣말이 든 **문장을 통째로** 뺀다(고쳐 쓰지 않는다 — 지어내지 않으려고).
+ * 다 빠지면 `fallbackUnderstanding`. 지시가 무시돼도 학부모에게 숫자·혼잣말이 가지 않게 하는 마지막 관문.
+ */
+export function cleanPilotUnderstanding(text: string, items: readonly { title: string; score: number }[]): string {
+  const out = text
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(/(?<=[.!?])\s+/)
+    .filter((sen) => sen && !LEAK.test(sen))
+    .join(" ")
+    .trim();
+  return out || (items.length ? fallbackUnderstanding(items) : "");
+}
 
 /** 서버 발송 게이트 거절 문구 — 자동작성 글이 아니거나 고쳐졌다. */
 export const PILOT_AUTOWRITE_REQUIRED_ERROR =
-  "이 학생의 수학 보고서는 '자동작성'으로 만든 글만 보낼 수 있습니다(저장은 됐습니다) — 자동작성을 누른 뒤 다시 보내 주세요";
+  "이 학생의 수학 보고서는 '자동작성'을 먼저 해야 보낼 수 있습니다(저장은 됐습니다) — 자동작성을 누른 뒤 다시 보내 주세요";
 
 /**
  * 자동작성 글이 **지금 칸 값과 맞나** — 자동작성 뒤에 진도·테스트·태도·과제·이해도를 바꾸면 글은 옛 값 그대로라 다시 눌러야 한다
@@ -271,18 +329,37 @@ export function isPilotDraftCurrent(
 ): boolean {
   const d = (draft ?? "").trim();
   const lead = progressLead(now.studentName, pilotLessons(now.today), skipStatusOf(now.today));
-  if (lead && !d.startsWith(pilotSection(PILOT_SECTION_TITLES.progress, lead))) return false;
+  // 진도 항목은 맨 앞이거나 '수업 평가' 표 바로 뒤(원장 2026-10-23 표를 맨 위로).
+  const sec = lead ? pilotSection(PILOT_SECTION_TITLES.progress, lead) : "";
+  if (sec && !d.startsWith(sec) && !d.includes(`\n\n${sec}`)) return false;
   if (now.writtenSig !== undefined && now.writtenSig !== now.factsSig) return false;
   const note = (now.note ?? "").trim();
   if (note && !d.endsWith(note)) return false;
   return true;
 }
 
-/** 발송 게이트용 — 자동작성 글 그대로이고 지금 칸 값과도 맞아야 보낼 수 있다(카드·표 공용). */
+/**
+ * 자동작성을 한 번이라도 했나 — 시범 대상 멘트 칸은 그 전엔 잠기고, 그 뒤엔 고칠 수 있다
+ * (원장 2026-10-23 *"자동작성하고나면 수정은 할수있게 열어줘"*, 종전 2026-10-21 *"수정하지 못하도록 막고 보이게만"*을 뒤집음).
+ */
+export function pilotCanEdit(autoDraft: string | null | undefined): boolean {
+  return (autoDraft ?? "").trim() !== "";
+}
+
+/**
+ * 발송 게이트용(카드·표 공용) — 자동작성을 한 번은 해야 하고, 그 뒤 칸 값(진도·테스트·태도·과제·이해도)이 바뀌었으면 다시 눌러야 한다.
+ * · 자동작성 글 그대로 = 종전 대조 전부(진도 첫 문장 · 사실 서명 · 끝의 한마디).
+ * · 강사가 고친 글 = 글 대조(진도 첫 문장)는 못 한다 — 사실 서명과 끝의 한마디만 본다(고친 글을 '다시 자동작성'으로 지우게 하지 않는다).
+ */
 export function pilotNeedsAutoWrite(
   draft: string | null | undefined,
   autoDraft: string | null | undefined,
   now: Parameters<typeof isPilotDraftCurrent>[1],
 ): boolean {
-  return !isPilotAutoWritten(draft, autoDraft) || !isPilotDraftCurrent(draft, now);
+  const d = (draft ?? "").trim();
+  if (!pilotCanEdit(autoDraft) || !d) return true;
+  if (isPilotAutoWritten(draft, autoDraft)) return !isPilotDraftCurrent(draft, now);
+  if (now.writtenSig !== undefined && now.writtenSig !== now.factsSig) return true;
+  const note = (now.note ?? "").trim();
+  return note !== "" && !d.endsWith(note);
 }

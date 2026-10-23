@@ -2,7 +2,7 @@
  * 월간계획 가져오기 **기록·조회** — 서버 전용 IO. 규칙은 [`import-undo.ts`](../import-undo.ts) 한 곳.
  *
  * 🔴 `class_sheet_*`는 RLS 정책이 0개라 admin 클라이언트 + `tenant_id` 명시 필터([[#104]]).
- * ⚠️ 표(20261015170000)가 없어도 **가져오기는 막지 않는다**([[#95]]) — 기록만 안 남고 되돌리기 메뉴가 안 뜬다.
+ * ⚠️ 표(0430a)가 없어도 **가져오기는 막지 않는다**([[#95]]) — 기록만 안 남고 되돌리기 메뉴가 안 뜬다.
  */
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";

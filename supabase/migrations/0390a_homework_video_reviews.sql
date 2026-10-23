@@ -53,8 +53,8 @@ alter table public.homework_video_reviews enable row level security;
 revoke all on public.homework_video_reviews from anon, authenticated;
 grant all on public.homework_video_reviews to service_role;
 
--- 연동 앱(발송 PC, Electron) 워커 = 중개 역할 eywa_sync_agent로 붙는다 — 자기 지점 줄만(20261008101000과 같은 모양).
--- 새 DB는 적용기가 이름순이라 이 파일이 20261008101000(역할·함수를 만든다)보다 먼저 돌 수 있다 — 그때는 건너뛴다(그 뒤 다시 실행하면 붙는다).
+-- 연동 앱(발송 PC, Electron) 워커 = 중개 역할 eywa_sync_agent로 붙는다 — 자기 지점 줄만(0401a과 같은 모양).
+-- 새 DB는 적용기가 이름순이라 이 파일이 0401a(역할·함수를 만든다)보다 먼저 돌 수 있다 — 그때는 건너뛴다(그 뒤 다시 실행하면 붙는다).
 do $$
 begin
   if exists (select 1 from pg_roles where rolname = 'eywa_sync_agent')

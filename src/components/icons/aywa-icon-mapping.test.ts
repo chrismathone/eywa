@@ -82,6 +82,9 @@ const APPROVED_INLINE_SVG = [
   // 2026-10-13 직원 포트폴리오의 **총점 원 그래프**(/100, 바탕 원 + 값 호 · aria-hidden, 점수는 버튼의 aria-label과 HTML 숫자) —
   // 차트이지 아이콘이 아니다(vk-score와 같은 성격).
   "src/app/(shell)/class-review/_components/portfolio/score-hero.tsx",
+  // 2026-10-22 원생 기여도 학생 상세의 **월별 누적 점수 추이**(눈금선·면·선·월 점, aria-label · 점마다 그 달 점수 버튼) —
+  // 차트이지 아이콘이 아니다(trend-chart와 같은 성격). 81691e56d가 이 목록을 안 고쳐 가드가 빨갰다.
+  "src/features/student-contribution/components/score-trend.tsx",
   // 2026-10-19 영어 시간표 오른쪽 **메모 시트**(엑셀 판) — 칸 격자·채우기·테두리를 그리는 바탕 층(grid-base), 고른 범위 틀(grid-overlay),
   // 테두리 고르기 창의 **선 모양 견본**(실선·점선·이중선 한 줄씩, border-picker). 셋 다 aria-hidden이고 표를 그리는 그림이지 아이콘이 아니다.
   "src/features/timetable-memo/ui/border-picker.tsx",
@@ -229,7 +232,8 @@ describe("Aywa icon compatibility mapping", () => {
       // 142→141은 2026-09-03 `BarChart3` 제거분(등록상담 보기 토글이 아이콘 칩 3개 → 드롭다운 하나가 되며 소비처 0, 디자인 v5 §10).
       // 141→139는 2026-09-03 `BookPlus`·`MessageSquarePlus` 제거분(운영실 '빠른 작업'이 §10 "같은 동작 두 곳 금지"로 사라지며 소비처 0).
       // 139→138: 랜딩 리팩토링으로 LayoutDashboard의 마지막 소비처를 제거.
-      expect(mapped.size).toBe(138);
+      // 138→137은 2026-10-22 `Banknote` 제거분(0c631a51e가 콜&상담 폼의 '결제 금액' 칸을 걷으며 소비처 0).
+      expect(mapped.size).toBe(137);
     },
     // src/ 전건을 ts.createSourceFile로 파싱한다 — 단독 실행 14초라 15초는 여유가 없었고
     // 전 스위트 병렬(파일 증가 + CPU 경합)에서 실제로 터졌다. 파일 수는 계속 는다.

@@ -2,7 +2,6 @@
 
 // 수업보고서(발송 관리) — ClassNote 발송 큐 관리 액션(재발송·멈춤복구). 쓰기는 lesson_reports 메뉴 권한(위임 반영).
 // edutrix retrySelectedClassNoteReports/resetStuckClassNoteReports 이식. 과거일 재발송 사고 방지(isClassnoteAllowed).
-import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
@@ -20,6 +19,8 @@ import { STUCK_MINUTES } from "../classnote-queue";
 import { IMPORT_FILTER, UNSENT_FILTER, reportOrderSpecs, type ReportListFilters, type ReportListRow } from "../report-filters";
 import { hasTextBesidesMarkers } from "@/features/report-templates/image-slots";
 import { getClassnoteQueue, type ClassnoteQueueView } from "./queries";
+import { loadReportRatings } from "./report-ratings";
+import type { ReportRating } from "../report-rating";
 import { isSendClassRouteRow, sendClassRow } from "@/features/onescreen/send-class";
 import { blockedForNoSendClass } from "@/features/onescreen/server/send-class";
 import { classnoteSendOn } from "@/features/owner/classnote-gate";
@@ -502,7 +503,12 @@ export async function listReports(
   const supabase = await createClient();
   const page = Math.max(0, filters.page ?? 0);
   // ment_source(0214a) 적용 여부 — 미적용이면 select·필터에서 빼서 목록이 죽지 않게(#95, probe 캐시 왕복 0).
-  const mentReady = await mentSourceColumnReady(supabase);
+  // 평점(0450a)은 선생님 보고서를 평가한 참고 값이라 **쓰기(발송) 권한자에게만** 싣는다 — 화면의 canSend와 같은
+  // 판정을 서버가 다시 한다(#77). 권한이 없으면 표를 읽지도 않고 행에 평점 칸 자체가 없다.
+  const [mentReady, canSeeRatings] = await Promise.all([
+    mentSourceColumnReady(supabase),
+    canWriteTenant(user.systemRole, "lesson_reports"),
+  ]);
 
   let q = supabase
     .from("lesson_reports")
@@ -515,7 +521,7 @@ export async function listReports(
     // ⚠️ 반대로 **정렬 문자열엔 `!FK`를 넣으면 안 된다** — order 파서가 '!'를 못 읽어 PGRST100(400)이다.
     //    select만 힌트로 확정하면 `order=classes(class_name)`은 그 임베드를 가리켜 정상 동작(둘 다 실측).
     .select(
-      "id, student_id, subject, report_date, covers_date, covers_by, covers_at, covers_note, created_at, classnote_sent_at, classnote_status, classnote_read_at, teacher_name, share_token, source, class_id" +
+      "id, student_id, subject, report_date, created_at, classnote_sent_at, classnote_status, classnote_read_at, teacher_name, share_token, source, class_id" +
         (mentReady ? ", ment_source" : "") +
         ", classes!lesson_reports_class_id_fkey(class_name)",
       { count: "exact" },
@@ -597,10 +603,6 @@ export async function listReports(
     student_id: string;
     subject: string | null;
     report_date: string;
-    covers_date: string | null;
-    covers_by: string | null;
-    covers_at: string | null;
-    covers_note: string | null;
     created_at: string | null;
     classnote_sent_at: string | null;
     classnote_status: string | null;
@@ -614,18 +616,16 @@ export async function listReports(
   };
   const list = (data ?? []) as unknown as DbRow[];
   const ids = [...new Set(list.map((r) => r.student_id as string))];
-  const nameRows = await fetchInChunks<{ id: string; name: string }>(ids, (chunk) =>
-    supabase.from("students").select("id, name").in("id", chunk),
-  );
+  // 학생 이름과 평점은 서로 독립 — 함께 받는다(B4). 평점 조회는 실패해도 빈 값이라 목록을 막지 않는다.
+  const [nameRows, ratingById] = await Promise.all([
+    fetchInChunks<{ id: string; name: string }>(ids, (chunk) =>
+      supabase.from("students").select("id, name").in("id", chunk),
+    ),
+    canSeeRatings
+      ? loadReportRatings(user.tenantId, list.map((r) => r.id))
+      : Promise.resolve(new Map<string, ReportRating>()),
+  ]);
   const nameById = new Map(nameRows.map((s) => [s.id, s.name]));
-  // covers_date 지정자 이름 — 소수(그 페이지에 지정된 행만)라 청크 조회 한 번.
-  const byIds = [...new Set(list.map((r) => r.covers_by as string | null).filter((v): v is string => !!v))];
-  const staffRows = byIds.length
-    ? await fetchInChunks<{ id: string; display_name: string | null }>(byIds, (chunk) =>
-        supabase.from("users").select("id, display_name").in("id", chunk),
-      )
-    : [];
-  const staffById = new Map(staffRows.map((u) => [u.id, u.display_name ?? null]));
   // to-one 임베드는 객체로 온다(실측). 관계 추론이 배열로 잡히는 경우까지 견디게 both를 받는다.
   const embeddedClassName = (v: unknown): string | null => {
     const one = Array.isArray(v) ? v[0] : v;
@@ -637,10 +637,6 @@ export async function listReports(
     subject: r.subject as string | null,
     className: embeddedClassName((r as { classes?: unknown }).classes),
     reportDate: r.report_date as string,
-    coversDate: (r.covers_date as string | null) ?? null,
-    coversBy: r.covers_by ? (staffById.get(r.covers_by as string) ?? null) : null,
-    coversAt: (r.covers_at as string | null) ?? null,
-    coversNote: (r.covers_note as string | null) ?? null,
     createdAt: r.created_at as string | null,
     sentAt: r.classnote_sent_at as string | null,
     classnoteStatus: r.classnote_status as string | null,
@@ -650,64 +646,7 @@ export async function listReports(
     readAt: r.classnote_read_at as string | null,
     // 0214a 미적용이면 select에 없어 undefined — 열 표시는 mentSourceReady(옵션)가 따로 게이트한다.
     mentSource: (r as { ment_source?: string | null }).ment_source ?? null,
+    ...(canSeeRatings ? { rating: ratingById.get(r.id) ?? null } : {}),
   }));
   return { ok: true, rows, total: count ?? rows.length, page, pageSize: REPORT_PAGE_SIZE };
-}
-
-/**
- * 보고서의 **실제 수업일(covers_date)** 지정/해제 — 미리 하거나 앞 수업에 몰아서 한 수업분(0136a).
- *
- * 효과: 그 (학생, 지정일)이 작성률 **분모에서 면제**된다 — 그날 학생이 오지 않으므로 미작성이 아니다.
- *   · 선발송   7/19분을 7/3에 미리 함           → 7/19 면제
- *   · 연속수업 7/19분을 7/3에 2타임으로 함(보고서 1건) → 7/19 면제(7/3은 보고서가 있어 그대로 충족)
- * ⚠️ 집계를 **옮기지 않는다** — 옮기면 연속수업에서 7/3이 거꾸로 미작성이 된다.
- * ⚠️ **내부 메타데이터**(원장 확정) — 학부모 발송 페이로드·학부모용 보고서에는 싣지 않는다.
- */
-export async function setReportCoversDate(
-  reportId: string,
-  coversDate: string | null,
-  note?: string | null,
-): Promise<{ ok: boolean; error?: string }> {
-  const user = await getCurrentUser();
-  if (!user) return { ok: false, error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "lesson_reports"))) {
-    return { ok: false, error: "보고서 관리 권한이 없습니다" };
-  }
-  const id = (reportId ?? "").trim();
-  if (!id) return { ok: false, error: "대상이 없습니다" };
-  const date = (coversDate ?? "").trim();
-  if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return { ok: false, error: "날짜 형식이 올바르지 않습니다" };
-
-  const supabase = await createClient();
-  // 감사(0139a) — 지정하면 누가·언제·왜를 남기고, 해제하면 함께 지운다(남은 흔적이 현재 상태와 어긋나지 않게).
-  const { error } = await supabase
-    .from("lesson_reports")
-    .update(
-      date
-        ? {
-            covers_date: date,
-            covers_by: user.id,
-            covers_at: new Date().toISOString(),
-            covers_note: (note ?? "").trim() || null,
-          }
-        : { covers_date: null, covers_by: null, covers_at: null, covers_note: null },
-    )
-    .eq("id", id);
-  if (error) return { ok: false, error: humanizeDbError(error.message, "저장") };
-
-  // 🔴 이 값은 그 학생·날짜를 **작성률 분모에서 빼는** 면제라, 강사 평가에 그대로 닿는다.
-  //    행의 covers_by/covers_at은 **현재 상태**만 담고 해제하면 함께 지워진다(위 update의 null 분기)
-  //    — "누가 면제를 걸었다가 풀었나"는 이 줄에만 남는다. 사유(note)는 사람이 적은 짧은 메모라 담는다.
-  await logAction({
-    action: "report_covers_date",
-    targetType: "lesson_report",
-    metadata: {
-      reportId: id,
-      coversDate: date || null,
-      cleared: !date,
-      ...(date && (note ?? "").trim() ? { note: (note ?? "").trim().slice(0, 200) } : {}),
-    },
-  });
-  revalidatePath("/lesson-reports");
-  return { ok: true };
 }

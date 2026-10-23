@@ -239,7 +239,7 @@ export async function getMathTextbookChoices(tenantId: string): Promise<MathText
         .returns<Row[]>(),
     );
   try {
-    // 🔑 강사가 매일 여는 수학 시트 경로다 — `grade_term`(20261022120000) 적용 전이면 그 칸만 빼고 다시 읽는다([[#95]]).
+    // 🔑 강사가 매일 여는 수학 시트 경로다 — `grade_term`(0437a) 적용 전이면 그 칸만 빼고 다시 읽는다([[#95]]).
     const rows = await read("id, title, grade_term").catch((e: unknown) => {
       if (isMissingGradeTermColumn(e as { code?: string; message?: string })) return read("id, title");
       throw e;

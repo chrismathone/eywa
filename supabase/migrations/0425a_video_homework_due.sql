@@ -15,7 +15,7 @@ do $$ begin
   end if;
 end $$;
 
--- 자동 판정: 미수행·미확인을 가르는 날을 숙제일 + 7일 대신 그 숙제의 마감으로. 나머지는 20261013140000 그대로.
+-- 자동 판정: 미수행·미확인을 가르는 날을 숙제일 + 7일 대신 그 숙제의 마감으로. 나머지는 0411a 그대로.
 create or replace function public.reconcile_video_homework_outcomes(p_tenant uuid,p_outcomes jsonb,p_observed_at timestamptz)
 returns jsonb language plpgsql security invoker set search_path=public,pg_temp as $$
 declare

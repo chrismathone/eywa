@@ -33,7 +33,7 @@ describe("보강 조회 실패·범위·분량 표시", () => {
   });
   it("DB 오류와 응답 누락은 빈 목록이나 0건으로 바꾸지 않는다", async () => {
     deps.rpc.mockResolvedValueOnce({ data: null, error: { code: "08006", message: "연결 실패" } });
-    expect(await getMakeupCases({})).toEqual({ error: "보강 기록을 불러오지 못했습니다. 다시 시도해 주세요." });
+    expect(await getMakeupCases({})).toEqual({ error: "보강 기록을 불러오지 못했습니다. 다시 시도해 주세요.", reason: "failed" });
     deps.rpc.mockResolvedValueOnce({ data: { rows: [], total: 0 }, error: null });
     expect((await getMakeupCases({})).data).toBeUndefined();
   });

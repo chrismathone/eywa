@@ -119,7 +119,6 @@ export const AppWindow = createAywaCompatIcon("window", "AppWindow");
 export const Archive = createAywaCompatIcon("archive", "Archive");
 export const ArrowRightLeft = createAywaCompatIcon("swap", "ArrowRightLeft");
 export const BadgePercent = createAywaCompatIcon("percentBadge", "BadgePercent");
-export const Banknote = createAywaCompatIcon("banknote", "Banknote");
 export const Bell = createAywaCompatIcon("bell", "Bell");
 export const BellRing = createAywaCompatIcon("bellRing", "BellRing");
 export const BookMarked = createAywaCompatIcon("bookMarked", "BookMarked");

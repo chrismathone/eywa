@@ -3,7 +3,8 @@
 export type ChipSeries = { key: string; label: string; color: string };
 
 /**
- * 범례 겸 선 고르기 — 일반 차트의 범례처럼 **색 선 + 이름**만(값은 선 끝 라벨·마우스 오버 상자가 말한다).
+ * 범례 겸 선 고르기 — 일반 차트의 범례처럼 **색 선 + 이름**만(값은 마우스 오버 상자가 말한다) · **그래프 아래**에 둔다(원장 2026-10-22
+ * *"라벨류는 밑에"* · *"다른 화면의 꺾은선도 전부 일치화"* — 이 칩을 쓰는 카드는 차트 범례를 끈다 `legend={false}`).
  * 누르면 그 선을 끄고 켠다(마지막 남은 선은 안 꺼진다). 꺼진 항목은 흐리게 · 상태는 `aria-pressed`로 알린다.
  */
 export function SeriesChips({ series, off, onToggle }: { series: ChipSeries[]; off: readonly string[]; onToggle: (key: string) => void }) {

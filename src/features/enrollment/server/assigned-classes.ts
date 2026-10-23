@@ -90,11 +90,34 @@ export async function countAssignedClasses(
   subject: string | null,
 ): Promise<number> {
   if (!studentId) return 0;
-  const { count } = await assignedQuery(supabase, studentId, subject, "*, class:class_id!inner ( subject )", {
+  const { count, error } = await assignedQuery(supabase, studentId, subject, "*, class:class_id!inner ( subject )", {
     count: "exact",
     head: true,
   });
+  if (error) throw new Error("수강 정보를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.");
   return count ?? 0;
+}
+
+/**
+ * 상담 과목 기준 배정 반의 **이름·과목 키**(운영실 '전일 / 이달 신규' 팝업 — 원장 2026-10-22 *"반배정된 반이름과 과목 보이게"*).
+ * 개수와 같은 필터(`assignedQuery`)라 이 목록이 비면 배지도 '배정 전'이다. 같은 반이 두 수강 행(오늘 끝내고 오늘 다시 연 수강)으로
+ * 잡혀도 한 번만 · 이름 순. 조회 실패는 던진다(빈 목록 = '배정 전'으로 위장하지 않는다).
+ */
+export async function listAssignedClassNames(
+  supabase: SupabaseClient,
+  studentId: string | null,
+  subject: string | null,
+): Promise<{ name: string; subject: string | null }[]> {
+  if (!studentId) return [];
+  type Klass = { class_name: string; subject: string | null };
+  const { data, error } = await assignedQuery(supabase, studentId, subject, "id, class:class_id!inner ( class_name, subject )");
+  if (error) throw new Error("배정 반을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+  const seen = new Map<string, { name: string; subject: string | null }>();
+  for (const row of (data ?? []) as unknown as { class: Klass | Klass[] | null }[]) {
+    const klass = Array.isArray(row.class) ? row.class[0] : row.class;
+    if (klass) seen.set(`${klass.subject ?? ""}|${klass.class_name}`, { name: klass.class_name, subject: klass.subject ?? null });
+  }
+  return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name, "ko"));
 }
 
 type SchedRow = {

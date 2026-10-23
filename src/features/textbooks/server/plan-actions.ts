@@ -85,7 +85,7 @@ const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** 옛 유니크(0266a `class_textbook_plans_pos_uniq`)가 남은 DB — 같은 교재 두 번째 배정이 막힌다([[#95]]). */
 const SAME_BOOK_NOT_READY =
-  "같은 교재를 한 반에 여러 개 거는 기능은 DB 업데이트(20261021120000) 뒤에 열립니다 — 지금은 한 반에 한 개만 걸 수 있습니다";
+  "같은 교재를 한 반에 여러 개 거는 기능은 DB 업데이트(0436a) 뒤에 열립니다 — 지금은 한 반에 한 개만 걸 수 있습니다";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
@@ -278,7 +278,7 @@ export async function saveClassTextbookPlan(input: ClassTextbookPlanInput): Prom
   if (error || !data) {
     return {
       ok: false,
-      // 23505 = 옛 유니크(반·교재·축)가 아직 있다 — 같은 교재 두 번째 배정은 SQL(20261021120000) 뒤에 열린다.
+      // 23505 = 옛 유니크(반·교재·축)가 아직 있다 — 같은 교재 두 번째 배정은 SQL(0436a) 뒤에 열린다.
       error: friendlyTextbookError(error ?? {}, "배정을 만들지 못했습니다", SAME_BOOK_NOT_READY),
     };
   }

@@ -272,6 +272,7 @@ function diffPermissions(before: unknown, after: unknown): SettingsDiff {
         ["enrollmentDateEditorIds", "수강 날짜 수정"],
         ["studentStatusManagerIds", "원생 상태 변경"],
         ["staffTaskMonitorIds", "업무 처리 현황"],
+        ["vendorViewerIds", "업체리스트"],
       ] as const) {
         const ids = key === "payslipManagerIds" ? effectivePayslipManagerIds(v.specialAccess) : v.specialAccess[key];
         for (const id of Array.isArray(ids) ? ids : []) {

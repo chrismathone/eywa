@@ -1,7 +1,7 @@
 "use client";
 
 import { Bar, CartesianGrid, ComposedChart, LabelList, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { axisFloor, axisScale, endLabelOffsets, lastIndexWithValue, niceTop, stackTotals, textWidth } from "@/features/students/stats/chart-math";
+import { axisFloor, axisScale, niceTop, stackTotals } from "@/features/students/stats/chart-math";
 import type { BasisMarker } from "@/features/students/stats/joined";
 import { basisMarkerLines, ChartLegend, ValueBox } from "./trend-chart-parts";
 
@@ -24,8 +24,8 @@ export type ChartSeries = {
   format?: (n: number) => string;
   /** 점선 — 뜻이 조금 다른 구간(지난 기록으로 메운 점 · 원장 2026-10-21 전체 추이). 막대 보기에선 색이 가른다(점선 없음). */
   dashed?: boolean;
-  /** 선 끝 이름을 적지 않는다 — 다른 선에 이어 붙인 앞 구간(지난 기록)은 끝이 그래프 한가운데라 이름이 본선 위에 찍힌다(리뷰 2026-10-21). */
-  endLabel?: false;
+  /** 아래 범례에서 뺀다 — 다른 선에 이어 붙인 앞 구간(지난 기록)처럼 본선과 한 줄로 읽히는 것(그 뜻은 카드가 따로 적는다). */
+  hideInLegend?: true;
 };
 export type TrendChartProps = {
   /** 가로축 라벨(짧게 — `26.03`). */
@@ -35,7 +35,7 @@ export type TrendChartProps = {
   series: ChartSeries[];
   kind: "line" | "bar";
   unit?: string;
-  /** 값 글자(눈금·선 끝·막대 위·값 상자) — 없으면 `1,234명`. 돈은 `1,234만`처럼 줄여 쓴다(수납 통계). */
+  /** 값 글자(눈금·막대 위·값 상자) — 없으면 `1,234명`. 돈은 `1,234만`처럼 줄여 쓴다(수납 통계). */
   format?: (n: number) => string;
   /** 세로축 꼭대기 고정 — 비율은 100(값에 맞춘 꼭대기는 100% 위로 200%까지 올라가 정상 값이 가운데에 선다). */
   max?: number;
@@ -44,26 +44,31 @@ export type TrendChartProps = {
    * 10 단위로 내린 값 · 0 아래로는 안 간다. 눈금에 바닥 값이 적혀 0부터가 아님이 보인다.
    */
   fitFloor?: boolean;
-  /** 막대 보기 아래 범례 — 카드에 따로 범례(선 고르기 칩 등)가 없을 때만 켠다. */
+  /**
+   * 그래프 **아래** 범례. 꺾은선은 기본으로 켜진다 — 선 이름은 선 끝이 아니라 늘 그래프 아래다(원장 2026-10-22 *"라벨류는 밑에 넣어줘"*
+   * → *"다른 화면의 꺾은선도 전부 일치화"*). 막대는 켤 때만. 선 고르기 칩·손으로 만든 범례가 있는 카드는 `false`로 끄고 그것을
+   * 그래프 아래에 둔다(이름이 두 번 서지 않게).
+   */
   legend?: boolean;
   /** 구간 경계 세로선 — 기준이 바뀌는 칸(지난 기록 청구 기준 추정 → 메이크에듀 기록 → 에이와 · `basisMarkers`). */
   markers?: readonly BasisMarker[];
 };
 
 const HEIGHT = 300;
-const MARGIN = { top: 16, bottom: 4, left: 4 };
+const MARGIN = { top: 16, bottom: 4, left: 4, right: 12 };
 const X_AXIS_H = 30;
 const Y_AXIS_W = 56;
 const FONT = 14; // 디자인 v5 글자 바닥 — recharts는 토큰을 못 읽는 자리라 숫자로.
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 /**
- * recharts 본체 — 일반 차트처럼 **선 끝에 이름·값**(겹치면 위아래로 벌린다), **마우스를 올리면 그 칸의 모든 값**(큰 순),
- * 막대는 칸이 넉넉할 때(12칸 이하) 막대 위에 값(쌓은 막대는 합) + 아래 범례. 세로축은 0부터 보기 좋은 꼭대기까지(선 끝 라벨 자리 계산과
- * 같은 눈금 · `max`면 고정). 값이 null인 칸은 그리지 않는다(정확히 셀 수 없는 기간 — 선이 그 달부터 시작한다).
+ * recharts 본체 — 선 이름은 **그래프 아래 범례**(2026-10-22 원장 *"다른 화면의 꺾은선도 전부 일치화"* — 옛 '선 끝 이름·값'은 걷었다),
+ * **마우스를 올리면 그 칸의 모든 값**(큰 순), 막대는 칸이 넉넉할 때(12칸 이하) 막대 위에 값(쌓은 막대는 합). 세로축은 0부터 보기 좋은
+ * 꼭대기까지(`max`면 고정). 값이 null인 칸은 그리지 않는다(정확히 셀 수 없는 기간 — 선이 그 달부터 시작한다).
  */
 export function TrendChartImpl({ labels, tooltipLabels, series, kind, unit = "명", format, max, fitFloor, legend, markers = [] }: TrendChartProps) {
   const showOf = (s?: ChartSeries) => s?.format ?? format ?? ((n: number) => `${fmt(n)}${s?.unit ?? unit}`);
   const lineMode = kind === "line";
+  const legendOn = legend ?? lineMode;
   const markerSpace = markers.length * (FONT + 6) * 2;
   const plotTop = MARGIN.top + markerSpace; // 기준 문구는 데이터 위 별도 공간.
   const drawn = series.filter((s) => !s.tooltipOnly);
@@ -85,19 +90,9 @@ export function TrendChartImpl({ labels, tooltipLabels, series, kind, unit = "�
   const top = max ?? niceTop(Math.max(0, ...flat, ...[...totals.values()].flatMap((t) => t.filter((v): v is number => v !== null))));
   const scale = axisScale(top, fitFloor && flat.length ? axisFloor(Math.min(...flat), top) : 0);
   const bottom = scale.bottom;
-  // 세로축 글자 — 선마다 단위가 다르면 숫자만(단위는 선 끝·값 상자가 적는다).
+  // 세로축 글자 — 선마다 단위가 다르면 숫자만(단위는 값 상자가 적는다).
   const mixed = new Set(drawn.map((s) => s.unit ?? unit)).size > 1;
   const tick = format ?? ((n: number) => (mixed ? fmt(n) : `${fmt(n)}${drawn[0]?.unit ?? unit}`));
-  const ends = drawn.map((s) => {
-    const i = s.endLabel === false ? -1 : lastIndexWithValue(s.values);
-    return { key: s.key, index: i, value: i >= 0 ? (s.values[i] as number) : 0, text: i >= 0 ? `${s.name} ${showOf(s)(s.values[i] as number)}` : "" };
-  });
-  const right = lineMode ? Math.max(...ends.map((e) => textWidth(e.text)), 0) + 20 : 12;
-  const plotHeight = HEIGHT - MARGIN.top - MARGIN.bottom - X_AXIS_H;
-  const offsets = endLabelOffsets(
-    ends.filter((e) => e.index >= 0).map((e) => ({ key: e.key, value: e.value })),
-    { top, bottom, plotTop, plotHeight },
-  );
   // 쌓은 막대의 맨 위 칸(둥근 모서리 · 합 숫자 자리).
   const stackTop = new Map<string, string>();
   for (const s of stacked) stackTop.set(s.stack!, s.key);
@@ -111,7 +106,7 @@ export function TrendChartImpl({ labels, tooltipLabels, series, kind, unit = "�
     <div className="w-full space-y-1">
       <div style={{ height: HEIGHT + markerSpace }} className="w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={data} margin={{ ...MARGIN, top: plotTop, right }} barGap={2} barCategoryGap="22%">
+          <ComposedChart data={data} margin={{ ...MARGIN, top: plotTop }} barGap={2} barCategoryGap="22%">
             <CartesianGrid strokeDasharray="3 4" stroke="var(--color-border)" vertical={false} />
             <XAxis
               dataKey="key"
@@ -139,7 +134,6 @@ export function TrendChartImpl({ labels, tooltipLabels, series, kind, unit = "�
               content={<ValueBox series={series} showOf={showOf} />}
             />
             {drawn.map((s) => {
-              const end = ends.find((e) => e.key === s.key)!;
               if (lineMode) {
                 return (
                   <Line
@@ -160,20 +154,7 @@ export function TrendChartImpl({ labels, tooltipLabels, series, kind, unit = "�
                     activeDot={{ r: 5, strokeWidth: 0, fill: s.color }}
                     connectNulls={false}
                     isAnimationActive={false}
-                  >
-                    <LabelList
-                      dataKey={s.key}
-                      content={(props) => {
-                        const { x, y, index } = props as { x?: number; y?: number; index?: number };
-                        if (index !== end.index || x === undefined || y === undefined) return null;
-                        return (
-                          <text x={Number(x) + 9} y={Number(y) + (offsets.get(s.key) ?? 0)} dominantBaseline="middle" fontSize={FONT} fontWeight={700} fill={s.color}>
-                            {end.text}
-                          </text>
-                        );
-                      }}
-                    />
-                  </Line>
+                  />
                 );
               }
               const onTop = !s.stack || stackTop.get(s.stack) === s.key;
@@ -194,7 +175,9 @@ export function TrendChartImpl({ labels, tooltipLabels, series, kind, unit = "�
           </ComposedChart>
         </ResponsiveContainer>
       </div>
-      {legend && !lineMode && drawn.length > 1 ? <ChartLegend series={drawn} note={stacked.length ? "막대 높이 = 합계" : undefined} /> : null}
+      {legendOn && (lineMode || drawn.length > 1) ? (
+        <ChartLegend series={drawn.filter((s) => !s.hideInLegend)} line={lineMode} note={stacked.length ? "막대 높이 = 합계" : undefined} />
+      ) : null}
     </div>
   );
 }

@@ -14,21 +14,27 @@ import { homeworkVideoSource } from "./video-source";
 import { loadVideoAssignmentCandidates, unassignedVideoPairs } from "./assignment-availability";
 import { loadReviewPoints } from "@/features/video-review/server/points";
 import { videoReviewEnabled } from "@/features/video-review/server/rows";
+import { fillablePairs, idleLessonDates, pendingVideoPairs, splitIdlePairs } from "../idle-rows";
+import { loadBlankLessonRecords } from "./blank-lessons";
 
 type DbMark = { class_id: string; student_id: string; check_date: string; homework_date: string | null;
   submitted_date: string | null; status: string; updated_at: string | null };
 type DbVideo = { id: string; student_id: string; post_id: number | null; posted_at: string; created_at: string | null; uploaded_at: string | null;
   md5: string | null; bytes: number | string | null; status: string; drive_file_id: string | null;
-  class_id: string | null; homework_date: string | null; manual_assignment?: string | null; excluded?: string | null; free?: string | null };
+  class_id: string | null; homework_date: string | null; manual_assignment?: string | null; excluded?: string | null; free?: string | null; subject?: string | null };
 type DbLedgerClass = LedgerClass & { teacher: { display_name: string; tenant_id: string } | null };
 export type VideoHomeworkLedgerBaseRow = VideoHomeworkRosterRow & {
   assignedDates: string[]; teacherName: string | null; hasAssignableVideos: boolean;
+  /** '영상 배정 필요함' — 붙일 빈 숙제가 있는 미배정 영상이 이 줄의 칸에 갈 수 있다(알림·할 일과 같은 판정 `fillablePairs`, 버튼이 있는 줄만). */
+  needsVideoAssignment: boolean;
   /** 보고서 없이 따로 낸 숙제의 날짜(extra-issues.ts) — 조회 기간 안의 것만. 칸의 '따로 낸 숙제' 표시와 취소에 쓴다. */
   extraDates: string[];
   /** 반려한 숙제(숙제일 → 반려 시각, rejections.ts) — 칸을 짜는 쪽(화면)이 같은 칸을 세우게. */
   rejected?: Record<string, string>;
   /** AI 참고 메모 대상 줄(지점 스위치 켜짐 · 수학 반) — 재생 창이 메모 칸을 처음부터 세운다. */
   aiReview?: true;
+  /** 숙제 0건 반의 줄(①)만 — 그 학생의 숙제없음 수업일(`VideoHomeworkLedgerRow.lessonDates`). */
+  lessonDates?: readonly string[];
 };
 
 /**
@@ -43,7 +49,7 @@ export async function loadClassVideos(tenantId: string, studentIds: string[], fr
     const rows = await fetchAllPagedInChunks<DbVideo>(studentIds, (chunk, from, to) => {
       const query = db
       .from(source)
-      .select("id,student_id,post_id,posted_at,created_at,uploaded_at,md5,bytes,status,drive_file_id,class_id:route->>classId,homework_date:route->>homeworkDate,manual_assignment:route->>manualAssignment,excluded:route->>excluded,free:route->>free")
+      .select("id,student_id,post_id,posted_at,created_at,uploaded_at,md5,bytes,status,drive_file_id,subject,class_id:route->>classId,homework_date:route->>homeworkDate,manual_assignment:route->>manualAssignment,excluded:route->>excluded,free:route->>free")
       .eq("tenant_id", tenantId).in("student_id", chunk)
       .or(`and(posted_at.gte.${fromDate}T00:00:00+09:00,posted_at.lt.${addDays(toDate, 1)}T00:00:00+09:00),and(route->>manualAssignment.eq.true,route->>homeworkDate.gte.${fromDate},route->>homeworkDate.lte.${toDate})`)
       .order("id", { ascending: true });
@@ -55,7 +61,7 @@ export async function loadClassVideos(tenantId: string, studentIds: string[], fr
       const homeworkDate = row.homework_date || null;
       const links = row.status === "uploaded" ? homeworkVideoLinks(row.drive_file_id) : null;
       return { id: row.id, studentId: row.student_id, classId: row.class_id, postedAt: row.posted_at, homeworkDate, fingerprint: videoFingerprint(row.md5, row.bytes),
-        manuallyAssigned: row.manual_assignment === "true", free: row.free === "true",
+        manuallyAssigned: row.manual_assignment === "true", free: row.free === "true", subject: row.subject ?? null,
         playback: links ? { ...links, uploadedAt: row.uploaded_at } : null,
         createdAt: row.created_at,
         arrivedAt: videoArrivedAt({ createdAt: row.created_at, postedAt: row.posted_at, uploadedAt: row.uploaded_at, fromClassnote: row.post_id != null, picked: !!homeworkDate }) };
@@ -72,9 +78,20 @@ export async function loadClassVideos(tenantId: string, studentIds: string[], fr
  * 숙제·기록·영상은 `videoMatchRange`(오늘 기준 고정 시작점 ~ 기간 끝 + 2주)로 넓혀 읽는다 — 화면에는 기간 안의 회차만 선다.
  */
 export async function getVideoHomeworkLedger(tenantId: string, fromDate: string, toDate: string,
-  /** 읽을 반 × 학생(`반:학생`)만 — 강사뷰(내가 낸 숙제가 있는 줄). 명단·영상·출결을 이 줄만 읽는다(판정은 반 × 학생 단위라 결과는 같다). */
-  scope?: { pairs: ReadonlySet<string> }): Promise<{
+  /**
+   * 읽을 반 × 학생(`반:학생`)만 — 강사뷰(내가 낸 숙제가 있는 줄). 명단·영상·출결을 이 줄만 읽는다(판정은 반 × 학생 단위라 결과는 같다).
+   * `classes` = 숙제 0건 반의 줄·검색 명단을 세울 반(강사뷰 = 내가 담임인 반 — 숙제가 없으니 '내가 낸 숙제'로 고를 수 없다). 없으면 세우지 않는다.
+   */
+  scope?: { pairs: ReadonlySet<string>; classes?: ReadonlySet<string> },
+  options?: {
+    /** 학원 휴원일 — 숙제 0건 반 줄의 수업일에서 뺀다(issue-window `blankLessonError`, 배정 창과 같은 판정). */
+    isHoliday?: (date: string) => boolean;
+    /** 반·과목 기준 검사 대상(policy `isVideoHomeworkClassEnabled`) — 대상 밖 숙제 0건 반은 읽지 않는다. 없으면 전부 본다(화면이 거른다). */
+    classTracked?: (classId: string, subjectKey: string) => boolean;
+  }): Promise<{
   rows: VideoHomeworkLedgerBaseRow[]; marks: VideoHomeworkMark[]; videos: VideoArrival[];
+  /** 숙제가 0건이라 장부에 반째 빠진 반의 수강생(원장 2026-10-22 ②) — 검색 전용(줄이 아니다 · 회차·인원·CSV에 안 든다). 줄로 선 학생(①)은 뺀다. */
+  idleRoster: VideoHomeworkRosterRow[];
   /** 빈 칸 사유(결석·숙제없음) — `classId:studentId` → 날짜 → 사유. 못 읽었으면 빈 객체(그 칸은 '—'). */
   blankFacts: BlankFacts;
   /** 보고서의 '영상 과제' 값을 읽었나 — 못 읽었으면 기록이 있는 회차만 보인다. */
@@ -115,8 +132,19 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
   // 기간 안에 숙제도 기록도 없는 반은 세울 회차가 없다 — 그 반은 명단부터 읽지 않는다.
   const activeClasses = new Set(occurrences.filter((row) => row.date >= fromDate && row.date <= toDate).map((row) => row.class_id));
   // 명단 = 기간에 그 반 수업이 있는 수강생 + (수강이 끝났어도) 기간 안에 숙제·기록이 있는 학생.
-  const pairs = buildVideoHomeworkLessonPairs({ classes, enrollments, schedules, fromDate, toDate, today, occurrences })
-    .filter((pair) => activeClasses.has(pair.classId) && (!scope || scope.pairs.has(`${pair.classId}:${pair.studentId}`)));
+  const lessonPairs = buildVideoHomeworkLessonPairs({ classes, enrollments, schedules, fromDate, toDate, today, occurrences });
+  const pairs = lessonPairs.filter((pair) => activeClasses.has(pair.classId) && (!scope || scope.pairs.has(`${pair.classId}:${pair.studentId}`)));
+  // 숙제 0건 반의 수강생(idle-rows.ts) — 붙지 않은 영상이 있으면 줄(①), 나머지는 검색 명단(②). 영상·이름만 함께 읽는다(출결은 줄로 설 학생만, 아래).
+  // 숙제를 못 읽었으면(null) 어느 반이 0건인지 모른다 — 세우지 않는다.
+  // 검사 대상 밖 반(과목·반 설정 — 학년은 줄에서 마저 본다)은 미리 뺀다: 줄도 검색 명단도 서지 않는 반의 이름·영상을 읽지 않게.
+  const subjectOfIdle = new Map(classes.map((row) => [row.id, row.subject]));
+  const idlePairs = assigned === null ? [] : lessonPairs.filter((pair) => !activeClasses.has(pair.classId) && (!scope || !!scope.classes?.has(pair.classId))
+    && (!options?.classTracked || options.classTracked(pair.classId, subjectOfIdle.get(pair.classId) ?? "")));
+  const idleStudents = idlePairs.map((pair) => pair.studentId);
+  // 강사뷰 — 회차가 있는 내 담임 반의 명단 학생 중 '내가 낸 숙제'가 없는 학생. 숙제 없이 올린 영상이 안 붙어 있으면 줄로 선다(아래 · 미배정 영상
+  // 할 일이 담임에게 가고 링크가 강사뷰다 — 재리뷰 2026-10-22). 영상만 함께 읽는다(내 반 명단이라 작다).
+  const ownedRoster = scope?.classes ? lessonPairs.filter((pair) => activeClasses.has(pair.classId) && scope.classes!.has(pair.classId)
+    && !scope.pairs.has(`${pair.classId}:${pair.studentId}`)) : [];
   const assignedByPair = new Map<string, string[]>();
   const extraByPair = new Map<string, string[]>();
   // 반려한 숙제(숙제일 → 반려 시각) — 화면·버튼 판정이 같은 칸을 짜게 줄에 싣는다(rounds.ts ②).
@@ -135,11 +163,10 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
   }
   const shownPairs = new Set(pairs.map((pair) => `${pair.classId}:${pair.studentId}`));
   const studentIds = [...new Set(pairs.map((row) => row.studentId))];
-  // 영상은 숙제 칸이 있는 학생만 — 숙제가 없으면 채울 칸도 없다. 검사 기록만으로 선 숙제 칸도 ②의 뒷순위로 영상을 받으므로 함께 읽는다
-  // (안 읽으면 그 칸에 붙을 영상이 장부에서만 안 보이고, 자동 판정·미배정 알림과 다른 말을 한다 — 재리뷰 2026-10-13).
-  const markPairs = new Set(marks.filter((mark) => !!mark.homeworkDate).map((mark) => `${mark.classId}:${mark.studentId}`));
-  const homeworkStudents = [...new Set(pairs.filter((row) => assignedByPair.has(`${row.classId}:${row.studentId}`)
-    || markPairs.has(`${row.classId}:${row.studentId}`)).map((row) => row.studentId))];
+  // 영상(과 이름)은 명단의 학생 전부 + 숙제 0건 반의 학생 + (강사뷰) 담임 반 명단 — 숙제 칸이 없어도 숙제 없이 올린 영상이 남아 있으면 배정할
+  // 길을 열어야 한다(원장 2026-10-22 ①·③·④ — 반에 숙제가 있고 본인은 0건인 학생 포함). 숙제 칸이 있는 학생만 읽던 것은 지점 영상이 75일에
+  // 수백 건 규모라 넓혔다. 검사 기록만으로 선 숙제 칸도 ②의 뒷순위로 영상을 받는다(안 읽으면 장부만 자동 판정·미배정 알림과 다른 말을 한다 — 재리뷰 2026-10-13).
+  const videoStudents = [...new Set([...studentIds, ...idleStudents, ...ownedRoster.map((pair) => pair.studentId)])];
   // 빈 칸 사유 재료 — 반별 숙제 날짜(기간 안) · 학생별 이미 있는 회차 날짜. 출결은 반·기간 범위로 한 번에(blank-facts.ts).
   const classDates = new Map<string, Set<string>>();
   const ownDates = new Map<string, Set<string>>();
@@ -158,12 +185,13 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
   const assignmentRows = pairs.map(pair => ({ ...pair, assignedDates: [...new Set([
     ...(assignedByPair.get(`${pair.classId}:${pair.studentId}`) ?? []).filter(inRange), ...(markDates.get(`${pair.classId}:${pair.studentId}`) ?? [])])] }));
   const [students, videos, blankFacts, assignmentCandidates, reviewOn] = await Promise.all([
-    fetchAllPagedInChunks<{ id: string; name: string; school: string | null; grade: string | null }>(studentIds,
+    fetchAllPagedInChunks<{ id: string; name: string; school: string | null; grade: string | null }>(videoStudents,
       (chunk, from, to) => db.from("students").select("id,name,school,grade").eq("tenant_id", tenantId)
         .in("id", chunk).order("id").range(from, to)),
     // 영상은 짝 범위 끝 + 2주까지 읽는다 — 범위 끝 무렵 숙제를 골라 그 뒤에 올린 영상이 있어야, 지난 기간을 볼 때도 같은 파일의 사본을
     // 지금 보기와 똑같이 뺀다. 더 늦은 영상은 화면 칸에 닿지 못한다(칸은 숙제일 + 2주까지만 영상을 받는다).
-    loadClassVideos(tenantId, homeworkStudents, wideFrom, addDays(wideTo, VIDEO_MATCH_WINDOW_DAYS)),
+    // 반을 모르는 영상도 읽는다 — 회차·줄·칸에는 안 쓰인다(반이 정해진 영상만 센다 · 화면에도 안 내린다). '영상 배정 필요함'(`fillablePairs`)만 알림과 같게.
+    loadClassVideos(tenantId, videoStudents, wideFrom, addDays(wideTo, VIDEO_MATCH_WINDOW_DAYS), true),
     loadBlankFacts(tenantId, { classDates, ownDates: new Map([...ownDates].filter(([pair]) => shownPairs.has(pair))), enrollments }),
     loadVideoAssignmentCandidates(tenantId, assignmentRows),
     // 영상 설명 AI 참고 메모 스위치(지점) — 꺼졌으면 평점도, 재생 창의 메모 칸 자리도 없다(기능 스위치 = 흔적 없이).
@@ -200,15 +228,29 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
       ...unassignedVideoPairs(openRows(true), assignmentCandidates, owned, subjectOf)]) : null;
   const byClass = new Map(classes.map((row) => [row.id, row]));
   const byStudent = new Map(students.map((row) => [row.id, row]));
-  const rows = pairs.flatMap((pair): VideoHomeworkLedgerBaseRow[] => {
+  // ① 숙제 0건 반에서 줄로 설 학생(붙지 않은 영상) · ② 나머지는 검색 명단. 영상을 못 읽었으면 줄은 못 가르고 명단만 남는다.
+  const pending = (freeOnly: boolean) => videos === null ? new Set<string>()
+    : pendingVideoPairs({ videos, rounds: assignmentRounds, fromDate, toDate, freeOnly });
+  const idle = videos === null ? { free: [], rest: idlePairs } : splitIdlePairs(idlePairs, pending(false));
+  const freeKeys = new Set(idle.free.map((pair) => `${pair.classId}:${pair.studentId}`));
+  // 회차가 있는 반의 줄도 숙제 없이 올린 영상(자동으로 칸에 안 붙는다)이 안 붙어 있으면 배정할 길을 연다 — 숙제없음 수업일에 붙인다(③).
+  // 반에 숙제가 있고 본인은 0건인 학생은 붙일 숙제 칸이 없어 종전 버튼 판정으로는 막혀 있었다(적대적 리뷰 2026-10-22).
+  const freePending = pending(true);
+  // '영상 배정 필요함' = 붙일 빈 숙제가 있는 미배정 영상의 그 칸 줄(미배정 알림·할 일과 같은 판정 — 원장 2026-10-23).
+  const needs = videos === null ? null : fillablePairs({ videos, rounds: assignmentRounds, fromDate, toDate, subjectOf });
+  const ownedFree = ownedRoster.filter((pair) => freePending.has(`${pair.classId}:${pair.studentId}`));
+  const rows = [...pairs, ...ownedFree, ...idle.free].flatMap((pair): VideoHomeworkLedgerBaseRow[] => {
     const cls = byClass.get(pair.classId);
     const student = byStudent.get(pair.studentId);
+    const key = `${pair.classId}:${pair.studentId}`;
+    // 숙제 0건 반의 줄은 붙지 않은 영상 때문에 선 줄이다 — 배정 창에서 숙제없음 수업일에 붙이거나 집계에서 뺀다(③).
+    const hasAssignableVideos = freeKeys.has(key) || freePending.has(key) || (assignablePairs?.has(key) ?? false);
     return cls && student ? [{ classId: pair.classId, studentId: pair.studentId, className: cls.class_name, subject: cls.subject,
       // AI 참고 메모 대상 줄(스위치 켜짐 · 수학 반 — 분석은 수학 영상만) — 재생 창이 메모를 불러오는 동안에도 칸을 세워 둔다(ledger-video-dialog).
       ...(reviewOn && cls.subject === "math" ? { aiReview: true as const } : {}),
       teacherName: cls.teacher?.tenant_id === tenantId ? cls.teacher.display_name.trim() || null : null,
       studentName: student.name, school: student.school, grade: student.grade,
-      hasAssignableVideos: assignablePairs?.has(`${pair.classId}:${pair.studentId}`) ?? false,
+      hasAssignableVideos, needsVideoAssignment: hasAssignableVideos && (needs?.has(key) ?? false),
       extraDates: [...(extraByPair.get(`${pair.classId}:${pair.studentId}`) ?? [])].sort(),
       ...(rejectedByPair.has(`${pair.classId}:${pair.studentId}`) ? { rejected: rejectedByPair.get(`${pair.classId}:${pair.studentId}`) } : {}),
       ...(keptByPair.has(`${pair.classId}:${pair.studentId}`) ? { kept: [...keptByPair.get(`${pair.classId}:${pair.studentId}`)!].sort() } : {}),
@@ -218,10 +260,32 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
   // 화면으로는 명단에 선 (반 × 학생)의 기록만 — 넓혀 읽은 지점 전체 기록을 내려보내지 않는다.
   const shown = new Set(rows.map((row) => `${row.classId}:${row.studentId}`));
   const shownVideos = (videos ?? []).filter((video) => video.classId && shown.has(`${video.classId}:${video.studentId}`));
-  // 분석이 끝난 영상의 AI 참고 평점 — 칸 아래 "2.8/5"(원장 2026-10-21). 스위치가 꺼졌으면 빈 결과(video-review/server/points.ts).
-  const points = reviewOn ? await loadReviewPoints(tenantId, shownVideos.map((video) => video.id), { enabled: true }) : new Map<string, number>();
-  return { rows, marks: marks.filter((mark) => shown.has(`${mark.classId}:${mark.studentId}`)),
+  // 숙제 0건 반 줄의 숙제없음 수업일(③)은 그 학생들의 기간 출결로 — 평점 조회와 나란히(B4). 오늘 뒤의 수업일은 깔지 않는다.
+  const lastDay = toDate < today ? toDate : today;
+  const [points, lessonRecords, ownedFreeFacts] = await Promise.all([
+    // 분석이 끝난 영상의 AI 참고 평점 — 칸 아래 "2.8/5"(원장 2026-10-21). 스위치가 꺼졌으면 빈 결과(video-review/server/points.ts).
+    reviewOn ? loadReviewPoints(tenantId, shownVideos.map((video) => video.id), { enabled: true }) : new Map<string, number>(),
+    loadBlankLessonRecords(db, tenantId, idle.free, fromDate, lastDay),
+    // 강사뷰에 더 선 담임 반 줄의 빈 칸 사유(결석·숙제없음) — 반 숙제일 기준, 다른 줄과 같은 재료(blank-facts.ts).
+    ownedFree.length ? loadBlankFacts(tenantId, { classDates, enrollments,
+      ownDates: new Map(ownedFree.map((pair) => [`${pair.classId}:${pair.studentId}`, ownDates.get(`${pair.classId}:${pair.studentId}`) ?? new Set<string>()])) }) : null,
+  ]);
+  // 출결을 못 읽었으면 칸 없이 선다(빈 칸으로 결석일을 '숙제없음'이라 하지 않게) — 배정 창이 따로 다시 판정한다.
+  const lessons = (() => {
+    try {
+      return lessonRecords && idleLessonDates({ pairs: idle.free, schedules, enrollments, records: lessonRecords, fromDate, toDate: lastDay,
+        isHoliday: options?.isHoliday ?? (() => false), closedOn: (classId) => byClass.get(classId)?.closed_at });
+    } catch { return null; }
+  })();
+  for (const row of rows) if (freeKeys.has(`${row.classId}:${row.studentId}`)) row.lessonDates = lessons?.dates.get(`${row.classId}:${row.studentId}`) ?? [];
+  const idleRoster = idle.rest.flatMap((pair): VideoHomeworkRosterRow[] => {
+    const cls = byClass.get(pair.classId);
+    const student = byStudent.get(pair.studentId);
+    return cls && student ? [{ classId: pair.classId, className: cls.class_name, subject: cls.subject, studentId: pair.studentId,
+      studentName: student.name, school: student.school, grade: student.grade }] : [];
+  });
+  return { rows, marks: marks.filter((mark) => shown.has(`${mark.classId}:${mark.studentId}`)), idleRoster,
     videos: points.size ? shownVideos.map((video) => points.has(video.id) ? { ...video, reviewPoints: points.get(video.id)! } : video) : shownVideos,
-    blankFacts: blankFacts ?? {},
+    blankFacts: { ...blankFacts, ...ownedFreeFacts, ...lessons?.facts },
     assignedKnown: assigned !== null, videosKnown: videos !== null, assignmentVideosKnown: assignablePairs !== null };
 }

@@ -3,6 +3,7 @@
  * export할 수 없어(런타임 상수 IMPORT_FILTER) 여기로 분리. 5단계-2 Part C.
  */
 import type { MentSource } from "@/features/onescreen/ment-source";
+import type { ReportRating } from "./report-rating";
 
 export type ReportListRow = {
   id: string;
@@ -16,16 +17,6 @@ export type ReportListRow = {
    */
   className: string | null;
   reportDate: string;
-  /**
-   * 실제 수업일(covers_date, 0136a) — 미리/몰아서 한 수업의 보고서를 그 수업일에 귀속시킨다.
-   * 효과는 **분모 면제**: 그 (학생, 날짜)는 작성률 대상에서 빠진다(보고서 집계는 reportDate 그대로).
-   * ⚠️ 내부 메타데이터 — 학부모 발송 페이로드에 넣지 않는다.
-   */
-  coversDate: string | null;
-  /** covers_date 감사(0139a) — 누가·언제·왜 면제를 걸었는지. 지표를 빼주는 값이라 화면에 근거를 보여준다. */
-  coversBy: string | null; // 지정자 이름(표시용)
-  coversAt: string | null;
-  coversNote: string | null;
   createdAt: string | null; // 작성/이관 등록 시각(timestamptz) — 정렬 최종 tiebreak(이관분은 cron 배치 시각으로 동일)
   sentAt: string | null; // 실제 학부모 발송 시각(classnote_sent_at) — 목록 hh:mm 표시 + 같은 날짜 내 최신 발송 정렬 키. 없으면 createdAt 폴백
   classnoteStatus: string | null;
@@ -43,6 +34,11 @@ export type ReportListRow = {
    * 빠져 undefined(목록은 그대로 동작 — 열 자체를 mentSourceReady로 숨긴다). 라벨은 ment-source.ts 단일 소스.
    */
   mentSource?: string | null;
+  /**
+   * 평점(참고용, 0450a) — 2026-10-22 오프라인 배치가 한 번 매긴 값(앱은 AI를 부르지 않는다). null = 평점 없음(새 보고서).
+   * 🔴 **수업보고서 쓰기 권한자에게만** 서버가 싣는다 — 권한이 없으면 키 자체가 없다(listReports, #77).
+   */
+  rating?: ReportRating | null;
 };
 
 export type ReportListFilters = {

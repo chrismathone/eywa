@@ -10,12 +10,17 @@ import {
   hasPilotOneLine,
   pilotOneLineAttached,
   pilotRecomposeNote,
+  pilotCanEdit,
+  pilotNeedsAutoWrite,
   MATH_REPORT_PILOT_STUDENT_IDS,
   progressLead,
   readUnderstanding,
   topicName,
   pilotSection,
   PILOT_AI_DIRECTIVE,
+  callName,
+  cleanPilotUnderstanding,
+  pilotAiDirective,
   understandingRows,
 } from "./math-report-pilot";
 import { evaluateSendGate } from "./send-gate";
@@ -32,7 +37,7 @@ describe("시범 대상 판정", () => {
     expect(isMathReportPilot(null, "math")).toBe(false);
   });
   it("명단은 학생 '테스트'·'학원이' 둘", () => {
-    expect(MATH_REPORT_PILOT_STUDENT_IDS).toEqual(["67a53999-fb62-4753-a938-9a5ce4af9e61", "6219e442-aa57-455f-a5bc-834b222d9e1c"]);
+    expect(MATH_REPORT_PILOT_STUDENT_IDS).toEqual(["67a53999-fb62-4753-a938-9a5ce4af9e61", "6219e442-aa57-455f-a5bc-834b222d9e1c", "5de5c803-6cf6-4ad9-85f0-d184334c679e"]);
   });
 });
 
@@ -60,15 +65,20 @@ describe("이름 + 조사", () => {
 
 describe("진도 첫 문장", () => {
   it("하나 / 둘 / 셋 이상", () => {
-    expect(progressLead("이승엽", ["소수와 거듭제곱"])).toBe("우리 승엽이는 오늘 소수와 거듭제곱 진도를 나갔습니다.");
-    expect(progressLead("이승엽", ["소인수분해", "최대공약수"])).toBe("우리 승엽이는 오늘 소인수분해와 최대공약수 진도를 나갔습니다.");
-    expect(progressLead("이승엽", ["최대공약수", "최소공배수"])).toBe("우리 승엽이는 오늘 최대공약수와 최소공배수 진도를 나갔습니다.");
+    const close = " 오늘 배운 내용이 잘 자리 잡을 수 있도록 다음 시간에도 이어서 꼼꼼히 다지겠습니다.";
+    expect(progressLead("이승엽", ["소수와 거듭제곱"])).toBe(`우리 승엽이는 오늘 '소수와 거듭제곱' 진도를 나갔습니다.${close}`);
+    expect(progressLead("이승엽", ["소인수분해", "최대공약수"])).toBe(
+      `우리 승엽이는 오늘 '소인수분해'와 '최대공약수', 두 소단원 진도를 나갔습니다.${close}`,
+    );
+    expect(progressLead("이승엽", ["최대공약수", "최소공배수"])).toBe(
+      `우리 승엽이는 오늘 '최대공약수'와 '최소공배수', 두 소단원 진도를 나갔습니다.${close}`,
+    );
     expect(progressLead("이승엽", ["소수의 뜻", "거듭제곱", "소인수분해"])).toBe(
-      "우리 승엽이는 오늘 소수의 뜻부터 소인수분해까지 진도를 나갔습니다.",
+      `우리 승엽이는 오늘 '소수의 뜻'부터 '소인수분해'까지 모두 3개 소단원 진도를 나갔습니다.${close}`,
     );
   });
   it("초등 차시 번호는 뗀다", () => {
-    expect(progressLead("김지수", ["1-1-1 1부터 5까지의 수 알아보기"])).toBe("우리 지수는 오늘 1부터 5까지의 수 알아보기 진도를 나갔습니다.");
+    expect(progressLead("김지수", ["1-1-1 1부터 5까지의 수 알아보기"])).toMatch(/^우리 지수는 오늘 '1부터 5까지의 수 알아보기' 진도를 나갔습니다\. /);
   });
   it("진도 중단일은 그날 한 일을 적는다 · 진도 없으면 빈 문장", () => {
     expect(progressLead("이승엽", [], "월말평가")).toBe("우리 승엽이는 오늘 월말평가 수업을 했습니다.");
@@ -107,7 +117,36 @@ describe("소단원별 이해도", () => {
   });
   it("AI 사실 줄에 들어간다", () => {
     const input = { studentName: "a", subject: "수학", progress: "x", dailyTest: "", checkTest: "", attitude: "", homework: "", homeworkToday: "", textbook: "", specialNote: "", understanding: [{ title: "소인수분해", score: 7 }] } satisfies ReportCommentInput;
-    expect(buildFactBlock(input)).toContain("소단원별 이해도: 소인수분해 10점 만점에 7점");
+    expect(buildFactBlock(input)).toContain("소단원별 이해도: 소인수분해 — 대체로 따라왔으나 아직 조금 어려워함");
+    expect(buildFactBlock(input)).not.toMatch(/\d+점|만점/);
+  });
+});
+
+describe("이해도 AI — 이름·숫자·혼잣말(원장 2026-10-23 제보)", () => {
+  it("지시에 예시 이름이 없고, 이 학생의 부르는 이름이 붙는다", () => {
+    expect(PILOT_AI_DIRECTIVE).not.toMatch(/승엽|지수/);
+    expect(callName("학원삼")).toBe("원삼이");
+    expect(callName("김지수")).toBe("지수");
+    expect(pilotAiDirective("학원삼")).toMatch(/\[부르는 이름\] 우리 원삼이$/);
+    expect(pilotAiDirective("")).toMatch(/이름을 부르지 말고/);
+  });
+  it("점수 숫자·규칙 혼잣말이 든 문장은 통째로 뺀다", () => {
+    const items = [{ title: "연립방정식의 풀이의 응용", score: 10 }];
+    const leaked =
+      "연립방정식의 풀이의 응용은 10점 만점에 10점을 받아, 우리 원삼이가 가장 자신 있게 이해한 부분으로 보입니다 — 이 문장은 금지 표현이니 제외하고 다시 쓰겠습니다. 우리 원삼이가 문제를 차근차근 잘 풀었습니다.";
+    expect(cleanPilotUnderstanding(leaked, items)).toBe("우리 원삼이가 문제를 차근차근 잘 풀었습니다.");
+  });
+  it("다 빠지면 정해진 문장으로 · 숫자 없음", () => {
+    const out = cleanPilotUnderstanding("10점 만점에 10점입니다.", [
+      { title: "소인수분해", score: 9 },
+      { title: "최대공약수", score: 6 },
+    ]);
+    expect(out).toContain("'소인수분해'는 잘 이해하고 있습니다.");
+    expect(out).toContain("'최대공약수'는 대체로 잘 따라왔지만");
+    expect(out).not.toMatch(/\d/);
+  });
+  it("멀쩡한 글은 그대로", () => {
+    expect(cleanPilotUnderstanding("우리 원삼이는 소인수분해를 잘 이해했습니다.", [])).toBe("우리 원삼이는 소인수분해를 잘 이해했습니다.");
   });
 });
 
@@ -157,6 +196,10 @@ describe("자동작성 뒤에 칸을 바꾸면 다시 눌러야 한다", () => {
   const now = { studentName: "이승엽", today: "소인수분해", note: "잘했어요", factsSig: "A", writtenSig: "A" };
   const draft = composePilotMent({ lead: pilotSection("진도", progressLead("이승엽", ["소인수분해"])), body: "본문", note: "잘했어요" });
   it("그대로면 통과", () => expect(isPilotDraftCurrent(draft, now)).toBe(true));
+  it("수업 평가 표가 맨 위에 있어도 진도 항목을 찾는다", () => {
+    expect(isPilotDraftCurrent(`■ 수업 평가\n구분\n\n${draft}`, now)).toBe(true);
+    expect(isPilotDraftCurrent(`■ 수업 평가\n구분\n\n${draft}`, { ...now, today: "최대공약수" })).toBe(false);
+  });
   it("진도·사실 서명·한마디가 바뀌면 막는다", () => {
     expect(isPilotDraftCurrent(draft, { ...now, today: "최대공약수" })).toBe(false);
     expect(isPilotDraftCurrent(draft, { ...now, factsSig: "B" })).toBe(false);
@@ -171,18 +214,21 @@ describe("배선", () => {
   const read = (p: string) => readFileSync(new URL(p, import.meta.url), "utf8");
   it("서버 발송 경로가 저장된 작성 방식으로 다시 막는다", () => {
     const src = read("./server/actions.ts");
-    expect(src).toMatch(/saved\.mentSource !== "auto"\s*\?\s*PILOT_AUTOWRITE_REQUIRED_ERROR/);
+    expect(src).toMatch(/saved\.mentSource !== "auto" && saved\.mentSource !== "auto_edited"[^\n]*\n\s*\?\s*PILOT_AUTOWRITE_REQUIRED_ERROR/);
     expect(src).toMatch(/!pilotOneLineAttached\(input\.notes, input\.pilotOneLine\)/);
     expect(src).toMatch(/mentSource: mentSourceFinal,/);
   });
   it("자동작성 글에 이해도 점수 블록을 붙이지 않는다(말로 풀어 쓴다)", () => {
     expect(read("./server/actions.ts")).not.toMatch(/understandingBlock/);
   });
-  it("카드·표 멘트 칸이 시범 대상에서 잠기고 이해도 서명으로 대조한다", () => {
+  it("카드·표 멘트 칸이 자동작성 전에만 잠기고 이해도 서명으로 대조한다", () => {
     const card = read("./components/report-card.tsx");
     const grid = read("./components/grid-row.tsx");
-    expect(card).toMatch(/readOnly=\{pilot\}/);
-    expect(grid).toMatch(/readOnly=\{rowLocked \|\| pilot\}/);
+    expect(card).toMatch(/const pilotLocked = pilot && !pilotCanEdit\(rep\.autoDraft\)/);
+    expect(card).toMatch(/readOnly=\{pilotLocked\}/);
+    expect(grid).toMatch(/const pilotLocked = pilot && !pilotCanEdit\(rep\?\.autoDraft\)/);
+    expect(grid).toMatch(/readOnly=\{rowLocked \|\| pilotLocked\}/);
+    expect(card).not.toMatch(/readOnly=\{pilot\}/);
     // 사실 서명은 카드·표·자동작성이 같은 함수(pilotRowSig)로 만든다 — 갈리면 값이 그대로인데도 게이트가 안 풀린다.
     for (const src of [card, grid]) {
       expect(src).toMatch(/factsSig: pilotRowSig\(student, subject\.name\)/);
@@ -197,6 +243,32 @@ describe("배선", () => {
     expect(client).toMatch(/pilotOneLine: rowEval\.note/);
     expect(read("./components/report-card.tsx")).toMatch(/needsOneLine: pilot && !hasPilotOneLine\(cardEval\.note\)/);
     expect(read("./components/grid-row.tsx")).toMatch(/needsOneLine: pilot && !hasPilotOneLine\(rowEval\.note\)/);
+  });
+});
+
+describe("자동작성 뒤 수정 허용(원장 2026-10-23)", () => {
+  const now = { studentName: "이승엽", today: "소인수분해", note: "잘했어요", factsSig: "A", writtenSig: "A" };
+  const auto = composePilotMent({ lead: pilotSection("진도", progressLead("이승엽", ["소인수분해"])), body: "본문", note: "잘했어요" });
+  const edited = auto.replace("본문", "고친 본문");
+  it("자동작성 전엔 잠금 · 뒤엔 열림", () => {
+    expect(pilotCanEdit(undefined)).toBe(false);
+    expect(pilotCanEdit("  ")).toBe(false);
+    expect(pilotCanEdit(auto)).toBe(true);
+  });
+  it("고친 글도 보낼 수 있다", () => {
+    expect(pilotNeedsAutoWrite(edited, auto, now)).toBe(false);
+    expect(pilotNeedsAutoWrite(auto, auto, now)).toBe(false);
+  });
+  it("자동작성을 안 했거나 글이 비면 막는다", () => {
+    expect(pilotNeedsAutoWrite(edited, undefined, now)).toBe(true);
+    expect(pilotNeedsAutoWrite("", auto, now)).toBe(true);
+  });
+  it("고친 글이어도 칸 값이 바뀌었거나 한마디가 끝에 없으면 막는다", () => {
+    expect(pilotNeedsAutoWrite(edited, auto, { ...now, factsSig: "B" })).toBe(true);
+    expect(pilotNeedsAutoWrite(edited, auto, { ...now, note: "다른 말" })).toBe(true);
+  });
+  it("고친 글에서도 한마디를 바꾸면 끝만 바뀐다", () => {
+    expect(pilotRecomposeNote(edited, auto, "잘했어요", "최고예요")).toBe(edited.replace(/잘했어요$/, "최고예요"));
   });
 });
 

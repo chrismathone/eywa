@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import {
+  homeworkLevel,
   homeworkSentence,
+  levelTableText,
+  pilotLevelsSection,
+  scoreRemark,
+  understandingLevel,
   MAKEUP_TEST_PROMISE,
   pilotBody,
   pilotFactsSig,
@@ -23,25 +28,88 @@ const facts: PilotFacts = {
 
 describe("항목별 글(원장 2026-10-22 — 섹션을 나눠 어떤 것에 어떤 답인지)", () => {
   it("항목마다 제목이 붙고 값이 없는 항목은 빠진다", () => {
-    expect(pilotBody(facts, { understandingText: "연립방정식을 잘 소화했습니다." })).toBe(
+    expect(
+      pilotBody({ ...facts, understanding: [{ title: "연립방정식", score: 7 }] }, { understandingText: "연립방정식을 잘 소화했습니다." }),
+    ).toBe(
       [
-        "■ 일일 테스트\n5문제 중 4개 맞음",
-        "■ 수업 태도\n매우 좋았습니다.",
-        "■ 과제 수행률\n지난 과제를 90% 해 왔습니다.",
-        "■ 이해도\n연립방정식을 잘 소화했습니다.",
-        "■ 오늘 과제\n5p 풀기",
+        "■ 일일 테스트\n5문제 중 4개 맞음\n대부분 잘 맞혔습니다. 틀린 문제는 다음 시간에 다시 짚고 넘어가겠습니다.",
+        "■ 수업 태도\n오늘 수업 태도가 매우 좋았습니다. 처음부터 끝까지 집중해서 성실하게 참여했습니다.",
+        "■ 과제 수행률\n지난 시간 과제를 90% 해 왔습니다. 거의 다 해 왔고, 남은 부분은 수업 시간에 함께 확인하겠습니다.",
+        "■ 오늘의 수업\n연립방정식을 잘 소화했습니다.",
+        "■ 오늘 과제\n오늘 내준 과제는 아래와 같습니다.\n5p 풀기\n다음 시간에 잘 해 왔는지 함께 확인하겠습니다.",
       ].join("\n\n"),
     );
   });
   it("이해도를 안 매겼으면 이해도 항목이 없다 · 영상 숙제는 오늘 과제에", () => {
     const out = pilotBody({ ...facts, videoHomework: true, videoHomeworkDue: "10/29 (목)까지" }, {});
-    expect(out).not.toContain("■ 이해도");
-    expect(out).toContain("■ 오늘 과제\n5p 풀기\n영상 숙제가 있습니다(10/29 (목)까지 제출).");
+    expect(out).not.toContain("■ 오늘의 수업");
+    expect(out).toContain("■ 오늘 과제\n오늘 내준 과제는 아래와 같습니다.\n5p 풀기\n영상 숙제가 있습니다(10/29 (목)까지 제출).");
   });
   it("지난 과제 수행률을 문장으로 — 고른 값만 옮긴다", () => {
-    expect(homeworkSentence("100%")).toBe("지난 과제를 100% 해 왔습니다.");
-    expect(homeworkSentence("없음")).toBe("지난 시간에 내준 과제가 없었습니다.");
+    expect(homeworkSentence("100%")).toContain("빠짐없이 모두 해 왔습니다");
+    expect(homeworkSentence("완료")).toContain("빠짐없이 모두 해 왔습니다");
+    expect(homeworkSentence("80%")).toMatch(/^지난 시간 과제를 80% 해 왔습니다\. /);
+    expect(homeworkSentence("20%")).toContain("꼭 마무리하겠습니다");
+    expect(homeworkSentence("미제출")).toContain("아직 해 오지 못했습니다");
+    expect(homeworkSentence("0%")).toBe(homeworkSentence("미제출"));
+    expect(homeworkSentence("없음")).toBe("지난 시간에 내준 과제는 없었습니다.");
+    expect(homeworkSentence("일부 미흡")).toBe("일부 미흡");
     expect(homeworkSentence("—")).toBe("");
+  });
+});
+
+describe("수업 평가 표(원장 2026-10-22 — 하·중하·중·중상·상)", () => {
+  it("과제 수행률 경계 · 과제가 없던 날은 줄을 뺀다", () => {
+    expect(homeworkLevel("90%")).toBe("상");
+    expect(homeworkLevel("89%")).toBe("중상");
+    expect(homeworkLevel("50%")).toBe("중");
+    expect(homeworkLevel("미제출")).toBe("하");
+    expect(homeworkLevel("없음")).toBeNull();
+    expect(homeworkLevel("")).toBeNull();
+  });
+  it("이해도 = 매긴 소단원 평균 · AI 지시(8 이상 강점 · 5~7 중간 · 4 이하 낮음)와 같은 쪽", () => {
+    expect(understandingLevel([{ score: 10 }, { score: 8 }])).toBe("상");
+    expect(understandingLevel([{ score: 8 }])).toBe("중상");
+    expect(understandingLevel([{ score: 7 }])).toBe("중");
+    expect(understandingLevel([{ score: 4 }])).toBe("중하");
+    expect(understandingLevel([{ score: 2 }])).toBe("하");
+    expect(understandingLevel([])).toBeNull();
+  });
+  it("표 모양 — 머리 줄 + 고른 칸에 ● · 전각 공백으로 칸을 맞춘다(첫 줄은 '구분'으로 시작해 trim에 안 깎인다)", () => {
+    const t = levelTableText({ attitude: "매우 좋음", homework: "80%", understanding: [{ title: "a", score: 7 }] }).split("\n");
+    expect(t[0]).toBe("구분\u3000\u3000\u3000\u3000\u3000하\u3000\u3000중하\u3000중\u3000\u3000중상\u3000상");
+    expect(t[1]).toBe("수업\u3000태도\u3000\u3000○\u3000\u3000○\u3000\u3000○\u3000\u3000○\u3000\u3000●\u3000상");
+    expect(t[2]).toBe("과제\u3000수행률\u3000○\u3000\u3000○\u3000\u3000○\u3000\u3000●\u3000\u3000○\u3000중상");
+    expect(t[3]).toBe("이해도\u3000\u3000\u3000\u3000○\u3000\u3000○\u3000\u3000●\u3000\u3000○\u3000\u3000○\u3000중");
+    expect(t.every((l) => !l.includes(" "))).toBe(true);
+    expect(pilotLevelsSection({ attitude: "좋음", homework: "" })).toMatch(/^■ 수업 평가\n구분/);
+  });
+  it("값이 하나도 없으면 표째 없다 · 옛 태도 값은 정도를 몰라 뺀다", () => {
+    expect(levelTableText({ attitude: "", homework: "", understanding: [] })).toBe("");
+    expect(levelTableText({ attitude: "최고", homework: "없음" })).toBe("");
+    expect(pilotLevelsSection({ attitude: "", homework: "" })).toBe("");
+    expect(pilotBody(facts, {})).not.toContain("■ 수업 평가");
+  });
+});
+
+describe("점수 뒤 덧붙이는 말", () => {
+  it("다 맞음 / 8할 이상 / 절반 이상 / 그 아래 · 형식이 다르면 없음", () => {
+    expect(scoreRemark("5문제 중 5개 맞음")).toContain("모두 맞혔습니다");
+    expect(scoreRemark("10문제 중 8개 맞음")).toContain("대부분");
+    expect(scoreRemark("10문제 중 5개 맞음")).toContain("절반 이상");
+    expect(scoreRemark("10문제 중 2개 맞음")).toContain("다음 시간에");
+    expect(scoreRemark("시험")).toBe("");
+    expect(scoreRemark("5문제 중 7개 맞음")).toBe("");
+  });
+  it("사람이 안 쓰는 말투를 쓰지 않는다(원장 2026-10-23)", () => {
+    const all = [
+      ...[0, 2, 5, 8, 10].map((k) => scoreRemark(`10문제 중 ${k}개 맞음`)),
+      ...["0%", "40%", "60%", "95%", "100%", "미제출"].map(homeworkSentence),
+    ];
+    for (const t of all) expect(t).not.toMatch(/칭찬해 주고 싶|대견|응원하겠|챙겨 주었/);
+  });
+  it("아이를 탓하는 말을 쓰지 않는다", () => {
+    for (const k of [0, 2, 5, 8]) expect(scoreRemark(`10문제 중 ${k}개 맞음`)).not.toMatch(/못했|부족|느려/);
   });
 });
 
@@ -99,7 +167,8 @@ describe("배선", () => {
     const src = read("./server/actions.ts");
     expect(src).toMatch(/input: aiInput,/);
     expect(src).toMatch(/pilot && !safeInput\.understanding\?\.length/);
-    expect(src).toMatch(/const comment = pilot \? composePilot\(res\.comment, videoReceipt\) : body;/);
+    expect(src).toMatch(/composePilot\(cleanPilotUnderstanding\(res\.comment, safeInput\.understanding \?\? \[\]\), videoReceipt\)/);
+    expect(src).toMatch(/extraDirective: pilotAiDirective\(input\.studentName\)/);
   });
   it("세션이 '시험 없음' 사유를 싣고 로스터가 되읽는다 · '없음'이면 점수를 비운다", () => {
     expect(read("./components/onescreen-client.tsx")).toMatch(/dailyTestSkip: su\.dailyTestSkip/);

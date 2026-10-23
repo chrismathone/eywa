@@ -36,6 +36,27 @@ it("막대 경계는 해당 칸의 시작에 서고, 표식 없는 공용 차트
   expect([...container.querySelectorAll(".recharts-xAxis-tick-labels .recharts-cartesian-axis-tick-value")].map((x) => x.textContent)).toEqual(labels);
 });
 
+// 원장 2026-10-22 *"라벨류는 밑에 넣어줘"* → *"다른 화면의 꺾은선도 전부 일치화"* — 선 끝 이름은 없다.
+it("꺾은선 이름은 선 끝이 아니라 그래프 아래 범례(기본 켜짐) · 칩 카드는 끈다 · 앞 구간은 범례에서 뺀다", () => {
+  const two = [series[0]!, { key: "due", name: "청구액", color: "red", values: [5, 6, 7, 8], dashed: true }];
+  const legendItems = (c: HTMLElement) => [...c.querySelectorAll("ul > li")].map((li) => li.textContent);
+  const { container, rerender } = render(<TrendChartImpl labels={labels} series={two} kind="line" />);
+  expect(screen.queryByText("수납액 40명")).toBeNull();
+  expect(legendItems(container)).toEqual(["수납액", "청구액"]);
+  // 칩이 범례인 카드(legend 꺼짐)는 아래 범례를 따로 세우지 않는다.
+  rerender(<TrendChartImpl labels={labels} series={two} kind="line" legend={false} />);
+  expect(container.querySelector("ul")).toBeNull();
+  // 본선에 이어 붙인 앞 구간(지난 기록)은 범례에 따로 서지 않는다.
+  const old = { key: "old", name: "지난 기록", color: "gray", values: [1, null, null, null], hideInLegend: true as const };
+  rerender(<TrendChartImpl labels={labels} series={[...two, old]} kind="line" />);
+  expect(legendItems(container)).toEqual(["수납액", "청구액"]);
+  // 막대는 켤 때만(종전 그대로).
+  rerender(<TrendChartImpl labels={labels} series={two} kind="bar" />);
+  expect(container.querySelector("ul")).toBeNull();
+  rerender(<TrendChartImpl labels={labels} series={two} kind="bar" legend />);
+  expect(legendItems(container)).toEqual(["수납액", "청구액"]);
+});
+
 it("툴팁은 칸 번호 대신 긴 날짜와 기존 값 형식을 표시한다", () => {
   render(<ValueBox active payload={[{ dataKey: "paid", value: 30, payload: { key: "2", tip: "2026년 3월" } }]} series={series} showOf={() => (n) => `${n}만원`} />);
   expect(screen.getByText("2026년 3월")).toBeInTheDocument();

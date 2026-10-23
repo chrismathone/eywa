@@ -18,7 +18,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** `kept` = 그날 보고서를 다른 선생님이 처음 써서 따로 낸 표시만 지웠다(숙제는 그대로 — 영상 과제 값은 그 선생님 것이다). */
 export type CancelHomeworkResult = { ok: boolean; error?: string; kept?: true };
 
-/** DB 함수(20261016130000)가 거절한 까닭 — 아무것도 안 바꿨다. */
+/** DB 함수(0431a)가 거절한 까닭 — 아무것도 안 바꿨다. */
 const REFUSED: Record<string, string> = {
   submitted: "완료로 기록된 숙제는 취소할 수 없습니다. 기록을 미확인으로 되돌린 뒤 취소해 주세요.",
   has_video: "영상이 붙은 숙제는 취소할 수 없습니다. 영상을 반려하거나 다른 숙제로 옮긴 뒤 취소해 주세요.",

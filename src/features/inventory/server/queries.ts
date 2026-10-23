@@ -1,11 +1,13 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { reportError } from "@/lib/observability/report-error";
 import type { InventoryTab } from "../faces";
-import type { InventoryAsset, InventoryAudit, InventoryLoan, InventorySupply } from "../types";
+import type { InventoryAsset, InventoryAudit, InventoryLoan, InventorySupply, InventoryVendor } from "../types";
 import { isMissingInventoryTable } from "./access";
+import { canViewVendorsNow } from "./vendor-gate";
 
 /**
  * 재고관리 조회 — 읽기는 세션 클라이언트 + RLS(테넌트 전원 select, 0242a). 쓰기는 서버 액션(`*-actions.ts`).
@@ -24,22 +26,28 @@ function classify(error: { code?: string; message?: string } | null): TableStatu
   return isMissingInventoryTable(error) ? "missing-table" : "failed";
 }
 
-/** 탭 라벨 옆 건수 4개 — 행을 안 받는다(head). 실패는 null(0을 적으면 "하나도 없다"는 거짓말). */
+/** 탭 라벨 옆 건수(면마다 하나) — 행을 안 받는다(head). 실패는 null(0을 적으면 "하나도 없다"는 거짓말). */
 export async function getInventoryCounts(): Promise<Record<InventoryTab, number | null>> {
   const user = await getCurrentUser();
-  if (!user) return { assets: null, loans: null, audits: null, supplies: null };
+  if (!user) return { assets: null, loans: null, audits: null, supplies: null, vendors: null };
   const supabase = await createClient();
   const head = (table: string) =>
     supabase.from(table).select("id", { count: "exact", head: true }).eq("tenant_id", user.tenantId);
+  // 업체리스트는 지정한 사람만(vendor-gate) — 표는 RLS 읽기를 닫아 두어 admin으로 센다(tenant_id 필터 필수).
+  const vendorHead = async () =>
+    (await canViewVendorsNow())
+      ? createAdminClient().from("inventory_vendors").select("id", { count: "exact", head: true }).eq("tenant_id", user.tenantId)
+      : null;
   // 서로 독립 — 함께 받는다(B4).
-  const [a, l, d, s] = await Promise.all([
+  const [a, l, d, s, v] = await Promise.all([
     head("inventory_assets"),
     head("inventory_loans"),
     head("inventory_audits"),
     head("inventory_supplies"),
+    vendorHead(),
   ]);
-  const n = (r: { count: number | null; error: { message: string } | null }) => (r.error ? null : (r.count ?? 0));
-  return { assets: n(a), loans: n(l), audits: n(d), supplies: n(s) };
+  const n = (r: { count: number | null; error: { message: string } | null } | null) => (!r || r.error ? null : (r.count ?? 0));
+  return { assets: n(a), loans: n(l), audits: n(d), supplies: n(s), vendors: n(v) };
 }
 
 type Embedded = { asset_code: string; model: string | null } | { asset_code: string; model: string | null }[] | null;
@@ -182,6 +190,37 @@ export async function getSupplies(): Promise<FaceData<InventorySupply>> {
     rows: res.rows.map((r) => ({
       id: r.id, itemCode: r.item_code, name: r.name, makerModel: r.maker_model, qty: r.qty, location: r.location,
       checkedOn: r.checked_on, checkerName: r.checker_name, note: r.note, sortOrder: r.sort_order,
+    })),
+  };
+}
+
+type VendorRow = {
+  id: string; name: string; category: string | null; phone: string | null; contact_name: string | null;
+  contact_phone: string | null; email: string | null; address: string | null; biz_no: string | null; note: string | null;
+};
+
+/** 업체리스트 전건(업체명 가나다). 표가 없으면(0448a 미적용) `missing-table` — 이 면만 배너. */
+export async function getVendors(): Promise<FaceData<InventoryVendor>> {
+  const user = await getCurrentUser();
+  if (!user) return { status: "failed", rows: [] };
+  // 🔴 지정한 사람만(원장 2026-10-23 "이승엽만") — 호출부가 탭을 감춰도 여기서 한 번 더 닫는다([[#77]]).
+  if (!(await canViewVendorsNow())) return { status: "ok", rows: [] };
+  // 표의 RLS 읽기 정책은 닫았다(0449a) — 세션 클라이언트는 0행이라 admin + tenant_id 필터로 읽는다([[#104]]).
+  const supabase = createAdminClient();
+  const res = await loadAll<VendorRow>("inventory.vendors", (from, to) =>
+    supabase
+      .from("inventory_vendors")
+      .select("id, name, category, phone, contact_name, contact_phone, email, address, biz_no, note")
+      .eq("tenant_id", user.tenantId)
+      .order("name", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  return {
+    status: res.status,
+    rows: res.rows.map((r) => ({
+      id: r.id, name: r.name, category: r.category, phone: r.phone, contactName: r.contact_name,
+      contactPhone: r.contact_phone, email: r.email, address: r.address, bizNo: r.biz_no, note: r.note,
     })),
   };
 }

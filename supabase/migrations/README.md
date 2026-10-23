@@ -1,24 +1,42 @@
 # Supabase 마이그레이션 — 적용 방식·순서·현재 상태
 
+## 2026-10-23 미배정 영상 할 일 = 붙일 빈 숙제가 있을 때만 · 끝난 할 일의 알림은 읽음 · 오래 안 읽은 알림은 보관함 (0447a · ✅ 운영 적용 2026-10-23 · CLI do 블록 — 함수 넷 본문 = 파일 · 옛 4인자 함수 없음 · 읽음 100 · 보관 4,996 · 되돌리는 거래 시험: 이어진 할 일 하나 닫음 = 안 읽음 그대로 · 모두 닫음 = 읽음)
+
+`0447a_unassigned_video_fillable_and_notification_cleanup.sql` — 원장 *"숙제가 없는데도 미배정 영상이 남아있으면 그건 알림 오류"*(이영준 10/15 '숙제 없이 올린' 둘째 영상) · *"해결되지 않은 알림은 계속 남아있나?"* → *"고쳐"*. ① `staff_task_sync_unassigned_videos`에 `p_moot`(붙일 빈 숙제가 없는 미배정 영상 — 앱 `fillableCells`)를 더해 그 열린 할 일을 '취소'(`no_open_homework`)로 닫는다(옛 4인자 함수는 지운다 — 같은 이름 두 벌이면 PostgREST가 못 고른다 · 옛 앱의 4인자 호출은 기본값으로 돈다). ② `notify_unassigned_homework_videos` 묶음 건수에서 할 일이 이미 닫힌 영상을 뺀다(이번에 넘어온 영상은 센다). ③ 할 일이 열림 → 닫힘이 되면 그 할 일을 알린 알림을 읽음으로(트리거 — 연결된 다른 할 일이 열려 있으면 그대로). ④ `archive_stale_notifications(일수)` — 안 읽은 채 30일 넘은 알림을 보관함으로(열린 할 일이 붙은 알림은 그대로 · 매일 정리 cron이 부른다). ⑤ 한 번 맞춤(드라이런 10-23: 읽음 100 · 보관 4,995). 본문 1)·2)는 운영 함수 = 0379a·0411a 정의임을 확인하고 복사했다. **앱보다 먼저**(#95). 되돌리기는 파일 머리 주석.
+
+## 2026-10-23 학생 온톨로지 읽기 확장 (0445a · 0446a — 운영 적용 · Supabase CLI)
+
+`0445a_student_ontology_summaries.sql`은 요청자별 Claude 발췌 요약·지점별 일일 호출 횟수 표와 서버 전용 예약 함수를 추가한다. `0446a_student_ontology_current_scope.sql`은 현재 수강·담당 관계의 읽기 전용 집계 함수다. 기존 업무 자료 변경·백필은 없다. 파일별 트랜잭션과 권한 설정을 함께 적용한다. 미적용 시 학생 상세의 원본 연결은 계속 동작하고 AI 영역은 숨기며, 상위 현재 연결 보기는 준비 상태를 표시한다. 승인 대상 해시·검증·되돌리기는 [구현 기록](../../docs/features/student-ontology-expansion.md#적용-대상과-최종-통과-조건)에 있다. 되돌리기는 이전 앱으로 복귀하고 생성 경로를 닫는 방식이며 새 표의 자료는 보존한다.
+
+원장 승인 후 CLI 2.121.0 `db query --db-url … --file …`로 두 파일만 적용했다. CLI의 단일 prepared statement 제약 때문에 파일의 바깥 BEGIN/COMMIT을 단일 DO 거래로 감쌌으며, DDL·SET LOCAL·권한 본문은 그대로다. 운영 함수 세 개의 본문 일치, RLS·ACL 16항목, 현재 집계 331명/93반/17강사/2과목 대사 통과. 한도·토큰·지점 가드는 되돌리는 시험 거래로 확인했다.
+
+## 2026-10-23 활동 로그가 보기 설정을 안 남긴다 (0444a · ✅ 운영 적용 2026-10-23 · CLI — 운영 본문 = 파일 · 되돌리는 거래 시험: 보기 설정만 바꿈 0줄 · 메모 바꿈 1줄)
+
+`0444a_activity_log_skip_ui_prefs.sql`은 `log_activity()`를 0306a 정의 그대로 다시 만들고 noise 배열 끝에 `'ui_prefs'`만 더한다(운영 함수 = 0306a 정의임을 주석·공백 빼고 비교해 확인). 보기 설정(정렬·필터·글씨·메뉴 방문 수)만 바뀐 `users` 수정은 줄을 안 남기고, 생성·삭제 사본에서도 그 칸을 뺀다. 실측(30일): 활동 로그 61,460행 · 45.8MB 중 4,561행 · 6.0MB(13%)가 이 줄이었다. 이미 쌓인 줄은 지우지 않는다(앱이 '화면 보기 설정'으로 읽는다). 앱 배포와 순서 무관 — 같은 날 앱이 학습 추세 미발송에 감사로그(`onescreen_trend_optout`)를 따로 남긴다. 되돌리기 = 0306a의 '1) 활동 로그' 정의를 다시 적용.
+
+## 2026-10-22 시간표 칸 메모 (0395a · ✅ 운영 적용 2026-10-22 — 처음엔 0394a로 적었다가 퇴원보고서 0394a와 겹쳐 개명)
+
+`0395a_timetable_cell_memos.sql`은 `timetable_cell_memos`(지점 × 과목 × 날짜 × 강사 열쇠 × 칸 시작 분 한 줄 · 본문 · 상자 크기 · version · 만든/고친 사람·시각, 일반 유니크 `timetable_cell_memos_cell_key`)를 만든다. 정책 0개 = 의도(서버 키만 — 화면 문은 앱 `memoSheetAccess`). 기존 표는 건드리지 않는다. 앱 배포와 순서 무관 — 표가 없으면 영어 강사뷰에 메모 표식·우클릭 메뉴가 안 뜨고 시간표는 그대로다(GET `/api/timetable/cell-memos`가 `unavailable`). 적용 뒤 확인: 표·유니크·RLS 켜짐·정책 0개 · 공개 키로 읽으면 42501. 되돌리기 = `scripts/_oneoff/revert-0395a-timetable-cell-memos.sql`(표째 지운다 — 메모가 사라진다).
+
 ## 2026-10-22 수업보고서 발송 이력 (0392a → 드라이런 → 0392b · ✅ 운영 적용 2026-10-22 · CLI)
 
 `0392a_lesson_report_send_events.sql`은 발송 이력 표 `lesson_report_send_events`(추가만 · 정책 0개 = 서버 전용 · 앱 역할 권한 0 · service_role 읽기만)와 `lesson_reports` 트리거 셋(발송 상태·발송 시각이 바뀔 때와 대기 중 재요청 · 처음부터 발송 상태로 들어온 줄 · 발송 흔적이 있는 보고서 삭제)을 `create or replace trigger`로 단다(읽기를 막지 않는 잠금 · lock_timeout 5초). 이력 줄의 수정·삭제는 행 보호 트리거가 거절한다(지점째 지울 때의 외래키 연쇄만 통과). 기록이 실패해도 발송 상태 저장은 막지 않는다(사본 없이 한 줄 → 그것도 안 되면 DB 경고). 앱과 무관 — 앱은 이 표를 읽지도 쓰지도 않는다. 다시 돌려도 같다. 적용 뒤 `scripts/_oneoff/lesson-report-send-events-backfill-dry-run.sql`(읽기 전용) → `0392b_lesson_report_send_events_backfill.sql`(보고서 행에 남은 발송 · 2026-09-10부터의 발송 요청 감사로그 · 지움 기록만 남은 옛 발송, 멱등 — 빠진 기록을 메우려고 다시 돌려도 된다). 되돌리기 = `scripts/_oneoff/revert-0392a-lesson-report-send-events.sql`(기록만 멈춘다 · 표는 남긴다). 시험 = `supabase/tests/lesson_report_send_events.sql`. 적용 결과: 트리거 4 · 정책 0 · 공개 키 42501 · 백필 발송 17,701(사본 전부) · 요청 2,193 · 다시 돌린 드라이런 0줄.
 
 ## 2026-10-22 콜&상담 후속 조치 할 일 (✅ 운영 적용 2026-10-22 · CLI)
 
-`20261022190000_enrollment_followup_tasks.sql`은 할 일 종류 `enrollment_followup`을 더한다 — 신규 콜&상담에서 '다음 상담'으로 잡은 날이 되면 상담자(재직 중이 아니면 원장 전원)에게 열고, 등록·미등록으로 정하면 처리됨 · 날짜를 옮기거나 지우면 취소 · 상담 삭제는 취소. 열기·닫기 = `enrollment_consultations` 트리거(상태·후속 조치일·상담자) + 30분 맞춤 `staff_tasks_sync`에 한 종류(0380a 본문 + 이 종류). 도입일(2026-10-22) 이후 날짜만. 앱보다 먼저든 나중이든 된다(앱은 새 칸을 읽지 않는다 — 적용 전엔 알림만 가고 할 일 연결이 빈다). 적용 뒤 확인: `select public.staff_tasks_sync('<지점>', array['enrollment_followup'])`가 오류 없이 `{opened, closed}`를 돌려준다 · 트리거 존재.
+`0441a_enrollment_followup_tasks.sql`은 할 일 종류 `enrollment_followup`을 더한다 — 신규 콜&상담에서 '다음 상담'으로 잡은 날이 되면 상담자(재직 중이 아니면 원장 전원)에게 열고, 등록·미등록으로 정하면 처리됨 · 날짜를 옮기거나 지우면 취소 · 상담 삭제는 취소. 열기·닫기 = `enrollment_consultations` 트리거(상태·후속 조치일·상담자) + 30분 맞춤 `staff_tasks_sync`에 한 종류(0380a 본문 + 이 종류). 도입일(2026-10-22) 이후 날짜만. 앱보다 먼저든 나중이든 된다(앱은 새 칸을 읽지 않는다 — 적용 전엔 알림만 가고 할 일 연결이 빈다). 적용 뒤 확인: `select public.staff_tasks_sync('<지점>', array['enrollment_followup'])`가 오류 없이 `{opened, closed}`를 돌려준다 · 트리거 존재.
 
 ## 2026-10-22 보강 예약 결석난 반 (✅ 운영 적용 2026-10-22 · CLI)
 
-`20261022170000_makeup_reservation_absence_class.sql`은 `makeup_reservations.absence_class_id`(→ classes, on delete cascade, 빈 값 허용)를 더한다 — 예약이 기록할 반을 고르면 `class_id` = 기록할 반, 이 칸 = 결석난 반(다를 때만). 빈 값 = 같은 반이라 기존 10행·지금 앱은 그대로다(**앱보다 먼저** — 예약 단건·이행 조회는 칸이 없어도 칸 없이 다시 읽는다 · 시간표 마스터 보호 연결 SQL은 이 칸을 읽는다). 적용 뒤 확인: 칸·외래키 존재 · 기존 행 값 없음.
+`0440a_makeup_reservation_absence_class.sql`은 `makeup_reservations.absence_class_id`(→ classes, on delete cascade, 빈 값 허용)를 더한다 — 예약이 기록할 반을 고르면 `class_id` = 기록할 반, 이 칸 = 결석난 반(다를 때만). 빈 값 = 같은 반이라 기존 10행·지금 앱은 그대로다(**앱보다 먼저** — 예약 단건·이행 조회는 칸이 없어도 칸 없이 다시 읽는다 · 시간표 마스터 보호 연결 SQL은 이 칸을 읽는다). 적용 뒤 확인: 칸·외래키 존재 · 기존 행 값 없음.
 
 ## 2026-10-22 보강 예약 보고서 발송 방식 (✅ 운영 적용 2026-10-22 · CLI)
 
-`20261022150000_makeup_reservation_report_mode.sql`은 `makeup_reservations.report_mode`(merge·separate·null, 제약 `makeup_reservations_report_mode_chk`)를 더한다 — 보강 예약 창이 '+ 보강 학생 추가'와 같은 합침/분리를 남긴다. 빈 값 허용 칸만 더해 기존 행·지금 앱은 그대로다(**앱보다 먼저** — 원스크린 조회는 칸이 없어도 칸 없이 다시 읽는다). 적용 뒤 확인: 칸·제약 존재 · 잘못된 값 23514(되돌리는 거래) · 기존 10행 값 없음.
+`0438a_makeup_reservation_report_mode.sql`은 `makeup_reservations.report_mode`(merge·separate·null, 제약 `makeup_reservations_report_mode_chk`)를 더한다 — 보강 예약 창이 '+ 보강 학생 추가'와 같은 합침/분리를 남긴다. 빈 값 허용 칸만 더해 기존 행·지금 앱은 그대로다(**앱보다 먼저** — 원스크린 조회는 칸이 없어도 칸 없이 다시 읽는다). 적용 뒤 확인: 칸·제약 존재 · 잘못된 값 23514(되돌리는 거래) · 기존 10행 값 없음.
 
 ## 2026-10-22 시간표 연습본 지점 공유 (✅ 운영 적용 2026-10-22)
 
-`20261022153000_timetable_lab_shared_drafts.sql`은 시간표 편집기 이용 권한이 있는 같은 지점 계정에 기존·신규 저장본 읽기를 허용한다. 저장자는 계속 로그인 계정으로 고정되며, 다른 지점 접근·작성자 위조·기존 저장본 수정과 삭제는 허용하지 않는다. 저장자 이름은 기존 `created_by`의 사용자 정보에서 조회한다. `node --env-file=.env.local scripts/timetable-lab-db.mjs --test`로 공유 읽기·작성자 조회·지점 격리 등 34개 검증을 통과했다(시험 자료는 전부 롤백). `--apply`는 기존 표를 보존하고 공유 정책·조회 인덱스만 적용한다.
+`0439a_timetable_lab_shared_drafts.sql`은 시간표 편집기 이용 권한이 있는 같은 지점 계정에 기존·신규 저장본 읽기를 허용한다. 저장자는 계속 로그인 계정으로 고정되며, 다른 지점 접근·작성자 위조·기존 저장본 수정과 삭제는 허용하지 않는다. 저장자 이름은 기존 `created_by`의 사용자 정보에서 조회한다. `node --env-file=.env.local scripts/timetable-lab-db.mjs --test`로 공유 읽기·작성자 조회·지점 격리 등 34개 검증을 통과했다(시험 자료는 전부 롤백). `--apply`는 기존 표를 보존하고 공유 정책·조회 인덱스만 적용한다.
 
 ## 2026-10-20 업무 처리 확인 4~5단계 (0378a · 0379a · 0380a — 순서대로 · ✅ 운영 적용 2026-10-20 · CLI)
 
@@ -50,17 +68,17 @@
 
 ## 2026-10-15 퇴원보고서 처리 = 수강 줄에도 상세사유 메모 (0369a)
 
-`0369a_withdrawal_report_end_memo.sql`은 퇴원보고서 전이 함수 두 개(`transition_withdrawal_report`·`_v1`)가 수강 줄을 닫는 한 줄에 `withdrawal_memo`(보고서 상세사유 글)를 더한다(본문은 그대로 · 그 줄 글자만 · 바꿀 줄이 정확히 하나가 아니면 중단 · 이미 바뀌었으면 건너뜀 · 소유자·권한·security invoker 그대로). 함께 수강 보호 트리거(`student_status_private.guard_enrollment`, 20261015160100)의 '날짜 수정' 갈래에서 세부·메모 거절에 `and not student_status_private.allowed()`를 붙인다 — 종료일이 잡힌 수강을 같은 사유로 다시 종료하며 메모를 바꾸면 원장도 막혔다(원생 상태 변경 권한이 있으면 통과 · 날짜만 고칠 수 있는 사람은 그대로 막힘). 앱 배포와 순서 무관. 빈 DB 순서 의존은 아래 0367a와 같다(타임스탬프 파일들을 다 깐 뒤 다시 돌린다).
+`0369a_withdrawal_report_end_memo.sql`은 퇴원보고서 전이 함수 두 개(`transition_withdrawal_report`·`_v1`)가 수강 줄을 닫는 한 줄에 `withdrawal_memo`(보고서 상세사유 글)를 더한다(본문은 그대로 · 그 줄 글자만 · 바꿀 줄이 정확히 하나가 아니면 중단 · 이미 바뀌었으면 건너뜀 · 소유자·권한·security invoker 그대로). 함께 수강 보호 트리거(`student_status_private.guard_enrollment`, 0427a)의 '날짜 수정' 갈래에서 세부·메모 거절에 `and not student_status_private.allowed()`를 붙인다 — 종료일이 잡힌 수강을 같은 사유로 다시 종료하며 메모를 바꾸면 원장도 막혔다(원생 상태 변경 권한이 있으면 통과 · 날짜만 고칠 수 있는 사람은 그대로 막힘). 앱 배포와 순서 무관. 빈 DB 순서 의존은 아래 0367a와 같다(타임스탬프 파일들을 다 깐 뒤 다시 돌린다).
 
 ## 2026-10-15 퇴원·수강 종료 사유 2단계 (0367a)
 
 `0367a_withdrawal_reason_details.sql`은 `enrollments.withdrawal_detail`·`withdrawal_memo` 두 칸(nullable · 기본값 없음)을 더하고, 퇴원보고서 전이 함수 두 개(`transition_withdrawal_report`·`_v1`)의 사유 목록에 새 대분류 다섯을 더한다(본문은 그대로 · 목록 글자만 · 이미 바뀌었으면 건너뛰고, 바꿀 목록이 없으면 중단). **앱보다 먼저** 적용한다 — 부분 종료 저장과 수강 종료 되돌리기가 새 칸을 쓴다. 적용 뒤 앱 배포 → `node --env-file=.env.local scripts/_oneoff/withdrawal-reason-details-backfill.mjs`(미리 보기) → `--apply`.
 
-⚠️ 빈 DB에 파일 이름 순서로 처음부터 깔면(`pnpm db:alphas`) 이 파일이 퇴원보고서 함수를 만드는 `20261013203000`보다 먼저 돌아 함수를 못 찾고 통째로 멈춘다(칸도 안 생긴다 — `0366a`도 같은 순서 의존). 빈 DB에서는 타임스탬프 파일들을 다 깐 뒤 이 파일을 다시 돌린다. 이미 운영 중인 DB에 손으로 적용하는 데는 상관없다.
+⚠️ 빈 DB에 파일 이름 순서로 처음부터 깔면(`pnpm db:alphas`) 이 파일이 퇴원보고서 함수를 만드는 `0415a`보다 먼저 돌아 함수를 못 찾고 통째로 멈춘다(칸도 안 생긴다 — `0366a`도 같은 순서 의존). 빈 DB에서는 타임스탬프 파일들을 다 깐 뒤 이 파일을 다시 돌린다. 이미 운영 중인 DB에 손으로 적용하는 데는 상관없다.
 
 ## 2026-10-13 실험실 퇴원보고서
 
-`20261013203000_withdrawal_reports.sql`은 보고서·처리 이력·서비스 전용 상태 전이 RPC·실험실 메뉴 배치를 추가한다. 기존 원생·수강 표를 변경하지 않는다. `20261013210000_withdrawal_report_reasons.sql`은 병행 추가된 질병·권고퇴원 사유를 반영한다. `20261013215000_withdrawal_report_request_recovery.sql`은 요청자와 지정 원장이 퇴직해 고착된 요청을 현재 원장이 취소할 수 있게 한다. 지정자만 순서대로 승인하는 규칙은 유지한다.
+`0415a_withdrawal_reports.sql`은 보고서·처리 이력·서비스 전용 상태 전이 RPC·실험실 메뉴 배치를 추가한다. 기존 원생·수강 표를 변경하지 않는다. `0416a_withdrawal_report_reasons.sql`은 병행 추가된 질병·권고퇴원 사유를 반영한다. `0417a_withdrawal_report_request_recovery.sql`은 요청자와 지정 원장이 퇴직해 고착된 요청을 현재 원장이 취소할 수 있게 한다. 지정자만 순서대로 승인하는 규칙은 유지한다.
 
 대상 프로젝트를 확인하는 `node --env-file=.env.local scripts/withdrawal-reports-db.mjs --apply` → `--upgrade` → `--test`로 이 기능만 적용·검증한다. 테스트의 가상 지점·학생·수강·알림은 전부 롤백된다. 앱은 적용 전에도 기존 퇴원관리·예약 작업을 유지한다. 일반 브라우저 역할에는 새 표의 읽기·쓰기와 RPC 실행을 부여하지 않는다. 보고서 승인 뒤 실제 퇴원일이 된 예약은 기존 `apply-due-withdrawals` 작업이 처리한다.
 
@@ -316,10 +334,13 @@ pnpm db:alphas
 | `0321a_shuttle_ride_exception_history` | **셔틀 '그날만 변경' 이력 장부** — `shuttle_ride_exceptions`(0229a)에 `actor_kind`(staff·parent·system)·`actor_name`·`parent_account_id` + 장부 `shuttle_ride_exception_history`(생성·변경·취소마다 트리거가 한 줄, 전/후 자리 글자 스냅샷). 🔴 **추가만** — 수정·삭제는 service_role도 트리거가 거절. 자리 글자 `shuttle_ride_exception_label()`, 취소는 `cancel_shuttle_ride_exception()`로만(행위자를 장부에 넘긴다). 장부엔 FK 없음(cascade 중 트리거가 쓰므로). 0320a 필요. |
 | `0322a_shuttle_regular_ride_change` | **셔틀 매주 고정(요일) 시간 변경** — `change_shuttle_regular_ride()`가 한 트랜잭션으로 그 요일 하나만 옮기고(빼기 → 새 칸에 더하기) 이력 `shuttle_rider_history`(요일·전/후·사유·행위자, 추가만)를 남긴다. 반환 `same`·`changed`. 날짜 하루짜리 변경이 걸린 날은 그 변경이 여전히 이긴다. 0321a 필요. |
 | `0323a_shuttle_history_acks` | **변경 내역 '확인' 표식** — 관리자 '학부모 등하원' 화면에서 [확인]한 장부 줄(0321a·0322a)을 **화면에서만** 내린다(장부는 추가만이라 표식을 따로 쌓는다). 유일 `(tenant_id, history_kind, history_id)` — upsert 축이라 부분 유니크 아님([[#113]]). 학원 공용 · 누가·언제 확인했는지 남음. 없어도 앱은 산다(아무것도 안 숨김). |
-| `0390a_homework_video_reviews` | **영상 설명 AI 참고 메모** — 영상마다 분석 줄 하나(stage: extract → transcribe → judge(밤 배치) → verify → done) · 앱 사용자 정책 0개(서버 전용 · 연동 앱 워커 역할만 자기 지점 줄) · 비공개 버킷 `homework-video-review`(mp3·jpg 50MB). ⚠️ 새 DB는 이름순이라 `20261008101000_sync_agent_data_boundary` 앞에 돌아 워커 권한을 건너뛴다 — 그 뒤 이 파일을 한 번 더 실행할 것(멱등). |
+| `0390a_homework_video_reviews` | **영상 설명 AI 참고 메모** — 영상마다 분석 줄 하나(stage: extract → transcribe → judge(밤 배치) → verify → done) · 앱 사용자 정책 0개(서버 전용 · 연동 앱 워커 역할만 자기 지점 줄) · 비공개 버킷 `homework-video-review`(mp3·jpg 50MB). ⚠️ 새 DB는 이름순이라 `0401a_sync_agent_data_boundary` 앞에 돌아 워커 권한을 건너뛴다 — 그 뒤 이 파일을 한 번 더 실행할 것(멱등). |
 | `0391a_ai_usage_cache_tokens` | **AI 사용량에 프롬프트 캐시 토큰 두 칸**(`cache_read_tokens`·`cache_write_tokens`) — Anthropic의 `input_tokens`는 캐시에서 읽은 토큰을 뺀 값이라 캐시를 켠 기능(영상 설명 AI 참고 메모 밤 배치)의 비용이 이 칸 없이는 실제보다 적게 보인다. 앱은 값이 0보다 클 때만 쓴다(열 없는 DB에서도 다른 기록은 그대로). |
 | `0392a_lesson_report_send_events` | **수업보고서 발송 이력** — 발송 상태가 바뀔 때마다 트리거가 `lesson_report_send_events`에 한 줄(요청·집음·재시도·발송·실패·보류·회수·표시 지움·삭제 + 학부모 카드 칸 사본). 추가만 · 서버 전용 · 보고서가 지워져도 남는다(외래키 없음). 앱 배포와 독립. |
 | `0392b_lesson_report_send_events_backfill` | **발송 이력 백필**(0392a 다음, 드라이런 먼저) — 보고서 행의 마지막 발송 시각 · 발송 요청 감사로그 · 지움 기록만 남은 옛 발송. 멱등. |
+| `0445a_student_ontology_summaries` | **운영 적용 2026-10-23 · CLI** — 요청자별 발췌 요약·지점별 일일 사용량. RLS·서버 전용 접근, 지점 일치 검증과 원자 호출 예약 확인. |
+| `0447a_unassigned_video_fillable_and_notification_cleanup` | **✅ 운영 적용 2026-10-23 · CLI** — **미배정 영상 할 일 = 붙일 빈 숙제가 있을 때만**(`p_moot` → 취소 `no_open_homework`) · 묶음 알림 건수에서 닫힌 할 일 영상 빼기 · 할 일이 끝난 알림은 읽음(트리거) · 30일 넘게 안 읽은 알림은 보관함(`archive_stale_notifications`) · 한 번 맞춤. 앱보다 먼저. |
+| `0446a_student_ontology_current_scope` | **운영 적용 2026-10-23 · CLI** — 현재 수강·담당 연결 집계와 20명 서버 페이지. 원본 학생 범위·지점 조건·서버 전용 권한 확인, 331명 원본 대사. |
 
 새 alpha를 추가할 때: 다음 번호의 `000Na_*` 또는 `000Nb_*`로 만들고, 멱등 패턴을 지키고, **이 표에 추가**한다.
 상세 흐름은 [`../../CLAUDE.md`](../../CLAUDE.md) "마이그레이션 & 시드 흐름" 참고.

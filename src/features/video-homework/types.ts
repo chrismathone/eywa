@@ -35,8 +35,13 @@ export type VideoHomeworkLedgerRow = VideoHomeworkRosterRow & {
   tracked: boolean;
   editable: boolean;
   canAssignVideos?: boolean;
-  /** 숙제 당일~14일 뒤의 업로드 완료 영상 중 수동·자동 배정되지 않은 영상이 남아 있는가. */
+  /** 숙제 당일~14일 뒤의 업로드 완료 영상 중 수동·자동 배정되지 않은 영상이 남아 있는가('영상 배정' 버튼). */
   hasAssignableVideos?: boolean;
+  /**
+   * '영상 배정 필요함'(상태 필터) — 붙일 빈 숙제가 있는 미배정 영상이 이 줄의 칸에 갈 수 있다. 미배정 알림·할 일과 같은 판정(`fillablePairs` —
+   * 원장 2026-10-23 *"숙제가 없는데도 미배정 영상이 남아있으면 그건 알림 오류"* → 필터도 같게). 버튼보다 좁다. 없으면(옛 응답) 버튼 판정으로 거른다.
+   */
+  needsVideoAssignment?: boolean;
   /** AI 참고 메모 대상 줄(지점 스위치 켜짐 · 수학 반, 서버가 정한다) — 재생 창이 메모를 불러오는 동안에도 메모 칸을 세운다. */
   aiReview?: true;
   /** 보고서 없이 따로 낸 숙제의 날짜(원장 2026-10-13) — 그 칸에 '따로 낸 숙제' 표시와 취소 메뉴를 단다. */
@@ -53,6 +58,11 @@ export type VideoHomeworkLedgerRow = VideoHomeworkRosterRow & {
   kept?: readonly string[];
   /** 숙제일 → 보고서에 고른 마감('다음 수업', due.ts). 없는 날은 숙제일 + 7일이다. */
   dues?: Readonly<Record<string, string>>;
+  /**
+   * **숙제 0건 반의 줄**(원장 2026-10-22 ① — 붙지 않은 영상 때문에 선 줄)만 — 그 학생의 숙제없음 수업일(조회 기간 안 · issue-window
+   * `blankLessonDates`). 이 줄은 회차가 없고, 그 반엔 숙제가 나간 날이 없으니 이 날짜들이 '숙제없음' 칸으로 선다(idle-rows.ts).
+   */
+  lessonDates?: readonly string[];
 };
 
 /** 숙제 영상 한 건 — 반·시각·id와 재생 가능한 경우의 미리보기만 내려온다. 원본 다운로드 주소는 내리지 않는다. */
@@ -86,6 +96,8 @@ export type VideoArrival = {
   reviewPoints?: number;
   /** 학생이 올리며 적은 메모(`route.note`, 올리기 사이트) — `/v`가 "낸 영상"을 보일 때 쓴다(원장 2026-10-22). 싣는 로더만 있다. */
   note?: string | null;
+  /** 영상에 적힌 과목(ClassNote 보드에서 온 값) — 반을 모를 때 다른 과목 판정(`isOtherSubjectVideo`)에 쓴다. 싣는 로더만 있다. */
+  subject?: string | null;
 };
 
 export function isVideoHomeworkDate(value: string): boolean {

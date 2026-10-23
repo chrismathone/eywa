@@ -41,7 +41,7 @@ export const TASK_KINDS: Record<string, StaffTaskKindInfo> = {
   },
   video_unassigned: {
     label: "미배정 영상",
-    doneRule: "영상 제출 현황에서 이 영상을 숙제에 배정하거나 제외하면 처리됩니다. 영상이 지워지면 취소, 올린 지 14일이 지나면 기한 지남입니다. 다음 날까지 배정하지 않으면 늦음입니다.",
+    doneRule: "영상 제출 현황에서 이 영상을 숙제에 배정하거나 제외하면 처리됩니다. 영상이 아직 안 붙은 숙제가 있을 때만 생기고, 그 숙제가 다른 영상으로 채워지는 등 붙일 숙제가 없어지면 취소됩니다. 영상이 지워져도 취소, 올린 지 14일이 지나면 기한 지남입니다. 다음 날까지 배정하지 않으면 늦음입니다.",
   },
   unsent_report: {
     label: "미발송 수업 보고서",
@@ -108,6 +108,7 @@ const CLOSE_REASON: Record<string, string> = {
   video_removed: "영상이 지워짐",
   video_assigned: "숙제에 배정하거나 제외함",
   unassigned_window: "올린 지 14일이 지남",
+  no_open_homework: "붙일 숙제가 없음",
   send_requested: "발송을 요청함",
   not_sendable: "보낼 수 없는 보고서가 됨",
   approval_decided: "결재함",

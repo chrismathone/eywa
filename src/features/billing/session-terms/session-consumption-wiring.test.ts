@@ -33,7 +33,7 @@ const DROPS_RPC = /drop\s+function[^;]*\bsession_term_attendance\b/i;
 
 const sqlFiles = readdirSync(MIGRATIONS_DIR)
   .filter((f) => f.endsWith(".sql"))
-  .sort(); // 접두 4자리 제로패딩 고정(실측 314개 전부)이라 파일명 정렬 = 적용 순서
+  .sort(); // 접두 4자리 제로패딩(`NNNNa_`) 파일끼리는 파일명 정렬 = 적용 순서(규약 밖 타임스탬프 이름은 아래 offConvention)
 const readMigration = (f: string) => readFileSync(join(MIGRATIONS_DIR, f), "utf8");
 
 /**
@@ -66,7 +66,12 @@ const defCount = (body.match(new RegExp(DEFINES_RPC.source, "gi")) ?? []).length
 
 /**
  * "파일명 정렬 = 적용 순서"는 **명명 규약이 지켜질 때만** 참이다(4자리 제로패딩 + 선택 접미).
- * 규약 밖 이름(`00_…`처럼 앞서 정렬되는 것)이 생기면 이 가드의 전제가 조용히 깨지므로 그때 실패시킨다.
+ * 규약 밖 이름(`00_…`처럼 앞서 정렬되는 것, CLI 타임스탬프 `20261007171329_…`처럼 뒤로 몰리는 것)은
+ * 정렬 위치가 적용 순서를 보장하지 못한다.
+ *
+ * 2026-10-22: 10-07~10-22 여러 세션이 Supabase CLI로 만든 타임스탬프 이름 48개를 0396a~0443a로 **일괄 개명**했다
+ *    (원장 *"얼마 안 걸리면 지금해"* — 이름 순서 그대로 번호를 매겨 정렬 순서는 개명 전과 같다, [[#139]]).
+ *    그 사이 잠깐 좁혀 두었던 검사를 다시 "규약 밖 파일이 하나도 없다"로 되돌린다 — 새 파일도 `NNNNa_`로 만들 것.
  */
 const offConvention = sqlFiles.filter((f) => !/^\d{4}[a-z]?_/.test(f));
 
@@ -80,6 +85,8 @@ describe("회차 소비 — 배선", () => {
     expect(defCount).toBe(1);
     // 명명 규약이 깨지면 "정렬 = 적용 순서" 전제가 무너진다(규약 밖 파일은 정렬 위치를 보장 못 한다).
     expect(offConvention).toEqual([]);
+    // 마지막 정의 파일 자체도 규약 안이어야 한다(위 검사가 이미 함의하지만 판정 대상을 직접 못박는다).
+    expect(latestFile).toMatch(/^\d{4}[a-z]?_/);
   });
 
   it("새 확정은 시수 합, 기존 확정은 저장한 일수 기준으로 검증한다", () => {

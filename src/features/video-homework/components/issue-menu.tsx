@@ -21,14 +21,20 @@ const WIDTH = 256;
  * 🔴 보고서는 다시 나가지 않는다 — 학생에게 직접 알려야 한다는 것을 누르기 전에 읽게 한다.
  * 화면 전체를 덮는 바닥이 깔려 있어, 처리하는 동안 표의 다른 칸은 눌리지 않는다.
  */
-export function IssueMenu({ target, onClose }: { target: IssueMenuTarget; onClose: () => void }) {
+export function IssueMenu({ target, onClose, onAssign }: { target: IssueMenuTarget; onClose: () => void;
+  /**
+   * 숙제없음 칸에 **이미 올라온 영상을 붙인다**(원장 2026-10-22 '숙제없음 칸에 바로 배정') — 그 날짜를 골라 둔 배정 창을 연다. 붙지 않은 영상이 있고
+   * 배정할 수 있는 줄에서만 준다. 출제 기한(다음 수업 전)과 상관없다 — 새 숙제를 내는 것이 아니라 올라온 영상을 그 수업의 숙제로 기록한다.
+   */
+  onAssign?: () => void }) {
   const refresh = useLedgerRefresh();
   const [busy, setBusy] = useState(false);
   const action = useRef<HTMLButtonElement>(null);
   useEffect(() => { action.current?.focus(); }, []);
   const issue = target.kind === "issue";
+  const assign = issue && onAssign ? onAssign : undefined;
   const left = Math.max(8, Math.min(target.x, (typeof window === "undefined" ? 9999 : window.innerWidth) - WIDTH - 8));
-  const top = Math.max(8, Math.min(target.y, (typeof window === "undefined" ? 9999 : window.innerHeight) - 170));
+  const top = Math.max(8, Math.min(target.y, (typeof window === "undefined" ? 9999 : window.innerHeight) - (assign ? 260 : 170)));
   const title = `${target.row.studentName} · ${shortDate(target.date)} 수업`;
   const close = () => { if (!busy) onClose(); };
   async function run() {
@@ -52,7 +58,13 @@ export function IssueMenu({ target, onClose }: { target: IssueMenuTarget; onClos
     <div role="menu" aria-label={title} className="bg-card border-line fixed z-50 flex flex-col gap-0.5 rounded-lg border p-1 shadow-lg"
       style={{ left, top, width: WIDTH }} onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); close(); } }}>
       <p className="truncate px-2 py-1 text-xs font-semibold">{title}</p>
-      <button ref={action} type="button" role="menuitem" disabled={busy} onClick={() => void run()}
+      {/* 붙지 않은 영상이 있는 줄이면 배정이 먼저다 — 숙제 0건 반의 줄은 그 영상 때문에 선 줄이다. */}
+      {assign ? <>
+        <button ref={action} type="button" role="menuitem" disabled={busy} onClick={() => { assign(); onClose(); }}
+          className="hover:bg-bg-soft rounded-md px-2 py-1.5 text-left text-sm font-semibold disabled:opacity-50">이 수업에 영상 배정</button>
+        <p className="text-text-dim px-2 pb-1 text-xs leading-snug break-keep">학생이 이미 올린 영상을 이 수업의 숙제로 붙이고 완료로 셉니다. 학생에게 새 숙제가 나가지 않습니다.</p>
+      </> : null}
+      <button ref={assign ? undefined : action} type="button" role="menuitem" disabled={busy} onClick={() => void run()}
         className="hover:bg-bg-soft rounded-md px-2 py-1.5 text-left text-sm font-semibold disabled:opacity-50">
         {busy ? "처리 중…" : issue ? "숙제 출제" : "출제 취소"}
       </button>

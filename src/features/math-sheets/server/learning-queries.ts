@@ -45,12 +45,12 @@ export async function getMathLearningData(
   const [legacy, standard] = await Promise.all([admin
     .from("math_learning_goals")
     .select(
-      "student_id, study_grade, start_block, end_block, start_date, end_date, textbook",
+      "id, student_id, study_grade, start_block, end_block, start_date, end_date, textbook",
     )
     .eq("tenant_id", tenantId)
     .eq("class_id", classId), admin
     .from("math_learning_track_goals")
-    .select("student_id, study_grade, end_study_grade, start_block, end_block, start_date, end_date, textbook, track, block_count, milestones, updated_at, plan_revision")
+    .select("id, student_id, study_grade, end_study_grade, start_block, end_block, start_date, end_date, textbook, track, block_count, milestones, updated_at, plan_revision")
     .eq("tenant_id", tenantId)
     .eq("class_id", classId)
     .eq("track", track)
@@ -65,9 +65,10 @@ export async function getMathLearningData(
         : "failed",
     };
   const visibleIds = new Set(monthData.students.filter(s => !options.studentId || s.studentId === options.studentId).map((s) => s.studentId));
-  for (const row of [...(legacy.data ?? []).map((row) => ({ ...row, track: "regular", block_count: null as number | null, end_study_grade: null, milestones: [], updated_at: undefined, plan_revision: null })), ...(standard.data ?? [])]) {
+  for (const row of [...(legacy.data ?? []).map((row) => ({ ...row, sourceTable: "math_learning_goals" as const, track: "regular", block_count: null as number | null, end_study_grade: null, milestones: [], updated_at: undefined, plan_revision: null })), ...(standard.data ?? []).map((row) => ({ ...row, sourceTable: "math_learning_track_goals" as const }))]) {
     if (!visibleIds.has(String(row.student_id)) || row.track !== track) continue;
     const goal: LearningGoal = {
+      ...(row.id ? { source: { table: row.sourceTable, id: row.id } } : {}),
       studentId: String(row.student_id),
       studyGrade: row.study_grade,
       endStudyGrade: row.end_study_grade ?? undefined,
@@ -86,6 +87,7 @@ export async function getMathLearningData(
   }
   if (!visibleIds.size) return result;
   type Row = {
+    id: string;
     student_id: string;
     report_date: string;
     progress: string | null;
@@ -100,7 +102,7 @@ export async function getMathLearningData(
       (chunk, from, to) =>
         admin
           .from("lesson_reports")
-          .select("student_id, report_date, progress, textbook, homework_today, classnote_sent_at")
+          .select("id, student_id, report_date, progress, textbook, homework_today, classnote_sent_at")
           .eq("tenant_id", tenantId)
           .eq("class_id", classId)
           .in("student_id", chunk)
@@ -129,14 +131,14 @@ export async function getMathLearningData(
     // Historical, completed enrollments only: concurrent regular/supplement classes never replace this class's current progress.
     const previousRecords = previousClassIds.length ? await fetchAllPagedInChunks<Row & { class_id: string }>(
       [...visibleIds], (chunk, from, to) => admin.from("lesson_reports")
-        .select("student_id, class_id, report_date, progress, textbook, homework_today, classnote_sent_at, classes!lesson_reports_class_id_fkey!inner(subject, math_learning_track)")
+        .select("id, student_id, class_id, report_date, progress, textbook, homework_today, classnote_sent_at, classes!lesson_reports_class_id_fkey!inner(subject, math_learning_track)")
         .eq("tenant_id", tenantId).in("student_id", chunk).in("class_id", previousClassIds)
         .eq("classes.subject", "math").eq("classes.math_learning_track", track)
         .or(SENT_REPORT_OR)
         .is("revoked_at", null).lte("report_date", referenceDate)
         .order("report_date").order("classnote_sent_at", { nullsFirst: true }).order("id").range(from, to),
     ) : [];
-    const asRecord = (row: Row): LearningRecord => ({ date: row.report_date, progress: row.progress, textbook: row.textbook, homework: row.homework_today, sentAt: row.classnote_sent_at });
+    const asRecord = (row: Row): LearningRecord => ({ ...(row.id ? { sourceId: row.id } : {}), date: row.report_date, progress: row.progress, textbook: row.textbook, homework: row.homework_today, sentAt: row.classnote_sent_at });
     const previousByStudent = new Map<string, LearningRecord[]>();
     for (const row of previousRecords) {
       if (!previousEnrollments.some(enrollment => enrollment.student_id === row.student_id && enrollment.class_id === row.class_id

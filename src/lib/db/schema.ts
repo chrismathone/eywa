@@ -754,7 +754,7 @@ export const lessonReports = pgTable(
     videoHomework: boolean("video_homework"),
     // 영상 첨부 링크 넣기(0328a) — 보고서 글에 영상 제출 링크를 붙일지. null = 고른 적 없음(안 붙임).
     videoSubmitLink: boolean("video_submit_link"),
-    // 영상 숙제 마감(20261015090000) — null = 숙제일 + 7일 · 날짜 = '다음 수업'을 고른 보고서의 다음 수업일(video-homework/due.ts).
+    // 영상 숙제 마감(0425a) — null = 숙제일 + 7일 · 날짜 = '다음 수업'을 고른 보고서의 다음 수업일(video-homework/due.ts).
     videoHomeworkDue: date("video_homework_due"),
     // 학습 추세(종합분석) — 0091a(edutrix graph_eval 이식). 멘트(notes)와 별개. 자동작성 시 함께 생성, /r '학습 추세' 섹션.
     trendNote: text("trend_note"),

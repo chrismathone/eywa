@@ -31,7 +31,7 @@ async function main() {
     for (const role of ["anon", "authenticated", "service_role"]) {
       if (!(await admin`select 1 from pg_roles where rolname=${role}`).length) await admin`create role ${admin(role)}`;
     }
-    await sql.unsafe(fs.readFileSync(path.join(__dirname, "../../supabase/migrations/20261008073000_worker_execution_leases.sql"), "utf8"));
+    await sql.unsafe(fs.readFileSync(path.join(__dirname, "../../supabase/migrations/0399a_worker_execution_leases.sql"), "utf8"));
     const tenant = randomUUID(), other = randomUUID();
     await sql`insert into public.tenants(id) values (${tenant}), (${other})`;
     const { workerLeaseApi } = await import(pathToFileURL(path.join(__dirname, "../_classnote/worker-execution-lease.mjs")));

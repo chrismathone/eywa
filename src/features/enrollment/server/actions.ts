@@ -9,13 +9,14 @@ import { getAssemblyaiWebhookUrl } from "@/lib/config/app-url";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
+import { countAssignedClasses } from "./assigned-classes";
 import { licenseBlockReason } from "@/lib/license/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { explainDbError, logDbError } from "@/lib/supabase/db-error";
 import { resolveUniqueStudentNameFor } from "@/features/students/server/unique-name";
 import { after } from "next/server";
-import { ENROLLED_REVERT_BLOCKED } from "@/features/enrollment/board-stages";
+import { ASSIGNED_DRAG_BLOCKED, ENROLLED_REVERT_BLOCKED, stageOfOutcome } from "@/features/enrollment/board-stages";
 import { normalizeAssignStartDate } from "@/features/enrollment/assign-start-date";
 import { canonicalSchoolName, type SchoolSaveAlias } from "@/features/schools/school-name";
 import { completeSchoolKind } from "@/features/schools/server/complete-kind";
@@ -126,7 +127,6 @@ export async function createEnrollmentConsultation(
       learning_history: Object.keys(learningHistory).length > 0 ? learningHistory : null,
       consultant_id: user.id,
       outcome: followUp.outcome,
-      ...(followUp.registrationStatus ? { registration_status: followUp.registrationStatus } : {}),
     })
     .select("id")
     .single();
@@ -163,7 +163,7 @@ async function createConsultationWithAudio(
   audioPath: string,
   audioSizeBytes: number,
   referrer: Partial<ReferrerColumns>,
-  followUp: { outcome: string; registrationStatus: string | null; result: FollowUpResult | null },
+  followUp: { outcome: string; result: FollowUpResult | null },
 ): Promise<CreateConsultationState> {
   const admin = createAdminClient();
   if (!isTenantAudioPath(audioPath, user.tenantId)) return { error: "파일 경로가 잘못되었습니다" };
@@ -189,7 +189,6 @@ async function createConsultationWithAudio(
       consultant_id: user.id,
       // 후속 조치로 고른 상태(등록·미등록이면 녹음 분석이 끝나도 그대로 — 웹훅은 끝난 상태를 지킨다).
       outcome: followUp.outcome,
-      ...(followUp.registrationStatus ? { registration_status: followUp.registrationStatus } : {}),
       // 단일 오디오 컬럼 = "최신 녹음 미러"(목록 🎙️ 배지·StatusWatcher 레거시 소비처용).
       audio_path: audioPath,
       audio_size_bytes: verifiedSize,
@@ -384,7 +383,7 @@ export async function updateEnrollmentConsultation(
     // 뒤의 이름·학교…상담 내용 칸 = 감사로그 "무엇이 바뀌었나"의 저장 전 값
     // (consultation-audit.ts CONSULTATION_AUDIT_FIELDS와 같은 목록 — 가드 테스트가 잠근다).
     .select(
-      "prospect_name, prospect_grade, prospect_school, english_name, gender, blood_type, birth_date, student_phone, home_phone, parent_name, parent_phone, parent_relation, address, zip_code, address_detail, consultation_path, subject, career_goal, siblings, safety_notes, registration_status, payment_amount, payment_date, registrar, follow_up_date, follow_up_content, non_registration_reason, parent_request, shuttle_bus_request, privacy_agreement, installment_agreement, subject_details, received_date, student_type, siblings_details, consultation_date, learning_history, consultant_id, counselor, from_public_intake, outcome, updated_at",
+      "student_id, prospect_name, prospect_grade, prospect_school, english_name, gender, blood_type, birth_date, student_phone, home_phone, parent_name, parent_phone, parent_relation, address, zip_code, address_detail, consultation_path, subject, career_goal, siblings, safety_notes, follow_up_date, follow_up_content, non_registration_reason, parent_request, shuttle_bus_request, privacy_agreement, installment_agreement, subject_details, received_date, student_type, siblings_details, consultation_date, learning_history, consultant_id, counselor, from_public_intake, outcome, updated_at",
     )
     .eq("id", id)
     .single();
@@ -402,9 +401,10 @@ export async function updateEnrollmentConsultation(
     ["pending", "scheduled"].includes(String(existing?.outcome ?? ""));
 
   // 후속 조치(원장 2026-10-22) — 저장 뒤 '상담 완료' 칸에 남는 상담이면 반드시 고른다(QR 접수를 '상담 완료로 저장'할 때 포함).
-  // 고른 값이 상태를 정한다 · 칸 안의 원래 값(노쇼·AI 완료)은 지킨다 · 등록 완료는 되돌리지 않는다(follow-up.ts).
+  // 고른 값이 칸반 상태를 정한다. 이관 registration_status·결제 기록은 수정하지 않는다.
   const followUp = resolveFollowUp({
     current: promoteToConsulted ? "consulted" : String(existing.outcome),
+    assignedClassCount: await countAssignedClasses(supabase, existing.student_id, existing.subject),
     result: parseFollowUpResult(formData.get("followUpResult")),
     followUpDate: parsed.data.followUpDate || null,
     storedDate: (existing.follow_up_date as string | null) ?? null,
@@ -430,7 +430,6 @@ export async function updateEnrollmentConsultation(
       ...row,
       learning_history: Object.keys(lh).length > 0 ? lh : null,
       ...(outcomeTo ? { outcome: outcomeTo } : {}),
-      ...(followUp.registrationStatus ? { registration_status: followUp.registrationStatus } : {}),
       updated_at: new Date().toISOString(),
     })
     .eq("id", id).eq("updated_at", existing.updated_at).select("id").maybeSingle();
@@ -520,10 +519,12 @@ export async function setEnrollmentOutcome(
   // 따라서 전환 판정은 outcome==='enrolled'만(연결 여부로 상태 이동을 막지 않음).
   const { data: cur } = await supabase
     .from("enrollment_consultations")
-    .select("outcome, prospect_name")
+    .select("outcome, prospect_name, student_id, subject")
     .eq("id", id)
     .single();
   if (!cur) return { error: "상담을 찾을 수 없습니다" };
+  const assignedClassCount = await countAssignedClasses(supabase, cur.student_id, cur.subject);
+  if (assignedClassCount > 0 && stageOfOutcome(outcome) !== "enrolled") return { error: ASSIGNED_DRAG_BLOCKED };
   const isConverted = cur.outcome === "enrolled";
   if (isConverted && outcome !== "enrolled" && outcome !== "declined") {
     // ⚠️ 클라 안내문(consultation-manage.tsx)과 **같은 문장**을 유지할 것 — 한쪽만 고치면 갈린다.

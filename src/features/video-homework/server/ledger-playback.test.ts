@@ -1,4 +1,4 @@
-import { beforeEach, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const m = vi.hoisted(() => ({ rows: {} as Record<string, unknown[]>, reads: [] as { table: string; name: string; args: unknown[] }[],
   assigned: [] as { classId: string; studentId: string; date: string }[] }));
@@ -130,4 +130,96 @@ it("조회 기간 밖의 숙제에 자동 배정된 영상도 미배정으로 �
   ];
   const result = await getVideoHomeworkLedger("tenant-a", "2026-10-01", "2026-10-10", { pairs: new Set(["a:one"]) });
   expect(result.rows[0].hasAssignableVideos).toBe(false);
+});
+
+// 원장 2026-10-22 — 이희재: 반 전체가 10월 영상 숙제 0건인 반에 숙제 없이 올린 영상. 장부가 반째 빼서 검색해도 안 나왔다.
+describe("숙제 0건 반 — 붙지 않은 영상이 있는 학생의 줄(①) · 나머지는 검색 명단(②)", () => {
+  beforeEach(() => {
+    (m.rows.classes as unknown[]).push({ id: "z", class_name: "숙제 없는 반", subject: "math", is_active: true, closed_at: null });
+    m.rows.students = [...(m.rows.students as unknown[]), { id: "lee", name: "합성 학생 둘", school: "성광중", grade: "중2" }, { id: "friend", name: "합성 친구", school: "성광중", grade: "중2" }];
+    // z = 월·목 수업(10/1 목 · 10/5 월 · 10/8 목) · 두 학생 다 수강 중
+    m.rows.class_schedules = [{ class_id: "z", day_of_week: "mon", valid_from: "2026-03-01", valid_to: null }, { class_id: "z", day_of_week: "thu", valid_from: "2026-03-01", valid_to: null }];
+    m.rows.enrollments = ["lee", "friend"].map((student_id) => ({ class_id: "z", student_id, start_date: "2026-03-01", end_date: null, on_hold: false, is_transferred: false, attendance_days: null }));
+    m.rows.attendance_records = [
+      { id: "r1", student_id: "lee", class_id: "z", session_date: "2026-10-05", slot_start: null, status: "present", recorded_at: "2026-10-05T09:00:00Z" },
+      { id: "r2", student_id: "lee", class_id: "z", session_date: "2026-10-08", slot_start: null, status: "absent", recorded_at: "2026-10-08T09:00:00Z" },
+    ];
+    (m.rows.student_homework_videos as unknown[]).push({ id: "free", student_id: "lee", class_id: "z", posted_at: "2026-10-08T08:00:00Z", created_at: "2026-10-08T08:00:00Z",
+      uploaded_at: "2026-10-08T08:10:00Z", drive_file_id: "freeDriveFile789", status: "uploaded", free: "true" });
+  });
+  it("관리자 화면 — 그 학생만 줄로 서고(반 명단은 아니다) 숙제없음 칸은 그 학생이 들은 수업일 · 반 친구는 검색 명단", async () => {
+    const result = await getVideoHomeworkLedger("tenant-a", "2026-10-01", "2026-10-10");
+    const free = result.rows.find((row) => row.classId === "z");
+    expect(result.rows.filter((row) => row.classId === "z").map((row) => row.studentId)).toEqual(["lee"]);
+    expect(free).toMatchObject({ hasAssignableVideos: true, lessonDates: ["2026-10-01", "2026-10-05"], assignedDates: [] });
+    expect(result.blankFacts["z:lee"]).toEqual({ "2026-10-01": "none", "2026-10-05": "none" });
+    expect(result.videos.map((video) => video.id)).toContain("free");
+    expect(result.idleRoster).toEqual([{ classId: "z", className: "숙제 없는 반", subject: "math", studentId: "friend", studentName: "합성 친구", school: "성광중", grade: "중2" }]);
+  });
+  it("휴원일은 숙제없음 칸에서 빠진다(배정 창과 같은 판정)", async () => {
+    const result = await getVideoHomeworkLedger("tenant-a", "2026-10-01", "2026-10-10", undefined, { isHoliday: (date) => date === "2026-10-01" });
+    expect(result.rows.find((row) => row.classId === "z")?.lessonDates).toEqual(["2026-10-05"]);
+  });
+  it("🔴 강사뷰는 담임 반으로 고른 반만 — 반을 안 주면 숙제 0건 반의 줄도 명단도 없다", async () => {
+    const none = await getVideoHomeworkLedger("tenant-a", "2026-10-01", "2026-10-10", { pairs: new Set(["a:one"]) });
+    expect(none.rows.map((row) => row.classId)).toEqual(["a"]);
+    expect(none.idleRoster).toEqual([]);
+    const mine = await getVideoHomeworkLedger("tenant-a", "2026-10-01", "2026-10-10", { pairs: new Set(["a:one"]), classes: new Set(["z"]) });
+    expect(mine.rows.map((row) => `${row.classId}:${row.studentId}`)).toEqual(["a:one", "z:lee"]);
+    expect(mine.idleRoster.map((entry) => entry.studentId)).toEqual(["friend"]);
+  });
+  it("영상을 손으로 배정했으면(붙은 영상) 줄은 사라지고 검색 명단으로 돌아간다", async () => {
+    const video = (m.rows.student_homework_videos as Record<string, unknown>[]).find((row) => row.id === "free")!;
+    Object.assign(video, { homework_date: "2026-10-05", manual_assignment: "true" });
+    const result = await getVideoHomeworkLedger("tenant-a", "2026-10-01", "2026-10-10");
+    expect(result.rows.some((row) => row.classId === "z")).toBe(false);
+    expect(result.idleRoster.map((entry) => entry.studentId).sort()).toEqual(["friend", "lee"]);
+  });
+  it("숙제를 못 읽었으면 어느 반이 0건인지 모른다 — 세우지 않는다", async () => {
+    m.assigned = null as unknown as typeof m.assigned;
+    const result = await getVideoHomeworkLedger("tenant-a", "2026-10-01", "2026-10-10");
+    expect(result.rows.some((row) => row.classId === "z")).toBe(false);
+    expect(result.idleRoster).toEqual([]);
+  });
+});
+
+// 적대적 리뷰 2026-10-22 — 반에 숙제가 있고 본인은 0건인 학생(PS3A 최주원 모양)이 숙제 없이 올린 영상은 붙일 숙제 칸이 없어 버튼이 안 떴다.
+describe("회차가 있는 반 — 숙제 없이 올린 영상이 안 붙어 있으면 배정할 길을 연다", () => {
+  beforeEach(() => {
+    m.rows.students = [...(m.rows.students as unknown[]), { id: "two", name: "합성 셋", school: null, grade: "중1" }];
+    // 반 a에 학생 two가 수강 중(본인 숙제 0건) — 반 a는 학생 one의 숙제로 '회차 있는 반'
+    m.rows.class_schedules = [{ class_id: "a", day_of_week: "tue", valid_from: "2026-03-01", valid_to: null }];
+    m.rows.enrollments = [{ class_id: "a", student_id: "two", start_date: "2026-03-01", end_date: null, on_hold: false, is_transferred: false, attendance_days: null }];
+    m.rows.student_homework_videos = [{ id: "free2", student_id: "two", class_id: "a", posted_at: "2026-10-08T08:00:00Z", created_at: "2026-10-08T08:00:00Z",
+      uploaded_at: "2026-10-08T08:10:00Z", drive_file_id: "freeDriveFile790", status: "uploaded", free: "true" }];
+  });
+  // 재리뷰 2026-10-22 — '미배정 영상' 할 일은 담임에게 가고 링크가 강사뷰다. 담임이 반 친구들에게만 숙제를 냈어도 그 학생이 보여야 한다(⑤).
+  it("🔴 강사뷰 — 담임 반 명단의 학생은 '내가 낸 숙제'가 없어도 숙제 없이 올린 영상이 안 붙어 있으면 줄로 선다", async () => {
+    const mine = await getVideoHomeworkLedger("tenant-a", "2026-10-01", "2026-10-10", { pairs: new Set(["a:one"]), classes: new Set(["a"]) });
+    expect(mine.rows.map((row) => `${row.classId}:${row.studentId}`)).toEqual(["a:one", "a:two"]);
+    expect(mine.rows.find((row) => row.studentId === "two")).toMatchObject({ hasAssignableVideos: true });
+    expect(mine.videos.map((video) => video.id)).toContain("free2");
+    // 담임 반이 아니면 그대로 안 선다 · ClassNote 영상이면 안 선다
+    expect((await getVideoHomeworkLedger("tenant-a", "2026-10-01", "2026-10-10", { pairs: new Set(["a:one"]), classes: new Set(["b"]) })).rows.map((row) => row.studentId)).toEqual(["one"]);
+    (m.rows.student_homework_videos as Record<string, unknown>[])[0].free = null;
+    expect((await getVideoHomeworkLedger("tenant-a", "2026-10-01", "2026-10-10", { pairs: new Set(["a:one"]), classes: new Set(["a"]) })).rows.map((row) => row.studentId)).toEqual(["one"]);
+  });
+  it("숙제 없이 올린 영상 → '영상 배정' · 같은 자리의 ClassNote 영상은 종전대로(버튼 없음)", async () => {
+    expect((await getVideoHomeworkLedger("tenant-a", "2026-10-01", "2026-10-10")).rows.find((row) => row.studentId === "two")?.hasAssignableVideos).toBe(true);
+    (m.rows.student_homework_videos as Record<string, unknown>[])[0].free = null;
+    expect((await getVideoHomeworkLedger("tenant-a", "2026-10-01", "2026-10-10")).rows.find((row) => row.studentId === "two")?.hasAssignableVideos).toBe(false);
+  });
+});
+
+describe("검사 대상 밖 반은 숙제 0건 반이어도 읽지 않는다", () => {
+  it("반·과목 기준으로 미리 거른다 — 줄도 검색 명단도 없다", async () => {
+    (m.rows.classes as unknown[]).push({ id: "e", class_name: "영어 반", subject: "english", is_active: true, closed_at: null });
+    m.rows.students = [...(m.rows.students as unknown[]), { id: "eng", name: "합성 영어", school: null, grade: "중1" }];
+    m.rows.class_schedules = [{ class_id: "e", day_of_week: "tue", valid_from: "2026-03-01", valid_to: null }];
+    m.rows.enrollments = [{ class_id: "e", student_id: "eng", start_date: "2026-03-01", end_date: null, on_hold: false, is_transferred: false, attendance_days: null }];
+    const all = await getVideoHomeworkLedger("tenant-a", "2026-10-01", "2026-10-10");
+    expect(all.idleRoster.map((entry) => entry.studentId)).toEqual(["eng"]);
+    const tracked = await getVideoHomeworkLedger("tenant-a", "2026-10-01", "2026-10-10", undefined, { classTracked: (_, subject) => subject !== "english" });
+    expect(tracked.idleRoster).toEqual([]);
+  });
 });
