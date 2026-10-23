@@ -227,6 +227,19 @@
   --color-att-makeup-ink: var(--att-makeup-ink);
   --color-att-classday: var(--att-classday);
   --color-att-weekend: var(--att-weekend);
+  --color-report-accent: var(--report-accent);
+  --color-report-accent-soft: var(--report-accent-soft);
+  --color-report-tint: var(--report-tint);
+  --color-report-lv1: var(--report-lv1);
+  --color-report-lv2: var(--report-lv2);
+  --color-report-lv3: var(--report-lv3);
+  --color-report-lv4: var(--report-lv4);
+  --color-report-lv5: var(--report-lv5);
+  --color-report-lv1-soft: var(--report-lv1-soft);
+  --color-report-lv2-soft: var(--report-lv2-soft);
+  --color-report-lv3-soft: var(--report-lv3-soft);
+  --color-report-lv4-soft: var(--report-lv4-soft);
+  --color-report-lv5-soft: var(--report-lv5-soft);
   --color-att-outside: var(--att-outside);
   --color-att-holiday: var(--att-holiday);
   --color-att-holiday-ink: var(--att-holiday-ink);
@@ -422,6 +435,23 @@
      🔴 `--marker`(형광펜)를 빌려 쓰지 말 것 — 저건 "한 화면에 하나"라는 가드(`marker-trigger.test.ts`)가 붙은
         색이라 여기서 쓰면 그 규칙이 깨지고, 둘을 따로 조일 수도 없어진다. 글자는 --foreground(#121212) 고정. */
   --makeup-band: #ffe14a;
+  /* 수학 학부모 보고서(시범) **데일리 학습알림 표** — 원장 2026-10-23 *"색감은 쨍하게 눈에 잘 띄어야함"* + 참고 시안(하~상 다섯 색 머리칸).
+     🔴 학부모 문서 전용 — 앱 화면의 의미색 캐논(green=정상·danger=위험)과 **다른 축**이라 그 토큰을 빌리지 않는다
+        (빌리면 '상'이 위험으로, '하'가 보라 '예외'로 읽힌다 — 여기서 색은 눈금 위치일 뿐이다).
+     accent = 인재원 로고의 노랑(라벨 칸·숙제 상자). 글자는 그 위에 항상 primary-deep(대비 확보). */
+  --report-accent: #fdb913;
+  --report-accent-soft: #fff3cc;
+  --report-tint: #eef4fc;
+  --report-lv1: #7c3aed;
+  --report-lv2: #2563eb;
+  --report-lv3: #0f9d58;
+  --report-lv4: #f59e0b;
+  --report-lv5: #e8453c;
+  --report-lv1-soft: color-mix(in srgb, var(--report-lv1) 14%, #fff);
+  --report-lv2-soft: color-mix(in srgb, var(--report-lv2) 14%, #fff);
+  --report-lv3-soft: color-mix(in srgb, var(--report-lv3) 14%, #fff);
+  --report-lv4-soft: color-mix(in srgb, var(--report-lv4) 18%, #fff);
+  --report-lv5-soft: color-mix(in srgb, var(--report-lv5) 14%, #fff);
   /* 형광펜 노랑 — **한 화면에서 절대 놓치면 안 되는 식별자 하나**를 칠하는 자리(원장 2026-08-18:
      영어 강사 시트 반 전환 드롭다운 = *"배경을 쌩노란색으로 … 수업명을 확실하게 보기 위함"*).
      ⚠️ 앱 톤은 -soft(8~11% 틴트)가 기준이라 이건 의도적 예외다 — 출석부 형광 팔레트와 같은 성격이고,

@@ -166,6 +166,7 @@ export default async function PublicLessonReportPage({
             ? classKindMeta({ isSpecial: reportClass.is_special as boolean | null, className: reportClass.class_name as string }).kind === "special"
             : false,
           // 과목 = 다른 화면과 같은 판정(과목이 빈 이관분은 수학 — `reportSubject`).
+          className: (reportClass?.class_name as string | null | undefined) ?? null, // 시범 카드 머리의 '반' 칸
           subjectLabel: subjectReportLabel(buildSubjectMaps(settings.operations.subjects).labelOf, reportSubject({ subject: report.subject as string | null, classSubject: (reportClass?.subject as string | null | undefined) ?? null })),
         }}
         student={student ?? null}
