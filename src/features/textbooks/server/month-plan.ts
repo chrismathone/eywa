@@ -13,7 +13,8 @@ import "server-only";
  *    미반영)은 달력·비교·현황의 **기준**이고, `byCell`(일정, 미루기 반영)은 [가져오기]가 옮기는 값이다.
  *    미루기가 원래 계획을 고쳐 쓰면 "얼마나 밀렸나"를 잴 기준이 사라진다.
  * 🔴 **실제와 섞지 않는다** — 실제는 `class_sheet_plan_lines` 하나뿐이고, 계획이 거기 들어가는 길은
- *    사람이 누르는 [월간계획 전체 가져오기]뿐이다(`importPlannedRange`).
+ *    교재 배정(`applyTextbookFill`, 2026-10-22 배정 = 계획 + 가져오기) 하나뿐이다(writer = `writePlannedCells`).
+ *    [월간계획 전체 가져오기] 버튼은 같은 날 없앴다 — 그 자리엔 되돌리기만 남는다.
  * ⚠️ 0266a/0268a 미적용이어도 **절대 throw하지 않는다**([[#95]]) — 영어 강사 전원이 매일 여는 화면이
  *    이걸 읽는다. 못 읽으면 계획이 빈 채로 시트가 그대로 돈다.
  */
@@ -27,6 +28,8 @@ import type { HolidayMap } from "@/features/class-sheets/lib/holiday";
 import type { MonthScheduleRow } from "@/features/class-sheets/lib/month-assemble";
 import { isMissingTextbookTable } from "./access";
 import type { TextbookTableStatus } from "../types";
+import { addDays } from "@/lib/date-kst";
+import { MAX_LOOKAHEAD_DAYS } from "../lesson-schedule";
 import {
   expandPlans,
   lessonIndexOf,
@@ -295,4 +298,40 @@ export async function getClassPlannedLines(input: {
   const materials = await loadPlanMaterials({ tenantId, classIds: [classId], to });
   if (materials.status !== "ok") return emptyResult(materials.status);
   return { status: "ok", ...planCellsOf(materials, classId, from, to) };
+}
+
+/**
+ * 교재 배정이 실제에 넣을 **일정**(미루기 반영) — 그 배정 하나를 `from`부터 끝 차수까지.
+ * `lastDate` = 실제로 닿은 마지막 날(되돌리기 기록 범위). 🔴 게이트는 호출부(`applyTextbookFill`)가 이미 걸었다.
+ */
+export async function getClassImportLines(input: {
+  tenantId: string;
+  classId: string;
+  from: string;
+  to: string;
+  planId: string;
+}): Promise<{ status: TextbookTableStatus; byCell: Record<string, PlannedLine[]>; lastDate: string }> {
+  const { tenantId, classId, from, to } = input;
+  if (!from || !to || from > to) return { status: "ok", byCell: {}, lastDate: to };
+  // 시작일부터 앞보기 상한(400일)까지 펼치므로, `to`에서 그만큼 더 가면 어떤 배정의 끝도 넘는다.
+  const horizon = addDays(to, MAX_LOOKAHEAD_DAYS);
+  // 미루기 표식도 horizon까지 읽는다 — `to`에서 끊으면 다음 달의 미룸이 빠진 일정을 가져온다.
+  const materials = await loadPlanMaterials({ tenantId, classIds: [classId], to: horizon });
+  if (materials.status !== "ok") return { status: materials.status, byCell: {}, lastDate: to };
+  const m = materials.byClass.get(classId);
+  const plans = m?.plans.filter((p) => String(p.id) === input.planId);
+  if (!m || !plans || plans.length === 0) return { status: "ok", byCell: {}, lastDate: to };
+  // 창으로 고르지 않고 `from`부터 끝까지 펼친다.
+  const byCell = expandPlans({
+    plans,
+    books: materials.books,
+    lessonsByBook: materials.lessonsByBook,
+    schedules: m.schedules,
+    holidays: materials.holidays,
+    shifts: m.shifts,
+    from,
+    to: horizon,
+  });
+  const lastDate = Object.keys(byCell).reduce((max, k) => (k.slice(0, 10) > max ? k.slice(0, 10) : max), to);
+  return { status: "ok", byCell, lastDate };
 }

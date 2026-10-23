@@ -285,7 +285,7 @@ function DayCell({
                   </span>
                   {/* 🔴 **월간계획은 실제가 아니다**(원장 2026-09-22) — 아직 안 쓴 칸에만, 무채색으로,
                       `계획` 표식을 달아 보여 준다. 실제가 한 줄이라도 있으면 안 그린다(이미 한 수업이다).
-                      강사는 월간 화면의 [월간계획 전체 가져오기]로 이걸(일정) 옮긴 뒤 고쳐 쓴다. */}
+                      교재 배정이 오늘 이후 칸엔 이걸(일정) 실제에 함께 넣으니(2026-10-22) 여기 남는 건 빈 칸·지난 칸뿐이다. */}
                   {planned.map((p, i) => (
                     <div key={`${p.skillArea}|${p.lessonNo}|${i}`} className="text-text-faint flex min-w-0 gap-1 text-xs">
                       <span className="border-line-strong shrink-0 rounded border border-dashed px-1 font-bold">

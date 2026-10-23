@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { HOVER_CARD_MAX_H, HOVER_CARD_SHELL, HOVER_CARD_WIDTH } from "./card-style";
+import { HOVER_CARD_MAX_H, HOVER_CARD_SHELL, HOVER_CARD_WIDE_MAX_H, HOVER_CARD_WIDE_WIDTH, HOVER_CARD_WIDTH } from "./card-style";
 import { decodeTip, TIP_ATTR, type ResolvedTip } from "./tip";
 
 /**
@@ -33,15 +33,31 @@ type OpenTip = {
   cursorY: number;
 };
 
+type CardSize = { width: number; maxH: number };
+
+/**
+ * 카드 폭·최대 높이 — 기본 카드는 시간표 hover 카드와 같은 값, 넓은 카드(`wide`)는 창이 작으면 창에 맞춘다
+ * (가장자리 여백을 남기고, 기본 카드보다 작아지지는 않는다).
+ */
+function cardSize(card: ResolvedTip): CardSize {
+  if (!card.wide) return { width: HOVER_CARD_WIDTH, maxH: HOVER_CARD_MAX_H };
+  const vw = typeof window === "undefined" ? 1024 : window.innerWidth;
+  const vh = typeof window === "undefined" ? 768 : window.innerHeight;
+  return {
+    width: Math.max(HOVER_CARD_WIDTH, Math.min(HOVER_CARD_WIDE_WIDTH, vw - EDGE * 2)),
+    maxH: Math.max(HOVER_CARD_MAX_H, Math.min(HOVER_CARD_WIDE_MAX_H, vh - EDGE * 2)),
+  };
+}
+
 /** 커서 위치에서 카드가 화면 안에 들어오는 자리 — 시간표 hover 카드와 **같은 규칙**(폭·높이 상수 공유). */
-function placeCard(clientX: number, clientY: number): { x: number; y: number } {
+function placeCard(clientX: number, clientY: number, size: CardSize): { x: number; y: number } {
   const vw = typeof window === "undefined" ? 1024 : window.innerWidth;
   const vh = typeof window === "undefined" ? 768 : window.innerHeight;
   let x = clientX + CURSOR_GAP;
-  if (x + HOVER_CARD_WIDTH > vw - EDGE) x = clientX - HOVER_CARD_WIDTH - CURSOR_GAP;
+  if (x + size.width > vw - EDGE) x = clientX - size.width - CURSOR_GAP;
   if (x < EDGE) x = EDGE;
   let y = clientY + CURSOR_GAP;
-  if (y + HOVER_CARD_MAX_H > vh - EDGE) y = Math.max(EDGE, vh - EDGE - HOVER_CARD_MAX_H);
+  if (y + size.maxH > vh - EDGE) y = Math.max(EDGE, vh - EDGE - size.maxH);
   return { x, y };
 }
 
@@ -63,7 +79,7 @@ export function HoverTipLayer() {
     if (h <= 0) return;
     // 🔴 최대 높이에 닿은 카드도 **건너뛰지 않는다**(3차 재리뷰) — 짧은 카드로 아래쪽에 자리를 잡은 뒤 내용이
     //    갈려 길어지면(메모 저장) 옛 자리가 남아 카드 아래가 화면 밖으로 나간다. 그때는 최대 높이로 클램프한다.
-    const height = Math.min(h, HOVER_CARD_MAX_H);
+    const height = Math.min(h, cardSize(tip.card).maxH);
     const want = Math.min(tip.cursorY + CURSOR_GAP, window.innerHeight - EDGE - height);
     const y = Math.max(EDGE, want);
     if (Math.abs(y - tip.y) > 1) setTip((cur) => (cur === tip ? { ...cur, y } : cur));
@@ -98,7 +114,7 @@ export function HoverTipLayer() {
 
     const show = (card: ResolvedTip) => {
       open = true;
-      setTip({ card, ...placeCard(lastX, lastY), cursorY: lastY });
+      setTip({ card, ...placeCard(lastX, lastY, cardSize(card)), cursorY: lastY });
     };
 
     const onOver = (e: PointerEvent) => {
@@ -194,12 +210,13 @@ export function HoverTipLayer() {
   }, []);
 
   if (!tip || typeof document === "undefined") return null;
+  const size = cardSize(tip.card);
   return createPortal(
     <div
       ref={cardRef}
       role="tooltip"
       className={`${HOVER_CARD_SHELL} pointer-events-none fixed z-[9999] overflow-y-auto`}
-      style={{ left: tip.x, top: tip.y, width: HOVER_CARD_WIDTH, maxHeight: HOVER_CARD_MAX_H }}
+      style={{ left: tip.x, top: tip.y, width: size.width, maxHeight: size.maxH }}
     >
       <TipCardView card={tip.card} />
     </div>,

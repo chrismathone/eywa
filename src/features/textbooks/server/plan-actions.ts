@@ -46,7 +46,7 @@ import {
   type LessonPace,
   type SlotAxis,
 } from "../lesson-schedule";
-import { groupCellLessons } from "../plan-expand";
+import { groupCellLessons, type PlannedLine } from "../plan-expand";
 import { applyCellLessons, ApplyCellLessonsError } from "./apply-cell-lessons";
 import type { ApplyPreview, ApplyPreviewRow, ApplyResult, ClassSlotChoice, ClassTextbookPlanRow, PlanRestoreRow } from "../types";
 import { placeSameBookPlan } from "../plan-siblings";
@@ -54,7 +54,16 @@ import { friendlyTextbookError, isMissingTextbookTable, SLOTS_NOT_READY, TEXTBOO
 
 export type PlanActionResult = { ok: true; id: string } | { ok: false; error: string };
 export type PlanPreviewResult = { ok: true; preview: ApplyPreview } | { ok: false; error: string };
-export type PlanApplyResult = { ok: true; result: ApplyResult } | { ok: false; error: string };
+export type PlanApplyResult =
+  | {
+      ok: true;
+      result: ApplyResult;
+      /** 배정은 됐는데 실제에 못 넣었을 때의 사유(원장 2026-10-22 배정=가져오기). null = 문제 없음. */
+      importError: string | null;
+      /** 실제에 넣은 것의 되돌리기 기록 — 알림의 [실행 취소]가 쓴다. */
+      undoBatchId: string | null;
+    }
+  | { ok: false; error: string };
 
 export type ClassTextbookPlanInput = {
   id?: string | null;
@@ -109,7 +118,7 @@ function isPaceRejected(error: { code?: string; message?: string } | null | unde
  * 🔴 **교재목록 모듈을 끈 학원에선 배정 액션이 돌지 않는다**(감사 S7) — 서버 액션은 공개 엔드포인트라
  *    화면에서 [교재 배정] 입구를 감춘 것만으로는 게이트가 아니다([[#77]]). 판정 실패는 켜진 것으로 본다
  *    (`isModuleOnForTenant` fail-open — 침산은 꺼진 모듈이 없다).
- * ⚠️ [월간계획 전체 가져오기](`importPlannedRange`)·회차 미루기는 시트의 **실제** 쪽 문이라 여기 걸지 않는다.
+ * ⚠️ 실제에 넣기(`writePlannedCells`)·회차 미루기는 시트의 **실제** 쪽 문이라 여기 걸지 않는다.
  */
 const TEXTBOOKS_MODULE_OFF = "이 학원은 교재목록 기능이 꺼져 있습니다";
 async function textbooksModuleOff(tenantId: string): Promise<boolean> {
@@ -913,10 +922,11 @@ export async function applyTextbookFill(
     return { ok: false, error: "배정할 칸이 없습니다 — 고른 교시에 남은 수업일이 없습니다" };
   }
 
-  // 🔴 **실제 칸엔 한 줄도 쓰지 않는다**(원장 2026-09-22 *"월간계획에서 교재배정을 해놓고 그걸 각자
-  //    월간계획에서 가저오기 해서"*). 배정을 저장하면 월간계획이 거기서 **계산돼** 뜨고, 실제는
-  //    강사가 [가져오기]를 누를 때만 채워진다. 그전엔 여기서 `applyLoaded`(RPC)를 불러 실제를 바로
-  //    채웠는데, 그러면 배정만으로 작성률이 올라 "강사가 실제 나간 진도"가 거짓이 된다.
+  // 🔑 **배정 = 계획 + 가져오기 한 번에**(원장 2026-10-22 *"교재배정과 월간계획 전체 가져오기가 굳이 두가지를
+  //    나눠서 사용할 이유가 없는거같음 … 한큐에"*) — 09-22의 "배정은 실제에 안 쓴다"를 원장이 뒤집었다.
+  //    배정을 저장해 월간계획을 세운 뒤, **그 배정의** 일정을 [가져오기]와 같은 함수(`writePlannedCells`)로
+  //    실제 빈 칸에 넣는다. 🔴 지난 날짜엔 안 넣는다(미리보기의 '지난 날짜' 표시와 같은 약속) · 이미 적은 칸은
+  //    안 덮는다. 쓰기는 직접 RPC가 아니라 공용 함수 경유(`applyCellLessons`).
   const saved = await saveClassTextbookPlan({
     classId: input.classId,
     textbookId: input.textbookId,
@@ -931,77 +941,80 @@ export async function applyTextbookFill(
   //    부가 기록이라 삼켜도 됐다). 0268a 미적용 안내도 이 길로 사람에게 닿는다.
   if (!saved.ok) return { ok: false, error: saved.error };
 
+  // 실제로 넣기 — 오늘(또는 시작일) 이후 그 배정의 차수 전부. 배정은 이미 저장됐으니 여기서 실패해도
+  // 계획은 남는다 → 그 사실을 그대로 알리고, 다시 배정하면 빈 칸만 채운다.
+  const importFrom = input.startDate > today ? input.startDate : today;
+  const { getClassImportLines } = await import("./month-plan");
+  const planned = await getClassImportLines({
+    tenantId: loaded.gate.access.tenantId,
+    classId: input.classId,
+    from: importFrom,
+    to: importFrom,
+    planId: saved.id,
+  });
+  const written =
+    planned.status === "ok" && Object.keys(planned.byCell).length > 0
+      ? await writePlannedCells({
+          access: loaded.gate.access,
+          classId: input.classId,
+          from: importFrom,
+          to: planned.lastDate,
+          byCell: planned.byCell,
+        })
+      : null;
+
   await logAction({
     action: "textbook_plan_apply",
     targetType: "class",
     targetLabel: loaded.gate.access.className,
-    metadata: { planId: saved.id, textbook: computed.title, planned: upcoming.length, from: today },
+    metadata: {
+      planId: saved.id,
+      textbook: computed.title,
+      planned: upcoming.length,
+      from: today,
+      ...(written?.ok ? { imported: written.result.added + written.result.filled, through: planned.lastDate } : {}),
+    },
   });
   // 월간계획은 파생값이라 배정이 바뀌면 그 반 화면 전체가 달라진다([[#102]] 계열 — `"layout"` 필수).
   revalidatePath(`/ecs/${input.classId}`, "layout");
   revalidatePath("/ecs");
   revalidatePath("/textbooks");
 
+  if (!written || !written.ok) {
+    // 계획은 섰다 — 실제만 못 넣었다. 성공으로 위장하지 않는다.
+    const importError = written && !written.ok ? written.error : planned.status === "ok" ? null : "월간계획을 읽지 못했습니다";
+    return {
+      ok: true,
+      result: { applied: 0, filled: 0, added: 0, skipped: 0, truncated: 0, planned: upcoming.length },
+      importError,
+      undoBatchId: null,
+    };
+  }
   return {
     ok: true,
-    result: { applied: 0, filled: 0, added: 0, skipped: 0, truncated: 0, planned: upcoming.length },
+    result: { ...written.result, planned: upcoming.length },
+    importError: null,
+    undoBatchId: written.undoBatchId,
   };
 }
 
-// ── 가져오기 — 월간계획(일정)을 한 달치 **실제**로 옮긴다 ────────────────────────
-
-export type ImportPlannedResult =
-  | {
-      ok: true;
-      result: ApplyResult;
-      cells: number;
-      /** 되돌리기 기록 id — 바뀐 칸이 없거나 기록을 못 남겼으면(표 미적용 등) null. 알림의 [실행 취소]가 쓴다. */
-      undoBatchId: string | null;
-    }
-  | { ok: false; error: string };
-
-/** 한 번에 가져올 수 있는 날 수 — 세션 한 달(최대 ~40일)을 넉넉히 덮는 상한. 락·시간 예산 가드. */
-const IMPORT_MAX_DAYS = 62;
+// ── 실제에 넣기 — 교재 배정이 부른다 ────────────────────────
 
 /**
- * **[월간계획 전체 가져오기]** — 그 기간의 월간계획(**일정**, 미루기 반영)을 실제 계획 줄로 복사한다.
- *
- * 🔴 원장 2026-09-28: *"선생님이 월간계획 전체가져오기 기능 추가, 한주씩 가져오는건 필요없음"* — 옛
- *    교시 한 칸 가져오기(`importPlannedSlot`)는 없앴다. 계획이 실제에 들어가는 길은 **이 버튼 하나**다.
- * 🔑 가져오는 건 **일정**이다(원장 2026-09-28 *"계획 놔두고 일정만 밀리게"*) — 미룬 칸은 비워 두고 뒤로
- *    밀린 차수가 들어간다. 비교의 기준인 원래 계획(`baselineByCell`)은 여기서 안 쓴다.
- * 🔑 **빈 칸만 채운다** — 밑바닥은 기입과 같은 RPC(`ecs_apply_textbook_lessons`)라, 이미 적은 칸이나
- *    가져온 뒤 고쳐 쓴 값은 다시 눌러도 덮어쓰지 않는다(여러 번 눌러도 안전하다).
- * 🔴 게이트는 그 반의 ECS 쓰기 권한 — 서버 액션은 공개 엔드포인트다([[#77]]).
+ * 계획 줄(일정) → **실제** 빈 칸에 쓴다 + 되돌리기 기록. 교재 배정(원장 2026-10-22 *"교재배정하면 계획과
+ * 가져오기가 한큐에"*)이 부른다 — [월간계획 전체 가져오기] 버튼은 같은 날 없앴다(*"없어도될듯 대신 되돌리기"*).
+ * 🔴 게이트는 호출부가 이미 걸었다(그 반 ECS 쓰기). 감사로그·revalidate도 호출부 몫.
  */
-export async function importPlannedRange(input: {
+async function writePlannedCells(input: {
+  access: { tenantId: string; user: { id: string } };
   classId: string;
-  /** `"YYYY-MM-DD"` — 화면이 그린 기간(달력월 또는 세션). */
   from: string;
   to: string;
-}): Promise<ImportPlannedResult> {
-  const gate = await requireEcsClassAccess(input.classId, { write: true });
-  if (!gate.ok) return { ok: false, error: gate.error };
-  if (!YMD_RE.test(input.from) || !YMD_RE.test(input.to) || input.from > input.to) {
-    return { ok: false, error: "기간이 올바르지 않습니다" };
-  }
-  const days = (Date.parse(`${input.to}T00:00:00Z`) - Date.parse(`${input.from}T00:00:00Z`)) / 86_400_000;
-  if (!(days < IMPORT_MAX_DAYS)) return { ok: false, error: "한 번에 가져올 수 있는 기간을 넘었습니다" };
-
-  const { getClassPlannedLines } = await import("./month-plan");
-  const planned = await getClassPlannedLines({
-    tenantId: gate.access.tenantId,
-    subject: gate.access.subject,
-    classId: input.classId,
-    from: input.from,
-    to: input.to,
-  });
-  if (planned.status === "missing-table") return { ok: false, error: TEXTBOOKS_NOT_READY };
-  if (planned.status !== "ok") return { ok: false, error: "월간계획을 읽지 못했습니다 — 잠시 뒤 다시 시도해 주세요" };
-
-  const cells = Object.keys(planned.byCell).sort();
-  const lines = cells.flatMap((k) => planned.byCell[k]!);
-  if (lines.length === 0) return { ok: false, error: "이 기간엔 가져올 월간계획이 없습니다" };
+  byCell: Record<string, PlannedLine[]>;
+}): Promise<{ ok: true; result: ApplyResult; cells: number; undoBatchId: string | null } | { ok: false; error: string }> {
+  const { access, classId } = input;
+  const cells = Object.keys(input.byCell).sort();
+  const lines = cells.flatMap((k) => input.byCell[k]!);
 
   // 🔴 RPC는 (시기, 구분, 교재명) 한 벌을 받는다 — 교재마다 따로 부른다. 한 번에 뭉치면 다른 교재의
   //    진도가 첫 교재 줄에 적힌다(구분은 선호가 아니라 필터다, 0266a).
@@ -1013,12 +1026,10 @@ export async function importPlannedRange(input: {
   }
 
   // 되돌리기 기록용 — 가져오기 **전** 모습. 못 읽으면 가져오기는 그대로 하고 되돌리기만 없다.
-  const before = await snapshotPlanLines(admin, gate.access.tenantId, input.classId, input.from, input.to).catch(
-    (e: unknown) => {
-      reportError(e, { scope: "textbooks.import-batch.snapshot", classId: input.classId });
-      return null;
-    },
-  );
+  const before = await snapshotPlanLines(admin, access.tenantId, classId, input.from, input.to).catch((e: unknown) => {
+    reportError(e, { scope: "textbooks.import-batch.snapshot", classId });
+    return null;
+  });
 
   const total: ApplyResult = { applied: 0, filled: 0, added: 0, skipped: 0, truncated: 0 };
   for (const group of groups.values()) {
@@ -1027,9 +1038,9 @@ export async function importPlannedRange(input: {
     try {
       const out = await applyCellLessons({
         admin,
-        tenantId: gate.access.tenantId,
-        actorId: gate.access.user.id,
-        classId: input.classId,
+        tenantId: access.tenantId,
+        actorId: access.user.id,
+        classId,
         termMode: head.termMode,
         book: { skillArea: head.skillArea, title: head.title, pageTime: head.pageTime },
         cells: groupCellLessons(group),
@@ -1049,24 +1060,14 @@ export async function importPlannedRange(input: {
     before && total.added + total.filled > 0
       ? await recordImportBatch({
           admin,
-          tenantId: gate.access.tenantId,
-          classId: input.classId,
+          tenantId: access.tenantId,
+          classId,
           from: input.from,
           to: input.to,
-          actorId: gate.access.user.id,
+          actorId: access.user.id,
           before,
         })
       : null;
-
-  await logAction({
-    action: "textbook_plan_import",
-    targetType: "class",
-    targetLabel: gate.access.className,
-    metadata: { from: input.from, to: input.to, cells: cells.length, ...total },
-  });
-  // 실제 줄이 바뀌었다 — 그 반의 시트·월간을 통째로 무효화한다([[#102]] 계열 — `"layout"` 필수).
-  revalidatePath(`/ecs/${input.classId}`, "layout");
-  revalidatePath("/ecs");
   return { ok: true, result: total, cells: cells.length, undoBatchId };
 }
 

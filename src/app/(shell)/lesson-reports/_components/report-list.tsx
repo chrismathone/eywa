@@ -26,6 +26,7 @@ import type { SortState } from "@/lib/table/sort";
 import type { ReportFilterOptions } from "@/features/report-admin/server/queries";
 import { ReportViewSettings } from "./report-view-settings";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
+import { RatingCell } from "./rating-cell";
 
 // 시:분(KST). timestamptz → Asia/Seoul HH:mm. 값 없으면 빈 문자열.
 function hhmmKst(iso: string | null): string {
@@ -187,6 +188,8 @@ export function ReportList({
   const allChecked = sendable.length > 0 && sendable.every((r) => checked.has(r.id));
   // 멘트 작성 방식 열(0214a) — 마이그레이션 전엔 전 행 "—"뿐이라 열 자체를 숨긴다(뷰 설정 필터와 같은 게이트).
   const showMent = options.mentSourceReady ?? false;
+  // 평점 열(참고용, 0450a) — 서버도 쓰기 권한자에게만 평점을 싣는다(listReports). 화면은 같은 판정으로 열만 감춘다.
+  const showRating = canSend;
 
   const toggle = (id: string) =>
     setChecked((prev) => {
@@ -317,8 +320,12 @@ export function ReportList({
 
       <DragScrollArea className="border-line rounded-md border">
         {/* 반 열이 늘어 최소폭 상향(600→680) — 좁은 창에서 열이 서로 뭉개지지 않게. 넘치면 가로 스크롤.
-            멘트 열(0214a)이 켜지면 한 뼘 더(680→720). */}
-        <table className={`w-full ${showMent ? "min-w-[720px]" : "min-w-[680px]"} text-left text-xs`}>
+            멘트 열(0214a)·평점 열(0450a)이 켜지면 열마다 한 뼘씩 더(+40·+50). */}
+        <table
+          className={`w-full ${
+            showMent && showRating ? "min-w-[770px]" : showMent ? "min-w-[720px]" : showRating ? "min-w-[730px]" : "min-w-[680px]"
+          } text-left text-xs`}
+        >
           <thead>
             <tr className="border-line text-text-faint group border-b">
               {sendOn ? (
@@ -340,6 +347,15 @@ export function ReportList({
               <th className="px-3 py-2 font-bold">학생 · 과목</th>
               <SortableTh sortKey="class" state={sortState} onSort={onSort}>반</SortableTh>
               <SortableTh sortKey="teacher" state={sortState} onSort={onSort}>강사</SortableTh>
+              {/* 평점(참고용, 0450a) — 정렬 없음(원장 미요청). 근거는 숫자에 마우스를 올리면 카드로 뜬다. */}
+              {showRating ? (
+                <th
+                  className="px-3 py-2 font-bold whitespace-nowrap"
+                  title="학부모가 받았을 때 좋은 느낌인가 — AI가 한 번 매긴 참고 값(숫자에 마우스를 올리면 근거)"
+                >
+                  평점
+                </th>
+              ) : null}
               {/* 멘트 작성 방식(0214a) — 정렬 없음(값 3종 + 도입 전 "—"라 필터가 더 정확하다, 뷰 설정에서). */}
               {showMent ? <th className="px-3 py-2 font-bold" title="멘트를 누가 썼는가 — 직접 작성/자동작성(뷰 설정에서 필터)">멘트</th> : null}
               {classnoteOn ? <SortableTh sortKey="status" state={sortState} onSort={onSort}>발송 상태</SortableTh> : null}
@@ -349,7 +365,10 @@ export function ReportList({
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={(sendOn ? 7 : 6) + (showMent ? 1 : 0) - (classnoteOn ? 0 : 1)} className="text-text-faint px-3 py-6 text-center">
+                <td
+                  colSpan={(sendOn ? 7 : 6) + (showMent ? 1 : 0) + (showRating ? 1 : 0) - (classnoteOn ? 0 : 1)}
+                  className="text-text-faint px-3 py-6 text-center"
+                >
                   조건에 맞는 보고서가 없습니다.
                 </td>
               </tr>
@@ -388,6 +407,11 @@ export function ReportList({
                       불가해 대부분 "—"다. 반 정렬 시 이 빈 값들이 뒤로 가고 반 있는 건이 위로 모인다. */}
                   <td className="text-text-dim px-3 py-2 whitespace-nowrap">{r.className ?? "—"}</td>
                   <td className="text-text-dim px-3 py-2">{r.teacherName ?? "—"}</td>
+                  {showRating ? (
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      <RatingCell rating={r.rating} />
+                    </td>
+                  ) : null}
                   {showMent ? (
                     <td className="px-3 py-2 whitespace-nowrap">
                       <MentSourceCell value={r.mentSource} />

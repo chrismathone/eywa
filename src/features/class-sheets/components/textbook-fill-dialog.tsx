@@ -19,6 +19,7 @@ import { sheetDowLabel, sheetDowLabelByIndex, type SheetLang } from "@/features/
 import type { ApplyPreview, ApplyPreviewRow, ClassSlotChoice, LessonPace } from "@/features/textbooks/types";
 import { slotPickKey } from "@/features/textbooks/lesson-schedule";
 import { TextbookFillExisting } from "./textbook-fill-existing";
+import { undoPlanImport } from "@/features/textbooks/server/import-undo-actions";
 
 /**
  * **교재 배정** — 월간 시트에서 교시를 고르고 교재를 고르면 차수가 수업일마다 순서대로 들어간다.
@@ -289,11 +290,32 @@ export function TextbookFillDialog({
         setError(feedback(res.error));
         return;
       }
-      // 🔴 배정은 **월간계획까지만** 만든다(원장 2026-09-22) — 실제 칸은 강사가 [월간계획 가져오기]를
-      //    누를 때만 채워지므로, 여기서 '기입 완료'라고 말하면 거짓이 된다.
+      // 🔑 배정 = 계획 + 실제 한 번에(원장 2026-10-22). 실제에 몇 칸 넣었는지를 따로 말한다 — 빈 칸이 없어
+      //    0칸일 수 있고, 계획은 섰는데 실제만 실패했을 수도 있다(성공으로 뭉개지 않는다).
       const planned = res.result.planned ?? 0;
-      if (planned === 0) toast.info(t("fill.done.none"));
-      else toast.success(tf("fill.done", { n: planned }));
+      const imported = res.result.added + res.result.filled;
+      const batchId = res.undoBatchId;
+      if (res.importError) toast.error(t("fill.done.importFailed"), { description: feedback(res.importError) });
+      else if (planned === 0) toast.info(t("fill.done.none"));
+      else if (imported === 0) toast.success(tf("fill.done.planOnly", { n: planned }));
+      else
+        toast.success(
+          tf("fill.done", { n: imported }),
+          batchId
+            ? {
+                duration: 10_000,
+                action: {
+                  label: t("month.importUndo.action"),
+                  onClick: () =>
+                    void undoPlanImport({ classId, batchId }).then((r) => {
+                      if (!r.ok) return void toast.error(feedback(r.error));
+                      toast.success(tf("month.importUndo.done", { n: r.restored }));
+                      router.refresh();
+                    }),
+                },
+              }
+            : undefined,
+        );
       router.refresh();
       onApplied();
       onClose();

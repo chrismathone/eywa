@@ -226,13 +226,19 @@ describe("교재 배정 — 계획과 실제를 가른다", () => {
   const plan = read("src", "features", "textbooks", "server", "plan-actions.ts");
   const monthPlan = read("src", "features", "textbooks", "server", "month-plan.ts");
 
-  it("🔴 배정은 실제 칸에 한 줄도 쓰지 않는다 — 기입 RPC를 부르지 않는다", () => {
+  it("🔴 배정 = 계획 + 가져오기 한 번에(원장 2026-10-22) — 실제 쓰기는 가져오기와 **같은 함수**만", () => {
     const body = plan.slice(plan.indexOf("export async function applyTextbookFill"), plan.indexOf("// ── 가져오기"));
-    // ⚠️ **호출만** 본다 — 왜 그런가를 적은 주석에도 그 이름이 나온다(가드가 설명을 결과로 오인하면 안 된다).
+    // 배정을 저장한다(그게 곧 월간계획이다) → 그 배정만 골라 가져오기와 같은 writer로 실제에 넣는다.
+    expect(body).toContain("saveClassTextbookPlan");
+    expect(body).toContain("planId: saved.id");
+    expect(body).toContain("await writePlannedCells(");
+    // ⚠️ 직접 RPC·옛 기입 경로로 따로 쓰지 않는다(두 벌이면 같은 칸이 길마다 다르게 들어간다).
     expect(body).not.toContain("await applyLoaded(");
     expect(body).not.toContain(`rpc("ecs_apply_textbook_lessons"`);
-    // 대신 배정을 저장한다(그게 곧 월간계획이다).
-    expect(body).toContain("saveClassTextbookPlan");
+    // 🔴 지난 날짜엔 안 넣는다(미리보기의 '지난 날짜' 약속).
+    expect(body).toMatch(/importFrom = input\.startDate > today \? input\.startDate : today/);
+    // 🔴 [월간계획 전체 가져오기]는 없앴다(원장 2026-10-22 *"없어도될듯 대신 되돌리기"*) — 되살리지 말 것.
+    expect(plan).not.toContain("importPlannedRange");
   });
 
   it("🔴 월간계획은 **저장하지 않는다** — 배정에서 계산하는 읽기 전용이다", () => {
@@ -252,36 +258,38 @@ describe("교재 배정 — 계획과 실제를 가른다", () => {
     // 달력의 '계획' 표식·비교 배지는 원래 계획을 본다.
     const monthQueries = read("src", "features", "class-sheets", "server", "month-queries.ts");
     expect(monthQueries).toContain("plannedBySlot: plannedRes.baselineByCell");
-    // 가져오기는 일정(byCell)을 옮긴다.
-    const importFn = plan.slice(plan.indexOf("export async function importPlannedRange"));
-    expect(importFn).toContain("planned.byCell");
-    expect(importFn).not.toContain("baselineByCell");
+    // 배정이 실제에 넣는 건 일정(byCell)이다.
+    const fill = plan.slice(plan.indexOf("export async function applyTextbookFill"));
+    expect(fill).toContain("byCell: planned.byCell");
+    expect(fill).not.toContain("baselineByCell");
   });
 
-  it("계획이 실제로 들어가는 길은 [월간계획 전체 가져오기] 하나뿐이다 — 교시 한 칸 가져오기는 없앴다", () => {
-    expect(plan).toContain("export async function importPlannedRange");
+  it("계획이 실제로 들어가는 길은 교재 배정 하나다 — 교시 한 칸·전체 가져오기는 없앴다", () => {
+    expect(plan).not.toContain("export async function importPlannedRange");
     expect(plan).not.toContain("export async function importPlannedSlot");
     const api = read("src", "features", "class-sheets", "components", "plan-api.ts");
     expect(api).not.toContain("importPlan");
     const table = read("src", "features", "class-sheets", "components", "plan-table.tsx");
     expect(table).not.toContain("plan.fromPlan");
     expect(table).toContain("PlanCompareButton");
-    // 버튼은 되돌리기와 함께 `ImportPlanButton`으로 나갔다(2026-10-15).
+    // 툴바의 가져오기 자리엔 되돌리기만 선다(2026-10-22).
     const month = read("src", "features", "class-sheets", "components", "month-client.tsx");
-    expect(month).toContain("<ImportPlanButton");
-    const button = read("src", "features", "class-sheets", "components", "import-plan-button.tsx");
-    expect(button).toContain("importPlannedRange");
+    expect(month).toContain("<ImportUndoButton");
+    expect(month).not.toContain("ImportPlanButton");
   });
 
-  it("🔴 가져오기는 되돌릴 수 있다 — 알림 [실행 취소] + ▾ 메뉴, 손대지 않은 칸만(원장 2026-10-15)", () => {
-    const button = read("src", "features", "class-sheets", "components", "import-plan-button.tsx");
+  it("🔴 배정이 넣은 실제는 되돌릴 수 있다 — 알림 [실행 취소] + 툴바 [되돌리기 ▾], 손대지 않은 칸만", () => {
+    const button = read("src", "features", "class-sheets", "components", "import-undo-button.tsx");
     expect(button).toContain("undoPlanImport");
-    expect(button).toContain("month.importUndo.action"); // 알림의 [실행 취소]
-    expect(button).toContain("month.importUndo.menu"); // ▾ 메뉴
-    // 가져오기가 기록을 남기고(앞 스냅숏 → 뒤 차이) 되돌리기는 같은 쓰기 게이트를 탄다.
-    const importFn = plan.slice(plan.indexOf("export async function importPlannedRange"));
-    expect(importFn).toContain("snapshotPlanLines(");
-    expect(importFn).toContain("recordImportBatch(");
+    expect(button).toContain("month.importUndo.menu"); // ▾ 메뉴 — 언제·몇 줄을 보고 고른다
+    expect(button).toContain("if (!lastImport) return null"); // 되돌릴 기록이 있을 때만 선다
+    const dialog = read("src", "features", "class-sheets", "components", "textbook-fill-dialog.tsx");
+    expect(dialog).toContain("month.importUndo.action"); // 배정 알림의 [실행 취소]
+    expect(dialog).toContain("undoPlanImport");
+    // 쓰기가 기록을 남기고(앞 스냅숏 → 뒤 차이) 되돌리기는 같은 쓰기 게이트를 탄다.
+    const writer = plan.slice(plan.indexOf("async function writePlannedCells"));
+    expect(writer).toContain("snapshotPlanLines(");
+    expect(writer).toContain("recordImportBatch(");
     const undo = read("src", "features", "textbooks", "server", "import-undo-actions.ts");
     expect(undo).toContain("requireEcsClassAccess(input.classId, { write: true })");
     expect(undo).toContain("planUndo(");
@@ -359,10 +367,10 @@ describe("교재 배정 — 회차 미루기·당기기", () => {
     expect(relay).toContain("previous: scheduleWith(m!.shifts ?? {})");
   });
 
-  it("🔴 차수 하나 = 줄 하나 — 가져오기·미룸·당김이 같은 쓰기를 탄다(원장 2026-10-19 \"차시마다 한줄씩\")", () => {
+  it("🔴 차수 하나 = 줄 하나 — 배정·미룸·당김이 같은 쓰기를 탄다(원장 2026-10-19 \"차시마다 한줄씩\")", () => {
     // 한 줄로 잇던 옛 함수가 되살아나면 `25분` 줄 하나에 차수가 둘 들어간다.
     expect(plan).not.toContain("mergeSameCellLessons");
-    const body = plan.slice(plan.indexOf("export async function importPlannedRange"));
+    const body = plan.slice(plan.indexOf("async function writePlannedCells"));
     expect(body).toContain("applyCellLessons(");
     expect(body).toContain("groupCellLessons(");
     const relay = read("src", "features", "textbooks", "server", "shift-relay.ts");

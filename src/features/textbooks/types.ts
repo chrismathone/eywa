@@ -107,9 +107,8 @@ export type ApplyResult = {
   skipped: number;
   truncated: number;
   /**
-   * 배정으로 **계획에 선** 칸 수(원장 2026-09-22). 실제에 쓴 칸이 아니다 — 실제는 강사가
-   * [가져오기]를 누를 때만 채워진다. 그래서 위 넷(applied/filled/added/skipped)과 **다른 축**이고,
-   * 배정 저장 응답에서는 그 넷이 전부 0이다.
+   * 배정으로 **계획에 선** 칸 수(원장 2026-09-22). 실제에 쓴 칸이 아니다 — 위 넷(applied/filled/added/skipped)과
+   * **다른 축**이다. 2026-10-22부터 배정이 실제까지 함께 넣으므로(배정 = 계획 + 가져오기) 그 넷은 실제에 쓴 결과다.
    */
   planned?: number;
 };

@@ -665,7 +665,7 @@ export const SHEET_DICT = {
   "plan.shift.undo": { ko: "되돌리기", en: "Revert" },
   "plan.shift.undo.done": { ko: "되돌렸습니다 — 누르기 전 진도로 돌아갔습니다", en: "Undone — lessons are back to how they were" },
   // 계획 비교(원장 2026-09-28) — 이 칸의 **원래 월간계획 ↔ 실제**를 모달로 견준다(읽기 전용).
-  //  🔴 옛 '월간계획 가져오기'(교시 한 칸)는 없앴다 — 가져오기는 월간 화면의 전체 가져오기 하나뿐이다.
+  //  🔴 옛 '월간계획 가져오기'(교시 한 칸)·전체 가져오기는 없앴다 — 계획은 교재 배정이 실제에 함께 넣는다.
   "plan.compare": { ko: "계획 비교", en: "Compare plan" },
   "plan.compare.title": {
     ko: "이 교시의 원래 월간계획과 실제 수업을 나란히 봅니다",
@@ -966,8 +966,8 @@ export const SHEET_DICT = {
   },
   "fill.title": { ko: "교재 배정 — {class}", en: "Assign a textbook — {class}" },
   "fill.desc": {
-    ko: "교시와 교재를 고르면 그 시각의 수업일마다 차수가 순서대로 월간계획에 섭니다. 연휴는 건너뜁니다. 실제 시트는 강사가 [월간계획 전체 가져오기]를 누를 때만 채워집니다.",
-    en: "Pick periods and a book and the lessons line up on the monthly plan, class day by class day (holidays skipped). The actual sheet is filled only when a teacher presses [Import plan].",
+    ko: "교시와 교재를 고르면 그 시각의 수업일마다 차수가 순서대로 월간계획에 서고, 오늘부터의 실제 시트 빈 칸에도 함께 들어갑니다. 연휴는 건너뛰고 이미 적은 칸은 덮어쓰지 않습니다.",
+    en: "Pick periods and a book and the lessons line up on the monthly plan, class day by class day — and go into the empty cells of the actual sheet from today on. Holidays are skipped; written cells are never overwritten.",
   },
   "fill.slots": {
     ko: "교시 — 선생님을 누르고, 요일과 차수 자리를 고르세요 (1차수 = 25분)",
@@ -1036,8 +1036,16 @@ export const SHEET_DICT = {
   "fill.out.past.title": { ko: "이미 지난 수업엔 소급해 넣지 않습니다", en: "Past lessons are never back-filled" },
   "fill.done.none": { ko: "배정할 칸이 없었습니다", en: "Nothing to assign" },
   "fill.done": {
-    ko: "월간계획에 {n}칸 배정했습니다 — 실제엔 월간 화면의 [월간계획 전체 가져오기]로 넣습니다",
-    en: "Assigned {n} cells to the monthly plan — bring them in with [Import whole plan] on the month view",
+    ko: "교재를 배정하고 실제 시트에 {n}칸을 넣었습니다 — 실제와 다르면 고쳐 주세요",
+    en: "Assigned the book and filled {n} cells of the actual sheet — edit them if lessons went differently",
+  },
+  "fill.done.planOnly": {
+    ko: "월간계획에 {n}칸 배정했습니다 — 실제 시트엔 채울 빈 칸이 없었습니다",
+    en: "Assigned {n} cells to the monthly plan — no empty cells to fill on the actual sheet",
+  },
+  "fill.done.importFailed": {
+    ko: "월간계획엔 배정했지만 실제 시트에 넣지 못했습니다 — 잠시 뒤 같은 교시로 다시 배정하면 빈 칸만 채웁니다",
+    en: "Assigned to the monthly plan, but couldn't fill the actual sheet — assign again with the same periods shortly; only empty cells are filled",
   },
   "fill.done.skipped": { ko: "이미 적혀 있어 그대로 둠 {n}칸", en: "{n} already written" },
   "fill.done.truncated": { ko: "줄 상한(20)으로 못 넣음 {n}칸", en: "{n} skipped (20-row cap)" },
@@ -1134,28 +1142,26 @@ export const SHEET_DICT = {
     ko: "이 줄 차수를 건너뛰고 다음 차수를 이 줄로 당깁니다(같은 칸의 다른 줄은 그대로). 실행 뒤 [되돌리기]로 원래대로 돌릴 수 있습니다.",
     en: "Skips this row's lesson and pulls the next one here (other rows in the cell stay). You can Undo afterwards.",
   },
-  // 월간계획 전체 가져오기(원장 2026-09-28) — 이 기간의 일정(미루기 반영)을 실제 빈 칸에 한 번에 넣는다.
-  "month.importAll": { ko: "월간계획 전체 가져오기", en: "Import whole plan" },
-  "month.importAll.title": {
-    ko: "이 기간의 월간계획(미루기·당기기 반영)을 실제 칸에 한 번에 넣습니다 — 빈 칸만 채우고 이미 적은 칸은 덮어쓰지 않습니다",
-    en: "Imports this period's monthly plan (with pushes/pulls) into the actual cells at once — empty cells only; written cells are never overwritten",
-  },
-  "month.importAll.busy": { ko: "가져오는 중…", en: "Importing…" },
-  "month.importAll.done": { ko: "월간계획에서 {n}칸을 채웠습니다 — 실제와 다르면 고쳐 주세요", en: "Filled {n} cells from the plan — edit them if lessons went differently" },
+  // 이미 다 적힌 칸 — 전엔 [월간계획 전체 가져오기]가 쓰던 문구, 지금은 내용 복사(target_already_filled)가 쓴다.
   "month.importAll.none": {
     ko: "빈 칸이 없어 채울 게 없습니다(이미 쓴 칸은 덮어쓰지 않습니다)",
     en: "Nothing to fill — written cells are never overwritten",
   },
-  // 가져오기 되돌리기(원장 2026-10-15) — 알림의 [실행 취소] + 버튼 옆 ▾ 메뉴. 손대지 않은 칸만 되돌린다.
+  // 되돌리기(원장 2026-10-15 → 2026-10-22 툴바의 가져오기 자리) — 배정이 실제에 넣은 마지막 반영을 되돌린다.
+  // 알림의 [실행 취소] + 툴바 [되돌리기 ▾]. 손대지 않은 칸만 되돌린다.
   "month.importUndo.action": { ko: "실행 취소", en: "Undo" },
-  "month.importUndo.more": { ko: "가져오기 되돌리기 메뉴", en: "Undo import menu" },
-  "month.importUndo.menu": { ko: "마지막 가져오기 되돌리기 ({at} · {n}줄)", en: "Undo last import ({at} · {n} rows)" },
-  "month.importUndo.done": { ko: "가져오기를 되돌렸습니다 — {n}줄을 원래대로 돌렸습니다", en: "Import undone — {n} rows restored" },
-  "month.importUndo.doneKept": {
-    ko: "가져오기를 되돌렸습니다 — {n}줄을 원래대로 돌리고, 그 뒤 고쳐 쓰거나 옮긴 {kept}줄은 남겼습니다",
-    en: "Import undone — {n} rows restored; {kept} rows edited or moved afterwards were kept",
+  "month.importUndo.button": { ko: "되돌리기", en: "Revert fill" },
+  "month.importUndo.busy": { ko: "되돌리는 중…", en: "Undoing…" },
+  "month.importUndo.more": {
+    ko: "교재 배정으로 실제 시트에 넣은 마지막 반영을 되돌립니다 — 그 뒤 고쳐 쓴 칸은 남깁니다",
+    en: "Undoes the last fill of the actual sheet from a book assignment — cells edited afterwards are kept",
   },
-  "month.importAll.truncated": { ko: " · {n}줄은 칸의 20줄 상한이라 못 넣었습니다", en: " · {n} rows skipped (20-row limit per cell)" },
+  "month.importUndo.menu": { ko: "마지막 반영 되돌리기 ({at} · {n}줄)", en: "Undo last fill ({at} · {n} rows)" },
+  "month.importUndo.done": { ko: "되돌렸습니다 — {n}줄을 원래대로 돌렸습니다", en: "Undone — {n} rows restored" },
+  "month.importUndo.doneKept": {
+    ko: "되돌렸습니다 — {n}줄을 원래대로 돌리고, 그 뒤 고쳐 쓰거나 옮긴 {kept}줄은 남겼습니다",
+    en: "Undone — {n} rows restored; {kept} rows edited or moved afterwards were kept",
+  },
   "month.plannedTag": { ko: "계획", en: "Plan" },
   "month.plannedNo": { ko: "{n}차수", en: "lesson {n}" },
   "month.unwritten": { ko: "미작성", en: "Not written" },
