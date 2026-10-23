@@ -82,31 +82,10 @@ describe("강사 시트 — 독립 사이드바 탭 (원장 2026-08-17 승격 ·
   });
 
   // 시간표 하부탭의 내력: ECS가 떠난 뒤 0면 → 2026-08-28 원장 지시로 3면(본 시간표 / 개발중 / 월별 비교)
-  // → **08-31 원장 지시로 사이드바에서 숨김**(`TIMETABLE_DEV_NAV_VISIBLE=false`).
-  // 🔴 숨김은 **잠금이 아니다** — 라우트·권한은 그대로 살아서 주소로는 지금도 들어간다(아래 두 번째 it).
-  // 🔴 개발중 면은 **본 시간표와 같은 menuKey**를 쓴다 — 새 키를 만들면 auth_menu_access DEFAULTS에
-  //    없어 master 빼고 전원 차단이 된다(#92). 다시 켤 때도 이 성질을 유지할 것.
-  it("시간표 하부탭은 지금 숨김 — 사이드바에 줄이 서지 않는다", () => {
+  // → 08-31 사이드바에서 숨김 → **10-23 '개발중'·'월별 비교' 화면째 제거**(편집기로 대체).
+  // 경로가 겹치는 하부탭의 '긴 쪽이 이긴다' 규약은 아래 출석부 묶음이 잠근다.
+  it("시간표는 하부탭이 없다 — 사이드바에 줄이 서지 않는다", () => {
     expect(subTabsForMenu("timetable")).toEqual([]);
-  });
-
-  it("🔴 숨겨도 경로 권한은 살아 있다 — /timetable-dev는 시간표 메뉴 키로 판정된다", () => {
-    // 이게 null이 되면 주소로 들어간 사람의 뷰-경로 가드가 판정을 못 한다(신규 라우트는 fail-open).
-    expect(menuKeyForPath("/timetable-dev")).toBe("timetable");
-    expect(menuKeyForPath("/timetable-dev/compare")).toBe("timetable");
-  });
-
-  it("다시 켤 때를 대비 — 긴 경로가 이기는 규약은 그대로다", () => {
-    // 스위치를 true로 되돌리면 이 세 줄이 그대로 하부탭이 된다. 그때 '비교' 화면에서 '개발중'이 같이
-    // 켜지면 지금 어디인지 알 수 없으므로, 활성 판정 규약을 미리 잠가 둔다.
-    const tabs = [
-      { label: "시간표", href: "/timetable" },
-      { label: "시간표(개발중)", href: "/timetable-dev" },
-      { label: "월별 비교", href: "/timetable-dev/compare" },
-    ];
-    expect(activeSubTabHref(tabs, "/timetable-dev/compare")).toBe("/timetable-dev/compare");
-    expect(activeSubTabHref(tabs, "/timetable-dev")).toBe("/timetable-dev");
-    expect(activeSubTabHref(tabs, "/timetable")).toBe("/timetable");
   });
 });
 

@@ -96,20 +96,8 @@ export const TONE_SOFT: Record<SemanticTone, string> = {
   brand: "bg-primary-soft text-primary",
 };
 
-/**
- * 🔴 **사용 금지** — 왼쪽 색 띠는 앱에서 걷어냈다(원장 2026-09-16 *"왼쪽에 이렇게 테두리 같은거 표시하는거 싹다
- * 제거해"* · AI가 만든 화면에 흔한 장식이라는 지적). 뜻은 배경색·글자색·문구가 말한다. 남은 소비처는 손대지 않는
- * 개발 사본 `timetable-dev`뿐이라 상수만 남겨 둔다 — 새 코드에서 쓰지 말 것(가드 `no-left-accent-bar.test.ts`).
- */
-export const TONE_ACCENT_BAR: Record<SemanticTone, string> = {
-  positive: "border-l-green",
-  caution: "border-l-amber",
-  critical: "border-l-danger",
-  info: "border-l-blue",
-  special: "border-l-purple",
-  inert: "border-l-line-strong",
-  brand: "border-l-primary",
-};
+// 왼쪽 색 띠 표현(옛 `TONE_ACCENT_BAR`)은 없다 — 앱에서 걷어냈고(원장 2026-09-16) 마지막 소비처였던 시간표(개발중)를
+// 2026-10-23 지우면서 상수도 지웠다. 뜻은 배경색·글자색·문구가 말한다(가드 `no-left-accent-bar.test.ts`).
 
 /** tone → Pill 색. `<Pill color={toneColor("positive")}>` 처럼 쓴다. */
 export function toneColor(tone: SemanticTone): PillColor {

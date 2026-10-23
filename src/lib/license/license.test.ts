@@ -79,7 +79,6 @@ describe("라이선스 배선 가드", () => {
         "src/app/api/cron/sheets-sync/route.ts",
         "src/features/integrations/server/actions.ts",
         "src/features/timetable/server/import-actions.ts",
-        "src/features/timetable-dev/server/sheet-import-actions.ts",
         "src/features/staff/resume/server/resume-roster-sheet.ts",
       ]),
     );

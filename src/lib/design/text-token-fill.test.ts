@@ -39,8 +39,8 @@ describe("글자 토큰은 글자에만", () => {
   it("bg-/ring-/fill-/border- 로 글자 토큰을 쓰지 않는다 — 면 회색은 --neutral-fill", { timeout: 60_000 }, () => {
     const bad: string[] = [];
     for (const f of walk(join(ROOT, "src"))) {
-      // timetable-dev는 개발 사본이라 규약 밖. 테스트 파일은 규칙을 인용한다.
-      if (/\.test\.tsx?$/.test(f) || f.includes("timetable-dev")) continue;
+      // 테스트 파일은 규칙을 인용한다.
+      if (/\.test\.tsx?$/.test(f)) continue;
       readFileSync(f, "utf8")
         .split("\n")
         .forEach((line, i) => {
@@ -96,7 +96,7 @@ describe("글자 토큰은 글자에만", () => {
     const bad: string[] = [];
     for (const f of walk(join(ROOT, "src"))) {
       const rel = f.slice(ROOT.length + 1).split("\\").join("/");
-      if (/\.test\.tsx?$/.test(f) || f.includes("timetable-dev") || ALLOW.some((re) => re.test(rel))) continue;
+      if (/\.test\.tsx?$/.test(f) || ALLOW.some((re) => re.test(rel))) continue;
       readFileSync(f, "utf8")
         .split("\n")
         .forEach((line, i) => {

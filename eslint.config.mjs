@@ -81,11 +81,6 @@ const shadcnConfig = !shadcn
         ],
         rules: { "shadcn/no-unknown-classes": "off" },
       },
-      // 개발 사본 — 손대지 않는 폴더라 경고를 내도 고칠 수 없다(다른 디자인 가드도 대상 밖).
-      {
-        files: ["src/app/(shell)/timetable-dev/**"],
-        rules: { "shadcn/no-raw-colors": "off", "shadcn/no-unknown-classes": "off" },
-      },
       // 학부모 보고서 그래프 — ClassNote 워커 캡처에는 앱 스타일시트가 없어 색을 일부러 hex로 적는다.
       {
         files: ["src/features/onescreen/components/report-trend-graph.tsx"],

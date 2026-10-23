@@ -27,7 +27,6 @@
 | 대상 | 뺀 규칙 | 까닭 |
 |---|---|---|
 | `src/app/(marketing)/**` · `src/app/(academy)/**` · `src/features/timetable-lab/editor/**` | `no-unknown-classes` | 자체 CSS 파일로 그리는 화면이라 테마 밖 클래스가 정상이다(켜면 710건) |
-| `src/app/(shell)/timetable-dev/**` | 둘 다 | 손대지 않는 개발 사본 — 다른 디자인 가드도 대상 밖 |
 | `src/features/onescreen/components/report-trend-graph.tsx` | `no-raw-colors` | 학부모 보고서 그래프 — ClassNote 워커 캡처에는 앱 스타일시트가 없어 색을 일부러 hex로 적는다(파일 머리말) |
 | 표식 클래스 `cf-turnstile` · `report-capture` · `tt-editing` · `ecs-slot-edge` | `no-unknown-classes`의 `allow` | 스타일 없이 이름으로만 찾는다 — 찾는 쪽은 설정의 줄마다 적혀 있다 |
 

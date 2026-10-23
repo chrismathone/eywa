@@ -167,7 +167,7 @@ describe("화면 최대화 배선", () => {
 
   it("머리글을 그리는 화면을 덮는 loading.tsx는 공용 PageHeaderSkeleton — 손으로 쌓은 막대는 로딩 동안 버튼을 지워 출구 줄이 깜빡인다", () => {
     const pages = walk(join(ROOT, "src/app/(shell)"))
-      .filter((f) => f.endsWith("page.tsx") && !rel(f).includes("timetable-dev/"))
+      .filter((f) => f.endsWith("page.tsx"))
       .map(rel);
     // 그 화면을 덮는 loading = 같은 폴더부터 위로 올라가며 처음 만나는 loading.tsx(Next 세그먼트 규칙 — (shell) 루트엔 없다).
     const coveringLoading = (page: string): string | null => {
@@ -189,7 +189,6 @@ describe("화면 최대화 배선", () => {
   it("헤더 스켈레톤은 공용 PageHeaderSkeleton — 옛 3단 근사(eyebrow·제목·설명 막대를 mt-2로 쌓기)가 남지 않는다", () => {
     const loadings = walk(join(ROOT, "src/app/(shell)"))
       .filter((f) => f.endsWith("loading.tsx"))
-      .filter((f) => !rel(f).includes("timetable-dev/")) // 개발 사본(skeleton-canon과 같은 예외)
       .filter((f) => !NOT_PAGE_HEADER.some((x) => rel(f).endsWith(x)));
     const stacked = loadings.filter((f) => /mt-2 h-(6|7) w-/.test(read(rel(f)))).map(rel);
     expect(stacked).toEqual([]);
@@ -205,7 +204,6 @@ describe("화면 최대화 배선", () => {
     const offenders: string[] = [];
     for (const f of [...walk(join(ROOT, "src/app/(shell)")), ...walk(join(ROOT, "src/features"))]) {
       const p = rel(f);
-      if (p.includes("timetable-dev/")) continue;
       const src = read(p);
       let at = src.indexOf("<PageHeader");
       while (at >= 0) {

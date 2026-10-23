@@ -20,10 +20,8 @@ function loadingFiles(dir: string, out: string[] = []): string[] {
  * 🔴 실제로 그렇게 썩었다(2026-09-07 검수): v5가 컨트롤 높이를 32→26px로 내리고(control-scale) ECS·MCS 상단 바의
  *    카드 껍데기를 걷었는데(2026-09-01), 스켈레톤 아홉이 옛 모양(h-8 · `bg-card` 툴바 띠 · 알약 7개짜리 면 탭 ·
  *    수납 '최근 6개월 칩 줄')을 그대로 그리고 있었다. 치수를 손으로 적으면 실표면이 바뀔 때 같이 안 바뀐다.
- *
- * ⚠️ `timetable-dev`는 개발 사본이라 손대지 않는다(결정 로그 ⑰).
  */
-const files = loadingFiles(APP).filter((p) => !p.includes("timetable-dev"));
+const files = loadingFiles(APP);
 const rel = (p: string) => p.slice(process.cwd().length + 1);
 const NL = String.fromCharCode(10);
 

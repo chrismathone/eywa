@@ -100,7 +100,7 @@ describe("회차 확정 예정 시수 변경 신호 배선", () => {
   it(
     "① 수강·배치·반·학생 상태를 바꾸는 액션을 부르는 클라이언트 파일은 전부 notifyTermPlansChanged를 부른다",
     () => {
-      const files = walk(SRC).filter((f) => !rel(f).startsWith("app/(shell)/timetable-dev/"));
+      const files = walk(SRC);
       const callers: string[] = [];
       const missing: string[] = [];
       for (const full of files) {
@@ -152,12 +152,7 @@ describe("회차 확정 예정 시수 변경 신호 배선", () => {
     () => {
       const offenders = walk(SRC)
         .map(rel)
-        .filter(
-          (r) =>
-            !r.startsWith("app/(shell)/billing/") &&
-            !r.startsWith("features/billing/") &&
-            !r.startsWith("app/(shell)/timetable-dev/"),
-        )
+        .filter((r) => !r.startsWith("app/(shell)/billing/") && !r.startsWith("features/billing/"))
         .filter((r) => /publishRecordSaved\(\s*["']billing:session-terms["']/.test(strip(read(r))));
       expect(offenders).toEqual([]);
     },

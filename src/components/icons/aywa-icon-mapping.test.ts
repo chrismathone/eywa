@@ -233,7 +233,8 @@ describe("Aywa icon compatibility mapping", () => {
       // 141→139는 2026-09-03 `BookPlus`·`MessageSquarePlus` 제거분(운영실 '빠른 작업'이 §10 "같은 동작 두 곳 금지"로 사라지며 소비처 0).
       // 139→138: 랜딩 리팩토링으로 LayoutDashboard의 마지막 소비처를 제거.
       // 138→137은 2026-10-22 `Banknote` 제거분(0c631a51e가 콜&상담 폼의 '결제 금액' 칸을 걷으며 소비처 0).
-      expect(mapped.size).toBe(137);
+      // 137→136은 2026-10-23 `Columns3` 제거분(시간표(개발중) 화면을 코드째 지우며 '기본뷰' 토글 소비처 0).
+      expect(mapped.size).toBe(136);
     },
     // src/ 전건을 ts.createSourceFile로 파싱한다 — 단독 실행 14초라 15초는 여유가 없었고
     // 전 스위트 병렬(파일 증가 + CPU 경합)에서 실제로 터졌다. 파일 수는 계속 는다.

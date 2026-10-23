@@ -15,10 +15,7 @@ const cron = strip(read("src", "app", "api", "cron", "apply-due-class-updates", 
 const applier = strip(read("src", "features", "owner", "server", "scheduled-groups.ts"));
 const due = strip(read("src", "features", "timetable", "due-class-updates.ts"));
 const script = strip(read("scripts", "_english_sync", "sync-integration-groups.mts"));
-const pages = [
-  ["시간표", strip(read("src", "app", "(shell)", "timetable", "page.tsx"))],
-  ["시간표(dev)", strip(read("src", "app", "(shell)", "timetable-dev", "page.tsx"))],
-] as const;
+const pages = [["시간표", strip(read("src", "app", "(shell)", "timetable", "page.tsx"))]] as const;
 
 describe("cron이 그룹 예약을 읽고 적용한다", () => {
   it("스냅샷 payload에서 그룹 예약을 함께 조회한다", () => {

@@ -20,8 +20,8 @@ import { describe, expect, it } from "vitest";
 const ROOT = process.cwd();
 const SRC = join(ROOT, "src");
 
-/** 손대지 않는 곳 — 개발 사본 · 홍보 페이지 · 종이 서식. */
-const SKIP_DIRS = ["timetable-dev", "(marketing)", "(print)"];
+/** 손대지 않는 곳 — 홍보 페이지 · 종이 서식. */
+const SKIP_DIRS = ["(marketing)", "(print)"];
 
 /**
  * 막지 않는 **줄**과 이유. 파일 통째로 허용하지 않는다 — 그러면 그 파일에 새 띠가 들어와도 못 잡는다.

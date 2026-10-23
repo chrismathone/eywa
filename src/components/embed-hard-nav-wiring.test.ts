@@ -115,8 +115,6 @@ const TOP_LEVEL_ONLY: Record<string, string> = {
   "src/components/workspace/embed-url-keeper.tsx":
     "최상위(새 탭)에 뜬 창 문서에서 embed를 **떼는** 자리 — 창 안에선 이 호출이 안 돈다(isFramed)",
 };
-/** 개발 사본 — CLAUDE.md "timetable-dev는 손대지 않는다". */
-const DEV_COPY_PREFIX = "src/app/(shell)/timetable-dev/";
 
 /**
  * **지금 문서**를 옮기는 호출만 — `window.location.…` 또는 맨 `location.…`.
@@ -145,7 +143,7 @@ function keepsEmbed(arg: string, src: string): boolean {
 }
 
 function unhandledCalls(file: string, src: string): string[] {
-  if (TOP_LEVEL_ONLY[file] || file.startsWith(DEV_COPY_PREFIX)) return [];
+  if (TOP_LEVEL_ONLY[file]) return [];
   return hardNavCalls(src)
     .filter(({ arg }) => !keepsEmbed(arg, src))
     .map(({ arg, index }) => `${lineOf(src, index)}번 줄 (${arg.trim()})`);

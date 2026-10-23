@@ -47,7 +47,7 @@ export const FILTER_SCREENS: readonly FilterScreen[] = [
   { key: "students", match: exact("/students") },
   { key: "classes", match: exact("/classes") },
   { key: "staff", match: exact("/staff") },
-  { key: "timetable", match: exact("/timetable", "/timetable-dev") },
+  { key: "timetable", match: exact("/timetable") },
   // 반 시트(`/ecs/<반>`)에 들어가 있어도 영어 시트를 보는 중이다 — 첫 화면·반 시트가 같은 필터(프로그램·담임)로 반 목록을 고른다
   { key: "ecs", match: under("/ecs") },
   { key: "attendance-live", match: exact("/attendance/live") },

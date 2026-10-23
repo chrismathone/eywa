@@ -41,8 +41,6 @@ export const ROUTE_WINDOW_SIZE: Record<string, { w: number; h: number }> = {
   // 운영실 — 지표 줄·오늘 브리핑·접힌 2차 줄이 들어가는 폭(2026-09-07 창으로 전환).
   dashboard: { w: 1180, h: 820 },
   timetable: { w: 1040, h: 680 }, // 강사×요일 표라 폭이 넓음
-  // 시간표(개발중) — 같은 격자를 그리므로 같은 크기. 없으면 기본 480×560으로 열려 표가 통째로 접힌다.
-  "timetable-dev": { w: 1040, h: 680 },
   // 시간표 편집기(연습본) — 강사 여러 명의 요일 칸 + 오른쪽 확인 패널(320px)이 함께 서는 폭. 시간표 창(1040)을
   // 상속하면 패널을 열 때 격자가 서너 칸만 남는다. 자기 창으로 열린다(`EditorShortcut`의 frameTarget="window").
   "timetable/editor": { w: 1280, h: 760 },

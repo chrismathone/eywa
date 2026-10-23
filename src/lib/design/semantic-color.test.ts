@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { TONE_COLOR, TONE_SOFT, TONE_TEXT, TONE_ACCENT_BAR, toneColor } from "./semantic-color";
+import { TONE_COLOR, TONE_SOFT, TONE_TEXT, toneColor } from "./semantic-color";
 import { STUDENT_STATUS_TONE, studentStatusMeta } from "@/features/students/status/status-labels";
 import { STAFF_STATUS_TONE, staffStatusMeta, roleMeta } from "@/features/staff/status-labels";
 import { docStatusLabel } from "@/features/approvals/types";
@@ -31,12 +31,12 @@ describe("의미색 캐논", () => {
     expect(TONE_COLOR.brand).toBe("primary");
   });
 
-  it("모든 tone이 네 표현(pill·text·soft·bar)을 빠짐없이 갖는다", () => {
+  it("모든 tone이 세 표현(pill·text·soft)을 빠짐없이 갖는다", () => {
     // 하나라도 비면 그 tone을 쓰는 화면이 조용히 무색으로 렌더된다.
+    // (왼쪽 띠 표현 TONE_ACCENT_BAR는 마지막 소비처와 함께 2026-10-23 지웠다.)
     for (const tone of Object.keys(TONE_COLOR) as (keyof typeof TONE_COLOR)[]) {
       expect(TONE_TEXT[tone], `TONE_TEXT.${tone}`).toBeTruthy();
       expect(TONE_SOFT[tone], `TONE_SOFT.${tone}`).toBeTruthy();
-      expect(TONE_ACCENT_BAR[tone], `TONE_ACCENT_BAR.${tone}`).toBeTruthy();
     }
   });
 

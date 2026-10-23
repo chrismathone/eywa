@@ -334,15 +334,15 @@ export const AUDIT_ACTIONS = {
   // 0318a 반 매핑 백필(scripts/_oneoff/backfill-consultation-classes.mjs --apply).
   student_consultation_class_backfill: "학생상담 반 채우기",
   student_care_analysis: "AI 케어 분석 실행",
-  // 시간표(개발중) 월별 계획(0232a) — class_schedules와 분리된 별도 표라, 본 시간표 감사 키와 섞이지
-  // 않게 timetable_plan_ 접두로 갈라 둔다("계획"이라는 말을 라벨에 반드시 남길 것 — 원장이 감사로그에서
-  // 본 시간표가 바뀐 줄로 읽으면 안 된다).
-  timetable_plan_seed: "시간표 계획 만들기(현재 시간표 복사)",
-  timetable_plan_copy: "시간표 계획 달 복사",
-  timetable_plan_month_delete: "시간표 계획 달 삭제",
-  timetable_plan_slot_upsert: "시간표 계획 칸 저장",
-  timetable_plan_slot_delete: "시간표 계획 칸 삭제",
-  timetable_plan_sheet_import: "시간표 계획 시트에서 가져오기",
+  // 시간표(개발중) 월별 계획(0232a) — ⚠️ 화면은 2026-10-23 코드째 지웠다. 라벨만 남긴 것은 그렇게 남은 과거 기록을
+  // 읽기 위해서다(침산 감사로그 2건 08-31 · 꺼 둔 슬랙 규칙 1개가 이 키 여섯을 골라 둠 — 지우면 영문 키가 그대로 뜬다).
+  // 새로 남는 일은 없다. "계획"이라는 말은 남길 것(본 시간표가 바뀐 줄로 읽히면 안 된다).
+  timetable_plan_seed: "시간표 계획 만들기(현재 시간표 복사 · 지금은 없는 기능)",
+  timetable_plan_copy: "시간표 계획 달 복사(지금은 없는 기능)",
+  timetable_plan_month_delete: "시간표 계획 달 삭제(지금은 없는 기능)",
+  timetable_plan_slot_upsert: "시간표 계획 칸 저장(지금은 없는 기능)",
+  timetable_plan_slot_delete: "시간표 계획 칸 삭제(지금은 없는 기능)",
+  timetable_plan_sheet_import: "시간표 계획 시트에서 가져오기(지금은 없는 기능)",
   // 시간표 연습실 — 작성자만 보는 개인 사본(timetable_lab_drafts)이라 운영 시간표는 안 바뀐다.
   // 라벨에 "연습본"을 반드시 남길 것(위 '계획'과 같은 이유) · 슬랙으로는 안 나간다(activity-catalog forbid).
   timetable_lab_draft_save: "시간표 연습본 저장",

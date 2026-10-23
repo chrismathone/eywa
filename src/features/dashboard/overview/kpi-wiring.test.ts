@@ -237,10 +237,15 @@ describe("③ 신규문의 — 같은 KST 하루 경계", () => {
     expect(PAGE).toContain("isValidYm(month)");
   });
 
-  it("C3 — 월별 결과 분포는 실패를 0건으로 위장하지 않는다(fetchAllPaged = throw)", () => {
-    const fn = QUERIES.slice(QUERIES.indexOf("export async function getMonthlyOutcomeDistribution"));
-    expect(fn.slice(0, 900)).toContain("fetchAllPaged");
-    expect(fn.slice(0, 900)).not.toContain("data ?? []");
+  // 옛 콜&상담 대시보드(`getMonthlyOutcomeDistribution`)가 지던 규칙 — 2026-10-23 그 화면을 지워 월별 결과 수는
+  // '통계' 보기의 `getEnrollmentStats`(group-by RPC)가 낸다. 같은 규칙을 그쪽에 건다.
+  it("C3 — 월별 결과 수는 실패를 0건으로 위장하지 않는다(RPC 오류 = throw)", () => {
+    const STATS = src("src/features/enrollment/server/stats-queries.ts");
+    const at = STATS.indexOf("export async function getEnrollmentStats");
+    expect(at, "getEnrollmentStats를 못 찾았다").toBeGreaterThanOrEqual(0);
+    const fn = STATS.slice(at, STATS.indexOf("export async function", at + 1));
+    expect(fn).toContain('supabase.rpc("consultation_monthly_stats"');
+    expect(fn).toContain("if (cur.error) throw cur.error;");
   });
 });
 

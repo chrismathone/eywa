@@ -130,7 +130,6 @@ export const CheckCircle = createAywaCompatIcon("success", "CheckCircle");
 export const CheckSquare = createAywaCompatIcon("checkbox", "CheckSquare");
 export const Circle = createAywaCompatIcon("circle", "Circle");
 export const Columns2 = createAywaCompatIcon("columns2", "Columns2");
-export const Columns3 = createAywaCompatIcon("columns3", "Columns3");
 export const CopyPlus = createAywaCompatIcon("copyPlus", "CopyPlus");
 export const DoorOpen = createAywaCompatIcon("doorOpen", "DoorOpen");
 export const Droplet = createAywaCompatIcon("droplet", "Droplet");

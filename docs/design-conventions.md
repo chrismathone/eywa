@@ -458,7 +458,7 @@ v3(회색 캔버스 `#f5f5f7` + 화이트 카드)에서 캔버스를 화이트�
 - **면 탭**은 알약 여러 개가 아니라 **테두리 상자 하나**(`FaceTabs` = `h-(--control-h) rounded-lg border`).
 - 실화면에 있는 줄(면 탭·툴바)을 **빠뜨리지 말 것** — 빠지면 그 줄 높이만큼 본문이 통째로 내려앉는다.
 - 가드 [`src/lib/design/skeleton-canon.test.ts`](../src/lib/design/skeleton-canon.test.ts): 툴바를 그리는 스켈레톤은
-  `--control-h`를 가리켜야 하고, 툴바 자리에 고정 px 높이를 적으면 실패한다. ⚠️ `timetable-dev`는 개발 사본이라 대상 밖.
+  `--control-h`를 가리켜야 하고, 툴바 자리에 고정 px 높이를 적으면 실패한다.
 - **임의 px 금지**: `rounded-[Npx]`는 토큰으로(2~4→xs, 5~6→sm, 8→md, 9~10→lg, 12~14→xl, 16~18→2xl).
   예외 = 로고 마크·모핑 하이라이트 등 정밀 튜닝(주석으로 사유 명시).
 - **불변 영역**: `src/components/ui/*`(base-nova 프리셋), 표·그리드 내부 밀도 요소(시간표 셀 미니 라벨 등),

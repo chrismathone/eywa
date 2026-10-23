@@ -13,7 +13,7 @@ describe("만든 요일 병합이 화면까지 간다", () => {
   });
 
   it("시간표 기본뷰는 풀어 둔 묶음을 그린다", () => {
-    for (const page of ["src/app/(shell)/timetable/page.tsx", "src/app/(shell)/timetable-dev/page.tsx"]) {
+    for (const page of ["src/app/(shell)/timetable/page.tsx"]) {
       const src = read(page);
       expect(src).toContain("resolveWeekdayGroups");
       expect(src).toContain("dayGroups={weekdayGroups}");
@@ -22,10 +22,7 @@ describe("만든 요일 병합이 화면까지 간다", () => {
 
   it("목록에서 빼기가 있고, 주말 묶음은 주말 판에서만 그린다", () => {
     expect(read("src/app/(shell)/owner/_components/weekday-grouping-editor.tsx")).toContain("목록에서 빼기");
-    for (const table of [
-      "src/app/(shell)/timetable/_components/weekday-group-tables.tsx",
-      "src/app/(shell)/timetable-dev/_components/weekday-group-tables.tsx",
-    ]) {
+    for (const table of ["src/app/(shell)/timetable/_components/weekday-group-tables.tsx"]) {
       const src = read(table);
       expect(src).toContain("timetableBoards");
       expect(src).toContain("weekendBoardDays");

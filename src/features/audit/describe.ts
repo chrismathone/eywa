@@ -107,7 +107,8 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   teacher_portfolio: "직원 포트폴리오",
   student_contribution: "원생 기여도",
   kiosk_device: "키오스크 기기",
-  // 시간표(개발중) 월별 계획(0232a) — 본 시간표가 아니라 **계획**임이 '대상' 칸에서 바로 읽혀야 한다.
+  // 시간표(개발중) 월별 계획(0232a) — 화면은 2026-10-23 지웠지만 남은 과거 기록(08-31 2건)을 읽으려고 라벨은 둔다.
+  // 본 시간표가 아니라 **계획**임이 '대상' 칸에서 바로 읽혀야 한다.
   timetable_plan: "시간표 계획",
   timetable_plan_slot: "시간표 계획 칸",
   // 시간표 연습실의 개인 사본 — 운영 시간표가 아니라 **연습본**임이 '대상' 칸에서 바로 읽혀야 한다.

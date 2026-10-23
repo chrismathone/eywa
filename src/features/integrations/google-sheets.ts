@@ -326,34 +326,6 @@ export async function readSheetTabRows(spreadsheetId: string, tabName: string): 
 }
 
 /**
- * 문서의 **탭 목록**(gid + 이름). 시간표(개발중) '시트에서 그 달 계획 가져오기'가 쓴다.
- *
- * 왜 필요한가: 읽기는 [`readSheetGridWithMerges`]가 탭 **이름**으로 하는데, 원장이 주소창에서 복사해 주는
- * 주소에는 **gid(숫자)**만 들어 있다(`…/edit?gid=661682520#gid=661682520`). 그 사이를 잇는 유일한 통로다.
- * 목록 자체도 쓸모가 있다 — 주소에 gid가 없으면 사람이 탭을 고를 수 있어야 한다.
- *
- * ⚠️ **격자 데이터를 받지 않는다**(`sheets.properties`만) — 탭이 수십 개인 큰 문서에서도 가볍다.
- * 실패는 다른 읽기와 같은 한글 문구(권한·공유 안내 포함)로 던진다.
- */
-export async function listSheetTabs(spreadsheetId: string): Promise<{ gid: number; title: string }[]> {
-  const sheets = await getSheetsApi();
-  try {
-    const res = await withSheetsRetry(() =>
-      sheets.spreadsheets.get({ spreadsheetId, fields: "sheets.properties(sheetId,title)" }),
-    );
-    return (res.data.sheets ?? [])
-      .map((s) => s.properties)
-      .filter(
-        (p): p is { sheetId: number; title: string } =>
-          typeof p?.sheetId === "number" && typeof p?.title === "string",
-      )
-      .map((p) => ({ gid: p.sheetId, title: p.title }));
-  } catch (e) {
-    throw new Error(translateSheetsError(e));
-  }
-}
-
-/**
  * 시트 탭을 **셀 + 병합** 포함으로 읽는다(구조 import용). `values.get`은 병합을 잃어(강사별 그리드는
  * 병합=수업길이라 필수) `spreadsheets.get(includeGridData:true)`로 읽는다. cells=formattedValue(빈="") 0-based,
  * merges=Sheets 원형(0-based, end-exclusive). 후행 완전 빈 행은 트림.

@@ -1,5 +1,9 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-10-23 — 안 쓰는 화면 둘 코드째 제거: 신규 콜&상담 대시보드 · 시간표(개발중)
+
+- 원장 *"신규 콜앤상담 대시보드 및 시간표(개발중)은 확실하게 제거해도 되겠네"*(안 쓰는 기능 전수 검수 — 09-28 이후 두 화면 기록 0회). `/enrollment/dashboard`(차트 4개 + 그 화면만 쓰던 조회 `getMonthlyOutcomeDistribution`·`getMonthlyConversionTrend`·`getConsultantPerformance`·`OUTCOME_COLOR`)와 `/timetable-dev`(월별 비교 포함) + `src/features/timetable-dev`, 사이드바 숨김 하부탭·경로→메뉴 표·창 크기·필터 초기화·eslint 예외, 그 화면만 쓰던 `listSheetTabs`·`TONE_ACCENT_BAR`·아이콘 별칭 `Columns3`를 지웠다. 가드 테스트는 예외 목록에서 경로만 뺐다(kpi-wiring C3은 '통계' 보기 `getEnrollmentStats`로 옮김). 감사 라벨 `timetable_plan_*`은 '(지금은 없는 기능)'을 붙여 남겼다 — 침산 감사로그 2건(08-31)과 꺼 둔 슬랙 규칙 1개가 이 키를 들고 있다. 🔴 표 `timetable_plan_slots`(0232a)와 마이그레이션은 그대로 — 지우는 SQL은 원장 결정 뒤.
+
 ## 2026-10-23 — 수학 보고서 시범: '이해도' 항목 제목 → '오늘의 수업'
 
 - 원장 *"이해도가 아니라 오늘수업의 이해도로"* → *"오늘의 수업으로 명칭 변경"*. 라벨만 바꿨다(AI가 쓰는 글·재료는 그대로). 수업 평가 표의 줄 이름은 칸이 좁아 '이해도' 그대로. 이미 '■ 이해도'로 저장된 글도 카드에서 똑같이 그려진다.

@@ -2,7 +2,7 @@ import "server-only";
 import { samePersonGroups } from "../same-person";
 import { findSamePersonConsultations } from "./same-person-query";
 import { auditScoped, systemAuditScope } from "@/features/audit/server/system-read";
-import { kstDateOf, kstMonth, kstMonthStartIso, kstYear, shiftMonth } from "@/lib/date-kst";
+import { kstMonth, kstMonthStartIso, kstYear, shiftMonth } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
@@ -819,7 +819,7 @@ function mapFullFields(c: Record<string, unknown>, assignedClassCount: number): 
   };
 }
 
-// ─────────────────────── 대시보드 통계 쿼리 ───────────────────────
+// ─────────────────────── 상담 결과(outcome) 라벨 ───────────────────────
 
 export type OutcomeKey =
   | "pending"
@@ -839,169 +839,6 @@ export const OUTCOME_LABEL: Record<OutcomeKey, string> = {
   declined: "거절",
   no_show: "노쇼",
 };
-
-export const OUTCOME_COLOR: Record<OutcomeKey, string> = {
-  // globals.css 토큰만 사용 — 값은 브라우저에서 recharts <Cell fill>로 해석되므로 var()가 동작한다
-  // (outcome-donut-impl.tsx). 리터럴 hex 금지: amber/gold/그린캐스트가 v1 값에 멈춰 있었다(2026-07-20 감사).
-  // ⚠️ 도넛은 조각이 맞닿으므로 인접 색상각이 겹치면 안 된다 — primary(네이비 214°)와 blue(219°)를
-  // 같은 도넛에 함께 쓰지 말 것(v3에서 두 색이 4.8° 차이로 붕괴). enrolled=성공이라 "긍정=그린"
-  // 시맨틱의 chart-2를 쓴다(globals.css가 이 목적으로 그린을 남겨 둠).
-  pending: "var(--color-amber)",
-  scheduled: "var(--color-gold)",
-  consulted: "var(--color-blue)",
-  ai_done: "var(--color-purple)",
-  enrolled: "var(--color-chart-2)",
-  declined: "var(--color-neutral-fill)",
-  no_show: "var(--color-danger)",
-};
-
-export type OutcomeDistribution = { outcome: OutcomeKey; label: string; count: number; color: string }[];
-
-export async function getMonthlyOutcomeDistribution(month: string): Promise<OutcomeDistribution> {
-  const supabase = await createClient();
-  // KST 달 경계(목록 월 필터와 같은 kstMonthBounds — 옛 monthBounds는 서버 로컬 자정이라 1일 새벽이 앞 달로 샜다).
-  const { startIso, endIso } = kstMonthBounds(month);
-  // 🔴 실패를 0건으로 위장하지 않는다(fetchAllPaged는 throw) · 한 달이 1000행을 넘어도 잘리지 않게 페이징(B2).
-  const data = await fetchAllPaged<{ outcome: string }>((from, to) =>
-    supabase
-      .from("enrollment_consultations")
-      .select("outcome")
-      .gte("consulted_at", startIso)
-      .lt("consulted_at", endIso)
-      .order("id")
-      .range(from, to),
-  );
-
-  const counts = new Map<OutcomeKey, number>();
-  for (const r of data) {
-    counts.set(r.outcome as OutcomeKey, (counts.get(r.outcome as OutcomeKey) ?? 0) + 1);
-  }
-
-  return (Object.keys(OUTCOME_LABEL) as OutcomeKey[]).map((o) => ({
-    outcome: o,
-    label: OUTCOME_LABEL[o],
-    count: counts.get(o) ?? 0,
-    color: OUTCOME_COLOR[o],
-  }));
-}
-
-export type ConversionTrendPoint = {
-  month: string; // "5월"
-  monthKey: string; // "2026-05"
-  total: number;
-  consultedRate: number; // (consulted + ai_done + enrolled) / total
-  enrolledRate: number; // enrolled / total
-};
-
-export async function getMonthlyConversionTrend(months = 6): Promise<ConversionTrendPoint[]> {
-  const supabase = await createClient();
-  // 🔴 달 축은 전부 **KST** — 경계도 버킷 키도(섞이면 경계 근처 건이 옆 달로 샌다).
-  const thisMonth = kstMonth();
-  // 🔴 무페이징 select는 1000건에서 조용히 잘리고, 오류를 `?? []`로 삼키면 전부 0%로 보인다(감사 T3, B2).
-  const data = await fetchAllPaged<{ outcome: string; consulted_at: string }>((from, to) =>
-    supabase
-      .from("enrollment_consultations")
-      .select("outcome, consulted_at")
-      .gte("consulted_at", kstMonthStartIso(shiftMonth(thisMonth, -(months - 1))))
-      .order("id")
-      .range(from, to),
-  );
-
-  // group by YYYY-MM
-  const buckets = new Map<string, { total: number; consulted: number; enrolled: number }>();
-  for (let i = months - 1; i >= 0; i--) {
-    const key = shiftMonth(thisMonth, -i);
-    buckets.set(key, { total: 0, consulted: 0, enrolled: 0 });
-  }
-
-  for (const r of data) {
-    // 🔴 버킷 키도 **KST 날짜**에서 뽑는다 — `new Date(...).getMonth()`는 서버가 UTC라 매달 1일 새벽 건이
-    //    앞 달 칸에 들어간다(경계와 키가 서로 다른 축이면 합계가 안 맞는다).
-    const key = kstDateOf(r.consulted_at)?.slice(0, 7);
-    const b = key ? buckets.get(key) : undefined;
-    if (!b) continue;
-    b.total += 1;
-    if (["consulted", "ai_done", "enrolled"].includes(r.outcome)) b.consulted += 1;
-    if (r.outcome === "enrolled") b.enrolled += 1;
-  }
-
-  const result: ConversionTrendPoint[] = [];
-  for (const [key, b] of buckets.entries()) {
-    const m = Number(key.slice(5));
-    result.push({
-      month: `${m}월`,
-      monthKey: key,
-      total: b.total,
-      consultedRate: b.total > 0 ? Math.round((b.consulted / b.total) * 100) : 0,
-      enrolledRate: b.total > 0 ? Math.round((b.enrolled / b.total) * 100) : 0,
-    });
-  }
-  return result;
-}
-
-export type ConsultantStats = {
-  id: string;
-  name: string;
-  total: number;
-  consulted: number;
-  enrolled: number;
-  conversionRate: number;
-};
-
-export async function getConsultantPerformance(months = 3): Promise<ConsultantStats[]> {
-  const supabase = await createClient();
-  const since = kstMonthStartIso(shiftMonth(kstMonth(), -(months - 1)));
-
-  // 🔴 전건 select는 1000건에서 잘리고 오류를 삼키면 전원 0%가 된다(감사 T3, B2) — 페이징 + throw.
-  const data = await fetchAllPaged<{
-    outcome: string;
-    consultant_id: string | null;
-    consulted_at: string;
-    consultant: { display_name?: string } | { display_name?: string }[] | null;
-  }>((from, to) =>
-    supabase
-      .from("enrollment_consultations")
-      .select(
-        `outcome, consultant_id, consulted_at,
-         consultant:consultant_id ( display_name )`,
-      )
-      .gte("consulted_at", since)
-      .not("consultant_id", "is", null)
-      .order("id")
-      .range(from, to),
-  );
-
-  const byConsultant = new Map<
-    string,
-    { name: string; total: number; consulted: number; enrolled: number }
-  >();
-
-  for (const r of data) {
-    if (!r.consultant_id) continue;
-    const c = (Array.isArray(r.consultant) ? r.consultant[0] : r.consultant) as
-      | { display_name?: string }
-      | undefined;
-    const id = r.consultant_id as string;
-    if (!byConsultant.has(id)) {
-      byConsultant.set(id, { name: c?.display_name ?? "?", total: 0, consulted: 0, enrolled: 0 });
-    }
-    const b = byConsultant.get(id)!;
-    b.total += 1;
-    if (["consulted", "ai_done", "enrolled"].includes(r.outcome)) b.consulted += 1;
-    if (r.outcome === "enrolled") b.enrolled += 1;
-  }
-
-  return Array.from(byConsultant.entries())
-    .map(([id, b]) => ({
-      id,
-      name: b.name,
-      total: b.total,
-      consulted: b.consulted,
-      enrolled: b.enrolled,
-      conversionRate: b.total > 0 ? Math.round((b.enrolled / b.total) * 100) : 0,
-    }))
-    .sort((a, b) => b.enrolled - a.enrolled);
-}
 
 export async function getConsultantOptions(): Promise<{ id: string; name: string }[]> {
   const supabase = await createClient();
