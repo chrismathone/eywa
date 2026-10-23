@@ -48,5 +48,14 @@ export function parseLevelRows(body: string): LevelRow[] | null {
 
 /** 테스트 항목 첫 줄이 점수("N문제 중 M개 맞음")인가 — 카드가 그 줄만 굵게 세운다. */
 export function isScoreLine(line: string): boolean {
-  return /^\d+문제 중 \d+개 맞음$/.test(line.trim());
+  return parseScoreLine(line) != null;
+}
+
+/** 점수 줄 → 맞힌 수 / 전체(카드의 점수 블록 재료). 형식이 아니거나 맞힌 수가 전체보다 크면 null. */
+export function parseScoreLine(line: string): { right: number; total: number } | null {
+  const m = line.trim().match(/^(\d+)문제 중 (\d+)개 맞음$/);
+  if (!m) return null;
+  const total = Number(m[1]);
+  const right = Number(m[2]);
+  return total > 0 && right <= total ? { right, total } : null;
 }
