@@ -7,7 +7,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: m.refresh }) })
 vi.mock("@/components/embed-link", () => ({ EmbedLink: "a" }));
 import { RecordSummary } from "./record-summary";
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
-const data = { state: "empty" as const, canWrite: true, items: [], generatedAt: null, model: null, partial: false };
+const data = { state: "empty" as const, canWrite: true, items: [], generatedAt: null, model: null, partial: false, legacy: false };
 it("allows another view transition while AI is pending and blocks duplicate calls", async () => {
   let finish!: (result: { ok: true }) => void;
   m.generate.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
@@ -24,4 +24,24 @@ it("allows another view transition while AI is pending and blocks duplicate call
   await act(async () => { finish({ ok: true }); });
   expect(screen.getByRole("status").textContent).toBe("요약을 저장했습니다.");
   expect(m.refresh).toHaveBeenCalledOnce();
+});
+const saved = { ...data, state: "ready" as const, generatedAt: "2026-10-23T06:07:33Z", model: "Claude Haiku",
+  items: [{ itemId: "consultations:1", title: "최근 상담", date: "2026-02-26", summary: "상담 당시 영어 수업을 계속할 의향을 밝혔습니다.", excerpt: "학생이 영어 수업을 계속하고 싶다고 말했습니다.", href: "/consultations/1" }] };
+it("shows the summary as the primary text with its source behind a disclosure", () => {
+  render(<RecordSummary studentId="s" data={saved} />);
+  expect(screen.getByText(saved.items[0].summary)).toBeTruthy();
+  const quote = screen.getByText(saved.items[0].excerpt);
+  expect(quote.closest("details")?.open).toBe(false);
+});
+it("labels legacy extracts instead of presenting them as newly generated summaries", () => {
+  render(<RecordSummary studentId="s" data={{ ...saved, legacy: true, items: [{ ...saved.items[0], summary: null }] }} />);
+  expect(screen.getByText(/이전 방식으로 저장된 원문 발췌/)).toBeTruthy();
+});
+it("keeps the saved summary visible and explains that a retry failed", async () => {
+  m.generate.mockResolvedValue({ error: "생성된 요약의 확인을 통과하지 못했습니다." });
+  render(<RecordSummary studentId="s" data={saved} />);
+  fireEvent.click(screen.getByRole("button", { name: "다시 요약" }));
+  await waitFor(() => expect(screen.getByRole("status").textContent).toContain("이전에 저장한 내용"));
+  expect(screen.getByText(saved.items[0].summary)).toBeTruthy();
+  expect(m.refresh).not.toHaveBeenCalled();
 });

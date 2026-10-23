@@ -16,7 +16,8 @@ beforeEach(() => {
   m.input.mockResolvedValue({ hash: "hash", sources: [source], asOf: "2026-10-23" });
   m.license.mockResolvedValue(true); m.saved.mockResolvedValue({ ready: true }); m.claim.mockResolvedValue(true);
   m.reserve.mockResolvedValue(true);
-  m.generate.mockResolvedValue({ data: { items: [{ itemId: source.itemId, excerpt: source.text }] }, model: "test" });
+  m.generate.mockResolvedValueOnce({ data: { items: [{ itemId: source.itemId, summary: "현재 고등 영어를 수강 중입니다.", excerpt: source.text }] }, model: "test" })
+    .mockResolvedValue({ data: { verdicts: [{ itemId: source.itemId, supported: true }] }, model: "test" });
 });
 afterEach(() => vi.unstubAllEnvs());
 it("requires the existing write gate before any AI or storage access", async () => {
@@ -37,6 +38,7 @@ it("uses Claude only, fast/low, a fixed bundle and saves after evidence validati
   expect(await generateStudentRecordSummary("s")).toEqual({ ok: true });
   expect(m.generate).toHaveBeenCalledWith(expect.objectContaining({ tier: "fast", reasoningEffort: "low", allowedProviders: ["anthropic"], meta: { feature: "student_ontology_summary", tenantId: "t" } }));
   expect(m.finish).toHaveBeenCalledOnce(); expect(m.release).toHaveBeenCalledOnce();
+  expect(m.generate).toHaveBeenCalledTimes(2); expect(m.reserve).toHaveBeenCalledTimes(2);
   expect(m.input).toHaveBeenLastCalledWith("s", true);
   expect(m.audit).toHaveBeenCalledWith(expect.objectContaining({ action: "student_contribution_summary_generate", metadata: {
     studentId: "s", inputHash: "hash", outcome: "saved", providerRequested: true, itemCount: 1, model: "Claude",
@@ -44,7 +46,7 @@ it("uses Claude only, fast/low, a fixed bundle and saves after evidence validati
   expect(JSON.stringify(m.audit.mock.calls)).not.toContain(source.text);
 });
 it("does not save a made-up statement even with a valid evidence ID", async () => {
-  m.generate.mockResolvedValue({ data: { items: [{ itemId: source.itemId, excerpt: "수학 성적이 대폭 향상되었습니다." }] }, model: "test" });
+  m.generate.mockReset().mockResolvedValue({ data: { items: [{ itemId: source.itemId, summary: "수학 성적이 대폭 향상되었습니다.", excerpt: "수학 성적이 대폭 향상되었습니다." }] }, model: "test" });
   expect((await generateStudentRecordSummary("s")).error).toBeTruthy(); expect(m.finish).not.toHaveBeenCalled(); expect(m.release).toHaveBeenCalledOnce();
   expect(m.audit).toHaveBeenCalledWith(expect.objectContaining({ metadata: expect.objectContaining({ outcome: "failed", providerRequested: true }) }));
 });
@@ -53,8 +55,24 @@ it("does not save when source evidence changes during generation", async () => {
   expect((await generateStudentRecordSummary("s")).error).toContain("바뀌었습니다"); expect(m.finish).not.toHaveBeenCalled(); expect(m.release).toHaveBeenCalledOnce();
 });
 it("releases the lease on provider failure", async () => {
-  m.generate.mockRejectedValue(new Error("provider offline"));
+  m.generate.mockReset().mockRejectedValue(new Error("provider offline"));
   expect((await generateStudentRecordSummary("s")).error).toBeTruthy(); expect(m.release).toHaveBeenCalledOnce(); expect(m.finish).not.toHaveBeenCalled();
+  expect(m.audit).toHaveBeenCalledWith(expect.objectContaining({ metadata: expect.objectContaining({ failureStage: "generation", failureCode: "generation_failed" }) }));
+});
+it("records validation failure separately without leaking the generated body", async () => {
+  m.generate.mockReset().mockResolvedValue({ data: { items: [{ itemId: source.itemId, summary: "원본에 없는 사적인 내용입니다.", excerpt: "원본에 없는 사적인 내용입니다." }] } });
+  const response = await generateStudentRecordSummary("s");
+  expect(response.error).toContain("확인을 통과하지 못했습니다");
+  expect(m.generate).toHaveBeenCalledTimes(2); expect(m.finish).not.toHaveBeenCalled();
+  expect(m.audit).toHaveBeenCalledWith(expect.objectContaining({ metadata: expect.objectContaining({ failureStage: "generation", failureCode: "invalid_response" }) }));
+  expect(JSON.stringify(m.audit.mock.calls)).not.toContain("사적인 내용");
+});
+it("distinguishes saving errors while retaining the previous result", async () => {
+  m.finish.mockRejectedValue(new Error("database detail must stay private"));
+  expect((await generateStudentRecordSummary("s")).error).toContain("저장하지 못했습니다");
+  expect(m.release).toHaveBeenCalledOnce();
+  expect(m.audit).toHaveBeenCalledWith(expect.objectContaining({ metadata: expect.objectContaining({ failureStage: "save", failureCode: "storage_failed" }) }));
+  expect(JSON.stringify(m.audit.mock.calls)).not.toContain("database detail");
 });
 it("stops before the provider when the tenant allowance is exhausted", async () => {
   m.reserve.mockResolvedValue(false);
