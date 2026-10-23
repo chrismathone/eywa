@@ -54,7 +54,6 @@ export default async function WithdrawalReportsPage({ searchParams }: { searchPa
   //   겸직이 강사뷰로 볼 때도 강사 문구(권한이 아니라 셸로 가른다).
   const header = (
     <PageHeader
-      eyebrow="실험실"
       title="퇴원보고서"
       description={
         shell !== "teacher"

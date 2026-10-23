@@ -4,7 +4,7 @@ import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { isFeatureOptedIn } from "@/lib/license/server";
+import { isLaboratoryMenuAvailable } from "@/lib/laboratory/server";
 import { getViewerStaffScope } from "@/features/staff/department/server/subject-scope";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { canRequestReport, isParticipant, missingReportSchema, snapshotMatches, type StudentSnapshot, type WithdrawalReport, type ReportListRow, type ReportEvent, type StaffOption, type StudentOption, type CourseSnapshot } from "../model";
@@ -16,9 +16,11 @@ import { staffSubjectScopeOf } from "@/features/staff/department/subject-scope";
 import { loadReportPrefill } from "./prefill";
 import { reportConsultations } from "./consultations";
 
+// 실험실 판정은 운영 콘솔 배정을 따른다(`isLaboratoryMenuAvailable`) — 예전엔 실험실 사용 여부를 배정과 무관하게 물어서,
+// 원장이 퇴원보고서를 일반 메뉴로 돌려도(2026-10-23) 실험실을 안 켠 지점에선 계속 닫혀 있었다.
 export const reportViewer = cache(async () => {
   const user = await getCurrentUser({ teacherView: true });
-  if (!user || !(await canAccessTenant(user.systemRole, "withdrawal_reports")) || !(await isFeatureOptedIn(user.tenantId, "laboratory"))) return null;
+  if (!user || !(await canAccessTenant(user.systemRole, "withdrawal_reports")) || !(await isLaboratoryMenuAvailable(user.tenantId, "withdrawal_reports"))) return null;
   const [writable, scope, teacherId] = await Promise.all([canWriteTenant(user.systemRole, "withdrawal_reports"), getViewerStaffScope(user), effectiveTeacherId()]);
   const manage = !teacherId && canRequestReport(user.systemRole);
   return { user, writable, scope, teacherId, manage, request: manage && writable };
