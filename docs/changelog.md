@@ -1,5 +1,9 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-10-23 — 시간표(개발중) 계획 칸 표 지움(0451a)
+
+- 원장 *"필요없음 계획 칸 표도 지워"* → `timetable_plan_slots`(0232a) 삭제 마이그레이션 0451a · 운영 적용. 지우기 전 운영 DB 확인: 1,112행 = 08-31 '현재 시간표 복사' + '달 복사' 한 번씩(8·9월 556행씩) · 만든 뒤 고친 행 0 · 이 표를 가리키는 연결(FK)·뷰·함수·트리거·정책 0 · main 코드 참조 0(화면은 같은 날 ac1236af4로 제거). `CASCADE` 없이 지운다. 백업 `D:\tmp\timetable-plan-slots-backup-2026-10-23\rows.json`(md5 대조 일치) · 되돌리기 `scripts/_oneoff/revert-0451a-drop-timetable-plan-slots.sql` + 백업 폴더 `restore.cjs`. 감사 라벨 `timetable_plan_*`은 옛 기록 2건 때문에 그대로.
+
 ## 2026-10-23 — 안 쓰는 화면 둘 코드째 제거: 신규 콜&상담 대시보드 · 시간표(개발중)
 
 - 원장 *"신규 콜앤상담 대시보드 및 시간표(개발중)은 확실하게 제거해도 되겠네"*(안 쓰는 기능 전수 검수 — 09-28 이후 두 화면 기록 0회). `/enrollment/dashboard`(차트 4개 + 그 화면만 쓰던 조회 `getMonthlyOutcomeDistribution`·`getMonthlyConversionTrend`·`getConsultantPerformance`·`OUTCOME_COLOR`)와 `/timetable-dev`(월별 비교 포함) + `src/features/timetable-dev`, 사이드바 숨김 하부탭·경로→메뉴 표·창 크기·필터 초기화·eslint 예외, 그 화면만 쓰던 `listSheetTabs`·`TONE_ACCENT_BAR`·아이콘 별칭 `Columns3`를 지웠다. 가드 테스트는 예외 목록에서 경로만 뺐다(kpi-wiring C3은 '통계' 보기 `getEnrollmentStats`로 옮김). 감사 라벨 `timetable_plan_*`은 '(지금은 없는 기능)'을 붙여 남겼다 — 침산 감사로그 2건(08-31)과 꺼 둔 슬랙 규칙 1개가 이 키를 들고 있다. 🔴 표 `timetable_plan_slots`(0232a)와 마이그레이션은 그대로 — 지우는 SQL은 원장 결정 뒤.
