@@ -27,6 +27,12 @@ it("does not read a forbidden consultation source", async () => {
   const { c, from } = fixture({ data: [], count: 0 });
   expect((await readLiveConsultations({ ...c, consultations: false })).state).toBe("forbidden"); expect(from).not.toHaveBeenCalled();
 });
+it("keeps UI previews short while supplying the complete authorized consultation to summaries", async () => {
+  const full = "상담 배경 설명입니다. ".repeat(30) + "마지막에는 수강 요일을 월요일로 확정했다.";
+  const { c } = fixture({ data: [{ id: "r", summary: full, counselor: null, consulted_at: "2026-10-23" }], count: 1, error: null });
+  expect((await readLiveConsultations(c)).items[0]!.detail.length).toBeLessThanOrEqual(180);
+  expect((await readLiveConsultations(c, true)).items[0]!.detail).toContain("마지막에는 수강 요일을 월요일로 확정했다.");
+});
 it.each([["42501", "forbidden"], ["42P01", "schema_missing"], ["500", "failed"]])("distinguishes memo read errors: %s", async (code, state) => {
   const { c } = fixture({ data: null, count: null, error: { code } });
   const result = await readLiveMemos(c);

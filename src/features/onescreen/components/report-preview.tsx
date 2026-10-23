@@ -154,6 +154,7 @@ export function ReportPreview({
             special: classKindMeta({ isSpecial: subject.isSpecial, className: subject.className }).kind === "special",
             // 과목 보고서(원장 2026-10-16) — 발송본과 같은 판정(`subjectReportLabel` — 키가 그대로 돌아온 라벨은 빼고 기본 제목).
             // 순수 과목 라벨만 쓴다(`name`은 반 이름이 붙을 수 있다). 과목 키가 없는 행은 저장도 라벨로 돼 발송본이 기본 제목이라 여기도 기본 제목.
+            className: subject.className ?? null, // 시범 카드 머리의 '반' 칸
             subjectLabel: subjectReportLabel((k) => subject.subjectLabel ?? k, subject.subjectKey ?? null),
           }}
           student={{ name: student.name, school: student.school ?? null, grade: student.grade }}

@@ -4,10 +4,10 @@ vi.mock("./access", () => ({ getContributionGate: m.gate }));
 vi.mock("./live-context", () => ({ getLiveContext: m.context }));
 vi.mock("./summary-input", () => ({ getSummaryInput: m.input }));
 vi.mock("./summary-store", () => ({ readSavedSummary: m.saved }));
-import { SUMMARY_VERSION } from "@/features/students/ontology/summary";
+import { SUMMARY_VERSION, LEGACY_SUMMARY_VERSION } from "@/features/students/ontology/summary";
 import { getStudentRecordSummary } from "./summary-query";
 const source = { itemId: "consultations:1", section: "상담", text: "학생이 영어를 계속 배우고 싶다고 말했다.", evidence: [{ href: "/consultations/1" }] };
-const row = { input_hash: "hash", contract_version: SUMMARY_VERSION, result: { items: [{ itemId: source.itemId, excerpt: source.text }] }, generated_at: "2026-10-23", model_label: "Claude" };
+const row = { input_hash: "hash", contract_version: SUMMARY_VERSION, result: { items: [{ itemId: source.itemId, summary: "상담 당시 학생은 영어를 계속 배우고 싶다고 했습니다.", excerpt: source.text }] }, generated_at: "2026-10-23", model_label: "Claude" };
 beforeEach(() => {
   vi.resetAllMocks(); m.gate.mockResolvedValue({ tenantId: "t", userId: "u", canWrite: true }); m.context.mockResolvedValue({ studentId: "s" });
   m.input.mockResolvedValue({ hash: "hash", sources: [source], partial: false }); m.saved.mockResolvedValue({ ready: true, row });
@@ -29,6 +29,11 @@ it("does not display unvalidated stored claims with a matching fingerprint", asy
 });
 it("hides the feature until its storage is installed", async () => {
   m.saved.mockResolvedValue({ ready: false }); expect(await getStudentRecordSummary("s")).toBeNull(); expect(m.input).not.toHaveBeenCalled();
+});
+it("keeps previously saved extracts readable using their original input contract", async () => {
+  m.saved.mockResolvedValue({ ready: true, row: { ...row, contract_version: LEGACY_SUMMARY_VERSION, result: { items: [{ itemId: source.itemId, excerpt: source.text }] } } });
+  expect(await getStudentRecordSummary("s")).toMatchObject({ state: "ready", legacy: true, items: [{ summary: null, excerpt: source.text }] });
+  expect(m.input).toHaveBeenCalledWith("s", false, LEGACY_SUMMARY_VERSION);
 });
 it("does not turn read errors into an empty summary", async () => {
   m.saved.mockRejectedValue(new Error("offline")); expect(await getStudentRecordSummary("s")).toMatchObject({ state: "unavailable", items: [] });
