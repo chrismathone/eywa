@@ -32,9 +32,9 @@ describe("항목별 글(원장 2026-10-22 — 섹션을 나눠 어떤 것에 어
       pilotBody({ ...facts, understanding: [{ title: "연립방정식", score: 7 }] }, { understandingText: "연립방정식을 잘 소화했습니다." }),
     ).toBe(
       [
-        "■ 일일 테스트\n5문제 중 4개 맞음\n대부분의 문제를 잘 맞혔습니다. 틀린 문제는 다음 시간에 한 번 더 짚어 확실히 익히도록 챙기겠습니다.",
-        "■ 수업 태도\n오늘 수업 태도가 매우 좋았습니다. 처음부터 끝까지 성실하게 수업에 참여해 주어 많이 칭찬해 주고 싶습니다.",
-        "■ 과제 수행률\n지난 시간에 내준 과제를 90% 해 왔습니다. 거의 다 해 온 만큼 성실하게 잘 챙겨 주었습니다. 남은 부분도 마저 마무리할 수 있도록 함께 확인하겠습니다.",
+        "■ 일일 테스트\n5문제 중 4개 맞음\n대부분 잘 맞혔습니다. 틀린 문제는 다음 시간에 다시 짚고 넘어가겠습니다.",
+        "■ 수업 태도\n오늘 수업 태도가 매우 좋았습니다. 처음부터 끝까지 집중해서 성실하게 참여했습니다.",
+        "■ 과제 수행률\n지난 시간 과제를 90% 해 왔습니다. 거의 다 해 왔고, 남은 부분은 수업 시간에 함께 확인하겠습니다.",
         "■ 이해도\n연립방정식을 잘 소화했습니다.",
         "■ 오늘 과제\n오늘 내준 과제는 아래와 같습니다.\n5p 풀기\n다음 시간에 잘 해 왔는지 함께 확인하겠습니다.",
       ].join("\n\n"),
@@ -48,8 +48,8 @@ describe("항목별 글(원장 2026-10-22 — 섹션을 나눠 어떤 것에 어
   it("지난 과제 수행률을 문장으로 — 고른 값만 옮긴다", () => {
     expect(homeworkSentence("100%")).toContain("빠짐없이 모두 해 왔습니다");
     expect(homeworkSentence("완료")).toContain("빠짐없이 모두 해 왔습니다");
-    expect(homeworkSentence("80%")).toMatch(/^지난 시간에 내준 과제를 80% 해 왔습니다\. /);
-    expect(homeworkSentence("20%")).toContain("학원에서 함께 확인하며");
+    expect(homeworkSentence("80%")).toMatch(/^지난 시간 과제를 80% 해 왔습니다\. /);
+    expect(homeworkSentence("20%")).toContain("꼭 마무리하겠습니다");
     expect(homeworkSentence("미제출")).toContain("아직 해 오지 못했습니다");
     expect(homeworkSentence("0%")).toBe(homeworkSentence("미제출"));
     expect(homeworkSentence("없음")).toBe("지난 시간에 내준 과제는 없었습니다.");
@@ -96,10 +96,17 @@ describe("점수 뒤 덧붙이는 말", () => {
   it("다 맞음 / 8할 이상 / 절반 이상 / 그 아래 · 형식이 다르면 없음", () => {
     expect(scoreRemark("5문제 중 5개 맞음")).toContain("모두 맞혔습니다");
     expect(scoreRemark("10문제 중 8개 맞음")).toContain("대부분");
-    expect(scoreRemark("10문제 중 5개 맞음")).toContain("절반 넘게");
+    expect(scoreRemark("10문제 중 5개 맞음")).toContain("절반 이상");
     expect(scoreRemark("10문제 중 2개 맞음")).toContain("다음 시간에");
     expect(scoreRemark("시험")).toBe("");
     expect(scoreRemark("5문제 중 7개 맞음")).toBe("");
+  });
+  it("사람이 안 쓰는 말투를 쓰지 않는다(원장 2026-10-23)", () => {
+    const all = [
+      ...[0, 2, 5, 8, 10].map((k) => scoreRemark(`10문제 중 ${k}개 맞음`)),
+      ...["0%", "40%", "60%", "95%", "100%", "미제출"].map(homeworkSentence),
+    ];
+    for (const t of all) expect(t).not.toMatch(/칭찬해 주고 싶|대견|응원하겠|챙겨 주었/);
   });
   it("아이를 탓하는 말을 쓰지 않는다", () => {
     for (const k of [0, 2, 5, 8]) expect(scoreRemark(`10문제 중 ${k}개 맞음`)).not.toMatch(/못했|부족|느려/);
@@ -160,7 +167,8 @@ describe("배선", () => {
     const src = read("./server/actions.ts");
     expect(src).toMatch(/input: aiInput,/);
     expect(src).toMatch(/pilot && !safeInput\.understanding\?\.length/);
-    expect(src).toMatch(/const comment = pilot \? composePilot\(res\.comment, videoReceipt\) : body;/);
+    expect(src).toMatch(/composePilot\(cleanPilotUnderstanding\(res\.comment, safeInput\.understanding \?\? \[\]\), videoReceipt\)/);
+    expect(src).toMatch(/extraDirective: pilotAiDirective\(input\.studentName\)/);
   });
   it("세션이 '시험 없음' 사유를 싣고 로스터가 되읽는다 · '없음'이면 점수를 비운다", () => {
     expect(read("./components/onescreen-client.tsx")).toMatch(/dailyTestSkip: su\.dailyTestSkip/);

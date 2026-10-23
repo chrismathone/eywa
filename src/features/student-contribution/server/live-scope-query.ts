@@ -2,6 +2,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant } from "@/lib/auth/perm-matrix";
+import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { getContributionGate } from "./access";
 import { getContributionDirectory } from "./directory";
 import { readableFactStudents } from "./fact-access";
@@ -28,10 +29,11 @@ export async function getCurrentOntologyScope(raw: { kind?: string; entity?: str
       return { ...base, state, data: null };
     }
     const result = validateLiveScope(data, allowed), subjects = new Map(directory.subjects.map((s) => [s.key, s.label]));
+    const studentDetails = new Map(directory.rows.filter((s) => allowed.has(s.id)).map((s) => [s.id, schoolGradeLabel(s.school, s.grade)]));
     const labels = (nodes: typeof result.options) => nodes.map((n) => n.kind === "subject" ? { ...n, label: subjects.get(n.id) ?? "과목 확인 필요" } : n);
     const partial = result.unresolvedAssignments > 0 || identity.issues.some((i) => readable === null || readable.has(i.studentId));
     return { ...base, request: { ...request, page: result.page }, state: partial ? "partial" as const : "ready" as const,
-      data: { ...result, options: labels(result.options), connections: labels(result.connections) } };
+      data: { ...result, options: labels(result.options).map((o) => o.kind === "student" ? { ...o, detail: studentDetails.get(o.id) ?? "" } : o), connections: labels(result.connections) } };
   } catch {
     console.error("[student-ontology] current scope read failed");
     return { ...base, state: "failed" as const, data: null };

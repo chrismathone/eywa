@@ -17,6 +17,7 @@ import { DEFAULT_PROMPTS, interpolate, assembleSingle } from "./prompt-defaults"
 import { isSkipStatus } from "./progress-status";
 import { asProgressMode, progressFactLabel } from "./progress-mode";
 import { progressForMent } from "./progress-range";
+import { understandingBandText } from "./math-report-pilot";
 import { homeworkDueText } from "@/features/video-homework/due";
 
 const PLAIN_COMMENT_STYLE = "\n\n[말투 보완]\n기존 선생님의 말투와 문장 구성을 유지하세요. 기록에 없는 칭찬·다짐·전망을 덧붙이지 말고, '성장이 기대됩니다', '꾸준한 노력으로', '한 걸음 더 나아갔습니다' 같은 상투적인 마무리는 피하세요.";
@@ -193,9 +194,9 @@ export function buildFactBlock(input: ReportCommentInput): string {
   if (input.homeworkToday) facts.push(`오늘 과제: ${flatten(input.homeworkToday)}`); // 마무리 문장 재료(0096a)
   if (input.videoHomework === true) facts.push(`오늘 영상 과제: 있음${dueClause(input)}. 오늘 과제 안내에 짧게 포함하되 이미 영상 과제를 언급했다면 반복하지 마세요. 지난 숙제의 제출 여부를 뜻하지 않습니다.`);
   if (input.specialNote) facts.push(`특이사항: ${flatten(input.specialNote)}`);
-  // 소단원별 이해도(수학 보고서 시범) — 값은 '10점 만점에 N점'으로 풀어 쓴다(괄호 설명은 모델이 베낀다, 위 ⚠️).
+  // 소단원별 이해도(수학 보고서 시범) — 숫자가 아니라 **말**로 준다. '10점 만점에 N점'을 주면 금지해도 모델이 그대로 베꼈다(2026-10-23 실측).
   if (input.understanding?.length)
-    facts.push(`소단원별 이해도: ${input.understanding.map((u) => `${flatten(u.title)} 10점 만점에 ${u.score}점`).join(", ")}`);
+    facts.push(`소단원별 이해도: ${input.understanding.map((u) => `${flatten(u.title)} — ${understandingBandText(u.score)}`).join(", ")}`);
   // 반 전체 안내 — 라벨에 **취급법까지** 적는다(프롬프트 본문은 원장이 편집 가능해 사라질 수 있다).
   if (input.classNotice)
     facts.push(

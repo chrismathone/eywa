@@ -5,13 +5,14 @@ import { liveScopeHref } from "@/features/students/ontology/live-scope";
 import { LIVE_RELATION_SCHEMA } from "@/features/students/ontology/live-relations";
 import type { getCurrentOntologyScope } from "../server/live-scope-query";
 import { ContributionHeader } from "./contribution-shell";
-import { CurrentScopeControls, CurrentScopeRefresh } from "./current-scope-controls";
+import { CurrentScopeControls, CurrentScopeDirectory, CurrentScopeRefresh } from "./current-scope-controls";
 import { OntologyViewMode } from "./ontology-view-mode";
 import { entityLabels } from "./ontology-labels";
 
 type View = NonNullable<Awaited<ReturnType<typeof getCurrentOntologyScope>>>;
 export function CurrentScopeExplorer({ view, embed }: { view: View; embed: boolean }) {
   const { data, request } = view;
+  const browsing = request.kind !== "academy" && !request.id;
   const selected = data?.options.find((o) => o.kind === request.kind && o.id === request.id)?.label ?? "선택한 대상";
   return <div className="w-full min-w-0 space-y-5 pb-6">
     <ContributionHeader title="학생 기록 연결" description="현재 수강과 담당 관계를 학생·반·강사·과목·학원 관점에서 확인합니다." active="ontology" canConfigure={view.canConfigure} />
@@ -23,17 +24,19 @@ export function CurrentScopeExplorer({ view, embed }: { view: View; embed: boole
     </div> : <>
       <section className="space-y-4 rounded-xl border border-line p-4">
         <CurrentScopeControls key={`${request.kind}:${request.id}:${request.search}`} request={request} options={data.options} />
-        <div className="flex flex-wrap items-end justify-between gap-2"><h2 className="text-lg font-semibold">{selected}</h2><span className="text-xs tabular-nums">{data.asOf} 현재 수강 기준 · 휴원 포함</span></div>
+        <div className="flex flex-wrap items-end justify-between gap-2">{!browsing && <h2 className="text-lg font-semibold">{selected}</h2>}<span className="text-xs tabular-nums">{data.asOf} 현재 수강 기준 · 휴원 포함</span></div>
+        {!browsing && <>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {[["연결된 학생", data.total, "명"], ["수강 반", data.classCount, "개"], ["배정·위임된 강사", data.teacherCount, "명"], ["수강 과목", data.subjectCount, "개"]].map(([label, value, unit]) =>
             <div key={label} className="rounded-lg bg-secondary px-4 py-3"><p className="text-xs">{label}</p><p className="mt-2 text-2xl font-semibold tabular-nums">{Number(value).toLocaleString("ko-KR")}<span className="ml-1 text-sm font-normal">{unit}</span></p></div>)}
         </div>
-        <p className="text-xs leading-relaxed">여러 반·담당자에 연결된 학생도 인원은 한 번만 셉니다. 담당 배정은 실제 수업 실시나 강사 성과를 뜻하지 않습니다. 월별 기여도와 합산하지 않습니다.</p>
+        <p className="text-xs leading-relaxed">여러 반·담당자에 연결된 학생도 인원은 한 번만 셉니다. 담당 배정은 실제 수업 실시나 강사 성과를 뜻하지 않습니다. 월별 기여도와 합산하지 않습니다.</p></>}
         {(view.state === "partial" || data.unassignedClasses > 0) && <p role="status" className="rounded-lg bg-primary-softer p-3 text-sm">
           {view.state === "partial" ? "일부 학생·담당 연결은 확인이 필요합니다. 확인된 관계만 표시합니다. " : ""}
           {data.unassignedClasses > 0 ? `담당자가 배정되지 않은 반이 ${data.unassignedClasses}개 있습니다.` : ""}</p>}
       </section>
-      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
+      {request.kind !== "academy" && <div hidden={!browsing}><CurrentScopeDirectory key={request.kind} request={request} options={data.options} /></div>}
+      {!browsing && <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
         <section className="min-w-0 overflow-hidden rounded-xl border border-line">
           <div className="flex items-center justify-between gap-2 px-5 py-4"><h2 className="font-semibold">연결된 학생과 수강 근거</h2><span className="text-xs tabular-nums">{data.filteredTotal.toLocaleString("ko-KR")}명{request.search ? " 검색됨" : ""}</span></div>
           <div className="overflow-x-auto"><table className="w-full min-w-150 table-fixed text-sm text-left"><colgroup><col className="w-[22%]" /><col className="w-[26%]" /><col className="w-[52%]" /></colgroup>
@@ -60,7 +63,7 @@ export function CurrentScopeExplorer({ view, embed }: { view: View; embed: boole
             <p className="mt-3 text-xs leading-relaxed">각 대상에 함께 연결된 학생 수입니다. 중복 수강이 있어 서로 더한 값은 전체 인원과 다를 수 있습니다.</p>
           </section>;
         })}</aside>
-      </div>
+      </div>}
     </>}
   </div>;
 }

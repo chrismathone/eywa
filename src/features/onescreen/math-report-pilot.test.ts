@@ -16,6 +16,9 @@ import {
   topicName,
   pilotSection,
   PILOT_AI_DIRECTIVE,
+  callName,
+  cleanPilotUnderstanding,
+  pilotAiDirective,
   understandingRows,
 } from "./math-report-pilot";
 import { evaluateSendGate } from "./send-gate";
@@ -112,7 +115,36 @@ describe("소단원별 이해도", () => {
   });
   it("AI 사실 줄에 들어간다", () => {
     const input = { studentName: "a", subject: "수학", progress: "x", dailyTest: "", checkTest: "", attitude: "", homework: "", homeworkToday: "", textbook: "", specialNote: "", understanding: [{ title: "소인수분해", score: 7 }] } satisfies ReportCommentInput;
-    expect(buildFactBlock(input)).toContain("소단원별 이해도: 소인수분해 10점 만점에 7점");
+    expect(buildFactBlock(input)).toContain("소단원별 이해도: 소인수분해 — 대체로 따라왔으나 아직 조금 어려워함");
+    expect(buildFactBlock(input)).not.toMatch(/\d+점|만점/);
+  });
+});
+
+describe("이해도 AI — 이름·숫자·혼잣말(원장 2026-10-23 제보)", () => {
+  it("지시에 예시 이름이 없고, 이 학생의 부르는 이름이 붙는다", () => {
+    expect(PILOT_AI_DIRECTIVE).not.toMatch(/승엽|지수/);
+    expect(callName("학원삼")).toBe("원삼이");
+    expect(callName("김지수")).toBe("지수");
+    expect(pilotAiDirective("학원삼")).toMatch(/\[부르는 이름\] 우리 원삼이$/);
+    expect(pilotAiDirective("")).toMatch(/이름을 부르지 말고/);
+  });
+  it("점수 숫자·규칙 혼잣말이 든 문장은 통째로 뺀다", () => {
+    const items = [{ title: "연립방정식의 풀이의 응용", score: 10 }];
+    const leaked =
+      "연립방정식의 풀이의 응용은 10점 만점에 10점을 받아, 우리 원삼이가 가장 자신 있게 이해한 부분으로 보입니다 — 이 문장은 금지 표현이니 제외하고 다시 쓰겠습니다. 우리 원삼이가 문제를 차근차근 잘 풀었습니다.";
+    expect(cleanPilotUnderstanding(leaked, items)).toBe("우리 원삼이가 문제를 차근차근 잘 풀었습니다.");
+  });
+  it("다 빠지면 정해진 문장으로 · 숫자 없음", () => {
+    const out = cleanPilotUnderstanding("10점 만점에 10점입니다.", [
+      { title: "소인수분해", score: 9 },
+      { title: "최대공약수", score: 6 },
+    ]);
+    expect(out).toContain("'소인수분해'는 잘 이해하고 있습니다.");
+    expect(out).toContain("'최대공약수'는 대체로 잘 따라왔지만");
+    expect(out).not.toMatch(/\d/);
+  });
+  it("멀쩡한 글은 그대로", () => {
+    expect(cleanPilotUnderstanding("우리 원삼이는 소인수분해를 잘 이해했습니다.", [])).toBe("우리 원삼이는 소인수분해를 잘 이해했습니다.");
   });
 });
 

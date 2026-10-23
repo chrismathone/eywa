@@ -3,7 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { levelTableText, pilotBody, pilotLevelsSection } from "./math-report-pilot-sections";
 import { composePilotMent, pilotSection } from "./math-report-pilot";
-import { isScoreLine, parseLevelRows, parsePilotNotes } from "./pilot-notes";
+import { isScoreLine, parseLevelRows, parsePilotNotes, parseScoreLine } from "./pilot-notes";
 import { PilotNotesBody } from "./components/pilot-notes-body";
 
 const facts = {
@@ -46,6 +46,9 @@ describe("항목별 글 → 카드 조각(원장 2026-10-23 시안 B)", () => {
   it("점수 줄 판정", () => {
     expect(isScoreLine("5문제 중 5개 맞음")).toBe(true);
     expect(isScoreLine("오늘은 몸이 좋지 않아 일일 테스트를 보지 않았습니다.")).toBe(false);
+    expect(parseScoreLine("10문제 중 7개 맞음")).toEqual({ right: 7, total: 10 });
+    expect(parseScoreLine("5문제 중 7개 맞음")).toBeNull();
+    expect(parseScoreLine("0문제 중 0개 맞음")).toBeNull();
   });
 });
 
@@ -57,6 +60,12 @@ describe("카드 렌더", () => {
     expect(html).toMatch(/bg-primary text-primary-foreground[^>]*>상</);
     expect((html.match(/bg-primary-soft block/g) ?? []).length).toBe(4 + 3 + 2);
     expect(html).not.toContain("○");
+  });
+  it("점수 블록 — 큰 숫자 · 정식 표기 · 문제마다 점", () => {
+    expect(html).toMatch(/text-4xl[^>]*>5<\/span>/);
+    expect(html).toContain(">/ 5</span>");
+    expect(html).toContain(">5문제 중 5개 맞음</p>");
+    expect((html.match(/size-3\.5 rounded-full bg-primary"/g) ?? []).length).toBe(5);
   });
   it("오늘 과제는 상자로 · 한마디도 상자로", () => {
     expect(html).toMatch(/bg-primary-softer[^>]*>~131p</);
