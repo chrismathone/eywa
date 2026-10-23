@@ -119,3 +119,10 @@ describe("activityDetail — 환불요청서 form_data 필드별 한글 펼침",
     expect(changes).toEqual(["서식내용 변경"]);
   });
 });
+
+describe("activityDetail — 계정 보기 설정(0444a 전에 쌓인 줄)", () => {
+  it("ui_prefs는 영문 칸 이름 대신 '화면 보기 설정 변경'", () => {
+    const { changes } = activityDetail("users", "UPDATE", "김선생", { ui_prefs: { old: { a: 1 }, new: { a: 2 } } });
+    expect(changes).toEqual(["화면 보기 설정 변경"]);
+  });
+});

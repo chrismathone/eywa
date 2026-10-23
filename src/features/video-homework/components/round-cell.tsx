@@ -51,7 +51,7 @@ export function BlankRoundCell({ blank, onMenu }: { blank: BlankCell | undefined
     aria-label={`${blank.date} ${label}`}>{body}</span></td>;
   const open = (event: MouseEvent<HTMLElement>) => { event.preventDefault(); onMenu("issue", blank.date, pointOf(event)); };
   return <td><button type="button" className={`${styles.blank} ${styles.blankAction}`} aria-haspopup="menu"
-    title={`${blank.date} ${label} — 우클릭하면 이 날짜의 영상 숙제를 낼 수 있습니다`} aria-label={`${blank.date} ${label}`}
+    title={`${blank.date} ${label} — 우클릭하면 이 날짜의 영상 숙제를 내거나, 올라온 영상을 이 수업에 붙일 수 있습니다`} aria-label={`${blank.date} ${label}`}
     onClick={open} onContextMenu={open}>{body}</button></td>;
 }
 

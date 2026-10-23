@@ -5,6 +5,7 @@ import { useTimetableText } from "@/features/teacher-view/use-timetable-text";
 import {
   cloneElement,
   useEffect,
+  useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
   type ReactElement,
@@ -13,6 +14,7 @@ import {
 import { createPortal } from "react-dom";
 import { Pill } from "@/components/atoms/pill";
 import { HOVER_CARD_MAX_H, HOVER_CARD_SHELL } from "@/components/hover-tip/card-style";
+import { placeBeside, type HoverAside } from "@/features/timetable-cell-memo/placement";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { formatSchoolGrade } from "@/features/exports/math-timetable/student-format";
 import { splitNumberedItems } from "@/lib/text/split-numbered";
@@ -41,6 +43,24 @@ const HOVER_MAX_H = HOVER_CARD_MAX_H;
  */
 const OPEN_CARDS = new Set<() => void>();
 
+/** 열려 있는 카드를 전부 닫는다 — 칸 메모 편집 상자가 열릴 때 그 자리의 hover 카드를 걷는다. */
+export function closeOpenHoverCards(): void {
+  for (const close of [...OPEN_CARDS]) close();
+}
+
+/** 카드 옆 2열(칸 메모)과 카드 사이 틈 · 칸에서 묶음으로 마우스를 옮기는 동안 기다리는 시간. */
+const ASIDE_GAP = 8;
+const ASIDE_GRACE_MS = 160;
+
+type Grace = { current: number | null };
+function graceClose(ref: Grace, close: () => void) {
+  if (ref.current === null) ref.current = window.setTimeout(() => ((ref.current = null), close()), ASIDE_GRACE_MS);
+}
+function graceCancel(ref: Grace) {
+  if (ref.current !== null) window.clearTimeout(ref.current);
+  ref.current = null;
+}
+
 /**
  * 시간표 hover 정보 카드 — 커서 위치 기준 포털(고정·z최상위·pointer-events-none).
  * overflow 컨테이너(셀·DragScrollArea)에 안 잘리도록 document.body로 portal(ijw 패턴).
@@ -48,15 +68,19 @@ const OPEN_CARDS = new Set<() => void>();
  * (WindowLink는 onMouseEnter/Leave를 forward하도록 확장됨, div는 네이티브 지원.)
  * ⚠️ 트리거가 **이미 들고 있던** hover 핸들러는 덮지 않고 함께 부른다 — 드래그 학생 행이 같은 이벤트로
  *    'Delete=수강 종료' 대상(hoveredRef)을 추적하는데, 덮으면 그 추적이 조용히 죽는다(2026-09-04).
+ * `aside` = 카드 **오른쪽 2열**(칸 메모, 원장 2026-10-22 *"정보 1열, 메모 2열"*) — 돌려준 것이 있으면 묶음을 **칸 옆**에 붙이고
+ *    마우스를 칸에서 묶음으로 옮겨도 닫히지 않는다(메모를 눌러 고친다). 없으면(null) 종전 그대로 커서 옆 · 포인터 통과.
  */
 export function HoverCard({
   card,
   width = 230,
   children,
+  aside,
 }: {
   card: ReactNode;
   width?: number;
   children: ReactElement;
+  aside?: (trigger: HTMLElement) => HoverAside | null;
 }) {
   const [pos, setPos] = useState<{
     x: number;
@@ -64,7 +88,11 @@ export function HoverCard({
     el: HTMLElement;
     /** 카드를 연 순간의 트리거 자리 — 노드가 갈려도 "커서가 아직 그 줄 위인가"를 이걸로 판정한다. */
     rect: DOMRect;
+    /** 2열(칸 메모) — 있을 때만 묶음이 칸 옆에 서고 포인터를 받는다. */
+    extra?: HoverAside;
   } | null>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const graceRef = useRef<number | null>(null);
   // 카드가 **열려 있는 동안만** 드래그 신호를 구독한다 — 커서가 줄 위에 있는 채로 드래그가 시작되면
   // 이미 열린 카드가 그대로 떠 있어 끄는 내내 따라다닌다(show()만 막아선 그 경우가 안 막힌다).
   const dragging = useTimetableDragging(pos != null);
@@ -73,6 +101,12 @@ export function HoverCard({
     // 끌고 있는 동안엔 카드를 안 띄운다(포인터가 줄 위를 스치며 포털이 열렸다 닫히면 그게 곧 렉이다).
     // 🔴 판정은 **렌더 밖 플래그**로 — prop/상태로 내리면 픽업 순간 350줄이 다시 그려진다(drag-flag.ts).
     if (isTimetableDragging()) return;
+    // 🔴 트리거 노드를 **상태에 함께** 담는다(ref가 아니라) — 안전망이 "커서가 아직 이 줄 위인가"를 물을
+    //    앵커다. `currentTarget`은 이벤트 처리가 끝나면 null이 되므로 지금 붙잡아야 한다.
+    const el = e.currentTarget as HTMLElement;
+    // 2열 묶음에서 칸으로 돌아왔다 — 그대로 둔다(다시 열면 메모가 깜빡인다 · 닫힘 유예는 아래 안전망이 거둔다).
+    if (pos?.extra && pos.el === el) return;
+    const extra = aside?.(el) ?? null;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     let x = e.clientX + 16;
@@ -83,14 +117,24 @@ export function HoverCard({
     // 다 붙은 학생 카드는 300px를 넘어 창(기본 680px) 아래로 잘렸다. 실측 대신 카드에 max-height를
     // 걸고(내부 스크롤) **같은 상수**로 클램프해 항상 화면 안에 들어오게 한다(적대 감사 UX).
     if (y + HOVER_MAX_H > vh - 8) y = Math.max(8, vh - 8 - HOVER_MAX_H);
+    if (extra) {
+      const at = placeBeside(
+        extra.anchor,
+        { width: width + ASIDE_GAP + extra.width, height: Math.max(extra.height, HOVER_MAX_H) },
+        { width: vw, height: vh },
+      );
+      x = at.left;
+      y = at.top;
+    }
     // 동시에 하나 — 이전 카드들을 먼저 닫는다(닫히는 쪽이 자기 Set 항목을 지운다).
     for (const close of [...OPEN_CARDS]) close();
-    // 🔴 트리거 노드를 **상태에 함께** 담는다(ref가 아니라) — 안전망이 "커서가 아직 이 줄 위인가"를 물을
-    //    앵커다. `currentTarget`은 이벤트 처리가 끝나면 null이 되므로 지금 붙잡아야 한다.
-    const el = e.currentTarget as HTMLElement;
-    setPos({ x, y, el, rect: el.getBoundingClientRect() });
+    setPos({ x, y, el, rect: el.getBoundingClientRect(), ...(extra ? { extra } : {}) });
   }
-  const hide = () => setPos(null);
+  // 2열이 있으면 여기서 닫지 않는다 — 칸에서 메모로 마우스를 옮기는 사이(틈 몇 px)에 꺼지지 않게.
+  //    묶음 밖으로 나갔는지는 아래 안전망(pointermove)이 보고 잠깐 기다렸다 닫는다.
+  const hide = () => {
+    if (!pos?.extra) setPos(null);
+  };
 
   // 열려 있는 동안만 도는 안전망 — 트리거의 `mouseleave`가 안 오는 경우를 덮는다(위 주석).
   useEffect(() => {
@@ -98,8 +142,20 @@ export function HoverCard({
     const close = () => setPos(null);
     OPEN_CARDS.add(close);
 
-    const { el, rect } = pos;
+    const { el, rect, extra } = pos;
+    // 2열 묶음 안(메모를 읽거나 누르는 중)은 카드 밖이 아니다.
+    const inWrap = (t: EventTarget | null) => !!extra && t instanceof Node && !!wrapRef.current?.contains(t);
+    const closeOutside = (ev: Event) => {
+      if (!inWrap(ev.target)) close();
+    };
+    const grace = graceRef;
     function onPointerMove(ev: PointerEvent) {
+      if (extra) {
+        const t = ev.target;
+        if (inWrap(t) || (t instanceof Node && el.isConnected && el.contains(t))) graceCancel(grace);
+        else graceClose(grace, close);
+        return;
+      }
       if (el.isConnected) {
         const target = ev.target;
         if (!(target instanceof Node) || !el.contains(target)) close();
@@ -119,18 +175,19 @@ export function HoverCard({
 
     // ⚠️ capture로 듣는다 — 중간에서 stopPropagation 하는 표(드래그 팬 영역)가 있어도 도달해야 한다.
     document.addEventListener("pointermove", onPointerMove, true);
-    document.addEventListener("pointerdown", close, true);
-    document.addEventListener("wheel", close, true);
-    document.addEventListener("scroll", close, true);
+    document.addEventListener("pointerdown", closeOutside, true);
+    document.addEventListener("wheel", closeOutside, true);
+    document.addEventListener("scroll", closeOutside, true);
     document.addEventListener("keydown", onEsc, true);
     document.addEventListener("visibilitychange", close);
     window.addEventListener("blur", close);
     return () => {
       OPEN_CARDS.delete(close);
+      graceCancel(grace);
       document.removeEventListener("pointermove", onPointerMove, true);
-      document.removeEventListener("pointerdown", close, true);
-      document.removeEventListener("wheel", close, true);
-      document.removeEventListener("scroll", close, true);
+      document.removeEventListener("pointerdown", closeOutside, true);
+      document.removeEventListener("wheel", closeOutside, true);
+      document.removeEventListener("scroll", closeOutside, true);
       document.removeEventListener("keydown", onEsc, true);
       document.removeEventListener("visibilitychange", close);
       window.removeEventListener("blur", close);
@@ -159,12 +216,27 @@ export function HoverCard({
       {trigger}
       {pos && !dragging
         ? createPortal(
-            <div
-              className={`${HOVER_CARD_SHELL} pointer-events-none fixed z-[9999] overflow-y-auto`}
-              style={{ left: pos.x, top: pos.y, width, maxHeight: HOVER_MAX_H }}
-            >
-              {card}
-            </div>,
+            pos.extra ? (
+              <div
+                ref={wrapRef}
+                className="fixed z-[9999] flex items-start"
+                style={{ left: pos.x, top: pos.y, gap: ASIDE_GAP }}
+                onPointerEnter={() => graceCancel(graceRef)}
+                onPointerLeave={() => graceClose(graceRef, () => setPos(null))}
+              >
+                <div className={`${HOVER_CARD_SHELL} shrink-0 overflow-y-auto`} style={{ width, maxHeight: HOVER_MAX_H }}>
+                  {card}
+                </div>
+                {pos.extra.node}
+              </div>
+            ) : (
+              <div
+                className={`${HOVER_CARD_SHELL} pointer-events-none fixed z-[9999] overflow-y-auto`}
+                style={{ left: pos.x, top: pos.y, width, maxHeight: HOVER_MAX_H }}
+              >
+                {card}
+              </div>
+            ),
             document.body,
           )
         : null}

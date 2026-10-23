@@ -10,8 +10,11 @@
  * ⚠️ 폭·최대 높이는 **위치 클램프와 같은 값**이어야 카드가 화면 밖으로 안 나간다(옛 코드가 높이를 추정해 잘렸다).
  */
 
+/** 카드 테두리·면·그림자(안쪽 여백 없음) — 안을 직접 나누는 상자(시간표 칸 메모 편집 상자)가 쓴다. */
+export const HOVER_CARD_FRAME = "border-line bg-card shadow-modal rounded-lg border";
+
 /** 카드 상자 — 흰 면 + 헤어라인 테두리 + 떠 있는 그림자(팔레트 v4). */
-export const HOVER_CARD_SHELL = "border-line bg-card shadow-modal rounded-lg border p-3";
+export const HOVER_CARD_SHELL = `${HOVER_CARD_FRAME} p-3`;
 
 /** 카드 최대 높이(px) — 넘치면 카드 안에서 스크롤한다. */
 export const HOVER_CARD_MAX_H = 320;

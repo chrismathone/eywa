@@ -50,6 +50,8 @@ const OP_LABEL: Record<ActivityOp, string> = { INSERT: "생성", UPDATE: "수정
 /** 자주 나오는 컬럼 → 한글. 없으면 원본 컬럼명 노출(폴백). */
 const COLUMN_LABEL: Record<string, string> = {
   name: "이름", display_name: "이름", grade: "학년", school: "학교", status: "상태",
+  // 계정 보기 설정 — 0444a부터 트리거가 안 남긴다. 그 전에 쌓인 줄이 영문 칸 이름으로 뜨지 않게.
+  ui_prefs: "화면 보기 설정",
   phone: "연락처", parent_phone: "학부모연락처", student_phone: "학생연락처", home_phone: "집전화",
   price: "금액", amount_total: "금액", amount: "금액", discount: "할인", due_date: "납기", period: "청구월",
   book_name: "교재명", class_name: "반이름", subject: "과목", teacher_id: "담당강사",

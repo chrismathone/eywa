@@ -86,7 +86,7 @@ describe("수업 이력 삭제 게이트", () => {
   });
 
   it("지운 행을 통째로 스냅샷해 감사로그에 남긴다(원장 지시 '대신 감사 로그에는 남겨')", () => {
-    const sql = read("supabase/migrations/20261015160300_enrollment_history_delete.sql");
+    const sql = read("supabase/migrations/0429a_enrollment_history_delete.sql");
     expect(sql).toContain("'enrollment_delete'");
     expect(sql).toContain("'snapshot',jsonb_build_object");
     // 손으로 되살릴 수 있을 만큼 — 기간·요일·휴원 표식까지.

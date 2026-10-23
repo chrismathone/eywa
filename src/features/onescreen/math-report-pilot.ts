@@ -22,6 +22,7 @@ import { skipStatusOf } from "./progress-status";
 export const MATH_REPORT_PILOT_STUDENT_IDS: readonly string[] = [
   "67a53999-fb62-4753-a938-9a5ce4af9e61", // 테스트
   "6219e442-aa57-455f-a5bc-834b222d9e1c", // 학원이
+  "5de5c803-6cf6-4ad9-85f0-d184334c679e", // 학원삼 — 원일 계정 테스트용(2026-10-22, 학원이 반 담임이 박소선으로 바뀌어 따로 만듦)
 ];
 
 /** 이 학생·과목 행이 시범 대상인가. 과목키가 없는 행(데모)은 수학으로 본다(원스크린 관례). */
@@ -79,12 +80,15 @@ export function progressLead(fullName: string, lessons: readonly string[], stopL
   if (stopLabel) return `${who} 오늘 ${stopLabel} 수업을 했습니다.`;
   const titles = lessons.map(lessonTitle).filter(Boolean);
   if (titles.length === 0) return "";
-  if (titles.length === 1) return `${who} 오늘 ${titles[0]} 진도를 나갔습니다.`;
+  // 소단원 이름은 따옴표로 묶는다 — 이름 안의 '의'·'와'가 문장 조사와 섞여 읽기 어렵다(원장 2026-10-23 *"너무 짧고 이상함"*).
+  const q = (t: string) => `'${t}'`;
+  const close = " 오늘 배운 내용이 잘 자리 잡을 수 있도록 다음 시간에도 이어서 꼼꼼히 다지겠습니다.";
+  if (titles.length === 1) return `${who} 오늘 ${q(titles[0]!)} 진도를 나갔습니다.${close}`;
   if (titles.length === 2) {
     const [a, b] = titles;
-    return `${who} 오늘 ${a}${hasBatchim(a!.slice(-1)) ? "과" : "와"} ${b} 진도를 나갔습니다.`;
+    return `${who} 오늘 ${q(a!)}${hasBatchim(a!.slice(-1)) ? "과" : "와"} ${q(b!)}, 두 소단원 진도를 나갔습니다.${close}`;
   }
-  return `${who} 오늘 ${titles[0]}부터 ${titles[titles.length - 1]}까지 진도를 나갔습니다.`;
+  return `${who} 오늘 ${q(titles[0]!)}부터 ${q(titles[titles.length - 1]!)}까지 모두 ${titles.length}개 소단원 진도를 나갔습니다.${close}`;
 }
 
 /** 소단원별 이해도 상태 — 점수(차시 원문 키 → 0~10) + 뺀 차시. 세션 `subject_progress`에 실린다. */
@@ -156,6 +160,7 @@ export const PILOT_SECTION_TITLES = {
   progress: "진도",
   daily: "일일 테스트",
   check: "확인 테스트",
+  levels: "수업 평가",
   attitude: "수업 태도",
   homework: "과제 수행률",
   understanding: "이해도",
@@ -239,7 +244,7 @@ export function isPilotAutoWritten(draft: string | null | undefined, autoDraft: 
  */
 export const PILOT_AI_DIRECTIVE = [
   "[이번 알림장 추가 규칙]",
-  "- 이 알림장은 항목별로 나뉩니다(진도·일일 테스트·수업 태도·과제 수행률·이해도·오늘 과제·선생님 한마디). 진도·테스트·태도·과제·선생님 한마디는 따로 붙으니, comment에는 '이해도' 항목에 들어갈 문장만 쓰세요 — 인사, 진도 나열, 테스트 점수, 수업 태도, 과제 이야기는 쓰지 마세요.",
+  "- 이 알림장은 항목별로 나뉩니다(수업 평가·진도·일일 테스트·수업 태도·과제 수행률·이해도·오늘 과제·선생님 한마디). 진도·테스트·태도·과제·선생님 한마디는 따로 붙으니, comment에는 '이해도' 항목에 들어갈 문장만 쓰세요 — 인사, 진도 나열, 테스트 점수, 수업 태도, 과제 이야기는 쓰지 마세요.",
   "- comment는 학생 이름으로 시작하지 말고, 첫 소단원 이야기부터 바로 시작하세요.",
   "- 본문에서 학생을 부를 때는 이름 앞에 '우리'를 붙여 친근하게 부르세요(예: 우리 승엽이가, 우리 지수가). 성은 빼고 부르세요.",
   "- '소단원별 이해도'가 있으면 소단원마다 한두 문장으로 말로 풀어 쓰세요. 점수가 높을수록(8~10점) 그 소단원을 아이의 강점으로 구체적으로 칭찬하세요.",
@@ -271,7 +276,9 @@ export function isPilotDraftCurrent(
 ): boolean {
   const d = (draft ?? "").trim();
   const lead = progressLead(now.studentName, pilotLessons(now.today), skipStatusOf(now.today));
-  if (lead && !d.startsWith(pilotSection(PILOT_SECTION_TITLES.progress, lead))) return false;
+  // 진도 항목은 맨 앞이거나 '수업 평가' 표 바로 뒤(원장 2026-10-23 표를 맨 위로).
+  const sec = lead ? pilotSection(PILOT_SECTION_TITLES.progress, lead) : "";
+  if (sec && !d.startsWith(sec) && !d.includes(`\n\n${sec}`)) return false;
   if (now.writtenSig !== undefined && now.writtenSig !== now.factsSig) return false;
   const note = (now.note ?? "").trim();
   if (note && !d.endsWith(note)) return false;

@@ -8,6 +8,7 @@ import { canAccess, MENU_KEYS, type MenuKey } from "@/lib/permissions";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { kstTimeOf, kstToday } from "@/lib/date-kst";
+import { previousDayRange } from "./previous-day";
 import {
   countEnrolledStudents,
   fetchActiveEnrolledEnrollments,
@@ -963,10 +964,16 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
         : Promise.resolve([]);
     // 창 구간을 **한 번에**(수기 일정만) — 달 단위로 받으면 창이 두 달에 걸치는 거의 모든 날 조회가 두 벌이 된다.
     // 휴가 오버레이는 안 받는다: 분류기(`admissionsEventKind`)가 `source !== "manual"`을 전부 버린다.
-    const result = await getDateRangeEvents(today, end);
+    // 전일 첫날(어제 · 월요일엔 토요일)부터 읽는다 — KPI '전일 입테'(원장 2026-10-22 *"금일 입테 -> 전일 입테로 … 측정하는것도
+    // 전일 입테로"* · *"월요일의 전일은 주말 모두 포함"*). 오늘 전 줄은 **레벨테스트만** 싣고(취소 포함 — 팝업 취소선),
+    // 패널은 `upcomingAdmissionsRows`로 오늘부터만 그린다.
+    const prevFrom = previousDayRange(today).from;
+    const result = await getDateRangeEvents(prevFrom, end);
     if (!result.ready) throw new Error("학원 일정 연결 확인 필요");
     // 취소된 일정도 목록에 취소선으로 남는다(원장 2026-09-30) — 반·상담 연결과 그 조회는 **살아 있는 일정만**(`live`).
-    const upcoming = upcomingAdmissionsEvents(result.events, today, end);
+    const upcoming = upcomingAdmissionsEvents(result.events, prevFrom, end).filter(
+      (event) => event.endDate >= today || admissionsEventBaseKind(event) === "levelTest",
+    );
     const live = upcoming.filter((e) => !isCancelledEventTitle(e.title));
     let candidates: Awaited<ReturnType<typeof firstClassCandidates>> = [];
     let classSlots: Awaited<ReturnType<typeof firstClassScheduleCandidates>> =
@@ -1008,7 +1015,7 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
     }
     const rows = upcoming.map((event) => {
       // 취소된 일정 = 목록에 취소선으로만(원장 2026-09-30). 반·콜&상담 링크·이름 바로잡기·단계 칩을 붙이지 않고
-      // `kind`는 null(금일입테·열 건수에서 빠진다), 원래 종류는 `cancelledKind`로만 싣는다.
+      // `kind`는 null(전일 입테·열 건수에서 빠진다), 원래 종류는 `cancelledKind`로만 싣는다.
       if (isCancelledEventTitle(event.title)) {
         return {
           id: event.id,

@@ -22,6 +22,8 @@ import {
 import { WindowLink } from "@/components/workspace/window-link";
 import { COMMON_FIELDS, ENGLISH_GROUPS, GENDER_OPTIONS, SUBJECT_TABS } from "@/features/enrollment/form-config";
 import { outcomeBadge } from "@/features/enrollment/outcome-meta";
+import { Pill } from "@/components/atoms/pill";
+import { boardStatusOf } from "@/features/enrollment/board-stages";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { loadConsultationReferrer } from "@/features/enrollment/server/referrer-queries";
 import { createClient } from "@/lib/supabase/server";
@@ -171,7 +173,7 @@ export default async function EnrollmentDetailPage({
       />
     ) : null;
 
-  const badge = outcomeBadge(consult.outcome);
+  const badge = boardStatusOf(consult);
   const procBadge = PROCESSING_BADGE[consult.processingStatus];
   const isProcessing =
     consult.processingStatus === "uploaded" ||
@@ -192,11 +194,7 @@ export default async function EnrollmentDetailPage({
           <p className="eyebrow">신규 콜&상담</p>
           <div className="flex items-baseline gap-3">
             <h1 className="font-bold tracking-tight text-foreground text-3xl">{consult.prospectName}</h1>
-            <span
-              className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${badge.class}`}
-            >
-              {badge.label}
-            </span>
+            <Pill color={badge.color}>{badge.label}</Pill>
             {procBadge ? (
               <span
                 className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs font-medium ${procBadge.class}`}
@@ -224,7 +222,7 @@ export default async function EnrollmentDetailPage({
             <Pencil className="size-4" />
             상담 수정
           </Button>
-          <ConsultationManageButtons values={{ id: consult.id, outcome: consult.outcome }} />
+          <ConsultationManageButtons values={{ id: consult.id, outcome: consult.outcome, assignedClassCount: consult.assignedClassCount }} />
           {consult.aiAnalysis ? (
             <PrintWindowButton
               id={`print/enrollment/${id}`}
@@ -497,16 +495,21 @@ export default async function EnrollmentDetailPage({
           ]}
         />
 
-        {/* 5. 등록 / 결제 */}
         <InfoCard
-          title="등록 / 결제"
+          title="상담 상태 / 동의"
           rows={[
-            ["등록 상태", f.registrationStatus],
+            ["상담 상태", badge.label],
+            ["개인정보 동의", f.privacyAgreement ? "동의" : null],
+            ["환불·학칙 동의", f.installmentAgreement ? "동의" : null],
+          ]}
+        />
+        <InfoCard
+          title="과거 결제 기록"
+          optional
+          rows={[
             ["결제 금액", f.paymentAmount ? `${Number(f.paymentAmount).toLocaleString()}원` : null],
             ["결제일", f.paymentDate, true],
             ["등록자", f.registrar],
-            ["개인정보 동의", f.privacyAgreement ? "동의" : null],
-            ["환불·학칙 동의", f.installmentAgreement ? "동의" : null],
           ]}
         />
 

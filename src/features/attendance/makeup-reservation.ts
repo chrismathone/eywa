@@ -60,10 +60,10 @@ export type MakeupReservation = {
   note: string | null;
   status: MakeupReservationStatus;
   createdBy: string | null;
-  /** 보고서 발송 방식(20261022150000) — 칸이 없거나 묻지 않은 예약은 null/없음. */
+  /** 보고서 발송 방식(0438a) — 칸이 없거나 묻지 않은 예약은 null/없음. */
   reportMode?: MakeupReportMode | null;
   /**
-   * 결석난 반(20261022170000) — `classId`는 **기록할 반**(보강이 서는 반)이다. 비면 같은 반. 결석일 칸을 다루는 곳은
+   * 결석난 반(0440a) — `classId`는 **기록할 반**(보강이 서는 반)이다. 비면 같은 반. 결석일 칸을 다루는 곳은
    * 반드시 `absenceClassOf`로 읽는다(원장 2026-10-22 — 예약에도 기록할 반 고르기).
    */
   absenceClassId?: string | null;

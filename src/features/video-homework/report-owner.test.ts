@@ -194,8 +194,8 @@ describe("③ DB 겹(0336a) — 직접 쓰기·동시 첫 저장까지", () => {
   });
 });
 
-describe("③' DB 겹 넓힘(20261015090000) — 영상 숙제 마감도 작성자 것으로 둔다", () => {
-  const sql = read("supabase", "migrations", "20261015090000_video_homework_due.sql");
+describe("③' DB 겹 넓힘(0425a) — 영상 숙제 마감도 작성자 것으로 둔다", () => {
+  const sql = read("supabase", "migrations", "0425a_video_homework_due.sql");
   const fn = sql.slice(sql.lastIndexOf("create or replace function public.lesson_reports_keep_video_homework_owner"));
 
   it("칸을 먼저 만들고 함수가 그 칸을 읽는다(칸이 없는 스키마에서 트리거가 갱신을 죽이지 않게)", () => {

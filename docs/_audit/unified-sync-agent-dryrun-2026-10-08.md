@@ -44,7 +44,7 @@
 변경 근거:
 
 - [OS 실행 잠금](../../scripts/_classnote/worker-lease.mjs), [서버 잠금 유지기](../../scripts/_classnote/worker-execution-lease.mjs)
-- [DB 마이그레이션](../../supabase/migrations/20261008073000_worker_execution_leases.sql)
+- [DB 마이그레이션](../../supabase/migrations/0399a_worker_execution_leases.sql)
 - [실제 ClassNote 실행기](../../scripts/_classnote/watch-classnote-queue.mjs)
 - [잠금 동작 시험](../../scripts/_classnote/worker-lease.test.mjs), [실제 실행기 배선 시험](../../scripts/_classnote/watch-classnote-lease.test.mjs), [DB 경쟁 시험](../../scripts/_sync-agent/lease-db-check.cjs)
 

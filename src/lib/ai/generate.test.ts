@@ -297,6 +297,25 @@ describe("generateJSON 폴백", () => {
     KEYS.forEach((k) => (saved[k] === undefined ? delete process.env[k] : (process.env[k] = saved[k])));
   });
 
+  it("회사 제한이 있으면 Claude 인증 실패도 DeepSeek으로 넘기지 않는다", async () => {
+    anthropicCreate.mockRejectedValueOnce({ status: 401, message: "invalid api key" });
+    await expect(generateJSON({ meta: TEST_META, prompt: "판정", maxTokens: 1024, provider: "anthropic", tier: "fast",
+      reasoningEffort: "low", allowedProviders: ["anthropic"] })).rejects.toThrow();
+    expect(anthropicCreate).toHaveBeenCalledOnce(); expect(deepseekCreate).not.toHaveBeenCalled();
+  });
+
+  it("허용한 회사의 키가 없으면 다른 회사 키만으로 호출하지 않는다", async () => {
+    delete process.env.ANTHROPIC_API_KEY;
+    await expect(generateJSON({ meta: TEST_META, prompt: "판정", maxTokens: 1024, allowedProviders: ["anthropic"] })).rejects.toThrow("API 키");
+    expect(anthropicCreate).not.toHaveBeenCalled(); expect(deepseekCreate).not.toHaveBeenCalled();
+  });
+
+  it("배치의 중단 신호를 Claude SDK 요청까지 전달한다", async () => {
+    const abort = new AbortController(); anthropicCreate.mockResolvedValueOnce(anthropicOk('{"ok":true}'));
+    await generateJSON({ meta: TEST_META, prompt: "판정", maxTokens: 1024, provider: "anthropic", allowedProviders: ["anthropic"], signal: abort.signal });
+    expect(anthropicCreate.mock.calls[0]![1]).toEqual({ signal: abort.signal });
+  });
+
   it("deepseek 401 → anthropic로 자동 폴백해 성공", async () => {
     deepseekCreate.mockRejectedValueOnce({ status: 401 });
     anthropicCreate.mockResolvedValueOnce(anthropicOk('{"ok":true}'));
@@ -413,6 +432,7 @@ describe("generateJSON 폴백", () => {
     expect(sentMaxTokens("anthropic", "claude-haiku-5-5", 1800, "ment_prompt_preview")).toBe(16_000); // 미리보기 = 자동작성과 같게
     expect(sentMaxTokens("deepseek", "deepseek-flash", 1800, "classnote_ment")).toBe(32_000);
     expect(sentMaxTokens("anthropic", "claude-sonnet-5-5", 2048, "student_care")).toBe(16_000); // 직원이 버튼을 누르고 기다린다
+    expect(sentMaxTokens("anthropic", "claude-haiku-5-5", 2048, "student_ontology_summary")).toBe(16_000);
     expect(sentMaxTokens("anthropic", "claude-sonnet-5-5", 1200, "ment_style_profile")).toBe(64_000); // 주 1회 cron — 기다리지 않는다
   });
 

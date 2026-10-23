@@ -29,8 +29,10 @@ import { capMakeupMode, normalizeMakeupSettings } from "@/features/makeups/confi
 import { capLaboratoryMenus } from "@/lib/laboratory/rule";
 import { getLaboratoryMenus } from "@/lib/laboratory/server";
 import { applyUserMenuBlocks } from "@/lib/auth/user-menu-blocks";
+import { capContributionMenu } from "@/features/student-contribution/model/access";
 
 async function capLaboratory(matrix: AccessMatrix, tenantId: string): Promise<AccessMatrix> {
+  matrix = capContributionMenu(matrix, tenantId);
   const menus = await getLaboratoryMenus();
   if (menus.length === 0) return matrix;
   return capLaboratoryMenus(matrix, menus, await isFeatureOptedIn(tenantId, "laboratory"));
@@ -208,7 +210,7 @@ export const getUserPermMatrix = cache(async (): Promise<AccessMatrix> => {
     return [menu, { ...actor[menu], [user.systemRole]: level, [target.systemRole]: level, teacher: level }];
   })) as AccessMatrix, user.tenantId).then((m) =>
     // 다른 강사 뷰는 대상 값으로 내 역할 줄을 다시 쓰므로 개인 메뉴 차단을 한 번 더 누른다(user-menu-blocks.ts).
-    applyUserMenuBlocks(m, user.id, [user.systemRole, target.systemRole, "teacher"]),
+    capContributionMenu(applyUserMenuBlocks(m, user.id, [user.systemRole, target.systemRole, "teacher"]), user.tenantId),
   );
 });
 

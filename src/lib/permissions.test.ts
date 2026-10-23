@@ -232,11 +232,21 @@ describe("새 권한의 기본값 = 원장 '전체' · 나머지 '없음'(원장
     "calendar", "shuttle", "inventory", "textbooks", "integrations", "sheet_sync", "help", "support", "teacher_onescreen", "my_learning",
   ];
   const expected = Object.fromEntries(SYSTEM_ROLES.map((role) => [role, role === "master" ? "full" : "none"]));
+  // 규칙 **뒤에** 그 기능의 결정 문서가 기본값을 따로 정한 권한 — 근거를 적고 **정해진 값 그대로** 고정한다(더 넓어지면 실패).
+  // 🔴 근거 문서 없이 더하지 말 것. 위 BEFORE_RULE과 섞지 않는다(규칙 전에 정해진 것이 아니다).
+  const DECIDED_AFTER_RULE: Readonly<Record<string, { why: string; access: Record<string, string> }>> = {
+    // 2026-10-22 추가: docs/decisions/withdrawal-reports.md(2026-10-13 사용자 요청) "기본 역할 권한은 관리자·원장 전체, 강사 본인 배정 건".
+    // 매니저 '전체'는 같은 커밋(6a76be7a3)의 요청 자격 canRequestReport(원장·관리자·매니저)와 짝이다. 실험실 메뉴라 실험실을 켠 지점만 열린다.
+    withdrawal_reports: {
+      why: "퇴원보고서 결정 문서 2026-10-13 — 관리자 요청 → 담임 작성 → 관리자 승인 흐름이 기본값으로 돈다",
+      access: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "none", accountant: "none", viewer: "none", student: "none" },
+    },
+  };
 
   it("🔴 목록 밖의 권한은 원장만 '전체'로 시작한다 — 새 권한을 다른 역할에게 코드 기본값으로 열어 두지 않는다", () => {
     for (const menu of MENU_KEYS) {
       if (BEFORE_RULE.includes(menu)) continue;
-      expect(MENU_ACCESS[menu], menu).toEqual(expected);
+      expect(MENU_ACCESS[menu], menu).toEqual(DECIDED_AFTER_RULE[menu]?.access ?? expected);
     }
   });
 
@@ -246,5 +256,11 @@ describe("새 권한의 기본값 = 원장 '전체' · 나머지 '없음'(원장
       expect(MENU_ACCESS[menu as MenuKey], menu).not.toEqual(expected);
     }
     expect(new Set(BEFORE_RULE).size).toBe(BEFORE_RULE.length);
+    for (const [menu, { why, access }] of Object.entries(DECIDED_AFTER_RULE)) {
+      expect(MENU_KEYS as readonly string[], menu).toContain(menu);
+      expect(BEFORE_RULE, menu).not.toContain(menu);
+      expect(access, menu).not.toEqual(expected);
+      expect(why.trim().length, `${menu} 근거`).toBeGreaterThan(0);
+    }
   });
 });

@@ -163,7 +163,7 @@ export function TrendBoard({
     })),
     // 지난 기록 선 — 학원 전체 선과 함께 켜지고 꺼진다(칩은 하나). 막대는 합계와 같은 스택(한 칸에 둘이 서지 않는다 · 쌓은 구성에선 구성 스택에).
     ...(hasHistory && totalShown
-      ? [{ key: HISTORY_KEY, name: "지난 기록", color: HISTORY_COLOR, values: split.history, strong: true, dashed: true, endLabel: false as const, ...(kind === "bar" ? { stack: stackMix ? "mix" : "total" } : {}) }]
+      ? [{ key: HISTORY_KEY, name: "지난 기록", color: HISTORY_COLOR, values: split.history, strong: true, dashed: true, hideInLegend: true as const, ...(kind === "bar" ? { stack: stackMix ? "mix" : "total" } : {}) }]
       : []),
     ...(unsplit.some((v) => v !== null) ? [{ key: "_unsplit", name: "구성을 셀 수 없는 칸", color: "#c5ccd4", values: unsplit, stack: "mix" }] : []),
   ];
@@ -233,8 +233,6 @@ export function TrendBoard({
         </>
       }
     >
-      {/* 쌓은 막대에선 합계 칩을 세우지 않는다(합계는 값 상자에만 — 눌러도 화면은 그대로인데 꺼진 상태가 저장돼 다른 보기에서 합계 선이 사라졌다 · 재리뷰 2026-10-21). */}
-      <SeriesChips series={drawnLines.filter((l) => !stackMix || l.key !== "total").map((l) => ({ key: l.key, label: l.label, color: l.color }))} off={offNow} onToggle={toggle} />
       {totalPoints.length === 0 ? (
         <p className="text-muted-foreground text-sm break-keep">
           {daily && countFrom ? `이 기간은 에이와 수강 기록이 갖춰진 ${monthText(countFrom)} 전이라 일별로 셀 수 없습니다(월별·연도별은 지난 기록으로 이어 보입니다).` : "이 기간에는 셀 수 있는 날이 없습니다."}
@@ -246,8 +244,12 @@ export function TrendBoard({
           tooltipLabels={totalPoints.map((p) => (p.source === "history" ? `${longLabel(p, labelRange, today)} · ${trendBasisName(p)}` : longLabel(p, labelRange, today)))}
           series={series}
           markers={hasHistory && totalShown ? basisMarkers(totalPoints.map(trendBasisName)) : []}
+          legend={false}
         />
       )}
+      {/* 선 고르기 칩 = 범례 — 그래프 아래(원장 2026-10-22 *"다른 화면의 꺾은선도 전부 일치화"*).
+          쌓은 막대에선 합계 칩을 세우지 않는다(합계는 값 상자에만 — 눌러도 화면은 그대로인데 꺼진 상태가 저장돼 다른 보기에서 합계 선이 사라졌다 · 재리뷰 2026-10-21). */}
+      <SeriesChips series={drawnLines.filter((l) => !stackMix || l.key !== "total").map((l) => ({ key: l.key, label: l.label, color: l.color }))} off={offNow} onToggle={toggle} />
       {/* 요약은 이은 축 전체 — 지난 기록 구간이 들면 뜻이 섞인 비교라 그 사실을 라벨에 적는다(리뷰 2026-10-21). */}
       <TrendFacts points={totalPoints} range={labelRange} who={hasHistory ? `${totalLabel}(지난 기록 포함)` : totalLabel} />
       <p className="text-muted-foreground text-xs break-keep">

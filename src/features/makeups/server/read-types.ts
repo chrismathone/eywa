@@ -112,7 +112,8 @@ export const dryRunPageSchema = candidatePageSchema.extend({
   writes: z.literal(0),
 }).refine(data => Object.values(data.counts).reduce((sum, count) => sum + count, 0) === data.total
   && data.rows.length <= data.page_size, "사전 점검 집계가 일치하지 않습니다");
-export type ReadResult<T> = { data: T; error?: never } | { data?: never; error: string };
+export type ReadResult<T> = { data: T; error?: never; reason?: never }
+  | { data?: never; error: string; reason?: "forbidden" | "off" | "schema_missing" | "failed" };
 export const eventPageSchema = z.object({
   rows: z.array(z.object({ id, event_type: z.string(), actor_name: nullableText,
     reason: nullableText, occurred_at: z.string() }).passthrough()),

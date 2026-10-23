@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import postgres from 'postgres';
 
 const migration = 'supabase/migrations/0333a_timetable_lab_drafts.sql';
-const sharedMigration = 'supabase/migrations/20261022153000_timetable_lab_shared_drafts.sql';
+const sharedMigration = 'supabase/migrations/0439a_timetable_lab_shared_drafts.sql';
 const mode = process.argv[2] ?? '--check';
 if (!['--check', '--apply', '--test'].includes(mode)) throw new Error('Use --check, --apply or --test.');
 let connection, ref;

@@ -33,7 +33,7 @@ export const calendar: HelpManual = {
       n: 4,
       label: "날짜 칸",
       zone: "cell",
-      body: "누르면 그날 일정 목록. 레벨테스트 일정은 [[dashboard|대시보드]] ‘금일 입테’와 같은 분류입니다.",
+      body: "누르면 그날 일정 목록. 레벨테스트 일정은 [[dashboard|대시보드]] ‘전일 입테’와 같은 분류입니다.",
     },
   ],
 };

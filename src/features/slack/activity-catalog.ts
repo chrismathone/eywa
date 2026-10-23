@@ -80,6 +80,10 @@ const RULES: readonly [string, string][] = [
   ["mcs_", "sheets"],
   ["progress_", "sheets"],
   ["textbook_", "sheets"],
+  // 수학 강사 시트(MCS) — 학생별 교재 배정 · 목표 교재 · 학교별 내신기간(대상 = 반 이름).
+  ["math_textbook_assign", "sheets"],
+  ["math_book_target", "sheets"],
+  ["school_exam_periods", "sheets"],
   ["exam_", "sheets"],
   ["staff_", "staff"],
   ["approval_", "staff"],
@@ -103,6 +107,8 @@ const RULES: readonly [string, string][] = [
   ["inventory_", "ops"],
   ["owner_", "settings"],
   ["integration_", "settings"],
+  // 오늘 수학 지점 사용 메뉴(연결 앱) — 에이와에서 바꾼 것과 오늘 수학에서 알려 온 것이 같은 키.
+  ["todays_math_", "settings"],
   ["slack_", "settings"],
   ["kiosk_", "settings"],
   ["kakao_", "settings"],
@@ -123,6 +129,9 @@ const RULES: readonly [string, string][] = [
 const FORBID_CATEGORIES = new Set(["payroll"]);
 const FORBID_PREFIXES = ["resume_", "staff_resume_", "staff_contract_", "staff_create_from_resume", "staff_link_from_resume", "slack_connection_token"];
 const FORBID_KEYS = new Set([
+  "student_contribution_refresh", "student_contribution_settings_save", "student_contribution_signal_cancel",
+  "student_contribution_signal_rejudge", "student_contribution_referral_backfill", "student_contribution_referral_link",
+  "student_contribution_summary_generate",
   "staff_password_reset",
   "self_password_change",
   "self_email_change",
@@ -137,6 +146,10 @@ const FORBID_KEYS = new Set([
   "timetable_lab_draft_save",
   // 메모 시트는 자동 저장이라(고칠 때마다) 채널로 내보내면 줄이 쏟아진다 — 고를 수 없게 둔다.
   "timetable_memo_sheet_save",
+  // 칸 메모도 자동 저장이다(입력하는 대로) — 같은 이유로 고를 수 없게 둔다.
+  "timetable_cell_memo_add",
+  "timetable_cell_memo_update",
+  "timetable_cell_memo_delete",
 ]);
 /** 대상 문구 없이 — 돈 계열(금액·계좌가 대상 라벨에 섞일 수 있다) + 연차. */
 const OPAQUE_CATEGORIES = new Set(["billing"]);

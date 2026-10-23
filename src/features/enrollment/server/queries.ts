@@ -10,7 +10,7 @@ import type { ExtractedConsultationForm } from "../form-fill";
 import type { IntakeChecklist } from "../intake-checklist";
 import type { PrepBriefRecord } from "../prep-brief";
 import { DEFAULT_RANGE, RANGE_MONTHS, type RangePreset } from "../range";
-import { outcomesOfStage, type BoardStageKey } from "../board-stages";
+import { boardStatusOf, outcomesOfStage, type BoardStageKey } from "../board-stages";
 import { kstDayBounds, kstMonthBounds } from "../kst-bounds";
 import { countAssignedClasses } from "./assigned-classes";
 
@@ -617,7 +617,7 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
        processing_status, processing_error,
        english_name, gender, blood_type, birth_date, student_phone, home_phone,
        parent_relation, address, zip_code, address_detail, consultation_path,
-       subject, career_goal, siblings, safety_notes, registration_status,
+       subject, career_goal, siblings, safety_notes,
        payment_amount, payment_date, registrar, follow_up_date, follow_up_content,
        non_registration_reason, shuttle_bus_request, privacy_agreement,
        installment_agreement, subject_details, intake_checklist, prep_brief, prep_brief_status, prep_brief_error,
@@ -775,13 +775,13 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
     personConsultCount: 1, // 상세는 목록 카드 배지를 안 씀 — 타입 충족용(상세의 '다른 상담'은 getSiblingConsultations로 별도 조회).
     personConsults: [],
     makeeduId: (c as { makeedu_id?: string | null }).makeedu_id ?? null,
-    fields: mapFullFields(c as Record<string, unknown>),
+    fields: mapFullFields(c as Record<string, unknown>, assignedClassCount),
   };
 }
 
 const s = (v: unknown): string | null => (v == null ? null : String(v));
 
-function mapFullFields(c: Record<string, unknown>): FullConsultationFields {
+function mapFullFields(c: Record<string, unknown>, assignedClassCount: number): FullConsultationFields {
   return {
     englishName: s(c.english_name),
     gender: s(c.gender),
@@ -798,7 +798,7 @@ function mapFullFields(c: Record<string, unknown>): FullConsultationFields {
     careerGoal: s(c.career_goal),
     siblings: s(c.siblings),
     safetyNotes: s(c.safety_notes),
-    registrationStatus: s(c.registration_status),
+    registrationStatus: boardStatusOf({ outcome: String(c.outcome), assignedClassCount }).label,
     paymentAmount: s(c.payment_amount),
     paymentDate: s(c.payment_date),
     registrar: s(c.registrar),

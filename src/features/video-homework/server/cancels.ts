@@ -16,7 +16,7 @@ export async function readVideoHomeworkCancels(tenantId: string, studentIds: str
 }
 
 /**
- * 장부에서 **취소한 영상 숙제**의 취소 시각(20261016130000 `video_homework_cancels`, 원장 2026-10-16) — `학생|날짜|반` → ISO 시각.
+ * 장부에서 **취소한 영상 숙제**의 취소 시각(0431a `video_homework_cancels`, 원장 2026-10-16) — `학생|날짜|반` → ISO 시각.
  * 원스크린 세션 초안은 보고서 값보다 이긴다(roster ⑤ 규약). 그래서 취소한 뒤에도 초안의 '있음'이 화면에 남고 발송 때 다시 적혔다 —
  * 원스크린을 열 때 이 기록이 있고 보고서가 '없음'이면 '없음'이 이긴다(`onescreen/page.tsx`).
  * 🔴 전원 핫패스(원스크린 첫 화면)라 실패는 삼켜 빈 지도로 둔다 — 표가 없는 DB(SQL 적용 전)도 종전 동작 그대로다(#95).

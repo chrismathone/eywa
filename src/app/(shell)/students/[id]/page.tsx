@@ -41,6 +41,8 @@ import { AttendanceTab } from "./_tabs/attendance-tab";
 import { ConsultationsTab } from "./_tabs/consultations-tab";
 import { MemosTab } from "./_tabs/memos-tab";
 import { TimelineTab } from "./_tabs/timeline-tab";
+import { getContributionGate } from "@/features/student-contribution/server/access";
+import { StudentOntologyPanel } from "@/features/student-contribution/components/student-ontology-panel";
 import { HomeworkVideosTab } from "./_tabs/homework-videos-tab";
 import { HomeworkVideoLinks } from "./_tabs/homework-video-links";
 import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
@@ -95,6 +97,7 @@ export default async function StudentDetailPage({
   // DB에서도 0158a RLS가 같은 매트릭스로 막는다(권한 없으면 0행) — 여기서 되돌리는 이유는 그 경우
   // 화면이 "미납 0원"이라는 **거짓 요약**을 보여주기 때문.
   const canSeeBilling = await canAccessTenant(user.systemRole, "billing");
+  const showContribution = !!(await getContributionGate());
   // 'SRS 성적'(인재원 단어 학습·시험) 탭은 **짝이 걸린 학생**에게만(원장 2026-09-21: 일반 성적과 분리).
   // 짝이 없으면 그 구역이 스스로 비어 **빈 탭**이 된다 — 탭 자체를 안 그리고, 강제 URL(?tab=srs)도 개요로
   // 되돌린다(화면에서 감추는 것만으로는 게이트가 아니다, [[#77]]). 인재원을 부르지 않는 가벼운 판정이다.
@@ -104,7 +107,7 @@ export default async function StudentDetailPage({
   const mathClasses = (await isFeatureOptedIn(user.tenantId, "todays_math")) ? await getCurrentMathClasses(id) : undefined;
   const showTodaysMath = mathClasses !== undefined && (mathClasses === null || mathClasses.classes.length > 0);
   const tab =
-    requestedTab === "billing" && !canSeeBilling
+    (requestedTab === "contribution" && !showContribution) || (requestedTab === "billing" && !canSeeBilling)
       ? "overview"
       : requestedTab === "srs" && !showSrs
         ? "overview"
@@ -261,6 +264,7 @@ export default async function StudentDetailPage({
       </header>
 
       <StudentTabsNav
+        showContribution={showContribution}
         studentId={student.id}
         active={tab}
         canSeeBilling={canSeeBilling}
@@ -332,6 +336,8 @@ export default async function StudentDetailPage({
           <MemosTab studentId={student.id} />
         ) : tab === "billing" ? (
           <BillingTab studentId={student.id} />
+        ) : tab === "contribution" && showContribution ? (
+          <StudentOntologyPanel studentId={student.id} />
         ) : tab === "timeline" ? (
           <TimelineTab studentId={student.id} />
         ) : null}

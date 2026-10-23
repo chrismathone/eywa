@@ -36,7 +36,7 @@ export function ReportDetail({ report: r, events, staff, labels, userId, writabl
   }
   return <>
     <div className="flex flex-wrap items-center justify-between gap-3"><Link className="text-sm text-primary hover:underline" href="/withdrawal-reports">← 보고서 목록</Link><span className="rounded-full bg-muted px-3 py-1.5 text-sm">{REPORT_STATUS[r.status]}</span></div>
-    <p className="text-sm">{r.exit_kind === "withdrawal" ? "전체 퇴원" : "과목 수강종료"} · {r.subjects.map(s => labels[s] ?? "기타 과목").join(" · ")}</p>
+    <p className="text-sm">{r.exit_kind === "withdrawal" ? "전체 퇴원" : "반 수강종료"} · {r.subjects.map(s => labels[s] ?? "기타 과목").join(" · ")}</p>
     {r.request_note && <div className="rounded-lg border bg-muted/20 p-4 text-sm"><div className="mb-2 font-medium">작성 요청 · {nameOf(r.requested_by)}</div><p className="whitespace-pre-wrap">{r.request_note}</p></div>}
     {r.last_comment && <p className="whitespace-pre-wrap rounded-lg border border-att-late-ink/20 bg-att-late p-4 text-sm text-att-late-ink">{r.last_comment}</p>}
     {r.status === "scheduled" && <p className="rounded-lg border bg-muted/20 p-4 text-sm">승인이 완료되었습니다. {r.effective_date}에 처리하며, 그 전까지는 기존 수강 상태를 유지합니다.</p>}
@@ -55,6 +55,6 @@ export function ReportDetail({ report: r, events, staff, labels, userId, writabl
       {decision === "reject" && <textarea className={control} aria-label="반려 사유" rows={3} maxLength={1000} value={comment} onChange={e => setComment(e.target.value)} />}
       <div className="flex gap-2"><Button disabled={pending || (decision === "reject" && !comment.trim())} onClick={() => change(decision)}>{pending ? "처리 중…" : `${REPORT_ACTION_LABEL[decision]} 확인`}</Button><Button variant="outline" disabled={pending} onClick={() => setDecision(null)}>닫기</Button></div>
     </section>}
-    <section className="rounded-xl border p-5"><h2 className="mb-4 text-sm font-semibold">처리 이력</h2><ol className="space-y-3">{events.map(e => <li key={e.id} className="border-l-2 pl-3 text-sm"><div>{REPORT_ACTION_LABEL[e.action]} · {nameOf(e.actor_id)} <span className="ml-2 text-xs text-muted-foreground">{dateTime(e.created_at)}</span></div>{e.comment && <p className="mt-1 whitespace-pre-wrap text-muted-foreground">{e.comment}</p>}</li>)}</ol></section>
+    <section className="rounded-xl border p-5"><h2 className="mb-4 text-sm font-semibold">처리 이력</h2><ol className="space-y-3">{events.map(e => <li key={e.id} className="text-sm"><div>{REPORT_ACTION_LABEL[e.action]} · {nameOf(e.actor_id)} <span className="ml-2 text-xs text-muted-foreground">{dateTime(e.created_at)}</span></div>{e.comment && <p className="mt-1 whitespace-pre-wrap text-muted-foreground">{e.comment}</p>}</li>)}</ol></section>
   </>;
 }

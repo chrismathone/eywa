@@ -13,6 +13,7 @@ export type TimelineEnrollment = {
 };
 
 export type EnrollmentTimelineEvent = {
+  sourceIds: string[];
   date: string;
   kind: "enrollment_start" | "enrollment_end" | "enrollment_transfer";
   title: string;
@@ -54,18 +55,19 @@ export function enrollmentTimeline(enrollments: readonly TimelineEnrollment[]): 
   const events: EnrollmentTimelineEvent[] = [];
   for (const e of enrollments) {
     if (!transferredStarts.has(e.id)) {
-      events.push({ date: e.startDate, kind: "enrollment_start", title: `${e.className} 수강 시작` });
+      events.push({ sourceIds: [e.id], date: e.startDate, kind: "enrollment_start", title: `${e.className} 수강 시작` });
     }
     const to = transfers.get(e.id);
     if (to) {
       events.push({
+        sourceIds: [e.id, to.id],
         date: to.startDate,
         kind: "enrollment_transfer",
         title: `${e.className} → ${to.className}`,
         description: e.reason,
       });
     } else if (e.endDate) {
-      events.push({ date: enrollmentLastDate(e.endDate, e.isTransferred)!, kind: "enrollment_end", title: `${e.className} 수강 종료`, description: e.reason });
+      events.push({ sourceIds: [e.id], date: enrollmentLastDate(e.endDate, e.isTransferred)!, kind: "enrollment_end", title: `${e.className} 수강 종료`, description: e.reason });
     }
   }
   return events.sort((a, b) => b.date.localeCompare(a.date) || a.title.localeCompare(b.title));

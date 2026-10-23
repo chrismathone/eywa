@@ -17,6 +17,7 @@ export const STUDENT_TABS = [
   { key: "consultations", label: "상담" },
   { key: "memos", label: "특이사항" },
   { key: "billing", label: "수납" },
+  { key: "contribution", label: "기여도" },
   { key: "timeline", label: "타임라인" },
 ] as const;
 
@@ -35,6 +36,7 @@ export function StudentTabsNav({
   canSeeBilling,
   showSrs,
   showTodaysMath = false,
+  showContribution = false,
 }: {
   studentId: string;
   active: StudentTabKey;
@@ -42,9 +44,10 @@ export function StudentTabsNav({
   /** 인재원 짝이 걸린 학생인가 — 아니면 'SRS 성적' 탭을 아예 안 그린다(빈 탭을 만들지 않는다). */
   showSrs: boolean;
   showTodaysMath?: boolean;
+  showContribution?: boolean;
 }) {
   const faces: Face[] = STUDENT_TABS.filter(
-    (t) => (t.key !== "billing" || canSeeBilling) && (t.key !== "srs" || showSrs) && (t.key !== "todays-math" || showTodaysMath),
+    (t) => (t.key !== "billing" || canSeeBilling) && (t.key !== "srs" || showSrs) && (t.key !== "todays-math" || showTodaysMath) && (t.key !== "contribution" || showContribution),
   ).map((t) => ({
     key: t.key,
     label: t.label,

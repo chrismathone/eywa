@@ -10,6 +10,34 @@ describe("historical identity and source preservation", () => {
   });
   it("does not treat a grade-only field as a school name", () => {
     expect(matchArchive({ ...r, schoolGrade: "중1" }, [student], "2026-10-14").studentId).toBe("s");
+    for (const schoolGrade of ["1", "1학년", "중학교1학년"]) {
+      expect(matchArchive({ ...r, schoolGrade }, [student], "2026-10-14").studentId).toBe("s");
+    }
+  });
+  it("matches enrolled students and recognizes course display decorations", () => {
+    const enrolled = { ...student, school: "옥산초", grade: "초6", status: "enrolled", withdrawn_at: null, courses: [{ className: "중등E_초등 브릿지 C (~26.09.30)", subject: "english" }] };
+    expect(matchArchive({ ...r, schoolGrade: "옥사초6", className: "초등 브릿지C반", subject: "english" }, [enrolled], "2026-10-22").studentId).toBe("s");
+    expect(matchArchive({ ...r, schoolGrade: "옥사초6", className: "초등 브릿지D반", subject: "english" }, [enrolled], "2026-10-22").studentId).toBeNull();
+    expect(matchArchive({ ...r, schoolGrade: "옥사초6", className: "초등 브릿지C반", subject: "math" }, [enrolled], "2026-10-22").studentId).toBeNull();
+    expect(matchArchive({ ...r, schoolGrade: "옥사초6", className: "중등M_초등 브릿지 C", subject: null }, [enrolled], "2026-10-22").studentId).toBeNull();
+  });
+  it("removes only grade/school annotations in a name cell and leaves multiple names unresolved", () => {
+    expect(matchArchive({ ...r, studentName: "김학생\n중1\n침중" }, [student], "2026-10-14").studentId).toBe("s");
+    expect(matchArchive({ ...r, studentName: "김학생,\n이학생" }, [student], "2026-10-14").studentId).toBeNull();
+    expect(matchArchive({ ...r, studentName: "김학생\n이중" }, [student], "2026-10-14").studentId).toBeNull();
+  });
+  it("uses an explicit suffix to select that identity without falling back to another suffix", () => {
+    const a = { ...student, id: "a", name: "김학생A" }, b = { ...student, id: "b", name: "김학생B" };
+    expect(matchArchive({ ...r, studentName: "김학생 A" }, [a, b], "2026-10-14").studentId).toBe("a");
+    expect(matchArchive({ ...r, studentName: "김학생A" }, [b], "2026-10-14").studentId).toBeNull();
+    expect(matchArchive(r, [a, b], "2026-10-14").studentId).toBeNull();
+  });
+  it("still checks numeric and name-cell grades instead of discarding them", () => {
+    expect(matchArchive({ ...r, schoolGrade: "5" }, [student], "2026-10-14").studentId).toBeNull();
+    expect(matchArchive({ ...r, schoolGrade: "", studentName: "김학생\n초1" }, [student], "2026-10-14").studentId).toBeNull();
+  });
+  it("requires review when an original date belongs to a different era", () => {
+    expect(matchArchive({ ...r, schoolGrade: "1", exitDate: "2012-02-20" }, [student], "2026-10-14").studentId).toBeNull();
   });
   it("leaves conflicting identities and unresolved homonyms unmapped", () => {
     expect(matchArchive(r, [{ ...student, school: "성광중" }], "2026-10-14").studentId).toBeNull();

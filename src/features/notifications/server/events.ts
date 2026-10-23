@@ -343,7 +343,7 @@ async function detectFollowup(admin: SupabaseClient, tenantId: string): Promise<
 /**
  * 신규 콜&상담 후속 조치 감지(원장 2026-10-22 *"후속조치일 다와가면 알람 기능"*) → 상담자(재직 중이 아니면 원장 전원) 개별 알림.
  * 하루 전 · 당일 · 지나면(주 1회). 아직 정하지 않은 상담(상담 전·상담 완료)만 · 도입일 이후 날짜만(follow-up.ts — DB 할 일과 같은 목록).
- * 당일·지남 알림은 할 일(20261022190000 `enrollment_followup`)을 가리킨다 — 하루 전엔 아직 할 일이 없다. 콜드스타트면 시드만.
+ * 당일·지남 알림은 할 일(0441a `enrollment_followup`)을 가리킨다 — 하루 전엔 아직 할 일이 없다. 콜드스타트면 시드만.
  */
 async function detectEnrollmentFollowup(admin: SupabaseClient, tenantId: string): Promise<number> {
   const today = kstToday();

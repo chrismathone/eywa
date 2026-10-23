@@ -361,7 +361,7 @@ export async function reserveMakeup(input: {
     .insert({
       tenant_id: user.tenantId,
       student_id: studentId,
-      // 기록할 반(보강이 서는 반) — 결석난 반과 다를 때만 결석난 반을 따로 적는다(20261022170000 · 같으면 비운다 = 종전 행 모양).
+      // 기록할 반(보강이 서는 반) — 결석난 반과 다를 때만 결석난 반을 따로 적는다(0440a · 같으면 비운다 = 종전 행 모양).
       class_id: hostId,
       ...(hostId !== classId ? { absence_class_id: classId } : {}),
       absence_date: absenceDate,
@@ -372,7 +372,7 @@ export async function reserveMakeup(input: {
       note,
       status: "reserved",
       created_by: user.id,
-      // 칸(20261022150000)이 없는 지점에서도 묻지 않은 예약은 그대로 저장되게 — 값이 있을 때만 싣는다.
+      // 칸(0438a)이 없는 지점에서도 묻지 않은 예약은 그대로 저장되게 — 값이 있을 때만 싣는다.
       ...(reportMode ? { report_mode: reportMode } : {}),
     })
     .select("id")
@@ -495,7 +495,7 @@ export async function cancelMakeupReservation(input: { id: string }): Promise<Ca
   if (mappedBlock) return { error: mappedBlock };
 
   const supabase = await createClient();
-  // 결석일 칸의 반 — 기록할 반과 다르게 잡은 예약은 결석난 반이 따로 적혀 있다(20261022170000).
+  // 결석일 칸의 반 — 기록할 반과 다르게 잡은 예약은 결석난 반이 따로 적혀 있다(0440a).
   const absenceClassId = absenceClassOf(r);
   if ((await accessLevelTenant(user.systemRole, "attendance")) === "scoped") {
     const teaching = await userTaughtClassSet(supabase, user.id, r.absenceDate);

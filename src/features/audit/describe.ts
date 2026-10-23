@@ -105,6 +105,7 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   ai_prompt: "AI 프롬프트",
   ment_style: "강사 말투",
   teacher_portfolio: "직원 포트폴리오",
+  student_contribution: "원생 기여도",
   kiosk_device: "키오스크 기기",
   // 시간표(개발중) 월별 계획(0232a) — 본 시간표가 아니라 **계획**임이 '대상' 칸에서 바로 읽혀야 한다.
   timetable_plan: "시간표 계획",
@@ -112,6 +113,7 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   // 시간표 연습실의 개인 사본 — 운영 시간표가 아니라 **연습본**임이 '대상' 칸에서 바로 읽혀야 한다.
   timetable_lab_draft: "시간표 연습본",
   timetable_memo_sheet: "시간표 메모 시트",
+  timetable_cell_memo: "시간표 칸 메모",
   // 재고관리(0242a) — 없으면 '대상' 칸에 영문 "inventory_asset"이 그대로 뜬다.
   inventory_asset: "자산",
   inventory_loan: "자산 대여",
@@ -411,6 +413,15 @@ export function auditDetail(
   const m = metadata ?? {};
   switch (action) {
     // 원스크린 일괄 입력(2026-10-15) — 방식 · 날짜 · 몇 행 · 어느 반 · 어떤 칸. 글 내용은 기록에 없다(bulk-log-actions.ts).
+    case "onescreen_trend_optout": {
+      const cleared = num(m.cleared);
+      return join(
+        ctx.nameOf(m.studentId),
+        ctx.nameOf(m.classId),
+        m.on === true ? "미발송 켬" : m.on === false ? "미발송 끔" : null,
+        cleared && cleared > 0 ? `안 나간 보고서 ${cleared}건 추세 비움` : null,
+      );
+    }
     case "onescreen_bulk_apply": {
       const FIELD: Record<string, string> = {
         today: "진도", textbook: "교재", homeworkToday: "오늘 과제", attitude: "태도", homework: "과제", note: "특이사항",
@@ -674,6 +685,15 @@ export function auditDetail(
       ].filter(Boolean);
       return parts.join(" · ");
     }
+    case "timetable_cell_memo_add":
+      return "새 메모";
+    case "timetable_cell_memo_update":
+    case "timetable_cell_memo_delete": {
+      // 칸 자리는 '대상' 칸이 보여 준다 — 여기선 바뀌기 전 글 앞부분만(전문은 원문 툴팁).
+      const before = str(m.before);
+      const head = before && before.length > 40 ? `${before.slice(0, 40)}…` : before;
+      return head ? `이전 내용 "${head}"` : "";
+    }
     case "timetable_lab_draft_save": {
       // 연습본 이름은 '대상' 칸이 보여 준다 — 여기선 규모만(운영 시간표는 안 바뀐다).
       const parts = [
@@ -787,6 +807,21 @@ export function auditDetail(
         closed.length ? `마감 ${closed.join(", ")}` : null,
       );
     }
+    case "student_contribution_refresh":
+      return join(m.trigger === "cron" ? "매일 자동 집계" : "지금 집계", `원생 ${num(m.students) ?? 0}명`, `저장 ${num(m.written) ?? 0}건`, `마감 ${num(m.closed) ?? 0}건`);
+    case "student_contribution_settings_save":
+      return join("지난 실적까지 현재 배점 적용", `지점 합계 ${num(m.beforeTotal) ?? 0} → ${num(m.afterTotal) ?? 0}`);
+    case "student_contribution_summary_generate": {
+      const outcome = ({ saved: "저장 완료", failed: "생성 실패", quota: "일일 한도 도달", busy: "중복 요청 중단",
+        unavailable: "요약 조건 미충족", input_limit: "입력량 제한", source_changed: "원본 변경으로 저장 중단" } as Record<string, string>)[str(m.outcome) ?? ""] ?? "결과 확인 필요";
+      return join(outcome, m.providerRequested === true ? "AI 요청함" : "AI 요청 전", num(m.itemCount) === null ? null : `발췌 ${num(m.itemCount)}건`, str(m.model) || null);
+    }
+    case "student_contribution_signal_cancel":
+    case "student_contribution_signal_rejudge":
+      return typeof m.reason === "string" ? m.reason : null;
+    case "student_contribution_referral_backfill":
+    case "student_contribution_referral_link":
+      return join(m.source === "backfill" ? "지난 소개 자동 연결" : "소개자 직접 확인", typeof m.evidence === "string" ? m.evidence : null);
     case "teacher_evaluation_satisfaction": {
       const kind = { apply: "글 반영", dismiss: "글 무시", cancel: "글 반영 취소", claim_add: "클레임·칭찬 넣기", claim_cancel: "클레임·칭찬 취소" }[String(m.kind)] ?? null;
       const points = num(m.points);
@@ -1170,8 +1205,11 @@ export function auditDetail(
         detailText(m.detail),
       );
     }
-    case "withdrawal_report_update":
-      return join(str(m.operation), str(m.date) ? `처리일 ${str(m.date)}` : null);
+    // 처리 결과(2026-10-23) = 이 동작으로 학생 퇴원·수강 종료가 끝났는지 · 처리 예약인지 + 끝난 수업(요청 때 반 이름). 옛 기록은 결과 칸이 없다.
+    case "withdrawal_report_update": {
+      const ended = Array.isArray(m.endedClasses) ? m.endedClasses.flatMap((v) => str(v) ?? []) : [];
+      return join(str(m.operation), str(m.result), str(m.date) ? `처리일 ${str(m.date)}` : null, ended.length ? `끝난 수업 ${ended.join("·")}` : null);
+    }
     // 잘못 만든 수업 이력 **삭제**(원장·super_admin) — 행이 사라지므로 이 로그가 유일한 흔적이다.
     // metadata.snapshot에 삭제된 행 전체가 들어 있다(뷰어 title 툴팁의 원문 JSON으로 확인).
     case "enrollment_delete": {

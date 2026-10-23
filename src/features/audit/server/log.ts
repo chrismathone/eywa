@@ -49,6 +49,13 @@ export const AUDIT_ACTIONS = {
   ment_style_rebuild: "강사 말투 프로파일 갱신",
   // 직원 포트폴리오(0357a) — [지금 집계]와, 매일 cron이 달을 마감했을 때 남긴다(매일의 재집계는 남기지 않는다).
   teacher_portfolio_refresh: "직원 포트폴리오 집계",
+  student_contribution_refresh: "원생 기여도 집계·마감",
+  student_contribution_settings_save: "원생 기여도 배점 저장",
+  student_contribution_signal_cancel: "원생 긍정 신호 판정 취소",
+  student_contribution_signal_rejudge: "원생 긍정 신호 재판정 요청",
+  student_contribution_referral_backfill: "지난 원생 소개 연결",
+  student_contribution_referral_link: "원생 소개 확인·연결",
+  student_contribution_summary_generate: "학생 기록 요약 생성",
   // 마감한 달에 바뀐 규칙을 얹음(원장 지시 때만 · 운영 스크립트) — 2026-10-14 강사 탓이 아닌 사유(배정·유지 감점 빼기).
   teacher_portfolio_rule_patch: "직원 포트폴리오 마감 달 규칙 반영",
   // 지난달을 지금 구성으로 처음부터 다시 집계(원장 지시 때만 · 운영 스크립트) — 2026-10-14 "이전 월들도 전부 10월 기준으로".
@@ -344,6 +351,10 @@ export const AUDIT_ACTIONS = {
   timetable_lab_apply_cancel: "시간표 연습본 적용 예약 취소",
   // 시간표 오른쪽 메모 시트(엑셀 판) — 자동 저장이라 같은 사람이 10분 안에 또 저장하면 한 줄로 친다(timetable-memo/server/actions.ts).
   timetable_memo_sheet_save: "시간표 메모 시트 저장",
+  // 영어 강사뷰 칸 메모(0395a) — 수정·삭제는 이전 내용(metadata.before)을 남긴다. 같은 사람이 이어 고치는 자동 저장은 10분에 한 줄.
+  timetable_cell_memo_add: "시간표 칸 메모 추가",
+  timetable_cell_memo_update: "시간표 칸 메모 수정",
+  timetable_cell_memo_delete: "시간표 칸 메모 삭제",
 
   // 수학 강사 시트(MCS) — 학생별 월간 목표. 실제 진도는 원스크린이 쓰므로 여기 안 온다(읽기 전용 화면).
   mcs_goal_update: "수학 시트 학생 월간 목표 저장",
@@ -594,6 +605,8 @@ export const AUDIT_ACTIONS = {
   class_split_end: "수업 나누기 해제",
   // 원스크린 일괄 입력(맨 위 행 복사 · 직접 입력) — 칸 저장은 건마다 남기지 않아 일괄 동작을 한 줄로(원장 2026-10-15 감사로그 빈틈).
   onescreen_bulk_apply: "원스크린 일괄 입력",
+  // 학습 추세 미발송(반·학생) — 계정 설정(ui_prefs)에 저장되지만 학부모 글을 바꾼다. 활동 로그가 ui_prefs를 안 남기게 된 날(0444a) 더했다.
+  onescreen_trend_optout: "학습 추세 미발송 설정",
   // ── 감사로그 빈틈 메우기(원장 2026-10-15 *"감사로그 빈틈 확인하고 추가할것"*) — 쓰는데 기록이 없던 서버 액션. 가드 = audit-coverage.test.ts ──
   // 학생 상세(메모·성적·레벨테스트·목표·학습 코멘트) — 본문·점수·사유는 metadata에 안 남긴다.
   student_memo_create: "학생 메모 작성",

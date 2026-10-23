@@ -9,6 +9,7 @@ import { recordMathWithdrawalToSheet } from "@/features/withdrawals/server/withd
 import { bodySchema, batchRequestSchema, submissionError, missingReportSchema, REPORT_ACTION_LABEL, type ReportAction, type WithdrawalReport } from "../model";
 import { reportViewer, getReport } from "./queries";
 import { completedEnrollmentIds } from "./completed-target";
+import { appliedAuditMeta } from "../audit-meta";
 import { loadReportBilling } from "./billing";
 
 export type ReportResult = { ok: true; id: string } | { error: string };
@@ -16,11 +17,16 @@ function refresh() {
   for (const path of ["/withdrawal-reports", "/withdrawals", "/students", "/timetable", "/dashboard"]) revalidatePath(path, "layout");
 }
 async function finish(r: WithdrawalReport, action: keyof typeof REPORT_ACTION_LABEL) {
-  await logAction({ action: "withdrawal_report_update", targetType: "student",
-    targetLabel: r.snapshot.name, metadata: { reportId: r.id, operation: REPORT_ACTION_LABEL[action], date: r.effective_date } });
+  // 이 승인으로 퇴원·수강 종료가 끝났으면 끝낸 수강을 함께 남긴다(appliedAuditMeta). 못 읽어도 기록을 먼저 남기고 종전처럼 실패를 알린다.
+  let endedIds: string[] | null = null, endedError: unknown = null;
+  if (r.status === "completed") { try { endedIds = await completedEnrollmentIds(r); } catch (e) { endedError = e; } }
+  await logAction({ action: "withdrawal_report_update", targetType: "student", targetLabel: r.snapshot.name,
+    metadata: { reportId: r.id, operation: REPORT_ACTION_LABEL[action], date: r.effective_date, ...appliedAuditMeta(r, endedIds) } });
   if (action !== "save") pokeSlack(r.tenant_id);
-  if (r.status === "completed") await recordMathWithdrawalToSheet({ tenantId: r.tenant_id, studentId: r.student_id, date: r.effective_date,
-    enrollmentIds: await completedEnrollmentIds(r) });
+  if (r.status === "completed") {
+    if (!endedIds) throw endedError;
+    await recordMathWithdrawalToSheet({ tenantId: r.tenant_id, studentId: r.student_id, date: r.effective_date, enrollmentIds: endedIds });
+  }
   refresh();
 }
 export async function requestWithdrawalReport(input: unknown): Promise<ReportResult> {

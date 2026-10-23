@@ -18,7 +18,7 @@ async function main(){
     });await sql.unsafe(`create table public."${table}" (${defs.join(',')})`);}
     await sql.unsafe('alter table enrollments add foreign key(student_id) references students(id)');
     await sql.unsafe('alter table enrollments add foreign key(class_id) references classes(id)');
-    for(const name of ['20261008100000_sync_agent_control.sql','20261008101000_sync_agent_data_boundary.sql','20261008102000_sync_agent_management.sql','20261008103000_sync_agent_module_sessions.sql'])await sql.unsafe(fs.readFileSync(path.resolve(__dirname,'../../supabase/migrations',name),'utf8'));
+    for(const name of ['0400a_sync_agent_control.sql','0401a_sync_agent_data_boundary.sql','0402a_sync_agent_management.sql','0403a_sync_agent_module_sessions.sql'])await sql.unsafe(fs.readFileSync(path.resolve(__dirname,'../../supabase/migrations',name),'utf8'));
     const a=crypto.randomUUID(),b=crypto.randomUUID(),studentA=crypto.randomUUID(),studentB=crypto.randomUUID(),classA=crypto.randomUUID(),classB=crypto.randomUUID();
     await sql`insert into tenants(id,name) values(${a},'fixture A'),(${b},'fixture B')`;
     await sql`insert into students(id,tenant_id,name) values(${studentA},${a},'A'),(${studentB},${b},'B')`;
@@ -28,7 +28,7 @@ async function main(){
       await sql.unsafe("create function public.auth_tenant_id() returns uuid language sql stable as 'select null::uuid'; create function public.auth_system_role() returns text language sql stable as 'select null::text'; revoke all on function public.auth_tenant_id(),public.auth_system_role() from public");
       await sql.unsafe('create policy fixture_existing_helper on students for select to public using(tenant_id=public.auth_tenant_id())');
       await assert.rejects(scoped(a,tx=>tx`select id from students`),{code:'42501'});
-      await sql.unsafe(fs.readFileSync(path.resolve(__dirname,'../../supabase/migrations/20261009061000_sync_agent_policy_function_grants.sql'),'utf8'));
+      await sql.unsafe(fs.readFileSync(path.resolve(__dirname,'../../supabase/migrations/0406a_sync_agent_policy_function_grants.sql'),'utf8'));
       assert.deepEqual((await scoped(a,tx=>tx`select id from students`)).map(r=>r.id),[studentA]);
       assert.equal((await scoped(null,tx=>tx`select id from students`)).length,0);
       const [role]=await sql`select rolinherit,rolbypassrls,rolsuper from pg_roles where rolname='eywa_sync_agent'`;

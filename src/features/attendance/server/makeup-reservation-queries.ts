@@ -45,9 +45,9 @@ type Row = {
   note: string | null;
   status: string;
   created_by: string | null;
-  /** 20261022150000 — 이 칸을 읽는 조회(`getRosterReservationsOn`)에서만 실린다. */
+  /** 0438a — 이 칸을 읽는 조회(`getRosterReservationsOn`)에서만 실린다. */
   report_mode?: string | null;
-  /** 20261022170000 결석난 반 — 결석일 칸을 다루는 조회(예약 단건·이행)에서만 실린다. */
+  /** 0440a 결석난 반 — 결석일 칸을 다루는 조회(예약 단건·이행)에서만 실린다. */
   absence_class_id?: string | null;
 };
 
@@ -137,7 +137,7 @@ export const getReservationsOn = cache(async function getReservationsOn(
 });
 
 /**
- * `report_mode` 칸이 아직 없을 때의 오류(20261022150000 미적용) — 42703 "column … does not exist" / 스키마 캐시.
+ * `report_mode` 칸이 아직 없을 때의 오류(0438a 미적용) — 42703 "column … does not exist" / 스키마 캐시.
  * ⚠️ `fetchInChunks`는 코드를 버리고 문구만 넘기므로 문구로 판정한다.
  */
 export function isMissingColumn(e: { message?: string } | null | undefined, column: string): boolean {
@@ -380,7 +380,7 @@ export async function reservedCellKeys(
 export async function loadReservationById(tenantId: string, id: string): Promise<MakeupReservation | null> {
   try {
     const admin = createAdminClient();
-    // 결석난 반(20261022170000)까지 — 취소가 결석일 칸을 되돌린다. 칸이 없으면(적용 전) 칸 없이 다시 읽는다(= 기록할 반과 같은 반).
+    // 결석난 반(0440a)까지 — 취소가 결석일 칸을 되돌린다. 칸이 없으면(적용 전) 칸 없이 다시 읽는다(= 기록할 반과 같은 반).
     const read = (select: string) =>
       admin.from("makeup_reservations").select(select).eq("tenant_id", tenantId).eq("id", id).maybeSingle<Row>();
     let { data, error } = await read(`${SELECT}, absence_class_id`);

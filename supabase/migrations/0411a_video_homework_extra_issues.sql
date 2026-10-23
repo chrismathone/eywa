@@ -67,7 +67,7 @@ end $$;
 revoke all on function public.cancel_video_homework_extra_issue(uuid,uuid,uuid,date) from public,anon,authenticated;
 grant execute on function public.cancel_video_homework_extra_issue(uuid,uuid,uuid,date) to service_role;
 
--- 자동 판정: 숙제가 보고서에 없으면 따로 낸 숙제를 본다(알림 받는 사람 = 그 숙제의 선생님). 나머지는 20261012110000 그대로.
+-- 자동 판정: 숙제가 보고서에 없으면 따로 낸 숙제를 본다(알림 받는 사람 = 그 숙제의 선생님). 나머지는 0410a 그대로.
 create or replace function public.reconcile_video_homework_outcomes(p_tenant uuid,p_outcomes jsonb,p_observed_at timestamptz)
 returns jsonb language plpgsql security invoker set search_path=public,pg_temp as $$
 declare
@@ -214,7 +214,7 @@ end $$;
 revoke all on function public.reconcile_video_homework_outcomes(uuid,jsonb,timestamptz) from public,anon,authenticated;
 grant execute on function public.reconcile_video_homework_outcomes(uuid,jsonb,timestamptz) to service_role;
 
--- 영상 손 배정: 따로 낸 숙제의 날짜에도 배정할 수 있다. 나머지는 20261012110000 그대로.
+-- 영상 손 배정: 따로 낸 숙제의 날짜에도 배정할 수 있다. 나머지는 0410a 그대로.
 create or replace function public.set_homework_video_assignment(
   p_tenant uuid,p_actor uuid,p_full boolean,p_student uuid,p_context_class uuid,p_video uuid,p_date date,p_excluded boolean,p_revision integer,p_reason text
 ) returns text language plpgsql security invoker set search_path=public,pg_temp as $$

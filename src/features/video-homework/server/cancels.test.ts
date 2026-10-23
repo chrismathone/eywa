@@ -1,5 +1,5 @@
 /**
- * 장부에서 취소한 영상 숙제의 기록(20261016130000 `video_homework_cancels`, 원장 2026-10-16 *"약점은 수정해"*) —
+ * 장부에서 취소한 영상 숙제의 기록(0431a `video_homework_cancels`, 원장 2026-10-16 *"약점은 수정해"*) —
  * 원스크린 세션 초안이 쥔 옛 '있음'이 취소한 숙제를 되살리지 않게 하는 판정 셋.
  */
 import { describe, expect, it, vi } from "vitest";

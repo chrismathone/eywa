@@ -82,8 +82,8 @@ afterEach(() => {
 
 
 describe("접힌 입력 보존", () => {
- it("선택지에 없는 옛 값(상담 경로·과목·등록 상태)도 그대로 보낸다", () => {
-  const values = { consultationPath: "설명회신청", subject: "EiE, 수학", registrationStatus: "등록-수학" };
+ it("선택지에 없는 옛 값(상담 경로·과목)도 그대로 보낸다", () => {
+  const values = { consultationPath: "설명회신청", subject: "EiE, 수학" };
   const { container } = render(<ConsultationFullForm mode="edit" recordingOwner={{ tenantId: "t1", userId: "u1" }} initial={{ id: "c1", prospectName: "학생", ...values }} />);
   const form = container.querySelector("form")!;
   for (const [key, value] of Object.entries(values)) expect(new FormData(form).get(key), key).toBe(value);

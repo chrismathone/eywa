@@ -19,9 +19,10 @@ describe("withdrawal reports", () => {
     expect(batchRequestSchema.safeParse({ ...batch, directorIds: [manager] }).success).toBe(false);
     expect(batchRequestSchema.safeParse({ ...batch, managerIds: [teacher] }).success).toBe(false);
   });
-  it("infers whole withdrawal only when every actual subject is selected", () => {
-    expect(automaticExitKind([{ subject: "math" }, { subject: "english" }], ["math"])).toBe("subject_end");
-    expect(automaticExitKind([{ subject: "math" }, { subject: "english" }], ["math", "english"])).toBe("withdrawal");
+  it("infers whole withdrawal only when every enrollment is selected, including same-subject classes", () => {
+    const courses = [{ id: "math-a", subject: "math" }, { id: "math-b", subject: "math" }];
+    expect(automaticExitKind(courses, ["math-a"])).toBe("subject_end");
+    expect(automaticExitKind(courses, ["math-a", "math-b"])).toBe("withdrawal");
     expect(automaticExitKind([], [])).toBe("subject_end");
   });
   it("each appointed reviewer acts once in their stage", () => {

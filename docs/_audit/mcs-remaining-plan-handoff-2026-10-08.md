@@ -13,7 +13,7 @@
 
 ## 저장 및 배포 순서
 
-마이그레이션: `supabase/migrations/20261008015559_mcs_remaining_plan_revision.sql`.
+마이그레이션: `supabase/migrations/0397a_mcs_remaining_plan_revision.sql`.
 
 - 기존 목표 표에 nullable `plan_revision` JSONB를 추가한다. 수정 적용일·실제 진도 기준점·보호할 정거장 수·이전 계획의 단원 위치를 저장한다.
 - 기존 자동 계획 제약을 보존하고, 수정 정보가 있는 계획에 날짜·분량 변경을 허용한다. 수정 정보의 형태·상한, 시작일·기간·분량 제한을 검증한다.

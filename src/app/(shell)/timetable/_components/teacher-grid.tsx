@@ -23,6 +23,7 @@ import {
 } from "@/features/timetable/lib/english-teacher-sheet";
 import { TeacherChip } from "./teacher-chip";
 import { SearchedCell } from "./search-context";
+import { TeacherCellMemoLayer } from "./teacher-cell-memo-layer";
 
 // 시트 "강사별영어시간표(7월)" = 강사-major 그리드(강사가 세로 블록, 그 안에 월~토가 가로).
 // ⚠️ 축 = 시트와 동일한 **10분 단위 행**(2026-07-06 재작업 — 이전엔 교시 1행이라 40/60분 수업이
@@ -116,6 +117,7 @@ export function TeacherGridView({
   showUnusedDays = true,
   hideSaturday = false,
   showSunday = false,
+  cellMemo,
 }: {
   slots: ScheduleSlotWithStudents[];
   weekMonday?: string;
@@ -152,6 +154,11 @@ export function TeacherGridView({
   showUnusedDays?: boolean;
   hideSaturday?: boolean;
   showSunday?: boolean;
+  /**
+   * 칸 메모(영어 강사뷰, 0395a) — 볼 수 있는 사람에게만 page가 넘긴다. 없으면 표는 종전 그대로(속성·레이어 0).
+   * 🔴 메모는 표 **옆** 레이어가 그 주 것만 따로 읽는다 — 이 표의 쿼리·칸은 그대로다([[#95]] · B7).
+   */
+  cellMemo?: { tenantId: string; canEdit: boolean };
 }) {
   /**
    * 축 하한보다 이른 슬롯은 **한 칸에 겹쳐 그려진다** — 그대로 두면 같은 열·같은 줄의 뒤엣것이 조용히
@@ -291,6 +298,10 @@ export function TeacherGridView({
     t.cols.flatMap((col) => Array.from({ length: col.laneCount }, () => col.laneW)),
   );
   const tableW = TIME_COL_W + laneColsFlat.reduce((a, w) => a + w, 0);
+  // 칸 메모 레이어가 표 구조로 칸을 되짚는 재료 — 화면 열 1번부터의 (강사 열 · 요일). 레인 순서 = laneColsFlat과 같다.
+  const memoLanes = cellMemo
+    ? prepared.flatMap((t) => t.cols.flatMap((col) => Array.from({ length: col.laneCount }, () => ({ col: t.name, day: col.day }))))
+    : [];
 
   // 강사 경계 세로줄 — 그 강사의 마지막 요일·마지막 레인(또는 거기까지 걸친 그룹 셀)에 2px.
   const isTeacherBoundary = (col: { laneCount: number }, isLastDay: boolean, laneEnd: number) =>
@@ -457,6 +468,8 @@ export function TeacherGridView({
                         key={key}
                         rowSpan={span}
                         colSpan={group.laneWidth}
+                        // 칸 메모의 열쇠 = 블록 시작 시각(행 간격을 바꿔도 같은 블록에 붙는다) — 메모가 켜진 화면에서만 싣는다.
+                        data-mb={cellMemo ? group.startMin : undefined}
                         className={`p-0 align-top ${bottom.cls} ${GRID} ${
                           isTeacherBoundary(col, isLastDay, group.laneStart + group.laneWidth)
                             ? TEACHER_EDGE
@@ -511,6 +524,17 @@ export function TeacherGridView({
           ))}
         </tbody>
       </table>
+      {cellMemo && subject && weekMonday && rows.length > 0 ? (
+        <TeacherCellMemoLayer
+          tenantId={cellMemo.tenantId}
+          subject={subject}
+          weekMonday={weekMonday}
+          canEdit={cellMemo.canEdit}
+          lanes={memoLanes}
+          firstMin={rows[0]!.startMin}
+          stepMin={stepMin}
+        />
+      ) : null}
     </DragScrollArea>
   );
 }

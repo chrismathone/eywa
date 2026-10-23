@@ -23,7 +23,7 @@ import { homeworkVideoSource } from "./video-source";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const REASON = "미확인으로 되돌림 — 영상 반려(Drive 휴지통)";
-/** DB 함수가 한 번에 받는 영상 수 상한(20261013160000) — 넘으면 함수는 'invalid'라 원인을 여기서 먼저 알린다. */
+/** DB 함수가 한 번에 받는 영상 수 상한(0414a) — 넘으면 함수는 'invalid'라 원인을 여기서 먼저 알린다. */
 const MAX_VIDEOS = 50;
 
 export type RejectResult = {
@@ -83,7 +83,7 @@ export async function rejectHomeworkVideos(input: { classId: string; studentId: 
     const source = await homeworkVideoSource(db);
     const rows = await fetchInChunks<{ id: string; drive_file_id: string | null; route: unknown }>(targets, (chunk) =>
       db.from(source).select("id,drive_file_id,route").eq("tenant_id", user.tenantId).eq("student_id", studentId).in("id", chunk));
-    // 반려 표시 · 영상 떼기 · 검사 기록 지우기는 DB 함수 한 거래로(20261013160000) — 하나라도 안 되면 아무것도 안 바뀐다.
+    // 반려 표시 · 영상 떼기 · 검사 기록 지우기는 DB 함수 한 거래로(0414a) — 하나라도 안 되면 아무것도 안 바뀐다.
     // 그사이 다른 반·숙제로 옮겨진 영상이 하나라도 있으면 함수가 'changed'로 돌려주고 아무것도 안 바꾼다.
     const { data, error } = await db.rpc("reject_homework_videos", {
       // 권한은 위에서 칸 편집과 같은 관문으로 확인했다(자기가 낸 숙제거나 전체 권한).

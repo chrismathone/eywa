@@ -185,6 +185,7 @@ export const AYWA_ICON_CATALOG = [
   { name: "wrench", label: "도구", family: "interface", meaning: "유지보수와 세부 조정" },
   { name: "panelTop", label: "상단 패널", family: "interface", meaning: "위쪽 영역이 나뉜 레이아웃" },
   { name: "tags", label: "여러 태그", family: "interface", meaning: "복수 분류와 라벨 묶음" },
+  { name: "flask", label: "실험실", family: "interface", meaning: "시험 중인 실험실 기능 표시" },
 ] as const satisfies readonly AywaIconDefinition[];
 
 export type AywaIconName = (typeof AYWA_ICON_CATALOG)[number]["name"];
@@ -977,6 +978,7 @@ const EXTENDED_ICON_GLYPHS = {
       <path d="M10 4h3l8 8-6 6M7 8h.1" />
     </>
   ),
+  flask: <path d="M9 3h6M10 3v6l-6 10a1.4 1.4 0 0 0 1.2 2h13.6a1.4 1.4 0 0 0 1.2-2L14 9V3M7 15h10" />,
 } as const;
 
 type ExtendedIconName = keyof typeof EXTENDED_ICON_GLYPHS;
@@ -1270,13 +1272,17 @@ export const MENU_ICON = {
   seat_attendance: "seatGrid",
   classes: "book",
   students: "users",
+  // 원생 기여도 — 남은 스티커 중 뜻이 맞는 것이 없어 선화(원형 차트 = 기여의 몫)로 둔다(menu-glyph.test.ts PENDING_GLYPH).
+  // 🔴 listChecks는 '출결 모드' 면이 쓴다(2026-10-22 겹침 해소).
+  student_contribution: "pieChart",
   student_english_name: "edit",
   teacher_view: "eye",
   exams: "exam",
   enrollment: "userPlus",
   consultations: "messages",
   withdrawals: "userMinus",
-  withdrawal_reports: "report",
+  // 퇴원보고서 — report는 수업보고서·영상 제출 현황 몫이다. 퇴원관리(userMinus)와 다른 사람+X 스티커(2026-10-22).
+  withdrawal_reports: "userX",
   retention: "shield",
   // 신규생 관리 — 체크리스트 7항목이 정체성이다(이탈 방어의 "방패"와 뜻이 달라 그림도 다르다).
   newcomers: "userCheck",
