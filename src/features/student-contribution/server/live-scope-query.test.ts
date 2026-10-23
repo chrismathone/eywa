@@ -17,7 +17,7 @@ beforeEach(() => {
   vi.resetAllMocks(); vi.spyOn(console, "error").mockImplementation(() => {});
   m.gate.mockResolvedValue({ tenantId: "tenant", canConfigure: false });
   m.user.mockResolvedValue({ systemRole: "teacher" }); m.permission.mockResolvedValue(true);
-  m.directory.mockResolvedValue({ rows: ["a", "b", "old", "broken"].map((id) => ({ id })), subjects: [{ key: "math", label: "수학" }] });
+  m.directory.mockResolvedValue({ rows: ["a", "b", "old", "broken"].map((id) => ({ id, name: id, school: null, grade: "초4", status: "enrolled", subjects: ["math"] })), subjects: [{ key: "math", label: "수학" }], grades: ["초4"] });
   m.readable.mockResolvedValue(new Set(["a", "old", "broken"]));
   m.identity.mockResolvedValue({ resolve: (id: string) => id === "old" ? "b" : id === "broken" ? null : id, issues: [] });
   m.rpc.mockResolvedValue({ data: result, error: null });
@@ -73,10 +73,31 @@ it("does not reveal identity problems outside the reader's original scope", asyn
   expect(await getCurrentOntologyScope({})).toMatchObject({ state: "partial" });
 });
 it("enriches only allowed picker students with school and grade without selecting one for an empty entity", async () => {
-  m.directory.mockResolvedValue({ rows: [{ id: "a", school: "침산초", grade: "초4" }, { id: "b", school: "비공개초", grade: "초3" }], subjects: [] });
+  m.directory.mockResolvedValue({ rows: [{ id: "a", school: "침산초", grade: "초4" }, { id: "b", school: "비공개초", grade: "초3" }].map((s) => ({ ...s, name: s.id, status: "enrolled", subjects: [] })), subjects: [], grades: [] });
   m.rpc.mockResolvedValue({ data: { ...result, options: [{ kind: "student", id: "a", label: "안도현", students: 1 }] }, error: null });
   const view = await getCurrentOntologyScope({ kind: "student", entity: "" });
   expect(view).toMatchObject({ request: { kind: "student", id: "" }, data: { options: [{ id: "a", detail: "침산초4" }] } });
   expect(m.rpc.mock.lastCall?.[1]).toMatchObject({ p_students: ["a"], p_entity: "" });
   expect(JSON.stringify(view)).not.toContain("비공개초");
+});
+it("filters the RPC cohort before counts, options and pages for every perspective", async () => {
+  m.readable.mockResolvedValue(null);
+  m.directory.mockResolvedValue({ rows: [
+    { id: "a", name: "학생 A", school: "침산초", grade: "초4", status: "enrolled", subjects: ["math", "english"] },
+    { id: "left", name: "학생 B", school: "침산초", grade: "초4", status: "withdrawn", subjects: ["math"] },
+    { id: "hold", name: "학생 C", school: "달산초", grade: "초5", status: "on_hold", subjects: ["english"] },
+  ], grades: ["초4", "초5"], subjects: [] });
+  for (const kind of ["student", "class", "teacher", "subject", "academy"]) {
+    await getCurrentOntologyScope({ kind, status: "all", q: "침산", grade: "초4", subject: "math" });
+    expect(m.rpc.mock.lastCall?.[1]).toMatchObject({ p_students: ["a", "left"], p_search: "", p_kind: kind });
+  }
+  await getCurrentOntologyScope({});
+  expect(m.rpc.mock.lastCall?.[1].p_students).toEqual(["a"]);
+  await getCurrentOntologyScope({ status: "on_hold", q: "없는 학생" });
+  expect(m.rpc.mock.lastCall?.[1].p_students).toEqual([]);
+});
+it("returns to the filtered directory when the selected entity is no longer an option", async () => {
+  const view = await getCurrentOntologyScope({ kind: "class", entity: "excluded", month: "2026-09" });
+  expect(view).toMatchObject({ selectionMissing: true, request: { kind: "class", id: "", month: "2026-09" } });
+  expect(m.rpc).toHaveBeenCalledOnce();
 });

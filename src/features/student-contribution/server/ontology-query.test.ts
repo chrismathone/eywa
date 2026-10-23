@@ -12,7 +12,7 @@ const record = { students: ["s"], counts: { attendance: 1 }, factCount: 1, tuiti
 beforeEach(() => {
   vi.resetAllMocks();
   m.gate.mockResolvedValue({ tenantId: "tenant", canConfigure: true });
-  m.directory.mockResolvedValue({ rows: [{ id: "s", name: "학생", school: "침산초", grade: "초4" }], classes: [], subjects: [] });
+  m.directory.mockResolvedValue({ rows: [{ id: "s", name: "학생", school: "침산초", grade: "초4", status: "enrolled", subjects: ["math"] }], classes: [], subjects: [], grades: ["초4"] });
   m.snapshot.mockResolvedValue({ ready: true, historyReady: true, refreshedAt: null });
   m.readable.mockResolvedValue(null);
   m.identity.mockResolvedValue({ ids: ["s"], canonical: (id: string) => id, issues: [] });
@@ -28,4 +28,38 @@ it("lists only teachers connected to that month, retaining former teachers witho
 it("does not turn unrelated accounts into a teacher list when a month has no records", async () => {
   m.views.mockResolvedValue({ views: {}, unresolved: 0 });
   expect((await getContributionOntology("2026-10"))?.labels.teacher).toEqual([]);
+});
+it("keeps class and subject directories within the filtered monthly projection", async () => {
+  m.directory.mockResolvedValue({ rows: [], grades: [], classes: [{ id: "visible", class_name: "수학 A" }, { id: "outside", class_name: "영어 B" }],
+    subjects: [{ key: "math", label: "수학" }, { key: "english", label: "영어" }] });
+  m.views.mockResolvedValue({ views: { "class:visible": record, "subject:math": record }, unresolved: 0 });
+  const data = await getContributionOntology("2026-10");
+  expect(data?.labels.class).toEqual([{ id: "visible", label: "수학 A" }]);
+  expect(data?.labels.subject).toEqual([{ id: "math", label: "수학" }]);
+  expect(data?.filterOptions.subjects).toHaveLength(2);
+});
+it("defaults the entire monthly projection and zero-record directory to enrolled students", async () => {
+  const student = { name: "학생", school: "침산초", grade: "초4", subjects: ["math"] };
+  m.directory.mockResolvedValue({ rows: [
+    { ...student, id: "s", status: "enrolled" }, { ...student, id: "zero", status: "enrolled" },
+    { ...student, id: "left", status: "withdrawn" }, { ...student, id: "hold", status: "on_hold" },
+  ], classes: [], subjects: [], grades: [] });
+  const data = await getContributionOntology("2026-10");
+  expect(data?.labels.student.map((s) => s.id)).toEqual(["s", "zero"]);
+  expect(m.views.mock.lastCall?.[2]).toEqual(["s", "zero"]);
+  await getContributionOntology("2026-10", { status: "all" });
+  expect(m.views.mock.lastCall?.[2]).toEqual(["s", "zero", "left", "hold"]);
+});
+it("combines filters before aggregation without widening source access or leaking directory names", async () => {
+  const student = { name: "학생 A", school: "침산초", grade: "초4", status: "enrolled", subjects: ["math"] };
+  m.directory.mockResolvedValue({ rows: [{ ...student, id: "s" }, { ...student, id: "private", name: "비공개" },
+    { ...student, id: "different", grade: "초5" }], classes: [], subjects: [], grades: [] });
+  m.readable.mockResolvedValue(new Set(["s", "different"]));
+  const data = await getContributionOntology("2026-10", { q: " a ", grade: "초4", subject: "math", status: "all" });
+  expect(m.views.mock.lastCall?.[2]).toEqual(["s"]);
+  expect(m.views.mock.lastCall?.[4]).toEqual(["s", "different"]);
+  expect(data?.labels.student.map((s) => s.id)).toEqual(["s"]);
+  expect(JSON.stringify(data)).not.toContain("비공개");
+  await getContributionOntology("2026-10", { subject: "english" });
+  expect(m.views.mock.lastCall?.[2]).toEqual([]);
 });

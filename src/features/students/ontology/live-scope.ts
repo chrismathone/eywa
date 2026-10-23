@@ -1,17 +1,21 @@
 import { z } from "zod";
 import { EXPLORER_KINDS, type ExplorerKind } from "./explorer";
+import { studentFilters, writeStudentFilters, type StudentFilters, type StudentFilterParams } from "@/features/student-contribution/model/student-filters";
+import { isMonth } from "@/features/student-contribution/model/dates";
 
 export const LIVE_SCOPE_VERSION = "student-current-scope-v1";
-export type LiveScopeRequest = { kind: ExplorerKind; id: string; search: string; page: number };
-export function liveScopeRequest(raw: { kind?: string; entity?: string; q?: string; page?: string }, tenant: string): LiveScopeRequest {
+export type LiveScopeRequest = { kind: ExplorerKind; id: string; page: number; month?: string } & StudentFilters;
+export type LiveScopeParams = { kind?: string; entity?: string; page?: string; month?: string } & StudentFilterParams;
+export function liveScopeRequest(raw: LiveScopeParams, tenant: string): LiveScopeRequest {
   const kind = EXPLORER_KINDS.includes(raw.kind as ExplorerKind) ? raw.kind as ExplorerKind : "academy";
   const requested = Number(raw.page);
-  return { kind, id: kind === "academy" ? tenant : (raw.entity ?? "").slice(0, 100), search: kind === "student" ? "" : (raw.q ?? "").trim().slice(0, 100),
+  return { ...studentFilters(raw), ...(raw.month && isMonth(raw.month) ? { month: raw.month } : {}), kind, id: kind === "academy" ? tenant : (raw.entity ?? "").slice(0, 100),
     page: Number.isSafeInteger(requested) && requested > 0 ? Math.min(requested, 100_000) : 1 };
 }
 export function liveScopeHref(request: LiveScopeRequest, embed = false) {
   const params = new URLSearchParams({ view: "current", kind: request.kind, entity: request.id });
-  if (request.search) params.set("q", request.search);
+  writeStudentFilters(params, request);
+  if (request.month) params.set("month", request.month);
   if (request.page > 1) params.set("page", String(request.page));
   if (embed) params.set("embed", "1");
   return `/student-contribution/ontology?${params}`;

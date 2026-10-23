@@ -13,23 +13,24 @@ import { ListPager } from "./list-pager";
 import { ScoreBreakdown } from "./score-breakdown";
 import { fieldClass, numberText } from "./presentation";
 import { PendingBadge } from "./pending-badge";
+import { DEFAULT_STUDENT_FILTERS, matchesStudentFilters } from "../model/student-filters";
+import { StudentFilterFields } from "./student-filter-fields";
 type Data = NonNullable<Awaited<ReturnType<typeof getContributionList>>>;
 export const pointsText = numberText;
 export function ContributionList({ data }: { data: Data }) {
-  const [filters, setFilters] = useState({ search: "", status: "enrolled", grade: "", subject: "", sort: "total" });
+  const [filters, setFilters] = useState({ ...DEFAULT_STUDENT_FILTERS, sort: "total" });
   const [page, setPage] = useState(1), [message, setMessage] = useState(""), [busy, start] = useTransition();
   const [pageSize, setPageSize] = useState(10);
   const router = useRouter();
   const filter = (patch: Partial<typeof filters>) => { setFilters({ ...filters, ...patch }); setPage(1); };
-  const rows = useMemo(() => data.rows.filter((r) => (!filters.search || `${r.name} ${r.school ?? ""}`.includes(filters.search.trim()))
-    && (filters.status === "all" || r.status === filters.status) && (!filters.grade || r.grade === filters.grade) && (!filters.subject || r.subjects.includes(filters.subject)))
+  const rows = useMemo(() => data.rows.filter((r) => matchesStudentFilters(r, filters))
     .map((r) => ({ ...r, score: r.total ? scoreRaws(r.total.raws, data.config) : null, recent: r.total ? scoreRaws(r.total.recent, data.config).total : null }))
     .sort((a, b) => (filters.sort === "recent" ? (b.recent ?? -Infinity) - (a.recent ?? -Infinity) : (b.score?.total ?? -Infinity) - (a.score?.total ?? -Infinity)) || a.name.localeCompare(b.name)), [data, filters]);
   const current = Math.min(page, Math.max(1, Math.ceil(rows.length / pageSize)));
   const shown = rows.slice((current - 1) * pageSize, current * pageSize);
   const raws = sumRaws(rows.flatMap((r) => r.total ? [r.total.raws] : []));
   const totals = rows.reduce((out, r) => ({ operations: out.operations + (r.score?.operations ?? 0), participation: out.participation + (r.score?.participation ?? 0) }), { operations: 0, participation: 0 });
-  const reset = () => { setFilters({ search: "", status: "enrolled", grade: "", subject: "", sort: "total" }); setPage(1); };
+  const reset = () => { setFilters({ ...DEFAULT_STUDENT_FILTERS, sort: "total" }); setPage(1); };
   return <div className="w-full min-w-0 space-y-5 pb-6">
     <ContributionHeader title="원생 기여도" description="학생의 운영 기여와 학습·참여 기록을 모아 봅니다. 학생을 선택하면 점수의 계산 근거를 확인할 수 있습니다."
       active="students" canConfigure={data.gate.canConfigure} actions={data.gate.canWrite && <Button disabled={busy || !data.ready} onClick={() => start(async () => {
@@ -45,13 +46,9 @@ export function ContributionList({ data }: { data: Data }) {
     <div className="grid grid-cols-1 items-start gap-5 2xl:grid-cols-[minmax(0,1fr)_22rem]">
     <section className="min-w-0 overflow-hidden rounded-xl border border-line bg-card" aria-label="원생 기여도 목록">
       <div className="flex flex-wrap items-center gap-3 border-b border-line p-4">
-        <label className="relative min-w-52 flex-1"><span className="pointer-events-none absolute inset-y-0 left-3 flex items-center"><EyIcon name="search" size={16} /></span>
-          <input aria-label="학생 이름·학교 검색" placeholder="이름 또는 학교로 찾기" value={filters.search} onChange={(e) => filter({ search: e.target.value })} className={`${fieldClass} w-full pl-9`} /></label>
-        <select aria-label="재원 상태" value={filters.status} onChange={(e) => filter({ status: e.target.value })} className={fieldClass}><option value="all">모든 상태</option><option value="enrolled">재원생</option><option value="on_hold">휴원생</option><option value="withdrawn">퇴원생</option></select>
-        <select aria-label="학년" value={filters.grade} onChange={(e) => filter({ grade: e.target.value })} className={fieldClass}><option value="">모든 학년</option>{data.grades.map((g) => <option key={g} value={g}>{g}</option>)}</select>
-        <select aria-label="과목" value={filters.subject} onChange={(e) => filter({ subject: e.target.value })} className={fieldClass}><option value="">모든 수강 과목</option>{data.subjects.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}</select>
+        <StudentFilterFields filters={filters} options={data} onChange={filter} onReset={reset}>
         <select aria-label="정렬" value={filters.sort} onChange={(e) => filter({ sort: e.target.value })} className={fieldClass}><option value="total">누적 기여도 순</option><option value="recent">최근 12개월 증가분 순</option></select>
-        <Button variant="ghost" size="sm" onClick={reset}>초기화</Button>
+        </StudentFilterFields>
       </div>
       <div className="overflow-x-auto"><table className="w-full min-w-180 table-fixed text-left text-sm"><colgroup><col className="w-[20%]" /><col className="w-[20%]" /><col className="w-[16%]" /><col className="w-[15%]" /><col className="w-[14%]" /><col className="w-[15%]" /></colgroup><thead className="bg-secondary"><tr>
         {["학생", "학교·학년", "누적 기여도", "운영 기여", "학습·참여", "최근 12개월"].map((label, index) => <th key={label} className={`whitespace-nowrap px-5 py-3 font-medium ${index > 1 ? "text-right" : ""}`}>{label}</th>)}
