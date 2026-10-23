@@ -5,7 +5,7 @@
 --   · 1,112행 = 08-31 한 번 '현재 시간표 복사'(8월 556) + '달 복사'(9월 556) · 만든 뒤 고친 행 0
 --   · 이 표를 가리키는 연결(FK)·뷰·함수·트리거·정책·실시간 발행 0 · main 코드에서 읽고 쓰는 곳 0
 -- 다음 달 시간표를 미리 짜 보는 일은 시간표 편집기(`/timetable/editor`, timetable-lab 표들)가 맡는다 —
--- 이름이 비슷한 `class_textbook_plan_slots`(0268a, 교재 차수)는 다른 표다.
+-- 교재 배정 표 `class_textbook_plans`(0268a 파일 이름이 `…_plan_slots`라 헷갈린다)는 다른 표다.
 --
 -- 백업: D:\tmp\timetable-plan-slots-backup-2026-10-23\rows.json (1,112행 · DB와 md5 대조 일치).
 -- 되돌리기는 이 파일에 적지 않는다 — scripts/_oneoff/revert-0451a-drop-timetable-plan-slots.sql (표 다시 만들기)
