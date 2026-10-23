@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { EMPTY_BODY, type WithdrawalReport } from "../model";
-const state = vi.hoisted(() => ({ user: { id: "actor", tenantId: "tenant", systemRole: "teacher" }, teacherId: null as string | null, access: true, write: true, lab: true, scope: null as string[] | null, db: vi.fn(), prefill: vi.fn() }));
+const state = vi.hoisted(() => ({ user: { id: "actor", tenantId: "tenant", systemRole: "teacher" }, teacherId: null as string | null, access: true, write: true, lab: true, labAssigned: true, scope: null as string[] | null, db: vi.fn(), prefill: vi.fn() }));
 vi.mock("@/lib/auth/view-mode", () => ({ effectiveTeacherId: async () => state.teacherId ?? (state.user.systemRole === "teacher" ? state.user.id : null) }));
 vi.mock("./consultations", () => ({ reportConsultations: async () => [] }));
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => state.user }));
 vi.mock("@/lib/auth/perm-matrix", () => ({ canAccessTenant: async () => state.access, canWriteTenant: async () => state.write }));
-vi.mock("@/lib/license/server", () => ({ isFeatureOptedIn: async () => state.lab }));
+// 실물과 같은 규칙: 운영 콘솔이 실험실에 배정한 메뉴만 지점의 실험실 사용 여부를 묻는다.
+vi.mock("@/lib/laboratory/server", () => ({ isLaboratoryMenuAvailable: async () => !state.labAssigned || state.lab }));
 vi.mock("@/features/staff/department/server/subject-scope", () => ({ getViewerStaffScope: async () => state.scope }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: state.db }));
 vi.mock("@/features/owner/server/queries", () => ({ getTenantSettings: async () => ({ operations: { subjects: [] } }) }));
@@ -13,13 +14,17 @@ vi.mock("./prefill", () => ({ loadReportPrefill: state.prefill }));
 import { reportViewer, canReadReport, listReports, requestStudents, getReport } from "./queries";
 const report = { requested_by: "requester", teacher_id: "actor", manager_id: "manager", director_id: "director", subjects: ["math"] } as WithdrawalReport;
 describe("report read boundaries", () => {
-  beforeEach(() => { state.user = { id: "actor", tenantId: "tenant", systemRole: "teacher" }; state.access = true; state.write = true; state.lab = true; state.scope = null; state.teacherId = null; state.db.mockReset(); });
+  beforeEach(() => { state.user = { id: "actor", tenantId: "tenant", systemRole: "teacher" }; state.access = true; state.write = true; state.lab = true; state.labAssigned = true; state.scope = null; state.teacherId = null; state.db.mockReset(); });
   it("does not read storage when the laboratory is disabled", async () => {
     state.lab = false;
     expect(await reportViewer()).toBeNull();
     expect((await listReports()).available).toBe(false);
     expect(await requestStudents()).toEqual([]);
     expect(state.db).not.toHaveBeenCalled();
+  });
+  it("opens as a general menu once the console unassigns it, even without the laboratory", async () => {
+    state.lab = false; state.labAssigned = false;
+    expect(await reportViewer()).not.toBeNull();
   });
   it("does not read storage with a denied menu", async () => {
     state.access = false;

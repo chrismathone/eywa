@@ -33,7 +33,7 @@ vi.mock("@/lib/auth/view-as", () => ({
 vi.mock("@/lib/license/server", () => ({ isFeatureLicensed: async () => true, isFeatureOptedIn: async () => false }));
 // 실험실 덮개(perm-matrix capLaboratory)는 평소 상태로 — `integrations`는 실험실에 배정되지 않았고 지점은 실험실 꺼짐.
 // 실물은 DB로 배정표를 읽고, 조회가 실패하면 배정 가능한 메뉴 전부(`integrations` 포함)를 닫아 이 게이트와 무관하게 막힌다.
-vi.mock("@/lib/laboratory/server", () => ({ getLaboratoryMenus: async () => ["withdrawal_reports", "student_contribution"] }));
+vi.mock("@/lib/laboratory/server", () => ({ getLaboratoryMenus: async () => ["student_contribution"] }));
 
 import { canPushToMakeedu } from "./makeedu-push-access";
 import type { SystemRole } from "@/lib/permissions";

@@ -1,5 +1,9 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-10-23 — 실험실 마크·잠금 = 운영 콘솔 배정 그대로(0452a)
+
+- 원장 *"실험실을 껐는데도 여전히 실험실마크가 있는것도 체크"* — 원인: `getLaboratoryMenus`가 퇴원보고서·원생 기여도를 코드에서 늘 실험실로 끼워 넣었다(운영 표엔 보강관리·수업 평가·키오스크·재등록 캠페인 4개뿐 · 퇴원보고서는 원장이 18:46에 끔). 끼워 넣기 제거 → 배정 표 하나가 원본. 퇴원보고서 `reportViewer`의 배정 무관 실험실 검사(`isFeatureOptedIn(…,"laboratory")`)도 `isLaboratoryMenuAvailable`로(안 고치면 일반 메뉴로 돌려도 실험실 안 켠 지점에선 화면이 닫힌다 — Codex 검토). 퇴원보고서 두 화면 머리글의 손으로 적은 '실험실' 삭제(사이드바 그룹 자동). 원생 기여도는 0452a로 배정 행을 넣어 그대로 실험실(🔴 0452a 먼저 적용 → 앱 배포). 되돌리기 `scripts/_oneoff/revert-0452a-lab-menu-student-contribution.sql`.
+
 ## 2026-10-23 — 시간표(개발중) 계획 칸 표 지움(0451a)
 
 - 원장 *"필요없음 계획 칸 표도 지워"* → `timetable_plan_slots`(0232a) 삭제 마이그레이션 0451a · 운영 적용. 지우기 전 운영 DB 확인: 1,112행 = 08-31 '현재 시간표 복사' + '달 복사' 한 번씩(8·9월 556행씩) · 만든 뒤 고친 행 0 · 이 표를 가리키는 연결(FK)·뷰·함수·트리거·정책 0 · main 코드 참조 0(화면은 같은 날 ac1236af4로 제거). `CASCADE` 없이 지운다. 백업 `D:\tmp\timetable-plan-slots-backup-2026-10-23\rows.json`(md5 대조 일치) · 되돌리기 `scripts/_oneoff/revert-0451a-drop-timetable-plan-slots.sql` + 백업 폴더 `restore.cjs`. 감사 라벨 `timetable_plan_*`은 옛 기록 2건 때문에 그대로.
