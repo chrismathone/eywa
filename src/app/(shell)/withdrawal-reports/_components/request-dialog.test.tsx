@@ -3,8 +3,8 @@ import "@testing-library/jest-dom/vitest";
 import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
 import { RequestDialog } from "./request-dialog";
 import type { StaffOption, StudentOption } from "@/features/withdrawal-reports/model";
-const mocks = vi.hoisted(() => ({ request: vi.fn(), inFrame: true }));
-vi.mock("@/features/withdrawal-reports/server/actions", () => ({ requestWithdrawalReport: mocks.request }));
+const mocks = vi.hoisted(() => ({ request: vi.fn(), direct: vi.fn(), inFrame: true }));
+vi.mock("@/features/withdrawal-reports/server/actions", () => ({ requestWithdrawalReport: mocks.request, processWithdrawalDirectly: mocks.direct }));
 vi.mock("@/components/workspace/use-in-frame", () => ({ useInFrame: () => mocks.inFrame }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn() } }));
 const staff: StaffOption[] = [{ id: "teacher", name: "담당 강사", role: "teacher", subjects: ["math"] }, { id: "manager", name: "관리자", role: "admin", subjects: ["math"] }, { id: "director", name: "원장", role: "master", subjects: [] }];
@@ -133,5 +133,60 @@ describe("compact request overlay and optional principal", () => {
     expect(screen.getByRole("button", { name: "관리자 승인: 수학 관리자2" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "강사에게 작성 요청" }));
     await waitFor(() => expect(mocks.request).toHaveBeenCalledWith(expect.objectContaining({ managerIds: ["math-manager-2"] })));
+  });
+});
+
+/** 관리자 바로 처리(강사 작성 없이) — 원장 2026-10-23. 원생 화면의 '퇴원보고서'가 `?request=`로 그 학생을 고른 채 연다. */
+describe("direct processing without teacher writing", () => {
+  const noCourse: StudentOption = { id: "alone", name: "수강없음", school: "학교", grade: "중2", courses: [] };
+  beforeEach(() => { cleanup(); mocks.direct.mockReset(); mocks.request.mockReset(); mocks.inFrame = false; assign = vi.spyOn(window.location, "assign").mockImplementation(() => {}); });
+  afterEach(() => { cleanup(); assign.mockRestore(); });
+  it("hides the option until the database is ready", async () => {
+    render(<RequestDialog {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "+ 보고서 작성 요청" }));
+    await screen.findByRole("dialog");
+    expect(screen.queryByRole("radio", { name: "강사 작성 없이 바로 처리" })).not.toBeInTheDocument();
+  });
+  it("opens for the chosen student and processes the selected classes with the picked reason", async () => {
+    mocks.direct.mockResolvedValue({ ok: true, id: "direct-report" });
+    render(<RequestDialog {...props} directReady initialStudentId="student" />);
+    await screen.findByRole("dialog");
+    expect(screen.getByRole("button", { name: "대상 학생: 학생" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: "강사 작성 없이 바로 처리" }));
+    expect(screen.queryByRole("button", { name: /^작성 강사:/ })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("퇴원·종료 사유"), { target: { value: "relocation" } });
+    fireEvent.click(screen.getByRole("button", { name: "바로 퇴원 처리" }));
+    await waitFor(() => expect(mocks.direct).toHaveBeenCalledWith(expect.objectContaining({ studentId: "student", enrollmentIds: ["course"], reason: "relocation" })));
+    expect(mocks.request).not.toHaveBeenCalled();
+    await waitFor(() => expect(assign).toHaveBeenCalledWith("/withdrawal-reports/direct-report"));
+  });
+  it("a student without classes opens straight into direct withdrawal and is not offered for teacher requests", async () => {
+    mocks.direct.mockResolvedValue({ ok: true, id: "r2" });
+    render(<RequestDialog {...props} students={[...students, noCourse]} directReady initialStudentId="alone" />);
+    await screen.findByRole("dialog");
+    expect(screen.getByRole("radio", { name: "강사 작성 없이 바로 처리" })).toBeChecked();
+    expect(screen.getByText("지금 다니는 반이 없는 원생이라 퇴원으로 처리합니다.")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("퇴원·종료 사유"), { target: { value: "other" } });
+    // '기타'는 메모가 필요하다 — 비어 있으면 보내지 않는다(서버도 같은 규칙).
+    fireEvent.click(screen.getByRole("button", { name: "바로 퇴원 처리" }));
+    expect(mocks.direct).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByRole("textbox", { name: /메모/ }), { target: { value: "가족 사정" } });
+    fireEvent.click(screen.getByRole("button", { name: "바로 퇴원 처리" }));
+    await waitFor(() => expect(mocks.direct).toHaveBeenCalledWith(expect.objectContaining({ studentId: "alone", enrollmentIds: [], reason: "other", memo: "가족 사정" })));
+    await waitFor(() => expect(assign).toHaveBeenCalledWith("/withdrawal-reports/r2"));
+    // 작성 요청 모드로 바꾸면 반 없는 원생은 고를 수 없다(담임이 없다).
+    await waitFor(() => expect(screen.getByRole("button", { name: "바로 퇴원 처리" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("radio", { name: "강사에게 작성 요청" }));
+    expect(screen.getByRole("button", { name: "대상 학생: 학생 검색·선택" })).toBeInTheDocument();
+  });
+  it("keeps the dialog and shows the reason when the server refuses", async () => {
+    mocks.direct.mockResolvedValue({ error: "이 학생의 진행 중인 보고서가 있습니다." });
+    render(<RequestDialog {...props} directReady initialStudentId="student" />);
+    await screen.findByRole("dialog");
+    fireEvent.click(screen.getByRole("radio", { name: "강사 작성 없이 바로 처리" }));
+    fireEvent.change(screen.getByLabelText("퇴원·종료 사유"), { target: { value: "graduated" } });
+    fireEvent.click(screen.getByRole("button", { name: "바로 퇴원 처리" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("진행 중");
+    expect(assign).not.toHaveBeenCalled();
   });
 });

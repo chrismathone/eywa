@@ -7,7 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isLaboratoryMenuAvailable } from "@/lib/laboratory/server";
 import { getViewerStaffScope } from "@/features/staff/department/server/subject-scope";
 import { getTenantSettings } from "@/features/owner/server/queries";
-import { canRequestReport, isParticipant, missingReportSchema, snapshotMatches, type StudentSnapshot, type WithdrawalReport, type ReportListRow, type ReportEvent, type StaffOption, type StudentOption, type CourseSnapshot } from "../model";
+import { canRequestReport, isBookkeepingReport, isParticipant, missingReportSchema, snapshotMatches, type StudentSnapshot, type WithdrawalReport, type ReportListRow, type ReportEvent, type StaffOption, type StudentOption, type CourseSnapshot } from "../model";
 import { kstToday } from "@/lib/date-kst";
 import { subjectLabelRecord } from "@/features/owner/subjects";
 import { protectedAccountIds } from "@/lib/auth/protected-accounts";
@@ -63,10 +63,20 @@ export async function listReports() {
     rows.push(...((data ?? []) as ReportListRow[]).filter(r => canReadReport(r, viewer)));
     if (!data || data.length < 400) break;
   }
-  const { data, error } = await base().in("status", ["completed", "canceled"]).order("created_at", { ascending: false }).limit(200);
-  if (error) throw new Error("완료된 퇴원보고서를 불러오지 못했습니다.");
-  rows.push(...((data ?? []) as ReportListRow[]).filter(r => canReadReport(r, viewer)));
-  return { rows, available: true, completedLimited: data?.length === 200 };
+  // 완료·취소는 최근 200건까지 — 장부 정리가 남긴 바로 처리 보고서(`isBookkeepingReport`)는 목록에서 빼고, 그 행들이 200건 창을 먹지 않게
+  // 더 읽어 채운다(한 번 정리에 수십~백여 명이 몰려 진짜 완료 보고서가 창 밖으로 밀리지 않게 · 최대 5쪽).
+  const completed: ReportListRow[] = [];
+  let completedLimited = false;
+  for (let offset = 0; ; offset += 200) {
+    const { data, error } = await base().in("status", ["completed", "canceled"]).order("created_at", { ascending: false }).order("id").range(offset, offset + 199);
+    if (error) throw new Error("완료된 퇴원보고서를 불러오지 못했습니다.");
+    const page = (data ?? []) as ReportListRow[];
+    completed.push(...page.filter(r => !isBookkeepingReport(r) && canReadReport(r, viewer)));
+    if (page.length < 200) break;
+    if (completed.length >= 200 || offset >= 800) { completedLimited = true; break; }
+  }
+  rows.push(...completed.slice(0, 200));
+  return { rows, available: true, completedLimited: completedLimited || completed.length > 200 };
 }
 export async function getReport(id: string) {
   const viewer = await reportViewer();
@@ -99,6 +109,11 @@ export async function reportStaff() {
   return (data ?? []).map(u => ({ id: u.id, name: u.display_name, role: displayRoleFor(u.id, u.system_role, protection.protectedIds), subjects: u.subjects ?? [],
     approvalSubjects: staffSubjectScopeOf(u.id, settings.permissions.specialAccess.staffSubjectScopes) ?? u.subjects ?? [] })) as StaffOption[];
 }
+/**
+ * 작성 요청·바로 처리 창의 학생 선택지 — 재원·휴원 · 퇴원 예약 없음 · 시험 학생 제외.
+ * 지금 다니는 반이 없는 학생도 싣는다(`courses: []`) — 강사 작성 요청은 담임이 없어 못 하지만 **관리자 바로 처리**(퇴원만)는 된다
+ * (원장 2026-10-23 · 창이 요청 모드에선 반 있는 학생만 보인다). 과목 범위가 걸린 사람에겐 담당 과목 반이 있는 학생만.
+ */
 export async function requestStudents() {
   const viewer = await reportViewer();
   if (!viewer?.request) return [] as StudentOption[];
@@ -113,12 +128,42 @@ export async function requestStudents() {
     if (error) throw new Error("학생의 수강 정보를 불러오지 못했습니다.");
     for (const student of data ?? []) {
       const courses = currentCourses((student.enrollments as unknown as JoinedCourse[]).filter(e => e.classes?.is_active && !e.classes.closed_at));
-      if (courses.length && (!viewer.scope || courses.some(c => viewer.scope!.includes(c.subject)))) result.push({ id: student.id, name: student.name, school: student.school, grade: student.grade, courses });
+      if (viewer.scope ? courses.some(c => viewer.scope!.includes(c.subject)) : true) result.push({ id: student.id, name: student.name, school: student.school, grade: student.grade, courses });
     }
     if (!data || data.length < 400) break;
   }
   return result.sort((a, b) => a.name.localeCompare(b.name, "ko"));
 }
+/**
+ * 관리자 바로 처리가 이 DB에서 되는가 — 0453a(`withdrawal_reports.direct` 칸 + 바로 처리 함수, 한 트랜잭션)가 적용됐는지 칸으로 본다.
+ * 🔴 적용 전 DB에서도 화면은 그대로 열리고 바로 처리 선택지만 숨는다(#95 — 앱이 마이그레이션보다 먼저 배포될 수 있다).
+ */
+export const directProcessingReady = cache(async (tenantId: string): Promise<boolean> => {
+  const { error } = await createAdminClient().from("withdrawal_reports").select("direct").eq("tenant_id", tenantId).limit(1);
+  return !error;
+});
+
+/**
+ * 원생 화면의 '퇴원보고서' 입구(원장 2026-10-23 퇴원은 퇴원보고서로만) — 그 학생에게 진행 중인 보고서가 있으면 그 보고서로, 없으면 요청 창으로.
+ * null = 퇴원보고서를 못 여는 사람(메뉴 권한·실험실 배정). `readable` = 진행 중인 보고서를 이 사람이 열 수 있는가(참여자·원장 — 목록과 같은 판정).
+ */
+export async function studentReportEntry(studentId: string): Promise<
+  { pending: { id: string; readable: boolean } | null; canRequest: boolean } | null
+> {
+  const viewer = await reportViewer();
+  if (!viewer) return null;
+  const { data, error } = await createAdminClient().from("withdrawal_reports")
+    .select("id,tenant_id,student_id,requested_by,teacher_id,manager_id,director_id,manager_ids,director_ids,status,group_leader")
+    .eq("tenant_id", viewer.user.tenantId).eq("student_id", studentId).not("status", "in", "(completed,canceled)")
+    .order("group_leader", { ascending: false }).order("created_at", { ascending: false }).limit(20);
+  if (missingReportSchema(error)) return null;
+  if (error) throw new Error("진행 중인 퇴원보고서를 확인하지 못했습니다.");
+  const rows = (data ?? []) as ReportListRow[];
+  const mine = rows.find(r => canReadReport(r, viewer));
+  const pending = mine ? { id: mine.id, readable: true } : rows[0] ? { id: rows[0].id, readable: false } : null;
+  return { pending, canRequest: viewer.request };
+}
+
 export async function reportSubjectLabels() {
   const settings = await getTenantSettings();
   return subjectLabelRecord(settings.operations.subjects);

@@ -99,7 +99,8 @@ describe("시간표 X 겹침 배선", () => {
 
   it("🔴 '데이터 정리 일괄 퇴원'은 줄에서 뺀다 — 일괄 퇴원 액션이 적는 글과 판정이 한 상수", () => {
     expect(SERVER).toContain("if (isCleanupWithdrawal(w.memo)) continue;");
-    expect(ADMIN).toContain("memo: CLEANUP_WITHDRAWAL_MEMO,");
+    // 일괄 퇴원은 2026-10-23부터 학생마다 바로 처리 보고서로 남긴다(사유 '기타' + 이 메모 — 처리 함수가 학생 퇴원 메모로 옮긴다).
+    expect(ADMIN).toContain('reason: "other", reasonDetail: "", memo: CLEANUP_WITHDRAWAL_MEMO');
     // 2026-07-10 스크립트의 '수강 반 없음 일괄 퇴원 처리 (날짜)'도 같은 장부 정리(원장 2026-10-14 "이것도 뺀다").
     expect(isCleanupWithdrawal("데이터 정리 일괄 퇴원")).toBe(true);
     expect(isCleanupWithdrawal(" 수강 반 없음 일괄 퇴원 처리 (2026-07-10)")).toBe(true);

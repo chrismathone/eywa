@@ -6,12 +6,12 @@ import { describeEndSelection } from "./withdraw-selection";
  * `total`은 수강 과목 수, 라벨은 과목 라벨이다(반 이름이 아니다).
  */
 describe("describeEndSelection", () => {
-  it("과목이 하나뿐이면 기본(전부 선택)이 곧 퇴원 — 종전과 체감이 같다", () => {
+  it("과목이 하나뿐이면 기본(전부 선택)이 곧 퇴원 — 퇴원보고서로 보낸다(원장 2026-10-23)", () => {
     // 수학만 세 반 다녀도 과목은 하나다(실측 송준영 — 주말내신특강·BS4F 수·BS4F 토).
     const plan = describeEndSelection(1, ["수학"]);
     expect(plan.mode).toBe("full");
-    expect(plan.buttonLabel).toBe("퇴원 처리");
-    expect(plan.notice).toContain("퇴원관리");
+    expect(plan.buttonLabel).toBe("퇴원보고서로 진행");
+    expect(plan.notice).toContain("퇴원보고서로 처리합니다");
   });
 
   it("두 과목 중 하나만 고르면 과목 종료 — 학생이 재원으로 남는다고 미리 말한다", () => {
@@ -25,10 +25,11 @@ describe("describeEndSelection", () => {
     expect(plan.buttonLabel).not.toContain("퇴원");
   });
 
-  it("전부 고르면 지금과 동일한 학생 퇴원", () => {
+  it("전부 고르면 학생 퇴원 — 이 창이 아니라 퇴원보고서로", () => {
     const plan = describeEndSelection(2, ["수학", "영어"]);
     expect(plan.mode).toBe("full");
-    expect(plan.notice).toContain("2과목이 모두 종료");
+    expect(plan.notice).toContain("2과목을 모두 끝내면 퇴원");
+    expect(plan.notice).toContain("퇴원보고서");
   });
 
   it("0개 선택은 진행 불가 — 무엇을 하겠다는 건지 알 수 없다", () => {
@@ -37,10 +38,11 @@ describe("describeEndSelection", () => {
     expect(plan.notice).toContain("과목을 1개 이상");
   });
 
-  it("활성 수강이 0개면 고를 것이 없으니 단순 퇴원", () => {
+  it("활성 수강이 0개면 고를 것이 없다 — 퇴원보고서(바로 처리)로", () => {
     const plan = describeEndSelection(0, []);
     expect(plan.mode).toBe("full");
-    expect(plan.notice).toContain("활성 수강이 없습니다");
+    expect(plan.notice).toContain("종료할 수강이 없습니다");
+    expect(plan.notice).toContain("퇴원보고서");
   });
 
   it("선택이 total을 넘겨도(경합으로 목록이 줄어든 경우) 퇴원으로 판정 — 부분으로 새지 않는다", () => {

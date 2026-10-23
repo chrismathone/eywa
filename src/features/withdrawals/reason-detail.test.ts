@@ -84,16 +84,19 @@ describe("배선 가드", () => {
     const keys = [...list.matchAll(/''([a-z_]+)''/g)].map((m) => m[1]);
     expect([...keys].sort()).toEqual([...WITHDRAWAL_REASONS].sort());
   });
-  it("세 저장 경로가 같은 검사를 지난다 — 퇴원(상태 전환) · 부분 종료 · 퇴원 상세 사유 저장", () => {
+  it("저장 경로가 같은 검사를 지난다 — 부분 종료 · 퇴원 상세 사유 저장 · 퇴원보고서 바로 처리", () => {
     const students = read("src/features/students/server/actions.ts");
-    expect(students.match(/checkReasonInput\(/g)?.length).toBe(2);
+    // 상태 전환 창의 퇴원 갈래는 걷었다(원장 2026-10-23 퇴원은 퇴원보고서로만) — 남은 것은 부분 종료 하나.
+    expect(students.match(/checkReasonInput\(/g)?.length).toBe(1);
+    expect(read("src/features/withdrawal-reports/server/actions.ts")).toContain("checkReasonInput(");
     expect(students).toContain("endEnrollmentById(supabase, t.id, date, reasonStr, { detail: checked.detail, memo })");
     expect(read("src/features/withdrawals/server/actions.ts")).toContain("checkReasonInput(");
   });
   it("🔴 '기타는 메모 필수'가 모든 곳에 — 사유를 받는 길이 모두 같은 읽기·같은 부품을 지난다(원장 2026-10-15 *\"기타는 모든 곳을 일치하게\"*)", () => {
     const students = read("src/features/students/server/actions.ts");
-    // 학생 등록·수정(새 퇴원·예약) · 수강 한 건 종료 — 사유 없이 '기타'로 떨어지는 기본값이 없어야 한다.
-    expect(students.match(/readReasonForm\(formData/g)?.length).toBe(3);
+    // 학생 등록(지난 퇴원 기록) · 수강 한 건 종료 — 사유 없이 '기타'로 떨어지는 기본값이 없어야 한다.
+    // (학생 수정 폼은 새 퇴원·예약을 걸지 못해 사유를 받지 않는다 — 원장 2026-10-23 퇴원은 퇴원보고서로만.)
+    expect(students.match(/readReasonForm\(formData/g)?.length).toBe(2);
     expect(students).not.toContain(`|| "other"`);
     expect(students).not.toMatch(/withdrawal_metadata: createPlan\.kind === "none" \? null : DEFAULT_WITHDRAWAL_METADATA/);
     const end = students.slice(students.indexOf("export async function endSingleEnrollment"), students.indexOf("// ────────────────────── 메모 + 성적"));

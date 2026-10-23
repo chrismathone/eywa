@@ -6,7 +6,8 @@ import { kstToday } from "@/lib/date-kst";
 import { getShellView } from "@/lib/auth/view-mode";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
-import { listReports, reportViewer, reportStaff, requestStudents, reportSubjectLabels } from "@/features/withdrawal-reports/server/queries";
+import { directProcessingReady, listReports, reportViewer, reportStaff, requestStudents, reportSubjectLabels } from "@/features/withdrawal-reports/server/queries";
+import { canManageStudentStatusNow } from "@/features/students/server/status-access";
 import { listArchives } from "@/features/withdrawal-reports/server/archives";
 import {
   LIST_PAGE_SIZE,
@@ -38,7 +39,7 @@ export default async function WithdrawalReportsPage({ searchParams }: { searchPa
   if (!viewer) notFound();
   const sp = flat(await searchParams);
   // 🔑 독립 조회 — 한 번에(B4). 기존 기록을 못 읽어도 웹 보고서는 보여야 하니 그쪽 실패만 안내로 접는다.
-  const [list, staff, students, labels, settings, archives, shell] = await Promise.all([
+  const [list, staff, students, labels, settings, archives, shell, directReady] = await Promise.all([
     listReports(),
     reportStaff(),
     requestStudents(),
@@ -49,7 +50,13 @@ export default async function WithdrawalReportsPage({ searchParams }: { searchPa
       return null;
     }),
     getShellView(),
+    // 관리자 바로 처리(0453a) — 적용 전 DB에선 그 선택지만 숨는다(#95). 승인을 건너뛰므로 원생 상태 변경 자격도 있어야 보인다(서버가 다시 본다).
+    viewer.request
+      ? Promise.all([directProcessingReady(viewer.user.tenantId), canManageStudentStatusNow()]).then(([ready, status]) => ready && status)
+      : Promise.resolve(false),
   ]);
+  // 원생 화면의 '퇴원보고서'가 `?request=<학생>`으로 연다 — 그 학생을 고른 채 창을 띄운다(퇴원은 퇴원보고서로만, 원장 2026-10-23).
+  const requestFor = sp.request && /^[0-9a-f-]{36}$/i.test(sp.request) ? sp.request : null;
   // 설명은 보는 화면의 일로 — 강사뷰(좁은 머리글)는 제목을 접고 이 한 줄만 보여 주는데, 결재 절차 설명이 강사 화면에 그대로 떴다(원장 2026-10-16).
   //   겸직이 강사뷰로 볼 때도 강사 문구(권한이 아니라 셸로 가른다).
   const header = (
@@ -103,7 +110,7 @@ export default async function WithdrawalReportsPage({ searchParams }: { searchPa
         }
         resultText={filterActive ? `${found.length}건 / 전체 ${items.length}건` : `전체 ${items.length}건`}
         resetHref={filterActive ? listHref(sp.embed ? { embed: sp.embed } : {}, {}) : null}
-        request={viewer.request ? <RequestDialog staff={staff} students={students} labels={labels} scope={viewer.scope} /> : null}
+        request={viewer.request ? <RequestDialog key={requestFor ?? "none"} staff={staff} students={students} labels={labels} scope={viewer.scope} initialStudentId={requestFor} directReady={directReady} /> : null}
       />
       {archives === null && canSeeArchive ? (
         <p role="alert" className="text-danger text-sm">

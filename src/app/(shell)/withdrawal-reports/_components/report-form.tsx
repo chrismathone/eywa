@@ -4,7 +4,7 @@ import type { ReportConsultation } from "@/features/withdrawal-reports/consultat
 import { GrowingTextarea } from "./growing-textarea";
 import { ConsultationLinks } from "./consultation-links";
 import { REASON_LABEL } from "@/features/withdrawals/types";
-import { directorIds, managerIds, type ReportBody, type ReportEvent, type WithdrawalReport } from "@/features/withdrawal-reports/model";
+import { directorIds, isDirectReport, managerIds, type ReportBody, type ReportEvent, type WithdrawalReport } from "@/features/withdrawal-reports/model";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { ReportSheet } from "./report-sheet";
 import { reportCourses } from "@/features/withdrawal-reports/target-courses";
@@ -32,20 +32,25 @@ export function ReportForm({ report: r, body, events, labels, nameOf, editable, 
     };
   };
   const applied = events.findLast(e => e.action === "apply");
+  // 관리자 바로 처리(원장 2026-10-23) — 강사가 쓰지 않았다. 결재란은 처리한 관리자 한 칸, 담임명은 그 반의 담임(요청 당시)으로.
+  const direct = isDirectReport(r);
+  const homeroom = [...new Set(courses.map(c => c.teacherName).filter(Boolean))].join(", ") || "—";
   return <ReportSheet
     subject={r.subjects.map(s => labels[s] ?? "기타 과목").join(" · ")}
     consultationLinks={<ConsultationLinks records={consultations} selected={body.consultationIds ?? []} editable={editable} pending={pending} onChange={ids => onChange("consultationIds", ids)} />}
-    signatures={[
-      { role: "담임", name: nameOf(r.teacher_id), date: `작성일 : ${writtenAt ? date(writtenAt) : ""}` },
-      approvers("manager"), approvers("director"),
-    ]}
+    signatures={direct
+      ? [{ role: "바로 처리", name: nameOf(r.requested_by), date: `처리 요청일 : ${date(r.created_at)}` }]
+      : [
+          { role: "담임", name: nameOf(r.teacher_id), date: `작성일 : ${writtenAt ? date(writtenAt) : ""}` },
+          approvers("manager"), approvers("director"),
+        ]}
     fields={{
       name: r.snapshot.name,
       grade: schoolGradeLabel(r.snapshot.school, r.snapshot.grade),
       className: courses.map(c => c.className).join("\n"),
       exitDate: r.effective_date,
       period: courses.map(c => `${courses.length > 1 ? `${c.className}: ` : ""}${c.startDate} ~ ${r.effective_date} (${courseDuration(c.startDate, r.effective_date)})`).join("\n"),
-      teacher: nameOf(r.teacher_id),
+      teacher: direct ? homeroom : nameOf(r.teacher_id),
       attendance: textField("attendance", "출결·현황"),
       reason: editable ? <div className="flex flex-wrap gap-2"><select aria-label="퇴원사유" style={{ flex: "1 1 180px" }} value={body.reason} disabled={pending} onChange={e => { onChange("reason", e.target.value as ReportBody["reason"]); onChange("reasonDetail", ""); }}>{Object.entries(REASON_LABEL).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>{REASON_DETAILS[body.reason].length > 0 && <select aria-label="세부 퇴원사유" style={{ flex: "1 1 240px" }} value={body.reasonDetail ?? ""} disabled={pending} onChange={e => onChange("reasonDetail", e.target.value)}><option value="">세부 사유 선택</option>{REASON_DETAILS[body.reason].map(d => <option key={d.key} value={d.key}>{d.label}</option>)}</select>}</div> : [REASON_LABEL[body.reason], reasonDetailOf(body.reasonDetail)?.label].filter(Boolean).join(" · "),
       detail: <>{textField("detail", "퇴원 상세사유")}{editable && <small>{Array.from(body.detail.trim()).length}자 · 제출 시 200자 이상</small>}</>,
@@ -54,7 +59,7 @@ export function ReportForm({ report: r, body, events, labels, nameOf, editable, 
       teacherOpinion: textField("teacherOpinion", "담임 의견"),
       tuition: body.tuition || "수납 기록 확인 필요",
       arrears: <><span>{ { unknown: "청구 기록 확인 필요", no: "미납 없음", yes: "미납 있음" }[body.arrears]}</span>{body.arrearsNote && <div>{body.arrearsNote}</div>}</>,
-      processing: r.applied_at ? `${nameOf(applied?.actor_id ?? null)} · ${date(r.applied_at)} 처리 완료` : `요청: ${nameOf(r.requested_by)} · ${r.status === "canceled" ? "요청 취소" : "승인 완료 후 자동 처리"}`,
+      processing: r.applied_at ? `${nameOf(applied?.actor_id ?? null)} · ${date(r.applied_at)} 처리 완료${direct ? " (관리자 바로 처리)" : ""}` : `${direct ? "관리자 바로 처리" : "요청"}: ${nameOf(r.requested_by)} · ${r.status === "canceled" ? "요청 취소" : direct ? `${r.effective_date} 처리 예약` : "승인 완료 후 자동 처리"}`,
     }}
   />;
 }

@@ -9,7 +9,7 @@ import type { ReportConsultation } from "@/features/withdrawal-reports/consultat
 import { ReportForm } from "./report-form";
 import { fillEmptyReportFields } from "@/features/withdrawal-reports/prefill";
 import { changeWithdrawalReport } from "@/features/withdrawal-reports/server/actions";
-import { EMPTY_BODY, REPORT_STATUS, REPORT_ACTION_LABEL, directorIds, reportCapabilities, type WithdrawalReport, type ReportEvent, type StaffOption, type ReportAction, type ReportBody } from "@/features/withdrawal-reports/model";
+import { EMPTY_BODY, REPORT_STATUS, REPORT_ACTION_LABEL, directorIds, isDirectReport, reportCapabilities, type WithdrawalReport, type ReportEvent, type StaffOption, type ReportAction, type ReportBody } from "@/features/withdrawal-reports/model";
 
 const control = "w-full min-w-0 rounded-md border bg-background px-3 py-2 text-sm disabled:bg-muted/20 disabled:text-foreground";
 const dateTime = (v: string) => new Date(v).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "short", timeStyle: "short" });
@@ -39,10 +39,12 @@ export function ReportDetail({ report: r, events, staff, labels, userId, writabl
   }
   return <>
     <div className="flex flex-wrap items-center justify-between gap-3"><span className="flex flex-wrap items-center gap-3 text-sm"><Link className="text-primary hover:underline" href="/withdrawal-reports">← 보고서 목록</Link>{withdrawalHref && <WindowLink href={withdrawalHref} className="text-primary hover:underline">퇴원 상세</WindowLink>}</span><span className="rounded-full bg-muted px-3 py-1.5 text-sm">{REPORT_STATUS[r.status]}</span></div>
-    <p className="text-sm">{r.exit_kind === "withdrawal" ? "전체 퇴원" : "반 수강종료"} · {r.subjects.map(s => labels[s] ?? "기타 과목").join(" · ")}</p>
+    <p className="text-sm">{r.exit_kind === "withdrawal" ? "전체 퇴원" : "반 수강종료"} · {r.subjects.length ? r.subjects.map(s => labels[s] ?? "기타 과목").join(" · ") : "다니는 반 없음"}</p>
+    {/* 관리자 바로 처리(강사 작성 없이, 원장 2026-10-23) — 누가·언제 처리했는지 먼저 말한다(양식의 상담·담임 의견 칸은 비어 있다). */}
+    {isDirectReport(r) && <p className="rounded-lg border bg-muted/20 p-4 text-sm">관리자 바로 처리 · {nameOf(r.requested_by)} · {dateTime(r.created_at)} — 강사 작성과 승인 없이 처리한 기록입니다.</p>}
     {r.request_note && <div className="rounded-lg border bg-muted/20 p-4 text-sm"><div className="mb-2 font-medium">작성 요청 · {nameOf(r.requested_by)}</div><p className="whitespace-pre-wrap">{r.request_note}</p></div>}
     {r.last_comment && <p className="whitespace-pre-wrap rounded-lg border border-att-late-ink/20 bg-att-late p-4 text-sm text-att-late-ink">{r.last_comment}</p>}
-    {r.status === "scheduled" && <p className="rounded-lg border bg-muted/20 p-4 text-sm">승인이 완료되었습니다. {r.effective_date}에 처리하며, 그 전까지는 기존 수강 상태를 유지합니다.</p>}
+    {r.status === "scheduled" && <p className="rounded-lg border bg-muted/20 p-4 text-sm">{isDirectReport(r) ? "처리 예약입니다." : "승인이 완료되었습니다."} {r.effective_date}에 처리하며, 그 전까지는 기존 수강 상태를 유지합니다.</p>}
     {r.status === "approved" && <p className="rounded-lg border bg-muted/20 p-4 text-sm">이 보고서는 승인이 완료되었습니다. 함께 요청한 다른 강사의 보고서 승인까지 모두 끝나면 처리합니다.</p>}
     {assignmentChanged && <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive">요청 이후 학생·수강·담당 강사가 변경되었습니다. 아래 내용은 요청 당시 기록이며, 제출·승인을 진행할 수 없습니다. 요청한 사람이 요청을 취소하고 현재 담당 기준으로 다시 요청해 주세요.</p>}
     {prefillWarning && <p role="alert" className="rounded-lg border p-4 text-sm">{prefillWarning}</p>}

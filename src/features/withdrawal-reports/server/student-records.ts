@@ -2,7 +2,7 @@ import "server-only";
 import { unstable_rethrow } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { describeDbError, logDbError } from "@/lib/supabase/db-error";
-import { missingReportSchema, type ReportListRow, type ReportStatus, type StudentSnapshot } from "../model";
+import { isDirectReport, missingReportSchema, type ReportListRow, type ReportStatus, type StudentSnapshot } from "../model";
 import type { ArchiveRow } from "../archive-model";
 import { canReadReport, reportViewer } from "./queries";
 import { canReadArchive } from "./archives";
@@ -27,6 +27,8 @@ export type StudentReportItem = {
   subjects: string[];
   effectiveDate: string;
   teacherName: string | null;
+  /** 관리자 바로 처리(강사 작성 없이, 원장 2026-10-23 · 0453a) — 카드가 담임 대신 이 표시를 단다. */
+  direct: boolean;
 };
 export type StudentArchiveItem = {
   id: string;
@@ -112,6 +114,7 @@ export async function loadStudentReportRecords(studentId: string): Promise<Stude
           subjects: r.subjects ?? [],
           effectiveDate: r.effective_date,
           teacherName: r.snapshot?.courses?.find((c) => c.teacherId === r.teacher_id)?.teacherName ?? null,
+          direct: isDirectReport(r),
         })),
       archives: archives.rows
         .filter((a) => canReadArchive(a, viewer))

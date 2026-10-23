@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { bodySchema, EMPTY_BODY, requestSchema, batchRequestSchema, automaticExitKind, reportCapabilities, submissionError, missingReportSchema, canRequestReport, type WithdrawalReport } from "./model";
+import { bodySchema, EMPTY_BODY, requestSchema, batchRequestSchema, automaticExitKind, reportCapabilities, submissionError, missingReportSchema, canRequestReport, directSchema, isBookkeepingReport, isDirectReport, type WithdrawalReport } from "./model";
+import { CLEANUP_WITHDRAWAL_MEMO } from "@/features/withdrawals/system-bulk";
 const id = "10000000-0000-4000-8000-000000000001";
 const teacher = "10000000-0000-4000-8000-000000000002";
 const manager = "10000000-0000-4000-8000-000000000003";
@@ -91,5 +92,24 @@ describe("withdrawal reports", () => {
     expect(missingReportSchema({ code: "42P01" })).toBe(true);
     expect(missingReportSchema({ code: "PGRST202" })).toBe(true);
     expect(missingReportSchema({ code: "42501" })).toBe(false);
+  });
+});
+
+/** 관리자 바로 처리(원장 2026-10-23 · 0453a) — 모양 판정과 입력 검사. */
+describe("direct processing", () => {
+  it("바로 처리 = 작성자 = 승인 관리자 = 요청자(DB CHECK가 표식과 묶는다) · 일반 요청은 작성자와 관리자가 다르다", () => {
+    expect(isDirectReport({ teacher_id: manager, manager_id: manager, requested_by: manager })).toBe(true);
+    expect(isDirectReport({ teacher_id: teacher, manager_id: manager, requested_by: manager })).toBe(false);
+  });
+  it("장부 정리가 남긴 바로 처리 보고서만 목록에서 뺀다", () => {
+    const direct = { teacher_id: manager, manager_id: manager, requested_by: manager };
+    expect(isBookkeepingReport({ ...direct, body_reason: "other", body_detail: CLEANUP_WITHDRAWAL_MEMO })).toBe(true);
+    expect(isBookkeepingReport({ ...direct, body_reason: "other", body_detail: "가족 사정" })).toBe(false);
+    expect(isBookkeepingReport({ ...direct, body_reason: "relocation", body_detail: CLEANUP_WITHDRAWAL_MEMO })).toBe(false);
+    expect(isBookkeepingReport({ teacher_id: teacher, manager_id: manager, requested_by: manager, body_reason: "other", body_detail: CLEANUP_WITHDRAWAL_MEMO })).toBe(false);
+  });
+  it("입력 — 반 0개 허용(다니는 반 없는 학생) · 사유는 정해진 목록", () => {
+    expect(directSchema.safeParse({ studentId: id, enrollmentIds: [], effectiveDate: "2026-10-23", reason: "relocation", memo: "" }).success).toBe(true);
+    expect(directSchema.safeParse({ studentId: id, enrollmentIds: [], effectiveDate: "2026-10-23", reason: "nope", memo: "" }).success).toBe(false);
   });
 });

@@ -10,6 +10,7 @@ import { naturalKey } from "@/features/students/lib/student-import";
 import { resolveUniqueStudentName } from "@/features/students/name-suffix";
 import { STUDENT_STATUS_LABEL } from "@/features/students/status/status-labels";
 import { planFormWithdrawal } from "@/features/students/withdrawal-plan";
+import { formWithdrawalViaReport, SCHEDULE_VIA_REPORT } from "@/features/withdrawals/via-report";
 import { canManageStudentStatusNow } from "@/features/students/server/status-access";
 import { statusCreationNeedsPermission, STUDENT_STATUS_DENIED } from "@/features/students/status-access";
 import { LEGACY_REASON_LABELS, REASON_LABEL, type WithdrawalMetadata, type WithdrawalReason } from "@/features/withdrawals/types";
@@ -68,8 +69,8 @@ function columns(gradeLevels: readonly string[]): ColumnSpec<K>[] {
     { key: "address", header: "주소", width: 28 },
     { key: "email", header: "이메일", width: 20 },
     { key: "enrolledAt", header: "등록일", width: 12, aliases: ["입학일", "입원일"] },
-    { key: "withdrawnAt", header: "퇴원일", width: 12, hint: "상태가 퇴원이면 필수. 오늘 이후 날짜면 퇴원 예약." },
-    { key: "withdrawalReason", header: "퇴원사유", width: 14, options: REASON_OPTIONS.map((o) => o.label), strictOptions: true, hint: "새로 넣는 원생이 퇴원(또는 퇴원 예약)이면 필수. '기타'면 퇴원메모도 적어 주세요." },
+    { key: "withdrawnAt", header: "퇴원일", width: 12, hint: "상태가 퇴원이면 필수(오늘까지의 날짜). 퇴원 예약(오늘 이후 날짜)은 가져오지 않습니다 — 퇴원보고서로." },
+    { key: "withdrawalReason", header: "퇴원사유", width: 14, options: REASON_OPTIONS.map((o) => o.label), strictOptions: true, hint: "새로 넣는 원생이 퇴원이면 필수. '기타'면 퇴원메모도 적어 주세요." },
     { key: "withdrawalMemo", header: "퇴원메모", width: 24, aliases: ["퇴원 메모", "퇴원사유 메모"], hint: "실제 사유('기타'는 필수)." },
     { key: "notes", header: "메모", width: 30, aliases: ["비고", "특이사항"] },
   ];
@@ -248,6 +249,12 @@ const def: ImporterDef<Plan> = {
         row.fail("withdrawnAt", w.error);
         continue;
       }
+      // 새 원생에 퇴원 예약(오늘 이후 퇴원일)은 걸지 않는다 — 퇴원은 퇴원보고서로만(원장 2026-10-23). 지난 퇴원(옛 기록)은 그대로 넣는다.
+      const viaReport = formWithdrawalViaReport({ prevStatus: null, kind: w.kind, withdrawnAt: w.withdrawnAt });
+      if (viaReport) {
+        row.fail("withdrawnAt", "오늘 이후 퇴원일(퇴원 예약)은 가져오지 않습니다 — 원생을 등록한 뒤 원생 화면의 '퇴원보고서'에서 퇴원일을 정해 주세요.");
+        continue;
+      }
       if (status === "withdrawn" && !fields.withdrawnAt) {
         row.fail("withdrawnAt", "상태가 퇴원이면 퇴원일을 적어 주세요");
         continue;
@@ -306,6 +313,8 @@ const def: ImporterDef<Plan> = {
     if (plan.inserts.some((r) => statusCreationNeedsPermission(r.status, r.withdrawnAt)) && !(await canManageStudentStatusNow())) {
       return { error: STUDENT_STATUS_DENIED };
     }
+    // 계획 단계가 이미 거른다 — 적용 직전에 한 번 더(퇴원 예약은 퇴원보고서로만, 원장 2026-10-23).
+    if (plan.inserts.some((r) => r.scheduled)) return { error: SCHEDULE_VIA_REPORT };
     const adding = plan.inserts.filter((r) => r.status === "enrolled").length;
     const seat = await seatBlockReason(ctx.tenantId, adding);
     if (seat) return { error: seat };

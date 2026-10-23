@@ -79,8 +79,9 @@ function ReportLine({ report: r, labelOf }: { report: StudentReportItem; labelOf
         {r.subjects.length ? ` · ${r.subjects.map(labelOf).join(" · ")}` : ""}
       </WindowLink>
       <p className={META}>
-        {REPORT_STATUS[r.status] ?? "상태 확인 필요"} · 종료일 <span className="num">{r.effectiveDate}</span> · 담임{" "}
-        {r.teacherName ?? "—"}
+        {REPORT_STATUS[r.status] ?? "상태 확인 필요"} · 종료일 <span className="num">{r.effectiveDate}</span> ·{" "}
+        {/* 관리자 바로 처리(강사 작성 없이, 원장 2026-10-23) — 작성한 담임이 없다. */}
+        {r.direct ? "관리자 바로 처리" : <>담임 {r.teacherName ?? "—"}</>}
       </p>
     </div>
   );

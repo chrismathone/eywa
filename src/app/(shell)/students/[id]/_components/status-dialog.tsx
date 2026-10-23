@@ -23,6 +23,7 @@ import {
 } from "@/features/students/server/actions";
 import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-change-signal";
 import { ReasonFields } from "@/features/withdrawals/reason-fields";
+import { WithdrawalReportEntry, type ReportEntry } from "./withdrawal-report-entry";
 
 type Target = "withdrawn" | "on_hold" | "enrolled";
 
@@ -44,7 +45,7 @@ const FIELD_CONTROL = "border-border bg-card text-foreground w-full rounded-lg b
 
 function SubmitBtn({ target, label, disabled, pending }: { target: Target; label?: string; disabled?: boolean; pending: boolean }) {
   const fallback =
-    target === "withdrawn" ? "퇴원 처리" : target === "on_hold" ? "휴원 처리" : "재원 복구";
+    target === "withdrawn" ? "수강 종료" : target === "on_hold" ? "휴원 처리" : "재원 복구";
   return (
     <Button type="submit" disabled={pending || disabled}>
       {pending ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
@@ -60,6 +61,8 @@ export function StatusDialog({
   statusKey,
   initialTarget,
   openEnrollments,
+  reportEntry,
+  scheduledWithdrawal = null,
   onClose,
 }: {
   studentId: string;
@@ -75,6 +78,10 @@ export function StatusDialog({
   initialTarget: Target;
   /** 활성 수강 — 다이얼로그가 **과목으로 묶어** 보여 준다. 비면 종전처럼 목록 없이 학생 단위로 처리. */
   openEnrollments: OpenEnrollment[];
+  /** 퇴원보고서 입구 — 모든 과목을 끝내려 하면(=퇴원) 이 창에서 처리하지 않고 이리로 보낸다(원장 2026-10-23). */
+  reportEntry: ReportEntry | null;
+  /** 이번 변경 전에 걸린 퇴원 예약일 — 그날 처리되므로 모든 과목을 고르면 퇴원보고서 대신 그 사실을 말한다(예약 학생은 보고서를 시작할 수 없다). */
+  scheduledWithdrawal?: string | null;
   onClose: (changed: boolean) => void;
 }) {
   const subjects = useSubjectMaps();
@@ -94,8 +101,6 @@ export function StatusDialog({
     undefined,
   );
   const [target, setTarget] = useState<Target>(initialTarget);
-  // 퇴원일이 미래면 예약이다(서버 `changeStudentStatus`) — 저장 전에 그 사실을 한 줄로 알린다.
-  const [pickedDate, setPickedDate] = useState(() => kstToday());
 
   /**
    * 🔑 **선택 단위 = 과목**(원장 2026-09-16 *"과목 선택 가능하게 해달라한것 같은데, 수업 선택이 아니라"*).
@@ -112,7 +117,7 @@ export function StatusDialog({
 
   // 🔴 퇴원과 휴원은 **선택을 공유하지 않는다** — 뜻이 다르다(그만두는 과목 / 쉬는 과목).
   //    한 벌로 묶으면 탭을 바꾸는 것만으로 다른 쪽 결과가 바뀐다.
-  // 기본은 **전부 선택** = 지금 동작 보존(과목이 하나뿐이면 추가 클릭 없이 그대로 퇴원).
+  // 기본은 **전부 선택** — 그대로면 퇴원이라 창이 바로 퇴원보고서로 안내한다(일부 과목만 끝낼 때는 체크를 푼다).
   const [selected, setSelected] = useState<Set<string>>(() => new Set(allSubjects));
   /** 휴원 탭 기본값 — 대기인 수강이 있는 과목(없으면 전 과목). 규칙은 `initialHoldSubjects` 주석. */
   const [holdSelected, setHoldSelected] = useState<Set<string>>(() => initialHoldSubjects(groups));
@@ -152,12 +157,13 @@ export function StatusDialog({
   const isWithdraw = target === "withdrawn";
   const isHold = target === "on_hold";
   const isRestore = target === "enrolled";
-  // 퇴원 탭에서 일부만 골랐을 때만 부분 종료 경로 — 나머지는 전부 종전 changeStudentStatus.
+  // 🔴 '수강 종료' 탭(옛 '퇴원' 탭)은 **일부 과목 종료만** 한다 — 모든 과목을 고르면 퇴원이라 퇴원보고서로 보낸다(원장 2026-10-23
+  //    *"퇴원 보고서를 써야 퇴원처리가 가능하도록"*). 서버도 같은 판정으로 거절한다(`changeStudentStatus`·`lastCourseViaReport`).
   const isPartial = isWithdraw && plan.mode === "partial";
-  const blocked = (isWithdraw && plan.mode === "none") || (isHold && holdPlan.mode === "none");
-  // 🔴 "0개 선택"도 부분 종료 액션으로 보낸다 — 버튼은 비활성이지만 만에 하나 제출이 새어 나가도
-  //    서버가 "1개 이상 선택" 으로 거절할 뿐, **전체 퇴원으로 떨어지지 않는다**(가장 나쁜 오작동 차단).
-  const usePartialAction = isWithdraw && plan.mode !== "full";
+  const viaReport = isWithdraw && plan.mode === "full";
+  const blocked = (isWithdraw && plan.mode !== "partial") || (isHold && holdPlan.mode === "none");
+  // 🔴 이 탭의 제출은 늘 부분 종료 액션이다 — 만에 하나 버튼 잠금이 새어 나가도 퇴원으로 떨어지지 않는다(서버가 마지막 반을 거절).
+  const usePartialAction = isWithdraw;
   // 휴원도 같은 규약 — 전부 선택만 학생 상태를 바꾸고, 나머지(부분·해제·0개)는 수강 단위 액션으로.
   const useHoldAction = isHold && holdPlan.mode !== "full";
   const activeState = usePartialAction ? partialState : useHoldAction ? holdState : state;
@@ -201,7 +207,7 @@ export function StatusDialog({
             활성화 되어있지? 알아서 비활성화"*). 재원인 학생을 '재원 복구'로 보내면 할 일이 없는 저장이 되고,
             휴원인 학생을 '휴원'으로, 퇴원인 학생을 '퇴원'으로 보내는 것도 같다. 판정은 원값(statusKey)으로. */}
         <div className="border-border mb-4 flex gap-1 rounded-full border p-1">
-          <ChipButton current={target} value="withdrawn" onClick={setTarget} label="퇴원" disabled={statusKey === "withdrawn"} />
+          <ChipButton current={target} value="withdrawn" onClick={setTarget} label="수강 종료" disabled={statusKey === "withdrawn"} />
           <ChipButton current={target} value="on_hold" onClick={setTarget} label="휴원" disabled={statusKey === "on_hold"} />
           <ChipButton current={target} value="enrolled" onClick={setTarget} label="재원 복구" disabled={statusKey === "enrolled"} />
         </div>
@@ -228,41 +234,40 @@ export function StatusDialog({
                 subjects={subjects}
               />
 
-              <div className="space-y-1.5">
-                <label className="text-foreground block text-sm font-medium">
-                  {isPartial ? "종료일" : "퇴원일"}
-                </label>
-                <input
-                  name="date"
-                  type="date"
-                  required
-                  defaultValue={kstToday()}
-                  onChange={(e) => setPickedDate(e.target.value)}
-                  className="border-border bg-card text-foreground num w-full rounded-lg border px-3 py-2 text-sm"
-                />
-                {!isPartial && pickedDate > kstToday() ? (
-                  <p className="text-muted-foreground text-sm">
-                    퇴원 예약입니다 — 퇴원일 전날까지는 재원으로 남고, 퇴원일에 자동으로 퇴원 처리됩니다.
-                  </p>
-                ) : null}
-              </div>
-              {/* 대분류 · 세부(선택) · 메모(기타는 필수) — 퇴원은 students.withdrawal_metadata, 부분 종료는 고른 수강 행
-                  (`enrollments.withdrawal_detail`·`withdrawal_memo`, 0367a)에 남는다(원장 2026-10-15 사유 2단계). */}
-              <ReasonFields
-                reasonLabel={isPartial ? "종료 사유" : "퇴원 사유"}
-                initialReason={null}
-                memoPlaceholder="배경 정보 (선택)"
-                labelClassName={FIELD_LABEL}
-                controlClassName={FIELD_CONTROL}
-              />
+              {viaReport ? null : (
+                <>
+                  <div className="space-y-1.5">
+                    <label className="text-foreground block text-sm font-medium">종료일</label>
+                    <input
+                      name="date"
+                      type="date"
+                      required
+                      defaultValue={kstToday()}
+                      className="border-border bg-card text-foreground num w-full rounded-lg border px-3 py-2 text-sm"
+                    />
+                  </div>
+                  {/* 대분류 · 세부(선택) · 메모(기타는 필수) — 고른 수강 행(`enrollments.withdrawal_detail`·`withdrawal_memo`, 0367a)에
+                      남는다(원장 2026-10-15 사유 2단계). */}
+                  <ReasonFields
+                    reasonLabel="종료 사유"
+                    initialReason={null}
+                    memoPlaceholder="배경 정보 (선택)"
+                    labelClassName={FIELD_LABEL}
+                    controlClassName={FIELD_CONTROL}
+                  />
+                </>
+              )}
               {/* 결과를 **누르기 전에** 말한다 — 누른 뒤에 알게 되면 지금과 같은 말싸움이 난다. */}
               <p
                 className={`text-xs ${
                   isPartial ? "text-amber font-medium" : blocked ? "text-danger" : "text-muted-foreground"
                 }`}
               >
-                {plan.notice}
+                {viaReport && scheduledWithdrawal
+                  ? `퇴원 예약(${scheduledWithdrawal})이 걸려 있어 그날 퇴원 처리됩니다. 그 전에 일부 과목만 끝내려면 끝낼 과목만 골라 주세요.`
+                  : plan.notice}
               </p>
+              {viaReport && reportEntry && !scheduledWithdrawal ? <WithdrawalReportEntry entry={reportEntry} /> : null}
             </>
           ) : isHold ? (
             <>
@@ -321,12 +326,15 @@ export function StatusDialog({
             <Button type="button" variant="ghost" onClick={() => onClose(false)}>
               취소
             </Button>
-            <SubmitBtn
-              target={target}
-              label={isWithdraw ? plan.buttonLabel : isHold ? holdPlan.buttonLabel : undefined}
-              disabled={blocked}
-              pending={statusPending || partialPending || holdPending}
-            />
+            {/* 퇴원(모든 과목)은 이 창의 저장 버튼이 없다 — 위 '퇴원보고서' 입구로. */}
+            {viaReport ? null : (
+              <SubmitBtn
+                target={target}
+                label={isWithdraw ? plan.buttonLabel : isHold ? holdPlan.buttonLabel : undefined}
+                disabled={blocked}
+                pending={statusPending || partialPending || holdPending}
+              />
+            )}
           </footer>
         </form>
       </div>

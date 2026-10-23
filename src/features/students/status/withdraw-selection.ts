@@ -7,7 +7,8 @@
  * *"활성 수강 등록은 모두 종료되며…"* 한 줄뿐이라 **어느 반이 닫히는지 누르기 전엔 알 수 없었다.**
  *
  * 규칙(원장 확정):
- *  · 전부 선택 = 지금과 동일한 **학생 퇴원**(students.status='withdrawn' + 전 수강 종료 + 퇴원관리 노출).
+ *  · 전부 선택 = **학생 퇴원** — 🔴 2026-10-23부터 이 창에서 하지 않는다(원장 *"퇴원 보고서를 써야 퇴원처리가 가능하도록"*).
+ *    안내문이 퇴원보고서로 보내고 창은 저장 버튼을 잠근다(서버도 같은 판정으로 거절 — `changeStudentStatus`·`lastCourseViaReport`).
  *  · 일부만 선택 = **학생 퇴원이 아니다.** 고른 수강만 종료하고 학생은 재원으로 남는다.
  *  · 0개 선택 = 진행 불가(무엇을 하겠다는 건지 알 수 없다).
  *
@@ -16,13 +17,14 @@
  *    `total`은 수강 **과목** 수, `selectedLabels`는 고른 **과목 라벨**이다([`subject-selection.ts`](./subject-selection.ts)).
  *    반 단위로 세웠더니 수학만 세 반 다니는 학생이 한 과목인데 세 줄로 보였다.
  */
+import { WITHDRAWAL_VIA_REPORT } from "@/features/withdrawals/via-report";
 
 export type EndSelectionMode =
   /** 아무것도 안 고름 — 진행 불가. */
   | "none"
   /** 일부만 — 그 수강만 종료, 학생은 재원 유지. */
   | "partial"
-  /** 전부(또는 활성 수강 0개) — 학생 퇴원. */
+  /** 전부(또는 활성 수강 0개) — 학생 퇴원 = 퇴원보고서로(이 창에서는 진행 불가). */
   | "full";
 
 export type EndSelectionPlan = {
@@ -39,12 +41,12 @@ export type EndSelectionPlan = {
  *                       호출부에서 이미 한글 라벨로 만든 값을 넘길 것(raw enum 금지).
  */
 export function describeEndSelection(total: number, selectedLabels: string[]): EndSelectionPlan {
-  // 활성 수강이 아예 없는 학생 — 고를 것이 없으니 종전과 같은 단순 퇴원.
+  // 활성 수강이 아예 없는 학생 — 고를 것이 없다. 퇴원은 퇴원보고서의 바로 처리로.
   if (total <= 0) {
     return {
       mode: "full",
-      buttonLabel: "퇴원 처리",
-      notice: "종료할 활성 수강이 없습니다. 학생만 퇴원 처리되고 퇴원관리 페이지에 노출됩니다.",
+      buttonLabel: "퇴원보고서로 진행",
+      notice: `종료할 수강이 없습니다. ${WITHDRAWAL_VIA_REPORT}`,
     };
   }
 
@@ -61,8 +63,8 @@ export function describeEndSelection(total: number, selectedLabels: string[]): E
   if (selected >= total) {
     return {
       mode: "full",
-      buttonLabel: "퇴원 처리",
-      notice: `수강 중인 ${total}과목이 모두 종료되고, 퇴원관리 페이지에 노출됩니다.`,
+      buttonLabel: "퇴원보고서로 진행",
+      notice: `수강 중인 ${total}과목을 모두 끝내면 퇴원입니다. ${WITHDRAWAL_VIA_REPORT}`,
     };
   }
 
