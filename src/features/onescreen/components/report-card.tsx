@@ -361,6 +361,21 @@ export function ReportCard({
   // 영어 템플릿 글은 문단이 여럿이라 2칸으로 쪼개면 템플릿이 망가진다 → 영어 행은 늘 한 칸.
   // 시범 대상은 단일 문단 고정(서버도 A로 쓴다 — math-report-pilot.ts).
   const para = noticeMode === "B" && !isEnglishRow && !pilot;
+  // 특이사항 칸 — 수학 보고서 시범에선 '사랑의 한마디'라 보고서 끝에 붙는다. 그래서 칸도 오른쪽 열 **맨 아래**(보고서 글·학습 추세 뒤,
+  // 발송 버튼 바로 위)에 둔다(원장 2026-10-23 *"사랑의 한마디를 더 밑으로 내려달라고"*). 그 밖의 행은 종전처럼 맨 위.
+  const noteField = (
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={`teacher-note-${student.id}`} className="micro text-text-faint">{pilot ? t("os.card.notePilot") : t("os.card.note")}</label>
+      <textarea
+        id={`teacher-note-${student.id}`}
+        rows={3}
+        value={cardEval.note}
+        onChange={(e) => onNote(e.target.value)}
+        placeholder={pilot ? t("os.card.notePhPilot") : t("os.card.notePh")}
+        className={`${TEXTAREA_AUTOSIZE} border-line focus:border-primary min-h-20 rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none`}
+      />
+    </div>
+  );
   const paras = splitComment(rep.draft);
 
   return (
@@ -685,17 +700,7 @@ export function ReportCard({
           disabled={locked}
           className="contents [&_input:disabled]:opacity-50 [&_textarea:disabled]:opacity-50 [&_select:disabled]:opacity-50 [&_button:disabled]:opacity-50 [&:disabled_*]:cursor-not-allowed"
         >
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor={`teacher-note-${student.id}`} className="micro text-text-faint">{pilot ? t("os.card.notePilot") : t("os.card.note")}</label>
-          <textarea
-            id={`teacher-note-${student.id}`}
-            rows={3}
-            value={cardEval.note}
-            onChange={(e) => onNote(e.target.value)}
-            placeholder={pilot ? t("os.card.notePhPilot") : t("os.card.notePh")}
-            className={`${TEXTAREA_AUTOSIZE} border-line focus:border-primary min-h-20 rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none`}
-          />
-        </div>
+        {pilot ? null : noteField}
         <div className="flex flex-1 flex-col gap-1.5">
           <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
             <div className="flex flex-wrap items-center gap-1.5">
@@ -827,6 +832,7 @@ export function ReportCard({
             />
           </div>
         )}
+        {pilot ? noteField : null}
         </fieldset>
 
         {/* ClassNote 자동 발송 — 저장 + 큐 적재(로컬 워커가 자동 게시). 상태는 배지로 표시.
