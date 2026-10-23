@@ -35,8 +35,13 @@ export type VideoHomeworkLedgerRow = VideoHomeworkRosterRow & {
   tracked: boolean;
   editable: boolean;
   canAssignVideos?: boolean;
-  /** 숙제 당일~14일 뒤의 업로드 완료 영상 중 수동·자동 배정되지 않은 영상이 남아 있는가. */
+  /** 숙제 당일~14일 뒤의 업로드 완료 영상 중 수동·자동 배정되지 않은 영상이 남아 있는가('영상 배정' 버튼). */
   hasAssignableVideos?: boolean;
+  /**
+   * '영상 배정 필요함'(상태 필터) — 붙일 빈 숙제가 있는 미배정 영상이 이 줄의 칸에 갈 수 있다. 미배정 알림·할 일과 같은 판정(`fillablePairs` —
+   * 원장 2026-10-23 *"숙제가 없는데도 미배정 영상이 남아있으면 그건 알림 오류"* → 필터도 같게). 버튼보다 좁다. 없으면(옛 응답) 버튼 판정으로 거른다.
+   */
+  needsVideoAssignment?: boolean;
   /** AI 참고 메모 대상 줄(지점 스위치 켜짐 · 수학 반, 서버가 정한다) — 재생 창이 메모를 불러오는 동안에도 메모 칸을 세운다. */
   aiReview?: true;
   /** 보고서 없이 따로 낸 숙제의 날짜(원장 2026-10-13) — 그 칸에 '따로 낸 숙제' 표시와 취소 메뉴를 단다. */

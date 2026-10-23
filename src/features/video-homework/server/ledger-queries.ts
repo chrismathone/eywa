@@ -14,7 +14,7 @@ import { homeworkVideoSource } from "./video-source";
 import { loadVideoAssignmentCandidates, unassignedVideoPairs } from "./assignment-availability";
 import { loadReviewPoints } from "@/features/video-review/server/points";
 import { videoReviewEnabled } from "@/features/video-review/server/rows";
-import { idleLessonDates, pendingVideoPairs, splitIdlePairs } from "../idle-rows";
+import { fillablePairs, idleLessonDates, pendingVideoPairs, splitIdlePairs } from "../idle-rows";
 import { loadBlankLessonRecords } from "./blank-lessons";
 
 type DbMark = { class_id: string; student_id: string; check_date: string; homework_date: string | null;
@@ -25,6 +25,8 @@ type DbVideo = { id: string; student_id: string; post_id: number | null; posted_
 type DbLedgerClass = LedgerClass & { teacher: { display_name: string; tenant_id: string } | null };
 export type VideoHomeworkLedgerBaseRow = VideoHomeworkRosterRow & {
   assignedDates: string[]; teacherName: string | null; hasAssignableVideos: boolean;
+  /** '영상 배정 필요함' — 붙일 빈 숙제가 있는 미배정 영상이 이 줄의 칸에 갈 수 있다(알림·할 일과 같은 판정 `fillablePairs`, 버튼이 있는 줄만). */
+  needsVideoAssignment: boolean;
   /** 보고서 없이 따로 낸 숙제의 날짜(extra-issues.ts) — 조회 기간 안의 것만. 칸의 '따로 낸 숙제' 표시와 취소에 쓴다. */
   extraDates: string[];
   /** 반려한 숙제(숙제일 → 반려 시각, rejections.ts) — 칸을 짜는 쪽(화면)이 같은 칸을 세우게. */
@@ -188,7 +190,8 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
         .in("id", chunk).order("id").range(from, to)),
     // 영상은 짝 범위 끝 + 2주까지 읽는다 — 범위 끝 무렵 숙제를 골라 그 뒤에 올린 영상이 있어야, 지난 기간을 볼 때도 같은 파일의 사본을
     // 지금 보기와 똑같이 뺀다. 더 늦은 영상은 화면 칸에 닿지 못한다(칸은 숙제일 + 2주까지만 영상을 받는다).
-    loadClassVideos(tenantId, videoStudents, wideFrom, addDays(wideTo, VIDEO_MATCH_WINDOW_DAYS)),
+    // 반을 모르는 영상도 읽는다 — 회차·줄·칸에는 안 쓰인다(반이 정해진 영상만 센다 · 화면에도 안 내린다). '영상 배정 필요함'(`fillablePairs`)만 알림과 같게.
+    loadClassVideos(tenantId, videoStudents, wideFrom, addDays(wideTo, VIDEO_MATCH_WINDOW_DAYS), true),
     loadBlankFacts(tenantId, { classDates, ownDates: new Map([...ownDates].filter(([pair]) => shownPairs.has(pair))), enrollments }),
     loadVideoAssignmentCandidates(tenantId, assignmentRows),
     // 영상 설명 AI 참고 메모 스위치(지점) — 꺼졌으면 평점도, 재생 창의 메모 칸 자리도 없다(기능 스위치 = 흔적 없이).
@@ -233,18 +236,21 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
   // 회차가 있는 반의 줄도 숙제 없이 올린 영상(자동으로 칸에 안 붙는다)이 안 붙어 있으면 배정할 길을 연다 — 숙제없음 수업일에 붙인다(③).
   // 반에 숙제가 있고 본인은 0건인 학생은 붙일 숙제 칸이 없어 종전 버튼 판정으로는 막혀 있었다(적대적 리뷰 2026-10-22).
   const freePending = pending(true);
+  // '영상 배정 필요함' = 붙일 빈 숙제가 있는 미배정 영상의 그 칸 줄(미배정 알림·할 일과 같은 판정 — 원장 2026-10-23).
+  const needs = videos === null ? null : fillablePairs({ videos, rounds: assignmentRounds, fromDate, toDate, subjectOf });
   const ownedFree = ownedRoster.filter((pair) => freePending.has(`${pair.classId}:${pair.studentId}`));
   const rows = [...pairs, ...ownedFree, ...idle.free].flatMap((pair): VideoHomeworkLedgerBaseRow[] => {
     const cls = byClass.get(pair.classId);
     const student = byStudent.get(pair.studentId);
+    const key = `${pair.classId}:${pair.studentId}`;
+    // 숙제 0건 반의 줄은 붙지 않은 영상 때문에 선 줄이다 — 배정 창에서 숙제없음 수업일에 붙이거나 집계에서 뺀다(③).
+    const hasAssignableVideos = freeKeys.has(key) || freePending.has(key) || (assignablePairs?.has(key) ?? false);
     return cls && student ? [{ classId: pair.classId, studentId: pair.studentId, className: cls.class_name, subject: cls.subject,
       // AI 참고 메모 대상 줄(스위치 켜짐 · 수학 반 — 분석은 수학 영상만) — 재생 창이 메모를 불러오는 동안에도 칸을 세워 둔다(ledger-video-dialog).
       ...(reviewOn && cls.subject === "math" ? { aiReview: true as const } : {}),
       teacherName: cls.teacher?.tenant_id === tenantId ? cls.teacher.display_name.trim() || null : null,
       studentName: student.name, school: student.school, grade: student.grade,
-      // 숙제 0건 반의 줄은 붙지 않은 영상 때문에 선 줄이다 — 배정 창에서 숙제없음 수업일에 붙이거나 집계에서 뺀다(③).
-      hasAssignableVideos: freeKeys.has(`${pair.classId}:${pair.studentId}`) || freePending.has(`${pair.classId}:${pair.studentId}`)
-        || (assignablePairs?.has(`${pair.classId}:${pair.studentId}`) ?? false),
+      hasAssignableVideos, needsVideoAssignment: hasAssignableVideos && (needs?.has(key) ?? false),
       extraDates: [...(extraByPair.get(`${pair.classId}:${pair.studentId}`) ?? [])].sort(),
       ...(rejectedByPair.has(`${pair.classId}:${pair.studentId}`) ? { rejected: rejectedByPair.get(`${pair.classId}:${pair.studentId}`) } : {}),
       ...(keptByPair.has(`${pair.classId}:${pair.studentId}`) ? { kept: [...keptByPair.get(`${pair.classId}:${pair.studentId}`)!].sort() } : {}),

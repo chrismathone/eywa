@@ -120,8 +120,11 @@ describe("숙제 0건 반 — 줄(①)은 회차 없이 · 검색 명단(②)은
     // 다른 반은 그대로
     expect(groupLedgerRows(all, freeRounds).find((g) => g.classId === "a")).toMatchObject({ roundCount: 3, blankColumns: 0, idle: false });
   });
-  it("'영상 배정 필요함' 필터에 걸린다 · CSV에는 회차 칸 없이 0회로", () => {
+  // 원장 2026-10-23 — '영상 배정 필요함'은 미배정 알림과 같게 붙일 빈 숙제가 있을 때만(서버 `needsVideoAssignment`). 숙제 0건 반 줄은 버튼만 남는다.
+  it("'영상 배정 필요함'은 서버가 정한 needsVideoAssignment를 따른다(옛 응답은 버튼 판정) · CSV에는 회차 칸 없이 0회로", () => {
     expect(filterLedgerRows(all, freeRounds, { ...DEFAULT_LEDGER_FILTERS, status: "assign" })).toEqual([free]);
+    expect(filterLedgerRows([...rows, { ...free, needsVideoAssignment: false }], freeRounds, { ...DEFAULT_LEDGER_FILTERS, status: "assign" })).toEqual([]);
+    expect(filterLedgerRows([{ ...rows[0], hasAssignableVideos: true, needsVideoAssignment: true }], rounds, { ...DEFAULT_LEDGER_FILTERS, status: "assign" })).toHaveLength(1);
     const group = groupLedgerRows([free], freeRounds)[0]!;
     expect(ledgerCsv([group], freeRounds)).toContain('"중등M 개별 BS3G","수학","이희재","성광중","중2","0","0","0"');
     expect(ledgerCsv([group], freeRounds)).not.toContain("1회");
