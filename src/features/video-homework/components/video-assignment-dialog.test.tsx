@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 const m = vi.hoisted(() => ({ options: vi.fn(), save: vi.fn(), refresh: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: m.refresh }), usePathname: () => "/lesson-reports/video-homework" }));
@@ -52,6 +52,21 @@ it("칸에서 연 배정 창은 그 칸의 숙제를 먼저 골라 둔다 — �
   cleanup();
   render(<VideoAssignmentDialog row={row} initialDate="2026-09-01" fromDate="2026-10-01" toDate="2026-10-31" onClose={vi.fn()} />);
   expect(await screen.findByRole("combobox", { name: "배정할 영상 숙제" })).toHaveValue("2026-10-01");
+});
+// 원장 2026-10-23 — 이영준: 최근 숙제(10/20)를 먼저 골라 이미 붙은 영상 하나만 보여 "다 배정됐다"로 읽혔다. 안 붙은 영상은 10/13 숙제에만 들어간다.
+it("아직 안 붙은 영상이 들어갈 숙제를 먼저 골라 두고, 안 붙은 영상을 목록 맨 위에 둔다", async () => {
+  const original = await m.options();
+  const base = { ...original.videos[0], className: "수학반", classId: "math" };
+  m.options.mockResolvedValue({ ...original, dates: ["2026-10-20", "2026-10-13"], videos: [
+    { ...base, id: "late", homeworkDate: "2026-10-20", postedAt: "2026-10-22T14:10:00Z" },
+    { ...base, id: "first", homeworkDate: "2026-10-13", postedAt: "2026-10-15T14:13:00Z" },
+    { ...base, id: "loose", homeworkDate: null, free: true, note: "10월13일 2단원", postedAt: "2026-10-15T14:16:00Z" },
+  ] });
+  render(<VideoAssignmentDialog row={{ ...row, assignedDates: ["2026-10-13", "2026-10-20"] }} fromDate="2026-10-01" toDate="2026-10-31" onClose={vi.fn()} />);
+  expect(await screen.findByRole("combobox", { name: "배정할 영상 숙제" })).toHaveValue("2026-10-13");
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole("combobox", { name: "영상 선택" }));
+  expect(within(await screen.findByRole("listbox")).getAllByRole("option").map(option => option.textContent)[0]).toMatch(/숙제 없이 올림.*10월13일 2단원/);
 });
 it("저장 충돌은 창을 닫지 않고 이유를 보여 준다", async () => {
   m.save.mockResolvedValue({ ok: false, error: "다른 곳에서 변경됐습니다." }); const close = vi.fn();

@@ -91,6 +91,8 @@ export type VideoArrival = {
   reviewPoints?: number;
   /** 학생이 올리며 적은 메모(`route.note`, 올리기 사이트) — `/v`가 "낸 영상"을 보일 때 쓴다(원장 2026-10-22). 싣는 로더만 있다. */
   note?: string | null;
+  /** 영상에 적힌 과목(ClassNote 보드에서 온 값) — 반을 모를 때 다른 과목 판정(`isOtherSubjectVideo`)에 쓴다. 싣는 로더만 있다. */
+  subject?: string | null;
 };
 
 export function isVideoHomeworkDate(value: string): boolean {

@@ -2,6 +2,10 @@ import { addDays, kstDateOf } from "@/lib/date-kst";
 import { homeworkDue } from "./due";
 import { buildLedgerRounds, roundPairKey, VIDEO_MATCH_WINDOW_DAYS, type LedgerRound } from "./rounds";
 import type { VideoArrival, VideoHomeworkMark } from "./types";
+import { isOtherSubjectVideo, isVideoAssignableToDate } from "./video-assignment";
+
+/** 반 → 과목(모르면 null) — 빈 숙제를 같은 과목 반에서만 찾는다(`fillableCells`). */
+export type ClassSubjectOf = (classId: string) => string | null | undefined;
 
 export type AssignedHomework = { classId: string; studentId: string; date: string; /** 반려 시각(장부와 같은 칸이 서게) */ rejectedAt?: string;
   /** 검사 기록 칸에서 옮겨 남긴 숙제(keep-round.ts) — 판정하지 않는다. 그 칸이 받은 영상만 미배정에서 뺀다. */ kept?: true;
@@ -14,7 +18,7 @@ export type AutoOutcome = { classId: string; studentId: string; homeworkDate: st
  * 같은 칸을 짜서 그 칸이 받은 영상을 미배정에서만 뺀다(장부와 알림이 같은 말을 하게 — 적대적 리뷰 2026-10-13). 기록은 정식 칸의 영상 짝을 바꾸지 않는다.
  */
 export function videoHomeworkOutcomes(assignments: AssignedHomework[], videos: VideoArrival[], today: string, fromDate: string,
-  marks: readonly VideoHomeworkMark[] = []) {
+  marks: readonly VideoHomeworkMark[] = [], subjectOf?: ClassSubjectOf) {
   const rows = new Map<string, { classId: string; studentId: string; assignedDates: string[]; tracked: boolean; rejected: Record<string, string>; kept: string[]; dues: Record<string, string> }>();
   const rowOf = (pair: { classId: string; studentId: string }) => {
     const key = roundPairKey(pair);
@@ -49,7 +53,37 @@ export function videoHomeworkOutcomes(assignments: AssignedHomework[], videos: V
     const day = kstDateOf(video.postedAt)!;
     return day < today && day >= addDays(today, -14);
   });
-  return { outcomes, unmatched };
+  // 알림·할 일은 그중 붙일 빈 숙제가 있는 영상만(`fillableCells`). 나머지(`unmatched` − `fillable`)는 열린 할 일을 '취소'로 닫는 데 쓴다.
+  const cells = fillableCells(unmatched, rounds, subjectOf);
+  return { outcomes, unmatched, fillable: unmatched.filter(video => cells.has(video.id)) };
+}
+
+/**
+ * 미배정 영상마다 **붙일 빈 숙제 칸**(반:학생 목록) — 빈 칸이 없는 영상은 지도에 없다. 원장 2026-10-23 *"숙제가 없는데도 미배정 영상이
+ * 남아있으면 그건 알림 오류"*(이영준 10/15: 숙제 넷이 영상으로 다 찼는데 '숙제 없이 올린' 둘째 영상 때문에 할 일이 섰다). 미배정 알림 · '미배정 영상'
+ * 할 일이 이 판정을 쓴다. 장부의 '영상 배정' 버튼·'영상 배정 필요함'(붙일 수 있는가)은 종전 판정 그대로 — 숙제가 다 찬 줄의 숙제 없이 올린 영상 ·
+ * 숙제 0건 반의 영상도 붙일 수는 있다(2026-10-22 결정).
+ * 빈 칸 = 같은 학생의 숙제 칸 중 영상이 안 붙었고 손으로 찍은 완료도 아닌 칸(미확인·미수행 — 옮겨 남긴 숙제·검사 기록 칸 포함),
+ * 그 영상을 올린 날이 숙제일부터 14일 안(배정 창과 같은 `isVideoAssignableToDate`). 확실히 다른 과목 반의 칸은 빼고(배정 창 목록 · '영상 배정'
+ * 버튼과 같은 `isOtherSubjectVideo` — 반의 과목, 반을 모르면 영상에 적힌 과목), 과목을 모르면 따지지 않는다.
+ */
+export function fillableCells(videos: readonly VideoArrival[], rounds: ReadonlyMap<string, readonly LedgerRound[]>,
+  subjectOf: ClassSubjectOf = () => null): Map<string, string[]> {
+  const open = new Map<string, { pair: string; classId: string; dates: string[] }[]>();
+  for (const [pair, list] of rounds) {
+    const dates = list.flatMap(round => round.homeworkDate && !round.videoId && round.status !== "submitted" ? [round.homeworkDate] : []);
+    if (!dates.length) continue;
+    const [classId, studentId] = pair.split(":");
+    open.set(studentId, [...(open.get(studentId) ?? []), { pair, classId, dates }]);
+  }
+  const cells = new Map<string, string[]>();
+  for (const video of videos) {
+    const own = { classSubject: video.classId ? subjectOf(video.classId) : null, subject: video.subject };
+    const pairs = (open.get(video.studentId) ?? []).filter(cell => !isOtherSubjectVideo(own, subjectOf(cell.classId))
+      && cell.dates.some(date => isVideoAssignableToDate(video.postedAt, date))).map(cell => cell.pair);
+    if (pairs.length) cells.set(video.id, pairs);
+  }
+  return cells;
 }
 
 /**

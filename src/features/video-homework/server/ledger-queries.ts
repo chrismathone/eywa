@@ -21,7 +21,7 @@ type DbMark = { class_id: string; student_id: string; check_date: string; homewo
   submitted_date: string | null; status: string; updated_at: string | null };
 type DbVideo = { id: string; student_id: string; post_id: number | null; posted_at: string; created_at: string | null; uploaded_at: string | null;
   md5: string | null; bytes: number | string | null; status: string; drive_file_id: string | null;
-  class_id: string | null; homework_date: string | null; manual_assignment?: string | null; excluded?: string | null; free?: string | null };
+  class_id: string | null; homework_date: string | null; manual_assignment?: string | null; excluded?: string | null; free?: string | null; subject?: string | null };
 type DbLedgerClass = LedgerClass & { teacher: { display_name: string; tenant_id: string } | null };
 export type VideoHomeworkLedgerBaseRow = VideoHomeworkRosterRow & {
   assignedDates: string[]; teacherName: string | null; hasAssignableVideos: boolean;
@@ -47,7 +47,7 @@ export async function loadClassVideos(tenantId: string, studentIds: string[], fr
     const rows = await fetchAllPagedInChunks<DbVideo>(studentIds, (chunk, from, to) => {
       const query = db
       .from(source)
-      .select("id,student_id,post_id,posted_at,created_at,uploaded_at,md5,bytes,status,drive_file_id,class_id:route->>classId,homework_date:route->>homeworkDate,manual_assignment:route->>manualAssignment,excluded:route->>excluded,free:route->>free")
+      .select("id,student_id,post_id,posted_at,created_at,uploaded_at,md5,bytes,status,drive_file_id,subject,class_id:route->>classId,homework_date:route->>homeworkDate,manual_assignment:route->>manualAssignment,excluded:route->>excluded,free:route->>free")
       .eq("tenant_id", tenantId).in("student_id", chunk)
       .or(`and(posted_at.gte.${fromDate}T00:00:00+09:00,posted_at.lt.${addDays(toDate, 1)}T00:00:00+09:00),and(route->>manualAssignment.eq.true,route->>homeworkDate.gte.${fromDate},route->>homeworkDate.lte.${toDate})`)
       .order("id", { ascending: true });
@@ -59,7 +59,7 @@ export async function loadClassVideos(tenantId: string, studentIds: string[], fr
       const homeworkDate = row.homework_date || null;
       const links = row.status === "uploaded" ? homeworkVideoLinks(row.drive_file_id) : null;
       return { id: row.id, studentId: row.student_id, classId: row.class_id, postedAt: row.posted_at, homeworkDate, fingerprint: videoFingerprint(row.md5, row.bytes),
-        manuallyAssigned: row.manual_assignment === "true", free: row.free === "true",
+        manuallyAssigned: row.manual_assignment === "true", free: row.free === "true", subject: row.subject ?? null,
         playback: links ? { ...links, uploadedAt: row.uploaded_at } : null,
         createdAt: row.created_at,
         arrivedAt: videoArrivedAt({ createdAt: row.created_at, postedAt: row.posted_at, uploadedAt: row.uploaded_at, fromClassnote: row.post_id != null, picked: !!homeworkDate }) };

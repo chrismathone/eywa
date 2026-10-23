@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
-import { videoHomeworkOutcomes } from "./auto-outcomes";
+import { fillableCells, videoHomeworkOutcomes } from "./auto-outcomes";
+import type { LedgerRound } from "./rounds";
 import type { VideoArrival } from "./types";
 
 const assignments = ["2026-10-01", "2026-10-08"].map(date => ({ classId: "math", studentId: "s1", date }));
@@ -71,6 +72,30 @@ it("마감을 고른 숙제는 그 날까지 미확인, 다음 날부터 미제�
   expect(at("2026-10-16")).toEqual(["missing", "unchecked"]);
   expect(at("2026-10-20")).toEqual(["missing", "unchecked"]);
   expect(at("2026-10-21")).toEqual(["missing", "missing"]);
+});
+// 원장 2026-10-23 *"숙제가 없는데도 미배정 영상이 남아있으면 그건 알림 오류"* — 이영준 10/15 '숙제 없이 올린' 둘째 영상.
+it("🔴 숙제가 다 영상으로 찼으면 남은 영상은 미배정이어도 알림 대상(fillable)이 아니다", () => {
+  const chosen = [video("a", "2026-10-02", { homeworkDate: "2026-10-01" }), video("b", "2026-10-09", { homeworkDate: "2026-10-08" })];
+  const full = run([...chosen, video("free", "2026-10-10", { free: true })]);
+  expect(full.unmatched.map(v => v.id)).toEqual(["free"]);
+  expect(full.fillable).toEqual([]);
+  // 빈 숙제(10/08 미확인)가 있으면 알린다
+  expect(run([chosen[0], video("free", "2026-10-10", { free: true })]).fillable.map(v => v.id)).toEqual(["free"]);
+  // 손으로 찍은 완료(영상 없음)는 끝난 숙제다
+  const manual = { classId: "math", studentId: "s1", checkDate: "2026-10-09", homeworkDate: "2026-10-08", status: "submitted" as const };
+  expect(videoHomeworkOutcomes(assignments, [chosen[0], video("free", "2026-10-10", { free: true })], "2026-10-12", "2026-09-01", [manual]).fillable).toEqual([]);
+  // 숙제일보다 먼저 올렸거나 14일을 넘긴 영상은 그 칸에 못 간다
+  expect(run([video("early", "2026-09-30", { free: true })]).fillable).toEqual([]);
+});
+it("🔴 빈 숙제는 같은 과목 반에서만 찾는다 — 반을 모르는 영상은 과목을 따지지 않는다", () => {
+  const eng = [{ classId: "eng", studentId: "s1", date: "2026-10-08" }];
+  const subjectOf = (classId: string) => ({ math: "math", eng: "english" })[classId];
+  const at = (v: VideoArrival) => videoHomeworkOutcomes(eng, [v], "2026-10-12", "2026-09-01", [], subjectOf).fillable.map(x => x.id);
+  expect(at(video("m", "2026-10-10", { free: true }))).toEqual([]);
+  expect(at(video("e", "2026-10-10", { classId: "eng", free: true }))).toEqual(["e"]);
+  expect(at(video("x", "2026-10-10", { classId: null }))).toEqual(["x"]);
+  expect(fillableCells([video("x", "2026-10-10", { classId: null })],
+    new Map([["eng:s1", [{ homeworkDate: "2026-10-08", videoId: null, status: "unchecked" } as LedgerRound]]]), subjectOf)).toEqual(new Map([["x", ["eng:s1"]]]));
 });
 it("🔴 옮겨 남긴 숙제에 둘째 영상을 골라 내도 미배정 알림에 서지 않는다(한 숙제에 여러 개 — 적대적 리뷰 2026-10-21)", () => {
   const kept = { classId: "math", studentId: "s1", date: "2026-09-24", kept: true as const };
