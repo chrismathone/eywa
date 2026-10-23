@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { originalClassName } from "@/features/classes/closed-name";
 import type { ReportSettings } from "@/features/owner/settings-types";
 import type { JjReportSnapshot } from "@/features/ijw/snapshot";
 import { parentStudentName } from "@/features/report-templates/student-name";
@@ -179,7 +180,8 @@ export function ParentReportCard({
           // **같은 제목 함수**(과목 보고서 · [특강] · 보강 접미사, report-title.ts)를 붙인다. 머리 표가 이름과 이어 그린다.
           title={reportTitleText(rpt.title, report)}
           date={report.reportDate}
-          className={report.className ?? null}
+          // 종강 표식 `(~26.09.29)`은 학원 내부 보관 꼬리라 학부모 문서엔 뗀다(원장 2026-10-23 *"반에 날짜는 왜 들어간거임 빼고"*) — 규칙은 반 이름 쪽 단일 소스.
+          className={report.className ? originalClassName(report.className) : null}
           teacherName={report.teacherName}
           sections={pilotSplit.main}
           note={pilotSplit.note}

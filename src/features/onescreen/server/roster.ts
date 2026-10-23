@@ -1,4 +1,5 @@
 import "server-only";
+import { stripTextbookPages } from "../textbook-carry";
 import { DEFAULT_DISPLAY_OPTIONS, readDisplayOptions, type DisplayOptions } from "../display-options";
 import { lessonEndsByClass } from "../send-mark";
 import { readTrendOptOut } from "../trend-optout";
@@ -1602,8 +1603,10 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
         const carry = carryProgressOf(pbs);
         if (carry) su.prev = label && carry.startsWith(label) ? carry.slice(label.length).trim() || carry : carry;
       }
-      const prevBook = su.prevReport?.textbook?.trim();
-      if (prevBook) su.textbook = prevBook; // ③ 직전 교재(과목 매칭된 prevReport라 이미 그 과목 것)
+      // ③ 직전 교재(과목 매칭된 prevReport라 이미 그 과목 것) — 끝의 쪽수는 떼고 가져온다(원장 2026-10-23, textbook-carry.ts:
+      //    지난 쪽수가 매 보고서에 따라와 학부모에게 오늘 쪽수로 보였다). 참고행(prevReport)은 원문 그대로 둔다.
+      const prevBook = stripTextbookPages(su.prevReport?.textbook ?? "");
+      if (prevBook) su.textbook = prevBook;
       // ② 교재요청서(덮음) — **math 행에만**. 과목 컬럼이 없어 영어 행에 주면 수학 교재가 영어 보고서
       //    교재명 칸에 **미리 채워진 채** 저장·발송된다(실측: 영어 행에 '초5-2 발전 1권'·'가우스 중1-1 2권').
       if (reqBook && (su.subjectKey?.trim() || LEGACY_REPORT_SUBJECT) === LEGACY_REPORT_SUBJECT)
