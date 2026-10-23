@@ -122,6 +122,10 @@ export function homeworkSentence(v: string): string {
   return `${head} 아직 다 하지 못한 부분은 다음 시간에 학원에서 함께 확인하며 꼼꼼히 챙기겠습니다.`;
 }
 
+/** 오늘 과제 항목의 앞·뒤 문장 — 학부모 카드(pilot-notes-body.tsx)가 이 둘 사이를 과제 상자로 세운다. */
+export const HOMEWORK_TODAY_INTRO = "오늘 내준 과제는 아래와 같습니다.";
+export const HOMEWORK_TODAY_CLOSE = "다음 시간에 잘 해 왔는지 함께 확인하겠습니다.";
+
 /** 항목 글의 재료 — 원스크린이 AI에 주는 값(ReportCommentInput)과 같은 모양. */
 export type PilotFacts = {
   progress?: string;
@@ -225,7 +229,7 @@ export function pilotBody(f: PilotFacts, extra: { understandingText?: string; vi
   const video = f.videoHomework === true ? `영상 숙제가 있습니다${f.videoHomeworkDue ? `(${f.videoHomeworkDue} 제출)` : ""}.` : "";
   const todayHw = f.homeworkToday.trim();
   const today = todayHw || video
-    ? [todayHw ? `오늘 내준 과제는 아래와 같습니다.\n${todayHw}` : "", video, "다음 시간에 잘 해 왔는지 함께 확인하겠습니다."]
+    ? [todayHw ? `${HOMEWORK_TODAY_INTRO}\n${todayHw}` : "", video, HOMEWORK_TODAY_CLOSE]
         .filter(Boolean)
         .join("\n")
     : "";
