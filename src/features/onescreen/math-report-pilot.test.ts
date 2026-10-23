@@ -60,15 +60,20 @@ describe("이름 + 조사", () => {
 
 describe("진도 첫 문장", () => {
   it("하나 / 둘 / 셋 이상", () => {
-    expect(progressLead("이승엽", ["소수와 거듭제곱"])).toBe("우리 승엽이는 오늘 소수와 거듭제곱 진도를 나갔습니다.");
-    expect(progressLead("이승엽", ["소인수분해", "최대공약수"])).toBe("우리 승엽이는 오늘 소인수분해와 최대공약수 진도를 나갔습니다.");
-    expect(progressLead("이승엽", ["최대공약수", "최소공배수"])).toBe("우리 승엽이는 오늘 최대공약수와 최소공배수 진도를 나갔습니다.");
+    const close = " 오늘 배운 내용이 잘 자리 잡을 수 있도록 다음 시간에도 이어서 꼼꼼히 다지겠습니다.";
+    expect(progressLead("이승엽", ["소수와 거듭제곱"])).toBe(`우리 승엽이는 오늘 '소수와 거듭제곱' 진도를 나갔습니다.${close}`);
+    expect(progressLead("이승엽", ["소인수분해", "최대공약수"])).toBe(
+      `우리 승엽이는 오늘 '소인수분해'와 '최대공약수', 두 소단원 진도를 나갔습니다.${close}`,
+    );
+    expect(progressLead("이승엽", ["최대공약수", "최소공배수"])).toBe(
+      `우리 승엽이는 오늘 '최대공약수'와 '최소공배수', 두 소단원 진도를 나갔습니다.${close}`,
+    );
     expect(progressLead("이승엽", ["소수의 뜻", "거듭제곱", "소인수분해"])).toBe(
-      "우리 승엽이는 오늘 소수의 뜻부터 소인수분해까지 진도를 나갔습니다.",
+      `우리 승엽이는 오늘 '소수의 뜻'부터 '소인수분해'까지 모두 3개 소단원 진도를 나갔습니다.${close}`,
     );
   });
   it("초등 차시 번호는 뗀다", () => {
-    expect(progressLead("김지수", ["1-1-1 1부터 5까지의 수 알아보기"])).toBe("우리 지수는 오늘 1부터 5까지의 수 알아보기 진도를 나갔습니다.");
+    expect(progressLead("김지수", ["1-1-1 1부터 5까지의 수 알아보기"])).toMatch(/^우리 지수는 오늘 '1부터 5까지의 수 알아보기' 진도를 나갔습니다\. /);
   });
   it("진도 중단일은 그날 한 일을 적는다 · 진도 없으면 빈 문장", () => {
     expect(progressLead("이승엽", [], "월말평가")).toBe("우리 승엽이는 오늘 월말평가 수업을 했습니다.");
@@ -157,6 +162,10 @@ describe("자동작성 뒤에 칸을 바꾸면 다시 눌러야 한다", () => {
   const now = { studentName: "이승엽", today: "소인수분해", note: "잘했어요", factsSig: "A", writtenSig: "A" };
   const draft = composePilotMent({ lead: pilotSection("진도", progressLead("이승엽", ["소인수분해"])), body: "본문", note: "잘했어요" });
   it("그대로면 통과", () => expect(isPilotDraftCurrent(draft, now)).toBe(true));
+  it("수업 평가 표가 맨 위에 있어도 진도 항목을 찾는다", () => {
+    expect(isPilotDraftCurrent(`■ 수업 평가\n구분\n\n${draft}`, now)).toBe(true);
+    expect(isPilotDraftCurrent(`■ 수업 평가\n구분\n\n${draft}`, { ...now, today: "최대공약수" })).toBe(false);
+  });
   it("진도·사실 서명·한마디가 바뀌면 막는다", () => {
     expect(isPilotDraftCurrent(draft, { ...now, today: "최대공약수" })).toBe(false);
     expect(isPilotDraftCurrent(draft, { ...now, factsSig: "B" })).toBe(false);

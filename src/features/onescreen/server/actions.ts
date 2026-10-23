@@ -90,7 +90,7 @@ import {
   pilotSection,
   progressLead,
 } from "../math-report-pilot";
-import { pilotBody, readTestSkip, type DailyTestSkip } from "../math-report-pilot-sections";
+import { pilotBody, pilotLevelsSection, readTestSkip, type DailyTestSkip } from "../math-report-pilot-sections";
 import { skipStatusOf } from "../progress-status";
 import { logAction } from "@/features/audit/server/log";
 import { isSlotOnlyEnglishNotes, shouldCaptureJj } from "../jj-capture-plan";
@@ -1563,10 +1563,16 @@ export async function generateReportComment(
   const pilotSkip: DailyTestSkip | null = pilot ? readTestSkip(input.dailyTestSkip) : null;
   const composePilot = (understandingText: string, videoReceipt: string | null) =>
     composePilotMent({
-      lead: pilotSection(
-        PILOT_SECTION_TITLES.progress,
-        progressLead(input.studentName, pilotLessons(input.progress), skipStatusOf(input.progress)),
-      ),
+      // 수업 평가 표가 맨 위, 그다음 진도(원장 2026-10-23 *"진도보다 위에 표 형태로"*).
+      lead: [
+        pilotLevelsSection(safeInput),
+        pilotSection(
+          PILOT_SECTION_TITLES.progress,
+          progressLead(input.studentName, pilotLessons(input.progress), skipStatusOf(input.progress)),
+        ),
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
       body: pilotBody({ ...safeInput, dailyTestSkip: pilotSkip }, { understandingText, videoReceipt }),
       note: pilotNote,
     });

@@ -66,15 +66,60 @@ function scoreOnly(line: string): string {
   return line.replace(/\s*\(지난 회차[^)]*\)\s*$/, "").trim();
 }
 
-/** 지난 과제 수행률 → 문장. 고른 값을 옮기기만 한다(못 해 온 것도 아이를 탓하지 않는다). */
+/**
+ * 점수 줄 뒤에 붙는 한두 문장 — 원장 2026-10-23 *"너무 짧고 이상함 사람이 쓴거처럼 좀 부풀려서"*.
+ * 점수 표기("N문제 중 M개 맞음")는 그대로 두고(결정 로그 2026-08-11) 아래 줄에 말을 덧붙인다. 못 맞힌 몫은 학원이 챙긴다는 어투.
+ */
+export function scoreRemark(line: string): string {
+  const m = line.match(/(\d+)문제 중 (\d+)개 맞음/);
+  if (!m) return "";
+  const total = Number(m[1]);
+  const right = Number(m[2]);
+  if (!total || right > total) return "";
+  if (right === total) return "한 문제도 놓치지 않고 모두 맞혔습니다. 정말 잘했습니다! 다음 시간에도 지금처럼 이어 갈 수 있도록 응원하겠습니다.";
+  const r = right / total;
+  if (r >= 0.8) return "대부분의 문제를 잘 맞혔습니다. 틀린 문제는 다음 시간에 한 번 더 짚어 확실히 익히도록 챙기겠습니다.";
+  if (r >= 0.5) return "절반 넘게 맞혔습니다. 틀린 문제는 다음 시간에 다시 풀어 보며 확실히 이해할 수 있도록 꼼꼼히 챙기겠습니다.";
+  return "아직 어려워한 문제가 있었습니다. 틀린 문제는 다음 시간에 처음부터 함께 다시 짚어 보며 확실히 챙기겠습니다.";
+}
+
+/** 점수 줄 + 덧붙인 말. 점수가 없으면 "". */
+function scoreText(line: string): string {
+  const score = scoreOnly(line);
+  if (!score) return "";
+  return [score, scoreRemark(score)].filter(Boolean).join("\n");
+}
+
+/** 수업 태도 5단 → 학부모 문단. 고른 정도만 옮기고, 낮은 쪽은 학원이 챙긴다는 어투로 맺는다. 옛 값은 예전 조각 그대로. */
+const ATTITUDE_TEXT: Record<string, string> = {
+  "매우 좋음": "오늘 수업 태도가 매우 좋았습니다. 처음부터 끝까지 성실하게 수업에 참여해 주어 많이 칭찬해 주고 싶습니다.",
+  좋음: "오늘 수업 태도가 좋았습니다. 지금처럼 꾸준히 이어 갈 수 있도록 옆에서 계속 응원하겠습니다.",
+  보통: "오늘 수업 태도는 보통이었습니다. 수업에 조금 더 집중할 수 있도록 학원에서도 함께 신경 쓰겠습니다.",
+  안좋음: "오늘은 수업 태도가 좋지 않았습니다. 다음 시간에는 더 집중해서 참여할 수 있도록 학원에서 잘 살피고 챙기겠습니다.",
+  "매우 안좋음":
+    "오늘은 수업 태도가 많이 좋지 않았습니다. 다음 시간에는 수업에 잘 집중할 수 있도록 학원에서 더 세심하게 살피고 챙기겠습니다.",
+};
+
+export function attitudeText(raw: string): string {
+  const s = raw.trim();
+  if (!s) return "";
+  return ATTITUDE_TEXT[s] ?? `오늘 수업 태도는 ${attitudeClause(s)}.`;
+}
+
+/** 지난 과제 수행률 → 문단. 고른 값을 옮기고, 덜 해 온 몫은 아이를 탓하지 않고 학원이 챙긴다는 말로 맺는다. */
 export function homeworkSentence(v: string): string {
   const s = v.trim();
   if (!s || s === "—") return "";
-  if (/^\d{1,3}%$/.test(s)) return `지난 과제를 ${s} 해 왔습니다.`;
-  if (s === "완료") return "지난 과제를 모두 해 왔습니다.";
-  if (s === "없음") return "지난 시간에 내준 과제가 없었습니다.";
-  if (s === "미제출") return "지난 과제는 아직 해 오지 못했습니다. 다음 시간에 함께 챙기겠습니다.";
-  return s;
+  if (s === "없음") return "지난 시간에 내준 과제는 없었습니다.";
+  // 0%는 미제출과 같은 문장 — "0% 해 왔습니다"는 어색하다.
+  if (s === "미제출" || parseHomeworkRate(s) === 0) return "지난 과제는 아직 해 오지 못했습니다. 다음 시간에 학원에서 함께 확인하며 꼭 마무리할 수 있도록 챙기겠습니다.";
+  const n = parseHomeworkRate(s);
+  if (n == null) return s;
+  if (n >= 100) return "지난 시간에 내준 과제를 빠짐없이 모두 해 왔습니다. 스스로 끝까지 챙겨 온 점이 정말 대견합니다.";
+  const head = `지난 시간에 내준 과제를 ${n}% 해 왔습니다.`;
+  if (n >= 90) return `${head} 거의 다 해 온 만큼 성실하게 잘 챙겨 주었습니다. 남은 부분도 마저 마무리할 수 있도록 함께 확인하겠습니다.`;
+  if (n >= 50) return `${head} 다 하지 못한 부분은 다음 시간에 함께 확인해서 끝까지 마무리할 수 있도록 챙기겠습니다.`;
+  return `${head} 아직 다 하지 못한 부분은 다음 시간에 학원에서 함께 확인하며 꼼꼼히 챙기겠습니다.`;
 }
 
 /** 항목 글의 재료 — 원스크린이 AI에 주는 값(ReportCommentInput)과 같은 모양. */
@@ -137,38 +182,57 @@ export function understandingLevel(items: readonly { score: number }[] | undefin
   return levelOfPercent(avg * 10);
 }
 
-/** 한 줄 — `수업 태도  ○○○○●  상`. ClassNote 본문은 평문이라 칸 대신 눈금 기호로 위치를 보인다(글꼴과 무관하게 읽힌다). */
-function levelRow(label: string, level: Level): string {
-  const idx = LEVELS.indexOf(level);
-  return `${label}  ${LEVELS.map((_, i) => (i === idx ? "●" : "○")).join("")}  ${level}`;
+/**
+ * 전각 공백 — 한글 한 글자와 폭이 같고 HTML이 접지 않는다(ClassNote 본문은 평문). 그래서 칸을 이걸로 맞춘다.
+ * ⚠️ 줄 **앞**에 두지 말 것 — `String.trim()`이 전각 공백까지 지워 첫 줄이 밀린다(그래서 머리 줄은 '구분'으로 시작한다).
+ */
+const FW = "\u3000";
+
+/** 전각 폭 w칸으로 — 안의 반각 공백도 전각으로 바꾼다(반각은 폭이 반이라 줄이 어긋난다). */
+function padFw(text: string, w: number): string {
+  const t = text.replace(/ /g, FW);
+  return t + FW.repeat(Math.max(0, w - [...t].length));
 }
 
-/** 평가표 본문 — 값이 있는 줄만. 하나도 없으면 "" (항목째 빠진다). */
+/** 평가표 본문 — 표 모양(머리 줄 + 항목 줄, 고른 칸에 ●). 값이 있는 줄만, 하나도 없으면 "" (항목째 빠진다). */
 export function levelTableText(f: Pick<PilotFacts, "attitude" | "homework" | "understanding">): string {
   const rows: [string, Level | null][] = [
     [T.attitude, attitudeLevel(f.attitude)],
     [T.homework, homeworkLevel(f.homework)],
     [T.understanding, understandingLevel(f.understanding)],
   ];
-  const lines = rows.filter((r): r is [string, Level] => r[1] != null).map(([l, v]) => levelRow(l, v));
-  if (!lines.length) return "";
-  return [`(왼쪽부터 ${LEVELS.join(" · ")})`, ...lines].join("\n");
+  const filled = rows.filter((r): r is [string, Level] => r[1] != null);
+  if (!filled.length) return "";
+  const w = Math.max(2, ...filled.map(([l]) => [...l].length));
+  const head = padFw("구분", w) + LEVELS.map((lv) => FW + padFw(lv, 2)).join("");
+  const lines = filled.map(([l, v]) => padFw(l, w) + LEVELS.map((lv) => FW + (lv === v ? "●" : "○") + FW).join("") + v);
+  return [head.replace(/\u3000+$/, ""), ...lines].join("\n");
+}
+
+/** 맨 위 '수업 평가' 항목 — 원장 2026-10-23 *"진도보다 위에 표 형태로"*. 진도 항목 앞에 붙는다(actions.ts composePilot). */
+export function pilotLevelsSection(f: Pick<PilotFacts, "attitude" | "homework" | "understanding">): string {
+  return pilotSection(T.levels, levelTableText(f));
 }
 
 /**
- * 진도 항목과 선생님 한마디 사이의 항목들 — 일일 테스트 → 확인 테스트 → 수업 평가(표) → 수업 태도 → 과제 수행률 → 이해도 → 오늘 과제.
+ * 진도 항목과 선생님 한마디 사이의 항목들 — 일일 테스트 → 확인 테스트 → 수업 태도 → 과제 수행률 → 이해도 → 오늘 과제.
+ * (수업 평가 표는 맨 위 — `pilotLevelsSection`.)
  * 값이 없는 항목은 통째로 뺀다. `understandingText`는 AI가 쓴 이해도 글, `videoReceipt`는 지난 영상 숙제 확인 문장.
  */
 export function pilotBody(f: PilotFacts, extra: { understandingText?: string; videoReceipt?: string | null }): string {
-  const daily = f.dailyTestSkip ? testSkipText(f.dailyTestSkip) : scoreOnly(f.dailyTest);
+  const daily = f.dailyTestSkip ? testSkipText(f.dailyTestSkip) : scoreText(f.dailyTest);
   const hw = [homeworkSentence(f.homework), extra.videoReceipt?.trim() ?? ""].filter(Boolean).join(" ");
   const video = f.videoHomework === true ? `영상 숙제가 있습니다${f.videoHomeworkDue ? `(${f.videoHomeworkDue} 제출)` : ""}.` : "";
-  const today = [f.homeworkToday.trim(), video].filter(Boolean).join("\n");
+  const todayHw = f.homeworkToday.trim();
+  const today = todayHw || video
+    ? [todayHw ? `오늘 내준 과제는 아래와 같습니다.\n${todayHw}` : "", video, "다음 시간에 잘 해 왔는지 함께 확인하겠습니다."]
+        .filter(Boolean)
+        .join("\n")
+    : "";
   return [
     pilotSection(T.daily, daily),
-    pilotSection(T.check, scoreOnly(f.checkTest)),
-    pilotSection(T.levels, levelTableText(f)),
-    pilotSection(T.attitude, f.attitude.trim() ? `${attitudeClause(f.attitude)}.` : ""),
+    pilotSection(T.check, scoreText(f.checkTest)),
+    pilotSection(T.attitude, attitudeText(f.attitude)),
     pilotSection(T.homework, hw),
     pilotSection(T.understanding, extra.understandingText),
     pilotSection(T.homeworkToday, today),
