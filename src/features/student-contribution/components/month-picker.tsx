@@ -1,19 +1,20 @@
 "use client";
-import { useTransition } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { monthText, fieldClass } from "./presentation";
+import { useOntologyNavigation } from "./ontology-navigation";
 
-export function ContributionMonthPicker({ month, months }: { month: string; months?: string[] }) {
-  const router = useRouter(), pathname = usePathname(), search = useSearchParams();
-  const [busy, start] = useTransition();
+export function ContributionMonthPicker({ month, months, scope }: { month: string; months?: string[]; scope?: { kind: string; id: string } }) {
+  const pathname = usePathname(), search = useSearchParams();
+  const { pending: busy, navigate } = useOntologyNavigation();
   const choices = months ? [...months].sort() : null;
   const index = choices?.indexOf(month) ?? -1;
   const move = (next: string) => {
     if (!next || next === month) return;
     const params = new URLSearchParams(search.toString()); params.set("month", next); params.delete("page");
-    start(() => router.push(`${pathname}?${params}`, { scroll: false }));
+    if (scope) { params.set("kind", scope.kind); params.set("entity", scope.id); }
+    navigate(`${pathname}?${params}`);
   };
   return <div className="flex items-center gap-2" aria-busy={busy}>
     {choices && <Button size="icon-sm" variant="outline" aria-label="이전 기록 월" disabled={busy || index <= 0} onClick={() => move(choices[index - 1]!)}><EyIcon name="chevronLeft" size={16} /></Button>}

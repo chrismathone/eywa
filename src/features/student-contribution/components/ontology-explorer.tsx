@@ -13,28 +13,32 @@ import { ListPager } from "./list-pager";
 import { OntologyViewMode } from "./ontology-view-mode";
 import { OntologyDirectory } from "./ontology-directory";
 import { Button } from "@/components/ui/button";
-import { factLabels, fieldClass, monthText, numberText } from "./presentation";
+import { factLabels, monthText, numberText } from "./presentation";
+import { OntologyFilters } from "./ontology-filters";
+import { OntologyNavigation } from "./ontology-navigation";
 type Data = NonNullable<Awaited<ReturnType<typeof getContributionOntology>>>;
 const EMPTY = { students: [] as string[], counts: {}, factCount: 0, tuitionWon: 0, unallocatedTuitionFacts: 0, related: [], studentCounts: {}, basis: { recorded: 0, rule: 0, ai: 0 }, recordedAt: "" };
-export function OntologyExplorer({ data }: { data: Data }) {
-  const [kind, setKind] = useState<ExplorerKind>("academy"), [id, setId] = useState(data.tenant);
-  const [search, setSearch] = useState(""), [recordKind, setRecordKind] = useState("all"), [page, setPage] = useState(1);
+export function OntologyExplorer({ data, initialScope }: { data: Data; initialScope?: { kind: ExplorerKind; id: string } }) {
+  const initialKind = initialScope?.kind ?? "academy";
+  const [kind, setKind] = useState<ExplorerKind>(initialKind), [selectedId, setId] = useState(initialScope?.id ?? "");
+  const id = kind === "academy" ? data.tenant : data.labels[kind].some((item) => item.id === selectedId) ? selectedId : "";
+  const [recordKind, setRecordKind] = useState("all"), [page, setPage] = useState(1);
   const browsing = kind !== "academy" && !id;
   const result: Data["views"][string] = data.views[`${kind}:${id}`] ?? EMPTY;
-  const choose = (next: ExplorerKind, target: string) => { setKind(next); setId(target); setSearch(""); setRecordKind("all"); setPage(1); };
+  const choose = (next: ExplorerKind, target: string) => { setKind(next); setId(target); setRecordKind("all"); setPage(1); };
   const selected = data.labels[kind].find((item) => item.id === id)?.label ?? "대상을 선택해 주세요";
   const names = useMemo(() => new Map(data.labels.student.map((s) => [s.id, s])), [data.labels.student]);
   const directoryRows = useMemo(() => data.labels[kind].map((item) => ({ ...item, count: data.views[`${kind}:${item.id}`]?.factCount ?? 0 })), [data.labels, data.views, kind]);
-  const rows = result.students.filter((student) => `${names.get(student)?.label ?? ""} ${names.get(student)?.detail ?? ""}`.includes(search.trim())
-    && (recordKind === "all" || (result.studentCounts[student]?.[recordKind as StudentFact["kind"]] ?? 0) > 0))
+  const rows = result.students.filter((student) => recordKind === "all" || (result.studentCounts[student]?.[recordKind as StudentFact["kind"]] ?? 0) > 0)
     .sort((a, b) => (names.get(a)?.label ?? "").localeCompare(names.get(b)?.label ?? ""));
   const current = Math.min(page, Math.max(1, Math.ceil(rows.length / 15)));
   const counts = Object.entries(result.counts) as [StudentFact["kind"], number][];
   const largest = Math.max(1, ...counts.map(([, n]) => n));
-  return <div className="w-full min-w-0 space-y-5 pb-6">
-    <ContributionHeader title="학생 기록 연결" description="학생의 기록이 반·강사·과목·학원에 어떻게 연결되는지 살펴봅니다. 관점을 바꾸거나 연결된 대상을 선택해 근거를 따라갈 수 있습니다." active="ontology" canConfigure={data.canConfigure} actions={<ContributionMonthPicker month={data.month} />} />
-    <OntologyViewMode current={false} month={data.month} />
+  return <OntologyNavigation><div className="w-full min-w-0 space-y-5 pb-6">
+    <ContributionHeader title="학생 기록 연결" description="학생의 기록이 반·강사·과목·학원에 어떻게 연결되는지 살펴봅니다. 관점을 바꾸거나 연결된 대상을 선택해 근거를 따라갈 수 있습니다." active="ontology" canConfigure={data.canConfigure} actions={<ContributionMonthPicker month={data.month} scope={{ kind, id }} />} />
+    <OntologyViewMode current={false} month={data.month} filters={data.filters} scope={{ kind, id }} />
     <section className="rounded-xl border border-line">
+      <div className="border-b border-line p-4"><OntologyFilters key={JSON.stringify(data.filters)} filters={data.filters} options={data.filterOptions} scope={{ kind, id }} /></div>
       <div className="flex flex-wrap items-center gap-4 border-b border-line p-4">
         <div className="flex flex-wrap gap-1 rounded-lg bg-secondary p-1" aria-label="연결 관점">{Object.entries(entityLabels).map(([key, label]) => <button key={key} type="button" aria-pressed={kind === key}
           onClick={() => choose(key as ExplorerKind, key === "academy" ? data.tenant : "")}
@@ -53,10 +57,12 @@ export function OntologyExplorer({ data }: { data: Data }) {
     </section>
     {!data.historyReady && <p className="rounded-lg bg-primary-softer px-4 py-3 text-sm">첫 집계가 완료되기 전에는 일부 기록만 표시됩니다.</p>}
     {!!data.identityIssues && <p role="status" className="rounded-lg bg-primary-softer px-4 py-3 text-sm">학생 병합 연결을 확인할 기록이 있어 일부 자료를 제외했습니다. 현재 합계는 확인된 연결만 포함합니다.</p>}
+    {browsing && selectedId && <p role="status" className="text-sm">선택한 대상이 조회 조건에 없어 목록으로 돌아왔습니다. 조건을 바꾸거나 다른 대상을 선택해 주세요.</p>}
     {kind !== "academy" && <div hidden={!browsing}><OntologyDirectory key={`${kind}:${data.month}`} kind={kind}
+      hideSearch={kind === "student"}
       rows={directoryRows}
-      description={kind === "teacher" ? `${monthText(data.month)} 기록에 연결된 강사입니다. 이름을 선택하면 당시의 기록과 근거를 볼 수 있습니다.`
-        : `${entityLabels[kind]} 이름을 선택하면 ${monthText(data.month)}의 연결 기록과 근거를 볼 수 있습니다. 기록이 없는 대상도 표시합니다.`}
+      description={kind === "student" ? `조건에 맞는 학생입니다. 이름을 선택하면 ${monthText(data.month)}의 기록과 근거를 볼 수 있습니다. 이 달 기록이 없는 학생도 표시합니다.`
+        : `조건에 맞는 학생의 ${monthText(data.month)} 기록에 연결된 ${entityLabels[kind]}입니다. 이름을 선택하면 기록과 근거를 볼 수 있습니다.`}
       measure={{ label: "이 달 연결 기록", unit: "건" }} onSelect={(next) => choose(kind, next)} /></div>}
     {!browsing && <>
     {kind === "teacher" && <p className="text-xs">시간표 기준 · 마감 당시 판정입니다. 실제 수업 담당 기록과 다를 수 있습니다.</p>}
@@ -68,7 +74,7 @@ export function OntologyExplorer({ data }: { data: Data }) {
           {!counts.length && <p className="py-10 text-center text-sm">선택한 대상과 월에 연결된 기록이 없습니다. 다른 월이나 대상을 선택해 주세요.</p>}
           <p className="mt-4 border-t border-line pt-3 text-xs">원본 기록 {numberText(result.basis.recorded)}건 · 규칙 판정 {numberText(result.basis.rule)}건 · AI 판정 {numberText(result.basis.ai)}건</p>
         </section>
-        <section className="overflow-hidden rounded-xl border border-line"><div className="flex flex-wrap items-center justify-between gap-3 p-4"><h2 className="font-semibold">{kind === "student" ? "학생의 기록 근거" : "연결된 학생의 근거"}</h2>{kind !== "student" && <input aria-label="연결된 학생 검색" placeholder="이름 또는 학교로 찾기" className={`${fieldClass} min-w-48`} value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />}</div>
+        <section className="overflow-hidden rounded-xl border border-line"><div className="flex flex-wrap items-center justify-between gap-3 p-4"><h2 className="font-semibold">{kind === "student" ? "학생의 기록 근거" : "연결된 학생의 근거"}</h2></div>
           {recordKind !== "all" && <div className="flex items-center justify-between bg-primary-softer px-5 py-2 text-sm"><span>{factLabels[recordKind as StudentFact["kind"]]} 기록이 있는 학생</span><button type="button" onClick={() => { setRecordKind("all"); setPage(1); }} className="underline">전체 기록 보기</button></div>}
           <div className="overflow-x-auto"><table className="w-full min-w-120 table-fixed text-left text-sm"><colgroup><col className="w-[28%]" /><col className="w-[32%]" /><col className="w-[20%]" /><col className="w-[20%]" /></colgroup><thead className="bg-secondary"><tr><th scope="col" className="px-5 py-3 font-medium">학생</th><th scope="col" className="px-5 py-3 font-medium">학교·학년</th><th scope="col" className="px-5 py-3 text-right font-medium">연결 기록</th><th scope="col" className="px-5 py-3 text-right font-medium">근거</th></tr></thead>
             <tbody>{rows.slice((current - 1) * 15, current * 15).map((student) => <tr key={student} className="border-t border-line-faint hover:bg-primary-softer"><td className="px-5 py-3"><button type="button" onClick={() => choose("student", student)} className="font-semibold text-primary hover:underline">{names.get(student)?.label ?? "원생"}</button></td><td className="px-5 py-3">{names.get(student)?.detail || "—"}</td>
@@ -83,5 +89,5 @@ export function OntologyExplorer({ data }: { data: Data }) {
           {result.unallocatedTuitionFacts > 0 && <p className="mt-3">어느 과목의 금액인지 확인되지 않은 수업료 기록 {numberText(result.unallocatedTuitionFacts)}건은 위 금액에 포함되지 않았습니다.</p>}
           {result.recordedAt && <p className="mt-3 border-t border-line pt-3">최근 근거 확인 {new Date(result.recordedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}</p>}</div></aside>
     </div></>}
-  </div>;
+  </div></OntologyNavigation>;
 }
