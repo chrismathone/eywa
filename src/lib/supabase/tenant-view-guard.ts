@@ -33,6 +33,8 @@ export const TENANT_VIEW_READ_RPCS: ReadonlySet<string> = new Set([
   "attendance_rate_buckets",
   // 원생 기여도 학생별 합계(0443a) — 읽기 전용 집계(stable). 지점 보기에서도 기여도 화면이 같은 값을 읽게.
   "student_contribution_totals",
+  // 학생 온톨로지 현재 수강·담당 연결(0446a) — 읽기 전용 집계(stable). 지점은 서버가 넘긴 p_tenant뿐(로그인한 사람의 행에서 정하지 않는다).
+  "student_ontology_current_scope",
   // 보고서 통계 숙제·학부모 확인 추이(0388a) — 읽기 전용 group-by.
   "lesson_report_buckets",
   "consultation_class_candidates",
