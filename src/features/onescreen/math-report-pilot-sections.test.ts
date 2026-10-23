@@ -80,7 +80,7 @@ describe("항목별 글(원장 2026-10-22 — 섹션을 나눠 어떤 것에 어
     expect(homeworkSentence("20%")).toContain("꼭 마무리하겠습니다");
     expect(homeworkSentence("미제출")).toContain("아직 해 오지 못했습니다");
     expect(homeworkSentence("0%")).toBe(homeworkSentence("미제출"));
-    expect(homeworkSentence("없음")).toBe("지난 시간에 내준 과제는 없었습니다.");
+    expect(homeworkSentence("없음")).toBe(""); // 과제 없던 날은 항목째 뺀다(원장 2026-10-23)
     expect(homeworkSentence("일부 미흡")).toBe("일부 미흡");
     expect(homeworkSentence("—")).toBe("");
   });

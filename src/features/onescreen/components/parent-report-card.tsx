@@ -6,8 +6,7 @@ import { hasTrend, type TrendPoint } from "../report-trend";
 import { isImageAttachment, pickInlineAttachments } from "../attachment-utils";
 import { isSkipStatusProgress } from "../progress-status";
 import { collapseProgressRanges } from "../progress-range";
-import { reportTitleText, SPECIAL_TITLE_PREFIX } from "../report-title";
-import { makeupTitleSuffix } from "../makeup-label";
+import { reportTitleText } from "../report-title";
 import { videoHomeworkDueLabel } from "../video-homework-label";
 import { isPilotReportSections, parsePilotNotes, splitPilotNote } from "../pilot-notes";
 import { PilotNoteBox, PilotNotesBody } from "./pilot-notes-body";
@@ -176,8 +175,9 @@ export function ParentReportCard({
           subjectLabel={report.subjectLabel ?? null}
           studentName={parentStudent?.name || "-"}
           schoolGrade={schoolGrade === "-" ? "" : schoolGrade}
-          // 제목 = '데일리 학습알림'(참고 시안) — 특강·보강 표시는 기본 카드와 같은 규칙으로 앞뒤에 붙인다(report-title.ts·makeup-label.ts).
-          title={`${report.special ? SPECIAL_TITLE_PREFIX : ""}데일리 학습알림${makeupTitleSuffix(report)}`}
+          // 제목 = "학생이름 수학 보고서"(원장 2026-10-23 *"데일리 학습알림이 아니라 학생이름 수학 보고서"*) — 이름 뒤에 기본 카드와
+          // **같은 제목 함수**(과목 보고서 · [특강] · 보강 접미사, report-title.ts)를 붙인다. 머리 표가 이름과 이어 그린다.
+          title={reportTitleText(rpt.title, report)}
           date={report.reportDate}
           className={report.className ?? null}
           teacherName={report.teacherName}

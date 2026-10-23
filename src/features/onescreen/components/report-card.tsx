@@ -663,7 +663,7 @@ export function ReportCard({
         </div>
 
         <div>
-          <p className="micro text-text-faint mb-1.5">{t("os.col.homework")}</p>
+          <p className="micro text-text-faint mb-1.5">{t(pilot ? "os.col.homeworkPilot" : "os.col.homework")}</p>
           <HomeworkRateInput
             value={cardEval.homework}
             onChange={onHomework}

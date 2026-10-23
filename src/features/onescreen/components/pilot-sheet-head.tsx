@@ -120,85 +120,75 @@ export type PilotSheetHeadProps = {
   levels: LevelRow[] | null;
 };
 
+/**
+ * 반·담임 칸 글씨 — 실제 수학 반 이름은 최대 30자·중간값 11자(2026-10-23 실측, 예 "중간고사 대비 주말보강(중등) (~26.09.19)")라
+ * 칸을 넓히고(30%) 길면 한 단계 줄인다. 자르지 않는다(반 이름이 잘리면 다른 반으로 읽힌다) — 넘치면 어절 단위로 줄을 바꾼다.
+ */
+export function sheetValueSize(value: string): "text-sm" | "text-xs" {
+  return [...value].length <= 9 ? "text-sm" : "text-xs";
+}
+
+function InfoRow({ label, value }: { label: string; value: string | null }) {
+  const v = value?.trim() || "-";
+  return (
+    <tr>
+      <td className={`${CELL} bg-report-accent-soft text-text-dim h-10 text-sm font-bold`}>{label}</td>
+      <td className={`${CELL} text-foreground px-1.5 py-1 leading-snug font-bold break-keep ${sheetValueSize(v)}`}>{v}</td>
+    </tr>
+  );
+}
+
 export function PilotSheetHead(p: PilotSheetHeadProps) {
   return (
-    <table className="w-full table-fixed border-collapse tabular-nums">
-      <colgroup>
-        <col className="w-[24%]" />
-        {LEVELS.map((lv) => (
-          <col key={lv} />
-        ))}
-      </colgroup>
-      <tbody>
-        <tr>
-          <td rowSpan={3} className={`${CELL} bg-card px-1.5 py-2.5`}>
-            {p.logoSrc ? (
-              // eslint-disable-next-line @next/next/no-img-element -- 공개/인쇄 페이지 외부 로고(최적화 불필요)
-              <img
-                src={p.logoSrc}
-                alt={p.academyName}
-                className="mx-auto block w-full max-w-[118px] object-contain"
-              />
-            ) : (
-              <p className="text-primary text-lg font-black break-keep">
-                {p.academyName}
+    <>
+      {/* 머리는 표를 따로 둔다 — 아래 눈금 격자(6열)에 묶으면 반·담임 칸이 눈금 한 칸(15%) 폭이라 긴 반 이름이 서너 줄로 꺾인다. */}
+      <table className="w-full table-fixed border-collapse tabular-nums">
+        <colgroup>
+          <col className="w-[24%]" />
+          <col className="w-[34%]" />
+          <col className="w-[12%]" />
+          <col className="w-[30%]" />
+        </colgroup>
+        <tbody>
+          <tr>
+            <td rowSpan={3} className={`${CELL} bg-card px-1.5 py-2.5`}>
+              {p.logoSrc ? (
+                // eslint-disable-next-line @next/next/no-img-element -- 공개/인쇄 페이지 외부 로고(최적화 불필요)
+                <img src={p.logoSrc} alt={p.academyName} className="mx-auto block w-full max-w-[118px] object-contain" />
+              ) : (
+                <p className="text-primary text-lg font-black break-keep">{p.academyName}</p>
+              )}
+              {p.subjectLabel ? (
+                <span className="bg-report-accent text-primary-deep mt-1.5 inline-block rounded-full px-2.5 py-0.5 text-xs font-black">
+                  {p.subjectLabel}
+                </span>
+              ) : null}
+            </td>
+            {/* 제목 = "학생이름 수학 보고서"(원장 2026-10-23) — 이름은 흰색, 보고서 제목은 노랑. */}
+            <td rowSpan={3} className={`${CELL} bg-primary px-2 py-3 text-white`}>
+              <p className="text-xl leading-snug font-black break-keep">
+                {p.studentName}{" "}
+                {/* 제목은 한 덩어리로 줄을 바꾼다 — 이름 뒤에서 "수학 / 보고서"로 갈라지지 않게(긴 [특강]·보강 제목은 덩어리 안에서 어절 단위로). */}
+                <span className="text-report-accent inline-block">{p.title}</span>
               </p>
-            )}
-            {p.subjectLabel ? (
-              <span className="bg-report-accent text-primary-deep mt-1.5 inline-block rounded-full px-2.5 py-0.5 text-xs font-black">
-                {p.subjectLabel}
-              </span>
-            ) : null}
-          </td>
-          <td
-            colSpan={3}
-            rowSpan={3}
-            className={`${CELL} bg-primary px-2 py-3 text-white`}
-          >
-            <p className="text-2xl leading-tight font-black break-keep">
-              {p.studentName}
-            </p>
-            <p className="text-report-accent mt-1 text-base font-bold break-keep">
-              {p.title}
-            </p>
-            {p.schoolGrade ? (
-              <p className="mt-1.5 text-xs font-medium text-white/80">
-                {p.schoolGrade}
-              </p>
-            ) : null}
-          </td>
-          <td
-            colSpan={2}
-            className={`${CELL} bg-report-tint text-primary h-10 px-1 text-base font-black whitespace-nowrap`}
-          >
-            {sheetDateLabel(p.date)}
-          </td>
-        </tr>
-        <tr>
-          <td
-            className={`${CELL} bg-report-accent-soft text-text-dim h-10 text-sm font-bold`}
-          >
-            반
-          </td>
-          <td
-            className={`${CELL} text-foreground px-1 text-sm font-bold break-keep`}
-          >
-            {p.className || "-"}
-          </td>
-        </tr>
-        <tr>
-          <td
-            className={`${CELL} bg-report-accent-soft text-text-dim h-10 text-sm font-bold`}
-          >
-            담임
-          </td>
-          <td
-            className={`${CELL} text-foreground px-1 text-sm font-bold break-keep`}
-          >
-            {p.teacherName || "-"}
-          </td>
-        </tr>
-
+              {p.schoolGrade ? <p className="mt-1.5 text-xs font-medium text-white/80">{p.schoolGrade}</p> : null}
+            </td>
+            <td colSpan={2} className={`${CELL} bg-report-tint text-primary h-10 px-1 text-base font-black whitespace-nowrap`}>
+              {sheetDateLabel(p.date)}
+            </td>
+          </tr>
+          <InfoRow label="반" value={p.className} />
+          <InfoRow label="담임" value={p.teacherName} />
+        </tbody>
+      </table>
+      <table className="-mt-px w-full table-fixed border-collapse tabular-nums">
+        <colgroup>
+          <col className="w-[24%]" />
+          {LEVELS.map((lv) => (
+            <col key={lv} />
+          ))}
+        </colgroup>
+        <tbody>
         {p.tests.map((s) => (
           <tr key={s.title}>
             <th scope="row" className={LABEL}>
@@ -249,7 +239,8 @@ export function PilotSheetHead(p: PilotSheetHeadProps) {
             })}
           </>
         ) : null}
-      </tbody>
-    </table>
+        </tbody>
+      </table>
+    </>
   );
 }

@@ -2669,6 +2669,8 @@ export const SHEET_DICT = {
   "os.col.check": { ko: "확인", en: "Check" },
   "os.col.attitude": { ko: "태도", en: "Attitude" },
   "os.col.homework": { ko: "과제 수행률", en: "Homework done" },
+  // 수학 보고서 시범 행의 같은 칸 — 원장 2026-10-23 *"과제 → 숙제완성도로 이름 변경"*(보고서 항목 제목과 같은 말, 값은 그대로 지난 과제 수행률).
+  "os.col.homeworkPilot": { ko: "숙제 완성도", en: "Homework completion" },
   "os.col.book": { ko: "교재명 · 보강 · 과제", en: "Book · makeup · homework" },
   "os.col.ment": { ko: "학부모 문구", en: "Parent message" },
   "os.col.send": { ko: "발송 · 편집", en: "Send · edit" },

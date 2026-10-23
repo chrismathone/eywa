@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sheetDateLabel } from "./pilot-sheet-head";
+import { sheetDateLabel, sheetValueSize } from "./pilot-sheet-head";
 import { splitSheetSections } from "./pilot-report-sheet";
 
 describe("데일리 학습알림 표(수학 보고서 시범)", () => {
@@ -26,5 +26,11 @@ describe("데일리 학습알림 표(수학 보고서 시범)", () => {
     const r = splitSheetSections([{ title: "수업 평가", body: "손으로 쓴 글" }]);
     expect(r.levels).toBeNull();
     expect(r.rest.map((s) => s.title)).toEqual(["수업 평가"]);
+  });
+
+  it("반 이름이 길면 칸 글씨를 한 단계 줄인다(자르지 않는다)", () => {
+    expect(sheetValueSize("학원이(테스트)")).toBe("text-sm");
+    expect(sheetValueSize("중등M 중2 JJ3E")).toBe("text-xs");
+    expect(sheetValueSize("중간고사 대비 주말보강(중등) (~26.09.19)")).toBe("text-xs");
   });
 });

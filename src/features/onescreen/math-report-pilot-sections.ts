@@ -138,7 +138,8 @@ function asSentence(text: string): string {
 export function homeworkSentence(v: string, missReason?: string | null): string {
   const s = v.trim();
   if (!s || s === "—") return "";
-  if (s === "없음") return "지난 시간에 내준 과제는 없었습니다.";
+  // 과제가 없던 날은 항목째 뺀다(원장 2026-10-23 *"미제출이면 미제출 사유가 들어가야하고 없으면 숙제완성도는 없어야"*) — 수업 평가 표 줄도 같이 빠진다(homeworkLevel).
+  if (s === "없음") return "";
   // 0%는 미제출과 같은 문장 — "0% 해 왔습니다"는 어색하다.
   if (isHomeworkMissed(s))
     // typeof — `.map(homeworkSentence)`처럼 두 번째 인자에 숫자가 들어와도 깨지지 않게.
