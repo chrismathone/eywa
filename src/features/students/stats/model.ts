@@ -37,7 +37,7 @@ export type StudentStatsPrefs = {
   flowKind: ChartKind;
   /** '지난 기록' 보기 — 연도별이 기본(원장 2026-10-20 · 6년치라 달마다는 촘촘하다). */
   historyView: HistoryView;
-  /** 강좌수 추이(원장 2026-10-20) — 기간 · 그래프 종류 · 꺼 둔 선(`total` · `program:<프로그램>`). */
+  /** 강좌수 추이 — 기간 · 그래프 종류 · 꺼 둔 선(`total` · `subject:<과목>`). */
   courseRange: TrendRange; courseKind: ChartKind; courseOff: string[];
   /** 첫 수업 추이(원장 2026-10-20) — 보기 방식(12·24개월 · 일별 · 구간). 고른 달·구간은 남기지 않는다(`period.ts`). */
   firstMode: PeriodMode;

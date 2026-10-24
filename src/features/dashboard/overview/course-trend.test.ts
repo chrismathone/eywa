@@ -3,7 +3,7 @@ import { courseBreakdownOf, courseTrendOf, coursesOn, type CourseRow } from "./c
 import { summarizeCourses } from "@/features/students/enrollment/course-count";
 import type { TrendEnrollments, TrendStudent } from "./enrolled-trend";
 
-/** 강좌수 추이(원장 2026-10-20) — 학생마다 그날 듣던 반을 모두 센다 · 오늘 점은 '강좌수' 칸 규약. */
+/** 강좌수 추이(원장 2026-10-20) — 학생·과목마다 한 번 센다 · 오늘 점은 '강좌수' 칸 규약. */
 const en = (o: Partial<TrendEnrollments> = {}): TrendEnrollments => ({ firstStart: new Map(), ended: new Set(), ...o });
 const student = (id: string, o: Partial<TrendStudent> = {}): TrendStudent => ({ id, status: "enrolled", enrolledAt: "2026-01-01", withdrawnAt: null, ...o });
 const row = (studentId: string, classId: string, subject: string, o: Partial<CourseRow> = {}): CourseRow => ({
@@ -18,7 +18,7 @@ const row = (studentId: string, classId: string, subject: string, o: Partial<Cou
 const at = (date: string) => [{ key: date, label: date, date }];
 
 describe("coursesOn / courseTrendOf — 강좌수 추이", () => {
-  it("같은 과목 반이 둘이면 2 · 같은 반 두 줄은 1 · 시작 전·끝난 수강은 뺀다(반이동은 종료일부터 · 일반 종료는 종료일까지)", () => {
+  it("집계 재료는 반마다 하나 · 시작 전·끝난 수강은 뺀다(반이동은 종료일부터 · 일반 종료는 종료일까지)", () => {
     const rows = [
       row("a", "jj", "math"),
       row("a", "ms", "math"),
@@ -33,9 +33,9 @@ describe("coursesOn / courseTrendOf — 강좌수 추이", () => {
 
   it("🔴 오늘 점 = '강좌수' 칸 규약 — 휴원 수강은 오늘 세지 않고, 종료일이 미래로 적힌 수강(반이동 예약 전의 원래 반)은 그날까지 센다", () => {
     const rows = [row("a", "c1", "math"), row("a", "c2", "math", { end: "2026-10-31", transferred: true }), row("a", "c3", "english", { onHold: true })];
-    expect(courseTrendOf([student("a")], en(), rows, at("2026-10-20"), undefined, "2026-10-20")[0]!.count).toBe(2);
+    expect(courseTrendOf([student("a")], en(), rows, at("2026-10-20"), undefined, "2026-10-20")[0]!.count).toBe(1);
     // 지난 날짜는 휴원 이력이 없어 지금 휴원 중인 수강도 센다(재원생 추이와 같은 한계).
-    expect(courseTrendOf([student("a")], en(), rows, at("2026-09-30"), undefined, "2026-10-20")[0]!.count).toBe(3);
+    expect(courseTrendOf([student("a")], en(), rows, at("2026-09-30"), undefined, "2026-10-20")[0]!.count).toBe(2);
   });
 
   it("🔴 오늘 점 = 상단 '강좌수' 칸(`summarizeCourses`) — 같은 수강을 두 모양으로 넘겨도 같은 수", () => {
@@ -65,7 +65,7 @@ describe("coursesOn / courseTrendOf — 강좌수 추이", () => {
       undefined,
       today,
     )[0]!.count;
-    expect(kpi).toBe(4); // a: m1 · 특강 · 옛 반 / b: 오늘 끝나는 e2
+    expect(kpi).toBe(3); // a: 수학 · 영어 / b: 오늘 끝나는 영어
     expect(trend).toBe(kpi);
   });
 
@@ -112,4 +112,16 @@ describe("coursesOn / courseTrendOf — 강좌수 추이", () => {
     expect(out.total[0]!.count).toBe(3);
     expect([out.groups.eie[0]!.count, out.groups.injaewon[0]!.count, out.groups.math[0]!.count]).toEqual([1, 0, 1]);
   });
+});
+
+it("과목별 추이의 합 = 전체 · 수학 5반 + 영어 두 프로그램 + 국어는 3(주별·월별·연도별 같은 계산)", () => {
+  const subjects = [{ key: "math", label: "수학" }, { key: "advanced", label: "수학(심화)" }, { key: "english", label: "영어" }, { key: "korean", label: "국어" }];
+  const rows = [...Array.from({ length: 5 }, (_, i) => row("a", `m${i}`, i === 4 ? "advanced" : "math")),
+    row("a", "e1", "english", { englishTrack: "eie" }), row("a", "e2", "english"), row("a", "k", "korean"), row("a", "unknown", "")];
+  const points = ["2026-03-31", "2026-04-05", "2026-12-31"].map((date) => ({ key: date, label: date, date }));
+  const group = (e: CourseRow) => e.subject === "advanced" ? "math" : e.subject;
+  const out = courseBreakdownOf([student("a")], en(), rows, points, ["math", "english", "korean"], group, undefined, undefined, subjects);
+  expect(out.total.map((p) => p.count)).toEqual([3, 3, 3]);
+  for (let i = 0; i < points.length; i++) expect(Object.values(out.groups).reduce((n, ps) => n + ps[i]!.count, 0)).toBe(out.total[i]!.count);
+  expect(courseTrendOf([student("a")], en(), rows, points, undefined, undefined, subjects)).toEqual(out.total);
 });

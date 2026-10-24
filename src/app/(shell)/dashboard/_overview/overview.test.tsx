@@ -302,17 +302,16 @@ function kpiSnapshot(allowed = ALL_MENUS): OverviewSnapshot {
         ...ok,
       },
       students: { data: studentsData(), ...ok },
-      // 강좌수(원장 2026-10-20) — 학생 10명 중 반 1개 6명 · 2개 4명 = 14강좌(EiE 4 · 인재원 영어 3 · 수학 7).
+      // 강좌수(원장 2026-10-20) — 학생 10명 중 1과목 6명 · 2과목 4명 = 14강좌(영어 7 · 수학 7).
       courses: {
         data: {
           total: 14,
-          programs: { eie: 4, injaewon: 3, math: 7 },
+          basis: "student-subject", students: 10, subjects: { english: 7, math: 7 },
           perStudent: [{ courses: 1, students: 6 }, { courses: 2, students: 4 }, { courses: 3, students: 0 }, { courses: 4, students: 0 }],
           combos: [
-            { bucket: 1, parts: [{ program: "eie" as const, count: 1 }], students: 4 },
-            { bucket: 1, parts: [{ program: "injaewon" as const, count: 1 }], students: 2 },
-            { bucket: 2, parts: [{ program: "math" as const, count: 2 }], students: 3 },
-            { bucket: 2, parts: [{ program: "injaewon" as const, count: 1 }, { program: "math" as const, count: 1 }], students: 1 },
+            { bucket: 1, parts: [{ subject: "english", count: 1 }], students: 3 },
+            { bucket: 1, parts: [{ subject: "math", count: 1 }], students: 3 },
+            { bucket: 2, parts: [{ subject: "english", count: 1 }, { subject: "math", count: 1 }], students: 4 },
           ],
         },
         ...ok,
@@ -428,17 +427,17 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     mocks.data = kpiSnapshot();
     render(<Overview initial={mocks.data} />);
     const card = screen.getByRole("button", { name: /^강좌수 14개\./ });
-    expect(card.getAttribute("aria-label")).toContain("EiE 4 · 인재원 영어 3 · 수학 7");
+    expect(card.getAttribute("aria-label")).toContain("영어 7 · 수학 7");
     const jump = screen.getByRole("link", { name: "원생 통계에서 강좌수 추이 보기" });
     expect(jump.getAttribute("href")).toBe("/students/stats#courses");
     expect(jump.closest("button")).toBeNull();
     fireEvent.click(card);
     const popup = screen.getByRole("dialog");
     expect(popup.textContent).toContain("강좌수 14개");
-    // 칸마다 조합 인원의 합 = 그 칸 학생 수(2개 4명 = 수학 2 · 3명 + 인재원 영어 1 + 수학 1 · 1명).
+    // 칸마다 조합 인원의 합 = 그 칸 학생 수(2개 4명 = 영어 1 + 수학 1 · 4명).
     expect(popup.textContent).toContain("2개4명");
-    expect(popup.textContent).toContain("수학 23명");
-    expect(popup.textContent).toContain("인재원 영어 1 + 수학 11명");
+    expect(popup.textContent).toContain("수학 13명");
+    expect(popup.textContent).toContain("영어 1 + 수학 14명");
     cleanup();
   });
 

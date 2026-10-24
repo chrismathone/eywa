@@ -705,7 +705,7 @@ export function Overview({
     !(v.courseTrend && v.courseTrend.data === null && v.courseTrend.at !== null) ? (
       <Panel
         title={t("courseTrend", "강좌수 추이")}
-        note={`${courseTrend?.monthlyFrom ? `${ym(courseTrend.monthlyFrom)}부터` : "최근 12개월"} · 달마다 말일 기준(이번 달은 오늘) · 학생마다 듣는 반을 모두`}
+        note={`${courseTrend?.monthlyFrom ? `${ym(courseTrend.monthlyFrom)}부터` : "최근 12개월"} · 달마다 말일 기준(이번 달은 오늘) · 학생마다 같은 과목은 1개`}
         href={studentsStatsHref("courses", { subject: view?.activeSubject, teacherView: snapshot.teacherView })}
         sections={[v.courseTrend]}
         className={s.fullRow}
@@ -732,7 +732,7 @@ export function Overview({
             {courseTrend.trustFrom ? (
               <p className={s.footnote}>
                 {courseTrend.cutBy === "records"
-                  ? `강좌수는 ${ym(courseTrend.trustFrom)}부터 보입니다 — 그 전에 그만둔 학생은 수강 기록이 남아 있지 않아 반을 셀 수 없습니다.`
+                  ? `강좌수는 ${ym(courseTrend.trustFrom)}부터 보입니다 — 그 전에 그만둔 학생은 수강 기록이 남아 있지 않아 과목별 수강을 셀 수 없습니다.`
                   : `에이와 수강 기록이 갖춰진 ${ym(courseTrend.trustFrom)}부터 보입니다 — 그 전 달은 옮겨 오기 전 학생의 수강 시작일이 늦게 잡혀 실제보다 적게 나옵니다.`}
               </p>
             ) : null}

@@ -152,7 +152,7 @@ async function loadEnrolledRows(): Promise<EnrolledRows> {
 /**
  * 상단 '강좌수'(원장 2026-10-20 *"대시보드에 강좌수도 볼 수 있으면 좋을듯 … 한 학생이 여러 강좌를 들을 수도 있기 때문에 듣는 모든 강좌를
  * 체크"*) — '재원생' 칸과 같은 조회(`enrolledRows`)·같은 줄 판정(`activeRows` — 이미 시작 · 휴원 아님 · 스코프)에 **종료일이 오늘 이후로
- * 적힌 수강**(특강 기간 · 반이동 예약 전의 원래 반)을 더해 재원생이 오늘 듣는 반을 학생마다 모두 센다(`summarizeCourses`). 과목 관리자는 그 과목 반만(`pred`).
+ * 적힌 수강**(특강 기간 · 반이동 예약 전의 원래 반)을 더해 재원생의 오늘 수강을 학생·과목마다 한 번 센다(`summarizeCourses`). 과목 관리자는 그 과목 반만(`pred`).
  */
 async function courses(
   scope: TeacherScope | null,
@@ -758,8 +758,8 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
   let slicerOnce: ReturnType<typeof loadEnrolledTrendSlicer> | null = null;
   const trends = () =>
     Promise.all([
-      (trendOnce ??= loadEnrolledTrend(user.tenantId, today)),
-      sliceSets.length ? (slicerOnce ??= loadEnrolledTrendSlicer(user.tenantId, today)) : Promise.resolve(null),
+      (trendOnce ??= loadEnrolledTrend(user.tenantId, today, sliceSubjects)),
+      sliceSets.length ? (slicerOnce ??= loadEnrolledTrendSlicer(user.tenantId, today, sliceSubjects)) : Promise.resolve(null),
     ]);
   addSliced("enrolledTrend", ["students"], async () => {
     if (await scopePromise) return () => null;

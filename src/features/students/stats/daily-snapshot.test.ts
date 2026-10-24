@@ -45,9 +45,9 @@ describe("buildDailySnapshot — 그날 재원생 구성(운영실 카드와 같
     expect(mid2).toMatchObject({ both: 1, englishOnly: 1, mathOnly: 0 });
   });
 
-  it("강좌수(2026-10-20부터) — 운영실 '강좌수' 칸과 같은 계산 · 아직 시작 안 한 수강은 빼고 국어 반은 전체에만", () => {
+  it("강좌수(2026-10-20부터) — 운영실 '강좌수' 칸과 같은 계산 · 아직 시작 안 한 수강은 빼고 국어도 과목별 합계에 포함", () => {
     expect(snap.courses?.total).toBe(4);
-    expect(snap.courses?.programs).toEqual({ eie: 0, injaewon: 2, math: 1 });
+    expect(snap.courses?.subjects).toEqual({ english: 2, math: 1, korean: 1 });
   });
 });
 

@@ -44,7 +44,7 @@ const SECTIONS: { title: string; note: string; panels: PanelShape[]; followups?:
       { title: "6개월 청구 · 수납", note: "최근 6개월 · 청구월 기준 실청구액(청구 − 할인)", body: 245, wide: true },
       // 한 줄 전체 추이 둘(실제 화면의 재원생 추이 · 강좌수 추이 — `s.fullRow`).
       { title: "재원생 추이", note: "최근 12개월 · 달마다 말일 기준(이번 달은 오늘) · 휴원 제외", body: 245, className: s.fullRow },
-      { title: "강좌수 추이", note: "최근 12개월 · 달마다 말일 기준(이번 달은 오늘) · 학생마다 듣는 반을 모두", body: 245, className: s.fullRow },
+      { title: "강좌수 추이", note: "최근 12개월 · 달마다 말일 기준(이번 달은 오늘) · 학생마다 같은 과목은 1개", body: 245, className: s.fullRow },
     ],
   },
   {

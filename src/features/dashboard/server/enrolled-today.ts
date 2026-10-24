@@ -9,6 +9,7 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { kstDayBounds } from "@/features/enrollment/kst-bounds";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { assignedEntryAt, enrolledRecentFrom } from "@/features/dashboard/overview/enrolled-recent";
+import { enrollmentEventTimes, type EnrollmentOutcomeLog } from "@/features/dashboard/overview/enrolled-outcome";
 import { consultClassKeysOf } from "@/features/enrollment/consult-subject";
 
 export type EnrolledTodayRow = {
@@ -31,8 +32,6 @@ export type EnrolledTodayRow = {
   subject: string | null;
 };
 
-type OutcomeLog = { metadata: { consultationId?: unknown; to?: unknown } | null; created_at: string };
-
 /**
  * 운영실 KPI **'전일 / 이달 신규'**(원장 2026-09-23 '금일 등록' → 2026-10-21 *"전일 신규생 및 / 이달의 신규생 다나오는걸로"*) —
  * **어제부터 오늘까지 · 이번 달**(`enrolledRecentFrom`) 콜&상담 상태를 '등록 완료'(outcome=enrolled)로 옮긴 상담.
@@ -51,7 +50,7 @@ export async function getEnrolledRecent(today: string): Promise<EnrolledTodayRow
   if (!scope) return [];
   const { startIso } = kstDayBounds(enrolledRecentFrom(today));
   const { endIso } = kstDayBounds(today);
-  const logs = await fetchAllPaged<OutcomeLog>((from, to) =>
+  const logs = await fetchAllPaged<EnrollmentOutcomeLog>((from, to) =>
     auditScoped(scope.admin.from("audit_logs").select("metadata, created_at"), scope)
       .eq("metadata->>to", "enrolled")
       .gte("created_at", startIso)
@@ -60,12 +59,7 @@ export async function getEnrolledRecent(today: string): Promise<EnrolledTodayRow
       .order("id")
       .range(from, to),
   );
-  // 상담마다 창 안에서 **마지막으로** 등록 완료로 옮긴 시각(같은 상담을 두 번 옮겨도 한 줄).
-  const movedAt = new Map<string, string>();
-  for (const log of logs) {
-    const id = log.metadata?.consultationId;
-    if (typeof id === "string" && log.metadata?.to === "enrolled") movedAt.set(id, log.created_at);
-  }
+  const movedAt = enrollmentEventTimes(logs);
 
   const db = await createClient();
   type Row = {

@@ -102,15 +102,15 @@ export async function TrendSection(props: Ctx & { view: TrendView; boardKey: str
 export async function CourseSection(props: Ctx & { boardKey: string }) {
   const { stats, parts, settings, scopeLabel, boardKey } = props;
   const [courses, ctx] = await Promise.all([parts.courses, trendContext(props)]);
-  if (!courses.data) return courses.error ? <StatCard id="courses" title="강좌수 추이" note="학생마다 듣는 반을 모두" error /> : null;
+  if (!courses.data) return courses.error ? <StatCard id="courses" title="강좌수 추이" note="학생마다 같은 과목은 1개" error /> : null;
   const { courseFrom, courseClipNote } = courseBounds(ctx.bounds, ctx);
+  const subjectMaps = buildSubjectMaps(settings.operations.subjects);
+  const tokens = distinctSubjectTokens(courses.data.bySubject.map((s) => ({ key: s.key, color: subjectMaps.colorOf(s.key) })));
   return (
     <CourseBoard
       key={`courses|${boardKey}`}
       total={courses.data.total}
-      programs={courses.data.byProgram
-        .filter((p) => stats.eieOn || p.key !== "eie")
-        .map((p) => ({ key: `program:${p.key}`, label: programLabel(p.key, settings.operations.subjects, stats.eieOn), color: PROGRAM_COLOR[p.key], set: p }))}
+      subjects={courses.data.bySubject.map((p) => ({ key: `subject:${p.key}`, label: subjectMaps.labelOf(p.key), color: tokenColor(tokens.get(p.key) ?? subjectMaps.colorOf(p.key)), set: p }))}
       countFrom={courseFrom}
       clipNote={courseClipNote}
       today={stats.today}

@@ -39,7 +39,7 @@ export function courseBounds(bounds: StatsBounds, trend: { countFrom: string | n
     trustFrom && courseFrom === trustFrom
       ? `에이와 수강 기록이 갖춰진 ${monthText(trustFrom)}부터 그립니다 — 그 전 달은 옮겨 오기 전 학생의 수강 시작일이 늦게 잡혀 실제보다 적게 나옵니다.`
       : breakdownFrom && courseFrom === breakdownFrom && courseFrom !== trend.countFrom
-        ? `강좌수는 ${monthText(breakdownFrom)}부터 그립니다 — 그 전에 그만둔 학생은 수강 기록이 남아 있지 않아 반을 셀 수 없습니다.`
+        ? `강좌수는 ${monthText(breakdownFrom)}부터 그립니다 — 그 전에 그만둔 학생은 수강 기록이 남아 있지 않아 과목별 수강을 셀 수 없습니다.`
         : trend.clipNote;
   return { courseFrom, courseClipNote };
 }

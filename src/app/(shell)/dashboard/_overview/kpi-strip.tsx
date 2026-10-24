@@ -93,8 +93,8 @@ export function kpiCards(snapshot: OverviewSnapshot, opts: KpiCardOptions = {}):
     visiblePrograms(eieOn).map((program) => `${programLabel(program, subjects, eieOn)} ${number(counts[program])}`).join(" · ");
 
   const student = v.students?.data;
-  // 강좌수 = 재원생이 지금 듣는 반을 학생마다 모두(원장 2026-10-20) — 재원생 칸과 같은 조회·같은 줄 판정(`summarizeCourses`).
-  const course = v.courses?.data;
+  // 강좌수 = 재원생의 수강을 학생·과목마다 한 번(원장 2026-10-20) — 재원생 칸과 같은 조회·같은 줄 판정(`summarizeCourses`).
+  const course = v.courses?.data?.basis === "student-subject" ? v.courses.data : null;
   const withdrawals = v.withdrawals?.data;
   const wd = withdrawals ? countWithdrawalPrograms(withdrawals.rows) : null;
   const month = withdrawals?.month ?? today.slice(0, 7);
@@ -151,13 +151,13 @@ export function kpiCards(snapshot: OverviewSnapshot, opts: KpiCardOptions = {}):
           labelNote={noteOf("courses", "현재")}
           value={count(course?.total)}
           unit="개"
-          detail={course ? programLine(course.programs) : "지금 듣는 반 기준"}
+          detail={course ? Object.entries(course.subjects).map(([key, count]) => `${snapshot.subjects[key] ?? "기타 과목"} ${number(count)}`).join(" · ") : "학생별 같은 과목은 1개"}
           icon={<MenuGlyph name="book" size={20} />}
           error={v.courses.error}
           popupTitle="현재 강좌수 · 학생당 강좌 수"
           jump={can("students") ? (snapshot.teacherView ? { href: studentsEnrolledHref(), label: "원생목록에서 재원생 보기" } : { href: studentsStatsHref("courses", { subject: snapshot.view?.activeSubject }), label: "원생 통계에서 강좌수 추이 보기" }) : null}
         >
-          <CoursesPopup data={course} subjects={subjects} eieOn={eieOn} />
+          <CoursesPopup data={course} subjectLabels={snapshot.subjects} />
         </KpiCard>
   );
   if (v.withdrawals) cards.withdrawals = (

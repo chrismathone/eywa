@@ -1,3 +1,4 @@
+import { subjectGroupOf, type ProgramSubject } from "@/features/students/enrollment/program";
 import { isEnrollmentEndedOn } from "@/features/enrollments/eligibility";
 import { countedOn, type TrendEnrollment, type TrendEnrollments, type TrendPoint, type TrendStudent } from "./enrolled-trend";
 import { billedExitRows } from "./trend-billing";
@@ -5,7 +6,7 @@ import { billedExitRows } from "./trend-billing";
 /**
  * **강좌수 추이**(원장 2026-10-20 *"대시보드에 강좌수도 볼 수 있으면 좋을듯. 강좌수 추이도 당연히. … 한 학생이 여러 강좌를 들을 수도
  * 있기 때문에 듣는 모든 강좌를 체크"*) — 날짜 d에 재원생으로 세어지는 학생(`countedOn` — 재원생 추이와 같은 사람들)이 그날 듣던 반을
- * **학생마다 모두** 센다(같은 과목 반이 둘이면 2 · 같은 반이 두 줄이면 한 번). 순수 함수(Vitest).
+ * **학생·과목마다 한 번** 센다(같은 과목 반이 다섯이어도 1, 2026-10-24). 순수 함수(Vitest).
  * 그날 듣던 반 = 재원생 추이 과목 판정과 같은 규약 — 시작일 ≤ d(비면 시작한 것) · 반이동은 종료일 전날까지 · 일반 종료는 종료일 포함
  * (`isEnrollmentEndedOn` — 종료일이 미래로 적힌 수강은 그날까지) · **오늘 점**은 휴원 수강도 뺀다('강좌수' 칸과 같은 규약 → 오늘 점 = 칸 숫자).
  * 장부 정리 학생을 청구로 센 날(수강은 끝났는데 그달 청구가 살아 있다)은 퇴원 무렵 함께 끝난 반을 센다(`billedExitRows` — 재원생 추이의
@@ -42,16 +43,17 @@ export function courseTrendOf(
   points: readonly { key: string; label: string; date: string }[],
   inRow?: (e: CourseRow) => boolean,
   today?: string,
+  subjects: readonly ProgramSubject[] = [],
 ): TrendPoint[] {
   const byStudent = groupRows(enrollments);
   return points.map((p) => {
     let count = 0;
-    for (const s of students) if (countedOn(s, en, p.date)) count += coursesOn(s, byStudent.get(s.id) ?? [], en, p.date, today, inRow).length;
+    for (const s of students) if (countedOn(s, en, p.date)) count += new Set(coursesOn(s, byStudent.get(s.id) ?? [], en, p.date, today, inRow).map((e) => subjectGroupOf(e.subject, subjects)).filter((key) => key !== null)).size;
     return { ...p, count };
   });
 }
 
-/** 날짜마다 강좌수를 묶음(프로그램 등)으로 가른다 — `groupOf`가 null인 강좌는 전체에만 든다 · `inRow` = 과목 관리자(그 과목 반만). */
+/** 날짜마다 강좌수를 과목 묶음으로 가른다 — 과목 미입력 수강은 제외한다 · `inRow` = 과목 관리자(그 과목 반만). */
 export function courseBreakdownOf<K extends string>(
   students: readonly TrendStudent[],
   en: TrendEnrollments,
@@ -61,6 +63,7 @@ export function courseBreakdownOf<K extends string>(
   groupOf: (e: CourseRow) => K | null,
   today?: string,
   inRow?: (e: CourseRow) => boolean,
+  subjects: readonly ProgramSubject[] = [],
 ): { total: TrendPoint[]; groups: Record<K, TrendPoint[]> } {
   const byStudent = groupRows(enrollments);
   const total: TrendPoint[] = [];
@@ -70,11 +73,21 @@ export function courseBreakdownOf<K extends string>(
     const counts = new Map<K, number>();
     for (const s of students) {
       if (!countedOn(s, en, p.date)) continue;
+      const seen = new Set<string>();
+      const groupSeats = new Map<K, Set<string>>();
       for (const e of coursesOn(s, byStudent.get(s.id) ?? [], en, p.date, today, inRow)) {
-        all++;
+        const subject = subjectGroupOf(e.subject, subjects);
+        if (!subject) continue;
+        seen.add(subject);
         const g = groupOf(e);
-        if (g) counts.set(g, (counts.get(g) ?? 0) + 1);
+        if (g) {
+          const seats = groupSeats.get(g) ?? new Set<string>();
+          seats.add(subject);
+          groupSeats.set(g, seats);
+        }
       }
+      all += seen.size;
+      for (const [g, seats] of groupSeats) counts.set(g, (counts.get(g) ?? 0) + seats.size);
     }
     total.push({ ...p, count: all });
     for (const k of keys) groups[k].push({ ...p, count: counts.get(k) ?? 0 });
