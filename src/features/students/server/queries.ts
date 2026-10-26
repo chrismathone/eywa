@@ -30,6 +30,7 @@ import {
 } from "../lib/class-slots";
 // '따로 수업(*LAB)' 재료 — 켠 교시(0271a)·켠 수강(0271b). 둘 다 fail-soft(모르면 안 가른다).
 import { loadLabSeparateIds } from "@/features/classes/server/lab-separate";
+import { isSpecialLecture } from "@/features/classes/special-lecture";
 import { getStudentLabSeparateEnrollmentIds } from "@/features/enrollments/server/lab-separate";
 import { goalCellKey, goalExamLabel, goalStatus, type GoalStatus } from "@/features/grades/goals";
 import { loadGoals } from "@/features/grades/server/goals";
@@ -847,6 +848,8 @@ export type StudentEnrollment = {
   onHold: boolean;
   /** 반이동으로 끝났는가 — 종료 규약(`isEnrollmentEndedOn`)이 이 값으로 당일 포함/배타를 가른다. */
   isTransferred: boolean;
+  /** 특강 반인가(`isSpecialLecture` — 토글 또는 이름) — 끝난 특강은 퇴원관리 '수강종료'로 세지 않는다(상태 전환 창의 과목 종료 판정). */
+  isSpecial: boolean;
 };
 
 /**
@@ -866,7 +869,7 @@ export const getStudentEnrollments = cache(async function getStudentEnrollments(
     // 일반 종료는 그날까지 재원이라, 이 값 없이는 `isEnrollmentEndedOn`을 정확히 부를 수 없다.
     .select(
       `id, start_date, end_date, on_hold, is_transferred,
-       class:class_id ( id, class_name, subject, teacher:teacher_id ( display_name ) )`,
+       class:class_id ( id, class_name, subject, is_special, teacher:teacher_id ( display_name ) )`,
     )
     .eq("student_id", studentId)
     .order("start_date", { ascending: false });
@@ -877,7 +880,7 @@ export const getStudentEnrollments = cache(async function getStudentEnrollments(
 
   return data.map((r) => {
     const klass = (Array.isArray(r.class) ? r.class[0] : r.class) as
-      | { id?: string; class_name?: string; subject?: string; teacher?: { display_name?: string } | { display_name?: string }[] | null }
+      | { id?: string; class_name?: string; subject?: string; is_special?: boolean | null; teacher?: { display_name?: string } | { display_name?: string }[] | null }
       | undefined;
     const teacher = (Array.isArray(klass?.teacher) ? klass?.teacher[0] : klass?.teacher) as
       | { display_name?: string }
@@ -892,6 +895,7 @@ export const getStudentEnrollments = cache(async function getStudentEnrollments(
       endDate: r.end_date,
       onHold: r.on_hold,
       isTransferred: (r.is_transferred as boolean | null) ?? false,
+      isSpecial: isSpecialLecture({ isSpecial: klass?.is_special, className: klass?.class_name }),
     };
   });
 });

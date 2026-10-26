@@ -27,6 +27,7 @@ import { StatusAction } from "./_components/status-action";
 import { CancelScheduledWithdrawal } from "./_components/scheduled-withdrawal";
 import { WithdrawalReportEntry, type ReportEntry } from "./_components/withdrawal-report-entry";
 import { studentReportEntry } from "@/features/withdrawal-reports/server/queries";
+import { lastCourseGateApplies, viaReportMessage } from "@/features/withdrawals/via-report";
 import { DeleteStudentButton } from "./_components/delete-student-button";
 import { OverviewTab } from "./_tabs/overview-tab";
 import { ClassesTab } from "./_tabs/classes-tab";
@@ -147,18 +148,26 @@ export default async function StudentDetailPage({
   // ⚠️ 필터(end_date == null)는 서버가 실제로 닫는 기준(closeActiveEnrollmentsClamped)과 **같아야** 한다 —
   //    갈리면 화면이 보여준 목록과 실제로 닫히는 행이 어긋난다.
   const canManageStatus = await canManageStudentStatusNow();
-  const openEnrollments = canManageStatus
-    ? (await getStudentEnrollments(student.id))
-        .filter((e) => e.endDate == null)
-        .map((e) => ({
-          id: e.id,
-          className: e.className,
-          subject: e.subject,
-          teacherName: e.teacherName,
-          // 휴원 탭이 **지금 대기인 수업**을 체크된 채로 열기 위한 값(2026-09-16 부분 휴원).
-          onHold: e.onHold === true,
-        }))
-    : [];
+  const allEnrollments = canManageStatus ? await getStudentEnrollments(student.id) : [];
+  const openRows = allEnrollments.filter((e) => e.endDate == null);
+  // 과목 하나를 끝내면 퇴원보고서로 가야 하는가(그 과목의 마지막 반 · 원장 2026-10-26) — 서버 게이트와 **같은 판정**(`viaReportMessage`)을
+  // 오늘 날짜로 미리 돌린다. 창은 그 과목을 고르면 저장 대신 퇴원보고서로 안내한다(실제 날짜로는 서버가 다시 본다).
+  const endGate = lastCourseGateApplies(student.status, student.withdrawnAt ?? null);
+  const endRows = allEnrollments.map((e) => ({
+    id: e.id, classId: e.classId, className: e.className, subject: e.subject,
+    start: e.startDate, end: e.endDate, isTransferred: e.isTransferred, isSpecial: e.isSpecial,
+  }));
+  const subjectEndViaReport = (subject: string) =>
+    endGate && viaReportMessage(endRows, openRows.filter((e) => e.subject === subject).map((e) => e.id), kstToday(), student.withdrawnAt ?? null) !== null;
+  const openEnrollments = openRows.map((e) => ({
+    id: e.id,
+    className: e.className,
+    subject: e.subject,
+    teacherName: e.teacherName,
+    // 휴원 탭이 **지금 대기인 수업**을 체크된 채로 열기 위한 값(2026-09-16 부분 휴원).
+    onHold: e.onHold === true,
+    endViaReport: subjectEndViaReport(e.subject),
+  }));
   // 학생 영구 삭제 = 관리 도구(admin) 쓰기 권한(기본 master) — 파괴적이라 조임. 잘못 추가 정정용.
   const canDeleteStudent = await canWriteTenant(user.systemRole, "admin");
   const dateAccess = await getEnrollmentDateAccess();

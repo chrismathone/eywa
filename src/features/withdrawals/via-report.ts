@@ -11,11 +11,18 @@
  *  · 퇴원보고서의 최종 적용(DB `transition_withdrawal_report` — 승인 완료·처리일 cron·관리자 바로 처리가 모두 이 함수)
  *  · 이미 걸려 있던 퇴원 예약의 당일 처리(cron `apply-due-withdrawals`) — 이번 변경 전에 잡힌 예약을 깨지 않는다(새 예약 입구만 막는다)
  *  · 학생 병합(진 쪽 정리) · 옛 기록 등록(새 원생을 지난 퇴원 상태로 등록 · 엑셀 가져오기) · 데모 데이터
- *  · 반 이동 · 특강이 끝나도 다른 반을 계속 다니는 종료 · 한 과목만 끝내는 수강 종료(학생은 재원 그대로)
+ *  · 반 이동 · 특강 등 같은 과목의 다른 반이 남는 종료(원장 2026-10-23 *"같은 과목중에 하나가 남아있을때는 그냥 특강 등의 반 수강종료이므로
+ *    과목 수강종료(퇴원)이라고 볼 수 없어서 냅두는게 맞음."*) · 퇴원관리가 '수강종료'로 세지 않는 종료(특강만 다니던 과목의 특강이 끝남 등)
  *  · 반 폐지·종강·시트/엑셀 가져오기의 수강 종료(학생 상태는 그대로 — 수업 없는 재원생은 퇴원보고서로만 퇴원한다)
+ *  · 그 밖의 직접 쓰기(로그인 세션으로 DB에 바로 쓰는 것)는 막지 않고 **경고**한다 — 그 지점 원장 알림 + 감사로그(0454a DB 트리거)
+ * 🔴 그 과목의 **마지막 반**을 끝내는 과목 수강종료도 퇴원보고서로(원장 2026-10-26 *"그 과목의 마지막 반을 끝내는건 기존에 있던 것과
+ *    일치하게"*) — 학생의 마지막 반(퇴원)과 같은 처리다. 판정 = 시간표 확인 문구의 `endScopeOf`(과목 범위) **+** 퇴원관리 목록의 '수강종료'
+ *    판정(`getEndedSubjects`) 둘 다(`endsSubjectCourse`). 보고서에서 한 과목의 반만 고르면 처리 구분이 과목 수강종료(`subject_end`)다.
  * 장부 정리(관리 도구 '수강 없는 재원생' 일괄 퇴원)는 학생마다 **관리자 바로 처리 보고서**를 남기는 길로 옮겼다(보고서 없는 퇴원이 아니다).
  */
 import { clipToWithdrawal, endScopeOf, type OtherSpan } from "@/features/attendance/enrollment-span";
+import { addDays } from "@/lib/date-kst";
+import { getEndedSubjects } from "./subject-ended";
 
 /** 직원 화면의 직접 퇴원을 거절할 때. */
 export const WITHDRAWAL_VIA_REPORT = "퇴원은 퇴원보고서로 처리합니다. 원생 화면의 '퇴원보고서'에서 진행해 주세요.";
@@ -27,6 +34,10 @@ export const SCHEDULE_VIA_REPORT =
 /** 학생이 다니는 마지막 반을 끝내려 할 때(끝내면 다니는 반이 없다 = 사실상 퇴원). */
 export const LAST_COURSE_VIA_REPORT =
   "이 학생이 다니는 마지막 반이라 끝내면 퇴원입니다. 퇴원은 퇴원보고서로 처리합니다 — 원생 화면의 '퇴원보고서'에서 진행해 주세요.";
+
+/** 그 과목의 마지막 반을 끝내려 할 때(끝내면 그 과목 수강종료 — 퇴원관리 '수강종료'에 선다). */
+export const SUBJECT_END_VIA_REPORT =
+  "이 과목의 마지막 반이라 끝내면 과목 수강종료입니다. 수강종료는 퇴원보고서로 처리합니다 — 원생 화면의 '퇴원보고서'에서 진행해 주세요.";
 
 /**
  * 학생 폼(등록·수정) 저장이 **새로** 퇴원시키거나 새 퇴원 예약을 거는가 → 거절 문구(아니면 null).
@@ -57,6 +68,8 @@ export type EndRow = {
   start: string;
   end: string | null;
   isTransferred?: boolean;
+  /** 특강 반([`isSpecialLecture`](@/features/classes/special-lecture)) — 끝난 특강은 퇴원관리 '수강종료'로 세지 않는다. */
+  isSpecial?: boolean;
 };
 
 /**
@@ -102,4 +115,55 @@ export function endsLastCourse(
 ): boolean {
   const ending = new Set(targetIds);
   return rows.some((r) => ending.has(r.id) && endScopeFor(rows, r, ending, date, withdrawnAt).scope === "student");
+}
+
+/**
+ * 수강 `target`(함께 끝내는 `endingIds` 포함)을 `date`로 끝낸 뒤 그 과목이 **퇴원관리 '수강종료'로 서는가** — 목록 조회와 같은 판정
+ * ([`getEndedSubjects`](./subject-ended) · 끝난 특강은 빼고 그 과목 수강이 모두 끝남). 그 과목 수강이 다 끝나는 날의 다음 날로 본다
+ * (같은 과목 반이 며칠 뒤 끝나도 그날 선다 — 그 반이 계속되는지는 `endScopeOf`가 14일 창으로 먼저 가린다).
+ * 종료일이 없는 같은 과목 수강(아직 시작 전 포함)이 남으면 서지 않는다. 저장과 같게 미래 시작 수강의 종료일은 시작일로 당긴다.
+ * ⚠️ 학원 퇴원일로 자르지 않는다 — 이 판정을 쓰는 게이트는 퇴원 예약이 없는 학생에게만 걸린다(`lastCourseGateApplies`).
+ */
+export function subjectEndCounts(rows: readonly EndRow[], target: EndRow, endingIds: ReadonlySet<string>, date: string): boolean {
+  const subject = target.subject;
+  if (subject == null) return false;
+  const after = rows
+    .filter((r) => r.subject === subject)
+    .map((r) => (endingIds.has(r.id) ? { ...r, end: r.start > date ? r.start : date, isTransferred: false } : r));
+  if (after.some((r) => r.end == null)) return false;
+  const last = after.reduce((m, r) => (r.end! > m ? r.end! : m), date);
+  const split = getEndedSubjects(
+    after.map((r) => ({ subject, endDate: r.end, isTransferred: r.isTransferred, isSpecial: r.isSpecial })),
+    addDays(last, 1),
+  );
+  return split.ended.includes(subject);
+}
+
+/**
+ * 고른 수강을 끝내면 **그 과목의 마지막 반**이 끝나는가(= 과목 수강종료) — 하나라도 시간표 확인 문구가 '과목'이라 말하고(`endScopeOf` —
+ * 반이동·같은 과목 다른 반 계속이 아니고 다른 과목 반은 계속) **퇴원관리가 '수강종료'로 세면**(`subjectEndCounts`) 참.
+ * 원장 2026-10-26 *"그 과목의 마지막 반을 끝내는건 기존에 있던 것과 일치하게"* — 퇴원관리·시간표 X가 이미 수강종료로 세는 것만 막는다.
+ */
+export function endsSubjectCourse(
+  rows: readonly EndRow[],
+  targetIds: readonly string[],
+  date: string,
+  withdrawnAt: string | null,
+): boolean {
+  const ending = new Set(targetIds);
+  return rows.some(
+    (r) => ending.has(r.id) && endScopeFor(rows, r, ending, date, withdrawnAt).scope === "subject" && subjectEndCounts(rows, r, ending, date),
+  );
+}
+
+/** 마지막 반 게이트의 거절 문구 — 학생의 마지막 반(퇴원)이 먼저, 그다음 그 과목의 마지막 반(과목 수강종료). 아니면 null. */
+export function viaReportMessage(
+  rows: readonly EndRow[],
+  targetIds: readonly string[],
+  date: string,
+  withdrawnAt: string | null,
+): string | null {
+  if (endsLastCourse(rows, targetIds, date, withdrawnAt)) return LAST_COURSE_VIA_REPORT;
+  if (endsSubjectCourse(rows, targetIds, date, withdrawnAt)) return SUBJECT_END_VIA_REPORT;
+  return null;
 }

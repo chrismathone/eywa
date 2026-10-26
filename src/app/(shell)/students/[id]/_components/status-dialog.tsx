@@ -36,6 +36,11 @@ export type OpenEnrollment = {
   teacherName: string | null;
   /** 지금 대기(휴원)인가 — 휴원 탭이 **현재 상태 그대로** 열리는 근거(2026-09-16). */
   onHold?: boolean;
+  /**
+   * 이 과목(의 활성 수강 전부)을 끝내면 과목 수강종료라 퇴원보고서로 가는가 — 원생 화면이 서버 게이트와 같은 판정(`viaReportMessage`)으로
+   * 오늘 날짜에 미리 계산한다(원장 2026-10-26). 서버는 고른 날짜로 다시 본다.
+   */
+  endViaReport?: boolean;
 };
 
 // 퇴원 사유(대분류·세부·메모)는 퇴원관리와 **한 벌**(`ReasonFields` · REASON_LABEL) — 두 벌이면 여기서 고른 사유가 퇴원관리에선
@@ -133,13 +138,19 @@ export function StatusDialog({
       return next;
     });
 
+  // 끝내면 과목 수강종료가 되는 과목(퇴원보고서로) — 원생 화면이 서버 판정으로 넘긴 값.
+  const reportSubjects = useMemo(
+    () => new Set(openEnrollments.filter((e) => e.endViaReport).map((e) => e.subject)),
+    [openEnrollments],
+  );
   const plan = useMemo(
     () =>
       describeEndSelection(
         groups.length,
         groups.filter((g) => selected.has(g.subject)).map((g) => subjects.labelOf(g.subject)),
+        groups.filter((g) => selected.has(g.subject) && reportSubjects.has(g.subject)).map((g) => subjects.labelOf(g.subject)),
       ),
-    [groups, selected, subjects],
+    [groups, selected, subjects, reportSubjects],
   );
   const holdPlan = useMemo(
     () =>
@@ -158,9 +169,10 @@ export function StatusDialog({
   const isHold = target === "on_hold";
   const isRestore = target === "enrolled";
   // 🔴 '수강 종료' 탭(옛 '퇴원' 탭)은 **일부 과목 종료만** 한다 — 모든 과목을 고르면 퇴원이라 퇴원보고서로 보낸다(원장 2026-10-23
-  //    *"퇴원 보고서를 써야 퇴원처리가 가능하도록"*). 서버도 같은 판정으로 거절한다(`changeStudentStatus`·`lastCourseViaReport`).
+  //    *"퇴원 보고서를 써야 퇴원처리가 가능하도록"*). 고른 과목을 끝내면 그 과목 수강종료인 것도 퇴원보고서로(원장 2026-10-26).
+  //    서버도 같은 판정으로 거절한다(`changeStudentStatus`·`lastCourseViaReport`).
   const isPartial = isWithdraw && plan.mode === "partial";
-  const viaReport = isWithdraw && plan.mode === "full";
+  const viaReport = isWithdraw && (plan.mode === "full" || plan.mode === "subject");
   const blocked = (isWithdraw && plan.mode !== "partial") || (isHold && holdPlan.mode === "none");
   // 🔴 이 탭의 제출은 늘 부분 종료 액션이다 — 만에 하나 버튼 잠금이 새어 나가도 퇴원으로 떨어지지 않는다(서버가 마지막 반을 거절).
   const usePartialAction = isWithdraw;
@@ -263,7 +275,7 @@ export function StatusDialog({
                   isPartial ? "text-amber font-medium" : blocked ? "text-danger" : "text-muted-foreground"
                 }`}
               >
-                {viaReport && scheduledWithdrawal
+                {plan.mode === "full" && scheduledWithdrawal
                   ? `퇴원 예약(${scheduledWithdrawal})이 걸려 있어 그날 퇴원 처리됩니다. 그 전에 일부 과목만 끝내려면 끝낼 과목만 골라 주세요.`
                   : plan.notice}
               </p>

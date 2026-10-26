@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  endScopeFor,
   endsLastCourse,
+  endsSubjectCourse,
   formWithdrawalViaReport,
+  LAST_COURSE_VIA_REPORT,
   lastCourseGateApplies,
   SCHEDULE_VIA_REPORT,
+  SUBJECT_END_VIA_REPORT,
+  viaReportMessage,
   WITHDRAWAL_VIA_REPORT,
   type EndRow,
 } from "./via-report";
@@ -73,5 +78,54 @@ describe("lastCourseGateApplies — 게이트를 거는 학생", () => {
     expect(lastCourseGateApplies("withdrawn", "2026-09-01")).toBe(false);
     expect(lastCourseGateApplies("prospect", null)).toBe(false);
     expect(lastCourseGateApplies("enrolled", "2026-11-01")).toBe(false);
+  });
+});
+
+/**
+ * 원장 2026-10-26 *"그 과목의 마지막 반을 끝내는건 기존에 있던 것과 일치하게"* — 시간표 확인 문구가 '과목'이라 말하고(`endScopeOf`)
+ * 퇴원관리가 '수강종료'로 세는(`getEndedSubjects` — 끝난 특강 제외) 종료만 막는다. 각 줄 = 두 판정이 갈리는 경우.
+ */
+describe("endsSubjectCourse — 그 과목의 마지막 반 = 과목 수강종료(퇴원관리 '수강종료'와 같은 판정)", () => {
+  const D = "2026-10-26";
+  const eng = row("e", "E", "english", "2026-03-01");
+  it("다른 과목이 계속되는데 그 과목 하나뿐인 반을 끝내면 과목 수강종료 — 막는다", () => {
+    const rows = [row("a", "A", "math", "2026-03-01"), eng];
+    expect(endsSubjectCourse(rows, ["a"], D, null)).toBe(true);
+    expect(viaReportMessage(rows, ["a"], D, null)).toBe(SUBJECT_END_VIA_REPORT);
+  });
+  it("같은 과목 다른 반이 계속되면(특강만 끝남) · 이어받으면(반 이동) 그대로", () => {
+    expect(endsSubjectCourse([row("s", "S", "math", "2026-07-01", null, { isSpecial: true }), row("r", "R", "math", "2026-03-01"), eng], ["s"], D, null)).toBe(false);
+    expect(endsSubjectCourse([row("a", "A", "math", "2026-03-01"), row("b", "B", "math", "2026-10-27"), eng], ["a"], D, null)).toBe(false);
+  });
+  it("특강만 다니던 과목의 특강이 끝남 — 시간표는 '과목'이지만 퇴원관리는 수강종료로 안 센다 → 막지 않는다", () => {
+    const rows = [row("s", "S", "math", "2026-07-01", null, { isSpecial: true }), eng];
+    expect(endScopeFor(rows, rows[0]!, new Set(["s"]), D, null).scope).toBe("subject");
+    expect(endsSubjectCourse(rows, ["s"], D, null)).toBe(false);
+  });
+  it("예전 정규반이 끝나 있고 남은 특강을 끝내면 — 퇴원관리가 그 과목을 수강종료로 세운다 → 막는다", () => {
+    const rows = [row("o", "O", "math", "2025-03-01", "2025-12-31"), row("s", "S", "math", "2026-07-01", null, { isSpecial: true }), eng];
+    expect(endsSubjectCourse(rows, ["s"], D, null)).toBe(true);
+  });
+  it("같은 과목 다른 반이 15일 넘어 시작(종료일 없음) — 시간표는 '과목'이지만 퇴원관리는 그 반을 다니는 중으로 본다 → 막지 않는다", () => {
+    const rows = [row("a", "A", "math", "2026-03-01"), row("b", "B", "math", "2026-11-20"), eng];
+    expect(endScopeFor(rows, rows[0]!, new Set(["a"]), D, null).scope).toBe("subject");
+    expect(endsSubjectCourse(rows, ["a"], D, null)).toBe(false);
+  });
+  it("같은 과목 다른 반이 며칠 뒤 끝남(14일 안) — 그날 과목 수강종료 → 막는다 · 14일 넘게 계속되면 그대로", () => {
+    expect(endsSubjectCourse([row("a", "A", "math", "2026-03-01"), row("b", "B", "math", "2026-03-01", "2026-10-31"), eng], ["a"], D, null)).toBe(true);
+    expect(endsSubjectCourse([row("a", "A", "math", "2026-03-01"), row("b", "B", "math", "2026-03-01", "2026-12-31"), eng], ["a"], D, null)).toBe(false);
+  });
+  it("학생의 마지막 반이면 퇴원 문구가 먼저(과목 문구가 아니다)", () => {
+    expect(viaReportMessage([row("a", "A", "math", "2026-03-01")], ["a"], D, null)).toBe(LAST_COURSE_VIA_REPORT);
+    expect(endsSubjectCourse([row("a", "A", "math", "2026-03-01")], ["a"], D, null)).toBe(false);
+  });
+  it("한 과목의 반을 모두 함께 끝내면 과목 수강종료(나눠 끝내기 우회 금지) · 일부만이면 그대로", () => {
+    const rows = [row("a", "A", "math", "2026-03-01"), row("b", "B", "math", "2026-03-01"), eng];
+    expect(endsSubjectCourse(rows, ["a", "b"], D, null)).toBe(true);
+    expect(endsSubjectCourse(rows, ["a"], D, null)).toBe(false);
+  });
+  it("미래 시작 수강은 시작일로 닫힌다(저장과 같게) — 그래도 과목 수강종료", () => {
+    const rows = [row("f", "F", "math", "2026-11-02"), eng];
+    expect(endsSubjectCourse(rows, ["f"], D, null)).toBe(true);
   });
 });

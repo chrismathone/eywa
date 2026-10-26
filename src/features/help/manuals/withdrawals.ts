@@ -7,7 +7,8 @@ export const withdrawals: HelpManual = {
   menuKey: "withdrawals",
   group: "원생",
   layout: "list",
-  summary: "퇴원 처리와 사유 통계입니다. 한 과목만 끝난 원생(‘수강종료’)도 라벨을 달고 같은 목록에 섭니다.",
+  summary:
+    "퇴원 처리와 사유 통계입니다. 한 과목만 끝난 원생(‘수강종료’)도 라벨을 달고 같은 목록에 섭니다. 퇴원과 과목 수강종료는 원생 화면의 ‘퇴원보고서’로 처리합니다.",
   related: ["students", "dashboard", "retention"],
   callouts: [
     {
