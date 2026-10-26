@@ -58,6 +58,17 @@ describe("lessonNoOf — 진도 → 차수", () => {
     expect(lessonNoOf("수학 직사각형, 마름모, 정사각형", G3.lessons)).toBe(4);
     expect(lessonNoOf("삼각형에서 평행선 사이의 선분의 길이의 비", G4.lessons)).toBe(1);
   });
+  it("로마 숫자 · 교재식 이름 ↔ 커리큘럼 이름(중1-1 · 초등 발전)", () => {
+    expect(unitKey("수학 일차식의 뜻Ⅱ")).toBe(unitKey("일차식의 뜻 2"));
+    expect(unitKey("수학 문자의 사용과 식의 값")).toBe(unitKey("문자의 사용과 식의 계산"));
+    expect(unitKey("2-4-1 (1보다 작은 소수)×(자연수)의 계산")).toBe(unitKey("4-1. (소수)×(자연수)의 계산(1)"));
+    expect(unitKey("2-3-4 쌓은 모양과 쌓기나무의 개수 알아보기 (3)")).toBe(unitKey("3-4. 위에서 본 모양에 수를 적는 방법"));
+    const E52 = book("e52", "초5-2 발전 2권", ["4-1. (소수)×(자연수)의 계산(1) / 4-2. (소수)×(자연수)의 계산(2)", "4-7. 곱의 소수점 위치"]);
+    expect(lessonNoOf("수학 2-4-7 곱의 소수점의 위치", E52.lessons)).toBe(2);
+    // 받아올림 두 소단원이 한 커리큘럼 이름으로 묶이면 그 묶음의 뒤 차수
+    const E31 = book("e31", "초3-1 발전 1권", ["1-1-1 받아올림이 없는 (세 자리 수)+(세 자리 수)", "1-1-2 받아올림이 한 번 있는 (세 자리 수)+(세 자리 수)"]);
+    expect(lessonNoOf("1-1-1 받아올림이 없는, 한 번 있는 (세 자리 수)+(세 자리 수)", E31.lessons)).toBe(2);
+  });
   it("여러 줄이면 가장 뒤 차수", () => {
     expect(lessonNoOf("1.이등변삼각형의 성질\n2.삼각형의 외심", G3.lessons)).toBe(2);
   });
