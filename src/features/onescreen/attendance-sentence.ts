@@ -45,3 +45,35 @@ export function attendanceSentence(status: string | null | undefined, note: stri
   const reason = cleanReason(note);
   return reason ? `${head}(사유: ${reason}).` : `${head}.`;
 }
+
+/** 보고서 머리의 작은 출결 표시 — 글자 + 상태 키(색은 출결 단일 소스 `ATT_SOFT`가 정한다). */
+export type AttendanceMark = { status: "present" | "late" | "early_leave" | "excused" | "makeup"; label: string };
+
+const MARK_LABEL: Record<AttendanceMark["status"], string> = {
+  present: "출석",
+  late: "지각",
+  early_leave: "조퇴",
+  excused: "공결",
+  makeup: "보강",
+};
+
+/**
+ * '출결' 항목 글 → 머리 표시(원장 2026-10-26 *"조그마한 마크같은걸로 출석 여부 바로 확인"*). 학부모 카드는 저장된 글만 받으므로
+ * 글이 이 모듈이 만든 문장으로 **시작할 때만** 상태를 안다 — 모르는 글이면 null(표시를 지어내지 않는다).
+ */
+export function attendanceMarkOf(text: string | null | undefined): AttendanceMark | null {
+  const t = (text ?? "").trim();
+  if (!t) return null;
+  for (const [status, sentence] of Object.entries(PLAIN_SENTENCE)) {
+    if (t.startsWith(sentence)) return { status: status as AttendanceMark["status"], label: MARK_LABEL[status as AttendanceMark["status"]] };
+  }
+  for (const [status, head] of Object.entries(STATUS_SENTENCE)) {
+    if (t.startsWith(head)) return { status: status as AttendanceMark["status"], label: MARK_LABEL[status as AttendanceMark["status"]] };
+  }
+  return null;
+}
+
+/** 출결 항목이 표시만으로 충분한가 — 출석·보강은 문장이 표시와 같은 말이라 아래 띠를 따로 세우지 않는다. 사유가 있는 지각 등은 띠도 세운다. */
+export function attendanceMarkIsEnough(mark: AttendanceMark | null): boolean {
+  return mark?.status === "present" || mark?.status === "makeup";
+}
