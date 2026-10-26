@@ -8,8 +8,8 @@ const cancelled = /^(?:true|1|☑|취소|신청취소|예약취소|참석취소)
 const attended = /^(?:true|1|☑|o|ㅇ|○|참석|실참석|참석완료)$/;
 const absent = /^(?:false|0|x|불참|미참석|참석불가)$/;
 const noCancellation = /^(?:false|0|취소없음|취소아님|미취소|취소안함)$/;
-const registrationConfirmation = /^(?:참석확인(?:완료)?|참석화인|참석예정|완료|확인|확인완료|통화완료|통화함|전화완료|전화돌림|부재(?:중)?|미연결|전화기off|o|○)$/;
-export const ambiguousAbsence = /취소|불참|미참석|참석불가|안오|못오|안옴|못옴|못가|어렵|다음에|다음번|불가|힘들|결석|노쇼/;
+const registrationConfirmation = /^(?:(?:\d{1,2}:\d{2})?(?:설명회)?참석확인(?:완료)?|참석화인|참석예정|완료|확인|확인완료|통화완료|통화함|전화완료|전화돌림|부재(?:중)?|미연결|전화기off|o|○)$/;
+export const ambiguousAbsence = /취소|불참|미참석|미참여|참석불가|안오|못오|안옴|못옴|못올|안올|올수없|참여x|참석x|△|못가|어렵|다음에|다음번|불가|힘들|결석|노쇼|변경|연기/;
 
 /** A call result is not attendance. Free-text cancellation mentions require review. */
 export function decideEventAttendance(input: {

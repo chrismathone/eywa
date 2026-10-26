@@ -1,4 +1,5 @@
 import { z } from "zod";
+export const DEFAULT_PARENT_SEMINAR_POINTS = 5;
 
 /** D1/D5: 만점·구간 없이 원래 수치에 현재 건당 배점을 곱한다. */
 export const METRICS = ["referralConsult", "referralStarted", "tuitionWon", "subjectMonths", "tenureYears",
@@ -23,7 +24,7 @@ export const contributionConfigSchema = z.object({
   version: z.literal(1),
   rates: z.object({ referralConsult: rate, referralStarted: rate, tuitionWon: rate, subjectMonths: rate, tenureYears: rate,
     perfectMonths: rate, videoMonths: rate, examMonths: rate, parentPositiveMonths: rate, teacherPositiveMonths: rate,
-    parentSeminarEvents: rate.default({ enabled: false, points: 1 }) }),
+    parentSeminarEvents: rate.default({ enabled: false, points: DEFAULT_PARENT_SEMINAR_POINTS }) }),
   referrals: z.object({ months: z.number().int().min(1).max(120), key: z.enum(["studentSubject", "student"]) }),
   attendance: z.object({ allowLate: z.boolean() }),
 });
@@ -31,7 +32,7 @@ export type ContributionConfig = z.infer<typeof contributionConfigSchema>;
 export const DEFAULT_CONFIG: ContributionConfig = {
   version: 1,
   rates: Object.fromEntries(METRICS.map((id) => [id, { enabled: id !== "parentSeminarEvents",
-    points: id === "referralConsult" || id === "tenureYears" ? 5 : id === "referralStarted" ? 15 : 1 }])) as ContributionConfig["rates"],
+    points: id === "parentSeminarEvents" ? DEFAULT_PARENT_SEMINAR_POINTS : id === "referralConsult" || id === "tenureYears" ? 5 : id === "referralStarted" ? 15 : 1 }])) as ContributionConfig["rates"],
   referrals: { months: 12, key: "studentSubject" }, attendance: { allowLate: true },
 };
 export const emptyRaws = (): Raws => Object.fromEntries(METRICS.map((id) => [id, 0])) as Raws;

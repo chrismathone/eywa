@@ -1,17 +1,21 @@
 import { createHash } from "node:crypto";
 import { phoneKeyOf } from "../../../src/features/enrollment/same-person";
 import { validEventDate } from "../../../src/features/student-contribution/model/parent-events/attendance";
+import { guardianNameKey } from "../../../src/features/student-contribution/model/parent-events/family";
 export const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 export const cell = (row: unknown[], index: number | undefined) => index === undefined ? "" : String(row[index] ?? "").trim();
 export const childName = (s: string) => /^[가-힣]{2,5}[a-zA-Z]{0,2}$/.test(s.trim()) && !/재원생|비재원|없음|확인|어머니|아버지/.test(s) ? s.trim() : "";
 export const childFromGuardian = (s: string) => /^([가-힣]{2,5}[a-zA-Z]{0,2})\s*(?:어머님|어머니|아버님|아버지|엄마|맘)$/.exec(s.trim())?.[1] ?? "";
 export function contact(s: string) {
-  const tokens = s.match(/(?<!\d)(?:\+82[ .-]?10|010)[ .-]?\d{4}[ .-]?\d{4}(?!\d)/g) ?? [];
+  // A numeric phone-only spreadsheet cell may lose its initial zero. Never repair partial/narrative values.
+  const input = /^10\d{8}$/.test(s.trim()) ? `0${s.trim()}` : s;
+  const tokens = input.match(/(?<!\d)(?:\+82[ .-]{0,3}10|010)[ .-]{0,3}\d{4}[ .-]{0,3}\d{4}(?!\d)/g) ?? [];
   const phones = [...new Set(tokens.map(phoneKeyOf).filter((p): p is string => !!p))].sort();
-  let rest = s;
+  let rest = input;
   for (const t of tokens) rest = rest.replace(t, "");
-  rest = rest.replace(/^[\s/,:]+|[\s/,:]+$/g, "");
-  return { phones, guardian: /^[가-힣]{2,5}$/.test(rest) ? rest : "", invalid: !!s && (!phones.length || /(?:01[016789]|\+82)[ .-]*\d|\d[ .-]*\d[ .-]*\d/.test(rest)) };
+  rest = rest.replace(/^[\s/,:.]+|[\s/,:.]+$/g, "");
+  const guardian = guardianNameKey(rest) ? rest : "";
+  return { phones, guardian, invalid: !!s && (!phones.length && !guardian || /(?:01[016789]|\+82)[ .-]*\d|\d[ .-]*\d[ .-]*\d/.test(rest)) };
 }
 export function grade(s: string, school = "") {
   const v = s.replace(/\s+/g, "").replace(/초등학교|초등/, "초").replace(/중학교|중등/, "중").replace(/고등학교|고등/, "고").replace(/학년$/, "");

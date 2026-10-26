@@ -52,12 +52,13 @@ async function main() { try {
   await rejects(apply, /test audit failure/);
   assert.equal((await db.query("select count(*)::int n from student_parent_event_imports")).rows[0]!.n, 0); checks++;
   await db.exec("drop trigger audit_test on audit_logs");
-  const applied = await apply(); assert.equal(applied.count, 2); checks++;
+  const applied = await applyInitialEvents(sql, report, pack, { ...options, scoringApproved: true }, verifySources); assert.equal(applied.count, 2); checks++;
   assert.deepEqual((await db.query("select session from student_parent_events order by session")).rows.map(r => r.session), ["am", "pm"]); checks++;
   assert.equal((await apply()).alreadyApplied, true); checks++;
   const settings = (await db.query("select config,revision from student_contribution_settings where tenant_id=$1", [tenant])).rows[0]!;
   assert.deepEqual(settings.config, {}); assert.equal(settings.revision, 1); checks++;
-  assert.equal((await db.query("select scoring_approved_at from student_parent_event_imports")).rows[0]!.scoring_approved_at, null); checks++;
+  const approval = (await db.query("select scoring_approved_at,summary from student_parent_event_imports")).rows[0]!;
+  assert.ok(approval.scoring_approved_at); assert.deepEqual((approval.summary as { approvedRate: unknown }).approvedRate, { group: "operations", points: 5 }); checks++;
   await rejects(() => revokeEventImport(sql, tenant, applied.id, "0".repeat(64), owner, "wrong fingerprint"), /fingerprint/);
   await revokeEventImport(sql, tenant, applied.id, report.fingerprint, owner, "reviewed rollback"); checks++;
   const snapshot = (await db.query("select student_parent_event_snapshot($1) value", [tenant])).rows[0]!.value as { records: unknown[] };

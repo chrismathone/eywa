@@ -3,10 +3,12 @@ import { validEventDate } from "./attendance";
 import { eventEducationConflicts } from "./education";
 import { childNameKey, eventName, guardianNameKey, studentEventPhones, verifiedEventSibling } from "./family";
 import type { EventIdentity, EventIdentityMatch, EventReason, EventSiblingLink, EventStudent } from "./types";
+import { eventGuardiansCompatible } from "./guardian";
 
 /** Identity matching never proves attendance; the attendance policy is evaluated separately. */
 export function matchEventIdentity(input: EventIdentity, students: readonly EventStudent[], links: readonly EventSiblingLink[], today: string): EventIdentityMatch {
   const reasons: EventReason[] = [];
+  const guardian = input.studentName && childNameKey(input.guardianName) === childNameKey(input.studentName) ? "" : input.guardianName;
   const review = (candidates: string[] = []): EventIdentityMatch => ({ state: "review", studentIds: [], candidates: [...new Set(candidates)].sort(), reasons: [...new Set(reasons)], basis: null });
   if (!input.sourceRef.trim()) reasons.push("source_missing");
   if (!input.eventId.trim()) reasons.push("event_missing");
@@ -35,9 +37,9 @@ export function matchEventIdentity(input: EventIdentity, students: readonly Even
   }
   // All matching numbers must belong to the same verified household; do not choose a convenient one.
   for (const a of phoned) for (const b of phoned) if (a.id !== b.id && !verifiedEventSibling(a, b, links)) reasons.push("household_conflict");
-  if (!input.studentName && (!guardianNameKey(input.guardianName) || matches.some(s => !guardianNameKey(s.guardianName)))) reasons.push("guardian_missing");
+  if (!input.studentName && (!guardianNameKey(guardian) || matches.some(s => !guardianNameKey(s.guardianName)))) reasons.push("guardian_missing");
   for (const student of matches) {
-    if (guardianNameKey(input.guardianName) && guardianNameKey(student.guardianName) && guardianNameKey(input.guardianName) !== guardianNameKey(student.guardianName)) reasons.push("guardian_conflict");
+    if (guardian?.trim() && student.guardianName?.trim() && !eventGuardiansCompatible(guardian, student.guardianName)) reasons.push("guardian_conflict");
     if (input.studentName) reasons.push(...eventEducationConflicts(input, student, today));
   }
   if (!input.studentName && (input.school || input.grade)) {

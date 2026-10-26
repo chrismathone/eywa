@@ -1,14 +1,12 @@
 import { personName, phoneKeyOf } from "@/features/enrollment/same-person";
 import { resolveSiblingIds, siblingBasis } from "@/features/students/siblings";
 import type { EventAttribution, EventSiblingLink, EventStudent } from "./types";
+import { eventGuardianNames, eventGuardiansCompatible } from "./guardian";
 
 export const eventName = (value: string | null | undefined) => personName(value?.normalize("NFKC"));
 export const childNameKey = (value: string | null | undefined) => eventName(value).replace(/^(.*[가-힣])[a-z]{1,2}$/, "$1");
 /** Relationship labels and placeholders cannot establish a shared parent's identity. */
-export const guardianNameKey = (value: string | null | undefined) => {
-  const name = eventName(value);
-  return /^(?:어머니|어머님|엄마|아버지|아버님|아빠|학부모|보호자|부모|부|모|없음|미상|미입력|unknown|null|none|[-.]+)$/.test(name) ? "" : name;
-};
+export const guardianNameKey = (value: string | null | undefined) => eventGuardianNames(value).join("/");
 const person = (s: EventStudent) => ({ id: s.id, name: s.name, parent_name: s.guardianName, parent_phone: s.guardianPhone });
 export function explicitSiblings(anchorId: string, links: readonly EventSiblingLink[]) {
   return new Map(links.filter(l => l.student_a === anchorId || l.student_b === anchorId)
@@ -20,8 +18,7 @@ export function verifiedEventSibling(a: EventStudent, b: EventStudent, links: re
   if (explicit !== undefined) return explicit;
   // The profile's name-only suggestion is insufficient for automatic attribution of a historical event.
   if (siblingBasis(person(a), person(b)) !== "phone") return false;
-  const ga = guardianNameKey(a.guardianName), gb = guardianNameKey(b.guardianName);
-  return !!ga && ga === gb;
+  return eventGuardiansCompatible(a.guardianName, b.guardianName);
 }
 export function eventFamilyAttributions(anchorId: string, students: readonly EventStudent[], links: readonly EventSiblingLink[]): EventAttribution[] {
   const anchor = students.find(s => s.id === anchorId && s.eligible);

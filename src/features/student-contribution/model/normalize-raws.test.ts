@@ -18,7 +18,7 @@ describe("seminar metric backward compatibility", () => {
     const old = structuredClone(DEFAULT_CONFIG) as { version: number; rates: Record<string, unknown> };
     delete old.rates.parentSeminarEvents;
     const config = resolveConfig(old);
-    expect(config.rates.parentSeminarEvents).toEqual({ enabled: false, points: 1 });
+    expect(config.rates.parentSeminarEvents).toEqual({ enabled: false, points: 5 });
     expect(scoreRaws({ ...emptyRaws(), tuitionWon: 100_000, parentSeminarEvents: 500 }, config).total).toBe(1);
     delete old.rates.tuitionWon;
     expect(() => resolveConfig(old)).toThrow();

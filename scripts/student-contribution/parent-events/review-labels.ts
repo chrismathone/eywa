@@ -1,7 +1,8 @@
 /** Owner-facing labels; unknown parser reasons remain visible for diagnosis. */
 export const REVIEW_REASON_LABELS: Record<string, string> = {
   absence_meaning_unconfirmed: "불참 표시 의미 확인", ambiguous_student: "동명이인 구분 필요", attendance_marker_unknown: "참석 표시 의미 확인",
-  cancellation_ambiguous: "취소 여부 확인", cancellation_context_unconfirmed: "메모의 불참·취소 문맥 확인", confirmation_marker_unknown: "확인 칸 의미 확인",
+  cancellation_ambiguous: "취소 여부 확인", cancellation_context_unconfirmed: "메모의 취소·불참·일정 변경 확인", confirmation_marker_unknown: "확인 칸 의미 확인",
+  event_series_repeat: "같은 설명회의 다른 날짜 신청 중복 확인",
   cross_source_absence: "다른 명단의 불참 표시와 충돌", event_date_conflict: "행사일 충돌", event_date_conflict_27_vs_28: "7월 27일·28일 충돌",
   event_date_conflict_may_vs_march: "5월·3월 표제 충돌", event_date_invalid: "행사일 확인 필요", event_identity_unconfirmed: "같은 날 행사 구분 필요",
   event_kind_roundtable: "간담회 인정 범위 확인", event_missing: "행사 식별 필요", grade_conflict: "학년 불일치", grade_unstructured: "학년 표기 확인",

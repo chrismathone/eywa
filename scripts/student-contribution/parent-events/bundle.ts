@@ -10,6 +10,8 @@ import type { EventDatabaseSnapshot } from "./snapshot";
 import { createHmac } from "node:crypto";
 import { contributionRoster } from "../../../src/features/student-contribution/model/roster";
 import { eventCreditCounts } from "../../../src/features/student-contribution/model/parent-events/credits";
+import { DEFAULT_PARENT_SEMINAR_POINTS } from "../../../src/features/student-contribution/model/config";
+import { studentEventPhones } from "../../../src/features/student-contribution/model/parent-events/family";
 export type EventSourcePack = { capturedAt: string; sources: SourceSheet[]; profiles: SourceProfile[] };
 /** Ignore representation differences (MCP boolean vs Sheets formatted TRUE) and trailing empty grid cells. */
 export function normalizedGrid(values: unknown[][]) {
@@ -52,10 +54,17 @@ export function buildEventBundle(database: EventDatabaseSnapshot, pack: EventSou
     id: `parent_event:${opaque("event", c.eventId)}:${c.studentId}`, sourceIds: c.sourceIds.map(id => opaque("source", id)).sort(),
     familyKey: opaque("family", c.familyKey), familyKeys: c.familyKeys.map(key => opaque("family", key)).sort() }));
   const counts = (xs: string[]) => Object.fromEntries([...new Set(xs)].sort().map(k => [k, xs.filter(x => x === k).length]));
+  const knownPhones = new Set(students.filter(s => s.eligible).flatMap(s => [...studentEventPhones(s)]));
+  const withPhone = result.outcomes.filter(d => d.row.phones.length > 0);
+  const phoneMatched = withPhone.filter(d => d.row.phones.some(p => knownPhones.has(p)));
   const summary = { ...eventCreditCounts(result.credits), parsedRows: rows.length, sources: pack.sources.length, files: new Set(pack.sources.map(s => s.fileId)).size,
     states: counts(result.outcomes.map(d => d.state)), attendanceStates: counts(result.outcomes.map(d => d.attendance.state)),
     reasons: counts(result.outcomes.filter(d => d.state === "review").flatMap(d => d.reasons)), duplicateAttributions: result.duplicateAttributions,
-    proposedPointsAtOnePerEvent: result.credits.length, enabled: false, outsideRoster, identityKeyFingerprint: hash(privacyKey).slice(0, 16),
+    pointsPerEvent: DEFAULT_PARENT_SEMINAR_POINTS, proposedPoints: result.credits.length * DEFAULT_PARENT_SEMINAR_POINTS,
+    enabled: false, outsideRoster, identityKeyFingerprint: hash(privacyKey).slice(0, 16),
+    phoneAudit: { rowsWithPhone: withPhone.length, rowsWithoutPhone: rows.length - withPhone.length,
+      matchingRows: phoneMatched.length, matchedStates: counts(phoneMatched.map(d => d.state)),
+      phoneStates: counts(withPhone.map(d => d.state)), matchedReviewReasons: counts(phoneMatched.filter(d => d.state === "review").flatMap(d => d.reasons)) },
     pendingRows: result.outcomes.filter(d => d.state === "review" && d.row.tenantId === database.tenantId
       && !d.reasons.some(r => r === "tenant_unknown" || r.startsWith("event_kind_"))).length,
     enrollmentTiming: { beforeProfileEnrollment: result.credits.filter(c => { const s = database.students.find(s => s.id === c.studentId)!; return s.enrolled_at && c.eventDate < s.enrolled_at; }).length,

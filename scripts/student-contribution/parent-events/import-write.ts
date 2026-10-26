@@ -25,7 +25,7 @@ export async function applyInitialEvents(db: Sql, report: EventBundle, pack: Eve
     if (!fresh.credits.length) throw new Error("No approved recognitions to import");
     const id = randomUUID();
     await sql`insert into public.student_parent_event_imports(tenant_id,id,fingerprint,policy_version,status,approved_by,approved_at,scoring_approved_at,summary)
-      values(${fresh.tenantId},${id},${fresh.fingerprint},${fresh.policy},'applied',${options.owner},now(),${options.scoringApproved ? new Date() : null},${sql.json({ ...fresh.summary, approvedRate: options.scoringApproved ? { group: "operations", points: 1 } : null })})`;
+      values(${fresh.tenantId},${id},${fresh.fingerprint},${fresh.policy},'applied',${options.owner},now(),${options.scoringApproved ? new Date() : null},${sql.json({ ...fresh.summary, approvedRate: options.scoringApproved ? { group: "operations", points: fresh.summary.pointsPerEvent } : null })})`;
     for (const e of fresh.events) await sql`insert into public.student_parent_events(tenant_id,id,title,event_date,session,import_id) values(${fresh.tenantId},${e.id},${e.title},${e.date},${e.session},${id})`;
     for (const r of fresh.registrations) {
       await sql`insert into public.student_parent_event_registrations(tenant_id,id,event_id,identity_hash,content_hash,source_file,source_sheet,source_row,source_ref,state,attendance_basis,import_id)

@@ -47,12 +47,21 @@ export function evaluateRegistrations(input: { tenantId: string; today: string; 
       basis: a.basis === "direct" ? d.identity.basis === "household" ? "household" : "direct" : "sibling" });
     return { ...d, state, attributions, reasons: [...new Set(d.reasons)].sort() };
   });
-  const initial = deduplicateEventCredits(tenantId, recognized, canonical, today);
+  const series = new Map<string, Set<string>>();
+  for (const d of outcomes) if (d.state === "recognized" && d.row.seriesKey) for (const a of d.attributions) {
+    const key = `${d.row.seriesKey}:${canonical(a.studentId)}`, events = series.get(key) ?? new Set<string>();
+    events.add(d.row.eventId); series.set(key, events);
+  }
+  const repeatedSources = new Set(outcomes.filter(d => d.state === "recognized" && d.row.seriesKey
+    && d.attributions.some(a => (series.get(`${d.row.seriesKey}:${canonical(a.studentId)}`)?.size ?? 0) > 1)).map(d => d.row.sourceId));
+  for (const d of outcomes) if (repeatedSources.has(d.row.sourceId)) { d.state = "review"; d.attributions = []; d.reasons.push("event_series_repeat"); }
+  const unambiguous = recognized.filter(r => !r.sourceIds.some(id => repeatedSources.has(id)));
+  const initial = deduplicateEventCredits(tenantId, unambiguous, canonical, today);
   const ambiguousSources = new Set(initial.filter(c => c.familyKeys.length > 1).flatMap(c => c.sourceIds));
   for (const d of outcomes) if (ambiguousSources.has(d.row.sourceId)) {
     d.state = "review"; d.attributions = []; d.reasons.push("household_partition_conflict");
   }
-  const accepted = recognized.filter(r => !r.sourceIds.some(id => ambiguousSources.has(id)));
+  const accepted = unambiguous.filter(r => !r.sourceIds.some(id => ambiguousSources.has(id)));
   const credits = deduplicateEventCredits(tenantId, accepted, canonical, today);
   return { outcomes, credits, counts: eventCreditCounts(credits), duplicateAttributions: accepted.length - credits.length };
 }

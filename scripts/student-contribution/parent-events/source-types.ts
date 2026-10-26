@@ -6,10 +6,13 @@ export type SourceBlock = {
   name?: number; guardian?: number; phone?: number; contact?: number; school?: number; grade?: number;
   childDetail?: number; schoolGrade?: number; dateColumn?: number; dateYear?: number; rowKey?: number;
   sessionColumn?: number; session?: string; sessionMap?: Record<string, string>; timestampColumn?: number; gradeAsOf?: string; sameDayReviewed?: boolean;
+  /** Explicitly reviewed alternate dates for the same seminar. Multiple applications require review. */
+  seriesKey?: string;
   markers: { column: number; kind: EventMarker["kind"]; targetEventIds?: string[] }[];
 };
 export type SourceProfile = { fileId: string; gid: number; sheet: string; blocks: SourceBlock[]; excluded?: string };
 export type ParsedRegistration = EventIdentity & {
   sourceId: string; identityHash: string; contentHash: string; fileId: string; sheetId: number; row: number;
   eventTitle: string; session?: string; eligibleList: boolean; issues: string[]; markers: EventMarker[]; raw: unknown[];
+  seriesKey?: string;
 };

@@ -3,6 +3,9 @@ import { buildEventBundle as buildPrivateBundle, normalizedGrid, type EventSourc
 import { hash } from "../../../../../scripts/student-contribution/parent-events/source-values";
 import type { EventDatabaseSnapshot } from "../../../../../scripts/student-contribution/parent-events/snapshot";
 import { verifySourceSnapshot } from "../../../../../scripts/student-contribution/parent-events/source-freshness";
+import { previewEventImpact } from "../../../../../scripts/student-contribution/parent-events/preview-impact";
+import type { Sql } from "postgres";
+import { emptyRaws } from "../config";
 const buildEventBundle = (database: EventDatabaseSnapshot, pack: EventSourcePack, today: string) => buildPrivateBundle(database, pack, today, "synthetic-key-for-local-tests-only");
 const database: EventDatabaseSnapshot = { tenantId: "t", students: [{ id: "s", tenant_id: "t", name: "가학생", parent_name: "가보호",
   parent_phone: "01023456789", student_phone: null, school: "가초", grade: "초4", status: "enrolled", notes: null, is_test: false, enrolled_at: "2024-01-01", withdrawn_at: null, withdrawal_metadata: null }], siblings: [], enrollments: [], settings: [{ revision: 0, config: {} }] };
@@ -13,6 +16,7 @@ const pack: EventSourcePack = { capturedAt: "2026-10-26T00:00:00Z", sources: [{ 
 it("reproduces the approved fingerprint and changes it for source, identity, policy inputs and cancellation", () => {
   const bundle = buildEventBundle(database, pack, "2026-10-26");
   expect(bundle.summary.studentEvents).toBe(1); expect(bundle.summary.enabled).toBe(false);
+  expect(bundle.summary.pointsPerEvent).toBe(5); expect(bundle.summary.proposedPoints).toBe(5);
   expect(bundle.events[0]!.id).toMatch(/^[a-f0-9]{64}$/);
   expect(bundle.credits[0]!.eventId).not.toContain("file");
   expect(buildPrivateBundle(database, pack, "2026-10-26", "a-different-private-key-for-testing").events[0]!.id).not.toBe(bundle.events[0]!.id);
@@ -23,6 +27,14 @@ it("reproduces the approved fingerprint and changes it for source, identity, pol
   expect(buildEventBundle({ ...database, settings: [{ revision: 1, config: {} }] }, pack, "2026-10-26").fingerprint).not.toBe(bundle.fingerprint);
   expect(() => buildEventBundle({ ...database, tenantId: "other" }, pack, "2026-10-26")).toThrow("Cross-tenant");
   expect(normalizedGrid([[true, 3, null], ["", ""]])).toEqual([["TRUE", "3"]]);
+});
+it("previews five points per historical attendance while preserving frozen raw counts", async () => {
+  const bundle = buildEventBundle(database, pack, "2026-10-26");
+  const sql = { unsafe: async () => [{ student_id: "s", month: "2025-01", raws: emptyRaws(), correction: emptyRaws(),
+    closed_at: "2025-02-01T00:00:00Z", reconstructed: false }] } as unknown as Pick<Sql, "unsafe">;
+  const impact = await previewEventImpact(sql, bundle);
+  expect(impact).toEqual([{ studentId: "s", events: 1, cumulativeDelta: 5, recent12Delta: 5,
+    currentMonthDelta: 5, currentCorrection: 5, frozenMonthsPreserved: true }]);
 });
 it("requires complete current-day Drive reads before producing an approval report", () => {
   expect(verifySourceSnapshot(pack, pack, "2026-10-26")).toBe(pack.capturedAt);
@@ -36,6 +48,7 @@ it("reports only this academy's relevant unresolved rows and keeps a private-key
   pending.sources[0]!.values.push(["미확인", "01023456780", "FALSE"]);
   const bundle = buildEventBundle(database, pending, "2026-10-26");
   expect(bundle.summary.pendingRows).toBe(1);
+  expect(bundle.summary.phoneAudit).toMatchObject({ rowsWithPhone: 2, rowsWithoutPhone: 0, matchingRows: 1, matchedStates: { recognized: 1 }, phoneStates: { recognized: 1, review: 1 } });
   expect(bundle.summary.identityKeyFingerprint).toMatch(/^[a-f0-9]{16}$/);
   pending.profiles[0]!.blocks[0]!.tenantId = null;
   expect(buildEventBundle(database, pending, "2026-10-26").summary.pendingRows).toBe(0);

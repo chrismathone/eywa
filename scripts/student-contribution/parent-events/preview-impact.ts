@@ -16,8 +16,9 @@ export async function previewEventImpact(sql: Pick<Sql, "unsafe">, report: Event
       closedAt: r.closed_at, reconstructed: r.reconstructed, evidenceIds: [] }));
     const facts = report.credits.filter(c => c.studentId === studentId).map(c => ({ studentId, month: c.eventDate.slice(0, 7), raws: { ...emptyRaws(), parentSeminarEvents: 1 }, evidenceIds: [c.id] }));
     const next = buildStudentMonths({ month, capturedAt: `${report.today}T00:00:00+09:00`, facts, stored, complete: true });
-    return { studentId, events: facts.length, cumulativeDelta: total(next) - total(stored), recent12Delta: total(next, since) - total(stored, since),
-      currentMonthDelta: total(next, month) - total(stored, month), currentCorrection: next.find(r => r.month === month)?.correction.parentSeminarEvents ?? 0,
+    const points = report.summary.pointsPerEvent;
+    return { studentId, events: facts.length, cumulativeDelta: (total(next) - total(stored)) * points, recent12Delta: (total(next, since) - total(stored, since)) * points,
+      currentMonthDelta: (total(next, month) - total(stored, month)) * points, currentCorrection: (next.find(r => r.month === month)?.correction.parentSeminarEvents ?? 0) * points,
       frozenMonthsPreserved: stored.filter(r => r.closedAt).every(r => JSON.stringify(next.find(n => n.month === r.month)) === JSON.stringify(r)) };
   });
 }
