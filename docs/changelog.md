@@ -9,6 +9,13 @@
   번호 칸이 숫자 셀이면 엑셀이 지운 맨 앞 0을 되붙인다(서식은 번호 칸을 글자 서식으로 낸다).
 - 단일 소스: 칸·라벨·상한·다듬기 = `vendor.ts`의 `VENDOR_FIELDS`/`tidyVendor`(등록 창과 엑셀이 같이) · 쓰기 게이트 `requireVendorWrite`는 `vendor-gate.ts`로 옮겨 두 액션 파일이 공유 · 셀 읽기 `server/excel-cell.ts`.
 - 감사로그 `inventory_vendor_excel_import`. 가드 = `vendor-sheet.test.ts` · `inventory-wiring.test.ts`(vendor-* 액션 파일 게이트).
+## 2026-10-26 — AI 크레딧 MVP 세 가지(개발 모드 · 운영 적용 없음)
+
+- **① 퇴원 사유 복원**: 사유가 빈 침산 퇴원생 238명을 메이크에듀 사유·퇴원보고서 원본·상담·학부모 글에서 근거 인용과 함께 제안(Haiku 5.5 · 2회 합의 · 코드가 인용을 다시 확인). 적용기는 원장이 승인한 줄만 한 거래로 바꾸고 백업·감사로그(`withdrawal_reason_restore` — 감사로그 라벨·설명 추가)를 남긴다. 실행 전(스크립트 `scripts/_oneoff/ai-credit-mvp/withdrawals/apply.mjs`·`revert.mjs`).
+- **② 새 수업보고서 평점 정기 처리**: [`src/features/report-rating`](../src/features/report-rating) + cron `/api/cron/report-ratings` + 0455a(대기열 · 입력 지문 칸) + 지점 스위치 `report_rating` + 키 그룹 `MENT`(`lesson_report_rating`). 기본 꺼짐 — 원장 *"진행해"*(10-26 저녁)로 main 병합 · cron 등록(30분마다 · 스위치가 꺼진 지점은 바로 돌아선다 · 0455a가 없으면 '준비 안 됨'). 남은 것 = 0455a 운영 적용(원장) → 운영 콘솔에서 침산 스위치 켜기([`reports-ai.md`](decisions/reports-ai.md) 같은 날 조항).
+- **④ 결석 문자 판별 검증**: 사람 정답 표(빈 칸) + 프롬프트 비교 시험만 — 코드 변경 없음(사람 정답이 채워지기 전에는 '검증 완료'라 하지 않는다).
+- 공용: `dev-cli.ts`가 구독 CLI 응답의 실제 모델을 관찰자(`devCliTrace`)로 넘긴다(개발 시험 기록용 · 운영 경로 무변경).
+- 결과·개인정보는 Git 밖(`D:\tmp\ai-credit-mvp-2026-10-26\`) — 원장 요약 = `07-decision\owner-summary.md`.
 
 ## 2026-10-26 — AI 1순위 = Claude · DeepSeek은 폴백만
 

@@ -244,6 +244,8 @@ export const AUDIT_ACTIONS = {
   student_withdraw: "학생 퇴원 처리",
   // 퇴원보고서를 거치지 않은 퇴원·새 퇴원 예약 — DB 트리거(0454a)가 남긴다(막지 않고 원장에게 알림). 상세 = describe.ts.
   student_withdrawn_without_report: "퇴원보고서 없이 퇴원(경고)",
+  // 옛 퇴원 기록의 빈 사유를 원장 승인 행만 채운다(2026-10-26 크레딧 MVP 적용 스크립트 — scripts/_oneoff/ai-credit-mvp/withdrawals/apply.mjs).
+  withdrawal_reason_restore: "퇴원 사유 복원(옛 기록)",
   student_hold: "학생 휴원 처리",
   student_restore: "학생 재원 복구",
   enrollment_end: "수강 종료",
