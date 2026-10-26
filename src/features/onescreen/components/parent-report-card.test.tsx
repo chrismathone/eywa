@@ -266,6 +266,17 @@ describe("ParentReportCard — 그림 자리(인재원, 2026-09-11)", () => {
     expect(h.indexOf("잘했어요")).toBeLessThan(h.indexOf("STUDY:"));
   });
 
+  it("영어 항목 보고서(2026-10-26)도 수학 표로 그리고 '인재원 결과지' 항목 안에 그림을 끼운다", () => {
+    const sheet = "■ 진도\nUnit 3\n\n■ 오늘의 수업\n잘했어요\n\n■ 인재원 결과지\n[시험결과지]\n[학습분석지]\n\n■ 사랑의 한마디\n최고!";
+    const h = html(snap(["Unit 3"]), sheet);
+    expect(h).toContain("EXAM:Unit 3");
+    expect(h).toContain("STUDY:2026-08-12");
+    expect(h).not.toContain("[시험결과지]");
+    expect(h).not.toContain("■");
+    expect(h.indexOf("잘했어요")).toBeLessThan(h.indexOf("EXAM:Unit 3"));
+    expect(h.indexOf("STUDY:")).toBeLessThan(h.indexOf("최고!"));
+  });
+
   it("🔴 자리 표식 글자는 학부모에게 나가지 않는다 — 자료가 없어도", () => {
     for (const jj of [snap(["Unit 3"]), null]) {
       const h = html(jj);

@@ -3376,7 +3376,7 @@ export const SHEET_DICT = {
     ko: "AI 코멘트를 만들지 못했습니다 — 글은 그대로 두었습니다. 잠시 후 다시 눌러 주세요",
     en: "Couldn't write the AI comment — the text was left as it was. Try again shortly",
   },
-  "os.tpl.builtinName": { ko: "ECS 자동 (기본)", en: "ECS auto (built-in)" },
+  "os.tpl.builtinName": { ko: "ECS 자동", en: "ECS auto" }, // 2026-10-26 기본 자리를 항목 보고서에 넘겼다(builtinSheetName)
   "os.tpl.loading": {
     ko: "템플릿 목록을 불러오는 중입니다 — 잠시 후 다시 눌러 주세요",
     en: "Still loading your templates — try again in a moment",
@@ -3489,6 +3489,8 @@ export const SHEET_DICT = {
   },
   // ── 인재원 그림 칸(2026-09-11) — 시험 결과지·학습 분석지 ──
   "os.tpl.builtinJjName": { ko: "ECS 자동 + 인재원 결과지", en: "ECS auto + Injaewon sheets" },
+  // 영어 기본 = 수학과 같은 항목 보고서(원장 2026-10-26) — report-templates/defaults.ts BUILTIN_ENGLISH_SHEET_TEMPLATE.
+  "os.tpl.builtinSheetName": { ko: "수학과 같은 항목 보고서 (기본)", en: "Section report like math (default)" },
   "os.tpl.jjLoading": { ko: "인재원 자료를 불러오는 중…", en: "Loading Injaewon data…" },
   "os.tpl.jjUnlinked": {
     ko: "인재원 미연결 — 결과지·학습분석지 칸은 비워 둡니다",

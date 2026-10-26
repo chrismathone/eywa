@@ -12,6 +12,7 @@
 import { fillReportTemplate, templateTokens } from "@/features/report-templates/fill";
 import {
   BUILTIN_ENGLISH_TEMPLATES,
+  SHEET_TOKEN_KEYS,
   TEMPLATE_AI_TOKENS,
   TEMPLATE_DECORATION_TOKENS,
   type ReportTemplate,
@@ -26,6 +27,7 @@ import { withoutAttachmentLines } from "@/features/report-templates/attachment-l
 import { englishTemplateValues, englishTestText } from "@/features/report-templates/values";
 import { mentionsStudentName } from "@/features/report-templates/name-mention";
 import { englishFactsKey, textHash, type EnglishFacts } from "@/features/report-templates/provenance";
+import { englishSheetValues } from "./english-sheet";
 
 /** 한 행의 사실 — 이미 사람이 읽는 표기(buildReportFields 결과·행 평가값)를 그대로 받는다. */
 export type EnglishRowFacts = {
@@ -43,6 +45,8 @@ export type EnglishRowFacts = {
    * 🔑 이것도 '사실'이다: 자료가 생기거나 사라지면 템플릿 글 그대로인 글은 저장 직전 다시 짜이고, 고친 글엔 칩이 선다.
    */
   slots?: Partial<Record<ImageSlotKey, boolean>>;
+  /** 그날 출결 문장(attendance-sentence.ts, 2026-10-26) — 항목 보고서의 '출결' 칸. 출석이면 "". */
+  attendance?: string;
 };
 
 /**
@@ -98,6 +102,8 @@ export function composeEnglishDraft(
     aiIntro: parts.aiIntro ?? "",
     aiComment: parts.aiComment ?? "",
     slots: facts.slots,
+    // 항목 보고서 칸(2026-10-26) — 수학 새 보고서와 같은 문장(english-sheet.ts). 이 칸을 안 쓰는 템플릿엔 영향 없다.
+    sheet: englishSheetValues(facts),
   });
   // 줄바꿈은 LF 하나로 — AI 문장에 CR이 섞이면 첨부 줄을 넣고 뺄 때 글이 한 글자 달라져 지문이 영영 안 맞는다(적대 리뷰 2026-09-11).
   return fillReportTemplate(template.body, values, { decorationTokens: TEMPLATE_DECORATION_TOKENS }).text.replace(
@@ -138,7 +144,8 @@ export function aiFactsHashOf(facts: EnglishRowFacts, nextTest: string): string 
  *    칸 목록이 없는 옛 형식 지문은 앞 여섯 칸으로 셌으므로(LEGACY) 그 뜻을 바꾸지 않는다.
  */
 const LEGACY_FACT_TOKENS = ["학생", "작성자", "진도", "테스트", "숙제", "다음테스트"] as const;
-const FACT_TOKENS = [...LEGACY_FACT_TOKENS, "시험결과지", "학습분석지"] as const;
+// 항목 칸(2026-10-26)도 사실이다 — 점수·태도·출결이 바뀌면 그 문장이 바뀐다. 역시 **뒤에** 붙인다(앞 칸들의 뜻 불변).
+const FACT_TOKENS = [...LEGACY_FACT_TOKENS, "시험결과지", "학습분석지", ...SHEET_TOKEN_KEYS] as const;
 export type FactToken = (typeof FACT_TOKENS)[number];
 
 function factValue(token: FactToken, facts: EnglishRowFacts, nextTest: string): string {
@@ -158,6 +165,8 @@ function factValue(token: FactToken, facts: EnglishRowFacts, nextTest: string): 
     case "시험결과지":
     case "학습분석지":
       return facts.slots?.[token] ? imageSlotMarker(token) : "";
+    default:
+      return englishSheetValues(facts)[token];
   }
 }
 
@@ -165,6 +174,14 @@ function factValue(token: FactToken, facts: EnglishRowFacts, nextTest: string): 
 export function factTokensOf(template: ReportTemplate): FactToken[] {
   const used = new Set<string>(templateTokens(template.body));
   return FACT_TOKENS.filter((k) => used.has(k));
+}
+
+/**
+ * 이 템플릿이 특이사항을 **원문 그대로**(`{한마디}` — 사랑의 한마디) 싣는가. 그러면 AI에는 특이사항을 주지 않는다 —
+ * 주면 AI 코멘트가 같은 말을 한 번 더 써서 한 글에 두 번 나간다(수학 새 보고서와 같은 규칙: 한마디는 AI에 안 준다).
+ */
+export function templateCarriesNote(template: ReportTemplate): boolean {
+  return factTokensOf(template).includes("한마디");
 }
 
 /** 이 템플릿이 쓰는 그림 칸(고정 순서) — 있으면 자동작성·다시 채우기가 인재원 자료를 **먼저** 받는다. */

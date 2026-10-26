@@ -20,7 +20,16 @@ export type TemplateTokenKey =
   | "숙제"
   | "다음테스트"
   | "코멘트"
+  | SheetTokenKey
   | ImageSlotKey;
+
+/**
+ * **항목 칸**(원장 2026-10-26 *"수학보고서 디자인을 영어보고서에도 적용"*) — 수학 새 보고서와 **같은 문장**을 영어 칸 값으로 만든 것.
+ * 값은 원스크린이 수학 조각(math-report-pilot-sections.ts)으로 만들어 넘긴다(english-sheet.ts) — 여기는 이름만 안다.
+ */
+export type SheetTokenKey = "출결" | "수업평가" | "일일테스트" | "확인테스트" | "수업태도" | "숙제완성도" | "오늘의숙제" | "한마디";
+
+export const SHEET_TOKEN_KEYS: readonly SheetTokenKey[] = ["출결", "수업평가", "일일테스트", "확인테스트", "수업태도", "숙제완성도", "오늘의숙제", "한마디"];
 
 export type TemplateToken = {
   key: TemplateTokenKey;
@@ -46,6 +55,14 @@ export const ENGLISH_TEMPLATE_TOKENS: readonly TemplateToken[] = [
   { key: "숙제", label: "오늘 숙제", source: "원스크린 오늘 과제 칸" },
   { key: "다음테스트", label: "다음 시간 테스트", source: "다음 시간 테스트 안내 칸" },
   { key: "코멘트", label: "AI 코멘트", source: "AI가 쓰는 학생별 피드백", ai: true },
+  { key: "출결", label: "출결", source: "출석부의 지각·조퇴·공결 + 사유를 문장으로 — 출석이면 줄이 빠진다" },
+  { key: "수업평가", label: "수업 평가 표", source: "수업 태도·숙제 완성도를 하~상 눈금 표로" },
+  { key: "일일테스트", label: "일일 테스트 문장", source: "점수 + 한마디. 시험이 없으면 '보지 않았습니다'" },
+  { key: "확인테스트", label: "확인 테스트 문장", source: "점수 + 한마디. 없으면 줄이 빠진다" },
+  { key: "수업태도", label: "수업 태도 문장", source: "원스크린 태도 칸을 문장으로" },
+  { key: "숙제완성도", label: "숙제 완성도 문장", source: "지난 과제 수행률을 문장으로. 숙제가 없었으면 '없었습니다'" },
+  { key: "오늘의숙제", label: "오늘의 숙제(없음 포함)", source: "오늘 과제 칸. 비면 '오늘은 숙제가 없습니다'" },
+  { key: "한마디", label: "사랑의 한마디", source: "원스크린 특이사항 칸 원문 그대로" },
   {
     key: "시험결과지",
     label: "시험 결과지(그림)",
@@ -144,11 +161,77 @@ export const BUILTIN_ENGLISH_JJ_TEMPLATE: ReportTemplate = {
   ].join("\n"),
 };
 
-/** 기본 템플릿 전부(목록 맨 앞 순서). 목록을 못 받아도 이 둘은 언제나 고를 수 있다(findTemplateIn). */
-export const BUILTIN_ENGLISH_TEMPLATES: readonly ReportTemplate[] = [BUILTIN_ENGLISH_TEMPLATE, BUILTIN_ENGLISH_JJ_TEMPLATE];
+export const BUILTIN_ENGLISH_SHEET_TEMPLATE_ID = "builtin:english-sheet";
+
+/**
+ * **수학과 같은 항목 보고서**(원장 2026-10-26 *"우리 지금 수학보고서 디자인을 영어보고서에도 적용"* → *"수학과 같은 칸 + 영어 칸"*).
+ * 글이 `■ 제목` 항목으로 나뉘어 학부모 카드가 수학과 같은 표(PilotReportSheet)로 그린다(parent-report-card.tsx).
+ * 순서 = 수업 평가 → 진도 → 출결 → 일일·확인 테스트 → 수업 태도 → 숙제 완성도 → 오늘의 수업(AI) → 오늘의 숙제 → 다음 테스트 →
+ * 인재원 결과지(그림) → 사랑의 한마디. 이해도 점수는 영어에 없다(그래서 '수업 평가' 표는 태도·숙제 두 줄).
+ * 🔴 항목 제목은 수학 `PILOT_SECTION_TITLES`와 **글자까지 같아야** 카드가 그 항목으로 알아본다(테스트가 잠근다 — english-sheet.test.ts).
+ * 🔑 항목 머리(`■ …`)는 칸과 **같은 문단**에 둔다 — 칸이 비면 문단째 빠져 머리만 남지 않는다(fill.ts 규칙 3).
+ */
+export const BUILTIN_ENGLISH_SHEET_TEMPLATE: ReportTemplate = {
+  id: BUILTIN_ENGLISH_SHEET_TEMPLATE_ID,
+  name: "수학과 같은 항목 보고서 (기본)",
+  builtIn: true,
+  body: [
+    "■ 수업 평가",
+    "{수업평가}",
+    "",
+    "■ 진도",
+    "{진도}",
+    "",
+    "■ 출결",
+    "{출결}",
+    "",
+    "■ 일일 테스트",
+    "{일일테스트}",
+    "",
+    "■ 확인 테스트",
+    "{확인테스트}",
+    "",
+    "■ 수업 태도",
+    "{수업태도}",
+    "",
+    "■ 숙제 완성도",
+    "{숙제완성도}",
+    "",
+    "■ 오늘의 수업",
+    "{인사말}",
+    "{코멘트}",
+    "",
+    "■ 오늘의 숙제",
+    "{오늘의숙제}",
+    "",
+    "■ 다음 테스트",
+    "{다음테스트}",
+    "",
+    "■ 인재원 결과지",
+    "{시험결과지}",
+    "{학습분석지}",
+    "",
+    "■ 사랑의 한마디",
+    "{한마디}",
+  ].join("\n"),
+};
+
+/**
+ * 영어 행의 **기본 템플릿**(템플릿을 고르지 않은 행) — 2026-10-26부터 항목 보고서다. 옛 'ECS 자동'은 목록에 남아 고를 수 있다
+ * (글자 하나 안 바꿨다 — 그 템플릿으로 쓴 글·지문이 흔들리지 않게).
+ */
+export const DEFAULT_ENGLISH_TEMPLATE: ReportTemplate = BUILTIN_ENGLISH_SHEET_TEMPLATE;
+
+/** 기본 템플릿 전부(목록 맨 앞 순서 — 기본이 맨 앞). 목록을 못 받아도 이것들은 언제나 고를 수 있다(findTemplateIn). */
+export const BUILTIN_ENGLISH_TEMPLATES: readonly ReportTemplate[] = [
+  BUILTIN_ENGLISH_SHEET_TEMPLATE,
+  BUILTIN_ENGLISH_TEMPLATE,
+  BUILTIN_ENGLISH_JJ_TEMPLATE,
+];
 
 /** 기본 템플릿 이름의 화면 문구 키(teacher-view/i18n.ts) — 기본 템플릿 이름은 화면 언어를 따른다. */
-export function builtinTemplateLabelKey(id: string): "os.tpl.builtinName" | "os.tpl.builtinJjName" {
+export function builtinTemplateLabelKey(id: string): "os.tpl.builtinName" | "os.tpl.builtinJjName" | "os.tpl.builtinSheetName" {
+  if (id === BUILTIN_ENGLISH_SHEET_TEMPLATE_ID) return "os.tpl.builtinSheetName";
   return id === BUILTIN_ENGLISH_JJ_TEMPLATE_ID ? "os.tpl.builtinJjName" : "os.tpl.builtinName";
 }
 
@@ -171,6 +254,14 @@ export const TEMPLATE_PREVIEW_SAMPLE: Readonly<Record<TemplateTokenKey, string>>
   숙제: "Work Book : p.30~33 풀어오기",
   다음테스트: "단어 시험 : 71~80번",
   코멘트: "(AI가 학생 이름을 넣어 오늘의 피드백을 씁니다)",
+  출결: "오늘은 조금 늦게 도착했습니다(사유: 병원 진료).",
+  수업평가: "(수업 태도·숙제 완성도를 하~상 눈금 표로 그립니다)",
+  일일테스트: "20문제 중 18개 맞음\n대부분 잘 맞혔습니다. 틀린 문제는 다음 시간에 다시 짚고 넘어가겠습니다.",
+  확인테스트: "",
+  수업태도: "오늘 수업 태도가 좋았습니다. 수업에 성실하게 잘 참여했습니다.",
+  숙제완성도: "지난 시간 과제를 빠짐없이 모두 해 왔습니다. 성실하게 잘 해 왔습니다.",
+  오늘의숙제: "Work Book : p.30~33 풀어오기",
+  한마디: "오늘도 끝까지 집중해 줘서 고마웠어요!",
   시험결과지: imageSlotMarker("시험결과지"),
   학습분석지: imageSlotMarker("학습분석지"),
 };
