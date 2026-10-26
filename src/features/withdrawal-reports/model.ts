@@ -105,12 +105,18 @@ export function directorIds(r: Pick<WithdrawalReport, "director_id" | "director_
 export function isParticipant(r: Pick<WithdrawalReport, "requested_by" | "teacher_id" | "manager_id" | "director_id" | "manager_ids" | "director_ids">, userId: string) {
   return [r.requested_by, r.teacher_id, ...managerIds(r), ...directorIds(r)].includes(userId);
 }
-export function reportCapabilities(r: WithdrawalReport, userId: string, writable: boolean) {
+/**
+ * 원장 이상이면 남이 요청한 보고서도 취소한다(원장 2026-10-26 *"원장이상급 또는 퇴원보고서 요청자. 진행여부 상관없이"*) —
+ * 처리 끝(completed) 전이면 작성·승인·처리 예약 어느 단계든. DB 처리 함수(0421a 'cancel')와 같은 축 = 원장 역할(운영자 계정도 원장 역할).
+ * 강사뷰로 보는 중엔 원장 몫으로 치지 않는다.
+ */
+export function cancelsAsDirector(role: SystemRole, teacherView: boolean) { return role === "master" && !teacherView; }
+export function reportCapabilities(r: WithdrawalReport, userId: string, writable: boolean, directorLevel = false) {
   const draft = r.status === "requested" || r.status === "revision";
   return {
     edit: writable && draft && r.teacher_id === userId,
     approve: writable && ((r.status === "manager_pending" && managerIds(r).includes(userId) && !r.manager_decisions?.[userId]) || (r.status === "director_pending" && directorIds(r).includes(userId) && !r.director_decisions?.[userId])),
-    cancel: writable && r.requested_by === userId && !["completed", "canceled"].includes(r.status),
+    cancel: writable && (r.requested_by === userId || directorLevel) && !["completed", "canceled"].includes(r.status),
   };
 }
 export function submissionError(body: ReportBody): string | null {

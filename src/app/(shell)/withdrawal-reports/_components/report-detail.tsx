@@ -13,8 +13,10 @@ import { EMPTY_BODY, REPORT_STATUS, REPORT_ACTION_LABEL, directorIds, isDirectRe
 
 const control = "w-full min-w-0 rounded-md border bg-background px-3 py-2 text-sm disabled:bg-muted/20 disabled:text-foreground";
 const dateTime = (v: string) => new Date(v).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "short", timeStyle: "short" });
-export function ReportDetail({ report: r, events, staff, labels, userId, writable, consultations = [], assignmentChanged = false, prefill = {}, prefillWarning, withdrawalHref }: {
+export function ReportDetail({ report: r, events, staff, labels, userId, writable, directorLevel = false, consultations = [], assignmentChanged = false, prefill = {}, prefillWarning, withdrawalHref }: {
   report: WithdrawalReport; events: ReportEvent[]; staff: StaffOption[]; labels: Record<string, string>; userId: string; writable: boolean; consultations?: ReportConsultation[]; assignmentChanged?: boolean; prefill?: Partial<ReportBody>; prefillWarning?: string;
+  /** 원장 이상(`cancelsAsDirector`) — 남이 요청한 보고서도 취소 버튼이 선다. */
+  directorLevel?: boolean;
   /** 학생이 지금 퇴원 상태이고 퇴원관리를 열 수 있을 때만 서버가 넣는다(`withdrawalDetailHref`). */
   withdrawalHref?: string | null;
 }) {
@@ -24,7 +26,7 @@ export function ReportDetail({ report: r, events, staff, labels, userId, writabl
   const [decision, setDecision] = useState<ReportAction | null>(null);
   const [comment, setComment] = useState("");
   const [pending, startTransition] = useTransition();
-  const capabilities = reportCapabilities(r, userId, writable);
+  const capabilities = reportCapabilities(r, userId, writable, directorLevel);
   const nameOf = (id: string | null) => id ? staff.find(s => s.id === id)?.name ?? r.snapshot.courses.find(c => c.teacherId === id)?.teacherName ?? "이전 담당자" : "자동 처리";
   const update = <K extends keyof ReportBody>(key: K, value: ReportBody[K]) => setBody(b => ({ ...b, [key]: value }));
   function change(action: ReportAction) {
