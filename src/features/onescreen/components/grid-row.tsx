@@ -18,7 +18,8 @@ import {
   type GridRow,
 } from "../grid";
 import { evaluateSendGate } from "../send-gate";
-import { hasPilotOneLine, isMathReportPilot, pilotCanEdit, pilotNeedsAutoWrite } from "../math-report-pilot";
+import { hasPilotOneLine, isMathReportPilot, pilotCanEdit, pilotNeedsAutoWrite, understandingPresetOf, understandingRows } from "../math-report-pilot";
+import { UnderstandingPresetButtons } from "./understanding-presets";
 import { needsHomeworkMissReason, pilotRowSig, testSkipComplete } from "../math-report-pilot-sections";
 import { joinLevelsLead, splitLevelsLead } from "../pilot-notes";
 import { LevelsLead } from "./levels-lead";
@@ -89,6 +90,8 @@ export type GridFieldHandlers = {
   onProgress: (studentId: string, subjectIndex: number, today: string) => void;
   /** 오늘 수업 성격(복습·문제풀이) — 진도와 함께 사는 별개 축(progress-mode.ts). */
   onProgressMode: (studentId: string, subjectIndex: number, mode: string | null) => void;
+  /** 이해도 단계 버튼 — 그 행 소단원 전부에 같은 점수(카드와 같은 setter). 없으면 버튼을 안 그린다. */
+  onUnderstandingAll?: (studentId: string, subjectName: string, score: number) => void;
   onStudyGrade: (studentId: string, grade: string) => void;
   // 🔴 평가값 5종은 **행(수업) 단위**다(2026-08-13) — 보강은 정규와 따로 나가는 다른 보고서라 값도 독립이어야
   //    한다(원장 제보). 그래서 학생 id만이 아니라 **행 이름**까지 받는다. 해석·폴백은 row-fields.ts 단일 소스.
@@ -626,6 +629,17 @@ export function GridBodyRow({
           onStudyGrade={fields.onStudyGrade}
           locked={rowLocked}
         />
+        {/* 이해도 단계 버튼 — 카드와 같은 버튼·같은 함수(원장 2026-10-26 *"카드와 표에서 동일하게"*). 새 수학 보고서 행이고 진도가 있을 때만. */}
+        {pilot && fields.onUnderstandingAll && understandingRows(subject.today, subject.understanding).some((r) => !r.off) ? (
+          <div className="mt-1">
+            <UnderstandingPresetButtons
+              compact
+              disabled={rowLocked}
+              active={understandingPresetOf(understandingRows(subject.today, subject.understanding))}
+              onPick={(score) => fields.onUnderstandingAll?.(student.id, subject.name, score)}
+            />
+          </div>
+        ) : null}
       </td>
       {/* 점수·태도·과제 칸은 자체 잠금 prop이 없다 → **td 안에서** fieldset으로 묶어 잠근다(카드 모드와 같은 방식).
           ⚠️ `<tr>`의 자식은 `<td>`여야 해서 행 전체를 fieldset으로 감쌀 수 없다 — 칸마다 감싼다.

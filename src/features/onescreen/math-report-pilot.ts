@@ -171,6 +171,18 @@ export function setAllUnderstanding(
   return { scores, off: s.off };
 }
 
+/**
+ * 지금 눌린 단계 버튼 — 직접 매긴 점수가 있고 남은 소단원이 전부 한 단계 점수로 같을 때만. 카드 패널·표가 같은 판정을 쓴다.
+ * (뺀 소단원은 보지 않는다 · 기본값만 있으면 아무 버튼도 눌리지 않은 것으로 보인다.)
+ */
+export function understandingPresetOf(rows: readonly { off: boolean; score: number | null; stored?: boolean }[]): UnderstandingPresetKey | null {
+  const live = rows.filter((r) => !r.off);
+  if (!live.length || !live.some((r) => r.stored)) return null;
+  const first = live[0]!.score;
+  if (!live.every((r) => r.score === first)) return null;
+  return UNDERSTANDING_PRESETS.find((p) => p.score === first)?.key ?? null;
+}
+
 /** 강사가 점수를 하나라도 직접 매겼나('빈 칸만' 일괄 입력 판정). */
 export function hasStoredUnderstanding(today: string | null | undefined, st: UnderstandingState | undefined): boolean {
   const s = st ?? EMPTY_UNDERSTANDING;

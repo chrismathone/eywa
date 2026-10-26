@@ -4709,6 +4709,7 @@ export function OneScreenClient({
             onAttendance: setAttendanceFor,
             onProgress: setProgressFor,
             onProgressMode: setProgressModeFor,
+            onUnderstandingAll: setAllUnderstandingFor, // 표에서도 카드와 같은 이해도 단계 버튼(2026-10-26)
             onStudyGrade: setStudyGradeFor,
             onScore: setScoreFor,
             onMax: setMaxFor,

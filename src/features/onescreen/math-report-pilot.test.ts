@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import {
+  understandingPresetOf,
   activeUnderstanding,
   clampUnderstanding,
   composePilotMent,
@@ -357,5 +358,23 @@ describe("사랑의 한마디(옛 강사 한줄 멘트 — 필수, 실시간 반
     expect(g.canSend).toBe(false);
     expect(g.reasons).toEqual(["oneline"]);
     expect(g.label).toBe("사랑의 한마디 입력 필요");
+  });
+});
+
+describe("이해도 단계 버튼 — 카드·표 같은 판정(2026-10-26)", () => {
+  const row = (score: number, stored = true, off = false) => ({ off, score, stored });
+  it("직접 매긴 점수가 모두 한 단계면 그 버튼", () => {
+    expect(understandingPresetOf([row(7), row(7)])).toBe("ok");
+    expect(understandingPresetOf([row(10), row(10, true, false), row(4, true, true)])).toBe("good");
+  });
+  it("기본값뿐이거나 점수가 갈리면 아무것도 아니다", () => {
+    expect(understandingPresetOf([row(10, false)])).toBeNull();
+    expect(understandingPresetOf([row(7), row(4)])).toBeNull();
+    expect(understandingPresetOf([])).toBeNull();
+  });
+  it("표에도 같은 버튼을 단다", () => {
+    const grid = readFileSync(`${process.cwd()}/src/features/onescreen/components/grid-row.tsx`, "utf8");
+    expect(grid).toMatch(/<UnderstandingPresetButtons/);
+    expect(grid).toMatch(/fields\.onUnderstandingAll/);
   });
 });

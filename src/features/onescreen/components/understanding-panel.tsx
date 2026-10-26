@@ -6,7 +6,7 @@ import {
   clampUnderstanding,
   UNDERSTANDING_DEFAULT,
   UNDERSTANDING_MAX,
-  UNDERSTANDING_PRESETS,
+  understandingPresetOf,
   type UnderstandingRow,
 } from "../math-report-pilot";
 import { UnderstandingPresetButtons } from "./understanding-presets";
@@ -36,9 +36,8 @@ export function UnderstandingPanel({
   const tf = useSheetTf();
   const live = rows.filter((r) => !r.off);
   const removed = rows.filter((r) => r.off);
-  // 직접 매긴 점수가 있고 모든 소단원이 한 단계 점수로 같으면 그 버튼을 눌린 것으로 보인다.
-  const uniform = live.length && live.every((r) => r.score === live[0]!.score) ? live[0]!.score : null;
-  const activePreset = live.some((r) => r.stored) ? (UNDERSTANDING_PRESETS.find((p) => p.score === uniform)?.key ?? null) : null;
+  // 직접 매긴 점수가 있고 모든 소단원이 한 단계 점수로 같으면 그 버튼을 눌린 것으로 보인다(표와 같은 판정 — understandingPresetOf).
+  const activePreset = understandingPresetOf(rows);
   return (
     <section className="border-line flex flex-col gap-2 rounded-lg border px-3 py-2.5">
       <div className="flex flex-wrap items-baseline justify-between gap-x-2">
