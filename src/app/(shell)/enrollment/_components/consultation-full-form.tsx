@@ -203,6 +203,18 @@ export function ConsultationFullForm({
   }, [recordingActive]);
   const [phase, setPhase] = useState<"idle" | "uploading" | "submitting">("idle");
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // 막힌 저장은 이유가 보이는 곳으로 데려간다 — 오류 문구는 폼 맨 아래, 후속 조치는 '기본 정보' 탭 안이라
+  // 과목 탭에서 저장을 누르면 아무 반응이 없는 것처럼 보였다(원장 제보 2026-10-26, 영어 상담 탭).
+  // 같은 문구로 다시 막혀도 다시 데려가도록 횟수로 effect를 건다(탭 전환·문구가 그려진 뒤에 스크롤).
+  const errorRef = useRef<HTMLParagraphElement>(null);
+  const errorFocusRef = useRef<"followUp" | "message">("message");
+  const [errorSeq, setErrorSeq] = useState(0);
+  function showError(message: string, at: "followUp" | "message" = "message") {
+    errorFocusRef.current = at;
+    if (at === "followUp") setActiveTab("basic");
+    setSubmitError(message);
+    setErrorSeq((n) => n + 1);
+  }
   /** 저장이 끝나 상세로 떠나는 중 — 폼 전체를 잠근다(아래 form의 inert 주석). */
   const [leaving, setLeaving] = useState(false);
   /** 저장했지만 이 문서의 다른 녹음 때문에 머문다 — 상세로 가는 링크(SavedStayNotice). */
@@ -228,8 +240,12 @@ export function ConsultationFullForm({
   const [followUpResult, setFollowUpResult] = useState<FollowUpResult | null>(() => initialFollowUpResult(v.outcome, v.followUpDate, assignedClassCount));
   const followUpRef = useRef<HTMLDivElement>(null);
   const followUpMust = assignedClassCount === 0 && (isCreate || followUpRequired(v.outcome ?? "consulted"));
-  // '상담 완료' = 다음 상담 → 날짜 필수(원장 2026-10-23 · follow-up.ts와 같은 규칙 — 서버가 다시 판정한다).
-  const followUpDateMust = assignedClassCount === 0 && followUpResult === "consulted";
+  // 다음 상담일은 '상담 완료'에서도 선택(원장 2026-10-26 — 10-23 '날짜 필수'를 뒤집음 · follow-up.ts와 같은 규칙).
+  useEffect(() => {
+    if (errorSeq === 0) return;
+    const followUp = errorFocusRef.current === "followUp";
+    (followUp ? followUpRef.current : errorRef.current)?.scrollIntoView({ block: followUp ? "center" : "nearest", behavior: "smooth" });
+  }, [errorSeq]);
   const selectedStage = FOLLOW_UP_RESULTS.find((r) => r.value === followUpResult)?.stage;
   const stageLabel = boardStatusOf({
     outcome: selectedStage ? outcomeForDrop(selectedStage, v.outcome ?? "consulted") : (v.outcome ?? "consulted"),
@@ -264,6 +280,16 @@ export function ConsultationFullForm({
 
   // 로컬 초안 자동저장 — 입력 중 IDB 보관, 다시 열면 복구 배너. 서버 저장 성공 시 clear.
   const formRef = useRef<HTMLFormElement>(null);
+  // 수정 화면을 연 때의 값 — 저장 때 함께 보내 서버가 **이 사람이 바꾼 칸만** 쓴다(원장 2026-10-26: 먼저 열어 둔 화면으로 저장해
+  // 다른 사람이 막 저장한 상담자 칸을 빈칸으로 덮었다 · consultation-changed.ts).
+  // 🔴 초안 복원보다 먼저 잡는다(되살린 입력은 '바꾼 것'이어야 저장된다) — 그래서 이 효과는 useFormDraft보다 위에 둔다.
+  const editBaseRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (isCreate || editBaseRef.current !== null || !formRef.current) return;
+    const values: Record<string, string> = {};
+    for (const [key, value] of new FormData(formRef.current)) if (typeof value === "string") values[key] = value;
+    editBaseRef.current = JSON.stringify(values);
+  }, [isCreate]);
   const draftScope = isCreate ? formDraftScope("consultation:new", instance?.formId) : `consultation:${v.id ?? "edit"}`;
   const draft = useFormDraft({
     scope: draftScope,
@@ -345,8 +371,7 @@ export function ConsultationFullForm({
       assignedClassCount,
     });
     if ("error" in r) {
-      setSubmitError(r.error);
-      followUpRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+      showError(r.error, "followUp");
       return false;
     }
     return true;
@@ -358,11 +383,12 @@ export function ConsultationFullForm({
     e.preventDefault();
     setSubmitError(null);
     if (recordingActive) {
-      setSubmitError("녹음을 끝낸 뒤 저장해 주세요.");
+      showError("녹음을 끝낸 뒤 저장해 주세요.");
       return;
     }
     const fd = new FormData(e.currentTarget);
     fd.set("subjectDetails", JSON.stringify(details));
+    if (editBaseRef.current) fd.set("editBase", editBaseRef.current);
     // QR 접수 대기·예약 건 — 후속 조치를 안 골랐을 때만 상담 완료 전환 여부를 묻는다(고르면 그 값이 상태를 정한다).
     if (confirmConsultedOnSave && !isCreate && !parseFollowUpResult(fd.get("followUpResult"))) {
       pendingFdRef.current = fd;
@@ -386,14 +412,14 @@ export function ConsultationFullForm({
         fdT.set("size", String(audioFile.size));
         const tk = await issueAudioUploadTicket(undefined, fdT);
         if (tk?.error || !tk?.ticket) {
-          setSubmitError(tk?.error ?? "업로드 준비 실패");
+          showError(tk?.error ?? "업로드 준비 실패");
           setPhase("idle");
           return;
         }
         try {
           await uploadToTicket(tk.ticket, audioFile);
         } catch (err) {
-          setSubmitError(err instanceof Error ? err.message : "업로드 실패");
+          showError(err instanceof Error ? err.message : "업로드 실패");
           setPhase("idle");
           return;
         }
@@ -405,7 +431,7 @@ export function ConsultationFullForm({
         // 저장된 상담 id를 확인한 뒤에만 해당 녹음의 로컬 복구본을 비운다.
         const result = await createEnrollmentConsultation(undefined, fd);
         if (result?.error) {
-          setSubmitError(result.error);
+          showError(result.error);
           setPhase("idle");
         } else if (result?.id) {
           if (audioRecoveryId) { await clearRecovery(audioRecoveryId); dismissBrowserRecording({ recoveryId: audioRecoveryId }); }
@@ -413,13 +439,13 @@ export function ConsultationFullForm({
           markSaved();
           leaveTo(`/enrollment/${result.id}`);
         } else {
-          setSubmitError("저장 결과를 확인하지 못했습니다. 목록에서 확인해 주세요.");
+          showError("저장 결과를 확인하지 못했습니다. 목록에서 확인해 주세요.");
           setPhase("idle");
         }
       } else {
         const result = await updateEnrollmentConsultation(undefined, fd);
         if (result?.error) {
-          setSubmitError(result.error);
+          showError(result.error);
           setPhase("idle");
           // 부분 성공(필드는 저장, 녹음 첨부만 실패)이면 폼은 저장된 상태 — 미저장 가드 해제(닫아도 거짓 확인 안 뜸).
           if (result.saved) markSaved();
@@ -438,7 +464,7 @@ export function ConsultationFullForm({
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      setSubmitError(msg);
+      showError(msg);
       setPhase("idle");
     }
   }
@@ -785,7 +811,7 @@ export function ConsultationFullForm({
             </span>
             <span className="text-text-dim text-xs break-keep">
               {assignedClassCount > 0 ? ASSIGNED_DRAG_BLOCKED : followUpMust
-                ? "상담을 마쳤으면 등록 완료 · 미등록 · 상담 완료(다음 상담일) 중 하나를 고릅니다 · 저장하면 해당 칸으로 이동합니다"
+                ? "상담을 마쳤으면 등록 완료 · 미등록 · 상담 완료 중 하나를 고릅니다(다음 상담일은 선택) · 저장하면 해당 칸으로 이동합니다"
                 : `현재 상태: ${stageLabel} · 저장하면 선택한 상태로 이동합니다`}
             </span>
           </div>
@@ -824,7 +850,7 @@ export function ConsultationFullForm({
             })}
           </div>
           <Grid cols={2}>
-            <L label={followUpDateMust ? "다음 상담일" : "다음 상담일 (선택)"} icon={Calendar} required={followUpDateMust}>
+            <L label="다음 상담일 (선택)" icon={Calendar}>
               <input name="followUpDate" type="date" defaultValue={v.followUpDate ?? ""} className={`${input} num`} />
             </L>
             <L label="조치 내용" icon={MessageSquare}>
@@ -896,7 +922,7 @@ export function ConsultationFullForm({
       ) : null}
 
       {errorMsg ? (
-        <p className="text-danger bg-danger/5 border-danger/20 inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+        <p ref={errorRef} className="text-danger bg-danger/5 border-danger/20 inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
           <AlertCircle className="size-4" />
           {errorMsg}
         </p>

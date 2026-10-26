@@ -45,7 +45,7 @@ import { ConsultationsTab } from "./_tabs/consultations-tab";
 import { MemosTab } from "./_tabs/memos-tab";
 import { TimelineTab } from "./_tabs/timeline-tab";
 import { getContributionGate } from "@/features/student-contribution/server/access";
-import { StudentOntologyPanel } from "@/features/student-contribution/components/student-ontology-panel";
+import { StudentContributionView } from "@/features/student-contribution/components/student-contribution-view";
 import { HomeworkVideosTab } from "./_tabs/homework-videos-tab";
 import { HomeworkVideoLinks } from "./_tabs/homework-video-links";
 import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
@@ -63,6 +63,13 @@ export default async function StudentDetailPage({
   // jjFrom·jjTo = 성적 탭 인재원 학습 분석 기간(JJ실에서 들어오면 그 기간 그대로 — 2026-09-11).
   // page·from·to = 진도 탭 쪽·보고서 날짜 조회(원장 2026-09-18). 탭 링크가 `?tab=`만 싣기 때문에 탭을 옮기면 초기화된다.
   searchParams: Promise<{
+    contribution?: string;
+    month?: string;
+    view?: string;
+    entity?: string;
+    status?: string;
+    grade?: string;
+    q?: string;
     tab?: string;
     // 숙제 영상 탭에서 미리 골라 둘 영상 id(영상 제출 현황의 ▶) — 이 학생의 영상이 아니면 뷰어가 무시한다.
     video?: string;
@@ -368,7 +375,7 @@ export default async function StudentDetailPage({
         ) : tab === "billing" ? (
           <BillingTab studentId={student.id} />
         ) : tab === "contribution" && showContribution ? (
-          <StudentOntologyPanel studentId={student.id} />
+          <StudentContributionView studentId={student.id} params={sp} />
         ) : tab === "timeline" ? (
           <TimelineTab studentId={student.id} />
         ) : null}

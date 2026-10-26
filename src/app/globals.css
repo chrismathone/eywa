@@ -960,6 +960,13 @@
     height: auto !important;
     max-height: none !important;
   }
+  /* 이전 화면 유지 방식의 화면(iframe 문서) 바깥 껍데기 — 화면에선 사이드바 폭만큼 왼쪽을 비우는데(인라인 padding-left,
+     keepalive-frame-shell.tsx) 그 여백이 종이에도 남아 문서가 오른쪽으로 몰리고 좁아졌다(지출결의서 '총액' 칸 잘림,
+     원장 제보 2026-10-26). 종이엔 사이드바가 없다 — 여백·화면 높이를 푼다(!important: 인라인 style을 이긴다). */
+  [data-keepalive-root] {
+    padding-left: 0 !important;
+    height: auto !important;
+  }
 }
 
 /* ───────────────────────────────────────────────

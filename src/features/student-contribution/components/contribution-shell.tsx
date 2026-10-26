@@ -1,4 +1,4 @@
-import { EmbedLink as Link } from "@/components/embed-link";
+import { ContributionLink as Link } from "./student-contribution-scope";
 import type { ReactNode } from "react";
 import { ContributionNavigationHint } from "./navigation-hint";
 const tabs = [

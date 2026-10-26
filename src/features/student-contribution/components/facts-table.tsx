@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { EmbedLink as Link } from "@/components/embed-link";
+import { ContributionLink as Link } from "./student-contribution-scope";
 import type { EvidenceRef, StudentFact } from "@/features/students/ontology/types";
 import { ListPager } from "./list-pager";
 import { factLabels, fieldClass, sourceLabels } from "./presentation";

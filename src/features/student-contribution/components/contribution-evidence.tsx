@@ -9,6 +9,7 @@ import { MonthMetrics } from "./month-metrics";
 import { CorrectionDetails } from "./correction-details";
 import { FactsTable } from "./facts-table";
 import { SignalControls } from "./signal-controls";
+import { VideoCompletionCheck } from "./video-completion-check";
 import { metricLabels, monthStatusClass, monthStatusText, monthText, numberText, signedRawText, signedText, sourceLabels } from "./presentation";
 
 const statusNote: Record<TrendPoint["status"], string> = {
@@ -49,6 +50,7 @@ export function ContributionEvidence({ selected, months, through, point, config,
           <strong className="tabular-nums text-amber">{signedText(fix.points[r.metric])}점</strong></li>)}</ul>
         {!!corrections?.length && <details className="mt-3 text-xs"><summary className="cursor-pointer text-sm font-medium">원래 달별 변경 내역</summary><CorrectionDetails key={selected.month} entries={corrections} studentId={studentId} /></details>}</div>}
     </section>
+    {selected.month >= "2026-01" && <VideoCompletionCheck key={`${studentId}:${selected.month}`} studentId={studentId} month={selected.month} />}
     <section className="overflow-hidden rounded-xl border border-line"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4"><div><h3 className="font-semibold">{monthText(selected.month)} 근거 기록</h3>
       <p className="mt-1 text-xs">기록을 골라 원본을 확인할 수 있습니다. {selected.closedAt ? "마감 당시 확인한 자료입니다." : "최근 집계에서 확인한 자료입니다."}</p></div><span className="rounded-full bg-secondary px-3 py-1 text-xs tabular-nums">{facts.length}건</span></div>
       <FactsTable key={selected.month} facts={facts} /></section>
