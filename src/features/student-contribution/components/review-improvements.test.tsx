@@ -22,7 +22,7 @@ it("정정의 원래 달을 열어도 목록 복귀 조건과 임베드 상태�
 
 it("그래프 미리보기는 조회하지 않고 클릭·Enter 선택만 월과 복귀 조건을 함께 전달한다", () => {
   render(<ScoreTrend studentId="s" selectedMonth="2026-09" points={[{ month: "2026-09", total: 1, change: 1 }, { month: "2026-10", total: 2, change: 1 }]} />);
-  const september = screen.getByRole("button", { name: "2026년 9월 누적 1점" }), october = screen.getByRole("button", { name: "2026년 10월 누적 2점" });
+  const september = screen.getByRole("button", { name: "2026년 9월 그 달 +1점 · 누적 1점" }), october = screen.getByRole("button", { name: "2026년 10월 그 달 +1점 · 누적 2점" });
   expect(september.getAttribute("aria-pressed")).toBe("true");
   expect([september, october].filter((el) => el.getAttribute("tabindex") === "0")).toHaveLength(1);
   fireEvent.mouseEnter(october);
@@ -44,10 +44,10 @@ it("요약 바로가기를 눌렀을 때만 현재 연결을 펼치고 목록 �
   expect(document.activeElement?.id).toBe("record-summary-s"); scroll.mockRestore();
 });
 
-it("좁은 그래프에서 겹친 원보다 실제 포인터에 가까운 달을 선택하고 기록 없는 달은 조회하지 않는다", () => {
+it("좁은 그래프에서 실제 포인터가 있는 달을 선택하고 기록 없는 달은 조회하지 않는다", () => {
   const points = [{ month: "2026-08", total: 1, change: 1 }, { month: "2026-09", total: 1, change: 0, hasRecord: false }, { month: "2026-10", total: 2, change: 1 }];
   render(<ScoreTrend studentId="s" selectedMonth="2026-10" points={points} />);
-  const october = screen.getByRole("button", { name: "2026년 10월 누적 2점" });
+  const october = screen.getByRole("button", { name: "2026년 10월 그 달 +1점 · 누적 2점" });
   const svg = october.closest("svg")!;
   vi.spyOn(svg, "getBoundingClientRect").mockReturnValue({ left: 0, width: 640 } as DOMRect);
   fireEvent.click(october, { clientX: 65, detail: 1 });
@@ -55,8 +55,8 @@ it("좁은 그래프에서 겹친 원보다 실제 포인터에 가까운 달을
   expect(document.activeElement?.getAttribute("data-month")).toBe("2026-08");
   fireEvent.click(october, { clientX: 342.5, detail: 1 });
   expect(m.navigate).toHaveBeenCalledOnce();
-  expect(screen.getByText("이 달 집계 기록 없음")).toBeTruthy();
-  expect(screen.queryByRole("link", { name: "이 달 내역" })).toBeNull();
+  expect(screen.getByText("2026년 9월 미리보기")).toBeTruthy(); expect(screen.getByText("집계 기록 없음")).toBeTruthy();
+  expect(screen.getByText("집계 기록이 없는 달은 선택할 수 없습니다.")).toBeTruthy();
   fireEvent.keyDown(october, { key: "Home" });
   expect(document.activeElement?.getAttribute("data-month")).toBe("2026-08");
   fireEvent.keyDown(document.activeElement!, { key: "ArrowRight" });
@@ -67,11 +67,13 @@ it("실적 없는 항목만 접고 정정·누적 실적·자료 확인 전 항�
   const selected: StoredContributionMonth = { month: "2026-10", studentId: "s", raws: { ...emptyRaws(), tuitionWon: 100000 },
     correction: { ...emptyRaws(), referralConsult: -1 }, closedAt: null, reconstructed: false, computedAt: "now", historical: [],
     evidenceIds: [], unavailable: ["parentPositiveMonths"], payload: emptyPayload() };
-  render(<MonthMetrics selected={selected} total={{ ...emptyRaws(), tenureYears: 1 }} config={DEFAULT_CONFIG} />);
-  for (const label of ["수업료 기여", "소개 상담", "장기 재원", "학부모 긍정 신호"]) expect(screen.getByText(label)).toBeTruthy();
-  expect(screen.queryByText("개근")).toBeNull();
+  render(<MonthMetrics selected={selected} through={{ ...emptyRaws(), tenureYears: 1 }} config={DEFAULT_CONFIG} />);
+  // 넓은 화면 표와 폰 카드가 같은 항목을 함께 그린다(화면 폭에 따라 하나만 보인다).
+  for (const label of ["수업료 기여", "소개 상담", "장기 재원", "학부모 긍정 신호"]) expect(screen.getAllByText(label)).toHaveLength(2);
+  expect(screen.queryAllByText("개근")).toHaveLength(0);
+  expect(screen.getAllByText("정정 −1건")).toHaveLength(2);
   fireEvent.click(screen.getByRole("button", { name: /실적 없는 .* 항목도 보기/ }));
-  expect(screen.getByText("개근")).toBeTruthy();
+  expect(screen.getAllByText("개근")).toHaveLength(2);
 });
 
 it("저장 위치의 변경 요약에 끈 항목과 배점·인정 기준 차이를 표시한다", () => {

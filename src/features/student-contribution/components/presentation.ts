@@ -1,8 +1,16 @@
 import { METRIC_LABELS, type Metric } from "../model/config";
+import type { MonthStatus } from "../model/score-trend";
 import type { StudentFact, StudentSource } from "@/features/students/ontology/types";
+import { TONE_SOFT, type SemanticTone } from "@/lib/design/semantic-color";
 
 export const numberText = (n: number) => n.toLocaleString("ko-KR", { maximumFractionDigits: 2 });
+/** 증가·감소·유지를 색이 아니라 부호로 먼저 읽게 한다. 감소는 하이픈이 아닌 마이너스 기호. */
+export const signedText = (n: number) => Math.abs(n) < 0.005 ? "0" : n > 0 ? `+${numberText(n)}` : `−${numberText(-n)}`;
 export const monthText = (month: string) => `${month.slice(0, 4)}년 ${Number(month.slice(5))}월`;
+const statusMeta: Record<MonthStatus, [string, SemanticTone]> = { closed: ["마감", "positive"], current: ["집계 중", "info"],
+  unclosed: ["마감 전", "caution"], merged: ["병합 전 기록", "special"], none: ["집계 기록 없음", "inert"] };
+export const monthStatusText = (status: MonthStatus) => statusMeta[status][0];
+export const monthStatusClass = (status: MonthStatus) => `inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${TONE_SOFT[statusMeta[status][1]]}`;
 export const metricLabels: Record<Metric, string> = { ...METRIC_LABELS,
   referralConsult: "소개 상담", referralStarted: "소개 후 수업 시작", subjectMonths: "과목별 수강",
   perfectMonths: "개근", videoMonths: "영상 숙제 완료", examMonths: "월말평가 응시" };
@@ -11,6 +19,10 @@ export const metricUnits: Record<Metric, string> = {
   perfectMonths: "개월", videoMonths: "개월", examMonths: "개월", parentPositiveMonths: "개월", teacherPositiveMonths: "개월",
 };
 export const rawText = (metric: Metric, value: number) => `${numberText(value)}${metricUnits[metric]}`;
+export const signedRawText = (metric: Metric, value: number) => `${signedText(value)}${metricUnits[metric]}`;
+/** 누적 실적 × 현재 배점. 점수 구성·월별 근거 표가 같은 식을 쓴다. */
+export const formulaText = (metric: Metric, raw: number, points: number) =>
+  `${rawText(metric, raw)}${metric === "tuitionWon" ? " ÷ 100,000원" : ""} × ${numberText(points)}점`;
 export const rateUnit = (metric: Metric) => metric === "tuitionWon" ? "10만 원당" : metric === "tenureYears" ? "재원 12개월마다"
   : metric === "subjectMonths" ? "1과목·1개월당" : metric.endsWith("Months") ? "한 달당" : "한 건당";
 export const factLabels: Record<StudentFact["kind"], string> = {

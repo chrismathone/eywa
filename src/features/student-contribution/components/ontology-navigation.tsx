@@ -22,6 +22,16 @@ export function OntologyNavigation({ children }: { children: ReactNode }) {
   </Context.Provider>;
 }
 
+/**
+ * 화면 표시 없이 이동 상태만 나눠 쓴다. 학생 상세의 차트·월 선택·정정 링크·탭이 한 이동을 함께 본다 —
+ * 이동 중에 탭이 주소를 바꾸면(replaceState = 복원 동작) 라우터가 진행 중인 이동을 버리고 옛 달로 돌아간다.
+ */
+export function NavigationScope({ children }: { children: ReactNode }) {
+  const router = useRouter(), [pending, start] = useTransition();
+  const navigate = (href: string) => { if (!pending) start(() => router.push(href, { scroll: false })); };
+  return <Context.Provider value={{ pending, navigate }}>{children}</Context.Provider>;
+}
+
 export function useOntologyNavigation(): Navigation {
   const context = useContext(Context), router = useRouter(), [pending, start] = useTransition();
   return context ?? { pending, navigate: (href) => start(() => router.push(href, { scroll: false })) };
