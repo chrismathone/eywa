@@ -102,3 +102,45 @@ export function planUndo(rows: readonly ImportedRow[], current: ReadonlyMap<stri
   }
   return plan;
 }
+
+// ── 기록 한 건에 실리는 **배정 표식** ─────────────────────────────
+
+/**
+ * 반영을 만든 **교재 배정**(원장 2026-10-26 *"되돌리기 기능이 동작안한대"*) — 되돌리기가 실제 줄만 비우고
+ * 배정을 남겨 두면 빈 칸에 같은 교재가 `계획`으로 다시 그려져 **아무것도 안 바뀐 것처럼** 보인다.
+ * 그래서 배정이 만든 반영은 기록에 배정 id를 함께 싣고, 되돌리기가 그 배정까지 지운다.
+ *
+ * 🔑 새 칼럼 없이 `rows` 배열 안 **표식 원소**로 싣는다(표를 고치면 SQL을 손으로 돌리기 전까지 기록이 끊긴다, [[#95]]).
+ *    줄 원소는 `id`·`added`를 갖고 표식은 `kind: "plan"`을 갖는다 — 가르는 곳은 `splitBatchRows` 한 곳.
+ */
+export type ImportPlanMeta = { kind: "plan"; planId: string; title: string | null };
+
+function isPlanMeta(x: unknown): x is ImportPlanMeta {
+  return (
+    typeof x === "object" &&
+    x !== null &&
+    (x as { kind?: unknown }).kind === "plan" &&
+    typeof (x as { planId?: unknown }).planId === "string"
+  );
+}
+
+/** 저장된 `rows` → 줄 기록 + 배정 표식(없으면 null — 옛 기록·배정 밖 반영). 모양이 이상한 원소는 버린다. */
+export function splitBatchRows(raw: unknown): { rows: ImportedRow[]; plan: ImportPlanMeta | null } {
+  const list = Array.isArray(raw) ? raw : [];
+  let plan: ImportPlanMeta | null = null;
+  const rows: ImportedRow[] = [];
+  for (const x of list) {
+    if (isPlanMeta(x)) {
+      plan ??= { kind: "plan", planId: x.planId, title: typeof x.title === "string" ? x.title : null };
+      continue;
+    }
+    if (typeof x === "object" && x !== null && typeof (x as { id?: unknown }).id === "string") rows.push(x as ImportedRow);
+  }
+  return { rows, plan };
+}
+
+/** 최근 기록(최신 먼저) 중 `targetId`까지 — 되돌리기는 **그 뒤에 한 반영부터 거꾸로** 전부 되돌린다. 없으면 null. */
+export function undoChain<T extends { id: string }>(recentNewestFirst: readonly T[], targetId: string): T[] | null {
+  const idx = recentNewestFirst.findIndex((b) => b.id === targetId);
+  return idx < 0 ? null : recentNewestFirst.slice(0, idx + 1);
+}

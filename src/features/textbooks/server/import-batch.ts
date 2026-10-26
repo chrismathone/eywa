@@ -7,7 +7,7 @@
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { reportError } from "@/lib/observability/report-error";
-import { diffImport, IMPORT_FIELDS, type ImportedRow, type LineFields } from "../import-undo";
+import { diffImport, IMPORT_FIELDS, splitBatchRows, type ImportedRow, type ImportPlanMeta, type LineFields } from "../import-undo";
 
 type Admin = ReturnType<typeof createAdminClient>;
 type LineRow = LineFields & { id: string; updated_by: string | null };
@@ -44,11 +44,15 @@ export async function recordImportBatch(input: {
   to: string;
   actorId: string;
   before: readonly LineRow[];
+  /** 이 반영을 만든 교재 배정 — 되돌리기가 배정까지 지운다(`ImportPlanMeta`). */
+  plan?: { id: string; title: string | null } | null;
 }): Promise<string | null> {
   try {
     const after = await snapshotPlanLines(input.admin, input.tenantId, input.classId, input.from, input.to);
     const rows = diffImport(new Map(input.before.map((r) => [r.id, r])), after, input.actorId);
-    if (rows.length === 0) return null;
+    // 배정이 있으면 넣은 줄이 0이어도 남긴다 — 그래야 배정 자체를 되돌릴 수 있다.
+    if (rows.length === 0 && !input.plan) return null;
+    const meta: ImportPlanMeta[] = input.plan ? [{ kind: "plan", planId: input.plan.id, title: input.plan.title }] : [];
     const { data, error } = await input.admin
       .from("class_plan_import_batches")
       .insert({
@@ -56,7 +60,7 @@ export async function recordImportBatch(input: {
         class_id: input.classId,
         period_from: input.from,
         period_to: input.to,
-        rows,
+        rows: [...meta, ...rows],
         row_count: rows.length,
         created_by: input.actorId,
       })
@@ -72,26 +76,36 @@ export async function recordImportBatch(input: {
   }
 }
 
-export type LastImport = { id: string; at: string; count: number };
+/** 되돌리기 ▾ 메뉴 한 줄 — 언제·무슨 교재·몇 줄. */
+export type ImportHistoryItem = { id: string; at: string; count: number; title: string | null };
+
+/** 되돌리기 ▾ 메뉴가 보여 주는 기록 수(원장 2026-10-26 *"최근 5회 작업한거중에"*). */
+export const IMPORT_HISTORY_LIMIT = 5;
 
 /**
- * 그 반의 **가장 최근** 가져오기 — 이미 되돌렸으면 null(더 옛것으로 내려가지 않는다, SQL 헤더 🔑).
- * 표가 없거나 조회가 실패해도 null(표시용이라 조용히).
+ * 그 반의 **아직 안 되돌린** 반영, 최신 먼저 최대 5건. 고르면 그 뒤 반영까지 거꾸로 함께 되돌린다
+ * (`undoChain` — 중간 하나만 빼면 뒤 반영이 그 칸 위에 쌓인 채라 판정이 틀어진다).
+ * 표가 없거나 조회가 실패해도 빈 배열(표시용이라 조용히, [[#95]]).
  */
-export async function loadLastImport(admin: Admin, tenantId: string, classId: string): Promise<LastImport | null> {
+export async function loadRecentImports(admin: Admin, tenantId: string, classId: string): Promise<ImportHistoryItem[]> {
   try {
     const { data, error } = await admin
       .from("class_plan_import_batches")
-      .select("id, created_at, row_count, undone_at")
+      .select("id, created_at, row_count, rows")
       .eq("tenant_id", tenantId)
       .eq("class_id", classId)
+      .is("undone_at", null)
       .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (error || !data || data.undone_at) return null;
-    return { id: String(data.id), at: String(data.created_at), count: Number(data.row_count ?? 0) };
+      .limit(IMPORT_HISTORY_LIMIT);
+    if (error || !data) return [];
+    return data.map((r) => ({
+      id: String(r.id),
+      at: String(r.created_at),
+      count: Number(r.row_count ?? 0),
+      title: splitBatchRows(r.rows).plan?.title ?? null,
+    }));
   } catch {
-    return null;
+    return [];
   }
 }
 
@@ -101,7 +115,7 @@ export async function loadImportBatch(
   tenantId: string,
   classId: string,
   batchId: string,
-): Promise<{ rows: ImportedRow[]; undone: boolean } | null> {
+): Promise<{ rows: ImportedRow[]; plan: ImportPlanMeta | null; undone: boolean } | null> {
   const { data, error } = await admin
     .from("class_plan_import_batches")
     .select("rows, undone_at")
@@ -110,5 +124,5 @@ export async function loadImportBatch(
     .eq("id", batchId)
     .maybeSingle();
   if (error || !data) return null;
-  return { rows: (data.rows ?? []) as ImportedRow[], undone: Boolean(data.undone_at) };
+  return { ...splitBatchRows(data.rows), undone: Boolean(data.undone_at) };
 }

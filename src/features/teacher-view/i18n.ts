@@ -1153,10 +1153,18 @@ export const SHEET_DICT = {
   "month.importUndo.button": { ko: "되돌리기", en: "Revert fill" },
   "month.importUndo.busy": { ko: "되돌리는 중…", en: "Undoing…" },
   "month.importUndo.more": {
-    ko: "교재 배정으로 실제 시트에 넣은 마지막 반영을 되돌립니다 — 그 뒤 고쳐 쓴 칸은 남깁니다",
-    en: "Undoes the last fill of the actual sheet from a book assignment — cells edited afterwards are kept",
+    ko: "최근 교재 배정 5건 중 하나로 되돌립니다 — 고른 것과 그 뒤 배정을 함께 되돌리고(배정·넣은 칸), 그 뒤 고쳐 쓴 칸은 남깁니다",
+    en: "Roll back to one of the last 5 book assignments — undoes it and every later one (assignment and filled cells); cells edited afterwards are kept",
   },
-  "month.importUndo.menu": { ko: "마지막 반영 되돌리기 ({at} · {n}줄)", en: "Undo last fill ({at} · {n} rows)" },
+  "month.importUndo.head": { ko: "되돌릴 시점 고르기 (최근 5건)", en: "Roll back to… (last 5)" },
+  "month.importUndo.latest": { ko: "최근", en: "Latest" },
+  "month.importUndo.untitled": { ko: "교재 반영", en: "Book fill" },
+  "month.importUndo.alsoNewer": { ko: "+ 그 뒤 {n}건 함께", en: "+ {n} later" },
+  "month.importUndo.doneMany": {
+    ko: "{b}건을 되돌렸습니다 — 교재 배정 {p}개를 지우고 {n}줄을 원래대로 돌렸습니다",
+    en: "Rolled back {b} — removed {p} assignments, restored {n} rows",
+  },
+  "month.importUndo.menu": { ko: "{at} · {title} · {n}줄", en: "{at} · {title} · {n} rows" },
   "month.importUndo.done": { ko: "되돌렸습니다 — {n}줄을 원래대로 돌렸습니다", en: "Undone — {n} rows restored" },
   "month.importUndo.doneKept": {
     ko: "되돌렸습니다 — {n}줄을 원래대로 돌리고, 그 뒤 고쳐 쓰거나 옮긴 {kept}줄은 남겼습니다",

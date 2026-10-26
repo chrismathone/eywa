@@ -281,8 +281,9 @@ describe("교재 배정 — 계획과 실제를 가른다", () => {
   it("🔴 배정이 넣은 실제는 되돌릴 수 있다 — 알림 [실행 취소] + 툴바 [되돌리기 ▾], 손대지 않은 칸만", () => {
     const button = read("src", "features", "class-sheets", "components", "import-undo-button.tsx");
     expect(button).toContain("undoPlanImport");
-    expect(button).toContain("month.importUndo.menu"); // ▾ 메뉴 — 언제·몇 줄을 보고 고른다
-    expect(button).toContain("if (!lastImport) return null"); // 되돌릴 기록이 있을 때만 선다
+    expect(button).toContain("month.importUndo.menu"); // ▾ 메뉴 — 언제·무슨 교재·몇 줄을 보고 고른다
+    expect(button).toContain("if (recent.length === 0) return null"); // 되돌릴 기록이 있을 때만 선다
+    expect(button).toContain("recent.map("); // 최근 5건(원장 2026-10-26)
     const dialog = read("src", "features", "class-sheets", "components", "textbook-fill-dialog.tsx");
     expect(dialog).toContain("month.importUndo.action"); // 배정 알림의 [실행 취소]
     expect(dialog).toContain("undoPlanImport");
@@ -293,6 +294,11 @@ describe("교재 배정 — 계획과 실제를 가른다", () => {
     const undo = read("src", "features", "textbooks", "server", "import-undo-actions.ts");
     expect(undo).toContain("requireEcsClassAccess(input.classId, { write: true })");
     expect(undo).toContain("planUndo(");
+    // 고른 반영과 그 뒤 반영을 함께(원장 2026-10-26 최근 5건) · 배정까지 지운다(빈 칸에 계획이 다시 그려지던 문제)
+    expect(undo).toContain("undoChain(");
+    expect(undo).toContain("deleteClassTextbookPlan(");
+    expect(writer).toContain("plan: input.plan ?? null");
+    expect(plan.slice(plan.indexOf("export async function applyTextbookFill"))).toContain("plan: { id: saved.id, title: computed.title }");
     // 표가 없어도 가져오기·월간 화면은 산다([[#95]]).
     const batch = read("src", "features", "textbooks", "server", "import-batch.ts");
     expect(batch).toContain('"PGRST205"');
