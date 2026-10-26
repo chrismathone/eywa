@@ -134,7 +134,51 @@ export function readUnderstanding(raw: unknown): UnderstandingState {
   return { scores, off };
 }
 
-export type UnderstandingRow = { lesson: string; title: string; score: number | null; off: boolean };
+/**
+ * 점수를 안 매긴 소단원의 기본값 — 원장 2026-10-26 *"초기 데이터 값(10)을 설정해 두고 변경 하도록"*.
+ * 🔑 **저장값에 10을 박지 않는다** — 세션 `scores`에는 강사가 바꾼 소단원만 있고, 없는 소단원은 화면·자동작성이 이 값으로 읽는다
+ *    (`UnderstandingRow.stored`로 가른다). 그래서 기본값을 바꾸면 손대지 않은 칸이 전부 따라온다.
+ */
+export const UNDERSTANDING_DEFAULT = 10;
+
+/**
+ * 한 번에 넣는 단계 — 원장 2026-10-26 *"버튼식으로 이해도 우수 보통 나쁨 이런식으로 바로 기입"*. 카드 패널·일괄 입력이 같은 목록을 쓴다.
+ * 라벨은 화면 사전(`os.card.understandingPreset.<key>`)이 단다.
+ */
+export const UNDERSTANDING_PRESETS = [
+  { key: "good", score: 10 },
+  { key: "ok", score: 7 },
+  { key: "poor", score: 4 },
+] as const;
+export type UnderstandingPresetKey = (typeof UNDERSTANDING_PRESETS)[number]["key"];
+
+/**
+ * 0~10 눈금 안내 — 원장이 나중에 줄 예정(2026-10-26 *"0~10까지 이해도의 가이드는 배치로 강사들이 보고 설정 할 수 있도록 할 예정"*).
+ * 🔴 내용을 지어내지 않는다 — 비어 있으면 화면이 안내를 안 그린다. 받으면 여기(또는 학원설정으로 옮겨) 채운다.
+ */
+export const UNDERSTANDING_GUIDE: readonly { score: number; text: string }[] = [];
+
+/** 소단원 전부에 같은 점수 — 단계 버튼·일괄 입력. 뺀 소단원은 그대로 둔다(점수만 바뀐다). */
+export function setAllUnderstanding(
+  today: string | null | undefined,
+  st: UnderstandingState | undefined,
+  score: number,
+): UnderstandingState {
+  const s = st ?? EMPTY_UNDERSTANDING;
+  const v = clampUnderstanding(score) ?? UNDERSTANDING_DEFAULT;
+  const scores = { ...s.scores };
+  for (const lesson of pilotLessons(today)) scores[lesson] = v;
+  return { scores, off: s.off };
+}
+
+/** 강사가 점수를 하나라도 직접 매겼나('빈 칸만' 일괄 입력 판정). */
+export function hasStoredUnderstanding(today: string | null | undefined, st: UnderstandingState | undefined): boolean {
+  const s = st ?? EMPTY_UNDERSTANDING;
+  return pilotLessons(today).some((l) => s.scores[l] != null);
+}
+
+/** `stored` = 강사가 매긴 점수인가(아니면 기본값으로 읽은 것). */
+export type UnderstandingRow = { lesson: string; title: string; score: number | null; off: boolean; stored: boolean };
 
 /** 화면 줄 — 오늘 진도의 차시마다 한 줄(뺀 것도 '뺌'으로 남겨 되살릴 수 있게). */
 export function understandingRows(today: string | null | undefined, st: UnderstandingState | undefined): UnderstandingRow[] {
@@ -142,12 +186,14 @@ export function understandingRows(today: string | null | undefined, st: Understa
   return pilotLessons(today).map((lesson) => ({
     lesson,
     title: lessonTitle(lesson),
-    score: s.scores[lesson] ?? null,
+    // 안 매긴 소단원은 기본값(10)으로 읽는다(원장 2026-10-26) — 저장값엔 없다(`stored: false`).
+    score: s.scores[lesson] ?? UNDERSTANDING_DEFAULT,
+    stored: s.scores[lesson] != null,
     off: s.off.includes(lesson),
   }));
 }
 
-/** 자동작성에 쓰는 이해도 — 빼지 않았고 점수를 매긴 소단원만. */
+/** 자동작성에 쓰는 이해도 — 빼지 않은 소단원 전부(안 매긴 소단원은 기본값 10). */
 export function activeUnderstanding(
   today: string | null | undefined,
   st: UnderstandingState | undefined,

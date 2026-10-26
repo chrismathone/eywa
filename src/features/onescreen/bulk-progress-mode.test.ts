@@ -35,3 +35,21 @@ describe("일괄 입력의 수업 성격(복습·문제풀이, 원장 2026-10-26
     expect(client).toMatch(/p\.set\.progressMode !== undefined\) setProgressModeFor/);
   });
 });
+
+describe("일괄 입력의 이해도 단계(원장 2026-10-26)", () => {
+  it("새 수학 보고서 행에만 · '빈 칸만'은 직접 매긴 점수가 없는 행에만", () => {
+    const targets = [
+      row({ understandingOk: true }),
+      row({ studentId: "s2", understandingOk: true, understandingStored: true }),
+      row({ studentId: "s3", subjectKey: "english", understandingOk: false }),
+    ];
+    expect(planBulkApply(targets, { understanding: 7 }, false, "math").map((p) => [p.studentId, p.set.understanding])).toEqual([
+      ["s1", 7],
+      ["s2", 7],
+    ]);
+    expect(planBulkApply(targets, { understanding: 4 }, true, "math").map((p) => p.studentId)).toEqual(["s1"]);
+  });
+  it("잠긴 행엔 넣지 않는다", () => {
+    expect(planBulkApply([row({ understandingOk: true, locked: true })], { understanding: 10 }, false, "math")).toEqual([]);
+  });
+});

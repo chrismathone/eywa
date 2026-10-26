@@ -21,6 +21,10 @@ import {
   cleanPilotUnderstanding,
   pilotAiDirective,
   understandingRows,
+  UNDERSTANDING_DEFAULT,
+  UNDERSTANDING_PRESETS,
+  setAllUnderstanding,
+  hasStoredUnderstanding,
 } from "./math-report-pilot";
 import { evaluateSendGate } from "./send-gate";
 import { buildFactBlock, type ReportCommentInput } from "./report-comment";
@@ -104,13 +108,30 @@ describe("진도 첫 문장", () => {
 
 describe("소단원별 이해도", () => {
   const today = "소수와 거듭제곱\n소인수분해\n최대공약수";
-  it("뺀 소단원·점수 없는 소단원은 자동작성에 안 들어간다", () => {
+  it("뺀 소단원은 자동작성에 안 들어가고, 안 매긴 소단원은 기본값 10으로 들어간다(원장 2026-10-26)", () => {
     const st = { scores: { 소수와거듭제곱: 3, "소수와 거듭제곱": 8, 소인수분해: 6, 최대공약수: 9 }, off: ["최대공약수"] };
     expect(activeUnderstanding(today, st)).toEqual([
       { title: "소수와 거듭제곱", score: 8 },
       { title: "소인수분해", score: 6 },
     ]);
-    expect(activeUnderstanding(today, { scores: { 소인수분해: 7 }, off: [] })).toEqual([{ title: "소인수분해", score: 7 }]);
+    // 종전엔 점수 없는 소단원이 빠졌다 — 이제 기본값 10(UNDERSTANDING_DEFAULT)으로 읽는다(저장값엔 없다 = stored false).
+    expect(activeUnderstanding(today, { scores: { 소인수분해: 7 }, off: [] })).toEqual([
+      { title: "소수와 거듭제곱", score: UNDERSTANDING_DEFAULT },
+      { title: "소인수분해", score: 7 },
+      { title: "최대공약수", score: UNDERSTANDING_DEFAULT },
+    ]);
+    expect(understandingRows(today, { scores: { 소인수분해: 7 }, off: [] }).map((r) => r.stored)).toEqual([false, true, false]);
+  });
+  it("단계 버튼 — 소단원 전부에 같은 점수, 뺀 소단원 목록은 그대로", () => {
+    expect(UNDERSTANDING_PRESETS.map((p) => [p.key, p.score])).toEqual([["good", 10], ["ok", 7], ["poor", 4]]);
+    const next = setAllUnderstanding(today, { scores: { 소인수분해: 2 }, off: ["최대공약수"] }, 7);
+    expect(next.off).toEqual(["최대공약수"]);
+    expect(activeUnderstanding(today, next)).toEqual([
+      { title: "소수와 거듭제곱", score: 7 },
+      { title: "소인수분해", score: 7 },
+    ]);
+    expect(hasStoredUnderstanding(today, { scores: {}, off: [] })).toBe(false);
+    expect(hasStoredUnderstanding(today, next)).toBe(true);
   });
   it("뺀 줄도 화면에는 남는다(되살리기)", () => {
     const rows = understandingRows(today, { scores: {}, off: ["소인수분해"] });

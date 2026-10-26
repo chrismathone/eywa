@@ -3311,6 +3311,18 @@ export const SHEET_DICT = {
   "os.card.understandingRestore": { ko: "되살리기", en: "Put back in the report" },
   "os.card.understandingRemoved": { ko: "뺀 소단원", en: "Removed" },
   "os.card.understandingScoreAria": { ko: "{lesson} 이해도", en: "{lesson} understanding" },
+  // 기본값 10 · 단계 버튼(원장 2026-10-26 *"초기 데이터 값(10)"* · *"우수 보통 나쁨 이런식으로 바로 기입"*).
+  "os.card.understandingHintDefault": {
+    ko: "처음엔 모두 {n}점 — 다르면 바꾸세요 · 빼면 자동작성에 안 들어갑니다",
+    en: "Every lesson starts at {n} — change it if needed · removed lessons are left out",
+  },
+  "os.card.understandingDefaultTitle": { ko: "기본값 {n}점(아직 안 바꿈)", en: "Default {n} (not changed yet)" },
+  "os.card.understandingPresetAria": { ko: "이해도 한 번에 넣기", en: "Set understanding for all lessons" },
+  "os.card.understandingPresetTitle": { ko: "모든 소단원을 {label}({n}점)으로", en: "Set every lesson to {label} ({n})" },
+  "os.card.understandingPreset.good": { ko: "우수", en: "Great" },
+  "os.card.understandingPreset.ok": { ko: "보통", en: "OK" },
+  "os.card.understandingPreset.poor": { ko: "나쁨", en: "Weak" },
+  "os.bulk.understanding": { ko: "이해도 (수학 소단원 전부)", en: "Understanding (all math lessons)" },
   "os.card.reportOf": { ko: "{subject} 보고서", en: "{subject} report" },
   "os.card.modeBTitle": {
     ko: "2문단 B — 수업 내용과 태도·특이사항을 나눠 작성합니다. 상단 토글에서 바꿀 수 있습니다.",
