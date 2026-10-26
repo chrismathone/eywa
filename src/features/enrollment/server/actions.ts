@@ -35,9 +35,10 @@ import { logAction } from "@/features/audit/server/log";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { createSchema, buildConsultationRow, type FullForm } from "@/features/enrollment/consultation-form-row";
 import { counselorAutofill } from "@/features/enrollment/consultation-edit";
+import { changedColumns, effectiveFollowUp, mergeSubjectDetails, parseEditBase } from "@/features/enrollment/consultation-changed";
 import { parseFollowUpResult, resolveFollowUp, type FollowUpResult } from "@/features/enrollment/follow-up";
 import { summarizeConsultationChanges } from "@/features/enrollment/consultation-audit";
-import { referrerChanged, referrerColumns, type ReferrerColumns } from "@/features/enrollment/referrer";
+import { referrerChanged, referrerColumns, referrerColumnsOf, type ReferrerColumns } from "@/features/enrollment/referrer";
 import { readReferrerBefore, referrerLabelOf } from "@/features/enrollment/server/referrer-queries";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -388,11 +389,18 @@ export async function updateEnrollmentConsultation(
     .eq("id", id)
     .single();
   if (readError || !existing) return { error: "상담을 불러오지 못했습니다. 다시 시도해 주세요." };
+  // 수정 화면을 연 때의 값(editBase) — 있으면 **이 사람이 바꾼 칸만** 쓴다(원장 2026-10-26 · consultation-changed.ts).
+  // 없거나 못 읽으면(배포 전에 열린 화면) 종전처럼 전체를 쓴다.
+  const baseValues = parseEditBase(formData.get("editBase"));
+  const baseParsed = baseValues ? createSchema.safeParse(baseValues) : null;
+  const base = baseValues && baseParsed?.success ? { values: baseValues, data: baseParsed.data } : null;
   const lh: Record<string, unknown> = { ...((existing?.learning_history as Record<string, unknown>) ?? {}) };
-  if (parsed.data.prevAcademy) lh.prevAcademy = parsed.data.prevAcademy;
-  else delete lh.prevAcademy;
-  if (parsed.data.lastScore) lh.lastScore = parsed.data.lastScore;
-  else delete lh.lastScore;
+  for (const key of ["prevAcademy", "lastScore"] as const) {
+    const mine = parsed.data[key] || "";
+    if (base && (base.data[key] || "") === mine) continue; // 안 바꿨다 — 지금 값 그대로
+    if (mine) lh[key] = mine;
+    else delete lh[key];
+  }
 
   // 상담 완료 전환은 QR 접수건 + 현재 대기·예약(pending/scheduled)일 때만(클라 조작·낡은 폼 방어).
   const promoteToConsulted =
@@ -404,25 +412,52 @@ export async function updateEnrollmentConsultation(
   // 고른 값이 칸반 상태를 정한다. 이관 registration_status·결제 기록은 수정하지 않는다.
   // 🔑 배정 검사는 **저장될 과목**으로 한다(2026-10-23) — 과목 칸은 이 저장이 폼 값으로 덮으므로(`buildConsultationRow`), 고치기 전 과목으로
   //    보면 '영어'를 '수학'으로 바로잡으며 고른 후속 조치가 옛 과목의 배정에 막히거나 저장 뒤 칸반 칸과 어긋난다.
+  const referrer = referrerColumns(formData);
+  if ("error" in referrer) return { error: referrer.error };
+  // 바꾼 칸 — 화면을 연 때와 지금을 **같은 변환**으로 견준다(학교 표기 통일 등이 양쪽에 똑같이 걸린다).
+  const aliases = await schoolAliases();
+  const mineRow = { ...buildConsultationRow(parsed.data, aliases), ...referrer.cols };
+  const baseRow = base ? { ...buildConsultationRow(base.data, aliases), ...referrerColumnsOf(base.values) } : null;
+  const changed = baseRow ? changedColumns(mineRow, baseRow) : null;
+  const storedDate = (existing.follow_up_date as string | null) ?? null;
+  const mineResult = parseFollowUpResult(formData.get("followUpResult"));
+  const mineDate = parsed.data.followUpDate || null;
+  // 안 건드린 후속 조치·날짜는 DB의 지금 값을 따른다(그사이 다른 사람이 정한 상태를 되돌리지 않는다).
+  const effective = base
+    ? effectiveFollowUp({
+        mineResult, baseResult: parseFollowUpResult(base.values.followUpResult ?? null),
+        mineDate, baseDate: base.data.followUpDate || null, storedDate, storedStage: stageOfOutcome(String(existing.outcome)),
+      })
+    : { result: mineResult, followUpDate: mineDate };
   const followUp = resolveFollowUp({
     current: promoteToConsulted ? "consulted" : String(existing.outcome),
-    assignedClassCount: await countAssignedClasses(supabase, existing.student_id, parsed.data.subject || null),
-    result: parseFollowUpResult(formData.get("followUpResult")),
-    followUpDate: parsed.data.followUpDate || null,
-    storedDate: (existing.follow_up_date as string | null) ?? null,
+    assignedClassCount: await countAssignedClasses(
+      supabase, existing.student_id,
+      changed && !changed.has("subject") ? ((existing.subject as string | null) ?? null) : parsed.data.subject || null,
+    ),
+    result: effective.result,
+    followUpDate: effective.followUpDate,
+    storedDate,
     today: kstToday(),
   });
   if ("error" in followUp) return { error: followUp.error };
   const outcomeTo = followUp.outcome !== existing.outcome ? followUp.outcome : null;
 
-  const referrer = referrerColumns(formData);
-  if ("error" in referrer) return { error: referrer.error };
-  // 소개한 사람의 저장 전 값 — 따로·실패해도 되게 읽는다(위 선조회에 넣으면 칸이 없는 DB에서 학습 이력 보존 조회까지 함께 실패한다, #95).
-  const referrerBefore = "referrer_student_id" in referrer.cols ? await readReferrerBefore(supabase as unknown as SupabaseClient, id) : null;
-  const row = {
-    ...(await withSchoolKind(supabase, user.tenantId, buildConsultationRow(parsed.data, await schoolAliases()))),
+  const fullRow = {
+    ...(await withSchoolKind(supabase, user.tenantId, buildConsultationRow(parsed.data, aliases))),
     ...referrer.cols,
   };
+  let row: Partial<typeof fullRow> = fullRow;
+  if (changed && baseRow) {
+    const keep = new Set(changed);
+    // 학년만 바꿔도 학교급이 채워지면(칠성 + 초5 → 칠성초) 학교도 쓴다 — 종전 전체 저장과 같은 결과.
+    if (keep.has("prospect_grade") && fullRow.prospect_school !== mineRow.prospect_school) keep.add("prospect_school");
+    row = Object.fromEntries(Object.entries(fullRow).filter(([key]) => keep.has(key))) as Partial<typeof fullRow>;
+    const details = mergeSubjectDetails(existing.subject_details, baseRow.subject_details, mineRow.subject_details);
+    if (details.changed) row.subject_details = details.value;
+  }
+  // 소개한 사람의 저장 전 값 — 따로·실패해도 되게 읽는다(위 선조회에 넣으면 칸이 없는 DB에서 학습 이력 보존 조회까지 함께 실패한다, #95).
+  const referrerBefore = "referrer_student_id" in row ? await readReferrerBefore(supabase as unknown as SupabaseClient, id) : null;
   // 후속 조치로 상태가 바뀐 것도 '실제 수정'이다(완료 전환과 같은 결) — 다른 칸을 안 고치고 등록·미등록만 골라도 빈 상담자를 채운다.
   const autofilled = counselorAutofill({ ...existing, ...referrerBefore }, { ...row, learning_history: lh }, user.displayName, promoteToConsulted || !!outcomeTo);
   if (autofilled) row.counselor = autofilled;
@@ -442,7 +477,7 @@ export async function updateEnrollmentConsultation(
   // 감사로그(2026-09-10 김근우 건) — 이름·학교·학년·보호자는 자동 연결의 키라 전후 값까지, 연락처·상담 내용은
   // 항목 이름만. 아무것도 안 바뀐 저장(그냥 '저장'을 누름)은 남기지 않는다(감사로그가 소음에 묻힌다).
   const summary = summarizeConsultationChanges(existing, row);
-  if (referrerBefore && referrerChanged(referrerBefore, referrer.cols)) {
+  if (referrerBefore && referrerChanged(referrerBefore, row)) {
     // 점수(원생 소개)에 바로 들어가는 값이라 누구에서 누구로 바꿨는지 남긴다(본인을 고르는 경우까지 되짚을 수 있게).
     const db = supabase as unknown as SupabaseClient;
     const [from, to] = await Promise.all([referrerLabelOf(db, referrerBefore), referrerLabelOf(db, referrer.cols)]);

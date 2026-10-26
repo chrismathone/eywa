@@ -43,6 +43,14 @@ export function referrerColumns(formData: FormData): { cols: Partial<ReferrerCol
   return { cols: { referrer_student_id: parsed.studentId, referrer_staff_id: parsed.staffId, referrer_name: name || null } };
 }
 
+/** 같은 판정을 글자 사전에 — 수정 화면을 연 때의 값(`editBase`)과 견주려고. 칸이 없거나 못 읽으면 빈 객체(손대지 않는다). */
+export function referrerColumnsOf(values: Readonly<Record<string, string>>): Partial<ReferrerColumns> {
+  const fd = new FormData();
+  for (const [key, value] of Object.entries(values)) fd.set(key, value);
+  const r = referrerColumns(fd);
+  return "error" in r ? {} : r.cols;
+}
+
 /** 저장 전 ↔ 이번 저장 — 연결(원생·직원)이 바뀌었는지(감사로그 '소개한 사람'). 신청서 이름은 화면에서 못 고치니 보지 않는다. */
 export function referrerChanged(before: Partial<ReferrerColumns>, after: Partial<ReferrerColumns>): boolean {
   return (before.referrer_student_id ?? null) !== (after.referrer_student_id ?? null)

@@ -280,6 +280,16 @@ export function ConsultationFullForm({
 
   // 로컬 초안 자동저장 — 입력 중 IDB 보관, 다시 열면 복구 배너. 서버 저장 성공 시 clear.
   const formRef = useRef<HTMLFormElement>(null);
+  // 수정 화면을 연 때의 값 — 저장 때 함께 보내 서버가 **이 사람이 바꾼 칸만** 쓴다(원장 2026-10-26: 먼저 열어 둔 화면으로 저장해
+  // 다른 사람이 막 저장한 상담자 칸을 빈칸으로 덮었다 · consultation-changed.ts).
+  // 🔴 초안 복원보다 먼저 잡는다(되살린 입력은 '바꾼 것'이어야 저장된다) — 그래서 이 효과는 useFormDraft보다 위에 둔다.
+  const editBaseRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (isCreate || editBaseRef.current !== null || !formRef.current) return;
+    const values: Record<string, string> = {};
+    for (const [key, value] of new FormData(formRef.current)) if (typeof value === "string") values[key] = value;
+    editBaseRef.current = JSON.stringify(values);
+  }, [isCreate]);
   const draftScope = isCreate ? formDraftScope("consultation:new", instance?.formId) : `consultation:${v.id ?? "edit"}`;
   const draft = useFormDraft({
     scope: draftScope,
@@ -378,6 +388,7 @@ export function ConsultationFullForm({
     }
     const fd = new FormData(e.currentTarget);
     fd.set("subjectDetails", JSON.stringify(details));
+    if (editBaseRef.current) fd.set("editBase", editBaseRef.current);
     // QR 접수 대기·예약 건 — 후속 조치를 안 골랐을 때만 상담 완료 전환 여부를 묻는다(고르면 그 값이 상태를 정한다).
     if (confirmConsultedOnSave && !isCreate && !parseFollowUpResult(fd.get("followUpResult"))) {
       pendingFdRef.current = fd;

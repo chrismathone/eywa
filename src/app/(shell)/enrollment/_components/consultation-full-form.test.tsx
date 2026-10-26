@@ -197,6 +197,26 @@ describe("후속 조치 필수(원장 2026-10-22)", () => {
       Element.prototype.scrollIntoView = original;
     }
   });
+  it("수정 화면은 연 때의 값(editBase)을 함께 보낸다 — 서버가 바꾼 칸만 쓴다(원장 2026-10-26)", async () => {
+    m.updateEnrollmentConsultation.mockResolvedValue({ ok: true });
+    const { container } = render(<ConsultationFullForm mode="edit" recordingOwner={{ tenantId: "t1", userId: "u1" }} initial={{ id: "c1", prospectName: "A", outcome: "consulted", careerGoal: "변호사" }} />);
+    fireEvent.change(container.querySelector('input[name="careerGoal"]')!, { target: { value: "의사" } });
+    fireEvent.click(screen.getByRole("radio", { name: "미등록" }));
+    await act(async () => { fireEvent.submit(container.querySelector("form")!); for (let i = 0; i < 10; i++) await Promise.resolve(); });
+    const fd = m.updateEnrollmentConsultation.mock.calls[0]![1] as FormData;
+    expect(fd.get("careerGoal")).toBe("의사");
+    const base = JSON.parse(String(fd.get("editBase"))) as Record<string, string>;
+    expect(base).toMatchObject({ id: "c1", prospectName: "A", careerGoal: "변호사" });
+    expect(base).not.toHaveProperty("followUpResult"); // 연 때는 고르지 않았다
+  });
+  it("새 상담은 editBase를 보내지 않는다", async () => {
+    m.createEnrollmentConsultation.mockResolvedValue({ id: "n1" });
+    const { container } = render(<ConsultationFullForm mode="create" recordingOwner={{ tenantId: "t1", userId: "u1" }} initial={{ prospectName: "A" }} />);
+    fireEvent.click(screen.getByRole("radio", { name: "등록 완료" }));
+    await act(async () => { fireEvent.submit(container.querySelector("form")!); for (let i = 0; i < 10; i++) await Promise.resolve(); });
+    const fd = m.createEnrollmentConsultation.mock.calls[0]![1] as FormData;
+    expect(fd.has("editBase")).toBe(false);
+  });
   it("상담 전 접수(QR 등)는 '상담 전' 그대로 날짜 없이 저장할 수 있다", async () => {
     m.updateEnrollmentConsultation.mockResolvedValue({ ok: true });
     const { container } = render(<ConsultationFullForm mode="edit" recordingOwner={{ tenantId: "t1", userId: "u1" }} initial={{ id: "c1", prospectName: "A", outcome: "pending" }} />);
