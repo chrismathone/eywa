@@ -30,3 +30,5 @@
 검토: Claude Opus 5.5 xhigh. 운영 절차는 [실행 안내](../runbooks/student-parent-events.md), 앞선 설계는 [구현 계획](../plans/student-parent-event-contribution.md)을 따른다.
 
 최종 수정 검토에서 실행을 막는 코드 결함이 없음을 확인했다. 관련 Vitest, 변경 파일과 의존성을 포함한 TypeScript·ESLint, 메모리 PostgreSQL의 스키마 33개·실제 가져오기/되돌리기 19개 검사를 통과했다. 이는 운영 데이터 반영 완료를 뜻하지 않는다.
+
+배포 후 실제 배점 화면에서 기존 합계 캐시가 DB 호환 정규화를 건너뛰는 오류를 발견했다. 캐시 버전을 바꾸고 읽은 직후에도 옛 원수치를 정규화한다. 캐시 적중·비변형·기존 항목 오류 거절을 재현 테스트로 잠갔다. 운영 DB 쓰기로 우회하지 않는다.
