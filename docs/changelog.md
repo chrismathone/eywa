@@ -1,5 +1,13 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-10-26 — AI 크레딧 MVP 세 가지(개발 모드 · 운영 적용 없음)
+
+- **① 퇴원 사유 복원**: 사유가 빈 침산 퇴원생 238명을 메이크에듀 사유·퇴원보고서 원본·상담·학부모 글에서 근거 인용과 함께 제안(Haiku 5.5 · 2회 합의 · 코드가 인용을 다시 확인). 적용기는 원장이 승인한 줄만 한 거래로 바꾸고 백업·감사로그(`withdrawal_reason_restore` — 감사로그 라벨·설명 추가)를 남긴다. 실행 전(스크립트 `scripts/_oneoff/ai-credit-mvp/withdrawals/apply.mjs`·`revert.mjs`).
+- **② 새 수업보고서 평점 정기 처리**: [`src/features/report-rating`](../src/features/report-rating) + cron `/api/cron/report-ratings` + 0455a(대기열 · 입력 지문 칸) + 지점 스위치 `report_rating` + 키 그룹 `MENT`(`lesson_report_rating`). 기본 꺼짐 — 원장 *"진행해"*(10-26 저녁)로 main 병합 · cron 등록(30분마다 · 스위치가 꺼진 지점은 바로 돌아선다 · 0455a가 없으면 '준비 안 됨'). 남은 것 = 0455a 운영 적용(원장) → 운영 콘솔에서 침산 스위치 켜기([`reports-ai.md`](decisions/reports-ai.md) 같은 날 조항).
+- **④ 결석 문자 판별 검증**: 사람 정답 표(빈 칸) + 프롬프트 비교 시험만 — 코드 변경 없음(사람 정답이 채워지기 전에는 '검증 완료'라 하지 않는다).
+- 공용: `dev-cli.ts`가 구독 CLI 응답의 실제 모델을 관찰자(`devCliTrace`)로 넘긴다(개발 시험 기록용 · 운영 경로 무변경).
+- 결과·개인정보는 Git 밖(`D:\tmp\ai-credit-mvp-2026-10-26\`) — 원장 요약 = `07-decision\owner-summary.md`.
+
 ## 2026-10-26 — AI 1순위 = Claude · DeepSeek은 폴백만
 
 - 원장 *"딥시크로 바꾼거 다 클로드로 전환"* · *"전사 분석은 전부 sonnet 5.5로 돌리고, 간단하고 빠르게 작성해야하는 수업보고서 멘트는 haiku 5.5로"* · *"폴백으로 딥시크 남겨놔"*(Anthropic API 크레딧 200달러 지원).

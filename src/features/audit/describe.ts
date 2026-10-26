@@ -1140,6 +1140,12 @@ export function auditDetail(
             : join("퇴원", date ? `퇴원일 ${date}` : null);
       return join(ctx.nameOf(m.studentId), what, "퇴원보고서 없음");
     }
+    // 옛 퇴원 기록의 빈 사유 채움(원장 승인 행만 · 적용 스크립트) — 누구 · 어떤 사유로.
+    case "withdrawal_reason_restore": {
+      if (m.reverted) return join(ctx.nameOf(m.studentId), "복원한 사유를 되돌림");
+      const reason = reasonDisplay(str(m.reason));
+      return join(ctx.nameOf(m.studentId), reason ? `사유: ${reason}` : null, detailText(m.detail), str(m.memo));
+    }
     case "student_hold":
     case "student_restore": {
       // 휴원 메모는 여기 말고 남는 자리가 없다(enrollments·students에 칸이 없다) — 적혔으면 보여 준다.
