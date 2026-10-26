@@ -35,14 +35,14 @@ export function OntologyExplorer({ data, initialScope }: { data: Data; initialSc
   const counts = Object.entries(result.counts) as [StudentFact["kind"], number][];
   const largest = Math.max(1, ...counts.map(([, n]) => n));
   return <OntologyNavigation><div className="w-full min-w-0 space-y-5 pb-6">
-    <ContributionHeader title="학생 기록 연결" description="학생의 기록이 반·강사·과목·학원에 어떻게 연결되는지 살펴봅니다. 관점을 바꾸거나 연결된 대상을 선택해 근거를 따라갈 수 있습니다." active="ontology" canConfigure={data.canConfigure} actions={<ContributionMonthPicker month={data.month} scope={{ kind, id }} />} />
+    <ContributionHeader title="학생 기록 연결" description="학생·반·강사·과목별로 같은 달의 기록과 근거를 살펴봅니다." active="ontology" canConfigure={data.canConfigure} actions={<ContributionMonthPicker month={data.month} scope={{ kind, id }} />} />
     <OntologyViewMode current={false} month={data.month} filters={data.filters} scope={{ kind, id }} />
     <section className="rounded-xl border border-line">
       <div className="border-b border-line p-4"><OntologyFilters key={JSON.stringify(data.filters)} filters={data.filters} options={data.filterOptions} scope={{ kind, id }} /></div>
       <div className="flex flex-wrap items-center gap-4 border-b border-line p-4">
-        <div className="flex flex-wrap gap-1 rounded-lg bg-secondary p-1" aria-label="연결 관점">{Object.entries(entityLabels).map(([key, label]) => <button key={key} type="button" aria-pressed={kind === key}
+        <div className="flex max-w-full gap-1 overflow-x-auto rounded-lg bg-secondary p-1" aria-label="연결 관점">{Object.entries(entityLabels).map(([key, label]) => <button key={key} type="button" aria-pressed={kind === key}
           onClick={() => choose(key as ExplorerKind, key === "academy" ? data.tenant : "")}
-          className={`rounded-md px-4 py-2 text-sm focus-visible:outline-primary ${kind === key ? "bg-primary font-semibold text-primary-foreground" : "hover:bg-card"}`}>{label}</button>)}</div>
+          className={`shrink-0 rounded-md px-4 py-2 text-sm focus-visible:outline-primary phone:px-3 ${kind === key ? "bg-primary font-semibold text-primary-foreground" : "hover:bg-card"}`}>{label}</button>)}</div>
         {!browsing && kind !== "academy" && <><Button size="sm" variant="outline" onClick={() => choose(kind, "")}>{entityLabels[kind]} 목록으로</Button>
           <SearchableSelect ariaLabel={`${entityLabels[kind]} 선택`} value={id} onValueChange={(next) => choose(kind, next)} placeholder={`${entityLabels[kind]} 선택`} searchPlaceholder={`${entityLabels[kind]} 검색`}
             options={data.labels[kind].map((item) => ({ value: item.id, label: item.label, hint: "detail" in item ? item.detail as string : undefined, meta: `${numberText(data.views[`${kind}:${item.id}`]?.factCount ?? 0)}건` }))} className="min-w-0 w-full sm:w-auto sm:min-w-64 sm:flex-1" /></>}
@@ -50,9 +50,9 @@ export function OntologyExplorer({ data, initialScope }: { data: Data; initialSc
       </div>
       {!browsing && <div className="grid grid-cols-[minmax(0,1.4fr)_1fr_1fr_1.3fr] divide-x divide-line phone:grid-cols-2 phone:divide-x-0">
         <div className="bg-primary-softer px-5 py-4"><p className="text-xs">{entityLabels[kind]} 관점</p><h2 className="mt-2 break-words text-lg font-bold">{selected}</h2></div>
-        <div className="px-5 py-4"><p className="text-xs">연결된 학생</p><p className="mt-2 text-xl font-bold tabular-nums">{numberText(result.students.length)}<span className="ml-1 text-sm font-normal">명</span></p></div>
+        <div className="px-5 py-4"><p className="text-xs">이 달 기록이 연결된 학생</p><p className="mt-2 text-xl font-bold tabular-nums">{numberText(result.students.length)}<span className="ml-1 text-sm font-normal">명</span></p>{kind === "academy" && <p className="mt-1 text-xs">조회 조건에 맞는 {numberText(data.labels.student.length)}명 중</p>}</div>
         <div className="px-5 py-4"><p className="text-xs">중복을 뺀 기록</p><p className="mt-2 text-xl font-bold tabular-nums">{numberText(result.factCount)}<span className="ml-1 text-sm font-normal">건</span></p></div>
-        <div className="px-5 py-4"><p className="text-xs">{kind === "teacher" || kind === "class" ? "반·강사별 수업료" : "확인된 수업료"}</p><p className="mt-2 text-xl font-bold tabular-nums">{kind === "teacher" || kind === "class" ? <span className="text-base font-medium">반·강사별로 배분하지 않음</span> : <>{numberText(result.tuitionWon)}<span className="ml-1 text-sm font-normal">원</span></>}</p></div>
+        <div className="px-5 py-4"><p className="text-xs">{kind === "teacher" || kind === "class" ? "반·강사별 수업료" : "확인된 수업료"}</p><p className="mt-2 text-xl font-bold tabular-nums phone:text-sm">{kind === "teacher" || kind === "class" ? <span className="text-base font-medium">반·강사별로 배분하지 않음</span> : <span className="whitespace-nowrap">{numberText(result.tuitionWon)}<span className="ml-1 text-sm font-normal">원</span></span>}</p></div>
       </div>}
     </section>
     {!data.historyReady && <p className="rounded-lg bg-primary-softer px-4 py-3 text-sm">첫 집계가 완료되기 전에는 일부 기록만 표시됩니다.</p>}
@@ -72,7 +72,7 @@ export function OntologyExplorer({ data, initialScope }: { data: Data; initialSc
           <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-1 phone:grid-cols-1">{counts.map(([key, count]) => <button key={key} type="button" aria-pressed={recordKind === key} onClick={() => { setRecordKind(recordKind === key ? "all" : key); setPage(1); }}
             className={`rounded-lg p-3 text-left focus-visible:outline-primary ${recordKind === key ? "bg-primary-softer ring-1 ring-primary" : "hover:bg-secondary"}`}><span className="flex items-center justify-between gap-3 text-sm"><span>{factLabels[key]}</span><strong className="tabular-nums">{numberText(count)}건</strong></span><span className="mt-2 block h-1.5 rounded-full bg-secondary"><span className="block h-full rounded-full bg-primary" style={{ width: `${count / largest * 100}%` }} /></span></button>)}</div>
           {!counts.length && <p className="py-10 text-center text-sm">선택한 대상과 월에 연결된 기록이 없습니다. 다른 월이나 대상을 선택해 주세요.</p>}
-          <p className="mt-4 border-t border-line pt-3 text-xs">원본 기록 {numberText(result.basis.recorded)}건 · 규칙 판정 {numberText(result.basis.rule)}건 · AI 판정 {numberText(result.basis.ai)}건</p>
+          <p className="mt-4 border-t border-line pt-3 text-xs">기록 원본 {numberText(result.basis.recorded)}건 · 규칙에 따른 자동 판정 {numberText(result.basis.rule)}건 · AI 판정 {numberText(result.basis.ai)}건</p>
         </section>
         <section className="overflow-hidden rounded-xl border border-line"><div className="flex flex-wrap items-center justify-between gap-3 p-4"><h2 className="font-semibold">{kind === "student" ? "학생의 기록 근거" : "연결된 학생의 근거"}</h2></div>
           {recordKind !== "all" && <div className="flex items-center justify-between bg-primary-softer px-5 py-2 text-sm"><span>{factLabels[recordKind as StudentFact["kind"]]} 기록이 있는 학생</span><button type="button" onClick={() => { setRecordKind("all"); setPage(1); }} className="underline">전체 기록 보기</button></div>}

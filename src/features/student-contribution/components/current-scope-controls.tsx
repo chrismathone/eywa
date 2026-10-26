@@ -16,7 +16,7 @@ export function CurrentScopeControls({ request, options }: { request: LiveScopeR
   const choose = (kind: ExplorerKind, id: string) => move({ ...request, kind, id, page: 1 });
   return <div className="space-y-3" aria-busy={pending}>
     <div className="flex flex-wrap items-center gap-3">
-      <div className="flex flex-wrap gap-1 rounded-lg bg-secondary p-1" aria-label="현재 연결 관점">
+      <div className="flex max-w-full gap-1 overflow-x-auto rounded-lg bg-secondary p-1" aria-label="현재 연결 관점">
         {Object.entries(entityLabels).map(([key, label]) => <Button key={key} size="sm" variant={request.kind === key ? "default" : "ghost"} disabled={pending}
           aria-pressed={request.kind === key} onClick={() => choose(key as ExplorerKind, key === "academy" ? options.find((o) => o.kind === key)?.id ?? "" : "")}>{label}</Button>)}
       </div>

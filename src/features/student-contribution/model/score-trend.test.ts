@@ -15,9 +15,9 @@ it("keeps the chart equal to the card at a rounding boundary", () => {
 it("retains missing months and negative corrections using the current rates", () => {
   const config = { ...DEFAULT_CONFIG, rates: { ...DEFAULT_CONFIG.rates, tuitionWon: { enabled: true, points: 2 } } };
   expect(contributionTrend([row("2026-03", 10000, -30000), row("2026-01", 20000)], config)).toEqual([
-    { month: "2026-01", total: 0.4, change: 0.4, corrected: false },
-    { month: "2026-02", total: 0.4, change: 0, corrected: false },
-    { month: "2026-03", total: 0, change: -0.4, corrected: true },
+    { month: "2026-01", total: 0.4, change: 0.4, corrected: false, hasRecord: true },
+    { month: "2026-02", total: 0.4, change: 0, corrected: false, hasRecord: false },
+    { month: "2026-03", total: 0, change: -0.4, corrected: true, hasRecord: true },
   ]);
   expect(contributionTrend([], config)).toEqual([]);
 });

@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { StudentFact } from "@/features/students/ontology/types";
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }), useSearchParams: () => new URLSearchParams() }));
 vi.mock("../server/referral-actions", () => ({ searchReviewedReferrers: vi.fn(), linkReviewedReferral: vi.fn() }));
 vi.mock("../server/actions", () => ({ changePositiveSignal: vi.fn() }));
 import { FactsTable } from "./facts-table";
