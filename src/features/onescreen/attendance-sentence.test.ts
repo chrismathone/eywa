@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { attendanceSentence } from "./attendance-sentence";
-import { NO_DAILY_TEST_TEXT, NO_HOMEWORK_TEXT, NO_HOMEWORK_TODAY_TEXT, pilotBody, pilotFactsSig } from "./math-report-pilot-sections";
+import { NO_DAILY_TEST_TEXT, NO_HOMEWORK_TEXT, NO_HOMEWORK_TODAY_TEXT, homeworkTodayLine, pilotBody, pilotFactsSig } from "./math-report-pilot-sections";
 
 describe("출결 문장(원장 2026-10-26)", () => {
   it("지각·조퇴·공결 + 사유 원문", () => {
@@ -44,5 +44,22 @@ describe("빈 항목도 '없었다'로 남긴다(원장 2026-10-26)", () => {
     expect(pilotBody({ ...BASE, attendance: att }, {}).startsWith(`■ 출결\n${att}`)).toBe(true);
     expect(pilotBody(BASE, {})).not.toContain("■ 출결");
     expect(pilotFactsSig({ ...BASE, attendance: att }, [])).not.toBe(pilotFactsSig(BASE, []));
+  });
+});
+
+describe("오늘의 숙제 + 교재명(원장 2026-10-26)", () => {
+  it("숙제가 쪽수뿐이고 교재가 한 권이면 교재명을 앞에 붙인다", () => {
+    expect(homeworkTodayLine("153-170p", "쎈 미적분")).toBe("쎈 미적분 153-170p");
+    expect(homeworkTodayLine("p40-p56", "가우스 중3-1 2권")).toBe("가우스 중3-1 2권 p40-p56");
+    expect(homeworkTodayLine("128-135p, 140-149p", "가우스 중2-2 4권")).toBe("가우스 중2-2 4권 128-135p, 140-149p");
+  });
+  it("숙제에 글자가 있거나 교재가 여러 권·비었으면 그대로", () => {
+    expect(homeworkTodayLine("쎈 25-35p", "미적분1")).toBe("쎈 25-35p");
+    expect(homeworkTodayLine("프린트", "가우스 중1-2 3권")).toBe("프린트");
+    expect(homeworkTodayLine("p61`p81", "쎈 2-2권,가우스 3-1-1")).toBe("p61`p81");
+    expect(homeworkTodayLine("12-18p", "")).toBe("12-18p");
+  });
+  it("보고서 '오늘의 숙제' 항목에 반영된다", () => {
+    expect(pilotBody({ ...BASE, homeworkToday: "153-170p", textbook: "쎈 미적분" }, {})).toContain("■ 오늘의 숙제\n쎈 미적분 153-170p");
   });
 });
