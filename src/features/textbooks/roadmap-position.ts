@@ -1,5 +1,5 @@
 /** 로드맵 보조 — 기준일이 든 창 · 시리즈의 최근 진도 위치(순수 함수, book-roadmap.ts가 쓴다). */
-import { bookKey, bookPosition, type CatalogBook, type ReportLine } from "./math-book-match";
+import { bookKey, bookPosition, catalogCandidates, lessonNoOf, type CatalogBook, type ReportLine } from "./math-book-match";
 import { keyOrdinal, seriesOfKey } from "./book-sequence";
 import type { PlacedBook } from "./roadmap-calendar";
 import type { RoadPosition } from "./book-roadmap-types";
@@ -11,17 +11,52 @@ export function windowAt(books: readonly PlacedBook[], ref: string): number {
   return ref < books[0]!.startDate ? 0 : books[books.length - 1]!.window;
 }
 
-/** 시리즈 교재 중 진도가 걸린 **가장 최근** 기록(같은 날이면 뒤 권). */
+/**
+ * 시리즈 교재 중 진도가 걸린 **가장 최근** 기록(같은 날 두 권에 걸리면 아래 순서).
+ * 🔑 교재 칸에 **다른 책**이 적힌 기록은 **앞으로 나갈 때만** 센다 — 내신 기간에 `중2-2 100발 100중`으로 지난 단원을
+ *    복습하면 그 단원 이름이 가우스 중2-2 차시표에 걸려 중3을 나가는 학생의 '현재'가 중2-2로 되돌아갔다(원장
+ *    2026-10-26 제보). 그렇다고 다른 책 기록을 통째로 빼면 같은 단원을 개념원리·쎈으로 나가는 학생의 위치가 사라진다
+ *    (실데이터 드라이런에서 수십 명). 그래서: 시리즈가 적힌(또는 교재 칸이 빈) 기록의 위치가 기준이고, 다른 책 기록은
+ *    그보다 **새롭고 앞선** 위치일 때만 이긴다. 시리즈 기록이 하나도 없으면 다른 책 기록으로 본다(종전 그대로).
+ * 🔑 같은 기록이 두 권에 걸리면(`대푯값과 산포도` = 중1-2 4권·중3-2 4권, `인수분해` = 중3-1 1권·공통수학1) **교재 칸이
+ *    가리키는 권 → 같은 학년·학기 권 → 뒤 권** 순으로 고른다. 뒤 권만 보면 중1 학생이 중3으로 튄다.
+ */
 export function latestPosition(series: string, catalog: readonly CatalogBook[], reports: readonly ReportLine[]): RoadPosition | null {
-  let best: RoadPosition | null = null;
+  const loose = (s: string) => s.replace(/\s+/g, "");
+  const own = reports.filter((r) => !r.textbook?.trim() || loose(r.textbook).includes(loose(series)));
+  const mine = newestPosition(series, catalog, own);
+  const any = own.length === reports.length ? mine : newestPosition(series, catalog, reports);
+  if (!mine || !any) return mine ?? any;
+  const ahead = keyOrdinal(any.key) > keyOrdinal(mine.key) || (any.key === mine.key && any.lessonNo > mine.lessonNo);
+  return any.date > mine.date && ahead ? any : mine;
+}
+
+function newestPosition(series: string, catalog: readonly CatalogBook[], reports: readonly ReportLine[]): RoadPosition | null {
+  const head = (key: string | null) => key?.replace(/\|\d+$/, "") ?? null;
+  // 그 날 그 권에 걸린 기록의 교재 칸이 이 권을 얼마나 가리키나 — 2 = 이 권, 1 = 같은 학년·학기, 0 = 근거 없음.
+  const hint = (b: CatalogBook, key: string, date: string) => {
+    let rank = 0;
+    for (const r of reports) {
+      if (r.date !== date || lessonNoOf(r.progress, b.lessons) == null) continue;
+      const named = catalogCandidates(r.textbook, catalog);
+      if (named.some((c) => c.id === b.id)) return 2;
+      if (named.some((c) => head(bookKey(c)) === head(key))) rank = 1;
+    }
+    return rank;
+  };
+  let best: { pos: RoadPosition; book: CatalogBook } | null = null;
   for (const b of catalog) {
     const key = bookKey(b);
     if (!key || seriesOfKey(key) !== series) continue;
     const p = bookPosition(b, reports, catalog);
     if (!p) continue;
-    if (!best || p.date > best.date || (p.date === best.date && keyOrdinal(key) > keyOrdinal(best.key))) {
-      best = { key, title: b.title, lessonNo: p.lessonNo, total: p.total, date: p.date, unit: p.unit };
+    const pos = { key, title: b.title, lessonNo: p.lessonNo, total: p.total, date: p.date, unit: p.unit };
+    if (!best || p.date > best.pos.date) best = { pos, book: b };
+    else if (p.date === best.pos.date) {
+      const h = hint(b, key, p.date);
+      const bh = hint(best.book, best.pos.key, p.date);
+      if (h > bh || (h === bh && keyOrdinal(key) > keyOrdinal(best.pos.key))) best = { pos, book: b };
     }
   }
-  return best;
+  return best?.pos ?? null;
 }
