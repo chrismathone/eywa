@@ -21,6 +21,7 @@ import { correctionDetails } from "./corrections";
 import { pendingDetails } from "./pending-details";
 import { contributionLessonNames, contributionSubjectEvidence, lessonKey } from "./subject-evidence";
 import { reviewedHistoricalSubject } from "./reviewed-subjects";
+import { enrolledMonthCounts } from "./enrolled-months";
 
 export function assembleContribution(input: { tenant: string; today: string; capturedAt: string; core: CoreSources; activity: ActivitySources;
   settings: Awaited<ReturnType<typeof getTenantSettingsByTenantId>>; config: ContributionConfig; stored: StoredContributionMonth[];
@@ -56,6 +57,7 @@ export function assembleContribution(input: { tenant: string; today: string; cap
   const historySeeds = originals.filter((b) => b.month < "2026-01").map((b) => b.seed);
   const billing = billingMonths({ invoices: core.invoices.filter((r) => eligible(r.student_id)).map((r) => ({ ...r, student_id: canonical(r.student_id) })),
     history: [], cachedHistory: historySeeds.map((b) => ({ ...b, studentId: canonical(b.studentId) })), through: month, aywaFrom: "2026-01", subjectOf });
+  const enrolledMonths = enrolledMonthCounts(billing.map((b) => b.seed));
   const enrollmentIds = new Set(core.enrollments.map((e) => canonical(e.student_id)));
   const roster = contributionRoster(core.students, enrollmentIds);
   const calendar = contributionCalendar(core, { tenant, today, capturedAt, holidays: input.settings.operations.holidays, attendance: activity.attendance });
@@ -139,7 +141,7 @@ export function assembleContribution(input: { tenant: string; today: string; cap
       // A frozen month cannot be rewritten: preserve newly verified historical sources on the open month's payload.
       const subjectResolutions = (seedsByStudent.get(student.id) ?? []).filter(s => r.month === month || s.month === r.month).flatMap(s => s.subjectResolutions ?? []);
       return { ...r, studentId: student.id, computedAt: capturedAt, historical: (seedsByStudent.get(student.id) ?? []).filter((s) => s.month === r.month), unavailable: [...new Set(incomplete)],
-        payload: { ...emptyPayload(), evidenceIds: r.evidenceIds, facts: inMonth, relations: relationRows, coverage: ownCoverage, unavailableDetails: details, subjectResolutions,
+        payload: { ...emptyPayload(), ...(r.month === month ? { enrolledMonths: enrolledMonths.get(student.id) ?? 0 } : {}), evidenceIds: r.evidenceIds, facts: inMonth, relations: relationRows, coverage: ownCoverage, unavailableDetails: details, subjectResolutions,
           corrections: correctionDetails(r, built.filter((b) => !!b.closedAt), points),
           subjects: [...new Set(inMonth.flatMap((f) => f.related.filter((e) => e.kind === "subject").map((e) => e.id)))],
           correctionReasons: corrections.map((metric) => ({ metric, delta: r.correction[metric], reason: `${METRIC_LABELS[metric]}: 오늘 원본의 누적 수치와 마감한 달의 합계 차이(환불·연결 변경·병합·판정 변경 포함)` })) } };

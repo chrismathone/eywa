@@ -20,6 +20,7 @@ import {
   type SheetPlanLine,
 } from "@/features/class-sheets/sheet-report-draft";
 import { resolveBrandingSrc } from "@/lib/storage/media-storage";
+import { reportLogoPath } from "@/features/owner/report-logo";
 import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 // 담당 반 판정 단일 소스(담당 반 ∪ 그날 위임 반) — classes.teacher_id를 직접 비교하지 말 것(0173a).
 import { getTeachingClasses } from "@/features/classes/server/delegation";
@@ -410,7 +411,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       // 학부모 보고서 미리보기의 로고 — /r·인쇄와 **같은 해석기**를 쓴다(미리보기가 발송본과 달라지지 않게).
       // 로고를 안 쓰는 설정이면 서명 왕복 자체를 건너뛴다(원스크린은 전원이 매일 여는 경로 — 왕복 하나가 비싸다).
       settings.report.showLogo
-        ? resolveBrandingSrc(settings.profile.logoUrl, user.tenantId).catch(() => null)
+        ? resolveBrandingSrc(reportLogoPath(settings), user.tenantId).catch(() => null)
         : Promise.resolve(null),
       // 휴원일 이름 — 위에서 읽은 학원설정을 그대로 읽는다(요청 단위 캐시라 왕복 0). 실패는 null(fail-soft).
       holidayNameOrNull(targetDate),

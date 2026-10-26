@@ -4,7 +4,7 @@ import { DEFAULT_CONFIG, emptyRaws } from "../model/config";
 import { sumRaws } from "../model/calc";
 import { EmbedProvider } from "@/components/workspace/embed-context";
 const m = vi.hoisted(() => ({ refresh: vi.fn(), save: vi.fn(), recalc: vi.fn(), search: vi.fn(), link: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: m.refresh }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: m.refresh }), useSearchParams: () => new URLSearchParams(window.location.search) }));
 vi.mock("../server/actions", () => ({ saveContributionSettings: m.save, refreshContribution: m.recalc }));
 vi.mock("../server/referral-actions", () => ({ searchReviewedReferrers: m.search, linkReviewedReferral: m.link }));
 import { ContributionList } from "./contribution-list";
@@ -14,7 +14,7 @@ type Data = Parameters<typeof ContributionList>[0]["data"];
 function fixture(): Data {
   const total = (id: string, tuition: number, recent: number) => ({ studentId: id, raws: { ...emptyRaws(), tuitionWon: tuition },
     recent: { ...emptyRaws(), tuitionWon: recent }, computedAt: "2026-10-22T00:00:00Z", unavailable: [] });
-  const row = (id: string, status: string, tuition: number, recent: number) => ({ id, name: id, status, school: "초등학교", grade: "초5", subjects: ["math"], total: total(id, tuition, recent) });
+  const row = (id: string, status: string, tuition: number, recent: number) => ({ id, name: id, status, school: "초등학교", grade: "초5", subjects: ["math"], enrolledMonths: 13, total: total(id, tuition, recent) });
   return { gate: { tenantId: "t", userId: "owner", canConfigure: true, canWrite: true }, ready: true, missing: false, historyReady: true,
     refreshedAt: "2026-10-22T00:00:00Z", revision: 0, config: structuredClone(DEFAULT_CONFIG), subjects: [{ key: "math", label: "수학" }], grades: ["초5"],
     rows: [row("오래다닌학생", "enrolled", 1000000, 100000), row("최근기여학생", "enrolled", 500000, 500000), row("퇴원학생", "withdrawn", 2000000, 0)] };
@@ -23,7 +23,7 @@ function settingsFixture(data = fixture()): Parameters<typeof ContributionSettin
   return { gate: data.gate, ready: data.ready, config: data.config, revision: data.revision, historyReady: data.historyReady,
     studentCount: data.rows.length, raws: sumRaws(data.rows.flatMap((row) => row.total ? [row.total.raws] : [])) };
 }
-beforeEach(() => { vi.resetAllMocks(); m.save.mockResolvedValue({ ok: true, message: "저장 완료" }); m.link.mockResolvedValue({ ok: true, message: "연결 완료" }); });
+beforeEach(() => { vi.resetAllMocks(); window.history.replaceState(null, "", "/student-contribution"); m.save.mockResolvedValue({ ok: true, message: "저장 완료" }); m.link.mockResolvedValue({ ok: true, message: "연결 완료" }); });
 afterEach(cleanup);
 it("재원생 기본 목록과 최근 증가분 정렬·퇴원 포함 필터", () => {
   render(<ContributionList data={fixture()} />);
@@ -58,6 +58,29 @@ it("학생 목록을 나눠 보여 주고 검색·표시 수 변경 시 첫 페�
   expect(screen.getByRole("link", { name: "학생19" })).toBeTruthy();
   expect(screen.queryByRole("link", { name: "학생20" })).toBeNull();
 });
+it("상세에서 돌아오면 직전 목록의 페이지·정렬·필터를 복구한다", () => {
+  const data = fixture();
+  data.rows = Array.from({ length: 24 }, (_, i) => ({ ...data.rows[0]!, id: `s${i}`, name: `학생${String(i).padStart(2, "0")}` }));
+  const first = render(<ContributionList data={data} />);
+  fireEvent.change(screen.getByLabelText("재원 상태"), { target: { value: "all" } });
+  fireEvent.change(screen.getByLabelText("정렬"), { target: { value: "recent" } });
+  fireEvent.click(screen.getByRole("button", { name: "학생 목록 다음 페이지" }));
+  const href = screen.getByRole("link", { name: "학생10" }).getAttribute("href")!;
+  const saved = new URL(href, "https://test.local").searchParams.get("list");
+  first.unmount(); window.history.replaceState(null, "", `/student-contribution?${saved}`);
+  render(<ContributionList data={data} />);
+  expect(screen.getByRole("link", { name: "학생10" })).toBeTruthy(); expect(screen.queryByRole("link", { name: "학생00" })).toBeNull();
+  expect((screen.getByLabelText("재원 상태") as HTMLSelectElement).value).toBe("all");
+  expect((screen.getByLabelText("정렬") as HTMLSelectElement).value).toBe("recent");
+});
+it("셸이 목록 컴포넌트를 유지해도 외부 URL 변경과 새 메뉴의 초기값을 따른다", () => {
+  const data = fixture(); data.rows = Array.from({ length: 24 }, (_, i) => ({ ...data.rows[0]!, id: `s${i}`, name: `학생${String(i).padStart(2, "0")}` }));
+  const view = render(<ContributionList data={data} />);
+  window.history.replaceState(null, "", "/student-contribution?page=2"); view.rerender(<ContributionList data={data} />);
+  expect(screen.getByRole("link", { name: "학생10" })).toBeTruthy(); expect(screen.queryByRole("link", { name: "학생00" })).toBeNull();
+  window.history.replaceState(null, "", "/student-contribution"); view.rerender(<ContributionList data={data} />);
+  expect(screen.getByRole("link", { name: "학생00" })).toBeTruthy();
+});
 it("읽기 전용이면 집계 버튼이 없고 설정 입력도 잠긴다", () => {
   const data = fixture(); data.gate.canWrite = false;
   const view = render(<ContributionList data={data} />);
@@ -67,7 +90,9 @@ it("읽기 전용이면 집계 버튼이 없고 설정 입력도 잠긴다", () 
 it("창 안의 탭과 학생 상세 링크가 창 모드를 유지한다", () => {
   render(<EmbedProvider embed><ContributionList data={fixture()} /></EmbedProvider>);
   expect(screen.getByRole("link", { name: "학생 기록 연결" }).getAttribute("href")).toBe("/student-contribution/ontology?embed=1");
-  expect(screen.getByRole("link", { name: "오래다닌학생" }).getAttribute("href")).toBe("/student-contribution/오래다닌학생?embed=1");
+  expect(decodeURI(screen.getByRole("link", { name: "오래다닌학생" }).getAttribute("href")!)).toBe("/student-contribution/오래다닌학생?embed=1");
+  fireEvent.change(screen.getByLabelText("정렬"), { target: { value: "recent" } });
+  expect(new URLSearchParams(window.location.search).get("embed")).toBe("1");
 });
 it("자동 후보가 없는 상담도 퇴원생 검색 후 근거를 적어 명시 연결", async () => {
   m.search.mockResolvedValue({ options: [{ id: "withdrawn", label: "김학생 · 초등학교 초5 · 퇴원" }] });

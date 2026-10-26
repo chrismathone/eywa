@@ -8,6 +8,7 @@ import type { getContributionSettingsPreview } from "../server/queries";
 import { saveContributionSettings } from "../server/actions";
 import { ContributionHeader } from "./contribution-shell";
 import { ScoreBreakdown } from "./score-breakdown";
+import { SettingsChangeSummary } from "./settings-change-summary";
 import { fieldClass, metricLabels, numberText, rateUnit } from "./presentation";
 
 export function ContributionSettings({ data }: { data: NonNullable<Awaited<ReturnType<typeof getContributionSettingsPreview>>> }) {
@@ -36,7 +37,8 @@ export function ContributionSettings({ data }: { data: NonNullable<Awaited<Retur
             <label className="space-y-2 text-sm"><span className="block font-medium">소개 중복 판단 기준</span><select aria-label="소개 중복 판단 기준" value={config.referrals.key} onChange={(e) => setConfig({ ...config, referrals: { ...config.referrals, key: e.target.value as "studentSubject" | "student" } })} className={fieldClass}><option value="studentSubject">같은 학생 + 같은 과목</option><option value="student">같은 학생</option></select></label></div>
           <label className="mt-5 flex items-center gap-2 border-t border-line pt-4 text-sm"><input type="checkbox" className="h-4 w-4 accent-primary" checked={config.attendance.allowLate} onChange={(e) => setConfig({ ...config, attendance: { allowLate: e.target.checked } })} />지각도 개근으로 인정</label>
         </section>
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-card p-4"><p className="text-sm">{changed ? "저장하지 않은 변경 사항이 있습니다." : "현재 저장된 배점입니다."}</p><div className="flex gap-2"><Button type="button" variant="outline" disabled={!changed || busy} onClick={() => { setConfig(data.config); setMessage(""); }}>변경 취소</Button><Button type="submit" disabled={busy || !changed}>{busy ? "저장 중…" : "배점 저장"}</Button></div></div>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-card p-4"><SettingsChangeSummary before={data.config} after={config} delta={delta} /><p className="text-sm">{changed ? "과거 실적 전체에 새 배점을 적용합니다." : "현재 저장된 배점입니다."}</p><div className="flex gap-2"><Button type="button" variant="outline" disabled={!changed || busy} onClick={() => { setConfig(data.config); setMessage(""); }}>변경 취소</Button><Button type="submit" disabled={busy || !changed}>{busy ? "저장 중…" : "배점 저장"}</Button></div>
+          <p role="status" className="w-full text-sm">{message || (!data.ready ? "기여도 저장 준비가 필요합니다." : !data.gate.canWrite ? "현재는 읽기만 가능합니다." : "")}</p></div>
       </fieldset>
       <aside className="min-w-0 space-y-4">
         <section className="rounded-xl border border-primary/30 bg-primary-softer p-5" aria-label="배점 미리보기"><h2 className="font-semibold">저장 전 미리보기</h2><p className="mt-1 text-xs">전체 학생 {data.studentCount}명 · 목록 필터와 무관한 누적 실적</p>
@@ -50,7 +52,6 @@ export function ContributionSettings({ data }: { data: NonNullable<Awaited<Retur
         <ScoreBreakdown raws={raws} config={config} preview />
         <p className="px-1 text-xs leading-relaxed">모든 항목은 상한 없이 누적합니다. 수업료는 원 단위 순액을 모은 뒤 10만 원당 배점을 적용합니다. 항목을 끄면 해당 실적은 보존되고 점수에서만 빠집니다.</p>
       </aside>
-      <p role="status" className="text-sm xl:col-span-2">{message || (!data.ready ? "기여도 저장 준비가 필요합니다." : !data.gate.canWrite ? "현재는 읽기만 가능합니다." : "")}</p>
     </form>
   </div>;
 }
