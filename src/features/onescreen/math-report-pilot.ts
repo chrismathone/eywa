@@ -15,6 +15,7 @@
 
 import { skipStatusOf } from "./progress-status";
 import { asProgressMode } from "./progress-mode";
+import { asVariety, pickVariant, type Variety } from "./ment-variants";
 
 /**
  * 이 학생·과목 행이 새 수학 보고서 대상인가 — **수학 전원**(원장 2026-10-26 *"수학보고서 디자인 전체로 반영"* → *"지금 바로 전원"*).
@@ -63,29 +64,45 @@ export function pilotLessons(today: string | null | undefined): string[] {
   return out;
 }
 
+/** 진도 첫 문장 뒤 마무리 갈래(첫 갈래 = 종전 문장) — 매크로성 반복 금지(원장 2026-10-26, ment-variants.ts). */
+export const PROGRESS_CLOSES = {
+  진도: [
+    "오늘 배운 내용이 잘 자리 잡을 수 있도록 다음 시간에도 이어서 꼼꼼히 다지겠습니다.",
+    "새로 배운 개념이 헷갈리지 않도록 다음 시간에도 이어서 차근차근 다지겠습니다.",
+    "오늘 익힌 내용을 다음 시간에 한 번 더 확인하며 확실히 다지겠습니다.",
+  ],
+  복습: [
+    "앞서 배운 개념을 다시 짚으며 헷갈리던 부분을 정리했고, 다음 시간에도 이어서 꼼꼼히 다지겠습니다.",
+    "배웠던 내용을 한 번 더 정리하며 헷갈리던 부분을 바로잡았고, 다음 시간에도 이어서 챙기겠습니다.",
+    "이전 개념을 다시 살펴보며 빈틈을 메웠고, 다음 시간에도 계속 확인하겠습니다.",
+  ],
+  문제풀이: [
+    "배운 개념을 문제에 적용해 보며 실력을 다졌고, 틀린 문제는 다음 시간에 다시 짚고 넘어가겠습니다.",
+    "여러 문제를 풀어 보며 개념을 적용하는 연습을 했고, 틀린 문제는 다음 시간에 함께 다시 보겠습니다.",
+    "개념을 문제에 직접 써 보며 손에 익혔고, 헷갈린 문제는 다음 시간에 다시 정리하겠습니다.",
+  ],
+} as const;
+
 /**
- * 첫 문장 — 원장 지시 *"단원 하나면 하나로 갔다 3개면 어디서 어디까지 나갔다"*.
- * 1개 = "승엽이는 오늘 소수와 거듭제곱 진도를 나갔습니다." / 2개 = "A와 B" / 3개 이상 = "A부터 B까지".
- * `stopLabel`(월말평가 등 진도 중단일) = 진도 대신 그날 한 일을 적는다.
- * `mode`(진도 칸의 복습·문제풀이 알약, progress-mode.ts) = 원장 2026-10-26 *"복습이나 문제풀이를 선택하면 멘트도 그에 맞게 —
- * 오늘은 문제풀이 위주, 오늘은 이걸 복습했다"* — '진도를 나갔다' 대신 그날 수업 성격대로 적는다. 소단원 수에 따른 모양(1·2·3개+)은 같다.
+ * 진도 항목의 **첫 문장**(사실 문장) — 마무리 문장은 갈래가 바뀌어도 이 문장은 그대로다. 자동작성 글이 지금 값과 맞는지는
+ * 이 문장으로 대조한다(isPilotDraftCurrent — 마무리까지 대조하면 갈래가 바뀔 때마다 '자동작성 다시 필요'가 뜬다).
+ * 원장 지시 *"단원 하나면 하나로 갔다 3개면 어디서 어디까지 나갔다"* — 1개 = 'A' / 2개 = 'A'와 'B', 두 소단원 / 3개+ = 'A'부터 'B'까지.
+ * `stopLabel`(월말평가 등 진도 중단일) = 진도 대신 그날 한 일. `mode`(복습·문제풀이, progress-mode.ts) = 그날 수업 성격대로(원장 2026-10-26).
+ * 소단원 이름은 따옴표로 묶는다(원장 2026-10-23 — 이름 안의 '의'·'와'가 문장 조사와 섞였다). '우리 ○○이는' = 원장 2026-10-21 친근감.
  */
-export function progressLead(
+export function progressLeadHead(
   fullName: string,
   lessons: readonly string[],
   stopLabel?: string | null,
   mode?: string | null,
 ): string {
-  // '우리 ○○이는' — 친근감(원장 2026-10-21 *"학생이름 앞에 '우리' 붙여서 친근감 표현"*).
   const name = topicName(fullName);
   if (!name) return "";
   const who = `우리 ${name}`;
   if (stopLabel) return `${who} 오늘 ${stopLabel} 수업을 했습니다.`;
   const titles = lessons.map(lessonTitle).filter(Boolean);
   if (titles.length === 0) return "";
-  // 소단원 이름은 따옴표로 묶는다 — 이름 안의 '의'·'와'가 문장 조사와 섞여 읽기 어렵다(원장 2026-10-23 *"너무 짧고 이상함"*).
   const q = (t: string) => `'${t}'`;
-  // 소단원을 문장에 넣는 모양 — 1개 = 'A' / 2개 = 'A'와 'B', 두 소단원 / 3개+ = 'A'부터 'B'까지 모두 N개 소단원.
   const [first, second] = titles;
   const span =
     titles.length === 1
@@ -94,15 +111,22 @@ export function progressLead(
         ? `${q(first!)}${hasBatchim(first!.slice(-1)) ? "과" : "와"} ${q(second!)}, 두 소단원`
         : `${q(first!)}부터 ${q(titles[titles.length - 1]!)}까지 모두 ${titles.length}개 소단원`;
   const kind = asProgressMode(mode);
-  if (kind === "복습") {
-    // 1개면 "'A' 내용을", 여럿이면 "…소단원을" — 조사는 앞 낱말이 고정이라 문자열로 둔다.
-    return `${who} 오늘 ${span}${titles.length === 1 ? " 내용" : ""}을 복습했습니다. 앞서 배운 개념을 다시 짚으며 헷갈리던 부분을 정리했고, 다음 시간에도 이어서 꼼꼼히 다지겠습니다.`;
-  }
-  if (kind === "문제풀이") {
-    return `${who} 오늘 ${span}${titles.length === 1 ? "" : "의"} 문제풀이 위주로 수업했습니다. 배운 개념을 문제에 적용해 보며 실력을 다졌고, 틀린 문제는 다음 시간에 다시 짚고 넘어가겠습니다.`;
-  }
-  const close = " 오늘 배운 내용이 잘 자리 잡을 수 있도록 다음 시간에도 이어서 꼼꼼히 다지겠습니다.";
-  return `${who} 오늘 ${span} 진도를 나갔습니다.${close}`;
+  if (kind === "복습") return `${who} 오늘 ${span}${titles.length === 1 ? " 내용" : ""}을 복습했습니다.`;
+  if (kind === "문제풀이") return `${who} 오늘 ${span}${titles.length === 1 ? "" : "의"} 문제풀이 위주로 수업했습니다.`;
+  return `${who} 오늘 ${span} 진도를 나갔습니다.`;
+}
+
+export function progressLead(
+  fullName: string,
+  lessons: readonly string[],
+  stopLabel?: string | null,
+  mode?: string | null,
+  variety?: Variety | null,
+): string {
+  const head = progressLeadHead(fullName, lessons, stopLabel, mode);
+  if (!head || stopLabel) return head;
+  const kind = asProgressMode(mode) ?? "진도";
+  return `${head} ${pickVariant(PROGRESS_CLOSES[kind], asVariety(variety), `close:${kind}`)}`;
 }
 
 /** 소단원별 이해도 상태 — 점수(차시 원문 키 → 0~10) + 뺀 차시. 세션 `subject_progress`에 실린다. */
@@ -293,9 +317,11 @@ export function isPilotAutoWritten(draft: string | null | undefined, autoDraft: 
 export const PILOT_AI_DIRECTIVE = [
   "[이번 알림장 추가 규칙]",
   "- 이 알림장은 항목별로 나뉩니다(수업 평가·진도·일일 테스트·수업 태도·숙제 완성도·오늘의 수업·오늘의 숙제·사랑의 한마디). 진도·테스트·태도·숙제·사랑의 한마디는 따로 붙으니, comment에는 '오늘의 수업' 항목에 들어갈 문장만 쓰세요 — 인사, 진도 나열, 테스트 점수, 수업 태도, 과제 이야기는 쓰지 마세요.",
-  "- comment는 학생 이름으로 시작하지 말고, 첫 소단원 이야기부터 바로 시작하세요.",
+  "- comment는 학생 이름으로 시작하지 말고, 오늘 수업 이야기부터 바로 시작하세요.",
+  // 원장 2026-10-26 *"이해도를 기입하면 오늘의 수업에서 소단원별로 비슷한 워딩이 계속 그냥 나열되기만 하는데 실제 사람이 쓴거처럼 요약 및 문구 정리"*.
+  "- 소단원을 하나씩 나열하지 말고, 선생님이 직접 쓴 것처럼 오늘 수업 전체를 2~4문장으로 자연스럽게 요약하세요. 이해 정도가 비슷한 소단원은 한 문장으로 묶고('A와 B는 …'), 잘한 부분은 한 번, 더 챙길 부분은 한 번만 말하세요. 같은 말투·같은 문장 끝('~했습니다. ~했습니다.')을 소단원마다 되풀이하지 마세요.",
   "- 본문에서 학생을 부를 때는 이름 앞에 '우리'를 붙여 친근하게 부르세요. 부를 이름은 맨 아래 [부르는 이름]에 있습니다 — 그 이름 말고 다른 이름은 절대 쓰지 마세요.",
-  "- '소단원별 이해도'가 있으면 소단원마다 한두 문장으로 말로 풀어 쓰세요. '잘 이해함'인 소단원은 아이의 강점으로 구체적으로 칭찬하세요.",
+  "- '소단원별 이해도'는 점수 대신 말로 풀어 쓰세요. '잘 이해함'인 소단원들은 묶어서 아이의 강점으로 구체적으로 칭찬하세요.",
   "- '대체로 따라왔으나 아직 조금 어려워함'·'어려워함'인 소단원은 반드시 두 단계로 쓰세요. ① 먼저 그 소단원을 아이가 힘들어했다는 사실만 부드럽게 말합니다 — 대상은 소단원 이름(또는 그 소단원의 개념)까지만입니다(중간 예: '연립방정식의 풀이는 대체로 잘 따라왔지만 아직 조금 어려워했습니다' / 낮음 예: '해가 특수한 연립방정식 개념을 조금 힘들어했습니다'). 소단원 안의 어느 부분이 어려웠는지(응용 문제·식 세우기·계산·풀이 정리·문장제 등)는 입력에 없는 정보이므로 절대 추측해서 쓰지 마세요 — 선생님이 점수만 매겼을 뿐, 무엇이 어려웠는지는 알려 주지 않았습니다. '이해도가 낮다'·'못한다'·'부족하다' 같은 직접적인 표현은 쓰지 마세요. ② 그다음 '그래서'·'그만큼' 같은 말로 이어, 바로 그 이유 때문에 학원에서 챙기겠다고 아이를 향한 응원·격려와 함께 마무리합니다(예: '그래서 다음 시간에 한 번 더 짚어 확실히 챙기겠습니다', '충분히 해낼 수 있는 부분이라 그만큼 수업 중에 꼼꼼히 살펴보겠습니다'). 상태 설명 없이 '챙기겠습니다'만 쓰면 학부모가 왜 챙기는지 알 수 없으니 절대 그렇게 쓰지 마세요.",
   "- 아이가 잘 못한 부분·과제를 못 해 온 부분도 아이나 가정에 책임을 돌리지 말고, 학원이 책임지고 챙긴다는 어투로 마무리하세요. 가정에 숙제·복습을 부탁하는 말로 끝내지 마세요.",
   "- 점수 숫자·'10점 만점'·'이해도 N점' 같은 표현은 절대 쓰지 마세요. 소단원 이름은 그대로 써도 됩니다.",
@@ -326,16 +352,26 @@ export function understandingBandText(score: number): string {
 /** 모델이 규칙을 어기고 남긴 문장 — 점수 숫자 · 규칙에 대한 혼잣말("금지 표현이니 제외하고 다시 쓰겠습니다"). */
 const LEAK = /\d+\s*점|만점|점수|금지 표현|다시 쓰|제외하고|규칙을|지침을|지침에/;
 
-/** 모델이 아무것도 못 남겼을 때의 이해도 글 — 소단원마다 한 문장, 아직 어려워하면 학원이 챙긴다는 말. */
+/**
+ * 모델이 아무것도 못 남겼을 때의 이해도 글 — 이해 정도가 같은 소단원끼리 **묶어** 한 문장씩(원장 2026-10-26 *"소단원별로 비슷한 워딩이
+ * 나열되기만"* — 소단원마다 같은 문장을 되풀이하지 않는다). 아직 어려워한 묶음이 있으면 학원이 챙긴다는 말로 한 번만 맺는다.
+ */
 export function fallbackUnderstanding(items: readonly { title: string; score: number }[]): string {
-  return items
-    .map(({ title, score }) => {
-      const t = `'${title}'${hasBatchim(title.slice(-1)) ? "은" : "는"}`;
-      if (score >= 8) return `${t} 잘 이해하고 있습니다.`;
-      if (score >= 5) return `${t} 대체로 잘 따라왔지만 아직 조금 어려워했습니다. 그래서 다음 시간에 한 번 더 짚어 확실히 챙기겠습니다.`;
-      return `${t} 조금 힘들어했습니다. 그래서 다음 시간에 한 번 더 짚어 확실히 챙기겠습니다.`;
-    })
-    .join(" ");
+  const group = (pred: (s: number) => boolean) => items.filter((i) => pred(i.score)).map((i) => `'${i.title}'`);
+  const topic = (names: string[]) => {
+    const last = names[names.length - 1]!;
+    const joined = names.length === 1 ? last : `${names.slice(0, -1).join(", ")}${hasBatchim(names[names.length - 2]!.slice(-2, -1)) ? "과" : "와"} ${last}`;
+    return `${joined}${hasBatchim(last.slice(-2, -1)) ? "은" : "는"}`;
+  };
+  const good = group((s) => s >= 8);
+  const mid = group((s) => s >= 5 && s < 8);
+  const low = group((s) => s < 5);
+  const out: string[] = [];
+  if (good.length) out.push(`${topic(good)} 잘 이해하고 있습니다.`);
+  if (mid.length) out.push(`${topic(mid)} 대체로 잘 따라왔지만 아직 조금 어려워했습니다.`);
+  if (low.length) out.push(`${topic(low)} 조금 힘들어했습니다.`);
+  if (mid.length || low.length) out.push("그래서 다음 시간에 한 번 더 짚어 확실히 챙기겠습니다.");
+  return out.join(" ");
 }
 
 /**
@@ -377,7 +413,8 @@ export function isPilotDraftCurrent(
   },
 ): boolean {
   const d = (draft ?? "").trim();
-  const lead = progressLead(now.studentName, pilotLessons(now.today), skipStatusOf(now.today), now.progressMode);
+  // 첫 문장(사실)만 대조한다 — 마무리 문장은 갈래(ment-variants.ts)라 날마다 다르다(원장 2026-10-26 매크로성 반복 금지).
+  const lead = progressLeadHead(now.studentName, pilotLessons(now.today), skipStatusOf(now.today), now.progressMode);
   // 진도 항목은 맨 앞이거나 '수업 평가' 표 바로 뒤(원장 2026-10-23 표를 맨 위로).
   const sec = lead ? pilotSection(PILOT_SECTION_TITLES.progress, lead) : "";
   if (sec && !d.startsWith(sec) && !d.includes(`\n\n${sec}`)) return false;
