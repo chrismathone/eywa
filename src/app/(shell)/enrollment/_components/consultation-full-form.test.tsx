@@ -163,15 +163,39 @@ describe("후속 조치 필수(원장 2026-10-22)", () => {
     render(<ConsultationFullForm mode="create" recordingOwner={{ tenantId: "t1", userId: "u1" }} />);
     expect(screen.getByRole("radio", { name: "상담 전" })).toBeDisabled();
   });
-  it("'상담 완료'(다음 상담)는 날짜 없이 저장하면 서버를 부르지 않고 이유를 보인다 · 라벨이 '(선택)'에서 필수로 바뀐다", async () => {
+  it("'상담 완료'는 다음 상담일 없이도 저장된다 — 다음 상담이 없을 수도 있다(원장 2026-10-26)", async () => {
+    m.updateEnrollmentConsultation.mockResolvedValue({ ok: true });
     const { container } = render(<ConsultationFullForm mode="edit" recordingOwner={{ tenantId: "t1", userId: "u1" }} initial={{ id: "c1", prospectName: "A", outcome: "consulted" }} />);
-    expect(screen.getByText("다음 상담일 (선택)")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("radio", { name: "상담 완료" }));
-    expect(screen.queryByText("다음 상담일 (선택)")).toBeNull();
-    expect(screen.getByText("다음 상담일").parentElement).toHaveTextContent("다음 상담일*");
-    await act(async () => { fireEvent.submit(container.querySelector("form")!); });
-    expect(m.updateEnrollmentConsultation).not.toHaveBeenCalled();
-    expect(screen.getByText(/다음 상담일을 넣어 주세요/)).toBeInTheDocument();
+    expect(screen.getByText("다음 상담일 (선택)")).toBeInTheDocument();
+    await act(async () => { fireEvent.submit(container.querySelector("form")!); for (let i = 0; i < 10; i++) await Promise.resolve(); });
+    const fd = m.updateEnrollmentConsultation.mock.calls[0]![1] as FormData;
+    expect(fd.get("followUpResult")).toBe("consulted");
+    expect(fd.get("followUpDate")).toBe("");
+  });
+  it("과목 탭에서 저장하다 후속 조치에 막히면 '기본 정보' 탭으로 돌아가 이유를 보인다(원장 제보 2026-10-26)", async () => {
+    const scrolled: Element[] = [];
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function (this: Element) { scrolled.push(this); };
+    try {
+      const { container } = render(<ConsultationFullForm mode="edit" recordingOwner={{ tenantId: "t1", userId: "u1" }} initial={{ id: "c1", prospectName: "A", outcome: "consulted" }} />);
+      const followUp = screen.getByRole("radiogroup", { name: "후속 조치" });
+      fireEvent.click(screen.getByRole("button", { name: "영어 상담" }));
+      expect(followUp.closest(".hidden")).not.toBeNull();
+      await act(async () => { fireEvent.submit(container.querySelector("form")!); });
+      expect(m.updateEnrollmentConsultation).not.toHaveBeenCalled();
+      expect(screen.getByText(/후속 조치를 골라 주세요/)).toBeInTheDocument();
+      expect(followUp.closest(".hidden")).toBeNull();
+      expect(scrolled.some((el) => el.contains(followUp))).toBe(true);
+      // 같은 이유로 다시 막혀도 다시 데려간다
+      scrolled.length = 0;
+      fireEvent.click(screen.getByRole("button", { name: "영어 상담" }));
+      await act(async () => { fireEvent.submit(container.querySelector("form")!); });
+      expect(followUp.closest(".hidden")).toBeNull();
+      expect(scrolled.some((el) => el.contains(followUp))).toBe(true);
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
   });
   it("상담 전 접수(QR 등)는 '상담 전' 그대로 날짜 없이 저장할 수 있다", async () => {
     m.updateEnrollmentConsultation.mockResolvedValue({ ok: true });
@@ -193,7 +217,7 @@ describe("후속 조치 필수(원장 2026-10-22)", () => {
     render(<ConsultationFullForm mode="edit" recordingOwner={{ tenantId: "t1", userId: "u1" }} initial={{ id: "c1", outcome: "consulted" }} />);
     fireEvent.click(await screen.findByRole("button", { name: "이어서 작성" }));
     expect(screen.getByRole("radio", { name: "상담 완료" })).toBeChecked();
-    expect(screen.getByText("다음 상담일").parentElement).toHaveTextContent("다음 상담일*");
+    expect(screen.getByText("다음 상담일 (선택)")).toBeInTheDocument();
   });
   it("후속 조치 초안을 복원하면 상태 표시도 같은 칸으로 바뀐다", async () => {
     m.loadDraft.mockResolvedValue({ savedAt: Date.now(), values: { prospectName: "A", followUpResult: "declined" } });
