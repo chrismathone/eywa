@@ -37,7 +37,11 @@ import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lan
 import { attendanceLabelOf } from "@/features/class-sheets/lib/attendance-label";
 import { formatSessionUnits } from "@/features/attendance/session-units";
 import { ProgressSelector } from "./progress-selector";
+import { ReasonNoteInput } from "./reason-note-input";
+import { attitudeNeedsNote, attitudeNoteComplete } from "../math-report-pilot-sections";
 import { ProgressModePills } from "./progress-mode-pills";
+import { UnderstandingPresetButtons } from "./understanding-presets";
+import { UNDERSTANDING_PRESETS } from "../math-report-pilot";
 import type { VideoHomeworkStatus } from "@/features/video-homework/types";
 import {
   BulkTestFields,
@@ -102,12 +106,16 @@ export function BulkApplyPopover({
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"input" | "copy">("input");
   const [attitude, setAttitude] = useState<string | null>(null);
+  // 수업 태도 의견 — 고른 태도가 하·중하일 때만(원장 2026-10-26, 새 수학 보고서 행에 들어간다 · planBulkApply).
+  const [attNote, setAttNote] = useState("");
   const [homework, setHomework] = useState<string>("");
   const [textbook, setTextbook] = useState("");
   const [homeworkToday, setHomeworkToday] = useState("");
   const [progress, setProgress] = useState("");
   // 오늘 수업 성격(복습·문제풀이) — 행의 진도 칸과 같은 알약(원장 2026-10-26 *"일괄입력에 진도에 복습, 문제풀이가 선택이 안되는데"*).
   const [lessonMode, setLessonMode] = useState<string | null>(null);
+  // 이해도 단계(우수 10 · 보통 7 · 나쁨 4, 원장 2026-10-26) — 고른 점수. null = 건드리지 않음.
+  const [understanding, setUnderstanding] = useState<number | null>(null);
   const [subjectKey, setSubjectKey] = useState<string | null>(null);
   const [grade, setGrade] = useState(studyGrade);
   // 반이 바뀌면(대상 행의 기본 진도 학년이 바뀌면) 그 반 기준으로 다시 연다 — 같은 반에서 고른 학년은 닫아도 유지(reset 주석).
@@ -150,7 +158,7 @@ export function BulkApplyPopover({
   const hasAny =
     mode === "copy"
       ? canCopy
-      : !!(attitude || homework || textbook.trim() || homeworkToday.trim() || progress.trim() || lessonMode || att ||
+      : !!(attitude || homework || textbook.trim() || homeworkToday.trim() || progress.trim() || lessonMode || understanding !== null || att ||
           note.trim() || hasTest || video.check || video.homework !== null || video.due !== null);
   // 과목이 하나뿐이면 고를 것도 없다 — 그대로 그 과목.
   const activeSubject = subjects.find((s) => s.key === (subjectKey ?? subjects[0]?.key)) ?? subjects[0] ?? null;
@@ -162,11 +170,13 @@ export function BulkApplyPopover({
   const reset = () => {
     // 닫을 때 초기화 — 이전 입력 잔존이 다음 일괄 적용 실수로 이어지지 않게.
     setAttitude(null);
+    setAttNote("");
     setHomework("");
     setTextbook("");
     setHomeworkToday("");
     setProgress("");
     setLessonMode(null);
+    setUnderstanding(null);
     setAtt(null); // 출결은 특히 — 남아 있다가 다음 적용에 딸려 나가면 출석부에 그대로 박힌다
     setAttUnits(""); // 시수도 같은 이유 — 급여 재료라 잔존값이 다음 반에 딸려 나가면 안 된다
     setTests(EMPTY_BULK_TESTS);
@@ -232,9 +242,12 @@ export function BulkApplyPopover({
     onApply(
       {
         attitude: attitude ?? undefined, homework: homework ?? undefined, textbook, homeworkToday, today: progress,
+        ...(attitudeNeedsNote(attitude) && attNote.trim() ? { attitudeNote: attNote } : {}),
         note,
         // 수업 성격 — 고른 때만(진도와 같은 과목 행에만 들어간다, planBulkApply).
         ...(lessonMode ? { progressMode: lessonMode } : {}),
+        // 이해도 단계 — 고른 때만(새 수학 보고서 행에만 들어간다).
+        ...(understanding !== null ? { understanding } : {}),
         ...testPatch,
         // 영상 과제 — 고른 때만. 링크 넣기는 '있음'과 함께 켠 때만 싣는다(안 켰으면 그 값은 건드리지 않는다).
         ...(video.homework !== null ? { videoHomework: video.homework } : {}),
@@ -384,6 +397,18 @@ export function BulkApplyPopover({
                 </p>
               </div>
             ) : null}
+            {/* 소단원별 이해도 — 단계 버튼 하나로 고른 행 소단원 전부에(원장 2026-10-26). 새 수학 보고서 행에만 들어간다(planBulkApply).
+                같은 버튼을 다시 누르면 고르기 해제(= 이해도는 건드리지 않음). */}
+            {mode === "input" && subjects.some((s) => isMathSubject(s.key)) ? (
+              <div className="flex flex-col gap-1">
+                <p className="micro text-text-faint">{t("os.bulk.understanding")}</p>
+                <UnderstandingPresetButtons
+                  compact
+                  active={UNDERSTANDING_PRESETS.find((p) => p.score === understanding)?.key ?? null}
+                  onPick={(score) => setUnderstanding((cur) => (cur === score ? null : score))}
+                />
+              </div>
+            ) : null}
             {/* 출결 — 화면 state가 아니라 **출석부에 즉시 기록**되는 유일한 칸이라 따로 묶고 경계를 밝힌다. */}
             {mode === "input" && attendance ? (
               <div className="border-line bg-bg-soft/60 rounded-md border p-2">
@@ -473,6 +498,16 @@ export function BulkApplyPopover({
                     onSelect={setAttitude}
                     ariaLabel={t("os.bulk.attitudeAria")}
                   />
+                  {attitudeNeedsNote(attitude) ? (
+                    <ReasonNoteInput
+                      multiline
+                      value={attNote}
+                      done={attitudeNoteComplete(attNote)}
+                      labelKey="os.card.attNote.label"
+                      placeholderKey="os.card.attNote.ph"
+                      onChange={setAttNote}
+                    />
+                  ) : null}
                 </div>
                 <div>
                   <p className="micro text-text-faint mb-1">{t("os.col.homework")}</p>

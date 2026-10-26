@@ -3174,6 +3174,16 @@ export const SHEET_DICT = {
   "os.gate.need.autowrite": { ko: "자동작성", en: "Auto-write" },
   "os.gate.need.oneline": { ko: "사랑의 한마디", en: "A loving word" },
   "os.gate.need.hwreason": { ko: "숙제 미제출 사유", en: "Reason homework was not done" },
+  "os.gate.need.attnote": { ko: "수업 태도 의견", en: "Attitude comment" },
+  "os.gate.hint.attnote": {
+    ko: "수업 태도가 하·중하입니다 — 학생 상세의 수업 태도 아래 '수업 태도 의견'을 3줄 이상(90자 이상) 적어 주세요(보고서에 그대로 들어갑니다)",
+    en: "Attitude is rated low — write the attitude comment under attitude in the student details, 3+ lines (90+ characters); it goes into the report as written",
+  },
+  "os.gate.need.mkreason": { ko: "보강 사유", en: "Make-up reason" },
+  "os.gate.hint.mkreason": {
+    ko: "보강 수업인데 어느 결석의 보강인지 예약에서 찾지 못했습니다 — 학생 상세의 '보강 사유'를 적어 주세요(보고서 출결에 들어갑니다)",
+    en: "This is a make-up class but the missed date was not found in the reservations — write the make-up reason in the student details (it goes into the attendance line)",
+  },
   "os.gate.hint.hwreason": {
     ko: "숙제 완성도가 미제출입니다 — 학생 상세의 숙제 완성도 아래 '미제출 사유'를 적어 주세요(보고서에 그대로 들어갑니다)",
     en: "Homework is marked as not done — write the reason under homework in the student details (it goes into the report as written)",
@@ -3259,6 +3269,17 @@ export const SHEET_DICT = {
     en: "Built from the attitude, homework and understanding fields — change those and run auto-write again",
   },
   "os.card.hwMiss.label": { ko: "미제출 사유 (필수)", en: "Why it was not done (required)" },
+  // 수업 태도 의견(하·중하) · 보강 사유(원장 2026-10-26) — ReasonNoteInput.
+  "os.card.attNote.label": { ko: "수업 태도 의견 (필수 · 3줄 이상)", en: "Attitude comment (required · 3+ lines)" },
+  "os.card.attNote.ph": {
+    ko: "오늘 수업에서 있었던 일과 앞으로 어떻게 지도할지 3줄 이상 적어 주세요 · 보고서 수업 태도에 그대로 들어갑니다",
+    en: "Write 3+ lines on what happened in class and how you will guide the student · goes into the report as written",
+  },
+  "os.card.mkReason.label": { ko: "보강 사유 (필수)", en: "Make-up reason (required)" },
+  "os.card.mkReason.ph": {
+    ko: "예: 10월 19일 결석 보충 · 보고서 출결에 '(사유: …)'로 들어갑니다",
+    en: "e.g. making up the Oct 19 absence · added to the attendance line as '(reason: …)'",
+  },
   "os.card.hwMiss.ph": {
     ko: "예: 감기로 몸이 좋지 않았다고 합니다 · 보고서 숙제 완성도에 그대로 들어갑니다",
     en: "e.g. was unwell with a cold · added as is to the homework part of the report",
@@ -3311,6 +3332,18 @@ export const SHEET_DICT = {
   "os.card.understandingRestore": { ko: "되살리기", en: "Put back in the report" },
   "os.card.understandingRemoved": { ko: "뺀 소단원", en: "Removed" },
   "os.card.understandingScoreAria": { ko: "{lesson} 이해도", en: "{lesson} understanding" },
+  // 기본값 10 · 단계 버튼(원장 2026-10-26 *"초기 데이터 값(10)"* · *"우수 보통 나쁨 이런식으로 바로 기입"*).
+  "os.card.understandingHintDefault": {
+    ko: "처음엔 모두 {n}점 — 다르면 바꾸세요 · 빼면 자동작성에 안 들어갑니다",
+    en: "Every lesson starts at {n} — change it if needed · removed lessons are left out",
+  },
+  "os.card.understandingDefaultTitle": { ko: "기본값 {n}점(아직 안 바꿈)", en: "Default {n} (not changed yet)" },
+  "os.card.understandingPresetAria": { ko: "이해도 한 번에 넣기", en: "Set understanding for all lessons" },
+  "os.card.understandingPresetTitle": { ko: "모든 소단원을 {label}({n}점)으로", en: "Set every lesson to {label} ({n})" },
+  "os.card.understandingPreset.good": { ko: "우수", en: "Great" },
+  "os.card.understandingPreset.ok": { ko: "보통", en: "OK" },
+  "os.card.understandingPreset.poor": { ko: "나쁨", en: "Weak" },
+  "os.bulk.understanding": { ko: "이해도 (수학 소단원 전부)", en: "Understanding (all math lessons)" },
   "os.card.reportOf": { ko: "{subject} 보고서", en: "{subject} report" },
   "os.card.modeBTitle": {
     ko: "2문단 B — 수업 내용과 태도·특이사항을 나눠 작성합니다. 상단 토글에서 바꿀 수 있습니다.",

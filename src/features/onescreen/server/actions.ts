@@ -93,8 +93,11 @@ import {
   pilotSection,
   progressLead,
 } from "../math-report-pilot";
-import { pilotBody, pilotLevelsSection, readHomeworkMissReason, readTestSkip, type DailyTestSkip } from "../math-report-pilot-sections";
+import { pilotBody, pilotLevelsSection, readAttitudeNote, readHomeworkMissReason, readTestSkip, type DailyTestSkip } from "../math-report-pilot-sections";
 import { skipStatusOf } from "../progress-status";
+import type { Variety } from "../ment-variants";
+import { prevPhrasingHint } from "../pilot-notes";
+import { fetchPrevReportNotes } from "./prev-notes";
 import { logAction } from "@/features/audit/server/log";
 import { isSlotOnlyEnglishNotes, shouldCaptureJj } from "../jj-capture-plan";
 import { classRouteActive, NO_SEND_CLASS_ERROR, SEND_CLASS_SUBJECTS } from "../send-class";
@@ -860,7 +863,10 @@ export async function saveAndQueueClassnote(
     ? // 영어 — '사랑의 한마디' 필수(원장 2026-10-26). 영어 글은 템플릿이라 끝에 붙었는지는 보지 않고 적었는지만 본다.
       input.subject === "english" && !(input.pilotOneLine ?? "").trim()
       ? ENGLISH_ONELINE_REQUIRED_ERROR
-      : null
+      : // 영어 보강 줄 — 결석 날짜를 몰라 보강 사유가 필요한데 비었다(화면이 판정해 싣는다, 2026-10-26).
+        input.subject === "english" && input.pilotCheck && !input.pilotCheck.reasonsOk
+        ? PILOT_REASON_REQUIRED_ERROR
+        : null
     : saved.mentSource !== "auto" && saved.mentSource !== "auto_edited" // 자동작성 뒤 고친 글도 보낸다(2026-10-23)
       ? PILOT_AUTOWRITE_REQUIRED_ERROR
       : !input.pilotCheck?.factsCurrent // 자동작성 뒤 출결·점수·태도 등이 바뀌었다(옛 값이 적힌 글) — 2026-10-26
@@ -1363,6 +1369,10 @@ export type SaveOnescreenSessionInput = {
       dailyTestSkip?: { reason: string | null; detail: string } | null;
       /** 숙제 미제출 사유(수학 보고서 시범) — 시범 행만 싣는다. 로스터가 readHomeworkMissReason으로 복원한다. */
       homeworkMissReason?: string;
+      /** 수업 태도 의견(새 수학 보고서, 2026-10-26) — 적은 행만. 로스터가 readAttitudeNote로 복원한다. */
+      attitudeNote?: string;
+      /** 보강 사유(보강 줄, 2026-10-26) — 적은 행만. 로스터가 readMakeupReason으로 복원한다. */
+      makeupReason?: string;
     }
   >;
   dailyScore?: number | null;
@@ -1569,7 +1579,8 @@ export async function generateReportComment(
     classNotice: noticeSplit.rest,
     classContext: input.classContext?.replace(/\s*\n+\s*/g, " ").trim().slice(0, 300) || "",
     // 출결 문장(attendance-sentence.ts가 만든 한 줄) — 클라 값이라 한 줄로 접고 길이를 자른다. 글에 그대로 들어가고 AI에는 안 준다.
-    attendance: input.attendance?.replace(/\s*\n+\s*/g, " ").trim().slice(0, 120) || "",
+    // 보강 문장(결석 날짜 · 시간 · 사유)이 붙으면 길어진다 — 300자까지(2026-10-26).
+    attendance: input.attendance?.replace(/\s*\n+\s*/g, " ").trim().slice(0, 300) || "",
     // 이해도는 시범 대상에만 — 다른 학생 입력에 실려 와도 프롬프트에 안 넣는다(클라 값을 믿지 않는다).
     understanding: pilot
       ? (input.understanding ?? [])
@@ -1580,28 +1591,46 @@ export async function generateReportComment(
   };
   // 수학 보고서 시범 — 항목별 글(math-report-pilot-sections.ts). 테스트·태도·과제는 고른 값을 코드가 옮기고 AI는 '이해도' 항목만 쓴다.
   const pilotSkip: DailyTestSkip | null = pilot ? readTestSkip(input.dailyTestSkip) : null;
-  const composePilot = (understandingText: string, videoReceipt: string | null) =>
+  // 매크로성 반복 금지(원장 2026-10-26) — 직전 보고서 글을 미리 읽어 둔다(AI 호출과 겹쳐 돈다). 코드 문장은 거기 쓴 갈래를 피하고,
+  // AI엔 '다른 표현으로'의 참고로 준다. 시드 = 학생·보고서 날짜·과목(같은 날 다시 눌러도 같은 갈래 — 서명은 값으로 만들어 흔들리지 않는다).
+  const pilotStudentId = pilot ? trendCtx?.studentId : undefined;
+  const prevNotesP: Promise<string | null> = pilotStudentId
+    ? createClient()
+        .then((sb) => fetchPrevReportNotes(sb, pilotStudentId, trendCtx?.subject, resolveReportDate(trendCtx?.date)))
+        .catch(() => null)
+    : Promise.resolve(null);
+  const varietyOf = (prev: string | null): Variety | null =>
+    pilotStudentId ? { seed: `${pilotStudentId}|${resolveReportDate(trendCtx?.date)}|${trendCtx?.subject ?? ""}`, prev } : null;
+  const composePilot = (understandingText: string, videoReceipt: string | null, variety: Variety | null = null) =>
     composePilotMent({
       // 수업 평가 표가 맨 위, 그다음 진도(원장 2026-10-23 *"진도보다 위에 표 형태로"*).
       lead: [
         pilotLevelsSection(safeInput),
         pilotSection(
           PILOT_SECTION_TITLES.progress,
-          progressLead(input.studentName, pilotLessons(input.progress), skipStatusOf(input.progress), input.progressMode),
+          progressLead(input.studentName, pilotLessons(input.progress), skipStatusOf(input.progress), input.progressMode, variety),
         ),
       ]
         .filter(Boolean)
         .join("\n\n"),
       body: pilotBody(
-        { ...safeInput, dailyTestSkip: pilotSkip, homeworkMissReason: readHomeworkMissReason(input.homeworkMissReason) },
-        { understandingText, videoReceipt },
+        {
+          ...safeInput,
+          dailyTestSkip: pilotSkip,
+          homeworkMissReason: readHomeworkMissReason(input.homeworkMissReason),
+          attitudeNote: readAttitudeNote(input.attitudeNote),
+        },
+        { understandingText, videoReceipt, variety },
       ),
       note: pilotNote,
     });
   // 이해도를 하나도 안 매겼으면 AI가 쓸 항목이 없다 — 부르지 않는다(재료 없이 부르면 이해도를 지어낸다). 추세도 이번엔 안 만든다.
   if (pilot && !safeInput.understanding?.length) {
-    const videoReceipt = await getVideoReceiptComment(user.tenantId, trendCtx ?? {}).catch(() => null);
-    return { ok: true, comment: composePilot("", videoReceipt) };
+    const [videoReceipt, prevNotes] = await Promise.all([
+      getVideoReceiptComment(user.tenantId, trendCtx ?? {}).catch(() => null),
+      prevNotesP,
+    ]);
+    return { ok: true, comment: composePilot("", videoReceipt, varietyOf(prevNotes)) };
   }
   // AI에는 진도·이해도만 준다 — 다른 사실을 주면 모델이 그 항목을 '이해도' 글에 다시 쓴다(항목이 겹친다).
   const aiInput: ReportCommentInput = pilot
@@ -1619,6 +1648,7 @@ export async function generateReportComment(
         classContext: "",
         dailyTestSkip: undefined,
         homeworkMissReason: undefined,
+        attitudeNote: undefined,
         attendance: "",
       }
     : safeInput;
@@ -1629,13 +1659,14 @@ export async function generateReportComment(
     // 프로파일이 없거나 표가 아직 없으면(미적용) 아무것도 안 붙는다([[#95]]).
     // 멘트 모드 — 강사 본인 오버라이드(users.report_notice_mode) > 학원 기본(report.noticeMode) > 'A'.
     // 설정·모드·말투 세 조회는 서로 독립 — 직렬 워터폴 금지(B4). 겸직 강사뷰의 스코프 판정(쿠키+담당 반)도 이 안에서 돈다.
-    const [settings, { data: meRow }, mentStyle, videoReceipt] = await Promise.all([
+    const [settings, { data: meRow }, mentStyle, videoReceipt, prevNotes] = await Promise.all([
       getTenantSettings(),
       supabase.from("users").select("report_notice_mode").eq("id", user.id).single(),
       opts?.teacherStyle === false
         ? null
         : effectiveTeacherId().then((teacherId) => (teacherId ? loadTeacherMentStyle(createAdminClient(), user.tenantId, teacherId) : null)),
       getVideoReceiptComment(user.tenantId, trendCtx ?? {}).catch(() => null),
+      prevNotesP,
     ]);
     const styleBlock = mentStyle ? mentStyleDirective(mentStyle) : "";
     // 추세엔 **어조·문장 결만** — 선생님 표현·마무리("다음 시간에 ~하겠습니다")까지 붙이면 추세 금지(계획)에 걸려 버려진다(2026-10-16).
@@ -1703,7 +1734,8 @@ export async function generateReportComment(
       styleBlock,
       toneBlock,
       trend: trendInput,
-      ...(pilot ? { extraDirective: pilotAiDirective(input.studentName) } : {}),
+      // 직전 보고서의 '오늘의 수업' 문단 = 표현 참고(사실 아님) — 같은 말이 매번 나가지 않게(원장 2026-10-26).
+      ...(pilot ? { extraDirective: [pilotAiDirective(input.studentName), prevPhrasingHint(prevNotes)].filter(Boolean).join("\n") } : {}),
     });
     if (sections.length === 0) return { ok: false, error: "생성할 내용이 없습니다" };
 
@@ -1724,7 +1756,7 @@ export async function generateReportComment(
     // 시범 대상 — 항목별 글(진도 → 테스트 → 태도 → 과제 → 이해도(AI) → 오늘 과제 → 선생님 한마디).
     // 이해도 글은 후보정을 거친다 — 점수 숫자·규칙 혼잣말이 든 문장은 빼고, 다 빠지면 정해진 문장으로(2026-10-23 실측 누출).
     const comment = pilot
-      ? composePilot(cleanPilotUnderstanding(res.comment, safeInput.understanding ?? []), videoReceipt)
+      ? composePilot(cleanPilotUnderstanding(res.comment, safeInput.understanding ?? []), videoReceipt, varietyOf(prevNotes))
       : body;
     if (res.dropped)
       console.warn(

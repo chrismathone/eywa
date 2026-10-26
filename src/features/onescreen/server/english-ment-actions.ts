@@ -16,6 +16,10 @@ import { reportError } from "@/lib/observability/report-error";
 import { aiUserMessage } from "@/lib/ai/user-message";
 import { mentionsStudentName } from "@/features/report-templates/name-mention";
 import { MENT_AI_TUNING } from "../prompt-defaults";
+import { createClient } from "@/lib/supabase/server";
+import { resolveReportDate } from "@/lib/date-kst";
+import { prevPhrasingHint } from "../pilot-notes";
+import { fetchPrevReportNotes } from "./prev-notes";
 import {
   buildEnglishMentPrompt,
   hasEnglishMentFacts,
@@ -32,9 +36,10 @@ async function generateOnce(
   input: EnglishMentInput,
   remindName: boolean,
   tenantId: string,
+  prevHint: string,
 ): Promise<{ intro: string; comment: string } | null> {
   const { data } = await generateJSON<Record<string, unknown>>({
-    prompt: buildEnglishMentPrompt(input, { remindName }),
+    prompt: buildEnglishMentPrompt(input, { remindName, prevHint }),
     maxTokens: MAX_TOKENS,
     keyName: "default",
     tier: "fast",
@@ -44,7 +49,11 @@ async function generateOnce(
   return parseEnglishMent(data);
 }
 
-export async function generateEnglishMent(input: EnglishMentInput): Promise<EnglishMentResult> {
+export async function generateEnglishMent(
+  input: EnglishMentInput,
+  // 직전 보고서 표현을 피하는 재료(원장 2026-10-26 매크로성 반복 금지) — 없으면(옛 화면) 종전대로.
+  ctx?: { studentId?: string; reportDate?: string },
+): Promise<EnglishMentResult> {
   const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   // '다른 강사 뷰'(열람 전용) — DB는 안 바꾸지만 AI 호출(비용)이라 열람에서 못 누르게 한다(수학 멘트와 같다).
@@ -59,9 +68,18 @@ export async function generateEnglishMent(input: EnglishMentInput): Promise<Engl
   const mentions = (r: { intro: string; comment: string }) =>
     mentionsStudentName(`${r.intro}\n${r.comment}`, safe.studentName, safe.englishName);
 
+  // 직전 영어 보고서의 '오늘의 수업' 문단(항목 보고서일 때만) — 표현 참고용(사실 아님, pilot-notes.ts prevPhrasingHint).
+  const prevHint = ctx?.studentId
+    ? prevPhrasingHint(
+        await createClient()
+          .then((sb) => fetchPrevReportNotes(sb, ctx.studentId!, "english", resolveReportDate(ctx.reportDate)))
+          .catch(() => null),
+      )
+    : "";
+
   let first: { intro: string; comment: string } | null;
   try {
-    first = await generateOnce(safe, false, user.tenantId);
+    first = await generateOnce(safe, false, user.tenantId, prevHint);
   } catch (e) {
     reportError(e, { scope: "onescreen.english-ment", step: "generate" });
     // 잔액 소진·키 오류·한도 같은 사유는 한글로 그대로 보인다(E11 — 이유를 모르면 강사가 계속 다시 누른다).
@@ -72,7 +90,7 @@ export async function generateEnglishMent(input: EnglishMentInput): Promise<Engl
 
   // 이름이 빠졌다 — 한 번만 다시(빠졌다고 짚어 준다). 두 번째가 실패해도 첫 답은 살린다.
   try {
-    const second = await generateOnce(safe, true, user.tenantId);
+    const second = await generateOnce(safe, true, user.tenantId, prevHint);
     if (second && mentions(second)) return { ok: true, ...second, nameMissing: false };
     return { ok: true, ...(second ?? first), nameMissing: true };
   } catch (e) {

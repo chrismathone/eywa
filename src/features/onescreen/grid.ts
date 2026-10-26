@@ -4,6 +4,7 @@
  */
 import { toHomeworkRateChoice } from "./homework-rate";
 import { asProgressMode } from "./progress-mode";
+import { attitudeNeedsNote } from "./math-report-pilot-sections";
 import { resolveRowFields } from "./row-fields";
 import type { OneScreenStudent, PrevReport, Subject } from "./types";
 
@@ -302,6 +303,10 @@ export type BulkPatch = {
   today?: string;
   /** 오늘 수업 성격(복습·문제풀이, progress-mode.ts) — 진도와 같은 과목 행에만(원장 2026-10-26). */
   progressMode?: string;
+  /** 소단원별 이해도 — 그 행 오늘 진도의 소단원 전부에 같은 점수(0~10, 단계 버튼 우수·보통·나쁨, 원장 2026-10-26). 새 수학 보고서 행에만. */
+  understanding?: number;
+  /** 수업 태도 의견(하·중하일 때 강사 원문, 2026-10-26) — 태도가 하·중하인(이번에 그렇게 바꾸는 것 포함) 새 수학 보고서 행에만. */
+  attitudeNote?: string;
   // ── 2026-10-02 추가(원장 *"일괄 입력에 지금 없는거 추가"*) — 전부 **행 단위**. 값이 없으면(undefined) 적용하지 않는다. ──
   /** 특이사항(강사 메모). */
   note?: string;
@@ -329,7 +334,15 @@ export type BulkTarget = {
   today: string;
   /** 지금 수업 성격(복습·문제풀이) — "빈 칸만" 판정용. */
   progressMode?: string | null;
+  /** 새 수학 보고서 행인가(이해도 칸이 있는 행) — 아니면 이해도를 넣지 않는다. */
+  understandingOk?: boolean;
+  /** 강사가 이해도를 하나라도 직접 매겼나 — '빈 칸만'이면 이런 행은 건너뛴다. */
+  understandingStored?: boolean;
   attitude: string | null;
+  /** 지금 수업 태도 의견 — '빈 칸만' 판정용(2026-10-26). */
+  attitudeNote?: string;
+  /** 태도 의견을 쓰는 행인가(새 수학 보고서) — 아니면 의견을 넣지 않는다. */
+  attitudeNoteOk?: boolean;
   homework: string;
   textbook: string;
   homeworkToday: string;
@@ -396,6 +409,14 @@ export function planBulkApply(
     if (t.locked) continue; // 잠긴 행엔 아무 값도 넣지 않는다(지울 수 없는 값이 남는다)
     const set: BulkPatch = {};
     if (p.attitude !== undefined && (!onlyEmpty || !t.attitude)) set.attitude = p.attitude;
+    // 수업 태도 의견 — 결과 태도가 하·중하인 행만. '빈 칸만'은 의견이 빈 행에만(적어 둔 의견을 덮지 않는다).
+    if (
+      patch.attitudeNote?.trim() &&
+      t.attitudeNoteOk &&
+      attitudeNeedsNote(set.attitude ?? t.attitude) &&
+      (!onlyEmpty || !(t.attitudeNote ?? "").trim())
+    )
+      set.attitudeNote = patch.attitudeNote;
     if (p.homework !== undefined && (!onlyEmpty || !t.homework)) set.homework = p.homework;
     if (p.textbook !== undefined && (!onlyEmpty || !t.textbook.trim())) set.textbook = p.textbook;
     if (p.homeworkToday !== undefined && (!onlyEmpty || !t.homeworkToday.trim())) set.homeworkToday = p.homeworkToday;
@@ -410,6 +431,11 @@ export function planBulkApply(
     const pm = asProgressMode(patch.progressMode);
     if (pm && progressSubjectKey !== undefined && t.subjectKey === progressSubjectKey && (!onlyEmpty || !asProgressMode(t.progressMode)))
       set.progressMode = pm;
+    // 이해도 단계 — 새 수학 보고서 행에만(과목 고르기와 무관: 이해도는 수학에만 있다). '빈 칸만'은 직접 매긴 점수가 없는 행에만.
+    if (patch.understanding !== undefined && t.understandingOk && (!onlyEmpty || !t.understandingStored)) {
+      const u = Math.round(patch.understanding);
+      if (Number.isFinite(u) && u >= 0 && u <= 10) set.understanding = u;
+    }
     if (p.note !== undefined && (!onlyEmpty || !(t.note ?? "").trim())) set.note = p.note;
     // 테스트 — '빈 칸만'은 **점수가 빈 행**에만(문항수는 늘 값이 있어 빈 칸 판정이 없다 — 점수가 찬 행의 문항수를 바꾸면 그 점수가 깎인다).
     // 점수는 그 행의 문항수(이번에 바꾸면 그 값)를 넘지 않게 맞춘다 — 화면 점수 칸과 같은 규칙.
