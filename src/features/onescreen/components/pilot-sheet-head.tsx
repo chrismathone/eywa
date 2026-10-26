@@ -1,4 +1,6 @@
 import { LEVELS } from "../math-report-pilot-sections";
+import { ATT_SOFT } from "@/features/attendance/status-color";
+import type { AttendanceMark } from "../attendance-sentence";
 import {
   parseScoreLine,
   type LevelRow,
@@ -118,6 +120,8 @@ export type PilotSheetHeadProps = {
   teacherName: string | null;
   tests: PilotNoteSection[];
   levels: LevelRow[] | null;
+  /** 그날 출결 — 날짜 옆 작은 표시(원장 2026-10-26). 모르면 null(표시 없음). */
+  attendance?: AttendanceMark | null;
 };
 
 /**
@@ -175,6 +179,13 @@ export function PilotSheetHead(p: PilotSheetHeadProps) {
             </td>
             <td colSpan={2} className={`${CELL} bg-report-tint text-primary h-10 px-1 text-base font-black whitespace-nowrap`}>
               {sheetDateLabel(p.date)}
+              {p.attendance ? (
+                <span
+                  className={`${ATT_SOFT[p.attendance.status]} ml-1.5 inline-block rounded-full px-2 py-0.5 align-middle text-xs font-black`}
+                >
+                  {p.attendance.label}
+                </span>
+              ) : null}
             </td>
           </tr>
           <InfoRow label="반" value={p.className} />
