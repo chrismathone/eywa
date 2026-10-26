@@ -234,6 +234,20 @@ export function hasPilotOneLine(note: string | null | undefined): boolean {
 export const PILOT_ONELINE_REQUIRED_ERROR =
   "이 학생의 수학 보고서는 '사랑의 한마디'를 적어야 보낼 수 있습니다(저장은 됐습니다) — 사랑의 한마디를 적은 뒤 다시 보내 주세요";
 
+/** 시험 없음·숙제 미제출 사유가 비었다(서버 발송 게이트, 2026-10-26 — 일괄 발송도 같은 조건). */
+export const PILOT_REASON_REQUIRED_ERROR =
+  "이 학생의 수학 보고서는 '시험 없음' 또는 '숙제 미제출' 사유를 적어야 보낼 수 있습니다(저장은 됐습니다) — 사유를 적은 뒤 다시 보내 주세요";
+
+/** 새 보고서 조건에 걸린 서버 거절인가 — 일괄 발송이 '실패'와 갈라 센다. */
+export function isPilotGateError(error: string | null | undefined): boolean {
+  return (
+    error === PILOT_AUTOWRITE_REQUIRED_ERROR ||
+    error === PILOT_ONELINE_REQUIRED_ERROR ||
+    error === PILOT_REASON_REQUIRED_ERROR ||
+    error === ENGLISH_ONELINE_REQUIRED_ERROR
+  );
+}
+
 /** 영어 보고서 발송 거절 문구 — '사랑의 한마디'가 비었다(원장 2026-10-26, 영어도 필수). */
 export const ENGLISH_ONELINE_REQUIRED_ERROR =
   "이 학생의 영어 보고서는 '사랑의 한마디'를 적어야 보낼 수 있습니다(저장은 됐습니다) — 사랑의 한마디를 적은 뒤 다시 보내 주세요";
