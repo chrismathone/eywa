@@ -55,7 +55,7 @@ export const ENGLISH_TEMPLATE_TOKENS: readonly TemplateToken[] = [
   { key: "숙제", label: "오늘 숙제", source: "원스크린 오늘 과제 칸" },
   { key: "다음테스트", label: "다음 시간 테스트", source: "다음 시간 테스트 안내 칸" },
   { key: "코멘트", label: "AI 코멘트", source: "AI가 쓰는 학생별 피드백", ai: true },
-  { key: "출결", label: "출결", source: "출석부의 지각·조퇴·공결 + 사유를 문장으로 — 출석이면 줄이 빠진다" },
+  { key: "출결", label: "출결", source: "출석부의 출석·지각·조퇴·공결(+ 사유)을 문장으로 — 출결 기록이 없으면 줄이 빠진다" },
   { key: "수업평가", label: "수업 평가 표", source: "수업 태도·숙제 완성도를 하~상 눈금 표로" },
   { key: "일일테스트", label: "일일 테스트 문장", source: "점수 + 한마디. 시험이 없으면 '보지 않았습니다'" },
   { key: "확인테스트", label: "확인 테스트 문장", source: "점수 + 한마디. 없으면 줄이 빠진다" },

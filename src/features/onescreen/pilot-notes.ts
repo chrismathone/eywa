@@ -7,7 +7,7 @@
  */
 
 import { PILOT_LEGACY_TITLES, PILOT_SECTION_TITLES } from "./math-report-pilot";
-import { LEVELS, type Level } from "./math-report-pilot-sections";
+import { LEVEL_NONE_SEP, LEVELS, type Level } from "./math-report-pilot-sections";
 
 export type PilotNoteSection = { title: string; body: string };
 
@@ -48,7 +48,8 @@ export function splitPilotNote(sections: PilotNoteSection[]): { main: PilotNoteS
   return { main: sections, note: null };
 }
 
-export type LevelRow = { label: string; level: Level };
+/** 표의 한 줄 — 등급이 있으면 `level`, 값이 없는 줄(숙제 없음·평가 없음, 2026-10-26)은 `level: null` + 그 표기 `none`. */
+export type LevelRow = { label: string; level: Level; none?: undefined } | { label: string; level: null; none: string };
 
 const MARK = /[○●]/;
 
@@ -60,7 +61,16 @@ export function parseLevelRows(body: string): LevelRow[] | null {
   const rows: LevelRow[] = [];
   for (const line of body.split("\n")) {
     const first = line.search(MARK);
-    if (first < 0) continue;
+    if (first < 0) {
+      // 값이 없는 줄 — `이름 — 숙제 없음`(levelTableText). 머리 줄('구분…')·옛 안내 줄엔 이 기호가 없어 건너뛴다.
+      const sep = line.indexOf(LEVEL_NONE_SEP);
+      if (sep < 0) continue;
+      const label = line.slice(0, sep).replace(/[\s　]+/g, " ").trim();
+      const none = line.slice(sep + LEVEL_NONE_SEP.length).trim();
+      if (!label || !none) return null;
+      rows.push({ label, level: null, none });
+      continue;
+    }
     const last = Math.max(line.lastIndexOf("○"), line.lastIndexOf("●"));
     const label = line.slice(0, first).replace(/[\s　]+/g, " ").trim();
     const level = line.slice(last + 1).replace(/[\s　]+/g, "");

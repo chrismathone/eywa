@@ -27,6 +27,16 @@ function LevelTable({ rows }: { rows: LevelRow[] }) {
       </thead>
       <tbody>
         {rows.map((r) => {
+          // 값이 없는 줄(숙제 없음·평가 없음) — 칸을 비우지 않고 다섯 칸을 합쳐 그 사실을 적는다(원장 2026-10-26).
+          if (r.level === null)
+            return (
+              <tr key={r.label}>
+                <th className="border-line-faint text-foreground h-11 border pl-3 text-left font-bold break-keep">{r.label}</th>
+                <td colSpan={LEVELS.length} className="border-line-faint text-text-dim h-11 border text-center text-sm font-bold">
+                  {r.none}
+                </td>
+              </tr>
+            );
           const at = LEVELS.indexOf(r.level);
           return (
             <tr key={r.label}>

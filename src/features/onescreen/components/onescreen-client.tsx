@@ -3640,7 +3640,8 @@ export function OneScreenClient({
         // 멘트 작성 방식(0214a) — 이번 세션 자동작성 스냅샷과 비교(최종은 서버 resolveMentSource가 sticky 판정).
         mentSource,
         // 수학 보고서 시범 — 강사 한줄 멘트(필수). 서버가 비었거나 글 끝에 안 붙었으면 거절한다.
-        ...(isMathReportPilot(student.id, su?.subjectKey) ? { pilotOneLine: rowEval.note } : {}),
+        // 영어도 같다(원장 2026-10-26 *"영어도 수학이랑 동일하게 … 사랑의 한마디 · 필수"*).
+        ...(isMathReportPilot(student.id, su?.subjectKey) || su?.subjectKey === "english" ? { pilotOneLine: rowEval.note } : {}),
         // 자동작성 후 고친 멘트면 그 자동작성 원문도 싣는다(0370a) — 말투 프로파일이 선생님이 '늘 고치는 것'을 배운다(원장 2026-10-16).
         //   영어는 템플릿 모드라 뺀다(코퍼스 밖).
         //   AI 실패 폴백 템플릿은 AI 원문이 아니라 뺀다.

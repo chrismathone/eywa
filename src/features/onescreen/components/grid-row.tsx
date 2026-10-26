@@ -301,6 +301,8 @@ export function GridBodyRow({
   // 수학 보고서 시범(테스트 학생 한정, math-report-pilot.ts) — 멘트·추세는 보기만, 자동작성 글 그대로여야 발송(카드와 같은 판정).
   const pilot = isMathReportPilot(student.id, subject.subjectKey);
   const pilotLocked = pilot && !pilotCanEdit(rep?.autoDraft); // 자동작성 전엔 잠금(2026-10-23)
+  // '사랑의 한마디' 행 — 새 수학 보고서 + 영어(원장 2026-10-26, 카드와 같은 판정).
+  const oneLineRow = pilot || subject.subjectKey === "english";
   const sendGate = evaluateSendGate({
     lang,
     needsAutoWrite:
@@ -312,7 +314,7 @@ export function GridBodyRow({
         factsSig: pilotRowSig(student, subject.name),
         writtenSig: rep?.pilotFactsSig,
       }),
-    needsOneLine: pilot && !hasPilotOneLine(rowEval.note), // 사랑의 한마디(옛 강사 한줄 멘트) 필수(원장 2026-10-22)
+    needsOneLine: oneLineRow && !hasPilotOneLine(rowEval.note), // 사랑의 한마디(옛 강사 한줄 멘트) 필수(원장 2026-10-22)
     needsTestReason: pilot && !testSkipComplete(subject.dailyTestSkip), // 일일 테스트 '없음'이면 사유 필수(원장 2026-10-22)
     needsHomeworkReason: pilot && needsHomeworkMissReason(rowEval.homework, subject.homeworkMissReason), // 숙제 미제출이면 사유 필수(원장 2026-10-23)
     readonlyView: gen.readonlyView, // 열람 전용 — 사유 라벨("열람 전용")까지 게이트가 만든다
@@ -802,7 +804,7 @@ export function GridBodyRow({
             value={rowEval.note}
             onChange={(e) => fields.onNote(student.id, subject.name, e.target.value)}
             readOnly={rowLocked}
-            placeholder={rowPlaceholder ?? (pilot ? t("os.row.notePhPilot") : t("os.row.notePh"))}
+            placeholder={rowPlaceholder ?? (oneLineRow ? t("os.row.notePhPilot") : t("os.row.notePh"))}
             aria-label={tf("os.row.noteAria", { name: student.name })}
             className={`border-amber/40 focus:border-primary scrollbar-thin min-h-[40px] w-full rounded-sm border px-2 py-1 text-xs leading-snug outline-none ${AUTOSIZE} ${
               lockedTone || "bg-amber-soft/30"
