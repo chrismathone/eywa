@@ -50,6 +50,7 @@ const VALIDATION_ONLY_LABELS: Record<string, Record<string, string>> = {
   report: {
     title: "보고서 제목",
     footerNote: "꼬리말",
+    logoUrl: "보고서 로고",
     videoHomeworkPolicy: "영상 숙제",
     writingExemptTeachers: "작성 제외 강사",
     classnoteSubjects: "발송 대상 과목",
