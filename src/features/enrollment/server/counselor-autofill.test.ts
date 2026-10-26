@@ -52,8 +52,16 @@ describe("QR 상담자 저장 배선", () => {
   const fd = form(); fd.set("careerGoal", "의사");
   expect(await updateEnrollmentConsultation(undefined, fd)).toEqual({ ok: true });
   expect(m.written?.counselor).toBe("직원");
-  expect(m.written).not.toHaveProperty("consultant_id");
+  // 빈 상담자 계정도 같은 직원으로(2026-10-26 — 계정이 비면 후속 조치 할 일·알림이 원장 전원에게 갔다 · 10-21 '계정은 안 바꾼다'를 고침)
+  expect(m.written?.consultant_id).toBe("u1");
   expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ metadata: expect.objectContaining({ consultationId: "c1", counselorAutofill: "직원" }) }));
+ });
+ it("상담자 계정이 이미 있으면 자동 채움이 계정을 바꾸지 않는다", async () => {
+  m.before = { ...m.before, consultant_id: "someone" };
+  const fd = form(); fd.set("careerGoal", "의사");
+  expect(await updateEnrollmentConsultation(undefined, fd)).toEqual({ ok: true });
+  expect(m.written?.counselor).toBe("직원");
+  expect(m.written).not.toHaveProperty("consultant_id");
  });
  it("완료 전환만 골라도 채운다", async () => {
   // 상담 완료로 옮기면 후속 조치가 필수(원장 2026-10-22) — 다음 상담 날짜를 골라 그대로 '상담 완료'.
