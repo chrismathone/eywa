@@ -108,6 +108,16 @@ export type Subject = {
    * 세션 `subject_progress`에 실려 새로고침 뒤에도 남는다(자동작성 재료).
    */
   homeworkMissReason?: string;
+  /**
+   * 수업 태도 의견(새 수학 보고서) — 태도가 하·중하일 때 강사가 3줄 이상 직접 적는다(원장 2026-10-26). '수업 태도' 항목에 그대로 들어간다.
+   * 세션 `subject_progress`에 실린다(homeworkMissReason과 같은 길).
+   */
+  attitudeNote?: string;
+  /**
+   * 보강 사유(보강 행) — 결석 날짜를 예약에서 못 찾을 때 강사가 적는다(원장 2026-10-26). 보고서 '출결' 문장 끝에 "(사유: …)"로 붙는다.
+   * 세션 `subject_progress`에 실린다.
+   */
+  makeupReason?: string;
   dailyScore?: number | null;
   dailyMax?: number;
   /**

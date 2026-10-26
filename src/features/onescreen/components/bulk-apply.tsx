@@ -37,6 +37,8 @@ import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lan
 import { attendanceLabelOf } from "@/features/class-sheets/lib/attendance-label";
 import { formatSessionUnits } from "@/features/attendance/session-units";
 import { ProgressSelector } from "./progress-selector";
+import { ReasonNoteInput } from "./reason-note-input";
+import { attitudeNeedsNote, attitudeNoteComplete } from "../math-report-pilot-sections";
 import { ProgressModePills } from "./progress-mode-pills";
 import type { VideoHomeworkStatus } from "@/features/video-homework/types";
 import {
@@ -102,6 +104,8 @@ export function BulkApplyPopover({
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"input" | "copy">("input");
   const [attitude, setAttitude] = useState<string | null>(null);
+  // 수업 태도 의견 — 고른 태도가 하·중하일 때만(원장 2026-10-26, 새 수학 보고서 행에 들어간다 · planBulkApply).
+  const [attNote, setAttNote] = useState("");
   const [homework, setHomework] = useState<string>("");
   const [textbook, setTextbook] = useState("");
   const [homeworkToday, setHomeworkToday] = useState("");
@@ -162,6 +166,7 @@ export function BulkApplyPopover({
   const reset = () => {
     // 닫을 때 초기화 — 이전 입력 잔존이 다음 일괄 적용 실수로 이어지지 않게.
     setAttitude(null);
+    setAttNote("");
     setHomework("");
     setTextbook("");
     setHomeworkToday("");
@@ -232,6 +237,7 @@ export function BulkApplyPopover({
     onApply(
       {
         attitude: attitude ?? undefined, homework: homework ?? undefined, textbook, homeworkToday, today: progress,
+        ...(attitudeNeedsNote(attitude) && attNote.trim() ? { attitudeNote: attNote } : {}),
         note,
         // 수업 성격 — 고른 때만(진도와 같은 과목 행에만 들어간다, planBulkApply).
         ...(lessonMode ? { progressMode: lessonMode } : {}),
@@ -473,6 +479,16 @@ export function BulkApplyPopover({
                     onSelect={setAttitude}
                     ariaLabel={t("os.bulk.attitudeAria")}
                   />
+                  {attitudeNeedsNote(attitude) ? (
+                    <ReasonNoteInput
+                      multiline
+                      value={attNote}
+                      done={attitudeNoteComplete(attNote)}
+                      labelKey="os.card.attNote.label"
+                      placeholderKey="os.card.attNote.ph"
+                      onChange={setAttNote}
+                    />
+                  ) : null}
                 </div>
                 <div>
                   <p className="micro text-text-faint mb-1">{t("os.col.homework")}</p>

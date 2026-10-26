@@ -4,6 +4,7 @@
  */
 import { toHomeworkRateChoice } from "./homework-rate";
 import { asProgressMode } from "./progress-mode";
+import { attitudeNeedsNote } from "./math-report-pilot-sections";
 import { resolveRowFields } from "./row-fields";
 import type { OneScreenStudent, PrevReport, Subject } from "./types";
 
@@ -302,6 +303,8 @@ export type BulkPatch = {
   today?: string;
   /** 오늘 수업 성격(복습·문제풀이, progress-mode.ts) — 진도와 같은 과목 행에만(원장 2026-10-26). */
   progressMode?: string;
+  /** 수업 태도 의견(하·중하일 때 강사 원문, 2026-10-26) — 태도가 하·중하인(이번에 그렇게 바꾸는 것 포함) 새 수학 보고서 행에만. */
+  attitudeNote?: string;
   // ── 2026-10-02 추가(원장 *"일괄 입력에 지금 없는거 추가"*) — 전부 **행 단위**. 값이 없으면(undefined) 적용하지 않는다. ──
   /** 특이사항(강사 메모). */
   note?: string;
@@ -330,6 +333,10 @@ export type BulkTarget = {
   /** 지금 수업 성격(복습·문제풀이) — "빈 칸만" 판정용. */
   progressMode?: string | null;
   attitude: string | null;
+  /** 지금 수업 태도 의견 — '빈 칸만' 판정용(2026-10-26). */
+  attitudeNote?: string;
+  /** 태도 의견을 쓰는 행인가(새 수학 보고서) — 아니면 의견을 넣지 않는다. */
+  attitudeNoteOk?: boolean;
   homework: string;
   textbook: string;
   homeworkToday: string;
@@ -396,6 +403,14 @@ export function planBulkApply(
     if (t.locked) continue; // 잠긴 행엔 아무 값도 넣지 않는다(지울 수 없는 값이 남는다)
     const set: BulkPatch = {};
     if (p.attitude !== undefined && (!onlyEmpty || !t.attitude)) set.attitude = p.attitude;
+    // 수업 태도 의견 — 결과 태도가 하·중하인 행만. '빈 칸만'은 의견이 빈 행에만(적어 둔 의견을 덮지 않는다).
+    if (
+      patch.attitudeNote?.trim() &&
+      t.attitudeNoteOk &&
+      attitudeNeedsNote(set.attitude ?? t.attitude) &&
+      (!onlyEmpty || !(t.attitudeNote ?? "").trim())
+    )
+      set.attitudeNote = patch.attitudeNote;
     if (p.homework !== undefined && (!onlyEmpty || !t.homework)) set.homework = p.homework;
     if (p.textbook !== undefined && (!onlyEmpty || !t.textbook.trim())) set.textbook = p.textbook;
     if (p.homeworkToday !== undefined && (!onlyEmpty || !t.homeworkToday.trim())) set.homeworkToday = p.homeworkToday;

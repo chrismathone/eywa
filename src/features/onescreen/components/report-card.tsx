@@ -50,7 +50,9 @@ import { classnoteBadge, type ClassnoteBadge } from "../classnote-badge";
 import { attendanceMarkBadgeClass, attendanceMarkLabel } from "../attendance-mark";
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { hasPilotOneLine, isMathReportPilot, pilotCanEdit, pilotNeedsAutoWrite } from "../math-report-pilot";
-import { needsHomeworkMissReason, pilotRowSig, testSkipComplete } from "../math-report-pilot-sections";
+import { needsAttitudeNote, needsHomeworkMissReason, pilotRowSig, testSkipComplete } from "../math-report-pilot-sections";
+import { needsMakeupReason } from "../attendance-sentence";
+import { rowMakeupFacts } from "../report-comment";
 import type { SheetLang } from "@/features/teacher-view/i18n";
 import { ReservedMakeupTag } from "./reserved-makeup-tag";
 import { MakeupSwitchButton } from "./makeup-switch-button";
@@ -179,6 +181,8 @@ export function ReportCard({
   onSubjectIndex,
   todayInputs,
   homeworkExtra,
+  attitudeExtra,
+  makeupExtra,
   templatePanel,
   shareCopyWarning = null,
   readonlyView = false,
@@ -246,6 +250,10 @@ export function ReportCard({
   todayInputs?: ReactNode;
   /** 숙제 완성도 칸 바로 아래 자리(수학 보고서 시범의 '미제출 사유', 2026-10-23) — todayInputs와 같은 슬롯 규약. */
   homeworkExtra?: ReactNode;
+  /** 수업 태도 칸 바로 아래 자리('수업 태도 의견' — 하·중하, 2026-10-26). 같은 슬롯 규약. */
+  attitudeExtra?: ReactNode;
+  /** 수업 태도 칸 위 자리('보강 사유' — 결석 날짜를 모르는 보강 줄, 2026-10-26). 같은 슬롯 규약. */
+  makeupExtra?: ReactNode;
   /**
    * 영어 행의 **템플릿 칸**(2026-09-10) — todayInputs와 같은 슬롯 규약(배선은 onescreen-client, 카드는 자리만).
    * 영어 행일 때만 그린다. 수학 행은 이 값을 넘겨도 무시한다.
@@ -328,6 +336,8 @@ export function ReportCard({
     needsOneLine: oneLineRow && !hasPilotOneLine(cardEval.note), // 사랑의 한마디(옛 강사 한줄 멘트) 필수(원장 2026-10-22)
     needsTestReason: pilot && !testSkipComplete(subject.dailyTestSkip), // 일일 테스트 '없음'이면 사유 필수(원장 2026-10-22)
     needsHomeworkReason: pilot && needsHomeworkMissReason(cardEval.homework, subject.homeworkMissReason), // 숙제 미제출이면 사유 필수(원장 2026-10-23)
+    needsAttitudeNote: pilot && needsAttitudeNote(cardEval.attitude, subject.attitudeNote), // 태도 하·중하면 의견 3줄 이상(원장 2026-10-26)
+    needsMakeupReason: needsMakeupReason(rowMakeupFacts(student, subject)), // 결석 날짜 모르는 보강 줄이면 사유(원장 2026-10-26)
     readonlyView, // 열람 전용 — 사유 라벨까지 게이트가 만든다(표뷰와 동일)
     recallPending: isRecallInFlight(liveStatus ?? null),
     // 발송 대기·게시 중 — 워커 결과 전까지 다시 못 누른다(표뷰와 같은 판정, 원장 2026-09-29).
@@ -657,6 +667,8 @@ export function ReportCard({
               강사가 못 찾는다(원장 제보). 같은 값을 두 번 보여주지 않는다. */}
         </div>
 
+        {makeupExtra}
+
         <div>
           <p className="micro text-text-faint mb-1.5">{t("os.card.attitude")}</p>
           {/* 원장 2026-07-23: 알약 → 드롭다운(표 모드와 동일 규약). 해제는 "선택 안 함". */}
@@ -666,6 +678,7 @@ export function ReportCard({
             onSelect={(v) => onAttitude(v ?? "")}
             ariaLabel={tf("os.card.attitudeAria", { name: student.name })}
           />
+          {attitudeExtra}
         </div>
 
         <div>

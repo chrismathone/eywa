@@ -82,7 +82,11 @@ import {
   type UnderstandingState,
 } from "../math-report-pilot";
 import { isHomeworkMissed, pilotRowSig, type DailyTestSkip } from "../math-report-pilot-sections";
-import { pilotSendBlocks } from "../pilot-send-gate";
+import { REASON_BLOCKS, pilotSendBlocks } from "../pilot-send-gate";
+import { ReasonNoteInput } from "./reason-note-input";
+import { attitudeNeedsNote, needsAttitudeNote } from "../math-report-pilot-sections";
+import { hasMakeupAbsenceDate } from "../attendance-sentence";
+import { rowMakeupFacts } from "../report-comment";
 import { DailyTestSkipPanel } from "./daily-test-skip-panel";
 import { HomeworkMissReasonInput } from "./homework-miss-reason";
 import { ReportCard, type SubjectReport } from "./report-card";
@@ -800,6 +804,9 @@ export function OneScreenClient({
               ...(su.dailyTestSkip !== undefined ? { dailyTestSkip: su.dailyTestSkip } : {}),
               // 숙제 미제출 사유(수학 보고서 시범) — 적은 적 있는 행만.
               ...(su.homeworkMissReason !== undefined ? { homeworkMissReason: su.homeworkMissReason } : {}),
+              // 수업 태도 의견 · 보강 사유(2026-10-26) — 적은 적 있는 행만.
+              ...(su.attitudeNote !== undefined ? { attitudeNote: su.attitudeNote } : {}),
+              ...(su.makeupReason !== undefined ? { makeupReason: su.makeupReason } : {}),
               ...(hasRowOverrides(su)
                 ? {
                     attitude: su.attitude,
@@ -2101,6 +2108,12 @@ export function OneScreenClient({
     patchRowEval(studentId, subjectName, (su) => ({ ...su, dailyTestSkip: skip, ...(skip ? { dailyScore: null } : {}) }));
   }
   // 숙제 미제출 사유(수학 보고서 시범, 원장 2026-10-23 *"미제출일경우 사유작성"*) — 숙제 완성도 항목에 그대로 들어간다.
+  function setAttitudeNoteFor(studentId: string, subjectName: string, note: string) {
+    patchRowEval(studentId, subjectName, (su) => ({ ...su, attitudeNote: note }));
+  }
+  function setMakeupReasonFor(studentId: string, subjectName: string, reason: string) {
+    patchRowEval(studentId, subjectName, (su) => ({ ...su, makeupReason: reason }));
+  }
   function setHomeworkMissReasonFor(studentId: string, subjectName: string, reason: string) {
     patchRowEval(studentId, subjectName, (su) => ({ ...su, homeworkMissReason: reason }));
   }
@@ -2503,7 +2516,8 @@ export function OneScreenClient({
       homework: rowEval.homework,
       note: rowEval.note,
       // 출결(원장 2026-10-26) — 출석부 칸 그대로(수학 보고서와 같은 문장, attendance-sentence.ts).
-      attendance: attendanceSentence(su.attendanceRaw, su.attendanceNote),
+      // 보강 줄이면 결석 날짜·시간·사유를 붙인다(2026-10-26 — 수학과 같은 재료, report-comment.ts rowMakeupFacts).
+      attendance: attendanceSentence(su.attendanceRaw, su.attendanceNote, rowMakeupFacts(student, su)),
       slots: slotFactsFor(
         jjKnownSlots(jjCache[jjDayKey(student.id, activeDate)]),
         rep?.autoDraft ?? rep?.draft ?? "",
@@ -2955,6 +2969,7 @@ export function OneScreenClient({
           // 일일 테스트 '없음'이면 점수 대신 사유가 나간다(math-report-pilot-sections.ts).
           ...(su?.dailyTestSkip ? { dailyTestSkip: su.dailyTestSkip, dailyTest: "" } : {}),
           homeworkMissReason: su?.homeworkMissReason ?? "",
+          attitudeNote: su?.attitudeNote ?? "",
         }
       : baseInput;
     // 이번 글을 만든 값의 서명 — 발송 게이트(카드·표)가 같은 함수로 지금 값과 대조한다.
@@ -3141,6 +3156,8 @@ export function OneScreenClient({
         today: r.subject.today ?? "",
         progressMode: r.subject.progressMode ?? null,
         attitude: rowEval.attitude,
+        attitudeNote: r.subject.attitudeNote ?? "",
+        attitudeNoteOk: isMathReportPilot(r.student.id, r.subject.subjectKey),
         homework: rowEval.homework,
         textbook: r.subject.textbook ?? "",
         homeworkToday: r.subject.homeworkToday ?? "",
@@ -3185,6 +3202,7 @@ export function OneScreenClient({
       // 🔴 일괄 적용은 **보강 행에도** 적용한다(원장 2026-08-13) — "일괄 적용됐는데 보강만 적용 안 된다는건
       //    일괄 적용이 아님". 이후 강사가 행별로 고치는 건 강사 몫이다.
       if (p.set.attitude !== undefined) setAttitudeValue(p.studentId, p.subjectName, p.set.attitude);
+      if (p.set.attitudeNote !== undefined) setAttitudeNoteFor(p.studentId, p.subjectName, p.set.attitudeNote);
       if (p.set.homework !== undefined) setHomeworkValue(p.studentId, p.subjectName, p.set.homework);
       if (p.set.textbook !== undefined) setTextbookFor(p.studentId, p.subjectName, p.set.textbook);
       if (p.set.homeworkToday !== undefined) setHomeworkTodayFor(p.studentId, p.subjectName, p.set.homeworkToday);
@@ -3662,10 +3680,11 @@ export function OneScreenClient({
         ...(isMathReportPilot(student.id, su?.subjectKey) || su?.subjectKey === "english" ? { pilotOneLine: rowEval.note } : {}),
         // 새 수학 보고서 — 화면 발송 조건(자동작성이 지금 값 기준인가 · 사유를 다 적었나)을 서버에도 싣는다(원장 2026-10-26 일괄 발송 구멍).
         //   일괄 발송·행 발송이 모두 이 입력을 지나므로, 어느 길로 보내도 서버가 같은 조건으로 거절한다.
-        ...(isMathReportPilot(student.id, su?.subjectKey)
+        // 영어 줄도 싣는다 — 보강 사유를 서버가 같은 조건으로 본다(2026-10-26). 영어엔 자동작성 조건이 없어 factsCurrent는 늘 참이다.
+        ...(isMathReportPilot(student.id, su?.subjectKey) || su?.subjectKey === "english"
           ? (() => {
               const blocks = pilotSendBlocks(student, subjectName, { draft, autoDraft: autoSnap, pilotFactsSig: existing?.pilotFactsSig });
-              return { pilotCheck: { factsCurrent: !blocks.includes("autowrite"), reasonsOk: !blocks.includes("testReason") && !blocks.includes("homeworkReason") } };
+              return { pilotCheck: { factsCurrent: !blocks.includes("autowrite"), reasonsOk: !blocks.some((b) => REASON_BLOCKS.includes(b)) } };
             })()
           : {}),
         // 자동작성 후 고친 멘트면 그 자동작성 원문도 싣는다(0370a) — 말투 프로파일이 선생님이 '늘 고치는 것'을 배운다(원장 2026-10-16).
@@ -4708,6 +4727,15 @@ export function OneScreenClient({
             onVideoHomework: toggleVideoHomeworkFor,
             onVideoSubmitLink: toggleVideoSubmitLinkFor,
             onVideoHomeworkDue: setVideoHomeworkDueFor,
+            // 새 보고서 필수 칸 — 카드와 같은 setter(원장 2026-10-26 *"카드와 표에서 동일하게"*). 열람 전용이면 안 넘긴다(칸이 안 선다).
+            ...(readonlyView
+              ? {}
+              : {
+                  onDailyTestSkip: setTestSkipFor,
+                  onHomeworkMissReason: setHomeworkMissReasonFor,
+                  onAttitudeNote: setAttitudeNoteFor,
+                  onMakeupReason: setMakeupReasonFor,
+                }),
           }}
           rowActions={{
             onSendRow: sendRow,
@@ -4804,6 +4832,38 @@ selected ? (
                     />
                   ) : null
                 }
+                // 수업 태도 의견(새 수학 보고서, 2026-10-26) — 태도가 하·중하일 때만, 태도 칸 바로 아래에. 3줄 이상(90자) 필수.
+                attitudeExtra={
+                  previewSubject &&
+                  isMathReportPilot(selected.id, previewSubject.subjectKey) &&
+                  attitudeNeedsNote(resolveRowFields(selected, previewSubject).attitude) ? (
+                    <ReasonNoteInput
+                      multiline
+                      value={previewSubject.attitudeNote ?? ""}
+                      done={!needsAttitudeNote(resolveRowFields(selected, previewSubject).attitude, previewSubject.attitudeNote)}
+                      disabled={readonlyView || !isRowInputEditable(previewSubject, effectiveClassnoteStatus(previewReport?.classnoteStatus, previewSubject.classnoteStatus))}
+                      labelKey="os.card.attNote.label"
+                      placeholderKey="os.card.attNote.ph"
+                      onChange={(v) => setAttitudeNoteFor(selected.id, previewSubject.name, v)}
+                    />
+                  ) : null
+                }
+                // 보강 사유(2026-10-26) — 보강 줄인데 결석 날짜를 예약에서 못 찾을 때만(예약된 보강은 날짜·시간이 자동으로 들어간다).
+                makeupExtra={(() => {
+                  if (!previewSubject) return null;
+                  const mk = rowMakeupFacts(selected, previewSubject);
+                  if (!mk?.row || hasMakeupAbsenceDate(mk)) return null;
+                  return (
+                    <ReasonNoteInput
+                      value={previewSubject.makeupReason ?? ""}
+                      done={(previewSubject.makeupReason ?? "").trim() !== ""}
+                      disabled={readonlyView || !isRowInputEditable(previewSubject, effectiveClassnoteStatus(previewReport?.classnoteStatus, previewSubject.classnoteStatus))}
+                      labelKey="os.card.mkReason.label"
+                      placeholderKey="os.card.mkReason.ph"
+                      onChange={(v) => setMakeupReasonFor(selected.id, previewSubject.name, v)}
+                    />
+                  );
+                })()}
                 student={selected}
                 reports={reports[selected.id] ?? {}}
                 attitudes={ATTITUDE}

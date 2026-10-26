@@ -19,7 +19,12 @@ import {
 } from "../grid";
 import { evaluateSendGate } from "../send-gate";
 import { hasPilotOneLine, isMathReportPilot, pilotCanEdit, pilotNeedsAutoWrite } from "../math-report-pilot";
-import { needsHomeworkMissReason, pilotRowSig, testSkipComplete } from "../math-report-pilot-sections";
+import { attitudeNeedsNote, isHomeworkMissed, needsAttitudeNote, needsHomeworkMissReason, pilotRowSig, testSkipComplete, type DailyTestSkip } from "../math-report-pilot-sections";
+import { hasMakeupAbsenceDate, needsMakeupReason } from "../attendance-sentence";
+import { DailyTestSkipPanel } from "./daily-test-skip-panel";
+import { HomeworkMissReasonInput } from "./homework-miss-reason";
+import { ReasonNoteInput } from "./reason-note-input";
+import { rowMakeupFacts } from "../report-comment";
 import { joinLevelsLead, splitLevelsLead } from "../pilot-notes";
 import { LevelsLead } from "./levels-lead";
 import { hasTextBesidesMarkers } from "@/features/report-templates/image-slots";
@@ -112,6 +117,15 @@ export type GridFieldHandlers = {
   onVideoSubmitLink?: (studentId: string, subjectName: string) => void;
   /** 영상 숙제 마감(7일 · 다음 수업) 고르기 — '영상 과제'를 켠 행에서만 뜬다. 없으면 칸이 잠긴다. */
   onVideoHomeworkDue?: (studentId: string, subjectName: string, mode: "week" | "next") => void;
+  // ── 새 보고서 필수 칸(원장 2026-10-26 *"카드와 표에서 동일하게"*) — 카드와 **같은 setter**를 넘긴다. 없으면 칸을 안 그린다(읽기 전용·테스트). ──
+  /** 일일 테스트 있음/없음 + 사유(null = 시험 있음). */
+  onDailyTestSkip?: (studentId: string, subjectName: string, skip: DailyTestSkip | null) => void;
+  /** 숙제 미제출 사유. */
+  onHomeworkMissReason?: (studentId: string, subjectName: string, reason: string) => void;
+  /** 수업 태도 의견(하·중하, 3줄 이상). */
+  onAttitudeNote?: (studentId: string, subjectName: string, note: string) => void;
+  /** 보강 사유(결석 날짜를 예약에서 못 찾은 보강 줄). */
+  onMakeupReason?: (studentId: string, subjectName: string, reason: string) => void;
 };
 
 /** 행 단위 액션. */
@@ -303,6 +317,7 @@ export function GridBodyRow({
   // 수학 보고서 시범(테스트 학생 한정, math-report-pilot.ts) — 멘트·추세는 보기만, 자동작성 글 그대로여야 발송(카드와 같은 판정).
   const pilot = isMathReportPilot(student.id, subject.subjectKey);
   const pilotLocked = pilot && !pilotCanEdit(rep?.autoDraft); // 자동작성 전엔 잠금(2026-10-23)
+  const makeupFacts = rowMakeupFacts(student, subject); // 보강 재료(결석 날짜·시간·사유) — 게이트와 보강 사유 칸이 같은 값을 본다
   const draftLead = splitLevelsLead(rep?.draft); // 맨 위 수업 평가 표 = 읽기 전용(원장 2026-10-26)
   // '사랑의 한마디' 행 — 새 수학 보고서 + 영어(원장 2026-10-26, 카드와 같은 판정).
   const oneLineRow = pilot || subject.subjectKey === "english";
@@ -321,6 +336,8 @@ export function GridBodyRow({
     needsOneLine: oneLineRow && !hasPilotOneLine(rowEval.note), // 사랑의 한마디(옛 강사 한줄 멘트) 필수(원장 2026-10-22)
     needsTestReason: pilot && !testSkipComplete(subject.dailyTestSkip), // 일일 테스트 '없음'이면 사유 필수(원장 2026-10-22)
     needsHomeworkReason: pilot && needsHomeworkMissReason(rowEval.homework, subject.homeworkMissReason), // 숙제 미제출이면 사유 필수(원장 2026-10-23)
+    needsAttitudeNote: pilot && needsAttitudeNote(rowEval.attitude, subject.attitudeNote), // 태도 하·중하면 의견 3줄 이상(원장 2026-10-26)
+    needsMakeupReason: needsMakeupReason(makeupFacts), // 결석 날짜 모르는 보강 줄이면 사유(원장 2026-10-26)
     readonlyView: gen.readonlyView, // 열람 전용 — 사유 라벨("열람 전용")까지 게이트가 만든다
     // 발송 대기·게시 중 — 워커 결과 전까지 다시 못 누른다(카드뷰와 같은 판정, 원장 2026-09-29).
     sendInFlight: liveStatus === "queued" || liveStatus === "processing",
@@ -590,6 +607,18 @@ export function GridBodyRow({
             </span>
           ) : null}
         </div>
+        {/* 보강 사유 — 결석 날짜를 예약에서 못 찾은 보강 줄만(카드와 같은 칸, 2026-10-26). */}
+        {fields.onMakeupReason && makeupFacts?.row && !hasMakeupAbsenceDate(makeupFacts) ? (
+          <fieldset disabled={rowLocked} className={LOCK_FS}>
+            <ReasonNoteInput
+              value={subject.makeupReason ?? ""}
+              done={(subject.makeupReason ?? "").trim() !== ""}
+              labelKey="os.card.mkReason.label"
+              placeholderKey="os.card.mkReason.ph"
+              onChange={(v) => fields.onMakeupReason?.(student.id, subject.name, v)}
+            />
+          </fieldset>
+        ) : null}
       </td>
       {/* 수업타임(시수) — **전용 열**(원장 2026-08-05 "타임이 너무 작다"). 이름칸 안에서 pill과 자리를
           다투면 계속 작아진다. 기록할 자리가 없는 행(보강·반 모호)은 왜 없는지 밝힌다(빈 칸 금지). */}
@@ -633,9 +662,18 @@ export function GridBodyRow({
       {config.dailyEnabled ? (
         <td className={`${td} text-center`}>
           {/* 수학 보고서 시범 — 카드에서 '시험 없음'을 고른 행은 점수 칸 대신 그 사실을 적는다(점수를 넣어도 읽지 않는다, row-fields.ts). */}
-          {pilot && subject.dailyTestSkip ? (
+          {/* 일일 테스트 '없음' — 표에서도 카드와 같은 판(DailyTestSkipPanel)으로 고른다(원장 2026-10-26 *"카드와 표에서 동일하게"*). */}
+          {pilot && subject.dailyTestSkip && fields.onDailyTestSkip ? (
+            <fieldset disabled={rowLocked} className={LOCK_FS}>
+              <DailyTestSkipPanel
+                skip={subject.dailyTestSkip}
+                onChange={(skip) => fields.onDailyTestSkip?.(student.id, subject.name, skip)}
+              />
+            </fieldset>
+          ) : pilot && subject.dailyTestSkip ? (
             <span className="text-text-dim text-xs font-bold">{t("os.card.testSkip.no")}</span>
           ) : (
+          <>
           <fieldset disabled={rowLocked} className={LOCK_FS}>
             <ScoreInput
               value={rowEval.tests.daily.score}
@@ -647,6 +685,16 @@ export function GridBodyRow({
               nav={nav.studentRow !== undefined ? { col: "daily", row: nav.studentRow } : undefined}
             />
           </fieldset>
+          {pilot && fields.onDailyTestSkip && !rowLocked ? (
+            <button
+              type="button"
+              onClick={() => fields.onDailyTestSkip?.(student.id, subject.name, { reason: null, detail: "" })}
+              className="text-text-faint hover:text-foreground mt-0.5 block w-full text-center text-xs underline-offset-2 hover:underline"
+            >
+              {t("os.card.testSkip.no")}
+            </button>
+          ) : null}
+          </>
           )}
           {todaysMathMarked(subject, "daily", rowEval.tests.daily) ? <TodaysMathMark /> : null}
         </td>
@@ -684,6 +732,17 @@ export function GridBodyRow({
             legacyHint={t("select.legacy")}
             searchPlaceholder={t("select.search")}
           />
+          {/* 수업 태도 의견 — 하·중하일 때만(카드와 같은 칸, 2026-10-26). */}
+          {pilot && fields.onAttitudeNote && attitudeNeedsNote(rowEval.attitude) ? (
+            <ReasonNoteInput
+              multiline
+              value={subject.attitudeNote ?? ""}
+              done={!needsAttitudeNote(rowEval.attitude, subject.attitudeNote)}
+              labelKey="os.card.attNote.label"
+              placeholderKey="os.card.attNote.ph"
+              onChange={(v) => fields.onAttitudeNote?.(student.id, subject.name, v)}
+            />
+          ) : null}
         </fieldset>
       </td>
       <td className={td}>
@@ -695,6 +754,13 @@ export function GridBodyRow({
             label={tf("os.row.hwLabel", { name: student.name })}
             nav={{ col: "homework", row: nav.row }}
           />
+          {/* 숙제 미제출 사유 — 카드와 같은 칸(2026-10-26 표에도). */}
+          {pilot && fields.onHomeworkMissReason && isHomeworkMissed(rowEval.homework) ? (
+            <HomeworkMissReasonInput
+              value={subject.homeworkMissReason ?? ""}
+              onChange={(r) => fields.onHomeworkMissReason?.(student.id, subject.name, r)}
+            />
+          ) : null}
         </fieldset>
           {subject.classId ? (
             <VideoHomeworkCheck classId={subject.classId} studentId={student.id}
