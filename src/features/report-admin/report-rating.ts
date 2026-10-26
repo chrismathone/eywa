@@ -10,6 +10,13 @@
  */
 import type { TipCard, TipRow } from "@/components/hover-tip/tip";
 
+/**
+ * 🔴 평점 표시 스위치 — 지금 **꺼 둠**(원장 2026-10-26 *"이게 4.0이라고?"* · *"전혀 신뢰안가는 점수"* → *"스위치 끄고 열 감춤"*).
+ * 다섯 항목 평균인데 '믿음'(91.5%)·'알기 쉬움'(62.5%)이 거의 늘 만점이라 판에 박힌 글도 4.0이 나왔다(5,393건 평균 3.75 · 93%가 3.0~4.5).
+ * 꺼지면 목록의 '평점' 열이 없고 서버(listReports)도 평점 표를 읽지 않는다. 원장 점수표로 새 기준을 검증한 뒤 다시 켠다(정렬도 그때 함께).
+ */
+export const REPORT_RATING_VISIBLE = false;
+
 export type RatingClaim = "confirmed" | "needs_check" | "cleared" | "flagged";
 
 /** 항목 하나 — score 0 = 해당 없음(종합 평균에서 빠진 항목). */

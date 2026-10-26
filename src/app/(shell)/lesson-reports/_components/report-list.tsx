@@ -27,6 +27,7 @@ import type { ReportFilterOptions } from "@/features/report-admin/server/queries
 import { ReportViewSettings } from "./report-view-settings";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { RatingCell } from "./rating-cell";
+import { REPORT_RATING_VISIBLE } from "@/features/report-admin/report-rating";
 
 // 시:분(KST). timestamptz → Asia/Seoul HH:mm. 값 없으면 빈 문자열.
 function hhmmKst(iso: string | null): string {
@@ -189,7 +190,8 @@ export function ReportList({
   // 멘트 작성 방식 열(0214a) — 마이그레이션 전엔 전 행 "—"뿐이라 열 자체를 숨긴다(뷰 설정 필터와 같은 게이트).
   const showMent = options.mentSourceReady ?? false;
   // 평점 열(참고용, 0450a) — 서버도 쓰기 권한자에게만 평점을 싣는다(listReports). 화면은 같은 판정으로 열만 감춘다.
-  const showRating = canSend;
+  // 표시 스위치가 꺼져 있으면 열 자체가 없다(2026-10-26 원장 — 새 기준 검증 전까지).
+  const showRating = REPORT_RATING_VISIBLE && canSend;
 
   const toggle = (id: string) =>
     setChecked((prev) => {
@@ -347,7 +349,7 @@ export function ReportList({
               <th className="px-3 py-2 font-bold">학생 · 과목</th>
               <SortableTh sortKey="class" state={sortState} onSort={onSort}>반</SortableTh>
               <SortableTh sortKey="teacher" state={sortState} onSort={onSort}>강사</SortableTh>
-              {/* 평점(참고용, 0450a) — 정렬 없음(원장 미요청). 근거는 숫자에 마우스를 올리면 카드로 뜬다. */}
+              {/* 평점(참고용, 0450a) — 근거는 숫자에 마우스를 올리면 카드로 뜬다. 정렬은 새 기준과 함께 연다(원장 2026-10-26). */}
               {showRating ? (
                 <th
                   className="px-3 py-2 font-bold whitespace-nowrap"

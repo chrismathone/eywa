@@ -20,7 +20,7 @@ import { IMPORT_FILTER, UNSENT_FILTER, reportOrderSpecs, type ReportListFilters,
 import { hasTextBesidesMarkers } from "@/features/report-templates/image-slots";
 import { getClassnoteQueue, type ClassnoteQueueView } from "./queries";
 import { loadReportRatings } from "./report-ratings";
-import type { ReportRating } from "../report-rating";
+import { REPORT_RATING_VISIBLE, type ReportRating } from "../report-rating";
 import { isSendClassRouteRow, sendClassRow } from "@/features/onescreen/send-class";
 import { blockedForNoSendClass } from "@/features/onescreen/server/send-class";
 import { classnoteSendOn } from "@/features/owner/classnote-gate";
@@ -505,9 +505,10 @@ export async function listReports(
   // ment_source(0214a) 적용 여부 — 미적용이면 select·필터에서 빼서 목록이 죽지 않게(#95, probe 캐시 왕복 0).
   // 평점(0450a)은 선생님 보고서를 평가한 참고 값이라 **쓰기(발송) 권한자에게만** 싣는다 — 화면의 canSend와 같은
   // 판정을 서버가 다시 한다(#77). 권한이 없으면 표를 읽지도 않고 행에 평점 칸 자체가 없다.
+  // 표시 스위치(REPORT_RATING_VISIBLE)가 꺼져 있으면 권한자에게도 같다(2026-10-26 원장 — 새 기준 검증 전까지 감춤).
   const [mentReady, canSeeRatings] = await Promise.all([
     mentSourceColumnReady(supabase),
-    canWriteTenant(user.systemRole, "lesson_reports"),
+    REPORT_RATING_VISIBLE ? canWriteTenant(user.systemRole, "lesson_reports") : Promise.resolve(false),
   ]);
 
   let q = supabase
