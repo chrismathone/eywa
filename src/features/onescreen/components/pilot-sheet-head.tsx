@@ -215,6 +215,18 @@ export function PilotSheetHead(p: PilotSheetHeadProps) {
               ))}
             </tr>
             {p.levels.map((r) => {
+              // 값이 없는 줄(숙제 없음·평가 없음) — 줄을 지우지 않고 다섯 칸을 합쳐 그 사실을 적는다(원장 2026-10-26).
+              if (r.level === null)
+                return (
+                  <tr key={r.label}>
+                    <th scope="row" className={`${LABEL} h-11`}>
+                      {r.label}
+                    </th>
+                    <td colSpan={LEVELS.length} className={`${CELL} text-text-dim h-11 text-sm font-bold`}>
+                      {r.none}
+                    </td>
+                  </tr>
+                );
               const at = LEVELS.indexOf(r.level);
               return (
                 <tr key={r.label}>

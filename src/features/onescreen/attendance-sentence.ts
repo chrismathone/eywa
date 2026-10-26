@@ -7,9 +7,16 @@
  * 🔑 재료는 출석부와 **같은 칸**(`attendance_records.status`·`note`, 원스크린 행의 `attendanceRaw`·`attendanceNote`)이다 — 새로 묻지 않는다.
  * 🔑 문장은 **코드가 만든다**(AI에 맡기지 않는다) — 사유가 비었을 때 모델이 '늦잠'·'교통' 같은 이유를 지어낼 수 있다.
  *    그래서 사유가 없으면 상태만 적고, 있으면 강사·데스크가 적은 원문을 괄호 안에 그대로 옮긴다.
- * ⚠️ 출석·기록 없음·결석은 "" — 출석은 말할 거리가 아니고, 결석한 날은 보고서 자체가 잠긴다(send-gate `absent`).
- * ⚠️ 보강도 "" — 보강 보고서는 제목에 이미 "(보강)"이 붙는다(같은 말을 두 번 하지 않는다).
+ * 🔑 **출석도 적는다**(원장 2026-10-26 *"학원삼이 출석처리되어있는데 그런 언급도없고 출석 지각 결석인지 확인도 안됌"*) — 종전엔 출석을
+ *    말할 거리가 아니라고 뺐다. 출석·보강의 메모는 싣지 않는다(지각·조퇴·공결의 사유만 학부모 글에 들어간다).
+ * ⚠️ 기록 없음·결석은 "" — 모르는 것을 '출석'으로 적지 않고, 결석한 날은 보고서 자체가 잠긴다(send-gate `absent`).
  */
+
+/** 사유를 싣지 않는 상태 — 메모가 있어도 문장만. */
+const PLAIN_SENTENCE: Record<string, string> = {
+  present: "오늘 수업에 정상적으로 출석했습니다.",
+  makeup: "오늘은 보강 수업에 출석했습니다.",
+};
 
 const STATUS_SENTENCE: Record<string, string> = {
   late: "오늘은 조금 늦게 도착했습니다",
@@ -31,6 +38,8 @@ function cleanReason(note: string | null | undefined): string {
 
 /** 출결 상태 + 사유 → 문장. 말할 게 없으면 "". */
 export function attendanceSentence(status: string | null | undefined, note: string | null | undefined): string {
+  const plain = status ? PLAIN_SENTENCE[status] : undefined;
+  if (plain) return plain;
   const head = status ? STATUS_SENTENCE[status] : undefined;
   if (!head) return "";
   const reason = cleanReason(note);
