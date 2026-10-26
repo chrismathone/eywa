@@ -23,6 +23,7 @@ export function MenuHubPanel({
   canTeacherView = false,
   menuLayout,
   isGenericTenant = false,
+  canViewVendors = false,
 }: {
   systemRole: SystemRole;
   /** 총괄(super_admin) — master 전용 목적지를 함께 연다. */
@@ -33,6 +34,8 @@ export function MenuHubPanel({
   menuLayout?: MenuLayout;
   /** 새 학원(일반판) — 설정 '기능' 면 노출. 사이드바와 같은 값을 받는다. */
   isGenericTenant?: boolean;
+  /** 업체리스트 지정자 — 학원운영 판의 '업체리스트' 입구(menu-hub `vendorsOnly`). */
+  canViewVendors?: boolean;
 }) {
   const { groups: groupLayout } = useNavigationSettings();
   const groupId = useMenuHub((s) => s.groupId);
@@ -62,6 +65,7 @@ export function MenuHubPanel({
     menuLayout,
     groupLayout,
     isGenericTenant,
+    canViewVendors,
   }).find((g) => g.id === groupId);
   if (!group) return null;
 

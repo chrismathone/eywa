@@ -139,6 +139,7 @@ export function AppSidebar({
   menuSearchHidden = false,
   menuLayout,
   isGenericTenant = false,
+  canViewVendors = false,
   connectedApps = [],
 }: {
   systemRole: SystemRole;
@@ -166,6 +167,8 @@ export function AppSidebar({
   menuLayout?: MenuLayout;
   /** 새 학원(일반판) — 설정 '기능' 면 노출(설정 화면 탭과 같은 판정). 모르면 false(침산처럼). */
   isGenericTenant?: boolean;
+  /** 업체리스트 지정자 — 학원운영 판의 '업체리스트' 입구(menu-hub `vendorsOnly`). */
+  canViewVendors?: boolean;
   /** 이 지점에 켜진 연결 앱(슈퍼관리자 스위치, 기본 꺼짐) — 비면 '연결 앱' 구역이 안 선다. */
   connectedApps?: readonly ConnectedApp[];
 }) {
@@ -249,6 +252,7 @@ export function AppSidebar({
     menuLayout,
     groupLayout,
     isGenericTenant,
+    canViewVendors,
   };
   // 자주 방문한 메뉴 — 서버가 계정 기록에서 뽑아 순서대로 내려준다(없으면 기본값).
   const frequent = frequentFor(gate, frequentKeys);
@@ -260,7 +264,7 @@ export function AppSidebar({
   const searchEntries = useMemo(
     () => hubSearchEntries(gate),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- gate는 매 렌더 새 객체라 그 재료로 묶는다
-    [systemRole, permMatrix, canTeacherView, isSuperAdmin, menuLayout, groupLayout, isGenericTenant],
+    [systemRole, permMatrix, canTeacherView, isSuperAdmin, menuLayout, groupLayout, isGenericTenant, canViewVendors],
   );
   // 칸 숨김 — 누르는 순간 화면을 바꾸고 계정에 저장한다(결과는 기다리지 않는다, 실패해도 이 화면은 그대로).
   const [searchHidden, setSearchHidden] = useState(menuSearchHidden);

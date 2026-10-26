@@ -293,3 +293,16 @@ describe("검색 팰릿 메뉴 축 — 메뉴 화면에 선 버튼은 전부 이
     expect(hrefs).toContain("/mcs"); // 수학 시트 = 강사 scoped
   });
 });
+
+describe("업체리스트 입구 — 지정자만(원장 2026-10-26)", () => {
+  const VENDORS = "/inventory?tab=vendors";
+  const hrefs = (canViewVendors?: boolean) =>
+    hubGroupsFor(HUB_GROUPS, { systemRole: "master", isMaster: true, canViewVendors }).flatMap((g) => g.items.map((d) => d.href));
+  it("지정자면 학원운영 판에 선다", () => {
+    expect(hrefs(true)).toContain(VENDORS);
+  });
+  it("지정이 없으면 원장 역할이어도 안 선다(모르면 닫힌 쪽)", () => {
+    expect(hrefs(false)).not.toContain(VENDORS);
+    expect(hrefs(undefined)).not.toContain(VENDORS);
+  });
+});
