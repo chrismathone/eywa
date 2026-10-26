@@ -1,5 +1,13 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-10-26 — AI 크레딧 MVP 세 가지(개발 모드 · 운영 적용 없음)
+
+- **① 퇴원 사유 복원**: 사유가 빈 침산 퇴원생 238명을 메이크에듀 사유·퇴원보고서 원본·상담·학부모 글에서 근거 인용과 함께 제안(Haiku 5.5 · 2회 합의 · 코드가 인용을 다시 확인). 적용기는 원장이 승인한 줄만 한 거래로 바꾸고 백업·감사로그(`withdrawal_reason_restore` — 감사로그 라벨·설명 추가)를 남긴다. 실행 전(스크립트 `scripts/_oneoff/ai-credit-mvp/withdrawals/apply.mjs`·`revert.mjs`).
+- **② 새 수업보고서 평점 정기 처리**: [`src/features/report-rating`](../src/features/report-rating) + cron `/api/cron/report-ratings` + 0455a(대기열 · 입력 지문 칸) + 지점 스위치 `report_rating` + 키 그룹 `MENT`(`lesson_report_rating`). 기본 꺼짐 · 0455a 미적용 · cron 미등록 — 켜는 것은 원장 결정([`reports-ai.md`](decisions/reports-ai.md) 같은 날 조항).
+- **④ 결석 문자 판별 검증**: 사람 정답 표(빈 칸) + 프롬프트 비교 시험만 — 코드 변경 없음(사람 정답이 채워지기 전에는 '검증 완료'라 하지 않는다).
+- 공용: `dev-cli.ts`가 구독 CLI 응답의 실제 모델을 관찰자(`devCliTrace`)로 넘긴다(개발 시험 기록용 · 운영 경로 무변경).
+- 결과·개인정보는 Git 밖(`D:\tmp\ai-credit-mvp-2026-10-26\`) — 원장 요약 = `07-decision\owner-summary.md`.
+
 ## 2026-10-26 — MCS 교재 진도 위치: 중3 차시표 매칭 · 다른 책 복습이 위치를 끌어내리지 않게
 
 - 가우스 중3 차시표(`1-3 무리수와 실수`, 번호 뒤 점 없음)가 보고서 진도와 0% 매칭이던 것을 고침 — `unitKey`가 하이픈 번호 머리(`1-3 `)도 떼고, eywa 커리큘럼의 굵은 중3 단원명(`근호를 포함한 식의 계산` 등)을 교재 소단원에 별칭으로 접는다. 실데이터: 중3-1 1권 0→49% · 2권 0→21% · 중3-2 3권 0→41% · 4권 0→37%, 초등 발전 교재도 새로 잡힘.

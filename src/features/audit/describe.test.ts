@@ -227,6 +227,13 @@ describe("auditDetail — 액션별 한글 상세", () => {
     );
   });
 
+  it("withdrawal_reason_restore(옛 퇴원 사유 복원): 누구 · 사유 라벨 · 메모 — 영문 키 없음", () => {
+    const c = ctx({ [SID]: "이윤건" });
+    expect(auditDetail("withdrawal_reason_restore", { studentId: SID, reason: "other", detail: null, memo: "고등수학관 이동" }, c)).toBe("이윤건 · 사유: 기타 · 고등수학관 이동");
+    expect(auditDetail("withdrawal_reason_restore", { studentId: SID, reason: "relocation" }, c)).toBe("이윤건 · 사유: 이사");
+    expect(auditDetail("withdrawal_reason_restore", { studentId: SID, reverted: true }, c)).toBe("이윤건 · 복원한 사유를 되돌림");
+  });
+
   it("payroll_upsert / withdrawal_update: 이름 해석 + 사유", () => {
     expect(auditDetail("payroll_upsert", { userId: UID, total: 2500000 }, ctx({ [UID]: "김강사" }))).toBe(
       "김강사 · 지급 합계 2,500,000원",

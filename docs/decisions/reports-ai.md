@@ -6,6 +6,7 @@
 - 판정 = 서버 [`listReports`](../../src/features/report-admin/server/actions.ts)가 화면 `canSend`와 같은 `canWriteTenant('lesson_reports')`를 다시 보고, 권한이 없으면 표를 읽지도 않고 행에 평점 키가 없다(#77) · 읽기 = [`loadReportRatings`](../../src/features/report-admin/server/report-ratings.ts)(admin + tenant_id · 표가 없으면 조용히 '—' · 그 밖의 오류는 로그만, 목록은 막지 않는다 #95·#138) · 표시·카드 재료 = [`report-rating.ts`](../../src/features/report-admin/report-rating.ts) 한 곳(raw 키 대신 한글 라벨 · 클레임 확정/확인 필요/검증에서 풀림/1차 판정만).
 - 화면 = 강사 열 뒤 소수 한 자리 · 3.0 미만만 주의(caution) 글자색 · 검증에서 남은 클레임(확정 = critical · 확인 필요 = caution)만 숫자 옆 `!` 알약 · 근거는 넓은 카드(`TipCard.wide`, 400×520 — 기본 240×320에선 근거 절반 넘게 잘린다) · 정렬·엑셀은 이번에 없음.
 - 🔴 '다시 매기기' 버튼·페이지 로드 시 AI 호출을 만들지 말 것 — 값은 한 번 매긴 참고 기록이다. 새 기준으로 다시 매기면 오프라인으로 다시 올린다(`rubric`·`model`·`rated_on` 칸이 기록).
+- **2026-10-26 크레딧 MVP — 새 보고서 평점 정기 처리 코드(기본 꺼짐 · 켜는 것은 원장 결정)**: 오프라인 하네스를 앱으로 옮겼다([`report-rating/harness`](../../src/features/report-rating/harness) — 옛 코드와 5,419건 카드·신호·재료 조립, 저장된 5,256건 점수 차이 0) + 대기열·배치(0455a · **운영 미적용**) + cron `/api/cron/report-ratings`(**vercel.json 미등록**) + 지점 스위치 `report_rating`(행 없음 = 꺼짐). 화면 버튼·페이지 로드에서는 여전히 AI를 부르지 않는다(위 조항 그대로) — 발송된 새 보고서만 cron이 Message Batches(50%)로 한 번 매기고, 기존 평점은 덮지 않는다. 앱 기본 규칙 = 7차(`rubric = v4-check7-app1`, 옛 5,256행과 섞이지 않는다) · 대상은 정상 발송만(회수·재발송 중이면 다시 나갈 때까지 기다리고 14일이 지나면 닫는다) · 외부 AI 전송 금지 정보가 글에 있으면 보내지 않는다 · 시도 횟수는 그 보고서 탓인 실패에만. 켜는 순서·되돌리기 = `D:\tmp\ai-credit-mvp-2026-10-26\07-decision\activation-and-rollback.md`.
 
 ## 2026-10-23 — 수업보고서 목록 '수업일'(실제 수업일 지정) 버튼 제거
 

@@ -62,6 +62,8 @@ export const FEATURE_KEY_GROUP: Readonly<Record<string, AiKeyGroup>> = {
   english_ment: "ment",
   ment_prompt_preview: "ment",
   ment_style_profile: "ment",
+  // 수업보고서 평점 정기 처리(2026-10-26 · 밤 배치 · 지점 스위치 report_rating) — 멘트를 읽어 매기는 일이라 같은 그룹
+  lesson_report_rating: "ment",
   // 회의록 녹음 분석
   meeting_analysis: "meeting",
   // 콜&상담 — 녹음 분석 · 폼 자동입력 · 상담 준비 브리프
