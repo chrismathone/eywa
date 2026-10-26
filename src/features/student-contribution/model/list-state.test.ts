@@ -2,7 +2,7 @@ import { expect, it } from "vitest";
 import { contributionListHref, contributionStudentHref, listStateQuery, readListState } from "./list-state";
 
 it("목록의 모든 조건과 페이지를 상세를 거쳐 복구한다", () => {
-  const state = readListState("status=all&q=김+학생&grade=초5&subject=math&sort=recent&page=3&size=20");
+  const state = readListState("status=all&q=김+학생&grade=초5&subject=math&sort=recent&direction=asc&period=3&page=3&size=20");
   const detail = new URL(contributionStudentHref("student-1", state), "https://test.local");
   const back = new URL(contributionListHref(detail.searchParams.get("list")), detail.origin);
   expect(readListState(back.search.slice(1))).toEqual(state);

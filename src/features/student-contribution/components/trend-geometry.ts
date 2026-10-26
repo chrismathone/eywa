@@ -10,7 +10,7 @@ export const SEGMENT_FILL: Record<SegmentKind, string> = { operations: "var(--pr
   participation: "color-mix(in srgb, var(--primary) 52%, var(--card))", correction: "var(--amber)" };
 
 /** 위 = 누적 선, 아래 = 그 달 증감 막대. 두 판이 같은 가로 칸(달)을 나눠 쓴다. */
-export const TREND_BOX = { left: 58, right: 14, top: 28, line: 92, gap: 54, bars: 132, axis: 30 } as const;
+export const TREND_BOX = { left: 58, right: 14, top: 28, line: 92, gap: 82, bars: 132, axis: 30 } as const;
 export const TREND_HEIGHT = TREND_BOX.top + TREND_BOX.line + TREND_BOX.gap + TREND_BOX.bars + TREND_BOX.axis;
 
 const ORDER: SegmentKind[] = ["operations", "participation", "correction"];

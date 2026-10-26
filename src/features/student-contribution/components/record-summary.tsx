@@ -2,7 +2,7 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { EmbedLink as Link } from "@/components/embed-link";
+import { ContributionLink as Link } from "./student-contribution-scope";
 import { generateStudentRecordSummary } from "../server/summary-actions";
 import type { getStudentRecordSummary } from "../server/summary-query";
 import { kstDateOf } from "@/lib/date-kst";

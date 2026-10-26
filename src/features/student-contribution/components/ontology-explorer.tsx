@@ -1,6 +1,6 @@
 "use client";
 import { useMemo, useState } from "react";
-import { EmbedLink as Link } from "@/components/embed-link";
+import { ContributionLink as Link } from "./student-contribution-scope";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import type { ExplorerKind } from "@/features/students/ontology/explorer";
 import type { StudentFact } from "@/features/students/ontology/types";
