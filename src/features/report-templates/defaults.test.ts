@@ -85,7 +85,13 @@ describe("기본 템플릿 + 인재원 결과지(2026-09-11)", () => {
     expect(unknown).toEqual([]);
     expect(BUILTIN_ENGLISH_JJ_TEMPLATE.body.length).toBeLessThan(TEMPLATE_BODY_MAX);
     // 2026-10-26 — 항목 보고서(기본)가 맨 앞, 옛 두 기본 템플릿은 그대로 남는다.
-    expect(BUILTIN_ENGLISH_TEMPLATES.map((t) => t.id)).toEqual(["builtin:english-sheet", BUILTIN_ENGLISH_TEMPLATE.id, BUILTIN_ENGLISH_JJ_TEMPLATE.id]);
+    // 2026-10-26 오후 — JJ 수업보고서가 맨 뒤에 붙는다(기본 자리는 그대로 항목 보고서).
+    expect(BUILTIN_ENGLISH_TEMPLATES.map((t) => t.id)).toEqual([
+      "builtin:english-sheet",
+      BUILTIN_ENGLISH_TEMPLATE.id,
+      BUILTIN_ENGLISH_JJ_TEMPLATE.id,
+      "builtin:english-jj-sheet",
+    ]);
     expect(BUILTIN_ENGLISH_TEMPLATES.every((t) => t.builtIn && t.id.startsWith("builtin:"))).toBe(true);
   });
 
