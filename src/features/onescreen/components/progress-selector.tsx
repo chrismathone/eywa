@@ -202,7 +202,8 @@ export function ProgressSelector({
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner side="bottom" align="start" sideOffset={4} className="z-50">
-          <Popover.Popup className="bg-card border-line shadow-card flex max-h-[70vh] w-[380px] flex-col overflow-hidden rounded-lg border text-xs outline-none">
+          {/* data-progress-picker = 일괄 입력 창이 '이 선택 창을 닫으려던 바깥 클릭'을 알아보는 표식(bulk-apply.tsx onOpenChange). */}
+          <Popover.Popup data-progress-picker="" className="bg-card border-line shadow-card flex max-h-[70vh] w-[380px] flex-col overflow-hidden rounded-lg border text-xs outline-none">
             {/* ── 진도 없이 제출(edutrix '상태 선택'의 특수 상태) — 진도가 중단된 날. 맨 위에 두는 이유:
                    이걸 고르면 아래가 전부 잠기므로 **분기 지점**이고, 아래에 묻히면 강사가 못 찾는다. ── */}
             <div className="border-line border-b px-3 py-2">
