@@ -3,6 +3,7 @@ import { originalClassName } from "@/features/classes/closed-name";
 import type { ReportSettings } from "@/features/owner/settings-types";
 import type { JjReportSnapshot } from "@/features/ijw/snapshot";
 import { parentStudentName } from "@/features/report-templates/student-name";
+import { splitImageSlots } from "@/features/report-templates/image-slots";
 import { hasTrend, type TrendPoint } from "../report-trend";
 import { isImageAttachment, pickInlineAttachments } from "../attachment-utils";
 import { isSkipStatusProgress } from "../progress-status";
@@ -102,6 +103,12 @@ export type ParentReportCardProps = {
   jj?: JjReportSnapshot | null;
 };
 
+/** 본문이 그림 자리 줄(`[시험결과지]` 등)뿐인가 — 글·첨부 자리가 하나라도 있으면 false. */
+function onlyImageSlots(body: string): boolean {
+  const segs = splitImageSlots(body);
+  return segs.length > 0 && segs.every((s) => s.kind === "slot");
+}
+
 /** 학부모 보고서 카드(max-w-md 컬럼) — /r·/print 공용. 표시 항목은 전부 settings 토글 준수. */
 export function ParentReportCard({
   report,
@@ -187,7 +194,8 @@ export function ParentReportCard({
           // 종강 표식 `(~26.09.29)`은 학원 내부 보관 꼬리라 학부모 문서엔 뗀다(원장 2026-10-23 *"반에 날짜는 왜 들어간거임 빼고"*) — 규칙은 반 이름 쪽 단일 소스.
           className={report.className ? originalClassName(report.className) : null}
           teacherName={report.teacherName}
-          sections={pilotSplit.main}
+          // 인재원 자료가 없는 영어 보고서는 그림 자리만 든 항목('인재원 결과지')을 뺀다 — 빈 띠에 '작성된 보고 내용이 없습니다'가 서면 안 된다.
+          sections={templateMode && !jj ? pilotSplit.main.filter((s) => !onlyImageSlots(s.body)) : pilotSplit.main}
           note={pilotSplit.note}
           textbook={rpt.showTextbook ? report.textbook : null}
           middle={middle}
