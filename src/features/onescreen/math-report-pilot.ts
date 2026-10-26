@@ -14,6 +14,7 @@
  */
 
 import { skipStatusOf } from "./progress-status";
+import { asProgressMode } from "./progress-mode";
 
 /**
  * 이 학생·과목 행이 새 수학 보고서 대상인가 — **수학 전원**(원장 2026-10-26 *"수학보고서 디자인 전체로 반영"* → *"지금 바로 전원"*).
@@ -66,8 +67,15 @@ export function pilotLessons(today: string | null | undefined): string[] {
  * 첫 문장 — 원장 지시 *"단원 하나면 하나로 갔다 3개면 어디서 어디까지 나갔다"*.
  * 1개 = "승엽이는 오늘 소수와 거듭제곱 진도를 나갔습니다." / 2개 = "A와 B" / 3개 이상 = "A부터 B까지".
  * `stopLabel`(월말평가 등 진도 중단일) = 진도 대신 그날 한 일을 적는다.
+ * `mode`(진도 칸의 복습·문제풀이 알약, progress-mode.ts) = 원장 2026-10-26 *"복습이나 문제풀이를 선택하면 멘트도 그에 맞게 —
+ * 오늘은 문제풀이 위주, 오늘은 이걸 복습했다"* — '진도를 나갔다' 대신 그날 수업 성격대로 적는다. 소단원 수에 따른 모양(1·2·3개+)은 같다.
  */
-export function progressLead(fullName: string, lessons: readonly string[], stopLabel?: string | null): string {
+export function progressLead(
+  fullName: string,
+  lessons: readonly string[],
+  stopLabel?: string | null,
+  mode?: string | null,
+): string {
   // '우리 ○○이는' — 친근감(원장 2026-10-21 *"학생이름 앞에 '우리' 붙여서 친근감 표현"*).
   const name = topicName(fullName);
   if (!name) return "";
@@ -77,13 +85,24 @@ export function progressLead(fullName: string, lessons: readonly string[], stopL
   if (titles.length === 0) return "";
   // 소단원 이름은 따옴표로 묶는다 — 이름 안의 '의'·'와'가 문장 조사와 섞여 읽기 어렵다(원장 2026-10-23 *"너무 짧고 이상함"*).
   const q = (t: string) => `'${t}'`;
-  const close = " 오늘 배운 내용이 잘 자리 잡을 수 있도록 다음 시간에도 이어서 꼼꼼히 다지겠습니다.";
-  if (titles.length === 1) return `${who} 오늘 ${q(titles[0]!)} 진도를 나갔습니다.${close}`;
-  if (titles.length === 2) {
-    const [a, b] = titles;
-    return `${who} 오늘 ${q(a!)}${hasBatchim(a!.slice(-1)) ? "과" : "와"} ${q(b!)}, 두 소단원 진도를 나갔습니다.${close}`;
+  // 소단원을 문장에 넣는 모양 — 1개 = 'A' / 2개 = 'A'와 'B', 두 소단원 / 3개+ = 'A'부터 'B'까지 모두 N개 소단원.
+  const [first, second] = titles;
+  const span =
+    titles.length === 1
+      ? q(first!)
+      : titles.length === 2
+        ? `${q(first!)}${hasBatchim(first!.slice(-1)) ? "과" : "와"} ${q(second!)}, 두 소단원`
+        : `${q(first!)}부터 ${q(titles[titles.length - 1]!)}까지 모두 ${titles.length}개 소단원`;
+  const kind = asProgressMode(mode);
+  if (kind === "복습") {
+    // 1개면 "'A' 내용을", 여럿이면 "…소단원을" — 조사는 앞 낱말이 고정이라 문자열로 둔다.
+    return `${who} 오늘 ${span}${titles.length === 1 ? " 내용" : ""}을 복습했습니다. 앞서 배운 개념을 다시 짚으며 헷갈리던 부분을 정리했고, 다음 시간에도 이어서 꼼꼼히 다지겠습니다.`;
   }
-  return `${who} 오늘 ${q(titles[0]!)}부터 ${q(titles[titles.length - 1]!)}까지 모두 ${titles.length}개 소단원 진도를 나갔습니다.${close}`;
+  if (kind === "문제풀이") {
+    return `${who} 오늘 ${span}${titles.length === 1 ? "" : "의"} 문제풀이 위주로 수업했습니다. 배운 개념을 문제에 적용해 보며 실력을 다졌고, 틀린 문제는 다음 시간에 다시 짚고 넘어가겠습니다.`;
+  }
+  const close = " 오늘 배운 내용이 잘 자리 잡을 수 있도록 다음 시간에도 이어서 꼼꼼히 다지겠습니다.";
+  return `${who} 오늘 ${span} 진도를 나갔습니다.${close}`;
 }
 
 /** 소단원별 이해도 상태 — 점수(차시 원문 키 → 0~10) + 뺀 차시. 세션 `subject_progress`에 실린다. */
@@ -349,6 +368,8 @@ export function isPilotDraftCurrent(
   now: {
     studentName: string;
     today: string | null | undefined;
+    /** 진도 칸의 복습·문제풀이(progress-mode.ts) — 첫 문장이 이 값에 따라 달라서 대조에도 같은 값을 넣는다. */
+    progressMode: string | null | undefined;
     note: string | null | undefined;
     /** 지금 칸 값의 사실 서명(math-report-pilot-sections.ts `pilotFactsSig`) — 자동작성 때 남긴 `writtenSig`와 대조한다. */
     factsSig: string;
@@ -356,7 +377,7 @@ export function isPilotDraftCurrent(
   },
 ): boolean {
   const d = (draft ?? "").trim();
-  const lead = progressLead(now.studentName, pilotLessons(now.today), skipStatusOf(now.today));
+  const lead = progressLead(now.studentName, pilotLessons(now.today), skipStatusOf(now.today), now.progressMode);
   // 진도 항목은 맨 앞이거나 '수업 평가' 표 바로 뒤(원장 2026-10-23 표를 맨 위로).
   const sec = lead ? pilotSection(PILOT_SECTION_TITLES.progress, lead) : "";
   if (sec && !d.startsWith(sec) && !d.includes(`\n\n${sec}`)) return false;

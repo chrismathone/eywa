@@ -29,6 +29,7 @@ export function pilotSendBlocks(student: OneScreenStudent, subjectName: string, 
     pilotNeedsAutoWrite(rep?.draft, rep?.autoDraft, {
       studentName: student.name,
       today: su.today,
+      progressMode: su.progressMode,
       note: ev.note,
       factsSig: pilotRowSig(student, su.name),
       writtenSig: rep?.pilotFactsSig,

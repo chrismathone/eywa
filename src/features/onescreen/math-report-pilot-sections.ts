@@ -9,6 +9,7 @@
  *    분명해야 하고, 테스트를 못 친 사유처럼 **꼭 들어가야 하는 문장**은 모델에 맡기면 빠질 수 있다.
  */
 
+import { asProgressMode } from "./progress-mode";
 import { attitudeClause } from "./attitude";
 import { parseHomeworkRate } from "./homework-rate";
 import { activeUnderstanding, PILOT_SECTION_TITLES as T, pilotSection, understandingSig } from "./math-report-pilot";
@@ -158,6 +159,8 @@ export function homeworkSentence(v: string, missReason?: string | null): string 
 /** 항목 글의 재료 — 원스크린이 AI에 주는 값(ReportCommentInput)과 같은 모양. */
 export type PilotFacts = {
   progress?: string;
+  /** 진도 칸의 복습·문제풀이 — 진도 첫 문장이 이 값으로 갈린다(원장 2026-10-26). */
+  progressMode?: string | null;
   dailyTest: string;
   dailyTestSkip?: DailyTestSkip | null;
   checkTest: string;
@@ -325,6 +328,8 @@ export function pilotBody(f: PilotFacts, extra: { understandingText?: string; vi
 export function pilotFactsSig(f: PilotFacts, understanding: readonly { title: string; score: number }[]): string {
   return JSON.stringify([
     f.progress ?? "",
+    // 진도 성격(복습·문제풀이) — 값이 있을 때만 서명에 싣는다(안 고른 행의 서명은 예전과 같다).
+    ...(asProgressMode(f.progressMode) ? [asProgressMode(f.progressMode)] : []),
     f.dailyTestSkip ? ["skip", f.dailyTestSkip.reason, f.dailyTestSkip.detail.trim()] : scoreOnly(f.dailyTest),
     scoreOnly(f.checkTest),
     f.attitude.trim(),

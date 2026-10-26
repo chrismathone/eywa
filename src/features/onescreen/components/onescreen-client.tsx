@@ -96,6 +96,7 @@ import {
   type ReportTemplate,
 } from "@/features/report-templates/defaults";
 import { attendanceSentence } from "../attendance-sentence";
+import { progressWithMode } from "../progress-mode";
 import { hasTextBesidesMarkers, stripImageSlots, usedAttachmentNames } from "@/features/report-templates/image-slots";
 import {
   attachmentLineIndex,
@@ -2494,6 +2495,7 @@ export function OneScreenClient({
       studentName: student.name,
       teacherName,
       progress: su.today ?? "",
+      progressMode: su.progressMode ?? null,
       homeworkToday: fields.homeworkToday,
       dailyTest: fields.dailyTest,
       checkTest: fields.checkTest,
@@ -2705,7 +2707,8 @@ export function OneScreenClient({
       try {
         const res = await generateEnglishMent({
           studentName: student.name,
-          progress: facts.progress,
+          // 복습·문제풀이 한 줄까지(aiFactsOf와 같은 값) — AI가 "진도를 나갔다"고 거꾸로 쓰지 않게(원장 2026-10-26).
+          progress: progressWithMode(facts.progress, facts.progressMode),
           homeworkToday: facts.homeworkToday,
           testText: englishTestText({ daily: facts.dailyTest, check: facts.checkTest }),
           nextTest,

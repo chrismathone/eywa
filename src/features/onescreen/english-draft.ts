@@ -28,6 +28,7 @@ import { englishTemplateValues, englishTestText } from "@/features/report-templa
 import { mentionsStudentName } from "@/features/report-templates/name-mention";
 import { englishFactsKey, textHash, type EnglishFacts } from "@/features/report-templates/provenance";
 import { englishSheetValues } from "./english-sheet";
+import { progressWithMode } from "./progress-mode";
 
 /** 한 행의 사실 — 이미 사람이 읽는 표기(buildReportFields 결과·행 평가값)를 그대로 받는다. */
 export type EnglishRowFacts = {
@@ -45,6 +46,8 @@ export type EnglishRowFacts = {
    * 🔑 이것도 '사실'이다: 자료가 생기거나 사라지면 템플릿 글 그대로인 글은 저장 직전 다시 짜이고, 고친 글엔 칩이 선다.
    */
   slots?: Partial<Record<ImageSlotKey, boolean>>;
+  /** 진도 칸의 복습·문제풀이(progress-mode.ts) — `{진도}` 아래에 그날 수업 성격 한 줄이 붙는다(원장 2026-10-26). */
+  progressMode?: string | null;
   /** 그날 출결 문장(attendance-sentence.ts, 2026-10-26) — 항목 보고서의 '출결' 칸. 출결 기록이 없으면 "". */
   attendance?: string;
 };
@@ -95,7 +98,7 @@ export function composeEnglishDraft(
   const values = englishTemplateValues({
     studentName: facts.studentName,
     teacherName: facts.teacherName,
-    progress: facts.progress,
+    progress: progressWithMode(facts.progress, facts.progressMode),
     homeworkToday: facts.homeworkToday,
     tests: { daily: facts.dailyTest, check: facts.checkTest },
     nextTest: parts.nextTest ?? "",
@@ -124,7 +127,8 @@ export function templateHashOf(text: string): string {
 /** AI에 넘기는 사실(지문 재료) — 생성할 때와 확인할 때 **같은 함수**로 만든다. */
 export function aiFactsOf(facts: EnglishRowFacts, nextTest: string): EnglishFacts {
   return {
-    progress: facts.progress,
+    // 복습·문제풀이를 골랐으면 그 한 줄까지(템플릿 글과 같은 값) — AI 코멘트가 "진도를 나갔다"고 거꾸로 쓰지 않게.
+    progress: progressWithMode(facts.progress, facts.progressMode),
     testText: englishTestText({ daily: facts.dailyTest, check: facts.checkTest }),
     homeworkToday: facts.homeworkToday,
     nextTest,
@@ -156,7 +160,8 @@ function factValue(token: FactToken, facts: EnglishRowFacts, nextTest: string): 
     case "작성자":
       return facts.teacherName;
     case "진도":
-      return facts.progress;
+      // 글에 들어간 값 그대로(성격 한 줄 포함) — 알약을 바꾸면 '칸이 바뀜'으로 읽혀야 한다.
+      return progressWithMode(facts.progress, facts.progressMode);
     case "테스트":
       return englishTestText({ daily: facts.dailyTest, check: facts.checkTest });
     case "숙제":

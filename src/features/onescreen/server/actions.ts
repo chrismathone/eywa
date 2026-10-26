@@ -1587,7 +1587,7 @@ export async function generateReportComment(
         pilotLevelsSection(safeInput),
         pilotSection(
           PILOT_SECTION_TITLES.progress,
-          progressLead(input.studentName, pilotLessons(input.progress), skipStatusOf(input.progress)),
+          progressLead(input.studentName, pilotLessons(input.progress), skipStatusOf(input.progress), input.progressMode),
         ),
       ]
         .filter(Boolean)

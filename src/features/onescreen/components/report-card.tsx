@@ -318,6 +318,7 @@ export function ReportCard({
       pilotNeedsAutoWrite(rep.draft, rep.autoDraft, {
         studentName: student.name,
         today: subject.today,
+        progressMode: subject.progressMode,
         note: cardEval.note,
         factsSig: pilotRowSig(student, subject.name),
         writtenSig: rep?.pilotFactsSig,

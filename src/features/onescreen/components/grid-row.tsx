@@ -310,6 +310,7 @@ export function GridBodyRow({
       pilotNeedsAutoWrite(rep?.draft, rep?.autoDraft, {
         studentName: student.name,
         today: subject.today,
+        progressMode: subject.progressMode,
         note: rowEval.note,
         factsSig: pilotRowSig(student, subject.name),
         writtenSig: rep?.pilotFactsSig,
