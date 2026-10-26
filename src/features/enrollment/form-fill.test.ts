@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildFormPatch } from "./form-fill";
+import { buildFormPatch, splitOutsideParens } from "./form-fill";
 
 describe("buildFormPatch — 빈 필드만 채우기", () => {
   it("비어있는 메인 필드를 추출값으로 채운다", () => {
@@ -82,6 +82,16 @@ describe("buildFormPatch — learning_history jsonb 병합", () => {
   it("채울 게 없으면 learning_history 키 자체가 없음", () => {
     const p = buildFormPatch({}, { learningHistory: { prevAcademy: "기존" } });
     expect(p).not.toHaveProperty("learning_history");
+  });
+});
+
+describe("buildFormPatch — 약점 단원은 괄호 안을 나누지 않는다(2026-10-26)", () => {
+  it("'문법(분사, 동명사, 능동태·수동태)'가 깨진 조각으로 저장되지 않는다", () => {
+    const p = buildFormPatch({ weakSubjects: "문법(분사, 동명사, 능동태·수동태), 어휘, 리딩(전체 흐름 파악)" }, {});
+    expect((p.learning_history as { weakSubjects: string[] }).weakSubjects).toEqual(["문법(분사, 동명사, 능동태·수동태)", "어휘", "리딩(전체 흐름 파악)"]);
+  });
+  it("괄호가 없으면 예전과 같다", () => {
+    expect(splitOutsideParens("영어 단어(어휘), 수학 응용·심화/개념")).toEqual(["영어 단어(어휘)", "수학 응용", "심화", "개념"]);
   });
 });
 

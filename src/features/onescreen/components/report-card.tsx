@@ -41,6 +41,8 @@ import { VideoHomeworkToggle } from "@/features/video-homework/components/video-
 import { VideoHomeworkDueToggle } from "@/features/video-homework/components/video-homework-due-toggle";
 import { VideoSubmitLinkToggle } from "@/features/video-homework/components/video-submit-link-toggle";
 import { ENGLISH_DRAFT_TEXTAREA_ID, REPORT_ATTACHMENT_MAX, isImageAttachment } from "../attachment-utils";
+import { joinLevelsLead, splitLevelsLead } from "../pilot-notes";
+import { LevelsLead } from "./levels-lead";
 import { hasTextBesidesMarkers } from "@/features/report-templates/image-slots";
 import { splitComment, joinComment } from "../comment-paragraphs";
 import type { OneScreenStudent } from "../types";
@@ -309,6 +311,8 @@ export function ReportCard({
   // 수학 보고서 시범(테스트 학생 한정, math-report-pilot.ts) — 멘트·추세는 보기만, 자동작성 글 그대로여야 발송.
   const pilot = isMathReportPilot(student.id, subject.subjectKey);
   const pilotLocked = pilot && !pilotCanEdit(rep.autoDraft); // 자동작성 전엔 잠금(2026-10-23)
+  // '사랑의 한마디' 행 — 새 수학 보고서 + 영어(원장 2026-10-26 *"영어도 수학이랑 동일하게 특이사항 말고 사랑의 한마디 · 밑에 배치 · 필수"*).
+  const oneLineRow = pilot || subject.subjectKey === "english";
   const sendGate = evaluateSendGate({
     lang, // 🔴 판정이 아니라 **글자**만 갈린다(canSend·reasons 불변, send-gate.ts)
     needsAutoWrite:
@@ -316,11 +320,12 @@ export function ReportCard({
       pilotNeedsAutoWrite(rep.draft, rep.autoDraft, {
         studentName: student.name,
         today: subject.today,
+        progressMode: subject.progressMode,
         note: cardEval.note,
         factsSig: pilotRowSig(student, subject.name),
         writtenSig: rep?.pilotFactsSig,
       }),
-    needsOneLine: pilot && !hasPilotOneLine(cardEval.note), // 사랑의 한마디(옛 강사 한줄 멘트) 필수(원장 2026-10-22)
+    needsOneLine: oneLineRow && !hasPilotOneLine(cardEval.note), // 사랑의 한마디(옛 강사 한줄 멘트) 필수(원장 2026-10-22)
     needsTestReason: pilot && !testSkipComplete(subject.dailyTestSkip), // 일일 테스트 '없음'이면 사유 필수(원장 2026-10-22)
     needsHomeworkReason: pilot && needsHomeworkMissReason(cardEval.homework, subject.homeworkMissReason), // 숙제 미제출이면 사유 필수(원장 2026-10-23)
     readonlyView, // 열람 전용 — 사유 라벨까지 게이트가 만든다(표뷰와 동일)
@@ -365,18 +370,19 @@ export function ReportCard({
   // 발송 버튼 바로 위)에 둔다(원장 2026-10-23 *"사랑의 한마디를 더 밑으로 내려달라고"*). 그 밖의 행은 종전처럼 맨 위.
   const noteField = (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={`teacher-note-${student.id}`} className="micro text-text-faint">{pilot ? t("os.card.notePilot") : t("os.card.note")}</label>
+      <label htmlFor={`teacher-note-${student.id}`} className="micro text-text-faint">{oneLineRow ? t("os.card.notePilot") : t("os.card.note")}</label>
       <textarea
         id={`teacher-note-${student.id}`}
         rows={3}
         value={cardEval.note}
         onChange={(e) => onNote(e.target.value)}
-        placeholder={pilot ? t("os.card.notePhPilot") : t("os.card.notePh")}
+        placeholder={oneLineRow ? t("os.card.notePhPilot") : t("os.card.notePh")}
         className={`${TEXTAREA_AUTOSIZE} border-line focus:border-primary min-h-20 rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none`}
       />
     </div>
   );
   const paras = splitComment(rep.draft);
+  const draftLead = splitLevelsLead(rep.draft); // 맨 위 수업 평가 표 = 읽기 전용(원장 2026-10-26)
 
   return (
     // @container — 아래 본문 2열 분기는 **창 폭이 아니라 이 카드 폭** 기준(3열 그리드 안이라 브레이크포인트가 안 맞음).
@@ -700,7 +706,7 @@ export function ReportCard({
           disabled={locked}
           className="contents [&_input:disabled]:opacity-50 [&_textarea:disabled]:opacity-50 [&_select:disabled]:opacity-50 [&_button:disabled]:opacity-50 [&:disabled_*]:cursor-not-allowed"
         >
-        {pilot ? null : noteField}
+        {oneLineRow ? null : noteField}
         <div className="flex flex-1 flex-col gap-1.5">
           <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
             <div className="flex flex-wrap items-center gap-1.5">
@@ -776,11 +782,16 @@ export function ReportCard({
               </label>
             </div>
           ) : (
+            <>
+            {/* 맨 위 '수업 평가' 표는 편집 칸에서 빼서 읽기 전용으로(원장 2026-10-26). 저장 글은 다시 붙인 그대로다. */}
+            <LevelsLead lead={draftLead.lead} />
             <textarea
               // 영어 글 칸 — '사진·PDF 넣기'가 이 칸의 커서 줄을 읽어 그 자리에 첨부 줄을 넣는다(카드는 한 학생만 그린다).
               id={isEnglishRow ? ENGLISH_DRAFT_TEXTAREA_ID : undefined}
-              value={rep.draft}
-              onChange={(e) => onSubjectDraft(subjectName, e.target.value)}
+              // 뗀 표만큼 커서 위치를 보정하라는 표식 — 첨부 줄 넣기가 전체 글 기준 위치를 쓴다(onescreen-client insertEnglishMediaFor).
+              data-caret-offset={draftLead.lead && draftLead.body ? draftLead.lead.length + 2 : 0}
+              value={draftLead.body}
+              onChange={(e) => onSubjectDraft(subjectName, joinLevelsLead(draftLead.lead, e.target.value))}
               // 시범 대상 = 자동작성 전엔 보기만, 자동작성 뒤엔 고칠 수 있다(원장 2026-10-23 *"자동작성하고나면 수정은 할수있게"*).
               readOnly={pilotLocked}
               placeholder={
@@ -795,6 +806,7 @@ export function ReportCard({
                 isEnglishRow ? "min-h-[280px]" : "min-h-[110px]"
               } flex-1 resize-none rounded-lg border ${pilotLocked ? "bg-bg-soft" : "bg-background"} px-3 py-2 text-sm leading-relaxed outline-none`}
             />
+            </>
           )}
         </div>
 
@@ -832,7 +844,7 @@ export function ReportCard({
             />
           </div>
         )}
-        {pilot ? noteField : null}
+        {oneLineRow ? noteField : null}
         </fieldset>
 
         {/* ClassNote 자동 발송 — 저장 + 큐 적재(로컬 워커가 자동 게시). 상태는 배지로 표시.

@@ -11,6 +11,7 @@ import {
   conflictsSchoolLevel,
   formatSchedule,
   gradeToken,
+  isClosedOutClass,
   isHalfPeriodClass,
   rankPrepClasses,
   seatsLeft,
@@ -118,6 +119,22 @@ describe("rankPrepClasses", () => {
   it("과목·학년 모두 미상이면 전체를 후보로 둔다(빈 목록으로 만들지 않는다)", () => {
     const ranked = rankPrepClasses(pool, { subjectKeyLabel: null, grade: null });
     expect(ranked).toHaveLength(4);
+  });
+
+  it("지금 열려 있지 않은 반(배치·수강생 둘 다 없음)은 뺀다 — 현원 0이라 '현원 적은 순' 맨 앞에 서던 끝난 특강 (2026-10-26)", () => {
+    const withEnded = [
+      { id: "ended", className: "중1 수학 주말특강 (~26.09.19)", subjectLabel: "수학", teacherName: null, scheduleLabel: null, seats: null, enrolled: 0, notes: null, closedOut: true },
+      { id: "open", className: "중1 수학 C", subjectLabel: "수학", teacherName: null, scheduleLabel: "월 16:20", seats: null, enrolled: 3, notes: null, closedOut: false },
+      { id: "new", className: "중1 수학 신설", subjectLabel: "수학", teacherName: null, scheduleLabel: "화 18:20", seats: null, enrolled: 0, notes: null, closedOut: false },
+    ];
+    const ranked = rankPrepClasses(withEnded, { subjectKeyLabel: "수학", grade: "중1" });
+    expect(ranked.map((c) => c.id)).toEqual(["new", "open"]);
+  });
+
+  it("isClosedOutClass — 배치도 학생도 없을 때만(하나라도 있으면 남긴다)", () => {
+    expect(isClosedOutClass(0, 0)).toBe(true);
+    expect(isClosedOutClass(0, 2)).toBe(false); // 배치 자료가 비었어도 학생이 다니면 남긴다
+    expect(isClosedOutClass(1, 0)).toBe(false); // 학생은 없어도 시간이 잡힌 반(새 반)은 남긴다
   });
 
   it("다른 학제가 명시된 반은 과목이 맞아도 배제 — 중1 상담지에 '[특강] 고등개별' 금지 (적대 검수 07-28 실사례)", () => {

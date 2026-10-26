@@ -67,13 +67,13 @@ describe("snapshotFromDay · parseJjSnapshot", () => {
 
 describe("slotAvailability", () => {
   it("그날 응시가 있어야 시험결과지, 30일 활동이 있어야 학습분석지", () => {
-    expect(slotAvailability(snap(study(0), []))).toEqual({ 시험결과지: false, 학습분석지: false });
-    expect(slotAvailability(snap(study(12), [exam]))).toEqual({ 시험결과지: true, 학습분석지: true });
-    expect(slotAvailability(snap(study(0, 1), []))).toEqual({ 시험결과지: false, 학습분석지: true });
-    expect(slotAvailability(snap(null, [exam]))).toEqual({ 시험결과지: true, 학습분석지: false });
+    expect(slotAvailability(snap(study(0), []))).toEqual({ 시험결과지: false, 학습분석지: false, 단어백분위: false, 학습배지: false });
+    expect(slotAvailability(snap(study(12), [exam]))).toEqual({ 시험결과지: true, 학습분석지: true, 단어백분위: false, 학습배지: false });
+    expect(slotAvailability(snap(study(0, 1), []))).toEqual({ 시험결과지: false, 학습분석지: true, 단어백분위: false, 학습배지: false });
+    expect(slotAvailability(snap(null, [exam]))).toEqual({ 시험결과지: true, 학습분석지: false, 단어백분위: false, 학습배지: false });
   });
 
   it("자료가 없으면 둘 다 없다", () => {
-    expect(slotAvailability(null)).toEqual({ 시험결과지: false, 학습분석지: false });
+    expect(slotAvailability(null)).toEqual({ 시험결과지: false, 학습분석지: false, 단어백분위: false, 학습배지: false });
   });
 });

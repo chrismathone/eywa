@@ -89,6 +89,29 @@ function asBoolTrue(v: string | boolean | undefined): boolean {
 }
 
 /**
+ * 약점 단원 목록 — 쉼표·가운뎃점·빗금에서 나누되 **괄호 안은 나누지 않는다**(2026-10-26). Claude는 묶음을 괄호로 적는다
+ * ('문법(분사, 동명사, 능동태·수동태)') — 예전처럼 다 나누면 '문법(분사'·'수동태)' 같은 깨진 칩이 저장됐다(시험 15건 중 4건).
+ * 괄호가 없으면 예전과 똑같이 나뉜다(옛 저장본 20건 중 달라지는 것 0건).
+ */
+export function splitOutsideParens(text: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let cur = "";
+  for (const ch of text) {
+    if (ch === "(") depth++;
+    else if (ch === ")" && depth > 0) depth--;
+    if (depth === 0 && /[,、·/]/.test(ch)) {
+      out.push(cur);
+      cur = "";
+      continue;
+    }
+    cur += ch;
+  }
+  out.push(cur);
+  return out.map((s) => s.trim()).filter(Boolean);
+}
+
+/**
  * 추출 JSON → enrollment_consultations DB 패치(snake_case 컬럼). 빈 필드만 포함.
  * jsonb(learning_history·subject_details)는 하위 키 단위로 빈 곳만 병합.
  */
@@ -197,10 +220,7 @@ export function buildFormPatch(
     lhChanged = true;
   }
   if ((!lh.weakSubjects || lh.weakSubjects.length === 0) && clean(ex.weakSubjects)) {
-    const list = clean(ex.weakSubjects)!
-      .split(/[,、·/]/)
-      .map((s) => s.trim())
-      .filter(Boolean);
+    const list = splitOutsideParens(clean(ex.weakSubjects)!);
     if (list.length > 0) {
       mergedLh.weakSubjects = list;
       lhChanged = true;

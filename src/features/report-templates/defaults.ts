@@ -55,7 +55,7 @@ export const ENGLISH_TEMPLATE_TOKENS: readonly TemplateToken[] = [
   { key: "숙제", label: "오늘 숙제", source: "원스크린 오늘 과제 칸" },
   { key: "다음테스트", label: "다음 시간 테스트", source: "다음 시간 테스트 안내 칸" },
   { key: "코멘트", label: "AI 코멘트", source: "AI가 쓰는 학생별 피드백", ai: true },
-  { key: "출결", label: "출결", source: "출석부의 지각·조퇴·공결 + 사유를 문장으로 — 출석이면 줄이 빠진다" },
+  { key: "출결", label: "출결", source: "출석부의 출석·지각·조퇴·공결(+ 사유)을 문장으로 — 출결 기록이 없으면 줄이 빠진다" },
   { key: "수업평가", label: "수업 평가 표", source: "수업 태도·숙제 완성도를 하~상 눈금 표로" },
   { key: "일일테스트", label: "일일 테스트 문장", source: "점수 + 한마디. 시험이 없으면 '보지 않았습니다'" },
   { key: "확인테스트", label: "확인 테스트 문장", source: "점수 + 한마디. 없으면 줄이 빠진다" },
@@ -73,6 +73,18 @@ export const ENGLISH_TEMPLATE_TOKENS: readonly TemplateToken[] = [
     key: "학습분석지",
     label: "학습 분석지(그림)",
     source: "인재원 30일 학습 분석지 — 저장할 때 인재원에서 받아 이 줄 자리에 그린다. 학습 기록이 없으면 줄이 빠진다",
+    image: true,
+  },
+  {
+    key: "단어백분위",
+    label: "단어 백분위(그림)",
+    source: "인재원 누적 단어·장기기억 단어 수와 학년·반 백분위(기본모드 기준) — 인재원이 순위를 안 주면 줄이 빠진다",
+    image: true,
+  },
+  {
+    key: "학습배지",
+    label: "학습 배지(그림)",
+    source: "인재원 학습 레벨 배지(통과한 학년 과정) — 아직 배지가 없으면 줄이 빠진다. 빼려면 이 줄을 지운다",
     image: true,
   },
 ] as const;
@@ -236,6 +248,11 @@ export const BUILTIN_JJ_SHEET_TEMPLATE: ReportTemplate = {
     "■ 일일 테스트",
     "{일일테스트}",
     "",
+    // 단어 순위·학습 배지(원장 2026-10-26) — 인재원이 순위·배지를 줄 때만 선다. 빼려면 그 줄을 지운다(그림 자리 줄 규약).
+    "■ 단어 학습 현황",
+    "{학습배지}",
+    "{단어백분위}",
+    "",
     "■ SRS 학습 결과",
     "{시험결과지}",
     "{학습분석지}",
@@ -294,6 +311,8 @@ export const TEMPLATE_PREVIEW_SAMPLE: Readonly<Record<TemplateTokenKey, string>>
   한마디: "오늘도 끝까지 집중해 줘서 고마웠어요!",
   시험결과지: imageSlotMarker("시험결과지"),
   학습분석지: imageSlotMarker("학습분석지"),
+  단어백분위: imageSlotMarker("단어백분위"),
+  학습배지: imageSlotMarker("학습배지"),
 };
 
 /** 템플릿 본문 상한 — ClassNote 공지 본문 4,000자 fail-closed 선례(notice-actions)와 같은 값. */

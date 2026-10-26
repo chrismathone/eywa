@@ -3252,6 +3252,12 @@ export const SHEET_DICT = {
   "os.card.hwTodayAria": { ko: "{subject} 오늘 과제", en: "{subject} today's homework" },
   "os.card.note": { ko: "특이사항 (메모)", en: "Notes (memo)" },
   "os.card.notePilot": { ko: "사랑의 한마디 (필수)", en: "A loving word (required)" },
+  // 학부모 문구 위 읽기 전용 '수업 평가' 요약(원장 2026-10-26 — 편집 칸에서 뺐다).
+  "os.lead.title": { ko: "수업 평가", en: "Class rating" },
+  "os.lead.hint": {
+    ko: "수업 평가는 수업 태도·숙제·이해도 칸에서 만들어집니다 — 바꾸려면 그 칸을 고치고 자동작성을 다시 누르세요",
+    en: "Built from the attitude, homework and understanding fields — change those and run auto-write again",
+  },
   "os.card.hwMiss.label": { ko: "미제출 사유 (필수)", en: "Why it was not done (required)" },
   "os.card.hwMiss.ph": {
     ko: "예: 감기로 몸이 좋지 않았다고 합니다 · 보고서 숙제 완성도에 그대로 들어갑니다",
@@ -4275,6 +4281,16 @@ export const SHEET_DICT = {
     en: " · {n} out of scope (no progress, unmarked attendance, absent or already sent)",
   },
   "os.c.bulkFail": { ko: " · 실패 {n}건", en: " · {n} failed to send" },
+  // 새 보고서 조건(자동작성·사랑의 한마디·사유)에 걸려 서버가 거절한 행(원장 2026-10-26) — 저장은 됐다.
+  "os.c.bulkPilot": {
+    ko: " · 자동작성·사랑의 한마디·사유 확인 필요 {n}건(저장만 됨)",
+    en: " · {n} saved but not sent — redo auto-write, add the note, or add the reason",
+  },
+  // 일괄 발송 확인창 — 새 보고서 조건에 걸려 빠지는 행(누구인지 명시).
+  "os.c.linePilot": {
+    ko: "\n자동작성 다시·사랑의 한마디·시험 없음/숙제 미제출 사유가 필요한 {n}건은 발송에서 제외됩니다 — {names}{more}",
+    en: "\n{n} rows need auto-write again, the closing note, or a reason and are left out — {names}{more}",
+  },
   // 반별 발송인데 보낼 반이 없어 막힌 행(원장 2026-09-30 — 담당 반이 없으면 발송 불가).
   "os.c.bulkNoClass": { ko: " · 보낼 반 없음 {n}건(발송 안 함)", en: " · {n} not sent — no class to send to" },
   // 반별 발송 '보낼 반' 단건 안내(원장 2026-09-30) — 서버 status로 고른다(서버 한국어 문장을 그대로 띄우지 않게).

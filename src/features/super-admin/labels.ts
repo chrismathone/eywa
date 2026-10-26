@@ -103,6 +103,9 @@ export const TOGGLE_FEATURES = [
   // 영상 숙제 설명 AI 참고 메모 — 켠 지점만 수학 영상을 밤 배치로 판정하고 영상 제출 현황 재생 창에 메모가 선다(원장 2026-10-20).
   // 학생 영상 화면·목소리가 AI로 나가므로 기본 꺼짐. 읽는 곳 = features/video-review/server/{gate,queue,queries}.ts.
   { key: "video_review", label: "영상 설명 AI 참고 메모", defaultOn: false },
+  // 수업보고서 평점 정기 처리 — 켠 지점만 새로 발송된 보고서를 밤 배치(Haiku 5.5)로 매겨 목록 '평점' 열에 싣는다(2026-10-26 크레딧 MVP).
+  // 보고서 글이 AI로 나가고 비용이 들어 기본 꺼짐. 읽는 곳 = features/report-rating/server/queue.ts(cron이 부른다 · 0455a 필요).
+  { key: "report_rating", label: "수업보고서 평점 정기 처리", defaultOn: false },
 ] as const;
 
 /**

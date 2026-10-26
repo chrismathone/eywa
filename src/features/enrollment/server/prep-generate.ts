@@ -34,9 +34,9 @@ export async function runPrepBriefGeneration(
   let record: PrepBriefRecord;
   try {
     const { data, model } = await generateJSON<unknown>({
-      // deepseek 경로는 generateJSON이 추론 토큰 여유(32k 하한)로 자동 상향한다.
+      // 응답 상한은 generateJSON이 바닥값(Claude 5 계열 64,000)으로 올린다 — 생각 토큰까지 들어가게.
       maxTokens: 8192,
-      provider: "deepseek",
+      provider: "anthropic", // 2026-10-26 원장 "딥시크로 바꾼거 다 클로드로" — Sonnet 5.5(기본 등급)
       meta: { feature: "enrollment_prep_brief", tenantId },
       prompt: buildPrepBriefPrompt(facts),
     });
@@ -119,7 +119,6 @@ export async function generatePrepBriefOnIntake(consultationId: string, tenantId
  * 화면은 진행바 + watcher(realtime+폴링)가 완료 시 자동 새로고침. 이전 브리프는 생성 중에도
  * 유지된다(재생성 실패 = 직전 브리프 증발 방지).
  *
- * provider = **DeepSeek v4-pro**(원장 지시 2026-07-29 — Sonnet 아님). 전사 분석 3종과 같은 정책:
- * 키 없으면 anthropic 무중단 폴백, 검증(grounding) 탈락 시 결정론 폴백 브리프.
- * v4-pro는 추론형이라 더 느리지만 백그라운드라 감수(전사 분석과 동일 트레이드오프).
+ * provider = **Claude Sonnet 5.5**(원장 2026-10-26 *"딥시크로 바꾼거 다 클로드로"* — 그 전 07-29~ DeepSeek v4-pro).
+ * Claude가 막히면 DeepSeek 무중단 폴백, 검증(grounding) 탈락 시 결정론 폴백 브리프.
  */

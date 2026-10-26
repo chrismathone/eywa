@@ -9,6 +9,7 @@
  *    분명해야 하고, 테스트를 못 친 사유처럼 **꼭 들어가야 하는 문장**은 모델에 맡기면 빠질 수 있다.
  */
 
+import { asProgressMode } from "./progress-mode";
 import { attitudeClause } from "./attitude";
 import { parseHomeworkRate } from "./homework-rate";
 import { activeUnderstanding, PILOT_SECTION_TITLES as T, pilotSection, understandingSig } from "./math-report-pilot";
@@ -158,6 +159,8 @@ export function homeworkSentence(v: string, missReason?: string | null): string 
 /** 항목 글의 재료 — 원스크린이 AI에 주는 값(ReportCommentInput)과 같은 모양. */
 export type PilotFacts = {
   progress?: string;
+  /** 진도 칸의 복습·문제풀이 — 진도 첫 문장이 이 값으로 갈린다(원장 2026-10-26). */
+  progressMode?: string | null;
   dailyTest: string;
   dailyTestSkip?: DailyTestSkip | null;
   checkTest: string;
@@ -166,6 +169,8 @@ export type PilotFacts = {
   /** 숙제 미제출 사유(시범 행, 강사 원문) — 미제출일 때만 글에 들어간다. */
   homeworkMissReason?: string;
   homeworkToday: string;
+  /** 교재명 — 오늘의 숙제가 쪽수뿐이면 앞에 붙인다(homeworkTodayLine, 2026-10-26). */
+  textbook?: string;
   videoHomework?: boolean;
   videoHomeworkDue?: string;
   /** 소단원별 이해도(뺀 것 제외) — 평가표 '이해도' 줄의 재료. */
@@ -239,18 +244,34 @@ function padFw(text: string, w: number): string {
   return t + FW.repeat(Math.max(0, w - [...t].length));
 }
 
-/** 평가표 본문 — 표 모양(머리 줄 + 항목 줄, 고른 칸에 ●). 값이 있는 줄만, 하나도 없으면 "" (항목째 빠진다). */
+/** 값이 없는 줄의 표기(원장 2026-10-26). */
+export const LEVEL_NONE_HOMEWORK = "숙제 없음";
+export const LEVEL_NONE = "평가 없음";
+/** 값이 없는 줄에서 이름과 표기 사이 기호 — 카드가 이 기호로 '없음' 줄을 알아본다(pilot-notes.ts parseLevelRows). */
+export const LEVEL_NONE_SEP = "—";
+
+/** 평가표 본문 — 표 모양(머리 줄 + 항목 줄, 고른 칸에 ●). 값이 없는 줄은 `이름 — 숙제 없음`. 줄이 하나도 없으면 "" (항목째 빠진다). */
 export function levelTableText(f: Pick<PilotFacts, "attitude" | "homework" | "understanding">): string {
-  const rows: [string, Level | null][] = [
-    [T.attitude, attitudeLevel(f.attitude)],
-    [T.homework, homeworkLevel(f.homework)],
-    ["이해도", understandingLevel(f.understanding)], // 표의 줄 이름은 짧게 — 항목 제목은 '오늘의 수업'
+  // 값이 없는 줄도 지우지 않는다(원장 2026-10-26 *"여기서는 그냥 사라지자나 없다는거 여기서 표시해줘"*) — `이름 — 숙제 없음`.
+  //   단 값은 있는데 정도를 모르는 옛 자유입력(예: '완료')은 지어내지 않고 그 줄을 뺀다(종전대로).
+  //   이해도 줄은 `understanding`을 넘긴 행(수학)에만 — 영어엔 그 칸이 없다.
+  const hw = f.homework.trim();
+  const rows: [string, string | null][] = [
+    [T.attitude, attitudeLevel(f.attitude) ?? (f.attitude.trim() ? null : LEVEL_NONE)],
+    [T.homework, homeworkLevel(f.homework) ?? (!hw || hw === "없음" || hw === "—" ? LEVEL_NONE_HOMEWORK : null)],
   ];
-  const filled = rows.filter((r): r is [string, Level] => r[1] != null);
+  // 표의 줄 이름은 짧게 — 항목 제목은 '오늘의 수업'
+  if (f.understanding !== undefined) rows.push(["이해도", understandingLevel(f.understanding) ?? LEVEL_NONE]);
+  const filled = rows.filter((r): r is [string, string] => r[1] != null);
   if (!filled.length) return "";
   const w = Math.max(2, ...filled.map(([l]) => [...l].length));
   const head = padFw("구분", w) + LEVELS.map((lv) => FW + padFw(lv, 2)).join("");
-  const lines = filled.map(([l, v]) => padFw(l, w) + LEVELS.map((lv) => FW + (lv === v ? "●" : "○") + FW).join("") + v);
+  const isLevel = (v: string): v is Level => (LEVELS as readonly string[]).includes(v);
+  const lines = filled.map(([l, v]) =>
+    isLevel(v)
+      ? padFw(l, w) + LEVELS.map((lv) => FW + (lv === v ? "●" : "○") + FW).join("") + v
+      : `${padFw(l, w)}${FW}${LEVEL_NONE_SEP} ${v}`,
+  );
   return [head.replace(/\u3000+$/, ""), ...lines].join("\n");
 }
 
@@ -265,12 +286,27 @@ export function pilotLevelsSection(f: Pick<PilotFacts, "attitude" | "homework" |
  * 일일 테스트·숙제 완성도·오늘의 숙제는 비어도 '없었다'고 적는다(`NO_*_TEXT`, 원장 2026-10-26). 확인 테스트·이해도·출결은 값이 없으면 항목째 뺀다. `understandingText`는 AI가 쓴 이해도 글, `videoReceipt`는 지난 영상 숙제 확인 문장.
  * 오늘의 숙제는 숙제 내용만 적는다 — 원장 2026-10-23 *"오늘 내준 과제 및 다음 시간에 잘 해 왔는지 등 멘트 삭제"*.
  */
+/** 쪽수·범위만 적힌 숙제인가 — `153-170p` · `p40-p56` · `128-135p, 140-149p` · `~131p`. 숫자가 하나는 있어야 한다. */
+const PAGES_ONLY = /^(?=.*\d)[\dpP쪽.\s\-~–`,]+$/;
+
+/**
+ * 오늘의 숙제 한 줄 — 숙제 칸이 **쪽수만**이면 교재명을 앞에 붙인다(원장 2026-10-26 *"같은 교재면 교재 명과 오늘과제랑 잘 조합 시켜서 바로 반영"*).
+ * 실측(9월~ 수학 보고서): 숙제 칸의 상당수가 `153-170p`처럼 쪽수뿐이고 그때 책은 교재 칸의 책이다 → "쎈 미적분 153-170p".
+ * 🔴 붙이지 않는 경우 — 숙제에 글자가 섞였다(`쎈 25-35p`·`프린트`: 이미 책을 적었거나 다른 자료) · 교재가 여러 권이다(`,`·`/` — 어느 책인지 모른다).
+ */
+export function homeworkTodayLine(homeworkToday: string, textbook?: string | null): string {
+  const hw = homeworkToday.trim();
+  const tb = (textbook ?? "").trim();
+  if (!hw || !tb || /[,/]/.test(tb) || !PAGES_ONLY.test(hw)) return hw;
+  return `${tb} ${hw}`;
+}
+
 export function pilotBody(f: PilotFacts, extra: { understandingText?: string; videoReceipt?: string | null }): string {
   const daily = (f.dailyTestSkip ? testSkipText(f.dailyTestSkip) : scoreText(f.dailyTest)) || NO_DAILY_TEST_TEXT;
   const hw =
     [homeworkSentence(f.homework, f.homeworkMissReason), extra.videoReceipt?.trim() ?? ""].filter(Boolean).join(" ") || NO_HOMEWORK_TEXT;
   const video = f.videoHomework === true ? `영상 숙제가 있습니다${f.videoHomeworkDue ? `(${f.videoHomeworkDue} 제출)` : ""}.` : "";
-  const today = [f.homeworkToday.trim() || (video ? "" : NO_HOMEWORK_TODAY_TEXT), video].filter(Boolean).join("\n");
+  const today = [homeworkTodayLine(f.homeworkToday, f.textbook) || (video ? "" : NO_HOMEWORK_TODAY_TEXT), video].filter(Boolean).join("\n");
   return [
     pilotSection(T.attendance, f.attendance),
     pilotSection(T.daily, daily),
@@ -292,12 +328,14 @@ export function pilotBody(f: PilotFacts, extra: { understandingText?: string; vi
 export function pilotFactsSig(f: PilotFacts, understanding: readonly { title: string; score: number }[]): string {
   return JSON.stringify([
     f.progress ?? "",
+    // 진도 성격(복습·문제풀이) — 값이 있을 때만 서명에 싣는다(안 고른 행의 서명은 예전과 같다).
+    ...(asProgressMode(f.progressMode) ? [asProgressMode(f.progressMode)] : []),
     f.dailyTestSkip ? ["skip", f.dailyTestSkip.reason, f.dailyTestSkip.detail.trim()] : scoreOnly(f.dailyTest),
     scoreOnly(f.checkTest),
     f.attitude.trim(),
     f.homework.trim(),
     isHomeworkMissed(f.homework) ? (f.homeworkMissReason ?? "").trim() : "",
-    f.homeworkToday.trim(),
+    homeworkTodayLine(f.homeworkToday, f.textbook), // 교재명을 붙인 줄 — 붙이지 않는 행은 예전 값 그대로(서명이 안 바뀐다)
     f.videoHomework === true,
     understandingSig(understanding),
     // 출결 — 자동작성 뒤 출석부에서 지각·사유를 고치면 글이 옛 출결을 말한다(발송 게이트가 다시 자동작성을 요구해야 한다).

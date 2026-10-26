@@ -57,3 +57,15 @@ export function progressPredicate(mode: ProgressMode | null): string {
   if (mode === "문제풀이") return "문제풀이를 진행했";
   return "진도를 진행했";
 }
+
+/**
+ * 영어 템플릿 `{진도}` 값 — 진도 칸 원문 + (복습·문제풀이를 골랐으면) 그날 수업 성격 한 줄(원장 2026-10-26
+ * *"복습이나 문제풀이를 선택하면 멘트도 그에 맞게 — 오늘은 문제풀이 위주, 오늘은 이걸 복습했다"*). 안 골랐으면 원문 그대로.
+ * 🔑 진도 원문에는 섞지 않는다(위 🔴 — 진도 문자열은 차시만). 글로 내보낼 값에서만 붙인다.
+ */
+export function progressWithMode(progress: string, mode: string | null | undefined): string {
+  const p = progress.trim();
+  const kind = asProgressMode(mode);
+  if (!p || !kind) return p;
+  return `${p}\n${kind === "복습" ? "오늘은 위 내용을 복습했습니다." : "오늘은 위 내용의 문제풀이 위주로 수업했습니다."}`;
+}

@@ -28,6 +28,7 @@ import { englishTemplateValues, englishTestText } from "@/features/report-templa
 import { mentionsStudentName } from "@/features/report-templates/name-mention";
 import { englishFactsKey, textHash, type EnglishFacts } from "@/features/report-templates/provenance";
 import { englishSheetValues } from "./english-sheet";
+import { progressWithMode } from "./progress-mode";
 
 /** 한 행의 사실 — 이미 사람이 읽는 표기(buildReportFields 결과·행 평가값)를 그대로 받는다. */
 export type EnglishRowFacts = {
@@ -45,7 +46,9 @@ export type EnglishRowFacts = {
    * 🔑 이것도 '사실'이다: 자료가 생기거나 사라지면 템플릿 글 그대로인 글은 저장 직전 다시 짜이고, 고친 글엔 칩이 선다.
    */
   slots?: Partial<Record<ImageSlotKey, boolean>>;
-  /** 그날 출결 문장(attendance-sentence.ts, 2026-10-26) — 항목 보고서의 '출결' 칸. 출석이면 "". */
+  /** 진도 칸의 복습·문제풀이(progress-mode.ts) — `{진도}` 아래에 그날 수업 성격 한 줄이 붙는다(원장 2026-10-26). */
+  progressMode?: string | null;
+  /** 그날 출결 문장(attendance-sentence.ts, 2026-10-26) — 항목 보고서의 '출결' 칸. 출결 기록이 없으면 "". */
   attendance?: string;
 };
 
@@ -95,7 +98,7 @@ export function composeEnglishDraft(
   const values = englishTemplateValues({
     studentName: facts.studentName,
     teacherName: facts.teacherName,
-    progress: facts.progress,
+    progress: progressWithMode(facts.progress, facts.progressMode),
     homeworkToday: facts.homeworkToday,
     tests: { daily: facts.dailyTest, check: facts.checkTest },
     nextTest: parts.nextTest ?? "",
@@ -124,7 +127,8 @@ export function templateHashOf(text: string): string {
 /** AI에 넘기는 사실(지문 재료) — 생성할 때와 확인할 때 **같은 함수**로 만든다. */
 export function aiFactsOf(facts: EnglishRowFacts, nextTest: string): EnglishFacts {
   return {
-    progress: facts.progress,
+    // 복습·문제풀이를 골랐으면 그 한 줄까지(템플릿 글과 같은 값) — AI 코멘트가 "진도를 나갔다"고 거꾸로 쓰지 않게.
+    progress: progressWithMode(facts.progress, facts.progressMode),
     testText: englishTestText({ daily: facts.dailyTest, check: facts.checkTest }),
     homeworkToday: facts.homeworkToday,
     nextTest,
@@ -145,7 +149,8 @@ export function aiFactsHashOf(facts: EnglishRowFacts, nextTest: string): string 
  */
 const LEGACY_FACT_TOKENS = ["학생", "작성자", "진도", "테스트", "숙제", "다음테스트"] as const;
 // 항목 칸(2026-10-26)도 사실이다 — 점수·태도·출결이 바뀌면 그 문장이 바뀐다. 역시 **뒤에** 붙인다(앞 칸들의 뜻 불변).
-const FACT_TOKENS = [...LEGACY_FACT_TOKENS, "시험결과지", "학습분석지", ...SHEET_TOKEN_KEYS] as const;
+// 단어백분위·학습배지(2026-10-26)도 맨 뒤 — 이 칸을 안 쓰는 템플릿의 지문은 그대로다(쓰는 칸만 센다).
+const FACT_TOKENS = [...LEGACY_FACT_TOKENS, "시험결과지", "학습분석지", ...SHEET_TOKEN_KEYS, "단어백분위", "학습배지"] as const;
 export type FactToken = (typeof FACT_TOKENS)[number];
 
 function factValue(token: FactToken, facts: EnglishRowFacts, nextTest: string): string {
@@ -155,7 +160,8 @@ function factValue(token: FactToken, facts: EnglishRowFacts, nextTest: string): 
     case "작성자":
       return facts.teacherName;
     case "진도":
-      return facts.progress;
+      // 글에 들어간 값 그대로(성격 한 줄 포함) — 알약을 바꾸면 '칸이 바뀜'으로 읽혀야 한다.
+      return progressWithMode(facts.progress, facts.progressMode);
     case "테스트":
       return englishTestText({ daily: facts.dailyTest, check: facts.checkTest });
     case "숙제":
@@ -164,6 +170,8 @@ function factValue(token: FactToken, facts: EnglishRowFacts, nextTest: string): 
       return nextTest;
     case "시험결과지":
     case "학습분석지":
+    case "단어백분위":
+    case "학습배지":
       return facts.slots?.[token] ? imageSlotMarker(token) : "";
     default:
       return englishSheetValues(facts)[token];
@@ -199,12 +207,12 @@ export function templateImageSlots(template: ReportTemplate): ImageSlotKey[] {
  *    자동 글이라 '칸이 바뀜'이 거짓으로 서지 않는다.
  */
 export function slotFactsFor(
-  known: Readonly<Record<ImageSlotKey, boolean>> | null,
+  known: Readonly<Partial<Record<ImageSlotKey, boolean>>> | null,
   baselineText: string,
 ): Record<ImageSlotKey, boolean> {
-  if (known) return { 시험결과지: !!known.시험결과지, 학습분석지: !!known.학습분석지 };
+  if (known) return Object.fromEntries(IMAGE_SLOT_KEYS.map((k) => [k, !!known[k]])) as Record<ImageSlotKey, boolean>;
   const had = new Set(usedImageSlots(baselineText));
-  return { 시험결과지: had.has("시험결과지"), 학습분석지: had.has("학습분석지") };
+  return Object.fromEntries(IMAGE_SLOT_KEYS.map((k) => [k, had.has(k)])) as Record<ImageSlotKey, boolean>;
 }
 
 /**

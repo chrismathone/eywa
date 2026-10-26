@@ -86,6 +86,24 @@ function fixQuestions(text: string): string {
     .join("\n");
 }
 
+/**
+ * 추출 학생 이름이 입력 이름에서 **성만 빠진 꼴**('도현' ↔ 입력 '김도현')이면 입력 이름으로(2026-10-26).
+ * Claude는 지침 '발화에 명시되지 않으면 null'을 글자대로 따라 전사에서 불린 이름만 적는다 — 이 값이 인쇄본 '학생명'
+ * (`print_payload.prospect.name`)에 그대로 나간다(시험 15건 중 5건 — 기존 DeepSeek 저장본은 입력 이름).
+ * 🔴 입력 이름의 끝과 정확히 같고 앞에 빠진 것이 한두 글자(성)일 때만 — 다른 이름(동명이인·ASR 오인식)은 손대지 않는다.
+ *    동명이인 구분 글자('김근우A')는 떼고 견주되, 바꿀 때는 입력 이름 그대로 쓴다.
+ */
+export function fullProspectName(extracted: string | null, inputName: string | null | undefined): string | null {
+  const full = (inputName ?? "").trim();
+  if (!extracted || !full) return extracted;
+  const ex = extracted.replace(/\s/g, "");
+  const base = full.replace(/\s/g, "").replace(/[A-Za-z]+$/, "");
+  const surname = base.length - ex.length;
+  // 성 한 글자 + 이름, 또는 두 글자 성(남궁·제갈) + 두 글자 이상 이름 — '김도현'에서 '현'만 남은 것은 이름 일부라 손대지 않는다.
+  const ok = (surname === 1 && ex.length >= 1) || (surname === 2 && ex.length >= 2);
+  return ok && base.endsWith(ex) ? full : extracted;
+}
+
 /** speakerRoles는 추론 못 했으면 없다(undefined) — 재분석이 `?? 이전 값`으로 기존 역할을 이어받는다. */
 export type NormalizedConsultationReport = ConsultationReport13 & { speakerRoles?: Record<string, string> };
 
@@ -96,7 +114,10 @@ export type NormalizedConsultationReport = ConsultationReport13 & { speakerRoles
  * - 🔴 13섹션 칸이 하나도 없으면 던진다 — 빈 보고서를 '완료'로 저장하지 않는다(호출부가 '분석 실패'로 남긴다).
  * - multi(녹음 여럿) = 화자 글자가 녹음마다 따로라 '화자 A'를 역할로 바꾸지 않는다(최근 녹음 기준 역할이라 앞 녹음과 어긋난다).
  */
-export function normalizeConsultationReport(raw: unknown, opts: { multi?: boolean } = {}): NormalizedConsultationReport {
+export function normalizeConsultationReport(
+  raw: unknown,
+  opts: { multi?: boolean; /** 상담 행의 학생 이름(현재 입력값) — 성이 빠진 추출 이름을 되돌릴 때만 쓴다. */ inputName?: string | null } = {},
+): NormalizedConsultationReport {
   const { source: r, hasSections } = sectionSource(raw, SECTION_KEYS, EXTRA_KEYS);
   if (!hasSections) throw new Error(EMPTY_ANALYSIS_ERROR);
   const speakerRoles = cleanRoleMap(r.speakerRoles, canonicalRole);
@@ -108,7 +129,7 @@ export function normalizeConsultationReport(raw: unknown, opts: { multi?: boolea
   if (!(out.warnings as string).trim() && "warnings" in r) out.warnings = NO_WARNING;
   const ex = r.extracted && typeof r.extracted === "object" ? (r.extracted as Record<string, unknown>) : {};
   out.extracted = {
-    prospectName: nullable(ex.prospectName),
+    prospectName: fullProspectName(nullable(ex.prospectName), opts.inputName),
     grade: nullable(ex.grade),
     school: nullable(ex.school),
     parentName: nullable(ex.parentName),

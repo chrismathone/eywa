@@ -3,6 +3,7 @@
  * 카드↔표 토글의 표 쪽 행 구성·발송대상 판정을 순수 함수로 분리(CLAUDE.md: 계산 함수 분리+Vitest).
  */
 import { toHomeworkRateChoice } from "./homework-rate";
+import { asProgressMode } from "./progress-mode";
 import { resolveRowFields } from "./row-fields";
 import type { OneScreenStudent, PrevReport, Subject } from "./types";
 
@@ -299,6 +300,8 @@ export type BulkPatch = {
   homeworkToday?: string;
   /** 오늘 진도 — 필드명은 모듈 전체 규약(planPrevFill·planCopyFirstRow)과 같은 `today`. */
   today?: string;
+  /** 오늘 수업 성격(복습·문제풀이, progress-mode.ts) — 진도와 같은 과목 행에만(원장 2026-10-26). */
+  progressMode?: string;
   // ── 2026-10-02 추가(원장 *"일괄 입력에 지금 없는거 추가"*) — 전부 **행 단위**. 값이 없으면(undefined) 적용하지 않는다. ──
   /** 특이사항(강사 메모). */
   note?: string;
@@ -324,6 +327,8 @@ export type BulkTarget = {
   /** 진도를 같은 과목 행에만 넣기 위한 키(미지정=math, 진도 셀 분기와 동일 규약). */
   subjectKey: string;
   today: string;
+  /** 지금 수업 성격(복습·문제풀이) — "빈 칸만" 판정용. */
+  progressMode?: string | null;
   attitude: string | null;
   homework: string;
   textbook: string;
@@ -401,6 +406,10 @@ export function planBulkApply(
       (!onlyEmpty || !t.today.trim())
     )
       set.today = p.today;
+    // 수업 성격 — 진도와 같은 규칙(고른 과목 행에만 · '빈 칸만'은 성격을 안 고른 행에만).
+    const pm = asProgressMode(patch.progressMode);
+    if (pm && progressSubjectKey !== undefined && t.subjectKey === progressSubjectKey && (!onlyEmpty || !asProgressMode(t.progressMode)))
+      set.progressMode = pm;
     if (p.note !== undefined && (!onlyEmpty || !(t.note ?? "").trim())) set.note = p.note;
     // 테스트 — '빈 칸만'은 **점수가 빈 행**에만(문항수는 늘 값이 있어 빈 칸 판정이 없다 — 점수가 찬 행의 문항수를 바꾸면 그 점수가 깎인다).
     // 점수는 그 행의 문항수(이번에 바꾸면 그 값)를 넘지 않게 맞춘다 — 화면 점수 칸과 같은 규칙.

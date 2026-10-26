@@ -18,6 +18,7 @@ import {
   testSkipText,
   type PilotFacts,
 } from "./math-report-pilot-sections";
+import { parseLevelRows } from "./pilot-notes";
 import { evaluateSendGate } from "./send-gate";
 
 const facts: PilotFacts = {
@@ -112,11 +113,26 @@ describe("수업 평가 표(원장 2026-10-22 — 하·중하·중·중상·상)
     expect(t.every((l) => !l.includes(" "))).toBe(true);
     expect(pilotLevelsSection({ attitude: "좋음", homework: "" })).toMatch(/^■ 수업 평가\n구분/);
   });
-  it("값이 하나도 없으면 표째 없다 · 옛 태도 값은 정도를 몰라 뺀다", () => {
-    expect(levelTableText({ attitude: "", homework: "", understanding: [] })).toBe("");
-    expect(levelTableText({ attitude: "최고", homework: "없음" })).toBe("");
-    expect(pilotLevelsSection({ attitude: "", homework: "" })).toBe("");
+  it("값이 없는 줄도 지우지 않고 '없음'으로 남긴다(원장 2026-10-26) · 옛 태도 값은 정도를 몰라 뺀다", () => {
+    const empty = levelTableText({ attitude: "", homework: "", understanding: [] });
+    expect(empty).toContain("수업　태도　　— 평가 없음");
+    expect(empty).toContain("— 숙제 없음");
+    expect(empty).toContain("이해도");
+    // 영어(understanding을 안 넘김)엔 이해도 줄이 없다.
+    expect(levelTableText({ attitude: "", homework: "" })).not.toContain("이해도");
+    // 옛 자유입력 태도('최고')는 줄째 빠지고, 숙제 '없음'은 '숙제 없음'으로 남는다.
+    const legacy = levelTableText({ attitude: "최고", homework: "없음" });
+    expect(legacy).not.toContain("태도");
+    expect(legacy).toContain("— 숙제 없음");
     expect(pilotBody(facts, {})).not.toContain("■ 수업 평가");
+  });
+  it("'없음' 줄은 카드가 그대로 읽는다", () => {
+    const rows = parseLevelRows(levelTableText({ attitude: "좋음", homework: "", understanding: [] }));
+    expect(rows).toEqual([
+      { label: "수업 태도", level: "중상" },
+      { label: "숙제 완성도", level: null, none: "숙제 없음" },
+      { label: "이해도", level: null, none: "평가 없음" },
+    ]);
   });
 });
 

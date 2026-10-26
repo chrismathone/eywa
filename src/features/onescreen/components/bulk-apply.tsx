@@ -37,6 +37,7 @@ import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lan
 import { attendanceLabelOf } from "@/features/class-sheets/lib/attendance-label";
 import { formatSessionUnits } from "@/features/attendance/session-units";
 import { ProgressSelector } from "./progress-selector";
+import { ProgressModePills } from "./progress-mode-pills";
 import type { VideoHomeworkStatus } from "@/features/video-homework/types";
 import {
   BulkTestFields,
@@ -105,8 +106,17 @@ export function BulkApplyPopover({
   const [textbook, setTextbook] = useState("");
   const [homeworkToday, setHomeworkToday] = useState("");
   const [progress, setProgress] = useState("");
+  // 오늘 수업 성격(복습·문제풀이) — 행의 진도 칸과 같은 알약(원장 2026-10-26 *"일괄입력에 진도에 복습, 문제풀이가 선택이 안되는데"*).
+  const [lessonMode, setLessonMode] = useState<string | null>(null);
   const [subjectKey, setSubjectKey] = useState<string | null>(null);
   const [grade, setGrade] = useState(studyGrade);
+  // 반이 바뀌면(대상 행의 기본 진도 학년이 바뀌면) 그 반 기준으로 다시 연다 — 같은 반에서 고른 학년은 닫아도 유지(reset 주석).
+  // 예전엔 처음 마운트 때 한 번만 정해 앞 반의 학년으로 열렸다(2026-10-26 조사). 렌더 중 조건부 갱신 = React가 권하는 '값이 바뀌면 맞추기'.
+  const [gradeFor, setGradeFor] = useState(studyGrade);
+  if (gradeFor !== studyGrade) {
+    setGradeFor(studyGrade);
+    setGrade(studyGrade);
+  }
   const t = useSheetT();
   const tf = useSheetTf();
   const lang = useSheetLang();
@@ -140,7 +150,7 @@ export function BulkApplyPopover({
   const hasAny =
     mode === "copy"
       ? canCopy
-      : !!(attitude || homework || textbook.trim() || homeworkToday.trim() || progress.trim() || att ||
+      : !!(attitude || homework || textbook.trim() || homeworkToday.trim() || progress.trim() || lessonMode || att ||
           note.trim() || hasTest || video.check || video.homework !== null || video.due !== null);
   // 과목이 하나뿐이면 고를 것도 없다 — 그대로 그 과목.
   const activeSubject = subjects.find((s) => s.key === (subjectKey ?? subjects[0]?.key)) ?? subjects[0] ?? null;
@@ -156,6 +166,7 @@ export function BulkApplyPopover({
     setTextbook("");
     setHomeworkToday("");
     setProgress("");
+    setLessonMode(null);
     setAtt(null); // 출결은 특히 — 남아 있다가 다음 적용에 딸려 나가면 출석부에 그대로 박힌다
     setAttUnits(""); // 시수도 같은 이유 — 급여 재료라 잔존값이 다음 반에 딸려 나가면 안 된다
     setTests(EMPTY_BULK_TESTS);
@@ -184,7 +195,7 @@ export function BulkApplyPopover({
     // 대상이 여러 반인데 수업 내용 칸(진도·교재·오늘 과제)을 넣으면 반 이름을 밝힌다(원장 2026-10-15 — 다른 반·다른 학년 학부모에게
     // 엉뚱한 과제가 나갔다). 막지는 않는다 — 시험 대비처럼 여러 반에 일부러 같은 내용을 넣기도 한다.
     const contentAll = !!(textbook.trim() || homeworkToday.trim()); // 교재·오늘 과제 = 모든 대상 행
-    const progressKey = progress.trim() ? (activeSubject?.key ?? null) : null; // 진도 = 고른 과목 행만(planBulkApply)
+    const progressKey = progress.trim() || lessonMode ? (activeSubject?.key ?? null) : null; // 진도 = 고른 과목 행만(planBulkApply)
     const classNames = [...new Set((fields.classRows ?? [])
       .filter((r) => contentAll || (progressKey !== null && r.subjectKey === progressKey))
       .map((r) => r.className))];
@@ -222,6 +233,8 @@ export function BulkApplyPopover({
       {
         attitude: attitude ?? undefined, homework: homework ?? undefined, textbook, homeworkToday, today: progress,
         note,
+        // 수업 성격 — 고른 때만(진도와 같은 과목 행에만 들어간다, planBulkApply).
+        ...(lessonMode ? { progressMode: lessonMode } : {}),
         ...testPatch,
         // 영상 과제 — 고른 때만. 링크 넣기는 '있음'과 함께 켠 때만 싣는다(안 켰으면 그 값은 건드리지 않는다).
         ...(video.homework !== null ? { videoHomework: video.homework } : {}),
@@ -242,7 +255,11 @@ export function BulkApplyPopover({
   return (
     <Popover.Root
       open={open}
-      onOpenChange={(o) => {
+      onOpenChange={(o, details) => {
+        // 진도 선택 창(이 창 안의 두 번째 팝오버)이 떠 있는 채로 바깥을 누르면 그 클릭은 '선택 창 닫기'다 — 이 창까지 닫고
+        // 초기화하면 고른 진도가 사라져 "튕겨서 입력이 안 된다"(원장 제보 2026-10-26 · 7/23 도입 때부터). 선택 창만 닫히고 이 창은 남는다.
+        // 같은 클릭 안에서는 선택 창이 아직 화면에 있다(닫힘은 클릭 처리가 끝난 뒤 반영) — 순서와 상관없이 같은 판정.
+        if (!o && details.reason === "outside-press" && document.querySelector("[data-progress-picker]")) return;
         setOpen(o);
         if (!o) reset();
       }}
@@ -341,6 +358,8 @@ export function BulkApplyPopover({
                   <ProgressSelector
                     value={progress}
                     onChange={setProgress}
+                    mode={lessonMode}
+                    onMode={setLessonMode}
                     studyGrade={grade}
                     onStudyGrade={setGrade}
                     studentGrade={grade}
@@ -355,6 +374,10 @@ export function BulkApplyPopover({
                     aria-label={t("os.bulk.progressAria")}
                     className="border-line bg-card focus:border-primary h-8 w-full rounded-lg border px-2 text-xs outline-none"
                   />
+                )}
+                {/* 수학은 진도 고르기 안에 알약이 있다 — 자유 입력 과목만 칸 아래에(행과 같은 자리). */}
+                {isMathSubject(activeSubject.key) ? null : (
+                  <ProgressModePills mode={lessonMode} onMode={setLessonMode} compact ariaLabel={t("os.bulk.progressAria")} />
                 )}
                 <p className="text-text-faint mt-1 text-xs">
                   {tf("os.bulk.subjectOnly", { name: activeSubject.name })}

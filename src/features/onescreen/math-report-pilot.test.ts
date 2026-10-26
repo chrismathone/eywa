@@ -82,6 +82,24 @@ describe("진도 첫 문장", () => {
     expect(progressLead("이승엽", [], "월말평가")).toBe("우리 승엽이는 오늘 월말평가 수업을 했습니다.");
     expect(progressLead("이승엽", [])).toBe("");
   });
+
+  it("복습·문제풀이를 고르면 첫 문장이 그날 수업 성격대로(원장 2026-10-26)", () => {
+    expect(progressLead("이승엽", ["소인수분해"], null, "복습")).toMatch(/^우리 승엽이는 오늘 '소인수분해' 내용을 복습했습니다\. /);
+    expect(progressLead("이승엽", ["소인수분해", "최대공약수"], null, "복습")).toMatch(
+      /^우리 승엽이는 오늘 '소인수분해'와 '최대공약수', 두 소단원을 복습했습니다\. /,
+    );
+    expect(progressLead("이승엽", ["소인수분해"], null, "문제풀이")).toMatch(
+      /^우리 승엽이는 오늘 '소인수분해' 문제풀이 위주로 수업했습니다\. /,
+    );
+    expect(progressLead("이승엽", ["소수의 뜻", "거듭제곱", "소인수분해"], null, "문제풀이")).toMatch(
+      /^우리 승엽이는 오늘 '소수의 뜻'부터 '소인수분해'까지 모두 3개 소단원의 문제풀이 위주로 수업했습니다\. /,
+    );
+    // 성격을 안 골랐거나 모르는 값이면 종전 그대로 · 진도 중단일(월말평가)이 성격보다 먼저.
+    expect(progressLead("이승엽", ["소인수분해"], null, "")).toBe(progressLead("이승엽", ["소인수분해"]));
+    expect(progressLead("이승엽", ["소인수분해"], null, "아무거나")).toBe(progressLead("이승엽", ["소인수분해"]));
+    expect(progressLead("이승엽", [], "월말평가", "복습")).toBe("우리 승엽이는 오늘 월말평가 수업을 했습니다.");
+    for (const m of ["복습", "문제풀이"]) expect(progressLead("이승엽", ["소인수분해"], null, m)).not.toContain("진도를 나갔습니다");
+  });
 });
 
 describe("소단원별 이해도", () => {
@@ -191,9 +209,15 @@ describe("발송 게이트", () => {
 });
 
 describe("자동작성 뒤에 칸을 바꾸면 다시 눌러야 한다", () => {
-  const now = { studentName: "이승엽", today: "소인수분해", note: "잘했어요", factsSig: "A", writtenSig: "A" };
+  const now = { studentName: "이승엽", today: "소인수분해", progressMode: null, note: "잘했어요", factsSig: "A", writtenSig: "A" };
   const draft = composePilotMent({ lead: pilotSection("진도", progressLead("이승엽", ["소인수분해"])), body: "본문", note: "잘했어요" });
   it("그대로면 통과", () => expect(isPilotDraftCurrent(draft, now)).toBe(true));
+  it("🔑 복습으로 쓴 글은 복습일 때만 최신 — 알약을 바꾸면 다시 자동작성", () => {
+    const review = composePilotMent({ lead: pilotSection("진도", progressLead("이승엽", ["소인수분해"], null, "복습")), body: "본문", note: "잘했어요" });
+    expect(isPilotDraftCurrent(review, { ...now, progressMode: "복습" })).toBe(true);
+    expect(isPilotDraftCurrent(review, now)).toBe(false);
+    expect(isPilotDraftCurrent(draft, { ...now, progressMode: "문제풀이" })).toBe(false);
+  });
   it("수업 평가 표가 맨 위에 있어도 진도 항목을 찾는다", () => {
     expect(isPilotDraftCurrent(`■ 수업 평가\n구분\n\n${draft}`, now)).toBe(true);
     expect(isPilotDraftCurrent(`■ 수업 평가\n구분\n\n${draft}`, { ...now, today: "최대공약수" })).toBe(false);
@@ -239,13 +263,15 @@ describe("배선", () => {
     const client = read("./components/onescreen-client.tsx");
     expect(client).toMatch(/pilotRecomposeNote\(r\.draft, r\.autoDraft, pilotPrevNote, text\)/);
     expect(client).toMatch(/pilotOneLine: rowEval\.note/);
-    expect(read("./components/report-card.tsx")).toMatch(/needsOneLine: pilot && !hasPilotOneLine\(cardEval\.note\)/);
-    expect(read("./components/grid-row.tsx")).toMatch(/needsOneLine: pilot && !hasPilotOneLine\(rowEval\.note\)/);
+    // 영어 행도 '사랑의 한마디' 필수(원장 2026-10-26) — 판정은 oneLineRow = pilot || 영어.
+    expect(read("./components/report-card.tsx")).toMatch(/needsOneLine: oneLineRow && !hasPilotOneLine\(cardEval\.note\)/);
+    expect(read("./components/grid-row.tsx")).toMatch(/needsOneLine: oneLineRow && !hasPilotOneLine\(rowEval\.note\)/);
+    expect(read("./components/report-card.tsx")).toMatch(/const oneLineRow = pilot \|\| subject\.subjectKey === "english"/);
   });
 });
 
 describe("자동작성 뒤 수정 허용(원장 2026-10-23)", () => {
-  const now = { studentName: "이승엽", today: "소인수분해", note: "잘했어요", factsSig: "A", writtenSig: "A" };
+  const now = { studentName: "이승엽", today: "소인수분해", progressMode: null, note: "잘했어요", factsSig: "A", writtenSig: "A" };
   const auto = composePilotMent({ lead: pilotSection("진도", progressLead("이승엽", ["소인수분해"])), body: "본문", note: "잘했어요" });
   const edited = auto.replace("본문", "고친 본문");
   it("자동작성 전엔 잠금 · 뒤엔 열림", () => {

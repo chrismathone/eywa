@@ -76,11 +76,13 @@ import {
   EMPTY_UNDERSTANDING,
   isMathReportPilot,
   isPilotAutoWritten,
+  isPilotGateError,
   pilotRecomposeNote,
   understandingRows,
   type UnderstandingState,
 } from "../math-report-pilot";
 import { isHomeworkMissed, pilotRowSig, type DailyTestSkip } from "../math-report-pilot-sections";
+import { pilotSendBlocks } from "../pilot-send-gate";
 import { DailyTestSkipPanel } from "./daily-test-skip-panel";
 import { HomeworkMissReasonInput } from "./homework-miss-reason";
 import { ReportCard, type SubjectReport } from "./report-card";
@@ -94,6 +96,7 @@ import {
   type ReportTemplate,
 } from "@/features/report-templates/defaults";
 import { attendanceSentence } from "../attendance-sentence";
+import { progressWithMode } from "../progress-mode";
 import { hasTextBesidesMarkers, stripImageSlots, usedAttachmentNames } from "@/features/report-templates/image-slots";
 import {
   attachmentLineIndex,
@@ -2492,6 +2495,7 @@ export function OneScreenClient({
       studentName: student.name,
       teacherName,
       progress: su.today ?? "",
+      progressMode: su.progressMode ?? null,
       homeworkToday: fields.homeworkToday,
       dailyTest: fields.dailyTest,
       checkTest: fields.checkTest,
@@ -2703,7 +2707,8 @@ export function OneScreenClient({
       try {
         const res = await generateEnglishMent({
           studentName: student.name,
-          progress: facts.progress,
+          // 복습·문제풀이 한 줄까지(aiFactsOf와 같은 값) — AI가 "진도를 나갔다"고 거꾸로 쓰지 않게(원장 2026-10-26).
+          progress: progressWithMode(facts.progress, facts.progressMode),
           homeworkToday: facts.homeworkToday,
           testText: englishTestText({ daily: facts.dailyTest, check: facts.checkTest }),
           nextTest,
@@ -3060,7 +3065,18 @@ export function OneScreenClient({
     // 사진·PDF 줄만 있는 행은 글이 없는 행이다(영어 — 그 줄은 새 글에 따라온다). 수학 글엔 첨부 줄이 없어 결과가 같다.
     const hasDraft = (r: (typeof eligible)[number]) =>
       hasTextBesidesAttachments(reportsRef.current[r.student.id]?.[r.subject.name]?.draft);
-    const rows = eligible.filter((r) => !hasDraft(r));
+    // 예외 — 새 수학 보고서의 **손대지 않은 자동작성 글**인데 그 뒤 값(출결·점수·태도…)이 바뀐 행은 다시 쓴다(원장 2026-10-26).
+    //   그 글은 사람이 다듬은 글이 아니라 옛 값으로 쓴 기계 글이고, 다시 안 쓰면 행마다 눌러야 발송이 풀린다. 고친 글은 그대로 건너뛴다.
+    const staleAuto = (r: (typeof eligible)[number]) => {
+      const rep = reportsRef.current[r.student.id]?.[r.subject.name];
+      const st = latestRow(r.student.id, r.subject.name) ?? r.student;
+      return (
+        isMathReportPilot(st.id, r.subject.subjectKey) &&
+        isPilotAutoWritten(rep?.draft, rep?.autoDraft) &&
+        pilotSendBlocks(st, r.subject.name, rep).includes("autowrite")
+      );
+    };
+    const rows = eligible.filter((r) => !hasDraft(r) || staleAuto(r));
     const preserved = eligible.length - rows.length;
     if (rows.length === 0) {
       toast.message(
@@ -3123,6 +3139,7 @@ export function OneScreenClient({
         subjectIndex: r.subjectIndex,
         subjectKey: r.subject.subjectKey ?? "math",
         today: r.subject.today ?? "",
+        progressMode: r.subject.progressMode ?? null,
         attitude: rowEval.attitude,
         homework: rowEval.homework,
         textbook: r.subject.textbook ?? "",
@@ -3172,6 +3189,7 @@ export function OneScreenClient({
       if (p.set.textbook !== undefined) setTextbookFor(p.studentId, p.subjectName, p.set.textbook);
       if (p.set.homeworkToday !== undefined) setHomeworkTodayFor(p.studentId, p.subjectName, p.set.homeworkToday);
       if (p.set.today !== undefined) setProgressFor(p.studentId, p.subjectIndex, p.set.today);
+      if (p.set.progressMode !== undefined) setProgressModeFor(p.studentId, p.subjectIndex, p.set.progressMode);
       // 2026-10-02 추가 칸 — 전부 **그 행에만**(행 값). 문항수를 먼저 바꾸고 점수를 넣는다(문항수 변경이 점수를 깎으므로).
       if (p.set.note !== undefined) setNoteFor(p.studentId, p.subjectName, p.set.note);
       if (p.set.dailyMax !== undefined) setMaxFor(p.studentId, p.subjectName, "daily", p.set.dailyMax);
@@ -3640,7 +3658,16 @@ export function OneScreenClient({
         // 멘트 작성 방식(0214a) — 이번 세션 자동작성 스냅샷과 비교(최종은 서버 resolveMentSource가 sticky 판정).
         mentSource,
         // 수학 보고서 시범 — 강사 한줄 멘트(필수). 서버가 비었거나 글 끝에 안 붙었으면 거절한다.
-        ...(isMathReportPilot(student.id, su?.subjectKey) ? { pilotOneLine: rowEval.note } : {}),
+        // 영어도 같다(원장 2026-10-26 *"영어도 수학이랑 동일하게 … 사랑의 한마디 · 필수"*).
+        ...(isMathReportPilot(student.id, su?.subjectKey) || su?.subjectKey === "english" ? { pilotOneLine: rowEval.note } : {}),
+        // 새 수학 보고서 — 화면 발송 조건(자동작성이 지금 값 기준인가 · 사유를 다 적었나)을 서버에도 싣는다(원장 2026-10-26 일괄 발송 구멍).
+        //   일괄 발송·행 발송이 모두 이 입력을 지나므로, 어느 길로 보내도 서버가 같은 조건으로 거절한다.
+        ...(isMathReportPilot(student.id, su?.subjectKey)
+          ? (() => {
+              const blocks = pilotSendBlocks(student, subjectName, { draft, autoDraft: autoSnap, pilotFactsSig: existing?.pilotFactsSig });
+              return { pilotCheck: { factsCurrent: !blocks.includes("autowrite"), reasonsOk: !blocks.includes("testReason") && !blocks.includes("homeworkReason") } };
+            })()
+          : {}),
         // 자동작성 후 고친 멘트면 그 자동작성 원문도 싣는다(0370a) — 말투 프로파일이 선생님이 '늘 고치는 것'을 배운다(원장 2026-10-16).
         //   영어는 템플릿 모드라 뺀다(코퍼스 밖).
         //   AI 실패 폴백 템플릿은 AI 원문이 아니라 뺀다.
@@ -4196,8 +4223,24 @@ export function OneScreenClient({
               : "",
         })
       : "";
+    // 새 보고서 조건(자동작성 다시 · 사랑의 한마디 · 시험 없음/숙제 미제출 사유) — 행별 발송 버튼과 **같은 판정**(pilot-send-gate.ts).
+    // 원장 2026-10-26 *"표로 일괄입력할 때 문제"* — 일괄 발송만 이 조건을 안 봐서 사유 없는 글·옛 출결이 적힌 글이 나갔다. 제외 + 누구인지.
+    const pilotBlockedRows = rows.filter((r) => pilotSendBlocks(latestRow(r.student.id, r.subject.name) ?? r.student, r.subject.name, reportsRef.current[r.student.id]?.[r.subject.name]).length > 0);
+    if (pilotBlockedRows.length) {
+      const blockedKeys = new Set(pilotBlockedRows.map((r) => r.key));
+      rows = rows.filter((r) => !blockedKeys.has(r.key));
+    }
+    const pilotBlockedNames = [...new Set(pilotBlockedRows.map((r) => r.student.name))];
+    const pilotLine = pilotBlockedRows.length
+      ? tf("os.c.linePilot", {
+          n: pilotBlockedRows.length,
+          names: pilotBlockedNames.slice(0, 5).join(", "),
+          more: pilotBlockedNames.length > 5 ? tf("os.c.lineMore", { n: pilotBlockedNames.length - 5 }) : "",
+        })
+      : "";
     if (rows.length === 0) {
-      toast.message(tf("os.c.sendNoneMent", { n: emptyMentRows.length }));
+      if (pilotBlockedRows.length) toast.message(`${t("os.c.sendNone")}${pilotLine}`);
+      else toast.message(tf("os.c.sendNoneMent", { n: emptyMentRows.length }));
       return;
     }
     // 영어 행 중 AI 코멘트가 고치기 전 값으로 쓰인 행 — 막지 않고 **누구인지** 알린다(위 줄들과 같은 규약).
@@ -4231,7 +4274,7 @@ export function OneScreenClient({
       !window.confirm(
         tf("os.c.sendConfirm", {
           n: rows.length,
-          lines: `${emptyMentLine}${progressLine}${uncheckedLine}${gapLine}${aiStaleLine}${absentLine}${sentLine}`,
+          lines: `${emptyMentLine}${pilotLine}${progressLine}${uncheckedLine}${gapLine}${aiStaleLine}${absentLine}${sentLine}`,
         }),
       )
     )
@@ -4250,6 +4293,7 @@ export function OneScreenClient({
     let noClass = 0; // 반별 발송인데 보낼 반이 없어 막힌 행(원장 2026-09-30 — 담당 반이 없으면 발송 불가)
     let boardWait = 0; // 반 보드 배정·재확인을 기다리는 행(방금 배정된 신입 등 — 배정된 뒤 다시 보내면 된다, 2026-10-03)
     let jjWarn = 0; // 영어 그림 자료를 못 묶은 행(저장은 성공)
+    let pilotSkip = 0; // 새 보고서 조건(자동작성·사랑의 한마디·사유)에 걸려 서버가 거절한 행 — 화면 판정 뒤에 값이 바뀐 경우
     let windowHint = ""; // 발송 허용 시간창 밖 큐잉 — 마지막 응답의 창 라벨(테넌트 단일 설정이라 동일)
     try {
       for (const r of rows) {
@@ -4260,6 +4304,8 @@ export function OneScreenClient({
           // 반 보드에 배정되는 중이면 '실패'가 아니라 '기다림'으로 센다. 보류·반을 떠난 학생은 보낼 반이 없는 것이다.
           if (isBoardWaitStatus(res.status)) boardWait++;
           else if (res.status === "no_class" || isBoardBlockedStatus(res.status)) noClass++;
+          // 새 보고서 조건에 걸려 서버가 거절(저장은 됐다) — '실패'로 뭉치지 않고 이유를 따로 센다(원장 2026-10-26).
+          else if (isPilotGateError(res.error)) pilotSkip++;
           else fail++;
         } else if (res.status === "queued") {
           queued++;
@@ -4296,6 +4342,7 @@ export function OneScreenClient({
         (jjWarn ? tf("os.tpl.jjWarnBulk", { n: jjWarn }) : "") +
         (boardWait ? tf("os.c.bulkBoardWait", { n: boardWait }) : "") +
         (noClass ? tf("os.c.bulkNoClass", { n: noClass }) : "") +
+        (pilotSkip ? tf("os.c.bulkPilot", { n: pilotSkip }) : "") +
         (fail ? tf("os.c.bulkFail", { n: fail }) : ""),
     );
   }
@@ -4519,7 +4566,8 @@ export function OneScreenClient({
     ]);
     // 자리는 **줄 내용**으로 기억한다(attachment-lines.ts) — 첫 첨부의 자동 저장이 글을 다시 짜거나 올리는 동안 강사가 계속 써도
     // 같은 윗줄 아래에 선다(줄 번호로만 기억하면 머리말과 내용 사이로 갔다 — 적대 리뷰 2026-09-11).
-    const caret = el instanceof HTMLTextAreaElement ? el.selectionStart : null;
+    // 글 칸은 맨 위 '수업 평가' 표를 뗀 본문만 보인다(2026-10-26) — 칸의 커서 위치에 뗀 길이(data-caret-offset)를 더해 전체 글 기준으로.
+    const caret = el instanceof HTMLTextAreaElement ? el.selectionStart + (Number(el.dataset.caretOffset) || 0) : null;
     const placed = insertAttachmentLine(draft0, attachmentLineIndex(draft0, caret), name);
     const named = name === file.name ? file : new File([file], name, { type: file.type });
     const added = await addAttachmentsFor(student, subjectName, [named]);

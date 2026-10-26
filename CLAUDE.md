@@ -119,8 +119,8 @@ provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어�
 
 | Tier | Anthropic | DeepSeek | 용도 |
 |---|---|---|---|
-| `fast` | **`claude-haiku-5-5`**(2026-10-16 4.5→5.5 · 1/10 값 · temperature 미전송·effort low는 `generate.ts` `isClaude5Model`이 흡수) | `deepseek-flash`(V4.1 · 옛 이름 `deepseek-v4-flash`는 2026-10-19 교체 — 딥시크가 은퇴로 적음) | **학부모 멘트** `classnote_ment` + **학부모 글 만족도 판정** `parent_satisfaction`(강사평가 · 문구로 애매한 글만 · DeepSeek flash 먼저 — 원장 2026-10-13). 🔴 deepseek 폴백은 **v4-flash**(원장 2026-08-28 *"haiku -> 폴백 deepseek v4 flash"*) — v4-pro를 걸었더니 자동작성 한 번에 **86초**(추론 6,505토큰)라 폴백이 또 다른 장애가 됐다. flash는 7.3초. **되돌리지 말 것**(같은 날 *"flash 말고 v4 pro"*를 실측 보고 뒤집은 것). |
-| `balanced` | `claude-sonnet-5-5`(2026-10-19 5→5.5 · 같은 값) | **`deepseek-v4-pro`** | 경량 호출 기본값 + **재원생 상담 분석**·브리프·결석 문자 판별 등. 콜&상담 분석·폼 자동입력·회의록은 아래 기능별 고정(V4.1 flash). |
+| `fast` | **`claude-haiku-5-5`**(2026-10-16 4.5→5.5 · 1/10 값 · temperature 미전송·effort low는 `generate.ts` `isClaude5Model`이 흡수) | `deepseek-flash`(V4.1 · 옛 이름 `deepseek-v4-flash`는 2026-10-19 교체 — 딥시크가 은퇴로 적음) | **학부모 멘트** `classnote_ment` + **학부모 글 만족도 판정** `parent_satisfaction`(강사평가 · 문구로 애매한 글만 · Claude Haiku 5.5 먼저 2026-10-26 — 그 전 10-13~ DeepSeek flash 먼저). 🔴 deepseek 폴백은 **v4-flash**(원장 2026-08-28 *"haiku -> 폴백 deepseek v4 flash"*) — v4-pro를 걸었더니 자동작성 한 번에 **86초**(추론 6,505토큰)라 폴백이 또 다른 장애가 됐다. flash는 7.3초. **되돌리지 말 것**(같은 날 *"flash 말고 v4 pro"*를 실측 보고 뒤집은 것). |
+| `balanced` | **`claude-sonnet-5-5`**(2026-10-19 5→5.5 · 같은 값) | `deepseek-v4-pro`(폴백) | 경량 호출 기본값 + **전사 분석**(재원생 상담 분석 · 콜&상담 분석·폼 자동입력·회의록은 아래 고정) · 상담 준비 브리프 · 결석 문자 판별 · 출결 요약 · 공지 번역 — 전부 Claude 먼저(2026-10-26). |
 | `reasoning` | `claude-opus-4-7` | — | **금지** (명시 요청 시만). reasoning은 Anthropic 고정. |
 
 - **AI 회사는 둘 = Claude · DeepSeek.** 🔴 Upstage(Solar)는 뺐다(원장 2026-10-19 *"솔라는 빼버려. 두개면 충분"* — 품질 A/B 탈락으로 맨 뒤 예비였고 그날 키도 잔액 정지). 클라이언트·사다리·모델 칸 전부 지웠다 — 되살리지 말 것. 옛 기록의 `solar-pro3` 라벨만 남긴다.
@@ -129,26 +129,19 @@ provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어�
 - **전역 기본 provider = Anthropic Claude Sonnet 5.5** (`AI_PROVIDER=anthropic`, 2026-07-13~ · 2026-10-19 5→5.5) — 품질 A/B에서 Solar가
   상담 분석의 warnings를 통째로 놓치고 잡담(주식 등)을 섞어 전환. 코드 기본값(env 미설정·옛 값 `upstage`)도 Claude다(2026-10-19 Solar 제거 뒤).
   DeepSeek을 기본으로 = `AI_PROVIDER=deepseek`.
-- **기능별 고정 모델 + 지점별 선택**(2026-10-19 원장 *"추천 순서로 진행"* · *"지점별로 ai모델 바꿀 수 있게"*) — [`FEATURE_MODELS`](src/lib/ai/model-pins.ts):
-  **콜&상담 분석·콜&상담 폼 자동입력·회의록 분석 = DeepSeek V4.1 flash**(`deepseek-flash`). 운영 프롬프트 그대로의 블라인드 비교에서
-  폼 8승 2무(Sonnet 5는 10건 중 4건이 4,096 토큰에서 잘려 실패) · 회의록 4승 1무 · 콜&상담 분석 3:2, 값 1/4~1/8 · 속도 약 2배.
-  형식 차이는 **저장 전 후처리**가 기존 모양으로 맞춘다([`analysis-normalize`](src/features/enrollment/analysis-normalize.ts) ·
-  [회의록](src/features/meetings/analysis-normalize.ts) · [`form-normalize`](src/features/enrollment/form-normalize.ts) — 기존 v4-pro 결과엔 0곳 손댐 실측).
-  지점마다 다른 모델 = 운영 콘솔 학원 상세 **'AI 모델' 탭**(`tenant_ai_models`, 0375a) — 지점 선택 > 코드 기본 > 호출부 tier·provider
+- 🔴 **AI 1순위 = Claude · DeepSeek은 폴백만**(원장 2026-10-26 *"딥시크로 바꾼거 다 클로드로 전환"* · *"전사 분석은 전부 sonnet 5.5로 돌리고, 간단하고 빠르게
+  작성해야하는 수업보고서 멘트는 haiku 5.5로"* · *"폴백으로 딥시크 남겨놔"* — Anthropic API 크레딧 지원). **전사 분석**(콜&상담 분석·폼 자동입력·회의록 =
+  [`FEATURE_MODELS`](src/lib/ai/model-pins.ts) Sonnet 5.5 고정 · 재원생 상담 분석) · 상담 준비 브리프 · 결석 문자 판별 · 출결 요약 · 공지 번역 = **Sonnet 5.5**(추론 강도는 호출부가 안 정해 모델 기본 high) ·
+  학부모 멘트 = **Haiku 5.5**(effort low) · 만족도 판정 = Haiku 5.5(기본 medium). 가드 [`claude-first.test.ts`](src/lib/ai/claude-first.test.ts) — 기능 코드가 DeepSeek을 먼저 고르면 실패.
+  저장 전 후처리([`analysis-normalize`](src/features/enrollment/analysis-normalize.ts) · [회의록](src/features/meetings/analysis-normalize.ts) · [`form-normalize`](src/features/enrollment/form-normalize.ts))는 그대로 둔다(폴백 결과도 같은 모양).
+  옛 결정(07-16 전사 분석 v4-pro · 10-19 V4.1 flash 블라인드 비교 수치)은 [`docs/decisions/reports-ai.md`](docs/decisions/reports-ai.md)에.
+- **지점별 선택** = 운영 콘솔 학원 상세 **'AI 모델' 탭**(`tenant_ai_models`, 0375a) — 지점 선택 > 코드 기본 > 호출부 tier·provider
   (`featurePin`). 고른 회사가 막히면 평소 사다리로 넘어간다(고정한 모델 이름이 없으면 같은 회사 기본 모델로 한 번 더). 계약서 스캔 OCR은 고를 수 없다(Claude 전용 승인) · 멘트·원생 AI 케어(사람이 기다리는 기능)엔 느린 v4-pro를 고를 수 없다. 🔴 시험 안 한 기능을 코드 기본에 넣지 말 것.
-- **재원생 상담 분석 = DeepSeek v4-pro**(아래 2026-07-16 근거 그대로 · 콜&상담·회의록은 위로 옮겼다) —
-  (옛 문단: 전사 분석 3종(회의록·등록상담·재원생 상담) = DeepSeek v4-pro, 2026-07-16, `AI_PROVIDER`과 무관하게 코드에서 우선) —
-  실측 A/B(injaewon 실전사 5건): v4-pro가 warnings를 5/5 Sonnet급으로 생성(255·316·243·219·97자), 비용은 압도적으로 저렴.
-  경량 v4-flash·레거시 chat·Solar는 warnings를 2~3/5 "확인된 위험 신호 없음"으로 붕괴(Solar 탈락과 동일 실패)라 v4-pro 채택.
-  ⚠️ 트레이드오프: v4-pro는 추론형이라 Sonnet보다 ~1.2배 느림(백그라운드 분석이라 감수). **Vercel에 `DEEPSEEK_API_KEY` 설정 필요** —
-  없으면 anthropic으로 **무중단 폴백**(키 추가 전까지 프로덕션은 Sonnet 유지, 롤백=키 제거). 라우팅은 호출부 `provider:"deepseek"`
-  ([analyzeMeeting](src/features/meetings/server/ai.ts)·[runConsultationAnalysis](src/features/enrollment/server/consultation-analysis.ts)·
-  [analyzeStudentConsultation](src/features/consultations/server/ai.ts) 기본값 + 웹훅 인라인). form-extract·멘트(Haiku)·care는 불변.
 
 ### 녹음·회의 처리 (Solar 후보정 하네스 · 재처리 2종 · 회의 화자) → [`docs/decisions/ai-recording.md`](docs/decisions/ai-recording.md)
 - 폼 자동입력 = `buildFormPatch` 후보정 하네스(grounding·echo·잡음 가드) — 새 "AI 추출→폼/DB 자동기입"도 이 가드를 통과한 값만.
 - 회의 재처리 = 기둥 A '분석 다시 생성'(텍스트) / 기둥 B '전사부터 다시'(오디오, Supabase 서명 — Firebase 의존 0). 화자 = `ai_speaker_roles`(표시) + `speaker_staff`(직원 연결).
-- DeepSeek = OpenAI 호환(JSON mode, 프롬프트에 "JSON" 필수) · 키 없으면 Claude로 무중단 폴백(Solar는 2026-10-19 뺐다).
+- DeepSeek = OpenAI 호환(JSON mode, 프롬프트에 "JSON" 필수) · 2026-10-26부터 **폴백 전용**(1순위는 Claude · Solar는 2026-10-19 뺐다).
 
 ### 키 분리 = 기능별 9그룹 (원장 2026-09-15 *"기능별로 키를 발급받아서 사용량 체크를 하려고"*)
 **env 이름 = `<회사>_API_KEY_<그룹>`**(회사 = `ANTHROPIC`·`DEEPSEEK`). 그룹은 호출부 식별자(`meta.feature`)에서
@@ -157,14 +150,14 @@ provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어�
 
 | 그룹 | 호출부(meta.feature) | 지금 1순위 |
 |---|---|---|
-| `MENT` | classnote_ment · english_ment · ment_prompt_preview · ment_style_profile | Claude(Haiku·Sonnet) |
-| `MEETING` | meeting_analysis | DeepSeek |
-| `ENROLLMENT` | enrollment_analysis · enrollment_form_extract · enrollment_prep_brief | DeepSeek(분석·브리프) · Claude(폼) |
-| `CONSULTATIONS` | consultation_analysis · student_care | DeepSeek(분석) · Claude(케어) |
+| `MENT` | classnote_ment · english_ment · ment_prompt_preview · ment_style_profile · lesson_report_rating(평점 정기 처리 · 기본 꺼짐) | Claude(Haiku·Sonnet) |
+| `MEETING` | meeting_analysis | Claude(Sonnet 5.5) |
+| `ENROLLMENT` | enrollment_analysis · enrollment_form_extract · enrollment_prep_brief | Claude(Sonnet 5.5) |
+| `CONSULTATIONS` | consultation_analysis · student_care | Claude(분석 Sonnet 5.5 · 케어) |
 | `BRIEFING` | daily_briefing | Claude |
-| `ATTENDANCE` | attendance_recap · parent_attendance_intent · parent_attendance_jev_shadow · parent_satisfaction | DeepSeek · TypeSafe(비교 전용) |
+| `ATTENDANCE` | attendance_recap · parent_attendance_intent · parent_attendance_jev_shadow · parent_satisfaction | Claude(요약·결석 판별 Sonnet 5.5 · 만족도 Haiku 5.5) · TypeSafe(비교 전용) |
 | `STUDENT_ONTOLOGY` | student_positive_signal · student_ontology_summary | 긍정 신호 밤 판정 / 명시 버튼의 최근 기록 발췌 요약 · Claude 전용 키 · fast/low · 다른 회사 폴백 없음 |
-| `NOTICE` | notice_translate | DeepSeek |
+| `NOTICE` | notice_translate | Claude(Sonnet 5.5) |
 | `STAFF` | staff_contract_pdf · staff_contract_pdf_ocr | Claude(OCR은 **Claude 전용**) |
 | `VIDEO` | video_review_judge · video_review_verify | Claude(판정 Haiku · 확인 Sonnet · 밤 배치) |
 
@@ -506,7 +499,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - 발송 기한(오늘 포함 7일)이 지난 보고서도 원장이 지정한 건은 보낸다
 - ClassNote 테스트 학생 '학원이'는 aywa에서 아무에게도 배정하지 않는다 — 배정은 ClassNote 쪽에서 전 강사에게
 - AI provider 전역 기본 = Anthropic Claude Sonnet 5.5(2026-10-19 5→5.5) · 응답 길이 상한 바닥 64,000 · AI 회사는 Claude·DeepSeek 둘(Solar 제거)
-- ~~전사 분석 3종 = DeepSeek v4-pro~~ → 콜&상담 분석·폼 자동입력·회의록 = DeepSeek V4.1 flash + 저장 전 후처리(2026-10-19 블라인드 비교) · 재원생 상담은 v4-pro 그대로 · 지점별 모델 = 운영 콘솔 'AI 모델' 탭(0375a)
+- AI 1순위 = Claude · DeepSeek은 폴백만(2026-10-26 · Anthropic 크레딧) · 전사 분석(콜&상담 분석·폼 자동입력·회의록·재원생 상담)·브리프·결석 문자·출결 요약·번역 = Sonnet 5.5 · 멘트·만족도 = Haiku 5.5 · 가드 `claude-first.test.ts` · 지점별 모델 = 운영 콘솔 'AI 모델' 탭(0375a) · ~~10-19 V4.1 flash · 07-16 v4-pro~~
 - 음성 전사 엔진 = AssemblyAI `universal-2` 유지
 - 학부모 보고서 제목 = 과목 보고서('수학 보고서' · 설정 제목이 기본값일 때 · `reportTitleText` 한 곳)
 - 수업보고서 테스트 표기 = "N문제 중 M개 맞음" 하나뿐

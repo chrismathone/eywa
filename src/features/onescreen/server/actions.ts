@@ -84,6 +84,8 @@ import {
   PILOT_AUTOWRITE_REQUIRED_ERROR,
   PILOT_ONELINE_REQUIRED_ERROR,
   pilotOneLineAttached,
+  ENGLISH_ONELINE_REQUIRED_ERROR,
+  PILOT_REASON_REQUIRED_ERROR,
   pilotLessons,
   cleanPilotUnderstanding,
   pilotAiDirective,
@@ -169,6 +171,11 @@ export type SaveLessonReportInput = {
   mentSource?: MentSource;
   /** 수학 보고서 시범 — 강사 한줄 멘트(필수, 원장 2026-10-22). 보낼 글 맨 끝에 그대로 붙어 있어야 발송한다. */
   pilotOneLine?: string;
+  /**
+   * 새 수학 보고서 발송 조건(화면이 pilot-send-gate.ts로 판정, 원장 2026-10-26) — 자동작성이 지금 칸 값 기준인가 · 시험 없음/숙제 미제출
+   * 사유를 다 적었나. 일괄 발송이 화면 게이트를 건너 사유 없는 글·옛 출결 글을 보냈던 구멍을 막는다. **없으면 거절**(옛 화면 = 보내지 않는 쪽).
+   */
+  pilotCheck?: { factsCurrent: boolean; reasonsOk: boolean };
   /**
    * 자동작성 원문(0370a) — 화면이 `mentSource: 'auto_edited'`일 때만 싣는다(선생님이 고친 그 자동작성 글). 말투 프로파일이
    * 원문 ↔ 최종을 견줘 '늘 고치는 것'을 배운다(원장 2026-10-16). 저장 응답 뒤에 따로 적는다 — 본 저장과 무관, 실패해도 저장은 성공.
@@ -850,12 +857,19 @@ export async function saveAndQueueClassnote(
   // 강사 한줄 멘트(필수, 원장 2026-10-22) — 비었거나 글 끝에 안 붙었으면 같은 길로 거절한다(안 싣는 옛 경로도 막힌다).
   const pilotRow = isMathReportPilot(input.studentId, input.subject);
   const pilotBlock = !pilotRow
-    ? null
+    ? // 영어 — '사랑의 한마디' 필수(원장 2026-10-26). 영어 글은 템플릿이라 끝에 붙었는지는 보지 않고 적었는지만 본다.
+      input.subject === "english" && !(input.pilotOneLine ?? "").trim()
+      ? ENGLISH_ONELINE_REQUIRED_ERROR
+      : null
     : saved.mentSource !== "auto" && saved.mentSource !== "auto_edited" // 자동작성 뒤 고친 글도 보낸다(2026-10-23)
       ? PILOT_AUTOWRITE_REQUIRED_ERROR
-      : !pilotOneLineAttached(input.notes, input.pilotOneLine)
-        ? PILOT_ONELINE_REQUIRED_ERROR
-        : null;
+      : !input.pilotCheck?.factsCurrent // 자동작성 뒤 출결·점수·태도 등이 바뀌었다(옛 값이 적힌 글) — 2026-10-26
+        ? PILOT_AUTOWRITE_REQUIRED_ERROR
+        : !input.pilotCheck.reasonsOk // 시험 없음·숙제 미제출 사유가 비었다 — 2026-10-26
+          ? PILOT_REASON_REQUIRED_ERROR
+          : !pilotOneLineAttached(input.notes, input.pilotOneLine)
+            ? PILOT_ONELINE_REQUIRED_ERROR
+            : null;
   if (pilotBlock) {
     if (prior?.classnote_status === "queued") {
       try {
@@ -1573,7 +1587,7 @@ export async function generateReportComment(
         pilotLevelsSection(safeInput),
         pilotSection(
           PILOT_SECTION_TITLES.progress,
-          progressLead(input.studentName, pilotLessons(input.progress), skipStatusOf(input.progress)),
+          progressLead(input.studentName, pilotLessons(input.progress), skipStatusOf(input.progress), input.progressMode),
         ),
       ]
         .filter(Boolean)

@@ -108,13 +108,13 @@ export async function buildNoticeTranslation(
   let out: TranslatedJson;
   let model: string;
   try {
-    // 🔴 tier는 `balanced`(= DeepSeek v4-pro) — `fast`는 문서상 "학부모 멘트 전용"이라 소비처를 늘리지
-    //    않는다. 저장 시점 백그라운드라 v4-pro가 느린 것은 상관없다. 키가 없으면 사다리로 무중단 폴백.
+    // 🔴 tier는 `balanced`(= Claude Sonnet 5.5 · 2026-10-26 원장 "딥시크로 바꾼거 다 클로드로" — 그 전엔 DeepSeek v4-pro).
+    //    저장 시점 백그라운드라 느려도 상관없다. 키가 없으면 사다리로 무중단 폴백.
     const res = await generateJSON<TranslatedJson>({
       prompt: buildPrompt(src),
       maxTokens: 2000,
       tier: "balanced",
-      provider: "deepseek",
+      provider: "anthropic", // 2026-10-26 원장 "딥시크로 바꾼거 다 클로드로" — Sonnet 5.5
       meta: { feature: "notice_translate", tenantId },
     });
     out = res.data;

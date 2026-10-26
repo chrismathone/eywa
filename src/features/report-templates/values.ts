@@ -59,6 +59,8 @@ export function englishTemplateValues(src: EnglishTemplateSource): Record<Templa
     코멘트: src.aiComment.trim(),
     시험결과지: src.slots?.시험결과지 ? imageSlotMarker("시험결과지") : "",
     학습분석지: src.slots?.학습분석지 ? imageSlotMarker("학습분석지") : "",
+    단어백분위: src.slots?.단어백분위 ? imageSlotMarker("단어백분위") : "",
+    학습배지: src.slots?.학습배지 ? imageSlotMarker("학습배지") : "",
     ...(Object.fromEntries(SHEET_TOKEN_KEYS.map((k) => [k, (src.sheet?.[k] ?? "").trim()])) as Record<SheetTokenKey, string>),
   };
 }
