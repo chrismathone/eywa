@@ -153,7 +153,7 @@ export function understandingSig(items: readonly { title: string; score: number 
  */
 export const PILOT_SECTION_TITLES = {
   progress: "진도",
-  attendance: "출결", // 지각·조퇴·공결 + 사유(원장 2026-10-26, attendance-sentence.ts) — 출석이면 항목이 없다
+  attendance: "출결", // 지각·조퇴·공결 + 사유(원장 2026-10-26, attendance-sentence.ts) — 출석도 적는다 · 출결 기록이 없으면 항목이 없다
   daily: "일일 테스트",
   check: "확인 테스트",
   levels: "수업 평가",
@@ -233,6 +233,10 @@ export function hasPilotOneLine(note: string | null | undefined): boolean {
 /** 서버 발송 게이트 거절 문구 — 강사 한줄 멘트가 없거나 보고서 끝에 붙어 있지 않다. */
 export const PILOT_ONELINE_REQUIRED_ERROR =
   "이 학생의 수학 보고서는 '사랑의 한마디'를 적어야 보낼 수 있습니다(저장은 됐습니다) — 사랑의 한마디를 적은 뒤 다시 보내 주세요";
+
+/** 영어 보고서 발송 거절 문구 — '사랑의 한마디'가 비었다(원장 2026-10-26, 영어도 필수). */
+export const ENGLISH_ONELINE_REQUIRED_ERROR =
+  "이 학생의 영어 보고서는 '사랑의 한마디'를 적어야 보낼 수 있습니다(저장은 됐습니다) — 사랑의 한마디를 적은 뒤 다시 보내 주세요";
 
 /** 서버 판정 — 한줄 멘트가 있고 보낼 글 맨 끝에 그대로 붙어 있나. */
 export function pilotOneLineAttached(notes: string | null | undefined, oneLine: string | null | undefined): boolean {

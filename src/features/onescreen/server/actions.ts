@@ -84,6 +84,7 @@ import {
   PILOT_AUTOWRITE_REQUIRED_ERROR,
   PILOT_ONELINE_REQUIRED_ERROR,
   pilotOneLineAttached,
+  ENGLISH_ONELINE_REQUIRED_ERROR,
   pilotLessons,
   cleanPilotUnderstanding,
   pilotAiDirective,
@@ -850,7 +851,10 @@ export async function saveAndQueueClassnote(
   // 강사 한줄 멘트(필수, 원장 2026-10-22) — 비었거나 글 끝에 안 붙었으면 같은 길로 거절한다(안 싣는 옛 경로도 막힌다).
   const pilotRow = isMathReportPilot(input.studentId, input.subject);
   const pilotBlock = !pilotRow
-    ? null
+    ? // 영어 — '사랑의 한마디' 필수(원장 2026-10-26). 영어 글은 템플릿이라 끝에 붙었는지는 보지 않고 적었는지만 본다.
+      input.subject === "english" && !(input.pilotOneLine ?? "").trim()
+      ? ENGLISH_ONELINE_REQUIRED_ERROR
+      : null
     : saved.mentSource !== "auto" && saved.mentSource !== "auto_edited" // 자동작성 뒤 고친 글도 보낸다(2026-10-23)
       ? PILOT_AUTOWRITE_REQUIRED_ERROR
       : !pilotOneLineAttached(input.notes, input.pilotOneLine)

@@ -13,6 +13,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { englishAssistantClassIdsOf } from "@/features/class-sheets/server/access";
 import { logAction } from "@/features/audit/server/log";
+import { getTenantSettings } from "@/features/owner/server/queries";
 
 // 겸직(관리자 계열 + 담당 반 보유)의 셸 뷰 전환 — 쿠키만 바꾼다.
 // ⚠️ 권한 변경이 아니다: 실 system_role은 그대로라 RLS·requireAccess는 관리자 권한 유지(락아웃 불가).
@@ -126,7 +127,9 @@ export async function switchToOtherTeacherView(targetId: string): Promise<string
 export type TeacherViewTarget = { id: string; name: string };
 
 /**
- * '다른 강사 뷰' 대상 후보 — 이 학원의 **활성 강사**(system_role=teacher) ∪ **담당 반이 있는 직원**(겸직).
+ * '다른 강사 뷰' 대상 후보 — 이 학원의 **활성 강사**(system_role=teacher) ∪ **담당 반이 있는 직원**(겸직)
+ * ∪ **JJ 보고서 담당**(학원설정 개인별 기능 권한 `jjReportManagerIds`, 원장 2026-10-26 *"강사뷰 전환에도 김동후가 떠야"*) —
+ * 담임 반은 없지만 그날 JJ 교시 반을 원스크린에서 맡는다(delegation.ts). 🔑 그 명단만 더한다 — 다른 개인 권한 명단은 강사 업무가 아니다.
  * 사이드바 피커·열람 배지 드롭다운이 열릴 때만 호출(지연 로드 — 레이아웃 상시 비용 0).
  * 자격 없는 호출은 빈 목록(게이트 재검증 — UI 조건은 게이트가 아니다 #77).
  */
@@ -135,7 +138,7 @@ export async function listTeacherViewTargets(): Promise<TeacherViewTarget[]> {
   if (!user || !isFullShellRole(user.systemRole) || await getShellView() !== "admin" || !(await canUseOtherTeacherView())) return [];
   const supabase = await createClient();
   // 전건 fetch지만 둘 다 whitelist 용도라 fetchAllPaged(B2 — 1000행 silent 절단 방지).
-  const [staff, classRows] = await Promise.all([
+  const [staff, classRows, jjIds] = await Promise.all([
     fetchAllPaged<{ id: string; display_name: string | null; system_role: string }>((from, to) =>
       supabase
         .from("users")
@@ -155,11 +158,15 @@ export async function listTeacherViewTargets(): Promise<TeacherViewTarget[]> {
         .order("id")
         .range(from, to),
     ),
+    // 설정을 못 읽으면 이 갈래만 빈다(목록 전체를 죽이지 않는다).
+    getTenantSettings()
+      .then((st) => new Set(st.permissions.specialAccess.jjReportManagerIds ?? []))
+      .catch(() => new Set<string>()),
   ]);
   const teachingIds = new Set(classRows.map((r) => r.teacher_id).filter(Boolean) as string[]);
   return staff
     .filter((s) => s.id !== user.id && s.system_role !== "student")
-    .filter((s) => s.system_role === "teacher" || teachingIds.has(s.id))
+    .filter((s) => s.system_role === "teacher" || teachingIds.has(s.id) || jjIds.has(s.id))
     .map((s) => ({ id: s.id, name: s.display_name ?? "(이름 없음)" }))
     .sort((a, b) => a.name.localeCompare(b.name, "ko")); // Postgres 정렬은 로마자→한글(#84) — 한글 우선 정렬
 }

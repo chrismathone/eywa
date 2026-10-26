@@ -239,8 +239,10 @@ describe("배선", () => {
     const client = read("./components/onescreen-client.tsx");
     expect(client).toMatch(/pilotRecomposeNote\(r\.draft, r\.autoDraft, pilotPrevNote, text\)/);
     expect(client).toMatch(/pilotOneLine: rowEval\.note/);
-    expect(read("./components/report-card.tsx")).toMatch(/needsOneLine: pilot && !hasPilotOneLine\(cardEval\.note\)/);
-    expect(read("./components/grid-row.tsx")).toMatch(/needsOneLine: pilot && !hasPilotOneLine\(rowEval\.note\)/);
+    // 영어 행도 '사랑의 한마디' 필수(원장 2026-10-26) — 판정은 oneLineRow = pilot || 영어.
+    expect(read("./components/report-card.tsx")).toMatch(/needsOneLine: oneLineRow && !hasPilotOneLine\(cardEval\.note\)/);
+    expect(read("./components/grid-row.tsx")).toMatch(/needsOneLine: oneLineRow && !hasPilotOneLine\(rowEval\.note\)/);
+    expect(read("./components/report-card.tsx")).toMatch(/const oneLineRow = pilot \|\| subject\.subjectKey === "english"/);
   });
 });
 

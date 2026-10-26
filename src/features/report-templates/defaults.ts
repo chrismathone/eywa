@@ -55,7 +55,7 @@ export const ENGLISH_TEMPLATE_TOKENS: readonly TemplateToken[] = [
   { key: "숙제", label: "오늘 숙제", source: "원스크린 오늘 과제 칸" },
   { key: "다음테스트", label: "다음 시간 테스트", source: "다음 시간 테스트 안내 칸" },
   { key: "코멘트", label: "AI 코멘트", source: "AI가 쓰는 학생별 피드백", ai: true },
-  { key: "출결", label: "출결", source: "출석부의 지각·조퇴·공결 + 사유를 문장으로 — 출석이면 줄이 빠진다" },
+  { key: "출결", label: "출결", source: "출석부의 출석·지각·조퇴·공결(+ 사유)을 문장으로 — 출결 기록이 없으면 줄이 빠진다" },
   { key: "수업평가", label: "수업 평가 표", source: "수업 태도·숙제 완성도를 하~상 눈금 표로" },
   { key: "일일테스트", label: "일일 테스트 문장", source: "점수 + 한마디. 시험이 없으면 '보지 않았습니다'" },
   { key: "확인테스트", label: "확인 테스트 문장", source: "점수 + 한마디. 없으면 줄이 빠진다" },
@@ -216,6 +216,32 @@ export const BUILTIN_ENGLISH_SHEET_TEMPLATE: ReportTemplate = {
   ].join("\n"),
 };
 
+export const BUILTIN_JJ_SHEET_TEMPLATE_ID = "builtin:english-jj-sheet";
+
+/**
+ * **JJ 수업보고서**(원장 2026-10-26 *"jj(영어) 양식 추가 · 기존 srs 디자인 밑에 하고 위에 [수학 보고서 표] 넣고 밑에 srs 사진"*).
+ * 위 = 수학 보고서와 같은 표 머리(로고·제목·날짜·반·담임 → 일일 테스트 → 수업 평가), 아래 = SRS(인재원) 결과지·학습 분석지.
+ * 그리는 길은 항목 보고서와 **같다**(parent-report-card → PilotReportSheet — 테스트·수업 평가는 표 머리로, 그림 항목은 TemplateBody로).
+ * 🔴 항목 제목('수업 평가'·'일일 테스트')은 수학 `PILOT_SECTION_TITLES`와 글자까지 같아야 표 머리로 올라간다.
+ * 🔑 인재원 자료가 없는 날은 그림 항목이 통째로 빠진다(카드가 그림만 든 항목을 거른다 — 빈 띠를 그리지 않는다).
+ */
+export const BUILTIN_JJ_SHEET_TEMPLATE: ReportTemplate = {
+  id: BUILTIN_JJ_SHEET_TEMPLATE_ID,
+  name: "JJ 수업보고서",
+  builtIn: true,
+  body: [
+    "■ 수업 평가",
+    "{수업평가}",
+    "",
+    "■ 일일 테스트",
+    "{일일테스트}",
+    "",
+    "■ SRS 학습 결과",
+    "{시험결과지}",
+    "{학습분석지}",
+  ].join("\n"),
+};
+
 /**
  * 영어 행의 **기본 템플릿**(템플릿을 고르지 않은 행) — 2026-10-26부터 항목 보고서다. 옛 'ECS 자동'은 목록에 남아 고를 수 있다
  * (글자 하나 안 바꿨다 — 그 템플릿으로 쓴 글·지문이 흔들리지 않게).
@@ -227,11 +253,15 @@ export const BUILTIN_ENGLISH_TEMPLATES: readonly ReportTemplate[] = [
   BUILTIN_ENGLISH_SHEET_TEMPLATE,
   BUILTIN_ENGLISH_TEMPLATE,
   BUILTIN_ENGLISH_JJ_TEMPLATE,
+  BUILTIN_JJ_SHEET_TEMPLATE,
 ];
 
 /** 기본 템플릿 이름의 화면 문구 키(teacher-view/i18n.ts) — 기본 템플릿 이름은 화면 언어를 따른다. */
-export function builtinTemplateLabelKey(id: string): "os.tpl.builtinName" | "os.tpl.builtinJjName" | "os.tpl.builtinSheetName" {
+export function builtinTemplateLabelKey(
+  id: string,
+): "os.tpl.builtinName" | "os.tpl.builtinJjName" | "os.tpl.builtinSheetName" | "os.tpl.builtinJjSheetName" {
   if (id === BUILTIN_ENGLISH_SHEET_TEMPLATE_ID) return "os.tpl.builtinSheetName";
+  if (id === BUILTIN_JJ_SHEET_TEMPLATE_ID) return "os.tpl.builtinJjSheetName";
   return id === BUILTIN_ENGLISH_JJ_TEMPLATE_ID ? "os.tpl.builtinJjName" : "os.tpl.builtinName";
 }
 

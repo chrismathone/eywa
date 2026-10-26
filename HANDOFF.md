@@ -1,6 +1,10 @@
 # aywa 이어가기 핸드오프 — 2026-07-06 (영어 시간표 이식 + 과목 운영 설정 + 과목 흡수 삭제, main 반영 완료)
 
-> 🔴 **2026-10-21 최신 핸드오프는 [`docs/handoff-video-review-2026-10-21.md`](docs/handoff-video-review-2026-10-21.md)** — 영상 설명 AI 참고 메모 main 반영 완료 · 연동 앱 1.0.8 게시만 남음(Windows 빌드 PC에서 재개). 아래는 2026-07-06 시점 문서.
+> **원생 기여도·학생 온톨로지(2026-10-26): [`docs/handoff-student-contribution-2026-10-26.md`](docs/handoff-student-contribution-2026-10-26.md)** — UI 개선 배포 완료 · 다음 자동 집계의 재원기간 확인과 설명회 참석 반영 계획 인계.
+>
+> **영상 설명 AI 참고 메모(2026-10-21): [`docs/handoff-video-review-2026-10-21.md`](docs/handoff-video-review-2026-10-21.md)** — 연동 앱 게시·운영 확인 상태는 해당 문서의 최신 갱신을 따른다.
+>
+> 아래는 2026-07-06 시점의 기록이다. 현재 작업의 검증 범위와 절차는 최신 `AGENTS.md`·`CLAUDE.md` 및 해당 작업 핸드오프를 우선한다.
 
 다른 컴퓨터/세션에서 **이 시점부터 바로** 이어가기 위한 문서. 상세 규약·함정은 [`CLAUDE.md`](CLAUDE.md),
 영어 시간표 동기화의 데이터/스크립트 상세는 [`ENGLISH_SYNC_HANDOFF.md`](ENGLISH_SYNC_HANDOFF.md).

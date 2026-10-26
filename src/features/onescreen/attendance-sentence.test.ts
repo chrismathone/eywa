@@ -11,8 +11,12 @@ describe("출결 문장(원장 2026-10-26)", () => {
   it("사유가 없으면 이유를 짓지 않고 상태만", () => {
     expect(attendanceSentence("late", null)).toBe("오늘은 조금 늦게 도착했습니다.");
   });
-  it("출석·결석·보강·기록 없음은 말하지 않는다", () => {
-    for (const s of ["present", "absent", "makeup", null, undefined, "weird"]) expect(attendanceSentence(s, "메모")).toBe("");
+  it("출석·보강도 적되 메모는 싣지 않는다(원장 2026-10-26)", () => {
+    expect(attendanceSentence("present", "내부 메모")).toBe("오늘 수업에 정상적으로 출석했습니다.");
+    expect(attendanceSentence("makeup", "메모")).toBe("오늘은 보강 수업에 출석했습니다.");
+  });
+  it("결석·기록 없음은 말하지 않는다", () => {
+    for (const s of ["absent", null, undefined, "weird"]) expect(attendanceSentence(s, "메모")).toBe("");
   });
 });
 

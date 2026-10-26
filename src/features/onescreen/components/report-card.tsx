@@ -309,6 +309,8 @@ export function ReportCard({
   // 수학 보고서 시범(테스트 학생 한정, math-report-pilot.ts) — 멘트·추세는 보기만, 자동작성 글 그대로여야 발송.
   const pilot = isMathReportPilot(student.id, subject.subjectKey);
   const pilotLocked = pilot && !pilotCanEdit(rep.autoDraft); // 자동작성 전엔 잠금(2026-10-23)
+  // '사랑의 한마디' 행 — 새 수학 보고서 + 영어(원장 2026-10-26 *"영어도 수학이랑 동일하게 특이사항 말고 사랑의 한마디 · 밑에 배치 · 필수"*).
+  const oneLineRow = pilot || subject.subjectKey === "english";
   const sendGate = evaluateSendGate({
     lang, // 🔴 판정이 아니라 **글자**만 갈린다(canSend·reasons 불변, send-gate.ts)
     needsAutoWrite:
@@ -320,7 +322,7 @@ export function ReportCard({
         factsSig: pilotRowSig(student, subject.name),
         writtenSig: rep?.pilotFactsSig,
       }),
-    needsOneLine: pilot && !hasPilotOneLine(cardEval.note), // 사랑의 한마디(옛 강사 한줄 멘트) 필수(원장 2026-10-22)
+    needsOneLine: oneLineRow && !hasPilotOneLine(cardEval.note), // 사랑의 한마디(옛 강사 한줄 멘트) 필수(원장 2026-10-22)
     needsTestReason: pilot && !testSkipComplete(subject.dailyTestSkip), // 일일 테스트 '없음'이면 사유 필수(원장 2026-10-22)
     needsHomeworkReason: pilot && needsHomeworkMissReason(cardEval.homework, subject.homeworkMissReason), // 숙제 미제출이면 사유 필수(원장 2026-10-23)
     readonlyView, // 열람 전용 — 사유 라벨까지 게이트가 만든다(표뷰와 동일)
@@ -365,13 +367,13 @@ export function ReportCard({
   // 발송 버튼 바로 위)에 둔다(원장 2026-10-23 *"사랑의 한마디를 더 밑으로 내려달라고"*). 그 밖의 행은 종전처럼 맨 위.
   const noteField = (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={`teacher-note-${student.id}`} className="micro text-text-faint">{pilot ? t("os.card.notePilot") : t("os.card.note")}</label>
+      <label htmlFor={`teacher-note-${student.id}`} className="micro text-text-faint">{oneLineRow ? t("os.card.notePilot") : t("os.card.note")}</label>
       <textarea
         id={`teacher-note-${student.id}`}
         rows={3}
         value={cardEval.note}
         onChange={(e) => onNote(e.target.value)}
-        placeholder={pilot ? t("os.card.notePhPilot") : t("os.card.notePh")}
+        placeholder={oneLineRow ? t("os.card.notePhPilot") : t("os.card.notePh")}
         className={`${TEXTAREA_AUTOSIZE} border-line focus:border-primary min-h-20 rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none`}
       />
     </div>
@@ -700,7 +702,7 @@ export function ReportCard({
           disabled={locked}
           className="contents [&_input:disabled]:opacity-50 [&_textarea:disabled]:opacity-50 [&_select:disabled]:opacity-50 [&_button:disabled]:opacity-50 [&:disabled_*]:cursor-not-allowed"
         >
-        {pilot ? null : noteField}
+        {oneLineRow ? null : noteField}
         <div className="flex flex-1 flex-col gap-1.5">
           <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
             <div className="flex flex-wrap items-center gap-1.5">
@@ -832,7 +834,7 @@ export function ReportCard({
             />
           </div>
         )}
-        {pilot ? noteField : null}
+        {oneLineRow ? noteField : null}
         </fieldset>
 
         {/* ClassNote 자동 발송 — 저장 + 큐 적재(로컬 워커가 자동 게시). 상태는 배지로 표시.

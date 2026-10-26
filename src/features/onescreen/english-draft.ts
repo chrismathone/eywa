@@ -45,7 +45,7 @@ export type EnglishRowFacts = {
    * 🔑 이것도 '사실'이다: 자료가 생기거나 사라지면 템플릿 글 그대로인 글은 저장 직전 다시 짜이고, 고친 글엔 칩이 선다.
    */
   slots?: Partial<Record<ImageSlotKey, boolean>>;
-  /** 그날 출결 문장(attendance-sentence.ts, 2026-10-26) — 항목 보고서의 '출결' 칸. 출석이면 "". */
+  /** 그날 출결 문장(attendance-sentence.ts, 2026-10-26) — 항목 보고서의 '출결' 칸. 출결 기록이 없으면 "". */
   attendance?: string;
 };
 

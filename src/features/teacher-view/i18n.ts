@@ -3491,6 +3491,7 @@ export const SHEET_DICT = {
   "os.tpl.builtinJjName": { ko: "ECS 자동 + 인재원 결과지", en: "ECS auto + Injaewon sheets" },
   // 영어 기본 = 수학과 같은 항목 보고서(원장 2026-10-26) — report-templates/defaults.ts BUILTIN_ENGLISH_SHEET_TEMPLATE.
   "os.tpl.builtinSheetName": { ko: "수학과 같은 항목 보고서 (기본)", en: "Section report like math (default)" },
+  "os.tpl.builtinJjSheetName": { ko: "JJ 수업보고서", en: "JJ class report" },
   "os.tpl.jjLoading": { ko: "인재원 자료를 불러오는 중…", en: "Loading Injaewon data…" },
   "os.tpl.jjUnlinked": {
     ko: "인재원 미연결 — 결과지·학습분석지 칸은 비워 둡니다",

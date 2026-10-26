@@ -13,27 +13,27 @@ const LV_TONE = [
   {
     head: "bg-report-lv1 text-white",
     soft: "bg-report-lv1-soft",
-    dot: "bg-report-lv1 ring-report-lv1",
+    dot: "border-report-lv1",
   },
   {
     head: "bg-report-lv2 text-white",
     soft: "bg-report-lv2-soft",
-    dot: "bg-report-lv2 ring-report-lv2",
+    dot: "border-report-lv2",
   },
   {
     head: "bg-report-lv3 text-white",
     soft: "bg-report-lv3-soft",
-    dot: "bg-report-lv3 ring-report-lv3",
+    dot: "border-report-lv3",
   },
   {
     head: "bg-report-lv4 text-primary-deep",
     soft: "bg-report-lv4-soft",
-    dot: "bg-report-lv4 ring-report-lv4",
+    dot: "border-report-lv4",
   },
   {
     head: "bg-report-lv5 text-white",
     soft: "bg-report-lv5-soft",
-    dot: "bg-report-lv5 ring-report-lv5",
+    dot: "border-report-lv5",
   },
 ] as const;
 
@@ -215,6 +215,18 @@ export function PilotSheetHead(p: PilotSheetHeadProps) {
               ))}
             </tr>
             {p.levels.map((r) => {
+              // 값이 없는 줄(숙제 없음·평가 없음) — 줄을 지우지 않고 다섯 칸을 합쳐 그 사실을 적는다(원장 2026-10-26).
+              if (r.level === null)
+                return (
+                  <tr key={r.label}>
+                    <th scope="row" className={`${LABEL} h-11`}>
+                      {r.label}
+                    </th>
+                    <td colSpan={LEVELS.length} className={`${CELL} text-text-dim h-11 text-sm font-bold`}>
+                      {r.none}
+                    </td>
+                  </tr>
+                );
               const at = LEVELS.indexOf(r.level);
               return (
                 <tr key={r.label}>
@@ -229,7 +241,7 @@ export function PilotSheetHead(p: PilotSheetHeadProps) {
                       {i === at ? (
                         <span
                           aria-label={lv}
-                          className={`${LV_TONE[i]!.dot} inline-block size-5 rounded-full ring-2 ring-offset-2 ring-offset-transparent align-middle`}
+                          className={`${LV_TONE[i]!.dot} inline-block size-5 rounded-full border-[3px] bg-transparent align-middle`}
                         />
                       ) : null}
                     </td>
