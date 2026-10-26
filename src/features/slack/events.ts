@@ -28,6 +28,7 @@ export const FORWARD_EVENT_OPTIONS: readonly ForwardEventOption[] = [
   { type: "outstanding_alert", label: "미납 누적", group: "학생 관리" },
   { type: "unsent_report", label: "미발송 수업 보고서", group: "학생 관리" },
   { type: "progress_anomaly", label: "진도 기록 이상", group: "학생 관리" },
+  { type: "withdrawal_bypass", label: "퇴원보고서 없이 퇴원", group: "학생 관리" },
   { type: "classnote_parent_post", label: "학부모 ClassNote 글", group: "학부모·발송" },
   { type: "classnote_parent_comment", label: "학부모 ClassNote 댓글", group: "학부모·발송" },
   { type: "homework_video_link", label: "제출 링크로 숙제 영상 올림", group: "학부모·발송" },

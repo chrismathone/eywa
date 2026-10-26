@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { diffImport, planUndo, type LineFields } from "./import-undo";
+import { diffImport, planUndo, splitBatchRows, undoChain, type LineFields } from "./import-undo";
 
 const ME = "me";
 
@@ -60,5 +60,25 @@ describe("planUndo — 손대지 않은 칸만 되돌린다", () => {
 
   it("사라진 줄(지웠거나 미룸으로 옮김)은 건드리지 않고 남긴 수로 센다", () => {
     expect(planUndo(rows, new Map())).toEqual({ deletes: [], resets: [], restored: 0, kept: 2 });
+  });
+});
+
+describe("splitBatchRows / undoChain — plan meta, last 5", () => {
+  it("separates the plan meta element from line rows; old records have no plan", () => {
+    const row = { id: "l1", added: true, after: { textbook: "RANK" } };
+    expect(splitBatchRows([{ kind: "plan", planId: "p1", title: "RANK" }, row])).toEqual({
+      rows: [row],
+      plan: { kind: "plan", planId: "p1", title: "RANK" },
+    });
+    expect(splitBatchRows([row])).toEqual({ rows: [row], plan: null });
+    expect(splitBatchRows(null)).toEqual({ rows: [], plan: null });
+    expect(splitBatchRows([1, "x", { kind: "plan" }, row]).rows).toEqual([row]);
+  });
+
+  it("picking one undoes it and everything newer, newest first", () => {
+    const recent = [{ id: "c" }, { id: "b" }, { id: "a" }];
+    expect(undoChain(recent, "c")).toEqual([{ id: "c" }]);
+    expect(undoChain(recent, "a")).toEqual([{ id: "c" }, { id: "b" }, { id: "a" }]);
+    expect(undoChain(recent, "zz")).toBeNull();
   });
 });

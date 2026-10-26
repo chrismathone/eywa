@@ -69,7 +69,9 @@ export type NotificationType =
   // 슬랙 발송이 토큰 문제로 멈춤(0298a 발송기) → 원장(master). 설정 화면 밖에서도 알게(grok 2차).
   | "slack_broken"
   // 늦은 할 일 요약(0377a 업무 처리 확인) — 매일 아침 원장 + 업무 처리 현황을 지정받은 사람에게. 누르면 늦은 할 일 목록.
-  | "staff_task_digest";
+  | "staff_task_digest"
+  // 퇴원보고서를 거치지 않은 퇴원·새 퇴원 예약(0454a DB 트리거, 막지 않는다) → 그 지점 원장(재직). 누르면 퇴원 상세.
+  | "withdrawal_bypass";
 
 export type NotificationItem = {
   id: string;
@@ -120,4 +122,5 @@ export const NOTIFICATION_ICON: Record<string, AywaIconName> = {
   support_answer: "mail",
   slack_broken: "alert",
   staff_task_digest: "clipboardCheck",
+  withdrawal_bypass: "alert",
 };

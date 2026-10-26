@@ -487,6 +487,9 @@ export type ConsultationsSettings = z.infer<typeof consultationsSchema>;
 export const reportSchema = z.object({
   title: z.string().max(40),
   showLogo: z.boolean(),
+  // 보고서 전용 로고(원장 2026-10-26 *"시지입시관 이름 빼"* — 학원 로고엔 지점명이 박혀 있다). 비우면 학원 로고(profile.logoUrl).
+  // 소비처 = reportLogoPath() → /r 공유 페이지 · 보고서 인쇄 · 원스크린 미리보기.
+  logoUrl: z.string().max(400).default(""),
   showAcademyName: z.boolean(),
   showFooter: z.boolean(),
   footerNote: z.string().max(200),

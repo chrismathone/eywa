@@ -63,7 +63,9 @@ const REV_SECTIONS: readonly SectionKey[] = ["operations", "permissions"];
 // 로고/직인/팝업 이미지 업로드 티켓 — saveOwnerSection과 동일 게이트(owner 쓰기). 반환 path를 logoUrl/sealUrl에 저장.
 export type IssueBrandingTicketState = { ticket?: UploadTicket; error?: string } | undefined;
 // logo/seal=인쇄물 브랜딩. popup=공지 팝업 이미지(같은 branding 버킷·경로·권한 재사용 — master 전용 이미지).
-const BRANDING_SLOTS = new Set(["logo", "seal", "popup"]);
+// reportLogo=보고서 전용 로고(report.logoUrl) — 보고서 설정을 고치는 사람이 올리므로 report_settings 게이트.
+const BRANDING_SLOTS = new Set(["logo", "seal", "popup", "reportLogo"]);
+const BRANDING_SLOT_MENU = { popup: "popup_settings", reportLogo: "report_settings" } as const;
 export async function issueBrandingUploadTicket(
   _prev: IssueBrandingTicketState,
   formData: FormData,
@@ -72,7 +74,7 @@ export async function issueBrandingUploadTicket(
   if (!actor) return { error: "로그인이 필요합니다" };
   const slot = String(formData.get("slot") ?? "");
   if (!BRANDING_SLOTS.has(slot)) return { error: "잘못된 슬롯입니다" };
-  if (!(await canWriteTenant(actor.systemRole, slot === "popup" ? "popup_settings" : "profile_settings"))) {
+  if (!(await canWriteTenant(actor.systemRole, BRANDING_SLOT_MENU[slot as keyof typeof BRANDING_SLOT_MENU] ?? "profile_settings"))) {
     return { error: "이미지 설정 변경 권한이 없습니다" };
   }
   const contentType = String(formData.get("contentType") ?? "");

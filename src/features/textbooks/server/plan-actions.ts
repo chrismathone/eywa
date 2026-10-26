@@ -960,6 +960,8 @@ export async function applyTextbookFill(
           from: importFrom,
           to: planned.lastDate,
           byCell: planned.byCell,
+          // 되돌리기가 배정까지 지우게 기록에 싣는다(원장 2026-10-26 — 줄만 비우면 빈 칸에 `계획`이 다시 그려졌다).
+          plan: { id: saved.id, title: computed.title },
         })
       : null;
 
@@ -1011,6 +1013,8 @@ async function writePlannedCells(input: {
   from: string;
   to: string;
   byCell: Record<string, PlannedLine[]>;
+  /** 이 반영을 만든 교재 배정 — 되돌리기 기록에 함께 싣는다. */
+  plan?: { id: string; title: string | null };
 }): Promise<{ ok: true; result: ApplyResult; cells: number; undoBatchId: string | null } | { ok: false; error: string }> {
   const { access, classId } = input;
   const cells = Object.keys(input.byCell).sort();
@@ -1057,7 +1061,7 @@ async function writePlannedCells(input: {
   }
 
   const undoBatchId =
-    before && total.added + total.filled > 0
+    before && (total.added + total.filled > 0 || input.plan)
       ? await recordImportBatch({
           admin,
           tenantId: access.tenantId,
@@ -1066,6 +1070,7 @@ async function writePlannedCells(input: {
           to: input.to,
           actorId: access.user.id,
           before,
+          plan: input.plan ?? null,
         })
       : null;
   return { ok: true, result: total, cells: cells.length, undoBatchId };

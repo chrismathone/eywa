@@ -13,7 +13,9 @@ import { WITHDRAWAL_REASONS } from "./types";
  * ⚠️ 한계(알고 둔다): 변수로 상태를 쓰는 저장(학생 등록·수정 폼 — 그 두 곳은 판정 함수를 부르는지 따로 본다) · 따옴표 키(`"withdrawn_at": x`) ·
  *    SQL 템플릿 안의 쓰기 · RPC · 수강 `end_date` 쓰기
  *    (반 폐지·종강·시트/엑셀 가져오기 등 시스템 종료는 학생을 퇴원시키지 않는다 — 수업 없는 재원생은 퇴원보고서로만 퇴원한다)는 글자로 못 잡는다.
- *    DB 트리거로 강제하지 않았다(워커·동기화·cron이 조용히 깨질 위험 #95 — 브리프 결정). 운영자 스크립트(`scripts/`)는 대상이 아니다.
+ *    DB 트리거로 **막지는** 않는다(워커·동기화·cron이 조용히 깨질 위험 #95). 대신 보고서를 안 거친 퇴원·새 퇴원 예약은 DB가 **경고**한다 —
+ *    원장 2026-10-23 *"개발자 도구는 어쩔 수 없지. 대신 경고할 수 있게"* → 0454a 지연 트리거(그 지점 원장 벨 알림 + 감사로그, 쓰기는 그대로 커밋).
+ *    트리거가 빼는 길도 이 목록과 같다(보고서 처리 · 옛 예약 당일 처리 · 병합 · 옛 기록/데모 INSERT). 운영자 스크립트(`scripts/`)는 대상이 아니다.
  */
 const ROOT = process.cwd();
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
@@ -72,7 +74,7 @@ describe("퇴원은 퇴원보고서로만", () => {
     expect(imp).toContain("if (plan.inserts.some((r) => r.scheduled)) return { error: SCHEDULE_VIA_REPORT };");
   });
 
-  it("마지막 반 종료는 두 수강 종료 액션이 같은 게이트로 거절한다 — 시간표 확인 문구와 같은 판정", () => {
+  it("마지막 반(학생 · 그 과목) 종료는 두 수강 종료 액션이 같은 게이트로 거절한다 — 시간표 확인 문구 · 원생 화면과 같은 판정", () => {
     const src = read("src/features/students/server/actions.ts");
     const partial = src.slice(src.indexOf("export async function endStudentEnrollments"), src.indexOf("export async function setStudentEnrollmentHolds"));
     const single = src.slice(src.indexOf("export async function endSingleEnrollment"), src.indexOf("// ────────────────────── 메모 + 성적"));
@@ -80,8 +82,30 @@ describe("퇴원은 퇴원보고서로만", () => {
       expect(fn).toContain("await lastCourseViaReport(supabase,");
       expect(fn.indexOf("lastCourseViaReport")).toBeLessThan(fn.indexOf("endEnrollmentById("));
     }
-    expect(read("src/features/timetable/server/end-scope.ts")).toContain("endScopeFor(rows, target");
-    expect(read("src/features/withdrawals/server/via-report.ts")).toContain("endsLastCourse(rows, input.enrollmentIds");
+    const scope = read("src/features/timetable/server/end-scope.ts");
+    expect(scope).toContain("endScopeFor(rows, target");
+    expect(scope).toContain("viaReportMessage(rows, [enrollmentId], date, withdrawnAt)");
+    const gate = read("src/features/withdrawals/server/via-report.ts");
+    expect(gate).toContain("viaReportMessage(rows, input.enrollmentIds, input.date, withdrawnAt)");
+    // 과목 마지막 반 판정은 특강 여부가 재료다(끝난 특강은 퇴원관리 '수강종료'가 아니다) — 조회가 칸을 읽는다.
+    expect(gate).toContain('select("id, class_name, subject, is_special")');
+    // 원생 화면의 상태 전환 창도 같은 함수로 과목별 '퇴원보고서로'를 미리 계산한다(원장 2026-10-26).
+    expect(read("src/app/(shell)/students/[id]/page.tsx")).toContain("viaReportMessage(endRows,");
+  });
+
+  it("보고서를 거치지 않은 퇴원은 DB가 막지 않고 경고한다(0454a) — 지연 트리거 · 실패해도 쓰기 커밋", () => {
+    const sql = read("supabase/migrations/0454a_withdrawal_bypass_warning.sql");
+    expect(sql).toContain("create constraint trigger zz_withdrawal_without_report_warning");
+    expect(sql.match(/deferrable initially deferred/g)?.length).toBe(2);
+    expect(sql).toContain("security definer");
+    expect(sql).toContain("exception when others or query_canceled then");
+    // 경고 함수가 쓰기를 막는 일은 없다 — raise 없음.
+    const fn = sql.slice(sql.indexOf("create or replace function withdrawal_guard_private.warn_unreported_withdrawal"), sql.indexOf("comment on function"));
+    expect(fn).not.toMatch(/\braise\b/i);
+    // 보고서 처리 = 이 트랜잭션에서 완료된 묶음(글자만 흉내 낸 metadata는 경고).
+    expect(fn).toContain("g.applied_at = now()");
+    expect(fn).toContain("'withdrawal_bypass'");
+    expect(read("src/features/notifications/types.ts")).toContain('| "withdrawal_bypass"');
   });
 
   it("장부 정리(수강 없는 재원생 일괄 퇴원)도 학생마다 바로 처리 보고서를 남긴다 — 학생을 직접 쓰지 않는다", () => {

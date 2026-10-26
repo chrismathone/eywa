@@ -225,6 +225,7 @@ export const DEFAULT_SETTINGS: TenantSettings = {
   report: {
     title: "수업 보고서",
     showLogo: true,
+    logoUrl: "",
     showAcademyName: true,
     showFooter: true,
     footerNote: "",

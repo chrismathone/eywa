@@ -14,7 +14,22 @@ describe("describeEndSelection", () => {
     expect(plan.notice).toContain("퇴원보고서로 처리합니다");
   });
 
-  it("두 과목 중 하나만 고르면 과목 종료 — 학생이 재원으로 남는다고 미리 말한다", () => {
+  it("고른 과목을 끝내면 그 과목 수강종료면(원생 화면이 서버 판정으로 넘김) 이 창이 아니라 퇴원보고서로 — 원장 2026-10-26", () => {
+    const plan = describeEndSelection(2, ["영어"], ["영어"]);
+    expect(plan.mode).toBe("subject");
+    expect(plan.buttonLabel).toBe("퇴원보고서로 진행");
+    expect(plan.notice).toContain("영어");
+    expect(plan.notice).toContain("과목 수강종료입니다");
+    expect(plan.notice).toContain("퇴원보고서");
+    // 여러 과목 중 하나라도 수강종료면 보고서로(나머지 과목만 따로 끝내려면 그 과목만 고른다).
+    expect(describeEndSelection(3, ["수학", "영어"], ["수학"]).mode).toBe("subject");
+  });
+
+  it("전부 고르면 과목 수강종료 표시가 있어도 학생 퇴원(full)이 먼저", () => {
+    expect(describeEndSelection(2, ["수학", "영어"], ["수학"]).mode).toBe("full");
+  });
+
+  it("두 과목 중 하나만 고르고 수강종료가 아니면(특강 종강 · 예전 퇴원 예약 학생) 과목 종료 — 학생이 재원으로 남는다고 미리 말한다", () => {
     const plan = describeEndSelection(2, ["영어"]);
     expect(plan.mode).toBe("partial");
     expect(plan.buttonLabel).toBe("과목 종료(1과목)");

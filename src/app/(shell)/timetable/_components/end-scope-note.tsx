@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { endScopeText, type EndScopeResult } from "@/features/timetable/lib/end-scope-text";
+import { endScopeText, endScopeViaReport, type EndScopeResult } from "@/features/timetable/lib/end-scope-text";
 
 /**
  * 수강 종료 확인 팝업의 한 줄 — 이걸 끝내면 **이 반만 종강인지 / 그 과목 수강종료인지 / 퇴원인지** 사실대로 말한다
@@ -40,7 +40,8 @@ export function EndScopeNote({ enrollmentId, date }: { enrollmentId: string; dat
 
   if (!date) return null;
   const settled = answer && answer.key === key ? answer : null;
-  const lastClass = settled?.result?.scope === "student";
+  // 서버가 막는 종료(학생의 마지막 반 · 그 과목의 마지막 반)는 빨간 글씨 — 확인을 눌러도 퇴원보고서로 보낸다.
+  const lastClass = endScopeViaReport(settled?.result ?? null);
   return (
     <p className={`mt-2 text-xs ${lastClass ? "text-danger" : "text-text-dim"}`} aria-live="polite">
       {settled ? endScopeText(settled.result) : "다른 반 수강을 확인하는 중…"}

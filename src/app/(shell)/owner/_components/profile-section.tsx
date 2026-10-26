@@ -111,7 +111,7 @@ export function ProfileSection({ initial }: { initial: ProfileSettings }) {
  * 미리보기는 방금 고른 File의 로컬 objectURL(GCS path는 비공개라 직접 <img> 불가 — 인쇄물은 서버가 resolve).
  * 외부 URL 직접 입력도 허용(하위호환). 업로드는 master만(서버 게이트).
  */
-function BrandingField({
+export function BrandingField({
   label,
   hint,
   slot,
@@ -120,7 +120,7 @@ function BrandingField({
 }: {
   label: string;
   hint: string;
-  slot: "logo" | "seal";
+  slot: "logo" | "seal" | "reportLogo";
   value: string;
   onChange: (v: string) => void;
 }) {
