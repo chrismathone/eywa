@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canonicalRole, EMPTY_ANALYSIS_ERROR, NO_WARNING, normalizeConsultationReport } from "./analysis-normalize";
+import { canonicalRole, EMPTY_ANALYSIS_ERROR, fullProspectName, NO_WARNING, normalizeConsultationReport } from "./analysis-normalize";
 
 // 2026-10-19 블라인드 비교에서 V4.1 flash가 실제로 낸 모양을 줄인 것 — 나열 섹션을 산문으로, 셔틀 같은 값은 그대로.
 const FLASH_LIKE = {
@@ -131,5 +131,25 @@ describe("canonicalRole", () => {
     expect(canonicalRole("학생 담당 선생님")).toBe("상담자");
     expect(canonicalRole("학부모 상담 실장")).toBe("상담자");
     expect(canonicalRole("학부모(어머니)")).toBe("학부모");
+  });
+});
+
+describe("fullProspectName — 성이 빠진 추출 이름은 입력 이름으로(2026-10-26)", () => {
+  it("입력 이름의 끝과 같고 앞의 성만 빠졌으면 입력 이름 그대로", () => {
+    expect(fullProspectName("도현", "김도현")).toBe("김도현");
+    expect(fullProspectName("근우", "김근우A")).toBe("김근우A"); // 동명이인 구분 글자는 떼고 견주고, 바꿀 땐 입력 그대로
+    expect(fullProspectName("우진", "남궁우진")).toBe("남궁우진");
+  });
+  it("그 밖은 손대지 않는다 — 같은 이름 · 다른 이름 · 입력 없음", () => {
+    expect(fullProspectName("김도현", "김도현")).toBe("김도현");
+    expect(fullProspectName("김근우", "김근우A")).toBe("김근우");
+    expect(fullProspectName("도영", "김도현")).toBe("도영");
+    expect(fullProspectName("현", "김도현")).toBe("현"); // 성 하나 넘게 빠지면(이름 일부) 손대지 않는다
+    expect(fullProspectName("도현", null)).toBe("도현");
+    expect(fullProspectName(null, "김도현")).toBeNull();
+  });
+  it("보고서 후처리에 이어져 있다", () => {
+    const out = normalizeConsultationReport({ summary: "요약.", extracted: { prospectName: "채은" } }, { inputName: "문채은" });
+    expect(out.extracted.prospectName).toBe("문채은");
   });
 });

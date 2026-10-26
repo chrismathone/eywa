@@ -36,7 +36,7 @@ export async function extractConsultationForm(
     keyName,
     provider,
     // 16000 — Claude 5는 생각 토큰도 이 상한에 든다. 4096일 때 긴 녹음에서 답이 잘려 양식이 안 채워졌다(운영 7일 57건 중 21건 ·
-    // 비교 시험 10건 중 4건, 2026-10-19). 기본 모델은 V4.1 flash(`FEATURE_MODELS`)지만 폴백·지점 선택으로 Claude가 와도 안 잘리게.
+    // 비교 시험 10건 중 4건, 2026-10-19). 기본 모델은 Claude Sonnet 5.5(`FEATURE_MODELS`, 2026-10-26 — 그 전 10-19~ V4.1 flash) — 생각 토큰까지 들어가게.
     maxTokens: 16000,
     meta: { feature: "enrollment_form_extract", tenantId: ctx.tenantId },
     prompt: [
@@ -67,7 +67,7 @@ export async function extractConsultationForm(
       '  "shuttleBusRequest": "셔틀 신청 여부 (true/false)",',
       '  "subject": "주요 상담 과목 (수학/영어/국어/과학/기타 중 하나)",',
       '  "parentRequest": "학부모 요구사항 (학부모가 직접 요청한 것만 2~4문장 요약)",',
-      '  "prevAcademy": "이전 다니던 학원",',
+      '  "prevAcademy": "다녔거나 지금 다니는 학원 이름만 — 전사 표기 그대로, 여럿이면 쉼표로(기간·과목·다닌 사정은 subjectDetails의 academyHistory에) · 이름이 안 나왔으면 \\"\\"",',
       '  "lastScore": "최근 성적/점수",',
       '  "weakSubjects": "약점 단원/영역 (쉼표로 구분)",',
       '  "followUpContent": "후속 조치 계획",',

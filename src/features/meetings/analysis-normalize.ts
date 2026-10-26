@@ -3,6 +3,7 @@
 // (나열 섹션 = 줄바꿈 + '- ' · 핵심어 **굵게** 허용). 화자 표기는 기존 저장본 꼴('노원장(A)')로 맞춘다.
 import { cleanRoleMap, normalizeSection, sectionSource, type SectionRules } from "@/lib/ai/section-normalize";
 import type { MeetingReport } from "./server/ai";
+import { cleanSpeakerLabels } from "./speaker-label";
 
 const PROSE_KEYS = ["meetingType", "summary"] as const;
 const LIST_KEYS = ["agendaDiscussion", "decisions", "actionItems", "speakerSummary", "concerns", "nextSteps"] as const;
@@ -20,5 +21,6 @@ export function normalizeMeetingAnalysis(raw: unknown): { report: MeetingReport;
   const out = {} as Record<string, string>;
   for (const k of PROSE_KEYS) out[k] = normalizeSection(r[k], "prose", rules);
   for (const k of LIST_KEYS) out[k] = normalizeSection(r[k], "list", rules);
-  return { report: out as MeetingReport, speakerRoles: cleanRoleMap(r.speakerRoles) };
+  // 화자 이름표는 짧은 이름·직함만 — 설명이 붙은 것은 정리하고, 남는 게 없으면 뺀다(speaker-label.ts · 2026-10-26).
+  return { report: out as MeetingReport, speakerRoles: cleanSpeakerLabels(cleanRoleMap(r.speakerRoles)) };
 }

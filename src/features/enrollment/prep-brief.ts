@@ -293,6 +293,17 @@ export function isHalfPeriodClass(
 }
 
 /**
+ * 지금 열려 있지 않은 반 — 살아 있는 배치(오늘 이후 유효한 `class_schedules` 행)도, 지금 다니는 학생(`end_date` 없는 수강)도
+ * 없다(2026-10-26). 이름 끝에 `(~26.09.19)`가 붙은 끝난 특강처럼 종강일(`closed_at`) 없이 운영 상태로 남은 반이 침산 운영
+ * 112반 중 12반(전부 배치 만료 · 수강생 0) — 정원을 모를 때 쓰는 '현원 적은 순' 정렬 때문에 이런 반이 후보 맨 앞을
+ * 차지해 상담지에 끝난 반 다섯 개가 실렸다(시험 2026-10-26, 고1 수학 상담). 상담에서 시간·자리를 말할 수 없는 반이다.
+ * 🔴 둘 다 없을 때만 — 배치가 남았거나(앞으로 시작하는 배치 포함) 학생이 한 명이라도 있으면 그대로 둔다.
+ */
+export function isClosedOutClass(liveSlotCount: number, openEnrollments: number): boolean {
+  return liveSlotCount === 0 && openEnrollments === 0;
+}
+
+/**
  * 상담 학생에게 제안할 반 후보 정렬 — ① 과목+학년 일치 ② 과목만 일치 순, 각 그룹 안에서는
  * **자리 있는 반 먼저**(상담 자리에서 바로 제안 가능한 순서). 과목 미상이면 학년만으로 좁힌다.
  *
@@ -300,15 +311,16 @@ export function isHalfPeriodClass(
  * 이름만 보면 "중1 영어"가 수학 상담에도 딸려 나온다.
  * ⚠️ **반교시 반은 후보에서 아예 뺀다**(원장 2026-08-04, [isHalfPeriodClass] 주석 참조) — 짝인 완교시
  *    반이 같은 학생·같은 흐름을 대표하므로 시간대가 사라지지 않는다.
+ * ⚠️ **지금 열려 있지 않은 반도 뺀다**([isClosedOutClass] — 배치·수강생이 둘 다 없는 반, 2026-10-26).
  */
 export function rankPrepClasses(
-  all: (Omit<PrepClassFact, "gradeMatched"> & { halfPeriod?: boolean })[],
+  all: (Omit<PrepClassFact, "gradeMatched"> & { halfPeriod?: boolean; closedOut?: boolean })[],
   opts: { subjectKeyLabel: string | null; grade: string | null },
   limit = 6,
 ): PrepClassFact[] {
   const token = gradeToken(opts.grade);
   const subject = opts.subjectKeyLabel;
-  const scored = all.filter((c) => !c.halfPeriod).map((c) => {
+  const scored = all.filter((c) => !c.halfPeriod && !c.closedOut).map((c) => {
     // 다른 학제·학년이 이름에 명시된 반은 무조건 배제(중1 상담지에 "고등"·"중2" 반 금지).
     if (conflictsSchoolLevel(c.className, token)) return { ...c, gradeMatched: false, tier: 0 };
     const gradeMatched = !!token && c.className.includes(token);

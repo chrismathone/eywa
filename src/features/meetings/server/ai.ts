@@ -76,7 +76,7 @@ export type MeetingAnalysisContext = {
 
 /**
  * 8섹션 회의록 분석(+화자→역할 추론) 생성. {report, speakerRoles, model} 반환. 호출부가 try/catch.
- * provider 미지정 = 기본(AI_PROVIDER — 지금 Claude) · 코드 기본 고정 = DeepSeek V4.1 flash(model-pins.ts). 녹음·텍스트 재분석 모두 이 함수를 거친다.
+ * 코드 기본 고정 = Claude Sonnet 5.5(model-pins.ts, 2026-10-26 — 그 전 10-19~ V4.1 flash). 녹음·텍스트 재분석 모두 이 함수를 거친다.
  *
  * 입력은 **전사 + 메모장 결합** — 셋 중 하나: (전사만) / (메모만) / (둘 다). 둘 다면 전사(발화 그대로)와
  * 메모(작성자가 짚은 핵심)를 종합하고, 상충 시 메모의 의도를 우선하되 필요하면 둘 다 남긴다.
@@ -84,7 +84,7 @@ export type MeetingAnalysisContext = {
 export async function analyzeMeeting(
   formattedTranscript: string,
   ctx: MeetingAnalysisContext,
-  provider: AiProvider = "deepseek", // 전사 분석 기본 = DeepSeek v4-pro(2026-07-16). 키 없으면 무중단 폴백.
+  provider: AiProvider = "anthropic", // 전사 분석 = Claude Sonnet 5.5(2026-10-26 원장). 막히면 무중단 폴백(DeepSeek).
 ): Promise<{ report: MeetingReport; speakerRoles: Record<string, string>; model: string }> {
   const notepad = (ctx.notepad ?? "").trim();
   const hasTranscript = formattedTranscript.trim().length > 0;
@@ -124,6 +124,7 @@ export async function analyzeMeeting(
       "출력 형식 규칙(중요):",
       "- 나열형 섹션(agendaDiscussion/decisions/actionItems/speakerSummary/concerns/nextSteps)은 각 항목을 줄바꿈(\\n)으로 구분하고 항목 앞에 '- '를 붙이세요.",
       "- 핵심어(담당자·기한·금액·결정 키워드 등)는 **굵게**로 강조하세요(예: **6/5까지**, **박부장**).",
+      "- 본문에서 사람은 speakerRoles 이름표 뒤에 화자 글자를 붙여 부르세요(예: **대표(B)**, 허은진(A)). 이름표가 빈 화자만 '화자 A'로 쓰고, 'A는'·'B가'처럼 글자만 쓰지 마세요.",
       "",
       "분석 시 반드시 주의할 점:",
       "1. 회의의 유형을 정확히 파악하세요 (예: 정기 운영회의, 강사 회의, 학부모 간담회).",
@@ -137,7 +138,7 @@ export async function analyzeMeeting(
       // gap 신호가 없는 잡담(연속 대화)은 이 지침이 backstop. 메모만일 땐 미삽입.
       ...(hasTranscript
         ? [
-            "8. 녹음이 회의 종료 후에도 꺼지지 않아 뒤에 섞인, 회의와 무관한 대화·잡담·인사·잡음은 분석에서 제외하고 실제 회의 내용만 정리하세요. 전사 끝부분에 회의 주제와 동떨어진 사담이 이어지면 무시하세요.",
+            "8. 녹음이 회의 종료 후에도 꺼지지 않아 뒤에 섞인 사담(일상 대화·식사·인사·잡음)은 분석에서 제외하세요. 단, 참석자 일부가 나간 뒤이거나 회의 주제와 다른 이야기라도 학원 업무에 관한 논의·결정(이름·홍보·일정·비용·업무 지시 등)이면 사담이 아니니 회의 내용으로 정리하세요.",
           ]
         : []),
       // 둘 다일 때만 결합 지침(전사만이면 미삽입 → 프롬프트 바이트 동일).
@@ -150,7 +151,10 @@ export async function analyzeMeeting(
       ...sourceBlock,
       "JSON schema (모든 필드 한국어, 줄바꿈은 \\n):",
       "{",
-      '  "speakerRoles": { "A": "역할/이름", "B": "역할/이름" },',
+      // speakerEvidence = 이름표를 정한 근거를 적는 자리(저장 전 후처리가 버린다 — analysis-normalize는 모르는 칸을 남기지 않는다).
+      // 2026-10-26 시험: 이름표만 짧게 쓰게 하자 근거를 적을 자리가 없어 '대표님' 호칭의 주인을 거꾸로 짚는 일이 생겼다.
+      '  "speakerEvidence": { "A": "이 화자를 누구로 본 근거 한 줄(누가 이 화자를 어떤 호칭으로 불렀는지 · 자기소개 · 참석자 명단)" },',
+      '  "speakerRoles": { "A": "이름이나 직함 1~3낱말(예: \\"대표\\", \\"이승엽 대리\\") — 전사에서 그렇게 불렸으면 그대로, 참석자 명단으로만 짐작했으면 뒤에 (추정) · 근거가 없으면 \\"\\" · 설명은 쓰지 않는다" },',
       '  "meetingType": string,',
       '  "summary": string (2-4문장),',
       '  "agendaDiscussion": string,',

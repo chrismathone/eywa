@@ -17,6 +17,7 @@ import {
   checklistToPairs,
   formatSchedule,
   gradeToken,
+  isClosedOutClass,
   isHalfPeriodClass,
   matchesSubjectCategory,
   normalizeSchool,
@@ -226,7 +227,7 @@ export async function collectPrepFacts(
     return v;
   };
 
-  const candidates: (Omit<PrepClassFact, "gradeMatched"> & { halfPeriod: boolean })[] = classes.map((row) => {
+  const candidates: (Omit<PrepClassFact, "gradeMatched"> & { halfPeriod: boolean; closedOut: boolean })[] = classes.map((row) => {
     const teacher = (Array.isArray(row.teacher) ? row.teacher[0] : row.teacher) as
       | { display_name?: string }
       | undefined;
@@ -244,6 +245,8 @@ export async function collectPrepFacts(
       notes: row.notes ?? null,
       // 반교시 반은 제안 후보에서 뺀다(원장 2026-08-04) — 판정 근거는 시간 길이뿐, 반 이름이 아니다.
       halfPeriod: isHalfPeriodClass(slotsByClass.get(row.id) ?? [], fullPeriodMinOf(row.subject)),
+      // 배치가 모두 끝났고 지금 다니는 학생도 없는 반(끝난 특강 등)은 후보에서 뺀다 — `slotsByClass`는 위에서 살아 있는 행만 담았다.
+      closedOut: isClosedOutClass(slotsByClass.get(row.id)?.length ?? 0, enrolledByClass.get(row.id) ?? 0),
     };
   });
 

@@ -7,17 +7,17 @@ export type ModelPin = { provider: AiProvider; model: string };
 
 /**
  * 기능별 **코드 기본 모델** — 티어 표와 다른 모델을 쓰는 기능만 적는다(나머지는 호출부의 tier·provider 그대로).
- * 🔴 2026-10-19 원장 *"추천 순서로 진행"* — 운영 프롬프트 그대로의 블라인드 비교(폼 10 · 콜&상담 분석 5 · 회의록 5)에서
- *    V4.1 flash가 폼 8승 2무(Sonnet 5는 4건이 4,096 토큰에서 잘려 실패) · 회의록 4승 1무 · 콜&상담 분석 3:2로 같거나 나았고,
- *    값은 1/4~1/8 · 속도는 약 2배였다. 형식 차이는 각 기능의 저장 전 후처리(enrollment/analysis-normalize ·
- *    enrollment/form-normalize · meetings/analysis-normalize)가 기존 모양으로 맞춘다.
- *    재원생 상담·브리프·결석 문자 판별 등 **시험하지 않은 기능은 그대로**(v4-pro) — 넓힐 땐 같은 시험을 먼저.
+ * 🔴 2026-10-26 원장 *"딥시크로 바꾼거 다 클로드로 전환"* · *"전사 분석은 전부 sonnet 5.5로 돌리고, 간단하고 빠르게 작성해야하는
+ *    수업보고서 멘트는 haiku 5.5로"* (Anthropic API 크레딧 지원) — 전사 분석 셋(폼 자동입력 · 콜&상담 분석 · 회의록)을 Sonnet 5.5로 고정.
+ *    (그 전 2026-10-19엔 블라인드 비교로 DeepSeek V4.1 flash였다 — 형식 차이를 맞추던 저장 전 후처리
+ *    enrollment/analysis-normalize · enrollment/form-normalize · meetings/analysis-normalize는 그대로 둔다(Claude 결과엔 할 일이 거의 없다).)
+ *    Claude가 막히면(키·잔액) 평소 사다리로 DeepSeek에 넘어간다(`FALLBACK_LADDER`).
  * 지점마다 다른 모델을 쓰게 하는 것은 운영 콘솔의 'AI 모델' 탭(`tenant_ai_models`, 0375a)이 이 값보다 먼저다.
  */
 export const FEATURE_MODELS: Readonly<Record<string, ModelPin>> = {
-  enrollment_form_extract: { provider: "deepseek", model: "deepseek-flash" },
-  enrollment_analysis: { provider: "deepseek", model: "deepseek-flash" },
-  meeting_analysis: { provider: "deepseek", model: "deepseek-flash" },
+  enrollment_form_extract: { provider: "anthropic", model: "claude-sonnet-5-5" },
+  enrollment_analysis: { provider: "anthropic", model: "claude-sonnet-5-5" },
+  meeting_analysis: { provider: "anthropic", model: "claude-sonnet-5-5" },
   // 영상 설명 AI 참고 메모(2026-10-20 하네스 6차) — 판정 = Haiku 5.5 · 실수 확인 = Sonnet 5.5.
   // Haiku 확인자는 진짜 오류를 '애매'로 떨어뜨리고 도형 오탐을 '확정'해 확인만 Sonnet으로 둔다(26개 기준 정답 실측).
   video_review_judge: { provider: "anthropic", model: "claude-haiku-5-5" },

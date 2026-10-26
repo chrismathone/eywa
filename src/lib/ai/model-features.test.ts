@@ -42,17 +42,19 @@ describe("고를 수 있는 모델", () => {
 });
 
 describe("featurePin — 지점 선택 > 코드 기본 > 없음", () => {
-  it("코드 기본(2026-10-19 비교 시험 뒤 flash로 옮긴 셋 + 2026-10-20 영상 설명 판정·확인)", () => {
+  it("코드 기본(전사 분석 셋 = Sonnet 5.5 · 2026-10-26 원장 '전사 분석은 전부 sonnet 5.5' + 2026-10-20 영상 설명 판정·확인)", () => {
     expect(Object.keys(FEATURE_MODELS).sort()).toEqual(["enrollment_analysis", "enrollment_form_extract", "meeting_analysis", "video_review_judge", "video_review_verify"]);
     expect(featurePin("video_review_judge")).toEqual({ provider: "anthropic", model: "claude-haiku-5-5" });
     expect(featurePin("video_review_verify")).toEqual({ provider: "anthropic", model: "claude-sonnet-5-5" });
-    expect(featurePin("meeting_analysis")).toEqual({ provider: "deepseek", model: "deepseek-flash" });
+    for (const f of ["meeting_analysis", "enrollment_analysis", "enrollment_form_extract"]) {
+      expect(featurePin(f), f).toEqual({ provider: "anthropic", model: "claude-sonnet-5-5" });
+    }
   });
   it("지점이 고르면 그게 먼저 · 이상한 값은 무시하고 코드 기본", () => {
-    expect(featurePin("meeting_analysis", "claude-sonnet-5-5")).toEqual({ provider: "anthropic", model: "claude-sonnet-5-5" });
+    expect(featurePin("meeting_analysis", "deepseek-flash")).toEqual({ provider: "deepseek", model: "deepseek-flash" });
     // 5.5로 올리기 전 이름이 남아 있어도 목록 밖 = 코드 기본(2026-10-19)
-    expect(featurePin("meeting_analysis", "claude-sonnet-5")).toEqual({ provider: "deepseek", model: "deepseek-flash" });
-    expect(featurePin("meeting_analysis", "없는모델")).toEqual({ provider: "deepseek", model: "deepseek-flash" });
+    expect(featurePin("meeting_analysis", "claude-sonnet-5")).toEqual({ provider: "anthropic", model: "claude-sonnet-5-5" });
+    expect(featurePin("meeting_analysis", "없는모델")).toEqual({ provider: "anthropic", model: "claude-sonnet-5-5" });
     expect(featurePin("classnote_ment")).toBeNull();
     expect(featurePin("constructor")).toBeNull();
   });

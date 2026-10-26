@@ -723,7 +723,7 @@ async function analyzeConsultationAndPersist(
   // 분석은 필수(실패 시 failed), 폼 추출은 best-effort(실패해도 분석은 살린다).
   const [analysisRes, extractRes] = await Promise.allSettled([
     // 프롬프트·모델·저장 전 후처리는 재분석과 같은 단일 소스(2026-10-19 — 같은 프롬프트 복사본이 여기 있었다, 줄 단위 동일 확인 뒤 합침).
-    runConsultationAnalysis(consult, formatted, opts.multi, "deepseek", { tenantId: consult.tenant_id }),
+    runConsultationAnalysis(consult, formatted, opts.multi, "anthropic", { tenantId: consult.tenant_id }),
     extractConsultationForm(formatted, {
       studentName: consult.prospect_name,
       grade: consult.prospect_grade,
