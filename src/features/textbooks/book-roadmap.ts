@@ -108,7 +108,11 @@ export function bookRoadmap(args: {
     ? (atDeadline >= 0 ? atDeadline : placed.length - 1)
     : Math.max(0, placed.filter((b) => b.window <= windowAt(placed, ref)).length - 1);
   const targetIdx = overrideIdx >= 0 && overrideIdx < placed.length ? overrideIdx : autoIdx;
-  const shownDeadline = deadlineUsable ? deadline : null;
+  // 🔑 시리즈가 마감 전에 끝나면(발전은 초6-2 2권이 끝 — 초2 학생의 중3 11월은 2033년) 목표는 시리즈 마지막 권이고
+  //    마감은 **보여주지 않는다** — 안 그러면 목표는 28.07에 끝나는데 문구는 '중3 11월 말까지', 레일·내신 표시는 2033년까지
+  //    늘어나 목표와 기간이 따로 논다(원장 2026-10-26 제보, 김유하 초2).
+  const seriesEnd = deadlineUsable && atDeadline < 0;
+  const shownDeadline = deadlineUsable && !seriesEnd ? deadline : null;
   // 최종 목표는 **11.30에 닿는 권·차시**(원장 "최종목표는 늘 11.30 인데 거기까지 몇권 몇차시까지 할수있는지").
   // 자동 목표일 때만 — 사람이 고른 권은 그 권 끝까지. 마감 권에서 0차시면 앞 권의 마지막 차시가 목표다.
   // 자동 목표 권·차시는 사람이 고른 목표와 상관없이 먼저 정한다(선택지의 '자동'이 같은 값을 말하게).
@@ -161,6 +165,7 @@ export function bookRoadmap(args: {
     target: { key: books[books.length - 1]!.key, auto: isAuto, autoKey: placed[autoBook]!.key, lesson: targetLesson, autoLesson },
     deadline: shownDeadline,
     deadlinePassed: deadline != null && !deadlineUsable,
+    seriesEnd,
     rebased,
     aheadLessons: doneAll != null && ref >= start && doneAll - origPlan > 1 ? doneAll - origPlan : null,
     startDate: start,

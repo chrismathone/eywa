@@ -106,6 +106,16 @@ describe("리뷰 보강", () => {
   it("한 권만 교재목록에 있어도 관례 권은 빠지지 않는다", () => {
     expect(bookSequence("가우스|중1-1|1", [B11], 3).map((b) => b.title)).toEqual(["가우스 중1-1 1권", "가우스 중1-1 2권", "가우스 중1-2 3권"]);
   });
+  it("시리즈가 마감 전에 끝나면(초2 · 발전) 목표·기간·레일이 시리즈 마지막 권에서 함께 끝난다", () => {
+    const E1 = { ...book("e1", "초3-1 발전 1권 (22개정)", eight("가")), gradeTerm: "초3-1" };
+    const E2 = { ...book("e2", "초3-1 발전 2권 (22개정)", eight("나")), gradeTerm: "초3-1" };
+    const r = bookRoadmap({ orders: [{ bookName: "초3-1 발전 1권 (22개정)", date: "2026-07-13" }], catalog: [E1, E2], today: "2026-10-26", grade: "초2", reports: [], referenceDate: "2026-10-26" })!;
+    expect(r).toMatchObject({ seriesEnd: true, deadline: null, deadlinePassed: false });
+    expect(r.target).toMatchObject({ key: "발전|초3-1|2", auto: true, lesson: null });
+    expect(r.scheduleEnd).toBe(r.endDate);
+    expect(r.endDate).toBe(r.books[r.books.length - 1]!.finishDate);
+    expect(r.exams.every((e) => e.from <= r.endDate)).toBe(true);
+  });
   it("중3인데 마감이 지났으면 지금 창 끝 · '마감 지남'", () => {
     const r = bookRoadmap({ orders: [{ bookName: "가우스 중2-2 4권", date: "2027-01-05" }], catalog: CATALOG, today: "2027-01-10", grade: "중3", reports: [], referenceDate: "2027-01-10" })!;
     expect(r).toMatchObject({ deadline: null, deadlinePassed: true });

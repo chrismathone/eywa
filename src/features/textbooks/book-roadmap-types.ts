@@ -38,6 +38,8 @@ export type BookRoadmap = {
   deadline: string | null;
   /** 마감(중3 11월 말)이 있지만 이미 지나 지금 창 끝으로 정했다. */
   deadlinePassed: boolean;
+  /** 시리즈가 마감(중3 11월 말) 전에 끝나 자동 목표가 시리즈 마지막 권이다 — 이때 `deadline`은 null. */
+  seriesEnd: boolean;
   /** 앞서 나가 다음 권으로 넘어가서 오늘부터 일정을 다시 폈다(오늘 계획 = 실제). */
   rebased: boolean;
   /** 계획보다 몇 차시 앞섰나(±1차시 너그러움 밖일 때만) — 재계산 전 원래 계획의 오늘 차시와 비교. */
