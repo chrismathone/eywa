@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { attendanceSentence } from "./attendance-sentence";
+import { attendanceMarkIsEnough, attendanceMarkOf, attendanceSentence } from "./attendance-sentence";
 import { NO_DAILY_TEST_TEXT, NO_HOMEWORK_TEXT, NO_HOMEWORK_TODAY_TEXT, homeworkTodayLine, pilotBody, pilotFactsSig } from "./math-report-pilot-sections";
 
 describe("출결 문장(원장 2026-10-26)", () => {
@@ -61,5 +61,23 @@ describe("오늘의 숙제 + 교재명(원장 2026-10-26)", () => {
   });
   it("보고서 '오늘의 숙제' 항목에 반영된다", () => {
     expect(pilotBody({ ...BASE, homeworkToday: "153-170p", textbook: "쎈 미적분" }, {})).toContain("■ 오늘의 숙제\n쎈 미적분 153-170p");
+  });
+});
+
+describe("보고서 머리의 작은 출결 표시(원장 2026-10-26)", () => {
+  it("만든 문장에서 상태를 되읽는다", () => {
+    expect(attendanceMarkOf(attendanceSentence("present", null))).toEqual({ status: "present", label: "출석" });
+    expect(attendanceMarkOf(attendanceSentence("late", "병원"))).toEqual({ status: "late", label: "지각" });
+    expect(attendanceMarkOf(attendanceSentence("early_leave", ""))?.label).toBe("조퇴");
+    expect(attendanceMarkOf(attendanceSentence("makeup", null))?.label).toBe("보강");
+  });
+  it("모르는 글은 표시하지 않는다", () => {
+    expect(attendanceMarkOf("선생님이 직접 쓴 글")).toBeNull();
+    expect(attendanceMarkOf("")).toBeNull();
+  });
+  it("출석·보강은 표시만, 사유가 붙는 지각 등은 띠도 남긴다", () => {
+    expect(attendanceMarkIsEnough({ status: "present", label: "출석" })).toBe(true);
+    expect(attendanceMarkIsEnough({ status: "late", label: "지각" })).toBe(false);
+    expect(attendanceMarkIsEnough(null)).toBe(false);
   });
 });
