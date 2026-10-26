@@ -3136,6 +3136,7 @@ export function OneScreenClient({
         subjectIndex: r.subjectIndex,
         subjectKey: r.subject.subjectKey ?? "math",
         today: r.subject.today ?? "",
+        progressMode: r.subject.progressMode ?? null,
         attitude: rowEval.attitude,
         homework: rowEval.homework,
         textbook: r.subject.textbook ?? "",
@@ -3185,6 +3186,7 @@ export function OneScreenClient({
       if (p.set.textbook !== undefined) setTextbookFor(p.studentId, p.subjectName, p.set.textbook);
       if (p.set.homeworkToday !== undefined) setHomeworkTodayFor(p.studentId, p.subjectName, p.set.homeworkToday);
       if (p.set.today !== undefined) setProgressFor(p.studentId, p.subjectIndex, p.set.today);
+      if (p.set.progressMode !== undefined) setProgressModeFor(p.studentId, p.subjectIndex, p.set.progressMode);
       // 2026-10-02 추가 칸 — 전부 **그 행에만**(행 값). 문항수를 먼저 바꾸고 점수를 넣는다(문항수 변경이 점수를 깎으므로).
       if (p.set.note !== undefined) setNoteFor(p.studentId, p.subjectName, p.set.note);
       if (p.set.dailyMax !== undefined) setMaxFor(p.studentId, p.subjectName, "daily", p.set.dailyMax);
