@@ -122,9 +122,9 @@ export function ExpenseLineItems({
               </label>
               <label className="text-text-faint flex min-w-0 flex-1 items-center gap-1 text-xs">
                 금액
+                {/* 음수도 받는다(원장 2026-10-26 "지출결의서 값 - 도 되게" — 환급·취소분) · min="0"이면 브라우저가 제출 때 막는다. */}
                 <input
                   type="number"
-                  min="0"
                   step={moneyStep(currency)}
                   value={r.unitPrice || ""}
                   onChange={(e) => setRow(i, { unitPrice: Number(e.target.value) || 0 })}

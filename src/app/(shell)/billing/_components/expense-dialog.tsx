@@ -102,7 +102,7 @@ export function ExpenseDialog({
 
   // amount와 line_items는 동일한 "유효 행" 집합에서 도출(불일치 방지).
   const filteredRows = rows.filter(
-    (r) => r.purpose.trim() || r.vendor.trim() || r.description.trim() || r.unitPrice > 0,
+    (r) => r.purpose.trim() || r.vendor.trim() || r.description.trim() || r.unitPrice !== 0, // 음수 금액 줄도 유효(2026-10-26)
   );
   // 합계도 통화 정밀도로 한 번 더 반올림 — 센트 단위 라인을 더하면 부동소수 꼬리($0.30000000000000004)가 붙는다.
   const amount = roundMoney(
