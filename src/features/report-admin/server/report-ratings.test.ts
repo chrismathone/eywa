@@ -4,7 +4,7 @@ const m = vi.hoisted(() => ({ admin: vi.fn(), log: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: m.admin }));
 vi.mock("@/lib/supabase/db-error", () => ({ logDbError: m.log }));
 
-import { isMissingRatingsTable, loadReportRatings } from "./report-ratings";
+import { isMissingRatingsTable, loadRatingPoints, loadReportRatings } from "./report-ratings";
 
 type Result = { data: unknown[] | null; error: { message: string; code?: string } | null };
 
@@ -40,7 +40,8 @@ describe("loadReportRatings — 평점 표 읽기", () => {
     const calls = fakeAdmin({ data: [dbRow], error: null });
     const out = await loadReportRatings("tenant-a", ["r1", "r1", "r2"]);
     expect(calls.table).toBe("lesson_report_ratings");
-    expect(calls.eq).toEqual([["tenant_id", "tenant-a"]]);
+    // 🔴 지금 기준(v6)으로 매긴 줄만 — 옛 기준 값은 원장이 '전혀 신뢰안가는 점수'라 한 값(2026-10-26)
+    expect(calls.eq).toEqual([["tenant_id", "tenant-a"], ["rubric", "v6-owner44"]]);
     expect(calls.inIds).toEqual([["r1", "r2"]]);
     expect(out.get("r1")?.points).toBe(3.3);
     expect(out.has("r2")).toBe(false);
@@ -70,5 +71,45 @@ describe("loadReportRatings — 평점 표 읽기", () => {
     expect(isMissingRatingsTable(new Error('fetchInChunks: relation "public.lesson_report_ratings" does not exist'))).toBe(true);
     expect(isMissingRatingsTable(new Error('fetchInChunks: relation "public.other" does not exist'))).toBe(false);
     expect(isMissingRatingsTable(null)).toBe(false);
+  });
+});
+
+/** `from(t).select(c).eq().eq().order().range(a, b)` — 페이지마다 다른 결과를 돌려준다(fetchAllPaged). */
+function fakePagedAdmin(pages: Result[]) {
+  const calls: { eq: [string, unknown][]; ranges: [number, number][] } = { eq: [], ranges: [] };
+  const chain = {
+    select: () => chain,
+    eq: (k: string, v: unknown) => {
+      calls.eq.push([k, v]);
+      return chain;
+    },
+    order: () => chain,
+    range: (a: number, b: number) => {
+      calls.ranges.push([a, b]);
+      return Promise.resolve(pages[calls.ranges.length - 1] ?? { data: [], error: null });
+    },
+  };
+  m.admin.mockReturnValue({ from: () => chain });
+  return calls;
+}
+
+describe("loadRatingPoints — 평점 정렬용 점수 전부", () => {
+  it("🔴 tenant_id + 지금 기준만 · 1,000행 넘으면 다음 페이지까지(#54) · 범위 밖 값은 버린다", async () => {
+    const first = Array.from({ length: 1000 }, (_, i) => ({ report_id: `r${i}`, points: (i % 5) + 1 }));
+    const calls = fakePagedAdmin([{ data: first, error: null }, { data: [{ report_id: "x", points: "4" }, { report_id: "bad", points: 9 }], error: null }]);
+    const out = await loadRatingPoints("tenant-a");
+    expect(calls.eq).toContainEqual(["tenant_id", "tenant-a"]);
+    expect(calls.eq).toContainEqual(["rubric", "v6-owner44"]);
+    expect(calls.ranges.length).toBe(2);
+    expect(out.size).toBe(1001);
+    expect(out.get("x")).toBe(4);
+    expect(out.has("bad")).toBe(false);
+  });
+
+  it("실패하면 로그만 남기고 빈 값 — 정렬은 '평점 없음'으로만 서고 목록은 뜬다", async () => {
+    fakePagedAdmin([{ data: null, error: { message: "boom" } }]);
+    expect((await loadRatingPoints("tenant-a")).size).toBe(0);
+    expect(m.log).toHaveBeenCalled();
+    expect((await loadRatingPoints("")).size).toBe(0);
   });
 });

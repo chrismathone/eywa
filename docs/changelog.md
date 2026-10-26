@@ -1,5 +1,12 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-10-26 — 수업보고서 평점 기준 v6(원장 점수표) · 평점 정렬 · 다시 켬
+
+- 원장 점수표 1차 24 · 2차 20(원장이 1~5와 이유를 직접) → 기준 = 정성·구체성. Haiku 5.5 + 원장 예시 44건 + 손대지 않은 자동작성 ≤3 — 처음 보는 글 교차 시험 r 0.79~0.88 · 1점 이내 43~44/44(옛 v4 r 0.42). 정보 단위 세기(v5)·Sonnet은 처음 보는 글에서 더 나빠 기각.
+- 코드: [`harness/owner.ts`](../src/features/report-rating/harness/owner.ts)(기준·카드·해석·상한·저장 행·지문) · [`owner-anchors.ts`](../src/features/report-rating/harness/owner-anchors.ts)(번호·점수·이유·지문만) · [`server/anchors.ts`](../src/features/report-rating/server/anchors.ts)(예시 글은 DB에서) · 배치·즉시 호출·대기열을 v6으로(한 장에 요청 하나 · 옛 기준 평점은 새로 바꾼다) · 화면은 지금 기준만 · 정수 표기 · 1점만 주의 색 · `REPORT_RATING_VISIBLE` 다시 true.
+- 평점 정렬: 머리 '평점' 화살표 → `listReports`가 같은 필터의 번호 목록 + 지점 평점 전부로 줄 세우고 그 페이지만 다시 읽는다(필터 한 곳 `filtered` · DB 변경 없음 · 평점 없는 보고서는 늘 뒤).
+- 운영: 옛 평점 5,393줄 백업 → 5,390건 Message Batches 재채점(회수 3건 제외) → 덮어쓰기 · 대기열 옛 배치 45줄 되돌림 · 정기 처리 스위치 다시 켬. 되돌리기 `scripts/_oneoff/report-rating-v6/revert.mjs`.
+
 ## 2026-10-26 — 수업보고서 평점 감춤(새 기준 검증 전까지)
 
 - 원장 *"이게 4.0이라고?"*(이소율 10-22 · 교재 미지참만 적은 멘트) · *"전혀 신뢰안가는 점수"* → *"스위치 끄고 열 감춤"* · *"원장님 점수표에 맞춤"* · 정렬은 새 기준과 함께.

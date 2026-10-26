@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { decodeTip, encodeTip, tipText } from "@/components/hover-tip/tip";
 import {
+  RATING_BASIS_LINE,
   claimNeedsAttention,
   formatPoints,
   isLowRating,
@@ -64,16 +65,20 @@ describe("parseRating — 표 행을 화면 값으로", () => {
 });
 
 describe("표기·색 판정", () => {
-  it("소수 한 자리 — 부동소수 반올림 흔들림 없이", () => {
+  it("정수는 정수로(기준 v6은 1~5 정수), 소수가 있으면 한 자리 — 부동소수 반올림 흔들림 없이", () => {
+    expect(formatPoints(5)).toBe("5");
+    expect(formatPoints(1)).toBe("1");
     expect(formatPoints(3.3)).toBe("3.3");
     expect(formatPoints(3.25)).toBe("3.3");
     expect(formatPoints(3.15)).toBe("3.2");
-    expect(formatPoints(5)).toBe("5.0");
+    expect(formatPoints(2.96)).toBe("3");
   });
 
-  it("주의 색은 화면에 보이는 값으로 — '3.0'으로 보이면 주의가 아니다", () => {
-    expect(isLowRating(2.9)).toBe(true);
-    expect(isLowRating(2.96)).toBe(false);
+  it("주의 색은 1점('성의 없음')만 — 화면에 보이는 값으로", () => {
+    expect(isLowRating(1)).toBe(true);
+    expect(isLowRating(1.9)).toBe(true);
+    expect(isLowRating(1.96)).toBe(false);
+    expect(isLowRating(2)).toBe(false);
     expect(isLowRating(3)).toBe(false);
   });
 
@@ -102,7 +107,7 @@ describe("근거 카드", () => {
     expect(card?.lines).toEqual([
       '학부모 느낌: "과제도 잘하고 있다는 건 알겠어요"',
       "고치면 좋을 점: 수업 중 아이가 보인 모습을 한 가지 덧붙여 주세요",
-      "AI가 2026-10-22에 한 번 매긴 값 — 기준: 학부모가 받았을 때 좋은 느낌인가",
+      `AI가 2026-10-22에 매긴 참고 값 · ${RATING_BASIS_LINE}`,
     ]);
   });
 

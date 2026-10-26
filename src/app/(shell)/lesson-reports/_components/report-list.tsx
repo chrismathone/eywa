@@ -349,14 +349,12 @@ export function ReportList({
               <th className="px-3 py-2 font-bold">학생 · 과목</th>
               <SortableTh sortKey="class" state={sortState} onSort={onSort}>반</SortableTh>
               <SortableTh sortKey="teacher" state={sortState} onSort={onSort}>강사</SortableTh>
-              {/* 평점(참고용, 0450a) — 근거는 숫자에 마우스를 올리면 카드로 뜬다. 정렬은 새 기준과 함께 연다(원장 2026-10-26). */}
+              {/* 평점(참고용, 0450a · 기준 v6 원장 점수표) — 근거는 숫자에 마우스를 올리면 카드로 뜬다.
+                  정렬(원장 2026-10-26)은 서버가 평점 표를 읽어 줄 세운다(listReports) — 평점 없는 보고서는 방향과 무관하게 뒤. */}
               {showRating ? (
-                <th
-                  className="px-3 py-2 font-bold whitespace-nowrap"
-                  title="학부모가 받았을 때 좋은 느낌인가 — AI가 한 번 매긴 참고 값(숫자에 마우스를 올리면 근거)"
-                >
+                <SortableTh sortKey="rating" state={sortState} onSort={onSort} className="whitespace-nowrap">
                   평점
-                </th>
+                </SortableTh>
               ) : null}
               {/* 멘트 작성 방식(0214a) — 정렬 없음(값 3종 + 도입 전 "—"라 필터가 더 정확하다, 뷰 설정에서). */}
               {showMent ? <th className="px-3 py-2 font-bold" title="멘트를 누가 썼는가 — 직접 작성/자동작성(뷰 설정에서 필터)">멘트</th> : null}
