@@ -16,10 +16,11 @@
  * ⚠️ 줄 **전체**가 자리 표식일 때만 자리다 — 문장 속 `[시험결과지]`는 그냥 글자(사람이 쓴 문장을 그림으로 오인하지 않게).
  */
 
-export type ImageSlotKey = "시험결과지" | "학습분석지";
+export type ImageSlotKey = "시험결과지" | "학습분석지" | "단어백분위" | "학습배지";
 
 /** 그림 자리 키 — 템플릿 칸 이름과 **같은 글자**다(defaults.ts의 토큰 목록이 이 키를 쓴다). */
-export const IMAGE_SLOT_KEYS: readonly ImageSlotKey[] = ["시험결과지", "학습분석지"];
+// 단어백분위·학습배지 = 2026-10-26(인재원 순위·배지) — 뒤에 붙인다(앞 둘의 뜻·순서를 바꾸지 않는다).
+export const IMAGE_SLOT_KEYS: readonly ImageSlotKey[] = ["시험결과지", "학습분석지", "단어백분위", "학습배지"];
 
 /** 글 안에 남는 자리 표식 한 줄. */
 export function imageSlotMarker(key: ImageSlotKey): string {

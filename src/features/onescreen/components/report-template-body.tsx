@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { JjExamSheet } from "@/features/ijw/components/jj-exam-sheet";
 import { JjStudySheet } from "@/features/ijw/components/jj-study-sheet";
+import { JjBadgeCard, JjStandingCard } from "@/features/ijw/components/jj-standing";
 import { slotAvailability, type JjReportSnapshot } from "@/features/ijw/snapshot";
 import { splitImageSlots } from "@/features/report-templates/image-slots";
 import { isImageAttachment } from "../attachment-utils";
@@ -78,6 +79,13 @@ export function TemplateBody({
             ),
           )
         : [];
+    }
+    // 단어 순위·학습 배지(2026-10-26) — 인재원 선택 필드. 없으면(옛 저장본·인재원 미배포) 그 자리만 빈다.
+    if (seg.key === "단어백분위") {
+      return avail.단어백분위 && jj?.standing ? [<JjStandingCard key={`r${i}`} standing={jj.standing} />] : [];
+    }
+    if (seg.key === "학습배지") {
+      return avail.학습배지 && jj?.standing?.badge ? [<JjBadgeCard key={`g${i}`} badge={jj.standing.badge} />] : [];
     }
     return avail.학습분석지 && jj?.study ? [<JjStudySheet key={`s${i}`} study={jj.study} layout="card" />] : [];
   });
