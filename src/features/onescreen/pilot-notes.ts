@@ -93,3 +93,24 @@ export function parseScoreLine(line: string): { right: number; total: number } |
   const right = Number(m[2]);
   return total > 0 && right <= total ? { right, total } : null;
 }
+
+/**
+ * 학부모 문구 칸에서 맨 위 '수업 평가' 표를 떼어 낸다(원장 2026-10-26 *"우리수업평가 저부분은 어차피 수정할일없는데 수정영역에서
+ * 제외하고 보여주는게 맞는거같다"*). 표는 고른 값(태도·숙제·이해도)에서 코드가 만든 것이라 손으로 고칠 일이 없고, 전각 공백 정렬이라
+ * 칸에서 만지면 줄이 깨진다. 화면은 `lead`를 읽기 전용으로 보이고 `body`만 편집 칸에 둔다 — 저장 글은 `joinLevelsLead`로 다시 붙인 그대로다.
+ * 글이 표로 시작하지 않으면 lead = "" (손대지 않는다).
+ */
+export function splitLevelsLead(draft: string | null | undefined): { lead: string; body: string } {
+  const d = (draft ?? "").replace(/\r\n?/g, "\n");
+  const head = `■ ${PILOT_SECTION_TITLES.levels}\n`;
+  if (!d.startsWith(head)) return { lead: "", body: d };
+  const next = d.search(/\n+(?=■ )/);
+  if (next < 0) return { lead: d.trimEnd(), body: "" };
+  return { lead: d.slice(0, next), body: d.slice(next).replace(/^\n+/, "") };
+}
+
+/** 떼어 낸 표 + 고친 본문 → 저장 글. 표와 본문 사이는 항목 사이와 같은 빈 줄 하나. */
+export function joinLevelsLead(lead: string, body: string): string {
+  if (!lead) return body;
+  return body.trim() ? `${lead}\n\n${body}` : lead;
+}

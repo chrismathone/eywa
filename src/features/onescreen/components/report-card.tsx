@@ -41,6 +41,8 @@ import { VideoHomeworkToggle } from "@/features/video-homework/components/video-
 import { VideoHomeworkDueToggle } from "@/features/video-homework/components/video-homework-due-toggle";
 import { VideoSubmitLinkToggle } from "@/features/video-homework/components/video-submit-link-toggle";
 import { ENGLISH_DRAFT_TEXTAREA_ID, REPORT_ATTACHMENT_MAX, isImageAttachment } from "../attachment-utils";
+import { joinLevelsLead, splitLevelsLead } from "../pilot-notes";
+import { LevelsLead } from "./levels-lead";
 import { hasTextBesidesMarkers } from "@/features/report-templates/image-slots";
 import { splitComment, joinComment } from "../comment-paragraphs";
 import type { OneScreenStudent } from "../types";
@@ -380,6 +382,7 @@ export function ReportCard({
     </div>
   );
   const paras = splitComment(rep.draft);
+  const draftLead = splitLevelsLead(rep.draft); // 맨 위 수업 평가 표 = 읽기 전용(원장 2026-10-26)
 
   return (
     // @container — 아래 본문 2열 분기는 **창 폭이 아니라 이 카드 폭** 기준(3열 그리드 안이라 브레이크포인트가 안 맞음).
@@ -779,11 +782,16 @@ export function ReportCard({
               </label>
             </div>
           ) : (
+            <>
+            {/* 맨 위 '수업 평가' 표는 편집 칸에서 빼서 읽기 전용으로(원장 2026-10-26). 저장 글은 다시 붙인 그대로다. */}
+            <LevelsLead lead={draftLead.lead} />
             <textarea
               // 영어 글 칸 — '사진·PDF 넣기'가 이 칸의 커서 줄을 읽어 그 자리에 첨부 줄을 넣는다(카드는 한 학생만 그린다).
               id={isEnglishRow ? ENGLISH_DRAFT_TEXTAREA_ID : undefined}
-              value={rep.draft}
-              onChange={(e) => onSubjectDraft(subjectName, e.target.value)}
+              // 뗀 표만큼 커서 위치를 보정하라는 표식 — 첨부 줄 넣기가 전체 글 기준 위치를 쓴다(onescreen-client insertEnglishMediaFor).
+              data-caret-offset={draftLead.lead && draftLead.body ? draftLead.lead.length + 2 : 0}
+              value={draftLead.body}
+              onChange={(e) => onSubjectDraft(subjectName, joinLevelsLead(draftLead.lead, e.target.value))}
               // 시범 대상 = 자동작성 전엔 보기만, 자동작성 뒤엔 고칠 수 있다(원장 2026-10-23 *"자동작성하고나면 수정은 할수있게"*).
               readOnly={pilotLocked}
               placeholder={
@@ -798,6 +806,7 @@ export function ReportCard({
                 isEnglishRow ? "min-h-[280px]" : "min-h-[110px]"
               } flex-1 resize-none rounded-lg border ${pilotLocked ? "bg-bg-soft" : "bg-background"} px-3 py-2 text-sm leading-relaxed outline-none`}
             />
+            </>
           )}
         </div>
 

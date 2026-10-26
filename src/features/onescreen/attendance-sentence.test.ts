@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { joinLevelsLead, splitLevelsLead } from "./pilot-notes";
 import { attendanceMarkIsEnough, attendanceMarkOf, attendanceSentence } from "./attendance-sentence";
 import { NO_DAILY_TEST_TEXT, NO_HOMEWORK_TEXT, NO_HOMEWORK_TODAY_TEXT, homeworkTodayLine, pilotBody, pilotFactsSig } from "./math-report-pilot-sections";
 
@@ -79,5 +80,22 @@ describe("보고서 머리의 작은 출결 표시(원장 2026-10-26)", () => {
     expect(attendanceMarkIsEnough({ status: "present", label: "출석" })).toBe(true);
     expect(attendanceMarkIsEnough({ status: "late", label: "지각" })).toBe(false);
     expect(attendanceMarkIsEnough(null)).toBe(false);
+  });
+});
+
+describe("학부모 문구의 '수업 평가' 표는 편집 칸에서 뺀다(원장 2026-10-26)", () => {
+  const lead = "■ 수업 평가\n구분　　하\n수업　태도　○●○○○중하";
+  const body = "■ 진도\n우리 길동이는 …\n\n■ 사랑의 한마디\n잘했어요";
+  it("떼고 붙이면 원래 글 그대로", () => {
+    const d = `${lead}\n\n${body}`;
+    expect(splitLevelsLead(d)).toEqual({ lead, body });
+    expect(joinLevelsLead(lead, body)).toBe(d);
+  });
+  it("표로 시작하지 않는 글은 손대지 않는다", () => {
+    expect(splitLevelsLead(body)).toEqual({ lead: "", body });
+    expect(joinLevelsLead("", "손글씨")).toBe("손글씨");
+  });
+  it("본문을 다 지우면 표만 남는다", () => {
+    expect(joinLevelsLead(lead, "  ")).toBe(lead);
   });
 });

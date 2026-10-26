@@ -4564,7 +4564,8 @@ export function OneScreenClient({
     ]);
     // 자리는 **줄 내용**으로 기억한다(attachment-lines.ts) — 첫 첨부의 자동 저장이 글을 다시 짜거나 올리는 동안 강사가 계속 써도
     // 같은 윗줄 아래에 선다(줄 번호로만 기억하면 머리말과 내용 사이로 갔다 — 적대 리뷰 2026-09-11).
-    const caret = el instanceof HTMLTextAreaElement ? el.selectionStart : null;
+    // 글 칸은 맨 위 '수업 평가' 표를 뗀 본문만 보인다(2026-10-26) — 칸의 커서 위치에 뗀 길이(data-caret-offset)를 더해 전체 글 기준으로.
+    const caret = el instanceof HTMLTextAreaElement ? el.selectionStart + (Number(el.dataset.caretOffset) || 0) : null;
     const placed = insertAttachmentLine(draft0, attachmentLineIndex(draft0, caret), name);
     const named = name === file.name ? file : new File([file], name, { type: file.type });
     const added = await addAttachmentsFor(student, subjectName, [named]);

@@ -20,6 +20,8 @@ import {
 import { evaluateSendGate } from "../send-gate";
 import { hasPilotOneLine, isMathReportPilot, pilotCanEdit, pilotNeedsAutoWrite } from "../math-report-pilot";
 import { needsHomeworkMissReason, pilotRowSig, testSkipComplete } from "../math-report-pilot-sections";
+import { joinLevelsLead, splitLevelsLead } from "../pilot-notes";
+import { LevelsLead } from "./levels-lead";
 import { hasTextBesidesMarkers } from "@/features/report-templates/image-slots";
 import { rowLockNotice } from "../split-rows";
 import { reportOptoutNotice } from "@/features/classes/report-optout";
@@ -301,6 +303,7 @@ export function GridBodyRow({
   // 수학 보고서 시범(테스트 학생 한정, math-report-pilot.ts) — 멘트·추세는 보기만, 자동작성 글 그대로여야 발송(카드와 같은 판정).
   const pilot = isMathReportPilot(student.id, subject.subjectKey);
   const pilotLocked = pilot && !pilotCanEdit(rep?.autoDraft); // 자동작성 전엔 잠금(2026-10-23)
+  const draftLead = splitLevelsLead(rep?.draft); // 맨 위 수업 평가 표 = 읽기 전용(원장 2026-10-26)
   // '사랑의 한마디' 행 — 새 수학 보고서 + 영어(원장 2026-10-26, 카드와 같은 판정).
   const oneLineRow = pilot || subject.subjectKey === "english";
   const sendGate = evaluateSendGate({
@@ -833,9 +836,12 @@ export function GridBodyRow({
               />
             </>
           ) : (
+            <>
+            {/* 맨 위 '수업 평가' 표는 편집 칸에서 빼서 읽기 전용 요약으로(원장 2026-10-26, 카드와 같은 규칙). */}
+            <LevelsLead lead={draftLead.lead} compact />
             <textarea
-              value={rep?.draft ?? ""}
-              onChange={(e) => fields.onDraft(student.id, subject.name, e.target.value)}
+              value={draftLead.body}
+              onChange={(e) => fields.onDraft(student.id, subject.name, joinLevelsLead(draftLead.lead, e.target.value))}
               // 시범 대상 = 자동작성 전엔 보기만, 뒤엔 고칠 수 있다(카드와 같은 규약, 2026-10-23).
               readOnly={rowLocked || pilotLocked}
               // 말투 반영 안내(0262a)는 프로파일을 읽는 행(영어 밖)에만 — 영어 행은 템플릿 모드라 그 문장이 거짓이 된다.
@@ -843,6 +849,7 @@ export function GridBodyRow({
               aria-label={tf("os.row.mentAria", { name: student.name, subject: subject.name })}
               className={`${mentBase} ${AUTOSIZE} ${lockedTone || "bg-background"} min-h-[72px]`}
             />
+            </>
           )}
           {englishFlags &&
           (englishFlags.stale || englishFlags.aiStale || englishFlags.nameMissing || englishFlags.needsAi) ? (
