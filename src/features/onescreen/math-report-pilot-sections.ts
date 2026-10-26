@@ -170,7 +170,17 @@ export type PilotFacts = {
   videoHomeworkDue?: string;
   /** 소단원별 이해도(뺀 것 제외) — 평가표 '이해도' 줄의 재료. */
   understanding?: readonly { title: string; score: number }[];
+  /** 그날 출결 문장(attendance-sentence.ts) — 지각·조퇴·공결일 때만 값이 있다. */
+  attendance?: string;
 };
+
+/**
+ * 비어도 항목을 지우지 않는다(원장 2026-10-26 *"시험없고 숙제없으면 영역 사라지지말고 금일 테스트 안봤다 숙제없습니다 등으로 알려줘야함"*).
+ * 종전(2026-10-23 *"없으면 숙제완성도는 없어야"*)을 뒤집었다 — 항목이 사라지면 학부모는 "안 적은 건지 없었던 건지" 모른다.
+ */
+export const NO_DAILY_TEST_TEXT = "오늘은 일일 테스트를 보지 않았습니다.";
+export const NO_HOMEWORK_TEXT = "지난 시간에 내준 숙제가 없었습니다.";
+export const NO_HOMEWORK_TODAY_TEXT = "오늘은 숙제가 없습니다.";
 
 /**
  * 평가표 눈금 — 원장 2026-10-22 *"수업태도 과제 수행률, 이해도 상 중 하 해서 표로"*(보내 준 시트 표 = 하·중하·중·중상·상 5칸).
@@ -252,15 +262,17 @@ export function pilotLevelsSection(f: Pick<PilotFacts, "attitude" | "homework" |
 /**
  * 진도 항목과 사랑의 한마디 사이의 항목들 — 원장 2026-10-23 순서 *"진도 → 일일테스트 → 수업태도 → 숙제완성도 → 오늘의 수업 →
  * 오늘의 숙제 → 사랑의 한마디"*. 확인 테스트는 일일 테스트 바로 뒤(값이 있을 때만). (수업 평가 표는 맨 위 — `pilotLevelsSection`.)
- * 값이 없는 항목은 통째로 뺀다. `understandingText`는 AI가 쓴 이해도 글, `videoReceipt`는 지난 영상 숙제 확인 문장.
+ * 일일 테스트·숙제 완성도·오늘의 숙제는 비어도 '없었다'고 적는다(`NO_*_TEXT`, 원장 2026-10-26). 확인 테스트·이해도·출결은 값이 없으면 항목째 뺀다. `understandingText`는 AI가 쓴 이해도 글, `videoReceipt`는 지난 영상 숙제 확인 문장.
  * 오늘의 숙제는 숙제 내용만 적는다 — 원장 2026-10-23 *"오늘 내준 과제 및 다음 시간에 잘 해 왔는지 등 멘트 삭제"*.
  */
 export function pilotBody(f: PilotFacts, extra: { understandingText?: string; videoReceipt?: string | null }): string {
-  const daily = f.dailyTestSkip ? testSkipText(f.dailyTestSkip) : scoreText(f.dailyTest);
-  const hw = [homeworkSentence(f.homework, f.homeworkMissReason), extra.videoReceipt?.trim() ?? ""].filter(Boolean).join(" ");
+  const daily = (f.dailyTestSkip ? testSkipText(f.dailyTestSkip) : scoreText(f.dailyTest)) || NO_DAILY_TEST_TEXT;
+  const hw =
+    [homeworkSentence(f.homework, f.homeworkMissReason), extra.videoReceipt?.trim() ?? ""].filter(Boolean).join(" ") || NO_HOMEWORK_TEXT;
   const video = f.videoHomework === true ? `영상 숙제가 있습니다${f.videoHomeworkDue ? `(${f.videoHomeworkDue} 제출)` : ""}.` : "";
-  const today = [f.homeworkToday.trim(), video].filter(Boolean).join("\n");
+  const today = [f.homeworkToday.trim() || (video ? "" : NO_HOMEWORK_TODAY_TEXT), video].filter(Boolean).join("\n");
   return [
+    pilotSection(T.attendance, f.attendance),
     pilotSection(T.daily, daily),
     pilotSection(T.check, scoreText(f.checkTest)),
     pilotSection(T.attitude, attitudeText(f.attitude)),
@@ -288,6 +300,8 @@ export function pilotFactsSig(f: PilotFacts, understanding: readonly { title: st
     f.homeworkToday.trim(),
     f.videoHomework === true,
     understandingSig(understanding),
+    // 출결 — 자동작성 뒤 출석부에서 지각·사유를 고치면 글이 옛 출결을 말한다(발송 게이트가 다시 자동작성을 요구해야 한다).
+    (f.attendance ?? "").trim(),
   ]);
 }
 

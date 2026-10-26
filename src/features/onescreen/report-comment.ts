@@ -19,6 +19,7 @@ import { asProgressMode, progressFactLabel } from "./progress-mode";
 import { progressForMent } from "./progress-range";
 import { understandingBandText } from "./math-report-pilot";
 import { homeworkDueText } from "@/features/video-homework/due";
+import { attendanceSentence } from "./attendance-sentence";
 
 const PLAIN_COMMENT_STYLE = "\n\n[말투 보완]\n기존 선생님의 말투와 문장 구성을 유지하세요. 기록에 없는 칭찬·다짐·전망을 덧붙이지 말고, '성장이 기대됩니다', '꾸준한 노력으로', '한 걸음 더 나아갔습니다' 같은 상투적인 마무리는 피하세요.";
 const VIDEO_COMMENT_GUIDANCE = "\n\n[영상 과제]\n제출 사실만으로 성실함이나 이해도를 평가하지 마세요. 영상 제출 여부는 별도로 확인해 붙이므로, 입력에 없는 지난 영상 숙제의 제출·미제출 문장을 만들지 마세요.";
@@ -76,6 +77,11 @@ export type ReportCommentInput = {
   dailyTestSkip?: import("./math-report-pilot-sections").DailyTestSkip | null;
   /** 숙제 미제출 사유 — 수학 보고서 시범에서만. 숙제가 미제출일 때 '숙제 완성도' 항목에 원문 그대로 들어간다(AI에는 안 준다). */
   homeworkMissReason?: string;
+  /**
+   * 그날 출결 문장(지각·조퇴·공결 + 사유) — 출석부 칸에서 코드가 만든다(attendance-sentence.ts, 원장 2026-10-26).
+   * 보고서 글에 **원문 그대로** 들어가는 항목이라 AI 사실 블록엔 싣지 않는다(이유를 지어낼 틈을 주지 않는다). "" = 말할 것 없음.
+   */
+  attendance?: string;
 };
 
 /** 값을 라벨 **한 줄 안에** 가두는 정규화 — 내부 개행을 ", "로 접는다.
@@ -154,6 +160,7 @@ export function buildReportCommentInput(
     textbook: su?.textbook ?? "",
     specialNote,
     classNotice,
+    attendance: attendanceSentence(su?.attendanceRaw, su?.attendanceNote),
   };
 }
 
