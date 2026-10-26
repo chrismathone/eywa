@@ -16,7 +16,7 @@ export function OntologyConnections({ links, labels, selected, currentKind, onSe
   const current = Math.min(page, Math.max(1, Math.ceil(rows.length / 8)));
   return <section className="min-w-0 overflow-hidden rounded-xl border border-line">
     <div className="border-b border-line p-5"><h2 className="font-semibold">기록으로 연결된 대상</h2><p className="mt-2 text-xs leading-relaxed">{selected}의 이 달 기록에 함께 연결된 대상입니다. 대상을 선택해 관점을 바꿀 수 있습니다.</p></div>
-    <div className="p-4"><div className="flex gap-2" aria-label="연결 대상 종류">{Object.entries(entityLabels).filter(([key]) => key !== "academy" || currentKind !== "academy").map(([key, label]) => <button key={key} type="button" aria-pressed={kind === key}
+    <div className="p-4"><p className="mb-2 text-xs font-medium">함께 연결된 대상 종류</p><div className="flex gap-2" aria-label="연결 대상 종류">{Object.entries(entityLabels).filter(([key]) => key !== "academy" || currentKind !== "academy").map(([key, label]) => <button key={key} type="button" aria-pressed={kind === key}
       onClick={() => { setKind(key as ExplorerKind); setSearch(""); setPage(1); }} className={`min-w-0 flex-1 rounded-lg border px-1 py-3 text-center text-xs focus-visible:outline-primary ${kind === key ? "border-primary bg-primary-softer" : "border-line hover:bg-secondary"}`}><span className="block">{key === currentKind ? `다른 ${label}` : label}</span><strong className="mt-1 block text-base tabular-nums">{links.filter((link) => link.kind === key).length}</strong></button>)}</div>
       <input aria-label="연결 대상 검색" className={`${fieldClass} mt-4 w-full`} value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder={`${entityLabels[kind]} 이름으로 찾기`} />
     </div>

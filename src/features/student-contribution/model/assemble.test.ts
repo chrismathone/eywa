@@ -46,6 +46,20 @@ it("첫 집계가 중간에 끊겨도 이미 마감한 달은 유지하고 남�
   expect(resumed.rows.find((r) => r.month === "2026-09")!.closedAt).toBeTruthy();
   expect(resumed.rows.find((r) => r.month === "2026-10")!.correction.tuitionWon).toBe(0);
 });
+it("재원 개월은 과목 수와 무관하며 마감 후 전액 환불과 병합을 현재 달에 반영한다", () => {
+  const input = fixture();
+  input.core.students.push(student("kept"));
+  input.core.invoices.push(invoice("second", "s", 200000), invoice("same-month", "kept", 100000), { ...invoice("prior", "s", 100000), period: "2026-08" });
+  const first = assembleContribution(input);
+  expect(first.rows.find((r) => r.studentId === "s" && r.month === "2026-10")!.payload.enrolledMonths).toBe(2);
+  input.core.students[0]!.notes = "중복 병합: kept와 통합됨";
+  const merged = assembleContribution({ ...input, stored: first.rows, historyReady: true });
+  expect(merged.rows.find((r) => r.studentId === "kept" && r.month === "2026-10")!.payload.enrolledMonths).toBe(2);
+  input.core.invoices = input.core.invoices.map((i) => i.period === "2026-08" ? { ...i, status: "refunded" } : i);
+  const refunded = assembleContribution({ ...input, stored: merged.rows, historyReady: true });
+  expect(refunded.rows.find((r) => r.studentId === "kept" && r.month === "2026-10")!.payload.enrolledMonths).toBe(1);
+  expect(refunded.rows.find((r) => r.studentId === "kept" && r.month === "2026-09")).toEqual(merged.rows.find((r) => r.studentId === "kept" && r.month === "2026-09"));
+});
 it("지난달 AI 대기가 남아 있어도 현재 목록은 계산 완료로 표시하지 않는다", () => {
   const input = fixture(); input.activity.pendingSignals.push({ id: "p", studentId: "s", source: "parent", day: "2026-09-01", text: "노력", author: null, hash: "hash" });
   const current = assembleContribution(input).rows.find((r) => r.month === "2026-10")!;

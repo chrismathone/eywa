@@ -27,14 +27,14 @@ export function CurrentScopeExplorer({ view, embed }: { view: View; embed: boole
       <section className="space-y-4 rounded-xl border border-line p-4">
         <OntologyFilters key={JSON.stringify(request)} filters={request} options={view.filterOptions} scope={request} />
         <CurrentScopeControls key={`${request.kind}:${request.id}:${request.search}`} request={request} options={data.options} />
-        <div className="flex flex-wrap items-end justify-between gap-2">{!browsing && <h2 className="text-lg font-semibold">{selected}</h2>}<span className="text-xs tabular-nums">수강 관계: {data.asOf} 현재 · 과목 필터: 수강 이력</span></div>
+        <div className="flex flex-wrap items-end justify-between gap-2">{!browsing && <h2 className="text-lg font-semibold">{selected}</h2>}<span className="text-xs tabular-nums">{data.asOf} 현재 수강이 연결된 학생 기준</span></div>
         {view.selectionMissing && <p role="status" className="text-sm">선택한 대상이 조회 조건에 없어 목록으로 돌아왔습니다. 조건을 바꾸거나 다른 대상을 선택해 주세요.</p>}
         {!browsing && <>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {[["연결된 학생", data.total, "명"], ["수강 반", data.classCount, "개"], ["배정·위임된 강사", data.teacherCount, "명"], ["수강 과목", data.subjectCount, "개"]].map(([label, value, unit]) =>
             <div key={label} className="rounded-lg bg-secondary px-4 py-3"><p className="text-xs">{label}</p><p className="mt-2 text-2xl font-semibold tabular-nums">{Number(value).toLocaleString("ko-KR")}<span className="ml-1 text-sm font-normal">{unit}</span></p></div>)}
         </div>
-        <p className="text-xs leading-relaxed">여러 반·담당자에 연결된 학생도 인원은 한 번만 셉니다. 담당 배정은 실제 수업 실시나 강사 성과를 뜻하지 않습니다. 월별 기여도와 합산하지 않습니다.</p></>}
+        <details className="text-xs leading-relaxed"><summary className="cursor-pointer">월별 기록의 학생 수와 다른 이유</summary><p className="mt-2">현재 유효한 수강 관계가 있는 학생만 셉니다. 월별 근거는 선택한 달의 기록이 있는 학생을 세므로 인원이 다를 수 있습니다. 여러 반에 연결된 학생도 한 번만 셉니다. 담당 배정은 실제 수업 실시나 강사 성과를 뜻하지 않습니다.</p></details></>}
         {(view.state === "partial" || data.unassignedClasses > 0) && <p role="status" className="rounded-lg bg-primary-softer p-3 text-sm">
           {view.state === "partial" ? "일부 학생·담당 연결은 확인이 필요합니다. 확인된 관계만 표시합니다. " : ""}
           {data.unassignedClasses > 0 ? `담당자가 배정되지 않은 반이 ${data.unassignedClasses}개 있습니다.` : ""}</p>}

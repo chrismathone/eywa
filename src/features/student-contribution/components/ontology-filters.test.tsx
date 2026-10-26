@@ -36,6 +36,16 @@ it("preserves the cohort in both current/monthly mode links", () => {
       .toMatchObject({ q: "학생", status: "on_hold", grade: "초4", subject: "math", month: "2026-09", kind: "class", entity: "c", embed: "1" });
   }
 });
+it("keeps the mobile filter panel open while applying successive conditions", () => {
+  const view = render(<OntologyFilters filters={DEFAULT_STUDENT_FILTERS} options={options} scope={{ kind: "student", id: "" }} />);
+  expect(screen.getByRole("button", { name: "필터 펼치기" }).getAttribute("aria-expanded")).toBe("false");
+  fireEvent.click(screen.getByRole("button", { name: "필터 펼치기" }));
+  fireEvent.change(screen.getByRole("combobox", { name: "학년" }), { target: { value: "초4" } });
+  expect(navigated().get("filters")).toBe("open");
+  m.query = navigated().toString(); view.unmount();
+  render(<OntologyFilters filters={{ ...DEFAULT_STUDENT_FILTERS, grade: "초4" }} options={options} scope={{ kind: "student", id: "" }} />);
+  expect(screen.getByRole("button", { name: "필터 접기" }).getAttribute("aria-expanded")).toBe("true");
+});
 it("preserves the locally chosen monthly perspective when moving months", () => {
   m.query = "month=2026-10&status=on_hold&grade=초4&embed=1&page=3";
   render(<ContributionMonthPicker month="2026-10" scope={{ kind: "teacher", id: "t" }} />);

@@ -13,7 +13,7 @@ export function contributionTrend(months: readonly Month[], config: Contribution
     const row = byMonth.get(month), raw = row ? sumRaws([row.raws, row.correction]) : emptyRaws();
     accumulated = sumRaws([accumulated, raw]);
     points.push({ month, total: scoreRaws(accumulated, config).total, change: scoreRaws(raw, config).total,
-      corrected: !!row?.payload.correctionReasons.length });
+      corrected: !!row?.payload.correctionReasons.length, hasRecord: !!row });
   }
   return points;
 }

@@ -6,6 +6,8 @@ import type { CorrectionDetail } from "./corrections";
 import type { PendingDetail } from "./pending-details";
 
 export type ContributionPayload = {
+  /** Latest aggregation's eligible billed months, computed before closed-month preservation. */
+  enrolledMonths?: number;
   evidenceIds: string[];
   facts: StudentFact[];
   relations: StudentRelation[];
