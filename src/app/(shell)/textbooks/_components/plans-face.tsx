@@ -237,7 +237,12 @@ function DeletePlanDialog({ plan, onClose }: { plan: ClassTextbookPlanRow; onClo
                       action: {
                         label: "되돌리기",
                         onClick: () => {
-                          void undoPlanDelete({ classId: plan.classId, plan: undo.plan, lines: undo.lines }).then((u) => {
+                          void undoPlanDelete({
+                            classId: plan.classId,
+                            plan: undo.plan,
+                            lines: undo.lines,
+                            historyId: res.historyId,
+                          }).then((u) => {
                             if (!u.ok) return void toast.error(u.error);
                             if (u.warning) toast.warning(u.warning);
                             else toast.success("배정을 되돌렸습니다");

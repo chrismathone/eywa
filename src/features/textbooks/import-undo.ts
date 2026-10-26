@@ -115,28 +115,80 @@ export function planUndo(rows: readonly ImportedRow[], current: ReadonlyMap<stri
  */
 export type ImportPlanMeta = { kind: "plan"; planId: string; title: string | null };
 
-function isPlanMeta(x: unknown): x is ImportPlanMeta {
-  return (
-    typeof x === "object" &&
-    x !== null &&
-    (x as { kind?: unknown }).kind === "plan" &&
-    typeof (x as { planId?: unknown }).planId === "string"
-  );
+/**
+ * **미룸·당김 / 배정 삭제도 같은 기록에 싣는다**(원장 2026-10-26 *"미룸·당김이랑 배정삭제도 히스토리에 넣어줘"*).
+ * 되돌리기 재료는 각 화면의 알림 [되돌리기]가 쓰던 것 그대로(`ShiftUndoToken` / `PlanRestoreRow`) — 실행도 같은
+ * 서버 액션(`undoLessonShift` / `undoPlanDelete`)이 한다. 이 기록은 **서버가 쓴 값**이라 클라를 거치지 않는다.
+ * 한 기록엔 표식 하나뿐이다(배정 반영 = `plan` + 줄 원소, 미룸·당김 = `shift`, 배정 삭제 = `delete`).
+ */
+export type ShiftHistoryMeta = { kind: "shift"; shift: "skip" | "advance"; title: string | null; token: unknown };
+export type DeleteHistoryMeta = { kind: "delete"; title: string | null; plan: unknown; lines?: unknown };
+export type HistoryMeta = ImportPlanMeta | ShiftHistoryMeta | DeleteHistoryMeta;
+/** 메뉴에 적는 종류 — 배정(반영) · 미룸 · 당김 · 배정 삭제. */
+export type HistoryKind = "fill" | "skip" | "advance" | "delete";
+
+function asTitle(v: unknown): string | null {
+  return typeof v === "string" && v.trim() !== "" ? v : null;
 }
 
-/** 저장된 `rows` → 줄 기록 + 배정 표식(없으면 null — 옛 기록·배정 밖 반영). 모양이 이상한 원소는 버린다. */
-export function splitBatchRows(raw: unknown): { rows: ImportedRow[]; plan: ImportPlanMeta | null } {
+function readMeta(x: unknown): HistoryMeta | null {
+  if (typeof x !== "object" || x === null) return null;
+  const r = x as Record<string, unknown>;
+  if (r.kind === "plan" && typeof r.planId === "string") return { kind: "plan", planId: r.planId, title: asTitle(r.title) };
+  if (r.kind === "shift" && (r.shift === "skip" || r.shift === "advance") && r.token && typeof r.token === "object") {
+    return { kind: "shift", shift: r.shift, title: asTitle(r.title), token: r.token };
+  }
+  if (r.kind === "delete" && r.plan && typeof r.plan === "object") {
+    return { kind: "delete", title: asTitle(r.title), plan: r.plan, ...(r.lines ? { lines: r.lines } : {}) };
+  }
+  return null;
+}
+
+/**
+ * 저장된 `rows` → 줄 기록 + 표식(없으면 null — 옛 기록). `plan`은 배정 반영의 배정 표식만(옛 호출부 호환).
+ * 모양이 이상한 원소는 버린다.
+ */
+export function splitBatchRows(raw: unknown): {
+  rows: ImportedRow[];
+  plan: ImportPlanMeta | null;
+  meta: HistoryMeta | null;
+} {
   const list = Array.isArray(raw) ? raw : [];
-  let plan: ImportPlanMeta | null = null;
+  let meta: HistoryMeta | null = null;
   const rows: ImportedRow[] = [];
   for (const x of list) {
-    if (isPlanMeta(x)) {
-      plan ??= { kind: "plan", planId: x.planId, title: typeof x.title === "string" ? x.title : null };
+    const m = readMeta(x);
+    if (m) {
+      meta ??= m;
       continue;
     }
-    if (typeof x === "object" && x !== null && typeof (x as { id?: unknown }).id === "string") rows.push(x as ImportedRow);
+    if (typeof x === "object" && x !== null && typeof (x as { id?: unknown }).id === "string" && "added" in x) {
+      rows.push(x as ImportedRow);
+    }
   }
-  return { rows, plan };
+  return { rows, plan: meta?.kind === "plan" ? meta : null, meta };
+}
+
+/** 기록 → 메뉴 종류. 표식이 없는 옛 기록은 배정 반영이다. */
+export function historyKindOf(meta: HistoryMeta | null): HistoryKind {
+  if (meta?.kind === "shift") return meta.shift;
+  if (meta?.kind === "delete") return "delete";
+  return "fill";
+}
+
+/** 미룸·당김 기록의 교재 이름 — 바뀐 줄에서 처음 보이는 교재(없으면 null). */
+export function shiftTitleOf(token: {
+  removed: readonly { textbook: string | null }[];
+  added: readonly { textbook: string | null }[];
+  changed: readonly { before: { textbook: string | null }; after: { textbook: string | null } }[];
+}): string | null {
+  const all = [
+    ...token.removed,
+    ...token.added,
+    ...token.changed.map((c) => c.after),
+    ...token.changed.map((c) => c.before),
+  ];
+  return asTitle(all.find((l) => asTitle(l.textbook))?.textbook ?? null);
 }
 
 /** 최근 기록(최신 먼저) 중 `targetId`까지 — 되돌리기는 **그 뒤에 한 반영부터 거꾸로** 전부 되돌린다. 없으면 null. */

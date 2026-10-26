@@ -7,7 +7,17 @@
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { reportError } from "@/lib/observability/report-error";
-import { diffImport, IMPORT_FIELDS, splitBatchRows, type ImportedRow, type ImportPlanMeta, type LineFields } from "../import-undo";
+import {
+  diffImport,
+  historyKindOf,
+  IMPORT_FIELDS,
+  splitBatchRows,
+  type HistoryKind,
+  type HistoryMeta,
+  type ImportedRow,
+  type ImportPlanMeta,
+  type LineFields,
+} from "../import-undo";
 
 type Admin = ReturnType<typeof createAdminClient>;
 type LineRow = LineFields & { id: string; updated_by: string | null };
@@ -76,8 +86,77 @@ export async function recordImportBatch(input: {
   }
 }
 
-/** 되돌리기 ▾ 메뉴 한 줄 — 언제·무슨 교재·몇 줄. */
-export type ImportHistoryItem = { id: string; at: string; count: number; title: string | null };
+/**
+ * 미룸·당김 / 배정 삭제 기록(원장 2026-10-26) — 줄 원소 없이 표식 하나. 실패는 삼킨다(그 동작은 이미 끝났다,
+ * 히스토리만 없다). 표가 없으면 null([[#95]]).
+ */
+export async function recordHistoryEntry(input: {
+  admin: Admin;
+  tenantId: string;
+  classId: string;
+  /** 기간 칸(NOT NULL) — 미룸·당김은 누른 날, 배정 삭제는 지운 날. */
+  date: string;
+  actorId: string;
+  meta: Exclude<HistoryMeta, ImportPlanMeta>;
+  count: number;
+}): Promise<string | null> {
+  try {
+    const { data, error } = await input.admin
+      .from("class_plan_import_batches")
+      .insert({
+        tenant_id: input.tenantId,
+        class_id: input.classId,
+        period_from: input.date,
+        period_to: input.date,
+        rows: [input.meta],
+        row_count: input.count,
+        created_by: input.actorId,
+      })
+      .select("id")
+      .single();
+    if (error && (error.code === "42P01" || error.code === "PGRST205")) return null;
+    if (error) throw error;
+    return String(data.id);
+  } catch (e) {
+    reportError(e, { scope: "textbooks.history.record", classId: input.classId });
+    return null;
+  }
+}
+
+/**
+ * 기록 하나에 '되돌림' 표시를 건다(조건부 — 두 창이 동시에 눌러도 한쪽만). 알림 [되돌리기]와 히스토리가
+ * **같은 표시**를 써야 한쪽에서 되돌린 것이 다른 쪽에 다시 뜨지 않는다.
+ */
+export async function claimHistory(
+  admin: Admin,
+  tenantId: string,
+  classId: string,
+  id: string,
+  actorId: string,
+): Promise<"ok" | "taken" | "error"> {
+  const { data, error } = await admin
+    .from("class_plan_import_batches")
+    .update({ undone_at: new Date().toISOString(), undone_by: actorId })
+    .eq("tenant_id", tenantId)
+    .eq("class_id", classId)
+    .eq("id", id)
+    .is("undone_at", null)
+    .select("id");
+  if (error) return "error";
+  return data && data.length > 0 ? "ok" : "taken";
+}
+
+/** 되돌리기가 실패하면 표시를 푼다(다시 누를 수 있게). */
+export async function releaseHistory(admin: Admin, tenantId: string, id: string): Promise<void> {
+  await admin
+    .from("class_plan_import_batches")
+    .update({ undone_at: null, undone_by: null })
+    .eq("tenant_id", tenantId)
+    .eq("id", id);
+}
+
+/** 되돌리기 ▾ 메뉴 한 줄 — 언제·무엇을(배정·미룸·당김·배정 삭제)·무슨 교재·몇 줄. */
+export type ImportHistoryItem = { id: string; at: string; count: number; title: string | null; kind: HistoryKind };
 
 /** 되돌리기 ▾ 메뉴가 보여 주는 기록 수(원장 2026-10-26 *"최근 5회 작업한거중에"*). */
 export const IMPORT_HISTORY_LIMIT = 5;
@@ -98,12 +177,16 @@ export async function loadRecentImports(admin: Admin, tenantId: string, classId:
       .order("created_at", { ascending: false })
       .limit(IMPORT_HISTORY_LIMIT);
     if (error || !data) return [];
-    return data.map((r) => ({
-      id: String(r.id),
-      at: String(r.created_at),
-      count: Number(r.row_count ?? 0),
-      title: splitBatchRows(r.rows).plan?.title ?? null,
-    }));
+    return data.map((r) => {
+      const { meta } = splitBatchRows(r.rows);
+      return {
+        id: String(r.id),
+        at: String(r.created_at),
+        count: Number(r.row_count ?? 0),
+        title: meta?.title ?? null,
+        kind: historyKindOf(meta),
+      };
+    });
   } catch {
     return [];
   }
@@ -115,7 +198,7 @@ export async function loadImportBatch(
   tenantId: string,
   classId: string,
   batchId: string,
-): Promise<{ rows: ImportedRow[]; plan: ImportPlanMeta | null; undone: boolean } | null> {
+): Promise<{ rows: ImportedRow[]; plan: ImportPlanMeta | null; meta: HistoryMeta | null; undone: boolean } | null> {
   const { data, error } = await admin
     .from("class_plan_import_batches")
     .select("rows, undone_at")

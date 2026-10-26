@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { diffImport, planUndo, splitBatchRows, undoChain, type LineFields } from "./import-undo";
+import { diffImport, historyKindOf, planUndo, shiftTitleOf, splitBatchRows, undoChain, type LineFields } from "./import-undo";
 
 const ME = "me";
 
@@ -69,9 +69,10 @@ describe("splitBatchRows / undoChain — plan meta, last 5", () => {
     expect(splitBatchRows([{ kind: "plan", planId: "p1", title: "RANK" }, row])).toEqual({
       rows: [row],
       plan: { kind: "plan", planId: "p1", title: "RANK" },
+      meta: { kind: "plan", planId: "p1", title: "RANK" },
     });
-    expect(splitBatchRows([row])).toEqual({ rows: [row], plan: null });
-    expect(splitBatchRows(null)).toEqual({ rows: [], plan: null });
+    expect(splitBatchRows([row])).toEqual({ rows: [row], plan: null, meta: null });
+    expect(splitBatchRows(null)).toEqual({ rows: [], plan: null, meta: null });
     expect(splitBatchRows([1, "x", { kind: "plan" }, row]).rows).toEqual([row]);
   });
 
@@ -80,5 +81,30 @@ describe("splitBatchRows / undoChain — plan meta, last 5", () => {
     expect(undoChain(recent, "c")).toEqual([{ id: "c" }]);
     expect(undoChain(recent, "a")).toEqual([{ id: "c" }, { id: "b" }, { id: "a" }]);
     expect(undoChain(recent, "zz")).toBeNull();
+  });
+});
+
+describe("history kinds — fill / shift / delete (2026-10-26)", () => {
+  it("reads shift and delete meta; they carry no line rows", () => {
+    const token = { classId: "c", date: "2026-10-26", slot: "16:00", removed: [], added: [], changed: [], markers: [] };
+    const shift = splitBatchRows([{ kind: "shift", shift: "skip", title: "RANK", token }]);
+    expect(shift.rows).toEqual([]);
+    expect(shift.plan).toBeNull();
+    expect(historyKindOf(shift.meta)).toBe("skip");
+    const del = splitBatchRows([{ kind: "delete", title: null, plan: { id: "p" } }]);
+    expect(historyKindOf(del.meta)).toBe("delete");
+    expect(historyKindOf(splitBatchRows([{ kind: "shift", shift: "bogus", token }]).meta)).toBe("fill");
+    expect(historyKindOf(null)).toBe("fill");
+  });
+
+  it("shift title = first textbook among touched lines", () => {
+    expect(
+      shiftTitleOf({
+        removed: [{ textbook: " " }],
+        added: [],
+        changed: [{ before: { textbook: null }, after: { textbook: "Grammar Inside" } }],
+      }),
+    ).toBe("Grammar Inside");
+    expect(shiftTitleOf({ removed: [], added: [], changed: [] })).toBeNull();
   });
 });

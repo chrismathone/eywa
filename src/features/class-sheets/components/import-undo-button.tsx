@@ -14,6 +14,14 @@ import type { ImportHistoryItem } from "@/features/textbooks/server/import-batch
 import { useSheetFeedback, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { sheetPill } from "../chrome";
 
+/** 무엇을 한 기록인지 — 배정(반영) · 미룸 · 당김 · 배정 삭제(원장 2026-10-26 히스토리에 넣기). */
+const KIND_LABEL = {
+  fill: "month.importUndo.kind.fill",
+  skip: "month.importUndo.kind.skip",
+  advance: "month.importUndo.kind.advance",
+  delete: "month.importUndo.kind.delete",
+} as const satisfies Record<ImportHistoryItem["kind"], string>;
+
 /** `2026-09-28T05:30:00Z` → `9/28 14:30`(KST) — 무엇을 되돌리는지 사람이 알아보게. */
 function importStamp(iso: string): string {
   const d = new Date(iso);
@@ -68,11 +76,13 @@ export function ImportUndoButton({
       .then((r) => {
         if (!r.ok) return void toast.error(feedback(r.error));
         toast.success(
-          r.batches > 1 || r.plansRemoved > 0
-            ? tf("month.importUndo.doneMany", { b: r.batches, p: r.plansRemoved, n: r.restored })
-            : r.kept > 0
-              ? tf("month.importUndo.doneKept", { n: r.restored, kept: r.kept })
-              : tf("month.importUndo.done", { n: r.restored }),
+          r.batches > 1 || r.others > 0
+            ? tf("month.importUndo.doneBatches", { b: r.batches })
+            : r.plansRemoved > 0
+              ? tf("month.importUndo.doneMany", { b: r.batches, p: r.plansRemoved, n: r.restored })
+              : r.kept > 0
+                ? tf("month.importUndo.doneKept", { n: r.restored, kept: r.kept })
+                : tf("month.importUndo.done", { n: r.restored }),
         );
         router.refresh();
       })
@@ -96,6 +106,7 @@ export function ImportUndoButton({
           <DropdownMenuItem key={b.id} className="cursor-pointer flex-col items-start gap-0" onClick={() => undo(b.id)}>
             <span>
               {i === 0 ? <span className="text-primary mr-1 font-bold">{t("month.importUndo.latest")}</span> : null}
+              <span className="mr-1 font-bold">{t(KIND_LABEL[b.kind])}</span>
               {tf("month.importUndo.menu", {
                 at: importStamp(b.at),
                 title: b.title ?? t("month.importUndo.untitled"),

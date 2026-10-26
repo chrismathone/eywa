@@ -186,7 +186,7 @@ export function MonthClient({
             ? () => {
                 if (shiftBusy.current) return;
                 shiftBusy.current = true;
-                void undoLessonShift({ classId: data.classId, token })
+                void undoLessonShift({ classId: data.classId, token, historyId: r.historyId })
                   .then((u) => {
                     if (!u.ok) return void toast.error(feedback(u.error));
                     toast.success(t("plan.shift.undo.done"));

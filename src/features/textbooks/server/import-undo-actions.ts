@@ -10,6 +10,9 @@
  * 🔴 **배정까지 지운다**(원장 2026-10-26 *"되돌리기 기능이 동작안한대"*) — 실제 줄만 비우면 빈 칸에 같은 교재가
  *    `계획`으로 다시 그려져 아무것도 안 바뀐 것처럼 보였다. 기록에 배정 표식이 있을 때만(옛 기록은 줄만).
  *    배정 삭제는 화면의 [배정 삭제]와 같은 액션(`deleteClassTextbookPlan`, 줄은 안 지움 — 줄은 여기서 이미 돌렸다).
+ * 🔑 **미룸·당김 / 배정 삭제도 같은 목록**(원장 2026-10-26 *"미룸·당김이랑 배정삭제도 히스토리에 넣어줘"*) —
+ *    기록의 표식(`HistoryMeta`)을 보고 각 화면 알림의 [되돌리기]와 **같은 서버 액션**을 부른다
+ *    (`undoLessonShift` / `undoPlanDelete` — 그 사이 바뀐 게 있으면 거절하는 판정도 그대로).
  * 🔑 건마다 먼저 '되돌림' 표시를 걸고(조건부 UPDATE) 그다음 줄을 돌린다 — 두 창이 동시에 눌러도 한 번만 돈다.
  *    줄 되돌리기가 실패하면 표시를 풀어 다시 누를 수 있게 한다.
  */
@@ -20,11 +23,15 @@ import { logAction } from "@/features/audit/server/log";
 import { requireEcsClassAccess } from "@/features/class-sheets/server/access";
 import { reportError } from "@/lib/observability/report-error";
 import { IMPORT_FIELDS, planUndo, undoChain, type LineFields } from "../import-undo";
-import { loadImportBatch, loadRecentImports } from "./import-batch";
+import { claimHistory, loadImportBatch, loadRecentImports, releaseHistory } from "./import-batch";
 import { deleteClassTextbookPlan } from "./plan-actions";
+import { undoLessonShift } from "./shift-undo-actions";
+import { undoPlanDelete } from "./plan-delete-actions";
+import type { ShiftUndoToken } from "../shift-undo";
+import type { PlanRestoreRow } from "../types";
 
 export type UndoImportResult =
-  | { ok: true; restored: number; kept: number; batches: number; plansRemoved: number }
+  | { ok: true; restored: number; kept: number; batches: number; plansRemoved: number; others: number }
   | { ok: false; error: string };
 
 /** 칸 되돌리기를 한꺼번에 몇 개씩 보낼지 — 수백 줄을 직렬로 보내면 수 초가 걸린다. */
@@ -32,7 +39,10 @@ const RESET_PARALLEL = 20;
 
 type Gate = Extract<Awaited<ReturnType<typeof requireEcsClassAccess>>, { ok: true }>;
 type Admin = ReturnType<typeof createAdminClient>;
-type OneResult = { ok: true; restored: number; kept: number; planRemoved: boolean } | { ok: false; error: string };
+/** `other` = 미룸·당김 / 배정 삭제를 되돌렸다(줄 수를 세지 않는 종류). */
+type OneResult =
+  | { ok: true; restored: number; kept: number; planRemoved: boolean; other?: boolean }
+  | { ok: false; error: string };
 
 export async function undoPlanImport(input: {
   classId: string;
@@ -53,7 +63,7 @@ export async function undoPlanImport(input: {
     return { ok: false, error: "되돌릴 수 있는 반영이 아닙니다 — 이미 되돌렸거나 최근 5건 밖입니다" };
   }
 
-  const total = { restored: 0, kept: 0, batches: 0, plansRemoved: 0 };
+  const total = { restored: 0, kept: 0, batches: 0, plansRemoved: 0, others: 0 };
   let failure: string | null = null;
   for (const b of chain) {
     const r = await undoOne(admin, gate, input.classId, b.id);
@@ -65,6 +75,7 @@ export async function undoPlanImport(input: {
     total.kept += r.kept;
     total.batches += 1;
     if (r.planRemoved) total.plansRemoved += 1;
+    if (r.other) total.others += 1;
   }
   revalidatePath(`/ecs/${input.classId}`, "layout");
   revalidatePath("/ecs");
@@ -82,22 +93,28 @@ async function undoOne(admin: Admin, gate: Gate, classId: string, batchId: strin
   if (!batch || batch.undone) return { ok: false, error: "이미 되돌린 반영입니다" };
 
   // ① 표시 먼저 — 조건부라 동시에 두 번 눌러도 한쪽만 통과한다.
-  const { data: claimed, error: claimErr } = await admin
-    .from("class_plan_import_batches")
-    .update({ undone_at: new Date().toISOString(), undone_by: gate.access.user.id })
-    .eq("tenant_id", tenantId)
-    .eq("id", batchId)
-    .is("undone_at", null)
-    .select("id");
-  if (claimErr) return { ok: false, error: "되돌리지 못했습니다 — 잠시 뒤 다시 시도해 주세요" };
-  if (!claimed || claimed.length === 0) return { ok: false, error: "이미 되돌린 반영입니다" };
+  const claim = await claimHistory(admin, tenantId, classId, batchId, gate.access.user.id);
+  if (claim === "error") return { ok: false, error: "되돌리지 못했습니다 — 잠시 뒤 다시 시도해 주세요" };
+  if (claim === "taken") return { ok: false, error: "이미 되돌린 반영입니다" };
+  const release = () => releaseHistory(admin, tenantId, batchId);
 
-  const release = () =>
-    admin
-      .from("class_plan_import_batches")
-      .update({ undone_at: null, undone_by: null })
-      .eq("tenant_id", tenantId)
-      .eq("id", batchId);
+  // 미룸·당김 / 배정 삭제 — 알림 [되돌리기]와 같은 액션. 재료는 서버가 쓴 기록이지만 액션이 모양을 다시 검사한다.
+  const meta = batch.meta;
+  if (meta?.kind === "shift" || meta?.kind === "delete") {
+    const r =
+      meta.kind === "shift"
+        ? await undoLessonShift({ classId, token: meta.token as ShiftUndoToken })
+        : await undoPlanDelete({
+            classId,
+            plan: meta.plan as PlanRestoreRow,
+            ...(meta.lines ? { lines: meta.lines as ShiftUndoToken } : {}),
+          });
+    if (!r.ok) {
+      await release();
+      return { ok: false, error: r.error };
+    }
+    return { ok: true, restored: 0, kept: 0, planRemoved: false, other: true };
+  }
 
   let plan: ReturnType<typeof planUndo>;
   try {
@@ -158,7 +175,7 @@ async function undoOne(admin: Admin, gate: Gate, classId: string, batchId: strin
       .eq("id", batch.plan.planId)
       .maybeSingle();
     if (row && String(row.class_id) === classId) {
-      const del = await deleteClassTextbookPlan(batch.plan.planId);
+      const del = await deleteClassTextbookPlan(batch.plan.planId, { skipHistory: true });
       // 줄은 이미 돌렸다 — 표시를 풀면 같은 줄을 두 번 돌리게 되니 풀지 않고 사실만 알린다.
       if (!del.ok) {
         return { ok: false, error: `칸은 되돌렸지만 교재 배정을 지우지 못했습니다 — 교재 배정에서 직접 지워 주세요 (${del.error})` };

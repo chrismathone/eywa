@@ -297,6 +297,20 @@ describe("교재 배정 — 계획과 실제를 가른다", () => {
     // 고른 반영과 그 뒤 반영을 함께(원장 2026-10-26 최근 5건) · 배정까지 지운다(빈 칸에 계획이 다시 그려지던 문제)
     expect(undo).toContain("undoChain(");
     expect(undo).toContain("deleteClassTextbookPlan(");
+    // 미룸·당김 / 배정 삭제도 같은 히스토리(원장 2026-10-26) — 기록은 서버가 남기고, 되돌리기는 알림과 같은 액션.
+    expect(undo).toContain("undoLessonShift(");
+    expect(undo).toContain("undoPlanDelete(");
+    expect(undo).toContain("{ skipHistory: true }"); // 배정 반영을 되돌리며 지운 배정은 '삭제' 기록이 아니다
+    expect(plan).toContain('meta: { kind: "shift"');
+    expect(plan).toContain('kind: "delete"');
+    // 알림 [되돌리기]가 히스토리 기록도 함께 '되돌림'으로 — 안 그러면 툴바 목록에 되돌린 것이 다시 뜬다.
+    for (const f of ["shift-undo-actions.ts", "plan-delete-actions.ts"]) {
+      expect(read("src", "features", "textbooks", "server", f)).toContain("claimHistory(");
+    }
+    expect(read("src", "features", "class-sheets", "components", "use-plan-handlers.ts")).toContain("r.historyId");
+    expect(read("src", "features", "class-sheets", "components", "month-client.tsx")).toContain("historyId: r.historyId");
+    expect(read("src", "features", "class-sheets", "components", "textbook-fill-existing.tsx")).toContain("historyId: res.historyId");
+    expect(read("src", "app", "(shell)", "textbooks", "_components", "plans-face.tsx")).toContain("historyId: res.historyId");
     expect(writer).toContain("plan: input.plan ?? null");
     expect(plan.slice(plan.indexOf("export async function applyTextbookFill"))).toContain("plan: { id: saved.id, title: computed.title }");
     // 표가 없어도 가져오기·월간 화면은 산다([[#95]]).

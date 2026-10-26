@@ -17,15 +17,25 @@ import type { PlanLineDTO } from "@/features/class-sheets/server/actions";
 import type { ShiftUndoToken } from "../shift-undo";
 import { readWeekCells } from "./shift-snapshot";
 import { restoreShiftState, validToken } from "./shift-undo-core";
+import { claimHistory, releaseHistory } from "./import-batch";
 
 export type ShiftUndoResult =
   | { ok: true; cells?: { date: string; slotStart: string; lines: PlanLineDTO[] }[] }
   | { ok: false; error: string };
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CHANGED = "그 사이 이 반의 진도가 바뀌어 되돌리지 않았습니다 — 화면을 새로고침해 확인해 주세요";
 const STOPPED = "되돌리다 멈췄습니다 — 새로고침 후 확인해 주세요";
 
-export async function undoLessonShift(input: { classId: string; token: ShiftUndoToken }): Promise<ShiftUndoResult> {
+export async function undoLessonShift(input: {
+  classId: string;
+  token: ShiftUndoToken;
+  /**
+   * 이 미룸·당김의 히스토리 기록(원장 2026-10-26) — 알림 [되돌리기]가 넘긴다. 같은 '되돌림' 표시를 걸어
+   * 툴바 [되돌리기 ▾]에 다시 안 뜨게 한다(히스토리에서 부를 땐 이미 표시를 걸었으니 안 넘긴다).
+   */
+  historyId?: string | null;
+}): Promise<ShiftUndoResult> {
   const gate = await requireEcsClassAccess(input.classId, { write: true });
   if (!gate.ok) return { ok: false, error: gate.error };
   if (!validToken(input.token, input.classId)) return { ok: false, error: "되돌릴 기록이 올바르지 않습니다" };
@@ -34,8 +44,16 @@ export async function undoLessonShift(input: { classId: string; token: ShiftUndo
   const tenantId = gate.access.tenantId;
   const classId = input.classId;
 
+  const historyId = input.historyId && UUID_RE.test(input.historyId) ? input.historyId : null;
+  if (historyId) {
+    const claim = await claimHistory(admin, tenantId, classId, historyId, gate.access.user.id);
+    if (claim === "taken") return { ok: false, error: "이미 되돌렸습니다" };
+    // "error"(표가 없거나 일시 실패)면 표시 없이 되돌린다 — 되돌리기 자체는 막지 않는다.
+  }
+
   const res = await restoreShiftState({ admin, tenantId, classId, actor: gate.access.user.id, token });
   if (res !== "ok") {
+    if (historyId) await releaseHistory(admin, tenantId, historyId).catch(() => undefined);
     revalidatePath(`/ecs/${classId}`, "layout");
     return { ok: false, error: res === "changed" ? CHANGED : STOPPED };
   }
