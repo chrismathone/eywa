@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { lessonNoOf, unitKey, type CatalogBook } from "./math-book-match";
-import { latestPosition } from "./roadmap-position";
+import { latestPosition, termFits } from "./roadmap-position";
 
 const book = (id: string, title: string, lessons: string[]): CatalogBook => ({
   id, title, lessons: lessons.map((progress, i) => ({ lessonNo: i + 1, progress })),
@@ -72,5 +72,35 @@ describe("latestPosition — 다른 책 복습은 진도 위치가 아니다", (
     expect(latestPosition("가우스", CATALOG, line("가우스 중1-2 3권"))?.title).toBe("가우스 중1-2 4권"); // 같은 학년·학기
     expect(latestPosition("가우스", CATALOG, line("가우스 중3-2 4권"))?.title).toBe("가우스 중3-2 4권");
     expect(latestPosition("가우스", CATALOG, line("가우스"))?.title).toBe("가우스 중3-2 4권"); // 근거 없으면 종전대로 뒤 권
+  });
+});
+
+describe("termFits — 교재 칸의 학년·학기가 다른 권의 진도로 세지 않는다", () => {
+  it.each([
+    ["시그마 중1-1", "발전|초5-1|1", false],
+    ["시그마 중1-1", "가우스|중1-1|1", true],
+    ["강아 6-2-1", "발전|초6-2|1", true],
+    ["바이블 유형 3-2", "가우스|중3-2|3", true],
+    ["중2-2 100발 100중", "가우스|중3-1|1", false],
+    ["가우스 공통수학1", "가우스|중3-1|1", true],
+    [null, "발전|초5-1|1", true],
+    ["연슴문제(기말범위) , 가우스 2-2-4", "가우스|중2-2|4", true],
+  ])("%s · %s → %s", (text, key, ok) => {
+    expect(termFits(text, key)).toBe(ok);
+  });
+  it("중학 교재로 한 같은 이름 단원이 초등 권 위치가 되지 않는다", () => {
+    const E5 = { ...book("e5", "초5-1 발전 1권 (22개정)", ["2-3. 공약수와 최대공약수", "2-5. 공배수와 최소공배수"]), gradeTerm: "초5-1" };
+    const reports = [{ date: "2026-09-03", textbook: "시그마 중1-1", progress: "수학 공배수와 최소공배수" }];
+    // 같은 이름 단원이 중1-1에도 있어야 '여러 학년'이다.
+    const M1 = book("m1", "가우스 중1-1 1권", ["공약수와 최대공약수 / 공배수와 최소공배수"]);
+    expect(latestPosition("발전", [E5, M1], reports)).toBeNull();
+    // 교재 칸이 초5-1이면 그 권으로 센다
+    expect(latestPosition("발전", [E5, M1], [{ ...reports[0]!, textbook: "초5-1 발전 1권" }])?.lessonNo).toBe(2);
+  });
+  it("한 학년에만 있는 단원은 교재 칸이 달라도 진도를 믿는다", () => {
+    const E6 = { ...book("e6", "초6-2 발전 2권 (22개정)", ["2-5-1. 원주와 원주율 알아보기"]), gradeTerm: "초6-2" };
+    const M1 = book("m1", "가우스 중1-1 1권", ["공배수와 최소공배수"]);
+    const reports = [{ date: "2026-10-21", textbook: "가우스 중1-1 1권", progress: "수학 2-5-1 원주와 원주율 알아보기" }];
+    expect(latestPosition("발전", [E6, M1], reports)?.title).toBe("초6-2 발전 2권 (22개정)");
   });
 });
