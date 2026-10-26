@@ -93,7 +93,7 @@ import {
   pilotSection,
   progressLead,
 } from "../math-report-pilot";
-import { pilotBody, pilotLevelsSection, readHomeworkMissReason, readTestSkip, type DailyTestSkip } from "../math-report-pilot-sections";
+import { pilotBody, pilotLevelsSection, readAttitudeNote, readHomeworkMissReason, readTestSkip, type DailyTestSkip } from "../math-report-pilot-sections";
 import { skipStatusOf } from "../progress-status";
 import type { Variety } from "../ment-variants";
 import { prevPhrasingHint } from "../pilot-notes";
@@ -863,7 +863,10 @@ export async function saveAndQueueClassnote(
     ? // 영어 — '사랑의 한마디' 필수(원장 2026-10-26). 영어 글은 템플릿이라 끝에 붙었는지는 보지 않고 적었는지만 본다.
       input.subject === "english" && !(input.pilotOneLine ?? "").trim()
       ? ENGLISH_ONELINE_REQUIRED_ERROR
-      : null
+      : // 영어 보강 줄 — 결석 날짜를 몰라 보강 사유가 필요한데 비었다(화면이 판정해 싣는다, 2026-10-26).
+        input.subject === "english" && input.pilotCheck && !input.pilotCheck.reasonsOk
+        ? PILOT_REASON_REQUIRED_ERROR
+        : null
     : saved.mentSource !== "auto" && saved.mentSource !== "auto_edited" // 자동작성 뒤 고친 글도 보낸다(2026-10-23)
       ? PILOT_AUTOWRITE_REQUIRED_ERROR
       : !input.pilotCheck?.factsCurrent // 자동작성 뒤 출결·점수·태도 등이 바뀌었다(옛 값이 적힌 글) — 2026-10-26
@@ -1366,6 +1369,10 @@ export type SaveOnescreenSessionInput = {
       dailyTestSkip?: { reason: string | null; detail: string } | null;
       /** 숙제 미제출 사유(수학 보고서 시범) — 시범 행만 싣는다. 로스터가 readHomeworkMissReason으로 복원한다. */
       homeworkMissReason?: string;
+      /** 수업 태도 의견(새 수학 보고서, 2026-10-26) — 적은 행만. 로스터가 readAttitudeNote로 복원한다. */
+      attitudeNote?: string;
+      /** 보강 사유(보강 줄, 2026-10-26) — 적은 행만. 로스터가 readMakeupReason으로 복원한다. */
+      makeupReason?: string;
     }
   >;
   dailyScore?: number | null;
@@ -1572,7 +1579,8 @@ export async function generateReportComment(
     classNotice: noticeSplit.rest,
     classContext: input.classContext?.replace(/\s*\n+\s*/g, " ").trim().slice(0, 300) || "",
     // 출결 문장(attendance-sentence.ts가 만든 한 줄) — 클라 값이라 한 줄로 접고 길이를 자른다. 글에 그대로 들어가고 AI에는 안 준다.
-    attendance: input.attendance?.replace(/\s*\n+\s*/g, " ").trim().slice(0, 120) || "",
+    // 보강 문장(결석 날짜 · 시간 · 사유)이 붙으면 길어진다 — 300자까지(2026-10-26).
+    attendance: input.attendance?.replace(/\s*\n+\s*/g, " ").trim().slice(0, 300) || "",
     // 이해도는 시범 대상에만 — 다른 학생 입력에 실려 와도 프롬프트에 안 넣는다(클라 값을 믿지 않는다).
     understanding: pilot
       ? (input.understanding ?? [])
@@ -1606,7 +1614,12 @@ export async function generateReportComment(
         .filter(Boolean)
         .join("\n\n"),
       body: pilotBody(
-        { ...safeInput, dailyTestSkip: pilotSkip, homeworkMissReason: readHomeworkMissReason(input.homeworkMissReason) },
+        {
+          ...safeInput,
+          dailyTestSkip: pilotSkip,
+          homeworkMissReason: readHomeworkMissReason(input.homeworkMissReason),
+          attitudeNote: readAttitudeNote(input.attitudeNote),
+        },
         { understandingText, videoReceipt, variety },
       ),
       note: pilotNote,
@@ -1635,6 +1648,7 @@ export async function generateReportComment(
         classContext: "",
         dailyTestSkip: undefined,
         homeworkMissReason: undefined,
+        attitudeNote: undefined,
         attendance: "",
       }
     : safeInput;

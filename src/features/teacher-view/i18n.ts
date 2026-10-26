@@ -3174,6 +3174,16 @@ export const SHEET_DICT = {
   "os.gate.need.autowrite": { ko: "자동작성", en: "Auto-write" },
   "os.gate.need.oneline": { ko: "사랑의 한마디", en: "A loving word" },
   "os.gate.need.hwreason": { ko: "숙제 미제출 사유", en: "Reason homework was not done" },
+  "os.gate.need.attnote": { ko: "수업 태도 의견", en: "Attitude comment" },
+  "os.gate.hint.attnote": {
+    ko: "수업 태도가 하·중하입니다 — 학생 상세의 수업 태도 아래 '수업 태도 의견'을 3줄 이상(90자 이상) 적어 주세요(보고서에 그대로 들어갑니다)",
+    en: "Attitude is rated low — write the attitude comment under attitude in the student details, 3+ lines (90+ characters); it goes into the report as written",
+  },
+  "os.gate.need.mkreason": { ko: "보강 사유", en: "Make-up reason" },
+  "os.gate.hint.mkreason": {
+    ko: "보강 수업인데 어느 결석의 보강인지 예약에서 찾지 못했습니다 — 학생 상세의 '보강 사유'를 적어 주세요(보고서 출결에 들어갑니다)",
+    en: "This is a make-up class but the missed date was not found in the reservations — write the make-up reason in the student details (it goes into the attendance line)",
+  },
   "os.gate.hint.hwreason": {
     ko: "숙제 완성도가 미제출입니다 — 학생 상세의 숙제 완성도 아래 '미제출 사유'를 적어 주세요(보고서에 그대로 들어갑니다)",
     en: "Homework is marked as not done — write the reason under homework in the student details (it goes into the report as written)",
@@ -3259,6 +3269,17 @@ export const SHEET_DICT = {
     en: "Built from the attitude, homework and understanding fields — change those and run auto-write again",
   },
   "os.card.hwMiss.label": { ko: "미제출 사유 (필수)", en: "Why it was not done (required)" },
+  // 수업 태도 의견(하·중하) · 보강 사유(원장 2026-10-26) — ReasonNoteInput.
+  "os.card.attNote.label": { ko: "수업 태도 의견 (필수 · 3줄 이상)", en: "Attitude comment (required · 3+ lines)" },
+  "os.card.attNote.ph": {
+    ko: "오늘 수업에서 있었던 일과 앞으로 어떻게 지도할지 3줄 이상 적어 주세요 · 보고서 수업 태도에 그대로 들어갑니다",
+    en: "Write 3+ lines on what happened in class and how you will guide the student · goes into the report as written",
+  },
+  "os.card.mkReason.label": { ko: "보강 사유 (필수)", en: "Make-up reason (required)" },
+  "os.card.mkReason.ph": {
+    ko: "예: 10월 19일 결석 보충 · 보고서 출결에 '(사유: …)'로 들어갑니다",
+    en: "e.g. making up the Oct 19 absence · added to the attendance line as '(reason: …)'",
+  },
   "os.card.hwMiss.ph": {
     ko: "예: 감기로 몸이 좋지 않았다고 합니다 · 보고서 숙제 완성도에 그대로 들어갑니다",
     en: "e.g. was unwell with a cold · added as is to the homework part of the report",

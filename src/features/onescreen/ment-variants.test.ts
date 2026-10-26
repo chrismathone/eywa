@@ -44,7 +44,7 @@ describe("갈래 고르기(원장 2026-10-26 매크로성 반복 금지)", () =>
   });
   it("`.map(fn)`의 세 번째 인자(배열)는 Variety가 아니다", () => {
     expect(asVariety([1, 2])).toBeNull();
-    expect(["100%"].map(homeworkSentence)[0]).toBe(HOMEWORK_FULL[0]);
+    expect(["100%"].map(homeworkSentence as unknown as (v: string, i: number, a: string[]) => string)[0]).toBe(HOMEWORK_FULL[0]);
   });
 });
 
