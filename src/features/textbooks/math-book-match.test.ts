@@ -69,6 +69,14 @@ describe("lessonNoOf — 진도 → 차수", () => {
     const E31 = book("e31", "초3-1 발전 1권", ["1-1-1 받아올림이 없는 (세 자리 수)+(세 자리 수)", "1-1-2 받아올림이 한 번 있는 (세 자리 수)+(세 자리 수)"]);
     expect(lessonNoOf("1-1-1 받아올림이 없는, 한 번 있는 (세 자리 수)+(세 자리 수)", E31.lessons)).toBe(2);
   });
+  it("초2·초3은 차시표 이름으로 접는다", () => {
+    expect(unitKey("2-4-2 몇 시 몇 분 알아보기 (2)")).toBe(unitKey("몇 시 몇 분 알기"));
+    expect(unitKey("1-2-1 선분, 반직선, 직선")).toBe(unitKey("1-2-1 선의 종류 알아보기"));
+    expect(unitKey("1-2-2 각, 직각 알아보기")).toBe(unitKey("1-2-3 직각 알아보기"));
+    expect(unitKey("2-5-1 자료를 분류하여 표로 나타내기")).toBe(unitKey("자료를 보고 표로 나타내기"));
+    const E31 = book("e31", "초3-1 발전 1권", ["1-2-1 선의 종류 알아보기", "1-3-1 똑같이 나누기(1) / 1-3-2 똑같이 나누기(2)"]);
+    expect(lessonNoOf("1-3-1 똑같이 나누기", E31.lessons)).toBe(2);
+  });
   it("여러 줄이면 가장 뒤 차수", () => {
     expect(lessonNoOf("1.이등변삼각형의 성질\n2.삼각형의 외심", G3.lessons)).toBe(2);
   });
