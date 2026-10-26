@@ -107,6 +107,13 @@ export function BulkApplyPopover({
   const [progress, setProgress] = useState("");
   const [subjectKey, setSubjectKey] = useState<string | null>(null);
   const [grade, setGrade] = useState(studyGrade);
+  // 반이 바뀌면(대상 행의 기본 진도 학년이 바뀌면) 그 반 기준으로 다시 연다 — 같은 반에서 고른 학년은 닫아도 유지(reset 주석).
+  // 예전엔 처음 마운트 때 한 번만 정해 앞 반의 학년으로 열렸다(2026-10-26 조사). 렌더 중 조건부 갱신 = React가 권하는 '값이 바뀌면 맞추기'.
+  const [gradeFor, setGradeFor] = useState(studyGrade);
+  if (gradeFor !== studyGrade) {
+    setGradeFor(studyGrade);
+    setGrade(studyGrade);
+  }
   const t = useSheetT();
   const tf = useSheetTf();
   const lang = useSheetLang();
@@ -242,7 +249,11 @@ export function BulkApplyPopover({
   return (
     <Popover.Root
       open={open}
-      onOpenChange={(o) => {
+      onOpenChange={(o, details) => {
+        // 진도 선택 창(이 창 안의 두 번째 팝오버)이 떠 있는 채로 바깥을 누르면 그 클릭은 '선택 창 닫기'다 — 이 창까지 닫고
+        // 초기화하면 고른 진도가 사라져 "튕겨서 입력이 안 된다"(원장 제보 2026-10-26 · 7/23 도입 때부터). 선택 창만 닫히고 이 창은 남는다.
+        // 같은 클릭 안에서는 선택 창이 아직 화면에 있다(닫힘은 클릭 처리가 끝난 뒤 반영) — 순서와 상관없이 같은 판정.
+        if (!o && details.reason === "outside-press" && document.querySelector("[data-progress-picker]")) return;
         setOpen(o);
         if (!o) reset();
       }}
