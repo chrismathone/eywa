@@ -6,6 +6,7 @@ import {
 } from "../pilot-notes";
 import { PilotSheetHead, type PilotSheetHeadProps } from "./pilot-sheet-head";
 import { PilotNoteBox, SectionBody } from "./pilot-notes-body";
+import { splitImageSlots } from "@/features/report-templates/image-slots";
 
 // 수학 보고서 시범의 학부모 카드 = **데일리 학습알림 표**(원장 2026-10-23: 참고 시안 + *"색감은 쨍하게 눈에 잘 띄어야함 ·
 // 좌측상단 인재원 마크 · 담임도 들어가야함 · 밑의 내용란들과 전체적인 디자인을 다시 재편성"*).
@@ -61,7 +62,17 @@ export type PilotReportSheetProps = Omit<
   /** 학습 추이·학습 추세·첨부 — 카드가 기존 재료로 그려 넘긴다(사랑의 한마디 앞). */
   middle: { title: string; body: ReactNode }[];
   footer: string | null;
+  /**
+   * 그림·첨부 자리 줄(`[시험결과지]`·`[첨부: 이름]`)이 든 항목의 본문 — 영어 항목 보고서(2026-10-26)의 '인재원 결과지'.
+   * 카드가 영어 본문 그리기(TemplateBody)를 넘긴다. 없으면(수학) 그 줄도 글 그대로다.
+   */
+  markerBody?: (text: string) => ReactNode;
 };
+
+/** 항목 본문에 그림·첨부 자리 줄이 있나 — 있으면 그 항목은 자리 그리기로 넘긴다. */
+function hasMarkerLines(body: string): boolean {
+  return splitImageSlots(body).some((seg) => seg.kind !== "text");
+}
 
 export function PilotReportSheet({
   sections,
@@ -69,6 +80,7 @@ export function PilotReportSheet({
   textbook,
   middle,
   footer,
+  markerBody,
   ...head
 }: PilotReportSheetProps) {
   const { tests, levels, rest } = splitSheetSections(sections);
@@ -82,7 +94,7 @@ export function PilotReportSheet({
           {textbook && isPilotTitle(s.title, "progress") ? (
             <TextbookRow textbook={textbook} inBand />
           ) : null}
-          {s.body ? <SectionBody s={s} /> : null}
+          {s.body ? markerBody && hasMarkerLines(s.body) ? markerBody(s.body) : <SectionBody s={s} /> : null}
         </SheetBand>
       ))}
       {middle.map((m) => (
@@ -92,7 +104,7 @@ export function PilotReportSheet({
       ))}
       {note?.body ? (
         <SheetBand title={note.title}>
-          <PilotNoteBox text={note.body} />
+          {markerBody && hasMarkerLines(note.body) ? markerBody(note.body) : <PilotNoteBox text={note.body} />}
         </SheetBand>
       ) : null}
       {footer ? (

@@ -4,7 +4,7 @@
  * 채우기(fill.ts)는 값이 어디서 왔는지 모른다. "어느 칸이 어느 토큰인가"는 **여기 한 곳**에서 정한다 —
  * 카드 미리보기·자동작성·다시 채우기가 같은 함수를 지나야 화면과 학부모 글이 갈리지 않는다.
  */
-import type { TemplateTokenKey } from "./defaults";
+import { SHEET_TOKEN_KEYS, type SheetTokenKey, type TemplateTokenKey } from "./defaults";
 import { imageSlotMarker, type ImageSlotKey } from "./image-slots";
 import { parentStudentName } from "./student-name";
 
@@ -25,6 +25,11 @@ export type EnglishTemplateSource = {
    * 없으면 빈 값이라 그 줄·문단이 빠진다. 무엇을 "있다"로 볼지는 호출부(english-draft `slotFactsFor`)가 정한다.
    */
   slots?: Partial<Record<ImageSlotKey, boolean>>;
+  /**
+   * 항목 칸 값(2026-10-26, 출결·수업평가·…) — 수학 새 보고서 조각으로 **원스크린이 만들어** 넘긴다(onescreen/english-sheet.ts).
+   * 이 모듈은 문장을 만들지 않는다(수학과 영어가 같은 문장을 쓰게 한 곳에서). 없으면 빈 값 = 그 줄·문단이 빠진다.
+   */
+  sheet?: Partial<Record<SheetTokenKey, string>>;
 };
 
 /**
@@ -54,5 +59,6 @@ export function englishTemplateValues(src: EnglishTemplateSource): Record<Templa
     코멘트: src.aiComment.trim(),
     시험결과지: src.slots?.시험결과지 ? imageSlotMarker("시험결과지") : "",
     학습분석지: src.slots?.학습분석지 ? imageSlotMarker("학습분석지") : "",
+    ...(Object.fromEntries(SHEET_TOKEN_KEYS.map((k) => [k, (src.sheet?.[k] ?? "").trim()])) as Record<SheetTokenKey, string>),
   };
 }

@@ -133,7 +133,9 @@ export function ParentReportCard({
   // 🔑 그 글이 진도·테스트·태도·숙제·오늘의 숙제를 **원장이 정한 순서대로** 이미 다 싣는다(원장 2026-10-23 *"진도 → 일일테스트 →
   //    수업태도 → 숙제완성도 → 오늘의 수업 → 오늘의 숙제 → 사랑의 한마디"*). 그래서 위쪽 '오늘 수업'(진도·오늘 과제)·'평가' 칸은
   //    그리지 않는다 — 그리면 같은 값이 순서를 어기며 두 번 나간다. 교재는 글에 없으니 남긴다.
-  const pilotSections = templateMode || !rpt.showParentNote ? null : parsePilotNotes(report.notes);
+  // 영어(템플릿 모드)도 항목 글이면 같은 표로 그린다(원장 2026-10-26 *"수학보고서 디자인을 영어보고서에도"*, 기본 템플릿 =
+  // report-templates/defaults.ts BUILTIN_ENGLISH_SHEET_TEMPLATE). 영어는 'showParentNote'를 보지 않는다 — 글이 곧 보고서다(아래 주석).
+  const pilotSections = !templateMode && !rpt.showParentNote ? null : parsePilotNotes(report.notes);
   const pilotSplit = pilotSections ? splitPilotNote(pilotSections) : null;
   // 위 칸을 감추는 건 **시범 보고서 글이 확실할 때만**(아는 항목 제목이 있을 때) — 손으로 "■"로 시작한 글이 진도 칸을 지우지 않게.
   const pilotOwns = !!pilotSections && isPilotReportSections(pilotSections);
@@ -166,6 +168,8 @@ export function ParentReportCard({
     if (rpt.showTrendNote && report.trendNote) {
       middle.push({ title: "학습 추세", body: <p className="text-foreground text-base leading-relaxed whitespace-pre-wrap">{report.trendNote}</p> });
     }
+    // 영어 영상 숙제 마감 — 수학은 글('오늘의 숙제')에 싣지만 영어 항목 글엔 그 칸이 없어 기본 카드처럼 따로 단다.
+    if (templateMode && videoDue) middle.push({ title: "영상 숙제", body: <p className="text-foreground text-base font-bold">{videoDue}</p> });
     if (rpt.showAttachments && restAttachments.length) middle.push({ title: "첨부", body: <AttachmentsBody items={restAttachments} /> });
     return (
       // ⚠️ report-capture = ClassNote 워커 스크린샷 대상(아래 기본 카드와 같은 클래스·폭 — 바꾸면 워커 선택자도).
@@ -188,6 +192,8 @@ export function ParentReportCard({
           textbook={rpt.showTextbook ? report.textbook : null}
           middle={middle}
           footer={rpt.showFooter ? rpt.footerNote || academyName : null}
+          // 영어 '인재원 결과지' 항목의 그림·첨부 자리 — 기본 카드와 같은 본문 그리기(TemplateBody)를 그 항목 안에서 쓴다.
+          markerBody={templateMode ? (text) => <TemplateBody text={text} jj={jj} inline={inline} student={parentStudent} /> : undefined}
         />
       </div>
     );

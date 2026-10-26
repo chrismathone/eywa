@@ -85,7 +85,7 @@ export function scoreRemark(line: string): string {
 }
 
 /** 점수 줄 + 덧붙인 말. 점수가 없으면 "". */
-function scoreText(line: string): string {
+export function scoreText(line: string): string {
   const score = scoreOnly(line);
   if (!score) return "";
   return [score, scoreRemark(score)].filter(Boolean).join("\n");

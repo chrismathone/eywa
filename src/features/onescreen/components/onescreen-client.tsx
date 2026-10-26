@@ -89,10 +89,11 @@ import { EnglishTemplatePanel } from "./english-template-panel";
 import { generateEnglishMent } from "../server/english-ment-actions";
 import { listMyReportTemplates } from "@/features/report-templates/server/actions";
 import {
-  BUILTIN_ENGLISH_TEMPLATE,
   BUILTIN_ENGLISH_TEMPLATES,
+  DEFAULT_ENGLISH_TEMPLATE,
   type ReportTemplate,
 } from "@/features/report-templates/defaults";
+import { attendanceSentence } from "../attendance-sentence";
 import { hasTextBesidesMarkers, stripImageSlots, usedAttachmentNames } from "@/features/report-templates/image-slots";
 import {
   attachmentLineIndex,
@@ -125,6 +126,7 @@ import {
   pendingNeedsAi,
   slotFactsFor,
   templateFactsKey,
+  templateCarriesNote,
   templateImageSlots,
   templateNeedsAi,
   type EnglishGenStatus,
@@ -2462,7 +2464,7 @@ export function OneScreenClient({
     templateId: string | undefined,
     list: readonly ReportTemplate[] = englishTemplates,
   ): ReportTemplate | null {
-    return findTemplateIn(list, templateId, BUILTIN_ENGLISH_TEMPLATE);
+    return findTemplateIn(list, templateId, DEFAULT_ENGLISH_TEMPLATE);
   }
   /**
    * 영어 행의 사실 — 표시 필드는 저장(buildReportFields)과 **같은 함수**로 만들고(오늘 과제 쪽수 후보정·테스트 표기)
@@ -2496,6 +2498,8 @@ export function OneScreenClient({
       attitude: rowEval.attitude ?? "",
       homework: rowEval.homework,
       note: rowEval.note,
+      // 출결(원장 2026-10-26) — 출석부 칸 그대로(수학 보고서와 같은 문장, attendance-sentence.ts).
+      attendance: attendanceSentence(su.attendanceRaw, su.attendanceNote),
       slots: slotFactsFor(
         jjKnownSlots(jjCache[jjDayKey(student.id, activeDate)]),
         rep?.autoDraft ?? rep?.draft ?? "",
@@ -2547,7 +2551,7 @@ export function OneScreenClient({
   /** 경고 셋(칸 달라짐·AI 코멘트가 옛 값 기준·이름 없음) — 카드 칸·표 행·발송 확인이 같은 판정을 쓴다. */
   function englishRowFlags(student: OneScreenStudent, su: Subject, rep: SubjectReport | undefined) {
     const found = findTemplate(rep?.templateId);
-    const template = found ?? BUILTIN_ENGLISH_TEMPLATE;
+    const template = found ?? DEFAULT_ENGLISH_TEMPLATE;
     const facts = englishFactsOf(student, su, rep);
     const aiStale = isAiStale(template, facts, rep);
     // 🔴 글이 옛 칸 값을 담고 있는데 저장·복사가 자동으로 못 맞추는가(템플릿 삭제·목록 실패·AI 글 없음·고친 글) —
@@ -2681,10 +2685,10 @@ export function OneScreenClient({
     // 그림 칸 템플릿이면 인재원 하루치를 AI와 **나란히** 받는다(기다림을 늘리지 않게) — 조립 전에 기다린다.
     // 🔴 자동작성은 **항상 새로** 받는다(force) — 카드를 수업 전에 열어 둔 채면 수업 중 본 시험이 빠진다(적대 리뷰 2026-09-11).
     const jjOpts = { outOfClass: rowOutOfClass(student, su), force: true };
-    let jjReady = templateImageSlots(found0 ?? BUILTIN_ENGLISH_TEMPLATE).length ? jj.ensure(student.id, jjOpts) : null;
+    let jjReady = templateImageSlots(found0 ?? DEFAULT_ENGLISH_TEMPLATE).length ? jj.ensure(student.id, jjOpts) : null;
     let ai: { intro: string; comment: string; factsHash: string } | null = null;
     // 템플릿에 AI 칸이 하나도 없으면 AI를 부르지 않는다(헛돈 쓰지 않게).
-    if (templateNeedsAi(found0 ?? BUILTIN_ENGLISH_TEMPLATE)) {
+    if (templateNeedsAi(found0 ?? DEFAULT_ENGLISH_TEMPLATE)) {
       const idx = student.subjects.indexOf(su);
       // 🔴 반 전체 안내를 개인 관찰과 갈라 준다 — 수학 자동작성과 **같은 모집단**(지금 화면의 로스터 전체)으로
       //    판정한다(class-notice.ts). 안 가르면 한 반 글이 서로 복사본이 된다(2026-08-13 실측).
@@ -2705,7 +2709,8 @@ export function OneScreenClient({
           nextTest,
           attitude: base.attitude,
           homework: base.homework,
-          specialNote: base.specialNote,
+          // 템플릿이 특이사항을 '사랑의 한마디'로 원문 그대로 싣는다면 AI엔 안 준다(두 번 나가지 않게, templateCarriesNote).
+          specialNote: templateCarriesNote(found0 ?? DEFAULT_ENGLISH_TEMPLATE) ? "" : base.specialNote,
           classContext: (su.classId && classNarratives[su.classId]) || "",
           classNotice: base.classNotice ?? "",
         });
@@ -2725,7 +2730,7 @@ export function OneScreenClient({
     if (!jjReady) {
       const repMid = reportsRef.current[student.id]?.[subjectName];
       const tplMid = findTemplate(repMid?.pendingTemplateId ?? repMid?.templateId, englishTemplatesRef.current);
-      if (templateImageSlots(tplMid ?? BUILTIN_ENGLISH_TEMPLATE).length) jjReady = jj.ensure(student.id, jjOpts);
+      if (templateImageSlots(tplMid ?? DEFAULT_ENGLISH_TEMPLATE).length) jjReady = jj.ensure(student.id, jjOpts);
     }
     // 인재원 하루치 — 실패해도 글은 짠다(모르는 그림 칸은 기준 글 그대로 = 중립, slotFactsFor).
     if (jjReady) await jjReady;
@@ -2757,7 +2762,7 @@ export function OneScreenClient({
     const aiComment = ai ? ai.comment : nowRep?.aiComment;
     const aiFactsHash = ai ? ai.factsHash : nowRep?.aiFactsHash;
     const nowFacts = englishFactsOf(nowStudent, nowSu, nowRep, jj.cacheRef.current);
-    const composed = composeEnglishDraft(found ?? BUILTIN_ENGLISH_TEMPLATE, nowFacts, {
+    const composed = composeEnglishDraft(found ?? DEFAULT_ENGLISH_TEMPLATE, nowFacts, {
       nextTest: nowRep?.nextTest,
       aiIntro,
       aiComment,
@@ -2773,7 +2778,7 @@ export function OneScreenClient({
       composedFactsHash: templateFactsKey(
         nowFacts,
         nowRep?.nextTest ?? "",
-        factTokensOf(found ?? BUILTIN_ENGLISH_TEMPLATE),
+        factTokensOf(found ?? DEFAULT_ENGLISH_TEMPLATE),
       ),
       aiIntro,
       aiComment,
@@ -2826,7 +2831,7 @@ export function OneScreenClient({
       return;
     }
     const keptId = found ? nextId : undefined;
-    const template = found ?? BUILTIN_ENGLISH_TEMPLATE;
+    const template = found ?? DEFAULT_ENGLISH_TEMPLATE;
     // 작성 중 수정으로 대기칸에 받아 둔 AI 글이 있으면 그것으로 채운다(지문도 함께 옮긴다).
     const pending = rep?.pendingAi;
     const ai = pending
@@ -4874,9 +4879,9 @@ selected ? (
                       state={{
                         // 고른 선택이 대기 중이면 그걸 보여 준다('AI 글 없음' 칩이 자동작성을 권한다).
                         templateId:
-                          previewReport?.pendingTemplateId ?? previewReport?.templateId ?? BUILTIN_ENGLISH_TEMPLATE.id,
+                          previewReport?.pendingTemplateId ?? previewReport?.templateId ?? DEFAULT_ENGLISH_TEMPLATE.id,
                         // 지금 글을 실제로 만든 템플릿 — 대기 중이면 칩이 그 이름을 함께 적는다(드롭다운과 글이 다를 때).
-                        appliedTemplateId: previewReport?.templateId ?? BUILTIN_ENGLISH_TEMPLATE.id,
+                        appliedTemplateId: previewReport?.templateId ?? DEFAULT_ENGLISH_TEMPLATE.id,
                         nextTest: previewReport?.nextTest ?? "",
                         // 경고 셋은 저장값이 아니라 **지금 글·칸** 기준(english-draft.ts) — 새로고침·일괄 작성 뒤에도 맞다.
                         ...englishRowFlags(selected, previewSubject, previewReport),
