@@ -40,6 +40,7 @@ export function MobileTopNav({
   canTeacherView = false,
   isSuperAdmin = false,
   isGenericTenant = false,
+  canViewVendors = false,
   connectedApps = [],
 }: {
   systemRole: SystemRole;
@@ -57,6 +58,8 @@ export function MobileTopNav({
   canTeacherView?: boolean;
   isSuperAdmin?: boolean;
   isGenericTenant?: boolean;
+  /** 업체리스트 지정자 — 학원운영 판의 '업체리스트' 입구(menu-hub `vendorsOnly`). */
+  canViewVendors?: boolean;
   /** 켜진 연결 앱(오늘 수학 등) — 폰엔 사이드바가 없어 메뉴 격자 끝에 바깥 링크로 둔다(새 탭). */
   connectedApps?: readonly ConnectedApp[];
 }) {
@@ -69,7 +72,7 @@ export function MobileTopNav({
   const currentHref = `${pathname}?${search.toString()}`;
   const groups = hubGroupsFor([...HUB_GROUPS, ...SUPPORT_GROUPS], {
     systemRole, permMatrix, menuLayout, groupLayout, canTeacherView,
-    isMaster: systemRole === "master" || isSuperAdmin, isGenericTenant,
+    isMaster: systemRole === "master" || isSuperAdmin, isGenericTenant, canViewVendors,
   });
   const currentDest = hubDestinationForPath(currentHref, groups.flatMap((g) => g.items));
   const currentLabel = presentation(currentHref)?.label ?? findNavItem(pathname)?.label ?? null;

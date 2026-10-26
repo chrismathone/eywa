@@ -67,6 +67,7 @@ import { HideInFrame } from "@/components/workspace/hide-in-frame";
 import { ScreenHelpOverlay } from "@/components/help/screen-help-overlay";
 import { menuLayoutWithModules } from "@/lib/modules";
 import { isGenericTenant } from "@/features/owner/preset";
+import { canViewVendorsNow } from "@/features/inventory/server/vendor-gate";
 import { getLaboratoryMenus, isLaboratoryMenuAvailable } from "@/lib/laboratory/server";
 import { TenantViewBanner } from "@/components/tenant-view-banner";
 import { TenantViewSync } from "@/components/tenant-view-sync";
@@ -115,6 +116,8 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   const menuLayout = showEvaluationSettings ? withMakeups : hideFace(withMakeups, "/owner?tab=evaluation");
   // 새 학원(일반판)이면 설정 '기능' 면을 사이드바·메뉴 판·검색에도 세운다(설정 화면 탭과 같은 판정, F19).
   const genericTenant = isGenericTenant(settings);
+  // 업체리스트 지정자 — 학원운영 판의 '업체리스트' 입구(탭·조회와 같은 게이트, 요청 캐시라 추가 왕복 없음).
+  const vendorsVisible = await canViewVendorsNow();
   // 지점 라이선스 넷(한 조회, 요청 캐시) — 꺼진 라이선스의 버튼·탭을 클라 화면이 감추는 데 쓴다(표시용 · 2026-09-30).
   // 창 모드 판정도 같은 결과를 쓴다(아래 풀셸 분기) — 조회를 늘리지 않으려고 기능별 조회 대신 이것 하나로.
   const licenseSnapshotPromise = getLicenseSnapshot(user.tenantId);
@@ -499,7 +502,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           frequentKeys={frequentKeys}
           menuSearchHidden={menuSearchHidden}
           menuLayout={menuLayout}
-          isGenericTenant={genericTenant}
+          isGenericTenant={genericTenant} canViewVendors={vendorsVisible}
           connectedApps={connectedApps}
           className="hidden desk:flex"
         />
@@ -507,7 +510,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
 
       {/* 데스크톱이 아니면(좁은 폭·터치) 상단 horizontal nav / 데스크톱(≥1240 + 마우스, `desk:`): 숨김 */}
       <HideInFrame>
-        <MobileTopNav systemRole={user.systemRole} email={user.email} brand={brand} logoSrc={logoSrc} permMatrix={permMatrix} menuLayout={menuLayout} canTeacherView={canTeacherView} isSuperAdmin={isSuperAdmin} isGenericTenant={genericTenant} connectedApps={connectedApps} className="desk:hidden" />
+        <MobileTopNav systemRole={user.systemRole} email={user.email} brand={brand} logoSrc={logoSrc} permMatrix={permMatrix} menuLayout={menuLayout} canTeacherView={canTeacherView} isSuperAdmin={isSuperAdmin} isGenericTenant={genericTenant} canViewVendors={vendorsVisible} connectedApps={connectedApps} className="desk:hidden" />
       </HideInFrame>
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden print:overflow-visible">
@@ -542,7 +545,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
       </div>
 
       {/* 검색 메뉴 점프 팰릿 — 헤더 검색 클릭으로 열림, 포털 렌더라 위치 무관 */}
-      <CommandPalette systemRole={user.systemRole} permMatrix={permMatrix} canTeacherView={canTeacherView} isSuperAdmin={isSuperAdmin} menuLayout={menuLayout} isGenericTenant={genericTenant} />
+      <CommandPalette systemRole={user.systemRole} permMatrix={permMatrix} canTeacherView={canTeacherView} isSuperAdmin={isSuperAdmin} menuLayout={menuLayout} isGenericTenant={genericTenant} canViewVendors={vendorsVisible} />
 
       {/* Stage Manager 워크스페이스 — 데스크톱에서만 자체 마운트(모바일/미니셸 무영향) */}
       {/* '지점 보기'(읽기 전용)에서는 캔버스를 싣지 않는다 — 창 배치의 주인(지점:사람)이 달라져, 실으면 운영자가 본인 지점에서
@@ -560,7 +563,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           canTeacherView={canTeacherView}
           isSuperAdmin={isSuperAdmin}
           menuLayout={menuLayout}
-          isGenericTenant={genericTenant}
+          isGenericTenant={genericTenant} canViewVendors={vendorsVisible}
         />
       </HideInFrame>
 

@@ -52,6 +52,8 @@ export type HubDest = {
    * `canManageParentAccountsRole` 한 벌이다. 메뉴 권한(menuKey)은 그대로 먼저 본다.
    */
   adminOnly?: boolean;
+  /** 업체리스트 지정자 전용(학원 설정 '개인별 기능 권한 · 업체리스트') — 판정은 `canViewVendorsNow` 한 벌(레이아웃이 계산해 넘긴다). */
+  vendorsOnly?: boolean;
   /** 부차 도구 — 큰 버튼이 아니라 아래 작은 줄로 그린다(자주 쓰는 것과 가끔 쓰는 것을 가른다). */
   tool?: boolean;
   /** 설명 줄 안에서의 묶음 제목(설정처럼 목적지가 많은 허브에서만). */
@@ -191,6 +193,9 @@ export const HUB_GROUPS: HubGroup[] = [
       fromMenu("staff", "명부·급여·연차·휴가"),
       fromMenu("shuttle", "노선 편성·등하원 기록"),
       fromMenu("inventory", "자산·대여·실사·소모품"),
+      // 업체리스트(거래처 연락처) — 재고관리 안의 탭이지만 지정자에겐 입구를 따로 세운다(원장 2026-10-26 *"안보임 추가해서
+      // 나만 보게"* — 탭만 있으면 메뉴 판·검색에서 찾을 수 없었다). 지정자 아니면 안 선다(탭·조회 게이트와 같은 판정).
+      face("inventory", "/inventory?tab=vendors", "업체리스트", "거래처 연락처", { vendorsOnly: true }),
       // 학부모 관리 현황 — 원장·관리자 전용. 셔틀 탭 줄에는 없고 입구는 여기 하나다(navigation.ts 주석).
       // ⚠️ 아이콘을 따로 안 준다 — 남은 스티커 중 '학부모'에 맞는 그림이 없어 셔틀 그림을 물려받는다.
       face("shuttle", SHUTTLE_PARENTS_PATH, "학부모 관리 현황", "학부모 계정·연결 원생", { tool: true, adminOnly: true }),
@@ -368,6 +373,8 @@ type Gate = {
   groupLayout?: MenuGroupLayout;
   /** 새 학원(일반판)인가 — `genericOnly` 목적지('기능' 면)의 노출. 모르면 false(침산처럼). */
   isGenericTenant?: boolean;
+  /** 업체리스트 지정자인가 — `vendorsOnly` 목적지의 노출. 모르면 false(닫힌 쪽). */
+  canViewVendors?: boolean;
 };
 
 function allowed(dest: HubDest, gate: Gate): boolean {
@@ -375,6 +382,7 @@ function allowed(dest: HubDest, gate: Gate): boolean {
   if (dest.teacherOnly && !gate.canTeacherView) return false;
   if (dest.masterOnly && !gate.isMaster) return false;
   if (dest.genericOnly && !gate.isGenericTenant) return false;
+  if (dest.vendorsOnly && !gate.canViewVendors) return false;
   // isMaster = master ∪ 총괄 — 총괄을 넘기는 자리가 그것뿐이라 그대로 싣는다.
   if (dest.adminOnly && !canManageParentAccountsRole(gate.systemRole, !!gate.isMaster)) return false;
   // 🔴 권한 **뒤에** 본다 — 순서를 바꿔도 결과는 같지만, "권한이 먼저 거른다"가 이 설정의 정의다.
