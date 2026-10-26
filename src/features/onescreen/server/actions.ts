@@ -95,6 +95,9 @@ import {
 } from "../math-report-pilot";
 import { pilotBody, pilotLevelsSection, readHomeworkMissReason, readTestSkip, type DailyTestSkip } from "../math-report-pilot-sections";
 import { skipStatusOf } from "../progress-status";
+import type { Variety } from "../ment-variants";
+import { prevPhrasingHint } from "../pilot-notes";
+import { fetchPrevReportNotes } from "./prev-notes";
 import { logAction } from "@/features/audit/server/log";
 import { isSlotOnlyEnglishNotes, shouldCaptureJj } from "../jj-capture-plan";
 import { classRouteActive, NO_SEND_CLASS_ERROR, SEND_CLASS_SUBJECTS } from "../send-class";
@@ -1580,28 +1583,41 @@ export async function generateReportComment(
   };
   // 수학 보고서 시범 — 항목별 글(math-report-pilot-sections.ts). 테스트·태도·과제는 고른 값을 코드가 옮기고 AI는 '이해도' 항목만 쓴다.
   const pilotSkip: DailyTestSkip | null = pilot ? readTestSkip(input.dailyTestSkip) : null;
-  const composePilot = (understandingText: string, videoReceipt: string | null) =>
+  // 매크로성 반복 금지(원장 2026-10-26) — 직전 보고서 글을 미리 읽어 둔다(AI 호출과 겹쳐 돈다). 코드 문장은 거기 쓴 갈래를 피하고,
+  // AI엔 '다른 표현으로'의 참고로 준다. 시드 = 학생·보고서 날짜·과목(같은 날 다시 눌러도 같은 갈래 — 서명은 값으로 만들어 흔들리지 않는다).
+  const pilotStudentId = pilot ? trendCtx?.studentId : undefined;
+  const prevNotesP: Promise<string | null> = pilotStudentId
+    ? createClient()
+        .then((sb) => fetchPrevReportNotes(sb, pilotStudentId, trendCtx?.subject, resolveReportDate(trendCtx?.date)))
+        .catch(() => null)
+    : Promise.resolve(null);
+  const varietyOf = (prev: string | null): Variety | null =>
+    pilotStudentId ? { seed: `${pilotStudentId}|${resolveReportDate(trendCtx?.date)}|${trendCtx?.subject ?? ""}`, prev } : null;
+  const composePilot = (understandingText: string, videoReceipt: string | null, variety: Variety | null = null) =>
     composePilotMent({
       // 수업 평가 표가 맨 위, 그다음 진도(원장 2026-10-23 *"진도보다 위에 표 형태로"*).
       lead: [
         pilotLevelsSection(safeInput),
         pilotSection(
           PILOT_SECTION_TITLES.progress,
-          progressLead(input.studentName, pilotLessons(input.progress), skipStatusOf(input.progress), input.progressMode),
+          progressLead(input.studentName, pilotLessons(input.progress), skipStatusOf(input.progress), input.progressMode, variety),
         ),
       ]
         .filter(Boolean)
         .join("\n\n"),
       body: pilotBody(
         { ...safeInput, dailyTestSkip: pilotSkip, homeworkMissReason: readHomeworkMissReason(input.homeworkMissReason) },
-        { understandingText, videoReceipt },
+        { understandingText, videoReceipt, variety },
       ),
       note: pilotNote,
     });
   // 이해도를 하나도 안 매겼으면 AI가 쓸 항목이 없다 — 부르지 않는다(재료 없이 부르면 이해도를 지어낸다). 추세도 이번엔 안 만든다.
   if (pilot && !safeInput.understanding?.length) {
-    const videoReceipt = await getVideoReceiptComment(user.tenantId, trendCtx ?? {}).catch(() => null);
-    return { ok: true, comment: composePilot("", videoReceipt) };
+    const [videoReceipt, prevNotes] = await Promise.all([
+      getVideoReceiptComment(user.tenantId, trendCtx ?? {}).catch(() => null),
+      prevNotesP,
+    ]);
+    return { ok: true, comment: composePilot("", videoReceipt, varietyOf(prevNotes)) };
   }
   // AI에는 진도·이해도만 준다 — 다른 사실을 주면 모델이 그 항목을 '이해도' 글에 다시 쓴다(항목이 겹친다).
   const aiInput: ReportCommentInput = pilot
@@ -1629,13 +1645,14 @@ export async function generateReportComment(
     // 프로파일이 없거나 표가 아직 없으면(미적용) 아무것도 안 붙는다([[#95]]).
     // 멘트 모드 — 강사 본인 오버라이드(users.report_notice_mode) > 학원 기본(report.noticeMode) > 'A'.
     // 설정·모드·말투 세 조회는 서로 독립 — 직렬 워터폴 금지(B4). 겸직 강사뷰의 스코프 판정(쿠키+담당 반)도 이 안에서 돈다.
-    const [settings, { data: meRow }, mentStyle, videoReceipt] = await Promise.all([
+    const [settings, { data: meRow }, mentStyle, videoReceipt, prevNotes] = await Promise.all([
       getTenantSettings(),
       supabase.from("users").select("report_notice_mode").eq("id", user.id).single(),
       opts?.teacherStyle === false
         ? null
         : effectiveTeacherId().then((teacherId) => (teacherId ? loadTeacherMentStyle(createAdminClient(), user.tenantId, teacherId) : null)),
       getVideoReceiptComment(user.tenantId, trendCtx ?? {}).catch(() => null),
+      prevNotesP,
     ]);
     const styleBlock = mentStyle ? mentStyleDirective(mentStyle) : "";
     // 추세엔 **어조·문장 결만** — 선생님 표현·마무리("다음 시간에 ~하겠습니다")까지 붙이면 추세 금지(계획)에 걸려 버려진다(2026-10-16).
@@ -1703,7 +1720,8 @@ export async function generateReportComment(
       styleBlock,
       toneBlock,
       trend: trendInput,
-      ...(pilot ? { extraDirective: pilotAiDirective(input.studentName) } : {}),
+      // 직전 보고서의 '오늘의 수업' 문단 = 표현 참고(사실 아님) — 같은 말이 매번 나가지 않게(원장 2026-10-26).
+      ...(pilot ? { extraDirective: [pilotAiDirective(input.studentName), prevPhrasingHint(prevNotes)].filter(Boolean).join("\n") } : {}),
     });
     if (sections.length === 0) return { ok: false, error: "생성할 내용이 없습니다" };
 
@@ -1724,7 +1742,7 @@ export async function generateReportComment(
     // 시범 대상 — 항목별 글(진도 → 테스트 → 태도 → 과제 → 이해도(AI) → 오늘 과제 → 선생님 한마디).
     // 이해도 글은 후보정을 거친다 — 점수 숫자·규칙 혼잣말이 든 문장은 빼고, 다 빠지면 정해진 문장으로(2026-10-23 실측 누출).
     const comment = pilot
-      ? composePilot(cleanPilotUnderstanding(res.comment, safeInput.understanding ?? []), videoReceipt)
+      ? composePilot(cleanPilotUnderstanding(res.comment, safeInput.understanding ?? []), videoReceipt, varietyOf(prevNotes))
       : body;
     if (res.dropped)
       console.warn(

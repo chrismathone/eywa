@@ -2730,7 +2730,7 @@ export function OneScreenClient({
           specialNote: templateCarriesNote(found0 ?? DEFAULT_ENGLISH_TEMPLATE) ? "" : base.specialNote,
           classContext: (su.classId && classNarratives[su.classId]) || "",
           classNotice: base.classNotice ?? "",
-        });
+        }, { studentId: student.id, reportDate: activeDate }); // 직전 보고서 표현을 피하는 재료(원장 2026-10-26)
         // 지문은 **보낸 사실**로 남긴다 — 기다리는 동안 점수가 바뀌면 곧바로 'AI 코멘트가 옛 값 기준'이 뜬다.
         if (res.ok) ai = { intro: res.intro, comment: res.comment, factsHash: aiFactsHashOf(facts, nextTest) };
       } catch {

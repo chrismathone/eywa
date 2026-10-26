@@ -114,3 +114,19 @@ export function joinLevelsLead(lead: string, body: string): string {
   if (!lead) return body;
   return body.trim() ? `${lead}\n\n${body}` : lead;
 }
+
+/**
+ * AI에 줄 '직전 표현' 참고 — 직전 보고서의 '오늘의 수업' 문단(원장 2026-10-26 *"직전에 쓴 표현이라면 조금 다른표현"*).
+ * 🔴 **사실로 주지 않는다** — 지난 수업 이야기가 오늘 글에 섞이면 거짓이 된다. 표현을 피하라는 참고로만, 그 사실을 밝혀 준다.
+ * 항목 글이 아니거나 그 문단이 없으면 "".
+ */
+export function prevPhrasingHint(prevNotes: string | null | undefined): string {
+  const sections = parsePilotNotes(prevNotes);
+  const body = sections?.find((s) => isPilotTitle(s.title, "understanding"))?.body.trim() ?? "";
+  if (!body) return "";
+  return [
+    "[직전 보고서의 '오늘의 수업' 문단 — 사실이 아니라 표현 참고용입니다. 이 내용(지난 수업 이야기)을 오늘 글에 옮기지 마세요]",
+    body.replace(/\s+/g, " ").slice(0, 600),
+    "- 위 문단과 같은 문장·같은 표현·같은 문장 끝을 되풀이하지 말고, 오늘 사실을 다른 표현으로 쓰세요(매번 같은 말이 나가지 않게).",
+  ].join("\n");
+}
