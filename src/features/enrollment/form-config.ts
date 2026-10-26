@@ -119,11 +119,12 @@ export const ENGLISH_GROUPS: Record<string, FieldGroup[]> = {
     {
       title: "NELT 세부",
       cols: 4,
+      // 글자 칸(score 아님) — 점수 대신 '중2 수준'·'B+' 같은 글로 적는 경우가 있다(원장 2026-10-26 *"text도 입력가능하게"*).
       fields: [
-        { key: "neltVocab", label: "어휘", type: "score" },
-        { key: "neltGrammar", label: "문법", type: "score" },
-        { key: "neltListening", label: "듣기", type: "score" },
-        { key: "neltReading", label: "독해", type: "score" },
+        { key: "neltVocab", label: "어휘" },
+        { key: "neltGrammar", label: "문법" },
+        { key: "neltListening", label: "듣기" },
+        { key: "neltReading", label: "독해" },
       ],
     },
   ],
