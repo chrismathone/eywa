@@ -38,12 +38,12 @@ const snapshot = (answers: number, exams: number): JjReportSnapshot => ({
 describe("jjKnownSlots", () => {
   it("받은 자료면 그림 자리 가용성", () => {
     const ok: JjDayState = { status: "ok", snapshot: snapshot(30, 1) };
-    expect(jjKnownSlots(ok)).toEqual({ 시험결과지: true, 학습분석지: true });
-    expect(jjKnownSlots({ status: "ok", snapshot: snapshot(0, 0) })).toEqual({ 시험결과지: false, 학습분석지: false });
+    expect(jjKnownSlots(ok)).toEqual({ 시험결과지: true, 학습분석지: true, 단어백분위: false, 학습배지: false });
+    expect(jjKnownSlots({ status: "ok", snapshot: snapshot(0, 0) })).toEqual({ 시험결과지: false, 학습분석지: false, 단어백분위: false, 학습배지: false });
   });
 
   it("🔑 미연결은 '그릴 게 없다'를 **안다** — 모름(null)과 다르다", () => {
-    expect(jjKnownSlots({ status: "unlinked" })).toEqual({ 시험결과지: false, 학습분석지: false });
+    expect(jjKnownSlots({ status: "unlinked" })).toEqual({ 시험결과지: false, 학습분석지: false, 단어백분위: false, 학습배지: false });
   });
 
   it("아직 안 받았거나 실패했으면 모름(null)", () => {

@@ -145,7 +145,8 @@ export function aiFactsHashOf(facts: EnglishRowFacts, nextTest: string): string 
  */
 const LEGACY_FACT_TOKENS = ["학생", "작성자", "진도", "테스트", "숙제", "다음테스트"] as const;
 // 항목 칸(2026-10-26)도 사실이다 — 점수·태도·출결이 바뀌면 그 문장이 바뀐다. 역시 **뒤에** 붙인다(앞 칸들의 뜻 불변).
-const FACT_TOKENS = [...LEGACY_FACT_TOKENS, "시험결과지", "학습분석지", ...SHEET_TOKEN_KEYS] as const;
+// 단어백분위·학습배지(2026-10-26)도 맨 뒤 — 이 칸을 안 쓰는 템플릿의 지문은 그대로다(쓰는 칸만 센다).
+const FACT_TOKENS = [...LEGACY_FACT_TOKENS, "시험결과지", "학습분석지", ...SHEET_TOKEN_KEYS, "단어백분위", "학습배지"] as const;
 export type FactToken = (typeof FACT_TOKENS)[number];
 
 function factValue(token: FactToken, facts: EnglishRowFacts, nextTest: string): string {
@@ -164,6 +165,8 @@ function factValue(token: FactToken, facts: EnglishRowFacts, nextTest: string): 
       return nextTest;
     case "시험결과지":
     case "학습분석지":
+    case "단어백분위":
+    case "학습배지":
       return facts.slots?.[token] ? imageSlotMarker(token) : "";
     default:
       return englishSheetValues(facts)[token];
@@ -199,12 +202,12 @@ export function templateImageSlots(template: ReportTemplate): ImageSlotKey[] {
  *    자동 글이라 '칸이 바뀜'이 거짓으로 서지 않는다.
  */
 export function slotFactsFor(
-  known: Readonly<Record<ImageSlotKey, boolean>> | null,
+  known: Readonly<Partial<Record<ImageSlotKey, boolean>>> | null,
   baselineText: string,
 ): Record<ImageSlotKey, boolean> {
-  if (known) return { 시험결과지: !!known.시험결과지, 학습분석지: !!known.학습분석지 };
+  if (known) return Object.fromEntries(IMAGE_SLOT_KEYS.map((k) => [k, !!known[k]])) as Record<ImageSlotKey, boolean>;
   const had = new Set(usedImageSlots(baselineText));
-  return { 시험결과지: had.has("시험결과지"), 학습분석지: had.has("학습분석지") };
+  return Object.fromEntries(IMAGE_SLOT_KEYS.map((k) => [k, had.has(k)])) as Record<ImageSlotKey, boolean>;
 }
 
 /**

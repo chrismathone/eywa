@@ -266,11 +266,11 @@ describe("그림 칸(인재원 시험 결과지·학습 분석지, 2026-09-11)",
   it("🔴 slotFactsFor — 모르면 기준 글 그대로(중립): 자료가 오기 전의 재조립이 그림 줄을 지우지 않는다", () => {
     const text = composeEnglishDraft(JJ, withSlots({ 시험결과지: true, 학습분석지: true }), AI);
     const neutral = slotFactsFor(null, text);
-    expect(neutral).toEqual({ 시험결과지: true, 학습분석지: true });
+    expect(neutral).toEqual({ 시험결과지: true, 학습분석지: true, 단어백분위: false, 학습배지: false });
     expect(composeEnglishDraft(JJ, withSlots(neutral), AI)).toBe(text);
-    expect(slotFactsFor(null, "그림 없는 글")).toEqual({ 시험결과지: false, 학습분석지: false });
+    expect(slotFactsFor(null, "그림 없는 글")).toEqual({ 시험결과지: false, 학습분석지: false, 단어백분위: false, 학습배지: false });
     // 알면 아는 대로(기준 글과 달라도).
-    expect(slotFactsFor({ 시험결과지: false, 학습분석지: true }, text)).toEqual({ 시험결과지: false, 학습분석지: true });
+    expect(slotFactsFor({ 시험결과지: false, 학습분석지: true }, text)).toEqual({ 시험결과지: false, 학습분석지: true, 단어백분위: false, 학습배지: false });
   });
 
   it("templateImageSlots — 그림 칸 템플릿만 인재원 자료를 먼저 받는다", () => {
