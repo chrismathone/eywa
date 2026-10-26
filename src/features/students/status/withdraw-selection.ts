@@ -10,6 +10,9 @@
  *  · 전부 선택 = **학생 퇴원** — 🔴 2026-10-23부터 이 창에서 하지 않는다(원장 *"퇴원 보고서를 써야 퇴원처리가 가능하도록"*).
  *    안내문이 퇴원보고서로 보내고 창은 저장 버튼을 잠근다(서버도 같은 판정으로 거절 — `changeStudentStatus`·`lastCourseViaReport`).
  *  · 일부만 선택 = **학생 퇴원이 아니다.** 고른 수강만 종료하고 학생은 재원으로 남는다.
+ *    🔴 단 고른 과목을 끝내면 **그 과목 수강종료**(퇴원관리 '수강종료'에 선다)면 이 창에서 하지 않는다 — 퇴원보고서로(원장 2026-10-26
+ *    *"그 과목의 마지막 반을 끝내는건 기존에 있던 것과 일치하게"* · 서버 게이트 `lastCourseViaReport`와 같은 판정을 원생 화면이 미리 돌려 넘긴다).
+ *    특강만 다니던 과목처럼 수강종료로 세지 않는 종료 · 예전에 걸린 퇴원 예약이 있는 학생은 그대로 이 창에서 끝낸다.
  *  · 0개 선택 = 진행 불가(무엇을 하겠다는 건지 알 수 없다).
  *
  * 🔴 라벨·안내는 **누르기 전에** 결과를 말해야 한다 — 누른 뒤에 알게 되면 지금과 같은 말싸움이 난다.
@@ -17,13 +20,15 @@
  *    `total`은 수강 **과목** 수, `selectedLabels`는 고른 **과목 라벨**이다([`subject-selection.ts`](./subject-selection.ts)).
  *    반 단위로 세웠더니 수학만 세 반 다니는 학생이 한 과목인데 세 줄로 보였다.
  */
-import { WITHDRAWAL_VIA_REPORT } from "@/features/withdrawals/via-report";
+import { SUBJECT_END_VIA_REPORT, WITHDRAWAL_VIA_REPORT } from "@/features/withdrawals/via-report";
 
 export type EndSelectionMode =
   /** 아무것도 안 고름 — 진행 불가. */
   | "none"
   /** 일부만 — 그 수강만 종료, 학생은 재원 유지. */
   | "partial"
+  /** 일부지만 그 과목 수강종료가 된다 — 퇴원보고서로(이 창에서는 진행 불가). */
+  | "subject"
   /** 전부(또는 활성 수강 0개) — 학생 퇴원 = 퇴원보고서로(이 창에서는 진행 불가). */
   | "full";
 
@@ -39,8 +44,9 @@ export type EndSelectionPlan = {
  * @param total   이 학생이 수강 중인 **과목** 수(활성 수강을 과목으로 묶은 수).
  * @param selectedLabels 고른 **과목의 라벨**(학원설정 `labelOf`). 안내문에 그대로 실린다 —
  *                       호출부에서 이미 한글 라벨로 만든 값을 넘길 것(raw enum 금지).
+ * @param reportLabels   고른 과목 가운데 **끝내면 과목 수강종료라 퇴원보고서로 가는** 과목의 라벨(원생 화면이 서버 판정으로 계산).
  */
-export function describeEndSelection(total: number, selectedLabels: string[]): EndSelectionPlan {
+export function describeEndSelection(total: number, selectedLabels: string[], reportLabels: string[] = []): EndSelectionPlan {
   // 활성 수강이 아예 없는 학생 — 고를 것이 없다. 퇴원은 퇴원보고서의 바로 처리로.
   if (total <= 0) {
     return {
@@ -68,10 +74,19 @@ export function describeEndSelection(total: number, selectedLabels: string[]): E
     };
   }
 
+  if (reportLabels.length > 0) {
+    return {
+      mode: "subject",
+      buttonLabel: "퇴원보고서로 진행",
+      notice: `${reportLabels.join(", ")} — ${SUBJECT_END_VIA_REPORT}`,
+    };
+  }
+
   return {
     mode: "partial",
     buttonLabel: `과목 종료(${selected}과목)`,
     // 🔴 "학생은 재원으로 남습니다"가 이 문장의 핵심 — 데스크가 퇴원으로 오해하면 사고가 반복된다.
-    notice: `${selectedLabels.join(", ")}만 종료합니다 — 학생은 재원으로 남습니다(퇴원관리 '수강종료'에서 확인).`,
+    //    (퇴원관리 '수강종료'에 서는 과목 종료는 위에서 퇴원보고서로 보냈다 — 여기 남는 것은 특강 종강·예약 학생의 정리라 그 안내를 붙이지 않는다.)
+    notice: `${selectedLabels.join(", ")}만 종료합니다 — 학생은 재원으로 남습니다.`,
   };
 }

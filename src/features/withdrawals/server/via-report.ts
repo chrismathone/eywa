@@ -3,7 +3,8 @@ import "server-only";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { logDbError } from "@/lib/supabase/db-error";
 import type { createClient } from "@/lib/supabase/server";
-import { endsLastCourse, LAST_COURSE_VIA_REPORT, lastCourseGateApplies, type EndRow } from "../via-report";
+import { isSpecialLecture } from "@/features/classes/special-lecture";
+import { lastCourseGateApplies, viaReportMessage, type EndRow } from "../via-report";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 
@@ -31,8 +32,9 @@ export async function loadEndRows(
   if (studentRes.error) throw studentRes.error;
   if (!studentRes.data) throw new Error("학생을 찾지 못했습니다");
   const classIds = [...new Set(enrollments.map((e) => e.class_id))];
-  const classes = await fetchInChunks<{ id: string; class_name: string; subject: string | null }>(classIds, (chunk) =>
-    supabase.from("classes").select("id, class_name, subject").in("id", chunk),
+  // `is_special`(0133a) — 끝난 특강은 퇴원관리 '수강종료'로 세지 않는다(과목 마지막 반 판정 `subjectEndCounts`).
+  const classes = await fetchInChunks<{ id: string; class_name: string; subject: string | null; is_special: boolean | null }>(classIds, (chunk) =>
+    supabase.from("classes").select("id, class_name, subject, is_special").in("id", chunk),
   );
   const byId = new Map(classes.map((c) => [c.id, c]));
   if (classIds.some((id) => !byId.has(id))) throw new Error("수강 반 정보를 확인하지 못했습니다");
@@ -47,6 +49,7 @@ export async function loadEndRows(
       start: e.start_date,
       end: e.end_date,
       isTransferred: e.is_transferred ?? undefined,
+      isSpecial: isSpecialLecture({ isSpecial: byId.get(e.class_id)!.is_special, className: byId.get(e.class_id)!.class_name }),
     })),
   };
 }
@@ -55,7 +58,9 @@ export async function loadEndRows(
  * **마지막 반 종료 게이트** — 고른 수강을 끝내면 재원·휴원 학생에게 이어지는 반이 하나도 없으면(사실상 퇴원) 거절 문구를 돌려준다.
  * 원장 2026-10-23 *"퇴원 보고서를 써야 퇴원처리가 가능하도록"* — 마지막 반을 '수강 종료'로 끝내 수강 없는 재원생으로 만든 뒤 따로 정리하면
  * 보고서 없는 퇴원이 된다. 그 길도 퇴원보고서(강사 작성 요청 또는 관리자 바로 처리)로 보낸다.
- * 반 이동(같은 과목 반이 이어받음) · 특강이 끝나도 다른 반을 계속 다님 · 한 과목만 끝냄은 그대로(판정 = `endScopeOf`, 시간표 확인 문구와 같다).
+ * 그 과목의 마지막 반(끝내면 과목 수강종료)도 같은 처리다(원장 2026-10-26 *"그 과목의 마지막 반을 끝내는건 기존에 있던 것과 일치하게"* —
+ * 퇴원관리가 '수강종료'로 세는 것만 · `endsSubjectCourse`). 반 이동(같은 과목 반이 이어받음) · 특강 등 같은 과목 다른 반이 남음 · 퇴원관리가
+ * 세지 않는 종료(특강만 다니던 과목)는 그대로(판정 = `viaReportMessage`, 시간표 확인 문구와 같다).
  * 학생이 이미 퇴원(남은 수강 정리)·예비·상담이면 대상이 아니다. 이번 변경 전에 걸린 **퇴원 예약**이 있는 재원·휴원 학생도 대상이 아니다 —
  * 퇴원은 이미 정해졌고(그날 cron이 처리) 예약 학생은 퇴원보고서를 시작할 수 없어, 막으면 남은 반을 정리할 길이 없다(판정 `lastCourseGateApplies`).
  * `studentId`를 모르면 첫 수강의 학생으로 찾는다(시간표는 학생 id 없이 보낼 수 있다). 수강을 못 찾으면 null — 종료 함수가 '찾을 수 없음'을 말한다.
@@ -77,7 +82,7 @@ export async function lastCourseViaReport(
     }
     const { status, withdrawnAt, rows } = await loadEndRows(supabase, studentId);
     if (!lastCourseGateApplies(status, withdrawnAt)) return null;
-    return endsLastCourse(rows, input.enrollmentIds, input.date, withdrawnAt) ? LAST_COURSE_VIA_REPORT : null;
+    return viaReportMessage(rows, input.enrollmentIds, input.date, withdrawnAt);
   } catch (error) {
     logDbError(error, "withdrawals.viaReport.lastCourse", { enrollmentIds: input.enrollmentIds });
     return "수강 정보를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.";

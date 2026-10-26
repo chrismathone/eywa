@@ -1128,6 +1128,18 @@ export function auditDetail(
         str(m.memo),
       );
     }
+    // 퇴원보고서를 거치지 않은 퇴원·새 퇴원 예약(0454a DB 트리거) — 막지 않고 남긴다. 무엇이 · 언제로.
+    case "student_withdrawn_without_report": {
+      const date = str(m.date);
+      const prev = str(m.previousDate);
+      const what =
+        m.kind === "schedule"
+          ? join("퇴원 예약", date ? `예약일 ${date}` : null)
+          : m.kind === "reschedule"
+            ? join("퇴원 예약일 변경", prev && date ? `${prev} → ${date}` : date)
+            : join("퇴원", date ? `퇴원일 ${date}` : null);
+      return join(ctx.nameOf(m.studentId), what, "퇴원보고서 없음");
+    }
     case "student_hold":
     case "student_restore": {
       // 휴원 메모는 여기 말고 남는 자리가 없다(enrollments·students에 칸이 없다) — 적혔으면 보여 준다.
