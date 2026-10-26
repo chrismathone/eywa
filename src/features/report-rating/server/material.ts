@@ -28,7 +28,8 @@ const shift = (ymd: string, days: number) => new Date(Date.parse(`${ymd}T00:00:0
 
 /** 평점을 지금 매길 수 없는 보고서 — drop = 매기지 않는다(줄을 닫는다) · wait = 아직 발송 전(다시 보내는 중 등)이라 다음에 다시 본다. */
 export type RatingSkip = { drop: boolean; reason: string };
-export type RatingMaterial = { reports: Map<string, RatingReport>; skip: Map<string, RatingSkip> };
+/** mentSource = 대상 보고서의 멘트 작성 방식(0214a) — 기준 v6의 자동작성 상한이 읽는다(비교 재료에는 없다). */
+export type RatingMaterial = { reports: Map<string, RatingReport>; skip: Map<string, RatingSkip>; mentSource: Map<string, string | null> };
 
 /**
  * 대상 id → 평점 재료. 대상은 **정상 발송(success)된 보고서만** — 회수된 보고서는 학부모가 보지 않은 글이라 매기지 않는다.
@@ -36,7 +37,9 @@ export type RatingMaterial = { reports: Map<string, RatingReport>; skip: Map<str
  */
 export async function loadRatingMaterial(tenantId: string, reportIds: readonly string[]): Promise<RatingMaterial> {
   const db = createAdminClient();
-  const targets = await fetchInChunks<Row>([...reportIds], (chunk) => db.from("lesson_reports").select(COLS).eq("tenant_id", tenantId).in("id", chunk));
+  const targets = await fetchInChunks<Row & { ment_source: string | null }>([...reportIds], (chunk) =>
+    db.from("lesson_reports").select(`${COLS}, ment_source`).eq("tenant_id", tenantId).in("id", chunk));
+  const mentSource = new Map(targets.map((r) => [r.id, r.ment_source ?? null]));
   const skip = new Map<string, RatingSkip>();
   const found = new Map(targets.map((r) => [r.id, r]));
   for (const id of reportIds) {
@@ -47,7 +50,7 @@ export async function loadRatingMaterial(tenantId: string, reportIds: readonly s
     else if (r.classnote_status !== "success" || !r.classnote_queued_at) skip.set(id, { drop: false, reason: "아직 발송되지 않았습니다(다시 보내는 중)" });
   }
   const live = targets.filter((r) => !skip.has(r.id));
-  if (!live.length) return { reports: new Map(), skip };
+  if (!live.length) return { reports: new Map(), skip, mentSource };
   const dates = [...new Set(live.map((r) => r.report_date))].sort();
   const studentIds = [...new Set(live.map((r) => r.student_id))];
   const [history, sameDays] = await Promise.all([
@@ -81,5 +84,5 @@ export async function loadRatingMaterial(tenantId: string, reportIds: readonly s
     if (a) reports.set(r.id, a);
     else skip.set(r.id, { drop: true, reason: "테스트 학생이거나 학생 정보가 없습니다" });
   }
-  return { reports, skip };
+  return { reports, skip, mentSource };
 }

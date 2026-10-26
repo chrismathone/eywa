@@ -4,6 +4,7 @@ import { isFeatureOptedIn } from "@/lib/license/server";
 import { kstToday } from "@/lib/date-kst";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
+import { OWNER_RUBRIC_ID } from "../harness/owner";
 
 /**
  * 평점 정기 처리 대기열(0455a `lesson_report_rating_queue`). 지점 스위치 'report_rating'(운영 콘솔 · 행 없음 = 꺼짐)을 켠 지점만.
@@ -32,7 +33,10 @@ export async function ratingQueueReady(tenantId: string): Promise<boolean> {
 
 const shift = (ymd: string, days: number) => new Date(Date.parse(`${ymd}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
 
-/** 정상 발송된 새 보고서(테스트 학생 제외 · 평점 없음 · 아직 줄 없음)를 줄 세운다. 줄 세운 수. */
+/**
+ * 정상 발송된 새 보고서(테스트 학생 제외 · **지금 기준(v6) 평점 없음** · 아직 줄 없음)를 줄 세운다. 줄 세운 수.
+ * 옛 기준 평점만 있는 보고서도 줄 선다 — 화면은 지금 기준 평점만 보여 주므로(2026-10-26 원장 '전혀 신뢰안가는 점수').
+ */
 export async function enqueueNewReports(tenantId: string, today: string = kstToday()): Promise<number> {
   const sent = await fetchAllPaged<{ id: string; student_id: string }>((from, to) => db().from("lesson_reports").select("id, student_id")
     .eq("tenant_id", tenantId).eq("classnote_status", "success").not("classnote_queued_at", "is", null)
@@ -41,7 +45,7 @@ export async function enqueueNewReports(tenantId: string, today: string = kstTod
   const ids = sent.map((r) => r.id);
   const [tests, rated, queued] = await Promise.all([
     fetchInChunks<{ id: string }>([...new Set(sent.map((r) => r.student_id))], (chunk) => db().from("students").select("id").eq("tenant_id", tenantId).eq("is_test", true).in("id", chunk)),
-    fetchInChunks<{ report_id: string }>(ids, (chunk) => db().from("lesson_report_ratings").select("report_id").eq("tenant_id", tenantId).in("report_id", chunk)),
+    fetchInChunks<{ report_id: string }>(ids, (chunk) => db().from("lesson_report_ratings").select("report_id").eq("tenant_id", tenantId).eq("rubric", OWNER_RUBRIC_ID).in("report_id", chunk)),
     fetchInChunks<{ report_id: string }>(ids, (chunk) => db().from(QUEUE).select("report_id").eq("tenant_id", tenantId).in("report_id", chunk)),
   ]);
   const testSet = new Set(tests.map((s) => s.id));

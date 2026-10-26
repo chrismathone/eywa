@@ -92,8 +92,12 @@ export type ReportListFilters = {
  * ⚠️ '반'만 예외로 연 이유(2026-07-24 원장 요청): 학생 이름과 달리 **PostgREST가 to-one 임베드 컬럼으로
  * 부모를 정렬**해 준다(`order=classes(class_name)`) — 실측으로 확인했다. 반 이름은 저장값 자체가 한글
  * 표시명이라 과목 같은 라벨 불일치도 없다. 즉 학생·과목을 막았던 두 이유가 반에는 해당하지 않는다.
+ *
+ * '평점'(2026-10-26 원장 *"평점 오름차순 내림차순 가능하게"*)은 PostgREST로 줄 세우지 않는다 — 평점 표는 정책 0개(쓰기 권한자만
+ * 서버가 읽는다)라 임베드할 수 없어서, listReports가 번호 목록 + 평점을 받아 `sortByRating`으로 줄 세운다.
+ * `reportOrderSpecs("rating")`은 기본 정렬을 돌려준다(평점을 볼 수 없는 계정이 보내면 기본 정렬).
  */
-export const REPORT_SORT_KEYS = ["date", "teacher", "status", "read", "class"] as const;
+export const REPORT_SORT_KEYS = ["date", "teacher", "status", "read", "class", "rating"] as const;
 export type ReportSortKey = (typeof REPORT_SORT_KEYS)[number];
 
 type OrderSpec = { column: string; ascending: boolean; nullsFirst: boolean };
@@ -148,6 +152,27 @@ export function reportOrderSpecs(sort?: ReportSortKey, dir: "asc" | "desc" = "as
         { column: "id", ascending: false, nullsFirst: false },
       ];
   }
+}
+
+/**
+ * 평점 정렬(순수) — 평점 있는 보고서를 점수순(asc = 낮은 점수부터)으로, **평점 없는 보고서는 방향과 무관하게 뒤**(규약 ①).
+ * 같은 점수 · 평점 없음끼리는 reportOrderSpecs의 tiebreak과 같게 수업일 최신 → 등록 최신 → id(페이지를 넘겨도 순서가 흔들리지 않게).
+ */
+export function sortByRating<T extends { id: string; report_date: string; created_at: string | null }>(
+  rows: readonly T[],
+  points: ReadonlyMap<string, number>,
+  dir: "asc" | "desc" = "asc",
+): T[] {
+  const sign = dir === "asc" ? 1 : -1;
+  const desc = (a: string, b: string) => (a < b ? 1 : a > b ? -1 : 0);
+  return [...rows].sort((a, b) => {
+    const pa = points.get(a.id);
+    const pb = points.get(b.id);
+    if (pa === undefined && pb !== undefined) return 1;
+    if (pb === undefined && pa !== undefined) return -1;
+    if (pa !== undefined && pb !== undefined && pa !== pb) return (pa - pb) * sign;
+    return desc(a.report_date, b.report_date) || desc(a.created_at ?? "", b.created_at ?? "") || desc(a.id, b.id);
+  });
 }
 
 // 상태 필터 특수값: 발송 이력 없는 이관분(edutrix_import). classnote_status가 아니라 source로 거른다.

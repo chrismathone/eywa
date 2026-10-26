@@ -32,13 +32,13 @@ describe("보고서 목록 평점 칸", () => {
     expect(container.querySelector("[title]")).toBeNull();
   });
 
-  it("3.0 미만만 주의 색, 검증에서 남은 클레임만 '!' 표식", () => {
-    const { container, rerender } = render(<RatingCell rating={rating({ points: 2.8, claim: "confirmed", claimReason: "어긋남" })} />);
-    expect(screen.getByText("2.8").className).toContain("text-amber");
+  it("1점만 주의 색(기준 v6 · 2점부터는 그대로), 검증에서 남은 클레임만 '!' 표식", () => {
+    const { container, rerender } = render(<RatingCell rating={rating({ points: 1, claim: "confirmed", claimReason: "어긋남" })} />);
+    expect(screen.getByText("1").className).toContain("text-amber");
     expect(screen.getByRole("img", { name: "클레임 위험 확정" }).className).toContain("text-danger");
 
-    rerender(<RatingCell rating={rating({ claim: "cleared", claimReason: "풀림" })} />);
-    expect(screen.getByText("3.4").className).not.toContain("text-amber");
+    rerender(<RatingCell rating={rating({ points: 2, claim: "cleared", claimReason: "풀림" })} />);
+    expect(screen.getByText("2").className).not.toContain("text-amber");
     expect(container.querySelector('[role="img"]')).toBeNull();
   });
 });
