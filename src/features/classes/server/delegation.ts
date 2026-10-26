@@ -4,6 +4,9 @@ import { kstToday } from "@/lib/date-kst";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { delegationOverlapsRange, isDelegationActiveOn } from "../delegation-window";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { axisDowOf, isSeatSlot, slotLiveOn } from "@/features/attendance/teacher-axis";
+import { SELF_STUDY_ROOM_LABEL, specialSlotLabel } from "@/features/timetable/lib/teacher-label";
 
 type ServerClient = Awaited<ReturnType<typeof createServerClient>>;
 type AdminClient = ReturnType<typeof createAdminClient>;
@@ -93,6 +96,41 @@ async function fetchActiveDelegations(supabase: ServerClient, date: string, stri
   );
 }
 
+/**
+ * **JJ 보고서 담당**이 그 날짜에 맡는 반 — 그날 JJ 자리 교시가 살아 있는 반(원장 2026-10-26 *"jj관리자로 해서 수업보고서 쓸수있게"*).
+ * 담당 명단은 학원설정 개인별 기능 권한(`specialAccess.jjReportManagerIds`)이고, 명단에 없으면 조회 없이 [].
+ * 🔴 시간표 JJ 칸에 담당을 채우는 방식은 쓰지 않는다 — `isSeatSlot`(담당 없음 + 자리 라벨)이 깨져 자리 출석·시수·포트폴리오가 갈린다.
+ * ⚠️ 설정·조회 실패는 [](이 갈래만 닫힌다 — 담임·위임 판정은 그대로). 자리 판정은 출결 축과 **같은 함수**(teacher-axis).
+ */
+async function fetchJjManagedClassIds(supabase: ServerClient, userId: string, date: string): Promise<string[]> {
+  try {
+    const settings = await getTenantSettings();
+    if (!(settings.permissions.specialAccess.jjReportManagerIds ?? []).includes(userId)) return [];
+    const dow = axisDowOf(date);
+    if (!dow) return [];
+    const rows = await fetchAllPaged<{ class_id: string; teacher_id: string | null; slot_teacher_label: string | null; valid_from: string; valid_to: string | null }>(
+      (from, to) =>
+        supabase
+          .from("class_schedules")
+          .select("class_id, teacher_id, slot_teacher_label, valid_from, valid_to")
+          .eq("day_of_week", dow)
+          .is("teacher_id", null)
+          .not("slot_teacher_label", "is", null)
+          .order("id")
+          .range(from, to),
+    );
+    const ids = rows
+      .filter((r) => {
+        const slot = { teacherId: r.teacher_id, slotTeacherLabel: r.slot_teacher_label, validFrom: String(r.valid_from).slice(0, 10), validTo: r.valid_to ? String(r.valid_to).slice(0, 10) : null };
+        return isSeatSlot(slot) && specialSlotLabel(r.slot_teacher_label) === SELF_STUDY_ROOM_LABEL && slotLiveOn(slot, date);
+      })
+      .map((r) => r.class_id);
+    return [...new Set(ids)];
+  } catch {
+    return [];
+  }
+}
+
 /** 알림 수신자용 위임 한 건 — 반 id·대체 강사·기간. 날짜 판정은 `isDelegationActiveOn`(delegation-window.ts). */
 export type ClassDelegationWindow = {
   id?: string;
@@ -156,14 +194,16 @@ export async function getTeachingClassIds(
   userId: string,
   date: string = kstToday(),
 ): Promise<TeachingClassIds> {
-  const [ownRes, active] = await Promise.all([
+  const [ownRes, active, jj] = await Promise.all([
     supabase.from("classes").select("id").eq("teacher_id", userId),
     fetchActiveDelegations(supabase, date),
+    fetchJjManagedClassIds(supabase, userId, date),
   ]);
   const own = (ownRes.data ?? []).map((c) => c.id as string);
   const ownSet = new Set(own);
+  // JJ 보고서 담당 반은 위임 반과 같은 갈래로 싣는다(남의 반을 그날만 맡는다는 점이 같다).
   const delegated = [
-    ...new Set(active.filter((r) => r.delegate_user_id === userId).map((r) => r.class_id)),
+    ...new Set([...active.filter((r) => r.delegate_user_id === userId).map((r) => r.class_id), ...jj]),
   ];
   return { own, delegated, all: [...own, ...delegated.filter((id) => !ownSet.has(id))] };
 }
@@ -182,21 +222,24 @@ export async function getTeachingClasses(
   const ownQuery = () => supabase.from("classes")
     .select("id, class_name, subject, is_special, report_optout, closed_at")
     .eq("teacher_id", userId).eq("is_active", true);
-  const [ownRes, active] = await Promise.all([
+  const [ownRes, active, jj] = await Promise.all([
     strict
       ? fetchAllPaged((from, to) => ownQuery().order("id").range(from, to)).then((data) => ({ data }))
       : ownQuery(),
     fetchActiveDelegations(supabase, date, strict),
+    fetchJjManagedClassIds(supabase, userId, date),
   ]);
   const ownRows = ownRes.data ?? [];
   const ownSet = new Set(ownRows.map((c) => c.id as string));
   // 내가 받은 위임 / 내 반이 남에게 넘어간 것 — 같은 한 번의 조회에서 방향만 갈라 읽는다.
   const wanted = [
-    ...new Set(
-      active
+    ...new Set([
+      ...active
         .filter((r) => r.delegate_user_id === userId && !ownSet.has(r.class_id))
         .map((r) => r.class_id),
-    ),
+      // JJ 보고서 담당 반 — 위임 반과 같은 칩('○○ 선생님 반')으로 그린다.
+      ...jj.filter((id) => !ownSet.has(id)),
+    ]),
   ];
   const awayByClass = new Map<string, string>(); // 내 반 → 지금 대신 맡은 강사 id
   for (const r of active) {

@@ -214,6 +214,19 @@ describe("auditDetail — 액션별 한글 상세", () => {
     );
   });
 
+  it("student_withdrawn_without_report(0454a DB 트리거): 누구 · 퇴원/예약/예약일 변경 · 날짜 · 퇴원보고서 없음 — 영문 키 없음", () => {
+    const c = ctx({ [SID]: "이윤건" });
+    expect(auditDetail("student_withdrawn_without_report", { studentId: SID, kind: "withdraw", date: "2026-10-26", requestRole: "authenticated" }, c)).toBe(
+      "이윤건 · 퇴원 · 퇴원일 2026-10-26 · 퇴원보고서 없음",
+    );
+    expect(auditDetail("student_withdrawn_without_report", { studentId: SID, kind: "schedule", date: "2026-12-24" }, c)).toBe(
+      "이윤건 · 퇴원 예약 · 예약일 2026-12-24 · 퇴원보고서 없음",
+    );
+    expect(auditDetail("student_withdrawn_without_report", { studentId: SID, kind: "reschedule", date: "2026-12-05", previousDate: "2026-12-01" }, c)).toBe(
+      "이윤건 · 퇴원 예약일 변경 · 2026-12-01 → 2026-12-05 · 퇴원보고서 없음",
+    );
+  });
+
   it("payroll_upsert / withdrawal_update: 이름 해석 + 사유", () => {
     expect(auditDetail("payroll_upsert", { userId: UID, total: 2500000 }, ctx({ [UID]: "김강사" }))).toBe(
       "김강사 · 지급 합계 2,500,000원",

@@ -1153,10 +1153,23 @@ export const SHEET_DICT = {
   "month.importUndo.button": { ko: "되돌리기", en: "Revert fill" },
   "month.importUndo.busy": { ko: "되돌리는 중…", en: "Undoing…" },
   "month.importUndo.more": {
-    ko: "교재 배정으로 실제 시트에 넣은 마지막 반영을 되돌립니다 — 그 뒤 고쳐 쓴 칸은 남깁니다",
-    en: "Undoes the last fill of the actual sheet from a book assignment — cells edited afterwards are kept",
+    ko: "최근 작업 5건(배정·미룸·당김·배정 삭제) 중 하나로 되돌립니다 — 고른 것과 그 뒤 작업을 함께 되돌리고, 그 뒤 고쳐 쓴 칸은 남깁니다",
+    en: "Roll back to one of the last 5 actions (assign, postpone, pull ahead, unassign) — undoes it and every later one; cells edited afterwards are kept",
   },
-  "month.importUndo.menu": { ko: "마지막 반영 되돌리기 ({at} · {n}줄)", en: "Undo last fill ({at} · {n} rows)" },
+  "month.importUndo.head": { ko: "되돌릴 시점 고르기 (최근 5건)", en: "Roll back to… (last 5)" },
+  "month.importUndo.latest": { ko: "최근", en: "Latest" },
+  "month.importUndo.untitled": { ko: "교재 미상", en: "Unknown book" },
+  "month.importUndo.kind.fill": { ko: "배정", en: "Assign" },
+  "month.importUndo.kind.skip": { ko: "미룸", en: "Postpone" },
+  "month.importUndo.kind.advance": { ko: "당김", en: "Pull ahead" },
+  "month.importUndo.kind.delete": { ko: "배정 삭제", en: "Unassign" },
+  "month.importUndo.doneBatches": { ko: "{b}건을 되돌렸습니다", en: "Rolled back {b}" },
+  "month.importUndo.alsoNewer": { ko: "+ 그 뒤 {n}건 함께", en: "+ {n} later" },
+  "month.importUndo.doneMany": {
+    ko: "{b}건을 되돌렸습니다 — 교재 배정 {p}개를 지우고 {n}줄을 원래대로 돌렸습니다",
+    en: "Rolled back {b} — removed {p} assignments, restored {n} rows",
+  },
+  "month.importUndo.menu": { ko: "{at} · {title} · {n}줄", en: "{at} · {title} · {n} rows" },
   "month.importUndo.done": { ko: "되돌렸습니다 — {n}줄을 원래대로 돌렸습니다", en: "Undone — {n} rows restored" },
   "month.importUndo.doneKept": {
     ko: "되돌렸습니다 — {n}줄을 원래대로 돌리고, 그 뒤 고쳐 쓰거나 옮긴 {kept}줄은 남겼습니다",
@@ -3363,7 +3376,7 @@ export const SHEET_DICT = {
     ko: "AI 코멘트를 만들지 못했습니다 — 글은 그대로 두었습니다. 잠시 후 다시 눌러 주세요",
     en: "Couldn't write the AI comment — the text was left as it was. Try again shortly",
   },
-  "os.tpl.builtinName": { ko: "ECS 자동 (기본)", en: "ECS auto (built-in)" },
+  "os.tpl.builtinName": { ko: "ECS 자동", en: "ECS auto" }, // 2026-10-26 기본 자리를 항목 보고서에 넘겼다(builtinSheetName)
   "os.tpl.loading": {
     ko: "템플릿 목록을 불러오는 중입니다 — 잠시 후 다시 눌러 주세요",
     en: "Still loading your templates — try again in a moment",
@@ -3476,6 +3489,8 @@ export const SHEET_DICT = {
   },
   // ── 인재원 그림 칸(2026-09-11) — 시험 결과지·학습 분석지 ──
   "os.tpl.builtinJjName": { ko: "ECS 자동 + 인재원 결과지", en: "ECS auto + Injaewon sheets" },
+  // 영어 기본 = 수학과 같은 항목 보고서(원장 2026-10-26) — report-templates/defaults.ts BUILTIN_ENGLISH_SHEET_TEMPLATE.
+  "os.tpl.builtinSheetName": { ko: "수학과 같은 항목 보고서 (기본)", en: "Section report like math (default)" },
   "os.tpl.jjLoading": { ko: "인재원 자료를 불러오는 중…", en: "Loading Injaewon data…" },
   "os.tpl.jjUnlinked": {
     ko: "인재원 미연결 — 결과지·학습분석지 칸은 비워 둡니다",

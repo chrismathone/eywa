@@ -242,6 +242,8 @@ export const AUDIT_ACTIONS = {
   student_siblings_update: "원생 형제 지정",
   student_delete: "학생 영구 삭제",
   student_withdraw: "학생 퇴원 처리",
+  // 퇴원보고서를 거치지 않은 퇴원·새 퇴원 예약 — DB 트리거(0454a)가 남긴다(막지 않고 원장에게 알림). 상세 = describe.ts.
+  student_withdrawn_without_report: "퇴원보고서 없이 퇴원(경고)",
   student_hold: "학생 휴원 처리",
   student_restore: "학생 재원 복구",
   enrollment_end: "수강 종료",

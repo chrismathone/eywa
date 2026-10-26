@@ -307,9 +307,13 @@ export function TextbookFillDialog({
                 action: {
                   label: t("month.importUndo.action"),
                   onClick: () =>
-                    void undoPlanImport({ classId, batchId }).then((r) => {
+                    void undoPlanImport({ classId, batchId, latestOnly: true }).then((r) => {
                       if (!r.ok) return void toast.error(feedback(r.error));
-                      toast.success(tf("month.importUndo.done", { n: r.restored }));
+                      toast.success(
+                        r.plansRemoved > 0
+                          ? tf("month.importUndo.doneMany", { b: r.batches, p: r.plansRemoved, n: r.restored })
+                          : tf("month.importUndo.done", { n: r.restored }),
+                      );
                       router.refresh();
                     }),
                 },

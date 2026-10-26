@@ -5,6 +5,7 @@ import { notFound, redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { resolveBrandingSrc, resolveTenantReadUrls } from "@/lib/storage/media-storage";
+import { reportLogoPath } from "@/features/owner/report-logo";
 import { parseForwardedFor } from "@/features/attendance/kiosk/device-info";
 import { isShareExpired } from "@/features/onescreen/share-expiry";
 import { expiredLinkHref } from "@/features/link-expired/kinds";
@@ -119,8 +120,9 @@ export default async function PublicLessonReportPage({
   const academyName = settings.profile.name || NEUTRAL_ACADEMY_NAME;
   const rpt = settings.report; // 보고서 표시 설정(학원 운영 > 보고서 탭): 로고/학원명/제목/필드 토글/바닥글
   // 로고 해석은 GCS signed URL 등 외부 의존 — 실패해도 페이지는 로고 없이 렌더(학부모 링크가 깨지지 않게).
-  const logoSrc = settings.profile.logoUrl
-    ? await resolveBrandingSrc(settings.profile.logoUrl, report.tenant_id as string).catch(() => null)
+  const logoPath = reportLogoPath(settings);
+  const logoSrc = logoPath
+    ? await resolveBrandingSrc(logoPath, report.tenant_id as string).catch(() => null)
     : null;
 
   // 학생 사진 첨부(P2b) — path별 signed URL(실패 path는 resolveTenantReadUrls가 자동 생략, 페이지 안 깨짐).

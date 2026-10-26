@@ -186,7 +186,7 @@ export function MonthClient({
             ? () => {
                 if (shiftBusy.current) return;
                 shiftBusy.current = true;
-                void undoLessonShift({ classId: data.classId, token })
+                void undoLessonShift({ classId: data.classId, token, historyId: r.historyId })
                   .then((u) => {
                     if (!u.ok) return void toast.error(feedback(u.error));
                     toast.success(t("plan.shift.undo.done"));
@@ -387,7 +387,7 @@ export function MonthClient({
               곧바로 실제에 넣으므로 [월간계획 전체 가져오기]는 없앴고, 그 자리엔 마지막 반영을 되돌리는 문만 선다
               (되돌릴 기록이 있을 때만). `ImportUndoButton`. */}
           {data.canEdit && textbooksOn ? (
-            <ImportUndoButton classId={data.classId} lastImport={data.lastImport ?? null} flushEdits={flushEdits} />
+            <ImportUndoButton classId={data.classId} recent={data.recentImports ?? []} flushEdits={flushEdits} />
           ) : null}
           {view === "mp" ? (
             <>

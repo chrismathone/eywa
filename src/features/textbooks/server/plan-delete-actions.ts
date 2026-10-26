@@ -20,6 +20,7 @@ import { placeSameBookPlan } from "../plan-siblings";
 import { friendlyTextbookError } from "./access";
 import { isModuleOnForTenant } from "@/features/owner/server/modules";
 import { restoreShiftState, validToken } from "./shift-undo-core";
+import { claimHistory, releaseHistory } from "./import-batch";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
@@ -53,6 +54,8 @@ export async function undoPlanDelete(input: {
   classId: string;
   plan: PlanRestoreRow;
   lines?: ShiftUndoToken;
+  /** 이 삭제의 히스토리 기록(원장 2026-10-26) — 알림 [되돌리기]가 넘긴다(`undoLessonShift`와 같은 짝). */
+  historyId?: string | null;
 }): Promise<{ ok: true; warning?: string } | { ok: false; error: string }> {
   const gate = await requireEcsClassAccess(input.classId, { write: true });
   if (!gate.ok) return { ok: false, error: gate.error };
@@ -77,6 +80,16 @@ export async function undoPlanDelete(input: {
 
   const picks = p.slot_picks ? normalizeSlotPicks(p.slot_picks) : [];
 
+  const historyId = input.historyId && UUID.test(input.historyId) ? input.historyId : null;
+  if (historyId) {
+    const claim = await claimHistory(admin, tenantId, input.classId, historyId, gate.access.user.id);
+    if (claim === "taken") return { ok: false, error: "이미 되돌렸습니다" };
+  }
+  const fail = async (error: string) => {
+    if (historyId) await releaseHistory(admin, tenantId, historyId).catch(() => undefined);
+    return { ok: false as const, error };
+  };
+
   // 🔴 같은 교재 배정 규칙(3개까지 · 교시 안 겹침, 2026-10-21)을 되살리기에도 건다 — 옛 유니크가 막아 주던 자리다.
   //    그 사이 같은 교시에 같은 교재를 다시 걸었으면 되살리면 한 칸에 같은 교재가 두 벌이 된다.
   const sib = await admin
@@ -86,7 +99,7 @@ export async function undoPlanDelete(input: {
     .eq("class_id", input.classId)
     .eq("textbook_id", p.textbook_id)
     .eq("is_active", true);
-  if (sib.error) return { ok: false, error: friendlyTextbookError(sib.error, "되돌리지 못했습니다") };
+  if (sib.error) return fail(friendlyTextbookError(sib.error, "되돌리지 못했습니다"));
   const placement = placeSameBookPlan({
     picks: picks.length > 0 ? picks : null,
     siblings: (sib.data ?? []).map((r) => ({
@@ -94,9 +107,9 @@ export async function undoPlanDelete(input: {
       slotPicks: Array.isArray(r.slot_picks) && r.slot_picks.length > 0 ? (r.slot_picks as unknown[]).map(String) : null,
     })),
   });
-  if (placement.kind === "error") return { ok: false, error: `되돌리지 않았습니다 — ${placement.error}` };
+  if (placement.kind === "error") return fail(`되돌리지 않았습니다 — ${placement.error}`);
   if (placement.kind === "update") {
-    return { ok: false, error: "그 사이 같은 교재가 같은 교시에 다시 배정돼 있어 되돌리지 않았습니다" };
+    return fail("그 사이 같은 교재가 같은 교시에 다시 배정돼 있어 되돌리지 않았습니다");
   }
   const { error } = await admin.from("class_textbook_plans").insert({
     id: p.id,
@@ -116,10 +129,9 @@ export async function undoPlanDelete(input: {
     ...(picks.length > 0 ? { slot_picks: picks } : {}),
   });
   if (error) {
-    return {
-      ok: false,
-      error: friendlyTextbookError(error, "배정을 되살리지 못했습니다", "그 사이 같은 교재가 다시 배정돼 있어 되돌리지 않았습니다"),
-    };
+    return fail(
+      friendlyTextbookError(error, "배정을 되살리지 못했습니다", "그 사이 같은 교재가 다시 배정돼 있어 되돌리지 않았습니다"),
+    );
   }
 
   let warning: string | undefined;

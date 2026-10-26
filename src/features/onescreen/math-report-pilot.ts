@@ -16,18 +16,13 @@
 import { skipStatusOf } from "./progress-status";
 
 /**
- * 시범 대상 학생 id — 학생 '테스트' + '학원이'(injaewon). 학원이는 원장이 원일 계정·'학원이(테스트)' 반에서 바로 확인하려고 더했다
- * (2026-10-21 — '테스트'는 퇴원·수강 0건이라 화면에 안 뜬다).
+ * 이 학생·과목 행이 새 수학 보고서 대상인가 — **수학 전원**(원장 2026-10-26 *"수학보고서 디자인 전체로 반영"* → *"지금 바로 전원"*).
+ * 시범(2026-10-21~)은 학생 id 명단(테스트·학원이·학원삼)으로 좁혔는데 그 명단을 걷었다. 과목키가 없는 행(데모)은 수학으로 본다(원스크린 관례).
+ * 🔴 학생 id가 없으면 false — 학생을 모르는 화면(사무실 직접 작성 등)은 종전 방식 그대로다.
+ * ⚠️ 함수 이름·"시범" 표현은 호출부 20곳이 쓰고 있어 그대로 둔다(의미 = '새 수학 보고서').
  */
-export const MATH_REPORT_PILOT_STUDENT_IDS: readonly string[] = [
-  "67a53999-fb62-4753-a938-9a5ce4af9e61", // 테스트
-  "6219e442-aa57-455f-a5bc-834b222d9e1c", // 학원이
-  "5de5c803-6cf6-4ad9-85f0-d184334c679e", // 학원삼 — 원일 계정 테스트용(2026-10-22, 학원이 반 담임이 박소선으로 바뀌어 따로 만듦)
-];
-
-/** 이 학생·과목 행이 시범 대상인가. 과목키가 없는 행(데모)은 수학으로 본다(원스크린 관례). */
 export function isMathReportPilot(studentId: string | null | undefined, subjectKey: string | null | undefined): boolean {
-  if (!studentId || !MATH_REPORT_PILOT_STUDENT_IDS.includes(studentId)) return false;
+  if (!studentId) return false;
   return !subjectKey || subjectKey === "math";
 }
 
@@ -158,6 +153,7 @@ export function understandingSig(items: readonly { title: string; score: number 
  */
 export const PILOT_SECTION_TITLES = {
   progress: "진도",
+  attendance: "출결", // 지각·조퇴·공결 + 사유(원장 2026-10-26, attendance-sentence.ts) — 출석이면 항목이 없다
   daily: "일일 테스트",
   check: "확인 테스트",
   levels: "수업 평가",

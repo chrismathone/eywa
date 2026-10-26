@@ -121,7 +121,8 @@ describe("결석 행 — 보고서 입력은 잠긴다", () => {
     expect(screen.getByLabelText("학생 일일테스트")).not.toBeDisabled();
     expect(screen.getByLabelText("학생 수학 교재명")).not.toHaveAttribute("readonly");
     expect(screen.getByLabelText("학생 특이사항")).not.toHaveAttribute("readonly");
-    expect(screen.getByLabelText("학생 수학 학부모 문구")).not.toHaveAttribute("readonly");
+    // 학부모 문구는 출결이 아니라 새 수학 보고서 규칙(자동작성 전엔 보기만, math-report-pilot.ts — 2026-10-26 수학 전원)으로 잠긴다.
+    expect(screen.getByLabelText("학생 수학 학부모 문구")).toHaveAttribute("readonly");
   });
 
   it("결석 행에서는 진도·점수·교재·과제·특이사항·문구가 전부 잠긴다", () => {

@@ -3,7 +3,6 @@ import { ASSIGNED_DRAG_BLOCKED, BOARD_STAGES, ENROLLED_REVERT_BLOCKED } from "./
 import {
   FOLLOW_UP_BEFORE_BLOCKED,
   FOLLOW_UP_DATE_PAST,
-  FOLLOW_UP_DATE_REQUIRED,
   FOLLOW_UP_RESULTS,
   FOLLOW_UP_REQUIRED_ERROR,
   initialFollowUpResult,
@@ -21,8 +20,9 @@ describe("후속 조치 — 상담 끝난 건은 반드시 고르고, 고르면 
     expect(FOLLOW_UP_RESULTS.map(({ value, label }) => ({ value, label }))).toEqual(
       BOARD_STAGES.map(({ key, label }) => ({ value: key, label })),
     );
-    // 상담 전 접수(필수 아님)에서 고르면 칸반 드롭과 같은 상태 — '상담 완료'는 다음 상담일과 함께.
+    // 상담 전 접수(필수 아님)에서 고르면 칸반 드롭과 같은 상태 — 다음 상담일은 넣어도 안 넣어도 된다.
     for (const stage of BOARD_STAGES) {
+      expect(run("pending", stage.key)).toEqual({ outcome: stage.dropOutcome });
       expect(run("pending", stage.key, stage.key === "consulted" ? "2026-10-25" : null)).toEqual({ outcome: stage.dropOutcome });
     }
   });
@@ -62,13 +62,13 @@ describe("후속 조치 — 상담 끝난 건은 반드시 고르고, 고르면 
     expect(run("scheduled", "before")).toEqual({ outcome: "scheduled" });
   });
 
-  it("'상담 완료' = 다음 상담 — 다음 상담일 필수 · 새로 넣는 날은 오늘 이후 · 저장돼 있던 날은 유지", () => {
-    expect(run("consulted", "consulted")).toEqual({ error: FOLLOW_UP_DATE_REQUIRED });
-    expect(run("ai_done", "consulted")).toEqual({ error: FOLLOW_UP_DATE_REQUIRED });
-    // 상담 전 접수를 '상담 완료'로 옮겨도 날짜가 있어야 한다(그날 알림이 선다)
-    expect(run("pending", "consulted")).toEqual({ error: FOLLOW_UP_DATE_REQUIRED });
-    // 저장은 폼의 날짜로 덮는다 — 저장돼 있던 날짜를 지우고 저장하면 날짜가 사라지므로 막는다
-    expect(run("consulted", "consulted", null, "2026-10-30")).toEqual({ error: FOLLOW_UP_DATE_REQUIRED });
+  it("'상담 완료' = 결정 전 — 다음 상담일은 선택(원장 2026-10-26) · 넣으면 오늘 이후 · 저장돼 있던 날은 유지", () => {
+    // 다음 상담이 없을 수도 있다 — 날짜 없이 저장된다
+    expect(run("consulted", "consulted")).toEqual({ outcome: "consulted" });
+    expect(run("ai_done", "consulted")).toEqual({ outcome: "ai_done" });
+    expect(run("pending", "consulted")).toEqual({ outcome: "consulted" });
+    // 저장돼 있던 날짜를 지우고 저장하면 날짜 없이 저장된다(폼의 날짜로 덮는다)
+    expect(run("consulted", "consulted", null, "2026-10-30")).toEqual({ outcome: "consulted" });
     expect(run("consulted", "consulted", "2026-10-21")).toEqual({ error: FOLLOW_UP_DATE_PAST });
     expect(run("consulted", "consulted", "2026-10-22")).toEqual({ outcome: "consulted" });
     // 이미 저장돼 있던 지난 날짜는 그대로 받는다(기한 지남 알림이 그 건을 말한다)
@@ -84,7 +84,7 @@ describe("후속 조치 — 상담 끝난 건은 반드시 고르고, 고르면 
     expect(run("pending", "before", "2026-10-21")).toEqual({ error: FOLLOW_UP_DATE_PAST });
   });
 
-  it("날짜가 필요한 것은 '상담 완료'뿐 — 등록·미등록·반 배정은 날짜 없이", () => {
+  it("등록·미등록·반 배정은 날짜 없이", () => {
     expect(run("consulted", "enrolled")).toEqual({ outcome: "enrolled" });
     expect(run("consulted", "unregistered")).toEqual({ outcome: "declined" });
     expect(resolveFollowUp({ current: "consulted", result: null, followUpDate: null, storedDate: null, today, assignedClassCount: 1 })).toEqual({ outcome: "enrolled" });

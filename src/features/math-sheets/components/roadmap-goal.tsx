@@ -67,7 +67,7 @@ export function RoadmapGoal({ r, studentId, studentName }: { r: RoadmapView; stu
         {r.aheadLessons ? <span className={css.rebased} title={r.rebased ? "앞서 다음 교재로 넘어가 오늘부터 일정을 다시 폈습니다" : undefined}><b>{r.aheadLessons}차시 앞섬</b></span> : null}
         <span>
           <small>목표</small>
-          <b>{r.target.auto ? (r.deadline ? "자동 · 중3 11월 말까지" : r.deadlinePassed ? "자동 · 마감 지남(지금 3개월 끝)" : "자동 · 지금 3개월 끝") : "직접 지정"}</b>
+          <b>{r.target.auto ? (r.deadline ? "자동 · 중3 11월 말까지" : r.seriesEnd ? "자동 · 시리즈 마지막 권" : r.deadlinePassed ? "자동 · 마감 지남(지금 3개월 끝)" : "자동 · 지금 3개월 끝") : "직접 지정"}</b>
           <TargetEditor key={r.target.key} r={r} studentId={studentId} studentName={studentName} />
         </span>
       </div>

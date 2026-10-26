@@ -1554,6 +1554,8 @@ export async function generateReportComment(
     specialNote: noteSplit.rest,
     classNotice: noticeSplit.rest,
     classContext: input.classContext?.replace(/\s*\n+\s*/g, " ").trim().slice(0, 300) || "",
+    // 출결 문장(attendance-sentence.ts가 만든 한 줄) — 클라 값이라 한 줄로 접고 길이를 자른다. 글에 그대로 들어가고 AI에는 안 준다.
+    attendance: input.attendance?.replace(/\s*\n+\s*/g, " ").trim().slice(0, 120) || "",
     // 이해도는 시범 대상에만 — 다른 학생 입력에 실려 와도 프롬프트에 안 넣는다(클라 값을 믿지 않는다).
     understanding: pilot
       ? (input.understanding ?? [])
@@ -1603,6 +1605,7 @@ export async function generateReportComment(
         classContext: "",
         dailyTestSkip: undefined,
         homeworkMissReason: undefined,
+        attendance: "",
       }
     : safeInput;
   try {

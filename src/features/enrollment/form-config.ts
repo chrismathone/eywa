@@ -119,11 +119,12 @@ export const ENGLISH_GROUPS: Record<string, FieldGroup[]> = {
     {
       title: "NELT 세부",
       cols: 4,
+      // 글자 칸(score 아님) — 점수 대신 '중2 수준'·'B+' 같은 글로 적는 경우가 있다(원장 2026-10-26 *"text도 입력가능하게"*).
       fields: [
-        { key: "neltVocab", label: "어휘", type: "score" },
-        { key: "neltGrammar", label: "문법", type: "score" },
-        { key: "neltListening", label: "듣기", type: "score" },
-        { key: "neltReading", label: "독해", type: "score" },
+        { key: "neltVocab", label: "어휘" },
+        { key: "neltGrammar", label: "문법" },
+        { key: "neltListening", label: "듣기" },
+        { key: "neltReading", label: "독해" },
       ],
     },
   ],
@@ -148,16 +149,17 @@ export const ENGLISH_GROUPS: Record<string, FieldGroup[]> = {
     },
     {
       title: "EiE 세부 (내 점수 / 평균)",
+      // 글자 칸(score 아님) — NELT 세부와 같은 이유(원장 2026-10-26 *"그쪽도 글자받게해줘"*).
       cols: 4,
       fields: [
-        { key: "eieVocabMy", label: "어휘(내)", type: "score" },
-        { key: "eieVocabAvg", label: "어휘(평균)", type: "score" },
-        { key: "eieListenMy", label: "듣기(내)", type: "score" },
-        { key: "eieListenAvg", label: "듣기(평균)", type: "score" },
-        { key: "eieReadMy", label: "읽기(내)", type: "score" },
-        { key: "eieReadAvg", label: "읽기(평균)", type: "score" },
-        { key: "eieGrammarMy", label: "문법(내)", type: "score" },
-        { key: "eieGrammarAvg", label: "문법(평균)", type: "score" },
+        { key: "eieVocabMy", label: "어휘(내)" },
+        { key: "eieVocabAvg", label: "어휘(평균)" },
+        { key: "eieListenMy", label: "듣기(내)" },
+        { key: "eieListenAvg", label: "듣기(평균)" },
+        { key: "eieReadMy", label: "읽기(내)" },
+        { key: "eieReadAvg", label: "읽기(평균)" },
+        { key: "eieGrammarMy", label: "문법(내)" },
+        { key: "eieGrammarAvg", label: "문법(평균)" },
       ],
     },
   ],

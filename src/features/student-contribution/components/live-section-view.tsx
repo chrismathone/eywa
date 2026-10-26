@@ -1,4 +1,4 @@
-import { EmbedLink as Link } from "@/components/embed-link";
+import { ContributionLink as Link } from "./student-contribution-scope";
 import type { LiveItem, LiveSection } from "@/features/students/ontology/live-contract";
 import { kstDateOf } from "@/lib/date-kst";
 

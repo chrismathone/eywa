@@ -234,7 +234,8 @@ export function usePlanHandlers({
                           if (shiftBusyRef.current) return;
                           shiftBusyRef.current = true;
                           void Promise.all([store.flush(), flushHost?.() ?? Promise.resolve()])
-                            .then(() => undoCall(classId, token))
+                            // 히스토리 기록도 함께 '되돌림'으로(툴바 [되돌리기 ▾]에 다시 안 뜨게, 2026-10-26).
+                            .then(() => undoCall(classId, token, r.historyId))
                             .then((u) => {
                               if (!u.ok) return void toast.error(feedback(u.error));
                               const pressed = u.cells?.find((c) => c.date === planDate && c.slotStart === slotStart);

@@ -487,6 +487,9 @@ export type ConsultationsSettings = z.infer<typeof consultationsSchema>;
 export const reportSchema = z.object({
   title: z.string().max(40),
   showLogo: z.boolean(),
+  // 보고서 전용 로고(원장 2026-10-26 *"시지입시관 이름 빼"* — 학원 로고엔 지점명이 박혀 있다). 비우면 학원 로고(profile.logoUrl).
+  // 소비처 = reportLogoPath() → /r 공유 페이지 · 보고서 인쇄 · 원스크린 미리보기.
+  logoUrl: z.string().max(400).default(""),
   showAcademyName: z.boolean(),
   showFooter: z.boolean(),
   footerNote: z.string().max(200),
@@ -619,10 +622,14 @@ const specialAccessSchema = z.object({
   // 업체리스트(재고관리 거래처 연락처) — 🔴 원장 역할도 지정해야 본다(원장 2026-10-23 "이승엽만"). 없음 = 아무도 못 본다.
   // 소비처 = `canViewVendorsNow`(inventory/server/vendor-gate.ts).
   vendorViewerIds: z.array(z.string().uuid()).max(80).optional(),
+  // JJ 보고서 담당(원장 2026-10-26 *"jj관리자로 해서 수업보고서 쓸수있게 · 영어 jj는 김동후"*) — 그날 JJ 자리 교시가 있는 반의
+  // 수업보고서를 원스크린에서 쓸 수 있다(시간표 JJ 칸은 그대로 — 담당을 채우면 자리 판정이 깨진다). 없음 = 아무도 아니다.
+  // 소비처 = `getTeachingClassIds`·`getTeachingClasses`(classes/server/delegation.ts)의 JJ 갈래.
+  jjReportManagerIds: z.array(z.string().uuid()).max(80).optional(),
   staffSubjectScopes: z.array(staffSubjectScopeSchema).max(80).default([]),
 });
 /** 사람 id 목록인 칸(과목 범위는 줄 모양이 달라 따로 다룬다). */
-export const SPECIAL_ACCESS_ID_LISTS = ["payslipViewerIds", "payslipManagerIds", "leaveAdjusterIds", "classSplitterIds", "enrollmentDateEditorIds", "studentStatusManagerIds", "staffTaskMonitorIds", "vendorViewerIds"] as const;
+export const SPECIAL_ACCESS_ID_LISTS = ["payslipViewerIds", "payslipManagerIds", "leaveAdjusterIds", "classSplitterIds", "enrollmentDateEditorIds", "studentStatusManagerIds", "staffTaskMonitorIds", "vendorViewerIds", "jjReportManagerIds"] as const;
 export const permissionsSchema = z
   .object({
     overrides: z.array(permissionOverrideSchema).max(MENU_KEYS.length * SYSTEM_ROLES.length),

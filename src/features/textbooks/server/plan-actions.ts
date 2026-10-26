@@ -28,7 +28,8 @@ import { dowKeyOf } from "@/features/class-sheets/lib/week";
 import { slotLiveOnDate } from "@/features/timetable/lib/week";
 import type { MonthScheduleRow } from "@/features/class-sheets/lib/month-assemble";
 import { kstToday } from "@/lib/date-kst";
-import { recordImportBatch, snapshotPlanLines } from "./import-batch";
+import { recordHistoryEntry, recordImportBatch, snapshotPlanLines } from "./import-batch";
+import { shiftTitleOf } from "../import-undo";
 import { reportError } from "@/lib/observability/report-error";
 import type { PlanLineDTO } from "@/features/class-sheets/server/actions";
 import { shiftActualLines } from "./shift-lines";
@@ -299,6 +300,8 @@ export type PlanDeleteResult =
       cleared?: { lines: number; markers: number };
       /** 되돌리기 재료 — 배정 한 줄 + (함께 지웠으면) 줄·표식 차이. 못 만들었으면 없다(되돌리기 버튼이 안 선다). */
       undo?: { plan: PlanRestoreRow; lines?: ShiftUndoToken };
+      /** 툴바 [되돌리기 ▾] 히스토리 기록(원장 2026-10-26) — 알림 [되돌리기]가 `undoPlanDelete`에 함께 넘긴다. */
+      historyId?: string;
       /** 배정은 지웠는데 진도 줄 지우기가 멈췄다 — 화면이 안내한다. */
       warning?: string;
     }
@@ -312,7 +315,8 @@ export type PlanDeleteResult =
  */
 export async function deleteClassTextbookPlan(
   planId: string,
-  opts: { withLines?: boolean } = {},
+  /** `skipHistory` = 히스토리에 안 남긴다 — 배정 반영을 되돌리며 배정을 지울 때(그건 삭제가 아니라 되돌리기다). */
+  opts: { withLines?: boolean; skipHistory?: boolean } = {},
 ): Promise<PlanDeleteResult> {
   const loaded = await loadPlan(planId);
   if ("error" in loaded) return { ok: false, error: loaded.error };
@@ -418,6 +422,32 @@ export async function deleteClassTextbookPlan(
     }
   }
 
+  // 툴바 [되돌리기 ▾] 히스토리(원장 2026-10-26 *"배정삭제도 히스토리에"*) — 재료는 알림 [되돌리기]와 같다.
+  let historyId: string | undefined;
+  if (restore && !opts.skipHistory) {
+    const { data: book } = await admin
+      .from("textbooks")
+      .select("title")
+      .eq("tenant_id", tenantId)
+      .eq("id", plan.textbookId)
+      .maybeSingle();
+    historyId =
+      (await recordHistoryEntry({
+        admin,
+        tenantId,
+        classId: plan.classId,
+        date: kstToday(),
+        actorId: gate.access.user.id,
+        meta: {
+          kind: "delete",
+          title: typeof book?.title === "string" ? book.title : null,
+          plan: restore,
+          ...(linesUndo ? { lines: linesUndo } : {}),
+        },
+        count: linesUndo?.removed.length ?? 0,
+      })) ?? undefined;
+  }
+
   await logAction({
     action: "textbook_plan_delete",
     targetType: "class",
@@ -433,6 +463,7 @@ export async function deleteClassTextbookPlan(
     cleared,
     warning,
     undo: restore ? { plan: restore, lines: linesUndo } : undefined,
+    historyId,
   };
 }
 
@@ -960,6 +991,8 @@ export async function applyTextbookFill(
           from: importFrom,
           to: planned.lastDate,
           byCell: planned.byCell,
+          // 되돌리기가 배정까지 지우게 기록에 싣는다(원장 2026-10-26 — 줄만 비우면 빈 칸에 `계획`이 다시 그려졌다).
+          plan: { id: saved.id, title: computed.title },
         })
       : null;
 
@@ -1011,6 +1044,8 @@ async function writePlannedCells(input: {
   from: string;
   to: string;
   byCell: Record<string, PlannedLine[]>;
+  /** 이 반영을 만든 교재 배정 — 되돌리기 기록에 함께 싣는다. */
+  plan?: { id: string; title: string | null };
 }): Promise<{ ok: true; result: ApplyResult; cells: number; undoBatchId: string | null } | { ok: false; error: string }> {
   const { access, classId } = input;
   const cells = Object.keys(input.byCell).sort();
@@ -1057,7 +1092,7 @@ async function writePlannedCells(input: {
   }
 
   const undoBatchId =
-    before && total.added + total.filled > 0
+    before && (total.added + total.filled > 0 || input.plan)
       ? await recordImportBatch({
           admin,
           tenantId: access.tenantId,
@@ -1066,6 +1101,7 @@ async function writePlannedCells(input: {
           to: input.to,
           actorId: access.user.id,
           before,
+          plan: input.plan ?? null,
         })
       : null;
   return { ok: true, result: total, cells: cells.length, undoBatchId };
@@ -1093,9 +1129,11 @@ export type LessonShiftResult =
        * (`undoLessonShift`). 앞 모습을 못 읽었거나 바뀐 게 없으면 없다(되돌리기 버튼이 안 선다).
        */
       undo?: ShiftUndoToken;
+      /** 툴바 [되돌리기 ▾] 히스토리 기록(원장 2026-10-26) — 알림 [되돌리기]가 `undoLessonShift`에 함께 넘긴다. */
+      historyId?: string;
     }
   /** `undo` = 옮기다 멈췄을 때 그때까지 바뀐 것을 되돌릴 기록(미룸은 누른 칸을 지우므로 멈춘 채 두면 잃는다). */
-  | { ok: false; error: string; undo?: ShiftUndoToken };
+  | { ok: false; error: string; undo?: ShiftUndoToken; historyId?: string };
 
 /**
  * **한 주 미루기 / 당기기** — 그 (반, 날짜, 교시)부터 **실제 진도를 한 주씩 민다/당긴다**.
@@ -1171,6 +1209,8 @@ export async function setLessonShift(input: {
 
   // ③ 마무리 — 누른 칸(+그 주 바뀐 칸)의 줄을 다시 읽어 화면에 준다 + 되돌리기 기록 + 감사로그 + 무효화.
   /** 지금 모습과 `before`의 차이 = 되돌리기 기록(바뀐 게 없거나 못 읽으면 없다). */
+  const shiftKind: LessonShiftKind = kind;
+  let historyId: string | undefined;
   const undoSince = async (): Promise<ShiftUndoToken | undefined> => {
     if (!before) return undefined;
     const after = await snapshotShiftState(admin, tenantId, input.classId, input.date).catch((e: unknown) => {
@@ -1187,7 +1227,19 @@ export async function setLessonShift(input: {
       markersBefore: before.markers,
       markersAfter: after.markers,
     });
-    return isEmptyUndo(token) ? undefined : token;
+    if (isEmptyUndo(token)) return undefined;
+    // 툴바 [되돌리기 ▾] 히스토리(원장 2026-10-26 *"미룸·당김이랑 배정삭제도 히스토리에"*) — 알림과 같은 재료.
+    historyId =
+      (await recordHistoryEntry({
+        admin,
+        tenantId,
+        classId: input.classId,
+        date: input.date,
+        actorId: gate.access.user.id,
+        meta: { kind: "shift", shift: shiftKind, title: shiftTitleOf(token), token },
+        count: token.removed.length + token.added.length + token.changed.length,
+      })) ?? undefined;
+    return token;
   };
 
   const finishShift = async (movedCount: number, touched: readonly string[] = []): Promise<LessonShiftResult> => {
@@ -1202,7 +1254,7 @@ export async function setLessonShift(input: {
     });
     // 그 반의 앞으로 전부가 바뀐다([[#102]] 계열 — `"layout"` 필수).
     revalidatePath(`/ecs/${input.classId}`, "layout");
-    return { ok: true, kind, moved: movedCount, lines: week?.lines, cells: week?.cells, undo };
+    return { ok: true, kind, moved: movedCount, lines: week?.lines, cells: week?.cells, undo, historyId };
   };
 
   // ⓪ 배정 교재가 지나가는 칸이면 교재 순서로(표식·줄을 그 경로가 함께 맞춘다).
@@ -1223,7 +1275,7 @@ export async function setLessonShift(input: {
     if (!relay.ok) {
       // 중간에 멈췄을 수 있다 — 화면은 다시 받게 하고, 그때까지 바뀐 게 있으면 되돌릴 수 있게 기록을 준다.
       revalidatePath(`/ecs/${input.classId}`, "layout");
-      return { ok: false, error: relay.error, undo: await undoSince() };
+      return { ok: false, error: relay.error, undo: await undoSince(), historyId };
     }
     return finishShift(relay.moved, relay.touched);
   }
@@ -1261,7 +1313,7 @@ export async function setLessonShift(input: {
       reportError(e, { scope: "textbooks.lesson-shift.line", classId: input.classId, date: input.date });
       return { ok: false as const, error: "진도를 불러오지 못해 옮기지 않았습니다 — 잠시 뒤 다시 시도해 주세요", noContent: false, chain: [] };
     });
-    if (!one.ok) return { ok: false, error: one.error, undo: "stopped" in one && one.stopped ? await undoSince() : undefined };
+    if (!one.ok) return { ok: false, error: one.error, undo: "stopped" in one && one.stopped ? await undoSince() : undefined, historyId };
     return finishShift(one.moved);
   }
 
@@ -1281,7 +1333,7 @@ export async function setLessonShift(input: {
   });
   if (!moved.ok && !moved.noContent) {
     // 쓰다가 멈췄으면(`stopped`) 그때까지 바뀐 것을 되돌릴 수 있게 — 처음부터 거절된 거면 바뀐 게 없다.
-    return { ok: false, error: moved.error, undo: "stopped" in moved && moved.stopped ? await undoSince() : undefined };
+    return { ok: false, error: moved.error, undo: "stopped" in moved && moved.stopped ? await undoSince() : undefined, historyId };
   }
 
   // ② 표식 — 순 횟수를 맞춘다(위 🔑).

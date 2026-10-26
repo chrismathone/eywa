@@ -12,7 +12,6 @@ import {
   pilotRecomposeNote,
   pilotCanEdit,
   pilotNeedsAutoWrite,
-  MATH_REPORT_PILOT_STUDENT_IDS,
   progressLead,
   readUnderstanding,
   topicName,
@@ -26,18 +25,17 @@ import {
 import { evaluateSendGate } from "./send-gate";
 import { buildFactBlock, type ReportCommentInput } from "./report-comment";
 
-const PILOT = MATH_REPORT_PILOT_STUDENT_IDS[0]!;
+const PILOT = "67a53999-fb62-4753-a938-9a5ce4af9e61";
 
-describe("시범 대상 판정", () => {
-  it("테스트 학생의 수학 행만", () => {
+describe("새 수학 보고서 대상 판정 — 수학 전원(원장 2026-10-26)", () => {
+  it("학생이 있는 수학 행이면 누구든", () => {
     expect(isMathReportPilot(PILOT, "math")).toBe(true);
     expect(isMathReportPilot(PILOT, undefined)).toBe(true);
-    expect(isMathReportPilot(PILOT, "english")).toBe(false);
-    expect(isMathReportPilot("someone-else", "math")).toBe(false);
-    expect(isMathReportPilot(null, "math")).toBe(false);
+    expect(isMathReportPilot("someone-else", "math")).toBe(true);
   });
-  it("명단은 학생 '테스트'·'학원이' 둘", () => {
-    expect(MATH_REPORT_PILOT_STUDENT_IDS).toEqual(["67a53999-fb62-4753-a938-9a5ce4af9e61", "6219e442-aa57-455f-a5bc-834b222d9e1c", "5de5c803-6cf6-4ad9-85f0-d184334c679e"]);
+  it("영어 행·학생을 모르는 화면은 아니다", () => {
+    expect(isMathReportPilot(PILOT, "english")).toBe(false);
+    expect(isMathReportPilot(null, "math")).toBe(false);
   });
 });
 

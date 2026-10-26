@@ -10,6 +10,7 @@ import { getContributionGate } from "./access";
 import { contributionReady, SETTINGS_TABLE } from "./store";
 import { getContributionDirectory, getContributionSnapshot } from "./directory";
 import { cachedContributionTotals, cachedEnrolledMonths } from "./snapshot-cache";
+import deployment from "../../../../vercel.json";
 
 export const getContributionList = cache(async (withEnrolledMonths = true) => {
   const [directory, snapshot] = await Promise.all([getContributionDirectory(), getContributionSnapshot()]);
@@ -22,7 +23,8 @@ export const getContributionList = cache(async (withEnrolledMonths = true) => {
   ]) : [[], []];
   const byStudent = new Map(totals.map((r) => [r.studentId, r]));
   const monthsByStudent = new Map(monthCounts.map((r) => [r.student_id, r.enrolled_months]));
-  return { gate, ...snapshot, rows: students.map((s) => ({ ...s, enrolledMonths: monthsByStudent.get(s.id) ?? null, total: byStudent.get(s.id) ?? null })), subjects, grades };
+  return { gate, ...snapshot, month, checkedAt: new Date().toISOString(), refreshCron: deployment.crons.find((job) => job.path === "/api/cron/student-contribution")?.schedule ?? null,
+    rows: students.map((s) => ({ ...s, enrolledMonths: monthsByStudent.get(s.id) ?? null, total: byStudent.get(s.id) ?? null })), subjects, grades };
 });
 
 /** 배점 미리보기에는 학생별 전체 실적을 전송할 필요가 없다. */

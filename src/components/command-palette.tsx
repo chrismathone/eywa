@@ -67,6 +67,7 @@ export function CommandPalette({
   isSuperAdmin = false,
   menuLayout,
   isGenericTenant = false,
+  canViewVendors = false,
 }: {
   systemRole: SystemRole;
   permMatrix?: AccessMatrix;
@@ -85,6 +86,8 @@ export function CommandPalette({
   menuLayout?: MenuLayout;
   /** 새 학원(일반판) — 설정 '기능' 면 노출(사이드바·메뉴 판과 같은 값). */
   isGenericTenant?: boolean;
+  /** 업체리스트 지정자 — 학원운영 판의 '업체리스트' 입구(menu-hub `vendorsOnly`). */
+  canViewVendors?: boolean;
 }) {
   const { groups: groupLayout } = useNavigationSettings();
   const router = useRouter();
@@ -108,12 +111,13 @@ export function CommandPalette({
       menuLayout,
       groupLayout,
       isGenericTenant,
+      canViewVendors,
     };
     // 메뉴 판의 버튼 전부 → 그 뒤에 화면 위 탭(수납 · 교재 · 지출 → 환불 …). 라벨+업무군+영문 키+별칭으로 찾는다.
     // 🔴 목록·찾는 말은 [`hubSearchEntries`](@/lib/menu-hub) 한 곳 — 사이드바 메뉴 검색과 같은 목록이다(갈리면 한쪽에서만 찾힌다).
     //    별칭이 붙은 이유: 라벨에 없는 말로 찾으면 **0건**이었다(원장 2026-09-09 "신입생 관리"). 별칭은 검색에만 실린다.
     return hubSearchEntries(gate);
-  }, [systemRole, permMatrix, canTeacherView, isSuperAdmin, menuLayout, groupLayout, isGenericTenant]);
+  }, [systemRole, permMatrix, canTeacherView, isSuperAdmin, menuLayout, groupLayout, isGenericTenant, canViewVendors]);
 
   const q = query.trim().toLowerCase();
   const menuResults = useMemo(() => matchHubSearch(commands, q), [commands, q]);

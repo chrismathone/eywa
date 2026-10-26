@@ -87,6 +87,15 @@ export function SpecialAccessEditor({ value, hiddenUserIds, staffOptions, nameOf
           nameOf={nameOf}
           onChange={(update) => onChange((prev) => ({ ...prev, vendorViewerIds: update(prev.vendorViewerIds ?? []) }))}
         />
+        <SpecialAccessList
+          label="JJ 보고서 담당"
+          hint="그날 JJ 교시가 있는 반의 수업보고서를 원스크린에서 쓸 수 있는 사람입니다. JJ는 담당 강사를 두지 않는 자리 교시라, 이 칸으로 보고서 작성자를 정합니다. 그 반 담임도 그대로 함께 씁니다."
+          ids={value.jjReportManagerIds ?? []}
+          hiddenUserIds={hiddenUserIds}
+          staffOptions={pickable}
+          nameOf={nameOf}
+          onChange={(update) => onChange((prev) => ({ ...prev, jjReportManagerIds: update(prev.jjReportManagerIds ?? []) }))}
+        />
       </div>
     </SettingsCard>
   );

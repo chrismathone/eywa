@@ -98,7 +98,7 @@ export function TextbookFillExisting({ classId }: { classId: string }) {
             action: {
               label: t("fill.existing.undo"),
               onClick: () => {
-                void undoPlanDelete({ classId, plan: undo.plan, lines: undo.lines }).then(async (u) => {
+                void undoPlanDelete({ classId, plan: undo.plan, lines: undo.lines, historyId: res.historyId }).then(async (u) => {
                   if (!u.ok) return void toast.error(feedback(u.error));
                   if (u.warning) toast.warning(feedback(u.warning));
                   else toast.success(t("fill.existing.undone"));

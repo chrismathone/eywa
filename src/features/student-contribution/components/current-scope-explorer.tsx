@@ -1,4 +1,4 @@
-import { EmbedLink as Link } from "@/components/embed-link";
+import { ContributionLink as Link } from "./student-contribution-scope";
 import { Pagination } from "@/components/pagination";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { liveScopeHref } from "@/features/students/ontology/live-scope";
