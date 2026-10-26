@@ -1,5 +1,5 @@
 "use client";
-import { EmbedLink as Link } from "@/components/embed-link";
+import { ContributionLink as Link } from "./student-contribution-scope";
 import { DEFAULT_STUDENT_FILTERS, writeStudentFilters, type StudentFilters } from "../model/student-filters";
 import { useSearchParams } from "next/navigation";
 

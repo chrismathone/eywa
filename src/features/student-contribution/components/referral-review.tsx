@@ -1,6 +1,6 @@
 "use client";
 import { Fragment, useState } from "react";
-import { EmbedLink as Link } from "@/components/embed-link";
+import { ContributionLink as Link } from "./student-contribution-scope";
 import { Button } from "@/components/ui/button";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import type { ReviewDisplayReport } from "../model/review-display";

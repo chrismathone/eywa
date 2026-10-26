@@ -1,4 +1,4 @@
-import { EmbedLink as Link } from "@/components/embed-link";
+import { ContributionLink as Link } from "./student-contribution-scope";
 import { kstMonth, shiftMonth } from "@/lib/date-kst";
 import { getContributionStudent } from "../server/student-query";
 import { sumRaws, scoreRaws } from "../model/calc";
@@ -33,6 +33,15 @@ export async function ContributionStudentPanel({ studentId, month }: { studentId
       {cells.map(([label, value, note], i) => <div key={label} className={`flex min-w-0 items-baseline justify-between gap-3 border-t border-line px-5 py-2.5 @2xl:block @2xl:py-4 @4xl:border-t-0 @4xl:px-6 @4xl:py-5 ${i ? "@2xl:border-l" : "@4xl:border-l"}`}>
         <h3 className="text-sm font-medium">{label}</h3><p className="whitespace-nowrap text-lg font-bold tabular-nums @2xl:mt-1 @2xl:text-xl @4xl:mt-2 @4xl:text-2xl">{value}<span className="ml-1 text-xs font-normal @4xl:text-sm">점</span></p><p className="mt-2 hidden text-xs @2xl:block">{note}</p></div>)}
     </section>
+    <details className="rounded-lg border border-line px-4 py-3 text-xs leading-relaxed">
+      <summary className="cursor-pointer font-medium">학습·참여 점수는 언제 반영되나요?</summary>
+      <div className="mt-2 space-y-1.5">
+        <p>개근과 영상 숙제는 달이 끝난 뒤 집계합니다. 이번 달 실적은 다음 달 집계부터 반영됩니다.</p>
+        <p>영상은 제출 편수가 아니라, 그 달에 배정된 영상 숙제를 모두 제출했는지로 판단해 월 1회 인정합니다. 영상이 있어도 배정 기록을 확인할 수 없으면 완료한 달로 인정하지 않습니다.</p>
+        <p>월말평가와 긍정 신호도 항목별로 한 달에 1회 인정하며, 점수는 현재 배점을 적용합니다.</p>
+        <Link href={`/students/${studentId}?tab=homework-videos`} className="inline-block text-primary underline underline-offset-4">숙제 영상 확인</Link>
+      </div>
+    </details>
     <StudentDetailTabs evidenceNote={`${monthText(selected.month)}의 원수치·현재 배점·계산식과 근거 기록입니다. 달을 바꾸면 추이 탭의 선택도 같이 바뀝니다.`}
       summary={<>
         {!!pending && <p className="rounded-lg bg-primary-softer px-4 py-3 text-sm">{pending}개 항목은 확인하지 못한 자료가 있어 현재 확인된 실적만 반영했습니다. 가장 최근 달의 계산 근거에서 항목별 이유를 확인할 수 있습니다.</p>}

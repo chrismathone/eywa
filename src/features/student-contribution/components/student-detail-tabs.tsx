@@ -3,6 +3,7 @@ import { createContext, useContext, useState, type KeyboardEvent, type ReactNode
 import { useSearchParams } from "next/navigation";
 import { TOOLBAR_SEG_BOX, TOOLBAR_SEG_ITEM, TOOLBAR_SEG_OFF, TOOLBAR_SEG_ON_PRIMARY } from "@/components/toolbar-controls";
 import { NavigationScope, useOntologyNavigation } from "./ontology-navigation";
+import { useStudentContributionScope } from "./student-contribution-scope";
 
 export type DetailView = "summary" | "evidence";
 type Tabs = { view: DetailView; show: (view: DetailView, reveal?: boolean) => void };
@@ -22,6 +23,7 @@ export function StudentDetailTabs(props: Props) {
 }
 
 function DetailTabs({ evidenceNote, summary, evidence }: Props) {
+  const scope = useStudentContributionScope();
   const query = useSearchParams().toString(), { pending } = useOntologyNavigation();
   const [view, setView] = useState(() => readView(query)), [seenQuery, setSeenQuery] = useState(query);
   if (query !== seenQuery) { setSeenQuery(query); setView(readView(query)); }
@@ -49,7 +51,7 @@ function DetailTabs({ evidenceNote, summary, evidence }: Props) {
       <div role="tablist" aria-label="기여도 보기" className={TOOLBAR_SEG_BOX}>{TABS.map(([key, label]) => <button key={key} type="button" role="tab" id={`contribution-tab-${key}`}
         aria-selected={view === key} aria-controls={`contribution-panel-${key}`} aria-disabled={pending && view !== key} tabIndex={view === key ? 0 : -1} onKeyDown={onKeyDown} onClick={() => show(key)}
         className={`${TOOLBAR_SEG_ITEM} scroll-mt-4 ${view === key ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF} ${pending && view !== key ? "cursor-progress opacity-50" : ""}`}>{label}</button>)}</div>
-      <p role={pending ? "status" : undefined} className="text-xs">{pending ? "선택한 달을 불러오는 중입니다. 끝나면 탭을 바꿀 수 있습니다." : view === "summary" ? "차트에서 달을 고르면 계산 근거도 같은 달로 바뀝니다." : evidenceNote}</p>
+      <p role={pending && !scope ? "status" : undefined} className="text-xs">{pending && !scope ? "선택한 달을 불러오는 중입니다. 끝나면 탭을 바꿀 수 있습니다." : view === "summary" ? "차트에서 달을 고르면 계산 근거도 같은 달로 바뀝니다." : evidenceNote}</p>
     </div>
     {TABS.map(([key]) => <div key={key} role="tabpanel" id={`contribution-panel-${key}`} aria-labelledby={`contribution-tab-${key}`} hidden={view !== key} className="space-y-5">
       {key === "summary" ? summary : evidence}</div>)}

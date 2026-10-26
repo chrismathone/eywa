@@ -66,13 +66,13 @@ export function ScoreTrend({ points, studentId, selectedMonth }: { points: Chart
         <p className="mt-3 text-sm"><span className="tabular-nums">{monthText(shown[0]!.month)} ~ {monthText(last.month)}</span>
           <strong className="ml-2 tabular-nums">{signedText(last.total - (before?.total ?? 0))}점</strong>
           <span className="ml-2 text-xs tabular-nums">누적 {numberText(before?.total ?? 0)}점 → {numberText(last.total)}점</span></p>
-        {pending && <p role="status" className="mt-2 text-xs">선택한 달의 근거를 불러오는 중…</p>}
         <svg ref={graph} viewBox={`0 0 ${measured} ${g.height}`} style={{ height: g.height, opacity: width === null ? 0 : 1 }} className="mt-3 w-full overflow-visible" role="group"
           onMouseLeave={() => setPreviewMonth(null)} onMouseMove={(event) => setPreviewMonth(pointerMonth(event.clientX, chosen.month))}
           aria-label="월별 기여와 누적 점수. 방향키로 달을 살펴보고 Enter 키로 선택하세요.">
           <defs><pattern id={`open-month-${studentId}`} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="3" height="6" fill="var(--card)" fillOpacity="0.55" /></pattern></defs>
-          <text x={TREND_BOX.left} y={12} className="text-xs font-medium" fill="currentColor">누적 점수</text>
-          <text x={TREND_BOX.left} y={g.barTop - 30} className="text-xs font-medium" fill="currentColor">그 달 증감</text>
+          <text x={0} y={12} className="text-xs font-semibold" fill="currentColor">누적 기여도 (점)</text>
+          <line x1={0} x2={measured} y1={g.barTop - 54} y2={g.barTop - 54} stroke="var(--line)" />
+          <text x={0} y={g.barTop - 30} className="text-xs font-semibold" fill="currentColor">월별 증감 (점)</text>
           {shown.map((p, i) => (p.month === chosen.month || p.month === selectedMonth) && <rect key={`band-${p.month}`} x={g.x(i) - g.step / 2} width={g.step} y={TREND_BOX.top - 6}
             height={g.axisY - TREND_BOX.top - 4} rx={4} fill={p.month === selectedMonth ? "var(--primary-soft)" : "var(--primary-softer)"} />)}
           {g.lineTicks.map((v) => <g key={`l${v}`}><line x1={TREND_BOX.left} x2={measured - TREND_BOX.right} y1={g.lineY(v)} y2={g.lineY(v)} stroke="var(--line)" strokeDasharray="3 4" />
@@ -107,11 +107,11 @@ export function ScoreTrend({ points, studentId, selectedMonth }: { points: Chart
         </svg>
         <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs" aria-label="차트 범례">
           {([["operations", "운영 기여"], ["participation", "학습·참여"], ["correction", "정정(마감 뒤 바뀐 기록)"]] as const).map(([kind, label]) => <li key={kind} className="flex items-center gap-1.5"><span aria-hidden className="size-3 rounded-sm" style={{ background: SEGMENT_FILL[kind] }} />{label}</li>)}
-          <li className="flex items-center gap-1.5"><span aria-hidden className="size-3 rounded-sm border border-dashed border-primary bg-primary-softer" />집계 중인 달</li>
-          <li className="flex items-center gap-1.5"><span aria-hidden className="h-0.5 w-4 bg-primary" />누적 점수</li>
+          <li className="flex items-center gap-1.5"><svg aria-hidden className="size-3 shrink-0" viewBox="0 0 12 12"><defs><pattern id={`legend-open-${studentId}`} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="3" height="6" fill="var(--card)" fillOpacity="0.55" /></pattern></defs>
+            <circle cx="6" cy="6" r="5.5" fill="var(--primary)" /><circle cx="6" cy="6" r="5.5" fill={`url(#legend-open-${studentId})`} stroke="var(--primary)" strokeDasharray="3 2" /></svg>집계 중인 달</li>
+          <li className="flex items-center gap-1.5"><span aria-hidden className="h-0.5 w-4 bg-primary" />누적 기여도</li>
           {shown.some((p) => p.hasRecord === false) && <li className="flex items-center gap-1.5"><span aria-hidden className="w-4 border-t-2 border-dotted border-text-placeholder" />집계 기록 없는 달</li>}
           {shown.some((p) => p.status === "merged") && <li className="flex items-center gap-1.5"><span aria-hidden className="w-4 border-t-2 border-dashed border-purple" />병합 전 기록</li>}
-          <li>0선 아래는 그 달에 줄어든 점수(환불·정정)</li>
         </ul>
       </div>
       <TrendMonthPanel point={chosen} comparison={compareMonth(points, chosen.month)} preview={chosen.month !== selectedMonth} pending={pending} />

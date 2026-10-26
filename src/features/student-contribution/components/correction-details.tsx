@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { EmbedLink as Link } from "@/components/embed-link";
+import { ContributionLink as Link } from "./student-contribution-scope";
 import type { CorrectionDetail } from "../model/corrections";
 import { ListPager } from "./list-pager";
 import { useOntologyNavigation } from "./ontology-navigation";
