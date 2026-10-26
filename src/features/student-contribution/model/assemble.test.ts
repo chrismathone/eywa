@@ -2,7 +2,24 @@ import { expect, it } from "vitest";
 import { DEFAULT_SETTINGS } from "@/features/owner/defaults";
 import { assembleContribution } from "./assemble";
 import { DEFAULT_CONFIG } from "./config";
+import type { ParentEventSources } from "./parent-events/facts";
 import { sumRaws } from "./calc";
+
+it("설명회는 마감한 과거를 보존하고 정정·취소를 한 번만 반영하며 원본 장애를 차감으로 처리하지 않는다", () => {
+  const input = fixture(), first = assembleContribution(input);
+  const parentEvents: ParentEventSources = { ready: true, checkedAt: input.capturedAt, records: [{ tenantId: input.tenant, studentId: "s",
+    eventId: "event", eventDate: "2025-07-09", title: "학부모 설명회", sourceIds: ["source"], familyKey: "family", basis: "direct", attendanceBasis: "registration_policy" }] };
+  const next = assembleContribution({ ...input, stored: first.rows, historyReady: true, parentEvents });
+  const current = next.rows.find(r => r.month === "2026-10")!;
+  expect(current.correction.parentSeminarEvents).toBe(1);
+  expect(next.rows.find(r => r.month === "2026-09")).toEqual(first.rows.find(r => r.month === "2026-09"));
+  expect(next.rows.find(r => r.month === "2025-07")!.raws.parentSeminarEvents).toBe(0);
+  const repeated = assembleContribution({ ...input, stored: next.rows, historyReady: true, parentEvents });
+  expect(sumRaws(repeated.rows.flatMap(r => [r.raws, r.correction])).parentSeminarEvents).toBe(1);
+  const cancelled = assembleContribution({ ...input, stored: next.rows, historyReady: true, parentEvents: { ...parentEvents, records: [] } });
+  expect(sumRaws(cancelled.rows.flatMap(r => [r.raws, r.correction])).parentSeminarEvents).toBe(0);
+  expect(() => assembleContribution({ ...input, stored: next.rows, historyReady: true })).toThrow("이전에 연결한 설명회");
+});
 import type { CoreSources, ContributionStudent } from "../server/source-types";
 import type { ActivitySources } from "../server/activity-sources";
 import { CONTRIBUTION_PILOT_TENANT } from "./access";

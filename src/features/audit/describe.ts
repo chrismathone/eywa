@@ -812,6 +812,10 @@ export function auditDetail(
       return join(m.trigger === "cron" ? "매일 자동 집계" : "지금 집계", `원생 ${num(m.students) ?? 0}명`, `저장 ${num(m.written) ?? 0}건`, `마감 ${num(m.closed) ?? 0}건`);
     case "student_contribution_settings_save":
       return join("지난 실적까지 현재 배점 적용", `지점 합계 ${num(m.beforeTotal) ?? 0} → ${num(m.afterTotal) ?? 0}`);
+    case "student_parent_events_import":
+      return join("운영 스크립트 실행 · 원장 승인", `행사 ${num(m.events) ?? 0}개`, `학생 ${num(m.students) ?? 0}명`, `학생별 참석 ${num(m.studentEvents) ?? 0}건`, "배점은 별도 활성화");
+    case "student_parent_events_revoke":
+      return join("운영 스크립트 실행 · 원장 승인", "연결 취소 · 원본 보존", str(m.reason), "점수는 다음 집계에서 정정");
     case "student_contribution_summary_generate": {
       const outcome = ({ saved: "저장 완료", failed: "생성 실패", quota: "일일 한도 도달", busy: "중복 요청 중단",
         unavailable: "요약 조건 미충족", input_limit: "입력량 제한", source_changed: "원본 변경으로 저장 중단" } as Record<string, string>)[str(m.outcome) ?? ""] ?? "결과 확인 필요";

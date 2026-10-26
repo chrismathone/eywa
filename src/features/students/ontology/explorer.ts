@@ -31,5 +31,6 @@ export function summarizeOntologyView(tenant: string, input: readonly StudentFac
   }
   return { students: result.students, counts: result.counts, factCount: result.facts.length,
     tuitionWon: result.tuitionWon, unallocatedTuitionFacts: result.unallocatedTuitionFacts,
+    parentEvents: result.parentEvents,
     related: [...links.values()], studentCounts, basis, recordedAt };
 }

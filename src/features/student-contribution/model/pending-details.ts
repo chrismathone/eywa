@@ -8,6 +8,7 @@ const reasons: Partial<Record<Metric, string>> = {
   perfectMonths: "개근 판정에 필요한 출결 자료를 확인하지 못했습니다.",
   videoMonths: "영상 숙제 완료 판정에 필요한 배정·제출 자료를 확인하지 못했습니다.",
   examMonths: "월말평가 응시 자료를 확인하지 못했습니다.",
+  parentSeminarEvents: "이 학원의 설명회 명단에 아직 확인되지 않은 자료가 있습니다. 확인된 신청·형제 참여만 반영했으며, 해당 학생의 참석 누락이 확정됐다는 뜻은 아닙니다.",
 };
 export function pendingDetails(metrics: readonly Metric[], saved: readonly PendingDetail[] = []): PendingDetail[] {
   return [...new Set(metrics)].map(metric => saved.find(d => d.metric === metric) ?? {

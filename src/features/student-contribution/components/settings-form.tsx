@@ -2,7 +2,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { METRICS, METRIC_LABELS } from "../model/config";
+import { METRICS, METRIC_LABELS, OPERATION_METRICS, PARTICIPATION_METRICS } from "../model/config";
 import { scoreRaws } from "../model/calc";
 import type { getContributionSettingsPreview } from "../server/queries";
 import { saveContributionSettings } from "../server/actions";
@@ -24,10 +24,10 @@ export function ContributionSettings({ data }: { data: NonNullable<Awaited<Retur
       const r = await saveContributionSettings(config, data.revision); setMessage(r.error ?? r.message ?? ""); router.refresh();
     }); }} className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(22rem,1fr)]">
       <fieldset disabled={!data.gate.canWrite || !data.ready || busy} className="min-w-0 space-y-5 disabled:opacity-60">
-        <div className="grid grid-cols-2 gap-5 phone:grid-cols-1">{[["운영 기여", METRICS.slice(0, 5)], ["학습·참여", METRICS.slice(5)]] .map(([title, metrics]) => <section key={title as string} className="min-w-0 overflow-hidden rounded-xl border border-line">
+        <div className="grid grid-cols-2 gap-5 phone:grid-cols-1">{[["운영 기여", OPERATION_METRICS], ["학습·참여", PARTICIPATION_METRICS]] .map(([title, metrics]) => <section key={title as string} className="min-w-0 overflow-hidden rounded-xl border border-line">
           <h2 className="border-b border-line bg-primary-softer px-5 py-4 font-semibold">{title as string}</h2>
           <div className="divide-y divide-line">{(metrics as typeof METRICS[number][]).map((metric) => <div key={metric} className="grid grid-cols-[minmax(0,1fr)_5rem_auto] items-center gap-3 px-5 py-4">
-            <div><label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" className="h-4 w-4 accent-primary" checked={config.rates[metric].enabled} onChange={(e) => setConfig({ ...config, rates: { ...config.rates, [metric]: { ...config.rates[metric], enabled: e.target.checked } } })} />{metricLabels[metric]}</label><p className="ml-6 mt-1 text-xs">{rateUnit(metric)}</p></div>
+            <div><label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" className="h-4 w-4 accent-primary" disabled={metric === "parentSeminarEvents" && !data.parentEventsApproved && !config.rates[metric].enabled} checked={config.rates[metric].enabled} onChange={(e) => setConfig({ ...config, rates: { ...config.rates, [metric]: { ...config.rates[metric], enabled: e.target.checked } } })} />{metricLabels[metric]}</label><p className="ml-6 mt-1 text-xs">{metric === "parentSeminarEvents" && !data.parentEventsApproved ? "명단·반영 범위 확인 중" : rateUnit(metric)}</p></div>
             <input aria-label={`${METRIC_LABELS[metric]} 배점`} type="number" min="0" step="any" required disabled={!config.rates[metric].enabled} value={config.rates[metric].points}
               onChange={(e) => { const points = Number(e.target.value); if (Number.isFinite(points) && points >= 0) setConfig({ ...config, rates: { ...config.rates, [metric]: { ...config.rates[metric], points } } }); }} className={`${fieldClass} w-full px-2 text-right tabular-nums disabled:bg-secondary`} /><span className="text-sm">점</span>
           </div>)}</div>

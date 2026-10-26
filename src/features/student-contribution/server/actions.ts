@@ -10,6 +10,7 @@ import { getContributionList } from "./queries";
 import { contributionReady, loadContributionSettings, SETTINGS_TABLE, SIGNALS_TABLE } from "./store";
 import { refreshStudentContribution } from "./refresh";
 import { contributionSnapshotTag } from "./snapshot-cache";
+import { hasApprovedParentEventImport } from "./parent-events";
 
 function invalidate() { revalidatePath("/student-contribution"); revalidatePath("/students", "layout"); revalidatePath("/owner"); }
 const message = (error: unknown) => error instanceof Error ? error.message : "작업을 완료하지 못했습니다";
@@ -19,6 +20,8 @@ export async function saveContributionSettings(value: unknown, revision: number)
     const db = createAdminClient();
     if (!(await contributionReady(db, gate.tenantId))) throw new Error("기여도 저장 준비가 필요합니다");
     const [before, list] = await Promise.all([loadContributionSettings(db, gate.tenantId), getContributionList()]);
+    if (!before.config.rates.parentSeminarEvents.enabled && config.rates.parentSeminarEvents.enabled && !(await hasApprovedParentEventImport(db, gate.tenantId)))
+      throw new Error("설명회 자료와 배점의 반영 범위를 확인한 뒤 사용할 수 있습니다");
     if (before.revision !== revision) throw new Error("설정이 바뀌었습니다. 새로고침 후 다시 저장해 주세요");
     const raws = sumRaws((list?.rows ?? []).flatMap((r) => r.total ? [r.total.raws] : []));
     const prevScore = scoreRaws(raws, before.config).total, nextScore = scoreRaws(raws, config).total;

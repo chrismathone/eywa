@@ -54,6 +54,8 @@ export const AUDIT_ACTIONS = {
   student_contribution_signal_cancel: "원생 긍정 신호 판정 취소",
   student_contribution_signal_rejudge: "원생 긍정 신호 재판정 요청",
   student_contribution_referral_backfill: "지난 원생 소개 연결",
+  student_parent_events_import: "설명회 참석 연결",
+  student_parent_events_revoke: "설명회 참석 연결 취소",
   student_contribution_referral_link: "원생 소개 확인·연결",
   student_contribution_summary_generate: "학생 기록 요약 생성",
   // 마감한 달에 바뀐 규칙을 얹음(원장 지시 때만 · 운영 스크립트) — 2026-10-14 강사 탓이 아닌 사유(배정·유지 감점 빼기).

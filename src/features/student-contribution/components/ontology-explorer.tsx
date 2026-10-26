@@ -17,7 +17,7 @@ import { factLabels, monthText, numberText } from "./presentation";
 import { OntologyFilters } from "./ontology-filters";
 import { OntologyNavigation } from "./ontology-navigation";
 type Data = NonNullable<Awaited<ReturnType<typeof getContributionOntology>>>;
-const EMPTY = { students: [] as string[], counts: {}, factCount: 0, tuitionWon: 0, unallocatedTuitionFacts: 0, related: [], studentCounts: {}, basis: { recorded: 0, rule: 0, ai: 0 }, recordedAt: "" };
+const EMPTY = { students: [] as string[], counts: {}, factCount: 0, tuitionWon: 0, unallocatedTuitionFacts: 0, related: [], studentCounts: {}, basis: { recorded: 0, rule: 0, ai: 0 }, recordedAt: "", parentEvents: { events: 0, familyEvents: 0, studentEvents: 0 } };
 export function OntologyExplorer({ data, initialScope }: { data: Data; initialScope?: { kind: ExplorerKind; id: string } }) {
   const initialKind = initialScope?.kind ?? "academy";
   const [kind, setKind] = useState<ExplorerKind>(initialKind), [selectedId, setId] = useState(initialScope?.id ?? "");
@@ -37,6 +37,7 @@ export function OntologyExplorer({ data, initialScope }: { data: Data; initialSc
   return <OntologyNavigation><div className="w-full min-w-0 space-y-5 pb-6">
     <ContributionHeader title="학생 기록 연결" description="학생·반·강사·과목별로 같은 달의 기록과 근거를 살펴봅니다." active="ontology" canConfigure={data.canConfigure} actions={<ContributionMonthPicker month={data.month} scope={{ kind, id }} />} />
     <OntologyViewMode current={false} month={data.month} filters={data.filters} scope={{ kind, id }} />
+    {data.parentEventNotice && <p role="status" className="rounded-lg bg-secondary px-4 py-3 text-sm">{data.parentEventNotice}</p>}
     <section className="rounded-xl border border-line">
       <div className="border-b border-line p-4"><OntologyFilters key={JSON.stringify(data.filters)} filters={data.filters} options={data.filterOptions} scope={{ kind, id }} /></div>
       <div className="flex flex-wrap items-center gap-4 border-b border-line p-4">
@@ -72,6 +73,7 @@ export function OntologyExplorer({ data, initialScope }: { data: Data; initialSc
           <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-1 phone:grid-cols-1">{counts.map(([key, count]) => <button key={key} type="button" aria-pressed={recordKind === key} onClick={() => { setRecordKind(recordKind === key ? "all" : key); setPage(1); }}
             className={`rounded-lg p-3 text-left focus-visible:outline-primary ${recordKind === key ? "bg-primary-softer ring-1 ring-primary" : "hover:bg-secondary"}`}><span className="flex items-center justify-between gap-3 text-sm"><span>{factLabels[key]}</span><strong className="tabular-nums">{numberText(count)}건</strong></span><span className="mt-2 block h-1.5 rounded-full bg-secondary"><span className="block h-full rounded-full bg-primary" style={{ width: `${count / largest * 100}%` }} /></span></button>)}</div>
           {!counts.length && <p className="py-10 text-center text-sm">선택한 대상과 월에 연결된 기록이 없습니다. 다른 월이나 대상을 선택해 주세요.</p>}
+          {result.parentEvents.studentEvents > 0 && <p className="mt-3 rounded-lg bg-primary-softer px-3 py-2 text-xs leading-relaxed">설명회 {numberText(result.parentEvents.events)}회 · 행사별 참석 가족 {numberText(result.parentEvents.familyEvents)}건 · 학생별 인정 {numberText(result.parentEvents.studentEvents)}건. 형제는 각각 실적으로 인정합니다.</p>}
           <p className="mt-4 border-t border-line pt-3 text-xs">기록 원본 {numberText(result.basis.recorded)}건 · 규칙에 따른 자동 판정 {numberText(result.basis.rule)}건 · AI 판정 {numberText(result.basis.ai)}건</p>
         </section>
         <section className="overflow-hidden rounded-xl border border-line"><div className="flex flex-wrap items-center justify-between gap-3 p-4"><h2 className="font-semibold">{kind === "student" ? "학생의 기록 근거" : "연결된 학생의 근거"}</h2></div>

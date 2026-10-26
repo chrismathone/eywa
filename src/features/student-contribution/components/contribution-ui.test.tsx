@@ -21,7 +21,7 @@ function fixture(): Data {
     rows: [row("오래다닌학생", "enrolled", 1000000, 100000), row("최근기여학생", "enrolled", 500000, 500000), row("퇴원학생", "withdrawn", 2000000, 0)] };
 }
 function settingsFixture(data = fixture()): Parameters<typeof ContributionSettings>[0]["data"] {
-  return { gate: data.gate, ready: data.ready, config: data.config, revision: data.revision, historyReady: data.historyReady,
+  return { parentEventsApproved: false, gate: data.gate, ready: data.ready, config: data.config, revision: data.revision, historyReady: data.historyReady,
     studentCount: data.rows.length, raws: sumRaws(data.rows.flatMap((row) => row.total ? [row.total.raws] : [])) };
 }
 beforeEach(() => { vi.resetAllMocks(); window.history.replaceState(null, "", "/student-contribution"); m.save.mockResolvedValue({ ok: true, message: "저장 완료" }); m.link.mockResolvedValue({ ok: true, message: "연결 완료" }); });

@@ -9,8 +9,14 @@ export function aggregateStudentOntology(tenant: string, input: readonly Student
     || f.related.some((r) => r.kind === scope.kind && r.id === scope.id));
   const counts: Partial<Record<StudentFact["kind"], number>> = {};
   let tuitionWon = 0, unallocatedTuitionFacts = 0;
+  const events = new Set<string>(), families = new Set<string>();
+  let studentEvents = 0;
   for (const f of facts) {
     counts[f.kind] = (counts[f.kind] ?? 0) + 1;
+    if (f.kind === "parent_event" && f.state === "active") {
+      const v = f.value as { eventId?: string; familyKeys?: string[] };
+      if (v.eventId) { events.add(v.eventId); studentEvents++; for (const key of v.familyKeys ?? []) families.add(JSON.stringify([v.eventId, key])); }
+    }
     if (f.kind !== "tuition" || f.state !== "active") continue;
     const v = f.value as { tuitionWon?: number };
     // 여러 과목의 합계 금액을 각 과목·반·강사에게 복제하지 않는다.
@@ -19,5 +25,6 @@ export function aggregateStudentOntology(tenant: string, input: readonly Student
     if (explicit && typeof v.tuitionWon === "number") tuitionWon += v.tuitionWon;
     else unallocatedTuitionFacts++;
   }
-  return { facts, students: [...new Set(facts.map((f) => f.studentId))], counts, tuitionWon, unallocatedTuitionFacts };
+  return { facts, students: [...new Set(facts.map((f) => f.studentId))], counts, tuitionWon, unallocatedTuitionFacts,
+    parentEvents: { events: events.size, familyEvents: families.size, studentEvents } };
 }

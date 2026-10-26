@@ -2,6 +2,8 @@
 
 2026-10-26 · Claude Opus 5.5·xhigh 검토 반영. 구현 전 계획이며 운영 DB 쓰기·백필·새 배점 적용은 실행하지 않았다.
 
+후속 상태: 최초 가져오기 범위의 비활성 구현과 드라이런을 준비했다. 최신 후보·제한 사항은 [구현 결정](../decisions/student-parent-events.md), 실행 순서는 [운영 안내](../runbooks/student-parent-events.md)를 따른다. 아래의 과거 조사 수치는 실행 승인 대상이 아니다.
+
 ## 확인된 현재 상태
 
 - 운영 DB 읽기 전용 확인: `student_parent_events`, `student_parent_event_imports` 테이블이 없고 현재 배점에도 설명회 항목이 없다. 지난 조사는 점수 반영까지 완료되지 않았다.

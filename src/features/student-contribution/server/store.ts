@@ -1,7 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
-import { assertRaws } from "../model/calc";
+import { normalizeStoredRaws } from "../model/normalize-raws";
 import { resolveConfig, type Metric, type Raws } from "../model/config";
 import { emptyPayload, type ContributionPayload, type ContributionTotal, type StoredContributionMonth } from "../model/stored";
 import type { BillingSeed } from "../model/billing";
@@ -38,10 +38,10 @@ export async function loadContributionMonths(db: SupabaseClient, tenant: string,
     return query.range(a, b).returns<DbMonth[]>();
   });
   return rows.map((r) => {
-    assertRaws(r.raws); assertRaws(r.correction);
+    const raws = normalizeStoredRaws(r.raws), correction = normalizeStoredRaws(r.correction);
     const payload = { ...emptyPayload(), ...r.payload };
     if (r.evidence_ids) payload.evidenceIds = r.evidence_ids;
-    return { studentId: r.student_id, month: r.month, raws: r.raws, correction: r.correction, payload,
+    return { studentId: r.student_id, month: r.month, raws, correction, payload,
       evidenceIds: payload.evidenceIds, historical: r.historical ?? [], unavailable: r.unavailable ?? [],
       closedAt: r.closed_at, reconstructed: r.reconstructed, computedAt: r.computed_at };
   });
@@ -50,8 +50,8 @@ export async function loadContributionTotals(db: SupabaseClient, tenant: string,
   const rows = await fetchInChunks<{ student_id: string; raws: Raws; recent: Raws; computed_at: string; unavailable: Metric[] }>(ids,
     (chunk) => db.rpc("student_contribution_totals", { p_tenant: tenant, p_students: chunk, p_since: since }, { get: true }));
   return rows.map((r) => {
-    assertRaws(r.raws); assertRaws(r.recent);
-    return { studentId: r.student_id, raws: r.raws, recent: r.recent, computedAt: r.computed_at, unavailable: r.unavailable };
+    const raws = normalizeStoredRaws(r.raws), recent = normalizeStoredRaws(r.recent);
+    return { studentId: r.student_id, raws, recent, computedAt: r.computed_at, unavailable: r.unavailable };
   });
 }
 export async function saveContributionMonths(db: SupabaseClient, tenant: string, token: string, revision: number, rows: StoredContributionMonth[], deadline = Infinity) {

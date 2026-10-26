@@ -17,6 +17,7 @@ export const metricLabels: Record<Metric, string> = { ...METRIC_LABELS,
 export const metricUnits: Record<Metric, string> = {
   referralConsult: "건", referralStarted: "건", tuitionWon: "원", subjectMonths: "과목·개월", tenureYears: "회",
   perfectMonths: "개월", videoMonths: "개월", examMonths: "개월", parentPositiveMonths: "개월", teacherPositiveMonths: "개월",
+  parentSeminarEvents: "회",
 };
 export const rawText = (metric: Metric, value: number) => `${numberText(value)}${metricUnits[metric]}`;
 export const signedRawText = (metric: Metric, value: number) => `${signedText(value)}${metricUnits[metric]}`;
@@ -27,12 +28,14 @@ export const rateUnit = (metric: Metric) => metric === "tuitionWon" ? "10만 원
   : metric === "subjectMonths" ? "1과목·1개월당" : metric.endsWith("Months") ? "한 달당" : "한 건당";
 export const factLabels: Record<StudentFact["kind"], string> = {
   consulted: "상담", referred: "소개", enrolled: "수강", tuition: "수업료", attendance: "출결", homework: "영상 숙제", exam: "시험", observation: "긍정 신호 판정",
+  parent_event: "학부모 설명회 참석",
 };
 export const sourceLabels: Record<StudentSource, string> = {
   students: "학생 정보", enrollments: "수강 이력", enrollment_consultations: "등록 상담·소개", invoices: "에이와 수업료",
   makeedu_history_bills: "메이크에듀 수업료", attendance_records: "출결", student_homework_videos: "영상 숙제", student_grades: "시험 응시",
   classnote_parent_messages: "학부모 글", classnote_parent_replies: "선생님 답글", student_positive_signals: "긍정 신호 판정",
   lesson_reports: "수업 기록", class_schedules: "수업 일정", audit_logs: "변경 이력",
+  student_parent_event_registrations: "설명회 신청·참석 명단",
 };
 export const fieldClass = "h-(--control-h) min-w-0 rounded-lg border border-input bg-card px-3 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/15";
 

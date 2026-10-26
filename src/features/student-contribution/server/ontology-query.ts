@@ -26,14 +26,14 @@ export async function getContributionOntology(month: string, raw: StudentFilterP
   const studentIds = new Set(students.map((s) => s.id));
   const projection = snapshot.ready ? await cachedOntologyViews(tenant, month, [...studentIds],
     identity.ids.map((id): [string, string] => [id, identity.canonical(id)]), readable === null ? null : [...readable], snapshot.refreshedAt,
-    identity.issues.map((i) => i.studentId)) : { views: {}, unresolved: 0 };
+    identity.issues.map((i) => i.studentId)) : { views: {}, unresolved: 0, parentEventNotice: null };
   // Hidden makeup pools are source bookkeeping, not selectable regular classes.
   const visibleClasses = new Set(directory.classes.map((c) => c.id));
   const projected = Object.fromEntries(Object.entries(projection.views).filter(([key]) => (!key.startsWith("class:") || visibleClasses.has(key.slice(6)))
     && (!key.startsWith("student:") || studentIds.has(key.slice(8))))
     .map(([key, view]) => [key, { ...view, related: view.related.filter((r) => (r.kind !== "class" || visibleClasses.has(r.id)) && (r.kind !== "student" || studentIds.has(r.id))) }]));
   return { tenant, month, filters, filterOptions: { grades: directory.grades, subjects: directory.subjects },
-    historyReady: snapshot.historyReady, canConfigure: gate.canConfigure, views: projected, identityIssues: identity.issues.length + projection.unresolved,
+    historyReady: snapshot.historyReady, canConfigure: gate.canConfigure, views: projected, identityIssues: identity.issues.length + projection.unresolved, parentEventNotice: projection.parentEventNotice,
     labels: { student: students.map((s) => ({ id: s.id, label: s.name, detail: schoolGradeLabel(s.school, s.grade) })),
       class: directory.classes.filter((c) => projected[`class:${c.id}`]?.factCount > 0).map((c) => ({ id: c.id, label: c.class_name })),
       // A monthly teacher is evidenced by that month's records, including former staff who taught then.
