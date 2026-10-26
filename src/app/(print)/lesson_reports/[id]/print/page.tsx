@@ -5,6 +5,7 @@ import { canAccessTenant } from "@/lib/auth/perm-matrix";
 import { canViewStudentDetail } from "@/features/students/server/read-scope";
 import { createClient } from "@/lib/supabase/server";
 import { resolveBrandingSrc, resolveTenantReadUrls } from "@/lib/storage/media-storage";
+import { reportLogoPath } from "@/features/owner/report-logo";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { subjectReportLabel } from "@/features/onescreen/report-title";
@@ -103,8 +104,9 @@ export default async function LessonReportPrintPage({
   const academyName = settings.profile.name || NEUTRAL_ACADEMY_NAME;
   const rpt = settings.report; // 보고서 표시 설정(학원 운영 > 보고서 탭) — /r과 동일 소스
   // 로고 해석은 GCS signed URL 등 외부 의존 — 실패해도 문서는 로고 없이 렌더.
-  const logoSrc = settings.profile.logoUrl
-    ? await resolveBrandingSrc(settings.profile.logoUrl, user.tenantId).catch(() => null)
+  const logoPath = reportLogoPath(settings);
+  const logoSrc = logoPath
+    ? await resolveBrandingSrc(logoPath, user.tenantId).catch(() => null)
     : null;
 
   // 학생 사진 첨부(P2b) — path별 signed URL(실패 생략). 표시 토글 off면 해석도 건너뜀.

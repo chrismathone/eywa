@@ -7,6 +7,7 @@ import { CLASSNOTE_SENDABLE_SUBJECTS } from "@/features/onescreen/classnote-guar
 import { SectionForm, SettingsCard } from "./section-form";
 import { StringListEditor } from "./list-editors";
 import { TextField, ToggleField } from "./fields";
+import { BrandingField } from "./profile-section";
 import { ClassnoteRouteField } from "./classnote-route-field";
 import { ClassnoteReplyModeField } from "./classnote-reply-mode-field";
 import { EyIcon } from "@/components/icons/aywa-icons";
@@ -289,6 +290,18 @@ export function ReportSection({
               >
                 <div className="space-y-1">
                   <ToggleField label="로고 표시" value={r.showLogo} onChange={(v) => set({ showLogo: v })} />
+                  {r.showLogo ? (
+                    <div className="py-2">
+                      {/* 보고서 전용 로고(원장 2026-10-26) — 비우면 학원 기본 정보의 로고. 소비처 = reportLogoPath. */}
+                      <BrandingField
+                        label="보고서 로고"
+                        hint="비우면 학원 로고"
+                        slot="reportLogo"
+                        value={r.logoUrl ?? ""}
+                        onChange={(v) => set({ logoUrl: v })}
+                      />
+                    </div>
+                  ) : null}
                   <ToggleField
                     label="학원명(텍스트) 표시"
                     hint="로고에 이름이 있으면 끄기"
