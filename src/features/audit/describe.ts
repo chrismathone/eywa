@@ -1976,6 +1976,15 @@ export function auditDetail(
     }
     case "inventory_vendor_delete":
       return join(str(m.category), "삭제");
+    case "inventory_vendor_excel_import": {
+      const mode = str(m.mode);
+      return join(
+        mode === "overwrite" ? "덮어쓰기" : mode === "append" ? "추가" : null,
+        num(m.inserted) ? `추가 ${num(m.inserted)}` : null,
+        num(m.updated) ? `갱신 ${num(m.updated)}` : null,
+        num(m.skipped) ? `건너뜀 ${num(m.skipped)}` : null,
+      );
+    }
     // 운행 단위(0243a) — 날짜만 있으면 그날 어느 운행인지가 목록에서 바로 읽힌다.
     case "shuttle_trip_start":
     case "shuttle_trip_end":

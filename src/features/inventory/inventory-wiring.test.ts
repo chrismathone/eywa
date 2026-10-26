@@ -208,8 +208,14 @@ describe("⑤ 쓰기 서버 액션은 canWriteTenant(\"inventory\")를 지난다
     expect(src).not.toMatch(/\bcanAccess(Tenant)?\(/);
     const exported = src.match(/export async function \w+\(/g) ?? [];
     // 업체리스트는 재고관리 쓰기 + 지정한 사람(원장 2026-10-23 "이승엽만") — 두 문을 함께 지나는 requireVendorWrite로 센다.
-    const vendor = f === "vendor-actions.ts";
-    if (vendor) expect(src).toMatch(/async function requireVendorWrite\(\)[\s\S]*?await requireInventoryWrite\(\)[\s\S]*?await canViewVendorsNow\(\)/);
+    // 게이트 본체는 vendor-gate.ts 한 곳(등록 창·엑셀 가져오기가 같은 함수) — 액션 파일은 그걸 import한다.
+    const vendor = f.startsWith("vendor-");
+    if (vendor) {
+      expect(src).toMatch(/import \{[^}]*\brequireVendorWrite\b[^}]*\} from "\.\/vendor-gate"/);
+      expect(read("src", "features", "inventory", "server", "vendor-gate.ts")).toMatch(
+        /async function requireVendorWrite\(\)[\s\S]*?await requireInventoryWrite\(\)[\s\S]*?await canViewVendorsNow\(\)/,
+      );
+    }
     const gated = src.match(vendor ? /await requireVendorWrite\(\)/g : /await requireInventoryWrite\(\)/g) ?? [];
     expect(exported.length).toBeGreaterThan(0);
     expect(gated.length).toBe(exported.length);
@@ -231,13 +237,13 @@ describe("⑦ 툴바 캐논 · 감사로그 등록", () => {
     const canon = read("src", "components", "toolbar-canon.test.ts");
     expect(canon).toContain("src/app/(shell)/inventory/_components/assets-face.tsx");
   });
-  it("감사로그 액션 19종이 레지스트리·상세 한글화에 있다", () => {
+  it("감사로그 액션 20종이 레지스트리·상세 한글화에 있다", () => {
     const log = read("src", "features", "audit", "server", "log.ts");
     const describeSrc = read("src", "features", "audit", "describe.ts");
     for (const k of ["inventory_asset_create", "inventory_asset_update", "inventory_asset_status", "inventory_loan_out", "inventory_loan_return", "inventory_audit", "inventory_supply_update", "inventory_excel_import",
     "inventory_asset_holder", "inventory_asset_delete", "inventory_loan_update", "inventory_loan_delete",
     "inventory_audit_update", "inventory_audit_delete", "inventory_supply_delete", "inventory_supply_create",
-    "inventory_vendor_create", "inventory_vendor_update", "inventory_vendor_delete"]) {
+    "inventory_vendor_create", "inventory_vendor_update", "inventory_vendor_delete", "inventory_vendor_excel_import"]) {
       expect(log).toMatch(new RegExp(`^\\s{2}${k}:`, "m"));
       expect(describeSrc).toContain(`case "${k}"`);
     }

@@ -26,6 +26,7 @@ import {
   type SupplySheetRow,
 } from "../excel-sheet";
 import { assetStatusLabel } from "../status";
+import { cellText } from "./excel-cell";
 import { friendlyInventoryError, requireInventoryWrite, type InventoryWriteCtx } from "./access";
 
 /**
@@ -77,22 +78,6 @@ function readConfirmedLabels(raw: FormDataEntryValue | null): string[] {
 
 const MAX_BYTES = 5 * 1024 * 1024;
 const REQUIRED_ASSET_HEADERS: AssetSheetKey[] = ["assetCode", "category", "status"];
-
-/** ExcelJS 셀 값 → 문자열(richText·수식 결과·하이퍼링크·날짜·숫자 안전화). 날짜는 UTC 성분으로 YYYY-MM-DD(엑셀 날짜엔 시간대가 없다). */
-function cellText(v: unknown): string {
-  if (v == null) return "";
-  if (v instanceof Date) {
-    return `${v.getUTCFullYear()}-${String(v.getUTCMonth() + 1).padStart(2, "0")}-${String(v.getUTCDate()).padStart(2, "0")}`;
-  }
-  if (typeof v === "object") {
-    const o = v as Record<string, unknown>;
-    if (typeof o.text === "string") return o.text;
-    if (Array.isArray(o.richText)) return (o.richText as { text?: string }[]).map((t) => t.text ?? "").join("");
-    if (o.result != null) return cellText(o.result);
-    return String(v);
-  }
-  return String(v);
-}
 
 function readSheet<K extends string>(ws: ExcelJS.Worksheet, columns: ReadonlyArray<{ key: K; header: string }>) {
   const headers: string[] = [];

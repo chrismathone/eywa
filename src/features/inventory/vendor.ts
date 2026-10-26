@@ -91,3 +91,69 @@ export function telHref(phone: string | null | undefined): string | null {
   const d = phone.replace(/[^\d+]/g, "");
   return d.replace(/\D/g, "").length >= 7 ? `tel:${d}` : null;
 }
+
+/** 업체 한 곳의 저장 값(화면 키 이름). DB 컬럼은 서버 액션이 옮긴다. */
+export type VendorValues = {
+  name: string;
+  category: string | null;
+  phone: string | null;
+  contactName: string | null;
+  contactPhone: string | null;
+  email: string | null;
+  address: string | null;
+  bizNo: string | null;
+  note: string | null;
+};
+
+/**
+ * 칸 목록 · 라벨 · 길이 상한 — 등록 창과 엑셀 서식이 **같은 표**를 읽는다(상한은 0448a 제약과 같다).
+ * 순서 = 엑셀 열 순서 = 화면 표 열 순서(이메일은 화면 표에 없다).
+ */
+export const VENDOR_FIELDS: ReadonlyArray<{ key: keyof VendorValues; label: string; max: number }> = [
+  { key: "name", label: "업체명", max: 80 },
+  { key: "category", label: "분류", max: 40 },
+  { key: "phone", label: "대표전화", max: 40 },
+  { key: "contactName", label: "담당자", max: 40 },
+  { key: "contactPhone", label: "담당자 연락처", max: 40 },
+  { key: "address", label: "주소", max: 200 },
+  { key: "bizNo", label: "사업자등록번호", max: 20 },
+  { key: "email", label: "이메일", max: 120 },
+  { key: "note", label: "비고", max: 500 },
+];
+
+/**
+ * 입력 다듬기 — 양끝 공백 제거 · 빈 칸 null · 번호 하이픈(`formatPhone`/`formatBizNo`) · 업체명 필수 · 길이 상한.
+ * 상한은 **다듬은 뒤**에도 본다(하이픈이 붙어 늘어날 수 있다).
+ */
+export function tidyVendor(raw: Readonly<Record<keyof VendorValues, unknown>>): VendorValues | { error: string } {
+  const out = {} as Record<keyof VendorValues, string | null>;
+  for (const f of VENDOR_FIELDS) {
+    const s = typeof raw[f.key] === "string" ? (raw[f.key] as string).trim() : "";
+    if (s.length > f.max) return { error: `${f.label}은(는) ${f.max}자까지입니다` };
+    out[f.key] = s || null;
+  }
+  if (!out.name) return { error: "업체명을 입력해 주세요" };
+  if (out.phone) out.phone = formatPhone(out.phone);
+  if (out.contactPhone) out.contactPhone = formatPhone(out.contactPhone);
+  if (out.bizNo) out.bizNo = formatBizNo(out.bizNo);
+  for (const f of VENDOR_FIELDS) {
+    const v = out[f.key];
+    if (v && v.length > f.max) return { error: `${f.label}은(는) ${f.max}자까지입니다` };
+  }
+  return out as VendorValues;
+}
+
+/** 화면 키 → `inventory_vendors` 컬럼 이름. */
+export const VENDOR_COLUMN = {
+  name: "name", category: "category", phone: "phone", contactName: "contact_name", contactPhone: "contact_phone",
+  email: "email", address: "address", bizNo: "biz_no", note: "note",
+} as const satisfies Record<keyof VendorValues, string>;
+
+/** 저장 값 → `inventory_vendors` 컬럼(등록 창·엑셀이 같은 옮김을 쓴다). `only`를 주면 그 칸만 싣는다. */
+export function vendorColumns(v: VendorValues, only?: ReadonlySet<keyof VendorValues>) {
+  const out = {} as { -readonly [K in keyof VendorValues as (typeof VENDOR_COLUMN)[K]]: VendorValues[K] };
+  for (const k of Object.keys(VENDOR_COLUMN) as (keyof VendorValues)[]) {
+    if (!only || only.has(k)) (out as Record<string, string | null>)[VENDOR_COLUMN[k]] = v[k];
+  }
+  return out;
+}

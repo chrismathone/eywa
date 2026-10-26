@@ -388,6 +388,7 @@ export const AUDIT_ACTIONS = {
   inventory_vendor_create: "업체 등록",
   inventory_vendor_update: "업체 수정",
   inventory_vendor_delete: "업체 삭제",
+  inventory_vendor_excel_import: "업체리스트 엑셀 반영",
   inventory_excel_import: "재고관리 엑셀 반영",
   // 공용 엑셀 가져오기(원장 2026-09-29) — 원생·직원·반·상담·출결·수납 등 탭마다의 '엑셀로 넣기'가 이 한 동작으로 남는다.
   excel_import: "엑셀 가져오기",

@@ -3,14 +3,19 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { EyIcon } from "@/components/icons/aywa-icons";
+import { ExcelMenu } from "@/components/excel-import/excel-menu";
 import { HrefSelect } from "@/components/href-select";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ToolbarButton } from "@/components/toolbar";
+import { deleteVendor } from "@/features/inventory/server/vendor-actions";
 import { matchesVendorCategory, matchesVendorQuery, NO_CATEGORY, telHref, vendorCategoryChips } from "@/features/inventory/vendor";
 import type { InventoryVendor } from "@/features/inventory/types";
 import { DashCell } from "./cell-bits";
+import { useSubmit } from "./form-bits";
 import { ListToolbar } from "./list-toolbar";
 import { SortableTable, type Column } from "./sortable-table";
 import { VendorDialog } from "./vendor-dialog";
+import { VENDOR_EXCEL_URL, VendorExcelDialog } from "./vendor-excel-dialog";
 import { useSort } from "./use-sort";
 
 const ALL = "__all__";
@@ -42,6 +47,41 @@ function PhoneCell({ v }: { v: string | null }) {
   );
 }
 
+/**
+ * 행 끝 [수정] [삭제] — 원장 2026-10-26 *"업체를 등록하면 수정도 삭제도 안됌"*: 수정은 행 더블클릭뿐이라 눈에 안 보였다.
+ * 더블클릭은 그대로 두고, 보이는 버튼을 함께 단다. 삭제는 한 번 더 묻는다(되돌릴 수 없다).
+ */
+function RowActions({ vendor, onEdit }: { vendor: InventoryVendor; onEdit: () => void }) {
+  const { busy, submit } = useSubmit();
+  const [asking, setAsking] = useState(false);
+  const run = () => {
+    const fd = new FormData();
+    fd.set("id", vendor.id);
+    // 실패 사유는 useSubmit이 갖고 있지만 칸이 좁아 토스트로 알린다.
+    void submit(fd, async (f) => {
+      const res = await deleteVendor(f);
+      if (res?.error) toast.error(res.error);
+      return res;
+    }, "업체를 지웠습니다").then(() => setAsking(false));
+  };
+  return (
+    // 버튼 위 더블클릭이 행 더블클릭(수정 창)으로 새지 않게 — 삭제를 두 번 누르면 확인창 위에 수정 창이 겹친다.
+    <span className="inline-flex items-center gap-1" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+      <button type="button" onClick={onEdit} className="text-primary rounded px-1.5 py-0.5 text-xs font-semibold hover:underline">수정</button>
+      <button type="button" onClick={() => setAsking(true)} disabled={busy} className="text-danger rounded px-1.5 py-0.5 text-xs font-semibold hover:underline disabled:opacity-40">삭제</button>
+      <ConfirmDialog
+        open={asking}
+        title={`업체 삭제 — ${vendor.name}`}
+        message="이 업체를 목록에서 지웁니다. 되돌릴 수 없습니다."
+        confirmLabel="삭제"
+        danger
+        onConfirm={run}
+        onCancel={() => setAsking(false)}
+      />
+    </span>
+  );
+}
+
 const TextCell = ({ v }: { v: string | null }) => (v ? <span title={v}>{v}</span> : <DashCell v={null} />);
 
 /**
@@ -53,6 +93,7 @@ export function VendorsFace({ vendors, canWrite }: { vendors: InventoryVendor[];
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<string>(ALL);
   const [editing, setEditing] = useState<InventoryVendor | "new" | null>(null);
+  const [excelOpen, setExcelOpen] = useState(false);
   const { sort, toggle } = useSort();
   const chips = useMemo(() => vendorCategoryChips(vendors), [vendors]);
   // 고른 분류가 사라졌으면(마지막 업체를 지움) 전체로 — 빈 표가 "업체가 없다"로 읽히지 않게.
@@ -92,7 +133,13 @@ export function VendorsFace({ vendors, canWrite }: { vendors: InventoryVendor[];
           ) : null
         }
         summary={`${rows.length}곳`}
-        actions={canWrite ? <ToolbarButton variant="primary" onClick={() => setEditing("new")}>+ 업체 등록</ToolbarButton> : null}
+        actions={
+          <>
+            {/* 엑셀 내보내기/가져오기(원장 2026-10-26 *"엑셀 시트로 넣고 뺄수있게"*) — 자산 면과 같은 부품·같은 자리. */}
+            <ExcelMenu exportHref={VENDOR_EXCEL_URL} onImport={canWrite ? () => setExcelOpen(true) : null} />
+            {canWrite ? <ToolbarButton variant="primary" onClick={() => setEditing("new")}>+ 업체 등록</ToolbarButton> : null}
+          </>
+        }
       />
       <div className="bg-card shadow-card rounded-2xl p-2">
         <SortableTable
@@ -103,11 +150,13 @@ export function VendorsFace({ vendors, canWrite }: { vendors: InventoryVendor[];
           onSort={toggle}
           emptyText={vendors.length === 0 ? (canWrite ? "등록된 업체가 없습니다 — '+ 업체 등록'으로 추가하세요" : "등록된 업체가 없습니다") : "조건에 맞는 업체가 없습니다"}
           onRowDoubleClick={canWrite ? (v) => setEditing(v) : undefined}
+          actions={canWrite ? (v) => <RowActions vendor={v} onEdit={() => setEditing(v)} /> : undefined}
         />
       </div>
       {editing ? (
         <VendorDialog vendor={editing === "new" ? undefined : editing} categories={categories} onClose={() => setEditing(null)} />
       ) : null}
+      {excelOpen ? <VendorExcelDialog onClose={() => setExcelOpen(false)} /> : null}
     </section>
   );
 }
