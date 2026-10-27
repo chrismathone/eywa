@@ -4412,6 +4412,15 @@ export const SHEET_DICT = {
     en: " · {n} saved but not sent — redo auto-write, add the note, or add the reason",
   },
   // 일괄 발송 확인창 — 새 보고서 조건에 걸려 빠지는 행(누구인지 명시).
+  // 보강 진행 여부 확인 전 줄(원장 2026-10-27 보강 확인 게이트) — 행별 발송 버튼과 같은 판정으로 일괄 발송에서도 뺀다.
+  "os.c.lineMakeupCheck": {
+    ko: "\n보강을 했는지 아직 확인하지 않은 {n}건은 발송에서 제외됩니다(이름 옆 보강 표식에서 확인) — {names}{more}",
+    en: "\n{n} rows with a make-up class not yet confirmed are left out (confirm it from the mark next to the name) — {names}{more}",
+  },
+  "os.c.bulkMakeupCheck": {
+    ko: " · 보강 진행 여부 확인 필요 {n}건(저장만 됨)",
+    en: " · {n} saved but not sent — confirm the make-up class first",
+  },
   "os.c.linePilot": {
     ko: "\n자동작성 다시·사랑의 한마디·시험 없음/숙제 미제출 사유가 필요한 {n}건은 발송에서 제외됩니다 — {names}{more}",
     en: "\n{n} rows need auto-write again, the closing note, or a reason and are left out — {names}{more}",
