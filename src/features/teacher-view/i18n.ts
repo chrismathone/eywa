@@ -3340,6 +3340,9 @@ export const SHEET_DICT = {
   "os.card.testSkip.title": { ko: "일일 테스트", en: "Daily test taken?" },
   "os.card.testSkip.yes": { ko: "시험 있음", en: "Test taken" },
   "os.card.testSkip.no": { ko: "시험 없음", en: "No test" },
+  // 표 일일 칸의 사유 드롭다운 버튼(88px 칸 — 짧게, 2026-10-27).
+  "os.row.testSkipPick": { ko: "사유", en: "Reason" },
+  "os.row.testSkipChange": { ko: "변경", en: "Change" },
   "os.card.testSkip.reasonLabel": { ko: "안 친 사유", en: "Why it was not taken" },
   "os.card.testSkip.sick": { ko: "몸이 아픔", en: "Unwell" },
   "os.card.testSkip.slow": { ko: "이해도가 느림", en: "Still learning the concept" },
