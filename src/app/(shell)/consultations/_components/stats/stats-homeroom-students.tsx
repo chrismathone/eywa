@@ -26,7 +26,7 @@ export function HomeroomStudentGrid({ t, months, unmetOnly }: { t: HomeroomTeach
       </p>
       {t.prev.withdrawn.length > 0 ? (
         <p className="text-muted-foreground text-xs break-keep">
-          지난달 퇴원 {t.prev.withdrawn.length}명: {t.prev.withdrawn.map((s) => (s.keepsOther ? `${s.name}(다른 과목은 다님)` : s.name)).join(" · ")}
+          지난달 퇴원 {t.prev.withdrawn.length}명: {t.prev.withdrawn.map((s) => s.name).join(" · ")}
         </p>
       ) : null}
       <table className="border-collapse text-sm">
