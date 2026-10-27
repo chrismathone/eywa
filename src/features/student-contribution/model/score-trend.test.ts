@@ -3,8 +3,8 @@ import { scoreRaws, sumRaws } from "./calc";
 import { DEFAULT_CONFIG, emptyRaws } from "./config";
 import { compareMonth, contributionTrend, rawsBetween, scoreBetween } from "./score-trend";
 
-const row = (month: string, tuitionWon: number, correction = 0, extra: { closedAt?: string | null; computedAt?: string; perfectMonths?: number } = {}) => ({ month,
-  raws: { ...emptyRaws(), tuitionWon, perfectMonths: extra.perfectMonths ?? 0 }, correction: { ...emptyRaws(), tuitionWon: correction },
+const row = (month: string, tuitionWon: number, correction = 0, extra: { closedAt?: string | null; computedAt?: string; perfectWeeks?: number } = {}) => ({ month,
+  raws: { ...emptyRaws(), tuitionWon, perfectWeeks: extra.perfectWeeks ?? 0 }, correction: { ...emptyRaws(), tuitionWon: correction },
   payload: { correctionReasons: correction ? [{}] : [] }, closedAt: extra.closedAt ?? null, computedAt: extra.computedAt ?? "2026-10-01T00:00:00Z" });
 it("keeps the chart equal to the card at a rounding boundary", () => {
   const months = [row("2026-01", 1000), row("2026-02", 7500)];
@@ -25,11 +25,11 @@ it("retains missing months and negative corrections using the current rates", ()
   expect(contributionTrend([], config)).toEqual([]);
 });
 it("splits operations and learning, and marks merged and unclosed months without treating them as closed", () => {
-  const points = contributionTrend([row("2026-01", 100000, 0, { closedAt: "x", perfectMonths: 1 }), row("2026-02", 0, 0, { computedAt: "" }), row("2026-03", 0)], DEFAULT_CONFIG, "2026-10");
+  const points = contributionTrend([row("2026-01", 100000, 0, { closedAt: "x", perfectWeeks: 1 }), row("2026-02", 0, 0, { computedAt: "" }), row("2026-03", 0)], DEFAULT_CONFIG, "2026-10");
   expect(points[0]).toMatchObject({ operations: 1, participation: 1, change: 2, status: "closed" });
   expect(points.map((p) => p.status)).toEqual(["closed", "merged", "unclosed"]);
   expect(compareMonth(points, "2026-03")).toEqual({ kind: "open", previous: "2026-02", previousChange: null });
-  const afterMerged = contributionTrend([row("2026-01", 0, 0, { computedAt: "" }), { ...row("2026-02", 100000, 0, { closedAt: "x" }), unavailable: ["videoMonths"] }], DEFAULT_CONFIG);
+  const afterMerged = contributionTrend([row("2026-01", 0, 0, { computedAt: "" }), { ...row("2026-02", 100000, 0, { closedAt: "x" }), unavailable: ["videoAssignments"] }], DEFAULT_CONFIG);
   expect(compareMonth(afterMerged, "2026-02")).toEqual({ kind: "previous-merged", previous: "2026-01" });
   expect(afterMerged[1]!.unavailable).toBe(1);
 });

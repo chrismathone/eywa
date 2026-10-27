@@ -24,6 +24,7 @@ const NOT_IN_MANUAL = new Map<string, string>([
   ["/help/icons", "아이콘 목록은 개발 참고 화면이다"],
   ["/admin", "숨은 관리자 도구(원장 화면이 아니다)"],
   ["/shuttle/track", "위치를 보내는 기능이 아직 없어 자리만 잡아 둔 화면"],
+  ["/shuttle/nearby", "새 화면(2026-10-27) — 설명서 면은 다음 설명서 갱신 때 만든다"],
 ]);
 
 describe("사용 설명서 목차", () => {

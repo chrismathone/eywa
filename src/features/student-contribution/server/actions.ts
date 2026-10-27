@@ -4,7 +4,7 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logAction } from "@/features/audit/server/log";
 import { sumRaws, scoreRaws } from "../model/calc";
-import { contributionConfigSchema } from "../model/config";
+import { configForStorage, contributionConfigSchema } from "../model/config";
 import { requireContributionWrite } from "./access";
 import { getContributionList } from "./queries";
 import { contributionReady, loadContributionSettings, SETTINGS_TABLE, SIGNALS_TABLE } from "./store";
@@ -27,7 +27,7 @@ export async function saveContributionSettings(value: unknown, revision: number)
     const prevScore = scoreRaws(raws, before.config).total, nextScore = scoreRaws(raws, config).total;
     const initial = await db.from(SETTINGS_TABLE).upsert({ tenant_id: gate.tenantId }, { onConflict: "tenant_id", ignoreDuplicates: true });
     if (initial.error) throw new Error("기여도 설정 준비에 실패했습니다");
-    const { data, error } = await db.from(SETTINGS_TABLE).update({ config, revision: revision + 1, updated_by: gate.userId, updated_at: new Date().toISOString() })
+    const { data, error } = await db.from(SETTINGS_TABLE).update({ config: configForStorage(config), revision: revision + 1, updated_by: gate.userId, updated_at: new Date().toISOString() })
       .eq("tenant_id", gate.tenantId).eq("revision", revision).is("refresh_token", null).select("revision").maybeSingle();
     if (error) throw new Error("설정을 저장하지 못했습니다");
     if (!data) throw new Error("집계 중이거나 설정이 바뀌었습니다. 집계가 끝난 뒤 다시 저장해 주세요");

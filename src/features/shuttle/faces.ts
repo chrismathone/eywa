@@ -16,6 +16,10 @@ export const SHUTTLE_LIVE_PATH = "/shuttle/live";
  * "관리자 계정들만") — 탭 줄엔 `shuttleFaces(season, { track: true })`일 때만 선다(SUBTABS_BY_MENU엔 창 식별 때문에 남긴다).
  */
 export const SHUTTLE_TRACK_PATH = "/shuttle/track";
+/** 가까운 노선 찾기(2026-10-26) — 학부모 탭 4와 같은 화면. 🔒 실시간 위치와 같은 관리자 전용. */
+export const SHUTTLE_NEARBY_PATH = "/shuttle/nearby";
+/** 관리자에게만 서는 면 — 탭 줄은 `track`일 때만 붙인다. */
+const ADMIN_FACE_PATHS: readonly string[] = [SHUTTLE_TRACK_PATH, SHUTTLE_NEARBY_PATH];
 
 /**
  * 셔틀 면 전환 탭 — 노선 편성 ↔ 오늘 등하원.
@@ -32,7 +36,7 @@ export const SHUTTLE_TRACK_PATH = "/shuttle/track";
 export function shuttleFaces(season: Season, opts: { track?: boolean } = {}): Face[] {
   return (SUBTABS_BY_MENU.shuttle ?? [])
     // 🔒 실시간 위치는 관리자에게만 — 판정은 서버(`isShuttleAdmin`)가 하고 화면은 그 결과(`track`)만 받는다.
-    .filter((tab) => opts.track || tab.href !== SHUTTLE_TRACK_PATH)
+    .filter((tab) => opts.track || !ADMIN_FACE_PATHS.includes(tab.href))
     .map((tab) => ({
       key: tab.href,
       label: tab.label,

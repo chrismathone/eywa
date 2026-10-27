@@ -3,6 +3,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { reportError } from "@/lib/observability/report-error";
 import { ACADEMY_LOCATION } from "../academy-location";
+import { trimSpurs } from "../trim-spurs";
 
 export type RunRoadPath =
   | {
@@ -16,6 +17,13 @@ export type RunRoadPath =
        * `kind`: 'out' = 나가는 길(학원 출발부터 마지막 정류장까지) · 'back' = 돌아오는 길(마지막 정류장 → 학원 도착).
        */
       legs: { distanceM: number; durationS: number; path: [number, number][]; kind: "out" | "back" }[];
+      /**
+       * 구간마다 **끝 정류장 이름**(legs와 같은 순서) — 운행 중 "다음 정류장"을 말할 때 쓴다(사용자 2026-10-21).
+       * 학원으로 끝나는 구간이면 학원 이름이다.
+       */
+      legEnds: string[];
+      /** 구간마다 **시작 정류장 이름**(legs와 같은 순서) — 지도에서 정류장을 누르면 그 정류장에서 나가는 구간만 그린다. */
+      legStarts: string[];
       /** 좌표가 없어 경로에서 빠진 정류장 이름. */
       skipped: string[];
     }
@@ -73,7 +81,10 @@ export async function computeRunRoadPath(tenantId: string, runId: string): Promi
     if (!hasDepart && !hasArrive && waypoints.length === 0 && origin === destination) {
       return { ok: false, error: "정류장이 하나뿐이라 경로를 그릴 수 없습니다" };
     }
-    const sig = JSON.stringify(["v2", origin, destination, waypoints]);
+    // 구간 i = 점 i → 점 i+1. 끝 정류장 이름은 점 1부터.
+    const legEnds = [...waypoints, destination].map((p) => p.name);
+    const legStarts = [origin, ...waypoints].map((p) => p.name);
+    const sig = JSON.stringify(["v4", origin, destination, waypoints]);
     const hit = cache.get(sig);
     if (hit && Date.now() - hit.at < CACHE_MS) return hit.value.ok ? { ...hit.value, skipped } : hit.value;
 
@@ -96,24 +107,28 @@ export async function computeRunRoadPath(tenantId: string, runId: string): Promi
       return { ok: false, error: `길찾기 실패: ${found?.result_msg ?? `HTTP ${res.status}`}` };
     }
 
-    const path: [number, number][] = [];
-    const legs = found.sections.map((sec, i) => {
+    const rawLegs = found.sections.map((sec, i) => {
       const legPath: [number, number][] = [];
       for (const road of sec.roads) {
         const v = road.vertexes; // [x1, y1, x2, y2, …] = [경도, 위도, …]
         for (let k = 0; k + 1 < v.length; k += 2) legPath.push([v[k + 1]!, v[k]!]);
       }
-      path.push(...legPath);
       // 마지막 구간이 학원 도착이면 '돌아오는 길', 나머지는 '나가는 길'.
       const kind: "out" | "back" = hasArrive && i === found.sections.length - 1 ? "back" : "out";
       return { distanceM: sec.distance, durationS: sec.duration, path: legPath, kind };
     });
+    // 🔑 정류장 앞 "골목으로 들어갔다 같은 길로 나오기"를 잘라 큰길에서 잇는다(trim-spurs.ts, 사용자 2026-10-21 "안쪽까지 들어가는데").
+    const legs = trimSpurs(rawLegs);
+    const path: [number, number][] = legs.flatMap((l) => l.path);
     const value: RunRoadPath = {
       ok: true,
       path,
-      distanceM: found.summary.distance,
-      durationS: found.summary.duration,
+      // 자른 만큼 줄어든 구간 합(카카오 요약은 왕복 꼬리를 포함한다).
+      distanceM: legs.reduce((n, l) => n + l.distanceM, 0),
+      durationS: legs.reduce((n, l) => n + l.durationS, 0),
       legs,
+      legEnds,
+      legStarts,
       skipped,
     };
     cache.set(sig, { at: Date.now(), value });

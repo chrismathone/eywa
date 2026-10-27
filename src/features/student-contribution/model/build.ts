@@ -42,7 +42,7 @@ export function buildStudentMonths(input: { month: string; capturedAt: string; f
     return [...byMonth.values()].sort((a, b) => a.month.localeCompare(b.month)).map((f) => ({ month: f.month, raws: { ...f.raws }, correction: emptyRaws(),
       closedAt: f.month < input.month ? input.capturedAt : null, evidenceIds: [...f.evidenceIds], reconstructed: f.month < input.month }));
   }
-  // 지난달의 개근·영상 완료는 달이 끝난 뒤에야 판정된다. 열린 달은 마지막으로 집계한 뒤 마감한다.
+  // 열린 달은 마지막 원자료를 집계한 뒤 마감한다. 월을 넘긴 주간 출석은 일요일의 달에 귀속한다.
   // 이미 마감한 달은 그대로 보존하고 그 뒤에 바뀐 사실만 열린 달 정정으로 보낸다.
   const closed: BuiltMonth[] = [];
   const previous = [...input.stored];

@@ -39,7 +39,9 @@ import { formatSessionUnits } from "@/features/attendance/session-units";
 import { ProgressSelector } from "./progress-selector";
 import { ReasonNoteInput } from "./reason-note-input";
 import { useMathBookListId } from "./math-book-list";
-import { attitudeNeedsNote, attitudeNoteComplete } from "../math-report-pilot-sections";
+import { attitudeNeedsNote, attitudeNoteComplete, isHomeworkMissed, testSkipComplete, type DailyTestSkip } from "../math-report-pilot-sections";
+import { DailyTestSkipPanel } from "./daily-test-skip-panel";
+import { HomeworkMissReasonInput } from "./homework-miss-reason";
 import { ProgressModePills } from "./progress-mode-pills";
 import { UnderstandingPresetButtons } from "./understanding-presets";
 import { UNDERSTANDING_PRESETS } from "../math-report-pilot";
@@ -110,6 +112,10 @@ export function BulkApplyPopover({
   // 수업 태도 의견 — 고른 태도가 하·중하일 때만(원장 2026-10-26, 새 수학 보고서 행에 들어간다 · planBulkApply).
   const [attNote, setAttNote] = useState("");
   const [homework, setHomework] = useState<string>("");
+  // 숙제 미제출 사유 · 일일 테스트 '안 봄'(원장 2026-10-27 *"표모드에서 일괄입력"* 점검) — 카드·행에선 고를 수 있는데 일괄엔 없어
+  // 반 전체가 시험을 안 본 날도 학생마다 눌러야 했다. 새 수학 보고서 행에만 들어간다(planBulkApply).
+  const [hwMissReason, setHwMissReason] = useState("");
+  const [testSkip, setTestSkip] = useState<DailyTestSkip | null>(null);
   const [textbook, setTextbook] = useState("");
   const [homeworkToday, setHomeworkToday] = useState("");
   const [progress, setProgress] = useState("");
@@ -139,12 +145,17 @@ export function BulkApplyPopover({
   const [video, setVideo] = useState(EMPTY_BULK_VIDEO);
   const [note, setNote] = useState("");
   const testPatch = {
-    dailyScore: fields.dailyEnabled ? bulkCount(tests.dailyScore) : undefined,
-    dailyMax: fields.dailyEnabled && fields.allowTestMax ? bulkCount(tests.dailyMax) : undefined,
+    // '시험 없음'을 고르면 일일 점수는 싣지 않는다(한 칸의 두 답).
+    dailyScore: fields.dailyEnabled && !testSkip ? bulkCount(tests.dailyScore) : undefined,
+    dailyMax: fields.dailyEnabled && fields.allowTestMax && !testSkip ? bulkCount(tests.dailyMax) : undefined,
     checkScore: fields.checkEnabled ? bulkCount(tests.checkScore) : undefined,
     checkMax: fields.checkEnabled && fields.allowTestMax ? bulkCount(tests.checkMax) : undefined,
   };
   const hasTest = Object.values(testPatch).some((v) => v !== undefined);
+  // '시험 없음'은 사유까지 골라야 적용된다 — 덜 고른 채 적용하면 아무 행에도 안 들어가 "눌렀는데 그대로"가 된다.
+  const skipReady = !!testSkip && testSkipComplete(testSkip);
+  const skipIncomplete = !!testSkip && !skipReady;
+  const missReasonReady = isHomeworkMissed(homework) && hwMissReason.trim() !== "";
   // 모드마다 기본이 다르다(위 주석) — 직접 입력=덮어쓰기, 복사=빈 칸만.
   const [onlyEmpty, setOnlyEmpty] = useState(false);
   const canCopy = !!copySource && copySource.belowCount > 0;
@@ -161,7 +172,7 @@ export function BulkApplyPopover({
     mode === "copy"
       ? canCopy
       : !!(attitude || homework || textbook.trim() || homeworkToday.trim() || progress.trim() || lessonMode || understanding !== null || att ||
-          note.trim() || hasTest || video.check || video.homework !== null || video.due !== null);
+          note.trim() || hasTest || skipReady || missReasonReady || video.check || video.homework !== null || video.due !== null);
   // 과목이 하나뿐이면 고를 것도 없다 — 그대로 그 과목.
   const activeSubject = subjects.find((s) => s.key === (subjectKey ?? subjects[0]?.key)) ?? subjects[0] ?? null;
 
@@ -174,6 +185,8 @@ export function BulkApplyPopover({
     setAttitude(null);
     setAttNote("");
     setHomework("");
+    setHwMissReason("");
+    setTestSkip(null);
     setTextbook("");
     setHomeworkToday("");
     setProgress("");
@@ -245,6 +258,8 @@ export function BulkApplyPopover({
       {
         attitude: attitude ?? undefined, homework: homework ?? undefined, textbook, homeworkToday, today: progress,
         ...(attitudeNeedsNote(attitude) && attNote.trim() ? { attitudeNote: attNote } : {}),
+        ...(missReasonReady ? { homeworkMissReason: hwMissReason } : {}),
+        ...(skipReady && testSkip ? { dailyTestSkip: testSkip } : {}),
         note,
         // 수업 성격 — 고른 때만(진도와 같은 과목 행에만 들어간다, planBulkApply).
         ...(lessonMode ? { progressMode: lessonMode } : {}),
@@ -491,7 +506,21 @@ export function BulkApplyPopover({
             {mode === "input" ? (
               <>
                 <div className="flex flex-col gap-2.5">
-                <BulkTestFields config={fields} value={tests} onChange={setTests} />
+                <BulkTestFields config={{ ...fields, dailyEnabled: fields.dailyEnabled && !testSkip }} value={tests} onChange={setTests} />
+                {/* 일일 테스트 '시험 없음' + 사유 — 카드·행과 같은 판(DailyTestSkipPanel). '시험 있음'을 누르면 일괄에서 뺀다. */}
+                {fields.dailyEnabled ? (
+                  testSkip ? (
+                    <DailyTestSkipPanel skip={testSkip} onChange={setTestSkip} />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setTestSkip({ reason: null, detail: "" })}
+                      className="border-line text-text-dim hover:border-primary self-start rounded-md border px-2.5 py-1 text-xs font-bold"
+                    >
+                      {t("os.bulk.testSkip")}
+                    </button>
+                  )
+                ) : null}
                 <div>
                   <p className="micro text-text-faint mb-1">{t("os.col.attitude")}</p>
                   <FieldSelect
@@ -519,6 +548,9 @@ export function BulkApplyPopover({
                     label={t("os.bulk.hwAria")}
                     size="lg"
                   />
+                  {isHomeworkMissed(homework) ? (
+                    <HomeworkMissReasonInput value={hwMissReason} onChange={setHwMissReason} />
+                  ) : null}
                 </div>
                 </div>
                 <div className="flex flex-col gap-2.5">
@@ -573,7 +605,7 @@ export function BulkApplyPopover({
                 />
                 {t("os.bulk.onlyEmpty")}
               </label>
-              <Button size="sm" onClick={apply} disabled={!hasAny}>
+              <Button size="sm" onClick={apply} disabled={!hasAny || skipIncomplete} title={skipIncomplete ? t("os.bulk.testSkipNeedReason") : undefined}>
                 {t("os.bulk.apply")}
               </Button>
             </div>

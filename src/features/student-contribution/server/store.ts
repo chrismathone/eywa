@@ -1,8 +1,8 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
-import { normalizeStoredRaws } from "../model/normalize-raws";
-import { resolveConfig, type Metric, type Raws } from "../model/config";
+import { normalizeStoredRaws, rawsForStorage } from "../model/normalize-raws";
+import { isMetric, resolveConfig, type Metric, type Raws } from "../model/config";
 import { emptyPayload, type ContributionPayload, type ContributionTotal, type StoredContributionMonth } from "../model/stored";
 import type { BillingSeed } from "../model/billing";
 
@@ -40,9 +40,11 @@ export async function loadContributionMonths(db: SupabaseClient, tenant: string,
   return rows.map((r) => {
     const raws = normalizeStoredRaws(r.raws), correction = normalizeStoredRaws(r.correction);
     const payload = { ...emptyPayload(), ...r.payload };
+    payload.correctionReasons = payload.correctionReasons.filter(r => isMetric(r.metric));
+    payload.corrections = payload.corrections?.filter(r => isMetric(r.metric));
     if (r.evidence_ids) payload.evidenceIds = r.evidence_ids;
     return { studentId: r.student_id, month: r.month, raws, correction, payload,
-      evidenceIds: payload.evidenceIds, historical: r.historical ?? [], unavailable: r.unavailable ?? [],
+      evidenceIds: payload.evidenceIds, historical: r.historical ?? [], unavailable: (r.unavailable ?? []).filter(isMetric),
       closedAt: r.closed_at, reconstructed: r.reconstructed, computedAt: r.computed_at };
   });
 }
@@ -51,7 +53,7 @@ export async function loadContributionTotals(db: SupabaseClient, tenant: string,
     (chunk) => db.rpc("student_contribution_totals", { p_tenant: tenant, p_students: chunk, p_since: since }, { get: true }));
   return rows.map((r) => {
     const raws = normalizeStoredRaws(r.raws), recent = normalizeStoredRaws(r.recent);
-    return { studentId: r.student_id, raws, recent, computedAt: r.computed_at, unavailable: r.unavailable };
+    return { studentId: r.student_id, raws, recent, computedAt: r.computed_at, unavailable: (r.unavailable ?? []).filter(isMetric) };
   });
 }
 export async function saveContributionMonths(db: SupabaseClient, tenant: string, token: string, revision: number, rows: StoredContributionMonth[], deadline = Infinity) {
@@ -65,7 +67,7 @@ export async function saveContributionMonths(db: SupabaseClient, tenant: string,
       const row = rows[processed++]!; batch.push(row); bytes += JSON.stringify(row).length * 3;
     }
     const { data, error } = await db.rpc("save_student_contribution_months", { p_tenant: tenant, p_token: token, p_revision: revision,
-      p_rows: batch.map((r) => ({ student_id: r.studentId, month: r.month, raws: r.raws, correction: r.correction,
+      p_rows: batch.map((r) => ({ student_id: r.studentId, month: r.month, raws: rawsForStorage(r.raws), correction: rawsForStorage(r.correction),
         payload: r.payload, historical: r.historical, unavailable: r.unavailable, closed_at: r.closedAt, reconstructed: r.reconstructed, computed_at: r.computedAt })) });
     if (error) throw new Error(`기여도 저장 실패: ${error.message}`);
     written += Number(data ?? 0);

@@ -3226,6 +3226,8 @@ export function OneScreenClient({
         attitude: rowEval.attitude,
         attitudeNote: r.subject.attitudeNote ?? "",
         attitudeNoteOk: isMathReportPilot(r.student.id, r.subject.subjectKey),
+        homeworkMissReason: r.subject.homeworkMissReason ?? "",
+        dailyTestSkip: r.subject.dailyTestSkip ?? null,
         homework: rowEval.homework,
         textbook: r.subject.textbook ?? "",
         homeworkToday: r.subject.homeworkToday ?? "",
@@ -3272,6 +3274,7 @@ export function OneScreenClient({
       if (p.set.attitude !== undefined) setAttitudeValue(p.studentId, p.subjectName, p.set.attitude);
       if (p.set.attitudeNote !== undefined) setAttitudeNoteFor(p.studentId, p.subjectName, p.set.attitudeNote);
       if (p.set.homework !== undefined) setHomeworkValue(p.studentId, p.subjectName, p.set.homework);
+      if (p.set.homeworkMissReason !== undefined) setHomeworkMissReasonFor(p.studentId, p.subjectName, p.set.homeworkMissReason);
       if (p.set.textbook !== undefined) setTextbookFor(p.studentId, p.subjectName, p.set.textbook);
       if (p.set.homeworkToday !== undefined) setHomeworkTodayFor(p.studentId, p.subjectName, p.set.homeworkToday);
       if (p.set.today !== undefined) setProgressFor(p.studentId, p.subjectIndex, p.set.today);
@@ -3284,6 +3287,8 @@ export function OneScreenClient({
       if (p.set.dailyScore !== undefined) setScoreFor(p.studentId, p.subjectName, "daily", p.set.dailyScore);
       if (p.set.checkMax !== undefined) setMaxFor(p.studentId, p.subjectName, "check", p.set.checkMax);
       if (p.set.checkScore !== undefined) setScoreFor(p.studentId, p.subjectName, "check", p.set.checkScore);
+      // 일일 테스트 '안 봄'(원장 2026-10-27) — null이면 '봄'으로(이번에 점수를 넣은 행, grid.ts planBulkApply).
+      if (p.set.dailyTestSkip !== undefined) setTestSkipFor(p.studentId, p.subjectName, p.set.dailyTestSkip);
       const { videoHomework: bulkVideoHw, videoSubmitLink: bulkVideoLink, videoHomeworkDue: bulkVideoDue } = p.set;
       if (bulkVideoHw !== undefined || bulkVideoLink !== undefined || bulkVideoDue !== undefined)
         patch(p.studentId, (s) => ({
@@ -3423,6 +3428,7 @@ export function OneScreenClient({
         // 같은 반 행에만 복사한다(원장 2026-10-15 — '전체' 보기에서 다른 반 빈 칸까지 채우던 것).
         classKey: classKeyOf(first),
         today: first.subject.today ?? "",
+        progressMode: first.subject.progressMode ?? null,
         textbook: first.subject.textbook ?? "",
         homeworkToday: first.subject.homeworkToday ?? "",
       },
@@ -3433,6 +3439,7 @@ export function OneScreenClient({
         subjectKey: r.subject.subjectKey ?? "math",
         classKey: classKeyOf(r),
         today: r.subject.today ?? "",
+        progressMode: r.subject.progressMode ?? null,
         textbook: r.subject.textbook ?? "",
         homeworkToday: r.subject.homeworkToday ?? "",
         // 🔴 여기서 `isRowActionable(…,"save")`를 쓰면 안 된다(2026-07-23 원장 제보로 발견).
@@ -3468,6 +3475,8 @@ export function OneScreenClient({
     }
     for (const p of res.plan) {
       if (p.set.today !== undefined) setProgressFor(p.studentId, p.subjectIndex, p.set.today);
+      // 복습·문제풀이도 진도와 함께(원장 2026-10-27) — 진도 문장이 이 값으로 갈린다.
+      if (p.set.progressMode !== undefined) setProgressModeFor(p.studentId, p.subjectIndex, p.set.progressMode);
       if (p.set.textbook !== undefined) setTextbookFor(p.studentId, p.subjectName, p.set.textbook);
       if (p.set.homeworkToday !== undefined) setHomeworkTodayFor(p.studentId, p.subjectName, p.set.homeworkToday);
     }

@@ -84,9 +84,9 @@ it("양수는 0 위로, 환불·정정 같은 음수는 0 아래로 항목마다
     { key: "operations", kind: "operations", from: 0, to: 3 }, { key: "participation", kind: "participation", from: 3, to: 4 }, { key: "correction", kind: "correction", from: 0, to: -3 }]);
   // 같은 달 안의 소개 +15와 환불 −5는 +10 하나로 상쇄되지 않는다.
   expect(stackSegments({ month: "m", total: 0, change: 10, operations: 10, items: [{ metric: "referralStarted", value: 15, correction: 0 }, { metric: "tuitionWon", value: -5, correction: 0 },
-    { metric: "perfectMonths", value: 1, correction: -1 }] })).toEqual([
+    { metric: "perfectWeeks", value: 1, correction: -1 }] })).toEqual([
     { key: "referralStarted", kind: "operations", from: 0, to: 15 }, { key: "tuitionWon", kind: "operations", from: 0, to: -5 },
-    { key: "perfectMonths", kind: "participation", from: 15, to: 16 }, { key: "perfectMonths:correction", kind: "correction", from: -5, to: -6 }]);
+    { key: "perfectWeeks", kind: "participation", from: 15, to: 16 }, { key: "perfectWeeks:correction", kind: "correction", from: -5, to: -6 }]);
   expect(stackSegments({ month: "m", total: 0, change: 0, operations: 0, participation: 0, correction: 0 })).toEqual([]);
 });
 
