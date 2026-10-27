@@ -149,7 +149,7 @@ export async function getHomeroomConsultStats(): Promise<HomeroomStats> {
   const nameOf = new Map(users.map((u) => [u.id, u.display_name?.trim() || "이름 없는 직원"]));
   for (const [id, prev] of flow) {
     if (shown.has(id) || !active.has(id) || (teacherId && id !== teacherId)) continue;
-    if (prev.withdrawn.length === 0 && prev.ended.length === 0) continue;
+    if (prev.withdrawn.length === 0) continue;
     teachers.push({
       id,
       name: nameOf.get(id) ?? "이름 없는 직원",

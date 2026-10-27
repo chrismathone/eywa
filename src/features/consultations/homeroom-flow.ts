@@ -9,7 +9,8 @@
  *    이력이 없으면 지금 담임이다(보고서 작성자 추정은 쓰지 않는다 — 작성자는 담임이 아니다, [[#93]]).
  * 🔑 **퇴원일 = 학생의 퇴원일(`students.withdrawn_at`)** — 수강 종료일이 하루 늦게 찍힌 행이 있다(실측: 윤채민 퇴원 8/31 · 수강 종료 9/1).
  *    수강 종료일로 세면 8월 퇴원이 9월로, 그리고 9/1부터 맡은 새 담임 앞으로 넘어간다.
- * 🔑 갈래 셋 — 퇴원(학생 상태 퇴원) / 수강 종료(학원은 다니는데 그 과목 수강이 오늘 하나도 없음) / 그 외(반이동·같은 과목 다른 반 = 안 셈).
+ * 🔑 퇴원 = 학원을 나감 **또는 그 과목을 그만둠**(학원은 다니는데 그 과목 수강이 오늘 하나도 없음 — 원장 *"수강 종료도 결국 그 과목에선 퇴원"*).
+ *    반이동·같은 과목 다른 반으로 옮긴 것은 퇴원이 아니다.
  */
 import { homeroomTeacherOnDate, type HomeroomPeriod } from "../classes/teacher-as-of";
 import { lastDayOf, type HomeroomPrevFlow } from "./homeroom-model";
@@ -40,10 +41,14 @@ export function buildPrevMonthFlow(input: FlowInput): Map<string, HomeroomPrevFl
   }
 
   const students = new Map<string, Set<string>>();
-  const withdrawn = new Map<string, Map<string, string>>();
-  const ended = new Map<string, Map<string, string>>();
-  const add = (m: Map<string, Map<string, string>>, teacher: string, id: string, name: string) =>
-    m.set(teacher, (m.get(teacher) ?? new Map<string, string>()).set(id, name));
+  const withdrawn = new Map<string, Map<string, { name: string; keepsOther: boolean }>>();
+  const add = (teacher: string, id: string, name: string, keepsOther: boolean) => {
+    const m = withdrawn.get(teacher) ?? new Map<string, { name: string; keepsOther: boolean }>();
+    // 한 담임 아래 두 갈래로 잡히면(한 반은 과목 중단, 다음 반에서 학원 퇴원) 학원 퇴원이 이긴다.
+    const prev = m.get(id);
+    m.set(id, { name, keepsOther: prev ? prev.keepsOther && keepsOther : keepsOther });
+    withdrawn.set(teacher, m);
+  };
 
   for (const e of input.enrollments) {
     const st = input.students.get(e.studentId);
@@ -63,17 +68,14 @@ export function buildPrevMonthFlow(input: FlowInput): Map<string, HomeroomPrevFl
     // 나간 날의 담임 — 반이동(반 단위)·끝나기 전 날 기준이 아니라 그 날 담임이 그 학생을 잃었다.
     const t = teacherOn(e.classId, leftOn);
     if (!t) continue;
-    if (st.withdrawn) add(withdrawn, t, e.studentId, st.name);
-    else if (!(cls.subject && liveSubjects.get(e.studentId)?.has(cls.subject))) add(ended, t, e.studentId, st.name);
+    if (st.withdrawn) add(t, e.studentId, st.name, false);
+    else if (!(cls.subject && liveSubjects.get(e.studentId)?.has(cls.subject))) add(t, e.studentId, st.name, true);
   }
-  // 같은 학생이 한 담임 아래 퇴원·수강 종료 둘에 겹치면(한 반은 수강 종료, 다음 반에서 퇴원) 퇴원만 남긴다.
-  for (const [t, m] of withdrawn) for (const id of m.keys()) ended.get(t)?.delete(id);
 
-  const list = (m?: Map<string, string>) =>
-    [...(m ?? new Map<string, string>())].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name, "ko"));
   const out = new Map<string, HomeroomPrevFlow>();
-  for (const t of new Set([...students.keys(), ...withdrawn.keys(), ...ended.keys()])) {
-    out.set(t, { students: students.get(t)?.size ?? 0, withdrawn: list(withdrawn.get(t)), ended: list(ended.get(t)) });
+  for (const t of new Set([...students.keys(), ...withdrawn.keys()])) {
+    const list = [...(withdrawn.get(t) ?? [])].map(([id, v]) => ({ id, ...v })).sort((a, b) => a.name.localeCompare(b.name, "ko"));
+    out.set(t, { students: students.get(t)?.size ?? 0, withdrawn: list });
   }
   return out;
 }

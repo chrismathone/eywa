@@ -12,12 +12,13 @@ export type HomeroomCell = "self" | "other" | "none" | "before";
 export type HomeroomPrevFlow = {
   /** 지난달 말일에 (그 당시) 담임 반에 있던 학생 수 — 지금 퇴원했어도 센다. */
   students: number;
-  /** 지난달 퇴원(학원을 나감 — 학생 퇴원일 기준). */
-  withdrawn: { id: string; name: string }[];
-  /** 지난달 수강 종료(그 과목만 그만두고 학원은 다님 · 같은 과목 다른 반으로 옮긴 것은 아님). */
-  ended: { id: string; name: string }[];
+  /**
+   * 지난달 퇴원 — 학원을 나갔거나 **그 과목을 그만둔** 학생(원장 2026-10-27 *"수강 종료도 결국 수학과에서는 퇴원이 맞지 — 합쳐도 될 듯"*).
+   * `keepsOther` = 학원은 다른 과목으로 계속 다닌다(마우스 오버에서만 밝힌다). 같은 과목 다른 반으로 옮긴 것은 퇴원이 아니다.
+   */
+  withdrawn: { id: string; name: string; keepsOther: boolean }[];
 };
-export const EMPTY_PREV_FLOW: HomeroomPrevFlow = { students: 0, withdrawn: [], ended: [] };
+export const EMPTY_PREV_FLOW: HomeroomPrevFlow = { students: 0, withdrawn: [] };
 
 /**
  * 담임 상담 대상 반인가 — 특강(방학 단기강좌)과 **JJ 반**은 뺀다(원장 2026-10-27 *"jj도 상담에 포함되지 않음"*).
