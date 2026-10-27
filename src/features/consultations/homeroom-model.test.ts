@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildHomeroomTeachers, isHomeroomConsultClass, recentMonths, type HomeroomInput } from "./homeroom-model";
+import { buildHomeroomTeachers, homeroomMonths, isHomeroomConsultClass, recentMonths, type HomeroomInput } from "./homeroom-model";
 
 const base = (over: Partial<HomeroomInput> = {}): HomeroomInput => ({
   today: "2026-10-27",
@@ -105,5 +105,13 @@ describe("isHomeroomConsultClass", () => {
     expect(isHomeroomConsultClass({ isSpecial: false, className: "초등M 개별 JJ1K", learningTrack: "regular" })).toBe(false);
     expect(isHomeroomConsultClass({ isSpecial: true, className: "중3 시험대비", learningTrack: null })).toBe(false);
     expect(isHomeroomConsultClass({ isSpecial: null, className: "내신중등특강", learningTrack: null })).toBe(false);
+  });
+});
+
+describe("homeroomMonths", () => {
+  it("2026-10부터만 · 이번 달은 항상 · 최대 6달", () => {
+    expect(homeroomMonths("2026-10-27")).toEqual(["2026-10"]);
+    expect(homeroomMonths("2026-12-01")).toEqual(["2026-10", "2026-11", "2026-12"]);
+    expect(homeroomMonths("2027-06-01")).toEqual(["2027-01", "2027-02", "2027-03", "2027-04", "2027-05", "2027-06"]);
   });
 });

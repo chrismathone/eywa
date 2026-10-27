@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { HomeroomMonth, HomeroomTeacher } from "./homeroom-model";
-import { nextSort, parseHomeroomSortKey, sortHomeroomTeachers } from "./homeroom-sort";
+import type { HomeroomFilter } from "./homeroom-sort";
+import { filterHomeroomTeachers, nextSort, parseHomeroomFilter, parseHomeroomSortKey, sortHomeroomTeachers } from "./homeroom-sort";
 
 const m = (self: number, target: number): HomeroomMonth => ({ self, target, other: 0, none: target - self });
 const t = (name: string, subjects: string[], months: HomeroomMonth[], students = 1): HomeroomTeacher => ({
@@ -41,5 +42,26 @@ describe("nextSort · parseHomeroomSortKey", () => {
     expect(parseHomeroomSortKey("m3")).toBe("m3");
     expect(parseHomeroomSortKey("m99")).toBeNull();
     expect(parseHomeroomSortKey("drop")).toBeNull();
+  });
+});
+
+describe("filterHomeroomTeachers · parseHomeroomFilter", () => {
+  it("과목·고른 담임·이번 달 미상담 있는 담임만", () => {
+    const base: HomeroomFilter = { subject: null, teachers: [], unmetOnly: false, unmetStudentsOnly: false };
+    const pick = (f: Partial<HomeroomFilter>) => filterHomeroomTeachers(list, { ...base, ...f }).map((x) => x.name);
+    expect(pick({ subject: "math" })).toEqual(["나", "다"]);
+    expect(pick({ teachers: ["가", "다"] })).toEqual(["가", "다"]);
+    expect(pick({ unmetOnly: true })).toEqual(["가", "다"]); // 나는 이번 달 대상 0명
+    expect(pick({})).toHaveLength(3);
+  });
+  it("저장값은 다시 거른다 — uuid 아닌 담임 id·이상한 과목은 버린다", () => {
+    const id = "11111111-2222-3333-4444-555555555555";
+    expect(parseHomeroomFilter({ subject: "math", teachers: [id, "x"], unmetOnly: true })).toEqual({
+      subject: "math",
+      teachers: [id],
+      unmetOnly: true,
+      unmetStudentsOnly: false,
+    });
+    expect(parseHomeroomFilter("junk")).toEqual({ subject: null, teachers: [], unmetOnly: false, unmetStudentsOnly: false });
   });
 });

@@ -64,3 +64,38 @@ export function sortHomeroomTeachers(
     return sign * (va - vb) || byName(a, b);
   });
 }
+
+/**
+ * 골라 보기(원장 2026-10-27 *"정렬 말고도 제외해서 볼 수도 있으면 — 해당 부분만 본다던지 수학만 본다던지"*). 정렬과 같이 계정에 남는다.
+ * - `subject` = 그 과목 담임 반이 있는 담임만(null = 전체)
+ * - `teachers` = 고른 담임만(빈 배열 = 전체 · 사라진 id는 조용히 무시)
+ * - `unmetOnly` = 이번 달 미상담이 있는 담임만 · `unmetStudentsOnly` = 펼친 학생 표에서 이번 달 미상담 학생만
+ */
+export type HomeroomFilter = { subject: string | null; teachers: string[]; unmetOnly: boolean; unmetStudentsOnly: boolean };
+export const DEFAULT_HOMEROOM_FILTER: HomeroomFilter = { subject: null, teachers: [], unmetOnly: false, unmetStudentsOnly: false };
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function parseHomeroomFilter(raw: unknown): HomeroomFilter {
+  const o = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+  return {
+    subject: typeof o.subject === "string" && o.subject.length > 0 && o.subject.length <= 40 ? o.subject : null,
+    teachers: Array.isArray(o.teachers) ? o.teachers.filter((v): v is string => typeof v === "string" && UUID_RE.test(v)).slice(0, 100) : [],
+    unmetOnly: o.unmetOnly === true,
+    unmetStudentsOnly: o.unmetStudentsOnly === true,
+  };
+}
+
+export function isDefaultHomeroomFilter(f: HomeroomFilter): boolean {
+  return !f.subject && f.teachers.length === 0 && !f.unmetOnly && !f.unmetStudentsOnly;
+}
+
+export function filterHomeroomTeachers(teachers: readonly HomeroomTeacher[], f: HomeroomFilter): HomeroomTeacher[] {
+  const picked = f.teachers.length ? new Set(f.teachers) : null;
+  const last = (t: HomeroomTeacher) => t.months[t.months.length - 1];
+  return teachers.filter(
+    (t) =>
+      (!f.subject || t.subjects.includes(f.subject)) &&
+      (!picked || picked.has(t.id)) &&
+      (!f.unmetOnly || (last(t)?.none ?? 0) > 0),
+  );
+}

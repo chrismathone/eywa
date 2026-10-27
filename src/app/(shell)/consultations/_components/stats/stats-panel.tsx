@@ -165,7 +165,7 @@ export async function ConsultationStatsPanel({
         doneHref={listHref({ urg: "done" })}
       />
       <StatsGap gap={gap} teacherScoped={teacherScoped} />
-      <StatsHomeroom data={homeroom} teacherScoped={teacherScoped} initialSort={prefs.hrSort} />
+      <StatsHomeroom data={homeroom} teacherScoped={teacherScoped} initialSort={prefs.hrSort} initialFilter={prefs.hrFilter} />
     </section>
   );
 }

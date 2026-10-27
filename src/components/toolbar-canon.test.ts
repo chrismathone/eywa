@@ -204,6 +204,8 @@ describe("툴바 규약 — <Toolbar> 구역", () => {
  *    통째로 비교하면 정당한 색 변경까지 막혀서 곧 지워진다.
  */
 const CANON_SURFACES = [
+  // 원생상담 통계 · 담임별 상담 현황 골라 보기(2026-10-27).
+  "src/app/(shell)/consultations/_components/stats/stats-homeroom-filters.tsx",
   "src/features/makeups/components/list-toolbar.tsx",
   "src/app/(shell)/makeups/candidates/page.tsx",
   // 학원 설정 '대시보드 관리'(2026-10-01) — 역할 고르기·편집 동작 줄.

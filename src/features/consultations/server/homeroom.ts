@@ -3,10 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { kstDateOf, kstToday } from "@/lib/date-kst";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
-import { buildHomeroomTeachers, isHomeroomConsultClass, recentMonths, type HomeroomStats } from "../homeroom-model";
-
-/** 현황 창 — 이번 달 포함 6개월. */
-const MONTHS = 6;
+import { buildHomeroomTeachers, homeroomMonths, isHomeroomConsultClass, type HomeroomStats } from "../homeroom-model";
 
 type ClassRow = {
   id: string;
@@ -29,7 +26,7 @@ export async function getHomeroomConsultStats(): Promise<HomeroomStats> {
   const supabase = await createClient();
   const teacherId = await effectiveTeacherId();
   const today = kstToday();
-  const months = recentMonths(today, MONTHS);
+  const months = homeroomMonths(today); // 2026-10부터(homeroom-model.ts HOMEROOM_START_MONTH)
   const sinceIso = `${months[0]}-01T00:00:00+09:00`;
 
   const allClasses = await fetchAllPaged<ClassRow>((from, to) => {

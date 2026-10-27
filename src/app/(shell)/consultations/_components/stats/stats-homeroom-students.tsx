@@ -15,10 +15,15 @@ function cellTitle(month: string, label: string, selfCount: number, others: stri
 }
 
 /** 한 담임의 학생 × 달(homeroom-model.ts). 이번 달 미상담이 맨 위. */
-export function HomeroomStudentGrid({ t, months }: { t: HomeroomTeacher; months: string[] }) {
+export function HomeroomStudentGrid({ t, months, unmetOnly }: { t: HomeroomTeacher; months: string[]; unmetOnly: boolean }) {
+  const last = months.length - 1;
+  const rows = unmetOnly ? t.students.filter((s) => s.cells[last] === "none") : t.students;
   return (
     <div className="space-y-1">
-      <p className="text-muted-foreground text-xs break-keep">담임 반: {t.classNames.join(" · ")}</p>
+      <p className="text-muted-foreground text-xs break-keep">
+        담임 반: {t.classNames.join(" · ")}
+        {unmetOnly ? ` · 이번 달 미상담 학생만(${rows.length}/${t.students.length}명)` : ""}
+      </p>
       <table className="border-collapse text-sm">
         <thead>
           <tr className="text-muted-foreground text-xs">
@@ -32,7 +37,14 @@ export function HomeroomStudentGrid({ t, months }: { t: HomeroomTeacher; months:
           </tr>
         </thead>
         <tbody>
-          {t.students.map((s) => (
+          {rows.length === 0 ? (
+            <tr>
+              <td colSpan={months.length + 2} className="text-muted-foreground px-2 py-2 text-center text-xs">
+                이번 달 미상담 학생이 없습니다
+              </td>
+            </tr>
+          ) : null}
+          {rows.map((s) => (
             <tr key={s.id} className="border-line border-t">
               <td className="px-2 py-1 whitespace-nowrap">
                 <WindowLink href={`/students/${s.id}`} className="text-foreground font-medium hover:underline">

@@ -1,7 +1,7 @@
 "use server";
 
 import { patchMyUiPrefs } from "@/lib/ui-prefs/patch";
-import { parseHomeroomSortKey, type HomeroomSort } from "../homeroom-sort";
+import { isDefaultHomeroomFilter, parseHomeroomFilter, parseHomeroomSortKey, type HomeroomFilter, type HomeroomSort } from "../homeroom-sort";
 import { STATS_DIMS, STATS_METRICS, type StatsDimKey, type StatsMetric, type StatsUnit } from "../stats-model";
 
 /**
@@ -13,6 +13,7 @@ export async function saveConsultationStatsPrefs(p: {
   metric?: StatsMetric;
   dim?: StatsDimKey;
   hrSort?: HomeroomSort;
+  hrFilter?: HomeroomFilter;
 }): Promise<{ ok: boolean; error?: string }> {
   const patch: Record<string, unknown> = {};
   if (p.unit === "week" || p.unit === "month") patch.stats_unit = p.unit === "week" ? "week" : undefined;
@@ -22,6 +23,10 @@ export async function saveConsultationStatsPrefs(p: {
     const isDefault = p.hrSort.key === "name" && p.hrSort.dir === "asc";
     patch.hr_sort = isDefault ? undefined : p.hrSort.key;
     patch.hr_dir = isDefault ? undefined : p.hrSort.dir;
+  }
+  if (p.hrFilter) {
+    const f = parseHomeroomFilter(p.hrFilter); // 클라가 준 값을 그대로 믿지 않는다 — 같은 파서로 다시 거른다.
+    patch.hr_filter = isDefaultHomeroomFilter(f) ? undefined : f;
   }
   if (Object.keys(patch).length === 0) return { ok: false, error: "잘못된 값입니다" };
   return patchMyUiPrefs("consultations", patch);

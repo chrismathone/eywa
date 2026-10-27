@@ -54,6 +54,20 @@ export type HomeroomStats = {
   retired: { teachers: number; classes: number; students: number };
 };
 
+/**
+ * 현황을 세기 시작하는 달(원장 2026-10-27 *"10월부터 보이고 싶고"*) — 담임 상담을 관리하기 시작한 달이라 그 전 달은 0%만 늘어서 잡음이다.
+ * 달이 지나면 11월·12월 열이 붙고, 최대 `HOMEROOM_MAX_MONTHS`개까지(오래된 달부터 밀려난다).
+ */
+export const HOMEROOM_START_MONTH = "2026-10";
+export const HOMEROOM_MAX_MONTHS = 6;
+
+/** 현황 달 열 — 이번 달 포함 최근 n달 중 시작 달 이후만(이번 달은 항상 남는다). */
+export function homeroomMonths(today: string): string[] {
+  const all = recentMonths(today, HOMEROOM_MAX_MONTHS);
+  const kept = all.filter((m) => m >= HOMEROOM_START_MONTH);
+  return kept.length ? kept : all.slice(-1);
+}
+
 /** 오늘이 든 달부터 거꾸로 n달(`YYYY-MM`, 오래된 순). */
 export function recentMonths(today: string, n: number): string[] {
   const y = Number(today.slice(0, 4));
