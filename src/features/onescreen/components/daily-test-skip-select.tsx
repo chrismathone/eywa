@@ -29,18 +29,21 @@ export function DailyTestSkipSelect({
   return (
     <div className="flex flex-col gap-1">
       <span className={`text-xs font-bold ${done ? "text-text-dim" : "text-danger"}`}>{t("os.card.testSkip.no")}</span>
+      {/* 고른 사유는 버튼 밖에 글자로(접혀도 다 보이게) — 칸 폭 88px에선 버튼 안 글자가 '안 …'으로 잘렸다(2026-10-27 실화면). */}
+      {skip.reason ? <span className="text-foreground text-xs leading-snug break-keep">{t(TEST_SKIP_REASON_KEY[skip.reason])}</span> : null}
       {/* FieldSelect는 쓰지 않는다 — 그 '선택 안 함' 줄이 빈 값과 같아, 사유를 안 고른 칸이 '시험 있음'으로 보였다. */}
       <SearchableSelect
         options={[
           ...TEST_SKIP_REASONS.map((r) => ({ value: r, label: t(TEST_SKIP_REASON_KEY[r]) })),
           { value: TAKEN, label: t("os.card.testSkip.yes") },
         ]}
-        value={skip.reason ?? ""}
+        // 버튼은 짧은 말('사유'·'변경')만 — 고른 값은 위 글자가 보여 준다.
+        value=""
         onValueChange={(v) => {
           if (v === TAKEN) onChange(null);
           else if ((TEST_SKIP_REASONS as readonly string[]).includes(v)) onChange({ ...skip, reason: v as TestSkipReason });
         }}
-        placeholder={t("os.card.testSkip.reasonLabel")}
+        placeholder={skip.reason ? t("os.row.testSkipChange") : t("os.row.testSkipPick")}
         ariaLabel={ariaLabel}
         searchPlaceholder={t("select.search")}
         // 이웃 입력칸(표)과 같은 치수 — field-select.tsx의 표 트리거와 한 벌. 사유가 비면 붉은 테두리.
