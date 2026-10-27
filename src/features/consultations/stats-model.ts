@@ -178,4 +178,11 @@ export type StatsDimRow = {
   active: boolean;
 };
 
-export type StatsDimView = { key: StatsDimKey; label: string; distinct: number; rows: StatsDimRow[] };
+export type StatsDimView = {
+  key: StatsDimKey;
+  label: string;
+  distinct: number;
+  rows: StatsDimRow[];
+  /** 줄에서 뺀 것(상담사 축의 퇴사자) — 각주에 '퇴사자 N명 M건 제외'로 밝힌다. */
+  excluded?: { people: number; n: number } | null;
+};

@@ -68,7 +68,8 @@ export default async function ConsultationStatsPage({
           urg={listParams.urg}
           who={listParams.who}
           subject={listParams.subject}
-          counselorOptions={counselorOptions}
+          // 퇴사자는 고르기에서 뺀다(원장 2026-10-27 *"상담통계 퇴사자제외"*) — 주소로 이미 골라 들어온 사람만 남겨 선택이 비지 않게.
+          counselorOptions={counselorOptions.filter((c) => !c.retired || c.id === listParams.who)}
           subjectOptions={subjects.options}
         />
       </div>

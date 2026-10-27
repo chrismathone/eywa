@@ -16,6 +16,8 @@ export function StatsPanelSkeleton() {
       <div className="bg-bg-soft/40 h-100 animate-pulse rounded-2xl @5xl/panel:col-span-2" />
       <div className="bg-bg-soft/40 h-96 animate-pulse rounded-2xl @5xl/panel:col-span-2" />
       <div className="bg-bg-soft/40 h-96 animate-pulse rounded-2xl" />
+      {/* 담임별 상담 현황(전폭). */}
+      <div className="bg-bg-soft/40 col-span-full h-64 animate-pulse rounded-2xl" />
     </div>
   );
 }

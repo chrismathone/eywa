@@ -10,6 +10,7 @@ import {
   type ConsultationListFilters,
 } from "./queries";
 import { classSchemaWorthTrying, isMissingClassSchema, noteClassSchema } from "./class-support";
+import { fetchAllPaged } from "@/lib/supabase/batch";
 import { getNotStartedStudentIds } from "@/features/students/server/enrolled-programs";
 import type { ConsultationStats, GapStats, StatsDimKey } from "../stats-model";
 
@@ -44,7 +45,8 @@ export async function getConsultationStats(filters: ConsultationListFilters): Pr
       p_counselor: counselor,
       p_subjects: consultationSubjectValues(filters),
       p_today: today,
-      p_top: 12,
+      // 화면은 12줄만 그리지만 퇴사자 줄을 걷어낸 뒤에도 12줄이 차도록 넉넉히 받는다(stats-panel.tsx).
+      p_top: 40,
     });
     if (!error && data) {
       noteClassSchema(true);
@@ -80,7 +82,9 @@ export async function getConsultationStats(filters: ConsultationListFilters): Pr
  * (다른 상담사가 어제 상담한 학생을 재촉하면 거짓 할 일). 좁히는 건 학생 집합뿐 — 강사는 담당 학생, 사무실은 재원생 전체.
  */
 export async function getConsultationGap(): Promise<GapStats> {
-  const scope = await effectiveTeacherScope({ includeScheduled: true });
+  // 🔑 담임 반 학생만(원장 2026-10-27 *"부담임은 상담에 포함할 필요가 없음 담임으로만 계산"*) — 교시 담당·부담임 슬롯으로 들어간
+  //    반 학생까지 넣으면 그 강사가 상담할 몫이 아닌 학생이 '공백'으로 잡힌다. 그래서 읽기 스코프(includeScheduled)가 아니라 담임 스코프.
+  const scope = await effectiveTeacherScope();
   const today = kstToday();
   if (scope && scope.studentIds.length === 0) return { full: true, today, enrolled: 0, never: 0, d30: 0, d60: 0, d90: 0, top: [] };
   if (classSchemaWorthTrying()) {
@@ -96,7 +100,9 @@ export async function getConsultationGap(): Promise<GapStats> {
   // 폴백(0318a 전) — 옛 통계 화면의 함수(fetchAllPaged)로 30일+만 센다. RPC와 같은 집합을 보게 '아직 시작 안 한 재원생'은 뺀다
   // (운영실·원생목록의 '실시간 재원생'과 같은 판정 — notYetStartedStudentIds).
   const [{ rows: allRows }, notStarted] = await Promise.all([getStudentsNeedingConsultation(30, 10_000), getNotStartedStudentIds()]);
-  const rows = allRows.filter((r) => !notStarted.has(r.id));
+  // 그 함수는 읽기 스코프(부담임 반 포함)라 담임 스코프로 한 번 더 좁힌다.
+  const homeroom = scope ? new Set(scope.studentIds) : null;
+  const rows = allRows.filter((r) => !notStarted.has(r.id) && (!homeroom || homeroom.has(r.id)));
   const never = rows.filter((r) => r.lastConsultedAt === null).length;
   return {
     full: false,
@@ -105,6 +111,18 @@ export async function getConsultationGap(): Promise<GapStats> {
     never,
     top: rows.slice(0, 10).map((r) => ({ id: r.id, name: r.name, grade: r.grade, last: r.lastConsultedAt, days: r.daysSince })),
   };
+}
+
+/**
+ * 퇴사한 직원 id(원장 2026-10-27 *"상담통계 퇴사자 제외"*) — 분해의 '상담사별' 줄과 상담사 고르기에서 뺀다.
+ * 🔴 합계(상담 N건)에선 빼지 않는다 — 퇴사자가 남긴 상담도 학생에게 실제로 한 상담이다. 빠진 수는 화면 각주가 밝힌다.
+ */
+export async function getRetiredStaffIds(): Promise<Set<string>> {
+  const supabase = await createClient();
+  const rows = await fetchAllPaged<{ id: string }>((from, to) =>
+    supabase.from("users").select("id").eq("status", "inactive").order("id").range(from, to),
+  );
+  return new Set(rows.map((r) => r.id));
 }
 
 export type { ConsultationStats, GapStats, StatsDimKey };

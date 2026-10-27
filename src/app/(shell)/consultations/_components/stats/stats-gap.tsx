@@ -11,7 +11,7 @@ const fmt = (n: number) => n.toLocaleString("ko-KR");
  * 강사는 담당 학생만(옛 화면에서 전교생 명단이 샌 자리 — queries.ts 주석).
  */
 export function StatsGap({ gap, teacherScoped }: { gap: GapStats; teacherScoped: boolean }) {
-  const who = teacherScoped ? "담당 재원생" : "재원생";
+  const who = teacherScoped ? "담임 반 재원생" : "재원생";
   const today = `${Number(gap.today.slice(5, 7))}/${Number(gap.today.slice(8, 10))}`;
   return (
     <div className="border-line space-y-2 rounded-2xl border p-3">
