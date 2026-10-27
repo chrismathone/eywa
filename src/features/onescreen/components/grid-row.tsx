@@ -23,7 +23,7 @@ import { UnderstandingPresetButtons } from "./understanding-presets";
 import { UnderstandingPopover } from "./understanding-popover";
 import { attitudeNeedsNote, isHomeworkMissed, needsAttitudeNote, needsHomeworkMissReason, pilotRowSig, testSkipComplete, type DailyTestSkip } from "../math-report-pilot-sections";
 import { hasMakeupAbsenceDate } from "../attendance-sentence";
-import { DailyTestSkipPanel } from "./daily-test-skip-panel";
+import { DailyTestSkipPopover } from "./daily-test-skip-popover";
 import { HomeworkMissReasonInput } from "./homework-miss-reason";
 import { ReasonNoteInput } from "./reason-note-input";
 import { rowMakeupFacts } from "../report-comment";
@@ -698,11 +698,12 @@ export function GridBodyRow({
       {config.dailyEnabled ? (
         <td className={`${td} text-center`}>
           {/* 수학 보고서 시범 — 카드에서 '시험 없음'을 고른 행은 점수 칸 대신 그 사실을 적는다(점수를 넣어도 읽지 않는다, row-fields.ts). */}
-          {/* 일일 테스트 '없음' — 표에서도 카드와 같은 판(DailyTestSkipPanel)으로 고른다(원장 2026-10-26 *"카드와 표에서 동일하게"*). */}
+          {/* 일일 테스트 '없음' — 표에서도 카드와 같은 판으로 고른다(원장 2026-10-26 *"카드와 표에서 동일하게"*) — 칸에 펼치면 행이 터져 창으로 띄운다(2026-10-27). */}
           {pilot && subject.dailyTestSkip && fields.onDailyTestSkip ? (
             <fieldset disabled={rowLocked} className={LOCK_FS}>
-              <DailyTestSkipPanel
+              <DailyTestSkipPopover
                 skip={subject.dailyTestSkip}
+                disabled={rowLocked}
                 onChange={(skip) => fields.onDailyTestSkip?.(student.id, subject.name, skip)}
               />
             </fieldset>
@@ -809,7 +810,7 @@ export function GridBodyRow({
       <td className={td}>
         <div className="flex flex-col gap-1">
           {/* 칸마다 무엇인지 앞에 작은 아이콘(원장 2026-09-30 *"교재 / 과제 / 보강체크 알 수 있게"*) — 값이 차면
-              placeholder가 사라져 두 칸이 구분되지 않았다. 폭 140px라 글자 대신 아이콘 + 툴팁. */}
+              placeholder가 사라져 두 칸이 구분되지 않았다. 폭 160px라 글자 대신 아이콘 + 툴팁. */}
           <div className="flex items-center gap-1">
           <span title={t("os.row.bookPh")} className="text-text-faint inline-flex shrink-0"><EyIcon name="book" size={14} aria-hidden /></span>
           {isJjSheetReport(rep) ? (
@@ -854,7 +855,7 @@ export function GridBodyRow({
               if (fixed !== e.target.value) fields.onHomeworkToday(student.id, subject.name, fixed);
             }}
             readOnly={rowLocked}
-            // ⚠️ 이 칸은 고정 140px(colgroup) — 예시까지 넣은 긴 placeholder는 **좁아서 잘려서**
+            // ⚠️ 이 칸은 고정 160px(colgroup) — 예시까지 넣은 긴 placeholder는 **좁아서 잘려서**
             // "오늘 과제 (예: 개념편 p"로 끊겼다(원장 제보 2026-08-04).
             // 칸 이름만 남기고 예시는 title(툴팁)로 — 카드 모드(폭 넉넉)는 예시를 그대로 쓴다.
             placeholder={t("os.row.hwTodayPh")}
@@ -993,7 +994,8 @@ export function GridBodyRow({
           {isEnglishRow ? null : (
             // 추세 칸 **오른쪽**에 '학습 추세 미발송'(원장 2026-09-18 *"오른쪽에 보기좋은 자리"*).
             // 🔴 반이 없는 행(수업외 보강)엔 안 그린다 — 키가 '같은 반'이라 성립하지 않는다.
-            <div className="flex items-start gap-2">
+            // 좁은 창(표 최소 폭)에선 문구 칸이 ~240px라 체크가 옆에 붙으면 추세 칸이 세 줄로 찌그러졌다(2026-10-27) → 넘치면 아래로.
+            <div className="flex flex-wrap items-start gap-x-2 gap-y-1">
               <textarea
                 value={rep?.trendDraft ?? ""}
                 onChange={(e) => fields.onTrend(student.id, subject.name, e.target.value)}
@@ -1001,7 +1003,7 @@ export function GridBodyRow({
                 placeholder={mentPlaceholder ?? t("os.row.trendPh")}
                 aria-label={tf("os.row.trendAria", { name: student.name, subject: subject.name })}
                 title={trendHidden ? t("os.row.trendOptOutOn") : undefined}
-                className={`${mentBase} ${AUTOSIZE} ${lockedTone || "bg-bg-soft"} min-h-[48px] flex-1 ${
+                className={`${mentBase} ${AUTOSIZE} ${lockedTone || "bg-bg-soft"} min-h-[48px] min-w-0 grow basis-[200px] ${
                   trendHidden ? "text-text-dim line-through decoration-1" : ""
                 }`}
               />
