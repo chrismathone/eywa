@@ -11,7 +11,7 @@ export const contributionSnapshotTag = (tenant: string) => `student-contribution
 export async function cachedContributionTotals(tenant: string, ids: string[], since: string, refreshedAt: string | null) {
   const rows = await unstable_cache(async (students: string[], from: string) =>
     loadContributionTotals(createAdminClient(), tenant, students, from),
-  ["student-contribution-totals-v2", tenant, refreshedAt ?? "initial"], { tags: [contributionSnapshotTag(tenant)], revalidate: 60 })(ids, since);
+  ["student-contribution-totals-v3", tenant, refreshedAt ?? "initial"], { tags: [contributionSnapshotTag(tenant)], revalidate: 60 })(ids, since);
   // A persistent cache hit bypasses the DB loader, including its compatibility normalization.
   return rows.map(row => ({ ...row, raws: normalizeStoredRaws(row.raws), recent: normalizeStoredRaws(row.recent) }));
 }

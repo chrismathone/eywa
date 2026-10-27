@@ -36,8 +36,9 @@ export async function ContributionStudentPanel({ studentId, month }: { studentId
     <details className="rounded-lg border border-line px-4 py-3 text-xs leading-relaxed">
       <summary className="cursor-pointer font-medium">학습·참여 점수는 언제 반영되나요?</summary>
       <div className="mt-2 space-y-1.5">
-        <p>개근과 영상 숙제는 달이 끝난 뒤 집계합니다. 이번 달 실적은 다음 달 집계부터 반영됩니다.</p>
-        <p>영상은 제출 편수가 아니라, 그 달에 배정된 영상 숙제를 모두 제출했는지로 판단해 월 1회 인정합니다. 영상이 있어도 배정 기록을 확인할 수 없으면 완료한 달로 인정하지 않습니다.</p>
+        <p>주간 개근은 월요일~일요일의 예정된 수업에 모두 출석했을 때 인정합니다. 끝난 주부터 집계하며, 일요일이 속한 달에 한 번 반영합니다.</p>
+        <p>영상 숙제는 배정된 숙제에 제출 영상이 하나 이상 확인되면 숙제당 1회 인정합니다. 같은 숙제에 영상이 여러 개여도 한 번만 계산하며, 월말까지 기다리지 않고 다음 집계에 반영합니다.</p>
+        <p>2026년부터 확인 가능한 기록으로 계산합니다. 이전 월 단위 실적은 새 실적과 중복 계산하지 않으며, 마감한 달의 새 기준 실적은 이번 달 정정에서 확인할 수 있습니다.</p>
         <p>월말평가와 긍정 신호도 항목별로 한 달에 1회 인정하며, 점수는 현재 배점을 적용합니다.</p>
         <Link href={`/students/${studentId}?tab=homework-videos`} className="inline-block text-primary underline underline-offset-4">숙제 영상 확인</Link>
       </div>
