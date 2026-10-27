@@ -845,9 +845,15 @@ export function ReportCard({
                     : tf("os.card.mentPh", { subject: subjectName })
               }
               // 영어 템플릿 글은 20줄 안팎이라 기본 높이로는 절반도 안 보인다 — 영어 행만 키운다.
+              // 새 수학 보고서 글도 항목이 일곱 개 안팎이라 110px 칸에선 고치기가 불편했다(원장 2026-10-27 *"칸이 너무 작아서 불편"*) —
+              // 글 길이만큼 자라고(화면 높이 70%까지) 손잡이로도 늘린다.
               className={`border-line focus:border-primary scrollbar-thin ${
-                isEnglishRow ? "min-h-[280px]" : "min-h-[110px]"
-              } flex-1 resize-none rounded-lg border ${pilotLocked ? "bg-bg-soft" : "bg-background"} px-3 py-2 text-sm leading-relaxed outline-none`}
+                isEnglishRow
+                  ? "min-h-[280px] resize-none"
+                  : pilot
+                    ? "field-sizing-content min-h-[280px] max-h-[70dvh] resize-y"
+                    : "min-h-[110px] resize-none"
+              } flex-1 rounded-lg border ${pilotLocked ? "bg-bg-soft" : "bg-background"} px-3 py-2 text-sm leading-relaxed outline-none`}
             />
             </>
           )}

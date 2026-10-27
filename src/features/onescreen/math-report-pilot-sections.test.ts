@@ -14,7 +14,7 @@ import {
   pilotBody,
   pilotFactsSig,
   readTestSkip,
-  testSkipComplete,
+  testSkipComplete, testSkipWritten,
   testSkipText,
   type PilotFacts,
 } from "./math-report-pilot-sections";
@@ -172,12 +172,20 @@ describe("일일 테스트 있음/없음 · 사유", () => {
   it("아이를 탓하는 말을 쓰지 않는다", () => {
     expect(testSkipText({ reason: "slow", detail: "" })).not.toMatch(/느려|느림|못해|부족/);
   });
-  it("사유를 다 적었나 — 미선택·'기타'인데 빈 말이면 아직", () => {
+  it("사유는 선택 — 발송을 막지 않고, 안 적으면 보고서에서 일일 테스트 항목이 빠진다(원장 2026-10-27)", () => {
     expect(testSkipComplete(null)).toBe(true);
-    expect(testSkipComplete({ reason: null, detail: "" })).toBe(false);
-    expect(testSkipComplete({ reason: "other", detail: " " })).toBe(false);
-    expect(testSkipComplete({ reason: "other", detail: "학교 행사" })).toBe(true);
-    expect(testSkipComplete({ reason: "sick", detail: "" })).toBe(true);
+    expect(testSkipComplete({ reason: null, detail: "" })).toBe(true);
+    expect(testSkipComplete({ reason: "other", detail: " " })).toBe(true);
+    expect(testSkipWritten({ reason: null, detail: "" })).toBe(false);
+    expect(testSkipWritten({ reason: "other", detail: " " })).toBe(false);
+    expect(testSkipWritten({ reason: "other", detail: "학교 행사" })).toBe(true);
+    expect(testSkipWritten({ reason: "sick", detail: "" })).toBe(true);
+    expect(testSkipText({ reason: null, detail: "" })).toBe("");
+    expect(testSkipText({ reason: "other", detail: "" })).toBe("");
+  });
+  it("'시험 없음'인데 사유를 안 적으면 일일 테스트 항목째 빠진다('없었다'로 메우지 않는다)", () => {
+    const out = pilotBody({ ...facts, dailyTestSkip: { reason: null, detail: "" } }, {});
+    expect(out).not.toContain("■ 일일 테스트");
   });
   it("세션 값의 모양을 믿지 않는다", () => {
     expect(readTestSkip(null)).toBeNull();

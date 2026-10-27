@@ -22,9 +22,9 @@ describe("새 보고서 발송 조건(원장 2026-10-26 — 일괄 발송도 같
   it("자동작성 전이면 자동작성·한마디가 막는다", () => {
     expect(pilotSendBlocks(student({}), "수학", null)).toEqual(expect.arrayContaining(["autowrite", "oneline"]));
   });
-  it("시험 없음인데 사유가 없으면 막는다", () => {
+  it("시험 없음 사유는 선택 — 안 적어도 막지 않는다(원장 2026-10-27)", () => {
     const b = pilotSendBlocks(student({ dailyTestSkip: { reason: null, detail: "" } }), "수학", null);
-    expect(b).toContain("testReason");
+    expect(b).not.toContain("testReason");
   });
   it("영어는 사랑의 한마디만 본다", () => {
     expect(pilotSendBlocks(student({ subjectKey: "english" }), "수학", null)).toEqual(["oneline"]);
