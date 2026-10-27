@@ -53,7 +53,7 @@ import {
 } from "../last-template";
 import { isTrendOptedOut, trendOptOutKey } from "../trend-optout";
 import { removeMakeupEntry } from "../server/makeup-remove-actions";
-import { setReservationReportMode } from "@/features/attendance/server/makeup-reservation-actions";
+import { moveReservationToRegular, setReservationReportMode } from "@/features/attendance/server/makeup-reservation-actions";
 import { joinMakeupContent, joinText, planJoinMakeup, planSplitMakeup, type MakeupSwitchBlock } from "../makeup-switch";
 import { logOnescreenBulkApply } from "../server/bulk-log-actions";
 import { canRemoveMakeupRow, makeupRemoveBlockReason } from "../makeup-remove-plan";
@@ -316,6 +316,8 @@ const SWITCH_BLOCK_KEY = {
   optout: "os.switch.blockOptout",
   hasSeparate: "os.switch.blockHasSeparate",
   gone: "os.switch.blockGone",
+  noAnchor: "os.switch.blockNoAnchor",
+  reservedDone: "os.switch.blockReservedDone",
 } as const satisfies Record<MakeupSwitchBlock, string>;
 
 /**
@@ -2345,12 +2347,15 @@ export function OneScreenClient({
     return !!rep?.sent || !canRemoveMakeupRow(rep?.classnoteStatus ?? null);
   };
   function switchBlockText(reason: MakeupSwitchBlock, cls: string): string {
-    return reason === "noRegular" ? tf(SWITCH_BLOCK_KEY.noRegular, { cls }) : t(SWITCH_BLOCK_KEY[reason]);
+    return reason === "noRegular" || reason === "reservedDone" ? tf(SWITCH_BLOCK_KEY[reason], { cls }) : t(SWITCH_BLOCK_KEY[reason]);
   }
   /**
    * 분리 → 합침(원장 2026-10-22 *"보강으로 분리되어있는 보고서도 … 같이 보내고 싶을 수"*) — 보강 줄을 **같은 반** 정규 줄에 합친다(makeup-switch.ts).
    * 🔴 하루 정규 2회여도 추측하지 않는다(앵커 반의 정규 줄 하나) · 시수는 그대로(같은 반 칸에 이미 있다 — 출결은 지우지 않는다).
    * 🔴 예약에서 온 보강이면 예약을 먼저 '합침'으로 바꾼다 — 안 바꾸면 새로고침이 예약대로 '(보강)' 줄을 다시 세운다. 뒤가 실패하면 되돌린다.
+   * 🔑 앵커 반에 오늘 정규 줄이 없는 **예약** 보강은 오늘 같은 과목 정규 반으로 **예약을 옮겨** 합친다(원장 2026-10-27 박지호 건 — `move`).
+   *    정규 반이 둘 이상이면 강사가 고른다. 시수는 서버가 옮긴 반에서 이행한다(출석이 이미 찍혔으면 지금). 옮긴 뒤 보강 줄 정리가 실패하면
+   *    예약은 되돌리지 않고 알린다(새로고침하면 옮긴 반 '정규+보강'으로 선다 — 그게 고른 결과다).
    */
   async function joinMakeupRow(student: OneScreenStudent, subjectName: string) {
     if (readonlyBlocked() || makeupSaving) return;
@@ -2358,18 +2363,40 @@ export function OneScreenClient({
     if (!card) return;
     const src0 = card.subjects.find((x) => x.name === subjectName);
     const anchorName = src0?.makeupClassName ?? todayClasses.find((c) => c.id === src0?.makeupClassId)?.name ?? t("os.switch.otherClass");
-    const plan = planJoinMakeup(card, subjectName, reportLockedOf(card.id));
+    const classNameOf = (row: Subject) => row.className ?? todayClasses.find((c) => c.id === row.classId)?.name ?? row.name;
+    let plan = planJoinMakeup(card, subjectName, reportLockedOf(card.id));
+    if (!plan.ok && plan.reason === "pickRegular") {
+      // 옮겨 합칠 정규 반이 둘 이상 — 추측하지 않고 고르게 한다(번호).
+      const choices = plan.choices;
+      const answer = window.prompt(tf("os.switch.pickRegular", { list: choices.map((c, i) => `${i + 1}. ${classNameOf(c)}`).join("\n") }), "1");
+      if (answer === null) return;
+      const picked = choices[Number(answer.trim()) - 1];
+      if (!picked?.classId) {
+        toast.error(t("os.switch.pickRegularBad"));
+        return;
+      }
+      plan = planJoinMakeup(card, subjectName, reportLockedOf(card.id), picked.classId);
+    }
     if (!plan.ok) {
-      toast.error(switchBlockText(plan.reason, anchorName));
+      toast.error(plan.reason === "pickRegular" ? t("os.switch.blockGone") : switchBlockText(plan.reason, anchorName));
       return;
     }
-    const { source, target } = plan;
-    const cls = target.className ?? todayClasses.find((c) => c.id === target.classId)?.name ?? target.name;
-    if (!window.confirm(tf("os.switch.confirmJoin", { name: card.name, cls }))) return;
+    const { source, target, move } = plan;
+    const cls = classNameOf(target);
+    const ask = move ? tf("os.switch.confirmMove", { name: card.name, from: anchorName, cls }) : tf("os.switch.confirmJoin", { name: card.name, cls });
+    if (!window.confirm(ask)) return;
     setMakeupSaving(true);
     try {
       const reserved = !!source.makeupReserved?.length;
-      if (reserved) {
+      let movedUnits: number | null | undefined;
+      if (move) {
+        const r = await moveReservationToRegular({ studentId: card.id, date: activeDate, fromClassId: source.makeupClassId!, toClassId: target.classId! });
+        if ("error" in r) {
+          toast.error(r.error);
+          return;
+        }
+        movedUnits = r.units;
+      } else if (reserved) {
         const r = await setReservationReportMode({ studentId: card.id, classId: target.classId!, date: activeDate, mode: "merge" });
         if ("error" in r) {
           toast.error(r.error);
@@ -2379,18 +2406,30 @@ export function OneScreenClient({
       // 보강 줄의 명단·미발송 보고서만 지운다 — 출결은 그대로(classId null). 예약에서 막 선 줄은 지울 기록이 없을 수 있다(not_found = 정상).
       const res = await removeMakeupEntry({ studentId: card.id, date: activeDate, classId: null, subject: source.subjectKey ?? null });
       if (!res.ok && !(reserved && res.code === "not_found")) {
+        if (move) {
+          toast.error(tf("os.switch.movedRowLeft", { cls, error: res.error }));
+          return;
+        }
         if (reserved) await setReservationReportMode({ studentId: card.id, classId: target.classId!, date: activeDate, mode: "separate" }).catch(() => null);
         toast.error(res.error);
         return;
       }
       const joined = joinMakeupContent(target, source, card.note ?? "");
-      const reservedList = (target.makeupReserved ?? source.makeupReserved)?.map((r) => ({ ...r, mode: "merge" as const }));
+      // 옮겨 합치면 두 반의 예약이 다르다 — 정규 반에 원래 있던 예약은 제 방식 그대로 두고 옮긴 예약만 '합침'으로 잇는다(리뷰 2026-10-27).
+      const reservedList = move
+        ? [...(target.makeupReserved ?? []), ...(source.makeupReserved ?? []).map((r) => ({ ...r, mode: "merge" as const }))]
+        : (target.makeupReserved ?? source.makeupReserved)?.map((r) => ({ ...r, mode: "merge" as const }));
       patch(card.id, (s) => ({
         ...s,
         subjects: s.subjects
           .filter((x) => x.name !== source.name)
           .map((x) => (x.name === target.name
-            ? { ...x, ...joined, makeup: true, ...(reserved ? { makeupByReservation: true as const, ...(reservedList ? { makeupReserved: reservedList } : {}) } : {}) }
+            ? {
+                ...x, ...joined, makeup: true,
+                ...(reserved ? { makeupByReservation: true as const, ...(reservedList ? { makeupReserved: reservedList } : {}) } : {}),
+                // 옮긴 반에서 지금 이행됐으면(출석이 이미 찍힘) 서버가 맞춘 시수 — 화면 '타임'도 그 값으로.
+                ...(movedUnits !== undefined ? { attendanceUnits: movedUnits } : {}),
+              }
             : x)),
       }));
       // 멘트 초안도 잇는다(보고서 칸은 줄 이름으로 묶인다) — 보강 줄 칸은 지운다.
@@ -2403,7 +2442,7 @@ export function OneScreenClient({
         return { ...prev, [card.id]: mine };
       });
       setSelId(card.id);
-      toast.success(tf("os.switch.joined", { name: card.name, cls }));
+      toast.success(tf(move ? "os.switch.moved" : "os.switch.joined", { name: card.name, cls }));
     } catch {
       toast.error(t("os.c.makeupSaveFail"));
     } finally {

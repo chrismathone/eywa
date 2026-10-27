@@ -258,3 +258,27 @@ describe("같은 학생의 정규·특강을 왼쪽에서도 각각 선택", () 
     expect(screen.getByText("보고서")).toHaveClass("text-danger");
   });
 });
+
+// 원장 2026-10-27 *"보강이 라벨 겹침 현상"* — 줄바꿈 없는 표식이 둘째 줄 왼쪽 칸을 넘쳐 진도·테스트·보고서 칩 밑으로 들어갔다.
+describe("보강 표식 = 칩 아래 셋째 줄 전체 폭", () => {
+  const reserved = [{ start: "18:20", end: "19:15", absenceDate: "2026-10-02", mode: "merge" as const, done: false }];
+  const tagRow = (text: string) => screen.getByText(text).closest("div")!;
+
+  it("보강 예약 표식은 칩 뒤 전체 폭 줄(col-span-2)에 선다", () => {
+    render(<StudentList students={[student({ id: "s1", name: "권민서A", subjects: [subject({ classId: "c1", makeupReserved: reserved })] })]} selId="" onSelect={vi.fn()} />);
+    const row = tagRow("보강 예약 18:20~19:15");
+    expect(row.className).toContain("col-span-2");
+    const chip = screen.getByText("진도");
+    expect(chip.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("보강 반 표식도 같은 줄 · 표식이 없으면 셋째 줄을 만들지 않는다", () => {
+    render(<StudentList students={[
+      student({ id: "s1", name: "박지호", subjects: [subject({ name: "수학 (보강)", makeup: true, classId: null, makeupClassId: "jj2l", makeupClassName: "초등M 개별 JJ2L" })] }),
+      student({ id: "s2", name: "김동리", subjects: [subject({ classId: "c1" })] }),
+    ]} selId="" onSelect={vi.fn()} />);
+    expect(tagRow("초등M 개별 JJ2L").className).toContain("col-span-2");
+    const plain = screen.getByText("김동리").closest("button")!;
+    expect(plain.querySelectorAll(":scope > div.col-span-2")).toHaveLength(0);
+  });
+});

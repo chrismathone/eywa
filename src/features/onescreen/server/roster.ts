@@ -1709,7 +1709,9 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
         // ⚠️ `!= null`이라 빈 문자열(해제)도 복원한다 — 켰다가 끈 상태가 새로고침에 되살아나면 안 된다.
         if (entry?.mode != null) su.progressMode = entry.mode || null;
         if (entry?.textbook != null) su.textbook = entry.textbook;
-        if (entry?.makeup != null) su.makeup = entry.makeup;
+        // 🔴 반 없는 보강 줄은 늘 보강이다 — '보강 빼기' 표시({makeup:false})가 남은 날 예약·출석부 칸이 같은 줄을 다시 세우면
+        //    그 표시가 줄을 '보강 아님'으로 덮어 반도 보강도 없는 줄이 됐다(적대 리뷰 2026-10-27). 정규 줄의 '정규+보강' 토글만 세션을 따른다.
+        if (entry?.makeup != null && !makeupKey) su.makeup = entry.makeup;
         if (entry?.homeworkToday != null) su.homeworkToday = entry.homeworkToday;
         if (typeof entry?.videoHomework === "boolean") su.videoHomework = entry.videoHomework;
         if (typeof entry?.videoSubmitLink === "boolean") su.videoSubmitLink = entry.videoSubmitLink;

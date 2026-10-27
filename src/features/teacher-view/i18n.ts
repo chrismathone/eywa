@@ -2957,6 +2957,28 @@ export const SHEET_DICT = {
   "os.switch.blockOptout": { ko: "보고서를 보내지 않는 줄이라 합칠 수 없습니다", en: "This row doesn't send reports, so it can't be merged" },
   "os.switch.blockHasSeparate": { ko: "같은 과목 보강 줄이 이미 있습니다", en: "A makeup row for this subject already exists" },
   "os.switch.blockGone": { ko: "화면이 바뀌었습니다 — 새로고침 뒤 다시 해 주세요", en: "The screen changed — refresh and try again" },
+  "os.switch.blockNoAnchor": {
+    ko: "반이 정해지지 않은 보강이라 합칠 수 없습니다 — '반 미정'을 눌러 반부터 고르세요",
+    en: "This makeup has no class yet, so it can't be merged — press 'Class not set' and pick one first",
+  },
+  "os.switch.blockReservedDone": {
+    ko: "이 보강은 이미 {cls} 출석부에 찍혀 있어 다른 반으로 옮겨 합칠 수 없습니다 — 출석부에서 보강 칸을 먼저 고쳐 주세요",
+    en: "This makeup is already marked in the {cls} register, so it can't be moved and merged — fix the makeup cell in the register first",
+  },
+  "os.switch.confirmMove": {
+    ko: "{name} 보강 예약을 {from}에서 오늘 {cls} 정규 수업으로 옮겨 보고서를 합칠까요?\n\n· 보고서는 {cls} 한 건(정규+보강)으로 나갑니다.\n· 보강 시수는 {cls} 오늘 칸에 더해집니다(출석이 이미 찍혀 있으면 지금, 아니면 출석을 찍을 때).\n· 결석 칸과 '보강 예정' 메모는 그대로입니다.\n· 보강 줄에 적은 오늘 과제·특이사항·멘트는 정규 줄 뒤에 이어 붙습니다.",
+    en: "Move {name}'s makeup booking from {from} to today's {cls} regular lesson and merge the reports?\n\n· One {cls} regular + makeup report is sent.\n· The makeup units are added to today's {cls} cell (now if attendance is already marked, otherwise when it is).\n· The absence cell and its 'makeup planned' memo stay as they are.\n· Today's homework, notes and comment written on the makeup row are appended to the regular row.",
+  },
+  "os.switch.moved": { ko: "{name} 보강 예약을 {cls}로 옮겨 정규 보고서에 합쳤습니다", en: "Moved {name}'s makeup booking to {cls} and merged it into the regular report" },
+  "os.switch.movedRowLeft": {
+    ko: "보강 예약은 {cls}로 옮겼지만 보강 줄을 정리하지 못했습니다 — 새로고침해 주세요 ({error})",
+    en: "The makeup booking was moved to {cls}, but the makeup row couldn't be cleaned up — please refresh ({error})",
+  },
+  "os.switch.pickRegular": {
+    ko: "오늘 정규 수업이 여럿입니다 — 어느 수업에 합칠까요? 번호를 적어 주세요.\n{list}",
+    en: "There are several regular lessons today — which one should it merge into? Enter the number.\n{list}",
+  },
+  "os.switch.pickRegularBad": { ko: "목록에 있는 번호를 적어 주세요", en: "Enter a number from the list" },
   "os.switch.otherClass": { ko: "다른 반", en: "another class" },
   "os.reserved.mergeLocked": {
     ko: "보강 예약으로 합쳐진 보고서입니다 — 따로 보내려면 옆의 '따로 보내기'를 누르세요",
