@@ -49,10 +49,11 @@ import {
 import { statusTextOf, type AttendanceMark } from "../cell-display";
 import { setAttendanceCell } from "./actions";
 import { pickAbsenceNoteTarget } from "./absence-cell";
-import { isMissingColumn, isMissingReservationTable, loadReservationById } from "./makeup-reservation-queries";
+import { isMissingColumn, isMissingReservationTable, loadReservationById, toReservation } from "./makeup-reservation-queries";
 import { isEnrollmentActiveOn } from "@/features/enrollments/eligibility";
 import { isClassOpenOn } from "../makeup-host";
-import { isRegularLessonDay } from "./makeup-reservation-complete";
+import { completeMakeupReservations, completionKey, isRegularLessonDay } from "./makeup-reservation-complete";
+import { attendanceLockMessage, isWithinAttendanceEditWindow } from "../edit-window";
 
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
 const NOT_APPLIED = "보강 예약 표(0264a)가 아직 적용되지 않았습니다 — 관리자에게 SQL 적용을 요청하세요";
@@ -656,6 +657,165 @@ export async function setReservationReportMode(input: {
     revalidateSurfaces();
   }
   return { ok: true, updated: ids.length };
+}
+
+/**
+ * 보강 예약을 **그날 정규 반으로 옮겨 합친다** — 원스크린 '(보강)' 줄의 '정규에 합치기'(원장 2026-10-27 박지호 건 *"예약 보강도 정규 반으로
+ * 옮겨 합치기"*). 예약 창에서 기록할 반 = 그 정규 반 + '함께 발송'으로 다시 잡은 것과 같은 행 모양: `class_id` = 정규 반 ·
+ * `absence_class_id` = 결석난 반(같으면 비움) · `report_mode` = merge. 결석 칸·'보강 예정' 메모는 결석난 반 그대로(`absenceClassOf`).
+ * 🔴 이행된 예약·기록된 반 출석부에 이미 보강이 찍힌 날은 막는다(옮기면 시수가 두 반에 두 번 선다).
+ * 🔴 합칠 반 = 예약 창의 기록할 반 후보(`reservationHostChoices` — 학생이 그날 다니는 열린 같은 과목 반 · 강사는 그날 담당 반) + 그날 정규 수업일.
+ * 시수: 합칠 반 출석이 이미 찍혀 있으면 지금 이행하고(`completeMakeupReservations` `addToCurrent` — '보강 완료' 메모·결석 칸 '예정 → 완료')
+ * 시수는 '+ 보강 학생 추가' 합침과 같은 규칙으로 **지금 값 + 보강분**. 아직이면 출석을 찍을 때 이행된다(새 칸 = 정규 + 보강 자동값).
+ * 게이트 = 출결 쓰기 + 강사(scoped)는 합칠 반을 그날 맡고, 기록된 반을 그날 맡거나 결석난 반을 결석일에 맡았다(취소와 같은 축) + 출결 수정 기간
+ * (시수는 급여 값 — `setAttendanceCell`과 같은 잠금 · 같은 scoped 기준). 감사로그 `makeup_reserve_host_move`.
+ */
+export async function moveReservationToRegular(input: {
+  studentId: string;
+  date: string;
+  /** 지금 예약이 기록된 반(원스크린 보강 줄의 앵커). */
+  fromClassId: string;
+  /** 합칠 정규 반. */
+  toClassId: string;
+}): Promise<{ ok: true; moved: number; units?: number | null } | { error: string }> {
+  const user = await getCurrentUser({ teacherView: true });
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "attendance"))) return { error: "출석 관리 권한이 없습니다" };
+  const { studentId, date, fromClassId, toClassId } = input ?? ({} as typeof input);
+  if (!studentId || !fromClassId || !toClassId || fromClassId === toClassId || !YMD.test(date ?? "")) return { error: "잘못된 요청입니다" };
+  // 🔴 강사(scoped) 출결 수정 기간 — 옮기면 합칠 반 칸의 시수가 바뀐다(적대 리뷰 2026-10-27: 2주 전 날짜를 열고 합치면 옛 칸 시수가 바뀌었다).
+  //    기준은 `setAttendanceCell`과 같은 권한 매트릭스 scoped(역할 이름이 아니다).
+  const scoped = (await accessLevelTenant(user.systemRole, "attendance")) === "scoped";
+  const today = kstToday();
+  if (scoped && !isWithinAttendanceEditWindow(date, today)) return { error: attendanceLockMessage(date, today) };
+  let admin: ReturnType<typeof createAdminClient>;
+  try {
+    admin = createAdminClient();
+  } catch {
+    return { error: "서버 설정 오류 — 관리자에게 알려 주세요" };
+  }
+  // 칸(0438a·0440a)이 없으면 옮길 수 없다 — 다른 반 기록·합침을 적을 자리가 없다.
+  const { data: rows, error: readErr } = await admin
+    .from("makeup_reservations")
+    .select("id, student_id, class_id, absence_date, makeup_date, slot_start, slot_end, period_label, note, status, created_by, report_mode, absence_class_id")
+    .eq("tenant_id", user.tenantId)
+    .eq("student_id", studentId)
+    .eq("class_id", fromClassId)
+    .eq("makeup_date", date)
+    .in("status", ["reserved", "done"]);
+  if (readErr) {
+    if (isMissingReservationTable(readErr)) return { error: NOT_APPLIED };
+    if (isMissingColumn(readErr, "absence_class_id") || isMissingColumn(readErr, "report_mode")) {
+      return { error: "다른 반에 기록하는 보강 예약은 아직 준비 중입니다 — 관리자에게 알려 주세요" };
+    }
+    console.error("[makeup-reservation] 옮길 예약 조회 실패", readErr.message);
+    return { error: "보강 예약을 읽지 못했습니다 — 잠시 후 다시 시도하세요" };
+  }
+  const list = ((rows ?? []) as unknown as Parameters<typeof toReservation>[0][]).map(toReservation);
+  if (list.length === 0) return { error: "옮길 보강 예약을 찾지 못했습니다 — 새로고침 뒤 다시 시도해 주세요" };
+  const DONE_ERROR = "이 보강은 이미 기록된 반 출석부에 찍혀 있어 다른 반으로 옮길 수 없습니다 — 출석부에서 보강 칸을 먼저 고쳐 주세요";
+  if (list.some((r) => r.status === "done")) return { error: DONE_ERROR };
+
+  const supabase = await createClient();
+  if (scoped) {
+    const teaching = await userTaughtClassSet(supabase, user.id, date);
+    if (!teaching.has(toClassId)) return { error: "담당 반이 아닙니다" };
+    if (!teaching.has(fromClassId)) {
+      for (const r of list) {
+        const then = await userTaughtClassSet(supabase, user.id, r.absenceDate);
+        if (!then.has(absenceClassOf(r))) return { error: "담당 반이 아닙니다" };
+      }
+    }
+  }
+  for (const r of list) {
+    const block = await mappedReservationMutationBlock({ reservationId: r.id, action: "reschedule" });
+    if (block) return { error: block };
+  }
+
+  const [{ data: fromCls }, { data: stu }] = await Promise.all([
+    admin.from("classes").select("subject").eq("tenant_id", user.tenantId).eq("id", fromClassId).maybeSingle(),
+    admin.from("students").select("name").eq("tenant_id", user.tenantId).eq("id", studentId).maybeSingle(),
+  ]);
+  if (!fromCls) return { error: "반을 찾지 못했습니다" };
+  let hosts: ReservationHost[];
+  try {
+    hosts = await reservationHostChoices(supabase, user, { studentId, absenceClassId: absenceClassOf(list[0]!), subject: String(fromCls.subject ?? ""), date });
+  } catch {
+    return { error: "학생의 반을 확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" };
+  }
+  const host = hosts.find((h) => h.classId === toClassId);
+  if (!host) return { error: "합칠 반을 다시 확인해 주세요 — 그날 이 학생이 다니는 같은 과목 반만 됩니다" };
+  const regularDay = await isRegularLessonDay(user.tenantId, { studentId, classId: toClassId, date });
+  if (regularDay === null) return { error: "그날 정규 수업인지 확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" };
+  if (!regularDay) return { error: `그날은 ${host.className} 정규 수업일이 아니라 합칠 수 없습니다` };
+
+  // 기록된 반에 그날 보강이 이미 찍혀 있으면(예약 이행 전 다른 경로로) 옮기면 시수가 두 번 선다. 강사 RLS에 가리지 않게 admin + tenant.
+  const { data: fromDay, error: dayErr } = await admin
+    .from("attendance_records")
+    .select("id, student_id, class_id, session_date, slot_start, status, note, recorded_at")
+    .eq("tenant_id", user.tenantId)
+    .eq("class_id", fromClassId)
+    .eq("student_id", studentId)
+    .eq("session_date", date);
+  if (dayErr) return { error: "출석부를 확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" };
+  if (effectiveAttendanceRecords((fromDay ?? []) as AttRow[]).some((c) => completesReservation(c.status))) return { error: DONE_ERROR };
+
+  const now = new Date().toISOString();
+  const moved: typeof list = [];
+  const undo = async () => {
+    for (const r of moved) {
+      const { error: undoErr } = await admin
+        .from("makeup_reservations")
+        .update({ class_id: r.classId, absence_class_id: r.absenceClassId ?? null, report_mode: r.reportMode ?? null, updated_at: now })
+        .eq("tenant_id", user.tenantId)
+        .eq("id", r.id)
+        .eq("status", "reserved");
+      if (undoErr) console.error("[makeup-reservation] 옮긴 예약을 되돌리지 못했습니다 — 관리자 확인 필요", r.id, undoErr.message);
+    }
+  };
+  for (const r of list) {
+    const absenceId = absenceClassOf(r);
+    const { data: upd, error: updErr } = await admin
+      .from("makeup_reservations")
+      .update({ class_id: toClassId, absence_class_id: absenceId === toClassId ? null : absenceId, report_mode: "merge", updated_at: now })
+      .eq("tenant_id", user.tenantId)
+      .eq("id", r.id)
+      .eq("status", "reserved")
+      .eq("class_id", fromClassId)
+      .select("id");
+    if (updErr || (upd ?? []).length === 0) {
+      await undo().catch(() => undefined);
+      if (updErr?.code === "23505") return { error: `${host.className}에 같은 교시 보강 예약이 이미 있습니다` };
+      if (!updErr) return { error: "그 사이 예약이 바뀌어 옮기지 못했습니다 — 새로고침 뒤 확인해 주세요" };
+      console.error("[makeup-reservation] 예약 옮기기 실패", updErr.message);
+      return { error: "보강 예약을 옮기지 못했습니다 — 잠시 후 다시 시도하세요" };
+    }
+    moved.push(r);
+  }
+
+  // 합칠 반 출석이 이미 찍혀 있으면 지금 이행('보강 완료' 메모 · 결석 칸 '예정 → 완료') — 아직이면 출석을 찍을 때 이행된다(새 칸 = 정규 + 보강 자동값).
+  // 🔴 시수 = 지금 값 + 보강분(`addToCurrent`) — 이행 모듈의 '새 칸·빈 칸에만 자동값'으로는 이미 찍힌 칸에서 보강분이 빠지거나(3교시 반 1.5)
+  //    시간표로 다시 매겨 사람이 친 값이 덮인다. 더하기는 예약을 done으로 바꾼 호출만 한다(동시 출석 저장과 두 번 더하지 않게) — 적대 리뷰 2026-10-27.
+  const completed = await completeMakeupReservations({ tenantId: user.tenantId }, [
+    { studentId, classId: toClassId, date, status: null, unitsExplicit: false, created: false, addToCurrent: true },
+  ]);
+  const units = completed.get(completionKey({ studentId, classId: toClassId, date }));
+  await logAction({
+    action: "makeup_reserve_host_move",
+    targetType: "attendance",
+    ...(stu?.name ? { targetLabel: `${stu.name} · ${host.className}` } : {}),
+    metadata: {
+      studentId,
+      date,
+      fromClassId,
+      classId: toClassId,
+      reservationIds: moved.map((r) => r.id),
+      reportMode: "merge",
+      ...(units !== undefined ? { units } : {}),
+    },
+  });
+  revalidateSurfaces();
+  return { ok: true, moved: moved.length, ...(units !== undefined ? { units } : {}) };
 }
 
 function revalidateSurfaces() {

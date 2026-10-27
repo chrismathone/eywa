@@ -27,7 +27,7 @@ import { getLessonProfile } from "@/features/owner/server/lesson-profile";
  */
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logAction } from "@/features/audit/server/log";
-import { appendMemo, hasMemoLine } from "@/features/onescreen/makeup-absence-link";
+import { appendMemo, hasMemoLine, unitsAfterMakeup } from "@/features/onescreen/makeup-absence-link";
 import { enrollmentAttendsOnDay, isEnrollmentActiveOn } from "@/features/enrollments/eligibility";
 import { liveSlotMinutesOn } from "@/features/class-sheets/lib/grid";
 import { DOW_KEYS } from "../calendar";
@@ -46,7 +46,7 @@ import {
   type MakeupReservation,
 } from "../makeup-reservation";
 import { effectiveAttendanceRecords } from "../effective-records";
-import { round1 } from "../session-units";
+import { MAX_SESSION_UNITS, round1 } from "../session-units";
 import { isMissingColumn, isMissingReservationTable, toReservation } from "./makeup-reservation-queries";
 import { classifyLegacyReservations } from "@/features/makeups/server/adapters/completion";
 import { effectGapsOf, noteEffectGap, type EffectGap } from "@/features/makeups/server/adapters/effects";
@@ -72,6 +72,13 @@ export type CompletionCell = {
    * (이번엔 안 쳤어도) 예전에 친 값일 수 있어 덮지 않는다(auto-units.ts "INSERT에만"과 같은 결).
    */
   created?: boolean;
+  /**
+   * 이미 있는 칸에 보강분을 **지금 값 위에 더한다**(`unitsAfterMakeup` — '+ 보강 학생 추가' 합침과 같은 규칙). 정규 반으로 옮겨 합친 예약
+   * (`moveReservationToRegular`, 원장 2026-10-27)만 싣는다 — 그 칸은 예약보다 먼저 찍혀 있어 '새 칸·빈 칸에만 자동값' 규칙으로는 보강분이
+   * 빠지고(3교시 반 1.5), 시간표로 다시 매기면 사람이 친 값이 덮인다. 🔴 예약을 done으로 바꾼 **이 호출만** 더한다(①의 0행 검사) —
+   * 동시 저장이 먼저 이행했으면 그쪽 값 그대로(두 번 더하지 않는다, 적대 리뷰 2026-10-27).
+   */
+  addToCurrent?: boolean;
 };
 
 /** 이행이 **시수를 바꾼** 칸 → 저장된 시수(null = 1). 호출부(단건 저장)가 화면 낙관값을 이 값으로 맞춘다. */
@@ -481,7 +488,15 @@ async function fulfil(
   const untouched = src?.created === true || cell.session_units == null;
   // 자동값은 학원 수업 규칙을 따른다(새 학원 = 자동 시수 없음). 침산은 종전과 같다.
   const resUnits = (await getLessonProfile(tenantId)).autoUnits ? reservationAutoUnits(r, subject) : null;
-  if (!explicit && untouched && resUnits !== null && cell.slot_start == null) {
+  if (!explicit && src?.addToCurrent === true && resUnits !== null && cell.slot_start == null) {
+    const next = round1(unitsAfterMakeup(cell.session_units == null ? null : Number(cell.session_units), resUnits));
+    if (next <= MAX_SESSION_UNITS) {
+      autoUnits = next;
+      patch.session_units = next === 1 ? null : next;
+    } else {
+      console.error("[makeup-reservation] 보강분을 더하면 시수 상한을 넘어 더하지 않았습니다", cell.id, next);
+    }
+  } else if (!explicit && untouched && resUnits !== null && cell.slot_start == null) {
     // 그날 정규 수업도 듣는 학생(수강 유효 + 등원 요일 + **그날 반이 실제로 돈다**)이면 정규 자동값 위에 보강값을 더한다.
     let base: number | null = 0;
     if (await isRegularAttendee(admin, tenantId, r)) {
