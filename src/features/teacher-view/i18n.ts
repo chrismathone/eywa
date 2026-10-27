@@ -2912,6 +2912,10 @@ export const SHEET_DICT = {
   // 보강 예약(0264a) 표식 — 원스크린 왼쪽 목록·카드·표 모드(원장 2026-10-22 *"보강 예약이 잘 되었나 확인할 방법이 없네"*).
   "os.reserved.tag": { ko: "보강 예약 {time}", en: "Makeup booked {time}" },
   "os.reserved.done": { ko: "보강 완료 {time}", en: "Makeup done {time}" },
+  "os.reserved.preApplied": {
+    ko: "출석으로 보강 시수가 미리 반영됐습니다 — 보강을 못 하면 출석부에서 시수를 고쳐 주세요",
+    en: "The makeup units were already added with today's attendance — if the makeup doesn't happen, fix the units in the register",
+  },
   "os.reserved.merge": {
     ko: "{date} 결석분 보강 · 정규 보고서에 합쳐 보냅니다(정규+보강). 출석을 찍으면 보강 시수가 이 칸에 함께 들어갑니다.",
     en: "Makeup for the {date} absence · sent in the regular report (regular + makeup). Marking attendance adds the makeup units to this cell.",

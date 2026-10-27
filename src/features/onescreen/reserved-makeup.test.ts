@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MakeupReservation } from "@/features/attendance/makeup-reservation";
-import { applyReservedMakeup, planReservedMakeup, reservedTimeText, studentReservations } from "./reserved-makeup";
+import { applyReservedMakeup, planReservedMakeup, reservedShownDone, reservedTimeText, studentReservations } from "./reserved-makeup";
 import type { OneScreenStudent, Subject } from "./types";
 
 const res = (over: Partial<MakeupReservation> = {}): MakeupReservation => ({
@@ -16,7 +16,7 @@ describe("planReservedMakeup", () => {
     const plan = planReservedMakeup([res()], regular);
     expect([...plan.merge]).toEqual(["s1|BS2G"]);
     expect(plan.separate).toEqual([]);
-    expect(plan.byKey.get("s1|BS2G")).toEqual([{ start: "15:25", end: "16:20", absenceDate: "2026-09-21", mode: "merge", done: false }]);
+    expect(plan.byKey.get("s1|BS2G")).toEqual([{ start: "15:25", end: "16:20", absenceDate: "2026-09-21", mode: "merge", done: false, date: "2026-10-22" }]);
   });
   it("정규 수업일 · 분리 = 정규 줄과 따로 '(보강)' 줄(같은 반 예약 둘이어도 한 줄)", () => {
     const plan = planReservedMakeup([res({ reportMode: "separate" }), res({ id: "r2", slotStart: "14:30", slotEnd: "15:25", reportMode: "separate" })], regular);
@@ -85,5 +85,32 @@ describe("reservedTimeText", () => {
     expect(reservedTimeText(one)).toBe("15:25~16:20");
     const two = planReservedMakeup([res(), res({ id: "r2", slotStart: "16:20", slotEnd: "17:15" })], regular).byKey.get("s1|BS2G")!;
     expect(reservedTimeText(two)).toBe("15:25~16:20 +1");
+  });
+});
+
+// 원장 2026-10-27 — BS2P 정규 16:20~18:10. 권민서A 보강 18:20~19:15(정규 뒤) · 박지호 보강 15:25~16:20(정규 앞). 16:24에 정규 출석을 찍으면 둘 다 이행된다.
+describe("reservedShownDone — '보강 완료'는 끝 시각이 지나야", () => {
+  const booked = (over: Partial<{ start: string; end: string; done: boolean; date?: string }> = {}) => ({
+    start: "18:20", end: "19:15", absenceDate: "2026-10-02", mode: "merge" as const, done: true, date: "2026-10-27", ...over,
+  });
+  it("🔴 정규 뒤 보강(권민서A) — 16:24 출석으로 이행됐어도 19:15 전엔 완료가 아니다", () => {
+    expect(reservedShownDone([booked()], "2026-10-27T16:24")).toBe(false);
+    expect(reservedShownDone([booked()], "2026-10-27T19:14")).toBe(false);
+    expect(reservedShownDone([booked()], "2026-10-27T19:15")).toBe(true);
+    expect(reservedShownDone([booked()], "2026-10-28T09:00")).toBe(true);
+  });
+  it("정규 앞 보강(박지호) — 정규 출석 때는 이미 끝났다", () => {
+    expect(reservedShownDone([booked({ start: "15:25", end: "16:20" })], "2026-10-27T16:24")).toBe(true);
+  });
+  it("이행 전이면 시간이 지나도 완료가 아니다 · 시계 전(null)이면 지나지 않은 것으로 · 날짜 없는 옛 값은 이행만 본다", () => {
+    expect(reservedShownDone([booked({ done: false })], "2026-10-28T09:00")).toBe(false);
+    expect(reservedShownDone([booked()], null)).toBe(false);
+    expect(reservedShownDone([booked({ date: undefined })], null)).toBe(true);
+    expect(reservedShownDone([], "2026-10-28T09:00")).toBe(false);
+  });
+  it("여러 건이면 전부 끝나야 완료", () => {
+    const two = [booked({ start: "15:25", end: "16:20" }), booked()];
+    expect(reservedShownDone(two, "2026-10-27T16:24")).toBe(false);
+    expect(reservedShownDone(two, "2026-10-27T19:20")).toBe(true);
   });
 });

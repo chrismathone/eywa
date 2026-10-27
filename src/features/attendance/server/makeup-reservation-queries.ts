@@ -149,7 +149,7 @@ const isMissingReportMode = (e: { message?: string } | null | undefined) => isMi
 /**
  * 원스크린 명단용 **한 날짜 예약 — 예약·이행 둘 다 + 보고서 발송 방식**(원장 2026-10-22 전주율 건).
  * 이행(`done`)까지 읽는 까닭: 출석을 찍는 순간 예약이 `done`이 되는데, 그때 '정규+보강' 표시와 따로 낸 '(보강)' 줄이 새로고침에
- * 사라지면 보고서가 정규로만 저장된다. 표식은 `done`이면 '보강 완료'로 바뀐다.
+ * 사라지면 보고서가 정규로만 저장된다. 표식은 `done`이고 예약 끝 시각이 지나야 '보강 완료'로 바뀐다(`reservedShownDone`, 원장 2026-10-27).
  * 🔴 fail-soft([[#95]]) — 표가 없으면 빈 목록, `report_mode` 칸이 없으면 그 칸 없이 다시 읽는다(방식 = null).
  */
 export const getRosterReservationsOn = cache(async function getRosterReservationsOn(
