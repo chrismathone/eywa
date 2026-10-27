@@ -2913,6 +2913,8 @@ export const SHEET_DICT = {
   "os.reserved.tag": { ko: "보강 예약 {time}", en: "Makeup booked {time}" },
   "os.reserved.done": { ko: "보강 완료 {time}", en: "Makeup done {time}" },
   "os.reserved.needsCheck": { ko: "보강 진행 여부 확인해 주세요", en: "Please confirm whether the makeup happened" },
+  // 좁은 자리(표 모드·왼쪽 목록) — 원장 2026-10-27 *"표모드에서는 넘치기 때문에 '보강 진행 여부 확인'으로 줄일것"*.
+  "os.reserved.needsCheckShort": { ko: "보강 진행 여부 확인", en: "Confirm makeup" },
   "os.reserved.needsCheckTitle": {
     ko: "눌러서 보강을 했는지 확인해 주세요 — 확인 전엔 이 보강이 든 보고서를 보낼 수 없습니다",
     en: "Press to confirm whether the makeup happened — reports with this makeup can't be sent until you do",
