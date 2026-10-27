@@ -49,10 +49,10 @@ describe("buildPrevMonthFlow", () => {
         ]),
       }),
     );
-    expect(out.get("new")).toEqual({ students: 1, withdrawn: [{ id: "a", name: "가퇴원", keepsOther: false }] });
+    expect(out.get("new")).toEqual({ students: 1, withdrawn: [{ id: "a", name: "가퇴원" }] });
   });
 
-  it("그 과목을 그만둔 재원생도 퇴원(keepsOther) · 같은 과목 다른 반에 있으면(반이동) 안 셈", () => {
+  it("그 과목을 그만둔 재원생도 퇴원 · 같은 과목 다른 반에 있으면(반이동) 안 셈", () => {
     const out = buildPrevMonthFlow(
       base({
         enrollments: [
@@ -69,7 +69,7 @@ describe("buildPrevMonthFlow", () => {
         ]),
       }),
     );
-    expect(out.get("new")?.withdrawn).toEqual([{ id: "drop", name: "영어만", keepsOther: true }]);
+    expect(out.get("new")?.withdrawn).toEqual([{ id: "drop", name: "영어만" }]);
   });
 
   it("8월 말 이전 담임 기간의 학생 수는 9월 말 기준이라 새 담임으로 센다", () => {

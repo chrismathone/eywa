@@ -41,14 +41,8 @@ export function buildPrevMonthFlow(input: FlowInput): Map<string, HomeroomPrevFl
   }
 
   const students = new Map<string, Set<string>>();
-  const withdrawn = new Map<string, Map<string, { name: string; keepsOther: boolean }>>();
-  const add = (teacher: string, id: string, name: string, keepsOther: boolean) => {
-    const m = withdrawn.get(teacher) ?? new Map<string, { name: string; keepsOther: boolean }>();
-    // 한 담임 아래 두 갈래로 잡히면(한 반은 과목 중단, 다음 반에서 학원 퇴원) 학원 퇴원이 이긴다.
-    const prev = m.get(id);
-    m.set(id, { name, keepsOther: prev ? prev.keepsOther && keepsOther : keepsOther });
-    withdrawn.set(teacher, m);
-  };
+  const withdrawn = new Map<string, Map<string, string>>();
+  const add = (teacher: string, id: string, name: string) => withdrawn.set(teacher, (withdrawn.get(teacher) ?? new Map<string, string>()).set(id, name));
 
   for (const e of input.enrollments) {
     const st = input.students.get(e.studentId);
@@ -68,13 +62,12 @@ export function buildPrevMonthFlow(input: FlowInput): Map<string, HomeroomPrevFl
     // 나간 날의 담임 — 반이동(반 단위)·끝나기 전 날 기준이 아니라 그 날 담임이 그 학생을 잃었다.
     const t = teacherOn(e.classId, leftOn);
     if (!t) continue;
-    if (st.withdrawn) add(t, e.studentId, st.name, false);
-    else if (!(cls.subject && liveSubjects.get(e.studentId)?.has(cls.subject))) add(t, e.studentId, st.name, true);
+    if (st.withdrawn || !(cls.subject && liveSubjects.get(e.studentId)?.has(cls.subject))) add(t, e.studentId, st.name);
   }
 
   const out = new Map<string, HomeroomPrevFlow>();
   for (const t of new Set([...students.keys(), ...withdrawn.keys()])) {
-    const list = [...(withdrawn.get(t) ?? [])].map(([id, v]) => ({ id, ...v })).sort((a, b) => a.name.localeCompare(b.name, "ko"));
+    const list = [...(withdrawn.get(t) ?? [])].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name, "ko"));
     out.set(t, { students: students.get(t)?.size ?? 0, withdrawn: list });
   }
   return out;

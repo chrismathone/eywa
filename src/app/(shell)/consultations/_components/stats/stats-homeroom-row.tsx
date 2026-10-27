@@ -12,10 +12,10 @@ const rateText = (v: number | null) => (v === null ? "—" : `${Math.round(v)}%`
 /** 줄 안에 바로 적는 미상담 학생 수 — 넘치면 '외 N명'(전체는 마우스 오버 · 줄을 펼치면 표). */
 const INLINE_NAMES = 10;
 
-/** 퇴원 수 — 0이면 '—', 이름은 마우스 오버(그 과목만 그만두고 학원은 다니는 학생은 표시). */
-function NamesCount({ list }: { list: readonly { name: string; keepsOther: boolean }[] }) {
+/** 퇴원 수 — 0이면 '—', 이름은 마우스 오버. */
+function NamesCount({ list }: { list: readonly { name: string }[] }) {
   return (
-    <td className="num px-2 py-1.5 text-center" title={list.map((s) => (s.keepsOther ? `${s.name}(다른 과목은 다님)` : s.name)).join(", ")}>
+    <td className="num px-2 py-1.5 text-center" title={list.map((s) => s.name).join(", ")}>
       {list.length > 0 ? <span className="font-bold">{fmt(list.length)}명</span> : <span className="text-muted-foreground">—</span>}
     </td>
   );

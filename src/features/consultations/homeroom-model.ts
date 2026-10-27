@@ -14,9 +14,9 @@ export type HomeroomPrevFlow = {
   students: number;
   /**
    * 지난달 퇴원 — 학원을 나갔거나 **그 과목을 그만둔** 학생(원장 2026-10-27 *"수강 종료도 결국 수학과에서는 퇴원이 맞지 — 합쳐도 될 듯"*).
-   * `keepsOther` = 학원은 다른 과목으로 계속 다닌다(마우스 오버에서만 밝힌다). 같은 과목 다른 반으로 옮긴 것은 퇴원이 아니다.
+   * 그 과목 담임이 보는 표라 다른 과목을 다니는지는 밝히지 않는다(원장 *"해당 과목에서 보는 거니까"*). 같은 과목 다른 반으로 옮긴 것은 퇴원이 아니다.
    */
-  withdrawn: { id: string; name: string; keepsOther: boolean }[];
+  withdrawn: { id: string; name: string }[];
 };
 export const EMPTY_PREV_FLOW: HomeroomPrevFlow = { students: 0, withdrawn: [] };
 
