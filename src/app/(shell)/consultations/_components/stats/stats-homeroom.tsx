@@ -102,6 +102,7 @@ export function StatsHomeroom({
                 {head("prev", `${mLabel(data.prevMonth)} 학생`)}
                 {head("students", `${mLabel(months[last]!)} 학생`)}
                 {head("left", `${mLabel(data.prevMonth)} 퇴원`)}
+                {head("ended", `${mLabel(data.prevMonth)} 수강 종료`)}
                 {months.map((m, i) => head(`m${last - i}`, m === months[last] ? `${mLabel(m)}(진행 중)` : mLabel(m)))}
                 {showAvg ? head("avg", "평균") : null}
                 {head("unmet", "이번 달 미상담")}
@@ -117,7 +118,7 @@ export function StatsHomeroom({
                   <HomeroomTeacherRow t={t} showAvg={showAvg} open={open === t.id} onToggle={() => setOpen(open === t.id ? null : t.id)} />
                   {open === t.id ? (
                     <tr>
-                      <td colSpan={months.length + (showAvg ? 9 : 8)} className="bg-bg-soft/40 p-2">
+                      <td colSpan={months.length + (showAvg ? 10 : 9)} className="bg-bg-soft/40 p-2">
                         <HomeroomStudentGrid t={t} months={months} unmetOnly={filter.unmetStudentsOnly} />
                       </td>
                     </tr>
@@ -129,9 +130,10 @@ export function StatsHomeroom({
         </div>
       )}
       <p className="text-muted-foreground text-xs break-keep">
-        칸 = 담임이 상담한 학생 / 그 달 대상 학생(반에 들어오기 전 달은 빼고 센다). 열 제목을 누르면 정렬된다(상담률은 낮은 순부터). 담임은 지금 기준이라
-        담임이 바뀐 반은 지난 달도 지금 담임 앞으로 보인다. {mLabel(data.prevMonth)} 학생 = 그 달 말일에 담임 반에 있던 학생(지금 퇴원했어도 센다) ·{" "}
-        {mLabel(months[last]!)} 학생 = 오늘 재원생 · {mLabel(data.prevMonth)} 퇴원 = 그 달에 담임 반 수강이 끝난 학생(반이동 제외, 이름은 마우스 오버·펼친 표).
+        칸 = 담임이 상담한 학생 / 그 달 대상 학생(반에 들어오기 전 달은 빼고 센다). 열 제목을 누르면 정렬된다(상담률은 낮은 순부터). 상담 칸은 지금
+        담임 기준이다. {mLabel(data.prevMonth)} 학생 = 그 달 말일에 담임 반에 있던 학생(지금 퇴원했어도 센다) · {mLabel(months[last]!)} 학생 = 오늘 재원생 ·{" "}
+        {mLabel(data.prevMonth)} 퇴원 = 그 달에 학원을 나간 학생(학생 퇴원일 기준) · 수강 종료 = 학원은 다니지만 그 과목을 그만둔 학생(반이동 제외). 지난달
+        학생·퇴원·수강 종료는 그 당시 담임 앞으로 센다(담임 변경 기록 기준) · 이름은 마우스 오버·펼친 표.
       </p>
     </div>
   );

@@ -5,7 +5,7 @@
  */
 import type { HomeroomTeacher } from "./homeroom-model";
 
-export type HomeroomSortKey = "name" | "subject" | "students" | "prev" | "left" | "avg" | "unmet" | `m${number}`;
+export type HomeroomSortKey = "name" | "subject" | "students" | "prev" | "left" | "ended" | "avg" | "unmet" | `m${number}`;
 export type SortDir = "asc" | "desc";
 export type HomeroomSort = { key: HomeroomSortKey; dir: SortDir };
 
@@ -16,7 +16,7 @@ export const DEFAULT_HOMEROOM_SORT: HomeroomSort = { key: "name", dir: "asc" };
 const MAX_MONTH_OFFSET = 11;
 
 export function parseHomeroomSortKey(raw: unknown): HomeroomSortKey | null {
-  if (raw === "name" || raw === "subject" || raw === "students" || raw === "prev" || raw === "left" || raw === "avg" || raw === "unmet") return raw;
+  if (raw === "name" || raw === "subject" || raw === "students" || raw === "prev" || raw === "left" || raw === "ended" || raw === "avg" || raw === "unmet") return raw;
   if (typeof raw === "string" && /^m\d{1,2}$/.test(raw) && Number(raw.slice(1)) <= MAX_MONTH_OFFSET) return raw as HomeroomSortKey;
   return null;
 }
@@ -49,8 +49,9 @@ export function sortHomeroomTeachers(
   const last = (t: HomeroomTeacher) => t.months.length - 1;
   const value = (t: HomeroomTeacher): number | null => {
     if (sort.key === "students") return t.students.length;
-    if (sort.key === "prev") return t.prevStudents;
-    if (sort.key === "left") return t.leftPrev.length;
+    if (sort.key === "prev") return t.prev.students;
+    if (sort.key === "left") return t.prev.withdrawn.length;
+    if (sort.key === "ended") return t.prev.ended.length;
     if (sort.key === "unmet") return t.months[last(t)]?.none ?? 0;
     if (sort.key === "avg") return averageRate(t);
     const m = t.months[last(t) - Number(sort.key.slice(1))];

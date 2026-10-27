@@ -12,6 +12,15 @@ const rateText = (v: number | null) => (v === null ? "—" : `${Math.round(v)}%`
 /** 줄 안에 바로 적는 미상담 학생 수 — 넘치면 '외 N명'(전체는 마우스 오버 · 줄을 펼치면 표). */
 const INLINE_NAMES = 10;
 
+/** 명단 수 — 0이면 '—', 이름은 마우스 오버. */
+function NamesCount({ list }: { list: readonly { name: string }[] }) {
+  return (
+    <td className="num px-2 py-1.5 text-center" title={list.map((s) => s.name).join(", ")}>
+      {list.length > 0 ? <span className="font-bold">{fmt(list.length)}명</span> : <span className="text-muted-foreground">—</span>}
+    </td>
+  );
+}
+
 /** 정렬되는 열 머리 — 누르면 그 열로, 한 번 더 누르면 방향이 뒤집힌다(homeroom-sort.ts). */
 export function SortHead({ label, active, dir, onClick }: { label: ReactNode; active: boolean; dir: "asc" | "desc"; onClick: () => void }) {
   return (
@@ -50,11 +59,10 @@ export function HomeroomTeacherRow({ t, showAvg, open, onToggle }: { t: Homeroom
           ))}
         </span>
       </td>
-      <td className="num text-muted-foreground px-2 py-1.5 text-center">{fmt(t.prevStudents)}</td>
+      <td className="num text-muted-foreground px-2 py-1.5 text-center">{fmt(t.prev.students)}</td>
       <td className="num px-2 py-1.5 text-center">{fmt(t.students.length)}</td>
-      <td className="num px-2 py-1.5 text-center" title={t.leftPrev.map((s) => s.name).join(", ")}>
-        {t.leftPrev.length > 0 ? <span className="font-bold">{fmt(t.leftPrev.length)}명</span> : <span className="text-muted-foreground">—</span>}
-      </td>
+      <NamesCount list={t.prev.withdrawn} />
+      <NamesCount list={t.prev.ended} />
       {t.months.map((m, i) => (
         <td key={i} className="px-2 py-1.5 text-center whitespace-nowrap" title={`담임 상담 ${m.self} · 담임 아닌 직원이 상담 ${m.other} · 미상담 ${m.none}`}>
           <span className="num text-foreground font-medium">
