@@ -64,7 +64,7 @@ function reportNoise() {
        where table_schema = 'public' and table_name in ('inventory_assets','inventory_loans','inventory_audits','inventory_supplies')`;
     const tablesReady = tableCount === 4;
     if (!tablesReady) {
-      const msg = `재고 관리 표가 ${tableCount}/4개뿐입니다 — supabase/migrations/0242a_inventory.sql을 먼저 적용하세요`;
+      const msg = `재고 관리 표가 ${tableCount}/4개뿐입니다 — 시즌1 합본(supabase/migrations/s1_season1.sql)의 0242a_inventory 구역을 먼저 적용하세요`;
       if (APPLY) throw new Error(msg);
       // 드라이런은 계획을 보여 준다(기존 행 = 0으로 본다). 실제 적용은 표가 생긴 뒤에만.
       console.log(`\n⚠️ ${msg}\n   (드라이런이라 "이미 있는 행 = 0"으로 가정하고 계획만 보여 줍니다)`);

@@ -12,7 +12,7 @@
 
 > 2026-07-29 작성. **설계는 확정, 구현은 트리거 충족 전까지 착수하지 않는다.**
 > 영어 보고서를 만지기 전에 이 문서를 먼저 읽을 것. 배달 레일은 [classnote-integration.md](classnote-integration.md),
-> 데이터 원천은 ECS([0157a](../supabase/migrations/0157a_class_sheets.sql), [features/class-sheets](../src/features/class-sheets)).
+> 데이터 원천은 ECS([0157a](../supabase/migrations/s1_season1.sql#0157a_class_sheets.sql), [features/class-sheets](../src/features/class-sheets)).
 
 ## 확정 결정 (재제안 금지)
 
@@ -68,13 +68,13 @@
 **강사 추가 타이핑 0**이 이 방향의 가치다. 원스크린 영어 행은 파생 초안을 **확인·보정 + 멘트만**.
 
 ### A1. 단위 변환 — ECS 슬롯 → 보고서 1건
-ECS 키는 `(class, date, slot_start)`([0157a#L30](../supabase/migrations/0157a_class_sheets.sql#L30))인데
-보고서는 `(student, date, class_id)` 1건이다([0134a#L102](../supabase/migrations/0134a_lesson_reports_class_id.sql#L102)).
+ECS 키는 `(class, date, slot_start)`([0157a#L30](../supabase/migrations/s1_season1.sql#0157a_class_sheets.sql#L30))인데
+보고서는 `(student, date, class_id)` 1건이다([0134a#L102](../supabase/migrations/s1_season1.sql#0134a_lesson_reports_class_id.sql#L102)).
 
 - **대상 슬롯** = 그 학생이 그날 그 반에서 마크된 `slot_start`만, 시각 오름차순.
 - `term_mode`(regular/exam)는 **둘 다 보존**하고 라벨로 구분 — 내신 줄을 조용히 버리지 않는다.
 - **`lineNo`를 DTO에 싣는다** — ECS 위치키가 `(…, term_mode, line_no)`라
-  ([0157a#L54](../supabase/migrations/0157a_class_sheets.sql#L54)) 원래 줄 순서가 의미를 갖는다.
+  ([0157a#L54](../supabase/migrations/s1_season1.sql#0157a_class_sheets.sql#L54)) 원래 줄 순서가 의미를 갖는다.
 
 ```
 EcsDerivedDraft {
@@ -98,7 +98,7 @@ EcsDerivedDraft {
 대표 실데이터(다중 교시 · exam 혼합 · 빈 줄 · 중복 교재)로 **골든 fixture** 동결.
 
 ### A3. 학부모 출력 안전 — unknown은 raw 출력 금지
-`status`·`progress_note` **둘 다 자유 입력**이다([0157a#L100](../supabase/migrations/0157a_class_sheets.sql#L100) — '완'/'결석'/'안침',
+`status`·`progress_note` **둘 다 자유 입력**이다([0157a#L100](../supabase/migrations/s1_season1.sql#0157a_class_sheets.sql#L100) — '완'/'결석'/'안침',
 "PL 7, 20개 / PV 4" 같은 내부 약어). 삭제된 skill key는 현재 폴백이 **slug를 그대로 노출**한다
 ([skill-areas.ts#L34](../src/features/owner/skill-areas.ts#L34)).
 
@@ -150,7 +150,7 @@ ECS에 **없는 것**: 과제 기한, 다음 평가 공지 — 실데이터를 �
   → **`group_queued` / `group_processing` / `group_blocked` 별도 상태**를 도입하고 배지·통계·달력·미발송·재시도 판정을
   **전부** 갱신하거나, 해당 화면이 delivery 테이블을 직접 읽게 한다. **둘 중 하나를 고르되 절반만 하지 않는다.**
 - ⚠️ 인증 사용자가 영어 행의 `classnote_status='queued'`를 **직접 REST로 쓰면 레일 전체가 우회**된다
-  ([0049a#L21](../supabase/migrations/0049a_lesson_reports.sql#L21) `FOR ALL`) →
+  ([0049a#L21](../supabase/migrations/s1_season1.sql#0049a_lesson_reports.sql#L21) `FOR ALL`) →
   **DB에서 group-routed 행의 legacy 상태 INSERT/UPDATE와 active/sent 행 DELETE를 거부**한다.
 
 **상태전이표**
@@ -162,12 +162,12 @@ ECS에 **없는 것**: 과제 기한, 다음 평가 공지 — 실데이터를 �
 
 ### B2. 권한 경계
 - delivery/recipient/**pin** 쓰기는 **검증 RPC(service-role) 경로만**. 지금 pin은 인증 사용자가 직접 INSERT/DELETE 가능해
-  ([0145a#L38](../supabase/migrations/0145a_classnote_student_links.sql#L38)) **잘못된 child를 "안전한 타깃"으로 승격**시킬 수 있다.
+  ([0145a#L38](../supabase/migrations/s1_season1.sql#0145a_classnote_student_links.sql#L38)) **잘못된 child를 "안전한 타깃"으로 승격**시킬 수 있다.
 - `content_revision`은 앱 코드가 아니라 **DB trigger**가 본문 필드·첨부·토큰 변경 시 증가.
 - `processing`/`success` 중 직접 REST 변경 **DB에서 거부**.
 
 ### B3. 대상 결정 — **명시적 multi-pin**
-- pin은 지금 학생·보드당 1개이고([0145a#L19](../supabase/migrations/0145a_classnote_student_links.sql#L19)) pin이 있으면 판정이
+- pin은 지금 학생·보드당 1개이고([0145a#L19](../supabase/migrations/s1_season1.sql#0145a_classnote_student_links.sql#L19)) pin이 있으면 판정이
   원아 하나만 돌려준다([board-roster-diff.ts#L216](../src/features/report-admin/board-roster-diff.ts#L216)) →
   단순 배열 추가로는 **pinned 다계정 학생의 전 계정을 못 담는다**. → **multi-pin**(학생·보드당 여러 child 허용)으로 확정.
 - **큐 API는 report ID만 받는다.** 서버가 파생: `report.class_id → 그 반 → 유일 board → 모든 child`.
@@ -224,7 +224,7 @@ ECS에 **없는 것**: 과제 기한, 다음 평가 공지 — 실데이터를 �
 
 ### B7. 부수 갱신
 `src/lib/db/schema.ts` · `supabase/migrations/README.md` ·
-**활동로그 noise/redact**([0120a#L28](../supabase/migrations/0120a_activity_redact_salary_policy.sql#L28)) —
+**활동로그 noise/redact**([0120a#L28](../supabase/migrations/s1_season1.sql#0120a_activity_redact_salary_policy.sql#L28)) —
 안 하면 본문 전체와 child id가 활동로그에 복제된다. 마이그레이션 번호는 착수 직전 `git fetch` 후 확정.
 교사 일괄발송은 학생별 직렬 Server Action이라([onescreen-client.tsx#L1474](../src/features/onescreen/components/onescreen-client.tsx#L1474))
 **배치 Server Action 1개**로 바꾼다(스냅샷은 호출당 1회).

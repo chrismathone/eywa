@@ -56,8 +56,8 @@ P0 뒤 P1/P2를 진행하고 P3도 P0 상태 계약을 사용한다. 상세 구�
 | 분야 | 먼저 볼 파일 |
 | --- | --- |
 | 완료 집계 | `src/features/dashboard/server/makeup-upcoming.ts`, `src/features/attendance/server/makeup-reservation-queries.ts` |
-| 참여 계약 | `src/features/makeups/types.ts`, `command-parse.ts`, `server/adapters/participants.ts`, `supabase/migrations/0348c_makeup_read_lists.sql` |
-| 후보·연결 | `components/candidate-action.tsx`, `supabase/migrations/0348e_makeup_read_candidates.sql`, `0346i_makeup_cmd_legacy_config.sql` |
+| 참여 계약 | `src/features/makeups/types.ts`, `command-parse.ts`, `server/adapters/participants.ts`, `supabase/migrations/s1_season1.sql#0348c_makeup_read_lists.sql` |
+| 후보·연결 | `components/candidate-action.tsx`, `supabase/migrations/s1_season1.sql#0348e_makeup_read_candidates.sql`, `0346i_makeup_cmd_legacy_config.sql` |
 | 접수·승인 | `components/intake-form.tsx`, `session-fields.tsx`, `option-picker.tsx`, `command-form.tsx`, `schemas.ts`, `server/actions.ts`, `0346a_makeup_cmd_intake.sql`, `0346b_makeup_cmd_decide.sql` |
 | 진입 문맥 | `src/features/attendance/components/makeup-add-flow.tsx`, `makeup-confirm-dialog.tsx`, `src/features/onescreen/server/makeup-register-actions.ts`, `src/components/workspace/open-window-button.tsx` |
 | 관리자 목록 | `src/features/makeups/components/case-list.tsx`, `list-navigation.ts`, `src/app/(shell)/makeups/` |

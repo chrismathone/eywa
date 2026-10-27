@@ -48,6 +48,6 @@
 - 로그: `.dev-3500.log`, `.dev-3500-error.log`.
 - 재시작: 이 작업 폴더에서 `pnpm exec next dev --port 3500 --hostname 127.0.0.1`.
 
-사용자 화면 확인 뒤 운영 공개 전에 `supabase/migrations/0327a_dashboard_settings_guard.sql`을 수동 적용하고 권한별 DB 쓰기를 검증해야 한다. 기존 0281a 가드는 유지하며, 새 트리거는 dashboard 값이 바뀌는 UPDATE에만 추가로 작동한다. 행·컬럼 추가는 없다.
+사용자 화면 확인 뒤 운영 공개 전에 `supabase/migrations/s1_season1.sql#0327a_dashboard_settings_guard.sql`을 수동 적용하고 권한별 DB 쓰기를 검증해야 한다. 기존 0281a 가드는 유지하며, 새 트리거는 dashboard 값이 바뀌는 UPDATE에만 추가로 작동한다. 행·컬럼 추가는 없다.
 
 2026-10-02 원장의 '전부 밀어' 지시로 푸시가 승인되었다. 이전 화면 유지 작업을 이 브랜치로 통합해 main에 반영한다. 로컬 dev는 사용자 요청에 따라 계속 실행한다.

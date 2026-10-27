@@ -13,6 +13,7 @@ vi.mock("sonner", () => ({ toast: { error: h.toastError, success: h.toastOk } })
 
 import { SalaryVisibleButton } from "./salary-visible-button";
 
+import { readMigration } from "@/lib/db/migrations-corpus.mjs";
 const teacherId = "aaaaaaaa-1111-1111-1111-111111111111";
 const MONTH = "2026-09";
 const read = (...p: string[]) => fs.readFileSync(path.join(process.cwd(), "src", ...p), "utf8");
@@ -165,12 +166,12 @@ describe("합계 및 실급여 보여주기 — 배선", () => {
   });
 
   it("스위치 표는 서버 전용이다 — 선생님 계정이 직접 읽거나 고칠 수 없다", () => {
-    const month = fs.readFileSync(path.join(process.cwd(), "supabase", "migrations", "0353a_attendance_salary_view_month.sql"), "utf8");
+    const month = readMigration("0353a_attendance_salary_view_month.sql");
     // 달별 저장(0353a) — 그때 켜져 있던 줄은 9월 것이 되고, 새 키는 지점 · 선생님 · 달이다.
     expect(month).toContain("add column if not exists period text not null default '2026-09'");
     expect(month).toContain("(tenant_id, teacher_id, period)");
     expect(month).not.toMatch(/create policy/i);
-    const sql = fs.readFileSync(path.join(process.cwd(), "supabase", "migrations", "0352a_attendance_salary_teacher_view.sql"), "utf8");
+    const sql = readMigration("0352a_attendance_salary_teacher_view.sql");
     expect(sql).toContain("enable row level security");
     expect(sql).toContain("revoke all on public.attendance_salary_teacher_view from anon, authenticated");
     expect(sql).not.toMatch(/create policy/i);

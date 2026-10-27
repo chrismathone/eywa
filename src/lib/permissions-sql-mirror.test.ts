@@ -1,6 +1,5 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, it, expect } from "vitest";
+import { readMigration } from "@/lib/db/migrations-corpus.mjs";
 import { MENU_ACCESS, SYSTEM_ROLES, type MenuKey } from "./permissions";
 
 /**
@@ -15,19 +14,14 @@ import { MENU_ACCESS, SYSTEM_ROLES, type MenuKey } from "./permissions";
  * 미러 검사도 0169a를 본다. 0158a의 리터럴은 역사 기록(재적용 시 0169a를 다시 돌려야 함). 앞으로
  * 이 함수를 또 재정의하면 MIGRATION 경로를 그 파일로 옮기고 이 주석을 갱신할 것.
  */
-const MIGRATION = join(
-  __dirname,
-  "../../supabase/migrations/0170a_user_permission_overrides.sql",
-);
+// 시즌1 합본(s1_season1.sql)의 구역을 원래 이름으로 읽는다.
+const MIGRATION = "0170a_user_permission_overrides.sql";
 // 0158a 고유 검사(정책 생성 여부)는 계속 원파일을 본다.
-const MIGRATION_0158A = join(
-  __dirname,
-  "../../supabase/migrations/0158a_rls_role_gates_for_invoices_expenses.sql",
-);
+const MIGRATION_0158A = "0158a_rls_role_gates_for_invoices_expenses.sql";
 
 /** SQL 안의 defaults jsonb 리터럴을 뽑아 파싱. */
 function readSqlDefaults(): Record<string, Record<string, string>> {
-  const sql = readFileSync(MIGRATION, "utf8");
+  const sql = readMigration(MIGRATION);
   const start = sql.indexOf("select '{", sql.indexOf("defaults as ("));
   expect(start, "defaults jsonb 리터럴을 찾지 못했다 — 마이그레이션 구조가 바뀌었는지 확인").toBeGreaterThan(0);
   const open = sql.indexOf("{", start);
@@ -62,12 +56,12 @@ describe("0158a RLS 기본 권한 = permissions.ts MENU_ACCESS 미러", () => {
   });
 
   it("master는 override와 무관하게 항상 통과한다(복구불능 락아웃 방지, gotchas #60)", () => {
-    const sql = readFileSync(MIGRATION, "utf8");
+    const sql = readMigration(MIGRATION);
     expect(sql).toMatch(/when \(select role from me\) = 'master' then 'full'/);
   });
 
   it("textbook_orders는 잠그지 않는다(created_by 부재 — 강사 교재요청 락아웃 방지)", () => {
-    const sql = readFileSync(MIGRATION_0158A, "utf8");
+    const sql = readMigration(MIGRATION_0158A);
     expect(sql).not.toMatch(/create policy \w*textbook_orders\w*_role_gate/);
   });
 
@@ -82,7 +76,7 @@ describe("0158a RLS 기본 권한 = permissions.ts MENU_ACCESS 미러", () => {
   });
 
   it("0170a — 개인 예외(uov)가 역할 override(ov)보다 먼저 coalesce된다", () => {
-    const sql = readFileSync(MIGRATION, "utf8");
+    const sql = readMigration(MIGRATION);
     // userOverrides 분기 존재 + 본인(auth.uid()) 한정
     expect(sql).toMatch(/userOverrides/);
     expect(sql).toMatch(/o->>'userId' = \(select auth\.uid\(\)\)::text/);

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { readMigration } from "@/lib/db/migrations-corpus.mjs";
 /**
  * 구조 가드 — **되돌릴 수 없는** 삭제라 배선이 하나만 빠져도 사고가 된다.
  * 잠그는 것: ① super_admin 통과 ② 기록 검사가 삭제보다 **먼저** ③ 감사로그 스냅샷
@@ -86,7 +87,7 @@ describe("수업 이력 삭제 게이트", () => {
   });
 
   it("지운 행을 통째로 스냅샷해 감사로그에 남긴다(원장 지시 '대신 감사 로그에는 남겨')", () => {
-    const sql = read("supabase/migrations/0429a_enrollment_history_delete.sql");
+    const sql = readMigration("0429a_enrollment_history_delete.sql");
     expect(sql).toContain("'enrollment_delete'");
     expect(sql).toContain("'snapshot',jsonb_build_object");
     // 손으로 되살릴 수 있을 만큼 — 기간·요일·휴원 표식까지.

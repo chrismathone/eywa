@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { protectedIdsFrom, protectionStatusOf } from "./protected-accounts-core";
 
+import { readMigration } from "@/lib/db/migrations-corpus.mjs";
 /**
  * 보호 계정(super_admins 명단) — 원장 2026-09-30 *"다음에 이런 일이 있어도 변경 안되게 강력 가드. 꼭 물어봐야하는걸로"*.
  * 순수 판정 + **모든 역할·재직·삭제 경로가 보호 문을 지나는지** 전수 배선 가드.
@@ -70,7 +71,7 @@ describe("배선 — 보호 계정은 앱 어느 경로로도 역할·재직·�
     expect(imp).toMatch(/역할은 바꾸지 않았습니다/);
   });
   it("DB 마지막 선(0309a) — users·auth.users·super_admins 세 트리거와 우회 스위치", () => {
-    const sql = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/0309a_protect_super_admin_accounts.sql"), "utf8");
+    const sql = readMigration("0309a_protect_super_admin_accounts.sql");
     expect(sql).toContain("before update or delete on public.users");
     expect(sql).toContain("before update or delete on auth.users");
     expect(sql).toContain("before update or delete on public.super_admins");
@@ -95,7 +96,7 @@ describe("지점 화면 문구 — 총괄 정체를 드러내지 않는다(displ
       describeTs.indexOf('case "staff_status_change"'),
     );
     expect(refused.length).toBeGreaterThan(0);
-    const sql = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/0309a_protect_super_admin_accounts.sql"), "utf8");
+    const sql = readMigration("0309a_protect_super_admin_accounts.sql");
     const sqlMsgs = [...sql.matchAll(/raise exception '([^']+)'/g)].map((m) => m[1]);
     expect(sqlMsgs.length).toBeGreaterThan(0);
     // 카드는 주석 줄을 빼고 본다(주석은 "쓰지 말라"는 규칙 설명이라 그 단어가 나온다).

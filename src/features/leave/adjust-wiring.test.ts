@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { MENU_ACCESS } from "@/lib/permissions";
 import { canAdjustLeave } from "@/features/leave/access";
 
+import { readMigration } from "@/lib/db/migrations-corpus.mjs";
 /**
  * 구조 가드 — 연차 조정(원장 2026-09-08 *"관리자랑 김예원이 직원들의 연차갯수를 조정해야하는데"*)이
  * ① 화면에서만 잠기거나([[#77]]) ② 잔여 산식이 표면마다 갈리지 않게 못 박는다.
@@ -172,7 +173,7 @@ describe("조정의 휴가 사용 기간(0270b, 원장 2026-09-18)", () => {
     const actions = read("src/features/leave/server/actions.ts");
     expect(actions).toContain("if (usedEnd && !usedStart)");
     expect(actions).toContain("usedStart && usedEnd && usedEnd < usedStart");
-    const sql = read("supabase/migrations/0270b_leave_adjustment_used_range.sql");
+    const sql = readMigration("0270b_leave_adjustment_used_range.sql");
     expect(sql).toContain("check (used_end is null or (used_start is not null and used_end >= used_start))");
   });
 
@@ -234,7 +235,7 @@ describe("사유는 선택(원장 2026-09-21)", () => {
   });
 
   it("DB 제약도 함께 푼다 — 화면만 열면 저장에서 막힌다([[#77]]의 뒤집힌 꼴)", () => {
-    const sql = read("supabase/migrations/0277a_leave_adjustment_reason_optional.sql");
+    const sql = readMigration("0277a_leave_adjustment_reason_optional.sql");
     expect(sql).toContain("drop constraint if exists leave_adjustments_reason_present");
     // 적용 전 창에서는 그 거절을 한글로 옮긴다(영문 제약 이름을 화면에 내보내지 않는다).
     const actions = read("src/features/leave/server/actions.ts");

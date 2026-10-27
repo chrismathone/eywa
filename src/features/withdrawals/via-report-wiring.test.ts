@@ -3,6 +3,7 @@ import { join, relative, sep } from "node:path";
 import { describe, expect, it } from "vitest";
 import { WITHDRAWAL_REASONS } from "./types";
 
+import { migrationFiles, readMigration } from "@/lib/db/migrations-corpus.mjs";
 /**
  * **퇴원은 퇴원보고서로만** 배선 가드 — 원장 2026-10-23 *"퇴원한 학생의 퇴원보고서를 새로 써야하는 경우는 앞으로 없도록. 퇴원 보고서를 써야
  * 퇴원처리가 가능하도록."* 직원이 학생을 퇴원시키는 길은 퇴원보고서(강사 작성 요청 → 승인, 또는 관리자 바로 처리)의 DB 처리 함수 하나다.
@@ -94,7 +95,7 @@ describe("퇴원은 퇴원보고서로만", () => {
   });
 
   it("보고서를 거치지 않은 퇴원은 DB가 막지 않고 경고한다(0454a) — 지연 트리거 · 실패해도 쓰기 커밋", () => {
-    const sql = read("supabase/migrations/0454a_withdrawal_bypass_warning.sql");
+    const sql = readMigration("0454a_withdrawal_bypass_warning.sql");
     expect(sql).toContain("create constraint trigger zz_withdrawal_without_report_warning");
     expect(sql.match(/deferrable initially deferred/g)?.length).toBe(2);
     expect(sql).toContain("security definer");
@@ -130,11 +131,11 @@ describe("퇴원은 퇴원보고서로만", () => {
     const action = read("src/features/withdrawal-reports/server/actions.ts");
     const direct = action.slice(action.indexOf("export async function processWithdrawalDirectly"), action.indexOf("export async function changeWithdrawalReport"));
     expect(direct).toContain("if (!(await canManageStudentStatusNow()))");
-    expect(read("supabase/migrations/0453a_withdrawal_report_direct.sql")).toContain("special ? 'studentStatusManagerIds'");
+    expect(readMigration("0453a_withdrawal_report_direct.sql")).toContain("special ? 'studentStatusManagerIds'");
   });
 
   it("관리자 바로 처리는 보고서 기록을 남기고 승인된 보고서와 같은 처리 함수를 지난다(0453a)", () => {
-    const sql = read("supabase/migrations/0453a_withdrawal_report_direct.sql");
+    const sql = readMigration("0453a_withdrawal_report_direct.sql");
     expect(sql).toContain("insert into public.withdrawal_reports(");
     expect(sql).toContain("perform public.transition_withdrawal_report(p_tenant, p_actor, rid, 'apply', '{}'::jsonb)");
     // 직접 학생을 퇴원으로 쓰지 않는다 — 학생·수강을 바꾸는 것은 처리 함수뿐.
@@ -152,10 +153,10 @@ describe("퇴원은 퇴원보고서로만", () => {
   });
 
   it("앞으로의 마이그레이션도 학생을 직접 퇴원으로 쓰지 않는다(0453a 이후)", () => {
-    const dir = join(ROOT, "supabase/migrations");
-    const later = readdirSync(dir).filter((f) => /^\d{4}[a-z]_.*\.sql$/.test(f) && f >= "0453a");
-    for (const f of later) {
-      const sql = readFileSync(join(dir, f), "utf8");
+    // 시즌1 0453a 이후 구역 + 시즌2 파일 전부(시즌2 이름 `s2_…`는 사전순으로 시즌1 번호 뒤다).
+    const later = migrationFiles(ROOT).filter((f) => f.name >= "0453a");
+    expect(later.length).toBeGreaterThan(0);
+    for (const { name: f, sql } of later) {
       expect(sql, f).not.toMatch(/update\s+public\.students\s+set\s+status\s*=\s*'withdrawn'/i);
     }
   });

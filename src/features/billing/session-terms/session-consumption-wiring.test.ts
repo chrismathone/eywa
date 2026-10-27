@@ -9,17 +9,16 @@
  *    리포와 DB가 갈릴 수 있다(가드가 보는 것은 저장소의 파일뿐이다). 세는 법이 의심되면
  *    `pg_get_functiondef('public.session_term_attendance(text)'::regprocedure)`로 **실제 함수 본문**을 확인할 것.
  */
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { migrationFiles, readMigration, SEASON2_NAME } from "@/lib/db/migrations-corpus.mjs";
 
 /**
  * 🔴 **마지막 정의가 이긴다** — 0263a 파일 하나만 읽으면 다음 마이그레이션이 같은 이름을
  *    `create or replace`로 되돌려도 이 가드는 그대로 통과한다. 가상의 위험이 아니라 이 함수에
  *    **실제로 네 번** 일어난 일이다(0103a → 0115a → 0198a → 0263a). 그래서 migrations를 전수로 훑어
- *    **파일명 정렬 마지막** 정의를 검사 대상으로 삼는다(적대 리뷰 2026-09-14 H2).
+ *    **적용 순서 마지막** 정의를 검사 대상으로 삼는다(적대 리뷰 2026-09-14 H2). 시즌1은 합본 `s1_season1.sql`의 구역(원래 이름),
+ *    시즌2는 `s2_NNNN_*.sql` 파일 — `migrationFiles()`가 적용 순서로 준다(2026-10-27 시즌2).
  */
-const MIGRATIONS_DIR = join(process.cwd(), "supabase", "migrations");
 /**
  * 🔴 `create or replace`만 찾으면 안 된다 — **0115a가 바로 그 문으로 이 함수를 갈아치웠다**:
  *    반환형이 int → numeric으로 바뀌어 replace가 불가능하니 `drop function … ;` 뒤 **맨 `create function`**.
@@ -31,10 +30,7 @@ const MIGRATIONS_DIR = join(process.cwd(), "supabase", "migrations");
 const DEFINES_RPC = /create\s+(?:or\s+replace\s+)?function\s+(?:public\.)?session_term_attendance\b/i;
 const DROPS_RPC = /drop\s+function[^;]*\bsession_term_attendance\b/i;
 
-const sqlFiles = readdirSync(MIGRATIONS_DIR)
-  .filter((f) => f.endsWith(".sql"))
-  .sort(); // 접두 4자리 제로패딩(`NNNNa_`) 파일끼리는 파일명 정렬 = 적용 순서(규약 밖 타임스탬프 이름은 아래 offConvention)
-const readMigration = (f: string) => readFileSync(join(MIGRATIONS_DIR, f), "utf8");
+const sqlFiles = migrationFiles().map((m) => m.name); // 적용 순서(시즌1 합본 구역 → 시즌2 이름순)
 
 /**
  * **뒤에서부터** 훑어 첫 정의에서 멈춘다 — 마이그레이션은 계속 늘어나는 축이고(지금 314개),
@@ -55,7 +51,7 @@ for (const f of [...sqlFiles].reverse()) {
 
 /** 주석은 규칙을 **설명**하는 자리라 본문 검사에서 뺀다(`--` 줄 제거). */
 const body = latestFile
-  ? readFileSync(join(MIGRATIONS_DIR, latestFile), "utf8").replace(/^\s*--.*$/gm, "")
+  ? readMigration(latestFile).replace(/^\s*--.*$/gm, "")
   : "";
 
 /**
@@ -71,9 +67,11 @@ const defCount = (body.match(new RegExp(DEFINES_RPC.source, "gi")) ?? []).length
  *
  * 2026-10-22: 10-07~10-22 여러 세션이 Supabase CLI로 만든 타임스탬프 이름 48개를 0396a~0443a로 **일괄 개명**했다
  *    (원장 *"얼마 안 걸리면 지금해"* — 이름 순서 그대로 번호를 매겨 정렬 순서는 개명 전과 같다, [[#139]]).
- *    그 사이 잠깐 좁혀 두었던 검사를 다시 "규약 밖 파일이 하나도 없다"로 되돌린다 — 새 파일도 `NNNNa_`로 만들 것.
+ *    그 사이 잠깐 좁혀 두었던 검사를 다시 "규약 밖 파일이 하나도 없다"로 되돌린다.
+ * 2026-10-27 시즌2: 시즌1(0458a까지)은 합본 구역으로 얼었고 새 파일은 `s2_NNNN_설명.sql` — 폴더 규칙은 `migrations-corpus.test.ts`.
  */
-const offConvention = sqlFiles.filter((f) => !/^\d{4}[a-z]?_/.test(f));
+const CONVENTION = (f: string) => /^\d{4}[a-z]?_/.test(f) || SEASON2_NAME.test(f);
+const offConvention = sqlFiles.filter((f) => !CONVENTION(f));
 
 describe("회차 소비 — 배선", () => {
   it("🔴 검사 대상 = session_term_attendance를 **마지막으로 정의한** 마이그레이션", () => {
@@ -86,7 +84,7 @@ describe("회차 소비 — 배선", () => {
     // 명명 규약이 깨지면 "정렬 = 적용 순서" 전제가 무너진다(규약 밖 파일은 정렬 위치를 보장 못 한다).
     expect(offConvention).toEqual([]);
     // 마지막 정의 파일 자체도 규약 안이어야 한다(위 검사가 이미 함의하지만 판정 대상을 직접 못박는다).
-    expect(latestFile).toMatch(/^\d{4}[a-z]?_/);
+    expect(latestFile && CONVENTION(latestFile)).toBe(true);
   });
 
   it("새 확정은 시수 합, 기존 확정은 저장한 일수 기준으로 검증한다", () => {

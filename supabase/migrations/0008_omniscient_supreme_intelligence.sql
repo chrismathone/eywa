@@ -1,1 +1,0 @@
-ALTER TABLE "students" ADD COLUMN "notes" text;

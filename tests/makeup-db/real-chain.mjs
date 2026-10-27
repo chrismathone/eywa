@@ -7,8 +7,9 @@
  * 읽는 것: CREATE TABLE · ALTER TABLE ADD/DROP/RENAME COLUMN · CREATE TYPE … ENUM · ALTER TYPE ADD VALUE · CREATE FUNCTION.
  * DB에 접속하지 않는다(파일만 읽는다). 실제 DB에 적용해 보는 검증은 이 실행기의 범위 밖이다.
  */
-import { readdir, readFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { migrationFiles } from '../../src/lib/db/migrations-corpus.mjs';
 
 const strip = (sql) => sql.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/--[^\n]*/g, ' ');
 const ident = (s) => s.replace(/"/g, '').replace(/^public\./i, '').toLowerCase();
@@ -79,10 +80,10 @@ const empty = () => ({ tables: new Map(), enums: new Map(), functions: new Set()
 
 /** fixture가 실제 체인의 부분집합인지 대조한다. 어긋난 목록(문장 배열)을 돌려준다 — 비어 있으면 통과. */
 export async function checkRealChain(root) {
-  const dir = path.join(root, 'supabase/migrations');
-  const files = (await readdir(dir)).filter((f) => f.endsWith('.sql') && !/^03(?:4[3-9]|5\d)[a-z]_makeup_/.test(f)).sort();
+  // 적용 순서(시즌1 합본 구역 → 시즌2 파일) — 원래 파일 이름으로(2026-10-27 시즌2).
+  const files = migrationFiles(root).filter((f) => !/^03(?:4[3-9]|5\d)[a-z]_makeup_/.test(f.name));
   const real = empty();
-  for (const f of files) absorb(real, await readFile(path.join(dir, f), 'utf8'));
+  for (const f of files) absorb(real, f.sql);
   const fixture = absorb(empty(), await readFile(path.join(root, 'tests/makeup-db/fixture.sql'), 'utf8'));
   const problems = [];
   let columns = 0;
@@ -113,7 +114,7 @@ export async function checkRealChain(root) {
   const notes = [];
   const drizzle = await readFile(path.join(root, 'src/lib/db/schema.ts'), 'utf8');
   const ledger = [];
-  for (const f of (await readdir(dir)).filter((n) => /^03(?:4[3-9]|5\d)[a-z]_makeup_.*\.sql$/.test(n))) ledger.push(strip(await readFile(path.join(dir, f), 'utf8')));
+  for (const f of migrationFiles(root).filter((n) => /^03(?:4[3-9]|5\d)[a-z]_makeup_.*\.sql$/.test(n.name))) ledger.push(strip(f.sql));
   const outOfChain = [{
     problem: "enum public.system_role 값 'student': 실제 마이그레이션에 없다",
     inDrizzle: /systemRoleEnum = pgEnum\("system_role", \[[^\]]*"student"/.test(drizzle),

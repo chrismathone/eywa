@@ -1,9 +1,9 @@
-import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { config } from "dotenv";
 import postgres from "postgres";
 import { expect, it } from "vitest";
 
+import { readMigration } from "../../src/lib/db/migrations-corpus.mjs";
 config({ path: ".env.local", quiet: true });
 
 // 스키마 설치·자료 생성·삭제까지 마지막에 전부 롤백한다.
@@ -12,7 +12,7 @@ it.skipIf(!process.env.DATABASE_URL)("문서 폴더: 중첩·중복 이름·순�
   const rollback = new Error("rollback_document_folders");
   try {
     await expect(db.begin(async (tx) => {
-      await tx.unsafe(readFileSync("supabase/migrations/0286a_document_folder_tree.sql", "utf8")
+      await tx.unsafe(readMigration("0286a_document_folder_tree.sql")
         .replace(/^begin;\r?$/m, "").replace(/^commit;\s*$/m, ""));
       const tag = randomUUID();
       const [tenant] = await tx`insert into tenants(slug, name) values (${`folders-${tag}`}, 'Folder test') returning id`;

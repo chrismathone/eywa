@@ -13,7 +13,7 @@
  * 바꾸는 것은 시험 칸과 시험 이름뿐이다(점수·만점·시험일·시험없음 표식·상담 연결은 그대로).
  */
 import postgres from "postgres";
-import { readFileSync } from "node:fs";
+import { readMigration } from "../../src/lib/db/migrations-corpus.mjs";
 
 if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is required");
 const sql = postgres(process.env.DATABASE_URL, { ssl: "require", prepare: false, max: 1, connect_timeout: 15, onnotice: () => {} });
@@ -21,7 +21,7 @@ const APPLY = process.argv.includes("--apply");
 const slug = (process.argv.find((a) => a.startsWith("--tenant=")) || "--tenant=cs").slice("--tenant=".length);
 // 감사로그의 행위자 = 지시한 원장.
 const ACTOR = { id: "94007db7-12d3-4b5d-97f2-39071446536b", name: "원일" };
-const GUARD_SQL = readFileSync(new URL("../../supabase/migrations/0363a_student_grades_math_no_school.sql", import.meta.url), "utf8");
+const GUARD_SQL = readMigration("0363a_student_grades_math_no_school.sql");
 const DRY = new Error("DRY_RUN");
 const stop = (msg) => { throw new Error(msg); };
 

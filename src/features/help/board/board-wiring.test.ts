@@ -3,11 +3,12 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { isMissingHelpBoard } from "./missing";
 
+import { readMigration } from "@/lib/db/migrations-corpus.mjs";
 const read = (p: string) => readFileSync(join(process.cwd(), p), "utf8");
 
 describe("도움말 게시판 배선", () => {
   it("0265a 마이그레이션이 있고 부분 유니크가 없다", () => {
-    const sql = read("supabase/migrations/0265a_help_board.sql");
+    const sql = readMigration("0265a_help_board.sql");
     expect(sql).toContain("create table if not exists public.help_posts");
     expect(sql).toContain("create table if not exists public.help_answers");
     expect(sql).toContain("auth_tenant_id()");

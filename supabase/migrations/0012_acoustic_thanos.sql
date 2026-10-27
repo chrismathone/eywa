@@ -1,1 +1,0 @@
-ALTER TABLE "students" ADD COLUMN "withdrawal_metadata" jsonb;

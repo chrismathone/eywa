@@ -22,7 +22,7 @@
 | --- | --- | --- |
 | 대시보드 예정 | `src/features/dashboard/server/makeup-upcoming.ts:93-97, 137-153` | 새 참여는 `cancelled`만 뺀다. 반 집합(`classIds`)에 없는 참여와 반이 없는 참여는 버린다. 중복 제거는 `학생\|반\|날짜\|시작` 문자열이다 |
 | 기존 예약 조회 | `src/features/attendance/server/makeup-reservation-queries.ts:165-190, 206-256` | 기존 예약은 `status = reserved`만 읽는다. 학생 예정은 새 참여를 `cancelled`·지난 날짜만 뺀다 |
-| 참여 조회 RPC | `supabase/migrations/0348c_makeup_read_lists.sql:58-71, 96-112` | `session_state`·`classroom_id`·`actual_minutes`·`planned_minutes`·`period_ids`를 **이미 반환**한다. 실시 기록 상태·인정량·반전 여부·기존 예약 상태는 없다 |
+| 참여 조회 RPC | `supabase/migrations/s1_season1.sql#0348c_makeup_read_lists.sql:58-71, 96-112` | `session_state`·`classroom_id`·`actual_minutes`·`planned_minutes`·`period_ids`를 **이미 반환**한다. 실시 기록 상태·인정량·반전 여부·기존 예약 상태는 없다 |
 | 참여 파서 | `src/features/makeups/command-parse.ts:100-113, 126-148` | 위 칸을 버린다. 모르는 상태값은 `"unknown"`으로 접는다. 한 줄이라도 형식이 틀리면 **전체 읽기가 실패**한다 |
 | 파서 소비처 | `src/features/makeups/server/adapters/gates.ts:19-34, 53-96, 99-136`, `adapters/completion.ts:21-63`, `onescreen/server/roster.ts:458, 506-507, 665`, `class-sheets/server/today.ts:330, 500`, `video-homework/server/queries.ts:93, 135`, `attendance/server/units-master.ts:82`, `timetable/server/master-sheet-store.ts:96, 415` | 출결 저장 문·보강 보고서 저장 문·예약 취소 문·출결 이행 훅이 같은 파서를 쓴다. 읽기 실패면 저장을 막는다 |
 | 참여 기록 | `0346e_makeup_cmd_participation.sql:112-118, 124-146, 153-160` | 왔다/일부 → 같은 트랜잭션에서 실시 기록(초안) 생성 + 연결된 기존 예약 `done`. 노쇼 → 배정 해제 + 살아 있는 실시 기록을 `reversed`("안 온 것으로 정정")로 바꾼다 |

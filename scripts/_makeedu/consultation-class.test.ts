@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { readMigration } from "../../src/lib/db/migrations-corpus.mjs";
 
 // 워커가 CommonJS라 판정 원천이 .cjs다(앱도 같은 파일을 import한다).
 const require_ = createRequire(import.meta.url);
@@ -77,7 +78,7 @@ describe("반 후보 SQL 두 벌이 같은 조건을 쓴다", () => {
   const squash = (s: string) => s.replace(/\$\{tenantId\}|auth_tenant_id\(\)/g, "T").replace(/\s+/g, " ");
   const worker = squash(readFileSync(join(process.cwd(), "scripts/_makeedu/consultation-class.cjs"), "utf8"));
   const rpc = squash(
-    readFileSync(join(process.cwd(), "supabase/migrations/0318a_student_consultation_class.sql"), "utf8"),
+    readMigration("0318a_student_consultation_class.sql"),
   );
   const conditions = [
     "cs.tenant_id = T and cs.class_id = cl.id and cs.teacher_id is not null",

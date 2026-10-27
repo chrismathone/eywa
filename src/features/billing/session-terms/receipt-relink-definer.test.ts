@@ -7,11 +7,9 @@
  *    되돌리기 = 0267d 재적용) 정의자 권한이 **조용히** 빠지고 동기화가 다시 멈춘다. 그래서 마지막으로 이 함수를 만지는 문장을 잠근다.
  * ⚠️ 이 가드가 초록이어도 운영 DB가 같다는 뜻은 아니다(SQL은 사람이 적용한다) — 의심되면 `pg_proc.prosecdef`를 직접 볼 것.
  */
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import { expect, it } from "vitest";
+import { migrationFiles } from "@/lib/db/migrations-corpus.mjs";
 
-const DIR = join(process.cwd(), "supabase", "migrations");
 const TOUCHES = /(?:create\s+(?:or\s+replace\s+)?|alter\s+)function\s+(?:public\.)?relink_session_receipt_allocations\s*\(/gi;
 
 /** 그 자리에서 시작하는 문장 하나 — 달러 따옴표 본문(`$$ … $$`)이 있으면 그 뒤의 `;`까지. */
@@ -32,10 +30,10 @@ it("문장 자르기 — alter 한 줄 · 달러 따옴표 본문 뒤의 속성�
 });
 
 it("🔴 마지막으로 relink_session_receipt_allocations를 만지는 문장이 정의자 권한으로 남긴다", () => {
-  const files = readdirSync(DIR).filter((f) => f.endsWith(".sql")).sort();
+  // 적용 순서(시즌1 합본 구역 → 시즌2 파일) — 마지막으로 만지는 문장이 이긴다.
   let last: { file: string; statement: string } | null = null;
-  for (const file of files) {
-    const body = readFileSync(join(DIR, file), "utf8").replace(/^\s*--.*$/gm, "");
+  for (const { name: file, sql } of migrationFiles()) {
+    const body = sql.replace(/^\s*--.*$/gm, "");
     for (const hit of body.matchAll(TOUCHES)) last = { file, statement: statementAt(body, hit.index) };
   }
   expect(last, "함수 정의를 못 찾았다(이름·경로가 바뀌었나)").not.toBeNull();

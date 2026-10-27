@@ -13,6 +13,7 @@ import {
 } from "./tenant-view-shared";
 import { TENANT_VIEW_READ_RPCS } from "@/lib/supabase/tenant-view-guard";
 
+import { migrationFiles, readMigration } from "@/lib/db/migrations-corpus.mjs";
 /**
  * 운영 콘솔의 '지점 보기'(읽기 전용) 배선 가드.
  *
@@ -34,11 +35,11 @@ function walk(dir: string, out: string[] = []): string[] {
 const SRC_FILES = walk(join(ROOT, "src"));
 const rel = (p: string) => p.slice(ROOT.length + 1).split(sep).join("/");
 const noSqlComments = (sql: string) => sql.replace(/--.*$/gm, "");
-const MIG_DIR = join(ROOT, "supabase", "migrations");
-const MIGRATIONS = readdirSync(MIG_DIR).filter((n) => n.endsWith(".sql")).sort();
+// 적용 순서(시즌1 합본 구역 → 시즌2 파일) — 원래 파일 이름으로.
+const MIGRATIONS = migrationFiles(ROOT).map((m) => m.name);
 
 describe("지점 보기 — DB 쪽 약속(0356a)", () => {
-  const sql = read("supabase/migrations/0356a_operator_tenant_view.sql");
+  const sql = readMigration("0356a_operator_tenant_view.sql");
   const body = noSqlComments(sql);
 
   it("DB 함수 셋(보기 판정 · 지점 · 역할)이 앱이 싣는 헤더를 **키 모양 그대로** 찾는다", () => {
@@ -137,7 +138,7 @@ describe("지점 보기 — DB 쪽 약속(0356a)", () => {
 });
 
 describe("지점 보기 — 뒤에 오는 마이그레이션이 약속을 깨지 않는다", () => {
-  const later = MIGRATIONS.filter((n) => n > "0356a_operator_tenant_view.sql").map((n) => [n, noSqlComments(readFileSync(join(MIG_DIR, n), "utf8"))] as const);
+  const later = MIGRATIONS.filter((n) => n > "0356a_operator_tenant_view.sql").map((n) => [n, noSqlComments(readMigration(n, ROOT))] as const);
 
   it("🔴 겉함수를 옛 모양으로 되돌리는 마이그레이션이 없다(되돌리면 보기가 조용히 사라진다)", () => {
     for (const [name, sql] of later) {
@@ -151,7 +152,7 @@ describe("지점 보기 — 뒤에 오는 마이그레이션이 약속을 깨지
 
   it("🔴 어떤 마이그레이션도 `transaction_read_only`를 손으로 켜지 않는다(켜면 쓰기 요청에서 보는 지점으로 바뀔 수 있다)", () => {
     for (const n of MIGRATIONS) {
-      const sql = noSqlComments(readFileSync(join(MIG_DIR, n), "utf8"));
+      const sql = noSqlComments(readMigration(n, ROOT));
       expect(sql, n).not.toMatch(/set_config\(\s*'(default_)?transaction_read_only'/i);
       expect(sql, n).not.toMatch(/set\s+(local\s+|session\s+)?(default_)?transaction_read_only/i);
       expect(sql, n).not.toMatch(/set\s+transaction\s+read\s+only/i);
@@ -164,7 +165,7 @@ describe("지점 보기 — 통과시키는 읽기 함수 목록 = 실제 STABLE
   const volatility = new Map<string, "stable" | "volatile">();
   const FN = /create\s+(?:or\s+replace\s+)?function\s+(?:public\.)?([a-z_0-9]+)\s*\(([\s\S]*?)\)\s*returns\s+([\s\S]*?)\bas\s+(\$[a-z_]*\$)([\s\S]*?)\4([^;]*);/gi;
   for (const f of MIGRATIONS) {
-    const sql = readFileSync(join(MIG_DIR, f), "utf8");
+    const sql = readMigration(f, ROOT);
     for (const m of sql.matchAll(FN)) {
       const attrs = `${m[3]} ${m[6]}`.toLowerCase();
       volatility.set(m[1]!.toLowerCase(), /\b(stable|immutable)\b/.test(attrs) ? "stable" : "volatile");

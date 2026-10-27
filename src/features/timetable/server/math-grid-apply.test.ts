@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { GridApplyPlan } from "@/features/timetable/import/math-grid/apply-plan";
+import { readMigration } from "@/lib/db/migrations-corpus.mjs";
 const access = vi.hoisted(() => ({ allowed: true }));
 vi.mock("@/features/students/server/status-access", () => ({ canManageStudentStatusNow: async () => access.allowed }));
 
@@ -162,7 +163,7 @@ describe("배선 — 예약 취소·되돌리기와의 약속", () => {
   const read = (...p: string[]) => readFileSync(join(process.cwd(), ...p), "utf8");
 
   it("종료 사유 문구가 되돌리기 함수(0236a)가 대조하는 문구와 같다", () => {
-    const sql = read("supabase", "migrations", "0236a_rollback_enrollment_import_by_id.sql");
+    const sql = readMigration("0236a_rollback_enrollment_import_by_id.sql");
     expect(sql).toContain("withdrawal_reason = '엑셀 import 삭제'");
     expect(read("src", "features", "timetable", "server", "math-grid-apply.ts")).toContain('withdrawal_reason: "엑셀 import 삭제"');
   });

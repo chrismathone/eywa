@@ -6,6 +6,7 @@ const { execFileSync } = require("node:child_process");
 const { pathToFileURL } = require("node:url");
 const assert = require("node:assert/strict");
 const postgres = require("postgres");
+const { readMigration } = require('../../src/lib/db/migrations-corpus.mjs');
 
 async function main() {
   const name = "eywa-worker-lease-test-20261008";
@@ -31,7 +32,7 @@ async function main() {
     for (const role of ["anon", "authenticated", "service_role"]) {
       if (!(await admin`select 1 from pg_roles where rolname=${role}`).length) await admin`create role ${admin(role)}`;
     }
-    await sql.unsafe(fs.readFileSync(path.join(__dirname, "../../supabase/migrations/0399a_worker_execution_leases.sql"), "utf8"));
+    await sql.unsafe(readMigration("0399a_worker_execution_leases.sql"));
     const tenant = randomUUID(), other = randomUUID();
     await sql`insert into public.tenants(id) values (${tenant}), (${other})`;
     const { workerLeaseApi } = await import(pathToFileURL(path.join(__dirname, "../_classnote/worker-execution-lease.mjs")));

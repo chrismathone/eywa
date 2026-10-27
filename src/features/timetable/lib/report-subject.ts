@@ -1,7 +1,7 @@
 /**
  * 수업보고서 1건의 **과목 판정**(순수 함수) — 시간표 hover의 진도·교재를 그 시간표 과목으로 가두기 위한 것.
  *
- * 🔴 2026-07-27부터 hover 경로의 실제 집계는 **RPC**(supabase/migrations/0150a_timetable_latest_reports_rpc.sql)가
+ * 🔴 2026-07-27부터 hover 경로의 실제 집계는 **RPC**(시즌1 합본 `supabase/migrations/s1_season1.sql`의 `0150a_timetable_latest_reports_rpc.sql` 구역)가
  * 한다 — 이 모듈은 그 SQL과 **같은 규칙의 단일 문서·테스트**다. 규칙을 바꾸면 반드시 SQL도 함께 바꿀 것
  * (rsubj = coalesce(nullif(trim(subject),''), nullif(trim(반 subject),''), 'math')).
  *

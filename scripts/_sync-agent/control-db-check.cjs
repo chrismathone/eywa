@@ -1,5 +1,6 @@
 // Destructive fixture work is confined to a fresh database in a labeled loopback-only container.
 const fs=require('node:fs');const path=require('node:path');const crypto=require('node:crypto');const assert=require('node:assert/strict');const {execFileSync}=require('node:child_process');const postgres=require('postgres');
+const { readMigration } = require('../../src/lib/db/migrations-corpus.mjs');
 async function main(){
   const [container]=JSON.parse(execFileSync('docker',['inspect','eywa-worker-lease-test-20261008'],{encoding:'utf8',windowsHide:true}));
   assert.equal(container.Config.Labels['eywa.test'],'worker-lease');assert.equal(container.Config.Image,'postgres:17-alpine');
@@ -18,7 +19,7 @@ async function main(){
     });await sql.unsafe(`create table public."${table}" (${defs.join(',')})`);}
     await sql.unsafe('alter table enrollments add foreign key(student_id) references students(id)');
     await sql.unsafe('alter table enrollments add foreign key(class_id) references classes(id)');
-    for(const name of ['0400a_sync_agent_control.sql','0401a_sync_agent_data_boundary.sql','0402a_sync_agent_management.sql','0403a_sync_agent_module_sessions.sql'])await sql.unsafe(fs.readFileSync(path.resolve(__dirname,'../../supabase/migrations',name),'utf8'));
+    for(const name of ['0400a_sync_agent_control.sql','0401a_sync_agent_data_boundary.sql','0402a_sync_agent_management.sql','0403a_sync_agent_module_sessions.sql'])await sql.unsafe(readMigration(name));
     const a=crypto.randomUUID(),b=crypto.randomUUID(),studentA=crypto.randomUUID(),studentB=crypto.randomUUID(),classA=crypto.randomUUID(),classB=crypto.randomUUID();
     await sql`insert into tenants(id,name) values(${a},'fixture A'),(${b},'fixture B')`;
     await sql`insert into students(id,tenant_id,name) values(${studentA},${a},'A'),(${studentB},${b},'B')`;
@@ -28,7 +29,7 @@ async function main(){
       await sql.unsafe("create function public.auth_tenant_id() returns uuid language sql stable as 'select null::uuid'; create function public.auth_system_role() returns text language sql stable as 'select null::text'; revoke all on function public.auth_tenant_id(),public.auth_system_role() from public");
       await sql.unsafe('create policy fixture_existing_helper on students for select to public using(tenant_id=public.auth_tenant_id())');
       await assert.rejects(scoped(a,tx=>tx`select id from students`),{code:'42501'});
-      await sql.unsafe(fs.readFileSync(path.resolve(__dirname,'../../supabase/migrations/0406a_sync_agent_policy_function_grants.sql'),'utf8'));
+      await sql.unsafe(readMigration("0406a_sync_agent_policy_function_grants.sql"));
       assert.deepEqual((await scoped(a,tx=>tx`select id from students`)).map(r=>r.id),[studentA]);
       assert.equal((await scoped(null,tx=>tx`select id from students`)).length,0);
       const [role]=await sql`select rolinherit,rolbypassrls,rolsuper from pg_roles where rolname='eywa_sync_agent'`;

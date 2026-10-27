@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { classOperatingPeriod, commonPeriod } from "./class-period";
 
+import { readMigration } from "@/lib/db/migrations-corpus.mjs";
 const TODAY = "2026-09-18";
 const slot = (validFrom: string | null, validTo: string | null) => ({ validFrom, validTo });
 
@@ -54,7 +55,7 @@ describe("classOperatingPeriod — 반 정보 '운영 기간'(원장 2026-09-18)
  */
 describe("배선 — 운영 기간 → 수강 종료일(0274a)", () => {
   const read = (...p: string[]) => readFileSync(join(process.cwd(), ...p), "utf8").replace(/\r\n/g, "\n");
-  const sqlFile = read("supabase", "migrations", "0274a_class_period_enrollment_end.sql");
+  const sqlFile = readMigration("0274a_class_period_enrollment_end.sql");
   const actions = read("src", "features", "classes", "server", "actions.ts");
   const helper = read("src", "features", "classes", "server", "period-enrollments.ts");
   const cron = read("src", "app", "api", "cron", "close-ended-class-periods", "route.ts");

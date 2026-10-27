@@ -1,10 +1,9 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ratio, reportTrend } from "./report-trend";
 import { parseStatsPeriod } from "@/features/stats/period";
 import { SENT_STATUS_SUCCESS, UNREAD_GRACE_HOURS } from "@/features/report-admin/unread-filter";
 
+import { readMigration } from "@/lib/db/migrations-corpus.mjs";
 const TODAY = "2026-10-21";
 const row = (
   bucket: string,
@@ -53,7 +52,7 @@ describe("reportTrend — 학습·학부모 보고 추이", () => {
   });
 
   it("🔴 RPC(0388a → 0389a)의 발송·유예 조건 = 운영실 미확인 판정(unread-filter.ts)", () => {
-    const sql = readFileSync(join(process.cwd(), "supabase/migrations/0389a_lesson_report_buckets_mature.sql"), "utf8");
+    const sql = readMigration("0389a_lesson_report_buckets_mature.sql");
     expect(sql).toContain("sent_mature");
     expect(sql).toContain(`classnote_status = '${SENT_STATUS_SUCCESS}'`);
     expect(sql).toContain(`interval '${UNREAD_GRACE_HOURS} hours'`);

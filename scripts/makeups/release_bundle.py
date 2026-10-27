@@ -49,6 +49,10 @@ def load_json(path):
 
 def artifact_names(root):
     migrations = sorted((root / "supabase/migrations").glob("034[3-9][a-z]_makeup_*.sql"))
+    # 2026-10-27 시즌2: 낱개 SQL(0343a~0350f)은 시즌1 합본(s1_season1.sql)에 들었다. 이 출시 묶음의 검증 증거는 낱개 파일 해시에
+    # 묶여 있어 합본으로는 다시 만들 수 없다 — 합본 직전 커밋의 워크트리(git worktree add <폴더> <커밋>)에서 돌린다.
+    if not migrations:
+        raise SystemExit("시즌1 낱개 SQL이 없습니다(2026-10-27 시즌2 합본) — 합본 직전 커밋의 워크트리에서 돌리세요")
     assert len(migrations) == 43, "Packaged migration count is not 43"
     docs = root / "docs/features/makeups"
     names = [f"supabase/migrations/{item.name}" for item in migrations]

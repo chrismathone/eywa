@@ -37,7 +37,7 @@
 
 ### 1.1 `시간표(개발중)` 월별 계획이 이미 있다 — M1
 
-- `supabase/migrations/0232a_timetable_plan_slots.sql`: 원장 지시(2026-08-28 *"다음달 다다음달 시간표도 미리 만들어서 관리하고싶음"*)로 만든 **월별 계획 표**. `class_schedules`와 분리, RLS 켜고 정책 0개 + service_role 전용, 앵커 = `(tenant_id, plan_month, class_id, day_of_week, start_time)` 유니크. 주석이 "확정(적용) 경로는 **일부러 만들지 않았다**"고 적는다.
+- `supabase/migrations/s1_season1.sql#0232a_timetable_plan_slots.sql`: 원장 지시(2026-08-28 *"다음달 다다음달 시간표도 미리 만들어서 관리하고싶음"*)로 만든 **월별 계획 표**. `class_schedules`와 분리, RLS 켜고 정책 0개 + service_role 전용, 앵커 = `(tenant_id, plan_month, class_id, day_of_week, start_time)` 유니크. 주석이 "확정(적용) 경로는 **일부러 만들지 않았다**"고 적는다.
 - `src/lib/navigation.ts:80` `TIMETABLE_DEV_NAV_VISIBLE = false` — 2026-08-31부터 사이드바에서 숨김. 라우트·권한은 살아 있다.
 - `src/features/timetable-dev/` 3,149줄(시트→계획 변환 `lib/sheet-plan.ts`, 월 비교 `lib/compare.ts`, 게이트 `server/access.ts`, 격리 테스트 `isolation.test.ts`), `src/app/(shell)/timetable-dev/_components/`에 **본 시간표 컴포넌트 30여 개를 복사한 사본**이 있다. changelog에도 "개발 사본이라 안 건드렸다"는 기록이 여러 번 있다(사본 표류).
 - 연습실과 겹치는 점: 미래 달 계획 + 운영 분리 + 시트에서 가져오기. 다른 점: 학생 배정·revision·이름 붙은 여러 안·반영이 없고, 식별이 시각 앵커라 `compare.ts`가 이동을 삭제+추가로 본다.
