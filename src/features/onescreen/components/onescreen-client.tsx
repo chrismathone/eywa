@@ -89,7 +89,9 @@ import {
   isMathReportPilot,
   isPilotAutoWritten,
   isPilotGateError,
+  pilotCanEdit,
   pilotRecomposeNote,
+  PILOT_SECTION_TITLES,
   setAllUnderstanding,
   hasStoredUnderstanding,
   understandingRows,
@@ -98,6 +100,7 @@ import {
 import { isHomeworkMissed, pilotRowSig, type DailyTestSkip } from "../math-report-pilot-sections";
 import { needsMakeupCheck } from "../reserved-makeup";
 import { MAKEUP_CHECK_REQUIRED_ERROR } from "@/features/attendance/makeup-check-error";
+import { mergePilotDraft, pilotSectionBody } from "../pilot-merge";
 import { REASON_BLOCKS, pilotSendBlocks } from "../pilot-send-gate";
 import { ReasonNoteInput } from "./reason-note-input";
 import { attitudeNeedsNote, needsAttitudeNote } from "../math-report-pilot-sections";
@@ -3203,6 +3206,40 @@ export function OneScreenClient({
       : baseInput;
     // 이번 글을 만든 값의 서명 — 발송 게이트(카드·표)가 같은 함수로 지금 값과 대조한다.
     const writtenFactsSig = pilot ? pilotRowSig(student, subjectName) : undefined;
+    // 새 수학 보고서에서 선생님이 **고친 글** — 다시 쓰면 고친 말이 다 사라진다(원장 2026-10-27 *"쓴게 다 없어 진데요"*).
+    //  · 값이 바뀌어 발송이 막힌 글 = AI 없이 바뀐 사실 항목만 다시 맞춘다(pilot-merge.ts) — 고친 '오늘의 수업'·손댄 항목은 그대로.
+    //  · 막히지 않은 글에서 누르면 = 정말 새로 쓸지 묻는다(일괄은 고친 글을 건드리지 않는다).
+    const curRep = reportsRef.current[student.id]?.[subjectName];
+    const editedPilot =
+      pilot && pilotCanEdit(curRep?.autoDraft) && !!(curRep?.draft ?? "").trim() && !isPilotAutoWritten(curRep?.draft, curRep?.autoDraft);
+    if (editedPilot) {
+      const stale = pilotSendBlocks(student, subjectName, curRep).includes("autowrite");
+      if (!stale) {
+        if (opts?.quiet || !window.confirm(t("os.c.pilotRewriteConfirm"))) return;
+      } else {
+        try {
+          const res = await generateReportComment({ ...commentInput, classContext }, {
+            studentId: student.id,
+            subject: subjectKey,
+            classId: su?.classId ?? null,
+            date: date || undefined,
+          }, { pilotKeepUnderstanding: pilotSectionBody(curRep?.draft, PILOT_SECTION_TITLES.understanding) });
+          if (!(res.ok && res.comment)) {
+            toast.error(t("os.c.pilotGenFailed"));
+            return;
+          }
+          const fresh = res.comment;
+          patchReport(student.id, subjectName, (r) => {
+            const merged = mergePilotDraft(r.draft, r.autoDraft, fresh);
+            return { ...r, draft: merged.draft, autoDraft: merged.autoDraft, pilotFactsSig: writtenFactsSig };
+          });
+          if (!opts?.quiet) toast.success(t("os.c.pilotMerged"));
+        } catch {
+          toast.error(t("os.c.pilotGenFailed"));
+        }
+        return;
+      }
+    }
     try {
       // 통합 1회 호출 — 멘트 + 추세를 한 번에 생성(비용·지연↓).
       const res = await generateReportComment({ ...commentInput, classContext }, {
@@ -3320,7 +3357,18 @@ export function OneScreenClient({
         pilotSendBlocks(st, r.subject.name, rep).includes("autowrite")
       );
     };
-    const rows = eligible.filter((r) => !hasDraft(r) || staleAuto(r));
+    // 선생님이 고친 글인데 값이 바뀌어 막힌 행 — AI 없이 바뀐 항목만 맞춘다(고친 말은 그대로, generateDraftFor의 합치기). 원장 2026-10-27.
+    const staleEdited = (r: (typeof eligible)[number]) => {
+      const rep = reportsRef.current[r.student.id]?.[r.subject.name];
+      const st = latestRow(r.student.id, r.subject.name) ?? r.student;
+      return (
+        isMathReportPilot(st.id, r.subject.subjectKey) &&
+        pilotCanEdit(rep?.autoDraft) &&
+        !isPilotAutoWritten(rep?.draft, rep?.autoDraft) &&
+        pilotSendBlocks(st, r.subject.name, rep).includes("autowrite")
+      );
+    };
+    const rows = eligible.filter((r) => !hasDraft(r) || staleAuto(r) || staleEdited(r));
     const preserved = eligible.length - rows.length;
     if (rows.length === 0) {
       toast.message(

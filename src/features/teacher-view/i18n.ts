@@ -3366,7 +3366,16 @@ export const SHEET_DICT = {
   // 표 일일 칸의 사유 드롭다운 버튼(88px 칸 — 짧게, 2026-10-27).
   "os.row.testSkipPick": { ko: "사유", en: "Reason" },
   "os.row.testSkipChange": { ko: "변경", en: "Change" },
-  "os.card.testSkip.reasonLabel": { ko: "안 친 사유", en: "Why it was not taken" },
+  // 고친 새 수학 보고서 글 — 값이 바뀌어 다시 맞췄다 / 새로 쓸지 묻는다(원장 2026-10-27 *"쓴게 다 없어 진데요"*).
+  "os.c.pilotMerged": {
+    ko: "고친 글은 그대로 두고, 바뀐 값만 보고서에 다시 반영했습니다",
+    en: "Your edits were kept — only the changed values were updated in the report",
+  },
+  "os.c.pilotRewriteConfirm": {
+    ko: "고친 글을 지우고 자동작성으로 새로 쓸까요? 고친 내용은 사라집니다.",
+    en: "Discard your edits and write a new auto-draft? Your changes will be lost.",
+  },
+  "os.card.testSkip.reasonLabel": { ko: "안 친 사유(선택)", en: "Why it was not taken (optional)" },
   "os.card.testSkip.sick": { ko: "몸이 아픔", en: "Unwell" },
   "os.card.testSkip.slow": { ko: "이해도가 느림", en: "Still learning the concept" },
   "os.card.testSkip.parent": { ko: "어머님 요청", en: "Parent's request" },
@@ -3376,7 +3385,7 @@ export const SHEET_DICT = {
     ko: "덧붙일 말(선택) · 보고서 사유 문장 뒤에 그대로 붙습니다",
     en: "Anything to add (optional) · added as is after the reason in the report",
   },
-  "os.card.testSkip.detailPhOther": { ko: "사유를 적어 주세요(필수)", en: "Write the reason (required)" },
+  "os.card.testSkip.detailPhOther": { ko: "사유를 적어 주세요(선택 · 비우면 보고서에서 일일 테스트 항목이 빠집니다)", en: "Write the reason (optional — left empty, the daily test section is dropped)" },
   "os.card.testSkip.detailAria": { ko: "일일 테스트를 안 친 사유 덧붙이기", en: "More about why the daily test was not taken" },
   "os.card.testSkip.makeupHint": {
     ko: "보고서에 '다음 시간에 보충해서 시험을 칠 수 있도록 하겠습니다'가 함께 들어갑니다",

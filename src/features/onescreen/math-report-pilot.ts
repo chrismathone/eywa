@@ -518,6 +518,7 @@ export function pilotNeedsAutoWrite(
   if (!pilotCanEdit(autoDraft) || !d) return true;
   if (isPilotAutoWritten(draft, autoDraft)) return !isPilotDraftCurrent(draft, now);
   if (now.writtenSig !== undefined && now.writtenSig !== now.factsSig) return true;
+  // 고친 글은 한마디가 **들어 있기만** 하면 된다 — 끝에 한 줄 덧붙였다고 '자동작성 다시'를 요구하면 고친 글을 지우게 된다(2026-10-27).
   const note = (now.note ?? "").trim();
-  return note !== "" && !d.endsWith(note);
+  return note !== "" && !d.includes(note);
 }

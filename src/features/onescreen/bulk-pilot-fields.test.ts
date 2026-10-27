@@ -21,12 +21,13 @@ const row = (over: Partial<BulkTarget> = {}): BulkTarget =>
 const SICK = { reason: "sick" as const, detail: "" };
 
 describe("일괄 입력 — 일일 테스트 '시험 없음'", () => {
-  it("새 수학 보고서 행에만 · 사유를 다 고른 값만", () => {
+  it("새 수학 보고서 행에만 · 사유는 선택(원장 2026-10-27 — 안 고른 값도 넣는다)", () => {
     expect(planBulkApply([row(), row({ studentId: "e", attitudeNoteOk: false })], { dailyTestSkip: SICK }, false)).toEqual([
       { studentId: "s1", subjectName: "수학", subjectIndex: 0, set: { dailyTestSkip: SICK } },
     ]);
-    expect(planBulkApply([row()], { dailyTestSkip: { reason: null, detail: "" } }, false)).toEqual([]);
-    expect(planBulkApply([row()], { dailyTestSkip: { reason: "other", detail: " " } }, false)).toEqual([]);
+    expect(planBulkApply([row()], { dailyTestSkip: { reason: null, detail: "" } }, false)).toEqual([
+      { studentId: "s1", subjectName: "수학", subjectIndex: 0, set: { dailyTestSkip: { reason: null, detail: "" } } },
+    ]);
   });
   it("'시험 없음'과 함께 온 일일 점수는 넣지 않는다", () => {
     const [p] = planBulkApply([row()], { dailyTestSkip: SICK, dailyScore: 8 }, false);

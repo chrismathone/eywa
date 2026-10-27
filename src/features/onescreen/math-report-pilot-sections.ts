@@ -75,16 +75,25 @@ export function readTestSkip(raw: unknown): DailyTestSkip | null {
   return { reason, detail };
 }
 
-/** 사유를 다 적었나 — 사유를 골랐고, '기타'면 덧붙인 말까지 있어야 한다(발송 게이트). */
-export function testSkipComplete(skip: DailyTestSkip | null | undefined): boolean {
-  if (!skip) return true;
-  if (!skip.reason) return false;
+/**
+ * 사유 때문에 발송을 막아야 하나 — **막지 않는다**(원장 2026-10-27 *"사유작성 필수 말고 선택으로 · 작성안하면 보고서에 해당 영역 빠지게"*).
+ * 사유를 안 고르거나 '기타'인데 덧붙인 말이 없으면 보고서에서 일일 테스트 항목째 빠진다(`testSkipText`가 빈 글을 낸다).
+ * 함수는 남긴다 — 발송 게이트·일괄 적용·표 칸이 이 판정 하나를 본다(다시 필수로 돌릴 때 여기 한 곳만 고친다).
+ */
+export function testSkipComplete(skip?: DailyTestSkip | null): boolean {
+  void skip;
+  return true;
+}
+
+/** 보고서에 일일 테스트 사유 글을 쓸 만큼 적었나 — 사유를 골랐고, '기타'면 덧붙인 말까지 있다. 아니면 항목째 뺀다. */
+export function testSkipWritten(skip: DailyTestSkip | null | undefined): boolean {
+  if (!skip?.reason) return false;
   return skip.reason !== "other" || skip.detail.trim() !== "";
 }
 
 /** '없음'일 때 일일 테스트 항목 글 — 사유 문장 → 덧붙인 말(원문) → (해당 사유면) 보충 시험 약속. */
 export function testSkipText(skip: DailyTestSkip, variety?: Variety | null): string {
-  if (!skip.reason) return "";
+  if (!skip.reason || !testSkipWritten(skip)) return "";
   const parts = [pickVariant(SKIP_SENTENCE[skip.reason], asVariety(variety), `skip:${skip.reason}`), skip.detail.trim()];
   if (MAKEUP_TEST_REASONS.includes(skip.reason)) parts.push(pickVariant(MAKEUP_TEST_PROMISES, asVariety(variety), "skip:promise"));
   return parts.filter(Boolean).join(" ");
@@ -441,9 +450,10 @@ export function pilotBody(
   extra: { understandingText?: string; videoReceipt?: string | null; variety?: Variety | null },
 ): string {
   const v = extra.variety ?? null;
-  const daily =
-    (f.dailyTestSkip ? testSkipText(f.dailyTestSkip, v) : scoreText(f.dailyTest, v, ":daily")) ||
-    pickVariant(NO_DAILY_TEST_TEXTS, v, "none:daily");
+  // '시험 없음'인데 사유를 안 적었으면 항목째 뺀다(원장 2026-10-27 사유 선택) — '없었다' 문장으로 메우지 않는다.
+  const daily = f.dailyTestSkip
+    ? testSkipText(f.dailyTestSkip, v)
+    : scoreText(f.dailyTest, v, ":daily") || pickVariant(NO_DAILY_TEST_TEXTS, v, "none:daily");
   // 숙제가 없던 날은 항목째 뺀다(원장 2026-10-27 *"숙제가 없으면 위에서 이야기했는데 밑에서도 동일하게 계속 나오는데"*) —
   // 맨 위 수업 평가 표가 같은 조건(levelTableText: 빈칸·'없음'·'—')에서 이미 `숙제 완성도 — 숙제 없음`을 적는다.
   // 🔴 그 표는 이 경우 항상 선다(숙제 줄이 비지 않는다) — 그래서 여기서 빼도 "안 적은 건지 없던 건지"(2026-10-26)는 안 흐려진다.

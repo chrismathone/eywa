@@ -1572,7 +1572,11 @@ export async function generateReportComment(
   },
   // teacherStyle=false: 사무실 대리작성(보고서 관리 > 직접 작성)이 넘긴다 — 그 멘트는 **다른 강사 이름**으로 나가는 보고서라 호출자의
   // 말투 프로파일(0262a)을 붙이면 안 된다. 스코프 판정(effectiveTeacherId)만으론 겸직 관리자가 강사뷰 쿠키를 켠 채 그 화면을 열면 새므로(재리뷰).
-  opts?: { teacherStyle?: boolean },
+  //
+  // pilotKeepUnderstanding: 새 수학 보고서에서 선생님이 **고친 글**을 값만 다시 맞출 때(원장 2026-10-27 *"글을 수정하면 자동작성을 다시 누르라고 …
+  // 쓴게 다 없어진데요"*) — AI를 부르지 않고 '오늘의 수업' 항목은 이 글(선생님이 고친 그대로)로, 나머지 사실 항목만 지금 값으로 다시 짠다.
+  // 화면이 이 결과와 고친 글을 항목별로 합친다(pilot-merge.ts). 추세는 만들지 않는다.
+  opts?: { teacherStyle?: boolean; pilotKeepUnderstanding?: string },
 ): Promise<{ ok: boolean; comment?: string; trend?: string; trendDropped?: boolean; trendQuiet?: boolean; error?: string }> {
   const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
@@ -1658,6 +1662,15 @@ export async function generateReportComment(
       ),
       note: pilotNote,
     });
+  // 고친 글의 값만 다시 맞추기 — AI 없이 사실 항목만(위 opts 주석). 글은 클라 값이라 한 항목 길이로 자른다.
+  if (pilot && typeof opts?.pilotKeepUnderstanding === "string") {
+    const keep = opts.pilotKeepUnderstanding.trim().slice(0, 4000);
+    const [videoReceipt, prevNotes] = await Promise.all([
+      getVideoReceiptComment(user.tenantId, trendCtx ?? {}).catch(() => null),
+      prevNotesP,
+    ]);
+    return { ok: true, comment: composePilot(keep, videoReceipt, varietyOf(prevNotes)) };
+  }
   // 이해도를 하나도 안 매겼으면 AI가 쓸 항목이 없다 — 부르지 않는다(재료 없이 부르면 이해도를 지어낸다). 추세도 이번엔 안 만든다.
   if (pilot && !safeInput.understanding?.length) {
     const [videoReceipt, prevNotes] = await Promise.all([
