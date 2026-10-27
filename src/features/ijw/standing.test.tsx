@@ -65,9 +65,12 @@ describe("계약 · 저장본", () => {
 });
 
 describe("문구", () => {
-  it("상위 %는 반올림 · 0%는 1%로 · 자릿수 쉼표는 로캘과 무관", () => {
-    expect(compareText({ label: "중2", rank: 3, of: 41, topPct: 7.3 }, "학년")).toMatchObject({ head: "중2 상위 7%", sub: "41명 중 3등" });
-    expect(compareText({ label: "", rank: 1, of: 300, topPct: 0.2 }, "반").head).toBe("반 상위 1%");
+  it("백분위 = 100 − 상위 %(반올림, 상위 0%는 1%로) · 꼴찌는 0 · 자릿수 쉼표는 로캘과 무관", () => {
+    expect(compareText({ label: "중2", rank: 3, of: 41, topPct: 7.3 }, "학년")).toMatchObject({ head: "중2 백분위 93", sub: "41명 중 3등", fill: 93 });
+    expect(compareText({ label: "", rank: 1, of: 300, topPct: 0.2 }, "반").head).toBe("반 백분위 99");
+    // 원장 2026-10-27 — 하위 학생이 '상위 86%'로 읽히던 것: 8명 중 7등은 백분위 14
+    expect(compareText({ label: "A반", rank: 7, of: 8, topPct: 86 }, "반")).toMatchObject({ head: "A반 백분위 14", fill: 14 });
+    expect(compareText({ label: "A반", rank: 8, of: 8, topPct: 100 }, "반").head).toBe("A반 백분위 0");
     expect(groupDigits(1234567)).toBe("1,234,567");
     expect(badgeGradeLabel("초4 과정 통과")).toBe("초4");
     expect(badgeGradeLabel("중1")).toBe("중1");
@@ -105,11 +108,13 @@ describe("JJ 수업보고서 · 카드", () => {
     expect(html).toContain('src="https://injaewon.vercel.app/img/level/M1.webp"');
     expect(html).toContain("누적 단어");
     expect(html).toContain("1,234");
-    expect(html).toContain("중2 상위 7%");
+    expect(html).toContain("중2 백분위 93");
+    expect(html).not.toContain("상위");
     expect(html).toContain("41명 중 3등");
-    expect(html).toContain("A반 상위 11%");
+    expect(html).toContain("A반 백분위 89");
     expect(html).toContain("장기기억 단어");
-    expect(html).toContain("기본모드(주관식 단어장) 기준");
+    // 인재원 계산 기준 문장은 싣지 않는다(원장 2026-10-27)
+    expect(html).not.toContain("기본모드(주관식 단어장) 기준");
     expect(html).not.toContain("[학습배지]");
     expect(html).not.toContain("[단어백분위]");
   });

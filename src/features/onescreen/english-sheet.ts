@@ -34,6 +34,7 @@ export function englishSheetValues(f: EnglishSheetFacts): Record<SheetTokenKey, 
   return {
     출결: (f.attendance ?? "").trim(),
     수업평가: levelTableText({ attitude: f.attitude, homework: f.homework }),
+    태도평가: levelTableText({ attitude: f.attitude }),
     일일테스트: scoreText(f.dailyTest) || NO_DAILY_TEST_TEXT,
     확인테스트: scoreText(f.checkTest),
     수업태도: attitudeText(f.attitude),

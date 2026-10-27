@@ -383,15 +383,18 @@ export const LEVEL_NONE = "평가 없음";
 export const LEVEL_NONE_SEP = "—";
 
 /** 평가표 본문 — 표 모양(머리 줄 + 항목 줄, 고른 칸에 ●). 값이 없는 줄은 `이름 — 숙제 없음`. 줄이 하나도 없으면 "" (항목째 빠진다). */
-export function levelTableText(f: Pick<PilotFacts, "attitude" | "homework" | "understanding">): string {
+export function levelTableText(
+  f: Pick<PilotFacts, "attitude" | "understanding"> & Partial<Pick<PilotFacts, "homework">>,
+): string {
   // 값이 없는 줄도 지우지 않는다(원장 2026-10-26 *"여기서는 그냥 사라지자나 없다는거 여기서 표시해줘"*) — `이름 — 숙제 없음`.
   //   단 값은 있는데 정도를 모르는 옛 자유입력(예: '완료')은 지어내지 않고 그 줄을 뺀다(종전대로).
   //   이해도 줄은 `understanding`을 넘긴 행(수학)에만 — 영어엔 그 칸이 없다.
-  const hw = f.homework.trim();
-  const rows: [string, string | null][] = [
-    [T.attitude, attitudeLevel(f.attitude) ?? (f.attitude.trim() ? null : LEVEL_NONE)],
-    [T.homework, homeworkLevel(f.homework) ?? (!hw || hw === "없음" || hw === "—" ? LEVEL_NONE_HOMEWORK : null)],
-  ];
+  //   숙제 줄은 `homework`를 넘긴 행에만 — JJ 수업보고서는 태도 한 줄이다(원장 2026-10-27 *"숙제완성도도 필요없음"*).
+  const rows: [string, string | null][] = [[T.attitude, attitudeLevel(f.attitude) ?? (f.attitude.trim() ? null : LEVEL_NONE)]];
+  if (f.homework !== undefined) {
+    const hw = f.homework.trim();
+    rows.push([T.homework, homeworkLevel(f.homework) ?? (!hw || hw === "없음" || hw === "—" ? LEVEL_NONE_HOMEWORK : null)]);
+  }
   // 표의 줄 이름은 짧게 — 항목 제목은 '오늘의 수업'
   if (f.understanding !== undefined) rows.push(["이해도", understandingLevel(f.understanding) ?? LEVEL_NONE]);
   const filled = rows.filter((r): r is [string, string] => r[1] != null);

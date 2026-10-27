@@ -215,6 +215,7 @@ export default async function OneScreenPage({
       initialFontSize={roster.fontSize}
       initialDisplayOptions={roster.displayOptions}
       initialTrendOptOut={roster.trendOptOut}
+      initialTemplatePrefs={roster.templatePrefs}
       noClassesToday={roster.noClassesToday}
       showingAll={roster.showingAll}
       holidayName={roster.holidayName}

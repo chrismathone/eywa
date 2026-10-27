@@ -37,7 +37,11 @@ export function handleGridNavKey(e: KeyboardEvent<GridCell>) {
     const target = table.querySelector<GridCell>(
       `input[data-nav-col="${col}"][data-nav-row="${r}"], textarea[data-nav-col="${col}"][data-nav-row="${r}"]`,
     );
-    if (!target) return; // 그 열의 끝(행 인덱스는 연속이라 빈 자리는 곧 끝이다)
+    if (!target) {
+      // 그 행에 이 열의 입력이 없을 뿐인가(JJ 행의 교재 칸은 버튼 묶음이다, 2026-10-27) — 행이 있으면 건너뛰고, 없으면 열의 끝.
+      if (table.querySelector(`[data-nav-row="${r}"]`)) continue;
+      return; // 그 열의 끝(행 인덱스는 연속이라 빈 자리는 곧 끝이다)
+    }
     if (target.disabled) continue;
     e.preventDefault();
     target.focus();

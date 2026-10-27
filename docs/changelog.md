@@ -1,5 +1,12 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-10-27 — JJ 수업보고서 정리 · 템플릿 기본값 = 반별 마지막 선택 · 단어 순위 백분위
+
+- 원장 *"jj수업보고서는 일일테스트 영역 삭제 · 숙제완성도도 필요없음 · 수업태도 밑에 사랑의 한마디 … 작성안하면 영역 삭제"* — `BUILTIN_JJ_SHEET_TEMPLATE` = 수업 평가(**태도 한 줄**, 새 토큰 `{태도평가}` = `levelTableText({attitude})`) → 사랑의 한마디(특이사항 칸 원문, 비면 문단째 빠짐) → 단어 학습 현황 → SRS. 중간에 선 한마디도 카드가 같은 상자(`PilotNoteBox`)로 그린다. 🔴 **JJ 글만 영어 '사랑의 한마디 필수'를 푼다**(`isJjSheetDraft` — 글의 템플릿으로 판정, 화면 게이트·일괄 발송·서버 `jjSheet` 모두). 다른 영어·수학은 그대로 필수.
+- 원장 *"교재는 인재원 ISM · 인재원 SRS · Listening (NTA)만"* — JJ 행(표·카드)의 교재 칸은 세 권 토글([`jj-books.ts`](src/features/onescreen/jj-books.ts), 여러 권 가능, 값은 ` · ` 이음). 일괄 입력 교재 칸은 자유 입력 그대로. 표의 Enter 세로 이동은 그 행을 건너뛴다(grid-nav).
+- 원장 *"템플릿은 사용자 별 자기가 최근 사용한걸 디폴트로"* — `users.ui_prefs.onescreen.lastTemplateByClass`(+ 계정 `lastTemplateId`), [`last-template.ts`](src/features/onescreen/last-template.ts). 🔴 **반이 먼저**, 계정 값이 JJ면 다른 반에 안 번진다(일반 반이 JJ로 시작하면 숙제 줄이 빠지고 한마디 필수가 풀린다 — 적대 리뷰). 🔴 **글 없는·안 보낸 행에만** 표시로(`templateImplicit`) 붙고 세션엔 안 싣는다 — 옛 기본 템플릿으로 쓴 글(templateId 빈 값)에 붙이면 저장 재조립이 다른 템플릿으로 다시 짠다. 글이 생기면 굳는다(`settleImplicit`). 지운 사용자 템플릿·목록 실패면 기본값을 거둔다.
+- 원장 *"단어 학습 순위 설명 내용 삭제 · 상위 몇퍼 → 백분위"* — `JjStandingCard`가 인재원 `basis` 문장을 안 싣고, 비교 칸은 `백분위 = 100 − 상위%`(8명 중 7등 = 백분위 14).
+
 ## 2026-10-27 — 수학 보고서 교재명 제안 · 일괄 입력 칸 이름 · 숙제 없음 중복 제거
 
 - 원장 *"교재명이 우리 수학에서 쓰는 교재명이 드롭다운으로 뜨면서 쓰면 바로 검색되서 선택"* — 교재목록 마스터(`textbooks`, subject=math)를 ECS와 **같은 공급자**(`TextbookOptionsProvider`, 캐시·fail-soft)로 원스크린에 걸고, 교재명 칸 셋(표 행·카드·일괄 입력)에 `<datalist>`를 단다([`math-book-list.ts`](src/features/onescreen/components/math-book-list.ts)). 🔴 표 행·카드는 **수학 행에만**(영어 행에 수학 교재가 제안되면 영어 보고서에 실린다). 칸은 자유 입력 그대로(프린트·부교재). 가드 `math-book-list-wiring.test.ts`.

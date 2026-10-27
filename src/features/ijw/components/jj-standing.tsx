@@ -14,11 +14,16 @@ export function groupDigits(n: number): string {
   return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
-/** 비교 한 칸의 문구 — "중2 상위 8%" / "41명 중 3등". 상위 %는 1 미만이면 1로(‘상위 0%’는 말이 안 된다). */
+/**
+ * 비교 한 칸의 문구 — "중2 백분위 92" / "41명 중 3등". 원장 2026-10-27 *"상위 몇퍼 이러니까 하위애들도 상위 86퍼 이런식으로 뜸
+ * 백분위로 변경"* — '상위 N%'는 꼴찌도 '상위 100%'라 좋은 말처럼 읽혔다. 백분위 = 100 − 인재원 상위 %(높을수록 앞, 0~99).
+ * 🔑 숫자는 인재원 상위 %에서 바로 바꾼다(전 학생 자료가 없어 다시 계산하지 않는다). 막대도 같은 값.
+ */
 export function compareText(c: { label: string; rank: number; of: number; topPct: number }, kind: "학년" | "반") {
   const top = Math.min(100, Math.max(1, Math.round(c.topPct)));
+  const pct = 100 - top;
   const who = c.label.trim() || kind;
-  return { head: `${who} 상위 ${top}%`, sub: `${groupDigits(c.of)}명 중 ${groupDigits(c.rank)}등`, fill: 100 - top + 1 };
+  return { head: `${who} 백분위 ${pct}`, sub: `${groupDigits(c.of)}명 중 ${groupDigits(c.rank)}등`, fill: pct };
 }
 
 const FRAME = "bg-card border-line shadow-card rounded-2xl border px-5 py-4";
@@ -52,7 +57,7 @@ function MetricRow({ label, unit, m }: { label: string; unit: string; m: IjwStan
   );
 }
 
-/** `[단어백분위]` — 누적 단어 · 장기기억 단어 두 줄, 줄마다 학년·반 상위 %. 그릴 게 없으면 null. */
+/** `[단어백분위]` — 누적 단어 · 장기기억 단어 두 줄, 줄마다 학년·반 백분위. 그릴 게 없으면 null. */
 export function JjStandingCard({ standing }: { standing: IjwStanding }) {
   const rows = [
     standing.seenWords ? { key: "seen", label: "누적 단어", m: standing.seenWords } : null,
@@ -62,8 +67,8 @@ export function JjStandingCard({ standing }: { standing: IjwStanding }) {
   return (
     <section className={FRAME}>
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+        {/* 인재원이 주는 계산 기준 문장(`basis`)은 싣지 않는다 — 원장 2026-10-27 *"이거 내용 삭제"*(학부모가 읽을 말이 아니다). */}
         <h3 className="text-foreground text-lg font-black">단어 학습 순위</h3>
-        {standing.basis.trim() ? <p className="text-text-dim text-xs">{standing.basis.trim()}</p> : null}
       </div>
       <div className="divide-line flex flex-col gap-4 divide-y [&>*:not(:first-child)]:pt-4">
         {rows.map((r) => (

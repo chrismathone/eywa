@@ -99,7 +99,10 @@ export function PilotReportSheet({
           {textbook && isPilotTitle(s.title, "progress") ? (
             <TextbookRow textbook={textbook} inBand />
           ) : null}
-          {s.body ? markerBody && hasMarkerLines(s.body) ? markerBody(s.body) : <SectionBody s={s} /> : null}
+          {/* 사랑의 한마디가 중간에 서는 글(JJ 수업보고서 — 수업 평가 바로 아래, 원장 2026-10-27)도 맨 아래와 같은 상자로. */}
+          {s.body ? (
+            markerBody && hasMarkerLines(s.body) ? markerBody(s.body) : isPilotTitle(s.title, "note") ? <PilotNoteBox text={s.body} /> : <SectionBody s={s} />
+          ) : null}
         </SheetBand>
       ))}
       {middle.map((m) => (
