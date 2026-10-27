@@ -18,14 +18,6 @@ const base = (over: Partial<HomeroomInput> = {}): HomeroomInput => ({
     ["s2", { name: "나학생", grade: "중1" }],
   ]),
   consults: [],
-  history: [],
-  knownStudents: new Map([
-    ["s1", "가학생"],
-    ["s2", "나학생"],
-    ["s3", "다퇴원"],
-    ["s4", "라이동"],
-  ]),
-  prevMonth: "2026-09",
   ...over,
 });
 
@@ -121,26 +113,6 @@ describe("homeroomMonths", () => {
     expect(homeroomMonths("2026-10-27")).toEqual(["2026-10"]);
     expect(homeroomMonths("2026-12-01")).toEqual(["2026-10", "2026-11", "2026-12"]);
     expect(homeroomMonths("2027-06-01")).toEqual(["2027-01", "2027-02", "2027-03", "2027-04", "2027-05", "2027-06"]);
-  });
-});
-
-describe("지난달 학생 수 · 퇴원생", () => {
-  it("말일에 있던 학생을 세고(지금 퇴원생 포함), 지난달에 끝난 수강 중 반이동·남은 학생은 퇴원이 아니다", () => {
-    const [t] = buildHomeroomTeachers(
-      base({
-        history: [
-          { studentId: "s1", classId: "c1", startDate: "2026-03-02", endDate: null, isTransferred: false },
-          { studentId: "s2", classId: "c1", startDate: "2026-09-15", endDate: null, isTransferred: false },
-          { studentId: "s3", classId: "c1", startDate: "2026-03-02", endDate: "2026-09-20", isTransferred: false },
-          { studentId: "s4", classId: "c1", startDate: "2026-03-02", endDate: "2026-09-30", isTransferred: true },
-          { studentId: "s1", classId: "c1", startDate: "2025-03-02", endDate: "2026-09-10", isTransferred: false },
-        ],
-      }),
-    );
-    // 9/30 기준: s1·s2(9/15 입반) — s3는 9/20에 나갔고 s4는 9/30 반이동(그날 이미 새 반).
-    expect(t!.prevStudents).toBe(2);
-    // s3만 퇴원 — s4는 반이동, s1은 끝난 수강이 있어도 지금 이 담임 반에 있다.
-    expect(t!.leftPrev).toEqual([{ id: "s3", name: "다퇴원" }]);
   });
 });
 

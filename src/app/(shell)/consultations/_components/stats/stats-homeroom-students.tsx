@@ -24,9 +24,14 @@ export function HomeroomStudentGrid({ t, months, unmetOnly }: { t: HomeroomTeach
         담임 반: {t.classNames.join(" · ")}
         {unmetOnly ? ` · 이번 달 미상담 학생만(${rows.length}/${t.students.length}명)` : ""}
       </p>
-      {t.leftPrev.length > 0 ? (
+      {t.prev.withdrawn.length > 0 ? (
         <p className="text-muted-foreground text-xs break-keep">
-          지난달 퇴원 {t.leftPrev.length}명: {t.leftPrev.map((s) => s.name).join(" · ")}
+          지난달 퇴원 {t.prev.withdrawn.length}명: {t.prev.withdrawn.map((s) => s.name).join(" · ")}
+        </p>
+      ) : null}
+      {t.prev.ended.length > 0 ? (
+        <p className="text-muted-foreground text-xs break-keep">
+          지난달 수강 종료 {t.prev.ended.length}명: {t.prev.ended.map((s) => s.name).join(" · ")}
         </p>
       ) : null}
       <table className="border-collapse text-sm">

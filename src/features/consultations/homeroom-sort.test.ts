@@ -11,8 +11,7 @@ const t = (name: string, subjects: string[], months: HomeroomMonth[], students =
   classNames: [],
   students: Array.from({ length: students }, (_, i) => ({ id: `${name}${i}`, name: "", grade: null, cells: [], selfCounts: [], otherNames: [], lastSelf: null })),
   months,
-  prevStudents: 0,
-  leftPrev: [],
+  prev: { students: 0, withdrawn: [], ended: [] },
 });
 const label = (k: string) => ({ math: "수학", english: "영어" })[k] ?? k;
 const list = [t("나", ["math"], [m(1, 2), m(0, 0)], 3), t("가", ["english"], [m(2, 2), m(1, 4)], 5), t("다", ["math"], [m(0, 2), m(2, 4)], 1)];
