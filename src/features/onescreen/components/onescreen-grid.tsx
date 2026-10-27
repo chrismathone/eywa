@@ -371,7 +371,7 @@ export function OneScreenGrid({
             표 한 곳에서 거는 이유: 행 종류가 여럿이고(본문·참고행·묶음 첫 행) 앞으로 늘 수 있어, 한 군데를
             빠뜨리면 그 행만 세로선이 끊긴다. 너비와 **색을 같이** 지정한다 — 색을 빼면 Tailwind v4 기본
             border-color(currentColor)가 먹어 진한 선이 된다. */}
-        <table className="w-full min-w-[1348px] table-fixed border-collapse text-xs [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-l-line-faint">
+        <table className="w-full min-w-[1368px] table-fixed border-collapse text-xs [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-l-line-faint">
           {/* ⚠️ 주석을 `<col />`과 **같은 줄**에 두지 말 것 — 사이의 공백이 JSX 텍스트 노드로 남아
               "whitespace text nodes cannot be a child of <colgroup>" 하이드레이션 에러가 난다(표뷰 전체가
               클라 재렌더로 떨어져 클릭이 먹통처럼 보임, #75류). 줄바꿈이 낀 공백만 컴파일러가 제거한다. */}
@@ -394,8 +394,8 @@ export function OneScreenGrid({
             <col className="w-[130px]" />
             {/* 과제 */}
             <col className="w-[130px]" />
-            {/* 교재명 · 보강 */}
-            <col className="w-[140px]" />
+            {/* 교재명 · 보강 — 140px에선 '가우스 중1-2 …'가 잘렸다(2026-10-27 실측) → 160px(표 최소 폭도 20px 늘려 문구 칸 하한을 지킨다). */}
+            <col className="w-[160px]" />
             {/* 학부모 문구(멘트) — 남는 폭 흡수(우측 공간 활용) */}
             <col />
             {/* 자동작성 · 카드 · 발송 — 첨부 개수 배지가 붙으면 132px에서 라벨이 끊겼다(2026-09-08). */}

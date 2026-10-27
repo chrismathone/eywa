@@ -30,7 +30,8 @@ export function JjBookPicker({
             aria-pressed={on}
             disabled={disabled}
             onClick={() => onChange(toggleJjBook(value, b))}
-            className={`h-7 shrink-0 rounded-md border px-2 text-xs font-bold whitespace-nowrap transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+            // 표의 교재 칸(160px)엔 'Listening (NTA)'가 한 줄로 안 들어간다 — 버튼 안에서 접는다(넘쳐 옆 칸을 덮지 않게).
+            className={`min-h-7 max-w-full rounded-md border px-2 py-0.5 text-xs leading-tight font-bold break-keep transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
               on ? "border-primary bg-primary text-white" : "border-line bg-card text-text-dim hover:border-primary"
             }`}
           >

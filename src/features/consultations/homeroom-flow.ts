@@ -11,7 +11,10 @@
  *    수강 종료일로 세면 8월 퇴원이 9월로, 그리고 9/1부터 맡은 새 담임 앞으로 넘어간다.
  * 🔑 퇴원 = 학원을 나감 **또는 그 과목을 그만둠**(학원은 다니는데 그 과목 수강이 오늘 하나도 없음 — 원장 *"수강 종료도 결국 그 과목에선 퇴원"*).
  *    반이동·같은 과목 다른 반으로 옮긴 것은 퇴원이 아니다.
+ * 🔑 학생 수·퇴원 모두 그날 **상담 의무**가 있는 담임만(가장 많은 요일을 맡은 담임 — `isDuty`, homeroom-duty.ts) — 화목 반에서
+ *    화요일만 듣는 학생은 그 반 담임에겐 부담임 학생이라 세지 않는다(원장 2026-10-27).
  */
+import { addDays } from "@/lib/date-kst";
 import { homeroomTeacherOnDate, type HomeroomPeriod } from "../classes/teacher-as-of";
 import { lastDayOf, type HomeroomPrevFlow } from "./homeroom-model";
 
@@ -25,10 +28,13 @@ export type FlowInput = {
   enrollments: { studentId: string; classId: string; startDate: string | null; endDate: string | null; isTransferred: boolean; live: boolean }[];
   /** 테스트가 아닌 학생. */
   students: Map<string, { name: string; withdrawn: boolean; withdrawnAt: string | null }>;
+  /** 그날 그 담임이 그 반으로 그 학생의 상담 의무를 지는가(없으면 모두 의무). */
+  isDuty?: (teacherId: string, studentId: string, classId: string, day: string) => boolean;
 };
 
 export function buildPrevMonthFlow(input: FlowInput): Map<string, HomeroomPrevFlow> {
   const prevLast = lastDayOf(input.prevMonth);
+  const isDuty = input.isDuty ?? (() => true);
   const teacherOn = (classId: string, date: string) => {
     const cls = input.classes.get(classId);
     return cls ? homeroomTeacherOnDate(input.homeroomHistory.get(classId), cls.teacherId, date) : null;
@@ -55,13 +61,15 @@ export function buildPrevMonthFlow(input: FlowInput): Map<string, HomeroomPrevFl
     const openAtEnd = !leftOn || leftOn > prevLast || (leftOn === prevLast && !e.isTransferred);
     if (started && openAtEnd) {
       const t = teacherOn(e.classId, prevLast);
-      if (t) students.set(t, (students.get(t) ?? new Set<string>()).add(e.studentId));
+      if (t && isDuty(t, e.studentId, e.classId, prevLast)) students.set(t, (students.get(t) ?? new Set<string>()).add(e.studentId));
     }
 
     if (!leftOn || leftOn.slice(0, 7) !== input.prevMonth || e.isTransferred) continue;
     // 나간 날의 담임 — 반이동(반 단위)·끝나기 전 날 기준이 아니라 그 날 담임이 그 학생을 잃었다.
     const t = teacherOn(e.classId, leftOn);
-    if (!t) continue;
+    // 의무는 나가기 전날(그 수강이 살아 있던 마지막 날)로 본다 — 나간 날엔 그 수강이 이미 명단에 없다.
+    const lastDay = e.startDate && e.startDate > addDays(leftOn, -1) ? e.startDate : addDays(leftOn, -1);
+    if (!t || !isDuty(t, e.studentId, e.classId, lastDay)) continue;
     if (st.withdrawn || !(cls.subject && liveSubjects.get(e.studentId)?.has(cls.subject))) add(t, e.studentId, st.name);
   }
 
