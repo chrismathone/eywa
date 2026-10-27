@@ -96,6 +96,8 @@ import {
   type UnderstandingState,
 } from "../math-report-pilot";
 import { isHomeworkMissed, pilotRowSig, type DailyTestSkip } from "../math-report-pilot-sections";
+import { needsMakeupCheck } from "../reserved-makeup";
+import { MAKEUP_CHECK_REQUIRED_ERROR } from "@/features/attendance/makeup-check-error";
 import { REASON_BLOCKS, pilotSendBlocks } from "../pilot-send-gate";
 import { ReasonNoteInput } from "./reason-note-input";
 import { attitudeNeedsNote, needsAttitudeNote } from "../math-report-pilot-sections";
@@ -4501,6 +4503,24 @@ export function OneScreenClient({
       const blockedKeys = new Set(pilotBlockedRows.map((r) => r.key));
       rows = rows.filter((r) => !blockedKeys.has(r.key));
     }
+    // 보강 진행 여부 확인 전 줄 — 행별 발송 버튼은 막는데(send-gate `mkcheck`) 일괄 발송만 안 걸러 서버 거절이 '실패'로 섞였다
+    //   (2026-10-27 표 일괄 점검). 버튼과 **같은 판정**(needsMakeupCheck)으로 미리 빼고 누구인지 알린다.
+    const makeupBlockedRows = rows.filter((r) => {
+      const st = latestRow(r.student.id, r.subject.name) ?? r.student;
+      return needsMakeupCheck(st.subjects.find((s) => s.name === r.subject.name) ?? r.subject);
+    });
+    if (makeupBlockedRows.length) {
+      const blockedKeys = new Set(makeupBlockedRows.map((r) => r.key));
+      rows = rows.filter((r) => !blockedKeys.has(r.key));
+    }
+    const makeupBlockedNames = [...new Set(makeupBlockedRows.map((r) => r.student.name))];
+    const makeupLine = makeupBlockedRows.length
+      ? tf("os.c.lineMakeupCheck", {
+          n: makeupBlockedRows.length,
+          names: makeupBlockedNames.slice(0, 5).join(", "),
+          more: makeupBlockedNames.length > 5 ? tf("os.c.lineMore", { n: makeupBlockedNames.length - 5 }) : "",
+        })
+      : "";
     const pilotBlockedNames = [...new Set(pilotBlockedRows.map((r) => r.student.name))];
     const pilotLine = pilotBlockedRows.length
       ? tf("os.c.linePilot", {
@@ -4510,7 +4530,7 @@ export function OneScreenClient({
         })
       : "";
     if (rows.length === 0) {
-      if (pilotBlockedRows.length) toast.message(`${t("os.c.sendNone")}${pilotLine}`);
+      if (pilotBlockedRows.length || makeupBlockedRows.length) toast.message(`${t("os.c.sendNone")}${pilotLine}${makeupLine}`);
       else toast.message(tf("os.c.sendNoneMent", { n: emptyMentRows.length }));
       return;
     }
@@ -4545,7 +4565,7 @@ export function OneScreenClient({
       !window.confirm(
         tf("os.c.sendConfirm", {
           n: rows.length,
-          lines: `${emptyMentLine}${pilotLine}${progressLine}${uncheckedLine}${gapLine}${aiStaleLine}${absentLine}${sentLine}`,
+          lines: `${emptyMentLine}${pilotLine}${makeupLine}${progressLine}${uncheckedLine}${gapLine}${aiStaleLine}${absentLine}${sentLine}`,
         }),
       )
     )
@@ -4564,6 +4584,7 @@ export function OneScreenClient({
     let noClass = 0; // 반별 발송인데 보낼 반이 없어 막힌 행(원장 2026-09-30 — 담당 반이 없으면 발송 불가)
     let boardWait = 0; // 반 보드 배정·재확인을 기다리는 행(방금 배정된 신입 등 — 배정된 뒤 다시 보내면 된다, 2026-10-03)
     let jjWarn = 0; // 영어 그림 자료를 못 묶은 행(저장은 성공)
+    let makeupSkip = 0; // 보강 진행 여부 확인 전이라 서버가 거절한 행(저장은 됐다)
     let pilotSkip = 0; // 새 보고서 조건(자동작성·사랑의 한마디·사유)에 걸려 서버가 거절한 행 — 화면 판정 뒤에 값이 바뀐 경우
     let windowHint = ""; // 발송 허용 시간창 밖 큐잉 — 마지막 응답의 창 라벨(테넌트 단일 설정이라 동일)
     try {
@@ -4577,6 +4598,8 @@ export function OneScreenClient({
           else if (res.status === "no_class" || isBoardBlockedStatus(res.status)) noClass++;
           // 새 보고서 조건에 걸려 서버가 거절(저장은 됐다) — '실패'로 뭉치지 않고 이유를 따로 센다(원장 2026-10-26).
           else if (isPilotGateError(res.error)) pilotSkip++;
+          // 보강 진행 여부 확인 전(화면 판정 뒤에 예약이 생긴 경우 등) — 서버가 거절, 저장은 됐다.
+          else if (res.error === MAKEUP_CHECK_REQUIRED_ERROR) makeupSkip++;
           else fail++;
         } else if (res.status === "queued") {
           queued++;
@@ -4614,6 +4637,7 @@ export function OneScreenClient({
         (boardWait ? tf("os.c.bulkBoardWait", { n: boardWait }) : "") +
         (noClass ? tf("os.c.bulkNoClass", { n: noClass }) : "") +
         (pilotSkip ? tf("os.c.bulkPilot", { n: pilotSkip }) : "") +
+        (makeupSkip ? tf("os.c.bulkMakeupCheck", { n: makeupSkip }) : "") +
         (fail ? tf("os.c.bulkFail", { n: fail }) : ""),
     );
   }

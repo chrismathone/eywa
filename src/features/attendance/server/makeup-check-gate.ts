@@ -3,9 +3,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { featureLive } from "@/features/makeups/types";
 import { getTenantSettings } from "@/features/owner/server/queries";
 
-/** 보강 진행 여부 확인 전이라 보내지 않았다 — 화면 게이트 라벨 '보강 진행 여부 입력 필요'와 같은 뜻(강사·관리자 발송 공용). */
-export const MAKEUP_CHECK_REQUIRED_ERROR =
-  "보강을 했는지 아직 확인하지 않아 보내지 않았습니다(저장은 했습니다) — 원스크린에서 이름 옆 보강 표식을 눌러 '보강 했음' 또는 '보강 못 했음'을 골라 주세요";
+// 문구는 일반 모듈에 — 원스크린 일괄 발송(클라이언트)이 같은 문구로 거절 사유를 가른다.
+export { MAKEUP_CHECK_REQUIRED_ERROR } from "../makeup-check-error";
 
 /**
  * 보고서 발송의 **보강 진행 여부 확인** 게이트(원장 2026-10-27 *"보강체크를 하지 않으면 보고서 발송 비활성화"*) — 서버 겹.
