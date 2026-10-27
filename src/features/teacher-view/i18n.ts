@@ -2622,6 +2622,12 @@ export const SHEET_DICT = {
   },
   "os.prev.pick": { ko: "선택 {n} 이전값 가져오기", en: "Copy last session into {n}" },
   "os.prev.allRows": { ko: "이전값 일괄 가져오기", en: "Copy last session into all" },
+  "os.prev.makeupLoad": { ko: "보강 {n}명 이전 진도 불러오기", en: "Load last progress for {n} make-up students" },
+  "os.prev.makeupBusy": { ko: "보강 이전 진도 불러오는 중…", en: "Loading make-up history…" },
+  "os.prev.makeupTitle": {
+    ko: "보강 학생은 이전 회차를 따로 불러와야 '이전값 가져오기'·참고행에 들어갑니다",
+    en: "Make-up students need their last session loaded before 'copy last session' can fill them",
+  },
   "os.attach.pick": { ko: "선택 {n} 첨부", en: "Attach to {n}" },
   "os.notice.title": {
     ko: "선택(없으면 표시 전체) 학생 학부모에게 공지 발송 — 진도와 무관",
@@ -3354,6 +3360,17 @@ export const SHEET_DICT = {
   "os.card.understandingPreset.ok": { ko: "보통", en: "OK" },
   "os.card.understandingPreset.poor": { ko: "나쁨", en: "Weak" },
   "os.bulk.understanding": { ko: "이해도 (수학 소단원 전부)", en: "Understanding (all math lessons)" },
+  "os.bulk.understandingOffHint": {
+    ko: "뺄 소단원 — 누르면 빠짐 (그 소단원이 있는 학생만 · 학생마다 다른 점수는 행의 '소단원별')",
+    en: "Lessons to leave out — tap to remove (only for students who have it · per-student scores via 'Per lesson' on the row)",
+  },
+  "os.bulk.understandingOffTitle": { ko: "{lesson} — {n}행에 있음 · 누르면 이해도에서 뺌", en: "{lesson} — in {n} rows · tap to leave it out" },
+  "os.grid.understandingDetail": { ko: "소단원별", en: "Per lesson" },
+  "os.grid.understandingDetailOff": { ko: "소단원별 · {n}개 뺌", en: "Per lesson · {n} out" },
+  "os.grid.understandingDetailTitle": {
+    ko: "소단원마다 다른 점수를 주거나 빼기·되살리기",
+    en: "Score each lesson separately, or leave lessons out / put them back",
+  },
   "os.card.reportOf": { ko: "{subject} 보고서", en: "{subject} report" },
   "os.card.modeBTitle": {
     ko: "2문단 B — 수업 내용과 태도·특이사항을 나눠 작성합니다. 상단 토글에서 바꿀 수 있습니다.",
@@ -4116,6 +4133,16 @@ export const SHEET_DICT = {
   },
   "os.c.prevFail": { ko: "이전 진도를 불러오지 못했습니다", en: "The last progress could not be loaded" },
   "os.c.prevLoaded": { ko: "이전 진도를 불러왔습니다", en: "The last progress was loaded" },
+  "os.c.makeupPrevPending": {
+    ko: "보강 학생 {n}명은 이전 진도를 아직 안 불러와 비어 있습니다",
+    en: "{n} make-up students have no last session loaded yet",
+  },
+  "os.c.makeupPrevLoadNow": { ko: "지금 불러오기", en: "Load now" },
+  "os.c.makeupPrevAllDone": {
+    ko: "보강 학생 이전 진도: {n}명 불러옴 · 이전 기록 없음 {none}명 — 이제 '이전값 가져오기'를 누르면 채워집니다",
+    en: "Make-up history: {n} loaded · {none} with no history — 'copy last session' will now fill them",
+  },
+  "os.c.makeupPrevAllFail": { ko: "보강 학생 {n}명은 이전 진도를 불러오지 못했습니다", en: "Couldn't load history for {n} make-up students" },
   "os.c.prevNone": { ko: "이전 보고서가 없습니다", en: "There is no earlier report" },
   "os.c.attRecorded": { ko: "기록됨", en: "on record" },
   "os.c.attConflict": {

@@ -43,8 +43,8 @@ import { attitudeNeedsNote, attitudeNoteComplete, isHomeworkMissed, testSkipComp
 import { DailyTestSkipPanel } from "./daily-test-skip-panel";
 import { HomeworkMissReasonInput } from "./homework-miss-reason";
 import { ProgressModePills } from "./progress-mode-pills";
-import { UnderstandingPresetButtons } from "./understanding-presets";
-import { UNDERSTANDING_PRESETS } from "../math-report-pilot";
+import { BulkUnderstandingField } from "./bulk-understanding";
+import { bulkUnderstandingLessons } from "../math-report-pilot";
 import type { VideoHomeworkStatus } from "@/features/video-homework/types";
 import {
   BulkTestFields,
@@ -123,6 +123,8 @@ export function BulkApplyPopover({
   const [lessonMode, setLessonMode] = useState<string | null>(null);
   // 이해도 단계(우수 10 · 보통 7 · 나쁨 4, 원장 2026-10-26) — 고른 점수. null = 건드리지 않음.
   const [understanding, setUnderstanding] = useState<number | null>(null);
+  // 이해도에서 뺄 소단원(원장 2026-10-27 *"몇개 선택 빼기"*) — 진도칸 원문 차시. 그 소단원이 있는 행에서만 빠진다.
+  const [understandingOff, setUnderstandingOff] = useState<string[]>([]);
   const [subjectKey, setSubjectKey] = useState<string | null>(null);
   const [grade, setGrade] = useState(studyGrade);
   // 반이 바뀌면(대상 행의 기본 진도 학년이 바뀌면) 그 반 기준으로 다시 연다 — 같은 반에서 고른 학년은 닫아도 유지(reset 주석).
@@ -168,10 +170,18 @@ export function BulkApplyPopover({
   const blankUnits = attPlan?.newCellUnits ?? [];
   const blankIsOne = blankUnits.every((u) => u === 1);
   const blankList = blankUnits.map(formatSessionUnits).join("·");
+  // 뺄 소단원 후보 = 대상 행 진도의 소단원 + 이번에 넣을 수학 진도의 소단원(같은 차례에 진도를 바꿔도 고를 수 있게).
+  // 고른 뒤 진도를 바꿔 후보에서 사라진 것은 싣지 않는다(눌러도 아무 데도 안 들어가는 값).
+  const activeSubjectForOff = subjects.find((s) => s.key === (subjectKey ?? subjects[0]?.key)) ?? subjects[0] ?? null;
+  const offLessons = bulkUnderstandingLessons(
+    fields.understandingTodays ?? [],
+    progress.trim() && activeSubjectForOff && isMathSubject(activeSubjectForOff.key) ? { today: progress, rows: activeSubjectForOff.count } : undefined,
+  );
+  const liveOff = understandingOff.filter((l) => offLessons.some((o) => o.lesson === l));
   const hasAny =
     mode === "copy"
       ? canCopy
-      : !!(attitude || homework || textbook.trim() || homeworkToday.trim() || progress.trim() || lessonMode || understanding !== null || att ||
+      : !!(attitude || homework || textbook.trim() || homeworkToday.trim() || progress.trim() || lessonMode || understanding !== null || liveOff.length > 0 || att ||
           note.trim() || hasTest || skipReady || missReasonReady || video.check || video.homework !== null || video.due !== null);
   // 과목이 하나뿐이면 고를 것도 없다 — 그대로 그 과목.
   const activeSubject = subjects.find((s) => s.key === (subjectKey ?? subjects[0]?.key)) ?? subjects[0] ?? null;
@@ -192,6 +202,7 @@ export function BulkApplyPopover({
     setProgress("");
     setLessonMode(null);
     setUnderstanding(null);
+    setUnderstandingOff([]);
     setAtt(null); // 출결은 특히 — 남아 있다가 다음 적용에 딸려 나가면 출석부에 그대로 박힌다
     setAttUnits(""); // 시수도 같은 이유 — 급여 재료라 잔존값이 다음 반에 딸려 나가면 안 된다
     setTests(EMPTY_BULK_TESTS);
@@ -265,6 +276,7 @@ export function BulkApplyPopover({
         ...(lessonMode ? { progressMode: lessonMode } : {}),
         // 이해도 단계 — 고른 때만(새 수학 보고서 행에만 들어간다).
         ...(understanding !== null ? { understanding } : {}),
+        ...(liveOff.length ? { understandingOff: liveOff } : {}),
         ...testPatch,
         // 영상 과제 — 고른 때만. 링크 넣기는 '있음'과 함께 켠 때만 싣는다(안 켰으면 그 값은 건드리지 않는다).
         ...(video.homework !== null ? { videoHomework: video.homework } : {}),
@@ -417,14 +429,14 @@ export function BulkApplyPopover({
             {/* 소단원별 이해도 — 단계 버튼 하나로 고른 행 소단원 전부에(원장 2026-10-26). 새 수학 보고서 행에만 들어간다(planBulkApply).
                 같은 버튼을 다시 누르면 고르기 해제(= 이해도는 건드리지 않음). */}
             {mode === "input" && subjects.some((s) => isMathSubject(s.key)) ? (
-              <div className="flex flex-col gap-1">
-                <p className="micro text-text-faint">{t("os.bulk.understanding")}</p>
-                <UnderstandingPresetButtons
-                  compact
-                  active={UNDERSTANDING_PRESETS.find((p) => p.score === understanding)?.key ?? null}
-                  onPick={(score) => setUnderstanding((cur) => (cur === score ? null : score))}
-                />
-              </div>
+              <BulkUnderstandingField
+                score={understanding}
+                onScore={setUnderstanding}
+                // 후보 = 대상 행 진도의 소단원 + 이번에 넣을 수학 진도의 소단원(같은 차례에 진도를 바꿔도 고를 수 있게).
+                lessons={offLessons}
+                off={understandingOff}
+                onOff={setUnderstandingOff}
+              />
             ) : null}
             {/* 출결 — 화면 state가 아니라 **출석부에 즉시 기록**되는 유일한 칸이라 따로 묶고 경계를 밝힌다. */}
             {mode === "input" && attendance ? (

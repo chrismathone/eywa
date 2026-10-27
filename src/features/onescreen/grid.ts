@@ -5,6 +5,7 @@
 import { toHomeworkRateChoice } from "./homework-rate";
 import { asProgressMode } from "./progress-mode";
 import { attitudeNeedsNote, isHomeworkMissed, testSkipComplete, type DailyTestSkip } from "./math-report-pilot-sections";
+import { pilotLessons } from "./math-report-pilot";
 import { resolveRowFields } from "./row-fields";
 import type { OneScreenStudent, PrevReport, Subject } from "./types";
 
@@ -305,6 +306,8 @@ export type BulkPatch = {
   progressMode?: string;
   /** 소단원별 이해도 — 그 행 오늘 진도의 소단원 전부에 같은 점수(0~10, 단계 버튼 우수·보통·나쁨, 원장 2026-10-26). 새 수학 보고서 행에만. */
   understanding?: number;
+  /** 이해도에서 뺄 소단원(진도칸 원문 차시) — 그 행 오늘 진도에 있는 것만 뺀다. 새 수학 보고서 행에만(원장 2026-10-27). */
+  understandingOff?: string[];
   /** 수업 태도 의견(하·중하일 때 강사 원문, 2026-10-26) — 태도가 하·중하인(이번에 그렇게 바꾸는 것 포함) 새 수학 보고서 행에만. */
   attitudeNote?: string;
   /** 숙제 미제출 사유(원장 2026-10-27 표 일괄 점검) — 숙제가 미제출·0%인(이번에 그렇게 바꾸는 것 포함) 새 수학 보고서 행에만. */
@@ -454,6 +457,13 @@ export function planBulkApply(
     if (patch.understanding !== undefined && t.understandingOk && (!onlyEmpty || !t.understandingStored)) {
       const u = Math.round(patch.understanding);
       if (Number.isFinite(u) && u >= 0 && u <= 10) set.understanding = u;
+    }
+    // 이해도에서 뺄 소단원(원장 2026-10-27 *"몇개 선택 빼기"*) — 그 행 오늘 진도(이번에 바꾸면 그 값)에 있는 소단원만.
+    // 빼기는 점수를 덮지 않아 '빈 칸만'과 무관하다(되살리기는 카드·표 행의 소단원별 창에서).
+    if (patch.understandingOff?.length && t.understandingOk) {
+      const lessons = pilotLessons(set.today ?? t.today);
+      const off = patch.understandingOff.filter((l) => lessons.includes(l));
+      if (off.length) set.understandingOff = off;
     }
     if (p.note !== undefined && (!onlyEmpty || !(t.note ?? "").trim())) set.note = p.note;
     // 테스트 — '빈 칸만'은 **점수가 빈 행**에만(문항수는 늘 값이 있어 빈 칸 판정이 없다 — 점수가 찬 행의 문항수를 바꾸면 그 점수가 깎인다).
