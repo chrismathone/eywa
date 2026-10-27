@@ -41,6 +41,7 @@ vi.mock("@/features/attendance/live/server/write-policy", () => ({
 vi.mock("@/features/makeups/server/adapters/gates", () => ({
   mappedReservationMutationBlock: async () => m.block,
   mappedCancelCommand: (id: string) => ({ reservationId: id, action: "cancel" }),
+  mappedRescheduleCommand: (id: string) => ({ reservationId: id, action: "reschedule" }),
 }));
 vi.mock("./actions", () => ({ setAttendanceCell: vi.fn() }));
 vi.mock("./makeup-reservation-complete", () => ({

@@ -28,7 +28,7 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
 import { appendMemo, hasMemoLine } from "@/features/onescreen/makeup-absence-link";
 import { userTaughtClassSet } from "@/features/attendance/live/server/write-policy";
-import { mappedCancelCommand, mappedReservationMutationBlock } from "@/features/makeups/server/adapters/gates";
+import { mappedCancelCommand, mappedRescheduleCommand, mappedReservationMutationBlock } from "@/features/makeups/server/adapters/gates";
 import { effectiveAttendanceRecords } from "../effective-records";
 import { isAutoUnitsSubject } from "../auto-units";
 import { getLessonProfile } from "@/features/owner/server/lesson-profile";
@@ -733,7 +733,7 @@ export async function moveReservationToRegular(input: {
     }
   }
   for (const r of list) {
-    const block = await mappedReservationMutationBlock({ reservationId: r.id, action: "reschedule" });
+    const block = await mappedReservationMutationBlock(mappedRescheduleCommand(r.id));
     if (block) return { error: block };
   }
 
@@ -912,7 +912,7 @@ export async function checkMakeupReservation(input: {
   const supabase = await createClient();
   if (scoped && !(await userTaughtClassSet(supabase, user.id, date)).has(classId)) return { error: "담당 반이 아닙니다" };
   for (const r of list) {
-    const block = await mappedReservationMutationBlock({ reservationId: r.id, action: outcome === "done" ? "reschedule" : "cancel" });
+    const block = await mappedReservationMutationBlock(outcome === "done" ? mappedRescheduleCommand(r.id) : mappedCancelCommand(r.id));
     if (block) return { error: block };
   }
   const [{ data: cls }, { data: stu }, regularDay, profile] = await Promise.all([
