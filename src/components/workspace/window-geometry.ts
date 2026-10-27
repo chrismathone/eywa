@@ -222,6 +222,7 @@ const ROUTE_WINDOW_MIN: Record<string, { w: number; h: number }> = {
   "shuttle/parent-rides": { w: 390, h: 560 },
   "shuttle/live": { w: 390, h: 560 },
   "shuttle/track": { w: 390, h: 560 },
+  "shuttle/nearby": { w: 390, h: 560 },
   "shuttle/parents": { w: 390, h: 560 },
 };
 

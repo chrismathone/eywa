@@ -261,6 +261,8 @@ export const INNER_TABS: { parent: string; items: HubDest[] }[] = [
       face("shuttle", "/shuttle/parent-rides", "학부모 등하원"),
       face("shuttle", "/shuttle/live", "운행 현황", undefined, { icon: "steering" }),
       face("shuttle", "/shuttle/track", "실시간 위치", undefined, { icon: "mapPin" }),
+      // 가까운 노선 찾기(2026-10-27) — 학부모 탭 4와 같은 화면 · 🔒 원장·관리자·총괄 전용(화면은 isShuttleAdmin 404).
+      face("shuttle", "/shuttle/nearby", "가까운 노선 찾기", undefined, { icon: "search", adminOnly: true }),
     ]),
   },
 ];
