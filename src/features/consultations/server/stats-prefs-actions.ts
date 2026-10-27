@@ -1,6 +1,7 @@
 "use server";
 
 import { patchMyUiPrefs } from "@/lib/ui-prefs/patch";
+import { parseHomeroomSortKey, type HomeroomSort } from "../homeroom-sort";
 import { STATS_DIMS, STATS_METRICS, type StatsDimKey, type StatsMetric, type StatsUnit } from "../stats-model";
 
 /**
@@ -11,11 +12,17 @@ export async function saveConsultationStatsPrefs(p: {
   unit?: StatsUnit;
   metric?: StatsMetric;
   dim?: StatsDimKey;
+  hrSort?: HomeroomSort;
 }): Promise<{ ok: boolean; error?: string }> {
   const patch: Record<string, unknown> = {};
   if (p.unit === "week" || p.unit === "month") patch.stats_unit = p.unit === "week" ? "week" : undefined;
   if (p.metric && STATS_METRICS.includes(p.metric)) patch.stats_metric = p.metric === "count" ? undefined : p.metric;
   if (p.dim && STATS_DIMS.includes(p.dim)) patch.stats_dim = p.dim === "counselor" ? undefined : p.dim;
+  if (p.hrSort && parseHomeroomSortKey(p.hrSort.key) && (p.hrSort.dir === "asc" || p.hrSort.dir === "desc")) {
+    const isDefault = p.hrSort.key === "name" && p.hrSort.dir === "asc";
+    patch.hr_sort = isDefault ? undefined : p.hrSort.key;
+    patch.hr_dir = isDefault ? undefined : p.hrSort.dir;
+  }
   if (Object.keys(patch).length === 0) return { ok: false, error: "잘못된 값입니다" };
   return patchMyUiPrefs("consultations", patch);
 }

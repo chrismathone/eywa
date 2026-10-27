@@ -3,13 +3,20 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { kstDateOf, kstToday } from "@/lib/date-kst";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
-import { isSpecialLecture } from "@/features/classes/special-lecture";
-import { buildHomeroomTeachers, recentMonths, type HomeroomStats } from "../homeroom-model";
+import { buildHomeroomTeachers, isHomeroomConsultClass, recentMonths, type HomeroomStats } from "../homeroom-model";
 
 /** 현황 창 — 이번 달 포함 6개월. */
 const MONTHS = 6;
 
-type ClassRow = { id: string; class_name: string; teacher_id: string; is_special: boolean | null; closed_at: string | null };
+type ClassRow = {
+  id: string;
+  class_name: string;
+  subject: string | null;
+  teacher_id: string;
+  is_special: boolean | null;
+  math_learning_track: string | null;
+  closed_at: string | null;
+};
 type EnrollRow = { student_id: string; class_id: string; start_date: string | null; end_date: string | null; on_hold: boolean | null; is_transferred: boolean | null };
 
 /**
@@ -28,14 +35,16 @@ export async function getHomeroomConsultStats(): Promise<HomeroomStats> {
   const allClasses = await fetchAllPaged<ClassRow>((from, to) => {
     let q = supabase
       .from("classes")
-      .select("id, class_name, teacher_id, is_special, closed_at")
+      .select("id, class_name, subject, teacher_id, is_special, math_learning_track, closed_at")
       .eq("is_active", true)
       .not("teacher_id", "is", null);
     if (teacherId) q = q.eq("teacher_id", teacherId);
     return q.order("id").range(from, to);
   });
   const classes = allClasses.filter(
-    (c) => (!c.closed_at || c.closed_at.slice(0, 10) >= today) && !isSpecialLecture({ isSpecial: c.is_special, className: c.class_name }),
+    (c) =>
+      (!c.closed_at || c.closed_at.slice(0, 10) >= today) &&
+      isHomeroomConsultClass({ isSpecial: c.is_special, className: c.class_name, learningTrack: c.math_learning_track }),
   );
   const teacherIds = [...new Set(classes.map((c) => c.teacher_id))];
 
@@ -79,6 +88,12 @@ export async function getHomeroomConsultStats(): Promise<HomeroomStats> {
         .range(from, to),
     ),
   ]);
+  // 담임이 아닌 상담자 이름(칸 마우스 오버 '누가 했는가') — 담임 이름 조회에 없는 id만 더 읽는다.
+  const known = new Set(users.map((u) => u.id));
+  const extraIds = [...new Set(consults.map((c) => c.counselor_id).filter((id): id is string => !!id && !known.has(id)))];
+  const counselors = await fetchInChunks<{ id: string; display_name: string | null }>(extraIds, (chunk) =>
+    supabase.from("users").select("id, display_name").in("id", chunk),
+  );
   const enrolled = new Map(
     students.filter((s) => s.status === "enrolled" && !s.is_test).map((s) => [s.id, { name: s.name, grade: s.grade }]),
   );
@@ -94,8 +109,10 @@ export async function getHomeroomConsultStats(): Promise<HomeroomStats> {
   const teachers = buildHomeroomTeachers({
     today,
     months,
-    classes: classes.filter((c) => active.has(c.teacher_id)).map((c) => ({ id: c.id, name: c.class_name, teacherId: c.teacher_id })),
-    teacherNames: new Map(users.map((u) => [u.id, u.display_name?.trim() || "이름 없는 직원"])),
+    classes: classes
+      .filter((c) => active.has(c.teacher_id))
+      .map((c) => ({ id: c.id, name: c.class_name, subject: c.subject, teacherId: c.teacher_id })),
+    staffNames: new Map([...users, ...counselors].map((u) => [u.id, u.display_name?.trim() || "이름 없는 직원"])),
     enrollments: live.map((e) => ({ studentId: e.student_id, classId: e.class_id, startDate: e.start_date })),
     students: enrolled,
     consults: consults.flatMap((c) => {

@@ -3,6 +3,8 @@
  * 집계는 0318a `consultation_stats`가 하고, 여기선 버킷을 지표 한 줄로 바꾸고 라벨을 짓는 일만 한다(Vitest).
  */
 
+import { DEFAULT_HOMEROOM_SORT, defaultDirOf, parseHomeroomSortKey, type HomeroomSort } from "./homeroom-sort";
+
 export type StatsUnit = "month" | "week";
 /** 추이로 볼 지표 — 원장 *"모든 것을 관리 통계 추이 가능하게"*. */
 export type StatsMetric = "count" | "perStudent" | "follow" | "media" | "sync" | "class";
@@ -70,9 +72,9 @@ export type GapStats =
   | { full: true; today: string; enrolled: number; never: number; d30: number; d60: number; d90: number; top: GapStudent[] }
   | { full: false; today: string; d30plus: number; never: number; top: GapStudent[] };
 
-/** 보기 설정(계정 귀속 `users.ui_prefs.consultations`) — 기본값(월·건수·상담사)은 저장하지 않는다. */
-export type ConsultationStatsPrefs = { unit: StatsUnit; metric: StatsMetric; dim: StatsDimKey };
-export const DEFAULT_STATS_PREFS: ConsultationStatsPrefs = { unit: "month", metric: "count", dim: "counselor" };
+/** 보기 설정(계정 귀속 `users.ui_prefs.consultations`) — 기본값(월·건수·상담사·담임 이름순)은 저장하지 않는다. */
+export type ConsultationStatsPrefs = { unit: StatsUnit; metric: StatsMetric; dim: StatsDimKey; hrSort: HomeroomSort };
+export const DEFAULT_STATS_PREFS: ConsultationStatsPrefs = { unit: "month", metric: "count", dim: "counselor", hrSort: DEFAULT_HOMEROOM_SORT };
 export const STATS_METRICS: readonly StatsMetric[] = ["count", "perStudent", "follow", "media", "sync", "class"];
 export const STATS_DIMS: readonly StatsDimKey[] = ["counselor", "subject", "class", "category", "audience", "source"];
 
@@ -82,6 +84,11 @@ export function parseConsultationStatsPrefs(raw: unknown): ConsultationStatsPref
     unit: o.stats_unit === "week" ? "week" : "month",
     metric: (STATS_METRICS as readonly unknown[]).includes(o.stats_metric) ? (o.stats_metric as StatsMetric) : "count",
     dim: (STATS_DIMS as readonly unknown[]).includes(o.stats_dim) ? (o.stats_dim as StatsDimKey) : "counselor",
+    hrSort: (() => {
+      const key = parseHomeroomSortKey(o.hr_sort);
+      if (!key) return DEFAULT_HOMEROOM_SORT;
+      return { key, dir: o.hr_dir === "asc" || o.hr_dir === "desc" ? o.hr_dir : defaultDirOf(key) };
+    })(),
   };
 }
 

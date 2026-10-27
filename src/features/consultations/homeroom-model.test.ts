@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { buildHomeroomTeachers, recentMonths, type HomeroomInput } from "./homeroom-model";
+import { buildHomeroomTeachers, isHomeroomConsultClass, recentMonths, type HomeroomInput } from "./homeroom-model";
 
 const base = (over: Partial<HomeroomInput> = {}): HomeroomInput => ({
   today: "2026-10-27",
   months: ["2026-08", "2026-09", "2026-10"],
-  classes: [{ id: "c1", name: "중등M 중1", teacherId: "t1" }],
-  teacherNames: new Map([["t1", "김담임"]]),
+  classes: [{ id: "c1", name: "중등M 중1", subject: "math", teacherId: "t1" }],
+  staffNames: new Map([
+    ["t1", "김담임"],
+    ["desk", "박데스크"],
+  ]),
   enrollments: [
     { studentId: "s1", classId: "c1", startDate: "2026-03-02" },
     { studentId: "s2", classId: "c1", startDate: "2026-09-15" },
@@ -41,6 +44,7 @@ describe("buildHomeroomTeachers", () => {
     expect(s1.cells).toEqual(["self", "other", "none"]);
     expect(s1.selfCounts).toEqual([2, 0, 0]);
     expect(s1.lastSelf).toBe("2026-08-20");
+    expect(s1.otherNames).toEqual([[], ["박데스크"], []]);
     expect(s2.cells).toEqual(["before", "none", "self"]);
     expect(t!.months).toEqual([
       { target: 1, self: 1, other: 0, none: 0 },
@@ -58,8 +62,8 @@ describe("buildHomeroomTeachers", () => {
     const out = buildHomeroomTeachers(
       base({
         classes: [
-          { id: "c1", name: "A", teacherId: "t1" },
-          { id: "c2", name: "B", teacherId: "t2" },
+          { id: "c1", name: "A", subject: "math", teacherId: "t1" },
+          { id: "c2", name: "B", subject: "math", teacherId: "t2" },
         ],
         enrollments: [
           { studentId: "s1", classId: "c1", startDate: null },
@@ -78,8 +82,8 @@ describe("buildHomeroomTeachers", () => {
     const [t] = buildHomeroomTeachers(
       base({
         classes: [
-          { id: "c1", name: "A", teacherId: "t1" },
-          { id: "c2", name: "B", teacherId: "t1" },
+          { id: "c1", name: "A", subject: "math", teacherId: "t1" },
+          { id: "c2", name: "B", subject: "english", teacherId: "t1" },
         ],
         enrollments: [
           { studentId: "s1", classId: "c1", startDate: "2026-10-01" },
@@ -90,5 +94,16 @@ describe("buildHomeroomTeachers", () => {
     expect(t!.students).toHaveLength(1);
     expect(t!.students[0]!.cells[0]).toBe("none");
     expect(t!.classNames).toEqual(["A", "B"]);
+    expect(t!.subjects).toEqual(["english", "math"]);
+  });
+});
+
+describe("isHomeroomConsultClass", () => {
+  it("특강·JJ(복습) 반은 담임 상담 대상이 아니다 — 컬럼이 먼저, 이름 JJ는 폴백", () => {
+    expect(isHomeroomConsultClass({ isSpecial: false, className: "중등M 중1 BS3C", learningTrack: "regular" })).toBe(true);
+    expect(isHomeroomConsultClass({ isSpecial: false, className: "초등M 개별 BS1B", learningTrack: "supplement" })).toBe(false);
+    expect(isHomeroomConsultClass({ isSpecial: false, className: "초등M 개별 JJ1K", learningTrack: "regular" })).toBe(false);
+    expect(isHomeroomConsultClass({ isSpecial: true, className: "중3 시험대비", learningTrack: null })).toBe(false);
+    expect(isHomeroomConsultClass({ isSpecial: null, className: "내신중등특강", learningTrack: null })).toBe(false);
   });
 });
