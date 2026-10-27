@@ -3865,6 +3865,8 @@ export const SHEET_DICT = {
   "os.bulk.bookAria": { ko: "일괄 교재명", en: "Bulk book" },
   "os.bulk.hwTodayPh": { ko: "오늘 과제 (비우면 적용 안 함)", en: "Today's homework (leave it empty to skip)" },
   "os.bulk.hwTodayAria": { ko: "일괄 오늘 과제", en: "Bulk today's homework" },
+  "os.bulk.testSkip": { ko: "일일 테스트 시험 없음으로", en: "Mark daily test as not taken" },
+  "os.bulk.testSkipNeedReason": { ko: "시험 없음 사유를 골라야 적용됩니다", en: "Pick a reason for the skipped test first" },
   "os.bulk.bookHwHint": {
     ko: "오늘 과제가 쪽수만이면(예: 153-170p) 수학 보고서 '오늘의 숙제'에 교재명이 앞에 붙어 나갑니다.",
     en: "If today's homework is only pages (e.g. 153-170p), the math report puts the book name in front of it.",
