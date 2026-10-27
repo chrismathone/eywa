@@ -272,8 +272,13 @@ export type ReservedMakeup = {
   absenceDate: string;
   /** 보고서 발송 방식 — 정규 수업일이 아닌 예약은 늘 separate(합칠 정규 보고서가 없다). */
   mode: "merge" | "separate";
-  /** 출결이 찍혀 이행됐다(표식 '보강 완료'). */
+  /**
+   * 출결이 찍혀 이행됐다(시수 반영). 🔴 표식 '보강 완료'는 이것만으로 켜지 않는다 — 예약 끝 시각이 지나야(`reservedShownDone`).
+   * 수학은 하루 한 칸이라 정규 출석을 찍는 순간 이행되는데, 정규 수업 **뒤** 보강(권민서A 18:20~19:15 — 16:24 출석)은 아직 하지 않았다.
+   */
   done: boolean;
+  /** 보강일(YYYY-MM-DD) — 끝 시각이 지났는지 판정. 없으면(옛 값) `done`만 본다. */
+  date?: string;
 };
 
 export type OneScreenStudent = {

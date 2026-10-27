@@ -42,7 +42,7 @@ export function planReservedMakeup(
     const regular = regularKeys.has(key);
     const mode = regular ? effectiveReportMode(r.reportMode) : "separate";
     const list = byKey.get(key) ?? [];
-    list.push({ start: r.slotStart, end: r.slotEnd, absenceDate: r.absenceDate, mode, done: r.status === "done" });
+    list.push({ start: r.slotStart, end: r.slotEnd, absenceDate: r.absenceDate, mode, done: r.status === "done", date: r.makeupDate });
     byKey.set(key, list);
     if (!regular) continue;
     if (mode === "merge") merge.add(key);
@@ -78,6 +78,17 @@ export function applyReservedMakeup(os: OneScreenStudent, plan: ReservedMakeupPl
       if (list) su.makeupReserved = list;
     }
   }
+}
+
+/**
+ * 표식을 **'보강 완료'** 로 보일까 — 모두 이행됐고(출결로 시수 반영) **예약 끝 시각이 지났을 때만**(원장 2026-10-27 *"bs2p가 실제 수업시간이
+ * 16:20~18:10 일텐데. 권민서a는 그 후에 보강하는거고, 박지호는 그 전에 보강하는거야"*). 수학은 정규 출석 한 번에 이행되므로 정규 수업 뒤
+ * 보강은 출석 시각엔 아직 하지 않은 것이다 — 그때까지는 '보강 예약'(툴팁: 시수 미리 반영). 판정만 바꾼다(시수·이행은 종전대로).
+ * `now` = KST "YYYY-MM-DDTHH:MM"(`useLessonClock`) · null(시계 전) = 지나지 않은 것으로. 날짜가 없는 옛 값은 `done`만 본다.
+ */
+export function reservedShownDone(list: readonly ReservedMakeup[], now: string | null): boolean {
+  if (list.length === 0 || !list.every((r) => r.done)) return false;
+  return list.every((r) => !r.date || (now !== null && `${r.date}T${r.end}` <= now));
 }
 
 /** 표식 글자의 시각 — "15:25~16:20"(여러 건이면 앞 것 + "+N" — 강사뷰 영어 화면에도 그대로 읽히게 낱말을 안 붙인다). */
