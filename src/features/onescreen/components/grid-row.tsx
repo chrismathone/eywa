@@ -67,6 +67,7 @@ import { TodaysMathMark } from "./todays-math-mark";
 import { todaysMathMarked } from "../todays-math-fill-rules";
 import { MakeupClassTag } from "./makeup-class-tag";
 import { ReservedMakeupTag } from "./reserved-makeup-tag";
+import { needsMakeupCheck } from "../reserved-makeup";
 import { MakeupSwitchButton } from "./makeup-switch-button";
 import { isMathBookRow, useMathBookListId } from "./math-book-list";
 import { JjBookPicker } from "./jj-book-picker";
@@ -157,6 +158,8 @@ export type GridRowActions = {
   onSplitMakeup?: (student: OneScreenStudent, subjectName: string) => void;
   /** 보강 반 고르기(원장 2026-09-30 — 보고서 반 = 출석부 반) — 없으면 반 표시만. */
   onPickMakeupClass?: (student: OneScreenStudent, subjectName: string) => void;
+  /** 보강 진행 여부 확인(원장 2026-10-27 — 보강 예약 표식을 눌러 했음/못 했음) — 없으면 표식은 표시만. */
+  onCheckMakeup?: (student: OneScreenStudent, subjectName: string, outcome: "done" | "missed") => void;
   /** 영어 행 경고 셋(칸 바뀜·AI 코멘트 옛 값·이름 없음) — 카드 칸·발송 확인과 같은 판정(english-draft.ts). */
   englishFlagsOf?: (
     student: OneScreenStudent,
@@ -351,6 +354,7 @@ export function GridBodyRow({
     needsTestReason: pilot && !testSkipComplete(subject.dailyTestSkip), // 일일 테스트 '없음'이면 사유 필수(원장 2026-10-22)
     needsHomeworkReason: pilot && needsHomeworkMissReason(rowEval.homework, subject.homeworkMissReason), // 숙제 미제출이면 사유 필수(원장 2026-10-23)
     needsAttitudeNote: pilot && needsAttitudeNote(rowEval.attitude, subject.attitudeNote), // 태도 하·중하면 의견 3줄 이상(원장 2026-10-26)
+    needsMakeupCheck: needsMakeupCheck(subject), // 보강 예약이 든 줄은 보강 진행 여부 확인 뒤에(원장 2026-10-27)
     readonlyView: gen.readonlyView, // 열람 전용 — 사유 라벨("열람 전용")까지 게이트가 만든다
     // 발송 대기·게시 중 — 워커 결과 전까지 다시 못 누른다(카드뷰와 같은 판정, 원장 2026-09-29).
     sendInFlight: liveStatus === "queued" || liveStatus === "processing",
@@ -592,8 +596,11 @@ export function GridBodyRow({
           {showClass && subject.className ? (
             <span className="text-text-faint text-xs">{subject.className}</span>
           ) : null}
-          {/* 보강 예약(0264a) — 이 줄에 걸린 그날 보강(원장 2026-10-22 *"표 모드도 동일하게"*). */}
-          <ReservedMakeupTag list={subject.makeupReserved} />
+          {/* 보강 예약(0264a) — 이 줄에 걸린 그날 보강(원장 2026-10-22 *"표 모드도 동일하게"*). 눌러서 보강 진행 여부 확인(2026-10-27). */}
+          <ReservedMakeupTag
+            list={subject.makeupReserved}
+            onCheck={actions.onCheckMakeup && !gen.readonlyView ? (outcome) => actions.onCheckMakeup?.(student, subject.name, outcome) : undefined}
+          />
           {/* 수업 나누기(0351a) — 받는 반 행이면 "← 원래 선생님", 원래 반 행이면 "→ 받는 선생님"(그 시간만). */}
           {subject.splitIn || subject.splitOut ? (
             <span className="bg-blue-soft text-blue rounded-pill px-1 py-px text-xs font-bold">{subject.splitIn ?? subject.splitOut}</span>

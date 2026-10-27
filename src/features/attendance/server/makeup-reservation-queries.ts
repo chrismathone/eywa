@@ -18,6 +18,8 @@ import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supab
 import { weekBoundsOf } from "@/features/timetable/lib/week";
 import { isMakeupReportMode, type MakeupReservation } from "../makeup-reservation";
 import { loadNativeParticipants } from "@/features/makeups/server/adapters/participants";
+import { featureLive } from "@/features/makeups/types";
+import { getTenantSettings } from "@/features/owner/server/queries";
 
 type Sb = Awaited<ReturnType<typeof createClient>>;
 
@@ -49,6 +51,8 @@ type Row = {
   report_mode?: string | null;
   /** 0440a 결석난 반 — 결석일 칸을 다루는 조회(예약 단건·이행)에서만 실린다. */
   absence_class_id?: string | null;
+  /** 0458a 보강 확인 — 원스크린 명단 조회(`getRosterReservationsOn`)에서만 실린다. */
+  checked_at?: string | null;
 };
 
 type ClassRef = { class_name?: string | null };
@@ -77,6 +81,7 @@ export function toReservation(r: Row): MakeupReservation {
     createdBy: r.created_by ?? null,
     ...(r.report_mode !== undefined ? { reportMode: isMakeupReportMode(r.report_mode) ? r.report_mode : null } : {}),
     ...(r.absence_class_id !== undefined ? { absenceClassId: r.absence_class_id ?? null } : {}),
+    ...(r.checked_at !== undefined ? { checkedAt: r.checked_at ?? null } : {}),
   };
 }
 
@@ -151,6 +156,9 @@ const isMissingReportMode = (e: { message?: string } | null | undefined) => isMi
  * 이행(`done`)까지 읽는 까닭: 출석을 찍는 순간 예약이 `done`이 되는데, 그때 '정규+보강' 표시와 따로 낸 '(보강)' 줄이 새로고침에
  * 사라지면 보고서가 정규로만 저장된다. 표식은 `done`이고 예약 끝 시각이 지나야 '보강 완료'로 바뀐다(`reservedShownDone`, 원장 2026-10-27).
  * 🔴 fail-soft([[#95]]) — 표가 없으면 빈 목록, `report_mode` 칸이 없으면 그 칸 없이 다시 읽는다(방식 = null).
+ *    보강 확인(`checked_at`, 0458a)도 같다 — 칸이 없으면 그 칸 없이 읽어 확인을 요구하지 않는다(원장 2026-10-27).
+ *    🔴 보강관리(신규)가 켜진 지점(on·draining)도 읽지 않는다 — 연결 예약은 확인('했음/못 했음')을 쓸 수 없어(연결 게이트·0349a 트리거)
+ *       표식·발송이 영영 막힌다(적대 리뷰 2026-10-27). 그 지점은 보강관리의 실시 기록이 확인이다.
  */
 export const getRosterReservationsOn = cache(async function getRosterReservationsOn(
   date: string,
@@ -170,6 +178,14 @@ export const getRosterReservationsOn = cache(async function getRosterReservation
         // 동적 select 문자열이라 행 모양을 추론하지 못한다 — 실은 모양을 적는다.
         .returns<Row[]>(),
     );
+  try {
+    const live = featureLive((await getTenantSettings()).makeups.mode);
+    return (await read(`${SELECT}, report_mode${live ? "" : ", checked_at"}`)).map(toReservation);
+  } catch (e) {
+    if (!isMissingColumn(e as { message?: string }, "checked_at") && !isMissingReportMode(e as { code?: string; message?: string })) {
+      return soft("원스크린 날짜", e as { code?: string; message?: string });
+    }
+  }
   try {
     return (await read(`${SELECT}, report_mode`)).map(toReservation);
   } catch (e) {

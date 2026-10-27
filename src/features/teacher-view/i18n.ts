@@ -2912,6 +2912,24 @@ export const SHEET_DICT = {
   // 보강 예약(0264a) 표식 — 원스크린 왼쪽 목록·카드·표 모드(원장 2026-10-22 *"보강 예약이 잘 되었나 확인할 방법이 없네"*).
   "os.reserved.tag": { ko: "보강 예약 {time}", en: "Makeup booked {time}" },
   "os.reserved.done": { ko: "보강 완료 {time}", en: "Makeup done {time}" },
+  "os.reserved.needsCheck": { ko: "보강 진행 여부 확인해 주세요", en: "Please confirm whether the makeup happened" },
+  "os.reserved.needsCheckTitle": {
+    ko: "눌러서 보강을 했는지 확인해 주세요 — 확인 전엔 이 보강이 든 보고서를 보낼 수 없습니다",
+    en: "Press to confirm whether the makeup happened — reports with this makeup can't be sent until you do",
+  },
+  "os.reserved.checkTitle": { ko: "눌러서 보강 진행 여부를 확인합니다", en: "Press to confirm whether the makeup happened" },
+  "os.reserved.checkDone": { ko: "보강 했음", en: "Makeup done" },
+  "os.reserved.checkMissed": { ko: "보강 못 했음", en: "Makeup didn't happen" },
+  "os.reserved.confirmMissed": {
+    ko: "{name} 보강을 못 했다고 기록할까요?\n\n· 보강분 시수를 빼고 이 보강 예약을 지웁니다.\n· 결석은 '보강 안 된 결석'으로 돌아갑니다(다시 예약할 수 있습니다).\n· 합쳐 둔 보고서는 정규 보고서로 돌아갑니다.\n· 따로 선 '(보강)' 줄은 보강 출결·명단·미발송 보고서와 함께 빠집니다.",
+    en: "Record that {name}'s makeup didn't happen?\n\n· The makeup units are removed and this booking is deleted.\n· The absence goes back to 'not made up' (you can book again).\n· A merged report goes back to a regular report.\n· A separate makeup row is removed with its makeup attendance, roster entry and unsent report.",
+  },
+  "os.reserved.checkedDone": { ko: "{name} 보강을 했다고 기록했습니다", en: "Recorded {name}'s makeup as done" },
+  "os.reserved.checkedMissed": { ko: "{name} 보강을 못 했다고 기록했습니다 — 보강분 시수를 뺐습니다", en: "Recorded {name}'s makeup as not done — the makeup units were removed" },
+  "os.reserved.unitsLeft": {
+    ko: "시수는 자동으로 뺄 수 없어(선생님이 고친 값이거나 같은 날 보강이 여럿) 그대로 두었습니다 — 출석부에서 시수를 확인해 주세요",
+    en: "The units couldn't be adjusted automatically (edited by hand, or several makeups that day), so they were left as is — check them in the register",
+  },
   "os.reserved.preApplied": {
     ko: "출석으로 보강 시수가 미리 반영됐습니다 — 보강을 못 하면 출석부에서 시수를 고쳐 주세요",
     en: "The makeup units were already added with today's attendance — if the makeup doesn't happen, fix the units in the register",
@@ -3199,6 +3217,11 @@ export const SHEET_DICT = {
   "os.gate.absentHint": {
     ko: "결석 학생 — 발송 제외 (기록 저장은 가능)",
     en: "Absent student — left out of the send (the record can still be saved)",
+  },
+  "os.gate.need.mkcheck": { ko: "보강 진행 여부", en: "Whether the makeup happened" },
+  "os.gate.hint.mkcheck": {
+    ko: "보강 예약이 든 보고서입니다 — 이름 옆 보강 표식을 눌러 보강을 했는지(보강 했음 / 보강 못 했음) 확인해 주세요",
+    en: "This report includes a booked makeup — press the makeup tag next to the name and confirm whether it happened (done / not done)",
   },
   "os.gate.need.attendance": { ko: "출결", en: "Attendance" },
   "os.gate.need.progress": { ko: "진도", en: "Progress" },

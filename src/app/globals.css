@@ -758,6 +758,15 @@
   .pulse-now {
     animation: aywa-pulse 1.8s ease-out infinite;
   }
+  /* 꼭 해야 하는 확인 — 같은 고리를 느리게(원장 2026-10-27 "펄스 깜빡임으로 주기 길게" · 보강 진행 여부 확인 표식). */
+  .pulse-slow {
+    animation: aywa-pulse 3.6s ease-out infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .pulse-slow {
+      animation: none;
+    }
+  }
 
   /* 알림 벨 — 안 읽음 있을 때 은은히 "딸랑"(울린 뒤 쉼), hover 시 1회 스윙. transform-origin=top(매단 것처럼). */
   @keyframes bell-swing {

@@ -43,6 +43,7 @@ import {
 import { claimMakeupAnchorChange, finishMakeupAnchor, prepareMakeupAnchor } from "./makeup-anchor-sync";
 import { ingestReport } from "@/features/progress/server/ingest";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { MAKEUP_CHECK_REQUIRED_ERROR, makeupCheckPending } from "@/features/attendance/server/makeup-check-gate";
 import { after } from "next/server";
 import {
   nextTrendOptOut,
@@ -895,6 +896,33 @@ export async function saveAndQueueClassnote(
       }
     }
     return { ok: false, id: saved.id, shareToken: saved.shareToken, ...warn, error: pilotBlock };
+  }
+
+  // 🔴 보강 진행 여부 확인(원장 2026-10-27 *"보강체크를 하지 않으면 보고서 발송 비활성화"*) — 보강이 든 보고서(정규+보강 · 보강 줄)는
+  //    그 반 그날 보강 예약을 선생님이 '보강 했음'으로 확인(0458a `checked_at`)해야 보낸다. 화면 게이트(`needsMakeupCheck`)와 같은 판정의
+  //    서버 겹(#77 — 일괄 발송·옛 화면). 정규 줄은 분리 예약(따로 선 보강 줄의 몫)을 보지 않는다.
+  if (
+    input.makeup &&
+    (await makeupCheckPending({
+      tenantId: user.tenantId,
+      studentId: input.studentId,
+      date: reportDate,
+      classId: input.classId ?? null,
+      makeupClassId: saved.makeupClassId ?? input.makeupClassId ?? null,
+    }))
+  ) {
+    if (prior?.classnote_status === "queued") {
+      try {
+        await supabase
+          .from("lesson_reports")
+          .update({ classnote_status: null, classnote_queued_at: null })
+          .eq("id", saved.id)
+          .eq("classnote_status", "queued");
+      } catch {
+        // best-effort — 어차피 에러 반환이라 강사 재시도가 뒤따른다(옆 게이트와 같다)
+      }
+    }
+    return { ok: false, id: saved.id, shareToken: saved.shareToken, ...warn, error: MAKEUP_CHECK_REQUIRED_ERROR };
   }
 
   // 발송 안전 스위치 — 기본 OFF(dry-run). 원장이 승인(설정 토글)하기 전까지 **저장만** 하고 실제 큐잉(발송) 안 함.

@@ -120,3 +120,21 @@ describe("evaluateSendGate", () => {
     expect(g.hint).toContain("열람 전용");
   });
 });
+
+// 원장 2026-10-27 *"보강체크를 하지 않으면 보고서 발송 비활성화 되고 왜 발송안되었는지도"*.
+describe("evaluateSendGate — 보강 진행 여부 확인", () => {
+  it("확인 전이면 발송 막힘 · 라벨 맨 앞 '보강 진행 여부' · 힌트가 할 일(표식 누르기)을 말한다", () => {
+    const g = gate({ needsMakeupCheck: true, hasProgress: false });
+    expect(g.canSend).toBe(false);
+    expect(g.reasons).toEqual(["mkcheck", "progress"]);
+    expect(g.label).toBe("보강 진행 여부 · 진도 입력 필요");
+    expect(g.hint).toContain("보강 표식을 눌러");
+  });
+  it("확인했으면(또는 보강이 없으면) 종전 판정 그대로", () => {
+    expect(gate({ needsMakeupCheck: false }).canSend).toBe(true);
+  });
+  it("결석·발송 완료는 단독 사유 — 보강 확인을 덧붙이지 않는다", () => {
+    expect(gate({ needsMakeupCheck: true, isAbsent: true }).reasons).toEqual(["absent"]);
+    expect(gate({ needsMakeupCheck: true, alreadySent: true }).reasons).toEqual(["sent"]);
+  });
+});

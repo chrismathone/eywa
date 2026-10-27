@@ -279,6 +279,11 @@ export type ReservedMakeup = {
   done: boolean;
   /** 보강일(YYYY-MM-DD) — 끝 시각이 지났는지 판정. 없으면(옛 값) `done`만 본다. */
   date?: string;
+  /**
+   * 선생님이 보강을 했다고 확인했나(0458a `checked_at` · 원장 2026-10-27). 없음 = 확인 칸이 아직 없다(종전 판정 · 발송 게이트 없음).
+   * false = 아직 확인 전 → 표식 '보강 진행 여부 확인해 주세요'(끝 시각 뒤) · 그 보강이 든 보고서는 발송 막힘(`needsMakeupCheck`).
+   */
+  checked?: boolean;
 };
 
 export type OneScreenStudent = {

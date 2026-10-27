@@ -43,6 +43,8 @@ export type SendBlockReason =
   | "hwreason"
   /** 새 수학 보고서 — 수업 태도가 하·중하인데 의견(3줄 이상)이 모자라다(원장 2026-10-26). */
   | "attnote"
+  /** 보강 예약이 든 보고서인데 선생님이 보강을 했는지 아직 확인하지 않았다(원장 2026-10-27, `needsMakeupCheck`). */
+  | "mkcheck"
   | "recall_pending"
   /** 발송 대기·게시 중(queued/processing) — 워커 결과가 나올 때까지 다시 못 누른다(원장 2026-09-29). */
   | "in_flight"
@@ -51,8 +53,9 @@ export type SendBlockReason =
   | "report_optout";
 
 /** 입력이 필요한 사유의 짧은 이름 — 라벨에서 "출결 · 진도 · 멘트 입력 필요"로 이어 붙인다. */
-type NeedReason = "attendance" | "progress" | "testreason" | "hwreason" | "attnote" | "ment" | "autowrite" | "oneline";
+type NeedReason = "mkcheck" | "attendance" | "progress" | "testreason" | "hwreason" | "attnote" | "ment" | "autowrite" | "oneline";
 const NEED_KEY: Record<NeedReason, SheetDictKey> = {
+  mkcheck: "os.gate.need.mkcheck",
   attendance: "os.gate.need.attendance",
   progress: "os.gate.need.progress",
   ment: "os.gate.need.ment",
@@ -128,6 +131,11 @@ export function evaluateSendGate(args: {
   /** 새 수학 보고서 — 수업 태도 하·중하인데 의견이 모자라다(2026-10-26). */
   needsAttitudeNote?: boolean;
   /**
+   * 보강 예약이 든 줄(정규+보강 · '(보강)' 줄)인데 보강 진행 여부를 확인하지 않았다(원장 2026-10-27 *"보강체크를 하지 않으면 보고서 발송
+   * 비활성화 되고 왜 발송안되었는지도"*) — `needsMakeupCheck`(reserved-makeup.ts). 서버(`saveAndQueueClassnote`)도 같은 이유로 거절한다.
+   */
+  needsMakeupCheck?: boolean;
+  /**
    * 화면 언어 — 없으면 한국어(기존 호출부는 한 글자도 안 바뀐다).
    * 🔴 **판정에는 안 쓴다**: `canSend`·`reasons`는 언어와 무관하고 글자만 갈린다.
    */
@@ -186,7 +194,9 @@ export function evaluateSendGate(args: {
     };
   }
   const needs: NeedReason[] = [];
-  // 출결이 행에서 제일 앞 칸이라 사유도 맨 앞 — 체크하는 순서대로 읽힌다.
+  // 보강 확인은 카드 머리(이름 옆 표식)에서 한다 — 행에서 제일 위라 사유도 맨 앞.
+  if (args.needsMakeupCheck) needs.push("mkcheck");
+  // 출결이 행에서 제일 앞 칸이라 사유도 앞 — 체크하는 순서대로 읽힌다.
   if (args.attendanceUnchecked) needs.push("attendance");
   if (!args.hasProgress) needs.push("progress");
   if (args.needsTestReason) needs.push("testreason");
@@ -204,6 +214,7 @@ export function evaluateSendGate(args: {
       list: needs.map((n) => t(NEED_KEY[n])).join(" · "),
     }),
     hint: [
+      needs.includes("mkcheck") ? t("os.gate.hint.mkcheck") : "",
       needs.includes("attendance") ? t("os.gate.hint.attendance") : "",
       needs.includes("progress") ? t("os.gate.hint.progress") : "",
       needs.includes("testreason") ? t("os.gate.hint.testreason") : "",

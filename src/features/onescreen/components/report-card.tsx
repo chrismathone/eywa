@@ -56,6 +56,7 @@ import { hasPilotOneLine, isMathReportPilot, pilotCanEdit, pilotNeedsAutoWrite }
 import { needsAttitudeNote, needsHomeworkMissReason, pilotRowSig, testSkipComplete } from "../math-report-pilot-sections";
 import type { SheetLang } from "@/features/teacher-view/i18n";
 import { ReservedMakeupTag } from "./reserved-makeup-tag";
+import { needsMakeupCheck } from "../reserved-makeup";
 import { MakeupSwitchButton } from "./makeup-switch-button";
 
 // shareToken: 저장 시 발급되는 학부모 공개 링크(/r/[token]) 토큰. 세션 내 저장 후에만 존재.
@@ -166,6 +167,7 @@ export function ReportCard({
   onSplitMakeup,
   canRemoveMakeup,
   onPickMakeupClass,
+  onCheckMakeup,
   onSubjectDraft,
   onSubjectTrend,
   trendOptOut,
@@ -217,6 +219,8 @@ export function ReportCard({
   canRemoveMakeup?: (subjectName: string) => boolean;
   /** 보강 반 고르기(원장 2026-09-30) — 없으면 반 표시만. */
   onPickMakeupClass?: (subjectName: string) => void;
+  /** 보강 진행 여부 확인(원장 2026-10-27 — 보강 예약 표식을 눌러 했음/못 했음) — 없으면 표식은 표시만. */
+  onCheckMakeup?: (subjectName: string, outcome: "done" | "missed") => void;
   onSubjectDraft: (subjectName: string, text: string) => void;
   onSubjectTrend: (subjectName: string, text: string) => void; // 학습 추세 초안 편집(4a)
   /** '학습 추세 미발송'(원장 2026-09-18) — 표와 **같은 상태**(계정 ui_prefs). 없으면 체크를 안 그린다. */
@@ -346,6 +350,7 @@ export function ReportCard({
     needsTestReason: pilot && !testSkipComplete(subject.dailyTestSkip), // 일일 테스트 '없음'이면 사유 필수(원장 2026-10-22)
     needsHomeworkReason: pilot && needsHomeworkMissReason(cardEval.homework, subject.homeworkMissReason), // 숙제 미제출이면 사유 필수(원장 2026-10-23)
     needsAttitudeNote: pilot && needsAttitudeNote(cardEval.attitude, subject.attitudeNote), // 태도 하·중하면 의견 3줄 이상(원장 2026-10-26)
+    needsMakeupCheck: needsMakeupCheck(subject), // 보강 예약이 든 줄은 보강 진행 여부 확인 뒤에(원장 2026-10-27)
     readonlyView, // 열람 전용 — 사유 라벨까지 게이트가 만든다(표뷰와 동일)
     recallPending: isRecallInFlight(liveStatus ?? null),
     // 발송 대기·게시 중 — 워커 결과 전까지 다시 못 누른다(표뷰와 같은 판정, 원장 2026-09-29).
@@ -465,8 +470,12 @@ export function ReportCard({
                   {t("os.row.jump")}
                 </span>
               ) : null}
-              {/* 보강 예약(0264a) — 이 줄에 걸린 그날 보강(원장 2026-10-22). */}
-              <ReservedMakeupTag list={subject.makeupReserved} size="md" />
+              {/* 보강 예약(0264a) — 이 줄에 걸린 그날 보강(원장 2026-10-22). 눌러서 보강 진행 여부 확인(2026-10-27). */}
+              <ReservedMakeupTag
+                list={subject.makeupReserved}
+                size="md"
+                onCheck={onCheckMakeup && !readonlyView ? (outcome) => onCheckMakeup(subject.name, outcome) : undefined}
+              />
               {/* 수업 나누기(0351a) — 이 행이 왜 여기 있는지 / 그 시간이 어디로 가는지를 **글자로**(hover는 모바일에서 없다). */}
               {subject.splitIn || subject.splitOut ? (
                 <span className="bg-blue-soft text-blue rounded-pill px-1.5 py-px text-xs font-bold">

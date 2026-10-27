@@ -24,6 +24,7 @@ import { REPORT_RATING_VISIBLE, type ReportRating } from "../report-rating";
 import { isSendClassRouteRow, sendClassRow } from "@/features/onescreen/send-class";
 import { blockedForNoSendClass } from "@/features/onescreen/server/send-class";
 import { classnoteSendOn } from "@/features/owner/classnote-gate";
+import { makeupUncheckedIds } from "@/features/attendance/server/makeup-check-gate";
 
 /**
  * 실패/오래됨 보고서 재발송 — queued로 되돌려 워커가 다시 잡게 한다. retry_count·error 초기화.
@@ -56,6 +57,8 @@ export async function retryClassnote(
   absentSkipped?: number;
   /** 반별 발송인데 보낼 반이 없어 다시 올리지 않은 건수(원장 2026-09-30) — 원스크린·직접 작성에서 반을 골라 보낸다. */
   noClass?: number;
+  /** 보강 진행 여부 확인 전이라 다시 올리지 않은 보강 보고서 건수(원장 2026-10-27). */
+  makeupUnchecked?: number;
   dryRun?: boolean;
   error?: string;
 }> {
@@ -79,7 +82,7 @@ export async function retryClassnote(
     rows = await fetchInChunks(ids.slice(0, 200), (chunk) =>
       supabase
         .from("lesson_reports")
-        .select("id, report_date, subject, class_id, student_id, makeup, notes, teacher_name, students!lesson_reports_student_id_fkey(name)")
+        .select("id, report_date, subject, class_id, makeup_class_id, student_id, makeup, notes, teacher_name, students!lesson_reports_student_id_fkey(name)")
         .in("id", chunk)
         // 🔴 재발송은 **끝나지 못한 행만**(적대적 리뷰) — 목록 스냅샷이 옛 '실패'를 들고 있는 사이 워커가 이미
         //    게시했거나(success) 게시 중(processing/queued)인 행을 다시 queued로 돌리면 학부모에게 **두 번** 나간다.
@@ -127,7 +130,11 @@ export async function retryClassnote(
   } catch {
     return { ok: false, error: "출결 확인에 실패했습니다 — 다시 시도하세요" };
   }
-  if (requeueIds.length === 0) return { ok: true, requeued: 0, skipped, absentSkipped };
+  // 보강 진행 여부 확인 전인 보강 보고서는 다시 올리지 않는다(원장 2026-10-27 — 원스크린 발송 게이트와 같은 판정, makeup-check-gate.ts).
+  const uncheckedIds = await makeupUncheckedIds(user.tenantId, allowed.filter((r) => requeueIds.includes(r.id as string)));
+  const makeupUnchecked = uncheckedIds.size;
+  if (makeupUnchecked) requeueIds = requeueIds.filter((id) => !uncheckedIds.has(id));
+  if (requeueIds.length === 0) return { ok: true, requeued: 0, skipped, absentSkipped, ...(makeupUnchecked ? { makeupUnchecked } : {}) };
 
   // 보낼 반 게이트(미발송 일괄 발송과 같은 함수) — 반별 발송인데 보낼 반이 없으면 다시 올리지 않는다(워커가 1인 보드로 흘리지 않게).
   const requeueSet = new Set(requeueIds);
@@ -143,9 +150,9 @@ export async function retryClassnote(
   const noClass = noClassIds.size;
   if (noClass) requeueIds = requeueIds.filter((id) => !noClassIds.has(id));
   if (requeueIds.length === 0)
-    return noClass && !absentSkipped && !skipped
+    return noClass && !absentSkipped && !skipped && !makeupUnchecked
       ? { ok: false, requeued: 0, noClass, error: "보낼 반이 없어 다시 보내지 않았습니다 — 원스크린·직접 작성에서 반을 골라 보내세요" }
-      : { ok: true, requeued: 0, skipped, absentSkipped, noClass };
+      : { ok: true, requeued: 0, skipped, absentSkipped, noClass, ...(makeupUnchecked ? { makeupUnchecked } : {}) };
 
   const { data: requeuedRows, error } = await supabase
     .from("lesson_reports")
@@ -163,7 +170,7 @@ export async function retryClassnote(
   if (error) return { ok: false, error: humanizeDbError(error.message, "재발송") };
   // 실제로 갱신된 행만 센다(사이에 워커가 집어 간 행은 빠진다 — 감사로그·토스트 숫자가 거짓이 되지 않게).
   requeueIds = (requeuedRows ?? []).map((r) => r.id as string);
-  if (requeueIds.length === 0) return { ok: true, requeued: 0, skipped, absentSkipped, noClass };
+  if (requeueIds.length === 0) return { ok: true, requeued: 0, skipped, absentSkipped, noClass, ...(makeupUnchecked ? { makeupUnchecked } : {}) };
   // 🔴 학부모 게시판에 **글이 하나 더 붙는** 동작이라 반드시 남긴다. 일괄이므로 **한 줄 요약**
   //    (건별 N줄 금지) — 대신 되짚을 id·이름을 함께 담는다(재발송은 최대 200건이라 id는 50개로 자른다).
   const requeuedSet = new Set(requeueIds);
@@ -184,10 +191,11 @@ export async function retryClassnote(
       skipped,
       absentSkipped,
       ...(noClass ? { noClass } : {}),
+      ...(makeupUnchecked ? { makeupUnchecked } : {}),
       ...(gateOut.rewritten.length ? { makeupRewritten: gateOut.rewritten.slice(0, 50) } : {}),
     },
   });
-  return { ok: true, requeued: requeueIds.length, skipped, absentSkipped, noClass };
+  return { ok: true, requeued: requeueIds.length, skipped, absentSkipped, noClass, ...(makeupUnchecked ? { makeupUnchecked } : {}) };
 }
 
 /**
@@ -216,6 +224,8 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
    * 보고서 반에 살아 있는 반 보드가 없고 '보낼 반'(0303a)도 비어 있는 행. 원스크린·직접 작성에서 반을 골라 보낸다.
    */
   noClass?: number;
+  /** 보강 진행 여부 확인 전이라 큐잉하지 않은 보강 보고서 건수(원장 2026-10-27) — 원스크린에서 '보강 했음/못 했음'을 고른 뒤 보낸다. */
+  makeupUnchecked?: number;
   dryRun?: boolean;
   error?: string;
 }> {
@@ -234,7 +244,7 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
       supabase
         .from("lesson_reports")
         // 학생 이름은 감사로그 라벨용(위 retryClassnote와 같은 이유). 임베드엔 FK 이름 명시(#94).
-        .select("id, report_date, subject, class_id, student_id, makeup, notes, teacher_name, students!lesson_reports_student_id_fkey(name)")
+        .select("id, report_date, subject, class_id, makeup_class_id, student_id, makeup, notes, teacher_name, students!lesson_reports_student_id_fkey(name)")
         .in("id", chunk)
         .is("classnote_status", null)
         .or("source.is.null,source.neq.edutrix_import")
@@ -278,6 +288,10 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
     return { ok: false, error: "출결 확인에 실패했습니다 — 다시 시도하세요" };
   }
   const absentSkipped = eligible.length - sendable.length;
+  // 보강 진행 여부 확인 전인 보강 보고서는 올리지 않는다(원장 2026-10-27 — 원스크린 발송 게이트와 같은 판정, makeup-check-gate.ts).
+  const uncheckedIds = await makeupUncheckedIds(user.tenantId, sendable);
+  const makeupUnchecked = uncheckedIds.size;
+  if (makeupUnchecked) sendable = sendable.filter((r) => !uncheckedIds.has(r.id as string));
   // 반별 발송(ClassNote 모듈 + '수학 발송 경로') — 보낼 반 보드가 없는 행은 **큐에 올리지 않는다**(원스크린과 같은 규칙).
   // 일괄에선 행마다 반을 고를 수 없으니 이미 정해진 '보낼 반'(0303a)이 있을 때만 보낸다. 판정 실패 = fail-closed(그 행 제외).
   const routeRow = (r: (typeof sendable)[number]) => isSendClassRouteRow(settings, r);
@@ -293,7 +307,10 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
   const noClass = noClassIds.size;
   if (noClass) sendable = sendable.filter((r) => !noClassIds.has(r.id as string));
   if (sendable.length === 0)
-    return { ok: true, queued: 0, conflicts: 0, skipped: capped.length - emptyMent - absentSkipped - noClass, absentSkipped, emptyMent, noClass };
+    return {
+      ok: true, queued: 0, conflicts: 0, skipped: capped.length - emptyMent - absentSkipped - noClass - makeupUnchecked,
+      absentSkipped, emptyMent, noClass, ...(makeupUnchecked ? { makeupUnchecked } : {}),
+    };
 
   // 동명이인 감지 — 학생별 1회(중복 제거), 25명 청크로 버스트 제한(학생당 3쿼리).
   const studentIds = [...new Set(sendable.map((r) => r.student_id as string))];
@@ -371,10 +388,11 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
     queued,
     conflicts,
     // E13 — 멘트 미작성(emptyMent)은 따로 세므로 "제외"에서 뺀다(같은 건이 두 사유로 두 번 세지던 것).
-    skipped: capped.length - emptyMent - queued - conflicts - absentSkipped - noClass,
+    skipped: capped.length - emptyMent - queued - conflicts - absentSkipped - noClass - makeupUnchecked,
     absentSkipped,
     emptyMent,
     noClass,
+    ...(makeupUnchecked ? { makeupUnchecked } : {}),
   };
 }
 

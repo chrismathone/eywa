@@ -69,11 +69,13 @@ export async function loadRatingMaterial(tenantId: string, reportIds: readonly s
   for (const r of byId.values()) {
     const s = S.get(r.student_id);
     if (!s || s.is_test) continue; // 옛 모집단과 같게 — 테스트 학생은 비교 재료에서도 뺀다
+    // 읽은 값을 옮겨 담을 뿐이다 — 줄임 표기로 둔다(키에 콜론을 붙인 꼴은 영상 과제 **쓰기** 경로 가드에 걸린다, report-owner.test.ts).
+    const { video_homework } = r;
     population.push({
       id: r.id, d: r.report_date, subject: r.subject, makeup: r.makeup, student: s.name ?? "", school: s.school, grade: s.grade,
       textbook: r.textbook, progress: r.progress, homework_today: r.homework_today, daily_test: r.daily_test, check_test: r.check_test,
       exam_info: r.exam_info, homework_score: r.homework_score, attitude: r.attitude, notes: r.notes, trend_note: r.trend_note,
-      video_homework: r.video_homework, student_id: r.student_id, created_at: r.created_at,
+      video_homework, student_id: r.student_id, created_at: r.created_at,
       unit_class: r.class_id ?? r.makeup_class_id ?? r.classnote_class_id ?? null,
     });
   }

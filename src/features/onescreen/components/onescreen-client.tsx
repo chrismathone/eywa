@@ -53,7 +53,7 @@ import {
 } from "../last-template";
 import { isTrendOptedOut, trendOptOutKey } from "../trend-optout";
 import { removeMakeupEntry } from "../server/makeup-remove-actions";
-import { moveReservationToRegular, setReservationReportMode } from "@/features/attendance/server/makeup-reservation-actions";
+import { checkMakeupReservation, moveReservationToRegular, setReservationReportMode } from "@/features/attendance/server/makeup-reservation-actions";
 import { joinMakeupContent, joinText, planJoinMakeup, planSplitMakeup, type MakeupSwitchBlock } from "../makeup-switch";
 import { logOnescreenBulkApply } from "../server/bulk-log-actions";
 import { canRemoveMakeupRow, makeupRemoveBlockReason } from "../makeup-remove-plan";
@@ -2518,6 +2518,105 @@ export function OneScreenClient({
       setMakeupSaving(false);
     }
   }
+  /**
+   * **보강 진행 여부 확인**(원장 2026-10-27 *"보강 예약을 누르면 보강을 했다 안했다 체크"*) — 보강 예약 표식의 '보강 했음 / 보강 못 했음'.
+   * 대상 반 = 정규+보강 줄의 반 · '(보강)' 줄의 앵커 반(예약이 기록된 반). 서버 [`checkMakeupReservation`]:
+   *  · 했음 = 아직 이행 전이면 이행(시수) + 확인 → 표식 '보강 완료' · 발송 게이트가 풀린다.
+   *  · 못 했음 = 보강분 시수를 빼고 예약을 지운다 → 정규 줄은 예약 합침이면 정규로, 그 반의 '(보강)' 줄은 화면에서 빼고 그 줄의 명단·
+   *    미발송 보강 보고서도 '보강 빼기'와 같은 길로 지운다(남기면 새로고침 뒤 확인 게이트 없이 다시 서서 보내진다 — 적대 리뷰 2026-10-27).
+   *    로스터는 마운트 때 한 번 복사돼 새로고침 없이는 안 바뀐다.
+   *  · 했음인데 그날 칸이 없어 서버가 찍었으면(`marked`) 출결 알약도 그 값으로 맞춘다(출석부 스트립 반영과 같은 함수).
+   */
+  async function checkMakeup(student: OneScreenStudent, subjectName: string, outcome: "done" | "missed") {
+    if (readonlyBlocked() || makeupSaving) return;
+    const card = studentsRef.current.find((s) => s.id === student.id);
+    const row = card?.subjects.find((x) => x.name === subjectName);
+    const classId = row ? (row.classId ?? row.makeupClassId ?? null) : null;
+    if (!card || !row || !classId || !row.makeupReserved?.length) {
+      toast.error(t("os.switch.blockGone"));
+      return;
+    }
+    if (outcome === "missed" && !window.confirm(tf("os.reserved.confirmMissed", { name: card.name }))) return;
+    setMakeupSaving(true);
+    try {
+      // 못 했음이면 그 반 '(보강)' 줄의 명단·미발송 보고서를 지운다(없으면 not_found = 정상) — 실패해도 예약은 이미 지워졌으니 알리기만.
+      // 🔴 예약이 그 줄을 세웠을 때만(분리 — 정규 수업일이 아니면 늘 분리) — 모두 합침이면 그 반 '(보강)' 줄은 '+ 보강 학생 추가'로 따로 세운
+      //    실제 보강이라 지우지 않는다(적대 리뷰 2026-10-27).
+      const ownRow = row.makeupReserved.some((m) => m.mode === "separate");
+      const pureRows = ownRow ? card.subjects.filter((x) => x.makeup && !x.classId && x.makeupClassId === classId) : [];
+      let r = await checkMakeupReservation({ studentId: card.id, classId, date: activeDate, outcome });
+      // 정규 수업이 없는 날의 보강 칸이 남았다(`makeup_only`) — 그 '(보강)' 줄을 '보강 빼기'와 같은 길로 칸째 지우고(보강 칸·명단·미발송
+      // 보고서) 다시 묻는다. 칸이 없어진 예약은 서버가 시수 없이 지운다. '보강 빼기'가 막히면(남이 연 칸·발송된 보고서) 그 사유를 보인다.
+      // 🔴 칸이 실제로 지워졌을 때만 다시 묻는다 — 강사는 본인이 찍은 '보강' 칸만 지워지고 '출석'으로 찍힌 칸은 안 지워진다(그때는 서버 안내로
+      //    멈춘다 · 재리뷰). 두 번째 요청이 실패해도 줄은 화면에 남아 바로 다시 누를 수 있다(새로고침하면 비정규일 이행 예약은 표식이 안 선다).
+      let removedFirst = false;
+      if ("error" in r && r.code === "makeup_only" && pureRows.length) {
+        let cellGone = false;
+        for (const x of pureRows) {
+          const rm = await removeMakeupEntry({ studentId: card.id, date: activeDate, classId, subject: x.subjectKey ?? null });
+          if (!rm.ok && rm.code !== "not_found") {
+            toast.error(rm.error);
+            return;
+          }
+          if (rm.ok && rm.attendanceRemoved) cellGone = true;
+        }
+        if (!cellGone) {
+          toast.error(r.error);
+          return;
+        }
+        removedFirst = true;
+        r = await checkMakeupReservation({ studentId: card.id, classId, date: activeDate, outcome });
+      }
+      if ("error" in r) {
+        toast.error(r.error);
+        return;
+      }
+      if (outcome === "missed" && !removedFirst) {
+        for (const x of pureRows) {
+          const rm = await removeMakeupEntry({ studentId: card.id, date: activeDate, classId: null, subject: x.subjectKey ?? null }).catch(() => null);
+          if (rm && !rm.ok && rm.code !== "not_found") toast.error(rm.error);
+        }
+      }
+      const onClass = (x: Subject) => (x.classId ?? x.makeupClassId ?? null) === classId && !!x.makeupReserved?.length;
+      const unitsPatch = r.units !== undefined ? { attendanceUnits: r.units } : {};
+      const dropped = outcome === "missed" ? pureRows.map((x) => x.name) : [];
+      patch(card.id, (s) => ({
+        ...s,
+        subjects: s.subjects
+          .filter((x) => !dropped.includes(x.name))
+          .map((x) => {
+            if (!onClass(x)) return x;
+            if (outcome === "done") {
+              return {
+                ...x,
+                makeupReserved: x.makeupReserved!.map((m) => ({ ...m, done: true, ...(r.checkUnsaved ? {} : { checked: true }) })),
+                ...(x.classId === classId ? unitsPatch : {}),
+              };
+            }
+            const { makeupReserved: _gone, makeupByReservation, ...rest } = x;
+            void _gone;
+            return { ...rest, ...(makeupByReservation ? { makeup: false } : {}), ...(x.classId === classId ? unitsPatch : {}) };
+          }),
+      }));
+      if (dropped.length) {
+        setReports((prev) => {
+          const mine = { ...(prev[card.id] ?? {}) };
+          for (const name of dropped) delete mine[name];
+          return { ...prev, [card.id]: mine };
+        });
+      }
+      if (r.marked) {
+        const cells = [{ studentId: card.id, classId, ...(r.units !== undefined ? { units: r.units } : {}) }];
+        setStudents((prev) => applyAppliedAttendance(prev, cells, r.marked!, attPendingRef.current));
+      }
+      toast.success(tf(outcome === "done" ? "os.reserved.checkedDone" : "os.reserved.checkedMissed", { name: card.name }));
+      if (r.unitsLeft) toast.message(t("os.reserved.unitsLeft"));
+    } catch {
+      toast.error(t("os.c.makeupSaveFail"));
+    } finally {
+      setMakeupSaving(false);
+    }
+  }
   // 오늘 영상 과제 있음/없음(0308a) — 과목(행)별. 자동저장에 실린다(보강 토글과 같은 길).
   function toggleVideoHomeworkFor(studentId: string, subjectName: string) {
     patch(studentId, (s) => ({
@@ -4909,6 +5008,7 @@ export function OneScreenClient({
             onJoinMakeup: (student, subjectName) => void joinMakeupRow(student, subjectName),
             onSplitMakeup: (student, subjectName) => void splitMakeupRow(student, subjectName),
             onPickMakeupClass: (student, subjectName) => void pickMakeupClass(student, subjectName),
+            onCheckMakeup: (student, subjectName, outcome) => void checkMakeup(student, subjectName, outcome),
             canRemoveMakeup: (studentId, subjectName) =>
               canRemoveMakeupRow(reports[studentId]?.[subjectName]?.classnoteStatus ?? null),
             // 영어 행 경고 칩 — 카드 칸·발송 확인과 같은 판정(english-draft.ts).
@@ -5048,6 +5148,7 @@ selected ? (
                 onJoinMakeup={(subjectName) => void joinMakeupRow(selected, subjectName)}
                 onSplitMakeup={(subjectName) => void splitMakeupRow(selected, subjectName)}
                 onPickMakeupClass={(subjectName) => void pickMakeupClass(selected, subjectName)}
+                onCheckMakeup={(subjectName, outcome) => void checkMakeup(selected, subjectName, outcome)}
                 canRemoveMakeup={(subjectName) =>
                   canRemoveMakeupRow(reports[selected.id]?.[subjectName]?.classnoteStatus ?? null)
                 }

@@ -218,6 +218,8 @@ export function ReportList({
       if (res.emptyMent) parts.push(`${res.emptyMent}건 멘트 미작성 제외(강사가 작성 후 발송)`);
       // 반별 발송인데 보낼 반이 안 정해진 행(원장 2026-09-30 — 담당 반이 없으면 발송 불가) — 원스크린·직접 작성에서 반을 골라 보낸다.
       if (res.noClass) parts.push(`${res.noClass}건 보낼 반 미지정 제외(원스크린·직접 작성에서 반을 골라 발송)`);
+      // 보강 진행 여부 확인 전(원장 2026-10-27) — 원스크린에서 보강 표식을 눌러 했음/못 했음을 고른 뒤 보낸다.
+      if (res.makeupUnchecked) parts.push(`${res.makeupUnchecked}건 보강 진행 여부 확인 전 제외(원스크린 보강 표식에서 확인 후 발송)`);
       if (res.skipped) parts.push(`${res.skipped}건 제외(이미 발송·과목 미허용·오래된 보고서)`);
       toast.success(parts.join(" · "));
       setChecked(new Set());

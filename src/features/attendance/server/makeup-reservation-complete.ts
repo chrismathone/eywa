@@ -562,6 +562,9 @@ async function revert(
     .eq("status", "done")
     .select("id");
   if (error || (reverted ?? []).length === 0) return; // 0행 = 남이 먼저 되돌렸다(로그를 두 번 안 남긴다)
+  // 보강 확인(0458a)도 지운다 — 이행이 풀렸는데(결석으로 고침·칸 지움) '보강 완료' 표식·발송 통과로 남지 않게(적대 리뷰 2026-10-27).
+  // 칸이 없는 지점(미적용)은 오류로 돌아온다 — 조용히 넘긴다(되돌림 자체는 끝났다).
+  await admin.from("makeup_reservations").update({ checked_at: null, checked_by: null }).eq("tenant_id", tenantId).eq("id", r.id);
   const makeupLine = reservationMakeupMemo(r);
   for (const x of liveMakeupDay) {
     if (!hasMemoLine(x.note, makeupLine)) continue;
