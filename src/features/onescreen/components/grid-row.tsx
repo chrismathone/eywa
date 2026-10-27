@@ -68,6 +68,8 @@ import { MakeupClassTag } from "./makeup-class-tag";
 import { ReservedMakeupTag } from "./reserved-makeup-tag";
 import { MakeupSwitchButton } from "./makeup-switch-button";
 import { isMathBookRow, useMathBookListId } from "./math-book-list";
+import { JjBookPicker } from "./jj-book-picker";
+import { isJjSheetDraft, isJjSheetReport } from "../jj-books";
 
 const TD_BASE = "px-2 py-1.5 align-top";
 // 학생 묶음 구분선 — 묶음 첫 행(참고행이 꺼져 있을 때는 이 행)의 위쪽만 굵고 진한 회색.
@@ -326,6 +328,8 @@ export function GridBodyRow({
   const draftLead = splitLevelsLead(rep?.draft); // 맨 위 수업 평가 표 = 읽기 전용(원장 2026-10-26)
   // '사랑의 한마디' 행 — 새 수학 보고서 + 영어(원장 2026-10-26, 카드와 같은 판정).
   const oneLineRow = pilot || subject.subjectKey === "english";
+  // JJ 수업보고서 글 — 사랑의 한마디는 선택(비우면 그 항목이 빠진다, 원장 2026-10-27).
+  const jjOptionalNote = subject.subjectKey === "english" && isJjSheetDraft(rep);
   const sendGate = evaluateSendGate({
     lang,
     needsAutoWrite:
@@ -338,7 +342,7 @@ export function GridBodyRow({
         factsSig: pilotRowSig(student, subject.name),
         writtenSig: rep?.pilotFactsSig,
       }),
-    needsOneLine: oneLineRow && !hasPilotOneLine(rowEval.note), // 사랑의 한마디(옛 강사 한줄 멘트) 필수(원장 2026-10-22)
+    needsOneLine: oneLineRow && !jjOptionalNote && !hasPilotOneLine(rowEval.note), // 사랑의 한마디(옛 강사 한줄 멘트) 필수(원장 2026-10-22)
     needsTestReason: pilot && !testSkipComplete(subject.dailyTestSkip), // 일일 테스트 '없음'이면 사유 필수(원장 2026-10-22)
     needsHomeworkReason: pilot && needsHomeworkMissReason(rowEval.homework, subject.homeworkMissReason), // 숙제 미제출이면 사유 필수(원장 2026-10-23)
     needsAttitudeNote: pilot && needsAttitudeNote(rowEval.attitude, subject.attitudeNote), // 태도 하·중하면 의견 3줄 이상(원장 2026-10-26)
@@ -792,6 +796,15 @@ export function GridBodyRow({
               placeholder가 사라져 두 칸이 구분되지 않았다. 폭 140px라 글자 대신 아이콘 + 툴팁. */}
           <div className="flex items-center gap-1">
           <span title={t("os.row.bookPh")} className="text-text-faint inline-flex shrink-0"><EyIcon name="book" size={14} aria-hidden /></span>
+          {isJjSheetReport(rep) ? (
+            // JJ 수업보고서 행 — 교재는 세 권 중에서 고른다(원장 2026-10-27, jj-books.ts).
+            <JjBookPicker
+              value={subject.textbook}
+              onChange={(v) => fields.onTextbook(student.id, subject.name, v)}
+              disabled={rowLocked}
+              label={tf("os.row.bookAria", { name: student.name, subject: subject.name })}
+            />
+          ) : (
           <input
             type="text"
             value={subject.textbook ?? ""}
@@ -805,6 +818,7 @@ export function GridBodyRow({
             onKeyDown={handleGridNavKey}
             className="border-line bg-card focus:border-primary h-8 w-full min-w-0 rounded-sm border px-2 text-xs outline-none"
           />
+          )}
           </div>
           {/* 오늘 과제(숙제 내용) — 0096a. 과제 셀렉트(수행 상태)와 별개, AI 멘트·학부모 카드 재료. */}
           {/* 진도 셀과 같은 처방 — 시트 초안은 교시마다 과제가 있어 한 줄 input이면 붙어 보인다(2026-08-07). */}
@@ -891,7 +905,7 @@ export function GridBodyRow({
             value={rowEval.note}
             onChange={(e) => fields.onNote(student.id, subject.name, e.target.value)}
             readOnly={rowLocked}
-            placeholder={rowPlaceholder ?? (oneLineRow ? t("os.row.notePhPilot") : t("os.row.notePh"))}
+            placeholder={rowPlaceholder ?? (jjOptionalNote ? t("os.row.notePhJj") : oneLineRow ? t("os.row.notePhPilot") : t("os.row.notePh"))}
             aria-label={tf("os.row.noteAria", { name: student.name })}
             className={`border-amber/40 focus:border-primary scrollbar-thin min-h-[40px] w-full rounded-sm border px-2 py-1 text-xs leading-snug outline-none ${AUTOSIZE} ${
               lockedTone || "bg-amber-soft/30"

@@ -3262,6 +3262,16 @@ export const SHEET_DICT = {
   "os.card.hwTodayAria": { ko: "{subject} 오늘 과제", en: "{subject} today's homework" },
   "os.card.note": { ko: "특이사항 (메모)", en: "Notes (memo)" },
   "os.card.notePilot": { ko: "사랑의 한마디 (필수)", en: "A loving word (required)" },
+  // JJ 수업보고서(원장 2026-10-27 *"수업태도 밑에 사랑의 한마디 … 작성안하면 영역 삭제"*) — 선택이고, 쓰면 수업 평가 바로 아래에 선다.
+  "os.card.noteJj": { ko: "사랑의 한마디 (선택)", en: "A loving word (optional)" },
+  "os.card.notePhJj": {
+    ko: "예: 오늘 발음이 정말 또렷해졌어요! · 쓰면 보고서의 수업 평가 바로 아래에 실리고, 비우면 그 항목이 빠집니다",
+    en: "e.g. Your pronunciation was so clear today! · Shown right under the class rating; leave it empty to drop the section",
+  },
+  "os.row.notePhJj": {
+    ko: "사랑의 한마디(선택) · 비우면 보고서에서 빠집니다",
+    en: "A loving word (optional) · left out of the report when empty",
+  },
   // 학부모 문구 위 읽기 전용 '수업 평가' 요약(원장 2026-10-26 — 편집 칸에서 뺐다).
   "os.lead.title": { ko: "수업 평가", en: "Class rating" },
   "os.lead.hint": {

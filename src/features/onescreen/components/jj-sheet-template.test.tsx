@@ -22,7 +22,10 @@ vi.mock("@/features/ijw/components/jj-study-sheet", () => ({
   JjStudySheet: ({ study }: { study: { from: string } }) => `STUDY:${study.from}`,
 }));
 
-/** JJ 수업보고서(원장 2026-10-26) — 위 = 수학 보고서 표 머리(일일 테스트·수업 평가), 아래 = SRS 그림. */
+/**
+ * JJ 수업보고서(원장 2026-10-26) — 위 = 수학 보고서 표 머리(수업 평가), 아래 = SRS 그림.
+ * 2026-10-27: 일일 테스트 없음 · 수업 평가 = 태도 한 줄 · 사랑의 한마디는 수업 평가 바로 아래(안 쓰면 빠진다).
+ */
 
 const FACTS: EnglishRowFacts = {
   studentName: "이윤건",
@@ -94,33 +97,35 @@ describe("JJ 수업보고서 템플릿", () => {
     expect(builtinTemplateLabelKey(BUILTIN_JJ_SHEET_TEMPLATE.id)).toBe("os.tpl.builtinJjSheetName");
   });
 
-  it("글 = 테스트·수업 평가는 표 머리로, SRS 그림 항목만 아래 띠로", () => {
+  it("글 = 수업 평가(태도만)는 표 머리로 · 일일 테스트 없음 · 한마디가 없으면 그 항목째 빠진다", () => {
     const secs = parsePilotNotes(notes);
     expect(secs && isPilotReportSections(secs)).toBe(true);
     const { tests, levels, rest } = splitSheetSections(secs!);
-    expect(tests.map((s) => s.title)).toEqual(["일일 테스트"]);
-    expect(tests[0]!.body).toContain("5문제 중 2개 맞음");
-    expect(levels).toEqual([
-      { label: "수업 태도", level: "중" },
-      { label: "숙제 완성도", level: "상" },
-    ]);
+    expect(tests).toEqual([]);
+    expect(levels).toEqual([{ label: "수업 태도", level: "중" }]);
     expect(rest.map((s) => s.title)).toEqual(["SRS 학습 결과"]);
     // 그날 시험이 없으면 결과지 자리는 빠지고 분석지만 남는다.
     expect(rest[0]!.body).toBe("[학습분석지]");
+  });
+
+  it("사랑의 한마디를 쓰면 수업 평가 바로 아래 항목으로 선다", () => {
+    const secs = parsePilotNotes(composeEnglishDraft(BUILTIN_JJ_SHEET_TEMPLATE, { ...FACTS, note: "오늘 정말 잘했어요!" }, {}));
+    expect(secs!.map((s) => s.title)).toEqual(["수업 평가", "사랑의 한마디", "SRS 학습 결과"]);
+    expect(secs![1]!.body).toBe("오늘 정말 잘했어요!");
   });
 });
 
 describe("JJ 수업보고서 카드", () => {
   const html = renderToStaticMarkup(<ParentReportCard {...props()} />);
 
-  it("위 = 표 머리(제목·반·담임·일일 테스트·수업 평가)", () => {
+  it("위 = 표 머리(제목·반·담임·수업 평가 — 태도 한 줄) · 일일 테스트·숙제 완성도 없음", () => {
     expect(html).toContain("영어 보고서");
     expect(html).toContain("JJ 영어반");
     expect(html).toContain("김동후");
-    expect(html).toContain(">일일 테스트<");
+    expect(html).not.toContain(">일일 테스트<");
     expect(html).toContain(">수업 평가<");
     expect(html).toContain('aria-label="중"'); // 수업 태도 '보통'
-    expect(html).toContain('aria-label="상"'); // 숙제 100%
+    expect(html).not.toContain("숙제 완성도");
     expect(html).not.toContain("■");
     expect(html).not.toContain("○");
   });
@@ -137,7 +142,20 @@ describe("JJ 수업보고서 카드", () => {
     const h = renderToStaticMarkup(<ParentReportCard {...props(null)} />);
     expect(h).not.toContain("SRS 학습 결과");
     expect(h).not.toContain("[학습분석지]");
-    expect(h).toContain(">일일 테스트<");
     expect(h).toContain(">수업 평가<");
+  });
+
+  it("사랑의 한마디 = 수업 평가와 SRS 사이 띠", () => {
+    const withNote = composeEnglishDraft(BUILTIN_JJ_SHEET_TEMPLATE, { ...FACTS, note: "오늘 정말 잘했어요!" }, {});
+    const p = props();
+    const h = renderToStaticMarkup(<ParentReportCard {...p} report={{ ...p.report, notes: withNote }} />);
+    expect(h).toContain("사랑의 한마디");
+    expect(h).toContain("오늘 정말 잘했어요!");
+    expect(h.indexOf(">수업 평가<")).toBeLessThan(h.indexOf("사랑의 한마디"));
+    expect(h.indexOf("사랑의 한마디")).toBeLessThan(h.indexOf("STUDY:"));
+  });
+
+  it("한마디를 안 쓰면 그 띠가 없다", () => {
+    expect(html).not.toContain("사랑의 한마디");
   });
 });

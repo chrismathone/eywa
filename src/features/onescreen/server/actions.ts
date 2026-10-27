@@ -1,5 +1,6 @@
 "use server";
 
+import { LAST_TEMPLATE_BY_CLASS_PREF, LAST_TEMPLATE_PREF, isTemplateIdShape, readTemplatePrefs, rememberTemplate } from "../last-template";
 import { normalizeNoneMarker } from "../none-marker";
 import { classnoteSendOn } from "@/features/owner/classnote-gate";
 import { preserveMakeupSessionEntries, type SessionProgress } from "../makeup-session";
@@ -174,6 +175,11 @@ export type SaveLessonReportInput = {
   mentSource?: MentSource;
   /** 수학 보고서 시범 — 강사 한줄 멘트(필수, 원장 2026-10-22). 보낼 글 맨 끝에 그대로 붙어 있어야 발송한다. */
   pilotOneLine?: string;
+  /**
+   * JJ 수업보고서로 쓴 영어 글(원장 2026-10-27) — 사랑의 한마디가 **선택**이라 '영어 한마디 필수'를 건너뛴다(비우면 글에서 그 항목이 빠진다).
+   * 화면이 글의 템플릿(templateId)으로 판정해 싣는다. 강사 자신의 선택 칸을 비우는 것뿐이라 화면 판정을 그대로 믿는다.
+   */
+  jjSheet?: boolean;
   /**
    * 새 수학 보고서 발송 조건(화면이 pilot-send-gate.ts로 판정, 원장 2026-10-26) — 자동작성이 지금 칸 값 기준인가 · 시험 없음/숙제 미제출
    * 사유를 다 적었나. 일괄 발송이 화면 게이트를 건너 사유 없는 글·옛 출결 글을 보냈던 구멍을 막는다. **없으면 거절**(옛 화면 = 보내지 않는 쪽).
@@ -861,7 +867,7 @@ export async function saveAndQueueClassnote(
   const pilotRow = isMathReportPilot(input.studentId, input.subject);
   const pilotBlock = !pilotRow
     ? // 영어 — '사랑의 한마디' 필수(원장 2026-10-26). 영어 글은 템플릿이라 끝에 붙었는지는 보지 않고 적었는지만 본다.
-      input.subject === "english" && !(input.pilotOneLine ?? "").trim()
+      input.subject === "english" && !input.jjSheet && !(input.pilotOneLine ?? "").trim()
       ? ENGLISH_ONELINE_REQUIRED_ERROR
       : // 영어 보강 줄 — 결석 날짜를 몰라 보강 사유가 필요한데 비었다(화면이 판정해 싣는다, 2026-10-26).
         input.subject === "english" && input.pilotCheck && !input.pilotCheck.reasonsOk
@@ -1851,6 +1857,53 @@ export async function setMyOnescreenFontSize(
   const { error } = await admin
     .from("users")
     .update({ ui_prefs: merged })
+    .eq("id", user.id)
+    .eq("tenant_id", user.tenantId);
+  if (error) return { ok: false, error: humanizeDbError(error.message, "저장") };
+  return { ok: true };
+}
+
+/**
+ * 영어 보고서 템플릿 **내 기본값**(원장 2026-10-27 *"사용자 별 자기가 최근 사용한걸 디폴트로"*) — 드롭다운에서 고른 템플릿을
+ * 본인 계정 `users.ui_prefs.onescreen`에 적는다 — 그 반의 기록(`lastTemplateByClass`) + 계정의 마지막 선택(`lastTemplateId`).
+ * 반을 먼저 보는 이유는 last-template.ts. 글씨 크기와 같은 규약(형제 키 보존).
+ * ⚠️ 보기 설정이라 감사로그·revalidatePath 없음(다음에 연 화면의 빈 행 기본값일 뿐 — 이미 쓴 글은 안 바뀐다).
+ */
+export async function setMyLastReportTemplate(
+  templateId: string,
+  classId: string | null,
+): Promise<{ ok: boolean; error?: string }> {
+  const user = await getCurrentUser({ teacherView: true });
+  if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  const roError = await readonlyTeacherViewError();
+  if (roError) return { ok: false, error: roError };
+  if (!isTemplateIdShape(templateId)) return { ok: false, error: "잘못된 템플릿입니다" };
+  if (classId !== null && !isTemplateIdShape(classId)) return { ok: false, error: "잘못된 반입니다" };
+
+  const admin = createAdminClient();
+  const { data: row, error: readErr } = await admin
+    .from("users")
+    .select("ui_prefs")
+    .eq("id", user.id)
+    .eq("tenant_id", user.tenantId)
+    .maybeSingle();
+  if (readErr) return { ok: false, error: readErr.message };
+  const raw =
+    row?.ui_prefs && typeof row.ui_prefs === "object" && !Array.isArray(row.ui_prefs)
+      ? (row.ui_prefs as Record<string, unknown>)
+      : {};
+  const ns =
+    raw.onescreen && typeof raw.onescreen === "object" && !Array.isArray(raw.onescreen)
+      ? { ...(raw.onescreen as Record<string, unknown>) }
+      : {};
+  const prev = readTemplatePrefs(raw);
+  if (prev.last === templateId && (!classId || prev.byClass[classId] === templateId)) return { ok: true };
+  const next = rememberTemplate(prev, templateId, classId);
+  ns[LAST_TEMPLATE_PREF] = next.last;
+  ns[LAST_TEMPLATE_BY_CLASS_PREF] = next.byClass;
+  const { error } = await admin
+    .from("users")
+    .update({ ui_prefs: { ...raw, onescreen: ns } })
     .eq("id", user.id)
     .eq("tenant_id", user.tenantId);
   if (error) return { ok: false, error: humanizeDbError(error.message, "저장") };

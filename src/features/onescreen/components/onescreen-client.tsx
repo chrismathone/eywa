@@ -31,6 +31,7 @@ import {
   saveOnescreenSession,
   setMyNoticeMode,
   setMyOnescreenFontSize,
+  setMyLastReportTemplate,
   setMyTrendOptOut,
 } from "../server/actions";
 import { DisplayOptionsProvider, useDisplayOptionsState } from "./display-options-context";
@@ -39,6 +40,17 @@ import type { DisplayOptions } from "../display-options";
 import { PreviousContent } from "./previous-content";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { isJjSheetDraft } from "../jj-books";
+import {
+  EMPTY_TEMPLATE_PREFS,
+  implicitTemplateFor,
+  isBuiltinTemplateId,
+  rememberTemplate,
+  retargetImplicit,
+  revertImplicit,
+  settleImplicit,
+  type TemplatePrefs,
+} from "../last-template";
 import { isTrendOptedOut, trendOptOutKey } from "../trend-optout";
 import { removeMakeupEntry } from "../server/makeup-remove-actions";
 import { setReservationReportMode } from "@/features/attendance/server/makeup-reservation-actions";
@@ -306,7 +318,11 @@ const SWITCH_BLOCK_KEY = {
   gone: "os.switch.blockGone",
 } as const satisfies Record<MakeupSwitchBlock, string>;
 
-function initReports(students: OneScreenStudent[]): ReportsState {
+/**
+ * @param templatePrefs 영어 보고서 템플릿 내 기본값(반별 마지막 선택, last-template.ts) — **글이 없고 안 보낸** 영어 행에만,
+ *   표시로만(`templateImplicit`) 붙는다(세션엔 안 싣는다).
+ */
+function initReports(students: OneScreenStudent[], templatePrefs: TemplatePrefs = EMPTY_TEMPLATE_PREFS): ReportsState {
   const out: ReportsState = {};
   for (const s of students) {
     out[s.id] = {};
@@ -327,7 +343,10 @@ function initReports(students: OneScreenStudent[]): ReportsState {
         viewCount: su.viewCount,
         attachments: su.attachments ?? [],
         // 영어 템플릿 모드(2026-09-10) — 세션 복원값. 수학 행은 전부 undefined(세션에 키가 없다).
-        templateId: su.templateId,
+        ...((): { templateId?: string; templateImplicit?: true } => {
+          const implicit = implicitTemplateFor(su, templatePrefs);
+          return implicit ? { templateId: implicit, templateImplicit: true } : { templateId: su.templateId };
+        })(),
         nextTest: su.nextTest,
         aiIntro: su.aiIntro,
         aiComment: su.aiComment,
@@ -386,6 +405,7 @@ export function OneScreenClient({
   initialView = "card",
   initialFontSize = DEFAULT_ONESCREEN_FONT_SIZE,
   initialTrendOptOut = [],
+  initialTemplatePrefs = EMPTY_TEMPLATE_PREFS,
   initialDisplayOptions,
   initialClassName = null,
   initialStudentId = null,
@@ -430,6 +450,8 @@ export function OneScreenClient({
   initialFontSize?: OnescreenFontSize;
   /** '학습 추세 미발송'으로 켠 `반:학생` 키(내 계정 ui_prefs, 원장 2026-09-18) — 글씨 크기와 같은 행에서 온다. */
   initialTrendOptOut?: string[];
+  /** 영어 보고서 템플릿 내 기본값 = 반별 마지막으로 고른 템플릿(내 계정 ui_prefs, 원장 2026-10-27) — 빈 행에만 붙는다. */
+  initialTemplatePrefs?: TemplatePrefs;
   initialDisplayOptions?: DisplayOptions;
   /**
    * 진입 시 고를 반 이름(`?class=<반 id>`를 서버가 이름으로 해석해 내림) — '오늘 ECS' 카드에서 넘어올 때
@@ -578,7 +600,7 @@ export function OneScreenClient({
   const absenceSeq = useRef(0);
   /** 수업 후보 조회 응답 순서 가드 — 결석 조회와 같은 규약(늦게 온 옛 응답이 새 창을 덮지 않게). */
   const hostSeq = useRef(0);
-  const [reports, setReports] = useState<ReportsState>(() => initReports(initial));
+  const [reports, setReports] = useState<ReportsState>(() => initReports(initial, initialTemplatePrefs));
   const [genSubject, setGenSubject] = useState<string | null>(null); // AI 멘트 생성 중인 과목(카드 버튼 로딩)
   const [genKey, setGenKey] = useState<string | null>(null); // 표 행별 자동작성 로딩 키(studentId::과목)
   // 영어 템플릿 모드(2026-09-10) — 내 템플릿 목록(맨 앞은 기본). **영어 행이 있을 때만** 한 번 불러온다
@@ -594,6 +616,8 @@ export function OneScreenClient({
   const [templateManagerOpen, setTemplateManagerOpen] = useState(false);
   // 목록을 한 번이라도 받았는가(성공·실패 무관) — 받기 전엔 사용자 템플릿을 "없다"고 단정하지 않는다.
   const [templatesLoaded, setTemplatesLoaded] = useState(false);
+  // 영어 템플릿 내 기본값(반별 마지막 선택) — 고를 때마다 바뀐다. 새로 세우는 행(보강 추가 등)이 지금 값을 쓴다.
+  const templatePrefsRef = useRef<TemplatePrefs>(initialTemplatePrefs);
   const [templateListFailed, setTemplateListFailed] = useState(false);
   const hasEnglishRows = useMemo(
     () => students.some((s) => s.subjects.some((su) => su.subjectKey === "english")),
@@ -608,13 +632,22 @@ export function OneScreenClient({
         if (cancelled) return;
         setEnglishTemplates(res.templates);
         setTemplateNotice(res.notice);
+        // 기본값으로 붙여 둔 사용자 템플릿이 목록에 없으면(지움) — 또는 목록이 불완전하면(notice) — 그 빈 행을 코드 기본 템플릿으로
+        // 되돌린다. 🔴 안 되돌리면 목록 실패 한 번에 반 전체의 자동작성이 '템플릿 목록 실패'로 멈춘다(적대 리뷰 2026-10-27).
+        //    강사가 직접 고른 행은 그대로 둔다(종전대로 알린다).
+        const ids = new Set(res.notice ? [] : res.templates.map((tp) => tp.id));
+        setReports((prev) => revertImplicit(prev, (id) => !isBuiltinTemplateId(id) && !ids.has(id)));
         // 🔴 안내(notice)가 붙은 목록은 기본 템플릿뿐인 **불완전한** 목록이다(DB 오류·표 없음·권한) — 실패로 친다.
         //    안 치면 사용자 템플릿 행에 '삭제됨' 거짓 칩이 서고, 자동작성이 기본 템플릿으로 바꿔 끼워 선택을 잃었다(적대 재리뷰).
         if (res.notice) setTemplateListFailed(true);
       } catch {
         // 목록을 못 받아도 기본 템플릿으로 계속 쓸 수 있다 — 화면을 막지 않되 **알린다**
         // (말없이 기본으로 바꿔 끼우면 고른 템플릿과 다른 글이 나간다).
-        if (!cancelled) setTemplateListFailed(true);
+        if (!cancelled) {
+          setTemplateListFailed(true);
+          // 기본값으로만 붙여 둔 사용자 템플릿은 되돌린다(위와 같은 이유) — 강사가 고른 행은 그대로.
+          setReports((prev) => revertImplicit(prev, (id) => !isBuiltinTemplateId(id)));
+        }
       } finally {
         if (!cancelled) setTemplatesLoaded(true);
       }
@@ -788,7 +821,10 @@ export function OneScreenClient({
               // 영어 템플릿 모드(2026-09-10) — **영어 행만** 싣는다(수학 세션 모양 불변). 로스터가 같은 키로 복원한다.
               ...(su.subjectKey === "english"
                 ? {
-                    templateId: r?.[su.name]?.templateId ?? "",
+                    // 기본값으로만 붙인 템플릿은 싣지 않는다 — 실으면 기본값을 바꿔도 이 행이 옛 기본값에 묶인다(last-template.ts).
+                    //   단 글이 있는 행은 싣는다 — patchReport를 거치지 않고 글이 생긴 행도 그 템플릿으로 쓴 글이다.
+                    templateId:
+                      r?.[su.name]?.templateImplicit && !(r?.[su.name]?.draft ?? "").trim() ? "" : (r?.[su.name]?.templateId ?? ""),
                     nextTest: r?.[su.name]?.nextTest ?? "",
                     aiIntro: r?.[su.name]?.aiIntro ?? "",
                     aiComment: r?.[su.name]?.aiComment ?? "",
@@ -1046,7 +1082,8 @@ export function OneScreenClient({
       ...prev,
       [studentId]: {
         ...prev[studentId],
-        [subjectName]: fn(prev[studentId]?.[subjectName] ?? { draft: "", sent: false }),
+        // 기본값으로 붙은 템플릿은 글이 생기는 순간 굳힌다(last-template.ts settleImplicit — 어떤 경로로 글이 생겨도).
+        [subjectName]: settleImplicit(fn(prev[studentId]?.[subjectName] ?? { draft: "", sent: false })),
       },
     }));
     queueSave(studentId);
@@ -1529,7 +1566,7 @@ export function OneScreenClient({
       // 목록에 없던 학생 — 확인을 받았으니 이제 카드를 만든다(취소했으면 여기 안 온다).
       const mk = ask.mk;
       setStudents((prev) => (prev.some((s) => s.id === mk.id) ? prev : [...prev, mk]));
-      setReports((prev) => ({ ...prev, [mk.id]: initReports([mk])[mk.id] ?? {} }));
+      setReports((prev) => ({ ...prev, [mk.id]: initReports([mk], templatePrefsRef.current)[mk.id] ?? {} }));
       setSelId(mk.id);
       if (choice.absentDate && anchorIdNew) {
         void linkMakeupToAbsenceCell(mk.id, anchorIdNew, choice, mk.name, hostNote);
@@ -1793,7 +1830,7 @@ export function OneScreenClient({
       return false;
     }
     patch(studentId, (s) => ({ ...s, subjects: [...s.subjects, ...makeupRows] }));
-    const slots = initReports([{ ...existing, subjects: makeupRows }])[existing.id] ?? {};
+    const slots = initReports([{ ...existing, subjects: makeupRows }], templatePrefsRef.current)[existing.id] ?? {};
     setReports((prev) => ({ ...prev, [studentId]: { ...(prev[studentId] ?? {}), ...slots } }));
     setSelId(studentId);
     // 결석분 연결이 뒤따르는 경로(다이얼로그 '분리')는 그쪽 토스트가 시수까지 밝히므로 여기선 조용히(silent).
@@ -2408,7 +2445,7 @@ export function OneScreenClient({
           added,
         ],
       }));
-      const slots = initReports([{ ...card, subjects: [added] }])[card.id] ?? {};
+      const slots = initReports([{ ...card, subjects: [added] }], templatePrefsRef.current)[card.id] ?? {};
       setReports((prev) => ({ ...prev, [card.id]: { ...(prev[card.id] ?? {}), ...slots } }));
       setSelId(card.id);
       toast.success(tf("os.switch.splitDone", { name: card.name }));
@@ -2803,6 +2840,7 @@ export function OneScreenClient({
     patchReport(student.id, subjectName, (r) => ({
       ...r,
       templateId,
+      templateImplicit: undefined, // 글이 됐다 — 이제 강사의 템플릿이다
       draft: text,
       autoDraft: text, // 작성 방식 스냅샷(0214a) — 수학과 같은 규약
       templateHash: templateHashOf(composed),
@@ -2893,6 +2931,7 @@ export function OneScreenClient({
     patchReport(student.id, subjectName, (r) => ({
       ...r,
       templateId: keptId,
+      templateImplicit: undefined,
       draft: text,
       autoDraft: text,
       templateHash: templateHashOf(composed),
@@ -2906,10 +2945,24 @@ export function OneScreenClient({
   }
   /** 템플릿 바꾸기 — 아직 글이 없으면 고르기만(자동작성 때 그 템플릿으로 채워진다), 있으면 다시 채운다. */
   function setEnglishTemplateFor(student: OneScreenStudent, subjectName: string, templateId: string) {
+    // 고른 템플릿이 그 반의 내 기본값이 된다(원장 2026-10-27) — 같은 반의 빈 행도 지금 따라오고, 다음에 여는 빈 행도 이것으로
+    // 시작한다. 실패해도 고르기는 그대로(보기 설정). 반이 없는 행(수업외 보강)은 계정 값만 바뀐다.
+    if (!readonlyView) {
+      const classId = rowClassId(student.id, subjectName);
+      templatePrefsRef.current = rememberTemplate(templatePrefsRef.current, templateId, classId);
+      void setMyLastReportTemplate(templateId, classId).catch(() => undefined);
+      if (classId) {
+        const englishClassOf = (sid: string, name: string) => {
+          const row = studentsRef.current.find((x) => x.id === sid)?.subjects.find((x) => x.name === name);
+          return row?.subjectKey === "english" ? (row.classId ?? null) : null;
+        };
+        setReports((prev) => retargetImplicit(prev, englishClassOf, classId, templateId));
+      }
+    }
     const rep = reportsRef.current[student.id]?.[subjectName];
     // 사진·PDF 줄만 있는 행도 '글 없음' — 고르기만 한다(자동작성 때 그 템플릿으로 채워지고 사진 줄은 따라온다).
     if (!hasTextBesidesAttachments(rep?.draft)) {
-      patchReport(student.id, subjectName, (r) => ({ ...r, templateId, pendingTemplateId: undefined }));
+      patchReport(student.id, subjectName, (r) => ({ ...r, templateId, templateImplicit: undefined, pendingTemplateId: undefined }));
       return;
     }
     void refillEnglishFor(student, subjectName, templateId);
@@ -3704,12 +3757,14 @@ export function OneScreenClient({
         // 수학 보고서 시범 — 강사 한줄 멘트(필수). 서버가 비었거나 글 끝에 안 붙었으면 거절한다.
         // 영어도 같다(원장 2026-10-26 *"영어도 수학이랑 동일하게 … 사랑의 한마디 · 필수"*).
         ...(isMathReportPilot(student.id, su?.subjectKey) || su?.subjectKey === "english" ? { pilotOneLine: rowEval.note } : {}),
+        // JJ 수업보고서 글 — 사랑의 한마디가 선택이다(원장 2026-10-27). 서버가 이 표시로 '영어 한마디 필수'를 건너뛴다.
+        ...(su?.subjectKey === "english" && isJjSheetDraft(existing) ? { jjSheet: true } : {}),
         // 새 수학 보고서 — 화면 발송 조건(자동작성이 지금 값 기준인가 · 사유를 다 적었나)을 서버에도 싣는다(원장 2026-10-26 일괄 발송 구멍).
         //   일괄 발송·행 발송이 모두 이 입력을 지나므로, 어느 길로 보내도 서버가 같은 조건으로 거절한다.
         // 영어 줄도 싣는다 — 보강 사유를 서버가 같은 조건으로 본다(2026-10-26). 영어엔 자동작성 조건이 없어 factsCurrent는 늘 참이다.
         ...(isMathReportPilot(student.id, su?.subjectKey) || su?.subjectKey === "english"
           ? (() => {
-              const blocks = pilotSendBlocks(student, subjectName, { draft, autoDraft: autoSnap, pilotFactsSig: existing?.pilotFactsSig });
+              const blocks = pilotSendBlocks(student, subjectName, { draft, autoDraft: autoSnap, pilotFactsSig: existing?.pilotFactsSig, templateId: existing?.templateId });
               return { pilotCheck: { factsCurrent: !blocks.includes("autowrite"), reasonsOk: !blocks.some((b) => REASON_BLOCKS.includes(b)) } };
             })()
           : {}),
@@ -5055,7 +5110,12 @@ selected ? (
                   open
                   onOpenChange={setTemplateManagerOpen}
                   templates={englishTemplates}
-                  onTemplatesChange={setEnglishTemplates}
+                  onTemplatesChange={(list) => {
+                    setEnglishTemplates(list);
+                    // 관리 창에서 지운 사용자 템플릿을 기본값으로 붙여 둔 빈 행은 되돌린다(첫 목록 때와 같은 판정).
+                    const ids = new Set(list.map((tp) => tp.id));
+                    setReports((prev) => revertImplicit(prev, (id) => !isBuiltinTemplateId(id) && !ids.has(id)));
+                  }}
                   teacherName={teacherName}
                   notice={templateNotice ?? (templateListFailed ? t("os.tpl.listFailed") : null)}
                   // 미리보기 그림 칸의 예시 자료 날짜 — 보고 있는 날짜로(결과지 제출일·학습 기간이 그 날짜로 적힌다).
