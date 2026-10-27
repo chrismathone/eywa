@@ -138,7 +138,7 @@ export function ratingTipCard(r: ReportRating): TipCard {
     i.score > 0 ? [`${i.label} ${i.score}`, i.note || "—"] : [i.label, "해당 없음"],
   );
   return {
-    title: `평점 ${formatPoints(r.points)}`,
+    title: `보고서 멘트 점수 ${formatPoints(r.points)}`, // 원장 2026-10-27 '평점' → '보고서 멘트 점수'(목록 열 이름과 같게)
     meta: "참고용",
     rows,
     lines: [

@@ -94,7 +94,7 @@ describe("표기·색 판정", () => {
 describe("근거 카드", () => {
   it("항목마다 '라벨 점수 · 근거', 해당 없음 항목은 점수 없이 — 넓은 카드로", () => {
     const card = decodeTip(encodeTip(ratingTipCard(parseRating(row())!)));
-    expect(card?.title).toBe("평점 3.3");
+    expect(card?.title).toBe("보고서 멘트 점수 3.3");
     expect(card?.meta).toBe("참고용");
     expect(card?.wide).toBe(true);
     expect(card?.rows).toEqual([

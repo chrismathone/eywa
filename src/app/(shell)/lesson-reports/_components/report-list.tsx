@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { classnoteBadge } from "@/features/onescreen/components/report-card";
 import { RecallButton } from "@/features/report-admin/components/recall-button";
 import { useSubjectMaps } from "@/features/owner/operations-context";
+import { Pill } from "@/components/atoms/pill";
 import { listReports, retryClassnote, sendClassnoteForUnsent } from "@/features/report-admin/server/actions";
 import { classnoteRetryDeadline } from "@/features/onescreen/classnote-guard";
 import {
@@ -324,10 +325,10 @@ export function ReportList({
 
       <DragScrollArea className="border-line rounded-md border">
         {/* 반 열이 늘어 최소폭 상향(600→680) — 좁은 창에서 열이 서로 뭉개지지 않게. 넘치면 가로 스크롤.
-            멘트 열(0214a)·평점 열(0450a)이 켜지면 열마다 한 뼘씩 더(+40·+50). */}
+            과목 열(원장 2026-10-27 학생과 분리)이 +60, 멘트 열(0214a)·보고서 멘트 점수 열(0450a)이 켜지면 열마다 한 뼘씩 더(+40·+90). */}
         <table
           className={`w-full ${
-            showMent && showRating ? "min-w-[770px]" : showMent ? "min-w-[720px]" : showRating ? "min-w-[730px]" : "min-w-[680px]"
+            showMent && showRating ? "min-w-[870px]" : showMent ? "min-w-[780px]" : showRating ? "min-w-[830px]" : "min-w-[740px]"
           } text-left text-xs`}
         >
           <thead>
@@ -343,19 +344,21 @@ export function ReportList({
                   />
                 </th>
               ) : null}
+              {/* 과목 = 맨 앞 열(원장 2026-10-27 *"학생과 과목을 분리. 과목을 가장 앞으로"*) — 원생 목록·수업과 같은 과목 칩. */}
+              <th className="w-14 px-3 py-2 text-center font-bold">과목</th>
               <SortableTh sortKey="date" state={sortState} onSort={onSort}>날짜</SortableTh>
               {/* 학생·과목은 서버 정렬 대상이 아니다 — 학생 이름은 이 표에 없는 값(조인), 과목은 저장값이
                   내부 키라 한글 라벨 순서와 어긋난다(report-filters.ts REPORT_SORT_KEYS 주석).
                   ⚠️ 반은 예외로 정렬된다 — 조인이지만 PostgREST가 to-one 임베드로 부모를 정렬해 주고,
                   반 이름은 저장값 자체가 한글 표시명이라 라벨 불일치가 없다. */}
-              <th className="px-3 py-2 font-bold">학생 · 과목</th>
+              <th className="px-3 py-2 font-bold">학생</th>
               <SortableTh sortKey="class" state={sortState} onSort={onSort}>반</SortableTh>
               <SortableTh sortKey="teacher" state={sortState} onSort={onSort}>강사</SortableTh>
-              {/* 평점(참고용, 0450a · 기준 v6 원장 점수표) — 근거는 숫자에 마우스를 올리면 카드로 뜬다.
-                  정렬(원장 2026-10-26)은 서버가 평점 표를 읽어 줄 세운다(listReports) — 평점 없는 보고서는 방향과 무관하게 뒤. */}
+              {/* 보고서 멘트 점수(참고용, 0450a · 기준 v6 원장 점수표 — 원장 2026-10-27 '평점'에서 이름 바꿈 · 가운데 정렬) — 근거는
+                  숫자에 마우스를 올리면 카드로 뜬다. 정렬(원장 2026-10-26)은 서버가 평점 표를 읽어 줄 세운다(listReports) — 점수 없는 보고서는 방향과 무관하게 뒤. */}
               {showRating ? (
-                <SortableTh sortKey="rating" state={sortState} onSort={onSort} className="whitespace-nowrap">
-                  평점
+                <SortableTh sortKey="rating" state={sortState} onSort={onSort} align="center" className="whitespace-nowrap">
+                  보고서 멘트 점수
                 </SortableTh>
               ) : null}
               {/* 멘트 작성 방식(0214a) — 정렬 없음(값 3종 + 도입 전 "—"라 필터가 더 정확하다, 뷰 설정에서). */}
@@ -368,7 +371,7 @@ export function ReportList({
             {rows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={(sendOn ? 7 : 6) + (showMent ? 1 : 0) + (showRating ? 1 : 0) - (classnoteOn ? 0 : 1)}
+                  colSpan={(sendOn ? 8 : 7) + (showMent ? 1 : 0) + (showRating ? 1 : 0) - (classnoteOn ? 0 : 1)}
                   className="text-text-faint px-3 py-6 text-center"
                 >
                   조건에 맞는 보고서가 없습니다.
@@ -389,6 +392,9 @@ export function ReportList({
                       />
                     </td>
                   ) : null}
+                  <td className="px-3 py-2 text-center whitespace-nowrap">
+                    {r.subject ? <Pill color={subjects.colorOf(r.subject)}>{subjects.labelOf(r.subject)}</Pill> : <span className="text-text-faint">—</span>}
+                  </td>
                   <td className="text-text-dim px-3 py-2 whitespace-nowrap">
                     {r.reportDate}
                     {/* 발송분은 실제 발송 시각(classnote_sent_at), 미발송분은 작성/등록 시각 폴백 */}
@@ -401,16 +407,13 @@ export function ReportList({
                       </span>
                     ) : null}
                   </td>
-                  <td className="px-3 py-2">
-                    <span className="text-foreground font-bold">{r.studentName}</span>
-                    {r.subject ? <span className="text-text-faint ml-1.5">{subjects.labelOf(r.subject)}</span> : null}
-                  </td>
+                  <td className="text-foreground px-3 py-2 font-bold whitespace-nowrap">{r.studentName}</td>
                   {/* 반(0134a) — **내부 표시 전용**(학부모 화면엔 안 나온다). 이관분은 반 추정이 구조적으로
                       불가해 대부분 "—"다. 반 정렬 시 이 빈 값들이 뒤로 가고 반 있는 건이 위로 모인다. */}
                   <td className="text-text-dim px-3 py-2 whitespace-nowrap">{r.className ?? "—"}</td>
                   <td className="text-text-dim px-3 py-2">{r.teacherName ?? "—"}</td>
                   {showRating ? (
-                    <td className="px-3 py-2 whitespace-nowrap">
+                    <td className="px-3 py-2 text-center whitespace-nowrap">
                       <RatingCell rating={r.rating} />
                     </td>
                   ) : null}
