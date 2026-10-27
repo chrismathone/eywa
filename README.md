@@ -51,8 +51,8 @@ pnpm lint             # ESLint
 pnpm test             # Vitest 단위 테스트
 pnpm test:watch       # Vitest watch
 pnpm test:e2e         # Playwright E2E (dev 서버 자동 기동)
-pnpm db:generate      # Drizzle 스키마 → SQL 마이그레이션 생성
-pnpm db:migrate       # 마이그레이션 적용
+pnpm db:generate      # Drizzle 스키마 → SQL 초안(supabase/drizzle-out/ — 필요한 문장만 s2_NNNN 파일로)
+pnpm db:alphas        # 새(빈) DB 셋업 — 시즌1 합본 구역 → 시즌2 파일(빈 DB가 아니면 멈춘다 · db:migrate는 안내만)
 pnpm db:studio        # Drizzle Studio (테이블 탐색기)
 ```
 

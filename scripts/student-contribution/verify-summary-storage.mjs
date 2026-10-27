@@ -1,9 +1,9 @@
 // Disposable in-memory PostgreSQL only. No environment files or operating DB connections.
 // node scripts/student-contribution/verify-summary-storage.mjs <path-to-pglite/dist/index.js>
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { readMigration } from "../../src/lib/db/migrations-corpus.mjs";
 
 if (!process.argv[2]) throw new Error("Pass the isolated PGlite module path");
 const { PGlite } = await import(pathToFileURL(resolve(process.argv[2])).href);
@@ -29,7 +29,7 @@ try {
   await db.query("insert into tenants values ($1),($2)", [tenant, other]);
   await db.query("insert into students values ($1,$2)", [student, tenant]);
   await db.query("insert into users values ($1,$2),($3,$4)", [user, tenant, foreignUser, other]);
-  const migration = await readFile("supabase/migrations/0445a_student_ontology_summaries.sql", "utf8");
+  const migration = readMigration("0445a_student_ontology_summaries.sql");
   await db.exec(migration); await db.exec(migration); checks++;
   for (const role of ["anon", "authenticated"]) {
     await db.exec(`set role ${role}`);

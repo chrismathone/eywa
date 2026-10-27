@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { readMigration } from "@/lib/db/migrations-corpus.mjs";
 const root = process.cwd();
 const read = (p: string) => readFileSync(join(root, p), "utf-8");
 /** 주석을 걷어낸 코드만 — 규칙을 설명하는 주석이 그 규칙의 위반으로 잡히면 안 된다. */
@@ -51,7 +52,7 @@ describe("서버 액션이 적용일을 실제로 쓴다", () => {
     expect(s).toMatch(/laterByKey\.get\(slotKey\(/);
     expect(s).toMatch(/shiftDays\(until, -1\)/);
     expect(s).toMatch(/validTo: boundValidTo\(p\)/);
-    const sql = read("supabase/migrations/0231a_apply_english_structure_effective_date.sql");
+    const sql = readMigration("0231a_apply_english_structure_effective_date.sql");
     expect(sql).toMatch(/p_today, nullif\(rec->>'validTo', ''\)::date/);
   });
 

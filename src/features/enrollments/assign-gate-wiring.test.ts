@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { readMigration } from "@/lib/db/migrations-corpus.mjs";
 /**
  * 구조 가드 — "판정 함수는 만들었는데 아무도 안 부른다"(write-only-orphan)를 막는다.
  *
@@ -37,7 +38,7 @@ describe("반 배정 게이트 배선", () => {
 });
 
 describe("반 이동이 휴원 표식을 승계한다(0228a)", () => {
-  const sql = read("supabase/migrations/0228a_move_enrollments_inherit_on_hold.sql");
+  const sql = readMigration("0228a_move_enrollments_inherit_on_hold.sql");
 
   it("옛 수강의 on_hold를 읽어 새 행 insert에 싣는다", () => {
     expect(sql).toContain("move_enrollments_batch");
@@ -47,7 +48,7 @@ describe("반 이동이 휴원 표식을 승계한다(0228a)", () => {
   });
 
   it("0063a(대체 대상)는 손대지 않았다 — 옛 정의는 그대로 남는다", () => {
-    const old = read("supabase/migrations/0063a_move_enrollments_attendance_days.sql");
+    const old = readMigration("0063a_move_enrollments_attendance_days.sql");
     expect(old).not.toContain("on_hold");
   });
 });

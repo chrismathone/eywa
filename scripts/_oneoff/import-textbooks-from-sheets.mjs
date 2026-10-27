@@ -141,7 +141,7 @@ const pad = (s, n) => {
   if (!existingRes.ok) {
     if (isMissingTable(existingRes.body)) {
       tableReady = false;
-      const msg = "교재목록 표가 없습니다 — supabase/migrations/0266a_textbooks.sql을 먼저 적용하세요";
+      const msg = "교재목록 표가 없습니다 — 시즌1 합본(supabase/migrations/s1_season1.sql)의 0266a_textbooks 구역을 먼저 적용하세요";
       if (APPLY) {
         console.error(`\n${msg}`);
         process.exit(1);

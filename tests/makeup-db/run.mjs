@@ -11,6 +11,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
 import { checkRealChain } from './real-chain.mjs';
+import { migrationFiles, readMigration } from "../../src/lib/db/migrations-corpus.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..', '..');
@@ -34,15 +35,13 @@ let failed = 0;
 try {
   const [{ name }] = await db`select current_database() as name`;
   assert.equal(name, database);
-  const migrations = (await readdir(path.join(root, 'supabase/migrations')))
-    .filter((f) => /^03(?:4[3-9]|5\d)[a-z]_makeup_.*\.sql$/.test(f))
-    .sort();
+  const migrations = migrationFiles().map((f) => f.name).filter((f) => /^03(?:4[3-9]|5\d)[a-z]_makeup_.*\.sql$/.test(f));
   // 정적 대조 ①: 원장 SQL은 출결·보고서·청구를 쓰지 않고 0267a 산식을 다시 정의하지 않는다.
   const forbidden =
     /session_term_attendance|(insert\s+into|update|delete\s+from)\s+(public\.)?(attendance_records|lesson_reports|invoices|invoice_session_terms|onescreen_daily_sessions)\b/i;
   const NL = String.fromCharCode(10);
   for (const f of migrations) {
-    const lines = (await read(`supabase/migrations/${f}`)).split(NL);
+    const lines = (readMigration(f)).split(NL);
     if (lines.at(-1) === '') lines.pop();
     const body = lines.filter((l) => !l.trim().startsWith('--')).join(NL);
     assert.ok(!forbidden.test(body), `${f}: 출결·보고서·청구 표를 쓰거나 청구 산식을 건드린다`);
@@ -50,7 +49,7 @@ try {
   }
   // 정적 대조 ②: SQL의 기본 교시표가 코드 기본값(periods.ts)과 같다.
   const tsPeriods = await read('src/features/timetable/lib/periods.ts');
-  const sqlPeriods = await read('supabase/migrations/0344b_makeup_settings_periods.sql');
+  const sqlPeriods = readMigration("0344b_makeup_settings_periods.sql");
   const pairs = (text) => [...text.matchAll(/startTime"?:\s*"(\d\d:\d\d)",\s*"?endTime"?:\s*"(\d\d:\d\d)"/g)].map((m) => `${m[1]}-${m[2]}`).join(',');
   const tsBlock = (name) => pairs(tsPeriods.slice(tsPeriods.indexOf(`const ${name}`)).split('};')[0]);
   const sqlBlock = (kind) => pairs(sqlPeriods.slice(sqlPeriods.indexOf(`when '${kind}' then`)).split("]'::jsonb")[0]);
@@ -61,7 +60,7 @@ try {
   // 정적 대조 ③: 기존 자동 시수의 자리 교시 이름(teacher-label.ts)이 SQL 예상 시수의 제외 목록과 같다.
   const labelTs = await read('src/features/timetable/lib/teacher-label.ts');
   const specials = [...labelTs.slice(labelTs.indexOf('const SPECIAL_BY_ALIAS')).split(']);')[0].matchAll(/\["([^"]+)",/g)].map((m) => m[1].toLowerCase()).sort();
-  const unitsSql = await read('supabase/migrations/0345d_makeup_evidence_checks.sql');
+  const unitsSql = readMigration("0345d_makeup_evidence_checks.sql");
   const sqlSpecials = (unitsSql.match(/not in \(('lab'[^)]*)\)/)?.[1] ?? '').split(',').map((v) => v.trim().replace(/'/g, '')).sort();
   assert.ok(specials.length > 0, '자리 교시 이름 표를 읽지 못했다');
   assert.deepEqual(sqlSpecials, specials, '자리 교시 이름 미러 불일치(teacher-label.ts SPECIAL_BY_ALIAS ↔ 0345d)');
@@ -87,10 +86,10 @@ try {
     );
     await db.unsafe(await read('tests/makeup-db/fixture.sql'));
     const seed = await read('tests/makeup-db/seed.sql');
-    await db.unsafe(await read('supabase/migrations/0264a_makeup_reservations.sql'));
+    await db.unsafe(readMigration("0264a_makeup_reservations.sql"));
     const apply = async (f) => {
       try {
-        await db.unsafe(await read(`supabase/migrations/${f}`));
+        await db.unsafe(readMigration(f));
       } catch (e) {
         throw new Error(`${f}: ${e.message} (position ${e.position ?? '?'}) ${e.where ?? ''}`);
       }

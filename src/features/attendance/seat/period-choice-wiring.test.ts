@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { readMigration } from "@/lib/db/migrations-corpus.mjs";
 /**
  * 자리 **교시 선택**(0255a) 구조 가드 — 원장 2026-09-10(① 하루 두 번 도는 반 · ② *"다른 시간으로 이동"*).
  *
@@ -16,7 +17,7 @@ const read = (...p: string[]) => fs.readFileSync(path.join(ROOT, ...p), "utf8");
 const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
 
 const SEAT = ["src", "features", "attendance", "seat"];
-const SQL = read("supabase", "migrations", "0255a_seat_period_choice.sql");
+const SQL = readMigration("0255a_seat_period_choice.sql");
 const ACTIONS = strip(read(...SEAT, "server", "period-actions.ts"));
 const QUERY = strip(read(...SEAT, "server", "period-choice.ts"));
 const DAY_QUERY = strip(read(...SEAT, "server", "queries.ts"));

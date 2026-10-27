@@ -1,12 +1,12 @@
 /** Run with tsx. Tests the actual import code against a local, in-memory PostgreSQL database only. */
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import type { Sql } from "postgres";
 import { PGlite } from "../../work/sql-check/node_modules/@electric-sql/pglite/dist/index.js";
 import { buildEventBundle, type EventSourcePack } from "./parent-events/bundle";
 import { readEventDatabase } from "./parent-events/snapshot";
 import { applyInitialEvents, revokeEventImport } from "./parent-events/import-write";
 import { hash } from "./parent-events/source-values";
+import { readMigration } from "../../src/lib/db/migrations-corpus.mjs";
 const tenant = "11111111-1111-4111-8111-111111111111", student = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", owner = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const db = new PGlite();
 type Queryable = { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> };
@@ -30,7 +30,7 @@ async function main() { try {
   await db.query("insert into users values($1,$2,'master','active','owner')", [owner, tenant]);
   await db.query("insert into students(id,tenant_id,name,parent_name,parent_phone,status,is_test) values($1,$2,'가학생','가보호','01023456789','enrolled',false)", [student, tenant]);
   for (const file of ["0442a_student_contribution.sql", "0443a_student_contribution_functions.sql", "0456a_student_parent_events.sql"])
-    await db.exec(await readFile(`supabase/migrations/${file}`, "utf8"));
+    await db.exec(readMigration(file));
   await db.query("insert into student_contribution_settings(tenant_id) values($1)", [tenant]);
   const privacyKey = "synthetic-key-for-local-tests-only";
   const report = buildEventBundle(await readEventDatabase(sql, tenant), pack, "2026-10-26", privacyKey);

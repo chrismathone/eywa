@@ -17,7 +17,7 @@
     "manual:shots": "node --env-file=.env.local scripts/_manual/capture.mjs",
     "manual:build": "node --env-file=.env.local scripts/_manual/build.mjs",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
+    "db:migrate": "node -e \"console.error('db:migrate는 2026-10-27 SQL 시즌2부터 쓰지 않습니다 — 새(빈) DB 셋업은 pnpm db:alphas · 운영 DB에는 새 s2_NNNN 파일 하나만 원장 승인 뒤 적용'); process.exit(1)\"",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:alphas": "tsx scripts/apply-all-alphas.ts",

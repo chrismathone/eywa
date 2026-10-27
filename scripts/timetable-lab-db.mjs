@@ -1,10 +1,12 @@
 // node --env-file=.env.local scripts/timetable-lab-db.mjs [--apply | --test]
 // Only this feature's additive migration; test fixtures always roll back. Never print credentials.
 import { readFileSync } from 'node:fs';
+import { readMigration } from '../src/lib/db/migrations-corpus.mjs';
 import postgres from 'postgres';
 
-const migration = 'supabase/migrations/0333a_timetable_lab_drafts.sql';
-const sharedMigration = 'supabase/migrations/0439a_timetable_lab_shared_drafts.sql';
+// 시즌1 합본(s1_season1.sql)의 구역 — 원래 파일 이름으로 읽는다(2026-10-27 시즌2).
+const migration = '0333a_timetable_lab_drafts.sql';
+const sharedMigration = '0439a_timetable_lab_shared_drafts.sql';
 const mode = process.argv[2] ?? '--check';
 if (!['--check', '--apply', '--test'].includes(mode)) throw new Error('Use --check, --apply or --test.');
 let connection, ref;
@@ -19,14 +21,14 @@ try {
   console.log(JSON.stringify({ project: ref, ...state }));
   if (!state.tenant_function || !state.super_function) throw new Error('Required auth functions are missing.');
   if (mode === '--apply') {
-    if (!state.draft_table) await sql.unsafe(readFileSync(migration, 'utf8'));
-    await sql.unsafe(readFileSync(sharedMigration, 'utf8'));
+    if (!state.draft_table) await sql.unsafe(readMigration(migration));
+    await sql.unsafe(readMigration(sharedMigration));
     console.log('Applied branch-shared timetable drafts migration.');
     await sql`notify pgrst, 'reload schema'`;
   }
   if (mode === '--test') {
     // Test the candidate sharing policy in the same rollback-only transaction as the fixtures.
-    const candidate = readFileSync(sharedMigration, 'utf8').replace(/^begin;\s*/im, '').replace(/commit;\s*$/im, '');
+    const candidate = readMigration(sharedMigration).replace(/^begin;\s*/im, '').replace(/commit;\s*$/im, '');
     const fixture = readFileSync('supabase/tests/timetable_lab_drafts.sql', 'utf8').replace(/^begin;\s*/im, '');
     const results = await sql.unsafe(`begin;\n${candidate}\n${fixture}`);
     const lines = results.flatMap(result => Array.isArray(result) ? result.flatMap(row => Object.values(row)) : Object.values(result));

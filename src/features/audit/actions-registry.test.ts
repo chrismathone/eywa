@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { migrationFiles } from "@/lib/db/migrations-corpus.mjs";
 
 /**
  * 감사로그 액션 키 레지스트리 전수 스캔.
@@ -228,18 +229,13 @@ function directInsertActions(): Map<string, Set<string>> {
   return found;
 }
 
-/** SQL 마이그레이션에서 `'값', -- audit-action`(또는 audit-target-type) 표식을 단 값. */
-const MIGRATIONS = path.join(process.cwd(), "supabase", "migrations");
+/** SQL 마이그레이션에서 `'값', -- audit-action`(또는 audit-target-type) 표식을 단 값 — 시즌1 합본 구역 + 시즌2 파일(원래 이름으로). */
 function sqlMarked(marker: "audit-action" | "audit-target-type"): Map<string, Set<string>> {
   const found = new Map<string, Set<string>>();
-  if (!fs.existsSync(MIGRATIONS)) return found;
   const re = new RegExp(`'([a-z][a-z0-9_]*)'[^\\n]*--\\s*${marker}\\b`, "g");
-  for (const name of fs.readdirSync(MIGRATIONS)) {
-    if (!name.endsWith(".sql")) continue;
-    const p = path.join(MIGRATIONS, name);
-    const src = fs.readFileSync(p, "utf8");
+  for (const { name, sql: src } of migrationFiles()) {
     if (!src.includes("audit_logs")) continue;
-    for (const m of src.matchAll(re)) addFound(found, m[1], p);
+    for (const m of src.matchAll(re)) addFound(found, m[1], `supabase/migrations/${name}`);
   }
   return found;
 }

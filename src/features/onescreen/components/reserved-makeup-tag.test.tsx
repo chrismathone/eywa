@@ -46,9 +46,9 @@ describe("ReservedMakeupTag — 끝 시각 전엔 '보강 예약'", () => {
 
 describe("ReservedMakeupTag — 보강 진행 여부 확인(원장 2026-10-27)", () => {
   const unchecked: ReservedMakeup[] = [{ ...minseo[0]!, start: "15:25", end: "16:20", checked: false }];
-  it("🔴 끝 시각이 지났는데 확인 전 = '보강 진행 여부 확인해 주세요' · 강조색 · 느린 깜빡임", async () => {
+  it("🔴 끝 시각이 지났는데 확인 전 = '보강 진행 여부 확인'(좁은 자리 — 표 모드·왼쪽 목록) · 강조색 · 느린 깜빡임", async () => {
     await renderAt("2026-10-27T07:24:00Z", unchecked);
-    const tag = screen.getByText("보강 진행 여부 확인해 주세요");
+    const tag = screen.getByText("보강 진행 여부 확인");
     expect(tag.className).toContain("bg-danger");
     expect(tag.className).toContain("pulse-slow");
     expect(tag.getAttribute("title")).toContain("확인 전엔");
@@ -60,6 +60,15 @@ describe("ReservedMakeupTag — 보강 진행 여부 확인(원장 2026-10-27)",
   it("누를 수 있으면(카드·표 모드) 메뉴 단추로 그린다 — 왼쪽 목록(onCheck 없음)은 표시만", async () => {
     vi.setSystemTime(new Date("2026-10-27T07:24:00Z"));
     render(<ReservedMakeupTag list={unchecked} onCheck={vi.fn()} />);
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(screen.getByRole("button").textContent).toContain("보강 진행 여부 확인");
+    expect(screen.getByRole("button").textContent).not.toContain("확인해 주세요");
+  });
+  it("카드 머리(md)는 문장 그대로 '보강 진행 여부 확인해 주세요' — 표 모드에서만 줄인다(원장 2026-10-27)", async () => {
+    vi.setSystemTime(new Date("2026-10-27T07:24:00Z"));
+    render(<ReservedMakeupTag list={unchecked} size="md" onCheck={vi.fn()} />);
     await act(async () => {
       vi.advanceTimersByTime(1);
     });

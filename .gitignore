@@ -64,3 +64,6 @@ data/연동PC-makeedu/*.zip
 
 # ijw-calander Firebase 삭제 전 마지막 백업(1.7GB, PII 포함) — 로컬 보관 전용
 data/ijw-firebase-backup/
+
+# drizzle-kit generate 생성물(2026-10-27 시즌2 — 필요한 문장만 s2_NNNN 파일로 옮겨 쓴다)
+/supabase/drizzle-out/

@@ -1,7 +1,7 @@
 /** In-memory PostgreSQL only. No connection string or network database is used. */
-import { readFile } from "node:fs/promises";
 import assert from "node:assert/strict";
 import { PGlite } from "../../work/sql-check/node_modules/@electric-sql/pglite/dist/index.js";
+import { readMigration } from "../../src/lib/db/migrations-corpus.mjs";
 const db = new PGlite();
 const tenant = "11111111-1111-4111-8111-111111111111", other = "22222222-2222-4222-8222-222222222222";
 const student = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", outsider = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -18,7 +18,7 @@ try {
   await db.query("insert into users values ($1)", [owner]);
   await db.query("insert into students values ($1,$2),($3,$4)", [student, tenant, outsider, other]);
   for (const file of ["0442a_student_contribution.sql", "0443a_student_contribution_functions.sql", "0456a_student_parent_events.sql"])
-    await db.exec(await readFile(new URL(`../../supabase/migrations/${file}`, import.meta.url), "utf8"));
+    await db.exec(readMigration(file));
   assert.deepEqual((await snapshot()).records, []); assert.equal((await snapshot()).ready, false); checks++;
   const tables = ["student_parent_event_imports", "student_parent_events", "student_parent_event_registrations", "student_parent_event_revisions", "student_parent_event_recognitions"];
   const security = await db.query("select relname,relrowsecurity from pg_class where relname = any($1)", [tables]);

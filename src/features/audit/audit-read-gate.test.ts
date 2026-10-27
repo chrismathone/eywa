@@ -1,6 +1,7 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { migrationFiles } from "@/lib/db/migrations-corpus.mjs";
 
 import { HUB_GROUPS, SUPPORT_GROUPS, hubGroupsFor } from "@/lib/menu-hub";
 import { MENU_ACCESS, type AccessMatrix } from "@/lib/permissions";
@@ -87,12 +88,10 @@ describe("감사로그 게이트 배선 — 한쪽만 고치면 화면과 정책
   });
 
   it("🔴 가장 최근 audit_logs SELECT 정책이 총괄을 `is_super_admin()`으로 알아본다(enum 값이 아니라)", () => {
-    const dir = join(REPO, "supabase", "migrations");
-    const files = readdirSync(dir)
-      .filter((f) => f.endsWith(".sql") && /audit_logs/.test(f) && /select|read/.test(f))
-      .sort();
+    // 시즌1 합본 구역 + 시즌2 파일(적용 순서 — 마지막이 가장 최근).
+    const files = migrationFiles().filter((f) => /audit_logs/.test(f.name) && /select|read/.test(f.name));
     expect(files.length, "audit_logs select 정책 마이그레이션을 못 찾음 — 스캔 방식을 갱신할 것").toBeGreaterThan(0);
-    const latest = readFileSync(join(dir, files[files.length - 1]), "utf8");
+    const latest = files[files.length - 1]!.sql;
     const body = latest
       .split("\n")
       .filter((l) => !l.trimStart().startsWith("--"))

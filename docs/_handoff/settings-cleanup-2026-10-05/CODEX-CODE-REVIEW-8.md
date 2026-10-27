@@ -10,7 +10,7 @@
 
 확인한 실행 경로:
 
-- 강사 직접 요청은 쓰기 전에 거절한다(`classnote-sync-actions.ts:100`). 공용 버튼 4곳은 숨김이면 null·폴링 없음(`classnote-sync-now-button.tsx:82`, `:93`); 다운로드도 별도 권한 검사 유지(`classnote-sync-report-actions.ts:30`). 다른 앱 쓰기 진입점은 없고 사용자 DB 쓰기 정책도 없다(`supabase/migrations/0313a_classnote_sync_requests.sql:46`).
+- 강사 직접 요청은 쓰기 전에 거절한다(`classnote-sync-actions.ts:100`). 공용 버튼 4곳은 숨김이면 null·폴링 없음(`classnote-sync-now-button.tsx:82`, `:93`); 다운로드도 별도 권한 검사 유지(`classnote-sync-report-actions.ts:30`). 다른 앱 쓰기 진입점은 없고 사용자 DB 쓰기 정책도 없다(`supabase/migrations/s1_season1.sql#0313a_classnote_sync_requests.sql:46`).
 - 서버 전용 `run`은 액션 전체 Promise를 감싼다(`classnote-sync-auto.ts:15`; `send-class.ts:107`). 내부 상태 재조회까지 문맥 안이고 await 뒤에도 유지되는 Node 계약이다(`node_modules/@types/node/async_hooks.d.ts:436`). 발송 보류 판정·요청 표 되읽기는 그대로(`send-class.ts:102`, `:110`). 배포 환경 동시 요청 실측은 미확인이다.
 - 관리자 본인 강사뷰·겸직은 실제 역할의 보고서 쓰기 권한으로 통과하고 다른 강사 뷰는 기존 쓰기 캡으로 막힌다(`src/lib/auth/perm-matrix.ts:131`; `classnote-sync-actions.ts:43`). 관리자 역할 운영자는 통과하며 강사 역할의 경계만 C2다.
 - 옛 버튼/없는 source는 수동, send_blocked는 자동이며 joined·full도 구분된다(`describe.ts:1152`). PC의 auto=true 분기는 종전 그대로(`:1140`; `scripts/_classnote/classnote-auto-sync.mjs:118`). 감사 목록도 이 상세를 쓴다(`src/app/(shell)/owner/_components/audit-face.tsx:254`). 새 거절·문맥 종료·문구 테스트는 유효하나 C1/C2 입력이 없다(`classnote-sync-actions.test.ts:205`, `:225`; `describe.test.ts:1311`).

@@ -84,7 +84,8 @@ node --env-file=.env.local scripts/_english_sync/verify-sheet-parity.cjs   # 영
 
 ## 4. DB 마이그레이션 상태
 
-- 드리즐 번호본은 `db:migrate`, RLS/트리거/RPC 등 **손수 alpha(`000Na_*`)** 는 개별 적용(README §4·§5).
+- 2026-10-27 SQL 시즌2: 시즌1은 `supabase/migrations/s1_season1.sql` 하나 · 새 SQL은 `s2_NNNN_설명.sql` · 새(빈) DB = `pnpm db:alphas`(`db:migrate`는 안내만) · 운영 DB는 새 시즌2 파일 하나만 승인 뒤 적용.
+- (시즌1 기록) 드리즐 번호본은 `db:migrate`, RLS/트리거/RPC 등 **손수 alpha(`000Na_*`)** 는 개별 적용(README §4·§5).
 - **이번 세션 신규: `0077a_absorb_subject_rpc.sql`**(과목 흡수 RPC `absorb_subject_key`) — **프로덕션 DB 적용됨**
   (함수 생성만, main 코드가 호출). 신규 DB 셋업 시 `supabase/migrations/README.md`의 alpha 전체 목록대로 적용.
 - ⚠️ 데모 시드(`pnpm db:seed`·`scripts/seed.ts`)는 **2026-09-19 영구 제거** — 테넌트 데이터를 먼저 지우는 구조라

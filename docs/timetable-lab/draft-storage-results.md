@@ -14,7 +14,7 @@
 
 ## 데이터베이스 경계
 
-마이그레이션은 `supabase/migrations/0333a_timetable_lab_drafts.sql`이다. 처음에는 Supabase CLI 2.119.0의 `migration new`가 붙인 이름(`20261002100848_timetable_lab_drafts.sql`)이었고 원격 DB에도 그 이름일 때 적용했다. 이 저장소는 `NNNNa_` 번호 이름만 쓰고(`session-consumption-wiring.test.ts`가 규약 밖 이름을 실패시킨다) CLI의 적용 기록 표도 쓰지 않으므로, 내용은 그대로 두고 파일 이름만 바꿨다. **0333a는 2026-10-02 21시 기준 비어 있던 번호다. main에 합치기 직전에 번호가 겹치지 않는지 다시 확인한다**(0330a는 다른 작업이 쓰고 있다). 테이블 RLS와 SELECT/INSERT 권한만 부여하며 UPDATE/DELETE는 부여하지 않는다. API는 세션 클라이언트를 사용하고 명시적인 `tenant_id`·`created_by` 필터도 적용한다. 서비스 역할로 저장·조회하지 않는다.
+마이그레이션은 `supabase/migrations/s1_season1.sql#0333a_timetable_lab_drafts.sql`이다. 처음에는 Supabase CLI 2.119.0의 `migration new`가 붙인 이름(`20261002100848_timetable_lab_drafts.sql`)이었고 원격 DB에도 그 이름일 때 적용했다. 이 저장소는 `NNNNa_` 번호 이름만 쓰고(`session-consumption-wiring.test.ts`가 규약 밖 이름을 실패시킨다) CLI의 적용 기록 표도 쓰지 않으므로, 내용은 그대로 두고 파일 이름만 바꿨다. **0333a는 2026-10-02 21시 기준 비어 있던 번호다. main에 합치기 직전에 번호가 겹치지 않는지 다시 확인한다**(0330a는 다른 작업이 쓰고 있다). 테이블 RLS와 SELECT/INSERT 권한만 부여하며 UPDATE/DELETE는 부여하지 않는다. API는 세션 클라이언트를 사용하고 명시적인 `tenant_id`·`created_by` 필터도 적용한다. 서비스 역할로 저장·조회하지 않는다.
 
 `auth_can_use_timetable_lab()`은 SECURITY INVOKER이며 시간표와 반의 전체 관리 권한을 모두 요구한다. 기존 `auth_menu_access` SQL 기본값은 이 두 메뉴가 누락되어 있으므로 재사용하지 않는다. 앱의 역할 기본값·역할 예외·개인 예외·슈퍼관리자 병합 규칙을 이 두 메뉴에 한해 반영하고, 퇴사자와 학생 역할은 거절한다. 슈퍼관리자도 다른 작성자의 저장본에는 접근하지 못한다. 브라우저의 '다른 강사 화면 보기' 읽기 전용 상태는 API의 기존 `canManageTenant`가 계속 제한한다.
 

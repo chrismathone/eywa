@@ -8,6 +8,7 @@ import {
   type IntegrityUserRow,
 } from "./protected-integrity-core";
 
+import { readMigration } from "@/lib/db/migrations-corpus.mjs";
 const NOW = new Date("2026-09-30T00:00:00Z");
 const T = "t-1";
 const baseline = ["a", "b", "login"];
@@ -81,10 +82,7 @@ describe("배선 — 점검이 매일 돈다", () => {
     expect(pm).toMatch(/mergeMostPermissive\(mergeMostPermissive\(base, applied\), codeOnly\)/);
   });
   it("0312a 트리거 목록과 코드의 기대 목록이 같다", () => {
-    const sql = fs.readFileSync(
-      path.join(process.cwd(), "supabase/migrations/0312a_protect_super_admin_accounts_hardening.sql"),
-      "utf8",
-    );
+    const sql = readMigration("0312a_protect_super_admin_accounts_hardening.sql");
     for (const n of EXPECTED_GUARD_TRIGGERS) expect(sql).toContain(`'${n}'`);
     expect(sql).toContain("new.deleted_at is not null");
   });

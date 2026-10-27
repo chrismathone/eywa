@@ -9,6 +9,7 @@ import { REASON_DETAILS, checkReasonInput, detailFor, memoRequired, readReasonFo
 import { reasonKeyOf } from "./reason-key";
 import { reasonFacetLabel } from "./breakdown";
 
+import { readMigration } from "@/lib/db/migrations-corpus.mjs";
 const read = (p: string) => readFileSync(join(process.cwd(), p), "utf8");
 
 describe("세부 표", () => {
@@ -79,7 +80,7 @@ describe("폼 사유 칸 읽기(readReasonForm) — 사유를 받는 서버 액�
 
 describe("배선 가드", () => {
   it("🔴 퇴원보고서 DB 함수의 사유 목록 = 앱 사유 목록(0367a) — 사유를 늘리면 함수 목록도 함께 늘린다(안 그러면 그 사유로 낸 보고서가 거절된다)", () => {
-    const sql = read("supabase/migrations/0367a_withdrawal_reason_details.sql");
+    const sql = readMigration("0367a_withdrawal_reason_details.sql");
     const list = sql.match(/new_list constant text := '(.*)';/)?.[1] ?? "";
     const keys = [...list.matchAll(/''([a-z_]+)''/g)].map((m) => m[1]);
     expect([...keys].sort()).toEqual([...WITHDRAWAL_REASONS].sort());
@@ -114,7 +115,7 @@ describe("배선 가드", () => {
     expect(imp).toContain("checkReasonInput(");
     expect(imp).not.toContain("DEFAULT_WITHDRAWAL_METADATA");
     // 퇴원보고서 — 닫는 수강 줄에도 상세사유 메모(0369a).
-    const m = read("supabase/migrations/0369a_withdrawal_report_end_memo.sql");
+    const m = readMigration("0369a_withdrawal_report_end_memo.sql");
     expect(m).toContain("withdrawal_memo=(select nullif(btrim(q.body->>'detail'),'')");
     expect(m).toContain("withdrawal_memo=nullif(btrim(r.body->>'detail'),'')");
     // 같은 사유로 다시 종료하며 메모를 바꾸는 것 — 원생 상태 변경 권한이 있으면 보호 트리거가 막지 않는다(리뷰 2026-10-15).

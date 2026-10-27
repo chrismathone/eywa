@@ -541,11 +541,11 @@ void useWindowStore.persist.rehydrate();`(create 직후). 컴포넌트는 `hasHy
 
 ### 70. 미러 트리거가 metadata-only 갱신에서 role을 stale app_metadata로 덮음 → 임포트 강사 조용한 강등 (2026-07-01)
 프로덕션(injaewon)에서 임포트 강사 계정 8명이 `auth.users.app_metadata.system_role='viewer'`인데 `public.users.system_role='teacher'`로 어긋나 있었다.
-원인 = 미러 트리거 [`tg_sync_user_from_auth`](supabase/migrations/0001a_rls_constraints_triggers.sql)의 `on conflict do update set system_role = excluded.system_role`.
+원인 = 미러 트리거 [`tg_sync_user_from_auth`](supabase/migrations/s1_season1.sql#0001a_rls_constraints_triggers.sql)의 `on conflict do update set system_role = excluded.system_role`.
 `excluded.system_role`은 `coalesce(app_metadata.system_role, 'viewer')`라, **GoTrue가 어떤 `updateUserById`(비번리셋·ban·이메일변경)에서든 `raw_app_meta_data`를 재기록**하며
 `update of raw_app_meta_data` 트리거를 발동 → app_metadata에 role이 없거나 stale하면 `public.users` role을 **덮어써** teacher→viewer로 강등(2026-07-01 이수연/kelly에 실발생, 이후 8명 추가 확인).
 `getCurrentUser`/`auth_tenant_id()`는 `public.users`를 읽어 평소엔 무해하나, **트리거가 write 시 stale app_metadata를 재전파**하는 게 함정.
-- **하드닝**([`0075a`](supabase/migrations/0075a_mirror_trigger_role_hardening.sql), `create or replace`, dev=prod 적용): `v_role`(viewer 폴백)을 **`v_role_explicit`**(app_metadata에 role이 **명시적으로 있을 때만** non-null)로 분리.
+- **하드닝**([`0075a`](supabase/migrations/s1_season1.sql#0075a_mirror_trigger_role_hardening.sql), `create or replace`, dev=prod 적용): `v_role`(viewer 폴백)을 **`v_role_explicit`**(app_metadata에 role이 **명시적으로 있을 때만** non-null)로 분리.
   on conflict 브랜치를 **`system_role = coalesce(v_role_explicit, public.users.system_role)`** 로 바꿔, **명시 role이 있을 때만 채택하고 없으면 기존(권위) role 보존**. INSERT 경로(신규=viewer 폴백)는 불변.
 - **회귀 0**: 모든 의도적 role 변경 경로(createStaff·super-admin createTenantWithMaster·changeStaffRole·changeUserRole)는 **app_metadata.system_role을 명시**로 넣어 v_role_explicit이 non-null → 옛 동작과 동일. metadata-only 갱신만 "강등 안 함"으로 바뀜.
 - **데이터 교정**: 8명 auth app_metadata를 `updateUserById`로 `teacher`로 정정(provider/providers/tenant_id 병합 보존). ⚠️ **하드닝만으로는 이 8명이 안 고쳐진다** — 그들 app_metadata가 **명시적으로 'viewer'**라 다음 비번리셋에 또 강등 → 정정 필수.
@@ -2265,7 +2265,10 @@ iframe `load`에서 덮개를 걷었는데, `load`는 HTML 스트림 끝 + 이�
 **원인**: 그 가드는 "파일명 정렬 = 적용 순서"를 전제로 **마지막 정의**를 고른다. 전제가 깨지지 않게 `^\d{4}[a-z]?_` 밖의 이름이 하나라도 있으면 실패시킨다. `npx supabase migration new x`는 `20261002050926_x.sql`을 만든다 — 하루에 세 번(다른 세션 둘 + 시간표 연습실) 같은 이름이 들어왔다.
 
 **규칙**:
-- 마이그레이션 파일은 **`NNNNa_설명.sql`**(다음 빈 번호). CLI로 만들었으면 커밋 전에 이름을 바꾼다. 이 저장소는 CLI의 적용 기록 표를 쓰지 않아 이름과 DB는 무관하다(내용은 그대로).
+- 🔴 **2026-10-27부터 시즌2** — 마이그레이션 파일은 **`s2_NNNN_설명.sql`**(0001부터 · 다음 빈 번호 · 빈틈·겹침 금지). 시즌1(아래 옛 규칙의 `NNNNa_` 568개)은 `supabase/migrations/s1_season1.sql` 하나로 합쳤다 — 원장 *"이전 001~458번대까지 sql을 전부 하나로 정리해서 뭉쳐놔. 번호가 너무 많이 올랐어. 다시 1번부터 시작할 수 있게"* · *"시즌2 sql 느낌으로 시작해 새로"*. 폴더에는 합본 · 시즌2 파일 · README만 둔다(가드 `src/lib/db/migrations-corpus.test.ts`). 합본은 **고치지 않는다**(지난 기록 — 바꿀 게 있으면 시즌2 파일로 다시 정의한다).
+- 시즌1 SQL을 읽는 테스트·스크립트는 원래 이름으로 `readMigration("0349a_….sql")` · 적용 순서 전체는 `migrationFiles()`(`src/lib/db/migrations-corpus.mjs` — 합본 구역 머리줄 `--@@s1 <원래 이름>`). 문서 표기는 `supabase/migrations/s1_season1.sql#0349a_….sql`. 낱개 파일은 git 기록(합본 커밋 직전)에 그대로 있다.
+- 🔴 합본 전에 갈라진 브랜치가 **옛 낱개 파일을 고쳤으면**(modify/delete 충돌) 그 변경을 합본 구역에 넣지 말고 **시즌2 파일**로 옮긴다. 새로 만든 `0459a_…`류는 다음 빈 `s2_` 번호로 바꾼다 — 단계별 방법과 부딪히는 브랜치 목록은 [`sql-season2.md`](sql-season2.md).
+- (옛 규칙 — 시즌1) 마이그레이션 파일은 **`NNNNa_설명.sql`**(다음 빈 번호). CLI로 만들었으면 커밋 전에 이름을 바꾼다. 이 저장소는 CLI의 적용 기록 표를 쓰지 않아 이름과 DB는 무관하다(내용은 그대로).
 - 번호는 main에 합치는 시점에 확정된다 — 다른 워크트리가 쓰는 번호를 `git worktree list`의 각 `supabase/migrations`에서 확인할 것.
 - 🔴 이름을 바꿀 때 그 파일을 **경로로 읽는 곳**을 저장소 전체에서 찾는다. `src`·`docs`·`scripts`만 보면 `tests/integration/*.test.ts`를 놓친다(실제로 놓쳤다가 푸시 전에 잡았다).
 - ⚠️ 번호가 뒤로 가도 되는지는 **같은 객체를 다시 정의하는 파일이 그 사이에 있는지**로 판단한다(있으면 "마지막 정의" 판정이 뒤집힌다).

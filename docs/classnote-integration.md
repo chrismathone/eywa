@@ -771,7 +771,7 @@ subject NULL(이관·레거시)은 게이트가 거부한다(2026-07-10 P0-2·P0
 
 | 구성 | 파일 | 역할 |
 |---|---|---|
-| 요청 표 | `supabase/migrations/0313a_classnote_sync_requests.sql` | 지점당 살아 있는 요청(대기·실행 중) **하나** — 부분 유니크. 쓰기 = 서버 액션(admin)·워커만. 학생 계정 읽기 금지 |
+| 요청 표 | `supabase/migrations/s1_season1.sql#0313a_classnote_sync_requests.sql` | 지점당 살아 있는 요청(대기·실행 중) **하나** — 부분 유니크. 쓰기 = 서버 액션(admin)·워커만. 학생 계정 읽기 금지 |
 | 앱 판정(순수) | [`classnote-sync.ts`](../src/features/report-admin/classnote-sync.ts) | 범위 합치기 · 멈춤(대기 30분·실행 20분) · 쿨다운 5분 · 버튼 상태 · 연동 PC 준비(살아 있음 + `postMode` + `caps.syncRequests`) |
 | 서버 액션 | [`classnote-sync-actions.ts`](../src/features/report-admin/server/classnote-sync-actions.ts) | `requestClassnoteBoardSync` · `getClassnoteSyncStatus` — 모듈·권한·열람 전용 게이트, 23505 = 합류 |
 | 버튼 | [`classnote-sync-now-button.tsx`](../src/features/report-admin/components/classnote-sync-now-button.tsx) | 대기·실행 중 10초 폴링 · 누르는 즉시 잠금 · 실패 사유 한글(원문은 툴팁) |
@@ -820,7 +820,7 @@ subject NULL(이관·레거시)은 게이트가 거부한다(2026-07-10 P0-2·P0
 
 | 구성 | 파일 | 역할 |
 |---|---|---|
-| 표 | `supabase/migrations/0317a_classnote_parent_replies.sql` | 답글 1행 = 요청·상태·ClassNote 댓글 번호·원문 보존(`edit_history`). 쓰기 = 서버 액션·워커만. 재클릭 = `client_key` 유니크 · 같은 글·같은 본문(살아 있는 것) = 부분 유니크(23505로 받음, [[#113]]) |
+| 표 | `supabase/migrations/s1_season1.sql#0317a_classnote_parent_replies.sql` | 답글 1행 = 요청·상태·ClassNote 댓글 번호·원문 보존(`edit_history`). 쓰기 = 서버 액션·워커만. 재클릭 = `client_key` 유니크 · 같은 글·같은 본문(살아 있는 것) = 부분 유니크(23505로 받음, [[#113]]) |
 | 설정 | 수업보고서 > 보고서 설정 > 발송 탭 '학부모 글 답글·공감'([`classnote-reply-mode-field.tsx`](../src/app/(shell)/owner/_components/classnote-reply-mode-field.tsx)) | `report.classnoteParentReplyMode` = 끔(기본)·시험·전체. 저장 = `saveOwnerSection`. 읽기 = 앱 [`classnoteReplyMode`](../src/features/owner/classnote-gate.ts)(모듈이 꺼지면 끔) · 워커 `loadReplyMode`(DB 직결, 폴마다) |
 | 앱 판정(순수) | [`reply-policy.ts`](../src/features/classnote-reply/reply-policy.ts) · [`reply-eligibility-rule.ts`](../src/features/classnote-reply/reply-eligibility-rule.ts) · [`notification-match.ts`](../src/features/classnote-reply/notification-match.ts) | 모드별 대상 · 전체 모드 사전 확인 · 본문 1,000자 · 게시 명의 · 상태 라벨 · 연동 PC 준비(`caps.parentReply`) · 자격 · 벨 알림 → 원문 행 |
 | 서버 액션 | [`reply-actions.ts`](../src/features/classnote-reply/server/reply-actions.ts) (+ 첫 문 [`reply-gate`](../src/features/classnote-reply/server/reply-gate.ts) · `reply-permission`·`reply-change`·`reply-data`·`reply-eligibility`) | 입력 = 메시지 행 id + 본문 + 재클릭 키. 글·원아·보드는 0184a 행으로 다시 찾는다 |
@@ -892,7 +892,7 @@ subject NULL(이관·레거시)은 게이트가 거부한다(2026-07-10 P0-2·P0
 
 | 구성 | 파일 | 역할 |
 |---|---|---|
-| 표 | `supabase/migrations/0319a_classnote_parent_reactions.sql` | **학부모 메시지 하나에 공감 하나**(지점 단위 일반 유니크 — 부분 유니크 아님, [[#113]]). 풀었거나 못 눌렀으면 **같은 행을 다시 쓴다**. 쓰기 = 서버 액션·워커만 |
+| 표 | `supabase/migrations/s1_season1.sql#0319a_classnote_parent_reactions.sql` | **학부모 메시지 하나에 공감 하나**(지점 단위 일반 유니크 — 부분 유니크 아님, [[#113]]). 풀었거나 못 눌렀으면 **같은 행을 다시 쓴다**. 쓰기 = 서버 액션·워커만 |
 | 앱 판정(순수) | [`reaction-policy.ts`](../src/features/classnote-reply/reaction-policy.ts) | 종류 6 + 한글 라벨 · 상태 라벨 · 누를 수 있나/풀 수 있나 |
 | 서버 액션 | [`reaction-actions.ts`](../src/features/classnote-reply/server/reaction-actions.ts) (+ `reaction-data`) | 입력 = 메시지 행 id(+ 종류). 첫 문 `replyGate` → `decideReplyPermission`(답글과 같은 자격·명의) → 연동 PC(`caps.parentReaction`) → 조건부 쓰기 → 감사로그 |
 | 화면 | [`reaction-control.tsx`](../src/features/classnote-reply/components/reaction-control.tsx) — 벨 알림 행('답글 쓰기' 옆, 종류는 그 아래 줄) · '학부모 글·답글' 면 · 답글 창 | '공감' → 종류 여섯(좋아요·감사해요·확인했어요·기쁨·놀람·슬픔) → 요청. 눌려 있으면 `확인했어요 · 공감함`(누른 사람·관리자급은 눌러서 푼다). 처리 중 잠금 + 10초 갱신 |

@@ -11,6 +11,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { readMigration } from "@/lib/db/migrations-corpus.mjs";
 const read = (...p: string[]) => readFileSync(join(process.cwd(), ...p), "utf8");
 /** 주석은 규약이 아니라 설명이다 — 단언이 주석 문구에 걸려 거짓 통과하지 않게 지운다. */
 const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
@@ -26,8 +27,8 @@ const monthPage = strip(read("src", "app", "(shell)", "ecs", "[classId]", "month
 const monthClient = strip(read("src", "features", "class-sheets", "components", "month-client.tsx"));
 const toolbar = strip(read("src", "features", "class-sheets", "components", "sheet-toolbar.tsx"));
 const landing = strip(read("src", "app", "(shell)", "ecs", "_components", "landing-list.tsx"));
-const migration = read("supabase", "migrations", "0239a_class_month_plan_cells.sql");
-const migrationFooter = read("supabase", "migrations", "0240a_class_month_plan_footer.sql");
+const migration = readMigration("0239a_class_month_plan_cells.sql");
+const migrationFooter = readMigration("0240a_class_month_plan_footer.sql");
 
 describe("🔴 EiE 판정 — 표면 넷이 같은 근거를 본다", () => {
   it("탭은 `sheetFacesFor(isEie)`로만 선다(두 상단 바가 같은 함수를 쓴다)", () => {

@@ -11,9 +11,10 @@
  *   데이터는 여전히 합성이고 운영 DB가 아니다 — 운영 데이터 분포·실제 Supabase 플랫폼 동작(PostgREST·JWT·실제 auth)은 범위 밖이다.
  * 이 모드는 DB를 비우고 다시 만든다 — 끝난 뒤 fixture로 돌아가려면 `--reset`을 다시 실행한다.
  */
-import { readdir, readFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { absorb } from './real-chain.mjs';
+import { migrationFiles, readMigration } from '../../src/lib/db/migrations-corpus.mjs';
 
 const PLATFORM = `
 do $$ declare r text; begin
@@ -56,8 +57,8 @@ const TRIGGER_TABLES = ['attendance_records', 'tenant_settings', 'class_schedule
   'lesson_reports', 'makeup_reservations'];
 
 export async function applyOnRealChain({ db, root, assert }) {
-  const dir = path.join(root, 'supabase/migrations');
-  const all = (await readdir(dir)).filter((f) => f.endsWith('.sql')).sort();
+  // 적용 순서(시즌1 합본 구역 → 시즌2 파일) — 원래 파일 이름으로(2026-10-27 시즌2).
+  const all = migrationFiles(root).map((f) => f.name);
   const mine = all.filter((f) => /^03(?:4[3-9]|5\d)[a-z]_makeup_.*\.sql$/.test(f));
   const real = all.filter((f) => !mine.includes(f));
   await db.unsafe(PLATFORM);
@@ -66,7 +67,7 @@ export async function applyOnRealChain({ db, root, assert }) {
   const settle = (verb) => db.unsafe(verb).catch(() => {});
   for (const f of real) {
     try {
-      await db.unsafe(await readFile(path.join(dir, f), 'utf8'));
+      await db.unsafe(readMigration(f, root));
       await settle('commit');
     } catch (e) {
       await settle('rollback');
@@ -78,7 +79,7 @@ export async function applyOnRealChain({ db, root, assert }) {
   for (const round of ['apply', 'rerun']) {
     for (const f of mine) {
       try {
-        await db.unsafe(await readFile(path.join(dir, f), 'utf8'));
+        await db.unsafe(readMigration(f, root));
         await settle('commit');
       } catch (e) {
         await settle('rollback');

@@ -1582,6 +1582,29 @@ export function auditDetail(
       const mode = m.mode === "merge" ? "정규 보고서에 합침(정규+보강)" : m.mode === "separate" ? "보강 보고서 따로" : null;
       return join(str(m.date) ? `${str(m.date)} 보강` : null, mode);
     }
+    case "makeup_reserve_host_move": {
+      // 다른 반에 기록된 보강 예약을 그날 정규 반으로 옮겨 정규 보고서에 합쳤다(원장 2026-10-27). '대상' = 학생 · 옮긴 반.
+      const n = Array.isArray(m.reservationIds) ? m.reservationIds.length : 0;
+      const units = m.units === null ? 1 : num(m.units);
+      return join(
+        str(m.date) ? `${str(m.date)} 보강` : null,
+        n > 0 ? `예약 ${n}건을 정규 반으로 옮겨 합침(정규+보강)` : "정규 반으로 옮겨 합침(정규+보강)",
+        units !== null ? `시수 ${units}` : null,
+      );
+    }
+    case "makeup_reserve_check": {
+      // 원스크린 보강 표식의 '보강 했음 / 못 했음'(원장 2026-10-27). 했음 = 이행 + 확인 · 못 했음 = 보강분 시수 빼고 예약 지움.
+      const done = m.outcome === "done";
+      const units = m.units === null ? 1 : num(m.units);
+      return join(
+        str(m.date) ? `${str(m.date)} 보강` : null,
+        m.outcome === "done" || m.outcome === "missed" ? (done ? "보강 했음" : "보강 못 했음 — 예약 지움") : null,
+        m.marked === "present" ? "출결을 출석으로 찍음" : m.marked === "makeup" ? "출결을 보강으로 찍음" : null,
+        units !== null ? (done ? `시수 ${units}` : `보강분 뺀 시수 ${units}`) : null,
+        m.unitsLeft === true ? "시수는 그대로(출석부 확인)" : null,
+        m.checkUnsaved === true ? "확인 칸 미적용(이행만)" : null,
+      );
+    }
     case "attendance_cell":
     case "attendance_bulk":
     case "attendance_range": {

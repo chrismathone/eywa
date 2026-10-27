@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { readMigration } from "@/lib/db/migrations-corpus.mjs";
 /**
  * 신규생 **과목별 행·과목별 체크**(0256a) 구조 가드 — 원장 2026-09-10.
  *
@@ -13,7 +14,7 @@ const read = (...p: string[]) => fs.readFileSync(path.join(ROOT, ...p), "utf8");
 /** 주석을 걷어낸 본문 — 주석에 적힌 낱말이 가드를 통과시키지 않게. */
 const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
 
-const SQL = read("supabase", "migrations", "0256a_onboarding_checks_subject.sql");
+const SQL = readMigration("0256a_onboarding_checks_subject.sql");
 const ACTIONS = strip(read("src", "features", "newcomers", "server", "actions.ts"));
 const QUERIES = strip(read("src", "features", "newcomers", "server", "queries.ts"));
 const SIGNALS = strip(read("src", "features", "dashboard", "server", "action-signals.ts"));

@@ -4,6 +4,7 @@
  */
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { readMigration } from '../src/lib/db/migrations-corpus.mjs';
 import postgres from 'postgres';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -20,8 +21,9 @@ const config = { host: '127.0.0.1', port: 55432, user: 'postgres', database: 'ey
 const db = new Client(config);
 await db.connect();
 const read = (name) => readFile(path.join(root,name),'utf8');
-const migration = 'supabase/migrations/0337a_todays_math_sync_v2.sql';
-async function apply(name) { await db.query(await read(name)); }
+// 마이그레이션은 시즌1 합본(s1_season1.sql)의 구역을 원래 이름으로 읽는다(2026-10-27 시즌2) · supabase/tests/는 파일 그대로.
+const migration = '0337a_todays_math_sync_v2.sql';
+async function apply(name) { await db.query(name.includes('/') ? await read(name) : readMigration(name)); }
 let checks = 0;
 async function sqlTest(name, file) {
   await apply(file); checks++; console.log(`PASS ${name}`);
@@ -38,11 +40,11 @@ try {
       '0075a_mirror_trigger_role_hardening','0083a_lesson_reports_classnote',
       '0089a_lesson_reports_textbook_makeup','0134a_lesson_reports_class_id',
       '0141a_students_is_test','0171a_lesson_reports_makeup_class','0173a_class_delegations',
-      '0274a_class_period_enrollment_end']) await apply(`supabase/migrations/${name}.sql`);
+      '0274a_class_period_enrollment_end']) await apply(`${name}.sql`);
     await apply(migration);
     await apply(migration); // alpha rerun safety
-    await apply('supabase/migrations/0339a_todays_math_student_phone_tail.sql');
-    await apply('supabase/migrations/0339a_todays_math_student_phone_tail.sql');
+    await apply('0339a_todays_math_student_phone_tail.sql');
+    await apply('0339a_todays_math_student_phone_tail.sql');
     console.log('PASS migration and rerun against actual source DDL'); checks++;
   }
   await sqlTest('transactional lifecycle, scopes, exports, PKCE and privileges','supabase/tests/todays_math_sync.sql');

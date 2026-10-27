@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { readMigration } from "@/lib/db/migrations-corpus.mjs";
 /**
  * 구조 가드 — 성적 입력표(원장 2026-09-22)가 **한 경로·한 게이트·한 서식**으로 남게 못 박는다.
  *
@@ -99,7 +100,7 @@ describe("마이그레이션(0283a)보다 앱이 먼저 배포돼도 산다", ()
   });
 
   it("마이그레이션 파일이 있고 부분 유니크(WHERE)를 쓰지 않는다([[#113]])", () => {
-    const sql = read("supabase/migrations/0283a_student_grades_term.sql");
+    const sql = readMigration("0283a_student_grades_term.sql");
     expect(sql).toContain("create unique index if not exists ux_grades_term_slot");
     expect(sql).not.toMatch(/create unique index[\s\S]{0,200}?where/i);
   });
@@ -112,7 +113,7 @@ describe("마이그레이션(0283a)보다 앱이 먼저 배포돼도 산다", ()
     const q = read("src/features/grades/server/queries.ts");
     expect(q).toContain("marksReady");
     expect(q).toMatch(/marksReady[\s\S]{0,200}ask1_at/);
-    const sql = read("supabase/migrations/0284a_student_grades_marks.sql");
+    const sql = readMigration("0284a_student_grades_marks.sql");
     for (const col of ["ask1_at", "ask2_at", "received_at", "ask1_by", "ask2_by", "received_by"]) {
       expect(sql).toContain(col);
     }
@@ -206,7 +207,7 @@ describe("시험없음 · 해당 없음(원장 2026-09-22)", () => {
     expect(write).toContain("no_exam_reason");
     // 켜진 칸은 점수가 없어도 행을 남긴다(사유가 기록이다).
     expect(read("src/features/grades/keep.ts")).toMatch(/r\.noExam === true/);
-    const sql = read("supabase/migrations/0285a_student_grades_no_exam.sql");
+    const sql = readMigration("0285a_student_grades_no_exam.sql");
     expect(sql).toContain("no_exam boolean");
     // 수학의 새 칸(내신·월말평가)이 제약에 들어갔는가 — 빠지면 저장이 23514로 거절된다.
     expect(sql).toContain("'school'");
@@ -338,7 +339,7 @@ describe("월말평가 표식 열(원장 2026-09-23)", () => {
 
 describe("월 축 0288a · 확인 뷰(원장 2026-09-23)", () => {
   it("마이그레이션이 있고 유니크 축에 월이 들어간다(부분 유니크 금지 [[#113]])", () => {
-    const sql = read("supabase/migrations/0288a_student_grades_month.sql");
+    const sql = readMigration("0288a_student_grades_month.sql");
     expect(sql).toContain("exam_month smallint not null default 0");
     expect(sql).toContain("ux_grades_term_slot_month");
     expect(sql).toContain("drop index if exists ux_grades_term_slot");
@@ -386,7 +387,7 @@ describe("월 축 0288a · 확인 뷰(원장 2026-09-23)", () => {
   });
 
   it("🔴 옛 월말평가 행을 시험일의 달로 백필한다 — 안 하면 적용 직후 지난 점수가 안 보인다", () => {
-    const sql = read("supabase/migrations/0288a_student_grades_month.sql");
+    const sql = readMigration("0288a_student_grades_month.sql");
     expect(sql).toMatch(/update student_grades[\s\S]{0,200}extract\(month from taken_on\)/);
     // 스키마 캐시 갱신이 없으면 새 컬럼을 한동안 "없다"고 답한다.
     expect(sql).toContain("notify pgrst, 'reload schema'");

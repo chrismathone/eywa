@@ -5,6 +5,7 @@ import { SUBJECT_MULTI, SUBJECT_NONE, splitSegmentKey, usageSegmentKey } from ".
 import { parseUsageQuery, usageHref } from "./query";
 import { isTrackedRoute } from "./route-key";
 
+import { readMigration } from "@/lib/db/migrations-corpus.mjs";
 describe("표시 말 — raw 키를 화면에 내지 않는다", () => {
   it("권한·메뉴", () => {
     expect(usageRoleLabel("master")).toBe("원장");
@@ -105,7 +106,7 @@ describe("배선 가드", () => {
   });
 
   it("DB: RLS를 켜고 정책 없이 닫으며, 함수는 service_role만 실행한다", () => {
-    const sql = readFileSync("supabase/migrations/0292a_page_usage_daily.sql", "utf8");
+    const sql = readMigration("0292a_page_usage_daily.sql");
     expect(sql).toContain("alter table public.page_usage_daily enable row level security");
     expect(sql).toContain("revoke all on table public.page_usage_daily from anon, authenticated");
     expect(sql).not.toMatch(/create policy/i);
@@ -114,7 +115,7 @@ describe("배선 가드", () => {
   });
 
   it("DB 0293a: 슈퍼관리자는 세지 않고(지난 기록도 삭제), 새 함수도 service_role 전용", () => {
-    const sql = readFileSync("supabase/migrations/0293a_page_usage_subject_group.sql", "utf8");
+    const sql = readMigration("0293a_page_usage_subject_group.sql");
     expect(sql).toContain("delete from public.page_usage_daily where role = 'super_admin'");
     expect(sql).toMatch(/super_admins sa where sa\.id = p_user\) then\s+return 0;/);
     expect(sql).not.toMatch(/create policy/i);

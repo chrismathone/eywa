@@ -10,7 +10,7 @@
 
 ## 저장
 
-`supabase/migrations/0269b_math_learning_goals.sql`을 연결 DB에 적용했다. 기존 월 목표와 수업 기록은 보존한다. 새 표는 서버 전용이며 테넌트·반 접근 게이트를 통과해야 저장할 수 있다. 샘플 목표는 저장하지 않았다.
+`supabase/migrations/s1_season1.sql#0269b_math_learning_goals.sql`을 연결 DB에 적용했다. 기존 월 목표와 수업 기록은 보존한다. 새 표는 서버 전용이며 테넌트·반 접근 게이트를 통과해야 저장할 수 있다. 샘플 목표는 저장하지 않았다.
 
 작업 브랜치는 `feat/mcs-learning-goals`. 사용자 승인 후 최신 `main`과 통합해 배포한다. 아래는 배포 전 검증 결과다.
 
