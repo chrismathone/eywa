@@ -101,15 +101,14 @@ function koDate(iso: string): string {
   return m ? `${Number(m[1])}월 ${Number(m[2])}일` : "";
 }
 
-/** 분 → "1시간" · "1시간 30분" · "40분". 0·모름은 "". */
-function koDuration(minutes: number | null, units: number | null): string {
-  if (minutes != null && minutes > 0) {
-    const h = Math.floor(minutes / 60);
-    const m = Math.round(minutes % 60);
-    return [h ? `${h}시간` : "", m ? `${m}분` : ""].filter(Boolean).join(" ");
-  }
-  if (units != null && units > 0) return `${Number.isInteger(units) ? units : units.toFixed(1)}시간`;
-  return "";
+/**
+ * 보강 분량 → "1교시" · "2교시". 분(55분)으로 적지 않는다(원장 2026-10-27 *"보강 55분 대신에 한타임 체크되어있으면 1교시 보강수업을 함께
+ * 진행했습니다로"*). 예약은 교시 칸 하나씩이라(학원설정 교시표) 예약 수 = 교시 수 · 예약이 없는 보강 줄은 출석부 수업타임. 모르면 "".
+ */
+function koPeriods(m: Pick<MakeupFacts, "absenceDates" | "units" | "row">, reservedCount: number): string {
+  const n = reservedCount > 0 ? reservedCount : m.row ? (m.units ?? 0) : 0;
+  if (!(n > 0)) return "";
+  return `${Number.isInteger(n) ? n : n.toFixed(1)}교시`;
 }
 
 /** 결석분 날짜를 적을 수 있나 — 하나라도 날짜 형식이면. */
@@ -117,12 +116,13 @@ export function hasMakeupAbsenceDate(makeup: Pick<MakeupFacts, "absenceDates"> |
   return (makeup?.absenceDates ?? []).some((d) => koDate(d) !== "");
 }
 
-/** 보강 문장 본체 — "10월 19일 결석에 대한 보강 수업을 1시간 진행했습니다" (마침표·사유 전). */
+/** 보강 문장 본체 — "10월 19일 결석에 대한 1교시 보강 수업도 함께 진행했습니다" (마침표·사유 전). */
 function makeupClause(m: MakeupFacts, also: boolean): string {
   const dates = [...new Set(m.absenceDates.map(koDate).filter(Boolean))].join("·");
-  const dur = koDuration(m.minutes, m.units);
+  // 예약 수 = 결석분 날짜 수(예약 한 건 = 교시 한 칸) — 날짜를 모르는 줄은 수업타임으로.
+  const dur = koPeriods(m, m.absenceDates.length);
   if (!dates) return also ? "보강 수업도 함께 진행했습니다" : "오늘은 보강 수업에 출석했습니다";
-  return `${also ? "" : "오늘은 "}${dates} 결석에 대한 보강 수업${also ? "도" : "을"}${dur ? ` ${dur}` : ""} ${also ? "함께 " : ""}진행했습니다`;
+  return `${also ? "" : "오늘은 "}${dates} 결석에 대한 ${dur ? `${dur} ` : ""}보강 수업${also ? "도 함께" : "을"} 진행했습니다`;
 }
 
 /** 출결 상태 + 사유(+ 보강 재료) → 문장. 말할 게 없으면 "". */
@@ -181,8 +181,8 @@ export function attendanceMarkOf(text: string | null | undefined): AttendanceMar
   for (const [status, sentence] of Object.entries(PLAIN_SENTENCE)) {
     if (t.startsWith(sentence.replace(/\.$/, ""))) return mark(status as AttendanceMark["status"], sentence);
   }
-  // 날짜가 붙은 보강 문장("오늘은 10월 19일 결석에 대한 보강 수업을 …") — 늘 더 말하는 글이다.
-  if (/^오늘은 .*결석에 대한 보강 수업/.test(t)) return { status: "makeup", label: MARK_LABEL.makeup, detail: true };
+  // 날짜가 붙은 보강 문장("오늘은 10월 19일 결석에 대한 1교시 보강 수업을 …" · 옛 글 "… 보강 수업을 1시간 …") — 늘 더 말하는 글이다.
+  if (/^오늘은 .*결석에 대한 (?:\S+ )?보강 수업/.test(t)) return { status: "makeup", label: MARK_LABEL.makeup, detail: true };
   for (const [status, head] of Object.entries(STATUS_SENTENCE)) {
     if (t.startsWith(head)) return mark(status as AttendanceMark["status"]);
   }
