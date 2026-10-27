@@ -43,12 +43,18 @@ export type HomeroomTeacher = {
   classNames: string[];
   students: HomeroomStudent[];
   months: HomeroomMonth[];
+  /** 지난달 말일에 담임 반에 있던 학생 수(지금 퇴원했어도 센다). */
+  prevStudents: number;
+  /** 지난달에 담임 반 수강이 끝난 학생(반이동 제외 · 지금 이 담임 반에 남은 학생 제외) — 퇴원생. */
+  leftPrev: { id: string; name: string }[];
 };
 
 export type HomeroomStats = {
   today: string;
   /** `YYYY-MM` 오래된 달 → 이번 달. */
   months: string[];
+  /** '지난달'(`YYYY-MM`) — 학생 수 비교·퇴원생의 기준 달. */
+  prevMonth: string;
   teachers: HomeroomTeacher[];
   /** 퇴사한 담임이 아직 맡고 있는 반 — 현황에서 빠진 사실을 밝힌다. */
   retired: { teachers: number; classes: number; students: number };
@@ -66,6 +72,12 @@ export function homeroomMonths(today: string): string[] {
   const all = recentMonths(today, HOMEROOM_MAX_MONTHS);
   const kept = all.filter((m) => m >= HOMEROOM_START_MONTH);
   return kept.length ? kept : all.slice(-1);
+}
+
+/** `YYYY-MM`의 말일(`YYYY-MM-DD`). */
+export function lastDayOf(ym: string): string {
+  const d = new Date(Date.UTC(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)), 0));
+  return d.toISOString().slice(0, 10);
 }
 
 /** 오늘이 든 달부터 거꾸로 n달(`YYYY-MM`, 오래된 순). */
@@ -91,6 +103,11 @@ export type HomeroomInput = {
   enrollments: { studentId: string; classId: string; startDate: string | null }[];
   /** 재원생(테스트 제외)만. 여기 없는 학생은 버린다. */
   students: Map<string, { name: string; grade: string | null }>;
+  /** 지난달 비교용 — 지난달 1일 이후 끝났거나 아직 열린 담임 반 수강 전부(반이동 표시 포함). */
+  history: { studentId: string; classId: string; startDate: string | null; endDate: string | null; isTransferred: boolean }[];
+  /** 테스트가 아닌 학생 이름(퇴원생 포함). */
+  knownStudents: Map<string, string>;
+  prevMonth: string;
   /** 창 안 상담(KST 날짜). */
   consults: { studentId: string; counselorId: string | null; date: string }[];
 };
@@ -129,6 +146,22 @@ export function buildHomeroomTeachers(input: HomeroomInput): HomeroomTeacher[] {
     who.set(c.counselorId, (who.get(c.counselorId) ?? 0) + 1);
     const key = `${c.studentId}|${c.counselorId}`;
     if (!lastBy.has(key) || lastBy.get(key)! < c.date) lastBy.set(key, c.date);
+  }
+
+  // 지난달 — 말일 기준 학생 수 · 그 달에 끝난(반이동 아닌) 수강 = 퇴원생.
+  const prevLast = lastDayOf(input.prevMonth);
+  const prevSet = new Map<string, Set<string>>();
+  const leftSet = new Map<string, Map<string, string>>();
+  for (const h of input.history) {
+    const cls = classById.get(h.classId);
+    const name = input.knownStudents.get(h.studentId);
+    if (!cls || name === undefined) continue;
+    const started = !h.startDate || h.startDate <= prevLast;
+    const openAtEnd = !h.endDate || h.endDate > prevLast || (h.endDate === prevLast && !h.isTransferred);
+    if (started && openAtEnd) prevSet.set(cls.teacherId, (prevSet.get(cls.teacherId) ?? new Set<string>()).add(h.studentId));
+    if (h.endDate && h.endDate.slice(0, 7) === input.prevMonth && !h.isTransferred && !roster.get(cls.teacherId)?.has(h.studentId)) {
+      leftSet.set(cls.teacherId, (leftSet.get(cls.teacherId) ?? new Map<string, string>()).set(h.studentId, name));
+    }
   }
 
   const teachers: HomeroomTeacher[] = [];
@@ -178,6 +211,10 @@ export function buildHomeroomTeachers(input: HomeroomInput): HomeroomTeacher[] {
       classNames: [...(classNames.get(teacherId) ?? [])].sort((a, b) => a.localeCompare(b, "ko")),
       students,
       months: monthsAgg,
+      prevStudents: prevSet.get(teacherId)?.size ?? 0,
+      leftPrev: [...(leftSet.get(teacherId) ?? new Map<string, string>())]
+        .map(([id, name]) => ({ id, name }))
+        .sort((a, b) => a.name.localeCompare(b.name, "ko")),
     });
   }
   return teachers.sort((a, b) => a.name.localeCompare(b.name, "ko"));

@@ -50,7 +50,11 @@ export function HomeroomTeacherRow({ t, showAvg, open, onToggle }: { t: Homeroom
           ))}
         </span>
       </td>
+      <td className="num text-muted-foreground px-2 py-1.5 text-center">{fmt(t.prevStudents)}</td>
       <td className="num px-2 py-1.5 text-center">{fmt(t.students.length)}</td>
+      <td className="num px-2 py-1.5 text-center" title={t.leftPrev.map((s) => s.name).join(", ")}>
+        {t.leftPrev.length > 0 ? <span className="font-bold">{fmt(t.leftPrev.length)}명</span> : <span className="text-muted-foreground">—</span>}
+      </td>
       {t.months.map((m, i) => (
         <td key={i} className="px-2 py-1.5 text-center whitespace-nowrap" title={`담임 상담 ${m.self} · 담임 아닌 직원이 상담 ${m.other} · 미상담 ${m.none}`}>
           <span className="num text-foreground font-medium">

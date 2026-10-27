@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { kstDateOf, kstToday } from "@/lib/date-kst";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
-import { buildHomeroomTeachers, homeroomMonths, isHomeroomConsultClass, type HomeroomStats } from "../homeroom-model";
+import { buildHomeroomTeachers, homeroomMonths, isHomeroomConsultClass, recentMonths, type HomeroomStats } from "../homeroom-model";
 
 type ClassRow = {
   id: string;
@@ -28,6 +28,9 @@ export async function getHomeroomConsultStats(): Promise<HomeroomStats> {
   const today = kstToday();
   const months = homeroomMonths(today); // 2026-10부터(homeroom-model.ts HOMEROOM_START_MONTH)
   const sinceIso = `${months[0]}-01T00:00:00+09:00`;
+  // 지난달 — 학생 수 비교·퇴원생(원장 2026-10-27 *"저번달 학생 수 이번 달 학생 수 전달 퇴원생"*).
+  const prevMonth = recentMonths(today, 2)[0]!;
+  const prevFirst = `${prevMonth}-01`;
 
   const allClasses = await fetchAllPaged<ClassRow>((from, to) => {
     let q = supabase
@@ -56,7 +59,7 @@ export async function getHomeroomConsultStats(): Promise<HomeroomStats> {
           .from("enrollments")
           .select("student_id, class_id, start_date, end_date, on_hold, is_transferred")
           .in("class_id", chunk)
-          .or(`end_date.is.null,end_date.gte.${today}`)
+          .or(`end_date.is.null,end_date.gte.${prevFirst}`)
           .order("id")
           .range(from, to),
     ),
@@ -70,9 +73,11 @@ export async function getHomeroomConsultStats(): Promise<HomeroomStats> {
   );
   const active = new Set(users.filter((u) => u.status === "active").map((u) => u.id));
   const studentIds = [...new Set(live.map((e) => e.student_id))];
+  // 이름은 지난달에 끝난 학생까지(퇴원생 명단) — 상담 조회는 지금 재원생만.
+  const nameIds = [...new Set(enrollRows.map((e) => e.student_id))];
 
   const [students, consults] = await Promise.all([
-    fetchInChunks<{ id: string; name: string; grade: string | null; status: string | null; is_test: boolean | null }>(studentIds, (chunk) =>
+    fetchInChunks<{ id: string; name: string; grade: string | null; status: string | null; is_test: boolean | null }>(nameIds, (chunk) =>
       supabase.from("students").select("id, name, grade, status, is_test").in("id", chunk),
     ),
     fetchAllPagedInChunks<{ id: string; student_id: string; counselor_id: string | null; consulted_at: string }>(studentIds, (chunk, from, to) =>
@@ -112,10 +117,19 @@ export async function getHomeroomConsultStats(): Promise<HomeroomStats> {
     staffNames: new Map([...users, ...counselors].map((u) => [u.id, u.display_name?.trim() || "이름 없는 직원"])),
     enrollments: live.map((e) => ({ studentId: e.student_id, classId: e.class_id, startDate: e.start_date })),
     students: enrolled,
+    history: enrollRows.map((e) => ({
+      studentId: e.student_id,
+      classId: e.class_id,
+      startDate: e.start_date,
+      endDate: e.end_date,
+      isTransferred: !!e.is_transferred,
+    })),
+    knownStudents: new Map(students.filter((s) => !s.is_test).map((s) => [s.id, s.name])),
+    prevMonth,
     consults: consults.flatMap((c) => {
       const date = kstDateOf(c.consulted_at);
       return date ? [{ studentId: c.student_id, counselorId: c.counselor_id, date }] : [];
     }),
   });
-  return { today, months, teachers, retired };
+  return { today, months, prevMonth, teachers, retired };
 }
