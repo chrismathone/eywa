@@ -7,7 +7,8 @@ import {
   consultationsStatsHref,
   type ConsultationListParams,
 } from "@/features/consultations/list-href";
-import { getConsultationGap, getConsultationStats } from "@/features/consultations/server/stats";
+import { getConsultationGap, getConsultationStats, getRetiredStaffIds } from "@/features/consultations/server/stats";
+import { getHomeroomConsultStats } from "@/features/consultations/server/homeroom";
 import { loadConsultationStatsPrefs } from "@/features/consultations/server/stats-prefs";
 import type { ConsultationListFilters } from "@/features/consultations/server/queries";
 import { statsScopeText } from "@/features/consultations/stats-scope";
@@ -19,6 +20,7 @@ import {
 } from "@/features/consultations/stats-model";
 import { StatsPanelClient } from "./stats-panel-client";
 import { StatsGap } from "./stats-gap";
+import { StatsHomeroom } from "./stats-homeroom";
 import { STATS_PANEL_GRID } from "./stats-skeleton";
 
 const DIM_LABEL: Record<StatsDimKey, string> = {
@@ -56,7 +58,18 @@ export async function ConsultationStatsPanel({
   // 🔴 집계가 실패해도 **화면 틀은 산다** — 여기서 던지면 가장 가까운 오류 경계가 툴바('목록으로')째 갈아 끼운다. 본문 자리에만 한 줄 알린다.
   let loaded;
   try {
-    loaded = await Promise.all([getConsultationStats(filters), getConsultationGap(), loadConsultationStatsPrefs(), getTenantSettings()]);
+    loaded = await Promise.all([
+      getConsultationStats(filters),
+      getConsultationGap(),
+      loadConsultationStatsPrefs(),
+      getTenantSettings(),
+      getRetiredStaffIds(),
+      // 담임별 현황은 실패해도 위 통계는 산다 — 그 카드 자리에만 알린다.
+      getHomeroomConsultStats().catch((e: unknown) => {
+        console.error("[consultations] 담임별 상담 현황 조회 실패:", e instanceof Error ? e.message : String(e));
+        return null;
+      }),
+    ]);
   } catch (e) {
     const raw = e instanceof Error ? e.message : String(e);
     console.error("[consultations] 통계 화면 조회 실패:", raw);
@@ -66,7 +79,7 @@ export async function ConsultationStatsPanel({
       </p>
     );
   }
-  const [stats, gap, prefs, settings] = loaded;
+  const [stats, gap, prefs, settings, retiredIds, homeroom] = loaded;
   const subjects = buildSubjectMaps(settings.operations.subjects);
   // 분해 줄 = 이 화면 안에서 거르기 / 지표 옆 링크 = 목록을 그 값으로 열기.
   const statsHref = (patch: Partial<ConsultationListParams>) => consultationsStatsHref(listParams, patch);
@@ -117,11 +130,17 @@ export async function ConsultationStatsPanel({
   const dims: StatsDimView[] = stats.full
     ? STATS_DIMS.filter((d) => (d !== "source" || syncOn) && (d !== "class" || classOn)).map((d) => {
         const bucket = stats.dims[d];
+        const items = bucket?.items ?? [];
+        // 퇴사자는 상담사별 줄에서 뺀다(원장 2026-10-27) — 뺀 사람·건수는 각주에 밝힌다. 화면은 12줄까지(RPC는 넉넉히 준다).
+        const retired = d === "counselor" ? items.filter((it) => it.k !== null && retiredIds.has(it.k)) : [];
+        const kept = retired.length ? items.filter((it) => !(it.k !== null && retiredIds.has(it.k))) : items;
+        const rows = kept.slice(0, 12);
         return {
           key: d,
           label: DIM_LABEL[d],
-          distinct: bucket?.distinct ?? 0,
-          rows: (bucket?.items ?? []).map((it) => ({ key: it.k ?? "∅", n: it.n, m: it.m ?? [], w: it.w ?? [], ...row(d, it) })),
+          distinct: Math.max(rows.length, (bucket?.distinct ?? 0) - retired.length),
+          rows: rows.map((it) => ({ key: it.k ?? "∅", n: it.n, m: it.m ?? [], w: it.w ?? [], ...row(d, it) })),
+          excluded: retired.length ? { people: retired.length, n: retired.reduce((a, it) => a + it.n, 0) } : null,
         };
       })
     : [];
@@ -146,6 +165,7 @@ export async function ConsultationStatsPanel({
         doneHref={listHref({ urg: "done" })}
       />
       <StatsGap gap={gap} teacherScoped={teacherScoped} />
+      <StatsHomeroom data={homeroom} teacherScoped={teacherScoped} />
     </section>
   );
 }

@@ -403,7 +403,7 @@ export function consultationSubjectValues(filters: Pick<ConsultationListFilters,
  * ⚠️ distinct는 PostgREST가 못 하므로 counselor_id만 **전건 페이지네이션**으로 받아 접는다(B2 — bare select 금지).
  *    컬럼 하나(uuid)뿐이라 가볍고, 요청 캐시(React cache)라 한 화면에서 한 번만 돈다.
  */
-export const getConsultationCounselorOptions = cache(async (): Promise<{ id: string; name: string }[]> => {
+export const getConsultationCounselorOptions = cache(async (): Promise<{ id: string; name: string; retired: boolean }[]> => {
   const supabase = await createClient();
   // 강사는 **자기가 쓴 상담만** 보므로 이 필터에 고를 것이 하나뿐이다 — 선택지를 만들지 않는다(화면도 줄을 감춘다).
   if (await effectiveTeacherId()) return [];
@@ -418,13 +418,14 @@ export const getConsultationCounselorOptions = cache(async (): Promise<{ id: str
   );
   const ids = [...new Set(rows.map((r) => r.counselor_id).filter((v): v is string => !!v))];
   if (ids.length === 0) return [];
-  const users = await fetchInChunks<{ id: string; display_name: string | null }>(ids, (chunk) =>
-    supabase.from("users").select("id, display_name").in("id", chunk),
+  const users = await fetchInChunks<{ id: string; display_name: string | null; status: string | null }>(ids, (chunk) =>
+    supabase.from("users").select("id, display_name, status").in("id", chunk),
   );
   return users
     // 이름이 없는 계정은 세우지 않는다 — 빈 라벨을 고르면 무엇을 고른 건지 알 수 없다.
     .filter((u) => !!u.display_name?.trim())
-    .map((u) => ({ id: u.id, name: u.display_name!.trim() }))
+    // retired = 퇴사 — 통계 화면은 고르기에서 뺀다(원장 2026-10-27). 목록은 옛 기록을 찾을 수 있게 그대로 둔다.
+    .map((u) => ({ id: u.id, name: u.display_name!.trim(), retired: u.status === "inactive" }))
     .sort((a, b) => a.name.localeCompare(b.name, "ko"));
 });
 

@@ -36,6 +36,8 @@ export function StatsBreakdown({
   if (dims.length === 0) return null;
   const view = dims.find((d) => d.key === dim) ?? dims[0]!;
   const shown = view.rows.reduce((a, r) => a + r.n, 0);
+  const excludedN = view.excluded?.n ?? 0;
+  const restCount = view.distinct - view.rows.length;
   return (
     // flex-col + 바닥 줄 mt-auto — 같은 줄 카드(상담 공백)가 더 길어 이 카드가 늘어나도 기준 문구는 카드 바닥에 붙는다.
     <div className="border-line @container/bd flex flex-col gap-2 rounded-2xl border p-3 @5xl/panel:col-span-2">
@@ -85,7 +87,8 @@ export function StatsBreakdown({
       )}
       <p className="text-muted-foreground mt-auto text-xs break-keep">
         건수·비율 = 위 기간·범위 안 {fmt(total)}건 기준 · 작은 막대 = {unit === "week" ? "최근 12주" : "최근 12개월"}
-        {view.distinct > view.rows.length ? ` · 상위 ${view.rows.length}개(외 ${view.distinct - view.rows.length}개 ${fmt(total - shown)}건)` : ""}
+        {restCount > 0 ? ` · 상위 ${view.rows.length}개(외 ${restCount}개 ${fmt(total - shown - excludedN)}건)` : ""}
+        {view.excluded ? ` · 퇴사자 ${view.excluded.people}명(${fmt(excludedN)}건) 제외` : ""}
       </p>
     </div>
   );
