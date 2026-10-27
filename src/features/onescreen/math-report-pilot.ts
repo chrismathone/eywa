@@ -207,6 +207,20 @@ export function understandingPresetOf(rows: readonly { off: boolean; score: numb
   return UNDERSTANDING_PRESETS.find((p) => p.score === first)?.key ?? null;
 }
 
+/**
+ * 일괄 입력에서 뺄 소단원 후보 — 대상 행들의 오늘 진도에 나온 소단원(처음 나온 순서) + 몇 행에 있는지(원장 2026-10-27 *"몇개 선택 빼기"*).
+ * `extra` = 이번 일괄이 새로 넣을 진도(그 진도가 들어갈 행 수) — 같은 차례에 진도를 바꾸면 그 소단원도 고를 수 있게.
+ */
+export function bulkUnderstandingLessons(
+  todays: readonly (string | null | undefined)[],
+  extra?: { today: string; rows: number },
+): { lesson: string; title: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const today of todays) for (const l of pilotLessons(today)) counts.set(l, (counts.get(l) ?? 0) + 1);
+  if (extra) for (const l of pilotLessons(extra.today)) counts.set(l, Math.max(counts.get(l) ?? 0, extra.rows));
+  return [...counts].map(([lesson, count]) => ({ lesson, title: lessonTitle(lesson), count }));
+}
+
 /** 강사가 점수를 하나라도 직접 매겼나('빈 칸만' 일괄 입력 판정). */
 export function hasStoredUnderstanding(today: string | null | undefined, st: UnderstandingState | undefined): boolean {
   const s = st ?? EMPTY_UNDERSTANDING;

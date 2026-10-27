@@ -11,6 +11,7 @@ import { BulkPresentButton, type BulkPresentProps } from "./bulk-present-button"
 import { planBulkAttendance } from "../bulk-attendance";
 import { moveInOrder } from "../student-order";
 import { resolveStudyGrade } from "../curriculum";
+import { isMathReportPilot } from "../math-report-pilot";
 import type { OneScreenStudent } from "../types";
 import type { SubjectReport } from "./report-card";
 import { BulkApplyPopover } from "./bulk-apply";
@@ -297,6 +298,9 @@ export function OneScreenGrid({
                   const className = rowClassName(r.subject);
                   return className ? [{ className, subjectKey: r.subject.subjectKey ?? "math" }] : [];
                 }),
+                understandingTodays: copyRows
+                  .filter((r) => isMathReportPilot(r.student.id, r.subject.subjectKey))
+                  .map((r) => r.subject.today ?? ""),
               }}
               subjects={bulkSubjects}
               studyGrade={bulkStudyGrade}

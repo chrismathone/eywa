@@ -38,6 +38,8 @@ export type BulkFieldConfig = {
    * (시험 대비처럼 여러 반에 일부러 같은 내용을 넣는 때가 있다). 안 주면 묻지 않는다.
    */
   classRows?: readonly { className: string; subjectKey: string }[];
+  /** 이해도를 쓰는 대상 행(새 수학 보고서)의 오늘 진도 — 일괄에서 뺄 소단원 후보를 만든다(원장 2026-10-27). */
+  understandingTodays?: readonly string[];
 };
 export type BulkVideoCheckPlan = { cells: number; overwrite: number };
 

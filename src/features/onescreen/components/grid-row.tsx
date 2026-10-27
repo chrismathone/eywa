@@ -20,6 +20,7 @@ import {
 import { evaluateSendGate } from "../send-gate";
 import { hasPilotOneLine, isMathReportPilot, pilotCanEdit, pilotNeedsAutoWrite, understandingPresetOf, understandingRows } from "../math-report-pilot";
 import { UnderstandingPresetButtons } from "./understanding-presets";
+import { UnderstandingPopover } from "./understanding-popover";
 import { attitudeNeedsNote, isHomeworkMissed, needsAttitudeNote, needsHomeworkMissReason, pilotRowSig, testSkipComplete, type DailyTestSkip } from "../math-report-pilot-sections";
 import { hasMakeupAbsenceDate, needsMakeupReason } from "../attendance-sentence";
 import { DailyTestSkipPanel } from "./daily-test-skip-panel";
@@ -100,6 +101,9 @@ export type GridFieldHandlers = {
   onProgressMode: (studentId: string, subjectIndex: number, mode: string | null) => void;
   /** 이해도 단계 버튼 — 그 행 소단원 전부에 같은 점수(카드와 같은 setter). 없으면 버튼을 안 그린다. */
   onUnderstandingAll?: (studentId: string, subjectName: string, score: number) => void;
+  /** 소단원 하나의 점수(null = 기본값으로) · 빼기/되살리기 — 카드 패널과 같은 setter. 없으면 '소단원별' 창을 안 그린다. */
+  onUnderstandingScore?: (studentId: string, subjectName: string, lesson: string, score: number | null) => void;
+  onUnderstandingToggle?: (studentId: string, subjectName: string, lesson: string, off: boolean) => void;
   onStudyGrade: (studentId: string, grade: string) => void;
   // 🔴 평가값 5종은 **행(수업) 단위**다(2026-08-13) — 보강은 정규와 따로 나가는 다른 보고서라 값도 독립이어야
   //    한다(원장 제보). 그래서 학생 id만이 아니라 **행 이름**까지 받는다. 해석·폴백은 row-fields.ts 단일 소스.
@@ -323,6 +327,7 @@ export function GridBodyRow({
   //    버튼만 살려 두면 눌러 보고서야 이유를 아는 거짓 어포던스다(원장 2026-07-30 제보의 핵심).
   // 수학 보고서 시범(테스트 학생 한정, math-report-pilot.ts) — 멘트·추세는 보기만, 자동작성 글 그대로여야 발송(카드와 같은 판정).
   const pilot = isMathReportPilot(student.id, subject.subjectKey);
+  const uRows = pilot ? understandingRows(subject.today, subject.understanding) : [];
   const pilotLocked = pilot && !pilotCanEdit(rep?.autoDraft); // 자동작성 전엔 잠금(2026-10-23)
   const makeupFacts = rowMakeupFacts(student, subject); // 보강 재료(결석 날짜·시간·사유) — 게이트와 보강 사유 칸이 같은 값을 본다
   const draftLead = splitLevelsLead(rep?.draft); // 맨 위 수업 평가 표 = 읽기 전용(원장 2026-10-26)
@@ -665,14 +670,26 @@ export function GridBodyRow({
           locked={rowLocked}
         />
         {/* 이해도 단계 버튼 — 카드와 같은 버튼·같은 함수(원장 2026-10-26 *"카드와 표에서 동일하게"*). 새 수학 보고서 행이고 진도가 있을 때만. */}
-        {pilot && fields.onUnderstandingAll && understandingRows(subject.today, subject.understanding).some((r) => !r.off) ? (
-          <div className="mt-1">
-            <UnderstandingPresetButtons
-              compact
-              disabled={rowLocked}
-              active={understandingPresetOf(understandingRows(subject.today, subject.understanding))}
-              onPick={(score) => fields.onUnderstandingAll?.(student.id, subject.name, score)}
-            />
+        {/* 소단원별 — 소단원마다 다른 점수·빼기·되살리기(카드와 같은 패널, 원장 2026-10-27). 다 뺐어도 되살릴 수 있게 소단원이 있으면 선다. */}
+        {pilot && fields.onUnderstandingAll && uRows.length ? (
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            {uRows.some((r) => !r.off) ? (
+              <UnderstandingPresetButtons
+                compact
+                disabled={rowLocked}
+                active={understandingPresetOf(uRows)}
+                onPick={(score) => fields.onUnderstandingAll?.(student.id, subject.name, score)}
+              />
+            ) : null}
+            {fields.onUnderstandingScore && fields.onUnderstandingToggle ? (
+              <UnderstandingPopover
+                rows={uRows}
+                disabled={rowLocked}
+                onScore={(lesson, score) => fields.onUnderstandingScore?.(student.id, subject.name, lesson, score)}
+                onToggle={(lesson, off) => fields.onUnderstandingToggle?.(student.id, subject.name, lesson, off)}
+                onAll={(score) => fields.onUnderstandingAll?.(student.id, subject.name, score)}
+              />
+            ) : null}
           </div>
         ) : null}
       </td>

@@ -501,6 +501,8 @@ export function OneScreenClient({
   const fontZoom = ONESCREEN_FONT_SIZE_ZOOM[fontSize];
   // 보강 학생 중 '이전 진도'를 이미 불러온 학생 id — 버튼 숨김·재요청 방지.
   const [prevLoaded, setPrevLoaded] = useState<Set<string>>(new Set());
+  const [makeupPrevBusy, setMakeupPrevBusy] = useState(false); // 보강 학생 이전 진도 일괄 불러오기 중
+  const makeupPrevBusyRef = useRef(false); // 토스트 버튼은 옛 렌더의 함수를 들고 있다 — 중복 실행은 ref로 막는다
   // 진입 시 반·학생 지정(2026-08-07) — '오늘 ECS' 카드에서 넘어올 때 그 반(·그 학생)에서 시작한다.
   // ⚠️ 값 검증은 **서버**가 한다(그 날짜 로스터에 실제로 있는 반/학생만 내려온다) — 여기선 그대로 쓴다.
   const [selId, setSelId] = useState<string>(initialStudentId ?? initial[0]?.id ?? "");
@@ -1839,11 +1841,12 @@ export function OneScreenClient({
     return true;
   }
   // 보강 학생 '이전 진도 불러오기' — 직전 회차를 당겨 prev/prevReport/prevScore를 채운다(세션 저장 없음).
-  async function loadMakeupPrev(studentId: string) {
+  //   silent = 일괄 불러오기(아래)가 결과를 모아 한 번에 알린다.
+  async function loadMakeupPrev(studentId: string, silent = false): Promise<"loaded" | "none" | "fail"> {
     const res = await loadMakeupHistory(studentId, date || undefined); // 조회 중인 날짜 기준 직전 회차(과거 백필 정합)
     if (!res.ok || !res.bySubject) {
-      toast.error(res.error ?? t("os.c.prevFail"));
-      return;
+      if (!silent) toast.error(res.error ?? t("os.c.prevFail"));
+      return "fail";
     }
     const bySubject = res.bySubject;
     const prevScore = res.prevScore;
@@ -1866,9 +1869,30 @@ export function OneScreenClient({
       }),
     );
     setPrevLoaded((prev) => new Set(prev).add(studentId));
-    toast.success(
-      Object.keys(bySubject).length ? t("os.c.prevLoaded") : t("os.c.prevNone"),
-    );
+    const found = Object.keys(bySubject).length > 0;
+    if (!silent) toast.success(found ? t("os.c.prevLoaded") : t("os.c.prevNone"));
+    return found ? "loaded" : "none";
+  }
+  // 보강 학생 이전 진도 **일괄** 불러오기(원장 2026-10-27 *"보강학생이 따로 있으면 안내하고 버튼도"*) — 표의 '이전값 가져오기'는
+  // 이전 회차가 있는 행만 채운다. 보강 학생은 그 회차를 따로 불러와야 해서, 안 불러온 보강 학생이 있으면 표 위에 안내 버튼이 선다.
+  async function loadMakeupPrevAll(ids: string[]) {
+    if (makeupPrevBusyRef.current || !ids.length) return;
+    makeupPrevBusyRef.current = true;
+    setMakeupPrevBusy(true);
+    try {
+      let loaded = 0;
+      let failed = 0;
+      for (const id of ids) {
+        const r = await loadMakeupPrev(id, true); // 한 명씩 — 서버 액션은 어차피 줄 서서 돈다
+        if (r === "loaded") loaded++;
+        else if (r === "fail") failed++;
+      }
+      if (failed) toast.error(tf("os.c.makeupPrevAllFail", { n: failed }));
+      if (failed < ids.length) toast.success(tf("os.c.makeupPrevAllDone", { n: loaded, none: ids.length - loaded - failed }));
+    } finally {
+      makeupPrevBusyRef.current = false;
+      setMakeupPrevBusy(false);
+    }
   }
   function setScoreFor(studentId: string, subjectName: string, which: "daily" | "check", v: number | null) {
     patchRowEval(studentId, subjectName, (su) => ({ ...su, [which === "daily" ? "dailyScore" : "checkScore"]: v }));
@@ -3281,6 +3305,8 @@ export function OneScreenClient({
       if (p.set.progressMode !== undefined) setProgressModeFor(p.studentId, p.subjectIndex, p.set.progressMode);
       // 이해도 — 진도 **다음에** 넣는다(같은 차례에 바꾼 진도의 소단원에 채워지게, setAllUnderstandingFor는 patch 안의 행 값을 읽는다).
       if (p.set.understanding !== undefined) setAllUnderstandingFor(p.studentId, p.subjectName, p.set.understanding);
+      // 뺄 소단원(원장 2026-10-27) — 계획이 그 행 진도에 있는 것만 골라 왔다.
+      for (const lesson of p.set.understandingOff ?? []) toggleUnderstandingFor(p.studentId, p.subjectName, lesson, true);
       // 2026-10-02 추가 칸 — 전부 **그 행에만**(행 값). 문항수를 먼저 바꾸고 점수를 넣는다(문항수 변경이 점수를 깎으므로).
       if (p.set.note !== undefined) setNoteFor(p.studentId, p.subjectName, p.set.note);
       if (p.set.dailyMax !== undefined) setMaxFor(p.studentId, p.subjectName, "daily", p.set.dailyMax);
@@ -3591,8 +3617,15 @@ export function OneScreenClient({
         currentDraft: reportsRef.current[r.student.id]?.[r.subject.name]?.draft ?? "",
       })),
     );
+    // 보강 학생은 이전 회차를 따로 불러와야 채워진다 — 안 불러온 학생이 대상에 있으면 알리고 그 자리에서 불러오게 한다(원장 2026-10-27).
+    const makeupPending = [...new Set(rows.filter((r) => r.student.isMakeup && !prevLoaded.has(r.student.id)).map((r) => r.student.id))];
+    if (makeupPending.length) {
+      toast.message(tf("os.c.makeupPrevPending", { n: makeupPending.length }), {
+        action: { label: t("os.c.makeupPrevLoadNow"), onClick: () => void loadMakeupPrevAll(makeupPending) },
+      });
+    }
     if (!plan.length && !commentPlan.length) {
-      toast.message(t("os.c.prevFillNone"));
+      if (!makeupPending.length) toast.message(t("os.c.prevFillNone"));
       return;
     }
     let filledCells = 0;
@@ -4793,6 +4826,9 @@ export function OneScreenClient({
             onProgress: setProgressFor,
             onProgressMode: setProgressModeFor,
             onUnderstandingAll: setAllUnderstandingFor, // 표에서도 카드와 같은 이해도 단계 버튼(2026-10-26)
+            // 소단원별 점수·빼기 — 카드 패널과 같은 setter(원장 2026-10-27 *"학생별 상세에서 각각 변하게"*).
+            onUnderstandingScore: setUnderstandingScoreFor,
+            onUnderstandingToggle: toggleUnderstandingFor,
             onStudyGrade: setStudyGradeFor,
             onScore: setScoreFor,
             onMax: setMaxFor,
@@ -4847,6 +4883,18 @@ export function OneScreenClient({
             onBulkApply: bulkApplyValues,
             onCopyFirstRow: copyFirstRowDown,
             onBulkImportPrev: bulkImportPrev,
+            // 안 불러온 보강 학생(표시 중인 반) — 있으면 표 위에 안내 + 일괄 불러오기 버튼(원장 2026-10-27).
+            makeupPrev: (() => {
+              if (readonlyView) return undefined;
+              const ids = [
+                ...new Set(
+                  buildGridRows(visible)
+                    .filter((r) => rowInClass(r.subject, activeClassFilter) && r.student.isMakeup && !prevLoaded.has(r.student.id))
+                    .map((r) => r.student.id),
+                ),
+              ];
+              return ids.length ? { count: ids.length, busy: makeupPrevBusy, onLoad: () => void loadMakeupPrevAll(ids) } : undefined;
+            })(),
             onBulkAttach: (keys, files) => void bulkAttach(keys, files),
           }}
           uploadingAttKey={uploadingAttKey}
