@@ -96,7 +96,9 @@ export function AttendancePills({
   }
   return (
     <span className="inline-flex flex-wrap items-center gap-x-1 gap-y-0.5">
-      <span className="inline-flex gap-0.5" role="group" aria-label={tf("os.att.group", { name: studentName })}>
+      {/* 칸이 모자라면 알약째 다음 줄로(글자를 쪼개지 않는다) — 표 이름 칸(144px)에서 사유 점(●)이 붙은 알약 하나만으로
+          세 알약이 넘쳐 '출/석'처럼 두 줄로 접혔다(2026-10-27 표 전수검사). */}
+      <span className="inline-flex flex-wrap gap-0.5" role="group" aria-label={tf("os.att.group", { name: studentName })}>
         {BASIC.map((s) => (
           <StatusPill
             key={s}
@@ -170,7 +172,7 @@ function StatusPill({
             ? tf("os.att.already", { label })
             : tf("os.att.mark", { label })
       }
-      className={`rounded-pill px-1.5 py-px text-xs font-bold transition disabled:opacity-50 ${
+      className={`rounded-pill shrink-0 px-1.5 py-px text-xs font-bold whitespace-nowrap transition disabled:opacity-50 ${
         active ? ON_CLS[status] : "border-line text-text-faint hover:bg-bg-soft hover:text-text-dim border"
       }`}
     >
