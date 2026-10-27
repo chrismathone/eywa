@@ -39,7 +39,7 @@ function cleanReason(note: string | null | undefined): string {
 /**
  * 보강의 재료(원장 2026-10-26 *"보강 예약 혹은 보강이였으면 0월0일자 결석 보강 0시간 진행 과 같은 안내 멘트"* + *"보강이면 왜 보강을 들었는지
  * 선생님들한테 기입 받게"*). 결석 날짜·시간은 **이미 있는 기록**(보강 예약 `makeupReserved` — 결석분 날짜·시작·끝)에서 오고,
- * 그걸 못 찾을 때만 강사가 적은 `reason`이 붙는다(예약된 보강은 사유를 다시 묻지 않는다 — `needsMakeupReason`).
+ * 그걸 못 찾을 때만 강사가 적은 `reason`이 붙는다(예약된 보강은 사유를 다시 묻지 않는다 · 사유는 선택 — 비어도 발송된다, 원장 2026-10-27).
  */
 export type MakeupFacts = {
   /** 이 줄 자체가 보강 줄인가('(보강)' 줄). false = 정규 줄에 보강 예약이 합쳐진 '정규+보강'. */
@@ -115,11 +115,6 @@ function koDuration(minutes: number | null, units: number | null): string {
 /** 결석분 날짜를 적을 수 있나 — 하나라도 날짜 형식이면. */
 export function hasMakeupAbsenceDate(makeup: Pick<MakeupFacts, "absenceDates"> | null | undefined): boolean {
   return (makeup?.absenceDates ?? []).some((d) => koDate(d) !== "");
-}
-
-/** 보강 줄인데 결석 날짜를 몰라 강사 사유가 필요한가(발송 게이트). */
-export function needsMakeupReason(makeup: MakeupFacts | null | undefined): boolean {
-  return !!makeup?.row && !hasMakeupAbsenceDate(makeup) && makeup.reason.trim() === "";
 }
 
 /** 보강 문장 본체 — "10월 19일 결석에 대한 보강 수업을 1시간 진행했습니다" (마침표·사유 전). */

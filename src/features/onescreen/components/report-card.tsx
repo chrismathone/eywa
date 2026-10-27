@@ -54,8 +54,6 @@ import { attendanceMarkBadgeClass, attendanceMarkLabel } from "../attendance-mar
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { hasPilotOneLine, isMathReportPilot, pilotCanEdit, pilotNeedsAutoWrite } from "../math-report-pilot";
 import { needsAttitudeNote, needsHomeworkMissReason, pilotRowSig, testSkipComplete } from "../math-report-pilot-sections";
-import { needsMakeupReason } from "../attendance-sentence";
-import { rowMakeupFacts } from "../report-comment";
 import type { SheetLang } from "@/features/teacher-view/i18n";
 import { ReservedMakeupTag } from "./reserved-makeup-tag";
 import { MakeupSwitchButton } from "./makeup-switch-button";
@@ -348,7 +346,6 @@ export function ReportCard({
     needsTestReason: pilot && !testSkipComplete(subject.dailyTestSkip), // 일일 테스트 '없음'이면 사유 필수(원장 2026-10-22)
     needsHomeworkReason: pilot && needsHomeworkMissReason(cardEval.homework, subject.homeworkMissReason), // 숙제 미제출이면 사유 필수(원장 2026-10-23)
     needsAttitudeNote: pilot && needsAttitudeNote(cardEval.attitude, subject.attitudeNote), // 태도 하·중하면 의견 3줄 이상(원장 2026-10-26)
-    needsMakeupReason: needsMakeupReason(rowMakeupFacts(student, subject)), // 결석 날짜 모르는 보강 줄이면 사유(원장 2026-10-26)
     readonlyView, // 열람 전용 — 사유 라벨까지 게이트가 만든다(표뷰와 동일)
     recallPending: isRecallInFlight(liveStatus ?? null),
     // 발송 대기·게시 중 — 워커 결과 전까지 다시 못 누른다(표뷰와 같은 판정, 원장 2026-09-29).

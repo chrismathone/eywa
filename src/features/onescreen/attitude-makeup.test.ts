@@ -5,7 +5,6 @@ import {
   attendanceMarkOf,
   attendanceSentence,
   makeupFactsOf,
-  needsMakeupReason,
 } from "./attendance-sentence";
 import {
   attitudeNoteComplete,
@@ -51,16 +50,15 @@ describe("보강 출결 문장(원장 2026-10-26)", () => {
   it("예약에서 결석 날짜·시간을 읽어 문장을 만든다 · 사유를 묻지 않는다", () => {
     const m = row();
     expect(attendanceSentence("makeup", null, m)).toBe("오늘은 10월 19일 결석에 대한 보강 수업을 1시간 진행했습니다.");
-    expect(needsMakeupReason(m)).toBe(false);
   });
   it("사유가 있으면 끝에 붙는다", () => {
     expect(attendanceSentence("present", null, row({ reason: "가족 여행" }))).toBe(
       "오늘은 10월 19일 결석에 대한 보강 수업을 1시간 진행했습니다(사유: 가족 여행).",
     );
   });
-  it("예약이 없으면 날짜를 몰라 사유가 필수 · 시간은 수업타임", () => {
+  it("예약이 없으면 날짜를 몰라 사유가 있으면 붙이고, 없어도 문장은 선다(원장 2026-10-27 — 사유는 발송 조건 아님)", () => {
     const m = row({ reserved: [], units: 1.5 });
-    expect(needsMakeupReason(m)).toBe(true);
+    expect(attendanceSentence("makeup", null, m)).toBe("오늘은 보강 수업에 출석했습니다.");
     expect(attendanceSentence("makeup", null, { ...m!, reason: "결석 보충" })).toBe("오늘은 보강 수업에 출석했습니다(사유: 결석 보충).");
   });
   it("'정규+보강'은 정규 문장 뒤에 한 문장 · 정규 줄은 손대지 않는다", () => {
@@ -71,7 +69,6 @@ describe("보강 출결 문장(원장 2026-10-26)", () => {
     expect(attendanceSentence("present", null, merged)).toBe(
       "오늘 수업에 정상적으로 출석했습니다. 10월 21일 결석에 대한 보강 수업도 1시간 30분 함께 진행했습니다.",
     );
-    expect(needsMakeupReason(merged)).toBe(false);
     expect(makeupFactsOf({ isMakeupStudent: false, rowMakeup: false, classId: "c1", reserved, units: 1, reason: "" })).toBeNull();
   });
   it("머리 표시 — 날짜·사유가 붙은 보강은 '보강' + 띠도 세운다", () => {

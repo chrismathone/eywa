@@ -869,7 +869,7 @@ export async function saveAndQueueClassnote(
     ? // 영어 — '사랑의 한마디' 필수(원장 2026-10-26). 영어 글은 템플릿이라 끝에 붙었는지는 보지 않고 적었는지만 본다.
       input.subject === "english" && !input.jjSheet && !(input.pilotOneLine ?? "").trim()
       ? ENGLISH_ONELINE_REQUIRED_ERROR
-      : // 영어 보강 줄 — 결석 날짜를 몰라 보강 사유가 필요한데 비었다(화면이 판정해 싣는다, 2026-10-26).
+      : // 영어 사유 조건(화면이 판정해 싣는다) — 보강 사유는 2026-10-27부터 조건이 아니라 지금은 해당 없음(옛 화면 탭만 false를 싣는다).
         input.subject === "english" && input.pilotCheck && !input.pilotCheck.reasonsOk
         ? PILOT_REASON_REQUIRED_ERROR
         : null

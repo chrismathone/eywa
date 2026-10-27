@@ -22,7 +22,7 @@ import { hasPilotOneLine, isMathReportPilot, pilotCanEdit, pilotNeedsAutoWrite, 
 import { UnderstandingPresetButtons } from "./understanding-presets";
 import { UnderstandingPopover } from "./understanding-popover";
 import { attitudeNeedsNote, isHomeworkMissed, needsAttitudeNote, needsHomeworkMissReason, pilotRowSig, testSkipComplete, type DailyTestSkip } from "../math-report-pilot-sections";
-import { hasMakeupAbsenceDate, needsMakeupReason } from "../attendance-sentence";
+import { hasMakeupAbsenceDate } from "../attendance-sentence";
 import { DailyTestSkipPanel } from "./daily-test-skip-panel";
 import { HomeworkMissReasonInput } from "./homework-miss-reason";
 import { ReasonNoteInput } from "./reason-note-input";
@@ -351,7 +351,6 @@ export function GridBodyRow({
     needsTestReason: pilot && !testSkipComplete(subject.dailyTestSkip), // 일일 테스트 '없음'이면 사유 필수(원장 2026-10-22)
     needsHomeworkReason: pilot && needsHomeworkMissReason(rowEval.homework, subject.homeworkMissReason), // 숙제 미제출이면 사유 필수(원장 2026-10-23)
     needsAttitudeNote: pilot && needsAttitudeNote(rowEval.attitude, subject.attitudeNote), // 태도 하·중하면 의견 3줄 이상(원장 2026-10-26)
-    needsMakeupReason: needsMakeupReason(makeupFacts), // 결석 날짜 모르는 보강 줄이면 사유(원장 2026-10-26)
     readonlyView: gen.readonlyView, // 열람 전용 — 사유 라벨("열람 전용")까지 게이트가 만든다
     // 발송 대기·게시 중 — 워커 결과 전까지 다시 못 누른다(카드뷰와 같은 판정, 원장 2026-09-29).
     sendInFlight: liveStatus === "queued" || liveStatus === "processing",

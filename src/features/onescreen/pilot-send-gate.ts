@@ -8,16 +8,14 @@
  */
 import { hasPilotOneLine, isMathReportPilot, pilotNeedsAutoWrite } from "./math-report-pilot";
 import { needsAttitudeNote, needsHomeworkMissReason, pilotRowSig, testSkipComplete } from "./math-report-pilot-sections";
-import { needsMakeupReason } from "./attendance-sentence";
-import { rowMakeupFacts } from "./report-comment";
 import { isJjSheetDraft } from "./jj-books";
 import { resolveRowFields } from "./row-fields";
 import type { OneScreenStudent } from "./types";
 
-export type PilotSendBlock = "autowrite" | "oneline" | "testReason" | "homeworkReason" | "attitudeNote" | "makeupReason";
+export type PilotSendBlock = "autowrite" | "oneline" | "testReason" | "homeworkReason" | "attitudeNote";
 
 /** 사유·의견 칸이 모자라 막는 조건 — 서버 `pilotCheck.reasonsOk`가 이것들을 본다. */
-export const REASON_BLOCKS: readonly PilotSendBlock[] = ["testReason", "homeworkReason", "attitudeNote", "makeupReason"];
+export const REASON_BLOCKS: readonly PilotSendBlock[] = ["testReason", "homeworkReason", "attitudeNote"];
 
 type RowReport = { draft?: string | null; autoDraft?: string | null; pilotFactsSig?: string; templateId?: string } | null | undefined;
 
@@ -48,7 +46,7 @@ export function pilotSendBlocks(student: OneScreenStudent, subjectName: string, 
   if (pilot && needsHomeworkMissReason(ev.homework, su.homeworkMissReason)) out.push("homeworkReason");
   // 수업 태도 하·중하 → 강사 의견 3줄 이상(새 수학 보고서, 2026-10-26).
   if (pilot && needsAttitudeNote(ev.attitude, su.attitudeNote)) out.push("attitudeNote");
-  // 보강 줄인데 결석 날짜를 예약에서 못 찾았다 → 보강 사유(수학·영어, 2026-10-26).
-  if (needsMakeupReason(rowMakeupFacts(student, su))) out.push("makeupReason");
+  // 보강 사유는 발송 조건이 아니다(원장 2026-10-27 *"사유 없어도 발송되게"*) — 결석 날짜를 모르는 보강(다른 반 학생 등)은
+  //   사유가 비면 "오늘은 보강 수업에 출석했습니다"로 나간다(attendance-sentence.ts). 사유 칸은 선택 입력으로 남는다.
   return out;
 }
